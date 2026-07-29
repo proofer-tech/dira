@@ -30,7 +30,7 @@ from datetime import datetime, timezone
 
 # 기본 접미사는 ASCII + 마침표 구분이다: <hash>.md / <hash>.wip.md / <hash>.done.md.
 # (ls·grep·탭완성에서 한글이 걸리적거리고, 마침표는 확장자처럼 읽혀 해시와 상태가 눈에 갈린다.)
-# 다른 접미사로 만든 티켓이 이미 있는 설치는 config에서 그 값으로 고정해야 한다 - 안 하면
+# 다른 접미사로 만든 티켓이 이미 있는 설치는 워커에서 그 값으로 고정해야 한다 - 안 하면
 # 접미사가 이름의 일부로 보여서 이미 잡힌 티켓이 큐에 다시 뜬다.
 IN_PROGRESS = os.environ.get("TICKET_INPROGRESS") or ".wip"
 DONE = os.environ.get("TICKET_DONE") or ".done"

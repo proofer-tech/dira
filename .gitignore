@@ -1,4 +1,2 @@
 __pycache__/
 *.pyc
-*.config.sh
-!config.sh.example

@@ -1,0 +1,60 @@
+#!/bin/bash
+# 워커 예시. 복사해서 <티켓루트>/workers/<이름>.sh 로 두고 chmod +x 한 뒤
+#   <티켓루트>/workers/<이름>.sh dryrun
+# 으로 확인한다. 크론잡 하나 = 이 파일 하나 = 실행 1회에 티켓 1건(동기).
+#
+# 워커를 더 두면 그만큼 동시에 돈다: workers/w1.sh, workers/w2.sh ... 각각 cron 한 줄.
+# 같은 워커가 겹쳐 돌지는 않는다(앞 실행이 아직 물고 있으면 이번 tick은 넘긴다).
+#
+# 필수는 마지막 source 한 줄뿐이다. 위쪽 값은 전부 선택이고, 여기 적힌 게 기본값이다.
+
+# --- 이름 (기본: 이 파일 이름에서 딴다) ---
+# 로그 접두 + 티켓 owner에 박힌다.
+# TICKET_NAME="w1"
+
+# --- 작업 디렉터리 (기본: 티켓 루트의 부모) ---
+# <프로젝트>/.fs-tickets/workers/w1.sh 면 기본값이 <프로젝트>다. 큐를 프로젝트 밖에 뒀거나
+# (공유 클라우드 워크스페이스 등) 세션을 다른 데서 돌리려면 여기서 지정한다.
+# TICKET_CWD="$HOME/Projects/myproject"
+#
+# 티켓 루트는 설정하지 않는다 - 이 파일 위치가 곧 루트다(<루트>/workers/<이름>.sh).
+# 루트 안에 tickets/(큐)·personas/·protocols/·workers/가 산다.
+
+# --- 페르소나 디렉터리 (기본 <루트>/personas) ---
+# <이 경로>/<페르소나>/PROFILE.md 를 찾아 프롬프트 머리에 인라인한다.
+# 페르소나 이름 = 티켓 frontmatter `persona:` 값. 없으면 페르소나 없는 평범한 에이전트가 처리한다.
+# 이름은 있는데 프로필 파일이 없으면 runner.log에 WARN만 남기고 그냥 디스패치한다.
+# TICKET_PERSONAS="$HOME/Projects/myproject/personas"
+
+# --- 협업 프로토콜 디렉터리 (기본 <루트>/protocols) ---
+# <이 경로>/AGENTS.md 가 있으면 모든 세션의 프롬프트에 인라인한다(페르소나와 달리 티켓이 고르지
+# 않는다 - 전원 공통 규약이다). 없으면 그냥 넘어간다. 여러 큐가 같은 규약을 쓰면 공유 경로로.
+# TICKET_PROTOCOLS="$HOME/Projects/team-protocols"
+
+# --- 티켓 수행 세션이 참조할 컨텍스트 (경로|설명 쌍) ---
+# 프롬프트 꼬리에 목록으로 붙는다. 없는 경로는 건너뛰고 runner.log에 WARN만 남긴다
+# (클라우드 마운트에 있을 수 있어서, 없다고 디스패치를 막지는 않는다).
+# TICKET_CONTEXT=(
+#   "$HOME/Projects/myproject/docs|제품 스펙·용어 정의"
+#   "$HOME/Projects/myproject/decisions|과거 의사결정 기록. 같은 논의 반복 전에 확인"
+# )
+
+# --- 실행 엔진 (기본값 = 아래 그대로) ---
+# {prompt}·{sid}는 실행 직전 치환된다. 배열이라 프롬프트에 공백·개행이 있어도 인자 1개로 간다.
+# 세션키 정정(응답 JSON의 session_id 확인)은 claude 전용 - 다른 엔진이면 그냥 건너뛴다.
+# TICKET_ENGINE=(claude -p "{prompt}" --session-id "{sid}" --dangerously-skip-permissions --output-format json)
+# TICKET_ENGINE=(codex exec --json "{prompt}")
+
+# --- 나머지 (아래 값이 기본값) ---
+# TICKET_INPROGRESS=".wip"               # 진행중 상태 파일명 접미사
+# TICKET_DONE=".done"                    # 완료 상태 파일명 접미사
+#   한글 접미사(-진행중/-완료)로 만든 티켓이 이미 있으면 여기서 그 값으로 고정해야 한다.
+#   안 하면 `<hash>-진행중.md`가 '접미사 없는 이름'으로 보여서 잡힌 티켓이 큐에 다시 뜬다.
+# TICKET_MAXRUN=5400                     # 세션 1건 실행 상한(초). 초과 시 TERM->KILL 후 백로그 복귀
+# TICKET_PROMPT_FMT="%s 티켓을 확인해 주세요. ..."   # printf 포맷: %s = 티켓 해시 하나뿐
+#
+# 상태 3종(없음/진행중/완료)·해시 파일명·claim 락은 프로토콜 자체이므로 워커로 열지 않는다.
+# 성격(kind)·수행자(persona)는 디렉터리가 아니라 티켓 frontmatter에 있다.
+
+# --- 필수: 엔진 코드를 불러 실행한다(레포 경로에 맞게 고칠 것) ---
+. "$HOME/Projects/fs-tickets/tick.sh"
