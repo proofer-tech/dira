@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""티켓 큐 헬퍼(프로젝트 무관). <루트> = `to-<역할>/` 들을 담은 티켓 루트 디렉터리.
+"""티켓 큐 헬퍼(프로젝트 무관). <루트> = `tickets/`(큐)와 `personas/`를 담은 티켓 루트.
 
-select <루트>          가장 오래된 미할당 열린 티켓 1건 -> "path|hash|role"
+select <루트>          미할당 열린 티켓들을 오래된 순으로 -> "path|hash|kind|persona"
 assign <path> <sid>    frontmatter에 session_id/assigned_at 기록
 clear  <path>          frontmatter의 session_id/assigned_at 비우기 (할당 취소)
 list   <루트>          열린 티켓 전체 상태 표
@@ -9,30 +9,31 @@ find   <루트> <hash>   해시로 티켓 경로 찾기
 reap   <루트>          세션이 죽은 진행중 티켓을 백로그로 회수 (스테일 수거)
 handclaim <path> [owner]  대화형 세션이 손으로 잡기. claim + pid/claimed_at/transcript 기록
 
-프로젝트별 값은 환경변수로만 갈린다(기본값 = 스트림에서 쓰던 값이라 미설정 시 동작 동일):
-  TICKET_ROLES       역할 목록 (기본 "pm designer developer")
-  TICKET_INPROGRESS  진행중 상태 접미사 (기본 "-진행중")
-  TICKET_DONE        완료 상태 접미사 (기본 "-완료")
-성격(request/work/feedback)·상태 3종·해시 파일명은 프로토콜 자체라 파라미터로 열지 않는다.
+큐는 루트 한 곳이고 하위 디렉터리는 없다. 디렉터리가 뜻하던 것은 전부 frontmatter로 갔다 --
+누가 수행하는지는 `persona:`(없으면 페르소나 없는 평범한 에이전트), 성격은 `kind:`.
+상태만 여전히 파일명 접미사다(rename이 원자적 락이라 그렇다).
+
+프로젝트별 값은 환경변수로만 갈린다:
+  TICKET_INPROGRESS  진행중 상태 접미사 (기본 ".wip")
+  TICKET_DONE        완료 상태 접미사 (기본 ".done")
 """
 import os
 import re
 import sys
 import glob
 import json
+import errno
 import subprocess
 import unicodedata
 from datetime import datetime, timezone
 
 
-def _words(env, default):
-    return tuple((os.environ.get(env) or default).replace(",", " ").split())
-
-
-ROLES = _words("TICKET_ROLES", "pm designer developer")
-KINDS = ("request", "work", "feedback")
-IN_PROGRESS = os.environ.get("TICKET_INPROGRESS") or "-진행중"
-DONE = os.environ.get("TICKET_DONE") or "-완료"
+# 기본 접미사는 ASCII + 마침표 구분이다: <hash>.md / <hash>.wip.md / <hash>.done.md.
+# (ls·grep·탭완성에서 한글이 걸리적거리고, 마침표는 확장자처럼 읽혀 해시와 상태가 눈에 갈린다.)
+# 다른 접미사로 만든 티켓이 이미 있는 설치는 config에서 그 값으로 고정해야 한다 - 안 하면
+# 접미사가 이름의 일부로 보여서 이미 잡힌 티켓이 큐에 다시 뜬다.
+IN_PROGRESS = os.environ.get("TICKET_INPROGRESS") or ".wip"
+DONE = os.environ.get("TICKET_DONE") or ".done"
 CLOSED_SUFFIXES = (IN_PROGRESS, DONE)
 
 
@@ -80,6 +81,38 @@ def is_assigned(fm):
     return bool((fm.get("session_id") or "").strip().strip("\"'"))
 
 
+PERSONA_RE = re.compile(r"^[A-Za-z0-9_-]+$")
+
+
+def persona_of(fm):
+    """frontmatter `persona:`. 없으면 "" - 페르소나 없는 평범한 에이전트가 처리한다.
+
+    디스패처가 이 값을 <personas>/<값>/PROFILE.md 경로로 조립하므로 이름 문자만 통과시킨다
+    (`persona: ../../.ssh/id_rsa` 같은 값이면 임의 파일이 프롬프트에 실려 나간다).
+    """
+    p = (fm.get("persona") or "").strip().strip("\"'")
+    return p if PERSONA_RE.match(p) else ""
+
+
+def tickets_in(troot):
+    """큐(<루트>/tickets/)의 티켓 파일들. 평면이다 - 하위 디렉터리는 보지 않는다."""
+    return [p for p in glob.glob(os.path.join(troot, "tickets", "*.md"))
+            if not os.path.basename(p).startswith(".")]
+
+
+# 구 레이아웃(to-<역할>/<성격>/) 잔여물. 큐에서 안 보이므로 조용히 굶는 대신 알린다.
+LEGACY_GLOBS = ("to-*/*/*.md", "to-*/*.md", "request/*.md", "work/*.md", "feedback/*.md",
+                "tickets/*/*.md")
+
+
+def warn_legacy(troot):
+    hits = [p for g in LEGACY_GLOBS for p in glob.glob(os.path.join(troot, g))]
+    if hits:
+        print("WARN 구 레이아웃에 티켓 {}건이 남아 있다 - 큐에서 안 보인다. 루트로 옮기고 "
+              "frontmatter에 kind:/persona:를 넣어라 (예: {})".format(len(hits), hits[0]),
+              file=sys.stderr)
+
+
 def birth(path):
     st = os.stat(path)
     return getattr(st, "st_birthtime", st.st_mtime)
@@ -118,35 +151,27 @@ def deps_unmet(troot, deps):
 def scan(troot):
     """열린 티켓(상태 접미사 없음)을 생성일 오름차순으로."""
     rows = []
-    for role in ROLES:
-        for kind in KINDS:
-            d = os.path.join(troot, "to-" + role, kind)
-            if not os.path.isdir(d):
-                continue
-            for p in glob.glob(os.path.join(d, "*.md")):
-                base = os.path.basename(p)
-                if base.startswith("."):
-                    continue
-                if not is_open_name(base):
-                    continue
-                try:
-                    fm, flines, end = read_fm(p)
-                except (OSError, UnicodeDecodeError):
-                    continue
-                if end < 0:
-                    continue
-                rows.append({
-                    "path": p,
-                    "hash": ticket_hash(p, fm),
-                    "role": role,
-                    "kind": kind,
-                    "birth": birth(p),
-                    "assigned": is_assigned(fm),
-                    "session_id": (fm.get("session_id") or "").strip(),
-                    # deps 미충족이면 큐에서 제외한다(pull 규약을 디스패처 층에서 강제).
-                    # 없으면 세션이 착수를 거부하고 종료해 티켓이 진행중으로 유실된다(2026-07-28 05990d8e 실사고).
-                    "unmet": deps_unmet(troot, deps_of(flines, end)),
-                })
+    for p in tickets_in(troot):
+        if not is_open_name(os.path.basename(p)):
+            continue
+        try:
+            fm, flines, end = read_fm(p)
+        except (OSError, UnicodeDecodeError):
+            continue
+        if end < 0:
+            continue
+        rows.append({
+            "path": p,
+            "hash": ticket_hash(p, fm),
+            "kind": (fm.get("kind") or "").strip().strip("\"'"),
+            "persona": persona_of(fm),
+            "birth": birth(p),
+            "assigned": is_assigned(fm),
+            "session_id": (fm.get("session_id") or "").strip(),
+            # deps 미충족이면 큐에서 제외한다(pull 규약을 디스패처 층에서 강제).
+            # 없으면 세션이 착수를 거부하고 종료해 티켓이 진행중으로 유실된다(2026-07-28 05990d8e 실사고).
+            "unmet": deps_unmet(troot, deps_of(flines, end)),
+        })
     rows.sort(key=lambda r: (r["birth"], r["path"]))
     return rows
 
@@ -182,12 +207,27 @@ def claim(path):
         os.unlink(path)
         return dst
     except OSError as e:
-        if getattr(e, "errno", None) == 17:      # EEXIST
+        if getattr(e, "errno", None) == errno.EEXIST:
             raise SystemExit("이미 잡힘: " + dst)
-        if os.path.exists(dst):                   # 하드링크 미지원 파일시스템 폴백
+    # 하드링크 미지원 파일시스템(구글드라이브 등 FUSE·SMB) 폴백.
+    # os.rename은 쓰면 안 된다 - dst가 있어도 조용히 덮어쓰므로 락이 아니다. exists() 선검사는
+    # TOCTOU라 두 프로세스가 둘 다 통과해 같은 티켓을 잡고 한쪽 파일이 사라진다.
+    # O_CREAT|O_EXCL은 하드링크 없이도 원자적이라, 자리를 먼저 잡고 내용을 옮긴다.
+    try:
+        with open(path, "rb") as f:
+            data = f.read()
+    except FileNotFoundError:      # 읽는 사이에 다른 쪽이 이겨서 원본을 치웠다
+        raise SystemExit("이미 잡힘: " + dst)
+    try:
+        fd = os.open(dst, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+    except OSError as e:
+        if getattr(e, "errno", None) == errno.EEXIST:
             raise SystemExit("이미 잡힘: " + dst)
-        os.rename(path, dst)
-        return dst
+        raise
+    with os.fdopen(fd, "wb") as out:
+        out.write(data)
+    os.unlink(path)
+    return dst
 
 
 def release(path):
@@ -307,15 +347,8 @@ def transcript_state(path):
 
 def in_progress(troot):
     """상태 접미사가 진행중인 티켓 경로들(NFC/NFD 무관)."""
-    out = []
-    for role in ROLES:
-        for kind in KINDS:
-            d = os.path.join(troot, "to-" + role, kind)
-            for p in glob.glob(os.path.join(d, "*.md")):
-                stem = nfc(os.path.basename(p))[:-3]
-                if stem.endswith(nfc(IN_PROGRESS)):
-                    out.append(p)
-    return out
+    return [p for p in tickets_in(troot)
+            if nfc(os.path.basename(p))[:-3].endswith(nfc(IN_PROGRESS))]
 
 
 def reclaim(path, fm, why):
@@ -413,16 +446,11 @@ def find_any(troot, want):
 
 
 def _find_stem(troot, want):
-    for role in ROLES:
-        for kind in KINDS:
-            d = os.path.join(troot, "to-" + role, kind)
-            if not os.path.isdir(d):
-                continue
-            for pth in glob.glob(os.path.join(d, "*.md")):
-                stem = nfc(os.path.basename(pth))[:-3]
-                for sfx in ("",) + CLOSED_SUFFIXES:
-                    if stem == want + nfc(sfx):
-                        return pth
+    for pth in tickets_in(troot):
+        stem = nfc(os.path.basename(pth))[:-3]
+        for sfx in ("",) + CLOSED_SUFFIXES:
+            if stem == want + nfc(sfx):
+                return pth
     return None
 
 
@@ -430,12 +458,14 @@ def main():
     if len(sys.argv) < 2:
         raise SystemExit(__doc__)
     cmd = sys.argv[1]
+    if len(sys.argv) > 2 and os.path.isdir(sys.argv[2]):
+        warn_legacy(sys.argv[2])
 
     if cmd == "select":
         # 미할당 열린 티켓을 생성일 오름차순으로 전부. 호출자가 위에서부터 claim 시도.
         for r in scan(sys.argv[2]):
             if not r["assigned"] and not r["unmet"]:
-                print("{}|{}|{}".format(r["path"], r["hash"], r["role"]))
+                print("{}|{}|{}|{}".format(r["path"], r["hash"], r["kind"], r["persona"]))
         return
 
     if cmd == "list":
@@ -451,8 +481,8 @@ def main():
                 mark = "deps 대기 " + ",".join(r["unmet"])
             else:
                 mark = "대기"
-            print("{}  {:<12} {:<10} {:<9} {}".format(
-                when, r["hash"], r["role"], r["kind"], mark))
+            print("{}  {:<12} {:<9} {:<10} {}".format(
+                when, r["hash"], r["kind"] or "-", r["persona"] or "-", mark))
         return
 
     if cmd == "reap":

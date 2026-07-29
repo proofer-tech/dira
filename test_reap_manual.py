@@ -11,9 +11,9 @@ import tickets as T
 
 
 def mk(troot, h, fm_lines):
-    d = os.path.join(troot, "to-developer", "work")
+    d = os.path.join(troot, "tickets")
     os.makedirs(d, exist_ok=True)
-    p = os.path.join(d, h + "-진행중.md")
+    p = os.path.join(d, h + T.IN_PROGRESS + ".md")
     with open(p, "w", encoding="utf-8") as f:
         f.write("---\nticket: {}\n{}\n---\n\n## 목표\n테스트\n".format(h, "\n".join(fm_lines)))
     return p
@@ -60,7 +60,7 @@ try:
     joined = "\n".join(msgs)
 
     assert not os.path.exists(pa), "A: pid 죽었는데 회수 안 됨"
-    assert os.path.exists(os.path.join(ws, "to-developer/work/aaaa1111.md")), "A: 백로그 복귀 안 됨"
+    assert os.path.exists(os.path.join(ws, "tickets/aaaa1111.md")), "A: 백로그 복귀 안 됨"
     assert "REAP aaaa1111" in joined, "A: REAP 메시지 없음\n" + joined
 
     assert os.path.exists(pb), "B: 살아있는 세션 티켓을 건드렸다"

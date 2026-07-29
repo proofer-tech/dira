@@ -7,11 +7,17 @@
 
 # --- 필수 ---
 TICKET_NAME="myproject"                       # 로그 접두. 생략하면 config 파일명에서 딴다
-TICKET_ROOT="$HOME/Projects/myproject/tickets" # to-<역할>/ 들을 담은 디렉터리
-TICKET_CWD="$HOME/Projects/myproject"          # 디스패치된 세션의 작업 디렉터리
+TICKET_CWD="$HOME/Projects/myproject"          # 프로젝트 = 디스패치된 세션의 작업 디렉터리
 
+# --- 선택: 티켓 루트 (기본 $TICKET_CWD/.fs-tickets, 없으면 만든다) ---
+# 프로젝트 안에 큐가 산다: stream에 설치하면 ~/Projects/stream/.fs-tickets,
+# proofer에 설치하면 ~/Projects/proofer/.fs-tickets. 아래 둘은 이걸 덮어쓸 때만 쓴다.
+# 루트 안에 tickets/(큐)와 personas/가 산다. 티켓은 <루트>/tickets/<해시>.md 평면이다.
+# TICKET_ROOT="$HOME/Projects/myproject/fs-tickets"
+#
 # 티켓 루트가 고정 경로가 아니면(클라우드 마운트 등) 값 대신 함수를 준다.
 # TICKET_ROOT가 비어 있을 때만 호출된다. stdout으로 경로 한 줄을 낸다.
+# 이렇게 명시로 준 경로는 없으면 에러다(안 만든다 - 미마운트를 빈 큐로 착각하면 안 되므로).
 # resolve_ticket_root() {
 #   local acc hit
 #   for acc in "$HOME"/Library/CloudStorage/GoogleDrive-*/; do
@@ -21,14 +27,39 @@ TICKET_CWD="$HOME/Projects/myproject"          # 디스패치된 세션의 작�
 #   return 1
 # }
 
+# --- 선택: 페르소나 디렉터리 (기본 $TICKET_ROOT/personas) ---
+# <이 경로>/<페르소나>/PROFILE.md 를 찾아 프롬프트 머리에 인라인한다.
+# 페르소나 이름 = 티켓 frontmatter `persona:` 값. 없으면 페르소나 없는 평범한 에이전트가 처리한다.
+# 이름은 있는데 프로필 파일이 없으면 runner.log에 WARN만 남기고 그냥 디스패치한다.
+# TICKET_PERSONAS="$HOME/Projects/myproject/personas"
+
+# --- 선택: 티켓 수행 세션이 참조할 컨텍스트 (경로|설명 쌍) ---
+# 프롬프트 꼬리에 목록으로 붙는다. 없는 경로는 건너뛰고 runner.log에 WARN만 남긴다
+# (티켓 루트처럼 클라우드 마운트에 있을 수 있어서, 없다고 디스패치를 막지는 않는다).
+# TICKET_CONTEXT=(
+#   "$HOME/Projects/myproject/docs|제품 스펙·용어 정의"
+#   "$HOME/Projects/myproject/decisions|과거 의사결정 기록. 같은 논의 반복 전에 확인"
+# )
+
+# --- 선택: 실행 엔진 (기본값 = 아래 그대로) ---
+# {prompt}·{sid}는 실행 직전 치환된다. 배열이라 프롬프트에 공백·개행이 있어도 인자 1개로 간다.
+# 세션키 정정(응답 JSON의 session_id 확인)은 claude 전용 - 다른 엔진이면 그냥 건너뛴다.
+# TICKET_ENGINE=(claude -p "{prompt}" --session-id "{sid}" --dangerously-skip-permissions --output-format json)
+# TICKET_ENGINE=(codex exec --json "{prompt}")
+#
+# 동시 실행 상한(TICKET_MAXCONC)은 ps 출력에서 이 패턴을 세서 판단한다. 엔진을 바꿨으면
+# 같이 바꿔야 상한이 실제로 걸린다(안 바꾸면 항상 0으로 세서 상한이 무력화된다).
+# 대괄호는 grep 자기 자신을 세지 않으려는 관용구.
+# TICKET_ENGINE_PS="[c]odex exec"
+
 # --- 선택 (아래 값이 기본값) ---
-# TICKET_ROLES="pm designer developer"   # 역할 = 수신함 to-<역할>/. 프로젝트마다 갈린다
-# TICKET_INPROGRESS="-진행중"            # 진행중 상태 파일명 접미사
-# TICKET_DONE="-완료"                    # 완료 상태 파일명 접미사
+# TICKET_INPROGRESS=".wip"               # 진행중 상태 파일명 접미사
+# TICKET_DONE=".done"                    # 완료 상태 파일명 접미사
+#   한글 접미사(-진행중/-완료)로 만든 티켓이 이미 있으면 여기서 그 값으로 고정해야 한다.
+#   안 하면 `<hash>-진행중.md`가 '접미사 없는 이름'으로 보여서 잡힌 티켓이 큐에 다시 뜬다.
 # TICKET_MAXCONC=3                       # 동시 실행 상한(머신 전역 카운트)
 # TICKET_MAXRUN=5400                     # 세션 1건 실행 상한(초). 초과 시 TERM->KILL 후 백로그 복귀
-# TICKET_LABEL_pm="PM"                   # 프롬프트에 쓸 역할 표시명(없으면 역할 이름 그대로)
-# TICKET_PROMPT_FMT="%s님 %s티켓 확인 부탁드립니다. ..."   # printf 포맷: 1=역할표시명 2=티켓해시
+# TICKET_PROMPT_FMT="%s 티켓을 확인해 주세요. ..."   # printf 포맷: %s = 티켓 해시 하나뿐
 #
-# 성격(request/work/feedback)·상태 3종(없음/진행중/완료)·해시 파일명·claim 락은 프로토콜
-# 자체이므로 config로 열지 않는다.
+# 상태 3종(없음/진행중/완료)·해시 파일명·claim 락은 프로토콜 자체이므로 config로 열지 않는다.
+# 성격(kind)·수행자(persona)는 디렉터리가 아니라 티켓 frontmatter에 있다.
