@@ -424,6 +424,11 @@ def reap(troot):
         if not sid:
             msgs.extend(reap_manual(p, fm, now))   # 손 클레임 -> pid + 트랜스크립트로 판정
             continue
+        # Codex는 Claude식 --session-id를 ps에서 찾을 수 없다. tick.sh가 남긴 실제
+        # 엔진 pid가 살아 있으면, 엔진 종류와 무관하게 아직 실행 중이다.
+        pid = (fm.get("pid") or "").strip().strip("\"'")
+        if pid.isdigit() and pid_alive(pid):
+            continue
         if sid in live:
             continue                     # 살아있는 디스패처 세션
         at = (fm.get("assigned_at") or "").strip()
@@ -529,14 +534,19 @@ def main():
         upd = {
             "session_id": sid,
             "assigned_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+            "pid": "",
         }
         if len(sys.argv) > 4:
             upd["owner"] = sys.argv[4]
         set_fm_keys(path, upd)
         return
 
+    if cmd == "setpid":
+        set_fm_keys(sys.argv[2], {"pid": sys.argv[3]})
+        return
+
     if cmd == "clear":
-        set_fm_keys(sys.argv[2], {"session_id": "", "assigned_at": ""})
+        set_fm_keys(sys.argv[2], {"session_id": "", "assigned_at": "", "pid": ""})
         return
 
     raise SystemExit("알 수 없는 명령: " + cmd)

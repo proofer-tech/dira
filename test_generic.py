@@ -134,16 +134,7 @@ try:
                           env=env, timeout=30)
     assert back.stdout.strip().endswith("cafe0001.md"), "release 복귀 실패: " + back.stdout
 
-    # 비대화형(cron)인데 장기 토큰이 없으면 디스패치 자체를 안 돈다(키체인 접근 불가)
-    rc, out = run("tick", w1, local)
-    assert rc == 0, "인증 대기 tick rc={}\n{}".format(rc, out)
-    assert not os.path.exists(os.path.join(tmp, "engine-prompt.txt")), "토큰 없이 디스패치했다"
-    with open(os.path.join(root, "workers", "runner.log"), encoding="utf-8") as f:
-        assert "AUTH 대기" in f.read(), "인증 대기 로그가 없다"
-    with open(os.path.join(local, "oauth-token"), "w", encoding="utf-8") as f:
-        f.write("sk-test\n")
-
-    # 커스텀 엔진으로 실제 디스패치 1회: 토큰 치환이 되고 프롬프트가 인자 1개로 넘어가는가
+    # Codex 등 Claude가 아닌 커스텀 엔진은 Claude OAuth 토큰 없이도 cron에서 디스패치한다.
     rc, out = run("tick", w1, local)
     assert rc == 0, "tick rc={}\n{}".format(rc, out)
     with open(os.path.join(tmp, "engine-prompt.txt"), encoding="utf-8") as f:

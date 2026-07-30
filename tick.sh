@@ -48,14 +48,17 @@ TICKET_ENGINE=(${TICKET_ENGINE[@]+"${TICKET_ENGINE[@]}"})
 # 상태 접미사는 tickets.py가 환경변수로 읽는다(미설정이면 .wip/.done).
 export TICKET_INPROGRESS="${TICKET_INPROGRESS:-}" TICKET_DONE="${TICKET_DONE:-}"
 
-# 헤드리스 인증: cron은 로그인 키체인에 접근 못 하므로 장기 토큰을 파일에서 읽는다
-#   claude setup-token 으로 발급 후: printf %s '<토큰>' > ~/.config/fs-tickets/oauth-token
-[ -r "$LOCAL/oauth-token" ] && export CLAUDE_CODE_OAUTH_TOKEN="$(tr -d '\r\n' < "$LOCAL/oauth-token")"
+# Claude를 명시적으로 쓸 때만 헤드리스 OAuth 토큰을 읽는다. Codex의 인증은 자체 설정을 쓴다.
+if [ "$(basename "${TICKET_ENGINE[0]}")" = "claude" ]; then
+  # claude setup-token 으로 발급 후: printf %s '<토큰>' > ~/.config/fs-tickets/oauth-token
+  [ -r "$LOCAL/oauth-token" ] && export CLAUDE_CODE_OAUTH_TOKEN="$(tr -d '\r\n' < "$LOCAL/oauth-token")"
+fi
 
 CMD="${1:-tick}"
 
-# 비대화형(=cron)인데 장기 토큰이 없으면 무의미한 디스패치를 돌지 않는다(키체인 접근 불가)
-if [ "$CMD" = "tick" ] && [ ! -r "$LOCAL/oauth-token" ] && [ ! -t 1 ]; then
+# 비대화형 Claude만 장기 토큰이 없으면 디스패치하지 않는다. Codex 등 다른 엔진은 자체 인증을 쓴다.
+if [ "$CMD" = "tick" ] && [ "$(basename "${TICKET_ENGINE[0]}")" = "claude" ] \
+  && [ ! -r "$LOCAL/oauth-token" ] && [ ! -t 1 ]; then
   if [ ! -f "$LOCAL/.authwarn" ]; then
     log "AUTH 대기: claude setup-token 발급 후 $LOCAL/oauth-token 에 저장 필요"
     touch "$LOCAL/.authwarn"
@@ -217,6 +220,8 @@ cd "$TICKET_CWD" || { log "ERROR cwd 없음 $TICKET_CWD"; python3 "$PY" clear "$
 OUTF="$LOGDIR/.out-${SID}"
 "${ENGINE[@]}" >"$OUTF" 2>>"$LOGF" &
 CPID=$!
+# Codex에는 Claude식 --session-id가 없으므로 실제 엔진 pid도 남겨 reap이 생존을 확인한다.
+python3 "$PY" setpid "$TPATH" "$CPID"
 # 감시자는 짧은 sleep으로 돈다. 한 방 `sleep $TICKET_MAXRUN`이면 세션이 끝난 뒤에도 그 sleep이
 # 상속받은 stdout/stderr를 90분간 쥐고 남아, 호출자(cron·테스트)가 파이프에서 못 빠져나온다.
 ( SECONDS=0
