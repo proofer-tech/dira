@@ -16,6 +16,7 @@ import path from "node:path";
 import { revalidatePath } from "next/cache";
 import { findTicket, unassign, type UnassignRun } from "@/lib/engine";
 import { NAME_RE, isHash, resolveWithin } from "@/lib/paths";
+import { findTranscript, sessionIdOf, tailEvents, type StreamEvent } from "@/lib/transcript";
 import {
   awaitingOf,
   isAwaiting,
@@ -37,6 +38,7 @@ type Target = {
   stem: string;
   state: TicketState;
   assigned: boolean;
+  sessionId: string | null; // UUID_RE를 통과한 것만. 이 값만 경로가 된다(§2-1 경로 방어)
 };
 
 /** 프로젝트·해시 → 지금 이 순간의 파일. 못 찾으면 문장으로 던진다(액션이 결과로 바꾼다).
@@ -57,7 +59,41 @@ async function target(projectId: string, hash: string): Promise<Target> {
     stem: stemOf(p, config),
     state: stateOf(path.basename(p), config),
     assigned: end >= 0 && !!(fm.session_id ?? "").trim().replace(/^["']+|["']+$/g, ""),
+    sessionId: end >= 0 ? sessionIdOf(fm) : null,
   };
+}
+
+export type StreamChunk = { events: StreamEvent[]; offset: number; live: boolean };
+
+/** 세션 스트림 폴링 (DESIGN.md §2-1 · §9). 클라이언트가 `offset`을 들고 오면 **그 뒤에 붙은
+ *  바이트만** 읽어 사건 + 새 `offset`을 돌려준다. Route Handler를 만들지 않는다 — 서버 fs 접근은
+ *  이미 Server Action이 하는 일이고 `app/api/`는 §아키텍처 트리에 없는 새 관례다.
+ *
+ *  **`session_id`는 클라이언트가 보내는 것을 쓰지 않는다.** 매 호출마다 티켓 fm에서 서버가 읽고
+ *  UUID_RE를 통과한 것만 경로가 된다(§경로 방어). 클라이언트가 주는 건 티켓 stem과 offset뿐이고
+ *  stem은 다른 액션과 같은 조회(`tickets.py find`)를 지나므로 큐 밖 파일을 가리킬 수 없다.
+ *
+ *  `live`(= 티켓이 `.wip`)는 **클라이언트가 폴링을 멈출 근거다.** 티켓이 사라졌거나 조회가 실패해도
+ *  `live: false`로 물러난다 — 못 찾는 티켓을 2초마다 다시 물을 이유가 없다. 빈 상태(트랜스크립트
+ *  없음)도 에러가 아니라 빈 사건 배열이다(§9 "에러로 그리지 않는다"). */
+export async function tailSession(
+  projectId: string,
+  stem: string,
+  offset: number,
+): Promise<StreamChunk> {
+  // 클라이언트가 준 숫자다. `tailEvents`가 파일 크기로 다시 자르지만 NaN·Infinity는 그 비교를
+  // 통과해 `Buffer.alloc`까지 간다 — 여기서 정수 아닌 것을 0으로 되돌린다.
+  const at = Number.isSafeInteger(offset) && offset >= 0 ? offset : 0;
+  try {
+    const t = await target(projectId, stem);
+    const live = t.state === "wip";
+    if (!t.sessionId) return { events: [], offset: at, live };
+    const file = await findTranscript(t.sessionId);
+    if (!file) return { events: [], offset: at, live };
+    return { ...(await tailEvents(file, at)), live };
+  } catch {
+    return { events: [], offset: at, live: false };
+  }
 }
 
 const LOCKED = "진행중 티켓은 편집할 수 없습니다 — 세션이 그 파일로 일하고 있습니다.";

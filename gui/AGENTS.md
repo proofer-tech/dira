@@ -48,6 +48,8 @@ gui/
     ticket-ui.tsx       편집 폼 · 할당 해제 · 삭제 · 발행 폼 (티켓 화면들의 클라이언트 조각)
     personas-ui.tsx     생성 · PROFILE.md 편집 · 삭제 (페르소나 화면의 클라이언트 조각)
     protocols-ui.tsx    md 에디터 · 새 파일 · 이름변경 · 삭제 (프로토콜의 클라이언트 조각)
+    session-stream.tsx  세션 스트림(§2-1 · §비주얼 §9). 2초 폴링 + 자동 스크롤 + 네이티브 <details>.
+                        읽기·파싱은 전부 lib/transcript.ts고 여기는 그리기만 한다
     copy-command.tsx    실행 대신 복사시키는 명령 블록
   components/ui/        shadcn CLI 산출물. 손으로 만들지 않는다
   components.json       shadcn 설정

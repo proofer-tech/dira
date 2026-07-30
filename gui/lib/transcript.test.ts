@@ -3,7 +3,7 @@ import assert from "node:assert";
 import { appendFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { findTranscript, recordToEvents, tailEvents } from "./transcript.ts";
+import { findTranscript, recordToEvents, sessionIdOf, tailEvents } from "./transcript.ts";
 
 /** 픽스처는 전부 임시 디렉터리다 — **`~/.claude/projects`를 건드리지 않는다**(§수용조건).
  *  `findTranscript`의 `root` 인자가 그것 하나를 위해 있다. */
@@ -53,6 +53,16 @@ test("findTranscript — UUID 정규식을 통과 못 하면 글롭하기 전에
     "645a7c59-5d99-4c48-8fbb-2486bb29720", // 한 글자 짧다
   ]) {
     assert.equal(await findTranscript(bad, projects), null, bad);
+  }
+});
+
+test("sessionIdOf — 따옴표를 벗기고 UUID만 통과시킨다 (§9 빈 상태 갈림길)", () => {
+  assert.equal(sessionIdOf({ session_id: UUID }), UUID);
+  assert.equal(sessionIdOf({ session_id: `"${UUID}"` }), UUID); // tickets.py의 strip("\"'")과 같다
+  assert.equal(sessionIdOf({ session_id: `  '${UUID}'  ` }), UUID);
+  assert.equal(sessionIdOf({}), null); // 키 없음 = 세션이 붙은 적 없다 → 절 자체를 감춘다
+  for (const bad of ["", "  ", "없음", UUID.toUpperCase(), `../${UUID}`, `${UUID}.jsonl`]) {
+    assert.equal(sessionIdOf({ session_id: bad }), null, bad);
   }
 });
 

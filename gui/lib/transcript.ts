@@ -29,6 +29,15 @@ export type StreamEvent = {
  *  트랜스크립트는 등록된 root 밖이라 이 정규식이 그 예외의 유일한 방어다. */
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
+/** 티켓 fm → 이 티켓의 `session_id`, 또는 null. **경로가 되는 값이 여기 하나뿐이게 하는 관문이다.**
+ *  `queue.ts`의 unquote와 같은 정규화(python `.strip().strip("\"'")`)를 거쳐 UUID_RE를 통과해야 한다.
+ *  null 두 경우(키 없음 · 사람이 손으로 쓴 값)는 §9 빈 상태 표에서 **절 자체를 감춘다**로 같다 —
+ *  그래서 화면이 둘을 구별할 필요가 없고 이 함수도 나누지 않는다. */
+export function sessionIdOf(fm: Record<string, string>): string | null {
+  const v = (fm.session_id ?? "").trim().replace(/^["']+|["']+$/g, "");
+  return UUID_RE.test(v) ? v : null;
+}
+
 /** `~/.claude/projects/*​/<session_id>.jsonl` 글롭. 매치가 **정확히 1개**일 때만 경로다.
  *  0개·2개 이상이면 빈 상태(null) — 디렉터리 이름을 유도하지 않는다(§2-1).
  *  `root`는 테스트가 픽스처 디렉터리를 주기 위한 것이다. 사용자 입력이 들어오는 자리가 아니다. */

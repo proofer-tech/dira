@@ -9,6 +9,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Lock, TriangleAlert } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
+import { SessionStream } from "@/components/session-stream";
 import { DepBadge, StatusBadge, daysSince } from "@/components/status-badge";
 import {
   AnswerCard,
@@ -35,6 +36,7 @@ import {
   type Ticket,
 } from "@/lib/queue";
 import { getProject, resolveConfig } from "@/lib/projects";
+import { findTranscript, sessionIdOf } from "@/lib/transcript";
 import { decodeHash } from "@/lib/urls";
 import { listWorkers } from "@/lib/workers";
 
@@ -111,6 +113,12 @@ export default async function TicketDetail({
 
   // 요구사항 왕복 스레드 — 본문의 `## 질문 n` 절과 `deps` 중 `kind: answer`인 티켓을 번갈아.
   // 답변은 birth 순이다(라운드 순서고, deps에 적힌 순서는 PM이 append한 순서일 뿐이다).
+  // 세션 스트림 (§2-1). 갈림길은 **세션이 붙은 적이 있는가** 하나다(§9 빈 상태 표):
+  // `session_id`가 없거나 UUID가 아니면 절 자체를 감추고(상태 배지가 이미 말한다), 있는데
+  // 글롭 매치가 0개·2개 이상이면 `트랜스크립트 없음`이다. **어느 쪽도 에러로 그리지 않는다.**
+  const sessionId = sessionIdOf(ticket.fm);
+  const transcript = sessionId ? await findTranscript(sessionId) : null;
+
   const questions = questionsOf(ticket.body);
   const answers = ticket.deps
     .map((d) => resolveDep(tickets, d, config))
@@ -241,6 +249,30 @@ export default async function TicketDetail({
           </TableBody>
         </Table>
       </section>
+
+      {/* 세션 스트림(§2-1)은 frontmatter 표 바로 아래다 — §비주얼 §9가 `h-[32rem]`을 고른 근거가
+          "제목 + frontmatter 표 다음"이라는 배치다(512px면 스트림의 머리와 바닥이 한 화면에 같이
+          들어온다). 본문 아래로 내리면 수백 줄짜리 티켓에서 그 계산이 통째로 무너진다. */}
+      {sessionId && (
+        <section className="max-w-3xl space-y-2">
+          <h2 className="text-sm font-medium">세션 스트림</h2>
+          {transcript ? (
+            <SessionStream project={id} stem={ticket.stem} live={ticket.state === "wip"} />
+          ) : (
+            // 액션이 없다 — 사람이 할 일이 없다(§9). `action` 자리엔 왜 없는지 사람이 직접 쳐 볼
+            // 글롭을 넣는다. "Claude 세션이 아닙니다"라고 말하지 않는다: 화면은 못 찾았다는 것만
+            // 알고 왜 없는지는 모른다(Codex 티켓도 `session_id`를 갖는다 — `tick.sh:124`).
+            <EmptyState
+              text="트랜스크립트 없음"
+              action={
+                <span className="font-mono text-xs break-all text-muted-foreground">
+                  {`~/.claude/projects/*/${sessionId}.jsonl`}
+                </span>
+              }
+            />
+          )}
+        </section>
+      )}
 
       <section className="max-w-3xl space-y-4">
         <h2 className="text-sm font-medium">관계</h2>
