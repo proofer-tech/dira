@@ -11,6 +11,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { cache } from "react";
 import { NAME_RE, expandHome, resolveWithin, shellPath, shellValue } from "./paths.ts";
 import type { Ticket } from "./queue.ts";
 
@@ -97,16 +98,24 @@ function alive(pid: number): boolean {
  *  **중복 cron 줄**이 생긴다. */
 const nfc = (s: string) => s.normalize("NFC");
 
-// ponytail: 프로젝트마다 한 번 부른다(프로젝트는 한 자릿수). 캐시하면 사람이 crontab을 고친 걸
-// GUI가 못 보므로, 느려지면 요청 단위 캐시를 넣는다.
-async function crontabText(): Promise<string> {
+/** **요청당 1회**. 셸이 전환기 카운트를 위해 등록된 프로젝트 전부에 `listWorkers`를 돌리므로
+ *  이게 없으면 한 화면에 `crontab -l` 프로세스가 프로젝트 수만큼 뜬다(§성능 예산: 요청당
+ *  서브프로세스 0~1회).
+ *
+ *  `cache()`의 수명은 **요청 하나**다 — 프로세스 전역이 아니다. 그래서 사람이 crontab을 고치면
+ *  다음 요청(보드 5초 폴링·`revalidatePath`·새로고침)이 다시 읽는다. 프로세스 전역 캐시였다면
+ *  워커 화면이 계속 거짓말을 한다 — 그게 원래 캐시를 안 넣었던 이유고, 그 조건이 여기서 지켜진다.
+ *
+ *  쓰기 경로는 `crontabForWrite`가 따로 읽는다(캐시 대상이 아니다) — 렌더 때 읽은 값 위에 쓰면
+ *  그 사이 남의 변경을 되돌린다. */
+const crontabText = cache(async (): Promise<string> => {
   try {
     const { stdout } = await promisify(execFile)("crontab", ["-l"]);
     return stdout;
   } catch {
     return ""; // crontab 없음·비어 있음 = 등록된 워커 없음
   }
-}
+});
 
 // ── 워커 파일 읽기 ──────────────────────────────────────────────────────────
 
