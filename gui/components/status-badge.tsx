@@ -110,10 +110,13 @@ export function DepBadge({
   hash,
   kind,
   href,
+  hint,
 }: {
   hash: string;
   kind: "met" | "unmet" | "missing";
   href?: string;
+  /** 사유 문구 덮어쓰기. `req:`(출처)는 잠금이 아니라서 "영구 대기"가 거짓말이다 — 그 자리용. */
+  hint?: string;
 }) {
   const spec = {
     met: { icon: Check, tint: undefined, hint: "충족 — 완료된 티켓" },
@@ -121,7 +124,7 @@ export function DepBadge({
     missing: { icon: CircleQuestionMark, tint: BLOCKED, hint: "큐에 없는 해시 — 영구 대기" },
   }[kind];
   const badge = (
-    <Badge variant="outline" className={cn("font-mono", spec.tint)} title={spec.hint}>
+    <Badge variant="outline" className={cn("font-mono", spec.tint)} title={hint ?? spec.hint}>
       <spec.icon aria-hidden className="size-3.5" />
       {hash}
     </Badge>

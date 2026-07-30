@@ -202,6 +202,9 @@ export function awaitingUnlocked(t: Ticket): boolean {
   return t.state === "open" && !!a && !t.deps.some((d) => nfc(d) === a);
 }
 
+/** 출처 요구사항 stem. `deps`가 아니다 — 선후가 아니라 출처고, 엮으면 큐가 직렬화된다(결정 5). */
+export const reqOf = (t: Ticket): string => unquote(t.fm.req ?? "");
+
 /** 본문의 `## 질문 n` 절. 다음 `#`/`##` 제목 전까지가 그 질문의 몸통이다(h3 이하는 안에 남는다). */
 export function questionsOf(body: string): { heading: string; text: string }[] {
   const out: { heading: string; text: string }[] = [];
@@ -318,6 +321,17 @@ export function referrers(tickets: Ticket[], target: Ticket, sfx: Suffixes): Tic
   return tickets.filter(
     (t) => t.path !== target.path && t.deps.some((d) => resolveDep(tickets, d, sfx) === target),
   );
+}
+
+/** 이 요구사항에서 나온 티켓 — `req:`가 이 티켓을 가리키는 것들(§요구사항 레이어 결정 5).
+ *
+ *  `referrers`(deps 역참조)와 **섞지 않는다**: 이건 선후가 아니라 출처다. 해석은 `resolveDep`을
+ *  그대로 쓴다 — stem 조회 판정이 엔진과 갈리면 화면의 링크가 다른 파일로 간다. */
+export function derivedFrom(tickets: Ticket[], target: Ticket, sfx: Suffixes): Ticket[] {
+  return tickets.filter((t) => {
+    const req = reqOf(t);
+    return !!req && t.path !== target.path && resolveDep(tickets, req, sfx) === target;
+  });
 }
 
 // ── 쓰기 ────────────────────────────────────────────────────────────────────

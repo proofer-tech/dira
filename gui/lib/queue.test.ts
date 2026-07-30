@@ -12,11 +12,13 @@ import { fileURLToPath } from "node:url";
 import {
   awaitingOf,
   awaitingUnlocked,
+  derivedFrom,
   filterTickets,
   isAwaiting,
   listTickets,
   questionsOf,
   referrers,
+  reqOf,
   resolveDep,
   sortTickets,
   statusOf,
@@ -419,10 +421,11 @@ test("보드 — 5상태 판정 · 필터 AND/OR · 검색 대상 · 정렬", as
 
 // ── 요구사항 왕복 (DESIGN.md §요구사항 레이어) ───────────────────────────────
 
-function pySelect(root: string): string {
+function pySelect(root: string, env: Record<string, string> = {}): string {
   return execFileSync("python3", [PY, "select", root], {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "ignore"],
+    env: { ...process.env, ...env },
   });
 }
 
@@ -508,4 +511,72 @@ test("답변 대기 판정 + 답변 파일 생성으로 재큐 (엔진과 대조
   assert.match(pySelect(r), /r0000001\.md\|r0000001\|request\|pm/);
   // 답변 파일 자체는 열린 티켓이 아니라 `list`를 어지럽히지 않는다
   assert.doesNotMatch(pyList(r), /a1111111/);
+});
+
+/** `req:` 왕복 — 작업 티켓 → 출처 요구사항, 요구사항 → 나온 티켓. 한글 접미사 프로젝트로 돌린다:
+ *  stem 판정이 접미사를 하드코딩하면 `req: r0000001`이 `r0000001-완료.md`를 못 찾는다. */
+test("req 왕복 — 출처·파생 양방향, deps와 섞이지 않고 큐를 직렬화하지 않는다", async () => {
+  const r = newRoot();
+  const sfx: Suffixes = { inProgress: "-진행중", done: "-완료" };
+  // 출처 요구사항. `.done`(접미사 붙은 파일)이지만 `req:`가 가리키는 것은 stem이다
+  await write(r, "r0000001-완료.md", fm({ ticket: "r0000001", title: "요구사항", kind: "request" }));
+  // 아직 안 쪼갠 요구사항 — 나온 티켓 0건
+  await write(r, "r0000002.md", fm({ ticket: "r0000002", title: "안 쪼갬", kind: "request" }));
+  // 한글 stem 요구사항을 NFD로 저장한다(macOS 큐가 이렇다). NFC로 적은 `req:`가 걸려야 한다
+  await write(r, "요구사항.md".normalize("NFD"), fm({ title: "한글 요구", kind: "request" }));
+  // 쪼갠 작업 티켓 둘. `deps`는 없다 — 출처는 선후가 아니다(결정 5)
+  await write(r, "w0000001.md", fm({ ticket: "w0000001", title: "쪼갠 1", req: "r0000001" }));
+  await write(
+    r,
+    "w0000002.md",
+    // deps는 따로 걸려 있다: 관계 절에서 `req`와 섞이면 안 되는 게 이 티켓이다
+    fm({ ticket: "w0000002", title: "쪼갠 2", req: "r0000001", deps: "[r0000002]" }),
+  );
+  await write(r, "w0000003.md", fm({ ticket: "w0000003", title: "한글 출처", req: "요구사항" }));
+  // 오타 req — 큐에 없는 stem이면 링크 대신 사유를 띄운다
+  await write(r, "w0000004.md", fm({ ticket: "w0000004", title: "오타 req", req: "zzzz9999" }));
+  // req 없는 평범한 티켓 — 아무 줄도 안 붙는다
+  await write(r, "w0000005.md", fm({ ticket: "w0000005", title: "무관" }));
+
+  const tickets = await listTickets(r, sfx);
+  const at = (h: string) => tickets.find((t) => t.hash === h.normalize("NFC"))!;
+  const KO = "요구사항".normalize("NFC"); // `ticket:`이 없어 해시가 파일명에서 나온다(NFC)
+  const ENV = { TICKET_INPROGRESS: "-진행중", TICKET_DONE: "-완료" };
+
+  // ① 작업 티켓 → 출처 (접미사를 뗀 stem으로 찾는다)
+  assert.strictEqual(reqOf(at("w0000001")), "r0000001");
+  assert.strictEqual(resolveDep(tickets, reqOf(at("w0000001")), sfx), at("r0000001"));
+  // NFD로 저장된 한글 요구사항도 NFC `req:`로 걸린다
+  assert.strictEqual(resolveDep(tickets, reqOf(at("w0000003")), sfx), at(KO));
+  // 오타 stem은 못 찾는다 → 화면은 링크 대신 사유 배지다
+  assert.strictEqual(resolveDep(tickets, reqOf(at("w0000004")), sfx), null);
+  assert.strictEqual(reqOf(at("w0000005")), "");
+
+  // ② 요구사항 → 나온 티켓 (큐 순서 그대로)
+  assert.deepStrictEqual(
+    derivedFrom(tickets, at("r0000001"), sfx).map((t) => t.hash),
+    ["w0000001", "w0000002"],
+  );
+  assert.deepStrictEqual(derivedFrom(tickets, at("r0000002"), sfx), []); // 아직 안 쪼갬
+  assert.deepStrictEqual(
+    derivedFrom(tickets, at(KO), sfx).map((t) => t.hash),
+    ["w0000003"],
+  );
+
+  // ③ deps 관계와 섞이지 않는다 — `req`는 역참조에 안 나오고 `deps`는 파생에 안 나온다
+  assert.deepStrictEqual(referrers(tickets, at("r0000001"), sfx), []); // req는 deps가 아니다
+  assert.deepStrictEqual(
+    referrers(tickets, at("r0000002"), sfx).map((t) => t.hash),
+    ["w0000002"], // deps로 엮인 것만
+  );
+  assert.deepStrictEqual(derivedFrom(tickets, at("w0000002"), sfx), []);
+
+  // ④ 엔진은 `req:`를 모른다 — 출처가 있어도 잠기지 않는다(엮으면 큐가 직렬화된다)
+  assert.deepStrictEqual(at("w0000001").unmet, []);
+  assert.strictEqual(statusOf(at("w0000001")), "open");
+  assert.match(pyList(r, ENV), /w0000001 .* 대기/);
+  assert.match(pySelect(r, ENV), /w0000001\.md\|w0000001/);
+  // deps가 걸린 쪽만 잠긴다 — r0000002가 열려 있으므로
+  assert.deepStrictEqual(at("w0000002").unmet, ["r0000002"]);
+  assert.doesNotMatch(pySelect(r, ENV), /w0000002/);
 });

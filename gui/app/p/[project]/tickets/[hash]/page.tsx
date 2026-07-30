@@ -23,10 +23,12 @@ import { findTicket } from "@/lib/engine";
 import {
   awaitingOf,
   awaitingUnlocked,
+  derivedFrom,
   isAwaiting,
   listTickets,
   questionsOf,
   referrers,
+  reqOf,
   resolveDep,
   statusOf,
   type Ticket,
@@ -37,6 +39,18 @@ import { listWorkers } from "@/lib/workers";
 
 // 큐는 GUI 밖에서(cron·세션이) 바뀐다. 프리렌더하면 빌드 시점 내용이 굳는다.
 export const dynamic = "force-dynamic";
+
+/** 관계 절의 티켓 한 줄 — 상태 배지 + stem 링크. 세 목록(막는 것 · 요구사항 · 나온 티켓)이 같은 모양이다. */
+function TicketLine({ t, href }: { t: Ticket; href: string }) {
+  return (
+    <div className="flex items-center gap-2">
+      <StatusBadge status={statusOf(t)} />
+      <Link href={href} className="truncate text-sm hover:underline">
+        <span className="font-mono text-xs">{t.hash}</span> {t.title}
+      </Link>
+    </div>
+  );
+}
 
 export default async function TicketDetail({
   params,
@@ -86,6 +100,11 @@ export default async function TicketDetail({
   const blocked = referrers(tickets, ticket, config); // 이 티켓이 막는 것 = 역참조
   // 관계 링크도 **stem**이다 (보드와 같은 규칙 — §식별자)
   const href = (t: Ticket) => `/p/${id}/tickets/${encodeURIComponent(t.stem)}`;
+
+  // 출처/파생 (§요구사항 레이어 결정 5). `deps` 관계와 **섞지 않는다** — 선후가 아니라 출처다.
+  const req = reqOf(ticket);
+  const reqTicket = req ? resolveDep(tickets, req, config) : null;
+  const derived = derivedFrom(tickets, ticket, config);
 
   // 요구사항 왕복 스레드 — 본문의 `## 질문 n` 절과 `deps` 중 `kind: answer`인 티켓을 번갈아.
   // 답변은 birth 순이다(라운드 순서고, deps에 적힌 순서는 PM이 append한 순서일 뿐이다).
@@ -256,16 +275,49 @@ export default async function TicketDetail({
           ) : (
             <div className="space-y-1">
               {blocked.map((t) => (
-                <div key={t.path} className="flex items-center gap-2">
-                  <StatusBadge status={statusOf(t)} />
-                  <Link href={href(t)} className="truncate text-sm hover:underline">
-                    <span className="font-mono text-xs">{t.hash}</span> {t.title}
-                  </Link>
-                </div>
+                <TicketLine key={t.path} t={t} href={href(t)} />
               ))}
             </div>
           )}
         </div>
+
+        {/* 출처/파생 — 같은 절 안이지만 구분선으로 갈라 둔다(§2 "`deps` 관계와 섞지 않는다").
+            작업 티켓엔 `요구사항` 한 줄, 요구사항엔 나온 티켓 목록. 둘 다 없는 평범한 티켓엔
+            아무것도 안 붙는다 — `kind: request`일 때만 "아직 없다"를 말할 값이 있다. */}
+        {(req || derived.length > 0 || ticket.kind === "request") && (
+          <div className="space-y-4 border-t pt-4">
+            {req && (
+              <div className="space-y-2">
+                <p className="text-xs text-muted-foreground">요구사항</p>
+                {reqTicket ? (
+                  <TicketLine t={reqTicket} href={href(reqTicket)} />
+                ) : (
+                  // 큐에 없는 stem — deps `missing` 배지와 같은 처리다. 사유만 바꾼다:
+                  // `req`는 엔진 잠금이 아니라서 이 티켓이 굶지는 않는다(출처를 잃을 뿐이다).
+                  <DepBadge
+                    hash={req}
+                    kind="missing"
+                    hint="큐에 없는 요구사항 stem — 출처를 따라갈 수 없다"
+                  />
+                )}
+              </div>
+            )}
+            {(derived.length > 0 || ticket.kind === "request") && (
+              <div className="space-y-2">
+                <p className="text-xs text-muted-foreground">이 요구사항에서 나온 티켓</p>
+                {derived.length === 0 ? (
+                  <EmptyState text="아직 쪼갠 티켓 없음" />
+                ) : (
+                  <div className="space-y-1">
+                    {derived.map((t) => (
+                      <TicketLine key={t.path} t={t} href={href(t)} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </section>
 
       <section className="space-y-2">
