@@ -3,6 +3,7 @@
  *  **crontab은 읽기만 한다**(제약 4). 등록·해제 명령어는 만들어서 복사시키고 사람이 실행한다.
  *  락은 프로젝트의 **워커 파일 목록에서 시작해** 찾는다 — 락 디렉터리는 머신 전역이라 모든
  *  프로젝트의 락이 섞여 있고 락 이름에서 프로젝트를 역추적할 수 없다(§워커 상태 판정). */
+import { Fragment } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { TriangleAlert } from "lucide-react";
@@ -52,6 +53,23 @@ const NOTE: Record<WorkerRow["status"], string> = {
   idle: "",
   stopped: "crontab 미등록",
   stale: "다음 tick이 회수한다",
+};
+
+/** §4 표의 결함 이름 + "실제로 무슨 일이 일어나나". LABEL·NOTE와 같은 자리에 둔다 —
+ *  판정은 `lib/workers.ts`가 하고 그 워커의 실제 경로는 `detail`로 온다. */
+const DEFECT: Record<WorkerRow["defects"][number]["kind"], { title: string; why: string }> = {
+  "missing-cwd": {
+    title: "작업 디렉터리 없음",
+    why: "tick.sh가 ERROR cwd 없음을 남기고 락을 풀어 티켓을 되돌립니다 — 물었다 놓기만 합니다.",
+  },
+  "missing-link": {
+    title: "큐 심링크 없음",
+    why: "세션이 미끼 큐를 보고 자기 티켓을 못 찾습니다 — 완료 신고도 못 하고 reap이 attempts만 올립니다.",
+  },
+  "shared-cwd": {
+    title: "작업 디렉터리 공유",
+    why: "두 세션이 한 트리에서 한 브랜치를 밟습니다 — dispatch-gate.sh가 디스패치를 막습니다.",
+  },
 };
 
 export default async function Workers({ params }: { params: Promise<{ project: string }> }) {
@@ -153,7 +171,8 @@ export default async function Workers({ params }: { params: Promise<{ project: s
           </TableHeader>
           <TableBody>
             {rows.map((w) => (
-              <TableRow key={w.name} className="h-9">
+              <Fragment key={w.name}>
+              <TableRow className="h-9">
                 <TableCell className="px-3 py-0 font-mono text-xs" title={w.path}>
                   {w.name}
                 </TableCell>
@@ -198,6 +217,49 @@ export default async function Workers({ params }: { params: Promise<{ project: s
                   <WorkerRowActions projectId={id} row={w} />
                 </TableCell>
               </TableRow>
+              {/* 결함은 락을 만들지 않으므로 위 배지로는 안 보인다(§4) — 이 워커는 화면에 정상으로
+                  뜨면서 티켓을 처리하지 못한다. 모양은 §4-1 `source` 줄 경고와 같은 Alert다.
+                  결함 0개면 이 행 자체가 없다 — 정상 상태에 켜져 있는 경고를 만들지 않는다. */}
+              {w.defects.length > 0 && (
+                <TableRow className="hover:bg-transparent">
+                  <TableCell colSpan={7} className="px-3 py-2">
+                    <Alert>
+                      <TriangleAlert aria-hidden className="text-status-stale" />
+                      <AlertTitle>
+                        {w.name} — {w.defects.map((d) => DEFECT[d.kind].title).join(" · ")}
+                      </AlertTitle>
+                      <AlertDescription>
+                        <div className="space-y-2">
+                          {w.defects.map((d) => (
+                            <p key={d.kind}>
+                              <span className="font-mono text-xs break-all">{d.detail}</span>{" "}
+                              {DEFECT[d.kind].why}
+                            </p>
+                          ))}
+                          <p>
+                            준비 명령은 이 큐의 배치인{" "}
+                            <span className="font-mono text-xs break-all">
+                              {project.root}/worktrees/{w.name}
+                            </span>
+                            를 만듭니다(§4-2) —{" "}
+                            <span className="font-mono text-xs">TICKET_CWD</span>가 그 경로가 아니면 그
+                            줄도 손으로 고치세요. 체크아웃은 GUI가 실행하지 않습니다.
+                          </p>
+                          {w.worktree?.reason && (
+                            <p className="text-muted-foreground">
+                              {w.worktree.reason} 첫 줄의 레포 경로를 직접 채우세요.
+                            </p>
+                          )}
+                          {w.worktree?.cmds.map((cmd) => (
+                            <CopyCommand key={cmd} cmd={cmd} />
+                          ))}
+                        </div>
+                      </AlertDescription>
+                    </Alert>
+                  </TableCell>
+                </TableRow>
+              )}
+              </Fragment>
             ))}
           </TableBody>
         </Table>

@@ -1,7 +1,15 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { listTickets } from "./queue.ts";
@@ -28,6 +36,7 @@ const {
   renderContextBlock,
   stopWorker,
   workerSummary,
+  worktreeCmds,
   writeCommonContext,
   writeContext,
 } = await import("./workers.ts");
@@ -173,6 +182,77 @@ test("주석 처리된 할당문은 설정이 아니다 (worker.sh.example이 �
   // 주석의 TICKET_NAME=w9를 먹었다면 락을 엉뚱한 이름으로 찾는다
   putLock(path.join(root, "workers"), "w1", process.pid);
   assert.strictEqual((await listWorkers(root))[0].status, "running");
+});
+
+test("작업 디렉터리 결함 — 3종을 판정하고 정상 워커에는 아무것도 붙이지 않는다 (§4)", async () => {
+  // 실제 배치를 그대로 만든다: 큐가 `<base>/.fs-tickets`, 워크트리가 `<큐>/worktrees/<이름>`.
+  // mkdtemp가 주는 /var/… 는 /private/var/… 의 심링크라서 realpath 없이 비교하면 전부 결함이 된다.
+  const base = mkdtempSync(path.join(tmpdir(), "fst-base-"));
+  tmps.push(base);
+  const root = path.join(base, ".fs-tickets");
+  mkdirSync(path.join(root, "workers"), { recursive: true });
+  const tree = (n: string) => path.join(root, "worktrees", n);
+  /** 워커 파일 한 장. `. <레포>/tick.sh` 줄이 준비 명령의 엔진 레포 경로가 된다. */
+  const wk = (cwd: string) => `#!/bin/bash\nTICKET_CWD="${cwd}"\nTICKET_CONTEXT=()\n. "${base}/tick.sh"\n`;
+  const put = (name: string, cwd: string) =>
+    writeFileSync(path.join(root, "workers", `${name}.sh`), wk(cwd));
+  /** 사람이 손으로 만드는 상태: 트리 + `.fs-tickets -> ../..` */
+  const prepare = (n: string) => {
+    mkdirSync(tree(n), { recursive: true });
+    symlinkSync("../..", path.join(tree(n), ".fs-tickets"));
+  };
+
+  put("ok", tree("ok"));
+  prepare("ok");
+  put("gone", tree("gone")); // 트리를 안 만든다
+  put("nolink", tree("nolink"));
+  mkdirSync(tree("nolink"), { recursive: true }); // 트리는 있고 심링크가 없다
+  put("bait", tree("bait")); // `ln -s` 함정: .fs-tickets 안쪽에 링크가 생긴 상태
+  mkdirSync(path.join(tree("bait"), ".fs-tickets"), { recursive: true });
+  symlinkSync("../../..", path.join(tree("bait"), ".fs-tickets", ".fs-tickets"));
+  put("s1", tree("shared")); // 두 워커가 한 트리를 가리킨다
+  put("s2", tree("shared"));
+  prepare("shared");
+
+  const ws = await listWorkers(root);
+  assert.deepStrictEqual(
+    ws.map((w) => [w.name, w.defects.map((d) => d.kind)]),
+    [
+      ["bait", ["missing-link"]], // 존재 확인만 했으면 통과했다 — realpath가 판정이다
+      ["gone", ["missing-cwd"]], // 트리가 없으면 심링크를 따로 말하지 않는다(원인은 하나)
+      ["nolink", ["missing-link"]],
+      ["ok", []], // 정상 워커에는 결함도 준비 명령도 붙지 않는다
+      ["s1", ["shared-cwd"]],
+      ["s2", ["shared-cwd"]],
+    ],
+  );
+  const by = (n: string) => ws.find((w) => w.name === n)!;
+  assert.strictEqual(by("ok").worktree, undefined);
+  assert.strictEqual(by("ok").cwd, tree("ok"));
+  assert.match(by("bait").defects[0].detail, /큐 루트가 아니라/);
+  assert.deepStrictEqual(by("s1").defects[0].detail, `s2와 같은 경로입니다: ${tree("shared")}`);
+  // 준비 명령은 §4 생성의 3줄과 **같은 함수**에서 나온다. 화면 두 곳이 다른 문자열을 보여주면 안 된다.
+  assert.deepStrictEqual(
+    by("gone").worktree,
+    worktreeCmds(root, "gone", wk(tree("gone")), "gone.sh"),
+  );
+  assert.deepStrictEqual(by("gone").worktree!.cmds, [
+    `git -C '${base}' worktree add '${tree("gone")}' -b wt/gone`,
+    `ln -s ../.. '${path.join(tree("gone"), ".fs-tickets")}'`,
+    `ls -ld '${path.join(tree("gone"), ".fs-tickets")}'    # \`l\`로 시작해야 한다`,
+  ]);
+});
+
+test("작업 디렉터리 결함 — TICKET_CWD 줄이 없으면 엔진 기본값(루트의 부모)으로 판정한다", async () => {
+  // tick.sh 39행. 이 기본값은 큐가 있는 디렉터리라 `<부모>/.fs-tickets`가 곧 큐 루트다 = 정상.
+  const base = mkdtempSync(path.join(tmpdir(), "fst-base-"));
+  tmps.push(base);
+  const root = path.join(base, ".fs-tickets");
+  mkdirSync(path.join(root, "workers"), { recursive: true });
+  writeFileSync(path.join(root, "workers", "w1.sh"), "#!/bin/bash\nTICKET_CONTEXT=()\n");
+  const [w] = await listWorkers(root);
+  assert.strictEqual(w.cwd, null);
+  assert.deepStrictEqual(w.defects, []);
 });
 
 test("holding — .wip 티켓의 owner에서 워커를 되짚는다 (tick.sh 207행 표기)", async () => {

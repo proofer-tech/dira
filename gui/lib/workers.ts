@@ -6,7 +6,7 @@
  *  되돌아간다 — 그래서 그 둘은 남아 있다.
  *  상태 전이(reap·unassign)는 여기서 다시 구현하지 않는다 — `lib/engine.ts`가 워커를 부른다. */
 import { createHash } from "node:crypto";
-import { chmod, readFile, readdir, rename, stat, unlink, writeFile } from "node:fs/promises";
+import { chmod, readFile, readdir, realpath, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import { execFile } from "node:child_process";
@@ -15,6 +15,14 @@ import { NAME_RE, expandHome, resolveWithin, shellPath, shellValue } from "./pat
 import type { Ticket } from "./queue.ts";
 
 export type WorkerStatus = "running" | "idle" | "stopped" | "stale";
+
+/** 작업 디렉터리 결함 3종 (DESIGN.md §4 표). **`status`에 5번째 값을 만들지 않는다** — 결함은
+ *  락·crontab의 사실과 직교한 축이다(사람이 도중에 트리를 지우면 `running` + 결함이다). */
+export type WorkerDefectKind = "missing-cwd" | "missing-link" | "shared-cwd";
+
+/** `detail`은 판정에 **실제로 쓴 경로·워커 이름**이다. 결함 이름과 "그래서 무슨 일이
+ *  일어나나"는 화면이 붙인다(§4 표와 같은 단어를 쓰게 한 자리에 둔다). */
+export type WorkerDefect = { kind: WorkerDefectKind; detail: string };
 
 export type Worker = {
   /** 파일 stem. 액션(생성·삭제·reap)이 가리키는 이름이다 */
@@ -34,6 +42,12 @@ export type Worker = {
   context: WorkerContext;
   /** 공통 컨텍스트 `source` 줄이 있는가. false면 이 워커는 공통을 못 받는다 (§4-1) */
   commonSource: boolean;
+  /** `TICKET_CWD` (셸 없이 읽은 절대경로). null = 줄이 없다 → 엔진 기본값은 루트의 부모다 */
+  cwd: string | null;
+  /** 작업 디렉터리 결함 (§4). **0개가 정상이고 그때 화면은 아무것도 늘지 않는다** */
+  defects: WorkerDefect[];
+  /** 사람이 결함을 고치는 준비 명령. 결함이 있을 때만 채운다 — §4 생성의 3줄과 같은 함수다 */
+  worktree?: { cmds: string[]; reason?: string };
 };
 
 /** tick.sh 46행. 워커가 덮어쓰지 않으면 실제로 이게 돈다 — "기본값"이라고 얼버무리지 않는다. */
@@ -507,6 +521,48 @@ function holdingOf(tickets: Ticket[], effName: string): string | null {
   return null;
 }
 
+// ── 작업 디렉터리 결함 (§4) ─────────────────────────────────────────────────
+//
+// 셋 다 **락을 만들지 않는다** — 그래서 이 판정이 없으면 깨진 워커가 `idle`로 뜨고, 사람이 보는
+// 것은 "멀쩡한데 일을 안 가져간다"이며 단서는 runner.log 마지막 줄뿐이다(실사고 §4-2).
+
+/** 워커별 결함 배열(입력과 같은 순서). `realpath`가 판정의 근거다:
+ *  - 심링크 판정은 `<cwd>/.fs-tickets`가 **큐 루트로 풀리는가**다. `ln -s` 함정이 만드는
+ *    `.fs-tickets/.fs-tickets`는 존재하는 디렉터리라서 존재 확인만으로는 통과한다(실사고 `bf4d8878`).
+ *  - 공유 판정도 `realpath` 키로 본다 — 표기·심링크가 달라도 같은 트리면 같은 트리다.
+ *
+ *  ponytail: 워커 수만큼 stat·realpath 2번이다(한 자릿수). 목록이 커지면 요청 단위 캐시. */
+async function cwdDefects(root: string, ws: { name: string; cwd: string }[]): Promise<WorkerDefect[][]> {
+  const queue = nfc(await realpath(root).catch(() => root));
+  // 못 풀리는 경로(없는 디렉터리)는 문자열로 비교한다 — 없는 트리를 둘이 공유하는 것도 공유다.
+  const keys = await Promise.all(ws.map((w) => realpath(w.cwd).then(nfc, () => nfc(w.cwd))));
+  const byKey = new Map<string, string[]>();
+  keys.forEach((k, i) => byKey.set(k, [...(byKey.get(k) ?? []), ws[i].name]));
+
+  return Promise.all(
+    ws.map(async ({ name, cwd }, i) => {
+      const out: WorkerDefect[] = [];
+      const isDir = await stat(cwd).then((s) => s.isDirectory(), () => false);
+      if (!isDir) {
+        out.push({ kind: "missing-cwd", detail: `${cwd} 가 없거나 디렉터리가 아닙니다.` });
+      } else {
+        // 트리 자체가 없으면 심링크를 따로 말하지 않는다 — 원인은 하나고 명령도 같다.
+        const link = path.join(cwd, ".fs-tickets");
+        const to = await realpath(link).then(nfc, () => null);
+        if (to === null) out.push({ kind: "missing-link", detail: `${link} 가 없습니다.` });
+        else if (to !== queue) {
+          out.push({ kind: "missing-link", detail: `${link} 가 큐 루트가 아니라 ${to} 로 풀립니다.` });
+        }
+      }
+      const others = (byKey.get(keys[i]) ?? []).filter((n) => n !== name);
+      if (others.length > 0) {
+        out.push({ kind: "shared-cwd", detail: `${others.join("·")}와 같은 경로입니다: ${cwd}` });
+      }
+      return out;
+    }),
+  );
+}
+
 // ── 목록 ────────────────────────────────────────────────────────────────────
 
 /** 프로젝트의 워커 전부. 이름 순.
@@ -530,6 +586,8 @@ export async function listWorkers(root: string, tickets: Ticket[] = []): Promise
   const [cronRaw, logs] = await Promise.all([crontabText(), lastLogByWorker(dir)]);
   const cron = nfc(cronRaw);
   const out: Worker[] = [];
+  // 결함 판정에 워커 파일 텍스트가 다시 필요하다(준비 명령의 엔진 레포 경로) — 두 번 읽지 않는다.
+  const texts: string[] = [];
   for (const file of names) {
     const name = file.slice(0, -3);
     const full = path.join(dir, file);
@@ -554,8 +612,21 @@ export async function listWorkers(root: string, tickets: Ticket[] = []): Promise
       context: await contextOf(root, text, parsed.cwd),
       // 이 줄이 없는 워커는 공통을 못 받는다 — 화면이 경고 + `공통 적용`을 띄운다(§4-1).
       commonSource: commonSourceRe.test(text),
+      cwd: parsed.cwd,
+      defects: [], // 공유 판정이 목록 전체를 봐야 하므로 행을 다 만든 뒤에 채운다
     });
+    texts.push(text);
   }
+
+  // tick.sh 39행: TICKET_CWD 줄이 없는 워커의 실효 cwd는 루트의 부모다(contextOf와 같은 기준).
+  const eff = out.map((w) => ({ name: w.name, cwd: w.cwd ?? path.dirname(root) }));
+  const defects = await cwdDefects(root, eff);
+  defects.forEach((d, i) => {
+    if (d.length === 0) return; // 결함 0개인 워커는 아무것도 늘지 않는다
+    out[i].defects = d;
+    // 명령 문자열은 §4 생성과 **같은 함수**에서 나온다 — 두 자리가 다른 걸 보여주면 안 된다.
+    out[i].worktree = worktreeCmds(root, out[i].name, texts[i], `${out[i].name}.sh`);
+  });
   return out;
 }
 

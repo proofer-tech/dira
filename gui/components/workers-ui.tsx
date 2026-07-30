@@ -65,6 +65,13 @@ export type WorkerRow = {
   context: { ok: true; items: ContextRow[] } | { ok: false; reason: string };
   /** 공통 컨텍스트 `source` 줄이 있는가. false면 이 워커는 공통을 못 받는다 (§4-1) */
   commonSource: boolean;
+  /** `TICKET_CWD`. null = 줄이 없다(엔진 기본값 = 루트의 부모) */
+  cwd: string | null;
+  /** 작업 디렉터리 결함 (§4). **0개가 정상**이고 그때 행은 아무것도 늘지 않는다.
+   *  `status`와 직교한다 — 결함이 있어도 락이 있으면 `running`이다 */
+  defects: { kind: "missing-cwd" | "missing-link" | "shared-cwd"; detail: string }[];
+  /** 결함이 있을 때만 온다. §4 생성의 준비 3줄과 같은 문자열이다 */
+  worktree?: { cmds: string[]; reason?: string };
 };
 
 /** §6 에러 3요소 중 1·2번. 3번(다음 행동)은 부르는 쪽이 다이얼로그 안에 붙인다. */
