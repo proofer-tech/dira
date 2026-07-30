@@ -447,7 +447,10 @@ function ExistsMark({ row }: { row: ContextRow }) {
       : row.exists === false
         ? [X, "text-muted-foreground", "없음 — 엔진이 건너뛰고 WARN만 남깁니다"]
         : row.exists === null
-          ? [CircleQuestionMark, "text-muted-foreground", `변수를 못 펴서 확인 못 했습니다: ${row.resolved}`]
+          ? // 원인 중립. `null`은 못 편 변수가 남았을 때도, 워커에 따라 갈릴 때도 온다 —
+            // 후자는 변수가 **펴졌는데** 결과가 갈린 것이라 "못 펴서"는 거짓이다(§4-1).
+            // 경로는 아래 `title`이 한 번만 붙인다.
+            [CircleQuestionMark, "text-muted-foreground", "경로를 한 값으로 확정하지 못했습니다"]
           : [CircleQuestionMark, "text-muted-foreground", "저장하면 확인합니다"];
   return (
     <span className="flex items-center gap-1" title={row.resolved ? `${row.resolved} — ${label}` : label}>
