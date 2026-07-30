@@ -162,109 +162,143 @@ export function PersonaCard({ projectId, row }: { projectId: string; row: Person
   return (
     // 네이티브 `<details>`다 — shadcn accordion을 설치하지 않는다(§비주얼 컴포넌트 인벤토리).
     // 접힘은 표시 상태일 뿐이라 본문이 언마운트되지 않는다 = 편집 중인 textarea가 살아 있다.
-    <details className="group rounded-md border">
-      <summary className="flex cursor-pointer list-none items-center gap-2 p-3 [&::-webkit-details-marker]:hidden">
-        <ChevronRight
-          aria-hidden
-          className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90"
-        />
-        <span className="font-mono text-sm">{row.name}</span>
-        {saved === null && <Badge variant="outline">프로필 없음</Badge>}
-        <span className="min-w-0 truncate text-xs text-muted-foreground" title={row.file}>
-          {refs ? `티켓 ${refs}` : "참조하는 티켓 없음"}
-        </span>
-      </summary>
+    // ponytail: 펼침 상태를 URL에 담지 않는다. 딥링크(`?open=<이름>`)가 실제로 생기면 그때.
+    // 바깥 div는 삭제 실패 사유 때문이다 — 삭제를 접힌 줄에서 누르므로 사유도 접힌 채 보여야 한다.
+    <div className="rounded-md border">
+      <details className="group">
+        <summary className="flex cursor-pointer list-none items-center gap-2 p-3 [&::-webkit-details-marker]:hidden">
+          <ChevronRight
+            aria-hidden
+            className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90"
+          />
+          <span className="font-mono text-sm">{row.name}</span>
+          {saved === null && <Badge variant="outline">프로필 없음</Badge>}
+          <span className="min-w-0 truncate text-xs text-muted-foreground" title={row.file}>
+            {refs ? `티켓 ${refs}` : "참조하는 티켓 없음"}
+          </span>
+          {/* 프로필 본문은 **모든 디스패치 프롬프트에 인라인된다** — 길이가 곧 비용이다(§5).
+              접힌 줄에 둬야 "누가 프롬프트를 얼마나 먹는가"를 목록에서 비교할 수 있다 */}
+          <span className="font-mono text-xs whitespace-nowrap text-muted-foreground">
+            {body.length}자
+          </span>
+          {/* 저장 버튼은 펼쳐야 보인다 — 접은 채 잊으면 이게 유일한 표시다(§5) */}
+          {dirty && <Badge variant="outline">저장 안 됨</Badge>}
+          {saved !== null && (
+            // 삭제는 접힌 줄에 있고 펼침을 토글하지 않는다. summary의 활성화 동작을 막는 건
+            // preventDefault다 — stopPropagation은 activationTarget이 이미 정해져 안 통한다.
+            <span className="ml-auto" onClick={(e) => e.preventDefault()}>
+              <DeleteButton projectId={projectId} row={row} onError={setDeleteError} />
+            </span>
+          )}
+        </summary>
 
-      <div className="space-y-3 border-t p-3">
-        {deleteError && <Failure title="삭제하지 못했습니다" message={deleteError} />}
+        <div className="space-y-3 border-t p-3">
+          {/* 원문 편집이다 — 마크다운 렌더는 넣지 않는다(§6 프로토콜 에디터와 같은 결정) */}
+          <Textarea
+            aria-label={`${row.name} PROFILE.md`}
+            className="font-mono"
+            rows={16}
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+          />
+          {result && !result.ok && (
+            <Failure title="저장하지 못했습니다" message={result.message ?? ""} />
+          )}
+          <div className="flex items-center gap-4">
+            <Button
+              size="sm"
+              disabled={pending || !dirty}
+              onClick={() =>
+                start(async () => {
+                  const r = await savePersonaAction(projectId, row.name, body);
+                  setResult(r);
+                  if (r.ok) setSaved(body);
+                })
+              }
+            >
+              {pending ? "저장 중…" : "저장"}
+            </Button>
+            {result?.ok && !dirty && (
+              <span className="text-sm text-muted-foreground">저장됐습니다.</span>
+            )}
+          </div>
+        </div>
+      </details>
 
-        {/* 원문 편집이다 — 마크다운 렌더는 넣지 않는다(§6 프로토콜 에디터와 같은 결정) */}
-        <Textarea
-          aria-label={`${row.name} PROFILE.md`}
-          className="font-mono"
-          rows={16}
-          value={body}
-          onChange={(e) => setBody(e.target.value)}
-        />
-        {result && !result.ok && (
-          <Failure title="저장하지 못했습니다" message={result.message ?? ""} />
+      {deleteError && (
+        <div className="p-3 pt-0">
+          <Failure title="삭제하지 못했습니다" message={deleteError} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** 삭제 확인. `PersonaCard`에서 뽑은 이유는 재사용이 아니라 자리다 — 60줄짜리 다이얼로그가
+ *  `<summary>` 안에 들어가면 접힌 줄이 뭘 담는지가 안 보인다. 호출부는 하나다. */
+function DeleteButton({
+  projectId,
+  row,
+  onError,
+}: {
+  projectId: string;
+  row: PersonaRow;
+  onError: (message: string) => void;
+}) {
+  const [pending, start] = useTransition();
+
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger
+        render={
+          <Button variant="ghost" size="sm">
+            <Trash2 aria-hidden />
+            삭제
+          </Button>
+        }
+      />
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>페르소나 삭제 — {row.name}</AlertDialogTitle>
+          <AlertDialogDescription>
+            <span className="font-mono text-xs break-all">
+              {row.file.replace(/\/PROFILE\.md$/, "")}
+            </span>{" "}
+            디렉터리를 안의 파일까지 지웁니다. 되돌릴 수 없습니다.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        {/* 티켓은 지우지 않는다 — 남은 티켓은 페르소나 없이 디스패치된다(tick.sh 188행) */}
+        {row.refs.open + row.refs.wip > 0 && (
+          <Alert>
+            <TriangleAlert aria-hidden className="text-status-stale" />
+            <AlertTitle>
+              이 페르소나를 참조하는 티켓이 {row.refs.open + row.refs.wip}건 있습니다
+              {row.refs.wip > 0 && ` (진행중 ${row.refs.wip}건)`}
+            </AlertTitle>
+            <AlertDescription>
+              티켓은 지워지지 않습니다. 프로필이 없어지면 엔진은{" "}
+              <span className="font-mono text-xs">WARN</span>만 남기고{" "}
+              <strong className="font-medium">페르소나 없이</strong> 디스패치합니다 — 세션이
+              역할·권한을 모르는 채로 시작합니다.
+            </AlertDescription>
+          </Alert>
         )}
-        <div className="flex items-center gap-4">
-          <Button
-            size="sm"
-            disabled={pending || !dirty}
+        <AlertDialogFooter>
+          <AlertDialogCancel autoFocus>취소</AlertDialogCancel>
+          <AlertDialogAction
+            variant="destructive"
+            disabled={pending}
             onClick={() =>
               start(async () => {
-                const r = await savePersonaAction(projectId, row.name, body);
-                setResult(r);
-                if (r.ok) setSaved(body);
+                const r = await deletePersonaAction(projectId, row.name);
+                if (!r.ok) onError(r.message ?? "삭제하지 못했습니다.");
               })
             }
           >
-            {pending ? "저장 중…" : "저장"}
-          </Button>
-          {result?.ok && !dirty && (
-            <span className="text-sm text-muted-foreground">저장됐습니다.</span>
-          )}
-          {/* 프로필 본문은 **모든 디스패치 프롬프트에 인라인된다** — 길이가 곧 비용이다(§6) */}
-          <span className="font-mono text-xs text-muted-foreground">{body.length}자</span>
-          {/* 삭제는 `<summary>` 밖이다 — summary 안의 버튼은 클릭이 곧 펼침 토글이다 */}
-          {saved !== null && (
-            <AlertDialog>
-              <AlertDialogTrigger
-                render={
-                  <Button variant="ghost" size="sm">
-                    <Trash2 aria-hidden />
-                    삭제
-                  </Button>
-                }
-              />
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>페르소나 삭제 — {row.name}</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    <span className="font-mono text-xs break-all">
-                      {row.file.replace(/\/PROFILE\.md$/, "")}
-                    </span>{" "}
-                    디렉터리를 안의 파일까지 지웁니다. 되돌릴 수 없습니다.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                {/* 티켓은 지우지 않는다 — 남은 티켓은 페르소나 없이 디스패치된다(tick.sh 188행) */}
-                {row.refs.open + row.refs.wip > 0 && (
-                  <Alert>
-                    <TriangleAlert aria-hidden className="text-status-stale" />
-                    <AlertTitle>
-                      이 페르소나를 참조하는 티켓이 {row.refs.open + row.refs.wip}건 있습니다
-                      {row.refs.wip > 0 && ` (진행중 ${row.refs.wip}건)`}
-                    </AlertTitle>
-                    <AlertDescription>
-                      티켓은 지워지지 않습니다. 프로필이 없어지면 엔진은{" "}
-                      <span className="font-mono text-xs">WARN</span>만 남기고{" "}
-                      <strong className="font-medium">페르소나 없이</strong> 디스패치합니다 — 세션이
-                      역할·권한을 모르는 채로 시작합니다.
-                    </AlertDescription>
-                  </Alert>
-                )}
-                <AlertDialogFooter>
-                  <AlertDialogCancel autoFocus>취소</AlertDialogCancel>
-                  <AlertDialogAction
-                    variant="destructive"
-                    disabled={pending}
-                    onClick={() =>
-                      start(async () => {
-                        const r = await deletePersonaAction(projectId, row.name);
-                        if (!r.ok) setDeleteError(r.message ?? "삭제하지 못했습니다.");
-                      })
-                    }
-                  >
-                    삭제
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          )}
-        </div>
-      </div>
-    </details>
+            삭제
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
