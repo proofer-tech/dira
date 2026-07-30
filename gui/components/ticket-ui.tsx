@@ -36,6 +36,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -61,6 +62,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Message, MessageContent, MessageHeader } from "@/components/ui/message";
 import {
   MessageScroller,
   MessageScrollerButton,
@@ -316,22 +318,41 @@ function AnswerFields({
           <MessageScroller>
             <MessageScrollerViewport aria-label="답변 스레드" className="max-h-96">
               <MessageScrollerContent>
-                {thread.map((item, i) => (
-                  <MessageScrollerItem key={i} messageId={String(i)} className="space-y-1">
-                    <p className="text-xs text-muted-foreground">
-                      {item.heading || (item.role === "question" ? "질문" : "답변")}
-                      {item.hash && <span className="ml-2 font-mono">{item.hash}</span>}
-                    </p>
-                    {/* 읽기만 하는 자리라 렌더된 마크다운이다(§비주얼 §10). 답변 쪽 구분은 왼쪽 선
-                        하나뿐이다 — `text-muted-foreground`를 걸면 렌더된 본문의 `bg-muted` 블록
-                        안에서 4.34가 되고, 그건 §1이 실측으로 금지한 조합이다. 구조로 가르고 색으로
-                        안 가른다. **이 줄(`border-l-2`)을 지우고 말풍선으로 바꾸는 것은
-                        `6ca526f3`이다**(§13 — 말풍선과 겹치면 답변 쪽만 상자 두 겹이 된다) */}
-                    <div className={item.role === "answer" ? "border-l-2 border-border pl-3" : ""}>
-                      <Markdown text={item.text} />
-                    </div>
-                  </MessageScrollerItem>
-                ))}
+                {thread.map((item, i) => {
+                  // 역할은 **정렬**이 가른다 — 질문(PM)은 왼쪽, 답변(사람)은 오른쪽(§비주얼 §13 ·
+                  // 사람 요청 `c01a9a11` Q2=(b)). 변종은 좌우가 같은 `outline` 하나다: §13의
+                  // 실측표에서 §10을 안 깎는 말풍선 배경이 `--background` 하나뿐이었다
+                  // (채워진 배경 6종은 코드 펜스가 녹거나 표 선·인용이 미달한다).
+                  // 아바타는 없다 — 참여자가 둘이고 정렬이 이미 가른다.
+                  const align = item.role === "question" ? "start" : "end";
+                  return (
+                    <MessageScrollerItem key={i} messageId={String(i)}>
+                      <Message align={align}>
+                        <MessageContent>
+                          {/* 헤더는 말풍선 **밖 · 위**다(§13) — 안에 넣으면 본문의 소유자가
+                              `<Markdown>` 하나가 아니게 되고 §10 루트의 `[&>:first-child]:mt-0`이
+                              거짓이 된다. 밖이면 앉는 면이 `--card`고 거기서 `--muted-foreground`는
+                              4.73 / 6.91이다. 오른쪽 정렬은 `MessageContent`가 `data-align=end`에서
+                              자식을 `self-end`로 밀어 같이 준다 */}
+                          <MessageHeader>
+                            {item.heading || (item.role === "question" ? "질문" : "답변")}
+                            {item.hash && <span className="ml-2 font-mono">{item.hash}</span>}
+                          </MessageHeader>
+                          {/* 읽기만 하는 자리라 렌더된 마크다운이다(§비주얼 §10) — 말풍선 안에서도
+                              그대로다. 본문에 `text-muted-foreground`를 걸지 않는다: 렌더된 본문의
+                              `bg-muted` 블록 안에서 4.34가 되고 그건 §1이 실측으로 금지한 조합이다.
+                              종전의 `border-l-2 border-border pl-3`은 지웠다 — 말풍선과 겹치면
+                              답변 쪽만 세로선 + 상자 두 겹이 된다(§13) */}
+                          <Bubble variant="outline" align={align}>
+                            <BubbleContent>
+                              <Markdown text={item.text} />
+                            </BubbleContent>
+                          </Bubble>
+                        </MessageContent>
+                      </Message>
+                    </MessageScrollerItem>
+                  );
+                })}
               </MessageScrollerContent>
             </MessageScrollerViewport>
             {/* 아래가 가려졌을 때만 뜬다(`data-active`) — 안 가려지면 스스로 사라진다.
