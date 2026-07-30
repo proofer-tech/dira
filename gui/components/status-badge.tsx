@@ -15,6 +15,7 @@ import {
   CircleQuestionMark,
   Clock,
   Lock,
+  MessageCircleQuestion,
   Play,
   Plug,
   Power,
@@ -29,6 +30,8 @@ export type Status =
   // 티켓 5상태 (open은 미할당·deps 충족)
   | "open"
   | "blocked"
+  // `blocked`의 하위 종류 — 상태 5개를 늘리는 게 아니라 표시가 갈리는 것이다(queue.ts isAwaiting)
+  | "awaiting"
   | "assigned"
   | "wip"
   | "done"
@@ -63,6 +66,16 @@ const ASSIGNED_HINT =
 const STATUS: Record<Status, Spec> = {
   open: { label: "대기", icon: Circle, variant: "secondary" },
   blocked: { label: "deps 대기", icon: Lock, variant: "outline", tint: BLOCKED },
+  // 이상 상태가 **아니다** — PM이 물었고 사람이 답할 일이 있다는 정상 신호다(§요구사항 레이어
+  // 결정 4). 그래서 막힘 색을 그대로 쓰고 새 색 토큰을 만들지 않는다. 갈리는 건 아이콘·라벨뿐이고,
+  // 방치는 `days`(경과일)가 말한다. 아이콘 최종 확정은 designer(`588bc5bc`)다.
+  awaiting: {
+    label: "답변 대기",
+    icon: MessageCircleQuestion,
+    variant: "outline",
+    tint: BLOCKED,
+    hint: "PM이 되물었다 — 요구사항 상세에서 답을 쓰면 다시 큐에 뜬다",
+  },
   // 정상 흐름에 없는 상태다(엔진은 claim → assign 순서라 "열린 파일 + session_id"를 만들지 않는다).
   // 그래서 정상 단계용 색을 주지 않는다 — stale과 같은 "고장, 사람이 봐야 함"이다(§2 이상 상태).
   assigned: {
@@ -91,12 +104,27 @@ const STATUS: Record<Status, Spec> = {
 /** 상태 라벨 문자열이 필요한 곳(보드 필터 선택지) — 배지 없이도 **같은 말**을 쓰게 한다. */
 export const statusLabel = (status: Status) => STATUS[status].label;
 
-export function StatusBadge({ status, className }: { status: Status; className?: string }) {
+/** `답변 대기 · <n>일`의 경과일. 기준은 `birth`가 아니라 `mtime`이다 — PM이 `awaiting`을 걸며
+ *  파일을 고친 시점이 대기 시작이다(§1 보드). 배지를 그리는 화면(보드·상세)이 **같은 계산**을
+ *  쓰게 여기 둔다. 서버에서 부른다(로컬 도구라 서버·브라우저가 같은 타임존이다). */
+export const daysSince = (ms: number) => Math.floor((Date.now() - ms) / 86_400_000);
+
+/** `days`는 방치 경과일이다(`답변 대기 · 3일`). 오래된 답변 대기가 정체의 신호이고 그 판단은
+ *  사람이 한다 — 자동 만료도 색 변화도 없다(§요구사항 레이어 결정 4). */
+export function StatusBadge({
+  status,
+  days,
+  className,
+}: {
+  status: Status;
+  days?: number;
+  className?: string;
+}) {
   const { label, icon: Icon, variant, tint, hint } = STATUS[status];
   return (
     <Badge variant={variant} className={cn(tint, className)} title={hint}>
       <Icon aria-hidden className="size-3.5" />
-      {label}
+      {days === undefined ? label : `${label} · ${days}일`}
     </Badge>
   );
 }

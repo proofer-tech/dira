@@ -29,6 +29,7 @@ export type Ticket = {
   fm: Record<string, string>;
   body: string; // frontmatter 이후 본문
   birth: number; // ms. st_birthtime ?? mtime. 큐 순서
+  mtime: number; // ms. 마지막 수정 = `awaiting`이 걸린 시점 (답변 대기 경과일의 기준, §1 보드)
 };
 
 /** 상태 접미사는 프로젝트별이다. 하드코딩하지 않고 해석된 값을 받는다. */
@@ -125,11 +126,13 @@ export async function listTickets(root: string, config: Suffixes): Promise<Ticke
   for (const p of files) {
     let text: string;
     let birth: number;
+    let mtime: number;
     try {
       text = await readFile(p, "utf8");
       const st = await stat(p);
       // ponytail: birthtime이 없는 파일시스템은 0으로 온다 → mtime (tickets.py와 같은 폴백).
       birth = st.birthtimeMs || st.mtimeMs;
+      mtime = st.mtimeMs;
     } catch {
       continue;
     }
@@ -159,6 +162,7 @@ export async function listTickets(root: string, config: Suffixes): Promise<Ticke
       fm,
       body: lines.slice(end + 1).join("\n"),
       birth,
+      mtime,
     });
   }
   out.sort((a, b) => a.birth - b.birth || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
@@ -188,7 +192,10 @@ export const awaitingOf = (t: Ticket): string => unquote(t.fm.awaiting ?? "");
  *
  *  `deps`가 엔진 잠금이고 `awaiting`은 그 잠금이 사람 답변을 기다린다는 표시다. 답변 파일이
  *  생기면 unmet에서 빠져 판정이 저절로 꺼진다 — `awaiting`은 지우지 않는다(이력이 남는다).
- *  `.wip`은 state로 이미 걸러진다: 그 파일로 지금 세션이 일하고 있다(제약 5). */
+ *  `.wip`은 state로 이미 걸러진다: 그 파일로 지금 세션이 일하고 있다(제약 5).
+ *
+ *  **`statusOf`에 넣지 않는다**(결정 4): 이건 `blocked`의 하위 종류이고, 칸반 컬럼 5개와 상태
+ *  정렬은 엔진이 아는 5상태 그대로여야 한다. 갈리는 것은 배지·필터 선택지뿐이다(§1 보드). */
 export function isAwaiting(t: Ticket): boolean {
   const a = nfc(awaitingOf(t));
   return t.state === "open" && !!a && t.unmet.some((d) => nfc(d) === a);
@@ -238,12 +245,26 @@ export type BoardQuery = {
   q: string; // title + 본문 + frontmatter 값 전체 부분일치
 };
 
+/** `kind: answer`는 **기본 목록에서 뺀다**(§1 보드). 답변은 수행할 티켓이 아니라 요구사항 상세에서
+ *  읽는 기록이고 CLI `list`에도 뜨지 않는다(`.done`으로 태어난다) — 여기서 빼는 게 패리티다.
+ *  kind 필터에서 `answer`를 고르면 보인다. 숨기는 게 아니라 기본에서 빼는 것이다. */
+export const inDefaultList = (t: Ticket, kind: string[]) =>
+  t.kind !== "answer" || kind.includes("answer");
+
 export function filterTickets(tickets: Ticket[], query: BoardQuery): Ticket[] {
   const needle = norm(query.q.trim());
   return tickets.filter((t) => {
+    if (!inDefaultList(t, query.kind)) return false;
     if (query.kind.length && !query.kind.includes(t.kind)) return false;
     if (query.persona.length && !query.persona.includes(t.persona)) return false;
-    if (query.status.length && !query.status.includes(statusOf(t))) return false;
+    // `답변 대기`는 `deps 대기`의 하위 종류다 — `blocked`를 고르면 답변 대기도 들어오고,
+    // `awaiting`을 고르면 그것만 남는다(statusOf는 여전히 `blocked`를 준다).
+    if (
+      query.status.length &&
+      !query.status.includes(statusOf(t)) &&
+      !(query.status.includes("awaiting") && isAwaiting(t))
+    )
+      return false;
     if (!needle) return true;
     // 해시를 같이 본다: `ticket:`이 없는 티켓은 해시가 파일명에서 나오므로 frontmatter 값만
     // 훑으면 해시로 못 찾는다("검색해도 안 나오는 티켓"이 생긴다).

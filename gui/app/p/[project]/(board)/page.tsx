@@ -14,7 +14,7 @@ import { notFound } from "next/navigation";
 import { ArrowDown, ArrowUp, ChevronsUpDown, X } from "lucide-react";
 import { BoardFilter, BoardPolling, BoardSearch } from "@/components/board-ui";
 import { EmptyState } from "@/components/empty-state";
-import { DepBadge, StatusBadge, statusLabel } from "@/components/status-badge";
+import { DepBadge, StatusBadge, daysSince, statusLabel } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -29,6 +29,8 @@ import {
 import {
   SORT_KEYS,
   filterTickets,
+  inDefaultList,
+  isAwaiting,
   listTickets,
   resolveDep,
   sortTickets,
@@ -44,6 +46,10 @@ export const dynamic = "force-dynamic";
 /** 티켓 5상태 — 필터 선택지 **겸 칸반 컬럼**. 순서는 큐를 흐르는 순서다(queue.ts `RANK`와 같다).
  *  라벨은 `<StatusBadge>`에서 가져온다(같은 말을 써야 한다). */
 const STATUSES = ["open", "blocked", "assigned", "wip", "done"] as const;
+
+/** 상태 필터 선택지 = 칸반 컬럼 5개 + 파생 `답변 대기`(§1 보드 · §요구사항 레이어 결정 5).
+ *  **컬럼은 5개 그대로다** — 답변 대기 카드는 `deps 대기` 컬럼에 앉고 배지로만 갈린다. */
+const STATUS_OPTIONS = ["open", "blocked", "awaiting", "assigned", "wip", "done"] as const;
 
 /** 뷰 전환은 `<Link>` 2개다 — `tabs`를 설치하지 않은 이유가 이것이다(DESIGN.md §5). */
 const VIEWS = [
@@ -101,6 +107,11 @@ export default async function Board({
   const sortKey = SORT_KEYS.find((k) => k === sortParam) ?? null; // 모르는 값은 큐 순서로 떨어진다
   const desc = sp.get("dir") === "desc";
   const rows = sortTickets(filterTickets(tickets, query), sortKey, desc);
+  // 건수의 분모는 **기본 목록에 드는 수**다(`kind: answer` 제외 후, §1 보드). `tickets.length`를
+  // 쓰면 필터를 안 걸었는데도 `12 / 14건`으로 보여 답변 파일이 필터처럼 읽힌다.
+  // `tickets`(전체)는 deps 해석·선택지 목록이 계속 쓴다 — 거기서 답변을 빼면 요구사항의 답변 dep이
+  // `큐에 없는 해시`(영구 대기)로 거짓 표시된다.
+  const total = tickets.filter((t) => inDefaultList(t, query.kind)).length;
 
   // 선택지를 하드코딩하지 않는다 — kind는 프로젝트마다 다르고, persona는 그 큐의 페르소나다.
   // persona 목록은 **페르소나 화면과 같은 `listPersonas`**로 만든다. 여기서 `readdir`을 다시
@@ -142,7 +153,7 @@ export default async function Board({
     ...query.kind.map((v) => ({ param: "kind", value: v, text: `kind: ${v}` })),
     ...query.persona.map((v) => ({ param: "persona", value: v, text: `persona: ${v}` })),
     ...query.status.map((v) => {
-      const known = STATUSES.find((s) => s === v);
+      const known = STATUS_OPTIONS.find((s) => s === v);
       return { param: "status", value: v, text: `상태: ${known ? statusLabel(known) : v}` };
     }),
   ];
@@ -202,7 +213,7 @@ export default async function Board({
         </Button>
       </div>
 
-      {tickets.length === 0 ? (
+      {total === 0 ? (
         // 빈 큐 — 필터 0건과 다른 문구다(§6). 원인이 다르므로 다음 행동도 다르다.
         <EmptyState
           text="열린 티켓 없음"
@@ -229,7 +240,7 @@ export default async function Board({
             <BoardFilter
               param="status"
               label="상태"
-              options={STATUSES.map((s) => ({ value: s, label: statusLabel(s) }))}
+              options={STATUS_OPTIONS.map((s) => ({ value: s, label: statusLabel(s) }))}
             />
             <div className="ml-auto flex items-center gap-2">
               {VIEWS.map((v) => (
@@ -245,9 +256,7 @@ export default async function Board({
                 </Button>
               ))}
               <span className="text-xs tabular-nums text-muted-foreground">
-                {rows.length === tickets.length
-                  ? `티켓 ${tickets.length}건`
-                  : `티켓 ${rows.length} / ${tickets.length}건`}
+                {rows.length === total ? `티켓 ${total}건` : `티켓 ${rows.length} / ${total}건`}
               </span>
             </div>
           </div>
@@ -294,12 +303,20 @@ export default async function Board({
                             key={t.path}
                             className="relative gap-2 px-4 focus-within:bg-muted/50 hover:bg-muted/50"
                           >
-                            <Link
-                              href={href(t)}
-                              className="rounded-sm font-mono text-xs after:absolute after:inset-0"
-                            >
-                              {t.hash}
-                            </Link>
+                            {/* 칸반 카드는 컬럼이 상태를 말하므로 배지를 달지 않는다 — 예외가
+                                `답변 대기`다. `deps 대기` 컬럼에 앉으므로(컬럼 5개 유지) 카드
+                                자신이 하위 종류임을 말해야 한다(§1 보드 요구사항 항) */}
+                            <div className="flex items-start justify-between gap-2">
+                              <Link
+                                href={href(t)}
+                                className="rounded-sm font-mono text-xs after:absolute after:inset-0"
+                              >
+                                {t.hash}
+                              </Link>
+                              {isAwaiting(t) && (
+                                <StatusBadge status="awaiting" days={daysSince(t.mtime)} />
+                              )}
+                            </div>
                             {/* 카드 title은 2줄까지(§6). 전문은 `title` 속성으로 본다 */}
                             <span className="line-clamp-2 text-sm" title={t.title}>
                               {t.title || "(제목 없음)"}
@@ -376,7 +393,11 @@ export default async function Board({
                   // 여기는 행 액션 버튼이 없어서 행 링크가 안전하다). deps 배지는 그 위에 뜬다.
                   <TableRow key={t.path} className="relative h-9 focus-within:bg-muted/50">
                     <TableCell className="px-3 py-0">
-                      <StatusBadge status={statusOf(t)} />
+                      {isAwaiting(t) ? (
+                        <StatusBadge status="awaiting" days={daysSince(t.mtime)} />
+                      ) : (
+                        <StatusBadge status={statusOf(t)} />
+                      )}
                     </TableCell>
                     <TableCell className="px-3 py-0">
                       <Link

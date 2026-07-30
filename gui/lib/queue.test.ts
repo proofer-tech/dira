@@ -14,6 +14,7 @@ import {
   awaitingUnlocked,
   derivedFrom,
   filterTickets,
+  inDefaultList,
   isAwaiting,
   listTickets,
   questionsOf,
@@ -579,4 +580,91 @@ test("req 왕복 — 출처·파생 양방향, deps와 섞이지 않고 큐를 �
   // deps가 걸린 쪽만 잠긴다 — r0000002가 열려 있으므로
   assert.deepStrictEqual(at("w0000002").unmet, ["r0000002"]);
   assert.doesNotMatch(pySelect(r, ENV), /w0000002/);
+});
+
+// ── 보드 표현 (DESIGN.md §1 보드 요구사항·`kind: answer` 항 · 결정 4) ─────────
+//
+// 위 테스트가 **판정**을 못박고, 이 테스트는 그 판정이 **보드의 컬럼·필터·목록**으로 어떻게
+// 번역되는지를 못박는다: 답변 대기는 `blocked`의 하위 종류이고 답변 파일은 기본 목록에 없다.
+
+test("보드 — 답변 대기는 deps 대기의 하위 종류 · kind: answer 기본 제외", async () => {
+  const root = newRoot();
+  // ① PM이 되물었고 답변 파일이 아직 없다 → 답변 대기
+  await write(
+    root,
+    "r0000001.md",
+    fm({
+      ticket: "r0000001",
+      title: "답변 대기 요구사항",
+      kind: "request",
+      persona: "pm",
+      deps: "[a1111111]",
+      awaiting: "a1111111",
+    }) + "\n## 질문 1\n무엇을 먼저?\n",
+  );
+  // ② 답이 달렸다 → `awaiting`을 지우지 않아도 판정이 꺼진다(이력이 남는다)
+  await write(
+    root,
+    "r0000002.md",
+    fm({ ticket: "r0000002", title: "답 받은 요구사항", kind: "request", persona: "pm",
+      deps: "[a2222222]", awaiting: "a2222222" }),
+  );
+  await write(
+    root,
+    "a2222222.done.md", // 답변 파일은 처음부터 `.done`으로 태어난다
+    fm({ ticket: "a2222222", title: "답변 — r0000002 #1", kind: "answer" }) + "\n첫 화면부터.\n",
+  );
+  // ③ 평범한 deps 대기 — 답변 대기가 아니다
+  await write(root, "b0000003.md", fm({ ticket: "b0000003", title: "선행 대기", kind: "work", deps: "[zzzz9999]" }));
+  // ④ `awaiting`은 있는데 `deps`를 안 걸었다 → 잠금 없음. 대기가 아니라 그냥 열림이다
+  //    (상세가 경고 한 줄을 띄우는 경우다 — 결정 5)
+  await write(root, "r0000004.md", fm({ ticket: "r0000004", title: "잠금 없는 요구사항", kind: "request", awaiting: "a4444444" }));
+  // ⑤ PM이 물고 있는 중 → 답변칸이 구조적으로 없다(제약 5). 열림이 아니므로 답변 대기도 아니다
+  await write(root, "r0000005.wip.md", fm({ ticket: "r0000005", title: "PM 착수", kind: "request", awaiting: "a5555555", session_id: "sess-r5" }));
+
+  const tickets = await listTickets(root, DEFAULT);
+  const by = (h: string) => tickets.find((t) => t.hash === h)!;
+  const hashes = (ts: Ticket[]) => ts.map((t) => t.hash);
+  const none = { kind: [], persona: [], status: [], q: "" };
+
+  // 엔진과 판정이 같은가 — awaiting은 엔진이 읽는 문법이고 무시하는 키다
+  assert.strictEqual(tsList(tickets), pyList(root));
+
+  assert.strictEqual(isAwaiting(by("r0000001")), true);
+  assert.strictEqual(isAwaiting(by("r0000002")), false); // 답이 달려 unmet에서 빠졌다
+  assert.strictEqual(isAwaiting(by("b0000003")), false); // awaiting 없음
+  assert.strictEqual(isAwaiting(by("r0000004")), false); // 잠금 없음
+  assert.strictEqual(isAwaiting(by("r0000005")), false); // .wip
+
+  // 칸반 컬럼은 5개 그대로다 — 답변 대기 카드는 `deps 대기` 컬럼에 앉는다
+  assert.strictEqual(statusOf(by("r0000001")), "blocked");
+  assert.strictEqual(statusOf(by("r0000002")), "open");
+  assert.strictEqual(statusOf(by("r0000004")), "open");
+
+  // 하위 종류: `blocked`를 고르면 둘 다, `awaiting`을 고르면 그것만
+  assert.deepStrictEqual(hashes(filterTickets(tickets, { ...none, status: ["blocked"] })), [
+    "r0000001",
+    "b0000003",
+  ]);
+  assert.deepStrictEqual(hashes(filterTickets(tickets, { ...none, status: ["awaiting"] })), [
+    "r0000001",
+  ]);
+  assert.deepStrictEqual(hashes(filterTickets(tickets, { ...none, status: ["awaiting", "wip"] })), [
+    "r0000001",
+    "r0000005",
+  ]);
+
+  // `kind: answer`는 기본 목록에 없다 — 필터에서 고르면 보인다(숨기는 게 아니다)
+  assert.strictEqual(inDefaultList(by("a2222222"), []), false);
+  assert.strictEqual(inDefaultList(by("a2222222"), ["answer"]), true);
+  assert.ok(!hashes(filterTickets(tickets, none)).includes("a2222222"));
+  assert.deepStrictEqual(hashes(filterTickets(tickets, { ...none, kind: ["answer"] })), [
+    "a2222222",
+  ]);
+  // 검색도 기본 목록을 따른다 — 답변 본문이 검색으로 새 나오면 "기본 제외"가 거짓말이 된다
+  assert.deepStrictEqual(hashes(filterTickets(tickets, { ...none, q: "첫 화면부터" })), []);
+
+  // 경과일 기준은 mtime이다 — 답변 대기 배지의 `· <n>일`
+  assert.ok(by("r0000001").mtime > 0);
+  assert.strictEqual(Math.floor((Date.now() - by("r0000001").mtime) / 86_400_000), 0);
 });

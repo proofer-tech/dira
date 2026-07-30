@@ -9,7 +9,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Lock, TriangleAlert } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
-import { DepBadge, StatusBadge } from "@/components/status-badge";
+import { DepBadge, StatusBadge, daysSince } from "@/components/status-badge";
 import {
   AnswerCard,
   DeleteTicketButton,
@@ -131,7 +131,13 @@ export default async function TicketDetail({
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex min-w-0 items-center gap-3">
           <h1 className="text-lg font-semibold">{ticket.title || "(제목 없음)"}</h1>
-          <StatusBadge status={statusOf(ticket)} />
+          {/* 보드와 **같은 말**을 쓴다 — 같은 티켓이 한쪽에서 `deps 대기`, 다른 쪽에서
+              `답변 대기`로 보이면 배지가 상태 표현의 유일한 출처인 의미가 없다(§1 보드) */}
+          {isAwaiting(ticket) ? (
+            <StatusBadge status="awaiting" days={daysSince(ticket.mtime)} />
+          ) : (
+            <StatusBadge status={statusOf(ticket)} />
+          )}
           <span className="font-mono text-xs text-muted-foreground">{ticket.hash}</span>
         </div>
         <div className="flex items-center gap-2">
