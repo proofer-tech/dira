@@ -54,6 +54,9 @@ cat > ~/Projects/myproject/.fs-tickets/workers/w1.sh <<'EOF'
 EOF
 chmod +x ~/Projects/myproject/.fs-tickets/workers/w1.sh
 
+# (선택) 프로토콜·페르소나 출발점을 복사한다 — 엔진은 이게 없어도 그대로 돈다
+cp -r ~/Projects/fs-tickets/templates/* ~/Projects/myproject/.fs-tickets/
+
 # 티켓 하나 만들고
 mkdir -p ~/Projects/myproject/.fs-tickets/tickets
 cat > ~/Projects/myproject/.fs-tickets/tickets/a1b2c3d4.md <<'EOF'
@@ -160,6 +163,9 @@ rename이 그 자체로 락이기 때문**이다(아래 [동작](#동작) 참조
 - 범위가 커지면 쪼개서 deps로 엮는다.
 ```
 
+여기 예시는 짧게 뒀고, 바로 쓸 수 있는 실물 프로필 4종(pm·developer·qa·designer)은
+[§템플릿](#템플릿)에 있다.
+
 ## 협업 프로토콜
 
 ```
@@ -193,8 +199,36 @@ rename이 그 자체로 락이기 때문**이다(아래 [동작](#동작) 참조
 - 추측으로 진행하지 않는다. 세부는 [handoff.md](handoff.md) 참조.
 ```
 
+여기 예시는 뼈대만이고, 바로 쓸 수 있는 실물 `AGENTS.md`는 [§템플릿](#템플릿)에 있다.
+
 프롬프트 조립 순서는 **페르소나 -> 프로토콜 -> 티켓 지시 -> 참조 컨텍스트**다. `dryrun`으로 실제
 조립 결과를 그대로 볼 수 있다.
+
+## 템플릿
+
+프로토콜과 페르소나는 **직접 쓰기 전에 복사부터 한다.** 빈 파일에서 시작하지 않게 이 레포가
+출발점을 들고 있다.
+
+```
+templates/
+  protocols/AGENTS.md              <- 큐를 다루는 규약. 전원 프롬프트에 실린다
+  protocols/tickets.md             <- 티켓 파일 작성법. AGENTS.md가 가리키고 필요할 때 읽힌다
+  personas/pm/PROFILE.md           <- 무엇을 만들지 정하고 쪼개서 티켓으로 내보낸다
+  personas/developer/PROFILE.md    <- 티켓을 돌아가는 코드로 바꾸고 증거를 남긴다
+  personas/qa/PROFILE.md           <- "됐다"는 주장을 돌려보고 깬다
+  personas/designer/PROFILE.md     <- 화면을 확정한다. UI가 있는 프로젝트에서만 둔다
+```
+
+```bash
+cp -r ~/Projects/fs-tickets/templates/* ~/Projects/myproject/.fs-tickets/
+```
+
+**복사한 순간부터 프로젝트의 것이다.** 고쳐 쓰라고 있는 것이고, 업스트림과 동기화되지 않는다 —
+템플릿이 나중에 바뀌어도 복사본은 그대로다(엔진이 템플릿을 찾아가지 않으니 그럴 방법도 없다).
+프로젝트 이름·경로·금지사항은 복사 직후 손으로 채운다.
+
+내용의 출처는 이 레포 자신의 도그푸딩이다 — `.fs-tickets/`에서 실제로 돌던 규약에서
+프로젝트 고유 부분을 걷어내고 뽑았다.
 
 ## 명령
 
@@ -371,5 +405,6 @@ MIT. [`LICENSE`](LICENSE) 참조.
 - 티켓 수백 건 규모를 전제한다. 매 tick마다 루트를 glob으로 훑는다(인덱스 없음).
 - 우선순위가 없다. 순서는 생성일 + `deps`뿐이다.
 - 티켓 본문 형식을 강제하지 않는다. 무엇을 완료로 볼지는 티켓에 사람이 쓴다.
-- 협업 프로토콜의 **내용**은 이 레포에 없다. `protocols/AGENTS.md`로 실어 보내는 자리만 있고,
-  무엇을 규약으로 쓸지는 프로젝트가 정한다. 엔진은 그 문서를 읽지도 검증하지도 않는다.
+- 협업 프로토콜의 **내용**은 엔진의 것이 아니다. 엔진에는 `protocols/AGENTS.md`로 실어 보내는
+  자리만 있고, 무엇을 규약으로 쓸지는 프로젝트가 정한다. 엔진은 그 문서를 읽지도 검증하지도 않는다.
+  레포가 주는 건 [§템플릿](#템플릿)의 **출발점**뿐이고, 복사되는 순간 그것도 프로젝트의 것이다.
