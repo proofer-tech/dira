@@ -46,7 +46,8 @@ gui/
     status-badge.tsx    상태 표현의 유일한 출처 (티켓 5 · 워커 4 · 연결 2) + deps 배지
     project-switcher.tsx 전환기 · 내비 · 다시 확인 (셸의 클라이언트 조각)
     projects-ui.tsx      등록 폼 · 해석 결과 표 · 행 액션 (`/`의 클라이언트 조각)
-    ticket-ui.tsx       편집 폼 · 할당 해제 · 삭제 · 발행 폼 (티켓 화면들의 클라이언트 조각)
+    ticket-ui.tsx       편집 폼 · 할당 해제 · 삭제 · 답변 카드 + **보드의 발행 · 요구 접수
+                        다이얼로그**(§3 — 라우트가 아니다. 트리거가 보드에 산다)
     personas-ui.tsx     생성 · PROFILE.md 편집 · 삭제 (페르소나 화면의 클라이언트 조각)
     protocols-ui.tsx    md 에디터 · 새 파일 · 이름변경 · 삭제 (프로토콜의 클라이언트 조각)
     session-stream.tsx  세션 스트림(§2-1 · §비주얼 §9). 2초 폴링 + 자동 스크롤 + 네이티브 <details>.
