@@ -69,7 +69,8 @@ export default async function Personas({ params }: { params: Promise<{ project: 
       {personas.length === 0 ? (
         <EmptyState text="페르소나 없음" action={<CreatePersonaButton projectId={id} />} />
       ) : (
-        <div className="max-w-3xl space-y-3">
+        // ponytail: 폭 제한 없음 — §5의 §4 예외. 카드 목록만 전체 폭이고 경고 Alert는 문단 폭이다
+        <div className="space-y-3">
           {personas.map((p) => (
             <PersonaCard key={p.name} projectId={id} row={p} />
           ))}
