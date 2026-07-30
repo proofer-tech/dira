@@ -1,18 +1,16 @@
-/** 보드 로딩 — 실제 테이블과 같은 모양(헤더 + 8행, 행 높이 `h-9`, 컬럼 8개). 스피너 금지(DESIGN.md §6).
+/** 보드 로딩 — 실제 칸반과 같은 모양(컬럼 5개 `w-72` × 카드 3장). 스피너 금지(DESIGN.md §6).
+ *  기본 뷰가 칸반이라 스켈레톤도 칸반이다(§1). `?view=table`로 들어와도 이 스켈레톤이 뜬다 —
+ *  뷰 선택 기억을 안 두므로 서버가 어느 쪽인지 모른다. 기본값 쪽이 제일 자주 맞는다.
  *
  *  **라우트 그룹 `(board)`에 사는 이유**: `p/[project]/loading.tsx`로 두면 워커·페르소나·프로토콜·
- *  티켓 화면까지 테이블 스켈레톤이 뜬다. 더 위(`p/[project]/`)의 Suspense 경계는 레이아웃의
+ *  티켓 화면까지 보드 스켈레톤이 뜬다. 더 위(`p/[project]/`)의 Suspense 경계는 레이아웃의
  *  `notFound()`보다 먼저 흘러서 404 상태도 못 세운다 — `(list)/loading.tsx`가 같은 함정의 실측이다.
  *  경계가 이 그룹 안에 있으면 `p/[project]/layout.tsx`는 여전히 블로킹으로 돌아 404를 세운다.
  *
- *  헤더·발행 버튼은 fs를 안 읽지만 스켈레톤에 남긴다 — 이 화면에서 그 자리는 테이블 위로
- *  고정이고, 비워 두면 도착할 때 표가 통째로 아래로 밀린다. */
+ *  헤더·발행 버튼은 fs를 안 읽지만 스켈레톤에 남긴다 — 이 화면에서 그 자리는 보드 위로
+ *  고정이고, 비워 두면 도착할 때 본문이 통째로 아래로 밀린다. */
+import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-
-/** 컬럼 8개의 대략적인 내용 폭 — 상태·해시·title·kind·persona·deps·생성일·owner 순.
- *  실제 표는 auto layout이라 정확히 같을 수 없다. 눈에 띄는 점프만 막으면 된다. */
-const CELLS = ["w-14", "w-16", "w-48", "w-12", "w-16", "w-10", "w-28", "w-24"];
 
 export default function Loading() {
   return (
@@ -35,28 +33,26 @@ export default function Loading() {
         </div>
       </div>
 
-      <Table>
-        <TableHeader>
-          <TableRow className="h-9 hover:bg-transparent">
-            {CELLS.map((w, i) => (
-              <TableHead key={i} className="h-9 px-3">
-                <Skeleton className={`h-3.5 ${w}`} />
-              </TableHead>
+      {/* 컬럼 5개 × w-72는 1440에 안 들어간다 — 실제 보드와 같이 가로 스크롤로 넘긴다 */}
+      <div className="flex gap-4 overflow-x-auto pb-2">
+        {Array.from({ length: 5 }, (_, c) => (
+          <div key={c} className="w-72 shrink-0 space-y-2">
+            {/* 컬럼 헤더: 상태 배지 + 건수 */}
+            <div className="flex items-center justify-between gap-2">
+              <Skeleton className="h-5 w-16" />
+              <Skeleton className="h-3.5 w-8" />
+            </div>
+            {/* 카드 3장 — 컬럼별 실제 건수는 알 수 없다. 카드 안은 해시·title·kind·persona 순 */}
+            {Array.from({ length: 3 }, (_, i) => (
+              <Card key={i} className="gap-2 px-4">
+                <Skeleton className="h-3.5 w-16" />
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-3.5 w-32" />
+              </Card>
             ))}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {Array.from({ length: 8 }, (_, r) => (
-            <TableRow key={r} className="h-9 hover:bg-transparent">
-              {CELLS.map((w, i) => (
-                <TableCell key={i} className="px-3 py-0">
-                  <Skeleton className={`h-3.5 ${w}`} />
-                </TableCell>
-              ))}
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

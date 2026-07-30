@@ -148,12 +148,12 @@ export default async function Board({
   ];
 
   /** 뷰 전환 링크 — `sp`를 통째로 복사하므로 필터·검색·정렬이 두 뷰에서 그대로 유지된다.
-   *  기본값인 table은 파라미터를 **지운다**: 같은 화면을 가리키는 URL이 두 개가 되면 공유 링크가
-   *  갈린다(`?view=table`로 들어와도 물론 테이블이다 — 모르는 값도 테이블로 떨어진다). */
-  const view = sp.get("view") === "kanban" ? "kanban" : "table";
+   *  기본값인 kanban은 파라미터를 **지운다**: 같은 화면을 가리키는 URL이 두 개가 되면 공유 링크가
+   *  갈린다(`?view=kanban`으로 들어와도 물론 칸반이다 — 모르는 값도 칸반으로 떨어진다). */
+  const view = sp.get("view") === "table" ? "table" : "kanban";
   const viewHref = (v: (typeof VIEWS)[number]["value"]) => {
     const next = new URLSearchParams(sp);
-    if (v === "kanban") next.set("view", v);
+    if (v === "table") next.set("view", v);
     else next.delete("view");
     return qs(next);
   };
@@ -179,12 +179,12 @@ export default async function Board({
           ))}
         </div>
       )}
-      {/* 필터만 지운다 — 뷰는 남긴다. 초기화가 테이블로 되돌리면 칸반에서 필터를 지울 수 없다 */}
+      {/* 필터만 지운다 — 뷰는 남긴다. 초기화가 칸반으로 되돌리면 테이블에서 필터를 지울 수 없다 */}
       <Button
         variant="outline"
         size="sm"
         nativeButton={false}
-        render={<Link href={view === "kanban" ? `/p/${id}?view=kanban` : `/p/${id}`} />}
+        render={<Link href={view === "table" ? `/p/${id}?view=table` : `/p/${id}`} />}
       >
         필터 초기화
       </Button>
