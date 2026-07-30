@@ -232,6 +232,41 @@ export function questionsOf(body: string): { heading: string; text: string }[] {
   return out;
 }
 
+/** 스레드 한 칸. 질문은 요구사항 본문의 절이고 답변은 `kind: answer` 티켓이다. */
+export type ThreadItem = {
+  role: "question" | "answer";
+  heading: string;
+  text: string;
+  /** 답변 티켓의 stem. 질문은 없다(요구사항 본문의 일부다) */
+  hash?: string;
+};
+
+/** 요구사항 왕복 스레드 — 본문의 `## 질문 n` 절과 `deps` 중 `kind: answer`인 티켓을 번갈아.
+ *  답변은 birth 순이다(라운드 순서고, `deps`에 적힌 순서는 PM이 append한 순서일 뿐이다).
+ *
+ *  **상세(§2 답변 카드)와 보드 카드의 답변 다이얼로그(§1)가 같은 함수를 쓴다** — 두 곳에서 따로
+ *  엮으면 같은 요구사항이 화면마다 다른 스레드로 보인다. */
+export function threadOf(tickets: Ticket[], t: Ticket, sfx: Suffixes): ThreadItem[] {
+  const questions = questionsOf(t.body);
+  const answers = t.deps
+    .map((d) => resolveDep(tickets, d, sfx))
+    .filter((x): x is Ticket => !!x && x.kind === "answer")
+    .sort((a, b) => a.birth - b.birth);
+  const thread: ThreadItem[] = [];
+  for (let i = 0; i < Math.max(questions.length, answers.length); i++) {
+    if (questions[i]) thread.push({ role: "question", ...questions[i] });
+    if (answers[i]) {
+      thread.push({
+        role: "answer",
+        heading: answers[i].title,
+        text: answers[i].body.trim(),
+        hash: answers[i].stem,
+      });
+    }
+  }
+  return thread;
+}
+
 /** 요구 접수 모드의 `title` — 자연어 입력의 첫 비어있지 않은 줄(80자에서 자르고 `…`).
  *
  *  사람이 쓴 문장을 고쳐 쓰지 않는다(그 해석이 PM의 일이다 — §3 요구 접수 모드). frontmatter는

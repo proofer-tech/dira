@@ -27,6 +27,7 @@ import {
   sortTickets,
   statusOf,
   stemOf,
+  threadOf,
   writeTicket,
   type Suffixes,
   type Ticket,
@@ -554,6 +555,18 @@ test("답변 대기 판정 + 답변 파일 생성으로 재큐 (엔진과 대조
   assert.strictEqual(awaitingUnlocked(req), false);
   assert.deepStrictEqual(req.unmet, []);
   assert.strictEqual(statusOf(req), "open");
+
+  // 스레드 — 질문 절과 답변 티켓을 번갈아. 상세(§2 답변 카드)와 보드 카드의 답변 다이얼로그(§1)가
+  // 이 함수 하나를 쓴다. 답변 라벨은 답변 티켓의 title이고 해시는 **stem**(접미사를 뗀 이름)이다
+  assert.deepStrictEqual(threadOf(after, req, DEFAULT), [
+    { role: "question", heading: "질문 1", text: "어느 화면인가?\n\n### 보기\n\n- 보드" },
+    {
+      role: "answer",
+      heading: "답변 — r0000001 #1",
+      text: "## 답변 1\n\n보드다.",
+      hash: "a1111111",
+    },
+  ]);
 
   // 엔진 대조 — 답변 후: `대기`이고 select에 뜬다. 이게 재큐의 증거다
   assert.match(pyList(r), /r0000001 .* 대기/);

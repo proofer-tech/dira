@@ -19,6 +19,8 @@ import {
 } from "@/app/p/[project]/tickets/[hash]/actions";
 import { createTicket, type NewTicketState } from "@/app/p/[project]/(board)/actions";
 import type { UnassignRun } from "@/lib/engine";
+// 스레드를 엮는 쪽은 서버(`lib/queue.ts threadOf`)다 — 여기 오는 건 타입뿐이라 `node:*`를 안 끈다
+import type { ThreadItem } from "@/lib/queue";
 import { Markdown } from "@/components/markdown";
 import { DepBadge } from "@/components/status-badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -216,21 +218,9 @@ export function UnassignButton({
 
 // ── 요구사항 왕복 ───────────────────────────────────────────────────────────
 
-/** 스레드 한 칸. 서버가 `## 질문 n` 절과 `kind: answer` 티켓을 번갈아 엮어 넘긴다. */
-export type ThreadItem = {
-  role: "question" | "answer";
-  heading: string;
-  text: string;
-  /** 답변 티켓의 stem. 질문은 없다(요구사항 본문의 일부다) */
-  hash?: string;
-};
-
-/** 답변 카드 — **답변 대기일 때만** 렌더된다(판정은 서버가 `isAwaiting`으로 한다).
- *
- *  버튼이 하는 일은 `tickets/<awaiting>.done.md`를 만드는 것 하나뿐이다. 그 파일이 생기면
- *  요구사항의 unmet이 비어 큐에 다시 뜬다 — `다시 큐에` 버튼을 따로 두지 않는 이유다
- *  (답만 쓰고 안 누른 상태가 생긴다. DESIGN.md §요구사항 레이어 버린 대안). */
-export function AnswerCard({
+/** 스레드 + 답변 폼. **상세의 카드와 보드의 다이얼로그가 같은 것을 그린다** — 그릇만 다르고
+ *  스레드·폼·서버 액션은 하나다(§1 보드 요구사항 항). 엮는 쪽은 `lib/queue.ts threadOf`다. */
+function AnswerFields({
   project,
   hash,
   answerFile,
@@ -238,11 +228,58 @@ export function AnswerCard({
 }: {
   project: string;
   hash: string;
-  /** 만들어질 답변 파일 이름. 사람이 무엇이 생기는지 보고 누른다(접미사는 프로젝트별이다) */
   answerFile: string;
   thread: ThreadItem[];
 }) {
   const [state, action, pending] = useActionState<SaveState, FormData>(answerRequirement, {});
+  // 답변 칸의 id는 한 화면에 하나뿐이다 — 보드에서도 열려 있는 다이얼로그는 하나다.
+  return (
+    <>
+      {thread.map((item, i) => (
+        <div key={i} className="space-y-1">
+          <p className="text-xs text-muted-foreground">
+            {item.heading || (item.role === "question" ? "질문" : "답변")}
+            {item.hash && <span className="ml-2 font-mono">{item.hash}</span>}
+          </p>
+          {/* 읽기만 하는 자리라 렌더된 마크다운이다(§비주얼 §10). 답변 쪽 구분은 왼쪽 선
+              하나뿐이다 — `text-muted-foreground`를 걸면 렌더된 본문의 `bg-muted` 블록 안에서
+              4.34가 되고, 그건 §1이 실측으로 금지한 조합이다. 구조로 가르고 색으로 안 가른다 */}
+          <div className={item.role === "answer" ? "border-l-2 border-border pl-3" : ""}>
+            <Markdown text={item.text} />
+          </div>
+        </div>
+      ))}
+      <form action={action} className="space-y-3">
+        <input type="hidden" name="project" value={project} />
+        <input type="hidden" name="hash" value={hash} />
+        <Label htmlFor="a-body">답변</Label>
+        <Textarea id="a-body" name="body" rows={8} className="font-mono" required />
+        {state.error && <Failure title="답변을 달지 못했습니다" message={state.error} />}
+        <div className="flex items-center gap-3">
+          <Button type="submit" disabled={pending}>
+            {pending ? "답변 다는 중…" : "답변 달기"}
+          </Button>
+          <span className="text-xs text-muted-foreground">
+            <span className="font-mono">tickets/{answerFile}</span>를 만듭니다
+          </span>
+        </div>
+      </form>
+    </>
+  );
+}
+
+/** 답변 카드 — **답변 대기일 때만** 렌더된다(판정은 서버가 `isAwaiting`으로 한다).
+ *
+ *  버튼이 하는 일은 `tickets/<awaiting>.done.md`를 만드는 것 하나뿐이다. 그 파일이 생기면
+ *  요구사항의 unmet이 비어 큐에 다시 뜬다 — `다시 큐에` 버튼을 따로 두지 않는 이유다
+ *  (답만 쓰고 안 누른 상태가 생긴다. DESIGN.md §요구사항 레이어 버린 대안). */
+export function AnswerCard(props: {
+  project: string;
+  hash: string;
+  /** 만들어질 답변 파일 이름. 사람이 무엇이 생기는지 보고 누른다(접미사는 프로젝트별이다) */
+  answerFile: string;
+  thread: ThreadItem[];
+}) {
   return (
     <Card className="max-w-3xl">
       <CardHeader>
@@ -250,37 +287,53 @@ export function AnswerCard({
         <CardDescription>답변을 달면 이 요구사항이 다시 큐에 뜨고 PM이 이어서 봅니다.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        {thread.map((item, i) => (
-          <div key={i} className="space-y-1">
-            <p className="text-xs text-muted-foreground">
-              {item.heading || (item.role === "question" ? "질문" : "답변")}
-              {item.hash && <span className="ml-2 font-mono">{item.hash}</span>}
-            </p>
-            {/* 읽기만 하는 자리라 렌더된 마크다운이다(§비주얼 §10). 답변 쪽 구분은 왼쪽 선
-                하나뿐이다 — `text-muted-foreground`를 걸면 렌더된 본문의 `bg-muted` 블록 안에서
-                4.34가 되고, 그건 §1이 실측으로 금지한 조합이다. 구조로 가르고 색으로 안 가른다 */}
-            <div className={item.role === "answer" ? "border-l-2 border-border pl-3" : ""}>
-              <Markdown text={item.text} />
-            </div>
-          </div>
-        ))}
-        <form action={action} className="space-y-3">
-          <input type="hidden" name="project" value={project} />
-          <input type="hidden" name="hash" value={hash} />
-          <Label htmlFor="a-body">답변</Label>
-          <Textarea id="a-body" name="body" rows={8} className="font-mono" required />
-          {state.error && <Failure title="답변을 달지 못했습니다" message={state.error} />}
-          <div className="flex items-center gap-3">
-            <Button type="submit" disabled={pending}>
-              {pending ? "답변 다는 중…" : "답변 달기"}
-            </Button>
-            <span className="text-xs text-muted-foreground">
-              <span className="font-mono">tickets/{answerFile}</span>를 만듭니다
-            </span>
-          </div>
-        </form>
+        <AnswerFields {...props} />
       </CardContent>
     </Card>
+  );
+}
+
+/** 보드 칸반 카드의 `답변` 버튼 — 같은 스레드·폼을 다이얼로그로 연다(§1 보드 요구사항 항,
+ *  사람 요청 `14c88df4`). 새 라우트도 새 액션도 없다.
+ *
+ *  카드 전체가 상세로 가는 링크(`after:inset-0`)라 트리거는 `relative z-10`이고, 클릭이 카드
+ *  링크로 새어 나가지 않게 `stopPropagation`한다 — 오버레이 링크가 버튼 **위**가 아니라
+ *  아래에 깔려 있어서 z만으로 충분하지만, 답을 쓰다 상세로 튀는 사고는 되돌릴 방법이 없다.
+ *
+ *  닫기 상태를 만들지 않는다: 답이 달리면 `answerRequirement`가 보드를 `revalidatePath`하고
+ *  그 카드가 `답변 대기`를 벗으면서 트리거째 사라진다 = 다이얼로그도 같이 언마운트된다. */
+export function AnswerDialog({
+  title,
+  ...props
+}: {
+  project: string;
+  hash: string;
+  answerFile: string;
+  thread: ThreadItem[];
+  /** 다이얼로그 머리에 요구사항 제목을 적는다 — 보드에서는 어느 카드를 열었는지가 안 보인다 */
+  title: string;
+}) {
+  return (
+    <Dialog>
+      <DialogTrigger
+        // `self-start` — 카드가 flex 컬럼이라 안 주면 버튼이 카드 폭을 다 먹는다
+        render={<Button size="sm" variant="outline" className="relative z-10 self-start" />}
+        onClick={(e) => e.stopPropagation()}
+      >
+        답변
+      </DialogTrigger>
+      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>답변 — {title || props.hash}</DialogTitle>
+          <DialogDescription>
+            답변을 달면 이 요구사항이 다시 큐에 뜨고 PM이 이어서 봅니다.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <AnswerFields {...props} />
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 

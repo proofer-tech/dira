@@ -15,7 +15,7 @@ import { ArrowDown, ArrowUp, ChevronsUpDown, X } from "lucide-react";
 import { BoardFilter, BoardPolling, BoardSearch } from "@/components/board-ui";
 import { EmptyState } from "@/components/empty-state";
 import { DepBadge, StatusBadge, daysSince, statusLabel } from "@/components/status-badge";
-import { NewTicketDialog, RequestDialog } from "@/components/ticket-ui";
+import { AnswerDialog, NewTicketDialog, RequestDialog } from "@/components/ticket-ui";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -30,6 +30,7 @@ import {
 import {
   HIDE_DONE_STATUSES,
   SORT_KEYS,
+  awaitingOf,
   filterTickets,
   inDefaultList,
   isAwaiting,
@@ -37,6 +38,7 @@ import {
   depBadges,
   sortTickets,
   statusOf,
+  threadOf,
   type SortKey,
   type Ticket,
 } from "@/lib/queue";
@@ -393,6 +395,20 @@ export default async function Board({
                                   />
                                 ))}
                               </span>
+                            )}
+                            {/* 답변은 여기서 바로 단다(§1 요구사항 항, 사람 요청 `14c88df4`) —
+                                상세와 같은 스레드(`threadOf`) · 같은 폼 · 같은 액션이다. 판정은
+                                위 배지와 **같은 식**이고, 테이블 행에는 붙이지 않는다(§1 행 액션 없음).
+                                자리는 카드 맨 아래다: 위는 티켓이 무엇인가고 여기부터가 할 수 있는
+                                일이다(deps 배지도 같은 `z-10` 층에 있다) */}
+                            {isAwaiting(t) && (
+                              <AnswerDialog
+                                project={id}
+                                hash={t.stem}
+                                title={t.title}
+                                answerFile={`${awaitingOf(t)}${config.done}.md`}
+                                thread={threadOf(tickets, t, config)}
+                              />
                             )}
                           </Card>
                         ))

@@ -17,7 +17,6 @@ import {
   DeleteTicketButton,
   TicketEditForm,
   UnassignButton,
-  type ThreadItem,
 } from "@/components/ticket-ui";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
@@ -29,11 +28,11 @@ import {
   derivedFrom,
   isAwaiting,
   listTickets,
-  questionsOf,
   referrers,
   reqOf,
   resolveDep,
   statusOf,
+  threadOf,
   type Ticket,
 } from "@/lib/queue";
 import { getProject, resolveConfig } from "@/lib/projects";
@@ -111,31 +110,14 @@ export default async function TicketDetail({
   const reqTicket = req ? resolveDep(tickets, req, config) : null;
   const derived = derivedFrom(tickets, ticket, config);
 
-  // 요구사항 왕복 스레드 — 본문의 `## 질문 n` 절과 `deps` 중 `kind: answer`인 티켓을 번갈아.
-  // 답변은 birth 순이다(라운드 순서고, deps에 적힌 순서는 PM이 append한 순서일 뿐이다).
   // 세션 스트림 (§2-1). 갈림길은 **세션이 붙은 적이 있는가** 하나다(§9 빈 상태 표):
   // `session_id`가 없거나 UUID가 아니면 절 자체를 감추고(상태 배지가 이미 말한다), 있는데
   // 글롭 매치가 0개·2개 이상이면 `트랜스크립트 없음`이다. **어느 쪽도 에러로 그리지 않는다.**
   const sessionId = sessionIdOf(ticket.fm);
   const transcript = sessionId ? await findTranscript(sessionId) : null;
 
-  const questions = questionsOf(ticket.body);
-  const answers = ticket.deps
-    .map((d) => resolveDep(tickets, d, config))
-    .filter((t): t is Ticket => !!t && t.kind === "answer")
-    .sort((a, b) => a.birth - b.birth);
-  const thread: ThreadItem[] = [];
-  for (let i = 0; i < Math.max(questions.length, answers.length); i++) {
-    if (questions[i]) thread.push({ role: "question", ...questions[i] });
-    if (answers[i]) {
-      thread.push({
-        role: "answer",
-        heading: answers[i].title,
-        text: answers[i].body.trim(),
-        hash: answers[i].stem,
-      });
-    }
-  }
+  // 요구사항 왕복 스레드 — 보드 카드의 답변 다이얼로그와 **같은 함수**가 엮는다(§1 · §2).
+  const thread = threadOf(tickets, ticket, config);
 
   return (
     <div className="space-y-6">
