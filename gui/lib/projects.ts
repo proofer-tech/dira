@@ -6,7 +6,7 @@ import { mkdir, readFile, readdir, realpath, rm, stat, writeFile } from "node:fs
 import { homedir } from "node:os";
 import path from "node:path";
 import { NAME_RE, PROJECT_ID_RE, expandHome, resolveWithin, shellPath, shellValue } from "./paths.ts";
-import { listTickets, type Ticket } from "./queue.ts";
+import { listTickets, statusOf, type Ticket } from "./queue.ts";
 import { listWorkers, type Worker } from "./workers.ts";
 import { slugify } from "./urls.ts";
 
@@ -300,6 +300,15 @@ export type ProjectSummary = {
   error: string | null;
   open: number | null; // 열린 티켓 수
   workers: Worker[];
+  /** `할당됨`(열린 파일 + `session_id`) 티켓 — 엔진이 만들지 않는 조합이고 도달하면 아무 신호
+   *  없이 영구 정체다. 셸의 상주 배너(§0-2)와 목록 행 배지(§0)가 이걸 쓴다. 판정은 `statusOf`
+   *  하나뿐이고 이미 읽은 `listTickets` 결과를 거르므로 **새 fs 읽기가 0**이다.
+   *  링크는 `stem`이다(상태가 바뀌어도 URL이 안 변한다 — §식별자).
+   *
+   *  못 읽은 프로젝트는 빈 배열이다. `open`과 달리 `null`로 갈라두지 않는다 — 판정 자체가
+   *  불가능하면 배너·배지가 없는 게 답이고(§0-2 마지막 항), 그 자리에는 이미 `연결 안 됨`
+   *  사유가 뜬다. */
+  assigned: { hash: string; stem: string }[];
 };
 
 /** 프로젝트 하나를 훑는다. 경로가 없으면 읽기를 시도하지 않고 사유만 담는다.
@@ -320,9 +329,12 @@ export async function readSummary(project: Pick<Project, "root">): Promise<Proje
       error: null,
       open: tickets.filter((t) => t.state === "open").length,
       workers,
+      assigned: tickets
+        .filter((t) => statusOf(t) === "assigned")
+        .map((t) => ({ hash: t.hash, stem: t.stem })),
     };
   } catch (e) {
-    return { connected: false, error: (e as Error).message, open: null, workers: [] };
+    return { connected: false, error: (e as Error).message, open: null, workers: [], assigned: [] };
   }
 }
 

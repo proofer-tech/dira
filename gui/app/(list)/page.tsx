@@ -83,9 +83,23 @@ export default async function Home() {
                   <TableRow key={t.id} className="h-9">
                     {/* 이 셀만 링크다 — 행 전체를 링크로 만들면 액션 버튼과 겹친다 */}
                     <TableCell className="px-3 py-0 text-sm">
-                      <Link href={`/p/${t.id}`} className="hover:underline">
-                        {t.name}
-                      </Link>
+                      <span className="flex items-center gap-2">
+                        <Link href={`/p/${t.id}`} className="hover:underline">
+                          {t.name}
+                        </Link>
+                        {/* 프로젝트에 들어가기 전에 정체를 알린다(§0). 배너는 여기 두지 않는다 —
+                            이 화면은 프로젝트 스코프가 아니고 이 배지가 목적지를 이미 가리킨다.
+                            건수는 배지 밖 숫자다: 라벨(`할당됨`)은 <StatusBadge> 하나가 정하고
+                            건수는 상태가 아니라 이 행의 사실이다. 0건인 행에는 아무것도 없다 */}
+                        {t.summary.assigned.length > 0 && (
+                          <span className="flex items-center gap-1">
+                            <StatusBadge status="assigned" />
+                            <span className="text-xs tabular-nums text-status-stale">
+                              {t.summary.assigned.length}
+                            </span>
+                          </span>
+                        )}
+                      </span>
                     </TableCell>
                     <TableCell
                       className="max-w-[16rem] truncate px-3 py-0 font-mono text-xs text-muted-foreground"

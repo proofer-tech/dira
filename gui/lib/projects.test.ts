@@ -402,14 +402,27 @@ test("readSummary — 연결됨은 카운트, 연결 안 됨은 사유 원문 + 
   writeFileSync(path.join(root, "tickets", "aaaa1111.md"), "---\nticket: aaaa1111\n---\n");
   writeFileSync(path.join(root, "tickets", "bbbb2222.done.md"), "---\nticket: bbbb2222\n---\n");
 
+  // 열린 파일 + session_id = 할당됨. 엔진이 만들지 않는 조합이고 §0-2 배너가 이걸 판정으로 쓴다
+  writeFileSync(
+    path.join(root, "tickets", "cccc3333.md"),
+    "---\nticket: cccc3333\nsession_id: dead-beef\n---\n",
+  );
+  // .wip은 정상 진행중이다 — session_id가 있어도 배너에 들지 않는다(statusOf가 wip을 준다)
+  writeFileSync(
+    path.join(root, "tickets", "dddd4444.wip.md"),
+    "---\nticket: dddd4444\nsession_id: dead-beef\n---\n",
+  );
+
   const ok = await readSummary({ root });
   assert.strictEqual(ok.connected, true);
-  assert.strictEqual(ok.open, 1); // .done은 열림이 아니다
+  assert.strictEqual(ok.open, 2); // .done은 열림이 아니다 (.wip도 아니다)
   assert.deepStrictEqual(ok.workers.map((w) => w.name), ["w1"]);
+  assert.deepStrictEqual(ok.assigned, [{ hash: "cccc3333", stem: "cccc3333" }]);
 
   // 경로가 사라진 프로젝트: 0건이 아니라 "모른다"다(DESIGN.md §4-1)
   const gone = await readSummary({ root: path.join(root, "없는디렉터리") });
   assert.strictEqual(gone.connected, false);
   assert.strictEqual(gone.open, null);
+  assert.deepStrictEqual(gone.assigned, []); // 판정 불가 = 배너·배지가 없다(§0-2)
   assert.match(gone.error!, /ENOENT/);
 });
