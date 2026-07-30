@@ -33,8 +33,11 @@ export default function Loading() {
         </div>
       </div>
 
-      {/* 컬럼 5개 × w-72는 1440에 안 들어간다 — 실제 보드와 같이 가로 스크롤로 넘긴다 */}
-      <div className="flex gap-4 overflow-x-auto pb-2">
+      {/* 컬럼 5개 × w-72는 1440에 안 들어간다 — 실제 보드와 같이 가로 스크롤로 넘긴다.
+          `-mx-1 px-1`도 보드와 같다: <Card>의 `ring-1`은 border box 밖에 그려서 여백이 없으면
+          양끝 카드 테두리가 잘린다(근거는 `(board)/page.tsx`). 여기서 빼면 스켈레톤과 도착한
+          보드의 카드 테두리가 갈린다 */}
+      <div className="-mx-1 flex gap-4 overflow-x-auto px-1 pb-2">
         {Array.from({ length: 5 }, (_, c) => (
           <div key={c} className="w-72 shrink-0 space-y-2">
             {/* 컬럼 헤더: 상태 배지 + 건수 */}

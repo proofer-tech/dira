@@ -279,8 +279,12 @@ export default async function Board({
               {rows.length === 0 && (
                 <div className="rounded-md border border-dashed px-6 py-6">{noMatch}</div>
               )}
-              {/* 컬럼 5개 × w-72는 1440에 안 들어간다 — 가로 스크롤로 넘긴다(§4 사이드바를 안 쓰는 이유) */}
-              <div className="flex gap-4 overflow-x-auto pb-2">
+              {/* 컬럼 5개 × w-72는 1440에 안 들어간다 — 가로 스크롤로 넘긴다(§4 사이드바를 안 쓰는 이유).
+                  `-mx-1 px-1`은 스크롤 컨테이너의 클리핑 여백이다: <Card>의 테두리는 `ring-1`(=
+                  border box **밖에** 그리는 box-shadow)이라 카드가 컨테이너 끝에 딱 붙으면
+                  양끝 카드의 왼/오른쪽 테두리가 잘려 카드가 열려 보인다. 음수 마진으로 되돌려
+                  컬럼은 페이지 거터(main px-6)에 그대로 정렬시킨다 */}
+              <div className="-mx-1 flex gap-4 overflow-x-auto px-1 pb-2">
                 {STATUSES.map((s) => {
                   // 컬럼 배정은 테이블 상태 컬럼과 **같은 판정**이다(queue.ts statusOf 하나뿐).
                   const group = rows.filter((t) => statusOf(t) === s);
