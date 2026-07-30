@@ -681,9 +681,9 @@ export function RequestDialog({ project }: { project: string }) {
  *  `kind`·`persona`·`deps`는 전부 선택이다. 사람이 칠 수 있는 자리는 title과 본문뿐이고,
  *  그 둘은 틀려도 티켓이 사라지지 않는다 — 나머지는 틀리면 조용히 사라진다.
  *
- *  **복사도 이 컴포넌트다**(§2 복사): `copy`가 오면 같은 폼이 원본 값으로 채워져 열린다.
+ *  **복제도 이 컴포넌트다**(§2 복제): `copy`가 오면 같은 폼이 원본 값으로 채워져 열린다.
  *  새 화면도 새 서버 액션도 없다 — `createTicket`이 그대로 받고 해시 생성·`O_EXCL`·발행 후
- *  상세 이동이 전부 따라온다. 원본은 **읽기만** 하므로 `.wip`도 복사할 수 있다. */
+ *  상세 이동이 전부 따라온다. 원본은 **읽기만** 하므로 `.wip`도 복제할 수 있다. */
 export function NewTicketDialog({
   project,
   personas,
@@ -704,8 +704,8 @@ export function NewTicketDialog({
   personaDir: string;
   /** 보드 우상단은 `outline`(primary는 `요구 접수`), 빈 상태는 기본 변종이다(§3) */
   variant?: "default" | "outline";
-  /** 복사 모드 — 원본 frontmatter **원문**과 본문 전문(`## 결과` 포함)을 채운다.
-   *  `deps`는 **넣지 않는다**: 원본의 선행은 원본이 이미 소비한 것이고, 그대로 복사하면 새 티켓이
+  /** 복제 모드 — 원본 frontmatter **원문**과 본문 전문(`## 결과` 포함)을 채운다.
+   *  `deps`는 **넣지 않는다**: 원본의 선행은 원본이 이미 소비한 것이고, 그대로 복제하면 새 티켓이
    *  끝난 선행을 다시 기다리거나(미완이면) 착수 불가로 태어난다. 제목에 `(사본)`도 안 붙인다 —
    *  사람이 조건만 바꿔 다시 시키려는 것이지 이름을 바꾸려는 게 아니다. */
   copy?: { stem: string; title: string; kind: string; persona: string; body: string };
@@ -724,7 +724,7 @@ export function NewTicketDialog({
         {copy ? (
           <>
             <Copy aria-hidden />
-            복사
+            복제
           </>
         ) : (
           "티켓 발행"
@@ -734,12 +734,12 @@ export function NewTicketDialog({
           않게 여기서 스크롤한다(§3 크기) */}
       <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{copy ? "티켓 복사" : "티켓 발행"}</DialogTitle>
+          <DialogTitle>{copy ? "티켓 복제" : "티켓 발행"}</DialogTitle>
           <DialogDescription>
             {copy ? (
               <>
                 <span className="font-mono">{copy.stem}</span>의 title·kind·persona·본문을 그대로
-                채웠습니다. deps는 복사되지 않습니다 — 필요하면 직접 고르세요.
+                채웠습니다. deps는 복제되지 않습니다 — 필요하면 직접 고르세요.
               </>
             ) : (
               "선택지는 전부 이 프로젝트의 실제 값입니다 — 손으로 치는 건 title과 본문뿐입니다."
@@ -763,7 +763,7 @@ export function NewTicketDialog({
           <div className="flex gap-4">
             <div className="space-y-2">
               <Label htmlFor="n-kind">kind</Label>
-              {/* 복사는 원본 값에서 시작한다. 원본에 `kind`가 없거나 목록 밖 값(`answer` 등)이면
+              {/* 복제는 원본 값에서 시작한다. 원본에 `kind`가 없거나 목록 밖 값(`answer` 등)이면
                   그 사실을 select가 그려야 한다 — 편집 폼과 같은 이유고 같은 모양이다(§2 편집 항).
                   목록 밖 값은 서버가 발행 시점에 사유를 붙여 거부한다(`createTicket`의 KINDS). */}
               <Select name="kind" defaultValue={copy ? copy.kind || null : "work"}>
@@ -792,7 +792,7 @@ export function NewTicketDialog({
                 <SelectTrigger
                   id="n-persona"
                   className="w-40"
-                  // 복사는 원본 값이 이미 들어 있다 — 페르소나 0개라고 잠그면 그 값을 못 지운다
+                  // 복제는 원본 값이 이미 들어 있다 — 페르소나 0개라고 잠그면 그 값을 못 지운다
                   disabled={personas.length === 0 && !copy?.persona}
                 >
                   {/* 비우는 게 정상이다 — 페르소나 없이도 디스패치된다(protocols/tickets.md) */}
