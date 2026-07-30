@@ -11,12 +11,22 @@
  *
  *  여기 오는 `hash`는 **푼 값**이다(페이지가 `decodeHash`로 한 번 푼다). 조회에만 쓴다 —
  *  엔진 인자와 `revalidatePath`는 찾아낸 파일의 `stem`이고(§식별자), URL이라 다시 인코딩한다. */
-import { readFile, unlink } from "node:fs/promises";
+import { open, readFile, unlink } from "node:fs/promises";
 import path from "node:path";
 import { revalidatePath } from "next/cache";
 import { findTicket, unassign, type UnassignRun } from "@/lib/engine";
-import { NAME_RE } from "@/lib/paths";
-import { readFm, stateOf, stemOf, writeTicket, type TicketState } from "@/lib/queue";
+import { NAME_RE, isHash, resolveWithin } from "@/lib/paths";
+import {
+  awaitingOf,
+  isAwaiting,
+  listTickets,
+  readFm,
+  resolveDep,
+  stateOf,
+  stemOf,
+  writeTicket,
+  type TicketState,
+} from "@/lib/queue";
 import { getProject, resolveConfig } from "@/lib/projects";
 
 export type SaveState = { ok?: boolean; error?: string };
@@ -108,6 +118,105 @@ export async function unassignTicket(projectId: string, hash: string): Promise<U
     return r;
   } catch (e) {
     return { ok: false, output: (e as Error).message, worker: null };
+  }
+}
+
+/** 요구사항 답변 — `tickets/<awaiting><done>.md`를 **새로** 만든다 (DESIGN.md §요구사항 레이어).
+ *
+ *  이 액션이 큐의 잠금을 푸는 유일한 방법이다: `<R>`은 존재하지 않는 dep을 기다리며 열린 채
+ *  `select`에서 빠져 있고(결정 3), 그 파일이 생기는 순간 `deps_unmet`이 비어 다시 디스패치된다.
+ *  사람이 누를 `다시 큐에` 버튼은 없다 — 답변 파일 생성이 그 버튼이다.
+ *
+ *  **답변 파일은 처음부터 `.done`으로 태어난다.** 열린 상태로 만들면 페르소나 없는 티켓이 되어
+ *  아무 워커에게 디스패치된다. `<R>` 자체는 건드리지 않는다(`awaiting`도 지우지 않는다 — 이력이다).
+ *
+ *  `.wip`은 `isAwaiting`의 `state === "open"`이 구조적으로 막는다(제약 5). */
+export async function answerRequirement(_prev: SaveState, form: FormData): Promise<SaveState> {
+  const projectId = String(form.get("project") ?? "");
+  const hash = String(form.get("hash") ?? "");
+  try {
+    const project = await getProject(projectId);
+    if (!project) throw new Error(`등록되지 않은 프로젝트입니다: ${projectId}`);
+    const config = await resolveConfig(project);
+    const file = await findTicket(project.root, hash, config);
+    if (!file) throw new Error(`큐에 없는 티켓입니다: ${hash}`);
+
+    // 화면을 그린 뒤 세션이 이 티켓을 잡았거나 다른 창이 이미 답했을 수 있다 — 판정을 다시 한다.
+    const tickets = await listTickets(project.root, config);
+    const nfc = (s: string) => s.normalize("NFC");
+    const t = tickets.find((x) => nfc(x.path) === nfc(file));
+    if (!t || !isAwaiting(t)) {
+      throw new Error(
+        "지금 이 티켓은 답변 대기가 아닙니다 — 이미 답변이 달렸거나 세션이 잡았습니다. 화면을 새로고침해 상태를 확인하세요.",
+      );
+    }
+
+    const stem = awaitingOf(t);
+    // PM 세션이 쓴 값이지만 여기서 파일명이 된다 — 신뢰 경계다(경로 구분자·제어문자·dotfile).
+    if (!isHash(stem)) {
+      throw new Error(
+        `awaiting 값을 파일 이름으로 쓸 수 없습니다: ${stem}. 경로 구분자·제어문자가 없는 이름이어야 합니다 — 요구사항의 frontmatter를 고치세요.`,
+      );
+    }
+
+    // **`O_EXCL`만으로는 부족하다**: 그건 `<A><done>.md`만 막는다. `<A>.md`가 열린 채로 있으면
+    // `_find_stem`이 열린 쪽을 먼저 집어 답을 써도 unmet이 그대로다 = 영구 대기. 판정은 엔진과
+    // 같은 조회(`tickets.py find` → `find_any`)로 한다 — 상태 무관하게 그 stem을 찾는다.
+    const clash = await findTicket(project.root, stem, config);
+    if (clash) {
+      throw new Error(
+        `${stem} 이름의 티켓이 이미 큐에 있습니다: ${path.basename(clash)}. 그 파일이 있는 한 답변 파일을 만들어도 엔진이 그쪽을 먼저 집어 요구사항이 영구 대기합니다. 그 파일을 확인해 정리하거나, PM에게 다른 awaiting 해시를 받으세요.`,
+      );
+    }
+
+    // textarea는 CRLF로 온다(HTML 폼 규격).
+    const answer = String(form.get("body") ?? "")
+      .replace(/\r\n/g, "\n")
+      .trim();
+    if (!answer) throw new Error("답변 내용을 입력하세요.");
+
+    // 라운드 번호 = 이미 달린 답변 수 + 1. 질문 절 번호와 같은 수를 쓴다(§요구사항 왕복 스레드).
+    const n =
+      t.deps.filter((d) => resolveDep(tickets, d, config)?.kind === "answer").length + 1;
+
+    // 경로를 문자열로 믿지 않는다 — 큐 디렉터리 안인지 확인하고 그 결과로 연다(§경로 방어).
+    const answerPath = await resolveWithin(
+      path.join(project.root, "tickets"),
+      `${stem}${config.done}.md`,
+    );
+    const text = [
+      "---",
+      `ticket: ${stem}`,
+      `title: 답변 — ${t.stem} #${n}`,
+      "kind: answer",
+      "---",
+      "",
+      `## 답변 ${n}`,
+      "",
+      answer,
+      "",
+    ].join("\n");
+
+    // 여는 것 자체가 검사다(`wx`) — 위 검사와 생성 사이에 다른 창·세션이 끼어들 수 있다.
+    const fh = await open(answerPath, "wx").catch((e) => {
+      if ((e as NodeJS.ErrnoException).code === "EEXIST") {
+        throw new Error(
+          `답변 파일이 이미 있습니다: ${path.basename(answerPath)}. 다른 창에서 방금 답했을 수 있습니다 — 새로고침해 스레드를 확인하세요.`,
+        );
+      }
+      throw e;
+    });
+    try {
+      await fh.writeFile(text, "utf8");
+    } finally {
+      await fh.close();
+    }
+
+    revalidatePath(`/p/${projectId}/tickets/${encodeURIComponent(t.stem)}`);
+    revalidatePath(`/p/${projectId}`); // 배지가 `deps 대기` → `대기`로 바뀐다 = 재큐의 증거
+    return { ok: true };
+  } catch (e) {
+    return { error: (e as Error).message };
   }
 }
 

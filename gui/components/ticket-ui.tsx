@@ -9,7 +9,13 @@
 import { useActionState, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Check, Trash2, TriangleAlert, Unlink, X } from "lucide-react";
-import { deleteTicket, saveTicket, unassignTicket, type SaveState } from "@/app/p/[project]/tickets/[hash]/actions";
+import {
+  answerRequirement,
+  deleteTicket,
+  saveTicket,
+  unassignTicket,
+  type SaveState,
+} from "@/app/p/[project]/tickets/[hash]/actions";
 import { createTicket, type NewTicketState } from "@/app/p/[project]/tickets/new/actions";
 import type { UnassignRun } from "@/lib/engine";
 import { DepBadge } from "@/components/status-badge";
@@ -26,6 +32,13 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   Command,
   CommandEmpty,
@@ -188,6 +201,78 @@ export function UnassignButton({
           <Failure title="할당 해제 실패" message={run.output} />
         ))}
     </div>
+  );
+}
+
+// ── 요구사항 왕복 ───────────────────────────────────────────────────────────
+
+/** 스레드 한 칸. 서버가 `## 질문 n` 절과 `kind: answer` 티켓을 번갈아 엮어 넘긴다. */
+export type ThreadItem = {
+  role: "question" | "answer";
+  heading: string;
+  text: string;
+  /** 답변 티켓의 stem. 질문은 없다(요구사항 본문의 일부다) */
+  hash?: string;
+};
+
+/** 답변 카드 — **답변 대기일 때만** 렌더된다(판정은 서버가 `isAwaiting`으로 한다).
+ *
+ *  버튼이 하는 일은 `tickets/<awaiting>.done.md`를 만드는 것 하나뿐이다. 그 파일이 생기면
+ *  요구사항의 unmet이 비어 큐에 다시 뜬다 — `다시 큐에` 버튼을 따로 두지 않는 이유다
+ *  (답만 쓰고 안 누른 상태가 생긴다. DESIGN.md §요구사항 레이어 버린 대안). */
+export function AnswerCard({
+  project,
+  hash,
+  answerFile,
+  thread,
+}: {
+  project: string;
+  hash: string;
+  /** 만들어질 답변 파일 이름. 사람이 무엇이 생기는지 보고 누른다(접미사는 프로젝트별이다) */
+  answerFile: string;
+  thread: ThreadItem[];
+}) {
+  const [state, action, pending] = useActionState<SaveState, FormData>(answerRequirement, {});
+  return (
+    <Card className="max-w-3xl">
+      <CardHeader>
+        <CardTitle>답변</CardTitle>
+        <CardDescription>답변을 달면 이 요구사항이 다시 큐에 뜨고 PM이 이어서 봅니다.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {thread.map((item, i) => (
+          <div key={i} className="space-y-1">
+            <p className="text-xs text-muted-foreground">
+              {item.heading || (item.role === "question" ? "질문" : "답변")}
+              {item.hash && <span className="ml-2 font-mono">{item.hash}</span>}
+            </p>
+            {/* 원문 그대로 — 마크다운 렌더는 넣지 않는다(본문·프로토콜과 같은 결정) */}
+            <pre
+              className={`font-mono text-base whitespace-pre-wrap ${
+                item.role === "answer" ? "border-l-2 pl-3 text-muted-foreground" : ""
+              }`}
+            >
+              {item.text || "(내용 없음)"}
+            </pre>
+          </div>
+        ))}
+        <form action={action} className="space-y-3">
+          <input type="hidden" name="project" value={project} />
+          <input type="hidden" name="hash" value={hash} />
+          <Label htmlFor="a-body">답변</Label>
+          <Textarea id="a-body" name="body" rows={8} className="font-mono" required />
+          {state.error && <Failure title="답변을 달지 못했습니다" message={state.error} />}
+          <div className="flex items-center gap-3">
+            <Button type="submit" disabled={pending}>
+              {pending ? "답변 다는 중…" : "답변 달기"}
+            </Button>
+            <span className="text-xs text-muted-foreground">
+              <span className="font-mono">tickets/{answerFile}</span>를 만듭니다
+            </span>
+          </div>
+        </form>
+      </CardContent>
+    </Card>
   );
 }
 

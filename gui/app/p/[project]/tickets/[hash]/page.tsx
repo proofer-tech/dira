@@ -10,11 +10,27 @@ import { notFound } from "next/navigation";
 import { Lock, TriangleAlert } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { DepBadge, StatusBadge } from "@/components/status-badge";
-import { DeleteTicketButton, TicketEditForm, UnassignButton } from "@/components/ticket-ui";
+import {
+  AnswerCard,
+  DeleteTicketButton,
+  TicketEditForm,
+  UnassignButton,
+  type ThreadItem,
+} from "@/components/ticket-ui";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 import { findTicket } from "@/lib/engine";
-import { listTickets, referrers, resolveDep, statusOf, type Ticket } from "@/lib/queue";
+import {
+  awaitingOf,
+  awaitingUnlocked,
+  isAwaiting,
+  listTickets,
+  questionsOf,
+  referrers,
+  resolveDep,
+  statusOf,
+  type Ticket,
+} from "@/lib/queue";
 import { getProject, resolveConfig } from "@/lib/projects";
 import { decodeHash } from "@/lib/urls";
 import { listWorkers } from "@/lib/workers";
@@ -71,6 +87,26 @@ export default async function TicketDetail({
   // 관계 링크도 **stem**이다 (보드와 같은 규칙 — §식별자)
   const href = (t: Ticket) => `/p/${id}/tickets/${encodeURIComponent(t.stem)}`;
 
+  // 요구사항 왕복 스레드 — 본문의 `## 질문 n` 절과 `deps` 중 `kind: answer`인 티켓을 번갈아.
+  // 답변은 birth 순이다(라운드 순서고, deps에 적힌 순서는 PM이 append한 순서일 뿐이다).
+  const questions = questionsOf(ticket.body);
+  const answers = ticket.deps
+    .map((d) => resolveDep(tickets, d, config))
+    .filter((t): t is Ticket => !!t && t.kind === "answer")
+    .sort((a, b) => a.birth - b.birth);
+  const thread: ThreadItem[] = [];
+  for (let i = 0; i < Math.max(questions.length, answers.length); i++) {
+    if (questions[i]) thread.push({ role: "question", ...questions[i] });
+    if (answers[i]) {
+      thread.push({
+        role: "answer",
+        heading: answers[i].title,
+        text: answers[i].body.trim(),
+        hash: answers[i].stem,
+      });
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -108,6 +144,24 @@ export default async function TicketDetail({
             <span>
               고치려면 <span className="font-mono">ticket:</span>을{" "}
               <span className="font-mono">{ticket.stem}</span>으로 맞추거나 파일 이름을 바꾸세요.
+            </span>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* 표시만 있고 잠금이 없다 — PM이 `awaiting`을 쓰고 `deps`에 안 걸었다. 조용히 두면
+          사람이 답하기 전에 워커가 이 티켓을 집어 간다(§요구사항 레이어 결정 5) */}
+      {awaitingUnlocked(ticket) && (
+        <Alert className="max-w-3xl">
+          <TriangleAlert aria-hidden className="text-status-stale" />
+          <AlertTitle>잠금 없는 답변 대기 — 이 티켓은 답변 전에 디스패치된다</AlertTitle>
+          <AlertDescription>
+            <span>
+              <span className="font-mono">awaiting: {awaitingOf(ticket)}</span>가 있는데{" "}
+              <span className="font-mono">deps</span>에 그 해시가 없습니다. 엔진은{" "}
+              <span className="font-mono">deps</span>만 보므로 답변 없이도 이 티켓이 큐에 뜹니다 —
+              요구사항의 <span className="font-mono">deps</span>에{" "}
+              <span className="font-mono">{awaitingOf(ticket)}</span>를 넣으세요.
             </span>
           </AlertDescription>
         </Alert>
@@ -232,6 +286,16 @@ export default async function TicketDetail({
           />
         )}
       </section>
+
+      {/* 답변 대기일 때만. `.wip`은 `isAwaiting`의 state 조건이 구조적으로 막는다(제약 5) */}
+      {isAwaiting(ticket) && (
+        <AnswerCard
+          project={id}
+          hash={hash}
+          answerFile={`${awaitingOf(ticket)}${config.done}.md`}
+          thread={thread}
+        />
+      )}
     </div>
   );
 }

@@ -10,8 +10,12 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  awaitingOf,
+  awaitingUnlocked,
   filterTickets,
+  isAwaiting,
   listTickets,
+  questionsOf,
   referrers,
   resolveDep,
   sortTickets,
@@ -411,4 +415,97 @@ test("보드 — 5상태 판정 · 필터 AND/OR · 검색 대상 · 정렬", as
     sortTickets(tickets, "status", false).map((t) => statusOf(t)),
     ["open", "open", "open", "blocked", "blocked", "blocked", "assigned", "wip", "done"],
   );
+});
+
+// ── 요구사항 왕복 (DESIGN.md §요구사항 레이어) ───────────────────────────────
+
+function pySelect(root: string): string {
+  return execFileSync("python3", [PY, "select", root], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "ignore"],
+  });
+}
+
+/** 답변 파일 하나가 큐의 잠금을 푸는 것과 GUI 판정이 같은 순간에 켜지고 꺼지는지.
+ *  판정만 맞추면 소용없다 — 실제로 `select`에 뜨는지를 엔진에게 물어 못박는다. */
+test("답변 대기 판정 + 답변 파일 생성으로 재큐 (엔진과 대조)", async () => {
+  const r = newRoot();
+  await write(
+    r,
+    "r0000001.md",
+    fm({
+      ticket: "r0000001",
+      title: "요구사항",
+      kind: "request",
+      persona: "pm",
+      deps: "[a1111111]",
+      awaiting: "a1111111",
+    }) + "사람이 쓴 요구 전문.\n\n## 질문 1\n\n어느 화면인가?\n\n### 보기\n\n- 보드\n\n## 참고\n\n질문 아니다.\n",
+  );
+  // 잠금 없는 답변 대기 — `awaiting`만 있고 `deps`가 없다
+  await write(
+    r,
+    "r0000002.md",
+    fm({ ticket: "r0000002", title: "잠금 없음", kind: "request", awaiting: "b2222222" }),
+  );
+  // `.wip` — 답변칸이 없어야 한다(제약 5). `awaiting`이 걸려 있어도 마찬가지다
+  await write(
+    r,
+    "r0000003.wip.md",
+    fm({
+      ticket: "r0000003",
+      title: "물고 있는 중",
+      kind: "request",
+      deps: "[c3333333]",
+      awaiting: "c3333333",
+    }),
+  );
+
+  const before = await listTickets(r, DEFAULT);
+  const at = (h: string) => before.find((t) => t.hash === h)!;
+  assert.strictEqual(isAwaiting(at("r0000001")), true);
+  assert.strictEqual(awaitingOf(at("r0000001")), "a1111111");
+  assert.strictEqual(awaitingUnlocked(at("r0000001")), false);
+  // 잠금 없음: 경고는 뜨고 답변칸은 안 뜬다(엔진이 이미 디스패치 후보로 본다)
+  assert.strictEqual(awaitingUnlocked(at("r0000002")), true);
+  assert.strictEqual(isAwaiting(at("r0000002")), false);
+  // `.wip`은 state로 걸러진다 — 답변칸도 경고도 없다
+  assert.strictEqual(isAwaiting(at("r0000003")), false);
+  assert.strictEqual(awaitingUnlocked(at("r0000003")), false);
+
+  // 본문 스레드: `## 질문 n`만 집고, h3 이하는 그 질문 안에 남는다
+  assert.deepStrictEqual(questionsOf(at("r0000001").body), [
+    { heading: "질문 1", text: "어느 화면인가?\n\n### 보기\n\n- 보드" },
+  ]);
+
+  // 엔진 대조 — 답변 전: `deps 대기`이고 select 0건이다
+  assert.match(pyList(r), /r0000001 .* deps 대기 a1111111/);
+  assert.strictEqual(
+    pySelect(r)
+      .split("\n")
+      .filter((l) => l.includes("r0000001")).length,
+    0,
+  );
+
+  // 답변 파일 생성 = 액션이 하는 일 그대로 (`.done`으로 태어난다)
+  await write(
+    r,
+    "a1111111.done.md",
+    fm({ ticket: "a1111111", title: "답변 — r0000001 #1", kind: "answer" }) + "\n## 답변 1\n\n보드다.\n",
+  );
+
+  const after = await listTickets(r, DEFAULT);
+  const req = after.find((t) => t.hash === "r0000001")!;
+  // `awaiting`은 지우지 않았는데 판정이 저절로 꺼진다(이력이 남는다 — 결정 5)
+  assert.strictEqual(awaitingOf(req), "a1111111");
+  assert.strictEqual(isAwaiting(req), false);
+  assert.strictEqual(awaitingUnlocked(req), false);
+  assert.deepStrictEqual(req.unmet, []);
+  assert.strictEqual(statusOf(req), "open");
+
+  // 엔진 대조 — 답변 후: `대기`이고 select에 뜬다. 이게 재큐의 증거다
+  assert.match(pyList(r), /r0000001 .* 대기/);
+  assert.match(pySelect(r), /r0000001\.md\|r0000001\|request\|pm/);
+  // 답변 파일 자체는 열린 티켓이 아니라 `list`를 어지럽히지 않는다
+  assert.doesNotMatch(pyList(r), /a1111111/);
 });

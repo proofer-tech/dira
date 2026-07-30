@@ -179,6 +179,49 @@ export function statusOf(t: Ticket): TicketStatus {
   return t.unmet.length ? "blocked" : "open";
 }
 
+// ── 요구사항 왕복 (DESIGN.md §요구사항 레이어 결정 5) ────────────────────────
+
+/** 지금 기다리는 답변 stem. 엔진은 이 키를 모른다 — GUI 의미다. */
+export const awaitingOf = (t: Ticket): string => unquote(t.fm.awaiting ?? "");
+
+/** 답변 대기 = 열림 + `awaiting`이 걸려 있고 그 stem이 **미충족 dep**이다.
+ *
+ *  `deps`가 엔진 잠금이고 `awaiting`은 그 잠금이 사람 답변을 기다린다는 표시다. 답변 파일이
+ *  생기면 unmet에서 빠져 판정이 저절로 꺼진다 — `awaiting`은 지우지 않는다(이력이 남는다).
+ *  `.wip`은 state로 이미 걸러진다: 그 파일로 지금 세션이 일하고 있다(제약 5). */
+export function isAwaiting(t: Ticket): boolean {
+  const a = nfc(awaitingOf(t));
+  return t.state === "open" && !!a && t.unmet.some((d) => nfc(d) === a);
+}
+
+/** 표시만 있고 잠금이 없는 상태 — PM이 `awaiting`만 쓰고 `deps`에 안 걸었다.
+ *  판정을 `unmet`이 아니라 `deps`로 하는 이유: 답이 달린 뒤엔 `awaiting`이 unmet에서 빠지는데
+ *  그때도 경고를 띄우면 "답변 전에 디스패치된다"가 거짓말이 된다(정상적으로 답을 받은 티켓이다). */
+export function awaitingUnlocked(t: Ticket): boolean {
+  const a = nfc(awaitingOf(t));
+  return t.state === "open" && !!a && !t.deps.some((d) => nfc(d) === a);
+}
+
+/** 본문의 `## 질문 n` 절. 다음 `#`/`##` 제목 전까지가 그 질문의 몸통이다(h3 이하는 안에 남는다). */
+export function questionsOf(body: string): { heading: string; text: string }[] {
+  const out: { heading: string; text: string }[] = [];
+  let cur: { heading: string; text: string[] } | null = null;
+  const flush = () => {
+    if (cur) out.push({ heading: cur.heading, text: cur.text.join("\n").trim() });
+    cur = null;
+  };
+  for (const line of body.split("\n")) {
+    if (/^#{1,2}\s/.test(line)) {
+      flush();
+      if (/^##\s*질문/.test(line)) cur = { heading: line.replace(/^#+\s*/, "").trim(), text: [] };
+      continue;
+    }
+    cur?.text.push(line);
+  }
+  flush();
+  return out;
+}
+
 // ── 보드 필터·검색·정렬 (DESIGN.md §1 보드) ──────────────────────────────────
 
 /** 대소문자·정규화 무시 비교용. 큐 파일이 NFD로 저장돼 있어도(macOS) 한글 검색어가 걸려야 한다 —
