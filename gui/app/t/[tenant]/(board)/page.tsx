@@ -8,7 +8,7 @@
  *  입력·폴링뿐이다. 두 뷰는 **같은 `rows`**를 그린다 — 읽기·필터 코어를 다시 쓰지 않는다.
  *
  *  칸반에 드래그는 없다: 상태 전이의 주체는 엔진과 티켓 수행 세션이다(DESIGN.md §결정 기록). */
-import { readdir, stat } from "node:fs/promises";
+import { stat } from "node:fs/promises";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowDown, ArrowUp, ChevronsUpDown, X } from "lucide-react";
@@ -36,7 +36,7 @@ import {
   type SortKey,
   type Ticket,
 } from "@/lib/queue";
-import { getTenant, resolveConfig } from "@/lib/tenants";
+import { getTenant, listPersonas, resolveConfig } from "@/lib/tenants";
 
 // 큐는 GUI 밖에서(cron·세션이) 바뀐다. 프리렌더하면 빌드 시점 내용이 굳는다.
 export const dynamic = "force-dynamic";
@@ -103,14 +103,11 @@ export default async function Board({
   const rows = sortTickets(filterTickets(tickets, query), sortKey, desc);
 
   // 선택지를 하드코딩하지 않는다 — kind는 테넌트마다 다르고, persona는 그 큐의 페르소나다.
-  // 프로필이 없는데 티켓이 참조하는 persona도 선택지에 남긴다(엔진은 WARN만 남기고 그냥 돈다).
+  // persona 목록은 **페르소나 화면과 같은 `listPersonas`**로 만든다. 여기서 `readdir`을 다시
+  // 하면 이름 규칙(`NAME_RE`) 밖 디렉터리가 선택지에 들어오고, 그건 `queue.ts`가 `''`로 만드는
+  // 값이라 고르면 언제나 0건이다. 프로필 없이 티켓만 참조하는 이름은 `listPersonas`가 넣는다.
   const kinds = [...new Set(tickets.map((t) => t.kind).filter(Boolean))].sort();
-  const profiles = (await readdir(config.personas, { withFileTypes: true }).catch(() => []))
-    .filter((e) => e.isDirectory())
-    .map((e) => e.name);
-  const personas = [
-    ...new Set([...profiles, ...tickets.map((t) => t.persona).filter(Boolean)]),
-  ].sort();
+  const personas = (await listPersonas(config.personas, tickets)).map((p) => p.name);
 
   const href = (t: Ticket) => `/t/${id}/tickets/${encodeURIComponent(t.hash)}`;
   const qs = (next: URLSearchParams) => (next.toString() ? `?${next}` : `/t/${id}`);
