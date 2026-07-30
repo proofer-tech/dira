@@ -4,12 +4,12 @@
  *  `cronRegisterCmd`/`cronUnregisterCmd`가 만든 명령어를 사람이 복사해 실행한다.
  *  상태 전이(reap·unassign)도 여기서 다시 구현하지 않는다 — `lib/engine.ts`가 워커를 부른다. */
 import { createHash } from "node:crypto";
-import { chmod, readFile, readdir, stat, unlink, writeFile } from "node:fs/promises";
+import { chmod, readFile, readdir, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { NAME_RE, expandHome, resolveWithin } from "./paths.ts";
+import { NAME_RE, expandHome, resolveWithin, shellValue } from "./paths.ts";
 import type { Ticket } from "./queue.ts";
 
 export type WorkerStatus = "running" | "idle" | "stopped" | "stale";
@@ -28,6 +28,8 @@ export type Worker = {
   engine: string;
   /** runner.log에서 이 워커의 마지막 줄 */
   lastLog: string | null;
+  /** TICKET_CONTEXT 항목(경로·설명·존재 여부) 또는 못 읽은 사유 */
+  context: WorkerContext;
 };
 
 /** tick.sh 46행. 워커가 덮어쓰지 않으면 실제로 이게 돈다 — "기본값"이라고 얼버무리지 않는다. */
@@ -87,20 +89,20 @@ async function crontabText(): Promise<string> {
  *  주석 처리된 할당문이라 이 앵커가 없으면 예시 값이 실제 설정으로 보인다. */
 const nameAssign = /^[ \t]*(?:export[ \t]+)?TICKET_NAME=(.*)$/gm;
 const engineAssign = /^[ \t]*(?:export[ \t]+)?TICKET_ENGINE=\(/m;
-
-/** `TICKET_NAME` 값만 벗긴다. tenants.ts의 `shellValue`를 쓰지 않는 이유는 순환 import뿐이다
- *  (tenants.ts → workers.ts). 이름은 `^[A-Za-z0-9_-]+$`라 `$HOME` 치환도 필요 없다. */
-function unquote(raw: string): string | null {
-  const s = raw.trim().split(/[ \t#]/)[0];
-  const v = s.replace(/^["']|["']$/g, "");
-  return v || null;
-}
+const cwdAssign = /^[ \t]*(?:export[ \t]+)?TICKET_CWD=(.*)$/gm;
 
 /** 워커 파일에서 읽는 값. **셸을 실행하지 않는다** — 등록된 경로의 임의 코드가 GUI 권한으로
- *  도는 걸 막는 게 이 함수의 존재 이유다(tenants.ts §shellValue와 같은 결정). */
-function parseWorkerFile(text: string): { name: string | null; engine: string | null } {
+ *  도는 걸 막는 게 이 함수의 존재 이유다(`shellValue`와 같은 결정). */
+function parseWorkerFile(text: string): {
+  name: string | null;
+  engine: string | null;
+  /** 컨텍스트 경로의 `$TICKET_CWD`를 펴는 데만 쓴다(표시·존재 확인용) */
+  cwd: string | null;
+} {
   let name: string | null = null;
-  for (const m of text.matchAll(nameAssign)) name = unquote(m[1]) ?? name; // 뒤 할당이 이긴다
+  for (const m of text.matchAll(nameAssign)) name = shellValue(m[1]) ?? name; // 뒤 할당이 이긴다
+  let cwd: string | null = null;
+  for (const m of text.matchAll(cwdAssign)) cwd = shellValue(m[1]) ?? cwd;
 
   let engine: string | null = null;
   const m = engineAssign.exec(text);
@@ -110,7 +112,203 @@ function parseWorkerFile(text: string): { name: string | null; engine: string | 
     // 닫는 괄호가 없으면 파일이 깨진 것이다 — 추측해서 반쪽을 보여주지 않는다.
     if (close > open) engine = text.slice(open, close).replace(/\\?\s+/g, " ").trim() || null;
   }
-  return { name, engine };
+  return { name, engine, cwd };
+}
+
+// ── TICKET_CONTEXT 블록 (tick.sh 141~153행) ────────────────────────────────
+//
+// 셸 스크립트를 프로그램이 고치는 자리다. 엉뚱한 라인을 밟으면 워커가 죽고 cron이 조용히
+// 실패한다 — 그래서 **아는 모양만 고치고, 나머지는 거부한다**(DESIGN.md §4 컨텍스트 경로 관리).
+
+/** 워커 파일에 그대로 들어가는 한 항목. `path`는 **셸 문자열**이라 `$TICKET_CWD`가 살아 있다 —
+ *  덕분에 w1의 설정을 w2로 복사해도 각자 자기 워크트리를 가리킨다. */
+export type ContextItem = {
+  path: string;
+  desc: string;
+  /** `$HOME`·`$TICKET_CWD`를 편 결과. 표시·존재 확인용이고 파일에는 안 들어간다 */
+  resolved: string;
+  /** 엔진의 `[ -e ]`와 같은 판정. null = 못 편 변수가 남아 확인 불가 */
+  exists: boolean | null;
+};
+
+/** 못 읽으면 편집 UI를 열지 않는다 — 사람이 손으로 고쳐야 한다는 사실과 이유를 넘긴다. */
+export type WorkerContext = { ok: true; items: ContextItem[] } | { ok: false; reason: string };
+
+/** 주석 처리된 블록(`# TICKET_CONTEXT=(`)에 걸리지 않게 줄 처음에 앵커한다. */
+const contextOpen = /^[ \t]*(?:export[ \t]+)?TICKET_CONTEXT(\+?)=\(/gm;
+
+/** 항목 하나 = 큰따옴표 문자열 · 작은따옴표 문자열 · 맨 낱말. **이 셋 말고는 거부한다.**
+ *  `\`·백틱은 아예 안 받는다(다시 쓸 때 이스케이프 의미가 갈린다). 맨 낱말에 글로브 문자를
+ *  넣지 않는 이유도 같다 — 셸은 인용 없는 `*`를 펴는데 GUI는 큰따옴표로 다시 쓴다. */
+const contextEntry = /^(?:"([^"\\`]*)"|'([^'\\`]*)'|([A-Za-z0-9_/.$:@=+,%{}-]+))/;
+
+function splitEntry(entry: string): { path: string; desc: string } {
+  // 엔진과 같이 **첫 `|`**로 가른다(tick.sh 146행 `${entry%%|*}` · `${entry#*|}`).
+  const i = entry.indexOf("|");
+  return i < 0 ? { path: entry, desc: "" } : { path: entry.slice(0, i), desc: entry.slice(i + 1) };
+}
+
+export type ContextBlock =
+  | { ok: true; items: { path: string; desc: string }[]; start: number; end: number }
+  | { ok: false; reason: string };
+
+/** 워커 파일 텍스트에서 `TICKET_CONTEXT=( … )` 블록을 찾아 항목과 **치환 구간**을 돌려준다.
+ *  모양이 조금이라도 예상과 다르면 `ok: false` — 반쪽만 고치는 것보다 거부가 낫다. */
+export function parseContextBlock(text: string): ContextBlock {
+  const opens = [...text.matchAll(contextOpen)];
+  if (opens.length === 0) return { ok: false, reason: "TICKET_CONTEXT=( … ) 블록이 없습니다" };
+  if (opens.length > 1) {
+    return {
+      ok: false,
+      reason: `TICKET_CONTEXT 할당이 ${opens.length}개입니다 — 어느 쪽이 실효인지 GUI가 정하지 않습니다`,
+    };
+  }
+  const m = opens[0];
+  if (m[1]) return { ok: false, reason: "`+=` 추가 할당입니다" };
+
+  const start = m.index;
+  const entries: string[] = [];
+  let i = start + m[0].length;
+  for (;;) {
+    while (i < text.length && " \t\r\n".includes(text[i])) i++;
+    if (i >= text.length) return { ok: false, reason: "닫는 `)`가 없습니다" };
+    if (text[i] === ")") return { ok: true, items: entries.map(splitEntry), start, end: i + 1 };
+    if (text[i] === "#") {
+      // 블록 전체를 치환하므로 안의 주석은 사라진다. 지우는 대신 거부한다.
+      return { ok: false, reason: "블록 안에 주석이 있습니다" };
+    }
+    const e = contextEntry.exec(text.slice(i));
+    const after = e ? text[i + e[0].length] : undefined;
+    // 이어붙이기(`"$X"/y`)도 예상 밖이다 — 항목 하나는 공백이나 `)`로 끝나야 한다.
+    if (!e || (after !== undefined && !" \t\r\n)".includes(after))) {
+      const snippet = text.slice(i, i + 30).split("\n")[0];
+      return { ok: false, reason: `항목으로 읽을 수 없는 부분이 있습니다: ${snippet}` };
+    }
+    // 큰따옴표 안에서도 `$( )`는 셸이 실행한다. 실행되는 것을 GUI가 다시 쓰지 않는다.
+    if (e[0].includes("$(")) {
+      return { ok: false, reason: `항목에 명령 치환 $( ) 가 있습니다: ${e[0]}` };
+    }
+    // 작은따옴표 안의 `$`는 셸이 펴지 않는데 GUI는 큰따옴표로 다시 쓴다 = 의미가 바뀐다.
+    if (e[2] !== undefined && e[2].includes("$")) {
+      return { ok: false, reason: `작은따옴표 안에 $ 가 있습니다: ${e[0]}` };
+    }
+    entries.push(e[1] ?? e[2] ?? e[3]);
+    i += e[0].length;
+  }
+}
+
+/** 파일에 들어갈 블록 텍스트. 항상 큰따옴표로 쓴다 — `$TICKET_CWD`는 살리고 공백은 죽인다. */
+export function renderContextBlock(items: { path: string; desc: string }[]): string {
+  if (items.length === 0) return "TICKET_CONTEXT=()";
+  const lines = items.map((it) => `  "${it.path}${it.desc ? `|${it.desc}` : ""}"`);
+  return `TICKET_CONTEXT=(\n${lines.join("\n")}\n)`;
+}
+
+/** 사용자 입력이 **셸 스크립트 안의 큰따옴표 문자열**이 된다. 여기가 그 신뢰 경계다:
+ *  큰따옴표 안에서 특별한 건 `"`·`` ` ``·`\`·`$`뿐이고, `$`만 살려 두고(그게 용도다)
+ *  명령 치환 `$( )`는 막는다. 클라이언트 검증은 검증이 아니다 — 이 함수가 서버에서 돈다. */
+function cleanItem(raw: { path: string; desc: string }): { path: string; desc: string } {
+  const path = raw.path.trim();
+  const desc = raw.desc.trim();
+  if (!path) throw new Error("경로가 비어 있는 항목이 있습니다.");
+  if (path.includes("|")) {
+    throw new Error(`경로에 | 는 쓸 수 없습니다(엔진이 첫 | 를 설명 구분자로 씁니다): ${path}`);
+  }
+  for (const [what, s] of [
+    ["경로", path],
+    ["설명", desc],
+  ] as const) {
+    if (/["`\\\r\n]/.test(s)) throw new Error(`${what}에 " \` \\ 개행은 쓸 수 없습니다: ${s}`);
+    if (s.includes("$(")) throw new Error(`${what}에 명령 치환 $( ) 는 쓸 수 없습니다: ${s}`);
+  }
+  return { path, desc };
+}
+
+/** 존재 확인용 변수 전개. 셸을 실행하지 않으므로 아는 변수는 이 둘뿐이다. */
+function expandVars(v: string, cwd: string): string {
+  return v
+    .replace(/\$\{TICKET_CWD\}|\$TICKET_CWD(?![A-Za-z0-9_])/g, cwd)
+    .replace(/\$\{HOME\}|\$HOME(?![A-Za-z0-9_])/g, homedir());
+}
+
+/** 컨텍스트 경로는 **루트 밖을 허용한다**(그게 용도다). 쓰기 대상이 아니라 워커 파일에 들어갈
+ *  문자열일 뿐이므로 `resolveWithin`을 걸지 않고 `stat`으로 존재만 본다 — 엔진의 `[ -e ]`와 같다. */
+async function withExistence(
+  items: { path: string; desc: string }[],
+  cwd: string,
+): Promise<ContextItem[]> {
+  return Promise.all(
+    items.map(async (it) => {
+      const resolved = expandVars(it.path, cwd);
+      return {
+        ...it,
+        resolved,
+        exists: /\$[A-Za-z_{]/.test(resolved)
+          ? null // 못 편 변수가 남았다 — 없다고 단정하지 않는다
+          : await stat(resolved).then(
+              () => true,
+              () => false,
+            ),
+      };
+    }),
+  );
+}
+
+/** 워커 하나의 컨텍스트. `text`를 이미 읽었으면 넘겨서 재읽기를 아낀다. */
+async function contextOf(root: string, text: string, cwd: string | null): Promise<WorkerContext> {
+  const b = parseContextBlock(text);
+  if (!b.ok) return b;
+  // tick.sh 39행: TICKET_CWD 기본값은 루트의 부모다.
+  return { ok: true, items: await withExistence(b.items, cwd ?? path.dirname(root)) };
+}
+
+/** 블록 전체 치환. 모양이 예상과 다르면 **쓰지 않고** 손으로 고치라고 알린다. */
+export async function writeContext(
+  root: string,
+  name: string,
+  items: { path: string; desc: string }[],
+): Promise<WorkerContext> {
+  const file = await workerFile(root, name);
+  const text = await readFile(file, "utf8");
+  const b = parseContextBlock(text);
+  if (!b.ok) {
+    throw new Error(
+      `${name}.sh의 TICKET_CONTEXT 블록을 GUI가 안전하게 고칠 수 없습니다: ${b.reason}. 파일을 손으로 편집하세요.`,
+    );
+  }
+  const clean = items.map(cleanItem);
+  const next = text.slice(0, b.start) + renderContextBlock(clean) + text.slice(b.end);
+
+  // 자기 검증: 쓴 것을 다시 읽어 같은 항목이 나오는지 본다. 이스케이프가 틀리면 여기서 멈춘다.
+  const back = parseContextBlock(next);
+  if (!back.ok || JSON.stringify(back.items) !== JSON.stringify(clean)) {
+    throw new Error(
+      `쓴 블록을 다시 읽었을 때 항목이 달라집니다(${back.ok ? "내용 불일치" : back.reason}). 쓰지 않았습니다.`,
+    );
+  }
+  // **원자적 교체.** cron이 1분마다 이 파일을 실행하고 bash는 스크립트를 조금씩 읽는다 —
+  // 제자리 덮어쓰기 중에 tick이 걸리면 반쪽 스크립트가 실행된다. rename은 원자적이라
+  // 그 순간의 tick은 이전 파일이나 새 파일 중 하나를 온전히 본다.
+  const tmp = `${file}.gui-${process.pid}.tmp`;
+  await writeFile(tmp, next, { flag: "wx", mode: (await stat(file)).mode & 0o777 }); // 755를 잃지 않는다
+  await rename(tmp, file).catch(async (e) => {
+    await unlink(tmp).catch(() => {});
+    throw e;
+  });
+  const { cwd } = parseWorkerFile(next);
+  return { ok: true, items: await withExistence(clean, cwd ?? path.dirname(root)) };
+}
+
+/** 워커 간 복사. 갈라진 컨텍스트는 티켓 결과를 워커에 따라 달라지게 만든다.
+ *  `$TICKET_CWD`를 펴지 않고 문자열째로 옮기므로 받는 워커는 자기 워크트리를 가리킨다. */
+export async function copyContext(root: string, from: string, to: string): Promise<WorkerContext> {
+  if (from === to) throw new Error("같은 워커입니다.");
+  const src = await readFile(await workerFile(root, from), "utf8");
+  const b = parseContextBlock(src);
+  if (!b.ok) {
+    throw new Error(`${from}.sh의 TICKET_CONTEXT 블록을 읽을 수 없습니다: ${b.reason}`);
+  }
+  return writeContext(root, to, b.items);
 }
 
 /** runner.log는 워커 전체가 한 파일에 섞여 쌓인다: `2026-07-30 13:19:01 [w3] SKIP …`.
@@ -169,7 +367,8 @@ export async function listWorkers(root: string, tickets: Ticket[] = []): Promise
   for (const file of names) {
     const name = file.slice(0, -3);
     const full = path.join(dir, file);
-    const parsed = parseWorkerFile(await readFile(full, "utf8").catch(() => ""));
+    const text = await readFile(full, "utf8").catch(() => "");
+    const parsed = parseWorkerFile(text);
     // tick.sh 37행: TICKET_NAME 기본값이 파일명이다. 락·로그·owner가 전부 이 값으로 간다.
     const eff = parsed.name ?? name;
     const { held, pid } = await lockOf(lockPath(dir, eff));
@@ -184,6 +383,7 @@ export async function listWorkers(root: string, tickets: Ticket[] = []): Promise
       holding: holdingOf(tickets, eff),
       engine: parsed.engine ?? DEFAULT_ENGINE,
       lastLog: logs[eff] ?? null,
+      context: await contextOf(root, text, parsed.cwd),
     });
   }
   return out;

@@ -5,7 +5,7 @@
 import { mkdir, readFile, readdir, realpath, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
-import { TENANT_ID_RE, expandHome } from "./paths.ts";
+import { TENANT_ID_RE, expandHome, shellValue } from "./paths.ts";
 import { listTickets } from "./queue.ts";
 import { listWorkers, type Worker } from "./workers.ts";
 import { slugify } from "./urls.ts";
@@ -184,28 +184,9 @@ type Field = (typeof KEYS)[keyof typeof KEYS];
 
 const ASSIGN_RE = /^[ \t]*(?:export[ \t]+)?(TICKET_[A-Z_]+)=(.*)$/;
 
-/** 셸 값 한 줄을 해석한다. 해석 못 하면 null(호출자가 기본값 + assumed로 처리).
- *
- *  **셸을 실행하지 않는다.** 등록된 경로의 임의 코드가 GUI 권한으로 도는 걸 막는 게 이 함수의
- *  존재 이유다(DESIGN.md §결정 기록). 그 대가로 `$HOME` 말고 다른 변수는 못 읽는다. */
-export function shellValue(raw: string): string | null {
-  const s = raw.trimStart();
-  let v: string;
-  if (s.startsWith("'")) {
-    const e = s.indexOf("'", 1);
-    if (e < 0) return null;
-    return s.slice(1, e) || null; // 작은따옴표 안은 치환 없음(셸과 같다)
-  } else if (s.startsWith('"')) {
-    const e = s.indexOf('"', 1);
-    if (e < 0) return null;
-    v = s.slice(1, e);
-  } else {
-    v = s.split(/[ \t#]/)[0];
-  }
-  v = v.replace(/\$\{HOME\}|\$HOME(?![A-Za-z0-9_])/g, homedir());
-  if (/\$[A-Za-z_{]/.test(v)) return null; // 남은 변수 참조 = 해석 실패
-  return v || null; // 빈 값은 미설정과 같다(tickets.py도 `or 기본값`)
-}
+/** 셸 값 해석은 `lib/paths.ts`에 있다 — `workers.ts`도 같은 규칙으로 `TICKET_CWD`를 읽어야 하고
+ *  둘이 서로를 import하면 순환이다. 여기서 다시 export하는 건 기존 호출자(테스트) 때문이다. */
+export { shellValue };
 
 function parseWorker(text: string): Partial<Record<Field, string>> {
   const out: Partial<Record<Field, string>> = {};

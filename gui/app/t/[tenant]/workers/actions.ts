@@ -10,7 +10,15 @@
 import { revalidatePath } from "next/cache";
 import { runWorker } from "@/lib/engine";
 import { getTenant } from "@/lib/tenants";
-import { createWorker, cronRegisterCmd, cronUnregisterCmd, deleteWorker } from "@/lib/workers";
+import {
+  copyContext,
+  createWorker,
+  cronRegisterCmd,
+  cronUnregisterCmd,
+  deleteWorker,
+  writeContext,
+  type WorkerContext,
+} from "@/lib/workers";
 
 export type WorkerActionResult = {
   ok: boolean;
@@ -63,6 +71,41 @@ export async function deleteWorkerAction(
     await deleteWorker(await rootOf(tenantId), name);
     revalidatePath(`/t/${tenantId}`, "layout");
     return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+// ── 컨텍스트 경로 (TICKET_CONTEXT 블록 전체 치환) ───────────────────────────
+
+/** 성공하면 서버가 다시 읽은 항목(존재 여부 포함)을 넘긴다 — 화면이 저장 직후 체크 표시를
+ *  갱신하고, 방금 넣은 경로가 정말 있는지 그 자리에서 보인다. */
+export type ContextResult = { ok: boolean; message?: string; context?: WorkerContext };
+
+export async function saveContextAction(
+  tenantId: string,
+  name: string,
+  items: { path: string; desc: string }[],
+): Promise<ContextResult> {
+  try {
+    const context = await writeContext(await rootOf(tenantId), name, items);
+    revalidatePath(`/t/${tenantId}`, "layout");
+    return { ok: true, context };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** 워커 간 복사. 받는 워커의 블록을 **통째로** 바꾼다 — 화면이 그 사실을 먼저 알린다. */
+export async function copyContextAction(
+  tenantId: string,
+  from: string,
+  to: string,
+): Promise<ContextResult> {
+  try {
+    const context = await copyContext(await rootOf(tenantId), from, to);
+    revalidatePath(`/t/${tenantId}`, "layout");
+    return { ok: true, context };
   } catch (e) {
     return fail(e);
   }

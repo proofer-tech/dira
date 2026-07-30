@@ -22,9 +22,9 @@ gui/
   lib/
     tenants.ts          테넌트 레지스트리 읽기·쓰기, 검증, 설정 해석, 목록 요약
     urls.ts             슬러그·전환 경로·`~` 축약. **순수 함수만** — 클라이언트가 import한다
-    paths.ts            경로 탈출 방어 (신뢰 경계)
+    paths.ts            경로 탈출 방어 (신뢰 경계) + 셸 값 해석(`shellValue` — tenants·workers 공용)
     queue.ts            티켓 읽기 코어 (tickets.py 미러). 테넌트를 인자로 받는다
-    workers.ts          워커 파일·락·crontab 판정
+    workers.ts          워커 파일·락·crontab 판정, TICKET_CONTEXT 블록 파싱·치환
     engine.ts           엔진 서브프로세스 호출 (워커 `reap`·`unassign` · `tickets.py find`)
     utils.ts            shadcn cn() — 건드리지 않는다
     *.test.ts           node --test

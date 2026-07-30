@@ -5,10 +5,17 @@
  *  테넌트의 락이 섞여 있고 락 이름에서 테넌트를 역추적할 수 없다(§워커 상태 판정). */
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { TriangleAlert } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { StatusBadge } from "@/components/status-badge";
 import { CopyCommand } from "@/components/copy-command";
-import { CreateWorkerButton, WorkerRowActions, type WorkerRow } from "@/components/workers-ui";
+import {
+  CreateWorkerButton,
+  WorkerContextCard,
+  WorkerRowActions,
+  type WorkerRow,
+} from "@/components/workers-ui";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Table,
   TableBody,
@@ -23,6 +30,14 @@ import { cronUnregisterCmd, cronRegisterCmd, firstWorkerCmd, listWorkers } from 
 
 // 워커는 GUI 밖에서(cron이) 상태를 바꾼다 — 프리렌더하면 빌드 시점 현황이 굳는다.
 export const dynamic = "force-dynamic";
+
+/** 설정 키 라벨. 경고와 표가 같은 단어를 쓰게 한 자리에 둔다. */
+const LABEL: Record<string, string> = {
+  personas: "페르소나 (TICKET_PERSONAS)",
+  protocols: "프로토콜 (TICKET_PROTOCOLS)",
+  inProgress: "진행중 접미사 (TICKET_INPROGRESS)",
+  done: "완료 접미사 (TICKET_DONE)",
+};
 
 /** 배지 옆 보조 문구 (DESIGN.md §비주얼 디렉션 §2 워커 4상태). */
 const NOTE: Record<WorkerRow["status"], string> = {
@@ -47,6 +62,16 @@ export default async function Workers({ params }: { params: Promise<{ tenant: st
     registerCmd: cronRegisterCmd(w),
     unregisterCmd: cronUnregisterCmd(w),
   }));
+
+  // 표시만 하는 값들(편집은 범위 밖 — 4e2850eb). 해석은 resolveConfig 하나가 한다.
+  const settings = [
+    { key: LABEL.personas, value: config.personas, assumed: config.assumed.includes("personas") },
+    { key: LABEL.protocols, value: config.protocols, assumed: config.assumed.includes("protocols") },
+    { key: LABEL.inProgress, value: config.inProgress, assumed: config.assumed.includes("inProgress") },
+    { key: LABEL.done, value: config.done, assumed: config.assumed.includes("done") },
+  ];
+  // cwd는 갈리는 게 정상이므로 경고에서 뺀다(정상 상태의 경고는 사람이 경고를 안 읽게 만든다).
+  const divergent = config.conflicts.filter((c) => c.key !== "cwd");
 
   return (
     <div className="space-y-4">
@@ -141,6 +166,78 @@ export default async function Workers({ params }: { params: Promise<{ tenant: st
             ))}
           </TableBody>
         </Table>
+      )}
+
+      {rows.length > 0 && (
+        <section className="space-y-3 pt-4">
+          <div>
+            <h2 className="text-sm font-semibold">컨텍스트 경로</h2>
+            <p className="text-sm text-muted-foreground">
+              워커별 <span className="font-mono text-xs">TICKET_CONTEXT</span> — 세션 프롬프트 꼬리에
+              경로와 설명이 붙습니다. <strong className="font-medium">없는 경로는 에러가 아닙니다</strong>{" "}
+              — 엔진이 건너뛰고 runner.log에 <span className="font-mono text-xs">WARN</span>만 남깁니다
+              (클라우드 마운트가 안 붙은 상태에서 세션이 헛짚지 않게).
+            </p>
+          </div>
+          {rows.map((w) => (
+            <WorkerContextCard
+              key={w.name}
+              tenantId={id}
+              row={w}
+              others={rows.filter((o) => o.name !== w.name).map((o) => o.name)}
+            />
+          ))}
+        </section>
+      )}
+
+      {rows.length > 0 && (
+        <section className="space-y-2 pt-4">
+          <div>
+            <h2 className="text-sm font-semibold">나머지 워커 설정 (표시만)</h2>
+            <p className="text-sm text-muted-foreground">
+              이 값들은 이 화면에서 고치지 않습니다 — 워커 파일을 손으로 편집합니다.
+            </p>
+          </div>
+          <Table>
+            <TableBody>
+              {settings.map((s) => (
+                <TableRow key={s.key} className="h-9">
+                  <TableCell className="w-48 px-3 py-0 text-xs text-muted-foreground">{s.key}</TableCell>
+                  <TableCell className="px-3 py-0 font-mono text-xs break-all">
+                    {s.value}
+                    {s.assumed && (
+                      <span className="ml-2 font-sans text-muted-foreground">기본값 가정</span>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+          {/* TICKET_CWD는 워커마다 다른 게 정상이라 여기 없다(워크트리 하나면 두 세션이 서로를
+              밟는다). 갈렸다고 경고하면 사람이 경고를 안 읽게 된다 — DESIGN.md §설정 해석. */}
+          {divergent.length > 0 && (
+            <Alert>
+              <TriangleAlert aria-hidden className="text-status-stale" />
+              <AlertTitle>워커 간 값이 갈렸습니다</AlertTitle>
+              <AlertDescription>
+                <div className="space-y-1">
+                  <p>
+                    엔진은 티켓을 디스패치한 워커의 값을 씁니다 — 같은 티켓이 어느 워커에 물리느냐로
+                    결과가 달라집니다.
+                  </p>
+                  {divergent.map((c) => (
+                    <p key={c.key} className="font-mono text-xs break-all">
+                      {LABEL[c.key] ?? c.key}:{" "}
+                      {Object.entries(c.byWorker)
+                        .map(([w, v]) => `${w}=${v}`)
+                        .join(" · ")}
+                    </p>
+                  ))}
+                </div>
+              </AlertDescription>
+            </Alert>
+          )}
+        </section>
       )}
     </div>
   );

@@ -22,6 +22,30 @@ export function expandHome(p: string): string {
   return p;
 }
 
+/** 셸 값 한 줄을 해석한다. 해석 못 하면 null(호출자가 기본값 + `기본값 가정`으로 처리).
+ *
+ *  **셸을 실행하지 않는다.** 등록된 경로의 임의 코드가 GUI 권한으로 도는 걸 막는 게 이 함수의
+ *  존재 이유다(DESIGN.md §결정 기록). 그 대가로 `$HOME` 말고 다른 변수는 못 읽는다.
+ *  `tenants.ts`와 `workers.ts`가 같은 규칙을 써야 해서 여기 있다(둘이 서로를 import하면 순환이다). */
+export function shellValue(raw: string): string | null {
+  const s = raw.trimStart();
+  let v: string;
+  if (s.startsWith("'")) {
+    const e = s.indexOf("'", 1);
+    if (e < 0) return null;
+    return s.slice(1, e) || null; // 작은따옴표 안은 치환 없음(셸과 같다)
+  } else if (s.startsWith('"')) {
+    const e = s.indexOf('"', 1);
+    if (e < 0) return null;
+    v = s.slice(1, e);
+  } else {
+    v = s.split(/[ \t#]/)[0];
+  }
+  v = v.replace(/\$\{HOME\}|\$HOME(?![A-Za-z0-9_])/g, homedir());
+  if (/\$[A-Za-z_{]/.test(v)) return null; // 남은 변수 참조 = 해석 실패
+  return v || null; // 빈 값은 미설정과 같다(tickets.py도 `or 기본값`)
+}
+
 /** 기준 디렉터리 안의 실제 경로를 돌려준다. 밖이면 던진다.
  *
  *  기준은 테넌트 root가 아니라 **그 용도의 해석된 디렉터리**다 — 페르소나 편집의 기준은
