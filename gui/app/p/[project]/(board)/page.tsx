@@ -43,12 +43,18 @@ import { getProject, listPersonas, resolveConfig } from "@/lib/projects";
 // 큐는 GUI 밖에서(cron·세션이) 바뀐다. 프리렌더하면 빌드 시점 내용이 굳는다.
 export const dynamic = "force-dynamic";
 
-/** 티켓 5상태 — 필터 선택지 **겸 칸반 컬럼**. 순서는 큐를 흐르는 순서다(queue.ts `RANK`와 같다).
- *  라벨은 `<StatusBadge>`에서 가져온다(같은 말을 써야 한다). */
-const STATUSES = ["open", "blocked", "assigned", "wip", "done"] as const;
+/** 칸반 레인 **4개**. 순서는 큐를 흐르는 순서다(queue.ts `RANK`와 같다).
+ *  라벨은 `<StatusBadge>`에서 가져온다(같은 말을 써야 한다).
+ *
+ *  `assigned`가 없는 이유(§1 보드 · 사람 요청 `b69e26ce`): 정상 흐름에 없는 상태를 흐름을 그리는
+ *  뷰에 레인으로 세우면 비어 있는 게 정상인 컬럼이 화면 폭을 상시 먹고 "여기도 티켓이 지나간다"고
+ *  말한다. 그 티켓이 사는 곳은 셸의 알림 배너다(§0-2). **테이블·필터에서는 빼지 않는다** —
+ *  빼면 GUI가 CLI `list`보다 덜 보인다. */
+const STATUSES = ["open", "blocked", "wip", "done"] as const;
 
-/** 상태 필터 선택지 = 칸반 컬럼 5개 + 파생 `답변 대기`(§1 보드 · §요구사항 레이어 결정 5).
- *  **컬럼은 5개 그대로다** — 답변 대기 카드는 `deps 대기` 컬럼에 앉고 배지로만 갈린다. */
+/** 상태 필터 선택지 = 엔진 5상태 + 파생 `답변 대기`(§1 보드 · §요구사항 레이어 결정 5).
+ *  **레인 4개와 개수가 다르다** — `assigned`는 필터에 남고(위 `STATUSES` 주석), 답변 대기 카드는
+ *  `deps 대기` 레인에 앉고 배지로만 갈린다. */
 const STATUS_OPTIONS = ["open", "blocked", "awaiting", "assigned", "wip", "done"] as const;
 
 /** 뷰 전환은 `<Link>` 2개다 — `tabs`를 설치하지 않은 이유가 이것이다(DESIGN.md §5). */
@@ -112,6 +118,10 @@ export default async function Board({
   // `tickets`(전체)는 deps 해석·선택지 목록이 계속 쓴다 — 거기서 답변을 빼면 요구사항의 답변 dep이
   // `큐에 없는 해시`(영구 대기)로 거짓 표시된다.
   const total = tickets.filter((t) => inDefaultList(t, query.kind)).length;
+  // 레인 4개 밖으로 떨어지는 행 = `할당됨`. 분모가 아니라 **표시 건수(`rows`)** 기준이다 —
+  // 각주는 "지금 화면의 건수와 레인 합계가 왜 다른가"를 설명하는 것이고, 필터가 걸리면
+  // 레인도 같이 좁아진다. `rows.length - 레인합계`와 같은 값이다(`statusOf`는 5상태 중 하나).
+  const undispatched = rows.filter((t) => statusOf(t) === "assigned").length;
 
   // 선택지를 하드코딩하지 않는다 — kind는 프로젝트마다 다르고, persona는 그 큐의 페르소나다.
   // persona 목록은 **페르소나 화면과 같은 `listPersonas`**로 만든다. 여기서 `readdir`을 다시
@@ -268,6 +278,12 @@ export default async function Board({
               ))}
               <span className="text-xs tabular-nums text-muted-foreground">
                 {rows.length === total ? `티켓 ${total}건` : `티켓 ${rows.length} / ${total}건`}
+                {/* 레인 4개에 `할당됨`이 없어서 칸반에서는 레인 합계 < 표시 건수가 된다.
+                    어긋난 숫자를 설명 없이 두지 않는다(§1 보드) — 그 티켓으로 가는 링크는
+                    배너가 갖고 있다(§0-2). 0건이면 어긋나지 않으므로 각주도 없다 */}
+                {view === "kanban" && undispatched > 0 && (
+                  <span className="ml-1">(디스패치되지 않는 {undispatched}건은 상단 알림)</span>
+                )}
               </span>
             </div>
           </div>
@@ -279,7 +295,7 @@ export default async function Board({
               {rows.length === 0 && (
                 <div className="rounded-md border border-dashed px-6 py-6">{noMatch}</div>
               )}
-              {/* 컬럼 5개 × w-72는 1440에 안 들어간다 — 가로 스크롤로 넘긴다(§4 사이드바를 안 쓰는 이유).
+              {/* 레인 4개 × w-72는 1440에 안 들어간다 — 가로 스크롤로 넘긴다(§4 사이드바를 안 쓰는 이유).
                   `-mx-1 px-1`은 스크롤 컨테이너의 클리핑 여백이다: <Card>의 테두리는 `ring-1`(=
                   border box **밖에** 그리는 box-shadow)이라 카드가 컨테이너 끝에 딱 붙으면
                   양끝 카드의 왼/오른쪽 테두리가 잘려 카드가 열려 보인다. 음수 마진으로 되돌려
@@ -296,17 +312,9 @@ export default async function Board({
                           {group.length}건
                         </span>
                       </div>
-                      {/* 할당됨은 큐를 흐르는 단계가 아니다 — 엔진이 만들지 않는 조합이라 이 컬럼은
-                          비어 있는 게 정상이다(§1 보드 · §비주얼 §2 이상 상태). */}
-                      {s === "assigned" && (
-                        <p className="text-xs text-muted-foreground">
-                          정상이면 비어 있습니다 — 카드가 있으면 그 티켓은 디스패치되지 않는 영구 정체
-                          상태입니다.
-                        </p>
-                      )}
                       {group.length === 0 ? (
-                        // <EmptyState>는 화면 하나의 빈 상태용이다(py-10 + 1차 액션 버튼). 컬럼
-                        // 5개에 그걸 깔면 같은 버튼이 5개 생긴다 — 여기선 건수 0만 말한다.
+                        // <EmptyState>는 화면 하나의 빈 상태용이다(py-10 + 1차 액션 버튼). 레인
+                        // 4개에 그걸 깔면 같은 버튼이 4개 생긴다 — 여기선 건수 0만 말한다.
                         <p className="rounded-md border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">
                           0건
                         </p>
@@ -318,8 +326,8 @@ export default async function Board({
                             key={t.path}
                             className="relative gap-2 px-4 focus-within:bg-muted/50 hover:bg-muted/50"
                           >
-                            {/* 칸반 카드는 컬럼이 상태를 말하므로 배지를 달지 않는다 — 예외가
-                                `답변 대기`다. `deps 대기` 컬럼에 앉으므로(컬럼 5개 유지) 카드
+                            {/* 칸반 카드는 레인이 상태를 말하므로 배지를 달지 않는다 — 예외가
+                                `답변 대기`다. 자기 레인 없이 `deps 대기`에 앉으므로 카드
                                 자신이 하위 종류임을 말해야 한다(§1 보드 요구사항 항) */}
                             <div className="flex items-start justify-between gap-2">
                               <Link

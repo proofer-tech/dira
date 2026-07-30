@@ -1,4 +1,4 @@
-/** 보드 로딩 — 실제 칸반과 같은 모양(컬럼 5개 `w-72` × 카드 3장). 스피너 금지(DESIGN.md §6).
+/** 보드 로딩 — 실제 칸반과 같은 모양(레인 4개 `w-72` × 카드 3장). 스피너 금지(DESIGN.md §6).
  *  기본 뷰가 칸반이라 스켈레톤도 칸반이다(§1). `?view=table`로 들어와도 이 스켈레톤이 뜬다 —
  *  뷰 선택 기억을 안 두므로 서버가 어느 쪽인지 모른다. 기본값 쪽이 제일 자주 맞는다.
  *
@@ -33,12 +33,12 @@ export default function Loading() {
         </div>
       </div>
 
-      {/* 컬럼 5개 × w-72는 1440에 안 들어간다 — 실제 보드와 같이 가로 스크롤로 넘긴다.
-          `-mx-1 px-1`도 보드와 같다: <Card>의 `ring-1`은 border box 밖에 그려서 여백이 없으면
-          양끝 카드 테두리가 잘린다(근거는 `(board)/page.tsx`). 여기서 빼면 스켈레톤과 도착한
-          보드의 카드 테두리가 갈린다 */}
+      {/* 레인 4개 × w-72 — 개수는 파생값이다(`(board)/page.tsx`의 `STATUSES`). 그쪽 레인이
+          바뀌면 여기도 같이 바꾼다(§1). `-mx-1 px-1`도 보드와 같다: <Card>의 `ring-1`은
+          border box 밖에 그려서 여백이 없으면 양끝 카드 테두리가 잘린다(근거는 같은 파일).
+          여기서 빼면 스켈레톤과 도착한 보드의 카드 테두리가 갈린다 */}
       <div className="-mx-1 flex gap-4 overflow-x-auto px-1 pb-2">
-        {Array.from({ length: 5 }, (_, c) => (
+        {Array.from({ length: 4 }, (_, c) => (
           <div key={c} className="w-72 shrink-0 space-y-2">
             {/* 컬럼 헤더: 상태 배지 + 건수 */}
             <div className="flex items-center justify-between gap-2">

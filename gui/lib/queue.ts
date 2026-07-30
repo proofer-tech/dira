@@ -194,7 +194,7 @@ export const awaitingOf = (t: Ticket): string => unquote(t.fm.awaiting ?? "");
  *  생기면 unmet에서 빠져 판정이 저절로 꺼진다 — `awaiting`은 지우지 않는다(이력이 남는다).
  *  `.wip`은 state로 이미 걸러진다: 그 파일로 지금 세션이 일하고 있다(제약 5).
  *
- *  **`statusOf`에 넣지 않는다**(결정 4): 이건 `blocked`의 하위 종류이고, 칸반 컬럼 5개와 상태
+ *  **`statusOf`에 넣지 않는다**(결정 4): 이건 `blocked`의 하위 종류이고, 칸반 레인 배정과 상태
  *  정렬은 엔진이 아는 5상태 그대로여야 한다. 갈리는 것은 배지·필터 선택지뿐이다(§1 보드). */
 export function isAwaiting(t: Ticket): boolean {
   const a = nfc(awaitingOf(t));
