@@ -2322,14 +2322,6 @@ pnpm dlx shadcn@latest add @shadcn/message-scroller @shadcn/message @shadcn/bubb
 `@base-ui/react`가 들어와 있다. 사람에게 이 줄을 미리 확인받고 진행했다(`c01a9a11` 확인 항).
 **커스텀 표는 무수정이다** — `<Markdown>`이 말풍선 **안**에서 종전대로 본문을 그린다.
 
-**등록 항목이 들고 오는 유틸은 보탤 것이 없다**(실측 `e589e0f1`, Tailwind v4.3.3 · shadcn 4.16).
-`message-scroller`가 쓰는 `scroll-fade-b` `scrollbar-thin` `scrollbar-gutter-stable`
-`scrollbar-thumb-transparent` `scrollbar-track-transparent` `inset-s-1/2`는 **여섯 개 전부
-이 레포에서 CSS가 나온다** — 앞의 하나는 `globals.css`가 이미 읽는 `shadcn/tailwind.css`의
-`@utility`고, 나머지 다섯은 Tailwind v4 코어다. `app/globals.css`에 손으로 보탤 CSS가 없고,
-`components/ui/message-scroller.tsx`는 CLI 산출물 그대로 둔다(고친 곳은 CLI가 이미 `lucide-react`
-`ArrowDownIcon`으로 바꿔 준 `IconPlaceholder` import 하나뿐이다). 근거는 티켓 `e589e0f1` §결과.
-
 **페르소나 색 스와치 팝오버(§12)도 `add` 인자를 늘리지 않는다.** 위 `popover` 한 줄이 그릇이고,
 안은 `button` 9개다 — 둘 다 이 표에 이미 있다. `command`도 `select`도 쓰지 않는 이유는 §12에 적었다.
 
