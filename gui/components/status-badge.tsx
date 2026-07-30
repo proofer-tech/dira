@@ -79,6 +79,9 @@ const STATUS: Record<Status, Spec> = {
   disconnected: { label: "연결 안 됨", icon: Unplug, variant: "outline", tint: STALE },
 };
 
+/** 상태 라벨 문자열이 필요한 곳(보드 필터 선택지) — 배지 없이도 **같은 말**을 쓰게 한다. */
+export const statusLabel = (status: Status) => STATUS[status].label;
+
 export function StatusBadge({ status, className }: { status: Status; className?: string }) {
   const { label, icon: Icon, variant, tint } = STATUS[status];
   return (

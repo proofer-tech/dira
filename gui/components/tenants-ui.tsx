@@ -131,7 +131,7 @@ export function RegisterCard() {
             <span className="font-mono text-xs text-muted-foreground">{view.tenant.shortRoot}</span>
           </h2>
           <div className="flex items-center gap-2">
-            <Button size="sm" render={<Link href={`/t/${view.tenant.id}`} />}>
+            <Button size="sm" nativeButton={false} render={<Link href={`/t/${view.tenant.id}`} />}>
               보드 열기
             </Button>
             <Button size="sm" variant="ghost" onClick={() => setDismissed(true)}>

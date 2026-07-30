@@ -10,9 +10,12 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  filterTickets,
   listTickets,
   referrers,
   resolveDep,
+  sortTickets,
+  statusOf,
   stemOf,
   writeTicket,
   type Suffixes,
@@ -287,4 +290,71 @@ test("writeTicket — 남의 frontmatter 키는 그대로, 파싱은 엔진과 �
   assert.strictEqual(after.fm.attempts, "2");
   // 쓴 뒤에도 엔진이 같은 판정을 하는가 — 이게 깨지면 GUI 저장이 티켓을 큐에서 지운다
   assert.strictEqual(tsList([after]), pyList(root));
+});
+
+// ── 보드 필터·검색·정렬 ──────────────────────────────────────────────────────
+
+test("보드 — 5상태 판정 · 필터 AND/OR · 검색 대상 · 정렬", async () => {
+  const root = await buildDefaultFixture();
+  const tickets = await listTickets(root, DEFAULT);
+  const hashes = (ts: Ticket[]) => ts.map((t) => t.hash);
+  const none = { kind: [], persona: [], status: [], q: "" };
+
+  // 5상태 — 우선순위가 tickets.py list와 같다(할당됨이 deps 대기보다 먼저)
+  const by = (h: string) => tickets.find((t) => t.hash === h)!;
+  assert.strictEqual(statusOf(by("aaaa1111")), "open");
+  assert.strictEqual(statusOf(by("ffff6666")), "blocked"); // unmet: aaaa1111
+  assert.strictEqual(statusOf(by("iiii9999")), "assigned");
+  assert.strictEqual(statusOf(by("dddd4444")), "wip");
+  assert.strictEqual(statusOf(by("eeee5555")), "done");
+
+  // 필터 없음 = 큐 그대로(순서까지)
+  assert.deepStrictEqual(hashes(filterTickets(tickets, none)), hashes(tickets));
+
+  // 다중 선택은 OR
+  assert.deepStrictEqual(hashes(filterTickets(tickets, { ...none, status: ["blocked"] })), [
+    "ffff6666",
+    "gggg7777",
+    "hhhh8888",
+  ]);
+  assert.deepStrictEqual(
+    hashes(filterTickets(tickets, { ...none, kind: ["request", "feedback"] })),
+    ["한글티켓".normalize("NFC"), "테스트".normalize("NFC")],
+  );
+
+  // 필터끼리는 AND — kind=work인 열린 미할당·deps충족 티켓은 aaaa1111뿐이다
+  assert.deepStrictEqual(
+    hashes(filterTickets(tickets, { ...none, kind: ["work"], status: ["open"] })),
+    ["aaaa1111"],
+  );
+
+  // 검색 대상은 title + 본문 + frontmatter 값 전체, 대소문자 무시
+  assert.deepStrictEqual(hashes(filterTickets(tickets, { ...none, q: "정상" })), ["aaaa1111"]);
+  assert.deepStrictEqual(hashes(filterTickets(tickets, { ...none, q: "본문이다" })), ["aaaa1111"]);
+  assert.deepStrictEqual(hashes(filterTickets(tickets, { ...none, q: "SESS-IIII" })), ["iiii9999"]);
+  assert.deepStrictEqual(hashes(filterTickets(tickets, { ...none, q: "없는말" })), []);
+  // 한글은 NFC로 맞춰 비교한다 — 파일명이 NFD인 티켓(해시가 파일명에서 나온다)을
+  // NFD 검색어로 찾아도 걸려야 한다. 안 맞추면 "검색해도 안 나오는 티켓"이 생긴다.
+  assert.deepStrictEqual(hashes(filterTickets(tickets, { ...none, q: "테스트".normalize("NFD") })), [
+    "테스트".normalize("NFC"),
+  ]);
+
+  // 정렬 안 하면 큐 순서를 손대지 않는다(= CLI list와 같은 순서)
+  assert.strictEqual(sortTickets(tickets, null, false), tickets);
+  assert.deepStrictEqual(hashes(sortTickets(tickets, "created", true)), hashes(tickets).reverse());
+  // 해시 오름차순 (한글 해시의 자리는 로케일이 정한다 — 영문 해시들의 순서로 본다)
+  assert.deepStrictEqual(
+    hashes(sortTickets(tickets, "hash", false)).filter((h) => /^[a-z]/.test(h)),
+    ["aaaa1111", "dddd4444", "eeee5555", "ffff6666", "gggg7777", "hhhh8888", "iiii9999"],
+  );
+  // deps 개수 내림차순 — 2개짜리 둘이 먼저, 동률은 큐 순서 유지(안정 정렬)
+  assert.deepStrictEqual(hashes(sortTickets(tickets, "deps", true)).slice(0, 2), [
+    "ffff6666",
+    "gggg7777",
+  ]);
+  // 상태 정렬은 큐를 흐르는 순서다(대기 → deps 대기 → 할당됨 → 진행중 → 완료)
+  assert.deepStrictEqual(
+    sortTickets(tickets, "status", false).map((t) => statusOf(t)),
+    ["open", "open", "open", "blocked", "blocked", "blocked", "assigned", "wip", "done"],
+  );
 });

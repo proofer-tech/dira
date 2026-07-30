@@ -159,6 +159,82 @@ export async function listTickets(root: string, config: Suffixes): Promise<Ticke
 export const isDispatchable = (t: Ticket) =>
   t.state === "open" && !t.assigned && t.unmet.length === 0;
 
+/** 티켓 5상태. 우선순위는 `tickets.py list`와 같다 — **할당됨이 deps 대기보다 먼저** 나온다.
+ *  (`<StatusBadge>`의 Status 부분집합이다. 라벨·색은 그쪽이 정하고 판정은 여기서만 한다.) */
+export type TicketStatus = "open" | "blocked" | "assigned" | "wip" | "done";
+
+export function statusOf(t: Ticket): TicketStatus {
+  if (t.state !== "open") return t.state;
+  if (t.assigned) return "assigned";
+  return t.unmet.length ? "blocked" : "open";
+}
+
+// ── 보드 필터·검색·정렬 (DESIGN.md §1 보드) ──────────────────────────────────
+
+/** 대소문자·정규화 무시 비교용. 큐 파일이 NFD로 저장돼 있어도(macOS) 한글 검색어가 걸려야 한다 —
+ *  안 맞추면 "검색해도 안 나오는 티켓"이 생겨 GUI가 거짓말을 한다. */
+const norm = (s: string) => s.normalize("NFC").toLowerCase();
+
+export type BoardQuery = {
+  kind: string[]; // 비면 전체 (다중 선택은 OR, 필터끼리는 AND)
+  persona: string[];
+  status: string[];
+  q: string; // title + 본문 + frontmatter 값 전체 부분일치
+};
+
+export function filterTickets(tickets: Ticket[], query: BoardQuery): Ticket[] {
+  const needle = norm(query.q.trim());
+  return tickets.filter((t) => {
+    if (query.kind.length && !query.kind.includes(t.kind)) return false;
+    if (query.persona.length && !query.persona.includes(t.persona)) return false;
+    if (query.status.length && !query.status.includes(statusOf(t))) return false;
+    if (!needle) return true;
+    // 해시를 같이 본다: `ticket:`이 없는 티켓은 해시가 파일명에서 나오므로 frontmatter 값만
+    // 훑으면 해시로 못 찾는다("검색해도 안 나오는 티켓"이 생긴다).
+    return [t.hash, t.title, t.body, ...Object.values(t.fm)].some((v) => norm(v).includes(needle));
+  });
+}
+
+/** 정렬 가능한 컬럼 = 테이블 컬럼 8개. URL의 `sort` 값은 이 목록으로 검증한다. */
+export const SORT_KEYS = [
+  "status",
+  "hash",
+  "title",
+  "kind",
+  "persona",
+  "deps",
+  "created",
+  "owner",
+] as const;
+export type SortKey = (typeof SORT_KEYS)[number];
+
+/** 상태 컬럼의 정렬 순서. 알파벳순(assigned·blocked·done…)은 의미가 없다 — 큐를 흐르는 순서다. */
+const RANK: Record<TicketStatus, number> = { open: 0, blocked: 1, assigned: 2, wip: 3, done: 4 };
+
+/** `key`가 null이면 **손대지 않는다** — listTickets의 birth 오름차순, 즉 CLI `list`와 같은
+ *  큐 순서가 기본값이다. 동률은 `sort`가 안정적이라(ES2019) 큐 순서를 유지한다. */
+export function sortTickets(tickets: Ticket[], key: SortKey | null, desc: boolean): Ticket[] {
+  if (!key) return tickets;
+  const val = (t: Ticket): string | number =>
+    ({
+      status: RANK[statusOf(t)],
+      hash: t.hash,
+      title: norm(t.title),
+      kind: t.kind,
+      persona: t.persona,
+      deps: t.deps.length,
+      created: t.birth,
+      owner: norm(t.fm.owner ?? ""),
+    })[key];
+  return [...tickets].sort((a, b) => {
+    const x = val(a);
+    const y = val(b);
+    // 한글 title·persona가 섞이므로 문자열은 localeCompare다(코드포인트 순은 사람이 못 읽는다).
+    const c = typeof x === "number" ? x - (y as number) : String(x).localeCompare(String(y), "ko");
+    return desc ? -c : c;
+  });
+}
+
 // ── 관계 (티켓 상세 §2) ─────────────────────────────────────────────────────
 
 /** 상태 접미사를 뗀 파일명 stem. deps 해시가 가리키는 이름이 이것이다(tickets.py _find_stem). */

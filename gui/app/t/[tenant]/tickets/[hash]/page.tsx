@@ -9,25 +9,17 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Lock, TriangleAlert } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
-import { DepBadge, StatusBadge, type Status } from "@/components/status-badge";
+import { DepBadge, StatusBadge } from "@/components/status-badge";
 import { DeleteTicketButton, TicketEditForm, UnassignButton } from "@/components/ticket-ui";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 import { findTicket } from "@/lib/engine";
-import { listTickets, referrers, resolveDep, type Ticket } from "@/lib/queue";
+import { listTickets, referrers, resolveDep, statusOf, type Ticket } from "@/lib/queue";
 import { getTenant, resolveConfig } from "@/lib/tenants";
 import { listWorkers } from "@/lib/workers";
 
 // 큐는 GUI 밖에서(cron·세션이) 바뀐다. 프리렌더하면 빌드 시점 내용이 굳는다.
 export const dynamic = "force-dynamic";
-
-/** 티켓 5상태 — 라벨·색은 `<StatusBadge>`가 정한다. 우선순위는 `tickets.py list`와 같다
- *  (할당됨이 deps 대기보다 먼저 나온다). */
-function statusOf(t: Ticket): Status {
-  if (t.state !== "open") return t.state;
-  if (t.assigned) return "assigned";
-  return t.unmet.length ? "blocked" : "open";
-}
 
 export default async function TicketDetail({
   params,
