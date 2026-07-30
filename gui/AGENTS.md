@@ -16,7 +16,7 @@ gui/
     actions.ts          Server Action (테넌트 등록·이름·순서·해제·재해석). 큐 파일은 안 건드린다
     t/[tenant]/         테넌트 스코프. layout.tsx가 셸(헤더·내비·전환기)
                         큐 파일을 건드리는 Server Action은 그 화면 폴더에 둔다
-                        (`workers/actions.ts`·`tickets/[hash]/actions.ts`).
+                        (`workers/actions.ts`·`tickets/[hash]/actions.ts`·`tickets/new/actions.ts`).
                         클라이언트에서 `@/app/t/[tenant]/…/actions`로 그냥 import된다
     globals.css         Tailwind v4 + shadcn 토큰. 색은 여기서만 정의한다
   lib/
@@ -33,7 +33,7 @@ gui/
     status-badge.tsx    상태 표현의 유일한 출처 (티켓 5 · 워커 4 · 연결 2) + deps 배지
     tenant-switcher.tsx 전환기 · 내비 · 다시 확인 (셸의 클라이언트 조각)
     tenants-ui.tsx      등록 폼 · 해석 결과 표 · 행 액션 (`/`의 클라이언트 조각)
-    ticket-ui.tsx       편집 폼 · 할당 해제 · 삭제 (티켓 상세의 클라이언트 조각)
+    ticket-ui.tsx       편집 폼 · 할당 해제 · 삭제 · 발행 폼 (티켓 화면들의 클라이언트 조각)
     personas-ui.tsx     생성 · PROFILE.md 편집 · 삭제 (페르소나 화면의 클라이언트 조각)
     copy-command.tsx    실행 대신 복사시키는 명령 블록
   components/ui/        shadcn CLI 산출물. 손으로 만들지 않는다
