@@ -167,10 +167,15 @@ export function DepBadge({
       hint: "답변 기록 — 이 요구사항의 답변",
     },
   }[kind];
+  const reason = hint ?? spec.hint;
   const badge = (
-    <Badge variant="outline" className={cn("font-mono", spec.tint)} title={hint ?? spec.hint}>
+    <Badge variant="outline" className={cn("font-mono", spec.tint)} title={reason}>
       <spec.icon aria-hidden className="size-3.5" />
       {hash}
+      {/* 아이콘은 `aria-hidden`이고 사유는 `title`뿐이라, 이 문구가 비시각 사용자에게 종류를
+          말하는 유일한 통로다(§비주얼 §2, 사람 요청 `1f2ac454`). 옆 라벨의 `· 미충족 n`을
+          지우면서 여기로 옮겼다 — 건수 대신 **어느 해시가** 무엇인지를 말한다. */}
+      <span className="sr-only">{reason}</span>
     </Badge>
   );
   return href ? <Link href={href}>{badge}</Link> : badge;

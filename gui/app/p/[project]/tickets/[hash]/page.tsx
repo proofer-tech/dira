@@ -101,7 +101,6 @@ export default async function TicketDetail({
   const workers = await listWorkers(project.root);
   // 선행 = deps **전부**(미충족으로 걸러내지 않는다). 종류·순서 판정은 보드와 같은 헬퍼가 한다.
   const deps = depBadges(tickets, ticket, config);
-  const unmetCount = ticket.unmet.length;
   const blocked = referrers(tickets, ticket, config); // 후행 = 이 티켓을 deps로 둔 것 = 역참조
   // 관계 링크도 **stem**이다 (보드와 같은 규칙 — §식별자)
   const href = (t: Ticket) => `/p/${id}/tickets/${encodeURIComponent(t.stem)}`;
@@ -292,11 +291,9 @@ export default async function TicketDetail({
         {/* **선행을 unmet으로 걸러내지 않는다**(§2, `b9775505`) — 걸러면 충족된 선행이 라벨 없이
             떠서 `막고 있는 것 없음` 바로 밑에 배지가 붙고 한 라벨 안에서 두 문장이 서로를 부정했다.
             막혀 있는지는 머리의 상태 배지가 말하고, 개별 해시의 상태는 배지 아이콘이 말한다.
-            미충족 건수만 **글자로** 라벨에 붙는다 — 보드 카드와 같은 문구다. */}
+            라벨은 건수를 세어주지 않는다 — 보드 카드와 같은 문구다(사람 요청 `1f2ac454`). */}
         <div className="space-y-2">
-          <p className="text-xs text-muted-foreground">
-            선행 — 이 티켓의 deps{unmetCount > 0 && ` · 미충족 ${unmetCount}`}
-          </p>
+          <p className="text-xs text-muted-foreground">선행 — 이 티켓의 deps</p>
           {deps.length === 0 ? (
             <EmptyState text="선행 없음" />
           ) : (

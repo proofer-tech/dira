@@ -359,8 +359,8 @@ export default async function Board({
                                 `답변 대기`다. 자기 레인 없이 `대기`에 앉고, 답변 stem은 큐에
                                 없는 해시라 deps 태그가 `?`로만 떠서 "사람이 답할 차례"라는
                                 말을 못 한다. 그래서 이 배지 하나만 남는다(§1 보드 요구사항 항).
-                                `deps 대기`는 배지를 얹지 않는다 — 아래 `deps · 미충족 n`과
-                                주황색 <DepBadge>가 그 표시다(사람 요청 `bd2062cb`) */}
+                                `deps 대기`는 배지를 얹지 않는다 — 아래 deps 줄의 주황색
+                                <DepBadge>가 그 표시다(사람 요청 `bd2062cb`) */}
                             <div className="flex items-start justify-between gap-2">
                               <Link
                                 href={href(t)}
@@ -380,12 +380,10 @@ export default async function Board({
                               {t.kind || "—"} · {t.persona || "—"}
                             </span>
                             {t.deps.length > 0 && (
-                              // 미충족 건수를 **글자로** 먼저 말한다(색만으로 하지 않는다). 어느
-                              // 해시가 막고 있는지는 <DepBadge>의 아이콘+해시가 개별로 말한다.
+                              // 라벨은 세어주지 않는다 — 어느 해시가 무엇인지는 <DepBadge>가
+                              // 색·아이콘으로, 스크린리더에는 배지 안 `sr-only` 문구로 말한다.
                               <span className="relative z-10 flex flex-wrap items-center gap-1">
-                                <span className="text-xs text-muted-foreground">
-                                  deps{t.unmet.length > 0 && ` · 미충족 ${t.unmet.length}`}
-                                </span>
+                                <span className="text-xs text-muted-foreground">deps</span>
                                 {depBadges(tickets, t, config).map((d) => (
                                   <DepBadge
                                     key={d.hash}
