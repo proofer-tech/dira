@@ -427,7 +427,7 @@ test("보드 — 5상태 판정 · 필터 AND/OR · 검색 대상 · 정렬", as
     ["aaaa1111"],
   );
 
-  // `완료 숨기기` 프리셋(§1 보드) — 완료만 빠진다. 4개 중 하나가 빠지면 그 상태 티켓이
+  // `완료 숨기기` 프리셋(§1 보드) — 완료만 빠진다. 5개 중 하나가 빠지면 그 상태 티켓이
   // 테이블에서 조용히 사라지므로, "완료 아닌 전부"와 글자 단위로 같은지 본다.
   const hideDone = filterTickets(tickets, { ...none, status: HIDE_DONE_STATUSES });
   assert.deepStrictEqual(
@@ -703,10 +703,16 @@ test("보드 — 답변 대기는 deps 대기의 하위 종류 · kind: answer �
     "r0000005",
   ]);
 
-  // 그래서 `완료 숨기기` 프리셋에 `awaiting`을 넣지 않는다 — `blocked`가 답변 대기를 데려온다
-  assert.ok(
-    hashes(filterTickets(tickets, { ...none, status: HIDE_DONE_STATUSES })).includes("r0000001"),
+  // `완료 숨기기` 프리셋에는 `awaiting`이 **있다**(`4578d715`). 결과를 바꾸려고 넣은 게 아니다 —
+  // `blocked`가 답변 대기를 이미 데려오므로 빼도 결과는 같다. 체크 표시가 진술이라서 넣는다.
+  assert.ok(HIDE_DONE_STATUSES.includes("awaiting"));
+  const preset = hashes(filterTickets(tickets, { ...none, status: HIDE_DONE_STATUSES }));
+  assert.deepStrictEqual(
+    preset, // `awaiting`을 뺀 옛 프리셋과 글자 단위로 같다 = 결과 집합 불변
+    hashes(filterTickets(tickets, { ...none, status: HIDE_DONE_STATUSES.filter((s) => s !== "awaiting") })),
   );
+  assert.ok(preset.includes("r0000001")); // 답변 대기는 남고
+  assert.ok(!preset.some((h) => statusOf(by(h)) === "done")); // 완료는 없다
 
   // `kind: answer`는 기본 목록에 없다 — 필터에서 고르면 보인다(숨기는 게 아니다)
   assert.strictEqual(inDefaultList(by("a2222222"), []), false);
