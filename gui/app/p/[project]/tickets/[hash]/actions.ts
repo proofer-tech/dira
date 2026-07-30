@@ -96,7 +96,19 @@ export async function tailSession(
   }
 }
 
-const LOCKED = "진행중 티켓은 편집할 수 없습니다 — 세션이 그 파일로 일하고 있습니다.";
+/** 쓰기가 막히는 두 상태의 사유. **열린 티켓만 쓸 수 있다** — `.wip`은 세션이 그 파일로 일하고
+ *  있고(제약 5), `.done`은 이 큐의 불변 기록이다(`deps` 해소·`kind: answer`·`req:` 역참조가 전부
+ *  그 파일의 존재에 달렸다 — 지우면 그 해시를 `deps`로 둔 후행이 영구 대기다). 두 사유가 다르므로
+ *  문장도 다르다: 진행중은 기다리면 풀리고, 완료는 영영 안 풀린다. */
+const LOCKED: Record<"wip" | "done", string> = {
+  wip: "진행중 티켓은 편집할 수 없습니다 — 세션이 그 파일로 일하고 있습니다.",
+  done: "완료 티켓은 편집할 수 없습니다 — 완료는 이 큐의 불변 기록입니다.",
+};
+
+const DELETE_LOCKED: Record<"wip" | "done", string> = {
+  wip: "진행중 티켓은 삭제할 수 없습니다 — 세션이 물고 있습니다.",
+  done: "완료 티켓은 삭제할 수 없습니다 — 이 해시를 deps로 둔 티켓이 영구 대기합니다.",
+};
 
 /** frontmatter 값으로 들어갈 한 줄. 개행이 섞이면 frontmatter가 깨져 티켓이 큐에서 사라진다. */
 function fmValue(name: string, raw: string): string {
@@ -115,7 +127,7 @@ export async function saveTicket(_prev: SaveState, form: FormData): Promise<Save
   const hash = String(form.get("hash") ?? "");
   try {
     const t = await target(projectId, hash);
-    if (t.state === "wip") return { error: LOCKED };
+    if (t.state !== "open") return { error: LOCKED[t.state] };
 
     const title = fmValue("제목", String(form.get("title") ?? ""));
     if (!title) return { error: "제목을 입력하세요." };
@@ -258,12 +270,14 @@ export async function answerRequirement(_prev: SaveState, form: FormData): Promi
 
 export type DeleteResult = { ok: boolean; message?: string };
 
-/** 삭제 — 파일을 지운다. `.wip`이면 막는다(돌고 있는 세션의 티켓이 사라지면 완료 신고도 못 한다). */
+/** 삭제 — 파일을 지운다. **열린 티켓만** 지운다: `.wip`은 돌고 있는 세션의 티켓이 사라지면 완료
+ *  신고도 못 하고, `.done`은 후행의 `deps`가 그 파일에 걸려 있다(사람 요청 `17e24fbc`, 답변
+ *  `432f9c40`). 완료를 정리해야 하면 터미널에서 지운다 — 화면이 대신 눌러주지 않는다. */
 export async function deleteTicket(projectId: string, hash: string): Promise<DeleteResult> {
   try {
     const t = await target(projectId, hash);
-    if (t.state === "wip") {
-      return { ok: false, message: "진행중 티켓은 삭제할 수 없습니다 — 세션이 물고 있습니다." };
+    if (t.state !== "open") {
+      return { ok: false, message: DELETE_LOCKED[t.state] };
     }
     await unlink(t.path);
     revalidatePath(`/p/${projectId}`);

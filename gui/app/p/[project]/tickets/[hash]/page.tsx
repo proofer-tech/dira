@@ -172,11 +172,18 @@ export default async function TicketDetail({
               body: ticket.body,
             }}
           />
+          {/* 열린 티켓만 지운다. 사유가 둘이라 문장을 넘긴다 — 툴팁이 그대로 쓴다 */}
           <DeleteTicketButton
             project={id}
             hash={hash}
             title={ticket.title}
-            locked={ticket.state === "wip"}
+            locked={
+              ticket.state === "wip"
+                ? "진행중 티켓은 삭제할 수 없습니다 — 세션이 물고 있습니다"
+                : ticket.state === "done"
+                  ? "완료 티켓은 삭제할 수 없습니다 — 불변 기록입니다"
+                  : null
+            }
           />
         </div>
       </div>
@@ -245,6 +252,22 @@ export default async function TicketDetail({
             </Alert>
           )}
 
+          {/* `.done`은 이 큐의 불변 기록이다 — `.wip`과 **다른 사유로** 잠긴다(사람 요청
+              `17e24fbc`, 답변 `432f9c40`). 진행중은 기다리면 풀리고 완료는 영영 안 풀리므로
+              같은 문장을 쓰지 않는다. 파일이 사라졌을 때 무엇이 부서지는지를 적는다 —
+              "읽기 전용입니다"만으로는 사람이 터미널에서 지우고 후행을 굶긴다. */}
+          {ticket.state === "done" && (
+            <Alert>
+              <Lock aria-hidden className="text-status-done" />
+              <AlertTitle>완료 티켓은 읽기 전용입니다</AlertTitle>
+              <AlertDescription>
+                완료는 이 큐의 불변 기록입니다 — 후행의 <span className="font-mono">deps</span>{" "}
+                해소와 <span className="font-mono">req:</span> 역참조가 이 파일의 존재에 걸려 있어
+                편집·삭제를 막습니다. 이어서 할 일이 있으면 새 티켓을 만드세요.
+              </AlertDescription>
+            </Alert>
+          )}
+
           {/* 할당됨일 때만 보인다 — 그 판정은 컴포넌트 안에서 한다(해제 후 출력을 남기려면 여기서
               조건부로 렌더하면 안 된다). 상태 전이는 엔진 소관이라 워커 스크립트를 부른다(제약 2) */}
           <UnassignButton
@@ -270,7 +293,10 @@ export default async function TicketDetail({
 
           <section className="space-y-2">
             <h2 className="text-sm font-medium">본문</h2>
-            {ticket.state === "wip" ? (
+            {/* **열린 티켓만 편집 폼이다.** `.wip`(세션이 물고 있다)과 `.done`(불변 기록)은 같은
+                읽기 전용 자리를 쓴다 — 사유는 위 Alert가 각자 말한다. 판정을 상태 하나로 두는
+                이유: `!== "open"`이면 나중에 상태가 늘어도 기본이 읽기 전용이다. */}
+            {ticket.state !== "open" ? (
               // 읽기만 한다 — 원문일 이유가 없다(§비주얼 §10). 편집 폼 쪽은 종전대로 원문이다
               <Markdown text={ticket.body} />
             ) : (

@@ -392,7 +392,7 @@ export function AnswerDialog({
 
 // ── 삭제 ────────────────────────────────────────────────────────────────────
 
-/** 확인 다이얼로그. `.wip`이면 트리거 자체가 비활성이고 서버 액션도 다시 거부한다. */
+/** 확인 다이얼로그. 열린 티켓이 아니면 트리거 자체가 비활성이고 서버 액션도 다시 거부한다. */
 export function DeleteTicketButton({
   project,
   hash,
@@ -402,8 +402,9 @@ export function DeleteTicketButton({
   project: string;
   hash: string;
   title: string;
-  /** `.wip` — 세션이 물고 있어서 지울 수 없다 */
-  locked: boolean;
+  /** 잠금 사유 — `.wip`(세션이 물고 있다) · `.done`(불변 기록). 열린 티켓이면 `null`.
+   *  불리언이 아니라 문장인 이유: 툴팁이 **왜** 못 지우는지를 말해야 하는데 두 사유가 다르다. */
+  locked: string | null;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -411,7 +412,7 @@ export function DeleteTicketButton({
 
   if (locked) {
     return (
-      <Button variant="outline" size="sm" disabled title="진행중 티켓은 삭제할 수 없습니다">
+      <Button variant="outline" size="sm" disabled title={locked}>
         <Trash2 aria-hidden />
         삭제
       </Button>
