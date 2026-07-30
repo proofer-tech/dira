@@ -684,7 +684,8 @@ test("보드 — 답변 대기는 deps 대기의 하위 종류 · kind: answer �
   assert.strictEqual(isAwaiting(by("r0000004")), false); // 잠금 없음
   assert.strictEqual(isAwaiting(by("r0000005")), false); // .wip
 
-  // 칸반 컬럼은 5개 그대로다 — 답변 대기 카드는 `deps 대기` 컬럼에 앉는다
+  // `statusOf`는 무수정이다 — 답변 대기도 `blocked`다. 칸반은 그걸 `대기` 레인으로 접고
+  // (레인 3개, `bd2062cb`) 카드가 `답변 대기` 배지로 갈린다 — 레인 배정은 표현이지 상태가 아니다
   assert.strictEqual(statusOf(by("r0000001")), "blocked");
   assert.strictEqual(statusOf(by("r0000002")), "open");
   assert.strictEqual(statusOf(by("r0000004")), "open");
