@@ -108,7 +108,7 @@ catch가 무조건 그 경로라 파일 배치로는 못 고친다(위 둘째 �
 
 | | |
 |---|---|
-| `pnpm dev` | 개발 서버 (localhost:3000) |
+| `pnpm dev` | 개발 서버 (localhost:7331, `PORT=...`로 덮어쓴다) |
 | `pnpm build` | 프로덕션 빌드 + 타입체크. **티켓 완료 전에 반드시 통과** |
 | `pnpm test` | `node --test "lib/**/*.test.ts"` |
 | `pnpm lint` | eslint |

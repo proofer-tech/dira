@@ -264,7 +264,7 @@ python3 tickets.py handclaim <티켓경로> "<페르소나 / 세션식별>"
 쓰고(워커 생성이 등록까지 한 동작으로 끝난다) 나머지 줄은 바이트 그대로 보존한다.
 
 ```bash
-cd gui && pnpm install && pnpm dev     # http://localhost:3000
+cd gui && pnpm install && pnpm dev     # http://localhost:7331
 ```
 
 **프로젝트마다 띄우지 않는다.** GUI는 이 레포에서 한 벌만 돌고, 큐 위치를 **프로젝트로 등록**해
