@@ -8,7 +8,7 @@ import { execFile } from "node:child_process";
 import path from "node:path";
 import { promisify } from "node:util";
 import { NAME_RE, isHash, resolveWithin } from "./paths.ts";
-import type { Suffixes } from "./queue.ts";
+import { listTickets, type Suffixes } from "./queue.ts";
 import { listWorkers } from "./workers.ts";
 
 /** rc와 출력을 그대로 넘긴다. 실패해도 삼키지 않는다 — 화면이 원문을 보여준다(§6 에러 3요소). */
@@ -74,7 +74,11 @@ const enginePy = () => path.resolve(process.cwd(), "..", "tickets.py");
 /** 해시 → 실제 티켓 경로. 없으면 null(404의 근거).
  *
  *  **경로를 조립하지 않는다.** 형식 검증을 통과한 해시를 엔진에게 물어 실제 파일을 받는다 —
- *  상태 접미사가 붙은 이름·`re-<해시>` 폴백을 두 곳에서 판정하지 않으려는 것도 같은 이유다. */
+ *  상태 접미사가 붙은 이름·`re-<해시>` 폴백을 두 곳에서 판정하지 않으려는 것도 같은 이유다.
+ *
+ *  엔진 `find`는 **파일명 stem으로만** 찾는데 화면이 URL에 싣는 `Ticket.hash`는 frontmatter
+ *  `ticket:`이 우선이다(`tickets.py ticket_hash`도 같다). 둘이 갈리는 티켓은 보드가 그린 링크가
+ *  404였다(a606dd0e) — 그래서 stem이 빗나가면 frontmatter 해시로 한 번 더 본다. */
 export async function findTicket(
   root: string,
   hash: string,
@@ -86,8 +90,15 @@ export async function findTicket(
       // 접미사는 테넌트별이다(제약 6). 엔진은 이 두 환경변수로만 읽는다.
       env: { ...process.env, TICKET_INPROGRESS: sfx.inProgress, TICKET_DONE: sfx.done },
     });
-    return stdout.trim() || null;
+    const hit = stdout.trim();
+    if (hit) return hit;
   } catch {
-    return null; // rc=1 `티켓을 못 찾음` — 없는 해시다
+    // rc=1 `티켓을 못 찾음` — stem으로는 없다. frontmatter 해시일 수 있다(아래).
   }
+  // 여기서도 경로를 조립하지 않는다: 큐 스캔이 준 실제 파일 경로를 돌려준다. 비교는 NFC로 —
+  // URL에서 온 한글과 파일에 적힌 한글의 정규화가 다를 수 있다(엔진 `find_any`도 nfc한다).
+  // ponytail: 폴백에서만 큐를 한 번 더 읽는다. stem이 맞는 흔한 경우엔 추가 I/O가 없다.
+  const want = hash.normalize("NFC");
+  const found = (await listTickets(root, sfx)).find((t) => t.hash.normalize("NFC") === want);
+  return found?.path ?? null;
 }

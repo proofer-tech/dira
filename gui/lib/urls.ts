@@ -17,6 +17,21 @@ export function slugify(name: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
+/** 라우트 파라미터의 티켓 해시 → 실제 해시. Next는 세그먼트를 **퍼센트 인코딩된 원문으로**
+ *  넘기므로(실측 16.2.12) 조회 전에 풀어야 한다 — 안 풀면 한글 해시가 전부 404다(a606dd0e).
+ *
+ *  인코딩이 깨진 URL(`%zz`)은 던지지 않고 원문을 돌려준다: 어차피 그 이름의 티켓은 없어서
+ *  호출자가 404로 처리하고, 던지면 404여야 할 것이 500이 된다.
+ *  ponytail: 해시에 `%`가 **글자로** 들어 있으면(`50%할인`) 링크로 왕복시킬 방법이 없다 —
+ *  파일명에 `%`를 쓰는 큐가 나오면 그때 이중 인코딩을 고민한다. */
+export function decodeHash(raw: string): string {
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+}
+
 /** 테넌트 전환 목적지 — **같은 화면 종류를 유지한다**(DESIGN.md §0-1).
  *  `/t/a/workers` → `/t/b/workers`. 필터·검색 searchParams는 애초에 안 받는다
  *  (호출자가 `usePathname()`을 넘기므로 공짜로 버려진다 — 테넌트마다 persona·kind 값이 다르다).

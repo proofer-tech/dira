@@ -7,7 +7,10 @@
  *
  *  **클라이언트가 넘긴 테넌트·해시는 신뢰 경계 밖이다.** 매 호출마다 다시 검증하고, 경로는
  *  `tickets.py find`로 새로 얻는다 — 화면을 그린 뒤 파일이 잡혔을(claim) 수도 있다.
- *  상태 재확인이 `.wip` 편집을 막는 유일한 장치다(렌더 시점 판정은 이미 낡았다). */
+ *  상태 재확인이 `.wip` 편집을 막는 유일한 장치다(렌더 시점 판정은 이미 낡았다).
+ *
+ *  여기 오는 `hash`는 **푼 값**이다(페이지가 `decodeHash`로 한 번 푼다). 그래서 조회는 그대로
+ *  하고 `revalidatePath`만 다시 인코딩한다 — 그건 URL이라 라우트 표기와 같아야 한다. */
 import { readFile, unlink } from "node:fs/promises";
 import path from "node:path";
 import { revalidatePath } from "next/cache";
@@ -71,7 +74,7 @@ export async function saveTicket(_prev: SaveState, form: FormData): Promise<Save
     if (body && !body.endsWith("\n")) body += "\n";
 
     await writeTicket(t.path, { title, kind, persona }, body);
-    revalidatePath(`/t/${tenantId}/tickets/${hash}`);
+    revalidatePath(`/t/${tenantId}/tickets/${encodeURIComponent(hash)}`);
     revalidatePath(`/t/${tenantId}`); // 보드의 title·kind·persona 컬럼
     return { ok: true };
   } catch (e) {
@@ -88,7 +91,7 @@ export async function unassignTicket(tenantId: string, hash: string): Promise<Un
       return { ok: false, output: "할당된 티켓이 아닙니다(session_id가 비어 있습니다).", worker: null };
     }
     const r = await unassign(t.root, hash);
-    revalidatePath(`/t/${tenantId}/tickets/${hash}`);
+    revalidatePath(`/t/${tenantId}/tickets/${encodeURIComponent(hash)}`);
     revalidatePath(`/t/${tenantId}`);
     return r;
   } catch (e) {

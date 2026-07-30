@@ -21,7 +21,12 @@ test("이름·해시·id 규칙", () => {
   assert.ok(isName("developer") && isName("w1") && isName("a_b-c"));
   assert.ok(!isName("../../.ssh/id_rsa") && !isName("한글") && !isName(""));
   assert.ok(isHash("bacdf72b") && isHash("re-6544fd23"));
-  assert.ok(!isHash("ABC1") && !isHash("abc") && !isHash("a/b/c"));
+  // 해시는 파일명 stem일 수 있다 — 엔진이 디스패치하는 이름을 GUI가 거르면 안 된다(a606dd0e)
+  assert.ok(isHash("순수한글") && isHash("ABC1") && isHash("두 단어") && isHash("a.b"));
+  // 막는 건 경로가 될 수 있는 것뿐: 경로 구분자·제어문자·`.` 시작
+  assert.ok(!isHash("a/b/c") && !isHash("../../etc/passwd") && !isHash("a\\b"));
+  assert.ok(!isHash(".") && !isHash("..") && !isHash(".hidden") && !isHash(""));
+  assert.ok(!isHash("a\0b") && !isHash("a\nb") && !isHash("x".repeat(256)));
   assert.ok(isTenantId("fs-tickets") && !isTenantId("Fs_Tickets"));
 });
 

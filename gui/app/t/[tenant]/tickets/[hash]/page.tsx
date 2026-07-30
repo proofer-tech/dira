@@ -16,6 +16,7 @@ import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 import { findTicket } from "@/lib/engine";
 import { listTickets, referrers, resolveDep, statusOf, type Ticket } from "@/lib/queue";
 import { getTenant, resolveConfig } from "@/lib/tenants";
+import { decodeHash } from "@/lib/urls";
 import { listWorkers } from "@/lib/workers";
 
 // 큐는 GUI 밖에서(cron·세션이) 바뀐다. 프리렌더하면 빌드 시점 내용이 굳는다.
@@ -26,7 +27,11 @@ export default async function TicketDetail({
 }: {
   params: Promise<{ tenant: string; hash: string }>;
 }) {
-  const { tenant: id, hash } = await params;
+  const { tenant: id, hash: raw } = await params;
+  // Next는 라우트 파라미터를 **퍼센트 인코딩된 원문 세그먼트로** 넘긴다(실측 16.2.12) — 보드가
+  // `encodeURIComponent(t.hash)`로 링크를 걸므로 한글 해시가 `%EC%88%9C…`로 도착해 404였다.
+  // 여기가 URL을 읽는 유일한 지점이라 여기서 한 번만 푼다. 액션·자식 컴포넌트에는 푼 값이 간다.
+  const hash = decodeHash(raw);
   const tenant = await getTenant(id);
   if (!tenant) notFound(); // 레이아웃이 이미 404를 세우지만 페이지도 같이 돈다
 

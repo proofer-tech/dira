@@ -6,14 +6,25 @@ import path from "node:path";
 
 /** 워커·페르소나 이름. tickets.py의 PERSONA_RE와 같은 규칙 — 엔진이 이 값으로 경로를 만든다. */
 export const NAME_RE = /^[A-Za-z0-9_-]+$/;
-/** 티켓 해시. 통과해도 경로를 조립하지 않고 실제 파일 목록에서 찾는다. */
-export const HASH_RE = /^[a-z0-9-]{4,40}$/;
+/** 티켓 해시로 **쓸 수 없는** 것: 경로 구분자와 제어문자. 아래 `isHash` 참고. */
+const HASH_DENY = /[/\\\p{Cc}]/u;
 /** 테넌트 id. 경로 조각은 아니지만(레지스트리 조회 키) URL에 실리므로 제한한다. */
 export const TENANT_ID_RE = /^[a-z0-9-]+$/;
 
 export const isName = (s: string) => NAME_RE.test(s);
-export const isHash = (s: string) => HASH_RE.test(s);
 export const isTenantId = (s: string) => TENANT_ID_RE.test(s);
+
+/** 티켓 해시 = URL에 실리는 티켓 식별자. 파일명 stem이거나 frontmatter `ticket:` 값이고
+ *  (`tickets.py ticket_hash`) **엔진은 둘 다 임의 문자열을 허용한다** — 한글 파일명으로 도는
+ *  큐가 실제로 있다. 옛 규칙 `^[a-z0-9-]{4,40}$`은 엔진이 디스패치하는 티켓(`순수한글.md`)을
+ *  GUI만 못 열게 했다(a606dd0e). 그래서 **글자를 고르지 않고 경로가 될 수 있는 것만** 막는다:
+ *  경로 구분자·제어문자, 그리고 `.` 시작(`.`·`..`·dotfile — 큐 목록도 dotfile은 빼므로 없는 것과 같다).
+ *
+ *  이건 심층 방어의 첫 겹일 뿐이다: 통과해도 **경로를 조립하지 않는다.** 해시는
+ *  `tickets.py find`(그리고 `engine.findTicket`의 폴백)에서 `tickets/*.md`의 실제 이름과
+ *  비교되고, 돌아오는 것은 그 파일의 경로다 — 테넌트 큐 밖을 가리킬 방법이 없다. */
+export const isHash = (s: string) =>
+  s.length > 0 && s.length <= 255 && !s.startsWith(".") && !HASH_DENY.test(s);
 
 /** `~` 확장. 사용자가 손으로 치는 경로 입력에만 쓴다(셸이 안 거치므로 직접 편다). */
 export function expandHome(p: string): string {

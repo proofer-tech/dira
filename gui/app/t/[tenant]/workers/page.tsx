@@ -137,7 +137,11 @@ export default async function Workers({ params }: { params: Promise<{ tenant: st
                 {/* 해시는 자르지 않는다(§6 텍스트 잘림) */}
                 <TableCell className="px-3 py-0 font-mono text-xs">
                   {w.holding ? (
-                    <Link href={`/t/${id}/tickets/${w.holding}`} className="hover:underline">
+                    // 해시가 파일명에서 올 수 있어 한글·공백이 섞인다 — 보드와 같이 인코딩한다
+                    <Link
+                      href={`/t/${id}/tickets/${encodeURIComponent(w.holding)}`}
+                      className="hover:underline"
+                    >
                       {w.holding}
                     </Link>
                   ) : (

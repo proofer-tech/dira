@@ -26,7 +26,7 @@ const {
   usingDefault,
 } = await import("./tenants.ts");
 const { filterTickets, listTickets } = await import("./queue.ts");
-const { tenantPath } = await import("./urls.ts");
+const { decodeHash, tenantPath } = await import("./urls.ts");
 
 const roots: string[] = [];
 process.on("exit", () => {
@@ -245,6 +245,16 @@ test("tenantPath — 전환은 같은 화면 종류를 유지한다", () => {
   assert.strictEqual(tenantPath("/t/a/tickets/7b3e0c62", "b"), "/t/b");
   // 테넌트 스코프가 아닌 곳(테넌트 목록)에서 골랐으면 그 테넌트의 보드로
   assert.strictEqual(tenantPath("/", "b"), "/t/b");
+});
+
+/** a606dd0e — 보드는 `encodeURIComponent(t.hash)`로 링크를 걸고 Next는 세그먼트를 인코딩된
+ *  원문으로 넘긴다. 이 왕복이 깨지면 한글 해시가 전부 404다. */
+test("decodeHash — 보드가 인코딩한 해시를 그대로 되돌린다", () => {
+  for (const h of ["7b3e0c62", "re-6544fd23", "순수한글", "한글파일명", "두 단어", "a+b"]) {
+    assert.strictEqual(decodeHash(encodeURIComponent(h)), h, h);
+  }
+  // 인코딩이 깨진 URL은 던지지 않는다 — 없는 해시로 흘러가 404가 된다(500이 아니다)
+  assert.strictEqual(decodeHash("%zz"), "%zz");
 });
 
 test("레지스트리 — 이름 변경 · 순서 변경 · 등록 해제", async () => {
