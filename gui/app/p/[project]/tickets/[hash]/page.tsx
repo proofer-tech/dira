@@ -9,6 +9,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Lock, TriangleAlert } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
+import { Markdown } from "@/components/markdown";
 import { SessionStream } from "@/components/session-stream";
 import { DepBadge, StatusBadge, daysSince } from "@/components/status-badge";
 import {
@@ -364,8 +365,10 @@ export default async function TicketDetail({
       <section className="space-y-2">
         <h2 className="text-sm font-medium">본문</h2>
         {ticket.state === "wip" ? (
-          // 읽기만. 원문 그대로 보여준다(마크다운 렌더는 넣지 않는다 — §6과 같은 결정)
-          <pre className="max-w-3xl font-mono text-base whitespace-pre-wrap">{ticket.body}</pre>
+          // 읽기만 한다 — 원문일 이유가 없다(§비주얼 §10). 편집 폼 쪽은 종전대로 원문이다
+          <div className="max-w-3xl">
+            <Markdown text={ticket.body} />
+          </div>
         ) : (
           // 폼에는 frontmatter **원문**을 넣는다. `ticket.persona`는 PERSONA_RE를 못 넘긴 값을
           // ''로 만든 것이라, 그대로 저장하면 사람이 적어둔 값을 조용히 지운다.

@@ -19,6 +19,7 @@ import {
 } from "@/app/p/[project]/tickets/[hash]/actions";
 import { createTicket, type NewTicketState } from "@/app/p/[project]/(board)/actions";
 import type { UnassignRun } from "@/lib/engine";
+import { Markdown } from "@/components/markdown";
 import { DepBadge } from "@/components/status-badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
@@ -255,14 +256,12 @@ export function AnswerCard({
               {item.heading || (item.role === "question" ? "질문" : "답변")}
               {item.hash && <span className="ml-2 font-mono">{item.hash}</span>}
             </p>
-            {/* 원문 그대로 — 마크다운 렌더는 넣지 않는다(본문·프로토콜과 같은 결정) */}
-            <pre
-              className={`font-mono text-base whitespace-pre-wrap ${
-                item.role === "answer" ? "border-l-2 pl-3 text-muted-foreground" : ""
-              }`}
-            >
-              {item.text || "(내용 없음)"}
-            </pre>
+            {/* 읽기만 하는 자리라 렌더된 마크다운이다(§비주얼 §10). 답변 쪽 구분은 왼쪽 선
+                하나뿐이다 — `text-muted-foreground`를 걸면 렌더된 본문의 `bg-muted` 블록 안에서
+                4.34가 되고, 그건 §1이 실측으로 금지한 조합이다. 구조로 가르고 색으로 안 가른다 */}
+            <div className={item.role === "answer" ? "border-l-2 border-border pl-3" : ""}>
+              <Markdown text={item.text} />
+            </div>
           </div>
         ))}
         <form action={action} className="space-y-3">

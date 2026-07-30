@@ -180,4 +180,6 @@ import { listTickets } from "./queue.ts";   // lib 안에서는 확장자 `.ts`�
 | `shadcn` | CLI 겸 **런타임 CSS**. `globals.css`가 `@import "shadcn/tailwind.css"`로 읽는다 |
 | `@base-ui/react`·`class-variance-authority`·`clsx`·`tailwind-merge`·`tw-animate-css` | shadcn 컴포넌트가 직접 import |
 | `lucide-react` | `components.json`의 `iconLibrary`. shadcn 기본 |
+| `react-markdown` | 읽기 전용 마크다운 렌더(`components/markdown.tsx` · DESIGN.md §비주얼 §10). 파서 + AST + React 매핑을 직접 쓰면 수백 줄이다. **기본값이 raw HTML 무시**라 새니타이저를 따로 안 들인다(`rehype-raw`를 켜지 않는 근거) — 티켓 본문은 세션이 쓰는 파일이라 HTML이 섞일 수 있다. `marked` + `dangerouslySetInnerHTML`은 그 이유로 거절했다 |
+| `remark-gfm` | 이 큐의 본문이 표와 체크리스트(`- [ ]`)로 가득한데 CommonMark에 둘 다 없다. `react-markdown`이 GFM을 기본으로 안 켠다 |
 | `cmdk` | shadcn `command`가 직접 import. DESIGN.md §5가 전환기·deps 멀티셀렉트·필터를 `command`로 정한 것의 대가다(검색·키보드 이동·필터링을 직접 쓰면 수백 줄). `add command`가 끌고 왔다 |
