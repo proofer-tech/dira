@@ -1113,10 +1113,10 @@ TICKET_CONTEXT=(
 | P14 | 중단·삭제도 GUI가 crontab을 뺀다 `ba3cffe5` | developer | `8cab04e8` | 대기 |
 | P15 | 워커 작업 디렉터리 스펙 확정 `6d6f6823` | pm | — | 완료 — `<루트>/worktrees/<워커>`. 엔진 무수정 |
 | P15 | **긴급** w4·w5 전용 워크트리 `784a7f71` | developer | — | **큐에 없음** — 결과는 반영됨(w4·w5·w6이 새 배치) |
-| P15 | 생성이 `TICKET_CWD`를 이름에서 유도 `855212b4` | developer | 스펙 | 진행중 |
+| P15 | 생성이 `TICKET_CWD`를 이름에서 유도 `855212b4` | developer | 스펙 | 완료 — `822ec58`. 실측: `w6.sh`가 `worktrees/w6` |
 | P15 | w1·w2·w3 워크트리 이동 `957e7f51` | developer | `784a7f71` | **큐에 없음 · 미반영** — w1·w2·w3은 아직 `~/Projects/fs-tickets-wt/` |
 | P15 | §4 생성이 워크트리를 다룬다 — 스펙 확정 `344787ec` | pm | `6d6f6823` | 완료 — 생성 3항 + `작업 디렉터리 결함` 3종 |
-| P15 | `dispatch-gate.sh` 워크트리 게이트 `3aa90042` | developer | — | 대기 |
+| P15 | `dispatch-gate.sh` 워크트리 게이트 `3aa90042` | developer | — | 완료 — 선행조건 1(없음·비-워크트리·공유). 실측: w6이 23:36부터 디스패치 정지 |
 | P15 | 워커 행이 작업 디렉터리 결함을 말한다 `824efe2e` | developer | `344787ec` | 대기 |
 | P16 | 페르소나 카드 접기 스펙 확정 `19fd6a9f` | pm | — | 완료 — `<details>`·전부 접힘·**동시 펼침 허용**·전체 폭. 컴포넌트 0개 |
 | P16 | 페르소나 카드 접기 + 전체 폭 구현 `8583baba` | developer | 스펙 | 대기 |
