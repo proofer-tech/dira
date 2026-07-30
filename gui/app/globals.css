@@ -49,7 +49,6 @@
 
   /* 상태 색 토큰 — Tailwind v4에 text-status-X · bg-status-X · border-status-X 로 노출 */
   --color-status-active: var(--status-active);
-  --color-status-assigned: var(--status-assigned);
   --color-status-blocked: var(--status-blocked);
   --color-status-done: var(--status-done);
   --color-status-stale: var(--status-stale);
@@ -92,10 +91,9 @@
   /* shadcn 배지 변종 4개로 상태 11개(티켓 5 · 워커 4 · 연결 2)를 못 담아 추가한 것.
      대비는 실측했다(DESIGN.md §비주얼 디렉션 §1 표) — 값을 손으로 고치지 않는다. */
   --status-active: oklch(0.52 0.18 258); /* 진행중 · running */
-  --status-assigned: oklch(0.52 0.19 295); /* 할당됨 */
   --status-blocked: oklch(0.52 0.13 75); /* deps 대기 */
   --status-done: oklch(0.5 0.13 155); /* 완료 */
-  --status-stale: oklch(0.52 0.19 25); /* stale · 연결 안 됨 */
+  --status-stale: oklch(0.52 0.19 25); /* stale · 할당됨 · 연결 안 됨 */
 }
 
 .dark {
@@ -132,7 +130,6 @@
   --sidebar-ring: oklch(0.556 0 0);
 
   --status-active: oklch(0.75 0.15 258);
-  --status-assigned: oklch(0.76 0.15 295);
   --status-blocked: oklch(0.8 0.13 80);
   --status-done: oklch(0.76 0.14 155);
   --status-stale: oklch(0.75 0.15 25);

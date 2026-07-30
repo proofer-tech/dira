@@ -382,8 +382,8 @@ test("writeContext — 셸에 위험한 입력과 모양이 다른 블록은 거
     [[{ path: "/a.md", desc: "설명 `id`" }], /쓸 수 없습니다/],
     [[{ path: "/a.md|b", desc: "" }], /경로에 \| 는/],
     [[{ path: "   ", desc: "설명만" }], /경로가 비어 있는/],
-  ] as const) {
-    await assert.rejects(writeContext(root, "w1", items as { path: string; desc: string }[]), re);
+  ] as [{ path: string; desc: string }[], RegExp][]) {
+    await assert.rejects(writeContext(root, "w1", items), re);
   }
   // 블록이 없는 워커는 고치지 않는다 — 어디에 넣을지 GUI가 추측하지 않는다
   await assert.rejects(writeContext(root, "bad", ok), /손으로 편집하세요/);

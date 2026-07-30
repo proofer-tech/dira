@@ -124,12 +124,16 @@ export function UnassignButton({
   hash,
   worker,
   assigned,
+  ghost,
 }: {
   tenant: string;
   hash: string;
   /** 호출될 워커 이름. 0개면 null */
   worker: string | null;
   assigned: boolean;
+  /** 열린 티켓 + `session_id` = 엔진이 만들지 않는 조합. 여기선 이 버튼이 유일한 복구 수단이다.
+   *  `.wip`의 죽은 세션과는 **다른 사건**이라 문구를 갈라 쓴다(DESIGN.md §2 · §비주얼 §2). */
+  ghost: boolean;
 }) {
   const [pending, start] = useTransition();
   const [run, setRun] = useState<UnassignRun | null>(null);
@@ -161,6 +165,14 @@ export function UnassignButton({
             )}
           </span>
         </div>
+      )}
+      {assigned && ghost && (
+        <p className="text-xs text-muted-foreground">
+          열린 티켓에 <span className="font-mono">session_id</span>가 박혀 있습니다 —{" "}
+          <span className="font-mono">select</span>가 영구 제외하고{" "}
+          <span className="font-mono">reap</span>은 <span className="font-mono">.wip</span>만 보므로,
+          할당 해제만이 이 티켓을 큐로 되돌립니다.
+        </p>
       )}
       {/* 스크립트 출력은 그대로 보여준다: 백로그 복귀 여부가 여기 적혀 온다 */}
       {run &&

@@ -132,6 +132,7 @@ export default async function TicketDetail({
         hash={hash}
         worker={workers[0]?.name ?? null}
         assigned={ticket.assigned}
+        ghost={ticket.state === "open" && ticket.assigned}
       />
 
       <section className="max-w-3xl space-y-2">

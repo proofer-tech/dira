@@ -48,20 +48,29 @@ type Spec = {
   variant: "secondary" | "outline";
   /** 배지 레시피는 하나다 — 색만 다르다. Tailwind가 클래스를 정적으로 봐야 해서 다 적는다. */
   tint?: string;
+  /** 이상 상태의 사유. `DepBadge`의 `missing`과 같은 처리 — 전문은 `title`로 붙인다. */
+  hint?: string;
 };
 
 const ACTIVE = "text-status-active bg-status-active/10 border-status-active/30";
 const STALE = "text-status-stale bg-status-stale/10 border-status-stale/30";
 const BLOCKED = "text-status-blocked bg-status-blocked/10 border-status-blocked/30";
 
+/** `할당됨` 배지의 사유 — 스펙 문구 그대로다(DESIGN.md §비주얼 §2 이상 상태 항). */
+const ASSIGNED_HINT =
+  "session_id가 박힌 열린 티켓 — 큐에서 영구 제외된다. 할당 해제로 되돌린다";
+
 const STATUS: Record<Status, Spec> = {
   open: { label: "대기", icon: Circle, variant: "secondary" },
   blocked: { label: "deps 대기", icon: Lock, variant: "outline", tint: BLOCKED },
+  // 정상 흐름에 없는 상태다(엔진은 claim → assign 순서라 "열린 파일 + session_id"를 만들지 않는다).
+  // 그래서 정상 단계용 색을 주지 않는다 — stale과 같은 "고장, 사람이 봐야 함"이다(§2 이상 상태).
   assigned: {
     label: "할당됨",
     icon: CircleDot,
     variant: "outline",
-    tint: "text-status-assigned bg-status-assigned/10 border-status-assigned/30",
+    tint: STALE,
+    hint: ASSIGNED_HINT,
   },
   wip: { label: "진행중", icon: CirclePlay, variant: "outline", tint: ACTIVE },
   done: {
@@ -83,9 +92,9 @@ const STATUS: Record<Status, Spec> = {
 export const statusLabel = (status: Status) => STATUS[status].label;
 
 export function StatusBadge({ status, className }: { status: Status; className?: string }) {
-  const { label, icon: Icon, variant, tint } = STATUS[status];
+  const { label, icon: Icon, variant, tint, hint } = STATUS[status];
   return (
-    <Badge variant={variant} className={cn(tint, className)}>
+    <Badge variant={variant} className={cn(tint, className)} title={hint}>
       <Icon aria-hidden className="size-3.5" />
       {label}
     </Badge>

@@ -272,6 +272,14 @@ export default async function Board({
                           {group.length}건
                         </span>
                       </div>
+                      {/* 할당됨은 큐를 흐르는 단계가 아니다 — 엔진이 만들지 않는 조합이라 이 컬럼은
+                          비어 있는 게 정상이다(§1 보드 · §비주얼 §2 이상 상태). */}
+                      {s === "assigned" && (
+                        <p className="text-xs text-muted-foreground">
+                          정상이면 비어 있습니다 — 카드가 있으면 그 티켓은 디스패치되지 않는 영구 정체
+                          상태입니다.
+                        </p>
+                      )}
                       {group.length === 0 ? (
                         // <EmptyState>는 화면 하나의 빈 상태용이다(py-10 + 1차 액션 버튼). 컬럼
                         // 5개에 그걸 깔면 같은 버튼이 5개 생긴다 — 여기선 건수 0만 말한다.
