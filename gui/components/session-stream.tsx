@@ -3,21 +3,23 @@
 /** 세션 스트림 (DESIGN.md §2-1 · §비주얼 §9). 티켓이 진행되는 과정의 `tail -f`.
  *
  *  **줄 모양이 둘뿐이고 그 둘이 서로 안 닮은 것**이 이 파일의 전부다(§9):
- *  접힌 4열 그리드(회색·`text-xs`·mono 섞임) / 전면 전문 줄(검정·`text-sm`·여러 줄).
+ *  접힌 `<Marker>` 한 줄(회색·mono 섞임) / 전면 전문 줄(검정·여러 줄).
  *  색 토큰은 하나도 안 쓴다 — 스트림에는 상태가 없다. 갈리는 건 밝기·폭·서체 셋이다.
  *
  *  읽기·파싱은 전부 `lib/transcript.ts`고 여기는 그리기만 한다. 접기는 네이티브 `<details>`,
- *  툴팁은 네이티브 `title`, 스크롤도 네이티브 — 새 shadcn 0개(§5). */
+ *  툴팁은 네이티브 `title`, 스크롤도 네이티브 — shadcn은 `button`과 `marker` 둘뿐이다(§5). */
 import { useEffect, useRef, useState } from "react";
 import { ArrowDown, ChevronRight } from "lucide-react";
 import { tailSession } from "@/app/p/[project]/tickets/[hash]/actions";
 import { Button } from "@/components/ui/button";
+import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/marker";
 import type { StreamEvent } from "@/lib/transcript";
 import { expandable } from "@/lib/urls";
 import { cn } from "@/lib/utils";
 
 /** 레코드의 `timestamp`는 UTC다 — **로컬 시간으로 렌더한다**(§2-1: `13:55:10Z` = KST `22:55:10`).
- *  `toLocaleTimeString`을 쓰지 않는 이유: 로케일에 따라 `오후 10:55:10`이 나온다. 열 폭이 4rem이다. */
+ *  `toLocaleTimeString`을 쓰지 않는 이유: 로케일에 따라 `오후 10:55:10`이 나온다. 8자 고정이라
+ *  열 정렬을 버린 뒤에도 시각만은 줄마다 세로로 맞는다(§9). */
 function localTime(iso: string): string {
   const d = new Date(iso);
   const p = (n: number) => String(n).padStart(2, "0");
@@ -114,9 +116,10 @@ export function SessionStream({
   );
 }
 
-/** 접힌 줄 — 4열 그리드. `tool_use`·`thinking`·`tool_result`·세션 프롬프트가 전부 이 모양이다.
- *  도구명 열이 `7rem` 고정인 이유: `auto`면 `mcp__…` 한 줄이 도착하는 순간 앞의 모든 줄의
- *  요약 열이 오른쪽으로 밀린다(2초마다 append된다). */
+/** 접힌 줄 — `<Marker>` 한 줄. `tool_use`·`thinking`·`tool_result`·세션 프롬프트가 전부 이 모양이다.
+ *  고정폭 4열은 (a)가 버렸다(요구 `e3020347`) — 시각(mono 8자)만 세로로 맞고 도구명부터 줄마다
+ *  어긋난다. 도구명에 `max-w-[7rem]`만 남은 것이 종전 고정폭이 묶던 흔들림 범위를 대신한다.
+ *  Marker 기본값(`flex gap-2 items-center text-sm text-muted-foreground w-full`)은 하나도 안 덮는다. */
 function Row({
   e,
   onToggle,
@@ -125,48 +128,57 @@ function Row({
   onToggle: (ev: React.SyntheticEvent<HTMLDetailsElement>) => void;
 }) {
   const summary = e.sidechain ? `서브 · ${e.summary}` : e.summary;
-  // 3·4열은 두 모양이 공유한다 — 열 폭이 갈리면 그리드가 안 맞는다
+  // 시각·도구명은 `shrink-0`이라, 줄이 넘칠 때 줄어드는 칸은 `MarkerContent` 하나다
+  // (그 `min-w-0`이 종전 `minmax(0,1fr)`가 하던 일이다).
   const cells = (
     <>
-      <span className="font-mono tabular-nums">{localTime(e.ts)}</span>
+      <span className="shrink-0 font-mono tabular-nums">{localTime(e.ts)}</span>
       {/* mono면 엔진이 실제로 부른 이름이고, sans면 우리가 붙인 이름이다(§9).
           판정은 `kind` 하나다 — 화면이 도구 목록을 다시 갖지 않는다. */}
-      <span className={cn("truncate", e.kind === "tool_use" && "font-mono")} title={e.label}>
+      <span
+        className={cn("max-w-[7rem] shrink-0 truncate", e.kind === "tool_use" && "font-mono")}
+        title={e.label}
+      >
         {e.label}
       </span>
-      <span className={cn("truncate", e.summaryMono && "font-mono")} title={summary}>
+      <MarkerContent className={cn("truncate", e.summaryMono && "font-mono")} title={summary}>
         {summary}
-      </span>
+      </MarkerContent>
     </>
   );
-  const grid =
-    "grid grid-cols-[1rem_4rem_7rem_minmax(0,1fr)] items-center gap-x-2 px-3 text-xs leading-6 text-muted-foreground";
+  const line = "px-3 leading-6";
 
   // 펼칠 것이 없으면 어포던스도 없다(`expandable` — 판정은 `lib/urls.ts` 하나다).
   // 여기 오는 건 본문이 암호화된 `thinking`이다(실측 75/75). 줄 자체는 그대로 흘리고
-  // — 빼면 생각하는 동안 화면이 조용해진다 — 어포던스 열만 §9대로 **비워서 유지**한다.
+  // — 빼면 생각하는 동안 화면이 조용해진다 — `MarkerIcon` 칸만 §9대로 **비워서 유지**한다.
   if (!expandable(e)) {
     return (
-      <div className={grid}>
-        <span />
+      <Marker className={line}>
+        <MarkerIcon />
         {cells}
-      </div>
+      </Marker>
     );
   }
 
   return (
     <details className="group" onToggle={onToggle}>
       {/* hover에서 글자를 같이 올리는 건 대비 때문이다 — `--muted-foreground`가 `bg-muted/50`
-          위에서 라이트 4.54로 바닥에 붙는다(§9 함정 2). `text-foreground`면 18.97이다. */}
-      <summary
+          위에서 라이트 4.54로 바닥에 붙는다(§9 함정 2). `text-foreground`면 18.97이다.
+          색이 이제 Marker 루트의 기본 클래스라 hover도 같은 요소에 붙는다(변종이 이긴다). */}
+      <Marker
+        render={<summary />}
         className={cn(
-          grid,
+          line,
           "cursor-pointer list-none hover:bg-muted/50 hover:text-foreground [&::-webkit-details-marker]:hidden",
         )}
       >
-        <ChevronRight aria-hidden className="size-3.5 group-open:rotate-90" />
+        {/* `MarkerIcon`은 `aria-hidden`이라 의미를 나르는 그림을 넣지 않는다 — 순수 어포던스뿐이다.
+            `size-4`는 Marker 기본 규칙이 준다(§9: 덮지 않는다). */}
+        <MarkerIcon>
+          <ChevronRight className="group-open:rotate-90" />
+        </MarkerIcon>
         {cells}
-      </summary>
+      </Marker>
       {/* 펼친 원문. `text-foreground`가 아니면 `--muted` 위에서 4.34로 미달한다(§9에서 가장
           밟기 쉬운 함정). `max-h-96`은 `tool_result` 실측 38173바이트가 컨테이너를 삼키는 걸 막는다. */}
       <div className="px-3">
@@ -178,7 +190,7 @@ function Row({
   );
 }
 
-/** 전문 줄 — assistant `text`와 첫 번째 이후의 사용자 프롬프트. 그리드에 **들어가지 않는다.**
+/** 전문 줄 — assistant `text`와 첫 번째 이후의 사용자 프롬프트. **`<Marker>`가 아니다.**
  *  다른 모양이라는 것 자체가 구분이고(§9), 시각도 어포던스도 없다 — 전문이 이미 줄이라 펼칠 것이 없다.
  *  사용자 쪽만 왼쪽 선을 받는다: 밖에서 들어온 말이라는 표시에 색을 쓰면 §0이 깨진다(정상 흐름이다). */
 function FullText({ e }: { e: StreamEvent }) {
