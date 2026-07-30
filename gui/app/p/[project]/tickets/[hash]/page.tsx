@@ -15,6 +15,7 @@ import { DepBadge, StatusBadge, daysSince } from "@/components/status-badge";
 import {
   AnswerCard,
   DeleteTicketButton,
+  NewTicketDialog,
   TicketEditForm,
   UnassignButton,
 } from "@/components/ticket-ui";
@@ -128,6 +129,13 @@ export default async function TicketDetail({
     .filter((p) => p.body !== null)
     .map((p) => p.name);
 
+  // 복사 다이얼로그의 deps 선택지. 보드와 **같은 한 줄**이다(§3 — deps가 가리키는 이름은
+  // `ticket:`이 아니라 stem이고, 큐 순서를 뒤집어야 방금 만든 티켓이 맨 위다).
+  // 이미 읽은 `tickets`를 넘긴다 — `readdir`도 큐 스캔도 다시 하지 않는다.
+  const depOptions = tickets
+    .map((t) => ({ hash: t.stem, title: t.title, met: t.state === "done" }))
+    .reverse();
+
   return (
     // 폭은 **여기 한 곳이 문다**(§비주얼 §11 `max-w-3xl` 재판정): 1단일 때 768로 종전과 같고,
     // 2단일 때 왼쪽 단이 896(mono 93자)에서 멈춘다. 절이 자기 폭을 다시 정하면 이중 제한이다.
@@ -146,6 +154,24 @@ export default async function TicketDetail({
           <span className="font-mono text-xs text-muted-foreground">{ticket.hash}</span>
         </div>
         <div className="flex items-center gap-2">
+          {/* 복사는 **상태 3종 전부**에서 보인다 — 원본을 읽기만 하므로 `.wip`도 막을 이유가 없고,
+              완료가 읽기 전용이 되면 "같은 일을 조건만 바꿔 다시" 하는 자리가 여기뿐이다(§2 복사).
+              frontmatter는 **원문**을 넘긴다: `ticket.persona`는 `PERSONA_RE`를 못 넘긴 값을 ''로
+              만든 것이라 사본이 조용히 페르소나를 잃는다(편집 폼이 같은 이유로 `fm`을 넘긴다). */}
+          <NewTicketDialog
+            project={id}
+            personas={personas}
+            deps={depOptions}
+            personaDir={config.personas}
+            variant="outline"
+            copy={{
+              stem: ticket.stem,
+              title: ticket.fm.title ?? "",
+              kind: ticket.fm.kind ?? "",
+              persona: ticket.fm.persona ?? "",
+              body: ticket.body,
+            }}
+          />
           <DeleteTicketButton
             project={id}
             hash={hash}
