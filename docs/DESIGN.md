@@ -1565,7 +1565,7 @@ P6 블로커였던 `1c9de45f`는 **회귀가 아니었다** — 404 화면이 JS
 | P29 | 세션 스트림 Marker 시각 사양 재작성 `eeb7ca3a` | designer | 스펙 | 대기 |
 | P29 | 접힌 줄 Marker 교체 — `add marker` + `session-stream.tsx` `fd41fbe9` | developer | `eeb7ca3a` | 대기 |
 | P30 | select 항목 persona 점 정렬 판정 `4ed2ba93` | pm | — | 완료 — 실측 −6.0px(필터 팝오버는 0.0). 정렬은 `PersonaDot`이 든다. §비주얼 §12 |
-| P30 | persona 점 수직 정렬 + 목록 밖 항목 점 누락 `394d3b50` | developer | 스펙 | 대기 |
+| P30 | persona 점 수직 정렬 + 목록 밖 항목 점 누락 `394d3b50` | developer | 스펙 | 완료 — `PersonaDot`에 `self-center` 한 줄(`2837246`). 호출부 3곳이 아니라 점이 든다 · 발행 다이얼로그 "원본 값"의 누락된 점도 채움 |
 | P31 | 티켓 `복사` → `복제` — 문구 3개 `12430b47` | developer | 스펙 | 대기 |
 
 **P31은 왕복 없이 티켓 1개다.** 요구(`c921fe79`)가 근거까지 문장에 들어 있어서 — Duplicate니까
