@@ -1343,7 +1343,7 @@ P6 블로커였던 `1c9de45f`는 **회귀가 아니었다** — 404 화면이 JS
 | # | 티켓 | persona | deps | 상태 |
 |---|---|---|---|---|
 | P20 | 답변 UX 스펙 확정 `14c88df4` | pm | — | 완료 — 렌더 **채택**(읽기 전용만), 카드 상단 이동, 보드 다이얼로그 |
-| P20 | 마크다운 렌더 타이포 사양 `e0847b43` | designer | 스펙 | 대기 |
+| P20 | 마크다운 렌더 타이포 사양 `e0847b43` | designer | 스펙 | 완료 — §비주얼 §10. 요소 20종 한 표, 새 토큰 0, 답변 쪽 `text-muted-foreground` **제거** |
 | P20 | `<Markdown>` + 왕복 스레드·`.wip` 본문 적용 `3f2f773f` | developer | `e0847b43` | 대기 |
 | P20 | 답변 카드를 상세 머리 아래로 `d264dc8a` | developer | 스펙 | 대기 |
 | P20 | 보드 카드에서 답변 다이얼로그 `0b55bcf4` | developer | `3f2f773f` | 대기 |
@@ -1665,7 +1665,7 @@ text-status-X  bg-status-X/10  border-status-X/30
 
 해시 · 파일/디렉터리 경로 · `session_id` · `owner` · pid · 환경변수 이름 · crontab 한 줄 ·
 `runner.log` 테일 · 프로토콜/페르소나 에디터 · 티켓 본문 원문 · 에러 메시지 원문 ·
-**세션 스트림의 도구명과 펼친 원문 블록**(§9).
+**세션 스트림의 도구명과 펼친 원문 블록**(§9) · **렌더된 본문의 코드 스팬과 펜스**(§10).
 
 읽는 문장(설명·라벨·빈 상태 문구)에는 쓰지 않는다.
 
@@ -2439,6 +2439,115 @@ ring-[3px]`)을 그대로 받는다. `outline-none`만 남기는 코드는 반�
 **§3에 더한 것 하나**: mono 사용처 목록에 **`도구명`**이 들어간다. 리터럴 API 식별자이고
 (실측 `mcp__claude_ai_Gmail__unlabel_thread`), mono여야 `Bash`/`Read`/`Edit`가 고정폭 블록으로
 스캔된다. 이 한 줄이 sans 라벨(`생각`·`결과`·`세션 프롬프트`)과의 구분도 겸한다.
+
+### 10. 마크다운 렌더 `<Markdown text>` (§2 · §비주얼 §3)
+
+읽기 전용 자리에 붙는 **하나뿐인** 렌더러다. 붙는 곳은 둘 — 요구사항 왕복 스레드(§2 · 상세와
+보드 다이얼로그)와 `.wip` 티켓 본문. **두 자리가 같은 값을 쓴다**: 아래 표가 유일한 출처이고
+자리별 오버라이드는 없다. 편집기는 종전대로 원문이다(§6 · §2 본문 폼 · 페르소나·프로토콜).
+
+파서는 `react-markdown` + `remark-gfm`이다(결정 기록). 아래 표는 그 `components` 매핑이고,
+**표에 없는 문법은 렌더되지 않는다** — raw HTML은 기본값 그대로 무시하고(`rehype-raw`를 켜지
+않는다), 각주·이미지는 원문 글자로 문단에 남는다. 이미지를 그리지 않는 이유는 로컬 큐의 티켓
+본문에 이미지가 없고, 원격 URL을 로컬 도구가 요청하게 만들 값이 없어서다.
+
+**루트**
+
+```
+min-w-0 text-base leading-7 break-words [&>:first-child]:mt-0 [&>:last-child]:mb-0
+```
+
+- `text-base`는 §3이 이미 정한 값이다("티켓 본문 — 원문·렌더 둘 다"). 원문 `<pre>`와 렌더가
+  같은 크기라 `3f2f773f`가 갈아끼워도 본문 덩어리의 무게가 안 바뀐다.
+- `leading-7`(28px)은 §3의 5단계 밖이 아니다 — 크기 단계는 글자 크기 규칙이고 줄 높이는 §9가
+  이미 자기 값을 정했다(`leading-6`). 한글 본문 768px 폭에서 기본 1.5(24px)는 줄이 붙는다.
+- **`min-w-0`이 없으면 다이얼로그에서 표가 깨진다.** `DialogContent`는 `grid`고 grid 아이템의
+  `min-width: auto`가 아래 표·펜스의 `overflow-x-auto`를 무력화해 다이얼로그를 통째로 늘린다.
+- 첫/마지막 자식의 바깥 여백만 죽인다. 나머지 리듬은 요소가 각자 들고 있다(아래 표) —
+  `space-y-*`를 루트에 걸지 않는다. 제목의 위 여백이 문단 사이 간격보다 커야 하는데,
+  한 값으로는 그게 안 나온다.
+
+**요소별** — 크기는 §3의 5단계(`text-xs`·`text-sm`·`text-base`·`text-lg`), 간격은 `1 2 3 4 6 8`.
+
+| 요소 | 클래스 | 왜 |
+|---|---|---|
+| `h1` | `mt-6 mb-2 text-lg font-semibold` | 본문 안에서 드물다(제목은 frontmatter가 들고 있다). 화면 `h1`과 같은 18px인 것은 의도다 — 본문 안의 `#`가 화면 제목보다 커질 자리가 없다(`text-xl`은 §3이 금지) |
+| `h2` | `mt-6 mb-2 border-b border-border pb-1 text-base font-semibold` | **이 큐에서 제일 흔한 요소다**(`## Goal`·`## Done when`·`## 결과`). 쓸 수 있는 크기가 `lg`/`base` 둘뿐이라 굵기만으로는 문단과 안 갈린다 — 밑줄 한 줄이 새 크기 단계 없이 절 경계를 만든다. 색이 아니라 선이다(§0: 색은 예외 표시) |
+| `h3` | `mt-4 mb-1 text-base font-medium` | `h2`보다 한 단계 가볍고 위 여백이 절반이다. `h4~h6`도 같은 값 — 단계를 더 만들지 않는다(이 큐의 본문에 4단계 중첩이 없다) |
+| `p` | `my-3` | 크기·색·줄높이는 루트에서 상속 |
+| `ul` | `my-3 list-disc pl-6 space-y-1 marker:text-muted-foreground` | 마커까지 `--foreground`면 글머리가 글자만큼 무겁다 |
+| `ol` | `my-3 list-decimal pl-6 space-y-1 marker:text-muted-foreground` | |
+| 중첩 `ul`·`ol` | `[&_li>ul]:my-1 [&_li>ol]:my-1` | 항목 안의 목록은 문단이 아니다. 바깥 `my-3`이 그대로 걸리면 한 항목이 두 덩어리로 보인다 |
+| `li` | 없음 | 간격은 목록의 `space-y-1`이 준다 |
+| **체크리스트** `- [ ]` | `li`에 `[&:has(>input)]:flex [&:has(>input)]:list-none [&:has(>input)]:gap-2` · `input`은 `sr-only`로 **남기고** 옆에 lucide `Square`/`SquareCheck` `size-4 shrink-0 mt-1 text-muted-foreground aria-hidden` | `remark-gfm`이 `<input type="checkbox" disabled>`를 낳는다. **지우지 않고 감춘다** — 체크 상태·비활성이 스크린리더에 네이티브로 그대로 가고(`sr-only` 문구를 손으로 쓸 필요가 없다), `:has(>input)` 선택자도 그 입력에 걸린다. 네이티브 체크박스를 그대로 보여주지 않는 이유는 `color-scheme`을 선언하지 않은 이 앱에서 다크 테마에 흰 상자가 뜨고 disabled 색이 토큰 밖이라서다. 두 아이콘은 **모양이 다르다** — 색으로만 말하지 않는다(§0). `mt-1`(4px)은 28px 줄에 16px 아이콘을 맞추는 값 중 허용 단계에 가장 가깝다 |
+| `strong` | `font-semibold` | 이 큐의 본문은 `**`가 강조의 기본 수단이다 |
+| `em` | `italic` | 한글에서 기울임이 약하지만, 색을 쓰면 §0이 깨진다 |
+| `code` (인라인) | `rounded-sm bg-muted px-1 font-mono text-sm text-foreground` | mono가 같은 px에서 더 커 보여 한 단계 내린다. **세로 패딩 없음** — 주면 문단 줄 높이가 줄마다 튄다. `text-foreground`는 못박는다(아래 대비표) |
+| `pre` | `my-3 overflow-x-auto rounded-md bg-muted p-3` | §9 펼친 원문 블록과 같은 그릇(`bg-muted rounded-md p-3`). **높이 상한을 두지 않는다** — §9의 `max-h-96`은 512px 컨테이너 안이라 필요했고, 본문은 페이지가 스크롤한다 |
+| `pre > code` | `bg-transparent p-0 font-mono text-sm text-foreground` | 인라인 규칙을 상속하면 배경이 두 겹이 된다. 크기는 인라인과 같다 — 이 컴포넌트의 mono는 한 크기다(§9가 `text-xs`인 것은 12px 그리드 안이라서다) |
+| 표 래퍼 `div` | `my-3 overflow-x-auto` | **필수다.** `Card`가 `overflow-hidden`이라 래퍼 없는 넓은 표는 스크롤이 아니라 **잘려 사라진다** |
+| `table` | `w-full text-sm` | |
+| `th` | `border-b border-border px-3 py-2 text-left align-top text-xs font-medium text-muted-foreground` | §3 테이블 헤더와 같은 색·굵기·크기 |
+| `td` | `border-b border-border px-3 py-2 align-top` | **§3의 `h-9` 밀도 오버라이드를 쓰지 않는다.** 그 값은 40~60행을 한 화면에 넣으려고 만든 것이고, 본문의 표는 셀이 여러 줄로 감긴다 — 고정 높이는 감긴 셀에서 깨진다. `align-top`이 그 감김을 읽히게 한다 |
+| `a` | `underline underline-offset-2 decoration-muted-foreground hover:decoration-foreground` | **색을 주지 않는다.** 밑줄이 이미 링크를 말하고, `--primary`를 쓰면 §0("색은 예외를 표시한다")이 깨진다. 포커스 링은 §1 기본 그대로 |
+| `blockquote` | `my-3 border-l-2 border-border pl-3 text-muted-foreground` | §9의 사용자 프롬프트 구분과 같은 값. `--background` 위 4.73으로 AA 통과 — **인용 안에 코드가 들어오면 그 코드는 위 규칙대로 `text-foreground`다** |
+| `hr` | `my-6 border-border` | 문단 간격(12px)의 두 배. `---`를 절 경계로 쓰는 본문이 있다 |
+| `img` | 그리지 않는다 | 위 문단 |
+
+**소프트 줄바꿈은 공백으로 합친다**(마크다운 표준, `remark-breaks`를 켜지 않는다). 이 큐의
+본문은 100자 근처에서 손으로 감겨 있는데, 그 줄바꿈을 그대로 그리면 렌더 폭과 원문 폭이
+다른 만큼 문단이 톱니가 된다. 원문의 줄 그대로가 필요한 자리는 펜스다.
+
+**빈 텍스트**: 본문이 비었거나 공백뿐이면 `(내용 없음)`을 `text-sm text-muted-foreground`로.
+`<EmptyState>`를 쓰지 않는다 — 그건 화면의 1차 콘텐츠가 빌 때의 그릇이고(§6), 여기는 카드 안
+한 칸이며 사람이 할 다음 행동도 없다. **로딩·에러 상태는 없다**: 서버가 이미 읽은 문자열을
+동기로 그리는 컴포넌트라 실패할 지점이 없다(파일을 못 읽은 경우는 그 화면의 에러가 이미 받는다).
+**본문은 자르지 않는다** — `truncate`도 `line-clamp`도 없다(§6 "본문 미리보기는 어디에도 넣지
+않는다"의 반대편이다. 여기가 그 본문을 읽으러 오는 자리다).
+
+**왕복 스레드 — 답변 쪽의 구분을 여기서 정한다**
+
+지금 코드는 답변 항목 전체에 `border-l-2 pl-3 text-muted-foreground`가 걸려 있다.
+**`text-muted-foreground`를 뗀다. 남는 것은 `border-l-2 border-border pl-3`뿐이다.**
+
+- 렌더된 본문에는 `bg-muted` 블록(코드 스팬·펜스)이 들어온다. 본문을 통째로 흐리게 두면 그
+  블록 안에서 **4.34**가 되고, 그건 §1이 실측으로 금지한 조합이다(§9가 두 번 밟은 자리다).
+- 밝기를 구분에 쓰면 "덜 중요한 글"로 읽힌다. 사람이 방금 쓴 자기 답변이 질문보다 흐릴 이유가 없다.
+- 구분은 이미 두 개가 하고 있다: 항목 머리의 라벨 줄(`질문 n`/`답변` + 해시, `text-xs
+  text-muted-foreground`)과 왼쪽 선. §9가 사용자 프롬프트를 `border-l-2 border-border pl-3`
+  하나로만 가른 것과 같은 판단이다 — **구조로 가르고 색으로 가르지 않는다.**
+
+**두 폭에서 깨지지 않는다**
+
+| 자리 | 안쪽 폭 |
+|---|---|
+| `.wip` 본문 (상세) | `max-w-3xl` = **768px** |
+| 답변 카드 (상세) | 768 − `Card` `--card-spacing` 16×2 = **736px** |
+| 답변 다이얼로그 (보드) | `sm:max-w-2xl` 672 − `DialogContent` `p-4` 16×2 = **640px** ← 좁은 쪽 |
+
+- **답변 다이얼로그는 `sm:max-w-2xl`이다** — §3 발행 다이얼로그와 같은 값. 접수(`xl`)보다 넓은
+  이유는 이 다이얼로그가 폼만이 아니라 **스레드를 읽는 자리**이고, 상세(736px)와 폭이 96px밖에
+  안 갈려야 같은 표가 두 자리에서 같은 줄 수로 감기기 때문이다.
+- 640px에서도 위 표는 한 값이다. **잘림 대신 세 가지로 받는다**: 긴 낱말·URL·경로는 루트의
+  `break-words`, 펜스는 가로 스크롤(줄을 감으면 코드가 아니게 된다), 표는 래퍼의 가로 스크롤.
+  §6 "식별자는 자르지 않는다"가 그대로 지켜진다 — 어느 쪽도 글자를 버리지 않는다.
+
+**대비 검증** (§1·§9에서 이미 실측된 조합만 쓴다 — 새 조합이 없다)
+
+| 조합 | 라이트 | 다크 |
+|---|---|---|
+| 본문 `--foreground` / `--background` | 19.79 | 18.96 |
+| 코드 스팬·펜스 `--foreground` / `--muted` | 18.15 | 14.48 |
+| 인용·표 헤더 `--muted-foreground` / `--background` | 4.73 | 7.63 |
+| ~~`--muted-foreground` / `--muted`~~ **금지** | **4.34** | 5.83 |
+
+마지막 줄이 이 절의 유일한 함정이고, 코드 안을 `text-foreground`로 못박는 이유와 답변 쪽에서
+`text-muted-foreground`를 떼는 이유가 **같은 숫자 하나**다.
+
+**새 색 토큰 0개 · 새 shadcn 컴포넌트 0개 · `add` 인자 무수정.** 쓰는 색은 `--foreground`
+`--muted-foreground` `--muted` `--border` 넷뿐이고 §1의 상태 토큰 4개는 **하나도 쓰지 않는다**
+(본문에는 상태가 없다). 아이콘 둘은 lucide-react(기존 의존성)다. §5 커스텀 표의
+`<Markdown text>` 줄과 그 위 문단이 이 절과 그대로 일치한다 — **커스텀은 7개 그대로다.**
 
 ## 결정 기록
 
