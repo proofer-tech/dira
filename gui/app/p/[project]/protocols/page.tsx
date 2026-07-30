@@ -43,6 +43,11 @@ export default async function Protocols({
     } catch (e) {
       rejected = (e as Error).message;
     }
+  } else {
+    // 기본 선택 = 루트 `AGENTS.md`(§6). 인라인되는 유일한 파일이라 여기서 제일 많이 열고,
+    // 리다이렉트 대신 서버가 고른다 — `?file=`은 명시 선택만 담는다. 없으면 안내 문구로
+    // 떨어진다(트리 첫 파일 같은 임의 대체를 넣지 않는다). 거부 사유가 없으니 Alert도 없다.
+    selected = await readTextFile(config.protocols, "AGENTS.md").catch(() => null);
   }
 
   return (
