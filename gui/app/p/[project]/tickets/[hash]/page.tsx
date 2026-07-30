@@ -48,7 +48,9 @@ function TicketLine({ t, href }: { t: Ticket; href: string }) {
   return (
     <div className="flex items-center gap-2">
       <StatusBadge status={statusOf(t)} />
-      <Link href={href} className="truncate text-sm hover:underline">
+      {/* 오른쪽 단(352px)에서 title에 남는 폭이 ≈200px(≈14자)다 — 잘린 문장을 툴팁이 받는다
+          (§6 "title은 truncate + 툴팁 전문"). 해시는 자르지 않는다 */}
+      <Link href={href} title={t.title} className="truncate text-sm hover:underline">
         <span className="font-mono text-xs">{t.hash}</span> {t.title}
       </Link>
     </div>
@@ -120,7 +122,10 @@ export default async function TicketDetail({
   const thread = threadOf(tickets, ticket, config);
 
   return (
-    <div className="space-y-6">
+    // 폭은 **여기 한 곳이 문다**(§비주얼 §11 `max-w-3xl` 재판정): 1단일 때 768로 종전과 같고,
+    // 2단일 때 왼쪽 단이 896(mono 93자)에서 멈춘다. 절이 자기 폭을 다시 정하면 이중 제한이다.
+    // `mx-auto`는 쓰지 않는다 — 보드·워커가 `px-6` 왼쪽 정렬이라 이 화면만 가운데 오면 제목이 튄다.
+    <div className="max-w-3xl space-y-6 xl:max-w-7xl">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex min-w-0 items-center gap-3">
           <h1 className="text-lg font-semibold">{ticket.title || "(제목 없음)"}</h1>
@@ -143,227 +148,260 @@ export default async function TicketDetail({
         </div>
       </div>
 
-      {/* 표시값으로는 엔진이 이 티켓을 못 찾는다 — 그 사실을 아는 유일한 자리가 여기다.
-          화면의 해시를 사람이 `deps:`에 옮겨 적으면 선행이 `.done`이 돼도 영구 대기다(§식별자).
-          판정은 `listTickets`가 엔진과 같은 조회(`find_any`)로 한 것이다 — 문자열 비교가 아니다. */}
-      {!ticket.hashResolves && (
-        <Alert className="max-w-3xl">
-          <TriangleAlert aria-hidden className="text-status-stale" />
-          <AlertTitle>
-            표시값 <span className="font-mono">{ticket.hash}</span>로는 엔진이 이 티켓을 찾지 못합니다
-          </AlertTitle>
-          <AlertDescription className="grid gap-2">
-            <span>
-              frontmatter <span className="font-mono">ticket:</span>이 파일명과 다릅니다. 엔진은
-              파일명으로만 찾으므로 <span className="font-mono">deps:</span>에는{" "}
-              <b className="font-mono">{ticket.stem}</b>을 적어야 합니다 — 표시값을 적으면 이 티켓이
-              <span className="font-mono"> .done</span>이 돼도 후행이 영구 대기입니다.
-            </span>
-            <span>
-              고치려면 <span className="font-mono">ticket:</span>을{" "}
-              <span className="font-mono">{ticket.stem}</span>으로 맞추거나 파일 이름을 바꾸세요.
-            </span>
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {/* 표시만 있고 잠금이 없다 — PM이 `awaiting`을 쓰고 `deps`에 안 걸었다. 조용히 두면
-          사람이 답하기 전에 워커가 이 티켓을 집어 간다(§요구사항 레이어 결정 5) */}
-      {awaitingUnlocked(ticket) && (
-        <Alert className="max-w-3xl">
-          <TriangleAlert aria-hidden className="text-status-stale" />
-          <AlertTitle>잠금 없는 답변 대기 — 이 티켓은 답변 전에 디스패치된다</AlertTitle>
-          <AlertDescription>
-            <span>
-              <span className="font-mono">awaiting: {awaitingOf(ticket)}</span>가 있는데{" "}
-              <span className="font-mono">deps</span>에 그 해시가 없습니다. 엔진은{" "}
-              <span className="font-mono">deps</span>만 보므로 답변 없이도 이 티켓이 큐에 뜹니다 —
-              요구사항의 <span className="font-mono">deps</span>에{" "}
-              <span className="font-mono">{awaitingOf(ticket)}</span>를 넣으세요.
-            </span>
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {/* `.wip`은 지금 세션이 그 파일로 일하고 있다 — 잠금 사유를 그 자리에 적는다(제약 5) */}
-      {ticket.state === "wip" && (
-        <Alert className="max-w-3xl">
-          <Lock aria-hidden className="text-status-active" />
-          <AlertTitle>세션이 물고 있습니다 — 편집·삭제 잠금</AlertTitle>
-          <AlertDescription>
-            진행중 티켓은 읽기만 합니다. 세션이 죽었다면 아래 <b>할당 해제</b>로 큐에 되돌린 뒤
-            편집하세요.
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {/* 할당됨일 때만 보인다 — 그 판정은 컴포넌트 안에서 한다(해제 후 출력을 남기려면 여기서
-          조건부로 렌더하면 안 된다). 상태 전이는 엔진 소관이라 워커 스크립트를 부른다(제약 2) */}
-      <UnassignButton
-        project={id}
-        hash={hash}
-        worker={workers[0]?.name ?? null}
-        assigned={ticket.assigned}
-        ghost={ticket.state === "open" && ticket.assigned}
-      />
-
-      {/* 답변 대기일 때만. `.wip`은 `isAwaiting`의 state 조건이 구조적으로 막는다(제약 5).
-          자리는 **제목 직하**다(§2, 사람 요청 `14c88df4`) — 이 화면을 여는 이유가 답을 쓰는 것
-          하나인데 종전은 본문 편집 폼까지 지나야 답변칸이 나왔다. 잠금 Alert·할당 해제는 이 위에
-          남는다: "무엇을 할 수 없는가"가 액션보다 앞이다. */}
-      {isAwaiting(ticket) && (
-        <AnswerCard
-          project={id}
-          hash={hash}
-          answerFile={`${awaitingOf(ticket)}${config.done}.md`}
-          thread={thread}
-        />
-      )}
-
-      <section className="max-w-3xl space-y-2">
-        <h2 className="text-sm font-medium">frontmatter</h2>
-        <Table>
-          <TableBody>
-            {Object.entries(ticket.fm).map(([k, v]) => (
-              <TableRow key={k} className="h-9">
-                <TableCell className="w-40 px-3 py-0 text-sm text-muted-foreground">{k}</TableCell>
-                {/* 값은 거의 다 식별자·경로·시각이다. 문장인 title만 예외로 읽는 글꼴 */}
-                <TableCell className="px-3 py-0">
-                  <span className={k === "title" ? "text-sm" : "font-mono text-xs break-all"}>
-                    {v || "—"}
-                  </span>
-                </TableCell>
-              </TableRow>
-            ))}
-            <TableRow className="h-9">
-              <TableCell className="w-40 px-3 py-0 text-sm text-muted-foreground">파일</TableCell>
-              <TableCell className="px-3 py-0 font-mono text-xs break-all">
-                {path.basename(ticket.path)}
-              </TableCell>
-            </TableRow>
-          </TableBody>
-        </Table>
-      </section>
-
-      {/* 세션 스트림(§2-1)은 frontmatter 표 바로 아래다 — §비주얼 §9가 `h-[32rem]`을 고른 근거가
-          "제목 + frontmatter 표 다음"이라는 배치다(512px면 스트림의 머리와 바닥이 한 화면에 같이
-          들어온다). 본문 아래로 내리면 수백 줄짜리 티켓에서 그 계산이 통째로 무너진다. */}
-      {sessionId && (
-        <section className="max-w-3xl space-y-2">
-          <h2 className="text-sm font-medium">세션 스트림</h2>
-          {transcript ? (
-            <SessionStream project={id} stem={ticket.stem} live={ticket.state === "wip"} />
-          ) : (
-            // 액션이 없다 — 사람이 할 일이 없다(§9). `action` 자리엔 왜 없는지 사람이 직접 쳐 볼
-            // 글롭을 넣는다. "Claude 세션이 아닙니다"라고 말하지 않는다: 화면은 못 찾았다는 것만
-            // 알고 왜 없는지는 모른다(Codex 티켓도 `session_id`를 갖는다 — `tick.sh:124`).
-            <EmptyState
-              text="트랜스크립트 없음"
-              action={
-                <span className="font-mono text-xs break-all text-muted-foreground">
-                  {`~/.claude/projects/*/${sessionId}.jsonl`}
+      {/* 2단(§2 · §비주얼 §11). 왼쪽 = 이 화면에 온 이유(읽고 쓰는 것), 오른쪽 = 그동안 곁눈으로
+          참조하는 값. 왼쪽이 `minmax(0,1fr)`인 것은 본문의 긴 경로 한 줄이 트랙을 밀어 오른쪽을
+          찌그러뜨리지 않게 하기 위해서다. 가로 갭이 세로 리듬(24)보다 커야(32) 두 단이 갈린다 —
+          그래서 구분선을 넣지 않는다. `xl`(1280) 미만은 1단이고, 왼쪽이 DOM에서 먼저라
+          `order-*` 없이 왼쪽이 위로 온다(탭 순서 = 시각 순서). */}
+      <div className="grid gap-x-8 gap-y-6 xl:grid-cols-[minmax(0,1fr)_22rem]">
+        <div className="space-y-6">
+          {/* 표시값으로는 엔진이 이 티켓을 못 찾는다 — 그 사실을 아는 유일한 자리가 여기다.
+              화면의 해시를 사람이 `deps:`에 옮겨 적으면 선행이 `.done`이 돼도 영구 대기다(§식별자).
+              판정은 `listTickets`가 엔진과 같은 조회(`find_any`)로 한 것이다 — 문자열 비교가 아니다. */}
+          {!ticket.hashResolves && (
+            <Alert>
+              <TriangleAlert aria-hidden className="text-status-stale" />
+              <AlertTitle>
+                표시값 <span className="font-mono">{ticket.hash}</span>로는 엔진이 이 티켓을 찾지
+                못합니다
+              </AlertTitle>
+              <AlertDescription className="grid gap-2">
+                <span>
+                  frontmatter <span className="font-mono">ticket:</span>이 파일명과 다릅니다. 엔진은
+                  파일명으로만 찾으므로 <span className="font-mono">deps:</span>에는{" "}
+                  <b className="font-mono">{ticket.stem}</b>을 적어야 합니다 — 표시값을 적으면 이
+                  티켓이
+                  <span className="font-mono"> .done</span>이 돼도 후행이 영구 대기입니다.
                 </span>
-              }
+                <span>
+                  고치려면 <span className="font-mono">ticket:</span>을{" "}
+                  <span className="font-mono">{ticket.stem}</span>으로 맞추거나 파일 이름을
+                  바꾸세요.
+                </span>
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* 표시만 있고 잠금이 없다 — PM이 `awaiting`을 쓰고 `deps`에 안 걸었다. 조용히 두면
+              사람이 답하기 전에 워커가 이 티켓을 집어 간다(§요구사항 레이어 결정 5) */}
+          {awaitingUnlocked(ticket) && (
+            <Alert>
+              <TriangleAlert aria-hidden className="text-status-stale" />
+              <AlertTitle>잠금 없는 답변 대기 — 이 티켓은 답변 전에 디스패치된다</AlertTitle>
+              <AlertDescription>
+                <span>
+                  <span className="font-mono">awaiting: {awaitingOf(ticket)}</span>가 있는데{" "}
+                  <span className="font-mono">deps</span>에 그 해시가 없습니다. 엔진은{" "}
+                  <span className="font-mono">deps</span>만 보므로 답변 없이도 이 티켓이 큐에 뜹니다
+                  — 요구사항의 <span className="font-mono">deps</span>에{" "}
+                  <span className="font-mono">{awaitingOf(ticket)}</span>를 넣으세요.
+                </span>
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* `.wip`은 지금 세션이 그 파일로 일하고 있다 — 잠금 사유를 그 자리에 적는다(제약 5) */}
+          {ticket.state === "wip" && (
+            <Alert>
+              <Lock aria-hidden className="text-status-active" />
+              <AlertTitle>세션이 물고 있습니다 — 편집·삭제 잠금</AlertTitle>
+              <AlertDescription>
+                진행중 티켓은 읽기만 합니다. 세션이 죽었다면 아래 <b>할당 해제</b>로 큐에 되돌린 뒤
+                편집하세요.
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* 할당됨일 때만 보인다 — 그 판정은 컴포넌트 안에서 한다(해제 후 출력을 남기려면 여기서
+              조건부로 렌더하면 안 된다). 상태 전이는 엔진 소관이라 워커 스크립트를 부른다(제약 2) */}
+          <UnassignButton
+            project={id}
+            hash={hash}
+            worker={workers[0]?.name ?? null}
+            assigned={ticket.assigned}
+            ghost={ticket.state === "open" && ticket.assigned}
+          />
+
+          {/* 답변 대기일 때만. `.wip`은 `isAwaiting`의 state 조건이 구조적으로 막는다(제약 5).
+              자리는 **제목 직하**다(§2, 사람 요청 `14c88df4`) — 이 화면을 여는 이유가 답을 쓰는 것
+              하나인데 종전은 본문 편집 폼까지 지나야 답변칸이 나왔다. 잠금 Alert·할당 해제는 이 위에
+              남는다: "무엇을 할 수 없는가"가 액션보다 앞이다. */}
+          {isAwaiting(ticket) && (
+            <AnswerCard
+              project={id}
+              hash={hash}
+              answerFile={`${awaitingOf(ticket)}${config.done}.md`}
+              thread={thread}
             />
           )}
-        </section>
-      )}
 
-      <section className="max-w-3xl space-y-4">
-        <h2 className="text-sm font-medium">관계</h2>
-        {/* **선행을 unmet으로 걸러내지 않는다**(§2, `b9775505`) — 걸러면 충족된 선행이 라벨 없이
-            떠서 `막고 있는 것 없음` 바로 밑에 배지가 붙고 한 라벨 안에서 두 문장이 서로를 부정했다.
-            막혀 있는지는 머리의 상태 배지가 말하고, 개별 해시의 상태는 배지 아이콘이 말한다.
-            라벨은 건수를 세어주지 않는다 — 보드 카드와 같은 문구다(사람 요청 `1f2ac454`). */}
-        <div className="space-y-2">
-          <p className="text-xs text-muted-foreground">선행 — 이 티켓의 deps</p>
-          {deps.length === 0 ? (
-            <EmptyState text="선행 없음" />
-          ) : (
-            <div className="flex flex-wrap items-center gap-2">
-              {deps.map((d) => (
-                <DepBadge
-                  key={d.hash}
-                  hash={d.hash}
-                  kind={d.kind}
-                  href={d.hit ? href(d.hit) : undefined}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-        <div className="space-y-2">
-          <p className="text-xs text-muted-foreground">후행 — 이 티켓을 deps로 둔 티켓</p>
-          {blocked.length === 0 ? (
-            <EmptyState text="후행 없음" />
-          ) : (
-            <div className="space-y-1">
-              {blocked.map((t) => (
-                <TicketLine key={t.path} t={t} href={href(t)} />
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* 출처/파생 — 같은 절 안이지만 구분선으로 갈라 둔다(§2 "`deps` 관계와 섞지 않는다").
-            작업 티켓엔 `요구사항` 한 줄, 요구사항엔 나온 티켓 목록. 둘 다 없는 평범한 티켓엔
-            아무것도 안 붙는다 — `kind: request`일 때만 "아직 없다"를 말할 값이 있다. */}
-        {(req || derived.length > 0 || ticket.kind === "request") && (
-          <div className="space-y-4 border-t pt-4">
-            {req && (
-              <div className="space-y-2">
-                <p className="text-xs text-muted-foreground">요구사항</p>
-                {reqTicket ? (
-                  <TicketLine t={reqTicket} href={href(reqTicket)} />
-                ) : (
-                  // 큐에 없는 stem — deps `missing` 배지와 같은 처리다. 사유만 바꾼다:
-                  // `req`는 엔진 잠금이 아니라서 이 티켓이 굶지는 않는다(출처를 잃을 뿐이다).
-                  <DepBadge
-                    hash={req}
-                    kind="missing"
-                    hint="큐에 없는 요구사항 stem — 출처를 따라갈 수 없다"
-                  />
-                )}
-              </div>
+          <section className="space-y-2">
+            <h2 className="text-sm font-medium">본문</h2>
+            {ticket.state === "wip" ? (
+              // 읽기만 한다 — 원문일 이유가 없다(§비주얼 §10). 편집 폼 쪽은 종전대로 원문이다
+              <Markdown text={ticket.body} />
+            ) : (
+              // 폼에는 frontmatter **원문**을 넣는다. `ticket.persona`는 PERSONA_RE를 못 넘긴 값을
+              // ''로 만든 것이라, 그대로 저장하면 사람이 적어둔 값을 조용히 지운다.
+              <TicketEditForm
+                project={id}
+                hash={hash}
+                title={ticket.fm.title ?? ""}
+                kind={ticket.fm.kind ?? ""}
+                persona={ticket.fm.persona ?? ""}
+                body={ticket.body}
+              />
             )}
-            {(derived.length > 0 || ticket.kind === "request") && (
-              <div className="space-y-2">
-                <p className="text-xs text-muted-foreground">이 요구사항에서 나온 티켓</p>
-                {derived.length === 0 ? (
-                  <EmptyState text="아직 쪼갠 티켓 없음" />
-                ) : (
-                  <div className="space-y-1">
-                    {derived.map((t) => (
-                      <TicketLine key={t.path} t={t} href={href(t)} />
-                    ))}
+          </section>
+
+          {/* 세션 스트림(§2-1)은 왼쪽 단 마지막이다. §비주얼 §9 `h-[32rem]`은 이 배치를 안 묻는다 —
+              고정 높이 + 자체 스크롤이라 페이지 어디에 놓이든 절(564px)이 한 화면(852px)에 담긴다.
+              종전 주석이 근거로 삼던 "frontmatter 표 다음"이라는 서술이 틀렸던 것이고 수는 맞았다
+              (§비주얼 §11 재판정). 페이지 높이에 맡기지 않는 둘째 근거는 그대로다: 2094줄
+              트랜스크립트가 페이지를 늘리면 브라우저 스크롤과 자동 스크롤이 서로를 민다. */}
+          {sessionId && (
+            <section className="space-y-2">
+              <h2 className="text-sm font-medium">세션 스트림</h2>
+              {transcript ? (
+                <SessionStream project={id} stem={ticket.stem} live={ticket.state === "wip"} />
+              ) : (
+                // 액션이 없다 — 사람이 할 일이 없다(§9). `action` 자리엔 왜 없는지 사람이 직접 쳐 볼
+                // 글롭을 넣는다. "Claude 세션이 아닙니다"라고 말하지 않는다: 화면은 못 찾았다는 것만
+                // 알고 왜 없는지는 모른다(Codex 티켓도 `session_id`를 갖는다 — `tick.sh:124`).
+                <EmptyState
+                  text="트랜스크립트 없음"
+                  action={
+                    <span className="font-mono text-xs break-all text-muted-foreground">
+                      {`~/.claude/projects/*/${sessionId}.jsonl`}
+                    </span>
+                  }
+                />
+              )}
+            </section>
+          )}
+        </div>
+
+        {/* 오른쪽 단 — 왼쪽을 스크롤하는 동안 따라다닌다(§2). 세 값이 한 벌이다:
+            `self-start`가 없으면 그리드 아이템이 왼쪽 단 높이만큼 늘어나 `sticky`가 움직일
+            여지를 잃고(다 맞는데 안 따라다닌다), `top-18`(4.5rem)은 헤더 `h-12` + `py-6`에서
+            유도된 수이며, `max-h`의 4.5rem은 **그 수와 같아야** 바닥이 안 잘린다.
+            후행이 20건이면 이 단이 뷰포트보다 길어지는데 그때 `overflow-y-auto`가 받는다. */}
+        <div className="space-y-6 xl:sticky xl:top-18 xl:max-h-[calc(100vh-4.5rem)] xl:self-start xl:overflow-y-auto">
+          <section className="space-y-2">
+            <h2 className="text-sm font-medium">frontmatter</h2>
+            {/* `table-fixed`가 §비주얼 §11의 216px 값 열을 **실제로** 만든다. 기본 `auto`에서는
+                `session_id` 36자의 min-content가 표를 352px 밖으로 밀고, `Table` 컨테이너의
+                `overflow-x-auto`가 그걸 가로 스크롤로 받아 값이 잘려 보인다(1440 실측).
+                `break-words`는 min-content 기여를 바꾸지 않으므로 폭을 고정해야 줄이 접힌다. */}
+            <Table className="table-fixed">
+              <TableBody>
+                {Object.entries(ticket.fm).map(([k, v]) => (
+                  <TableRow key={k} className="h-9">
+                    {/* 최장 키 `assigned_at` 11자 ≈ 84 + `px-3` 24 = 108 ≤ 112. `w-40`은 352px
+                        안에서 키 열이 값 열보다 넓어진다 */}
+                    <TableCell className="w-28 px-3 py-0 text-sm text-muted-foreground">
+                      {k}
+                    </TableCell>
+                    {/* 값은 거의 다 식별자·경로·시각이다. 문장인 title만 예외로 읽는 글꼴.
+                        `break-all`이 아니라 `break-words`다 — 216px 값 열에서 `session_id`가
+                        넘치는데 전자는 16진수 한가운데를, 후자는 하이픈·`/`에서 끊는다.
+                        `whitespace-normal`은 shadcn `TableCell`의 `whitespace-nowrap`을 벗기는
+                        값이다 — 안 벗기면 `break-words`가 걸릴 자리가 아예 없어 값이 잘린다 */}
+                    <TableCell className="px-3 py-0 whitespace-normal">
+                      <span className={k === "title" ? "text-sm" : "font-mono text-xs break-words"}>
+                        {v || "—"}
+                      </span>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                <TableRow className="h-9">
+                  <TableCell className="w-28 px-3 py-0 text-sm text-muted-foreground">
+                    파일
+                  </TableCell>
+                  <TableCell className="px-3 py-0 font-mono text-xs break-words whitespace-normal">
+                    {path.basename(ticket.path)}
+                  </TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </section>
+
+          <section className="space-y-4">
+            <h2 className="text-sm font-medium">관계</h2>
+            {/* **선행을 unmet으로 걸러내지 않는다**(§2, `b9775505`) — 걸러면 충족된 선행이 라벨 없이
+                떠서 `막고 있는 것 없음` 바로 밑에 배지가 붙고 한 라벨 안에서 두 문장이 서로를 부정했다.
+                막혀 있는지는 머리의 상태 배지가 말하고, 개별 해시의 상태는 배지 아이콘이 말한다.
+                라벨은 건수를 세어주지 않는다 — 보드 카드와 같은 문구다(사람 요청 `1f2ac454`). */}
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground">선행 — 이 티켓의 deps</p>
+              {deps.length === 0 ? (
+                <EmptyState text="선행 없음" />
+              ) : (
+                <div className="flex flex-wrap items-center gap-2">
+                  {deps.map((d) => (
+                    <DepBadge
+                      key={d.hash}
+                      hash={d.hash}
+                      kind={d.kind}
+                      href={d.hit ? href(d.hit) : undefined}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground">후행 — 이 티켓을 deps로 둔 티켓</p>
+              {blocked.length === 0 ? (
+                <EmptyState text="후행 없음" />
+              ) : (
+                <div className="space-y-1">
+                  {blocked.map((t) => (
+                    <TicketLine key={t.path} t={t} href={href(t)} />
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* 출처/파생 — 같은 절 안이지만 구분선으로 갈라 둔다(§2 "`deps` 관계와 섞지 않는다").
+                작업 티켓엔 `요구사항` 한 줄, 요구사항엔 나온 티켓 목록. 둘 다 없는 평범한 티켓엔
+                아무것도 안 붙는다 — `kind: request`일 때만 "아직 없다"를 말할 값이 있다. */}
+            {(req || derived.length > 0 || ticket.kind === "request") && (
+              <div className="space-y-4 border-t pt-4">
+                {req && (
+                  <div className="space-y-2">
+                    <p className="text-xs text-muted-foreground">요구사항</p>
+                    {reqTicket ? (
+                      <TicketLine t={reqTicket} href={href(reqTicket)} />
+                    ) : (
+                      // 큐에 없는 stem — deps `missing` 배지와 같은 처리다. 사유만 바꾼다:
+                      // `req`는 엔진 잠금이 아니라서 이 티켓이 굶지는 않는다(출처를 잃을 뿐이다).
+                      <DepBadge
+                        hash={req}
+                        kind="missing"
+                        hint="큐에 없는 요구사항 stem — 출처를 따라갈 수 없다"
+                      />
+                    )}
+                  </div>
+                )}
+                {(derived.length > 0 || ticket.kind === "request") && (
+                  <div className="space-y-2">
+                    <p className="text-xs text-muted-foreground">이 요구사항에서 나온 티켓</p>
+                    {derived.length === 0 ? (
+                      <EmptyState text="아직 쪼갠 티켓 없음" />
+                    ) : (
+                      <div className="space-y-1">
+                        {derived.map((t) => (
+                          <TicketLine key={t.path} t={t} href={href(t)} />
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
             )}
-          </div>
-        )}
-      </section>
-
-      <section className="space-y-2">
-        <h2 className="text-sm font-medium">본문</h2>
-        {ticket.state === "wip" ? (
-          // 읽기만 한다 — 원문일 이유가 없다(§비주얼 §10). 편집 폼 쪽은 종전대로 원문이다
-          <div className="max-w-3xl">
-            <Markdown text={ticket.body} />
-          </div>
-        ) : (
-          // 폼에는 frontmatter **원문**을 넣는다. `ticket.persona`는 PERSONA_RE를 못 넘긴 값을
-          // ''로 만든 것이라, 그대로 저장하면 사람이 적어둔 값을 조용히 지운다.
-          <TicketEditForm
-            project={id}
-            hash={hash}
-            title={ticket.fm.title ?? ""}
-            kind={ticket.fm.kind ?? ""}
-            persona={ticket.fm.persona ?? ""}
-            body={ticket.body}
-          />
-        )}
-      </section>
+          </section>
+        </div>
+      </div>
     </div>
   );
 }

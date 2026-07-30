@@ -104,7 +104,8 @@ export function TicketEditForm({
 }) {
   const [state, action, pending] = useActionState<SaveState, FormData>(saveTicket, {});
   return (
-    <form action={action} className="max-w-3xl space-y-4">
+    // 폭은 페이지 루트가 문다(§비주얼 §11) — 2단의 왼쪽 단 안에서 다시 걸면 이중 제한이다
+    <form action={action} className="space-y-4">
       <input type="hidden" name="project" value={project} />
       <input type="hidden" name="hash" value={hash} />
       <div className="space-y-2">
@@ -281,7 +282,8 @@ export function AnswerCard(props: {
   thread: ThreadItem[];
 }) {
   return (
-    <Card className="max-w-3xl">
+    // 폭은 페이지 루트가 문다(§비주얼 §11) — 왼쪽 단이 이미 정한 폭을 다시 자르지 않는다
+    <Card>
       <CardHeader>
         <CardTitle>답변</CardTitle>
         <CardDescription>답변을 달면 이 요구사항이 다시 큐에 뜨고 PM이 이어서 봅니다.</CardDescription>
