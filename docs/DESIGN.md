@@ -2288,7 +2288,7 @@ py-6">`의 **첫 자식**이고, 헤더(`h-12 sticky`)와의 24px은 기존 `py-
 ```
 pnpm dlx shadcn@latest add alert alert-dialog badge button card command dialog \
   input label popover select skeleton sonner table textarea tooltip
-pnpm dlx shadcn@latest add @shadcn/message-scroller @shadcn/message @shadcn/bubble
+pnpm dlx shadcn@latest add @shadcn/message-scroller @shadcn/message @shadcn/bubble @shadcn/marker
 ```
 
 | 컴포넌트 | 쓰는 곳 |
@@ -2306,6 +2306,7 @@ pnpm dlx shadcn@latest add @shadcn/message-scroller @shadcn/message @shadcn/bubb
 | `skeleton` | `loading.tsx` |
 | `sonner` | 서버 액션 결과(할당 해제·저장·복사) |
 | `message-scroller` `message` `bubble` | **답변 스레드**(§2 요구사항 왕복 — 상세 카드와 보드 다이얼로그가 같은 것을 그린다). 사람이 지목했다: 요청 `c01a9a11`, 답변 `55fbe924` |
+| `marker` | **세션 스트림의 접힌 사건 줄 4종**(§2-1 · §비주얼 §9 — `tool_use`·`thinking`·`tool_result`·세션 프롬프트). 전문 줄 2종은 Marker가 아니다. 사람이 지목했다: 요구 `e3020347`, 답변 `45912e1a` |
 
 **설치하지 않는 것과 이유**
 
@@ -2328,11 +2329,15 @@ pnpm dlx shadcn@latest add @shadcn/message-scroller @shadcn/message @shadcn/bubb
 (그 판정 당시 표는 5개였다. `<SessionStream>`이 6번째로 들어온 것은 §2-1이고 배너와 무관하다.)
 "별도 공간"을 새 라우트·새 패널로 만들지 않기로 한 §0-2의 결정이 여기서 컴포넌트 0개로 떨어진다.
 
-**세션 스트림(§2-1)은 `add` 인자를 늘리지 않는다.** 접기는 **네이티브 `<details>`**가 받는다 —
-이 표가 `scroll-area`를 "네이티브 스크롤로 충분"으로 거절한 것과 같은 판단이고, shadcn
-`collapsible`은 사건 수백 줄마다 상태를 들고 있을 이유가 없다. 선례가 이미 있다 —
-페르소나 카드 접기가 `<details>`다(`19fd6a9f` — 위 `accordion` 줄이 같은 판단이다). 자동 스크롤도 `scroll-area` 없이
-네이티브로 한다. 늘어나는 것은 아래 커스텀 1개뿐이다.
+**세션 스트림(§2-1)은 `add` 인자를 하나 늘린다 — `@shadcn/marker`.** 사람이 지목했고(요구
+`e3020347`, 답변 `45912e1a` = (a)) 접힌 사건 줄 4종이 `<Marker>`다(§비주얼 §9가 그 줄을
+Marker 기본값 쪽으로 다시 썼다 — 열 정렬을 포기하는 대신 `className`으로 덮는 곳이 0이다).
+**늘어나는 npm 의존성은 0이다**: Marker는 `@base-ui/react`(`mergeProps`·`useRender`)와 `cva`만
+쓰고 둘 다 이미 있다. 나머지는 종전 판정 그대로다 — 접기는 **네이티브 `<details>`**가 받는다
+(이 표가 `scroll-area`를 "네이티브 스크롤로 충분"으로 거절한 것과 같은 판단이고, shadcn
+`collapsible`은 사건 수백 줄마다 상태를 들고 있을 이유가 없다. 선례가 이미 있다 — 페르소나 카드
+접기가 `<details>`다(`19fd6a9f` — 위 `accordion` 줄이 같은 판단이다)). 자동 스크롤도 `scroll-area`
+없이 네이티브로 한다. 커스텀은 아래 1개뿐이다.
 
 **요구사항 왕복의 답변 다이얼로그(§1)는 `add` 인자를 늘리지 않는다.** `dialog`가 위 표에 이미
 있고(발행·요구 접수와 같은 그릇), 안에 들어가는 스레드·폼은 §2 답변 카드의 것을 그대로 쓴다.
@@ -2359,7 +2364,7 @@ pnpm dlx shadcn@latest add @shadcn/message-scroller @shadcn/message @shadcn/bubb
 | `<Hash hash>` | mono + 링크 + 클릭 복사. 6개 화면 전부에 나오는데 매번 다시 쓸 이유가 없다 |
 | `<EmptyState>` | shadcn에 없다. §6의 빈/0건 문구 규칙을 한 컴포넌트가 강제한다 |
 | `<CopyCommand cmd>` | 제약 4가 요구하는 것 — 실행 대신 복사시키는 mono 블록 + 복사 버튼 |
-| `<SessionStream>` | §2-1. 사건 한 줄 + 펼치면 원문 + 2초 폴링 + 자동 스크롤. shadcn에 로그 뷰가 없고, 티켓 상세와 워커 화면이 **같은 것을 같게** 그려야 한다(대상만 다르다 — Q2=(a)) |
+| `<SessionStream>` | §2-1. **`marker`가 접힌 줄 하나를 그리고, 나머지 전부가 여기 남는다** — 2초 폴링 · 바이트 오프셋 · 자동 스크롤 · 빈 상태 3종 · 펼침 블록 · 전문 줄 2종. shadcn에 로그 뷰는 여전히 없다(Marker는 줄 하나짜리 그릇이다). 티켓 상세와 워커 화면이 **같은 것을 같게** 그려야 한다(대상만 다르다 — Q2=(a)) |
 | `<Markdown text>` | §비주얼 §10. shadcn에 없고 Tailwind에도 없다(`@tailwindcss/typography`는 세 번째 의존성이 되고 프로즈 문서용 스케일이 §3의 5단계를 통째로 덮는다). **읽기 전용 마크다운의 유일한 출처** — 왕복 스레드와 `.wip` 본문이 같게 보여야 한다 |
 | `<PersonaBadge name>` | §5 · §비주얼 §12. persona 값이 5곳에 나오는데 색은 레지스트리에 있다 — 조회를 자리마다 다시 쓰면 어느 화면 하나가 조용히 색 없이 남는다. `<StatusBadge>`와 같은 이유의 컴포넌트이고, 점만 필요한 자리(필터·select 항목)를 같은 파일이 받는다 |
 | 밀도 오버라이드 | §3. shadcn Table 기본 패딩이 밀도 목표를 못 맞춘다 |
@@ -2620,7 +2625,7 @@ fs-tickets GUI                                      ← h1, text-lg
 이 레포에서 처음 만드는 로그 뷰다. **줄 모양이 두 개뿐이고 그 둘이 서로 안 닮은 것**이 이 절의
 전부다 — 실측 바이트의 90% 이상이 접히는 쪽이고(§2-1), 접힌 회색 줄들 사이에 세션이 실제로 쓴
 검은 문단이 서 있어야 스트림이 스캔된다. 색은 하나도 쓰지 않는다: §0의 "색은 예외를 표시한다"에서
-스트림에는 예외가 없다. 갈리는 것은 **밝기(회색/검정) · 폭(3열/전면) · mono 여부** 세 가지다.
+스트림에는 예외가 없다. 갈리는 것은 **밝기(회색/검정) · 폭(한 줄/전면) · mono 여부** 세 가지다.
 
 **컨테이너**
 
@@ -2653,70 +2658,135 @@ fs-tickets GUI                                      ← h1, text-lg
 페이지 높이에 맡기지 않는 이유는 2000줄짜리 트랜스크립트(실측 2094줄)가 페이지를 무한정 늘려
 브라우저 스크롤과 자동 스크롤이 서로를 밀기 때문이다.
 
-**사건 한 줄 — 4열 그리드** (`tool_use`·`thinking`·`tool_result`·세션 프롬프트)
+**사건 한 줄 — `<Marker>`** (`tool_use`·`thinking`·`tool_result`·세션 프롬프트)
+
+사람이 지목했다 — 요구 `e3020347`, 답변 `45912e1a` = **(a)**. 종전 4열 그리드를
+`@shadcn/marker`로 갈아 끼우고 **열 정렬을 포기한다**(시각·도구명이 줄마다 세로로 맞던 것).
+`gui/AGENTS.md`의 "shadcn 기본값을 이기려 하지 않는다"를 지키는 방향이 이쪽이다: Marker 위에
+§9 값을 `className`으로 덮는 게 아니라 §9를 Marker 기본값 쪽으로 다시 쓴다.
+
+Marker 기본 클래스가 이 줄의 뼈대다 — `group/marker relative flex min-h-4 w-full items-center
+gap-2 text-left text-sm text-muted-foreground [&_svg:not([class*='size-'])]:size-4`.
 
 ```
-grid-cols-[1rem_4rem_7rem_minmax(0,1fr)] gap-x-2 leading-6 text-xs
++ leading-6 px-3 hover:bg-muted/50 hover:text-foreground list-none
 
- ⌄   22:55:10   Bash          티켓 파일 목록을 센다
- ⌄   22:55:12   Read          gui/components/board-ui.tsx
- ⌄   22:55:12   결과          412줄
- ⌄   22:55:18   생각          1240자
- ⌄   22:55:20   Bash          서브 · 하위 에이전트가 훑는다
-└1─┘└──4rem──┘└───7rem───┘└──────── 1fr, truncate ────────┘
+ ⌄  22:55:10  Bash  티켓 파일 목록을 센다
+ ⌄  22:55:12  Read  gui/components/board-ui.tsx
+ ⌄  22:55:12  결과  412줄
+ ⌄  22:55:18  생각  1240자
+ ⌄  22:55:20  Bash  서브 · 하위 에이전트가 훑는다
+└16┘└ mono 8자 ┘└ ≤7rem ┘└──── 남는 폭 전부, truncate ────┘
+      (세로로 맞는다)  (여기부터 줄마다 어긋난다)
 ```
 
-| 열 | 값 | 왜 |
-|---|---|---|
-| 어포던스 | `ChevronRight size-3.5`, 열리면 `group-open:rotate-90` (`transition` 없음 — §0 애니메이션 금지) | 네이티브 마커는 끈다(`list-none [&::-webkit-details-marker]:hidden`). 슬롯은 **모든 줄이 비워 두더라도 유지한다** — 폭이 흔들리면 열이 안 맞는다 |
-| 시각 | `4rem` · `font-mono tabular-nums text-muted-foreground` | `HH:MM:SS` 8자 × 7.2px = 57.6px < 64px. `tabular-nums`는 §3 숫자 컬럼 규칙 |
-| 도구명 | `7rem` · `truncate` + `title` 전문 | 15.5자까지 들어간다. 실측 도구명 길이 p50 = 4(`Bash`) · p90 = 4 · **max 36**(`mcp__claude_ai_Gmail__unlabel_thread`) — 긴 쪽은 자르고 툴팁이 받는다 |
-| 요약 | `minmax(0,1fr)` · `truncate` + `title` 전문 | `minmax(0,…)`가 아니면 grid 트랙이 콘텐츠 폭으로 벌어져 `truncate`가 안 먹는다 |
+**줄 요소 5종이 어느 슬롯에 어떤 순서로 들어가나** (왼 → 오)
 
-**도구명 열을 `auto`로 두지 않는 이유**: grid `auto`는 지금 로드된 줄 중 가장 넓은 것에 맞춘다.
-스트림은 2초마다 append되므로 `mcp__…` 한 줄이 도착하는 순간 **그 앞의 모든 줄의 요약 열이
-오른쪽으로 밀린다.** 고정폭이 그 점프를 없앤다.
+| # | 요소 | 슬롯 | 값 | 왜 여기 |
+|---|---|---|---|---|
+| 1 | 어포던스 `ChevronRight` | **`MarkerIcon`** | `size-4`(Marker 기본값), 열리면 `group-open:rotate-90` (`transition` 없음 — §0 애니메이션 금지) | `MarkerIcon`이 `size-4 shrink-0` 고정폭 칸이라 종전 어포던스 열(`1rem`)과 **폭이 같다.** 종전 `size-3.5`는 12px 글자에 맞춘 값이었고 글자가 14px이 됐으므로 기본값 `size-4`를 그냥 받는다 |
+| 2 | 시각 | 슬롯 아님 — `<span>` | `shrink-0 font-mono tabular-nums` | mono `HH:MM:SS` 8자는 **줄마다 같은 폭**이다. 열 정렬을 포기해도 **시각은 그대로 세로로 맞는다** — (a)가 실제로 버리는 것은 요약이 시작하는 x 하나뿐이다. `text-muted-foreground`를 여기 따로 걸던 것은 **지운다**(Marker 루트가 이미 준다) |
+| 3 | 도구명 | 슬롯 아님 — `<span>` | `shrink-0 max-w-[7rem] truncate` + `title` 전문 | 고정폭을 버리고 **상한만 남겼다.** `Bash`(실측 길이 p50 = 4 · p90 = 4)면 4자만큼만 먹고 요약이 그만큼 왼쪽에서 시작한다. 상한 `7rem`은 종전 값 그대로라 실측 max 36자(`mcp__claude_ai_Gmail__unlabel_thread`)를 자르고 툴팁이 받는 계약이 안 바뀐다 |
+| 4 | `서브` 마커 | **`MarkerContent`** 첫머리 | `서브 · ` 접두 (아래 `서브` 항) | 요약과 같은 칸이라 같이 `truncate`된다 — 줄 높이가 안 늘어난다 |
+| 5 | 요약 | **`MarkerContent`** | `truncate` + `title` 전문 | `MarkerContent`의 **`min-w-0`이 grid `minmax(0,1fr)`가 하던 일을 이미 한다.** flex 자식은 기본이 `shrink:1`이라 `flex-1`도 필요 없다 — 앞의 셋이 `shrink-0`이므로 줄이 넘칠 때 줄어드는 칸은 이것 하나다 |
 
-**줄 높이는 `leading-6`(24px)**, 세로 패딩 없음. 512px에 21행이 들어간다. §3 테이블의 `h-9`를
-쓰지 않는 이유는 스트림이 테이블이 아니라서다 — 36px이면 14행이고 `tail -f` 체감이 죽는다.
+**`<summary>`가 되는 방법.** Marker가 `useRender`를 쓰므로 `<Marker render={<summary />}>`가
+1차안이고, 네이티브 마커는 종전대로 끈다(`list-none [&::-webkit-details-marker]:hidden`).
+`render`가 안 서면 `<summary>` 안에 `<Marker>`를 넣는다 — 그때 Marker의 `w-full`이 hover 배경을
+좌우 끝까지 미는 일을 그대로 한다. **둘 중 무엇인지는 후행 구현 티켓이 첫 렌더에서 확정한다.**
 
-**hover**: `hover:bg-muted/50 hover:text-foreground`. 배경은 §3 테이블 hover와 같은 값이고,
-글자를 같이 올리는 건 **대비 때문**이다 — `--muted-foreground`가 `bg-muted/50` 위에서 라이트
-**4.54**로 바닥에 붙는다(§1 함정 1과 같은 자리). `text-foreground`로 올리면 18.97이고,
-회색→검정이 틴트보다 "만질 수 있다"를 더 잘 말한다.
+**Marker 기본값 중 덮는 것은 하나도 없다.**
+
+| 기본값 | 처리 |
+|---|---|
+| `flex` · `gap-2` | **그대로.** `gap-2`가 종전 `gap-x-2`와 같은 값이다 |
+| `w-full` | **그대로.** hover 배경이 좌우 끝까지 닿아야 한다(종전 `px-3` 근거 그대로) |
+| `items-center` | **그대로.** 자식이 전부 같은 `leading-6` 한 줄 상자라 중심이 맞으면 베이스라인도 사실상 맞는다(Geist Sans/Mono는 같은 메트릭 패밀리다). 어긋나 보이면 그때 `items-baseline`으로 덮는다 — 미리 안 덮는다 |
+| `text-sm` | **그대로.** 아래 "크기 축" 항이 이 한 줄의 값을 치른다 |
+| `text-muted-foreground` | **그대로.** 종전 §9가 접힌 줄에 쓰던 바로 그 색이라 대비 표가 안 흔들린다 |
+| `min-h-4` | **그대로.** 16px < `leading-6` 24px이라 아무 일도 안 한다 |
+| `[&_svg:not([class*='size-'])]:size-4` | **그대로.** chevron이 `size-4`라 이 규칙이 그냥 맞는다 |
+
+**지웠다 — `grid-cols-[1rem_4rem_7rem_minmax(0,1fr)]` 문자열과 "도구명 열을 `auto`로 두지 않는
+이유" 문단.** 그 문단은 `mcp__…` 한 줄이 도착하는 순간 앞선 모든 줄의 요약 열이 오른쪽으로 밀리는
+**열 점프**를 고정폭으로 없앤다는 근거였는데, **(a)가 그 점프를 받아들이기로 했으므로 근거째
+지운다.** 대신 `max-w-[7rem]`이 흔들리는 범위를 종전 고정폭과 같은 수로 묶는다.
+
+**줄 높이는 `leading-6`(24px)**, 세로 패딩 없음. 512px에 21행 — **글자가 12 → 14px이 돼도 행 수가
+안 바뀐다**(`text-sm`의 기본 `leading-5`를 `leading-6`이 덮고 14px은 24px 줄 상자에 든다).
+§3 테이블의 `h-9`를 쓰지 않는 이유는 종전과 같다 — 36px이면 14행이고 `tail -f` 체감이 죽는다.
+
+**hover**: `hover:bg-muted/50 hover:text-foreground`. **값은 그대로인데 덮는 자리가 바뀌었다** —
+`text-muted-foreground`가 이제 Marker **루트의 기본 클래스**이고 hover도 같은 요소에 붙는다.
+Tailwind가 `hover:` 변종을 베이스 유틸리티 뒤에 쌓으므로 hover가 이긴다(shadcn `Button`이 쓰는
+바로 그 패턴이고, `tw-merge`는 변종이 다른 둘을 서로 지우지 않는다). 글자를 같이 올리는 이유는
+안 바뀐다 — `--muted-foreground`가 `bg-muted/50` 위에서 라이트 **4.54**로 바닥에 붙는다
+(§1 함정 1과 같은 자리). `text-foreground`로 올리면 18.97이고, 회색→검정이 틴트보다
+"만질 수 있다"를 더 잘 말한다.
 
 **mono 여부 — mono면 엔진이 실제로 부른 이름이고, sans면 우리가 붙인 이름이다**
 
 | | 서체 |
 |---|---|
-| 시각 | `font-mono tabular-nums` |
+| 시각 | `font-mono tabular-nums` (색은 Marker 루트가 준다 — 여기 안 쓴다) |
 | 도구명 `Bash`·`Read`·`mcp__…` | **`font-mono`** — 리터럴 식별자다(§3 mono 목록에 `도구명`을 한 줄 더한다) |
 | 우리가 붙인 라벨 `생각`·`결과`·`세션 프롬프트`·`서브` | sans. §3 "읽는 문장에는 mono를 쓰지 않는다" |
 | 요약 — 파일 도구의 상대경로 | `font-mono` (§3 mono 목록 `파일/디렉터리 경로`. 규칙 그대로다) |
 | 요약 — `Bash`의 `description` | sans. 읽는 문장이다 |
 
-이 한 축이 **종류 아이콘을 0개로 만든다.** `생각`/`결과`에 `Brain`/`CornerDownRight`를 붙이는
-안은 거절한다 — 도구명 열이 이미 글자로 종류를 말하고, 아이콘은 같은 정보를 두 번 쓰면서
-14px씩을 먹는다. §2의 세 겹(색·아이콘·라벨)은 **상태 배지** 규칙이고 스트림 줄은 상태가 아니다.
-아이콘은 어포던스 `ChevronRight` 하나뿐이고, 그건 종류가 아니라 "펼칠 수 있다"를 말한다.
+**`MarkerIcon` 슬롯에 들어가는 것은 어포던스 `ChevronRight` 하나다 — 종류 아이콘은 안 넣는다.**
+
+종전 §9가 "아이콘 0개"를 판정한 근거는 *도구명이 이미 글자로 종류를 말한다*였고, 도구명 span이
+없어지지 않았으므로 **그 근거는 Marker 위에서 그대로 선다.** Marker가 근거를 둘 더 준다:
+
+- **슬롯이 하나다.** 종류 아이콘을 `MarkerIcon`에 넣으면 chevron이 갈 곳이 없어 그 앞에 16px
+  `<span>`을 하나 더 세워야 한다 — 줄 왼쪽 거터가 24px(`size-4` 16 + `gap-2` 8) 늘고,
+  그 24px에 맞춰 둔 전문 줄 들여쓰기(`ml-6`)가 같이 깨진다.
+- **`MarkerIcon`은 `aria-hidden="true"`다.** 의미를 나르는 아이콘을 스크린리더가 못 읽는 칸에
+  넣는 것은 §0 접근성 기본선(그림만으로 의미 전달 금지)에 걸린다. chevron은 순수 어포던스이고
+  펼침 여부는 `<details open>`이 이미 말하므로, **이 칸에 맞는 유일한 내용물이다.**
+- 게다가 `tool_use`는 종류가 도구 수만큼이라 4종 표로 안 닫힌다. `생각`/`결과`에만
+  `Brain`/`CornerDownRight`를 주면 같은 칸이 어떤 줄에는 그림, 어떤 줄에는 chevron이 된다.
+
+§2의 세 겹(색·아이콘·라벨)은 **상태 배지** 규칙이고 스트림 줄은 상태가 아니다 — 그대로다.
+
+**variant 3종 — 하나만 쓴다**
+
+| variant | 값 | | 왜 |
+|---|---|---|---|
+| `default` | 빈 값 | **쓴다** | 접힌 줄 4종 전부. 빈 값이라 위 표의 처리가 그대로 선다 |
+| `separator` | 앞뒤 `before/after` 가로선 + 가운데 정렬 | **안 쓴다** | 스트림은 시간순 한 줄기라 나눌 구간이 없고, 가운데 정렬이 시각→도구명 왼쪽 스캔을 깬다. 서브에이전트 구간을 이걸로 나누고 싶은 유혹이 있는데 그 일은 `서브 ·` 텍스트 마커가 이미 받는다 |
+| `border` | `border-b pb-2` | **안 쓴다** | 줄이 24 → 34px이 되어 512px에 21행이던 것이 **15행**으로 떨어진다. §3 테이블은 행 구분에 `border-b`를 쓰지만 스트림은 테이블이 아니고(`leading-6`을 고른 것과 같은 자리), 수백 줄에 가로선을 그으면 얼룩이 된다 |
 
 **접힌 줄 4종은 전부 `text-muted-foreground`다.** 색으로 갈리지 않는다 — 갈리는 것은 도구명
 열의 글자와 그 서체다. 대비 `--background` 위 라이트 4.73 · 다크 7.63 (AA 통과).
 
 **전문 줄 2종 — 접힌 줄과 무엇으로 갈리나** (assistant `text` · 첫 번째 이후의 사용자 프롬프트)
 
-3열 그리드에 **들어가지 않는다.** 다른 모양이라는 것 자체가 구분이다:
+**이 둘은 `<Marker>`가 아니다.** 요구 원문의 가정이고 (a)가 뒤집지 않았다 — Marker는 접힌 줄
+4종만이다. 다른 모양이라는 것 자체가 구분이다.
 
-| | 접힌 줄 | 전문 줄 |
-|---|---|---|
-| 폭 | 4열 그리드, 한 줄 `truncate` | `ml-6` 전면, `whitespace-pre-wrap break-words` 여러 줄 |
-| 색 | `text-muted-foreground` | **`text-foreground`** (`--background` 위 라이트 19.79 · 다크 18.96) |
-| 크기 | `text-xs` | **`text-sm`** — 한 단계 위다. `text-base`(§3 티켓 본문 원문)까지 올리지 않는 이유는 12px 줄들 사이에서 16px 문단이 스트림을 지배해서다 |
-| 어포던스 | `ChevronRight` 있음 | 없다. 전문이 이미 줄이라 펼칠 것이 없다 |
-| 시각 | 있다 | **없다**(§2-1 표가 "전문"만 규정한다 — 늘리지 않는다). 위아래 사건 줄의 시각이 위치로 시간을 말한다 |
+**크기 축이 죽었다.** 접힌 줄이 Marker 기본 `text-sm`이 되면서 종전의 "`text-xs` vs `text-sm`
+한 단계"가 사라진다. 이 절 머리가 세운 세 축(**밝기 · 폭 · mono**)은 애초에 크기를 안 세었고,
+그 셋이 그대로 일을 한다 — 크기는 넷째 축이었고 지금 없어지는 것이다.
 
-`ml-6`은 어포던스 열(`1rem`) + `gap-x-2`(`0.5rem`)다. 요약 열(13.5rem)까지 밀지 않는 이유:
-전문을 읽으라고 만든 줄의 폭을 216px 깎을 이유가 없다.
+| | 접힌 줄 | 전문 줄 | 이 축이 지금 지고 있는 일 |
+|---|---|---|---|
+| 폭 | `<Marker>` 한 줄, 요약 `truncate` | `ml-6` 전면, `whitespace-pre-wrap break-words` 여러 줄 | **가장 크다.** 한 줄 vs 문단이라 눈이 먼저 잡는다 |
+| 색 | `text-muted-foreground` (Marker 기본값) | **`text-foreground`** (`--background` 위 라이트 19.79 · 다크 18.96) | 회색들 사이의 검정 문단 — 머리의 밝기 축 그대로 |
+| 크기 | `text-sm` | `text-sm` | **없다. 둘이 같아졌다** |
+| 어포던스 | `MarkerIcon`에 `ChevronRight` | 없다. 전문이 이미 줄이라 펼칠 것이 없다 | 왼쪽 16px 칸의 유무. `ml-6`이 그 칸 + `gap-2`와 같아서 **전문 줄 첫 글자가 접힌 줄의 시각과 세로로 맞는다** |
+| 시각 | 있다 | **없다**(§2-1 표가 "전문"만 규정한다 — 늘리지 않는다) | 위아래 사건 줄의 시각이 위치로 시간을 말한다 |
+| mono | 시각·도구명·경로 요약 | 없다. 읽는 문장이다 | 머리의 mono 축 그대로 |
+
+한 축이 죽었지만 **남은 다섯 줄이 같은 방향을 가리킨다.** 크기를 살리겠다고 접힌 줄에 `text-xs`를
+도로 덮는 것은 (a)가 안 하기로 한 일이고, 전문 줄을 `text-base`(§3 티켓 본문 원문)로 올리는 것은
+종전 근거("12px 줄들 사이에서 16px 문단이 스트림을 지배한다")가 14px 줄들 사이에서 오히려 더 세다 —
+둘 다 안 한다.
+
+`ml-6`은 `MarkerIcon`(`size-4` = `1rem`) + `gap-2`(`0.5rem`)다 — **Marker로 바뀌어도 같은 24px이다.**
+요약 칸까지 밀지 않는 이유: 종전엔 그 x가 고정 13.5rem이었고 지금은 아예 줄마다 다르다. 전문을
+읽으라고 만든 줄을 흔들리는 x에 맞출 이유가 없다.
 
 **사용자 프롬프트와 assistant `text`의 구분**: 사용자 쪽만 `border-l-2 border-border pl-3`.
 색을 쓰지 않는다 — 밖에서 들어온 말이라는 표시에 `--primary`를 주면 §0의 "색은 예외를 표시한다"가
@@ -2724,12 +2794,14 @@ grid-cols-[1rem_4rem_7rem_minmax(0,1fr)] gap-x-2 leading-6 text-xs
 
 **`서브` (`isSidechain: true`)**
 
-줄 맨 앞의 **텍스트 마커**다 — 그리드 줄에서는 요약 열 첫머리, 전문 줄에서는 문단 첫머리.
+줄 맨 앞의 **텍스트 마커**다 — 접힌 줄에서는 `MarkerContent` 첫머리, 전문 줄에서는 문단 첫머리.
 둘 다 `text-muted-foreground` + 가운뎃점: `서브 · <요약>`.
 
-- **요약 열에 넣는 이유**: 요약 열은 x가 고정이라(13.5rem) 서브 줄이 연속되면 `서브`가 세로로
-  한 줄기를 이룬다 — 30줄짜리 서브에이전트 구간이 덩어리로 보인다. 왼쪽 들여쓰기나 세로선으로
-  하면 그 줄만 열이 어긋난다.
+- **`MarkerContent`에 넣는 이유 — 종전 근거는 (a)가 죽였고 다른 게 남는다.** 종전엔 "요약 열은
+  x가 고정이라(13.5rem) 서브 줄이 연속되면 `서브`가 세로로 한 줄기를 이룬다"였는데, (a)가 그
+  고정폭을 버렸으므로 **줄기가 안 생긴다.** 남는 근거: 출처는 요약을 읽을 때 필요한 정보라
+  요약 바로 앞이 맞는 자리이고, 같은 칸이라 요약과 같이 `truncate`돼 줄 높이를 안 늘린다.
+  줄기를 되살리려면 고정폭 열이 필요한데 그게 정확히 (a)가 버린 것이다.
 - **배지로 그리지 않는다.** §2 배지는 상태 표현이고 `서브`는 출처다. 수백 줄에 배지를 붙이면
   줄 높이가 24px를 넘긴다.
 - 색으로만 말하지 않는다(§0 접근성 기본선) — 글자가 곧 신호다.
@@ -2813,18 +2885,29 @@ ring-[3px]`)을 그대로 받는다. `outline-none`만 남기는 코드는 반�
 아래 두 줄이 이 절의 두 함정이다. 컨테이너를 틴트하지 않는 이유, hover에서 글자를 올리는 이유,
 펼친 블록 안을 `text-foreground`로 못박는 이유가 전부 이 숫자 두 개다.
 
-**새 색 토큰 0개 · 새 shadcn 컴포넌트 0개.** 쓰는 색은 `--background` `--foreground`
-`--muted` `--muted-foreground` `--border` `--ring` — 전부 shadcn 기본이고 §1의 상태 토큰 4개는
-**하나도 쓰지 않는다**(스트림에는 상태가 없다). shadcn은 `button` 하나(`맨 아래로`)뿐이고 §5
-설치 목록에 이미 있다. 아이콘 `ChevronRight`·`ArrowDown`은 lucide-react(§0, 기존 의존성).
-접기는 네이티브 `<details>`, 스크롤도 툴팁도 네이티브 — §5가 `scroll-area`·`accordion`을 거절한
-것과 같은 판단이고, 늘어나는 것은 §5 커스텀 표의 `<SessionStream>` 1개뿐이다.
+**이 표는 Marker 위에서 그대로 성립한다.** 색이 하나도 안 바뀌었다 — `--muted-foreground`가
+`className`에서 Marker 루트의 기본 클래스로 **자리만 옮겼다.** 접힌 줄이 12 → 14px이 된 것도 기준을
+안 흔든다: WCAG의 large text는 24px(또는 18.66px 굵게)부터라 14px은 종전 12px과 똑같이 일반 텍스트
+4.5 기준이고, 4.73이 그 위다. 크기가 커진 만큼 **읽기는 좋아지고 요구 비율은 그대로다.**
+조심할 자리는 hover 한 줄뿐이고 — 색이 이제 Marker 기본값으로 딸려 오므로 덮는 자리가 바뀐다 —
+위 hover 항이 그것을 적었다.
 
-**§5와 어긋나지 않는다 — §5는 무수정이다.** `<SessionStream>` 줄("사건 한 줄 + 펼치면 원문 +
-2초 폴링 + 자동 스크롤")과 그 위 문단(네이티브 `<details>` · 네이티브 자동 스크롤 · `add` 인자
-불변 · 커스텀 6개)이 이 절과 그대로 일치한다. §5의 `tooltip` 항목("잘린 텍스트 전문")도 깨지지
-않는다 — 그 줄은 tooltip이 쓰이는 자리를 적은 것이지 잘림 처리의 유일한 수단을 정한 것이 아니고,
-§2가 배지 사유에 네이티브 `title`을 쓰는 선례가 이미 있다.
+**새 색 토큰 0개 · 새 npm 의존성 0개 · 새 shadcn 컴포넌트 1개(`@shadcn/marker`).** 쓰는 색은
+`--background` `--foreground` `--muted` `--muted-foreground` `--border` `--ring` — 전부 shadcn
+기본이고 §1의 상태 토큰 4개는 **하나도 쓰지 않는다**(스트림에는 상태가 없다). shadcn은
+`button`(`맨 아래로`)과 `marker` 둘이고, Marker는 `@base-ui/react`(`mergeProps`·`useRender`)와
+`cva`만 쓴다 — 둘 다 이미 있으므로 **npm은 안 늘어난다**(§5 스레드 3종이 들여온 `@shadcn/react`도
+안 건드린다). 아이콘 `ChevronRight`·`ArrowDown`은 lucide-react(§0, 기존 의존성). 접기는 네이티브
+`<details>`, 스크롤도 툴팁도 네이티브 — §5가 `scroll-area`·`accordion`을 거절한 것과 같은 판단이고,
+커스텀은 §5 표의 `<SessionStream>` 1개뿐이다.
+
+**§5를 이 절이 고친다.** 종전 §9는 "§5는 무수정"이라 적었는데 **(a)가 그 문장을 죽였다** —
+`add` 인자가 `@shadcn/marker` 하나 늘고, §5의 "세션 스트림(§2-1)은 `add` 인자를 늘리지 않는다"
+문단이 사실이 아니게 된다. 그 두 곳을 §5에서 고쳤다. `<SessionStream>`은 **커스텀 표에 그대로
+남는다**: 2초 폴링 · 바이트 오프셋 · 자동 스크롤 · 빈 상태 3종을 Marker가 하나도 안 준다 —
+Marker는 그 안의 줄 하나를 그리는 그릇이다. §5의 `tooltip` 항목("잘린 텍스트 전문")은 종전
+판정대로 안 깨진다 — 그 줄은 tooltip이 쓰이는 자리를 적은 것이지 잘림 처리의 유일한 수단을 정한
+것이 아니고, §2가 배지 사유에 네이티브 `title`을 쓰는 선례가 이미 있다.
 
 **§3에 더한 것 하나**: mono 사용처 목록에 **`도구명`**이 들어간다. 리터럴 API 식별자이고
 (실측 `mcp__claude_ai_Gmail__unlabel_thread`), mono여야 `Bash`/`Read`/`Edit`가 고정폭 블록으로
@@ -2981,8 +3064,11 @@ min-w-0 text-base leading-7 break-words [&>:first-child]:mt-0 [&>:last-child]:mb
   무너지는 방향이 맞으므로 보정하지 않는다.
 - 왼쪽 단 = mono `text-base` 기준 **93자**(896÷9.6) · **88자**(848) · **80자**(768). 셋 다 §4가
   건 100자 아래다(textarea 자체 패딩 `px-3`을 빼면 더 줄어든다). **이게 `max-w-7xl`의 근거다.**
-- 세션 스트림 요약 열은 왼쪽 단 − 216(§9 고정 3열 16+64+112 + `gap-x-2`×3)이라 **680 / 632 / 552**다.
-  552는 종전 `max-w-3xl`에서의 값과 같다 — **2단은 스트림을 좁히지 않고 넓힌다.**
+- 세션 스트림 요약이 시작하는 x는 **줄마다 다르다**(§9가 Marker로 바뀌며 고정폭 열을 버렸다).
+  최악은 도구명이 상한 `7rem`에 닿을 때로 왼쪽 단 − **219**(`size-4` 16 + mono 8자 67 + 112 +
+  `gap-2`×3 24)이고, 실측 p50(`Bash` 4자)에서는 − **141**이다. **최악에서도 677 / 629 / 549**로
+  종전 `max-w-3xl` 1단의 값과 사실상 같고, 대부분의 줄은 78px 더 넓다 —
+  **2단은 스트림을 좁히지 않고 넓힌다.** 이 결론은 (a) 전후로 안 바뀐다.
 
 **왼쪽 단 내부 순서 — §2 표 그대로다. 바꾸지 않았다.**
 
