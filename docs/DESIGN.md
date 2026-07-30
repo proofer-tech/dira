@@ -341,7 +341,9 @@ tickets/<R>.md    kind: request   persona: pm
 $ python3 tickets.py list /tmp/reqlayer        # a1111111.done.md 없음
 2026-07-30 21:03  r0000001  request  pm   deps 대기 a1111111
 $ python3 tickets.py select /tmp/reqlayer      # 출력 없음 = 디스패치 후보 아님
-$ cat > /tmp/reqlayer/tickets/a1111111.done.md <<< '(kind: answer 답변)'
+$ cat > /tmp/reqlayer/tickets/a1111111.done.md <<'EOF'   # kind: answer, .done으로 생성
+--- / ticket: a1111111 / title: 답변 — r0000001 #1 / kind: answer / --- / ## 답변 …
+EOF
 $ python3 tickets.py list /tmp/reqlayer
 2026-07-30 21:03  r0000001  request  pm   대기
 $ python3 tickets.py select /tmp/reqlayer
