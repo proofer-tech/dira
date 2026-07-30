@@ -35,7 +35,7 @@ import {
   threadOf,
   type Ticket,
 } from "@/lib/queue";
-import { getProject, resolveConfig } from "@/lib/projects";
+import { getProject, listPersonas, resolveConfig } from "@/lib/projects";
 import { findTranscript, sessionIdOf } from "@/lib/transcript";
 import { decodeHash } from "@/lib/urls";
 import { listWorkers } from "@/lib/workers";
@@ -120,6 +120,13 @@ export default async function TicketDetail({
 
   // 요구사항 왕복 스레드 — 보드 카드의 답변 다이얼로그와 **같은 함수**가 엮는다(§1 · §2).
   const thread = threadOf(tickets, ticket, config);
+
+  // 편집 폼의 persona select 선택지. **보드의 발행 다이얼로그와 같은 규칙**이다(§2 편집 항):
+  // `listPersonas` 결과 중 `body !== null`(= PROFILE.md가 있다). 여기서 `readdir`을 다시 하면
+  // 이름 규칙 밖 디렉터리가 선택지에 들어온다 — 이미 읽은 `config`·`tickets`를 넘긴다.
+  const personas = (await listPersonas(config.personas, tickets))
+    .filter((p) => p.body !== null)
+    .map((p) => p.name);
 
   return (
     // 폭은 **여기 한 곳이 문다**(§비주얼 §11 `max-w-3xl` 재판정): 1단일 때 768로 종전과 같고,
@@ -249,6 +256,7 @@ export default async function TicketDetail({
                 title={ticket.fm.title ?? ""}
                 kind={ticket.fm.kind ?? ""}
                 persona={ticket.fm.persona ?? ""}
+                personas={personas}
                 body={ticket.body}
               />
             )}

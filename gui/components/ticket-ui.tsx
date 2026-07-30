@@ -85,14 +85,22 @@ function Failure({ title, message }: { title: string; message: string }) {
 
 // ── 편집 폼 ─────────────────────────────────────────────────────────────────
 
+/** 발행 다이얼로그의 `n-kind`와 **같은 셋**이다(§2 편집 항). 보드 필터의 kind 목록(큐에서 뽑는다)과
+ *  다른 값인 게 맞다 — 저기는 있는 값을 거르는 자리고 여기는 값을 정하는 자리다. */
+const KINDS = ["work", "request", "feedback"];
+
 /** frontmatter의 title·kind·persona + 본문 원문. `.wip`이면 이 폼은 렌더되지 않고
- *  서버 액션도 다시 거부한다(렌더 시점 판정은 저장 시점엔 이미 낡았다). */
+ *  서버 액션도 다시 거부한다(렌더 시점 판정은 저장 시점엔 이미 낡았다).
+ *
+ *  `kind`·`persona`는 발행과 **같은 방식으로** 고른다(select. §2 편집 항) — 자유 입력이면 오타 친
+ *  `kind`는 어느 화면에서도 안 걸리고 `persona`는 저장 눌러야 `NAME_RE`로 거부당한다. */
 export function TicketEditForm({
   project,
   hash,
   title,
   kind,
   persona,
+  personas,
   body,
 }: {
   project: string;
@@ -100,6 +108,9 @@ export function TicketEditForm({
   title: string;
   kind: string;
   persona: string;
+  /** 발행 다이얼로그와 같은 목록 — `listPersonas` 결과 중 `PROFILE.md`가 있는 이름. 상세 페이지가
+   *  이미 읽은 것을 넘긴다(§3 "선택지 데이터는 이미 읽은 것을 넘긴다") */
+  personas: string[];
   body: string;
 }) {
   const [state, action, pending] = useActionState<SaveState, FormData>(saveTicket, {});
@@ -113,13 +124,53 @@ export function TicketEditForm({
         <Input id="t-title" name="title" defaultValue={title} />
       </div>
       <div className="flex gap-4">
-        <div className="grow space-y-2">
+        {/* 값이 없으면 `null`이다 — base-ui가 `null`을 빈 문자열로 직렬화하므로 `없음`을 고른 저장이
+            텍스트칸을 비우고 저장한 것과 같은 결과가 된다(`writeTicket`이 `kind:`로 쓴다).
+            **목록 밖 현재 값은 항목으로 남긴다** — 안 그리면 select가 제 값을 못 그리고,
+            그대로 저장하면 사람이 적어둔 값이 조용히 사라진다(§2 편집 항). */}
+        <div className="space-y-2">
           <Label htmlFor="t-kind">kind</Label>
-          <Input id="t-kind" name="kind" defaultValue={kind} placeholder="work · request · feedback" />
+          <Select name="kind" defaultValue={kind || null}>
+            <SelectTrigger id="t-kind" className="w-40">
+              <SelectValue placeholder="없음" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={null}>없음</SelectItem>
+              {KINDS.map((k) => (
+                <SelectItem key={k} value={k}>
+                  {k}
+                </SelectItem>
+              ))}
+              {kind && !KINDS.includes(kind) && (
+                <SelectItem value={kind}>
+                  {kind}
+                  <span className="text-xs text-muted-foreground">현재 값</span>
+                </SelectItem>
+              )}
+            </SelectContent>
+          </Select>
         </div>
-        <div className="grow space-y-2">
+        <div className="space-y-2">
           <Label htmlFor="t-persona">persona</Label>
-          <Input id="t-persona" name="persona" className="font-mono" defaultValue={persona} />
+          <Select name="persona" defaultValue={persona || null}>
+            <SelectTrigger id="t-persona" className="w-40 font-mono">
+              <SelectValue placeholder="없음" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={null}>없음</SelectItem>
+              {personas.map((p) => (
+                <SelectItem key={p} value={p} className="font-mono">
+                  {p}
+                </SelectItem>
+              ))}
+              {persona && !personas.includes(persona) && (
+                <SelectItem value={persona} className="font-mono">
+                  {persona}
+                  <span className="text-xs text-muted-foreground">현재 값</span>
+                </SelectItem>
+              )}
+            </SelectContent>
+          </Select>
         </div>
       </div>
       <div className="space-y-2">
