@@ -5,11 +5,19 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { listTickets, type Suffixes, type Ticket } from "./queue.ts";
+import {
+  listTickets,
+  referrers,
+  resolveDep,
+  stemOf,
+  writeTicket,
+  type Suffixes,
+  type Ticket,
+} from "./queue.ts";
 
 const PY = fileURLToPath(new URL("../../tickets.py", import.meta.url));
 const DEFAULT: Suffixes = { inProgress: ".wip", done: ".done" };
@@ -207,4 +215,76 @@ test("패리티 — 한글 접미사(-진행중/-완료) 테넌트", async () =>
 test("패리티 — 빈 큐", async () => {
   const root = newRoot();
   assert.strictEqual(tsList(await listTickets(root, DEFAULT)), pyList(root));
+});
+
+// ── 관계 (티켓 상세) ────────────────────────────────────────────────────────
+
+test("관계 — stemOf · resolveDep(`re-` 폴백) · 역참조", async () => {
+  const root = newRoot();
+  const sfx: Suffixes = { inProgress: "-진행중", done: "-완료" };
+  // 한글 접미사 테넌트로 돌린다: stem 판정이 접미사를 하드코딩하면 여기서 깨진다.
+  await write(root, "aaaa1111-완료.md", fm({ ticket: "aaaa1111", title: "선행" }));
+  await write(root, "re-bbbb2222.md", fm({ ticket: "re-bbbb2222", title: "피드백 티켓" }));
+  await write(root, "cccc3333.md", fm({ ticket: "cccc3333", title: "본체", deps: "[aaaa1111]" }));
+  await write(
+    root,
+    "dddd4444.md",
+    // bbbb2222은 큐에 없다 — find_any가 `re-bbbb2222`로 폴백한다
+    fm({ ticket: "dddd4444", title: "둘 다 의존", deps: "[bbbb2222, cccc3333]" }),
+  );
+  await write(root, "eeee5555.md", fm({ ticket: "eeee5555", title: "오타", deps: "[zzzz9999]" }));
+
+  const tickets = await listTickets(root, sfx);
+  const by = (h: string) => tickets.find((t) => t.hash === h)!;
+
+  assert.strictEqual(stemOf(by("aaaa1111").path, sfx), "aaaa1111"); // 접미사를 뗀다
+  assert.strictEqual(stemOf(by("cccc3333").path, sfx), "cccc3333");
+
+  assert.strictEqual(resolveDep(tickets, "aaaa1111", sfx), by("aaaa1111"));
+  assert.strictEqual(resolveDep(tickets, "bbbb2222", sfx), by("re-bbbb2222")); // `re-` 폴백
+  assert.strictEqual(resolveDep(tickets, "zzzz9999", sfx), null); // 큐에 없는 해시
+
+  // 역참조: cccc3333을 deps에 가진 건 dddd4444뿐이다
+  assert.deepStrictEqual(
+    referrers(tickets, by("cccc3333"), sfx).map((t) => t.hash),
+    ["dddd4444"],
+  );
+  assert.deepStrictEqual(
+    referrers(tickets, by("re-bbbb2222"), sfx).map((t) => t.hash),
+    ["dddd4444"],
+  );
+  assert.deepStrictEqual(referrers(tickets, by("dddd4444"), sfx), []); // 아무도 안 막는다
+  // deps가 오타면 아무 티켓도 가리키지 않는다(그래서 영구 대기다)
+  assert.deepStrictEqual(by("eeee5555").unmet, ["zzzz9999"]);
+});
+
+// ── 쓰기 ────────────────────────────────────────────────────────────────────
+
+test("writeTicket — 남의 frontmatter 키는 그대로, 파싱은 엔진과 계속 같다", async () => {
+  const root = newRoot();
+  await write(
+    root,
+    "ffff6666.md",
+    "---\nticket: ffff6666\ntitle: 원래 제목\nkind: work\nsession_id: sess-x\nowner: developer / w1\nattempts: 2\n---\n\n## Goal\n원래 본문\n",
+  );
+
+  const before = (await listTickets(root, DEFAULT))[0];
+  await writeTicket(before.path, { title: "고친 제목", kind: "feedback", persona: "qa" }, "새 본문\n");
+
+  const raw = readFileSync(before.path, "utf8");
+  // 없던 키는 닫는 `---` 직전에 들어간다(tickets.py set_fm_keys와 같은 자리)
+  assert.strictEqual(
+    raw,
+    "---\nticket: ffff6666\ntitle: 고친 제목\nkind: feedback\nsession_id: sess-x\nowner: developer / w1\nattempts: 2\npersona: qa\n---\n새 본문\n",
+  );
+
+  const after = (await listTickets(root, DEFAULT))[0];
+  assert.strictEqual(after.title, "고친 제목");
+  assert.strictEqual(after.kind, "feedback");
+  assert.strictEqual(after.persona, "qa");
+  assert.strictEqual(after.body, "새 본문\n");
+  assert.strictEqual(after.fm.session_id, "sess-x"); // 엔진이 쓰는 값은 건드리지 않는다
+  assert.strictEqual(after.fm.attempts, "2");
+  // 쓴 뒤에도 엔진이 같은 판정을 하는가 — 이게 깨지면 GUI 저장이 티켓을 큐에서 지운다
+  assert.strictEqual(tsList([after]), pyList(root));
 });

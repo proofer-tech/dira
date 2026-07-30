@@ -1,12 +1,15 @@
-/** 테넌트의 워커 스크립트 서브프로세스 호출 (DESIGN.md §아키텍처 · 제약 2).
+/** 엔진을 **서브프로세스로** 부른다 (DESIGN.md §아키텍처 · 제약 2 · §경로 방어).
  *
  *  claim(`os.link`)·release·reap의 원자성 보장은 `tickets.py` 안에만 있다. TS로 다시 구현하면
- *  두 판정이 갈리고, 갈리는 순간 티켓이 사라진다. 그래서 GUI는 **워커 스크립트를 부른다**.
- *  지금 부르는 건 `reap` 하나고, `unassign`은 티켓 상세 티켓이 같은 함수를 쓴다. */
+ *  두 판정이 갈리고, 갈리는 순간 티켓이 사라진다. 그래서 GUI는 **워커 스크립트를 부른다**
+ *  (`reap`·`unassign`). 해시 → 경로도 같은 이유로 `tickets.py find`가 답한다 — 사용자 입력으로
+ *  경로를 조립하지 않는다. */
 import { execFile } from "node:child_process";
 import path from "node:path";
 import { promisify } from "node:util";
-import { NAME_RE, resolveWithin } from "./paths.ts";
+import { NAME_RE, isHash, resolveWithin } from "./paths.ts";
+import type { Suffixes } from "./queue.ts";
+import { listWorkers } from "./workers.ts";
 
 /** rc와 출력을 그대로 넘긴다. 실패해도 삼키지 않는다 — 화면이 원문을 보여준다(§6 에러 3요소). */
 export type Run = { ok: boolean; output: string };
@@ -34,5 +37,57 @@ export async function runWorker(root: string, name: string, args: string[]): Pro
     const err = e as NodeJS.ErrnoException & { stdout?: string; stderr?: string };
     const out = ((err.stdout ?? "") + (err.stderr ?? "")).trim();
     return { ok: false, output: out || err.message };
+  }
+}
+
+/** 어느 워커가 불렸는지 — 화면이 `w1.sh unassign <해시>`라고 적어야 한다. */
+export type UnassignRun = Run & { worker: string | null };
+
+/** `workers/<w>.sh unassign <해시>` — 할당 해제(session_id 비우기 + 진행중 접미사 떼기).
+ *
+ *  워커 이름을 **인자로 받지 않는다**: 디스크 목록의 첫 워커를 쓴다. `unassign`은 큐 전체를 보므로
+ *  같은 루트의 어느 워커로 불러도 같고(README §워커 레퍼런스), 그러면 사용자 입력이 경로가 되는
+ *  지점이 하나 줄어든다. 워커가 0개면 부를 스크립트가 없다 — 호출자가 액션을 비활성화한다. */
+export async function unassign(root: string, hash: string): Promise<UnassignRun> {
+  if (!isHash(hash)) return { ok: false, output: `해시 형식이 아닙니다: ${hash}`, worker: null };
+  const workers = await listWorkers(root);
+  if (workers.length === 0) {
+    return {
+      ok: false,
+      output: "이 테넌트에 워커가 없습니다 — 할당 해제를 호출할 스크립트가 없습니다.",
+      worker: null,
+    };
+  }
+  const name = workers[0].name;
+  return { ...(await runWorker(root, name, ["unassign", hash])), worker: name };
+}
+
+/** 엔진 코드가 사는 곳. GUI는 `<레포>/gui`에서 돌므로 부모다(`pnpm dev`·`pnpm build` 둘 다).
+ *  ponytail: cwd 기준. GUI를 다른 디렉터리에서 띄우게 되면 그때 경로를 환경변수로 받는다.
+ *
+ *  이 파일이 실행하는 것(python3·워커 `.sh`)은 **번들 대상이 아니다.** 그래서 `pnpm build`가
+ *  `Encountered unexpected file in NFT list` 경고를 낸다 — 서브프로세스 경로가 런타임 값이라
+ *  트레이서가 포기하는 것이고, 경고일 뿐 빌드는 통과한다. `turbopackIgnore` 주석으로도 안 사라진다
+ *  (실측). 워커 스크립트 경로가 테넌트마다 다른 건 제약 2가 요구하는 설계다. */
+const enginePy = () => path.resolve(process.cwd(), "..", "tickets.py");
+
+/** 해시 → 실제 티켓 경로. 없으면 null(404의 근거).
+ *
+ *  **경로를 조립하지 않는다.** 형식 검증을 통과한 해시를 엔진에게 물어 실제 파일을 받는다 —
+ *  상태 접미사가 붙은 이름·`re-<해시>` 폴백을 두 곳에서 판정하지 않으려는 것도 같은 이유다. */
+export async function findTicket(
+  root: string,
+  hash: string,
+  sfx: Suffixes,
+): Promise<string | null> {
+  if (!isHash(hash)) return null;
+  try {
+    const { stdout } = await promisify(execFile)("python3", [enginePy(), "find", root, hash], {
+      // 접미사는 테넌트별이다(제약 6). 엔진은 이 두 환경변수로만 읽는다.
+      env: { ...process.env, TICKET_INPROGRESS: sfx.inProgress, TICKET_DONE: sfx.done },
+    });
+    return stdout.trim() || null;
+  } catch {
+    return null; // rc=1 `티켓을 못 찾음` — 없는 해시다
   }
 }

@@ -10,3 +10,4 @@ __pycache__/
 # GUI
 node_modules/
 .next/
+.gstack/

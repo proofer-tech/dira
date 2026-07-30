@@ -13,8 +13,11 @@ gui/
     (list)/loading.tsx  이 그룹만 덮는다 — app/ 최상단에 두면 모든 라우트가 즉시 스트리밍돼
                         레이아웃의 notFound()가 404 상태를 못 세운다(실측)
     not-found.tsx       404. `t/[tenant]/layout.tsx`의 notFound()를 받는 경계가 여기다
-    actions.ts          Server Action (테넌트 등록·이름·순서·해제·재해석)
+    actions.ts          Server Action (테넌트 등록·이름·순서·해제·재해석). 큐 파일은 안 건드린다
     t/[tenant]/         테넌트 스코프. layout.tsx가 셸(헤더·내비·전환기)
+                        큐 파일을 건드리는 Server Action은 그 화면 폴더에 둔다
+                        (`workers/actions.ts`·`tickets/[hash]/actions.ts`).
+                        클라이언트에서 `@/app/t/[tenant]/…/actions`로 그냥 import된다
     globals.css         Tailwind v4 + shadcn 토큰. 색은 여기서만 정의한다
   lib/
     tenants.ts          테넌트 레지스트리 읽기·쓰기, 검증, 설정 해석, 목록 요약
@@ -22,13 +25,14 @@ gui/
     paths.ts            경로 탈출 방어 (신뢰 경계)
     queue.ts            티켓 읽기 코어 (tickets.py 미러). 테넌트를 인자로 받는다
     workers.ts          워커 파일·락·crontab 판정
-    engine.ts           테넌트의 워커 스크립트 서브프로세스 호출 (unassign · reap)
+    engine.ts           엔진 서브프로세스 호출 (워커 `reap`·`unassign` · `tickets.py find`)
     utils.ts            shadcn cn() — 건드리지 않는다
     *.test.ts           node --test
   components/           손으로 만드는 컴포넌트 (DESIGN.md §5 커스텀)
-    status-badge.tsx    상태 표현의 유일한 출처 (티켓 5 · 워커 4 · 연결 2)
+    status-badge.tsx    상태 표현의 유일한 출처 (티켓 5 · 워커 4 · 연결 2) + deps 배지
     tenant-switcher.tsx 전환기 · 내비 · 다시 확인 (셸의 클라이언트 조각)
     tenants-ui.tsx      등록 폼 · 해석 결과 표 · 행 액션 (`/`의 클라이언트 조각)
+    ticket-ui.tsx       편집 폼 · 할당 해제 · 삭제 (티켓 상세의 클라이언트 조각)
     copy-command.tsx    실행 대신 복사시키는 명령 블록
   components/ui/        shadcn CLI 산출물. 손으로 만들지 않는다
   components.json       shadcn 설정

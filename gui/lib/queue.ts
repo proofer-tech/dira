@@ -4,7 +4,7 @@
  *  `tickets.py`의 함수(is_open_name·read_fm·deps_of·deps_unmet·find_any·scan)를 줄 단위로
  *  베낀다. 눈으로 맞추지 말고 queue.test.ts의 패리티 테스트로 못박는다.
  *  YAML 파서를 쓰지 않는 이유도 같다 — 엔진이 정규식이라 파서를 쓰면 판정이 갈린다. */
-import { readFile, readdir, stat } from "node:fs/promises";
+import { readFile, readdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { TenantConfig } from "./tenants.ts";
 
@@ -158,3 +158,64 @@ export async function listTickets(root: string, config: Suffixes): Promise<Ticke
 /** 디스패치 가능 = open + 미할당 + unmet 없음 (tickets.py select). */
 export const isDispatchable = (t: Ticket) =>
   t.state === "open" && !t.assigned && t.unmet.length === 0;
+
+// ── 관계 (티켓 상세 §2) ─────────────────────────────────────────────────────
+
+/** 상태 접미사를 뗀 파일명 stem. deps 해시가 가리키는 이름이 이것이다(tickets.py _find_stem). */
+export function stemOf(p: string, sfx: Suffixes): string {
+  let stem = nfc(path.basename(p));
+  if (stem.endsWith(".md")) stem = stem.slice(0, -3);
+  for (const s of [sfx.done, sfx.inProgress]) {
+    const n = nfc(s);
+    if (n && stem.endsWith(n)) return stem.slice(0, -n.length);
+  }
+  return stem;
+}
+
+/** deps 문자열 하나 → 큐의 티켓. tickets.py find_any와 같은 판정: 정확 일치가 없으면 `re-<해시>`.
+ *
+ *  ponytail: find_any는 frontmatter가 깨진 파일도 후보로 보지만(파일 목록을 훑는다) 여기 넘어오는
+ *  `tickets`는 그 파일들이 빠진 목록이다. 그런 파일은 엔진 scan에도 안 잡혀 화면에 띄울 게 없으므로
+ *  링크가 없는 `큐에 없는 해시`로 보인다 — unmet 판정 자체는 listTickets가 파일 목록으로 한다. */
+export function resolveDep(tickets: Ticket[], dep: string, sfx: Suffixes): Ticket | null {
+  const byStem = (want: string) => tickets.find((t) => stemOf(t.path, sfx) === want) ?? null;
+  const want = nfc(dep);
+  return byStem(want) ?? (want.startsWith(nfc("re-")) ? null : byStem(nfc("re-") + want));
+}
+
+/** 역참조 — **이 티켓을 deps에 가진** 티켓들. 전체 큐를 훑는다(deps는 한 방향으로만 적히므로).
+ *  ponytail: 티켓 수 × deps 수 선형 스캔. 큐가 수천 건 되면 stem → 티켓 맵을 한 번 만든다. */
+export function referrers(tickets: Ticket[], target: Ticket, sfx: Suffixes): Ticket[] {
+  return tickets.filter(
+    (t) => t.path !== target.path && t.deps.some((d) => resolveDep(tickets, d, sfx) === target),
+  );
+}
+
+// ── 쓰기 ────────────────────────────────────────────────────────────────────
+
+/** 티켓 파일 제자리 쓰기 — frontmatter 키 갱신 + 본문 교체. **읽고-고치고-쓰기**다.
+ *
+ *  frontmatter는 `tickets.py set_fm_keys`와 같은 규칙으로 손댄다: 있는 키는 그 줄을 바꾸고 없는
+ *  키는 닫는 `---` 직전에 넣는다. 나머지 줄(session_id·owner·attempts·pid…)은 순서까지 그대로
+ *  둔다 — 엔진이 쓰는 값이라 GUI가 다시 조립하면 잃는다.
+ *
+ *  `.wip` 여부는 **호출자가 막는다**(그 파일로 지금 세션이 일하고 있다 — 제약 5). */
+export async function writeTicket(
+  p: string,
+  updates: Record<string, string>,
+  body: string,
+): Promise<void> {
+  const text = await readFile(p, "utf8");
+  const { lines, end } = readFm(text);
+  if (end < 0) throw new Error(`frontmatter 없음: ${p}`);
+
+  const fmLines = lines.slice(0, end + 1);
+  for (const [key, raw] of Object.entries(updates)) {
+    const val = raw.trim();
+    const line = val ? `${key}: ${val}` : `${key}:`;
+    const i = fmLines.findIndex((l, n) => n > 0 && l.startsWith(key + ":"));
+    if (i < 0) fmLines.splice(fmLines.length - 1, 0, line);
+    else fmLines[i] = line;
+  }
+  await writeFile(p, [...fmLines, ...body.split("\n")].join("\n"), "utf8");
+}
