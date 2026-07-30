@@ -175,10 +175,10 @@ export default async function Workers({ params }: { params: Promise<{ project: s
       {rows.length > 0 && (
         <section className="space-y-3 pt-4">
           <div>
-            <h2 className="text-sm font-semibold">컨텍스트 경로</h2>
+            <h2 className="text-sm font-semibold">컨텍스트</h2>
             <p className="text-sm text-muted-foreground">
               워커별 <span className="font-mono text-xs">TICKET_CONTEXT</span> — 세션 프롬프트 꼬리에
-              경로와 설명이 붙습니다. <strong className="font-medium">없는 경로는 에러가 아닙니다</strong>{" "}
+              항목의 경로와 설명이 붙습니다. <strong className="font-medium">없는 항목은 에러가 아닙니다</strong>{" "}
               — 엔진이 건너뛰고 runner.log에 <span className="font-mono text-xs">WARN</span>만 남깁니다
               (클라우드 마운트가 안 붙은 상태에서 세션이 헛짚지 않게).
             </p>
