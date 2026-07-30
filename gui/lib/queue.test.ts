@@ -361,6 +361,47 @@ test("식별자 — stem 파생 · 경고 조건은 엔진 find와 판정이 같
   }
 });
 
+/** 같은 stem이 두 상태로 동시에 있는 큐 — `_find_stem`은 바깥이 **파일** · 안쪽이 접미사라
+ *  이기는 것은 접미사 순서가 아니라 **파일 목록 순서**다. stem 인덱스(`923f5f34`)가 후보 3개 중
+ *  목록에서 가장 앞선 파일을 고르는지 못박는다: 접미사 순서(`""` → wip → done)로 골랐다면
+ *  dup00002가 `.md`로 떨어져 여기서 깨진다.
+ *
+ *  **여기서만 엔진과 대조하지 않는다.** `tickets_in`은 `glob.glob`(디렉터리 원본 순서)이고
+ *  `ticketFiles`는 `readdir`(libuv가 strcmp로 정렬해서 준다)이라 후보가 둘 이상일 때 둘이 고르는
+ *  파일이 갈린다 — 이 refactor 이전부터 그랬고, 원본 순서는 node가 볼 수 없어 맞출 방법이 없다.
+ *  한 stem이 두 상태로 동시에 있는 건 엔진이 만들지 않는 큐다(상태 전이가 rename이라 파일이
+ *  하나다). 사람이 손으로 복사해 만든 경우에만 생기고, 그때 화면과 CLI가 다른 파일을 가리킨다. */
+test("find_any — 같은 stem이 두 상태로 있으면 파일 순서가 이긴다(접미사 순서가 아니다)", async () => {
+  const root = newRoot();
+  // `ticket:`을 stem으로 박는다 — 둘 다 같은 해시를 묻게 해서 findAny가 **누구를 고르는지** 본다
+  for (const n of ["dup00001.md", "dup00001.wip.md", "dup00002.done.md", "dup00002.md"]) {
+    await write(root, n, fm({ ticket: n.split(".")[0], title: "중복 stem" }));
+  }
+  const tickets = await listTickets(root, DEFAULT);
+  // hashResolves가 true인 티켓 = findAny가 자기 파일을 준 티켓. stem당 정확히 하나여야 한다
+  const won = (want: string) =>
+    tickets.filter((t) => t.stem === want && t.hashResolves).map((t) => path.basename(t.path));
+  assert.deepStrictEqual(won("dup00001"), ["dup00001.md"]); // 정렬 순서로 `.md` < `.wip.md`
+  assert.deepStrictEqual(won("dup00002"), ["dup00002.done.md"]); // `.done.md` < `.md` — 접미사 순서면 `.md`
+});
+
+/** 파싱 캐시(`923f5f34`)의 무효화 — **크기가 같은 제자리 수정**이 최악의 경우다.
+ *  mtime만으로 못 잡으면 GUI가 옛 본문을 계속 보여준다(파일이 곧 상태인 제품에서 치명적). */
+test("캐시 무효화 — 같은 크기로 제자리 수정해도 새 내용이 보인다", async () => {
+  const root = newRoot();
+  const p = path.join(root, "tickets", "cach0001.md");
+  writeFileSync(p, fm({ ticket: "cach0001", title: "AAA" }) + "본문 AAA\n");
+  assert.strictEqual((await listTickets(root, DEFAULT))[0].title, "AAA"); // 캐시를 채운다
+
+  const before = readFileSync(p, "utf8");
+  writeFileSync(p, before.replaceAll("AAA", "BBB")); // 한 글자도 안 늘어난다
+  assert.strictEqual(readFileSync(p, "utf8").length, before.length);
+
+  const after = (await listTickets(root, DEFAULT))[0];
+  assert.strictEqual(after.title, "BBB");
+  assert.strictEqual(after.body, "본문 BBB\n");
+});
+
 // ── 쓰기 ────────────────────────────────────────────────────────────────────
 
 test("writeTicket — 남의 frontmatter 키는 그대로, 파싱은 엔진과 계속 같다", async () => {

@@ -97,24 +97,53 @@ async function ticketFiles(root: string): Promise<string[]> {
     .map((e) => path.join(dir, e.name));
 }
 
-/** tickets.py find_any. 정확 일치가 없으면 `re-<해시>`(피드백 티켓)도 본다. */
-function findAny(files: string[], want: string, sfx: Suffixes): string | null {
-  const hit = findStem(files, nfc(want), sfx);
-  if (hit || nfc(want).startsWith("re-")) return hit;
-  return findStem(files, nfc("re-" + want), sfx);
+/** stem(NFC, `.md` 뗀 파일명) → 파일 목록에서 **처음 나온** 위치. 스캔당 한 번 만들어 재사용한다.
+ *  `_find_stem`이 파일을 훑다 처음 맞는 것에서 멈추므로 중복 stem은 **먼저 나온 파일이 이긴다**. */
+type StemIndex = { at: Map<string, number>; files: string[] };
+
+function stemIndex(files: string[]): StemIndex {
+  const at = new Map<string, number>();
+  files.forEach((p, i) => {
+    const stem = nfc(path.basename(p)).slice(0, -3);
+    if (!at.has(stem)) at.set(stem, i);
+  });
+  return { at, files };
 }
 
-// ponytail: 티켓 수 × deps 수 선형 스캔. tickets.py와 순회 순서까지 같아서 판정이 갈리지 않는
-// 게 여기선 속도보다 값지다. 수천 건 되면 stem 인덱스.
-function findStem(files: string[], want: string, sfx: Suffixes): string | null {
-  for (const p of files) {
-    const stem = nfc(path.basename(p)).slice(0, -3);
-    for (const s of ["", sfx.inProgress, sfx.done]) {
-      if (stem === want + nfc(s)) return p;
-    }
-  }
-  return null;
+/** tickets.py find_any. 정확 일치가 없으면 `re-<해시>`(피드백 티켓)도 본다. */
+function findAny(ix: StemIndex, want: string, sfx: Suffixes): string | null {
+  const hit = findStem(ix, nfc(want), sfx);
+  if (hit || nfc(want).startsWith("re-")) return hit;
+  return findStem(ix, nfc("re-" + want), sfx);
 }
+
+/** tickets.py _find_stem — 바깥 루프가 **파일**이고 안쪽이 접미사 3종이다. 즉 이기는 것은
+ *  접미사 순서가 아니라 **파일 순서**다: 후보 3개 중 목록에서 가장 앞에 있는 파일을 준다.
+ *  (접미사로 먼저 고르면 `x.md`와 `x.wip.md`가 같이 있을 때 판정이 엔진과 갈린다.) */
+function findStem(ix: StemIndex, want: string, sfx: Suffixes): string | null {
+  let best = -1;
+  for (const s of ["", sfx.inProgress, sfx.done]) {
+    const i = ix.at.get(want + nfc(s));
+    if (i !== undefined && (best < 0 || i < best)) best = i;
+  }
+  return best < 0 ? null : ix.files[best];
+}
+
+/** 파일 하나에서 나오는 것 중 **접미사 설정과 무관한** 부분. 캐시에 담기는 게 이것이다 —
+ *  state·stem·unmet은 프로젝트 접미사에 따라 갈리므로 캐시하지 않고 스캔마다 다시 판정한다. */
+type Parsed = { mtime: number; size: number; fm: Record<string, string>; deps: string[]; body: string; end: number };
+
+/** 경로 → 파싱 결과. 유효성은 `(mtime, size)`가 판정한다.
+ *
+ *  보드는 같은 큐를 5초마다 다시 읽는데 그 사이 바뀌는 파일은 0~1개다. stat(162건 ~2ms)만 돌고
+ *  안 바뀐 파일은 읽지도 파싱하지도 않는다 — 읽기가 이 함수 비용의 거의 전부다(파싱은 ~2ms).
+ *
+ *  ponytail: 프로세스 수명 동안 안 비운다. 무효화는 mtime·size가 하고, 항목은 **경로당** 하나라
+ *  티켓 하나가 열림·`.wip`·`.done`을 다 거쳐도 3개가 천장이다(큐는 단조 증가하지만 상수배다).
+ *  같은 mtime·같은 크기로 덮어쓴 파일은 stale이다 — mtimeMs는 APFS에서 ms 미만까지 오므로
+ *  같은 눈금 안에 크기까지 같은 쓰기가 있어야 하고, 그때는 rename(=경로 변경)이 아닌 제자리
+ *  수정이다. 이게 문제가 되면 캐시를 지우지 말고 키에 `st.ino`를 더한다. */
+const parseCache = new Map<string, Parsed>();
 
 /** 프로젝트 큐의 티켓 전부(open·wip·done). 순서는 birth 오름차순, 동률이면 path — CLI `list`와 같다.
  *
@@ -122,32 +151,52 @@ function findStem(files: string[], want: string, sfx: Suffixes): string | null {
  *  엔진에게 안 보이는 파일이고, GUI에 띄우면 있지도 않은 티켓을 있다고 하는 셈이다. */
 export async function listTickets(root: string, config: Suffixes): Promise<Ticket[]> {
   const files = await ticketFiles(root);
+  const ix = stemIndex(files);
+  // 파일별 I/O는 서로 독립이다 — 순차로 기다리면 큐 크기에 그대로 비례한다(158건 200ms).
+  // 결과는 Promise.all이 인자 순서로 주고 아래에서 birth·path로 다시 정렬하므로 순서는 불변이다.
+  const stats = await Promise.all(files.map((p) => stat(p).catch(() => null)));
+  const read = await Promise.all(
+    files.map(async (p, i) => {
+      const st = stats[i];
+      if (!st) return null;
+      const hit = parseCache.get(p);
+      if (hit && hit.mtime === st.mtimeMs && hit.size === st.size) return { p, st, q: hit };
+      let text: string;
+      try {
+        text = await readFile(p, "utf8");
+      } catch {
+        return null;
+      }
+      const { fm, lines, end } = readFm(text);
+      const q: Parsed = {
+        mtime: st.mtimeMs,
+        size: st.size,
+        fm,
+        end,
+        deps: end < 0 ? [] : depsOf(lines, end),
+        body: end < 0 ? "" : lines.slice(end + 1).join("\n"),
+      };
+      parseCache.set(p, q);
+      return { p, st, q };
+    }),
+  );
   const out: Ticket[] = [];
-  for (const p of files) {
-    let text: string;
-    let birth: number;
-    let mtime: number;
-    try {
-      text = await readFile(p, "utf8");
-      const st = await stat(p);
-      // ponytail: birthtime이 없는 파일시스템은 0으로 온다 → mtime (tickets.py와 같은 폴백).
-      birth = st.birthtimeMs || st.mtimeMs;
-      mtime = st.mtimeMs;
-    } catch {
-      continue;
-    }
-    const { fm, lines, end } = readFm(text);
+  for (const r of read) {
+    if (!r) continue;
+    const { p, st, q } = r;
+    const { fm, deps, body, end } = q;
     if (end < 0) continue;
+    // ponytail: birthtime이 없는 파일시스템은 0으로 온다 → mtime (tickets.py와 같은 폴백).
+    const birth = st.birthtimeMs || st.mtimeMs;
 
     const base = nfc(path.basename(p));
-    const deps = depsOf(lines, end);
     const persona = unquote(fm.persona ?? "");
     // 접미사 판정은 여기서 한 번만 한다 — 호출부마다 basename을 쪼개면 판정이 갈린다(§식별자).
     const hash = unquote(fm.ticket ?? "") || base.slice(0, -3);
     out.push({
       hash,
       stem: stemOf(p, config),
-      hashResolves: findAny(files, hash, config) === p,
+      hashResolves: findAny(ix, hash, config) === p,
       path: p,
       state: stateOf(path.basename(p), config),
       title: unquote(fm.title ?? ""),
@@ -155,14 +204,14 @@ export async function listTickets(root: string, config: Suffixes): Promise<Ticke
       persona: PERSONA_RE.test(persona) ? persona : "",
       deps,
       unmet: deps.filter((h) => {
-        const hit = findAny(files, h, config);
+        const hit = findAny(ix, h, config);
         return !hit || !nfc(path.basename(hit)).endsWith(nfc(config.done + ".md"));
       }),
       assigned: !!unquote(fm.session_id ?? ""),
       fm,
-      body: lines.slice(end + 1).join("\n"),
+      body,
       birth,
-      mtime,
+      mtime: st.mtimeMs,
     });
   }
   out.sort((a, b) => a.birth - b.birth || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
