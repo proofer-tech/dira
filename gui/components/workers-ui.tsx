@@ -10,10 +10,12 @@
 import { useState, useTransition } from "react";
 import { ArrowDown, ArrowUp, Check, CircleQuestionMark, TriangleAlert, X } from "lucide-react";
 import {
+  applyCommonSourceAction,
   copyContextAction,
   createWorkerAction,
   deleteWorkerAction,
   reapWorkerAction,
+  saveCommonContextAction,
   saveContextAction,
   stopWorkerAction,
   type ContextResult,
@@ -21,6 +23,7 @@ import {
 } from "@/app/p/[project]/workers/actions";
 import { CopyCommand } from "@/components/copy-command";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -60,6 +63,8 @@ export type WorkerRow = {
   unregisterCmd: string;
   /** TICKET_CONTEXT 항목 또는 GUI가 못 고치는 사유 */
   context: { ok: true; items: ContextRow[] } | { ok: false; reason: string };
+  /** 공통 컨텍스트 `source` 줄이 있는가. false면 이 워커는 공통을 못 받는다 (§4-1) */
+  commonSource: boolean;
 };
 
 /** §6 에러 3요소 중 1·2번. 3번(다음 행동)은 부르는 쪽이 다이얼로그 안에 붙인다. */
@@ -398,22 +403,35 @@ function ExistsMark({ row }: { row: ContextRow }) {
   );
 }
 
-/** 워커 하나의 컨텍스트 편집. 저장은 `TICKET_CONTEXT=( … )` **블록 전체 치환**이고, 블록 모양이
- *  예상과 다르면 서버가 거부한다 — 그때는 편집 UI를 아예 열지 않고 손으로 고치라고 알린다. */
-export function WorkerContextCard({
-  projectId,
-  row,
-  others,
+/** 항목 목록 편집 + 저장. **워커 카드와 공통 카드가 같은 이 컴포넌트를 쓴다**(§4-1: "편집기는
+ *  워커별 것과 같은 컴포넌트다"). 파일 이름·블록 이름·저장 액션만 갈린다. */
+function ContextEditor({
+  file,
+  arr,
+  filePath,
+  context,
+  common,
+  emptyText,
+  addLabel,
+  save,
 }: {
-  projectId: string;
-  row: WorkerRow;
-  /** 복사 대상 후보(자기 자신 제외) */
-  others: string[];
+  /** 저장이 바꾸는 파일(표시용) — `w1.sh` · `context.sh` */
+  file: string;
+  /** 통째로 치환되는 블록 이름 — `TICKET_CONTEXT` · `TICKET_CONTEXT_COMMON` */
+  arr: string;
+  /** 손으로 고치라고 알릴 때 보여줄 절대경로 */
+  filePath: string;
+  context: { ok: true; items: ContextRow[] } | { ok: false; reason: string };
+  /** 목록 **최상단**에 `공통` 배지 + 읽기 전용으로 붙는 항목(워커 카드에서만).
+   *  **저장에 들어가지 않는다** — 이 항목은 워커 파일에 실제로 없다(§4-1) */
+  common?: ContextRow[];
+  emptyText: string;
+  addLabel: string;
+  save: (items: { path: string; desc: string }[]) => Promise<ContextResult>;
 }) {
-  const saved = row.context.ok ? row.context.items : [];
+  const saved = context.ok ? context.items : [];
   const [rows, setRows] = useState<ContextRow[]>(saved);
   const [result, setResult] = useState<ContextResult | null>(null);
-  const [copyTo, setCopyTo] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const dirty = JSON.stringify(rows.map((r) => [r.path, r.desc])) !== JSON.stringify(saved.map((r) => [r.path, r.desc]));
 
@@ -425,12 +443,173 @@ export function WorkerContextCard({
     [next[i], next[i + d]] = [next[i + d], next[i]];
     setRows(next);
   };
-  const save = () =>
-    start(async () => {
-      const r = await saveContextAction(projectId, row.name, rows.map(({ path, desc }) => ({ path, desc })));
-      setResult(r);
-      if (r.ok && r.context?.ok) setRows(r.context.items);
-    });
+
+  if (!context.ok) {
+    return (
+      <>
+        <Failure title={`${file}의 ${arr} 블록을 GUI가 고칠 수 없습니다`} message={context.reason} />
+        <p className="text-sm text-muted-foreground">
+          추측해서 쓰지 않습니다 — 엉뚱한 라인을 밟으면 워커가 죽고 cron이 조용히 실패합니다.
+          <span className="font-mono text-xs break-all"> {filePath}</span>를 손으로 편집한 뒤 이
+          화면을 새로고침하세요.
+        </p>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <div className="space-y-1">
+        {/* 공통 항목: 편집 입력·삭제·순서 컨트롤이 **없다.** 이 화면에서 지울 수 없다는 것이
+            요청(f3254035)의 핵심이고, 파일에도 실제로 없으므로 UI가 거짓말하지 않는다.
+            ponytail: 존재 표시는 공통 카드에서만 한다 — `$TICKET_CWD`가 워커마다 갈려서 여기
+            같은 판정을 붙이면 워커에 따라 거짓이 된다. 워커별로 필요해지면 그때 cwd를 넘긴다. */}
+        {common?.map((r, i) => (
+          // 편집 행과 열이 맞지 않는다(입력·순서·삭제 컨트롤이 없으니 그게 맞다) — 띠로 묶어
+          // 편집 행이 아님을 먼저 읽히게 한다.
+          <div key={`common-${i}`} className="flex min-h-9 items-center gap-2 rounded-md bg-muted/50 px-2">
+            <Badge variant="outline" className="shrink-0">
+              공통
+            </Badge>
+            <span className="flex-[2] truncate font-mono text-xs" title={r.path}>
+              {r.path}
+            </span>
+            <span className="flex-1 truncate text-xs text-muted-foreground" title={r.desc}>
+              {r.desc}
+            </span>
+          </div>
+        ))}
+
+        {rows.length === 0 ? (
+          <p className="text-sm text-muted-foreground">{emptyText}</p>
+        ) : (
+          rows.map((r, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <ExistsMark row={r} />
+              <Input
+                aria-label="경로"
+                className="flex-[2] font-mono text-xs"
+                placeholder="$TICKET_CWD/docs/DESIGN.md"
+                value={r.path}
+                onChange={(e) => edit(i, { path: e.target.value })}
+              />
+              <Input
+                aria-label="설명"
+                className="flex-1 text-xs"
+                placeholder="설명(선택) — 세션이 읽을 이유"
+                value={r.desc}
+                onChange={(e) => edit(i, { desc: e.target.value })}
+              />
+              <Button variant="ghost" size="sm" disabled={i === 0} onClick={() => move(i, -1)}>
+                <ArrowUp aria-hidden />
+                <span className="sr-only">위로</span>
+              </Button>
+              <Button variant="ghost" size="sm" disabled={i === rows.length - 1} onClick={() => move(i, 1)}>
+                <ArrowDown aria-hidden />
+                <span className="sr-only">아래로</span>
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setRows(rows.filter((_, j) => j !== i))}>
+                <X aria-hidden />
+                <span className="sr-only">삭제</span>
+              </Button>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* 저장 거부(블록 모양이 예상과 다름)는 §6 에러 3요소 — 파일은 쓰이지 않았다 */}
+      {result && !result.ok && (
+        <Failure title={`${file}를 저장하지 못했습니다`} message={result.message ?? ""} />
+      )}
+
+      <div className="flex items-center gap-2">
+        <Button variant="outline" size="sm" onClick={() => setRows([...rows, { path: "", desc: "" }])}>
+          {addLabel}
+        </Button>
+        <Button
+          size="sm"
+          disabled={!dirty || pending}
+          onClick={() =>
+            start(async () => {
+              // 워커 자기 항목만 보낸다 — 공통은 `common`이고 이 배열에 없다.
+              const r = await save(rows.map(({ path, desc }) => ({ path, desc })));
+              setResult(r);
+              if (r.ok && r.context?.ok) setRows(r.context.items);
+            })
+          }
+        >
+          {pending ? "저장 중…" : "저장"}
+        </Button>
+        {dirty && (
+          <>
+            <Button variant="ghost" size="sm" disabled={pending} onClick={() => setRows(saved)}>
+              되돌리기
+            </Button>
+            <span className="text-xs text-muted-foreground">
+              저장하면 {file}의 {arr} 블록을 통째로 바꿉니다
+            </span>
+          </>
+        )}
+      </div>
+    </>
+  );
+}
+
+/** 공통 컨텍스트 카드 — 워커 화면 **최상단**(§4-1). 편집기는 워커별 것과 같은 컴포넌트다.
+ *  `context.sh`가 없으면 항목 0개이고 **오류가 아니다** — 빈 상태 + `공통 항목 추가`다. */
+export function CommonContextCard({
+  projectId,
+  filePath,
+  context,
+}: {
+  projectId: string;
+  /** `<루트>/context.sh` */
+  filePath: string;
+  context: { ok: true; items: ContextRow[] } | { ok: false; reason: string };
+}) {
+  return (
+    <div className="space-y-3 rounded-md border p-3">
+      <div className="flex items-center gap-2">
+        <Badge variant="outline">공통</Badge>
+        <span className="font-mono text-sm">context.sh</span>
+        <span className="text-xs text-muted-foreground">
+          {context.ok ? `${context.items.length}개` : "읽지 못했습니다"}
+        </span>
+      </div>
+      <ContextEditor
+        file="context.sh"
+        arr="TICKET_CONTEXT_COMMON"
+        filePath={filePath}
+        context={context}
+        emptyText="공통 항목이 없습니다 — 워커는 각자 자기 항목만 읽습니다."
+        addLabel="공통 항목 추가"
+        save={(items) => saveCommonContextAction(projectId, items)}
+      />
+    </div>
+  );
+}
+
+/** 워커 하나의 컨텍스트 편집. 저장은 `TICKET_CONTEXT=( … )` **블록 전체 치환**이고, 블록 모양이
+ *  예상과 다르면 서버가 거부한다 — 그때는 편집 UI를 아예 열지 않고 손으로 고치라고 알린다. */
+export function WorkerContextCard({
+  projectId,
+  row,
+  others,
+  common,
+}: {
+  projectId: string;
+  row: WorkerRow;
+  /** 복사 대상 후보(자기 자신 제외) */
+  others: string[];
+  /** 공통 항목. `row.commonSource`가 false면 이 워커는 못 받으므로 그리지 않는다 (§4-1) */
+  common: ContextRow[];
+}) {
+  const saved = row.context.ok ? row.context.items : [];
+  const [copyTo, setCopyTo] = useState<string | null>(null);
+  const [copyError, setCopyError] = useState<string | null>(null);
+  const [applyError, setApplyError] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+  const gets = row.commonSource ? common : [];
 
   return (
     <div className="space-y-3 rounded-md border p-3">
@@ -453,84 +632,52 @@ export function WorkerContextCard({
         )}
       </div>
 
-      {!row.context.ok ? (
-        <>
-          <Failure
-            title={`${row.name}.sh의 TICKET_CONTEXT 블록을 GUI가 고칠 수 없습니다`}
-            message={row.context.reason}
-          />
-          <p className="text-sm text-muted-foreground">
-            추측해서 쓰지 않습니다 — 엉뚱한 라인을 밟으면 워커가 죽고 cron이 조용히 실패합니다.
-            <span className="font-mono text-xs break-all"> {row.path}</span>를 손으로 편집한 뒤 이
-            화면을 새로고침하세요.
-          </p>
-        </>
-      ) : (
-        <>
-          {rows.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              항목이 없습니다 — 이 워커의 세션은 참조 컨텍스트 없이 시작합니다.
-            </p>
-          ) : (
-            <div className="space-y-1">
-              {rows.map((r, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <ExistsMark row={r} />
-                  <Input
-                    aria-label="경로"
-                    className="flex-[2] font-mono text-xs"
-                    placeholder="$TICKET_CWD/docs/DESIGN.md"
-                    value={r.path}
-                    onChange={(e) => edit(i, { path: e.target.value })}
-                  />
-                  <Input
-                    aria-label="설명"
-                    className="flex-1 text-xs"
-                    placeholder="설명(선택) — 세션이 읽을 이유"
-                    value={r.desc}
-                    onChange={(e) => edit(i, { desc: e.target.value })}
-                  />
-                  <Button variant="ghost" size="sm" disabled={i === 0} onClick={() => move(i, -1)}>
-                    <ArrowUp aria-hidden />
-                    <span className="sr-only">위로</span>
-                  </Button>
-                  <Button variant="ghost" size="sm" disabled={i === rows.length - 1} onClick={() => move(i, 1)}>
-                    <ArrowDown aria-hidden />
-                    <span className="sr-only">아래로</span>
-                  </Button>
-                  <Button variant="ghost" size="sm" onClick={() => setRows(rows.filter((_, j) => j !== i))}>
-                    <X aria-hidden />
-                    <span className="sr-only">삭제</span>
-                  </Button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {result && !result.ok && (
-            <Failure title={`${row.name}.sh를 저장하지 못했습니다`} message={result.message ?? ""} />
-          )}
-
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => setRows([...rows, { path: "", desc: "" }])}>
-              항목 추가
-            </Button>
-            <Button size="sm" disabled={!dirty || pending} onClick={save}>
-              {pending ? "저장 중…" : "저장"}
-            </Button>
-            {dirty && (
-              <Button variant="ghost" size="sm" disabled={pending} onClick={() => setRows(saved)}>
-                되돌리기
+      {/* `source` 줄이 없으면 이 워커만 공통에서 빠진다. 조용히 넘기면 "전원이 본다"는 전제가
+          화면에서 거짓이 된다(§4-1) — 사실을 말하고 그 자리에서 줄을 넣게 한다. */}
+      {!row.commonSource && (
+        <Alert>
+          <TriangleAlert aria-hidden className="text-status-stale" />
+          <AlertTitle>이 워커는 공통 컨텍스트를 받지 않습니다</AlertTitle>
+          <AlertDescription>
+            <div className="space-y-2">
+              <p>
+                {row.name}.sh에 <span className="font-mono text-xs">context.sh</span>를{" "}
+                <span className="font-mono text-xs">.</span> 하는 줄이 없습니다 — 위 공통 항목{" "}
+                {common.length}개가 이 워커의 세션에는 붙지 않습니다.
+              </p>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={pending}
+                onClick={() =>
+                  start(async () => {
+                    const r = await applyCommonSourceAction(projectId, row.name);
+                    setApplyError(r.ok ? null : (r.message ?? "줄을 넣지 못했습니다."));
+                  })
+                }
+              >
+                {pending ? "적용 중…" : "공통 적용"}
               </Button>
-            )}
-            {dirty && (
-              <span className="text-xs text-muted-foreground">
-                저장하면 {row.name}.sh의 블록을 통째로 바꿉니다
-              </span>
-            )}
-          </div>
-        </>
+              {applyError && <Failure title="공통을 적용하지 못했습니다" message={applyError} />}
+            </div>
+          </AlertDescription>
+        </Alert>
       )}
+
+      <ContextEditor
+        file={`${row.name}.sh`}
+        arr="TICKET_CONTEXT"
+        filePath={row.path}
+        context={row.context}
+        common={gets}
+        emptyText={
+          gets.length > 0
+            ? "이 워커의 자기 항목은 없습니다 — 위 공통 항목만 받습니다."
+            : "항목이 없습니다 — 이 워커의 세션은 참조 컨텍스트 없이 시작합니다."
+        }
+        addLabel="항목 추가"
+        save={(items) => saveContextAction(projectId, row.name, items)}
+      />
 
       {/* 워커 간 복사 — 받는 쪽 블록이 통째로 없어진다. 되돌리기가 없으므로 먼저 알린다 */}
       <Dialog open={!!copyTo} onOpenChange={(o) => !o && setCopyTo(null)}>
@@ -549,7 +696,7 @@ export function WorkerContextCard({
             받는 워커는 자기 작업 디렉터리를 가리킵니다. 컨텍스트가 워커마다 갈라져 있으면 같은
             티켓이 어느 워커에 물리느냐로 결과가 달라집니다.
           </p>
-          {result && !result.ok && <Failure title="복사하지 못했습니다" message={result.message ?? ""} />}
+          {copyError && <Failure title="복사하지 못했습니다" message={copyError} />}
           <DialogFooter>
             <DialogClose render={<Button variant="outline" />}>취소</DialogClose>
             <Button
@@ -557,7 +704,7 @@ export function WorkerContextCard({
               onClick={() =>
                 start(async () => {
                   const r = await copyContextAction(projectId, row.name, copyTo!);
-                  setResult(r);
+                  setCopyError(r.ok ? null : (r.message ?? "복사하지 못했습니다."));
                   if (r.ok) setCopyTo(null);
                 })
               }

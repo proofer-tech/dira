@@ -11,6 +11,7 @@ import { revalidatePath } from "next/cache";
 import { runWorker } from "@/lib/engine";
 import { getProject } from "@/lib/projects";
 import {
+  applyCommonSource,
   copyContext,
   createWorker,
   cronRegisterCmd,
@@ -18,6 +19,7 @@ import {
   deleteWorker,
   registerCron,
   stopWorker,
+  writeCommonContext,
   writeContext,
   type WorkerContext,
 } from "@/lib/workers";
@@ -134,6 +136,36 @@ export async function saveContextAction(
     const context = await writeContext(await rootOf(projectId), name, items);
     revalidatePath(`/p/${projectId}`, "layout");
     return { ok: true, context };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** 공통 컨텍스트(`<루트>/context.sh`) 항목 치환 (§4-1). 워커 파일은 안 건드린다 —
+ *  워커는 이 파일을 `.` 할 뿐이라 여기 한 번 쓰면 전원에게 반영된다. */
+export async function saveCommonContextAction(
+  projectId: string,
+  items: { path: string; desc: string }[],
+): Promise<ContextResult> {
+  try {
+    const context = await writeCommonContext(await rootOf(projectId), items);
+    revalidatePath(`/p/${projectId}`, "layout");
+    return { ok: true, context };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** `source` 줄이 없는 워커에 그 한 줄을 넣는다 (§4-1). 이 줄이 없으면 그 워커는 공통을 못 받는다.
+ *  이미 있으면 no-op이고, 넣을 자리를 짚을 수 없으면 쓰지 않고 사유를 넘긴다. */
+export async function applyCommonSourceAction(
+  projectId: string,
+  name: string,
+): Promise<WorkerActionResult> {
+  try {
+    await applyCommonSource(await rootOf(projectId), name);
+    revalidatePath(`/p/${projectId}`, "layout");
+    return { ok: true };
   } catch (e) {
     return fail(e);
   }
