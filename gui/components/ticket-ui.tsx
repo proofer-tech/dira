@@ -812,6 +812,8 @@ export function NewTicketDialog({
                       select가 제 값을 못 그리고 사본이 조용히 페르소나를 잃는다(§2 편집 항) */}
                   {copy?.persona && !personas.includes(copy.persona) && (
                     <SelectItem value={copy.persona} className="font-mono">
+                      {/* 편집 폼의 같은 줄과 같다 — 점을 빼면 이 줄만 이름이 왼쪽으로 튀어나온다(§12 `순서`) */}
+                      <PersonaDot color={colors?.[copy.persona]} />
                       {copy.persona}
                       <span className="text-xs text-muted-foreground">원본 값</span>
                     </SelectItem>

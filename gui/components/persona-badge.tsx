@@ -15,12 +15,18 @@ import { cn } from "@/lib/utils";
 
 /** 색 점 하나 (점만 그리는 모드). `size-2`는 border-box라 빈 점의 테두리가 붙어도 정확히 8px이다 —
  *  미할당 페르소나 줄만 들여쓰기가 어긋나지 않는다(§12). 색만으로 뜻을 전하지 않으므로
- *  `aria-hidden`이다 — 이름 텍스트가 항상 같이 온다(§비주얼 §0). */
+ *  `aria-hidden`이다 — 이름 텍스트가 항상 같이 온다(§비주얼 §0).
+ *
+ *  **수직 정렬은 점이 들고 간다** — `self-center`다(`394d3b50`). 감싸는 항목에 맡기면
+ *  `CommandItem`(`items-center`)에서는 맞고 `SelectItem`에서는 6px 위로 붙는다:
+ *  shadcn `SelectItem`의 텍스트 슬롯이 `flex ... gap-2`인데 `items-center`가 없어
+ *  교차축 시작점(줄 맨 위)에 놓인다. `components/ui/`는 손대지 않으므로(gui/AGENTS.md)
+ *  여섯 번째 자리가 생겨도 안 어긋나는 쪽에 붙인다. 이미 `items-center`인 자리에서는 무동작이다. */
 export function PersonaDot({ color, className }: { color?: string; className?: string }) {
   return (
     <span
       aria-hidden
-      className={cn("size-2 shrink-0 rounded-full", personaDotClass(color), className)}
+      className={cn("size-2 shrink-0 self-center rounded-full", personaDotClass(color), className)}
     />
   );
 }
