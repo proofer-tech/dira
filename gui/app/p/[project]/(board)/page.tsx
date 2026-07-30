@@ -208,9 +208,20 @@ export default async function Board({
 
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-lg font-semibold">보드</h1>
-        <Button size="sm" nativeButton={false} render={<Link href={`/p/${id}/tickets/new`} />}>
-          티켓 발행
-        </Button>
+        {/* 요구 접수는 같은 화면의 모드다(§3). 내비를 5개로 늘리지 않고 여기로만 들어간다 */}
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            nativeButton={false}
+            render={<Link href={`/p/${id}/tickets/new?mode=req`} />}
+          >
+            요구 접수
+          </Button>
+          <Button size="sm" nativeButton={false} render={<Link href={`/p/${id}/tickets/new`} />}>
+            티켓 발행
+          </Button>
+        </div>
       </div>
 
       {total === 0 ? (

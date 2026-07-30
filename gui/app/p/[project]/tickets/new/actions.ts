@@ -17,7 +17,7 @@ import path from "node:path";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { NAME_RE, isHash } from "@/lib/paths";
-import { stemOf } from "@/lib/queue";
+import { reqTitle, stemOf } from "@/lib/queue";
 import { getProject, resolveConfig } from "@/lib/projects";
 
 export type NewTicketState = { error?: string };
@@ -47,15 +47,23 @@ export async function createTicket(
     if (!project) throw new Error(`등록되지 않은 프로젝트입니다: ${projectId}`);
     const config = await resolveConfig(project);
 
-    const title = fmValue("제목", String(form.get("title") ?? ""));
-    if (!title) throw new Error("제목을 입력하세요.");
+    // textarea는 CRLF로 온다(HTML 폼 규격). 그대로 쓰면 파일 줄끝이 갈린다.
+    let body = String(form.get("body") ?? "").replace(/\r\n/g, "\n");
+    if (body && !body.endsWith("\n")) body += "\n";
 
-    const kind = fmValue("kind", String(form.get("kind") ?? ""));
+    // 요구 접수 모드(`?mode=req`)는 자연어 한 칸만 받고 나머지를 **서버가 고정한다**
+    // (DESIGN.md §3 요구 접수 모드). 폼이 안 보내도 여기서 정해지므로 요청을 손으로 만들어도 같다.
+    const req = String(form.get("mode") ?? "") === "req";
+
+    const title = req ? reqTitle(body) : fmValue("제목", String(form.get("title") ?? ""));
+    if (!title) throw new Error(req ? "요구 내용을 입력하세요." : "제목을 입력하세요.");
+
+    const kind = req ? "request" : fmValue("kind", String(form.get("kind") ?? ""));
     if (kind && !KINDS.includes(kind)) {
       throw new Error(`kind는 ${KINDS.join(" · ")} 중 하나입니다: ${kind}`);
     }
 
-    const persona = fmValue("persona", String(form.get("persona") ?? ""));
+    const persona = req ? "pm" : fmValue("persona", String(form.get("persona") ?? ""));
     // 엔진이 이 값으로 `<personas>/<이름>/PROFILE.md` 경로를 만든다(tick.sh). 규칙 밖이면
     // 조용히 무시돼 프로필 없이 세션이 돈다.
     if (persona && !NAME_RE.test(persona)) {
@@ -71,14 +79,13 @@ export async function createTicket(
     const stems = new Set(names.map((n) => stemOf(n, config)));
 
     // deps는 선택만 받는다 — 오타 해시로 인한 영구 대기를 구조적으로 없앤다(DESIGN.md §3).
-    const deps = [...new Set(form.getAll("deps").map((d) => String(d).normalize("NFC")))];
+    // 요구 접수 모드는 `deps` 없음이 계약이라 폼이 보내도 버린다.
+    const deps = req
+      ? []
+      : [...new Set(form.getAll("deps").map((d) => String(d).normalize("NFC")))];
     for (const d of deps) {
       if (!isHash(d) || !stems.has(d)) throw new Error(`큐에 없는 deps 해시입니다: ${d}`);
     }
-
-    // textarea는 CRLF로 온다(HTML 폼 규격). 그대로 쓰면 파일 줄끝이 갈린다.
-    let body = String(form.get("body") ?? "").replace(/\r\n/g, "\n");
-    if (body && !body.endsWith("\n")) body += "\n";
 
     const text = (h: string) =>
       [

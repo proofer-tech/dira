@@ -452,6 +452,31 @@ function DepsPicker({
  *
  *  `kind`·`persona`·`deps`는 전부 선택이다. 사람이 칠 수 있는 자리는 title과 본문뿐이고,
  *  그 둘은 틀려도 티켓이 사라지지 않는다 — 나머지는 틀리면 조용히 사라진다. */
+/** 요구 접수 모드(`?mode=req`) — 자연어 한 칸. kind·persona·deps를 **사람에게 묻지 않는다**
+ *  (서버가 `kind: request`·`persona: pm`·deps 없음으로 고정한다. DESIGN.md §3).
+ *  title 칸도 없다 — 첫 줄에서 만든다. */
+export function RequestForm({ project }: { project: string }) {
+  const [state, action, pending] = useActionState<NewTicketState, FormData>(createTicket, {});
+
+  return (
+    <form action={action} className="space-y-4">
+      <input type="hidden" name="project" value={project} />
+      <input type="hidden" name="mode" value="req" />
+      <Textarea
+        name="body"
+        rows={14}
+        required
+        aria-label="요구 내용"
+        placeholder={"무엇이 필요한지 그냥 쓰세요.\n첫 줄이 제목이 됩니다."}
+      />
+      {state.error && <Failure title="접수하지 못했습니다" message={state.error} />}
+      <Button type="submit" disabled={pending}>
+        {pending ? "접수 중…" : "요구 접수"}
+      </Button>
+    </form>
+  );
+}
+
 export function NewTicketForm({
   project,
   personas,

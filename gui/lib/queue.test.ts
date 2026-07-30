@@ -20,6 +20,7 @@ import {
   questionsOf,
   referrers,
   reqOf,
+  reqTitle,
   resolveDep,
   sortTickets,
   statusOf,
@@ -667,4 +668,13 @@ test("보드 — 답변 대기는 deps 대기의 하위 종류 · kind: answer �
   // 경과일 기준은 mtime이다 — 답변 대기 배지의 `· <n>일`
   assert.ok(by("r0000001").mtime > 0);
   assert.strictEqual(Math.floor((Date.now() - by("r0000001").mtime) / 86_400_000), 0);
+});
+
+test("reqTitle — 첫 비어있지 않은 줄, 80자에서 자르고 …", () => {
+  assert.strictEqual(reqTitle("\n\n  보드에 검색이 필요하다  \n다음 줄\n"), "보드에 검색이 필요하다");
+  // 80자 경계: 80자는 그대로, 81자는 80자 + …
+  assert.strictEqual(reqTitle("가".repeat(80)), "가".repeat(80));
+  assert.strictEqual(reqTitle("가".repeat(81)), "가".repeat(80) + "…");
+  // 빈 입력·공백만 → ""(액션이 "요구 내용을 입력하세요."로 거부한다)
+  assert.strictEqual(reqTitle("   \n\t\n"), "");
 });

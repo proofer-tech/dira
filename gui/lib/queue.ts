@@ -232,6 +232,15 @@ export function questionsOf(body: string): { heading: string; text: string }[] {
   return out;
 }
 
+/** 요구 접수 모드의 `title` — 자연어 입력의 첫 비어있지 않은 줄(80자에서 자르고 `…`).
+ *
+ *  사람이 쓴 문장을 고쳐 쓰지 않는다(그 해석이 PM의 일이다 — §3 요구 접수 모드). frontmatter는
+ *  줄 단위 정규식이므로 한 줄이면 그대로 실린다. 없으면 ""을 준다 — 판정은 호출부(액션)가 한다. */
+export function reqTitle(input: string): string {
+  const line = input.split("\n").find((l) => l.trim() !== "")?.trim() ?? "";
+  return line.length > 80 ? line.slice(0, 80) + "…" : line;
+}
+
 // ── 보드 필터·검색·정렬 (DESIGN.md §1 보드) ──────────────────────────────────
 
 /** 대소문자·정규화 무시 비교용. 큐 파일이 NFD로 저장돼 있어도(macOS) 한글 검색어가 걸려야 한다 —

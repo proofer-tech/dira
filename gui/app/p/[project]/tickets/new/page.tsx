@@ -5,20 +5,42 @@
  *  조용한 유실이라 자유 입력을 주지 않는다(`protocols/tickets.md` §함정). */
 import { stat } from "node:fs/promises";
 import { notFound } from "next/navigation";
-import { NewTicketForm } from "@/components/ticket-ui";
+import { NewTicketForm, RequestForm } from "@/components/ticket-ui";
 import { listTickets, stemOf } from "@/lib/queue";
 import { getProject, listPersonas, resolveConfig } from "@/lib/projects";
 
 // 큐는 GUI 밖에서(cron·세션이) 바뀐다. 프리렌더하면 deps 목록이 빌드 시점에 굳는다.
 export const dynamic = "force-dynamic";
 
-export default async function NewTicket({ params }: { params: Promise<{ project: string }> }) {
+export default async function NewTicket({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ project: string }>;
+  searchParams: Promise<{ mode?: string }>;
+}) {
   const { project: id } = await params;
+  const { mode } = await searchParams;
   const project = await getProject(id);
   if (!project) notFound();
 
   // 연결 안 됨은 셸이 사유 블록으로 받는다(§4-1). 여기서 404를 던지면 그 사유가 404로 덮인다.
   if (!(await stat(project.root).catch(() => null))) return null;
+
+  // 요구 접수 모드는 별개 화면이 아니라 이 화면의 모드다(§3). persona 목록도 deps 목록도 안 묻으므로
+  // 읽지 않는다 — 큐 전체 스캔을 건너뛴다.
+  if (mode === "req") {
+    return (
+      <div className="max-w-3xl space-y-6">
+        <h1 className="text-lg font-semibold">요구 접수</h1>
+        <p className="text-sm text-muted-foreground">
+          필요한 것을 자연어로 쓰면 <span className="font-mono">kind: request</span> 티켓이 되고 PM이
+          받아 해석합니다. 첫 줄이 제목이 됩니다.
+        </p>
+        <RequestForm project={id} />
+      </div>
+    );
+  }
 
   const config = await resolveConfig(project);
   // 티켓을 넘기지 않는다 — 프로필이 없는 이름(엔진의 WARN)은 새 티켓의 선택지가 아니다.
