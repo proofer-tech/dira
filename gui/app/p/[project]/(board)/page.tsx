@@ -15,6 +15,7 @@ import { ArrowDown, ArrowUp, ChevronsUpDown, X } from "lucide-react";
 import { BoardFilter, BoardPolling, BoardSearch } from "@/components/board-ui";
 import { EmptyState } from "@/components/empty-state";
 import { DepBadge, StatusBadge, daysSince, statusLabel } from "@/components/status-badge";
+import { NewTicketDialog, RequestDialog } from "@/components/ticket-ui";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -135,7 +136,19 @@ export default async function Board({
   // 하면 이름 규칙(`NAME_RE`) 밖 디렉터리가 선택지에 들어오고, 그건 `queue.ts`가 `''`로 만드는
   // 값이라 고르면 언제나 0건이다. 프로필 없이 티켓만 참조하는 이름은 `listPersonas`가 넣는다.
   const kinds = [...new Set(tickets.map((t) => t.kind).filter(Boolean))].sort();
-  const personas = (await listPersonas(config.personas, tickets)).map((p) => p.name);
+  const profiles = await listPersonas(config.personas, tickets);
+  const personas = profiles.map((p) => p.name);
+
+  // 발행 다이얼로그의 선택지 둘. **보드가 이미 읽은 것을 넘긴다** — `readdir`도 큐 스캔도 다시
+  // 하지 않는다(§3).
+  //  - persona는 위 필터 목록과 **다르다**: `body !== null`(= PROFILE.md가 있다)만 남긴다.
+  //    프로필 없이 티켓만 참조하는 이름(엔진의 WARN)은 새 티켓의 선택지가 아니다.
+  //  - deps가 가리키는 이름은 frontmatter의 `ticket:`이 아니라 상태 접미사를 뗀 파일명(`stem`)이다.
+  //    큐 순서를 뒤집는다 — 방금 만든 티켓에 엮는 경우가 대부분이고, 뒤집으면 그게 목록 맨 위다.
+  const personaChoices = profiles.filter((p) => p.body !== null).map((p) => p.name);
+  const depOptions = tickets
+    .map((t) => ({ hash: t.stem, title: t.title, met: t.state === "done" }))
+    .reverse();
 
   // 링크는 **stem**이다 — 엔진이 찾는 이름이고, 상태가 바뀌어도(접미사) URL이 안 변한다(§식별자).
   const href = (t: Ticket) => `/p/${id}/tickets/${encodeURIComponent(t.stem)}`;
@@ -225,23 +238,18 @@ export default async function Board({
 
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-lg font-semibold">보드</h1>
-        {/* 요구 접수는 같은 화면의 모드다(§3). 내비를 5개로 늘리지 않고 여기로만 들어간다 */}
+        {/* 발행도 접수도 라우트가 아니라 **이 화면의 다이얼로그**다(§3) — 눌러도 URL이 안 바뀌므로
+            필터·검색·뷰·스크롤이 그대로 남고 취소가 곧 닫기다. 내비를 5개로 늘리지 않는다.
+            `요구 접수`가 primary·오른쪽이다(사람 요청 `08e23555`) */}
         <div className="flex items-center gap-2">
-          <Button
+          <NewTicketDialog
+            project={id}
+            personas={personaChoices}
+            deps={depOptions}
+            personaDir={config.personas}
             variant="outline"
-            size="sm"
-            nativeButton={false}
-            render={<Link href={`/p/${id}/tickets/new`} />}
-          >
-            티켓 발행
-          </Button>
-          <Button
-            size="sm"
-            nativeButton={false}
-            render={<Link href={`/p/${id}/tickets/new?mode=req`} />}
-          >
-            요구 접수
-          </Button>
+          />
+          <RequestDialog project={id} />
         </div>
       </div>
 
@@ -249,10 +257,15 @@ export default async function Board({
         // 빈 큐 — 필터 0건과 다른 문구다(§6). 원인이 다르므로 다음 행동도 다르다.
         <EmptyState
           text="열린 티켓 없음"
+          // 버튼은 여전히 1개고(§6) 우상단과 **같은 다이얼로그**를 연다. 변종만 기본값이다 —
+          // 큐가 비었다는 신호에 대한 다음 행동은 발행이다(§3).
           action={
-            <Button size="sm" nativeButton={false} render={<Link href={`/p/${id}/tickets/new`} />}>
-              티켓 발행
-            </Button>
+            <NewTicketDialog
+              project={id}
+              personas={personaChoices}
+              deps={depOptions}
+              personaDir={config.personas}
+            />
           }
         />
       ) : (

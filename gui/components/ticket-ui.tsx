@@ -1,6 +1,7 @@
 "use client";
 
-/** 티켓 화면의 클라이언트 조각 — 상세(편집 폼 · 할당 해제 · 삭제)와 발행 폼.
+/** 티켓 화면의 클라이언트 조각 — 상세(편집 폼 · 할당 해제 · 삭제)와 보드의 발행 · 요구 접수
+ *  다이얼로그(§3 — 발행은 라우트가 아니라 보드에서 하는 한 동작이다).
  *
  *  한 파일에 있는 이유는 `projects-ui.tsx`와 같다: 같은 도메인(티켓 파일)의 액션이고 전부 서버
  *  액션 뒤에 있다(fs 접근은 여기 없다). 결과를 **토스트에 담지 않는다** — 워커 스크립트 출력과
@@ -16,7 +17,7 @@ import {
   unassignTicket,
   type SaveState,
 } from "@/app/p/[project]/tickets/[hash]/actions";
-import { createTicket, type NewTicketState } from "@/app/p/[project]/tickets/new/actions";
+import { createTicket, type NewTicketState } from "@/app/p/[project]/(board)/actions";
 import type { UnassignRun } from "@/lib/engine";
 import { DepBadge } from "@/components/status-badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -46,6 +47,14 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -448,114 +457,170 @@ function DepsPicker({
   );
 }
 
-/** 발행 폼. 성공하면 서버 액션이 상세로 보낸다(여기서 성공 상태를 그리지 않는다).
- *
- *  `kind`·`persona`·`deps`는 전부 선택이다. 사람이 칠 수 있는 자리는 title과 본문뿐이고,
- *  그 둘은 틀려도 티켓이 사라지지 않는다 — 나머지는 틀리면 조용히 사라진다. */
-/** 요구 접수 모드(`?mode=req`) — 자연어 한 칸. kind·persona·deps를 **사람에게 묻지 않는다**
+/** 요구 접수 — 자연어 한 칸. kind·persona·deps를 **사람에게 묻지 않는다**
  *  (서버가 `kind: request`·`persona: pm`·deps 없음으로 고정한다. DESIGN.md §3).
- *  title 칸도 없다 — 첫 줄에서 만든다. */
-export function RequestForm({ project }: { project: string }) {
+ *  title 칸도 없다 — 첫 줄에서 만든다.
+ *
+ *  버튼이 곧 `DialogTrigger`다(§3 — 라우트가 없다). `mode=req` hidden input은 그대로다:
+ *  서버가 kind·persona를 고정하는 경로가 그것이고 `createTicket`은 무수정이다. */
+export function RequestDialog({ project }: { project: string }) {
   const [state, action, pending] = useActionState<NewTicketState, FormData>(createTicket, {});
+  // 본문은 **controlled**여야 한다: React 19는 form action이 끝나면 폼을 리셋하므로, uncontrolled면
+  // 발행이 실패한 순간 사람이 쓴 글이 사라진다(실측). 실패 사유만 남고 본문이 비면 사유가 무의미하다.
+  const [body, setBody] = useState("");
 
   return (
-    <form action={action} className="space-y-4">
-      <input type="hidden" name="project" value={project} />
-      <input type="hidden" name="mode" value="req" />
-      <Textarea
-        name="body"
-        rows={14}
-        required
-        aria-label="요구 내용"
-        placeholder={"무엇이 필요한지 그냥 쓰세요.\n첫 줄이 제목이 됩니다."}
-      />
-      {state.error && <Failure title="접수하지 못했습니다" message={state.error} />}
-      <Button type="submit" disabled={pending}>
-        {pending ? "접수 중…" : "요구 접수"}
-      </Button>
-    </form>
+    // 닫기는 상태를 지우지 않는다 — 다시 열면 쓰던 본문이 남아 있다(성공 시엔 상세로 떠난다).
+    <Dialog>
+      <DialogTrigger render={<Button size="sm" />}>요구 접수</DialogTrigger>
+      <DialogContent className="sm:max-w-xl">
+        <DialogHeader>
+          <DialogTitle>요구 접수</DialogTitle>
+          <DialogDescription>
+            필요한 것을 자연어로 쓰면 <span className="font-mono text-xs">kind: request</span> 티켓이
+            되고 PM이 받아 해석합니다. 첫 줄이 제목이 됩니다.
+          </DialogDescription>
+        </DialogHeader>
+        <form action={action} className="space-y-4">
+          <input type="hidden" name="project" value={project} />
+          <input type="hidden" name="mode" value="req" />
+          <Textarea
+            name="body"
+            rows={12}
+            required
+            aria-label="요구 내용"
+            placeholder={"무엇이 필요한지 그냥 쓰세요.\n첫 줄이 제목이 됩니다."}
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+          />
+          {/* 실패는 이 자리에 남는다 — 닫으면 사람이 쓴 본문이 사라진다(§3) */}
+          {state.error && <Failure title="접수하지 못했습니다" message={state.error} />}
+          <Button type="submit" disabled={pending}>
+            {pending ? "접수 중…" : "요구 접수"}
+          </Button>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
-export function NewTicketForm({
+/** 발행 다이얼로그. 성공하면 서버 액션의 `redirect`가 상세로 보내고 그 내비게이션이 다이얼로그를
+ *  닫는다(close 상태를 따로 만들지 않는다. §3).
+ *
+ *  `kind`·`persona`·`deps`는 전부 선택이다. 사람이 칠 수 있는 자리는 title과 본문뿐이고,
+ *  그 둘은 틀려도 티켓이 사라지지 않는다 — 나머지는 틀리면 조용히 사라진다. */
+export function NewTicketDialog({
   project,
   personas,
   deps,
   personaDir,
+  variant,
 }: {
   project: string;
-  /** 해석된 `TICKET_PERSONAS` 아래 실제 디렉터리 목록 */
+  /** 프로필(`PROFILE.md`)이 있는 이름만. 보드의 **필터 목록을 넘기면 안 된다** — 그쪽은
+   *  티켓이 참조하는 프로필 없는 이름까지 포함한다(§3) */
   personas: string[];
   deps: DepOption[];
   /** 페르소나가 0개일 때 어디를 봐야 하는지 적는다(§6 에러 3요소의 3번) */
   personaDir: string;
+  /** 보드 우상단은 `outline`(primary는 `요구 접수`), 빈 상태는 기본 변종이다(§3) */
+  variant?: "default" | "outline";
 }) {
   const [state, action, pending] = useActionState<NewTicketState, FormData>(createTicket, {});
   const [picked, setPicked] = useState<string[]>([]);
+  // title·본문이 **controlled**인 이유는 `RequestDialog`와 같다 — React 19가 action 후 폼을
+  // 리셋해서 uncontrolled면 발행 실패가 곧 입력 유실이다. deps는 이미 `picked`가 들고 있고,
+  // kind·persona는 base-ui Select가 자기 상태로 들고 있다(리셋에 안 밟힌다. 실측).
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState(BODY_SKELETON);
 
   return (
-    <form action={action} className="space-y-4">
-      <input type="hidden" name="project" value={project} />
-      <div className="space-y-2">
-        <Label htmlFor="n-title">title</Label>
-        <Input id="n-title" name="title" required placeholder="한 줄 제목 — 무엇을 하는지" />
-      </div>
+    <Dialog>
+      <DialogTrigger render={<Button size="sm" variant={variant} />}>티켓 발행</DialogTrigger>
+      {/* 1440×900에서 본문 12줄이 다 들어가지만, 좁은 창·긴 deps 목록에서는 넘친다 — 잘리지
+          않게 여기서 스크롤한다(§3 크기) */}
+      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>티켓 발행</DialogTitle>
+          <DialogDescription>
+            선택지는 전부 이 프로젝트의 실제 값입니다 — 손으로 치는 건 title과 본문뿐입니다.
+          </DialogDescription>
+        </DialogHeader>
+        <form action={action} className="space-y-4">
+          <input type="hidden" name="project" value={project} />
+          <div className="space-y-2">
+            <Label htmlFor="n-title">title</Label>
+            <Input
+              id="n-title"
+              name="title"
+              required
+              placeholder="한 줄 제목 — 무엇을 하는지"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+            />
+          </div>
 
-      <div className="flex gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="n-kind">kind</Label>
-          <Select name="kind" defaultValue="work">
-            <SelectTrigger id="n-kind" className="w-40">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="work">work</SelectItem>
-              <SelectItem value="request">request</SelectItem>
-              <SelectItem value="feedback">feedback</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="n-persona">persona</Label>
-          <Select name="persona" defaultValue={null}>
-            <SelectTrigger id="n-persona" className="w-40" disabled={personas.length === 0}>
-              {/* 비우는 게 정상이다 — 페르소나 없이도 디스패치된다(protocols/tickets.md) */}
-              <SelectValue placeholder="없음" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={null}>없음</SelectItem>
-              {personas.map((p) => (
-                <SelectItem key={p} value={p} className="font-mono">
-                  {p}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        {personas.length === 0 && (
-          <p className="self-end pb-2 text-xs text-muted-foreground">
-            <span className="font-mono break-all">{personaDir}</span>에 페르소나 디렉터리가 없습니다.
-          </p>
-        )}
-      </div>
+          <div className="flex gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="n-kind">kind</Label>
+              <Select name="kind" defaultValue="work">
+                <SelectTrigger id="n-kind" className="w-40">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="work">work</SelectItem>
+                  <SelectItem value="request">request</SelectItem>
+                  <SelectItem value="feedback">feedback</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="n-persona">persona</Label>
+              <Select name="persona" defaultValue={null}>
+                <SelectTrigger id="n-persona" className="w-40" disabled={personas.length === 0}>
+                  {/* 비우는 게 정상이다 — 페르소나 없이도 디스패치된다(protocols/tickets.md) */}
+                  <SelectValue placeholder="없음" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={null}>없음</SelectItem>
+                  {personas.map((p) => (
+                    <SelectItem key={p} value={p} className="font-mono">
+                      {p}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {personas.length === 0 && (
+              <p className="self-end pb-2 text-xs text-muted-foreground">
+                <span className="font-mono break-all">{personaDir}</span>에 페르소나 디렉터리가
+                없습니다.
+              </p>
+            )}
+          </div>
 
-      <DepsPicker options={deps} picked={picked} setPicked={setPicked} />
+          <DepsPicker options={deps} picked={picked} setPicked={setPicked} />
 
-      <div className="space-y-2">
-        <Label htmlFor="n-body">본문</Label>
-        <Textarea
-          id="n-body"
-          name="body"
-          defaultValue={BODY_SKELETON}
-          rows={16}
-          className="font-mono"
-        />
-      </div>
+          <div className="space-y-2">
+            <Label htmlFor="n-body">본문</Label>
+            {/* 페이지였을 때는 16줄이었다 — 다이얼로그는 세로 예산이 창이라 12줄이다(§3 크기) */}
+            <Textarea
+              id="n-body"
+              name="body"
+              rows={12}
+              className="font-mono"
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+            />
+          </div>
 
-      {state.error && <Failure title="발행하지 못했습니다" message={state.error} />}
-      <Button type="submit" disabled={pending}>
-        {pending ? "발행 중…" : "발행"}
-      </Button>
-    </form>
+          {/* 실패는 이 자리에 남는다 — 닫으면 사람이 쓴 본문이 사라진다(§3) */}
+          {state.error && <Failure title="발행하지 못했습니다" message={state.error} />}
+          <Button type="submit" disabled={pending}>
+            {pending ? "발행 중…" : "발행"}
+          </Button>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

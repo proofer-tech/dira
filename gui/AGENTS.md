@@ -21,8 +21,9 @@ gui/
                         **이 그룹의 loading.tsx는 notFound() 경로에 영향이 없다**(A/B 실측 —
                         아래 §notFound()와 빈 SSR). 404가 백지면 여기를 의심하지 않는다
                         큐 파일을 건드리는 Server Action은 그 화면 폴더에 둔다
-                        (`workers/actions.ts`·`tickets/[hash]/actions.ts`·`tickets/new/actions.ts`·
-                        `protocols/actions.ts`).
+                        (`workers/actions.ts`·`tickets/[hash]/actions.ts`·`(board)/actions.ts`·
+                        `protocols/actions.ts`). 발행·요구 접수는 **라우트가 아니라 보드의
+                        다이얼로그**라 `createTicket`이 `(board)/`에 산다(DESIGN.md §3).
                         클라이언트에서 `@/app/p/[project]/…/actions`로 그냥 import된다
     globals.css         Tailwind v4 + shadcn 토큰. 색은 여기서만 정의한다
   lib/

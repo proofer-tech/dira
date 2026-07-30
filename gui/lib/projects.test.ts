@@ -240,7 +240,7 @@ test("projectPath — 전환은 같은 화면 종류를 유지한다", () => {
   assert.strictEqual(projectPath("/p/a", "b"), "/p/b");
   assert.strictEqual(projectPath("/p/a/", "b"), "/p/b");
   assert.strictEqual(projectPath("/p/a/protocols/AGENTS.md", "b"), "/p/b/protocols/AGENTS.md");
-  assert.strictEqual(projectPath("/p/a/tickets/new", "b"), "/p/b/tickets/new");
+  assert.strictEqual(projectPath("/p/a/personas", "b"), "/p/b/personas");
   // 해시는 프로젝트마다 독립이다 — 옮겨 붙이면 없는 티켓을 열게 되므로 보드로 떨어뜨린다
   assert.strictEqual(projectPath("/p/a/tickets/7b3e0c62", "b"), "/p/b");
   // 프로젝트 스코프가 아닌 곳(프로젝트 목록)에서 골랐으면 그 프로젝트의 보드로
