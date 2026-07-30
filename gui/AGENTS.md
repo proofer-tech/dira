@@ -12,10 +12,11 @@ gui/
     page.tsx            보드
     globals.css         Tailwind v4 + shadcn 토큰. 색은 여기서만 정의한다
   lib/
-    root.ts             루트 확정 + 경로 탈출 방어 (신뢰 경계)
-    queue.ts            티켓 읽기 코어 (tickets.py 미러)
+    tenants.ts          테넌트 레지스트리 읽기·쓰기, 검증, 설정 해석
+    paths.ts            경로 탈출 방어 (신뢰 경계)
+    queue.ts            티켓 읽기 코어 (tickets.py 미러). 테넌트를 인자로 받는다
     workers.ts          워커 파일·락·crontab 판정
-    engine.ts           tick.sh 서브프로세스 호출
+    engine.ts           테넌트의 워커 스크립트 서브프로세스 호출 (unassign · reap)
     utils.ts            shadcn cn() — 건드리지 않는다
     *.test.ts           node --test
   components/ui/        shadcn CLI 산출물. 손으로 만들지 않는다
@@ -76,7 +77,13 @@ YAML 파서는 특히 금지다 — `tickets.py`가 정규식이라 파서를 �
 ```ts
 import { test } from "node:test";
 import assert from "node:assert";
+import { listTickets } from "./queue.ts";   // lib 안에서는 확장자 `.ts`를 붙인다
 ```
+
+**`lib/` 내부 상대 import는 확장자 `.ts`를 붙인다.** Node의 타입 스트리핑이 실제 파일을 찾기
+때문이고(`tsconfig`의 `allowImportingTsExtensions`가 이걸 허용한다), 안 붙이면 `pnpm test`가
+모듈을 못 찾는다. 앱 코드에서 `lib/`를 부를 때는 종전대로 `@/lib/queue`다.
+**타입만 가져올 때는 `import type`을 쓴다** — 안 쓰면 런타임에 없는 바인딩을 import해서 터진다.
 
 `lib/queue.ts`는 `tickets.py`와 판정이 같아야 한다(NFC 정규화, 상태 접미사, `deps` 두 문법,
 미할당 판정). 눈으로 맞추지 말고 **패리티 테스트**로 못박는다 — 같은 픽스처 큐에 대해
