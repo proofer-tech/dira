@@ -422,13 +422,22 @@ export function cronLine(worker: Pick<Worker, "path">): string {
   return `* * * * * ${dq(worker.path)} >> ${dq(log)} 2>&1`;
 }
 
+/** `grep -F`는 **바이트로** 비교한다. crontab 줄은 사람이 넣은 NFC인데 `readdir`가 준 경로는
+ *  NFD라서(macOS 한글 큐) 한 형태만 주면 한 줄도 못 걸러낸다 — 사람이 해제 명령을 복사해
+ *  실행해도 아무 일이 안 일어나는 조용한 실패다. 두 형태를 **둘 다** 패턴으로 준다.
+ *  (a622f9e4는 판정만 고쳤다. `worker.path` 자체는 셸이 실행할 문자열이라 정규화하지 않는다.) */
+const grepBothForms = (p: string) =>
+  [...new Set([p.normalize("NFC"), p.normalize("NFD")])].map((v) => `-e ${sq(v)}`).join(" ");
+
+/** 먼저 지우고 넣는다 — 사람이 두 번 복사해 실행해도 중복 줄이 안 생긴다(미등록일 땐 no-op). */
 export function cronRegisterCmd(worker: Pick<Worker, "path">): string {
-  return `(crontab -l 2>/dev/null; echo ${sq(cronLine(worker))}) | crontab -`;
+  const keep = `crontab -l 2>/dev/null | grep -Fv ${grepBothForms(worker.path)}`;
+  return `(${keep}; echo ${sq(cronLine(worker))}) | crontab -`;
 }
 
 /** 이 파일 경로가 들어간 줄을 지운다(`-F` = 경로를 정규식으로 해석하지 않는다). */
 export function cronUnregisterCmd(worker: Pick<Worker, "path">): string {
-  return `crontab -l | grep -Fv ${sq(worker.path)} | crontab -`;
+  return `crontab -l | grep -Fv ${grepBothForms(worker.path)} | crontab -`;
 }
 
 /** 워커가 0개인 큐의 **첫 워커**를 손으로 만드는 명령. `<fs-tickets 레포>`는 채워지지 않는다 —

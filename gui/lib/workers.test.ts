@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { listTickets } from "./queue.ts";
@@ -189,16 +189,64 @@ test("holding — .wip 티켓의 owner에서 워커를 되짚는다 (tick.sh 207
   assert.strictEqual((await listWorkers(root))[0].holding, null);
 });
 
-test("cron 명령어 — 공백·작은따옴표가 든 경로를 셸이 한 인자로 받는다", () => {
-  // 실제로 있는 큐다: 구글 공유 드라이브 경로에 공백과 한글이 들어간다
-  const p = "/Users/x/공유 드라이브/it's/workers/w1.sh";
-  const expected = `* * * * * "${p}" >> "/Users/x/공유 드라이브/it's/workers/cron.log" 2>&1`;
-  // 등록 명령의 echo 부분만 떼어 진짜 셸에 먹인다 — crontab을 건드리지 않고 인용만 검증한다
-  const cmd = cronRegisterCmd({ path: p })
-    .replace("(crontab -l 2>/dev/null; ", "(")
-    .replace(") | crontab -", ")");
-  assert.strictEqual(execFileSync("sh", ["-c", cmd], { encoding: "utf8" }).trimEnd(), expected);
-  assert.ok(cronUnregisterCmd({ path: p }).includes("grep -Fv"));
+/** `-l`은 `tab`을 읽고, `crontab -`은 `out`에 쓴다. 만들어진 명령을 **진짜 셸에** 먹여
+ *  결과 crontab을 본다. 읽는 파일과 쓰는 파일을 나눈 건 `crontab -l | … | crontab -`이
+ *  한 파이프라인이라 같은 파일이면 읽기 도중 truncate되는 경주가 나서다.
+ *  (이 머신의 진짜 crontab은 PATH 스텁 덕에 절대 안 건드린다.) */
+function withWritableCrontab(text: string) {
+  const bin = mkdtempSync(path.join(tmpdir(), "fst-bin-"));
+  tmps.push(bin);
+  const tab = path.join(bin, "tab.txt");
+  const out = path.join(bin, "out.txt");
+  writeFileSync(tab, text);
+  writeFileSync(
+    path.join(bin, "crontab"),
+    `#!/bin/sh\nif [ "$1" = "-l" ]; then cat ${JSON.stringify(tab)}; else cat > ${JSON.stringify(out)}; fi\n`,
+    { mode: 0o755 },
+  );
+  const prev = process.env.PATH;
+  process.env.PATH = `${bin}:${prev}`;
+  return {
+    run: (cmd: string) => execFileSync("sh", ["-c", cmd], { encoding: "utf8" }),
+    out: () => readFileSync(out, "utf8"),
+    /** 방금 쓴 결과를 다음 명령의 입력으로 돌린다(두 번 실행 검증) */
+    feedBack: () => writeFileSync(tab, readFileSync(out, "utf8")),
+    restore: () => {
+      process.env.PATH = prev;
+    },
+  };
+}
+
+test("cron 명령어 — NFC crontab 줄 · NFD 경로에서 해제가 진짜로 지운다 (38eec0d4)", () => {
+  // 실제로 있는 큐다: 구글 공유 드라이브 경로에 공백·작은따옴표·한글이 들어간다.
+  // readdir/realpath는 이걸 NFD로 준다.
+  const p = "/Users/x/공유 드라이브/it's/workers/w1.sh".normalize("NFD");
+  const log = "/Users/x/공유 드라이브/it's/workers/cron.log".normalize("NFD");
+  // 픽스처가 진짜 NFD인지 못박는다 — 같아지면 이 테스트는 아무것도 검증하지 않는다
+  assert.notStrictEqual(p, p.normalize("NFC"));
+
+  const other = "* * * * * /usr/local/bin/other.sh";
+  const nfcLine = `* * * * * "${p.normalize("NFC")}" >> "${log.normalize("NFC")}" 2>&1`;
+  const nfdLine = `* * * * * "${p}" >> "${log}" 2>&1`;
+
+  const c = withWritableCrontab(`${other}\n${nfcLine}\n`);
+  try {
+    // 해제: 경로 한 형태만 grep 패턴으로 주면 여기가 두 줄 그대로다 = 조용한 실패
+    c.run(cronUnregisterCmd({ path: p }));
+    assert.strictEqual(c.out(), `${other}\n`);
+
+    // 등록: 인용이 살아 있어야 셸이 한 인자로 받는다(공백·작은따옴표·`$`)
+    c.feedBack();
+    c.run(cronRegisterCmd({ path: p }));
+    assert.strictEqual(c.out(), `${other}\n${nfdLine}\n`);
+
+    // 사람이 같은 명령을 두 번 복사해 실행해도 중복 줄이 안 생긴다 (NFD 줄도 걸러진다)
+    c.feedBack();
+    c.run(cronRegisterCmd({ path: p }));
+    assert.strictEqual(c.out(), `${other}\n${nfdLine}\n`);
+  } finally {
+    c.restore();
+  }
 });
 
 test("createWorker — 기존 워커를 템플릿으로 755 생성, 덮어쓰기·워커 0개는 거부", async () => {
