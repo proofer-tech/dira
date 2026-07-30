@@ -650,7 +650,7 @@ HOLD r0000004 attempts=3 - 자동 회수 상한 초과, 사람 개입 대기  # 
 | P8 | 답변 왕복 (상세 스레드 + 답변 생성) `da3759ca` | developer | 스펙 | 대기 |
 | P8 | 보드 `답변 대기` 표현 `582dccc8` | developer | 스펙 | 대기 |
 | P8 | `req:` 양방향 추적 `3ef28514` | developer | 스펙 | 완료 — 관계 절에 출처·파생 2줄, `deps`와 구분선으로 갈랐다 |
-| P8 | `답변 대기` 배지 시각 사양 `588bc5bc` | designer | 스펙 | 대기 |
+| P8 | `답변 대기` 배지 시각 사양 `588bc5bc` | designer | 스펙 | 완료 — `MessageSquareReply` · 새 토큰 0 |
 | P8 | PM 왕복 절차를 PROFILE·규약에 `32ecc74b` | pm | 스펙 | 대기 |
 | P8 | QA — 요구사항 왕복 `779ca04e` | qa | 접수·답변 | 대기 |
 | P8 | 보드 기본 뷰를 칸반으로 — 스펙 확정 `f14432b5` | pm | — | 완료 — §1 뒤집음. 뷰는 2개 유지 |
@@ -765,7 +765,8 @@ P6 블로커였던 `1c9de45f`는 **회귀가 아니었다** — 404 화면이 JS
 
 shadcn 기본 배지 변종은 4개(`default`/`secondary`/`destructive`/`outline`)인데 표시할 상태는
 티켓 5 + 워커 4 = 9개다. 부족하므로 **상태 색 토큰 4개를 추가**한다. 그 외 색은 추가하지 않는다.
-(`할당됨`은 전용 색을 갖지 않는다 — `--status-stale`을 공유한다. §2 이상 상태 항.)
+(`할당됨`은 전용 색을 갖지 않는다 — `--status-stale`을 공유한다. §2 이상 상태 항.
+`답변 대기`도 전용 색이 없다 — `deps 대기`의 하위 종류라 `--status-blocked`를 공유한다. §2 파생 항.)
 
 `gui/app/globals.css`:
 
@@ -822,12 +823,13 @@ text-status-X  bg-status-X/10  border-status-X/30
 
 라벨 문자열은 `tickets.py list` 출력과 같은 말을 쓴다. CLI와 GUI가 다른 단어를 쓰면 안 된다.
 
-**티켓 5상태**
+**티켓 5상태 + 파생 1**
 
 | 상태 | 라벨 | 토큰 / 변종 | 아이콘 |
 |---|---|---|---|
 | open · 미할당 · deps 충족 | `대기` | shadcn `secondary` | `Circle` |
 | open · unmet deps 있음 | `deps 대기` | `--status-blocked` | `Lock` |
+| ┗ 그중 `awaiting`이 그 unmet dep | `답변 대기 · <n>일` | `--status-blocked` | `MessageSquareReply` |
 | open · `session_id` 있음 | `할당됨` | `--status-stale` | `CircleDot` |
 | `.wip` | `진행중` | `--status-active` | `CirclePlay` |
 | `.done` | `완료` | `--status-done` | `CircleCheck` |
@@ -856,6 +858,36 @@ text-status-X  bg-status-X/10  border-status-X/30
 - 배지에는 사유를 `title`로 붙인다(`DepBadge`의 `missing`과 같은 처리):
   `session_id가 박힌 열린 티켓 — 큐에서 영구 제외된다. 할당 해제로 되돌린다`
 
+**`답변 대기`는 파생 상태다 — `deps 대기`를 대체하지 않고 좁힌다.** 판정은 §요구사항 레이어 결정 5의
+식이고(`open` + `awaiting`이 unmet dep), 그 티켓은 이미 `deps 대기`다. 그래서:
+
+- **색은 `--status-blocked`를 그대로 쓴다. 새 토큰 없음**(§1 토큰 4개 유지). 막힌 것은 맞고,
+  `--status-stale`(고장, 복구가 필요하다)이 아니다 — 다음 행동이 **답을 쓰는 것**(진행)이기 때문이다.
+  §결정 4의 표가 근거다.
+- **`--status-stale` 계열(`할당됨`·`stale`·`연결 안 됨`)과는 색이 먼저 갈린다** — amber(막힘) vs
+  red(고장). 아이콘 `CircleDot`/`TriangleAlert`/`Unplug`가 두 번째 겹이고, 라벨이 세 번째다.
+- **`deps 대기`와는 아이콘으로 갈린다**: `Lock`(엔진이 잠갔다) vs `MessageSquareReply`(사람이 답할
+  차례다). 같은 색이지만 자물쇠와 말풍선은 14px에서 실루엣이 겹치지 않는다.
+- 아이콘이 **`MessageCircleQuestionMark`가 아닌 이유**: 그것은 14px에서 deps 배지의 `큐에 없는
+  해시`(`CircleQuestionMark`, **같은 `--status-blocked`**)와 구분되지 않는다. 둘의 차이는 말풍선
+  꼬리 하나뿐이고 그게 축소에서 먼저 사라진다. 실측으로 확인했다(`588bc5bc` §결과). 보드에서
+  두 배지는 상태 컬럼과 deps 컬럼에 나란히 앉으므로 이 충돌은 실제 화면에서 일어난다.
+  물음표(질문이 열려 있다) 대신 답장 화살표(답을 쓴다)를 쓰는 건 §결정 4의 "다음 행동" 축과도 맞는다.
+
+**경과 표시 `· <n>일`** — 방치를 보이게 하는 장치다(§결정 4). 서식은 §3 안에서:
+
+| | 값 |
+|---|---|
+| 기준 | 요구사항 파일 `mtime`(= `awaiting`이 걸린 시점). `birth`가 아니다 |
+| 서식 | 라벨 문자열에 이어 붙인다 — `답변 대기 · 3일`. 배지에 `tabular-nums` 추가 |
+| 색·크기 | 배지와 **같다**(`text-xs`, 배지 색). 별도 span·`opacity`·`--muted-foreground` 금지 — 대비가 깨진다(§1 함정) |
+| `n = 0` | **경과를 붙이지 않는다.** 라벨은 `답변 대기`. `· 0일`은 고장으로 읽힌다 |
+| 잘림 | 없다. 배지는 줄이지 않는다(§6) |
+
+툴팁(`title`, `할당됨`과 같은 처리):
+
+`PM이 되물었다 — 상세에서 답을 쓰면 큐로 돌아간다. 자동 만료는 없다`
+
 **워커 4상태**
 
 | status | 라벨 | 토큰 / 변종 | 아이콘 | 보조 문구 |
@@ -873,7 +905,8 @@ text-status-X  bg-status-X/10  border-status-X/30
 
 - 충족: `outline` 배지 + `Check` + 해시
 - 미충족: `--status-blocked` + `Lock` + 해시
-- 큐에 없는 해시(오타 등): `--status-blocked` + `HelpCircle` + 해시 + 툴팁 `큐에 없는 해시 — 영구 대기`
+- 큐에 없는 해시(오타 등): `--status-blocked` + `CircleQuestionMark` + 해시 + 툴팁 `큐에 없는 해시 — 영구 대기`
+  (lucide 1.x 정식 이름. `HelpCircle`은 별칭이다 — 구현이 이미 정식 이름을 쓴다)
 
 ### 3. 타이포 · 간격
 
@@ -1104,7 +1137,7 @@ pnpm dlx shadcn@latest add alert alert-dialog badge button card command dialog \
 
 | 컴포넌트 | 왜 커스텀인가 |
 |---|---|
-| `<StatusBadge state>` | Badge 변종 4개로 11개 상태(티켓 5 · 워커 4 · 연결 2)를 못 담는다. Badge를 감싸 `data-status`로 토큰·아이콘·라벨을 한 곳에서 결정 — 상태 표현이 갈라지는 걸 구조적으로 막는다 |
+| `<StatusBadge state>` | Badge 변종 4개로 12개 상태(티켓 5 + 파생 `답변 대기` · 워커 4 · 연결 2)를 못 담는다. Badge를 감싸 `data-status`로 토큰·아이콘·라벨을 한 곳에서 결정 — 상태 표현이 갈라지는 걸 구조적으로 막는다 |
 | `<Hash hash>` | mono + 링크 + 클릭 복사. 6개 화면 전부에 나오는데 매번 다시 쓸 이유가 없다 |
 | `<EmptyState>` | shadcn에 없다. §6의 빈/0건 문구 규칙을 한 컴포넌트가 강제한다 |
 | `<CopyCommand cmd>` | 제약 4가 요구하는 것 — 실행 대신 복사시키는 mono 블록 + 복사 버튼 |
@@ -1340,6 +1373,7 @@ fs-tickets GUI                                      ← h1, text-lg
 | §5 `sonner` = 서버 액션 결과 ↔ 등록 직후 해석 결과 | **카드로 고정 표시** | 잘못 등록한 걸 알아채라고 있는 정보다. 사라지는 토스트에 담으면 목적을 잃는다 |
 | §2 `stale` 아이콘 `TriangleAlert` ↔ 연결 안 됨 | **`Unplug`로 분리** | 죽은 락과 없는 경로는 다른 사건이다. 색 토큰은 `--status-stale`을 재사용해 §1의 "토큰 5개" 약속은 지킨다 |
 | §1 `--destructive`는 파괴적 액션 전용 ↔ 등록 해제·연결 안 됨 | **둘 다 안 쓴다** | 등록 해제는 파일을 안 지우고, 연결 안 됨은 부재다. 빨강은 거짓 경고가 된다 |
+| §2 `답변 대기` 물음표 아이콘 ↔ deps 배지 `큐에 없는 해시`(같은 `--status-blocked`) | **`MessageSquareReply`로 분리** | 14px에서 두 물음표 원은 말풍선 꼬리 하나로만 갈리고 그게 먼저 사라진다(실측). 보드에서 두 배지가 나란히 앉는다. 색 토큰은 `--status-blocked` 재사용 — §1의 토큰 4개 약속은 지킨다 |
 
 깨지 않은 것: 색 토큰 5개 그대로 · 크기 단계 5개 그대로 · 간격 스케일(`1 2 3 4 6 8`) 그대로 ·
 새 shadcn 컴포넌트 0개 · 새 커스텀 컴포넌트 0개 · `<StatusBadge>`가 상태 표현의 유일한 출처.
