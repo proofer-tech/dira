@@ -110,6 +110,17 @@ function stemIndex(files: string[]): StemIndex {
   return { at, files };
 }
 
+/** 해시 → 실제 티켓 경로. `tickets.py find`(= find_any)와 같은 판정을 큐 디렉터리 스캔으로 답한다.
+ *  경로를 조립하지 않는다 — 돌려주는 건 `readdir`가 준 실제 파일 경로다(§경로 방어).
+ *  **파일을 열지 않는다**: 이름만 보면 되므로 `listTickets`보다 훨씬 싸다(38b11db5). */
+export async function findPath(
+  root: string,
+  want: string,
+  sfx: Suffixes,
+): Promise<string | null> {
+  return findAny(stemIndex(await ticketFiles(root)), want, sfx);
+}
+
 /** tickets.py find_any. 정확 일치가 없으면 `re-<해시>`(피드백 티켓)도 본다. */
 function findAny(ix: StemIndex, want: string, sfx: Suffixes): string | null {
   const hit = findStem(ix, nfc(want), sfx);

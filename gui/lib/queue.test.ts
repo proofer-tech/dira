@@ -15,6 +15,7 @@ import {
   awaitingUnlocked,
   derivedFrom,
   filterTickets,
+  findPath,
   inDefaultList,
   isAwaiting,
   listTickets,
@@ -343,6 +344,7 @@ test("식별자 — stem 파생 · 경고 조건은 엔진 find와 판정이 같
   assert.deepStrictEqual(by("dep00001").unmet, ["zzz99999"]);
 
   // 판정을 눈으로 맞추지 않는다: 엔진 `find`가 같은 파일을 주는지 티켓마다 확인한다.
+  // `findPath`도 같이 본다 — 상세·액션이 python 스폰 대신 부르는 미러가 이것이다(38b11db5).
   for (const t of tickets) {
     let hit = "";
     try {
@@ -357,6 +359,11 @@ test("식별자 — stem 파생 · 경고 조건은 엔진 find와 판정이 같
       t.hashResolves,
       hit.normalize("NFC") === t.path.normalize("NFC"),
       `${t.hash}: 엔진 find=${hit || "(못 찾음)"} / hashResolves=${t.hashResolves}`,
+    );
+    assert.strictEqual(
+      (await findPath(root, t.hash, sfx))?.normalize("NFC") ?? "",
+      hit.normalize("NFC"),
+      `${t.hash}: findPath가 엔진 find와 다른 파일을 준다`,
     );
   }
 });

@@ -1,14 +1,17 @@
 /** 엔진을 **서브프로세스로** 부른다 (DESIGN.md §아키텍처 · 제약 2 · §경로 방어).
  *
  *  claim(`os.link`)·release·reap의 원자성 보장은 `tickets.py` 안에만 있다. TS로 다시 구현하면
- *  두 판정이 갈리고, 갈리는 순간 티켓이 사라진다. 그래서 GUI는 **워커 스크립트를 부른다**
- *  (`reap`·`unassign`). 해시 → 경로도 같은 이유로 `tickets.py find`가 답한다 — 사용자 입력으로
- *  경로를 조립하지 않는다. */
+ *  두 판정이 갈리고, 갈리는 순간 티켓이 사라진다. 그래서 **상태 전이는 워커 스크립트를 부른다**
+ *  (`reap`·`unassign`).
+ *
+ *  **읽기 조회는 부르지 않는다**: 해시 → 경로는 `lib/queue.ts`의 미러(`findPath` = `find_any`)가
+ *  답한다. 스폰이 요청마다 160~360ms고 세션 스트림은 2초마다 그 길로 온다(38b11db5). 미러는
+ *  패리티 테스트로 못박혀 있고, 원자성이 걸린 건 여기 없다 — 판정은 파일 목록 하나다. */
 import { execFile } from "node:child_process";
 import path from "node:path";
 import { promisify } from "node:util";
 import { NAME_RE, isHash, resolveWithin } from "./paths.ts";
-import { listTickets, type Suffixes } from "./queue.ts";
+import { findPath, listTickets, type Suffixes } from "./queue.ts";
 import { listWorkers } from "./workers.ts";
 
 /** rc와 출력을 그대로 넘긴다. 실패해도 삼키지 않는다 — 화면이 원문을 보여준다(§6 에러 3요소). */
@@ -17,7 +20,12 @@ export type Run = { ok: boolean; output: string };
 /** `<root>/workers/<name>.sh <args…>`.
  *
  *  이름은 `NAME_RE`를 통과해야 하고, 경로는 조립한 문자열을 믿지 않고 `resolveWithin`으로
- *  workers/ 안인지 확인한다 — 여기서 실행되는 건 셸 스크립트다. 신뢰 경계다. */
+ *  workers/ 안인지 확인한다 — 여기서 실행되는 건 셸 스크립트다. 신뢰 경계다.
+ *
+ *  여기서 실행하는 워커 `.sh`는 **번들 대상이 아니다.** 그래서 `pnpm build`가 `Encountered
+ *  unexpected file in NFT list` 경고를 낸다 — 서브프로세스 경로가 런타임 값이라 트레이서가
+ *  포기하는 것이고, 경고일 뿐 빌드는 통과한다. `turbopackIgnore` 주석으로도 안 사라진다(실측).
+ *  워커 스크립트 경로가 프로젝트마다 다른 건 제약 2가 요구하는 설계다. */
 export async function runWorker(root: string, name: string, args: string[]): Promise<Run> {
   if (!NAME_RE.test(name)) return { ok: false, output: `워커 이름 형식이 아닙니다: ${name}` };
   let file: string;
@@ -66,21 +74,13 @@ export async function unassign(root: string, hash: string): Promise<UnassignRun>
   return { ...(await runWorker(root, name, ["unassign", hash])), worker: name };
 }
 
-/** 엔진 코드가 사는 곳. GUI는 `<레포>/gui`에서 돌므로 부모다(`pnpm dev`·`pnpm build` 둘 다).
- *  ponytail: cwd 기준. GUI를 다른 디렉터리에서 띄우게 되면 그때 경로를 환경변수로 받는다.
- *
- *  이 파일이 실행하는 것(python3·워커 `.sh`)은 **번들 대상이 아니다.** 그래서 `pnpm build`가
- *  `Encountered unexpected file in NFT list` 경고를 낸다 — 서브프로세스 경로가 런타임 값이라
- *  트레이서가 포기하는 것이고, 경고일 뿐 빌드는 통과한다. `turbopackIgnore` 주석으로도 안 사라진다
- *  (실측). 워커 스크립트 경로가 프로젝트마다 다른 건 제약 2가 요구하는 설계다. */
-const enginePy = () => path.resolve(process.cwd(), "..", "tickets.py");
-
 /** 해시 → 실제 티켓 경로. 없으면 null(404의 근거).
  *
- *  **경로를 조립하지 않는다.** 형식 검증을 통과한 해시를 엔진에게 물어 실제 파일을 받는다 —
- *  상태 접미사가 붙은 이름·`re-<해시>` 폴백을 두 곳에서 판정하지 않으려는 것도 같은 이유다.
+ *  **경로를 조립하지 않는다.** 형식 검증을 통과한 해시를 큐 스캔(`findPath`)에 물어 실제 파일을
+ *  받는다 — 상태 접미사가 붙은 이름·`re-<해시>` 폴백을 두 곳에서 판정하지 않으려는 것도 같은
+ *  이유다. 접미사는 프로젝트별이라(제약 6) 해석된 값을 인자로 받는다.
  *
- *  엔진 `find`는 **파일명 stem으로만** 찾는데 화면이 URL에 싣는 `Ticket.hash`는 frontmatter
+ *  `find_any`는 **파일명 stem으로만** 찾는데 화면이 URL에 싣는 `Ticket.hash`는 frontmatter
  *  `ticket:`이 우선이다(`tickets.py ticket_hash`도 같다). 둘이 갈리는 티켓은 보드가 그린 링크가
  *  404였다(a606dd0e) — 그래서 stem이 빗나가면 frontmatter 해시로 한 번 더 본다. */
 export async function findTicket(
@@ -89,19 +89,12 @@ export async function findTicket(
   sfx: Suffixes,
 ): Promise<string | null> {
   if (!isHash(hash)) return null;
-  try {
-    const { stdout } = await promisify(execFile)("python3", [enginePy(), "find", root, hash], {
-      // 접미사는 프로젝트별이다(제약 6). 엔진은 이 두 환경변수로만 읽는다.
-      env: { ...process.env, TICKET_INPROGRESS: sfx.inProgress, TICKET_DONE: sfx.done },
-    });
-    const hit = stdout.trim();
-    if (hit) return hit;
-  } catch {
-    // rc=1 `티켓을 못 찾음` — stem으로는 없다. frontmatter 해시일 수 있다(아래).
-  }
+  const hit = await findPath(root, hash, sfx);
+  if (hit) return hit;
   // 여기서도 경로를 조립하지 않는다: 큐 스캔이 준 실제 파일 경로를 돌려준다. 비교는 NFC로 —
   // URL에서 온 한글과 파일에 적힌 한글의 정규화가 다를 수 있다(엔진 `find_any`도 nfc한다).
-  // ponytail: 폴백에서만 큐를 한 번 더 읽는다. stem이 맞는 흔한 경우엔 추가 I/O가 없다.
+  // ponytail: 폴백에서만 파일을 연다(`findPath`는 이름만 본다). stem이 맞는 흔한 경우엔
+  // readdir 한 번이 전부다. 폴백까지 오면 큐 전체를 읽는데, 그건 상세가 어차피 하는 일이다.
   const want = hash.normalize("NFC");
   const found = (await listTickets(root, sfx)).find((t) => t.hash.normalize("NFC") === want);
   return found?.path ?? null;

@@ -1,5 +1,9 @@
-/** 엔진 호출 — 해시 → 경로를 **엔진에게 물어본다**는 것이 이 파일이 검증하는 전부다.
- *  경로를 조립하면 통과할 수 없는 케이스(접미사 붙은 이름·`re-` 폴백·형식 밖 해시)를 고른다. */
+/** 해시 → 경로 조회(`findTicket`)와 상태 전이(`unassign`).
+ *
+ *  조회는 `tickets.py find`의 미러가 답한다(38b11db5 — 스폰이 요청마다 160~360ms였다). 그래서
+ *  여기서 볼 것은 **판정이 엔진과 같은가**다: 경로를 조립하면 통과할 수 없는 케이스(접미사 붙은
+ *  이름·`re-` 폴백·형식 밖 해시·`ticket:`이 파일명과 갈린 티켓)를 고른다.
+ *  find_any 자체의 패리티(엔진 출력과 줄 단위 대조)는 `queue.test.ts`가 못박는다. */
 import { test } from "node:test";
 import assert from "node:assert";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -27,7 +31,7 @@ put("한글파일명NFD.wip.md".normalize("NFD"), "ticket: hangul-nfd\n");
 put("순수한글.md"); // `ticket:` 없음 → 해시 = stem. 엔진이 디스패치하는 티켓이다
 put("물고있는한글.wip.md".normalize("NFD")); // `ticket:` 없는 .wip → 해시에 접미사가 들어간다
 
-test("findTicket — 접미사·`re-` 폴백은 엔진이 판정한다", async () => {
+test("findTicket — 접미사·`re-` 폴백을 엔진과 같이 판정한다", async () => {
   const t = (n: string) => path.join(root, "tickets", n);
   assert.strictEqual(await findTicket(root, "aaaa1111", DEFAULT), t("aaaa1111.md"));
   assert.strictEqual(await findTicket(root, "bbbb2222", DEFAULT), t("bbbb2222.wip.md"));
@@ -54,7 +58,7 @@ test("findTicket — 해시가 파일명 stem과 갈려도 찾는다", async () 
   assert.strictEqual(hashOf("한글파일명NFD"), "hangul-nfd");
   const nfd = await findTicket(root, "hangul-nfd", DEFAULT);
   assert.strictEqual(nfd?.normalize("NFC"), t("한글파일명NFD.wip.md").normalize("NFC"));
-  // `ticket:` 없는 한글 파일명 = 엔진이 디스패치하는 티켓. 해시 = stem이고 엔진이 직접 답한다
+  // `ticket:` 없는 한글 파일명 = 엔진이 디스패치하는 티켓. 해시 = stem이라 폴백 없이 맞는다
   assert.strictEqual(hashOf("순수한글"), "순수한글");
   assert.strictEqual(await findTicket(root, "순수한글", DEFAULT), t("순수한글.md"));
   // `ticket:` 없는 `.wip` 티켓은 해시에 접미사가 들어간다(`ticket_hash`가 stem을 그대로 쓴다).
@@ -67,7 +71,7 @@ test("findTicket — 해시가 파일명 stem과 갈려도 찾는다", async () 
   assert.strictEqual(await findTicket(root, "hangul-nope", DEFAULT), null);
 });
 
-test("findTicket — 경로가 될 수 있는 해시는 엔진을 부르지도 않는다", async () => {
+test("findTicket — 경로가 될 수 있는 해시는 큐를 보지도 않는다", async () => {
   for (const bad of ["../../etc/passwd", "a/b", "..", ".hidden", "a\0b", ""]) {
     assert.strictEqual(await findTicket(root, bad, DEFAULT), null, JSON.stringify(bad));
   }
