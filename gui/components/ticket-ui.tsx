@@ -9,7 +9,7 @@
  *  표에 쓴 같은 근거다). */
 import { useActionState, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Copy, Trash2, TriangleAlert, Unlink, X } from "lucide-react";
+import { ArrowDown, Check, Copy, Trash2, TriangleAlert, Unlink, X } from "lucide-react";
 import {
   answerRequirement,
   deleteTicket,
@@ -61,6 +61,14 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  MessageScroller,
+  MessageScrollerButton,
+  MessageScrollerContent,
+  MessageScrollerItem,
+  MessageScrollerProvider,
+  MessageScrollerViewport,
+} from "@/components/ui/message-scroller";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Select,
@@ -295,20 +303,39 @@ function AnswerFields({
   // 답변 칸의 id는 한 화면에 하나뿐이다 — 보드에서도 열려 있는 다이얼로그는 하나다.
   return (
     <>
-      {thread.map((item, i) => (
-        <div key={i} className="space-y-1">
-          <p className="text-xs text-muted-foreground">
-            {item.heading || (item.role === "question" ? "질문" : "답변")}
-            {item.hash && <span className="ml-2 font-mono">{item.hash}</span>}
-          </p>
-          {/* 읽기만 하는 자리라 렌더된 마크다운이다(§비주얼 §10). 답변 쪽 구분은 왼쪽 선
-              하나뿐이다 — `text-muted-foreground`를 걸면 렌더된 본문의 `bg-muted` 블록 안에서
-              4.34가 되고, 그건 §1이 실측으로 금지한 조합이다. 구조로 가르고 색으로 안 가른다 */}
-          <div className={item.role === "answer" ? "border-l-2 border-border pl-3" : ""}>
-            <Markdown text={item.text} />
-          </div>
-        </div>
-      ))}
+      {/* 스레드는 고정 높이 상자 안에서 스크롤된다(§2 · 사람 요청 `c01a9a11` Q1=(a)).
+          `max-h`라 스레드가 하나뿐이면 상자도 그만큼만 그린다 — 24rem은 천장이지 바닥이 아니다.
+          `autoScroll`은 답변이 달려 스레드가 늘 때 맨 아래를 따라가게 한다(첫 렌더의 위치는
+          프리미티브 기본값 `defaultScrollPosition="end"`가 이미 맨 아래다). */}
+      <MessageScrollerProvider autoScroll>
+        <MessageScroller className="max-h-96">
+          <MessageScrollerViewport aria-label="답변 스레드">
+            <MessageScrollerContent>
+              {thread.map((item, i) => (
+                <MessageScrollerItem key={i} messageId={String(i)} className="space-y-1">
+                  <p className="text-xs text-muted-foreground">
+                    {item.heading || (item.role === "question" ? "질문" : "답변")}
+                    {item.hash && <span className="ml-2 font-mono">{item.hash}</span>}
+                  </p>
+                  {/* 읽기만 하는 자리라 렌더된 마크다운이다(§비주얼 §10). 답변 쪽 구분은 왼쪽 선
+                      하나뿐이다 — `text-muted-foreground`를 걸면 렌더된 본문의 `bg-muted` 블록 안에서
+                      4.34가 되고, 그건 §1이 실측으로 금지한 조합이다. 구조로 가르고 색으로 안 가른다.
+                      말풍선은 `6ca526f3`이 §비주얼 §13을 받아 이 자리를 다시 만진다 */}
+                  <div className={item.role === "answer" ? "border-l-2 border-border pl-3" : ""}>
+                    <Markdown text={item.text} />
+                  </div>
+                </MessageScrollerItem>
+              ))}
+            </MessageScrollerContent>
+          </MessageScrollerViewport>
+          {/* 아래가 가려졌을 때만 뜬다(`data-active`) — 안 가려지면 스스로 사라진다 */}
+          <MessageScrollerButton variant="outline" size="sm">
+            <ArrowDown aria-hidden />
+            최신으로
+          </MessageScrollerButton>
+        </MessageScroller>
+      </MessageScrollerProvider>
+      {/* 입력칸과 `답변 달기`는 상자 **밖 · 밑**이다 — 다이얼로그를 화면 높이로 늘리는 안은 버렸다(§2) */}
       <form action={action} className="space-y-3">
         <input type="hidden" name="project" value={project} />
         <input type="hidden" name="hash" value={hash} />

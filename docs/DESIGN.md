@@ -1556,7 +1556,7 @@ P6 블로커였던 `1c9de45f`는 **회귀가 아니었다** — 404 화면이 JS
 | P27 | 티켓 복사 — 발행 다이얼로그 초기값 `735b83db` | developer | 스펙 | 대기 |
 | P28 | 답변 스레드 스크롤러·말풍선 스펙 확정 `c01a9a11` | pm | — | 완료 — 답변 `55fbe924` `Q1 a / Q2 b`. 스레드만 스크롤, 말풍선 채택 |
 | P28 | 답변 스레드 말풍선·스크롤러 시각 사양 `4e6fb74b` | designer | 스펙 | 완료 — §비주얼 §13. 변종은 **양쪽 `outline` 하나**(나머지 6개가 실측으로 탈락) · 새 CSS 0줄 |
-| P28 | 답변 스레드 고정 높이 스크롤 상자 `e589e0f1` | developer | 스펙 | 대기 |
+| P28 | 답변 스레드 고정 높이 스크롤 상자 `e589e0f1` | developer | 스펙 | 완료 — `max-h-96`(실측 384px) · 폼은 상자 밖·밑 · `최신으로` 버튼. 등록 항목의 유틸은 **전부 있었다**(§5) |
 | P28 | 질문·답변 말풍선 적용 `6ca526f3` | developer | `4e6fb74b` `e589e0f1` | 대기 |
 
 **P27은 왕복 1회를 돌았고 갈린 것은 하나였다** — 요구(`17e24fbc`)의 "readonly"가 편집까지인지
@@ -2321,6 +2321,14 @@ pnpm dlx shadcn@latest add @shadcn/message-scroller @shadcn/message @shadcn/bubb
 **제약 1을 깨지 않는다** — 의존성 0은 `tick.sh`·`tickets.py`에 걸리는 규칙이고 GUI에는 처음부터
 `@base-ui/react`가 들어와 있다. 사람에게 이 줄을 미리 확인받고 진행했다(`c01a9a11` 확인 항).
 **커스텀 표는 무수정이다** — `<Markdown>`이 말풍선 **안**에서 종전대로 본문을 그린다.
+
+**등록 항목이 들고 오는 유틸은 보탤 것이 없다**(실측 `e589e0f1`, Tailwind v4.3.3 · shadcn 4.16).
+`message-scroller`가 쓰는 `scroll-fade-b` `scrollbar-thin` `scrollbar-gutter-stable`
+`scrollbar-thumb-transparent` `scrollbar-track-transparent` `inset-s-1/2`는 **여섯 개 전부
+이 레포에서 CSS가 나온다** — 앞의 하나는 `globals.css`가 이미 읽는 `shadcn/tailwind.css`의
+`@utility`고, 나머지 다섯은 Tailwind v4 코어다. `app/globals.css`에 손으로 보탤 CSS가 없고,
+`components/ui/message-scroller.tsx`는 CLI 산출물 그대로 둔다(고친 곳은 CLI가 이미 `lucide-react`
+`ArrowDownIcon`으로 바꿔 준 `IconPlaceholder` import 하나뿐이다). 근거는 티켓 `e589e0f1` §결과.
 
 **페르소나 색 스와치 팝오버(§12)도 `add` 인자를 늘리지 않는다.** 위 `popover` 한 줄이 그릇이고,
 안은 `button` 9개다 — 둘 다 이 표에 이미 있다. `command`도 `select`도 쓰지 않는 이유는 §12에 적었다.
