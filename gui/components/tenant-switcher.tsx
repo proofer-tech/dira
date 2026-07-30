@@ -44,6 +44,8 @@ export function TenantSwitcher({
   const router = useRouter();
   const pathname = usePathname(); // searchParams가 안 실린다 = 필터·검색을 공짜로 버린다
   const [open, setOpen] = useState(false);
+  // 0건 문구가 검색어를 되읽어야 해서(§6) 입력을 여기서 잡는다 — cmdk 내부 상태는 읽을 길이 없다.
+  const [q, setQ] = useState("");
   // 전환은 라우팅이라 지연이 보인다. 스피너 대신 트리거만 먼저 바꾼다(§4-1 전환 중 표시).
   const [going, setGoing] = useState<SwitcherTenant | null>(null);
   const [shown, setShown] = useState(currentId);
@@ -57,6 +59,7 @@ export function TenantSwitcher({
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
+        setQ("");
         setOpen((v) => !v);
       }
     };
@@ -67,8 +70,15 @@ export function TenantSwitcher({
   const current = going ?? tenants.find((t) => t.id === currentId);
   if (!current) return null;
 
+  // 닫을 때 검색어를 버린다 — 입력이 팝오버와 함께 언마운트되므로, 안 버리면 다시 열었을 때
+  // 안 보이는 검색어로 목록이 걸러진 채 뜬다.
+  const close = () => {
+    setOpen(false);
+    setQ("");
+  };
+
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={(v) => (v ? setOpen(true) : close())}>
       <PopoverTrigger
         render={
           <Button
@@ -90,16 +100,22 @@ export function TenantSwitcher({
       />
       <PopoverContent align="end" className="w-[28rem] p-0">
         <Command>
-          <CommandInput placeholder="테넌트 검색 — 이름 또는 경로" />
+          <CommandInput
+            placeholder="테넌트 검색 — 이름 또는 경로"
+            value={q}
+            onValueChange={setQ}
+          />
           <CommandList className="max-h-80">
-            <CommandEmpty>일치하는 테넌트 0건</CommandEmpty>
+            <CommandEmpty>
+              {q ? `"${q}"와 일치하는 테넌트 0건` : "일치하는 테넌트 0건"}
+            </CommandEmpty>
             {tenants.map((t) => (
               <CommandItem
                 key={t.id}
                 value={`${t.name} ${t.shortRoot}`}
                 className="items-start gap-2 px-2 py-2"
                 onSelect={() => {
-                  setOpen(false);
+                  close();
                   if (t.id !== currentId) {
                     setGoing(t);
                     router.push(tenantPath(pathname, t.id));
