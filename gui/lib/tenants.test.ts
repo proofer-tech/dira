@@ -97,22 +97,41 @@ test("resolveConfig — 해석 불가 변수는 기본값 + assumed(경고 근�
   assert.strictEqual(c.cwd, path.dirname(root)); // 셸을 실행하지 않으므로 못 읽는다
   assert.strictEqual(c.personas, path.join(root, "personas"));
   assert.ok(c.assumed.includes("cwd") && c.assumed.includes("personas"));
+  assert.deepStrictEqual(c.cwdByWorker, {}); // 해석 못 한 값은 목록에도 담지 않는다
 });
 
 test("resolveConfig — 워커 2개 값이 갈리면 conflicts + 첫 워커 값", async () => {
   const root = newQueue({
-    "w1.sh": 'TICKET_CWD="$HOME/wt/w1"\nTICKET_PERSONAS="$HOME/p"\n',
-    "w2.sh": 'TICKET_CWD="$HOME/wt/w2"\nTICKET_PERSONAS="$HOME/p"\n',
+    "w1.sh": 'TICKET_INPROGRESS=".wip"\nTICKET_PERSONAS="$HOME/p"\n',
+    "w2.sh": 'TICKET_INPROGRESS="-진행중"\nTICKET_PERSONAS="$HOME/p"\n',
   });
   const c = await resolveConfig({ root });
-  assert.strictEqual(c.cwd, path.join(homedir(), "wt/w1"));
+  assert.strictEqual(c.inProgress, ".wip");
   assert.deepStrictEqual(c.conflicts, [
-    {
-      key: "cwd",
-      byWorker: { w1: path.join(homedir(), "wt/w1"), w2: path.join(homedir(), "wt/w2") },
-    },
+    { key: "inProgress", byWorker: { w1: ".wip", w2: "-진행중" } },
   ]);
   assert.strictEqual(c.personas, path.join(homedir(), "p")); // 같은 값은 충돌이 아니다
+});
+
+test("resolveConfig — TICKET_CWD가 갈리는 건 정상: conflicts 없음 + cwdByWorker", async () => {
+  const root = newQueue({
+    "w1.sh": 'TICKET_CWD="$HOME/wt/w1"\n',
+    "w2.sh": 'TICKET_CWD="$HOME/wt/w2"\n',
+  });
+  const c = await resolveConfig({ root });
+  assert.deepStrictEqual(c.conflicts, []); // 워커마다 자기 워크트리 = 경고할 예외가 아니다
+  assert.deepStrictEqual(c.cwdByWorker, {
+    w1: path.join(homedir(), "wt/w1"),
+    w2: path.join(homedir(), "wt/w2"),
+  });
+  assert.strictEqual(c.cwd, path.join(homedir(), "wt/w1")); // 한 경로가 필요한 호출자용
+  assert.ok(!c.assumed.includes("cwd"));
+});
+
+test("resolveConfig — 워커 하나뿐이어도 cwdByWorker에 담는다", async () => {
+  const root = newQueue({ "w1.sh": 'TICKET_CWD="$HOME/wt/w1"\n' });
+  const c = await resolveConfig({ root });
+  assert.deepStrictEqual(c.cwdByWorker, { w1: path.join(homedir(), "wt/w1") });
 });
 
 // ── 레지스트리 ──────────────────────────────────────────────────────────────

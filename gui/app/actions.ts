@@ -31,6 +31,8 @@ export type ConfigRow = {
   badges: ("기본값 가정" | "루트 밖")[];
   /** 워커 간 값이 갈렸을 때만. 그 행은 워커별로 나눠 적고 경고한다. */
   byWorker?: Record<string, string>;
+  /** `작업 디렉터리` 행만. 워커별 나열이고 **경고가 아니다**(DESIGN.md §0-0 그 행 표기). */
+  perWorker?: { worker: string; value: string }[];
 };
 
 export type ResolvedView = {
@@ -85,12 +87,18 @@ function toView(tenant: Tenant, config: TenantConfig, workers: string[]): Resolv
       byWorker: conflictOf("protocols"),
     },
     {
-      // ponytail: 워커별 나열은 edc5e1a7이 넣는다(TICKET_CWD는 갈리는 게 정상 — 경고 아님).
       key: "작업 디렉터리",
       value: short(config.cwd),
       mono: true,
       badges: [...assumed("cwd")],
-      byWorker: conflictOf("cwd"),
+      // 값이 갈려도 경고하지 않는다 — 워커마다 자기 워크트리를 쓰는 게 권장 구성이다.
+      // 서로 다른 값이 하나면 경로 한 줄(워커명 없음), 둘 이상이면 워커별로 나열한다.
+      perWorker:
+        new Set(Object.values(config.cwdByWorker)).size > 1
+          ? workers
+              .filter((w) => w in config.cwdByWorker) // 순서는 `워커` 행과 같다
+              .map((w) => ({ worker: w, value: short(config.cwdByWorker[w]) }))
+          : undefined,
     },
     workers.length
       ? { key: "워커", value: `${workers.join(" ")} (${workers.length}개)`, mono: true, badges: [] }

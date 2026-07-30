@@ -23,10 +23,13 @@ export type TenantConfig = {
   protocols: string;
   inProgress: string; // 상태 접미사
   done: string;
-  cwd: string;
+  cwd: string; // 첫 워커 값 (한 경로가 필요한 호출자용)
+  /** `TICKET_CWD`를 읽은 워커만. 워커마다 자기 워크트리를 쓰는 게 정상이라 목록으로 본다. */
+  cwdByWorker: Record<string, string>;
   /** 워커에서 못 읽어 기본값을 쓴 키. UI가 "기본값 가정"으로 표시할 근거다. */
   assumed: string[];
-  /** 워커 간 값이 갈린 키. 엔진은 디스패치한 워커의 값을 쓰므로 실제 위험이다. */
+  /** 워커 간 값이 갈린 키. 엔진은 디스패치한 워커의 값을 쓰므로 실제 위험이다.
+   *  `cwd`는 **절대 들어오지 않는다**(§테넌트별 설정 해석의 `TICKET_CWD` 예외). */
   conflicts: { key: string; byWorker: Record<string, string> }[];
 };
 
@@ -202,7 +205,8 @@ function parseWorker(text: string): Partial<Record<Field, string>> {
 }
 
 /** 테넌트의 실효 설정. `<루트>/personas`·`.wip`·`.done`을 가정하지 않고 워커 파일에서 읽는다.
- *  워커가 여러 개인데 값이 갈리면 첫 워커 값을 쓰고 conflicts에 양쪽을 담는다. */
+ *  워커가 여러 개인데 값이 갈리면 첫 워커 값을 쓰고 conflicts에 양쪽을 담는다 —
+ *  `TICKET_CWD`만 예외로 `cwdByWorker` 목록에 담고 충돌로 보지 않는다. */
 export async function resolveConfig(tenant: Pick<Tenant, "root">): Promise<TenantConfig> {
   const root = tenant.root;
   const defaults: Record<Field, string> = {
@@ -223,15 +227,18 @@ export async function resolveConfig(tenant: Pick<Tenant, "root">): Promise<Tenan
     if (text !== null) parsed.push([n.slice(0, -3), parseWorker(text)]);
   }
 
-  const config: TenantConfig = { ...defaults, assumed: [], conflicts: [] };
+  const config: TenantConfig = { ...defaults, cwdByWorker: {}, assumed: [], conflicts: [] };
   for (const field of Object.values(KEYS)) {
     const found = parsed.filter(([, kv]) => kv[field] !== undefined);
+    // `TICKET_CWD`는 워커마다 갈리는 게 정상이다(워커마다 자기 git 워크트리) — 충돌이 아니라
+    // 목록이다. 하나뿐이어도 담는다: 표기(워커명 생략 여부)를 화면이 정한다.
+    if (field === "cwd") config.cwdByWorker = Object.fromEntries(found.map(([w, kv]) => [w, kv.cwd!]));
     if (found.length === 0) {
       config.assumed.push(field); // 워커에 없거나 해석 불가 — 어느 쪽이든 기본값을 쓴 것이다
       continue;
     }
     config[field] = found[0][1][field]!;
-    if (new Set(found.map(([, kv]) => kv[field])).size > 1) {
+    if (field !== "cwd" && new Set(found.map(([, kv]) => kv[field])).size > 1) {
       config.conflicts.push({
         key: field,
         byWorker: Object.fromEntries(found.map(([w, kv]) => [w, kv[field]!])),

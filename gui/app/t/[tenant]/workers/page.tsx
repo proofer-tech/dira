@@ -70,8 +70,8 @@ export default async function Workers({ params }: { params: Promise<{ tenant: st
     { key: LABEL.inProgress, value: config.inProgress, assumed: config.assumed.includes("inProgress") },
     { key: LABEL.done, value: config.done, assumed: config.assumed.includes("done") },
   ];
-  // cwd는 갈리는 게 정상이므로 경고에서 뺀다(정상 상태의 경고는 사람이 경고를 안 읽게 만든다).
-  const divergent = config.conflicts.filter((c) => c.key !== "cwd");
+  // cwd는 resolveConfig가 애초에 conflicts에 넣지 않는다(갈리는 게 정상 — edc5e1a7).
+  const divergent = config.conflicts;
 
   return (
     <div className="space-y-4">

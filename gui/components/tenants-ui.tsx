@@ -65,7 +65,23 @@ export function ConfigTable({ view }: { view: ResolvedView }) {
               </TableCell>
               <TableCell className="px-3 py-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  {row.byWorker ? (
+                  {row.perWorker ? (
+                    // 워커별 나열. 경고가 아니라 사실이므로 색도 아이콘도 쓰지 않는다 —
+                    // 한 워커만 엉뚱한 경로면 이 목록에서 그 줄이 튄다(DESIGN.md §0-0).
+                    <div className="min-w-0 space-y-0.5">
+                      {row.perWorker.map(({ worker, value }) => (
+                        <div key={worker} className="flex gap-2 font-mono text-xs">
+                          <span className="w-10 shrink-0 text-muted-foreground">{worker}</span>
+                          {/* min-w-0 래퍼가 있어야 flex 항목이 줄어들고 truncate가 먹는다 */}
+                          <div className="min-w-0">
+                            <Hint text={value}>
+                              <span className="block truncate">{value}</span>
+                            </Hint>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : row.byWorker ? (
                     // 워커마다 다르면 값을 하나로 적을 수 없다 — 양쪽을 다 적고 경고한다.
                     <>
                       {Object.entries(row.byWorker).map(([w, v]) => (
