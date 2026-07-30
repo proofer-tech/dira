@@ -26,7 +26,7 @@ const {
   usingDefault,
 } = await import("./projects.ts");
 const { filterTickets, listTickets } = await import("./queue.ts");
-const { decodeHash, projectPath } = await import("./urls.ts");
+const { decodeHash, elapsedSuffix, projectPath } = await import("./urls.ts");
 
 const roots: string[] = [];
 process.on("exit", () => {
@@ -255,6 +255,14 @@ test("decodeHash — 보드가 인코딩한 해시를 그대로 되돌린다", (
   }
   // 인코딩이 깨진 URL은 던지지 않는다 — 없는 해시로 흘러가 404가 된다(500이 아니다)
   assert.strictEqual(decodeHash("%zz"), "%zz");
+});
+
+/** `답변 대기 · 0일`은 고장으로 읽힌다 — 0이면 경과를 붙이지 않는다(DESIGN.md §2 경과 표시 표). */
+test("elapsedSuffix — 0일은 붙지 않는다", () => {
+  assert.strictEqual(elapsedSuffix(0), "");
+  assert.strictEqual(elapsedSuffix(undefined), "");
+  assert.strictEqual(elapsedSuffix(3), " · 3일");
+  assert.strictEqual(elapsedSuffix(120), " · 120일");
 });
 
 test("레지스트리 — 이름 변경 · 순서 변경 · 등록 해제", async () => {

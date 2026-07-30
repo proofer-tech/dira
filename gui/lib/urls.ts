@@ -1,4 +1,4 @@
-/** 클라이언트와 서버가 **같은 규칙을 써야 하는** 순수 URL 헬퍼.
+/** 클라이언트와 서버가 **같은 규칙을 써야 하는** 순수 헬퍼(대부분 URL).
  *
  *  `projects.ts`에 두지 못하는 이유는 하나다: 그 파일은 `node:fs`를 import하므로 클라이언트
  *  번들에 들어갈 수 없다. 등록 폼은 입력하는 동안 슬러그 미리보기를 보여주고(서버 왕복 없이),
@@ -43,6 +43,12 @@ export function projectPath(pathname: string, id: string): string {
   if (/^\/tickets\/(?!new(\/|$))./.test(rest)) return `/p/${id}`;
   return `/p/${id}${rest === "/" ? "" : rest}`;
 }
+
+/** 배지의 경과 접미사 — `답변 대기 · 3일`의 ` · 3일` (DESIGN.md §비주얼 §2 경과 표시 표).
+ *  **`0`이면 붙이지 않는다**: `· 0일`은 고장으로 읽힌다. `undefined`(경과를 안 주는 상태)와 같은 처리다.
+ *  판정만 여기 있는 이유는 `pnpm test`가 JSX를 못 읽어서다 — `status-badge.tsx`에 두면 검증이 없다.
+ *  이 파일이어야 하는 이유는 배지가 클라이언트 컴포넌트에도 들어가서다(`node:fs`를 못 끌고 온다). */
+export const elapsedSuffix = (days?: number) => (days ? ` · ${days}일` : "");
 
 /** 홈 디렉터리를 `~`로 줄인 표시용 경로. 잘리는 길이 자체를 줄인다(DESIGN.md §6 텍스트 잘림).
  *  표시 전용이다 — 이 값을 다시 파일 경로로 쓰지 않는다. */

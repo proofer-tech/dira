@@ -28,7 +28,9 @@ gui/
   lib/
     projects.ts          프로젝트 레지스트리 읽기·쓰기, 검증, 설정 해석, 목록 요약,
                         페르소나 CRUD (기준 디렉터리가 `resolveConfig().personas`라 여기 있다)
-    urls.ts             슬러그·전환 경로·`~` 축약. **순수 함수만** — 클라이언트가 import한다
+    urls.ts             슬러그·전환 경로·`~` 축약·배지 경과 접미사. **순수 함수만** —
+                        클라이언트가 import한다(배지도 클라이언트 컴포넌트에 들어간다).
+                        JSX는 `node --test`가 못 읽으므로 컴포넌트의 순수 판정은 여기서 검증한다
     paths.ts            경로 탈출 방어 (신뢰 경계) + 셸 값 해석(`shellValue` — projects·workers 공용)
     queue.ts            티켓 읽기 코어 (tickets.py 미러). 프로젝트를 인자로 받는다
     workers.ts          워커 파일·락·crontab 판정, TICKET_CONTEXT 블록 파싱·치환

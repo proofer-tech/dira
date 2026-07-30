@@ -15,7 +15,7 @@ import {
   CircleQuestionMark,
   Clock,
   Lock,
-  MessageCircleQuestion,
+  MessageSquareReply,
   Play,
   Plug,
   Power,
@@ -24,6 +24,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { elapsedSuffix } from "@/lib/urls";
 import { cn } from "@/lib/utils";
 
 export type Status =
@@ -68,13 +69,16 @@ const STATUS: Record<Status, Spec> = {
   blocked: { label: "deps 대기", icon: Lock, variant: "outline", tint: BLOCKED },
   // 이상 상태가 **아니다** — PM이 물었고 사람이 답할 일이 있다는 정상 신호다(§요구사항 레이어
   // 결정 4). 그래서 막힘 색을 그대로 쓰고 새 색 토큰을 만들지 않는다. 갈리는 건 아이콘·라벨뿐이고,
-  // 방치는 `days`(경과일)가 말한다. 아이콘 최종 확정은 designer(`588bc5bc`)다.
+  // 방치는 `days`(경과일)가 말한다. 아이콘은 designer가 확정했다(`588bc5bc` → DESIGN.md §2):
+  // 말풍선+답장 화살표다. 물음표 원(`MessageCircleQuestionMark`)은 안 쓴다 — 14px에서 deps 배지의
+  // `큐에 없는 해시`(`CircleQuestionMark`, **같은 BLOCKED 색**)와 실루엣이 겹치고, 보드에서 두
+  // 배지가 상태 컬럼·deps 컬럼에 나란히 앉는다.
   awaiting: {
     label: "답변 대기",
-    icon: MessageCircleQuestion,
+    icon: MessageSquareReply,
     variant: "outline",
     tint: BLOCKED,
-    hint: "PM이 되물었다 — 요구사항 상세에서 답을 쓰면 다시 큐에 뜬다",
+    hint: "PM이 되물었다 — 요구사항 상세에서 답을 쓰면 다시 큐에 뜬다. 자동 만료는 없다",
   },
   // 정상 흐름에 없는 상태다(엔진은 claim → assign 순서라 "열린 파일 + session_id"를 만들지 않는다).
   // 그래서 정상 단계용 색을 주지 않는다 — stale과 같은 "고장, 사람이 봐야 함"이다(§2 이상 상태).
@@ -110,7 +114,10 @@ export const statusLabel = (status: Status) => STATUS[status].label;
 export const daysSince = (ms: number) => Math.floor((Date.now() - ms) / 86_400_000);
 
 /** `days`는 방치 경과일이다(`답변 대기 · 3일`). 오래된 답변 대기가 정체의 신호이고 그 판단은
- *  사람이 한다 — 자동 만료도 색 변화도 없다(§요구사항 레이어 결정 4). */
+ *  사람이 한다 — 자동 만료도 색 변화도 없다(§요구사항 레이어 결정 4).
+ *
+ *  경과는 라벨과 **같은 색·크기**다 — 별도 span도 `opacity`도 `--muted-foreground`도 쓰지 않는다
+ *  (§비주얼 §1 대비 함정). `tabular-nums`만 붙어서 자릿수가 바뀔 때 배지가 흔들리지 않는다(§3). */
 export function StatusBadge({
   status,
   days,
@@ -122,9 +129,9 @@ export function StatusBadge({
 }) {
   const { label, icon: Icon, variant, tint, hint } = STATUS[status];
   return (
-    <Badge variant={variant} className={cn(tint, className)} title={hint}>
+    <Badge variant={variant} className={cn("tabular-nums", tint, className)} title={hint}>
       <Icon aria-hidden className="size-3.5" />
-      {days === undefined ? label : `${label} · ${days}일`}
+      {label + elapsedSuffix(days)}
     </Badge>
   );
 }
