@@ -75,10 +75,20 @@ import을 추가하면 등록 폼과 전환기가 빌드에서 깨진다.
 - **`curl`로 404 화면을 판정하지 않는다.** SSR HTML은 원래 비어 있어서 항상 "깨졌다"로 보인다.
   판정은 **하이드레이션 후 DOM**으로 한다(헤드리스 Chrome + CDP `Runtime.evaluate`).
 - **경계를 옮겨서 못 고친다**(실측). `(board)/loading.tsx`를 빼도, `app/t/[tenant]/not-found.tsx`를
-  더해도 SSR HTML은 여전히 `<main>` 0개다. 스켈레톤 위치는 이 증상과 무관하다.
+  더해도, `global-not-found`를 켜도 SSR HTML은 여전히 `<main>` 0개다. 스켈레톤 위치는 무관하다.
 - **"라우트 미스는 멀쩡한데 `notFound()`만 백지"는 앱 회귀가 아니라 JS가 안 돌았다는 신호다.**
   서버가 새 빌드로 안 올라갔거나 청크 로드가 실패한 쪽을 먼저 본다. 이 비대칭을 회귀로
-  오귀속하는 데 세션 하나를 썼다(`1c9de45f`). 개선은 `bb21be0a`가 들고 있다.
+  오귀속하는 데 세션 하나를 썼다(`1c9de45f`).
+
+**왜 안 고치나** — `bb21be0a` wontfix(사람 결정 2026-07-30). 원인이 Next 소스에 있다:
+`server/app-render/app-render.js`의 `getErrorRSCPayload`가 런타임 dynamic 요청의 `notFound()`에서
+루트 레이아웃을 `<html id="__next_error__">` + 빈 `<body>`로 **갈아치운다**. `renderToStream`의
+catch가 무조건 그 경로라 파일 배치로는 못 고친다(위 둘째 함정의 근거다. 응답의
+`id="__next_error__"`가 표식이다). 되는 길은 렌더 전에 정적 `/_not-found`로 rewrite하는 `proxy.ts`
+하나뿐인데, 재보니 티켓 상세가 **요청당 +68ms(+69%)**이고(`proxy`와 페이지가 `tickets.py find`를
+각각 부른다) 404 판정이 두 곳으로 갈린다. **JS를 끄면 `/`도 스켈레톤에 고정되므로** 고쳐도
+"JS 없이 되는 앱"이 되지 않는다 — 제일 많이 여는 화면을 느리게 할 값이 없다.
+프로토타입·실측은 `bb21be0a.done.md` §3~5에 있다.
 
 ## 명령
 
