@@ -326,6 +326,8 @@ where `h = sha1(<workers 절대경로>/<name>).hex[:8]`. 안의 `pid` 파일을 
   정렬 가능. 기본은 큐 순서(birth 오름차순) — CLI `list`와 같은 순서로 보인다.
 - **칸반 컬럼**: `대기` / `deps 대기` / `할당됨` / `진행중` / `완료`.
   드래그 없음(상태는 엔진 소관이다. 드래그로 옮기면 프로토콜을 깬다).
+  `할당됨`은 **정상 단계가 아니다** — §상태 표현의 이상 상태 항을 읽는다. 컬럼은 비어 있는 게
+  정상이고, 여기 카드가 있으면 그 티켓은 영구 정체다. 컬럼 헤더에 그 문장을 한 줄 붙인다.
 - **필터**: kind · persona · 상태 (다중 선택). URL에 반영.
 - **검색**: title + 본문 + frontmatter 값 전체를 대소문자 무시 부분일치. 서버에서.
 - **deps 표현**: deps 컬럼에 선행 해시를 badge로. 미충족은 시각적으로 구분(색만으로 하지 않는다 —
@@ -338,6 +340,8 @@ where `h = sha1(<workers 절대경로>/<name>).hex[:8]`. 안의 `pid` 파일을 
 - **관계**: `막고 있는 것`(이 티켓의 unmet deps) / `이 티켓이 막는 것`(역참조).
 - 편집: 상태 `open`·`done`만. `wip`은 잠금 + 사유 표시("세션이 물고 있다").
 - 액션: `할당 해제`(assigned일 때. `w1.sh unassign <hash>` 호출) · 삭제(확인 다이얼로그).
+  `할당됨`인 열린 티켓에서 이 버튼은 **복구 수단이다** — 그 티켓은 `select`에서 영구 제외돼 있고
+  `reap`도 손대지 않는다. 버튼 옆에 그 사유를 문장으로 적는다(§상태 표현 이상 상태 항).
 
 ### 3. 티켓 발행 `/t/<tenant>/tickets/new`
 
@@ -406,6 +410,8 @@ where `h = sha1(<workers 절대경로>/<name>).hex[:8]`. 안의 `pid` 파일을 
 | P6 | 릴리스 판정 + README에 gui/ 문서화 `3494f7d1` | pm | QA 2건 | 완료 — 릴리스 불가 판정 · `094bbe5` |
 | P6 | 릴리스 재판정 + README `## GUI` `f0111101` | pm | P6 결함 4건 | 완료 — **릴리스 가능** |
 | P7 | 수용조건 #7 왕복(발행 → 디스패치) `f75100b3` | qa | — | 완료 — **통과**. 12개 전부 통과 |
+| P7 | 할당됨 유효성 판정 `bba0c176` | pm | — | 완료 — **상태 유지**, 표현을 이상 상태로 고침 |
+| P7 | 할당됨을 이상 상태로 표현 `48056138` | developer | `bba0c176` | 열림 — 릴리스 후. 블로커 아님 |
 
 테넌트가 뒤늦게 들어와 P1이 하나 늘었다(레이아웃 셸이 보드 티켓에서 테넌트 티켓으로 옮겨갔다).
 그래서 기능 티켓 5개가 셸 하나에 직렬로 걸린다 — 셸이 완료되면 다시 4갈래 병렬이다.
@@ -494,28 +500,26 @@ P6 블로커였던 `1c9de45f`는 **회귀가 아니었다** — 404 화면이 JS
 ### 1. 색 토큰
 
 shadcn 기본 배지 변종은 4개(`default`/`secondary`/`destructive`/`outline`)인데 표시할 상태는
-티켓 5 + 워커 4 = 9개다. 부족하므로 **상태 색 토큰 5개를 추가**한다. 그 외 색은 추가하지 않는다.
+티켓 5 + 워커 4 = 9개다. 부족하므로 **상태 색 토큰 4개를 추가**한다. 그 외 색은 추가하지 않는다.
+(`할당됨`은 전용 색을 갖지 않는다 — `--status-stale`을 공유한다. §2 이상 상태 항.)
 
 `gui/app/globals.css`:
 
 ```css
 :root {
   --status-active:   oklch(0.52 0.18 258);   /* 진행중 · running */
-  --status-assigned: oklch(0.52 0.19 295);   /* 할당됨 */
   --status-blocked:  oklch(0.52 0.13 75);    /* deps 대기 */
   --status-done:     oklch(0.50 0.13 155);   /* 완료 */
-  --status-stale:    oklch(0.52 0.19 25);    /* stale */
+  --status-stale:    oklch(0.52 0.19 25);    /* stale · 할당됨 · 연결 안 됨 — "고장, 사람이 봐야 함" */
 }
 .dark {
   --status-active:   oklch(0.75 0.15 258);
-  --status-assigned: oklch(0.76 0.15 295);
   --status-blocked:  oklch(0.80 0.13 80);
   --status-done:     oklch(0.76 0.14 155);
   --status-stale:    oklch(0.75 0.15 25);
 }
 @theme inline {                              /* Tailwind v4 — bg-status-*/text-status-* 노출 */
   --color-status-active:   var(--status-active);
-  --color-status-assigned: var(--status-assigned);
   --color-status-blocked:  var(--status-blocked);
   --color-status-done:     var(--status-done);
   --color-status-stale:    var(--status-stale);
@@ -535,7 +539,6 @@ text-status-X  bg-status-X/10  border-status-X/30
 | 토큰 | 라이트 | 다크 |
 |---|---|---|
 | `--status-active` | 4.89 | 7.64 |
-| `--status-assigned` | 5.21 | 7.66 |
 | `--status-blocked` | 4.89 | 9.05 |
 | `--status-done` | 4.85 | 8.50 |
 | `--status-stale` | 5.17 | 7.40 |
@@ -561,9 +564,27 @@ text-status-X  bg-status-X/10  border-status-X/30
 |---|---|---|---|
 | open · 미할당 · deps 충족 | `대기` | shadcn `secondary` | `Circle` |
 | open · unmet deps 있음 | `deps 대기` | `--status-blocked` | `Lock` |
-| open · `session_id` 있음 | `할당됨` | `--status-assigned` | `CircleDot` |
+| open · `session_id` 있음 | `할당됨` | `--status-stale` | `CircleDot` |
 | `.wip` | `진행중` | `--status-active` | `CirclePlay` |
 | `.done` | `완료` | `--status-done` | `CircleCheck` |
+
+**`할당됨`은 이상 상태다 — 정상 흐름에 이 단계가 없다.** 디스패처는 claim(`.wip` rename)을 먼저
+하고 `session_id`를 그 뒤에 쓴다(`tick.sh`: claim → assign). 회수 경로도 전부 `session_id`를
+먼저 비우고 접미사를 뗀다(`clear` → `release`). 그래서 **엔진이 지나가는 상태가 아니다.**
+도달하는 길은 하나다: 사람·에이전트가 손으로 쓴 티켓 파일에 `session_id`가 들어간 경우
+(`protocols/tickets.md` §frontmatter가 금지하는 그것). 그 티켓은 `select`가 영구 제외하고
+`reap`은 `.wip`만 보므로 손대지 않는다 → **아무 신호 없이 영원히 디스패치되지 않는다.**
+
+이 배지가 그 유일한 신호다. 그래서:
+
+- **지우지 않는다.** `tickets.py list`도 같은 조건을 `할당됨`으로 보고한다 — GUI에서 빼면 화면이
+  CLI보다 덜 보이게 된다(`gui/AGENTS.md` 패리티 요건).
+- **라벨은 `할당됨` 그대로.** CLI와 같은 말을 쓴다(이 절 첫 문장).
+- **색은 `--status-stale`을 공유한다.** 워커 `stale`·테넌트 `연결 안 됨`과 같은 뜻이기 때문이다 —
+  "고장났고 사람이 봐야 한다". 아이콘으로 갈린다(`CircleDot` / `TriangleAlert` / `Unplug`).
+  전용 `--status-assigned` 토큰은 **없다**: 정상 단계용 색을 주면 화면이 거짓말을 한다.
+- 배지에는 사유를 `title`로 붙인다(`DepBadge`의 `missing`과 같은 처리):
+  `session_id가 박힌 열린 티켓 — 큐에서 영구 제외된다. 할당 해제로 되돌린다`
 
 **워커 4상태**
 
