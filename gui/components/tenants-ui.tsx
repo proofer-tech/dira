@@ -48,6 +48,7 @@ function Hint({ text, children }: { text: string; children: React.ReactNode }) {
 
 const BADGE_HINT: Record<string, string> = {
   "기본값 가정": "워커 파일에서 이 값을 찾지 못해 기본값을 씁니다",
+  "해석 실패": "$HOME 외 변수가 남아 값을 읽지 못했습니다 — 화면은 기본값을 씁니다",
   "루트 밖": "테넌트 루트 밖을 가리킵니다",
 };
 
@@ -104,8 +105,30 @@ export function ConfigTable({ view }: { view: ResolvedView }) {
                   )}
                   {row.badges.map((b) => (
                     <Hint key={b} text={BADGE_HINT[b]}>
-                      <Badge variant="outline">{b}</Badge>
+                      {/* `해석 실패`만 색+아이콘이다 — 나머지는 경고가 아니라 사실이다(§0) */}
+                      <Badge
+                        variant="outline"
+                        className={
+                          b === "해석 실패"
+                            ? "text-status-stale bg-status-stale/10 border-status-stale/30"
+                            : undefined
+                        }
+                      >
+                        {b === "해석 실패" && <TriangleAlert aria-hidden className="size-3.5" />}
+                        {b}
+                      </Badge>
                     </Hint>
+                  ))}
+                  {/* 무엇을 못 읽었는지는 원문 라인만이 말해준다(§7 해석 실패).
+                      `basis-full`이면 wrap 컨테이너가 알아서 값 아래 줄로 내린다 */}
+                  {row.unresolved?.map(({ worker, raw }) => (
+                    <div
+                      key={worker + raw}
+                      className="flex basis-full gap-2 font-mono text-xs text-muted-foreground"
+                    >
+                      <span className="w-10 shrink-0">{worker}</span>
+                      <span className="min-w-0 break-all">{raw}</span>
+                    </div>
                   ))}
                 </div>
               </TableCell>

@@ -10,7 +10,7 @@ import { CreatePersonaButton, PersonaCard } from "@/components/personas-ui";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { listTickets } from "@/lib/queue";
-import { getTenant, listPersonas, resolveConfig } from "@/lib/tenants";
+import { getTenant, listPersonas, resolveConfig, usingDefault } from "@/lib/tenants";
 
 // 프로필 파일은 GUI 밖에서도 바뀌고(에디터) 참조 건수는 디스패처가 바꾼다 — 굳히지 않는다.
 export const dynamic = "force-dynamic";
@@ -37,7 +37,7 @@ export default async function Personas({ params }: { params: Promise<{ tenant: s
         <span className="text-muted-foreground">디렉터리</span>
         <span className="font-mono break-all">{config.personas}</span>
         {/* 색을 쓰지 않는다 — 경고가 아니라 사실이다(§8 해석 결과 표와 같은 배지) */}
-        {config.assumed.includes("personas") && (
+        {usingDefault(config, "personas") && (
           <Badge variant="outline" title="워커 파일에서 TICKET_PERSONAS를 찾지 못해 기본값을 씁니다">
             기본값 가정
           </Badge>

@@ -12,7 +12,7 @@ import { EmptyState } from "@/components/empty-state";
 import { InlineBadge, NewFileButton, ProtocolEditor } from "@/components/protocols-ui";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { listTree, readTextFile, type ProtocolFile } from "@/lib/protocols";
-import { getTenant, resolveConfig } from "@/lib/tenants";
+import { getTenant, resolveConfig, usingDefault } from "@/lib/tenants";
 import { cn } from "@/lib/utils";
 
 // 프로토콜 파일은 세션이 GUI 밖에서 고친다 — 프리렌더하면 빌드 시점 내용이 굳는다.
@@ -52,7 +52,7 @@ export default async function Protocols({
           <h1 className="text-lg font-semibold">프로토콜</h1>
           <p className="font-mono text-xs break-all text-muted-foreground">
             {config.protocols}
-            {config.assumed.includes("protocols") && (
+            {usingDefault(config, "protocols") && (
               <span className="ml-2 font-sans">기본값 가정</span>
             )}
           </p>
@@ -60,11 +60,12 @@ export default async function Protocols({
         {tree.length > 0 && <NewFileButton tenantId={id} />}
       </div>
 
-      {config.assumed.includes("protocols") && (
-        // 워커 어디에도 TICKET_PROTOCOLS가 없다 = 엔진의 `${TICKET_PROTOCOLS:-$TICKET_ROOT/protocols}`
-        // 기본값을 쓴다는 뜻이다. GUI가 정한 게 아니라 엔진 기본값이라는 걸 밝힌다.
+      {usingDefault(config, "protocols") && (
+        // 워커에서 TICKET_PROTOCOLS를 못 얻었다(없거나 해석 실패) = 엔진의
+        // `${TICKET_PROTOCOLS:-$TICKET_ROOT/protocols}` 기본값을 쓴다는 뜻이다.
+        // 둘을 가르는 화면은 §7 해석 결과 표 하나다 — 여기는 "기본값을 본다"는 사실만 필요하다.
         <p className="max-w-3xl text-sm text-muted-foreground">
-          워커 파일에 <span className="font-mono text-xs">TICKET_PROTOCOLS</span>가 없어 엔진 기본값
+          워커 파일에서 <span className="font-mono text-xs">TICKET_PROTOCOLS</span>를 읽지 못해 엔진 기본값
           (<span className="font-mono text-xs">&lt;루트&gt;/protocols</span>)으로 봅니다. 워커에서
           다른 경로로 재정의하면 이 화면도 그 경로를 따라갑니다.
         </p>

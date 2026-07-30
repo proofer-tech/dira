@@ -23,6 +23,7 @@ const {
   renameTenant,
   reorderTenants,
   resolveConfig,
+  usingDefault,
 } = await import("./tenants.ts");
 const { listTickets } = await import("./queue.ts");
 const { tenantPath } = await import("./urls.ts");
@@ -60,6 +61,7 @@ test("resolveConfig — 워커에 값 없음: 기본값 + assumed 전부", async
   assert.strictEqual(c.cwd, path.dirname(root));
   assert.deepStrictEqual(c.assumed.sort(), ["cwd", "done", "inProgress", "personas", "protocols"]);
   assert.deepStrictEqual(c.conflicts, []);
+  assert.deepStrictEqual(c.unresolved, []); // 못 읽은 라인이 없다 = 해석 실패도 없다
 });
 
 test("resolveConfig — 워커 0개(디렉터리도 없음)", async () => {
@@ -89,15 +91,36 @@ test("resolveConfig — $HOME 치환, 루트 밖 페르소나, 한글 접미사"
   assert.deepStrictEqual(c.assumed, ["cwd"]); // cwd만 워커에 없다
 });
 
-test("resolveConfig — 해석 불가 변수는 기본값 + assumed(경고 근거)", async () => {
+test("resolveConfig — 해석 불가 변수는 기본값 + unresolved(assumed 아니다)", async () => {
   const root = newQueue({
-    "w1.sh": 'TICKET_CWD="$TICKET_ROOT/../wt/w1"\nTICKET_PERSONAS="$UNSET_VAR/personas"\n',
+    "w1.sh":
+      'TICKET_CWD="$TICKET_ROOT/../wt/w1"\nTICKET_PERSONAS="$UNSET_VAR/personas"\nTICKET_DONE=\n',
   });
   const c = await resolveConfig({ root });
   assert.strictEqual(c.cwd, path.dirname(root)); // 셸을 실행하지 않으므로 못 읽는다
   assert.strictEqual(c.personas, path.join(root, "personas"));
-  assert.ok(c.assumed.includes("cwd") && c.assumed.includes("personas"));
   assert.deepStrictEqual(c.cwdByWorker, {}); // 해석 못 한 값은 목록에도 담지 않는다
+  // 못 읽은 것은 unresolved에만. 값이 아예 없는 키(done=빈 값, protocols·inProgress=없는 줄)만 assumed.
+  assert.deepStrictEqual(c.unresolved, [
+    { key: "personas", raw: 'TICKET_PERSONAS="$UNSET_VAR/personas"', worker: "w1" },
+    { key: "cwd", raw: 'TICKET_CWD="$TICKET_ROOT/../wt/w1"', worker: "w1" },
+  ]);
+  assert.deepStrictEqual(c.assumed.sort(), ["done", "inProgress", "protocols"]);
+  assert.ok(usingDefault(c, "personas") && usingDefault(c, "done")); // 다른 화면은 둘을 안 가른다
+});
+
+test("resolveConfig — 한 워커만 못 읽으면 값은 다른 워커 것 + unresolved에 남는다", async () => {
+  const root = newQueue({
+    "w1.sh": 'TICKET_PERSONAS="$UNSET_VAR/personas"\n',
+    "w2.sh": 'TICKET_PERSONAS="$HOME/p"\n',
+  });
+  const c = await resolveConfig({ root });
+  assert.strictEqual(c.personas, path.join(homedir(), "p"));
+  assert.ok(!c.assumed.includes("personas")); // 기본값을 쓴 게 아니다
+  // 엔진은 셸을 실행하므로 w1에 물린 티켓은 우리가 못 본 경로를 쓴다 — 그 사실을 남긴다
+  assert.deepStrictEqual(c.unresolved, [
+    { key: "personas", raw: 'TICKET_PERSONAS="$UNSET_VAR/personas"', worker: "w1" },
+  ]);
 });
 
 test("resolveConfig — 워커 2개 값이 갈리면 conflicts + 첫 워커 값", async () => {

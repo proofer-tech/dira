@@ -26,8 +26,11 @@ export type TenantConfig = {
   cwd: string; // 첫 워커 값 (한 경로가 필요한 호출자용)
   /** `TICKET_CWD`를 읽은 워커만. 워커마다 자기 워크트리를 쓰는 게 정상이라 목록으로 본다. */
   cwdByWorker: Record<string, string>;
-  /** 워커에서 못 읽어 기본값을 쓴 키. UI가 "기본값 가정"으로 표시할 근거다. */
+  /** 워커에 **값이 없어** 기본값을 쓴 키. UI가 "기본값 가정"으로 표시할 근거다. */
   assumed: string[];
+  /** 값은 있는데 `$HOME` 외 변수가 남아 해석하지 못한 할당문. UI가 `[해석 실패]` 배지 + 원문
+   *  라인을 그린다(§7). `assumed`와 다른 사실이다 — 없는 것과 못 읽은 것은 조치가 다르다. */
+  unresolved: { key: string; raw: string; worker: string }[];
   /** 워커 간 값이 갈린 키. 엔진은 디스패치한 워커의 값을 쓰므로 실제 위험이다.
    *  `cwd`는 **절대 들어오지 않는다**(§테넌트별 설정 해석의 `TICKET_CWD` 예외). */
   conflicts: { key: string; byWorker: Record<string, string> }[];
@@ -191,17 +194,24 @@ const ASSIGN_RE = /^[ \t]*(?:export[ \t]+)?(TICKET_[A-Z_]+)=(.*)$/;
  *  둘이 서로를 import하면 순환이다. 여기서 다시 export하는 건 기존 호출자(테스트) 때문이다. */
 export { shellValue };
 
-function parseWorker(text: string): Partial<Record<Field, string>> {
-  const out: Partial<Record<Field, string>> = {};
+type Parsed = { kv: Partial<Record<Field, string>>; bad: Partial<Record<Field, string>> };
+
+/** 워커 파일 하나의 할당문. `bad`는 **해석 못 한 라인 원문** — `$` 참조가 남은 경우만이다.
+ *  `TICKET_DONE=`처럼 빈 값은 `shellValue`가 똑같이 null을 주지만 그건 미설정이지 실패가 아니다
+ *  (`tickets.py`도 `or 기본값`). 둘을 섞으면 화면이 안 켜져도 될 경고를 켠다. */
+function parseWorker(text: string): Parsed {
+  const kv: Partial<Record<Field, string>> = {};
+  const bad: Partial<Record<Field, string>> = {};
   for (const line of text.split("\n")) {
     const m = ASSIGN_RE.exec(line);
     if (!m) continue;
     const field = KEYS[m[1] as keyof typeof KEYS];
     if (!field) continue;
     const v = shellValue(m[2]);
-    if (v !== null) out[field] = v; // 뒤 할당이 이긴다(셸과 같다)
+    if (v !== null) kv[field] = v; // 뒤 할당이 이긴다(셸과 같다)
+    else if (m[2].includes("$")) bad[field] = line.trim(); // 원문 그대로 보여준다
   }
-  return out;
+  return { kv, bad };
 }
 
 /** 테넌트의 실효 설정. `<루트>/personas`·`.wip`·`.done`을 가정하지 않고 워커 파일에서 읽는다.
@@ -221,31 +231,48 @@ export async function resolveConfig(tenant: Pick<Tenant, "root">): Promise<Tenan
   const names = (await readdir(dir).catch(() => [] as string[]))
     .filter((n) => n.endsWith(".sh"))
     .sort();
-  const parsed: [string, Partial<Record<Field, string>>][] = [];
+  const parsed: [string, Parsed][] = [];
   for (const n of names) {
     const text = await readFile(path.join(dir, n), "utf8").catch(() => null);
     if (text !== null) parsed.push([n.slice(0, -3), parseWorker(text)]);
   }
 
-  const config: TenantConfig = { ...defaults, cwdByWorker: {}, assumed: [], conflicts: [] };
+  const config: TenantConfig = {
+    ...defaults,
+    cwdByWorker: {},
+    assumed: [],
+    unresolved: [],
+    conflicts: [],
+  };
   for (const field of Object.values(KEYS)) {
-    const found = parsed.filter(([, kv]) => kv[field] !== undefined);
+    const found = parsed.filter(([, p]) => p.kv[field] !== undefined);
+    const bad = parsed.filter(([, p]) => p.bad[field] !== undefined);
+    // 못 읽은 라인은 다른 워커가 같은 키를 제대로 줬더라도 남긴다 — 엔진은 셸을 실행하므로
+    // 그 워커에서는 우리가 못 본 값이 실제로 쓰인다. 그 사실을 화면이 알려야 한다.
+    for (const [w, p] of bad) config.unresolved.push({ key: field, raw: p.bad[field]!, worker: w });
     // `TICKET_CWD`는 워커마다 갈리는 게 정상이다(워커마다 자기 git 워크트리) — 충돌이 아니라
     // 목록이다. 하나뿐이어도 담는다: 표기(워커명 생략 여부)를 화면이 정한다.
-    if (field === "cwd") config.cwdByWorker = Object.fromEntries(found.map(([w, kv]) => [w, kv.cwd!]));
+    if (field === "cwd") config.cwdByWorker = Object.fromEntries(found.map(([w, p]) => [w, p.kv.cwd!]));
     if (found.length === 0) {
-      config.assumed.push(field); // 워커에 없거나 해석 불가 — 어느 쪽이든 기본값을 쓴 것이다
+      // 값이 아예 없다(`기본값 가정`) ≠ 있는데 못 읽었다(`해석 실패`). 후자는 unresolved에만 담는다.
+      if (bad.length === 0) config.assumed.push(field);
       continue;
     }
-    config[field] = found[0][1][field]!;
-    if (field !== "cwd" && new Set(found.map(([, kv]) => kv[field])).size > 1) {
+    config[field] = found[0][1].kv[field]!;
+    if (field !== "cwd" && new Set(found.map(([, p]) => p.kv[field])).size > 1) {
       config.conflicts.push({
         key: field,
-        byWorker: Object.fromEntries(found.map(([w, kv]) => [w, kv[field]!])),
+        byWorker: Object.fromEntries(found.map(([w, p]) => [w, p.kv[field]!])),
       });
     }
   }
   return config;
+}
+
+/** 워커 값을 못 쓴 모든 경우(값이 없음 + 해석 실패). §7 해석 결과 표만 둘을 구분해 그리고,
+ *  나머지 화면은 "화면이 쓰는 값이 기본값이다"라는 같은 사실만 필요하다. */
+export function usingDefault(config: TenantConfig, key: string): boolean {
+  return config.assumed.includes(key) || config.unresolved.some((u) => u.key === key);
 }
 
 // ── 목록·전환기용 요약 ──────────────────────────────────────────────────────

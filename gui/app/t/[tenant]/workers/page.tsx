@@ -25,7 +25,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { listTickets } from "@/lib/queue";
-import { getTenant, resolveConfig } from "@/lib/tenants";
+import { getTenant, resolveConfig, usingDefault } from "@/lib/tenants";
 import { cronUnregisterCmd, cronRegisterCmd, firstWorkerCmd, listWorkers } from "@/lib/workers";
 
 // 워커는 GUI 밖에서(cron이) 상태를 바꾼다 — 프리렌더하면 빌드 시점 현황이 굳는다.
@@ -65,10 +65,10 @@ export default async function Workers({ params }: { params: Promise<{ tenant: st
 
   // 표시만 하는 값들(편집은 범위 밖 — 4e2850eb). 해석은 resolveConfig 하나가 한다.
   const settings = [
-    { key: LABEL.personas, value: config.personas, assumed: config.assumed.includes("personas") },
-    { key: LABEL.protocols, value: config.protocols, assumed: config.assumed.includes("protocols") },
-    { key: LABEL.inProgress, value: config.inProgress, assumed: config.assumed.includes("inProgress") },
-    { key: LABEL.done, value: config.done, assumed: config.assumed.includes("done") },
+    { key: LABEL.personas, value: config.personas, assumed: usingDefault(config, "personas") },
+    { key: LABEL.protocols, value: config.protocols, assumed: usingDefault(config, "protocols") },
+    { key: LABEL.inProgress, value: config.inProgress, assumed: usingDefault(config, "inProgress") },
+    { key: LABEL.done, value: config.done, assumed: usingDefault(config, "done") },
   ];
   // cwd는 resolveConfig가 애초에 conflicts에 넣지 않는다(갈리는 게 정상 — edc5e1a7).
   const divergent = config.conflicts;

@@ -27,12 +27,15 @@ export type ConfigRow = {
   key: string;
   value: string;
   mono: boolean;
-  /** `기본값 가정` = 워커에서 못 읽음, `루트 밖` = 틀린 게 아니라 알아야 할 사실. */
-  badges: ("기본값 가정" | "루트 밖")[];
+  /** `기본값 가정` = 워커에 값이 없음, `해석 실패` = 값은 있는데 못 읽음(색+아이콘 있는 경고),
+   *  `루트 밖` = 틀린 게 아니라 알아야 할 사실. */
+  badges: ("기본값 가정" | "해석 실패" | "루트 밖")[];
   /** 워커 간 값이 갈렸을 때만. 그 행은 워커별로 나눠 적고 경고한다. */
   byWorker?: Record<string, string>;
   /** `작업 디렉터리` 행만. 워커별 나열이고 **경고가 아니다**(DESIGN.md §0-0 그 행 표기). */
   perWorker?: { worker: string; value: string }[];
+  /** 해석 못 한 할당문 원문. 값 아래 한 줄씩 그린다 — 무엇을 못 읽었는지 그것만이 말해준다. */
+  unresolved?: { worker: string; raw: string }[];
 };
 
 export type ResolvedView = {
@@ -56,41 +59,52 @@ function toView(tenant: Tenant, config: TenantConfig, workers: string[]): Resolv
   const outside = (p: string) => (p === tenant.root || p.startsWith(tenant.root + path.sep) ? [] : (["루트 밖"] as const));
   const conflictOf = (key: string) => config.conflicts.find((c) => c.key === key)?.byWorker;
   const assumed = (key: string) => (config.assumed.includes(key) ? (["기본값 가정"] as const) : []);
+  // 해석 실패는 `기본값 가정`과 배타적이다(resolveConfig가 갈라 담는다) — 배지도 하나만 뜬다.
+  const rawOf = (key: string) => {
+    const bad = config.unresolved.filter((u) => u.key === key);
+    return bad.length ? bad.map(({ worker, raw }) => ({ worker, raw })) : undefined;
+  };
+  const failed = (key: string) => (rawOf(key) ? (["해석 실패"] as const) : []);
 
   const rows: ConfigRow[] = [
     {
       key: "진행중 접미사",
       value: config.inProgress,
       mono: true,
-      badges: [...assumed("inProgress")],
+      badges: [...assumed("inProgress"), ...failed("inProgress")],
       byWorker: conflictOf("inProgress"),
+      unresolved: rawOf("inProgress"),
     },
     {
       key: "완료 접미사",
       value: config.done,
       mono: true,
-      badges: [...assumed("done")],
+      badges: [...assumed("done"), ...failed("done")],
       byWorker: conflictOf("done"),
+      unresolved: rawOf("done"),
     },
     {
       key: "페르소나",
       value: short(config.personas),
       mono: true,
-      badges: [...assumed("personas"), ...outside(config.personas)],
+      badges: [...assumed("personas"), ...failed("personas"), ...outside(config.personas)],
       byWorker: conflictOf("personas"),
+      unresolved: rawOf("personas"),
     },
     {
       key: "프로토콜",
       value: short(config.protocols),
       mono: true,
-      badges: [...assumed("protocols"), ...outside(config.protocols)],
+      badges: [...assumed("protocols"), ...failed("protocols"), ...outside(config.protocols)],
       byWorker: conflictOf("protocols"),
+      unresolved: rawOf("protocols"),
     },
     {
       key: "작업 디렉터리",
       value: short(config.cwd),
       mono: true,
-      badges: [...assumed("cwd")],
+      badges: [...assumed("cwd"), ...failed("cwd")],
+      unresolved: rawOf("cwd"),
       // 값이 갈려도 경고하지 않는다 — 워커마다 자기 워크트리를 쓰는 게 권장 구성이다.
       // 서로 다른 값이 하나면 경로 한 줄(워커명 없음), 둘 이상이면 워커별로 나열한다.
       perWorker:
