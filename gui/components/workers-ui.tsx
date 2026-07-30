@@ -2,8 +2,9 @@
 
 /** 워커 화면(`/p/<project>/workers`)의 클라이언트 조각 — 생성 · 중단 · 삭제 · reap.
  *
- *  **crontab의 그 워커 줄은 GUI가 쓴다**(제약 4, `44f876aa`로 뒤집힘). 서버가 만들어 준
- *  명령어를 `<CopyCommand>`로 복사시키는 건 이제 **실패했을 때**다. fs를 만지는 건 서버 액션뿐이다.
+ *  **crontab의 그 워커 줄은 GUI가 쓴다**(제약 4, `44f876aa`로 뒤집힘). 생성·중단·삭제 세 자리가
+ *  다 한 동작이고, 서버가 만들어 준 명령어를 `<CopyCommand>`로 복사시키는 건 **실패했을 때**다.
+ *  fs를 만지는 건 서버 액션뿐이다.
  *  파일 하나에 모은 이유는 projects-ui.tsx와 같다 — 세 다이얼로그가 같은 문구·같은 명령어를
  *  쓰므로 쪼개면 자리가 갈린다. */
 import { useState, useTransition } from "react";
@@ -14,6 +15,7 @@ import {
   deleteWorkerAction,
   reapWorkerAction,
   saveContextAction,
+  stopWorkerAction,
   type ContextResult,
   type WorkerActionResult,
 } from "@/app/p/[project]/workers/actions";
@@ -194,8 +196,9 @@ export function WorkerRowActions({ projectId, row }: { projectId: string; row: W
   const [pending, start] = useTransition();
   const [reap, setReap] = useState<WorkerActionResult | null>(null);
   const [stopping, setStopping] = useState(false);
+  const [stopped, setStopped] = useState<WorkerActionResult | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<WorkerActionResult | null>(null);
 
   return (
     <div className="flex items-center justify-end gap-1">
@@ -238,8 +241,14 @@ export function WorkerRowActions({ projectId, row }: { projectId: string; row: W
         </DialogContent>
       </Dialog>
 
-      {/* 중단 — 파일은 남기고 crontab 줄만 뺀다. 그 실행은 사람이 한다 */}
-      <Dialog open={stopping} onOpenChange={setStopping}>
+      {/* 중단 — 파일은 남기고 crontab 줄만 GUI가 뺀다. 실패했을 때만 복사 명령으로 돌아간다 */}
+      <Dialog
+        open={stopping}
+        onOpenChange={(o) => {
+          setStopping(o);
+          if (!o) setStopped(null);
+        }}
+      >
         <DialogContent className="sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>워커 중단 — {row.name}</DialogTitle>
@@ -248,12 +257,24 @@ export function WorkerRowActions({ projectId, row }: { projectId: string; row: W
               돌아옵니다.
             </DialogDescription>
           </DialogHeader>
-          {row.cron ? (
-            <CopyCommand cmd={row.unregisterCmd} />
+          {stopped?.ok ? (
+            // 이미 미등록이었으면 no-op이라고 말한다 — 에러가 아니다
+            <p className="text-sm font-medium">{stopped.message}</p>
           ) : (
-            <p className="text-sm text-muted-foreground">
-              이미 crontab에 없습니다. 이 워커는 지금도 돌지 않습니다.
-            </p>
+            <>
+              {!row.cron && (
+                <p className="text-sm text-muted-foreground">
+                  이미 crontab에 없습니다. 이 워커는 지금도 돌지 않습니다.
+                </p>
+              )}
+              {stopped && (
+                <div className="space-y-2">
+                  <Failure title="crontab에서 빼지 못했습니다" message={stopped.message ?? ""} />
+                  <p className="text-sm font-medium">이 명령을 셸에서 실행하세요</p>
+                  <CopyCommand cmd={row.unregisterCmd} />
+                </div>
+              )}
+            </>
           )}
           {row.status === "running" && (
             <Alert>
@@ -267,6 +288,16 @@ export function WorkerRowActions({ projectId, row }: { projectId: string; row: W
           )}
           <DialogFooter>
             <DialogClose render={<Button variant="outline" autoFocus />}>닫기</DialogClose>
+            {!stopped?.ok && (
+              <Button
+                disabled={pending}
+                onClick={() =>
+                  start(async () => setStopped(await stopWorkerAction(projectId, row.name)))
+                }
+              >
+                {pending ? "중단하는 중…" : "중단"}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -300,15 +331,25 @@ export function WorkerRowActions({ projectId, row }: { projectId: string; row: W
                 파일을 지웁니다. 이 큐의 티켓은 삭제되지 않습니다.
               </p>
               {row.cron && (
+                <p className="text-sm">
+                  crontab 줄도 같이 뺍니다 — <span className="font-medium">crontab 먼저, 파일
+                  나중</span>입니다. 남겨 두면 cron이 1분마다 없는 파일을 실행하고 cron.log에
+                  에러가 쌓입니다.
+                </p>
+              )}
+              {error && (
                 <div className="space-y-2">
-                  <p className="text-sm font-medium">crontab 줄도 같이 지우세요</p>
-                  <CopyCommand cmd={row.unregisterCmd} />
-                  <p className="text-xs text-muted-foreground">
-                    남겨 두면 cron이 1분마다 없는 파일을 실행하고 cron.log에 에러가 쌓입니다.
-                  </p>
+                  <Failure title={`워커 ${row.name} 삭제 실패`} message={error.message ?? ""} />
+                  {error.cronFailed && (
+                    <>
+                      <p className="text-sm font-medium">
+                        파일은 그대로입니다 — 이 명령으로 crontab 줄을 뺀 뒤 다시 시도하세요
+                      </p>
+                      <CopyCommand cmd={row.unregisterCmd} />
+                    </>
+                  )}
                 </div>
               )}
-              {error && <Failure title={`워커 ${row.name} 삭제 실패`} message={error} />}
             </>
           )}
 
@@ -322,7 +363,7 @@ export function WorkerRowActions({ projectId, row }: { projectId: string; row: W
                   start(async () => {
                     const r = await deleteWorkerAction(projectId, row.name);
                     if (r.ok) setDeleting(false);
-                    else setError(r.message ?? "삭제하지 못했습니다.");
+                    else setError({ ...r, message: r.message ?? "삭제하지 못했습니다." });
                   })
                 }
               >

@@ -1,6 +1,6 @@
 "use server";
 
-/** 워커 화면의 서버 액션 — 생성 · 삭제 · reap.
+/** 워커 화면의 서버 액션 — 생성 · 중단 · 삭제 · reap.
  *
  *  crontab은 **그 프로젝트의 워커 줄만** 쓴다(제약 4). 계산도 쓰기도 `lib/workers.ts`에 있고,
  *  등록이 실패하면 그때만 종전의 복사 명령어로 되돌아간다.
@@ -17,13 +17,18 @@ import {
   cronUnregisterCmd,
   deleteWorker,
   registerCron,
+  stopWorker,
   writeContext,
   type WorkerContext,
 } from "@/lib/workers";
 
 export type WorkerActionResult = {
   ok: boolean;
+  /** 실패 사유. 중단은 성공했을 때도 무엇을 했는지(또는 no-op이었는지) 여기로 말한다 */
   message?: string;
+  /** 삭제가 **crontab 해제 단계에서** 멈췄다 = 파일은 그대로다. 화면이 해제 명령어를
+   *  이 경우에만 보여준다(파일 삭제 실패에 같은 명령을 권하면 거짓 안내다) */
+  cronFailed?: boolean;
   /** 생성 성공 시. `cron: false`면 파일은 있고 등록만 실패한 것이다 — 화면이 사유와
    *  종전의 등록 명령어를 보여주고 사람이 셸에서 마무리한다 */
   created?: {
@@ -47,7 +52,8 @@ async function rootOf(projectId: string): Promise<string> {
 }
 
 function fail(e: unknown): WorkerActionResult {
-  return { ok: false, message: (e as Error).message };
+  const err = e as Error & { cronFailed?: boolean };
+  return { ok: false, message: err.message, cronFailed: err.cronFailed };
 }
 
 export async function createWorkerAction(
@@ -75,6 +81,25 @@ export async function createWorkerAction(
         registerCmd: cronRegisterCmd({ path }),
         unregisterCmd: cronUnregisterCmd({ path }),
       },
+    };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** 중단 — crontab 줄만 뺀다. 진행중 세션도 락도 안 건드린다(제약 4). */
+export async function stopWorkerAction(
+  projectId: string,
+  name: string,
+): Promise<WorkerActionResult> {
+  try {
+    const removed = await stopWorker(await rootOf(projectId), name);
+    revalidatePath(`/p/${projectId}`, "layout");
+    return {
+      ok: true,
+      message: removed
+        ? "crontab에서 뺐습니다 — 이 워커는 더 이상 새 티켓을 물지 않습니다."
+        : "이미 crontab에 없었습니다 — 바꾼 것이 없습니다.",
     };
   } catch (e) {
     return fail(e);

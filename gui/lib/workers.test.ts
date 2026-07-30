@@ -26,6 +26,7 @@ const {
   parseContextBlock,
   readCommonContext,
   renderContextBlock,
+  stopWorker,
   workerSummary,
   writeCommonContext,
   writeContext,
@@ -596,10 +597,88 @@ test("applyCommonSource — 삽입 위치는 닫는 `)` 다음 줄, 두 번째�
   await assert.rejects(applyCommonSource(root, "../evil"), /영문·숫자/);
 });
 
-test("deleteWorker — running은 막는다(락과 세션이 붕 뜬다)", async () => {
+/** `-l`과 `crontab -`이 **같은 파일**을 본다 — 쓴 뒤 다시 읽어 확인하는 `applyCrontab`의 경로다
+ *  (`withWritableCrontab`은 셸 파이프라인용이라 읽기/쓰기 파일이 갈라져 있다).
+ *  `failWrite`면 `crontab -`이 실패한다 — 해제 실패에 파일을 남기는지 보려고. */
+function withLiveCrontab(text: string, opts: { failWrite?: boolean } = {}) {
+  const bin = mkdtempSync(path.join(tmpdir(), "fst-bin-"));
+  tmps.push(bin);
+  const tab = path.join(bin, "tab.txt");
+  writeFileSync(tab, text);
+  const write = opts.failWrite
+    ? 'cat >/dev/null; echo "crontab: 쓸 수 없습니다" >&2; exit 1'
+    : `cat > ${JSON.stringify(tab + ".new")} && mv ${JSON.stringify(tab + ".new")} ${JSON.stringify(tab)}`;
+  writeFileSync(
+    path.join(bin, "crontab"),
+    `#!/bin/sh\nif [ "$1" = "-l" ]; then cat ${JSON.stringify(tab)}; else ${write}; fi\n`,
+    { mode: 0o755 },
+  );
+  const prev = process.env.PATH;
+  process.env.PATH = `${bin}:${prev}`;
+  return {
+    tab: () => readFileSync(tab, "utf8"),
+    restore: () => {
+      process.env.PATH = prev;
+    },
+  };
+}
+
+test("stopWorker — 그 줄만 빠지고 파일·락은 그대로. 두 번째는 no-op이다(에러가 아니다)", async () => {
+  const root = makeRoot({ "w1.sh": "#!/bin/bash\n", "w2.sh": "#!/bin/bash\n" });
+  const dir = path.join(root, "workers");
+  const [w1, w2] = ["w1.sh", "w2.sh"].map((n) => path.join(dir, n));
+  const other = "0 3 * * * /Users/x/bin/backup.sh\n";
+  // running인 워커를 중단한다 — 락도 세션도 건드리면 안 된다(끝난 뒤에 멈춘다)
+  putLock(dir, "w1", process.pid);
+  const c = withLiveCrontab(`${other}${cronLine({ path: w1 })}\n${cronLine({ path: w2 })}\n`);
+  try {
+    assert.strictEqual(await stopWorker(root, "w1"), true);
+    assert.strictEqual(c.tab(), `${other}${cronLine({ path: w2 })}\n`); // 남의 줄·w2 줄 그대로
+    assert.strictEqual(statSync(w1).isFile(), true); // 파일은 남는다
+    assert.strictEqual(statSync(lockPath(dir, "w1")).isDirectory(), true); // 락도 그대로
+    const w = (await listWorkers(root)).find((x) => x.name === "w1")!;
+    assert.strictEqual(w.cron, false);
+    assert.strictEqual(w.status, "running"); // 물고 있는 티켓은 끝까지 간다
+
+    assert.strictEqual(await stopWorker(root, "w1"), false); // 이미 미등록 = no-op
+    assert.strictEqual(c.tab(), `${other}${cronLine({ path: w2 })}\n`);
+    await assert.rejects(stopWorker(root, "없는워커"), /없는 워커입니다/);
+  } finally {
+    c.restore();
+  }
+});
+
+test("deleteWorker — running은 막는다(락과 세션이 붕 뜬다) · crontab 줄도 같이 뺀다", async () => {
   const root = makeRoot({ "w1.sh": "#!/bin/bash\n", "w2.sh": "#!/bin/bash\n" });
   putLock(path.join(root, "workers"), "w1", process.pid);
-  await assert.rejects(deleteWorker(root, "w1"), /티켓을 물고 있습니다/);
-  await deleteWorker(root, "w2");
-  assert.deepStrictEqual((await listWorkers(root)).map((w) => w.name), ["w1"]);
+  const w2 = path.join(root, "workers", "w2.sh");
+  const other = "0 3 * * * /Users/x/bin/backup.sh\n";
+  const c = withLiveCrontab(`${other}${cronLine({ path: w2 })}\n`);
+  try {
+    await assert.rejects(deleteWorker(root, "w1"), /티켓을 물고 있습니다/);
+    await deleteWorker(root, "w2");
+    assert.deepStrictEqual((await listWorkers(root)).map((w) => w.name), ["w1"]);
+    assert.strictEqual(c.tab(), other); // 그 줄만 빠지고 남의 줄은 그대로
+  } finally {
+    c.restore();
+  }
+});
+
+test("deleteWorker — crontab 해제가 실패하면 파일을 지우지 않는다(절반 지워진 상태를 안 만든다)", async () => {
+  const root = makeRoot({ "w1.sh": "#!/bin/bash\n" });
+  const w1 = path.join(root, "workers", "w1.sh");
+  const line = `${cronLine({ path: w1 })}\n`;
+  const c = withLiveCrontab(line, { failWrite: true });
+  try {
+    await assert.rejects(deleteWorker(root, "w1"), (e: Error & { cronFailed?: boolean }) => {
+      // 화면이 해제 명령어를 이 실패에만 보여주는 근거다
+      assert.strictEqual(e.cronFailed, true);
+      assert.match(e.message, /파일은 지우지 않았습니다/);
+      return true;
+    });
+    assert.strictEqual(statSync(w1).isFile(), true); // 파일이 살아 있고
+    assert.strictEqual(c.tab(), line); //                crontab 줄도 그대로다
+  } finally {
+    c.restore();
+  }
 });

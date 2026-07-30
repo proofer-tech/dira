@@ -647,11 +647,15 @@ async function crontabForWrite(): Promise<string> {
  *  없앨 수 없다(crontab에 잠금이 없다).
  *
  *  쓰기는 `crontab -`의 **stdin**이다 — `sh -c`도 임시 파일도 아니다(경로에 공백·한글·따옴표가
- *  들어 있는 큐가 실제로 있다). 그리고 **다시 읽어 확인한다**: 종료코드만 보지 않는다. */
-async function applyCrontab(workerPath: string, want: boolean): Promise<void> {
+ *  들어 있는 큐가 실제로 있다). 그리고 **다시 읽어 확인한다**: 종료코드만 보지 않는다.
+ *
+ *  돌려주는 값은 **crontab이 실제로 바뀌었는가**다. false = 이미 그 상태였다(no-op) — 중단이
+ *  "이미 미등록입니다"를 에러가 아니라 사실로 말할 수 있는 근거가 이것뿐이다. */
+async function applyCrontab(workerPath: string, want: boolean): Promise<boolean> {
   const before = await crontabForWrite();
   const next = want ? cronRegister(before, workerPath) : cronUnregister(before, workerPath);
-  if (next !== before) {
+  const changed = next !== before;
+  if (changed) {
     await new Promise<void>((resolve, reject) => {
       const child = execFile("crontab", ["-"], (err, _out, stderr) => {
         if (err) reject(new Error(`crontab - 실패: ${(stderr || err.message).trim()}`));
@@ -668,6 +672,7 @@ async function applyCrontab(workerPath: string, want: boolean): Promise<void> {
         : "crontab에서 뺐는데 다시 읽으니 그 줄이 남아 있습니다.",
     );
   }
+  return changed;
 }
 
 /** 이 워커 줄 하나를 crontab에 넣는다(이미 있으면 그 줄을 새로 쓴다). */
@@ -683,7 +688,7 @@ export function firstWorkerCmd(root: string, name = "w1"): string {
   return `mkdir -p ${dir} && cp <fs-tickets 레포>/worker.sh.example ${file} && chmod 755 ${file}`;
 }
 
-// ── 생성 · 삭제 ─────────────────────────────────────────────────────────────
+// ── 생성 · 중단 · 삭제 ──────────────────────────────────────────────────────
 
 /** 이름 검증 + 경로 조립은 **서버에서만** 한다(신뢰 경계). 이름이 규칙을 통과해도 경로를
  *  문자열로 믿지 않고 `resolveWithin`으로 workers/ 안인지 확인한다. */
@@ -721,7 +726,20 @@ export async function createWorker(root: string, name: string): Promise<{ path: 
   return { path: file, template };
 }
 
-/** 파일만 지운다. crontab 줄은 사람이 지운다(제약 4) — 화면이 해제 명령어를 같이 보여준다. */
+/** 중단 = **crontab 줄만 뺀다.** 파일도 락도 돌고 있는 세션도 건드리지 않는다 —
+ *  물고 있는 티켓은 끝까지 가고 그 다음 tick이 없을 뿐이다(DESIGN.md §4 중단).
+ *  false = 이미 미등록이었다(no-op이지 에러가 아니다).
+ *
+ *  이름은 경로로 조립하지 않는다 — `readdir`가 준 실제 워커 목록에서 찾는다. */
+export async function stopWorker(root: string, name: string): Promise<boolean> {
+  const w = (await listWorkers(root)).find((x) => x.name === name);
+  if (!w) throw new Error(`없는 워커입니다: ${name}`);
+  return unregisterCron(w.path);
+}
+
+/** crontab 줄을 빼고 파일을 지운다 — **순서가 그렇다**(DESIGN.md §4 삭제). 뒤집으면 그 사이
+ *  1분에 cron이 없는 파일을 실행한다. 해제가 실패하면 파일을 남기고 멈춘다: 절반 지워진
+ *  상태(파일은 없는데 cron 줄은 남은)를 만들지 않는다. */
 export async function deleteWorker(root: string, name: string): Promise<void> {
   const file = await workerFile(root, name);
   const w = (await listWorkers(root)).find((x) => x.name === name);
@@ -732,5 +750,13 @@ export async function deleteWorker(root: string, name: string): Promise<void> {
       `${name}이(가) 지금 티켓을 물고 있습니다(pid ${w.lockPid ?? "?"}). 끝난 뒤 삭제하세요.`,
     );
   }
+  // `cronFailed`는 화면이 해제 명령어를 **이 실패에만** 보여주려고 본다. unlink가 실패한
+  // 경우에 같은 명령을 권하면 이미 빠진 줄을 다시 빼라는 거짓 안내가 된다.
+  await unregisterCron(w.path).catch((e: Error) => {
+    throw Object.assign(
+      new Error(`crontab에서 ${name} 줄을 빼지 못했습니다: ${e.message} 파일은 지우지 않았습니다.`),
+      { cronFailed: true },
+    );
+  });
   await unlink(file);
 }
