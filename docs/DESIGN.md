@@ -1688,7 +1688,7 @@ JSX 블록 하나를 옮기는 일이라 렌더와 무관하고, 셋 중 제일 
 `--destructive` 3.99/2.89)와 **같은 종류의 실측값**이고, 사양 없이 만들면 두 번 만든다.
 
 **구현 2개 중 `e589e0f1`은 병렬이다.** 스크롤 상자에 남은 값은 높이 하나인데 그건 답변이 이미
-정했고(24rem = 대략 화면 절반), 등록 항목이 들고 오는 없는 유틸(`scroll-fade-b`·`scrollbar-*`)과
+정했고(24rem = 대략 화면 절반), 등록 항목이 들고 오는 덜어낼 유틸(`scroll-fade-b`·`scrollbar-*`)과
 깨진 import(`IconPlaceholder`)는 **사람이 정할 일이 아니라 구현 판단**이라 사양을 기다리지
 않는다. `6ca526f3`(말풍선)만 `deps`가 둘이다 — §13 없이는 고를 값이 없고, 상자 없이는 붙일 자리가
 없다. 같은 함수를 두 티켓이 만지지만 순서가 이미 `deps`로 박혀 있어 rebase 충돌이 없다.
@@ -3268,7 +3268,7 @@ WCAG 2.x 상대휘도로 계산했다(라이트 / 다크). 판정 기준은 두 
 | | 값 |
 |---|---|
 | 그릇 | `MessageScrollerButton direction="end"` — 상자 **안** 바닥 가운데에 떠 있다 |
-| 자리 | `absolute bottom-2 left-1/2 -translate-x-1/2`. 등록 항목의 `inset-s-1/2`는 **이 레포에 없는 유틸이다**(논리 속성). RTL을 쓰지 않으므로 `left-1/2`로 바꾼다. `bottom-4`(16px)는 384px 상자에서 바닥 48px을 가린다 → `bottom-2` |
+| 자리 | `absolute bottom-2 left-1/2 -translate-x-1/2`. 등록 항목의 `inset-s-1/2`는 Tailwind v4 코어에 있고 `inset-inline-start: calc(1/2 * 100%)`을 낸다 — **쓸 수 없어서가 아니라 논리 속성이 여기서 쓸모가 없어서** `left-1/2`로 바꾼다(RTL을 쓰지 않으므로 렌더 결과가 같고, 이 문서의 다른 자리 값이 전부 물리 방향이다). `bottom-4`(16px)는 384px 상자에서 바닥 48px을 가린다 → `bottom-2` |
 | 아이콘 | lucide **`ArrowDown`** `size-4` (§0 기본 크기). `lucide-react`는 이미 있는 의존성이다 |
 | 라벨 | **글자 `최신으로`를 남긴다.** 아이콘만이면 "한 화면 아래로"인지 "맨 끝으로"인지 안 갈린다 — §0의 "색·아이콘·텍스트 셋 다"와 같은 판단이다. `sr-only`로 숨기지 않는다 |
 | 모양 | `Button variant="secondary" size="sm"` + `rounded-full border border-border bg-background shadow-sm`. 등록 항목의 `size="icon-sm"`은 라벨이 생기므로 `sm`으로 바꾼다 |
@@ -3278,8 +3278,12 @@ WCAG 2.x 상대휘도로 계산했다(라이트 / 다크). 판정 기준은 두 
 #### 등록 항목에서 덜어내는 것 — `globals.css`는 **한 줄도 안 는다**
 
 `message-scroller` 등록 항목이 들고 오는 유틸 `scroll-fade-b` · `scrollbar-thin` ·
-`scrollbar-gutter-stable` · `scrollbar-thumb-transparent`는 이 레포 `app/globals.css`에 **없다**.
-**넷 다 덜어낸다. CSS를 보태지 않는다.**
+`scrollbar-gutter-stable` · `scrollbar-thumb-transparent`는 **넷 다 이미 CSS가 나온다**(실측
+`e589e0f1`). `app/globals.css`에 직접 쓰여 있지 않을 뿐이고, 그 파일 첫 줄의
+`@import "tailwindcss"` · `@import "shadcn/tailwind.css"`가 넷을 다 데려온다 —
+`scroll-fade-b`는 `shadcn/tailwind.css`의 `@utility`, 나머지 셋은 Tailwind v4 코어다.
+**그래도 넷 다 덜어낸다.** 이유는 "없어서"가 아니라 아래 셋이다. 덜어내므로 `globals.css`는
+어차피 한 줄도 안 는다.
 
 - `scroll-fade-b`는 아래쪽 페이드 마스크다 — 장식이고(§0), 게다가 `최신으로` 버튼이 이미 "아래에
   더 있다"를 **글자로** 말한다. 신호가 둘일 이유가 없다.
@@ -3287,8 +3291,8 @@ WCAG 2.x 상대휘도로 계산했다(라이트 / 다크). 판정 기준은 두 
   "네이티브 스크롤로 충분"으로 거절한 것과 **같은 판단**이다.
 - `scrollbar-gutter-stable`만 기능이 있다(스크롤바가 뜰 때 내용이 밀리는 것을 막는다). 그래도
   안 넣는다 — 개발 기본 대상인 macOS는 오버레이 스크롤바라 밀림이 없다. 밀림이 실제로 보이는
-  기기가 나오면 Viewport에 `[scrollbar-gutter:stable]` **한 클래스**를 붙인다 — Tailwind 임의
-  속성이라 그때도 `globals.css`는 안 는다.
+  기기가 나오면 Viewport에 `scrollbar-gutter-stable` **한 클래스**를 도로 붙인다 — 코어
+  유틸이라 그때도 `globals.css`는 안 는다.
 - `MessageScrollerItem`의 `[content-visibility:auto] [contain-intrinsic-size:auto_10rem]`도
   **지운다.** 메시지 수백 개용 최적화인데 이 스레드는 2~6개고, `content-visibility:auto`는
   브라우저 페이지 내 찾기에서 항목을 감추고 스크롤 위치를 튀게 한다 — 얻는 것 없이 회귀만 산다.
