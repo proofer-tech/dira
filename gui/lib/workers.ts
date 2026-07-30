@@ -266,23 +266,36 @@ function expandVars(v: string, cwd: string): string {
 }
 
 /** 컨텍스트 경로는 **루트 밖을 허용한다**(그게 용도다). 쓰기 대상이 아니라 워커 파일에 들어갈
- *  문자열일 뿐이므로 `resolveWithin`을 걸지 않고 `stat`으로 존재만 본다 — 엔진의 `[ -e ]`와 같다. */
+ *  문자열일 뿐이므로 `resolveWithin`을 걸지 않고 `stat`으로 존재만 본다 — 엔진의 `[ -e ]`와 같다.
+ *
+ *  `cwds`가 **여럿**인 자리는 공통 컨텍스트다(§4-1: 항목 하나를 워커 N개가 각자 자기
+ *  `TICKET_CWD`로 편다). 그때는 전원 일치일 때만 단정한다 — 갈리면 `null`(`확인 못 했습니다`)이고
+ *  `resolved`도 `$TICKET_CWD`를 편 척하지 않는다. 한 워커의 사실을 전원의 사실로 그리면
+ *  같은 화면의 워커 카드와 반대 판정이 나온다(`6e3dcd79`). */
 async function withExistence(
   items: { path: string; desc: string }[],
-  cwd: string,
+  cwds: string[],
 ): Promise<ContextItem[]> {
   return Promise.all(
     items.map(async (it) => {
-      const resolved = expandVars(it.path, cwd);
+      const paths = [...new Set(cwds.map((c) => expandVars(it.path, c)))];
+      // 후보가 갈리면 한 값으로 못 보여준다 — `$TICKET_CWD`는 그대로 두고 `$HOME`만 편다.
+      const resolved = paths.length === 1 ? paths[0] : expandVars(it.path, "$TICKET_CWD");
+      if (/\$[A-Za-z_{]/.test(paths[0])) {
+        return { ...it, resolved, exists: null }; // 못 편 변수가 남았다 — 없다고 단정하지 않는다
+      }
+      const found = await Promise.all(
+        paths.map((p) =>
+          stat(p).then(
+            () => true,
+            () => false,
+          ),
+        ),
+      );
       return {
         ...it,
         resolved,
-        exists: /\$[A-Za-z_{]/.test(resolved)
-          ? null // 못 편 변수가 남았다 — 없다고 단정하지 않는다
-          : await stat(resolved).then(
-              () => true,
-              () => false,
-            ),
+        exists: found.every(Boolean) ? true : found.some(Boolean) ? null : false,
       };
     }),
   );
@@ -293,7 +306,7 @@ async function contextOf(root: string, text: string, cwd: string | null): Promis
   const b = parseContextBlock(text);
   if (!b.ok) return b;
   // tick.sh 39행: TICKET_CWD 기본값은 루트의 부모다.
-  return { ok: true, items: await withExistence(b.items, cwd ?? path.dirname(root)) };
+  return { ok: true, items: await withExistence(b.items, [cwd ?? path.dirname(root)]) };
 }
 
 /** **원자적 교체.** cron이 1분마다 워커 파일을 실행하고 bash는 스크립트를 조금씩 읽는다 —
@@ -355,7 +368,7 @@ export async function writeContext(
     (await stat(file)).mode & 0o777,
   );
   const { cwd } = parseWorkerFile(next);
-  return { ok: true, items: await withExistence(clean, cwd ?? path.dirname(root)) };
+  return { ok: true, items: await withExistence(clean, [cwd ?? path.dirname(root)]) };
 }
 
 /** 워커 간 복사. 갈라진 컨텍스트는 티켓 결과를 워커에 따라 달라지게 만든다.
@@ -404,6 +417,21 @@ export function commonSourceLine(root: string): string {
  *  경로까지 비교한다(그때는 NFC 정규화와 `$HOME` 전개가 같이 필요하다). */
 const commonSourceRe = /^[ \t]*(?:\.|source)[ \t]+[^\n]*context\.sh/m;
 
+/** 공통 항목의 `$TICKET_CWD`를 펼 후보들. **공통을 실제로 `source`하는 워커의 값만** 본다 —
+ *  못 받는 워커의 cwd로 판정하면 카드가 남의 사실을 말한다. 하나도 없으면 tick.sh 39행 기본값.
+ *  ponytail: 워커 파일을 여기서 한 번 더 읽는다(프로젝트당 한 자릿수 파일). `listWorkers`와
+ *  합치려면 `Worker`에 cwd를 싣고 호출자 셋을 다 고쳐야 한다 — 느려지면 그때 한다. */
+async function commonCwds(root: string): Promise<string[]> {
+  const dir = path.join(root, "workers");
+  const names = (await readdir(dir).catch(() => [] as string[])).filter((n) => n.endsWith(".sh"));
+  const out = new Set<string>();
+  for (const n of names) {
+    const text = await readFile(path.join(dir, n), "utf8").catch(() => "");
+    if (commonSourceRe.test(text)) out.add(parseWorkerFile(text).cwd ?? path.dirname(root));
+  }
+  return out.size ? [...out] : [path.dirname(root)];
+}
+
 /** `<루트>/context.sh`의 공통 항목. **파일이 없으면 0개다 — 오류가 아니다**(§4-1). */
 export async function readCommonContext(root: string): Promise<WorkerContext> {
   const file = path.join(root, COMMON_FILE);
@@ -420,10 +448,9 @@ export async function readCommonContext(root: string): Promise<WorkerContext> {
   if (text === null) return { ok: true, items: [] };
   const b = parseContextBlock(text, COMMON_ARR);
   if (!b.ok) return b;
-  // ponytail: 존재 확인의 기준 cwd는 tick.sh 39행의 기본값(루트의 부모)이다. 공통 항목의
-  // `$TICKET_CWD`는 워커마다 갈리므로 카드 하나로는 한 값밖에 못 보여준다 — 워커별로 판정이
-  // 필요해지면 cwd를 인자로 받는다(§4-1 UI는 `공통` 배지를 워커 목록 최상단에 읽기 전용으로 그린다).
-  return { ok: true, items: await withExistence(b.items, path.dirname(root)) };
+  // 기준 cwd는 **공통을 받는 워커 전원의 `TICKET_CWD`**다. 루트의 부모(tick.sh 39행 기본값)로
+  // 단정하면 워커가 그 값을 덮어쓴 큐에서 있는 파일을 `없음`으로 그린다(`6e3dcd79`).
+  return { ok: true, items: await withExistence(b.items, await commonCwds(root)) };
 }
 
 /** 공통 항목 치환. 파일이 없으면 §4-1 고정 문구(주석 + 병합 2줄)까지 새로 만든다.
@@ -451,7 +478,7 @@ export async function writeCommonContext(
   // 실행 파일이 아니다(워커가 `.` 한다). 있던 파일의 mode는 사람이 정한 것이니 잃지 않는다.
   const mode = text === null ? 0o644 : (await stat(file)).mode & 0o777;
   await writeBlock(file, base, b, clean, COMMON_ARR, mode);
-  return { ok: true, items: await withExistence(clean, path.dirname(root)) };
+  return { ok: true, items: await withExistence(clean, await commonCwds(root)) };
 }
 
 /** `source` 줄을 워커 파일에 넣는다. 삽입 위치는 추측하지 않는다 —

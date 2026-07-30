@@ -717,6 +717,63 @@ test("공통이 워커 항목 **앞에** 붙는가 — 진짜 bash 3.2(set -u)�
   assert.strictEqual(empty.trimEnd(), "count=1");
 });
 
+test("공통 카드의 exists는 엔진 판정과 어긋나지 않는다 — 워커가 TICKET_CWD를 덮어쓴 큐 (6e3dcd79)", async () => {
+  // 워커 둘이 각자 워크트리를 갖는다(§4-2). 공통 항목의 `$TICKET_CWD`는 워커마다 다른 곳을 편다.
+  const cwd1 = mkdtempSync(path.join(tmpdir(), "fst-cwd1-"));
+  const cwd2 = mkdtempSync(path.join(tmpdir(), "fst-cwd2-"));
+  tmps.push(cwd1, cwd2);
+  writeFileSync(path.join(cwd1, "BOTH.md"), "x");
+  writeFileSync(path.join(cwd2, "BOTH.md"), "x");
+  writeFileSync(path.join(cwd1, "ONLY1.md"), "x"); // cwd2에는 없다
+  const w = (cwd: string) => `#!/bin/bash\nTICKET_CWD="${cwd}"\nTICKET_CONTEXT=(\n)\n`;
+  const root = makeRoot({ "w1.sh": w(cwd1), "w2.sh": w(cwd2) });
+
+  const items = ["BOTH.md", "ONLY1.md", "NONE.md"].map((n) => ({
+    path: `$TICKET_CWD/${n}`,
+    desc: n,
+  }));
+  await writeCommonContext(root, items);
+  for (const n of ["w1", "w2"]) assert.strictEqual(await applyCommonSource(root, n), true);
+
+  const ctx = await readCommonContext(root);
+  assert.ok(ctx.ok);
+  // 전원에게 있으면 `있음`, 전원에게 없으면 `없음`, 갈리면 단정하지 않는다(null).
+  // 여기서 BOTH가 false로 돌아오면 그게 이 티켓의 버그다 — 있는 파일을 `없음`으로 그린다.
+  assert.deepStrictEqual(
+    ctx.items.map((i) => [i.desc, i.exists]),
+    [
+      ["BOTH.md", true],
+      ["ONLY1.md", null],
+      ["NONE.md", false],
+    ],
+  );
+  // 갈릴 때는 편 척도 하지 않는다 — 툴팁에 한 워커의 경로가 사실처럼 박히면 같은 거짓말이다
+  assert.strictEqual(ctx.items[1].resolved, "$TICKET_CWD/ONLY1.md");
+
+  // 패리티: 진짜 bash로 워커 파일을 돌려 엔진의 `[ -e ]`(tick.sh 148행)와 대조한다.
+  const engine = ["w1", "w2"].map((n) => {
+    const body = readFileSync(path.join(root, "workers", `${n}.sh`), "utf8");
+    const out = execFileSync(
+      "/bin/bash",
+      [
+        "-c",
+        `set -u\n${body}\nfor e in \${TICKET_CONTEXT[@]+"\${TICKET_CONTEXT[@]}"}; do [ -e "\${e%%|*}" ] && echo 1 || echo 0; done`,
+      ],
+      { encoding: "utf8" },
+    );
+    return out.trimEnd().split("\n");
+  });
+  assert.deepStrictEqual(engine, [
+    ["1", "1", "0"], // w1: BOTH · ONLY1 있음, NONE 없음
+    ["1", "0", "0"], // w2: BOTH만 있음
+  ]);
+  ctx.items.forEach((it, i) => {
+    const both = engine.map((e) => e[i] === "1");
+    // 카드가 단정한 값은 워커 전원의 판정과 같아야 하고, 갈릴 때만 null이다
+    assert.strictEqual(it.exists, both.every(Boolean) ? true : both.some(Boolean) ? null : false);
+  });
+});
+
 test("applyCommonSource — 삽입 위치는 닫는 `)` 다음 줄, 두 번째는 no-op", async () => {
   const root = makeRoot({ "w1.sh": CTX_SH, "bad.sh": "#!/bin/bash\n. tick.sh\n" });
   const file = path.join(root, "workers", "w1.sh");

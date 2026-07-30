@@ -121,6 +121,9 @@ export default async function Workers({ params }: { params: Promise<{ project: s
               <span className="font-mono text-xs break-all"> {project.root}/context.sh</span>. 여기
               항목은 각 워커 컨텍스트 목록의 <strong className="font-medium">최상단</strong>에
               들어가고, 워커별 목록에서는 지울 수 없습니다. 한 줄을 고치면 전원에게 반영됩니다.
+              <span className="font-mono text-xs">$TICKET_CWD</span>는 워커마다 갈리므로 존재 여부는{" "}
+              <strong className="font-medium">전원에게 있을 때만</strong> 있음입니다 — 워커에 따라
+              갈리면 단정하지 않습니다(확인 못 했습니다).
             </p>
           </div>
           <CommonContextCard
