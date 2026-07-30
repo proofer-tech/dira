@@ -438,6 +438,22 @@ test("보드 — 5상태 판정 · 필터 AND/OR · 검색 대상 · 정렬", as
   assert.ok(hashes(hideDone).includes("iiii9999")); // 디스패치되지 않는 티켓은 남는다(§0-2)
   assert.ok(!hashes(hideDone).includes("eeee5555")); // 완료는 빠진다
 
+  // 완료 기본 숨김(§1 보드 · 사람 요청 `ae9add93`) — `status`가 URL에 하나도 없으면 page.tsx가
+  // `HIDE_DONE_STATUSES`를 넣고, `전체 보기`는 상태 6값을 넣는다. "없을 때 무엇을 넣느냐"는
+  // 그쪽 유도라 여기서는 **넣는 두 값이 각각 무엇을 내는지**를 못박는다.
+  assert.ok(!HIDE_DONE_STATUSES.includes("done")); // 섞이면 기본 화면이 자기 결과를 거짓으로 말한다
+  const allStatuses = [...HIDE_DONE_STATUSES, "done"]; // = 상태 필터 선택지 6개
+  assert.deepStrictEqual(
+    hashes(filterTickets(tickets, { ...none, status: allStatuses })), // 6값 = 상태로 안 거른 것
+    hashes(filterTickets(tickets, none)),
+  );
+  // 하나라도 실리면 실린 값이 전부다 — `?status=done` 단독에 기본값이 섞이면 완료만 보기가 깨진다.
+  // 이 집합의 크기가 건수 옆 `완료 N건 숨김`의 N이기도 하다(page.tsx가 같은 식을 쓴다).
+  assert.deepStrictEqual(
+    hashes(filterTickets(tickets, { ...none, status: ["done"] })),
+    hashes(tickets.filter((t) => statusOf(t) === "done")),
+  );
+
   // 검색 대상은 title + 본문 + frontmatter 값 전체, 대소문자 무시
   assert.deepStrictEqual(hashes(filterTickets(tickets, { ...none, q: "정상" })), ["aaaa1111"]);
   assert.deepStrictEqual(hashes(filterTickets(tickets, { ...none, q: "본문이다" })), ["aaaa1111"]);

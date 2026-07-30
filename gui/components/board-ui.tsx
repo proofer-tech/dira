@@ -85,19 +85,25 @@ export function BoardFilter({
   param,
   label,
   options,
+  defaults,
   preset,
 }: {
   param: string;
   label: string;
   options: FilterOption[];
+  /** 파라미터가 URL에 **하나도 없을 때**의 실효값(상태 필터의 완료 숨김만 쓴다 — §1 보드).
+   *  서버의 유도와 같은 식이어야 한다: 하나라도 실려 있으면 실린 값이 전부다. 체크 표시는
+   *  결과에 대한 진술이므로 기본값으로 걸러진 화면에서 체크가 6개면 그 진술이 거짓이 된다.
+   *  안 넘기면 종전 그대로다(`kind`·`persona`). */
+  defaults?: string[];
   /** 목록 맨 위의 1클릭 항목 — 이 필터를 `values`로 **갈아 쓴다**(토글이 아니다).
-   *  상태 필터의 `완료 숨기기`만 쓴다(§1 보드). 다른 파라미터는 건드리지 않는다. */
+   *  상태 필터의 `전체 보기`만 쓴다(§1 보드). 다른 파라미터는 건드리지 않는다. */
   preset?: { label: string; values: string[] };
 }) {
   const { qs, replace } = useUrlNav();
   const [open, setOpen] = useState(false);
   const sp = new URLSearchParams(qs);
-  const selected = sp.getAll(param);
+  const selected = sp.has(param) ? sp.getAll(param) : (defaults ?? []);
 
   const set = (values: string[]) => {
     const next = new URLSearchParams(qs);

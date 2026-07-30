@@ -127,10 +127,13 @@ export default async function Board({
   const config = await resolveConfig(project);
   const tickets = await listTickets(project.root, config);
 
+  // 상태만 **기본값이 있다**(§1 보드 · 사람 요청 `ae9add93`): `status`가 URL에 하나도 없을 때
+  // 완료를 뺀 5개가 들어간다. 하나라도 실려 있으면 실린 값이 전부다 — `?status=done`은 완료만이고
+  // 기본값이 섞이지 않는다. `filterTickets`는 이 값을 그대로 받는다(판정은 무수정이다).
   const query = {
     kind: sp.getAll("kind"),
     persona: sp.getAll("persona"),
-    status: sp.getAll("status"),
+    status: sp.has("status") ? sp.getAll("status") : HIDE_DONE_STATUSES,
     q: sp.get("q") ?? "",
   };
   const sortParam = sp.get("sort");
@@ -146,6 +149,13 @@ export default async function Board({
   // 각주는 "지금 화면의 건수와 레인 합계가 왜 다른가"를 설명하는 것이고, 필터가 걸리면
   // 레인도 같이 좁아진다. `rows.length - 레인합계`와 같은 값이다(`statusOf`는 5상태 중 하나).
   const undispatched = rows.filter((t) => statusOf(t) === "assigned").length;
+  // 실효 상태 집합에 `done`이 없으면 완료가 화면에서 빠진다 — 그 사실을 건수 옆 한 줄이 말한다.
+  // 기본 화면에는 URL 파라미터가 없어서 `applied` 배지도 `필터 초기화`도 없다: 이 줄이 완료로 가는
+  // 유일한 길이다. 세는 방법은 **다른 필터(kind·persona·검색)를 그대로 두고 상태만 완료로** 바꾼
+  // 같은 `filterTickets`다 — 판정을 여기서 다시 쓰면 건수와 목록이 갈린다.
+  const hiddenDone = query.status.includes("done")
+    ? 0
+    : filterTickets(tickets, { ...query, status: ["done"] }).length;
 
   // 선택지를 하드코딩하지 않는다 — kind는 프로젝트마다 다르고, persona는 그 큐의 페르소나다.
   // persona 목록은 **페르소나 화면과 같은 `listPersonas`**로 만든다. 여기서 `readdir`을 다시
@@ -195,10 +205,21 @@ export default async function Board({
     return qs(next);
   };
 
+  /** `완료 N건 숨김` 링크의 목적지 = 상태 6값이 실린 URL. 프리셋 `전체 보기`와 같은 화면이고
+   *  다른 파라미터(검색·정렬·뷰)는 그대로 남는다. */
+  const allStatusHref = (() => {
+    const next = new URLSearchParams(sp);
+    next.delete("status");
+    for (const s of STATUS_OPTIONS) next.append("status", s);
+    return qs(next);
+  })();
+
   const applied = [
     ...query.kind.map((v) => ({ param: "kind", value: v, text: `kind: ${v}` })),
     ...query.persona.map((v) => ({ param: "persona", value: v, text: `persona: ${v}` })),
-    ...query.status.map((v) => {
+    // 여기만 `query`가 아니라 **URL 그대로**다 — 배지는 "사람이 건 필터"의 목록이고 기본값은
+    // 사람이 건 게 아니다. 기본 화면에 배지 5개와 `필터 초기화`가 뜨면 안 된다(§1 보드).
+    ...sp.getAll("status").map((v) => {
       const known = STATUS_OPTIONS.find((s) => s === v);
       return { param: "status", value: v, text: `상태: ${known ? statusLabel(known) : v}` };
     }),
@@ -302,7 +323,11 @@ export default async function Board({
               param="status"
               label="상태"
               options={STATUS_OPTIONS.map((s) => ({ value: s, label: statusLabel(s) }))}
-              preset={{ label: "완료 숨기기", values: HIDE_DONE_STATUSES }}
+              // 기본이 완료 숨김이므로 프리셋 슬롯이 뒤집힌다 — 1클릭으로 접을 값어치가 있는 쪽은
+              // 이제 `전체 보기`다(슬롯은 1개 그대로다). `defaults`는 팝오버 체크·트리거 라벨이
+              // **실효값**을 그리게 한다: 파라미터가 없어도 6개 중 `완료`만 체크가 빈다.
+              defaults={HIDE_DONE_STATUSES}
+              preset={{ label: "전체 보기", values: [...STATUS_OPTIONS] }}
             />
             <div className="ml-auto flex items-center gap-2">
               {VIEWS.map((v) => (
@@ -319,6 +344,20 @@ export default async function Board({
               ))}
               <span className="text-xs tabular-nums text-muted-foreground">
                 {rows.length === total ? `티켓 ${total}건` : `티켓 ${rows.length} / ${total}건`}
+                {/* 완료가 빠졌다는 사실은 여기서만 말한다 — 두 뷰 공통이고 0건 화면에서도 뜬다
+                    (큐가 완료뿐이면 이 링크가 유일한 출구다). 상태 6값 URL로 간 화면에서는
+                    실효 집합에 `done`이 있으므로 이 줄이 사라진다 */}
+                {hiddenDone > 0 && (
+                  <>
+                    {" · "}
+                    <Link
+                      href={allStatusHref}
+                      className="underline underline-offset-2 hover:text-foreground"
+                    >
+                      완료 {hiddenDone}건 숨김
+                    </Link>
+                  </>
+                )}
                 {/* 레인 3개에 `할당됨`이 없어서 칸반에서는 레인 합계 < 표시 건수가 된다.
                     어긋난 숫자를 설명 없이 두지 않는다(§1 보드) — 그 티켓으로 가는 링크는
                     배너가 갖고 있다(§0-2). 0건이면 어긋나지 않으므로 각주도 없다 */}
