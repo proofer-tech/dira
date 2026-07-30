@@ -109,6 +109,32 @@ test("resolveConfig — 해석 불가 변수는 기본값 + unresolved(assumed �
   assert.ok(usingDefault(c, "personas") && usingDefault(c, "done")); // 다른 화면은 둘을 안 가른다
 });
 
+test("resolveConfig — 명령 치환·백틱·상대경로는 실효값이 되지 않는다 (ce40243f)", async () => {
+  const root = newQueue({
+    "w1.sh": [
+      'TICKET_PERSONAS="$(id -un)"', // 명령 치환 — 셸을 안 돌리니 원문이 남는다
+      "TICKET_PROTOCOLS=`whoami`", // 백틱도 같다
+      "TICKET_CWD=../wt/w1", // 절대경로가 아니다 → 서버 cwd(gui/) 기준으로 풀린다
+      "TICKET_INPROGRESS=.wip", // 경로가 아닌 키는 상대여도 정상값이다
+      "",
+    ].join("\n"),
+  });
+  const c = await resolveConfig({ root });
+  // 셋 다 기본값을 쓴다 — 원문이 기준 디렉터리가 되면 gui/ 밑에 쓴다
+  assert.strictEqual(c.personas, path.join(root, "personas"));
+  assert.strictEqual(c.protocols, path.join(root, "protocols"));
+  assert.strictEqual(c.cwd, path.dirname(root));
+  assert.deepStrictEqual(c.cwdByWorker, {});
+  assert.strictEqual(c.inProgress, ".wip"); // 상대경로 규칙에 휘말리지 않는다
+  assert.deepStrictEqual(c.unresolved, [
+    { key: "personas", raw: 'TICKET_PERSONAS="$(id -un)"', worker: "w1" },
+    { key: "protocols", raw: "TICKET_PROTOCOLS=`whoami`", worker: "w1" },
+    { key: "cwd", raw: "TICKET_CWD=../wt/w1", worker: "w1" },
+  ]);
+  assert.deepStrictEqual(c.assumed, ["done"]); // 있는데 못 읽은 것은 assumed가 아니다
+  assert.ok(usingDefault(c, "personas") && usingDefault(c, "protocols")); // 화면에 [해석 실패]
+});
+
 test("resolveConfig — 한 워커만 못 읽으면 값은 다른 워커 것 + unresolved에 남는다", async () => {
   const root = newQueue({
     "w1.sh": 'TICKET_PERSONAS="$UNSET_VAR/personas"\n',

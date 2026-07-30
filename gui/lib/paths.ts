@@ -42,8 +42,17 @@ export function shellValue(raw: string): string | null {
     v = s.split(/[ \t#]/)[0];
   }
   v = v.replace(/\$\{HOME\}|\$HOME(?![A-Za-z0-9_])/g, homedir());
-  if (/\$[A-Za-z_{]/.test(v)) return null; // 남은 변수 참조 = 해석 실패
+  // 변수 참조·명령 치환이 남았다 = 해석 실패. `$(`와 백틱을 빼먹으면 `$(id -un)` 같은 원문이
+  // 그대로 실효값이 되어 기준 디렉터리로 쓰인다(ce40243f).
+  if (/\$[A-Za-z_{(]|`/.test(v)) return null;
   return v || null; // 빈 값은 미설정과 같다(tickets.py도 `or 기본값`)
+}
+
+/** 기준 디렉터리가 될 셸 값. 절대경로가 아니면 null이다 — 상대경로를 서버(Next) cwd 기준으로
+ *  풀면 `gui/` 밑을 읽고 쓴다. 워커가 어디서 도는지는 셸을 실행하지 않는 한 알 수 없다. */
+export function shellPath(raw: string): string | null {
+  const v = shellValue(raw);
+  return v !== null && path.isAbsolute(expandHome(v)) ? v : null;
 }
 
 /** 기준 디렉터리 안의 실제 경로를 돌려준다. 밖이면 던진다.

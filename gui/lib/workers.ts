@@ -9,7 +9,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { NAME_RE, expandHome, resolveWithin, shellValue } from "./paths.ts";
+import { NAME_RE, expandHome, resolveWithin, shellPath, shellValue } from "./paths.ts";
 import type { Ticket } from "./queue.ts";
 
 export type WorkerStatus = "running" | "idle" | "stopped" | "stale";
@@ -109,7 +109,8 @@ function parseWorkerFile(text: string): {
   let name: string | null = null;
   for (const m of text.matchAll(nameAssign)) name = shellValue(m[1]) ?? name; // 뒤 할당이 이긴다
   let cwd: string | null = null;
-  for (const m of text.matchAll(cwdAssign)) cwd = shellValue(m[1]) ?? cwd;
+  // cwd는 기준 디렉터리다 — 절대경로가 아니면 못 읽은 것으로 본다(`shellPath`, ce40243f).
+  for (const m of text.matchAll(cwdAssign)) cwd = shellPath(m[1]) ?? cwd;
 
   let engine: string | null = null;
   const m = engineAssign.exec(text);

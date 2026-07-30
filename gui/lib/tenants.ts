@@ -5,7 +5,7 @@
 import { mkdir, readFile, readdir, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
-import { NAME_RE, TENANT_ID_RE, expandHome, resolveWithin, shellValue } from "./paths.ts";
+import { NAME_RE, TENANT_ID_RE, expandHome, resolveWithin, shellPath, shellValue } from "./paths.ts";
 import { listTickets, type Ticket } from "./queue.ts";
 import { listWorkers, type Worker } from "./workers.ts";
 import { slugify } from "./urls.ts";
@@ -196,7 +196,11 @@ export { shellValue };
 
 type Parsed = { kv: Partial<Record<Field, string>>; bad: Partial<Record<Field, string>> };
 
-/** 워커 파일 하나의 할당문. `bad`는 **해석 못 한 라인 원문** — `$` 참조가 남은 경우만이다.
+/** 기준 디렉터리로 쓰이는 키. 상대경로면 서버 cwd(`gui/`) 기준으로 풀리므로 해석 실패다. */
+const PATH_FIELDS = new Set<Field>(["personas", "protocols", "cwd"]);
+
+/** 워커 파일 하나의 할당문. `bad`는 **해석 못 한 라인 원문** — 셸 구문(`$X`·`$(…)`·백틱)이
+ *  남았거나, 경로 키인데 절대경로가 아닌 경우다.
  *  `TICKET_DONE=`처럼 빈 값은 `shellValue`가 똑같이 null을 주지만 그건 미설정이지 실패가 아니다
  *  (`tickets.py`도 `or 기본값`). 둘을 섞으면 화면이 안 켜져도 될 경고를 켠다. */
 function parseWorker(text: string): Parsed {
@@ -207,9 +211,11 @@ function parseWorker(text: string): Parsed {
     if (!m) continue;
     const field = KEYS[m[1] as keyof typeof KEYS];
     if (!field) continue;
-    const v = shellValue(m[2]);
+    const isPath = PATH_FIELDS.has(field);
+    const v = isPath ? shellPath(m[2]) : shellValue(m[2]);
     if (v !== null) kv[field] = v; // 뒤 할당이 이긴다(셸과 같다)
-    else if (m[2].includes("$")) bad[field] = line.trim(); // 원문 그대로 보여준다
+    // 값이 있는데 못 읽은 것만 원문으로 남긴다: 셸 구문이 남았거나, 경로인데 상대경로거나.
+    else if (/[$`]/.test(m[2]) || (isPath && shellValue(m[2]) !== null)) bad[field] = line.trim();
   }
   return { kv, bad };
 }
