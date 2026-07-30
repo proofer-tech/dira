@@ -11,6 +11,7 @@ import {
   createPersonaAction,
   deletePersonaAction,
   savePersonaAction,
+  setPersonaColorAction,
   type PersonaResult,
 } from "@/app/p/[project]/personas/actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -39,7 +40,10 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
+import { PERSONA_COLORS } from "@/lib/urls";
+import { cn } from "@/lib/utils";
 
 /** 서버가 읽어 넘긴 한 항목. `body: null` = PROFILE.md가 없다(엔진의 WARN 케이스). */
 export type PersonaRow = {
@@ -70,6 +74,112 @@ function refsLabel(refs: PersonaRow["refs"]): string | null {
     refs.total - refs.open - refs.wip > 0 && `완료 ${refs.total - refs.open - refs.wip}`,
   ].filter(Boolean);
   return parts.length ? parts.join(" · ") : null;
+}
+
+// ── 색 (DESIGN.md §5 · §비주얼 §12) ─────────────────────────────────────────
+
+/** 팔레트 키 → 점 배경 클래스. **`bg-persona-${key}`로 조립하지 않는다** — Tailwind는 소스에서
+ *  클래스 문자열을 정적으로 훑으므로 조립하면 8색이 통째로 빌드에서 빠진다. */
+const DOT_CLASS: Record<string, string> = {
+  orange: "bg-persona-orange",
+  yellow: "bg-persona-yellow",
+  green: "bg-persona-green",
+  teal: "bg-persona-teal",
+  sky: "bg-persona-sky",
+  blue: "bg-persona-blue",
+  violet: "bg-persona-violet",
+  pink: "bg-persona-pink",
+};
+
+/** 색 점 하나. **모르는 키·미할당은 빈 점이다 — 에러가 아니다**(§12): 레지스트리를 손으로 고쳐
+ *  오타가 나도 화면이 안 깨지고, 회색으로 채우지 않아 "누가 고른 9번째 색"으로도 안 읽힌다.
+ *  `size-2`는 border-box라 테두리가 붙어도 정확히 8px이다 — 미할당 줄만 어긋나지 않는다.
+ *
+ *  ponytail: persona 값이 보이는 다른 자리(보드 표·칸반·필터·select)는 `d9740156`이 붙인다.
+ *  그때 `<PersonaBadge>`(§비주얼 §5 표)가 생기면 이 점이 그 파일로 옮겨간다. */
+export function PersonaDot({ color, className }: { color?: string; className?: string }) {
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        "size-2 shrink-0 rounded-full",
+        DOT_CLASS[color ?? ""] ?? "border border-muted-foreground",
+        className,
+      )}
+    />
+  );
+}
+
+/** 접힌 줄의 점이 곧 트리거다(§12). `<summary>` 안이라 클릭이 곧 펼침 토글인데 — 삭제 버튼과
+ *  같은 처방으로 `preventDefault`다(호출부에서 감싼다. `stopPropagation`은 안 통한다).
+ *  `command`도 `select`도 아니다: 9개는 검색할 양이 아니고 항목의 내용이 글자가 아니라 색이다. */
+function ColorPicker({
+  projectId,
+  name,
+  color,
+  onError,
+}: {
+  projectId: string;
+  name: string;
+  color?: string;
+  onError: (message: string | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [current, setCurrent] = useState(color);
+  const [, start] = useTransition();
+
+  const pick = (next: string | null) =>
+    start(async () => {
+      setCurrent(next ?? undefined);
+      setOpen(false);
+      const r = await setPersonaColorAction(projectId, name, next);
+      onError(r.ok ? null : (r.message ?? "색을 저장하지 못했습니다."));
+      if (!r.ok) setCurrent(color);
+    });
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger
+        render={
+          <button
+            type="button"
+            className="flex shrink-0 cursor-pointer items-center rounded-full p-1 hover:bg-accent"
+          />
+        }
+      >
+        <PersonaDot color={current} />
+        {/* 색만으로 뜻을 전하지 않는다(§0) — 점은 aria-hidden이고 값은 여기서 말한다 */}
+        <span className="sr-only">{current ? `색: ${current}` : "색 없음"}</span>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-auto p-2">
+        <div className="grid grid-cols-3 gap-2">
+          {PERSONA_COLORS.map((c) => (
+            <button
+              key={c}
+              type="button"
+              aria-label={c}
+              onClick={() => pick(c)}
+              className={cn(
+                "size-6 cursor-pointer rounded-full",
+                DOT_CLASS[c],
+                c === current && "ring-2 ring-ring ring-offset-2",
+              )}
+            />
+          ))}
+          {/* 9번째 칸이 `색 없음`이다 — 3×3이 정확히 차서 빈 칸이 없다(§12) */}
+          <button
+            type="button"
+            aria-label="색 없음"
+            onClick={() => pick(null)}
+            className={cn(
+              "size-6 cursor-pointer rounded-full border border-muted-foreground",
+              !current && "ring-2 ring-ring ring-offset-2",
+            )}
+          />
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
 }
 
 // ── 생성 ────────────────────────────────────────────────────────────────────
@@ -148,13 +258,23 @@ export function CreatePersonaButton({
 
 /** 페르소나 하나. `body: null`(프로필 없음)이면 빈 textarea가 열리고 **저장이 곧 생성**이다 —
  *  티켓이 부르는데 프로필이 없는 이름을 그 자리에서 채우게 하려고 경로를 하나로 둔다. */
-export function PersonaCard({ projectId, row }: { projectId: string; row: PersonaRow }) {
+export function PersonaCard({
+  projectId,
+  row,
+  color,
+}: {
+  projectId: string;
+  row: PersonaRow;
+  /** 레지스트리의 팔레트 키. 없거나 팔레트 밖이면 빈 점이다(§12) */
+  color?: string;
+}) {
   // 저장된 원문을 state로 들고 있는다 — 서버가 다시 렌더해 주기를 기다리지 않고 저장 직후에
   // `프로필 없음` 배지와 삭제 버튼이 바로 맞는다(workers-ui의 컨텍스트 카드와 같은 이유).
   const [saved, setSaved] = useState(row.body);
   const [body, setBody] = useState(row.body ?? "");
   const [result, setResult] = useState<PersonaResult | null>(null);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
+  // 삭제·색은 둘 다 접힌 줄에서 누르므로 사유도 접힌 채 보여야 한다 — 자리가 하나다.
+  const [rowError, setRowError] = useState<{ title: string; message: string } | null>(null);
   const [pending, start] = useTransition();
   const refs = refsLabel(row.refs);
   const dirty = body !== (saved ?? "");
@@ -171,6 +291,17 @@ export function PersonaCard({ projectId, row }: { projectId: string; row: Person
             aria-hidden
             className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90"
           />
+          {/* 색을 고르는 자리는 이 화면 하나뿐이다(§5). 삭제와 같은 이유로 preventDefault다 */}
+          <span onClick={(e) => e.preventDefault()}>
+            <ColorPicker
+              projectId={projectId}
+              name={row.name}
+              color={color}
+              onError={(message) =>
+                setRowError(message ? { title: "색을 저장하지 못했습니다", message } : null)
+              }
+            />
+          </span>
           <span className="font-mono text-sm">{row.name}</span>
           {saved === null && <Badge variant="outline">프로필 없음</Badge>}
           <span className="min-w-0 truncate text-xs text-muted-foreground" title={row.file}>
@@ -187,7 +318,11 @@ export function PersonaCard({ projectId, row }: { projectId: string; row: Person
             // 삭제는 접힌 줄에 있고 펼침을 토글하지 않는다. summary의 활성화 동작을 막는 건
             // preventDefault다 — stopPropagation은 activationTarget이 이미 정해져 안 통한다.
             <span className="ml-auto" onClick={(e) => e.preventDefault()}>
-              <DeleteButton projectId={projectId} row={row} onError={setDeleteError} />
+              <DeleteButton
+                projectId={projectId}
+                row={row}
+                onError={(message) => setRowError({ title: "삭제하지 못했습니다", message })}
+              />
             </span>
           )}
         </summary>
@@ -225,9 +360,9 @@ export function PersonaCard({ projectId, row }: { projectId: string; row: Person
         </div>
       </details>
 
-      {deleteError && (
+      {rowError && (
         <div className="p-3 pt-0">
-          <Failure title="삭제하지 못했습니다" message={deleteError} />
+          <Failure title={rowError.title} message={rowError.message} />
         </div>
       )}
     </div>

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 
@@ -19,6 +19,7 @@ const {
   registryPath,
   removeProject,
   savePersona,
+  setPersonaColor,
   slugify,
   renameProject,
   reorderProjects,
@@ -282,6 +283,36 @@ test("레지스트리 — 이름 변경 · 순서 변경 · 등록 해제", asyn
   // 등록 해제는 레지스트리만 건드린다 — 큐 파일은 그대로다
   assert.deepStrictEqual(await import("node:fs").then((fs) => fs.existsSync(b.root)), true);
   assert.ok(a.root);
+});
+
+test("레지스트리 — personaColors 왕복 (DESIGN.md §5)", async () => {
+  rmSync(registryPath(), { force: true });
+  await addProject("색", newQueue({ "w1.sh": "" }), "c");
+  const queueBefore = readdirSync(path.join((await getProject("c"))!.root));
+
+  await setPersonaColor("c", "developer", "violet");
+  await setPersonaColor("c", "qa", "teal");
+  // 파일에서 다시 읽는다 — 메모리 객체가 아니라 왕복을 본다(새로고침 후에도 남는 근거)
+  assert.deepStrictEqual((await getProject("c"))!.personaColors, {
+    developer: "violet",
+    qa: "teal",
+  });
+
+  // 덮어쓰기 · 지우기. 빈 맵은 키째 사라진다(한 번도 안 고른 프로젝트와 같아야 한다)
+  await setPersonaColor("c", "developer", "pink");
+  await setPersonaColor("c", "qa", null);
+  assert.deepStrictEqual((await getProject("c"))!.personaColors, { developer: "pink" });
+  await setPersonaColor("c", "developer", null);
+  assert.strictEqual("personaColors" in (await getProject("c"))!, false);
+
+  // 팔레트 밖 값·이름 규칙 밖은 서버가 거부한다 — 레지스트리에 쓰레기를 넣지 않는다
+  await assert.rejects(() => setPersonaColor("c", "developer", "#ff0000"), /팔레트에 없는 색/);
+  await assert.rejects(() => setPersonaColor("c", "../x", "pink"), /페르소나 이름이 아닙니다/);
+  await assert.rejects(() => setPersonaColor("없는프로젝트", "developer", "pink"), /없는 프로젝트/);
+
+  // 큐에는 아무것도 쓰지 않는다(§5) — 색은 레지스트리 파일 하나가 전부다
+  await setPersonaColor("c", "developer", "sky");
+  assert.deepStrictEqual(readdirSync(path.join((await getProject("c"))!.root)), queueBefore);
 });
 
 test("레지스트리 — 옛 gui-tenants.json을 읽고, 첫 쓰기가 새 파일로 옮긴다", async () => {

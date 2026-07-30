@@ -8,7 +8,7 @@ import path from "node:path";
 import { NAME_RE, PROJECT_ID_RE, expandHome, resolveWithin, shellPath, shellValue } from "./paths.ts";
 import { listTickets, statusOf, type Ticket } from "./queue.ts";
 import { listWorkers, type Worker } from "./workers.ts";
-import { slugify } from "./urls.ts";
+import { PERSONA_COLORS, slugify } from "./urls.ts";
 
 export { slugify };
 
@@ -16,6 +16,11 @@ export type Project = {
   id: string; // URL 조각
   name: string; // 사람이 읽는 라벨
   root: string; // <프로젝트>/.fs-tickets 절대경로 (realpath 된 것)
+  /** 페르소나 이름 → 팔레트 키 (DESIGN.md §5 · §비주얼 §12). **큐에 저장하지 않는 이유**:
+   *  `PROFILE.md`에 넣으면 `tick.sh`가 통째로 프롬프트에 인라인하고(tick.sh:186), 사이드카
+   *  파일은 큐에 GUI 전용 규약을 새로 만든다. 레지스트리는 이미 있는 머신 로컬 저장소다.
+   *  페르소나를 지워도 청소하지 않는다 — 이름으로 조회하는 맵이라 고아 키가 아무것도 안 한다. */
+  personaColors?: Record<string, string>;
 };
 
 export type ProjectConfig = {
@@ -177,6 +182,32 @@ export async function reorderProjects(ids: string[]): Promise<void> {
   const ordered = ids.map((id) => projects.find((t) => t.id === id)).filter((t): t is Project => !!t);
   const rest = projects.filter((t) => !ordered.includes(t));
   await writeProjects([...ordered, ...rest]);
+}
+
+/** 페르소나 색 할당 (DESIGN.md §5). `color: null`이면 지운다(`색 없음`).
+ *
+ *  **큐에는 아무것도 쓰지 않는다** — 레지스트리 파일 하나가 전부다. 값은 팔레트 키만 받는다:
+ *  임의 문자열은 화면에서 중립 점으로 무시되므로 저장해봐야 쓰레기고, 이름은 다른 프로젝트의
+ *  키와 섞이지 않게 엔진과 같은 규칙(`NAME_RE`)으로 거른다. */
+export async function setPersonaColor(
+  id: string,
+  persona: string,
+  color: string | null,
+): Promise<void> {
+  if (!NAME_RE.test(persona)) throw new Error(`페르소나 이름이 아닙니다: ${persona}`);
+  if (color !== null && !(PERSONA_COLORS as readonly string[]).includes(color)) {
+    throw new Error(`팔레트에 없는 색입니다: ${color}`);
+  }
+  const projects = await readProjects();
+  const t = projects.find((x) => x.id === id);
+  if (!t) throw new Error(`없는 프로젝트: ${id}`);
+  const colors = { ...t.personaColors };
+  if (color === null) delete colors[persona];
+  else colors[persona] = color;
+  // 빈 맵은 키째 지운다 — 색을 한 번도 안 고른 프로젝트와 전부 지운 프로젝트가 같아야 한다.
+  if (Object.keys(colors).length === 0) delete t.personaColors;
+  else t.personaColors = colors;
+  await writeProjects(projects);
 }
 
 /** 레지스트리에서만 지운다. 큐 파일은 손대지 않는다(DESIGN.md 제약 7). */

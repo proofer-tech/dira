@@ -57,6 +57,21 @@ export const elapsedSuffix = (days?: number) => (days ? ` · ${days}일` : "");
  *  `elapsedSuffix`와 같은 이유로 여기 산다 — `pnpm test`가 JSX를 못 읽고, 스트림은 클라이언트다. */
 export const expandable = (e: { body: string }) => e.body !== "";
 
+/** 페르소나 색 팔레트 키 (DESIGN.md §비주얼 §12). 레지스트리에 이 문자열 그대로 저장된다.
+ *  **자유 hex가 아니라 고정 8색인 이유**는 §5에 있다 — 라이트/다크 두 벌과 대비를 사람이
+ *  즉석에서 못 맞춘다. 서버(레지스트리 쓰기 검증)와 클라이언트(스와치 목록)가 같은 목록을
+ *  써야 해서 여기 산다. 여기 없는 키는 에러가 아니라 **중립 점**이다(§12). */
+export const PERSONA_COLORS = [
+  "orange",
+  "yellow",
+  "green",
+  "teal",
+  "sky",
+  "blue",
+  "violet",
+  "pink",
+] as const;
+
 /** 홈 디렉터리를 `~`로 줄인 표시용 경로. 잘리는 길이 자체를 줄인다(DESIGN.md §6 텍스트 잘림).
  *  표시 전용이다 — 이 값을 다시 파일 경로로 쓰지 않는다. */
 export function tildePath(abs: string, home: string): string {

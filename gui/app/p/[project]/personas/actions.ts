@@ -15,6 +15,7 @@ import {
   getProject,
   resolveConfig,
   savePersona,
+  setPersonaColor,
 } from "@/lib/projects";
 
 export type PersonaResult = { ok: boolean; message?: string };
@@ -48,6 +49,23 @@ export async function createPersonaAction(projectId: string, name: string): Prom
   try {
     await createPersona(await personasDir(projectId), name.trim());
     revalidatePath(`/p/${projectId}/personas`);
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** 색은 **레지스트리**에 쓴다(DESIGN.md §5) — 이 액션만 큐를 아예 열지 않는 이유다.
+ *  `PROFILE.md`가 없는 페르소나(`body: null`)도 고를 수 있다: 색은 큐의 사실이 아니라 표시 취향이고
+ *  키는 이름이라 파일이 없어도 성립한다. 표시 지점이 여러 화면이라 `/p/<id>` 전체를 revalidate한다. */
+export async function setPersonaColorAction(
+  projectId: string,
+  name: string,
+  color: string | null,
+): Promise<PersonaResult> {
+  try {
+    await setPersonaColor(projectId, name, color);
+    revalidatePath(`/p/${projectId}`, "layout");
     return { ok: true };
   } catch (e) {
     return fail(e);

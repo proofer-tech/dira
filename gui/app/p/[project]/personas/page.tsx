@@ -72,7 +72,8 @@ export default async function Personas({ params }: { params: Promise<{ project: 
         // ponytail: 폭 제한 없음 — §5의 §4 예외. 카드 목록만 전체 폭이고 경고 Alert는 문단 폭이다
         <div className="space-y-3">
           {personas.map((p) => (
-            <PersonaCard key={p.name} projectId={id} row={p} />
+            // 색은 큐가 아니라 레지스트리에 있다(§5) — 같은 서버 렌더에 실려서 점 스켈레톤이 없다
+            <PersonaCard key={p.name} projectId={id} row={p} color={project.personaColors?.[p.name]} />
           ))}
         </div>
       )}
