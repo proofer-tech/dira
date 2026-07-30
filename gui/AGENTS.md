@@ -15,6 +15,10 @@ gui/
     not-found.tsx       404. `t/[tenant]/layout.tsx`의 notFound()를 받는 경계가 여기다
     actions.ts          Server Action (테넌트 등록·이름·순서·해제·재해석). 큐 파일은 안 건드린다
     t/[tenant]/         테넌트 스코프. layout.tsx가 셸(헤더·내비·전환기)
+    t/[tenant]/(board)/ 보드(`/t/<tenant>`). 라우트 그룹이라 URL은 그대로다.
+                        loading.tsx(테이블 스켈레톤)를 **보드에만** 걸려고 감쌌다 —
+                        `t/[tenant]/loading.tsx`면 워커·페르소나·프로토콜에도 표가 뜨고,
+                        경계가 레이아웃 위로 올라가 notFound()가 404를 못 세운다
                         큐 파일을 건드리는 Server Action은 그 화면 폴더에 둔다
                         (`workers/actions.ts`·`tickets/[hash]/actions.ts`·`tickets/new/actions.ts`·
                         `protocols/actions.ts`).
