@@ -14,6 +14,8 @@ import {
   setPersonaColorAction,
   type PersonaResult,
 } from "@/app/p/[project]/personas/actions";
+// 접힌 줄의 점도 보드·칸반·필터와 **같은 컴포넌트**다(§5) — 색 조회의 출처는 하나다
+import { PersonaDot } from "@/components/persona-badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   AlertDialog,
@@ -42,7 +44,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
-import { PERSONA_COLORS } from "@/lib/urls";
+import { PERSONA_COLORS, personaDotClass } from "@/lib/urls";
 import { cn } from "@/lib/utils";
 
 /** 서버가 읽어 넘긴 한 항목. `body: null` = PROFILE.md가 없다(엔진의 WARN 케이스). */
@@ -77,38 +79,6 @@ function refsLabel(refs: PersonaRow["refs"]): string | null {
 }
 
 // ── 색 (DESIGN.md §5 · §비주얼 §12) ─────────────────────────────────────────
-
-/** 팔레트 키 → 점 배경 클래스. **`bg-persona-${key}`로 조립하지 않는다** — Tailwind는 소스에서
- *  클래스 문자열을 정적으로 훑으므로 조립하면 8색이 통째로 빌드에서 빠진다. */
-const DOT_CLASS: Record<string, string> = {
-  orange: "bg-persona-orange",
-  yellow: "bg-persona-yellow",
-  green: "bg-persona-green",
-  teal: "bg-persona-teal",
-  sky: "bg-persona-sky",
-  blue: "bg-persona-blue",
-  violet: "bg-persona-violet",
-  pink: "bg-persona-pink",
-};
-
-/** 색 점 하나. **모르는 키·미할당은 빈 점이다 — 에러가 아니다**(§12): 레지스트리를 손으로 고쳐
- *  오타가 나도 화면이 안 깨지고, 회색으로 채우지 않아 "누가 고른 9번째 색"으로도 안 읽힌다.
- *  `size-2`는 border-box라 테두리가 붙어도 정확히 8px이다 — 미할당 줄만 어긋나지 않는다.
- *
- *  ponytail: persona 값이 보이는 다른 자리(보드 표·칸반·필터·select)는 `d9740156`이 붙인다.
- *  그때 `<PersonaBadge>`(§비주얼 §5 표)가 생기면 이 점이 그 파일로 옮겨간다. */
-export function PersonaDot({ color, className }: { color?: string; className?: string }) {
-  return (
-    <span
-      aria-hidden
-      className={cn(
-        "size-2 shrink-0 rounded-full",
-        DOT_CLASS[color ?? ""] ?? "border border-muted-foreground",
-        className,
-      )}
-    />
-  );
-}
 
 /** 접힌 줄의 점이 곧 트리거다(§12). `<summary>` 안이라 클릭이 곧 펼침 토글인데 — 삭제 버튼과
  *  같은 처방으로 `preventDefault`다(호출부에서 감싼다. `stopPropagation`은 안 통한다).
@@ -161,7 +131,7 @@ function ColorPicker({
               onClick={() => pick(c)}
               className={cn(
                 "size-6 cursor-pointer rounded-full",
-                DOT_CLASS[c],
+                personaDotClass(c),
                 c === current && "ring-2 ring-ring ring-offset-2",
               )}
             />

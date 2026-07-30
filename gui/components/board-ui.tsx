@@ -11,6 +11,7 @@
 import { useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Check, ChevronsUpDown, ListFilter, Search } from "lucide-react";
+import { PersonaDot } from "@/components/persona-badge";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -77,7 +78,14 @@ export function BoardSearch() {
   );
 }
 
-export type FilterOption = { value: string; label: string };
+export type FilterOption = {
+  value: string;
+  label: string;
+  /** persona 필터만 쓴다 — 레지스트리의 팔레트 키다(§5 · §비주얼 §12). 항목에 **점만** 붙는다:
+   *  껍데기(배지) 안에 배지를 또 넣지 않는다. 색을 안 고른 페르소나도 빈 점이 와야 자리가
+   *  흔들리지 않으므로 `undefined`가 "점을 그리지 않는다"를 뜻하지 않는다 — 그 판정은 `dot`이다. */
+  color?: string;
+};
 
 /** 다중 선택 하나(kind·persona·상태). 선택값은 `?<param>=a&<param>=b`로 URL에 쌓인다 —
  *  구분자를 쓰지 않는 이유는 kind 값에 무엇이 들어올지 우리가 정하지 않기 때문이다. */
@@ -87,10 +95,14 @@ export function BoardFilter({
   options,
   defaults,
   preset,
+  dot,
 }: {
   param: string;
   label: string;
   options: FilterOption[];
+  /** 항목마다 색 점을 그린다(persona 필터 하나뿐 — §5의 붙는 자리 표). 트리거 라벨
+   *  (`persona: pm, qa`)은 손대지 않는다: 값 표시가 아니라 선택 요약 문자열이다. */
+  dot?: boolean;
   /** 파라미터가 URL에 **하나도 없을 때**의 실효값(상태 필터의 완료 숨김만 쓴다 — §1 보드).
    *  서버의 유도와 같은 식이어야 한다: 하나라도 실려 있으면 실린 값이 전부다. 체크 표시는
    *  결과에 대한 진술이므로 기본값으로 걸러진 화면에서 체크가 6개면 그 진술이 거짓이 된다.
@@ -163,6 +175,8 @@ export function BoardFilter({
                 <span className="w-4 shrink-0">
                   {selected.includes(o.value) && <Check aria-hidden className="size-4" />}
                 </span>
+                {/* `[체크 자리 w-4] [점] [이름]` — 간격은 CommandItem 기본 gap-2다(§비주얼 §12) */}
+                {dot && <PersonaDot color={o.color} />}
                 <span className="truncate">{o.label}</span>
               </CommandItem>
             ))}

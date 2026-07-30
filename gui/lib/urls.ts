@@ -72,6 +72,31 @@ export const PERSONA_COLORS = [
   "pink",
 ] as const;
 
+/** 팔레트 키 → 점 클래스. **`bg-persona-${key}`로 조립하지 않는다** — Tailwind는 소스에서 클래스
+ *  문자열을 정적으로 훑으므로 조립하면 8색이 통째로 빌드에서 빠진다.
+ *
+ *  **모르는 키·미할당은 빈 점이다 — 에러가 아니다**(§비주얼 §12): 레지스트리를 손으로 고쳐
+ *  오타가 나도 화면이 안 깨지고, 회색으로 채우지 않아 "누가 고른 9번째 색"으로도 안 읽힌다.
+ *  `<PersonaBadge>`가 그리는 자리 5곳과 색 고르는 스와치가 **같은 이 함수**를 쓴다 —
+ *  자리마다 표를 다시 쓰면 어느 화면 하나가 조용히 색 없이 남는다.
+ *  JSX가 아니라 여기 사는 이유는 `elapsedSuffix`와 같다(`pnpm test`가 JSX를 못 읽는다). */
+const PERSONA_DOT = new Map([
+  ["orange", "bg-persona-orange"],
+  ["yellow", "bg-persona-yellow"],
+  ["green", "bg-persona-green"],
+  ["teal", "bg-persona-teal"],
+  ["sky", "bg-persona-sky"],
+  ["blue", "bg-persona-blue"],
+  ["violet", "bg-persona-violet"],
+  ["pink", "bg-persona-pink"],
+]);
+
+// 객체가 아니라 `Map`인 이유: 조회 키가 **레지스트리 파일에서 오는 남의 문자열**이라
+// `{...}["toString"]`이 함수를 돌려주는 자리다. 여기서는 그게 클래스 문자열 자리로 새어
+// 들어가 점이 사라진다 — `Map`이면 그 구멍이 없다(검증: `lib/projects.test.ts`).
+export const personaDotClass = (color?: string): string =>
+  PERSONA_DOT.get(color ?? "") ?? "border border-muted-foreground";
+
 /** 홈 디렉터리를 `~`로 줄인 표시용 경로. 잘리는 길이 자체를 줄인다(DESIGN.md §6 텍스트 잘림).
  *  표시 전용이다 — 이 값을 다시 파일 경로로 쓰지 않는다. */
 export function tildePath(abs: string, home: string): string {

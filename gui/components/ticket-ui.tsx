@@ -22,6 +22,7 @@ import type { UnassignRun } from "@/lib/engine";
 // 스레드를 엮는 쪽은 서버(`lib/queue.ts threadOf`)다 — 여기 오는 건 타입뿐이라 `node:*`를 안 끈다
 import type { ThreadItem } from "@/lib/queue";
 import { Markdown } from "@/components/markdown";
+import { PersonaDot } from "@/components/persona-badge";
 import { DepBadge } from "@/components/status-badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
@@ -101,6 +102,7 @@ export function TicketEditForm({
   kind,
   persona,
   personas,
+  colors,
   body,
 }: {
   project: string;
@@ -111,6 +113,8 @@ export function TicketEditForm({
   /** 발행 다이얼로그와 같은 목록 — `listPersonas` 결과 중 `PROFILE.md`가 있는 이름. 상세 페이지가
    *  이미 읽은 것을 넘긴다(§3 "선택지 데이터는 이미 읽은 것을 넘긴다") */
   personas: string[];
+  /** 이름 → 팔레트 키(레지스트리 `personaColors`). 없는 이름은 빈 점이다(§비주얼 §12) */
+  colors?: Record<string, string>;
   body: string;
 }) {
   const [state, action, pending] = useActionState<SaveState, FormData>(saveTicket, {});
@@ -159,12 +163,16 @@ export function TicketEditForm({
             <SelectContent>
               <SelectItem value={null}>없음</SelectItem>
               {personas.map((p) => (
+                // 발행 폼과 같다 — **점만**이고 `font-mono`는 무수정이다(§비주얼 §12)
                 <SelectItem key={p} value={p} className="font-mono">
+                  <PersonaDot color={colors?.[p]} />
                   {p}
                 </SelectItem>
               ))}
               {persona && !personas.includes(persona) && (
+                // 목록 밖 현재 값. 색은 이름으로 조회하므로 여기도 같은 규칙이다(대개 빈 점)
                 <SelectItem value={persona} className="font-mono">
+                  <PersonaDot color={colors?.[persona]} />
                   {persona}
                   <span className="text-xs text-muted-foreground">현재 값</span>
                 </SelectItem>
@@ -622,6 +630,7 @@ export function RequestDialog({ project }: { project: string }) {
 export function NewTicketDialog({
   project,
   personas,
+  colors,
   deps,
   personaDir,
   variant,
@@ -631,6 +640,8 @@ export function NewTicketDialog({
   /** 프로필(`PROFILE.md`)이 있는 이름만. 보드의 **필터 목록을 넘기면 안 된다** — 그쪽은
    *  티켓이 참조하는 프로필 없는 이름까지 포함한다(§3) */
   personas: string[];
+  /** 이름 → 팔레트 키(레지스트리 `personaColors`). 없는 이름은 빈 점이다(§비주얼 §12) */
+  colors?: Record<string, string>;
   deps: DepOption[];
   /** 페르소나가 0개일 때 어디를 봐야 하는지 적는다(§6 에러 3요소의 3번) */
   personaDir: string;
@@ -733,7 +744,10 @@ export function NewTicketDialog({
                 <SelectContent>
                   <SelectItem value={null}>없음</SelectItem>
                   {personas.map((p) => (
+                    // 항목은 **점만**이다 — 껍데기(배지) 안에 배지를 또 넣지 않는다(§5).
+                    // `font-mono`는 무수정: 이 자리는 배지가 아니라 값 목록이다(§비주얼 §12)
                     <SelectItem key={p} value={p} className="font-mono">
+                      <PersonaDot color={colors?.[p]} />
                       {p}
                     </SelectItem>
                   ))}

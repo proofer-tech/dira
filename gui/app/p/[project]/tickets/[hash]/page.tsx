@@ -161,6 +161,7 @@ export default async function TicketDetail({
           <NewTicketDialog
             project={id}
             personas={personas}
+            colors={project.personaColors}
             deps={depOptions}
             personaDir={config.personas}
             variant="outline"
@@ -309,6 +310,7 @@ export default async function TicketDetail({
                 kind={ticket.fm.kind ?? ""}
                 persona={ticket.fm.persona ?? ""}
                 personas={personas}
+                colors={project.personaColors}
                 body={ticket.body}
               />
             )}

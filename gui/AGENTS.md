@@ -44,6 +44,9 @@ gui/
     *.test.ts           node --test
   components/           손으로 만드는 컴포넌트 (DESIGN.md §5 커스텀)
     status-badge.tsx    상태 표현의 유일한 출처 (티켓 5 · 워커 4 · 연결 2) + deps 배지
+    persona-badge.tsx   persona 값 표시의 유일한 출처 (점+이름 배지 · 점만 그리는 모드).
+                        색은 레지스트리에 있고 자리가 5곳이다 — 조회를 자리마다 다시 쓰면
+                        어느 화면 하나가 조용히 색 없이 남는다. 팔레트 표는 `lib/urls.ts`
     project-switcher.tsx 전환기 · 내비 · 다시 확인 (셸의 클라이언트 조각)
     projects-ui.tsx      등록 폼 · 해석 결과 표 · 행 액션 (`/`의 클라이언트 조각)
     ticket-ui.tsx       편집 폼 · 할당 해제 · 삭제 · 답변 카드 + **보드의 발행 · 요구 접수

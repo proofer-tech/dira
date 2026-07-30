@@ -28,6 +28,7 @@ import { notFound } from "next/navigation";
 import { ArrowDown, ArrowUp, ChevronsUpDown, X } from "lucide-react";
 import { BoardFilter, BoardPolling, BoardSearch } from "@/components/board-ui";
 import { EmptyState } from "@/components/empty-state";
+import { PersonaBadge } from "@/components/persona-badge";
 import { DepBadge, StatusBadge, daysSince, statusLabel } from "@/components/status-badge";
 import { AnswerDialog, NewTicketDialog, RequestDialog } from "@/components/ticket-ui";
 import { Badge } from "@/components/ui/badge";
@@ -164,6 +165,10 @@ export default async function Board({
   const kinds = [...new Set(tickets.map((t) => t.kind).filter(Boolean))].sort();
   const profiles = await listPersonas(config.personas, tickets);
   const personas = profiles.map((p) => p.name);
+  // 색은 레지스트리에 있고 **티켓 목록과 같은 서버 렌더에 실린다**(§비주얼 §12 로딩) — 점 자리
+  // 스켈레톤이 없는 이유다. `?? {}`가 여기 한 번뿐인 이유: 아래로 넘길 때마다 붙이면 한 자리를
+  // 빼먹은 화면이 점을 통째로 잃는다(색 없음이 아니라 배지가 안 그려진다).
+  const colors = project.personaColors ?? {};
 
   // 발행 다이얼로그의 선택지 둘. **보드가 이미 읽은 것을 넘긴다** — `readdir`도 큐 스캔도 다시
   // 하지 않는다(§3).
@@ -282,6 +287,7 @@ export default async function Board({
           <NewTicketDialog
             project={id}
             personas={personaChoices}
+            colors={colors}
             deps={depOptions}
             personaDir={config.personas}
             variant="outline"
@@ -300,6 +306,7 @@ export default async function Board({
             <NewTicketDialog
               project={id}
               personas={personaChoices}
+              colors={colors}
               deps={depOptions}
               personaDir={config.personas}
             />
@@ -317,7 +324,8 @@ export default async function Board({
             <BoardFilter
               param="persona"
               label="persona"
-              options={personas.map((p) => ({ value: p, label: p }))}
+              options={personas.map((p) => ({ value: p, label: p, color: colors[p] }))}
+              dot
             />
             <BoardFilter
               param="status"
@@ -431,8 +439,15 @@ export default async function Board({
                             <span className="line-clamp-2 text-sm" title={t.title}>
                               {t.title || "(제목 없음)"}
                             </span>
-                            <span className="text-xs text-muted-foreground">
-                              {t.kind || "—"} · {t.persona || "—"}
+                            {/* 배지가 줄 안에 섞이므로 flex다 — 텍스트 baseline 정렬에 맡기면
+                                20px 배지가 줄을 밀어 카드마다 높이가 갈린다 */}
+                            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                              {t.kind || "—"} ·
+                              {t.persona ? (
+                                <PersonaBadge name={t.persona} color={colors[t.persona]} />
+                              ) : (
+                                "—"
+                              )}
                             </span>
                             {t.deps.length > 0 && (
                               // 라벨은 세어주지 않는다 — 어느 해시가 무엇인지는 <DepBadge>가
@@ -534,7 +549,15 @@ export default async function Board({
                       </span>
                     </TableCell>
                     <TableCell className="px-3 py-0 text-sm">{t.kind || "—"}</TableCell>
-                    <TableCell className="px-3 py-0 text-sm">{t.persona || "—"}</TableCell>
+                    {/* 배지가 셀의 `text-sm`을 대체한다(§비주얼 §12) — 셀에 남은 `text-sm`은
+                        배지가 없는 `—`(담당 없음) 한 글자용이다. Badge는 제 `text-xs`를 갖는다 */}
+                    <TableCell className="px-3 py-0 text-sm">
+                      {t.persona ? (
+                        <PersonaBadge name={t.persona} color={colors[t.persona]} />
+                      ) : (
+                        "—"
+                      )}
+                    </TableCell>
                     <TableCell className="px-3 py-0">
                       {t.deps.length === 0 ? (
                         <span className="text-sm text-muted-foreground">—</span>

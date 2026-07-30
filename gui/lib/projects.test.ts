@@ -27,7 +27,8 @@ const {
   usingDefault,
 } = await import("./projects.ts");
 const { filterTickets, listTickets } = await import("./queue.ts");
-const { decodeHash, elapsedSuffix, projectPath } = await import("./urls.ts");
+const { decodeHash, elapsedSuffix, personaDotClass, projectPath, PERSONA_COLORS } =
+  await import("./urls.ts");
 
 const roots: string[] = [];
 process.on("exit", () => {
@@ -264,6 +265,19 @@ test("elapsedSuffix — 0일은 붙지 않는다", () => {
   assert.strictEqual(elapsedSuffix(undefined), "");
   assert.strictEqual(elapsedSuffix(3), " · 3일");
   assert.strictEqual(elapsedSuffix(120), " · 120일");
+});
+
+/** 팔레트 8색이 **전부** 클래스를 갖는다 — 하나가 표에서 빠지면 그 색을 고른 페르소나만
+ *  조용히 빈 점이 된다(화면은 안 깨지므로 눈으로는 안 걸린다). 조립하지 않고 리터럴로 쓰는
+ *  이유(Tailwind 정적 스캔)가 곧 빠뜨릴 수 있다는 뜻이라 여기서 못박는다.
+ *  모르는 키·미할당이 빈 점인 것은 에러가 아니라 계약이다(DESIGN.md §비주얼 §12). */
+test("personaDotClass — 팔레트 8색 전부 + 모르는 키는 빈 점", () => {
+  for (const c of PERSONA_COLORS) assert.strictEqual(personaDotClass(c), `bg-persona-${c}`);
+  const empty = "border border-muted-foreground";
+  assert.strictEqual(personaDotClass(undefined), empty); // 미할당
+  assert.strictEqual(personaDotClass(""), empty);
+  assert.strictEqual(personaDotClass("mauve"), empty); // 레지스트리를 손으로 고친 오타
+  assert.strictEqual(personaDotClass("toString"), empty); // 프로토타입 키가 새지 않는다
 });
 
 test("레지스트리 — 이름 변경 · 순서 변경 · 등록 해제", async () => {
