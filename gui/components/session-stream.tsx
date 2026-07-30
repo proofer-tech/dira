@@ -13,6 +13,7 @@ import { ArrowDown, ChevronRight } from "lucide-react";
 import { tailSession } from "@/app/p/[project]/tickets/[hash]/actions";
 import { Button } from "@/components/ui/button";
 import type { StreamEvent } from "@/lib/transcript";
+import { expandable } from "@/lib/urls";
 import { cn } from "@/lib/utils";
 
 /** 레코드의 `timestamp`는 UTC다 — **로컬 시간으로 렌더한다**(§2-1: `13:55:10Z` = KST `22:55:10`).
@@ -124,21 +125,47 @@ function Row({
   onToggle: (ev: React.SyntheticEvent<HTMLDetailsElement>) => void;
 }) {
   const summary = e.sidechain ? `서브 · ${e.summary}` : e.summary;
+  // 3·4열은 두 모양이 공유한다 — 열 폭이 갈리면 그리드가 안 맞는다
+  const cells = (
+    <>
+      <span className="font-mono tabular-nums">{localTime(e.ts)}</span>
+      {/* mono면 엔진이 실제로 부른 이름이고, sans면 우리가 붙인 이름이다(§9).
+          판정은 `kind` 하나다 — 화면이 도구 목록을 다시 갖지 않는다. */}
+      <span className={cn("truncate", e.kind === "tool_use" && "font-mono")} title={e.label}>
+        {e.label}
+      </span>
+      <span className={cn("truncate", e.summaryMono && "font-mono")} title={summary}>
+        {summary}
+      </span>
+    </>
+  );
+  const grid =
+    "grid grid-cols-[1rem_4rem_7rem_minmax(0,1fr)] items-center gap-x-2 px-3 text-xs leading-6 text-muted-foreground";
+
+  // 펼칠 것이 없으면 어포던스도 없다(`expandable` — 판정은 `lib/urls.ts` 하나다).
+  // 여기 오는 건 본문이 암호화된 `thinking`이다(실측 75/75). 줄 자체는 그대로 흘리고
+  // — 빼면 생각하는 동안 화면이 조용해진다 — 어포던스 열만 §9대로 **비워서 유지**한다.
+  if (!expandable(e)) {
+    return (
+      <div className={grid}>
+        <span />
+        {cells}
+      </div>
+    );
+  }
+
   return (
     <details className="group" onToggle={onToggle}>
       {/* hover에서 글자를 같이 올리는 건 대비 때문이다 — `--muted-foreground`가 `bg-muted/50`
           위에서 라이트 4.54로 바닥에 붙는다(§9 함정 2). `text-foreground`면 18.97이다. */}
-      <summary className="grid cursor-pointer list-none grid-cols-[1rem_4rem_7rem_minmax(0,1fr)] items-center gap-x-2 px-3 text-xs leading-6 text-muted-foreground hover:bg-muted/50 hover:text-foreground [&::-webkit-details-marker]:hidden">
+      <summary
+        className={cn(
+          grid,
+          "cursor-pointer list-none hover:bg-muted/50 hover:text-foreground [&::-webkit-details-marker]:hidden",
+        )}
+      >
         <ChevronRight aria-hidden className="size-3.5 group-open:rotate-90" />
-        <span className="font-mono tabular-nums">{localTime(e.ts)}</span>
-        {/* mono면 엔진이 실제로 부른 이름이고, sans면 우리가 붙인 이름이다(§9).
-            판정은 `kind` 하나다 — 화면이 도구 목록을 다시 갖지 않는다. */}
-        <span className={cn("truncate", e.kind === "tool_use" && "font-mono")} title={e.label}>
-          {e.label}
-        </span>
-        <span className={cn("truncate", e.summaryMono && "font-mono")} title={summary}>
-          {summary}
-        </span>
+        {cells}
       </summary>
       {/* 펼친 원문. `text-foreground`가 아니면 `--muted` 위에서 4.34로 미달한다(§9에서 가장
           밟기 쉬운 함정). `max-h-96`은 `tool_result` 실측 38173바이트가 컨테이너를 삼키는 걸 막는다. */}

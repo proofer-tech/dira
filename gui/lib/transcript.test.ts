@@ -4,6 +4,7 @@ import { appendFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "n
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { findTranscript, recordToEvents, sessionIdOf, tailEvents } from "./transcript.ts";
+import { expandable } from "./urls.ts";
 
 /** 픽스처는 전부 임시 디렉터리다 — **`~/.claude/projects`를 건드리지 않는다**(§수용조건).
  *  `findTranscript`의 `root` 인자가 그것 하나를 위해 있다. */
@@ -185,6 +186,22 @@ test("사건 매핑 — thinking·tool_result는 크기가 있고 원문이 함�
     "3줄",
     "a\nb\nc\n",
   ]);
+});
+
+test("어포던스 — 빈 본문 줄은 펼칠 수 없고, 있는 쪽은 그대로다", () => {
+  const think = (t: string) =>
+    recordToEvents(JSON.parse(assistant([{ type: "thinking", thinking: t, signature: "x" }]).trim()))[0];
+
+  // 있는 본문: §2-1 표 그대로 `생각 n자` + 펼치면 원문
+  const full = think("가나다라마");
+  assert.deepEqual([full.label, full.summary, full.body], ["생각", "5자", "가나다라마"]);
+  assert.equal(expandable(full), true);
+
+  // 빈 본문(암호화된 thinking — 실측 75/75): 줄은 흐르되 셰브런·<details>가 없다.
+  // 이게 참으로 뒤집히면 화면에 **열리는 빈 상자**가 돌아온다(20f3d308).
+  const blank = think("");
+  assert.equal(blank.label, "생각"); // 줄 자체는 계속 흐른다
+  assert.equal(expandable(blank), false);
 });
 
 test("사건 매핑 — tool_result의 블록 배열도 접힌다 (실측: text·image·tool_reference)", () => {
