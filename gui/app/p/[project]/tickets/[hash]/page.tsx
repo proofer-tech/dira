@@ -225,6 +225,19 @@ export default async function TicketDetail({
         ghost={ticket.state === "open" && ticket.assigned}
       />
 
+      {/* 답변 대기일 때만. `.wip`은 `isAwaiting`의 state 조건이 구조적으로 막는다(제약 5).
+          자리는 **제목 직하**다(§2, 사람 요청 `14c88df4`) — 이 화면을 여는 이유가 답을 쓰는 것
+          하나인데 종전은 본문 편집 폼까지 지나야 답변칸이 나왔다. 잠금 Alert·할당 해제는 이 위에
+          남는다: "무엇을 할 수 없는가"가 액션보다 앞이다. */}
+      {isAwaiting(ticket) && (
+        <AnswerCard
+          project={id}
+          hash={hash}
+          answerFile={`${awaitingOf(ticket)}${config.done}.md`}
+          thread={thread}
+        />
+      )}
+
       <section className="max-w-3xl space-y-2">
         <h2 className="text-sm font-medium">frontmatter</h2>
         <Table>
@@ -369,16 +382,6 @@ export default async function TicketDetail({
           />
         )}
       </section>
-
-      {/* 답변 대기일 때만. `.wip`은 `isAwaiting`의 state 조건이 구조적으로 막는다(제약 5) */}
-      {isAwaiting(ticket) && (
-        <AnswerCard
-          project={id}
-          hash={hash}
-          answerFile={`${awaitingOf(ticket)}${config.done}.md`}
-          thread={thread}
-        />
-      )}
     </div>
   );
 }
