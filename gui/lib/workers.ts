@@ -72,6 +72,13 @@ function alive(pid: number): boolean {
   }
 }
 
+/** 한글 경로 비교는 **반드시** 양쪽을 맞춰야 한다(`queue.ts`와 같은 이유):
+ *  macOS `crontab -l`은 사람이 넣은 줄을 NFC로 그대로 주는데 `realpath()`는 같은 경로를
+ *  NFD(자모 분해)로 돌려주는 파일시스템이 있다(구글 드라이브 마운트). 정규화 없이 비교하면
+ *  cron에 등록돼 도는 워커가 `stopped` + `미등록`으로 뜨고, 화면이 권하는 등록 명령을 실행하면
+ *  **중복 cron 줄**이 생긴다. */
+const nfc = (s: string) => s.normalize("NFC");
+
 // ponytail: 테넌트마다 한 번 부른다(테넌트는 한 자릿수). 캐시하면 사람이 crontab을 고친 걸
 // GUI가 못 보므로, 느려지면 요청 단위 캐시를 넣는다.
 async function crontabText(): Promise<string> {
@@ -362,7 +369,8 @@ export async function listWorkers(root: string, tickets: Ticket[] = []): Promise
     .sort();
   if (names.length === 0) return [];
 
-  const [cron, logs] = await Promise.all([crontabText(), lastLogByWorker(dir)]);
+  const [cronRaw, logs] = await Promise.all([crontabText(), lastLogByWorker(dir)]);
+  const cron = nfc(cronRaw);
   const out: Worker[] = [];
   for (const file of names) {
     const name = file.slice(0, -3);
@@ -373,7 +381,9 @@ export async function listWorkers(root: string, tickets: Ticket[] = []): Promise
     const eff = parsed.name ?? name;
     const { held, pid } = await lockOf(lockPath(dir, eff));
     // crontab 한 줄은 인용부호가 붙기도 하므로 절대경로 부분일치로 본다(제약 4: 읽기 전용).
-    const inCron = cron.includes(full);
+    // `full`은 정규화하지 **않고** 저장한다 — cron 줄에 들어가 셸이 실제로 실행하는 문자열이라
+    // 파일시스템이 준 바이트 그대로여야 한다. 정규화는 비교에만 쓴다.
+    const inCron = cron.includes(nfc(full));
     out.push({
       name,
       path: full,

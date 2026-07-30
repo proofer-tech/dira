@@ -74,6 +74,54 @@ test("listWorkers — running · stale · stopped 판정", async () => {
   assert.strictEqual(workerSummary([]), "—");
 });
 
+/** `crontab -l`을 가로챈다. 진짜 crontab을 읽으면 이 머신의 등록 상태에 따라 결과가 흔들린다.
+ *  `execFile("crontab")`은 PATH로 찾으므로 스텁 디렉터리를 앞에 붙이면 된다. */
+function withFakeCrontab(text: string): () => void {
+  const bin = mkdtempSync(path.join(tmpdir(), "fst-bin-"));
+  tmps.push(bin);
+  const out = path.join(bin, "out.txt");
+  writeFileSync(out, text);
+  writeFileSync(path.join(bin, "crontab"), `#!/bin/sh\ncat ${JSON.stringify(out)}\n`, { mode: 0o755 });
+  const prev = process.env.PATH;
+  process.env.PATH = `${bin}:${prev}`;
+  return () => {
+    process.env.PATH = prev;
+  };
+}
+
+test("cron 판정 — crontab은 NFC, 파일시스템 경로는 NFD인 한글 큐 (QA c53c4259)", async () => {
+  // 실제로 있는 큐의 모양이다: 구글 드라이브 마운트가 realpath를 NFD로 돌려주고
+  // crontab -l은 사람이 넣은 NFC 줄을 그대로 준다.
+  const base = mkdtempSync(path.join(tmpdir(), "fst-root-"));
+  tmps.push(base);
+  const root = path.join(base, "스트림(Stream)".normalize("NFD"));
+  const dir = path.join(root, "workers");
+  mkdirSync(dir, { recursive: true });
+  for (const n of ["w1.sh", "w2.sh"]) writeFileSync(path.join(dir, n), "#!/bin/bash\n");
+
+  const nfd = path.join(dir, "w1.sh");
+  // 픽스처가 진짜 NFD인지 못박는다 — 같아지면 이 테스트는 아무것도 검증하지 않는다
+  assert.notStrictEqual(nfd, nfd.normalize("NFC"));
+
+  const restore = withFakeCrontab(
+    `* * * * * "${nfd.normalize("NFC")}" >> "${path.join(dir, "cron.log").normalize("NFC")}" 2>&1\n`,
+  );
+  try {
+    const [w1, w2] = await listWorkers(root);
+    // 정규화 없이 includes하면 여기가 false/stopped다 — 화면이 등록을 권하고 중복 줄이 생긴다
+    assert.strictEqual(w1.cron, true);
+    assert.strictEqual(w1.status, "idle");
+    // 등록 안 된 워커는 그대로 false다(정규화가 전부 true로 만들지 않는다)
+    assert.strictEqual(w2.cron, false);
+    assert.strictEqual(w2.status, "stopped");
+    // path는 정규화하지 않는다 — cron 줄에 들어가 셸이 실제로 실행할 문자열이다
+    assert.strictEqual(w1.path, nfd);
+    assert.strictEqual(cronRegisterCmd(w1).includes(nfd), true);
+  } finally {
+    restore();
+  }
+});
+
 test("listWorkers — workers/ 없으면 빈 배열(등록 검증은 tickets/만 있어도 통과한다)", async () => {
   const root = mkdtempSync(path.join(tmpdir(), "fst-root-"));
   tmps.push(root);
