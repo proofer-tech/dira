@@ -3,7 +3,7 @@ import assert from "node:assert";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { resolveConfig } from "./tenants.ts";
+import { resolveConfig } from "./projects.ts";
 import {
   createFile,
   deleteFile,
@@ -16,9 +16,9 @@ import {
 /** 재정의 큐 픽스처 — `TICKET_PROTOCOLS`가 **루트 밖**을 가리킨다.
  *
  *  이 레포의 큐는 관례대로 `<루트>/protocols`를 쓰므로 재정의 경로를 우연히 검증해주지 않는다
- *  (DESIGN.md §설정 해석). 기준을 테넌트 root로 잘못 잡은 코드는 여기서만 걸린다.
+ *  (DESIGN.md §설정 해석). 기준을 프로젝트 root로 잘못 잡은 코드는 여기서만 걸린다.
  *
- *      <tmp>/proj/.fs-tickets/   ← 테넌트 root
+ *      <tmp>/proj/.fs-tickets/   ← 프로젝트 root
  *      <tmp>/shared-protocols/   ← TICKET_PROTOCOLS (루트 밖. 여러 큐가 공유하는 그 경우)
  *      <tmp>/secrets/            ← 아무 화면도 못 읽어야 하는 곳
  */
@@ -100,7 +100,7 @@ test("탈출 거부 — ../ · 절대경로 · 심링크. 읽기·쓰기·생성
   assert.strictEqual(readFileSync(path.join(secrets, "id_rsa"), "utf8"), "비밀");
   assert.strictEqual(readFileSync(path.join(shared, "tickets.md"), "utf8"), "티켓 문법\n");
 
-  // 테넌트 root 안이라도 기준(해석된 protocols) 밖이면 거부다 — root는 기준이 아니다
+  // 프로젝트 root 안이라도 기준(해석된 protocols) 밖이면 거부다 — root는 기준이 아니다
   await assert.rejects(() => readTextFile(shared, path.join(root, "protocols", "AGENTS.md")), /기준 디렉터리 밖/);
 });
 

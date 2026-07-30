@@ -58,7 +58,7 @@ export async function unassign(root: string, hash: string): Promise<UnassignRun>
   if (workers.length === 0) {
     return {
       ok: false,
-      output: "이 테넌트에 워커가 없습니다 — 할당 해제를 호출할 스크립트가 없습니다.",
+      output: "이 프로젝트에 워커가 없습니다 — 할당 해제를 호출할 스크립트가 없습니다.",
       worker: null,
     };
   }
@@ -72,7 +72,7 @@ export async function unassign(root: string, hash: string): Promise<UnassignRun>
  *  이 파일이 실행하는 것(python3·워커 `.sh`)은 **번들 대상이 아니다.** 그래서 `pnpm build`가
  *  `Encountered unexpected file in NFT list` 경고를 낸다 — 서브프로세스 경로가 런타임 값이라
  *  트레이서가 포기하는 것이고, 경고일 뿐 빌드는 통과한다. `turbopackIgnore` 주석으로도 안 사라진다
- *  (실측). 워커 스크립트 경로가 테넌트마다 다른 건 제약 2가 요구하는 설계다. */
+ *  (실측). 워커 스크립트 경로가 프로젝트마다 다른 건 제약 2가 요구하는 설계다. */
 const enginePy = () => path.resolve(process.cwd(), "..", "tickets.py");
 
 /** 해시 → 실제 티켓 경로. 없으면 null(404의 근거).
@@ -91,7 +91,7 @@ export async function findTicket(
   if (!isHash(hash)) return null;
   try {
     const { stdout } = await promisify(execFile)("python3", [enginePy(), "find", root, hash], {
-      // 접미사는 테넌트별이다(제약 6). 엔진은 이 두 환경변수로만 읽는다.
+      // 접미사는 프로젝트별이다(제약 6). 엔진은 이 두 환경변수로만 읽는다.
       env: { ...process.env, TICKET_INPROGRESS: sfx.inProgress, TICKET_DONE: sfx.done },
     });
     const hit = stdout.trim();

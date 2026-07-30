@@ -1,13 +1,13 @@
 /** 프로토콜 파일트리 읽기·쓰기 (DESIGN.md §6).
  *
- *  **기준 디렉터리는 해석된 `TICKET_PROTOCOLS`다 — 테넌트 root가 아니다.** 엔진이 이 값을
+ *  **기준 디렉터리는 해석된 `TICKET_PROTOCOLS`다 — 프로젝트 root가 아니다.** 엔진이 이 값을
  *  워커에서 재정의할 수 있게 열어뒀고(README 용례: 여러 큐가 같은 규약을 쓰면 공유 경로로 준다),
  *  그러면 프로토콜 디렉터리는 루트 밖에 있다. root를 기준으로 접두를 확인하면 정상 설치가
  *  전부 거부되거나 — 더 나쁘게 — 루트 안이라는 잘못된 가정으로 경로를 조립하게 된다.
- *  기준을 인자로 받는 이유가 이것이고, 호출자는 `resolveConfig(tenant).protocols`를 넘긴다.
+ *  기준을 인자로 받는 이유가 이것이고, 호출자는 `resolveConfig(project).protocols`를 넘긴다.
  *
  *  `lib/workers.ts` ↔ `workers/actions.ts`와 같은 분담이다: fs 로직은 여기, `revalidatePath`와
- *  테넌트 해석은 얇은 서버 액션. 경로 방어를 Next 없이 `node --test`로 못박기 위해서이기도 하다. */
+ *  프로젝트 해석은 얇은 서버 액션. 경로 방어를 Next 없이 `node --test`로 못박기 위해서이기도 하다. */
 import { link, lstat, mkdir, readFile, readdir, realpath, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { expandHome, resolveWithin } from "./paths.ts";

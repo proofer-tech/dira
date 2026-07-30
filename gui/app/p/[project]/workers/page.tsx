@@ -1,8 +1,8 @@
-/** 워커 `/t/<tenant>/workers` — 현황 + 생성·중단·삭제 + reap (DESIGN.md §4).
+/** 워커 `/p/<project>/workers` — 현황 + 생성·중단·삭제 + reap (DESIGN.md §4).
  *
  *  **crontab은 읽기만 한다**(제약 4). 등록·해제 명령어는 만들어서 복사시키고 사람이 실행한다.
- *  락은 테넌트의 **워커 파일 목록에서 시작해** 찾는다 — 락 디렉터리는 머신 전역이라 모든
- *  테넌트의 락이 섞여 있고 락 이름에서 테넌트를 역추적할 수 없다(§워커 상태 판정). */
+ *  락은 프로젝트의 **워커 파일 목록에서 시작해** 찾는다 — 락 디렉터리는 머신 전역이라 모든
+ *  프로젝트의 락이 섞여 있고 락 이름에서 프로젝트를 역추적할 수 없다(§워커 상태 판정). */
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { TriangleAlert } from "lucide-react";
@@ -25,7 +25,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { listTickets } from "@/lib/queue";
-import { getTenant, resolveConfig, usingDefault } from "@/lib/tenants";
+import { getProject, resolveConfig, usingDefault } from "@/lib/projects";
 import { cronUnregisterCmd, cronRegisterCmd, firstWorkerCmd, listWorkers } from "@/lib/workers";
 
 // 워커는 GUI 밖에서(cron이) 상태를 바꾼다 — 프리렌더하면 빌드 시점 현황이 굳는다.
@@ -47,15 +47,15 @@ const NOTE: Record<WorkerRow["status"], string> = {
   stale: "다음 tick이 회수한다",
 };
 
-export default async function Workers({ params }: { params: Promise<{ tenant: string }> }) {
-  const { tenant: id } = await params;
-  const tenant = await getTenant(id);
-  if (!tenant) notFound();
+export default async function Workers({ params }: { params: Promise<{ project: string }> }) {
+  const { project: id } = await params;
+  const project = await getProject(id);
+  if (!project) notFound();
 
-  const config = await resolveConfig(tenant);
+  const config = await resolveConfig(project);
   // 물고 있는 티켓은 `.wip` 티켓의 `owner:`로 역추적한다 — 큐를 한 번만 읽고 넘긴다.
-  const tickets = await listTickets(tenant.root, config);
-  const workers = await listWorkers(tenant.root, tickets);
+  const tickets = await listTickets(project.root, config);
+  const workers = await listWorkers(project.root, tickets);
 
   const rows: WorkerRow[] = workers.map((w) => ({
     ...w,
@@ -78,7 +78,7 @@ export default async function Workers({ params }: { params: Promise<{ tenant: st
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-lg font-semibold">워커</h1>
         {rows.length > 0 && (
-          <CreateWorkerButton tenantId={id} canTemplate firstCmd={firstWorkerCmd(tenant.root)} />
+          <CreateWorkerButton projectId={id} canTemplate firstCmd={firstWorkerCmd(project.root)} />
         )}
       </div>
 
@@ -88,9 +88,9 @@ export default async function Workers({ params }: { params: Promise<{ tenant: st
             text="워커 없음 — 큐가 돌지 않는다"
             action={
               <CreateWorkerButton
-                tenantId={id}
+                projectId={id}
                 canTemplate={false}
-                firstCmd={firstWorkerCmd(tenant.root)}
+                firstCmd={firstWorkerCmd(project.root)}
               />
             }
           />
@@ -101,7 +101,7 @@ export default async function Workers({ params }: { params: Promise<{ tenant: st
               <span className="font-mono text-xs">unassign</span>(할당 해제)도 할 수 없습니다 —
               둘 다 워커 스크립트를 통해 엔진이 하는 일입니다(제약 2).
             </p>
-            <CopyCommand cmd={firstWorkerCmd(tenant.root)} />
+            <CopyCommand cmd={firstWorkerCmd(project.root)} />
             <p className="text-xs text-muted-foreground">
               엔진 레포 경로는 채워지지 않습니다 — 워커 파일에만 적혀 있어서 GUI가 알 수 없습니다.
             </p>
@@ -139,7 +139,7 @@ export default async function Workers({ params }: { params: Promise<{ tenant: st
                   {w.holding ? (
                     // 해시가 파일명에서 올 수 있어 한글·공백이 섞인다 — 보드와 같이 인코딩한다
                     <Link
-                      href={`/t/${id}/tickets/${encodeURIComponent(w.holding)}`}
+                      href={`/p/${id}/tickets/${encodeURIComponent(w.holding)}`}
                       className="hover:underline"
                     >
                       {w.holding}
@@ -164,7 +164,7 @@ export default async function Workers({ params }: { params: Promise<{ tenant: st
                   {w.lastLog ?? "—"}
                 </TableCell>
                 <TableCell className="px-3 py-0">
-                  <WorkerRowActions tenantId={id} row={w} />
+                  <WorkerRowActions projectId={id} row={w} />
                 </TableCell>
               </TableRow>
             ))}
@@ -186,7 +186,7 @@ export default async function Workers({ params }: { params: Promise<{ tenant: st
           {rows.map((w) => (
             <WorkerContextCard
               key={w.name}
-              tenantId={id}
+              projectId={id}
               row={w}
               others={rows.filter((o) => o.name !== w.name).map((o) => o.name)}
             />

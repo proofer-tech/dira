@@ -6,7 +6,7 @@
  *  YAML 파서를 쓰지 않는 이유도 같다 — 엔진이 정규식이라 파서를 쓰면 판정이 갈린다. */
 import { readFile, readdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { TenantConfig } from "./tenants.ts";
+import type { ProjectConfig } from "./projects.ts";
 
 export type TicketState = "open" | "wip" | "done";
 
@@ -31,8 +31,8 @@ export type Ticket = {
   birth: number; // ms. st_birthtime ?? mtime. 큐 순서
 };
 
-/** 상태 접미사는 테넌트별이다. 하드코딩하지 않고 해석된 값을 받는다. */
-export type Suffixes = Pick<TenantConfig, "inProgress" | "done">;
+/** 상태 접미사는 프로젝트별이다. 하드코딩하지 않고 해석된 값을 받는다. */
+export type Suffixes = Pick<ProjectConfig, "inProgress" | "done">;
 
 const nfc = (s: string) => s.normalize("NFC");
 /** python `.strip().strip("\"'")` */
@@ -115,7 +115,7 @@ function findStem(files: string[], want: string, sfx: Suffixes): string | null {
   return null;
 }
 
-/** 테넌트 큐의 티켓 전부(open·wip·done). 순서는 birth 오름차순, 동률이면 path — CLI `list`와 같다.
+/** 프로젝트 큐의 티켓 전부(open·wip·done). 순서는 birth 오름차순, 동률이면 path — CLI `list`와 같다.
  *
  *  frontmatter가 없거나 닫는 `---`이 없는 파일은 **제외한다**: tickets.py scan()이 그렇게 하므로
  *  엔진에게 안 보이는 파일이고, GUI에 띄우면 있지도 않은 티켓을 있다고 하는 셈이다. */

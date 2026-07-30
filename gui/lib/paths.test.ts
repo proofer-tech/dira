@@ -3,7 +3,7 @@ import assert from "node:assert";
 import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
-import { expandHome, isHash, isName, isTenantId, resolveWithin } from "./paths.ts";
+import { expandHome, isHash, isName, isProjectId, resolveWithin } from "./paths.ts";
 
 const tmp = mkdtempSync(path.join(tmpdir(), "fst-paths-"));
 process.on("exit", () => rmSync(tmp, { recursive: true, force: true }));
@@ -27,7 +27,7 @@ test("이름·해시·id 규칙", () => {
   assert.ok(!isHash("a/b/c") && !isHash("../../etc/passwd") && !isHash("a\\b"));
   assert.ok(!isHash(".") && !isHash("..") && !isHash(".hidden") && !isHash(""));
   assert.ok(!isHash("a\0b") && !isHash("a\nb") && !isHash("x".repeat(256)));
-  assert.ok(isTenantId("fs-tickets") && !isTenantId("Fs_Tickets"));
+  assert.ok(isProjectId("fs-tickets") && !isProjectId("Fs_Tickets"));
 });
 
 test("expandHome", () => {

@@ -4,29 +4,29 @@ import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, 
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 
-// 진짜 레지스트리(~/.config/fs-tickets/gui-tenants.json)를 밟지 않는다. import 전에 건다.
+// 진짜 레지스트리(~/.config/fs-tickets/gui-projects.json)를 밟지 않는다. import 전에 건다.
 const LOCAL = mkdtempSync(path.join(tmpdir(), "fst-local-"));
 process.env.TICKET_LOCAL = LOCAL;
 
 const {
-  addTenant,
+  addProject,
   createPersona,
   deletePersona,
-  getTenant,
+  getProject,
   listPersonas,
   readSummary,
-  readTenants,
+  readProjects,
   registryPath,
-  removeTenant,
+  removeProject,
   savePersona,
   slugify,
-  renameTenant,
-  reorderTenants,
+  renameProject,
+  reorderProjects,
   resolveConfig,
   usingDefault,
-} = await import("./tenants.ts");
+} = await import("./projects.ts");
 const { filterTickets, listTickets } = await import("./queue.ts");
-const { decodeHash, tenantPath } = await import("./urls.ts");
+const { decodeHash, projectPath } = await import("./urls.ts");
 
 const roots: string[] = [];
 process.on("exit", () => {
@@ -186,32 +186,32 @@ test("resolveConfig — 워커 하나뿐이어도 cwdByWorker에 담는다", asy
 // ── 레지스트리 ──────────────────────────────────────────────────────────────
 
 test("레지스트리 — 등록 검증 4종", async () => {
-  assert.deepStrictEqual(await readTenants(), []); // 파일 없음 = 온보딩
+  assert.deepStrictEqual(await readProjects(), []); // 파일 없음 = 온보딩
 
   const root = newQueue({ "w1.sh": "" });
   // 한글 이름은 슬러그가 빈다 -> 자동으로 지어내지 않고 거부한다(URL 조각을 직접 받는다)
   assert.strictEqual(slugify("스트림"), "");
   assert.strictEqual(slugify("fs-tickets 자체!!"), "fs-tickets");
-  await assert.rejects(() => addTenant("스트림", root), { code: "needId" });
+  await assert.rejects(() => addProject("스트림", root), { code: "needId" });
 
-  const t = await addTenant("스트림", root, "stream");
+  const t = await addProject("스트림", root, "stream");
   // 저장되는 root는 realpath된 것이다(macOS의 /tmp -> /private/tmp)
   assert.strictEqual(t.root, await import("node:fs/promises").then((fs) => fs.realpath(root)));
   assert.strictEqual(t.id, "stream");
-  assert.strictEqual((await getTenant(t.id))!.name, "스트림");
+  assert.strictEqual((await getProject(t.id))!.name, "스트림");
 
   // 실패 문구는 사용자에게 그대로 보인다(DESIGN.md §7 문구 표) — code로 필드 귀속까지 검사한다.
   // 1. 디렉터리 존재
-  await assert.rejects(() => addTenant("x", path.join(root, "없는디렉터리")), {
+  await assert.rejects(() => addProject("x", path.join(root, "없는디렉터리")), {
     code: "root",
     message: /없습니다\. 절대경로가 맞는지, 마운트가 연결돼 있는지/,
   });
   // 2. tickets/ 또는 workers/
   const empty = mkdtempSync(path.join(tmpdir(), "fst-empty-"));
   roots.push(empty);
-  await assert.rejects(() => addTenant("x", empty), { code: "root", message: /tickets\/도/ });
-  // 3. root 중복 — 폼이 링크를 붙이므로 그 테넌트를 실어 보낸다
-  await assert.rejects(() => addTenant("다른 이름", root), (e: unknown) => {
+  await assert.rejects(() => addProject("x", empty), { code: "root", message: /tickets\/도/ });
+  // 3. root 중복 — 폼이 링크를 붙이므로 그 프로젝트를 실어 보낸다
+  await assert.rejects(() => addProject("다른 이름", root), (e: unknown) => {
     const err = e as { code: string; message: string; dup: { id: string } };
     assert.strictEqual(err.code, "dupRoot");
     assert.match(err.message, /이미 스트림으로 등록돼 있습니다/);
@@ -220,31 +220,31 @@ test("레지스트리 — 등록 검증 4종", async () => {
   });
   // 4. id 중복 — 이름에서 나온 슬러그든 손으로 넣은 것이든 다시 검증한다
   const other = newQueue({ "w1.sh": "" });
-  await assert.rejects(() => addTenant("x", other, t.id), {
+  await assert.rejects(() => addProject("x", other, t.id), {
     code: "dupId",
     message: /URL 조각 stream가 이미 쓰이고 있습니다/,
   });
-  await assert.rejects(() => addTenant("스트림", other, "대문자ID"), { code: "badId" });
-  await assert.rejects(() => addTenant("스트림", other, "a".repeat(41)), { code: "badId" });
+  await assert.rejects(() => addProject("스트림", other, "대문자ID"), { code: "badId" });
+  await assert.rejects(() => addProject("스트림", other, "a".repeat(41)), { code: "badId" });
 
   // 절대경로 아님
-  await assert.rejects(() => addTenant("x", "relative/path"), {
+  await assert.rejects(() => addProject("x", "relative/path"), {
     code: "root",
     message: /절대경로/,
   });
-  await assert.rejects(() => addTenant("  ", root), { code: "name" });
+  await assert.rejects(() => addProject("  ", root), { code: "name" });
 });
 
-test("tenantPath — 전환은 같은 화면 종류를 유지한다", () => {
-  assert.strictEqual(tenantPath("/t/a/workers", "b"), "/t/b/workers");
-  assert.strictEqual(tenantPath("/t/a", "b"), "/t/b");
-  assert.strictEqual(tenantPath("/t/a/", "b"), "/t/b");
-  assert.strictEqual(tenantPath("/t/a/protocols/AGENTS.md", "b"), "/t/b/protocols/AGENTS.md");
-  assert.strictEqual(tenantPath("/t/a/tickets/new", "b"), "/t/b/tickets/new");
-  // 해시는 테넌트마다 독립이다 — 옮겨 붙이면 없는 티켓을 열게 되므로 보드로 떨어뜨린다
-  assert.strictEqual(tenantPath("/t/a/tickets/7b3e0c62", "b"), "/t/b");
-  // 테넌트 스코프가 아닌 곳(테넌트 목록)에서 골랐으면 그 테넌트의 보드로
-  assert.strictEqual(tenantPath("/", "b"), "/t/b");
+test("projectPath — 전환은 같은 화면 종류를 유지한다", () => {
+  assert.strictEqual(projectPath("/p/a/workers", "b"), "/p/b/workers");
+  assert.strictEqual(projectPath("/p/a", "b"), "/p/b");
+  assert.strictEqual(projectPath("/p/a/", "b"), "/p/b");
+  assert.strictEqual(projectPath("/p/a/protocols/AGENTS.md", "b"), "/p/b/protocols/AGENTS.md");
+  assert.strictEqual(projectPath("/p/a/tickets/new", "b"), "/p/b/tickets/new");
+  // 해시는 프로젝트마다 독립이다 — 옮겨 붙이면 없는 티켓을 열게 되므로 보드로 떨어뜨린다
+  assert.strictEqual(projectPath("/p/a/tickets/7b3e0c62", "b"), "/p/b");
+  // 프로젝트 스코프가 아닌 곳(프로젝트 목록)에서 골랐으면 그 프로젝트의 보드로
+  assert.strictEqual(projectPath("/", "b"), "/p/b");
 });
 
 /** a606dd0e — 보드는 `encodeURIComponent(t.hash)`로 링크를 걸고 Next는 세그먼트를 인코딩된
@@ -259,21 +259,48 @@ test("decodeHash — 보드가 인코딩한 해시를 그대로 되돌린다", (
 
 test("레지스트리 — 이름 변경 · 순서 변경 · 등록 해제", async () => {
   rmSync(registryPath(), { force: true });
-  const a = await addTenant("에이", newQueue({ "w1.sh": "" }), "a");
-  const b = await addTenant("비", newQueue({ "w1.sh": "" }), "b");
-  assert.deepStrictEqual((await readTenants()).map((t) => t.id), ["a", "b"]);
+  const a = await addProject("에이", newQueue({ "w1.sh": "" }), "a");
+  const b = await addProject("비", newQueue({ "w1.sh": "" }), "b");
+  assert.deepStrictEqual((await readProjects()).map((t) => t.id), ["a", "b"]);
 
-  await renameTenant("a", "에이 새이름");
-  assert.strictEqual((await getTenant("a"))!.name, "에이 새이름");
+  await renameProject("a", "에이 새이름");
+  assert.strictEqual((await getProject("a"))!.name, "에이 새이름");
 
-  await reorderTenants(["b", "a"]);
-  assert.deepStrictEqual((await readTenants()).map((t) => t.id), ["b", "a"]);
+  await reorderProjects(["b", "a"]);
+  assert.deepStrictEqual((await readProjects()).map((t) => t.id), ["b", "a"]);
 
-  await removeTenant("b");
-  assert.deepStrictEqual((await readTenants()).map((t) => t.id), ["a"]);
+  await removeProject("b");
+  assert.deepStrictEqual((await readProjects()).map((t) => t.id), ["a"]);
   // 등록 해제는 레지스트리만 건드린다 — 큐 파일은 그대로다
   assert.deepStrictEqual(await import("node:fs").then((fs) => fs.existsSync(b.root)), true);
   assert.ok(a.root);
+});
+
+test("레지스트리 — 옛 gui-tenants.json을 읽고, 첫 쓰기가 새 파일로 옮긴다", async () => {
+  const old = mkdtempSync(path.join(tmpdir(), "fst-old-"));
+  const prev = process.env.TICKET_LOCAL;
+  process.env.TICKET_LOCAL = old; // registryPath()는 호출마다 env를 읽는다
+  try {
+    const root = newQueue({ "w1.sh": "" });
+    writeFileSync(
+      path.join(old, "gui-tenants.json"),
+      JSON.stringify({ version: 1, tenants: [{ id: "a", name: "에이", root }] }),
+    );
+    // 새 파일이 없으면 옛 파일(배열 키 `tenants`)에서 읽는다
+    assert.deepStrictEqual((await readProjects()).map((t) => t.id), ["a"]);
+    assert.strictEqual(existsSync(registryPath()), false);
+
+    // 첫 쓰기가 새 파일로 옮겨 담는다 — 그 뒤로는 폴백을 타지 않는다
+    await renameProject("a", "에이 둘");
+    assert.strictEqual(existsSync(registryPath()), true);
+    assert.deepStrictEqual(
+      JSON.parse(readFileSync(registryPath(), "utf8")).projects.map((t: { name: string }) => t.name),
+      ["에이 둘"],
+    );
+  } finally {
+    process.env.TICKET_LOCAL = prev;
+    rmSync(old, { recursive: true, force: true });
+  }
 });
 
 // ── 페르소나 ────────────────────────────────────────────────────────────────
@@ -380,7 +407,7 @@ test("readSummary — 연결됨은 카운트, 연결 안 됨은 사유 원문 + 
   assert.strictEqual(ok.open, 1); // .done은 열림이 아니다
   assert.deepStrictEqual(ok.workers.map((w) => w.name), ["w1"]);
 
-  // 경로가 사라진 테넌트: 0건이 아니라 "모른다"다(DESIGN.md §4-1)
+  // 경로가 사라진 프로젝트: 0건이 아니라 "모른다"다(DESIGN.md §4-1)
   const gone = await readSummary({ root: path.join(root, "없는디렉터리") });
   assert.strictEqual(gone.connected, false);
   assert.strictEqual(gone.open, null);

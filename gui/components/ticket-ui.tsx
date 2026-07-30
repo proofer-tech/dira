@@ -2,15 +2,15 @@
 
 /** 티켓 화면의 클라이언트 조각 — 상세(편집 폼 · 할당 해제 · 삭제)와 발행 폼.
  *
- *  한 파일에 있는 이유는 `tenants-ui.tsx`와 같다: 같은 도메인(티켓 파일)의 액션이고 전부 서버
+ *  한 파일에 있는 이유는 `projects-ui.tsx`와 같다: 같은 도메인(티켓 파일)의 액션이고 전부 서버
  *  액션 뒤에 있다(fs 접근은 여기 없다). 결과를 **토스트에 담지 않는다** — 워커 스크립트 출력과
  *  검증 사유는 읽어야 하는 정보고, 3초 뒤 사라지는 자리에 두면 못 본다(DESIGN.md §8이 해석 결과
  *  표에 쓴 같은 근거다). */
 import { useActionState, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Check, Trash2, TriangleAlert, Unlink, X } from "lucide-react";
-import { deleteTicket, saveTicket, unassignTicket, type SaveState } from "@/app/t/[tenant]/tickets/[hash]/actions";
-import { createTicket, type NewTicketState } from "@/app/t/[tenant]/tickets/new/actions";
+import { deleteTicket, saveTicket, unassignTicket, type SaveState } from "@/app/p/[project]/tickets/[hash]/actions";
+import { createTicket, type NewTicketState } from "@/app/p/[project]/tickets/new/actions";
 import type { UnassignRun } from "@/lib/engine";
 import { DepBadge } from "@/components/status-badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -63,14 +63,14 @@ function Failure({ title, message }: { title: string; message: string }) {
 /** frontmatter의 title·kind·persona + 본문 원문. `.wip`이면 이 폼은 렌더되지 않고
  *  서버 액션도 다시 거부한다(렌더 시점 판정은 저장 시점엔 이미 낡았다). */
 export function TicketEditForm({
-  tenant,
+  project,
   hash,
   title,
   kind,
   persona,
   body,
 }: {
-  tenant: string;
+  project: string;
   hash: string;
   title: string;
   kind: string;
@@ -80,7 +80,7 @@ export function TicketEditForm({
   const [state, action, pending] = useActionState<SaveState, FormData>(saveTicket, {});
   return (
     <form action={action} className="max-w-3xl space-y-4">
-      <input type="hidden" name="tenant" value={tenant} />
+      <input type="hidden" name="project" value={project} />
       <input type="hidden" name="hash" value={hash} />
       <div className="space-y-2">
         <Label htmlFor="t-title">title</Label>
@@ -120,13 +120,13 @@ export function TicketEditForm({
  *  `assigned` 판정을 **이 안에서** 한다: 성공하면 티켓이 미할당으로 바뀌므로, 서버 쪽에서
  *  조건부로 렌더하면 이 컴포넌트가 통째로 사라져 스크립트 출력도 같이 사라진다(실측). */
 export function UnassignButton({
-  tenant,
+  project,
   hash,
   worker,
   assigned,
   ghost,
 }: {
-  tenant: string;
+  project: string;
   hash: string;
   /** 호출될 워커 이름. 0개면 null */
   worker: string | null;
@@ -147,7 +147,7 @@ export function UnassignButton({
             variant="outline"
             size="sm"
             disabled={pending || !worker}
-            onClick={() => start(async () => setRun(await unassignTicket(tenant, hash)))}
+            onClick={() => start(async () => setRun(await unassignTicket(project, hash)))}
           >
             <Unlink aria-hidden />
             {pending ? "할당 해제 중…" : "할당 해제"}
@@ -161,7 +161,7 @@ export function UnassignButton({
                 를 호출합니다
               </>
             ) : (
-              "이 테넌트에 워커가 없습니다 — 할당 해제를 호출할 스크립트가 없습니다."
+              "이 프로젝트에 워커가 없습니다 — 할당 해제를 호출할 스크립트가 없습니다."
             )}
           </span>
         </div>
@@ -195,12 +195,12 @@ export function UnassignButton({
 
 /** 확인 다이얼로그. `.wip`이면 트리거 자체가 비활성이고 서버 액션도 다시 거부한다. */
 export function DeleteTicketButton({
-  tenant,
+  project,
   hash,
   title,
   locked,
 }: {
-  tenant: string;
+  project: string;
   hash: string;
   title: string;
   /** `.wip` — 세션이 물고 있어서 지울 수 없다 */
@@ -245,8 +245,8 @@ export function DeleteTicketButton({
               disabled={pending}
               onClick={() =>
                 start(async () => {
-                  const r = await deleteTicket(tenant, hash);
-                  if (r.ok) router.push(`/t/${tenant}`);
+                  const r = await deleteTicket(project, hash);
+                  if (r.ok) router.push(`/p/${project}`);
                   else setError(r.message ?? "삭제하지 못했습니다.");
                 })
               }
@@ -368,12 +368,12 @@ function DepsPicker({
  *  `kind`·`persona`·`deps`는 전부 선택이다. 사람이 칠 수 있는 자리는 title과 본문뿐이고,
  *  그 둘은 틀려도 티켓이 사라지지 않는다 — 나머지는 틀리면 조용히 사라진다. */
 export function NewTicketForm({
-  tenant,
+  project,
   personas,
   deps,
   personaDir,
 }: {
-  tenant: string;
+  project: string;
   /** 해석된 `TICKET_PERSONAS` 아래 실제 디렉터리 목록 */
   personas: string[];
   deps: DepOption[];
@@ -385,7 +385,7 @@ export function NewTicketForm({
 
   return (
     <form action={action} className="space-y-4">
-      <input type="hidden" name="tenant" value={tenant} />
+      <input type="hidden" name="project" value={project} />
       <div className="space-y-2">
         <Label htmlFor="n-title">title</Label>
         <Input id="n-title" name="title" required placeholder="한 줄 제목 — 무엇을 하는지" />

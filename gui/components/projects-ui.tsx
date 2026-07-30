@@ -1,6 +1,6 @@
 "use client";
 
-/** 테넌트 목록·등록 화면(`/`)의 클라이언트 조각 — 등록 폼 · 해석 결과 표 · 행 액션(설정 다이얼로그).
+/** 프로젝트 목록·등록 화면(`/`)의 클라이언트 조각 — 등록 폼 · 해석 결과 표 · 행 액션(설정 다이얼로그).
  *
  *  세 개가 한 파일에 있는 이유: 해석 결과 표를 등록 직후와 설정 다이얼로그가 **같은 표**로 쓴다
  *  (DESIGN.md §7). 파일을 쪼개면 두 자리가 갈린다. fs 접근은 전부 서버 액션 뒤에 있다. */
@@ -8,11 +8,11 @@ import { useActionState, useState, useTransition } from "react";
 import Link from "next/link";
 import { ChevronDown, ChevronUp, Settings2, TriangleAlert, Unlink } from "lucide-react";
 import {
-  moveTenantAction,
-  registerTenant,
-  renameTenantAction,
-  resolveTenantAction,
-  unregisterTenantAction,
+  moveProjectAction,
+  registerProject,
+  renameProjectAction,
+  resolveProjectAction,
+  unregisterProjectAction,
   type RegisterState,
   type ResolvedView,
 } from "@/app/actions";
@@ -49,7 +49,7 @@ function Hint({ text, children }: { text: string; children: React.ReactNode }) {
 const BADGE_HINT: Record<string, string> = {
   "기본값 가정": "워커 파일에서 이 값을 찾지 못해 기본값을 씁니다",
   "해석 실패": "$HOME 외 변수가 남아 값을 읽지 못했습니다 — 화면은 기본값을 씁니다",
-  "루트 밖": "테넌트 루트 밖을 가리킵니다",
+  "루트 밖": "프로젝트 루트 밖을 가리킵니다",
 };
 
 // ── 해석 결과 표 ────────────────────────────────────────────────────────────
@@ -152,7 +152,7 @@ export function ConfigTable({ view }: { view: ResolvedView }) {
 // ── 등록 카드 ───────────────────────────────────────────────────────────────
 
 export function RegisterCard() {
-  const [state, action, pending] = useActionState<RegisterState, FormData>(registerTenant, {});
+  const [state, action, pending] = useActionState<RegisterState, FormData>(registerProject, {});
   const [name, setName] = useState("");
   const [dismissed, setDismissed] = useState(false);
   const slug = slugify(name);
@@ -166,11 +166,11 @@ export function RegisterCard() {
       <Card className="gap-3 p-4">
         <div className="flex items-center justify-between gap-4">
           <h2 className="text-sm font-medium">
-            등록됨 — {view.tenant.name}{" "}
-            <span className="font-mono text-xs text-muted-foreground">{view.tenant.shortRoot}</span>
+            등록됨 — {view.project.name}{" "}
+            <span className="font-mono text-xs text-muted-foreground">{view.project.shortRoot}</span>
           </h2>
           <div className="flex items-center gap-2">
-            <Button size="sm" nativeButton={false} render={<Link href={`/t/${view.tenant.id}`} />}>
+            <Button size="sm" nativeButton={false} render={<Link href={`/p/${view.project.id}`} />}>
               보드 열기
             </Button>
             <Button size="sm" variant="ghost" onClick={() => setDismissed(true)}>
@@ -187,24 +187,24 @@ export function RegisterCard() {
     <Card className="p-4">
       <form action={action} className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="tenant-name">이름</Label>
+          <Label htmlFor="project-name">이름</Label>
           <Input
-            id="tenant-name"
+            id="project-name"
             name="name"
             placeholder="fs-tickets 자체"
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
           {slug && (
-            <p className="font-mono text-xs text-muted-foreground">URL: /t/{slug}</p>
+            <p className="font-mono text-xs text-muted-foreground">URL: /p/{slug}</p>
           )}
           {err?.code === "name" && <p className="text-xs text-destructive">{err.message}</p>}
         </div>
 
         {showId && (
           <div className="space-y-2">
-            <Label htmlFor="tenant-id">URL 조각</Label>
-            <Input id="tenant-id" name="id" className="font-mono" placeholder="fs-tickets" />
+            <Label htmlFor="project-id">URL 조각</Label>
+            <Input id="project-id" name="id" className="font-mono" placeholder="fs-tickets" />
             <p className="text-xs text-muted-foreground">
               {err && (err.code === "needId" || err.code === "badId" || err.code === "dupId")
                 ? err.message
@@ -214,9 +214,9 @@ export function RegisterCard() {
         )}
 
         <div className="space-y-2">
-          <Label htmlFor="tenant-root">경로</Label>
+          <Label htmlFor="project-root">경로</Label>
           <Input
-            id="tenant-root"
+            id="project-root"
             name="root"
             className="font-mono"
             placeholder="~/Projects/myproject/.fs-tickets"
@@ -230,13 +230,13 @@ export function RegisterCard() {
             <AlertTitle>등록하지 못했습니다</AlertTitle>
             <AlertDescription>
               <span className="break-all">{err.message}</span>
-              {err.dup && <Link href={`/t/${err.dup.id}`}>{err.dup.name} 열기</Link>}
+              {err.dup && <Link href={`/p/${err.dup.id}`}>{err.dup.name} 열기</Link>}
             </AlertDescription>
           </Alert>
         )}
 
         <Button type="submit" disabled={pending}>
-          {pending ? "등록 확인 중…" : "테넌트 등록"}
+          {pending ? "등록 확인 중…" : "프로젝트 등록"}
         </Button>
       </form>
     </Card>
@@ -245,7 +245,7 @@ export function RegisterCard() {
 
 // ── 행 액션: 순서 변경 · 설정 다이얼로그 ────────────────────────────────────
 
-export function TenantRowActions({
+export function ProjectRowActions({
   id,
   name,
   shortRoot,
@@ -268,14 +268,14 @@ export function TenantRowActions({
   const load = () =>
     start(async () => {
       setError(null);
-      const r = await resolveTenantAction(id);
+      const r = await resolveProjectAction(id);
       if ("rows" in r) setView(r);
       else setError(r.message);
     });
 
   const move = (dir: -1 | 1) =>
     start(async () => {
-      const r = await moveTenantAction(id, dir);
+      const r = await moveProjectAction(id, dir);
       if (!r.ok) setError(r.message ?? "순서를 바꾸지 못했습니다.");
     });
 
@@ -323,7 +323,7 @@ export function TenantRowActions({
           {confirming ? (
             <>
               <DialogHeader>
-                <DialogTitle>테넌트 등록 해제</DialogTitle>
+                <DialogTitle>프로젝트 등록 해제</DialogTitle>
                 <DialogDescription>
                   &quot;{name}&quot;을 목록에서 제거합니다. 이 프로젝트의 티켓은 삭제되지 않습니다 —
                   레지스트리에서만 빠집니다.
@@ -339,7 +339,7 @@ export function TenantRowActions({
                   disabled={pending}
                   onClick={() =>
                     start(async () => {
-                      const r = await unregisterTenantAction(id);
+                      const r = await unregisterProjectAction(id);
                       if (r.ok) setOpen(false);
                       else setError(r.message ?? "등록 해제에 실패했습니다.");
                     })
@@ -393,7 +393,7 @@ export function TenantRowActions({
                     disabled={pending}
                     onClick={() =>
                       start(async () => {
-                        const r = await renameTenantAction(id, newName);
+                        const r = await renameProjectAction(id, newName);
                         if (r.ok) setOpen(false);
                         else setError(r.message ?? "이름을 바꾸지 못했습니다.");
                       })

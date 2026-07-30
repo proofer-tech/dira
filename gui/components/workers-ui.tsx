@@ -1,10 +1,10 @@
 "use client";
 
-/** 워커 화면(`/t/<tenant>/workers`)의 클라이언트 조각 — 생성 · 중단 · 삭제 · reap.
+/** 워커 화면(`/p/<project>/workers`)의 클라이언트 조각 — 생성 · 중단 · 삭제 · reap.
  *
  *  **crontab은 GUI가 만지지 않는다**(제약 4). 등록·해제는 서버가 만들어 준 명령어를
  *  `<CopyCommand>`로 복사시키고 사람이 셸에서 실행한다. 여기서 fs를 만지는 건 서버 액션뿐이다.
- *  파일 하나에 모은 이유는 tenants-ui.tsx와 같다 — 세 다이얼로그가 같은 문구·같은 명령어를
+ *  파일 하나에 모은 이유는 projects-ui.tsx와 같다 — 세 다이얼로그가 같은 문구·같은 명령어를
  *  쓰므로 쪼개면 자리가 갈린다. */
 import { useState, useTransition } from "react";
 import { ArrowDown, ArrowUp, Check, CircleQuestionMark, TriangleAlert, X } from "lucide-react";
@@ -16,7 +16,7 @@ import {
   saveContextAction,
   type ContextResult,
   type WorkerActionResult,
-} from "@/app/t/[tenant]/workers/actions";
+} from "@/app/p/[project]/workers/actions";
 import { CopyCommand } from "@/components/copy-command";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -78,12 +78,12 @@ function Failure({ title, message }: { title: string; message: string }) {
 /** 워커 생성. 만든 뒤에도 **아직 돌지 않는다** — crontab 한 줄이 있어야 돈다(제약 4).
  *  그래서 성공 화면의 주인공은 파일 경로가 아니라 등록 명령어다. */
 export function CreateWorkerButton({
-  tenantId,
+  projectId,
   canTemplate,
   firstCmd,
   variant,
 }: {
-  tenantId: string;
+  projectId: string;
   /** 템플릿으로 쓸 기존 워커가 있는가. 없으면 GUI가 만들 수 없다(엔진 코드 위치를 모른다) */
   canTemplate: boolean;
   /** 워커 0개일 때 손으로 첫 워커를 만드는 명령 */
@@ -171,7 +171,7 @@ export function CreateWorkerButton({
           {canTemplate && !created && (
             <Button
               disabled={pending || !name.trim()}
-              onClick={() => start(async () => setResult(await createWorkerAction(tenantId, name)))}
+              onClick={() => start(async () => setResult(await createWorkerAction(projectId, name)))}
             >
               {pending ? "만드는 중…" : "만들기"}
             </Button>
@@ -184,7 +184,7 @@ export function CreateWorkerButton({
 
 // ── 행 액션: reap · 중단 · 삭제 ─────────────────────────────────────────────
 
-export function WorkerRowActions({ tenantId, row }: { tenantId: string; row: WorkerRow }) {
+export function WorkerRowActions({ projectId, row }: { projectId: string; row: WorkerRow }) {
   const [pending, start] = useTransition();
   const [reap, setReap] = useState<WorkerActionResult | null>(null);
   const [stopping, setStopping] = useState(false);
@@ -198,7 +198,7 @@ export function WorkerRowActions({ tenantId, row }: { tenantId: string; row: Wor
         variant="ghost"
         size="sm"
         disabled={pending}
-        onClick={() => start(async () => setReap(await reapWorkerAction(tenantId, row.name)))}
+        onClick={() => start(async () => setReap(await reapWorkerAction(projectId, row.name)))}
       >
         {pending ? "reap…" : "reap"}
       </Button>
@@ -314,7 +314,7 @@ export function WorkerRowActions({ tenantId, row }: { tenantId: string; row: Wor
                 disabled={pending}
                 onClick={() =>
                   start(async () => {
-                    const r = await deleteWorkerAction(tenantId, row.name);
+                    const r = await deleteWorkerAction(projectId, row.name);
                     if (r.ok) setDeleting(false);
                     else setError(r.message ?? "삭제하지 못했습니다.");
                   })
@@ -354,11 +354,11 @@ function ExistsMark({ row }: { row: ContextRow }) {
 /** 워커 하나의 컨텍스트 편집. 저장은 `TICKET_CONTEXT=( … )` **블록 전체 치환**이고, 블록 모양이
  *  예상과 다르면 서버가 거부한다 — 그때는 편집 UI를 아예 열지 않고 손으로 고치라고 알린다. */
 export function WorkerContextCard({
-  tenantId,
+  projectId,
   row,
   others,
 }: {
-  tenantId: string;
+  projectId: string;
   row: WorkerRow;
   /** 복사 대상 후보(자기 자신 제외) */
   others: string[];
@@ -380,7 +380,7 @@ export function WorkerContextCard({
   };
   const save = () =>
     start(async () => {
-      const r = await saveContextAction(tenantId, row.name, rows.map(({ path, desc }) => ({ path, desc })));
+      const r = await saveContextAction(projectId, row.name, rows.map(({ path, desc }) => ({ path, desc })));
       setResult(r);
       if (r.ok && r.context?.ok) setRows(r.context.items);
     });
@@ -509,7 +509,7 @@ export function WorkerContextCard({
               disabled={pending}
               onClick={() =>
                 start(async () => {
-                  const r = await copyContextAction(tenantId, row.name, copyTo!);
+                  const r = await copyContextAction(projectId, row.name, copyTo!);
                   setResult(r);
                   if (r.ok) setCopyTo(null);
                 })

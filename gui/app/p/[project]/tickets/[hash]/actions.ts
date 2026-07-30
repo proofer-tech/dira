@@ -5,7 +5,7 @@
  *  `app/actions.ts`와 따로 두는 이유: 그쪽은 레지스트리 전용이고 큐 파일을 하나도 건드리지 않는다
  *  (제약 7). 여기는 반대로 큐 파일만 만진다. 화면 폴더에 두는 건 `workers/actions.ts`와 같은 규칙.
  *
- *  **클라이언트가 넘긴 테넌트·해시는 신뢰 경계 밖이다.** 매 호출마다 다시 검증하고, 경로는
+ *  **클라이언트가 넘긴 프로젝트·해시는 신뢰 경계 밖이다.** 매 호출마다 다시 검증하고, 경로는
  *  `tickets.py find`로 새로 얻는다 — 화면을 그린 뒤 파일이 잡혔을(claim) 수도 있다.
  *  상태 재확인이 `.wip` 편집을 막는 유일한 장치다(렌더 시점 판정은 이미 낡았다).
  *
@@ -17,7 +17,7 @@ import { revalidatePath } from "next/cache";
 import { findTicket, unassign, type UnassignRun } from "@/lib/engine";
 import { NAME_RE } from "@/lib/paths";
 import { readFm, stateOf, stemOf, writeTicket, type TicketState } from "@/lib/queue";
-import { getTenant, resolveConfig } from "@/lib/tenants";
+import { getProject, resolveConfig } from "@/lib/projects";
 
 export type SaveState = { ok?: boolean; error?: string };
 
@@ -29,20 +29,20 @@ type Target = {
   assigned: boolean;
 };
 
-/** 테넌트·해시 → 지금 이 순간의 파일. 못 찾으면 문장으로 던진다(액션이 결과로 바꾼다).
+/** 프로젝트·해시 → 지금 이 순간의 파일. 못 찾으면 문장으로 던진다(액션이 결과로 바꾼다).
  *
  *  `stem`은 **찾아낸 파일에서 뽑는다** — 엔진 왕복(`unassign`)과 `revalidatePath`가 쓰는 값이다.
  *  URL 문자열을 그대로 넘기면 `findTicket` 폴백으로 들어온 표시값에서 화면은 뜨는데 엔진 호출만
  *  `티켓을 못 찾음`으로 실패한다(DESIGN.md §식별자). */
-async function target(tenantId: string, hash: string): Promise<Target> {
-  const tenant = await getTenant(tenantId);
-  if (!tenant) throw new Error(`등록되지 않은 테넌트입니다: ${tenantId}`);
-  const config = await resolveConfig(tenant);
-  const p = await findTicket(tenant.root, hash, config);
+async function target(projectId: string, hash: string): Promise<Target> {
+  const project = await getProject(projectId);
+  if (!project) throw new Error(`등록되지 않은 프로젝트입니다: ${projectId}`);
+  const config = await resolveConfig(project);
+  const p = await findTicket(project.root, hash, config);
   if (!p) throw new Error(`큐에 없는 티켓입니다: ${hash}`);
   const { fm, end } = readFm(await readFile(p, "utf8"));
   return {
-    root: tenant.root,
+    root: project.root,
     path: p,
     stem: stemOf(p, config),
     state: stateOf(path.basename(p), config),
@@ -65,10 +65,10 @@ function fmValue(name: string, raw: string): string {
  *  ponytail: deps는 편집하지 않는다 — 자유 입력은 오타 해시로 영구 대기를 만들어 스펙이 금지한다
  *  (DESIGN.md §3). 검색 가능한 멀티셀렉트가 필요하고 그건 티켓 발행(fb4f2723)이 만든다. */
 export async function saveTicket(_prev: SaveState, form: FormData): Promise<SaveState> {
-  const tenantId = String(form.get("tenant") ?? "");
+  const projectId = String(form.get("project") ?? "");
   const hash = String(form.get("hash") ?? "");
   try {
-    const t = await target(tenantId, hash);
+    const t = await target(projectId, hash);
     if (t.state === "wip") return { error: LOCKED };
 
     const title = fmValue("제목", String(form.get("title") ?? ""));
@@ -85,8 +85,8 @@ export async function saveTicket(_prev: SaveState, form: FormData): Promise<Save
     if (body && !body.endsWith("\n")) body += "\n";
 
     await writeTicket(t.path, { title, kind, persona }, body);
-    revalidatePath(`/t/${tenantId}/tickets/${encodeURIComponent(t.stem)}`);
-    revalidatePath(`/t/${tenantId}`); // 보드의 title·kind·persona 컬럼
+    revalidatePath(`/p/${projectId}/tickets/${encodeURIComponent(t.stem)}`);
+    revalidatePath(`/p/${projectId}`); // 보드의 title·kind·persona 컬럼
     return { ok: true };
   } catch (e) {
     return { error: (e as Error).message };
@@ -95,16 +95,16 @@ export async function saveTicket(_prev: SaveState, form: FormData): Promise<Save
 
 /** 할당 해제 — **엔진에 위임한다**(제약 2). `assigned`가 아니면 부르지 않는다: 이 명령은
  *  진행중 접미사도 떼므로, 할당 안 된 `.wip`에 부르면 세션 없이 잡힌 상태를 사람이 흔드는 셈이다. */
-export async function unassignTicket(tenantId: string, hash: string): Promise<UnassignRun> {
+export async function unassignTicket(projectId: string, hash: string): Promise<UnassignRun> {
   try {
-    const t = await target(tenantId, hash);
+    const t = await target(projectId, hash);
     if (!t.assigned) {
       return { ok: false, output: "할당된 티켓이 아닙니다(session_id가 비어 있습니다).", worker: null };
     }
     // URL 문자열이 아니라 **찾아낸 파일의 stem**을 넘긴다 — 엔진 `find`는 파일명만 본다.
     const r = await unassign(t.root, t.stem);
-    revalidatePath(`/t/${tenantId}/tickets/${encodeURIComponent(t.stem)}`);
-    revalidatePath(`/t/${tenantId}`);
+    revalidatePath(`/p/${projectId}/tickets/${encodeURIComponent(t.stem)}`);
+    revalidatePath(`/p/${projectId}`);
     return r;
   } catch (e) {
     return { ok: false, output: (e as Error).message, worker: null };
@@ -114,14 +114,14 @@ export async function unassignTicket(tenantId: string, hash: string): Promise<Un
 export type DeleteResult = { ok: boolean; message?: string };
 
 /** 삭제 — 파일을 지운다. `.wip`이면 막는다(돌고 있는 세션의 티켓이 사라지면 완료 신고도 못 한다). */
-export async function deleteTicket(tenantId: string, hash: string): Promise<DeleteResult> {
+export async function deleteTicket(projectId: string, hash: string): Promise<DeleteResult> {
   try {
-    const t = await target(tenantId, hash);
+    const t = await target(projectId, hash);
     if (t.state === "wip") {
       return { ok: false, message: "진행중 티켓은 삭제할 수 없습니다 — 세션이 물고 있습니다." };
     }
     await unlink(t.path);
-    revalidatePath(`/t/${tenantId}`);
+    revalidatePath(`/p/${projectId}`);
     return { ok: true };
   } catch (e) {
     return { ok: false, message: (e as Error).message };

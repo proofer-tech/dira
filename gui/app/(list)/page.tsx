@@ -1,10 +1,10 @@
-/** 테넌트 목록·등록 `/` — 앱의 홈. 테넌트가 0개면 이 화면이 온보딩이다 (DESIGN.md §0 · §7). */
+/** 프로젝트 목록·등록 `/` — 앱의 홈. 프로젝트가 0개면 이 화면이 온보딩이다 (DESIGN.md §0 · §7). */
 import { homedir } from "node:os";
 import Link from "next/link";
 import { TriangleAlert } from "lucide-react";
 import { CopyCommand } from "@/components/copy-command";
 import { StatusBadge } from "@/components/status-badge";
-import { RegisterCard, TenantRowActions } from "@/components/tenants-ui";
+import { RegisterCard, ProjectRowActions } from "@/components/projects-ui";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Table,
@@ -14,7 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { readSummary, readTenants, registryPath } from "@/lib/tenants";
+import { readSummary, readProjects, registryPath } from "@/lib/projects";
 import { tildePath } from "@/lib/urls";
 import { workerSummary } from "@/lib/workers";
 
@@ -26,15 +26,15 @@ export default async function Home() {
 
   // 레지스트리가 깨졌으면 GUI가 고쳐 쓰려 들지 않는다 — 원문 + 파일 경로를 보여주고 사람이 연다.
   let registryError: string | null = null;
-  let tenants: Awaited<ReturnType<typeof readTenants>> = [];
+  let projects: Awaited<ReturnType<typeof readProjects>> = [];
   try {
-    tenants = await readTenants();
+    projects = await readProjects();
   } catch (e) {
     registryError = (e as Error).message;
   }
 
   const rows = await Promise.all(
-    tenants.map(async (t) => ({
+    projects.map(async (t) => ({
       ...t,
       shortRoot: tildePath(t.root, home),
       summary: await readSummary(t),
@@ -54,7 +54,7 @@ export default async function Home() {
         {registryError && (
           <Alert variant="destructive">
             <TriangleAlert aria-hidden />
-            <AlertTitle>테넌트 레지스트리를 읽지 못했습니다</AlertTitle>
+            <AlertTitle>프로젝트 레지스트리를 읽지 못했습니다</AlertTitle>
             <AlertDescription className="grid gap-2">
               <span className="font-mono text-xs break-all">{registryError}</span>
               <CopyCommand cmd={`open -e "${registryPath()}"`} />
@@ -66,7 +66,7 @@ export default async function Home() {
           <Onboarding />
         ) : (
           <>
-            <h1 className="text-lg font-semibold">테넌트</h1>
+            <h1 className="text-lg font-semibold">프로젝트</h1>
             <Table>
               <TableHeader>
                 <TableRow className="h-9">
@@ -83,7 +83,7 @@ export default async function Home() {
                   <TableRow key={t.id} className="h-9">
                     {/* 이 셀만 링크다 — 행 전체를 링크로 만들면 액션 버튼과 겹친다 */}
                     <TableCell className="px-3 py-0 text-sm">
-                      <Link href={`/t/${t.id}`} className="hover:underline">
+                      <Link href={`/p/${t.id}`} className="hover:underline">
                         {t.name}
                       </Link>
                     </TableCell>
@@ -104,7 +104,7 @@ export default async function Home() {
                       <StatusBadge status={t.summary.connected ? "connected" : "disconnected"} />
                     </TableCell>
                     <TableCell className="px-3 py-0">
-                      <TenantRowActions
+                      <ProjectRowActions
                         id={t.id}
                         name={t.name}
                         shortRoot={t.shortRoot}
@@ -124,7 +124,7 @@ export default async function Home() {
   );
 }
 
-/** 테넌트 0개. §6의 `<EmptyState>` 규칙(한 줄 + 버튼 1개)을 여기서만 쓰지 않는다 —
+/** 프로젝트 0개. §6의 `<EmptyState>` 규칙(한 줄 + 버튼 1개)을 여기서만 쓰지 않는다 —
  *  한 줄로는 "무엇을 등록해야 하는지"를 못 알려준다(§8 충돌 기록). */
 function Onboarding() {
   return (
@@ -132,7 +132,7 @@ function Onboarding() {
       <div className="space-y-2">
         <h1 className="text-lg font-semibold">fs-tickets GUI</h1>
         <p className="text-sm text-muted-foreground">
-          등록된 테넌트가 없습니다. 큐 디렉터리를 등록하면 시작합니다.
+          등록된 프로젝트가 없습니다. 큐 디렉터리를 등록하면 시작합니다.
         </p>
       </div>
       <RegisterCard />

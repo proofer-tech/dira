@@ -1,4 +1,4 @@
-/** 티켓 상세 `/t/<tenant>/tickets/[hash]` — frontmatter 표 · 본문 · 관계 · 액션
+/** 티켓 상세 `/p/<project>/tickets/[hash]` — frontmatter 표 · 본문 · 관계 · 액션
  *  (DESIGN.md §2 티켓 상세 · 제약 2 상태 전이 위임 · 제약 5 `.wip` 편집 금지).
  *
  *  **해시로 경로를 조립하지 않는다.** 형식 검증을 통과한 해시를 `tickets.py find`에 물어
@@ -15,7 +15,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 import { findTicket } from "@/lib/engine";
 import { listTickets, referrers, resolveDep, statusOf, type Ticket } from "@/lib/queue";
-import { getTenant, resolveConfig } from "@/lib/tenants";
+import { getProject, resolveConfig } from "@/lib/projects";
 import { decodeHash } from "@/lib/urls";
 import { listWorkers } from "@/lib/workers";
 
@@ -25,24 +25,24 @@ export const dynamic = "force-dynamic";
 export default async function TicketDetail({
   params,
 }: {
-  params: Promise<{ tenant: string; hash: string }>;
+  params: Promise<{ project: string; hash: string }>;
 }) {
-  const { tenant: id, hash: raw } = await params;
+  const { project: id, hash: raw } = await params;
   // Next는 라우트 파라미터를 **퍼센트 인코딩된 원문 세그먼트로** 넘긴다(실측 16.2.12) — 보드가
   // `encodeURIComponent(t.hash)`로 링크를 걸므로 한글 해시가 `%EC%88%9C…`로 도착해 404였다.
   // 여기가 URL을 읽는 유일한 지점이라 여기서 한 번만 푼다. 액션·자식 컴포넌트에는 푼 값이 간다.
   const hash = decodeHash(raw);
-  const tenant = await getTenant(id);
-  if (!tenant) notFound(); // 레이아웃이 이미 404를 세우지만 페이지도 같이 돈다
+  const project = await getProject(id);
+  if (!project) notFound(); // 레이아웃이 이미 404를 세우지만 페이지도 같이 돈다
 
   // 연결 안 됨은 셸이 사유 블록으로 받는다(§4-1). 여기서 404를 던지면 그 사유가 404로 덮인다.
-  if (!(await stat(tenant.root).catch(() => null))) return null;
+  if (!(await stat(project.root).catch(() => null))) return null;
 
-  const config = await resolveConfig(tenant);
-  const file = await findTicket(tenant.root, hash, config);
+  const config = await resolveConfig(project);
+  const file = await findTicket(project.root, hash, config);
   if (!file) notFound();
 
-  const tickets = await listTickets(tenant.root, config);
+  const tickets = await listTickets(project.root, config);
   const nfc = (s: string) => s.normalize("NFC");
   const ticket = tickets.find((t) => nfc(t.path) === nfc(file));
 
@@ -65,11 +65,11 @@ export default async function TicketDetail({
     );
   }
 
-  const workers = await listWorkers(tenant.root);
+  const workers = await listWorkers(project.root);
   const blocking = ticket.unmet; // 막고 있는 것 = 이 티켓의 미충족 deps
   const blocked = referrers(tickets, ticket, config); // 이 티켓이 막는 것 = 역참조
   // 관계 링크도 **stem**이다 (보드와 같은 규칙 — §식별자)
-  const href = (t: Ticket) => `/t/${id}/tickets/${encodeURIComponent(t.stem)}`;
+  const href = (t: Ticket) => `/p/${id}/tickets/${encodeURIComponent(t.stem)}`;
 
   return (
     <div className="space-y-6">
@@ -81,7 +81,7 @@ export default async function TicketDetail({
         </div>
         <div className="flex items-center gap-2">
           <DeleteTicketButton
-            tenant={id}
+            project={id}
             hash={hash}
             title={ticket.title}
             locked={ticket.state === "wip"}
@@ -128,7 +128,7 @@ export default async function TicketDetail({
       {/* 할당됨일 때만 보인다 — 그 판정은 컴포넌트 안에서 한다(해제 후 출력을 남기려면 여기서
           조건부로 렌더하면 안 된다). 상태 전이는 엔진 소관이라 워커 스크립트를 부른다(제약 2) */}
       <UnassignButton
-        tenant={id}
+        project={id}
         hash={hash}
         worker={workers[0]?.name ?? null}
         assigned={ticket.assigned}
@@ -223,7 +223,7 @@ export default async function TicketDetail({
           // 폼에는 frontmatter **원문**을 넣는다. `ticket.persona`는 PERSONA_RE를 못 넘긴 값을
           // ''로 만든 것이라, 그대로 저장하면 사람이 적어둔 값을 조용히 지운다.
           <TicketEditForm
-            tenant={id}
+            project={id}
             hash={hash}
             title={ticket.fm.title ?? ""}
             kind={ticket.fm.kind ?? ""}

@@ -1,6 +1,6 @@
 "use client";
 
-/** 프로토콜 화면(`/t/<tenant>/protocols`)의 클라이언트 조각 — 편집 · 새 파일 · 이름변경 · 삭제.
+/** 프로토콜 화면(`/p/<project>/protocols`)의 클라이언트 조각 — 편집 · 새 파일 · 이름변경 · 삭제.
  *
  *  트리는 여기 없다: 서버 컴포넌트가 `<Link href="?file=…">`으로 그린다(선택 상태는 URL이 담고,
  *  클라이언트 상태 라이브러리를 쓰지 않는다는 규약 그대로다). 여기 있는 건 fs를 만지는 액션과,
@@ -15,7 +15,7 @@ import {
   renameProtocolAction,
   saveProtocolAction,
   type ProtocolResult,
-} from "@/app/t/[tenant]/protocols/actions";
+} from "@/app/p/[project]/protocols/actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -56,16 +56,16 @@ export function InlineBadge({ chars }: { chars: number }) {
   );
 }
 
-const fileHref = (tenantId: string, rel: string) =>
-  `/t/${tenantId}/protocols?file=${encodeURIComponent(rel)}`;
+const fileHref = (projectId: string, rel: string) =>
+  `/p/${projectId}/protocols?file=${encodeURIComponent(rel)}`;
 
 // ── 새 파일 ─────────────────────────────────────────────────────────────────
 
 export function NewFileButton({
-  tenantId,
+  projectId,
   variant,
 }: {
-  tenantId: string;
+  projectId: string;
   variant?: "default" | "outline";
 }) {
   const router = useRouter();
@@ -120,11 +120,11 @@ export function NewFileButton({
             disabled={pending || !name.trim()}
             onClick={() =>
               start(async () => {
-                const r = await createProtocolAction(tenantId, name);
+                const r = await createProtocolAction(projectId, name);
                 setResult(r);
                 if (r.ok && r.rel) {
                   setOpen(false);
-                  router.replace(fileHref(tenantId, r.rel));
+                  router.replace(fileHref(projectId, r.rel));
                 }
               })
             }
@@ -142,12 +142,12 @@ export function NewFileButton({
 /** 원문 편집만. `// ponytail: 마크다운 렌더는 넣지 않는다 — 렌더가 실제로 필요해지면 그때 의존성`.
  *  파일을 바꿔도 이 컴포넌트가 재사용되면 textarea에 앞 파일 내용이 남으므로 부모가 `key={rel}`을 준다. */
 export function ProtocolEditor({
-  tenantId,
+  projectId,
   rel,
   initial,
   inlined,
 }: {
-  tenantId: string;
+  projectId: string;
   rel: string;
   initial: string;
   /** 최상위 AGENTS.md인가 — 문자 수를 타이핑 중에도 보여준다 */
@@ -171,8 +171,8 @@ export function ProtocolEditor({
           )}
         </div>
         <div className="flex items-center gap-1">
-          <RenameButton tenantId={tenantId} rel={rel} />
-          <DeleteButton tenantId={tenantId} rel={rel} />
+          <RenameButton projectId={projectId} rel={rel} />
+          <DeleteButton projectId={projectId} rel={rel} />
         </div>
       </div>
 
@@ -200,7 +200,7 @@ export function ProtocolEditor({
           disabled={pending || !dirty}
           onClick={() =>
             start(async () => {
-              const r = await saveProtocolAction(tenantId, rel, text);
+              const r = await saveProtocolAction(projectId, rel, text);
               setResult(r);
               if (r.ok) router.refresh(); // 트리의 AGENTS.md 문자 수도 다시 읽는다
             })
@@ -225,7 +225,7 @@ export function ProtocolEditor({
 
 // ── 이름변경 ────────────────────────────────────────────────────────────────
 
-function RenameButton({ tenantId, rel }: { tenantId: string; rel: string }) {
+function RenameButton({ projectId, rel }: { projectId: string; rel: string }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [to, setTo] = useState(rel);
@@ -283,11 +283,11 @@ function RenameButton({ tenantId, rel }: { tenantId: string; rel: string }) {
             disabled={pending || !to.trim() || to.trim() === rel}
             onClick={() =>
               start(async () => {
-                const r = await renameProtocolAction(tenantId, rel, to);
+                const r = await renameProtocolAction(projectId, rel, to);
                 setResult(r);
                 if (r.ok && r.rel) {
                   setOpen(false);
-                  router.replace(fileHref(tenantId, r.rel));
+                  router.replace(fileHref(projectId, r.rel));
                 }
               })
             }
@@ -302,7 +302,7 @@ function RenameButton({ tenantId, rel }: { tenantId: string; rel: string }) {
 
 // ── 삭제 ────────────────────────────────────────────────────────────────────
 
-function DeleteButton({ tenantId, rel }: { tenantId: string; rel: string }) {
+function DeleteButton({ projectId, rel }: { projectId: string; rel: string }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [result, setResult] = useState<ProtocolResult | null>(null);
@@ -345,11 +345,11 @@ function DeleteButton({ tenantId, rel }: { tenantId: string; rel: string }) {
             disabled={pending}
             onClick={() =>
               start(async () => {
-                const r = await deleteProtocolAction(tenantId, rel);
+                const r = await deleteProtocolAction(projectId, rel);
                 setResult(r);
                 if (r.ok) {
                   setOpen(false);
-                  router.replace(`/t/${tenantId}/protocols`);
+                  router.replace(`/p/${projectId}/protocols`);
                 }
               })
             }

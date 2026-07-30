@@ -8,11 +8,11 @@ import path from "node:path";
 export const NAME_RE = /^[A-Za-z0-9_-]+$/;
 /** 티켓 해시로 **쓸 수 없는** 것: 경로 구분자와 제어문자. 아래 `isHash` 참고. */
 const HASH_DENY = /[/\\\p{Cc}]/u;
-/** 테넌트 id. 경로 조각은 아니지만(레지스트리 조회 키) URL에 실리므로 제한한다. */
-export const TENANT_ID_RE = /^[a-z0-9-]+$/;
+/** 프로젝트 id. 경로 조각은 아니지만(레지스트리 조회 키) URL에 실리므로 제한한다. */
+export const PROJECT_ID_RE = /^[a-z0-9-]+$/;
 
 export const isName = (s: string) => NAME_RE.test(s);
-export const isTenantId = (s: string) => TENANT_ID_RE.test(s);
+export const isProjectId = (s: string) => PROJECT_ID_RE.test(s);
 
 /** 티켓 해시 = URL에 실리는 티켓 식별자. 파일명 stem이거나 frontmatter `ticket:` 값이고
  *  (`tickets.py ticket_hash`) **엔진은 둘 다 임의 문자열을 허용한다** — 한글 파일명으로 도는
@@ -22,7 +22,7 @@ export const isTenantId = (s: string) => TENANT_ID_RE.test(s);
  *
  *  이건 심층 방어의 첫 겹일 뿐이다: 통과해도 **경로를 조립하지 않는다.** 해시는
  *  `tickets.py find`(그리고 `engine.findTicket`의 폴백)에서 `tickets/*.md`의 실제 이름과
- *  비교되고, 돌아오는 것은 그 파일의 경로다 — 테넌트 큐 밖을 가리킬 방법이 없다. */
+ *  비교되고, 돌아오는 것은 그 파일의 경로다 — 프로젝트 큐 밖을 가리킬 방법이 없다. */
 export const isHash = (s: string) =>
   s.length > 0 && s.length <= 255 && !s.startsWith(".") && !HASH_DENY.test(s);
 
@@ -37,7 +37,7 @@ export function expandHome(p: string): string {
  *
  *  **셸을 실행하지 않는다.** 등록된 경로의 임의 코드가 GUI 권한으로 도는 걸 막는 게 이 함수의
  *  존재 이유다(DESIGN.md §결정 기록). 그 대가로 `$HOME` 말고 다른 변수는 못 읽는다.
- *  `tenants.ts`와 `workers.ts`가 같은 규칙을 써야 해서 여기 있다(둘이 서로를 import하면 순환이다). */
+ *  `projects.ts`와 `workers.ts`가 같은 규칙을 써야 해서 여기 있다(둘이 서로를 import하면 순환이다). */
 export function shellValue(raw: string): string | null {
   const s = raw.trimStart();
   let v: string;
@@ -68,7 +68,7 @@ export function shellPath(raw: string): string | null {
 
 /** 기준 디렉터리 안의 실제 경로를 돌려준다. 밖이면 던진다.
  *
- *  기준은 테넌트 root가 아니라 **그 용도의 해석된 디렉터리**다 — 페르소나 편집의 기준은
+ *  기준은 프로젝트 root가 아니라 **그 용도의 해석된 디렉터리**다 — 페르소나 편집의 기준은
  *  해석된 TICKET_PERSONAS이고 그건 루트 밖일 수 있다(이 레포의 큐가 당장 그렇다).
  *  양쪽 다 realpath한 뒤 비교한다: 심링크로 나가는 건 문자열 비교로 못 막는다. */
 export async function resolveWithin(baseDir: string, target: string): Promise<string> {

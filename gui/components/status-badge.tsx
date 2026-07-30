@@ -37,7 +37,7 @@ export type Status =
   | "idle"
   | "stopped"
   | "stale"
-  // 테넌트 연결 2상태
+  // 프로젝트 연결 2상태
   | "connected"
   | "disconnected";
 

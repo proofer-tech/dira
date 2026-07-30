@@ -1,6 +1,6 @@
 "use client";
 
-/** 테넌트 셸의 클라이언트 조각 — 전환기(DESIGN.md §0-1 · §4-1) · 내비 · `다시 확인` 버튼.
+/** 프로젝트 셸의 클라이언트 조각 — 전환기(DESIGN.md §0-1 · §4-1) · 내비 · `다시 확인` 버튼.
  *
  *  전환기는 헤더 우측 한 자리에 "지금 어느 큐인지"와 "다른 큐로 가는 길"을 겹쳐 둔다. 카운트는
  *  여기서 세지 않는다 — 셸이 서버에서 세서 props로 넘긴다. 내비는 활성 링크 판정에 현재 경로가
@@ -22,23 +22,23 @@ import {
   CommandShortcut,
 } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { tenantPath } from "@/lib/urls";
+import { projectPath } from "@/lib/urls";
 
-export type SwitcherTenant = {
+export type SwitcherProject = {
   id: string;
   name: string;
   shortRoot: string;
-  /** 못 읽은 테넌트는 `null`이다 — 0으로 적지 않는다(읽지 못한 것과 0건은 다른 사실이다). */
+  /** 못 읽은 프로젝트는 `null`이다 — 0으로 적지 않는다(읽지 못한 것과 0건은 다른 사실이다). */
   open: number | null;
   running: number;
   connected: boolean;
 };
 
-export function TenantSwitcher({
-  tenants,
+export function ProjectSwitcher({
+  projects,
   currentId,
 }: {
-  tenants: SwitcherTenant[];
+  projects: SwitcherProject[];
   currentId: string;
 }) {
   const router = useRouter();
@@ -47,7 +47,7 @@ export function TenantSwitcher({
   // 0건 문구가 검색어를 되읽어야 해서(§6) 입력을 여기서 잡는다 — cmdk 내부 상태는 읽을 길이 없다.
   const [q, setQ] = useState("");
   // 전환은 라우팅이라 지연이 보인다. 스피너 대신 트리거만 먼저 바꾼다(§4-1 전환 중 표시).
-  const [going, setGoing] = useState<SwitcherTenant | null>(null);
+  const [going, setGoing] = useState<SwitcherProject | null>(null);
   const [shown, setShown] = useState(currentId);
   if (shown !== currentId) {
     // 목적지가 도착했거나(전환 완료) 뒤로가기로 딴 데 왔다 — 낙관적 표시를 버린다.
@@ -67,7 +67,7 @@ export function TenantSwitcher({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const current = going ?? tenants.find((t) => t.id === currentId);
+  const current = going ?? projects.find((t) => t.id === currentId);
   if (!current) return null;
 
   // 닫을 때 검색어를 버린다 — 입력이 팝오버와 함께 언마운트되므로, 안 버리면 다시 열었을 때
@@ -86,7 +86,7 @@ export function TenantSwitcher({
             size="sm"
             role="combobox"
             aria-expanded={open}
-            aria-label="테넌트 전환"
+            aria-label="프로젝트 전환"
             className="ml-auto h-8 max-w-md gap-2 data-[popup-open]:bg-muted"
           >
             <span className="truncate text-sm text-foreground">{current.name}</span>
@@ -101,15 +101,15 @@ export function TenantSwitcher({
       <PopoverContent align="end" className="w-[28rem] p-0">
         <Command>
           <CommandInput
-            placeholder="테넌트 검색 — 이름 또는 경로"
+            placeholder="프로젝트 검색 — 이름 또는 경로"
             value={q}
             onValueChange={setQ}
           />
           <CommandList className="max-h-80">
             <CommandEmpty>
-              {q ? `"${q}"와 일치하는 테넌트 0건` : "일치하는 테넌트 0건"}
+              {q ? `"${q}"와 일치하는 프로젝트 0건` : "일치하는 프로젝트 0건"}
             </CommandEmpty>
-            {tenants.map((t) => (
+            {projects.map((t) => (
               <CommandItem
                 key={t.id}
                 value={`${t.name} ${t.shortRoot}`}
@@ -118,7 +118,7 @@ export function TenantSwitcher({
                   close();
                   if (t.id !== currentId) {
                     setGoing(t);
-                    router.push(tenantPath(pathname, t.id));
+                    router.push(projectPath(pathname, t.id));
                   }
                 }}
               >
@@ -146,9 +146,9 @@ export function TenantSwitcher({
             ))}
             <CommandSeparator className="my-1" />
             {/* 찾는 큐가 없으면 다음 행동은 등록이다 — 검색으로 걸러지지 않는다 */}
-            <CommandItem forceMount value="테넌트 관리" onSelect={() => router.push("/")}>
+            <CommandItem forceMount value="프로젝트 관리" onSelect={() => router.push("/")}>
               <Settings2 aria-hidden />
-              테넌트 관리
+              프로젝트 관리
               <CommandShortcut>⌘K</CommandShortcut>
             </CommandItem>
           </CommandList>
@@ -159,7 +159,7 @@ export function TenantSwitcher({
 }
 
 /** 내비 — 목적지 4개(§4 화면 진입 구조). 티켓 발행·상세는 보드에서 들어간다.
- *  연결 안 됨 테넌트에서도 링크를 죽이지 않는다: 어느 링크를 눌러도 같은 사유 화면이 나오므로
+ *  연결 안 됨 프로젝트에서도 링크를 죽이지 않는다: 어느 링크를 눌러도 같은 사유 화면이 나오므로
  *  거짓말이 아니고, `aria-disabled`로 죽은 척하는 것보다 정직하다(§4-1). */
 const NAV = [
   { seg: "", label: "보드" },
@@ -168,9 +168,9 @@ const NAV = [
   { seg: "/protocols", label: "프로토콜" },
 ];
 
-export function TenantNav({ id }: { id: string }) {
+export function ProjectNav({ id }: { id: string }) {
   const pathname = usePathname();
-  const base = `/t/${id}`;
+  const base = `/p/${id}`;
   const rest = pathname.startsWith(base) ? pathname.slice(base.length) : "";
   return (
     <nav className="flex items-center gap-4">

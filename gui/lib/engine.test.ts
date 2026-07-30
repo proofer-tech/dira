@@ -33,7 +33,7 @@ test("findTicket — 접미사·`re-` 폴백은 엔진이 판정한다", async (
   assert.strictEqual(await findTicket(root, "bbbb2222", DEFAULT), t("bbbb2222.wip.md"));
   assert.strictEqual(await findTicket(root, "cccc3333", DEFAULT), t("re-cccc3333.md"));
   assert.strictEqual(await findTicket(root, "zzzz9999", DEFAULT), null); // 없는 해시 = 404
-  // 접미사는 테넌트별이다: 기본 접미사로는 `-완료`가 이름의 일부라 안 맞고, 한글 접미사로는 맞는다
+  // 접미사는 프로젝트별이다: 기본 접미사로는 `-완료`가 이름의 일부라 안 맞고, 한글 접미사로는 맞는다
   assert.strictEqual(await findTicket(root, "dddd4444", DEFAULT), null);
   assert.strictEqual(await findTicket(root, "dddd4444", KO), t("dddd4444-완료.md"));
 });

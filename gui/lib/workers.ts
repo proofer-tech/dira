@@ -39,7 +39,7 @@ const DEFAULT_ENGINE =
 /** tick.sh와 **같이** 조립한다:
  *  `${TICKET_LOCAL:-~/.config/fs-tickets}/run/<이름>-<sha1(<workers 절대경로>/<이름>)[:8]>.lock`
  *
- *  `TICKET_LOCAL`은 테넌트별이 아니라 머신 전역이라 모든 테넌트의 락이 한 디렉터리에 섞인다.
+ *  `TICKET_LOCAL`은 프로젝트별이 아니라 머신 전역이라 모든 프로젝트의 락이 한 디렉터리에 섞인다.
  *  해시에 workers 절대경로가 들어 있어 이름이 같은 `w1`끼리도 충돌하지 않는다. 그래서 반대로
  *  **락 디렉터리에서 워커를 역추적하지 않고** 워커 파일 목록에서 락을 찾는다.
  *
@@ -79,7 +79,7 @@ function alive(pid: number): boolean {
  *  **중복 cron 줄**이 생긴다. */
 const nfc = (s: string) => s.normalize("NFC");
 
-// ponytail: 테넌트마다 한 번 부른다(테넌트는 한 자릿수). 캐시하면 사람이 crontab을 고친 걸
+// ponytail: 프로젝트마다 한 번 부른다(프로젝트는 한 자릿수). 캐시하면 사람이 crontab을 고친 걸
 // GUI가 못 보므로, 느려지면 요청 단위 캐시를 넣는다.
 async function crontabText(): Promise<string> {
   try {
@@ -356,7 +356,7 @@ function holdingOf(tickets: Ticket[], effName: string): string | null {
 
 // ── 목록 ────────────────────────────────────────────────────────────────────
 
-/** 테넌트의 워커 전부. 이름 순.
+/** 프로젝트의 워커 전부. 이름 순.
  *
  *  | status | 판정 |
  *  |---|---|
@@ -366,7 +366,7 @@ function holdingOf(tickets: Ticket[], effName: string): string | null {
  *  | stopped | 락 없음 + crontab 미등록 |
  *
  *  ponytail: `holding`은 **호출자가 이미 읽은 티켓 목록**에서 찾는다 — 큐를 두 번 읽지 않으려고.
- *  테넌트 목록·전환기 요약은 holding을 안 쓰므로 안 넘긴다(그때는 항상 null이다). */
+ *  프로젝트 목록·전환기 요약은 holding을 안 쓰므로 안 넘긴다(그때는 항상 null이다). */
 export async function listWorkers(root: string, tickets: Ticket[] = []): Promise<Worker[]> {
   const dir = path.join(root, "workers");
   const names = (await readdir(dir).catch(() => [] as string[]))

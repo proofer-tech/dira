@@ -1,24 +1,24 @@
 "use server";
 
-/** 테넌트 레지스트리를 바꾸는 서버 액션 전부. 큐 파일은 **하나도 건드리지 않는다**(제약 7).
+/** 프로젝트 레지스트리를 바꾸는 서버 액션 전부. 큐 파일은 **하나도 건드리지 않는다**(제약 7).
  *
- *  검증은 `lib/tenants.ts`에 있고 여기서 다시 하지 않는다 — 실패 문구도 거기 있다. 이 파일이
+ *  검증은 `lib/projects.ts`에 있고 여기서 다시 하지 않는다 — 실패 문구도 거기 있다. 이 파일이
  *  하는 일은 Error를 **직렬화 가능한 결과로 바꾸는 것**뿐이다(클라이언트로 Error는 못 넘어간다). */
 import { homedir } from "node:os";
 import path from "node:path";
 import { revalidatePath } from "next/cache";
 import {
-  TenantError,
-  addTenant,
-  getTenant,
-  removeTenant,
-  renameTenant,
-  reorderTenants,
+  ProjectError,
+  addProject,
+  getProject,
+  removeProject,
+  renameProject,
+  reorderProjects,
   resolveConfig,
-  readTenants,
-  type Tenant,
-  type TenantConfig,
-} from "@/lib/tenants";
+  readProjects,
+  type Project,
+  type ProjectConfig,
+} from "@/lib/projects";
 import { listWorkers } from "@/lib/workers";
 import { tildePath } from "@/lib/urls";
 
@@ -39,7 +39,7 @@ export type ConfigRow = {
 };
 
 export type ResolvedView = {
-  tenant: { id: string; name: string; root: string; shortRoot: string };
+  project: { id: string; name: string; root: string; shortRoot: string };
   rows: ConfigRow[];
   /** 하나라도 워커 간 값이 갈렸는가 — 표 아래 Alert 한 줄의 근거. */
   hasConflict: boolean;
@@ -53,10 +53,10 @@ export type RegisterState = {
 };
 
 /** 해석 결과를 표로 옮긴다 (DESIGN.md §7 등록 직후 — 해석 결과 표). */
-function toView(tenant: Tenant, config: TenantConfig, workers: string[]): ResolvedView {
+function toView(project: Project, config: ProjectConfig, workers: string[]): ResolvedView {
   const home = homedir();
   const short = (p: string) => tildePath(p, home);
-  const outside = (p: string) => (p === tenant.root || p.startsWith(tenant.root + path.sep) ? [] : (["루트 밖"] as const));
+  const outside = (p: string) => (p === project.root || p.startsWith(project.root + path.sep) ? [] : (["루트 밖"] as const));
   const conflictOf = (key: string) => config.conflicts.find((c) => c.key === key)?.byWorker;
   const assumed = (key: string) => (config.assumed.includes(key) ? (["기본값 가정"] as const) : []);
   // 해석 실패는 `기본값 가정`과 배타적이다(resolveConfig가 갈라 담는다) — 배지도 하나만 뜬다.
@@ -120,19 +120,19 @@ function toView(tenant: Tenant, config: TenantConfig, workers: string[]): Resolv
   ];
 
   return {
-    tenant: { ...tenant, shortRoot: short(tenant.root) },
+    project: { ...project, shortRoot: short(project.root) },
     rows,
     hasConflict: rows.some((r) => r.byWorker),
   };
 }
 
-async function viewOf(tenant: Tenant): Promise<ResolvedView> {
-  const [config, workers] = await Promise.all([resolveConfig(tenant), listWorkers(tenant.root)]);
-  return toView(tenant, config, workers.map((w) => w.name));
+async function viewOf(project: Project): Promise<ResolvedView> {
+  const [config, workers] = await Promise.all([resolveConfig(project), listWorkers(project.root)]);
+  return toView(project, config, workers.map((w) => w.name));
 }
 
 function fail(e: unknown): RegisterState {
-  if (e instanceof TenantError) {
+  if (e instanceof ProjectError) {
     return {
       error: {
         code: e.code,
@@ -146,7 +146,7 @@ function fail(e: unknown): RegisterState {
   return { error: { code: "unknown", message: (e as Error).message } };
 }
 
-export async function registerTenant(
+export async function registerProject(
   _prev: RegisterState,
   form: FormData,
 ): Promise<RegisterState> {
@@ -154,9 +154,9 @@ export async function registerTenant(
   const root = String(form.get("root") ?? "");
   const id = String(form.get("id") ?? "").trim();
   try {
-    const tenant = await addTenant(name, root, id || undefined);
-    revalidatePath("/", "layout"); // 목록 + 모든 테넌트 화면의 전환기
-    return { done: await viewOf(tenant) };
+    const project = await addProject(name, root, id || undefined);
+    revalidatePath("/", "layout"); // 목록 + 모든 프로젝트 화면의 전환기
+    return { done: await viewOf(project) };
   } catch (e) {
     return fail(e);
   }
@@ -165,9 +165,9 @@ export async function registerTenant(
 /** 이름 변경 · 순서 변경 · 등록 해제 — 결과는 성공 여부와 사유뿐이다. */
 export type ActionResult = { ok: boolean; message?: string };
 
-export async function renameTenantAction(id: string, name: string): Promise<ActionResult> {
+export async function renameProjectAction(id: string, name: string): Promise<ActionResult> {
   try {
-    await renameTenant(id, name);
+    await renameProject(id, name);
     revalidatePath("/", "layout");
     return { ok: true };
   } catch (e) {
@@ -176,14 +176,14 @@ export async function renameTenantAction(id: string, name: string): Promise<Acti
 }
 
 /** 표시 순서 = 레지스트리 배열 순서. `↑`/`↓`는 이웃과 자리를 바꾼다. */
-export async function moveTenantAction(id: string, dir: -1 | 1): Promise<ActionResult> {
+export async function moveProjectAction(id: string, dir: -1 | 1): Promise<ActionResult> {
   try {
-    const ids = (await readTenants()).map((t) => t.id);
+    const ids = (await readProjects()).map((t) => t.id);
     const i = ids.indexOf(id);
     const j = i + dir;
     if (i < 0 || j < 0 || j >= ids.length) return { ok: false, message: "더 옮길 자리가 없습니다." };
     [ids[i], ids[j]] = [ids[j], ids[i]];
-    await reorderTenants(ids);
+    await reorderProjects(ids);
     revalidatePath("/", "layout");
     return { ok: true };
   } catch (e) {
@@ -192,9 +192,9 @@ export async function moveTenantAction(id: string, dir: -1 | 1): Promise<ActionR
 }
 
 /** 레지스트리에서만 제거한다. 큐 파일은 손대지 않는다(제약 7). */
-export async function unregisterTenantAction(id: string): Promise<ActionResult> {
+export async function unregisterProjectAction(id: string): Promise<ActionResult> {
   try {
-    await removeTenant(id);
+    await removeProject(id);
     revalidatePath("/", "layout");
     return { ok: true };
   } catch (e) {
@@ -203,11 +203,11 @@ export async function unregisterTenantAction(id: string): Promise<ActionResult> 
 }
 
 /** 설정 다이얼로그의 `다시 읽기` — 워커 파일이 바뀌었을 수 있다. */
-export async function resolveTenantAction(id: string): Promise<ResolvedView | { message: string }> {
-  const tenant = await getTenant(id);
-  if (!tenant) return { message: `등록되지 않은 테넌트입니다: ${id}` };
+export async function resolveProjectAction(id: string): Promise<ResolvedView | { message: string }> {
+  const project = await getProject(id);
+  if (!project) return { message: `등록되지 않은 프로젝트입니다: ${id}` };
   try {
-    return await viewOf(tenant);
+    return await viewOf(project);
   } catch (e) {
     return { message: (e as Error).message };
   }

@@ -186,9 +186,9 @@ test("파생 판정 — 상태·해시·deps·본문·평면 큐", async () => {
   assert.strictEqual(by("aaaa1111").assigned, false);
 });
 
-// ── 픽스처 2: 한글 접미사 테넌트 ─────────────────────────────────────────────
+// ── 픽스처 2: 한글 접미사 프로젝트 ─────────────────────────────────────────────
 
-test("패리티 — 한글 접미사(-진행중/-완료) 테넌트", async () => {
+test("패리티 — 한글 접미사(-진행중/-완료) 프로젝트", async () => {
   const root = newRoot();
   const sfx: Suffixes = { inProgress: "-진행중", done: "-완료" };
   await write(root, "kkkk1111.md", fm({ ticket: "kkkk1111", title: "열림", kind: "work" }));
@@ -225,7 +225,7 @@ test("패리티 — 빈 큐", async () => {
 test("관계 — stemOf · resolveDep(`re-` 폴백) · 역참조", async () => {
   const root = newRoot();
   const sfx: Suffixes = { inProgress: "-진행중", done: "-완료" };
-  // 한글 접미사 테넌트로 돌린다: stem 판정이 접미사를 하드코딩하면 여기서 깨진다.
+  // 한글 접미사 프로젝트로 돌린다: stem 판정이 접미사를 하드코딩하면 여기서 깨진다.
   await write(root, "aaaa1111-완료.md", fm({ ticket: "aaaa1111", title: "선행" }));
   await write(root, "re-bbbb2222.md", fm({ ticket: "re-bbbb2222", title: "피드백 티켓" }));
   await write(root, "cccc3333.md", fm({ ticket: "cccc3333", title: "본체", deps: "[aaaa1111]" }));
@@ -265,7 +265,7 @@ test("관계 — stemOf · resolveDep(`re-` 폴백) · 역참조", async () => {
 
 test("식별자 — stem 파생 · 경고 조건은 엔진 find와 판정이 같다", async () => {
   const root = newRoot();
-  // 한글 접미사 테넌트로 돌린다: stem이 접미사를 하드코딩하면 여기서 깨진다.
+  // 한글 접미사 프로젝트로 돌린다: stem이 접미사를 하드코딩하면 여기서 깨진다.
   const sfx: Suffixes = { inProgress: "-진행중", done: "-완료" };
   // ① `ticket:`이 파일명과 어긋났다 — 표시값으로는 엔진이 못 찾는다(경고 대상)
   await write(root, "abc12345.md", fm({ ticket: "zzz99999", title: "어긋난 표시값" }));

@@ -1,24 +1,24 @@
-/** 테넌트 레지스트리 + 테넌트별 설정 해석 (DESIGN.md §테넌트, §테넌트별 설정 해석).
+/** 프로젝트 레지스트리 + 프로젝트별 설정 해석 (DESIGN.md §프로젝트, §프로젝트별 설정 해석).
  *
  *  GUI는 큐 하나에 붙어 사는 게 아니라 사용자가 등록한 큐들을 전환하며 본다. 레지스트리는
- *  머신 로컬 JSON 한 파일이고, 큐 위치·접미사·페르소나 디렉터리는 전부 테넌트에서 받아온다. */
+ *  머신 로컬 JSON 한 파일이고, 큐 위치·접미사·페르소나 디렉터리는 전부 프로젝트에서 받아온다. */
 import { mkdir, readFile, readdir, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
-import { NAME_RE, TENANT_ID_RE, expandHome, resolveWithin, shellPath, shellValue } from "./paths.ts";
+import { NAME_RE, PROJECT_ID_RE, expandHome, resolveWithin, shellPath, shellValue } from "./paths.ts";
 import { listTickets, type Ticket } from "./queue.ts";
 import { listWorkers, type Worker } from "./workers.ts";
 import { slugify } from "./urls.ts";
 
 export { slugify };
 
-export type Tenant = {
+export type Project = {
   id: string; // URL 조각
   name: string; // 사람이 읽는 라벨
   root: string; // <프로젝트>/.fs-tickets 절대경로 (realpath 된 것)
 };
 
-export type TenantConfig = {
+export type ProjectConfig = {
   personas: string;
   protocols: string;
   inProgress: string; // 상태 접미사
@@ -32,7 +32,7 @@ export type TenantConfig = {
    *  라인을 그린다(§7). `assumed`와 다른 사실이다 — 없는 것과 못 읽은 것은 조치가 다르다. */
   unresolved: { key: string; raw: string; worker: string }[];
   /** 워커 간 값이 갈린 키. 엔진은 디스패치한 워커의 값을 쓰므로 실제 위험이다.
-   *  `cwd`는 **절대 들어오지 않는다**(§테넌트별 설정 해석의 `TICKET_CWD` 예외). */
+   *  `cwd`는 **절대 들어오지 않는다**(§프로젝트별 설정 해석의 `TICKET_CWD` 예외). */
   conflicts: { key: string; byWorker: Record<string, string> }[];
 };
 
@@ -41,39 +41,48 @@ export type TenantConfig = {
 /** 엔진이 머신 로컬 상태를 두는 곳(oauth-token, run/)과 같은 디렉터리. 레포에 넣지 않는다. */
 export function registryPath(): string {
   const local = process.env.TICKET_LOCAL || path.join(homedir(), ".config", "fs-tickets");
-  return path.join(expandHome(local), "gui-tenants.json");
+  return path.join(expandHome(local), "gui-projects.json");
 }
 
-export async function readTenants(): Promise<Tenant[]> {
+/** 프로젝트로 이름을 바꾸기 전의 레지스트리(`gui-tenants.json`, 배열 키 `tenants`).
+ *  ponytail: 읽기만 폴백한다 — 첫 쓰기가 새 파일로 옮겨 담으므로 마이그레이션 코드가 없다.
+ *  옛 파일은 그대로 남는다(지우지 않는다). 한동안 새 파일만 보이면 이 폴백을 지운다. */
+function legacyRegistryPath(): string {
+  return registryPath().replace(/gui-projects\.json$/, "gui-tenants.json");
+}
+
+export async function readProjects(): Promise<Project[]> {
   let raw: string;
   try {
     raw = await readFile(registryPath(), "utf8");
   } catch (e) {
-    if ((e as NodeJS.ErrnoException).code === "ENOENT") return []; // 아직 등록 전 = 온보딩
-    throw e;
+    if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
+    raw = await readFile(legacyRegistryPath(), "utf8").catch(() => "");
+    if (!raw) return []; // 아직 등록 전 = 온보딩
   }
-  // 깨진 JSON은 삼키지 않는다. 빈 목록으로 넘기면 다음 등록이 남의 테넌트를 덮어쓴다.
-  const parsed = JSON.parse(raw) as { tenants?: unknown };
-  if (!Array.isArray(parsed.tenants)) {
-    throw new Error(`레지스트리 형식이 이상하다(tenants 배열 없음): ${registryPath()}`);
+  // 깨진 JSON은 삼키지 않는다. 빈 목록으로 넘기면 다음 등록이 남의 프로젝트를 덮어쓴다.
+  const parsed = JSON.parse(raw) as { projects?: unknown; tenants?: unknown };
+  const list = parsed.projects ?? parsed.tenants; // 옛 파일은 `tenants` 키다
+  if (!Array.isArray(list)) {
+    throw new Error(`레지스트리 형식이 이상하다(projects 배열 없음): ${registryPath()}`);
   }
-  return parsed.tenants as Tenant[];
+  return list as Project[];
 }
 
-export async function getTenant(id: string): Promise<Tenant | null> {
-  return (await readTenants()).find((t) => t.id === id) ?? null;
+export async function getProject(id: string): Promise<Project | null> {
+  return (await readProjects()).find((t) => t.id === id) ?? null;
 }
 
-async function writeTenants(tenants: Tenant[]): Promise<void> {
+async function writeProjects(projects: Project[]): Promise<void> {
   const p = registryPath();
   await mkdir(path.dirname(p), { recursive: true });
-  await writeFile(p, JSON.stringify({ version: 1, tenants }, null, 2) + "\n", "utf8");
+  await writeFile(p, JSON.stringify({ version: 1, projects }, null, 2) + "\n", "utf8");
 }
 
 /** 등록 검증 실패. `code`가 어느 입력의 문제인지를 정하고(등록 폼이 필드 아래 vs 폼 하단
  *  Alert을 가른다), `message`는 사용자에게 그대로 보이는 문장이다(DESIGN.md §7 문구 표).
  *  문장을 액션에 다시 쓰지 않는다 — 검증이 여기 있으므로 문구도 여기 있어야 갈리지 않는다. */
-export type TenantErrorCode =
+export type ProjectErrorCode =
   | "name" // 이름 비었음
   | "root" // 경로 사유 (없음 · 디렉터리 아님 · 큐 아님)
   | "dupRoot" // 같은 큐가 이미 등록됨
@@ -81,104 +90,104 @@ export type TenantErrorCode =
   | "badId" // 손으로 넣은 URL 조각 형식 오류
   | "dupId"; // URL 조각 중복
 
-export class TenantError extends Error {
-  code: TenantErrorCode;
-  /** `dupRoot`일 때 그 테넌트 — 폼이 "그 테넌트로 가는 링크"를 붙인다. */
-  dup?: Tenant;
+export class ProjectError extends Error {
+  code: ProjectErrorCode;
+  /** `dupRoot`일 때 그 프로젝트 — 폼이 "그 프로젝트로 가는 링크"를 붙인다. */
+  dup?: Project;
   // 필드를 생성자 파라미터 프로퍼티로 쓰지 않는다 — Node의 타입 스트리핑이 거부한다(pnpm test).
-  constructor(code: TenantErrorCode, message: string, dup?: Tenant) {
+  constructor(code: ProjectErrorCode, message: string, dup?: Project) {
     super(message);
-    this.name = "TenantError";
+    this.name = "ProjectError";
     this.code = code;
     this.dup = dup;
   }
 }
 
 /** 등록. 검증 4종을 서버에서 통과해야 저장한다 — 실패하면 무엇이 틀렸는지 문장으로 던진다. */
-export async function addTenant(name: string, rootInput: string, id?: string): Promise<Tenant> {
-  if (!name.trim()) throw new TenantError("name", "이름을 입력하세요.");
+export async function addProject(name: string, rootInput: string, id?: string): Promise<Project> {
+  if (!name.trim()) throw new ProjectError("name", "이름을 입력하세요.");
   const given = expandHome(rootInput.trim());
   if (!path.isAbsolute(given)) {
-    throw new TenantError("root", `절대경로여야 합니다: ${rootInput.trim() || "(비어 있음)"}`);
+    throw new ProjectError("root", `절대경로여야 합니다: ${rootInput.trim() || "(비어 있음)"}`);
   }
 
   let root: string;
   try {
     root = await realpath(given);
   } catch {
-    throw new TenantError(
+    throw new ProjectError(
       "root",
       `${given}가 없습니다. 절대경로가 맞는지, 마운트가 연결돼 있는지 확인하세요.`,
     );
   }
   if (!(await stat(root)).isDirectory()) {
-    throw new TenantError("root", `${root}는 디렉터리가 아닙니다.`);
+    throw new ProjectError("root", `${root}는 디렉터리가 아닙니다.`);
   }
   const inside = await readdir(root).catch(() => [] as string[]);
   if (!inside.includes("tickets") && !inside.includes("workers")) {
-    throw new TenantError(
+    throw new ProjectError(
       "root",
       "이 디렉터리에 tickets/도 workers/도 없습니다 — fs-tickets 큐 디렉터리가 맞는지 확인하세요.",
     );
   }
 
-  const tenants = await readTenants();
-  const dup = tenants.find((t) => t.root === root);
-  if (dup) throw new TenantError("dupRoot", `이미 ${dup.name}으로 등록돼 있습니다.`, dup);
+  const projects = await readProjects();
+  const dup = projects.find((t) => t.root === root);
+  if (dup) throw new ProjectError("dupRoot", `이미 ${dup.name}으로 등록돼 있습니다.`, dup);
 
-  // id는 이름에서 만들되, 비거나 겹치면 자동으로 지어내지 않는다 — `tenant-1` 같은 값은 URL이
+  // id는 이름에서 만들되, 비거나 겹치면 자동으로 지어내지 않는다 — `project-1` 같은 값은 URL이
   // 의미를 잃는다. 등록 폼이 그때만 `URL 조각` 입력을 노출하고 사용자가 정한다.
   const tid = id ?? slugify(name);
-  if (!TENANT_ID_RE.test(tid) || tid.length > 40) {
+  if (!PROJECT_ID_RE.test(tid) || tid.length > 40) {
     if (id) {
-      throw new TenantError(
+      throw new ProjectError(
         "badId",
         `URL 조각 형식이 틀렸습니다 — 영문 소문자·숫자·하이픈 1~40자: ${id}`,
       );
     }
-    throw new TenantError(
+    throw new ProjectError(
       "needId",
       "이름에서 URL 조각을 만들 수 없습니다. 직접 정해 주세요 (영문 소문자·숫자·하이픈).",
     );
   }
-  if (tenants.some((t) => t.id === tid)) {
-    throw new TenantError(
+  if (projects.some((t) => t.id === tid)) {
+    throw new ProjectError(
       "dupId",
       `URL 조각 ${tid}가 이미 쓰이고 있습니다. 다른 이름을 쓰거나 조각을 직접 정하세요.`,
     );
   }
 
-  const tenant: Tenant = { id: tid, name: name.trim(), root };
-  await writeTenants([...tenants, tenant]);
-  return tenant;
+  const project: Project = { id: tid, name: name.trim(), root };
+  await writeProjects([...projects, project]);
+  return project;
 }
 
-export async function renameTenant(id: string, name: string): Promise<void> {
-  if (!name.trim()) throw new TenantError("name", "이름을 입력하세요.");
-  const tenants = await readTenants();
-  const t = tenants.find((x) => x.id === id);
-  if (!t) throw new Error(`없는 테넌트: ${id}`);
+export async function renameProject(id: string, name: string): Promise<void> {
+  if (!name.trim()) throw new ProjectError("name", "이름을 입력하세요.");
+  const projects = await readProjects();
+  const t = projects.find((x) => x.id === id);
+  if (!t) throw new Error(`없는 프로젝트: ${id}`);
   t.name = name.trim();
-  await writeTenants(tenants);
+  await writeProjects(projects);
 }
 
 /** 표시 순서 = 배열 순서. 목록에 없는 id는 뒤에 원래 순서대로 남긴다. */
-export async function reorderTenants(ids: string[]): Promise<void> {
-  const tenants = await readTenants();
-  const ordered = ids.map((id) => tenants.find((t) => t.id === id)).filter((t): t is Tenant => !!t);
-  const rest = tenants.filter((t) => !ordered.includes(t));
-  await writeTenants([...ordered, ...rest]);
+export async function reorderProjects(ids: string[]): Promise<void> {
+  const projects = await readProjects();
+  const ordered = ids.map((id) => projects.find((t) => t.id === id)).filter((t): t is Project => !!t);
+  const rest = projects.filter((t) => !ordered.includes(t));
+  await writeProjects([...ordered, ...rest]);
 }
 
 /** 레지스트리에서만 지운다. 큐 파일은 손대지 않는다(DESIGN.md 제약 7). */
-export async function removeTenant(id: string): Promise<void> {
-  const tenants = await readTenants();
-  await writeTenants(tenants.filter((t) => t.id !== id));
+export async function removeProject(id: string): Promise<void> {
+  const projects = await readProjects();
+  await writeProjects(projects.filter((t) => t.id !== id));
 }
 
 // ── 설정 해석 ───────────────────────────────────────────────────────────────
 
-/** 워커 파일의 변수 → TenantConfig 필드. 이 5개만 본다. */
+/** 워커 파일의 변수 → ProjectConfig 필드. 이 5개만 본다. */
 const KEYS = {
   TICKET_PERSONAS: "personas",
   TICKET_PROTOCOLS: "protocols",
@@ -220,11 +229,11 @@ function parseWorker(text: string): Parsed {
   return { kv, bad };
 }
 
-/** 테넌트의 실효 설정. `<루트>/personas`·`.wip`·`.done`을 가정하지 않고 워커 파일에서 읽는다.
+/** 프로젝트의 실효 설정. `<루트>/personas`·`.wip`·`.done`을 가정하지 않고 워커 파일에서 읽는다.
  *  워커가 여러 개인데 값이 갈리면 첫 워커 값을 쓰고 conflicts에 양쪽을 담는다 —
  *  `TICKET_CWD`만 예외로 `cwdByWorker` 목록에 담고 충돌로 보지 않는다. */
-export async function resolveConfig(tenant: Pick<Tenant, "root">): Promise<TenantConfig> {
-  const root = tenant.root;
+export async function resolveConfig(project: Pick<Project, "root">): Promise<ProjectConfig> {
+  const root = project.root;
   const defaults: Record<Field, string> = {
     personas: path.join(root, "personas"),
     protocols: path.join(root, "protocols"),
@@ -243,7 +252,7 @@ export async function resolveConfig(tenant: Pick<Tenant, "root">): Promise<Tenan
     if (text !== null) parsed.push([n.slice(0, -3), parseWorker(text)]);
   }
 
-  const config: TenantConfig = {
+  const config: ProjectConfig = {
     ...defaults,
     cwdByWorker: {},
     assumed: [],
@@ -277,15 +286,15 @@ export async function resolveConfig(tenant: Pick<Tenant, "root">): Promise<Tenan
 
 /** 워커 값을 못 쓴 모든 경우(값이 없음 + 해석 실패). §7 해석 결과 표만 둘을 구분해 그리고,
  *  나머지 화면은 "화면이 쓰는 값이 기본값이다"라는 같은 사실만 필요하다. */
-export function usingDefault(config: TenantConfig, key: string): boolean {
+export function usingDefault(config: ProjectConfig, key: string): boolean {
   return config.assumed.includes(key) || config.unresolved.some((u) => u.key === key);
 }
 
 // ── 목록·전환기용 요약 ──────────────────────────────────────────────────────
 
-/** 테넌트 목록 행과 전환기 항목이 쓰는 한 줄 요약. 못 읽으면 `connected: false` + 사유 원문이고
+/** 프로젝트 목록 행과 전환기 항목이 쓰는 한 줄 요약. 못 읽으면 `connected: false` + 사유 원문이고
  *  카운트는 **0이 아니라 없음**이다(읽지 못한 것과 0건은 다른 사실이다 — DESIGN.md §4-1). */
-export type TenantSummary = {
+export type ProjectSummary = {
   connected: boolean;
   /** 연결 안 됨 사유 원문(`ENOENT: …`). §6 에러 3요소의 2번. 삼키지 않는다. */
   error: string | null;
@@ -293,18 +302,18 @@ export type TenantSummary = {
   workers: Worker[];
 };
 
-/** 테넌트 하나를 훑는다. 경로가 없으면 읽기를 시도하지 않고 사유만 담는다.
+/** 프로젝트 하나를 훑는다. 경로가 없으면 읽기를 시도하지 않고 사유만 담는다.
  *
- *  ponytail: 티켓 파일을 전부 읽어 개수만 센다(listTickets 재사용). 테넌트가 한 자릿수고
+ *  ponytail: 티켓 파일을 전부 읽어 개수만 센다(listTickets 재사용). 프로젝트가 한 자릿수고
  *  큐가 수십 건이라 이게 제일 싸다 — 수천 건 되면 파일명만 세는 경로를 따로 만든다. */
-export async function readSummary(tenant: Pick<Tenant, "root">): Promise<TenantSummary> {
+export async function readSummary(project: Pick<Project, "root">): Promise<ProjectSummary> {
   try {
-    const st = await stat(tenant.root);
-    if (!st.isDirectory()) throw new Error(`디렉터리가 아니다: ${tenant.root}`);
-    const config = await resolveConfig(tenant);
+    const st = await stat(project.root);
+    if (!st.isDirectory()) throw new Error(`디렉터리가 아니다: ${project.root}`);
+    const config = await resolveConfig(project);
     const [tickets, workers] = await Promise.all([
-      listTickets(tenant.root, config),
-      listWorkers(tenant.root),
+      listTickets(project.root, config),
+      listWorkers(project.root),
     ]);
     return {
       connected: true,

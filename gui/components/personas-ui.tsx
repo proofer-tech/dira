@@ -1,8 +1,8 @@
 "use client";
 
-/** 페르소나 화면(`/t/<tenant>/personas`)의 클라이언트 조각 — 생성 · 편집 · 삭제.
+/** 페르소나 화면(`/p/<project>/personas`)의 클라이언트 조각 — 생성 · 편집 · 삭제.
  *
- *  fs를 만지는 건 서버 액션뿐이다(`app/t/[tenant]/personas/actions.ts`). 파일 하나에 모은 이유는
+ *  fs를 만지는 건 서버 액션뿐이다(`app/p/[project]/personas/actions.ts`). 파일 하나에 모은 이유는
  *  `workers-ui.tsx`와 같다 — 같은 화면의 세 액션이 같은 문구(엔진이 WARN만 남긴다 · 이름 규칙)를
  *  쓰므로 쪼개면 자리가 갈린다. */
 import { useState, useTransition } from "react";
@@ -12,7 +12,7 @@ import {
   deletePersonaAction,
   savePersonaAction,
   type PersonaResult,
-} from "@/app/t/[tenant]/personas/actions";
+} from "@/app/p/[project]/personas/actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   AlertDialog,
@@ -77,10 +77,10 @@ function refsLabel(refs: PersonaRow["refs"]): string | null {
 /** 이름 규칙은 **서버가** 판정한다(`tickets.py PERSONA_RE`와 같은 규칙). 여기서 미리 막지 않는
  *  이유: 클라이언트 검증은 검증이 아니고, 규칙이 두 군데 있으면 갈린다. 대신 사유를 그 자리에 띄운다. */
 export function CreatePersonaButton({
-  tenantId,
+  projectId,
   variant,
 }: {
-  tenantId: string;
+  projectId: string;
   variant?: "default" | "outline";
 }) {
   const [open, setOpen] = useState(false);
@@ -130,7 +130,7 @@ export function CreatePersonaButton({
             disabled={pending || !name.trim()}
             onClick={() =>
               start(async () => {
-                const r = await createPersonaAction(tenantId, name);
+                const r = await createPersonaAction(projectId, name);
                 setResult(r);
                 if (r.ok) setOpen(false);
               })
@@ -148,7 +148,7 @@ export function CreatePersonaButton({
 
 /** 페르소나 하나. `body: null`(프로필 없음)이면 빈 textarea가 열리고 **저장이 곧 생성**이다 —
  *  티켓이 부르는데 프로필이 없는 이름을 그 자리에서 채우게 하려고 경로를 하나로 둔다. */
-export function PersonaCard({ tenantId, row }: { tenantId: string; row: PersonaRow }) {
+export function PersonaCard({ projectId, row }: { projectId: string; row: PersonaRow }) {
   // 저장된 원문을 state로 들고 있는다 — 서버가 다시 렌더해 주기를 기다리지 않고 저장 직후에
   // `프로필 없음` 배지와 삭제 버튼이 바로 맞는다(workers-ui의 컨텍스트 카드와 같은 이유).
   const [saved, setSaved] = useState(row.body);
@@ -212,7 +212,7 @@ export function PersonaCard({ tenantId, row }: { tenantId: string; row: PersonaR
                   disabled={pending}
                   onClick={() =>
                     start(async () => {
-                      const r = await deletePersonaAction(tenantId, row.name);
+                      const r = await deletePersonaAction(projectId, row.name);
                       if (!r.ok) setDeleteError(r.message ?? "삭제하지 못했습니다.");
                     })
                   }
@@ -244,7 +244,7 @@ export function PersonaCard({ tenantId, row }: { tenantId: string; row: PersonaR
           disabled={pending || !dirty}
           onClick={() =>
             start(async () => {
-              const r = await savePersonaAction(tenantId, row.name, body);
+              const r = await savePersonaAction(projectId, row.name, body);
               setResult(r);
               if (r.ok) setSaved(body);
             })

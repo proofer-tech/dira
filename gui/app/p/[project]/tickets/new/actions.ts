@@ -18,7 +18,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { NAME_RE, isHash } from "@/lib/paths";
 import { stemOf } from "@/lib/queue";
-import { getTenant, resolveConfig } from "@/lib/tenants";
+import { getProject, resolveConfig } from "@/lib/projects";
 
 export type NewTicketState = { error?: string };
 
@@ -40,12 +40,12 @@ export async function createTicket(
   _prev: NewTicketState,
   form: FormData,
 ): Promise<NewTicketState> {
-  const tenantId = String(form.get("tenant") ?? "");
+  const projectId = String(form.get("project") ?? "");
   let hash = "";
   try {
-    const tenant = await getTenant(tenantId);
-    if (!tenant) throw new Error(`등록되지 않은 테넌트입니다: ${tenantId}`);
-    const config = await resolveConfig(tenant);
+    const project = await getProject(projectId);
+    if (!project) throw new Error(`등록되지 않은 프로젝트입니다: ${projectId}`);
+    const config = await resolveConfig(project);
 
     const title = fmValue("제목", String(form.get("title") ?? ""));
     if (!title) throw new Error("제목을 입력하세요.");
@@ -66,7 +66,7 @@ export async function createTicket(
     // frontmatter가 깨져 엔진에 안 보이는 파일까지 포함해야 하고(그 파일도 이름을 점유한다),
     // deps가 가리키는 이름이 `ticket:` 값이 아니라 **상태 접미사를 뗀 파일명**이기 때문이다
     // (tickets.py `_find_stem`).
-    const dir = path.join(tenant.root, "tickets");
+    const dir = path.join(project.root, "tickets");
     const names = (await readdir(dir)).filter((n) => n.endsWith(".md") && !n.startsWith("."));
     const stems = new Set(names.map((n) => stemOf(n, config)));
 
@@ -117,6 +117,6 @@ export async function createTicket(
     return { error: (e as Error).message };
   }
 
-  revalidatePath(`/t/${tenantId}`); // 보드에 새 티켓이 뜬다
-  redirect(`/t/${tenantId}/tickets/${hash}`);
+  revalidatePath(`/p/${projectId}`); // 보드에 새 티켓이 뜬다
+  redirect(`/p/${projectId}/tickets/${hash}`);
 }

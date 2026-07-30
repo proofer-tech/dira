@@ -1,8 +1,8 @@
-/** 페르소나 `/t/<tenant>/personas` — `<해석된 TICKET_PERSONAS>/<이름>/PROFILE.md` 편집 (DESIGN.md §5).
+/** 페르소나 `/p/<project>/personas` — `<해석된 TICKET_PERSONAS>/<이름>/PROFILE.md` 편집 (DESIGN.md §5).
  *
- *  **디렉터리는 `resolveConfig(tenant).personas`에서 받는다.** `<루트>/personas`라고 가정하면
+ *  **디렉터리는 `resolveConfig(project).personas`에서 받는다.** `<루트>/personas`라고 가정하면
  *  `TICKET_PERSONAS`를 재정의한 큐에서 엉뚱한 디렉터리를 편집한다(README §워커 레퍼런스가
- *  재정의를 열어뒀다). 경로 방어의 기준 디렉터리도 테넌트 root가 아니라 그 값이다. */
+ *  재정의를 열어뒀다). 경로 방어의 기준 디렉터리도 프로젝트 root가 아니라 그 값이다. */
 import { notFound } from "next/navigation";
 import { TriangleAlert } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
@@ -10,19 +10,19 @@ import { CreatePersonaButton, PersonaCard } from "@/components/personas-ui";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { listTickets } from "@/lib/queue";
-import { getTenant, listPersonas, resolveConfig, usingDefault } from "@/lib/tenants";
+import { getProject, listPersonas, resolveConfig, usingDefault } from "@/lib/projects";
 
 // 프로필 파일은 GUI 밖에서도 바뀌고(에디터) 참조 건수는 디스패처가 바꾼다 — 굳히지 않는다.
 export const dynamic = "force-dynamic";
 
-export default async function Personas({ params }: { params: Promise<{ tenant: string }> }) {
-  const { tenant: id } = await params;
-  const tenant = await getTenant(id);
-  if (!tenant) notFound();
+export default async function Personas({ params }: { params: Promise<{ project: string }> }) {
+  const { project: id } = await params;
+  const project = await getProject(id);
+  if (!project) notFound();
 
-  const config = await resolveConfig(tenant);
+  const config = await resolveConfig(project);
   // 티켓을 같이 읽는 이유: 프로필 없는 페르소나 경고와 삭제 경고가 둘 다 참조 건수를 쓴다.
-  const tickets = await listTickets(tenant.root, config);
+  const tickets = await listTickets(project.root, config);
   const personas = await listPersonas(config.personas, tickets);
   const missing = personas.filter((p) => p.body === null);
 
@@ -30,7 +30,7 @@ export default async function Personas({ params }: { params: Promise<{ tenant: s
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-lg font-semibold">페르소나</h1>
-        {personas.length > 0 && <CreatePersonaButton tenantId={id} />}
+        {personas.length > 0 && <CreatePersonaButton projectId={id} />}
       </div>
 
       <div className="flex items-center gap-2 text-xs">
@@ -67,11 +67,11 @@ export default async function Personas({ params }: { params: Promise<{ tenant: s
       )}
 
       {personas.length === 0 ? (
-        <EmptyState text="페르소나 없음" action={<CreatePersonaButton tenantId={id} />} />
+        <EmptyState text="페르소나 없음" action={<CreatePersonaButton projectId={id} />} />
       ) : (
         <div className="max-w-3xl space-y-3">
           {personas.map((p) => (
-            <PersonaCard key={p.name} tenantId={id} row={p} />
+            <PersonaCard key={p.name} projectId={id} row={p} />
           ))}
         </div>
       )}

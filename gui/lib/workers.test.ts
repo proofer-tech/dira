@@ -185,7 +185,7 @@ test("holding — .wip 티켓의 owner에서 워커를 되짚는다 (tick.sh 207
       ["w2", null],
     ],
   );
-  // 티켓을 안 넘기면 항상 null이다(테넌트 목록 요약이 그렇게 부른다)
+  // 티켓을 안 넘기면 항상 null이다(프로젝트 목록 요약이 그렇게 부른다)
   assert.strictEqual((await listWorkers(root))[0].holding, null);
 });
 

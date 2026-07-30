@@ -1,7 +1,7 @@
-/** 보드 `/t/<tenant>/` — 테이블 · 칸반 · 필터 · 검색 (DESIGN.md §1 보드 · §비주얼 디렉션 §3 밀도).
+/** 보드 `/p/<project>/` — 테이블 · 칸반 · 필터 · 검색 (DESIGN.md §1 보드 · §비주얼 디렉션 §3 밀도).
  *
  *  기본 순서는 **손대지 않은 큐 순서**(birth 오름차순)다. 그래서 열린 티켓의 집합·순서가
- *  그 테넌트의 `workers/<w>.sh list`와 같게 보인다 — 다르면 GUI가 큐를 거짓으로 그린다.
+ *  그 프로젝트의 `workers/<w>.sh list`와 같게 보인다 — 다르면 GUI가 큐를 거짓으로 그린다.
  *
  *  필터·검색·정렬은 전부 **서버에서** 걸고, 상태는 URL이 담는다(클라이언트 상태 라이브러리 없음).
  *  덕분에 정렬 헤더·필터 해제·뷰 전환은 그냥 `<Link>`고, 클라이언트 코드는 board-ui.tsx의
@@ -36,7 +36,7 @@ import {
   type SortKey,
   type Ticket,
 } from "@/lib/queue";
-import { getTenant, listPersonas, resolveConfig } from "@/lib/tenants";
+import { getProject, listPersonas, resolveConfig } from "@/lib/projects";
 
 // 큐는 GUI 밖에서(cron·세션이) 바뀐다. 프리렌더하면 빌드 시점 내용이 굳는다.
 export const dynamic = "force-dynamic";
@@ -74,22 +74,22 @@ export default async function Board({
   params,
   searchParams,
 }: {
-  params: Promise<{ tenant: string }>;
+  params: Promise<{ project: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const { tenant: id } = await params;
-  const tenant = await getTenant(id);
-  if (!tenant) notFound(); // 레이아웃이 이미 404를 세우지만 페이지도 같이 돈다
+  const { project: id } = await params;
+  const project = await getProject(id);
+  if (!project) notFound(); // 레이아웃이 이미 404를 세우지만 페이지도 같이 돈다
 
   // 연결 안 됨은 셸이 사유 블록으로 받는다(§4-1). 여기서 던지면 그 사유가 덮인다.
-  if (!(await stat(tenant.root).catch(() => null))) return null;
+  if (!(await stat(project.root).catch(() => null))) return null;
 
   const raw = await searchParams;
   const sp = new URLSearchParams();
   for (const [k, v] of Object.entries(raw)) for (const x of [v ?? []].flat()) sp.append(k, x);
 
-  const config = await resolveConfig(tenant);
-  const tickets = await listTickets(tenant.root, config);
+  const config = await resolveConfig(project);
+  const tickets = await listTickets(project.root, config);
 
   const query = {
     kind: sp.getAll("kind"),
@@ -102,7 +102,7 @@ export default async function Board({
   const desc = sp.get("dir") === "desc";
   const rows = sortTickets(filterTickets(tickets, query), sortKey, desc);
 
-  // 선택지를 하드코딩하지 않는다 — kind는 테넌트마다 다르고, persona는 그 큐의 페르소나다.
+  // 선택지를 하드코딩하지 않는다 — kind는 프로젝트마다 다르고, persona는 그 큐의 페르소나다.
   // persona 목록은 **페르소나 화면과 같은 `listPersonas`**로 만든다. 여기서 `readdir`을 다시
   // 하면 이름 규칙(`NAME_RE`) 밖 디렉터리가 선택지에 들어오고, 그건 `queue.ts`가 `''`로 만드는
   // 값이라 고르면 언제나 0건이다. 프로필 없이 티켓만 참조하는 이름은 `listPersonas`가 넣는다.
@@ -110,8 +110,8 @@ export default async function Board({
   const personas = (await listPersonas(config.personas, tickets)).map((p) => p.name);
 
   // 링크는 **stem**이다 — 엔진이 찾는 이름이고, 상태가 바뀌어도(접미사) URL이 안 변한다(§식별자).
-  const href = (t: Ticket) => `/t/${id}/tickets/${encodeURIComponent(t.stem)}`;
-  const qs = (next: URLSearchParams) => (next.toString() ? `?${next}` : `/t/${id}`);
+  const href = (t: Ticket) => `/p/${id}/tickets/${encodeURIComponent(t.stem)}`;
+  const qs = (next: URLSearchParams) => (next.toString() ? `?${next}` : `/p/${id}`);
 
   /** 헤더 클릭 3단계: 오름차순 → 내림차순 → 큐 순서로 복귀. 정렬을 끌 방법이 없으면
    *  기본 순서(= CLI와 같은 순서)를 다시 못 본다. */
@@ -184,7 +184,7 @@ export default async function Board({
         variant="outline"
         size="sm"
         nativeButton={false}
-        render={<Link href={view === "kanban" ? `/t/${id}?view=kanban` : `/t/${id}`} />}
+        render={<Link href={view === "kanban" ? `/p/${id}?view=kanban` : `/p/${id}`} />}
       >
         필터 초기화
       </Button>
@@ -197,7 +197,7 @@ export default async function Board({
 
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-lg font-semibold">보드</h1>
-        <Button size="sm" nativeButton={false} render={<Link href={`/t/${id}/tickets/new`} />}>
+        <Button size="sm" nativeButton={false} render={<Link href={`/p/${id}/tickets/new`} />}>
           티켓 발행
         </Button>
       </div>
@@ -207,7 +207,7 @@ export default async function Board({
         <EmptyState
           text="열린 티켓 없음"
           action={
-            <Button size="sm" nativeButton={false} render={<Link href={`/t/${id}/tickets/new`} />}>
+            <Button size="sm" nativeButton={false} render={<Link href={`/p/${id}/tickets/new`} />}>
               티켓 발행
             </Button>
           }

@@ -9,28 +9,28 @@ fs-tickets 큐를 보는 로컬 웹 UI. **스펙은 `../docs/DESIGN.md`가 단�
 gui/
   app/                  App Router. fs 접근은 전부 여기(서버) 아니면 lib/
     layout.tsx          html·폰트·TooltipProvider
-    (list)/page.tsx     테넌트 목록·등록 (`/`). 라우트 그룹이라 URL은 `/`다
+    (list)/page.tsx     프로젝트 목록·등록 (`/`). 라우트 그룹이라 URL은 `/`다
     (list)/loading.tsx  이 그룹만 덮는다 — app/ 최상단에 두면 모든 라우트가 즉시 스트리밍돼
                         레이아웃의 notFound()가 404 상태를 못 세운다(실측)
-    not-found.tsx       404. `t/[tenant]/layout.tsx`의 notFound()를 받는 경계가 여기다
-    actions.ts          Server Action (테넌트 등록·이름·순서·해제·재해석). 큐 파일은 안 건드린다
-    t/[tenant]/         테넌트 스코프. layout.tsx가 셸(헤더·내비·전환기)
-    t/[tenant]/(board)/ 보드(`/t/<tenant>`). 라우트 그룹이라 URL은 그대로다.
+    not-found.tsx       404. `p/[project]/layout.tsx`의 notFound()를 받는 경계가 여기다
+    actions.ts          Server Action (프로젝트 등록·이름·순서·해제·재해석). 큐 파일은 안 건드린다
+    p/[project]/         프로젝트 스코프. layout.tsx가 셸(헤더·내비·전환기)
+    p/[project]/(board)/ 보드(`/p/<project>`). 라우트 그룹이라 URL은 그대로다.
                         loading.tsx(테이블 스켈레톤)를 **보드에만** 걸려고 감쌌다 —
-                        `t/[tenant]/loading.tsx`면 워커·페르소나·프로토콜에도 표가 뜬다.
+                        `p/[project]/loading.tsx`면 워커·페르소나·프로토콜에도 표가 뜬다.
                         **이 그룹의 loading.tsx는 notFound() 경로에 영향이 없다**(A/B 실측 —
                         아래 §notFound()와 빈 SSR). 404가 백지면 여기를 의심하지 않는다
                         큐 파일을 건드리는 Server Action은 그 화면 폴더에 둔다
                         (`workers/actions.ts`·`tickets/[hash]/actions.ts`·`tickets/new/actions.ts`·
                         `protocols/actions.ts`).
-                        클라이언트에서 `@/app/t/[tenant]/…/actions`로 그냥 import된다
+                        클라이언트에서 `@/app/p/[project]/…/actions`로 그냥 import된다
     globals.css         Tailwind v4 + shadcn 토큰. 색은 여기서만 정의한다
   lib/
-    tenants.ts          테넌트 레지스트리 읽기·쓰기, 검증, 설정 해석, 목록 요약,
+    projects.ts          프로젝트 레지스트리 읽기·쓰기, 검증, 설정 해석, 목록 요약,
                         페르소나 CRUD (기준 디렉터리가 `resolveConfig().personas`라 여기 있다)
     urls.ts             슬러그·전환 경로·`~` 축약. **순수 함수만** — 클라이언트가 import한다
-    paths.ts            경로 탈출 방어 (신뢰 경계) + 셸 값 해석(`shellValue` — tenants·workers 공용)
-    queue.ts            티켓 읽기 코어 (tickets.py 미러). 테넌트를 인자로 받는다
+    paths.ts            경로 탈출 방어 (신뢰 경계) + 셸 값 해석(`shellValue` — projects·workers 공용)
+    queue.ts            티켓 읽기 코어 (tickets.py 미러). 프로젝트를 인자로 받는다
     workers.ts          워커 파일·락·crontab 판정, TICKET_CONTEXT 블록 파싱·치환
     protocols.ts        프로토콜 파일트리·읽기·쓰기. 기준은 **해석된 TICKET_PROTOCOLS**(루트 아니다)
     engine.ts           엔진 서브프로세스 호출 (워커 `reap`·`unassign` · `tickets.py find`)
@@ -38,8 +38,8 @@ gui/
     *.test.ts           node --test
   components/           손으로 만드는 컴포넌트 (DESIGN.md §5 커스텀)
     status-badge.tsx    상태 표현의 유일한 출처 (티켓 5 · 워커 4 · 연결 2) + deps 배지
-    tenant-switcher.tsx 전환기 · 내비 · 다시 확인 (셸의 클라이언트 조각)
-    tenants-ui.tsx      등록 폼 · 해석 결과 표 · 행 액션 (`/`의 클라이언트 조각)
+    project-switcher.tsx 전환기 · 내비 · 다시 확인 (셸의 클라이언트 조각)
+    projects-ui.tsx      등록 폼 · 해석 결과 표 · 행 액션 (`/`의 클라이언트 조각)
     ticket-ui.tsx       편집 폼 · 할당 해제 · 삭제 · 발행 폼 (티켓 화면들의 클라이언트 조각)
     personas-ui.tsx     생성 · PROFILE.md 편집 · 삭제 (페르소나 화면의 클라이언트 조각)
     protocols-ui.tsx    md 에디터 · 새 파일 · 이름변경 · 삭제 (프로토콜의 클라이언트 조각)
@@ -57,7 +57,7 @@ import을 추가하면 등록 폼과 전환기가 빌드에서 깨진다.
 
 ## `notFound()`와 빈 SSR
 
-`notFound()`가 그리는 화면은 **SSR HTML이 비어 온다.** `/t/<없는id>`의 응답은 27,887바이트인데
+`notFound()`가 그리는 화면은 **SSR HTML이 비어 온다.** `/p/<없는id>`의 응답은 27,887바이트인데
 렌더된 엘리먼트가 0개다(`<main>` 0 · `<h1>` 0, `<body>`는 `<div hidden><!--$--><!--/$--></div>`
 하나). 404 본문은 flight 페이로드 안에만 있고 하이드레이션이 채운다. 응답 끝에 셸이 abort된 흔적
 (`NEXT_HTTP_ERROR_FALLBACK;404`)이 남는다 — Next 16의 동적 라우트 + `notFound()` 동작이다.
@@ -66,15 +66,15 @@ import을 추가하면 등록 폼과 전환기가 빌드에서 깨진다.
 
 | JS 끄고 로드 | 본문 |
 |---|---|
-| `/t/nope` · `/t/<t>/tickets/<없는해시>` | 백지 (HTTP 404는 정상으로 선다) |
+| `/p/nope` · `/p/<t>/tickets/<없는해시>` | 백지 (HTTP 404는 정상으로 선다) |
 | `/nosuchpage` | 정상 — 정적 프리렌더 `/_not-found`(빌드 출력 `○`)라 JS가 필요 없다 |
-| `/t/fs-tickets` 등 | 정상 — 서버 HTML을 낸다 |
+| `/p/fs-tickets` 등 | 정상 — 서버 HTML을 낸다 |
 
 함정 셋:
 
 - **`curl`로 404 화면을 판정하지 않는다.** SSR HTML은 원래 비어 있어서 항상 "깨졌다"로 보인다.
   판정은 **하이드레이션 후 DOM**으로 한다(헤드리스 Chrome + CDP `Runtime.evaluate`).
-- **경계를 옮겨서 못 고친다**(실측). `(board)/loading.tsx`를 빼도, `app/t/[tenant]/not-found.tsx`를
+- **경계를 옮겨서 못 고친다**(실측). `(board)/loading.tsx`를 빼도, `app/p/[project]/not-found.tsx`를
   더해도, `global-not-found`를 켜도 SSR HTML은 여전히 `<main>` 0개다. 스켈레톤 위치는 무관하다.
 - **"라우트 미스는 멀쩡한데 `notFound()`만 백지"는 앱 회귀가 아니라 JS가 안 돌았다는 신호다.**
   서버가 새 빌드로 안 올라갔거나 청크 로드가 실패한 쪽을 먼저 본다. 이 비대칭을 회귀로
