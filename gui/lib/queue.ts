@@ -354,6 +354,39 @@ export function resolveDep(tickets: Ticket[], dep: string, sfx: Suffixes): Ticke
   return byStem(want) ?? (want.startsWith(nfc("re-")) ? null : byStem(nfc("re-") + want));
 }
 
+/** deps 해시 → 배지 종류. **판정이 사는 유일한 곳**이다(§비주얼 §2 deps 배지).
+ *
+ *  보드 카드·보드 테이블·상세 관계 절 세 곳이 이걸 쓴다 — 같은 `kind: answer` dep이 화면마다
+ *  다르게 보이면 안 된다. 우선순위: 큐에 없음 → 미충족 → 답변 → 충족. **`unmet`이 `answer`보다
+ *  앞이다**: 답변 파일은 `.done`으로 태어나므로 정상적으로는 겹치지 않지만, 열린 채로 있는
+ *  `kind: answer` dep은 실제로 후행을 굶기고 있어서 중립 배지로 그리면 막힌 사유를 감춘다.
+ *
+ *  반환 순서도 여기서 정한다(미충족·큐에 없음 → 충족·답변) — 조치가 필요한 것이 줄 왼쪽 끝이다. */
+export type DepKind = "met" | "unmet" | "missing" | "answer";
+
+/** `sort`는 ES2019부터 안정적이라 그룹 안에서는 `deps`에 적힌 순서가 그대로 유지된다. */
+const needsAction = (d: { kind: DepKind }) => d.kind === "unmet" || d.kind === "missing";
+
+export function depBadges(
+  tickets: Ticket[],
+  t: Ticket,
+  sfx: Suffixes,
+): { hash: string; kind: DepKind; hit: Ticket | null }[] {
+  return t.deps
+    .map((hash) => {
+      const hit = resolveDep(tickets, hash, sfx);
+      const kind: DepKind = !hit
+        ? "missing"
+        : t.unmet.includes(hash)
+          ? "unmet"
+          : hit.kind === "answer"
+            ? "answer"
+            : "met";
+      return { hash, kind, hit };
+    })
+    .sort((a, b) => Number(needsAction(b)) - Number(needsAction(a)));
+}
+
 /** 역참조 — **이 티켓을 deps에 가진** 티켓들. 전체 큐를 훑는다(deps는 한 방향으로만 적히므로).
  *  ponytail: 티켓 수 × deps 수 선형 스캔. 큐가 수천 건 되면 stem → 티켓 맵을 한 번 만든다. */
 export function referrers(tickets: Ticket[], target: Ticket, sfx: Suffixes): Ticket[] {

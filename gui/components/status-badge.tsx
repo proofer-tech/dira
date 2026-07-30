@@ -24,6 +24,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import type { DepKind } from "@/lib/queue";
 import { elapsedSuffix } from "@/lib/urls";
 import { cn } from "@/lib/utils";
 
@@ -138,7 +139,8 @@ export function StatusBadge({
 
 /** deps 배지 (§2 deps 배지) — 보드 deps 컬럼과 티켓 상세 관계 절이 **같은 것**을 쓴다.
  *
- *  세 경우다: 충족 / 미충족 / 큐에 없는 해시(오타 → 조용히 굶는 영구 대기라 특히 눈에 띄어야 한다).
+ *  네 경우다: 충족 / 미충족 / 큐에 없는 해시(오타 → 조용히 굶는 영구 대기라 특히 눈에 띄어야
+ *  한다) / 답변 기록. 종류 판정은 여기서 하지 않는다 — `queue.ts depBadges`가 유일한 출처다.
  *  해시는 자르지 않는다(§6 텍스트 잘림: 잘린 해시는 쓸모가 없다). 전문 설명은 `title`로 붙인다 —
  *  `tooltip`은 클라이언트 컴포넌트고 이 배지는 테이블 셀에 수십 개가 깔린다. */
 export function DepBadge({
@@ -148,7 +150,7 @@ export function DepBadge({
   hint,
 }: {
   hash: string;
-  kind: "met" | "unmet" | "missing";
+  kind: DepKind;
   href?: string;
   /** 사유 문구 덮어쓰기. `req:`(출처)는 잠금이 아니라서 "영구 대기"가 거짓말이다 — 그 자리용. */
   hint?: string;
@@ -157,6 +159,13 @@ export function DepBadge({
     met: { icon: Check, tint: undefined, hint: "충족 — 완료된 티켓" },
     unmet: { icon: Lock, tint: BLOCKED, hint: "미충족 — 아직 완료되지 않았다" },
     missing: { icon: CircleQuestionMark, tint: BLOCKED, hint: "큐에 없는 해시 — 영구 대기" },
+    // 충족과 **같은 중립 색이고 아이콘만 다르다** — 답변은 선행 작업이 아니라 기록이다.
+    // `답변 대기` 상태 배지와 같은 아이콘: 왕복 한 쌍(기다리는 쪽 / 달린 쪽)이 아이콘을 공유한다.
+    answer: {
+      icon: MessageSquareReply,
+      tint: undefined,
+      hint: "답변 기록 — 이 요구사항의 답변",
+    },
   }[kind];
   const badge = (
     <Badge variant="outline" className={cn("font-mono", spec.tint)} title={hint ?? spec.hint}>

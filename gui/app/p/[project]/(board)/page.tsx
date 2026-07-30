@@ -33,7 +33,7 @@ import {
   inDefaultList,
   isAwaiting,
   listTickets,
-  resolveDep,
+  depBadges,
   sortTickets,
   statusOf,
   type SortKey,
@@ -360,19 +360,14 @@ export default async function Board({
                                 <span className="text-xs text-muted-foreground">
                                   deps{t.unmet.length > 0 && ` · 미충족 ${t.unmet.length}`}
                                 </span>
-                                {t.deps.map((d) => {
-                                  const hit = resolveDep(tickets, d, config);
-                                  return (
-                                    <DepBadge
-                                      key={d}
-                                      hash={d}
-                                      kind={
-                                        !hit ? "missing" : t.unmet.includes(d) ? "unmet" : "met"
-                                      }
-                                      href={hit ? href(hit) : undefined}
-                                    />
-                                  );
-                                })}
+                                {depBadges(tickets, t, config).map((d) => (
+                                  <DepBadge
+                                    key={d.hash}
+                                    hash={d.hash}
+                                    kind={d.kind}
+                                    href={d.hit ? href(d.hit) : undefined}
+                                  />
+                                ))}
                               </span>
                             )}
                           </Card>
@@ -453,17 +448,14 @@ export default async function Board({
                       ) : (
                         // 배지는 늘어난 행 링크 위에 뜨게 둔다 — 안 그러면 deps 클릭이 행에 먹힌다
                         <span className="relative z-10 flex items-center gap-1">
-                          {t.deps.map((d) => {
-                            const hit = resolveDep(tickets, d, config);
-                            return (
-                              <DepBadge
-                                key={d}
-                                hash={d}
-                                kind={!hit ? "missing" : t.unmet.includes(d) ? "unmet" : "met"}
-                                href={hit ? href(hit) : undefined}
-                              />
-                            );
-                          })}
+                          {depBadges(tickets, t, config).map((d) => (
+                            <DepBadge
+                              key={d.hash}
+                              hash={d.hash}
+                              kind={d.kind}
+                              href={d.hit ? href(d.hit) : undefined}
+                            />
+                          ))}
                         </span>
                       )}
                     </TableCell>

@@ -23,6 +23,7 @@ import { findTicket } from "@/lib/engine";
 import {
   awaitingOf,
   awaitingUnlocked,
+  depBadges,
   derivedFrom,
   isAwaiting,
   listTickets,
@@ -96,8 +97,10 @@ export default async function TicketDetail({
   }
 
   const workers = await listWorkers(project.root);
-  const blocking = ticket.unmet; // 막고 있는 것 = 이 티켓의 미충족 deps
-  const blocked = referrers(tickets, ticket, config); // 이 티켓이 막는 것 = 역참조
+  // 선행 = deps **전부**(미충족으로 걸러내지 않는다). 종류·순서 판정은 보드와 같은 헬퍼가 한다.
+  const deps = depBadges(tickets, ticket, config);
+  const unmetCount = ticket.unmet.length;
+  const blocked = referrers(tickets, ticket, config); // 후행 = 이 티켓을 deps로 둔 것 = 역참조
   // 관계 링크도 **stem**이다 (보드와 같은 규칙 — §식별자)
   const href = (t: Ticket) => `/p/${id}/tickets/${encodeURIComponent(t.stem)}`;
 
@@ -241,43 +244,33 @@ export default async function TicketDetail({
 
       <section className="max-w-3xl space-y-4">
         <h2 className="text-sm font-medium">관계</h2>
+        {/* **선행을 unmet으로 걸러내지 않는다**(§2, `b9775505`) — 걸러면 충족된 선행이 라벨 없이
+            떠서 `막고 있는 것 없음` 바로 밑에 배지가 붙고 한 라벨 안에서 두 문장이 서로를 부정했다.
+            막혀 있는지는 머리의 상태 배지가 말하고, 개별 해시의 상태는 배지 아이콘이 말한다.
+            미충족 건수만 **글자로** 라벨에 붙는다 — 보드 카드와 같은 문구다. */}
         <div className="space-y-2">
-          <p className="text-xs text-muted-foreground">막고 있는 것</p>
-          {blocking.length === 0 ? (
-            <EmptyState text="막고 있는 것 없음" />
+          <p className="text-xs text-muted-foreground">
+            선행 — 이 티켓의 deps{unmetCount > 0 && ` · 미충족 ${unmetCount}`}
+          </p>
+          {deps.length === 0 ? (
+            <EmptyState text="선행 없음" />
           ) : (
             <div className="flex flex-wrap items-center gap-2">
-              {blocking.map((d) => {
-                const hit = resolveDep(tickets, d, config);
-                return (
-                  <DepBadge
-                    key={d}
-                    hash={d}
-                    kind={hit ? "unmet" : "missing"}
-                    href={hit ? href(hit) : undefined}
-                  />
-                );
-              })}
-            </div>
-          )}
-          {/* 충족된 deps도 관계다 — 미충족만 보여주면 선행이 몇 개였는지 알 수 없다 */}
-          {ticket.deps.length > blocking.length && (
-            <div className="flex flex-wrap items-center gap-2">
-              {ticket.deps
-                .filter((d) => !blocking.includes(d))
-                .map((d) => {
-                  const hit = resolveDep(tickets, d, config);
-                  return (
-                    <DepBadge key={d} hash={d} kind="met" href={hit ? href(hit) : undefined} />
-                  );
-                })}
+              {deps.map((d) => (
+                <DepBadge
+                  key={d.hash}
+                  hash={d.hash}
+                  kind={d.kind}
+                  href={d.hit ? href(d.hit) : undefined}
+                />
+              ))}
             </div>
           )}
         </div>
         <div className="space-y-2">
-          <p className="text-xs text-muted-foreground">이 티켓이 막는 것</p>
+          <p className="text-xs text-muted-foreground">후행 — 이 티켓을 deps로 둔 티켓</p>
           {blocked.length === 0 ? (
-            <EmptyState text="이 티켓이 막는 것 없음" />
+            <EmptyState text="후행 없음" />
           ) : (
             <div className="space-y-1">
               {blocked.map((t) => (

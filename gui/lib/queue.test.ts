@@ -19,6 +19,7 @@ import {
   isAwaiting,
   listTickets,
   questionsOf,
+  depBadges,
   referrers,
   reqOf,
   reqTitle,
@@ -268,6 +269,41 @@ test("관계 — stemOf · resolveDep(`re-` 폴백) · 역참조", async () => {
   assert.deepStrictEqual(referrers(tickets, by("dddd4444"), sfx), []); // 아무도 안 막는다
   // deps가 오타면 아무 티켓도 가리키지 않는다(그래서 영구 대기다)
   assert.deepStrictEqual(by("eeee5555").unmet, ["zzzz9999"]);
+});
+
+test("관계 — depBadges 네 종류 판정 + 조치 필요한 것이 왼쪽 (§비주얼 §2)", async () => {
+  const root = newRoot();
+  const sfx: Suffixes = { inProgress: "-진행중", done: "-완료" };
+  await write(root, "a1111111-완료.md", fm({ ticket: "a1111111", title: "답변", kind: "answer" }));
+  await write(root, "b2222222-완료.md", fm({ ticket: "b2222222", title: "선행 완료" }));
+  await write(root, "c3333333.md", fm({ ticket: "c3333333", title: "선행 미완" }));
+  // 답변 파일이 `.done`이 아닌 이상 케이스 — 실제로 후행을 굶기므로 `answer`가 아니라 `unmet`이다
+  await write(root, "d4444444.md", fm({ ticket: "d4444444", title: "열린 답변", kind: "answer" }));
+  await write(
+    root,
+    "r0000001.md",
+    // deps 적힌 순서: 답변 · 충족 · 미충족 · 오타 · 열린 답변
+    fm({
+      ticket: "r0000001",
+      title: "요구사항",
+      kind: "request",
+      deps: "[a1111111, b2222222, c3333333, zzzz9999, d4444444]",
+    }),
+  );
+
+  const tickets = await listTickets(root, sfx);
+  const req = tickets.find((t) => t.hash === "r0000001")!;
+  // 미충족·큐에 없음이 먼저, 그 안에서는 `deps`에 적힌 순서가 유지된다(정렬이 안정적이다)
+  assert.deepStrictEqual(
+    depBadges(tickets, req, sfx).map((d) => [d.hash, d.kind, !!d.hit]),
+    [
+      ["c3333333", "unmet", true],
+      ["zzzz9999", "missing", false],
+      ["d4444444", "unmet", true],
+      ["a1111111", "answer", true],
+      ["b2222222", "met", true],
+    ],
+  );
 });
 
 // ── 식별자 (DESIGN.md §식별자) ───────────────────────────────────────────────
