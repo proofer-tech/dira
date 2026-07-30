@@ -688,6 +688,62 @@ export function firstWorkerCmd(root: string, name = "w1"): string {
   return `mkdir -p ${dir} && cp <fs-tickets 레포>/worker.sh.example ${file} && chmod 755 ${file}`;
 }
 
+// ── 워크트리 (§4-2) ─────────────────────────────────────────────────────────
+
+/** 워커의 작업 디렉터리는 **이름에서 유도한다**(템플릿에서 복사하지 않는다). 두 워커가 같은
+ *  트리를 가리키는 값을 GUI가 쓸 수 없어야 한다 — 실사고: `w4`·`w5`가 `w1`의 트리를 물려받아
+ *  세 세션이 브랜치 `wt/w1`에 커밋했다(§4-2). */
+const worktreePath = (root: string, name: string) => path.join(root, "worktrees", name);
+
+/** `TICKET_CWD` 줄 **하나만** 새 워커 값으로 다시 쓴다. 들여쓰기·`export` 접두는 있던 그대로 —
+ *  바뀌는 건 `=` 오른쪽뿐이다. 줄이 아예 없으면(엔진 기본값 = 루트의 부모를 쓰는 워커) 넣는데,
+ *  위치는 추측하지 않는다: `#!` 다음 줄, 아니면 맨 앞. */
+export function rewriteCwd(text: string, root: string, name: string): string {
+  const val = dq(worktreePath(root, name));
+  // `.match`는 `/g` 정규식의 lastIndex를 남기지 않는다(`.test`와 다르다 — cwdAssign은 공유다).
+  if (text.match(cwdAssign)) {
+    return text.replace(cwdAssign, (m, v: string) => m.slice(0, m.length - v.length) + val);
+  }
+  const lines = text.split("\n");
+  lines.splice(lines[0].startsWith("#!") ? 1 : 0, 0, `TICKET_CWD=${val}`);
+  return lines.join("\n");
+}
+
+/** 워커 파일의 `. "<레포>/tick.sh"` 줄. 엔진 코드 위치는 **워커 파일에만** 적혀 있다. */
+const sourceTick = /^[ \t]*(?:\.|source)[ \t]+(.*tick\.sh["']?)[ \t]*$/m;
+
+/** 워크트리 준비 명령 **2줄 + 검증 1줄**(§4 생성 3항). **GUI는 실행하지 않는다**(§4-2):
+ *  `git worktree add`는 큐가 아니라 엔진 레포에 쓰는 체크아웃이고, 그 레포 경로는 워커 파일에서
+ *  읽은 추측값이라 §경로 방어의 "등록된 root 안"이 안 걸린다. 못 읽으면 자리표시자를 두고
+ *  **사유를 같이** 넘긴다(§6 에러 3요소 — 삼키면 사람이 왜 빈칸인지 모른다).
+ *
+ *  검증 줄은 장식이 아니다: `.fs-tickets`가 이미 있으면 `ln -s`가 실패하는 대신 그 **안쪽에**
+ *  링크를 만든다(실사고 `bf4d8878`) — 세션이 미끼 큐를 보고 자기 티켓을 못 찾는다. */
+export function worktreeCmds(
+  root: string,
+  name: string,
+  templateText: string,
+  templateName: string,
+): { cmds: string[]; reason?: string } {
+  const dir = worktreePath(root, name);
+  const m = sourceTick.exec(templateText);
+  const raw = m?.[1] ?? null;
+  const repo = raw === null ? null : shellPath(raw);
+  const cmds = [
+    `git -C ${repo === null ? "<fs-tickets 레포>" : sq(path.dirname(expandHome(repo)))} worktree add ${sq(dir)} -b wt/${name}`,
+    `ln -s ../.. ${sq(path.join(dir, ".fs-tickets"))}`,
+    `ls -ld ${sq(path.join(dir, ".fs-tickets"))}    # \`l\`로 시작해야 한다`,
+  ];
+  if (repo !== null) return { cmds };
+  return {
+    cmds,
+    reason:
+      raw === null
+        ? `${templateName}에 \`. <레포>/tick.sh\` 줄이 없어 엔진 레포 경로를 읽지 못했습니다.`
+        : `${templateName}의 tick.sh 경로를 셸 없이 해석할 수 없습니다(\`${raw}\`). $HOME 외의 변수·명령 치환은 GUI가 펴지 않습니다.`,
+  };
+}
+
 // ── 생성 · 중단 · 삭제 ──────────────────────────────────────────────────────
 
 /** 이름 검증 + 경로 조립은 **서버에서만** 한다(신뢰 경계). 이름이 규칙을 통과해도 경로를
@@ -703,8 +759,14 @@ async function workerFile(root: string, name: string): Promise<string> {
  *
  *  템플릿이 필요한 이유는 마지막 `. <엔진레포>/tick.sh` 한 줄이다 — 엔진 코드가 어디 있는지는
  *  워커 파일에만 적혀 있고 GUI가 알 방법이 없다. 그래서 **워커 0개인 큐에서는 만들 수 없고**,
- *  화면이 그 사실과 손으로 만드는 법을 알린다. */
-export async function createWorker(root: string, name: string): Promise<{ path: string; template: string }> {
+ *  화면이 그 사실과 손으로 만드는 법을 알린다.
+ *
+ *  복사한 뒤 **`TICKET_CWD` 줄만** 새 이름으로 다시 쓴다(§4-2). 나머지 줄은 손대지 않는다 —
+ *  엔진 경로·게이트·컨텍스트가 템플릿에서 와야 하는 이유는 그대로다. */
+export async function createWorker(
+  root: string,
+  name: string,
+): Promise<{ path: string; template: string; worktree: { cmds: string[]; reason?: string } }> {
   // 템플릿 확인이 먼저다 — workers/가 아예 없는 큐에서 `resolveWithin`의 ENOENT를 먼저 만나면
   // 사용자가 받는 문장이 "경로 없음"이 되어 진짜 이유(템플릿 없음)를 가린다.
   if (!NAME_RE.test(name)) {
@@ -721,9 +783,9 @@ export async function createWorker(root: string, name: string): Promise<{ path: 
   const template = existing[0];
   const text = await readFile(path.join(dir, template), "utf8");
   // O_EXCL. 있는 워커를 덮어쓰면 돌고 있는 cron 줄의 내용이 바뀐다.
-  await writeFile(file, text, { flag: "wx" });
+  await writeFile(file, rewriteCwd(text, root, name), { flag: "wx" });
   await chmod(file, 0o755);
-  return { path: file, template };
+  return { path: file, template, worktree: worktreeCmds(root, name, text, template) };
 }
 
 /** 중단 = **crontab 줄만 뺀다.** 파일도 락도 돌고 있는 세션도 건드리지 않는다 —

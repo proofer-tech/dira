@@ -322,12 +322,75 @@ test("createWorker — 기존 워커를 템플릿으로 755 생성, 덮어쓰기
   const { path: file, template } = await createWorker(root, "w2");
   assert.strictEqual(template, "w1.sh");
   assert.strictEqual(statSync(file).mode & 0o777, 0o755);
-  assert.strictEqual(execFileSync("cat", [file], { encoding: "utf8" }), "#!/bin/bash\nTICKET_CWD=/tmp\n. tick.sh\n");
+  assert.strictEqual(
+    execFileSync("cat", [file], { encoding: "utf8" }),
+    `#!/bin/bash\nTICKET_CWD="${root}/worktrees/w2"\n. tick.sh\n`,
+  );
   // O_EXCL: 돌고 있는 워커를 덮어쓰지 않는다
   await assert.rejects(createWorker(root, "w2"), /EEXIST/);
   await assert.rejects(createWorker(root, "../evil"), /영문·숫자/);
   // 워커 0개면 템플릿이 없다 — 엔진 코드 위치를 GUI가 모른다
   await assert.rejects(createWorker(makeRoot({}), "w1"), /템플릿으로 쓸 워커가 없습니다/);
+});
+
+// ── TICKET_CWD 유도 (§4-2) ──────────────────────────────────────────────────
+
+/** 이 레포의 w5.sh와 같은 모양: `export`도 아니고 게이트·컨텍스트·엔진 줄이 다 들어 있다 */
+const WT_SH = `#!/bin/bash
+# 주석
+TICKET_CWD="$HOME/Projects/fs-tickets-wt/w1"
+
+TICKET_CONTEXT=(
+  "$TICKET_CWD/docs/DESIGN.md|스펙"
+)
+
+. "$HOME/Projects/fs-tickets/.fs-tickets/dispatch-gate.sh"
+
+. "$HOME/Projects/fs-tickets/tick.sh"
+`;
+
+test("createWorker — TICKET_CWD를 템플릿에서 물려받지 않는다 (w4·w5가 w1 트리를 쓴 사고)", async () => {
+  const root = makeRoot({ "w1.sh": WT_SH });
+  const { path: file, worktree } = await createWorker(root, "w4");
+  const text = readFileSync(file, "utf8");
+  assert.match(text, new RegExp(`^TICKET_CWD="${root}/worktrees/w4"$`, "m"));
+  assert.strictEqual(text.includes("fs-tickets-wt/w1"), false); // 템플릿 값이 남아 있지 않다
+  // 워크트리 준비 명령: 레포 경로는 `. …/tick.sh` 줄에서 뽑는다(자리표시자가 남지 않는다)
+  assert.deepStrictEqual(worktree, {
+    cmds: [
+      `git -C '${process.env.HOME}/Projects/fs-tickets' worktree add '${root}/worktrees/w4' -b wt/w4`,
+      `ln -s ../.. '${root}/worktrees/w4/.fs-tickets'`,
+      // 검증 줄 — `ln -s` 함정(bf4d8878)을 사람이 밟았는지 여기서만 보인다
+      "ls -ld '" + root + "/worktrees/w4/.fs-tickets'    # `l`로 시작해야 한다",
+    ],
+  });
+
+  // 줄이 없는 템플릿(엔진 기본값을 쓰던 워커)이면 `#!` 다음 줄에 넣는다
+  const bare = makeRoot({ "w1.sh": "#!/bin/bash\n. tick.sh\n" });
+  const made = await createWorker(bare, "w2");
+  assert.strictEqual(readFileSync(made.path, "utf8"), `#!/bin/bash\nTICKET_CWD="${bare}/worktrees/w2"\n. tick.sh\n`);
+  // 레포 경로를 못 뽑으면 자리표시자 + 사유다(§6: 삼키지 않는다)
+  assert.strictEqual(made.worktree.cmds[0].startsWith("git -C <fs-tickets 레포> "), true);
+  assert.match(made.worktree.reason ?? "", /w1\.sh/);
+
+  // `export TICKET_CWD=`도 같은 줄이다 — 접두는 남기고 값만 바꾼다
+  const exp = makeRoot({ "w1.sh": "#!/bin/bash\nexport TICKET_CWD='/tmp/x'\n. tick.sh\n" });
+  const e2 = await createWorker(exp, "w2");
+  assert.strictEqual(
+    readFileSync(e2.path, "utf8"),
+    `#!/bin/bash\nexport TICKET_CWD="${exp}/worktrees/w2"\n. tick.sh\n`,
+  );
+});
+
+test("createWorker — TICKET_CWD 말고는 한 줄도 안 바뀐다 (게이트·source·컨텍스트가 산다)", async () => {
+  const root = makeRoot({ "w1.sh": WT_SH });
+  const { path: file } = await createWorker(root, "w4");
+  const before = WT_SH.split("\n");
+  const after = readFileSync(file, "utf8").split("\n");
+  assert.strictEqual(after.length, before.length); // 줄이 늘지도 줄지도 않았다
+  const diff = before.map((l, i) => [i, l, after[i]] as const).filter(([, l, r]) => l !== r);
+  assert.strictEqual(diff.length, 1, `바뀐 줄: ${JSON.stringify(diff)}`);
+  assert.strictEqual(diff[0][1].startsWith("TICKET_CWD="), true);
 });
 
 // ── TICKET_CONTEXT 블록 ─────────────────────────────────────────────────────

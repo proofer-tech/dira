@@ -159,6 +159,23 @@ export function CreateWorkerButton({
                 <CopyCommand cmd={created.registerCmd} />
               </div>
             )}
+            {/* 워크트리는 GUI가 만들지 않는다(§4 생성 3항 · §4-2) — 큐가 아니라 엔진 레포에 쓰는
+                체크아웃이고, 반쯤 만들어진 워크트리는 없는 것보다 나쁘다. 트리가 없으면 이 워커는
+                티켓을 물었다 되돌린다(`ERROR cwd 없음`) — 그래서 이 명령이 마지막 화면이다. */}
+            <div className="space-y-2 border-t pt-3">
+              <p className="text-sm font-medium">
+                작업 디렉터리(<span className="font-mono text-xs">TICKET_CWD</span>)는 이 워커 것으로
+                다시 썼습니다. 트리는 아직 없습니다 — 준비 2줄 + 검증 1줄을 셸에서 실행하세요
+              </p>
+              {created.worktree.reason && (
+                <p className="text-sm text-muted-foreground">
+                  {created.worktree.reason} 첫 줄의 레포 경로를 직접 채우세요.
+                </p>
+              )}
+              {created.worktree.cmds.map((cmd) => (
+                <CopyCommand key={cmd} cmd={cmd} />
+              ))}
+            </div>
           </div>
         ) : (
           <div className="space-y-2">

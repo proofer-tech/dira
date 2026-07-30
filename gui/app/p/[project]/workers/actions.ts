@@ -41,6 +41,8 @@ export type WorkerActionResult = {
     cronError?: string;
     registerCmd: string;
     unregisterCmd: string;
+    /** 워크트리 준비 명령 2줄 + 레포 경로를 못 읽은 사유(§4-2 — GUI는 실행하지 않는다) */
+    worktree: { cmds: string[]; reason?: string };
   };
   /** reap 출력 원문 */
   output?: string;
@@ -64,7 +66,7 @@ export async function createWorkerAction(
 ): Promise<WorkerActionResult> {
   try {
     const root = await rootOf(projectId);
-    const { path, template } = await createWorker(root, name.trim());
+    const { path, template, worktree } = await createWorker(root, name.trim());
     // **등록이 실패해도 파일 생성을 되돌리지 않는다** — 만든 것을 지우면 사람이 이름을 다시
     // 정해야 한다. 실패는 `cronError`로 넘기고 화면이 등록 명령어를 그 자리에 보여준다.
     const cronError = await registerCron(path).then(
@@ -82,6 +84,7 @@ export async function createWorkerAction(
         cronError,
         registerCmd: cronRegisterCmd({ path }),
         unregisterCmd: cronUnregisterCmd({ path }),
+        worktree,
       },
     };
   } catch (e) {
