@@ -137,6 +137,12 @@ type Tenant = {
 기본값 + 경고를 쓴다. 워커가 여러 개인데 값이 갈리면 **양쪽을 다 보여주고 경고한다**(엔진은
 디스패치한 워커의 값을 쓰므로 티켓이 어느 워커에 물리느냐로 결과가 달라진다 — 실제 위험이다).
 
+**`TICKET_CWD`는 예외다 — 갈리는 게 정상이므로 경고하지 않는다.** 워커마다 자기 git 워크트리를
+가지는 게 권장 구성이고(워크트리가 하나면 두 세션이 서로를 밟는다), 이 레포의 큐도 w1/w2/w3가
+각자 다른 워크트리를 쓴다. 정상 상태에서 켜져 있는 경고는 사람이 경고를 안 읽게 만든다.
+대신 `cwdByWorker`로 **워커별 작업 디렉터리 목록**을 그냥 보여준다 — 한 워커만 엉뚱한 값이면
+목록에서 눈에 띈다(경고가 하던 일을 목록이 한다). `conflicts`에는 절대 넣지 않는다.
+
 이 레포의 큐가 바로 이 경우다: `TICKET_PERSONAS`가 `$HOME/Projects/fs-tickets/docs/personas`로
 루트 밖을 가리킨다. **첫 테넌트로 등록해서 검증한다.**
 
@@ -193,9 +199,10 @@ type Worker = {
 type TenantConfig = {
   personas: string; protocols: string
   inProgress: string; done: string        // 상태 접미사
-  cwd: string
+  cwd: string                             // 첫 워커 값 (한 경로가 필요한 호출자용)
+  cwdByWorker: Record<string,string>      // 워커별 작업 디렉터리. 갈리는 게 정상이라 목록으로 본다
   assumed: string[]                       // 예: ['personas','done']
-  conflicts: { key: string; byWorker: Record<string,string> }[]  // 워커 간 값이 갈린 것
+  conflicts: { key: string; byWorker: Record<string,string> }[]  // 워커 간 값이 갈린 것. cwd는 제외
 }
 ```
 
@@ -248,6 +255,7 @@ where `h = sha1(<workers 절대경로>/<name>).hex[:8]`. 안의 `pid` 파일을 
   `URL 조각` 입력을 추가로 노출한다(§테넌트 > `id` 슬러그 규칙). 평소 필드는 2개다.
 - 등록 직후 **해석 결과를 보여준다** — 접미사, 페르소나·프로토콜 디렉터리, 워커 개수.
   "기본값 가정" 항목은 그렇게 표시한다. 사용자가 잘못 등록한 걸 여기서 알아채야 한다.
+  `작업 디렉터리` 행은 워커별 값을 **경고 없이** 나열한다(§테넌트별 설정 해석의 `TICKET_CWD` 예외).
 - 이름 변경 · 순서 변경 · **등록 해제**(레지스트리에서만 제거. 큐 파일은 손대지 않는다 — 확인
   다이얼로그에 "이 프로젝트의 티켓은 삭제되지 않습니다"를 명시).
 - 테넌트가 0개일 때: 무엇을 등록해야 하는지 예시 경로와 함께 안내(`~/Projects/myproject/.fs-tickets`).
