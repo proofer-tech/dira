@@ -22,6 +22,7 @@ import {
   type WorkerActionResult,
 } from "@/app/p/[project]/workers/actions";
 import { CopyCommand } from "@/components/copy-command";
+import { SessionStream } from "@/components/session-stream";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -228,6 +229,10 @@ export function WorkerRowActions({ projectId, row }: { projectId: string; row: W
   const [stopped, setStopped] = useState<WorkerActionResult | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<WorkerActionResult | null>(null);
+  const [streaming, setStreaming] = useState(false);
+  // 스트림을 열 수 있는 유일한 조건(§4 · §2-1 Q2=(a)): 지금 돌고 있고, 물고 있는 티켓을 안다.
+  // `running`인데 `holding`이 null이면(owner 역추적 실패) 버튼이 없다 — 빈 스트림을 그리지 않는다.
+  const holding = row.status === "running" ? row.holding : null;
 
   return (
     <div className="flex items-center justify-end gap-1">
@@ -240,6 +245,11 @@ export function WorkerRowActions({ projectId, row }: { projectId: string; row: W
       >
         {pending ? "reap…" : "reap"}
       </Button>
+      {holding && (
+        <Button variant="ghost" size="sm" onClick={() => setStreaming(true)}>
+          스트림
+        </Button>
+      )}
       <Button variant="ghost" size="sm" onClick={() => setStopping(true)}>
         중단
       </Button>
@@ -269,6 +279,26 @@ export function WorkerRowActions({ projectId, row }: { projectId: string; row: W
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* 세션 스트림 — **진입점 하나다**(§4 · §2-1 Q2=(a)). 대상만 `holding`이고 컴포넌트도
+          Server Action(`tailSession`)도 티켓 상세가 쓰는 것 그대로다. 그래서 두 화면이 같은
+          티켓에서 같은 내용을 그린다. 다이얼로그가 닫히면 포털이 언마운트되고 폴링도 같이 끊긴다
+          — 워커 표에 `running` 여러 줄이 있어도 도는 폴링은 열어 둔 하나뿐이다. */}
+      {holding && (
+        <Dialog open={streaming} onOpenChange={setStreaming}>
+          <DialogContent className="sm:max-w-3xl">
+            <DialogHeader>
+              <DialogTitle>세션 스트림 — {row.name}</DialogTitle>
+              <DialogDescription className="font-mono text-xs break-all">
+                {holding}
+              </DialogDescription>
+            </DialogHeader>
+            {/* `live`는 초기값일 뿐이고 매 폴링마다 서버가 티켓 상태로 다시 판정한다 —
+                여는 순간 티켓이 끝났으면 첫 응답에서 폴링이 멈춘다. */}
+            <SessionStream project={projectId} stem={holding} live />
+          </DialogContent>
+        </Dialog>
+      )}
 
       {/* 중단 — 파일은 남기고 crontab 줄만 GUI가 뺀다. 실패했을 때만 복사 명령으로 돌아간다 */}
       <Dialog
