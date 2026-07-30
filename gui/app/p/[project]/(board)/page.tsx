@@ -225,12 +225,16 @@ export default async function Board({
             variant="outline"
             size="sm"
             nativeButton={false}
+            render={<Link href={`/p/${id}/tickets/new`} />}
+          >
+            티켓 발행
+          </Button>
+          <Button
+            size="sm"
+            nativeButton={false}
             render={<Link href={`/p/${id}/tickets/new?mode=req`} />}
           >
             요구 접수
-          </Button>
-          <Button size="sm" nativeButton={false} render={<Link href={`/p/${id}/tickets/new`} />}>
-            티켓 발행
           </Button>
         </div>
       </div>
