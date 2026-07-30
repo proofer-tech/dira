@@ -11,6 +11,8 @@ const LOCAL = mkdtempSync(path.join(tmpdir(), "fst-local-"));
 process.env.TICKET_LOCAL = LOCAL;
 
 const {
+  applyCommonSource,
+  commonSourceLine,
   copyContext,
   createWorker,
   cronRegisterCmd,
@@ -19,8 +21,10 @@ const {
   lockPath,
   listWorkers,
   parseContextBlock,
+  readCommonContext,
   renderContextBlock,
   workerSummary,
+  writeCommonContext,
   writeContext,
 } = await import("./workers.ts");
 
@@ -417,6 +421,116 @@ test("listWorkers — context가 같이 실린다(못 읽는 워커는 사유가
   assert.strictEqual(w1.context.ok, true);
   assert.strictEqual(w1.context.ok && w1.context.items.length, 2);
   assert.strictEqual(w2.context.ok, false);
+});
+
+// ── 공통 컨텍스트 context.sh (§4-1) ────────────────────────────────────────
+
+test("parseContextBlock — 배열 이름을 나누면 공통 파일이 자기 자신을 거부하지 않는다", async () => {
+  const root = makeRoot({});
+  await writeCommonContext(root, [{ path: "$TICKET_CWD/docs/DESIGN.md", desc: "스펙" }]);
+  const text = readFileSync(path.join(root, "context.sh"), "utf8");
+  // 이 파일에는 `TICKET_CONTEXT` 대입이 하나 더 있다(병합 2줄) — 이름을 안 나누면 "2개입니다"다
+  const common = parseContextBlock(text, "TICKET_CONTEXT_COMMON");
+  assert.ok(common.ok);
+  assert.deepStrictEqual(common.items, [{ path: "$TICKET_CWD/docs/DESIGN.md", desc: "스펙" }]);
+  // 기본값은 그대로 TICKET_CONTEXT다 — 병합 블록을 짚으므로 항목으로는 못 읽는다
+  assert.strictEqual(parseContextBlock(text).ok, false);
+  assert.strictEqual(renderContextBlock([], "TICKET_CONTEXT_COMMON"), "TICKET_CONTEXT_COMMON=()");
+});
+
+test("readCommonContext — 파일이 없으면 0개다(오류가 아니다) · 모양이 다르면 사유", async () => {
+  const root = makeRoot({});
+  assert.deepStrictEqual(await readCommonContext(root), { ok: true, items: [] });
+
+  const file = path.join(root, "context.sh");
+  await writeCommonContext(root, [
+    { path: path.join(root, "workers"), desc: "있는 경로" },
+    { path: "/없는/경로.md", desc: "" },
+  ]);
+  const ctx = await readCommonContext(root);
+  assert.ok(ctx.ok);
+  assert.deepStrictEqual(
+    ctx.items.map((i) => [i.desc, i.exists]),
+    [["있는 경로", true], ["", false]],
+  );
+
+  // 사람이 손으로 깨 놓은 파일은 0개라고 우기지 않는다 — 사유를 넘긴다(편집 UI가 안 열린다)
+  writeFileSync(file, "TICKET_CONTEXT_COMMON=(\n  # 임시\n)\n");
+  const bad = await readCommonContext(root);
+  assert.strictEqual(bad.ok, false);
+  assert.match((bad as { reason: string }).reason, /주석이 있습니다/);
+  await assert.rejects(writeCommonContext(root, []), /손으로 편집하세요/);
+});
+
+test("writeCommonContext — 처음엔 고정 문구까지 만들고, 그 뒤엔 블록만 갈린다", async () => {
+  const root = makeRoot({});
+  await writeCommonContext(root, [{ path: "/a.md", desc: "첫 항목" }]);
+  const file = path.join(root, "context.sh");
+  const first = readFileSync(file, "utf8");
+  assert.match(first, /^# 공통 참조 컨텍스트 — 워커 전원이 source한다/);
+  assert.match(first, /\$\{TICKET_CONTEXT_COMMON\[@\]\+"\$\{TICKET_CONTEXT_COMMON\[@\]\}"\}/);
+  assert.strictEqual(statSync(file).mode & 0o777, 0o644); // 실행 파일이 아니다 — 워커가 `.` 한다
+
+  await writeCommonContext(root, [{ path: "/b.md", desc: "둘째" }]);
+  const second = readFileSync(file, "utf8");
+  // 갈린 것은 블록 한 곳뿐이다 — 병합 2줄·주석은 한 글자도 안 바뀐다
+  assert.strictEqual(second, first.replace('"/a.md|첫 항목"', '"/b.md|둘째"'));
+  // 신뢰 경계는 그대로다(§4와 같은 cleanItem)
+  await assert.rejects(writeCommonContext(root, [{ path: "/a$(id)", desc: "" }]), /명령 치환/);
+  assert.strictEqual(readFileSync(file, "utf8"), second); // 거부됐으니 파일은 그대로
+});
+
+test("공통이 워커 항목 **앞에** 붙는가 — 진짜 bash 3.2(set -u)로 돌려 본다", async () => {
+  const root = makeRoot({
+    "w1.sh": '#!/bin/bash\nTICKET_CWD="/x"\nTICKET_CONTEXT=(\n  "own|x"\n)\n\n. "$HOME/tick.sh"\n',
+  });
+  await writeCommonContext(root, [{ path: "$TICKET_CWD/docs/DESIGN.md", desc: "스펙" }]);
+  assert.strictEqual(await applyCommonSource(root, "w1"), true);
+
+  // 워커 파일을 (엔진 호출 줄만 빼고) 그대로 먹인다 — source 줄 위치까지 같이 검증된다
+  const text = readFileSync(path.join(root, "workers", "w1.sh"), "utf8");
+  const body = text
+    .split("\n")
+    .filter((l) => !l.includes("tick.sh"))
+    .join("\n");
+  const out = execFileSync(
+    "/bin/bash",
+    ["-c", `set -u\n${body}\nprintf '%s\\n' "\${#TICKET_CONTEXT[@]}" "\${TICKET_CONTEXT[@]}"`],
+    { encoding: "utf8" },
+  );
+  assert.deepStrictEqual(out.trimEnd().split("\n"), ["2", "/x/docs/DESIGN.md|스펙", "own|x"]);
+
+  // 공통 0개여도 set -u에서 터지지 않는다(빈 배열 전개 = tick.sh 44행 관용구)
+  await writeCommonContext(root, []);
+  const empty = execFileSync(
+    "/bin/bash",
+    ["-c", `set -u\n${body}\nprintf 'count=%s\\n' "\${#TICKET_CONTEXT[@]}"`],
+    { encoding: "utf8" },
+  );
+  assert.strictEqual(empty.trimEnd(), "count=1");
+});
+
+test("applyCommonSource — 삽입 위치는 닫는 `)` 다음 줄, 두 번째는 no-op", async () => {
+  const root = makeRoot({ "w1.sh": CTX_SH, "bad.sh": "#!/bin/bash\n. tick.sh\n" });
+  const file = path.join(root, "workers", "w1.sh");
+  assert.strictEqual((await listWorkers(root)).find((w) => w.name === "w1")!.commonSource, false);
+
+  assert.strictEqual(await applyCommonSource(root, "w1"), true);
+  const text = readFileSync(file, "utf8");
+  // `)` 바로 다음 줄이다 — 위에 들어가면 워커의 `TICKET_CONTEXT=(`가 공통을 덮어쓴다
+  assert.match(text, /\)\n\. .+\/context\.sh"   # 공통 컨텍스트를 최상단에 끼운다\n\n\. "\$HOME/);
+  assert.strictEqual(text.includes(commonSourceLine(root)), true);
+  // 블록과 나머지 줄은 그대로다
+  assert.strictEqual(text.replace(commonSourceLine(root) + "\n", ""), CTX_SH);
+  assert.strictEqual(statSync(file).mode & 0o777, statSync(path.join(root, "workers", "bad.sh")).mode & 0o777);
+
+  assert.strictEqual(await applyCommonSource(root, "w1"), false); // 이미 있다 = no-op
+  assert.strictEqual(readFileSync(file, "utf8"), text);
+  assert.strictEqual((await listWorkers(root)).find((w) => w.name === "w1")!.commonSource, true);
+
+  // 블록이 없으면 어디에 넣을지 추측하지 않는다
+  await assert.rejects(applyCommonSource(root, "bad"), /손으로 편집하세요/);
+  await assert.rejects(applyCommonSource(root, "../evil"), /영문·숫자/);
 });
 
 test("deleteWorker — running은 막는다(락과 세션이 붕 뜬다)", async () => {

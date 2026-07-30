@@ -30,6 +30,8 @@ export type Worker = {
   lastLog: string | null;
   /** TICKET_CONTEXT 항목(경로·설명·존재 여부) 또는 못 읽은 사유 */
   context: WorkerContext;
+  /** 공통 컨텍스트 `source` 줄이 있는가. false면 이 워커는 공통을 못 받는다 (§4-1) */
+  commonSource: boolean;
 };
 
 /** tick.sh 46행. 워커가 덮어쓰지 않으면 실제로 이게 돈다 — "기본값"이라고 얼버무리지 않는다. */
@@ -142,8 +144,13 @@ export type ContextItem = {
 /** 못 읽으면 편집 UI를 열지 않는다 — 사람이 손으로 고쳐야 한다는 사실과 이유를 넘긴다. */
 export type WorkerContext = { ok: true; items: ContextItem[] } | { ok: false; reason: string };
 
-/** 주석 처리된 블록(`# TICKET_CONTEXT=(`)에 걸리지 않게 줄 처음에 앵커한다. */
-const contextOpen = /^[ \t]*(?:export[ \t]+)?TICKET_CONTEXT(\+?)=\(/gm;
+/** 주석 처리된 블록(`# TICKET_CONTEXT=(`)에 걸리지 않게 줄 처음에 앵커한다.
+ *
+ *  배열 이름이 인자인 이유는 공통 컨텍스트 파일이다(§4-1): 그 파일의 파싱 대상은
+ *  `TICKET_CONTEXT_COMMON`이고 같은 파일에 `TICKET_CONTEXT` 대입이 하나 더 있다(병합 2줄) —
+ *  이름을 나누지 않으면 "할당이 2개입니다"로 자기 파일을 거부한다. 문법·거부 규칙은 하나다. */
+const contextOpen = (arr: string) =>
+  new RegExp(`^[ \\t]*(?:export[ \\t]+)?${arr}(\\+?)=\\(`, "gm");
 
 /** 항목 하나 = 큰따옴표 문자열 · 작은따옴표 문자열 · 맨 낱말. **이 셋 말고는 거부한다.**
  *  `\`·백틱은 아예 안 받는다(다시 쓸 때 이스케이프 의미가 갈린다). 맨 낱말에 글로브 문자를
@@ -162,13 +169,13 @@ export type ContextBlock =
 
 /** 워커 파일 텍스트에서 `TICKET_CONTEXT=( … )` 블록을 찾아 항목과 **치환 구간**을 돌려준다.
  *  모양이 조금이라도 예상과 다르면 `ok: false` — 반쪽만 고치는 것보다 거부가 낫다. */
-export function parseContextBlock(text: string): ContextBlock {
-  const opens = [...text.matchAll(contextOpen)];
-  if (opens.length === 0) return { ok: false, reason: "TICKET_CONTEXT=( … ) 블록이 없습니다" };
+export function parseContextBlock(text: string, arr = "TICKET_CONTEXT"): ContextBlock {
+  const opens = [...text.matchAll(contextOpen(arr))];
+  if (opens.length === 0) return { ok: false, reason: `${arr}=( … ) 블록이 없습니다` };
   if (opens.length > 1) {
     return {
       ok: false,
-      reason: `TICKET_CONTEXT 할당이 ${opens.length}개입니다 — 어느 쪽이 실효인지 GUI가 정하지 않습니다`,
+      reason: `${arr} 할당이 ${opens.length}개입니다 — 어느 쪽이 실효인지 GUI가 정하지 않습니다`,
     };
   }
   const m = opens[0];
@@ -206,10 +213,13 @@ export function parseContextBlock(text: string): ContextBlock {
 }
 
 /** 파일에 들어갈 블록 텍스트. 항상 큰따옴표로 쓴다 — `$TICKET_CWD`는 살리고 공백은 죽인다. */
-export function renderContextBlock(items: { path: string; desc: string }[]): string {
-  if (items.length === 0) return "TICKET_CONTEXT=()";
+export function renderContextBlock(
+  items: { path: string; desc: string }[],
+  arr = "TICKET_CONTEXT",
+): string {
+  if (items.length === 0) return `${arr}=()`;
   const lines = items.map((it) => `  "${it.path}${it.desc ? `|${it.desc}` : ""}"`);
-  return `TICKET_CONTEXT=(\n${lines.join("\n")}\n)`;
+  return `${arr}=(\n${lines.join("\n")}\n)`;
 }
 
 /** 사용자 입력이 **셸 스크립트 안의 큰따옴표 문자열**이 된다. 여기가 그 신뢰 경계다:
@@ -270,6 +280,41 @@ async function contextOf(root: string, text: string, cwd: string | null): Promis
   return { ok: true, items: await withExistence(b.items, cwd ?? path.dirname(root)) };
 }
 
+/** **원자적 교체.** cron이 1분마다 워커 파일을 실행하고 bash는 스크립트를 조금씩 읽는다 —
+ *  제자리 덮어쓰기 중에 tick이 걸리면 반쪽 스크립트가 실행된다. rename은 원자적이라
+ *  그 순간의 tick은 이전 파일이나 새 파일 중 하나를 온전히 본다.
+ *  `mode`를 받는 이유: 워커 파일의 755를 잃지 않고, 새로 만드는 파일은 호출자가 정한다. */
+async function atomicWrite(file: string, text: string, mode: number): Promise<void> {
+  const tmp = `${file}.gui-${process.pid}.tmp`;
+  await writeFile(tmp, text, { flag: "wx", mode });
+  await rename(tmp, file).catch(async (e) => {
+    await unlink(tmp).catch(() => {});
+    throw e;
+  });
+}
+
+/** 블록 구간을 새 항목으로 갈고 → 다시 읽어 같은지 확인하고 → 원자적으로 쓴다.
+ *  워커 파일과 공통 파일이 **같은 경로를 쓴다**(§4-1: 자기검증·rename을 복붙하지 않는다). */
+async function writeBlock(
+  file: string,
+  text: string,
+  span: { start: number; end: number },
+  clean: { path: string; desc: string }[],
+  arr: string,
+  mode: number,
+): Promise<string> {
+  const next = text.slice(0, span.start) + renderContextBlock(clean, arr) + text.slice(span.end);
+  // 자기 검증: 쓴 것을 다시 읽어 같은 항목이 나오는지 본다. 이스케이프가 틀리면 여기서 멈춘다.
+  const back = parseContextBlock(next, arr);
+  if (!back.ok || JSON.stringify(back.items) !== JSON.stringify(clean)) {
+    throw new Error(
+      `쓴 블록을 다시 읽었을 때 항목이 달라집니다(${back.ok ? "내용 불일치" : back.reason}). 쓰지 않았습니다.`,
+    );
+  }
+  await atomicWrite(file, next, mode);
+  return next;
+}
+
 /** 블록 전체 치환. 모양이 예상과 다르면 **쓰지 않고** 손으로 고치라고 알린다. */
 export async function writeContext(
   root: string,
@@ -285,24 +330,14 @@ export async function writeContext(
     );
   }
   const clean = items.map(cleanItem);
-  const next = text.slice(0, b.start) + renderContextBlock(clean) + text.slice(b.end);
-
-  // 자기 검증: 쓴 것을 다시 읽어 같은 항목이 나오는지 본다. 이스케이프가 틀리면 여기서 멈춘다.
-  const back = parseContextBlock(next);
-  if (!back.ok || JSON.stringify(back.items) !== JSON.stringify(clean)) {
-    throw new Error(
-      `쓴 블록을 다시 읽었을 때 항목이 달라집니다(${back.ok ? "내용 불일치" : back.reason}). 쓰지 않았습니다.`,
-    );
-  }
-  // **원자적 교체.** cron이 1분마다 이 파일을 실행하고 bash는 스크립트를 조금씩 읽는다 —
-  // 제자리 덮어쓰기 중에 tick이 걸리면 반쪽 스크립트가 실행된다. rename은 원자적이라
-  // 그 순간의 tick은 이전 파일이나 새 파일 중 하나를 온전히 본다.
-  const tmp = `${file}.gui-${process.pid}.tmp`;
-  await writeFile(tmp, next, { flag: "wx", mode: (await stat(file)).mode & 0o777 }); // 755를 잃지 않는다
-  await rename(tmp, file).catch(async (e) => {
-    await unlink(tmp).catch(() => {});
-    throw e;
-  });
+  const next = await writeBlock(
+    file,
+    text,
+    b,
+    clean,
+    "TICKET_CONTEXT",
+    (await stat(file)).mode & 0o777,
+  );
   const { cwd } = parseWorkerFile(next);
   return { ok: true, items: await withExistence(clean, cwd ?? path.dirname(root)) };
 }
@@ -317,6 +352,122 @@ export async function copyContext(root: string, from: string, to: string): Promi
     throw new Error(`${from}.sh의 TICKET_CONTEXT 블록을 읽을 수 없습니다: ${b.reason}`);
   }
   return writeContext(root, to, b.items);
+}
+
+// ── 공통 컨텍스트 `<루트>/context.sh` (DESIGN.md §4-1) ──────────────────────
+//
+// 워커 5개가 같은 3항목을 각자 복사해 들고 있던 것을 사본 하나로 만든다. 엔진은 무수정이다 —
+// 셸 파일 하나 + 워커 파일의 `source` 한 줄이고, 새 엔진 변수도 새 프로토콜도 없다.
+
+const COMMON_FILE = "context.sh";
+/** 엔진 변수가 아니다. 이 파일 안에서만 쓴다 — 그래서 `TICKET_CONTEXT`와 이름이 갈려야 한다. */
+const COMMON_ARR = "TICKET_CONTEXT_COMMON";
+
+/** §4-1의 고정 문구. 처음 쓸 때만 들어가고 그 뒤로는 위 블록만 치환된다.
+ *  병합 2줄이 **공통을 워커 자기 항목 앞에** 놓는다(`${arr[@]+"…"}` = set -u에서 미정의 배열을
+ *  안전하게 전개하는 tick.sh 44·147행의 관용구. bash 3.2에서 빈 배열도 통한다 — 테스트가 확인). */
+const COMMON_TEMPLATE = `# 공통 참조 컨텍스트 — 워커 전원이 source한다. GUI 워커 화면(§4-1)이 위 블록을 치환한다.
+# ${COMMON_ARR}은 엔진 변수가 아니다(이 파일 안에서만 쓴다).
+${COMMON_ARR}=()
+# 공통을 워커 자기 항목 **앞에** 끼운다. \${arr[@]+"…"}는 set -u에서 미정의 배열을 안전하게
+# 전개하는 관용구다(bash 3.2 포함 — tick.sh 44·147행과 같은 idiom).
+TICKET_CONTEXT=(
+  \${${COMMON_ARR}[@]+"\${${COMMON_ARR}[@]}"}
+  \${TICKET_CONTEXT[@]+"\${TICKET_CONTEXT[@]}"}
+)
+`;
+
+/** 워커 파일이 공통 파일을 `.` 하는 한 줄 (§4-1). 블록 **아래**에 들어간다 —
+ *  위에 두면 워커의 `TICKET_CONTEXT=(`가 공통을 덮어쓴다(`=`는 대입이다). */
+export function commonSourceLine(root: string): string {
+  return `. ${dq(path.join(root, COMMON_FILE))}   # 공통 컨텍스트를 최상단에 끼운다`;
+}
+
+/** ponytail: `context.sh`를 `.` 하는 줄이면 무엇이든 있는 것으로 본다(경로 비교를 안 한다).
+ *  다른 큐의 `context.sh`를 가리키는 줄까지 통과시키는 것이 천장이다 — 그런 워커가 생기면
+ *  경로까지 비교한다(그때는 NFC 정규화와 `$HOME` 전개가 같이 필요하다). */
+const commonSourceRe = /^[ \t]*(?:\.|source)[ \t]+[^\n]*context\.sh/m;
+
+/** `<루트>/context.sh`의 공통 항목. **파일이 없으면 0개다 — 오류가 아니다**(§4-1). */
+export async function readCommonContext(root: string): Promise<WorkerContext> {
+  const file = path.join(root, COMMON_FILE);
+  let text: string | null = null;
+  try {
+    text = await readFile(file, "utf8");
+  } catch (e) {
+    const err = e as NodeJS.ErrnoException;
+    // 없음 = 공통 0개(빈 상태 카드). 권한·EISDIR은 사유를 넘긴다 — 0개라고 우기지 않는다.
+    if (err.code !== "ENOENT") {
+      return { ok: false, reason: `${COMMON_FILE}를 읽을 수 없습니다: ${err.message}` };
+    }
+  }
+  if (text === null) return { ok: true, items: [] };
+  const b = parseContextBlock(text, COMMON_ARR);
+  if (!b.ok) return b;
+  // ponytail: 존재 확인의 기준 cwd는 tick.sh 39행의 기본값(루트의 부모)이다. 공통 항목의
+  // `$TICKET_CWD`는 워커마다 갈리므로 카드 하나로는 한 값밖에 못 보여준다 — 워커별로 판정이
+  // 필요해지면 cwd를 인자로 받는다(§4-1 UI는 `공통` 배지를 워커 목록 최상단에 읽기 전용으로 그린다).
+  return { ok: true, items: await withExistence(b.items, path.dirname(root)) };
+}
+
+/** 공통 항목 치환. 파일이 없으면 §4-1 고정 문구(주석 + 병합 2줄)까지 새로 만든다.
+ *  자기검증·원자적 rename은 `writeContext`와 같은 `writeBlock`을 쓴다. */
+export async function writeCommonContext(
+  root: string,
+  items: { path: string; desc: string }[],
+): Promise<WorkerContext> {
+  const file = path.join(root, COMMON_FILE);
+  let text: string | null = null;
+  try {
+    text = await readFile(file, "utf8");
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
+  }
+  // 있는 파일은 블록만 갈린다 — 병합 2줄은 처음 쓸 때 넣은 뒤 다시 만지지 않는 고정 문구다.
+  const base = text ?? COMMON_TEMPLATE;
+  const b = parseContextBlock(base, COMMON_ARR);
+  if (!b.ok) {
+    throw new Error(
+      `${COMMON_FILE}의 ${COMMON_ARR} 블록을 GUI가 안전하게 고칠 수 없습니다: ${b.reason}. 파일을 손으로 편집하세요.`,
+    );
+  }
+  const clean = items.map(cleanItem);
+  // 실행 파일이 아니다(워커가 `.` 한다). 있던 파일의 mode는 사람이 정한 것이니 잃지 않는다.
+  const mode = text === null ? 0o644 : (await stat(file)).mode & 0o777;
+  await writeBlock(file, base, b, clean, COMMON_ARR, mode);
+  return { ok: true, items: await withExistence(clean, path.dirname(root)) };
+}
+
+/** `source` 줄을 워커 파일에 넣는다. 삽입 위치는 추측하지 않는다 —
+ *  `parseContextBlock`이 주는 `end`(닫는 `)`) **바로 다음 줄**이다.
+ *  이미 있으면 `false`(no-op), 넣었으면 `true`. */
+export async function applyCommonSource(root: string, name: string): Promise<boolean> {
+  const file = await workerFile(root, name);
+  const text = await readFile(file, "utf8");
+  if (commonSourceRe.test(text)) return false;
+  const b = parseContextBlock(text);
+  if (!b.ok) {
+    throw new Error(
+      `${name}.sh에 source 줄을 넣을 자리를 GUI가 짚을 수 없습니다: ${b.reason}. 파일을 손으로 편집하세요.`,
+    );
+  }
+  const rest = text.slice(b.end);
+  const next =
+    text.slice(0, b.end) +
+    "\n" +
+    commonSourceLine(root) +
+    (rest.startsWith("\n") ? rest : "\n" + rest);
+  // 자기 검증: 줄을 넣었는데 블록 항목이 달라지면 엉뚱한 라인을 밟은 것이다.
+  const back = parseContextBlock(next);
+  if (
+    !back.ok ||
+    JSON.stringify(back.items) !== JSON.stringify(b.items) ||
+    !commonSourceRe.test(next)
+  ) {
+    throw new Error("줄을 넣은 뒤 파일이 예상과 달라집니다. 쓰지 않았습니다.");
+  }
+  await atomicWrite(file, next, (await stat(file)).mode & 0o777); // 755를 잃지 않는다
+  return true;
 }
 
 /** runner.log는 워커 전체가 한 파일에 섞여 쌓인다: `2026-07-30 13:19:01 [w3] SKIP …`.
@@ -399,6 +550,8 @@ export async function listWorkers(root: string, tickets: Ticket[] = []): Promise
       engine: parsed.engine ?? DEFAULT_ENGINE,
       lastLog: logs[eff] ?? null,
       context: await contextOf(root, text, parsed.cwd),
+      // 이 줄이 없는 워커는 공통을 못 받는다 — 화면이 경고 + `공통 적용`을 띄운다(§4-1).
+      commonSource: commonSourceRe.test(text),
     });
   }
   return out;
