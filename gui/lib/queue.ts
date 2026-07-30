@@ -11,7 +11,13 @@ import type { TenantConfig } from "./tenants.ts";
 export type TicketState = "open" | "wip" | "done";
 
 export type Ticket = {
-  hash: string; // frontmatter ticket: || 파일명 stem
+  hash: string; // frontmatter ticket: || 파일명 stem. **표시값이다** (DESIGN.md §식별자)
+  stem: string; // 파일명 − 상태 접미사 − `.md` (NFC). **식별자다** — 링크·URL·엔진 인자가 이것
+  // 표시값(`hash`)으로 엔진이 **이 파일을** 찾는가(find_any). false면 사람이 화면의 해시를
+  // `deps:`에 옮겨 적으면 선행이 `.done`이 돼도 영구 대기다 — 상세가 경고를 띄우는 근거.
+  // 문자열 비교(`hash !== stem`)로 판정하지 않는다: `ticket:` 없는 `.wip`(표시값 `<이름>.wip`)과
+  // `re-<해시>` 폴백은 둘이 갈려도 엔진이 정상적으로 찾는다.
+  hashResolves: boolean;
   path: string; // 절대경로 (파일시스템 원본 표기 — NFD일 수 있다)
   state: TicketState;
   title: string;
@@ -133,8 +139,12 @@ export async function listTickets(root: string, config: Suffixes): Promise<Ticke
     const base = nfc(path.basename(p));
     const deps = depsOf(lines, end);
     const persona = unquote(fm.persona ?? "");
+    // 접미사 판정은 여기서 한 번만 한다 — 호출부마다 basename을 쪼개면 판정이 갈린다(§식별자).
+    const hash = unquote(fm.ticket ?? "") || base.slice(0, -3);
     out.push({
-      hash: unquote(fm.ticket ?? "") || base.slice(0, -3),
+      hash,
+      stem: stemOf(p, config),
+      hashResolves: findAny(files, hash, config) === p,
       path: p,
       state: stateOf(path.basename(p), config),
       title: unquote(fm.title ?? ""),

@@ -109,7 +109,8 @@ export default async function Board({
   const kinds = [...new Set(tickets.map((t) => t.kind).filter(Boolean))].sort();
   const personas = (await listPersonas(config.personas, tickets)).map((p) => p.name);
 
-  const href = (t: Ticket) => `/t/${id}/tickets/${encodeURIComponent(t.hash)}`;
+  // 링크는 **stem**이다 — 엔진이 찾는 이름이고, 상태가 바뀌어도(접미사) URL이 안 변한다(§식별자).
+  const href = (t: Ticket) => `/t/${id}/tickets/${encodeURIComponent(t.stem)}`;
   const qs = (next: URLSearchParams) => (next.toString() ? `?${next}` : `/t/${id}`);
 
   /** 헤더 클릭 3단계: 오름차순 → 내림차순 → 큐 순서로 복귀. 정렬을 끌 방법이 없으면

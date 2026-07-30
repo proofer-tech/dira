@@ -261,6 +261,60 @@ test("관계 — stemOf · resolveDep(`re-` 폴백) · 역참조", async () => {
   assert.deepStrictEqual(by("eeee5555").unmet, ["zzzz9999"]);
 });
 
+// ── 식별자 (DESIGN.md §식별자) ───────────────────────────────────────────────
+
+test("식별자 — stem 파생 · 경고 조건은 엔진 find와 판정이 같다", async () => {
+  const root = newRoot();
+  // 한글 접미사 테넌트로 돌린다: stem이 접미사를 하드코딩하면 여기서 깨진다.
+  const sfx: Suffixes = { inProgress: "-진행중", done: "-완료" };
+  // ① `ticket:`이 파일명과 어긋났다 — 표시값으로는 엔진이 못 찾는다(경고 대상)
+  await write(root, "abc12345.md", fm({ ticket: "zzz99999", title: "어긋난 표시값" }));
+  // ② 접미사 있는 정상 티켓 — stem은 접미사를 뗀 것
+  await write(root, "def67890-완료.md", fm({ ticket: "def67890", title: "정상 완료" }));
+  // ③ `ticket:` 없는 진행중 — 표시값이 `<이름>-진행중`이지만 엔진은 정상적으로 찾는다
+  await write(root, "ghi13579-진행중.md", fm({ title: "표시값에 접미사가 붙는다" }));
+  // ④ `re-<해시>` 폴백 — jkl24680이 큐에 없으니 find_any가 re-jkl24680으로 떨어진다
+  await write(root, "re-jkl24680.md", fm({ ticket: "jkl24680", title: "피드백 티켓" }));
+  // ⑤ ①을 표시값으로 지목한 후행 — 선행이 `.done`이 돼도 안 풀린다(스펙의 영구 대기)
+  await write(root, "dep00001.md", fm({ ticket: "dep00001", title: "후행", deps: "[zzz99999]" }));
+
+  const tickets = await listTickets(root, sfx);
+  const by = (h: string) => tickets.find((t) => t.hash === h)!;
+
+  // stem은 파일명에서 나온다 — `ticket:`을 보지 않고, 접미사를 뗀다
+  assert.strictEqual(by("zzz99999").stem, "abc12345");
+  assert.strictEqual(by("def67890").stem, "def67890");
+  assert.strictEqual(by("ghi13579-진행중").stem, "ghi13579");
+  assert.strictEqual(by("jkl24680").stem, "re-jkl24680");
+
+  // 경고는 ①에만 뜬다. 문자열 비교면 ③(hash≠stem)·④(hash≠stem)에도 떴을 것이다
+  assert.strictEqual(by("zzz99999").hashResolves, false);
+  assert.strictEqual(by("def67890").hashResolves, true);
+  assert.strictEqual(by("ghi13579-진행중").hashResolves, true);
+  assert.strictEqual(by("jkl24680").hashResolves, true);
+
+  // 표시값을 deps에 적으면 선행을 못 찾으므로 영구 대기다 — 경고가 필요한 이유
+  assert.deepStrictEqual(by("dep00001").unmet, ["zzz99999"]);
+
+  // 판정을 눈으로 맞추지 않는다: 엔진 `find`가 같은 파일을 주는지 티켓마다 확인한다.
+  for (const t of tickets) {
+    let hit = "";
+    try {
+      hit = execFileSync("python3", [PY, "find", root, t.hash], {
+        encoding: "utf8",
+        env: { ...process.env, TICKET_INPROGRESS: sfx.inProgress, TICKET_DONE: sfx.done },
+      }).trim();
+    } catch {
+      hit = ""; // rc=1 `티켓을 못 찾음`
+    }
+    assert.strictEqual(
+      t.hashResolves,
+      hit.normalize("NFC") === t.path.normalize("NFC"),
+      `${t.hash}: 엔진 find=${hit || "(못 찾음)"} / hashResolves=${t.hashResolves}`,
+    );
+  }
+});
+
 // ── 쓰기 ────────────────────────────────────────────────────────────────────
 
 test("writeTicket — 남의 frontmatter 키는 그대로, 파싱은 엔진과 계속 같다", async () => {

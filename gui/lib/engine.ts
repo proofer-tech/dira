@@ -45,6 +45,10 @@ export type UnassignRun = Run & { worker: string | null };
 
 /** `workers/<w>.sh unassign <해시>` — 할당 해제(session_id 비우기 + 진행중 접미사 떼기).
  *
+ *  넘기는 값은 **파일명 stem**이어야 한다: 이 명령은 `tickets.py find`로 떨어지고 그건 파일명만
+ *  본다(§식별자). 표시값(`Ticket.hash`)을 넘기면 `ticket:`이 파일명과 갈린 티켓에서 `티켓을 못
+ *  찾음`으로 실패한다 — 호출자가 `findTicket`이 준 경로에서 stem을 뽑아 넘긴다.
+ *
  *  워커 이름을 **인자로 받지 않는다**: 디스크 목록의 첫 워커를 쓴다. `unassign`은 큐 전체를 보므로
  *  같은 루트의 어느 워커로 불러도 같고(README §워커 레퍼런스), 그러면 사용자 입력이 경로가 되는
  *  지점이 하나 줄어든다. 워커가 0개면 부를 스크립트가 없다 — 호출자가 액션을 비활성화한다. */

@@ -9,21 +9,31 @@
  *  `tickets.py find`로 새로 얻는다 — 화면을 그린 뒤 파일이 잡혔을(claim) 수도 있다.
  *  상태 재확인이 `.wip` 편집을 막는 유일한 장치다(렌더 시점 판정은 이미 낡았다).
  *
- *  여기 오는 `hash`는 **푼 값**이다(페이지가 `decodeHash`로 한 번 푼다). 그래서 조회는 그대로
- *  하고 `revalidatePath`만 다시 인코딩한다 — 그건 URL이라 라우트 표기와 같아야 한다. */
+ *  여기 오는 `hash`는 **푼 값**이다(페이지가 `decodeHash`로 한 번 푼다). 조회에만 쓴다 —
+ *  엔진 인자와 `revalidatePath`는 찾아낸 파일의 `stem`이고(§식별자), URL이라 다시 인코딩한다. */
 import { readFile, unlink } from "node:fs/promises";
 import path from "node:path";
 import { revalidatePath } from "next/cache";
 import { findTicket, unassign, type UnassignRun } from "@/lib/engine";
 import { NAME_RE } from "@/lib/paths";
-import { readFm, stateOf, writeTicket, type TicketState } from "@/lib/queue";
+import { readFm, stateOf, stemOf, writeTicket, type TicketState } from "@/lib/queue";
 import { getTenant, resolveConfig } from "@/lib/tenants";
 
 export type SaveState = { ok?: boolean; error?: string };
 
-type Target = { root: string; path: string; state: TicketState; assigned: boolean };
+type Target = {
+  root: string;
+  path: string;
+  stem: string;
+  state: TicketState;
+  assigned: boolean;
+};
 
-/** 테넌트·해시 → 지금 이 순간의 파일. 못 찾으면 문장으로 던진다(액션이 결과로 바꾼다). */
+/** 테넌트·해시 → 지금 이 순간의 파일. 못 찾으면 문장으로 던진다(액션이 결과로 바꾼다).
+ *
+ *  `stem`은 **찾아낸 파일에서 뽑는다** — 엔진 왕복(`unassign`)과 `revalidatePath`가 쓰는 값이다.
+ *  URL 문자열을 그대로 넘기면 `findTicket` 폴백으로 들어온 표시값에서 화면은 뜨는데 엔진 호출만
+ *  `티켓을 못 찾음`으로 실패한다(DESIGN.md §식별자). */
 async function target(tenantId: string, hash: string): Promise<Target> {
   const tenant = await getTenant(tenantId);
   if (!tenant) throw new Error(`등록되지 않은 테넌트입니다: ${tenantId}`);
@@ -34,6 +44,7 @@ async function target(tenantId: string, hash: string): Promise<Target> {
   return {
     root: tenant.root,
     path: p,
+    stem: stemOf(p, config),
     state: stateOf(path.basename(p), config),
     assigned: end >= 0 && !!(fm.session_id ?? "").trim().replace(/^["']+|["']+$/g, ""),
   };
@@ -74,7 +85,7 @@ export async function saveTicket(_prev: SaveState, form: FormData): Promise<Save
     if (body && !body.endsWith("\n")) body += "\n";
 
     await writeTicket(t.path, { title, kind, persona }, body);
-    revalidatePath(`/t/${tenantId}/tickets/${encodeURIComponent(hash)}`);
+    revalidatePath(`/t/${tenantId}/tickets/${encodeURIComponent(t.stem)}`);
     revalidatePath(`/t/${tenantId}`); // 보드의 title·kind·persona 컬럼
     return { ok: true };
   } catch (e) {
@@ -90,8 +101,9 @@ export async function unassignTicket(tenantId: string, hash: string): Promise<Un
     if (!t.assigned) {
       return { ok: false, output: "할당된 티켓이 아닙니다(session_id가 비어 있습니다).", worker: null };
     }
-    const r = await unassign(t.root, hash);
-    revalidatePath(`/t/${tenantId}/tickets/${encodeURIComponent(hash)}`);
+    // URL 문자열이 아니라 **찾아낸 파일의 stem**을 넘긴다 — 엔진 `find`는 파일명만 본다.
+    const r = await unassign(t.root, t.stem);
+    revalidatePath(`/t/${tenantId}/tickets/${encodeURIComponent(t.stem)}`);
     revalidatePath(`/t/${tenantId}`);
     return r;
   } catch (e) {

@@ -113,6 +113,12 @@ catch가 무조건 그 경로라 파일 배치로는 못 고친다(위 둘째 �
 필터·검색·뷰 전환은 URL `searchParams`가 담는다(공유·새로고침 공짜). 서버 데이터는
 Server Component가 읽고, 갱신은 Server Action → `revalidatePath`다.
 
+**링크·URL·엔진 인자는 `Ticket.stem`이다.** `Ticket.hash`는 **화면 표시값**이다
+(`fm.ticket || 파일명`). 엔진 조회(`tickets.py find` → `find_any`)는 파일명만 보므로 표시값을
+URL·엔진에 실으면 `ticket:`이 파일명과 갈린 티켓에서 상세가 404가 되거나 `unassign`만
+`티켓을 못 찾음`으로 실패한다. `stem`은 `listTickets`가 한 번 만든다 — 호출부에서 basename을
+쪼개지 않는다. 규칙은 DESIGN.md §데이터 모델 > 식별자다.
+
 **신뢰 경계는 게으르지 않는다.** 사용자 입력이 파일 경로가 되는 지점(티켓 해시·워커 이름·
 페르소나 이름·프로토콜 경로)은 **서버에서** 검증한다. 클라이언트 검증은 검증이 아니다.
 규칙은 DESIGN.md §루트 확정 + 경로 방어에 있다. 경로를 문자열로 조립하지 말고

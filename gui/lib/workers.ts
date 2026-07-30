@@ -336,7 +336,11 @@ async function lastLogByWorker(workersDir: string): Promise<Record<string, strin
 }
 
 /** 워커가 물고 있는 티켓. tick.sh 207행이 `owner`에 `<페르소나> / <TICKET_NAME>-<sid[:8]>`를
- *  쓰므로 거기서 워커 이름을 되짚는다. `.wip` 티켓만 본다 — 끝난 티켓의 owner는 기록이다. */
+ *  쓰므로 거기서 워커 이름을 되짚는다. `.wip` 티켓만 본다 — 끝난 티켓의 owner는 기록이다.
+ *
+ *  **stem이다** (표시값 `hash`가 아니다): 이 값은 워커 화면이 티켓 상세로 거는 링크가 된다
+ *  (DESIGN.md §식별자). 물고 있는 티켓은 항상 `.wip`이라 표시값에 접미사가 붙어 있어
+ *  (`<이름>.wip`) 그대로 보여주면 파일 이름도 아니고 URL도 아닌 값이 화면에 남는다. */
 function holdingOf(tickets: Ticket[], effName: string): string | null {
   for (const t of tickets) {
     if (t.state !== "wip") continue;
@@ -345,7 +349,7 @@ function holdingOf(tickets: Ticket[], effName: string): string | null {
     const tail = i < 0 ? owner : owner.slice(i + 3);
     // `<이름>-<8자>`. 이름에 `-`가 들어가도 길이로 갈린다(정규식을 짓지 않는 이유 = 이름이
     // 파일시스템에서 오므로 메타문자가 섞일 수 있다).
-    if (tail.length === effName.length + 9 && tail.startsWith(effName + "-")) return t.hash;
+    if (tail.length === effName.length + 9 && tail.startsWith(effName + "-")) return t.stem;
   }
   return null;
 }

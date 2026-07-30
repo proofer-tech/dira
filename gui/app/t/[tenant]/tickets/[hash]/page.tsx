@@ -68,7 +68,8 @@ export default async function TicketDetail({
   const workers = await listWorkers(tenant.root);
   const blocking = ticket.unmet; // 막고 있는 것 = 이 티켓의 미충족 deps
   const blocked = referrers(tickets, ticket, config); // 이 티켓이 막는 것 = 역참조
-  const href = (t: Ticket) => `/t/${id}/tickets/${encodeURIComponent(t.hash)}`;
+  // 관계 링크도 **stem**이다 (보드와 같은 규칙 — §식별자)
+  const href = (t: Ticket) => `/t/${id}/tickets/${encodeURIComponent(t.stem)}`;
 
   return (
     <div className="space-y-6">
@@ -87,6 +88,30 @@ export default async function TicketDetail({
           />
         </div>
       </div>
+
+      {/* 표시값으로는 엔진이 이 티켓을 못 찾는다 — 그 사실을 아는 유일한 자리가 여기다.
+          화면의 해시를 사람이 `deps:`에 옮겨 적으면 선행이 `.done`이 돼도 영구 대기다(§식별자).
+          판정은 `listTickets`가 엔진과 같은 조회(`find_any`)로 한 것이다 — 문자열 비교가 아니다. */}
+      {!ticket.hashResolves && (
+        <Alert className="max-w-3xl">
+          <TriangleAlert aria-hidden className="text-status-stale" />
+          <AlertTitle>
+            표시값 <span className="font-mono">{ticket.hash}</span>로는 엔진이 이 티켓을 찾지 못합니다
+          </AlertTitle>
+          <AlertDescription className="grid gap-2">
+            <span>
+              frontmatter <span className="font-mono">ticket:</span>이 파일명과 다릅니다. 엔진은
+              파일명으로만 찾으므로 <span className="font-mono">deps:</span>에는{" "}
+              <b className="font-mono">{ticket.stem}</b>을 적어야 합니다 — 표시값을 적으면 이 티켓이
+              <span className="font-mono"> .done</span>이 돼도 후행이 영구 대기입니다.
+            </span>
+            <span>
+              고치려면 <span className="font-mono">ticket:</span>을{" "}
+              <span className="font-mono">{ticket.stem}</span>으로 맞추거나 파일 이름을 바꾸세요.
+            </span>
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* `.wip`은 지금 세션이 그 파일로 일하고 있다 — 잠금 사유를 그 자리에 적는다(제약 5) */}
       {ticket.state === "wip" && (
