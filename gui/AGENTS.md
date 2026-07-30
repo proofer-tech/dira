@@ -17,8 +17,9 @@ gui/
     t/[tenant]/         테넌트 스코프. layout.tsx가 셸(헤더·내비·전환기)
     t/[tenant]/(board)/ 보드(`/t/<tenant>`). 라우트 그룹이라 URL은 그대로다.
                         loading.tsx(테이블 스켈레톤)를 **보드에만** 걸려고 감쌌다 —
-                        `t/[tenant]/loading.tsx`면 워커·페르소나·프로토콜에도 표가 뜨고,
-                        경계가 레이아웃 위로 올라가 notFound()가 404를 못 세운다
+                        `t/[tenant]/loading.tsx`면 워커·페르소나·프로토콜에도 표가 뜬다.
+                        **이 그룹의 loading.tsx는 notFound() 경로에 영향이 없다**(A/B 실측 —
+                        아래 §notFound()와 빈 SSR). 404가 백지면 여기를 의심하지 않는다
                         큐 파일을 건드리는 Server Action은 그 화면 폴더에 둔다
                         (`workers/actions.ts`·`tickets/[hash]/actions.ts`·`tickets/new/actions.ts`·
                         `protocols/actions.ts`).
@@ -53,6 +54,31 @@ gui/
 **`node:*`를 import하는 모듈은 클라이언트 컴포넌트에서 import하지 못한다.** 그래서 슬러그·전환
 경로처럼 **양쪽이 같은 규칙을 써야 하는 순수 함수는 `lib/urls.ts`에** 둔다. 여기에 `node:*`
 import을 추가하면 등록 폼과 전환기가 빌드에서 깨진다.
+
+## `notFound()`와 빈 SSR
+
+`notFound()`가 그리는 화면은 **SSR HTML이 비어 온다.** `/t/<없는id>`의 응답은 27,887바이트인데
+렌더된 엘리먼트가 0개다(`<main>` 0 · `<h1>` 0, `<body>`는 `<div hidden><!--$--><!--/$--></div>`
+하나). 404 본문은 flight 페이로드 안에만 있고 하이드레이션이 채운다. 응답 끝에 셸이 abort된 흔적
+(`NEXT_HTTP_ERROR_FALLBACK;404`)이 남는다 — Next 16의 동적 라우트 + `notFound()` 동작이다.
+
+**나머지 화면은 전부 서버 렌더된다.** 그래서 JS가 안 돌면 404 화면만 백지다(실측):
+
+| JS 끄고 로드 | 본문 |
+|---|---|
+| `/t/nope` · `/t/<t>/tickets/<없는해시>` | 백지 (HTTP 404는 정상으로 선다) |
+| `/nosuchpage` | 정상 — 정적 프리렌더 `/_not-found`(빌드 출력 `○`)라 JS가 필요 없다 |
+| `/t/fs-tickets` 등 | 정상 — 서버 HTML을 낸다 |
+
+함정 셋:
+
+- **`curl`로 404 화면을 판정하지 않는다.** SSR HTML은 원래 비어 있어서 항상 "깨졌다"로 보인다.
+  판정은 **하이드레이션 후 DOM**으로 한다(헤드리스 Chrome + CDP `Runtime.evaluate`).
+- **경계를 옮겨서 못 고친다**(실측). `(board)/loading.tsx`를 빼도, `app/t/[tenant]/not-found.tsx`를
+  더해도 SSR HTML은 여전히 `<main>` 0개다. 스켈레톤 위치는 이 증상과 무관하다.
+- **"라우트 미스는 멀쩡한데 `notFound()`만 백지"는 앱 회귀가 아니라 JS가 안 돌았다는 신호다.**
+  서버가 새 빌드로 안 올라갔거나 청크 로드가 실패한 쪽을 먼저 본다. 이 비대칭을 회귀로
+  오귀속하는 데 세션 하나를 썼다(`1c9de45f`). 개선은 `bb21be0a`가 들고 있다.
 
 ## 명령
 
