@@ -8,23 +8,38 @@ fs-tickets 큐를 보는 로컬 웹 UI. **스펙은 `../docs/DESIGN.md`가 단�
 ```
 gui/
   app/                  App Router. fs 접근은 전부 여기(서버) 아니면 lib/
-    layout.tsx
-    page.tsx            보드
+    layout.tsx          html·폰트·TooltipProvider
+    (list)/page.tsx     테넌트 목록·등록 (`/`). 라우트 그룹이라 URL은 `/`다
+    (list)/loading.tsx  이 그룹만 덮는다 — app/ 최상단에 두면 모든 라우트가 즉시 스트리밍돼
+                        레이아웃의 notFound()가 404 상태를 못 세운다(실측)
+    not-found.tsx       404. `t/[tenant]/layout.tsx`의 notFound()를 받는 경계가 여기다
+    actions.ts          Server Action (테넌트 등록·이름·순서·해제·재해석)
+    t/[tenant]/         테넌트 스코프. layout.tsx가 셸(헤더·내비·전환기)
     globals.css         Tailwind v4 + shadcn 토큰. 색은 여기서만 정의한다
   lib/
-    tenants.ts          테넌트 레지스트리 읽기·쓰기, 검증, 설정 해석
+    tenants.ts          테넌트 레지스트리 읽기·쓰기, 검증, 설정 해석, 목록 요약
+    urls.ts             슬러그·전환 경로·`~` 축약. **순수 함수만** — 클라이언트가 import한다
     paths.ts            경로 탈출 방어 (신뢰 경계)
     queue.ts            티켓 읽기 코어 (tickets.py 미러). 테넌트를 인자로 받는다
     workers.ts          워커 파일·락·crontab 판정
     engine.ts           테넌트의 워커 스크립트 서브프로세스 호출 (unassign · reap)
     utils.ts            shadcn cn() — 건드리지 않는다
     *.test.ts           node --test
+  components/           손으로 만드는 컴포넌트 (DESIGN.md §5 커스텀)
+    status-badge.tsx    상태 표현의 유일한 출처 (티켓 5 · 워커 4 · 연결 2)
+    tenant-switcher.tsx 전환기 · 내비 · 다시 확인 (셸의 클라이언트 조각)
+    tenants-ui.tsx      등록 폼 · 해석 결과 표 · 행 액션 (`/`의 클라이언트 조각)
+    copy-command.tsx    실행 대신 복사시키는 명령 블록
   components/ui/        shadcn CLI 산출물. 손으로 만들지 않는다
   components.json       shadcn 설정
 ```
 
 `lib/`의 파일 목록은 DESIGN.md §아키텍처가 정한 것이다. **새 파일을 늘리지 않는다** —
 300줄짜리 `queue.ts` 하나가 50줄짜리 6개보다 낫다. 위에 없는 파일을 만들려면 티켓에 이유를 적는다.
+
+**`node:*`를 import하는 모듈은 클라이언트 컴포넌트에서 import하지 못한다.** 그래서 슬러그·전환
+경로처럼 **양쪽이 같은 규칙을 써야 하는 순수 함수는 `lib/urls.ts`에** 둔다. 여기에 `node:*`
+import을 추가하면 등록 폼과 전환기가 빌드에서 깨진다.
 
 ## 명령
 
@@ -101,3 +116,4 @@ import { listTickets } from "./queue.ts";   // lib 안에서는 확장자 `.ts`�
 | `shadcn` | CLI 겸 **런타임 CSS**. `globals.css`가 `@import "shadcn/tailwind.css"`로 읽는다 |
 | `@base-ui/react`·`class-variance-authority`·`clsx`·`tailwind-merge`·`tw-animate-css` | shadcn 컴포넌트가 직접 import |
 | `lucide-react` | `components.json`의 `iconLibrary`. shadcn 기본 |
+| `cmdk` | shadcn `command`가 직접 import. DESIGN.md §5가 전환기·deps 멀티셀렉트·필터를 `command`로 정한 것의 대가다(검색·키보드 이동·필터링을 직접 쓰면 수백 줄). `add command`가 끌고 왔다 |

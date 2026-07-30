@@ -6,6 +6,11 @@ import { mkdir, readFile, readdir, realpath, stat, writeFile } from "node:fs/pro
 import { homedir } from "node:os";
 import path from "node:path";
 import { TENANT_ID_RE, expandHome } from "./paths.ts";
+import { listTickets } from "./queue.ts";
+import { listWorkers, type Worker } from "./workers.ts";
+import { slugify } from "./urls.ts";
+
+export { slugify };
 
 export type Tenant = {
   id: string; // URL 조각
@@ -59,52 +64,82 @@ async function writeTenants(tenants: Tenant[]): Promise<void> {
   await writeFile(p, JSON.stringify({ version: 1, tenants }, null, 2) + "\n", "utf8");
 }
 
-/** 이름 → URL 조각 (DESIGN.md §테넌트 > `id` 슬러그 규칙).
- *  한글 이름이면 빈 문자열이 되는 게 정상이다 — 그때는 등록 폼이 id를 직접 받는다. */
-export function slugify(name: string): string {
-  return name
-    .normalize("NFC")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 40)
-    .replace(/^-+|-+$/g, "");
+/** 등록 검증 실패. `code`가 어느 입력의 문제인지를 정하고(등록 폼이 필드 아래 vs 폼 하단
+ *  Alert을 가른다), `message`는 사용자에게 그대로 보이는 문장이다(DESIGN.md §7 문구 표).
+ *  문장을 액션에 다시 쓰지 않는다 — 검증이 여기 있으므로 문구도 여기 있어야 갈리지 않는다. */
+export type TenantErrorCode =
+  | "name" // 이름 비었음
+  | "root" // 경로 사유 (없음 · 디렉터리 아님 · 큐 아님)
+  | "dupRoot" // 같은 큐가 이미 등록됨
+  | "needId" // 슬러그가 비어 URL 조각을 직접 받아야 함
+  | "badId" // 손으로 넣은 URL 조각 형식 오류
+  | "dupId"; // URL 조각 중복
+
+export class TenantError extends Error {
+  code: TenantErrorCode;
+  /** `dupRoot`일 때 그 테넌트 — 폼이 "그 테넌트로 가는 링크"를 붙인다. */
+  dup?: Tenant;
+  // 필드를 생성자 파라미터 프로퍼티로 쓰지 않는다 — Node의 타입 스트리핑이 거부한다(pnpm test).
+  constructor(code: TenantErrorCode, message: string, dup?: Tenant) {
+    super(message);
+    this.name = "TenantError";
+    this.code = code;
+    this.dup = dup;
+  }
 }
 
 /** 등록. 검증 4종을 서버에서 통과해야 저장한다 — 실패하면 무엇이 틀렸는지 문장으로 던진다. */
 export async function addTenant(name: string, rootInput: string, id?: string): Promise<Tenant> {
-  if (!name.trim()) throw new Error("이름이 비었다");
+  if (!name.trim()) throw new TenantError("name", "이름을 입력하세요.");
   const given = expandHome(rootInput.trim());
-  if (!path.isAbsolute(given)) throw new Error(`절대경로여야 한다: ${rootInput}`);
+  if (!path.isAbsolute(given)) {
+    throw new TenantError("root", `절대경로여야 합니다: ${rootInput.trim() || "(비어 있음)"}`);
+  }
 
   let root: string;
   try {
     root = await realpath(given);
   } catch {
-    throw new Error(`디렉터리가 없다: ${given}`);
+    throw new TenantError(
+      "root",
+      `${given}가 없습니다. 절대경로가 맞는지, 마운트가 연결돼 있는지 확인하세요.`,
+    );
   }
-  if (!(await stat(root)).isDirectory()) throw new Error(`디렉터리가 아니다: ${root}`);
+  if (!(await stat(root)).isDirectory()) {
+    throw new TenantError("root", `${root}는 디렉터리가 아닙니다.`);
+  }
   const inside = await readdir(root).catch(() => [] as string[]);
   if (!inside.includes("tickets") && !inside.includes("workers")) {
-    throw new Error(`큐로 보이지 않는다(tickets/ 도 workers/ 도 없다): ${root}`);
+    throw new TenantError(
+      "root",
+      "이 디렉터리에 tickets/도 workers/도 없습니다 — fs-tickets 큐 디렉터리가 맞는지 확인하세요.",
+    );
   }
 
   const tenants = await readTenants();
   const dup = tenants.find((t) => t.root === root);
-  if (dup) throw new Error(`같은 큐가 이미 등록돼 있다: ${dup.name} (${root})`);
+  if (dup) throw new TenantError("dupRoot", `이미 ${dup.name}으로 등록돼 있습니다.`, dup);
 
   // id는 이름에서 만들되, 비거나 겹치면 자동으로 지어내지 않는다 — `tenant-1` 같은 값은 URL이
   // 의미를 잃는다. 등록 폼이 그때만 `URL 조각` 입력을 노출하고 사용자가 정한다.
   const tid = id ?? slugify(name);
   if (!TENANT_ID_RE.test(tid) || tid.length > 40) {
-    throw new Error(
-      id
-        ? `URL 조각 형식이 틀렸다(^[a-z0-9-]{1,40}$): ${id}`
-        : `이름에서 URL 조각을 만들 수 없다: ${name} — URL 조각을 직접 정해야 한다`,
+    if (id) {
+      throw new TenantError(
+        "badId",
+        `URL 조각 형식이 틀렸습니다 — 영문 소문자·숫자·하이픈 1~40자: ${id}`,
+      );
+    }
+    throw new TenantError(
+      "needId",
+      "이름에서 URL 조각을 만들 수 없습니다. 직접 정해 주세요 (영문 소문자·숫자·하이픈).",
     );
   }
   if (tenants.some((t) => t.id === tid)) {
-    throw new Error(`URL 조각이 이미 있다: ${tid} — 다른 값을 정해야 한다`);
+    throw new TenantError(
+      "dupId",
+      `URL 조각 ${tid}가 이미 쓰이고 있습니다. 다른 이름을 쓰거나 조각을 직접 정하세요.`,
+    );
   }
 
   const tenant: Tenant = { id: tid, name: name.trim(), root };
@@ -113,7 +148,7 @@ export async function addTenant(name: string, rootInput: string, id?: string): P
 }
 
 export async function renameTenant(id: string, name: string): Promise<void> {
-  if (!name.trim()) throw new Error("이름이 비었다");
+  if (!name.trim()) throw new TenantError("name", "이름을 입력하세요.");
   const tenants = await readTenants();
   const t = tenants.find((x) => x.id === id);
   if (!t) throw new Error(`없는 테넌트: ${id}`);
@@ -223,4 +258,40 @@ export async function resolveConfig(tenant: Pick<Tenant, "root">): Promise<Tenan
     }
   }
   return config;
+}
+
+// ── 목록·전환기용 요약 ──────────────────────────────────────────────────────
+
+/** 테넌트 목록 행과 전환기 항목이 쓰는 한 줄 요약. 못 읽으면 `connected: false` + 사유 원문이고
+ *  카운트는 **0이 아니라 없음**이다(읽지 못한 것과 0건은 다른 사실이다 — DESIGN.md §4-1). */
+export type TenantSummary = {
+  connected: boolean;
+  /** 연결 안 됨 사유 원문(`ENOENT: …`). §6 에러 3요소의 2번. 삼키지 않는다. */
+  error: string | null;
+  open: number | null; // 열린 티켓 수
+  workers: Worker[];
+};
+
+/** 테넌트 하나를 훑는다. 경로가 없으면 읽기를 시도하지 않고 사유만 담는다.
+ *
+ *  ponytail: 티켓 파일을 전부 읽어 개수만 센다(listTickets 재사용). 테넌트가 한 자릿수고
+ *  큐가 수십 건이라 이게 제일 싸다 — 수천 건 되면 파일명만 세는 경로를 따로 만든다. */
+export async function readSummary(tenant: Pick<Tenant, "root">): Promise<TenantSummary> {
+  try {
+    const st = await stat(tenant.root);
+    if (!st.isDirectory()) throw new Error(`디렉터리가 아니다: ${tenant.root}`);
+    const config = await resolveConfig(tenant);
+    const [tickets, workers] = await Promise.all([
+      listTickets(tenant.root, config),
+      listWorkers(tenant.root),
+    ]);
+    return {
+      connected: true,
+      error: null,
+      open: tickets.filter((t) => t.state === "open").length,
+      workers,
+    };
+  } catch (e) {
+    return { connected: false, error: (e as Error).message, open: null, workers: [] };
+  }
 }

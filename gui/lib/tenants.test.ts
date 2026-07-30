@@ -11,6 +11,7 @@ process.env.TICKET_LOCAL = LOCAL;
 const {
   addTenant,
   getTenant,
+  readSummary,
   readTenants,
   registryPath,
   removeTenant,
@@ -19,6 +20,7 @@ const {
   reorderTenants,
   resolveConfig,
 } = await import("./tenants.ts");
+const { tenantPath } = await import("./urls.ts");
 
 const roots: string[] = [];
 process.on("exit", () => {
@@ -117,7 +119,7 @@ test("레지스트리 — 등록 검증 4종", async () => {
   // 한글 이름은 슬러그가 빈다 -> 자동으로 지어내지 않고 거부한다(URL 조각을 직접 받는다)
   assert.strictEqual(slugify("스트림"), "");
   assert.strictEqual(slugify("fs-tickets 자체!!"), "fs-tickets");
-  await assert.rejects(() => addTenant("스트림", root), /URL 조각을 직접/);
+  await assert.rejects(() => addTenant("스트림", root), { code: "needId" });
 
   const t = await addTenant("스트림", root, "stream");
   // 저장되는 root는 realpath된 것이다(macOS의 /tmp -> /private/tmp)
@@ -125,22 +127,51 @@ test("레지스트리 — 등록 검증 4종", async () => {
   assert.strictEqual(t.id, "stream");
   assert.strictEqual((await getTenant(t.id))!.name, "스트림");
 
+  // 실패 문구는 사용자에게 그대로 보인다(DESIGN.md §7 문구 표) — code로 필드 귀속까지 검사한다.
   // 1. 디렉터리 존재
-  await assert.rejects(() => addTenant("x", path.join(root, "없는디렉터리")), /디렉터리가 없다/);
+  await assert.rejects(() => addTenant("x", path.join(root, "없는디렉터리")), {
+    code: "root",
+    message: /없습니다\. 절대경로가 맞는지, 마운트가 연결돼 있는지/,
+  });
   // 2. tickets/ 또는 workers/
   const empty = mkdtempSync(path.join(tmpdir(), "fst-empty-"));
   roots.push(empty);
-  await assert.rejects(() => addTenant("x", empty), /큐로 보이지 않는다/);
-  // 3. root 중복
-  await assert.rejects(() => addTenant("다른 이름", root), /같은 큐가 이미 등록/);
+  await assert.rejects(() => addTenant("x", empty), { code: "root", message: /tickets\/도/ });
+  // 3. root 중복 — 폼이 링크를 붙이므로 그 테넌트를 실어 보낸다
+  await assert.rejects(() => addTenant("다른 이름", root), (e: unknown) => {
+    const err = e as { code: string; message: string; dup: { id: string } };
+    assert.strictEqual(err.code, "dupRoot");
+    assert.match(err.message, /이미 스트림으로 등록돼 있습니다/);
+    assert.strictEqual(err.dup.id, "stream");
+    return true;
+  });
   // 4. id 중복 — 이름에서 나온 슬러그든 손으로 넣은 것이든 다시 검증한다
   const other = newQueue({ "w1.sh": "" });
-  await assert.rejects(() => addTenant("x", other, t.id), /이미 있다/);
-  await assert.rejects(() => addTenant("스트림", other, "대문자ID"), /형식이 틀렸다/);
-  await assert.rejects(() => addTenant("스트림", other, "a".repeat(41)), /형식이 틀렸다/);
+  await assert.rejects(() => addTenant("x", other, t.id), {
+    code: "dupId",
+    message: /URL 조각 stream가 이미 쓰이고 있습니다/,
+  });
+  await assert.rejects(() => addTenant("스트림", other, "대문자ID"), { code: "badId" });
+  await assert.rejects(() => addTenant("스트림", other, "a".repeat(41)), { code: "badId" });
 
   // 절대경로 아님
-  await assert.rejects(() => addTenant("x", "relative/path"), /절대경로/);
+  await assert.rejects(() => addTenant("x", "relative/path"), {
+    code: "root",
+    message: /절대경로/,
+  });
+  await assert.rejects(() => addTenant("  ", root), { code: "name" });
+});
+
+test("tenantPath — 전환은 같은 화면 종류를 유지한다", () => {
+  assert.strictEqual(tenantPath("/t/a/workers", "b"), "/t/b/workers");
+  assert.strictEqual(tenantPath("/t/a", "b"), "/t/b");
+  assert.strictEqual(tenantPath("/t/a/", "b"), "/t/b");
+  assert.strictEqual(tenantPath("/t/a/protocols/AGENTS.md", "b"), "/t/b/protocols/AGENTS.md");
+  assert.strictEqual(tenantPath("/t/a/tickets/new", "b"), "/t/b/tickets/new");
+  // 해시는 테넌트마다 독립이다 — 옮겨 붙이면 없는 티켓을 열게 되므로 보드로 떨어뜨린다
+  assert.strictEqual(tenantPath("/t/a/tickets/7b3e0c62", "b"), "/t/b");
+  // 테넌트 스코프가 아닌 곳(테넌트 목록)에서 골랐으면 그 테넌트의 보드로
+  assert.strictEqual(tenantPath("/", "b"), "/t/b");
 });
 
 test("레지스트리 — 이름 변경 · 순서 변경 · 등록 해제", async () => {
@@ -160,4 +191,21 @@ test("레지스트리 — 이름 변경 · 순서 변경 · 등록 해제", asyn
   // 등록 해제는 레지스트리만 건드린다 — 큐 파일은 그대로다
   assert.deepStrictEqual(await import("node:fs").then((fs) => fs.existsSync(b.root)), true);
   assert.ok(a.root);
+});
+
+test("readSummary — 연결됨은 카운트, 연결 안 됨은 사유 원문 + 카운트 없음", async () => {
+  const root = newQueue({ "w1.sh": "" });
+  writeFileSync(path.join(root, "tickets", "aaaa1111.md"), "---\nticket: aaaa1111\n---\n");
+  writeFileSync(path.join(root, "tickets", "bbbb2222.done.md"), "---\nticket: bbbb2222\n---\n");
+
+  const ok = await readSummary({ root });
+  assert.strictEqual(ok.connected, true);
+  assert.strictEqual(ok.open, 1); // .done은 열림이 아니다
+  assert.deepStrictEqual(ok.workers.map((w) => w.name), ["w1"]);
+
+  // 경로가 사라진 테넌트: 0건이 아니라 "모른다"다(DESIGN.md §4-1)
+  const gone = await readSummary({ root: path.join(root, "없는디렉터리") });
+  assert.strictEqual(gone.connected, false);
+  assert.strictEqual(gone.open, null);
+  assert.match(gone.error!, /ENOENT/);
 });
