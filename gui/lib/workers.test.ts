@@ -15,7 +15,10 @@ const {
   commonSourceLine,
   copyContext,
   createWorker,
+  cronLine,
+  cronRegister,
   cronRegisterCmd,
+  cronUnregister,
   cronUnregisterCmd,
   deleteWorker,
   lockPath,
@@ -251,6 +254,66 @@ test("cron 명령어 — NFC crontab 줄 · NFD 경로에서 해제가 진짜로
   } finally {
     c.restore();
   }
+});
+
+/** 이 머신의 진짜 crontab을 닮은 픽스처: 남의 프로젝트 큐 · 주석 · 환경변수 · 인용된 줄.
+ *  **한 줄이라도 잃으면 이 변경은 사고다**(제약 4) — 그래서 보존을 바이트로 못박는다.
+ *  순수 함수만 부르므로 `crontab` 명령을 아예 실행하지 않는다. */
+const FIXTURE = [
+  "PATH=/usr/local/bin:/usr/bin:/bin",
+  "# 백업 — 손대지 말 것",
+  "0 3 * * * /Users/x/bin/backup.sh >> /tmp/backup.log 2>&1",
+  "",
+  '* * * * * "/Users/x/Projects/stream/.fs-tickets/workers/w1.sh" >> "/Users/x/Projects/stream/.fs-tickets/workers/cron.log" 2>&1',
+  "@reboot /Users/x/bin/other.sh",
+  "",
+].join("\n");
+
+test("cronRegister/cronUnregister — 대상 줄만 바뀌고 나머지는 바이트 그대로 (제약 4)", () => {
+  const p = "/Users/x/Projects/p/.fs-tickets/workers/w9.sh";
+  const line = `* * * * * "${p}" >> "/Users/x/Projects/p/.fs-tickets/workers/cron.log" 2>&1`;
+
+  // 등록: 딱 한 줄이 늘고 나머지 텍스트가 완전히 동일하다
+  const added = cronRegister(FIXTURE, p);
+  assert.strictEqual(added, `${FIXTURE}${line}\n`); // FIXTURE가 개행으로 끝난다
+  assert.strictEqual(added.split("\n").length - FIXTURE.split("\n").length, 1);
+  // 남의 프로젝트 줄·주석·환경변수·빈 줄이 그대로다
+  assert.strictEqual(added.split("\n").filter((l) => l.includes("stream")).length, 1);
+
+  // 두 번 등록해도 줄이 안 는다 (먼저 지우고 넣는다)
+  assert.strictEqual(cronRegister(added, p), added);
+
+  // 해제: 대상 줄만 사라지고 원본으로 정확히 돌아온다
+  assert.strictEqual(cronUnregister(added, p), FIXTURE);
+  // 미등록 경로 해제는 no-op
+  assert.strictEqual(cronUnregister(FIXTURE, p), FIXTURE);
+
+  // 남의 프로젝트 워커를 지우라고 하면 그 줄만 지운다(경로가 다르면 안 건드린다는 대칭 확인)
+  const stream = "/Users/x/Projects/stream/.fs-tickets/workers/w1.sh";
+  assert.strictEqual(cronUnregister(FIXTURE, stream).includes("stream"), false);
+  assert.strictEqual(cronUnregister(FIXTURE, stream).split("\n").length, FIXTURE.split("\n").length - 1);
+});
+
+test("cronRegister — NFD 경로가 NFC로 적힌 줄과 매칭된다 (a622f9e4·38eec0d4)", () => {
+  const nfd = "/Users/x/공유 드라이브/it's/workers/w1.sh".normalize("NFD");
+  assert.notStrictEqual(nfd, nfd.normalize("NFC")); // 픽스처가 진짜 NFD인지 못박는다
+  const nfcLine = `* * * * * "${nfd.normalize("NFC")}" >> "${"/Users/x/공유 드라이브/it's/workers/cron.log".normalize("NFC")}" 2>&1`;
+  const tab = `# 주석\n${nfcLine}\n@reboot /Users/x/bin/other.sh\n`;
+
+  // 이미 등록된 줄이 NFC라도 중복이 생기지 않는다
+  const re = cronRegister(tab, nfd);
+  assert.strictEqual(re.split("\n").filter((l) => l.includes("workers/w1.sh".normalize("NFD"))).length, 1);
+  assert.strictEqual(re.includes(nfcLine), false); // NFC 줄이 지워지고
+  assert.strictEqual(re.includes(nfd), true); //      정규화 안 한 경로가 들어갔다
+  // 해제도 NFC 줄을 진짜로 지운다(한 형태만 보면 조용한 실패다)
+  assert.strictEqual(cronUnregister(tab, nfd), "# 주석\n@reboot /Users/x/bin/other.sh\n");
+});
+
+test("cronRegister — 후행 개행이 없는 crontab에서도 줄이 이어 붙지 않는다", () => {
+  const out = cronRegister("@reboot /Users/x/bin/other.sh", "/tmp/w1.sh");
+  assert.strictEqual(out, `@reboot /Users/x/bin/other.sh\n${cronLine({ path: "/tmp/w1.sh" })}\n`);
+  // 빈 crontab(= 등록된 워커 없음)
+  assert.strictEqual(cronRegister("", "/tmp/w1.sh"), `${cronLine({ path: "/tmp/w1.sh" })}\n`);
 });
 
 test("createWorker — 기존 워커를 템플릿으로 755 생성, 덮어쓰기·워커 0개는 거부", async () => {

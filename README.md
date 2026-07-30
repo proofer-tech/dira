@@ -226,8 +226,8 @@ python3 tickets.py handclaim <티켓경로> "<페르소나 / 세션식별>"
 
 **큐를 보고 만지는 로컬 웹 UI.** `w1.sh list`·`vim tickets/*.md`로 하던 일을 화면에서 한다 —
 보드(테이블·칸반)·티켓 편집·발행·할당 해제·워커 현황·페르소나·프로토콜. 상태 전이는 그대로 엔진에
-위임한다(`unassign`·`reap`을 서브프로세스로 부른다), crontab은 읽기 전용으로 보여주고 등록·해제
-명령은 사람이 실행한다.
+위임한다(`unassign`·`reap`을 서브프로세스로 부른다), crontab은 **그 프로젝트의 워커 줄만** GUI가
+쓰고(워커 생성이 등록까지 한 동작으로 끝난다) 나머지 줄은 바이트 그대로 보존한다.
 
 ```bash
 cd gui && pnpm install && pnpm dev     # http://localhost:3000

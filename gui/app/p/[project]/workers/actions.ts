@@ -2,8 +2,8 @@
 
 /** 워커 화면의 서버 액션 — 생성 · 삭제 · reap.
  *
- *  crontab은 건드리지 않는다(제약 4): 등록·해제는 `lib/workers.ts`가 만든 명령어를 화면이
- *  복사시키고 사람이 실행한다. 여기서 하는 파일 조작은 `workers/<name>.sh` 하나뿐이다.
+ *  crontab은 **그 프로젝트의 워커 줄만** 쓴다(제약 4). 계산도 쓰기도 `lib/workers.ts`에 있고,
+ *  등록이 실패하면 그때만 종전의 복사 명령어로 되돌아간다.
  *
  *  검증과 문구는 `lib/`에 있다. 이 파일이 하는 일은 **프로젝트 id → 등록된 root** 해석과
  *  Error를 직렬화 가능한 결과로 바꾸는 것뿐이다(클라이언트로 Error는 못 넘어간다). */
@@ -16,6 +16,7 @@ import {
   cronRegisterCmd,
   cronUnregisterCmd,
   deleteWorker,
+  registerCron,
   writeContext,
   type WorkerContext,
 } from "@/lib/workers";
@@ -23,8 +24,17 @@ import {
 export type WorkerActionResult = {
   ok: boolean;
   message?: string;
-  /** 생성 성공 시 — 화면이 이어서 crontab 등록 명령어를 보여준다 */
-  created?: { name: string; path: string; template: string; registerCmd: string; unregisterCmd: string };
+  /** 생성 성공 시. `cron: false`면 파일은 있고 등록만 실패한 것이다 — 화면이 사유와
+   *  종전의 등록 명령어를 보여주고 사람이 셸에서 마무리한다 */
+  created?: {
+    name: string;
+    path: string;
+    template: string;
+    cron: boolean;
+    cronError?: string;
+    registerCmd: string;
+    unregisterCmd: string;
+  };
   /** reap 출력 원문 */
   output?: string;
 };
@@ -47,6 +57,12 @@ export async function createWorkerAction(
   try {
     const root = await rootOf(projectId);
     const { path, template } = await createWorker(root, name.trim());
+    // **등록이 실패해도 파일 생성을 되돌리지 않는다** — 만든 것을 지우면 사람이 이름을 다시
+    // 정해야 한다. 실패는 `cronError`로 넘기고 화면이 등록 명령어를 그 자리에 보여준다.
+    const cronError = await registerCron(path).then(
+      () => undefined,
+      (e: Error) => e.message,
+    );
     revalidatePath(`/p/${projectId}`, "layout"); // 목록·전환기의 워커 요약도 같이 바뀐다
     return {
       ok: true,
@@ -54,6 +70,8 @@ export async function createWorkerAction(
         name: name.trim(),
         path,
         template,
+        cron: !cronError,
+        cronError,
         registerCmd: cronRegisterCmd({ path }),
         unregisterCmd: cronUnregisterCmd({ path }),
       },

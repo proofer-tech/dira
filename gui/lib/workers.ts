@@ -1,8 +1,10 @@
 /** 워커 파일·락·crontab 판정 (DESIGN.md §워커 상태 판정 · §4).
  *
- *  crontab은 **읽기 전용**이다(제약 4): `crontab -l`을 파싱해 현황만 보고, 등록·해제는
- *  `cronRegisterCmd`/`cronUnregisterCmd`가 만든 명령어를 사람이 복사해 실행한다.
- *  상태 전이(reap·unassign)도 여기서 다시 구현하지 않는다 — `lib/engine.ts`가 워커를 부른다. */
+ *  crontab은 **그 프로젝트의 워커 줄만** 쓴다(제약 4, `44f876aa`로 뒤집힘): 변경은 순수 함수
+ *  `cronRegister`/`cronUnregister`가 텍스트로 계산하고 `registerCron`/`unregisterCron`이
+ *  `crontab -`의 stdin으로 준다. 실패하면 `cronRegisterCmd`/`cronUnregisterCmd`의 복사 명령으로
+ *  되돌아간다 — 그래서 그 둘은 남아 있다.
+ *  상태 전이(reap·unassign)는 여기서 다시 구현하지 않는다 — `lib/engine.ts`가 워커를 부른다. */
 import { createHash } from "node:crypto";
 import { chmod, readFile, readdir, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -567,7 +569,7 @@ export function workerSummary(workers: Worker[]): string {
   return parts.length ? parts.join(" / ") : "—";
 }
 
-// ── crontab 명령어 (읽기 전용 — 실행은 사람이 한다, 제약 4) ─────────────────
+// ── crontab 명령어 (등록·해제가 실패했을 때 사람이 실행한다, 제약 4) ────────
 
 /** 사람이 셸에 붙여 넣을 문자열이다. 경로에 공백·한글·따옴표가 들어 있는 큐가 실제로 있어서
  *  (구글 드라이브 공유 드라이브) 인용을 대충 하면 복사한 명령이 엉뚱한 줄을 만든다. */
@@ -597,6 +599,81 @@ export function cronRegisterCmd(worker: Pick<Worker, "path">): string {
 export function cronUnregisterCmd(worker: Pick<Worker, "path">): string {
   return `crontab -l | grep -Fv ${grepBothForms(worker.path)} | crontab -`;
 }
+
+// ── crontab 쓰기 (제약 4 — 그 프로젝트의 워커 줄만) ─────────────────────────
+//
+// crontab은 **머신 전역**이다: 남의 프로젝트 큐와 사람의 무관한 잡이 같은 파일에 산다.
+// 그래서 변경을 텍스트 순수 함수로 계산한다 — 보존을 진짜 crontab 없이 테스트할 수 있어야 한다.
+
+/** 이 워커 파일 경로가 들어간 줄인가. **비교만 NFC로** 한다(`nfc` 주석 · a622f9e4·38eec0d4):
+ *  macOS crontab 줄은 사람이 넣은 NFC인데 `readdir`가 준 경로는 NFD인 큐가 있다.
+ *  판정은 `listWorkers`의 `cron`(부분일치)·`grep -Fv`와 같아야 한다 — 갈리면 화면이 거짓말을 한다. */
+const isWorkerLine = (line: string, workerPath: string) => nfc(line).includes(nfc(workerPath));
+
+/** 줄 단위 필터. `split("\n")`의 마지막 빈 원소가 후행 개행을 들고 있어서 그대로 join하면
+ *  남는 줄은 **바이트 그대로**다(재정렬·재인용·주석 삭제·빈 줄 정리 없음). */
+export function cronUnregister(text: string, workerPath: string): string {
+  return text
+    .split("\n")
+    .filter((l) => !isWorkerLine(l, workerPath))
+    .join("\n");
+}
+
+/** 먼저 그 경로의 줄을 다 지우고 한 줄을 넣는다 — 두 번 등록해도 중복 줄이 안 생긴다
+ *  (`cronRegisterCmd`와 같은 의미). 줄에 들어가는 경로는 정규화하지 **않는다** — 셸이 실제로
+ *  실행할 문자열이라 파일시스템이 준 바이트 그대로여야 한다. */
+export function cronRegister(text: string, workerPath: string): string {
+  const kept = cronUnregister(text, workerPath);
+  // 마지막 줄에 개행이 없으면 넣는다 — 안 그러면 남의 줄에 우리 줄이 이어 붙는다.
+  const base = kept === "" || kept.endsWith("\n") ? kept : `${kept}\n`;
+  return `${base}${cronLine({ path: workerPath })}\n`;
+}
+
+/** 쓰기 직전의 읽기. `crontabText()`와 달리 **모든 실패를 빈 crontab으로 보지 않는다** —
+ *  읽기 실패를 "비었다"로 오해하고 그 위에 쓰면 남의 줄이 전부 사라진다. 진짜로 비어 있는
+ *  경우(`crontab: no crontab for <user>`)만 빈 문자열이다. */
+async function crontabForWrite(): Promise<string> {
+  try {
+    return (await promisify(execFile)("crontab", ["-l"])).stdout;
+  } catch (e) {
+    const err = e as { stdout?: string; stderr?: string; message: string };
+    if (!err.stdout && /no crontab for/i.test(err.stderr ?? "")) return "";
+    throw new Error(`crontab -l 실패: ${(err.stderr || err.message).trim()}`);
+  }
+}
+
+/** **읽기는 쓰기 직전에 한다.** 렌더 때 읽은 값을 재사용하면 그 사이 남의 변경을 되돌린다
+ *  (§결정 기록 실측 — 스펙 쓰는 20분 사이에 남의 줄이 하나 줄었다). 창은 좁힐 수 있을 뿐
+ *  없앨 수 없다(crontab에 잠금이 없다).
+ *
+ *  쓰기는 `crontab -`의 **stdin**이다 — `sh -c`도 임시 파일도 아니다(경로에 공백·한글·따옴표가
+ *  들어 있는 큐가 실제로 있다). 그리고 **다시 읽어 확인한다**: 종료코드만 보지 않는다. */
+async function applyCrontab(workerPath: string, want: boolean): Promise<void> {
+  const before = await crontabForWrite();
+  const next = want ? cronRegister(before, workerPath) : cronUnregister(before, workerPath);
+  if (next !== before) {
+    await new Promise<void>((resolve, reject) => {
+      const child = execFile("crontab", ["-"], (err, _out, stderr) => {
+        if (err) reject(new Error(`crontab - 실패: ${(stderr || err.message).trim()}`));
+        else resolve();
+      });
+      child.stdin!.end(next);
+    });
+  }
+  const after = await crontabForWrite();
+  if (after.split("\n").some((l) => isWorkerLine(l, workerPath)) !== want) {
+    throw new Error(
+      want
+        ? "crontab에 썼는데 다시 읽으니 그 줄이 없습니다(쓰기가 조용히 막힌 환경일 수 있습니다)."
+        : "crontab에서 뺐는데 다시 읽으니 그 줄이 남아 있습니다.",
+    );
+  }
+}
+
+/** 이 워커 줄 하나를 crontab에 넣는다(이미 있으면 그 줄을 새로 쓴다). */
+export const registerCron = (workerPath: string) => applyCrontab(workerPath, true);
+/** 이 워커 줄을 뺀다. 없으면 아무것도 쓰지 않는다. */
+export const unregisterCron = (workerPath: string) => applyCrontab(workerPath, false);
 
 /** 워커가 0개인 큐의 **첫 워커**를 손으로 만드는 명령. `<fs-tickets 레포>`는 채워지지 않는다 —
  *  엔진 코드 위치는 워커 파일에만 적혀 있고, 워커가 없으면 GUI가 알 방법이 없다(→ createWorker). */

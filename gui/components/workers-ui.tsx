@@ -2,8 +2,8 @@
 
 /** 워커 화면(`/p/<project>/workers`)의 클라이언트 조각 — 생성 · 중단 · 삭제 · reap.
  *
- *  **crontab은 GUI가 만지지 않는다**(제약 4). 등록·해제는 서버가 만들어 준 명령어를
- *  `<CopyCommand>`로 복사시키고 사람이 셸에서 실행한다. 여기서 fs를 만지는 건 서버 액션뿐이다.
+ *  **crontab의 그 워커 줄은 GUI가 쓴다**(제약 4, `44f876aa`로 뒤집힘). 서버가 만들어 준
+ *  명령어를 `<CopyCommand>`로 복사시키는 건 이제 **실패했을 때**다. fs를 만지는 건 서버 액션뿐이다.
  *  파일 하나에 모은 이유는 projects-ui.tsx와 같다 — 세 다이얼로그가 같은 문구·같은 명령어를
  *  쓰므로 쪼개면 자리가 갈린다. */
 import { useState, useTransition } from "react";
@@ -75,8 +75,8 @@ function Failure({ title, message }: { title: string; message: string }) {
 
 // ── 생성 ────────────────────────────────────────────────────────────────────
 
-/** 워커 생성. 만든 뒤에도 **아직 돌지 않는다** — crontab 한 줄이 있어야 돈다(제약 4).
- *  그래서 성공 화면의 주인공은 파일 경로가 아니라 등록 명령어다. */
+/** 워커 생성. **한 동작으로 끝난다** — 파일을 만들고 crontab 한 줄까지 서버가 등록한다(제약 4).
+ *  등록이 실패했을 때만 성공 화면이 종전의 등록 명령어로 되돌아간다. */
 export function CreateWorkerButton({
   projectId,
   canTemplate,
@@ -138,14 +138,20 @@ export function CreateWorkerButton({
               <span className="font-mono text-xs break-all">{created.path}</span>를 만들고 755로
               두었습니다. 내용을 확인하고 필요하면 손으로 고치세요.
             </p>
-            <div className="space-y-2">
-              <p className="text-sm font-medium">아직 돌지 않습니다 — crontab에 등록하세요</p>
-              <CopyCommand cmd={created.registerCmd} />
-              <p className="text-xs text-muted-foreground">
-                GUI는 crontab을 고치지 않습니다. 이 명령을 셸에서 실행해야 1분 뒤부터 티켓을
-                물어갑니다.
+            {created.cron ? (
+              <p className="text-sm font-medium">
+                crontab에 등록했습니다 — 1분 뒤부터 티켓을 물어갑니다.
               </p>
-            </div>
+            ) : (
+              // 파일은 있고 등록만 실패했다. 되돌리지 않고 사람이 셸에서 마무리하게 한다.
+              <div className="space-y-2">
+                <Failure title="crontab에 등록하지 못했습니다" message={created.cronError ?? ""} />
+                <p className="text-sm font-medium">
+                  아직 돌지 않습니다 — 이 명령을 셸에서 실행하세요
+                </p>
+                <CopyCommand cmd={created.registerCmd} />
+              </div>
+            )}
           </div>
         ) : (
           <div className="space-y-2">
