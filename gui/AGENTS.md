@@ -20,7 +20,8 @@ gui/
                         클라이언트에서 `@/app/t/[tenant]/…/actions`로 그냥 import된다
     globals.css         Tailwind v4 + shadcn 토큰. 색은 여기서만 정의한다
   lib/
-    tenants.ts          테넌트 레지스트리 읽기·쓰기, 검증, 설정 해석, 목록 요약
+    tenants.ts          테넌트 레지스트리 읽기·쓰기, 검증, 설정 해석, 목록 요약,
+                        페르소나 CRUD (기준 디렉터리가 `resolveConfig().personas`라 여기 있다)
     urls.ts             슬러그·전환 경로·`~` 축약. **순수 함수만** — 클라이언트가 import한다
     paths.ts            경로 탈출 방어 (신뢰 경계) + 셸 값 해석(`shellValue` — tenants·workers 공용)
     queue.ts            티켓 읽기 코어 (tickets.py 미러). 테넌트를 인자로 받는다
@@ -33,6 +34,7 @@ gui/
     tenant-switcher.tsx 전환기 · 내비 · 다시 확인 (셸의 클라이언트 조각)
     tenants-ui.tsx      등록 폼 · 해석 결과 표 · 행 액션 (`/`의 클라이언트 조각)
     ticket-ui.tsx       편집 폼 · 할당 해제 · 삭제 (티켓 상세의 클라이언트 조각)
+    personas-ui.tsx     생성 · PROFILE.md 편집 · 삭제 (페르소나 화면의 클라이언트 조각)
     copy-command.tsx    실행 대신 복사시키는 명령 블록
   components/ui/        shadcn CLI 산출물. 손으로 만들지 않는다
   components.json       shadcn 설정

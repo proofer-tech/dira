@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 
@@ -10,16 +10,21 @@ process.env.TICKET_LOCAL = LOCAL;
 
 const {
   addTenant,
+  createPersona,
+  deletePersona,
   getTenant,
+  listPersonas,
   readSummary,
   readTenants,
   registryPath,
   removeTenant,
+  savePersona,
   slugify,
   renameTenant,
   reorderTenants,
   resolveConfig,
 } = await import("./tenants.ts");
+const { listTickets } = await import("./queue.ts");
 const { tenantPath } = await import("./urls.ts");
 
 const roots: string[] = [];
@@ -191,6 +196,91 @@ test("레지스트리 — 이름 변경 · 순서 변경 · 등록 해제", asyn
   // 등록 해제는 레지스트리만 건드린다 — 큐 파일은 그대로다
   assert.deepStrictEqual(await import("node:fs").then((fs) => fs.existsSync(b.root)), true);
   assert.ok(a.root);
+});
+
+// ── 페르소나 ────────────────────────────────────────────────────────────────
+//
+// **`<루트>/personas`를 가정하면 틀린다**는 것 자체를 검증한다: 워커가 `TICKET_PERSONAS`를
+// 루트 밖으로 돌린 큐를 만들고, 루트 안에는 미끼 페르소나(`wrong`)를 둔다. 가정으로 만든 코드는
+// 미끼를 목록에 띄우고 미끼를 편집한다.
+test("페르소나 — 재정의된 TICKET_PERSONAS 기준으로 목록·생성·저장·삭제", async () => {
+  const root = newQueue({ "w1.sh": "" });
+  const outside = path.join(path.dirname(root), "team-personas"); // 루트 밖
+  writeFileSync(path.join(root, "workers", "w1.sh"), `TICKET_PERSONAS="${outside}"\n`);
+  mkdirSync(path.join(outside, "developer"), { recursive: true });
+  writeFileSync(path.join(outside, "developer", "PROFILE.md"), "# Developer\n내 일은…\n");
+  mkdirSync(path.join(outside, "qa")); // 디렉터리만 있고 PROFILE.md가 없다
+  mkdirSync(path.join(outside, "이름규칙밖")); // 엔진이 못 쓰는 이름 = 목록에 없다
+  mkdirSync(path.join(root, "personas", "wrong"), { recursive: true }); // 미끼
+  writeFileSync(path.join(root, "personas", "wrong", "PROFILE.md"), "미끼\n");
+
+  const fm = (h: string, p: string, sfx = "") =>
+    writeFileSync(
+      path.join(root, "tickets", `${h}${sfx}.md`),
+      `---\nticket: ${h}\npersona: ${p}\n---\n본문\n`,
+    );
+  fm("aaaa1111", "developer");
+  fm("bbbb2222", "developer", ".wip");
+  fm("cccc3333", "designer"); // 디렉터리가 아예 없다 — 엔진의 WARN 케이스
+
+  const config = await resolveConfig({ root });
+  assert.strictEqual(config.personas, outside); // 가정이 아니라 해석된 값
+  const tickets = await listTickets(root, config);
+  const list = await listPersonas(config.personas, tickets);
+
+  assert.deepStrictEqual(
+    list.map((p) => p.name),
+    ["designer", "developer", "qa"], // 미끼(wrong)도 이름규칙밖도 없다
+  );
+  const developer = list.find((p) => p.name === "developer")!;
+  assert.match(developer.body!, /^# Developer/);
+  assert.deepStrictEqual(developer.refs, { open: 1, wip: 1, total: 2 });
+  // 프로필 없는 두 종류: 디렉터리만 있는 것(qa)과 티켓만 부르는 것(designer)
+  assert.deepStrictEqual(
+    list.filter((p) => p.body === null).map((p) => [p.name, p.refs.total]),
+    [
+      ["designer", 1],
+      ["qa", 0],
+    ],
+  );
+
+  // 저장 = 없으면 생성. 파일은 **재정의된 디렉터리** 아래에 생긴다
+  await savePersona(config.personas, "designer", "# Designer\n");
+  assert.strictEqual(
+    readFileSync(path.join(outside, "designer", "PROFILE.md"), "utf8"),
+    "# Designer\n",
+  );
+  await createPersona(config.personas, "ops");
+  assert.strictEqual(readFileSync(path.join(outside, "ops", "PROFILE.md"), "utf8"), "# ops\n");
+  // O_EXCL — 있는 프로필을 덮지 않는다
+  await assert.rejects(() => createPersona(config.personas, "ops"), /EEXIST/);
+
+  await deletePersona(config.personas, "qa");
+  assert.strictEqual(existsSync(path.join(outside, "qa")), false);
+  assert.strictEqual(existsSync(path.join(outside, "developer", "PROFILE.md")), true);
+  // 미끼는 처음부터 끝까지 안 건드린다 — 기준 디렉터리가 루트가 아니라는 증거
+  assert.strictEqual(readFileSync(path.join(root, "personas", "wrong", "PROFILE.md"), "utf8"), "미끼\n");
+});
+
+test("페르소나 — 이름 규칙과 심링크 탈출은 서버에서 거부한다", async () => {
+  const root = newQueue({ "w1.sh": "" });
+  const dir = path.join(root, "personas");
+  mkdirSync(dir, { recursive: true });
+  const secret = mkdtempSync(path.join(tmpdir(), "fst-secret-"));
+  roots.push(secret);
+  writeFileSync(path.join(secret, "PROFILE.md"), "남의 파일\n");
+
+  // 엔진이 이 이름으로 경로를 만든다 — `persona: ../../.ssh`가 프롬프트에 실려 나가는 걸 막는 규칙
+  for (const bad of ["../../.ssh", "..", "a/b", "", "이름", "a b"]) {
+    await assert.rejects(() => savePersona(dir, bad, "x"), /영문·숫자·_·- 만 됩니다/);
+    await assert.rejects(() => deletePersona(dir, bad), /영문·숫자·_·- 만 됩니다/);
+  }
+
+  // 이름 규칙을 통과해도 문자열을 믿지 않는다: 심링크는 문자열 비교로 못 막는다
+  symlinkSync(secret, path.join(dir, "evil"));
+  await assert.rejects(() => savePersona(dir, "evil", "덮어쓰기"), /기준 디렉터리 밖이다/);
+  await assert.rejects(() => deletePersona(dir, "evil"), /기준 디렉터리 밖이다/);
+  assert.strictEqual(readFileSync(path.join(secret, "PROFILE.md"), "utf8"), "남의 파일\n");
 });
 
 test("readSummary — 연결됨은 카운트, 연결 안 됨은 사유 원문 + 카운트 없음", async () => {

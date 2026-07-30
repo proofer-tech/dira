@@ -2,11 +2,11 @@
  *
  *  GUI는 큐 하나에 붙어 사는 게 아니라 사용자가 등록한 큐들을 전환하며 본다. 레지스트리는
  *  머신 로컬 JSON 한 파일이고, 큐 위치·접미사·페르소나 디렉터리는 전부 테넌트에서 받아온다. */
-import { mkdir, readFile, readdir, realpath, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
-import { TENANT_ID_RE, expandHome, shellValue } from "./paths.ts";
-import { listTickets } from "./queue.ts";
+import { NAME_RE, TENANT_ID_RE, expandHome, resolveWithin, shellValue } from "./paths.ts";
+import { listTickets, type Ticket } from "./queue.ts";
 import { listWorkers, type Worker } from "./workers.ts";
 import { slugify } from "./urls.ts";
 
@@ -275,4 +275,86 @@ export async function readSummary(tenant: Pick<Tenant, "root">): Promise<TenantS
   } catch (e) {
     return { connected: false, error: (e as Error).message, open: null, workers: [] };
   }
+}
+
+// ── 페르소나 (DESIGN.md §5) ─────────────────────────────────────────────────
+//
+// 기준 디렉터리는 **해석된 `TICKET_PERSONAS`**다. `<루트>/personas`라고 가정하면 재정의한 큐에서
+// 엉뚱한 디렉터리를 편집한다 — 그래서 이 함수들은 root를 받지 않고 디렉터리를 받는다.
+// 페르소나 로직이 여기 있는 이유: 그 디렉터리를 해석하는 게 `resolveConfig`고, 같은 파일이다.
+
+/** 목록 한 항목. `body: null` = PROFILE.md가 없다 — 엔진은 WARN만 남기고 **페르소나 없이**
+ *  디스패치한다(tick.sh 188행). 그래서 프로필 없는 이름도 목록에 넣는다(경고의 근거다). */
+export type Persona = {
+  name: string;
+  /** `<해석된 personas>/<이름>/PROFILE.md` */
+  file: string;
+  body: string | null;
+  /** 이 이름을 `persona:`로 쓰는 티켓 수. 삭제 경고가 이걸 쓴다 */
+  refs: { open: number; wip: number; total: number };
+};
+
+/** 이름 검증 + 경로 조립은 **서버에서만** 한다(신뢰 경계). 규칙은 `tickets.py PERSONA_RE`와 같다 —
+ *  엔진이 이 값으로 경로를 만들므로 `../../.ssh` 같은 이름은 프롬프트에 실려 나간다.
+ *  통과해도 문자열을 믿지 않고 `resolveWithin`으로 기준 디렉터리 안인지 확인한다(심링크 포함). */
+async function profilePath(dir: string, name: string): Promise<string> {
+  if (!NAME_RE.test(name)) {
+    throw new Error(
+      `페르소나 이름은 영문·숫자·_·- 만 됩니다: ${name || "(비어 있음)"} — 엔진이 이 이름으로 <personas>/<이름>/PROFILE.md 경로를 만듭니다.`,
+    );
+  }
+  return resolveWithin(dir, path.join(name, "PROFILE.md"));
+}
+
+/** 디렉터리에 있는 페르소나 ∪ 티켓이 부르는 페르소나. 이름 순.
+ *
+ *  ponytail: 이름 규칙(`NAME_RE`) 밖 디렉터리는 목록에서 뺀다 — 엔진이 그 이름으로 티켓을
+ *  받아주지 않으므로(`persona_of`가 빈 문자열로 만든다) 절대 쓰이지 않는 디렉터리다. */
+export async function listPersonas(dir: string, tickets: Ticket[] = []): Promise<Persona[]> {
+  const ents = await readdir(dir, { withFileTypes: true }).catch(() => []);
+  const names = new Set(
+    ents.filter((e) => e.isDirectory() && NAME_RE.test(e.name)).map((e) => e.name),
+  );
+  for (const t of tickets) if (t.persona) names.add(t.persona); // 프로필 없는 이름 = 엔진의 WARN
+  return Promise.all(
+    [...names].sort().map(async (name) => {
+      const file = path.join(dir, name, "PROFILE.md");
+      const refs = tickets.filter((t) => t.persona === name);
+      return {
+        name,
+        file,
+        body: await readFile(file, "utf8").catch(() => null),
+        refs: {
+          open: refs.filter((t) => t.state === "open").length,
+          wip: refs.filter((t) => t.state === "wip").length,
+          total: refs.length,
+        },
+      };
+    }),
+  );
+}
+
+/** 저장. 없으면 만든다 — 목록에 "프로필 없음"으로 뜬 이름을 그 자리에서 채우게 하려고
+ *  생성과 같은 경로를 쓴다(빈 textarea에 쓰고 저장 = 생성). */
+export async function savePersona(dir: string, name: string, body: string): Promise<string> {
+  await mkdir(expandHome(dir), { recursive: true }); // 기준 디렉터리가 아직 없는 큐도 있다
+  const file = await profilePath(dir, name);
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(file, body, "utf8");
+  return file;
+}
+
+/** 생성은 `O_EXCL`. 이미 있는 프로필을 덮으면 돌고 있는 큐의 페르소나가 조용히 바뀐다. */
+export async function createPersona(dir: string, name: string): Promise<string> {
+  await mkdir(expandHome(dir), { recursive: true });
+  const file = await profilePath(dir, name);
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(file, `# ${name}\n`, { flag: "wx" });
+  return file;
+}
+
+/** 디렉터리째 지운다(안의 다른 파일도 같이) — 화면이 확인 다이얼로그에서 그 사실을 알린다. */
+export async function deletePersona(dir: string, name: string): Promise<void> {
+  const file = await profilePath(dir, name);
+  await rm(path.dirname(file), { recursive: true, force: true });
 }
