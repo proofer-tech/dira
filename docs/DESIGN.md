@@ -82,6 +82,7 @@ gui/
     queue.test.ts          패리티 테스트 (node --test)
     workers.ts             워커 파일·락·crontab 판정, TICKET_CONTEXT 파싱
     engine.ts              프로젝트의 워커 스크립트 서브프로세스 호출 (unassign · reap)
+    transcript.ts          세션 스트림 읽기 코어 (§2-1). 경로 찾기 · 오프셋 테일 · 사건 매핑
   AGENTS.md                코드베이스 규약
 ```
 
@@ -1121,7 +1122,7 @@ TICKET_CONTEXT=(
 | P16 | 페르소나 카드 접기 + 전체 폭 구현 `8583baba` | developer | 스펙 | 대기 |
 | P17 | 세션 스트림 스펙 확정 `76c76c84` | pm | `4752a72b` | 완료 — §2-1. 원본은 트랜스크립트, 엔진 무수정 |
 | P17 | 세션 스트림 시각 사양 `9b894bc7` | designer | — | 완료 — §비주얼 §9. 새 토큰·새 shadcn 0개 |
-| P17 | `lib/transcript.ts` + 테스트 `c172bd89` | developer | — | 대기 |
+| P17 | `lib/transcript.ts` + 테스트 `c172bd89` | developer | — | 완료 — `findTranscript`·`tailEvents`·`recordToEvents`. 테스트 16 |
 | P17 | `<SessionStream>` + Server Action + 상세 절 `d0a0dfb2` | developer | 사양, lib | 대기 |
 | P17 | 워커 화면에서 물고 있는 티켓 스트림 `da15c0ee` | developer | `d0a0dfb2` | 대기 |
 | P17 | QA — 세션 스트림 `fa765bba` | qa | `da15c0ee` | 대기 |
