@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  HIDE_DONE_STATUSES,
   awaitingOf,
   awaitingUnlocked,
   derivedFrom,
@@ -390,6 +391,16 @@ test("보드 — 5상태 판정 · 필터 AND/OR · 검색 대상 · 정렬", as
     ["aaaa1111"],
   );
 
+  // `완료 숨기기` 프리셋(§1 보드) — 완료만 빠진다. 4개 중 하나가 빠지면 그 상태 티켓이
+  // 테이블에서 조용히 사라지므로, "완료 아닌 전부"와 글자 단위로 같은지 본다.
+  const hideDone = filterTickets(tickets, { ...none, status: HIDE_DONE_STATUSES });
+  assert.deepStrictEqual(
+    hashes(hideDone),
+    hashes(tickets.filter((t) => statusOf(t) !== "done")),
+  );
+  assert.ok(hashes(hideDone).includes("iiii9999")); // 디스패치되지 않는 티켓은 남는다(§0-2)
+  assert.ok(!hashes(hideDone).includes("eeee5555")); // 완료는 빠진다
+
   // 검색 대상은 title + 본문 + frontmatter 값 전체, 대소문자 무시
   assert.deepStrictEqual(hashes(filterTickets(tickets, { ...none, q: "정상" })), ["aaaa1111"]);
   assert.deepStrictEqual(hashes(filterTickets(tickets, { ...none, q: "본문이다" })), ["aaaa1111"]);
@@ -654,6 +665,11 @@ test("보드 — 답변 대기는 deps 대기의 하위 종류 · kind: answer �
     "r0000001",
     "r0000005",
   ]);
+
+  // 그래서 `완료 숨기기` 프리셋에 `awaiting`을 넣지 않는다 — `blocked`가 답변 대기를 데려온다
+  assert.ok(
+    hashes(filterTickets(tickets, { ...none, status: HIDE_DONE_STATUSES })).includes("r0000001"),
+  );
 
   // `kind: answer`는 기본 목록에 없다 — 필터에서 고르면 보인다(숨기는 게 아니다)
   assert.strictEqual(inDefaultList(by("a2222222"), []), false);

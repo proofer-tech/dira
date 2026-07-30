@@ -281,6 +281,15 @@ export function filterTickets(tickets: Ticket[], query: BoardQuery): Ticket[] {
   });
 }
 
+/** 상태 필터 프리셋 `완료 숨기기`가 세팅하는 값(§1 보드 · 사람 요청 `fd34255d`).
+ *  새 파라미터가 아니라 그냥 `status` 4개다 — 선택지 5개 중 4개 고르기를 1클릭으로 접은 것.
+ *
+ *  `awaiting`이 없는 이유: 위 `filterTickets`의 하위 종류 규칙대로 `blocked`가 답변 대기를
+ *  포함한다. 넣으면 URL만 길어지고 결과가 같다.
+ *  `assigned`가 있는 이유: 빼면 디스패치되지 않는 티켓이 테이블에서 사라진다 — GUI가 유일하게
+ *  보여주는 고장 신호다(§0-2). */
+export const HIDE_DONE_STATUSES = ["open", "blocked", "assigned", "wip"];
+
 /** 정렬 가능한 컬럼 = 테이블 컬럼 8개. URL의 `sort` 값은 이 목록으로 검증한다. */
 export const SORT_KEYS = [
   "status",

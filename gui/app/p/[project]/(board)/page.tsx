@@ -27,6 +27,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
+  HIDE_DONE_STATUSES,
   SORT_KEYS,
   filterTickets,
   inDefaultList,
@@ -262,6 +263,7 @@ export default async function Board({
               param="status"
               label="상태"
               options={STATUS_OPTIONS.map((s) => ({ value: s, label: statusLabel(s) }))}
+              preset={{ label: "완료 숨기기", values: HIDE_DONE_STATUSES }}
             />
             <div className="ml-auto flex items-center gap-2">
               {VIEWS.map((v) => (

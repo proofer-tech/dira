@@ -10,7 +10,7 @@
  *  수백 줄이고, 전환기가 이미 같은 컴포넌트를 쓴다). */
 import { useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Check, ChevronsUpDown, Search } from "lucide-react";
+import { Check, ChevronsUpDown, ListFilter, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -18,6 +18,7 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
+  CommandSeparator,
 } from "@/components/ui/command";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -84,25 +85,31 @@ export function BoardFilter({
   param,
   label,
   options,
+  preset,
 }: {
   param: string;
   label: string;
   options: FilterOption[];
+  /** 목록 맨 위의 1클릭 항목 — 이 필터를 `values`로 **갈아 쓴다**(토글이 아니다).
+   *  상태 필터의 `완료 숨기기`만 쓴다(§1 보드). 다른 파라미터는 건드리지 않는다. */
+  preset?: { label: string; values: string[] };
 }) {
   const { qs, replace } = useUrlNav();
   const [open, setOpen] = useState(false);
   const sp = new URLSearchParams(qs);
   const selected = sp.getAll(param);
 
-  const toggle = (value: string) => {
+  const set = (values: string[]) => {
     const next = new URLSearchParams(qs);
-    const kept = selected.includes(value)
-      ? selected.filter((v) => v !== value)
-      : [...selected, value];
     next.delete(param);
-    for (const v of kept) next.append(param, v);
+    for (const v of values) next.append(param, v);
     replace(next);
   };
+
+  const toggle = (value: string) =>
+    set(
+      selected.includes(value) ? selected.filter((v) => v !== value) : [...selected, value],
+    );
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -129,6 +136,17 @@ export function BoardFilter({
           <CommandInput placeholder={`${label} 검색`} />
           <CommandList className="max-h-72">
             <CommandEmpty>일치하는 {label} 0건</CommandEmpty>
+            {preset && (
+              <>
+                {/* 값이 아니라 동작이다 — 체크 자리를 비워 두면 "안 고른 값"으로 읽힌다.
+                    구분선으로 값 목록에서 떼고, 아이콘 자리에는 동작 아이콘을 넣는다. */}
+                <CommandItem value={preset.label} onSelect={() => set(preset.values)}>
+                  <ListFilter aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+                  <span className="truncate">{preset.label}</span>
+                </CommandItem>
+                <CommandSeparator />
+              </>
+            )}
             {options.map((o) => (
               <CommandItem
                 key={o.value}
