@@ -46,8 +46,26 @@ export default async function ProjectLayout({
   return (
     <>
       <header className="sticky top-0 z-50 flex h-12 items-center gap-6 border-b bg-background px-6">
-        <Link href="/" className="shrink-0 text-sm font-medium">
-          dira
+        {/* 브랜드 마크 (§비주얼 §14 `헤더 표시`). href는 그 프로젝트의 첫 화면 = 지금은 보드다
+            — `/`(프로젝트 관리)로 가는 길은 전환기 하단 항목 하나로 남는다(§4).
+            `-m-2`가 32×32 히트 박스를 되돌려 셸의 `gap-6 px-6`을 무수정으로 둔다. */}
+        <Link
+          href={`/p/${id}`}
+          aria-label="dira"
+          className="-m-2 flex size-8 shrink-0 items-center justify-center rounded-md text-foreground outline-none hover:bg-accent focus-visible:ring-3 focus-visible:ring-ring/50"
+        >
+          {/* 탭 자산 `app/icon.svg`와 `d`가 문자 단위로 같다. 다른 건 fill 하나 — 화면 안에서는
+              currentColor다(§14: 브랜드 파랑은 상태색 계열이라 화면에 들이지 않는다).
+              사본 2벌은 의도된 값이다. 형상을 고칠 땐 §14 SVG 소스를 고치고 두 벌에 같이 반영한다. */}
+          <svg
+            aria-hidden
+            viewBox="0 0 32 32"
+            fill="currentColor"
+            fillRule="evenodd"
+            className="size-4"
+          >
+            <path d="M4.5 2H11.5L15.5 8H27.5A2.5 2.5 0 0 1 30 10.5V27.5A2.5 2.5 0 0 1 27.5 30H4.5A2.5 2.5 0 0 1 2 27.5V4.5A2.5 2.5 0 0 1 4.5 2ZM9.5 12H22.5A1.5 1.5 0 0 1 24 13.5V15A3 3 0 0 0 24 21V22.5A1.5 1.5 0 0 1 22.5 24H9.5A1.5 1.5 0 0 1 8 22.5V21A3 3 0 0 0 8 15V13.5A1.5 1.5 0 0 1 9.5 12Z" />
+          </svg>
         </Link>
         <ProjectNav id={id} />
         <ProjectSwitcher projects={items} currentId={id} />
