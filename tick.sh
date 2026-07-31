@@ -38,6 +38,9 @@ TICKET_NAME="${TICKET_NAME:-$(basename "$0" .sh)}"
 # 기본 작업 디렉터리 = 루트의 부모(<프로젝트>/.dira/workers/w1.sh -> <프로젝트>)
 TICKET_CWD="${TICKET_CWD:-$(dirname "$TICKET_ROOT")}"
 TICKET_MAXRUN="${TICKET_MAXRUN:-5400}"
+# 최초 프롬프트가 FIFO를 다 통과할 때까지 기다리는 상한. 프롬프트는 FIFO 버퍼(macOS 16KB)보다
+# 크므로 엔진이 stdin을 빨아야만 write가 끝난다 - 엔진이 기동 중 멎으면 영영 안 끝난다.
+TICKET_FEED_TIMEOUT="${TICKET_FEED_TIMEOUT:-120}"
 # 프롬프트 포맷의 %s = 티켓 해시 하나뿐이다(역할 호칭은 페르소나 프로필이 대신한다).
 TICKET_PROMPT_FMT="${TICKET_PROMPT_FMT:-%s 티켓을 확인해 주세요. (해당 티켓은 이미 진행중으로 잡아두었습니다. 수행을 마치면 완료 상태로 rename하고, 막히면 티켓 본문에 블록 이력을 남겨주세요.)}"
 # 실행 엔진. 워커가 TICKET_ENGINE 배열로 덮어쓴다. {prompt}/{sid}는 실행 직전 치환된다.
@@ -75,6 +78,20 @@ case "$CMD" in
   unassign)
     H="${2:-}"; [ -z "$H" ] && { echo "사용법: $(basename "$0") unassign <티켓해시>"; exit 2; }
     P=$(python3 "$PY" find "$TICKET_ROOT" "$H") || exit 1
+    # 산 세션을 두고 할당만 풀면 티켓이 다시 열려 두 워커가 같은 티켓을 문다
+    # (2026-08-01 실사고: b7bacafb·a461c2f7이 각각 세션 2개를 달았다). 죽은 뒤에 풀어라.
+    # reap과 같은 근거를 쓴다: pid 생존, 그리고 ps의 --session-id.
+    UPID=$(sed -n 's/^pid:[[:space:]]*//p' "$P" | head -1 | tr -d "\"' ")
+    USID=$(sed -n 's/^session_id:[[:space:]]*//p' "$P" | head -1 | tr -d "\"' ")
+    ALIVE=""
+    case "$UPID" in ''|*[!0-9]*) ;; *) ps -p "$UPID" -o pid= >/dev/null 2>&1 && ALIVE="pid=$UPID" ;; esac
+    [ -z "$ALIVE" ] && [ -n "$USID" ] && ps -eo command= | grep -q -- "--session-id $USID" \
+      && ALIVE="session=$USID"
+    if [ -n "$ALIVE" ]; then
+      echo "거부: $H 의 세션이 아직 살아 있다($ALIVE). 먼저 끝내거나 죽인 뒤 다시 시도하세요." >&2
+      log "UNASSIGN-DENY $H $ALIVE 생존"
+      exit 1
+    fi
     python3 "$PY" clear "$P" || exit 1
     RP=$(python3 "$PY" release "$P") || exit 1
     [ "$RP" != "$P" ] && echo "백로그 복귀: $(basename "$RP")"
@@ -245,21 +262,44 @@ if [ -n "$INBOX" ]; then
   # 안 풀린다. 읽기도 같이 잡으면 open이 즉시 돌아오고 우리가 항상 writer라 엔진이 EOF를 안 본다
   # (최초 프롬프트를 쓴 직후 세션이 끝나는 걸 막는 것이 이 fd의 일이다). 우리는 읽지 않는다.
   exec 9<>"$INBOX"
-  "${ENGINE[@]}" <"$INBOX" >"$OUTF" 2>>"$LOGF" &
+  # 9>&-로 엔진의 fd 9 사본을 닫는다. 물려주면 엔진이 자기 쓰기 끝을 쥐고 있어, 아래에서
+  # 우리가 fd 9를 닫아도 EOF를 영영 못 본다(FIFO의 writer가 0이 되어야 EOF다).
+  "${ENGINE[@]}" <"$INBOX" >"$OUTF" 2>>"$LOGF" 9>&- &
   CPID=$!
-  # 최초 프롬프트 = FIFO에 JSON 한 줄. 사람이 나중에 미는 참견도 같은 모양이다.
-  python3 -c 'import json,sys
-sys.stdout.write(json.dumps({"type":"user","message":{"role":"user","content":sys.argv[1]}},
-                            ensure_ascii=False, separators=(",", ":")) + "\n")' "$PROMPT" >&9
-  # 프롬프트를 넣은 뒤에 입구를 광고한다. 순서를 뒤집으면 화면이 먼저 밀어 넣은 참견이
-  # 티켓 지시보다 앞줄에 서서 세션이 엉뚱한 것부터 읽는다.
-  python3 "$PY" setinbox "$TPATH" "$INBOX"
 else
   "${ENGINE[@]}" >"$OUTF" 2>>"$LOGF" &
   CPID=$!
 fi
 # Codex에는 Claude식 --session-id가 없으므로 실제 엔진 pid도 남겨 reap이 생존을 확인한다.
+# 프롬프트 주입보다 **먼저** 적는다. 주입이 막히는 동안 pid가 비어 있으면 reap이 판정할 근거가
+# 없어 티켓이 진행중에 영구 잔류한다(2026-08-01 실사고).
 python3 "$PY" setpid "$TPATH" "$CPID"
+
+if [ -n "$INBOX" ]; then
+  # 최초 프롬프트 = FIFO에 JSON 한 줄. 사람이 나중에 미는 참견도 같은 모양이다.
+  # 백그라운드로 쓴다. 프롬프트는 FIFO 버퍼보다 크므로 엔진이 stdin을 안 빨면 write가
+  # 블록하는데, 전경에서 쓰면 아래 감시자·wait이 통째로 안 돌아 워커가 영구 정지한다
+  # (2026-08-01 실사고: 워커 4개가 최대 2시간 멈췄고 reap도 손을 못 댔다).
+  python3 -c 'import json,sys
+sys.stdout.write(json.dumps({"type":"user","message":{"role":"user","content":sys.argv[1]}},
+                            ensure_ascii=False, separators=(",", ":")) + "\n")' "$PROMPT" >&9 &
+  FEEDER=$!
+  FED=0
+  while kill -0 "$FEEDER" 2>/dev/null && [ "$FED" -lt "$TICKET_FEED_TIMEOUT" ]; do
+    sleep 1; FED=$((FED+1))
+  done
+  if kill -0 "$FEEDER" 2>/dev/null; then
+    # 엔진이 프롬프트를 다 받지 못했다 -> 이 디스패치는 실패다. 세션을 죽여 아래 wait이
+    # 평범한 FAIL 경로로 떨어지게 한다(clear + release + 백로그 복귀).
+    kill -9 "$FEEDER" 2>/dev/null
+    kill -KILL "$CPID" 2>/dev/null
+    log "STALL $THASH 엔진이 ${TICKET_FEED_TIMEOUT}s 동안 stdin을 안 읽었다 - 프롬프트 주입 실패"
+  else
+    # 프롬프트를 넣은 뒤에 입구를 광고한다. 순서를 뒤집으면 화면이 먼저 밀어 넣은 참견이
+    # 티켓 지시 줄 사이에 끼어들어 JSON 한 줄이 깨진다.
+    python3 "$PY" setinbox "$TPATH" "$INBOX"
+  fi
+fi
 # 감시자는 짧은 sleep으로 돈다. 한 방 `sleep $TICKET_MAXRUN`이면 세션이 끝난 뒤에도 그 sleep이
 # 상속받은 stdout/stderr를 90분간 쥐고 남아, 호출자(cron·테스트)가 파이프에서 못 빠져나온다.
 # 스트리밍 입력에서는 stdin이 열려 있는 한 세션이 스스로 안 끝난다(닫아도 60초는 안 죽는다).
