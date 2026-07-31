@@ -2792,11 +2792,20 @@ osascript -e 'tell application "System Events" to get name of every process whos
 **R4. `pnpm release <patch|minor|major>` — 순서가 계약이다.**
 
 1. **선행 확인.** 워킹 트리 깨끗 · 브랜치가 master · `sign-preflight.sh` 통과 · `GH_TOKEN` 존재 ·
-   `publish.owner`/`repo` 채워짐. **하나라도 없으면 여기서 멈춘다.**
+   `gh` 실행 가능 · `publish.owner`/`repo` 채워짐. **하나라도 없으면 여기서 멈춘다.**
 2. `apps/desktop/package.json`의 `version` bump
 3. 커밋 + 태그 `v<x.y.z>`
 4. `git push origin master --follow-tags`
-5. `pnpm dist`(서명·공증 그대로) → `electron-builder --publish always`
+5. `pnpm dist` **한 번만**(서명·공증·`sign-dmg.sh`까지) → 그 `dist/`의 세 자산을
+   `gh release create v<x.y.z>`로 올린다
+
+**5는 한 번 굽고 그것을 올린다.** 2026-08-01(`899b88d5`)까지 이 줄은 `pnpm dist` →
+`electron-builder --publish always`였고, 그게 **`.dmg`의 서명을 벗겼다**: 두 번째
+`electron-builder`가 dist를 다시 구워서 `sign-dmg.sh`가 서명·스테이플한 dmg를 덮고, 올라가는 건
+그 새 파일이었다. `sign-dmg.sh`가 막으려던 바로 그 상태(받는 맥의 첫 더블클릭이 Gatekeeper에
+막힘)가 R1이 "사람이 건네는 첫 설치"라고 부른 자산으로 나간다. **증상이 에러가 아니라 남의 맥에서만
+보이는 차단이라 올린 사람은 모른다.** `--publish always`를 안 쓸 뿐 `build.publish`는 그대로
+둔다 — `latest-mac.yml`을 굽는 것이 그 설정이다. 부수로 같은 `.app`을 두 번 공증하던 수 분도 없앤다.
 
 **1이 2보다 앞인 것이 이 순서의 전부다.** 뒤집으면 서명 없는 맥에서 버전만 올라간 커밋과 태그가
 남고, 그 태그는 자산이 없는데도 다음 릴리스의 경계 노릇을 한다 — 릴리즈 노트가 아무도 받지 못한
@@ -4304,6 +4313,7 @@ QA 티켓 둘 다 **임시 큐 픽스처에서 재라고** 못박았다(선례: 
 | P57 | `electron-updater` 배선 — publish + U1·U2 `4f418619` | developer | — | 대기 |
 | P57 | `pnpm release` 스크립트 `5ab56e03` | developer | `4f418619` | 대기 |
 | P57 | 릴리즈 노트 — compare API + `claude -p` 요약 `e80e2eae` | developer | `4f418619` | 대기 |
+| P57 | R4-5 재작성 — 한 번 굽고 `gh release create` `ab4fe016` | developer | 지적 `899b88d5` | 대기 — 두 번 굽던 R4-5가 `.dmg` 서명을 벗겼다 |
 
 **요구 셋이 전부 한 사실에 매달려 있었다 — "새 버전이 어디에 놓이는가".** 그래서 라운드 1에서
 되물었고(`b7bacafb` §질문 1), 답 `381efdd4`이 세 값을 줬다: 채널은 GitHub Releases · 릴리스는
