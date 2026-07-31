@@ -12,6 +12,7 @@ import {
   ProjectNav,
   ProjectSwitcher,
 } from "@/components/project-switcher";
+import { SettingsDialog } from "@/components/settings-dialog";
 import { StatusBadge } from "@/components/status-badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { readAuth } from "@/lib/auth";
@@ -54,8 +55,10 @@ export default async function ProjectLayout({
   );
   const current = items.find((t) => t.id === id)!;
   // 토큰은 머신당 하나라 프로젝트 요약에 들어 있지 않다(§0-4). 증상("내 큐가 안 돈다")이
-  // 나타나는 화면이 여기라 판정도 여기서 한다.
-  const { savedAt: token } = await readAuth();
+  // 나타나는 화면이 여기라 판정도 여기서 한다. 값은 헤더 `설정` 버튼과 배너 CTA가 같이 쓴다 —
+  // 진입점 둘이 같은 컴포넌트를 두 번 쓰고 전역 상태는 만들지 않는다(§0-4).
+  const rawAuth = await readAuth();
+  const auth = { path: tildePath(rawAuth.path, home), savedAt: rawAuth.savedAt };
 
   return (
     <>
@@ -64,7 +67,12 @@ export default async function ProjectLayout({
             전환기 하단 항목 하나로 남는다(§4). 나머지 값은 루트 셸과 같다(§14 · BrandMark). */}
         <BrandMark href={`/p/${id}`} />
         <ProjectNav id={id} />
-        <ProjectSwitcher projects={items} currentId={id} />
+        {/* 우측 끝은 전환기 오른쪽의 `설정`이다 — 두 셸이 같은 자리에 같은 것을 갖는다
+            (§비주얼 §4). 헤더의 `gap-6`이 아니라 이 둘 사이는 `gap-2`라 묶어서 오른쪽으로 민다 */}
+        <div className="ml-auto flex items-center gap-2">
+          <ProjectSwitcher projects={items} currentId={id} />
+          <SettingsDialog auth={auth} />
+        </div>
       </header>
 
       {/* 스크롤하는 것은 이 `main`이다(§비주얼 §4). `min-h-0`이 없으면 flex 자식 기본값
@@ -80,17 +88,16 @@ export default async function ProjectLayout({
             **세 번째 `Alert` 변종이다** — 새 컴포넌트 0개. dismiss도 없다: 토큰 파일이 생기면
             이 판정이 저절로 꺼진다(§0-2와 같은 논리). 아래 두 배너보다 먼저 선다 —
             인증이 없으면 그 프로젝트에서 아무것도 안 돈다. */}
-        {!token && (
+        {!auth.savedAt && (
           <Alert role="status" className="max-w-3xl">
             <TriangleAlert aria-hidden className="text-status-stale" />
             <AlertTitle>인증되지 않아 티켓이 디스패치되지 않습니다</AlertTitle>
             <AlertDescription className="grid gap-3 text-foreground">
               <span>Claude 장기 토큰이 없어 워커가 매번 조용히 종료합니다.</span>
-              {/* CTA는 행의 오른쪽 끝이다(§비주얼 §4-3). 인증은 머신 스코프라 목적지가 `/`다 */}
+              {/* CTA는 행의 오른쪽 끝이다(§비주얼 §4-3). **`/`로 보내지 않는다** — 그 자리에서
+                  헤더 버튼과 같은 다이얼로그를 연다. 이동이 0회가 된다(§0-4) */}
               <span className="flex justify-end">
-                <Link href="/" className="text-sm underline">
-                  인증하기
-                </Link>
+                <SettingsDialog auth={auth} trigger="link" />
               </span>
             </AlertDescription>
           </Alert>
