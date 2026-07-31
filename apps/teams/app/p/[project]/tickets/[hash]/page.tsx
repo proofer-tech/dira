@@ -27,6 +27,7 @@ import { findTicket } from "@/lib/engine";
 import {
   awaitingOf,
   awaitingUnlocked,
+  bodyWithoutQuestions,
   depBadges,
   derivedFrom,
   isAwaiting,
@@ -123,6 +124,9 @@ export default async function TicketDetail({
 
   // 요구사항 왕복 스레드 — 보드 카드의 답변 다이얼로그와 **같은 함수**가 엮는다(§1 · §2).
   const thread = threadOf(tickets, ticket, config);
+
+  // 읽기 전용 본문 — 스레드가 데려간 `## 질문 n` 절을 뺀 것. 편집 폼은 아래에서 원문을 쓴다.
+  const bodyRead = bodyWithoutQuestions(ticket.body);
 
   // 편집 폼의 persona select 선택지. **보드의 발행 다이얼로그와 같은 규칙**이다(§2 편집 항):
   // `listPersonas` 결과 중 `body !== null`(= PROFILE.md가 있다). 여기서 `readdir`을 다시 하면
@@ -294,8 +298,10 @@ export default async function TicketDetail({
                 읽기 전용 자리를 쓴다 — 사유는 위 Alert가 각자 말한다. 판정을 상태 하나로 두는
                 이유: `!== "open"`이면 나중에 상태가 늘어도 기본이 읽기 전용이다. */}
             {ticket.state !== "open" ? (
-              // 읽기만 한다 — 원문일 이유가 없다(§비주얼 §10). 편집 폼 쪽은 종전대로 원문이다
-              <Markdown text={ticket.body} />
+              // 읽기만 한다 — 원문일 이유가 없다(§비주얼 §10). 편집 폼 쪽은 종전대로 원문이다.
+              // `## 질문 n`은 빼고 그린다 — 아래 스레드가 답까지 짝지어 들고 있는 유일한 출처다.
+              // 걸러낸 뒤 남는 게 없으면 제목만 남는 절이 아니라 빈 상태다.
+              bodyRead ? <Markdown text={bodyRead} /> : <EmptyState text="본문 없음" />
             ) : (
               // 폼에는 frontmatter **원문**을 넣는다. `ticket.persona`는 PERSONA_RE를 못 넘긴 값을
               // ''로 만든 것이라, 그대로 저장하면 사람이 적어둔 값을 조용히 지운다.

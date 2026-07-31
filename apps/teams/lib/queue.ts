@@ -292,6 +292,30 @@ export function questionsOf(body: string): { heading: string; text: string }[] {
   return out;
 }
 
+/** `questionsOf`가 데려간 절을 뺀 본문 — **읽기 전용 렌더(`<Markdown>`)만** 이걸 쓴다(§2 왕복).
+ *  같은 질문이 스레드와 본문에 두 벌 뜨지 않게 하는 자리고, 스레드가 질문의 유일한 출처다.
+ *
+ *  편집 폼·검색·복사·이어받기는 **원문 전문**이다 — 폼에서 빼면 저장이 파일에서 질문을 지운다.
+ *  판정을 `questionsOf`와 한 파일·같은 루프 모양으로 두는 이유: 정규식이 두 벌이 되면 스레드에
+ *  뜬 질문이 본문에는 남는 티켓이 생긴다. */
+export function bodyWithoutQuestions(body: string): string {
+  const out: string[] = [];
+  let dropping = false;
+  for (const line of body.split("\n")) {
+    const heading = /^#{1,2}\s/.test(line);
+    if (heading) dropping = /^##\s*질문/.test(line);
+    if (dropping) {
+      // 절 제목 앞에 있던 빈 줄까지 걷어낸다 — 안 하면 지운 자리에 빈 줄이 겹쳐 남는다
+      if (heading) while (out.length && out[out.length - 1].trim() === "") out.pop();
+      continue;
+    }
+    // 걷어낸 뒤 다시 시작하는 절과 앞 절을 붙여놓지 않는다(이미 빈 줄이면 늘리지 않는다)
+    if (heading && out.length && out[out.length - 1].trim() !== "") out.push("");
+    out.push(line);
+  }
+  return out.join("\n").trim();
+}
+
 /** 스레드 한 칸. 질문은 요구사항 본문의 절이고 답변은 `kind: answer` 티켓이다. */
 export type ThreadItem = {
   role: "question" | "answer";

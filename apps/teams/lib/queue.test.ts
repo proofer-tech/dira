@@ -19,6 +19,7 @@ import {
   inDefaultList,
   isAwaiting,
   listTickets,
+  bodyWithoutQuestions,
   questionsOf,
   depBadges,
   referrers,
@@ -599,6 +600,16 @@ test("답변 대기 판정 + 답변 파일 생성으로 재큐 (엔진과 대조
   assert.deepStrictEqual(questionsOf(at("r0000001").body), [
     { heading: "질문 1", text: "어느 화면인가?\n\n### 보기\n\n- 보드" },
   ]);
+
+  // 짝 함수 — 읽기 전용 렌더가 쓰는 본문. 질문 절만 사라지고 앞뒤 절은 그대로다.
+  // 지운 자리에 빈 줄이 겹쳐 남지 않는다(`\n\n` 하나다)
+  assert.strictEqual(
+    bodyWithoutQuestions(at("r0000001").body),
+    "사람이 쓴 요구 전문.\n\n## 참고\n\n질문 아니다.",
+  );
+  // 절이 없는 본문은 그대로고, 질문뿐인 본문은 ""다(호출부가 `본문 없음`을 그린다)
+  assert.strictEqual(bodyWithoutQuestions("## Goal\n\n하나.\n"), "## Goal\n\n하나.");
+  assert.strictEqual(bodyWithoutQuestions("## 질문 1\n\n뭔가?\n"), "");
 
   // 엔진 대조 — 답변 전: `deps 대기`이고 select 0건이다
   assert.match(pyList(r), /r0000001 .* deps 대기 a1111111/);
