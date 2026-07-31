@@ -769,11 +769,18 @@ export function ProjectRows({ rows }: { rows: ProjectRow[] }) {
                   )}
                 </span>
               </TableCell>
+              {/* 상한은 `td`가 아니라 안쪽 `span`에 건다 — auto table layout은 `td`의
+                  max-width를 상한으로 지키지 않는다(§비주얼 §6). `title`은 셀에 둬서
+                  여백을 hover해도 전문이 뜬다.
+                  `w-px`가 같이 있어야 상한이 문다: 폭을 안 적은 컬럼은 남는 폭을 나눠 갖는
+                  자리에 들어가고, 그 배분은 안쪽 max-width를 보지 않는다. 폭을 적으면 그
+                  자리에서 빠져 컬럼이 내용 폭(상한까지)만 요구한다 — 늘어난 폭은 §7대로
+                  이름·액션이 가져간다. 1px은 최소값이고 실제 폭은 내용이 정한다 */}
               <TableCell
-                className="max-w-[16rem] truncate px-3 py-0 font-mono text-xs text-muted-foreground"
+                className="w-px px-3 py-0 font-mono text-xs text-muted-foreground"
                 title={t.root}
               >
-                {t.shortRoot}
+                <span className="block max-w-[16rem] truncate">{t.shortRoot}</span>
               </TableCell>
               {/* 연결 안 됨이면 세 자리를 전부 비운다. 0이 아니다 — 못 읽은 것과 0건은
                   다른 사실이다(§0). 세 수를 서로 다르게 칠하지 않는다(§비주얼 §7) */}
