@@ -134,3 +134,31 @@ test("preflight — .dira 유무와 큐 여부로 갈린다", async (t) => {
   assert.equal(file.ok, false);
   assert.equal(file.ok === false && file.queue, false);
 });
+
+test("engineRepo — DIRA_ENGINE이 먼저다. 값이 없으면 cwd 유도가 그대로", async (t) => {
+  const derived = engineRepo(); // env 없이 = 지금의 유도(레포 안에서 돌므로 성공한다)
+  assert.ok("path" in derived, `유도가 깨졌다: ${JSON.stringify(derived)}`);
+
+  const dir = await tmp();
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  t.after(() => void delete process.env.DIRA_ENGINE);
+
+  // ① tick.sh가 없는 값 → 거부하고, 사유에 **그 경로**가 담긴다(유도 경로가 아니다)
+  process.env.DIRA_ENGINE = dir;
+  const bad = engineRepo();
+  assert.ok("error" in bad && bad.error.includes(dir), `사유에 경로가 없다: ${JSON.stringify(bad)}`);
+  assert.ok("error" in bad && bad.error.includes("DIRA_ENGINE"), "어느 쪽에서 온 값인지 말해야 한다");
+  assert.ok("error" in bad && !bad.error.includes(derived.path), "유도 경로가 새면 안 된다");
+
+  // ② tick.sh가 있으면 그 경로다 — 유도를 이긴다
+  await writeFile(path.join(dir, "tick.sh"), "");
+  assert.deepEqual(engineRepo(), { path: dir });
+
+  // ③ 빈 값·공백은 없는 것과 같다(env를 지웠는데 껍데기가 남는 경우)
+  for (const v of ["", "  "]) {
+    process.env.DIRA_ENGINE = v;
+    assert.deepEqual(engineRepo(), derived);
+  }
+  delete process.env.DIRA_ENGINE;
+  assert.deepEqual(engineRepo(), derived);
+});

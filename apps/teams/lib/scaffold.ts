@@ -21,17 +21,22 @@ const TEMPLATE_FILES = [
   "personas/designer/PROFILE.md",
 ];
 
-/** 엔진 레포 경로를 **GUI 자기 위치에서 유도한다**(§0-3 답변 2(a)). GUI는 `<엔진 레포>/apps/teams/`
- *  에 산다 — 상위 2단계가 레포고, 그 자리에 `tick.sh`가 실제로 있는지 확인한다.
+/** 엔진 레포 경로. **`DIRA_ENGINE`이 있으면 그것이고**(패키징된 `.app`이 번들의 엔진을 userData로
+ *  꺼내 넘긴다 — §데스크톱 앱 못박는 것 8), 없으면 **GUI 자기 위치에서 유도한다**(§0-3 답변 2(a)).
+ *  GUI는 `<엔진 레포>/apps/teams/`에 산다 — 상위 2단계가 레포다. `.app`에서는 서버가
+ *  `Contents/Resources/server/`에서 돌아 그 유도가 `Contents`를 가리키므로 env가 먼저다.
  *
- *  없으면 **거부한다. 폼 필드로 되묻지 않는다** — GUI가 엔진 레포 밖에 있다는 건 설치가 깨진
- *  것이고 폼 하나로 고칠 문제가 아니다. 유도한 경로를 사유에 그대로 담아 사람이 무엇을 봐야
- *  하는지 알게 한다. */
+ *  **`tick.sh` 존재 확인은 어느 쪽이든 그대로다.** 없으면 **거부한다. 폼 필드로 되묻지 않는다** —
+ *  GUI가 엔진 레포 밖에 있다는 건 설치가 깨진 것이고 폼 하나로 고칠 문제가 아니다. 본 경로를
+ *  사유에 그대로 담아 사람이 무엇을 봐야 하는지 알게 한다(어느 쪽에서 나온 값인지도 같이). */
 export function engineRepo(): { path: string } | { error: string } {
-  const repo = path.resolve(process.cwd(), "..", "..");
+  const env = process.env.DIRA_ENGINE?.trim();
+  const repo = env ? path.resolve(env) : path.resolve(process.cwd(), "..", "..");
   if (existsSync(path.join(repo, "tick.sh"))) return { path: repo };
   return {
-    error: `엔진 레포를 찾지 못했습니다 — ${repo}에 tick.sh가 없습니다. GUI는 <엔진 레포>/apps/teams/에서 돌아야 합니다.`,
+    error: `엔진 레포를 찾지 못했습니다 — ${repo}에 tick.sh가 없습니다. ${
+      env ? "DIRA_ENGINE이 가리키는 자리입니다." : "GUI는 <엔진 레포>/apps/teams/에서 돌아야 합니다."
+    }`,
   };
 }
 

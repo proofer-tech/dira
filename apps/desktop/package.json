@@ -22,7 +22,11 @@
     "asar": false,
     "extraResources": [
       { "from": "../teams/.next/standalone", "to": "server" },
-      { "from": "../teams/.next/standalone/node_modules", "to": "server/node_modules" }
+      { "from": "../teams/.next/standalone/node_modules", "to": "server/node_modules" },
+      { "from": "../../tick.sh", "to": "engine/tick.sh" },
+      { "from": "../../tickets.py", "to": "engine/tickets.py" },
+      { "from": "../../templates", "to": "engine/templates" },
+      { "from": "../../worker.sh.example", "to": "engine/worker.sh.example" }
     ],
     "mac": {
       "target": "dmg",

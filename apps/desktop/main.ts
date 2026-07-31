@@ -1,10 +1,11 @@
-// dira 데스크톱 셸. 하는 일은 다섯이다 — Next standalone 서버를 자식으로 띄우고, 창이 그것을 열고,
+// dira 데스크톱 셸. 하는 일은 다섯이다 — Next standalone 서버를 자식으로 띄우고(번들의 엔진을
+// 그 전에 userData로 꺼내 `DIRA_ENGINE`으로 넘긴다, 못박는 것 8), 창이 그것을 열고,
 // 창을 닫아도 메뉴바에 남고(N1), 답변 대기 티켓이 새로 생기면 알리고(N2), 화면이 부르면
 // 네이티브 경로 다이얼로그를 띄우고(N3), 로그인 시 자동 실행을 켜고 끈다(N4).
-// 스펙: ../../docs/DESIGN.md §데스크톱 앱 (특히 "못박는 것" 1~7, N1·N2·N3·N4).
+// 스펙: ../../docs/DESIGN.md §데스크톱 앱 (특히 "못박는 것" 1~8, N1·N2·N3·N4).
 import { app, BrowserWindow, Menu, Notification, Tray, dialog, ipcMain, nativeImage, shell } from "electron";
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
-import { existsSync } from "node:fs";
+import { cpSync, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -86,7 +87,38 @@ function nodeBin(): string {
   return existsSync(helper) ? helper : process.execPath;
 }
 
+/** 못박는 것 8 — **엔진은 번들에 들어가고, 쓰이기 전에 번들 밖으로 나온다.** §0-3 스캐폴딩이
+ *  읽는 넷(`tick.sh` · `tickets.py` · `templates/` · `worker.sh.example`)이 `Resources/engine/`에
+ *  있고, 그것을 userData로 복사한 뒤 경로를 `DIRA_ENGINE`으로 서버에 넘긴다.
+ *
+ *  **번들 안 경로를 넘기지 않는 이유**는 `w1.sh`의 `. "<엔진>/tick.sh"`가 그 값을 그대로 물기
+ *  때문이다 — `.app` 안을 가리키면 그 워커는 앱을 지우는 순간 죽는다. 복사본이 앱보다 오래
+ *  살아야 해서 자리가 userData다.
+ *
+ *  판정은 마커 파일 한 줄(앱 버전)이다. 엔진은 읽기 전용이라 덮어써도 잃을 것이 없다.
+ *  소스에서 돌 때는 아무것도 하지 않는다 — 서버 cwd 상위 2단계가 진짜 레포고 그게 최신이다.
+ *  ponytail: 실패하면 로그만 남기고 env 없이 간다. 그러면 `engineRepo()`가 종전 유도로 가서
+ *  `새로 만들기`가 자기 거부 문구를 낸다 — 앱 기동 전체를 여기서 죽일 이유가 없다. */
+function extractEngine(): string | null {
+  if (!app.isPackaged) return null;
+  const dst = join(app.getPath("userData"), "engine");
+  const stamp = join(dst, ".version");
+  try {
+    if (!existsSync(stamp) || readFileSync(stamp, "utf8") !== app.getVersion()) {
+      rmSync(dst, { recursive: true, force: true });
+      cpSync(join(process.resourcesPath, "engine"), dst, { recursive: true });
+      writeFileSync(stamp, app.getVersion());
+      console.log(`[dira] 엔진을 꺼냈습니다 → ${dst} (v${app.getVersion()})`);
+    }
+    return dst;
+  } catch (e) {
+    console.error(`[dira] 엔진을 꺼내지 못했습니다: ${(e as Error).message}`);
+    return null;
+  }
+}
+
 function startServer(port: number): ChildProcess {
+  const engine = extractEngine();
   // node 바이너리가 PATH에 있다고 가정하지 않는다 — Electron 자신을 노드로 돌린다.
   const proc = spawn(nodeBin(), [SERVER], {
     env: {
@@ -95,6 +127,7 @@ function startServer(port: number): ChildProcess {
       ELECTRON_RUN_AS_NODE: "1",
       PORT: String(port),
       HOSTNAME: "127.0.0.1",
+      ...(engine ? { DIRA_ENGINE: engine } : {}),
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
