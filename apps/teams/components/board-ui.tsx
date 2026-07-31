@@ -8,7 +8,7 @@
  *
  *  필터 UI를 `command`로 하는 것은 DESIGN.md §5가 정한 것이다(검색·키보드 이동을 직접 쓰면
  *  수백 줄이고, 전환기가 이미 같은 컴포넌트를 쓴다). */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Check, ChevronsUpDown, ListFilter, Search } from "lucide-react";
 import { PersonaDot } from "@/components/persona-badge";
@@ -23,6 +23,8 @@ import {
 } from "@/components/ui/command";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { relationPath, type Anchor } from "@/lib/urls";
+import type { RelationEdge } from "@/lib/queue";
 
 /** 필터·검색은 히스토리를 남기지 않는다(`replace`) — 글자마다 한 칸씩 쌓이면 뒤로가기로
  *  보드에서 나갈 수 없다. 정렬·필터 해제는 `<Link>`(push)라 뒤로가기가 정상 동작한다. */
@@ -202,4 +204,123 @@ export function BoardPolling() {
     return () => clearInterval(timer);
   }, [router]);
   return null;
+}
+
+/** 칸반 호버 관계선 (DESIGN.md §1 보드 · §비주얼 §17). **스트립의 `absolute` 자식**이고
+ *  간선은 서버가 준다(`relationEdges` — fs 읽기가 늘지 않는다). 여기가 하는 일은 셋뿐이다:
+ *  호버된 stem을 알아내고, 그 stem의 상대를 DOM에서 찾고, rect를 재서 `d`를 만든다.
+ *
+ *  **호버 상태는 URL에 담지 않는다**(§1) — 확정되지 않은 입력이라 여기 남는다(파일 머리 규칙).
+ *
+ *  §1이 요구한 좌표 추종 넷이 어디서 풀리는지:
+ *   - **스트립 가로 스크롤** — 리스너가 없다. 오버레이가 스크롤 컨테이너의 `absolute` 자식이라
+ *     콘텐츠와 같이 움직인다(그래서 좌표 원점이 스트립 **콘텐츠 박스**다).
+ *   - **레인 세로 스크롤** — `scroll`은 버블하지 않으므로 스트립에서 **캡처로** 받는다.
+ *   - **창 리사이즈** — `window` 리스너.
+ *   - **5초 폴링 리렌더** — 서버가 `relations`를 새로 주면 아래 effect가 다시 돌아 재측정한다.
+ *     그래서 호버 stem이 effect 안의 지역변수가 아니라 `useState`다(effect가 다시 돌아도 산다).
+ *
+ *  못 그리는 것은 **조용히 뺀다**(§17 에러): 상대가 DOM에 없거나(필터·검색·완료 20건 자르기)
+ *  자기 레인의 보이는 상자와 안 겹치면 그 획만 없다. `화면 밖 N건` 같은 표시는 없다. */
+export function BoardRelations({ relations }: { relations: Map<string, RelationEdge[]> }) {
+  const ref = useRef<SVGSVGElement>(null);
+  const [stem, setStem] = useState<string | null>(null);
+  const [paths, setPaths] = useState<{ d: string; kind: RelationEdge["kind"] }[]>([]);
+
+  // 호버·포커스는 스트립 하나에 위임한다 — 카드마다 핸들러를 달면 보드가 통째로 클라이언트가 된다.
+  // 카드는 `focus-within:bg-muted/50`으로 이미 둘을 같이 받고 있다(§1: 호버 **와** 포커스).
+  useEffect(() => {
+    const strip = ref.current?.parentElement;
+    if (!strip) return;
+    const stemOf = (n: EventTarget | null) =>
+      (n instanceof Element ? n.closest("[data-stem]") : null)?.getAttribute("data-stem") ?? null;
+    const enter = (e: Event) => setStem(stemOf(e.target));
+    // 포커스가 카드에서 카드로 옮겨 갈 때 `focusout`이 먼저 온다 — 여기서 그냥 비우면 선이
+    // 100ms 동안 한 번 사라졌다 다시 뜬다. 받을 쪽(relatedTarget)을 보고 한 번에 갈아 끼운다.
+    const leave = (e: Event) => setStem(stemOf((e as FocusEvent).relatedTarget));
+    const clear = () => setStem(null);
+    strip.addEventListener("mouseover", enter);
+    strip.addEventListener("mouseleave", clear);
+    strip.addEventListener("focusin", enter);
+    strip.addEventListener("focusout", leave);
+    return () => {
+      strip.removeEventListener("mouseover", enter);
+      strip.removeEventListener("mouseleave", clear);
+      strip.removeEventListener("focusin", enter);
+      strip.removeEventListener("focusout", leave);
+    };
+  }, []);
+
+  // 좌표는 **호버가 시작된 뒤에** 잰다(§1) — 카드 전부의 rect를 상시 들고 있으면 5초 폴링마다
+  // 레이아웃을 강제로 계산한다.
+  useEffect(() => {
+    const strip = ref.current?.parentElement;
+    const edges = (stem && relations.get(stem)) || [];
+    if (!strip || !edges.length) {
+      setPaths([]);
+      return;
+    }
+    const find = (s: string) => strip.querySelector(`[data-stem="${CSS.escape(s)}"]`);
+    const anchor = (el: Element, sr: DOMRect): Anchor | null => {
+      const lane = el.closest("[data-lane]");
+      if (!lane) return null;
+      const r = el.getBoundingClientRect();
+      const lr = lane.getBoundingClientRect();
+      // §1의 보이는 판정 하나: 그 카드가 자기 레인 스크롤러의 보이는 상자와 겹치는가.
+      if (r.bottom <= lr.top || r.top >= lr.bottom) return null;
+      const dx = strip.scrollLeft - sr.left; // 원점 = 스트립 콘텐츠 박스(§17 좌표계)
+      return {
+        left: r.left + dx,
+        right: r.right + dx,
+        cx: (r.left + r.right) / 2 + dx,
+        // 앵커 클램프(§17) — 2px만 걸친 카드도 위 판정을 통과하는데 그 카드의 세로 중앙은
+        // 레인 밖이다. 클램프가 없으면 선이 레인 아래로 삐져나가 허공에 뜬다.
+        y: Math.min(Math.max((r.top + r.bottom) / 2, lr.top + 2), lr.bottom - 2) - sr.top,
+      };
+    };
+    const draw = () => {
+      const sr = strip.getBoundingClientRect();
+      const el = stem && find(stem);
+      const a = el && anchor(el, sr);
+      if (!a) return setPaths([]);
+      const next: { d: string; kind: RelationEdge["kind"] }[] = [];
+      for (const e of edges) {
+        const to = find(e.to);
+        const b = to && anchor(to, sr);
+        if (b) next.push({ d: relationPath(a, b), kind: e.kind });
+      }
+      setPaths(next);
+    };
+    draw();
+    strip.addEventListener("scroll", draw, true); // 캡처 — 레인 스크롤은 버블하지 않는다
+    window.addEventListener("resize", draw);
+    return () => {
+      strip.removeEventListener("scroll", draw, true);
+      window.removeEventListener("resize", draw);
+    };
+  }, [stem, relations]);
+
+  return (
+    // `overflow-visible`이 없으면 가로로 스크롤한 자리의 선이 SVG 상자 밖이라 통째로 사라진다
+    // (좌표는 콘텐츠 폭 기준인데 상자는 보이는 폭이다). 밖으로 나간 획은 스트립이 잘라 준다.
+    // 배경을 깔지 않는다 — 카드 위(`z-10`)지만 1.5px 획이라 포커스 링(`ring-[3px]`)이 남는다.
+    <svg
+      ref={ref}
+      aria-hidden="true"
+      className="pointer-events-none absolute inset-0 z-10 overflow-visible transition-opacity duration-100 ease-out motion-reduce:transition-none"
+      style={{ opacity: paths.length ? 1 : 0 }}
+    >
+      {/* `deps`는 실선(선후) · `req`는 파선(출처)이다 — 색으로 가르지 않는다(§17) */}
+      {paths.map((p, i) => (
+        <path
+          key={i}
+          d={p.d}
+          fill="none"
+          strokeWidth={1.5}
+          strokeDasharray={p.kind === "req" ? "4 3" : undefined}
+          className="stroke-muted-foreground/60"
+        />
+      ))}
+    </svg>
+  );
 }

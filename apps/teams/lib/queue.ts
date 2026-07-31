@@ -503,6 +503,54 @@ export function derivedFrom(tickets: Ticket[], target: Ticket, sfx: Suffixes): T
   });
 }
 
+/** 칸반 호버 관계선의 간선 (DESIGN.md §1 보드 · §비주얼 §17). 상세 §2 관계 절이 그리는 것과
+ *  **같은 간선**이다: `deps`(선행 · 후행 역참조) + `req:`(요구사항 ↔ 나온 티켓).
+ *  met/unmet으로 거르지 않는다 — 상세가 안 거르는 것과 같은 이유고 개별 상태는 배지가 말한다.
+ *
+ *  **fs를 1건도 더 읽지 않는다**: 보드가 이미 읽은 `tickets`와 `depBadges`·`derivedFrom`이
+ *  쓰는 `resolveDep`·`reqOf` 그대로다. 선에는 방향이 없으므로 **양쪽에 넣는다** — 호버된
+ *  stem 하나로 상대를 찾는 것이 클라이언트가 하는 전부다.
+ *
+ *  `shown`(지금 화면이 그리는 stem) 밖은 애초에 안 싣는다. 카드가 DOM에 없어 그릴 수 없고,
+ *  큐 전체를 실으면 5초마다 안 쓰는 간선을 브라우저로 밀어 넣는다. 완료 레인 20건 자르기와
+ *  레인 세로 스크롤은 여기서 못 보므로 클라이언트가 DOM·rect로 마저 거른다(§1).
+ *
+ *  객체가 아니라 `Map`인 이유는 `personaDotClass`와 같다 — 키가 **파일명에서 오는 남의
+ *  문자열**이라 `obj["__proto__"] ??= []`가 Object.prototype에 push하는 자리다.
+ *
+ *  ponytail: `resolveDep`이 매번 선형 탐색이라 티켓 수 × deps 수다(`referrers`와 같은 천장).
+ *            큐가 수천 건 되면 stem → 티켓 맵을 한 번 만들어 둘이 같이 쓴다. */
+export type RelationEdge = { to: string; kind: "deps" | "req" };
+
+export function relationEdges(
+  tickets: Ticket[],
+  sfx: Suffixes,
+  shown: Set<string>,
+): Map<string, RelationEdge[]> {
+  const out = new Map<string, RelationEdge[]>();
+  const link = (a: string, b: string, kind: RelationEdge["kind"]) => {
+    if (a === b || !shown.has(a) || !shown.has(b)) return;
+    for (const [x, y] of [
+      [a, b],
+      [b, a],
+    ]) {
+      const list = out.get(x);
+      if (list) list.push({ to: y, kind });
+      else out.set(x, [{ to: y, kind }]);
+    }
+  };
+  for (const t of tickets) {
+    for (const d of t.deps) {
+      const hit = resolveDep(tickets, d, sfx);
+      if (hit) link(t.stem, hit.stem, "deps");
+    }
+    const req = reqOf(t);
+    const hit = req ? resolveDep(tickets, req, sfx) : null;
+    if (hit) link(t.stem, hit.stem, "req");
+  }
+  return out;
+}
+
 // ── 쓰기 ────────────────────────────────────────────────────────────────────
 
 /** 티켓 파일 제자리 쓰기 — frontmatter 키 갱신 + 본문 교체. **읽고-고치고-쓰기**다.

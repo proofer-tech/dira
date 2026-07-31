@@ -97,6 +97,29 @@ const PERSONA_DOT = new Map([
 export const personaDotClass = (color?: string): string =>
   PERSONA_DOT.get(color ?? "") ?? "border border-muted-foreground";
 
+/** 칸반 호버 관계선 한 획의 `d` (DESIGN.md §비주얼 §17 기하). 좌표는 **스트립 콘텐츠 박스**
+ *  기준이고 `y`는 호출자가 이미 레인의 보이는 상자로 클램프한 값이다(§17 앵커 클램프).
+ *
+ *  **분기가 없는 것이 이 식의 값이다** — 이웃 레인 · 레인 건너뜀 · 같은 레인 세 배치가 여기서
+ *  같이 나온다. `s`는 접선 방향(상대가 오른쪽이면 +1 = 오른쪽 테두리에 붙는다. **같으면 둘 다
+ *  +1**이라 같은 레인 선이 오른쪽 거터로 부푼다), `d`는 제어점 거리 `clamp(|Δx|/2, 24, 96)`다.
+ *  하한 24는 레인 사이 거터 폭이고(카드 테두리 사이 `4+16+4`), 상한 96은 레인을 건너뛰는 선을 자른다.
+ *
+ *  제어점의 y가 앵커의 y와 같다 — 곡선이 두 앵커의 세로 범위를 못 벗어나므로 선이 레인 머리로
+ *  올라가지 않는다. 지켜야 할 성질이라 값이 아니라 근거로 적는다(§17).
+ *  JSX가 아니라 여기 사는 이유는 `elapsedSuffix`와 같다(`pnpm test`가 JSX를 못 읽는다). */
+export type Anchor = { left: number; right: number; cx: number; y: number };
+
+export function relationPath(a: Anchor, b: Anchor): string {
+  const s1 = b.cx < a.cx ? -1 : 1;
+  const s2 = b.cx > a.cx ? -1 : b.cx < a.cx ? 1 : 1;
+  const x1 = s1 > 0 ? a.right : a.left;
+  const x2 = s2 > 0 ? b.right : b.left;
+  const d = Math.min(96, Math.max(24, Math.abs(x2 - x1) / 2));
+  const r = (n: number) => Math.round(n * 10) / 10;
+  return `M ${r(x1)},${r(a.y)} C ${r(x1 + s1 * d)},${r(a.y)} ${r(x2 + s2 * d)},${r(b.y)} ${r(x2)},${r(b.y)}`;
+}
+
 /** 홈 디렉터리를 `~`로 줄인 표시용 경로. 잘리는 길이 자체를 줄인다(DESIGN.md §6 텍스트 잘림).
  *  표시 전용이다 — 이 값을 다시 파일 경로로 쓰지 않는다. */
 export function tildePath(abs: string, home: string): string {

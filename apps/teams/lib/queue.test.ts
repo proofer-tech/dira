@@ -22,6 +22,7 @@ import {
   questionsOf,
   depBadges,
   referrers,
+  relationEdges,
   reqOf,
   reqTitle,
   resolveDep,
@@ -817,4 +818,29 @@ test("reqTitle — 첫 비어있지 않은 줄, 80자에서 자르고 …", () =
   assert.strictEqual(reqTitle("가".repeat(81)), "가".repeat(80) + "…");
   // 빈 입력·공백만 → ""(액션이 "요구 내용을 입력하세요."로 거부한다)
   assert.strictEqual(reqTitle("   \n\t\n"), "");
+});
+
+test("관계선 간선 — deps 양방향 + req · 화면 밖은 안 싣는다 (§1 보드 · §비주얼 §17)", async () => {
+  const root = newRoot();
+  const sfx: Suffixes = { inProgress: "-진행중", done: "-완료" };
+  await write(root, "aaaa1111-완료.md", fm({ ticket: "aaaa1111", title: "선행 겸 요구사항" }));
+  await write(root, "bbbb2222.md", fm({ ticket: "bbbb2222", title: "후행", deps: "[aaaa1111]" }));
+  await write(root, "cccc3333.md", fm({ ticket: "cccc3333", title: "나온 티켓", req: "aaaa1111" }));
+  await write(root, "dddd4444.md", fm({ ticket: "dddd4444", title: "화면 밖", deps: "[aaaa1111]" }));
+  await write(root, "eeee5555.md", fm({ ticket: "eeee5555", title: "오타", deps: "[zzzz9999]" }));
+
+  const tickets = await listTickets(root, sfx);
+  // dddd4444는 필터·검색에 걸려 카드가 없는 상황이다
+  const edges = relationEdges(tickets, sfx, new Set(["aaaa1111", "bbbb2222", "cccc3333", "eeee5555"]));
+  const of = (s: string) => (edges.get(s) ?? []).map((e) => `${e.kind}:${e.to}`).sort();
+
+  // 선에는 방향이 없다 — 어느 쪽을 호버해도 상대가 나온다. `aaaa1111`은 **완료(met)인데도** 있다
+  // (met/unmet으로 거르지 않는다 — 상세 관계 절과 같은 규칙)
+  assert.deepStrictEqual(of("bbbb2222"), ["deps:aaaa1111"]);
+  assert.deepStrictEqual(of("aaaa1111"), ["deps:bbbb2222", "req:cccc3333"]);
+  assert.deepStrictEqual(of("cccc3333"), ["req:aaaa1111"]); // req는 deps와 갈린다(파선이 된다)
+  // 화면 밖 카드와 큐에 없는 해시는 간선이 아니다 — 그릴 상대가 없다
+  assert.strictEqual(edges.has("dddd4444"), false);
+  assert.deepStrictEqual(of("aaaa1111").filter((e) => e.endsWith("dddd4444")), []);
+  assert.deepStrictEqual(of("eeee5555"), []);
 });

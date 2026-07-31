@@ -26,7 +26,7 @@ import { stat } from "node:fs/promises";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowDown, ArrowUp, ChevronsUpDown, X } from "lucide-react";
-import { BoardFilter, BoardPolling, BoardSearch } from "@/components/board-ui";
+import { BoardFilter, BoardPolling, BoardRelations, BoardSearch } from "@/components/board-ui";
 import { EmptyState } from "@/components/empty-state";
 import { PersonaBadge } from "@/components/persona-badge";
 import { DepBadge, StatusBadge, daysSince, statusLabel } from "@/components/status-badge";
@@ -51,6 +51,7 @@ import {
   isAwaiting,
   listTickets,
   depBadges,
+  relationEdges,
   sortTickets,
   statusOf,
   threadOf,
@@ -257,6 +258,12 @@ export default async function Board({
    *  기본값인 kanban은 파라미터를 **지운다**: 같은 화면을 가리키는 URL이 두 개가 되면 공유 링크가
    *  갈린다(`?view=kanban`으로 들어와도 물론 칸반이다 — 모르는 값도 칸반으로 떨어진다). */
   const view = sp.get("view") === "table" ? "table" : "kanban";
+  /** 호버 관계선의 간선(§1 보드 · §비주얼 §17) — **칸반에서만** 만든다(테이블은 무수정이다).
+   *  fs 읽기가 늘지 않는다: 위에서 이미 읽은 `tickets`를 `depBadges`와 같은 조회로 훑는다.
+   *  범위가 `rows`인 이유 — 필터·검색에 걸린 티켓은 카드가 없어 그릴 수 없다. `완료` 레인
+   *  20건 자르기와 레인 세로 스크롤은 여기서 못 보므로 클라이언트가 DOM·rect로 마저 거른다. */
+  const relations =
+    view === "kanban" ? relationEdges(tickets, config, new Set(rows.map((t) => t.stem))) : null;
   const viewHref = (v: (typeof VIEWS)[number]["value"]) => {
     const next = new URLSearchParams(sp);
     if (v === "table") next.set("view", v);
@@ -416,7 +423,10 @@ export default async function Board({
                   컬럼은 페이지 거터(main px-6)에 그대로 정렬시킨다.
                   세로는 여기서 멈춘다 — 스트립이 남은 높이를 전부 먹고(`min-h-0 flex-1`)
                   세로 스크롤은 레인 안에서 일어난다(§1). 두 축이 공존한다: 여기가 가로다 */}
-              <div className="-mx-1 flex min-h-0 flex-1 gap-4 overflow-x-auto px-1 pb-2">
+              {/* `relative`는 호버 관계선의 좌표 원점이다(§비주얼 §17) — 오버레이가 이 스크롤
+                  컨테이너의 `absolute` 자식이라 콘텐츠와 함께 스크롤한다(가로 추종이 공짜다).
+                  이 줄에 더한 것은 그 한 클래스뿐이다 */}
+              <div className="relative -mx-1 flex min-h-0 flex-1 gap-4 overflow-x-auto px-1 pb-2">
                 {STATUSES.map((s) => {
                   // 컬럼 배정은 테이블 상태 컬럼과 **같은 판정**이다(queue.ts statusOf 하나뿐) —
                   // 렌더 직전에 `blocked → 대기`만 한 번 접는다. 레인 배정은 표현이지 상태가
@@ -448,7 +458,12 @@ export default async function Board({
                       {/* `-m-1 p-1`은 위 스트립의 `-mx-1 px-1`과 **같은 이유**다 — 세로 overflow가
                           새 클리핑 상자를 만들어 <Card>의 `ring-1`(border box 밖 box-shadow)이
                           네 변에서 잘린다. 음수 마진이 그 여백을 되돌려 간격은 종전 그대로다 */}
-                      <div className="-m-1 min-h-0 flex-1 space-y-2 overflow-y-auto p-1">
+                      {/* `data-lane`은 관계선의 **보이는 판정**이 재는 상자다(§1) — 카드가
+                          이 스크롤러의 보이는 상자와 안 겹치면 그 획을 안 그린다 */}
+                      <div
+                        data-lane
+                        className="-m-1 min-h-0 flex-1 space-y-2 overflow-y-auto p-1"
+                      >
                         {group.length === 0 && rows.length > 0 ? (
                           // <EmptyState>는 화면 하나의 빈 상태용이다(py-10 + 1차 액션 버튼). 레인
                           // 3개에 그걸 깔면 같은 버튼이 3개 생긴다 — 여기선 건수 0만 말한다.
@@ -462,6 +477,9 @@ export default async function Board({
                             // 없어서 안전하다). deps 배지는 늘어난 링크 위에 뜬다.
                             <Card
                               key={t.path}
+                              // 관계선이 상대를 찾는 이름이다(§1: 못 찾으면 안 그린다). 링크·엔진과
+                              // 같은 `stem`이라 `relationEdges`가 준 간선과 그냥 맞는다
+                              data-stem={t.stem}
                               className="relative gap-2 px-4 focus-within:bg-muted/50 hover:bg-muted/50"
                             >
                               {/* 칸반 카드는 레인이 상태를 말하므로 배지를 달지 않는다 — 예외가
@@ -541,6 +559,9 @@ export default async function Board({
                     </div>
                   );
                 })}
+                {/* 레인 뒤에 온다 — 카드 위(§17 z 층)에 뜨고 자기 크기를 갖지 않는다.
+                    호버·포커스 위임과 좌표 측정은 전부 여기 안이다(§1 상태는 URL에 없다) */}
+                {relations && <BoardRelations relations={relations} />}
               </div>
             </div>
           ) : (
