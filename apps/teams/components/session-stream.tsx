@@ -84,11 +84,12 @@ export function SessionStream({
   return (
     <div className="space-y-2">
       {/* 폴링 상태는 배지가 아니다 — 티켓 상태 배지가 이미 화면 머리에 있고, 같은 사실을 두 모양으로
-          그리면 어느 쪽이 정본인지 모르게 된다(§9). 색도 아이콘도 애니메이션도 없다. */}
-      <div className="flex h-8 items-center justify-between gap-2">
-        <p className="text-xs text-muted-foreground">
-          {live ? "따라가는 중 · 2초마다" : "끝난 세션 · 갱신 없음"}
-        </p>
+          그리면 어느 쪽이 정본인지 모르게 된다(§9). 색도 아이콘도 없다.
+          **`따라가는 중`은 여기 없다** — 상자 안 맨 아래로 옮겼다(§2-1 · §18 ④). 사건이 쌓일수록
+          머리 문구가 "지금"에서 멀어져서다. 진행중이면 이 줄에는 `맨 아래로` 버튼만 남고,
+          `h-8`은 그대로 둔다(버튼이 떴다 사라질 때 상자가 위아래로 튀지 않는다). */}
+      <div className="flex h-8 items-center justify-end gap-2">
+        {!live && <p className="mr-auto text-xs text-muted-foreground">끝난 세션 · 갱신 없음</p>}
         {detached && (
           <Button variant="ghost" size="sm" onClick={() => setDetached(false)}>
             <ArrowDown aria-hidden className="size-3.5" />
@@ -110,6 +111,21 @@ export function SessionStream({
           ) : (
             <FullText key={e.key} e={e} />
           ),
+        )}
+        {/* 진행 표식(§18 ④) — 마지막 사건 다음 줄이 올 자리를 지킨다. `<Marker>`도 `<details>`도
+            아니다: §9가 Marker 기본값을 하나도 안 덮기로 했는데 여기는 `text-xs`여야 한다
+            (폴링 상태 3종이 한 종류인 채로 자리만 옮겼다). 눌러 볼 것이 없으니 hover도 없다.
+            `mx-1`이 8px 점을 16px 칸(= MarkerIcon 폭) 가운데 세워 문구를 다른 두 줄과 같은
+            x=36px에 맞춘다. // ponytail: 정렬용 래퍼 대신 마진 4px. 점이 커지면 그때 래퍼.
+            문구를 같이 드는 이유는 `prefers-reduced-motion`이다 — 모션만으로 말하지 않는다. */}
+        {live && (
+          <div className="flex items-center gap-2 px-3 text-xs leading-6 text-muted-foreground">
+            <span
+              aria-hidden
+              className="mx-1 size-2 shrink-0 animate-wip-pulse rounded-full bg-muted-foreground motion-reduce:animate-none"
+            />
+            따라가는 중 · 2초마다
+          </div>
         )}
       </div>
     </div>

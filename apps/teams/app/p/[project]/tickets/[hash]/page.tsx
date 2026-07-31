@@ -242,10 +242,16 @@ export default async function TicketDetail({
             </Alert>
           )}
 
-          {/* `.wip`은 지금 세션이 그 파일로 일하고 있다 — 잠금 사유를 그 자리에 적는다(제약 5) */}
+          {/* `.wip`은 지금 세션이 그 파일로 일하고 있다 — 잠금 사유를 그 자리에 적는다(제약 5).
+              자물쇠가 움직이는 이유는 §18 ③: 이 문장이 서 있는 **이유**가 지금 누가 일하고 있다는
+              사실이라, 정지한 자물쇠는 그것을 과거형으로 읽힌다. 아래 `.done` 자물쇠는 정지다 —
+              영영 안 풀리는 잠금이라 기다릴 것이 없다. */}
           {ticket.state === "wip" && (
             <Alert>
-              <Lock aria-hidden className="text-status-active" />
+              <Lock
+                aria-hidden
+                className="animate-wip-pulse text-status-active motion-reduce:animate-none"
+              />
               <AlertTitle>세션이 물고 있습니다 — 편집·삭제 잠금</AlertTitle>
               <AlertDescription>
                 진행중 티켓은 읽기만 합니다. 세션이 죽었다면 아래 <b>할당 해제</b>로 큐에 되돌린 뒤
