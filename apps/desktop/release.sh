@@ -5,8 +5,10 @@
 # 커밋과 태그가 남고, 자산이 없는 그 태그가 다음 릴리즈 노트의 경계 노릇을 한다 — 되돌리려면
 # 사람이 원격 태그를 지워야 한다. 준비물이 없으면 조용히 떨어지지 않고 무엇이 없는지 말한다.
 #
-# **세션이 돌리는 스크립트가 아니다.** 사람이 자기 맥에서 손으로 친다 (프로토콜 §git —
-# 원격 push는 사람 몫이고, 4번이 이 레포에서 원격에 push하는 유일한 자리다).
+# **부르는 자리가 둘이고 스크립트는 하나다.** 사람이 자기 맥에서 손으로 치거나, `master`에
+# 앱이 들어왔을 때 `.github/workflows/release.yml`이 macOS 러너에서 부른다(§CI C3). 두 벌로
+# 갈라지면 사람 맥에서만 맞는 릴리스가 생긴다. 세션은 여전히 이걸 스스로 돌리지 않는다
+# (프로토콜 §git — 4번이 이 레포에서 원격에 push하는 유일한 자리다).
 set -u
 
 case "${1:-}" in
@@ -51,8 +53,16 @@ if [ -n "$missing" ]; then
 fi
 
 # 2~3. version bump + 커밋 + 태그 v<x.y.z>. 정본은 이 package.json 하나다(R2).
-npm version "$bump" -m 'release v%s' || exit 1
+#
+# **커밋·태그는 npm에 맡기지 않는다.** `npm version`은 패키지 디렉터리에 `.git`이 있을 때만
+# 커밋·태그를 만든다. 여기 `.git`은 레포 루트에 있고 `apps/desktop`에는 없어서, npm은 조용히
+# bump만 하고 0으로 끝난다 — 커밋 0 · 태그 0 · 4번의 push가 `Everything up-to-date`.
+# 그러면 5번은 돌아서 자산이 나오고 `gh release create`가 **버전 커밋이 없는 원격 HEAD에**
+# `v<x.y.z>` 태그를 박는다: 받는 사람의 앱 버전과 태그가 가리키는 소스가 갈린다(실측 2026-08-01).
+npm version "$bump" --no-git-tag-version || exit 1
 ver=$(node -p "require('./package.json').version")
+git commit -q -m "release v$ver" package.json || exit 1
+git tag "v$ver" || exit 1
 
 # 4. 원격에 나가는 유일한 자리.
 git push origin master --follow-tags || exit 1
