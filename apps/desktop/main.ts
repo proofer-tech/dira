@@ -1,9 +1,14 @@
-// dira 데스크톱 셸. 하는 일은 다섯이다 — Next standalone 서버를 자식으로 띄우고(번들의 엔진을
+// dira 데스크톱 셸. 하는 일은 여섯이다 — Next standalone 서버를 자식으로 띄우고(번들의 엔진을
 // 그 전에 userData로 꺼내 `DIRA_ENGINE`으로 넘긴다, 못박는 것 8), 창이 그것을 열고,
 // 창을 닫아도 메뉴바에 남고(N1), 답변 대기 티켓이 새로 생기면 알리고(N2), 화면이 부르면
-// 네이티브 경로 다이얼로그를 띄우고(N3), 로그인 시 자동 실행을 켜고 끈다(N4).
-// 스펙: ../../docs/DESIGN.md §데스크톱 앱 (특히 "못박는 것" 1~8, N1·N2·N3·N4).
+// 네이티브 경로 다이얼로그를 띄우고(N3), 로그인 시 자동 실행을 켜고 끄고(N4), 새 버전을
+// 찾아 받아둔다(U1·U2 — 설치는 다음 실행 때).
+// 스펙: ../../docs/DESIGN.md §데스크톱 앱 ("못박는 것" 1~8, N1~N4) · §릴리스 · 자동 업데이트 (R5·R6·R8).
 import { app, BrowserWindow, Menu, Notification, Tray, dialog, ipcMain, nativeImage, shell } from "electron";
+// 이름 가져오기(`import { autoUpdater }`)가 아닌 이유: electron-updater는 CJS이고 그 이름을
+// `Object.defineProperty(exports, ...)`의 getter로 단다 — cjs-module-lexer가 못 보는 형태라
+// ESM 이름 가져오기가 `SyntaxError`로 죽는다. 기본 가져오기는 `module.exports` 그 자체다.
+import updater from "electron-updater";
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { cpSync, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
@@ -283,6 +288,101 @@ ipcMain.handle("dira:pick-path", async (e, mode: unknown) => {
   return r.filePaths[0] ?? null;
 });
 
+// ── 릴리스 · 자동 업데이트 (R5·R6·R8) ──────────────────────────────────────
+//
+// 새 화면은 0개다 — `dialog.showMessageBox` 하나씩이고 `apps/teams`는 한 줄도 안 얹는다.
+// **받아두기만 하고 몰래 재시작하지 않는다**(R6): `autoInstallOnAppQuit`만 쓴다. 지금 당장
+// 설치하고 재시작시키는 API는 이 파일에 한 번도 나오지 않는다(판정이 `grep -c`라 이름도 안
+// 적는다 — R6이 부르지 말라고 한 그것이다). 이 앱 뒤에는 도는 세션과 cron 워커가 붙어 있어서
+// 임의 재시작이 못박는 것 3(자식 서버는 앱보다 오래 살지 않는다)을 사람이 모르는 시점에
+// 발동시킨다. 사람이 ⌘Q를 누르는 시점이 이미 "지금 재시작" 버튼이다.
+
+const { autoUpdater } = updater;
+autoUpdater.autoInstallOnAppQuit = true;
+
+/** R8 — U2의 상태는 이 파일의 **존재 여부** 하나다. N4는 `getLoginItemSettings`로 OS가 값을
+ *  갖고 있어서 파일이 없었는데 여기엔 그런 자리가 없다. 값이 하나라 JSON을 파싱하지 않는다 —
+ *  파싱 실패라는 상태가 아예 없다. 기본은 켜짐(= 파일 없음)이다.
+ *  ponytail: 두 번째 설정이 생기면 그때 settings.json으로 바꾼다. */
+function autoUpdateFlag(): string {
+  return join(app.getPath("userData"), "no-auto-update");
+}
+
+/** `checkForUpdates()`는 실패할 때 reject와 **`error` 이벤트를 같이** 낸다. `error`는
+ *  EventEmitter가 리스너 없으면 던지는 이름이라, 이 한 줄이 없으면 네트워크가 끊긴 것만으로
+ *  앱이 죽는다. 다운로드 중 실패도 여기로 온다(그쪽은 await할 자리가 없다). */
+autoUpdater.on("error", (e) => console.error(`[dira] 업데이트 실패: ${e.message}`));
+
+// R6 — 다 받으면 사실만 말한다. "지금 재시작" 버튼을 만들지 않는다.
+// ponytail: 릴리즈 노트 본문(R7)은 `e80e2eae`가 이 detail에 붙인다.
+autoUpdater.on("update-downloaded", (info) => {
+  dialog.showMessageBox({
+    type: "info",
+    message: `${info.version}을 받아뒀습니다.`,
+    detail: "앱을 다시 켤 때 적용됩니다.",
+    buttons: ["확인"],
+  });
+});
+
+/** U1(`manual`) · 켤 때와 U2를 켠 직후의 배경 검사(`!manual`).
+ *
+ *  **개발 실행에서는 검사하지 않는다**(R5) — 패키징되지 않은 앱에 걸면 electron-updater가
+ *  그 사실로 죽고 그 예외가 기동 경로에 앉는다. 손으로 누른 U1은 그 사실을 다이얼로그로 말한다.
+ *
+ *  **최신이어도 다이얼로그를 띄운다**(R5 U1). 손으로 누른 명령에 아무 반응이 없으면 사람은
+ *  고장으로 읽는다. `owner`/`repo`가 자리표시자인 채로 눌러도 마찬가지다 — 사유가 그 자리에 뜬다
+ *  (§배포 "조용히 떨어지지 않는다"와 같은 규칙). */
+async function checkForUpdate(manual: boolean) {
+  if (!app.isPackaged) {
+    const why = "개발 실행(`pnpm dev`)에서는 업데이트를 검사하지 않습니다";
+    if (!manual) return console.log(`[dira] ${why}`);
+    await dialog.showMessageBox({
+      type: "info",
+      message: why,
+      detail: "패키징된 .app에서만 동작합니다 (pnpm dist).",
+      buttons: ["확인"],
+    });
+    return;
+  }
+  try {
+    const r = await autoUpdater.checkForUpdates();
+    if (!manual) return;
+    await dialog.showMessageBox(
+      r?.isUpdateAvailable
+        ? {
+            type: "info",
+            message: `${r.updateInfo.version}을 받고 있습니다.`,
+            detail: "다 받으면 알려드립니다. 앱을 다시 켤 때 적용됩니다.",
+            buttons: ["확인"],
+          }
+        : {
+            type: "info",
+            message: `최신 버전입니다 — ${app.name} ${app.getVersion()}`,
+            buttons: ["확인"],
+          },
+    );
+  } catch (e) {
+    if (!manual) return; // `error` 리스너가 이미 찍었다
+    await dialog.showMessageBox({
+      type: "warning",
+      message: "업데이트를 확인하지 못했습니다",
+      // 404면 electron-updater가 응답 헤더 전부를 message에 붙인다(실측 30줄). 사유는 첫 줄과
+      // URL에 다 있고, 나머지는 다이얼로그를 못 읽게 만든다 — 전문은 콘솔에 남는다.
+      detail: (e as Error).message.slice(0, 300),
+      buttons: ["확인"],
+    });
+  }
+}
+
+/** U2 토글. 상태는 파일이고 켠 직후에만 한 번 검사한다 — 끄면 U1만 남는다(R5). */
+function setAutoUpdate(on: boolean) {
+  const flag = autoUpdateFlag();
+  if (on) rmSync(flag, { force: true });
+  else writeFileSync(flag, "");
+  console.log(`[dira] 자동 업데이트 ${on ? "켬" : "끔"} — ${flag} ${on ? "지움" : "만듦"}`);
+  if (on) checkForUpdate(false);
+}
+
 // ── N1 트레이 ──────────────────────────────────────────────────────────────
 
 /** 트레이 메뉴. **열 때마다 새로 만든다** — 체크 상태의 원본은 OS이고(N4) 앱 안 변수에 담아두면
@@ -298,6 +398,13 @@ function trayMenu(origin: string): Menu {
       checked: app.getLoginItemSettings().openAtLogin,
       // item.checked는 macOS가 이미 뒤집어 놓은 값이다(누른 뒤 상태). 그대로 OS에 되쓴다.
       click: (item) => app.setLoginItemSettings({ openAtLogin: item.checked }),
+    },
+    {
+      // U2 (R5·R8). N4 옆이고 상태의 원본은 마커 파일이라 여기도 열 때마다 읽는다.
+      label: "자동 업데이트",
+      type: "checkbox",
+      checked: !existsSync(autoUpdateFlag()),
+      click: (item) => setAutoUpdate(item.checked),
     },
     { type: "separator" },
     { label: "종료", click: () => app.quit() },
@@ -358,6 +465,8 @@ function installAppMenu() {
         label: app.name,
         submenu: [
           { label: `About ${app.name}`, click: showAbout },
+          // U1 — `About dira` **바로 아래**가 맥 관례다 (R5).
+          { label: "업데이트 확인…", click: () => checkForUpdate(true) },
           { type: "separator" },
           { role: "services" },
           { type: "separator" },
@@ -400,6 +509,10 @@ async function boot() {
   win = openWindow(origin);
   createTray(origin);
   app.on("activate", () => showWindow(origin)); // 독 아이콘도 `열기`와 같은 자리로 간다
+
+  // U2가 켜져 있으면(기본) 켤 때 한 번 검사해 받아둔다. await하지 않는다 — 네트워크가
+  // 기동 경로에 앉으면 안 된다. 실패는 `error` 리스너가 로그로만 남긴다 (R5·R6).
+  if (!existsSync(autoUpdateFlag())) checkForUpdate(false);
 
   await pollAwaiting(origin); // 첫 응답 = 씨 뿌리기
   setInterval(() => pollAwaiting(origin), POLL_MS);

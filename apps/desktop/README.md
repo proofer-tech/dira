@@ -7,7 +7,7 @@
 Electron main ──spawn──> node server.js        (Next standalone 빌드, 127.0.0.1:<빈 포트>)
       │                       ↑
       ├─ BrowserWindow ───load┘   빨간 버튼은 숨기기다. 파괴하지 않는다
-      └─ Tray ─ 열기 · 로그인 시 자동 실행 · 종료   창이 없어도 앱은 산다
+      └─ Tray ─ 열기 · 로그인 시 자동 실행 · 자동 업데이트 · 종료   창이 없어도 앱은 산다
 ```
 
 ## 실행
@@ -65,6 +65,33 @@ pnpm dev         # teams 빌드 + 조립 + 앱 실행
 - 상한과 문구는 `../teams/lib/workers.ts`의 `CRONTAB_WRITE_TIMEOUT`에 있다(3분).
   근거는 `../../docs/DESIGN.md` §제약 4.
 
+## 릴리스에 필요한 사람 몫 — 공개 GitHub 레포 (`4f418619`)
+
+자동 업데이트의 채널은 **공개 GitHub 레포의 Releases 하나**다(`../../docs/DESIGN.md`
+§릴리스 · 자동 업데이트 R1). 세 가지가 사람 몫이고 세션이 구할 수 없다 — §서명 · 공증이
+Apple 계정·인증서를 사람 몫으로 둔 것과 **같은 자리**다.
+
+1. **공개 GitHub 레포를 만든다.** 비공개면 안 된다 — 아래 근거.
+2. **`origin`을 붙인다.** 지금 이 레포에는 remote가 0개다(`git remote -v` 빈 출력).
+3. **`GH_TOKEN`을 환경변수로 쥔다.** `repo` 권한이 있는 PAT. 레포에 넣지 않는다(§배포).
+
+**공개여야 하는 이유는 고른 값이 아니라 이미 결정된 두 줄의 결론이다.** 비공개 레포의 릴리스
+자산은 토큰 없이 못 받는다 → 그러면 **받는 사람의 `.app` 안에 토큰이 들어가야 한다** →
+§배포의 「시크릿은 레포에 들어가지 않는다」와 §데스크톱 앱의 「남에게도 나눠준다」가 동시에
+성립하지 않는다. 비공개로 가려면 채널을 다시 고르는 요구가 필요하다.
+
+**`package.json`의 `build.publish`가 사람이 채우는 자리다.** 지금은 자리표시자다:
+
+```json
+"publish": { "provider": "github", "owner": "<GitHub 계정>", "repo": "<레포 이름>" }
+```
+
+레포를 만든 뒤 그 둘을 실제 값으로 바꾼다. **자리표시자인 채로도 `pnpm dist`는 끝까지 돈다** —
+`.dmg`·`.zip`·`latest-mac.yml`이 다 나오고 업로드만 안 한다. 대신 `업데이트 확인…`을 누르면
+GitHub이 404를 주고 **그 사유가 다이얼로그로 뜬다**(조용히 안 되지 않는다). 빈 문자열 `""`로
+두면 안 된다 — `electron-builder`가 `Cannot read properties of null (reading 'channel')`로
+빌드 자체를 실패시킨다(실측 2026-08-01).
+
 ## 패키징 — `.app` · `.dmg`
 
 ```sh
@@ -75,6 +102,8 @@ pnpm dist        # teams 빌드 + 조립 + electron-builder
 |---|---|
 | `.app` | `dist/mac-arm64/dira.app` — `/Applications`에 옮겨도 돈다 |
 | `.dmg` | `dist/dira-<버전>-arm64.dmg` — 사람이 이걸 건넨다 |
+| `.zip` | `dist/dira-<버전>-arm64-mac.zip` — **자동 업데이트가 실제로 내려받는 것.** Squirrel.Mac이 여는 건 `.zip`이고 `.dmg`가 아니다. `mac.target`에서 빼면 증상이 에러가 아니라 **아무 일도 안 일어남**이다 (R1) |
+| `latest-mac.yml` | 위 둘의 버전·해시. `publish` 항목이 있어야 나온다 |
 
 `dist/`는 gitignore돼 있다.
 
@@ -270,9 +299,37 @@ osascript -l JavaScript -e 'ObjC.import("AppKit");var s=$.NSScreen.mainScreen; \
 사라진다** — 서명이 바뀌면 macOS가 그 등록을 다른 앱의 것으로 본다. 개발 중 껐다 켜도 체크가
 풀려 있으면 그 사이에 재빌드·재서명한 것이 원인이다(`00fc34ba`에서 실측).
 
+## 업데이트 — 받아두기만 한다 (`4f418619`)
+
+스펙은 `../../docs/DESIGN.md` §릴리스 · 자동 업데이트 R5·R6·R8이다. 새 화면은 0개고
+전부 `dialog.showMessageBox` 하나씩이다.
+
+| # | 무엇 | 자리 |
+|---|---|---|
+| U1 | `업데이트 확인…` | 앱 메뉴 `dira`의 `About dira` **바로 아래**. **최신이어도 다이얼로그가 뜬다** — 손으로 누른 명령에 반응이 없으면 사람은 고장으로 읽는다 |
+| U2 | `자동 업데이트` | 트레이 메뉴 체크 항목(N4 옆). 기본 **켜짐**. 끄면 U1만 남는다 |
+
+**몰래 재시작하지 않는다**(R6). `autoInstallOnAppQuit`만 쓰고 지금 설치·재시작시키는 API는
+`main.ts`에 한 번도 안 나온다(`grep -c quitAndInstall main.ts` → `0`). 이 앱 뒤에는 도는 세션과
+cron 워커가 붙어 있어서, 임의 재시작이 §못박는 것 3(자식 서버는 앱보다 오래 살지 않는다)을
+사람이 모르는 시점에 발동시킨다. 사람이 ⌘Q를 누르는 시점이 이미 「지금 재시작」 버튼이다.
+
+**U2의 상태는 `~/Library/Application Support/dira/no-auto-update`의 존재 여부다**(R8).
+N4는 OS가 값을 갖지만(`getLoginItemSettings`) 여기엔 그런 자리가 없다. 값이 하나라 JSON을
+파싱하지 않는다 — 파싱 실패라는 상태가 아예 없다.
+
+**개발 실행에서는 검사하지 않는다.** `app.isPackaged`가 거짓이면 U1은 그 사실을 다이얼로그로
+말하고, 배경 검사는 로그 한 줄만 남기고 끝낸다. `pnpm dev`에서 electron-updater를 부르면
+패키징되지 않은 앱이라며 죽고 그 예외가 기동 경로에 앉는다.
+
+`electron-updater`는 **`dependencies`**다(`devDependencies`가 아니다) — 번들에 실려야 한다.
+그래서 `build.files`에 `node_modules/**/*`가 있다. electron-builder가 프로덕션 의존성만
+걸러 담아서 `electron`·`electron-builder`는 안 들어간다.
+
 ## 여기 아직 없는 것
 
-자동 업데이트도 릴리스 서버도 없다(§비목표). 산출물 `.dmg`를 사람이 건넨다.
+릴리즈 노트(R7 — 받은 시점에 compare API + `claude -p`로 요약)와 `pnpm release`(R4)는
+아직 없다. 각각 `e80e2eae` · `5ab56e03`이다. 지금 U1이 받은 뒤 띄우는 것은 R6 문장 한 줄뿐이다.
 
 서명·공증은 **끝났다**(`5aa9486d`) — `.app`·`.dmg` 둘 다 `Developer ID Application: Hansol Lim
 (L9E4Y653DY)`으로 서명·공증·스테이플되고 `spctl`이 둘 다 `accepted`다.
