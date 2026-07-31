@@ -11,7 +11,11 @@ jobs:
   # ponytail: 잡 하나에 8개를 다 넣는다. 잡을 쪼개면 checkout·setup이 3벌이 된다.
   # 벽시계가 아프면 그때 디렉터리별로 쪼갠다.
   check:
-    runs-on: ubuntu-latest
+    # macOS다. 이 레포는 macOS 전용이고 테스트가 그걸 그대로 쓴다 — pty로 `claude`를 몰고,
+    # crontab을 쓰고, 프롬프트를 FIFO로 민다. ubuntu에서는 그 셋이 다 다르게 굴러서 CI가
+    # **제품에 없는 플랫폼의 결함**을 찍었다(실측 2026-08-01: 파이프 버퍼 64KB · argv 128KB ·
+    # pty). release.yml과 러너가 같아지는 것도 값이다 — 여기 초록이 나갈 것에 대한 초록이다.
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
 

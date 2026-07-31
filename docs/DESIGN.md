@@ -3003,9 +3003,22 @@ https://hsol.info
 **루트에 `package.json`도 워크스페이스도 없다.** `apps/teams`·`apps/desktop`은 각자
 `pnpm-lock.yaml`을 가진 독립 프로젝트라 설치도 따로다.
 
-**C2. `ci.yml`의 러너는 `ubuntu-latest`다.** macOS 러너를 쓸 이유가 이 목록에 없다 — 엔진은
-python3 표준 라이브러리고 나머지 넷은 node다. macOS가 필요한 것은 서명·공증뿐이고 그건
-`release.yml`이 따로 `macos-latest`에서 한다(C3). 테스트까지 macOS로 올리지는 않는다.
+**C2. 러너는 둘 다 `macos-latest`다.**
+
+> **이 줄은 `ubuntu-latest`였다**(같은 날). 근거는 "macOS 러너를 쓸 이유가 이 목록에 없다 —
+> 엔진은 python3 표준 라이브러리고 나머지 넷은 node다"였다. **첫 실행이 그 근거를 부쉈다.**
+
+이 레포는 macOS 전용이고 **테스트가 그걸 그대로 쓴다.** ubuntu에서 나온 실패 셋은 전부
+제품에 없는 플랫폼의 결함이었다(실측 2026-08-01):
+
+| 무엇 | ubuntu에서 갈린 것 |
+|---|---|
+| `test_feed_stall.py` | 파이프 버퍼가 16KB(macOS)가 아니라 64KB — 프롬프트가 안 막혀 재현이 안 된다 |
+| 〃 | argv 한 개 상한이 128KB — 크게 잡으면 이번엔 주입기가 `Argument list too long`으로 즉사한다 |
+| `apps/teams` `lib/auth.test.ts` | pty로 `claude`를 모는 흐름이 다르게 군다(macOS 182/182 통과) |
+
+**러너가 같아지는 것 자체가 값이다.** `ci.yml`의 초록은 `release.yml`이 굽는 그 플랫폼에서
+나온 초록이어야 한다 — 다른 OS의 초록은 나갈 물건에 대해 아무것도 보장하지 않는다.
 
 **C3. 굽는다 — `master`에 앱이 들어오면 버전을 올리고 릴리스까지 자동으로 간다.**
 워크플로는 `.github/workflows/release.yml`이고 러너는 `macos-latest`다(C2의 `ubuntu-latest`는
