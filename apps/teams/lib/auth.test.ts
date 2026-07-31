@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert";
 import {
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
@@ -16,8 +17,17 @@ const LOCAL = mkdtempSync(path.join(tmpdir(), "fst-auth-"));
 process.env.TICKET_LOCAL = LOCAL;
 process.on("exit", () => rmSync(LOCAL, { recursive: true, force: true }));
 
-const { normalizeToken, ptyLines, pollSetup, readAuth, saveToken, startSetup, stopSetup, tokenPath } =
-  await import("./auth.ts");
+const {
+  findClaude,
+  normalizeToken,
+  ptyLines,
+  pollSetup,
+  readAuth,
+  saveToken,
+  startSetup,
+  stopSetup,
+  tokenPath,
+} = await import("./auth.ts");
 
 test("tokenPath — TICKET_LOCAL을 존중하고 레지스트리와 같은 디렉터리다", () => {
   assert.strictEqual(tokenPath(), path.join(LOCAL, "oauth-token"));
@@ -159,6 +169,42 @@ test("startSetup — 토큰 없이 끝나면 조용히 실패하지 않는다", 
   assert.ok(!s.lines.some((l) => l.includes("__dira_setup_exit")), s.lines.join("|"));
   assert.ok(s.lines.includes("command not found: whatever"), s.lines.join("|"));
   stopSetup();
+});
+
+/** `.app`은 PATH가 launchd 기본값이라 `~/.local/bin/claude`가 안 보인다(`bcf66f01`).
+ *  그 환경을 PATH로 그대로 재현한다 — 사람이 읽을 사유가 나와야 하고, `종료 코드 127`은 실패다. */
+test("startSetup — claude가 PATH에 없으면 사유가 사람 말이다 (127이 아니다)", () => {
+  stubClaude("exit 0"); // 스텁은 있지만 PATH에서 그 디렉터리를 뺀다
+  const real = process.env.PATH;
+  process.env.PATH = "/usr/bin:/bin:/usr/sbin:/sbin"; // launchd 기본값
+  try {
+    assert.strictEqual(findClaude(), null);
+    const s = startSetup();
+    assert.strictEqual(s.running, false);
+    assert.match(s.error!, /PATH에서 claude를 찾지 못했습니다/);
+    assert.ok(!/종료 코드/.test(s.error!), s.error);
+  } finally {
+    process.env.PATH = real;
+  }
+  // 스텁이 다시 보이면 그 절대경로를 집는다 — 셸의 PATH 해석에 기대지 않는다
+  assert.strictEqual(findClaude(), path.join(BIN, "claude"));
+});
+
+test("findClaude — 실행 권한이 없거나 디렉터리면 건너뛴다", () => {
+  const shadow = mkdtempSync(path.join(tmpdir(), "fst-shadow-"));
+  process.on("exit", () => rmSync(shadow, { recursive: true, force: true }));
+  mkdirSync(path.join(shadow, "claude")); // 디렉터리도 X_OK를 통과한다
+  const noexec = mkdtempSync(path.join(tmpdir(), "fst-noexec-"));
+  process.on("exit", () => rmSync(noexec, { recursive: true, force: true }));
+  writeFileSync(path.join(noexec, "claude"), "#!/bin/sh\n", { mode: 0o644 });
+
+  const real = process.env.PATH;
+  process.env.PATH = `${shadow}:${noexec}:${BIN}`;
+  try {
+    assert.strictEqual(findClaude(), path.join(BIN, "claude")); // 앞의 둘을 넘어간다
+  } finally {
+    process.env.PATH = real;
+  }
 });
 
 test("stopSetup — 다이얼로그를 닫으면 돌던 자식이 죽는다", async () => {

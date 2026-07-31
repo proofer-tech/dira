@@ -54,6 +54,13 @@ pnpm dist        # teams 빌드 + 조립 + electron-builder
   실측). 이미 끊긴 링크라 지워도 잃는 게 없다 — `find … -type l ! -exec test -e {} \; -print -delete`가
   무엇을 지웠는지 이름까지 찍는다.
 
+**Finder·Dock에서 띄운 `.app`에는 PATH가 없다**(`bcf66f01`). LaunchServices가 준 환경에 그 값이
+아예 없어 launchd 기본값(`/usr/bin:/bin:/usr/sbin:/sbin`)이 되고, 서버가 부르는 `claude`
+(`~/.local/bin`)가 안 보여 §0-4 층 ②가 종료 코드 127로 죽었다. 터미널의 `pnpm dev`는 셸 PATH를
+물려받아 멀쩡했기 때문에 여기서만 나는 결함이다. `main.ts`의 `userPath()`가 **로그인 셸에게
+PATH를 물어** 서버에 물려 준다 — `.app`에서만 되는·안 되는 것을 볼 때 이 경계를 먼저 의심한다.
+재현은 `env -i HOME=$HOME open -g -na dist/mac-arm64/dira.app`이다(셸 환경을 지우고 띄운다).
+
 ## 서명 · 공증 (`5aa9486d`)
 
 서명 없는 `.app`은 **이 맥에서는 돌지만 다른 맥에서는 Gatekeeper가 막는다.** 나눠주려면

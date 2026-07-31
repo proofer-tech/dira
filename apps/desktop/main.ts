@@ -4,7 +4,7 @@
 // 스펙: ../../docs/DESIGN.md §데스크톱 앱 (특히 "못박는 것" 1~5, N1·N2·N3).
 // 자동 실행은 여기 없다 (00fc34ba).
 import { app, BrowserWindow, Menu, Notification, Tray, dialog, ipcMain, nativeImage, shell } from "electron";
-import { spawn, type ChildProcess } from "node:child_process";
+import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { createServer } from "node:net";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -43,10 +43,43 @@ function freePort(): Promise<number> {
   });
 }
 
+/** **Finder·Dock에서 띄운 `.app`에는 PATH가 없다.** LaunchServices가 준 환경에 그 값이 아예
+ *  없어서 launchd 기본값(`/usr/bin:/bin:/usr/sbin:/sbin`)이 되고, 그러면 서버가 부르는
+ *  `claude`(`~/.local/bin`)가 안 보여 §0-4 층 ②가 종료 코드 127로 죽는다(`bcf66f01`).
+ *  터미널에서 띄운 `pnpm dev`는 셸 PATH를 물려받아 멀쩡했기 때문에 여태 안 보였다.
+ *
+ *  **경로 목록을 여기 하드코딩하지 않고 사람의 로그인 셸에게 묻는다** — 어디에 깔았는지는 그
+ *  셸만 안다(`~/.local/bin`·homebrew·nvm·mise…). `-i`가 있는 이유는 zsh가 `.zshrc`를
+ *  대화형일 때만 읽어서다. `printf %s`라 PATH에 개행이 없고, 셸 시작 배너가 앞에 끼어도
+ *  **마지막 줄**이 값이다. 물려받은 PATH와 합쳐 앞을 사람 것으로 세운다.
+ *  ponytail: 앱 기동에 한 번. 5초 안에 답이 없거나 셸이 없으면 물려받은 값 그대로 간다. */
+function userPath(): string {
+  const inherited = (process.env.PATH ?? "").split(":");
+  let asked: string[] = [];
+  try {
+    const out = execFileSync(process.env.SHELL || "/bin/zsh", ["-ilc", 'printf %s "$PATH"'], {
+      encoding: "utf8",
+      timeout: 5_000,
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    asked = (out.split("\n").pop() ?? "").split(":");
+  } catch (e) {
+    console.error(`[dira] 로그인 셸 PATH를 못 읽었습니다: ${(e as Error).message}`);
+  }
+  // 절대경로만 남긴다 — 셸이 뱉은 배너 조각이 PATH에 들어가지 않게
+  return [...new Set([...asked, ...inherited].filter((p) => p.startsWith("/")))].join(":");
+}
+
 function startServer(port: number): ChildProcess {
   // node 바이너리가 PATH에 있다고 가정하지 않는다 — Electron 자신을 노드로 돌린다.
   const proc = spawn(process.execPath, [SERVER], {
-    env: { ...process.env, ELECTRON_RUN_AS_NODE: "1", PORT: String(port), HOSTNAME: "127.0.0.1" },
+    env: {
+      ...process.env,
+      PATH: userPath(),
+      ELECTRON_RUN_AS_NODE: "1",
+      PORT: String(port),
+      HOSTNAME: "127.0.0.1",
+    },
     stdio: ["ignore", "pipe", "pipe"],
   });
   proc.stderr?.on("data", (b) => (stderr += b));

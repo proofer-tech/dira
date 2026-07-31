@@ -5,6 +5,7 @@
  *  `.authwarn`은 건드리지 않는다: 엔진이 "이미 한 번 경고했다"를 적어 두는 자기 파일이고,
  *  토큰이 생기면 61행 조건이 먼저 꺼져 다시 보지 않는다(§0-4). */
 import { spawn, type ChildProcess } from "node:child_process";
+import { accessSync, constants, statSync } from "node:fs";
 import { chmod, mkdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { registryPath } from "./projects.ts";
@@ -104,9 +105,11 @@ export type SetupState = {
  *  헤집는 것보다 짧고, 종료 코드도 같이 온다. FIFO로 `cat`을 없애는 길은 막혀 있다: macOS는
  *  FIFO의 `tcgetattr`에 ENOTTY가 아니라 EOPNOTSUPP를 줘서 `script`가 그냥 죽는다(실측). */
 const EXIT_MARK = "__dira_setup_exit:";
-const SETUP_CMD =
+const setupCmd = (bin: string) =>
   "cat | script -q /dev/null sh -c " +
-  `'stty cols 200 rows 50; claude setup-token; echo "${EXIT_MARK}$?"'`;
+  // 홑따옴표 안이다 — 경로에 `'`가 있으면 명령이 갈라진다. 사람이 고른 경로가 아니라 PATH의
+  // 디렉터리라 실현되기 어렵지만, 셸 문자열을 조립하는 자리라 값싸게 막아 둔다
+  `'stty cols 200 rows 50; ${bin.replace(/'/g, "'\\''")} setup-token; echo "${EXIT_MARK}$?"'`;
 const SETUP_TIMEOUT_MS = 120_000;
 /** 남의 TUI를 긁는 일이라 접두사에 묶인다 — 저장 검증(`normalizeToken`)이 접두사로 거르지
  *  **않는** 것과 축이 다르다. 여기선 화면 잡음 속에서 토큰을 골라낼 표식이 이것뿐이다. */
@@ -155,10 +158,41 @@ function settle(s: NonNullable<typeof setup>, error?: string): void {
   kill(s);
 }
 
+/** `claude`를 **우리가** PATH에서 찾는다. 셸에게 맡기면 못 찾았을 때 손에 남는 것이 종료 코드
+ *  `127`뿐이고, 사람은 그 숫자에서 원인을 못 읽는다 — §0-4의 "조용히 실패하지 않는다"는 사유가
+ *  읽힐 때만 지켜진다(`bcf66f01`). 찾았으면 절대경로를 그대로 몬다.
+ *  ponytail: PATH만 본다 — 셸 alias·function은 이 자식(`sh -c`)이 어차피 못 쓴다. */
+export function findClaude(): string | null {
+  for (const dir of (process.env.PATH ?? "").split(":")) {
+    if (!dir) continue;
+    const p = path.join(dir, "claude");
+    try {
+      if (!statSync(p).isFile()) continue; // 디렉터리도 X_OK를 통과한다
+      accessSync(p, constants.X_OK);
+      return p;
+    } catch {
+      // 없거나 실행 권한이 없다 — 다음 디렉터리
+    }
+  }
+  return null;
+}
+
 /** 층 ②를 시작한다. 앞선 시도가 남아 있으면 먼저 죽인다 — pty를 두 번 물 수 없다. */
 export function startSetup(): SetupState {
   stopSetup();
-  const child = spawn("sh", ["-c", SETUP_CMD], { stdio: ["pipe", "pipe", "pipe"], detached: true });
+  const bin = findClaude();
+  // 세션을 만들지 않고 그 자리에서 끝낸다 — 몰 대상이 없다. 다음 행동(층 ③)은 화면이 붙인다
+  if (!bin) {
+    return {
+      running: false,
+      lines: [],
+      error: `PATH에서 claude를 찾지 못했습니다. (PATH=${process.env.PATH ?? ""})`,
+    };
+  }
+  const child = spawn("sh", ["-c", setupCmd(bin)], {
+    stdio: ["pipe", "pipe", "pipe"],
+    detached: true,
+  });
   const s: NonNullable<typeof setup> = {
     child,
     raw: "",
