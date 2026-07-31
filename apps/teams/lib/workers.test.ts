@@ -31,6 +31,7 @@ const {
   cronUnregister,
   cronUnregisterCmd,
   deleteWorker,
+  engineName,
   lockPath,
   listWorkers,
   parseContextBlock,
@@ -70,6 +71,27 @@ test("lockPath — tick.sh의 파이썬 sha1과 한 글자도 다르지 않다",
     { encoding: "utf8" },
   ).trim();
   assert.strictEqual(lockPath(workers, "w1"), path.join(LOCAL, "run", `w1-${h}.lock`));
+});
+
+test("engineName — tick.sh:52의 basename \"${TICKET_ENGINE[0]}\"과 판정이 같다 (§0-4)", () => {
+  // 인증 배너를 켜고 끄는 판정이다 — 눈으로 맞추지 않고 **셸에 같은 값을 물어서** 맞춘다.
+  const cases = [
+    // tick.sh 46행의 기본값(워커가 TICKET_ENGINE을 안 쓰면 이게 돈다)
+    'claude -p "{prompt}" --session-id "{sid}" --dangerously-skip-permissions --output-format json',
+    '/usr/local/bin/claude -p "{prompt}" --session-id "{sid}"', // 절대경로
+    '"/usr/local/bin/claude" -p "{prompt}"', // 따옴표 친 절대경로
+    'codex exec --dangerously-bypass-approvals-and-sandbox "{prompt}"', // 다른 엔진
+  ];
+  for (const engine of cases) {
+    const bash = execFileSync(
+      "bash",
+      ["-c", `TICKET_ENGINE=(${engine}); basename "\${TICKET_ENGINE[0]}"`],
+      { encoding: "utf8" },
+    ).trim();
+    assert.strictEqual(engineName(engine), bash, engine);
+  }
+  assert.strictEqual(engineName(cases[3]), "codex"); // 이 워커에는 배너가 안 선다
+  assert.strictEqual(engineName(""), ""); // 값이 깨져 못 읽었으면 claude가 아니다 = 이름도 없다
 });
 
 test("listWorkers — running · stale · stopped 판정", async () => {

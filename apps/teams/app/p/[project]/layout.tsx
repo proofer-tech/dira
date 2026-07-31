@@ -17,6 +17,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { readAuth } from "@/lib/auth";
 import { readSummary, readProjects } from "@/lib/projects";
+import { engineName } from "@/lib/workers";
 import { tildePath } from "@/lib/urls";
 
 export default async function ProjectLayout({
@@ -50,6 +51,10 @@ export default async function ProjectLayout({
         failures: s.workers.flatMap((w) =>
           w.lastFailure ? [{ name: w.name, reason: w.lastFailure.reason }] : [],
         ),
+        // §0-4 인증 배너용. claude 엔진 워커가 있는가 — **못 읽었으면 판정 불가 = true**다
+        // (판정 불가를 "괜찮다"로 바꾸면 §0-4가 닫으려던 침묵이 그대로 돌아온다).
+        // 워커도 `readSummary`가 이미 읽어 둔 것이다 — 새 fs 읽기 0(§성능 예산).
+        claude: !s.connected || s.workers.some((w) => engineName(w.engine) === "claude"),
       };
     }),
   );
@@ -58,7 +63,13 @@ export default async function ProjectLayout({
   // 나타나는 화면이 여기라 판정도 여기서 한다. 값은 헤더 `설정` 버튼과 배너 CTA가 같이 쓴다 —
   // 진입점 둘이 같은 컴포넌트를 두 번 쓰고 전역 상태는 만들지 않는다(§0-4).
   const rawAuth = await readAuth();
-  const auth = { path: tildePath(rawAuth.path, home), savedAt: rawAuth.savedAt };
+  const auth = {
+    path: tildePath(rawAuth.path, home),
+    savedAt: rawAuth.savedAt,
+    // 헤더 버튼의 `인증 필요`는 머신 스코프라 **등록된 프로젝트 전부**를 보고 끈다 —
+    // 전부 읽었고 전부 claude가 0일 때만 꺼진다(§0-4). 배너는 그 프로젝트만 본다(`current.claude`).
+    claudeUsed: items.some((t) => t.claude),
+  };
 
   return (
     <>
@@ -87,11 +98,14 @@ export default async function ProjectLayout({
             화면에는 "티켓이 `대기`인데 아무 일도 안 일어난다"만 보인다. 그 침묵을 여기서 깬다.
             **세 번째 `Alert` 변종이다** — 새 컴포넌트 0개. dismiss도 없다: 토큰 파일이 생기면
             이 판정이 저절로 꺼진다(§0-2와 같은 논리). 아래 두 배너보다 먼저 선다 —
-            인증이 없으면 그 프로젝트에서 아무것도 안 돈다. */}
-        {!auth.savedAt && (
+            인증이 없으면 그 프로젝트에서 아무것도 안 돈다.
+            **토큰은 Claude 전용이다**(§0-4): `tick.sh:52`·`60`은 `TICKET_ENGINE[0]`의 basename이
+            `claude`일 때만 이 파일을 읽고 그때만 디스패치를 막는다. 그래서 이 프로젝트의 워커를
+            읽었고 claude가 0이면 세우지 않는다 — 못 읽었으면(연결 안 됨) 종전대로 세운다. */}
+        {!auth.savedAt && current.claude && (
           <Alert role="status" className="max-w-3xl">
             <TriangleAlert aria-hidden className="text-status-stale" />
-            <AlertTitle>인증되지 않아 티켓이 디스패치되지 않습니다</AlertTitle>
+            <AlertTitle>Claude 인증이 없어 티켓이 디스패치되지 않습니다</AlertTitle>
             <AlertDescription className="grid gap-3 text-foreground">
               <span>Claude 장기 토큰이 없어 워커가 매번 조용히 종료합니다.</span>
               {/* CTA는 행의 오른쪽 끝이다(§비주얼 §4-3). **`/`로 보내지 않는다** — 그 자리에서

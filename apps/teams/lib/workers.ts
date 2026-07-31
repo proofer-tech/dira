@@ -73,6 +73,15 @@ export type Worker = {
 const DEFAULT_ENGINE =
   'claude -p "{prompt}" --session-id "{sid}" --dangerously-skip-permissions --output-format json';
 
+/** 엔진 이름 = **첫 토큰의 basename**. `tick.sh:52`의 `basename "${TICKET_ENGINE[0]}"`와 같은
+ *  식이다 — 인증 판정(§0-4)이 이 값 하나에 걸리므로 식을 두 벌로 적지 않고 화면이 이걸 부른다.
+ *  ponytail: 셸을 실행하지 않으니 따옴표만 벗긴다 — `$VAR` 전개는 `parseWorkerFile`의 다른
+ *  값들과 같은 선이다(전개해야 하면 `shellValue`가 이미 있는 자리로 옮긴다). */
+export function engineName(engine: string): string {
+  const first = engine.trim().split(/\s+/)[0] ?? "";
+  return path.basename(first.replace(/^(['"])(.*)\1$/, "$2"));
+}
+
 /** tick.sh와 **같이** 조립한다:
  *  `${TICKET_LOCAL:-~/.config/dira}/run/<이름>-<sha1(<workers 절대경로>/<이름>)[:8]>.lock`
  *
