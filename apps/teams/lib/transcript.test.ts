@@ -175,6 +175,7 @@ test("참견 — 모르는 operation과 content 없는 queue-operation은 조용
   assert.deepEqual(q({ operation: "dequeue" }), []); // 실측 2443건 — content가 없다
   assert.deepEqual(q({ operation: "enqueue" }), []); // content 없는 enqueue도 실측 있다
   assert.deepEqual(q({ operation: "enqueue", content: "" }), []);
+  assert.deepEqual(q({ operation: "enqueue", content: " \n\t" }), []); // 공백뿐인 것도 본문 없는 참견 줄이다
   assert.deepEqual(q({ operation: "enqueue", content: 42 }), []);
   assert.deepEqual(q({ operation: "미래에 생길 값", content: "x" }), []);
   assert.deepEqual(q({ content: "x" }), []); // operation 자체가 없다

@@ -180,9 +180,11 @@ export function recordToEvents(rec: unknown, collapseFirstPrompt = false): Strea
   // 자기가 들고 있어서(실측 §2-2 표 2) 화면이 낙관적 에코를 만들 필요가 없다.
   // `remove`는 세션이 그걸 집어 갔다는 뜻이라 **같은 문장이 두 번 뜬다** — 안 흘린다.
   // `dequeue`·모르는 `operation`·`content` 없는 줄(실측 셋 다 있다)은 조용히 건너뛴다.
+  // `content`가 없는 `enqueue`는 이 머신 실측 1675건 중 815건이다(피드백 `edec37eb`) — 흘리면
+  // 본문 없는 `참견` 줄이 서서 화면이 "사람이 참견했다"고 거짓말한다. 공백뿐인 것도 같다.
   if (r.type === "queue-operation") {
     const text = typeof r.content === "string" ? r.content : "";
-    if (!isEnqueue(r) || !text || HARNESS_ENVELOPE.test(text)) return [];
+    if (!isEnqueue(r) || !text.trim() || HARNESS_ENVELOPE.test(text)) return [];
     // §9의 **전문 줄**이다(§2-1 표: 펼칠 것이 없다 — 한 줄이 이미 전문이다). 사용자 프롬프트와
     // 같은 모양을 받는 이유는 같은 것이라서다: 밖에서 들어온 사람의 말.
     return [
