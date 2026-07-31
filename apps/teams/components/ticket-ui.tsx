@@ -198,11 +198,13 @@ export function TicketEditForm({
         <Textarea id="t-body" name="body" defaultValue={body} rows={24} className="font-mono" />
       </div>
       {state.error && <Failure title="저장하지 못했습니다" message={state.error} />}
-      <div className="flex items-center gap-4">
+      {/* 액션 행은 오른쪽 정렬이고 1차 액션이 가장 오른쪽이다(§비주얼 §4-3). 결과 문구는 버튼
+          **왼쪽**이다 — 오른쪽에 두면 문구가 떴다 사라질 때마다 `저장`이 옆으로 움직인다 */}
+      <div className="flex flex-wrap items-center justify-end gap-4">
+        {state.ok && <span className="text-sm text-muted-foreground">저장됐습니다.</span>}
         <Button type="submit" disabled={pending}>
           {pending ? "저장 중…" : "저장"}
         </Button>
-        {state.ok && <span className="text-sm text-muted-foreground">저장됐습니다.</span>}
       </div>
     </form>
   );
@@ -384,13 +386,14 @@ function AnswerFields({
         <Label htmlFor="a-body">답변</Label>
         <Textarea id="a-body" name="body" rows={8} className="font-mono" required />
         {state.error && <Failure title="답변을 달지 못했습니다" message={state.error} />}
-        <div className="flex items-center gap-3">
-          <Button type="submit" disabled={pending}>
-            {pending ? "답변 다는 중…" : "답변 달기"}
-          </Button>
+        {/* 보조 텍스트는 버튼 왼쪽이다(§비주얼 §4-3) */}
+        <div className="flex flex-wrap items-center justify-end gap-3">
           <span className="text-xs text-muted-foreground">
             <span className="font-mono">tickets/{answerFile}</span>를 만듭니다
           </span>
+          <Button type="submit" disabled={pending}>
+            {pending ? "답변 다는 중…" : "답변 달기"}
+          </Button>
         </div>
       </form>
     </>
@@ -688,7 +691,8 @@ export function RequestDialog({ project }: { project: string }) {
           // 말하지 않는다: 사람이 고르지 않은 값이고 여기서 할 일도 없다. 상세는 링크로 남는다.
           <div className="space-y-4">
             <p className="text-sm">요구사항이 접수되었습니다. 곧 PM이 검토할 예정입니다.</p>
-            <div className="flex items-center gap-4">
+            {/* 오른쪽 정렬 · 1차 액션(`닫기`)이 가장 오른쪽이다(§비주얼 §4-3) */}
+            <div className="flex flex-wrap items-center justify-end gap-4">
               <Link
                 href={`/p/${project}/tickets/${done}`}
                 className="text-sm underline-offset-4 hover:underline"
@@ -715,9 +719,12 @@ export function RequestDialog({ project }: { project: string }) {
             />
             {/* 실패는 이 자리에 남는다 — 닫으면 사람이 쓴 본문이 사라진다(§3) */}
             {state.error && <Failure title="접수하지 못했습니다" message={state.error} />}
-            <Button type="submit" disabled={pending}>
-              {pending ? "접수 중…" : "요구 접수"}
-            </Button>
+            {/* 사람이 지목한 자리다(요구 `027d8e96`) — 오른쪽 끝(§비주얼 §4-3) */}
+            <div className="flex justify-end">
+              <Button type="submit" disabled={pending}>
+                {pending ? "접수 중…" : "요구 접수"}
+              </Button>
+            </div>
           </form>
         )}
       </DialogContent>
@@ -896,9 +903,11 @@ export function NewTicketDialog({
 
           {/* 실패는 이 자리에 남는다 — 닫으면 사람이 쓴 본문이 사라진다(§3) */}
           {state.error && <Failure title="발행하지 못했습니다" message={state.error} />}
-          <Button type="submit" disabled={pending}>
-            {pending ? "발행 중…" : "발행"}
-          </Button>
+          <div className="flex justify-end">
+            <Button type="submit" disabled={pending}>
+              {pending ? "발행 중…" : "발행"}
+            </Button>
+          </div>
         </form>
       </DialogContent>
     </Dialog>
