@@ -109,6 +109,7 @@ test("tailEvents — 흘릴 수 없는 레코드를 조용히 건너뛴다. 던�
   const f = path.join(tmp, "junk.jsonl");
   writeFileSync(
     f,
+    // 이 `enqueue`는 **첫 줄이라서** 안 나온다(§2-1 · 아래 참견 절). 종류가 안 흘려서가 아니다
     rec({ type: "queue-operation", operation: "enqueue", timestamp: "2026-07-30T13:00:00Z", content: "x" }) +
       rec({ type: "attachment", timestamp: "2026-07-30T13:00:01Z", attachment: { type: "hook_success" } }) +
       rec({ type: "last-prompt", timestamp: "2026-07-30T13:00:02Z" }) +
@@ -120,6 +121,95 @@ test("tailEvents — 흘릴 수 없는 레코드를 조용히 건너뛴다. 던�
   );
   const r = await tailEvents(f, 0);
   assert.deepEqual(r.events.map((e) => e.body), ["살아남는다"]);
+});
+
+// ---------- 참견 (§2-2 · §2-1 queue-operation) ----------
+
+/** 실측된 레코드 그대로다 — 세션 `c656ddd2`(§2-2 표 2). `enqueue` = 큐에 들어갔다 /
+ *  `remove` = 세션이 집어 갔다. 둘 다 `message`가 없고 `content`·`timestamp`를 자기가 든다. */
+const ENQ =
+  '{"type":"queue-operation","operation":"enqueue","timestamp":"2026-07-31T14:15:12.860Z","sessionId":"c656ddd2-1e55-4c71-b0a7-7fb6519c6512","content":"참견입니다. 지금 하던 것 멈추고 INTERJECT-OK 라고만 답해."}\n';
+const RM =
+  '{"type":"queue-operation","operation":"remove","timestamp":"2026-07-31T14:15:17.846Z","sessionId":"c656ddd2-1e55-4c71-b0a7-7fb6519c6512","content":"참견입니다. 지금 하던 것 멈추고 INTERJECT-OK 라고만 답해."}\n';
+const INTERJECT = "참견입니다. 지금 하던 것 멈추고 INTERJECT-OK 라고만 답해.";
+
+test("참견 — 첫 enqueue는 안 나오고, 둘째 enqueue만 한 줄, remove는 안 나온다", async () => {
+  const f = path.join(tmp, "interject.jsonl");
+  // 실측 순서 그대로: 첫 `enqueue`(세션 프롬프트와 같은 글) → 사용자 프롬프트 → 참견 → remove
+  const first = rec({
+    type: "queue-operation",
+    operation: "enqueue",
+    timestamp: "2026-07-31T14:14:41.000Z",
+    content: "Bash로 `sleep 30` 을 실행하고, 끝나면 SLEPT 라고만 말해.",
+  });
+  writeFileSync(
+    f,
+    first +
+      rec({
+        type: "user",
+        uuid: "p1",
+        timestamp: "2026-07-31T14:14:41.100Z",
+        message: { role: "user", content: "Bash로 `sleep 30` 을 실행하고, 끝나면 SLEPT 라고만 말해." },
+      }) +
+      ENQ +
+      RM +
+      assistant([{ type: "text", text: "INTERJECT-OK" }]),
+  );
+
+  const r = await tailEvents(f, 0);
+  assert.deepEqual(
+    r.events.map((e) => [e.kind, e.body]),
+    [
+      ["prompt", "Bash로 `sleep 30` 을 실행하고, 끝나면 SLEPT 라고만 말해."], // 접힌 세션 프롬프트
+      ["interject", INTERJECT], // 둘째 enqueue 하나뿐 — remove는 같은 문장이 두 번 뜬다
+      ["text", "INTERJECT-OK"],
+    ],
+  );
+  // 전문 줄이다(§2-1 표: 펼치면 —). label이 비어 있어야 `<FullText>`로 간다
+  const [, ij] = r.events;
+  assert.deepEqual([ij.label, ij.summary, ij.sidechain], ["", "", false]);
+});
+
+test("참견 — 모르는 operation과 content 없는 queue-operation은 조용히 건너뛴다", () => {
+  const q = (o: object) => recordToEvents(JSON.parse(rec({ type: "queue-operation", timestamp: "2026-07-31T14:15:12.860Z", ...o }).trim()));
+  assert.deepEqual(q({ operation: "dequeue" }), []); // 실측 2443건 — content가 없다
+  assert.deepEqual(q({ operation: "enqueue" }), []); // content 없는 enqueue도 실측 있다
+  assert.deepEqual(q({ operation: "enqueue", content: "" }), []);
+  assert.deepEqual(q({ operation: "enqueue", content: 42 }), []);
+  assert.deepEqual(q({ operation: "미래에 생길 값", content: "x" }), []);
+  assert.deepEqual(q({ content: "x" }), []); // operation 자체가 없다
+  assert.deepEqual(recordToEvents(JSON.parse(ENQ.trim())).length, 1); // 레코드 단위로는 흘린다
+});
+
+test("참견 — content 없는 첫 enqueue가 뒤의 진짜 참견을 대신 삼키지 않는다", async () => {
+  const f = path.join(tmp, "interject-empty-first.jsonl");
+  writeFileSync(
+    f,
+    rec({ type: "queue-operation", operation: "enqueue", timestamp: "2026-07-31T14:14:41.000Z" }) + ENQ,
+  );
+  const r = await tailEvents(f, 0);
+  assert.deepEqual(r.events.map((e) => e.body), [INTERJECT]);
+});
+
+test("참견 — 하니스가 스스로 밀어 넣은 봉투는 참견이 아니다", () => {
+  const enq = (content: string) =>
+    recordToEvents(
+      JSON.parse(rec({ type: "queue-operation", operation: "enqueue", timestamp: "2026-07-31T14:15:12.860Z", content }).trim()),
+    );
+  // 실측: 이 레포의 워커 세션 `e0d418fd`에 4건(백그라운드 Bash 완료). 사람은 아무 말도 안 했다
+  assert.deepEqual(enq("<task-notification>\n<task-id>b1nf18pf5</task-id>\n</task-notification>"), []);
+  assert.deepEqual(enq("<observed_from_primary_session>\n  <what_happened>Bash</what_happened>\n"), []);
+  // 사람 글은 그대로 흐른다 — 꺾쇠로 시작해도 첫 줄이 여는 태그 하나가 아니면 참견이다
+  assert.equal(enq("<div>이 태그 왜 이래요?")[0]?.body, "<div>이 태그 왜 이래요?");
+  assert.equal(enq(INTERJECT)[0]?.kind, "interject");
+});
+
+test("참견 — 이어 읽기(offset>0)에서는 첫 enqueue 규칙이 다시 걸리지 않는다", async () => {
+  const f = path.join(tmp, "interject-tail.jsonl");
+  const head = assistant([{ type: "text", text: "먼저" }]);
+  writeFileSync(f, head + ENQ);
+  const r = await tailEvents(f, Buffer.byteLength(head)); // 머리는 이미 지나갔다
+  assert.deepEqual(r.events.map((e) => [e.kind, e.body]), [["interject", INTERJECT]]);
 });
 
 test("tailEvents — 트랜스크립트가 없으면 빈 상태다", async () => {

@@ -206,19 +206,25 @@ function Row({
   );
 }
 
-/** 전문 줄 — assistant `text`와 첫 번째 이후의 사용자 프롬프트. **`<Marker>`가 아니다.**
- *  다른 모양이라는 것 자체가 구분이고(§9), 시각도 어포던스도 없다 — 전문이 이미 줄이라 펼칠 것이 없다.
- *  사용자 쪽만 왼쪽 선을 받는다: 밖에서 들어온 말이라는 표시에 색을 쓰면 §0이 깨진다(정상 흐름이다). */
+/** 전문 줄 — assistant `text`, 첫 번째 이후의 사용자 프롬프트, 그리고 **참견**(§2-2).
+ *  **`<Marker>`가 아니다.** 다른 모양이라는 것 자체가 구분이고(§9), 시각도 어포던스도 없다 —
+ *  전문이 이미 줄이라 펼칠 것이 없다(§2-1 표의 `펼치면 —`).
+ *  사용자 쪽만 왼쪽 선을 받는다: 밖에서 들어온 말이라는 표시에 색을 쓰면 §0이 깨진다(정상 흐름이다).
+ *  **참견도 밖에서 들어온 말이라 같은 선을 받고**, 갈리는 것은 §9가 `서브`에 쓴 것과 같은
+ *  텍스트 마커 하나다. // ponytail: §비주얼 §21이 아직 없다(`7ac43367` 진행중) — 값이 서면
+ *  이 두 줄이 그 자리다. 새 색 토큰도 새 모양도 만들지 않는다. */
 function FullText({ e }: { e: StreamEvent }) {
+  const outside = e.kind === "prompt" || e.kind === "interject";
   return (
     <div className="px-3">
       <p
         className={cn(
           "my-1 ml-6 text-sm break-words whitespace-pre-wrap text-foreground",
-          e.kind === "prompt" && "border-l-2 border-border pl-3",
+          outside && "border-l-2 border-border pl-3",
         )}
       >
         {e.sidechain && <span className="text-muted-foreground">서브 · </span>}
+        {e.kind === "interject" && <span className="text-muted-foreground">참견 · </span>}
         {e.body}
       </p>
     </div>

@@ -15,7 +15,7 @@ import path from "node:path";
 export type StreamEvent = {
   key: string; // 렌더 키. `<레코드 uuid>:<블록 index>`
   ts: string; // 레코드의 timestamp (UTC ISO). **로컬 시간 렌더는 화면이 한다**
-  kind: "prompt" | "text" | "thinking" | "tool_use" | "tool_result";
+  kind: "prompt" | "text" | "thinking" | "tool_use" | "tool_result" | "interject";
   label: string;
   summary: string;
   // §9: 요약이 리터럴이면 mono, 읽는 문장이면 sans. 판정이 도구 이름에 달렸으므로(파일 도구의
@@ -97,7 +97,8 @@ export async function tailEvents(
     if (cut < 0) return { events: [], offset: start }; // 온전한 줄이 하나도 없다
 
     const events: StreamEvent[] = [];
-    let promptSeen = start > 0; // offset>0이면 세션 프롬프트는 이미 지나갔다
+    let promptSeen = start > 0; // offset>0이면 세션 프롬프트도 그 `enqueue`도 이미 지나갔다
+    let enqueueSeen = start > 0;
     for (const line of chunk.subarray(0, cut).toString("utf8").split("\n")) {
       if (!line.trim()) continue;
       let rec: unknown;
@@ -105,6 +106,14 @@ export async function tailEvents(
         rec = JSON.parse(line);
       } catch {
         continue; // 파싱 불가능한 줄은 조용히 건너뛴다. 스트림이 멈추는 것이 최악이다
+      }
+      // **첫 `enqueue`는 안 흘린다**(§2-1) — 세션 프롬프트와 같은 글이고 이미 접힌 줄로 있다.
+      // 판정은 `content` 비교가 아니라 **레코드 단위 첫 하나**이고(실측: record 0), 그래서
+      // 레코드 간 상태다 — `promptSeen`과 같은 자리에 산다.
+      if (isEnqueue(rec)) {
+        const first = !enqueueSeen;
+        enqueueSeen = true;
+        if (first) continue;
       }
       const evs = recordToEvents(rec, !promptSeen);
       if (evs.some((e) => e.kind === "prompt")) promptSeen = true;
@@ -115,6 +124,27 @@ export async function tailEvents(
     await fh.close();
   }
 }
+
+/** **사람이 쓴 참견이 아니라 하니스가 스스로 밀어 넣은 봉투**를 거른다.
+ *
+ *  §2-2의 실측 세션에는 없던 것이 실측 코퍼스에는 있다 — 이 머신 트랜스크립트의 첫 줄 아닌
+ *  `enqueue` 859건 중 `<task-notification>` 234 · `<observed_from_primary_session>` 553,
+ *  사람 글은 72건뿐이다. **이 레포의 워커 세션에도 있다**(`e0d418fd` = `2100d54a`를 돌린 w3 세션,
+ *  백그라운드 Bash 완료 4건). 거르지 않으면 사람이 아무 말도 안 한 티켓에 `참견 ·` 줄이 4개
+ *  뜨고, 그 본문이 15줄짜리 XML이라 접지 않는 전문 줄이 스트림을 삼킨다.
+ *
+ *  판정은 **첫 줄이 여는 태그 하나뿐인가**다. 태그 이름을 나열하지 않는 이유는 하니스가 봉투를
+ *  하나 더 만들면 그때마다 여기가 늘기 때문이고, 사람이 참견 첫 줄에 태그만 달랑 쓰는 일은 없다. */
+const HARNESS_ENVELOPE = /^<[a-z][a-z0-9_-]*>\s*\n/;
+
+/** 참견을 나르는 레코드인가(§2-2). **`content`가 있느냐와 무관하다** — 첫 `enqueue`를 안 흘리는
+ *  판정이 레코드 단위라서(§2-1) `content` 없는 `enqueue`(실측 있다)도 그 한 장을 쓴다.
+ *  안 그러면 그 뒤에 온 **진짜 참견**이 대신 사라진다. */
+const isEnqueue = (rec: unknown): boolean => {
+  if (!rec || typeof rec !== "object") return false;
+  const r = rec as { type?: unknown; operation?: unknown };
+  return r.type === "queue-operation" && r.operation === "enqueue";
+};
 
 type Block = {
   type?: string;
@@ -127,11 +157,15 @@ type Block = {
 };
 
 /** 레코드 하나 → 사건 0..n개 (§2-1 표). assistant 한 레코드가 thinking+text+tool_use를 함께 담는다.
- *  `message`가 없거나(`queue-operation`·`attachment`·`last-prompt`) `timestamp`가 없으면 빈 배열이다.
+ *  `message`가 없으면(`attachment`·`last-prompt`) 빈 배열이다 — **`queue-operation` 하나만 예외**고
+ *  `timestamp`가 없으면 그것도 빈 배열이다.
  *  `collapseFirstPrompt`가 참이면 이 레코드의 첫 사용자 프롬프트를 `세션 프롬프트 n자`로 접는다. */
 export function recordToEvents(rec: unknown, collapseFirstPrompt = false): StreamEvent[] {
   if (!rec || typeof rec !== "object") return [];
   const r = rec as {
+    type?: unknown;
+    operation?: unknown;
+    content?: unknown;
     timestamp?: unknown;
     uuid?: unknown;
     cwd?: unknown;
@@ -139,13 +173,38 @@ export function recordToEvents(rec: unknown, collapseFirstPrompt = false): Strea
     message?: unknown;
   };
   const ts = typeof r.timestamp === "string" ? r.timestamp : "";
+  if (!ts) return [];
+  const uid = typeof r.uuid === "string" ? r.uuid : ts;
+
+  // **참견**(§2-2). `message`가 없는 레코드 중 이것 하나만 흘린다 — `content`와 `timestamp`를
+  // 자기가 들고 있어서(실측 §2-2 표 2) 화면이 낙관적 에코를 만들 필요가 없다.
+  // `remove`는 세션이 그걸 집어 갔다는 뜻이라 **같은 문장이 두 번 뜬다** — 안 흘린다.
+  // `dequeue`·모르는 `operation`·`content` 없는 줄(실측 셋 다 있다)은 조용히 건너뛴다.
+  if (r.type === "queue-operation") {
+    const text = typeof r.content === "string" ? r.content : "";
+    if (!isEnqueue(r) || !text || HARNESS_ENVELOPE.test(text)) return [];
+    // §9의 **전문 줄**이다(§2-1 표: 펼칠 것이 없다 — 한 줄이 이미 전문이다). 사용자 프롬프트와
+    // 같은 모양을 받는 이유는 같은 것이라서다: 밖에서 들어온 사람의 말.
+    return [
+      {
+        key: `${uid}:q`, // 이 레코드에는 `uuid`가 없다(실측 키 5개) — `ts`가 키가 된다
+        ts,
+        kind: "interject",
+        label: "", // 비면 화면이 전문 줄로 그린다
+        summary: "",
+        summaryMono: false,
+        body: text,
+        sidechain: false,
+      },
+    ];
+  }
+
   const msg = r.message;
-  if (!ts || !msg || typeof msg !== "object") return [];
+  if (!msg || typeof msg !== "object") return [];
   const content = (msg as { content?: unknown }).content;
   const role = (msg as { role?: unknown }).role;
   const cwd = typeof r.cwd === "string" ? r.cwd : undefined;
 
-  const uid = typeof r.uuid === "string" ? r.uuid : ts;
   const events: StreamEvent[] = [];
   let promptDone = !collapseFirstPrompt;
   type Push = Omit<StreamEvent, "key" | "ts" | "sidechain" | "summaryMono"> & {
