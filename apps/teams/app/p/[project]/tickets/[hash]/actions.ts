@@ -40,6 +40,7 @@ type Target = {
   state: TicketState;
   assigned: boolean;
   sessionId: string | null; // UUID_RE를 통과한 것만. 이 값만 경로가 된다(§2-1 경로 방어)
+  inbox: boolean; // 참견 입구가 fm에 있나(§2-2). **경로는 안 내보낸다** — 쓰는 건 서버뿐이다
 };
 
 /** 프로젝트·해시 → 지금 이 순간의 파일. 못 찾으면 문장으로 던진다(액션이 결과로 바꾼다).
@@ -61,10 +62,19 @@ async function target(projectId: string, hash: string): Promise<Target> {
     state: stateOf(path.basename(p), config),
     assigned: end >= 0 && !!(fm.session_id ?? "").trim().replace(/^["']+|["']+$/g, ""),
     sessionId: end >= 0 ? sessionIdOf(fm) : null,
+    inbox: end >= 0 && !!(fm.inbox ?? "").trim().replace(/^["']+|["']+$/g, ""),
   };
 }
 
-export type StreamChunk = { events: StreamEvent[]; offset: number; live: boolean };
+export type StreamChunk = {
+  events: StreamEvent[];
+  offset: number;
+  live: boolean;
+  /** 참견 입구가 있나(§2-2 · §비주얼 §21 — `live`인데 `inbox`가 없으면 폼은 비활성이다).
+   *  이 폴링에 얹는 이유는 매 2초 서버가 티켓 fm을 이미 읽고 있기 때문이다 — 화면이 같은 사실을
+   *  다른 요청으로 또 묻지 않는다. 나가는 것은 **불리언 하나**고 경로는 안 나간다. */
+  inbox: boolean;
+};
 
 /** 세션 스트림 폴링 (DESIGN.md §2-1 · §9). 클라이언트가 `offset`을 들고 오면 **그 뒤에 붙은
  *  바이트만** 읽어 사건 + 새 `offset`을 돌려준다. Route Handler를 만들지 않는다 — 서버 fs 접근은
@@ -88,12 +98,13 @@ export async function tailSession(
   try {
     const t = await target(projectId, stem);
     const live = t.state === "wip";
-    if (!t.sessionId) return { events: [], offset: at, live };
+    const inbox = t.inbox;
+    if (!t.sessionId) return { events: [], offset: at, live, inbox };
     const file = await findTranscript(t.sessionId);
-    if (!file) return { events: [], offset: at, live };
-    return { ...(await tailEvents(file, at)), live };
+    if (!file) return { events: [], offset: at, live, inbox };
+    return { ...(await tailEvents(file, at)), live, inbox };
   } catch {
-    return { events: [], offset: at, live: false };
+    return { events: [], offset: at, live: false, inbox: false };
   }
 }
 
@@ -116,7 +127,9 @@ export async function sendInterject(
     const config = await resolveConfig(project);
     return await interject(project.root, config, stem, text);
   } catch (e) {
-    return { ok: false, error: (e as Error).message };
+    // 여기 오는 건 프로젝트 조회·설정 해석이 던진 것뿐이다(§21 실패 4종에 없다) — `other`다.
+    const error = (e as Error).message;
+    return { ok: false, reason: "other", error, detail: error };
   }
 }
 

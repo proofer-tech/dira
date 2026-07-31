@@ -8,11 +8,19 @@
  *
  *  읽기·파싱은 전부 `lib/transcript.ts`고 여기는 그리기만 한다. 접기는 네이티브 `<details>`,
  *  툴팁은 네이티브 `title`, 스크롤도 네이티브 — shadcn은 `button`과 `marker` 둘뿐이다(§5). */
-import { useEffect, useRef, useState } from "react";
-import { ArrowDown, ChevronRight } from "lucide-react";
-import { tailSession } from "@/app/p/[project]/tickets/[hash]/actions";
+import { useEffect, useId, useRef, useState } from "react";
+import { ArrowDown, ChevronRight, Send, TriangleAlert } from "lucide-react";
+import { sendInterject, tailSession } from "@/app/p/[project]/tickets/[hash]/actions";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupTextarea,
+} from "@/components/ui/input-group";
 import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/marker";
+import type { InterjectReason } from "@/lib/interject";
 import type { StreamEvent } from "@/lib/transcript";
 import { expandable } from "@/lib/urls";
 import { cn } from "@/lib/utils";
@@ -40,6 +48,7 @@ export function SessionStream({
 }) {
   const [events, setEvents] = useState<StreamEvent[]>([]);
   const [live, setLive] = useState(initialLive);
+  const [inbox, setInbox] = useState<boolean | null>(null); // null = 첫 폴링이 아직 안 왔다
   const [detached, setDetached] = useState(false); // 바닥에서 떨어졌다 = 자동 스크롤 안 한다
   const offset = useRef(0);
   const box = useRef<HTMLDivElement>(null);
@@ -54,6 +63,7 @@ export function SessionStream({
       if (stop) return;
       offset.current = r.offset;
       if (r.events.length) setEvents((prev) => [...prev, ...r.events]);
+      setInbox(r.inbox); // 참견 폼의 활성 판정(§2-2) — 서버가 매 폴링마다 fm에서 다시 읽는다
       if (!r.live) {
         setLive(false);
         clearInterval(timer);
@@ -128,7 +138,176 @@ export function SessionStream({
           </div>
         )}
       </div>
+
+      {/* 참견 입력 form — 상자 **밖 · 밑**이다(§2-2 · §비주얼 §21). 여기 한 곳에 다니까 티켓 상세와
+          워커 다이얼로그가 같은 폼을 그린다(§2-1 Q2=(a)). 항상 마운트해 두고 그릴지 말지는
+          컴포넌트가 스스로 판정한다 — 조건을 바깥에 두면 `live`가 내려가는 순간(2초 폴링) 실패
+          사유와 사람이 쓴 글이 언마운트로 같이 증발한다(§21 예외 항). */}
+      <Interject project={project} stem={stem} live={live} inbox={inbox} />
     </div>
+  );
+}
+
+/** §비주얼 §21 실패 4종. **`reason` 코드로 갈린다** — `error` 문장을 되짚으면 문구를 한 자
+ *  고치는 날 화면이 조용히 뭉친다. `other`는 §21에 항이 없는 나머지고 제목 한 줄 + 원문이다. */
+const FAIL: Record<InterjectReason, { title: string; next?: string }> = {
+  ENXIO: {
+    title: "보내지 못했습니다 — 세션이 끝났습니다",
+    next: "이 티켓엔 더 이상 도는 세션이 없습니다. 위 글을 복사해 새 티켓으로 지시하세요.",
+  },
+  ENOENT: {
+    title: "보내지 못했습니다 — 입구가 없습니다",
+    next: "세션이 방금 끝났거나 엔진이 입구를 못 만들었습니다. 한 번 더 보내 보고, 그래도 안 되면 새 티켓으로 지시하세요.",
+  },
+  "not-wip": {
+    title: "보내지 못했습니다 — 진행중이 아닙니다",
+    next: "참견은 도는 세션에만 닿습니다. 새 티켓으로 지시하세요.",
+  },
+  "no-inbox": {
+    title: "보내지 못했습니다 — 참견을 받지 못하는 세션입니다",
+    next: "옛 세션이거나 입구를 만들지 않는 엔진입니다. 새 티켓으로 지시하세요.",
+  },
+  other: { title: "보내지 못했습니다" },
+};
+
+/** 참견 입력 form (DESIGN.md §2-2 · §비주얼 §21). 읽기만 하던 이 화면에 처음 생기는 쓰는 자리다.
+ *
+ *  **낙관적 에코를 그리지 않는다.** 보낸 문장은 다음 폴링(2초)의 `queue-operation` `enqueue` 줄로
+ *  위 상자에 돌아온다(§2-2 "도착 확인은 스트림이 한다"). 여기서 말풍선을 먼저 그리면 엔진이 못
+ *  받았을 때 화면이 거짓말을 한다 — 그래서 이 컴포넌트는 `events`를 만들지 않는다.
+ *
+ *  상태도 `inbox`도 **서버가 매번 다시 판정한다**(`lib/interject.ts`). 여기 있는 `live`·`inbox`는
+ *  그릴지 말지에만 쓰고 보내도 되는지의 근거로 쓰지 않는다 — 2초 사이에 세션이 끝난다. */
+function Interject({
+  project,
+  stem,
+  live,
+  inbox,
+}: {
+  project: string;
+  stem: string;
+  live: boolean;
+  inbox: boolean | null;
+}) {
+  const [text, setText] = useState("");
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [fail, setFail] = useState<{ reason: InterjectReason; detail: string } | null>(null);
+  const input = useRef<HTMLTextAreaElement>(null);
+  // 티켓 stem을 id로 쓰지 않는다 — 파일명에서 온 값이라 공백이 섞이면 `aria-describedby`가 끊긴다.
+  const offId = useId();
+
+  // `live`가 아니면 폼이 없다(§2-2) — `.done` 리플레이에는 보낼 곳이 없다. **예외 하나**: 마지막
+  // 제출이 실패했으면 남는다. `ENXIO`는 세션이 끝나서 나는 실패라 다음 폴링이 곧 `live`를 내리고,
+  // 그때 폼이 사라지면 방금 실패한 사유와 사람이 쓴 글이 같이 증발한다(§21).
+  // `inbox === null`은 첫 폴링 전이다 — 아직 모르는 것을 `참견을 받지 못합니다`로 그리지 않는다
+  // (한 번 깜빡이고 마는 그 문장이 §21 비활성 항의 사유와 구분이 안 된다).
+  if (inbox === null || (!live && !fail)) return null;
+
+  const closed = !live; // 세션이 끝났고 실패가 남아 있다 = 읽기 전용 잔해
+  const off = !inbox; // 입구가 없다 = 그릇 통째로 비활성(§21)
+  const empty = !text.trim();
+
+  const send = async () => {
+    if (sending || empty || off || closed) return;
+    setSending(true);
+    setSent(false);
+    setFail(null);
+    const r = await sendInterject(project, stem, text);
+    setSending(false);
+    if (r.ok) {
+      setText("");
+      setSent(true);
+    } else {
+      setFail({ reason: r.reason, detail: r.detail });
+    }
+    input.current?.focus(); // 참견은 연달아 하게 된다(§21 포커스 항)
+  };
+
+  const c = fail ? FAIL[fail.reason] : null;
+
+  return (
+    <form
+      className="space-y-2"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void send();
+      }}
+    >
+      <InputGroup>
+        <InputGroupTextarea
+          ref={input}
+          aria-label="참견"
+          aria-describedby={off ? offId : undefined}
+          placeholder="도는 세션에 말 걸기"
+          className="max-h-32"
+          value={text}
+          // 세션이 끝난 뒤 남은 폼은 `readOnly`다. `disabled`면 사람이 쓴 글을 선택·복사할 수 없다
+          // — 그 글을 새 티켓에 옮기는 것이 실패 4종의 `다음 행동`이다(§21).
+          readOnly={closed}
+          disabled={off}
+          onChange={(e) => {
+            setText(e.target.value);
+            setSent(false); // `보냈습니다`는 다음 타이핑에 사라진다(§21)
+          }}
+          // `⌘↵`로 보낸다. `Enter`는 줄바꿈이다 — 여러 줄 입력칸의 기본을 뺏지 않는다(§21).
+          // 맥이 아닌 데서도 되게 `ctrlKey`를 같이 받지만 화면에 적는 표기는 `⌘↵` 하나다.
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+              e.preventDefault();
+              void send();
+            }
+          }}
+        />
+        {!closed && (
+          <InputGroupAddon align="block-end">
+            {sent && (
+              <span className="min-w-0 truncate text-xs">보냈습니다 · 아래 스트림에 뜹니다</span>
+            )}
+            {/* `bg-muted`를 깔지 않는다 — `--muted-foreground`가 라이트 4.34로 AA 미달이다(§21 · §1
+                함정). 반경은 addon이 이미 준다(`[&>kbd]:rounded-…`). `ml-auto`가 여기 걸려서
+                1차 버튼이 줄의 가장 오른쪽이다(§4-3). */}
+            <kbd className="ml-auto border px-1 font-mono text-xs text-muted-foreground">⌘↵</kbd>
+            {/* **`disabled`가 아니라 `aria-disabled`다.** `InputGroup`의 흐림은 `:has(:disabled)`라
+                (빌드된 CSS 실측) 버튼 하나만 잠가도 **그릇이 통째로** 흐려진다 — 빈 입력이 기본
+                상태이므로 placeholder가 §21이 금지한 1.85 대비로 상시 떨어진다. 그릇을 흐리는 것은
+                입구가 없을 때(입력칸 `disabled`)로 남기고, 못 누른다는 사실은 이 버튼만 말한다.
+                누를 수 없음의 실효는 `send()`의 첫 줄이 지킨다(클릭·⌘↵ 양쪽). */}
+            <InputGroupButton
+              type="submit"
+              variant="default"
+              size="xs"
+              aria-disabled={off || sending || empty}
+              className="aria-disabled:opacity-50"
+            >
+              <Send aria-hidden />
+              {sending ? "보내는 중…" : "보내기"}
+            </InputGroupButton>
+          </InputGroupAddon>
+        )}
+      </InputGroup>
+
+      {/* 비활성 사유는 그룹 **밖**이다 — 안에 넣으면 `has-disabled:opacity-50`이 겹쳐 대비 1.85다
+          (§21 실측). 비활성 컨트롤은 WCAG 예외지만 **왜 못 쓰는지 설명하는 문장은 예외가 아니다**. */}
+      {off && (
+        <p id={offId} className="text-xs text-muted-foreground">
+          이 세션은 참견을 받지 못합니다 — 티켓에 inbox가 없습니다
+        </p>
+      )}
+
+      {/* 실패는 사유를 삼키지 않는다(§6 2번). 제목·mono 원문·**다음 행동** 3요소이고, 다음 행동이
+          `한 번 더 보내기`(ENOENT)와 `새 티켓으로 지시`(나머지)로 갈리는 것이 넷을 안 뭉치는 이유다. */}
+      {fail && c && (
+        <Alert variant="destructive">
+          <TriangleAlert aria-hidden />
+          <AlertTitle>{c.title}</AlertTitle>
+          <AlertDescription>
+            <span className="block font-mono text-xs break-all">{fail.detail}</span>
+            {c.next && <span className="block text-xs">{c.next}</span>}
+          </AlertDescription>
+        </Alert>
+      )}
+    </form>
   );
 }
 
@@ -211,8 +390,8 @@ function Row({
  *  전문이 이미 줄이라 펼칠 것이 없다(§2-1 표의 `펼치면 —`).
  *  사용자 쪽만 왼쪽 선을 받는다: 밖에서 들어온 말이라는 표시에 색을 쓰면 §0이 깨진다(정상 흐름이다).
  *  **참견도 밖에서 들어온 말이라 같은 선을 받고**, 갈리는 것은 §9가 `서브`에 쓴 것과 같은
- *  텍스트 마커 하나다. // ponytail: §비주얼 §21이 아직 없다(`7ac43367` 진행중) — 값이 서면
- *  이 두 줄이 그 자리다. 새 색 토큰도 새 모양도 만들지 않는다. */
+ *  텍스트 마커 하나다 — §비주얼 §21이 그 값을 확정했다(`셋째 모양을 만들지 않는다`).
+ *  새 색 토큰도 새 모양도 없다. */
 function FullText({ e }: { e: StreamEvent }) {
   const outside = e.kind === "prompt" || e.kind === "interject";
   return (

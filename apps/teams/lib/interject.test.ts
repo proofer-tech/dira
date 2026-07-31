@@ -117,6 +117,35 @@ test("큐에 없는 티켓", async () => {
   assert.match((r as { error: string }).error, /큐에 없는 티켓/);
 });
 
+test("실패 4종은 `reason` 코드와 mono 원문으로 갈린다 (§비주얼 §21)", async () => {
+  const dead = mkfifo("inbox-reason-dead"); // 읽는 쪽 없음 → ENXIO
+  const gone = path.join(tmp, "없는입구-reason"); // 파일 없음 → ENOENT
+  const live = mkfifo("inbox-reason-live");
+  const reader = await open(live, constants.O_RDONLY | constants.O_NONBLOCK);
+  try {
+    const cases: [string, string, string][] = [
+      // [stem, 기대 reason, 기대 detail]
+      [ticket("ffff1111", ".wip", dead), "ENXIO", `ENXIO: ${dead}`],
+      [ticket("ffff2222", ".wip", gone), "ENOENT", `ENOENT: ${gone}`],
+      [ticket("ffff3333", "", live), "not-wip", "상태: 열림"],
+      [ticket("ffff4444", ".done", live), "not-wip", "상태: 완료"],
+      [ticket("ffff5555", ".wip", null), "no-inbox", "frontmatter에 inbox 없음"],
+    ];
+    for (const [stem, reason, detail] of cases) {
+      const r = await interject(root, SFX, stem, "안녕");
+      assert.equal(r.ok, false);
+      assert.equal((r as { reason: string }).reason, reason, stem);
+      assert.equal((r as { detail: string }).detail, detail, stem);
+    }
+    // §21에 항이 없는 나머지는 `other`이고 원문이 그대로 detail이다(화면이 제목 한 줄로 그린다).
+    const other = await interject(root, SFX, ticket("ffff6666", ".wip", "run/rel"), "안녕");
+    assert.equal((other as { reason: string }).reason, "other");
+    assert.match((other as { detail: string }).detail, /절대경로가 아닙니다/);
+  } finally {
+    await reader.close();
+  }
+});
+
 // ---------- 경로 방어 ----------
 
 test("`inbox`가 FIFO가 아니면 그 파일에 쓰지 않는다", async () => {
