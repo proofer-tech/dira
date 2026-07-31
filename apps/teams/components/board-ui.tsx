@@ -206,6 +206,12 @@ export function BoardPolling() {
   return null;
 }
 
+/** §1의 보이는 판정 **하나** — 그 세로 구간이 자기 레인 스크롤러의 보이는 상자와 겹치는가.
+ *  §17 관계선과 §20 레인 이동이 **같은 함수**를 부른다(판정이 갈리면 화면이 거짓말한다).
+ *  rect가 아니라 `top`·`bottom`을 받는 이유는 §20이 **지금 DOM에 없는 자리**(종전 자리)도
+ *  같은 판정에 태우기 때문이다. */
+const laneVisible = (top: number, bottom: number, lr: DOMRect) => bottom > lr.top && top < lr.bottom;
+
 /** 칸반 호버 관계선 (DESIGN.md §1 보드 · §비주얼 §17). **스트립의 `absolute` 자식**이고
  *  간선은 서버가 준다(`relationEdges` — fs 읽기가 늘지 않는다). 여기가 하는 일은 셋뿐이다:
  *  호버된 stem을 알아내고, 그 stem의 상대를 DOM에서 찾고, rect를 재서 `d`를 만든다.
@@ -266,8 +272,7 @@ export function BoardRelations({ relations }: { relations: Map<string, RelationE
       if (!lane) return null;
       const r = el.getBoundingClientRect();
       const lr = lane.getBoundingClientRect();
-      // §1의 보이는 판정 하나: 그 카드가 자기 레인 스크롤러의 보이는 상자와 겹치는가.
-      if (r.bottom <= lr.top || r.top >= lr.bottom) return null;
+      if (!laneVisible(r.top, r.bottom, lr)) return null;
       const dx = strip.scrollLeft - sr.left; // 원점 = 스트립 콘텐츠 박스(§17 좌표계)
       return {
         left: r.left + dx,
@@ -323,4 +328,111 @@ export function BoardRelations({ relations }: { relations: Map<string, RelationE
       ))}
     </svg>
   );
+}
+
+/** 칸반 레인 이동 모션 (DESIGN.md §1 보드 · §비주얼 §20). 말하는 사실 한 문장 —
+ *  **이 카드가 방금 저 레인에서 왔다.**
+ *
+ *  React가 그리는 것은 **빈 그릇 하나**뿐이다(§17 오버레이 `<svg>`의 형제 = 스트립의 두 번째
+ *  `absolute` 자식). 날아가는 것은 도착 카드의 `cloneNode(true)`라 여기는 imperative다 —
+ *  `key={t.path}`도 카드 마크업도 안 건드린다(§18 함정). 추적은 `data-stem`이다.
+ *
+ *  **왜 카드 자신이 아니라 고스트인가**: 레인이 `overflow-y-auto`라 가로도 클리핑 상자다
+ *  — 카드를 이웃 레인까지 `translate`하면 레인 가장자리에서 사라진다(§20).
+ *
+ *  **폴링 갱신인지는 URL로 안다**(§20 함정): 직전 스냅샷과 경로+쿼리가 같을 때만 비교한다.
+ *  필터·검색·정렬·뷰 토글은 URL을 바꾸므로 그 틱은 이동 0건이고, 첫 스냅샷도 0건이다.
+ *  **새 상태 플래그를 만들지 않는다** — 판정이 이 문자열 비교 하나다.
+ *
+ *  ponytail: 틱마다 카드 전수의 rect를 잰다(레이아웃 1회 / 5초). 종전 자리는 DOM이 바뀌기
+ *            전에만 알 수 있어서 이 기능의 하한이다. 카드가 수백 장 되면 그때 레인당
+ *            `data-lane`만 먼저 비교해 갈린 stem을 추리고 rect는 그 몇 장만 잰다. */
+export function BoardLaneMotion() {
+  const ref = useRef<HTMLDivElement>(null);
+  const seat = useRef<{
+    url: string;
+    at: Map<string, { lane: number; x: number; y: number; w: number; h: number }>;
+  } | null>(null);
+  const url = `${usePathname()}?${useSearchParams().toString()}`;
+
+  // 의존성 배열이 **없다** — 폴링 리렌더마다 돌아야 다음 틱이 종전 자리를 안다.
+  useEffect(() => {
+    const host = ref.current;
+    const strip = host?.parentElement;
+    if (!strip) return;
+    const before = seat.current;
+    // 값이 틱마다 다른 측정값이라 CSS가 아니라 여기서 끈다(§20: `motion-reduce:`가 아닌 이유).
+    const live =
+      before?.url === url && !matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const stop: (() => void)[] = [];
+
+    const sr = strip.getBoundingClientRect();
+    const at: NonNullable<typeof before>["at"] = new Map();
+    const laneEls = [...strip.querySelectorAll<HTMLElement>("[data-lane]")];
+    const lrs = laneEls.map((l) => l.getBoundingClientRect());
+    laneEls.forEach((laneEl, lane) => {
+      for (const el of laneEl.querySelectorAll<HTMLElement>("[data-stem]")) {
+        const r = el.getBoundingClientRect();
+        // 좌표 원점은 §17 그대로 — 스트립 **콘텐츠 박스**라 가로 스크롤이 공짜로 따라온다.
+        const to = {
+          lane,
+          x: r.left - sr.left + strip.scrollLeft,
+          y: r.top - sr.top,
+          w: r.width,
+          h: r.height,
+        };
+        at.set(el.dataset.stem!, to);
+        const from = live ? before!.at.get(el.dataset.stem!) : undefined;
+        // 레인이 갈린 카드만이다(생성·삭제·같은 레인 세로 이동은 대상이 아니다 — §20).
+        if (!from || from.lane === to.lane) continue;
+        // 보이는 판정은 **지금** 잰다 — 스냅샷에 굳혀 두면 그 사이 레인을 스크롤한 사용자에게
+        // 화면 밖에서 고스트가 튀어나온다(실측 E). 재는 것은 "고스트가 실제로 뜨는 두 자리가
+        // 각자 레인의 보이는 상자 안인가"이고, 어느 쪽이든 밖이면 안 그린다.
+        // **스크롤은 건드리지 않는다** — 이 컴포넌트는 scrollLeft를 읽기만 한다(§20).
+        const fromTop = from.y + sr.top; // 스트립은 세로로 스크롤하지 않는다(§1: 보드가 화면에 맞는다)
+        if (
+          !laneVisible(fromTop, fromTop + from.h, lrs[from.lane]) ||
+          !laneVisible(r.top, r.bottom, lrs[lane])
+        )
+          continue;
+
+        const ghost = el.cloneNode(true) as HTMLElement;
+        // 복제본이 접근성 트리에 서면 같은 티켓이 두 개로 읽힌다(§20 접근성).
+        ghost.setAttribute("aria-hidden", "true");
+        ghost.setAttribute("inert", "");
+        Object.assign(ghost.style, {
+          position: "absolute",
+          margin: "0",
+          left: `${to.x}px`,
+          top: `${to.y}px`,
+          width: `${to.w}px`,
+          height: `${to.h}px`,
+        });
+        host.append(ghost);
+        // 원본은 자리를 잡은 채 숨는다 — 도착 순간 리플로우가 없다. 고스트의 끝 상태가
+        // `transform: none`이라 마지막 프레임에서 원본과 픽셀이 겹친다(§20).
+        el.style.visibility = "hidden";
+        const anim = ghost.animate(
+          [{ transform: `translate(${from.x - to.x}px, ${from.y - to.y}px)` }, { transform: "none" }],
+          { duration: 300, easing: "ease-out" }, // §비주얼 §20. 반복은 WAAPI 기본값(1회)
+        );
+        // `finish`든 `cancel`이든 즉시 되돌린다 — 뒤에 남는 것이 없다(§20).
+        const undo = () => {
+          anim.cancel();
+          ghost.remove();
+          el.style.visibility = "";
+        };
+        anim.onfinish = undo;
+        anim.oncancel = undo;
+        stop.push(undo);
+      }
+    });
+
+    seat.current = { url, at };
+    return () => stop.forEach((f) => f());
+  });
+
+  // §17 오버레이와 **같은 층 값**이다 — 새 z도 새 포털도 0. 자기 크기를 안 갖고,
+  // 밖으로 나간 고스트는 스트립이 잘라 준다.
+  return <div ref={ref} aria-hidden="true" className="pointer-events-none absolute inset-0 z-10" />;
 }

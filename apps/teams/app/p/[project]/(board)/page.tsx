@@ -26,7 +26,13 @@ import { stat } from "node:fs/promises";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowDown, ArrowUp, ChevronsUpDown, X } from "lucide-react";
-import { BoardFilter, BoardPolling, BoardRelations, BoardSearch } from "@/components/board-ui";
+import {
+  BoardFilter,
+  BoardLaneMotion,
+  BoardPolling,
+  BoardRelations,
+  BoardSearch,
+} from "@/components/board-ui";
 import { EmptyState } from "@/components/empty-state";
 import { PersonaBadge } from "@/components/persona-badge";
 import { DepBadge, StatusBadge, daysSince, statusLabel } from "@/components/status-badge";
@@ -572,6 +578,9 @@ export default async function Board({
                 {/* 레인 뒤에 온다 — 카드 위(§17 z 층)에 뜨고 자기 크기를 갖지 않는다.
                     호버·포커스 위임과 좌표 측정은 전부 여기 안이다(§1 상태는 URL에 없다) */}
                 {relations && <BoardRelations relations={relations} />}
+                {/* 두 번째 `absolute` 자식 — 폴링으로 레인이 갈린 카드의 고스트가 나는 층
+                    (§비주얼 §20). 관계선과 같은 스트립·같은 좌표계·같은 z를 쓴다 */}
+                <BoardLaneMotion />
               </div>
             </div>
           ) : (
