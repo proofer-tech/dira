@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <!-- V8. hardenedRuntime 아래 이 둘이 없으면 Electron이 창을 못 띄운다 -->
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+    <!-- Resources/server/ 안의 sharp(.node + libvips-cpp.dylib)를 spawn된 node가 dlopen한다.
+         라이브러리 검증을 켜두면 그 로드가 막혀 서버가 죽고 앱은 실패 화면을 띄운다 -->
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+  </dict>
+</plist>

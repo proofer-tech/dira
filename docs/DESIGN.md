@@ -2115,7 +2115,7 @@ QA도 세우지 않았다 — 왕복(발행 → `list`에 `대기`)은 이미 �
 | P23 | 답변 대기 네이티브 알림 `283dc4c1` | developer | `f226ac66` | 대기 |
 | P23 | 네이티브 경로 피커 4곳 `c01e2678` | developer | `f226ac66` | 대기 |
 | P23 | 로그인 시 자동 실행 `00fc34ba` | developer | `abce61c9` | 대기 |
-| P23 | 코드사이닝 + 공증 `5aa9486d` | developer | `9e0ec1af` | 대기 |
+| P23 | 코드사이닝 + 공증 `5aa9486d` | developer | `9e0ec1af` | 설정 완료 · **인증서 대기** — hardenedRuntime + entitlements + notarytool·스테이플이 다 서 있다. 사람이 `Developer ID`를 준비하면 `pnpm dist` 한 번 |
 | P23 | QA — 패키징된 앱 `34c86cc6` | qa | 셸·트레이·알림·피커·자동실행 | 대기 |
 | P24 | 워크트리 생성 스펙 확정 `5f55577a` | pm | — | 완료 — §4-2 뒤집음. GUI가 트리를 만든다 |
 | P24 | `prepareWorktree` + 레포 경로를 `dirname(root)`로 `fc96608c` | developer | 스펙 | 대기 |

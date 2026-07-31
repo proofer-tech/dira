@@ -34,11 +34,9 @@ pnpm dist        # teams 빌드 + 조립 + electron-builder
 | `.app` | `dist/mac-arm64/dira.app` — `/Applications`에 옮겨도 돈다 |
 | `.dmg` | `dist/dira-<버전>-arm64.dmg` — 사람이 이걸 건넨다 |
 
-`dist/`는 gitignore돼 있다. **서명·공증은 여기 없다**(`5aa9486d`) — `identity: null`이라
-electron-builder가 "skipped macOS code signing"을 찍고 지나간다. 링커가 붙이는 ad-hoc 서명만
-있어서 **이 맥에서는 돌지만 다른 맥에서는 Gatekeeper가 막는다.**
+`dist/`는 gitignore돼 있다.
 
-패키징에서 갈리는 것 셋:
+패키징에서 갈리는 것 넷:
 
 - **`asar: false`.** `main.ts`는 Electron이 타입 스트리핑으로 그대로 읽고 `server.js`는
   `spawn`으로 도는 별개 프로세스다. 둘 다 asar 안에서 성립하는지가 불확실한데, 끄면
@@ -49,6 +47,71 @@ electron-builder가 "skipped macOS code signing"을 찍고 지나간다. 링커�
   `node_modules`를 이름으로 걸러낸다(`filter`로 되돌려지지 않는다 — 실측). `from`을
   그 디렉터리 자체로 잡은 두 번째 항목이 필터를 비껴간다. 이게 빠지면 36MB가 조용히
   사라지고 앱은 창 대신 실패 화면을 띄운다.
+- **`pnpm build`가 끊어진 심링크를 지운다.** Next의 standalone 트레이서가
+  `node_modules/.pnpm/node_modules/semver -> ../semver@6.3.1/...`을 넣는데 정작 트레이싱된
+  것은 `semver@7.8.5`라 링크가 끊겨 있다. 서명 없는 빌드는 트리를 안 걸어서 몰랐지만,
+  **서명은 번들 전체를 `stat`으로 걷다가 그 링크에서 죽는다**(`ENOENT ... /.pnpm/node_modules/semver`,
+  실측). 이미 끊긴 링크라 지워도 잃는 게 없다 — `find … -type l ! -exec test -e {} \; -print -delete`가
+  무엇을 지웠는지 이름까지 찍는다.
+
+## 서명 · 공증 (`5aa9486d`)
+
+서명 없는 `.app`은 **이 맥에서는 돌지만 다른 맥에서는 Gatekeeper가 막는다.** 나눠주려면
+`Developer ID` 서명 + 공증 + 스테이플까지 가야 한다(`../../docs/DESIGN.md` §배포).
+
+**사람이 준비할 것 셋.** 세션이 구할 수 없다.
+
+1. **Apple Developer Program 계정** (연 $99). 개인 무료 계정으로는 `Developer ID`가 안 나온다.
+2. **`Developer ID Application` 인증서를 로그인 키체인에 설치.** developer.apple.com →
+   Certificates → `Developer ID Application` 발급 → 받은 `.cer`을 더블클릭.
+3. **notarytool용 App-specific password.** appleid.apple.com → 로그인 및 보안 →
+   앱 암호 → 생성. (API 키를 쓰면 `APPLE_API_KEY`·`APPLE_API_KEY_ID`·`APPLE_API_ISSUER`로
+   대신할 수 있다 — electron-builder가 둘 다 받는다.)
+
+**시크릿은 이 레포에 없다.** 값은 환경변수로만 들어온다:
+
+| 환경변수 | 무엇 |
+|---|---|
+| `APPLE_ID` | Apple 계정 이메일 |
+| `APPLE_APP_SPECIFIC_PASSWORD` | 위 3번에서 만든 앱 암호 (`abcd-efgh-ijkl-mnop`) |
+| `APPLE_TEAM_ID` | 10자 팀 ID. developer.apple.com → Membership |
+
+인증서는 환경변수가 아니라 **키체인**에서 온다 — electron-builder가 `Developer ID Application`을
+직접 찾는다. 키체인에 없으면 못 찾는다.
+
+```sh
+pnpm signcheck     # 준비물이 다 있는지만 본다. 빌드는 안 한다
+
+APPLE_ID=you@example.com \
+APPLE_APP_SPECIFIC_PASSWORD=abcd-efgh-ijkl-mnop \
+APPLE_TEAM_ID=XXXXXXXXXX \
+pnpm dist          # 서명 → 공증(notarytool) → 스테이플 → .dmg
+
+codesign -dv --verbose=4 dist/mac-arm64/dira.app   # Authority=Developer ID Application: ...
+spctl -a -vvv -t install dist/mac-arm64/dira.app   # accepted 가 나와야 통과다
+```
+
+**준비물이 없으면 서명 없는 빌드로 떨어지되 조용히 떨어지지 않는다.** `pnpm dist`가
+`sign-preflight.sh`를 먼저 부르고, 무엇이 없어서 건너뛰는지 이름을 찍는다:
+
+```
+서명 건너뜀 — 키체인에 'Developer ID Application' 인증서가 없다.
+공증 건너뜀 — 비어 있는 환경변수: APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID
+→ 서명 없는 .app이 나온다. 이 맥에서는 돌지만 다른 맥에서는 Gatekeeper가 막는다.
+```
+
+여기서 갈리는 것:
+
+- **`identity`를 안 쓴다.** `null`이면 서명을 끄는 스위치가 되고, 이름을 박으면 그 맥의
+  인증서 이름에 빌드가 묶인다. 비워두면 electron-builder가 키체인에서 알아서 찾고
+  못 찾으면 이유를 찍고 지나간다 — 우리가 원하는 두 갈래가 그대로다.
+- **`entitlements.mac.plist`는 3줄이지만 셋 다 필요하다.** JIT 둘이 없으면 서명된 앱이
+  창을 못 띄우고, `disable-library-validation`이 없으면 `Resources/server/`의 sharp
+  네이티브 모듈 로드가 막혀 서버가 죽는다. 파일 안에 각각 왜인지 적혀 있다.
+- **공증은 `.app`에 붙는다.** `xcrun stapler`가 `.app`을 스테이플한 뒤 그것으로 `.dmg`를
+  굽는다. `.dmg` 자체는 서명만 되고 공증 티켓은 안 붙지만, 안의 앱이 스테이플돼 있어
+  받는 맥이 오프라인이어도 Gatekeeper가 통과시킨다.
+- **자동 업데이트·릴리스 서버는 없다.** 산출물 `.dmg`를 사람이 건넨다(§비목표).
 
 ## 아이콘
 
@@ -110,5 +173,8 @@ SVG에서 직접 래스터하는 것이 그 절이 넘긴 실측이다.
 
 ## 여기 아직 없는 것
 
-로그인 시 자동 실행 `00fc34ba`(트레이 메뉴의 구분선 자리) · 코드사이닝/공증 `5aa9486d`.
-각각 자기 티켓이 있다.
+로그인 시 자동 실행 `00fc34ba`(트레이 메뉴의 구분선 자리). 자기 티켓이 있다.
+
+**서명된 산출물도 아직 없다** — 설정은 위 `## 서명 · 공증`에 다 서 있지만 이 맥에
+`Developer ID` 인증서가 없어서 서명 빌드를 한 번도 돌려보지 못했다(`5aa9486d` `## 블록`).
+사람이 준비물 셋을 갖추면 `pnpm dist` 한 번이 남은 전부다.
