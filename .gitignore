@@ -11,3 +11,8 @@ __pycache__/
 node_modules/
 .next/
 .gstack/
+
+# 빌드 생성물. 경로 무관 패턴이라 apps/teams/ 어디서 빌드가 돌아도 다시 추적되지 않는다 —
+# 추적되면 워크트리마다 있는 untracked 사본과 부딪혀 `git rebase master`가 체크아웃에서 멈춘다.
+next-env.d.ts
+*.tsbuildinfo
