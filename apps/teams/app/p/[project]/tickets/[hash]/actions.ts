@@ -178,7 +178,7 @@ const LOCKED: Record<"wip" | "done", string> = {
 };
 
 const DELETE_LOCKED: Record<"wip" | "done", string> = {
-  wip: "진행중 티켓은 삭제할 수 없습니다 — 세션이 물고 있습니다.",
+  wip: "진행중 티켓은 삭제할 수 없습니다 — 세션에 할당된 티켓입니다.",
   done: "완료 티켓은 삭제할 수 없습니다 — 이 해시를 deps로 둔 티켓이 영구 대기합니다.",
 };
 

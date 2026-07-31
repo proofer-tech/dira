@@ -316,7 +316,7 @@ export function UnassignButton({
           {/* 꼬리의 마크가 **누구인지**를 말한다(§비주얼 §19 ③ · 사람 요구 `47678a71`).
               `AlertDescription`이 아니라 여기인 이유: 할당 해제를 누를지 기다릴지가
               제목 한 줄에서 갈려야 한다(§2). 문구·`Lock`·`.done` `Alert`는 무수정 */}
-          <AlertTitle>세션이 물고 있습니다 — 편집·삭제 잠금 {mark}</AlertTitle>
+          <AlertTitle>세션에 할당된 티켓입니다 — 편집·삭제 잠금 {mark}</AlertTitle>
           <AlertDescription className="grid gap-1">
             {/* 손잡이가 옆으로 왔으므로 `아래`를 뺀다(§2) */}
             <span>

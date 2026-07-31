@@ -186,7 +186,7 @@ export default async function TicketDetail({
             title={ticket.title}
             locked={
               ticket.state === "wip"
-                ? "진행중 티켓은 삭제할 수 없습니다 — 세션이 물고 있습니다"
+                ? "진행중 티켓은 삭제할 수 없습니다 — 세션에 할당된 티켓입니다"
                 : ticket.state === "done"
                   ? "완료 티켓은 삭제할 수 없습니다 — 불변 기록입니다"
                   : null
