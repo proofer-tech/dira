@@ -621,8 +621,21 @@ async function failureOf(logsDir: string, line: string | null): Promise<WorkerFa
   return reason ? { at, hash, reason, log } : null; // 사유가 비면 화면에 그릴 것이 없다
 }
 
-/** 워커가 물고 있는 티켓. tick.sh 207행이 `owner`에 `<페르소나> / <TICKET_NAME>-<sid[:8]>`를
- *  쓰므로 거기서 워커 이름을 되짚는다. `.wip` 티켓만 본다 — 끝난 티켓의 owner는 기록이다.
+/** `owner:` → 워커 이름. tick.sh 207행이 `<페르소나> / <TICKET_NAME>-<sid[:8]>`를 쓰므로
+ *  그 형식일 때만 뒤쪽 이름을 돌려주고, 아니면 `null`이다 — **모르는 것을 `?`로 그리지 않는다**
+ *  (DESIGN.md §1 보드). 판정 방향이 둘(워커→티켓 `holdingOf` · 티켓→워커 칸반 카드)이라
+ *  규칙은 이 함수 하나다.
+ *
+ *  정규식을 짓지 않는다 — 워커 이름이 파일시스템에서 오므로 메타문자가 섞일 수 있다.
+ *  이름에 `-`가 들어가도 sid 8자라는 **길이**로 갈린다. */
+export function workerOf(owner: string): string | null {
+  const i = owner.lastIndexOf(" / ");
+  if (i < 0) return null;
+  const tail = owner.slice(i + 3);
+  return tail.length > 9 && tail[tail.length - 9] === "-" ? tail.slice(0, -9) : null;
+}
+
+/** 워커가 물고 있는 티켓. `.wip` 티켓만 본다 — 끝난 티켓의 owner는 기록이다.
  *
  *  **stem이다** (표시값 `hash`가 아니다): 이 값은 워커 화면이 티켓 상세로 거는 링크가 된다
  *  (DESIGN.md §식별자). 물고 있는 티켓은 항상 `.wip`이라 표시값에 접미사가 붙어 있어
@@ -630,12 +643,7 @@ async function failureOf(logsDir: string, line: string | null): Promise<WorkerFa
 function holdingOf(tickets: Ticket[], effName: string): string | null {
   for (const t of tickets) {
     if (t.state !== "wip") continue;
-    const owner = t.fm.owner ?? "";
-    const i = owner.lastIndexOf(" / ");
-    const tail = i < 0 ? owner : owner.slice(i + 3);
-    // `<이름>-<8자>`. 이름에 `-`가 들어가도 길이로 갈린다(정규식을 짓지 않는 이유 = 이름이
-    // 파일시스템에서 오므로 메타문자가 섞일 수 있다).
-    if (tail.length === effName.length + 9 && tail.startsWith(effName + "-")) return t.stem;
+    if (workerOf(t.fm.owner ?? "") === effName) return t.stem;
   }
   return null;
 }

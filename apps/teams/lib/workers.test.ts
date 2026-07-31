@@ -39,6 +39,7 @@ const {
   stopWorker,
   prepareWorktree,
   workerGroups,
+  workerOf,
   worktreeCmds,
   writeCommonContext,
   writeContext,
@@ -283,6 +284,17 @@ test("holding — .wip 티켓의 owner에서 워커를 되짚는다 (tick.sh 207
   );
   // 티켓을 안 넘기면 항상 null이다(프로젝트 목록 요약이 그렇게 부른다)
   assert.strictEqual((await listWorkers(root))[0].holding, null);
+});
+
+/** 칸반 카드의 워커 이름이 쓰는 **같은 규칙**(§1 보드 · §비주얼 §18). 형식이 아니면 `null`이고
+ *  화면은 아무것도 안 그린다 — `?`도 안 그린다. */
+test("workerOf — owner 표기에서 워커 이름 하나, 형식이 아니면 null", () => {
+  assert.strictEqual(workerOf("developer / w6-83533def"), "w6"); // 정상
+  assert.strictEqual(workerOf(""), null); // owner 없음
+  assert.strictEqual(workerOf("w6-83533def"), null); // `/` 없음
+  assert.strictEqual(workerOf("developer / w6-8353"), null); // 접미사 길이 불일치
+  // 이름에 `-`가 있어도 sid 8자라는 길이로 갈린다(정규식을 안 짓는 이유)
+  assert.strictEqual(workerOf("pm / build-2-83533def"), "build-2");
 });
 
 /** runner.log의 시각 표기(`tick.sh:35`의 `date '+%F %T'`, 로컬). **지금 기준 오프셋**으로
