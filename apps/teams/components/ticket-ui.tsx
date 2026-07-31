@@ -10,7 +10,16 @@
 import { useActionState, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowDown, Check, Copy, Trash2, TriangleAlert, Unlink, X } from "lucide-react";
+import {
+  ArrowDown,
+  Check,
+  Copy,
+  MessageSquareReply,
+  Trash2,
+  TriangleAlert,
+  Unlink,
+  X,
+} from "lucide-react";
 import {
   answerRequirement,
   deleteTicket,
@@ -391,7 +400,10 @@ function AnswerFields({
           <span className="text-xs text-muted-foreground">
             <span className="font-mono">tickets/{answerFile}</span>를 만듭니다
           </span>
+          {/* 아이콘이 `답변 대기` 배지와 이 CTA를 잇는다 — 색은 안 쓴다(§비주얼 §15).
+              보드 카드의 트리거와 같은 글자꼴이다 */}
           <Button type="submit" disabled={pending}>
+            <MessageSquareReply aria-hidden />
             {pending ? "답변 다는 중…" : "답변 달기"}
           </Button>
         </div>
@@ -449,11 +461,15 @@ export function AnswerDialog({
   return (
     <Dialog>
       <DialogTrigger
-        // `self-start` — 카드가 flex 컬럼이라 안 주면 버튼이 카드 폭을 다 먹는다
-        render={<Button size="sm" variant="outline" className="relative z-10 self-start" />}
+        // 변종·크기·라벨·아이콘은 다이얼로그 안 submit과 **같은 값**이다(§비주얼 §15) —
+        // `--primary` 면이 카드에서 가장 진해서 눈에 들고, `MessageSquareReply`가
+        // 오른쪽 위 `답변 대기` 배지와 같은 글자꼴이라 둘이 한 쌍으로 읽힌다.
+        // `self-end` — 카드가 flex 컬럼이라 안 주면 버튼이 카드 폭을 다 먹는다(§15 카드 안 자리)
+        render={<Button className="relative z-10 self-end" />}
         onClick={(e) => e.stopPropagation()}
       >
-        답변
+        <MessageSquareReply aria-hidden />
+        답변 달기
       </DialogTrigger>
       <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
