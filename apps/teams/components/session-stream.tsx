@@ -246,7 +246,12 @@ function Interject({
   const followup = mode === "followup";
   const closed = !followup && !live; // 세션이 끝났고 실패가 남아 있다 = 읽기 전용 잔해
   // 완료 모드는 `inbox`를 아예 안 본다 — 보내는 곳이 FIFO가 아니라 새 파일이다(§21).
-  const off = !followup && !inbox; // 입구가 없다 = 그릇 통째로 비활성(§21)
+  // **`live`인 동안만이다.** `!inbox`만 보면 회수된 티켓에서도 켜진다 — 엔진의 `clear`가
+  // `session_id`와 함께 `inbox`도 비우므로(`tickets.py`) `closed`와 같은 폴링에 동시에 서고,
+  // 남은 폼의 입력칸이 `disabled`가 돼 §21이 `readOnly`로 지키려던 선택·복사를 잃는다. §21이
+  // 그릇의 흐림을 의도한 자리는 하나뿐이고, 그 화면의 사유는 실패 Alert가 말한다(사유 한 줄도
+  // 같이 안 뜬다).
+  const off = !followup && live && !inbox; // 입구가 없다 = 그릇 통째로 비활성(§21)
   const empty = !text.trim();
 
   const send = async () => {
