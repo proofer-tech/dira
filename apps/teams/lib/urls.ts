@@ -126,3 +126,21 @@ export function tildePath(abs: string, home: string): string {
   if (abs === home) return "~";
   return abs.startsWith(home + "/") ? "~" + abs.slice(home.length) : abs;
 }
+
+/** `tildePath`의 역방향. `lib/paths.ts`의 `expandHome`과 같은 규칙이고, 이쪽은 `home`을 인자로
+ *  받아 **클라이언트에서도 돈다**(`node:os`를 import하면 폼이 빌드에서 깨진다 — AGENTS.md).
+ *  셸 변수는 펴지 않는다: `$TICKET_CWD`는 워커마다 갈리는 값이라 한 값으로 굳히면 거짓이 된다. */
+export function expandTilde(p: string, home: string): string {
+  if (p === "~") return home;
+  return p.startsWith("~/") ? home + p.slice(1) : p;
+}
+
+/** 네이티브 피커가 준 절대경로를 기준 디렉터리 **아래일 때만** 상대경로로 줄인다
+ *  (DESIGN.md §데스크톱 앱 N3 — 스펙 파일은 프로젝트 루트 상대, 컨텍스트는 `$TICKET_CWD` 접두).
+ *
+ *  밖이면 절대경로 그대로다. 거르지 않는 것이 요건이다 — 피커는 값을 채울 뿐이고 그 경로가
+ *  유효한지는 서버가 종전대로 판정한다(§0 해석 결과 표). `baseAbs`가 비면 줄일 기준이 없다. */
+export function relativeUnder(picked: string, baseAbs: string): string {
+  const base = baseAbs.replace(/\/+$/, "") + "/";
+  return base !== "/" && picked.startsWith(base) ? picked.slice(base.length) : picked;
+}

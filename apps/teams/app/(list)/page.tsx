@@ -80,6 +80,7 @@ export default async function Home() {
           <ProjectsSection
             empty={rows.length === 0}
             auth={{ path: tildePath(auth.path, home), savedAt: auth.savedAt }}
+            home={home}
           >
             {rows.length > 0 && <ProjectRows rows={rows} />}
           </ProjectsSection>

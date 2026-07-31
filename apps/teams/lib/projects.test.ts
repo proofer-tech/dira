@@ -27,8 +27,15 @@ const {
   usingDefault,
 } = await import("./projects.ts");
 const { filterTickets, listTickets } = await import("./queue.ts");
-const { decodeHash, elapsedSuffix, personaDotClass, projectPath, PERSONA_COLORS } =
-  await import("./urls.ts");
+const {
+  decodeHash,
+  elapsedSuffix,
+  expandTilde,
+  personaDotClass,
+  projectPath,
+  relativeUnder,
+  PERSONA_COLORS,
+} = await import("./urls.ts");
 
 const roots: string[] = [];
 process.on("exit", () => {
@@ -257,6 +264,26 @@ test("decodeHash — 보드가 인코딩한 해시를 그대로 되돌린다", (
   }
   // 인코딩이 깨진 URL은 던지지 않는다 — 없는 해시로 흘러가 404가 된다(500이 아니다)
   assert.strictEqual(decodeHash("%zz"), "%zz");
+});
+
+/** 경로 피커(§데스크톱 앱 N3)가 고른 절대경로를 입력칸 값으로 바꾸는 규칙. 스펙 파일은
+ *  프로젝트 루트 상대이고 워커 컨텍스트는 `$TICKET_CWD` 접두를 되살리는데, 둘 다 이 두 함수가
+ *  판정한다. **기준 밖은 절대경로 그대로**가 요건이다 — 피커는 값을 채울 뿐이고 유효성은
+ *  서버가 종전대로 본다. `../`로 걸어 나가지 않는 것도 그래서다. */
+test("relativeUnder · expandTilde — 기준 아래일 때만 줄인다", () => {
+  const home = "/Users/x";
+  assert.strictEqual(expandTilde("~/Projects/p", home), "/Users/x/Projects/p");
+  assert.strictEqual(expandTilde("~", home), "/Users/x");
+  assert.strictEqual(expandTilde("/abs/p", home), "/abs/p"); // 절대경로는 그대로
+  assert.strictEqual(expandTilde("~notme/p", home), "~notme/p"); // `~user`는 안 편다
+
+  const base = expandTilde("~/Projects/p", home);
+  assert.strictEqual(relativeUnder("/Users/x/Projects/p/docs/D.md", base), "docs/D.md");
+  assert.strictEqual(relativeUnder("/Users/x/Projects/p/D.md", base + "/"), "D.md"); // 끝 `/` 무해
+  // 기준 밖 · 접두만 같은 형제 · 기준이 빈 값 — 셋 다 절대경로 그대로다
+  assert.strictEqual(relativeUnder("/etc/hosts", base), "/etc/hosts");
+  assert.strictEqual(relativeUnder("/Users/x/Projects/px/D.md", base), "/Users/x/Projects/px/D.md");
+  assert.strictEqual(relativeUnder("/Users/x/D.md", ""), "/Users/x/D.md");
 });
 
 /** `답변 대기 · 0일`은 고장으로 읽힌다 — 0이면 경과를 붙이지 않는다(DESIGN.md §2 경과 표시 표). */

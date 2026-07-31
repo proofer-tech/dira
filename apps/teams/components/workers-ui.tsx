@@ -22,6 +22,7 @@ import {
   type WorkerActionResult,
 } from "@/app/p/[project]/workers/actions";
 import { CopyCommand } from "@/components/copy-command";
+import { PickPath } from "@/components/path-picker";
 import { SessionStream } from "@/components/session-stream";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -38,6 +39,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { relativeUnder } from "@/lib/urls";
 import { cn } from "@/lib/utils";
 
 /** 서버가 읽어 넘긴 컨텍스트 한 항목. `path`는 워커 파일에 든 셸 문자열이라 `$TICKET_CWD`가
@@ -492,6 +494,7 @@ function ContextEditor({
   filePath,
   context,
   common,
+  cwd,
   emptyText,
   addLabel,
   save,
@@ -506,6 +509,11 @@ function ContextEditor({
   /** 목록 **최상단**에 `공통` 배지 + 읽기 전용으로 붙는 항목(워커 카드에서만).
    *  **저장에 들어가지 않는다** — 이 항목은 워커 파일에 실제로 없다(§4-1) */
   common?: ContextRow[];
+  /** 이 워커의 `TICKET_CWD`. 경로 피커가 고른 파일이 이 아래면 `$TICKET_CWD/` 접두를 되살린다
+   *  (§데스크톱 앱 N3 — 접두 보존). **없으면 피커 버튼이 안 뜬다.** 공통 카드가 그렇다:
+   *  이 값은 워커마다 갈려서 한 기준으로 줄이면 남의 워커에게 거짓이 된다(존재 표시를
+   *  공통에서만 하는 것과 같은 이유). N3이 정한 자리는 워커 컨텍스트 하나다. */
+  cwd?: string;
   emptyText: string;
   addLabel: string;
   save: (items: { path: string; desc: string }[]) => Promise<ContextResult>;
@@ -597,6 +605,20 @@ function ContextEditor({
                 value={r.desc}
                 onChange={(e) => edit(i, { desc: e.target.value })}
               />
+              {/* 고른 파일이 `cwd` 아래면 `$TICKET_CWD/`로 되돌린다 — 절대경로로 굳히면 그
+                  항목이 이 컴퓨터 것이 되고 워커 간 복사도 뜻을 잃는다(§4-1 복사 다이얼로그).
+                  **기준이 없으면 버튼 자체가 없다**: 공통 카드와 `TICKET_CWD` 줄이 없는 워커가
+                  그렇고, 거기서 고르면 남는 건 이 컴퓨터의 절대경로뿐이다 */}
+              {cwd && (
+                <PickPath
+                  mode="file"
+                  label={`${i + 1}번째 경로`}
+                  onPick={(p) => {
+                    const rel = relativeUnder(p, cwd);
+                    edit(i, { path: rel === p ? p : `$TICKET_CWD/${rel}` });
+                  }}
+                />
+              )}
               <Button variant="ghost" size="sm" disabled={i === 0} onClick={() => move(i, -1)}>
                 <ArrowUp aria-hidden />
                 <span className="sr-only">위로</span>
@@ -769,6 +791,9 @@ export function WorkerContextCard({
         filePath={row.path}
         context={row.context}
         common={gets}
+        // ponytail: `TICKET_CWD` 줄이 없는 워커(엔진 기본값 = 루트의 부모)는 기준이 없어 피커가
+        // 안 뜬다 — 타이핑은 종전대로다. 필요해지면 페이지가 root를 같이 넘긴다
+        cwd={row.cwd ?? undefined}
         emptyText={
           gets.length > 0
             ? "이 워커의 자기 항목은 없습니다 — 위 공통 항목만 받습니다."

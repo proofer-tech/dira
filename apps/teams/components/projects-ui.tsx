@@ -26,6 +26,7 @@ import {
 } from "@/app/actions";
 import type { SetupState } from "@/lib/auth";
 import { CopyCommand } from "@/components/copy-command";
+import { PickPath } from "@/components/path-picker";
 import { PersonaBadge } from "@/components/persona-badge";
 import { StatusBadge, type Status } from "@/components/status-badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -53,7 +54,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { slugify } from "@/lib/urls";
+import { expandTilde, relativeUnder, slugify } from "@/lib/urls";
 
 /** 잘린 값·배지 설명을 붙인다. 트리거는 넘긴 요소 그대로 쓴다(base-ui `render`). */
 function Hint({ text, children }: { text: string; children: React.ReactNode }) {
@@ -181,6 +182,7 @@ function CreateDialog({
   onOpenChange,
   onCreated,
   onRegister,
+  home,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
@@ -188,10 +190,16 @@ function CreateDialog({
   /** `.dira`가 이미 있는 **큐**였다 — 만들지 않고 등록으로 보낸다(§0-3 답변 4(b)).
    *  경로만 채우고 그릇은 부모가 고른다: 0건이면 인라인 폼, 아니면 등록 다이얼로그다 */
   onRegister: (root: string) => void;
+  /** 피커가 고른 절대경로를 `프로젝트 폴더`(사람이 `~`로 칠 수 있다) 상대로 환산할 때 쓴다 */
+  home: string;
 }) {
   const [pending, start] = useTransition();
   const [state, setState] = useState<CreateState>({});
   const [name, setName] = useState("");
+  // 피커가 값을 넣으려면 제어 입력이어야 한다. 닫을 때 비우는 건 종전과 같다 —
+  // 다이얼로그가 닫히면 그동안은 비제어 입력이 언마운트로 비워졌다.
+  const [dir, setDir] = useState("");
+  const [spec, setSpec] = useState("");
   const slug = slugify(name);
   const showId = (name.trim() !== "" && slug === "") || !!state.needId;
   const err = state.error;
@@ -201,7 +209,11 @@ function CreateDialog({
       open={open}
       onOpenChange={(o) => {
         onOpenChange(o);
-        if (!o) setState({});
+        if (!o) {
+          setState({});
+          setDir("");
+          setSpec("");
+        }
       }}
     >
       <DialogContent className="sm:max-w-lg">
@@ -231,6 +243,8 @@ function CreateDialog({
                 onOpenChange(false);
                 setState({});
                 setName("");
+                setDir("");
+                setSpec("");
               }
             });
           }}
@@ -261,12 +275,18 @@ function CreateDialog({
 
           <div className="space-y-2">
             <Label htmlFor="create-dir">프로젝트 폴더</Label>
-            <Input
-              id="create-dir"
-              name="dir"
-              className="font-mono"
-              placeholder="~/Projects/myproject"
-            />
+            {/* 데스크톱이 아니면 `<PickPath>`가 아무것도 안 그린다 — 그때 이 줄은 입력 하나다 */}
+            <div className="flex items-center gap-2">
+              <Input
+                id="create-dir"
+                name="dir"
+                className="font-mono"
+                placeholder="~/Projects/myproject"
+                value={dir}
+                onChange={(e) => setDir(e.target.value)}
+              />
+              <PickPath mode="directory" label="프로젝트 폴더" onPick={setDir} />
+            </div>
             {/* `.dira`가 아니라 그 부모다 — 등록 폼과 갈리는 지점이라 도움말로 못박는다 */}
             <p className="text-xs text-muted-foreground">여기에 .dira를 만듭니다. ~는 확장됩니다</p>
           </div>
@@ -279,7 +299,24 @@ function CreateDialog({
 
           <div className="space-y-2">
             <Label htmlFor="create-spec">스펙 문서</Label>
-            <Input id="create-spec" name="spec" className="font-mono" placeholder="docs/DESIGN.md" />
+            <div className="flex items-center gap-2">
+              <Input
+                id="create-spec"
+                name="spec"
+                className="font-mono"
+                placeholder="docs/DESIGN.md"
+                value={spec}
+                onChange={(e) => setSpec(e.target.value)}
+              />
+              {/* 이 칸은 **프로젝트 루트 상대**다(§데스크톱 앱 N3 표) — 위 칸 아래를 고르면
+                  그만큼 줄이고, 밖을 고르면 절대경로 그대로 둔다. 위 칸이 비었으면 줄일
+                  기준이 없어 역시 절대경로다 */}
+              <PickPath
+                mode="file"
+                label="스펙 문서"
+                onPick={(p) => setSpec(relativeUnder(p, expandTilde(dir, home)))}
+              />
+            </div>
             <p className="text-xs text-muted-foreground">
               선택. 비우면 그 줄(AGENTS.md 지도 표 한 행)을 자리표시자 그대로 둡니다
             </p>
@@ -536,11 +573,15 @@ function AuthDialog({
 export function ProjectsSection({
   empty,
   auth,
+  home,
   children,
 }: {
   empty: boolean;
   /** 인증 상태 — 머신 스코프라 이 화면이 유일한 자리다(§0-4). */
   auth: AuthView;
+  /** 홈 디렉터리. 경로 피커가 `~`로 친 값을 펴는 데만 쓴다(§데스크톱 앱 N3) —
+   *  클라이언트는 `node:os`를 못 부르므로 서버가 넘긴다(`tildePath`와 같은 규약) */
+  home: string;
   children?: React.ReactNode;
 }) {
   const [pending, start] = useTransition();
@@ -612,14 +653,18 @@ export function ProjectsSection({
 
       <div className="space-y-2">
         <Label htmlFor="project-root">경로</Label>
-        <Input
-          id="project-root"
-          name="root"
-          className="font-mono"
-          placeholder="~/Projects/myproject/.dira"
-          value={root}
-          onChange={(e) => setRoot(e.target.value)}
-        />
+        <div className="flex items-center gap-2">
+          <Input
+            id="project-root"
+            name="root"
+            className="font-mono"
+            placeholder="~/Projects/myproject/.dira"
+            value={root}
+            onChange={(e) => setRoot(e.target.value)}
+          />
+          {/* 고르는 것은 `.dira` 자신이다(디렉터리) — dotfile이라 main이 `showHiddenFiles`를 켠다 */}
+          <PickPath mode="directory" label="큐 경로" onPick={setRoot} />
+        </div>
         <p className="text-xs text-muted-foreground">절대경로. ~는 확장됩니다</p>
       </div>
 
@@ -775,6 +820,7 @@ export function ProjectsSection({
       <CreateDialog
         open={creating}
         onOpenChange={setCreating}
+        home={home}
         onCreated={(s) => {
           setMade(s);
           setDismissed(false);

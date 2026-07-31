@@ -1,8 +1,8 @@
 // dira 데스크톱 셸. 하는 일은 셋이다 — Next standalone 서버를 자식으로 띄우고, 창이 그것을 열고,
-// 답변 대기 티켓이 새로 생기면 알린다.
-// 스펙: ../../docs/DESIGN.md §데스크톱 앱 (특히 "못박는 것" 1~5, N2).
-// 트레이·피커·자동 실행은 여기 없다 (abce61c9 · c01e2678 · 00fc34ba).
-import { app, BrowserWindow, Notification, shell } from "electron";
+// 답변 대기 티켓이 새로 생기면 알리고(N2), 화면이 부르면 네이티브 경로 다이얼로그를 띄운다(N3).
+// 스펙: ../../docs/DESIGN.md §데스크톱 앱 (특히 "못박는 것" 1~5, N2·N3).
+// 트레이·자동 실행은 여기 없다 (abce61c9 · 00fc34ba).
+import { app, BrowserWindow, Notification, dialog, ipcMain, shell } from "electron";
 import { spawn, type ChildProcess } from "node:child_process";
 import { createServer } from "node:net";
 import { basename, dirname, join } from "node:path";
@@ -15,6 +15,9 @@ const SERVER = process.env.DIRA_SERVER_JS
   : app.isPackaged
     ? join(process.resourcesPath, "server", "server.js")
     : fileURLToPath(new URL("../teams/.next/standalone/server.js", import.meta.url));
+/** main.ts 옆이다. **패키징 목록(package.json `build.files`)에 같이 실어야 한다** — 빠지면
+ *  `.app`에서만 피커 버튼이 조용히 사라진다(브라우저와 구분이 안 된다). */
+const PRELOAD = fileURLToPath(new URL("preload.cjs", import.meta.url));
 const READY_TIMEOUT_MS = 30_000;
 /** 배경 폴링이다 — 보드의 5초(§아키텍처)와 다른 값인 것이 맞다 (§데스크톱 앱 N2). */
 const POLL_MS = 30_000;
@@ -100,7 +103,7 @@ function openWindow(origin: string): BrowserWindow {
     width: 1440,
     height: 900,
     title: "dira",
-    webPreferences: { contextIsolation: true, nodeIntegration: false },
+    webPreferences: { contextIsolation: true, nodeIntegration: false, preload: PRELOAD },
   });
 
   const external = (url: string) => {
@@ -172,6 +175,20 @@ async function pollAwaiting(origin: string) {
     console.error(`[dira] 답변 대기 폴링 실패: ${(e as Error).message}`);
   }
 }
+
+/** N3 경로 피커. main이 하는 일은 다이얼로그를 띄우고 **고른 절대경로 하나**를 돌려주는 것뿐이다
+ *  — 상대경로 환산도 검증도 여기 없다(환산은 `lib/urls.ts`, 검증은 서버가 종전대로 한다).
+ *  `mode`는 렌더러가 보내는 값이라 두 글자 말고는 받지 않는다. `.dira`가 dotfile이라
+ *  `showHiddenFiles`가 없으면 등록할 큐를 아예 고를 수 없다. */
+ipcMain.handle("dira:pick-path", async (e, mode: unknown) => {
+  // 부른 창에 시트로 붙인다(모듈 최상단의 `win`이 아니라 **보낸 쪽**이다).
+  const from = BrowserWindow.fromWebContents(e.sender);
+  if (!from || (mode !== "file" && mode !== "directory")) return null;
+  const r = await dialog.showOpenDialog(from, {
+    properties: [mode === "file" ? "openFile" : "openDirectory", "showHiddenFiles"],
+  });
+  return r.filePaths[0] ?? null;
+});
 
 app.whenReady().then(async () => {
   const port = await freePort();
