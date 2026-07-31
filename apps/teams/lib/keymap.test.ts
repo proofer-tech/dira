@@ -35,8 +35,8 @@ test("DEFAULT_KEYMAP — §0-6 액션 표 8줄과 id·기본키가 같다", () =
       ["interject.send", "Mod+Enter"],
     ],
   );
-  // 목록 화면이 그리는 두 열도 비어 있지 않다
-  assert.ok(DEFAULT_KEYMAP.every((a) => a.name && a.scope));
+  // 목록 화면이 그리는 이름도 비어 있지 않다
+  assert.ok(DEFAULT_KEYMAP.every((a) => a.name));
   assert.strictEqual(DEFAULT_KEYMAP.find((a) => a.id === "project.search")!.name, "프로젝트 검색");
   // 기본값끼리 겹치면 첫 화면부터 거짓말이다
   assert.strictEqual(new Set(DEFAULT_KEYMAP.map((a) => a.combo)).size, DEFAULT_KEYMAP.length);

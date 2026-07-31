@@ -24,21 +24,19 @@ export type KeyAction = {
   id: ActionId;
   /** 목록 화면이 그리는 이름. 액션 id는 사람에게 보이지 않는다 */
   name: string;
-  /** 어디서 듣는 키인가 — 같은 조합이 화면마다 다른 일을 한다는 오해를 막는 열 */
-  scope: string;
   combo: string;
 };
 
 /** §0-6 액션 표. **순서가 목록의 순서다**(전역 → 보드 → 이동 → 입력칸). */
 export const DEFAULT_KEYMAP: KeyAction[] = [
-  { id: "project.search", name: "프로젝트 검색", scope: "전역", combo: "Mod+k" },
-  { id: "settings.open", name: "설정 열기", scope: "전역", combo: "?" },
-  { id: "board.search", name: "보드 검색", scope: "보드", combo: "/" },
-  { id: "board.new", name: "티켓 발행", scope: "보드", combo: "n" },
-  { id: "board.request", name: "요구 접수", scope: "보드", combo: "r" },
-  { id: "nav.board", name: "보드로 이동", scope: "프로젝트", combo: "b" },
-  { id: "nav.workers", name: "워커로 이동", scope: "프로젝트", combo: "w" },
-  { id: "interject.send", name: "참견 보내기", scope: "참견 입력칸", combo: "Mod+Enter" },
+  { id: "project.search", name: "프로젝트 검색", combo: "Mod+k" },
+  { id: "settings.open", name: "설정 열기", combo: "?" },
+  { id: "board.search", name: "보드 검색", combo: "/" },
+  { id: "board.new", name: "티켓 발행", combo: "n" },
+  { id: "board.request", name: "요구 접수", combo: "r" },
+  { id: "nav.board", name: "보드로 이동", combo: "b" },
+  { id: "nav.workers", name: "워커로 이동", combo: "w" },
+  { id: "interject.send", name: "참견 보내기", combo: "Mod+Enter" },
 ];
 
 export type Bindings = Record<ActionId, string>;
@@ -180,7 +178,7 @@ const wa = (s: string) => ((s.charCodeAt(s.length - 1) - 0xac00) % 28 ? "과" : 
 
 /** 못 쓰는 키를 거르고 겹치는 액션을 찾는다. `null`이면 지정해도 된다.
  *
- *  범위(`scope`)를 보지 않는 것은 의도다 — 보드에서만 듣는 키라도 같은 조합이 둘이면
+ *  어디서 듣는 키인지를 보지 않는 것은 의도다 — 보드에서만 듣는 키라도 같은 조합이 둘이면
  *  목록에서 어느 쪽이 이기는지 사람이 읽을 수 없다. 큐 하나에 액션 8개다. */
 export function validateBinding(
   bindings: Bindings,
