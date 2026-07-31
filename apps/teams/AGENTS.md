@@ -33,6 +33,13 @@ apps/teams/
   lib/
     projects.ts          프로젝트 레지스트리 읽기·쓰기, 검증, 설정 해석, 목록 요약,
                         페르소나 CRUD (기준 디렉터리가 `resolveConfig().personas`라 여기 있다)
+                        + **키맵 파일 3함수**(`keymapPath`·`readKeymap`·`writeKeymap`, §0-6).
+                        `keymap.ts`가 아니라 여기 있는 이유는 그 파일 머리 주석에 있다 —
+                        저기는 클라이언트 번들로 가고, 이 셋이 필요한 건 `registryPath()`뿐이다
+    keymap.ts           키맵 코어 (§0-6): `DEFAULT_KEYMAP`(액션 8개) · `matchCombo` ·
+                        `formatCombo` · `validateBinding`. **`node:*` import 금지** —
+                        키를 듣는 것도 그리는 것도 클라이언트 컴포넌트다(`urls.ts`와 같은 축).
+                        화면에 키를 적는 코드는 `formatCombo` 하나만 쓴다
     urls.ts             슬러그·전환 경로·`~` 축약·배지 경과 접미사·스트림 폼 모드. **순수 함수만** —
                         클라이언트가 import한다(배지도 클라이언트 컴포넌트에 들어간다).
                         JSX는 `node --test`가 못 읽으므로 컴포넌트의 순수 판정은 여기서 검증한다

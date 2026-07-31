@@ -5,6 +5,7 @@
 import { mkdir, readFile, readdir, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
+import { DEFAULT_KEYMAP, defaultBindings, type Bindings, type Keymap } from "./keymap.ts";
 import { NAME_RE, PROJECT_ID_RE, expandHome, resolveWithin, shellPath, shellValue } from "./paths.ts";
 import { listTickets, statusOf, type Ticket } from "./queue.ts";
 import { listWorkers, type Worker } from "./workers.ts";
@@ -54,6 +55,60 @@ export function registryPath(): string {
  *  옛 파일은 그대로 남는다(지우지 않는다). 한동안 새 파일만 보이면 이 폴백을 지운다. */
 function legacyRegistryPath(): string {
   return registryPath().replace(/gui-projects\.json$/, "gui-tenants.json");
+}
+
+// ── 키맵 파일 (DESIGN.md §0-6) ──────────────────────────────────────────────
+//
+// 판정·표기·검증은 전부 `lib/keymap.ts`고 여기 있는 건 **파일 세 함수뿐**이다. 저기는
+// 클라이언트 컴포넌트가 import해서 번들로 가므로 `node:*`를 들일 수 없고(실측: 빌드가
+// `chunking context does not support external modules`로 깨진다), 이 셋이 필요한 건
+// `registryPath()` 하나다 — 그 주인이 이 파일이라 여기 얹었다(`auth.ts`가 못 하는 선택이다).
+
+/** 레지스트리·토큰과 **같은 디렉터리**다(엔진의 `$LOCAL`). `lib/auth.ts:16`과 같은 한 줄. */
+export function keymapPath(): string {
+  return path.join(path.dirname(registryPath()), "keymap.json");
+}
+
+/** 파일을 **손댄 그대로** 준다(모르는 id 포함). 쓰기가 이 객체 위에 덮어쓴다. */
+async function readRawKeymap(): Promise<{ obj: Record<string, unknown>; broken: boolean }> {
+  const raw = await readFile(keymapPath(), "utf8").catch((e: NodeJS.ErrnoException) =>
+    // 없음은 정상이다(아직 아무것도 안 바꿨다). 그 외(권한 등)는 빈 문자열로 흘려
+    // 아래 파서가 `broken`으로 잡는다 — 던지면 서버 컴포넌트가 500이 된다
+    e.code === "ENOENT" ? null : "",
+  );
+  if (raw === null) return { obj: {}, broken: false };
+  try {
+    const o: unknown = JSON.parse(raw);
+    if (!o || typeof o !== "object" || Array.isArray(o)) return { obj: {}, broken: true };
+    return { obj: o as Record<string, unknown>, broken: false };
+  } catch {
+    return { obj: {}, broken: true };
+  }
+}
+
+/** 기본값 위에 파일을 얹는다. **던지지 않는다** — 파일 없음 · JSON 깨짐 · 모르는 액션 id
+ *  셋 다 완전한 키맵으로 흡수한다(모르는 id는 안 읽고, 쓰기가 보존한다). */
+export async function readKeymap(): Promise<Keymap> {
+  const { obj, broken } = await readRawKeymap();
+  const bindings = defaultBindings();
+  for (const a of DEFAULT_KEYMAP) {
+    const v = obj[a.id];
+    if (typeof v === "string" && v) bindings[a.id] = v;
+  }
+  return { bindings, broken };
+}
+
+/** 바꾼 것만 넘긴다. **읽은 객체 위에 덮어쓰므로** 우리가 모르는 id는 살아남는다
+ *  (옛 버전이 쓴 것 · 사람이 적어 둔 것). 깨진 파일만은 보존할 길이 없어 새로 쓴다 —
+ *  그 사실은 화면이 이미 `broken`으로 말한 뒤다. */
+export async function writeKeymap(changes: Partial<Bindings>): Promise<void> {
+  const { obj } = await readRawKeymap();
+  const next: Record<string, unknown> = { ...obj, ...changes };
+  // 기본값으로 되돌아온 항목은 파일에서 뺀다 — 파일은 **차이**만 담는다(§0-6)
+  for (const a of DEFAULT_KEYMAP) if (next[a.id] === a.combo) delete next[a.id];
+  const p = keymapPath();
+  await mkdir(path.dirname(p), { recursive: true });
+  await writeFile(p, JSON.stringify(next, null, 2) + "\n");
 }
 
 export async function readProjects(): Promise<Project[]> {
