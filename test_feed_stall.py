@@ -20,10 +20,18 @@ PY = os.path.join(HERE, "tickets.py")
 
 # stdin을 한 글자도 안 읽고 버티는 엔진. argv에 `--input-format stream-json`이 인접해 있어
 # tick.sh가 FIFO 경로를 탄다(그게 갈림의 유일한 근거다).
+#
+# `exec`가 이 스크립트에서 가장 중요한 한 단어다. 실제 엔진(`claude`)은 프로세스 하나이고
+# tick.sh의 `kill -KILL $CPID`는 그걸 죽인다. `exec` 없이 두면 가짜 엔진은 **bash 래퍼 +
+# 자식 sleep** 두 개가 되고, kill이 래퍼만 죽여 고아 sleep이 워커의 stdout을 60초 더 쥔다 —
+# 호출자의 `capture_output`이 EOF를 못 봐서 STALL이 제때 떴는데도 상한에 걸린다.
+# **그게 플랫폼마다 갈렸다**: macOS bash는 스크립트 마지막 명령을 exec로 바꿔치기해서 우연히
+# 프로세스가 하나였고, 리눅스 bash는 fork해서 둘이었다(CI 실측 2026-08-01: 61s).
+# 재현하려는 것은 주입 정지지 bash의 최적화가 아니라서, 손으로 `exec`를 박아 양쪽을 맞춘다.
 DEAF_ENGINE = """\
 #!/bin/bash
 printf '{"type":"system","subtype":"init"}\\n'
-sleep 60
+exec sleep 60
 """
 
 WORKER = """\
