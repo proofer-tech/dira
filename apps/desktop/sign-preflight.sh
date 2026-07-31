@@ -6,7 +6,8 @@
 # 시크릿은 이 레포에 없다. 값은 전부 환경변수로만 들어온다.
 set -u
 
-ok=1
+signed=1
+notarized=1
 
 login_kc="$HOME/Library/Keychains/login.keychain-db"
 
@@ -23,11 +24,11 @@ elif [ -n "$(find_id "$login_kc")" ]; then
   echo "         있는 것: $(find_id "$login_kc" | sed 's/^ *[0-9]*) //')"
   echo "         검색목록: $(security list-keychains | tr -d ' "' | tr '\n' ' ')"
   echo "         → 사람이 쓰는 터미널(GUI 로그인 세션)에서 이 빌드를 돌리면 잡힌다."
-  ok=0
+  signed=0
 else
   echo "서명 건너뜀 — 키체인에 'Developer ID Application' 인증서가 없다."
   echo "         Apple Developer 계정으로 발급해 로그인 키체인에 설치하면 잡힌다."
-  ok=0
+  signed=0
 fi
 
 missing=""
@@ -39,8 +40,12 @@ if [ -z "$missing" ]; then
   echo "공증: notarytool ($APPLE_ID / 팀 $APPLE_TEAM_ID)"
 else
   echo "공증 건너뜀 — 비어 있는 환경변수:$missing"
-  ok=0
+  notarized=0
 fi
 
-[ "$ok" = 1 ] || echo "→ 서명 없는 .app이 나온다. 이 맥에서는 돌지만 다른 맥에서는 Gatekeeper가 막는다."
+if [ "$signed" = 0 ]; then
+  echo "→ 서명 없는 .app이 나온다. 이 맥에서는 돌지만 다른 맥에서는 Gatekeeper가 막는다."
+elif [ "$notarized" = 0 ]; then
+  echo "→ 서명은 되지만 공증이 안 된다. 다른 맥에서 처음 열 때 Gatekeeper 경고가 뜬다 (우클릭 → 열기로 넘길 수 있다)."
+fi
 exit 0
