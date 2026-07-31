@@ -1,0 +1,15 @@
+{
+  "name": "desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "main.ts",
+  "scripts": {
+    "build": "cd ../teams && pnpm build && rm -rf .next/standalone/.next/static .next/standalone/public && cp -R .next/static .next/standalone/.next/static && { [ -d public ] && cp -R public .next/standalone/public || true; }",
+    "start": "electron .",
+    "dev": "pnpm build && pnpm start"
+  },
+  "devDependencies": {
+    "electron": "^40.0.0"
+  }
+}
