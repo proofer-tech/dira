@@ -57,7 +57,11 @@ try:
 
     # --- 1) 귀먹은 엔진 + 버퍼보다 큰 프롬프트: 정지가 아니라 STALL로 떨어져야 한다 ---
     w1 = mkfile(os.path.join(root, "workers", "w1.sh"),
-                WORKER.format(name="w1", tmp=tmp, tick=TICK, feed=3, filler="x" * 20000),
+                # filler는 **파이프 버퍼보다 커야** write가 막히고, 그 막힘이 이 테스트의 전부다.
+                # 버퍼가 macOS는 16KB, 리눅스는 64KB다 — 20000자면 리눅스에서 그냥 들어가서
+                # 재현이 안 되고, 실패도 아니고 **엔진 sleep 60을 기다리다 상한에 걸린다**
+                # (CI 실측 2026-08-01: 60s). 둘 다 넘기려고 200000자로 잡는다.
+                WORKER.format(name="w1", tmp=tmp, tick=TICK, feed=3, filler="x" * 200000),
                 0o755)
     mkfile(os.path.join(root, "tickets", "aaaa0001.md"),
            "---\nticket: aaaa0001\ntitle: t\nkind: work\n---\n\n## Goal\ntest\n")
