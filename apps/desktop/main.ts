@@ -321,6 +321,49 @@ function createTray(origin: string) {
   tray.on("right-click", popUp);
 }
 
+// ── 도움말 > 개발자 정보 ────────────────────────────────────────────────────
+
+/** 세 줄이 전부다 — 버전·빌드·라이선스는 여기 안 온다(§도움말 메뉴 4). 새 창도 라우트도 안
+ *  만들고 다이얼로그 하나다(2). `app.showAboutPanel()`이 아닌 이유는 그 패널의 credits가
+ *  선택도 클릭도 안 되는 회색 글자여서다 — 주소는 눌러서 열려야 한다(3). */
+async function showDeveloper() {
+  const { response } = await dialog.showMessageBox({
+    type: "info",
+    message: "임한솔",
+    detail: "molmoty@gmail.com\nhttps://hsol.info",
+    // macOS는 buttons[0]을 오른쪽 끝에 놓는다. 기본·취소 둘 다 0이라 ⏎·⎋가 그냥 닫는다 —
+    // 여는 쪽이 기본이면 다이얼로그를 넘기려던 ⏎가 브라우저를 띄운다.
+    buttons: ["닫기", "사이트 열기", "메일 보내기"],
+    defaultId: 0,
+    cancelId: 0,
+  });
+  if (response === 1) shell.openExternal("https://hsol.info");
+  else if (response === 2) shell.openExternal("mailto:molmoty@gmail.com");
+}
+
+/** **Electron 40 기본 메뉴에 도움말은 아예 없다**(실측: `appmenu` `filemenu` `editmenu`
+ *  `viewmenu` `windowmenu` 다섯뿐). 붙일 서브메뉴가 없으니 그 메뉴를 만든다.
+ *
+ *  ⌘C·⌘V·⌘W·⌘Q는 전부 그 role 항목이 주는 것이라 하나라도 빠뜨리면 증상이 메뉴가 아니라
+ *  **웹뷰 입력칸**에서 난다(§도움말 메뉴 1). 그래서 **항목을 손으로 적지 않는다** — 기본 메뉴와
+ *  같은 role 매크로 다섯을 그대로 다시 쓰고 여섯 번째만 새것이다. 내용은 Electron이 준다.
+ *
+ *  `getApplicationMenu()`를 받아 `append`하는 쪽이 더 짧지만 그 Menu는 **항목 추가를 지원하지
+ *  않는다**(Electron 문서). 실제로 되긴 되는데 콘솔이
+ *  `representedObject is not a WeakPtrToElectronMenuModelAsNSObject`로 도배된다(실측 279줄). */
+function installDeveloperItem() {
+  Menu.setApplicationMenu(
+    Menu.buildFromTemplate([
+      { role: "appMenu" },
+      { role: "fileMenu" },
+      { role: "editMenu" },
+      { role: "viewMenu" },
+      { role: "windowMenu" },
+      { label: "도움말", role: "help", submenu: [{ label: "개발자 정보", click: showDeveloper }] },
+    ]),
+  );
+}
+
 function showWindow(origin: string) {
   // 렌더러가 죽어 창이 파괴된 뒤라면 다시 만든다. 서버는 그대로라 포트도 그대로다.
   if (!win || win.isDestroyed()) win = openWindow(origin);
@@ -329,6 +372,7 @@ function showWindow(origin: string) {
 }
 
 async function boot() {
+  installDeveloperItem(); // 실패 화면만 뜨는 실행에도 메뉴는 있다
   const port = await freePort();
   const origin = `http://127.0.0.1:${port}`;
   child = startServer(port);
