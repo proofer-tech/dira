@@ -37,7 +37,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 /** 머신당 하나뿐인 Claude 장기 토큰의 자리와 저장 시각. 프로젝트마다 있지 않다(§0-4). */
-export type AuthView = { path: string; savedAt: string | null };
+export type AuthView = {
+  path: string;
+  savedAt: string | null;
+  /** claude 엔진 워커가 어딘가에 있는가 — **끄는 쪽에 증거가 필요하다**(§0-4). 등록된 프로젝트를
+   *  전부 읽었고 그 전부에서 claude가 0일 때만 `false`고, 그때만 `인증 필요`가 안 뜬다.
+   *  못 읽은 프로젝트·프로젝트 0건은 판정 불가라 `true`다. 판정은 부르는 쪽(서버)이 한다. */
+  claudeUsed: boolean;
+};
 
 export function SettingsDialog({
   auth,
@@ -55,6 +62,8 @@ export function SettingsDialog({
   const [code, setCode] = useState("");
   // 저장 직후엔 서버 프롭이 아직 옛 값이다 — 방금 쓴 것이 이긴다(층 ②·③ 어느 쪽이든)
   const savedAt = setup?.savedAt ?? result.savedAt ?? auth.savedAt;
+  // 토큰이 없어도 **claude 워커가 하나도 없으면** 이 컴퓨터는 이 토큰을 안 쓴다 — 안 말한다(§0-4)
+  const needsAuth = !savedAt && auth.claudeUsed;
 
   // 진행 로그는 폴링으로 받는다 — 이 앱에 소켓은 없다(세션 스트림과 같은 방식).
   // 돌고 있을 때만 돈다: `running`이 꺼지면 effect가 정리되고 폴링이 멈춘다
@@ -88,10 +97,10 @@ export function SettingsDialog({
               variant="ghost"
               size="icon"
               aria-label="설정"
-              className={savedAt ? undefined : "w-auto gap-1 px-2"}
+              className={needsAuth ? "w-auto gap-1 px-2" : undefined}
             >
               <Settings aria-hidden />
-              {!savedAt && (
+              {needsAuth && (
                 <>
                   <TriangleAlert aria-hidden className="text-status-stale" />
                   <span className="text-sm">인증 필요</span>
@@ -114,7 +123,9 @@ export function SettingsDialog({
         </DialogHeader>
 
         <section className="space-y-2">
-          <h3 className="text-sm font-medium">인증</h3>
+          {/* 제목이 엔진 이름을 말한다 — 이 토큰을 읽는 것은 `TICKET_ENGINE[0]`이 claude인
+              워커뿐이다(`tick.sh:52`). 다른 엔진(Codex 등)은 자체 인증을 쓴다(§0-4) */}
+          <h3 className="text-sm font-medium">Claude 인증</h3>
           <p className="text-xs text-muted-foreground">
             워커가 Claude에 붙을 때 쓰는 장기 토큰입니다. 이 컴퓨터에 하나뿐입니다.
           </p>
@@ -129,7 +140,7 @@ export function SettingsDialog({
           ) : (
             <p className="flex items-center gap-2 text-sm">
               <TriangleAlert aria-hidden className="size-4 shrink-0 text-status-stale" />
-              인증 안 됨 — 워커가 티켓을 물어가지 않습니다
+              인증 안 됨 — claude 엔진 워커가 티켓을 물어가지 않습니다
             </p>
           )}
         </section>
