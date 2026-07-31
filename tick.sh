@@ -42,9 +42,12 @@ TICKET_MAXRUN="${TICKET_MAXRUN:-5400}"
 TICKET_PROMPT_FMT="${TICKET_PROMPT_FMT:-%s 티켓을 확인해 주세요. (해당 티켓은 이미 진행중으로 잡아두었습니다. 수행을 마치면 완료 상태로 rename하고, 막히면 티켓 본문에 블록 이력을 남겨주세요.)}"
 # 실행 엔진. 워커가 TICKET_ENGINE 배열로 덮어쓴다. {prompt}/{sid}는 실행 직전 치환된다.
 # ${arr[@]+"..."}는 set -u에서 미정의 배열을 안전하게 전개하는 관용구(bash 3.2 포함).
+# 기본 엔진은 스트리밍 입력이다: 최초 프롬프트도 argv가 아니라 stdin(FIFO)으로 간다.
+# 그래야 세션이 도는 동안 사람이 같은 입구로 말을 걸 수 있다(참견).
 TICKET_ENGINE=(${TICKET_ENGINE[@]+"${TICKET_ENGINE[@]}"})
-[ ${#TICKET_ENGINE[@]} -eq 0 ] && TICKET_ENGINE=(claude -p "{prompt}" --session-id "{sid}" \
-  --dangerously-skip-permissions --output-format json)
+[ ${#TICKET_ENGINE[@]} -eq 0 ] && TICKET_ENGINE=(claude -p --session-id "{sid}" \
+  --dangerously-skip-permissions \
+  --input-format stream-json --output-format stream-json --verbose)
 # 상태 접미사는 tickets.py가 환경변수로 읽는다(미설정이면 .wip/.done).
 export TICKET_INPROGRESS="${TICKET_INPROGRESS:-}" TICKET_DONE="${TICKET_DONE:-}"
 
@@ -86,6 +89,9 @@ case "$CMD" in
   *) echo "알 수 없는 명령: $CMD"; exit 2 ;;
 esac
 
+# 참견 입구(FIFO). 스트리밍 입력 엔진일 때만 실제 경로가 들어간다.
+INBOX=""
+
 # --- 워커 락: 한 워커는 한 번에 티켓 1건 ---
 # 워커는 동기 프로세스다. 앞 실행이 아직 세션을 물고 있으면 이번 tick은 그냥 넘긴다
 # (cron은 1분마다 깨우지만 티켓 하나는 보통 5~25분 걸린다). 동시성은 워커 개수로 조절한다.
@@ -106,7 +112,8 @@ if [ "$CMD" = "tick" ]; then
     mkdir "$LOCK" 2>/dev/null || exit 0
   fi
   printf %s "$$" > "$LOCK/pid"
-  trap 'rm -rf "$LOCK"' EXIT
+  # 빈 값이면 rm -f ""가 되고 아무 일도 안 한다 -- 어떻게 죽든 FIFO가 남지 않게 여기 한 번만 건다.
+  trap 'rm -rf "$LOCK"; rm -f "$INBOX"' EXIT
 fi
 
 # --- 스테일 수거: 세션이 죽었는데 진행중으로 남은 티켓을 백로그로 되돌린다 ---
@@ -218,40 +225,113 @@ cd "$TICKET_CWD" || { log "ERROR cwd 없음 $TICKET_CWD"; python3 "$PY" clear "$
 # 실행 상한(기본 90분). 매달린 세션이 티켓을 무한정 쥐고 있는 걸 막는다.
 # 관측치: 정상 티켓은 5~25분, 죽은 세션 하나가 2시간14분을 쥐고 있었다(2026-07-28 스트림 9b3e5c08).
 OUTF="$LOGDIR/.out-${SID}"
-"${ENGINE[@]}" >"$OUTF" 2>>"$LOGF" &
-CPID=$!
+
+# --- 참견 입구: 스트리밍 입력 엔진일 때만 FIFO를 판다 ---
+# 갈림은 최종 argv에 `--input-format stream-json`이 인접해 있는가 하나다. 없으면 종전 그대로
+# (프로세스가 스스로 끝나고 RC가 판정) - Codex와 가짜 엔진이 그 경로로 산다.
+prev=""
+for arg in "${ENGINE[@]}"; do
+  if [ "$prev" = "--input-format" ] && [ "$arg" = "stream-json" ]; then
+    INBOX="$LOCAL/run/inbox-$SID"; break
+  fi
+  prev="$arg"
+done
+
+if [ -n "$INBOX" ]; then
+  rm -f "$INBOX"; mkfifo "$INBOX" || { log "ERROR mkfifo 실패 $INBOX"; INBOX=""; }
+fi
+if [ -n "$INBOX" ]; then
+  # O_RDWR로 연다. 쓰기 전용으로 열면 읽는 쪽이 붙을 때까지 블록하고, 엔진이 못 뜨면 영영
+  # 안 풀린다. 읽기도 같이 잡으면 open이 즉시 돌아오고 우리가 항상 writer라 엔진이 EOF를 안 본다
+  # (최초 프롬프트를 쓴 직후 세션이 끝나는 걸 막는 것이 이 fd의 일이다). 우리는 읽지 않는다.
+  exec 9<>"$INBOX"
+  "${ENGINE[@]}" <"$INBOX" >"$OUTF" 2>>"$LOGF" &
+  CPID=$!
+  # 최초 프롬프트 = FIFO에 JSON 한 줄. 사람이 나중에 미는 참견도 같은 모양이다.
+  python3 -c 'import json,sys
+sys.stdout.write(json.dumps({"type":"user","message":{"role":"user","content":sys.argv[1]}},
+                            ensure_ascii=False, separators=(",", ":")) + "\n")' "$PROMPT" >&9
+  # 프롬프트를 넣은 뒤에 입구를 광고한다. 순서를 뒤집으면 화면이 먼저 밀어 넣은 참견이
+  # 티켓 지시보다 앞줄에 서서 세션이 엉뚱한 것부터 읽는다.
+  python3 "$PY" setinbox "$TPATH" "$INBOX"
+else
+  "${ENGINE[@]}" >"$OUTF" 2>>"$LOGF" &
+  CPID=$!
+fi
 # Codex에는 Claude식 --session-id가 없으므로 실제 엔진 pid도 남겨 reap이 생존을 확인한다.
 python3 "$PY" setpid "$TPATH" "$CPID"
 # 감시자는 짧은 sleep으로 돈다. 한 방 `sleep $TICKET_MAXRUN`이면 세션이 끝난 뒤에도 그 sleep이
 # 상속받은 stdout/stderr를 90분간 쥐고 남아, 호출자(cron·테스트)가 파이프에서 못 빠져나온다.
+# 스트리밍 입력에서는 stdin이 열려 있는 한 세션이 스스로 안 끝난다(닫아도 60초는 안 죽는다).
+# `result` 줄이 곧 끝이고, 끝내는 건 우리다. MAXRUN은 그 줄이 영영 안 오는 경우로 남는다.
+POLL=5; [ -n "$INBOX" ] && POLL=1
+# 마지막 줄이 `result`인가. 접두사로는 못 본다 - 실측된 키 순서는 `is_error`가 먼저다.
+# 문자열 매치만으로 죽이는 것도 안 된다: 세션이 뱉는 본문에 이 프로토콜이 그대로 인용될 수 있고
+# (이 레포가 그 문서를 갖고 있다) 그러면 남의 티켓을 중간에 잘라낸다. grep은 문지기고 판정은 파싱이다.
+is_result() {
+  tail -n 1 "$1" 2>/dev/null | grep -q '"type":"result"' || return 1
+  tail -n 1 "$1" | python3 -c \
+    'import json,sys
+try: o = json.loads(sys.stdin.readline())
+except Exception: sys.exit(1)
+sys.exit(0 if isinstance(o, dict) and o.get("type") == "result" else 1)'
+}
 ( SECONDS=0
   while [ "$SECONDS" -lt "$TICKET_MAXRUN" ]; do
     kill -0 "$CPID" 2>/dev/null || exit 0
-    sleep 5
+    if [ -n "$INBOX" ] && is_result "$OUTF"; then
+      kill -TERM "$CPID" 2>/dev/null; sleep 5; kill -KILL "$CPID" 2>/dev/null; exit 0
+    fi
+    sleep "$POLL"
   done
   kill -TERM "$CPID" 2>/dev/null; sleep 20; kill -KILL "$CPID" 2>/dev/null ) &
 WPID=$!
 wait "$CPID"; RC=$?
 kill "$WPID" 2>/dev/null; wait "$WPID" 2>/dev/null
+[ -n "$INBOX" ] && { exec 9>&-; rm -f "$INBOX"; }
 OUT=$(cat "$OUTF" 2>/dev/null); rm -f "$OUTF"
 printf '%s\n' "$OUT" >> "$LOGF"
 
-if [ $RC -ne 0 ]; then
+# 실제 세션키와 판정을 응답에서 읽는다. 옛 경로는 응답 전체가 JSON 하나이고,
+# stream-json은 JSONL이라 `result` 줄이 판정이다(전체 json.load는 거기서 깨진다).
+VERDICT=$(printf '%s' "$OUT" | python3 -c \
+  'import json,sys
+raw = sys.stdin.read(); sid = ""; ok = ""
+for ln in raw.splitlines():
+    try: o = json.loads(ln)
+    except Exception: continue
+    if isinstance(o, dict) and o.get("type") == "result":
+        sid = o.get("session_id", "") or sid
+        ok = "err" if o.get("is_error") else "ok"
+if not sid:
+    try: sid = json.loads(raw).get("session_id", "")
+    except Exception: pass
+print(sid + "|" + ok)' 2>/dev/null)
+REAL="${VERDICT%%|*}"
+VERDICT="${VERDICT#*|}"
+
+# 스트리밍 입력에서는 우리가 죽여서 끝내므로 RC(143)는 판정이 아니다. `result` 줄이 판정이다.
+if [ -n "$INBOX" ]; then
+  [ "$VERDICT" = "ok" ] || FAILED=1
+else
+  [ $RC -ne 0 ] && FAILED=1
+fi
+if [ -n "${FAILED:-}" ]; then
   # 실행 실패(또는 상한 초과 강제종료) -> 할당 회수해서 다음 tick이 다시 집도록
   python3 "$PY" clear "$TPATH"
   python3 "$PY" release "$TPATH" >/dev/null 2>&1
-  case $RC in
-    143|137) log "TIMEOUT $THASH ${TICKET_MAXRUN}s 초과 강제종료 -> 할당 회수 + 백로그 복귀. 로그 $(basename "$LOGF")" ;;
-    *)       log "FAIL $THASH rc=$RC -> 할당 회수 + 백로그 복귀. 로그 $(basename "$LOGF")" ;;
-  esac
+  if [ "$VERDICT" = "err" ]; then
+    log "FAIL $THASH 세션이 result is_error로 끝났다 -> 할당 회수 + 백로그 복귀. 로그 $(basename "$LOGF")"
+  else
+    case $RC in
+      143|137) log "TIMEOUT $THASH ${TICKET_MAXRUN}s 초과 강제종료 -> 할당 회수 + 백로그 복귀. 로그 $(basename "$LOGF")" ;;
+      *)       log "FAIL $THASH rc=$RC -> 할당 회수 + 백로그 복귀. 로그 $(basename "$LOGF")" ;;
+    esac
+  fi
+  [ $RC -eq 0 ] && RC=1
   exit $RC
 fi
 
-# 실제 세션키를 응답에서 확인해 frontmatter와 일치시킨다
-REAL=$(printf '%s' "$OUT" | python3 -c \
-  'import json,sys
-try: print(json.load(sys.stdin).get("session_id",""))
-except Exception: print("")' 2>/dev/null)
 if [ -n "$REAL" ] && [ "$REAL" != "$SID" ]; then
   python3 "$PY" assign "$TPATH" "$REAL"
   log "NOTE $THASH 세션키 정정 $SID -> $REAL"

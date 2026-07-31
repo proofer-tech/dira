@@ -604,8 +604,14 @@ def main():
         set_fm_keys(sys.argv[2], {"pid": sys.argv[3]})
         return
 
+    if cmd == "setinbox":
+        # 도는 세션에 말을 거는 FIFO 경로. 세션이 끝나면 그 파일은 사라진다.
+        set_fm_keys(sys.argv[2], {"inbox": sys.argv[3]})
+        return
+
     if cmd == "clear":
-        set_fm_keys(sys.argv[2], {"session_id": "", "assigned_at": "", "pid": ""})
+        set_fm_keys(sys.argv[2], {"session_id": "", "assigned_at": "", "pid": "",
+                                  "inbox": ""})
         return
 
     raise SystemExit("알 수 없는 명령: " + cmd)
