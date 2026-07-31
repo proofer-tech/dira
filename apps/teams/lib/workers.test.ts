@@ -319,6 +319,20 @@ test("workerOf — owner 표기에서 워커 이름 하나, 형식이 아니면 
   assert.strictEqual(workerOf("pm / build-2-83533def"), "build-2");
 });
 
+/** 워커 마크 ② 전문 자리 (§비주얼 §19). 테이블 `owner` 셀은 전문을 **값 무수정으로** 두고 그
+ *  안의 워커 이름 구간만 칩으로 세운다 — 자르는 자리를 `components/worker-mark.tsx`가
+ *  `owner.length - name.length - 9`로 계산한다(`workerOf`의 계약: 이름 뒤는 `-` + sid 8자).
+ *  둘이 갈리면 셀에 엉뚱한 구간이 칩이 되거나 전문이 조용히 바뀐다. */
+test("워커 마크 ② 전문 자리 — 자르고 붙이면 owner 원문 그대로다", () => {
+  for (const owner of ["developer / w6-83533def", "pm / build-2-83533def", "x / a-12345678"]) {
+    const name = workerOf(owner);
+    assert.ok(name, owner);
+    const at = owner.length - name.length - 9;
+    assert.strictEqual(owner.slice(at, at + name.length), name); // 칩이 서는 구간이 이름이다
+    assert.strictEqual(owner.slice(0, at) + name + owner.slice(at + name.length), owner); // 원문 무수정
+  }
+});
+
 /** runner.log의 시각 표기(`tick.sh:35`의 `date '+%F %T'`, 로컬). **지금 기준 오프셋**으로
  *  만든다 — 고정 문자열이면 신선도 창(10분)이 도는지 확인할 수 없다. */
 function stamp(minutesAgo: number): string {

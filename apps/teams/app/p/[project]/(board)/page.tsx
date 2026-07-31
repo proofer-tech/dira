@@ -31,6 +31,7 @@ import { EmptyState } from "@/components/empty-state";
 import { PersonaBadge } from "@/components/persona-badge";
 import { DepBadge, StatusBadge, daysSince, statusLabel } from "@/components/status-badge";
 import { AnswerDialog, NewTicketDialog, RequestDialog } from "@/components/ticket-ui";
+import { WipWorker } from "@/components/worker-mark";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -59,7 +60,6 @@ import {
   type Ticket,
 } from "@/lib/queue";
 import { getProject, listPersonas, resolveConfig } from "@/lib/projects";
-import { workerOf } from "@/lib/workers";
 
 // 큐는 GUI 밖에서(cron·세션이) 바뀐다. 프리렌더하면 빌드 시점 내용이 굳는다.
 export const dynamic = "force-dynamic";
@@ -113,18 +113,6 @@ function when(ms: number): string {
   const d = new Date(ms);
   const p = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
-}
-
-/** `.wip` 칸반 카드 메타 줄 끝의 **워커 이름 하나**(§1 보드 · 사람 요구 `5f0498c9`).
- *  기본 뷰가 칸반인데 카드에는 `owner` 값이 없어서 보드를 열면 어느 워커가 무엇을 물고 있는지
- *  알 수 없었다 — 테이블에는 `owner` 컬럼이 이미 있고 **그 컬럼은 무수정이다**.
- *
- *  `owner:` 전문(`pm / w6-83533def`)을 그리지 않는다: 페르소나는 바로 왼쪽 배지가 이미 말하고
- *  sid 8자는 카드에서 쓸 일이 없다. 형식이 안 맞으면 **아무것도 안 그린다**(`?`도 아니다) —
- *  파싱은 워커 화면과 **같은 규칙**(`workerOf`)이고 원문은 테이블 `owner`에 그대로 있다. */
-function WipWorker({ t }: { t: Ticket }) {
-  const name = t.state === "wip" ? workerOf(t.fm.owner ?? "") : null;
-  return name ? <span className="font-mono">· {name}</span> : null;
 }
 
 export default async function Board({
@@ -519,8 +507,10 @@ export default async function Board({
                                 {t.title || "(제목 없음)"}
                               </span>
                               {/* 배지가 줄 안에 섞이므로 flex다 — 텍스트 baseline 정렬에 맡기면
-                                  20px 배지가 줄을 밀어 카드마다 높이가 갈린다 */}
-                              <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                                  20px 배지가 줄을 밀어 카드마다 높이가 갈린다.
+                                  `flex-wrap`은 워커 마크 몫이다(§비주얼 §19 잘림): 워커 이름은
+                                  식별자라 안 자르고, 길면 카드가 한 줄 자라며 배지를 안 민다 */}
+                              <span className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
                                 {t.kind || "—"} ·
                                 {t.persona ? (
                                   <PersonaBadge
@@ -696,11 +686,13 @@ export default async function Board({
                           {when(t.birth)}
                         </TableCell>
                         <TableCell className="px-3 py-0">
+                          {/* 값·컬럼 무수정 — 전문이 그대로 남고 그 안의 워커 이름만 마크로 선다
+                              (§비주얼 §19 ②). 폭 제약·`title` 툴팁도 종전 그대로다 */}
                           <span
                             className="block max-w-[24ch] truncate font-mono text-xs text-muted-foreground"
                             title={t.fm.owner ?? ""}
                           >
-                            {t.fm.owner || "—"}
+                            <WipWorker t={t} full />
                           </span>
                         </TableCell>
                       </TableRow>

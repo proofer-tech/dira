@@ -12,6 +12,7 @@ import { EmptyState } from "@/components/empty-state";
 import { Markdown } from "@/components/markdown";
 import { SessionStream } from "@/components/session-stream";
 import { DepBadge, StatusBadge, daysSince } from "@/components/status-badge";
+import { WipWorker } from "@/components/worker-mark";
 import {
   AnswerCard,
   AnswerThread,
@@ -252,7 +253,12 @@ export default async function TicketDetail({
                 aria-hidden
                 className="animate-wip-pulse text-status-active motion-reduce:animate-none"
               />
-              <AlertTitle>세션이 물고 있습니다 — 편집·삭제 잠금</AlertTitle>
+              {/* 꼬리의 마크가 **누구인지**를 말한다(§비주얼 §19 ③ · 사람 요구 `47678a71`).
+                  `AlertDescription`이 아니라 여기인 이유: 할당 해제를 누를지 기다릴지가
+                  제목 한 줄에서 갈려야 한다(§2). 문구·`Lock`·`.done` `Alert`는 무수정 */}
+              <AlertTitle>
+                세션이 물고 있습니다 — 편집·삭제 잠금 <WipWorker t={ticket} />
+              </AlertTitle>
               <AlertDescription>
                 진행중 티켓은 읽기만 합니다. 세션이 죽었다면 아래 <b>할당 해제</b>로 큐에 되돌린 뒤
                 편집하세요.

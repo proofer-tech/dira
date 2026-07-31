@@ -55,6 +55,11 @@ apps/teams/
     *.test.ts           node --test
   components/           손으로 만드는 컴포넌트 (DESIGN.md §5 커스텀)
     status-badge.tsx    상태 표현의 유일한 출처 (티켓 5 · 워커 4 · 연결 2) + deps 배지
+    worker-mark.tsx     `.wip` 워커 마크의 유일한 출처 (§비주얼 §19). 자리가 셋이고
+                        (칸반 카드 · 테이블 `owner` 셀 · 상세 잠금 `Alert`) 클래스 문자열이
+                        셋에서 같아야 한다. **`status-badge.tsx`에 못 얹는 이유**: 그 파일은
+                        클라이언트 컴포넌트가 import해서 번들로 가는데 여기는 `workerOf`
+                        (= `lib/workers.ts`, `node:fs`)가 필요하다. 부르는 곳은 서버 페이지 둘뿐
     persona-badge.tsx   persona 값 표시의 유일한 출처 (점+이름 배지 · 점만 그리는 모드).
                         색은 레지스트리에 있고 자리가 5곳이다 — 조회를 자리마다 다시 쓰면
                         어느 화면 하나가 조용히 색 없이 남는다. 팔레트 표는 `lib/urls.ts`
