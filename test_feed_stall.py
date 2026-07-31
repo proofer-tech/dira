@@ -77,10 +77,21 @@ try:
     began = time.time()
     r = subprocess.run([w1, "tick"], capture_output=True, text=True, env=env, timeout=90)
     took = time.time() - began
-    # 전경 write였다면 여기서 timeout=90에 걸려 죽는다. 상한 3s + 여유 안에 끝나야 한다.
-    assert took < 45, "프롬프트 주입에서 정지했다({:.0f}s)".format(took)
 
-    runlog = open(os.path.join(root, "workers", "runner.log"), encoding="utf-8").read()
+    def readlog():
+        try:
+            with open(os.path.join(root, "workers", "runner.log"), encoding="utf-8") as f:
+                return f.read()
+        except OSError as e:
+            return "(runner.log 없음: {})".format(e)
+
+    # 전경 write였다면 여기서 timeout=90에 걸려 죽는다. 상한 3s + 여유 안에 끝나야 한다.
+    # **러너 로그를 같이 찍는다.** 이 한 줄만 보면 "느리다"밖에 안 보이고, STALL이 제때 떴는데
+    # 뒤가 안 끝난 것인지 STALL 자체가 안 뜬 것인지가 갈리지 않는다 — 그 둘은 원인이 다르다.
+    assert took < 45, "프롬프트 주입에서 정지했다({:.0f}s)\n--- runner.log ---\n{}\n--- stderr ---\n{}".format(
+        took, readlog(), r.stderr)
+
+    runlog = readlog()
     assert "STALL aaaa0001" in runlog, "주입 실패를 STALL로 안 남겼다\n" + runlog
     assert os.path.exists(os.path.join(root, "tickets", "aaaa0001.md")), \
         "STALL 뒤 티켓이 백로그로 안 돌아왔다: " + str(os.listdir(os.path.join(root, "tickets")))
