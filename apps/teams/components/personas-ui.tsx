@@ -256,13 +256,17 @@ export function PersonaCard({
     // 바깥 div는 삭제 실패 사유 때문이다 — 삭제를 접힌 줄에서 누르므로 사유도 접힌 채 보여야 한다.
     <div className="rounded-md border">
       <details className="group">
-        <summary className="flex cursor-pointer list-none items-center gap-2 p-3 [&::-webkit-details-marker]:hidden">
+        {/* 글자는 밑선(§5) — 이 줄은 mono `text-sm` 이름과 `text-xs` 메타가 섞여 줄상자 높이가
+            20px/16px로 다르다. `items-center`는 상자를 맞추므로 글자 밑선이 어긋난다.
+            껍데기(chevron · 색 점 · 배지 2종 · 삭제)는 글자가 아니라 행의 세로 중앙이라
+            `self-center`로 뺀다. 밑선에 서는 것은 글자 세 자리(이름 · 티켓 참조 · 자수)뿐이다. */}
+        <summary className="flex cursor-pointer list-none items-baseline gap-2 p-3 [&::-webkit-details-marker]:hidden">
           <ChevronRight
             aria-hidden
-            className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90"
+            className="size-4 shrink-0 self-center text-muted-foreground transition-transform group-open:rotate-90"
           />
           {/* 색을 고르는 자리는 이 화면 하나뿐이다(§5). 삭제와 같은 이유로 preventDefault다 */}
-          <span onClick={(e) => e.preventDefault()}>
+          <span className="self-center" onClick={(e) => e.preventDefault()}>
             <ColorPicker
               projectId={projectId}
               name={row.name}
@@ -273,7 +277,11 @@ export function PersonaCard({
             />
           </span>
           <span className="font-mono text-sm">{row.name}</span>
-          {saved === null && <Badge variant="outline">프로필 없음</Badge>}
+          {saved === null && (
+            <Badge variant="outline" className="self-center">
+              프로필 없음
+            </Badge>
+          )}
           <span className="min-w-0 truncate text-xs text-muted-foreground" title={row.file}>
             {refs ? `티켓 ${refs}` : "참조하는 티켓 없음"}
           </span>
@@ -283,11 +291,15 @@ export function PersonaCard({
             {body.length}자
           </span>
           {/* 저장 버튼은 펼쳐야 보인다 — 접은 채 잊으면 이게 유일한 표시다(§5) */}
-          {dirty && <Badge variant="outline">저장 안 됨</Badge>}
+          {dirty && (
+            <Badge variant="outline" className="self-center">
+              저장 안 됨
+            </Badge>
+          )}
           {saved !== null && (
             // 삭제는 접힌 줄에 있고 펼침을 토글하지 않는다. summary의 활성화 동작을 막는 건
             // preventDefault다 — stopPropagation은 activationTarget이 이미 정해져 안 통한다.
-            <span className="ml-auto" onClick={(e) => e.preventDefault()}>
+            <span className="ml-auto self-center" onClick={(e) => e.preventDefault()}>
               <DeleteButton
                 projectId={projectId}
                 row={row}
