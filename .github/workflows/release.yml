@@ -1,0 +1,111 @@
+# master에 앱 코드가 들어오면 버전을 올리고 릴리스까지 자동으로 간다 (요구 2026-08-01).
+#
+# **이 파일은 docs/DESIGN.md §CI C3(「굽지 않는다」)를 뒤집는다.** C3의 근거는 편의가 아니라
+# 「서명·공증은 사람 맥의 인증서로 한다 · 시크릿은 레포에 들어가지 않는다」(§배포)였다.
+# 뒤집는 대가는 **인증서가 GitHub Actions 시크릿으로 올라가는 것**이다 — 레포 파일에는
+# 여전히 안 들어가지만, 사람 맥 밖으로 나가는 것은 맞다. 아래 5개가 없으면 릴리스는
+# `release.sh`의 선행 확인에서 **bump 전에** 멈추고 무엇이 없는지 찍는다(조용히 안 멈춘다).
+#
+#   MACOS_CERT_P12            `security export`한 Developer ID Application .p12의 base64
+#   MACOS_CERT_PASSWORD       그 .p12의 암호
+#   APPLE_ID                  공증 계정
+#   APPLE_APP_SPECIFIC_PASSWORD
+#   APPLE_TEAM_ID
+#
+# 굽는 절차 자체는 여기 없다. `release.sh` 하나가 사람 맥에서도 CI에서도 같은 순서로 돈다
+# (§릴리스 R4) — 두 벌로 갈라지면 사람 맥에서만 맞는 릴리스가 생긴다.
+name: release
+
+on:
+  push:
+    branches: [master]
+    # 앱이나 번들에 실려 나가는 것이 바뀐 커밋만 릴리스한다. 스펙·README만 고친 커밋까지
+    # 태그를 만들면 받는 사람에게 내용이 같은 버전이 계속 내려간다.
+    paths:
+      - 'apps/**'
+      - 'tick.sh'
+      - 'tickets.py'
+      - 'templates/**'
+      - 'worker.sh.example'
+      - '.github/workflows/release.yml'
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: 'patch | minor | major'
+        default: patch
+
+# 두 개가 겹치면 둘 다 같은 버전을 bump하고 뒤엣것의 push가 거절된다. 취소하지는 않는다 —
+# 굽던 릴리스를 중간에 죽이면 태그만 남고 자산이 없는 상태가 된다(R4가 막으려던 그것).
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: macos-latest
+    permissions:
+      contents: write
+    steps:
+      # ref를 안 주면 detached HEAD로 떨어져서 release.sh의 「브랜치가 master」 확인에 걸린다.
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 25
+
+      # 인증서를 임시 키체인에 넣고 **검색목록에 올린다.** electron-builder만 보는 게 아니다 —
+      # sign-preflight.sh와 sign-dmg.sh가 `security find-identity`로 찾는다(CSC_LINK만 주면
+      # 그 둘은 못 본다). set-key-partition-list를 빼면 codesign이 errSecInternalComponent로 죽는다.
+      - name: 인증서를 임시 키체인에 넣는다
+        env:
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: |
+          [ -n "$MACOS_CERT_P12" ] || { echo "MACOS_CERT_P12이 비어 있다 — 시크릿 5개를 채워야 한다(이 파일 머리말)." >&2; exit 1; }
+          kc="$RUNNER_TEMP/build.keychain-db"
+          security create-keychain -p "" "$kc"
+          security set-keychain-settings "$kc"          # 잠금 타임아웃 없음 — 공증 대기 중에 잠기면 스테이플에서 죽는다
+          security unlock-keychain -p "" "$kc"
+          printf '%s' "$MACOS_CERT_P12" | base64 -d > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$kc" -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          rm -f "$RUNNER_TEMP/cert.p12"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "" "$kc" >/dev/null
+          security list-keychains -d user -s "$kc" $(security list-keychains -d user | tr -d '" ')
+          ./apps/desktop/sign-preflight.sh
+
+      - run: pnpm install
+        working-directory: apps/teams
+      - run: pnpm install
+        working-directory: apps/desktop
+
+      # ci.yml과 겹치지만 여기서 다시 돈다. 두 워크플로는 서로를 기다리지 않아서, 이게 없으면
+      # ci.yml이 빨간 것과 무관하게 남의 맥으로 나가는 `.dmg`가 구워진다. 초 단위라 아깝지 않다.
+      - run: python3 test_generic.py && python3 test_reap_manual.py && python3 test_claim_race.py && python3 test_feed_stall.py && python3 test_inbox.py
+      - run: pnpm test
+        working-directory: apps/teams
+      - run: pnpm test
+        working-directory: apps/desktop
+
+      # release.sh가 커밋·태그·push를 한다. 저자가 없으면 git commit이 거기서 죽는다.
+      #
+      # **되먹임이 없는 이유가 여기 걸려 있다.** bump 커밋은 `apps/desktop/package.json`만
+      # 건드리는데 그건 위 paths에 걸린다 — 그런데도 릴리스가 릴리스를 부르지 않는 것은
+      # `GITHUB_TOKEN`으로 나간 push가 워크플로를 다시 트리거하지 않기 때문이다. PAT로 바꾸면
+      # 그 규칙이 사라지고 무한 릴리스가 된다.
+      - name: 릴리스
+        working-directory: apps/desktop
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          ./release.sh "${{ inputs.bump || 'patch' }}"

@@ -65,20 +65,39 @@ pnpm dev         # teams 빌드 + 조립 + 앱 실행
 - 상한과 문구는 `../teams/lib/workers.ts`의 `CRONTAB_WRITE_TIMEOUT`에 있다(3분).
   근거는 `../../docs/DESIGN.md` §제약 4.
 
-## 릴리스에 필요한 사람 몫 — 공개 GitHub 레포 (`4f418619`)
+## 릴리스 — 공개 GitHub 레포 (`4f418619`)
 
 자동 업데이트의 채널은 **공개 GitHub 레포의 Releases 하나**다(`../../docs/DESIGN.md`
-§릴리스 · 자동 업데이트 R1). 세 가지가 사람 몫이고 세션이 구할 수 없다 — §서명 · 공증이
-Apple 계정·인증서를 사람 몫으로 둔 것과 **같은 자리**다.
+§릴리스 · 자동 업데이트 R1).
 
-**명령은 다 있다.** `pnpm release <patch|minor|major>`(R4, `5ab56e03`·`ab4fe016`)가 선행 확인 →
-bump·태그 → `pnpm dist` → `gh release create`까지 한 방으로 간다. 남은 것은 아래 셋과
-§서명 · 공증의 Apple 환경변수 3개, 그리고 `build.publish`의 자리표시자 — **전부 사람 몫이고
-이 README에 다 적혀 있다.** 하나라도 비어 있으면 `release.sh`가 bump 전에 멈추고 이름을 찍는다.
+**레포는 섰다** — `proofer-tech/dira`(공개), `origin` 연결됨(2026-08-01). 그전까지 이 절은
+"사람이 레포를 만들고 origin을 붙이고 GH_TOKEN을 쥔다" 세 줄이었고 셋 다 닫혔다.
 
-1. **공개 GitHub 레포를 만든다.** 비공개면 안 된다 — 아래 근거.
-2. **`origin`을 붙인다.** 지금 이 레포에는 remote가 0개다(`git remote -v` 빈 출력).
-3. **`GH_TOKEN`을 환경변수로 쥔다.** `repo` 권한이 있는 PAT. 레포에 넣지 않는다(§배포).
+**두 가지 방법이 있고 스크립트는 하나다.**
+
+| 어디 | 무엇 | 무엇이 필요한가 |
+|---|---|---|
+| 사람 맥 | `pnpm release <patch\|minor\|major>` | 로그인 키체인의 인증서 · Apple 환경변수 3개 · `GH_TOKEN` |
+| CI (자동) | `master`에 `apps/**`·엔진 파일이 들어오면 `release.yml`이 `patch`로 돈다. `minor`·`major`는 Actions 탭에서 손으로(`workflow_dispatch`) | 레포 시크릿 5개(아래) |
+
+`pnpm release`(R4, `5ab56e03`·`ab4fe016`)가 선행 확인 → bump·커밋·태그 → push →
+`pnpm dist` → `gh release create`까지 한 방으로 간다. **CI도 같은 스크립트를 부른다** —
+`release.yml`은 인증서를 임시 키체인에 넣는 것 말고는 하는 일이 없다. 하나라도 비어 있으면
+`release.sh`가 **bump 전에** 멈추고 무엇이 없는지 찍는다.
+
+**CI가 굽게 하려면 레포 시크릿 5개가 필요하다**(Settings → Secrets and variables → Actions).
+없으면 릴리스 잡이 첫 스텝에서 이름을 찍고 멈춘다 — 조용히 안 멈춘다.
+
+| 시크릿 | 값 |
+|---|---|
+| `MACOS_CERT_P12` | Developer ID Application 인증서를 개인 키까지 `.p12`로 내보낸 뒤 `base64 -i cert.p12 \| pbcopy` |
+| `MACOS_CERT_PASSWORD` | 그 `.p12`에 건 암호 |
+| `APPLE_ID` · `APPLE_APP_SPECIFIC_PASSWORD` · `APPLE_TEAM_ID` | §서명 · 공증과 같은 값 |
+
+내보내기는 키체인 접근 앱에서 인증서를 **개인 키와 함께** 골라 우클릭 → `2개 항목 내보내기…`
+→ `.p12`. 개인 키 없이 내보내면 러너에서 `codesign`이 키를 못 찾는다.
+`GH_TOKEN`은 CI에서 따로 만들지 않는다 — `GITHUB_TOKEN`을 그대로 쓴다(PAT로 바꾸면 릴리스가
+릴리스를 트리거해 무한 루프가 된다).
 
 **공개여야 하는 이유는 고른 값이 아니라 이미 결정된 두 줄의 결론이다.** 비공개 레포의 릴리스
 자산은 토큰 없이 못 받는다 → 그러면 **받는 사람의 `.app` 안에 토큰이 들어가야 한다** →
@@ -91,9 +110,9 @@ bump·태그 → `pnpm dist` → `gh release create`까지 한 방으로 간다.
 "publish": { "provider": "github", "owner": "proofer-tech", "repo": "dira" }
 ```
 
-**그 이름의 레포는 아직 GitHub에 없다.** 없는 채로도 `pnpm dist`는 끝까지 돈다 —
-`.dmg`·`.zip`·`latest-mac.yml`이 다 나오고 업로드만 안 한다. 대신 `업데이트 확인…`을 누르면
-GitHub이 404를 주고 **그 사유가 다이얼로그로 뜬다**(조용히 안 되지 않는다). 빈 문자열 `""`로
+**레포가 없어도 `pnpm dist`는 끝까지 돈다** — `.dmg`·`.zip`·`latest-mac.yml`이 다 나오고
+업로드만 안 한다. 대신 `업데이트 확인…`을 누르면 GitHub이 404를 주고 **그 사유가
+다이얼로그로 뜬다**(조용히 안 되지 않는다). 빈 문자열 `""`로
 두면 안 된다 — `electron-builder`가 `Cannot read properties of null (reading 'channel')`로
 빌드 자체를 실패시킨다(실측 2026-08-01).
 
