@@ -9,7 +9,7 @@ import { existsSync } from "node:fs";
 import { chmod, mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { expandHome } from "./paths.ts";
-import { sourceTick, tickSourceLine } from "./workers.ts";
+import { renderContextBlock, sourceTick, tickSourceLine } from "./workers.ts";
 
 /** `templates/` 아래 경로가 곧 `.dira/` 아래 경로다(1:1). §0-3 스캐폴딩 집합 중 복사본들. */
 const TEMPLATE_FILES = [
@@ -133,9 +133,22 @@ export async function scaffold(
   // 프로젝트에서 유일하게 실제로 도는 값이다. `<루트>/worktrees/<이름>`은 워커를 **추가할** 때의
   // 규칙이고 그 트리는 사람이 만든다 — 첫 워커에 쓰면 없는 디렉터리를 가리켜 매 tick마다
   // `ERROR cwd 없음`이 난다. worker.sh.example의 `# TICKET_CWD=...`는 주석이라 그대로 둔다.
+  // **실효 `TICKET_CONTEXT=()` 한 줄을 `source` 줄 위에 넣는다**(§0-3, 요구 `b2bdfab6`):
+  // example은 모든 값이 주석이라 복사만 하면 살아 있는 `TICKET_CONTEXT=(`가 없고,
+  // `parseContextBlock`은 주석 블록에 안 걸리게 줄 처음에 앵커하므로(의도된 동작) 새 프로젝트의
+  // 워커 화면에서 컨텍스트 카드가 "블록이 없습니다"로 닫힌다. 문자열은 GUI가 0항목을 쓸 때 내는
+  // 것과 **같다**(`renderContextBlock([])`) — 새 모양을 만들지 않는다. 주석 예시 블록은 그대로다.
   const example = await readFile(path.join(repo.path, "worker.sh.example"), "utf8");
   // 치환값은 함수로 준다 — 경로에 `$&`·`$1`이 들어 있으면 문자열 치환은 그걸 해석한다.
-  await put("workers/w1.sh", example.replace(sourceTick, () => tickSourceLine(repo.path)), 0o755);
+  const w1 = example.replace(
+    sourceTick,
+    // 한 줄 설명을 붙인다 — 이 자리가 `# --- 필수: …` 제목 아래라서, 없으면 빈 블록이
+    // 엔진의 요구로 읽힌다(아니다. 엔진은 미정의 배열을 그대로 받는다 — tick.sh 147행).
+    () =>
+      `# 컨텍스트(선택). GUI 워커 화면이 이 블록을 고친다 — 항목 문법은 위 주석 예시.\n` +
+      `${renderContextBlock([])}\n\n${tickSourceLine(repo.path)}`,
+  );
+  await put("workers/w1.sh", w1, 0o755);
 
   return { root, repo: repo.path, written, skipped };
 }

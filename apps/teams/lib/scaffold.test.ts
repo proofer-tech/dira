@@ -3,7 +3,9 @@ import assert from "node:assert";
 import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { execFileSync } from "node:child_process";
 import { engineRepo, fillPlaceholders, preflight, scaffold } from "./scaffold.ts";
+import { parseContextBlock } from "./workers.ts";
 
 /** §0-3 스캐폴딩 집합. **이 목록이 계약이다** — 여기 없는 파일을 쓰면 실패한다. */
 const SET = [
@@ -74,6 +76,14 @@ test("scaffold — §0-3 집합 그대로, 두 번째는 전부 skipped", async 
   assert.ok(sh.includes(`. "${path.join(repo.path, "tick.sh")}"`), sh.slice(-200));
   assert.doesNotMatch(sh, /^[ \t]*(?:\.|source)[ \t]+.*\$HOME.*tick\.sh/m);
   assert.equal((await stat(w1)).mode & 0o777, 0o755);
+  // ⑥ 컨텍스트 카드가 짚을 실효 블록이 source 줄 **위**에 있다(§0-3, 요구 b2bdfab6).
+  //    주석 예시 블록은 남아 있고, 셸로도 성립한다.
+  const b = parseContextBlock(sh);
+  assert.ok(b.ok, `블록을 못 짚었다: ${JSON.stringify(b)}`);
+  assert.equal(b.items.length, 0);
+  assert.ok(b.start < sh.indexOf(`. "${path.join(repo.path, "tick.sh")}"`), "블록이 source 위여야");
+  assert.match(sh, /^# TICKET_CONTEXT=\(/m);
+  execFileSync("bash", ["-n", w1]);
 
   // ④ 두 번 돌리면 전부 skipped이고 내용이 안 바뀐다
   const second = await scaffold(project, { branch: "other", specDoc: "docs/S.md" });
