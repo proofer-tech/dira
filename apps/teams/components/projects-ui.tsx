@@ -432,9 +432,11 @@ export function ProjectsSection({
         </Alert>
       )}
 
-      <Button type="submit" disabled={pending}>
-        {pending ? "등록 확인 중…" : "프로젝트 등록"}
-      </Button>
+      <div className="flex justify-end">
+        <Button type="submit" disabled={pending}>
+          {pending ? "등록 확인 중…" : "프로젝트 등록"}
+        </Button>
+      </div>
     </form>
   );
 

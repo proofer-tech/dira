@@ -309,7 +309,11 @@ export function PersonaCard({
           {result && !result.ok && (
             <Failure title="저장하지 못했습니다" message={result.message ?? ""} />
           )}
-          <div className="flex items-center gap-4">
+          {/* 오른쪽 정렬, 1차 액션이 가장 오른쪽 — 결과 문구는 버튼 왼쪽이다(§비주얼 §4-3) */}
+          <div className="flex items-center justify-end gap-4">
+            {result?.ok && !dirty && (
+              <span className="text-sm text-muted-foreground">저장됐습니다.</span>
+            )}
             <Button
               size="sm"
               disabled={pending || !dirty}
@@ -323,9 +327,6 @@ export function PersonaCard({
             >
               {pending ? "저장 중…" : "저장"}
             </Button>
-            {result?.ok && !dirty && (
-              <span className="text-sm text-muted-foreground">저장됐습니다.</span>
-            )}
           </div>
         </div>
       </details>

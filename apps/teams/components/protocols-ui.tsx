@@ -194,7 +194,18 @@ export function ProtocolEditor({
 
       {result && !result.ok && <Failure title="저장하지 못했습니다" message={result.message ?? ""} />}
 
-      <div className="flex items-center gap-3">
+      {/* 부가 정보 → 보조 → 1차 순으로 오른쪽 정렬(§비주얼 §4-3) */}
+      <div className="flex items-center justify-end gap-3">
+        <span className="text-xs text-muted-foreground tabular-nums">
+          {[...text].length.toLocaleString()}자
+        </span>
+        {dirty ? (
+          <Button variant="ghost" size="sm" disabled={pending} onClick={() => setText(initial)}>
+            되돌리기
+          </Button>
+        ) : (
+          result?.ok && <span className="text-sm text-muted-foreground">저장됐습니다.</span>
+        )}
         <Button
           size="sm"
           disabled={pending || !dirty}
@@ -208,16 +219,6 @@ export function ProtocolEditor({
         >
           {pending ? "저장 중…" : "저장"}
         </Button>
-        {dirty ? (
-          <Button variant="ghost" size="sm" disabled={pending} onClick={() => setText(initial)}>
-            되돌리기
-          </Button>
-        ) : (
-          result?.ok && <span className="text-sm text-muted-foreground">저장됐습니다.</span>
-        )}
-        <span className="text-xs text-muted-foreground tabular-nums">
-          {[...text].length.toLocaleString()}자
-        </span>
       </div>
     </div>
   );

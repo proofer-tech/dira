@@ -595,7 +595,19 @@ function ContextEditor({
         <Failure title={`${file}를 저장하지 못했습니다`} message={result.message ?? ""} />
       )}
 
-      <div className="flex items-center gap-2">
+      {/* 안내 문구 → 되돌리기 → 추가 → 저장, 오른쪽 정렬(§비주얼 §4-3).
+          위 경로 행의 `▲▼×`는 조작 대상 옆이라 예외다 */}
+      <div className="flex items-center justify-end gap-2">
+        {dirty && (
+          <>
+            <span className="text-xs text-muted-foreground">
+              저장하면 {file}의 {arr} 블록을 통째로 바꿉니다
+            </span>
+            <Button variant="ghost" size="sm" disabled={pending} onClick={() => setRows(saved)}>
+              되돌리기
+            </Button>
+          </>
+        )}
         <Button variant="outline" size="sm" onClick={() => setRows([...rows, { path: "", desc: "" }])}>
           {addLabel}
         </Button>
@@ -613,16 +625,6 @@ function ContextEditor({
         >
           {pending ? "저장 중…" : "저장"}
         </Button>
-        {dirty && (
-          <>
-            <Button variant="ghost" size="sm" disabled={pending} onClick={() => setRows(saved)}>
-              되돌리기
-            </Button>
-            <span className="text-xs text-muted-foreground">
-              저장하면 {file}의 {arr} 블록을 통째로 바꿉니다
-            </span>
-          </>
-        )}
       </div>
     </>
   );
