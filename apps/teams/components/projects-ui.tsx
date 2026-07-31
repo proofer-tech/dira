@@ -170,7 +170,8 @@ function CreateDialog({
   open: boolean;
   onOpenChange: (o: boolean) => void;
   onCreated: (s: CreateState) => void;
-  /** `.dira`가 이미 있는 **큐**였다 — 만들지 않고 등록 카드로 보낸다(§0-3 답변 4(b)) */
+  /** `.dira`가 이미 있는 **큐**였다 — 만들지 않고 등록으로 보낸다(§0-3 답변 4(b)).
+   *  경로만 채우고 그릇은 부모가 고른다: 0건이면 인라인 폼, 아니면 등록 다이얼로그다 */
   onRegister: (root: string) => void;
 }) {
   const [pending, start] = useTransition();
@@ -287,7 +288,7 @@ function CreateDialog({
                       setState({});
                     }}
                   >
-                    등록 카드로
+                    등록으로
                   </Button>
                 )}
               </AlertDescription>
