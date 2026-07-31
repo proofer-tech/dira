@@ -36,6 +36,8 @@ apps/teams/
     queue.ts            티켓 읽기 코어 (tickets.py 미러). 프로젝트를 인자로 받는다
     workers.ts          워커 파일·락·crontab 판정, TICKET_CONTEXT 블록 파싱·치환
     protocols.ts        프로토콜 파일트리·읽기·쓰기. 기준은 **해석된 TICKET_PROTOCOLS**(루트 아니다)
+    scaffold.ts         새 프로젝트 스캐폴딩 (DESIGN.md §0-3). **등록되지 않은 경로에 파일을 쓰는
+                        유일한 곳** — 경계가 파일 목록 자체고 전부 `wx`다(있는 파일은 안 덮는다)
     engine.ts           엔진 서브프로세스 호출 (워커 `reap`·`unassign` · `tickets.py find`)
     transcript.ts       세션 스트림(§2-1) 읽기 코어. 트랜스크립트 경로 찾기 · 바이트 오프셋 테일 ·
                         jsonl 레코드 → 사건 매핑. **root 밖(`~/.claude/projects`)을 읽는 유일한 곳** —

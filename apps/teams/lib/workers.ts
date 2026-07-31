@@ -817,7 +817,11 @@ export function rewriteCwd(text: string, root: string, name: string): string {
 }
 
 /** 워커 파일의 `. "<레포>/tick.sh"` 줄. 엔진 코드 위치는 **워커 파일에만** 적혀 있다. */
-const sourceTick = /^[ \t]*(?:\.|source)[ \t]+(.*tick\.sh["']?)[ \t]*$/m;
+export const sourceTick = /^[ \t]*(?:\.|source)[ \t]+(.*tick\.sh["']?)[ \t]*$/m;
+
+/** 그 줄을 **쓰는** 쪽(`lib/scaffold.ts`의 첫 워커). 읽기(`sourceTick`)와 같은 파일에 둬야
+ *  두 모양이 갈리지 않는다. */
+export const tickSourceLine = (repo: string) => `. ${dq(path.join(repo, "tick.sh"))}`;
 
 /** 워크트리 준비 명령 **2줄 + 검증 1줄**(§4 생성 3항). **GUI는 실행하지 않는다**(§4-2):
  *  `git worktree add`는 큐가 아니라 엔진 레포에 쓰는 체크아웃이고, 그 레포 경로는 워커 파일에서
