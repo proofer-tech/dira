@@ -65,11 +65,15 @@ try:
 
     # --- 1) 귀먹은 엔진 + 버퍼보다 큰 프롬프트: 정지가 아니라 STALL로 떨어져야 한다 ---
     w1 = mkfile(os.path.join(root, "workers", "w1.sh"),
-                # filler는 **파이프 버퍼보다 커야** write가 막히고, 그 막힘이 이 테스트의 전부다.
-                # 버퍼가 macOS는 16KB, 리눅스는 64KB다 — 20000자면 리눅스에서 그냥 들어가서
-                # 재현이 안 되고, 실패도 아니고 **엔진 sleep 60을 기다리다 상한에 걸린다**
-                # (CI 실측 2026-08-01: 60s). 둘 다 넘기려고 200000자로 잡는다.
-                WORKER.format(name="w1", tmp=tmp, tick=TICK, feed=3, filler="x" * 200000),
+                # filler는 **위아래 두 상한 사이**여야 한다. 벗어나면 실패가 아니라 재현이
+                # 안 되고, 증상은 양쪽 다 똑같이 "엔진 sleep 60을 기다리다 상한 초과"다.
+                #   아래: 파이프 버퍼보다 커야 write가 막힌다 — macOS 16KB, **리눅스 64KB**.
+                #         20000자는 리눅스에서 그냥 들어가 안 막혔다(CI 실측 2026-08-01: 60s).
+                #   위:   argv 한 개의 상한보다 작아야 한다. tick.sh는 프롬프트를 `python3 -c`의
+                #         인자로 넘기고, 리눅스 `MAX_ARG_STRLEN`은 128KB다 — 200000자로 올렸더니
+                #         이번엔 `Argument list too long`으로 주입기가 즉사했다(같은 날 실측).
+                # 100000자가 그 사이다.
+                WORKER.format(name="w1", tmp=tmp, tick=TICK, feed=3, filler="x" * 100000),
                 0o755)
     mkfile(os.path.join(root, "tickets", "aaaa0001.md"),
            "---\nticket: aaaa0001\ntitle: t\nkind: work\n---\n\n## Goal\ntest\n")
