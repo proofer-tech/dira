@@ -1814,6 +1814,7 @@ lastFailure: { at: string; hash: string; reason: string; log: string } | null
 | 만드는 것 | `tick.sh`. 엔진 실행 **직전**에 `mkfifo`하고 stdin으로 물린다 |
 | 어디에 | 디스패처가 정한다(머신 로컬 — `$LOCAL/run/` 계열). **GUI는 경로를 유도하지 않는다** |
 | 어떻게 알리나 | 티켓 frontmatter **`inbox: <경로>`**. `session_id`·`pid`·`transcript`와 같은 부류 — 디스패처가 쓰고 사람은 넣지 않는다 |
+| **언제 쓰나** | **최초 프롬프트를 FIFO에 넣은 뒤에** 쓴다. 순서를 뒤집으면 화면이 먼저 민 참견이 티켓 지시보다 앞줄에 서서 세션이 엉뚱한 것부터 읽는다. 그래서 **`inbox:`가 보이는 순간 티켓 지시는 이미 큐에 들어가 있다** — 화면이 기댈 수 있는 사실이다 |
 | 지우는 것 | `tick.sh`. 세션이 끝나면 FIFO를 지우고 `clear`가 `inbox`를 비운다 |
 
 **`inbox:`를 fm에 남기는 것이 이 절의 유일한 새 규약이고, 대안을 재서 골랐다.** 경로 규칙을
@@ -1824,15 +1825,25 @@ GUI가 유도하는 안(`$TICKET_LOCAL/run/<sid>.in`)은 **거절한다** — `T
 
 **끝내는 규약: `result`를 보면 닫는다.**
 
-- `tick.sh`가 엔진 stdout에서 `{"type":"result"}` 줄을 보면 stdin을 닫고 **프로세스를 죽인다.**
+- `tick.sh`가 엔진 stdout에서 `type: "result"`인 줄을 보면 stdin을 닫고 **프로세스를 죽인다.**
   EOF만으로는 안 죽는다(실측 5). 죽이는 것이 정상 종료 경로가 되므로 **성공·실패 판정을 종료코드에서
-  `result` 줄로 옮긴다** — `subtype`이 판정값이고, `session_id`도 그 줄에서 읽는다
+  `result` 줄로 옮긴다** — **`is_error`(불리언)가 판정값**이고, `session_id`도 그 줄에서 읽는다
   (`--output-format stream-json`은 JSONL이라 종전의 `json.load(전체)`가 깨진다).
+- **키 순서는 보장되지 않는다 — 파싱해서 본다.** `{"type":"result"`를 접두사로 매치하면 **영원히
+  안 걸리고 티켓마다 `TICKET_MAXRUN` 90분을 태운 뒤 `143`으로 회수된다.** 실측된 줄에서 `type`은
+  일곱 번째 키다(`is_error`·`duration_api_ms`·`num_turns`·`stop_reason`·`session_id`·
+  `total_cost_usd`·**`type`**·…). 문자열 매치만으로 죽이는 것도 안 된다 — 세션 본문이 이 프로토콜을
+  그대로 인용할 수 있다(이 레포가 그 문서를 갖고 있다). **`grep`은 문지기, 판정은 `json.loads`다.**
+- **판정값이 `subtype`이 아닌 이유**: `subtype`은 문자열이라 성공 아닌 값의 목록
+  (`error_max_turns`·`error_during_execution`·…)을 구현자가 알아야 하고, 그 목록을 추측하면
+  새 값이 생기는 날 조용히 성공으로 샌다. `is_error`는 같은 줄에 있는 불리언 하나다.
 - `TICKET_MAXRUN` 감시자는 **그대로 남는다.** `result`가 영영 안 오는 경우(엔진이 매달렸다)가
   그 상한이 원래 막던 것이고, 그 자리는 안 바뀐다.
 - **그래서 참견 창은 세션이 도는 동안이다.** 턴이 끝나면 창이 닫힌다 — 그게 "진행중에 참견"의
   정의와 같다. `result`가 써진 뒤 kill 전에 도착한 참견은 유실되고, 그 폭은 초 단위다.
   GUI가 이 창을 늘리지 않는다(늘리면 티켓마다 그만큼 느려진다).
+  **세션이 백그라운드 작업을 걸고 턴을 반납하면 거기서 `result`가 한 번 나오고 창이 그때 닫힌다** —
+  옛 `-p` 경로도 같은 자리에서 프로세스가 끝났으므로 동작 변화는 아니다. "도는 동안"의 실제 폭이다.
 
 **옛 종료 경로는 지우지 않는다 — 갈림은 엔진이 stream-json인가 하나다.**
 
@@ -3829,7 +3840,8 @@ CDP 실측 두 줄(`Δbase`·`Δcenter`)이라 developer 티켓의 `## Done when
 `osascript`로 `dira` 메뉴 항목 이름을 찍는 것이 그 판정문이다.
 
 | P53 | 참견 — 요구 왕복 + 스펙 확정 `2100d54a` | pm | 답 `864f39c9` | 완료 — §2-2 신설 · §제약 1 뒤집음 · §2-1 `queue-operation` 예외 |
-| P53 | 엔진 — 참견 입구(FIFO) + stream-json 전환 `a7796d16` | developer | — | 대기 |
+| P53 | 엔진 — 참견 입구(FIFO) + stream-json 전환 `a7796d16` | developer | — | 완료 |
+| P53 | 구현 피드백 → §2-2 종료 규약 3정정 `8f2c820b` | pm | — | 완료 — `is_error` 판정 · 키 순서 무보장 · `inbox:` 쓰는 시점 |
 | P53 | 스트림에 참견 줄 — `queue-operation enqueue` `b285dc09` | developer | — | 완료 |
 | P53 | 봉투 실측 피드백 → §2-1 필터 명문화 `edec37eb` | pm | — | 완료 — `enqueue`가 곧 참견이 아니다(§2-2 표 3') |
 | P53 | 참견 입력 form 시각 사양 — §비주얼 §21 `7ac43367` | designer | — | 대기 |
