@@ -353,6 +353,14 @@ function CreateDialog({
             </Alert>
           )}
 
+          {/* 첫 등록은 macOS `앱 관리` 승인 창을 지난다(§제약 4) — 그동안 crontab이 블록되고
+              여기는 `만드는 중…`으로 서 있다. 창을 못 알아보면 3분 뒤 등록만 실패한다. */}
+          {pending && (
+            <p className="text-xs text-muted-foreground">
+              권한 창이 뜨면 [허용]을 누르세요 — crontab 등록이 그 대답을 기다립니다.
+            </p>
+          )}
+
           <DialogFooter>
             <DialogClose render={<Button variant="outline" />}>취소</DialogClose>
             <Button type="submit" disabled={pending}>

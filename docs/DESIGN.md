@@ -78,7 +78,8 @@
 
      **그래서 폴백은 예외 경로가 아니다 — 받는 맥의 첫 등록은 반드시 이 창을 지난다.**
      `cronRegisterCmd`와 사유 표시는 그 자리의 상시 경로이고, 타임아웃이 사람의 클릭보다 먼저
-     끊지 않는 것이 요건이다(`lib/workers.ts` `CRONTAB_TIMEOUT` — 조치 `79d9b659`).
+     끊지 않는 것이 요건이다(`lib/workers.ts` `CRONTAB_WRITE_TIMEOUT` = 3분 — 조치 `79d9b659`.
+     읽기는 `CRONTAB_READ_TIMEOUT` = 10초로 갈라 둔다. 기다리는 대상이 사람이 아니다).
 
      그러니 **수용조건을 두 층으로 나눠 쓴다** — 섞어 쓰면 QA가 통과 판정을 낼 수 없다:
 

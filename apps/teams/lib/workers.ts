@@ -845,24 +845,46 @@ export function cronRegister(text: string, workerPath: string): string {
  *  경우(`crontab: no crontab for <user>`)만 빈 문자열이다. */
 async function crontabForWrite(): Promise<string> {
   try {
-    return (await promisify(execFile)("crontab", ["-l"], { timeout: CRONTAB_TIMEOUT })).stdout;
+    return (await promisify(execFile)("crontab", ["-l"], { timeout: CRONTAB_READ_TIMEOUT })).stdout;
   } catch (e) {
     const err = e as { stdout?: string; stderr?: string; message: string; killed?: boolean };
-    if (err.killed) throw new Error(timedOut("crontab -l"));
+    if (err.killed) throw new Error(readTimedOut);
     if (!err.stdout && /no crontab for/i.test(err.stderr ?? "")) return "";
     throw new Error(`crontab -l 실패: ${(err.stderr || err.message).trim()}`);
   }
 }
 
-/** **crontab은 응답하지 않을 수 있다.** 실측(2026-07-31): 이 머신에서 `crontab <파일>`도
- *  `crontab -`도 영원히 안 끝난다(읽기는 정상) — macOS가 그 프로세스에 권한을 물으려다 막힌
- *  모양새다. 기다림에 끝이 없으면 화면은 `만드는 중…`에 영원히 갇히고, "등록 실패는 성공 보고를
- *  막지 않는다"(DESIGN.md §0-3 · §4)가 성립하지 않는다. 끊어서 **실패로 만들어야** 그 규약이
+/** **읽기와 쓰기의 상한이 다르다 — 기다리는 대상이 다르기 때문이다**(DESIGN.md §제약 4).
+ *
+ *  읽기(`crontab -l`)는 TCC 조회 자체가 없다(실측 `0f2c9453`: 5초 폴링이 프롬프트 없이 통과).
+ *  여기서 10초를 넘기면 그건 진짜 고장이다.
+ *
+ *  쓰기(`crontab -`)는 **사람을 기다린다.** macOS TCC `앱 관리`
+ *  (`kTCCServiceSystemPolicySysAdminFiles`) 승인을 요구하고, 승인 이력이 없는 프로세스에서는
+ *  tccd가 창을 띄운 채 crontab을 블록한다. 옛 10초는 그 창을 알아보고 `허용`을 누르기보다
+ *  짧아서 **받는 맥의 첫 등록이 항상 실패했다**(실측 `0f2c9453` — 서명·공증된 `.app`에서도
+ *  `crontab에 등록하지 못했습니다`). 그러니 이 상한의 단위는 crontab의 응답 시간이 아니라
+ *  **사람의 반응 시간**이다.
+ *
+ *  그래도 상한은 있다. 아무도 창을 안 누르면 화면이 `만드는 중…`에 영원히 갇히고, "등록 실패는
+ *  성공 보고를 막지 않는다"(§0-3 · §4)가 성립하지 않는다. 끊어서 **실패로 만들어야** 그 규약이
  *  산다 — 화면은 사유와 `cronRegisterCmd`를 보여주고 사람이 셸에서 마무리한다.
- *  // ponytail: 고정 10초. 값이 문제가 되면 그때 설정으로 뺀다 */
-const CRONTAB_TIMEOUT = 10_000;
-const timedOut = (cmd: string) =>
-  `${cmd}가 10초 안에 응답하지 않아 중단했습니다. 셸에서 직접 실행해 보세요 — 권한을 묻는 창이 떠 있을 수 있습니다.`;
+ *  (거부는 이 상한을 안 쓴다. 사람이 `허용 안 함`을 누르면 crontab이 즉시 EPERM으로 죽는다.)
+ *  // ponytail: 고정 3분. 짧으면 사람의 클릭을 앞지르고 길면 화면이 갇힌다 — 문제가 되면 설정으로 */
+const CRONTAB_READ_TIMEOUT = 10_000;
+const CRONTAB_WRITE_TIMEOUT = 180_000;
+
+const readTimedOut =
+  "crontab -l이 10초 안에 응답하지 않아 중단했습니다. 셸에서 직접 실행해 보세요.";
+const writeTimedOut =
+  "crontab -가 3분 안에 응답하지 않아 중단했습니다. macOS의 권한 창이 답을 기다리는 중일 수 있습니다 — 화면에 ‘…에서 사용자의 컴퓨터를 관리하려고 합니다’ 창이 떠 있으면 [허용]을 누르고 다시 시도하세요. 시스템 설정 > 개인정보 보호 및 보안 > 앱 관리에서 미리 켜 둘 수도 있습니다.";
+
+/** 승인 거부는 **기다림이 아니라 사유**다. TCC가 거부하면 crontab은 블록되지 않고 바로 죽는데,
+ *  그 stderr만으로는 무엇을 켜야 하는지 사람이 알 수 없다(`Operation not permitted`). 사유를 붙인다. */
+export const cronWriteError = (stderr: string) =>
+  /not permitted|permission denied|not allowed/i.test(stderr)
+    ? `‘앱 관리’ 권한이 없어 crontab에 쓰지 못했습니다 — 승인 창에서 [허용 안 함]을 눌렀거나 이전에 거부한 상태입니다. 시스템 설정 > 개인정보 보호 및 보안 > 앱 관리에서 이 앱(dira, 또는 GUI를 띄운 터미널)을 켜고 다시 시도하세요. (crontab -: ${stderr})`
+    : `crontab - 실패: ${stderr}`;
 
 /** **읽기는 쓰기 직전에 한다.** 렌더 때 읽은 값을 재사용하면 그 사이 남의 변경을 되돌린다
  *  (§결정 기록 실측 — 스펙 쓰는 20분 사이에 남의 줄이 하나 줄었다). 창은 좁힐 수 있을 뿐
@@ -879,9 +901,9 @@ async function applyCrontab(workerPath: string, want: boolean): Promise<boolean>
   const changed = next !== before;
   if (changed) {
     await new Promise<void>((resolve, reject) => {
-      const child = execFile("crontab", ["-"], { timeout: CRONTAB_TIMEOUT }, (err, _out, stderr) => {
+      const child = execFile("crontab", ["-"], { timeout: CRONTAB_WRITE_TIMEOUT }, (err, _out, stderr) => {
         const killed = (err as { killed?: boolean } | null)?.killed;
-        if (err) reject(new Error(killed ? timedOut("crontab -") : `crontab - 실패: ${(stderr || err.message).trim()}`));
+        if (err) reject(new Error(killed ? writeTimedOut : cronWriteError((stderr || err.message).trim())));
         else resolve();
       });
       child.stdin!.end(next);

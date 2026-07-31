@@ -30,7 +30,9 @@ const {
   cronRegisterCmd,
   cronUnregister,
   cronUnregisterCmd,
+  cronWriteError,
   deleteWorker,
+  registerCron,
   engineName,
   lockPath,
   listWorkers,
@@ -1025,14 +1027,16 @@ test("applyCommonSource — 삽입 위치는 닫는 `)` 다음 줄, 두 번째�
 
 /** `-l`과 `crontab -`이 **같은 파일**을 본다 — 쓴 뒤 다시 읽어 확인하는 `applyCrontab`의 경로다
  *  (`withWritableCrontab`은 셸 파이프라인용이라 읽기/쓰기 파일이 갈라져 있다).
- *  `failWrite`면 `crontab -`이 실패한다 — 해제 실패에 파일을 남기는지 보려고. */
-function withLiveCrontab(text: string, opts: { failWrite?: boolean } = {}) {
+ *  `failWrite`면 `crontab -`이 실패한다 — 해제 실패에 파일을 남기는지 보려고.
+ *  문자열을 주면 그것이 그 실패의 stderr다(진짜 crontab의 실패 문구를 넣어 보려고). */
+function withLiveCrontab(text: string, opts: { failWrite?: boolean | string } = {}) {
   const bin = mkdtempSync(path.join(tmpdir(), "fst-bin-"));
   tmps.push(bin);
   const tab = path.join(bin, "tab.txt");
   writeFileSync(tab, text);
+  const stderr = typeof opts.failWrite === "string" ? opts.failWrite : "crontab: 쓸 수 없습니다";
   const write = opts.failWrite
-    ? 'cat >/dev/null; echo "crontab: 쓸 수 없습니다" >&2; exit 1'
+    ? `cat >/dev/null; echo ${JSON.stringify(stderr)} >&2; exit 1`
     : `cat > ${JSON.stringify(tab + ".new")} && mv ${JSON.stringify(tab + ".new")} ${JSON.stringify(tab)}`;
   writeFileSync(
     path.join(bin, "crontab"),
@@ -1107,4 +1111,39 @@ test("deleteWorker — crontab 해제가 실패하면 파일을 지우지 않는
   } finally {
     c.restore();
   }
+});
+
+/** 승인 거부는 **기다림이 아니라 사유**다 (79d9b659 · §제약 4).
+ *  TCC가 `앱 관리`를 거부하면 파일 조작이 EPERM으로 떨어지고 crontab은 블록되지 않고 죽는다 —
+ *  쓰기 상한(3분)은 승인 창이 떠 있는 동안만 쓰인다. 픽스처의 stderr는 `/usr/bin/crontab`이
+ *  실제로 가진 실패 문구다(`strings -a /usr/bin/crontab`: `error renaming %s to %s`). */
+test("crontab 쓰기 거부 — 상한을 안 기다리고 즉시 실패하고 사유가 '앱 관리'다 (79d9b659)", async () => {
+  const root = makeRoot({ "w1.sh": "#!/bin/bash\n" });
+  const w1 = path.join(root, "workers", "w1.sh");
+  const c = withLiveCrontab("0 3 * * * /Users/x/bin/backup.sh\n", {
+    failWrite: "crontab: error renaming /var/at/tmp/tmp.1 to /var/at/tabs/hsol: Operation not permitted",
+  });
+  const t0 = Date.now();
+  try {
+    await assert.rejects(registerCron(w1), /앱 관리.*시스템 설정 > 개인정보 보호 및 보안/);
+    assert.ok(Date.now() - t0 < 5_000, `거부는 상한을 기다리지 않는다 (${Date.now() - t0}ms)`);
+    assert.strictEqual(c.tab(), "0 3 * * * /Users/x/bin/backup.sh\n"); // 남의 줄 그대로
+  } finally {
+    c.restore();
+  }
+});
+
+test("cronWriteError — 권한 거부만 '앱 관리'로 번역하고 나머지 실패는 그대로 (79d9b659)", () => {
+  // 셋 다 crontab 바이너리에 실제로 있는 문구다. 거부가 어느 꼴로 오든 사유를 놓치지 않는다.
+  for (const s of [
+    "crontab: error renaming /var/at/tmp/tmp.1 to /var/at/tabs/hsol: Operation not permitted",
+    "crontab: /var/at/tabs/hsol: Permission denied",
+    "crontab command not allowed",
+  ])
+    assert.match(cronWriteError(s), /앱 관리/);
+  // 권한과 무관한 실패는 번역하지 않는다 — 엉뚱한 조치를 시키면 사람이 거기서 막힌다
+  assert.strictEqual(
+    cronWriteError("errors in crontab file, can't install"),
+    "crontab - 실패: errors in crontab file, can't install",
+  );
 });
