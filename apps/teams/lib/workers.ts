@@ -6,7 +6,7 @@
  *  되돌아간다 — 그래서 그 둘은 남아 있다.
  *  상태 전이(reap·unassign)는 여기서 다시 구현하지 않는다 — `lib/engine.ts`가 워커를 부른다. */
 import { createHash } from "node:crypto";
-import { chmod, readFile, readdir, realpath, rename, stat, symlink, unlink, writeFile } from "node:fs/promises";
+import { chmod, open, readFile, readdir, realpath, rename, stat, symlink, unlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import { execFile } from "node:child_process";
@@ -25,6 +25,22 @@ export type WorkerDefectKind = "missing-cwd" | "missing-link" | "shared-cwd";
  *  일어나나"는 화면이 붙인다(§4 표와 같은 단어를 쓰게 한 자리에 둔다). */
 export type WorkerDefect = { kind: WorkerDefectKind; detail: string };
 
+/** 외부 요인으로 세션이 태어나자마자 죽었다 (DESIGN.md §0-5): 한도 소진 · API 과부하 ·
+ *  연결 끊김. **큐도 워커도 멀쩡한 상태다** — 그래서 `status`에 5번째 값을 만들지 않는다
+ *  (`WorkerDefect`와 같은 축의 판단이고, 실패 직후의 워커는 `idle`이다). */
+export type WorkerFailure = {
+  /** 그 `FAIL` 줄의 시각. runner.log가 쓴 문자열 그대로다(`2026-07-31 18:09:49`, 이 머신 로컬).
+   *  ISO로 갈아 끼우지 않는다 — 사람이 로그 원본에서 이 줄을 찾을 때 쓰는 값이다 */
+  at: string;
+  /** 실패한 티켓 해시 */
+  hash: string;
+  /** **엔진이 준 문자열 그대로.** 번역도 분류도 하지 않는다 — `resets 7:40pm (Asia/Seoul)`처럼
+   *  사람이 다음에 할 일이 이 문장 안에 이미 있다 */
+  reason: string;
+  /** `workers/logs/` 안의 파일명. 사람이 원본을 열 유일한 단서다 */
+  log: string;
+};
+
 export type Worker = {
   /** 파일 stem. 액션(생성·삭제·reap)이 가리키는 이름이다 */
   name: string;
@@ -39,6 +55,8 @@ export type Worker = {
   engine: string;
   /** runner.log에서 이 워커의 마지막 줄 */
   lastLog: string | null;
+  /** 외부 요인으로 죽은 마지막 세션 (§0-5). **정상 상태에서는 항상 `null`이다** */
+  lastFailure: WorkerFailure | null;
   /** TICKET_CONTEXT 항목(경로·설명·존재 여부) 또는 못 읽은 사유 */
   context: WorkerContext;
   /** 공통 컨텍스트 `source` 줄이 있는가. false면 이 워커는 공통을 못 받는다 (§4-1) */
@@ -522,20 +540,85 @@ export async function applyCommonSource(root: string, name: string): Promise<boo
   return true;
 }
 
+/** tick 하나의 **결과**인 동사는 이 셋뿐이다(DESIGN.md §0-5 판정 1단계). 나머지는 건너뛴다:
+ *  - `DISPATCH` — 아직 안 끝났다. 이걸 결과로 세면 **배너가 깜빡인다**(실측에서 FAIL은 DISPATCH
+ *    6~13초 뒤에 오는데 보드 폴링이 5초라 매분 그 창에 걸린다).
+ *  - `SKIP`·`HOLD` — "지금 물 티켓이 없다"이지 환경이 나았다는 증거가 아니다.
+ *  - `WARN`·`REAP`·`UNASSIGN`·`ERROR`·`NOTE` — tick 결과가 아니다. `ERROR cwd 없음`은 §4
+ *    작업 디렉터리 결함이 이미 자기 자리에서 말한다 — 같은 사실을 두 자리에 쓰지 않는다. */
+const RESULT_VERBS = new Set(["DONE", "FAIL", "TIMEOUT"]);
+
 /** runner.log는 워커 전체가 한 파일에 섞여 쌓인다: `2026-07-30 13:19:01 [w3] SKIP …`.
- *  실효 `TICKET_NAME` → 마지막 줄.
+ *  실효 `TICKET_NAME` → 마지막 줄 + **마지막 결과 줄**(§0-5 판정 1단계).
  *
  *  ponytail: 파일 전체를 읽고 뒤에서 훑는다. 이 레포 로그가 13KB고 사람이 가끔 지운다.
  *  MB 단위가 되면 뒤에서 N바이트만 읽는 경로로 바꾼다. */
-async function lastLogByWorker(workersDir: string): Promise<Record<string, string>> {
+async function lastLogByWorker(
+  workersDir: string,
+): Promise<Record<string, { last: string; result: string | null }>> {
   const text = await readFile(path.join(workersDir, "runner.log"), "utf8").catch(() => "");
-  const out: Record<string, string> = {};
+  const out: Record<string, { last: string; result: string | null }> = {};
   const lines = text.split("\n");
   for (let i = lines.length - 1; i >= 0; i--) {
-    const m = /^\S+ \S+ \[([^\]]+)\] /.exec(lines[i]);
-    if (m && !(m[1] in out)) out[m[1]] = lines[i];
+    const m = /^\S+ \S+ \[([^\]]+)\] (\S+)/.exec(lines[i]);
+    if (!m) continue;
+    const e = (out[m[1]] ??= { last: lines[i], result: null }); // 뒤에서 왔으니 첫 생성이 마지막 줄
+    if (e.result === null && RESULT_VERBS.has(m[2])) e.result = lines[i];
   }
   return out;
+}
+
+/** 실패 사유가 **아직 유효한가**의 창 (§0-5 신선도). cron이 1분 주기라 환경이 깨져 있고 물
+ *  티켓이 있으면 매분 새 `FAIL`이 온다. 이 창이 없으면 **배너가 거짓말을 한다**: 한도가 풀렸는데
+ *  큐가 비어 `SKIP`만 도는 큐에서 사흘 전 `FAIL`이 영원히 걸린다. §0-2 인증 배너에 만료가 없는
+ *  것과 갈리는 지점이고 이유는 상태의 성격이다 — 저건 사람이 손대야 꺼지지만 이건 저절로 복구된다.
+ *  // ponytail: 고정 10분. 폴링(5초)·cron(1분)보다 한참 크고 사유의 수명보다 짧으면 된다 */
+const FRESH_MS = 10 * 60 * 1000;
+
+/** 세션 로그는 **마지막 한 줄이 JSON**이고 그 앞은 세션 stderr다(`tick.sh:222`가 `2>>"$LOGF"`).
+ *  실측 파일은 1.4KB지만 상한이 없어서 꼬리 64KB만 읽는다 — `tickets.py:transcript_state`의
+ *  선례 그대로고 `readFile` 전체 읽기가 아니다. 파일이 64KB 미만이면 전체다. */
+const TAIL_BYTES = 64 * 1024;
+async function lastJsonLine(file: string): Promise<Record<string, unknown> | null> {
+  let fh: Awaited<ReturnType<typeof open>> | undefined;
+  try {
+    fh = await open(file, "r");
+    const { size } = await fh.stat();
+    const len = Math.min(size, TAIL_BYTES);
+    const buf = Buffer.alloc(len);
+    await fh.read(buf, 0, len, size - len);
+    const lines = buf.toString("utf8").trimEnd().split("\n");
+    const rec: unknown = JSON.parse(lines[lines.length - 1]);
+    return rec && typeof rec === "object" ? (rec as Record<string, unknown>) : null;
+  } catch {
+    return null; // 없다·못 읽는다·JSON이 아니다 — 사유를 지어내지 않는다
+  } finally {
+    await fh?.close();
+  }
+}
+
+/** `tick.sh:245`가 쓰는 줄: `FAIL <해시> rc=<n> -> 할당 회수 + 백로그 복귀. 로그 <basename>`.
+ *  파일명은 **꼬리에서 집는다 — 조립하지 않는다**(엔진이 이미 적어 준다). */
+const failLine = /^(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d) \[[^\]]*\] FAIL (\S+) .* 로그 (\S+)$/;
+
+/** §0-5 판정 2·3단계. 마지막 **결과** 줄 하나 → 외부 요인 실패이거나 `null`.
+ *  `DONE`이면 `null`이다 — 이게 "다음 성공 tick에 저절로 꺼진다"다. **`TIMEOUT`도 `null`**:
+ *  rc 143/137은 90분 상한에 걸린 매달린 세션이고 환경 탓이 아니다(그래서 이 정규식이 `FAIL`만 문다). */
+async function failureOf(logsDir: string, line: string | null): Promise<WorkerFailure | null> {
+  const m = line && failLine.exec(line);
+  if (!m) return null;
+  const [, at, hash, log] = m;
+  // `2026-07-31 18:09:49`는 `Date`가 엔진마다 다르게 무는 모양이다. `T`를 넣으면 오프셋 없는
+  // ISO = 로컬 시각으로 규격이 정해져 있고, tick.sh의 `date '+%F %T'`도 이 머신의 로컬이다.
+  const ts = Date.parse(at.replace(" ", "T"));
+  if (!Number.isFinite(ts) || Date.now() - ts > FRESH_MS) return null;
+  // 파일명은 엔진이 준 값이지만 그대로 이어 붙이지 않는다 — logs/ 밖으로 나가는 이름은 이름이 아니다.
+  const rec = await lastJsonLine(path.join(logsDir, path.basename(log)));
+  if (!rec || rec.is_error !== true) return null; // 파싱 실패·`is_error` 아님 → 사유가 없다
+  const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+  // 실측 6건이 `result: null`이고 그때 사유는 `terminal_reason`("aborted_streaming")뿐이다.
+  const reason = str(rec.result) || str(rec.terminal_reason);
+  return reason ? { at, hash, reason, log } : null; // 사유가 비면 화면에 그릴 것이 없다
 }
 
 /** 워커가 물고 있는 티켓. tick.sh 207행이 `owner`에 `<페르소나> / <TICKET_NAME>-<sid[:8]>`를
@@ -642,7 +725,9 @@ export async function listWorkers(root: string, tickets: Ticket[] = []): Promise
       lockPid: pid,
       holding: holdingOf(tickets, eff),
       engine: parsed.engine ?? DEFAULT_ENGINE,
-      lastLog: logs[eff] ?? null,
+      lastLog: logs[eff]?.last ?? null,
+      // 파일을 여는 것은 **마지막 결과가 `FAIL`인 워커뿐**이다 — 정상 상태에서는 0회다(§0-5 비용).
+      lastFailure: await failureOf(path.join(dir, "logs"), logs[eff]?.result ?? null),
       context: await contextOf(root, text, parsed.cwd),
       // 이 줄이 없는 워커는 공통을 못 받는다 — 화면이 경고 + `공통 적용`을 띄운다(§4-1).
       commonSource: commonSourceRe.test(text),

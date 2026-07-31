@@ -285,6 +285,88 @@ test("holding — .wip 티켓의 owner에서 워커를 되짚는다 (tick.sh 207
   assert.strictEqual((await listWorkers(root))[0].holding, null);
 });
 
+/** runner.log의 시각 표기(`tick.sh:35`의 `date '+%F %T'`, 로컬). **지금 기준 오프셋**으로
+ *  만든다 — 고정 문자열이면 신선도 창(10분)이 도는지 확인할 수 없다. */
+function stamp(minutesAgo: number): string {
+  const d = new Date(Date.now() - minutesAgo * 60_000);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+
+const LIMIT = "You've hit your session limit · resets 7:40pm (Asia/Seoul)";
+
+test("lastFailure — 외부 요인으로 죽은 세션만, 신선할 때만 잡는다 (§0-5)", async () => {
+  const names = ["w1", "w2", "w3", "w4", "w5", "w6", "w7", "w8", "w9"];
+  const root = makeRoot(Object.fromEntries(names.map((n) => [`${n}.sh`, "#!/bin/bash\n"])));
+  const dir = path.join(root, "workers");
+  mkdirSync(path.join(dir, "logs"));
+
+  /** `tick.sh:222`가 세션 stderr를 쌓고 마지막에 엔진 JSON 한 줄이 붙는다. */
+  const putLog = (name: string, rec: object, noise = "세션 stderr\n") =>
+    writeFileSync(path.join(dir, "logs", name), noise + JSON.stringify(rec) + "\n");
+
+  const err = { is_error: true, terminal_reason: "api_error", result: LIMIT };
+  for (const n of names) putLog(`fail-${n}.log`, err);
+  // 실측 6건: `result: null`이라 사유가 `terminal_reason`뿐이다
+  putLog("fail-w6.log", { is_error: true, terminal_reason: "aborted_streaming", result: null });
+  // 정상 종료한 세션의 마지막 줄. 사유가 아니다
+  putLog("fail-w7.log", { is_error: false, terminal_reason: null, result: "다 했습니다" });
+  writeFileSync(path.join(dir, "logs", "fail-w8.log"), "JSON이 아니다\n");
+  // 꼬리 64KB만 읽는지 — 100KB 앞에 두고도 마지막 줄을 집어야 한다(`readFile` 전체 읽기가 아니다)
+  putLog("fail-w9.log", err, "x".repeat(100_000) + "\n");
+
+  // 시각은 **한 번만** 만든다 — 픽스처와 단언에서 따로 부르면 초가 넘어갈 때 어긋난다.
+  const [t20, t5, t4, t3, t2, t1] = [20, 5, 4, 3, 2, 1].map(stamp);
+  const fail = (h: string, n: string) =>
+    `FAIL ${h} rc=1 -> 할당 회수 + 백로그 복귀. 로그 fail-${n}.log`;
+  writeFileSync(
+    path.join(dir, "runner.log"),
+    [
+      // 1) FAIL + is_error → 실패
+      `${t5} [w1] DISPATCH a1111111 kind=work persona=dev sid=xxx log=fail-w1.log`,
+      `${t5} [w1] ${fail("a1111111", "w1")}`,
+      // 2) FAIL 뒤에 DONE → null (다음 성공 tick에 저절로 꺼진다)
+      `${t4} [w2] ${fail("b2222222", "w2")}`,
+      `${t3} [w2] DONE b2222222 sid=yyy`,
+      // 3) TIMEOUT → null (90분 상한에 걸린 매달린 세션이고 환경 탓이 아니다)
+      `${t2} [w3] TIMEOUT c3333333 5400s 초과 강제종료 -> 할당 회수 + 백로그 복귀. 로그 fail-w3.log`,
+      // 4) 마지막 줄이 DISPATCH여도 그 앞의 FAIL이 잡힌다 = 배너가 안 깜빡인다
+      `${t2} [w4] ${fail("d4444444", "w4")}`,
+      `${t1} [w4] DISPATCH d4444444 kind=work persona=dev sid=zzz log=x.log`,
+      // 5) FAIL 뒤에 SKIP만 있고 10분 초과 → null (사흘 전 FAIL이 영원히 걸리지 않는다)
+      `${t20} [w5] ${fail("e5555555", "w5")}`,
+      `${t1} [w5] SKIP 물 티켓이 없다`,
+      // 6) result: null → terminal_reason이 사유다
+      `${t1} [w6] ${fail("f6666666", "w6")}`,
+      // 7·8) is_error 아님 · JSON 아님 → null (사유를 지어내지 않는다)
+      `${t1} [w7] ${fail("77777777", "w7")}`,
+      `${t1} [w8] ${fail("88888888", "w8")}`,
+      // 9) 로그가 100KB여도 꼬리에서 마지막 줄을 집는다
+      `${t1} [w9] ${fail("99999999", "w9")}`,
+      "",
+    ].join("\n"),
+  );
+
+  const ws = Object.fromEntries((await listWorkers(root)).map((w) => [w.name, w]));
+  assert.deepStrictEqual(ws.w1.lastFailure, {
+    at: t5,
+    hash: "a1111111",
+    reason: LIMIT, // 엔진 문자열 그대로 — 복구 시각이 이 문장 안에 있다
+    log: "fail-w1.log",
+  });
+  assert.strictEqual(ws.w2.lastFailure, null);
+  assert.strictEqual(ws.w3.lastFailure, null);
+  assert.strictEqual(ws.w4.lastFailure?.hash, "d4444444");
+  assert.strictEqual(ws.w5.lastFailure, null);
+  assert.strictEqual(ws.w6.lastFailure?.reason, "aborted_streaming");
+  assert.strictEqual(ws.w7.lastFailure, null);
+  assert.strictEqual(ws.w8.lastFailure, null);
+  assert.strictEqual(ws.w9.lastFailure?.reason, LIMIT);
+  // 결과 줄을 새로 뽑아도 `lastLog`는 여전히 **마지막 줄**이다(화면이 지금 쓰는 값이다)
+  assert.match(ws.w4.lastLog!, /DISPATCH d4444444/);
+  assert.match(ws.w5.lastLog!, /SKIP/);
+});
+
 /** `-l`은 `tab`을 읽고, `crontab -`은 `out`에 쓴다. 만들어진 명령을 **진짜 셸에** 먹여
  *  결과 crontab을 본다. 읽는 파일과 쓰는 파일을 나눈 건 `crontab -l | … | crontab -`이
  *  한 파이프라인이라 같은 파일이면 읽기 도중 truncate되는 경주가 나서다.
