@@ -521,6 +521,12 @@ test("parseContextBlock — 블록 없음 · 주석 처리된 블록 · 이중 �
     assert.strictEqual(b.ok, false, `거부해야 한다: ${text}`);
     assert.match((b as { reason: string }).reason, re);
   }
+  // `블록이 없습니다` 사유에서**만** 화면이 `<arr>=()` 스니펫을 내민다(§4). 그 분기는
+  // 이 문자열과 글자로 대조한다(workers-ui.tsx `missing`) — 문구를 고치면 여기서 걸린다.
+  for (const arr of ["TICKET_CONTEXT", "TICKET_CONTEXT_COMMON"]) {
+    const b = parseContextBlock("#!/bin/bash\n. tick.sh\n", arr);
+    assert.strictEqual((b as { reason: string }).reason, `${arr}=( … ) 블록이 없습니다`);
+  }
 });
 
 test("parseContextBlock — `|` 없는 항목 · 경로에 공백 · 맨 낱말", () => {

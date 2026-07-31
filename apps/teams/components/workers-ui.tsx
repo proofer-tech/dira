@@ -502,6 +502,10 @@ function ContextEditor({
   };
 
   if (!context.ok) {
+    // 사유가 `블록이 없습니다`일 때**만** 넣을 줄까지 준다(§4) — 나머지 사유는 파일에 이미
+    // 있는 것을 사람이 보고 정할 일이지만 이건 답이 한 줄로 정해져 있다. 문자열은
+    // `parseContextBlock`이 내는 그 사유와 글자로 맞춘다(lib/workers.ts 199행).
+    const missing = context.reason === `${arr}=( … ) 블록이 없습니다`;
     return (
       <>
         <Failure title={`${file}의 ${arr} 블록을 GUI가 고칠 수 없습니다`} message={context.reason} />
@@ -510,6 +514,18 @@ function ContextEditor({
           <span className="font-mono text-xs break-all"> {filePath}</span>를 손으로 편집한 뒤 이
           화면을 새로고침하세요.
         </p>
+        {missing && (
+          <>
+            <p className="text-sm text-muted-foreground">
+              넣을 줄은 이것 하나입니다 — 필수 <code className="font-mono text-xs">. …/tick.sh</code>{" "}
+              줄 <strong className="font-medium text-foreground">위</strong> 아무 곳에 붙이면
+              열립니다. GUI가 대신 넣지는 않습니다(삽입 자리를 짚을 앵커가 없습니다).
+            </p>
+            {/* ponytail: `renderContextBlock([], arr)`과 같은 문자열을 손으로 적는다 — 서버
+                전용 모듈(fs)이라 클라이언트에서 import할 수 없다. 0항목 모양이 바뀌면 여기도. */}
+            <CopyCommand cmd={`${arr}=()`} />
+          </>
+        )}
       </>
     );
   }
