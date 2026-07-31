@@ -15,6 +15,7 @@ import { open, readFile, unlink } from "node:fs/promises";
 import path from "node:path";
 import { revalidatePath } from "next/cache";
 import { findTicket, unassign, type UnassignRun } from "@/lib/engine";
+import { followup, type FollowupResult } from "@/lib/followup";
 import { interject, type InterjectResult } from "@/lib/interject";
 import { NAME_RE, isHash, resolveWithin } from "@/lib/paths";
 import { findTranscript, sessionIdOf, tailEvents, type StreamEvent } from "@/lib/transcript";
@@ -128,6 +129,35 @@ export async function sendInterject(
     return await interject(project.root, config, stem, text);
   } catch (e) {
     // 여기 오는 건 프로젝트 조회·설정 해석이 던진 것뿐이다(§21 실패 4종에 없다) — `other`다.
+    const error = (e as Error).message;
+    return { ok: false, reason: "other", error, detail: error };
+  }
+}
+
+/** 이어받기 (DESIGN.md §2-2 완료 티켓의 참견). 같은 form의 `.done` 모드가 부르는 자리다 —
+ *  **Server Action 둘**이고 각자 자기 상태를 다시 본다(모드가 어긋나면 실패 + 사유다).
+ *
+ *  **판정과 쓰기는 전부 `lib/followup.ts`가 한다**(`sendInterject`와 같은 이유 — 판정이 두 곳으로
+ *  갈리면 화면이 거짓말을 한다). 돌려주는 건 새 티켓 stem이고 **이동은 화면이 한다**: 여기서
+ *  `redirect`하면 실패 사유를 그릴 자리가 없어진다(발행 다이얼로그와 갈리는 점이다 — 저긴
+ *  다이얼로그가 결과를 들고 있다).
+ *
+ *  `revalidatePath`는 **보드만** 부른다: 원본 티켓 파일은 한 글자도 안 바뀌므로 그 상세는 다시
+ *  그릴 것이 없고, 보드에는 새 티켓이 한 줄 뜬다(`createTicket`과 같다). */
+export async function sendFollowup(
+  projectId: string,
+  stem: string,
+  text: string,
+): Promise<FollowupResult> {
+  try {
+    const project = await getProject(projectId);
+    if (!project) throw new Error(`등록되지 않은 프로젝트입니다: ${projectId}`);
+    const config = await resolveConfig(project);
+    const r = await followup(project.root, config, stem, text);
+    if (r.ok) revalidatePath(`/p/${projectId}`);
+    return r;
+  } catch (e) {
+    // 여기 오는 건 프로젝트 조회·설정 해석이 던진 것뿐이다 — 모드 어긋남이 아니므로 `other`다.
     const error = (e as Error).message;
     return { ok: false, reason: "other", error, detail: error };
   }

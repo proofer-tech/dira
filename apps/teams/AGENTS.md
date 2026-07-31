@@ -50,6 +50,12 @@ apps/teams/
                         `transcript.ts`인 것과 짝**이라 그쪽에 안 얹었다 — 저긴 순수 읽기 코어고
                         여긴 유일한 쓰기다. `O_WRONLY|O_NONBLOCK`이 이 파일의 존재 이유고
                         (없으면 Server Action이 영영 안 끝난다) 실패 사유를 갈라서 돌려준다
+    followup.ts         이어받기(§2-2 완료 티켓의 참견). 완료 티켓 + 참견 → **새 열린 티켓 한 장**.
+                        `interject.ts`와 **짝이고 한 파일이 아니다**: 저긴 FIFO에 쓰고 티켓 파일을
+                        안 건드리고, 여긴 큐에 파일을 만들고 FIFO를 모른다. 모드 판정이 반대
+                        방향(`.done` / `.wip`)이라 합치면 한 함수가 두 계약을 들게 된다.
+                        해시·`O_EXCL`·10회 재시도는 `createTicket`과 **같은 코드가 두 벌**이다
+                        (`"use server"` 파일에서 import 못 한다 — 그쪽 머리 주석이 같은 대가를 적는다)
     auth.ts             Claude 장기 토큰 경로·상태·저장 + `claude setup-token` pty 드라이버
                         (DESIGN.md §0-4). 엔진 계약을 **따라 쓸 뿐**이다(`tick.sh:52-54` —
                         개행 없는 한 줄 · 0600). `.authwarn`은 안 건드린다. 드라이버는 `script`로
