@@ -154,6 +154,12 @@ SVG에서 직접 래스터하는 것이 그 절이 넘긴 실측이다.
    내보낸다.
 5. **판정을 main에서 다시 구현하지 않는다.** 알림이 쓰는 `답변 대기`는 서버가 `lib/queue.ts`로
    판정한다 — main은 `GET /api/awaiting`을 물어본다.
+7. **자식 서버는 독에 타일을 갖지 않는다.** 서버를 `process.execPath`(`Contents/MacOS/dira`)로
+   띄우면 LaunchServices가 자식을 같은 번들의 앱 인스턴스로 등록해 **창을 안 만드는 빈 타일**이
+   하나 더 생긴다. `Contents/Frameworks/dira Helper.app`의 실행파일로 띄운다 — 같은 바이너리인데
+   그 번들의 `Info.plist`에 `LSUIElement`가 서 있어 타일을 안 만든다(`ELECTRON_RUN_AS_NODE`는
+   그대로다). **Helper 번들 이름은 `productName`에서 나온다** — `package.json`의 그 값을 바꾸면
+   `main.ts`의 `nodeBin()`이 못 찾고 타일이 조용히 돌아온다(못 찾으면 `execPath`로 떨어진다).
 
 ## N2 답변 대기 알림
 

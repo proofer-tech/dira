@@ -4,6 +4,7 @@
 // 스펙: ../../docs/DESIGN.md §데스크톱 앱 (특히 "못박는 것" 1~6, N1·N2·N3·N4).
 import { app, BrowserWindow, Menu, Notification, Tray, dialog, ipcMain, nativeImage, shell } from "electron";
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
+import { existsSync } from "node:fs";
 import { createServer } from "node:net";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -72,9 +73,22 @@ function userPath(): string {
   return [...new Set([...asked, ...inherited].filter((p) => p.startsWith("/")))].join(":");
 }
 
+/** 자식을 띄울 실행파일. Electron 자신을 노드로 돌리는 것은 그대로지만 **`process.execPath`가
+ *  아니다** — `.app/Contents/MacOS/dira`로 띄우면 LaunchServices가 그 자식을 같은 번들의 앱
+ *  인스턴스로 등록해 창을 안 만드는 **빈 독 타일**이 하나 더 생긴다(`lsappinfo`가 `type="Foreground"`
+ *  `!cgsConnection`으로 찍는다, `e59ceae4`). Helper 번들은 `Info.plist`에 `LSUIElement`가 서 있어
+ *  타일을 안 만든다 — Electron이 자기 유틸리티 프로세스를 그것으로 띄우는 이유다 (못박는 것 7).
+ *  바이너리는 같은 것이라 `ELECTRON_RUN_AS_NODE`도 못박는 것 3도 그대로다. */
+function nodeBin(): string {
+  const exe = basename(process.execPath); // 패키징 "dira" · 소스 "Electron"
+  const helper = join(process.execPath, "..", "..", "Frameworks", `${exe} Helper.app`, "Contents", "MacOS", `${exe} Helper`);
+  // Helper 이름은 productName에서 나온다. 규약이 바뀌어 없어지면 타일 하나를 지고 그냥 뜬다
+  return existsSync(helper) ? helper : process.execPath;
+}
+
 function startServer(port: number): ChildProcess {
   // node 바이너리가 PATH에 있다고 가정하지 않는다 — Electron 자신을 노드로 돌린다.
-  const proc = spawn(process.execPath, [SERVER], {
+  const proc = spawn(nodeBin(), [SERVER], {
     env: {
       ...process.env,
       PATH: userPath(),
