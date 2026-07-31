@@ -93,6 +93,17 @@ try:
         live.kill()
         live.wait()
 
+    # --- 3) 주인 세션이 자기 손으로 푸는 것은 통과한다(PM 왕복 3단계, 티켓 828dc247) ---
+    # 부르는 쪽의 조상에 그 pid가 있으면 주인이다. 여기서는 이 테스트 프로세스가 곧 조상이다.
+    mkfile(os.path.join(root, "tickets", "cccc0003.wip.md"),
+           "---\nticket: cccc0003\ntitle: t\nsession_id: dead-sid\npid: {}\n---\n\n"
+           "## Goal\ntest\n".format(os.getpid()))
+    r = subprocess.run([w1, "unassign", "cccc0003"], capture_output=True, text=True,
+                       env=env, timeout=30)
+    assert r.returncode == 0, "주인 세션이 자기 티켓을 못 풀었다\n" + r.stdout + r.stderr
+    assert os.path.exists(os.path.join(root, "tickets", "cccc0003.md")), \
+        "주인 세션 unassign 뒤 백로그로 안 돌아왔다"
+
     # 세션이 죽으면 같은 명령이 통과한다
     r = subprocess.run([w1, "unassign", "bbbb0002"], capture_output=True, text=True,
                        env=env, timeout=30)

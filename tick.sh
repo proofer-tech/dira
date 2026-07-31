@@ -87,6 +87,16 @@ case "$CMD" in
     case "$UPID" in ''|*[!0-9]*) ;; *) ps -p "$UPID" -o pid= >/dev/null 2>&1 && ALIVE="pid=$UPID" ;; esac
     [ -z "$ALIVE" ] && [ -n "$USID" ] && ps -eo command= | grep -q -- "--session-id $USID" \
       && ALIVE="session=$USID"
+    # 주인 세션이 자기 손으로 푸는 것은 통과다. 왕복 절차(PM PROFILE §요구사항 왕복 3단계)가
+    # 부르는 자리가 바로 여기이고, 거기서 산 pid는 **부르는 세션 자신**이다(티켓 828dc247).
+    # 조상 사슬로 본다 - 남의 산 세션을 푸는 것은 사슬에 없으므로 그대로 막힌다.
+    if [ -n "$ALIVE" ] && [ -n "$UPID" ]; then
+      ANC=$$
+      while [ "$ANC" != "0" ] && [ "$ANC" != "1" ] && [ -n "$ANC" ]; do
+        [ "$ANC" = "$UPID" ] && { ALIVE=""; break; }
+        ANC=$(ps -p "$ANC" -o ppid= 2>/dev/null | tr -d ' ')
+      done
+    fi
     if [ -n "$ALIVE" ]; then
       echo "거부: $H 의 세션이 아직 살아 있다($ALIVE). 먼저 끝내거나 죽인 뒤 다시 시도하세요." >&2
       log "UNASSIGN-DENY $H $ALIVE 생존"
