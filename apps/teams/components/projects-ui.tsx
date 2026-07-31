@@ -5,7 +5,7 @@
  *
  *  한 파일에 있는 이유: 해석 결과 표를 등록 직후와 설정 다이얼로그가 **같은 표**로 쓴다
  *  (DESIGN.md §7). 파일을 쪼개면 두 자리가 갈린다. fs 접근은 전부 서버 액션 뒤에 있다. */
-import { useState, useTransition } from "react";
+import { Fragment, useState, useTransition } from "react";
 import Link from "next/link";
 import { ChevronDown, ChevronUp, Settings2, TriangleAlert, Unlink } from "lucide-react";
 import {
@@ -20,6 +20,8 @@ import {
   type ResolvedView,
 } from "@/app/actions";
 import { CopyCommand } from "@/components/copy-command";
+import { PersonaBadge } from "@/components/persona-badge";
+import { StatusBadge, type Status } from "@/components/status-badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -36,7 +38,14 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { slugify } from "@/lib/urls";
 
@@ -555,6 +564,169 @@ export function ProjectsSection({
         }}
       />
     </>
+  );
+}
+
+// ── 목록 표 (DESIGN.md §비주얼 §7) ──────────────────────────────────────────
+
+/** 한 행이 그리는 것 전부. 서버(`(list)/page.tsx`)가 이 모양으로 만들어 넘긴다. */
+export type ProjectRow = {
+  id: string;
+  name: string;
+  root: string;
+  shortRoot: string;
+  connected: boolean;
+  /** 연결 안 됨이면 셋 다 `null`이다 — 못 읽은 것과 0건은 다른 사실이다(§0) */
+  open: number | null;
+  wip: number | null;
+  done: number | null;
+  assigned: number;
+  personas: { name: string; color?: string }[];
+  /** `lib/workers.ts`의 `workerGroups` 결과. 순서는 §2 4상태 표 고정이다 */
+  workers: { status: Status; names: string[] }[];
+};
+
+/** 자원 줄의 자리 라벨. `w-16`(64px)은 `페르소나` 4자가 12px에서 들어가는 폭이고,
+ *  `leading-5`가 있어야 12px 글자가 `h-5` 배지와 같은 중심에 선다(§비주얼 §7). */
+const LABEL = "w-16 shrink-0 text-xs leading-5 text-muted-foreground";
+/** 값이 0개일 때. **문장이므로 `font-mono`가 아니다**(§비주얼 §3). */
+const EMPTY = "text-xs leading-5 text-muted-foreground";
+
+/** 목록 표. **클라이언트가 그린다** — 서버가 행 엘리먼트를 그려 보내면 `↑`/`↓`가 죽는다.
+ *
+ *  회귀 `955a8237`의 근거: 행이 두 줄(§비주얼 §7)이 되면서 `/`의 RSC 페이로드가 커지자
+ *  Flight가 프로젝트 블록을 **`$L<id>` lazy 청크로 outline**하기 시작했다(실측: 액션 응답의
+ *  `TableBody` children이 `[<dira 인라인>, "$L21", "$L22", "$L23"]`). 그 상태에서 순서가 바뀌면
+ *  `revalidatePath`의 새 트리가 프로덕션 빌드에서 **커밋되지 않는다** — 화면은 옛 순서 그대로고
+ *  그 행이 건 transition의 `pending`도 안 풀린다(dev 빌드는 재현 안 됨).
+ *  `<Fragment>` → 평면 배열, `TableBody`에 remount `key`, `useTransition` 제거 —
+ *  전부 안 통했다. **행을 값으로 넘기고 여기서 `map`하면** 페이로드에 행 엘리먼트가 없으므로
+ *  outline 자체가 없고 재정렬은 평범한 클라이언트 렌더다.
+ *  ponytail: 이 화면은 수십 행이다. 수천 행이 되면 그때 가상화를 고민한다. */
+export function ProjectRows({ rows }: { rows: ProjectRow[] }) {
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow className="h-9">
+          <TableHead className="h-9 px-3 text-xs">이름</TableHead>
+          <TableHead className="h-9 px-3 text-xs">경로</TableHead>
+          {/* 칸반 레인 3개(§1)와 수가 안 맞는 이유는 이 한 문장뿐이다 */}
+          <TableHead
+            className="h-9 px-3 text-right text-xs"
+            title="파일이 열려 있는 티켓 — 대기·deps 대기·할당됨을 포함합니다"
+          >
+            열림
+          </TableHead>
+          <TableHead className="h-9 px-3 text-right text-xs">진행중</TableHead>
+          <TableHead className="h-9 px-3 text-right text-xs">완료</TableHead>
+          <TableHead className="h-9 px-3 text-xs">연결</TableHead>
+          <TableHead className="h-9 px-3 text-right text-xs">액션</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {rows.map((t, i) => (
+          // 한 프로젝트가 `TableRow` 2개다(§비주얼 §7). hover를 끄는 이유: 두 줄 중 한 줄만
+          // 밝아지면 블록이 반으로 갈려 보이고, 이 행에는 행 단위 클릭 대상이 없다.
+          // 블록의 경계는 hover가 아니라 **마지막 줄의 `border-b`**가 짓는다.
+          <Fragment key={t.id}>
+            <TableRow className={`h-9 hover:bg-transparent ${t.connected ? "border-b-0" : ""}`}>
+              {/* 이 셀만 링크다 — 행 전체를 링크로 만들면 액션 버튼과 겹친다 */}
+              <TableCell className="px-3 py-0 text-sm">
+                <span className="flex items-center gap-2">
+                  <Link href={`/p/${t.id}`} className="hover:underline">
+                    {t.name}
+                  </Link>
+                  {/* 프로젝트에 들어가기 전에 정체를 알린다(§0). 배너는 여기 두지 않는다 —
+                      이 화면은 프로젝트 스코프가 아니고 이 배지가 목적지를 이미 가리킨다.
+                      건수는 배지 밖 숫자다: 라벨(`할당됨`)은 <StatusBadge> 하나가 정하고
+                      건수는 상태가 아니라 이 행의 사실이다. 0건인 행에는 아무것도 없다 */}
+                  {t.assigned > 0 && (
+                    <span className="flex items-center gap-1">
+                      <StatusBadge status="assigned" />
+                      <span className="text-xs tabular-nums text-status-stale">{t.assigned}</span>
+                    </span>
+                  )}
+                </span>
+              </TableCell>
+              <TableCell
+                className="max-w-[16rem] truncate px-3 py-0 font-mono text-xs text-muted-foreground"
+                title={t.root}
+              >
+                {t.shortRoot}
+              </TableCell>
+              {/* 연결 안 됨이면 세 자리를 전부 비운다. 0이 아니다 — 못 읽은 것과 0건은
+                  다른 사실이다(§0). 세 수를 서로 다르게 칠하지 않는다(§비주얼 §7) */}
+              <TableCell className="px-3 py-0 text-right text-xs tabular-nums">
+                {t.connected ? t.open : ""}
+              </TableCell>
+              <TableCell className="px-3 py-0 text-right text-xs tabular-nums">
+                {t.connected ? t.wip : ""}
+              </TableCell>
+              <TableCell className="px-3 py-0 text-right text-xs tabular-nums">
+                {t.connected ? t.done : ""}
+              </TableCell>
+              <TableCell className="px-3 py-0">
+                <StatusBadge status={t.connected ? "connected" : "disconnected"} />
+              </TableCell>
+              <TableCell className="px-3 py-0">
+                <ProjectRowActions
+                  id={t.id}
+                  name={t.name}
+                  shortRoot={t.shortRoot}
+                  first={i === 0}
+                  last={i === rows.length - 1}
+                />
+              </TableCell>
+            </TableRow>
+            {/* 자원 줄 — 들어가기 전에 그 프로젝트가 무엇을 갖고 있는지 본다(§0).
+                **연결 안 됨 행에는 이 줄이 아예 없다** — `페르소나 없음`은 "0명"이라는
+                주장인데 큐를 못 읽었으므로 셀 수가 없다(첫 줄의 수 3칸과 같은 규칙).
+                정렬이 필요한 것은 위 셀에 남기고 길이가 흔들리는 것만 여기로 내렸다.
+                링크도 버튼도 없다 — 이 화면의 클릭 목적지는 이름 링크 하나다. */}
+            {t.connected && (
+              <TableRow className="hover:bg-transparent">
+                <TableCell colSpan={7} className="space-y-1 px-3 pt-0 pb-2 whitespace-normal">
+                  <div className="flex items-start gap-2">
+                    <span className={LABEL}>페르소나</span>
+                    {t.personas.length > 0 ? (
+                      // 자르지 않는다 — `외 3개`로 접으면 무엇을 갖고 있는지를 못 본다(§0).
+                      // 점만 쓰지 않는다: 프로젝트마다 페르소나 집합이 달라 같은 색이
+                      // 행마다 다른 사람을 뜻한다(§12).
+                      <span className="flex flex-wrap gap-1">
+                        {t.personas.map((p) => (
+                          <PersonaBadge key={p.name} name={p.name} color={p.color} />
+                        ))}
+                      </span>
+                    ) : (
+                      <span className={EMPTY}>없음</span>
+                    )}
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className={LABEL}>워커</span>
+                    {t.workers.length > 0 ? (
+                      // 워커 수만큼 배지를 세우지 않는다 — 라벨이 대부분 같은 글자라
+                      // 반복이 이 줄에서 제일 넓은 요소가 된다. 상태별로 묶고 이름을 뒤에.
+                      <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        {t.workers.map((g) => (
+                          <span key={g.status} className="flex items-center gap-1 whitespace-nowrap">
+                            <StatusBadge status={g.status} />
+                            <span className="font-mono text-xs">{g.names.join(" ")}</span>
+                          </span>
+                        ))}
+                      </span>
+                    ) : (
+                      // 해석 결과 표가 쓰는 문구 그대로 — 같은 사실을 두 자리에서 다른
+                      // 말로 하지 않는다(app/actions.ts 워커 행)
+                      <span className={EMPTY}>없음 — 이 큐는 돌지 않습니다</span>
+                    )}
+                  </div>
+                </TableCell>
+              </TableRow>
+            )}
+          </Fragment>
+        ))}
+      </TableBody>
+    </Table>
   );
 }
 
