@@ -572,6 +572,55 @@ const BODY_SKELETON = `## Goal
 /** deps 후보 한 건. `hash`는 상태 접미사를 뗀 **파일명 stem**이다 — deps가 가리키는 이름이 그것이다. */
 export type DepOption = { hash: string; title: string; met: boolean };
 
+/** 닫기 확인 + 리셋 (§3). 발행·접수가 같은 규칙을 쓴다 — 훅 하나로 묶는다(새 파일 0개).
+ *
+ *  `dirty`면 닫기를 한 번 막고, `버리고 닫기`를 받은 뒤에만 `reset`이 돈다. 되돌릴 방법이 없는
+ *  삭제라서다. `dirty`가 아니면 묻지 않고 그대로 닫힌다. */
+function useCloseGuard(dirty: boolean, reset: () => void) {
+  const [open, setOpen] = useState(false);
+  const [asking, setAsking] = useState(false);
+  const discard = () => {
+    setAsking(false);
+    setOpen(false);
+    reset();
+  };
+  return {
+    open,
+    asking,
+    setAsking,
+    discard,
+    /** 닫는 경로 넷(Esc · 배경 · 우상단 X · 폼 안 버튼)이 **전부 여기를 지난다**.
+     *  `setOpen(false)`는 `onOpenChange`를 안 태우므로(실측) 버튼도 이걸 부른다 — 안 모으면
+     *  Esc로 닫을 때와 버튼으로 닫을 때가 갈린다. */
+    close: (next: boolean) => {
+      if (next) setOpen(true);
+      else if (dirty) setAsking(true);
+      else discard();
+    },
+  };
+}
+
+/** 닫기 확인 — 문구·기본 초점은 §3이 박아둔 값이다. 삭제 확인(`DeleteTicketButton`)과 같은
+ *  `AlertDialog`고 같은 규칙이다: 기본 초점이 취소 쪽이라 Enter 한 번에 글이 날아가지 않는다. */
+function DiscardConfirm({ guard }: { guard: ReturnType<typeof useCloseGuard> }) {
+  return (
+    <AlertDialog open={guard.asking} onOpenChange={guard.setAsking}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>쓰던 내용이 있습니다</AlertDialogTitle>
+          <AlertDialogDescription>닫으면 지금 쓴 내용이 사라집니다.</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel autoFocus>계속 쓰기</AlertDialogCancel>
+          <AlertDialogAction variant="destructive" onClick={guard.discard}>
+            버리고 닫기
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
 /** deps 멀티셀렉트 — **자유 입력이 없다**(DESIGN.md §3 · §결정 기록).
  *
  *  오타 해시는 그 티켓을 못 찾아 보수적으로 미충족 판정이 되고, 티켓은 아무 사유도 남기지 않은 채
@@ -670,26 +719,22 @@ export function RequestDialog({ project }: { project: string }) {
   // 본문은 **controlled**여야 한다: React 19는 form action이 끝나면 폼을 리셋하므로, uncontrolled면
   // 발행이 실패한 순간 사람이 쓴 글이 사라진다(실측). 실패 사유만 남고 본문이 비면 사유가 무의미하다.
   const [body, setBody] = useState("");
-  const [open, setOpen] = useState(false);
-  // 확인을 **닫은** 접수의 해시. `useActionState`에는 리셋이 없어서 성공 상태가 계속 남는다 —
-  // 이걸 안 들면 닫았다 다시 열 때 접수 확인이 그대로 떠 있고 폼이 없다(두 번째 요구를 못 쓴다).
-  const [closed, setClosed] = useState("");
-  const done = state.ok && state.hash !== closed ? state.hash : null;
+  // 마지막으로 **닫은** 결과. `useActionState`에는 리셋이 없어서 접수 확인도 실패 사유도 계속
+  // 남는다 — 이걸 안 들면 닫았다 다시 열 때 접수 확인이 그대로 떠 있거나(두 번째 요구를 못 쓴다)
+  // 본문 없는 실패 사유만 남는다(§6이 요구하는 3요소 중 둘을 잃은 문장이다. §3).
+  const [dismissed, setDismissed] = useState<NewTicketState>({});
+  const live = state !== dismissed;
+  const done = live && state.ok ? state.hash : null;
 
-  // 접수된 뒤 닫으면 폼이 **빈 칸**으로 돌아간다 — 접수한 본문이 남아 있으면 같은 요구가 두 번
-  // 접수된다. 실패했을 때 본문·사유가 그 자리에 남는 것은 종전대로다(§3).
-  // `닫기` 버튼도 **이걸 부른다**: `setOpen(false)`는 `onOpenChange`를 태우지 않아서(실측)
-  // 거기서만 리셋하면 Esc·X로 닫을 때와 `닫기`로 닫을 때가 갈린다.
-  const close = () => {
-    setOpen(false);
-    if (done) {
-      setClosed(done);
-      setBody("");
-    }
-  };
+  // 닫히면 빈 칸으로 돌아간다 — 접수한 본문이 남아 있으면 같은 요구가 두 번 접수된다(§3).
+  // 접수 확인 화면(`done`)은 **묻지 않는다**: 이미 접수돼서 잃을 것이 없다.
+  const guard = useCloseGuard(!done && body !== "", () => {
+    setBody("");
+    setDismissed(state);
+  });
 
   return (
-    <Dialog open={open} onOpenChange={(next) => (next ? setOpen(true) : close())}>
+    <Dialog open={guard.open} onOpenChange={guard.close}>
       <DialogTrigger render={<Button size="sm" />}>요구 접수</DialogTrigger>
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
@@ -715,7 +760,7 @@ export function RequestDialog({ project }: { project: string }) {
               >
                 접수한 요구 보기
               </Link>
-              <Button variant="outline" size="sm" onClick={close}>
+              <Button variant="outline" size="sm" onClick={() => guard.close(false)}>
                 닫기
               </Button>
             </div>
@@ -733,8 +778,8 @@ export function RequestDialog({ project }: { project: string }) {
               value={body}
               onChange={(e) => setBody(e.target.value)}
             />
-            {/* 실패는 이 자리에 남는다 — 닫으면 사람이 쓴 본문이 사라진다(§3) */}
-            {state.error && <Failure title="접수하지 못했습니다" message={state.error} />}
+            {/* 실패는 이 자리에 남는다 — 닫으면 본문과 함께 사라진다(§3) */}
+            {live && state.error && <Failure title="접수하지 못했습니다" message={state.error} />}
             {/* 사람이 지목한 자리다(요구 `027d8e96`) — 오른쪽 끝(§비주얼 §4-3) */}
             <div className="flex justify-end">
               <Button type="submit" disabled={pending}>
@@ -743,6 +788,7 @@ export function RequestDialog({ project }: { project: string }) {
             </div>
           </form>
         )}
+        <DiscardConfirm guard={guard} />
       </DialogContent>
     </Dialog>
   );
@@ -785,14 +831,32 @@ export function NewTicketDialog({
 }) {
   const [state, action, pending] = useActionState<NewTicketState, FormData>(createTicket, {});
   const [picked, setPicked] = useState<string[]>([]);
+  // 열었을 때의 값 — dirty 판정과 리셋이 둘 다 이걸 기준으로 한다(§3)
+  const blankTitle = copy?.title ?? "";
+  const blankBody = copy?.body ?? BODY_SKELETON;
   // title·본문이 **controlled**인 이유는 `RequestDialog`와 같다 — React 19가 action 후 폼을
   // 리셋해서 uncontrolled면 발행 실패가 곧 입력 유실이다. deps는 이미 `picked`가 들고 있고,
   // kind·persona는 base-ui Select가 자기 상태로 들고 있다(리셋에 안 밟힌다. 실측).
-  const [title, setTitle] = useState(copy?.title ?? "");
-  const [body, setBody] = useState(copy?.body ?? BODY_SKELETON);
+  const [title, setTitle] = useState(blankTitle);
+  const [body, setBody] = useState(blankBody);
+  // 마지막으로 닫은 결과. `RequestDialog`와 같은 이유 — 실패 사유가 본문 없이 살아남지 않게 한다(§3)
+  const [dismissed, setDismissed] = useState<NewTicketState>({});
+
+  // **kind·persona select는 세지 않는다**: base-ui가 자기 상태로 들고 있어 읽을 수 없고,
+  // 사람이 "쓰던 내용"이라 부르는 것도 아니다(§3). 성공에는 확인이 끼지 않는다 — 그 경로는
+  // 서버 액션의 `redirect`가 컴포넌트째 언마운트한다.
+  const guard = useCloseGuard(
+    title !== blankTitle || body !== blankBody || picked.length > 0,
+    () => {
+      setTitle(blankTitle);
+      setBody(blankBody);
+      setPicked([]);
+      setDismissed(state);
+    },
+  );
 
   return (
-    <Dialog>
+    <Dialog open={guard.open} onOpenChange={guard.close}>
       <DialogTrigger render={<Button size="sm" variant={variant} />}>
         {copy ? (
           <>
@@ -917,14 +981,17 @@ export function NewTicketDialog({
             />
           </div>
 
-          {/* 실패는 이 자리에 남는다 — 닫으면 사람이 쓴 본문이 사라진다(§3) */}
-          {state.error && <Failure title="발행하지 못했습니다" message={state.error} />}
+          {/* 실패는 이 자리에 남는다 — 닫으면 본문과 함께 사라진다(§3) */}
+          {state !== dismissed && state.error && (
+            <Failure title="발행하지 못했습니다" message={state.error} />
+          )}
           <div className="flex justify-end">
             <Button type="submit" disabled={pending}>
               {pending ? "발행 중…" : "발행"}
             </Button>
           </div>
         </form>
+        <DiscardConfirm guard={guard} />
       </DialogContent>
     </Dialog>
   );
