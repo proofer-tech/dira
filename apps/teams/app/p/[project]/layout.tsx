@@ -5,7 +5,7 @@
 import { homedir } from "node:os";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { CircleDot, Unplug } from "lucide-react";
+import { CircleDot, TriangleAlert, Unplug } from "lucide-react";
 import {
   BrandMark,
   RefreshButton,
@@ -14,6 +14,7 @@ import {
 } from "@/components/project-switcher";
 import { StatusBadge } from "@/components/status-badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { readAuth } from "@/lib/auth";
 import { readSummary, readProjects } from "@/lib/projects";
 import { tildePath } from "@/lib/urls";
 
@@ -47,6 +48,9 @@ export default async function ProjectLayout({
     }),
   );
   const current = items.find((t) => t.id === id)!;
+  // 토큰은 머신당 하나라 프로젝트 요약에 들어 있지 않다(§0-4). 증상("내 큐가 안 돈다")이
+  // 나타나는 화면이 여기라 판정도 여기서 한다.
+  const { savedAt: token } = await readAuth();
 
   return (
     <>
@@ -66,6 +70,26 @@ export default async function ProjectLayout({
             프로토콜에도 뜬다 — 그래야 "해결 전까지 보인다"가 성립한다. dismiss·읽음 상태가 없다:
             폴링이 매번 다시 판정하므로 0건이 되면 이 노드가 사라지고, 안 되면 남는다.
             0건이면 `보류 없음`을 말하지 않는다 — 정상 상태에서 켜진 경고는 안 읽히게 된다. */}
+        {/* 인증 배너 (§0-4). 토큰 파일이 없으면 `tick.sh:61`이 매 tick마다 조용히 `exit 0`한다 —
+            화면에는 "티켓이 `대기`인데 아무 일도 안 일어난다"만 보인다. 그 침묵을 여기서 깬다.
+            **세 번째 `Alert` 변종이다** — 새 컴포넌트 0개. dismiss도 없다: 토큰 파일이 생기면
+            이 판정이 저절로 꺼진다(§0-2와 같은 논리). 아래 두 배너보다 먼저 선다 —
+            인증이 없으면 그 프로젝트에서 아무것도 안 돈다. */}
+        {!token && (
+          <Alert role="status" className="max-w-3xl">
+            <TriangleAlert aria-hidden className="text-status-stale" />
+            <AlertTitle>인증되지 않아 티켓이 디스패치되지 않습니다</AlertTitle>
+            <AlertDescription className="grid gap-3 text-foreground">
+              <span>Claude 장기 토큰이 없어 워커가 매번 조용히 종료합니다.</span>
+              {/* CTA는 행의 오른쪽 끝이다(§비주얼 §4-3). 인증은 머신 스코프라 목적지가 `/`다 */}
+              <span className="flex justify-end">
+                <Link href="/" className="text-sm underline">
+                  인증하기
+                </Link>
+              </span>
+            </AlertDescription>
+          </Alert>
+        )}
         {current.connected && current.assigned.length > 0 && (
           // role은 status로 내린다 — 사건이 아니라 해결 전까지 상주하는 상태고, 5초 폴링이
           // 셸을 다시 렌더하므로 assertive면 재낭독 위험이 있다(§4-2 라이브 리전).

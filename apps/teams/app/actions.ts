@@ -1,12 +1,15 @@
 "use server";
 
-/** 프로젝트 레지스트리를 바꾸는 서버 액션 전부. 큐 파일은 **하나도 건드리지 않는다**(제약 7).
+/** `/` 화면의 서버 액션 전부 — 프로젝트 레지스트리 + 인증 토큰(§0-4). 둘 다 머신 로컬
+ *  디렉터리(`$TICKET_LOCAL`)에 살고 프로젝트 스코프가 아니라 여기 같이 있다.
+ *  큐 파일은 **하나도 건드리지 않는다**(제약 7).
  *
  *  검증은 `lib/projects.ts`에 있고 여기서 다시 하지 않는다 — 실패 문구도 거기 있다. 이 파일이
  *  하는 일은 Error를 **직렬화 가능한 결과로 바꾸는 것**뿐이다(클라이언트로 Error는 못 넘어간다). */
 import { homedir } from "node:os";
 import path from "node:path";
 import { revalidatePath } from "next/cache";
+import { normalizeToken, readAuth, saveToken } from "@/lib/auth";
 import {
   ProjectError,
   addProject,
@@ -274,6 +277,21 @@ export async function unregisterProjectAction(id: string): Promise<ActionResult>
   } catch (e) {
     return { ok: false, message: (e as Error).message };
   }
+}
+
+/** 인증 다이얼로그 층 ③ — 붙여 넣은 토큰을 제자리에 놓는다(DESIGN.md §0-4).
+ *
+ *  **유효성은 판정하지 않는다** — 접두사로 거르면 형식이 바뀔 때 멀쩡한 토큰을 GUI가 거부한다.
+ *  실제 유효성은 워커가 돌아야 드러나고, 다이얼로그가 그렇게 말한다. */
+export async function saveTokenAction(raw: string): Promise<{ savedAt?: string; error?: string }> {
+  try {
+    await saveToken(normalizeToken(raw));
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+  // 셸 배너(`p/[project]/layout.tsx`)가 이 판정으로 뜬다 — 레이아웃까지 무효화한다
+  revalidatePath("/", "layout");
+  return { savedAt: (await readAuth()).savedAt ?? undefined };
 }
 
 /** 설정 다이얼로그의 `다시 읽기` — 워커 파일이 바뀌었을 수 있다. */

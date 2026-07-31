@@ -14,6 +14,7 @@ import {
   registerProject,
   renameProjectAction,
   resolveProjectAction,
+  saveTokenAction,
   unregisterProjectAction,
   type CreateState,
   type RegisterState,
@@ -326,6 +327,110 @@ function CreateDialog({
   );
 }
 
+// ── 인증 다이얼로그 (DESIGN.md §0-4) ───────────────────────────────────────
+
+/** 머신당 하나뿐인 Claude 장기 토큰. **새 라우트 0개 · 새 배지 0개** — 자리는 `h1` 우측 버튼
+ *  하나고, 상태는 그 버튼의 라벨이 말한다(§0-4 자리 표).
+ *
+ *  층은 셋이고 여기 있는 것은 ①상태 · ③직접 넣기다. ②(`claude setup-token`을 GUI가 몬다)는
+ *  `2ef82410`이 이 사이에 올린다 — **③은 ②가 된 뒤에도 남는다**: 남의 TUI를 긁는 일이라
+ *  깨질 수 있고, 깨지면 여기가 제품의 바닥이다(§0-4 천장 항). */
+export type AuthView = { path: string; savedAt: string | null };
+
+function AuthDialog({
+  open,
+  onOpenChange,
+  auth,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  auth: AuthView;
+}) {
+  const [pending, start] = useTransition();
+  const [token, setToken] = useState("");
+  const [result, setResult] = useState<{ savedAt?: string; error?: string }>({});
+  // 저장 직후엔 서버 프롭이 아직 옛 값이다 — 방금 쓴 것이 이긴다
+  const savedAt = result.savedAt ?? auth.savedAt;
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        onOpenChange(o);
+        if (!o) {
+          setToken("");
+          setResult({});
+        }
+      }}
+    >
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>인증</DialogTitle>
+          <DialogDescription>
+            워커가 Claude에 붙을 때 쓰는 장기 토큰입니다. 이 컴퓨터에 하나뿐이고 등록된 프로젝트
+            전부가 같은 것을 씁니다.
+          </DialogDescription>
+        </DialogHeader>
+
+        {/* ① 상태 — 한 줄. 배지를 세우지 않는다(§0-4) */}
+        {savedAt ? (
+          <p className="text-sm">
+            인증됨 —{" "}
+            <span className="font-mono text-xs break-all text-muted-foreground">{auth.path}</span>{" "}
+            <span className="text-muted-foreground">· {savedAt} 저장</span>
+          </p>
+        ) : (
+          <p className="flex items-center gap-2 text-sm">
+            <TriangleAlert aria-hidden className="size-4 shrink-0 text-status-stale" />
+            인증 안 됨 — 워커가 티켓을 물어가지 않습니다
+          </p>
+        )}
+
+        {/* ③ 직접 넣기 */}
+        <form
+          className="space-y-2 border-t pt-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            start(async () => {
+              const r = await saveTokenAction(token);
+              setResult(r);
+              if (r.savedAt) setToken("");
+            });
+          }}
+        >
+          <Label htmlFor="auth-token">토큰</Label>
+          <div className="flex items-center gap-2">
+            <Input
+              id="auth-token"
+              className="font-mono"
+              placeholder="sk-ant-oat…"
+              autoComplete="off"
+              spellCheck={false}
+              value={token}
+              onChange={(e) => {
+                setToken(e.target.value);
+                setResult({});
+              }}
+            />
+            <Button type="submit" disabled={pending}>
+              {pending ? "저장 중…" : "저장"}
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            이미 발급받은 토큰이 있으면 여기에 붙여 넣습니다. 다시 저장하면 덮어씁니다.
+          </p>
+          {result.error && <p className="text-xs text-destructive">{result.error}</p>}
+          {/* 삼키지 않는 것이 요건이지 미리 아는 것이 요건이 아니다 — 형식으로 거르지 않으므로
+              "저장했다"까지만 말한다(§0-4) */}
+          {result.savedAt && (
+            <p className="text-xs">저장했습니다. 유효한지는 다음 디스패치에서 드러납니다.</p>
+          )}
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ── 화면 헤더 + 등록 · 생성 · 결과 슬롯 ─────────────────────────────────────
 
 /** `/`의 클라이언트 조각. **`h1`·트리거·결과 슬롯이 한 컴포넌트인 이유**는 트리거가 `h1`
@@ -337,9 +442,12 @@ function CreateDialog({
  *  (§0 마지막 항). 그래서 그릇을 바꾸는 시점은 결과가 아니라 `닫기`다. */
 export function ProjectsSection({
   empty,
+  auth,
   children,
 }: {
   empty: boolean;
+  /** 인증 상태 — 머신 스코프라 이 화면이 유일한 자리다(§0-4). */
+  auth: AuthView;
   children?: React.ReactNode;
 }) {
   const [pending, start] = useTransition();
@@ -349,6 +457,7 @@ export function ProjectsSection({
   const [made, setMade] = useState<CreateState | null>(null);
   const [creating, setCreating] = useState(false);
   const [registering, setRegistering] = useState(false);
+  const [authing, setAuthing] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const slug = slugify(name);
   // 슬러그가 비면(한글 이름) 그때만 `URL 조각`을 받는다. 서버가 중복·형식으로 거부한 경우도 같다.
@@ -447,16 +556,33 @@ export function ProjectsSection({
       <div className={empty ? "max-w-3xl space-y-2" : undefined}>
         <div className="flex items-center justify-between gap-4">
           <h1 className="text-lg font-semibold">{empty ? "dira" : "프로젝트"}</h1>
-          {!empty && (
-            <div className="flex items-center gap-2">
-              <Button size="sm" onClick={() => setRegistering(true)}>
-                프로젝트 등록
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => setCreating(true)}>
-                새로 만들기
-              </Button>
-            </div>
-          )}
+          {/* 인증 버튼은 0건에서도 선다 — `등록`·`새로 만들기`가 빠지는 이유는 그 폼이 이미
+              펼쳐져 있어서고(§비주얼 §7), 인증은 그 화면에 다른 자리가 없다. 토큰이 없는
+              사람은 대개 프로젝트도 0개다(§0-4 자리 표: 언제 = 항상) */}
+          <div className="flex items-center gap-2">
+            {!empty && (
+              <>
+                <Button size="sm" onClick={() => setRegistering(true)}>
+                  프로젝트 등록
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setCreating(true)}>
+                  새로 만들기
+                </Button>
+              </>
+            )}
+            {/* 상태를 배지로 따로 세우지 않는다 — 버튼이 이미 그 자리에 있고, 하나로 두면
+                사람이 볼 곳이 하나다(§0-4) */}
+            <Button variant="outline" size="sm" onClick={() => setAuthing(true)}>
+              {auth.savedAt ? (
+                "인증"
+              ) : (
+                <>
+                  <TriangleAlert aria-hidden className="text-status-stale" />
+                  인증 필요
+                </>
+              )}
+            </Button>
+          </div>
         </div>
         {empty && (
           <p className="text-sm text-muted-foreground">
@@ -565,6 +691,8 @@ export function ProjectsSection({
           if (!empty) setRegistering(true); // 0건이면 폼이 이미 펼쳐져 있다
         }}
       />
+
+      <AuthDialog open={authing} onOpenChange={setAuthing} auth={auth} />
     </>
   );
 }

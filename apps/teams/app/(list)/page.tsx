@@ -5,6 +5,7 @@ import { CopyCommand } from "@/components/copy-command";
 import { BrandMark } from "@/components/project-switcher";
 import { ProjectsSection, ProjectRows, type ProjectRow } from "@/components/projects-ui";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { readAuth } from "@/lib/auth";
 import { readSummary, readProjects, registryPath } from "@/lib/projects";
 import { tildePath } from "@/lib/urls";
 import { workerGroups } from "@/lib/workers";
@@ -14,6 +15,9 @@ export const dynamic = "force-dynamic";
 
 export default async function Home() {
   const home = homedir();
+
+  // 인증은 **머신당 하나**다 — 프로젝트마다 있지 않아 이 화면이 그 자리다(§0-4 자리 표).
+  const auth = await readAuth();
 
   // 레지스트리가 깨졌으면 GUI가 고쳐 쓰려 들지 않는다 — 원문 + 파일 경로를 보여주고 사람이 연다.
   let registryError: string | null = null;
@@ -73,7 +77,10 @@ export default async function Home() {
           {/* `h1`·등록·생성 트리거·결과 슬롯이 한 클라이언트 조각이다 — 트리거는 `h1` 우측인데
               결과 카드는 목록 아래 슬롯에 떠야 한다(§비주얼 §7). 목록이 0↔1로 바뀌어도 이 조각은
               자리를 안 옮긴다: 옮기면 remount로 해석 결과 표가 사라진다(§0 마지막 항) */}
-          <ProjectsSection empty={rows.length === 0}>
+          <ProjectsSection
+            empty={rows.length === 0}
+            auth={{ path: tildePath(auth.path, home), savedAt: auth.savedAt }}
+          >
             {rows.length > 0 && <ProjectRows rows={rows} />}
           </ProjectsSection>
 
