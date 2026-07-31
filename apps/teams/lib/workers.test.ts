@@ -439,12 +439,13 @@ TICKET_CONTEXT=(
 
 test("createWorker — TICKET_CWD를 템플릿에서 물려받지 않는다 (w4·w5가 w1 트리를 쓴 사고)", async () => {
   const root = makeRoot({ "w1.sh": WT_SH });
-  const { path: file, worktree } = await createWorker(root, "w4");
+  const { path: file } = await createWorker(root, "w4");
   const text = readFileSync(file, "utf8");
   assert.match(text, new RegExp(`^TICKET_CWD="${root}/worktrees/w4"$`, "m"));
   assert.strictEqual(text.includes("dira-wt/w1"), false); // 템플릿 값이 남아 있지 않다
   // 워크트리 준비 명령: `git -C`는 프로젝트다. 템플릿이 source하는 엔진 레포(`~/Projects/dira`)가
   // 아니다 — 그걸 넣으면 이 큐에 dira를 체크아웃한다(§4 생성 4항의 3번).
+  const worktree = worktreeCmds(root, "w4");
   assert.deepStrictEqual(worktree, [
     `git -C '${path.dirname(root)}' worktree add '${root}/worktrees/w4' -b wt/w4`,
     `ln -s ../.. '${root}/worktrees/w4/.dira'`,
@@ -458,7 +459,10 @@ test("createWorker — TICKET_CWD를 템플릿에서 물려받지 않는다 (w4�
   const made = await createWorker(bare, "w2");
   assert.strictEqual(readFileSync(made.path, "utf8"), `#!/bin/bash\nTICKET_CWD="${bare}/worktrees/w2"\n. tick.sh\n`);
   // `. tick.sh` 줄을 못 읽어도 자리표시자가 없다 — 이제 경로가 root에서 나온다
-  assert.strictEqual(made.worktree[0], `git -C '${path.dirname(bare)}' worktree add '${bare}/worktrees/w2' -b wt/w2`);
+  assert.strictEqual(
+    worktreeCmds(bare, "w2")[0],
+    `git -C '${path.dirname(bare)}' worktree add '${bare}/worktrees/w2' -b wt/w2`,
+  );
 
   // `export TICKET_CWD=`도 같은 줄이다 — 접두는 남기고 값만 바꾼다
   const exp = makeRoot({ "w1.sh": "#!/bin/bash\nexport TICKET_CWD='/tmp/x'\n. tick.sh\n" });
@@ -511,8 +515,8 @@ const headOf = (tree: string) =>
 
 test("prepareWorktree — 트리·심링크·검증 3단계를 서버가 실행한다 (§4 생성 4항)", async () => {
   const { root } = makeRepo();
-  assert.deepStrictEqual(await prepareWorktree(root, "w2"), { done: 3, rest: [] });
   const tree = path.join(root, "worktrees", "w2");
+  assert.deepStrictEqual(await prepareWorktree(root, "w2"), { dir: tree, done: 3, rest: [] });
   assert.strictEqual(statSync(tree).isDirectory(), true);
   assert.strictEqual(readFileSync(path.join(tree, "README.md"), "utf8"), "# t\n"); // 진짜 체크아웃
   assert.strictEqual(readlinkSync(path.join(tree, ".dira")), "../.."); // 상대경로다(§4-2)
@@ -524,7 +528,11 @@ test("prepareWorktree — 트리·심링크·검증 3단계를 서버가 실행�
 test("prepareWorktree — 브랜치 wt/<이름>이 이미 있으면 -b 없이 그 브랜치로 붙인다", async () => {
   const { base, root } = makeRepo();
   execFileSync("git", ["-C", base, "branch", "wt/w2"]); // 워커를 지웠다 다시 만드는 경로
-  assert.deepStrictEqual(await prepareWorktree(root, "w2"), { done: 3, rest: [] });
+  assert.deepStrictEqual(await prepareWorktree(root, "w2"), {
+    dir: path.join(root, "worktrees", "w2"),
+    done: 3,
+    rest: [],
+  });
   // `-b`를 그대로 냈으면 여기 오기 전에 실패했다. 디렉터리 이름으로 dwim했으면 `w2`가 잡힌다
   assert.strictEqual(headOf(path.join(root, "worktrees", "w2")), "wt/w2");
 });
@@ -542,15 +550,16 @@ test("prepareWorktree — .dira가 이미 있으면 EEXIST로 멈추고 되돌�
   assert.throws(() => statSync(path.join(tree, ".dira", ".dira"))); // 미끼 큐를 안 만들었다
 });
 
-test("prepareWorktree — dirname(root)가 git 레포가 아니면 아무것도 실행하지 않는다", async () => {
+test("prepareWorktree — dirname(root)가 git 레포가 아니면 실패가 아니라 정상 종료다", async () => {
   const base = mkdtempSync(path.join(tmpdir(), "fst-norepo-"));
   tmps.push(base);
   const root = path.join(base, ".dira");
   mkdirSync(path.join(root, "workers"), { recursive: true });
   const r = await prepareWorktree(root, "w2");
+  assert.strictEqual(r.skipped, true); // 화면이 에러가 아니라 사실로 말한다 (§4 생성 4항)
   assert.strictEqual(r.done, 0);
   assert.match(r.reason ?? "", /git 레포가 아닙니다/);
-  assert.deepStrictEqual(r.rest, worktreeCmds(root, "w2")); // 3줄 전부가 남은 명령이다
+  assert.deepStrictEqual(r.rest, []); // 안 해도 되는 일에 명령을 주지 않는다
   assert.throws(() => statSync(path.join(root, "worktrees"))); // 디렉터리 하나도 안 만들었다
 });
 

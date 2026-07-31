@@ -858,14 +858,19 @@ export function worktreeCmds(root: string, name: string): string[] {
   ];
 }
 
-/** `prepareWorktree`의 결과. 화면이 **이것만으로** 실패 패널을 그린다(§6 에러 3요소). */
+/** `prepareWorktree`의 결과. 화면이 **이것만으로** 성공·정상종료·실패 패널을 그린다(§6 에러 3요소). */
 export type WorktreePrep = {
+  /** 만든(또는 만들려던) 트리 경로. 성공 패널이 이 경로를 말한다 */
+  dir: string;
   /** 끝난 단계 수 0~3 (트리 → 심링크 → 검증). 3이면 성공이다 */
   done: number;
   /** 멈춘 사유. `done === 3`이면 없다 */
   reason?: string;
   /** 사람이 셸에서 이어서 실행할 명령 = `worktreeCmds`의 꼬리. 성공이면 빈 배열 */
   rest: string[];
+  /** 레포가 아니라 **아예 시작하지 않았다**. 실패가 아니라 정상 종료다(§4 생성 4항) —
+   *  화면이 에러가 아니라 사실로 말하고, `rest`도 비어 있다(줄 게 없다) */
+  skipped?: true;
 };
 
 /** 워크트리 3단계를 **서버가 실행한다**(§4 생성 4항 — 사람 요청 `5f55577a`가 §4-2를 뒤집었다).
@@ -883,18 +888,25 @@ export type WorktreePrep = {
  *  `<루트>/worktree-setup.sh`가 다음 단계고 `context.sh`와 같은 선례를 따른다. */
 export async function prepareWorktree(root: string, name: string): Promise<WorktreePrep> {
   const cmds = worktreeCmds(root, name);
-  const stop = (done: number, reason: string): WorktreePrep => ({ done, reason, rest: cmds.slice(done) });
+  const dir = worktreePath(root, name);
+  const stop = (done: number, reason: string): WorktreePrep => ({ dir, done, reason, rest: cmds.slice(done) });
   const why = (e: unknown) =>
     (String((e as { stderr?: string }).stderr ?? "").trim() || (e as Error).message).trim();
 
   const repo = path.dirname(root);
-  const dir = worktreePath(root, name);
   const link = path.join(dir, ".dira");
   const git = (...args: string[]) => promisify(execFile)("git", ["-C", repo, ...args]);
 
-  // 레포가 아니면 **아무것도 실행하지 않는다.** 워크트리를 안 쓰는 배치는 정상이다(§0-3).
+  // 레포가 아니면 **아무것도 실행하지 않는다.** 워크트리를 안 쓰는 배치는 정상이다(§0-3) —
+  // 그래서 남은 명령도 주지 않는다. 여기서 3줄을 주면 "안 해도 되는 일"을 지시로 읽는다.
   if (!(await git("rev-parse", "--git-dir").then(() => true, () => false))) {
-    return stop(0, `${repo} 는 git 레포가 아닙니다. 워크트리를 쓰지 않는 배치라면 정상입니다.`);
+    return {
+      dir,
+      done: 0,
+      reason: `${repo} 는 git 레포가 아닙니다. 워크트리를 쓰지 않는 배치라면 정상입니다.`,
+      rest: [],
+      skipped: true,
+    };
   }
   // 브랜치가 이미 있으면 `-b`가 실패한다(같은 이름의 워커를 지웠다 다시 만드는 경우가 유일한
   // 발생 경로다). 실패 후 재시도가 아니라 **먼저 본다** — git의 에러 문구는 로케일을 타서
@@ -926,7 +938,7 @@ export async function prepareWorktree(root: string, name: string): Promise<Workt
   if (to !== queue) {
     return stop(2, `${link} 가 큐 루트(${queue})가 아니라 ${to ?? "(못 풀림)"} 로 풀립니다.`);
   }
-  return { done: 3, rest: [] };
+  return { dir, done: 3, rest: [] };
 }
 
 // ── 생성 · 중단 · 삭제 ──────────────────────────────────────────────────────
@@ -951,7 +963,7 @@ async function workerFile(root: string, name: string): Promise<string> {
 export async function createWorker(
   root: string,
   name: string,
-): Promise<{ path: string; template: string; worktree: string[] }> {
+): Promise<{ path: string; template: string }> {
   // 템플릿 확인이 먼저다 — workers/가 아예 없는 큐에서 `resolveWithin`의 ENOENT를 먼저 만나면
   // 사용자가 받는 문장이 "경로 없음"이 되어 진짜 이유(템플릿 없음)를 가린다.
   if (!NAME_RE.test(name)) {
@@ -970,7 +982,9 @@ export async function createWorker(
   // O_EXCL. 있는 워커를 덮어쓰면 돌고 있는 cron 줄의 내용이 바뀐다.
   await writeFile(file, rewriteCwd(text, root, name), { flag: "wx" });
   await chmod(file, 0o755);
-  return { path: file, template, worktree: worktreeCmds(root, name) };
+  // 워크트리 준비 명령은 여기서 안 준다 — 생성 액션이 `prepareWorktree`로 **직접 만들고**,
+  // 명령은 그게 실패했을 때만(`WorktreePrep.rest`) 화면에 나온다(§4 생성 4항).
+  return { path: file, template };
 }
 
 /** 중단 = **crontab 줄만 뺀다.** 파일도 락도 돌고 있는 세션도 건드리지 않는다 —

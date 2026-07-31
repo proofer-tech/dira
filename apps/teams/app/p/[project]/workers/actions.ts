@@ -17,11 +17,13 @@ import {
   cronRegisterCmd,
   cronUnregisterCmd,
   deleteWorker,
+  prepareWorktree,
   registerCron,
   stopWorker,
   writeCommonContext,
   writeContext,
   type WorkerContext,
+  type WorktreePrep,
 } from "@/lib/workers";
 
 export type WorkerActionResult = {
@@ -41,8 +43,9 @@ export type WorkerActionResult = {
     cronError?: string;
     registerCmd: string;
     unregisterCmd: string;
-    /** 워크트리 준비 명령 2줄 + 검증 1줄 (§4 생성 4항) */
-    worktree: string[];
+    /** 서버가 실제로 실행한 워크트리 3단계의 결과 (§4 생성 4항). 성공이면 화면에
+     *  `CopyCommand`가 없다 — 남은 명령은 실패했을 때만 생긴다 */
+    worktree: WorktreePrep;
   };
   /** reap 출력 원문 */
   output?: string;
@@ -66,18 +69,23 @@ export async function createWorkerAction(
 ): Promise<WorkerActionResult> {
   try {
     const root = await rootOf(projectId);
-    const { path, template, worktree } = await createWorker(root, name.trim());
+    const worker = name.trim();
+    const { path, template } = await createWorker(root, worker);
     // **등록이 실패해도 파일 생성을 되돌리지 않는다** — 만든 것을 지우면 사람이 이름을 다시
     // 정해야 한다. 실패는 `cronError`로 넘기고 화면이 등록 명령어를 그 자리에 보여준다.
     const cronError = await registerCron(path).then(
       () => undefined,
       (e: Error) => e.message,
     );
+    // 순서는 **파일 → crontab → 트리**다(§4 생성 4항). 트리가 실패해도 파일도 crontab도
+    // 되돌리지 않는다 — 둘 다 트리와 무관하게 유효하고, 등록을 사람 손에 되돌리면
+    // `44f876aa`가 없앤 speed bump가 다른 이름으로 돌아온다.
+    const worktree = await prepareWorktree(root, worker);
     revalidatePath(`/p/${projectId}`, "layout"); // 목록·전환기의 워커 요약도 같이 바뀐다
     return {
       ok: true,
       created: {
-        name: name.trim(),
+        name: worker,
         path,
         template,
         cron: !cronError,

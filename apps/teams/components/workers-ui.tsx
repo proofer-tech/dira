@@ -90,6 +90,14 @@ function Failure({ title, message }: { title: string; message: string }) {
 
 // ── 생성 ────────────────────────────────────────────────────────────────────
 
+/** §6 에러 3요소의 1번 — **어느 단계에서 멈췄나**. 인덱스는 `WorktreePrep.done`(= 끝난 단계 수)이다.
+ *  성공(3)은 여기 없다 — 그 화면에는 에러가 없다. */
+const WORKTREE_STEP = [
+  "워크트리를 만들지 못했습니다",
+  "큐 심링크를 만들지 못했습니다",
+  "큐 심링크가 이 큐를 가리키지 않습니다",
+];
+
 /** 워커 생성. **한 동작으로 끝난다** — 파일을 만들고 crontab 한 줄까지 서버가 등록한다(제약 4).
  *  등록이 실패했을 때만 성공 화면이 종전의 등록 명령어로 되돌아간다. */
 export function CreateWorkerButton({
@@ -167,17 +175,38 @@ export function CreateWorkerButton({
                 <CopyCommand cmd={created.registerCmd} />
               </div>
             )}
-            {/* 워크트리는 GUI가 만들지 않는다(§4 생성 3항 · §4-2) — 큐가 아니라 엔진 레포에 쓰는
-                체크아웃이고, 반쯤 만들어진 워크트리는 없는 것보다 나쁘다. 트리가 없으면 이 워커는
-                티켓을 물었다 되돌린다(`ERROR cwd 없음`) — 그래서 이 명령이 마지막 화면이다. */}
+            {/* 워크트리 3단계도 서버가 실행했다(§4 생성 4항 — 요청 `5f55577a`가 §4-2를 뒤집었다).
+                성공하면 `CopyCommand`가 없다. 사람이 셸로 넘어가는 것은 실패했을 때뿐이고, 그때도
+                **남은 명령만** 준다 — 이미 된 단계를 다시 돌리면 `ln -s` 함정을 직접 밟는다. */}
             <div className="space-y-2 border-t pt-3">
-              <p className="text-sm font-medium">
-                작업 디렉터리(<span className="font-mono text-xs">TICKET_CWD</span>)는 이 워커 것으로
-                다시 썼습니다. 트리는 아직 없습니다 — 준비 2줄 + 검증 1줄을 셸에서 실행하세요
-              </p>
-              {created.worktree.map((cmd) => (
-                <CopyCommand key={cmd} cmd={cmd} />
-              ))}
+              {created.worktree.skipped ? (
+                // 레포가 아니다 = 실패가 아니라 정상 종료다. 파일도 crontab도 그대로다.
+                <p className="text-sm text-muted-foreground">
+                  워크트리는 만들지 않았습니다 — {created.worktree.reason} 워커 파일과 crontab
+                  등록은 그대로입니다.
+                </p>
+              ) : created.worktree.done === 3 ? (
+                <p className="text-sm font-medium">
+                  작업 디렉터리{" "}
+                  <span className="font-mono text-xs break-all">{created.worktree.dir}</span>를
+                  만들고, 그 안의 <span className="font-mono text-xs">.dira</span>가 이 큐를
+                  가리키는 것까지 확인했습니다.
+                </p>
+              ) : (
+                <>
+                  <Failure
+                    title={WORKTREE_STEP[created.worktree.done]}
+                    message={created.worktree.reason ?? ""}
+                  />
+                  <p className="text-sm font-medium">
+                    작업 디렉터리가 없으면 이 워커는 티켓을 물었다 되돌립니다 — 남은 명령을 셸에서
+                    실행하세요
+                  </p>
+                  {created.worktree.rest.map((cmd) => (
+                    <CopyCommand key={cmd} cmd={cmd} />
+                  ))}
+                </>
+              )}
             </div>
           </div>
         ) : (
