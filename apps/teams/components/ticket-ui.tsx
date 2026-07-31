@@ -32,6 +32,7 @@ import { createTicket, type NewTicketState } from "@/app/p/[project]/(board)/act
 import type { UnassignRun } from "@/lib/engine";
 // 스레드를 엮는 쪽은 서버(`lib/queue.ts threadOf`)다 — 여기 오는 건 타입뿐이라 `node:*`를 안 끈다
 import type { ThreadItem } from "@/lib/queue";
+import { useHotkey } from "@/components/keymap-provider";
 import { Markdown } from "@/components/markdown";
 import { PersonaDot } from "@/components/persona-badge";
 import { DepBadge } from "@/components/status-badge";
@@ -788,6 +789,13 @@ export function RequestDialog({ project }: { project: string }) {
     setDismissed(state);
   });
 
+  // `r`(§0-6 `board.request`). **보드에만 있는 컴포넌트라 범위가 저절로 맞는다.** 여는 것도
+  // 닫는 경로 넷과 같은 `guard.close`다 — 상태를 새로 만들지 않는다.
+  useHotkey("board.request", (e) => {
+    e.preventDefault();
+    guard.close(true);
+  });
+
   return (
     <Dialog open={guard.open} onOpenChange={guard.close}>
       <DialogTrigger render={<Button size="sm" />}>요구 접수</DialogTrigger>
@@ -866,6 +874,7 @@ export function NewTicketDialog({
   personaDir,
   variant,
   copy,
+  hotkey,
 }: {
   project: string;
   /** 프로필(`PROFILE.md`)이 있는 이름만. 보드의 **필터 목록을 넘기면 안 된다** — 그쪽은
@@ -883,6 +892,9 @@ export function NewTicketDialog({
    *  끝난 선행을 다시 기다리거나(미완이면) 착수 불가로 태어난다. 제목에 `(사본)`도 안 붙인다 —
    *  사람이 조건만 바꿔 다시 시키려는 것이지 이름을 바꾸려는 게 아니다. */
   copy?: { stem: string; title: string; kind: string; persona: string; body: string };
+  /** `board.new`(`n`)를 듣는다. **보드의 두 자리만 켠다** — 티켓 상세의 복제 버튼도 이 컴포넌트라
+   *  켜면 상세에서 `n`이 복제 다이얼로그를 연다(§0-6 `어디서 듣나`는 보드다) */
+  hotkey?: boolean;
 }) {
   const [state, action, pending] = useActionState<NewTicketState, FormData>(createTicket, {});
   const [picked, setPicked] = useState<string[]>([]);
@@ -909,6 +921,14 @@ export function NewTicketDialog({
       setDismissed(state);
     },
   );
+
+  // `n`(§0-6 `board.new`). **이 컴포넌트만 보드 밖에도 산다**(티켓 상세의 복제) — 그래서
+  // 범위가 저절로 맞지 않고 부르는 쪽이 켠다. 여는 자리는 `RequestDialog`와 같은 `guard.close`다.
+  useHotkey("board.new", (e) => {
+    if (!hotkey) return;
+    e.preventDefault();
+    guard.close(true);
+  });
 
   return (
     <Dialog open={guard.open} onOpenChange={guard.close}>

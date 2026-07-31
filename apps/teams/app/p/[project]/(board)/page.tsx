@@ -331,6 +331,7 @@ export default async function Board({
             deps={depOptions}
             personaDir={config.personas}
             variant="outline"
+            hotkey
           />
           <RequestDialog project={id} />
         </div>
@@ -349,6 +350,7 @@ export default async function Board({
               colors={colors}
               deps={depOptions}
               personaDir={config.personas}
+              hotkey
             />
           }
         />

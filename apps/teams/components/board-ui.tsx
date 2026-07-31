@@ -11,6 +11,7 @@
 import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Check, ChevronsUpDown, ListFilter, Search } from "lucide-react";
+import { useHotkey } from "@/components/keymap-provider";
 import { PersonaDot } from "@/components/persona-badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -43,6 +44,7 @@ function useUrlNav() {
 export function BoardSearch() {
   const { qs, replace } = useUrlNav();
   const url = new URLSearchParams(qs).get("q") ?? "";
+  const input = useRef<HTMLInputElement>(null);
   const [text, setText] = useState(url);
   const [shown, setShown] = useState(url);
   if (shown !== url) {
@@ -65,12 +67,21 @@ export function BoardSearch() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- replace는 매 렌더 새 함수다(qs가 실질 의존)
   }, [text, qs]);
 
+  // `/`(§0-6 `board.search`). **보드에만 있는 컴포넌트라 범위가 저절로 맞는다.** 글 쓰는 중
+  // 가드는 `useHotkey`가 이미 건다 — 여기서 다시 짜지 않는다. `preventDefault`는 포커스가
+  // 옮겨간 칸에 `/`가 그대로 찍히는 것을 막는다(이 키의 기본 동작이 글자 입력이다).
+  useHotkey("board.search", (e) => {
+    e.preventDefault();
+    input.current?.focus();
+  });
+
   return (
     <InputGroup className="h-8 max-w-xs">
       <InputGroupAddon>
         <Search aria-hidden className="size-3.5" />
       </InputGroupAddon>
       <InputGroupInput
+        ref={input}
         value={text}
         onChange={(e) => setText(e.target.value)}
         placeholder="title · 본문 · frontmatter 검색"
