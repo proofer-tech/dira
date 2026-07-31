@@ -5,7 +5,7 @@
 import { homedir } from "node:os";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { CircleDot, TriangleAlert, Unplug } from "lucide-react";
+import { CircleDot, CloudOff, TriangleAlert, Unplug } from "lucide-react";
 import {
   BrandMark,
   RefreshButton,
@@ -44,6 +44,11 @@ export default async function ProjectLayout({
         connected: s.connected,
         error: s.error,
         assigned: s.assigned, // §0-2 배너용. 전환기는 이 필드를 쓰지 않는다
+        // §0-5 배너용. `readSummary`가 이미 `listWorkers`를 불렀으므로 워커를 다시 읽지 않는다.
+        // 정상 상태에서는 항상 빈 배열이고 그때 배너 노드가 아예 없다.
+        failures: s.workers.flatMap((w) =>
+          w.lastFailure ? [{ name: w.name, reason: w.lastFailure.reason }] : [],
+        ),
       };
     }),
   );
@@ -87,6 +92,39 @@ export default async function ProjectLayout({
                   인증하기
                 </Link>
               </span>
+            </AlertDescription>
+          </Alert>
+        )}
+        {/* 외부 요인 실패 (§0-5 · §비주얼 §4-4). **네 번째 `Alert` 변종이다** — 새 컴포넌트 0.
+            인증 아래, 할당됨 위다: 인증이 없으면 아무것도 안 돌고, 이건 워커 전원이 멈추며,
+            할당됨은 티켓 몇 건이다(위로 갈수록 범위가 넓다). dismiss도 만료도 없다 —
+            `lastFailure`의 신선도 창 10분과 다음 성공 tick이 판정을 저절로 끈다.
+            색이 stale이 아니라 blocked인 이유: 이건 **사람이 아무것도 안 해도 꺼진다**(§4-4). */}
+        {current.connected && current.failures.length > 0 && (
+          <Alert role="status" className="max-w-3xl">
+            {/* `!`가 붙은 이유: shadcn `Alert` 기본 변종의 `*:[svg]:text-current`가 아이콘의
+                `text-status-*`를 **전부** 덮는다(자식 결합자라 특이도가 높다). 이 레포의 Alert
+                아이콘 13곳이 다 같은 이유로 색 없이 검게 뜬다 — 공통 원인은
+                `components/ui/alert.tsx` 한 줄이고 그 파일은 규약상 손으로 안 고친다.
+                여기만 important로 §4-4를 지키고 나머지 11곳은 `b532bf8b`이 받는다 */}
+            <CloudOff aria-hidden className="text-status-blocked!" />
+            <AlertTitle>세션이 즉시 실패하는 워커 {current.failures.length}개</AlertTitle>
+            <AlertDescription className="grid gap-3 text-foreground">
+              <span>디스패치는 계속 돌지만 세션이 즉시 실패하고 티켓은 백로그로 돌아갑니다.</span>
+              {/* `grid gap-2` — 한 워커가 한 줄에서 시작한다. flex-wrap이면 두 워커가 한 줄에
+                  섞여 어느 사유가 누구 것인지가 무너진다(§4-4). 상위 N개로 자르지 않는다 */}
+              <span className="grid gap-2">
+                {current.failures.map((f) => (
+                  <span key={f.name} className="flex items-baseline gap-2">
+                    <span className="shrink-0 font-mono text-xs">{f.name}</span>
+                    {/* 엔진이 준 문자열 그대로다 — 번역도 분류도 자르기도 하지 않는다.
+                        `break-all`이 아닌 이유: `7:40pm`이 갈리면 이 배너의 유일한 실행 정보가
+                        깨진다(§4-4 줄바꿈) */}
+                    <span className="min-w-0 font-mono text-xs break-words">{f.reason}</span>
+                  </span>
+                ))}
+              </span>
+              <span>사유가 가리키는 시각이 지나면 다음 tick이 저절로 집습니다.</span>
             </AlertDescription>
           </Alert>
         )}

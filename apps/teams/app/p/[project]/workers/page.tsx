@@ -6,7 +6,7 @@
 import { Fragment } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { TriangleAlert } from "lucide-react";
+import { CloudOff, TriangleAlert } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { StatusBadge } from "@/components/status-badge";
 import { CopyCommand } from "@/components/copy-command";
@@ -222,38 +222,75 @@ export default async function Workers({ params }: { params: Promise<{ project: s
               </TableRow>
               {/* 결함은 락을 만들지 않으므로 위 배지로는 안 보인다(§4) — 이 워커는 화면에 정상으로
                   뜨면서 티켓을 처리하지 못한다. 모양은 §4-1 `source` 줄 경고와 같은 Alert다.
-                  결함 0개면 이 행 자체가 없다 — 정상 상태에 켜져 있는 경고를 만들지 않는다. */}
-              {w.defects.length > 0 && (
+                  결함 0개면 이 행 자체가 없다 — 정상 상태에 켜져 있는 경고를 만들지 않는다.
+
+                  외부 요인 실패(§0-5)도 **같은 행 같은 셀**에 담는다(§4-4) — `TableRow`를 하나 더
+                  만들면 행 경계선이 둘 사이에 그어져 같은 워커 것으로 안 읽힌다. 순서는
+                  결함이 위·실패가 아래다: 사람이 할 일이 있는 쪽이 위고, 신선도 10분 창이라
+                  자주 켜졌다 꺼지는 쪽을 아래 두어야 위 블록의 `CopyCommand`가 자리를 안 옮긴다. */}
+              {(w.defects.length > 0 || w.lastFailure) && (
                 <TableRow className="hover:bg-transparent">
                   <TableCell colSpan={7} className="px-3 py-2">
-                    <Alert>
-                      <TriangleAlert aria-hidden className="text-status-stale" />
-                      <AlertTitle>
-                        {w.name} — {w.defects.map((d) => DEFECT[d.kind].title).join(" · ")}
-                      </AlertTitle>
-                      <AlertDescription>
-                        <div className="space-y-2">
-                          {w.defects.map((d) => (
-                            <p key={d.kind}>
-                              <span className="font-mono text-xs break-all">{d.detail}</span>{" "}
-                              {DEFECT[d.kind].why}
-                            </p>
-                          ))}
-                          <p>
-                            준비 명령은 이 큐의 배치인{" "}
-                            <span className="font-mono text-xs break-all">
-                              {project.root}/worktrees/{w.name}
-                            </span>
-                            를 만듭니다(§4-2) —{" "}
-                            <span className="font-mono text-xs">TICKET_CWD</span>가 그 경로가 아니면 그
-                            줄도 손으로 고치세요. 체크아웃은 GUI가 실행하지 않습니다.
-                          </p>
-                          {w.worktree?.map((cmd) => (
-                            <CopyCommand key={cmd} cmd={cmd} />
-                          ))}
-                        </div>
-                      </AlertDescription>
-                    </Alert>
+                    <div className="space-y-2">
+                      {w.defects.length > 0 && (
+                        // role은 status다 — 5초 폴링이 이 표를 다시 그리므로 alert면 재낭독 위험이다(§4-4)
+                        <Alert role="status">
+                          <TriangleAlert aria-hidden className="text-status-stale" />
+                          <AlertTitle>
+                            {w.name} — {w.defects.map((d) => DEFECT[d.kind].title).join(" · ")}
+                          </AlertTitle>
+                          <AlertDescription>
+                            <div className="space-y-2">
+                              {w.defects.map((d) => (
+                                <p key={d.kind}>
+                                  <span className="font-mono text-xs break-all">{d.detail}</span>{" "}
+                                  {DEFECT[d.kind].why}
+                                </p>
+                              ))}
+                              <p>
+                                준비 명령은 이 큐의 배치인{" "}
+                                <span className="font-mono text-xs break-all">
+                                  {project.root}/worktrees/{w.name}
+                                </span>
+                                를 만듭니다(§4-2) —{" "}
+                                <span className="font-mono text-xs">TICKET_CWD</span>가 그 경로가
+                                아니면 그 줄도 손으로 고치세요. 체크아웃은 GUI가 실행하지 않습니다.
+                              </p>
+                              {w.worktree?.map((cmd) => (
+                                <CopyCommand key={cmd} cmd={cmd} />
+                              ))}
+                            </div>
+                          </AlertDescription>
+                        </Alert>
+                      )}
+                      {w.lastFailure && (
+                        // 위 결함과 아이콘·색 둘 다로 갈린다(CloudOff/blocked ↔ TriangleAlert/stale).
+                        // `<CopyCommand>`를 붙이지 않는다 — 파일명은 원본을 찾을 단서지 실행할
+                        // 명령이 아니고, 조작 0개가 §0-5의 결정이다(`Q2=(a)`).
+                        <Alert role="status">
+                          {/* `!`의 근거는 셸 배너와 같다 — `Alert` 기본 변종이 아이콘 색을 덮는다 */}
+                          <CloudOff aria-hidden className="text-status-blocked!" />
+                          <AlertTitle>{w.name} — 세션이 즉시 실패했습니다</AlertTitle>
+                          <AlertDescription>
+                            {/* `<p>`가 아니라 `<div>`인 이유: `AlertDescription`이 마지막이 아닌
+                                `<p>`에 `mb-4`를 건다. 이 둘은 같은 사실의 세 좌표라 붙어 있어야
+                                위계가 순서·서체로 읽힌다(§4-4) */}
+                            <div className="space-y-1">
+                              {/* 엔진이 준 문자열 그대로. 배너와 같은 문자열·같은 서체다 */}
+                              <div className="font-mono text-xs break-words">
+                                {w.lastFailure.reason}
+                              </div>
+                              {/* 시각이 먼저인 것은 사유 안의 `resets 7:40pm`과 비교할 값이라서고,
+                                  파일명이 나중인 것은 `ls`에 칠 값이라서다. 날짜는 안 붙인다 —
+                                  신선도 창이 10분이라 항상 오늘이고 파일명 앞 8자가 날짜다(§4-4) */}
+                              <div className="font-mono text-xs tabular-nums">
+                                {w.lastFailure.at.slice(11)} · {w.lastFailure.log}
+                              </div>
+                            </div>
+                          </AlertDescription>
+                        </Alert>
+                      )}
+                    </div>
                   </TableCell>
                 </TableRow>
               )}

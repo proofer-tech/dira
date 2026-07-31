@@ -73,6 +73,9 @@ export type WorkerRow = {
   /** 작업 디렉터리 결함 (§4). **0개가 정상**이고 그때 행은 아무것도 늘지 않는다.
    *  `status`와 직교한다 — 결함이 있어도 락이 있으면 `running`이다 */
   defects: { kind: "missing-cwd" | "missing-link" | "shared-cwd"; detail: string }[];
+  /** 외부 요인으로 죽은 마지막 세션 (§0-5). **정상 상태에서는 항상 `null`이고** 그때 행은
+   *  아무것도 늘지 않는다. `defects`와 같은 축이다 — 실패 직후의 워커는 `idle`이다 */
+  lastFailure: { at: string; hash: string; reason: string; log: string } | null;
   /** 결함이 있을 때만 온다. §4 생성의 준비 3줄과 같은 문자열이다 */
   worktree?: string[];
 };
