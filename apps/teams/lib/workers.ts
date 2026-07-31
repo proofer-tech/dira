@@ -6,7 +6,7 @@
  *  되돌아간다 — 그래서 그 둘은 남아 있다.
  *  상태 전이(reap·unassign)는 여기서 다시 구현하지 않는다 — `lib/engine.ts`가 워커를 부른다. */
 import { createHash } from "node:crypto";
-import { chmod, readFile, readdir, realpath, rename, stat, unlink, writeFile } from "node:fs/promises";
+import { chmod, readFile, readdir, realpath, rename, stat, symlink, unlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import { execFile } from "node:child_process";
@@ -48,7 +48,7 @@ export type Worker = {
   /** 작업 디렉터리 결함 (§4). **0개가 정상이고 그때 화면은 아무것도 늘지 않는다** */
   defects: WorkerDefect[];
   /** 사람이 결함을 고치는 준비 명령. 결함이 있을 때만 채운다 — §4 생성의 3줄과 같은 함수다 */
-  worktree?: { cmds: string[]; reason?: string };
+  worktree?: string[];
 };
 
 /** tick.sh 46행. 워커가 덮어쓰지 않으면 실제로 이게 돈다 — "기본값"이라고 얼버무리지 않는다. */
@@ -622,8 +622,6 @@ export async function listWorkers(root: string, tickets: Ticket[] = []): Promise
   const [cronRaw, logs] = await Promise.all([crontabText(), lastLogByWorker(dir)]);
   const cron = nfc(cronRaw);
   const out: Worker[] = [];
-  // 결함 판정에 워커 파일 텍스트가 다시 필요하다(준비 명령의 엔진 레포 경로) — 두 번 읽지 않는다.
-  const texts: string[] = [];
   for (const file of names) {
     const name = file.slice(0, -3);
     const full = path.join(dir, file);
@@ -651,7 +649,6 @@ export async function listWorkers(root: string, tickets: Ticket[] = []): Promise
       cwd: parsed.cwd,
       defects: [], // 공유 판정이 목록 전체를 봐야 하므로 행을 다 만든 뒤에 채운다
     });
-    texts.push(text);
   }
 
   // tick.sh 39행: TICKET_CWD 줄이 없는 워커의 실효 cwd는 루트의 부모다(contextOf와 같은 기준).
@@ -661,7 +658,7 @@ export async function listWorkers(root: string, tickets: Ticket[] = []): Promise
     if (d.length === 0) return; // 결함 0개인 워커는 아무것도 늘지 않는다
     out[i].defects = d;
     // 명령 문자열은 §4 생성과 **같은 함수**에서 나온다 — 두 자리가 다른 걸 보여주면 안 된다.
-    out[i].worktree = worktreeCmds(root, out[i].name, texts[i], `${out[i].name}.sh`);
+    out[i].worktree = worktreeCmds(root, out[i].name);
   });
   return out;
 }
@@ -840,36 +837,96 @@ export const sourceTick = /^[ \t]*(?:\.|source)[ \t]+(.*tick\.sh["']?)[ \t]*$/m;
  *  두 모양이 갈리지 않는다. */
 export const tickSourceLine = (repo: string) => `. ${dq(path.join(repo, "tick.sh"))}`;
 
-/** 워크트리 준비 명령 **2줄 + 검증 1줄**(§4 생성 3항). **GUI는 실행하지 않는다**(§4-2):
- *  `git worktree add`는 큐가 아니라 엔진 레포에 쓰는 체크아웃이고, 그 레포 경로는 워커 파일에서
- *  읽은 추측값이라 §경로 방어의 "등록된 root 안"이 안 걸린다. 못 읽으면 자리표시자를 두고
- *  **사유를 같이** 넘긴다(§6 에러 3요소 — 삼키면 사람이 왜 빈칸인지 모른다).
+/** 워크트리 준비 명령 **2줄 + 검증 1줄**(§4 생성 4항). GUI가 실패했을 때 사람이 셸에서
+ *  이어서 실행하는 문자열이다 — 성공하면 아무 데도 안 보인다.
+ *
+ *  **`git -C`의 대상은 `dirname(root)` = 그 프로젝트다.** 엔진 레포가 아니다(§4 생성 4항의 3번,
+ *  `tick.sh:39` — `TICKET_CWD` 기본값이 `dirname(TICKET_ROOT)`). 종전엔 워커 파일의
+ *  `. <레포>/tick.sh`에서 읽은 엔진 레포를 넣었는데, 그건 dira가 자기를 도그푸딩해서 우연히
+ *  맞았을 뿐이다 — 프로젝트 `foo`의 워커가 `~/Projects/dira/tick.sh`를 source하면 그 명령은
+ *  `foo/.dira/worktrees/w2`에 **dira를 체크아웃한다**.
  *
  *  검증 줄은 장식이 아니다: `.dira`가 이미 있으면 `ln -s`가 실패하는 대신 그 **안쪽에**
- *  링크를 만든다(실사고 `bf4d8878`) — 세션이 미끼 큐를 보고 자기 티켓을 못 찾는다. */
-export function worktreeCmds(
-  root: string,
-  name: string,
-  templateText: string,
-  templateName: string,
-): { cmds: string[]; reason?: string } {
+ *  링크를 만든다(실사고 `bf4d8878`) — 세션이 미끼 큐를 보고 자기 티켓을 못 찾는다.
+ *  `prepareWorktree`는 그래서 셸이 아니라 `fs.symlink` + `fs.realpath`로 간다. */
+export function worktreeCmds(root: string, name: string): string[] {
   const dir = worktreePath(root, name);
-  const m = sourceTick.exec(templateText);
-  const raw = m?.[1] ?? null;
-  const repo = raw === null ? null : shellPath(raw);
-  const cmds = [
-    `git -C ${repo === null ? "<dira 레포>" : sq(path.dirname(expandHome(repo)))} worktree add ${sq(dir)} -b wt/${name}`,
+  return [
+    `git -C ${sq(path.dirname(root))} worktree add ${sq(dir)} -b wt/${name}`,
     `ln -s ../.. ${sq(path.join(dir, ".dira"))}`,
     `ls -ld ${sq(path.join(dir, ".dira"))}    # \`l\`로 시작해야 한다`,
   ];
-  if (repo !== null) return { cmds };
-  return {
-    cmds,
-    reason:
-      raw === null
-        ? `${templateName}에 \`. <레포>/tick.sh\` 줄이 없어 엔진 레포 경로를 읽지 못했습니다.`
-        : `${templateName}의 tick.sh 경로를 셸 없이 해석할 수 없습니다(\`${raw}\`). $HOME 외의 변수·명령 치환은 GUI가 펴지 않습니다.`,
-  };
+}
+
+/** `prepareWorktree`의 결과. 화면이 **이것만으로** 실패 패널을 그린다(§6 에러 3요소). */
+export type WorktreePrep = {
+  /** 끝난 단계 수 0~3 (트리 → 심링크 → 검증). 3이면 성공이다 */
+  done: number;
+  /** 멈춘 사유. `done === 3`이면 없다 */
+  reason?: string;
+  /** 사람이 셸에서 이어서 실행할 명령 = `worktreeCmds`의 꼬리. 성공이면 빈 배열 */
+  rest: string[];
+};
+
+/** 워크트리 3단계를 **서버가 실행한다**(§4 생성 4항 — 사람 요청 `5f55577a`가 §4-2를 뒤집었다).
+ *
+ *  자동화의 근거는 셸 3줄이 못 잡는 함정 둘이다:
+ *  - 심링크가 `fs.symlink`라 `.dira`가 이미 있으면 **`EEXIST`로 멈춘다.** `ln -s`는 대신
+ *    대상 **안쪽에** `.dira/.dira`를 만든다(실사고 `bf4d8878`).
+ *  - 검증이 `ls -ld`가 아니라 `realpath`다. `ls`는 심링크라는 것까지만 보이지 그게
+ *    **이 큐를 가리키는지**는 안 본다.
+ *
+ *  **실패해도 되돌리지 않는다**(§0-3 스캐폴딩과 같은 규칙). `git worktree add`가 성공한 뒤라면
+ *  그 디렉터리는 이미 사람의 작업이 들어갈 수 있는 자리다 — GUI가 지우는 쪽이 더 위험하다.
+ *
+ *  ponytail: 의존성 설치는 하지 않는다(§4 생성 4항 — 이게 이 기능의 천장이다). 필요해지면
+ *  `<루트>/worktree-setup.sh`가 다음 단계고 `context.sh`와 같은 선례를 따른다. */
+export async function prepareWorktree(root: string, name: string): Promise<WorktreePrep> {
+  const cmds = worktreeCmds(root, name);
+  const stop = (done: number, reason: string): WorktreePrep => ({ done, reason, rest: cmds.slice(done) });
+  const why = (e: unknown) =>
+    (String((e as { stderr?: string }).stderr ?? "").trim() || (e as Error).message).trim();
+
+  const repo = path.dirname(root);
+  const dir = worktreePath(root, name);
+  const link = path.join(dir, ".dira");
+  const git = (...args: string[]) => promisify(execFile)("git", ["-C", repo, ...args]);
+
+  // 레포가 아니면 **아무것도 실행하지 않는다.** 워크트리를 안 쓰는 배치는 정상이다(§0-3).
+  if (!(await git("rev-parse", "--git-dir").then(() => true, () => false))) {
+    return stop(0, `${repo} 는 git 레포가 아닙니다. 워크트리를 쓰지 않는 배치라면 정상입니다.`);
+  }
+  // 브랜치가 이미 있으면 `-b`가 실패한다(같은 이름의 워커를 지웠다 다시 만드는 경우가 유일한
+  // 발생 경로다). 실패 후 재시도가 아니라 **먼저 본다** — git의 에러 문구는 로케일을 타서
+  // 판정에 못 쓴다. `add <경로> <브랜치>`로 붙인다: 브랜치를 빼면 git이 디렉터리 이름
+  // (`<name>`)에서 dwim해서 `wt/<name>`이 아닌 다른 브랜치를 만든다.
+  const branch = `wt/${name}`;
+  const has = await git("show-ref", "--verify", "--quiet", `refs/heads/${branch}`).then(
+    () => true,
+    () => false,
+  );
+  try {
+    await git("worktree", "add", dir, ...(has ? [branch] : ["-b", branch]));
+  } catch (e) {
+    return stop(0, `git worktree add 실패: ${why(e)}`);
+  }
+  try {
+    await symlink("../..", link);
+  } catch (e) {
+    const eexist = (e as NodeJS.ErrnoException).code === "EEXIST";
+    return stop(
+      1,
+      eexist
+        ? `${link} 가 이미 있습니다. 지우지 않았습니다 — 그 안에 사람의 작업이 있을 수 있습니다.`
+        : `심링크를 만들지 못했습니다: ${why(e)}`,
+    );
+  }
+  const to = await realpath(link).then(nfc, () => null);
+  const queue = nfc(await realpath(root).catch(() => root));
+  if (to !== queue) {
+    return stop(2, `${link} 가 큐 루트(${queue})가 아니라 ${to ?? "(못 풀림)"} 로 풀립니다.`);
+  }
+  return { done: 3, rest: [] };
 }
 
 // ── 생성 · 중단 · 삭제 ──────────────────────────────────────────────────────
@@ -894,7 +951,7 @@ async function workerFile(root: string, name: string): Promise<string> {
 export async function createWorker(
   root: string,
   name: string,
-): Promise<{ path: string; template: string; worktree: { cmds: string[]; reason?: string } }> {
+): Promise<{ path: string; template: string; worktree: string[] }> {
   // 템플릿 확인이 먼저다 — workers/가 아예 없는 큐에서 `resolveWithin`의 ENOENT를 먼저 만나면
   // 사용자가 받는 문장이 "경로 없음"이 되어 진짜 이유(템플릿 없음)를 가린다.
   if (!NAME_RE.test(name)) {
@@ -913,7 +970,7 @@ export async function createWorker(
   // O_EXCL. 있는 워커를 덮어쓰면 돌고 있는 cron 줄의 내용이 바뀐다.
   await writeFile(file, rewriteCwd(text, root, name), { flag: "wx" });
   await chmod(file, 0o755);
-  return { path: file, template, worktree: worktreeCmds(root, name, text, template) };
+  return { path: file, template, worktree: worktreeCmds(root, name) };
 }
 
 /** 중단 = **crontab 줄만 뺀다.** 파일도 락도 돌고 있는 세션도 건드리지 않는다 —

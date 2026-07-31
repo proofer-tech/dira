@@ -248,12 +248,7 @@ export default async function Workers({ params }: { params: Promise<{ project: s
                             <span className="font-mono text-xs">TICKET_CWD</span>가 그 경로가 아니면 그
                             줄도 손으로 고치세요. 체크아웃은 GUI가 실행하지 않습니다.
                           </p>
-                          {w.worktree?.reason && (
-                            <p className="text-muted-foreground">
-                              {w.worktree.reason} 첫 줄의 레포 경로를 직접 채우세요.
-                            </p>
-                          )}
-                          {w.worktree?.cmds.map((cmd) => (
+                          {w.worktree?.map((cmd) => (
                             <CopyCommand key={cmd} cmd={cmd} />
                           ))}
                         </div>

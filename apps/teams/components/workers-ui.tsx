@@ -72,7 +72,7 @@ export type WorkerRow = {
    *  `status`와 직교한다 — 결함이 있어도 락이 있으면 `running`이다 */
   defects: { kind: "missing-cwd" | "missing-link" | "shared-cwd"; detail: string }[];
   /** 결함이 있을 때만 온다. §4 생성의 준비 3줄과 같은 문자열이다 */
-  worktree?: { cmds: string[]; reason?: string };
+  worktree?: string[];
 };
 
 /** §6 에러 3요소 중 1·2번. 3번(다음 행동)은 부르는 쪽이 다이얼로그 안에 붙인다. */
@@ -175,12 +175,7 @@ export function CreateWorkerButton({
                 작업 디렉터리(<span className="font-mono text-xs">TICKET_CWD</span>)는 이 워커 것으로
                 다시 썼습니다. 트리는 아직 없습니다 — 준비 2줄 + 검증 1줄을 셸에서 실행하세요
               </p>
-              {created.worktree.reason && (
-                <p className="text-sm text-muted-foreground">
-                  {created.worktree.reason} 첫 줄의 레포 경로를 직접 채우세요.
-                </p>
-              )}
-              {created.worktree.cmds.map((cmd) => (
+              {created.worktree.map((cmd) => (
                 <CopyCommand key={cmd} cmd={cmd} />
               ))}
             </div>

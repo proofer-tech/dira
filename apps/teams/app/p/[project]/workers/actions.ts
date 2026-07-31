@@ -41,8 +41,8 @@ export type WorkerActionResult = {
     cronError?: string;
     registerCmd: string;
     unregisterCmd: string;
-    /** 워크트리 준비 명령 2줄 + 레포 경로를 못 읽은 사유(§4-2 — GUI는 실행하지 않는다) */
-    worktree: { cmds: string[]; reason?: string };
+    /** 워크트리 준비 명령 2줄 + 검증 1줄 (§4 생성 4항) */
+    worktree: string[];
   };
   /** reap 출력 원문 */
   output?: string;

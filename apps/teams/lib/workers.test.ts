@@ -5,6 +5,8 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readlinkSync,
+  realpathSync,
   rmSync,
   statSync,
   symlinkSync,
@@ -35,6 +37,7 @@ const {
   readCommonContext,
   renderContextBlock,
   stopWorker,
+  prepareWorktree,
   workerGroups,
   worktreeCmds,
   writeCommonContext,
@@ -197,8 +200,10 @@ test("작업 디렉터리 결함 — 3종을 판정하고 정상 워커에는 �
   const root = path.join(base, ".dira");
   mkdirSync(path.join(root, "workers"), { recursive: true });
   const tree = (n: string) => path.join(root, "worktrees", n);
-  /** 워커 파일 한 장. `. <레포>/tick.sh` 줄이 준비 명령의 엔진 레포 경로가 된다. */
-  const wk = (cwd: string) => `#!/bin/bash\nTICKET_CWD="${cwd}"\nTICKET_CONTEXT=()\n. "${base}/tick.sh"\n`;
+  /** 엔진 레포는 프로젝트(`dirname(root)`)와 **다른 자리**다 — dira가 자기를 도그푸딩해서 둘이
+   *  같았던 게 `git -C`에 엔진 레포를 넣는 버그를 가렸다(§4 생성 4항의 3번). */
+  const engine = path.join(base, "engine-repo");
+  const wk = (cwd: string) => `#!/bin/bash\nTICKET_CWD="${cwd}"\nTICKET_CONTEXT=()\n. "${engine}/tick.sh"\n`;
   const put = (name: string, cwd: string) =>
     writeFileSync(path.join(root, "workers", `${name}.sh`), wk(cwd));
   /** 사람이 손으로 만드는 상태: 트리 + `.dira -> ../..` */
@@ -237,11 +242,9 @@ test("작업 디렉터리 결함 — 3종을 판정하고 정상 워커에는 �
   assert.match(by("bait").defects[0].detail, /큐 루트가 아니라/);
   assert.deepStrictEqual(by("s1").defects[0].detail, `s2와 같은 경로입니다: ${tree("shared")}`);
   // 준비 명령은 §4 생성의 3줄과 **같은 함수**에서 나온다. 화면 두 곳이 다른 문자열을 보여주면 안 된다.
-  assert.deepStrictEqual(
-    by("gone").worktree,
-    worktreeCmds(root, "gone", wk(tree("gone")), "gone.sh"),
-  );
-  assert.deepStrictEqual(by("gone").worktree!.cmds, [
+  assert.deepStrictEqual(by("gone").worktree, worktreeCmds(root, "gone"));
+  // `git -C`는 프로젝트(`dirname(root)`)다. 워커가 source하는 엔진 레포가 아니다.
+  assert.deepStrictEqual(by("gone").worktree, [
     `git -C '${base}' worktree add '${tree("gone")}' -b wt/gone`,
     `ln -s ../.. '${path.join(tree("gone"), ".dira")}'`,
     `ls -ld '${path.join(tree("gone"), ".dira")}'    # \`l\`로 시작해야 한다`,
@@ -440,23 +443,22 @@ test("createWorker — TICKET_CWD를 템플릿에서 물려받지 않는다 (w4�
   const text = readFileSync(file, "utf8");
   assert.match(text, new RegExp(`^TICKET_CWD="${root}/worktrees/w4"$`, "m"));
   assert.strictEqual(text.includes("dira-wt/w1"), false); // 템플릿 값이 남아 있지 않다
-  // 워크트리 준비 명령: 레포 경로는 `. …/tick.sh` 줄에서 뽑는다(자리표시자가 남지 않는다)
-  assert.deepStrictEqual(worktree, {
-    cmds: [
-      `git -C '${process.env.HOME}/Projects/dira' worktree add '${root}/worktrees/w4' -b wt/w4`,
-      `ln -s ../.. '${root}/worktrees/w4/.dira'`,
-      // 검증 줄 — `ln -s` 함정(bf4d8878)을 사람이 밟았는지 여기서만 보인다
-      "ls -ld '" + root + "/worktrees/w4/.dira'    # `l`로 시작해야 한다",
-    ],
-  });
+  // 워크트리 준비 명령: `git -C`는 프로젝트다. 템플릿이 source하는 엔진 레포(`~/Projects/dira`)가
+  // 아니다 — 그걸 넣으면 이 큐에 dira를 체크아웃한다(§4 생성 4항의 3번).
+  assert.deepStrictEqual(worktree, [
+    `git -C '${path.dirname(root)}' worktree add '${root}/worktrees/w4' -b wt/w4`,
+    `ln -s ../.. '${root}/worktrees/w4/.dira'`,
+    // 검증 줄 — `ln -s` 함정(bf4d8878)을 사람이 밟았는지 여기서만 보인다
+    "ls -ld '" + root + "/worktrees/w4/.dira'    # `l`로 시작해야 한다",
+  ]);
+  assert.strictEqual(worktree[0].includes("Projects/dira'"), false);
 
   // 줄이 없는 템플릿(엔진 기본값을 쓰던 워커)이면 `#!` 다음 줄에 넣는다
   const bare = makeRoot({ "w1.sh": "#!/bin/bash\n. tick.sh\n" });
   const made = await createWorker(bare, "w2");
   assert.strictEqual(readFileSync(made.path, "utf8"), `#!/bin/bash\nTICKET_CWD="${bare}/worktrees/w2"\n. tick.sh\n`);
-  // 레포 경로를 못 뽑으면 자리표시자 + 사유다(§6: 삼키지 않는다)
-  assert.strictEqual(made.worktree.cmds[0].startsWith("git -C <dira 레포> "), true);
-  assert.match(made.worktree.reason ?? "", /w1\.sh/);
+  // `. tick.sh` 줄을 못 읽어도 자리표시자가 없다 — 이제 경로가 root에서 나온다
+  assert.strictEqual(made.worktree[0], `git -C '${path.dirname(bare)}' worktree add '${bare}/worktrees/w2' -b wt/w2`);
 
   // `export TICKET_CWD=`도 같은 줄이다 — 접두는 남기고 값만 바꾼다
   const exp = makeRoot({ "w1.sh": "#!/bin/bash\nexport TICKET_CWD='/tmp/x'\n. tick.sh\n" });
@@ -476,6 +478,80 @@ test("createWorker — TICKET_CWD 말고는 한 줄도 안 바뀐다 (게이트�
   const diff = before.map((l, i) => [i, l, after[i]] as const).filter(([, l, r]) => l !== r);
   assert.strictEqual(diff.length, 1, `바뀐 줄: ${JSON.stringify(diff)}`);
   assert.strictEqual(diff[0][1].startsWith("TICKET_CWD="), true);
+});
+
+// ── prepareWorktree (§4 생성 4항) ───────────────────────────────────────────
+//
+// **진짜 git으로 돌린다.** 이 함수의 값어치가 진짜 git이라 모킹하면 검증할 게 남지 않는다
+// (브랜치 선존재·체크아웃이 만든 `.dira`·realpath 판정은 전부 파일시스템 사실이다).
+
+/** `<base>`가 git 레포, 큐가 `<base>/.dira`. `seed`는 **커밋되는** 파일이라 워크트리
+ *  체크아웃이 그 경로를 만든다(`.dira` 선존재 테스트가 이걸 쓴다). */
+function makeRepo(seed: Record<string, string> = {}): { base: string; root: string } {
+  const base = mkdtempSync(path.join(tmpdir(), "fst-repo-"));
+  tmps.push(base);
+  const git = (...args: string[]) => execFileSync("git", ["-C", base, ...args], { encoding: "utf8" });
+  git("init", "-q", "-b", "main");
+  git("config", "user.email", "t@example.com");
+  git("config", "user.name", "t");
+  writeFileSync(path.join(base, "README.md"), "# t\n");
+  for (const [rel, body] of Object.entries(seed)) {
+    mkdirSync(path.dirname(path.join(base, rel)), { recursive: true });
+    writeFileSync(path.join(base, rel), body);
+  }
+  git("add", "-A");
+  git("commit", "-qm", "init"); // 커밋이 없으면 `worktree add`가 HEAD를 못 읽는다
+  const root = path.join(base, ".dira");
+  mkdirSync(path.join(root, "workers"), { recursive: true });
+  return { base, root };
+}
+
+const headOf = (tree: string) =>
+  execFileSync("git", ["-C", tree, "rev-parse", "--abbrev-ref", "HEAD"], { encoding: "utf8" }).trim();
+
+test("prepareWorktree — 트리·심링크·검증 3단계를 서버가 실행한다 (§4 생성 4항)", async () => {
+  const { root } = makeRepo();
+  assert.deepStrictEqual(await prepareWorktree(root, "w2"), { done: 3, rest: [] });
+  const tree = path.join(root, "worktrees", "w2");
+  assert.strictEqual(statSync(tree).isDirectory(), true);
+  assert.strictEqual(readFileSync(path.join(tree, "README.md"), "utf8"), "# t\n"); // 진짜 체크아웃
+  assert.strictEqual(readlinkSync(path.join(tree, ".dira")), "../.."); // 상대경로다(§4-2)
+  assert.strictEqual(realpathSync(path.join(tree, ".dira")), realpathSync(root));
+  // 브랜치가 워커마다 갈려야 한다 — 세 세션이 `wt/w1`에 커밋한 사고가 이 배치의 근거다(§4-2)
+  assert.strictEqual(headOf(tree), "wt/w2");
+});
+
+test("prepareWorktree — 브랜치 wt/<이름>이 이미 있으면 -b 없이 그 브랜치로 붙인다", async () => {
+  const { base, root } = makeRepo();
+  execFileSync("git", ["-C", base, "branch", "wt/w2"]); // 워커를 지웠다 다시 만드는 경로
+  assert.deepStrictEqual(await prepareWorktree(root, "w2"), { done: 3, rest: [] });
+  // `-b`를 그대로 냈으면 여기 오기 전에 실패했다. 디렉터리 이름으로 dwim했으면 `w2`가 잡힌다
+  assert.strictEqual(headOf(path.join(root, "worktrees", "w2")), "wt/w2");
+});
+
+test("prepareWorktree — .dira가 이미 있으면 EEXIST로 멈추고 되돌리지 않는다 (ln -s 함정 bf4d8878)", async () => {
+  // 체크아웃이 `.dira`를 만드는 배치. `ln -s`였다면 여기서 `.dira/.dira`가 생겨 세션이
+  // 미끼 큐를 보고 자기 티켓을 못 찾았다 — `fs.symlink`는 대신 EEXIST로 멈춘다.
+  const { root } = makeRepo({ ".dira/keep": "tracked\n" });
+  const r = await prepareWorktree(root, "w2");
+  assert.strictEqual(r.done, 1);
+  assert.match(r.reason ?? "", /이미 있습니다/);
+  assert.deepStrictEqual(r.rest, worktreeCmds(root, "w2").slice(1)); // 남은 명령 = 꼬리 2줄
+  const tree = path.join(root, "worktrees", "w2");
+  assert.strictEqual(readFileSync(path.join(tree, ".dira", "keep"), "utf8"), "tracked\n"); // 안 지웠다
+  assert.throws(() => statSync(path.join(tree, ".dira", ".dira"))); // 미끼 큐를 안 만들었다
+});
+
+test("prepareWorktree — dirname(root)가 git 레포가 아니면 아무것도 실행하지 않는다", async () => {
+  const base = mkdtempSync(path.join(tmpdir(), "fst-norepo-"));
+  tmps.push(base);
+  const root = path.join(base, ".dira");
+  mkdirSync(path.join(root, "workers"), { recursive: true });
+  const r = await prepareWorktree(root, "w2");
+  assert.strictEqual(r.done, 0);
+  assert.match(r.reason ?? "", /git 레포가 아닙니다/);
+  assert.deepStrictEqual(r.rest, worktreeCmds(root, "w2")); // 3줄 전부가 남은 명령이다
+  assert.throws(() => statSync(path.join(root, "worktrees"))); // 디렉터리 하나도 안 만들었다
 });
 
 // ── TICKET_CONTEXT 블록 ─────────────────────────────────────────────────────
