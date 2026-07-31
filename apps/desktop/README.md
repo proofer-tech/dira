@@ -7,7 +7,7 @@
 Electron main ──spawn──> node server.js        (Next standalone 빌드, 127.0.0.1:<빈 포트>)
       │                       ↑
       ├─ BrowserWindow ───load┘   빨간 버튼은 숨기기다. 파괴하지 않는다
-      └─ Tray ─ 열기 · 종료         창이 없어도 앱은 산다
+      └─ Tray ─ 열기 · 로그인 시 자동 실행 · 종료   창이 없어도 앱은 산다
 ```
 
 ## 실행
@@ -199,11 +199,21 @@ osascript -l JavaScript -e 'ObjC.import("AppKit");var s=$.NSScreen.mainScreen; \
 **푸는 법은 자리를 만드는 것뿐이다** — 메뉴바 항목 하나를 ⌘-드래그해 치우거나, 디스플레이를
 `더 넓은 공간`으로 바꾼다. 앱이 자기 슬롯을 고르는 API는 없다(Electron에도 AppKit에도).
 
+## 트레이 메뉴는 열 때마다 새로 만든다
+
+`로그인 시 자동 실행`(N4)의 상태는 **OS가 갖는다**(`app.getLoginItemSettings()` → macOS 13+는
+`SMAppService`). 앱은 그 값을 어디에도 캐시하지 않는다 — 사람이 시스템 설정 → 로그인 항목에서
+빼버려도 다음에 연 메뉴가 맞는 상태를 그린다. 그래서 `tray.setContextMenu`(메뉴를 한 번 박고
+끝)를 안 쓰고 `click`·`right-click`에서 `popUpContextMenu(trayMenu())`로 매번 만들어 띄운다.
+
+`getLoginItemSettings().status`가 실제 진단값이다: `not-found`(등록된 적 없음) ·
+`enabled`(등록됨) · `not-registered`(해제됨). **앱 번들에 손대고 재서명하면 등록이 `not-found`로
+사라진다** — 서명이 바뀌면 macOS가 그 등록을 다른 앱의 것으로 본다. 개발 중 껐다 켜도 체크가
+풀려 있으면 그 사이에 재빌드·재서명한 것이 원인이다(`00fc34ba`에서 실측).
+
 ## 여기 아직 없는 것
 
-로그인 시 자동 실행 `00fc34ba`(트레이 메뉴의 구분선 자리). 자기 티켓이 있다.
-
-**서명된 산출물도 아직 없다** — 설정은 위 `## 서명 · 공증`에 다 서 있고 인증서도
+**서명된 산출물이 아직 없다** — 설정은 위 `## 서명 · 공증`에 다 서 있고 인증서도
 이 맥에 설치돼 있지만(`Developer ID Application: Hansol Lim (L9E4Y653DY)`), 에이전트 세션이
 키체인에 닿지 못해 서명 빌드를 한 번도 돌려보지 못했다(`5aa9486d` `## 블록`).
 사람이 **자기 터미널에서** 앱 암호를 얹어 `pnpm dist`를 한 번 돌리는 것이 남은 전부다.

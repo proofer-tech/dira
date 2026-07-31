@@ -1,8 +1,7 @@
-// dira 데스크톱 셸. 하는 일은 넷이다 — Next standalone 서버를 자식으로 띄우고, 창이 그것을 열고,
+// dira 데스크톱 셸. 하는 일은 다섯이다 — Next standalone 서버를 자식으로 띄우고, 창이 그것을 열고,
 // 창을 닫아도 메뉴바에 남고(N1), 답변 대기 티켓이 새로 생기면 알리고(N2), 화면이 부르면
-// 네이티브 경로 다이얼로그를 띄운다(N3).
-// 스펙: ../../docs/DESIGN.md §데스크톱 앱 (특히 "못박는 것" 1~5, N1·N2·N3).
-// 자동 실행은 여기 없다 (00fc34ba).
+// 네이티브 경로 다이얼로그를 띄우고(N3), 로그인 시 자동 실행을 켜고 끈다(N4).
+// 스펙: ../../docs/DESIGN.md §데스크톱 앱 (특히 "못박는 것" 1~5, N1·N2·N3·N4).
 import { app, BrowserWindow, Menu, Notification, Tray, dialog, ipcMain, nativeImage, shell } from "electron";
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { createServer } from "node:net";
@@ -236,7 +235,26 @@ ipcMain.handle("dira:pick-path", async (e, mode: unknown) => {
 
 // ── N1 트레이 ──────────────────────────────────────────────────────────────
 
-/** 메뉴바 아이콘. 항목은 둘이고, 로그인 시 자동 실행(`00fc34ba`)이 그 사이에 들어온다. */
+/** 트레이 메뉴. **열 때마다 새로 만든다** — 체크 상태의 원본은 OS이고(N4) 앱 안 변수에 담아두면
+ *  시스템 설정 → 로그인 항목에서 끈 것이 메뉴에는 켜진 채로 남는다. `setContextMenu`는 메뉴를
+ *  한 번 박고 끝이라 그 갱신 자리가 없어서 안 쓴다 — 클릭 때마다 `popUpContextMenu`로 띄운다. */
+function trayMenu(origin: string): Menu {
+  return Menu.buildFromTemplate([
+    { label: "열기", click: () => showWindow(origin) },
+    { type: "separator" },
+    {
+      label: "로그인 시 자동 실행",
+      type: "checkbox",
+      checked: app.getLoginItemSettings().openAtLogin,
+      // item.checked는 macOS가 이미 뒤집어 놓은 값이다(누른 뒤 상태). 그대로 OS에 되쓴다.
+      click: (item) => app.setLoginItemSettings({ openAtLogin: item.checked }),
+    },
+    { type: "separator" },
+    { label: "종료", click: () => app.quit() },
+  ]);
+}
+
+/** 메뉴바 아이콘. */
 function createTray(origin: string) {
   // 템플릿 이미지 — 색을 갖지 않고 알파만 있다. 라이트/다크 메뉴바를 macOS가 각각 칠한다.
   // @2x는 파일명 규약으로 nativeImage가 알아서 집는다 (trayTemplate@2x.png).
@@ -248,13 +266,9 @@ function createTray(origin: string) {
 
   tray = new Tray(image);
   tray.setToolTip("dira");
-  tray.setContextMenu(
-    Menu.buildFromTemplate([
-      { label: "열기", click: () => showWindow(origin) },
-      { type: "separator" }, // 여기에 `00fc34ba`가 로그인 시 자동 실행 체크 항목을 붙인다
-      { label: "종료", click: () => app.quit() },
-    ]),
-  );
+  const popUp = () => tray?.popUpContextMenu(trayMenu(origin));
+  tray.on("click", popUp);
+  tray.on("right-click", popUp);
 }
 
 function showWindow(origin: string) {
