@@ -85,7 +85,7 @@ test("findTicket — 경로가 될 수 있는 해시는 큐를 보지도 않는�
 // 상태 전이는 TS로 다시 구현하지 않는다(제약 2). 그래서 여기서 볼 것은 **진짜 워커 스크립트가
 // 돌았는가**다: session_id가 비고 진행중 접미사가 떨어졌으면 tick.sh가 한 일이다.
 
-const TICK = fileURLToPath(new URL("../../tick.sh", import.meta.url));
+const TICK = fileURLToPath(new URL("../../../tick.sh", import.meta.url));
 
 /** 워커 하나짜리 티켓 루트. 워커는 tick.sh를 source하는 두 줄이 전부다(worker.sh.example). */
 function scratch(workers: string[]) {

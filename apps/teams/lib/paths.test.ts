@@ -27,7 +27,7 @@ test("이름·해시·id 규칙", () => {
   assert.ok(!isHash("a/b/c") && !isHash("../../etc/passwd") && !isHash("a\\b"));
   assert.ok(!isHash(".") && !isHash("..") && !isHash(".hidden") && !isHash(""));
   assert.ok(!isHash("a\0b") && !isHash("a\nb") && !isHash("x".repeat(256)));
-  assert.ok(isProjectId("fs-tickets") && !isProjectId("Fs_Tickets"));
+  assert.ok(isProjectId("dira") && !isProjectId("Dira_Teams"));
 });
 
 test("expandHome", () => {

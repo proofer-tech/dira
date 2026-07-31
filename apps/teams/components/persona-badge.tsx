@@ -20,7 +20,7 @@ import { cn } from "@/lib/utils";
  *  **수직 정렬은 점이 들고 간다** — `self-center`다(`394d3b50`). 감싸는 항목에 맡기면
  *  `CommandItem`(`items-center`)에서는 맞고 `SelectItem`에서는 6px 위로 붙는다:
  *  shadcn `SelectItem`의 텍스트 슬롯이 `flex ... gap-2`인데 `items-center`가 없어
- *  교차축 시작점(줄 맨 위)에 놓인다. `components/ui/`는 손대지 않으므로(gui/AGENTS.md)
+ *  교차축 시작점(줄 맨 위)에 놓인다. `components/ui/`는 손대지 않으므로(apps/teams/AGENTS.md)
  *  여섯 번째 자리가 생겨도 안 어긋나는 쪽에 붙인다. 이미 `items-center`인 자리에서는 무동작이다. */
 export function PersonaDot({ color, className }: { color?: string; className?: string }) {
   return (

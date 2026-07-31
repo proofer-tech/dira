@@ -47,7 +47,7 @@ export default async function ProjectLayout({
     <>
       <header className="sticky top-0 z-50 flex h-12 items-center gap-6 border-b bg-background px-6">
         <Link href="/" className="shrink-0 text-sm font-medium">
-          fs-tickets
+          dira
         </Link>
         <ProjectNav id={id} />
         <ProjectSwitcher projects={items} currentId={id} />

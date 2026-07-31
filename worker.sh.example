@@ -13,7 +13,7 @@
 # TICKET_NAME="w1"
 
 # --- 작업 디렉터리 (기본: 티켓 루트의 부모) ---
-# <프로젝트>/.fs-tickets/workers/w1.sh 면 기본값이 <프로젝트>다. 큐를 프로젝트 밖에 뒀거나
+# <프로젝트>/.dira/workers/w1.sh 면 기본값이 <프로젝트>다. 큐를 프로젝트 밖에 뒀거나
 # (공유 클라우드 워크스페이스 등) 세션을 다른 데서 돌리려면 여기서 지정한다.
 # TICKET_CWD="$HOME/Projects/myproject"
 #
@@ -57,4 +57,4 @@
 # 성격(kind)·수행자(persona)는 디렉터리가 아니라 티켓 frontmatter에 있다.
 
 # --- 필수: 엔진 코드를 불러 실행한다(레포 경로에 맞게 고칠 것) ---
-. "$HOME/Projects/fs-tickets/tick.sh"
+. "$HOME/Projects/dira/tick.sh"

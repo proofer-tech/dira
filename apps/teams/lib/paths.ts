@@ -60,7 +60,7 @@ export function shellValue(raw: string): string | null {
 }
 
 /** 기준 디렉터리가 될 셸 값. 절대경로가 아니면 null이다 — 상대경로를 서버(Next) cwd 기준으로
- *  풀면 `gui/` 밑을 읽고 쓴다. 워커가 어디서 도는지는 셸을 실행하지 않는 한 알 수 없다. */
+ *  풀면 `apps/teams/` 밑을 읽고 쓴다. 워커가 어디서 도는지는 셸을 실행하지 않는 한 알 수 없다. */
 export function shellPath(raw: string): string | null {
   const v = shellValue(raw);
   return v !== null && path.isAbsolute(expandHome(v)) ? v : null;

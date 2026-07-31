@@ -29,13 +29,13 @@ TICKET_ROOT="$(dirname "$WORKERS")"
 LOGDIR="$WORKERS/logs"
 RUNLOG="$WORKERS/runner.log"
 # 머신 로컬 상태(토큰·실행 락). 티켓 루트가 공유 드라이브여도 비밀과 pid는 여기 남는다.
-LOCAL="${TICKET_LOCAL:-$HOME/.config/fs-tickets}"
+LOCAL="${TICKET_LOCAL:-$HOME/.config/dira}"
 mkdir -p "$LOGDIR" "$LOCAL/run" "$TICKET_ROOT/tickets"
 
 log() { printf '%s [%s] %s\n' "$(date '+%F %T')" "${TICKET_NAME:-?}" "$*" >> "$RUNLOG"; }
 
 TICKET_NAME="${TICKET_NAME:-$(basename "$0" .sh)}"
-# 기본 작업 디렉터리 = 루트의 부모(<프로젝트>/.fs-tickets/workers/w1.sh -> <프로젝트>)
+# 기본 작업 디렉터리 = 루트의 부모(<프로젝트>/.dira/workers/w1.sh -> <프로젝트>)
 TICKET_CWD="${TICKET_CWD:-$(dirname "$TICKET_ROOT")}"
 TICKET_MAXRUN="${TICKET_MAXRUN:-5400}"
 # 프롬프트 포맷의 %s = 티켓 해시 하나뿐이다(역할 호칭은 페르소나 프로필이 대신한다).
@@ -50,7 +50,7 @@ export TICKET_INPROGRESS="${TICKET_INPROGRESS:-}" TICKET_DONE="${TICKET_DONE:-}"
 
 # Claude를 명시적으로 쓸 때만 헤드리스 OAuth 토큰을 읽는다. Codex의 인증은 자체 설정을 쓴다.
 if [ "$(basename "${TICKET_ENGINE[0]}")" = "claude" ]; then
-  # claude setup-token 으로 발급 후: printf %s '<토큰>' > ~/.config/fs-tickets/oauth-token
+  # claude setup-token 으로 발급 후: printf %s '<토큰>' > ~/.config/dira/oauth-token
   [ -r "$LOCAL/oauth-token" ] && export CLAUDE_CODE_OAUTH_TOKEN="$(tr -d '\r\n' < "$LOCAL/oauth-token")"
 fi
 

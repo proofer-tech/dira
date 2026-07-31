@@ -15,10 +15,10 @@
 | 여기 있는 것 | 성격 |
 |---|---|
 | 프로젝트 소스·문서 | 워크트리의 **자기 사본**. 여기서 고치고 커밋한다 |
-| `.fs-tickets/` | **심링크 → canonical 큐 1개.** gitignore돼 있어 커밋 대상이 아니다 |
+| `.dira/` | **심링크 → canonical 큐 1개.** gitignore돼 있어 커밋 대상이 아니다 |
 
-큐 사본은 세상에 하나뿐이다(`<프로젝트>/.fs-tickets`). 심링크 덕에 상대경로
-`.fs-tickets/tickets/...`가 그냥 통한다. `git status`에 티켓이 안 뜨는 건 정상이다.
+큐 사본은 세상에 하나뿐이다(`<프로젝트>/.dira`). 심링크 덕에 상대경로
+`.dira/tickets/...`가 그냥 통한다. `git status`에 티켓이 안 뜨는 건 정상이다.
 
 ## git — 시작 · 끝
 
@@ -73,13 +73,13 @@ $ git -C <프로젝트> diff --cached --stat              # 무엇이 걸려 있
 
 당신의 티켓은 **이미 `.wip`로 잡혀 있다**(디스패처가 claim했다).
 
-1. `.fs-tickets/tickets/<해시>.wip.md`를 읽는다. `## Goal`과 `## Done when`이 계약이다.
+1. `.dira/tickets/<해시>.wip.md`를 읽는다. `## Goal`과 `## Done when`이 계약이다.
 2. 수행한다. `## Done when`에 없는 일은 하지 않는다.
 3. 본문 끝에 `## 결과` 절 추가 — 무엇을 바꿨는지, 검증 명령과 **실제 출력**, push한 커밋 해시.
 4. `git push . HEAD:<통합 브랜치>` 성공 확인.
 5. 파일명을 `<해시>.done.md`로 rename. 이 rename이 완료 신고다. **안 하면 미완으로 남는다.**
 
-경로를 잃었으면 `ls .fs-tickets/tickets/<해시>.*`로 찾는다.
+경로를 잃었으면 `ls .dira/tickets/<해시>.*`로 찾는다.
 `mv`로 상태를 바꾸는 건 **자기 티켓의 `.wip` → `.done`뿐**이다.
 
 ## 티켓 성격 (`kind:`)
@@ -128,8 +128,8 @@ $ git -C <프로젝트> diff --cached --stat              # 무엇이 걸려 있
 
 | 문서 | 무엇 |
 |---|---|
-| `.fs-tickets/protocols/tickets.md` | 티켓 파일 작성법. **새 티켓 만들기 전에 읽는다** |
-| `.fs-tickets/personas/<이름>/PROFILE.md` | 각 역할의 권한·판단 기준 |
+| `.dira/protocols/tickets.md` | 티켓 파일 작성법. **새 티켓 만들기 전에 읽는다** |
+| `.dira/personas/<이름>/PROFILE.md` | 각 역할의 권한·판단 기준 |
 | `<프로젝트 스펙 문서>` | (프로젝트마다 채운다) |
 
 ## 큐의 불변식

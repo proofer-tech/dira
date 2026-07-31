@@ -14,7 +14,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { listTickets } from "./queue.ts";
 
-// 진짜 락 디렉터리(~/.config/fs-tickets/run)를 밟지 않는다. import 전에 건다.
+// 진짜 락 디렉터리(~/.config/dira/run)를 밟지 않는다. import 전에 건다.
 const LOCAL = mkdtempSync(path.join(tmpdir(), "fst-local-"));
 process.env.TICKET_LOCAL = LOCAL;
 
@@ -54,7 +54,7 @@ function putLock(workersDir: string, name: string, pid: number | null) {
 }
 
 test("lockPath — tick.sh의 파이썬 sha1과 한 글자도 다르지 않다", () => {
-  const workers = "/Users/x/Projects/p/.fs-tickets/workers";
+  const workers = "/Users/x/Projects/p/.dira/workers";
   // tick.sh: LOCK="$LOCAL/run/$TICKET_NAME-$(python3 -c 'sha1(argv[1])[:8]' "$WORKERS/$TICKET_NAME").lock"
   const h = execFileSync(
     "python3",
@@ -185,21 +185,21 @@ test("주석 처리된 할당문은 설정이 아니다 (worker.sh.example이 �
 });
 
 test("작업 디렉터리 결함 — 3종을 판정하고 정상 워커에는 아무것도 붙이지 않는다 (§4)", async () => {
-  // 실제 배치를 그대로 만든다: 큐가 `<base>/.fs-tickets`, 워크트리가 `<큐>/worktrees/<이름>`.
+  // 실제 배치를 그대로 만든다: 큐가 `<base>/.dira`, 워크트리가 `<큐>/worktrees/<이름>`.
   // mkdtemp가 주는 /var/… 는 /private/var/… 의 심링크라서 realpath 없이 비교하면 전부 결함이 된다.
   const base = mkdtempSync(path.join(tmpdir(), "fst-base-"));
   tmps.push(base);
-  const root = path.join(base, ".fs-tickets");
+  const root = path.join(base, ".dira");
   mkdirSync(path.join(root, "workers"), { recursive: true });
   const tree = (n: string) => path.join(root, "worktrees", n);
   /** 워커 파일 한 장. `. <레포>/tick.sh` 줄이 준비 명령의 엔진 레포 경로가 된다. */
   const wk = (cwd: string) => `#!/bin/bash\nTICKET_CWD="${cwd}"\nTICKET_CONTEXT=()\n. "${base}/tick.sh"\n`;
   const put = (name: string, cwd: string) =>
     writeFileSync(path.join(root, "workers", `${name}.sh`), wk(cwd));
-  /** 사람이 손으로 만드는 상태: 트리 + `.fs-tickets -> ../..` */
+  /** 사람이 손으로 만드는 상태: 트리 + `.dira -> ../..` */
   const prepare = (n: string) => {
     mkdirSync(tree(n), { recursive: true });
-    symlinkSync("../..", path.join(tree(n), ".fs-tickets"));
+    symlinkSync("../..", path.join(tree(n), ".dira"));
   };
 
   put("ok", tree("ok"));
@@ -207,9 +207,9 @@ test("작업 디렉터리 결함 — 3종을 판정하고 정상 워커에는 �
   put("gone", tree("gone")); // 트리를 안 만든다
   put("nolink", tree("nolink"));
   mkdirSync(tree("nolink"), { recursive: true }); // 트리는 있고 심링크가 없다
-  put("bait", tree("bait")); // `ln -s` 함정: .fs-tickets 안쪽에 링크가 생긴 상태
-  mkdirSync(path.join(tree("bait"), ".fs-tickets"), { recursive: true });
-  symlinkSync("../../..", path.join(tree("bait"), ".fs-tickets", ".fs-tickets"));
+  put("bait", tree("bait")); // `ln -s` 함정: .dira 안쪽에 링크가 생긴 상태
+  mkdirSync(path.join(tree("bait"), ".dira"), { recursive: true });
+  symlinkSync("../../..", path.join(tree("bait"), ".dira", ".dira"));
   put("s1", tree("shared")); // 두 워커가 한 트리를 가리킨다
   put("s2", tree("shared"));
   prepare("shared");
@@ -238,16 +238,16 @@ test("작업 디렉터리 결함 — 3종을 판정하고 정상 워커에는 �
   );
   assert.deepStrictEqual(by("gone").worktree!.cmds, [
     `git -C '${base}' worktree add '${tree("gone")}' -b wt/gone`,
-    `ln -s ../.. '${path.join(tree("gone"), ".fs-tickets")}'`,
-    `ls -ld '${path.join(tree("gone"), ".fs-tickets")}'    # \`l\`로 시작해야 한다`,
+    `ln -s ../.. '${path.join(tree("gone"), ".dira")}'`,
+    `ls -ld '${path.join(tree("gone"), ".dira")}'    # \`l\`로 시작해야 한다`,
   ]);
 });
 
 test("작업 디렉터리 결함 — TICKET_CWD 줄이 없으면 엔진 기본값(루트의 부모)으로 판정한다", async () => {
-  // tick.sh 39행. 이 기본값은 큐가 있는 디렉터리라 `<부모>/.fs-tickets`가 곧 큐 루트다 = 정상.
+  // tick.sh 39행. 이 기본값은 큐가 있는 디렉터리라 `<부모>/.dira`가 곧 큐 루트다 = 정상.
   const base = mkdtempSync(path.join(tmpdir(), "fst-base-"));
   tmps.push(base);
-  const root = path.join(base, ".fs-tickets");
+  const root = path.join(base, ".dira");
   mkdirSync(path.join(root, "workers"), { recursive: true });
   writeFileSync(path.join(root, "workers", "w1.sh"), "#!/bin/bash\nTICKET_CONTEXT=()\n");
   const [w] = await listWorkers(root);
@@ -345,14 +345,14 @@ const FIXTURE = [
   "# 백업 — 손대지 말 것",
   "0 3 * * * /Users/x/bin/backup.sh >> /tmp/backup.log 2>&1",
   "",
-  '* * * * * "/Users/x/Projects/stream/.fs-tickets/workers/w1.sh" >> "/Users/x/Projects/stream/.fs-tickets/workers/cron.log" 2>&1',
+  '* * * * * "/Users/x/Projects/stream/.dira/workers/w1.sh" >> "/Users/x/Projects/stream/.dira/workers/cron.log" 2>&1',
   "@reboot /Users/x/bin/other.sh",
   "",
 ].join("\n");
 
 test("cronRegister/cronUnregister — 대상 줄만 바뀌고 나머지는 바이트 그대로 (제약 4)", () => {
-  const p = "/Users/x/Projects/p/.fs-tickets/workers/w9.sh";
-  const line = `* * * * * "${p}" >> "/Users/x/Projects/p/.fs-tickets/workers/cron.log" 2>&1`;
+  const p = "/Users/x/Projects/p/.dira/workers/w9.sh";
+  const line = `* * * * * "${p}" >> "/Users/x/Projects/p/.dira/workers/cron.log" 2>&1`;
 
   // 등록: 딱 한 줄이 늘고 나머지 텍스트가 완전히 동일하다
   const added = cronRegister(FIXTURE, p);
@@ -370,7 +370,7 @@ test("cronRegister/cronUnregister — 대상 줄만 바뀌고 나머지는 바�
   assert.strictEqual(cronUnregister(FIXTURE, p), FIXTURE);
 
   // 남의 프로젝트 워커를 지우라고 하면 그 줄만 지운다(경로가 다르면 안 건드린다는 대칭 확인)
-  const stream = "/Users/x/Projects/stream/.fs-tickets/workers/w1.sh";
+  const stream = "/Users/x/Projects/stream/.dira/workers/w1.sh";
   assert.strictEqual(cronUnregister(FIXTURE, stream).includes("stream"), false);
   assert.strictEqual(cronUnregister(FIXTURE, stream).split("\n").length, FIXTURE.split("\n").length - 1);
 });
@@ -418,15 +418,15 @@ test("createWorker — 기존 워커를 템플릿으로 755 생성, 덮어쓰기
 /** 이 레포의 w5.sh와 같은 모양: `export`도 아니고 게이트·컨텍스트·엔진 줄이 다 들어 있다 */
 const WT_SH = `#!/bin/bash
 # 주석
-TICKET_CWD="$HOME/Projects/fs-tickets-wt/w1"
+TICKET_CWD="$HOME/Projects/dira-wt/w1"
 
 TICKET_CONTEXT=(
   "$TICKET_CWD/docs/DESIGN.md|스펙"
 )
 
-. "$HOME/Projects/fs-tickets/.fs-tickets/dispatch-gate.sh"
+. "$HOME/Projects/dira/.dira/dispatch-gate.sh"
 
-. "$HOME/Projects/fs-tickets/tick.sh"
+. "$HOME/Projects/dira/tick.sh"
 `;
 
 test("createWorker — TICKET_CWD를 템플릿에서 물려받지 않는다 (w4·w5가 w1 트리를 쓴 사고)", async () => {
@@ -434,14 +434,14 @@ test("createWorker — TICKET_CWD를 템플릿에서 물려받지 않는다 (w4�
   const { path: file, worktree } = await createWorker(root, "w4");
   const text = readFileSync(file, "utf8");
   assert.match(text, new RegExp(`^TICKET_CWD="${root}/worktrees/w4"$`, "m"));
-  assert.strictEqual(text.includes("fs-tickets-wt/w1"), false); // 템플릿 값이 남아 있지 않다
+  assert.strictEqual(text.includes("dira-wt/w1"), false); // 템플릿 값이 남아 있지 않다
   // 워크트리 준비 명령: 레포 경로는 `. …/tick.sh` 줄에서 뽑는다(자리표시자가 남지 않는다)
   assert.deepStrictEqual(worktree, {
     cmds: [
-      `git -C '${process.env.HOME}/Projects/fs-tickets' worktree add '${root}/worktrees/w4' -b wt/w4`,
-      `ln -s ../.. '${root}/worktrees/w4/.fs-tickets'`,
+      `git -C '${process.env.HOME}/Projects/dira' worktree add '${root}/worktrees/w4' -b wt/w4`,
+      `ln -s ../.. '${root}/worktrees/w4/.dira'`,
       // 검증 줄 — `ln -s` 함정(bf4d8878)을 사람이 밟았는지 여기서만 보인다
-      "ls -ld '" + root + "/worktrees/w4/.fs-tickets'    # `l`로 시작해야 한다",
+      "ls -ld '" + root + "/worktrees/w4/.dira'    # `l`로 시작해야 한다",
     ],
   });
 
@@ -450,7 +450,7 @@ test("createWorker — TICKET_CWD를 템플릿에서 물려받지 않는다 (w4�
   const made = await createWorker(bare, "w2");
   assert.strictEqual(readFileSync(made.path, "utf8"), `#!/bin/bash\nTICKET_CWD="${bare}/worktrees/w2"\n. tick.sh\n`);
   // 레포 경로를 못 뽑으면 자리표시자 + 사유다(§6: 삼키지 않는다)
-  assert.strictEqual(made.worktree.cmds[0].startsWith("git -C <fs-tickets 레포> "), true);
+  assert.strictEqual(made.worktree.cmds[0].startsWith("git -C <dira 레포> "), true);
   assert.match(made.worktree.reason ?? "", /w1\.sh/);
 
   // `export TICKET_CWD=`도 같은 줄이다 — 접두는 남기고 값만 바꾼다
@@ -482,10 +482,10 @@ TICKET_CWD="$HOME/wt/w1"
 # --- 참조 컨텍스트 ---
 TICKET_CONTEXT=(
   "$TICKET_CWD/docs/DESIGN.md|GUI 제품 스펙"
-  "$TICKET_CWD/gui/AGENTS.md|코드 규약"
+  "$TICKET_CWD/dira/AGENTS.md|코드 규약"
 )
 
-. "$HOME/Projects/fs-tickets/tick.sh"
+. "$HOME/Projects/dira/tick.sh"
 `;
 
 test("parseContextBlock — 정상 블록: 항목·치환 구간을 정확히 짚는다", () => {
@@ -493,7 +493,7 @@ test("parseContextBlock — 정상 블록: 항목·치환 구간을 정확히 �
   assert.ok(b.ok);
   assert.deepStrictEqual(b.items, [
     { path: "$TICKET_CWD/docs/DESIGN.md", desc: "GUI 제품 스펙" },
-    { path: "$TICKET_CWD/gui/AGENTS.md", desc: "코드 규약" },
+    { path: "$TICKET_CWD/dira/AGENTS.md", desc: "코드 규약" },
   ]);
   // start~end가 블록 그 자체여야 한다 — 한 글자 밀리면 남의 라인을 밟는다
   assert.strictEqual(CTX_SH.slice(b.start, b.end).startsWith("TICKET_CONTEXT=("), true);
@@ -568,7 +568,7 @@ test("writeContext — 블록만 갈리고 나머지 줄은 한 글자도 안 �
 
   const text = execFileSync("cat", [real], { encoding: "utf8" });
   assert.strictEqual(text.startsWith('#!/bin/bash\nTICKET_CWD="$HOME/wt/w1"\n'), true);
-  assert.strictEqual(text.endsWith('. "$HOME/Projects/fs-tickets/tick.sh"\n'), true);
+  assert.strictEqual(text.endsWith('. "$HOME/Projects/dira/tick.sh"\n'), true);
   assert.match(text, /# --- 참조 컨텍스트 ---/); // 주변 주석이 살아 있다
   // **bash가 정말 그렇게 읽는가.** 눈으로 맞추지 않는다 — 블록만 떼어 진짜 셸에 먹인다
   // (파일째 source하면 마지막 줄이 tick.sh를 실행한다).
@@ -615,7 +615,7 @@ test("copyContext — $TICKET_CWD가 살아 옮겨간다(받는 워커는 자기
   assert.ok(ctx.ok);
   assert.deepStrictEqual(
     ctx.items.map((i) => i.path),
-    ["$TICKET_CWD/docs/DESIGN.md", "$TICKET_CWD/gui/AGENTS.md"],
+    ["$TICKET_CWD/docs/DESIGN.md", "$TICKET_CWD/dira/AGENTS.md"],
   );
   // 펴진 경로는 w2의 TICKET_CWD를 쓴다 — 여기서 w1이 나오면 복사가 설정을 갈라놓는다
   assert.match(ctx.items[0].resolved, /\/wt\/w2\/docs\/DESIGN\.md$/);

@@ -34,7 +34,7 @@
    `awaiting: $A` (이미 있으면 덮는다) + `deps:`에 `$A`를 **append**(기존 deps를 지우지 않는다).
    **둘 다 있어야 한다** — `deps`가 실제 잠금이고 `awaiting`은 "답변 대기"라는 표시다.
    `deps`만 걸면 선행 티켓 대기와 구분되지 않고, `awaiting`만 걸면 답변 전에 디스패치된다.
-3. **`.fs-tickets/workers/<w>.sh unassign <R stem>`** 을 호출한다. `<w>`는 내 티켓 fm의 `owner:`에
+3. **`.dira/workers/<w>.sh unassign <R stem>`** 을 호출한다. `<w>`는 내 티켓 fm의 `owner:`에
    있다(`pm / w1-...` → `w1`). `.wip`을 직접 rename하지 않는다 — 열림으로 되돌리는 유일한 방법이다.
 4. **종료.** `.done`으로 바꾸지 않는다. 사람이 `tickets/<A>.done.md`를 만들면 `deps`가 충족돼
    `<R>`이 다시 큐에 뜬다. 그때 다음 PM 세션이 아래 §답이 온 뒤대로 이어서 본다.
@@ -53,7 +53,7 @@
 
 - **판정 한 줄: `awaiting` 값이 `.done`으로 존재하면 답이 온 것이다.**
   ```bash
-  ls .fs-tickets/tickets/<awaiting 값>.done.md    # 나오면 답이 왔다
+  ls .dira/tickets/<awaiting 값>.done.md    # 나오면 답이 왔다
   ```
   디스패치됐다는 사실 자체가 이미 그 뜻이다 — 답변 파일이 없으면 `deps`가 미충족이라 큐에 안 뜬다.
 - **`awaiting`이 남아 있는 것은 이력이다. 미답 표시가 아니다**(위 — 답이 달려도 지우지 않는다).
@@ -61,9 +61,9 @@
 - **답은 `tickets/<stem>.done.md`에 따로 산다.** 요구사항 본문에 없고 `list`에도 안 뜬다
   (`.done`으로 태어난다). `deps` 중 `kind: answer`인 stem을 전부 연다:
   ```bash
-  R=.fs-tickets/tickets/<R 해시>.wip.md              # 지금 내 .wip.md 경로
+  R=.dira/tickets/<R 해시>.wip.md              # 지금 내 .wip.md 경로
   for A in $(sed -n 's/^deps: *\[\(.*\)\]/\1/p' "$R" | tr ',' ' '); do
-    P=.fs-tickets/tickets/$A.done.md
+    P=.dira/tickets/$A.done.md
     [ -f "$P" ] && grep -q '^kind: answer' "$P" && cat "$P"
   done
   ```

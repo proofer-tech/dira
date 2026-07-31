@@ -34,7 +34,7 @@ import {
   type Ticket,
 } from "./queue.ts";
 
-const PY = fileURLToPath(new URL("../../tickets.py", import.meta.url));
+const PY = fileURLToPath(new URL("../../../tickets.py", import.meta.url));
 const DEFAULT: Suffixes = { inProgress: ".wip", done: ".done" };
 
 function pyList(root: string, env: Record<string, string> = {}): string {

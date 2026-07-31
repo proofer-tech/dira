@@ -46,7 +46,7 @@ export default async function Home() {
       {/* 루트 셸: 로고만. 내비·전환기를 넣지 않는다 — 목적지가 아직 정해지지 않았다(§4) */}
       <header className="sticky top-0 z-50 flex h-12 items-center border-b bg-background px-6">
         <Link href="/" className="text-sm font-medium">
-          fs-tickets
+          dira
         </Link>
       </header>
 
@@ -144,7 +144,7 @@ function Onboarding() {
   return (
     <div className="space-y-6">
       <div className="space-y-2">
-        <h1 className="text-lg font-semibold">fs-tickets GUI</h1>
+        <h1 className="text-lg font-semibold">dira</h1>
         <p className="text-sm text-muted-foreground">
           등록된 프로젝트가 없습니다. 큐 디렉터리를 등록하면 시작합니다.
         </p>
@@ -152,15 +152,15 @@ function Onboarding() {
       <RegisterCard />
       <div className="space-y-2">
         <p className="text-sm text-muted-foreground">
-          큐 디렉터리는 프로젝트 루트 아래 .fs-tickets 입니다. 안에 tickets/ 와 workers/ 가 있습니다.
+          큐 디렉터리는 프로젝트 루트 아래 .dira 입니다. 안에 tickets/ 와 workers/ 가 있습니다.
         </p>
-        <p className="font-mono text-xs text-muted-foreground">~/Projects/myproject/.fs-tickets</p>
-        <p className="font-mono text-xs text-muted-foreground">~/Projects/fs-tickets/.fs-tickets</p>
+        <p className="font-mono text-xs text-muted-foreground">~/Projects/myproject/.dira</p>
+        <p className="font-mono text-xs text-muted-foreground">~/Projects/dira/.dira</p>
       </div>
       <div className="space-y-2">
         <p className="text-sm text-muted-foreground">어디 있는지 모르겠다면:</p>
         {/* 스캔하는 건 GUI 프로세스가 아니라 사용자의 셸이다 — 경계는 여전히 명시적이다 */}
-        <CopyCommand cmd="ls -d ~/Projects/*/.fs-tickets" />
+        <CopyCommand cmd="ls -d ~/Projects/*/.dira" />
       </div>
     </div>
   );

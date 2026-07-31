@@ -18,14 +18,14 @@ import {
  *  이 레포의 큐는 관례대로 `<루트>/protocols`를 쓰므로 재정의 경로를 우연히 검증해주지 않는다
  *  (DESIGN.md §설정 해석). 기준을 프로젝트 root로 잘못 잡은 코드는 여기서만 걸린다.
  *
- *      <tmp>/proj/.fs-tickets/   ← 프로젝트 root
+ *      <tmp>/proj/.dira/   ← 프로젝트 root
  *      <tmp>/shared-protocols/   ← TICKET_PROTOCOLS (루트 밖. 여러 큐가 공유하는 그 경우)
  *      <tmp>/secrets/            ← 아무 화면도 못 읽어야 하는 곳
  */
 const tmp = mkdtempSync(path.join(tmpdir(), "fst-proto-"));
 process.on("exit", () => rmSync(tmp, { recursive: true, force: true }));
 
-const root = path.join(tmp, "proj", ".fs-tickets");
+const root = path.join(tmp, "proj", ".dira");
 const shared = path.join(tmp, "shared-protocols");
 const secrets = path.join(tmp, "secrets");
 mkdirSync(path.join(root, "tickets"), { recursive: true });

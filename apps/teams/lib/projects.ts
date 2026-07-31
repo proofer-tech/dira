@@ -15,7 +15,7 @@ export { slugify };
 export type Project = {
   id: string; // URL 조각
   name: string; // 사람이 읽는 라벨
-  root: string; // <프로젝트>/.fs-tickets 절대경로 (realpath 된 것)
+  root: string; // <프로젝트>/.dira 절대경로 (realpath 된 것)
   /** 페르소나 이름 → 팔레트 키 (DESIGN.md §5 · §비주얼 §12). **큐에 저장하지 않는 이유**:
    *  `PROFILE.md`에 넣으면 `tick.sh`가 통째로 프롬프트에 인라인하고(tick.sh:186), 사이드카
    *  파일은 큐에 GUI 전용 규약을 새로 만든다. 레지스트리는 이미 있는 머신 로컬 저장소다.
@@ -45,7 +45,7 @@ export type ProjectConfig = {
 
 /** 엔진이 머신 로컬 상태를 두는 곳(oauth-token, run/)과 같은 디렉터리. 레포에 넣지 않는다. */
 export function registryPath(): string {
-  const local = process.env.TICKET_LOCAL || path.join(homedir(), ".config", "fs-tickets");
+  const local = process.env.TICKET_LOCAL || path.join(homedir(), ".config", "dira");
   return path.join(expandHome(local), "gui-projects.json");
 }
 
@@ -132,7 +132,7 @@ export async function addProject(name: string, rootInput: string, id?: string): 
   if (!inside.includes("tickets") && !inside.includes("workers")) {
     throw new ProjectError(
       "root",
-      "이 디렉터리에 tickets/도 workers/도 없습니다 — fs-tickets 큐 디렉터리가 맞는지 확인하세요.",
+      "이 디렉터리에 tickets/도 workers/도 없습니다 — dira 큐 디렉터리가 맞는지 확인하세요.",
     );
   }
 
@@ -236,7 +236,7 @@ export { shellValue };
 
 type Parsed = { kv: Partial<Record<Field, string>>; bad: Partial<Record<Field, string>> };
 
-/** 기준 디렉터리로 쓰이는 키. 상대경로면 서버 cwd(`gui/`) 기준으로 풀리므로 해석 실패다. */
+/** 기준 디렉터리로 쓰이는 키. 상대경로면 서버 cwd(`apps/teams/`) 기준으로 풀리므로 해석 실패다. */
 const PATH_FIELDS = new Set<Field>(["personas", "protocols", "cwd"]);
 
 /** 워커 파일 하나의 할당문. `bad`는 **해석 못 한 라인 원문** — 셸 구문(`$X`·`$(…)`·백틱)이

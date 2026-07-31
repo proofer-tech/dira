@@ -1,11 +1,14 @@
-# fs-tickets
+# dira
 
 **파일시스템이 곧 큐인 티켓 디스패처.** 워커 하나가 cron에 물려 열린 티켓 1건을 골라 헤드리스
 에이전트 세션(`claude -p` 등)에 넘기고, 그 세션이 끝날 때까지 기다린다. 상주 루프도, DB도, 인덱스도
 없다 — **상태의 단일 출처는 티켓 파일 자체**(파일명 접미사 + frontmatter)다.
 
+**이름은 `dira`다** — `dir` + `jira`. 큐가 디렉터리 하나라서 `dir`이고, 그 디렉터리를 티켓으로
+보는 도구라서 `jira`의 오마주다. 웹 UI는 `dira teams`이고 `apps/teams/`에 있다.
+
 - **의존성 0** — bash + python3 표준 라이브러리. 설치는 `git clone`이 끝이다. 이 약속은 **엔진의
-  것이다**(`tick.sh`·`tickets.py`). 선택 사항인 [GUI](#gui-선택)는 `gui/`에 격리된 별개 앱이라 여기 없다.
+  것이다**(`tick.sh`·`tickets.py`). 선택 사항인 [GUI](#gui-선택)는 `apps/teams/`에 격리된 별개 앱이라 여기 없다.
 - **워커 = 크론잡 1개 = 티켓 1건** — 동기 프로세스다. 더 돌리려면 `workers/`에 워커를 더 둔다.
 - **프로젝트 무관** — 엔진은 어느 프로젝트도 모른다. 프로젝트별 값은 워커 파일에만 있다.
 - **엔진 무관** — `claude -p`가 기본이지만 워커 한 줄로 다른 CLI 에이전트로 바꾼다.
@@ -13,7 +16,7 @@
 - **죽은 세션 자동 회수** — 프로세스 생존을 직접 확인해서 회수한다(시간 만료 아님).
 
 ```
-$ .fs-tickets/workers/w1.sh list
+$ .dira/workers/w1.sh list
 2026-07-29 17:16  a1b2c3d4     work      pm         대기
 2026-07-29 17:20  f0e1d2c3     request   -          deps 대기 a1b2c3d4
 ```
@@ -28,7 +31,7 @@ $ .fs-tickets/workers/w1.sh list
 ## 설치
 
 ```bash
-git clone <this-repo> ~/Projects/fs-tickets
+git clone <this-repo> ~/Projects/dira
 ```
 
 `tick.sh`는 엔진 코드일 뿐이고 직접 실행하지 않는다 — 진입점은 워커다(아래).
@@ -37,9 +40,9 @@ git clone <this-repo> ~/Projects/fs-tickets
 있어도 비밀이 같이 동기화되지 않게:
 
 ```bash
-mkdir -p ~/.config/fs-tickets
+mkdir -p ~/.config/dira
 claude setup-token
-printf %s '<토큰>' > ~/.config/fs-tickets/oauth-token && chmod 600 ~/.config/fs-tickets/oauth-token
+printf %s '<토큰>' > ~/.config/dira/oauth-token && chmod 600 ~/.config/dira/oauth-token
 ```
 
 ## 빠른 시작
@@ -47,19 +50,19 @@ printf %s '<토큰>' > ~/.config/fs-tickets/oauth-token && chmod 600 ~/.config/f
 프로젝트 하나 붙이는 데 필요한 것은 워커 파일 하나다. **워커가 놓인 위치가 곧 티켓 루트다.**
 
 ```bash
-mkdir -p ~/Projects/myproject/.fs-tickets/workers
-cat > ~/Projects/myproject/.fs-tickets/workers/w1.sh <<'EOF'
+mkdir -p ~/Projects/myproject/.dira/workers
+cat > ~/Projects/myproject/.dira/workers/w1.sh <<'EOF'
 #!/bin/bash
-. "$HOME/Projects/fs-tickets/tick.sh"
+. "$HOME/Projects/dira/tick.sh"
 EOF
-chmod +x ~/Projects/myproject/.fs-tickets/workers/w1.sh
+chmod +x ~/Projects/myproject/.dira/workers/w1.sh
 
 # (선택) 프로토콜·페르소나 출발점을 복사한다 — 엔진은 이게 없어도 그대로 돈다
-cp -r ~/Projects/fs-tickets/templates/* ~/Projects/myproject/.fs-tickets/
+cp -r ~/Projects/dira/templates/* ~/Projects/myproject/.dira/
 
 # 티켓 하나 만들고
-mkdir -p ~/Projects/myproject/.fs-tickets/tickets
-cat > ~/Projects/myproject/.fs-tickets/tickets/a1b2c3d4.md <<'EOF'
+mkdir -p ~/Projects/myproject/.dira/tickets
+cat > ~/Projects/myproject/.dira/tickets/a1b2c3d4.md <<'EOF'
 ---
 ticket: a1b2c3d4
 title: 정산 리포트에 환불 컬럼 추가
@@ -74,13 +77,13 @@ kind: work
 EOF
 
 # 실행 없이 선정 결과·프롬프트만 확인
-~/Projects/myproject/.fs-tickets/workers/w1.sh dryrun
+~/Projects/myproject/.dira/workers/w1.sh dryrun
 ```
 
 cron 등록(**워커당 한 줄**):
 
 ```
-* * * * * $HOME/Projects/myproject/.fs-tickets/workers/w1.sh >> $HOME/Projects/myproject/.fs-tickets/workers/cron.log 2>&1
+* * * * * $HOME/Projects/myproject/.dira/workers/w1.sh >> $HOME/Projects/myproject/.dira/workers/cron.log 2>&1
 ```
 
 중지는 그 줄 삭제. 진행 상황은 `<루트>/workers/runner.log`, 세션별 출력은
@@ -93,7 +96,7 @@ cron 등록(**워커당 한 줄**):
 ## 티켓
 
 ```
-<프로젝트>/.fs-tickets/          <- 티켓 루트. 워커가 놓인 위치가 루트를 정한다
+<프로젝트>/.dira/          <- 티켓 루트. 워커가 놓인 위치가 루트를 정한다
   tickets/<hash>.md              <- 큐. 평면이다. 하위 디렉터리 없음
   personas/<이름>/PROFILE.md     <- 누가 (티켓이 고른다)
   protocols/AGENTS.md            <- 어떻게 같이 일하는가 (전원 공통)
@@ -106,7 +109,7 @@ cron 등록(**워커당 한 줄**):
 가리킨다(마운트가 안 붙으면 워커 파일 자체가 없어 cron이 조용히 실패한다 — 빈 큐로 오해하고 도는 일이
 없다). 큐 디렉터리(`tickets/`)는 없으면 만든다.
 
-세션의 작업 디렉터리는 기본이 **루트의 부모**다(`<프로젝트>/.fs-tickets` → `<프로젝트>`).
+세션의 작업 디렉터리는 기본이 **루트의 부모**다(`<프로젝트>/.dira` → `<프로젝트>`).
 큐를 프로젝트 밖에 뒀으면 워커에서 `TICKET_CWD`로 지정한다.
 
 **상태는 파일명, 나머지는 frontmatter.**
@@ -220,14 +223,14 @@ templates/
 ```
 
 ```bash
-cp -r ~/Projects/fs-tickets/templates/* ~/Projects/myproject/.fs-tickets/
+cp -r ~/Projects/dira/templates/* ~/Projects/myproject/.dira/
 ```
 
 **복사한 순간부터 프로젝트의 것이다.** 고쳐 쓰라고 있는 것이고, 업스트림과 동기화되지 않는다 —
 템플릿이 나중에 바뀌어도 복사본은 그대로다(엔진이 템플릿을 찾아가지 않으니 그럴 방법도 없다).
 프로젝트 이름·경로·금지사항은 복사 직후 손으로 채운다.
 
-내용의 출처는 이 레포 자신의 도그푸딩이다 — `.fs-tickets/`에서 실제로 돌던 규약에서
+내용의 출처는 이 레포 자신의 도그푸딩이다 — `.dira/`에서 실제로 돌던 규약에서
 프로젝트 고유 부분을 걷어내고 뽑았다.
 
 ## 명령
@@ -264,17 +267,17 @@ python3 tickets.py handclaim <티켓경로> "<페르소나 / 세션식별>"
 쓰고(워커 생성이 등록까지 한 동작으로 끝난다) 나머지 줄은 바이트 그대로 보존한다.
 
 ```bash
-cd gui && pnpm install && pnpm dev     # http://localhost:7331
+cd apps/teams && pnpm install && pnpm dev     # http://localhost:7331
 ```
 
 **프로젝트마다 띄우지 않는다.** GUI는 이 레포에서 한 벌만 돌고, 큐 위치를 **프로젝트로 등록**해
 여러 프로젝트의 큐를 한 앱에서 전환하며 본다 — 프로젝트가 5개면 인스턴스 5개가 아니라 등록 5개다.
-등록 목록은 `~/.config/fs-tickets/gui-projects.json` 하나에 있고 등록 경로 외의 정보는 담지 않는다.
+등록 목록은 `~/.config/dira/gui-projects.json` 하나에 있고 등록 경로 외의 정보는 담지 않는다.
 디스크를 스캔해 큐를 자동으로 찾아다니지 않고, 등록을 해제해도 그 프로젝트의 큐 파일은 그대로다.
 
 **엔진 없이도 돌지만 엔진을 대체하지 않는다.** GUI만 띄워도 큐를 읽고 티켓을 만들 수 있지만
 그 티켓을 실제로 물어 세션에 넘기는 건 여전히 cron에 물린 워커다. GUI는 같은 파일을 보는 창이고,
-읽기 판정이 `tickets.py`와 갈리지 않도록 패리티 테스트로 못박아 둔다(`cd gui && pnpm test`).
+읽기 판정이 `tickets.py`와 갈리지 않도록 패리티 테스트로 못박아 둔다(`cd apps/teams && pnpm test`).
 
 위 **의존성 0은 엔진에 대한 약속**이고 GUI는 그 밖이다 — 별개 Next.js 앱이라 자기 의존성을 가지며,
 안 쓰면 `pnpm install`을 할 일도 없다. 제품 스펙은 [`docs/DESIGN.md`](docs/DESIGN.md).
@@ -288,7 +291,7 @@ cd gui && pnpm install && pnpm dev     # http://localhost:7331
 #!/bin/bash
 TICKET_NAME="reviewer"
 TICKET_ENGINE=(codex exec --json "{prompt}")
-. "$HOME/Projects/fs-tickets/tick.sh"
+. "$HOME/Projects/dira/tick.sh"
 ```
 
 | 변수 | 기본값 | 뜻 |
@@ -311,7 +314,7 @@ frontmatter를 정정하는 단계는 `claude` 전용이고 다른 엔진이면 
 
 | 변수 | 기본값 | 뜻 |
 |---|---|---|
-| `TICKET_LOCAL` | `~/.config/fs-tickets` | 토큰(`oauth-token`)과 워커 락(`run/`). 티켓 루트가 공유 드라이브여도 여기는 로컬 |
+| `TICKET_LOCAL` | `~/.config/dira` | 토큰(`oauth-token`)과 워커 락(`run/`). 티켓 루트가 공유 드라이브여도 여기는 로컬 |
 
 ## 동작
 
@@ -393,7 +396,7 @@ python3 test_claim_race.py    # claim 락 동시성: 24프로세스 동시 claim
   test_*.py            자체검증 3종
 
 <티켓루트>/workers/     크론잡: <워커>.sh, runner.log, logs/
-~/.config/fs-tickets/   머신 로컬: oauth-token, run/<워커>.lock
+~/.config/dira/   머신 로컬: oauth-token, run/<워커>.lock
 ```
 
 ## 라이선스

@@ -68,7 +68,7 @@ def run(cmd, worker, local, timeout=60):
 
 tmp = os.path.realpath(tempfile.mkdtemp())
 try:
-    root = os.path.join(tmp, "fs-tickets")
+    root = os.path.join(tmp, "dira")
     local = os.path.join(tmp, "local")
     os.makedirs(local)
     ctxdir = os.path.join(tmp, "docs")
@@ -163,7 +163,7 @@ try:
 
     # 워커 위치가 곧 루트: 설정 0줄 워커가 <루트>/tickets를 만들고 cwd를 루트의 부모로 잡는다
     proj = os.path.join(tmp, "proofer")
-    root2 = os.path.join(proj, ".fs-tickets")
+    root2 = os.path.join(proj, ".dira")
     mk(root2, "0badcafe")
     bare = mkworker(root2, "bare", '#!/bin/bash\n. "{}"\n'.format(TICK))
     rc, out = run("dryrun", bare, local)
@@ -188,7 +188,7 @@ try:
     with open(slow_eng, "w", encoding="utf-8") as f:
         f.write('#!/bin/bash\nprintf "%s\\n" "$1" >> {}\nsleep 4\n'.format(runs))
     os.chmod(slow_eng, 0o755)
-    root3 = os.path.join(tmp, "pair", ".fs-tickets")
+    root3 = os.path.join(tmp, "pair", ".dira")
     slow = ('#!/bin/bash\nTICKET_NAME="{name}"\nTICKET_PROMPT_FMT="slow %s"\n'
             'TICKET_ENGINE=("{eng}" "{{prompt}}")\n. "{tick}"\n')
     wa = mkworker(root3, "wa", slow.format(name="wa", eng=slow_eng, tick=TICK))

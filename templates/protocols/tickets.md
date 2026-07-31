@@ -4,11 +4,11 @@
 
 ## 만드는 절차
 
-티켓 루트(`.fs-tickets`) 기준 상대경로로 돌린다.
+티켓 루트(`.dira`) 기준 상대경로로 돌린다.
 
 ```bash
 H=$(python3 -c 'import uuid;print(uuid.uuid4().hex[:8])')
-cat > ".fs-tickets/tickets/$H.md" <<EOF
+cat > ".dira/tickets/$H.md" <<EOF
 ---
 ticket: $H
 title: 한 줄 제목 — 무엇을 하는지
@@ -63,7 +63,7 @@ echo "$H"
 - **첫 줄이 `---`가 아니면** frontmatter가 없는 것으로 보고 큐에서 제외된다. 앞에 빈 줄도 안 된다.
 - **닫는 `---`가 없으면** 같다. 파싱 실패 = 조용한 유실.
 - **`deps`에 오타 해시**를 쓰면 그 티켓을 못 찾고 → 보수적으로 "미완료"로 판정 → 영구 대기.
-  적기 전에 `python3 tickets.py find .fs-tickets <해시>`로 존재를 확인한다.
+  적기 전에 `python3 tickets.py find .dira <해시>`로 존재를 확인한다.
 - **파일명에 상태 접미사를 넣지 않는다.** `<해시>.md`로 만든다. `.wip`·`.done`은 디스패처와
   당신의 완료 신고만 쓴다.
 - **하위 디렉터리에 만들지 않는다.** `tickets/` 바로 아래다. 평면 큐다.
@@ -73,7 +73,7 @@ echo "$H"
 만든 뒤 반드시 큐에 뜨는지 본다:
 
 ```bash
-.fs-tickets/workers/<워커>.sh list
+.dira/workers/<워커>.sh list
 ```
 
 `대기`로 보이면 성공. 안 보이면 frontmatter가 깨졌거나 접미사가 붙었다.

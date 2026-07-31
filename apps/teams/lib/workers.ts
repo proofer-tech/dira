@@ -56,7 +56,7 @@ const DEFAULT_ENGINE =
   'claude -p "{prompt}" --session-id "{sid}" --dangerously-skip-permissions --output-format json';
 
 /** tick.sh와 **같이** 조립한다:
- *  `${TICKET_LOCAL:-~/.config/fs-tickets}/run/<이름>-<sha1(<workers 절대경로>/<이름>)[:8]>.lock`
+ *  `${TICKET_LOCAL:-~/.config/dira}/run/<이름>-<sha1(<workers 절대경로>/<이름>)[:8]>.lock`
  *
  *  `TICKET_LOCAL`은 프로젝트별이 아니라 머신 전역이라 모든 프로젝트의 락이 한 디렉터리에 섞인다.
  *  해시에 workers 절대경로가 들어 있어 이름이 같은 `w1`끼리도 충돌하지 않는다. 그래서 반대로
@@ -64,7 +64,7 @@ const DEFAULT_ENGINE =
  *
  *  여기 들어가는 `<이름>`은 파일 stem이 아니라 **실효 `TICKET_NAME`**이다(tick.sh 37·87행). */
 export function lockPath(workersDir: string, name: string): string {
-  const local = process.env.TICKET_LOCAL || path.join(homedir(), ".config", "fs-tickets");
+  const local = process.env.TICKET_LOCAL || path.join(homedir(), ".config", "dira");
   const h = createHash("sha1").update(path.join(workersDir, name)).digest("hex").slice(0, 8);
   return path.join(expandHome(local), "run", `${name}-${h}.lock`);
 }
@@ -563,8 +563,8 @@ function holdingOf(tickets: Ticket[], effName: string): string | null {
 // 것은 "멀쩡한데 일을 안 가져간다"이며 단서는 runner.log 마지막 줄뿐이다(실사고 §4-2).
 
 /** 워커별 결함 배열(입력과 같은 순서). `realpath`가 판정의 근거다:
- *  - 심링크 판정은 `<cwd>/.fs-tickets`가 **큐 루트로 풀리는가**다. `ln -s` 함정이 만드는
- *    `.fs-tickets/.fs-tickets`는 존재하는 디렉터리라서 존재 확인만으로는 통과한다(실사고 `bf4d8878`).
+ *  - 심링크 판정은 `<cwd>/.dira`가 **큐 루트로 풀리는가**다. `ln -s` 함정이 만드는
+ *    `.dira/.dira`는 존재하는 디렉터리라서 존재 확인만으로는 통과한다(실사고 `bf4d8878`).
  *  - 공유 판정도 `realpath` 키로 본다 — 표기·심링크가 달라도 같은 트리면 같은 트리다.
  *
  *  ponytail: 워커 수만큼 stat·realpath 2번이다(한 자릿수). 목록이 커지면 요청 단위 캐시. */
@@ -583,7 +583,7 @@ async function cwdDefects(root: string, ws: { name: string; cwd: string }[]): Pr
         out.push({ kind: "missing-cwd", detail: `${cwd} 가 없거나 디렉터리가 아닙니다.` });
       } else {
         // 트리 자체가 없으면 심링크를 따로 말하지 않는다 — 원인은 하나고 명령도 같다.
-        const link = path.join(cwd, ".fs-tickets");
+        const link = path.join(cwd, ".dira");
         const to = await realpath(link).then(nfc, () => null);
         if (to === null) out.push({ kind: "missing-link", detail: `${link} 가 없습니다.` });
         else if (to !== queue) {
@@ -787,12 +787,12 @@ export const registerCron = (workerPath: string) => applyCrontab(workerPath, tru
 /** 이 워커 줄을 뺀다. 없으면 아무것도 쓰지 않는다. */
 export const unregisterCron = (workerPath: string) => applyCrontab(workerPath, false);
 
-/** 워커가 0개인 큐의 **첫 워커**를 손으로 만드는 명령. `<fs-tickets 레포>`는 채워지지 않는다 —
+/** 워커가 0개인 큐의 **첫 워커**를 손으로 만드는 명령. `<dira 레포>`는 채워지지 않는다 —
  *  엔진 코드 위치는 워커 파일에만 적혀 있고, 워커가 없으면 GUI가 알 방법이 없다(→ createWorker). */
 export function firstWorkerCmd(root: string, name = "w1"): string {
   const dir = sq(path.join(root, "workers"));
   const file = sq(path.join(root, "workers", `${name}.sh`));
-  return `mkdir -p ${dir} && cp <fs-tickets 레포>/worker.sh.example ${file} && chmod 755 ${file}`;
+  return `mkdir -p ${dir} && cp <dira 레포>/worker.sh.example ${file} && chmod 755 ${file}`;
 }
 
 // ── 워크트리 (§4-2) ─────────────────────────────────────────────────────────
@@ -824,7 +824,7 @@ const sourceTick = /^[ \t]*(?:\.|source)[ \t]+(.*tick\.sh["']?)[ \t]*$/m;
  *  읽은 추측값이라 §경로 방어의 "등록된 root 안"이 안 걸린다. 못 읽으면 자리표시자를 두고
  *  **사유를 같이** 넘긴다(§6 에러 3요소 — 삼키면 사람이 왜 빈칸인지 모른다).
  *
- *  검증 줄은 장식이 아니다: `.fs-tickets`가 이미 있으면 `ln -s`가 실패하는 대신 그 **안쪽에**
+ *  검증 줄은 장식이 아니다: `.dira`가 이미 있으면 `ln -s`가 실패하는 대신 그 **안쪽에**
  *  링크를 만든다(실사고 `bf4d8878`) — 세션이 미끼 큐를 보고 자기 티켓을 못 찾는다. */
 export function worktreeCmds(
   root: string,
@@ -837,9 +837,9 @@ export function worktreeCmds(
   const raw = m?.[1] ?? null;
   const repo = raw === null ? null : shellPath(raw);
   const cmds = [
-    `git -C ${repo === null ? "<fs-tickets 레포>" : sq(path.dirname(expandHome(repo)))} worktree add ${sq(dir)} -b wt/${name}`,
-    `ln -s ../.. ${sq(path.join(dir, ".fs-tickets"))}`,
-    `ls -ld ${sq(path.join(dir, ".fs-tickets"))}    # \`l\`로 시작해야 한다`,
+    `git -C ${repo === null ? "<dira 레포>" : sq(path.dirname(expandHome(repo)))} worktree add ${sq(dir)} -b wt/${name}`,
+    `ln -s ../.. ${sq(path.join(dir, ".dira"))}`,
+    `ls -ld ${sq(path.join(dir, ".dira"))}    # \`l\`로 시작해야 한다`,
   ];
   if (repo !== null) return { cmds };
   return {

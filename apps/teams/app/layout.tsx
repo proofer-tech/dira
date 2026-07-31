@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "fs-tickets",
+  title: "dira",
   description: "파일시스템 티켓 큐 관제",
 };
 

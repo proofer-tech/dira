@@ -21,7 +21,10 @@ writeFileSync(path.join(projects, "-Users-hsol-a", `${UUID2}.jsonl`), "");
 writeFileSync(path.join(projects, "-Users-hsol-b", `${UUID2}.jsonl`), ""); // 중복 = 빈 상태
 
 const rec = (o: object) => JSON.stringify(o) + "\n";
-const CWD = "/Users/hsol/Projects/fs-tickets/.fs-tickets/worktrees/w5";
+const CWD = "/Users/hsol/Projects/dira/.dira/worktrees/w5";
+/** 이 앱의 레포 기준 상대경로와 그 절대경로. 앱이 옮겨가면 코드에서 고칠 곳은 여기 하나다. */
+const APP_DIR = "apps/teams";
+const APP_CWD = `${CWD}/${APP_DIR}`;
 const assistant = (blocks: unknown[], extra: object = {}) =>
   rec({
     type: "assistant",
@@ -130,14 +133,14 @@ test("사건 매핑 — Bash는 description, 파일 도구는 상대경로, 모�
     JSON.parse(
       assistant([
         { type: "tool_use", name: "Bash", input: { command: "ls -l", description: "티켓 파일 찾기" } },
-        { type: "tool_use", name: "Read", input: { file_path: `${CWD}/gui/lib/queue.ts` } },
+        { type: "tool_use", name: "Read", input: { file_path: `${APP_CWD}/lib/queue.ts` } },
         { type: "tool_use", name: "Glob", input: { pattern: "**/*.ts" } },
       ]).trim(),
     ),
   );
   assert.deepEqual([bash.label, bash.summary], ["Bash", "티켓 파일 찾기"]);
   assert.equal(bash.body, '{\n  "command": "ls -l",\n  "description": "티켓 파일 찾기"\n}');
-  assert.deepEqual([read.label, read.summary], ["Read", "gui/lib/queue.ts"]);
+  assert.deepEqual([read.label, read.summary], ["Read", `${APP_DIR}/lib/queue.ts`]);
   assert.deepEqual([glob.label, glob.summary], ["Glob", ""]); // 인자를 추측해 넣지 않는다
   // §9 서체: 경로는 리터럴(mono), `description`은 읽는 문장(sans)
   assert.deepEqual([bash.summaryMono, read.summaryMono, glob.summaryMono], [false, true, false]);

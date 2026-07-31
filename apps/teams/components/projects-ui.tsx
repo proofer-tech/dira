@@ -191,7 +191,7 @@ export function RegisterCard() {
           <Input
             id="project-name"
             name="name"
-            placeholder="fs-tickets 자체"
+            placeholder="dira 자체"
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
@@ -204,7 +204,7 @@ export function RegisterCard() {
         {showId && (
           <div className="space-y-2">
             <Label htmlFor="project-id">URL 조각</Label>
-            <Input id="project-id" name="id" className="font-mono" placeholder="fs-tickets" />
+            <Input id="project-id" name="id" className="font-mono" placeholder="dira" />
             <p className="text-xs text-muted-foreground">
               {err && (err.code === "needId" || err.code === "badId" || err.code === "dupId")
                 ? err.message
@@ -219,7 +219,7 @@ export function RegisterCard() {
             id="project-root"
             name="root"
             className="font-mono"
-            placeholder="~/Projects/myproject/.fs-tickets"
+            placeholder="~/Projects/myproject/.dira"
           />
           <p className="text-xs text-muted-foreground">절대경로. ~는 확장됩니다</p>
         </div>

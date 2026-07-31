@@ -1,12 +1,12 @@
-# gui/ 코드베이스 규약
+# apps/teams/ 코드베이스 규약
 
-fs-tickets 큐를 보는 로컬 웹 UI. **스펙은 `../docs/DESIGN.md`가 단일 출처**다.
+dira 큐를 보는 로컬 웹 UI. **스펙은 `../docs/DESIGN.md`가 단일 출처**다.
 여기 있는 건 코드 규약뿐이다. 스펙과 다르게 만들고 싶으면 `kind: feedback` 티켓을 올린다.
 
 ## 구조
 
 ```
-gui/
+apps/teams/
   app/                  App Router. fs 접근은 전부 여기(서버) 아니면 lib/
     layout.tsx          html·폰트·TooltipProvider
     (list)/page.tsx     프로젝트 목록·등록 (`/`). 라우트 그룹이라 URL은 `/`다
@@ -82,7 +82,7 @@ import을 추가하면 등록 폼과 전환기가 빌드에서 깨진다.
 |---|---|
 | `/p/nope` · `/p/<t>/tickets/<없는해시>` | 백지 (HTTP 404는 정상으로 선다) |
 | `/nosuchpage` | 정상 — 정적 프리렌더 `/_not-found`(빌드 출력 `○`)라 JS가 필요 없다 |
-| `/p/fs-tickets` 등 | 정상 — 서버 HTML을 낸다 |
+| `/p/dira` 등 | 정상 — 서버 HTML을 낸다 |
 
 함정 셋:
 

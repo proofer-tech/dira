@@ -4,7 +4,7 @@ import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, 
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 
-// 진짜 레지스트리(~/.config/fs-tickets/gui-projects.json)를 밟지 않는다. import 전에 건다.
+// 진짜 레지스트리(~/.config/dira/gui-projects.json)를 밟지 않는다. import 전에 건다.
 const LOCAL = mkdtempSync(path.join(tmpdir(), "fst-local-"));
 process.env.TICKET_LOCAL = LOCAL;
 
@@ -36,11 +36,11 @@ process.on("exit", () => {
   rmSync(LOCAL, { recursive: true, force: true });
 });
 
-/** `<프로젝트>/.fs-tickets` 모양의 큐를 만든다. workers는 {이름: 파일 내용}. */
+/** `<프로젝트>/.dira` 모양의 큐를 만든다. workers는 {이름: 파일 내용}. */
 function newQueue(workers: Record<string, string> | null): string {
   const proj = mkdtempSync(path.join(tmpdir(), "fst-proj-"));
   roots.push(proj);
-  const root = path.join(proj, ".fs-tickets");
+  const root = path.join(proj, ".dira");
   mkdirSync(path.join(root, "tickets"), { recursive: true });
   if (workers) {
     mkdirSync(path.join(root, "workers"));
@@ -78,16 +78,16 @@ test("resolveConfig — $HOME 치환, 루트 밖 페르소나, 한글 접미사"
     "w1.sh": [
       "#!/bin/bash",
       '# TICKET_PERSONAS="$HOME/주석은/무시된다"',
-      'TICKET_PERSONAS="$HOME/Projects/fs-tickets/docs/personas"',
-      "TICKET_PROTOCOLS=${HOME}/Projects/fs-tickets/docs/protocols",
+      'TICKET_PERSONAS="$HOME/Projects/dira/docs/personas"',
+      "TICKET_PROTOCOLS=${HOME}/Projects/dira/docs/protocols",
       'TICKET_INPROGRESS="-진행중"',
       "export TICKET_DONE='-완료'   # 작은따옴표 + 꼬리 주석",
       "",
     ].join("\n"),
   });
   const c = await resolveConfig({ root });
-  assert.strictEqual(c.personas, path.join(homedir(), "Projects/fs-tickets/docs/personas"));
-  assert.strictEqual(c.protocols, path.join(homedir(), "Projects/fs-tickets/docs/protocols"));
+  assert.strictEqual(c.personas, path.join(homedir(), "Projects/dira/docs/personas"));
+  assert.strictEqual(c.protocols, path.join(homedir(), "Projects/dira/docs/protocols"));
   assert.strictEqual(c.inProgress, "-진행중");
   assert.strictEqual(c.done, "-완료");
   assert.deepStrictEqual(c.assumed, ["cwd"]); // cwd만 워커에 없다
@@ -116,13 +116,13 @@ test("resolveConfig — 명령 치환·백틱·상대경로는 실효값이 되�
     "w1.sh": [
       'TICKET_PERSONAS="$(id -un)"', // 명령 치환 — 셸을 안 돌리니 원문이 남는다
       "TICKET_PROTOCOLS=`whoami`", // 백틱도 같다
-      "TICKET_CWD=../wt/w1", // 절대경로가 아니다 → 서버 cwd(gui/) 기준으로 풀린다
+      "TICKET_CWD=../wt/w1", // 절대경로가 아니다 → 서버 cwd(apps/teams/) 기준으로 풀린다
       "TICKET_INPROGRESS=.wip", // 경로가 아닌 키는 상대여도 정상값이다
       "",
     ].join("\n"),
   });
   const c = await resolveConfig({ root });
-  // 셋 다 기본값을 쓴다 — 원문이 기준 디렉터리가 되면 gui/ 밑에 쓴다
+  // 셋 다 기본값을 쓴다 — 원문이 기준 디렉터리가 되면 apps/teams/ 밑에 쓴다
   assert.strictEqual(c.personas, path.join(root, "personas"));
   assert.strictEqual(c.protocols, path.join(root, "protocols"));
   assert.strictEqual(c.cwd, path.dirname(root));
@@ -193,7 +193,7 @@ test("레지스트리 — 등록 검증 4종", async () => {
   const root = newQueue({ "w1.sh": "" });
   // 한글 이름은 슬러그가 빈다 -> 자동으로 지어내지 않고 거부한다(URL 조각을 직접 받는다)
   assert.strictEqual(slugify("스트림"), "");
-  assert.strictEqual(slugify("fs-tickets 자체!!"), "fs-tickets");
+  assert.strictEqual(slugify("dira 자체!!"), "dira");
   await assert.rejects(() => addProject("스트림", root), { code: "needId" });
 
   const t = await addProject("스트림", root, "stream");
