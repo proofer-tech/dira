@@ -62,7 +62,10 @@ fi
 npm version "$bump" --no-git-tag-version || exit 1
 ver=$(node -p "require('./package.json').version")
 git commit -q -m "release v$ver" package.json || exit 1
-git tag "v$ver" || exit 1
+# `-a`가 빠지면 lightweight 태그가 되고 **4번의 `--follow-tags`가 그걸 안 민다.** 커밋만
+# 올라가고 태그는 로컬에 남아서, 5번의 `gh release create`가 원격 기본 브랜치 HEAD에 같은
+# 이름의 태그를 새로 만든다 — 로컬 태그와 원격 태그가 다른 객체가 된다(실측 2026-08-01).
+git tag -a "v$ver" -m "release v$ver" || exit 1
 
 # 4. 원격에 나가는 유일한 자리.
 git push origin master --follow-tags || exit 1
@@ -80,6 +83,15 @@ zip=$(ls dist/*.zip 2>/dev/null | head -1)
 [ -n "$dmg" ] || add "dist/*.dmg — 사람이 건네는 첫 설치본."
 [ -n "$zip" ] || add "dist/*.zip — 자동 업데이트가 실제로 내려받는 자산."
 [ -f dist/latest-mac.yml ] || add "dist/latest-mac.yml — 이게 없으면 앱이 새 버전을 못 찾는다(조용히)."
+
+# **자산이 있는 것과 받는 맥에서 열리는 것은 다르다.** 실측 2026-08-01: electron-builder가
+# 공증까지 마치고 그 뒤에 죽으면 `pnpm dist`의 `&&` 사슬이 끊겨 `sign-dmg.sh`가 안 돈다 —
+# 파일은 셋 다 나와 있고 `.dmg`만 공증이 안 된 채다. 위 세 줄은 그걸 못 잡는다.
+# 여기서 안 잡으면 잡는 것은 받는 사람의 첫 더블클릭이고, 올린 사람은 모른다.
+[ -z "$dmg" ] || spctl -a -t open --context context:primary-signature "$dmg" >/dev/null 2>&1 \
+  || add "$dmg가 Gatekeeper에 막힌다 — 공증·스테이플이 안 됐다 (./sign-dmg.sh 로그를 보라)."
+xcrun stapler validate dist/mac-arm64/dira.app >/dev/null 2>&1 \
+  || add ".app에 공증 티켓이 스테이플되지 않았다 — .zip으로 나가는 자동 업데이트가 이걸 받는다."
 
 if [ -n "$missing" ]; then
   echo "v$ver를 굽긴 했는데 올릴 자산이 모자란다. 없는 것:$missing" >&2

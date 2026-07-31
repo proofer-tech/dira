@@ -2834,11 +2834,25 @@ osascript -e 'tell application "System Events" to get name of every process whos
 
 1. **선행 확인.** 워킹 트리 깨끗 · 브랜치가 master · `sign-preflight.sh` 통과 · `GH_TOKEN` 존재 ·
    `gh` 실행 가능 · `publish.owner`/`repo` 채워짐. **하나라도 없으면 여기서 멈춘다.**
-2. `apps/desktop/package.json`의 `version` bump
-3. 커밋 + 태그 `v<x.y.z>`
+2. `apps/desktop/package.json`의 `version` bump — **`npm version`에 커밋·태그를 맡기지 않는다**
+3. 커밋 + **annotated** 태그 `v<x.y.z>`
 4. `git push origin master --follow-tags`
-5. `pnpm dist` **한 번만**(서명·공증·`sign-dmg.sh`까지) → 그 `dist/`의 세 자산을
-   `gh release create v<x.y.z>`로 올린다
+5. `pnpm dist` **한 번만**(서명·공증·`sign-dmg.sh`까지) → 세 자산이 **있고 Gatekeeper를 지나는지**
+   본 뒤 `gh release create v<x.y.z>`로 올린다
+
+**2와 3이 갈라져 있는 것에 이유가 있다.** `npm version`은 **패키지 디렉터리에 `.git`이 있을
+때만** 커밋·태그를 만든다. 여기 `.git`은 레포 루트에 있고 `apps/desktop`에는 없어서, npm은
+조용히 `package.json`만 고치고 0으로 끝난다 — 4의 push가 `Everything up-to-date`가 되고,
+5는 그대로 돌아 `gh release create`가 **버전 커밋이 없는 원격 HEAD에** 태그를 박는다.
+받는 사람 앱의 버전과 그 태그가 가리키는 소스가 갈린다(실측 2026-08-01). 그래서 bump만
+`--no-git-tag-version`으로 맡기고 커밋·태그는 스크립트가 만든다. **`-a`도 빠지면 안 된다** —
+lightweight 태그는 4의 `--follow-tags`가 안 민다(같은 날 실측).
+
+**5의 "있는지"와 "열리는지"는 다른 확인이다.** `electron-builder`가 공증까지 마치고 그 뒤에
+죽으면 `pnpm dist`의 `&&` 사슬이 끊겨 `sign-dmg.sh`가 안 돈다 — 파일은 셋 다 나와 있고
+`.dmg`만 공증이 안 된 채다(실측 2026-08-01). 존재 확인 셋은 그걸 통과시킨다. 그래서
+`spctl`로 dmg를, `stapler validate`로 `.app`을 한 번 더 본다. 여기서 안 잡으면 잡는 것은
+받는 사람의 첫 더블클릭이고 올린 사람은 모른다.
 
 **5는 한 번 굽고 그것을 올린다.** 2026-08-01(`899b88d5`)까지 이 줄은 `pnpm dist` →
 `electron-builder --publish always`였고, 그게 **`.dmg`의 서명을 벗겼다**: 두 번째
