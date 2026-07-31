@@ -46,6 +46,10 @@ apps/teams/
     transcript.ts       세션 스트림(§2-1) 읽기 코어. 트랜스크립트 경로 찾기 · 바이트 오프셋 테일 ·
                         jsonl 레코드 → 사건 매핑. **root 밖(`~/.claude/projects`)을 읽는 유일한 곳** —
                         방어는 `session_id` UUID 정규식 하나다(사람 입력을 받지 않는다)
+    interject.ts        참견 보내기(§2-2). 티켓 fm의 `inbox:` FIFO에 JSON 한 줄. **읽는 쪽이
+                        `transcript.ts`인 것과 짝**이라 그쪽에 안 얹었다 — 저긴 순수 읽기 코어고
+                        여긴 유일한 쓰기다. `O_WRONLY|O_NONBLOCK`이 이 파일의 존재 이유고
+                        (없으면 Server Action이 영영 안 끝난다) 실패 사유를 갈라서 돌려준다
     auth.ts             Claude 장기 토큰 경로·상태·저장 + `claude setup-token` pty 드라이버
                         (DESIGN.md §0-4). 엔진 계약을 **따라 쓸 뿐**이다(`tick.sh:52-54` —
                         개행 없는 한 줄 · 0600). `.authwarn`은 안 건드린다. 드라이버는 `script`로
