@@ -27,7 +27,7 @@ import {
   stopSetupAction,
 } from "@/app/actions";
 import type { SetupState } from "@/lib/auth";
-import { useKeymap } from "@/components/keymap-provider";
+import { useHotkey, useKeymap } from "@/components/keymap-provider";
 import { DEFAULT_KEYMAP, MODIFIER_KEYS, formatCombo } from "@/lib/keymap";
 import { cn } from "@/lib/utils";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -245,6 +245,16 @@ export function SettingsDialog({
   const savedAt = setup?.savedAt ?? result.savedAt ?? auth.savedAt;
   // 토큰이 없어도 **claude 워커가 하나도 없으면** 이 컴퓨터는 이 토큰을 안 쓴다 — 안 말한다(§0-4)
   const needsAuth = !savedAt && auth.claudeUsed;
+
+  // `?`(§0-6 `settings.open`) — 두 셸 어디서나 이 다이얼로그를 연다. **`icon` 트리거만 듣는다**:
+  // 프로젝트 셸에는 이 컴포넌트가 둘(헤더 버튼 · 인증 배너 CTA)이고 둘 다 들으면 키 한 번에
+  // 다이얼로그가 둘 열린다. 헤더 버튼은 두 셸에 항상 하나씩 있고 배너는 조건부라 이쪽이 기준이다 —
+  // 전역 상태도 URL 파라미터도 만들지 않는다는 §0-4의 자리 그대로다.
+  // 글 쓰는 중 가드는 `useHotkey`가 들고, 캡처 중에는 위 캡처 상자의 `stopPropagation`이
+  // 이벤트를 window까지 안 보낸다 — 이 키도 그래서 안 듣는다(§0-6 `언제 안 듣는가`).
+  useHotkey("settings.open", () => {
+    if (trigger === "icon") setOpen(true);
+  });
 
   // 진행 로그는 폴링으로 받는다 — 이 앱에 소켓은 없다(세션 스트림과 같은 방식).
   // 돌고 있을 때만 돈다: `running`이 꺼지면 effect가 정리되고 폴링이 멈춘다

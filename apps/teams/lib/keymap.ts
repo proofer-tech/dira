@@ -114,6 +114,10 @@ export function matchCombo(e: KeyLike, combo: string): boolean {
  *  다이얼로그가 열린다. **`Mod`가 있는 조합은 가드를 받지 않는다** — `Mod+k`는 지금도
  *  검색 칸에서 듣는다(§4-1 "어디서나").
  *
+ *  **캡처 중(키 지정)에 죽이는 자리는 여기가 아니다** — 캡처 상자의 `stopPropagation`이
+ *  이벤트를 window까지 안 보낸다(`settings-dialog.tsx`). 여기에 플래그를 또 두면 같은 사실이
+ *  두 곳에 산다(실측: `c7fc6ba5`이 `b`·`w`·`?`로 캡처 상자 위에서 확인했다).
+ *
  *  `typing`(이벤트가 입력칸 안에서 났나)은 호출자가 `closest` 한 줄로 판정해 넘긴다. DOM을
  *  여기 들이지 않으려는 것이다 — 이 파일은 `node --test`가 그냥 읽는다(AGENTS.md §검증).
  *
