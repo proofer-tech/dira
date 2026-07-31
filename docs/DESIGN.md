@@ -3291,7 +3291,7 @@ P46은 인스턴스 하나가 자식을 하나 더 등록한다. **그래서 못
 
 | P47 | 진행중 모션을 투명도 축으로 — 스펙 확정 `ab03bc3e` | pm | — | 완료 — §비주얼 §18의 축을 `scale` → `opacity`로. 되묻지 않았다 |
 | P47 | 모션 프리미티브 재스펙 — §비주얼 §18 `b344552b` | designer | 스펙 | 완료 — **고른 수는 알파 하한 `0.3` 하나**(주기·easing·반복은 종전 = Tailwind 값). Skeleton과는 깊이로 갈린다(0.5 vs 0.3). 새 색 토큰 0 · 새 컴포넌트 0 · `@keyframes` 1개 · `#### 네 자리` 표 무수정 |
-| P47 | `--animate-wip-pulse` opacity 교체 `5c32fe50` | developer | `b344552b` | 대기 |
+| P47 | `--animate-wip-pulse` opacity 교체 `5c32fe50` | developer | `b344552b` | 완료 — `globals.css` 한 블록(`scale: 1.4` → `opacity: 0.3`)뿐이고 호출부 4곳 무수정. `grep scale globals.css` 0줄. 헤드리스 실측 opacity 0.966 → 0.564 → **0.300** · computed `scale`은 `none` 고정 |
 
 **P47은 P43을 되돌리는 것이 아니라 축 하나를 바꾼다.** 요구(`5f0498c9`)도, 움직이는 자리 넷도,
 "애니메이션 예외는 하나"라는 §0의 경계도 그대로다. **`f7593738`이 고른 값 한 벌만 갈린다** —
