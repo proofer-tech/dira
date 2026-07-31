@@ -71,6 +71,11 @@ pnpm dev         # teams 빌드 + 조립 + 앱 실행
 §릴리스 · 자동 업데이트 R1). 세 가지가 사람 몫이고 세션이 구할 수 없다 — §서명 · 공증이
 Apple 계정·인증서를 사람 몫으로 둔 것과 **같은 자리**다.
 
+**명령은 다 있다.** `pnpm release <patch|minor|major>`(R4, `5ab56e03`·`ab4fe016`)가 선행 확인 →
+bump·태그 → `pnpm dist` → `gh release create`까지 한 방으로 간다. 남은 것은 아래 셋과
+§서명 · 공증의 Apple 환경변수 3개, 그리고 `build.publish`의 자리표시자 — **전부 사람 몫이고
+이 README에 다 적혀 있다.** 하나라도 비어 있으면 `release.sh`가 bump 전에 멈추고 이름을 찍는다.
+
 1. **공개 GitHub 레포를 만든다.** 비공개면 안 된다 — 아래 근거.
 2. **`origin`을 붙인다.** 지금 이 레포에는 remote가 0개다(`git remote -v` 빈 출력).
 3. **`GH_TOKEN`을 환경변수로 쥔다.** `repo` 권한이 있는 PAT. 레포에 넣지 않는다(§배포).
@@ -133,6 +138,10 @@ PATH를 물어** 서버에 물려 준다 — `.app`에서만 되는·안 되는 
 재현은 `env -i HOME=$HOME open -g -na dist/mac-arm64/dira.app`이다(셸 환경을 지우고 띄운다).
 
 ## 서명 · 공증 (`5aa9486d`)
+
+**끝났다** — `.app`·`.dmg` 둘 다 `Developer ID Application: Hansol Lim (L9E4Y653DY)`으로
+서명·공증·스테이플되고 `spctl`이 둘 다 `accepted`다. 아래는 그게 어떻게 되는지와,
+준비물이 빠졌을 때 무엇이 일어나는지다.
 
 서명 없는 `.app`은 **이 맥에서는 돌지만 다른 맥에서는 Gatekeeper가 막는다.** 나눠주려면
 `Developer ID` 서명 + 공증 + 스테이플까지 가야 한다(`../../docs/DESIGN.md` §배포).
@@ -354,10 +363,3 @@ $ cd apps/desktop && pnpm test
 `build`·`scripts`·`devDependencies`를 떼고 package.json을 복사해서 **번들에는 그 값이 없다.**
 사람이 위 §릴리스에 필요한 사람 몫을 아직 안 채웠으면 자리표시자가 그대로 실려 404가 되고,
 그건 경로 ③이다.
-
-## 여기 아직 없는 것
-
-`pnpm release`(R4)가 아직 없다 — `5ab56e03`이다.
-
-서명·공증은 **끝났다**(`5aa9486d`) — `.app`·`.dmg` 둘 다 `Developer ID Application: Hansol Lim
-(L9E4Y653DY)`으로 서명·공증·스테이플되고 `spctl`이 둘 다 `accepted`다.
