@@ -666,14 +666,19 @@ export async function listWorkers(root: string, tickets: Ticket[] = []): Promise
   return out;
 }
 
-/** `running 1 / idle 1` — 0인 종류는 뺀다. 워커 0개면 `—`(DESIGN.md §7 목록 행). */
-export function workerSummary(workers: Worker[]): string {
-  const order: WorkerStatus[] = ["running", "stale", "idle", "stopped"];
-  const parts = order
-    .map((s) => [s, workers.filter((w) => w.status === s).length] as const)
-    .filter(([, n]) => n > 0)
-    .map(([s, n]) => `${s} ${n}`);
-  return parts.length ? parts.join(" / ") : "—";
+/** 목록 행의 워커 줄 — 상태별 묶음(DESIGN.md §비주얼 §7). `running 1 / idle 1` 요약을 대체한다:
+ *  같은 모양에 이름을 채워 넣은 것이다.
+ *
+ *  순서는 §2 워커 4상태 표 순서로 **고정**이고 심각도 순으로 재정렬하지 않는다 — `stale`을 앞으로
+ *  당기면 상태 구성이 다른 행끼리 자리가 어긋나 세로로 훑을 수 없다. 없는 상태는 묶음이 없다. */
+export function workerGroups(workers: Worker[]): { status: WorkerStatus; names: string[] }[] {
+  const order: WorkerStatus[] = ["running", "idle", "stopped", "stale"];
+  return order
+    .map((status) => ({
+      status,
+      names: workers.filter((w) => w.status === status).map((w) => w.name),
+    }))
+    .filter((g) => g.names.length > 0);
 }
 
 // ── crontab 명령어 (등록·해제가 실패했을 때 사람이 실행한다, 제약 4) ────────

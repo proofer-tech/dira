@@ -35,7 +35,7 @@ const {
   readCommonContext,
   renderContextBlock,
   stopWorker,
-  workerSummary,
+  workerGroups,
   worktreeCmds,
   writeCommonContext,
   writeContext,
@@ -86,9 +86,14 @@ test("listWorkers — running · stale · stopped 판정", async () => {
     ["w1:running", "w2:stale", "w3:stopped"], // .sh 아닌 파일은 워커가 아니다
   );
   assert.strictEqual(ws[0].lockPid, process.pid);
-  // crontab에 없는 워커는 stopped다. 이 판정이 뒤집히면 요약이 거짓말을 한다.
-  assert.strictEqual(workerSummary(ws), "running 1 / stale 1 / stopped 1");
-  assert.strictEqual(workerSummary([]), "—");
+  // crontab에 없는 워커는 stopped다. 이 판정이 뒤집히면 목록 행이 거짓말을 한다.
+  // 묶음 순서는 §2 4상태 표 순서다 — stale이 뒤에 서는 것이 이 assert의 요점이다(심각도 순 아님).
+  assert.deepStrictEqual(workerGroups(ws), [
+    { status: "running", names: ["w1"] },
+    { status: "stopped", names: ["w3"] },
+    { status: "stale", names: ["w2"] },
+  ]);
+  assert.deepStrictEqual(workerGroups([]), []);
 });
 
 /** `crontab -l`을 가로챈다. 진짜 crontab을 읽으면 이 머신의 등록 상태에 따라 결과가 흔들린다.
