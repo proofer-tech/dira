@@ -14,6 +14,7 @@ import { SessionStream } from "@/components/session-stream";
 import { DepBadge, StatusBadge, daysSince } from "@/components/status-badge";
 import {
   AnswerCard,
+  AnswerThread,
   DeleteTicketButton,
   NewTicketDialog,
   TicketEditForm,
@@ -315,6 +316,18 @@ export default async function TicketDetail({
               />
             )}
           </section>
+
+          {/* 답이 달린 뒤의 같은 스레드 — 읽기 전용 기록이다(§2 · 사람 요청 `9feae652`).
+              답은 `<A>.done.md`에 따로 살아서, 답변 카드가 사라지면(`isAwaiting`이 꺼진다)
+              답변 본문이 화면 어디에도 없었다. 조건은 하나다: 카드가 없고 스레드가 있으면 뜬다 —
+              상태를 따로 묻지 않는다(대기 중에는 카드가 이미 같은 스레드를 들고 있어서, 두 벌이
+              뜨지 않는 것도 이 조건이 같이 준다). 입력칸도 `답변 달기`도 없다. */}
+          {!isAwaiting(ticket) && thread.length > 0 && (
+            <section className="space-y-2">
+              <h2 className="text-sm font-medium">질문·답변</h2>
+              <AnswerThread thread={thread} />
+            </section>
+          )}
 
           {/* 세션 스트림(§2-1)은 왼쪽 단 마지막이다. §비주얼 §9 `h-[32rem]`은 이 배치를 안 묻는다 —
               고정 높이 + 자체 스크롤이라 페이지 어디에 놓이든 절(564px)이 한 화면(852px)에 담긴다.

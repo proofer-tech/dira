@@ -288,21 +288,10 @@ export function UnassignButton({
 
 // ── 요구사항 왕복 ───────────────────────────────────────────────────────────
 
-/** 스레드 + 답변 폼. **상세의 카드와 보드의 다이얼로그가 같은 것을 그린다** — 그릇만 다르고
- *  스레드·폼·서버 액션은 하나다(§1 보드 요구사항 항). 엮는 쪽은 `lib/queue.ts threadOf`다. */
-function AnswerFields({
-  project,
-  hash,
-  answerFile,
-  thread,
-}: {
-  project: string;
-  hash: string;
-  answerFile: string;
-  thread: ThreadItem[];
-}) {
-  const [state, action, pending] = useActionState<SaveState, FormData>(answerRequirement, {});
-  // 답변 칸의 id는 한 화면에 하나뿐이다 — 보드에서도 열려 있는 다이얼로그는 하나다.
+/** 질문·답변 스레드만. 답변 대기면 폼과 같이(`AnswerFields`), 답이 달린 뒤엔 상세 왼쪽 단의
+ *  읽기 전용 `질문·답변` 절로 혼자 뜬다(§2 · 사람 요청 `9feae652`) — 답은 `<A>.done.md`에 따로
+ *  살아서 카드가 사라지면 답변 본문이 화면 어디에도 없었다. 그리는 것은 두 자리가 똑같다. */
+export function AnswerThread({ thread }: { thread: ThreadItem[] }) {
   return (
     <>
       {/* 스레드는 고정 높이 상자 안에서 스크롤된다(§2 · 사람 요청 `c01a9a11` Q1=(a) · §비주얼 §13).
@@ -365,6 +354,28 @@ function AnswerFields({
           </MessageScroller>
         </MessageScrollerProvider>
       )}
+    </>
+  );
+}
+
+/** 스레드 + 답변 폼. **상세의 카드와 보드의 다이얼로그가 같은 것을 그린다** — 그릇만 다르고
+ *  스레드·폼·서버 액션은 하나다(§1 보드 요구사항 항). 엮는 쪽은 `lib/queue.ts threadOf`다. */
+function AnswerFields({
+  project,
+  hash,
+  answerFile,
+  thread,
+}: {
+  project: string;
+  hash: string;
+  answerFile: string;
+  thread: ThreadItem[];
+}) {
+  const [state, action, pending] = useActionState<SaveState, FormData>(answerRequirement, {});
+  // 답변 칸의 id는 한 화면에 하나뿐이다 — 보드에서도 열려 있는 다이얼로그는 하나다.
+  return (
+    <>
+      <AnswerThread thread={thread} />
       {/* 입력칸과 `답변 달기`는 상자 **밖 · 밑**이다 — 다이얼로그를 화면 높이로 늘리는 안은 버렸다(§2) */}
       <form action={action} className="space-y-3">
         <input type="hidden" name="project" value={project} />
