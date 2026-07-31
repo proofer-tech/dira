@@ -4,6 +4,7 @@ import Link from "next/link";
 import { TriangleAlert } from "lucide-react";
 import { CopyCommand } from "@/components/copy-command";
 import { StatusBadge } from "@/components/status-badge";
+import { BrandMark } from "@/components/project-switcher";
 import { RegisterCard, ProjectRowActions } from "@/components/projects-ui";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
@@ -43,11 +44,10 @@ export default async function Home() {
 
   return (
     <>
-      {/* 루트 셸: 로고만. 내비·전환기를 넣지 않는다 — 목적지가 아직 정해지지 않았다(§4) */}
+      {/* 루트 셸: 마크만. 내비·전환기를 넣지 않는다 — 목적지가 아직 정해지지 않았다(§4).
+          href는 `/` = 자기 자신이다(§14: 프로젝트가 정해지지 않았다). */}
       <header className="sticky top-0 z-50 flex h-12 items-center border-b bg-background px-6">
-        <Link href="/" className="text-sm font-medium">
-          dira
-        </Link>
+        <BrandMark href="/" />
       </header>
 
       <main className="w-full max-w-3xl space-y-6 px-6 py-6">

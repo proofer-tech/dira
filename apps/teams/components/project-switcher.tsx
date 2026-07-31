@@ -1,6 +1,7 @@
 "use client";
 
-/** 프로젝트 셸의 클라이언트 조각 — 전환기(DESIGN.md §0-1 · §4-1) · 내비 · `다시 확인` 버튼.
+/** 셸의 클라이언트 조각 — 브랜드 마크(§14, 두 셸 공용) · 전환기(DESIGN.md §0-1 · §4-1) ·
+ *  내비 · `다시 확인` 버튼.
  *
  *  전환기는 헤더 우측 한 자리에 "지금 어느 큐인지"와 "다른 큐로 가는 길"을 겹쳐 둔다. 카운트는
  *  여기서 세지 않는다 — 셸이 서버에서 세서 props로 넘긴다. 내비는 활성 링크 판정에 현재 경로가
@@ -23,6 +24,38 @@ import {
 } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { projectPath } from "@/lib/urls";
+
+/** 헤더 좌측 브랜드 마크 (§비주얼 §14 `헤더 표시`). **두 셸이 같이 쓴다** — 프로젝트 스코프 셸과
+ *  루트 셸에서 값이 전부 같고 다른 건 `href` 하나다(§4: 프로젝트는 `/p/<project>`, 루트는 `/`).
+ *
+ *  `-m-2`가 32×32 히트 박스를 되돌려 셸의 `px-6`(·`gap-6`)을 무수정으로 둔다.
+ *
+ *  탭 자산 `app/icon.svg`와 `d`가 문자 단위로 같다. 다른 건 fill 하나 — 화면 안에서는
+ *  currentColor다(§14: 브랜드 파랑은 상태색 계열이라 화면에 들이지 않는다). 사본 **2벌**은
+ *  의도된 값이고 이 컴포넌트가 그중 화면쪽 한 벌이다 — 셸마다 인라인하면 3벌이 된다.
+ *  형상을 고칠 땐 §14 SVG 소스를 고치고 두 벌에 같이 반영한다.
+ *
+ *  ponytail: 훅이 없는 정적 마크업인데 이 파일의 `"use client"`에 얹혀 클라이언트 번들로 간다.
+ *  새 파일을 늘리지 않는 쪽을 택했다(AGENTS.md §구조). 마크업 몇 백 바이트라 재는 값이 아니다. */
+export function BrandMark({ href }: { href: string }) {
+  return (
+    <Link
+      href={href}
+      aria-label="dira"
+      className="-m-2 flex size-8 shrink-0 items-center justify-center rounded-md text-foreground outline-none hover:bg-accent focus-visible:ring-3 focus-visible:ring-ring/50"
+    >
+      <svg
+        aria-hidden
+        viewBox="0 0 32 32"
+        fill="currentColor"
+        fillRule="evenodd"
+        className="size-4"
+      >
+        <path d="M4.5 2H11.5L15.5 8H27.5A2.5 2.5 0 0 1 30 10.5V27.5A2.5 2.5 0 0 1 27.5 30H4.5A2.5 2.5 0 0 1 2 27.5V4.5A2.5 2.5 0 0 1 4.5 2ZM9.5 12H22.5A1.5 1.5 0 0 1 24 13.5V15A3 3 0 0 0 24 21V22.5A1.5 1.5 0 0 1 22.5 24H9.5A1.5 1.5 0 0 1 8 22.5V21A3 3 0 0 0 8 15V13.5A1.5 1.5 0 0 1 9.5 12Z" />
+      </svg>
+    </Link>
+  );
+}
 
 export type SwitcherProject = {
   id: string;
