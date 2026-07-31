@@ -22,6 +22,7 @@ import re
 import sys
 import glob
 import json
+import uuid
 import errno
 import subprocess
 import unicodedata
@@ -197,6 +198,26 @@ def set_fm_keys(path, updates):
         f.write("\n".join(lines))
 
 
+def set_deps(path, deps):
+    """deps를 인라인 한 줄로 다시 쓴다. 블록 리스트(`- a`)면 children까지 걷어낸다 --
+    set_fm_keys는 `deps:` 첫 줄만 고쳐서 children이 고아로 남고 그 해시들이 조용히 사라진다."""
+    fm, lines, end = read_fm(path)
+    if end < 0:
+        raise SystemExit("frontmatter 없음: " + path)
+    out, i = [], 0
+    while i < end:
+        if re.match(r"^deps:", lines[i]):
+            i += 1
+            while i < end and re.match(r"^\s+-\s", lines[i]):
+                i += 1
+            continue
+        out.append(lines[i])
+        i += 1
+    out.append("deps: [{}]".format(", ".join(deps)))
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("\n".join(out + lines[end:]))
+
+
 def claim(path):
     """<hash>.md -> <hash><진행중>.md 원자적 잡기. 이미 잡혀 있으면 실패."""
     d, base = os.path.split(path)
@@ -351,19 +372,57 @@ def in_progress(troot):
             if nfc(os.path.basename(p))[:-3].endswith(nfc(IN_PROGRESS))]
 
 
+# 회수할 때 비우는 할당·생존 신호. 남겨 두면 열린 티켓이 '할당됨'으로 보여 select가 영구 제외한다.
+REAP_CLEAR = ("session_id", "assigned_at", "owner", "pid", "claimed_at", "transcript")
+
+
+def ask_human(path, h, attempts, why):
+    """자동 회수 상한을 넘긴 티켓을 답변 요청으로 올린다.
+
+    `.wip`에 굳혀 두면(구 `HOLD`) GUI가 `.wip`을 편집할 수 없어 **사람이 눈으로 발견할 때까지
+    방치된다** (2026-07-31 5aa9486d: 인증서가 없어 막힌 티켓이 attempts 45까지 로그만 쌓았다).
+    대신 열림 + **존재하지 않는 dep**으로 바꾼다 -- deps_unmet은 티켓을 못 찾으면 미완료로 보므로
+    재디스패치가 막히고(무한 재시도를 막던 HOLD의 목적은 그대로), GUI는 `awaiting`을 읽어
+    `답변 대기` 배지와 답변칸을 그린다. 사람이 답변 파일(`<A><완료>.md`)을 만들면 잠금이 저절로
+    풀려 큐에 다시 뜬다(DESIGN.md §요구사항 레이어 결정 3과 같은 장치).
+    """
+    a = uuid.uuid4().hex[:8]
+    fm, lines, end = read_fm(path)
+    body = lines[end:]
+    with open(path, "a", encoding="utf-8") as f:
+        f.write("\n## 질문 {}\n\n자동 회수 {}회 실패({}). 엔진은 더 시도하지 않습니다 — {}\n".format(
+            sum(1 for l in body if re.match(r"^##\s*질문", l)) + 1, attempts, why,
+            "위 `## 블록`에 적힌 결정을 답해주세요."
+            if any(re.match(r"^##\s*블록", l) for l in body)
+            else "세션이 왜 계속 죽는지, 이 티켓을 계속 갈지 답해주세요."))
+    # 잠금(deps)을 먼저 걸고 할당을 나중에 푼다. 순서를 바꾸면 그 사이에 티켓이
+    # 잠금 없이 열려 다음 tick이 답변 없이 집어 간다.
+    set_deps(path, deps_of(lines, end) + [a])
+    # attempts를 "0" 문자열로 쓴다(0은 falsy라 set_fm_keys가 빈 값으로 적는다) --
+    # 답을 받아 다시 디스패치된 뒤엔 자동 회수 2회를 처음부터 다시 쓴다
+    upd = {"attempts": "0", "awaiting": a}
+    upd.update({k: "" for k in REAP_CLEAR})
+    set_fm_keys(path, upd)
+    return "ASK {} awaiting={} - 자동 회수 {}회 실패, 답변 요청으로 전환".format(h, a, attempts)
+
+
 def reclaim(path, fm, why):
-    """attempts 상한을 지키며 백로그로 복귀. 상한을 넘으면 HOLD만 남기고 진행중 유지."""
+    """attempts 상한까지 백로그로 복귀. 상한을 넘으면 답변 요청으로 올린다(사람 개입 대기)."""
     h = ticket_hash(path, fm)
     attempts = int((fm.get("attempts") or "0").strip() or 0) + 1
-    if attempts > REAP_MAX_ATTEMPTS:
-        set_fm_keys(path, {"attempts": attempts})
-        return "HOLD {} attempts={} - 자동 회수 상한 초과, 사람 개입 대기".format(h, attempts)
-    set_fm_keys(path, {"attempts": attempts, "session_id": "", "assigned_at": "",
-                       "owner": "", "pid": "", "claimed_at": "", "transcript": ""})
+    # 되돌리기(rename)를 먼저 이긴다. frontmatter를 먼저 쓰면 리퍼 둘이 겹칠 때 진 쪽의
+    # open(w)이 **이미 사라진 `.wip`을 되살려** 주인 없는 유령이 영구 잔류한다
+    # (2026-07-31 5f0498c9 실사고: w6이 이기고 w1·w2가 되살렸다. 그 파일은 pid도 session_id도
+    # 비어 있어 reap이 두 번 다시 보지 않는다). claim이 원자적인 것과 같은 이유로 여기도 rename이 락이다.
     try:
-        release(path)
-    except SystemExit as e:
+        path = release(path)
+    except (SystemExit, OSError) as e:
         return "REAP-FAIL {} {}".format(h, e)
+    if attempts > REAP_MAX_ATTEMPTS:
+        return ask_human(path, h, attempts, why)
+    upd = {"attempts": attempts}
+    upd.update({k: "" for k in REAP_CLEAR})
+    set_fm_keys(path, upd)
     return "REAP {} attempts={} - {}, 백로그 복귀".format(h, attempts, why)
 
 

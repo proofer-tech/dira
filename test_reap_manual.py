@@ -10,12 +10,12 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import tickets as T
 
 
-def mk(troot, h, fm_lines):
+def mk(troot, h, fm_lines, body="## 목표\n테스트\n"):
     d = os.path.join(troot, "tickets")
     os.makedirs(d, exist_ok=True)
     p = os.path.join(d, h + T.IN_PROGRESS + ".md")
     with open(p, "w", encoding="utf-8") as f:
-        f.write("---\nticket: {}\n{}\n---\n\n## 목표\n테스트\n".format(h, "\n".join(fm_lines)))
+        f.write("---\nticket: {}\n{}\n---\n\n{}".format(h, "\n".join(fm_lines), body))
     return p
 
 
@@ -55,6 +55,11 @@ try:
     # F) 디스패처 경로 회귀: session_id 죽음 + 유예 경과 -> 종전대로 회수
     pf = mk(ws, "ffff6666", ["session_id: nosuchsession-zzzz",
                              "assigned_at: " + iso(-T.REAP_GRACE_SEC - 60)])
+    # G) attempts 상한 초과 -> HOLD로 굳지 않고 답변 요청(열림 + 없는 dep + awaiting)
+    pg = mk(ws, "gggg7777", ["session_id: nosuchsession-zzzz", "deps: [aaaa0000]",
+                             "attempts: " + str(T.REAP_MAX_ATTEMPTS),
+                             "assigned_at: " + iso(-T.REAP_GRACE_SEC - 60)],
+            body="## 목표\n테스트\n\n## 블록\n인증서가 없다.\n")
 
     msgs = T.reap(ws)
     joined = "\n".join(msgs)
@@ -78,7 +83,29 @@ try:
     assert not os.path.exists(pf), "F: 디스패처 경로 회귀 - 죽은 세션 회수 안 됨"
     assert "REAP ffff6666" in joined, "F: 디스패처 경로 REAP 메시지 없음\n" + joined
 
-    print("PASS 6/6")
+    # G) 상한 초과는 사람이 답할 수 있는 자리(열림)로 올라간다. .wip에 남으면 GUI가 못 만진다.
+    gopen = os.path.join(ws, "tickets/gggg7777.md")
+    assert not os.path.exists(pg) and os.path.exists(gopen), "G: 상한 초과인데 .wip에 굳었다"
+    assert "ASK gggg7777" in joined, "G: ASK 메시지 없음\n" + joined
+    gfm, glines, gend = T.read_fm(gopen)
+    gawait = gfm["awaiting"].strip()
+    assert len(gawait) == 8, "G: awaiting 미기록 " + repr(gawait)
+    assert T.deps_of(glines, gend) == ["aaaa0000", gawait], "G: 기존 dep 유실 또는 잠금 누락"
+    body = "\n".join(glines[gend:])
+    assert "## 질문 1" in body and "`## 블록`" in body, "G: 질문 절이 없다\n" + body
+    assert gfm["attempts"].strip() == "0" and not gfm["session_id"].strip(), "G: 할당이 안 풀렸다"
+    grow = [r for r in T.scan(ws) if r["hash"] == "gggg7777"][0]
+    assert grow["unmet"] and not grow["assigned"], "G: 답변 전에 디스패치 후보다"
+
+    # H) 유령 회귀(5f0498c9): 리퍼 둘이 겹쳐도 사라진 .wip을 되살리지 않는다
+    ph = mk(ws, "hhhh8888", ["session_id: nosuchsession-zzzz",
+                             "assigned_at: " + iso(-T.REAP_GRACE_SEC - 60)])
+    hfm = T.read_fm(ph)[0]
+    assert "REAP hhhh8888" in T.reclaim(ph, hfm, "이긴 쪽")
+    assert "REAP-FAIL hhhh8888" in T.reclaim(ph, hfm, "진 쪽"), "H: 진 쪽이 조용히 성공했다"
+    assert not os.path.exists(ph), "H: 진 쪽이 .wip을 되살렸다 - 주인 없는 유령이 남는다"
+
+    print("PASS 8/8")
     for m in msgs:
         print("  " + m)
 finally:

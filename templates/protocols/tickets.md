@@ -41,11 +41,12 @@ echo "$H"
 | `kind:` | | `work` \| `request` \| `feedback` \| `answer` |
 | `persona:` | | `personas/` 아래 디렉터리 이름 중 하나(예: `pm` `designer` `developer` `qa`). 없으면 페르소나 없이 디스패치(정상) |
 | `deps:` | | `[a1b2c3d4, e5f6a7b8]`. 전부 `.done`이어야 큐에 뜬다 |
-| `awaiting:` | | 지금 기다리는 **답변 stem 1개**. `kind: request`에만. **같은 값을 `deps`에도 넣는다** — 잠금은 `deps`고 이건 사람(또는 그 역할을 하는 도구)이 `답변 대기`로 읽는 표시다. PM 세션이 쓴다. 답이 달려도 **지우지 않는다**(이력) — 아직 기다리는 중인지는 `tickets/<awaiting>.done.md`의 존재로 판정한다 |
+| `awaiting:` | | 지금 기다리는 **답변 stem 1개**. **같은 값을 `deps`에도 넣는다** — 잠금은 `deps`고 이건 사람(또는 그 역할을 하는 도구)이 `답변 대기`로 읽는 표시다. PM 세션이 `kind: request`에 쓰고, `reap`이 자동 회수 상한을 넘긴 티켓에 쓴다(성격 무관). 답이 달려도 **지우지 않는다**(이력) — 아직 기다리는 중인지는 `tickets/<awaiting>.done.md`의 존재로 판정한다 |
 | `req:` | | 출처 요구사항 stem. PM이 요구사항에서 쪼갠 작업 티켓에 붙인다. `deps`가 아니다 — 선후가 아니라 출처다. PM 세션이 쓴다 |
 
 `awaiting:`·`req:` 절차는 `personas/pm/PROFILE.md` §요구사항 왕복에 있다.
-엔진은 둘 다 읽기만 하고 아무 의미도 부여하지 않는다.
+엔진이 이 키를 쓰는 자리는 `reap`의 답변 요청 하나뿐이고([AGENTS.md](AGENTS.md) §막혔을 때),
+잠금은 언제나 `deps`가 한다.
 
 **`kind: answer`는 사람(또는 그 역할을 하는 도구)이 만들고 처음부터 `.done`이다.** 요구사항의
 `awaiting:` stem으로 `tickets/<A>.done.md`를 새로 생성한다(`title: 답변 — <R> #n`). 열린 상태로

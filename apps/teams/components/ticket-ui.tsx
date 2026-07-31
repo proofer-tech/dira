@@ -429,7 +429,7 @@ export function AnswerCard(props: {
     <Card>
       <CardHeader>
         <CardTitle>답변</CardTitle>
-        <CardDescription>답변을 달면 이 요구사항이 다시 큐에 뜨고 PM이 이어서 봅니다.</CardDescription>
+        <CardDescription>답변을 달면 이 티켓이 다시 큐에 뜨고 담당 세션이 이어서 봅니다.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <AnswerFields {...props} />
@@ -475,7 +475,7 @@ export function AnswerDialog({
         <DialogHeader>
           <DialogTitle>답변 — {title || props.hash}</DialogTitle>
           <DialogDescription>
-            답변을 달면 이 요구사항이 다시 큐에 뜨고 PM이 이어서 봅니다.
+            답변을 달면 이 티켓이 다시 큐에 뜨고 담당 세션이 이어서 봅니다.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
