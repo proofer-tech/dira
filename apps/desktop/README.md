@@ -182,8 +182,22 @@ SVG에서 직접 래스터하는 것이 그 절이 넘긴 실측이다.
   --default-background-color=00000000 --force-device-scale-factor=1 --user-data-dir=/tmp/… wrap.html
 ```
 
-**`trayTemplate.png`가 현재 메뉴바에 그려지지 않는다** — 티켓 `abce61c9` `## 블록`을 읽어라.
-트레이 자체(항목·클릭·메뉴)는 동작한다.
+**아이콘이 메뉴바에 안 보이면 자산도 코드도 아니다 — 노치다.** 노치 있는 맥에서 메뉴바가 꽉
+차면 macOS가 새 상태 항목을 **카메라 하우징 아래 슬롯**에 놓고, 거기서는 이미지도 `setTitle`
+텍스트도 그리지 않는다. 항목·메뉴·`열기`·`종료`는 전부 그대로 동작한다.
+
+확인하는 법 — 항목의 x범위가 노치 안이면 이것이다(`abce61c9`에서 실측: 항목 `894–928`,
+노치 `771–956`):
+
+```sh
+osascript -e 'tell application "System Events" to tell process "Electron" \
+  to get {position, size} of menu bar item 1 of menu bar 2'          # 894, 4, 34, 24
+osascript -l JavaScript -e 'ObjC.import("AppKit");var s=$.NSScreen.mainScreen; \
+  [s.auxiliaryTopLeftArea.size.width, s.auxiliaryTopRightArea.origin.x]+""'   # 771,956
+```
+
+**푸는 법은 자리를 만드는 것뿐이다** — 메뉴바 항목 하나를 ⌘-드래그해 치우거나, 디스플레이를
+`더 넓은 공간`으로 바꾼다. 앱이 자기 슬롯을 고르는 API는 없다(Electron에도 AppKit에도).
 
 ## 여기 아직 없는 것
 

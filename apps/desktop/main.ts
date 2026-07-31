@@ -240,9 +240,9 @@ ipcMain.handle("dira:pick-path", async (e, mode: unknown) => {
 function createTray(origin: string) {
   // 템플릿 이미지 — 색을 갖지 않고 알파만 있다. 라이트/다크 메뉴바를 macOS가 각각 칠한다.
   // @2x는 파일명 규약으로 nativeImage가 알아서 집는다 (trayTemplate@2x.png).
-  // ponytail: 이 이미지가 지금 이 맥의 메뉴바에 **그려지지 않는다**(항목·메뉴는 동작한다).
-  // 이미지가 아니라 macOS/Electron 쪽이다 — 컬러 아이콘도 setTitle 텍스트도 같이 안 그려진다.
-  // 근거와 다음 수는 티켓 abce61c9 `## 블록`.
+  // 안 보이면 코드도 자산도 아니다: 노치 있는 맥에서 메뉴바가 꽉 차면 macOS가 새 상태 항목을
+  // **카메라 하우징 아래 슬롯**에 놓고 거기서는 아무것도 그리지 않는다(setTitle 텍스트조차).
+  // 항목·메뉴·클릭은 그대로 동작한다. 메뉴바 항목 하나를 ⌘-드래그로 치우면 나타난다. abce61c9.
   const image = nativeImage.createFromPath(fileURLToPath(new URL("trayTemplate.png", import.meta.url)));
   image.setTemplateImage(true);
 
