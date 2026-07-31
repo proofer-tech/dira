@@ -21,7 +21,9 @@ writeFileSync(path.join(projects, "-Users-hsol-a", `${UUID2}.jsonl`), "");
 writeFileSync(path.join(projects, "-Users-hsol-b", `${UUID2}.jsonl`), ""); // 중복 = 빈 상태
 
 const rec = (o: object) => JSON.stringify(o) + "\n";
-const CWD = "/Users/hsol/Projects/dira/.dira/worktrees/w5";
+/** 레포 루트. **절대경로여야 한다** — `toolSummary`가 `path.isAbsolute(file_path)`일 때만
+ *  cwd 기준으로 접으므로, 상대 문자열을 넣으면 227행 `Read` 요약 테스트가 무의미해진다. */
+const CWD = path.resolve(import.meta.dirname, "../../..");
 /** 이 앱의 레포 기준 상대경로와 그 절대경로. 앱이 옮겨가면 코드에서 고칠 곳은 여기 하나다. */
 const APP_DIR = "apps/teams";
 const APP_CWD = `${CWD}/${APP_DIR}`;

@@ -31,7 +31,7 @@ $ .dira/workers/w1.sh list
 ## 설치
 
 ```bash
-git clone <this-repo> ~/Projects/dira
+git clone https://github.com/proofertech/dira.git ~/Projects/dira
 ```
 
 `tick.sh`는 엔진 코드일 뿐이고 직접 실행하지 않는다 — 진입점은 워커다(아래).

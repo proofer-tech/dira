@@ -1121,7 +1121,7 @@ test("crontab 쓰기 거부 — 상한을 안 기다리고 즉시 실패하고 �
   const root = makeRoot({ "w1.sh": "#!/bin/bash\n" });
   const w1 = path.join(root, "workers", "w1.sh");
   const c = withLiveCrontab("0 3 * * * /Users/x/bin/backup.sh\n", {
-    failWrite: "crontab: error renaming /var/at/tmp/tmp.1 to /var/at/tabs/hsol: Operation not permitted",
+    failWrite: "crontab: error renaming /var/at/tmp/tmp.1 to /var/at/tabs/me: Operation not permitted",
   });
   const t0 = Date.now();
   try {
@@ -1136,8 +1136,8 @@ test("crontab 쓰기 거부 — 상한을 안 기다리고 즉시 실패하고 �
 test("cronWriteError — 권한 거부만 '앱 관리'로 번역하고 나머지 실패는 그대로 (79d9b659)", () => {
   // 셋 다 crontab 바이너리에 실제로 있는 문구다. 거부가 어느 꼴로 오든 사유를 놓치지 않는다.
   for (const s of [
-    "crontab: error renaming /var/at/tmp/tmp.1 to /var/at/tabs/hsol: Operation not permitted",
-    "crontab: /var/at/tabs/hsol: Permission denied",
+    "crontab: error renaming /var/at/tmp/tmp.1 to /var/at/tabs/me: Operation not permitted",
+    "crontab: /var/at/tabs/me: Permission denied",
     "crontab command not allowed",
   ])
     assert.match(cronWriteError(s), /앱 관리/);
