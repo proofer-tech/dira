@@ -28,6 +28,7 @@ import type { SetupState } from "@/lib/auth";
 import { CopyCommand } from "@/components/copy-command";
 import { PickPath } from "@/components/path-picker";
 import { PersonaBadge } from "@/components/persona-badge";
+import { BrandMark } from "@/components/project-switcher";
 import { StatusBadge, type Status } from "@/components/status-badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -561,11 +562,14 @@ function AuthDialog({
   );
 }
 
-// ── 화면 헤더 + 등록 · 생성 · 결과 슬롯 ─────────────────────────────────────
+// ── 루트 셸(헤더 + main) + 등록 · 생성 · 결과 슬롯 ──────────────────────────
 
 /** `/`의 클라이언트 조각. **`h1`·트리거·결과 슬롯이 한 컴포넌트인 이유**는 트리거가 `h1`
  *  우측인데 결과 카드는 목록 아래 슬롯에 떠야 하기 때문이다(§비주얼 §7). 목록(`children`)은
  *  서버가 그린 것을 그대로 통과시킨다.
+ *
+ *  그 `h1` 행이 헤더 바로 올라가면서(§비주얼 §4 루트 셸 항) **셸까지 이 조각이 그린다** —
+ *  `<header>`를 서버에 남기고 버튼만 여기로 내리면 헤더 행과 결과 슬롯이 두 트리로 갈린다.
  *
  *  **0건에서 등록에 성공해도 이 컴포넌트는 자리를 안 옮긴다** — 같은 응답에서 화면이
  *  온보딩→목록으로 바뀌는데, 폼이 그때 다이얼로그로 옮겨 앉으면 결과 표가 remount로 사라진다
@@ -574,6 +578,7 @@ export function ProjectsSection({
   empty,
   auth,
   home,
+  registryError,
   children,
 }: {
   empty: boolean;
@@ -582,6 +587,8 @@ export function ProjectsSection({
   /** 홈 디렉터리. 경로 피커가 `~`로 친 값을 펴는 데만 쓴다(§데스크톱 앱 N3) —
    *  클라이언트는 `node:os`를 못 부르므로 서버가 넘긴다(`tildePath`와 같은 규약) */
   home: string;
+  /** 레지스트리를 못 읽었을 때. GUI가 고쳐 쓰려 들지 않는다 — 원문 + 여는 명령이다. */
+  registryError?: { message: string; openCmd: string } | null;
   children?: React.ReactNode;
 }) {
   const [pending, start] = useTransition();
@@ -689,117 +696,169 @@ export function ProjectsSection({
 
   return (
     <>
-      {/* 0건이면 `h1` 우측이 비어 있다 — 폼이 이미 펼쳐져 있는데 그 폼을 여는 버튼을 같은
-          화면에 세우지 않는다(§비주얼 §7) */}
-      <div className={empty ? "max-w-3xl space-y-2" : undefined}>
-        <div className="flex items-center justify-between gap-4">
-          <h1 className="text-lg font-semibold">{empty ? "dira" : "프로젝트"}</h1>
-          {/* 인증 버튼은 0건에서도 선다 — `등록`·`새로 만들기`가 빠지는 이유는 그 폼이 이미
-              펼쳐져 있어서고(§비주얼 §7), 인증은 그 화면에 다른 자리가 없다. 토큰이 없는
-              사람은 대개 프로젝트도 0개다(§0-4 자리 표: 언제 = 항상) */}
-          <div className="flex items-center gap-2">
-            {!empty && (
-              <>
-                <Button size="sm" onClick={() => setRegistering(true)}>
-                  프로젝트 등록
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => setCreating(true)}>
-                  새로 만들기
-                </Button>
-              </>
-            )}
-            {/* 상태를 배지로 따로 세우지 않는다 — 버튼이 이미 그 자리에 있고, 하나로 두면
-                사람이 볼 곳이 하나다(§0-4) */}
-            <Button variant="outline" size="sm" onClick={() => setAuthing(true)}>
-              {auth.savedAt ? (
-                "인증"
-              ) : (
-                <>
-                  <TriangleAlert aria-hidden className="text-status-stale" />
-                  인증 필요
-                </>
-              )}
-            </Button>
-          </div>
-        </div>
-        {empty && (
-          <p className="text-sm text-muted-foreground">
-            등록된 프로젝트가 없습니다. 큐 디렉터리를 등록하면 시작합니다.
-          </p>
-        )}
-      </div>
-
-      {children}
-
-      {/* 결과 슬롯 — 등록·생성 어느 쪽으로 성공해도 같은 자리다. 평소엔 아무것도 없다(§비주얼 §7) */}
-      {view && !dismissed ? (
-        <Card className="max-w-3xl gap-3 p-4">
-          <div className="flex items-center justify-between gap-4">
-            <h2 className="text-sm font-medium">
-              {c ? "만들었습니다" : "등록됨"} — {view.project.name}{" "}
-              <span className="font-mono text-xs text-muted-foreground">
-                {view.project.shortRoot}
-              </span>
-            </h2>
-            <div className="flex items-center gap-2">
-              <Button size="sm" nativeButton={false} render={<Link href={`/p/${view.project.id}`} />}>
-                보드 열기
+      {/* 루트 셸 — 마크만 있던 바에 이 화면의 `h1` 행이 **통째로** 올라온다(§비주얼 §4 루트 셸 항).
+          내비·전환기는 넣지 않는다: 목적지가 아직 정해지지 않았다. href는 `/` = 자기 자신이다(§14).
+          헤딩은 `프로젝트` 고정이다 — 0건이라고 `dira`로 바꾸면 마크 옆에 같은 말이 두 번 선다.
+          0건이면 우측이 인증 하나다: 등록 폼이 이미 펼쳐져 있는데 그 폼을 여는 버튼을 같은
+          화면에 세우지 않는다(§비주얼 §7). 인증은 0건에서도 선다 — 그 화면에 다른 자리가 없고,
+          토큰이 없는 사람은 대개 프로젝트도 0개다(§0-4 자리 표: 언제 = 항상) */}
+      <header className="sticky top-0 z-50 flex h-12 items-center gap-6 border-b bg-background px-6">
+        <BrandMark href="/" />
+        <h1 className="text-lg font-semibold">프로젝트</h1>
+        <div className="ml-auto flex items-center gap-2">
+          {!empty && (
+            <>
+              <Button size="sm" onClick={() => setRegistering(true)}>
+                프로젝트 등록
               </Button>
-              <Button size="sm" variant="ghost" onClick={() => setDismissed(true)}>
-                닫기
-              </Button>
-            </div>
-          </div>
-          {c && (
-            <div className="space-y-1 text-sm">
-              <p>
-                파일 {c.written}개를 만들었습니다.
-                {c.skipped.length > 0 && (
-                  <span className="text-muted-foreground">
-                    {" "}
-                    이미 있어 건너뜀:{" "}
-                    <span className="font-mono text-xs">{c.skipped.join(" ")}</span>
-                  </span>
-                )}
-              </p>
-              <p className="text-muted-foreground">
-                엔진 레포 <span className="font-mono text-xs">{c.repo}</span>
-              </p>
-              {c.cron ? (
-                <p>crontab에 등록됨 — 1분 뒤부터 티켓을 물어갑니다</p>
-              ) : (
-                // 등록 실패는 성공 보고를 막지 않는다(§0-3). 파일은 그대로 두고 명령을 준다.
-                <Alert variant="destructive">
-                  <TriangleAlert aria-hidden />
-                  <AlertTitle>crontab에 등록하지 못했습니다</AlertTitle>
-                  <AlertDescription className="grid gap-2">
-                    <span className="break-all">{c.cronError}</span>
-                    <CopyCommand cmd={c.registerCmd} />
-                  </AlertDescription>
-                </Alert>
-              )}
-            </div>
-          )}
-          <ConfigTable view={view} />
-        </Card>
-      ) : (
-        empty && (
-          // 0건 온보딩 — 폼이 1차 콘텐츠다. `새로 만들기`는 설명 한 줄이 붙어야 등록과 갈린다
-          // (§0-3 트리거 두 자리 중 하나. `h1` 우측 자리와 동시에 서지 않는다)
-          <>
-            <div className="flex max-w-3xl items-center justify-between gap-4">
-              <p className="text-sm text-muted-foreground">아직 큐가 없다면 새로 만듭니다.</p>
               <Button variant="outline" size="sm" onClick={() => setCreating(true)}>
                 새로 만들기
               </Button>
+            </>
+          )}
+          {/* 상태를 배지로 따로 세우지 않는다 — 버튼이 이미 그 자리에 있고, 하나로 두면
+              사람이 볼 곳이 하나다(§0-4) */}
+          <Button variant="outline" size="sm" onClick={() => setAuthing(true)}>
+            {auth.savedAt ? (
+              "인증"
+            ) : (
+              <>
+                <TriangleAlert aria-hidden className="text-status-stale" />
+                인증 필요
+              </>
+            )}
+          </Button>
+        </div>
+      </header>
+
+      {/* 스크롤하는 것은 이 `main`이다(§비주얼 §4). 폭 상한은 **안쪽 상자**가 든다 —
+          `main`에 걸면 스크롤바가 화면 오른쪽이 아니라 896px 자리에 선다.
+          등록 폼이 다이얼로그로 내려가면서 이 화면은 테이블 화면이 됐다 — 폼 폭 규칙(3xl)은
+          폼이 서는 자리만 문다(§비주얼 §7 폭 항) */}
+      <main className="min-h-0 w-full flex-1 overflow-y-auto">
+        <div className="w-full max-w-4xl space-y-6 px-6 py-6">
+          {registryError && (
+            <Alert variant="destructive">
+              <TriangleAlert aria-hidden />
+              <AlertTitle>프로젝트 레지스트리를 읽지 못했습니다</AlertTitle>
+              <AlertDescription className="grid gap-2">
+                <span className="font-mono text-xs break-all">{registryError.message}</span>
+                <CopyCommand cmd={registryError.openCmd} />
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* 0건 본문의 첫 줄. 두 글자 규칙(0건이면 `dira`)은 본문에 남지만 태그는 `h2`다 —
+              헤더가 `h1`을 가져갔고 페이지의 `h1`은 하나다(§비주얼 §4 · §7) */}
+          {empty && (
+            <div className="max-w-3xl space-y-2">
+              <h2 className="text-lg font-semibold">dira</h2>
+              <p className="text-sm text-muted-foreground">
+                등록된 프로젝트가 없습니다. 큐 디렉터리를 등록하면 시작합니다.
+              </p>
             </div>
-            <Card className="max-w-3xl gap-4 p-4">
-              <h2 className="text-sm font-medium">프로젝트 등록</h2>
-              {form}
+          )}
+
+          {children}
+
+          {/* 결과 슬롯 — 등록·생성 어느 쪽으로 성공해도 같은 자리다. 평소엔 아무것도 없다(§비주얼 §7) */}
+          {view && !dismissed ? (
+            <Card className="max-w-3xl gap-3 p-4">
+              <div className="flex items-center justify-between gap-4">
+                <h2 className="text-sm font-medium">
+                  {c ? "만들었습니다" : "등록됨"} — {view.project.name}{" "}
+                  <span className="font-mono text-xs text-muted-foreground">
+                    {view.project.shortRoot}
+                  </span>
+                </h2>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    nativeButton={false}
+                    render={<Link href={`/p/${view.project.id}`} />}
+                  >
+                    보드 열기
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setDismissed(true)}>
+                    닫기
+                  </Button>
+                </div>
+              </div>
+              {c && (
+                <div className="space-y-1 text-sm">
+                  <p>
+                    파일 {c.written}개를 만들었습니다.
+                    {c.skipped.length > 0 && (
+                      <span className="text-muted-foreground">
+                        {" "}
+                        이미 있어 건너뜀:{" "}
+                        <span className="font-mono text-xs">{c.skipped.join(" ")}</span>
+                      </span>
+                    )}
+                  </p>
+                  <p className="text-muted-foreground">
+                    엔진 레포 <span className="font-mono text-xs">{c.repo}</span>
+                  </p>
+                  {c.cron ? (
+                    <p>crontab에 등록됨 — 1분 뒤부터 티켓을 물어갑니다</p>
+                  ) : (
+                    // 등록 실패는 성공 보고를 막지 않는다(§0-3). 파일은 그대로 두고 명령을 준다.
+                    <Alert variant="destructive">
+                      <TriangleAlert aria-hidden />
+                      <AlertTitle>crontab에 등록하지 못했습니다</AlertTitle>
+                      <AlertDescription className="grid gap-2">
+                        <span className="break-all">{c.cronError}</span>
+                        <CopyCommand cmd={c.registerCmd} />
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </div>
+              )}
+              <ConfigTable view={view} />
             </Card>
-          </>
-        )
-      )}
+          ) : (
+            empty && (
+              // 0건 온보딩 — 폼이 1차 콘텐츠다. `새로 만들기`는 설명 한 줄이 붙어야 등록과 갈린다
+              // (§0-3 트리거 두 자리 중 하나. 헤더의 액션 자리와 동시에 서지 않는다)
+              <>
+                <div className="flex max-w-3xl items-center justify-between gap-4">
+                  <p className="text-sm text-muted-foreground">아직 큐가 없다면 새로 만듭니다.</p>
+                  <Button variant="outline" size="sm" onClick={() => setCreating(true)}>
+                    새로 만들기
+                  </Button>
+                </div>
+                <Card className="max-w-3xl gap-4 p-4">
+                  <h2 className="text-sm font-medium">프로젝트 등록</h2>
+                  {form}
+                </Card>
+              </>
+            )
+          )}
+
+          {/* 프로젝트 0개일 때의 안내 산문. §6의 `<EmptyState>` 규칙(한 줄 + 버튼 1개)을 여기서만
+              쓰지 않는다 — 한 줄로는 "무엇을 등록해야 하는지"를 못 알려준다(§8 충돌 기록).
+              목록이 생기면 통째로 사라진다(§비주얼 §7) */}
+          {empty && (
+            <div className="max-w-3xl space-y-6">
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">
+                  큐 디렉터리는 프로젝트 루트 아래 .dira 입니다. 안에 tickets/ 와 workers/ 가
+                  있습니다.
+                </p>
+                <p className="font-mono text-xs text-muted-foreground">
+                  ~/Projects/myproject/.dira
+                </p>
+                <p className="font-mono text-xs text-muted-foreground">~/Projects/dira/.dira</p>
+              </div>
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">어디 있는지 모르겠다면:</p>
+                {/* 스캔하는 건 GUI 프로세스가 아니라 사용자의 셸이다 — 경계는 여전히 명시적이다 */}
+                <CopyCommand cmd="ls -d ~/Projects/*/.dira" />
+              </div>
+            </div>
+          )}
+        </div>
+      </main>
 
       {/* 폼은 하나고 그릇만 둘이다 — 0건이면 위 인라인 카드, 아니면 이 다이얼로그다.
           둘이 동시에 서지 않으므로 필드 `id`가 겹치지 않는다 */}
