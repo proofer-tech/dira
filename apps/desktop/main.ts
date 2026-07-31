@@ -1,7 +1,7 @@
 // dira 데스크톱 셸. 하는 일은 다섯이다 — Next standalone 서버를 자식으로 띄우고, 창이 그것을 열고,
 // 창을 닫아도 메뉴바에 남고(N1), 답변 대기 티켓이 새로 생기면 알리고(N2), 화면이 부르면
 // 네이티브 경로 다이얼로그를 띄우고(N3), 로그인 시 자동 실행을 켜고 끈다(N4).
-// 스펙: ../../docs/DESIGN.md §데스크톱 앱 (특히 "못박는 것" 1~6, N1·N2·N3·N4).
+// 스펙: ../../docs/DESIGN.md §데스크톱 앱 (특히 "못박는 것" 1~7, N1·N2·N3·N4).
 import { app, BrowserWindow, Menu, Notification, Tray, dialog, ipcMain, nativeImage, shell } from "electron";
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
