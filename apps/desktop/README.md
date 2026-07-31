@@ -79,6 +79,13 @@ pnpm dist        # teams 빌드 + 조립 + electron-builder
 인증서는 환경변수가 아니라 **키체인**에서 온다 — electron-builder가 `Developer ID Application`을
 직접 찾는다. 키체인에 없으면 못 찾는다.
 
+> **서명 빌드는 사람이 쓰는 터미널에서 돌린다.** 에이전트 세션은 GUI 로그인 세션이 아니라서
+> 키체인 검색목록이 `System.keychain`만 남고 로그인 키체인이 빠진다. 인증서가 설치돼 있어도
+> `security find-identity -v -p codesigning`이 `0 valid identities found`을 찍고,
+> `codesign -s <이름>`은 `no identity found`으로 죽는다. `list-keychains -s`로도 안 되돌아간다
+> (검색목록은 보안 세션에 묶여 있다). `pnpm signcheck`가 이 경우를 인증서 없는 경우와
+> 구분해서 찍어주니 둘을 헷갈리지 마라.
+
 ```sh
 pnpm signcheck     # 준비물이 다 있는지만 본다. 빌드는 안 한다
 
@@ -175,6 +182,7 @@ SVG에서 직접 래스터하는 것이 그 절이 넘긴 실측이다.
 
 로그인 시 자동 실행 `00fc34ba`(트레이 메뉴의 구분선 자리). 자기 티켓이 있다.
 
-**서명된 산출물도 아직 없다** — 설정은 위 `## 서명 · 공증`에 다 서 있지만 이 맥에
-`Developer ID` 인증서가 없어서 서명 빌드를 한 번도 돌려보지 못했다(`5aa9486d` `## 블록`).
-사람이 준비물 셋을 갖추면 `pnpm dist` 한 번이 남은 전부다.
+**서명된 산출물도 아직 없다** — 설정은 위 `## 서명 · 공증`에 다 서 있고 인증서도
+이 맥에 설치돼 있지만(`Developer ID Application: Hansol Lim (L9E4Y653DY)`), 에이전트 세션이
+키체인에 닿지 못해 서명 빌드를 한 번도 돌려보지 못했다(`5aa9486d` `## 블록`).
+사람이 **자기 터미널에서** 앱 암호를 얹어 `pnpm dist`를 한 번 돌리는 것이 남은 전부다.
