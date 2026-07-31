@@ -17,17 +17,11 @@
 name: release
 
 on:
+  # **매 master 커밋마다다** — path 필터 없다(요구 2026-08-01). 대가를 알고 고른 값이다:
+  # 스펙·README만 고친 커밋도 patch를 올리고 받는 사람에게 내용이 같은 버전이 내려간다.
+  # 줄이려면 여기에 `paths: ['apps/**', 'tick.sh', 'tickets.py', 'templates/**']`를 넣으면 된다.
   push:
     branches: [master]
-    # 앱이나 번들에 실려 나가는 것이 바뀐 커밋만 릴리스한다. 스펙·README만 고친 커밋까지
-    # 태그를 만들면 받는 사람에게 내용이 같은 버전이 계속 내려간다.
-    paths:
-      - 'apps/**'
-      - 'tick.sh'
-      - 'tickets.py'
-      - 'templates/**'
-      - 'worker.sh.example'
-      - '.github/workflows/release.yml'
   workflow_dispatch:
     inputs:
       bump:

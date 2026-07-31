@@ -78,7 +78,7 @@ pnpm dev         # teams 빌드 + 조립 + 앱 실행
 | 어디 | 무엇 | 무엇이 필요한가 |
 |---|---|---|
 | 사람 맥 | `pnpm release <patch\|minor\|major>` | 로그인 키체인의 인증서 · Apple 환경변수 3개 · `GH_TOKEN` |
-| CI (자동) | `master`에 `apps/**`·엔진 파일이 들어오면 `release.yml`이 `patch`로 돈다. `minor`·`major`는 Actions 탭에서 손으로(`workflow_dispatch`) | 레포 시크릿 5개(아래) |
+| CI (자동) | **`master`에 커밋이 들어올 때마다** `release.yml`이 `patch`로 돈다. `minor`·`major`는 Actions 탭에서 손으로(`workflow_dispatch`) | 레포 시크릿 5개(아래) |
 
 `pnpm release`(R4, `5ab56e03`·`ab4fe016`)가 선행 확인 → bump·커밋·태그 → push →
 `pnpm dist` → `gh release create`까지 한 방으로 간다. **CI도 같은 스크립트를 부른다** —
