@@ -243,29 +243,6 @@ export default async function TicketDetail({
             </Alert>
           )}
 
-          {/* `.wip`은 지금 세션이 그 파일로 일하고 있다 — 잠금 사유를 그 자리에 적는다(제약 5).
-              자물쇠가 움직이는 이유는 §18 ③: 이 문장이 서 있는 **이유**가 지금 누가 일하고 있다는
-              사실이라, 정지한 자물쇠는 그것을 과거형으로 읽힌다. 아래 `.done` 자물쇠는 정지다 —
-              영영 안 풀리는 잠금이라 기다릴 것이 없다. */}
-          {ticket.state === "wip" && (
-            <Alert>
-              <Lock
-                aria-hidden
-                className="animate-wip-pulse text-status-active motion-reduce:animate-none"
-              />
-              {/* 꼬리의 마크가 **누구인지**를 말한다(§비주얼 §19 ③ · 사람 요구 `47678a71`).
-                  `AlertDescription`이 아니라 여기인 이유: 할당 해제를 누를지 기다릴지가
-                  제목 한 줄에서 갈려야 한다(§2). 문구·`Lock`·`.done` `Alert`는 무수정 */}
-              <AlertTitle>
-                세션이 물고 있습니다 — 편집·삭제 잠금 <WipWorker t={ticket} />
-              </AlertTitle>
-              <AlertDescription>
-                진행중 티켓은 읽기만 합니다. 세션이 죽었다면 아래 <b>할당 해제</b>로 큐에 되돌린 뒤
-                편집하세요.
-              </AlertDescription>
-            </Alert>
-          )}
-
           {/* `.done`은 이 큐의 불변 기록이다 — `.wip`과 **다른 사유로** 잠긴다(사람 요청
               `17e24fbc`, 답변 `432f9c40`). 진행중은 기다리면 풀리고 완료는 영영 안 풀리므로
               같은 문장을 쓰지 않는다. 파일이 사라졌을 때 무엇이 부서지는지를 적는다 —
@@ -283,13 +260,19 @@ export default async function TicketDetail({
           )}
 
           {/* 할당됨일 때만 보인다 — 그 판정은 컴포넌트 안에서 한다(해제 후 출력을 남기려면 여기서
-              조건부로 렌더하면 안 된다). 상태 전이는 엔진 소관이라 워커 스크립트를 부른다(제약 2) */}
+              조건부로 렌더하면 안 된다). 상태 전이는 엔진 소관이라 워커 스크립트를 부른다(제약 2).
+              **`.wip` 잠금 `Alert`도 이 컴포넌트가 그린다**(§2 · 사람 요구 `bfb1374a`) — 버튼이
+              그 카드 안 오른쪽 끝에 붙는데 카드를 여기 두면 상태를 든 버튼만 넘길 수가 없다.
+              `.done` 잠금 `Alert`는 위에 그대로 있다(둘은 배타라 화면 순서가 안 바뀐다).
+              마크만 서버가 그려 넘긴다 — `WipWorker`는 `node:fs`를 타서 클라이언트로 못 간다. */}
           <UnassignButton
             project={id}
             hash={hash}
             worker={workers[0]?.name ?? null}
             assigned={ticket.assigned}
             ghost={ticket.state === "open" && ticket.assigned}
+            wip={ticket.state === "wip"}
+            mark={<WipWorker t={ticket} />}
           />
 
           {/* 답변 대기일 때만. `.wip`은 `isAwaiting`의 state 조건이 구조적으로 막는다(제약 5).

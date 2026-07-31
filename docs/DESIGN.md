@@ -3458,7 +3458,7 @@ P46은 인스턴스 하나가 자식을 하나 더 등록한다. **그래서 못
 | P48 | 워커 마크 시각 사양 — §비주얼 §19 `12e2fd52` | designer | 스펙 | 완료 — **뒤집은 축은 밝기 하나**(`--muted-foreground` → `--foreground`, 이웃과 단차 4.73 → 16.46). 그릇은 `<span>` 칩(`Badge`는 옆의 `PersonaBadge`와 실루엣이 겹친다). 새 색 토큰 0 · 새 컴포넌트 0 · `globals.css` 무수정 · §18 무수정. ②는 `aria-hidden` + `sr-only` 원문 |
 | P48 | 워커 마크 구현 — 자리 3곳 `6a813cae` | developer | `12e2fd52` | 완료 — `components/worker-mark.tsx` 하나가 셋의 출처(클래스 문자열 동일). 새 색 토큰 0 · 새 shadcn 0 · `globals.css`·`workerOf`·`COLUMNS` 무수정. ②는 전문 값 무수정 + `aria-hidden`/`sr-only` 원문. `status-badge.tsx`에 못 얹은 이유는 클라이언트 번들(`workerOf` → `node:fs`) |
 | P49 | 할당 해제를 잠금 카드 안으로 — 스펙 확정 `bfb1374a` | pm | — | 완료 — §2 `.wip` 잠금 `Alert` 항에 하위 항목 5개(자리 · 설명 `<span>` 이관 · **결과는 카드 밖** · ghost 무회귀). 되묻지 않았다 |
-| P49 | 할당 해제 버튼을 잠금 `Alert` 안 오른쪽으로 `cdffbbef` | developer | 스펙(§2) | 대기 |
+| P49 | 할당 해제 버튼을 잠금 `Alert` 안 오른쪽으로 `cdffbbef` | developer | 스펙(§2) | 완료 — `Alert`는 열이 하나 늘었다(`grid-cols-[auto_1fr_auto]`, 실측 `16px 746px 96px`). 버튼 세로 중심차 **0px** · 두 줄에 걸침. 잠금 카드를 `UnassignButton`이 그린다(버튼만 서버에서 넘길 수 없다 — `pending`·`run`이 그 컴포넌트 상태다). 마크는 서버가 그려 `mark`로 넘긴다(`WipWorker` → `node:fs`). 해제 후 카드 소멸 · 출력 잔존 실측. 새 shadcn 0 · 새 색 토큰 0 · `globals.css` 무수정 |
 
 **P49는 티켓이 하나다. designer도 QA도 없다.** 옮기는 것은 이미 있는 버튼이고 새 색 토큰 ·
 새 컴포넌트 · 새 모션이 0이라 designer가 고를 수가 없다(P32·P35·P40·P46 선례 — 고를 값이

@@ -7,13 +7,14 @@
  *  액션 뒤에 있다(fs 접근은 여기 없다). 결과를 **토스트에 담지 않는다** — 워커 스크립트 출력과
  *  검증 사유는 읽어야 하는 정보고, 3초 뒤 사라지는 자리에 두면 못 본다(DESIGN.md §8이 해석 결과
  *  표에 쓴 같은 근거다). */
-import { useActionState, useState, useTransition } from "react";
+import { useActionState, useState, useTransition, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ArrowDown,
   Check,
   Copy,
+  Lock,
   MessageSquareReply,
   Trash2,
   TriangleAlert,
@@ -225,13 +226,20 @@ export function TicketEditForm({
  *  워커가 0개면 부를 스크립트가 없다 — 비활성화하고 이유를 그 자리에 적는다.
  *
  *  `assigned` 판정을 **이 안에서** 한다: 성공하면 티켓이 미할당으로 바뀌므로, 서버 쪽에서
- *  조건부로 렌더하면 이 컴포넌트가 통째로 사라져 스크립트 출력도 같이 사라진다(실측). */
+ *  조건부로 렌더하면 이 컴포넌트가 통째로 사라져 스크립트 출력도 같이 사라진다(실측).
+ *
+ *  `.wip`이면 잠금 `Alert`를 **여기서** 그린다(DESIGN.md §2 · 사람 요구 `bfb1374a`) — 버튼이
+ *  그 카드 안 오른쪽에 붙어야 하는데 카드를 서버 쪽(page.tsx)에 두면 버튼만 넘길 방법이 없다
+ *  (`pending`·`run`이 이 컴포넌트의 상태다). 워커 마크는 `WipWorker`가 `lib/workers.ts`
+ *  (`node:fs`)를 쓰므로 여기서 import할 수 없다 — 서버가 그려 `mark`로 넘긴다. */
 export function UnassignButton({
   project,
   hash,
   worker,
   assigned,
   ghost,
+  wip,
+  mark,
 }: {
   project: string;
   hash: string;
@@ -241,36 +249,95 @@ export function UnassignButton({
   /** 열린 티켓 + `session_id` = 엔진이 만들지 않는 조합. 여기선 이 버튼이 유일한 복구 수단이다.
    *  `.wip`의 죽은 세션과는 **다른 사건**이라 문구를 갈라 쓴다(DESIGN.md §2 · §비주얼 §2). */
   ghost: boolean;
+  /** `.wip`이면 잠금 `Alert`가 이 컴포넌트의 그릇이 된다. 아니면 종전대로 버튼 + 사유 한 줄이다. */
+  wip: boolean;
+  /** 서버가 그린 `<WipWorker>` (§비주얼 §19 ③). `.wip`이 아니거나 `owner` 형식이 안 맞으면 없다 */
+  mark?: ReactNode;
 }) {
   const [pending, start] = useTransition();
   const [run, setRun] = useState<UnassignRun | null>(null);
-  if (!assigned && !run) return null; // 할당 안 된 티켓엔 이 액션이 없다
+  // `.wip`은 할당 여부와 무관하게 잠금 카드가 서야 한다 — 버튼만 그 안에서 빠진다
+  if (!wip && !assigned && !run) return null; // 할당 안 된 티켓엔 이 액션이 없다
+
+  const button = (
+    <Button
+      variant="outline"
+      size="sm"
+      disabled={pending || !worker}
+      onClick={() => start(async () => setRun(await unassignTicket(project, hash)))}
+    >
+      <Unlink aria-hidden />
+      {pending ? "할당 해제 중…" : "할당 해제"}
+    </Button>
+  );
+  // 누를 수 있는지/무엇이 불리는지. 자리가 둘(잠금 카드 설명 · 종전 버튼 옆)이라 한 번만 쓴다
+  const why = worker ? (
+    <>
+      <span className="font-mono">
+        {worker}.sh unassign {hash}
+      </span>{" "}
+      를 호출합니다
+    </>
+  ) : (
+    "이 프로젝트에 워커가 없습니다 — 할당 해제를 호출할 스크립트가 없습니다."
+  );
+
+  // 스크립트 출력은 그대로 보여준다: 백로그 복귀 여부가 여기 적혀 온다.
+  // **잠금 카드 밖 아래**다 — 해제가 성공하면 티켓이 `.wip`이 아니게 돼 카드가 통째로
+  // 사라지고, 안에 있으면 출력도 같이 사라진다(§2 · 위 실측과 같은 사건).
+  const output =
+    run &&
+    (run.ok ? (
+      <Alert>
+        <Unlink aria-hidden />
+        <AlertTitle>할당 해제 완료{run.worker && ` — ${run.worker}`}</AlertTitle>
+        <AlertDescription>
+          <pre className="font-mono text-xs whitespace-pre-wrap">{run.output}</pre>
+        </AlertDescription>
+      </Alert>
+    ) : (
+      <Failure title="할당 해제 실패" message={run.output} />
+    ));
+
+  /* `.wip`은 지금 세션이 그 파일로 일하고 있다 — 잠금 사유를 그 자리에 적는다(제약 5).
+     자물쇠가 움직이는 이유는 §18 ③: 이 문장이 서 있는 **이유**가 지금 누가 일하고 있다는
+     사실이라, 정지한 자물쇠는 그것을 과거형으로 읽는다. `.done` 자물쇠는 정지다(page.tsx) —
+     영영 안 풀리는 잠금이라 기다릴 것이 없다.
+     `Alert`는 열이 하나 는 것뿐이다: 손잡이가 오른쪽 끝에서 제목·설명 두 줄에 걸쳐 선다. */
+  if (wip)
+    return (
+      <div className="space-y-2">
+        <Alert className="has-[>svg]:grid-cols-[auto_1fr_auto]">
+          <Lock
+            aria-hidden
+            className="animate-wip-pulse text-status-active motion-reduce:animate-none"
+          />
+          {/* 꼬리의 마크가 **누구인지**를 말한다(§비주얼 §19 ③ · 사람 요구 `47678a71`).
+              `AlertDescription`이 아니라 여기인 이유: 할당 해제를 누를지 기다릴지가
+              제목 한 줄에서 갈려야 한다(§2). 문구·`Lock`·`.done` `Alert`는 무수정 */}
+          <AlertTitle>세션이 물고 있습니다 — 편집·삭제 잠금 {mark}</AlertTitle>
+          <AlertDescription className="grid gap-1">
+            {/* 손잡이가 옆으로 왔으므로 `아래`를 뺀다(§2) */}
+            <span>
+              진행중 티켓은 읽기만 합니다. 세션이 죽었다면 <b>할당 해제</b>로 큐에 되돌린 뒤
+              편집하세요.
+            </span>
+            {assigned && <span className="text-xs">{why}</span>}
+          </AlertDescription>
+          {assigned && (
+            <div className="col-start-3 row-start-1 row-span-2 self-center pl-2">{button}</div>
+          )}
+        </Alert>
+        {output}
+      </div>
+    );
 
   return (
     <div className="space-y-2">
       {assigned && (
         <div className="flex items-center gap-3">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={pending || !worker}
-            onClick={() => start(async () => setRun(await unassignTicket(project, hash)))}
-          >
-            <Unlink aria-hidden />
-            {pending ? "할당 해제 중…" : "할당 해제"}
-          </Button>
-          <span className="text-xs text-muted-foreground">
-            {worker ? (
-              <>
-                <span className="font-mono">
-                  {worker}.sh unassign {hash}
-                </span>{" "}
-                를 호출합니다
-              </>
-            ) : (
-              "이 프로젝트에 워커가 없습니다 — 할당 해제를 호출할 스크립트가 없습니다."
-            )}
-          </span>
+          {button}
+          <span className="text-xs text-muted-foreground">{why}</span>
         </div>
       )}
       {assigned && ghost && (
@@ -281,19 +348,7 @@ export function UnassignButton({
           할당 해제만이 이 티켓을 큐로 되돌립니다.
         </p>
       )}
-      {/* 스크립트 출력은 그대로 보여준다: 백로그 복귀 여부가 여기 적혀 온다 */}
-      {run &&
-        (run.ok ? (
-          <Alert>
-            <Unlink aria-hidden />
-            <AlertTitle>할당 해제 완료{run.worker && ` — ${run.worker}`}</AlertTitle>
-            <AlertDescription>
-              <pre className="font-mono text-xs whitespace-pre-wrap">{run.output}</pre>
-            </AlertDescription>
-          </Alert>
-        ) : (
-          <Failure title="할당 해제 실패" message={run.output} />
-        ))}
+      {output}
     </div>
   );
 }
