@@ -8,14 +8,17 @@ import { useActionState, useState, useTransition } from "react";
 import Link from "next/link";
 import { ChevronDown, ChevronUp, Settings2, TriangleAlert, Unlink } from "lucide-react";
 import {
+  createProject,
   moveProjectAction,
   registerProject,
   renameProjectAction,
   resolveProjectAction,
   unregisterProjectAction,
+  type CreateState,
   type RegisterState,
   type ResolvedView,
 } from "@/app/actions";
+import { CopyCommand } from "@/components/copy-command";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -149,24 +152,208 @@ export function ConfigTable({ view }: { view: ResolvedView }) {
   );
 }
 
+// ── 생성 다이얼로그 (DESIGN.md §0-3) ────────────────────────────────────────
+
+/** 없는 큐를 만든다. **새 컴포넌트·새 색 토큰 0개** — 필드 사양은 등록 카드 표 그대로고
+ *  결과는 등록과 같은 해석 결과 표다(§비주얼 §7 생성 다이얼로그 항).
+ *
+ *  성공하면 다이얼로그가 닫히고 결과는 **등록 카드 자리**로 올라간다(`onCreated`) — 여는 자리가
+ *  둘이라 결과를 여기 두면 어느 트리거로 열었느냐에 따라 결과가 다른 자리에 뜬다. */
+function CreateDialog({
+  open,
+  onOpenChange,
+  onCreated,
+  onRegister,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  onCreated: (s: CreateState) => void;
+  /** `.dira`가 이미 있는 **큐**였다 — 만들지 않고 등록 카드로 보낸다(§0-3 답변 4(b)) */
+  onRegister: (root: string) => void;
+}) {
+  const [pending, start] = useTransition();
+  const [state, setState] = useState<CreateState>({});
+  const [name, setName] = useState("");
+  const slug = slugify(name);
+  const showId = (name.trim() !== "" && slug === "") || !!state.needId;
+  const err = state.error;
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        onOpenChange(o);
+        if (!o) setState({});
+      }}
+    >
+      <DialogTrigger
+        render={
+          <Button variant="outline" size="sm">
+            새로 만들기
+          </Button>
+        }
+      />
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>새 프로젝트</DialogTitle>
+          <DialogDescription>
+            .dira를 만들고 워커 하나를 crontab에 올립니다 — 1분 뒤부터 티켓을 물어갑니다.
+          </DialogDescription>
+        </DialogHeader>
+        <form
+          className="space-y-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const f = new FormData(e.currentTarget);
+            const get = (k: string) => String(f.get(k) ?? "");
+            start(async () => {
+              const r = await createProject(
+                name,
+                get("dir"),
+                get("branch"),
+                get("spec"),
+                get("id") || undefined,
+              );
+              setState(r);
+              if (r.done) {
+                onCreated(r);
+                onOpenChange(false);
+                setState({});
+                setName("");
+              }
+            });
+          }}
+        >
+          <div className="space-y-2">
+            <Label htmlFor="create-name">이름</Label>
+            <Input
+              id="create-name"
+              placeholder="dira 자체"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+            {slug && <p className="font-mono text-xs text-muted-foreground">URL: /p/{slug}</p>}
+            {err?.code === "name" && <p className="text-xs text-destructive">{err.message}</p>}
+          </div>
+
+          {showId && (
+            <div className="space-y-2">
+              <Label htmlFor="create-id">URL 조각</Label>
+              <Input id="create-id" name="id" className="font-mono" placeholder="dira" />
+              <p className="text-xs text-muted-foreground">
+                {err && (err.code === "needId" || err.code === "badId" || err.code === "dupId")
+                  ? err.message
+                  : "이름에서 URL 조각을 만들 수 없습니다. 직접 정해 주세요 (영문 소문자·숫자·하이픈)."}
+              </p>
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <Label htmlFor="create-dir">프로젝트 폴더</Label>
+            <Input
+              id="create-dir"
+              name="dir"
+              className="font-mono"
+              placeholder="~/Projects/myproject"
+            />
+            {/* `.dira`가 아니라 그 부모다 — 등록 폼과 갈리는 지점이라 도움말로 못박는다 */}
+            <p className="text-xs text-muted-foreground">여기에 .dira를 만듭니다. ~는 확장됩니다</p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="create-branch">통합 브랜치</Label>
+            <Input id="create-branch" name="branch" defaultValue="main" />
+            {err?.code === "branch" && <p className="text-xs text-destructive">{err.message}</p>}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="create-spec">스펙 문서</Label>
+            <Input id="create-spec" name="spec" className="font-mono" placeholder="docs/DESIGN.md" />
+            <p className="text-xs text-muted-foreground">선택. 비우면 프로토콜 지도의 그 줄을 비워 둡니다</p>
+          </div>
+
+          {/* `.dira`가 이미 있다 — 만들지 않았다. 큐면 등록으로 보낸다(§0-3 표) */}
+          {state.exists && (
+            <Alert>
+              <TriangleAlert aria-hidden />
+              <AlertTitle>만들지 않았습니다</AlertTitle>
+              <AlertDescription className="grid gap-2">
+                <span className="break-all">{state.exists.message}</span>
+                {state.exists.queue && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="justify-self-start"
+                    onClick={() => {
+                      onRegister(state.exists!.root);
+                      onOpenChange(false);
+                      setState({});
+                    }}
+                  >
+                    등록 카드로
+                  </Button>
+                )}
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {err && err.code !== "name" && err.code !== "branch" && !showId && (
+            <Alert variant="destructive">
+              <TriangleAlert aria-hidden />
+              <AlertTitle>만들지 못했습니다</AlertTitle>
+              <AlertDescription>
+                <span className="break-all">{err.message}</span>
+              </AlertDescription>
+            </Alert>
+          )}
+
+          <DialogFooter>
+            <DialogClose render={<Button variant="outline" />}>취소</DialogClose>
+            <Button type="submit" disabled={pending}>
+              {pending ? "만드는 중…" : "프로젝트 만들기"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ── 등록 카드 ───────────────────────────────────────────────────────────────
 
-export function RegisterCard() {
+export function RegisterCard({ empty }: { empty?: boolean }) {
   const [state, action, pending] = useActionState<RegisterState, FormData>(registerProject, {});
   const [name, setName] = useState("");
+  const [root, setRoot] = useState("");
+  const [made, setMade] = useState<CreateState | null>(null);
+  const [creating, setCreating] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const slug = slugify(name);
   // 슬러그가 비면(한글 이름) 그때만 `URL 조각`을 받는다. 서버가 중복·형식으로 거부한 경우도 같다.
   const showId = (name.trim() !== "" && slug === "") || !!state.needId;
   const err = state.error;
 
-  if (state.done && !dismissed) {
-    const view = state.done;
+  const dialog = (
+    <CreateDialog
+      open={creating}
+      onOpenChange={setCreating}
+      onCreated={(s) => {
+        setMade(s);
+        setDismissed(false);
+      }}
+      onRegister={setRoot}
+    />
+  );
+
+  // 생성 결과 = 등록과 **같은 표** + 그 위 세 줄(만든 파일 수 · 유도한 엔진 레포 · crontab 등록).
+  const view = made?.done ?? state.done;
+  if (view && !dismissed) {
+    const c = made?.created;
     return (
       <Card className="gap-3 p-4">
         <div className="flex items-center justify-between gap-4">
           <h2 className="text-sm font-medium">
-            등록됨 — {view.project.name}{" "}
+            {c ? "만들었습니다" : "등록됨"} — {view.project.name}{" "}
             <span className="font-mono text-xs text-muted-foreground">{view.project.shortRoot}</span>
           </h2>
           <div className="flex items-center gap-2">
@@ -178,68 +365,114 @@ export function RegisterCard() {
             </Button>
           </div>
         </div>
+        {c && (
+          <div className="space-y-1 text-sm">
+            <p>
+              파일 {c.written}개를 만들었습니다.
+              {c.skipped.length > 0 && (
+                <span className="text-muted-foreground">
+                  {" "}
+                  이미 있어 건너뜀: <span className="font-mono text-xs">{c.skipped.join(" ")}</span>
+                </span>
+              )}
+            </p>
+            <p className="text-muted-foreground">
+              엔진 레포 <span className="font-mono text-xs">{c.repo}</span>
+            </p>
+            {c.cron ? (
+              <p>crontab에 등록됨 — 1분 뒤부터 티켓을 물어갑니다</p>
+            ) : (
+              // 등록 실패는 성공 보고를 막지 않는다(§0-3). 파일은 그대로 두고 명령을 준다.
+              <Alert variant="destructive">
+                <TriangleAlert aria-hidden />
+                <AlertTitle>crontab에 등록하지 못했습니다</AlertTitle>
+                <AlertDescription className="grid gap-2">
+                  <span className="break-all">{c.cronError}</span>
+                  <CopyCommand cmd={c.registerCmd} />
+                </AlertDescription>
+              </Alert>
+            )}
+          </div>
+        )}
         <ConfigTable view={view} />
       </Card>
     );
   }
 
   return (
-    <Card className="p-4">
-      <form action={action} className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="project-name">이름</Label>
-          <Input
-            id="project-name"
-            name="name"
-            placeholder="dira 자체"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-          {slug && (
-            <p className="font-mono text-xs text-muted-foreground">URL: /p/{slug}</p>
-          )}
-          {err?.code === "name" && <p className="text-xs text-destructive">{err.message}</p>}
+    <>
+      {/* 프로젝트 0개 빈 상태에도 같은 버튼이 하나 더 선다(§0-3 트리거 두 자리) */}
+      {empty && (
+        <div className="flex items-center justify-between gap-4">
+          <p className="text-sm text-muted-foreground">아직 큐가 없다면 새로 만듭니다.</p>
+          <Button variant="outline" size="sm" onClick={() => setCreating(true)}>
+            새로 만들기
+          </Button>
         </div>
-
-        {showId && (
+      )}
+      <Card className="gap-4 p-4">
+        <div className="flex items-center justify-between gap-4">
+          <h2 className="text-sm font-medium">프로젝트 등록</h2>
+          {dialog}
+        </div>
+        <form action={action} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="project-id">URL 조각</Label>
-            <Input id="project-id" name="id" className="font-mono" placeholder="dira" />
-            <p className="text-xs text-muted-foreground">
-              {err && (err.code === "needId" || err.code === "badId" || err.code === "dupId")
-                ? err.message
-                : "이름에서 URL 조각을 만들 수 없습니다. 직접 정해 주세요 (영문 소문자·숫자·하이픈)."}
-            </p>
+            <Label htmlFor="project-name">이름</Label>
+            <Input
+              id="project-name"
+              name="name"
+              placeholder="dira 자체"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+            {slug && (
+              <p className="font-mono text-xs text-muted-foreground">URL: /p/{slug}</p>
+            )}
+            {err?.code === "name" && <p className="text-xs text-destructive">{err.message}</p>}
           </div>
-        )}
 
-        <div className="space-y-2">
-          <Label htmlFor="project-root">경로</Label>
-          <Input
-            id="project-root"
-            name="root"
-            className="font-mono"
-            placeholder="~/Projects/myproject/.dira"
-          />
-          <p className="text-xs text-muted-foreground">절대경로. ~는 확장됩니다</p>
-        </div>
+          {showId && (
+            <div className="space-y-2">
+              <Label htmlFor="project-id">URL 조각</Label>
+              <Input id="project-id" name="id" className="font-mono" placeholder="dira" />
+              <p className="text-xs text-muted-foreground">
+                {err && (err.code === "needId" || err.code === "badId" || err.code === "dupId")
+                  ? err.message
+                  : "이름에서 URL 조각을 만들 수 없습니다. 직접 정해 주세요 (영문 소문자·숫자·하이픈)."}
+              </p>
+            </div>
+          )}
 
-        {err && (err.code === "root" || err.code === "dupRoot" || err.code === "unknown") && (
-          <Alert variant="destructive">
-            <TriangleAlert aria-hidden />
-            <AlertTitle>등록하지 못했습니다</AlertTitle>
-            <AlertDescription>
-              <span className="break-all">{err.message}</span>
-              {err.dup && <Link href={`/p/${err.dup.id}`}>{err.dup.name} 열기</Link>}
-            </AlertDescription>
-          </Alert>
-        )}
+          <div className="space-y-2">
+            <Label htmlFor="project-root">경로</Label>
+            <Input
+              id="project-root"
+              name="root"
+              className="font-mono"
+              placeholder="~/Projects/myproject/.dira"
+              value={root}
+              onChange={(e) => setRoot(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">절대경로. ~는 확장됩니다</p>
+          </div>
 
-        <Button type="submit" disabled={pending}>
-          {pending ? "등록 확인 중…" : "프로젝트 등록"}
-        </Button>
-      </form>
-    </Card>
+          {err && (err.code === "root" || err.code === "dupRoot" || err.code === "unknown") && (
+            <Alert variant="destructive">
+              <TriangleAlert aria-hidden />
+              <AlertTitle>등록하지 못했습니다</AlertTitle>
+              <AlertDescription>
+                <span className="break-all">{err.message}</span>
+                {err.dup && <Link href={`/p/${err.dup.id}`}>{err.dup.name} 열기</Link>}
+              </AlertDescription>
+            </Alert>
+          )}
+
+          <Button type="submit" disabled={pending}>
+            {pending ? "등록 확인 중…" : "프로젝트 등록"}
+          </Button>
+        </form>
+      </Card>
+    </>
   );
 }
 

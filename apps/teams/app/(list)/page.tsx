@@ -62,8 +62,10 @@ export default async function Home() {
           </Alert>
         )}
 
+        {/* 등록 카드는 **두 분기에서 같은 자리**에 있어야 한다 — 첫 프로젝트를 만들면 이 화면이
+            온보딩에서 목록으로 바뀌는데, 자리가 옮겨지면 카드가 remount되고 결과 표가 사라진다 */}
         {rows.length === 0 ? (
-          <Onboarding />
+          <OnboardingIntro />
         ) : (
           <>
             <h1 className="text-lg font-semibold">프로젝트</h1>
@@ -130,26 +132,34 @@ export default async function Home() {
                 ))}
               </TableBody>
             </Table>
-            <RegisterCard />
           </>
         )}
+
+        <RegisterCard empty={rows.length === 0} />
+
+        {rows.length === 0 && <OnboardingHelp />}
       </main>
     </>
   );
 }
 
 /** 프로젝트 0개. §6의 `<EmptyState>` 규칙(한 줄 + 버튼 1개)을 여기서만 쓰지 않는다 —
- *  한 줄로는 "무엇을 등록해야 하는지"를 못 알려준다(§8 충돌 기록). */
-function Onboarding() {
+ *  한 줄로는 "무엇을 등록해야 하는지"를 못 알려준다(§8 충돌 기록). 등록 카드를 사이에 두고
+ *  둘로 갈라 놨다(위 주석) — 카드가 remount되면 안 되기 때문이다. */
+function OnboardingIntro() {
+  return (
+    <div className="space-y-2">
+      <h1 className="text-lg font-semibold">dira</h1>
+      <p className="text-sm text-muted-foreground">
+        등록된 프로젝트가 없습니다. 큐 디렉터리를 등록하면 시작합니다.
+      </p>
+    </div>
+  );
+}
+
+function OnboardingHelp() {
   return (
     <div className="space-y-6">
-      <div className="space-y-2">
-        <h1 className="text-lg font-semibold">dira</h1>
-        <p className="text-sm text-muted-foreground">
-          등록된 프로젝트가 없습니다. 큐 디렉터리를 등록하면 시작합니다.
-        </p>
-      </div>
-      <RegisterCard />
       <div className="space-y-2">
         <p className="text-sm text-muted-foreground">
           큐 디렉터리는 프로젝트 루트 아래 .dira 입니다. 안에 tickets/ 와 workers/ 가 있습니다.

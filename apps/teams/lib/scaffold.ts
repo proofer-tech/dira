@@ -59,7 +59,9 @@ function queueRoot(projectDir: string): { project: string; root: string } {
   return { project, root: path.join(project, ".dira") };
 }
 
-export type Preflight = { ok: true } | { ok: false; queue: boolean; message: string };
+export type Preflight =
+  | { ok: true }
+  | { ok: false; queue: boolean; root: string; message: string };
 
 /** `.dira`가 이미 있으면 **만들지 않는다**(§0-3 답변 4(b)). 안의 상태로 문구만 갈린다 —
  *  큐면 등록으로 보내고, 큐가 아니면 고치거나 지우라고 말한다. 빈 `.dira`를 스캐폴딩으로
@@ -75,6 +77,8 @@ export async function preflight(projectDir: string): Promise<Preflight> {
   return {
     ok: false,
     queue,
+    // 화면이 이 값을 등록 카드의 `경로`에 그대로 넣는다(큐면 "만들지 말고 등록하세요"의 다음 행동).
+    root,
     message: queue
       ? `${root}에 이미 큐가 있습니다. 만들지 않고 등록하세요.`
       : `${root}가 이미 있지만 dira 큐가 아닙니다. 안을 고쳐 큐로 만들거나, 지우고 다시 만드세요.`,
@@ -83,11 +87,15 @@ export async function preflight(projectDir: string): Promise<Preflight> {
 
 /** §0-3 스캐폴딩 집합을 만든다. 돌려주는 경로는 `<프로젝트>` 기준 상대경로다(결과 패널이
  *  그대로 보여준다). `preflight`는 **부르는 쪽이** 먼저 돌린다 — 이 함수는 이미 있는 파일을
- *  건너뛸 뿐 `.dira` 전체의 성격을 판정하지 않는다. */
+ *  건너뛸 뿐 `.dira` 전체의 성격을 판정하지 않는다.
+ *
+ *  `root`·`repo`도 같이 돌려준다: 다음 단계(`registerCron`·`addProject`)가 큐 경로를 알아야 하고,
+ *  유도한 엔진 레포는 결과 패널에 그대로 뜬다(§0-3 — 틀린 값을 나중에 발견하는 자리가 없으면
+ *  증상이 "워커가 도는데 아무것도 안 한다"가 된다). 부르는 쪽이 경로를 다시 조립하지 않는다. */
 export async function scaffold(
   projectDir: string,
   opts: { branch: string; specDoc?: string },
-): Promise<{ written: string[]; skipped: string[] }> {
+): Promise<{ root: string; repo: string; written: string[]; skipped: string[] }> {
   const repo = engineRepo();
   if ("error" in repo) throw new Error(repo.error);
   const { project, root } = queueRoot(projectDir);
@@ -129,5 +137,5 @@ export async function scaffold(
   // 치환값은 함수로 준다 — 경로에 `$&`·`$1`이 들어 있으면 문자열 치환은 그걸 해석한다.
   await put("workers/w1.sh", example.replace(sourceTick, () => tickSourceLine(repo.path)), 0o755);
 
-  return { written, skipped };
+  return { root, repo: repo.path, written, skipped };
 }

@@ -54,6 +54,9 @@ test("scaffold — §0-3 집합 그대로, 두 번째는 전부 skipped", async 
   const first = await scaffold(project, { branch: "main" });
   assert.deepEqual(first.written.sort(), [...SET].sort());
   assert.deepEqual(first.skipped, []);
+  // 다음 단계(registerCron·addProject)가 쓰는 값 — 부르는 쪽이 경로를 다시 조립하지 않는다
+  assert.equal(first.root, path.join(project, ".dira"));
+  assert.equal(first.repo, repo.path);
 
   const agents = path.join(project, ".dira/protocols/AGENTS.md");
   const before = await readFile(agents, "utf8");
@@ -110,6 +113,8 @@ test("preflight — .dira 유무와 큐 여부로 갈린다", async (t) => {
   assert.equal(queue.ok, false);
   assert.equal(queue.ok === false && queue.queue, true);
   assert.match(queue.ok === false ? queue.message : "", /이미 큐가 있습니다/);
+  // 화면이 이 값을 등록 카드에 그대로 넣는다 — `.dira`까지다(입력한 프로젝트 폴더가 아니다)
+  assert.equal(queue.ok === false && queue.root, root);
 
   // `.dira`가 디렉터리가 아니어도 생성으로 새지 않는다
   const dir2 = await tmp();

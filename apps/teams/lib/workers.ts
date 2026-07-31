@@ -741,13 +741,24 @@ export function cronRegister(text: string, workerPath: string): string {
  *  경우(`crontab: no crontab for <user>`)만 빈 문자열이다. */
 async function crontabForWrite(): Promise<string> {
   try {
-    return (await promisify(execFile)("crontab", ["-l"])).stdout;
+    return (await promisify(execFile)("crontab", ["-l"], { timeout: CRONTAB_TIMEOUT })).stdout;
   } catch (e) {
-    const err = e as { stdout?: string; stderr?: string; message: string };
+    const err = e as { stdout?: string; stderr?: string; message: string; killed?: boolean };
+    if (err.killed) throw new Error(timedOut("crontab -l"));
     if (!err.stdout && /no crontab for/i.test(err.stderr ?? "")) return "";
     throw new Error(`crontab -l 실패: ${(err.stderr || err.message).trim()}`);
   }
 }
+
+/** **crontab은 응답하지 않을 수 있다.** 실측(2026-07-31): 이 머신에서 `crontab <파일>`도
+ *  `crontab -`도 영원히 안 끝난다(읽기는 정상) — macOS가 그 프로세스에 권한을 물으려다 막힌
+ *  모양새다. 기다림에 끝이 없으면 화면은 `만드는 중…`에 영원히 갇히고, "등록 실패는 성공 보고를
+ *  막지 않는다"(DESIGN.md §0-3 · §4)가 성립하지 않는다. 끊어서 **실패로 만들어야** 그 규약이
+ *  산다 — 화면은 사유와 `cronRegisterCmd`를 보여주고 사람이 셸에서 마무리한다.
+ *  // ponytail: 고정 10초. 값이 문제가 되면 그때 설정으로 뺀다 */
+const CRONTAB_TIMEOUT = 10_000;
+const timedOut = (cmd: string) =>
+  `${cmd}가 10초 안에 응답하지 않아 중단했습니다. 셸에서 직접 실행해 보세요 — 권한을 묻는 창이 떠 있을 수 있습니다.`;
 
 /** **읽기는 쓰기 직전에 한다.** 렌더 때 읽은 값을 재사용하면 그 사이 남의 변경을 되돌린다
  *  (§결정 기록 실측 — 스펙 쓰는 20분 사이에 남의 줄이 하나 줄었다). 창은 좁힐 수 있을 뿐
@@ -764,8 +775,9 @@ async function applyCrontab(workerPath: string, want: boolean): Promise<boolean>
   const changed = next !== before;
   if (changed) {
     await new Promise<void>((resolve, reject) => {
-      const child = execFile("crontab", ["-"], (err, _out, stderr) => {
-        if (err) reject(new Error(`crontab - 실패: ${(stderr || err.message).trim()}`));
+      const child = execFile("crontab", ["-"], { timeout: CRONTAB_TIMEOUT }, (err, _out, stderr) => {
+        const killed = (err as { killed?: boolean } | null)?.killed;
+        if (err) reject(new Error(killed ? timedOut("crontab -") : `crontab - 실패: ${(stderr || err.message).trim()}`));
         else resolve();
       });
       child.stdin!.end(next);

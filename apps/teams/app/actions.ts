@@ -19,7 +19,8 @@ import {
   type Project,
   type ProjectConfig,
 } from "@/lib/projects";
-import { listWorkers } from "@/lib/workers";
+import { preflight, scaffold } from "@/lib/scaffold";
+import { cronRegisterCmd, listWorkers, registerCron } from "@/lib/workers";
 import { tildePath } from "@/lib/urls";
 
 /** 해석 결과 표 한 행. 서버가 배지까지 정해서 넘긴다 — 클라이언트는 그리기만 한다. */
@@ -159,6 +160,79 @@ export async function registerProject(
     return { done: await viewOf(project) };
   } catch (e) {
     return fail(e);
+  }
+}
+
+// ── 새 프로젝트 생성 (DESIGN.md §0-3) ──────────────────────────────────────
+
+export type CreateState = RegisterState & {
+  /** `.dira`가 이미 있어서 **아무것도 만들지 않았다**(답변 4(b)). `queue`면 등록으로 보낸다. */
+  exists?: { queue: boolean; root: string; message: string };
+  /** 만든 것 — 해석 결과 표 위에 얹는 세 줄. `cron: false`면 파일은 다 있고 등록만 실패한 것이다. */
+  created?: {
+    root: string;
+    repo: string;
+    written: number;
+    skipped: string[];
+    cron: boolean;
+    cronError?: string;
+    registerCmd: string;
+  };
+};
+
+/** 없는 큐를 만든다: `preflight` → `scaffold` → `registerCron(w1.sh)` → `addProject`.
+ *  스캐폴딩에서 멈추지 않고 crontab 한 줄까지 가는 것이 이 기능이다 — 만든 직후 1분 뒤에
+ *  디스패치가 시작된다(§0-3 답변 1(c)).
+ *
+ *  **어느 단계에서 실패해도 만든 파일을 되돌리지 않는다**(§0-3). 그 경로에 사람의 파일이 있을 수
+ *  있고, `wx`로 덮지 않는 것이 이 기능의 유일한 방어다. crontab 등록 실패는 성공 보고를 막지
+ *  않는다(§4 워커 생성과 같은 규약) — 사유와 등록 명령을 결과에 담고 사람이 셸에서 마무리한다. */
+export async function createProject(
+  name: string,
+  projectDir: string,
+  branch: string,
+  specDoc: string,
+  id?: string,
+): Promise<CreateState> {
+  let created: CreateState["created"] | undefined;
+  try {
+    if (!branch.trim()) {
+      // 비면 push 절차가 자리표시자로 남아 세션이 추측한다(§0-3 자리표시자 표).
+      return { error: { code: "branch", message: "통합 브랜치를 입력하세요." } };
+    }
+    const pre = await preflight(projectDir);
+    if (!pre.ok) return { exists: { queue: pre.queue, root: pre.root, message: pre.message } };
+
+    const made = await scaffold(projectDir, {
+      branch: branch.trim(),
+      specDoc: specDoc.trim() || undefined,
+    });
+    const workerPath = path.join(made.root, "workers", "w1.sh");
+    const cronError = await registerCron(workerPath).then(
+      () => undefined,
+      (e: Error) => e.message,
+    );
+    created = {
+      root: made.root,
+      repo: made.repo,
+      written: made.written.length,
+      skipped: made.skipped,
+      cron: !cronError,
+      cronError,
+      registerCmd: cronRegisterCmd({ path: workerPath }),
+    };
+
+    const project = await addProject(name, made.root, id?.trim() || undefined);
+    revalidatePath("/", "layout");
+    return { created, done: await viewOf(project) };
+  } catch (e) {
+    const state: CreateState = { ...fail(e), created };
+    // 파일은 이미 놓였는데 레지스트리 등록만 실패한 경우(이름 없음·id 중복 …). 만든 것을 지우지
+    // 않으므로 다음 행동은 "다시 만들기"가 아니라 "그 경로를 등록하기"다.
+    if (created && state.error) {
+      state.error.message += ` — .dira는 ${created.root}에 만들어졌습니다. 등록 카드에서 그 경로를 등록하세요.`;
+    }
+    return state;
   }
 }
 
