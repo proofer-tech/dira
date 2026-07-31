@@ -12,7 +12,7 @@
     "dev": "pnpm build && pnpm start",
     "icns": "./make-icns.sh",
     "signcheck": "./sign-preflight.sh",
-    "dist": "./sign-preflight.sh && pnpm build && electron-builder && { test -e dist/mac-arm64/dira.app/Contents/Resources/server/node_modules/next || { echo '번들에 server/node_modules가 없다 — extraResources의 node_modules 항목을 확인하라' >&2; exit 1; }; } && du -sh dist/mac-arm64/dira.app dist/*.dmg"
+    "dist": "./sign-preflight.sh && pnpm build && electron-builder && { test -e dist/mac-arm64/dira.app/Contents/Resources/server/node_modules/next || { echo '번들에 server/node_modules가 없다 — extraResources의 node_modules 항목을 확인하라' >&2; exit 1; }; } && ./sign-dmg.sh && du -sh dist/mac-arm64/dira.app dist/*.dmg"
   },
   "build": {
     "appId": "dev.dira.desktop",

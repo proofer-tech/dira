@@ -446,7 +446,7 @@ HOLD r0000004 attempts=3 - 자동 회수 상한 초과, 사람 개입 대기  # 
 없다**. `## 블록`은 사람 판단이 필요한 **다른** 경우(스펙 모순·엔진 수정)에 그대로 남는다.
 
 **추가 2026-07-31 — 그 `## 블록`도 같은 자리로 온다(엔진이 올린다).** 위 실측의 `HOLD` 줄이
-실제로 방치를 만들었다: 인증서가 없어 막힌 `5aa9486d`가 `.wip`에 굳어 `attempts` 49까지
+실제로 방치를 만들었다: 서명에 막힌 `5aa9486d`가 `.wip`에 굳어 `attempts` 49까지
 1분마다 로그만 쌓았고, 사람이 "워커 6개인데 진행중이 8개"를 눈으로 세다가 발견했다. 그래서
 `reap`이 상한을 넘을 때 `HOLD` 대신 **이 레이어의 장치를 그대로 쓴다** — 본문에 `## 질문 n`을
 붙이고 `awaiting:` + 없는 `deps`를 걸어 열림으로 되돌린다(`ASK` 로그, `tickets.py:ask_human`).
@@ -2374,7 +2374,7 @@ QA도 세우지 않았다 — 왕복(발행 → `list`에 `대기`)은 이미 �
 | P23 | 답변 대기 네이티브 알림 `283dc4c1` | developer | `f226ac66` | 대기 |
 | P23 | 네이티브 경로 피커 4곳 `c01e2678` | developer | `f226ac66` | 대기 |
 | P23 | 로그인 시 자동 실행 `00fc34ba` | developer | `abce61c9` | 대기 |
-| P23 | 코드사이닝 + 공증 `5aa9486d` | developer | `9e0ec1af` | 설정 완료 · **사람 터미널 대기** — hardenedRuntime + entitlements + notarytool·스테이플이 다 서 있고 `Developer ID` 인증서도 이 맥에 있다. 에이전트 세션은 GUI 로그인 세션이 아니라 키체인에 닿지 못한다(검색목록이 `System.keychain`만). 사람이 자기 터미널에서 앱 암호를 얹어 `pnpm dist` 한 번 |
+| P23 | 코드사이닝 + 공증 `5aa9486d` | developer | `9e0ec1af` | **완료** — `.app`·`.dmg` 둘 다 `Developer ID` 서명 + 공증 + 스테이플, `spctl` 둘 다 `accepted`. 에이전트 셸은 키체인 검색목록에 로그인 키체인이 없어 못 서명하지만, 같은 맥의 **GUI launchd 도메인**(임시 LaunchAgent)에서는 그대로 잡힌다. dmg는 electron-builder가 안 만져서 `sign-dmg.sh`가 따로 서명·공증한다 |
 | P23 | QA — 패키징된 앱 `34c86cc6` | qa | 셸·트레이·알림·피커·자동실행 | 대기 |
 | P24 | 워크트리 생성 스펙 확정 `5f55577a` | pm | — | 완료 — §4-2 뒤집음. GUI가 트리를 만든다 |
 | P24 | `prepareWorktree` + 레포 경로를 `dirname(root)`로 `fc96608c` | developer | 스펙 | 대기 |

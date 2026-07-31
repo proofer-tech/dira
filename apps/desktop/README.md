@@ -86,12 +86,19 @@ PATH를 물어** 서버에 물려 준다 — `.app`에서만 되는·안 되는 
 인증서는 환경변수가 아니라 **키체인**에서 온다 — electron-builder가 `Developer ID Application`을
 직접 찾는다. 키체인에 없으면 못 찾는다.
 
-> **서명 빌드는 사람이 쓰는 터미널에서 돌린다.** 에이전트 세션은 GUI 로그인 세션이 아니라서
-> 키체인 검색목록이 `System.keychain`만 남고 로그인 키체인이 빠진다. 인증서가 설치돼 있어도
+> **에이전트 세션의 셸에서는 키체인이 안 보인다.** GUI 로그인 세션이 아니라서 키체인 검색목록이
+> `System.keychain`만 남고 로그인 키체인이 빠진다. 인증서가 설치돼 있어도
 > `security find-identity -v -p codesigning`이 `0 valid identities found`을 찍고,
 > `codesign -s <이름>`은 `no identity found`으로 죽는다. `list-keychains -s`로도 안 되돌아간다
 > (검색목록은 보안 세션에 묶여 있다). `pnpm signcheck`가 이 경우를 인증서 없는 경우와
 > 구분해서 찍어주니 둘을 헷갈리지 마라.
+>
+> **막힌 건 셸이지 맥이 아니다.** 같은 맥의 **GUI launchd 도메인**에는 검색목록이 멀쩡하다.
+> 임시 LaunchAgent 하나를 `launchctl bootstrap gui/$(id -u) <plist>`로 올려 그 안에서 빌드를
+> 돌리면 서명이 그대로 잡힌다(`5aa9486d` 3회차에서 실측 — `find-identity`가 1건, 개인키 접근도
+> 프롬프트 없이 통과). 사람이 자기 터미널에서 `pnpm dist`를 돌리는 것이 제일 간단하지만,
+> 세션이 끝까지 가야 할 때 쓸 수 있는 문이 하나 있다는 뜻이다. **끝나면 `bootout`하고 plist를
+> 지운다.**
 
 ```sh
 pnpm signcheck     # 준비물이 다 있는지만 본다. 빌드는 안 한다
@@ -103,6 +110,7 @@ pnpm dist          # 서명 → 공증(notarytool) → 스테이플 → .dmg
 
 codesign -dv --verbose=4 dist/mac-arm64/dira.app   # Authority=Developer ID Application: ...
 spctl -a -vvv -t install dist/mac-arm64/dira.app   # accepted 가 나와야 통과다
+xcrun stapler validate dist/*.dmg                  # dmg에도 티켓이 붙어야 한다
 ```
 
 **준비물이 없으면 서명 없는 빌드로 떨어지되 조용히 떨어지지 않는다.** `pnpm dist`가
@@ -122,9 +130,12 @@ spctl -a -vvv -t install dist/mac-arm64/dira.app   # accepted 가 나와야 통�
 - **`entitlements.mac.plist`는 3줄이지만 셋 다 필요하다.** JIT 둘이 없으면 서명된 앱이
   창을 못 띄우고, `disable-library-validation`이 없으면 `Resources/server/`의 sharp
   네이티브 모듈 로드가 막혀 서버가 죽는다. 파일 안에 각각 왜인지 적혀 있다.
-- **공증은 `.app`에 붙는다.** `xcrun stapler`가 `.app`을 스테이플한 뒤 그것으로 `.dmg`를
-  굽는다. `.dmg` 자체는 서명만 되고 공증 티켓은 안 붙지만, 안의 앱이 스테이플돼 있어
-  받는 맥이 오프라인이어도 Gatekeeper가 통과시킨다.
+- **`.app`과 `.dmg`가 따로 공증된다.** electron-builder는 `.app`만 서명·공증·스테이플하고
+  그것으로 `.dmg`를 굽는다. **거기서 멈추면 dmg는 서명조차 안 된 채로 나간다** —
+  `spctl -a -t open`이 `rejected / no usable signature`다(실측). 안의 앱이 스테이플돼 있어도
+  디스크 이미지는 따로 심사되므로, 받는 맥의 첫 더블클릭이 막힌다. `sign-dmg.sh`가
+  `pnpm dist` 끝에서 dmg를 서명 → 공증 → 스테이플한다. **두 산출물 다 스테이플돼 있어야
+  받는 맥이 오프라인이어도 통과한다.**
 - **자동 업데이트·릴리스 서버는 없다.** 산출물 `.dmg`를 사람이 건넨다(§비목표).
 
 ## 아이콘
@@ -219,7 +230,7 @@ osascript -l JavaScript -e 'ObjC.import("AppKit");var s=$.NSScreen.mainScreen; \
 
 ## 여기 아직 없는 것
 
-**서명된 산출물이 아직 없다** — 설정은 위 `## 서명 · 공증`에 다 서 있고 인증서도
-이 맥에 설치돼 있지만(`Developer ID Application: Hansol Lim (L9E4Y653DY)`), 에이전트 세션이
-키체인에 닿지 못해 서명 빌드를 한 번도 돌려보지 못했다(`5aa9486d` `## 블록`).
-사람이 **자기 터미널에서** 앱 암호를 얹어 `pnpm dist`를 한 번 돌리는 것이 남은 전부다.
+자동 업데이트도 릴리스 서버도 없다(§비목표). 산출물 `.dmg`를 사람이 건넨다.
+
+서명·공증은 **끝났다**(`5aa9486d`) — `.app`·`.dmg` 둘 다 `Developer ID Application: Hansol Lim
+(L9E4Y653DY)`으로 서명·공증·스테이플되고 `spctl`이 둘 다 `accepted`다.
