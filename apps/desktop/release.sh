@@ -36,6 +36,8 @@ esac
 
 [ -n "${GH_TOKEN:-}" ] || add "GH_TOKEN이 비어 있다 — GitHub Releases에 올릴 수 없다."
 
+command -v gh >/dev/null 2>&1 || add "gh가 없다 — 5번이 자산을 올리는 명령이다 (brew install gh)."
+
 for f in owner repo; do
   v=$(node -p "require('./package.json').build.publish.$f" 2>/dev/null)
   case "$v" in
@@ -55,8 +57,27 @@ ver=$(node -p "require('./package.json').version")
 # 4. 원격에 나가는 유일한 자리.
 git push origin master --follow-tags || exit 1
 
-# 5. 서명·공증 그대로 빌드하고(dist) 올린다(publish).
+# 5. **한 번만 굽는다.** 두 번 구우면 두 번째 electron-builder가 `sign-dmg.sh`의 서명·스테이플을
+# 덮어서, 올라가는 `.dmg`는 sign-dmg가 막으려던 상태 그대로다 — 받는 맥의 첫 더블클릭이
+# Gatekeeper에 막히고 올린 사람은 모른다 (§릴리스 R4-5). 그래서 publish는 electron-builder가
+# 아니라 gh가 한다. `build.publish`는 그대로다 — latest-mac.yml을 굽는 것이 그 설정이다.
 pnpm run dist || exit 1
-pnpm exec electron-builder --publish always || exit 1
+
+# 올리기 전에 세 자산이 실제로 있는지 본다. 특히 latest-mac.yml이 빠지면 자동 업데이트는
+# 에러가 아니라 **아무 일도 안 일어남**으로 죽는다(R1 첫 줄). 없는 채로 올리는 대신 멈춘다.
+dmg=$(ls dist/*.dmg 2>/dev/null | head -1)
+zip=$(ls dist/*.zip 2>/dev/null | head -1)
+[ -n "$dmg" ] || add "dist/*.dmg — 사람이 건네는 첫 설치본."
+[ -n "$zip" ] || add "dist/*.zip — 자동 업데이트가 실제로 내려받는 자산."
+[ -f dist/latest-mac.yml ] || add "dist/latest-mac.yml — 이게 없으면 앱이 새 버전을 못 찾는다(조용히)."
+
+if [ -n "$missing" ]; then
+  echo "v$ver를 굽긴 했는데 올릴 자산이 모자란다. 없는 것:$missing" >&2
+  exit 1
+fi
+
+# --generate-notes가 없으면 사람 터미널에서 에디터가 열려 멈춘다. 본문은 무엇이든 상관없다 —
+# 사람이 읽는 릴리즈 노트는 앱이 받은 시점에 스스로 만든다(R7).
+gh release create "v$ver" "$dmg" "$zip" dist/latest-mac.yml --title "v$ver" --generate-notes || exit 1
 
 echo "v$ver 릴리스 완료 — GitHub Releases에 .dmg · .zip · latest-mac.yml이 올라갔다."
