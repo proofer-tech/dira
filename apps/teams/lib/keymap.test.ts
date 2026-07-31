@@ -9,7 +9,8 @@ const LOCAL = mkdtempSync(path.join(tmpdir(), "fst-keymap-"));
 process.env.TICKET_LOCAL = LOCAL;
 process.on("exit", () => rmSync(LOCAL, { recursive: true, force: true }));
 
-const { DEFAULT_KEYMAP, formatCombo, matchCombo, validateBinding } = await import("./keymap.ts");
+const { DEFAULT_KEYMAP, formatCombo, matchCombo, shouldFire, validateBinding } =
+  await import("./keymap.ts");
 // 파일 세 함수는 `registryPath()` 옆에 산다 — `keymap.ts`가 클라이언트 번들로 가기 때문이다
 // (그 파일 머리 주석). 여기서 같이 검증한다: 계약이 하나고 픽스처도 하나다.
 const { keymapPath, readKeymap, writeKeymap } = await import("./projects.ts");
@@ -126,6 +127,17 @@ test("matchCombo — 글자는 대소문자로 갈리지 않고, `?`는 Shift와
 test("matchCombo — 조합 중(isComposing)이면 무조건 false", () => {
   assert.ok(!matchCombo(ev({ key: "Enter", metaKey: true, isComposing: true }), "Mod+Enter"));
   assert.ok(!matchCombo(ev({ key: "n", isComposing: true }), "n"));
+});
+
+test("shouldFire — 글 쓰는 중이면 Mod 없는 조합만 죽는다", () => {
+  // 검색 칸에 `n`을 쳐도 발행 다이얼로그가 열리지 않는다 — 이 기능 전체의 성패다(§0-6)
+  assert.ok(!shouldFire(ev({ key: "n" }), "n", true));
+  assert.ok(shouldFire(ev({ key: "n" }), "n", false));
+  // `Mod+k`는 가드를 안 받는다 — §4-1이 "어디서나"라고 적었다
+  assert.ok(shouldFire(ev({ key: "k", metaKey: true }), "Mod+k", true));
+  // 가드를 통과해도 매칭은 매칭이다
+  assert.ok(!shouldFire(ev({ key: "j" }), "n", false));
+  assert.ok(!shouldFire(ev({ key: "n", isComposing: true }), "n", false));
 });
 
 test("formatCombo — 화면 표기는 여기 하나에서 나온다", () => {

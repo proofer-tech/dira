@@ -4342,7 +4342,7 @@ QA 티켓 둘 다 **임시 큐 픽스처에서 재라고** 못박았다(선례: 
 | P58 | 키설정 — 요구 왕복 + 스펙 확정 `a461c2f7` | pm | 답 `4c5d8fee` | 완료 — §0-6 신설 · §0-4 "섹션은 인증 하나" 갱신 · §4-1 힌트 출처 |
 | P58 | `lib/keymap.ts` — 기본 키맵 · 읽기/쓰기 · 조합 매칭 · 충돌 `d77bea0e` | developer | — | 대기 |
 | P58 | 키설정 섹션 시각 사양 — §비주얼 §22 `2e6543f6` | designer | — | 완료 — **고른 것은 캡처 상자 하나**(`<button>`에 `input.tsx`의 포커스 상태를 입힌다 — `<input>`은 캐럿·IME가 딸려 온다). 키 열 정렬은 `grid-cols-subgrid` 하나로 끝나고 `되돌리기` 트랙은 `invisible`로 28px 상시 예약(§6 `경로` 90px 거절과 반대로 가는 이유를 적었다). 줄 단위 거절은 `Alert`가 아니다 — 원문 블록이 있는 파일 깨짐만 `Alert`. 새 색 토큰 0 · 새 npm 0 · shadcn 신규 설치 0 · 새 커스텀 0 · `globals.css` 무수정 |
-| P58 | `KeymapProvider` + 기존 두 키를 키맵에서 읽는다 `f9665a3f` | developer | `d77bea0e` | 대기 |
+| P58 | `KeymapProvider` + 기존 두 키를 키맵에서 읽는다 `f9665a3f` | developer | `d77bea0e` | 완료 — 루트 레이아웃이 한 번 읽고 `components/keymap-provider.tsx`가 나른다(`useKeymap` · `useHotkey`). 글 쓰는 중 가드는 `lib/keymap.ts`의 `shouldFire` 하나(DOM은 훅이 댄다). `⌘K`·`⌘↵` 하드코딩 문자열 0개 |
 | P58 | `설정` > `키설정` 섹션 — 목록 · 재지정 · 되돌리기 `c771e4b6` | developer | `d77bea0e` · `2e6543f6` | 대기 |
 | P58 | 셸 키 3개 — `?` · `b` · `w` `c7fc6ba5` | developer | `f9665a3f` | 대기 |
 | P58 | 보드 키 3개 — `/` · `n` · `r` `12b278fb` | developer | `f9665a3f` | 대기 |

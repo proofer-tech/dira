@@ -6,7 +6,7 @@
  *  전환기는 헤더 우측 한 자리에 "지금 어느 큐인지"와 "다른 큐로 가는 길"을 겹쳐 둔다. 카운트는
  *  여기서 세지 않는다 — 셸이 서버에서 세서 props로 넘긴다. 내비는 활성 링크 판정에 현재 경로가
  *  필요해서 여기 있다(서버 레이아웃은 pathname을 모른다). */
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Check, ChevronsUpDown, Settings2 } from "lucide-react";
@@ -24,6 +24,8 @@ import {
 } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { projectPath } from "@/lib/urls";
+import { formatCombo } from "@/lib/keymap";
+import { useHotkey, useKeymap } from "@/components/keymap-provider";
 
 /** 헤더 좌측 브랜드 마크 (§비주얼 §14 `헤더 표시`). **두 셸이 같이 쓴다** — 프로젝트 스코프 셸과
  *  루트 셸에서 값이 전부 같고 다른 건 `href` 하나다(§4: 프로젝트는 `/p/<project>`, 루트는 `/`).
@@ -88,17 +90,14 @@ export function ProjectSwitcher({
     setGoing(null);
   }
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
-        e.preventDefault();
-        setQ("");
-        setOpen((v) => !v);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  // 키도 하단 힌트도 **키맵에서 나온다**(§0-6 · §4-1 마지막 줄) — 하드코딩하면 사람이 키를
+  // 바꾼 뒤에 화면이 옛 키를 말한다. 기본값 `Mod+k`는 브라우저 기본(검색창 포커스)을 뺏는다.
+  const { bindings } = useKeymap();
+  useHotkey("project.search", (e) => {
+    e.preventDefault();
+    setQ("");
+    setOpen((v) => !v);
+  });
 
   const current = going ?? projects.find((t) => t.id === currentId);
   if (!current) return null;
@@ -182,7 +181,7 @@ export function ProjectSwitcher({
             <CommandItem forceMount value="프로젝트 관리" onSelect={() => router.push("/")}>
               <Settings2 aria-hidden />
               프로젝트 관리
-              <CommandShortcut>⌘K</CommandShortcut>
+              <CommandShortcut>{formatCombo(bindings["project.search"])}</CommandShortcut>
             </CommandItem>
           </CommandList>
         </Command>

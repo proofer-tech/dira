@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { KeymapProvider } from "@/components/keymap-provider";
+import { readKeymap } from "@/lib/projects";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -18,11 +20,15 @@ export const metadata: Metadata = {
   description: "파일시스템 티켓 큐 관제",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // 키맵은 **여기서 한 번** 읽는다(§0-6 배선). 두 셸이 다 이 아래고 파일 하나짜리 읽기라
+  // 셸마다 중복해서 읽을 이유가 없다. `readKeymap()`은 던지지 않는다 — 키맵 파일 하나가
+  // 앱 전체를 못 열게 하면 안 된다(깨졌다는 사실은 `broken`으로 화면이 말한다).
+  const keymap = await readKeymap();
   return (
     <html
       lang="ko"
@@ -37,7 +43,9 @@ export default function RootLayout({
           **그래서 모든 화면의 `main`이 스크롤러여야 한다** — 안 그러면 넘친 내용이 못 닿는다 */}
       <body className="flex h-full flex-col">
         {/* 툴팁은 잘린 경로 전문·배지 설명에 쓴다. shadcn tooltip이 Provider를 요구한다 */}
-        <TooltipProvider>{children}</TooltipProvider>
+        <TooltipProvider>
+          <KeymapProvider keymap={keymap}>{children}</KeymapProvider>
+        </TooltipProvider>
       </body>
     </html>
   );

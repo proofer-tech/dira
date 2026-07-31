@@ -8,7 +8,8 @@ dira 큐를 보는 로컬 웹 UI. **스펙은 `../docs/DESIGN.md`가 단일 출�
 ```
 apps/teams/
   app/                  App Router. fs 접근은 전부 여기(서버) 아니면 lib/
-    layout.tsx          html·폰트·TooltipProvider
+    layout.tsx          html·폰트·TooltipProvider + **키맵을 읽는 유일한 곳**(§0-6 배선 —
+                        두 셸이 다 이 아래고 파일 하나짜리 읽기다. 셸마다 읽지 않는다)
     (list)/page.tsx     프로젝트 목록·등록 (`/`). 라우트 그룹이라 URL은 `/`다
     (list)/loading.tsx  이 그룹만 덮는다 — app/ 최상단에 두면 모든 라우트가 즉시 스트리밍돼
                         레이아웃의 notFound()가 404 상태를 못 세운다(실측)
@@ -80,6 +81,12 @@ apps/teams/
     persona-badge.tsx   persona 값 표시의 유일한 출처 (점+이름 배지 · 점만 그리는 모드).
                         색은 레지스트리에 있고 자리가 5곳이다 — 조회를 자리마다 다시 쓰면
                         어느 화면 하나가 조용히 색 없이 남는다. 팔레트 표는 `lib/urls.ts`
+    keymap-provider.tsx 서버가 읽은 키맵을 클라이언트로 나르는 통로 (§0-6 배선):
+                        `KeymapProvider`(`useContext` 하나) · `useKeymap()` ·
+                        **`useHotkey()`**. 전역 키를 거는 코드는 이 훅만 쓴다 — 글 쓰는 중
+                        가드(`lib/keymap.ts`의 `shouldFire`)를 자리마다 다시 짜면 어느 한 곳이
+                        조용히 검색 칸을 먹는다. **새 파일인 이유**: 쓰는 곳이 셸 · 티켓 상세 ·
+                        설정 다이얼로그 셋이라 어디에 얹어도 나머지 둘이 그 파일을 import한다
     project-switcher.tsx 전환기 · 내비 · 다시 확인 (셸의 클라이언트 조각) + **브랜드 마크**
                         (§비주얼 §14). 마크는 두 셸(`p/[project]/layout.tsx` · `(list)/page.tsx`)이
                         같이 쓰고 `href`만 다르다 — 셸마다 인라인하면 §14가 2벌로 고정한 사본이

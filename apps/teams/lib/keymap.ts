@@ -105,6 +105,20 @@ export function matchCombo(e: KeyLike, combo: string): boolean {
   return normalizeKey(e.key) === c.key;
 }
 
+/** **전역 핸들러(window)가 들어야 하는가** — 매칭 + 글 쓰는 중 가드(§0-6 `언제 안 듣는가`).
+ *  신규 키 6개 중 5개가 글쇠 하나라 이 한 줄이 없으면 검색 칸에 `n`을 치는 순간 발행
+ *  다이얼로그가 열린다. **`Mod`가 있는 조합은 가드를 받지 않는다** — `Mod+k`는 지금도
+ *  검색 칸에서 듣는다(§4-1 "어디서나").
+ *
+ *  `typing`(이벤트가 입력칸 안에서 났나)은 호출자가 `closest` 한 줄로 판정해 넘긴다. DOM을
+ *  여기 들이지 않으려는 것이다 — 이 파일은 `node --test`가 그냥 읽는다(AGENTS.md §검증).
+ *
+ *  조합자 표기 순서가 `Mod+…`로 고정이라(위 `parseCombo`) 접두 비교로 충분하다. */
+export function shouldFire(e: KeyLike, combo: string, typing: boolean): boolean {
+  if (typing && !combo.startsWith("Mod+")) return false;
+  return matchCombo(e, combo);
+}
+
 const KEY_GLYPH: Record<string, string> = {
   Enter: "↵",
   Space: "␣",

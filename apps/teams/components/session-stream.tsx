@@ -21,6 +21,8 @@ import {
   InputGroupTextarea,
 } from "@/components/ui/input-group";
 import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/marker";
+import { useKeymap } from "@/components/keymap-provider";
+import { formatCombo, matchCombo } from "@/lib/keymap";
 import type { FollowupReason } from "@/lib/followup";
 import type { InterjectReason } from "@/lib/interject";
 import type { StreamEvent } from "@/lib/transcript";
@@ -231,6 +233,8 @@ function Interject({
   const input = useRef<HTMLTextAreaElement>(null);
   // 티켓 stem을 id로 쓰지 않는다 — 파일명에서 온 값이라 공백이 섞이면 `aria-describedby`가 끊긴다.
   const offId = useId();
+  // 보내는 키와 손잡이의 `<kbd>`가 **같은 값 하나**에서 나온다(§0-6: 표기를 하드코딩하지 않는다).
+  const sendCombo = useKeymap().bindings["interject.send"];
 
   // 어느 폼을 그리나 — 판정은 `lib/urls.ts` 하나다(§21 표 4행 + 예외 둘. 그 파일에 검증이 있다).
   const mode = interjectMode({ polled: inbox !== null, live, done, failed: !!fail });
@@ -310,9 +314,13 @@ function Interject({
             setSent(false); // `보냈습니다`는 다음 타이핑에 사라진다(§21)
           }}
           // `⌘↵`로 보낸다. `Enter`는 줄바꿈이다 — 여러 줄 입력칸의 기본을 뺏지 않는다(§21).
-          // 맥이 아닌 데서도 되게 `ctrlKey`를 같이 받지만 화면에 적는 표기는 `⌘↵` 하나다.
+          // 맥이 아닌 데서도 되게 `ctrlKey`를 같이 받는 것은 이제 `matchCombo`의 `Mod`가 한다.
+          //
+          // **글 쓰는 중 가드(`useHotkey`)를 안 받는다.** 이건 window가 아니라 이 textarea의
+          // 핸들러고, 애초에 입력칸 안에서 쓰라고 있는 키다(§0-6 배선). 대신 `matchCombo`가
+          // `isComposing`을 막아 준다 — 받침을 확정하는 `Enter`에 글이 날아가지 않는다.
           onKeyDown={(e) => {
-            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+            if (matchCombo(e.nativeEvent, sendCombo)) {
               e.preventDefault();
               void send();
             }
@@ -333,7 +341,9 @@ function Interject({
             {/* `bg-muted`를 깔지 않는다 — `--muted-foreground`가 라이트 4.34로 AA 미달이다(§21 · §1
                 함정). 반경은 addon이 이미 준다(`[&>kbd]:rounded-…`). `ml-auto`가 여기 걸려서
                 1차 버튼이 줄의 가장 오른쪽이다(§4-3). */}
-            <kbd className="ml-auto border px-1 font-mono text-xs text-muted-foreground">⌘↵</kbd>
+            <kbd className="ml-auto border px-1 font-mono text-xs text-muted-foreground">
+              {formatCombo(sendCombo)}
+            </kbd>
             {/* **`disabled`가 아니라 `aria-disabled`다.** `InputGroup`의 흐림은 `:has(:disabled)`라
                 (빌드된 CSS 실측) 버튼 하나만 잠가도 **그릇이 통째로** 흐려진다 — 빈 입력이 기본
                 상태이므로 placeholder가 §21이 금지한 1.85 대비로 상시 떨어진다. 그릇을 흐리는 것은
