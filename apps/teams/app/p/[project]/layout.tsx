@@ -102,12 +102,7 @@ export default async function ProjectLayout({
             색이 stale이 아니라 blocked인 이유: 이건 **사람이 아무것도 안 해도 꺼진다**(§4-4). */}
         {current.connected && current.failures.length > 0 && (
           <Alert role="status" className="max-w-3xl">
-            {/* `!`가 붙은 이유: shadcn `Alert` 기본 변종의 `*:[svg]:text-current`가 아이콘의
-                `text-status-*`를 **전부** 덮는다(자식 결합자라 특이도가 높다). 이 레포의 Alert
-                아이콘 13곳이 다 같은 이유로 색 없이 검게 뜬다 — 공통 원인은
-                `components/ui/alert.tsx` 한 줄이고 그 파일은 규약상 손으로 안 고친다.
-                여기만 important로 §4-4를 지키고 나머지 11곳은 `b532bf8b`이 받는다 */}
-            <CloudOff aria-hidden className="text-status-blocked!" />
+            <CloudOff aria-hidden className="text-status-blocked" />
             <AlertTitle>세션이 즉시 실패하는 워커 {current.failures.length}개</AlertTitle>
             <AlertDescription className="grid gap-3 text-foreground">
               <span>디스패치는 계속 돌지만 세션이 즉시 실패하고 티켓은 백로그로 돌아갑니다.</span>

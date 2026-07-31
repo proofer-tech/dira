@@ -4,7 +4,11 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
 const alertVariants = cva(
-  "group/alert relative grid w-full gap-0.5 rounded-lg border px-2.5 py-2 text-left text-sm has-data-[slot=alert-action]:relative has-data-[slot=alert-action]:pr-18 has-[>svg]:grid-cols-[auto_1fr] has-[>svg]:gap-x-2 *:[svg]:row-span-2 *:[svg]:translate-y-0.5 *:[svg]:text-current *:[svg:not([class*='size-'])]:size-4",
+  // 기본 변종에서 shadcn 원본의 `*:[svg]:text-current`를 뺐다(b532bf8b). 그 자리는
+  // 상속색을 다시 쓰는 no-op인데 자식 결합자라 특이도가 높아, 아이콘에 직접 준
+  // `text-status-*`를 21곳 전부에서 덮었다 — §비주얼 §2의 색 겹이 통째로 죽어 있었다.
+  // destructive에는 남긴다: 그쪽은 Alert 자신의 색으로 아이콘을 끌어오는 게 의도다.
+  "group/alert relative grid w-full gap-0.5 rounded-lg border px-2.5 py-2 text-left text-sm has-data-[slot=alert-action]:relative has-data-[slot=alert-action]:pr-18 has-[>svg]:grid-cols-[auto_1fr] has-[>svg]:gap-x-2 *:[svg]:row-span-2 *:[svg]:translate-y-0.5 *:[svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {

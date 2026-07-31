@@ -268,8 +268,7 @@ export default async function Workers({ params }: { params: Promise<{ project: s
                         // `<CopyCommand>`를 붙이지 않는다 — 파일명은 원본을 찾을 단서지 실행할
                         // 명령이 아니고, 조작 0개가 §0-5의 결정이다(`Q2=(a)`).
                         <Alert role="status">
-                          {/* `!`의 근거는 셸 배너와 같다 — `Alert` 기본 변종이 아이콘 색을 덮는다 */}
-                          <CloudOff aria-hidden className="text-status-blocked!" />
+                          <CloudOff aria-hidden className="text-status-blocked" />
                           <AlertTitle>{w.name} — 세션이 즉시 실패했습니다</AlertTitle>
                           <AlertDescription>
                             {/* `<p>`가 아니라 `<div>`인 이유: `AlertDescription`이 마지막이 아닌

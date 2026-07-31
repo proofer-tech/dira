@@ -74,7 +74,11 @@ apps/teams/
     markdown.tsx        읽기 전용 마크다운 렌더(§비주얼 §10). **왕복 스레드와 `.wip` 본문의
                         유일한 출처** — 편집기는 종전대로 원문이다. 자리별 오버라이드 없음
     copy-command.tsx    실행 대신 복사시키는 명령 블록
-  components/ui/        shadcn CLI 산출물. 손으로 만들지 않는다
+  components/ui/        shadcn CLI 산출물. 손으로 만들지 않는다.
+                        **예외 1건: `alert.tsx` 기본 변종에서 `*:[svg]:text-current`를 뺐다**
+                        (`b532bf8b`). 그게 아이콘의 `text-status-*`를 21곳 전부에서 덮어
+                        §비주얼 §2의 색 겹이 죽어 있었다. `shadcn add alert`를 다시 돌리면
+                        되살아난다 — 돌린 뒤 그 한 조각만 다시 뺀다
   components.json       shadcn 설정
 ```
 
