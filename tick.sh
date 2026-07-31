@@ -85,8 +85,14 @@ case "$CMD" in
     USID=$(sed -n 's/^session_id:[[:space:]]*//p' "$P" | head -1 | tr -d "\"' ")
     ALIVE=""
     case "$UPID" in ''|*[!0-9]*) ;; *) ps -p "$UPID" -o pid= >/dev/null 2>&1 && ALIVE="pid=$UPID" ;; esac
-    [ -z "$ALIVE" ] && [ -n "$USID" ] && ps -eo command= | grep -q -- "--session-id $USID" \
-      && ALIVE="session=$USID"
+    # ps를 변수에 먼저 담고 셸이 매칭한다. `ps -eo command= | grep -- "--session-id $USID"`는
+    # **grep 자신을 문다** — grep의 명령줄에 그 문자열이 그대로 들어 있고 ps가 그걸 본다.
+    # 그러면 세션이 죽어도 항상 살아 있다고 판정해 unassign이 영영 거부된다(CI 실측
+    # 2026-08-01: `거부: ... (session=dead-sid)`). 파이프를 없애면 매칭 시점에 grep이 없다.
+    if [ -z "$ALIVE" ] && [ -n "$USID" ]; then
+      PSOUT=$(ps -eo command= 2>/dev/null)
+      case "$PSOUT" in *"--session-id $USID"*) ALIVE="session=$USID" ;; esac
+    fi
     # 주인 세션이 자기 손으로 푸는 것은 통과다. 왕복 절차(PM PROFILE §요구사항 왕복 3단계)가
     # 부르는 자리가 바로 여기이고, 거기서 산 pid는 **부르는 세션 자신**이다(티켓 828dc247).
     # 조상 사슬로 본다 - 남의 산 세션을 푸는 것은 사슬에 없으므로 그대로 막힌다.
