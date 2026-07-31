@@ -1,7 +1,7 @@
 // dira 데스크톱 셸. 하는 일은 다섯이다 — Next standalone 서버를 자식으로 띄우고, 창이 그것을 열고,
 // 창을 닫아도 메뉴바에 남고(N1), 답변 대기 티켓이 새로 생기면 알리고(N2), 화면이 부르면
 // 네이티브 경로 다이얼로그를 띄우고(N3), 로그인 시 자동 실행을 켜고 끈다(N4).
-// 스펙: ../../docs/DESIGN.md §데스크톱 앱 (특히 "못박는 것" 1~5, N1·N2·N3·N4).
+// 스펙: ../../docs/DESIGN.md §데스크톱 앱 (특히 "못박는 것" 1~6, N1·N2·N3·N4).
 import { app, BrowserWindow, Menu, Notification, Tray, dialog, ipcMain, nativeImage, shell } from "electron";
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { createServer } from "node:net";
@@ -27,6 +27,9 @@ let stderr = "";
 let win: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let quitting = false;
+/** **서버가 준비된 뒤에만** 값이 있다 — `second-instance`가 그 전에 올 수 있어서 모듈
+ *  스코프다. 준비 전의 오리진을 담아두면 두 번째 실행이 아직 안 듣는 포트로 창을 연다. */
+let readyOrigin: string | null = null;
 
 /** OS가 준 빈 포트. 7331 고정은 브라우저의 계약이고 창은 자기 서버를 알고 있다 (못박는 것 1). */
 function freePort(): Promise<number> {
@@ -278,7 +281,7 @@ function showWindow(origin: string) {
   win.focus();
 }
 
-app.whenReady().then(async () => {
+async function boot() {
   const port = await freePort();
   const origin = `http://127.0.0.1:${port}`;
   child = startServer(port);
@@ -290,13 +293,38 @@ app.whenReady().then(async () => {
     showFailure(reason);
     return;
   }
+  readyOrigin = origin; // 여기부터 `second-instance`가 창을 열 수 있다
   win = openWindow(origin);
   createTray(origin);
   app.on("activate", () => showWindow(origin)); // 독 아이콘도 `열기`와 같은 자리로 간다
 
   await pollAwaiting(origin); // 첫 응답 = 씨 뿌리기
   setInterval(() => pollAwaiting(origin), POLL_MS);
-});
+}
+
+// ── 못박는 것 6 — 인스턴스는 하나다 ────────────────────────────────────────
+//
+// **서버 spawn·창·트레이보다 먼저 잡는다.** 늦게 잡으면 두 번째 인스턴스는 이미 서버를 띄운
+// 뒤고, 포트가 0이라(못박는 것 1) 충돌로 걸리지도 않는다 — 큐를 만지는 서버가 한 벌 더 조용히
+// 떴다가 죽는다. 3이 종료 경로에서 막은 것이 시작 경로에서 새는 자리다.
+// 락 키는 정하지 않는다 — Electron 기본값(앱 단위)이다.
+if (!app.requestSingleInstanceLock()) {
+  console.log("[dira] 이미 떠 있습니다 — 첫 번째 인스턴스에 넘기고 종료합니다");
+  app.quit();
+} else {
+  // 두 번째 실행은 트레이 `열기`와 **같은 경로**로 간다. 아무 반응이 없으면 사람은 앱이 안
+  // 켜졌다고 읽고 한 번 더 누른다. 서버 준비 전이면 열 오리진이 아직 없다 — 조용히 흘리지
+  // 않고 로그를 남긴다. 준비되면 boot()이 어차피 창을 연다.
+  app.on("second-instance", () => {
+    if (!readyOrigin) {
+      console.log("[dira] 두 번째 실행 — 서버 준비 중입니다. 준비되면 창이 열립니다");
+      return;
+    }
+    console.log("[dira] 두 번째 실행 — 첫 번째 창을 엽니다");
+    showWindow(readyOrigin);
+  });
+  app.whenReady().then(boot);
+}
 
 // 자식 서버는 앱보다 오래 살지 않는다 (못박는 것 3). 죽는 경로 전부에 건다.
 // ⌘Q · 트레이 `종료` · SIGTERM이 전부 여기로 모인다 — `quitting`이 창의 close 가로채기를 푼다.
