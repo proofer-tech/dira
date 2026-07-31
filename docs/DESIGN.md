@@ -3318,7 +3318,7 @@ P46은 인스턴스 하나가 자식을 하나 더 등록한다. **그래서 못
 | P47 | `--animate-wip-pulse` opacity 교체 `5c32fe50` | developer | `b344552b` | 완료 — `globals.css` 한 블록(`scale: 1.4` → `opacity: 0.3`)뿐이고 호출부 4곳 무수정. `grep scale globals.css` 0줄. 헤드리스 실측 opacity 0.966 → 0.564 → **0.300** · computed `scale`은 `none` 고정 |
 | P48 | 워커 식별 — 스펙 확정 `47678a71` | pm | — | 완료 — §1 보드 워커 항 다시 씀 · §2 잠금 `Alert` · §비주얼 §19 신설. **워커 색 배정 거절**. 되묻지 않았다 |
 | P48 | 워커 마크 시각 사양 — §비주얼 §19 `12e2fd52` | designer | 스펙 | 완료 — **뒤집은 축은 밝기 하나**(`--muted-foreground` → `--foreground`, 이웃과 단차 4.73 → 16.46). 그릇은 `<span>` 칩(`Badge`는 옆의 `PersonaBadge`와 실루엣이 겹친다). 새 색 토큰 0 · 새 컴포넌트 0 · `globals.css` 무수정 · §18 무수정. ②는 `aria-hidden` + `sr-only` 원문 |
-| P48 | 워커 마크 구현 — 자리 3곳 `6a813cae` | developer | `12e2fd52` | 대기 |
+| P48 | 워커 마크 구현 — 자리 3곳 `6a813cae` | developer | `12e2fd52` | 완료 — `components/worker-mark.tsx` 하나가 셋의 출처(클래스 문자열 동일). 새 색 토큰 0 · 새 shadcn 0 · `globals.css`·`workerOf`·`COLUMNS` 무수정. ②는 전문 값 무수정 + `aria-hidden`/`sr-only` 원문. `status-badge.tsx`에 못 얹은 이유는 클라이언트 번들(`workerOf` → `node:fs`) |
 
 **P47은 P43을 되돌리는 것이 아니라 축 하나를 바꾼다.** 요구(`5f0498c9`)도, 움직이는 자리 넷도,
 "애니메이션 예외는 하나"라는 §0의 경계도 그대로다. **`f7593738`이 고른 값 한 벌만 갈린다** —
