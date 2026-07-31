@@ -404,9 +404,10 @@ export default async function Board({
                           {group.length}건
                         </span>
                       </div>
-                      {group.length === 0 ? (
+                      {group.length === 0 && rows.length > 0 ? (
                         // <EmptyState>는 화면 하나의 빈 상태용이다(py-10 + 1차 액션 버튼). 레인
                         // 3개에 그걸 깔면 같은 버튼이 3개 생긴다 — 여기선 건수 0만 말한다.
+                        // 전체 0건일 땐 위 블록이 이미 말했으므로 이 자리표시자는 안 그린다(§6).
                         <p className="rounded-md border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">
                           0건
                         </p>
