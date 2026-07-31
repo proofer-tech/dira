@@ -1,6 +1,6 @@
 # apps/desktop — dira 데스크톱 셸 (Electron)
 
-`apps/teams`를 담는 껍데기. 안에 든 것은 지금 그대로의 GUI다 — 화면도 라우트도 여기서 만들지 않는다.
+`apps/teams`를 담는 껍데기. 안에 든 것은 지금 그대로의 GUI다 — 화면은 여기서 만들지 않는다.
 스펙은 `../../docs/DESIGN.md` §데스크톱 앱이 단일 출처다.
 
 ```
@@ -36,10 +36,19 @@ pnpm dev         # teams 빌드 + 조립 + 앱 실행
 4. **창은 자기가 띄운 오리진만 연다.** `contextIsolation: true`·`nodeIntegration: false`,
    `will-navigate`·`setWindowOpenHandler`가 밖을 전부 거부하고 http(s)만 `shell.openExternal`로
    내보낸다.
+5. **판정을 main에서 다시 구현하지 않는다.** 알림이 쓰는 `답변 대기`는 서버가 `lib/queue.ts`로
+   판정한다 — main은 `GET /api/awaiting`을 물어본다.
+
+## N2 답변 대기 알림
+
+30초마다 `GET /api/awaiting`을 물어보고 **직전 집합과의 차집합만** 알린다(배경 폴링이라 보드의
+5초와 다른 값인 것이 맞다). **앱을 켠 직후 첫 응답은 조용히 씨를 뿌린다** — 켤 때마다 밀린
+알림이 쏟아지면 그 알림은 다음 주에 꺼진다. 알림을 누르면 창이 그 티켓 상세로 간다.
+폴링 실패(서버가 죽음 · 응답이 배열이 아님)는 로그만 남기고 앱은 계속 산다.
 
 `main.ts`는 Electron이 그대로 실행한다(Node 24 타입 스트리핑). 빌드 단계도 번들러도 없다.
 
 ## 여기 아직 없는 것
 
-트레이 상주 `abce61c9` · 답변 대기 알림 `283dc4c1` · 경로 피커 `c01e2678` ·
-로그인 시 자동 실행 `00fc34ba` · `.app` 패키징 `9e0ec1af`. 각각 자기 티켓이 있다.
+트레이 상주 `abce61c9` · 경로 피커 `c01e2678` · 로그인 시 자동 실행 `00fc34ba` ·
+`.app` 패키징 `9e0ec1af`. 각각 자기 티켓이 있다.

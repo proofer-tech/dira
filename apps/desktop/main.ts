@@ -1,7 +1,8 @@
-// dira 데스크톱 셸. 하는 일은 둘이다 — Next standalone 서버를 자식으로 띄우고, 창이 그것을 연다.
-// 스펙: ../../docs/DESIGN.md §데스크톱 앱 (특히 "못박는 것" 1~4).
-// 트레이·알림·피커·자동 실행은 여기 없다 (abce61c9 · 283dc4c1 · c01e2678 · 00fc34ba).
-import { app, BrowserWindow, shell } from "electron";
+// dira 데스크톱 셸. 하는 일은 셋이다 — Next standalone 서버를 자식으로 띄우고, 창이 그것을 열고,
+// 답변 대기 티켓이 새로 생기면 알린다.
+// 스펙: ../../docs/DESIGN.md §데스크톱 앱 (특히 "못박는 것" 1~5, N2).
+// 트레이·피커·자동 실행은 여기 없다 (abce61c9 · c01e2678 · 00fc34ba).
+import { app, BrowserWindow, Notification, shell } from "electron";
 import { spawn, type ChildProcess } from "node:child_process";
 import { createServer } from "node:net";
 import { basename, dirname } from "node:path";
@@ -11,9 +12,12 @@ const SERVER = fileURLToPath(
   new URL(process.env.DIRA_SERVER_JS ?? "../teams/.next/standalone/server.js", import.meta.url),
 );
 const READY_TIMEOUT_MS = 30_000;
+/** 배경 폴링이다 — 보드의 5초(§아키텍처)와 다른 값인 것이 맞다 (§데스크톱 앱 N2). */
+const POLL_MS = 30_000;
 
 let child: ChildProcess | null = null;
 let stderr = "";
+let win: BrowserWindow | null = null;
 
 /** OS가 준 빈 포트. 7331 고정은 브라우저의 계약이고 창은 자기 서버를 알고 있다 (못박는 것 1). */
 function freePort(): Promise<number> {
@@ -87,7 +91,7 @@ function showFailure(reason: string) {
 }
 
 /** 창은 자기가 띄운 오리진만 연다 (못박는 것 4). 이 창은 fs를 만지는 서버 바로 앞이다. */
-function openWindow(origin: string) {
+function openWindow(origin: string): BrowserWindow {
   const win = new BrowserWindow({
     width: 1440,
     height: 900,
@@ -111,6 +115,58 @@ function openWindow(origin: string) {
   });
 
   win.loadURL(origin);
+  return win;
+}
+
+// ── N2 답변 대기 알림 ───────────────────────────────────────────────────────
+//
+// 판정은 서버가 한다(못박는 것 5) — main은 `GET /api/awaiting`를 물어보고 **직전 집합과의
+// 차집합만** 알린다. 켠 직후 첫 응답은 조용히 씨를 뿌린다: 앱을 켤 때마다 밀린 알림이 쏟아지면
+// 그 알림은 다음 주에 꺼진다.
+
+type Awaiting = { project: string; stem: string; hash: string; title: string };
+
+/** `null` = 아직 씨를 안 뿌렸다. 빈 집합(`답변 대기 0건`)과 다른 상태다 — 섞으면 첫 응답이
+ *  0건인 큐에서 두 번째 응답의 새 티켓을 놓치거나, 반대로 첫 응답을 통째로 알린다. */
+let seen: Set<string> | null = null;
+
+function notify(item: Awaiting, origin: string) {
+  const n = new Notification({
+    title: "답변 대기",
+    body: `${item.title || item.hash} — ${item.project}`,
+  });
+  n.on("click", () => {
+    const url = `${origin}/p/${encodeURIComponent(item.project)}/tickets/${encodeURIComponent(item.stem)}`;
+    if (!win || win.isDestroyed()) win = openWindow(origin);
+    win.loadURL(url);
+    win.show();
+    win.focus();
+  });
+  n.on("show", () => console.log(`[dira] 알림 → ${item.project}/${item.stem}`));
+  n.show();
+}
+
+/** 폴링 실패는 삼키되 로그로 남긴다 — 서버가 죽었거나 응답이 깨져도 앱은 계속 산다.
+ *  `Array.isArray`까지가 신뢰 경계다: 응답이 배열이 아니면 아래 루프가 던져 앱이 죽는다. */
+async function pollAwaiting(origin: string) {
+  try {
+    const res = await fetch(`${origin}/api/awaiting`, { signal: AbortSignal.timeout(10_000) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const items: unknown = await res.json();
+    if (!Array.isArray(items)) throw new Error(`배열이 아닌 응답: ${JSON.stringify(items).slice(0, 200)}`);
+    const now = new Map<string, Awaiting>();
+    for (const i of items as Awaiting[]) {
+      if (i && typeof i.project === "string" && typeof i.stem === "string") {
+        now.set(`${i.project}/${i.stem}`, i);
+      }
+    }
+    const first = seen === null;
+    if (!first) for (const [key, item] of now) if (!seen!.has(key)) notify(item, origin);
+    seen = new Set(now.keys());
+    if (first) console.log(`[dira] 답변 대기 ${now.size}건으로 씨를 뿌렸습니다 (알리지 않음)`);
+  } catch (e) {
+    console.error(`[dira] 답변 대기 폴링 실패: ${(e as Error).message}`);
+  }
 }
 
 app.whenReady().then(async () => {
@@ -125,7 +181,10 @@ app.whenReady().then(async () => {
     showFailure(reason);
     return;
   }
-  openWindow(origin);
+  win = openWindow(origin);
+
+  await pollAwaiting(origin); // 첫 응답 = 씨 뿌리기
+  setInterval(() => pollAwaiting(origin), POLL_MS);
 });
 
 // 자식 서버는 앱보다 오래 살지 않는다 (못박는 것 3). 죽는 경로 전부에 건다.
