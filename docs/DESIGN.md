@@ -3830,7 +3830,8 @@ CDP 실측 두 줄(`Δbase`·`Δcenter`)이라 developer 티켓의 `## Done when
 
 | P53 | 참견 — 요구 왕복 + 스펙 확정 `2100d54a` | pm | 답 `864f39c9` | 완료 — §2-2 신설 · §제약 1 뒤집음 · §2-1 `queue-operation` 예외 |
 | P53 | 엔진 — 참견 입구(FIFO) + stream-json 전환 `a7796d16` | developer | — | 대기 |
-| P53 | 스트림에 참견 줄 — `queue-operation enqueue` `b285dc09` | developer | — | 대기 |
+| P53 | 스트림에 참견 줄 — `queue-operation enqueue` `b285dc09` | developer | — | 완료 |
+| P53 | 봉투 실측 피드백 → §2-1 필터 명문화 `edec37eb` | pm | — | 완료 — `enqueue`가 곧 참견이 아니다(§2-2 표 3') |
 | P53 | 참견 입력 form 시각 사양 — §비주얼 §21 `7ac43367` | designer | — | 대기 |
 | P53 | 참견 보내기 — `lib/interject.ts` + Server Action `a077404a` | developer | `a7796d16` | 대기 |
 | P53 | 참견 입력 form 구현 `c5fe8ac3` | developer | `a077404a` · `7ac43367` | 대기 |
