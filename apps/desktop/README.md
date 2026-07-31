@@ -6,7 +6,8 @@
 ```
 Electron main ──spawn──> node server.js        (Next standalone 빌드, 127.0.0.1:<빈 포트>)
       │                       ↑
-      └─ BrowserWindow ───load┘
+      ├─ BrowserWindow ───load┘   빨간 버튼은 숨기기다. 파괴하지 않는다
+      └─ Tray ─ 열기 · 종료         창이 없어도 앱은 산다
 ```
 
 ## 실행
@@ -69,7 +70,8 @@ SVG에서 직접 래스터하는 것이 그 절이 넘긴 실측이다.
 2. **준비 판정은 HTTP다.** `GET http://127.0.0.1:<port>/`를 200ms 간격으로 30초까지 친다.
    stdout의 `Ready` 문자열은 안 본다.
 3. **자식 서버는 앱보다 오래 살지 않는다.** `before-quit`·`process exit`·`SIGINT/SIGTERM`
-   전부에서 죽인다.
+   전부에서 죽인다. 반대로 **창보다는 오래 산다**(N1) — 빨간 버튼은 `close`를 가로채 `hide()`이고,
+   `before-quit`이 세운 `quitting` 플래그만 그 가로채기를 푼다. ⌘Q·트레이 `종료`가 같은 문으로 간다.
 4. **창은 자기가 띄운 오리진만 연다.** `contextIsolation: true`·`nodeIntegration: false`,
    `will-navigate`·`setWindowOpenHandler`가 밖을 전부 거부하고 http(s)만 `shell.openExternal`로
    내보낸다.
@@ -85,7 +87,28 @@ SVG에서 직접 래스터하는 것이 그 절이 넘긴 실측이다.
 
 `main.ts`는 Electron이 그대로 실행한다(Node 24 타입 스트리핑). 빌드 단계도 번들러도 없다.
 
+## 트레이 아이콘 (메뉴바)
+
+독 아이콘(`icon.svg`, 위 `## 아이콘`)과 **다른 자산이다.** 메뉴바 아이콘은 타일도 색도 갖지 않는다.
+
+| 파일 | 무엇 |
+|---|---|
+| `tray.svg` | **원본.** 32 뷰박스. §비주얼 §14 마크의 `d`를 문자 단위로 그대로 쓰고, 타일이 없다 |
+| `trayTemplate.png` · `trayTemplate@2x.png` | 위를 16·32로 래스터한 것. **순검정 + 알파**뿐이라 라이트/다크는 macOS가 칠한다. `@2x`는 파일명 규약으로 `nativeImage`가 알아서 집는다 |
+
+두 PNG는 **커밋돼 있다** — `icon.icns`와 같은 이유로 빌드가 크롬을 필요로 하지 않는다.
+형상을 고쳤을 때만 다시 뽑고, 그때도 `.icns`와 같은 규약이다 — 큰 것을 줄이지 말고
+`tray.svg`에서 크기별로 직접 래스터한다:
+
+```sh
+"…/Google Chrome" --headless --screenshot=trayTemplate.png --window-size=16,16 \
+  --default-background-color=00000000 --force-device-scale-factor=1 --user-data-dir=/tmp/… wrap.html
+```
+
+**`trayTemplate.png`가 현재 메뉴바에 그려지지 않는다** — 티켓 `abce61c9` `## 블록`을 읽어라.
+트레이 자체(항목·클릭·메뉴)는 동작한다.
+
 ## 여기 아직 없는 것
 
-트레이 상주 `abce61c9` · 경로 피커 `c01e2678` · 로그인 시 자동 실행 `00fc34ba` ·
-코드사이닝/공증 `5aa9486d`. 각각 자기 티켓이 있다.
+로그인 시 자동 실행 `00fc34ba`(트레이 메뉴의 구분선 자리) · 코드사이닝/공증 `5aa9486d`.
+각각 자기 티켓이 있다.

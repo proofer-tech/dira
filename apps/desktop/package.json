@@ -17,7 +17,7 @@
     "appId": "dev.dira.desktop",
     "productName": "dira",
     "directories": { "output": "dist" },
-    "files": ["main.ts", "preload.cjs", "package.json"],
+    "files": ["main.ts", "preload.cjs", "package.json", "trayTemplate.png", "trayTemplate@2x.png"],
     "asar": false,
     "extraResources": [
       { "from": "../teams/.next/standalone", "to": "server" },

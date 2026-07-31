@@ -1,8 +1,9 @@
-// dira 데스크톱 셸. 하는 일은 셋이다 — Next standalone 서버를 자식으로 띄우고, 창이 그것을 열고,
-// 답변 대기 티켓이 새로 생기면 알리고(N2), 화면이 부르면 네이티브 경로 다이얼로그를 띄운다(N3).
-// 스펙: ../../docs/DESIGN.md §데스크톱 앱 (특히 "못박는 것" 1~5, N2·N3).
-// 트레이·자동 실행은 여기 없다 (abce61c9 · 00fc34ba).
-import { app, BrowserWindow, Notification, dialog, ipcMain, shell } from "electron";
+// dira 데스크톱 셸. 하는 일은 넷이다 — Next standalone 서버를 자식으로 띄우고, 창이 그것을 열고,
+// 창을 닫아도 메뉴바에 남고(N1), 답변 대기 티켓이 새로 생기면 알리고(N2), 화면이 부르면
+// 네이티브 경로 다이얼로그를 띄운다(N3).
+// 스펙: ../../docs/DESIGN.md §데스크톱 앱 (특히 "못박는 것" 1~5, N1·N2·N3).
+// 자동 실행은 여기 없다 (00fc34ba).
+import { app, BrowserWindow, Menu, Notification, Tray, dialog, ipcMain, nativeImage, shell } from "electron";
 import { spawn, type ChildProcess } from "node:child_process";
 import { createServer } from "node:net";
 import { basename, dirname, join } from "node:path";
@@ -25,6 +26,8 @@ const POLL_MS = 30_000;
 let child: ChildProcess | null = null;
 let stderr = "";
 let win: BrowserWindow | null = null;
+let tray: Tray | null = null;
+let quitting = false;
 
 /** OS가 준 빈 포트. 7331 고정은 브라우저의 계약이고 창은 자기 서버를 알고 있다 (못박는 것 1). */
 function freePort(): Promise<number> {
@@ -121,6 +124,14 @@ function openWindow(origin: string): BrowserWindow {
     return { action: "deny" };
   });
 
+  // N1 — 빨간 버튼은 앱을 끝내지 않고 창을 숨긴다. 파괴하지 않으므로 `열기`가 이미 그려진
+  // 보드를 그대로 되돌린다(다시 로드하면 그 시점부터 콜드 스타트다). 종료 경로에서만 통과시킨다.
+  win.on("close", (e) => {
+    if (quitting) return;
+    e.preventDefault();
+    win.hide();
+  });
+
   win.loadURL(origin);
   return win;
 }
@@ -190,6 +201,36 @@ ipcMain.handle("dira:pick-path", async (e, mode: unknown) => {
   return r.filePaths[0] ?? null;
 });
 
+// ── N1 트레이 ──────────────────────────────────────────────────────────────
+
+/** 메뉴바 아이콘. 항목은 둘이고, 로그인 시 자동 실행(`00fc34ba`)이 그 사이에 들어온다. */
+function createTray(origin: string) {
+  // 템플릿 이미지 — 색을 갖지 않고 알파만 있다. 라이트/다크 메뉴바를 macOS가 각각 칠한다.
+  // @2x는 파일명 규약으로 nativeImage가 알아서 집는다 (trayTemplate@2x.png).
+  // ponytail: 이 이미지가 지금 이 맥의 메뉴바에 **그려지지 않는다**(항목·메뉴는 동작한다).
+  // 이미지가 아니라 macOS/Electron 쪽이다 — 컬러 아이콘도 setTitle 텍스트도 같이 안 그려진다.
+  // 근거와 다음 수는 티켓 abce61c9 `## 블록`.
+  const image = nativeImage.createFromPath(fileURLToPath(new URL("trayTemplate.png", import.meta.url)));
+  image.setTemplateImage(true);
+
+  tray = new Tray(image);
+  tray.setToolTip("dira");
+  tray.setContextMenu(
+    Menu.buildFromTemplate([
+      { label: "열기", click: () => showWindow(origin) },
+      { type: "separator" }, // 여기에 `00fc34ba`가 로그인 시 자동 실행 체크 항목을 붙인다
+      { label: "종료", click: () => app.quit() },
+    ]),
+  );
+}
+
+function showWindow(origin: string) {
+  // 렌더러가 죽어 창이 파괴된 뒤라면 다시 만든다. 서버는 그대로라 포트도 그대로다.
+  if (!win || win.isDestroyed()) win = openWindow(origin);
+  else win.show();
+  win.focus();
+}
+
 app.whenReady().then(async () => {
   const port = await freePort();
   const origin = `http://127.0.0.1:${port}`;
@@ -203,13 +244,22 @@ app.whenReady().then(async () => {
     return;
   }
   win = openWindow(origin);
+  createTray(origin);
+  app.on("activate", () => showWindow(origin)); // 독 아이콘도 `열기`와 같은 자리로 간다
 
   await pollAwaiting(origin); // 첫 응답 = 씨 뿌리기
   setInterval(() => pollAwaiting(origin), POLL_MS);
 });
 
 // 자식 서버는 앱보다 오래 살지 않는다 (못박는 것 3). 죽는 경로 전부에 건다.
-app.on("before-quit", killServer);
-app.on("window-all-closed", () => app.quit()); // 트레이가 없는 동안은 창이 곧 앱이다 (N1이 뒤집는다)
+// ⌘Q · 트레이 `종료` · SIGTERM이 전부 여기로 모인다 — `quitting`이 창의 close 가로채기를 푼다.
+app.on("before-quit", () => {
+  quitting = true;
+  killServer();
+});
+// 트레이가 있으면 창이 없어도 앱이 아니다 (N1). 실패 화면은 트레이가 없어서 그대로 끝난다.
+app.on("window-all-closed", () => {
+  if (!tray) app.quit();
+});
 process.on("exit", killServer);
 for (const sig of ["SIGINT", "SIGTERM"] as const) process.on(sig, () => app.quit());
