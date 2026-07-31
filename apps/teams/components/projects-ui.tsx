@@ -769,11 +769,10 @@ export function ProjectRows({ rows }: { rows: ProjectRow[] }) {
                   )}
                 </span>
               </TableCell>
-              <TableCell
-                className="max-w-[16rem] truncate px-3 py-0 font-mono text-xs text-muted-foreground"
-                title={t.root}
-              >
-                {t.shortRoot}
+              {/* 상한은 `td`가 아니라 셀 안쪽 span에 건다 — auto table layout에서 `td`의
+                  max-width는 상한으로 지켜지지 않는다(§비주얼 §6) */}
+              <TableCell className="px-3 py-0 font-mono text-xs text-muted-foreground" title={t.root}>
+                <span className="block max-w-[16rem] truncate">{t.shortRoot}</span>
               </TableCell>
               {/* 연결 안 됨이면 세 자리를 전부 비운다. 0이 아니다 — 못 읽은 것과 0건은
                   다른 사실이다(§0). 세 수를 서로 다르게 칠하지 않는다(§비주얼 §7) */}

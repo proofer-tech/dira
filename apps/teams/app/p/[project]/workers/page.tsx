@@ -204,17 +204,19 @@ export default async function Workers({ params }: { params: Promise<{ project: s
                 <TableCell className="px-3 py-0 text-right font-mono text-xs tabular-nums">
                   {w.lockPid ?? <span className="text-muted-foreground">—</span>}
                 </TableCell>
+                {/* 상한은 `td`가 아니라 셀 안쪽 span에 건다 — auto table layout에서 `td`의
+                    max-width는 상한으로 지켜지지 않는다(§비주얼 §6) */}
                 <TableCell
-                  className="max-w-[14rem] truncate px-3 py-0 font-mono text-xs text-muted-foreground"
+                  className="px-3 py-0 font-mono text-xs text-muted-foreground"
                   title={w.engine}
                 >
-                  {w.engine}
+                  <span className="block max-w-[14rem] truncate">{w.engine}</span>
                 </TableCell>
                 <TableCell
-                  className="max-w-[20rem] truncate px-3 py-0 font-mono text-xs text-muted-foreground"
+                  className="px-3 py-0 font-mono text-xs text-muted-foreground"
                   title={w.lastLog ?? ""}
                 >
-                  {w.lastLog ?? "—"}
+                  <span className="block max-w-[20rem] truncate">{w.lastLog ?? "—"}</span>
                 </TableCell>
                 <TableCell className="px-3 py-0">
                   <WorkerRowActions projectId={id} row={w} />
