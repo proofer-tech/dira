@@ -1,6 +1,6 @@
 {
   "name": "dira",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "티켓 큐를 보는 화면",
   "author": "dira",
@@ -19,20 +19,55 @@
   "build": {
     "appId": "dev.dira.desktop",
     "productName": "dira",
-    "directories": { "output": "dist" },
-    "files": ["main.ts", "release-notes.ts", "preload.cjs", "package.json", "trayTemplate.png", "trayTemplate@2x.png", "node_modules/**/*"],
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.ts",
+      "release-notes.ts",
+      "preload.cjs",
+      "package.json",
+      "trayTemplate.png",
+      "trayTemplate@2x.png",
+      "node_modules/**/*"
+    ],
     "asar": false,
-    "publish": { "provider": "github", "owner": "proofer-tech", "repo": "dira" },
+    "publish": {
+      "provider": "github",
+      "owner": "proofer-tech",
+      "repo": "dira"
+    },
     "extraResources": [
-      { "from": "../teams/.next/standalone", "to": "server" },
-      { "from": "../teams/.next/standalone/node_modules", "to": "server/node_modules" },
-      { "from": "../../tick.sh", "to": "engine/tick.sh" },
-      { "from": "../../tickets.py", "to": "engine/tickets.py" },
-      { "from": "../../templates", "to": "engine/templates" },
-      { "from": "../../worker.sh.example", "to": "engine/worker.sh.example" }
+      {
+        "from": "../teams/.next/standalone",
+        "to": "server"
+      },
+      {
+        "from": "../teams/.next/standalone/node_modules",
+        "to": "server/node_modules"
+      },
+      {
+        "from": "../../tick.sh",
+        "to": "engine/tick.sh"
+      },
+      {
+        "from": "../../tickets.py",
+        "to": "engine/tickets.py"
+      },
+      {
+        "from": "../../templates",
+        "to": "engine/templates"
+      },
+      {
+        "from": "../../worker.sh.example",
+        "to": "engine/worker.sh.example"
+      }
     ],
     "mac": {
-      "target": ["dmg", "zip"],
+      "target": [
+        "dmg",
+        "zip"
+      ],
       "icon": "icon.icns",
       "category": "public.app-category.developer-tools",
       "hardenedRuntime": true,
