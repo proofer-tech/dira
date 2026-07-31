@@ -1,10 +1,11 @@
 "use client";
 
-/** 프로젝트 목록·등록 화면(`/`)의 클라이언트 조각 — 등록 폼 · 해석 결과 표 · 행 액션(설정 다이얼로그).
+/** 프로젝트 목록·등록 화면(`/`)의 클라이언트 조각 — 화면 헤더 · 등록 폼 · 해석 결과 표 ·
+ *  행 액션(설정 다이얼로그).
  *
- *  세 개가 한 파일에 있는 이유: 해석 결과 표를 등록 직후와 설정 다이얼로그가 **같은 표**로 쓴다
+ *  한 파일에 있는 이유: 해석 결과 표를 등록 직후와 설정 다이얼로그가 **같은 표**로 쓴다
  *  (DESIGN.md §7). 파일을 쪼개면 두 자리가 갈린다. fs 접근은 전부 서버 액션 뒤에 있다. */
-import { useActionState, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import Link from "next/link";
 import { ChevronDown, ChevronUp, Settings2, TriangleAlert, Unlink } from "lucide-react";
 import {
@@ -157,8 +158,9 @@ export function ConfigTable({ view }: { view: ResolvedView }) {
 /** 없는 큐를 만든다. **새 컴포넌트·새 색 토큰 0개** — 필드 사양은 등록 카드 표 그대로고
  *  결과는 등록과 같은 해석 결과 표다(§비주얼 §7 생성 다이얼로그 항).
  *
- *  성공하면 다이얼로그가 닫히고 결과는 **등록 카드 자리**로 올라간다(`onCreated`) — 여는 자리가
- *  둘이라 결과를 여기 두면 어느 트리거로 열었느냐에 따라 결과가 다른 자리에 뜬다. */
+ *  성공하면 다이얼로그가 닫히고 결과는 **목록 아래 결과 슬롯**으로 올라간다(`onCreated`) — 여는
+ *  자리가 둘이라 결과를 여기 두면 어느 트리거로 열었느냐에 따라 결과가 다른 자리에 뜬다.
+ *  트리거도 여기 없다: `h1` 우측과 0건 빈 상태 두 자리라 부모가 연다(§비주얼 §7). */
 function CreateDialog({
   open,
   onOpenChange,
@@ -186,13 +188,6 @@ function CreateDialog({
         if (!o) setState({});
       }}
     >
-      <DialogTrigger
-        render={
-          <Button variant="outline" size="sm">
-            새로 만들기
-          </Button>
-        }
-      />
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>새 프로젝트</DialogTitle>
@@ -321,159 +316,243 @@ function CreateDialog({
   );
 }
 
-// ── 등록 카드 ───────────────────────────────────────────────────────────────
+// ── 화면 헤더 + 등록 · 생성 · 결과 슬롯 ─────────────────────────────────────
 
-export function RegisterCard({ empty }: { empty?: boolean }) {
-  const [state, action, pending] = useActionState<RegisterState, FormData>(registerProject, {});
+/** `/`의 클라이언트 조각. **`h1`·트리거·결과 슬롯이 한 컴포넌트인 이유**는 트리거가 `h1`
+ *  우측인데 결과 카드는 목록 아래 슬롯에 떠야 하기 때문이다(§비주얼 §7). 목록(`children`)은
+ *  서버가 그린 것을 그대로 통과시킨다.
+ *
+ *  **0건에서 등록에 성공해도 이 컴포넌트는 자리를 안 옮긴다** — 같은 응답에서 화면이
+ *  온보딩→목록으로 바뀌는데, 폼이 그때 다이얼로그로 옮겨 앉으면 결과 표가 remount로 사라진다
+ *  (§0 마지막 항). 그래서 그릇을 바꾸는 시점은 결과가 아니라 `닫기`다. */
+export function ProjectsSection({
+  empty,
+  children,
+}: {
+  empty: boolean;
+  children?: React.ReactNode;
+}) {
+  const [pending, start] = useTransition();
+  const [state, setState] = useState<RegisterState>({});
   const [name, setName] = useState("");
   const [root, setRoot] = useState("");
   const [made, setMade] = useState<CreateState | null>(null);
   const [creating, setCreating] = useState(false);
+  const [registering, setRegistering] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const slug = slugify(name);
   // 슬러그가 비면(한글 이름) 그때만 `URL 조각`을 받는다. 서버가 중복·형식으로 거부한 경우도 같다.
   const showId = (name.trim() !== "" && slug === "") || !!state.needId;
   const err = state.error;
 
-  const dialog = (
-    <CreateDialog
-      open={creating}
-      onOpenChange={setCreating}
-      onCreated={(s) => {
-        setMade(s);
-        setDismissed(false);
-      }}
-      onRegister={setRoot}
-    />
-  );
-
   // 생성 결과 = 등록과 **같은 표** + 그 위 세 줄(만든 파일 수 · 유도한 엔진 레포 · crontab 등록).
   const view = made?.done ?? state.done;
-  if (view && !dismissed) {
-    const c = made?.created;
-    return (
-      <Card className="gap-3 p-4">
-        <div className="flex items-center justify-between gap-4">
-          <h2 className="text-sm font-medium">
-            {c ? "만들었습니다" : "등록됨"} — {view.project.name}{" "}
-            <span className="font-mono text-xs text-muted-foreground">{view.project.shortRoot}</span>
-          </h2>
-          <div className="flex items-center gap-2">
-            <Button size="sm" nativeButton={false} render={<Link href={`/p/${view.project.id}`} />}>
-              보드 열기
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => setDismissed(true)}>
-              닫기
-            </Button>
-          </div>
+  const c = made?.created;
+
+  // `useActionState` 대신 직접 부른다 — 성공 시 다이얼로그를 닫고 결과 슬롯을 되살리는 일이
+  // 렌더 결과가 아니라 이벤트라서다(생성 다이얼로그와 같은 방식).
+  // ponytail: `<form action={서버액션}>`이 주던 JS-없이 제출이 사라진다. 이 화면의 등록은
+  // 이제 다이얼로그(=JS)가 기본 자리라 값이 0건 인라인 폼에만 남는다 — 되살리려면
+  // `useActionState` + `useEffect(닫기)`다.
+  const form = (
+    <form
+      className="space-y-4"
+      onSubmit={(e) => {
+        e.preventDefault();
+        const f = new FormData(e.currentTarget);
+        start(async () => {
+          const r = await registerProject({}, f);
+          setState(r);
+          setDismissed(false); // 닫아 둔 뒤 다시 등록하면 새 결과가 다시 뜬다
+          if (r.done) {
+            setMade(null); // 앞선 생성 결과가 새 등록 결과를 가리지 않는다
+            setRegistering(false);
+            setName("");
+            setRoot("");
+          }
+        });
+      }}
+    >
+      <div className="space-y-2">
+        <Label htmlFor="project-name">이름</Label>
+        <Input
+          id="project-name"
+          name="name"
+          placeholder="dira 자체"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
+        {slug && <p className="font-mono text-xs text-muted-foreground">URL: /p/{slug}</p>}
+        {err?.code === "name" && <p className="text-xs text-destructive">{err.message}</p>}
+      </div>
+
+      {showId && (
+        <div className="space-y-2">
+          <Label htmlFor="project-id">URL 조각</Label>
+          <Input id="project-id" name="id" className="font-mono" placeholder="dira" />
+          <p className="text-xs text-muted-foreground">
+            {err && (err.code === "needId" || err.code === "badId" || err.code === "dupId")
+              ? err.message
+              : "이름에서 URL 조각을 만들 수 없습니다. 직접 정해 주세요 (영문 소문자·숫자·하이픈)."}
+          </p>
         </div>
-        {c && (
-          <div className="space-y-1 text-sm">
-            <p>
-              파일 {c.written}개를 만들었습니다.
-              {c.skipped.length > 0 && (
-                <span className="text-muted-foreground">
-                  {" "}
-                  이미 있어 건너뜀: <span className="font-mono text-xs">{c.skipped.join(" ")}</span>
-                </span>
-              )}
-            </p>
-            <p className="text-muted-foreground">
-              엔진 레포 <span className="font-mono text-xs">{c.repo}</span>
-            </p>
-            {c.cron ? (
-              <p>crontab에 등록됨 — 1분 뒤부터 티켓을 물어갑니다</p>
-            ) : (
-              // 등록 실패는 성공 보고를 막지 않는다(§0-3). 파일은 그대로 두고 명령을 준다.
-              <Alert variant="destructive">
-                <TriangleAlert aria-hidden />
-                <AlertTitle>crontab에 등록하지 못했습니다</AlertTitle>
-                <AlertDescription className="grid gap-2">
-                  <span className="break-all">{c.cronError}</span>
-                  <CopyCommand cmd={c.registerCmd} />
-                </AlertDescription>
-              </Alert>
-            )}
-          </div>
-        )}
-        <ConfigTable view={view} />
-      </Card>
-    );
-  }
+      )}
+
+      <div className="space-y-2">
+        <Label htmlFor="project-root">경로</Label>
+        <Input
+          id="project-root"
+          name="root"
+          className="font-mono"
+          placeholder="~/Projects/myproject/.dira"
+          value={root}
+          onChange={(e) => setRoot(e.target.value)}
+        />
+        <p className="text-xs text-muted-foreground">절대경로. ~는 확장됩니다</p>
+      </div>
+
+      {err && (err.code === "root" || err.code === "dupRoot" || err.code === "unknown") && (
+        <Alert variant="destructive">
+          <TriangleAlert aria-hidden />
+          <AlertTitle>등록하지 못했습니다</AlertTitle>
+          <AlertDescription>
+            <span className="break-all">{err.message}</span>
+            {err.dup && <Link href={`/p/${err.dup.id}`}>{err.dup.name} 열기</Link>}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      <Button type="submit" disabled={pending}>
+        {pending ? "등록 확인 중…" : "프로젝트 등록"}
+      </Button>
+    </form>
+  );
 
   return (
     <>
-      {/* 프로젝트 0개 빈 상태에도 같은 버튼이 하나 더 선다(§0-3 트리거 두 자리) */}
-      {empty && (
+      {/* 0건이면 `h1` 우측이 비어 있다 — 폼이 이미 펼쳐져 있는데 그 폼을 여는 버튼을 같은
+          화면에 세우지 않는다(§비주얼 §7) */}
+      <div className={empty ? "max-w-3xl space-y-2" : undefined}>
         <div className="flex items-center justify-between gap-4">
-          <p className="text-sm text-muted-foreground">아직 큐가 없다면 새로 만듭니다.</p>
-          <Button variant="outline" size="sm" onClick={() => setCreating(true)}>
-            새로 만들기
-          </Button>
-        </div>
-      )}
-      <Card className="gap-4 p-4">
-        <div className="flex items-center justify-between gap-4">
-          <h2 className="text-sm font-medium">프로젝트 등록</h2>
-          {dialog}
-        </div>
-        <form action={action} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="project-name">이름</Label>
-            <Input
-              id="project-name"
-              name="name"
-              placeholder="dira 자체"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-            {slug && (
-              <p className="font-mono text-xs text-muted-foreground">URL: /p/{slug}</p>
-            )}
-            {err?.code === "name" && <p className="text-xs text-destructive">{err.message}</p>}
-          </div>
-
-          {showId && (
-            <div className="space-y-2">
-              <Label htmlFor="project-id">URL 조각</Label>
-              <Input id="project-id" name="id" className="font-mono" placeholder="dira" />
-              <p className="text-xs text-muted-foreground">
-                {err && (err.code === "needId" || err.code === "badId" || err.code === "dupId")
-                  ? err.message
-                  : "이름에서 URL 조각을 만들 수 없습니다. 직접 정해 주세요 (영문 소문자·숫자·하이픈)."}
-              </p>
+          <h1 className="text-lg font-semibold">{empty ? "dira" : "프로젝트"}</h1>
+          {!empty && (
+            <div className="flex items-center gap-2">
+              <Button size="sm" onClick={() => setRegistering(true)}>
+                프로젝트 등록
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setCreating(true)}>
+                새로 만들기
+              </Button>
             </div>
           )}
+        </div>
+        {empty && (
+          <p className="text-sm text-muted-foreground">
+            등록된 프로젝트가 없습니다. 큐 디렉터리를 등록하면 시작합니다.
+          </p>
+        )}
+      </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="project-root">경로</Label>
-            <Input
-              id="project-root"
-              name="root"
-              className="font-mono"
-              placeholder="~/Projects/myproject/.dira"
-              value={root}
-              onChange={(e) => setRoot(e.target.value)}
-            />
-            <p className="text-xs text-muted-foreground">절대경로. ~는 확장됩니다</p>
+      {children}
+
+      {/* 결과 슬롯 — 등록·생성 어느 쪽으로 성공해도 같은 자리다. 평소엔 아무것도 없다(§비주얼 §7) */}
+      {view && !dismissed ? (
+        <Card className="max-w-3xl gap-3 p-4">
+          <div className="flex items-center justify-between gap-4">
+            <h2 className="text-sm font-medium">
+              {c ? "만들었습니다" : "등록됨"} — {view.project.name}{" "}
+              <span className="font-mono text-xs text-muted-foreground">
+                {view.project.shortRoot}
+              </span>
+            </h2>
+            <div className="flex items-center gap-2">
+              <Button size="sm" nativeButton={false} render={<Link href={`/p/${view.project.id}`} />}>
+                보드 열기
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setDismissed(true)}>
+                닫기
+              </Button>
+            </div>
           </div>
-
-          {err && (err.code === "root" || err.code === "dupRoot" || err.code === "unknown") && (
-            <Alert variant="destructive">
-              <TriangleAlert aria-hidden />
-              <AlertTitle>등록하지 못했습니다</AlertTitle>
-              <AlertDescription>
-                <span className="break-all">{err.message}</span>
-                {err.dup && <Link href={`/p/${err.dup.id}`}>{err.dup.name} 열기</Link>}
-              </AlertDescription>
-            </Alert>
+          {c && (
+            <div className="space-y-1 text-sm">
+              <p>
+                파일 {c.written}개를 만들었습니다.
+                {c.skipped.length > 0 && (
+                  <span className="text-muted-foreground">
+                    {" "}
+                    이미 있어 건너뜀:{" "}
+                    <span className="font-mono text-xs">{c.skipped.join(" ")}</span>
+                  </span>
+                )}
+              </p>
+              <p className="text-muted-foreground">
+                엔진 레포 <span className="font-mono text-xs">{c.repo}</span>
+              </p>
+              {c.cron ? (
+                <p>crontab에 등록됨 — 1분 뒤부터 티켓을 물어갑니다</p>
+              ) : (
+                // 등록 실패는 성공 보고를 막지 않는다(§0-3). 파일은 그대로 두고 명령을 준다.
+                <Alert variant="destructive">
+                  <TriangleAlert aria-hidden />
+                  <AlertTitle>crontab에 등록하지 못했습니다</AlertTitle>
+                  <AlertDescription className="grid gap-2">
+                    <span className="break-all">{c.cronError}</span>
+                    <CopyCommand cmd={c.registerCmd} />
+                  </AlertDescription>
+                </Alert>
+              )}
+            </div>
           )}
+          <ConfigTable view={view} />
+        </Card>
+      ) : (
+        empty && (
+          // 0건 온보딩 — 폼이 1차 콘텐츠다. `새로 만들기`는 설명 한 줄이 붙어야 등록과 갈린다
+          // (§0-3 트리거 두 자리 중 하나. `h1` 우측 자리와 동시에 서지 않는다)
+          <>
+            <div className="flex max-w-3xl items-center justify-between gap-4">
+              <p className="text-sm text-muted-foreground">아직 큐가 없다면 새로 만듭니다.</p>
+              <Button variant="outline" size="sm" onClick={() => setCreating(true)}>
+                새로 만들기
+              </Button>
+            </div>
+            <Card className="max-w-3xl gap-4 p-4">
+              <h2 className="text-sm font-medium">프로젝트 등록</h2>
+              {form}
+            </Card>
+          </>
+        )
+      )}
 
-          <Button type="submit" disabled={pending}>
-            {pending ? "등록 확인 중…" : "프로젝트 등록"}
-          </Button>
-        </form>
-      </Card>
+      {/* 폼은 하나고 그릇만 둘이다 — 0건이면 위 인라인 카드, 아니면 이 다이얼로그다.
+          둘이 동시에 서지 않으므로 필드 `id`가 겹치지 않는다 */}
+      {!empty && (
+        <Dialog open={registering} onOpenChange={setRegistering}>
+          <DialogContent className="sm:max-w-lg">
+            <DialogHeader>
+              <DialogTitle>프로젝트 등록</DialogTitle>
+              <DialogDescription>
+                이미 있는 .dira 큐를 목록에 올립니다. 파일은 만들지 않습니다.
+              </DialogDescription>
+            </DialogHeader>
+            {form}
+          </DialogContent>
+        </Dialog>
+      )}
+
+      <CreateDialog
+        open={creating}
+        onOpenChange={setCreating}
+        onCreated={(s) => {
+          setMade(s);
+          setDismissed(false);
+        }}
+        onRegister={(r) => {
+          setRoot(r);
+          if (!empty) setRegistering(true); // 0건이면 폼이 이미 펼쳐져 있다
+        }}
+      />
     </>
   );
 }
