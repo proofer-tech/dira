@@ -1,0 +1,46 @@
+# 이 레포의 검증 명령 8개를 한 번에 돌린다. 굽지 않는다 — 패키징·서명·공증은 사람이
+# 자기 맥에서 한다(docs/DESIGN.md §CI C3). 큐(`.dira/`)는 gitignore돼 있어 체크아웃에 없다.
+name: CI
+
+# 브랜치 제한 없음 — 워커 브랜치 `wt/<워커>`가 6개 살아 있고 전부 봐야 한다.
+on: [push, pull_request]
+
+jobs:
+  # ponytail: 잡 하나에 8개를 다 넣는다. 잡을 쪼개면 checkout·setup이 3벌이 된다.
+  # 벽시계가 아프면 그때 디렉터리별로 쪼갠다.
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # 엔진 — 의존성 0. ubuntu-latest의 python3를 그대로 쓴다.
+      - run: python3 test_generic.py
+      - run: python3 test_reap_manual.py
+      - run: python3 test_claim_race.py
+      - run: python3 test_feed_stall.py
+      - run: python3 test_inbox.py
+
+      # 루트에 package.json도 워크스페이스도 없다. apps/teams·apps/desktop은
+      # 각자 pnpm-lock.yaml을 가진 독립 프로젝트라 설치도 각각이다.
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 25
+
+      - run: pnpm install
+        working-directory: apps/teams
+      - run: pnpm lint
+        working-directory: apps/teams
+      - run: pnpm test
+        working-directory: apps/teams
+      - run: pnpm build
+        working-directory: apps/teams
+
+      # --ignore-scripts: 여기 테스트는 파일 하나뿐이고 electron을 임포트하지 않는다.
+      # postinstall의 electron 바이너리 내려받기를 건너뛴다.
+      - run: pnpm install --ignore-scripts
+        working-directory: apps/desktop
+      - run: pnpm test
+        working-directory: apps/desktop
