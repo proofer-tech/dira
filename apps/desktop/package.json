@@ -10,6 +10,7 @@
     "build": "cd ../teams && pnpm build && rm -rf .next/standalone/.next/static .next/standalone/public && cp -R .next/static .next/standalone/.next/static && { [ -d public ] && cp -R public .next/standalone/public || true; } && find .next/standalone -type l ! -exec test -e {} \\; -print -delete",
     "start": "electron .",
     "dev": "pnpm build && pnpm start",
+    "test": "node --test \"*.test.ts\"",
     "icns": "./make-icns.sh",
     "signcheck": "./sign-preflight.sh",
     "release": "./release.sh",
@@ -19,7 +20,7 @@
     "appId": "dev.dira.desktop",
     "productName": "dira",
     "directories": { "output": "dist" },
-    "files": ["main.ts", "preload.cjs", "package.json", "trayTemplate.png", "trayTemplate@2x.png", "node_modules/**/*"],
+    "files": ["main.ts", "release-notes.ts", "preload.cjs", "package.json", "trayTemplate.png", "trayTemplate@2x.png", "node_modules/**/*"],
     "asar": false,
     "publish": { "provider": "github", "owner": "<GitHub 계정>", "repo": "<레포 이름>" },
     "extraResources": [

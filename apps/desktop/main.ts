@@ -2,18 +2,19 @@
 // 그 전에 userData로 꺼내 `DIRA_ENGINE`으로 넘긴다, 못박는 것 8), 창이 그것을 열고,
 // 창을 닫아도 메뉴바에 남고(N1), 답변 대기 티켓이 새로 생기면 알리고(N2), 화면이 부르면
 // 네이티브 경로 다이얼로그를 띄우고(N3), 로그인 시 자동 실행을 켜고 끄고(N4), 새 버전을
-// 찾아 받아둔다(U1·U2 — 설치는 다음 실행 때).
-// 스펙: ../../docs/DESIGN.md §데스크톱 앱 ("못박는 것" 1~8, N1~N4) · §릴리스 · 자동 업데이트 (R5·R6·R8).
+// 찾아 받아두고 받은 시점에 릴리즈 노트를 만들어 보여준다(U1·U2·U3 — 설치는 다음 실행 때).
+// 스펙: ../../docs/DESIGN.md §데스크톱 앱 ("못박는 것" 1~8, N1~N4) · §릴리스 · 자동 업데이트 (R5~R8).
 import { app, BrowserWindow, Menu, Notification, Tray, dialog, ipcMain, nativeImage, shell } from "electron";
 // 이름 가져오기(`import { autoUpdater }`)가 아닌 이유: electron-updater는 CJS이고 그 이름을
 // `Object.defineProperty(exports, ...)`의 getter로 단다 — cjs-module-lexer가 못 보는 형태라
 // ESM 이름 가져오기가 `SyntaxError`로 죽는다. 기본 가져오기는 `module.exports` 그 자체다.
 import updater from "electron-updater";
-import { execFileSync, spawn, type ChildProcess } from "node:child_process";
-import { cpSync, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { execFile, execFileSync, spawn, type ChildProcess } from "node:child_process";
+import { accessSync, constants, cpSync, existsSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { releaseNotes } from "./release-notes.ts";
 
 /** 패키징하면 standalone 산출물이 통째로 `Contents/Resources/server/`에 들어간다
  *  (package.json `build.extraResources`). 소스에서 돌 때는 `apps/teams` 옆이다. */
@@ -313,15 +314,72 @@ function autoUpdateFlag(): string {
  *  앱이 죽는다. 다운로드 중 실패도 여기로 온다(그쪽은 await할 자리가 없다). */
 autoUpdater.on("error", (e) => console.error(`[dira] 업데이트 실패: ${e.message}`));
 
+/** `claude`를 **우리가** PATH에서 찾는다 — 셸에게 맡기면 못 찾았을 때 손에 남는 것이 종료 코드
+ *  `127`뿐이고 사람은 그 숫자에서 원인을 못 읽는다. `apps/teams/lib/auth.ts:161`이 §0-4에서
+ *  같은 판단을 적어 놨다(**import하지 않는다 — 앱 경계를 넘는다**). `.app`에는 PATH가 아예
+ *  없어서 물려받은 값이 아니라 `userPath()`를 본다. */
+function findClaude(): string | null {
+  for (const dir of userPath().split(":")) {
+    const p = join(dir, "claude");
+    try {
+      if (!statSync(p).isFile()) continue; // 디렉터리도 X_OK를 통과한다
+      accessSync(p, constants.X_OK);
+      return p;
+    } catch {
+      // 없거나 실행 권한이 없다 — 다음 디렉터리
+    }
+  }
+  return null;
+}
+
+/** compare API가 쓸 `<owner>/<repo>`. **정본은 `build.publish`인데(R1) 패키징된 package.json에
+ *  그 값이 없다** — electron-builder가 `build`·`scripts`·`devDependencies`를 떼고 복사한다
+ *  (실측: 번들의 package.json은 8줄이고 `build`가 없다). 런타임에 남는 것은 그 설정을 푼 결과인
+ *  `app-update.yml`이고, electron-updater 자신이 피드를 읽는 파일도 그것이다.
+ *
+ *  사람이 아직 `owner`/`repo`를 안 채웠으면 자리표시자가 그대로 실려 compare가 404를 준다 —
+ *  그건 경로 ③(노트 없이 R6 문장)이고 다이얼로그는 그래도 뜬다.
+ *  ponytail: 두 값을 정규식으로 집는다. 키 둘 때문에 YAML 파서를 들이지 않는다. */
+function publishSlug(): { owner: string; repo: string } {
+  try {
+    const yml = readFileSync(join(process.resourcesPath, "app-update.yml"), "utf8");
+    const pick = (k: string) => yml.match(new RegExp(`^${k}:\\s*(.+)$`, "m"))?.[1].trim().replace(/^["']|["']$/g, "") ?? "";
+    return { owner: pick("owner"), repo: pick("repo") };
+  } catch (e) {
+    console.error(`[dira] app-update.yml을 못 읽었습니다: ${(e as Error).message}`);
+    return { owner: "", repo: "" }; // → 404 → 경로 ③
+  }
+}
+
+/** R7의 두 인자. 던지는 것이 계약이다 — `releaseNotes()`가 잡아서 경로 ②·③으로 떨어뜨린다. */
+const releaseIo = {
+  async fetchText(url: string) {
+    // 인증 헤더가 없다(R1 공개 레포). User-Agent는 GitHub API가 요구하는 값이라 붙인다.
+    const r = await fetch(url, {
+      headers: { Accept: "application/vnd.github+json", "User-Agent": `dira/${app.getVersion()}` },
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!r.ok) throw new Error(`${r.status} ${r.statusText} — ${url}`);
+    return r.text();
+  },
+  summarize(prompt: string): Promise<string> {
+    const bin = findClaude();
+    if (!bin) return Promise.reject(new Error("PATH에서 claude를 찾지 못했습니다"));
+    return new Promise((resolve, reject) => {
+      // ponytail: 60초. 커밋 제목 20줄 요약에 그보다 오래 걸리면 노트를 기다릴 값이 없다 —
+      // 목록으로 떨어지는 편이 낫다. 죽인 자식은 `-p`라 pty를 안 물어서 남는 것이 없다.
+      execFile(bin, ["-p", prompt], { timeout: 60_000, maxBuffer: 1 << 20 }, (err, stdout) =>
+        err ? reject(err) : resolve(stdout),
+      );
+    });
+  },
+};
+
 // R6 — 다 받으면 사실만 말한다. "지금 재시작" 버튼을 만들지 않는다.
-// ponytail: 릴리즈 노트 본문(R7)은 `e80e2eae`가 이 detail에 붙인다.
-autoUpdater.on("update-downloaded", (info) => {
-  dialog.showMessageBox({
-    type: "info",
-    message: `${info.version}을 받아뒀습니다.`,
-    detail: "앱을 다시 켤 때 적용됩니다.",
-    buttons: ["확인"],
-  });
+// **본문 첫 줄이 R6의 사실이고 노트는 그 아래 붙는다**(R7) — 요약이 죽어도 그 줄은 남는다.
+autoUpdater.on("update-downloaded", async (info) => {
+  const detail = await releaseNotes(app.getVersion(), info.version, publishSlug(), releaseIo);
+  await dialog.showMessageBox({ type: "info", message: `${app.name} ${info.version}`, detail, buttons: ["확인"] });
 });
 
 /** U1(`manual`) · 켤 때와 U2를 켠 직후의 배경 검사(`!manual`).

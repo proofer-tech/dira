@@ -308,6 +308,7 @@ osascript -l JavaScript -e 'ObjC.import("AppKit");var s=$.NSScreen.mainScreen; \
 |---|---|---|
 | U1 | `업데이트 확인…` | 앱 메뉴 `dira`의 `About dira` **바로 아래**. **최신이어도 다이얼로그가 뜬다** — 손으로 누른 명령에 반응이 없으면 사람은 고장으로 읽는다 |
 | U2 | `자동 업데이트` | 트레이 메뉴 체크 항목(N4 옆). 기본 **켜짐**. 끄면 U1만 남는다 |
+| U3 | 릴리즈 노트 | 다 받은 뒤 뜨는 다이얼로그 본문(R7 — 아래 절) |
 
 **몰래 재시작하지 않는다**(R6). `autoInstallOnAppQuit`만 쓰고 지금 설치·재시작시키는 API는
 `main.ts`에 한 번도 안 나온다(`grep -c quitAndInstall main.ts` → `0`). 이 앱 뒤에는 도는 세션과
@@ -326,10 +327,37 @@ N4는 OS가 값을 갖지만(`getLoginItemSettings`) 여기엔 그런 자리가 
 그래서 `build.files`에 `node_modules/**/*`가 있다. electron-builder가 프로덕션 의존성만
 걸러 담아서 `electron`·`electron-builder`는 안 들어간다.
 
+## 릴리즈 노트 — 앱이 받은 시점에 스스로 만든다 (`e80e2eae`)
+
+스펙은 R7이고 코드는 `release-notes.ts` 하나다. **`git log`가 아닌 이유는 받는 맥에 이 레포가
+없어서다** — 번들에 `.git`이 안 들어간다(§못박는 것 8). 원본은 공개 GitHub compare API
+(`/repos/<o>/<r>/compare/v<현재>...v<새것>`)이고 **인증 헤더를 붙이지 않는다**(R1의 공개가 낳는 값).
+요약은 `claude -p`가 한다 — 새 npm 의존성 0개다.
+
+**세 경로 전부에서 다이얼로그가 뜬다.** 요약은 장식이고 본문 첫 줄은 R6의 사실이다.
+
+| | 언제 | 본문 |
+|---|---|---|
+| ① | 요약 성공 | R6 문장 + `claude`의 불릿 요약 |
+| ② | `claude` 부재·비정상 종료·타임아웃(60초) | R6 문장 + **커밋 제목 목록 그대로**(20건 + `…외 N건`) |
+| ③ | compare 실패(네트워크·404·`owner` 자리표시자) | **R6 문장만** |
+
+`releaseNotes()`는 네트워크와 프로세스를 인자로 받고 **절대 던지지 않는다.** 던지면 다이얼로그가
+안 뜨고, 그러면 사람은 업데이트를 받았다는 사실 자체를 모른다. 그 세 경로의 판정이
+`release-notes.test.ts`에 있다 — electron도 GitHub도 `claude`도 없이 돈다:
+
+```
+$ cd apps/desktop && pnpm test
+```
+
+**`owner`/`repo`는 `app-update.yml`에서 읽는다.** 정본은 `build.publish`지만 electron-builder가
+`build`·`scripts`·`devDependencies`를 떼고 package.json을 복사해서 **번들에는 그 값이 없다.**
+사람이 위 §릴리스에 필요한 사람 몫을 아직 안 채웠으면 자리표시자가 그대로 실려 404가 되고,
+그건 경로 ③이다.
+
 ## 여기 아직 없는 것
 
-릴리즈 노트(R7 — 받은 시점에 compare API + `claude -p`로 요약)와 `pnpm release`(R4)는
-아직 없다. 각각 `e80e2eae` · `5ab56e03`이다. 지금 U1이 받은 뒤 띄우는 것은 R6 문장 한 줄뿐이다.
+`pnpm release`(R4)가 아직 없다 — `5ab56e03`이다.
 
 서명·공증은 **끝났다**(`5aa9486d`) — `.app`·`.dmg` 둘 다 `Developer ID Application: Hansol Lim
 (L9E4Y653DY)`으로 서명·공증·스테이플되고 `spctl`이 둘 다 `accepted`다.
