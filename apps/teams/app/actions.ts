@@ -9,7 +9,16 @@
 import { homedir } from "node:os";
 import path from "node:path";
 import { revalidatePath } from "next/cache";
-import { normalizeToken, readAuth, saveToken } from "@/lib/auth";
+import {
+  normalizeToken,
+  pollSetup,
+  readAuth,
+  saveToken,
+  sendSetupCode,
+  startSetup,
+  stopSetup,
+  type SetupState,
+} from "@/lib/auth";
 import {
   ProjectError,
   addProject,
@@ -292,6 +301,37 @@ export async function saveTokenAction(raw: string): Promise<{ savedAt?: string; 
   // 셸 배너(`p/[project]/layout.tsx`)가 이 판정으로 뜬다 — 레이아웃까지 무효화한다
   revalidatePath("/", "layout");
   return { savedAt: (await readAuth()).savedAt ?? undefined };
+}
+
+/** 인증 다이얼로그 층 ② — `claude setup-token`을 GUI가 pty로 몬다(DESIGN.md §0-4).
+ *
+ *  **OAuth를 직접 구현하지 않는다.** 공식 CLI가 이미 그 일을 하고, 다시 짜면 문서화되지 않은
+ *  엔드포인트에 제품이 묶인다. 여기 넷은 `lib/auth.ts`의 드라이버를 그대로 노출할 뿐이고,
+ *  **저장은 층 ③과 같은 `saveToken()`이 한다** — 저장 경로가 두 벌이 되지 않는다.
+ *
+ *  진행 상황은 폴링이다(§아키텍처 상태 갱신 — 이 앱에 소켓은 없다. 세션 스트림과 같은 방식). */
+export async function startSetupAction(): Promise<SetupState> {
+  return startSetup();
+}
+
+export async function pollSetupAction(): Promise<SetupState> {
+  const s = pollSetup();
+  // 토큰이 놓이면 `/`의 버튼 라벨과 프로젝트 셸의 배너가 같이 꺼진다. 클라이언트가 done을 보면
+  // 폴링을 멈추므로 이 무효화는 사실상 한 번이다
+  if (s.savedAt) revalidatePath("/", "layout");
+  return s;
+}
+
+/** 승인 뒤 브라우저가 주는 코드를 CLI에 넣는다. **실측(2.1.220)에서 이 단계가 있다** —
+ *  마지막 화면이 `Paste code here if prompted >`이고, 넣지 않으면 CLI가 거기서 멈춘다. */
+export async function sendSetupCodeAction(code: string): Promise<SetupState> {
+  return sendSetupCode(code);
+}
+
+/** 다이얼로그를 닫으면 부른다. **자식을 남기지 않는다** — 살아남은 `setup-token`은 pty를 물고
+ *  사람의 다음 시도를 막는다(§0-4). */
+export async function stopSetupAction(): Promise<void> {
+  stopSetup();
 }
 
 /** 설정 다이얼로그의 `다시 읽기` — 워커 파일이 바뀌었을 수 있다. */

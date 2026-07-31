@@ -5,7 +5,7 @@
  *
  *  한 파일에 있는 이유: 해석 결과 표를 등록 직후와 설정 다이얼로그가 **같은 표**로 쓴다
  *  (DESIGN.md §7). 파일을 쪼개면 두 자리가 갈린다. fs 접근은 전부 서버 액션 뒤에 있다. */
-import { Fragment, useState, useTransition } from "react";
+import { Fragment, useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { ChevronDown, ChevronUp, Settings2, TriangleAlert, Unlink } from "lucide-react";
 import {
@@ -15,11 +15,16 @@ import {
   renameProjectAction,
   resolveProjectAction,
   saveTokenAction,
+  sendSetupCodeAction,
+  startSetupAction,
+  pollSetupAction,
+  stopSetupAction,
   unregisterProjectAction,
   type CreateState,
   type RegisterState,
   type ResolvedView,
 } from "@/app/actions";
+import type { SetupState } from "@/lib/auth";
 import { CopyCommand } from "@/components/copy-command";
 import { PersonaBadge } from "@/components/persona-badge";
 import { StatusBadge, type Status } from "@/components/status-badge";
@@ -349,8 +354,18 @@ function AuthDialog({
   const [pending, start] = useTransition();
   const [token, setToken] = useState("");
   const [result, setResult] = useState<{ savedAt?: string; error?: string }>({});
-  // 저장 직후엔 서버 프롭이 아직 옛 값이다 — 방금 쓴 것이 이긴다
-  const savedAt = result.savedAt ?? auth.savedAt;
+  const [setup, setSetup] = useState<SetupState | null>(null);
+  const [code, setCode] = useState("");
+  // 저장 직후엔 서버 프롭이 아직 옛 값이다 — 방금 쓴 것이 이긴다(층 ②·③ 어느 쪽이든)
+  const savedAt = setup?.savedAt ?? result.savedAt ?? auth.savedAt;
+
+  // 진행 로그는 폴링으로 받는다 — 이 앱에 소켓은 없다(세션 스트림과 같은 방식).
+  // 돌고 있을 때만 돈다: `running`이 꺼지면 effect가 정리되고 폴링이 멈춘다
+  useEffect(() => {
+    if (!setup?.running) return;
+    const id = setInterval(async () => setSetup(await pollSetupAction()), 1000);
+    return () => clearInterval(id);
+  }, [setup?.running]);
 
   return (
     <Dialog
@@ -360,6 +375,10 @@ function AuthDialog({
         if (!o) {
           setToken("");
           setResult({});
+          setCode("");
+          setSetup(null);
+          // 닫으면 죽인다 — 살아남은 `setup-token`은 pty를 물고 다음 시도를 막는다(§0-4)
+          void stopSetupAction();
         }
       }}
     >
@@ -385,6 +404,80 @@ function AuthDialog({
             인증 안 됨 — 워커가 티켓을 물어가지 않습니다
           </p>
         )}
+
+        {/* ② 발급 — CLI에게 터미널을 대신 내어 준다 */}
+        <div className="space-y-2 border-t pt-4">
+          <div className="flex items-center justify-between gap-4">
+            <Label>브라우저로 인증</Label>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={setup?.running}
+              onClick={() => start(async () => setSetup(await startSetupAction()))}
+            >
+              {setup?.running ? "진행 중…" : setup ? "다시 시도" : "브라우저로 인증하기"}
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            claude setup-token을 대신 실행합니다. 새 탭에서 승인한 뒤 받은 코드를 여기에 붙여
+            넣으면 토큰이 제자리에 저장됩니다.
+          </p>
+
+          {setup && setup.lines.length > 0 && (
+            // 원문 그대로 흘리면 `Opening[12Gbrowser[20Gto`가 뜬다 — 서버가 escape를 걷어낸
+            // 뒤 사람이 읽을 줄만 넘긴다(§0-4)
+            <div className="max-h-40 overflow-y-auto rounded-md border bg-muted/40 p-2">
+              {setup.lines.map((l, i) => (
+                <p key={i} className="font-mono text-xs break-all text-muted-foreground">
+                  {l}
+                </p>
+              ))}
+            </div>
+          )}
+
+          {/* CLI가 코드를 기다린다(실측: `Paste code here if prompted`). 이 입력이 그 통로다 —
+              프롬프트 문구로 감지하지 않는다: 남의 TUI 문구는 바뀌고, 안 쓰면 그만인 칸이다 */}
+          {setup?.running && (
+            <form
+              className="flex items-center gap-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                start(async () => {
+                  setSetup(await sendSetupCodeAction(code));
+                  setCode("");
+                });
+              }}
+            >
+              <Input
+                className="font-mono"
+                placeholder="브라우저에서 받은 코드"
+                autoComplete="off"
+                spellCheck={false}
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+              />
+              <Button type="submit" variant="outline" disabled={!code.trim()}>
+                코드 보내기
+              </Button>
+            </form>
+          )}
+
+          {/* 조용히 실패하지 않는다 — 사유 원문 + 다음 행동(§비주얼 §6 에러 3요소).
+              층 ③은 바로 아래 그대로 서 있다: 이 폴백이 제품의 바닥이다(§0-4 천장 항) */}
+          {setup?.error && (
+            <Alert variant="destructive">
+              <TriangleAlert aria-hidden />
+              <AlertTitle>토큰을 받지 못했습니다</AlertTitle>
+              <AlertDescription className="grid gap-1">
+<span>{setup.error}</span>
+                {/* 원인 원문은 위 진행 로그가 이미 그대로 담고 있다 — 여기 문장을 `font-mono`로
+                    쓰지 않는다(§비주얼 §3). 다음 행동은 `다시 시도`와 아래 층 ③ 둘이다 */}
+                <span>&quot;직접 넣기&quot;에 이미 발급받은 토큰을 붙여 넣어도 됩니다.</span>
+              </AlertDescription>
+            </Alert>
+          )}
+          {setup?.savedAt && <p className="text-xs">토큰을 받아 저장했습니다.</p>}
+        </div>
 
         {/* ③ 직접 넣기 */}
         <form

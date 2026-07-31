@@ -46,8 +46,11 @@ apps/teams/
     transcript.ts       세션 스트림(§2-1) 읽기 코어. 트랜스크립트 경로 찾기 · 바이트 오프셋 테일 ·
                         jsonl 레코드 → 사건 매핑. **root 밖(`~/.claude/projects`)을 읽는 유일한 곳** —
                         방어는 `session_id` UUID 정규식 하나다(사람 입력을 받지 않는다)
-    auth.ts             Claude 장기 토큰 경로·상태·저장 (DESIGN.md §0-4). 엔진 계약을 **따라 쓸
-                        뿐**이다(`tick.sh:52-54` — 개행 없는 한 줄 · 0600). `.authwarn`은 안 건드린다
+    auth.ts             Claude 장기 토큰 경로·상태·저장 + `claude setup-token` pty 드라이버
+                        (DESIGN.md §0-4). 엔진 계약을 **따라 쓸 뿐**이다(`tick.sh:52-54` —
+                        개행 없는 한 줄 · 0600). `.authwarn`은 안 건드린다. 드라이버는 `script`로
+                        pty를 주고(네이티브 모듈 0) 세션이 하나뿐인 모듈 상태다 — 왜 `cat |`이고
+                        왜 종료를 pty 안 표식으로 아는지는 그 파일 주석에 실측과 함께 있다
     utils.ts            shadcn cn() — 건드리지 않는다
     *.test.ts           node --test
   components/           손으로 만드는 컴포넌트 (DESIGN.md §5 커스텀)
