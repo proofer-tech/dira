@@ -75,6 +75,10 @@ export type StreamChunk = {
    *  이 폴링에 얹는 이유는 매 2초 서버가 티켓 fm을 이미 읽고 있기 때문이다 — 화면이 같은 사실을
    *  다른 요청으로 또 묻지 않는다. 나가는 것은 **불리언 하나**고 경로는 안 나간다. */
   inbox: boolean;
+  /** 티켓이 `.done`인가 — 폼의 **모드**를 고르는 비트다(§비주얼 §21 `어느 폼을 그리나`).
+   *  `live` 하나로는 안 갈린다: `.done`과 열림이 **둘 다 `live === false`**이고 열림엔 이 입구가
+   *  없다(§2-2 안 만드는 것 3). `inbox`와 같은 이유로 이 응답에 얹는다 — 상태는 이미 읽었다. */
+  done: boolean;
 };
 
 /** 세션 스트림 폴링 (DESIGN.md §2-1 · §9). 클라이언트가 `offset`을 들고 오면 **그 뒤에 붙은
@@ -100,12 +104,13 @@ export async function tailSession(
     const t = await target(projectId, stem);
     const live = t.state === "wip";
     const inbox = t.inbox;
-    if (!t.sessionId) return { events: [], offset: at, live, inbox };
+    const done = t.state === "done";
+    if (!t.sessionId) return { events: [], offset: at, live, inbox, done };
     const file = await findTranscript(t.sessionId);
-    if (!file) return { events: [], offset: at, live, inbox };
-    return { ...(await tailEvents(file, at)), live, inbox };
+    if (!file) return { events: [], offset: at, live, inbox, done };
+    return { ...(await tailEvents(file, at)), live, inbox, done };
   } catch {
-    return { events: [], offset: at, live: false, inbox: false };
+    return { events: [], offset: at, live: false, inbox: false, done: false };
   }
 }
 

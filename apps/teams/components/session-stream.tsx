@@ -9,8 +9,9 @@
  *  읽기·파싱은 전부 `lib/transcript.ts`고 여기는 그리기만 한다. 접기는 네이티브 `<details>`,
  *  툴팁은 네이티브 `title`, 스크롤도 네이티브 — shadcn은 `button`과 `marker` 둘뿐이다(§5). */
 import { useEffect, useId, useRef, useState } from "react";
-import { ArrowDown, ChevronRight, Send, TriangleAlert } from "lucide-react";
-import { sendInterject, tailSession } from "@/app/p/[project]/tickets/[hash]/actions";
+import { useRouter } from "next/navigation";
+import { ArrowDown, ChevronRight, FilePlus2, Send, TriangleAlert } from "lucide-react";
+import { sendFollowup, sendInterject, tailSession } from "@/app/p/[project]/tickets/[hash]/actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,9 +21,10 @@ import {
   InputGroupTextarea,
 } from "@/components/ui/input-group";
 import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/marker";
+import type { FollowupReason } from "@/lib/followup";
 import type { InterjectReason } from "@/lib/interject";
 import type { StreamEvent } from "@/lib/transcript";
-import { expandable } from "@/lib/urls";
+import { expandable, interjectMode, type InterjectMode } from "@/lib/urls";
 import { cn } from "@/lib/utils";
 
 /** 레코드의 `timestamp`는 UTC다 — **로컬 시간으로 렌더한다**(§2-1: `13:55:10Z` = KST `22:55:10`).
@@ -49,6 +51,7 @@ export function SessionStream({
   const [events, setEvents] = useState<StreamEvent[]>([]);
   const [live, setLive] = useState(initialLive);
   const [inbox, setInbox] = useState<boolean | null>(null); // null = 첫 폴링이 아직 안 왔다
+  const [done, setDone] = useState(false); // 티켓이 `.done`인가 — 폼의 모드다(§21)
   const [detached, setDetached] = useState(false); // 바닥에서 떨어졌다 = 자동 스크롤 안 한다
   const offset = useRef(0);
   const box = useRef<HTMLDivElement>(null);
@@ -64,6 +67,7 @@ export function SessionStream({
       offset.current = r.offset;
       if (r.events.length) setEvents((prev) => [...prev, ...r.events]);
       setInbox(r.inbox); // 참견 폼의 활성 판정(§2-2) — 서버가 매 폴링마다 fm에서 다시 읽는다
+      setDone(r.done); // 폼의 모드(§21) — `.wip`이 `.done`이 되는 그 폴링에서 칸이 이어받기가 된다
       if (!r.live) {
         setLive(false);
         clearInterval(timer);
@@ -143,7 +147,7 @@ export function SessionStream({
           워커 다이얼로그가 같은 폼을 그린다(§2-1 Q2=(a)). 항상 마운트해 두고 그릴지 말지는
           컴포넌트가 스스로 판정한다 — 조건을 바깥에 두면 `live`가 내려가는 순간(2초 폴링) 실패
           사유와 사람이 쓴 글이 언마운트로 같이 증발한다(§21 예외 항). */}
-      <Interject project={project} stem={stem} live={live} inbox={inbox} />
+      <Interject project={project} stem={stem} live={live} inbox={inbox} done={done} />
     </div>
   );
 }
@@ -170,42 +174,79 @@ const FAIL: Record<InterjectReason, { title: string; next?: string }> = {
   other: { title: "보내지 못했습니다" },
 };
 
+/** 완료 모드(이어받기)의 실패 2종 — §비주얼 §21 `완료 모드` 실패 표.
+ *  **`보내지 못했습니다`로 시작하지 않는다**: 두 모드의 Alert가 같은 문장이면 스크린샷 한 장으로
+ *  어느 칸에서 난 실패인지 가리지 못한다. 모드 어긋남에 `새로고침`을 적는 이유는 완료 티켓의
+ *  폴링이 1회에 멈춰서다(§2-1) — 화면이 스스로 모드를 고쳐 잡지 않는다. */
+const FAIL_DONE: Record<FollowupReason, { title: string; next?: string }> = {
+  "not-done": {
+    title: "발행하지 못했습니다 — 완료 티켓이 아닙니다",
+    next: "이어받기는 완료 티켓의 것입니다. 새로고침하고 다시 보세요 — 도는 세션이면 이 칸이 참견으로 바뀝니다.",
+  },
+  other: {
+    title: "발행하지 못했습니다",
+    next: "위 글을 복사해 보드에서 발행하세요.",
+  },
+};
+
 /** 참견 입력 form (DESIGN.md §2-2 · §비주얼 §21). 읽기만 하던 이 화면에 처음 생기는 쓰는 자리다.
+ *
+ *  **같은 칸이 모드가 둘이다**(요구 `8050f011`): `.wip`이면 **참견** — 도는 세션의 FIFO로 간다.
+ *  `.done`이면 **이어받기** — 새 열린 티켓 1장이 생기고 화면이 그 상세로 간다. 갈리는 것은
+ *  이름 셋(라벨·placeholder·버튼)과 보낸 뒤뿐이고, 그릇·키(`⌘↵`)·절 높이는 하나다(§21 완료 모드).
  *
  *  **낙관적 에코를 그리지 않는다.** 보낸 문장은 다음 폴링(2초)의 `queue-operation` `enqueue` 줄로
  *  위 상자에 돌아온다(§2-2 "도착 확인은 스트림이 한다"). 여기서 말풍선을 먼저 그리면 엔진이 못
  *  받았을 때 화면이 거짓말을 한다 — 그래서 이 컴포넌트는 `events`를 만들지 않는다.
+ *  완료 모드에는 그 자리가 아예 없다: 끝난 트랜스크립트는 더 자라지 않고 **확인은 내비게이션**이다.
  *
- *  상태도 `inbox`도 **서버가 매번 다시 판정한다**(`lib/interject.ts`). 여기 있는 `live`·`inbox`는
- *  그릴지 말지에만 쓰고 보내도 되는지의 근거로 쓰지 않는다 — 2초 사이에 세션이 끝난다. */
+ *  상태도 `inbox`도 **서버가 매번 다시 판정한다**(`lib/interject.ts` · `lib/followup.ts`).
+ *  여기 있는 `live`·`inbox`·`done`은 **그릴 것을 고르는 데만** 쓰고 보내도 되는지의 근거로 쓰지
+ *  않는다 — 2초 사이에 세션이 끝난다. 모드가 어긋나면 서버가 조용히 바꾸지 않고 실패 + 사유다. */
 function Interject({
   project,
   stem,
   live,
   inbox,
+  done,
 }: {
   project: string;
   stem: string;
   live: boolean;
   inbox: boolean | null;
+  done: boolean;
 }) {
+  const router = useRouter();
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
-  const [fail, setFail] = useState<{ reason: InterjectReason; detail: string } | null>(null);
+  // 사유 코드가 아니라 **고른 문구 + 그때의 모드**를 든다: 두 모드의 표가 다르고
+  // (`InterjectReason` / `FollowupReason`), 실패는 그것이 난 모드의 것이다.
+  const [fail, setFail] = useState<{
+    mode: InterjectMode;
+    title: string;
+    next?: string;
+    detail: string;
+  } | null>(null);
   const input = useRef<HTMLTextAreaElement>(null);
   // 티켓 stem을 id로 쓰지 않는다 — 파일명에서 온 값이라 공백이 섞이면 `aria-describedby`가 끊긴다.
   const offId = useId();
 
-  // `live`가 아니면 폼이 없다(§2-2) — `.done` 리플레이에는 보낼 곳이 없다. **예외 하나**: 마지막
-  // 제출이 실패했으면 남는다. `ENXIO`는 세션이 끝나서 나는 실패라 다음 폴링이 곧 `live`를 내리고,
-  // 그때 폼이 사라지면 방금 실패한 사유와 사람이 쓴 글이 같이 증발한다(§21).
-  // `inbox === null`은 첫 폴링 전이다 — 아직 모르는 것을 `참견을 받지 못합니다`로 그리지 않는다
-  // (한 번 깜빡이고 마는 그 문장이 §21 비활성 항의 사유와 구분이 안 된다).
-  if (inbox === null || (!live && !fail)) return null;
+  // 어느 폼을 그리나 — 판정은 `lib/urls.ts` 하나다(§21 표 4행 + 예외 둘. 그 파일에 검증이 있다).
+  const mode = interjectMode({ polled: inbox !== null, live, done, failed: !!fail });
+  if (!mode) return null;
 
-  const closed = !live; // 세션이 끝났고 실패가 남아 있다 = 읽기 전용 잔해
-  const off = !inbox; // 입구가 없다 = 그릇 통째로 비활성(§21)
+  // **모드가 갈리면 쓴 글은 남기고 실패 Alert만 지운다**(§21). `ENXIO`의 다음 행동이 `위 글을
+  // 복사해 새 티켓으로 지시하세요`인데 그 순간 같은 칸이 바로 그 일을 하는 칸이 된다 — 글을
+  // 지우면 사람이 방금 읽은 안내를 따를 수단을 화면이 빼앗는다. Alert는 사유가 더 이상 참이
+  // 아니라 사라진다(세션이 끝난 것이 이제 실패가 아니다). 지우는 효과를 걸지 않고 **실패에
+  // 모드를 달아** 그리는 자리에서 거른다 — 상태를 고치는 효과는 렌더를 한 번 더 돌린다.
+  const shown = fail?.mode === mode ? fail : null;
+
+  const followup = mode === "followup";
+  const closed = !followup && !live; // 세션이 끝났고 실패가 남아 있다 = 읽기 전용 잔해
+  // 완료 모드는 `inbox`를 아예 안 본다 — 보내는 곳이 FIFO가 아니라 새 파일이다(§21).
+  const off = !followup && !inbox; // 입구가 없다 = 그릇 통째로 비활성(§21)
   const empty = !text.trim();
 
   const send = async () => {
@@ -213,18 +254,29 @@ function Interject({
     setSending(true);
     setSent(false);
     setFail(null);
-    const r = await sendInterject(project, stem, text);
-    setSending(false);
-    if (r.ok) {
-      setText("");
-      setSent(true);
+    if (followup) {
+      const r = await sendFollowup(project, stem, text);
+      if (r.ok) {
+        // 성공에는 확인이 끼지 않는다 — **내비게이션이 확인이다**(§21 · §3 발행과 같은 길).
+        // `sending`을 안 내리는 것이 이동 전 두 번째 클릭을 막는 유일한 관문이다(티켓 2장).
+        // 포커스도 되돌리지 않는다 — 이 폼은 곧 언마운트된다(새 티켓은 열림이라 스트림 절이 없다).
+        router.push(`/p/${project}/tickets/${encodeURIComponent(r.stem)}`);
+        return;
+      }
+      setSending(false);
+      setFail({ mode, ...FAIL_DONE[r.reason], detail: r.detail });
     } else {
-      setFail({ reason: r.reason, detail: r.detail });
+      const r = await sendInterject(project, stem, text);
+      setSending(false);
+      if (r.ok) {
+        setText("");
+        setSent(true);
+      } else {
+        setFail({ mode, ...FAIL[r.reason], detail: r.detail });
+      }
     }
-    input.current?.focus(); // 참견은 연달아 하게 된다(§21 포커스 항)
+    input.current?.focus(); // 참견은 연달아 하게 되고, 실패는 두 모드 다 이 칸으로 돌아온다(§21)
   };
-
-  const c = fail ? FAIL[fail.reason] : null;
 
   return (
     <form
@@ -237,9 +289,11 @@ function Interject({
       <InputGroup>
         <InputGroupTextarea
           ref={input}
-          aria-label="참견"
+          // 이름 셋이 보내기 **전에** 두 모드를 가른다(§21 완료 모드) — `참견`·`보내기`만으로는
+          // 파일 한 장이 생긴다는 것을 감춘다.
+          aria-label={followup ? "이어받기" : "참견"}
           aria-describedby={off ? offId : undefined}
-          placeholder="도는 세션에 말 걸기"
+          placeholder={followup ? "이어서 무엇을 할지 쓰기" : "도는 세션에 말 걸기"}
           className="max-h-32"
           value={text}
           // 세션이 끝난 뒤 남은 폼은 `readOnly`다. `disabled`면 사람이 쓴 글을 선택·복사할 수 없다
@@ -261,8 +315,15 @@ function Interject({
         />
         {!closed && (
           <InputGroupAddon align="block-end">
-            {sent && (
-              <span className="min-w-0 truncate text-xs">보냈습니다 · 아래 스트림에 뜹니다</span>
+            {/* 같은 슬롯을 두 모드가 나눠 쓴다(§21): `live`는 성공 뒤 한 번, 완료 모드는 **상시**
+                무엇이 몇 장 생기는지. 완료 모드에는 성공 문구가 없어서(페이지가 이동한다)
+                비어 있는 자리를 쓰는 것이고 요소가 늘지 않는다 — 절 높이 692가 그대로다. */}
+            {followup ? (
+              <span className="min-w-0 truncate text-xs">새 열린 티켓 1장이 생깁니다</span>
+            ) : (
+              sent && (
+                <span className="min-w-0 truncate text-xs">보냈습니다 · 아래 스트림에 뜹니다</span>
+              )
             )}
             {/* `bg-muted`를 깔지 않는다 — `--muted-foreground`가 라이트 4.34로 AA 미달이다(§21 · §1
                 함정). 반경은 addon이 이미 준다(`[&>kbd]:rounded-…`). `ml-auto`가 여기 걸려서
@@ -280,8 +341,17 @@ function Interject({
               aria-disabled={off || sending || empty}
               className="aria-disabled:opacity-50"
             >
-              <Send aria-hidden />
-              {sending ? "보내는 중…" : "보내기"}
+              {/* `FilePlus2`는 프로토콜의 `새 파일`이 이미 쓰는 것이라 이 앱에서 "파일 한 장이
+                  생긴다"를 이미 뜻한다(§21 — 셋째 아이콘을 고르면 뜻을 처음부터 가르쳐야 한다).
+                  `발행`도 새 동사가 아니다: 보드의 `티켓 발행`(§3)이 그 낱말의 임자다. */}
+              {followup ? <FilePlus2 aria-hidden /> : <Send aria-hidden />}
+              {followup
+                ? sending
+                  ? "발행 중…"
+                  : "이어서 발행"
+                : sending
+                  ? "보내는 중…"
+                  : "보내기"}
             </InputGroupButton>
           </InputGroupAddon>
         )}
@@ -296,14 +366,15 @@ function Interject({
       )}
 
       {/* 실패는 사유를 삼키지 않는다(§6 2번). 제목·mono 원문·**다음 행동** 3요소이고, 다음 행동이
-          `한 번 더 보내기`(ENOENT)와 `새 티켓으로 지시`(나머지)로 갈리는 것이 넷을 안 뭉치는 이유다. */}
-      {fail && c && (
+          `한 번 더 보내기`(ENOENT)와 `새 티켓으로 지시`(나머지)로 갈리는 것이 넷을 안 뭉치는 이유다.
+          완료 모드도 같은 그릇·같은 자리이고 문구만 `FAIL_DONE`에서 온다(§21 완료 모드 실패 표). */}
+      {shown && (
         <Alert variant="destructive">
           <TriangleAlert aria-hidden />
-          <AlertTitle>{c.title}</AlertTitle>
+          <AlertTitle>{shown.title}</AlertTitle>
           <AlertDescription>
-            <span className="block font-mono text-xs break-all">{fail.detail}</span>
-            {c.next && <span className="block text-xs">{c.next}</span>}
+            <span className="block font-mono text-xs break-all">{shown.detail}</span>
+            {shown.next && <span className="block text-xs">{shown.next}</span>}
           </AlertDescription>
         </Alert>
       )}

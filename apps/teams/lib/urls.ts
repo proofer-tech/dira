@@ -57,6 +57,33 @@ export const elapsedSuffix = (days?: number) => (days ? ` · ${days}일` : "");
  *  `elapsedSuffix`와 같은 이유로 여기 산다 — `pnpm test`가 JSX를 못 읽고, 스트림은 클라이언트다. */
 export const expandable = (e: { body: string }) => e.body !== "";
 
+/** 스트림 아래 입력 form의 **모드** (§비주얼 §21 `어느 폼을 그리나`). 같은 칸이 티켓 상태에 따라
+ *  둘로 갈린다: `.wip`이면 `참견`(도는 세션에 말이 간다), `.done`이면 `이어받기`(새 열린 티켓
+ *  1장이 생긴다). 열림에는 이 입구가 없다(§2-2 안 만드는 것 3).
+ *
+ *  **`live` 하나로는 안 갈린다** — `.done`과 열림이 둘 다 `live === false`다. 그래서 폴링이
+ *  `done` 비트를 같이 들고 온다(`tailSession`).
+ *
+ *  두 예외가 이 함수의 전부다:
+ *  - `polled`가 아니면 아직 모른다 — 첫 폴링 전에 그리면 `참견을 받지 못합니다`가 한 번 깜빡인다.
+ *  - **`failed`면 `live`가 내려가도 `참견`이 남는다.** `ENXIO`는 세션이 끝나서 나는 실패라
+ *    다음 폴링이 곧 `live`를 내리고, 그때 폼이 사라지면 방금 실패한 사유와 사람이 쓴 글이 같이
+ *    증발한다(§21 예외 항). `.done`이 되면 그쪽이 이긴다 — 실패 Alert만 지우고 글은 남긴다.
+ *
+ *  `elapsedSuffix`와 같은 이유로 JSX가 아니라 여기 산다(`pnpm test`가 JSX를 못 읽는다). */
+export type InterjectMode = "interject" | "followup" | null;
+
+export function interjectMode(s: {
+  polled: boolean;
+  live: boolean;
+  done: boolean;
+  failed: boolean;
+}): InterjectMode {
+  if (!s.polled) return null;
+  if (s.done) return "followup";
+  return s.live || s.failed ? "interject" : null;
+}
+
 /** 페르소나 색 팔레트 키 (DESIGN.md §비주얼 §12). 레지스트리에 이 문자열 그대로 저장된다.
  *  **자유 hex가 아니라 고정 8색인 이유**는 §5에 있다 — 라이트/다크 두 벌과 대비를 사람이
  *  즉석에서 못 맞춘다. 서버(레지스트리 쓰기 검증)와 클라이언트(스와치 목록)가 같은 목록을

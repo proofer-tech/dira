@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { relationPath, type Anchor } from "./urls.ts";
+import { interjectMode, relationPath, type Anchor } from "./urls.ts";
 
 /** 칸반 호버 관계선 기하 (DESIGN.md §비주얼 §17). 레인이 하한 폭 288(`min-w-72`)까지
  *  좁아진 배치다 — 카드는 280폭, 카드 테두리 사이 거터는 24다. 레인은 `flex-1`이라 보통은
@@ -44,4 +44,36 @@ test("relationPath — 제어점의 y가 앵커의 y와 같다(선이 레인 머
     .map(Number);
   assert.equal(c1y, 120);
   assert.equal(c2y, 480);
+});
+
+/** 스트림 아래 입력 form의 모드 (DESIGN.md §비주얼 §21 `어느 폼을 그리나` 표 + 예외 둘).
+ *  JSX 안에서 이 판정이 갈리면 완료 티켓에서 참견을 보내거나(닿을 곳이 없다) 열린 티켓에
+ *  없어야 할 입구가 선다 — 그래서 판정만 순수 함수로 나와 있다. */
+const m = (o: Partial<Parameters<typeof interjectMode>[0]>) =>
+  interjectMode({ polled: true, live: false, done: false, failed: false, ...o });
+
+test("interjectMode — 티켓 상태가 폼을 가른다(§21 표 3행)", () => {
+  assert.equal(m({ live: true }), "interject"); // `.wip`
+  assert.equal(m({ done: true }), "followup"); // `.done`
+  assert.equal(m({}), null); // 열림 — 이 입구가 없다(§2-2 안 만드는 것 3)
+});
+
+test("interjectMode — 첫 폴링 전에는 아무것도 안 그린다", () => {
+  // `live`를 서버가 넘겨준 뒤에도 `.done`인지는 첫 폴링이 온 뒤에 안다. 먼저 그리면
+  // 완료 티켓에서 `참견` 폼이 한 번 깜빡였다가 `이어받기`로 바뀐다.
+  assert.equal(m({ polled: false, live: true }), null);
+  assert.equal(m({ polled: false, done: true }), null);
+});
+
+test("interjectMode — 실패가 남아 있으면 `live`가 내려가도 폼이 남는다(§21 예외)", () => {
+  // `ENXIO`는 세션이 끝나서 나는 실패다 — 다음 폴링이 곧 `live`를 내린다. 그때 사라지면
+  // 방금 실패한 사유와 사람이 쓴 글이 같이 증발한다.
+  assert.equal(m({ live: false, failed: true }), "interject");
+  assert.equal(m({ live: false, failed: false }), null);
+});
+
+test("interjectMode — `.done`이 실패 잔해를 이긴다(글은 남고 Alert만 지운다)", () => {
+  // `.wip` → `.done`으로 굳는 그 폴링. 읽기 전용 잔해가 아니라 **보낼 수 있는 이어받기 칸**이다 —
+  // `ENXIO`의 다음 행동(`위 글을 복사해 새 티켓으로`)을 같은 칸이 바로 할 수 있게 된다.
+  assert.equal(m({ done: true, failed: true }), "followup");
 });
