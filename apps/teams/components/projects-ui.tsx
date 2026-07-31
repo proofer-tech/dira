@@ -269,7 +269,9 @@ function CreateDialog({
           <div className="space-y-2">
             <Label htmlFor="create-spec">스펙 문서</Label>
             <Input id="create-spec" name="spec" className="font-mono" placeholder="docs/DESIGN.md" />
-            <p className="text-xs text-muted-foreground">선택. 비우면 프로토콜 지도의 그 줄을 비워 둡니다</p>
+            <p className="text-xs text-muted-foreground">
+              선택. 비우면 그 줄(AGENTS.md 지도 표 한 행)을 자리표시자 그대로 둡니다
+            </p>
           </div>
 
           {/* `.dira`가 이미 있다 — 만들지 않았다. 큐면 등록으로 보낸다(§0-3 표) */}
