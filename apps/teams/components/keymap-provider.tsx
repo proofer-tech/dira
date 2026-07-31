@@ -19,7 +19,12 @@ import { defaultBindings, shouldFire, type ActionId, type Keymap } from "@/lib/k
 
 /** 기본값은 Provider 밖에서도 화면이 키를 그릴 수 있게 하는 안전망이다(레이아웃이 늘 감싸므로
  *  실제로 쓰일 일은 없다). `broken`은 여기서 거짓말하지 않는다 — 파일을 못 읽은 것이 아니다. */
-const KeymapContext = createContext<Keymap>({ bindings: defaultBindings(), broken: false });
+// `path`가 빈 문자열인 것은 거짓말이 아니다 — 그리는 자리가 `broken`일 때뿐이고 여긴 false다
+const KeymapContext = createContext<Keymap>({
+  bindings: defaultBindings(),
+  broken: false,
+  path: "",
+});
 
 export function KeymapProvider({
   keymap,

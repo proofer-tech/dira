@@ -9,7 +9,7 @@ import { DEFAULT_KEYMAP, defaultBindings, type Bindings, type Keymap } from "./k
 import { NAME_RE, PROJECT_ID_RE, expandHome, resolveWithin, shellPath, shellValue } from "./paths.ts";
 import { listTickets, statusOf, type Ticket } from "./queue.ts";
 import { listWorkers, type Worker } from "./workers.ts";
-import { PERSONA_COLORS, slugify } from "./urls.ts";
+import { PERSONA_COLORS, slugify, tildePath } from "./urls.ts";
 
 export { slugify };
 
@@ -69,33 +69,44 @@ export function keymapPath(): string {
   return path.join(path.dirname(registryPath()), "keymap.json");
 }
 
-/** 파일을 **손댄 그대로** 준다(모르는 id 포함). 쓰기가 이 객체 위에 덮어쓴다. */
-async function readRawKeymap(): Promise<{ obj: Record<string, unknown>; broken: boolean }> {
-  const raw = await readFile(keymapPath(), "utf8").catch((e: NodeJS.ErrnoException) =>
-    // 없음은 정상이다(아직 아무것도 안 바꿨다). 그 외(권한 등)는 빈 문자열로 흘려
-    // 아래 파서가 `broken`으로 잡는다 — 던지면 서버 컴포넌트가 500이 된다
-    e.code === "ENOENT" ? null : "",
-  );
-  if (raw === null) return { obj: {}, broken: false };
+/** 파일을 **손댄 그대로** 준다(모르는 id 포함). 쓰기가 이 객체 위에 덮어쓴다.
+ *  `error`가 사유 원문이다 — 화면이 그대로 그리므로(§비주얼 §22) 문구를 지어내지 않는다. */
+async function readRawKeymap(): Promise<{ obj: Record<string, unknown>; error: string | null }> {
+  let raw: string;
+  try {
+    raw = await readFile(keymapPath(), "utf8");
+  } catch (e) {
+    // 없음은 정상이다(아직 아무것도 안 바꿨다). 그 외(권한 등)는 사유를 그대로 올린다 —
+    // 던지면 서버 컴포넌트가 500이 되고, 삼키면 화면이 기본값으로 뜬 이유를 말할 수 없다
+    if ((e as NodeJS.ErrnoException).code === "ENOENT") return { obj: {}, error: null };
+    return { obj: {}, error: (e as Error).message };
+  }
   try {
     const o: unknown = JSON.parse(raw);
-    if (!o || typeof o !== "object" || Array.isArray(o)) return { obj: {}, broken: true };
-    return { obj: o as Record<string, unknown>, broken: false };
-  } catch {
-    return { obj: {}, broken: true };
+    if (!o || typeof o !== "object" || Array.isArray(o)) {
+      return { obj: {}, error: "최상위가 객체가 아닙니다" };
+    }
+    return { obj: o as Record<string, unknown>, error: null };
+  } catch (e) {
+    return { obj: {}, error: (e as Error).message };
   }
 }
 
 /** 기본값 위에 파일을 얹는다. **던지지 않는다** — 파일 없음 · JSON 깨짐 · 모르는 액션 id
  *  셋 다 완전한 키맵으로 흡수한다(모르는 id는 안 읽고, 쓰기가 보존한다). */
 export async function readKeymap(): Promise<Keymap> {
-  const { obj, broken } = await readRawKeymap();
+  const { obj, error } = await readRawKeymap();
   const bindings = defaultBindings();
   for (const a of DEFAULT_KEYMAP) {
     const v = obj[a.id];
     if (typeof v === "string" && v) bindings[a.id] = v;
   }
-  return { bindings, broken };
+  return {
+    bindings,
+    broken: error !== null,
+    ...(error ? { error } : {}),
+    path: tildePath(keymapPath(), homedir()),
+  };
 }
 
 /** 바꾼 것만 넘긴다. **읽은 객체 위에 덮어쓰므로** 우리가 모르는 id는 살아남는다

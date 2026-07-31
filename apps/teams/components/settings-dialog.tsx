@@ -3,8 +3,9 @@
 /** `설정` 다이얼로그 — 두 셸(`/` · `/p/<project>`)이 헤더 **우측 끝**에 같이 갖는 앱 액션
  *  (DESIGN.md §0-4 자리 표 · §비주얼 §4). 라우트가 아니다.
  *
- *  섹션은 지금 **인증 하나**다. 그릇 이름이 `인증`이 아니라 `설정`인 이유는 자리가 두 셸 공통이
- *  됐기 때문이다 — 다음 항목이 올 때 자리를 또 옮기지 않는다(§0-4).
+ *  섹션은 **인증 · 키설정 둘**이다(§0-4 · §0-6). 그릇 이름이 `인증`이 아니라 `설정`인 이유가
+ *  "다음 항목이 올 때 자리를 또 옮기지 않는다"였고 키설정이 그 다음 항목이다 — 섹션이 하나 늘 뿐
+ *  자리도 라우트도 다이얼로그 폭도 안 바뀐다.
  *
  *  인증 층은 셋이다: ①상태 · ②`claude setup-token`을 GUI가 몬다 · ③직접 넣기.
  *  **③은 ②가 된 뒤에도 남는다** — 남의 TUI를 긁는 일이라 깨질 수 있고, 깨지면 여기가 바닥이다.
@@ -14,15 +15,21 @@
  *  props에서 온다(§0-4). 트리거를 JSX로 받지 않고 두 값 중 하나로 받는 이유는 배너가
  *  **서버 컴포넌트**라서다: 넘길 수 있는 것은 값이고, 모양은 두 가지뿐이다. */
 import { useEffect, useState, useTransition } from "react";
-import { Settings, TriangleAlert } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { RotateCcw, Settings, TriangleAlert } from "lucide-react";
 import {
+  resetKeymapAction,
   saveTokenAction,
   sendSetupCodeAction,
+  setBindingAction,
   startSetupAction,
   pollSetupAction,
   stopSetupAction,
 } from "@/app/actions";
 import type { SetupState } from "@/lib/auth";
+import { useKeymap } from "@/components/keymap-provider";
+import { DEFAULT_KEYMAP, MODIFIER_KEYS, formatCombo } from "@/lib/keymap";
+import { cn } from "@/lib/utils";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -35,6 +42,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 /** 머신당 하나뿐인 Claude 장기 토큰의 자리와 저장 시각. 프로젝트마다 있지 않다(§0-4). */
 export type AuthView = {
@@ -45,6 +53,179 @@ export type AuthView = {
    *  못 읽은 프로젝트·프로젝트 0건은 판정 불가라 `true`다. 판정은 부르는 쪽(서버)이 한다. */
   claudeUsed: boolean;
 };
+
+/** §0-6 섹션의 층 셋 — ①목록 ②캡처 ③되돌리기. 값은 전부 `DEFAULT_KEYMAP`·props에서 오고
+ *  **이 파일에 키 문자열이 없다**(표기는 `formatCombo` 하나가 그린다). */
+function KeymapSection() {
+  // 루트 레이아웃이 읽어 내린 값이다(§0-6 배선) — 다이얼로그가 열릴 때 이미 손에 있다
+  const keymap = useKeymap();
+  const router = useRouter();
+  // 캡처 중인 줄. `null`이면 목록이다 — 한 번에 하나만 잡는다(§비주얼 §22)
+  const [capturing, setCapturing] = useState<string | null>(null);
+  const [rejected, setRejected] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+  const changed = DEFAULT_KEYMAP.filter((a) => keymap.bindings[a.id] !== a.combo);
+  const busy = capturing !== null || pending;
+
+  const stop = () => {
+    setCapturing(null);
+    setRejected(null);
+  };
+  const reset = (id?: string) =>
+    start(async () => {
+      await resetKeymapAction(id);
+      router.refresh();
+    });
+
+  return (
+    <section className="space-y-2 border-t pt-4">
+      <h3 className="text-sm font-medium">키설정</h3>
+      <p className="text-xs text-muted-foreground">
+        단축키입니다. 이 컴퓨터에 하나뿐이고 등록된 프로젝트 전부에 적용됩니다.
+      </p>
+
+      {/* 깨진 파일만 `Alert`다 — 원문 블록이 있는 쪽이 여기고, 줄 단위 거절은 보조 줄이다
+          (§비주얼 §22 ③). 조용히 기본값으로 돌아가면 사람은 자기 키가 왜 안 듣는지 모른다 */}
+      {keymap.broken && (
+        <Alert variant="destructive">
+          <TriangleAlert aria-hidden />
+          <AlertTitle>keymap.json을 읽지 못해 전부 기본값으로 떴습니다</AlertTitle>
+          <AlertDescription className="grid gap-1">
+            <span className="font-mono text-xs break-all">{keymap.error}</span>
+            <span className="font-mono text-xs break-all">{keymap.path}</span>
+            <span>여기서 키를 바꾸면 파일을 다시 씁니다.</span>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* 격자는 **목록이 갖고 줄은 빌린다**(§비주얼 §22 ①). 줄마다 `flex ml-auto`로 밀면
+          여덟 줄이 서로를 몰라 키가 각자 다른 x에 선다 — `auto` 트랙이 여덟 줄의 최대폭이다 */}
+      <ul className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-x-3">
+        {DEFAULT_KEYMAP.map((a) => {
+          const combo = keymap.bindings[a.id];
+          const active = capturing === a.id;
+          return (
+            <li
+              key={a.id}
+              className={cn("col-span-4 grid grid-cols-subgrid items-center", !active && "h-9")}
+            >
+              <span className="min-w-0 truncate text-sm">{a.name}</span>
+              {active ? (
+                <>
+                  {/* `<input>`이 아닌 이유: 캐럿·IME·자동완성이 전부 딸려 오고 그중 무엇도
+                      이 상자가 원하는 것이 아니다. 값은 `input.tsx`의 포커스 상태를 빌린 것 */}
+                  <button
+                    type="button"
+                    autoFocus
+                    className="col-span-3 h-8 w-full rounded-lg border border-ring px-2.5 text-left text-sm text-muted-foreground ring-3 ring-ring/50 outline-none"
+                    onBlur={stop}
+                    onKeyDown={(e) => {
+                      // **`stopPropagation`이 이 기능의 전제다.** 없으면 `Esc`가 캡처를 끄면서
+                      // 다이얼로그까지 닫고, 전역 핸들러(`⌘K` 등)가 지정하려는 키를 같이 먹는다.
+                      // `preventDefault`는 `Space`·`Enter`가 버튼 click으로 새는 것을 막는다
+                      e.preventDefault();
+                      e.stopPropagation();
+                      if (pending) return;
+                      const ne = e.nativeEvent;
+                      if (ne.isComposing) return; // 한글 조합 중의 key는 누른 글자가 아니다
+                      if (e.key === "Escape") return stop(); // 취소다. 지정 대상이 아니다
+                      // ⌘를 먼저 누르는 사이 거절이 번쩍이지 않는다 — 아직 누르는 중이다
+                      if (MODIFIER_KEYS.has(e.key)) return;
+                      start(async () => {
+                        // 조합 문자열은 **서버가** 만든다(`comboOf`) — 여기서 조립해 보내면
+                        // 액션이 받는 것이 임의 문자열이 된다
+                        const r = await setBindingAction(a.id, {
+                          key: ne.key,
+                          metaKey: ne.metaKey,
+                          ctrlKey: ne.ctrlKey,
+                          altKey: ne.altKey,
+                          shiftKey: ne.shiftKey,
+                        });
+                        if (r.error) return setRejected(r.error);
+                        // 큐가 아니라 머신 설정이 바뀌었다 — 다시 그릴 것은 루트 레이아웃이다
+                        router.refresh();
+                        stop();
+                      });
+                    }}
+                  >
+                    {pending ? "저장 중…" : "키를 누르세요"}
+                  </button>
+                  {/* 거절은 **보조 줄 그 자리**에 뜬다 — 줄이 하나 더 생기지 않으므로 아래
+                      일곱 줄이 안 밀린다. 아이콘이 붙는 이유는 색만으로 뜻을 전하지 않기 위해서다 */}
+                  {rejected ? (
+                    <p
+                      role="alert"
+                      className="col-span-4 flex items-center gap-1 pb-1 text-xs text-destructive"
+                    >
+                      <TriangleAlert aria-hidden className="size-3.5 shrink-0" />
+                      {rejected} 다른 키를 누르세요 · <Kbd>Esc</Kbd> 취소
+                    </p>
+                  ) : (
+                    <p className="col-span-4 pb-1 text-xs text-muted-foreground">
+                      누른 조합이 그대로 지정됩니다 · 다른 단축키는 그동안 듣지 않습니다 ·{" "}
+                      <Kbd>Esc</Kbd> 취소
+                    </p>
+                  )}
+                </>
+              ) : (
+                <>
+                  <Kbd className="justify-self-start">{formatCombo(combo)}</Kbd>
+                  {/* 트랙은 **항상 자리를 차지한다**(`invisible`) — `hidden`으로 지우면 폭이
+                      0↔28px로 흔들리고, 사람 눈이 정확히 거기 있는 순간 키 열이 미끄러진다 */}
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label={`${a.name} 기본값으로 되돌리기`}
+                          className={combo === a.combo ? "invisible" : undefined}
+                          disabled={busy}
+                          onClick={() => reset(a.id)}
+                        >
+                          <RotateCcw aria-hidden />
+                        </Button>
+                      }
+                    />
+                    <TooltipContent>기본값 {formatCombo(a.combo)}(으)로 되돌립니다</TooltipContent>
+                  </Tooltip>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => setCapturing(a.id)}
+                  >
+                    바꾸기
+                  </Button>
+                </>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+
+      {/* 바꾼 것이 하나라도 있을 때만 뜬다 — 늘 떠 있는 되돌리기는 누를 일이 없는 동안
+          층 하나를 차지한다(§비주얼 §22 ③층) */}
+      {changed.length > 0 && (
+        <div className="flex justify-end">
+          <Button variant="ghost" size="sm" disabled={busy} onClick={() => reset()}>
+            전부 기본값으로
+          </Button>
+        </div>
+      )}
+    </section>
+  );
+}
+
+/** 화면에 키를 적는 그릇 하나 — 값은 §비주얼 §21이 박았다(**배경 없음**: `bg-muted`를 깔면
+ *  라이트 4.34로 AA 미달). 안에 들어가는 글자는 `formatCombo`가 만든다. */
+function Kbd({ className, children }: { className?: string; children: React.ReactNode }) {
+  return (
+    <kbd className={cn("border px-1 font-mono text-xs text-muted-foreground", className)}>
+      {children}
+    </kbd>
+  );
+}
 
 export function SettingsDialog({
   auth,
@@ -114,7 +295,11 @@ export function SettingsDialog({
           )
         }
       />
-      <DialogContent className="sm:max-w-lg">
+      {/* 폭은 §비주얼 §22가 무수정으로 못박은 값이다. **높이만 푼다** — 키설정 섹션이 붙으면서
+          내용이 785px이 됐고 `dialog.tsx`에는 `max-h`가 없다. 짧은 창(실측 757px)에서 그릇이
+          위아래로 삐져나가고 `fixed` + 가운데 정렬이라 스크롤할 길이 없다 = `전부 기본값으로`에
+          손이 안 닿는다 */}
+      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>설정</DialogTitle>
           <DialogDescription>
@@ -259,6 +444,8 @@ export function SettingsDialog({
             <p className="text-xs">저장했습니다. 유효한지는 다음 디스패치에서 드러납니다.</p>
           )}
         </form>
+
+        <KeymapSection />
       </DialogContent>
     </Dialog>
   );

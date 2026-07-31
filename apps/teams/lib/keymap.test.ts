@@ -9,7 +9,7 @@ const LOCAL = mkdtempSync(path.join(tmpdir(), "fst-keymap-"));
 process.env.TICKET_LOCAL = LOCAL;
 process.on("exit", () => rmSync(LOCAL, { recursive: true, force: true }));
 
-const { DEFAULT_KEYMAP, formatCombo, matchCombo, shouldFire, validateBinding } =
+const { DEFAULT_KEYMAP, comboOf, formatCombo, matchCombo, shouldFire, validateBinding } =
   await import("./keymap.ts");
 // 파일 세 함수는 `registryPath()` 옆에 산다 — `keymap.ts`가 클라이언트 번들로 가기 때문이다
 // (그 파일 머리 주석). 여기서 같이 검증한다: 계약이 하나고 픽스처도 하나다.
@@ -63,9 +63,12 @@ test("readKeymap — JSON이 깨져도 던지지 않고 broken으로 말한다",
   put("{ 이건 JSON이 아니다");
   const k = await readKeymap();
   assert.strictEqual(k.broken, true);
+  assert.ok(k.error); // 사유 원문을 삼키지 않는다 — 화면이 그대로 그린다(§비주얼 §22)
   assert.strictEqual(k.bindings["project.search"], "Mod+k"); // 그래도 완전하다
   put([1, 2]); // 객체가 아닌 JSON도 같다
   assert.strictEqual((await readKeymap()).broken, true);
+  clear();
+  assert.strictEqual((await readKeymap()).error, undefined); // 없음은 깨진 것이 아니다
 });
 
 test("readKeymap — 모르는 액션 id·이상한 값은 무시하고 아는 것만 얹는다", async () => {
@@ -138,6 +141,40 @@ test("shouldFire — 글 쓰는 중이면 Mod 없는 조합만 죽는다", () =>
   // 가드를 통과해도 매칭은 매칭이다
   assert.ok(!shouldFire(ev({ key: "j" }), "n", false));
   assert.ok(!shouldFire(ev({ key: "n", isComposing: true }), "n", false));
+});
+
+test("comboOf — 누른 키를 저장형으로. `matchCombo`가 그 값을 도로 잡는다", () => {
+  assert.strictEqual(comboOf(ev({ key: "k", metaKey: true })), "Mod+k");
+  assert.strictEqual(comboOf(ev({ key: "K", metaKey: true, shiftKey: true })), "Mod+k");
+  assert.strictEqual(comboOf(ev({ key: "Enter", ctrlKey: true })), "Mod+Enter");
+  assert.strictEqual(comboOf(ev({ key: " " })), "Space");
+  const up = ev({ key: "ArrowUp", metaKey: true, shiftKey: true });
+  assert.strictEqual(comboOf(up), "Mod+Shift+ArrowUp");
+  assert.strictEqual(comboOf(ev({ key: "j", altKey: true })), "Alt+j");
+  // 왕복: 캡처가 만든 값을 그 키가 도로 잡는다(둘이 갈리면 바꾼 키가 안 듣는다)
+  for (const e of [
+    ev({ key: "K", metaKey: true }),
+    ev({ key: "?", shiftKey: true }),
+    ev({ key: "Enter", metaKey: true }),
+    ev({ key: "ArrowUp", shiftKey: true }),
+  ]) {
+    assert.ok(matchCombo(e, comboOf(e)), JSON.stringify(e));
+  }
+});
+
+test("comboOf — 글자 키의 Shift는 안 적는다(같은 물리 키가 두 값이 되면 충돌을 못 잡는다)", () => {
+  // `Shift+/`의 `e.key`는 이미 `?`다 — `Shift+?`로 적으면 §0-6 기본키 `?`와 안 겹치는 값이 된다
+  const q = comboOf(ev({ key: "?", shiftKey: true }));
+  assert.strictEqual(q, "?");
+  assert.strictEqual(validateBinding(BOUND, "board.new", q)!.conflict, "settings.open");
+  // 이름 있는 키는 Shift가 뜻을 바꾸므로 적는다
+  assert.strictEqual(comboOf(ev({ key: "Enter", metaKey: true, shiftKey: true })), "Mod+Shift+Enter");
+});
+
+test("comboOf — 조합자만 누른 것은 검증이 거절한다(캡처 상자는 흘려보낸다)", () => {
+  for (const key of ["Meta", "Control", "Shift", "Alt"]) {
+    assert.match(validateBinding(BOUND, "board.new", comboOf(ev({ key })))!.reason, /조합키만/, key);
+  }
 });
 
 test("formatCombo — 화면 표기는 여기 하나에서 나온다", () => {

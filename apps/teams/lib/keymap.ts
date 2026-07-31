@@ -49,6 +49,12 @@ export type Keymap = {
   /** 파일이 있는데 못 읽었다. 값으로 돌려주는 이유는 **화면이 말해야** 하기 때문이다 —
    *  조용히 기본값으로 돌아가면 사람은 자기가 바꾼 키가 왜 안 듣는지 알 길이 없다 */
   broken: boolean;
+  /** 못 읽은 **사유 원문**(파싱 에러 · 권한 에러). `broken`이 판정이고 이건 근거다 —
+   *  §비주얼 §22가 `Alert`에 요구하는 `font-mono` 원문 블록이 이 값이다. 삼키지 않는다 */
+  error?: string;
+  /** 파일이 있는 자리(`~` 축약). **깨졌을 때 사람이 열어야 하는 것**이라 같이 나른다 —
+   *  `keymapPath()`는 서버 전용이고 이 값을 그리는 것은 클라이언트다(`auth.path`와 같은 규약) */
+  path: string;
 };
 
 /** 기본값만으로 만든 완전한 바인딩. `readKeymap()`이 이 위에 파일을 얹는다. */
@@ -119,6 +125,26 @@ export function shouldFire(e: KeyLike, combo: string, typing: boolean): boolean 
   return matchCombo(e, combo);
 }
 
+/** 조합자 그 자체. **캡처 상자와 `validateBinding`이 같은 목록을 본다** — 상자는 "아직 누르는
+ *  중"으로 흘려보내고(⌘을 먼저 누르는 사이 거절 문구가 번쩍이면 안 된다) 검증은 거절한다. */
+export const MODIFIER_KEYS = new Set(["Meta", "Control", "Shift", "Alt"]);
+
+/** 누른 키 → **저장형 조합**. `parseCombo`의 역이고 조합자 순서를 여기서 정한다.
+ *
+ *  **서버가 이 함수를 부른다.** 캡처 상자가 조합 문자열을 조립해 보내면 서버 액션이 받는 것이
+ *  임의 문자열이 되고, 그대로 `keymap.json`에 들어간다 — 사람이 누른 키에서 값이 나오는 길은
+ *  이 한 줄뿐이다(신뢰 경계).
+ *
+ *  **글자 키의 `Shift`는 안 적는다.** `Shift+/`는 `e.key`가 이미 `?`라 또 적으면 `?`와
+ *  `Shift+?`가 서로 다른 값이 되고, 같은 물리 키인데 `validateBinding`이 충돌을 못 잡는다.
+ *  이름 있는 키(`Enter`·`ArrowUp`·`Space`)만 적는다 — `matchCombo`가 `Shift`를 "있으라고 할
+ *  때만" 보는 것과 짝이다. */
+export function comboOf(e: KeyLike): string {
+  const key = normalizeKey(e.key);
+  const shift = e.shiftKey && key.length > 1;
+  return `${e.metaKey || e.ctrlKey ? "Mod+" : ""}${e.altKey ? "Alt+" : ""}${shift ? "Shift+" : ""}${key}`;
+}
+
 const KEY_GLYPH: Record<string, string> = {
   Enter: "↵",
   Space: "␣",
@@ -149,8 +175,6 @@ export type BindingError = {
   conflict?: ActionId;
 };
 
-const MODIFIERS = new Set(["Meta", "Control", "Shift", "Alt", ""]);
-
 /** 받침이 있으면 `과`. 이름은 우리가 정한 한글이라(§0-6 액션 표) 이 판정으로 충분하다. */
 const wa = (s: string) => ((s.charCodeAt(s.length - 1) - 0xac00) % 28 ? "과" : "와");
 
@@ -164,7 +188,7 @@ export function validateBinding(
   combo: string,
 ): BindingError | null {
   const c = parseCombo(combo);
-  if (MODIFIERS.has(c.key)) return { reason: "조합키만으로는 지정할 수 없습니다." };
+  if (!c.key || MODIFIER_KEYS.has(c.key)) return { reason: "조합키만으로는 지정할 수 없습니다." };
   if (c.key === "Escape") return { reason: "`Esc`는 닫기·취소에 쓰입니다." };
   if (c.key === "Tab") return { reason: "`Tab`은 초점 이동에 쓰입니다." };
   if (!c.mod && (c.key === "Enter" || c.key === "Space")) {

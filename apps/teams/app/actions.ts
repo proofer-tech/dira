@@ -19,6 +19,7 @@ import {
   stopSetup,
   type SetupState,
 } from "@/lib/auth";
+import { DEFAULT_KEYMAP, comboOf, validateBinding, type KeyLike } from "@/lib/keymap";
 import {
   ProjectError,
   addProject,
@@ -27,7 +28,9 @@ import {
   renameProject,
   reorderProjects,
   resolveConfig,
+  readKeymap,
   readProjects,
+  writeKeymap,
   type Project,
   type ProjectConfig,
 } from "@/lib/projects";
@@ -332,6 +335,38 @@ export async function sendSetupCodeAction(code: string): Promise<SetupState> {
  *  사람의 다음 시도를 막는다(§0-4). */
 export async function stopSetupAction(): Promise<void> {
   stopSetup();
+}
+
+/** 키설정 층 ② — 캡처 상자가 누른 키를 그대로 값으로 만든다(DESIGN.md §0-6).
+ *
+ *  **조합 문자열은 서버가 만든다.** 클라이언트가 조립해 보내면 이 액션이 받는 것이 임의
+ *  문자열이 되고 그대로 `keymap.json`에 들어간다 — 받는 것은 `KeyboardEvent`의 필드 다섯이고
+ *  값으로 바꾸는 것은 `comboOf` 하나다(신뢰 경계). `id`도 여기서 액션 표와 대조한다.
+ *
+ *  검증은 `validateBinding` 하나고 여기서 다시 쓰지 않는다 — 거절 문구도 거기 있다.
+ *  `revalidatePath`가 아닌 이유는 §0-6에 있다: 바뀐 것은 큐가 아니라 머신 설정이라
+ *  **부르는 쪽이 `router.refresh()`** 한다. */
+export async function setBindingAction(
+  id: string,
+  e: KeyLike,
+): Promise<{ combo?: string; error?: string }> {
+  const action = DEFAULT_KEYMAP.find((a) => a.id === id);
+  if (!action) return { error: `모르는 액션입니다: ${id}` };
+  const combo = comboOf(e);
+  const { bindings } = await readKeymap();
+  const bad = validateBinding(bindings, action.id, combo);
+  if (bad) return { error: bad.reason };
+  await writeKeymap({ [action.id]: combo });
+  return { combo };
+}
+
+/** 키설정 층 ③ — `되돌리기`(줄 하나) · `전부 기본값으로`(`id` 없음).
+ *  기본값으로 쓰면 `writeKeymap`이 그 키를 파일에서 뺀다 — 전부 되돌리면 `{}`가 남는다(§0-6). */
+export async function resetKeymapAction(id?: string): Promise<{ error?: string }> {
+  const targets = id ? DEFAULT_KEYMAP.filter((a) => a.id === id) : DEFAULT_KEYMAP;
+  if (targets.length === 0) return { error: `모르는 액션입니다: ${id}` };
+  await writeKeymap(Object.fromEntries(targets.map((a) => [a.id, a.combo])));
+  return {};
 }
 
 /** 설정 다이얼로그의 `다시 읽기` — 워커 파일이 바뀌었을 수 있다. */
