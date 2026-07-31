@@ -2,8 +2,10 @@ import { test } from "node:test";
 import assert from "node:assert";
 import { relationPath, type Anchor } from "./urls.ts";
 
-/** 칸반 호버 관계선 기하 (DESIGN.md §비주얼 §17). 카드는 280폭, 레인은 288(`w-72`),
- *  카드 테두리 사이 거터는 24다 — 아래 x값은 그 배치 그대로다. */
+/** 칸반 호버 관계선 기하 (DESIGN.md §비주얼 §17). 레인이 하한 폭 288(`min-w-72`)까지
+ *  좁아진 배치다 — 카드는 280폭, 카드 테두리 사이 거터는 24다. 레인은 `flex-1`이라 보통은
+ *  이보다 넓지만 `relationPath`는 실측 rect를 받으므로 식은 그대로다(거터 24는 레인 폭과
+ *  무관하다 — `p-1`×2 + `gap-4`). 아래 x값은 그 하한 배치 그대로다. */
 const card = (left: number, y: number): Anchor => ({
   left,
   right: left + 280,

@@ -429,7 +429,9 @@ export default async function Board({
               {rows.length === 0 && (
                 <div className="rounded-md border border-dashed px-6 py-6">{noMatch}</div>
               )}
-              {/* 레인 × w-72가 창보다 넓으면 가로 스크롤로 넘긴다(§4 사이드바를 안 쓰는 이유).
+              {/* 레인은 이 스트립의 가로를 균등하게 나눠 갖는다(`flex-1`) — 남는 폭이 없다(§1 보드).
+                  `min-w-72`(288)가 하한이라 스트립이 896px보다 좁아지면 거기서 멈추고 그때만
+                  가로 스크롤로 넘긴다(§4 사이드바를 안 쓰는 이유).
                   `-mx-1 px-1`은 스크롤 컨테이너의 클리핑 여백이다: <Card>의 테두리는 `ring-1`(=
                   border box **밖에** 그리는 box-shadow)이라 카드가 컨테이너 끝에 딱 붙으면
                   양끝 카드의 왼/오른쪽 테두리가 잘려 카드가 열려 보인다. 음수 마진으로 되돌려
@@ -461,7 +463,7 @@ export default async function Board({
                     // 레인 높이는 스트립이 준다(flex 기본 stretch) — 머리는 그 위에 고정으로 남고
                     // 카드 스택만 스크롤한다. 머리를 스크롤러 안에 넣고 sticky를 걸지 않는 이유는
                     // §1에 있다: 건수는 레인 전체에 대한 진술이라 흔들릴 이유가 없다.
-                    <div key={s} className="flex w-72 shrink-0 flex-col gap-2">
+                    <div key={s} className="flex min-w-72 flex-1 flex-col gap-2">
                       <div className="flex items-center justify-between gap-2">
                         <StatusBadge status={s} />
                         <span className="text-xs tabular-nums text-muted-foreground">
