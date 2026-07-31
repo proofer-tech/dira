@@ -20,7 +20,8 @@ import { NAME_RE, isHash } from "@/lib/paths";
 import { reqTitle, stemOf } from "@/lib/queue";
 import { getProject, resolveConfig } from "@/lib/projects";
 
-export type NewTicketState = { error?: string };
+/** `ok`·`hash`는 **요구 접수 경로에서만** 온다 — 발행은 종전대로 `redirect`라 값을 돌려주지 않는다. */
+export type NewTicketState = { error?: string; ok?: true; hash?: string };
 
 /** `protocols/tickets.md` frontmatter 표의 `kind`. 폼의 select와 서버 판정이 같은 목록을 쓴다. */
 const KINDS = ["work", "request", "feedback"];
@@ -32,7 +33,9 @@ function fmValue(name: string, raw: string): string {
   return v;
 }
 
-/** 발행. 성공하면 상세로 이동한다(액션이 값을 돌려주지 않는다 — `redirect`는 던진다).
+/** 발행하면 상세로 이동한다(그 경로는 값을 돌려주지 않는다 — `redirect`는 던진다).
+ *  **요구 접수(`mode=req`)만 `{ ok, hash }`를 돌려준다** — 다이얼로그가 그 자리에서 접수 확인을
+ *  그린다(DESIGN.md §3 요구 접수 모드).
  *
  *  `session_id`·`owner`·`assigned_at`은 **쓰지 않는다**: 디스패처가 쓰는 키고, 새 티켓에 넣으면
  *  이미 할당된 것으로 보여 영원히 디스패치되지 않는다(`protocols/tickets.md`). */
@@ -42,6 +45,7 @@ export async function createTicket(
 ): Promise<NewTicketState> {
   const projectId = String(form.get("project") ?? "");
   let hash = "";
+  let req = false; // 끝의 `redirect` 여부가 이 값으로 갈린다 — try 밖에서 봐야 한다
   try {
     const project = await getProject(projectId);
     if (!project) throw new Error(`등록되지 않은 프로젝트입니다: ${projectId}`);
@@ -53,7 +57,7 @@ export async function createTicket(
 
     // 요구 접수 모드(`?mode=req`)는 자연어 한 칸만 받고 나머지를 **서버가 고정한다**
     // (DESIGN.md §3 요구 접수 모드). 폼이 안 보내도 여기서 정해지므로 요청을 손으로 만들어도 같다.
-    const req = String(form.get("mode") ?? "") === "req";
+    req = String(form.get("mode") ?? "") === "req";
 
     const title = req ? reqTitle(body) : fmValue("제목", String(form.get("title") ?? ""));
     if (!title) throw new Error(req ? "요구 내용을 입력하세요." : "제목을 입력하세요.");
@@ -124,6 +128,11 @@ export async function createTicket(
     return { error: (e as Error).message };
   }
 
-  revalidatePath(`/p/${projectId}`); // 보드에 새 티켓이 뜬다
+  revalidatePath(`/p/${projectId}`); // 보드에 새 티켓이 뜬다 — 두 경로 공통이다
+  // 요구 접수는 **이동하지 않는다**: 상세는 frontmatter 표·deps·세션 스트림이 있는 운영 화면이라
+  // "당신이 티켓을 만들었다"고 말한다. 실제로 일어난 일은 큐가 요구를 접수했고 해석은 PM이
+  // 한다는 것이다 — 접수 확인은 다이얼로그 안에 남고 상세는 링크가 된다(사람 지적 `fb0d309c`).
+  // 발행은 종전대로 상세로 간다: 그쪽은 kind·persona·deps를 직접 고른 운영자의 동작이다.
+  if (req) return { ok: true, hash };
   redirect(`/p/${projectId}/tickets/${hash}`);
 }

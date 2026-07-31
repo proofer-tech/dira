@@ -8,6 +8,7 @@
  *  검증 사유는 읽어야 하는 정보고, 3초 뒤 사라지는 자리에 두면 못 본다(DESIGN.md §8이 해석 결과
  *  표에 쓴 같은 근거다). */
 import { useActionState, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowDown, Check, Copy, Trash2, TriangleAlert, Unlink, X } from "lucide-react";
 import {
@@ -643,44 +644,82 @@ function DepsPicker({
  *  (서버가 `kind: request`·`persona: pm`·deps 없음으로 고정한다. DESIGN.md §3).
  *  title 칸도 없다 — 첫 줄에서 만든다.
  *
- *  버튼이 곧 `DialogTrigger`다(§3 — 라우트가 없다). `mode=req` hidden input은 그대로다:
- *  서버가 kind·persona를 고정하는 경로가 그것이고 `createTicket`은 무수정이다. */
+ *  버튼이 곧 `DialogTrigger`다(§3 — 라우트가 없다). `mode=req` hidden input이 서버가 kind·persona를
+ *  고정하는 경로고, **성공이 `redirect`가 아니라 `{ ok, hash }`로 돌아오는 경로**이기도 하다. */
 export function RequestDialog({ project }: { project: string }) {
   const [state, action, pending] = useActionState<NewTicketState, FormData>(createTicket, {});
   // 본문은 **controlled**여야 한다: React 19는 form action이 끝나면 폼을 리셋하므로, uncontrolled면
   // 발행이 실패한 순간 사람이 쓴 글이 사라진다(실측). 실패 사유만 남고 본문이 비면 사유가 무의미하다.
   const [body, setBody] = useState("");
+  const [open, setOpen] = useState(false);
+  // 확인을 **닫은** 접수의 해시. `useActionState`에는 리셋이 없어서 성공 상태가 계속 남는다 —
+  // 이걸 안 들면 닫았다 다시 열 때 접수 확인이 그대로 떠 있고 폼이 없다(두 번째 요구를 못 쓴다).
+  const [closed, setClosed] = useState("");
+  const done = state.ok && state.hash !== closed ? state.hash : null;
+
+  // 접수된 뒤 닫으면 폼이 **빈 칸**으로 돌아간다 — 접수한 본문이 남아 있으면 같은 요구가 두 번
+  // 접수된다. 실패했을 때 본문·사유가 그 자리에 남는 것은 종전대로다(§3).
+  // `닫기` 버튼도 **이걸 부른다**: `setOpen(false)`는 `onOpenChange`를 태우지 않아서(실측)
+  // 거기서만 리셋하면 Esc·X로 닫을 때와 `닫기`로 닫을 때가 갈린다.
+  const close = () => {
+    setOpen(false);
+    if (done) {
+      setClosed(done);
+      setBody("");
+    }
+  };
 
   return (
-    // 닫기는 상태를 지우지 않는다 — 다시 열면 쓰던 본문이 남아 있다(성공 시엔 상세로 떠난다).
-    <Dialog>
+    <Dialog open={open} onOpenChange={(next) => (next ? setOpen(true) : close())}>
       <DialogTrigger render={<Button size="sm" />}>요구 접수</DialogTrigger>
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>요구 접수</DialogTitle>
-          <DialogDescription>
-            필요한 것을 자연어로 쓰면 <span className="font-mono text-xs">kind: request</span> 티켓이
-            되고 PM이 받아 해석합니다. 첫 줄이 제목이 됩니다.
-          </DialogDescription>
+          {!done && (
+            <DialogDescription>
+              필요한 것을 자연어로 쓰면 <span className="font-mono text-xs">kind: request</span>{" "}
+              티켓이 되고 PM이 받아 해석합니다. 첫 줄이 제목이 됩니다.
+            </DialogDescription>
+          )}
         </DialogHeader>
-        <form action={action} className="space-y-4">
-          <input type="hidden" name="project" value={project} />
-          <input type="hidden" name="mode" value="req" />
-          <Textarea
-            name="body"
-            rows={12}
-            required
-            aria-label="요구 내용"
-            placeholder={"무엇이 필요한지 그냥 쓰세요.\n첫 줄이 제목이 됩니다."}
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-          />
-          {/* 실패는 이 자리에 남는다 — 닫으면 사람이 쓴 본문이 사라진다(§3) */}
-          {state.error && <Failure title="접수하지 못했습니다" message={state.error} />}
-          <Button type="submit" disabled={pending}>
-            {pending ? "접수 중…" : "요구 접수"}
-          </Button>
-        </form>
+        {done ? (
+          // 접수 확인은 **이 자리**다 — 상세로 튀면 "당신이 티켓을 만들었다"가 되고, 실제로 일어난
+          // 일은 큐가 요구를 접수했다는 것뿐이다(사람 지적 `fb0d309c`). 해시·kind·persona는
+          // 말하지 않는다: 사람이 고르지 않은 값이고 여기서 할 일도 없다. 상세는 링크로 남는다.
+          <div className="space-y-4">
+            <p className="text-sm">요구사항이 접수되었습니다. 곧 PM이 검토할 예정입니다.</p>
+            <div className="flex items-center gap-4">
+              <Link
+                href={`/p/${project}/tickets/${done}`}
+                className="text-sm underline-offset-4 hover:underline"
+              >
+                접수한 요구 보기
+              </Link>
+              <Button variant="outline" size="sm" onClick={close}>
+                닫기
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <form action={action} className="space-y-4">
+            <input type="hidden" name="project" value={project} />
+            <input type="hidden" name="mode" value="req" />
+            <Textarea
+              name="body"
+              rows={12}
+              required
+              aria-label="요구 내용"
+              placeholder={"무엇이 필요한지 그냥 쓰세요.\n첫 줄이 제목이 됩니다."}
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+            />
+            {/* 실패는 이 자리에 남는다 — 닫으면 사람이 쓴 본문이 사라진다(§3) */}
+            {state.error && <Failure title="접수하지 못했습니다" message={state.error} />}
+            <Button type="submit" disabled={pending}>
+              {pending ? "접수 중…" : "요구 접수"}
+            </Button>
+          </form>
+        )}
       </DialogContent>
     </Dialog>
   );
