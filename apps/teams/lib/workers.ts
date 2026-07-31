@@ -1122,6 +1122,21 @@ export async function stopWorker(root: string, name: string): Promise<boolean> {
   return unregisterCron(w.path);
 }
 
+/** 재등록 = **crontab 줄만 다시 넣는다** (DESIGN.md §4 재등록). `중단`의 역방향이고 그것뿐이다 —
+ *  파일은 이미 있고 락도 돌고 있는 세션도 안 건드린다. 등록은 생성이 쓰는 그 함수다.
+ *  **파일이 없는 워커는 되살리지 않는다** — 목록에 없으면 그건 `생성`의 일이다.
+ *
+ *  true = 새로 넣었다 / false = 이미 등록돼 있었다(no-op). 판정이 `registerCron`의 반환값이
+ *  아니라 **등록 전의 `cron`**인 이유: `cronRegister`는 있던 줄을 지우고 맨 뒤에 다시 넣으므로
+ *  줄 뒤에 남의 잡이 있으면 텍스트는 바뀐다(`changed = true`). 그건 "등록돼 있지 않았다"가
+ *  아니다 — 화면이 말해야 하는 사실은 `중단`과 대칭인 이쪽이다. */
+export async function startWorker(root: string, name: string): Promise<boolean> {
+  const w = (await listWorkers(root)).find((x) => x.name === name);
+  if (!w) throw new Error(`없는 워커입니다: ${name}`);
+  await registerCron(w.path);
+  return !w.cron;
+}
+
 /** crontab 줄을 빼고 파일을 지운다 — **순서가 그렇다**(DESIGN.md §4 삭제). 뒤집으면 그 사이
  *  1분에 cron이 없는 파일을 실행한다. 해제가 실패하면 파일을 남기고 멈춘다: 절반 지워진
  *  상태(파일은 없는데 cron 줄은 남은)를 만들지 않는다. */

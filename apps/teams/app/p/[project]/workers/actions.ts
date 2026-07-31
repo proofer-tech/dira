@@ -1,6 +1,6 @@
 "use server";
 
-/** 워커 화면의 서버 액션 — 생성 · 중단 · 삭제 · reap.
+/** 워커 화면의 서버 액션 — 생성 · 중단 · 재등록 · 삭제 · reap.
  *
  *  crontab은 **그 프로젝트의 워커 줄만** 쓴다(제약 4). 계산도 쓰기도 `lib/workers.ts`에 있고,
  *  등록이 실패하면 그때만 종전의 복사 명령어로 되돌아간다.
@@ -19,6 +19,7 @@ import {
   deleteWorker,
   prepareWorktree,
   registerCron,
+  startWorker,
   stopWorker,
   writeCommonContext,
   writeContext,
@@ -113,6 +114,27 @@ export async function stopWorkerAction(
       message: removed
         ? "crontab에서 뺐습니다 — 이 워커는 더 이상 새 티켓을 물지 않습니다."
         : "이미 crontab에 없었습니다 — 바꾼 것이 없습니다.",
+    };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** 재등록 — crontab 줄만 다시 넣는다. `중단`의 역방향이고 등록은 생성이 쓰는 `registerCron`
+ *  그대로다(§4 재등록: 새 계산도 새 명령 문자열도 만들지 않는다). 성공 판정도 생성과 같다 —
+ *  종료코드가 아니라 다시 읽은 crontab이고, 그 확인은 `registerCron` 안에 이미 있다. */
+export async function registerWorkerAction(
+  projectId: string,
+  name: string,
+): Promise<WorkerActionResult> {
+  try {
+    const added = await startWorker(await rootOf(projectId), name);
+    revalidatePath(`/p/${projectId}`, "layout");
+    return {
+      ok: true,
+      message: added
+        ? "crontab에 넣었습니다 — 1분 뒤부터 티켓을 물어갑니다."
+        : "이미 crontab에 있었습니다 — 바꾼 것이 없습니다.",
     };
   } catch (e) {
     return fail(e);

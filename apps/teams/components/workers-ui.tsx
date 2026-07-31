@@ -1,6 +1,6 @@
 "use client";
 
-/** 워커 화면(`/p/<project>/workers`)의 클라이언트 조각 — 생성 · 중단 · 삭제 · reap.
+/** 워커 화면(`/p/<project>/workers`)의 클라이언트 조각 — 생성 · 중단 · 재등록 · 삭제 · reap.
  *
  *  **crontab의 그 워커 줄은 GUI가 쓴다**(제약 4, `44f876aa`로 뒤집힘). 생성·중단·삭제 세 자리가
  *  다 한 동작이고, 서버가 만들어 준 명령어를 `<CopyCommand>`로 복사시키는 건 **실패했을 때**다.
@@ -15,6 +15,7 @@ import {
   createWorkerAction,
   deleteWorkerAction,
   reapWorkerAction,
+  registerWorkerAction,
   saveCommonContextAction,
   saveContextAction,
   stopWorkerAction,
@@ -90,6 +91,17 @@ function Failure({ title, message }: { title: string; message: string }) {
         <span className="font-mono text-xs break-all">{message}</span>
       </AlertDescription>
     </Alert>
+  );
+}
+
+/** 첫 등록은 macOS `앱 관리` 승인 창을 지난다(§제약 4) — 그동안 crontab이 블록되고 버튼은
+ *  `…중`으로 서 있다. 창을 못 알아보면 3분 뒤 등록만 실패한다.
+ *  **생성과 재등록이 같은 `crontab -` 쓰기라 같은 벽에서 멈춘다** — 그래서 문구도 하나다(§4 재등록). */
+function CrontabApproval() {
+  return (
+    <p className="text-xs text-muted-foreground">
+      권한 창이 뜨면 [허용]을 누르세요 — crontab 등록이 그 대답을 기다립니다.
+    </p>
   );
 }
 
@@ -231,13 +243,7 @@ export function CreateWorkerButton({
           </div>
         )}
 
-        {/* 첫 등록은 macOS `앱 관리` 승인 창을 지난다(§제약 4) — 그동안 crontab이 블록되고
-            버튼은 `만드는 중…`으로 서 있다. 창을 못 알아보면 3분 뒤 등록만 실패한다. */}
-        {pending && (
-          <p className="text-xs text-muted-foreground">
-            권한 창이 뜨면 [허용]을 누르세요 — crontab 등록이 그 대답을 기다립니다.
-          </p>
-        )}
+        {pending && <CrontabApproval />}
 
         <DialogFooter>
           <DialogClose render={<Button variant="outline" />}>
@@ -257,13 +263,15 @@ export function CreateWorkerButton({
   );
 }
 
-// ── 행 액션: reap · 중단 · 삭제 ─────────────────────────────────────────────
+// ── 행 액션: reap · 중단/재등록 · 삭제 ──────────────────────────────────────
 
 export function WorkerRowActions({ projectId, row }: { projectId: string; row: WorkerRow }) {
   const [pending, start] = useTransition();
   const [reap, setReap] = useState<WorkerActionResult | null>(null);
   const [stopping, setStopping] = useState(false);
   const [stopped, setStopped] = useState<WorkerActionResult | null>(null);
+  const [registering, setRegistering] = useState(false);
+  const [registered, setRegistered] = useState<WorkerActionResult | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<WorkerActionResult | null>(null);
   const [streaming, setStreaming] = useState(false);
@@ -287,9 +295,18 @@ export function WorkerRowActions({ projectId, row }: { projectId: string; row: W
           스트림
         </Button>
       )}
-      <Button variant="ghost" size="sm" onClick={() => setStopping(true)}>
-        중단
-      </Button>
+      {/* 같은 줄에 대한 반대 동작이라 둘이 동시에 뜨는 상태가 없다 — 판정은 `status`가 아니라
+          `cron`이다(§4 재등록): 뺄 줄이 있으면 `중단`, 없으면 `재등록`이다. `running`인데
+          미등록인 워커에도 `재등록`이 뜬다(락과 crontab은 직교한다 — §워커 상태 판정) */}
+      {row.cron ? (
+        <Button variant="ghost" size="sm" onClick={() => setStopping(true)}>
+          중단
+        </Button>
+      ) : (
+        <Button variant="ghost" size="sm" onClick={() => setRegistering(true)}>
+          재등록
+        </Button>
+      )}
       <Button variant="ghost" size="sm" onClick={() => setDeleting(true)}>
         삭제
       </Button>
@@ -361,20 +378,15 @@ export function WorkerRowActions({ projectId, row }: { projectId: string; row: W
             // 이미 미등록이었으면 no-op이라고 말한다 — 에러가 아니다
             <p className="text-sm font-medium">{stopped.message}</p>
           ) : (
-            <>
-              {!row.cron && (
-                <p className="text-sm text-muted-foreground">
-                  이미 crontab에 없습니다. 이 워커는 지금도 돌지 않습니다.
-                </p>
-              )}
-              {stopped && (
-                <div className="space-y-2">
-                  <Failure title="crontab에서 빼지 못했습니다" message={stopped.message ?? ""} />
-                  <p className="text-sm font-medium">이 명령을 셸에서 실행하세요</p>
-                  <CopyCommand cmd={row.unregisterCmd} />
-                </div>
-              )}
-            </>
+            // 여는 버튼이 `row.cron`으로 갈리므로 "이미 미등록입니다"를 여기서 미리 말하지
+            // 않는다 — 그 상태의 행에는 `중단`이 아니라 `재등록`이 있다(§4 재등록).
+            stopped && (
+              <div className="space-y-2">
+                <Failure title="crontab에서 빼지 못했습니다" message={stopped.message ?? ""} />
+                <p className="text-sm font-medium">이 명령을 셸에서 실행하세요</p>
+                <CopyCommand cmd={row.unregisterCmd} />
+              </div>
+            )
           )}
           {row.status === "running" && (
             <Alert>
@@ -396,6 +408,54 @@ export function WorkerRowActions({ projectId, row }: { projectId: string; row: W
                 }
               >
                 {pending ? "중단하는 중…" : "중단"}
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 재등록 — `중단`의 역방향이고 crontab 한 줄이 전부다(§4 재등록). 파일은 이미 있으니
+          만들 것도 지울 것도 없고, 실패했을 때만 복사 명령으로 돌아간다(= 생성의 등록 실패
+          화면과 같은 모양이고 명령도 서버가 만든 그 값이다) */}
+      <Dialog
+        open={registering}
+        onOpenChange={(o) => {
+          setRegistering(o);
+          if (!o) setRegistered(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>워커 재등록 — {row.name}</DialogTitle>
+            <DialogDescription>
+              crontab에 이 워커 줄을 다시 넣습니다. 파일은 이미 있으니 바뀌는 것은 그 한 줄뿐입니다.
+            </DialogDescription>
+          </DialogHeader>
+          {registered?.ok ? (
+            // 이미 등록돼 있었으면 no-op이라고 말한다 — `중단`이 미등록에 대해 말하는 것과 대칭이다
+            <p className="text-sm font-medium">{registered.message}</p>
+          ) : (
+            registered && (
+              <div className="space-y-2">
+                <Failure title="crontab에 등록하지 못했습니다" message={registered.message ?? ""} />
+                <p className="text-sm font-medium">
+                  아직 돌지 않습니다 — 이 명령을 셸에서 실행하세요
+                </p>
+                <CopyCommand cmd={row.registerCmd} />
+              </div>
+            )
+          )}
+          {pending && <CrontabApproval />}
+          <DialogFooter>
+            <DialogClose render={<Button variant="outline" autoFocus />}>닫기</DialogClose>
+            {!registered?.ok && (
+              <Button
+                disabled={pending}
+                onClick={() =>
+                  start(async () => setRegistered(await registerWorkerAction(projectId, row.name)))
+                }
+              >
+                {pending ? "등록하는 중…" : "재등록"}
               </Button>
             )}
           </DialogFooter>

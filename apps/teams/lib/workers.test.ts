@@ -39,6 +39,7 @@ const {
   parseContextBlock,
   readCommonContext,
   renderContextBlock,
+  startWorker,
   stopWorker,
   prepareWorktree,
   workerGroups,
@@ -1073,6 +1074,40 @@ test("stopWorker — 그 줄만 빠지고 파일·락은 그대로. 두 번째�
     assert.strictEqual(await stopWorker(root, "w1"), false); // 이미 미등록 = no-op
     assert.strictEqual(c.tab(), `${other}${cronLine({ path: w2 })}\n`);
     await assert.rejects(stopWorker(root, "없는워커"), /없는 워커입니다/);
+  } finally {
+    c.restore();
+  }
+});
+
+test("startWorker — 중단의 역방향. 줄이 정확히 1줄 늘고, 두 번째는 no-op이다(§4 재등록)", async () => {
+  const root = makeRoot({ "w1.sh": "#!/bin/bash\n", "w2.sh": "#!/bin/bash\n" });
+  const dir = path.join(root, "workers");
+  const [w1, w2] = ["w1.sh", "w2.sh"].map((n) => path.join(dir, n));
+  const other = "0 3 * * * /Users/x/bin/backup.sh\n";
+  // running인데 미등록인 워커를 되살린다 — 락도 세션도 안 건드린다(다음 분부터 다시 부를 뿐이다)
+  putLock(dir, "w1", process.pid);
+  const c = withLiveCrontab(`${other}${cronLine({ path: w2 })}\n`);
+  const count = (p: string) => c.tab().split("\n").filter((l) => l.includes(p)).length;
+  try {
+    assert.strictEqual(await startWorker(root, "w1"), true);
+    assert.strictEqual(c.tab(), `${other}${cronLine({ path: w2 })}\n${cronLine({ path: w1 })}\n`);
+    assert.strictEqual(count(w1), 1);
+    assert.strictEqual(statSync(lockPath(dir, "w1")).isDirectory(), true); // 락 그대로
+    const w = (await listWorkers(root)).find((x) => x.name === "w1")!;
+    assert.strictEqual(w.cron, true);
+    assert.strictEqual(w.status, "running"); // 물고 있는 티켓은 그대로 간다
+
+    // 이미 등록된 상태에서 다시 눌러도 줄이 늘지 않고 **no-op이라고 말한다**. 이 자리가
+    // `registerCron`의 반환값과 갈린다: 줄을 지우고 맨 뒤에 다시 넣으므로 뒤에 남의 줄이
+    // 있으면 텍스트는 바뀐다(changed=true) — 그래도 "등록돼 있었다"가 사실이다.
+    await registerCron(w2); // w2를 맨 뒤로 보낸다 = w1 줄이 마지막이 아닌 배치
+    assert.strictEqual(await startWorker(root, "w1"), false); // 화면이 말하는 사실은 이쪽이다
+    // 텍스트는 실제로 바뀌었다(w1 줄이 w2 뒤로 갔다) — 그런데도 위가 no-op이라고 말한다
+    assert.strictEqual(c.tab(), `${other}${cronLine({ path: w2 })}\n${cronLine({ path: w1 })}\n`);
+    assert.strictEqual(count(w1), 1);
+    assert.strictEqual(count("backup.sh"), 1); // 남의 잡은 그대로
+
+    await assert.rejects(startWorker(root, "없는워커"), /없는 워커입니다/);
   } finally {
     c.restore();
   }
