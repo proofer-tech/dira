@@ -738,8 +738,10 @@ export function ProjectsSection({
           `main`에 걸면 스크롤바가 화면 오른쪽이 아니라 상한 자리에 선다 */}
       <main className="min-h-0 w-full flex-1 overflow-y-auto">
         <div className="w-full space-y-6 px-6 py-6">
+          {/* 읽는 산문이라 폭 상한을 스스로 든다 — 본문 상한이 풀리면서(§비주얼 §7 폭 항)
+              페이지 폭이 대신 물어 주던 것이 없어졌다. 값은 셸 배너 넷과 같다(§4-4) */}
           {registryError && (
-            <Alert variant="destructive">
+            <Alert variant="destructive" className="max-w-3xl">
               <TriangleAlert aria-hidden />
               <AlertTitle>프로젝트 레지스트리를 읽지 못했습니다</AlertTitle>
               <AlertDescription className="grid gap-2">
