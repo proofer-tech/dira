@@ -22,6 +22,43 @@ pnpm dev         # teams 빌드 + 조립 + 앱 실행
 | `pnpm start` | 빌드 산출물이 이미 있을 때 앱만 띄운다 |
 | `DIRA_SERVER_JS=…/NOPE.js pnpm start` | 실패 화면 확인용. 서버를 못 띄우면 창 대신 사유 + 서버 stderr가 뜬다 |
 
+## 패키징 — `.app` · `.dmg`
+
+```sh
+pnpm dist        # teams 빌드 + 조립 + electron-builder
+```
+
+| 산출물 | 어디 |
+|---|---|
+| `.app` | `dist/mac-arm64/dira.app` — `/Applications`에 옮겨도 돈다 |
+| `.dmg` | `dist/dira-<버전>-arm64.dmg` — 사람이 이걸 건넨다 |
+
+`dist/`는 gitignore돼 있다. **서명·공증은 여기 없다**(`5aa9486d`) — `identity: null`이라
+electron-builder가 "skipped macOS code signing"을 찍고 지나간다. 링커가 붙이는 ad-hoc 서명만
+있어서 **이 맥에서는 돌지만 다른 맥에서는 Gatekeeper가 막는다.**
+
+패키징에서 갈리는 것 셋:
+
+- **`asar: false`.** `main.ts`는 Electron이 타입 스트리핑으로 그대로 읽고 `server.js`는
+  `spawn`으로 도는 별개 프로세스다. 둘 다 asar 안에서 성립하는지가 불확실한데, 끄면
+  그 질문 자체가 없어진다. 대가는 `Contents/Resources/app/`이 소스 그대로 보이는 것뿐이다.
+- **standalone은 `extraResources`로 `Contents/Resources/server/`에 들어간다.** `main.ts`가
+  `app.isPackaged`로 갈라 그 경로를 본다.
+- **`node_modules`가 별도 항목이다.** electron-builder는 `extraResources` 복사에서
+  `node_modules`를 이름으로 걸러낸다(`filter`로 되돌려지지 않는다 — 실측). `from`을
+  그 디렉터리 자체로 잡은 두 번째 항목이 필터를 비껴간다. 이게 빠지면 36MB가 조용히
+  사라지고 앱은 창 대신 실패 화면을 띄운다.
+
+## 아이콘
+
+```sh
+pnpm icns        # icon.svg -> icon.icns. 형상을 고쳤을 때만 돌린다
+```
+
+`icon.icns`는 **커밋돼 있다** — `pnpm dist`는 이 스크립트도 크롬도 필요로 하지 않는다.
+사양은 `../../docs/DESIGN.md` §비주얼 §16이고, 각 크기를 1024 마스터에서 축소하지 않고
+SVG에서 직접 래스터하는 것이 그 절이 넘긴 실측이다.
+
 **`apps/teams`는 브라우저에서 그대로 돈다.** `pnpm dev` → `localhost:7331`은 이 앱과 무관하다.
 `teams`는 `electron`을 의존성으로 갖지 않는다 — 껍데기가 알맹이의 실행 조건이 되면 안 된다.
 
@@ -51,4 +88,4 @@ pnpm dev         # teams 빌드 + 조립 + 앱 실행
 ## 여기 아직 없는 것
 
 트레이 상주 `abce61c9` · 경로 피커 `c01e2678` · 로그인 시 자동 실행 `00fc34ba` ·
-`.app` 패키징 `9e0ec1af`. 각각 자기 티켓이 있다.
+코드사이닝/공증 `5aa9486d`. 각각 자기 티켓이 있다.

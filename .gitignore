@@ -16,3 +16,6 @@ node_modules/
 # 추적되면 워크트리마다 있는 untracked 사본과 부딪혀 `git rebase master`가 체크아웃에서 멈춘다.
 next-env.d.ts
 *.tsbuildinfo
+
+# Electron 패키징 산출물 (apps/desktop). electron-builder가 매 빌드마다 다시 만든다
+apps/desktop/dist/

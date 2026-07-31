@@ -1,15 +1,37 @@
 {
-  "name": "desktop",
+  "name": "dira",
   "version": "0.1.0",
   "private": true,
+  "description": "티켓 큐를 보는 화면",
+  "author": "dira",
   "type": "module",
   "main": "main.ts",
   "scripts": {
     "build": "cd ../teams && pnpm build && rm -rf .next/standalone/.next/static .next/standalone/public && cp -R .next/static .next/standalone/.next/static && { [ -d public ] && cp -R public .next/standalone/public || true; }",
     "start": "electron .",
-    "dev": "pnpm build && pnpm start"
+    "dev": "pnpm build && pnpm start",
+    "icns": "./make-icns.sh",
+    "dist": "pnpm build && electron-builder && { test -e dist/mac-arm64/dira.app/Contents/Resources/server/node_modules/next || { echo '번들에 server/node_modules가 없다 — extraResources의 node_modules 항목을 확인하라' >&2; exit 1; }; } && du -sh dist/mac-arm64/dira.app dist/*.dmg"
+  },
+  "build": {
+    "appId": "dev.dira.desktop",
+    "productName": "dira",
+    "directories": { "output": "dist" },
+    "files": ["main.ts", "package.json"],
+    "asar": false,
+    "extraResources": [
+      { "from": "../teams/.next/standalone", "to": "server" },
+      { "from": "../teams/.next/standalone/node_modules", "to": "server/node_modules" }
+    ],
+    "mac": {
+      "target": "dmg",
+      "icon": "icon.icns",
+      "category": "public.app-category.developer-tools",
+      "identity": null
+    }
   },
   "devDependencies": {
-    "electron": "^40.0.0"
+    "electron": "^40.0.0",
+    "electron-builder": "^26.0.0"
   }
 }

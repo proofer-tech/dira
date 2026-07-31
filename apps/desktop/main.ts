@@ -5,12 +5,16 @@
 import { app, BrowserWindow, Notification, shell } from "electron";
 import { spawn, type ChildProcess } from "node:child_process";
 import { createServer } from "node:net";
-import { basename, dirname } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const SERVER = fileURLToPath(
-  new URL(process.env.DIRA_SERVER_JS ?? "../teams/.next/standalone/server.js", import.meta.url),
-);
+/** 패키징하면 standalone 산출물이 통째로 `Contents/Resources/server/`에 들어간다
+ *  (package.json `build.extraResources`). 소스에서 돌 때는 `apps/teams` 옆이다. */
+const SERVER = process.env.DIRA_SERVER_JS
+  ? fileURLToPath(new URL(process.env.DIRA_SERVER_JS, import.meta.url))
+  : app.isPackaged
+    ? join(process.resourcesPath, "server", "server.js")
+    : fileURLToPath(new URL("../teams/.next/standalone/server.js", import.meta.url));
 const READY_TIMEOUT_MS = 30_000;
 /** 배경 폴링이다 — 보드의 5초(§아키텍처)와 다른 값인 것이 맞다 (§데스크톱 앱 N2). */
 const POLL_MS = 30_000;

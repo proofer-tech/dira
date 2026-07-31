@@ -1999,7 +1999,7 @@ QA도 세우지 않았다 — 왕복(발행 → `list`에 `대기`)은 이미 �
 | P23 | Electron 패키징 스펙 확정 `f6e5445a` | pm | — | 완료 — §데스크톱 앱. 답변 `c86f376f` = `1(b) 2 전부 3(a)` |
 | P23 | `apps/desktop/` Electron 셸 `f226ac66` | developer | 스펙 | 대기 |
 | P23 | 맥 앱 아이콘 사양 + 1024 마스터 `318dbc17` | designer | 스펙 | 완료 — §비주얼 §16 + `apps/desktop/icon.svg`·`icon.png`(1024). 새 토큰 0 |
-| P23 | `.app` 패키징 (서명 없음) `9e0ec1af` | developer | `f226ac66`·`318dbc17` | 대기 |
+| P23 | `.app` 패키징 (서명 없음) `9e0ec1af` | developer | `f226ac66`·`318dbc17` | 완료 — `pnpm dist` → `.app` 310MB / `.dmg` 124MB. 아이콘은 §16 자산 |
 | P23 | 트레이 상주 `abce61c9` | developer | `f226ac66` | 대기 |
 | P23 | 답변 대기 네이티브 알림 `283dc4c1` | developer | `f226ac66` | 대기 |
 | P23 | 네이티브 경로 피커 4곳 `c01e2678` | developer | `f226ac66` | 대기 |

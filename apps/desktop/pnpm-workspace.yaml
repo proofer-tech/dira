@@ -1,2 +1,5 @@
 allowBuilds:
   electron: true
+  # Windows 인스톨러 빌더. §데스크톱 앱 "여기서 안 하는 것"이 Windows 빌드를 뺐다 —
+  # electron-builder가 딸려 끌고 올 뿐이라 빌드 스크립트를 돌릴 이유가 없다.
+  electron-winstaller: false
