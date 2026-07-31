@@ -76,6 +76,12 @@ export const dynamic = "force-dynamic";
  *  빼면 GUI가 CLI `list`보다 덜 보인다. */
 const STATUSES = ["open", "wip", "done"] as const;
 
+/** 칸반 `완료` 레인이 그리는 카드 수(§1 보드 · 사람 요청 `38108932`). 사람이 원한 것은
+ *  "완료를 거른다"가 아니라 "과거 완료를 한꺼번에 보지 않는다"라 자르는 축이 상태가 아니라
+ *  **시간**이고, 자르는 자리는 필터가 아니라 이 레인 하나다. 나머지는 레인 아래 한 줄이
+ *  `?status=done`으로 데려간다 — 테이블도 건수도 자르지 않는다. */
+const DONE_LANE_LIMIT = 20;
+
 /** 상태 필터 선택지 = 엔진 5상태 + 파생 `답변 대기`(§1 보드 · §요구사항 레이어 결정 5).
  *  **레인 3개와 개수가 다르고 그게 정상이다** — 필터는 엔진의 상태를 고르는 것이고(CLI `list`
  *  패리티) 레인은 흐름의 단계를 그린다. `deps 대기`·`답변 대기`는 `대기` 레인에 앉고
@@ -128,13 +134,15 @@ export default async function Board({
   const config = await resolveConfig(project);
   const tickets = await listTickets(project.root, config);
 
-  // 상태만 **기본값이 있다**(§1 보드 · 사람 요청 `ae9add93`): `status`가 URL에 하나도 없을 때
-  // 완료를 뺀 5개가 들어간다. 하나라도 실려 있으면 실린 값이 전부다 — `?status=done`은 완료만이고
-  // 기본값이 섞이지 않는다. `filterTickets`는 이 값을 그대로 받는다(판정은 무수정이다).
+  // 상태만 **기본값이 있다**(§1 보드 · 사람 요청 `38108932`): `status`가 URL에 하나도 없을 때
+  // 상태 6개가 전부 들어간다 — 완료는 기본으로 보인다. 방금 끝난 티켓까지 지우지 않으려고
+  // 되돌린 값이고, 분량은 칸반 `완료` 레인의 자르기(`DONE_LANE_LIMIT`)가 받는다.
+  // 하나라도 실려 있으면 실린 값이 전부다 — `?status=done`은 완료만이고 기본값이 섞이지 않는다.
+  // `filterTickets`는 이 값을 그대로 받는다(판정은 무수정이다).
   const query = {
     kind: sp.getAll("kind"),
     persona: sp.getAll("persona"),
-    status: sp.has("status") ? sp.getAll("status") : HIDE_DONE_STATUSES,
+    status: sp.has("status") ? sp.getAll("status") : [...STATUS_OPTIONS],
     q: sp.get("q") ?? "",
   };
   const sortParam = sp.get("sort");
@@ -218,6 +226,21 @@ export default async function Board({
     for (const s of STATUS_OPTIONS) next.append("status", s);
     return qs(next);
   })();
+
+  /** 잘린 완료로 가는 URL = 상태가 `done` 하나뿐인 화면. 위 `allStatusHref`와 같은 모양이고
+   *  다른 파라미터(검색·정렬·뷰)는 그대로 남는다. 새 파라미터를 만들지 않는 이유가 이것이다 —
+   *  "과거 완료 전부"는 이미 있는 화면이다. */
+  const doneOnlyHref = (() => {
+    const next = new URLSearchParams(sp);
+    next.delete("status");
+    next.append("status", "done");
+    return qs(next);
+  })();
+
+  // 자르는 화면은 **기본 화면 하나**다. `status`가 URL에 실려 있으면 사람이 상태를 직접 고른
+  // 화면이고, 위 링크가 데려가는 `?status=done`이 바로 그 화면이다 — 거기서 또 자르면 출구가
+  // 자기 자신으로 돌아온다("과거 완료를 한꺼번에 안 본다"지 "못 본다"가 아니다).
+  const trimDone = !sp.has("status");
 
   const applied = [
     ...query.kind.map((v) => ({ param: "kind", value: v, text: `kind: ${v}` })),
@@ -334,11 +357,11 @@ export default async function Board({
               param="status"
               label="상태"
               options={STATUS_OPTIONS.map((s) => ({ value: s, label: statusLabel(s) }))}
-              // 기본이 완료 숨김이므로 프리셋 슬롯이 뒤집힌다 — 1클릭으로 접을 값어치가 있는 쪽은
-              // 이제 `전체 보기`다(슬롯은 1개 그대로다). `defaults`는 팝오버 체크·트리거 라벨이
-              // **실효값**을 그리게 한다: 파라미터가 없어도 6개 중 `완료`만 체크가 빈다.
-              defaults={HIDE_DONE_STATUSES}
-              preset={{ label: "전체 보기", values: [...STATUS_OPTIONS] }}
+              // 기본이 6개 전부이므로 1클릭으로 접을 값어치가 있는 쪽은 `완료 숨기기`다
+              // (슬롯은 1개 그대로다). `defaults`는 팝오버 체크·트리거 라벨이 **실효값**을
+              // 그리게 한다: 파라미터가 없어도 6개가 전부 체크된다.
+              defaults={[...STATUS_OPTIONS]}
+              preset={{ label: "완료 숨기기", values: HIDE_DONE_STATUSES }}
             />
             <div className="ml-auto flex items-center gap-2">
               {VIEWS.map((v) => (
@@ -401,6 +424,16 @@ export default async function Board({
                   const group = rows.filter(
                     (t) => (statusOf(t) === "blocked" ? "open" : statusOf(t)) === s,
                   );
+                  // `완료` 레인은 **최근 것부터**다. `rows`의 순서를 믿지 않고 `birth`로 다시
+                  // 정렬한다 — `?sort=`는 칸반에도 살아 있어서 정렬을 걸면 "최근 20건"이
+                  // "제목순 20건"이 된다(URL 정렬은 이 레인에 끼어들지 않는다).
+                  // 자르는 것은 카드뿐이다: 아래 머리 건수는 `group.length`(자르기 전) 그대로다.
+                  let cards = group;
+                  if (s === "done") {
+                    cards = [...group].sort((a, b) => b.birth - a.birth);
+                    if (trimDone) cards = cards.slice(0, DONE_LANE_LIMIT);
+                  }
+                  const trimmed = group.length - cards.length;
                   return (
                     // 레인 높이는 스트립이 준다(flex 기본 stretch) — 머리는 그 위에 고정으로 남고
                     // 카드 스택만 스크롤한다. 머리를 스크롤러 안에 넣고 sticky를 걸지 않는 이유는
@@ -424,7 +457,7 @@ export default async function Board({
                             0건
                           </p>
                         ) : (
-                          group.map((t) => (
+                          cards.map((t) => (
                             // 카드 전체가 상세로 가는 링크다(테이블 행과 같은 규칙 — 행 액션 버튼이
                             // 없어서 안전하다). deps 배지는 늘어난 링크 위에 뜬다.
                             <Card
@@ -493,6 +526,16 @@ export default async function Board({
                               )}
                             </Card>
                           ))
+                        )}
+                        {/* 잘린 나머지의 출구. 목적지는 새 화면이 아니라 이미 있는 `?status=done`
+                            이고, 거기서는 완료가 전부 뜬다(자르는 것은 이 레인뿐이다) */}
+                        {trimmed > 0 && (
+                          <Link
+                            href={doneOnlyHref}
+                            className="block rounded-md px-3 py-2 text-center text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                          >
+                            과거 완료 {trimmed}건 →
+                          </Link>
                         )}
                       </div>
                     </div>
