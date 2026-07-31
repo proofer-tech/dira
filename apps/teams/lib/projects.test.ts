@@ -452,8 +452,18 @@ test("페르소나 — 이름 규칙과 심링크 탈출은 서버에서 거부�
 
 test("readSummary — 연결됨은 카운트, 연결 안 됨은 사유 원문 + 카운트 없음", async () => {
   const root = newQueue({ "w1.sh": "" });
-  writeFileSync(path.join(root, "tickets", "aaaa1111.md"), "---\nticket: aaaa1111\n---\n");
+  writeFileSync(
+    path.join(root, "tickets", "aaaa1111.md"),
+    "---\nticket: aaaa1111\npersona: designer\n---\n", // 디렉터리 없이 티켓만 부르는 이름
+  );
   writeFileSync(path.join(root, "tickets", "bbbb2222.done.md"), "---\nticket: bbbb2222\n---\n");
+
+  // 페르소나는 이름 목록뿐이다(§0 표) — 디렉터리 ∪ 티켓 `persona:`, `NAME_RE` 밖은 제외
+  mkdirSync(path.join(root, "personas", "developer"), { recursive: true });
+  writeFileSync(path.join(root, "personas", "developer", "PROFILE.md"), "# Developer\n");
+  mkdirSync(path.join(root, "personas", "qa")); // PROFILE.md 없는 디렉터리도 이름이다
+  mkdirSync(path.join(root, "personas", "한글")); // NAME_RE 밖 = 엔진이 안 받는 이름
+  writeFileSync(path.join(root, "personas", "README.md"), "디렉터리가 아니다\n");
 
   // 열린 파일 + session_id = 할당됨. 엔진이 만들지 않는 조합이고 §0-2 배너가 이걸 판정으로 쓴다
   writeFileSync(
@@ -469,6 +479,14 @@ test("readSummary — 연결됨은 카운트, 연결 안 됨은 사유 원문 + 
   const ok = await readSummary({ root });
   assert.strictEqual(ok.connected, true);
   assert.strictEqual(ok.open, 2); // .done은 열림이 아니다 (.wip도 아니다)
+  assert.strictEqual(ok.wip, 1);
+  assert.strictEqual(ok.done, 1);
+  // 픽스처의 실제 파일 수와 맞는다 — 3종이 큐 전체를 나눠 갖는다
+  assert.strictEqual(
+    ok.open! + ok.wip! + ok.done!,
+    readdirSync(path.join(root, "tickets")).length,
+  );
+  assert.deepStrictEqual(ok.personas, ["designer", "developer", "qa"]);
   assert.deepStrictEqual(ok.workers.map((w) => w.name), ["w1"]);
   assert.deepStrictEqual(ok.assigned, [{ hash: "cccc3333", stem: "cccc3333" }]);
 
@@ -476,6 +494,9 @@ test("readSummary — 연결됨은 카운트, 연결 안 됨은 사유 원문 + 
   const gone = await readSummary({ root: path.join(root, "없는디렉터리") });
   assert.strictEqual(gone.connected, false);
   assert.strictEqual(gone.open, null);
+  assert.strictEqual(gone.wip, null);
+  assert.strictEqual(gone.done, null);
+  assert.deepStrictEqual(gone.personas, []); // 판정 불가 = 빈 배열(사유가 그 자리에 있다)
   assert.deepStrictEqual(gone.assigned, []); // 판정 불가 = 배너·배지가 없다(§0-2)
   assert.match(gone.error!, /ENOENT/);
 });

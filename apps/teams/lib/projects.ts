@@ -331,7 +331,15 @@ export type ProjectSummary = {
   connected: boolean;
   /** 연결 안 됨 사유 원문(`ENOENT: …`). §6 에러 3요소의 2번. 삼키지 않는다. */
   error: string | null;
+  /** 티켓 3종 수(§0 자원 표). 판정은 `listTickets`가 준 `state`를 세는 것뿐 — 새 fs 읽기 0.
+   *  못 읽으면 셋 다 `null`이다(0건과 다른 사실이다 — §4-1). */
   open: number | null; // 열린 티켓 수
+  wip: number | null;
+  done: number | null;
+  /** 페르소나 **이름만**(§0 자원 표). `listPersonas`를 부르지 않는 이유: 그건 이름마다
+   *  `PROFILE.md`를 열어서 페르소나 수 × 프로젝트 수만큼 파일을 읽는다(§성능 예산).
+   *  못 읽은 프로젝트는 빈 배열이다(`assigned`와 같은 규칙 — 그 자리엔 `연결 안 됨`이 뜬다). */
+  personas: string[];
   workers: Worker[];
   /** `할당됨`(열린 파일 + `session_id`) 티켓 — 엔진이 만들지 않는 조합이고 도달하면 아무 신호
    *  없이 영구 정체다. 셸의 상주 배너(§0-2)와 목록 행 배지(§0)가 이걸 쓴다. 판정은 `statusOf`
@@ -361,13 +369,25 @@ export async function readSummary(project: Pick<Project, "root">): Promise<Proje
       connected: true,
       error: null,
       open: tickets.filter((t) => t.state === "open").length,
+      wip: tickets.filter((t) => t.state === "wip").length,
+      done: tickets.filter((t) => t.state === "done").length,
+      personas: await personaNames(config.personas, tickets),
       workers,
       assigned: tickets
         .filter((t) => statusOf(t) === "assigned")
         .map((t) => ({ hash: t.hash, stem: t.stem })),
     };
   } catch (e) {
-    return { connected: false, error: (e as Error).message, open: null, workers: [], assigned: [] };
+    return {
+      connected: false,
+      error: (e as Error).message,
+      open: null,
+      wip: null,
+      done: null,
+      personas: [],
+      workers: [],
+      assigned: [],
+    };
   }
 }
 
@@ -404,14 +424,20 @@ async function profilePath(dir: string, name: string): Promise<string> {
  *
  *  ponytail: 이름 규칙(`NAME_RE`) 밖 디렉터리는 목록에서 뺀다 — 엔진이 그 이름으로 티켓을
  *  받아주지 않으므로(`persona_of`가 빈 문자열로 만든다) 절대 쓰이지 않는 디렉터리다. */
-export async function listPersonas(dir: string, tickets: Ticket[] = []): Promise<Persona[]> {
+export async function personaNames(dir: string, tickets: Ticket[] = []): Promise<string[]> {
   const ents = await readdir(dir, { withFileTypes: true }).catch(() => []);
   const names = new Set(
     ents.filter((e) => e.isDirectory() && NAME_RE.test(e.name)).map((e) => e.name),
   );
   for (const t of tickets) if (t.persona) names.add(t.persona); // 프로필 없는 이름 = 엔진의 WARN
+  return [...names].sort();
+}
+
+/** 위 이름들 + 각각의 `PROFILE.md`·참조 수. **파일을 이름 수만큼 읽는다** — 목록 행처럼 이름만
+ *  필요한 화면은 `personaNames`를 부른다(§0 표 · §성능 예산). */
+export async function listPersonas(dir: string, tickets: Ticket[] = []): Promise<Persona[]> {
   return Promise.all(
-    [...names].sort().map(async (name) => {
+    (await personaNames(dir, tickets)).map(async (name) => {
       const file = path.join(dir, name, "PROFILE.md");
       const refs = tickets.filter((t) => t.persona === name);
       return {
