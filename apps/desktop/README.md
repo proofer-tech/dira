@@ -85,13 +85,13 @@ bump·태그 → `pnpm dist` → `gh release create`까지 한 방으로 간다.
 §배포의 「시크릿은 레포에 들어가지 않는다」와 §데스크톱 앱의 「남에게도 나눠준다」가 동시에
 성립하지 않는다. 비공개로 가려면 채널을 다시 고르는 요구가 필요하다.
 
-**`package.json`의 `build.publish`가 사람이 채우는 자리다.** 지금은 자리표시자다:
+**`package.json`의 `build.publish`가 사람이 채우는 자리고, 값은 채워져 있다**(요구 `25a2ead9`):
 
 ```json
-"publish": { "provider": "github", "owner": "<GitHub 계정>", "repo": "<레포 이름>" }
+"publish": { "provider": "github", "owner": "proofer-tech", "repo": "dira" }
 ```
 
-레포를 만든 뒤 그 둘을 실제 값으로 바꾼다. **자리표시자인 채로도 `pnpm dist`는 끝까지 돈다** —
+**그 이름의 레포는 아직 GitHub에 없다.** 없는 채로도 `pnpm dist`는 끝까지 돈다 —
 `.dmg`·`.zip`·`latest-mac.yml`이 다 나오고 업로드만 안 한다. 대신 `업데이트 확인…`을 누르면
 GitHub이 404를 주고 **그 사유가 다이얼로그로 뜬다**(조용히 안 되지 않는다). 빈 문자열 `""`로
 두면 안 된다 — `electron-builder`가 `Cannot read properties of null (reading 'channel')`로
