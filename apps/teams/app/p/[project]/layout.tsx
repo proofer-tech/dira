@@ -58,7 +58,10 @@ export default async function ProjectLayout({
         <ProjectSwitcher projects={items} currentId={id} />
       </header>
 
-      <main className="w-full space-y-6 px-6 py-6">
+      {/* 스크롤하는 것은 이 `main`이다(§비주얼 §4). `min-h-0`이 없으면 flex 자식 기본값
+          (`min-height: auto`)이 내용만큼 늘어나 문서가 도로 길어진다. flex 컬럼인 이유는
+          배너다: 배너가 뜨면 남는 높이가 줄어 보드가 그만큼 짧아진다(§1) */}
+      <main className="flex min-h-0 w-full flex-1 flex-col gap-6 overflow-y-auto px-6 py-6">
         {/* 디스패치되지 않는 티켓 알림 (§0-2). 셸에 있으므로 보드뿐 아니라 워커·페르소나·
             프로토콜에도 뜬다 — 그래야 "해결 전까지 보인다"가 성립한다. dismiss·읽음 상태가 없다:
             폴링이 매번 다시 판정하므로 0건이 되면 이 노드가 사라지고, 안 되면 남는다.

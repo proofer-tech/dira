@@ -53,28 +53,32 @@ export default async function Home() {
         <BrandMark href="/" />
       </header>
 
-      {/* 등록 폼이 다이얼로그로 내려가면서 이 화면은 테이블 화면이 됐다 — 폼 폭 규칙(3xl)은
-          폼이 서는 자리만 문다(§비주얼 §7 폭 항) */}
-      <main className="w-full max-w-4xl space-y-6 px-6 py-6">
-        {registryError && (
-          <Alert variant="destructive">
-            <TriangleAlert aria-hidden />
-            <AlertTitle>프로젝트 레지스트리를 읽지 못했습니다</AlertTitle>
-            <AlertDescription className="grid gap-2">
-              <span className="font-mono text-xs break-all">{registryError}</span>
-              <CopyCommand cmd={`open -e "${registryPath()}"`} />
-            </AlertDescription>
-          </Alert>
-        )}
+      {/* 스크롤하는 것은 이 `main`이다(§비주얼 §4). 폭 상한은 **안쪽 상자**가 든다 —
+          `main`에 걸면 스크롤바가 화면 오른쪽이 아니라 896px 자리에 선다 */}
+      <main className="min-h-0 w-full flex-1 overflow-y-auto">
+        {/* 등록 폼이 다이얼로그로 내려가면서 이 화면은 테이블 화면이 됐다 — 폼 폭 규칙(3xl)은
+            폼이 서는 자리만 문다(§비주얼 §7 폭 항) */}
+        <div className="w-full max-w-4xl space-y-6 px-6 py-6">
+          {registryError && (
+            <Alert variant="destructive">
+              <TriangleAlert aria-hidden />
+              <AlertTitle>프로젝트 레지스트리를 읽지 못했습니다</AlertTitle>
+              <AlertDescription className="grid gap-2">
+                <span className="font-mono text-xs break-all">{registryError}</span>
+                <CopyCommand cmd={`open -e "${registryPath()}"`} />
+              </AlertDescription>
+            </Alert>
+          )}
 
-        {/* `h1`·등록·생성 트리거·결과 슬롯이 한 클라이언트 조각이다 — 트리거는 `h1` 우측인데
-            결과 카드는 목록 아래 슬롯에 떠야 한다(§비주얼 §7). 목록이 0↔1로 바뀌어도 이 조각은
-            자리를 안 옮긴다: 옮기면 remount로 해석 결과 표가 사라진다(§0 마지막 항) */}
-        <ProjectsSection empty={rows.length === 0}>
-          {rows.length > 0 && <ProjectRows rows={rows} />}
-        </ProjectsSection>
+          {/* `h1`·등록·생성 트리거·결과 슬롯이 한 클라이언트 조각이다 — 트리거는 `h1` 우측인데
+              결과 카드는 목록 아래 슬롯에 떠야 한다(§비주얼 §7). 목록이 0↔1로 바뀌어도 이 조각은
+              자리를 안 옮긴다: 옮기면 remount로 해석 결과 표가 사라진다(§0 마지막 항) */}
+          <ProjectsSection empty={rows.length === 0}>
+            {rows.length > 0 && <ProjectRows rows={rows} />}
+          </ProjectsSection>
 
-        {rows.length === 0 && <OnboardingHelp />}
+          {rows.length === 0 && <OnboardingHelp />}
+        </div>
       </main>
     </>
   );

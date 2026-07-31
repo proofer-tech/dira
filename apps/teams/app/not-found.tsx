@@ -8,7 +8,8 @@ import Link from "next/link";
 
 export default function NotFound() {
   return (
-    <main className="w-full max-w-3xl space-y-2 px-6 py-6">
+    // 스크롤러는 `main`이다(§비주얼 §4 · app/layout.tsx) — 문서는 스크롤하지 않는다
+    <main className="min-h-0 w-full max-w-3xl flex-1 space-y-2 overflow-y-auto px-6 py-6">
       <h1 className="text-lg font-semibold">찾을 수 없습니다</h1>
       <p className="text-sm text-muted-foreground">
         이 URL에 해당하는 화면이 없습니다. <span className="font-mono text-xs">/p/&lt;프로젝트&gt;</span>

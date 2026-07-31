@@ -358,10 +358,14 @@ export default async function TicketDetail({
 
         {/* 오른쪽 단 — 왼쪽을 스크롤하는 동안 따라다닌다(§2). 세 값이 한 벌이다:
             `self-start`가 없으면 그리드 아이템이 왼쪽 단 높이만큼 늘어나 `sticky`가 움직일
-            여지를 잃고(다 맞는데 안 따라다닌다), `top-18`(4.5rem)은 헤더 `h-12` + `py-6`에서
-            유도된 수이며, `max-h`의 4.5rem은 **그 수와 같아야** 바닥이 안 잘린다.
+            여지를 잃고(다 맞는데 안 따라다닌다), `top-0`은 스크롤 상자(`main`)의 **콘텐츠 박스**
+            위 = 뷰포트 72px이며(헤더 `h-12` 48 + `main`의 `py-6` 24 — sticky 기준은 스크롤러의
+            패딩만큼 안쪽이다, 1440×900 실측), `max-h`의 4.5rem은 거기서 뷰포트 바닥까지의
+            높이라 **그 72와 같은 수여야** 바닥이 안 잘린다.
+            **`top-18`이 아니다**: 스크롤 주체가 문서에서 `main`으로 내려가면서(§비주얼 §4)
+            기준이 뷰포트 위가 아니게 됐다. 화면에 보이는 자리는 종전과 같은 72px다.
             후행이 20건이면 이 단이 뷰포트보다 길어지는데 그때 `overflow-y-auto`가 받는다. */}
-        <div className="space-y-6 xl:sticky xl:top-18 xl:max-h-[calc(100vh-4.5rem)] xl:self-start xl:overflow-y-auto">
+        <div className="space-y-6 xl:sticky xl:top-0 xl:max-h-[calc(100vh-4.5rem)] xl:self-start xl:overflow-y-auto">
           <section className="space-y-2">
             <h2 className="text-sm font-medium">frontmatter</h2>
             {/* `table-fixed`가 §비주얼 §11의 216px 값 열을 **실제로** 만든다. 기본 `auto`에서는

@@ -275,7 +275,10 @@ export default async function Board({
   );
 
   return (
-    <div className="space-y-4">
+    // 보드만 자기 높이를 뷰포트에 맞춘다(§1 · §비주얼 §4). 셸 → `main` → 여기 → 스트립 → 레인이
+    // 한 사슬이고 **한 칸이라도 `min-h-0`이 빠지면** 그 칸이 내용만큼 늘어나 문서가 도로 길어진다.
+    // 위에서 고정되는 것(h1 · 툴바)은 그대로 두고 마지막 칸(레인 · 테이블 바디)만 flex-1이다.
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
       <BoardPolling />
 
       <div className="flex items-center justify-between gap-4">
@@ -377,7 +380,7 @@ export default async function Board({
           </div>
 
           {view === "kanban" ? (
-            <div className="space-y-4">
+            <div className="flex min-h-0 flex-1 flex-col gap-4">
               {/* 필터 0건이라도 **컬럼은 남긴다** — 컬럼이 사라지면 필터를 지운 건지 데이터가
                   없는 건지 구분이 안 된다(테이블 헤더를 남기는 것과 같은 이유, §6) */}
               {rows.length === 0 && (
@@ -387,8 +390,10 @@ export default async function Board({
                   `-mx-1 px-1`은 스크롤 컨테이너의 클리핑 여백이다: <Card>의 테두리는 `ring-1`(=
                   border box **밖에** 그리는 box-shadow)이라 카드가 컨테이너 끝에 딱 붙으면
                   양끝 카드의 왼/오른쪽 테두리가 잘려 카드가 열려 보인다. 음수 마진으로 되돌려
-                  컬럼은 페이지 거터(main px-6)에 그대로 정렬시킨다 */}
-              <div className="-mx-1 flex gap-4 overflow-x-auto px-1 pb-2">
+                  컬럼은 페이지 거터(main px-6)에 그대로 정렬시킨다.
+                  세로는 여기서 멈춘다 — 스트립이 남은 높이를 전부 먹고(`min-h-0 flex-1`)
+                  세로 스크롤은 레인 안에서 일어난다(§1). 두 축이 공존한다: 여기가 가로다 */}
+              <div className="-mx-1 flex min-h-0 flex-1 gap-4 overflow-x-auto px-1 pb-2">
                 {STATUSES.map((s) => {
                   // 컬럼 배정은 테이블 상태 컬럼과 **같은 판정**이다(queue.ts statusOf 하나뿐) —
                   // 렌더 직전에 `blocked → 대기`만 한 번 접는다. 레인 배정은 표현이지 상태가
@@ -397,201 +402,225 @@ export default async function Board({
                     (t) => (statusOf(t) === "blocked" ? "open" : statusOf(t)) === s,
                   );
                   return (
-                    <div key={s} className="w-72 shrink-0 space-y-2">
+                    // 레인 높이는 스트립이 준다(flex 기본 stretch) — 머리는 그 위에 고정으로 남고
+                    // 카드 스택만 스크롤한다. 머리를 스크롤러 안에 넣고 sticky를 걸지 않는 이유는
+                    // §1에 있다: 건수는 레인 전체에 대한 진술이라 흔들릴 이유가 없다.
+                    <div key={s} className="flex w-72 shrink-0 flex-col gap-2">
                       <div className="flex items-center justify-between gap-2">
                         <StatusBadge status={s} />
                         <span className="text-xs tabular-nums text-muted-foreground">
                           {group.length}건
                         </span>
                       </div>
-                      {group.length === 0 && rows.length > 0 ? (
-                        // <EmptyState>는 화면 하나의 빈 상태용이다(py-10 + 1차 액션 버튼). 레인
-                        // 3개에 그걸 깔면 같은 버튼이 3개 생긴다 — 여기선 건수 0만 말한다.
-                        // 전체 0건일 땐 위 블록이 이미 말했으므로 이 자리표시자는 안 그린다(§6).
-                        <p className="rounded-md border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">
-                          0건
-                        </p>
-                      ) : (
-                        group.map((t) => (
-                          // 카드 전체가 상세로 가는 링크다(테이블 행과 같은 규칙 — 행 액션 버튼이
-                          // 없어서 안전하다). deps 배지는 늘어난 링크 위에 뜬다.
-                          <Card
-                            key={t.path}
-                            className="relative gap-2 px-4 focus-within:bg-muted/50 hover:bg-muted/50"
-                          >
-                            {/* 칸반 카드는 레인이 상태를 말하므로 배지를 달지 않는다 — 예외가
-                                `답변 대기`다. 자기 레인 없이 `대기`에 앉고, 답변 stem은 큐에
-                                없는 해시라 deps 태그가 `?`로만 떠서 "사람이 답할 차례"라는
-                                말을 못 한다. 그래서 이 배지 하나만 남는다(§1 보드 요구사항 항).
-                                `deps 대기`는 배지를 얹지 않는다 — 아래 deps 줄의 주황색
-                                <DepBadge>가 그 표시다(사람 요청 `bd2062cb`) */}
-                            <div className="flex items-start justify-between gap-2">
-                              <Link
-                                href={href(t)}
-                                className="rounded-sm font-mono text-xs after:absolute after:inset-0"
-                              >
-                                {t.hash}
-                              </Link>
-                              {isAwaiting(t) && (
-                                <StatusBadge status="awaiting" days={daysSince(t.mtime)} />
-                              )}
-                            </div>
-                            {/* 카드 title은 2줄까지(§6). 전문은 `title` 속성으로 본다 */}
-                            <span className="line-clamp-2 text-sm" title={t.title}>
-                              {t.title || "(제목 없음)"}
-                            </span>
-                            {/* 배지가 줄 안에 섞이므로 flex다 — 텍스트 baseline 정렬에 맡기면
-                                20px 배지가 줄을 밀어 카드마다 높이가 갈린다 */}
-                            <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                              {t.kind || "—"} ·
-                              {t.persona ? (
-                                <PersonaBadge name={t.persona} color={colors[t.persona]} />
-                              ) : (
-                                "—"
-                              )}
-                            </span>
-                            {t.deps.length > 0 && (
-                              // 라벨은 세어주지 않는다 — 어느 해시가 무엇인지는 <DepBadge>가
-                              // 색·아이콘으로, 스크린리더에는 배지 안 `sr-only` 문구로 말한다.
-                              <span className="relative z-10 flex flex-wrap items-center gap-1">
-                                <span className="text-xs text-muted-foreground">deps</span>
-                                {depBadges(tickets, t, config).map((d) => (
-                                  <DepBadge
-                                    key={d.hash}
-                                    hash={d.hash}
-                                    kind={d.kind}
-                                    href={d.hit ? href(d.hit) : undefined}
-                                  />
-                                ))}
+                      {/* `-m-1 p-1`은 위 스트립의 `-mx-1 px-1`과 **같은 이유**다 — 세로 overflow가
+                          새 클리핑 상자를 만들어 <Card>의 `ring-1`(border box 밖 box-shadow)이
+                          네 변에서 잘린다. 음수 마진이 그 여백을 되돌려 간격은 종전 그대로다 */}
+                      <div className="-m-1 min-h-0 flex-1 space-y-2 overflow-y-auto p-1">
+                        {group.length === 0 && rows.length > 0 ? (
+                          // <EmptyState>는 화면 하나의 빈 상태용이다(py-10 + 1차 액션 버튼). 레인
+                          // 3개에 그걸 깔면 같은 버튼이 3개 생긴다 — 여기선 건수 0만 말한다.
+                          // 전체 0건일 땐 위 블록이 이미 말했으므로 이 자리표시자는 안 그린다(§6).
+                          <p className="rounded-md border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">
+                            0건
+                          </p>
+                        ) : (
+                          group.map((t) => (
+                            // 카드 전체가 상세로 가는 링크다(테이블 행과 같은 규칙 — 행 액션 버튼이
+                            // 없어서 안전하다). deps 배지는 늘어난 링크 위에 뜬다.
+                            <Card
+                              key={t.path}
+                              className="relative gap-2 px-4 focus-within:bg-muted/50 hover:bg-muted/50"
+                            >
+                              {/* 칸반 카드는 레인이 상태를 말하므로 배지를 달지 않는다 — 예외가
+                                  `답변 대기`다. 자기 레인 없이 `대기`에 앉고, 답변 stem은 큐에
+                                  없는 해시라 deps 태그가 `?`로만 떠서 "사람이 답할 차례"라는
+                                  말을 못 한다. 그래서 이 배지 하나만 남는다(§1 보드 요구사항 항).
+                                  `deps 대기`는 배지를 얹지 않는다 — 아래 deps 줄의 주황색
+                                  <DepBadge>가 그 표시다(사람 요청 `bd2062cb`) */}
+                              <div className="flex items-start justify-between gap-2">
+                                <Link
+                                  href={href(t)}
+                                  className="rounded-sm font-mono text-xs after:absolute after:inset-0"
+                                >
+                                  {t.hash}
+                                </Link>
+                                {isAwaiting(t) && (
+                                  <StatusBadge status="awaiting" days={daysSince(t.mtime)} />
+                                )}
+                              </div>
+                              {/* 카드 title은 2줄까지(§6). 전문은 `title` 속성으로 본다 */}
+                              <span className="line-clamp-2 text-sm" title={t.title}>
+                                {t.title || "(제목 없음)"}
                               </span>
-                            )}
-                            {/* 답변은 여기서 바로 단다(§1 요구사항 항, 사람 요청 `14c88df4`) —
-                                상세와 같은 스레드(`threadOf`) · 같은 폼 · 같은 액션이다. 판정은
-                                위 배지와 **같은 식**이고, 테이블 행에는 붙이지 않는다(§1 행 액션 없음).
-                                자리는 카드 맨 아래다: 위는 티켓이 무엇인가고 여기부터가 할 수 있는
-                                일이다(deps 배지도 같은 `z-10` 층에 있다) */}
-                            {isAwaiting(t) && (
-                              <AnswerDialog
-                                project={id}
-                                hash={t.stem}
-                                title={t.title}
-                                answerFile={`${awaitingOf(t)}${config.done}.md`}
-                                thread={threadOf(tickets, t, config)}
-                              />
-                            )}
-                          </Card>
-                        ))
-                      )}
+                              {/* 배지가 줄 안에 섞이므로 flex다 — 텍스트 baseline 정렬에 맡기면
+                                  20px 배지가 줄을 밀어 카드마다 높이가 갈린다 */}
+                              <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                                {t.kind || "—"} ·
+                                {t.persona ? (
+                                  <PersonaBadge name={t.persona} color={colors[t.persona]} />
+                                ) : (
+                                  "—"
+                                )}
+                              </span>
+                              {t.deps.length > 0 && (
+                                // 라벨은 세어주지 않는다 — 어느 해시가 무엇인지는 <DepBadge>가
+                                // 색·아이콘으로, 스크린리더에는 배지 안 `sr-only` 문구로 말한다.
+                                <span className="relative z-10 flex flex-wrap items-center gap-1">
+                                  <span className="text-xs text-muted-foreground">deps</span>
+                                  {depBadges(tickets, t, config).map((d) => (
+                                    <DepBadge
+                                      key={d.hash}
+                                      hash={d.hash}
+                                      kind={d.kind}
+                                      href={d.hit ? href(d.hit) : undefined}
+                                    />
+                                  ))}
+                                </span>
+                              )}
+                              {/* 답변은 여기서 바로 단다(§1 요구사항 항, 사람 요청 `14c88df4`) —
+                                  상세와 같은 스레드(`threadOf`) · 같은 폼 · 같은 액션이다. 판정은
+                                  위 배지와 **같은 식**이고, 테이블 행에는 붙이지 않는다(§1 행 액션 없음).
+                                  자리는 카드 맨 아래다: 위는 티켓이 무엇인가고 여기부터가 할 수 있는
+                                  일이다(deps 배지도 같은 `z-10` 층에 있다) */}
+                              {isAwaiting(t) && (
+                                <AnswerDialog
+                                  project={id}
+                                  hash={t.stem}
+                                  title={t.title}
+                                  answerFile={`${awaitingOf(t)}${config.done}.md`}
+                                  thread={threadOf(tickets, t, config)}
+                                />
+                              )}
+                            </Card>
+                          ))
+                        )}
+                      </div>
                     </div>
                   );
                 })}
               </div>
             </div>
           ) : (
-          <Table>
-            <TableHeader>
-              <TableRow className="h-9 hover:bg-transparent">
-                {COLUMNS.map(({ key, label }) => {
-                  const active = sortKey === key;
-                  const Icon = !active ? ChevronsUpDown : desc ? ArrowDown : ArrowUp;
-                  return (
-                    <TableHead key={key} className="h-9 px-3 text-xs font-medium">
-                      <Link
-                        href={sortHref(key)}
-                        aria-label={`${label} 정렬`}
-                        className={`inline-flex items-center gap-1 rounded-sm ${
-                          active ? "text-foreground" : "text-muted-foreground"
-                        }`}
-                      >
-                        {label}
-                        <Icon aria-hidden className="size-3.5 opacity-60" />
-                      </Link>
-                    </TableHead>
-                  );
-                })}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.length === 0 ? (
-                // 필터 0건 — 헤더는 남긴다(컬럼이 사라지면 필터를 지운 건지 데이터가 없는 건지
-                // 구분이 안 된다). 문구·액션이 빈 큐와 다른 이유도 같다(§6).
-                <TableRow className="hover:bg-transparent">
-                  <TableCell colSpan={COLUMNS.length} className="px-3 py-6">
-                    {noMatch}
-                  </TableCell>
-                </TableRow>
-              ) : (
-                rows.map((t) => (
-                  // 행 전체가 상세로 가는 링크다 — 해시 셀의 링크를 행 크기로 늘린다(§7 대비:
-                  // 여기는 행 액션 버튼이 없어서 행 링크가 안전하다). deps 배지는 그 위에 뜬다.
-                  <TableRow key={t.path} className="relative h-9 focus-within:bg-muted/50">
-                    <TableCell className="px-3 py-0">
-                      {isAwaiting(t) ? (
-                        <StatusBadge status="awaiting" days={daysSince(t.mtime)} />
-                      ) : (
-                        <StatusBadge status={statusOf(t)} />
-                      )}
-                    </TableCell>
-                    <TableCell className="px-3 py-0">
-                      <Link
-                        href={href(t)}
-                        className="rounded-sm font-mono text-xs after:absolute after:inset-0"
-                      >
-                        {t.hash}
-                      </Link>
-                    </TableCell>
-                    {/* title은 자르고 전문은 `title` 속성으로 본다(§6). tooltip은 클라이언트
-                        컴포넌트라 행마다 하나씩 두면 테이블이 통째로 클라이언트가 된다 */}
-                    <TableCell className="px-3 py-0">
-                      {/* 폭 상한은 1440에서 컬럼 8개가 다 들어가도록 잡은 값이다(§4 사이드바를
-                          쓰지 않는 이유). deps가 4개 넘게 달린 행은 가로 스크롤로 넘긴다 */}
-                      <span className="block max-w-[34ch] truncate text-sm" title={t.title}>
-                        {t.title || "(제목 없음)"}
-                      </span>
-                    </TableCell>
-                    <TableCell className="px-3 py-0 text-sm">{t.kind || "—"}</TableCell>
-                    {/* 배지가 셀의 `text-sm`을 대체한다(§비주얼 §12) — 셀에 남은 `text-sm`은
-                        배지가 없는 `—`(담당 없음) 한 글자용이다. Badge는 제 `text-xs`를 갖는다 */}
-                    <TableCell className="px-3 py-0 text-sm">
-                      {t.persona ? (
-                        <PersonaBadge name={t.persona} color={colors[t.persona]} />
-                      ) : (
-                        "—"
-                      )}
-                    </TableCell>
-                    <TableCell className="px-3 py-0">
-                      {t.deps.length === 0 ? (
-                        <span className="text-sm text-muted-foreground">—</span>
-                      ) : (
-                        // 배지는 늘어난 행 링크 위에 뜨게 둔다 — 안 그러면 deps 클릭이 행에 먹힌다
-                        <span className="relative z-10 flex items-center gap-1">
-                          {depBadges(tickets, t, config).map((d) => (
-                            <DepBadge
-                              key={d.hash}
-                              hash={d.hash}
-                              kind={d.kind}
-                              href={d.hit ? href(d.hit) : undefined}
-                            />
-                          ))}
-                        </span>
-                      )}
-                    </TableCell>
-                    <TableCell className="px-3 py-0 text-xs tabular-nums text-muted-foreground">
-                      {when(t.birth)}
-                    </TableCell>
-                    <TableCell className="px-3 py-0">
-                      <span
-                        className="block max-w-[24ch] truncate font-mono text-xs text-muted-foreground"
-                        title={t.fm.owner ?? ""}
-                      >
-                        {t.fm.owner || "—"}
-                      </span>
-                    </TableCell>
+            /* 바디가 스크롤러고 헤더 행은 그 안에서 고정이다(§1) — 뷰를 토글해도 페이지 높이가
+               안 변한다. 세로 스크롤을 **shadcn Table의 컨테이너**(이미 `overflow-x-auto`인 그
+               div)에 걸어야 한다: `sticky`의 기준은 가장 가까운 스크롤 상자라, 바깥에 새
+               스크롤러를 두면 헤더가 그 스크롤을 못 따라간다(컨테이너가 그 사이에 낀다).
+               컨테이너는 className을 안 받으므로(shadcn CLI 산출물 — 손대지 않는다) 부모에서
+               자식 선택자로 준다. */
+            <div className="min-h-0 flex-1 [&>[data-slot=table-container]]:h-full [&>[data-slot=table-container]]:overflow-y-auto">
+              <Table>
+                {/* 헤더 행은 스크롤러 안에서 고정이다(§1). `thead`에 걸고 셀에도 배경을 준다 —
+                    `thead`만으로는 collapse된 표에서 셀 배경이 없어 행이 비쳐 보인다 */}
+                <TableHeader className="sticky top-0 z-20">
+                  <TableRow className="h-9 hover:bg-transparent">
+                    {COLUMNS.map(({ key, label }) => {
+                      const active = sortKey === key;
+                      const Icon = !active ? ChevronsUpDown : desc ? ArrowDown : ArrowUp;
+                      return (
+                        // 배경은 셀이 든다(위 `thead` 주석). 행의 `border-b`는 collapse된 표에서
+                        // 고정된 헤더를 안 따라오므로 밑줄을 `inset` 그림자로 셀에 직접 그린다
+                        // (색은 같은 `--border` 토큰).
+                        <TableHead
+                          key={key}
+                          className="h-9 bg-background px-3 text-xs font-medium shadow-[inset_0_-1px_0_var(--border)]"
+                        >
+                          <Link
+                            href={sortHref(key)}
+                            aria-label={`${label} 정렬`}
+                            className={`inline-flex items-center gap-1 rounded-sm ${
+                              active ? "text-foreground" : "text-muted-foreground"
+                            }`}
+                          >
+                            {label}
+                            <Icon aria-hidden className="size-3.5 opacity-60" />
+                          </Link>
+                        </TableHead>
+                      );
+                    })}
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                </TableHeader>
+                <TableBody>
+                  {rows.length === 0 ? (
+                    // 필터 0건 — 헤더는 남긴다(컬럼이 사라지면 필터를 지운 건지 데이터가 없는 건지
+                    // 구분이 안 된다). 문구·액션이 빈 큐와 다른 이유도 같다(§6).
+                    <TableRow className="hover:bg-transparent">
+                      <TableCell colSpan={COLUMNS.length} className="px-3 py-6">
+                        {noMatch}
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    rows.map((t) => (
+                      // 행 전체가 상세로 가는 링크다 — 해시 셀의 링크를 행 크기로 늘린다(§7 대비:
+                      // 여기는 행 액션 버튼이 없어서 행 링크가 안전하다). deps 배지는 그 위에 뜬다.
+                      <TableRow key={t.path} className="relative h-9 focus-within:bg-muted/50">
+                        <TableCell className="px-3 py-0">
+                          {isAwaiting(t) ? (
+                            <StatusBadge status="awaiting" days={daysSince(t.mtime)} />
+                          ) : (
+                            <StatusBadge status={statusOf(t)} />
+                          )}
+                        </TableCell>
+                        <TableCell className="px-3 py-0">
+                          <Link
+                            href={href(t)}
+                            className="rounded-sm font-mono text-xs after:absolute after:inset-0"
+                          >
+                            {t.hash}
+                          </Link>
+                        </TableCell>
+                        {/* title은 자르고 전문은 `title` 속성으로 본다(§6). tooltip은 클라이언트
+                            컴포넌트라 행마다 하나씩 두면 테이블이 통째로 클라이언트가 된다 */}
+                        <TableCell className="px-3 py-0">
+                          {/* 폭 상한은 1440에서 컬럼 8개가 다 들어가도록 잡은 값이다(§4 사이드바를
+                              쓰지 않는 이유). deps가 4개 넘게 달린 행은 가로 스크롤로 넘긴다 */}
+                          <span className="block max-w-[34ch] truncate text-sm" title={t.title}>
+                            {t.title || "(제목 없음)"}
+                          </span>
+                        </TableCell>
+                        <TableCell className="px-3 py-0 text-sm">{t.kind || "—"}</TableCell>
+                        {/* 배지가 셀의 `text-sm`을 대체한다(§비주얼 §12) — 셀에 남은 `text-sm`은
+                            배지가 없는 `—`(담당 없음) 한 글자용이다. Badge는 제 `text-xs`를 갖는다 */}
+                        <TableCell className="px-3 py-0 text-sm">
+                          {t.persona ? (
+                            <PersonaBadge name={t.persona} color={colors[t.persona]} />
+                          ) : (
+                            "—"
+                          )}
+                        </TableCell>
+                        <TableCell className="px-3 py-0">
+                          {t.deps.length === 0 ? (
+                            <span className="text-sm text-muted-foreground">—</span>
+                          ) : (
+                            // 배지는 늘어난 행 링크 위에 뜨게 둔다 — 안 그러면 deps 클릭이 행에 먹힌다
+                            <span className="relative z-10 flex items-center gap-1">
+                              {depBadges(tickets, t, config).map((d) => (
+                                <DepBadge
+                                  key={d.hash}
+                                  hash={d.hash}
+                                  kind={d.kind}
+                                  href={d.hit ? href(d.hit) : undefined}
+                                />
+                              ))}
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell className="px-3 py-0 text-xs tabular-nums text-muted-foreground">
+                          {when(t.birth)}
+                        </TableCell>
+                        <TableCell className="px-3 py-0">
+                          <span
+                            className="block max-w-[24ch] truncate font-mono text-xs text-muted-foreground"
+                            title={t.fm.owner ?? ""}
+                          >
+                            {t.fm.owner || "—"}
+                          </span>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </>
       )}
