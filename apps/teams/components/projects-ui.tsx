@@ -731,12 +731,13 @@ export function ProjectsSection({
         </div>
       </header>
 
-      {/* 스크롤하는 것은 이 `main`이다(§비주얼 §4). 폭 상한은 **안쪽 상자**가 든다 —
-          `main`에 걸면 스크롤바가 화면 오른쪽이 아니라 896px 자리에 선다.
-          등록 폼이 다이얼로그로 내려가면서 이 화면은 테이블 화면이 됐다 — 폼 폭 규칙(3xl)은
-          폼이 서는 자리만 문다(§비주얼 §7 폭 항) */}
+      {/* 스크롤하는 것은 이 `main`이다(§비주얼 §4). **본문에 폭 상한이 없다** — 목록이 화면
+          전폭을 쓴다(요청 `27a7a13b`, 티켓 `9b288700`). 등록 폼이 다이얼로그로 내려가면서 이
+          화면은 테이블 화면이 됐고, 폼 폭 규칙(3xl)은 폼이 서는 자리·읽는 산문만 문다
+          (§비주얼 §7 폭 항). 상한이 다시 필요해지면 여기가 아니라 안쪽 상자에 건다 —
+          `main`에 걸면 스크롤바가 화면 오른쪽이 아니라 상한 자리에 선다 */}
       <main className="min-h-0 w-full flex-1 overflow-y-auto">
-        <div className="w-full max-w-4xl space-y-6 px-6 py-6">
+        <div className="w-full space-y-6 px-6 py-6">
           {registryError && (
             <Alert variant="destructive">
               <TriangleAlert aria-hidden />
