@@ -1,0 +1,543 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>dira — 에이전트 팀을 화면으로 본다</title>
+<meta name="description" content="티켓을 큐에 넣으면 cron에 물린 워커가 claude 세션에 넘긴다. 도는 동안 화면에서 보고, 도는 세션에 말을 건다. 파일시스템이 곧 큐인 티켓 디스패처.">
+<meta property="og:title" content="dira — 에이전트 팀을 화면으로 본다">
+<meta property="og:description" content="파일시스템이 곧 큐인 티켓 디스패처. 엔진은 의존성 0, 화면은 로컬 맥 앱.">
+<meta property="og:type" content="website">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<style>
+:root {
+  --bg: #FFFFFF;
+  --fg: #0A0A0A;
+  --panel: #FAFAFA;
+  --muted-fg: #71717A;
+  --faint: #A1A1AA;
+  --border: #E4E4E7;
+  --active:  oklch(0.52 0.18 258);
+  --blocked: oklch(0.52 0.13 75);
+  --done:    oklch(0.50 0.13 155);
+  --stale:   oklch(0.52 0.19 25);
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  --maxw: 1080px;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font: 15px/1.7 -apple-system, BlinkMacSystemFont, "Pretendard", "Apple SD Gothic Neo", "Segoe UI", sans-serif;
+  word-break: keep-all; overflow-wrap: anywhere;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: inherit; }
+code, kbd { font-family: var(--mono); font-size: 0.88em; }
+.wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 24px; }
+
+/* ── announcement bar ───────────────────────────── */
+.ann {
+  background: var(--fg); color: #FAFAFA;
+  font-size: 13px; line-height: 1; position: relative; z-index: 20;
+}
+.ann .wrap { display: flex; align-items: center; justify-content: center; gap: 12px; height: 38px; }
+.ann a {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 10px; border-radius: 99px; text-decoration: none;
+  background: rgba(255,255,255,.12); font-size: 12px; font-weight: 500;
+}
+.ann a:hover { background: rgba(255,255,255,.2); }
+.ann span { color: #D4D4D8; }
+
+/* ── header ─────────────────────────────────────── */
+header {
+  position: sticky; top: 0; z-index: 10;
+  height: 60px; display: flex; align-items: center;
+  background: var(--bg); border-bottom: 1px solid var(--border);
+}
+header .wrap { display: flex; align-items: center; gap: 12px; width: 100%; }
+.brand { display: flex; align-items: center; gap: 8px; text-decoration: none; font-family: var(--mono); font-weight: 600; font-size: 16px; letter-spacing: -0.03em; }
+.brand svg { width: 20px; height: 20px; fill: currentColor; }
+header nav { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 34px; padding: 0 14px; border-radius: 8px;
+  font-size: 13.5px; font-weight: 500; text-decoration: none;
+  border: 1px solid var(--border); background: var(--bg); color: var(--fg); white-space: nowrap;
+}
+.btn:hover { background: var(--panel); }
+.btn-primary { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.btn-primary:hover { background: #262626; }
+.btn-lg { height: 44px; padding: 0 22px; font-size: 15px; border-radius: 10px; }
+
+/* ── shared type ────────────────────────────────── */
+.eyebrow {
+  margin: 0 0 14px; font-family: var(--mono);
+  font-size: 11.5px; font-weight: 600; letter-spacing: .13em;
+  text-transform: uppercase; color: var(--faint);
+}
+h1 {
+  margin: 0 0 20px; font-size: clamp(38px, 6vw, 62px); line-height: 1.08;
+  letter-spacing: -0.045em; font-weight: 700;
+}
+h2 { margin: 0 0 14px; font-size: clamp(26px, 3.4vw, 36px); line-height: 1.22; letter-spacing: -0.035em; font-weight: 700; }
+h3 { margin: 0 0 6px; font-size: 15.5px; letter-spacing: -0.02em; font-weight: 650; }
+.body { margin: 0; color: var(--muted-fg); font-size: 15.5px; line-height: 1.72; }
+.body b, .body strong { color: var(--fg); font-weight: 650; }
+
+/* ── hero ───────────────────────────────────────── */
+.hero { padding: 96px 0 0; text-align: center; }
+.hero h1 { max-width: 15em; margin-inline: auto; }
+.hero .body { max-width: 34em; margin: 0 auto 34px; }
+.cta { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+.cta-note { margin: 16px 0 0; font-size: 12.5px; color: var(--faint); font-family: var(--mono); }
+
+/* ── pillar grid ────────────────────────────────── */
+.pillars { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 60px; text-align: left; }
+.pillar { border: 1px solid var(--border); border-radius: 12px; padding: 20px; background: var(--panel); }
+.tag {
+  display: inline-block; margin-bottom: 12px; padding: 3px 9px; border-radius: 5px;
+  font-family: var(--mono); font-size: 10.5px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase;
+}
+.t-queue  { color: var(--blocked); background: color-mix(in oklab, var(--blocked) 12%, transparent); }
+.t-worker { color: var(--active);  background: color-mix(in oklab, var(--active) 12%, transparent); }
+.t-ui     { color: var(--done);    background: color-mix(in oklab, var(--done) 12%, transparent); }
+.t-engine { color: var(--stale);   background: color-mix(in oklab, var(--stale) 12%, transparent); }
+.pillar p { margin: 0; font-size: 14px; color: var(--muted-fg); line-height: 1.6; }
+
+/* ── figures ────────────────────────────────────── */
+figure { margin: 0; }
+.shot { display: block; width: 100%; height: auto; border: 1px solid var(--border); border-radius: 12px; background: #fff; }
+figcaption { margin-top: 14px; font-size: 13.5px; line-height: 1.68; color: var(--muted-fg); }
+figcaption b { color: var(--fg); font-weight: 650; }
+figure.narrow { max-width: 880px; margin-inline: auto; }
+.hero figure { margin-top: 64px; text-align: left; }
+
+/* ── stats ──────────────────────────────────────── */
+.stats { margin-top: 88px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.stats ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, 1fr); }
+.stats li { padding: 26px 20px; border-left: 1px solid var(--border); }
+.stats li:first-child { border-left: 0; padding-left: 0; }
+.stats b { display: block; font-size: 28px; font-weight: 700; letter-spacing: -0.03em; font-family: var(--mono); line-height: 1.2; }
+.stats span { display: block; margin-top: 4px; font-size: 12.5px; color: var(--faint); line-height: 1.5; }
+
+/* ── content rows ───────────────────────────────── */
+section { padding: 96px 0; }
+section + section { padding-top: 0; }
+.row { display: grid; grid-template-columns: minmax(0, 400px) minmax(0, 1fr); gap: 56px; align-items: start; }
+.row.flip > .col-text { order: 2; }
+.row.flip > .col-vis  { order: 1; }
+.col-text { position: sticky; top: 96px; }
+
+.marks { list-style: none; margin: 20px 0 0; padding: 0; }
+.marks li { position: relative; padding: 5px 0 5px 20px; font-size: 14px; color: var(--muted-fg); line-height: 1.6; }
+.marks li::before { content: "—"; position: absolute; left: 0; color: var(--faint); }
+.marks b { color: var(--fg); font-weight: 650; }
+
+.arrows { margin: 24px 0 0; display: flex; flex-wrap: wrap; gap: 6px 20px; }
+.arrows a {
+  font-size: 13.5px; font-weight: 550; text-decoration: none;
+  border-bottom: 1px solid var(--border); padding-bottom: 2px;
+}
+.arrows a:hover { border-color: var(--fg); }
+.arrows a::after { content: " →"; color: var(--faint); }
+
+/* ── engine ─────────────────────────────────────── */
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: start; margin-top: 40px; }
+pre {
+  margin: 0; padding: 20px; overflow-x: auto;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+  font-family: var(--mono); font-size: 13px; line-height: 1.75;
+}
+pre .c { color: var(--faint); }
+.why { list-style: none; margin: 0; padding: 0; }
+.why li { padding: 18px 0; border-top: 1px solid var(--border); }
+.why li:last-child { border-bottom: 1px solid var(--border); }
+.why h3 { margin-bottom: 5px; }
+.why p { margin: 0; font-size: 14px; color: var(--muted-fg); line-height: 1.65; }
+.why .m { color: var(--stale); font-weight: 600; }
+
+/* ── limits ─────────────────────────────────────── */
+.limits { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 0 48px; }
+.limits li { padding: 14px 0 14px 20px; position: relative; font-size: 14px; color: var(--muted-fg); line-height: 1.6; border-top: 1px solid var(--border); }
+.limits li::before { content: "—"; position: absolute; left: 0; color: var(--faint); }
+.limits b { color: var(--fg); font-weight: 650; }
+
+/* ── closing ────────────────────────────────────── */
+.closing { background: var(--panel); border-top: 1px solid var(--border); padding: 96px 0; text-align: center; }
+.closing .body { max-width: 34em; margin: 0 auto 34px; }
+
+/* ── footer ─────────────────────────────────────── */
+footer { border-top: 1px solid var(--border); padding: 56px 0 40px; }
+.fgrid { display: grid; grid-template-columns: 1.6fr repeat(3, 1fr); gap: 40px; }
+.fbrand { display: flex; align-items: center; gap: 8px; font-family: var(--mono); font-weight: 600; font-size: 16px; letter-spacing: -0.03em; }
+.fbrand svg { width: 20px; height: 20px; fill: currentColor; }
+.fnote { margin: 12px 0 0; font-size: 13px; color: var(--faint); max-width: 24em; line-height: 1.6; }
+.fcol h4 { margin: 0 0 12px; font-size: 12px; font-family: var(--mono); font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); }
+.fcol ul { list-style: none; margin: 0; padding: 0; }
+.fcol li { padding: 4px 0; }
+.fcol a { font-size: 13.5px; color: var(--muted-fg); text-decoration: none; }
+.fcol a:hover { color: var(--fg); }
+.fbot { margin-top: 48px; padding-top: 24px; border-top: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 12.5px; color: var(--faint); }
+.fbot .sep { margin-left: auto; }
+
+@media (max-width: 900px) {
+  .row, .two, .pillars, .limits { grid-template-columns: 1fr; }
+  .row { gap: 28px; }
+  .row.flip > .col-text, .row.flip > .col-vis { order: 0; }
+  .col-text { position: static; }
+  .stats ul { grid-template-columns: 1fr 1fr; }
+  .stats li:nth-child(3) { border-left: 0; padding-left: 0; }
+  .stats li:nth-child(n+3) { border-top: 1px solid var(--border); }
+  .fgrid { grid-template-columns: 1fr 1fr; }
+  section, .closing { padding: 64px 0; }
+  .hero { padding-top: 56px; }
+  .limits li:first-child + li { border-top: 1px solid var(--border); }
+}
+</style>
+</head>
+<body>
+
+<div class="ann">
+  <div class="wrap">
+    <span>v0.1.2가 나와 있습니다. 앱이 스스로 받습니다.</span>
+    <a href="https://github.com/proofer-tech/dira/releases">릴리스 보기</a>
+  </div>
+</div>
+
+<header>
+  <div class="wrap">
+    <a class="brand" href="./" aria-label="dira">
+      <svg viewBox="0 0 32 32" fill-rule="evenodd" aria-hidden="true"><path d="M4.5 2H11.5L15.5 8H27.5A2.5 2.5 0 0 1 30 10.5V27.5A2.5 2.5 0 0 1 27.5 30H4.5A2.5 2.5 0 0 1 2 27.5V4.5A2.5 2.5 0 0 1 4.5 2ZM9.5 12H22.5A1.5 1.5 0 0 1 24 13.5V15A3 3 0 0 0 24 21V22.5A1.5 1.5 0 0 1 22.5 24H9.5A1.5 1.5 0 0 1 8 22.5V21A3 3 0 0 0 8 15V13.5A1.5 1.5 0 0 1 9.5 12Z"/></svg>
+      dira
+    </a>
+    <nav>
+      <a class="btn" href="https://github.com/proofer-tech/dira">GitHub</a>
+      <a class="btn btn-primary" href="https://github.com/proofer-tech/dira/releases/latest">앱 받기</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+<div class="hero wrap">
+  <p class="eyebrow">로컬 에이전트 러너</p>
+  <h1>에이전트 팀을 화면으로 본다</h1>
+  <p class="body">
+    티켓을 큐에 넣으면 cron에 물린 워커가 <code>claude -p</code> 세션에 넘긴다.
+    도는 동안 무엇을 하고 있는지 화면에서 보고, <b>도는 세션에 말을 건다.</b>
+  </p>
+  <div class="cta">
+    <a class="btn btn-primary btn-lg" href="https://github.com/proofer-tech/dira/releases/latest">macOS 앱 받기</a>
+    <a class="btn btn-lg" href="#engine">엔진만 쓰기</a>
+  </div>
+  <p class="cta-note">v0.1.2 · macOS (Apple Silicon) · MIT · 자동 업데이트</p>
+
+  <div class="pillars">
+    <div class="pillar">
+      <span class="tag t-queue">큐</span>
+      <h3>티켓 하나가 파일 하나다</h3>
+      <p>디렉터리 하나가 큐 전부다. 상태는 파일명 접미사에 있고, 나머지는 frontmatter다. DB도 인덱스도 없다.</p>
+    </div>
+    <div class="pillar">
+      <span class="tag t-worker">워커</span>
+      <h3>크론잡 하나가 티켓 한 건을 문다</h3>
+      <p>동시성은 설정값이 아니라 워커 파일의 개수다. 더 돌리려면 워커를 하나 더 만든다.</p>
+    </div>
+    <div class="pillar">
+      <span class="tag t-ui">화면</span>
+      <h3>도는 세션을 보고, 말을 건다</h3>
+      <p>보드·티켓·워커·페르소나·프로토콜. 끝난 뒤 로그를 뒤지는 대신 도는 동안 개입한다.</p>
+    </div>
+    <div class="pillar">
+      <span class="tag t-engine">엔진</span>
+      <h3>bash와 python3 표준 라이브러리</h3>
+      <p>그 밖으로 나가지 않는다. 설치는 <code>git clone</code>이 끝이고, 화면을 안 쓰면 설치할 것도 없다.</p>
+    </div>
+  </div>
+
+  <figure>
+    <img class="shot" src="shots/02-board.png" alt="dira 보드 화면. 대기·진행중·완료 세 레인에 티켓 카드가 놓여 있다." width="1600">
+    <figcaption>이 화면은 <b>dira가 자기 자신을 만들고 있는 큐</b>다. 완료 387건이 전부 이 레포의 커밋이다.</figcaption>
+  </figure>
+</div>
+
+<div class="wrap stats">
+  <ul>
+    <li><b>0</b><span>엔진 의존성<br>bash + python3 표준 라이브러리</span></li>
+    <li><b>6</b><span>이 레포에서 동시에 도는 워커</span></li>
+    <li><b>405</b><span>자기 큐가 처리한 티켓<br>완료 397</span></li>
+    <li><b>4일</b><span>첫 커밋에서 v0.1.2까지<br>커밋 389</span></li>
+  </ul>
+</div>
+
+<section>
+  <div class="wrap">
+    <div class="row">
+      <div class="col-text">
+        <p class="eyebrow">도는 동안</p>
+        <h2>세션에 말을 건다</h2>
+        <p class="body">
+          <b>턴이 끝나기를 기다리지 않는다.</b> 스트림 아래 칸에 한 줄 넣고 보내면 그 세션의 stdin으로 들어가,
+          하던 일을 접고 그 말을 따른다. 세션이 무엇을 읽고 무엇을 고쳤는지는 그 위에서 2초마다 따라간다.
+        </p>
+        <ul class="marks">
+          <li>입구는 <b>세션마다 FIFO 하나</b>. 디스패처가 만들고 디스패처가 지운다</li>
+          <li>스트림의 원본은 <b>claude가 이미 쓰고 있는 트랜스크립트</b>다. 새로 남기는 파일이 없다</li>
+          <li>참견은 화면이 지어낸 에코가 아니라 <b>트랜스크립트에 실제로 남은 줄</b>이다</li>
+          <li>창은 세션이 도는 동안이다. 턴이 끝나면 닫힌다</li>
+        </ul>
+        <p class="arrows">
+          <a href="https://github.com/proofer-tech/dira/blob/master/docs/DESIGN.md">계약 읽기</a>
+          <a href="https://github.com/proofer-tech/dira#동작">디스패치 순서</a>
+        </p>
+      </div>
+      <div class="col-vis">
+        <figure>
+          <img class="shot" src="shots/barge.gif" loading="lazy" alt="세션 스트림이 도구 호출을 한 줄씩 늘려 가는 동안, 아래 입력창에 문장을 넣고 보내기를 누르자 그 문장이 참견 줄로 스트림에 나타나고 세션이 이어서 방향을 바꾼다." width="1760">
+          <figcaption>
+            <b>실제 왕복이다. 재현이 아니다.</b> 티켓은 <q>세 파일을 읽어 세 줄로 쓴다</q>였고,
+            참견은 <q>지금 읽은 것까지만, 한 줄로</q>였다.
+            세션은 <code>c.md</code>를 읽지 않고 멈춰 <b>한 줄짜리 파일</b>을 남겼다.
+          </figcaption>
+        </figure>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="row flip">
+      <div class="col-text">
+        <p class="eyebrow">막혔을 때</p>
+        <h2>에이전트가 스스로 잠근다</h2>
+        <p class="body">
+          <b>추측으로 진행하는 대신 되묻는다.</b> 티켓 본문에 질문을 붙이고
+          <b>존재하지 않는 파일</b>을 dep으로 걸어 아무 워커도 못 집게 만든다.
+          답을 쓰면 그 파일이 생겨 잠금이 저절로 풀린다.
+        </p>
+        <ul class="marks">
+          <li>잠긴 티켓은 <b>큐에서 보인다</b>. 화면에서 답할 수 있다는 뜻이다</li>
+          <li>사람이 상태를 되돌리지 않는다. <b>잠금과 해제가 같은 규칙</b>이다</li>
+          <li>같은 이유로 죽는 티켓이 세션을 무한히 태우지 않는다 — 2회까지만 자동 회수하고 3회째는 질문이 된다</li>
+        </ul>
+        <p class="arrows">
+          <a href="https://github.com/proofer-tech/dira#스테일-수거-reap">스테일 수거</a>
+          <a href="https://github.com/proofer-tech/dira/blob/master/docs/DESIGN.md">요구사항 레이어</a>
+        </p>
+      </div>
+      <div class="col-vis">
+        <figure>
+          <img class="shot" src="shots/07-qa-thread.png" loading="lazy" alt="요구 티켓의 질문·답변 스레드. 질문 아래에 답변 말풍선이 오른쪽으로 붙어 있고, frontmatter에 awaiting 해시가 있다." width="1600">
+          <figcaption>오른쪽 <code>awaiting:</code>에 걸린 해시는 <b>아직 없는 파일</b>이다. 답변을 쓰면 그 파일이 생긴다.</figcaption>
+        </figure>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="row">
+      <div class="col-text">
+        <p class="eyebrow">동시성</p>
+        <h2>워커를 하나 더 만든다</h2>
+        <p class="body">
+          <b>"몇 개까지" 같은 설정값이 없다.</b> 워커 파일 하나가 크론잡 하나이고, 한 번 실행에 티켓 한 건을 문다.
+          앞 실행이 아직 세션을 쥐고 있으면 그 분의 tick은 그냥 넘어간다.
+        </p>
+        <ul class="marks">
+          <li>워커가 놓인 위치가 <b>곧 큐의 루트</b>다. 경로를 어디에도 적지 않는다</li>
+          <li>회수 판정은 시간이 아니라 <b>프로세스 생존</b>이다. 그래서 화면에 pid가 있다</li>
+          <li>워커 한 줄로 <b>엔진을 바꾼다</b> — <code>claude</code>가 기본이고 다른 CLI 에이전트도 같은 자리에 선다</li>
+          <li>세션 실행 상한은 <code>TICKET_MAXRUN</code> 하나다. 넘으면 백로그로 돌아간다</li>
+        </ul>
+        <p class="arrows">
+          <a href="https://github.com/proofer-tech/dira#워커-레퍼런스">워커 레퍼런스</a>
+          <a href="https://github.com/proofer-tech/dira/blob/master/worker.sh.example">worker.sh.example</a>
+        </p>
+      </div>
+      <div class="col-vis">
+        <figure>
+          <img class="shot" src="shots/03-workers.png" loading="lazy" alt="워커 화면. 워커 6대가 running 상태로 각자 다른 티켓을 물고 있고 pid와 엔진이 표시된다." width="1600">
+          <figcaption>워커 6대가 각자 다른 티켓을 물고 있다. 위 칸은 <b>여섯이 같이 읽는 참조 경로</b>다.</figcaption>
+        </figure>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="row flip">
+      <div class="col-text">
+        <p class="eyebrow">여러 프로젝트</p>
+        <h2>큐는 여럿, 앱은 한 벌</h2>
+        <p class="body">
+          <b>프로젝트가 5개여도 앱을 5개 띄우지 않는다.</b> 큐 위치를 등록해 두고 앱 안에서 전환한다.
+          큐끼리는 서로 만나지 않는다 — 그 독립이 엔진의 전제다.
+        </p>
+        <ul class="marks">
+          <li>디스크를 스캔해 <b>찾아다니지 않는다</b>. 사용자가 등록한다</li>
+          <li>등록을 해제해도 <b>큐 파일은 그대로</b>다</li>
+          <li>등록 목록은 파일 하나이고, 등록 경로 외의 정보를 담지 않는다</li>
+        </ul>
+        <p class="arrows">
+          <a href="https://github.com/proofer-tech/dira#gui-선택">GUI 문서</a>
+        </p>
+      </div>
+      <div class="col-vis">
+        <figure>
+          <img class="shot" src="shots/01-projects.png" loading="lazy" alt="프로젝트 목록. 등록된 세 프로젝트가 각각 경로·페르소나·워커 상태·티켓 수와 함께 한 행씩 놓여 있다." width="1600">
+          <figcaption>한 행이 한 큐다. 페르소나·워커 상태·티켓 3수가 <b>열기 전에</b> 보인다.</figcaption>
+        </figure>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="engine">
+  <div class="wrap">
+    <p class="eyebrow">그 아래서 도는 것</p>
+    <h2>파일시스템이 곧 큐다</h2>
+    <p class="body" style="max-width:46em">
+      화면은 선택이다. 실제로 티켓을 물어 세션에 넘기는 것은 <code>tick.sh</code> 하나이고,
+      그것은 bash와 python3 표준 라이브러리 밖으로 나가지 않는다. 상주 루프도, DB도, 인덱스도 없다.
+      <b>상태의 단일 출처는 티켓 파일 그 자체다.</b>
+    </p>
+
+    <div class="two">
+      <div>
+        <pre><span class="c"># 설치는 이게 끝이다</span>
+git clone \
+  https://github.com/proofer-tech/dira.git \
+  ~/Projects/dira
+
+<span class="c"># 프로젝트 하나 붙이기 — 워커 파일 한 개</span>
+cat &gt; myproject/.dira/workers/w1.sh &lt;&lt;'EOF'
+#!/bin/bash
+. "$HOME/Projects/dira/tick.sh"
+EOF
+
+<span class="c"># cron 두 줄. 워커가 놓인 위치가 곧 큐다</span>
+* * * * * .../w1.sh
+* * * * * sleep 30; .../w1.sh</pre>
+        <ul class="marks">
+          <li>루트를 어디에도 적지 않는다. <code>workers/</code>의 <b>부모</b>가 큐다</li>
+          <li>두 줄인 이유는 cron의 최소 단위가 분이라서다. 30초 폴링을 그렇게 낸다</li>
+          <li>중지는 그 두 줄을 지우는 것이다</li>
+        </ul>
+      </div>
+
+      <div>
+        <p class="eyebrow" style="margin-bottom:2px">왜 이렇게 안 만들었나</p>
+        <ul class="why">
+          <li>
+            <h3>시간 기반 클레임 만료를 버렸다</h3>
+            <p>파일 기반 도구가 흔히 쓰는 1시간 만료는 오래 걸리는 정상 세션을 살아 있는데도 회수해, 같은 티켓을 두 세션이 동시에 수행한다. 프로세스 생존이 직접 증거다.
+            <span class="m">근거 — 매달린 세션 하나가 2시간 14분간 티켓을 쥐고 있었다.</span></p>
+          </li>
+          <li>
+            <h3>전역 동시 실행 상한을 버렸다</h3>
+            <p>예전엔 <code>ps</code> 출력에서 엔진 프로세스를 셌는데, 엔진을 바꾸면 세는 패턴도 같이 바꿔야 하고 안 바꾸면 항상 0으로 세져 상한이 조용히 무력화됐다.
+            <span class="m">근거 — 동시 4세션이 공유 dev DB를 만져 컬럼 드롭이 관측됐다.</span></p>
+          </li>
+          <li>
+            <h3>상태를 frontmatter로 옮기지 않았다</h3>
+            <p>상태가 파일명에 있는 이유는 rename이 그 자체로 락이기 때문이다. 잡기는 <code>os.link</code> 한 번이고, 목적지가 있으면 커널이 <code>EEXIST</code>를 준다 — 판정과 획득이 한 시스템콜 안에 있어 틈이 없다. Maildir와 같은 계보다.</p>
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <div style="margin-top:56px">
+      <figure>
+        <img class="shot" src="shots/04-ticket-running.png" loading="lazy" alt="진행중 티켓 상세. 왼쪽에 본문과 Done when 체크리스트, 오른쪽에 frontmatter 표와 관계." width="1600">
+        <figcaption>티켓 한 장의 전부. 왼쪽은 사람이 쓴 마크다운, 오른쪽 <code>session_id</code>·<code>pid</code>·<code>owner</code>·<code>inbox</code>는 <b>디스패처가 쓰고 사람은 건드리지 않는다.</b></figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <p class="eyebrow">먼저 알아야 할 것</p>
+    <h2>여기 없는 것</h2>
+    <p class="body" style="max-width:44em; margin-bottom:32px">비목표는 아직 못 만든 것이 아니라 안 만들기로 한 것이다.</p>
+    <ul class="limits">
+      <li><b>서버로 배포하지 않는다.</b> 호스팅·도메인·원격 접속이 없다. 앱은 당신 맥에서 돌고 그 맥의 파일시스템에 붙는다.</li>
+      <li><b>인증·멀티유저가 없다.</b> 파일시스템 권한이 곧 권한이다.</li>
+      <li><b>데스크톱 앱은 macOS(Apple Silicon)뿐이다.</b> 엔진 자체는 macOS와 Linux에서 돈다.</li>
+      <li><b>실시간 푸시가 없다.</b> 폴링이다. 모바일 레이아웃도 없다.</li>
+      <li><b>프로젝트를 자동으로 찾지 않는다.</b> 디스크를 스캔하지 않고 당신이 등록한다.</li>
+      <li><b>우선순위가 없다.</b> 순서는 생성일과 <code>deps</code>뿐이다.</li>
+      <li><b>티켓 수백 건 규모를 전제한다.</b> 매 tick마다 큐를 glob으로 훑는다. 인덱스가 없다.</li>
+      <li><b>워커를 만들 때마다 macOS가 <code>앱 관리</code> 권한을 묻는다.</b> 승인이 다음 등록까지 남지 않는다.</li>
+    </ul>
+  </div>
+</section>
+
+</main>
+
+<div class="closing">
+  <div class="wrap">
+    <h2>큐는 디렉터리 하나다</h2>
+    <p class="body">
+      이름은 <code>dir</code> + <code>jira</code>다. 큐가 디렉터리 하나라서 <code>dir</code>이고,
+      그 디렉터리를 티켓으로 보는 도구라서 <code>jira</code>의 오마주다.
+    </p>
+    <div class="cta">
+      <a class="btn btn-primary btn-lg" href="https://github.com/proofer-tech/dira/releases/latest">macOS 앱 받기</a>
+      <a class="btn btn-lg" href="https://github.com/proofer-tech/dira">GitHub에서 보기</a>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <div class="wrap">
+    <div class="fgrid">
+      <div>
+        <div class="fbrand">
+          <svg viewBox="0 0 32 32" fill-rule="evenodd" aria-hidden="true"><path d="M4.5 2H11.5L15.5 8H27.5A2.5 2.5 0 0 1 30 10.5V27.5A2.5 2.5 0 0 1 27.5 30H4.5A2.5 2.5 0 0 1 2 27.5V4.5A2.5 2.5 0 0 1 4.5 2ZM9.5 12H22.5A1.5 1.5 0 0 1 24 13.5V15A3 3 0 0 0 24 21V22.5A1.5 1.5 0 0 1 22.5 24H9.5A1.5 1.5 0 0 1 8 22.5V21A3 3 0 0 0 8 15V13.5A1.5 1.5 0 0 1 9.5 12Z"/></svg>
+          dira
+        </div>
+        <p class="fnote">이 페이지의 화면은 전부 실제 큐에서 찍었다. 목업이 없다.</p>
+      </div>
+      <div class="fcol">
+        <h4>제품</h4>
+        <ul>
+          <li><a href="https://github.com/proofer-tech/dira/releases/latest">다운로드</a></li>
+          <li><a href="https://github.com/proofer-tech/dira/releases">릴리스</a></li>
+          <li><a href="#engine">엔진</a></li>
+        </ul>
+      </div>
+      <div class="fcol">
+        <h4>문서</h4>
+        <ul>
+          <li><a href="https://github.com/proofer-tech/dira#readme">README</a></li>
+          <li><a href="https://github.com/proofer-tech/dira/blob/master/docs/DESIGN.md">제품 스펙</a></li>
+          <li><a href="https://github.com/proofer-tech/dira#워커-레퍼런스">워커 레퍼런스</a></li>
+          <li><a href="https://github.com/proofer-tech/dira/tree/master/templates">템플릿</a></li>
+        </ul>
+      </div>
+      <div class="fcol">
+        <h4>레포</h4>
+        <ul>
+          <li><a href="https://github.com/proofer-tech/dira">proofer-tech/dira</a></li>
+          <li><a href="https://github.com/proofer-tech/dira/issues">이슈</a></li>
+          <li><a href="https://github.com/proofer-tech/dira/blob/master/LICENSE">MIT 라이선스</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="fbot">
+      <span>© 2026 Proofer. MIT.</span>
+      <span class="sep">bash + python3 표준 라이브러리</span>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
