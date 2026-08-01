@@ -13,12 +13,13 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
-  MAX_BYTES,
   safeName,
   saveAttachment,
   verifyAttachments,
   withAttachments,
 } from "./attachments.ts";
+import { BODY_SIZE_LIMIT, MAX_BYTES } from "./attachment-limit.ts";
+import nextConfig from "../next.config.ts";
 
 /** 픽스처 큐는 임시 디렉터리다 — **진짜 `.dira`를 건드리지 않는다.**
  *  realpath를 거치는 이유: macOS의 `/tmp`가 `/private/tmp` 심링크라 `resolveWithin`이 돌려주는
@@ -73,6 +74,28 @@ test("20MB 초과가 거절된다 — 다른 셋과 다른 문장이다", async 
   assert.ok(!noName.ok);
   assert.match(noName.error, /이름/);
   assert.notStrictEqual(noName.error, r.error);
+});
+
+test("상한 경계 — 정확히 20 MiB는 통과, 1바이트 크면 §6 문장", async () => {
+  // 바이트를 진짜로 20MB 만들지 않는다. 이 테스트가 못박는 것은 부등호(`>` vs `>=`)이지
+  // 쓰기가 아니다 — 쓰기는 위 두 테스트가 이미 본다.
+  const edge = (size: number) =>
+    ({ name: "edge.bin", size, arrayBuffer: async () => new ArrayBuffer(0) }) as unknown as File;
+
+  const ok = await saveAttachment(project, edge(MAX_BYTES));
+  assert.ok(ok.ok, ok.ok ? "" : ok.error); // 20 MiB 정각은 §8이 통과시키기로 한 값이다
+  const over = await saveAttachment(project, edge(MAX_BYTES + 1));
+  assert.ok(!over.ok);
+  assert.strictEqual(over.error, "20MB를 넘습니다 (20.0MB) — 필요한 부분만 잘라서 올리세요.");
+});
+
+test("bodySizeLimit이 §8 상한보다 크다 — 멀티파트 본문은 파일보다 크다", () => {
+  // 두 수가 갈리면 정확히 상한인 파일이 서버 액션에 닿기 전에 잘리고, 사유가 §6 문장이 아니라
+  // Next의 영어 마스킹 문구가 된다(`6dab7cc8`). 주석이 아니라 이 줄이 부등호를 민다.
+  const limit = nextConfig.experimental?.serverActions?.bodySizeLimit;
+  assert.strictEqual(limit, BODY_SIZE_LIMIT, "next.config가 유도값을 안 쓰고 수를 따로 적었다");
+  const bytes = Number(String(limit).replace(/mb$/, "")) * 1024 * 1024;
+  assert.ok(bytes > MAX_BYTES, `bodySizeLimit ${bytes} <= MAX_BYTES ${MAX_BYTES}`);
 });
 
 test("이름 정규화 — 치환 · 80자 · 앞뒤 점", () => {

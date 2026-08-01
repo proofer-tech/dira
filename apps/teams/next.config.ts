@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { BODY_SIZE_LIMIT } from "./lib/attachment-limit.ts";
 
 const nextConfig: NextConfig = {
   // apps/teams/ 상위 홈 디렉터리에도 pnpm-workspace.yaml이 있어서, 못박지 않으면
@@ -9,10 +10,9 @@ const nextConfig: NextConfig = {
   output: "standalone",
   outputFileTracingRoot: import.meta.dirname,
   // 첨부의 통로가 Server Action(`FormData`)인데(DESIGN.md §8) Next의 기본 한도가 **1MB**다 —
-  // 안 얹으면 §8이 정한 20MB 상한이 `saveAttachment`에 닿기도 전에 Next가 거절한다
-  // (`lib/attachments.ts`의 `MAX_BYTES` 위 ponytail 주석이 이 자리를 지목했다).
-  // 수를 §8과 같게 둔다: 여기가 더 작으면 화면이 못 보는 자리에서 거절이 난다.
-  experimental: { serverActions: { bodySizeLimit: "20mb" } },
+  // 안 얹으면 §8이 정한 20MB 상한이 `saveAttachment`에 닿기도 전에 Next가 거절한다.
+  // 수를 여기 적지 않는다: §8 상한에서 유도된 값이다(`MAX_BYTES` + 여유. 같게 뒀던 것이 `6dab7cc8`).
+  experimental: { serverActions: { bodySizeLimit: BODY_SIZE_LIMIT } },
 };
 
 export default nextConfig;

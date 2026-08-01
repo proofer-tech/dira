@@ -21,6 +21,7 @@
 import { useRef, useState, type ReactNode } from "react";
 import { Paperclip, TriangleAlert, X } from "lucide-react";
 import { uploadAttachment } from "@/app/p/[project]/actions";
+import { oversizeError } from "@/lib/attachment-limit";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { InputGroupAddon, InputGroupButton } from "@/components/ui/input-group";
@@ -66,7 +67,7 @@ export function useAttachments(project: string) {
     );
   };
 
-  /** 파일 고르기와 붙여넣기가 **같은 경로로** 들어온다(§8). 상한 초과는 여기서 거절한다. */
+  /** 파일 고르기와 붙여넣기가 **같은 경로로** 들어온다(§8). 개수 상한은 여기서 거절한다. */
   const add = (files: File[]) => {
     if (files.length === 0) return;
     const room = Math.max(0, MAX_FILES - chips.length);
@@ -77,8 +78,12 @@ export function useAttachments(project: string) {
       // macOS 스크린샷은 이 폴백을 안 탄다 — 합성 `ClipboardEvent`에서만 탄다(`c29b5bdc` 실측).
       const ext = (file.type.split("/")[1] || "bin").replace(/[^A-Za-z0-9]/g, "");
       const name = file.name || `pasted-${++pasted.current}.${ext}`;
-      setChips((prev) => [...prev, { id, name }]);
-      void upload(id, name, file);
+      // 1건 상한은 **올리기 전에** 본다. 넘긴 요청은 Next의 `bodySizeLimit`에 걸려 서버 액션에
+      // 닿지 못하고, 그러면 사유가 §6 3요소가 아니라 Next의 영어 마스킹 문구가 된다(`6dab7cc8`).
+      // 판정은 서버(`saveAttachment`)가 다시 한다 — 같은 `oversizeError`다.
+      const oversize = oversizeError(file.size);
+      setChips((prev) => [...prev, { id, name, error: oversize ?? undefined }]);
+      if (!oversize) void upload(id, name, file);
     }
   };
 
@@ -96,8 +101,7 @@ export function useAttachments(project: string) {
    *
    *  ponytail: 뭉치는 키가 사유 **문자열 전체**다. 상한 초과 문장은 크기(`21.0MB`)를 품고 있어서
    *  크기가 다른 두 파일은 안 뭉친다(§27이 셋으로 셌던 것과 갈리는 유일한 지점 — 최대 10줄이다).
-   *  뭉치려면 `lib/attachments.ts`가 사유를 코드로도 돌려줘야 하는데, 그러면 §6 문장이 서버와
-   *  화면 두 곳에 생긴다. 눈에 걸리면 그때 코드를 붙인다. */
+   *  뭉치려면 사유에 코드가 붙어야 한다(`lib/attachment-limit.ts`). 눈에 걸리면 그때 붙인다. */
   const byReason = new Map<string, string[]>();
   for (const c of chips) {
     if (c.error) byReason.set(c.error, [...(byReason.get(c.error) ?? []), c.name]);

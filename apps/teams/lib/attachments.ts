@@ -13,16 +13,9 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, open } from "node:fs/promises";
 import path from "node:path";
+import { oversizeError } from "./attachment-limit.ts";
 import { resolveWithin } from "./paths.ts";
 import type { Project } from "./projects.ts";
-
-/** §8 상한. 1건 20MB.
- *
- *  ponytail: 통로는 Server Action(`FormData`)이고 Next의 기본 `serverActions.bodySizeLimit`은
- *  **1MB**다 — 결선 티켓(`5bbed7c9`)이 `next.config.ts`에 `experimental.serverActions.
- *  bodySizeLimit: "20mb"`를 얹지 않으면 20MB짜리는 이 함수에 닿기 전에 Next가 거절한다.
- *  여기서 미리 얹지 않는 이유는 이 티켓의 `## Done when`이 서버층 두 함수뿐이어서다. */
-export const MAX_BYTES = 20 * 1024 * 1024;
 
 /** 프롬프트에 붙는 안내 한 줄(§8 §프롬프트에 붙는 모양). 네 자리가 이 문자열을 같이 쓴다. */
 const NOTE = "첨부 파일 — 아래 경로를 Read로 읽어라:";
@@ -55,13 +48,9 @@ export async function saveAttachment(
   file: File,
 ): Promise<SaveResult> {
   // 신뢰 경계. 바이트를 읽기 **전에** 크기를 본다 — 20MB를 버퍼에 올린 뒤 거절하면 거절이 비싸다.
-  if (file.size > MAX_BYTES) {
-    const mb = (file.size / 1024 / 1024).toFixed(1);
-    return {
-      ok: false,
-      error: `20MB를 넘습니다 (${mb}MB) — 필요한 부분만 잘라서 올리세요.`,
-    };
-  }
+  // 화면도 같은 함수를 보내기 전에 부르지만(`attachment-field.tsx`) 판정은 여기가 한다.
+  const oversize = oversizeError(file.size);
+  if (oversize) return { ok: false, error: oversize };
   const name = safeName(file.name ?? "");
   if (!name) {
     return {
