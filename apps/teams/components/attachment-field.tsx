@@ -73,7 +73,8 @@ export function useAttachments(project: string) {
     setDropped(Math.max(0, files.length - room));
     for (const file of files.slice(0, room)) {
       const id = ++seq.current;
-      // 이름 없는 클립보드 이미지는 `pasted-<n>.<ext>`(§8) — macOS 스크린샷이 이 경로로 온다.
+      // 이름이 빈 파일만 `pasted-<n>.<ext>`(§8). 크롬은 클립보드 이미지에 `image.png`를 주므로
+      // macOS 스크린샷은 이 폴백을 안 탄다 — 합성 `ClipboardEvent`에서만 탄다(`c29b5bdc` 실측).
       const ext = (file.type.split("/")[1] || "bin").replace(/[^A-Za-z0-9]/g, "");
       const name = file.name || `pasted-${++pasted.current}.${ext}`;
       setChips((prev) => [...prev, { id, name }]);
