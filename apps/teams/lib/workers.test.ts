@@ -45,6 +45,7 @@ const {
   writeEngine,
   registerCron,
   engineName,
+  holderEngine,
   lockPath,
   listWorkers,
   parseContextBlock,
@@ -320,6 +321,39 @@ test("holding — .wip 티켓의 owner에서 워커를 되짚는다 (tick.sh 207
   );
   // 티켓을 안 넘기면 항상 null이다(프로젝트 목록 요약이 그렇게 부른다)
   assert.strictEqual((await listWorkers(root))[0].holding, null);
+});
+
+/** codex 워커에서 §2-1 스트림·§2-2 참견이 왜 없는지 화면이 말하는 근거(§4-3 · §비주얼 §23 ⑤).
+ *  **판정은 이것 하나다** — 화면 두 자리(티켓 상세 · 워커 행)가 다른 식을 쓰면 한쪽이 조용히
+ *  claude 전제 위에 남는다. 이게 뒤집히면 codex 워커에서 빈 스트림이 돌거나(사람은 고장으로
+ *  읽는다) claude 워커에서 멀쩡한 참견 폼이 사유와 함께 잠긴다. */
+test("holderEngine — 티켓을 물고 있는 워커의 엔진 하나. 모델은 안 본다 (§4-3)", async () => {
+  const root = makeRoot(
+    {
+      // 대입이 없는 워커 = tick.sh 기본값(claude)으로 돈다 — 지금 이 큐의 워커 6개가 전부 여기다
+      "w1.sh": "#!/bin/bash\n",
+      // 모델을 골라도 판정은 안 갈린다: 죽는 이유가 CLI의 입출력 규약이지 모델이 아니다
+      "w2.sh": '#!/bin/bash\nTICKET_ENGINE=(codex exec --json -m gpt-5.1-codex-max "{prompt}")\n',
+      "w3.sh": '#!/bin/bash\nTICKET_ENGINE=("/usr/local/bin/claude" -p --model opus)\n',
+    },
+    {
+      "aaa1.wip.md": "---\nticket: aaa1\nowner: developer / w1-064007b2\n---\n본문\n",
+      "bbb2.wip.md": "---\nticket: bbb2\nowner: developer / w2-1a2b3c4d\n---\n본문\n",
+      "ccc3.wip.md": "---\nticket: ccc3\nowner: developer / w3-5e6f7a8b\n---\n본문\n",
+      // 완료 티켓은 아무도 안 물고 있다 — 되짚을 워커가 없다(빈 상태가 종전 그대로여야 한다)
+      "ddd4.done.md": "---\nticket: ddd4\nowner: developer / w2-1a2b3c4d\n---\n본문\n",
+    },
+  );
+  const tickets = await listTickets(root, SFX);
+  const ws = await listWorkers(root, tickets);
+
+  assert.strictEqual(holderEngine(ws, "aaa1"), "claude"); // 기본값도 실제로 도는 것은 claude다
+  assert.strictEqual(holderEngine(ws, "bbb2"), "codex"); // 여기서만 스트림·참견이 사라진다
+  assert.strictEqual(holderEngine(ws, "ccc3"), "claude"); // 절대경로 + 모델 지정 — 무회귀
+  assert.strictEqual(holderEngine(ws, "ddd4"), null); // 완료 티켓 리플레이 = 모른다
+  assert.strictEqual(holderEngine(ws, "없는티켓"), null);
+  // 티켓을 안 넘긴 목록은 holding이 전부 null이라 아무것도 못 되짚는다(호출부가 넘겨야 한다)
+  assert.strictEqual(holderEngine(await listWorkers(root), "bbb2"), null);
 });
 
 /** 칸반 카드의 워커 이름이 쓰는 **같은 규칙**(§1 보드 · §비주얼 §18). 형식이 아니면 `null`이고

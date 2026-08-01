@@ -42,7 +42,7 @@ import {
 import { getProject, listPersonas, resolveConfig } from "@/lib/projects";
 import { findTranscript, sessionIdOf } from "@/lib/transcript";
 import { decodeHash } from "@/lib/urls";
-import { listWorkers } from "@/lib/workers";
+import { holderEngine, listWorkers } from "@/lib/workers";
 
 // 큐는 GUI 밖에서(cron·세션이) 바뀐다. 프리렌더하면 빌드 시점 내용이 굳는다.
 export const dynamic = "force-dynamic";
@@ -104,7 +104,9 @@ export default async function TicketDetail({
     );
   }
 
-  const workers = await listWorkers(project.root);
+  // 티켓을 같이 넘긴다 — `holding`이 차야 이 티켓을 **물고 있는 워커**를 되짚을 수 있다
+  // (아래 `holderEngine`, §4-3 판정). 큐는 이미 위에서 한 번 읽었고 여기서 다시 읽지 않는다.
+  const workers = await listWorkers(project.root, tickets);
   // 선행 = deps **전부**(미충족으로 걸러내지 않는다). 종류·순서 판정은 보드와 같은 헬퍼가 한다.
   const deps = depBadges(tickets, ticket, config);
   const blocked = referrers(tickets, ticket, config); // 후행 = 이 티켓을 deps로 둔 것 = 역참조
@@ -121,6 +123,10 @@ export default async function TicketDetail({
   // 글롭 매치가 0개·2개 이상이면 `트랜스크립트 없음`이다. **어느 쪽도 에러로 그리지 않는다.**
   const sessionId = sessionIdOf(ticket.fm);
   const transcript = sessionId ? await findTranscript(sessionId) : null;
+  // 갈림길이 하나 늘었다: **이 티켓을 물고 있는 워커의 엔진**(§4-3 · §비주얼 §23 ⑤). codex면
+  // 스트림도 참견도 없는 워커라 화면이 그걸 말한다 — 진입점을 지우지 않는다. 완료 티켓은
+  // 아무도 안 물고 있어 `null`이고, 그때는 종전 빈 상태 그대로다(추측해서 문구를 고르지 않는다).
+  const engine = holderEngine(workers, ticket.stem);
 
   // 요구사항 왕복 스레드 — 보드 카드의 답변 다이얼로그와 **같은 함수**가 엮는다(§1 · §2).
   const thread = threadOf(tickets, ticket, config);
@@ -348,12 +354,21 @@ export default async function TicketDetail({
           {sessionId && (
             <section className="space-y-2">
               <h2 className="text-sm font-medium">세션 스트림</h2>
-              {transcript ? (
-                <SessionStream project={id} stem={ticket.stem} live={ticket.state === "wip"} />
+              {/* codex면 트랜스크립트가 **있을 수 없다**(§4-3 표) — 그래도 컴포넌트를 세운다:
+                  왜 없는지와 참견 폼의 사유가 그 안에 있고, 두 진입점(여기 · 워커 행)이 같은
+                  조각을 그린다(§비주얼 §23 ⑤). */}
+              {transcript || engine === "codex" ? (
+                <SessionStream
+                  project={id}
+                  stem={ticket.stem}
+                  live={ticket.state === "wip"}
+                  engine={engine}
+                />
               ) : (
                 // 액션이 없다 — 사람이 할 일이 없다(§9). `action` 자리엔 왜 없는지 사람이 직접 쳐 볼
-                // 글롭을 넣는다. "Claude 세션이 아닙니다"라고 말하지 않는다: 화면은 못 찾았다는 것만
-                // 알고 왜 없는지는 모른다(Codex 티켓도 `session_id`를 갖는다 — `tick.sh:124`).
+                // 글롭을 넣는다. **여기 남는 것은 "왜"를 모르는 경우뿐이다**(§비주얼 §23 ⑤):
+                // 완료 티켓 리플레이처럼 되짚을 워커가 없어 엔진을 모르는 자리. 참이고, 왜인지
+                // 모르는 채로 참이다 — 없는 값을 추측해 `codex입니다`라고 쓰지 않는다.
                 <EmptyState
                   text="트랜스크립트 없음"
                   action={

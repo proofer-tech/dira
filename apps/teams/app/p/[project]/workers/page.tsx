@@ -31,6 +31,7 @@ import { getProject, resolveConfig, usingDefault } from "@/lib/projects";
 import {
   cronUnregisterCmd,
   cronRegisterCmd,
+  engineName,
   firstWorkerCmd,
   listWorkers,
   readCommonContext,
@@ -87,6 +88,9 @@ export default async function Workers({ params }: { params: Promise<{ project: s
 
   const rows: WorkerRow[] = workers.map((w) => ({
     ...w,
+    // 세션 스트림·참견이 이 값 하나로 갈린다(§4-3). 클라이언트가 `engineName`을 못 부르므로
+    // (그 파일이 `node:fs`를 탄다) 서버가 여기서 한 번 적용한다 — 판정식은 여전히 하나다.
+    engineName: engineName(w.engine),
     registerCmd: cronRegisterCmd(w),
     unregisterCmd: cronUnregisterCmd(w),
   }));

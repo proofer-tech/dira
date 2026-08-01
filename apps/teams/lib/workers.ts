@@ -819,6 +819,21 @@ function holdingOf(tickets: Ticket[], effName: string): string | null {
   return null;
 }
 
+/** 이 티켓을 물고 있는 워커의 **엔진 이름**. 아무도 안 물고 있으면 `null`
+ *  (DESIGN.md §4-3 `codex를 고르면 GUI 기능 둘이 죽는다` · §비주얼 §23 ⑤).
+ *
+ *  **새 판정식이 아니다.** 짝은 `holding`이 이미 만들었고(`.wip` 티켓의 `owner:` 역추적),
+ *  이름은 §0-4 인증 배너와 **같은 `engineName`**이다. 모델은 안 본다 — 참견·스트림이 죽는
+ *  이유가 CLI의 입출력 규약이지 모델이 아니다(§4-3).
+ *
+ *  `null`이 되는 자리는 **완료 티켓**이다: 아무도 안 물고 있어 되짚을 워커가 없다. 그때 화면은
+ *  종전 빈 상태 그대로다 — 없는 값을 추측해 문구를 고르지 않는다(§비주얼 §23 ⑤ 마지막 항).
+ *  `holding`은 `listWorkers(root, tickets)`로 부른 목록에만 차 있다(티켓을 안 넘기면 전부 null). */
+export function holderEngine(workers: Worker[], stem: string): string | null {
+  const w = workers.find((x) => x.holding === stem);
+  return w ? engineName(w.engine) : null;
+}
+
 // ── 작업 디렉터리 결함 (§4) ─────────────────────────────────────────────────
 //
 // 셋 다 **락을 만들지 않는다** — 그래서 이 판정이 없으면 깨진 워커가 `idle`로 뜨고, 사람이 보는

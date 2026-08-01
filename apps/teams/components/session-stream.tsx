@@ -7,11 +7,16 @@
  *  색 토큰은 하나도 안 쓴다 — 스트림에는 상태가 없다. 갈리는 건 밝기·폭·서체 셋이다.
  *
  *  읽기·파싱은 전부 `lib/transcript.ts`고 여기는 그리기만 한다. 접기는 네이티브 `<details>`,
- *  툴팁은 네이티브 `title`, 스크롤도 네이티브 — shadcn은 `button`과 `marker` 둘뿐이다(§5). */
+ *  툴팁은 네이티브 `title`, 스크롤도 네이티브 — shadcn은 `button`과 `marker` 둘뿐이다(§5).
+ *
+ *  **codex 워커에는 이 화면도 참견도 없다**(§4-3 · §비주얼 §23 ⑤). 판정은 `engine` prop 하나고
+ *  (서버가 `engineName`을 적용해 넘긴다) 상자 자리엔 `<EmptyState>`, 폼 자리엔 비활성 + 사유
+ *  한 줄이 선다. **진입점을 지우지 않는다** — 조용히 사라지면 사람은 고장으로 읽는다. */
 import { useEffect, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowDown, ChevronRight, FilePlus2, Send, TriangleAlert } from "lucide-react";
 import { sendFollowup, sendInterject, tailSession } from "@/app/p/[project]/tickets/[hash]/actions";
+import { EmptyState } from "@/components/empty-state";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -45,10 +50,15 @@ export function SessionStream({
   project,
   stem,
   live: initialLive,
+  engine,
 }: {
   project: string;
   stem: string;
   live: boolean; // 티켓이 `.wip`인가 — 서버가 매 폴링마다 다시 판정해 갱신한다
+  /** 이 티켓을 물고 있는 워커의 **엔진 이름**(§4-3 · §비주얼 §23 ⑤). `engineName`을 **서버가**
+   *  적용해 넘긴다 — `lib/workers.ts`는 `node:fs`를 타서 이 파일이 못 import한다.
+   *  `null`/`undefined`는 모른다는 뜻이고(완료 티켓 리플레이) 그때는 종전 그대로 그린다. */
+  engine?: string | null;
 }) {
   const [events, setEvents] = useState<StreamEvent[]>([]);
   const [live, setLive] = useState(initialLive);
@@ -58,9 +68,15 @@ export function SessionStream({
   const offset = useRef(0);
   const box = useRef<HTMLDivElement>(null);
 
+  // codex 워커에는 이 화면이 **없다**(§4-3 · §비주얼 §23 ⑤). 고장이 아니라 기능 집합의 차이라
+  // 진입점은 그대로 두고 그 자리에서 왜 없는지를 말한다. 판정은 엔진 이름 하나고 모델은 안 본다.
+  const codex = engine === "codex";
+
   // 진행중이면 2초 폴링, 완료면 1회 읽고 멈춘다(§2-1). `live`가 false로 바뀌는 순간(세션이 끝났다)
   // 그 응답을 마지막으로 타이머를 끊는다 — 완료 티켓에서 요청이 반복되지 않는 근거가 이 줄이다.
   useEffect(() => {
+    // 있을 수 없는 파일을 2초마다 묻지 않는다 — codex는 트랜스크립트를 아예 안 남긴다(§4-3 표).
+    if (codex) return;
     let stop = false;
     let timer: ReturnType<typeof setInterval> | undefined;
     const poll = async () => {
@@ -81,7 +97,7 @@ export function SessionStream({
       stop = true;
       clearInterval(timer);
     };
-  }, [project, stem, initialLive]);
+  }, [project, stem, initialLive, codex]);
 
   // 붙어 있을 때만 따라간다. 첫 렌더가 맨 아래에서 시작하는 것도 이 효과다(§9).
   useEffect(() => {
@@ -99,57 +115,86 @@ export function SessionStream({
 
   return (
     <div className="space-y-2">
-      {/* 폴링 상태는 배지가 아니다 — 티켓 상태 배지가 이미 화면 머리에 있고, 같은 사실을 두 모양으로
-          그리면 어느 쪽이 정본인지 모르게 된다(§9). 색도 아이콘도 없다.
-          **`따라가는 중`은 여기 없다** — 상자 안 맨 아래로 옮겼다(§2-1 · §18 ④). 사건이 쌓일수록
-          머리 문구가 "지금"에서 멀어져서다. 진행중이면 이 줄에는 `맨 아래로` 버튼만 남고,
-          `h-8`은 그대로 둔다(버튼이 떴다 사라질 때 상자가 위아래로 튀지 않는다). */}
-      <div className="flex h-8 items-center justify-end gap-2">
-        {!live && <p className="mr-auto text-xs text-muted-foreground">끝난 세션 · 갱신 없음</p>}
-        {detached && (
-          <Button variant="ghost" size="sm" onClick={() => setDetached(false)}>
-            <ArrowDown aria-hidden className="size-3.5" />
-            맨 아래로
-          </Button>
-        )}
-      </div>
-
-      {/* 배경에 틴트를 깔지 않는다 — `--muted`를 깔면 접힌 줄의 `--muted-foreground`가 4.34로
-          AA 미달이다(§9 함정 1). 512px인 이유는 머리와 바닥이 한 화면에 같이 들어와서다. */}
-      <div
-        ref={box}
-        onScroll={(e) => setDetached(!atBottom(e.currentTarget))}
-        className="h-[32rem] overflow-y-auto rounded-md border bg-background py-2"
-      >
-        {events.map((e) =>
-          e.label ? (
-            <Row key={e.key} e={e} onToggle={onToggle} />
-          ) : (
-            <FullText key={e.key} e={e} />
-          ),
-        )}
-        {/* 진행 표식(§18 ④) — 마지막 사건 다음 줄이 올 자리를 지킨다. `<Marker>`도 `<details>`도
-            아니다: §9가 Marker 기본값을 하나도 안 덮기로 했는데 여기는 `text-xs`여야 한다
-            (폴링 상태 3종이 한 종류인 채로 자리만 옮겼다). 눌러 볼 것이 없으니 hover도 없다.
-            `mx-1`이 8px 점을 16px 칸(= MarkerIcon 폭) 가운데 세워 문구를 다른 두 줄과 같은
-            x=36px에 맞춘다. // ponytail: 정렬용 래퍼 대신 마진 4px. 점이 커지면 그때 래퍼.
-            문구를 같이 드는 이유는 `prefers-reduced-motion`이다 — 모션만으로 말하지 않는다. */}
-        {live && (
-          <div className="flex items-center gap-2 px-3 text-xs leading-6 text-muted-foreground">
-            <span
-              aria-hidden
-              className="mx-1 size-2 shrink-0 animate-wip-pulse rounded-full bg-muted-foreground motion-reduce:animate-none"
-            />
-            따라가는 중 · 2초마다
+      {codex ? (
+        /* §비주얼 §23 ⑤ 사후 — §9가 이미 세워 둔 `<EmptyState>`에 문구만 갈아 끼운다.
+           `Alert`가 아니다: 사람이 할 일이 없고(원문도 다음 행동도 없다), §9가 스트림 부재를
+           이미 `부재이지 고장이 아니다`로 판정했고, codex 워커에겐 이게 상시 상태라 정상
+           상태에 켜진 경고가 된다(§0-2). 상자도 폴링도 없다 — 빈 스트림을 돌리지 않는다. */
+        <EmptyState
+          text="이 워커의 엔진은 codex입니다"
+          action={
+            <span className="text-xs text-muted-foreground">
+              세션 스트림은 claude 엔진에서만 됩니다 — codex는 트랜스크립트를 남기지 않습니다
+            </span>
+          }
+        />
+      ) : (
+        <>
+          {/* 폴링 상태는 배지가 아니다 — 티켓 상태 배지가 이미 화면 머리에 있고, 같은 사실을 두
+              모양으로 그리면 어느 쪽이 정본인지 모르게 된다(§9). 색도 아이콘도 없다.
+              **`따라가는 중`은 여기 없다** — 상자 안 맨 아래로 옮겼다(§2-1 · §18 ④). 사건이
+              쌓일수록 머리 문구가 "지금"에서 멀어져서다. 진행중이면 이 줄에는 `맨 아래로` 버튼만
+              남고, `h-8`은 그대로 둔다(버튼이 떴다 사라질 때 상자가 위아래로 튀지 않는다). */}
+          <div className="flex h-8 items-center justify-end gap-2">
+            {!live && (
+              <p className="mr-auto text-xs text-muted-foreground">끝난 세션 · 갱신 없음</p>
+            )}
+            {detached && (
+              <Button variant="ghost" size="sm" onClick={() => setDetached(false)}>
+                <ArrowDown aria-hidden className="size-3.5" />
+                맨 아래로
+              </Button>
+            )}
           </div>
-        )}
-      </div>
+
+          {/* 배경에 틴트를 깔지 않는다 — `--muted`를 깔면 접힌 줄의 `--muted-foreground`가 4.34로
+              AA 미달이다(§9 함정 1). 512px인 이유는 머리와 바닥이 한 화면에 같이 들어와서다. */}
+          <div
+            ref={box}
+            onScroll={(e) => setDetached(!atBottom(e.currentTarget))}
+            className="h-[32rem] overflow-y-auto rounded-md border bg-background py-2"
+          >
+            {events.map((e) =>
+              e.label ? (
+                <Row key={e.key} e={e} onToggle={onToggle} />
+              ) : (
+                <FullText key={e.key} e={e} />
+              ),
+            )}
+            {/* 진행 표식(§18 ④) — 마지막 사건 다음 줄이 올 자리를 지킨다. `<Marker>`도
+                `<details>`도 아니다: §9가 Marker 기본값을 하나도 안 덮기로 했는데 여기는
+                `text-xs`여야 한다(폴링 상태 3종이 한 종류인 채로 자리만 옮겼다). 눌러 볼 것이
+                없으니 hover도 없다. `mx-1`이 8px 점을 16px 칸(= MarkerIcon 폭) 가운데 세워 문구를
+                다른 두 줄과 같은 x=36px에 맞춘다. // ponytail: 정렬용 래퍼 대신 마진 4px. 점이
+                커지면 그때 래퍼. 문구를 같이 드는 이유는 `prefers-reduced-motion`이다 — 모션만으로
+                말하지 않는다. */}
+            {live && (
+              <div className="flex items-center gap-2 px-3 text-xs leading-6 text-muted-foreground">
+                <span
+                  aria-hidden
+                  className="mx-1 size-2 shrink-0 animate-wip-pulse rounded-full bg-muted-foreground motion-reduce:animate-none"
+                />
+                따라가는 중 · 2초마다
+              </div>
+            )}
+          </div>
+        </>
+      )}
 
       {/* 참견 입력 form — 상자 **밖 · 밑**이다(§2-2 · §비주얼 §21). 여기 한 곳에 다니까 티켓 상세와
           워커 다이얼로그가 같은 폼을 그린다(§2-1 Q2=(a)). 항상 마운트해 두고 그릴지 말지는
           컴포넌트가 스스로 판정한다 — 조건을 바깥에 두면 `live`가 내려가는 순간(2초 폴링) 실패
-          사유와 사람이 쓴 글이 언마운트로 같이 증발한다(§21 예외 항). */}
-      <Interject project={project} stem={stem} live={live} inbox={inbox} done={done} />
+          사유와 사람이 쓴 글이 언마운트로 같이 증발한다(§21 예외 항).
+          **codex에서도 자리를 지운다는 뜻이 아니다**(§비주얼 §23 ⑤): 비활성 + 사유 한 줄로 뜬다 —
+          진입점을 지우면 화면은 "왜 없는지"를 말할 자리를 잃는다. */}
+      <Interject
+        project={project}
+        stem={stem}
+        live={live}
+        inbox={inbox}
+        done={done}
+        codex={codex}
+      />
     </div>
   );
 }
@@ -211,12 +256,15 @@ function Interject({
   live,
   inbox,
   done,
+  codex,
 }: {
   project: string;
   stem: string;
   live: boolean;
   inbox: boolean | null;
   done: boolean;
+  /** 물고 있는 워커가 codex다 — 참견이 아예 없는 워커다(§4-3 · §비주얼 §23 ⑤) */
+  codex: boolean;
 }) {
   const router = useRouter();
   const [text, setText] = useState("");
@@ -237,7 +285,10 @@ function Interject({
   const sendCombo = useKeymap().bindings["interject.send"];
 
   // 어느 폼을 그리나 — 판정은 `lib/urls.ts` 하나다(§21 표 4행 + 예외 둘. 그 파일에 검증이 있다).
-  const mode = interjectMode({ polled: inbox !== null, live, done, failed: !!fail });
+  // **codex는 `polled`가 이미 참이다**: 폴링을 아예 안 도는데(위 효과) `inbox`가 `null`인 채로
+  // 두면 `첫 폴링 전`으로 읽혀 폼이 통째로 사라진다 — §23이 지우지 말라고 한 그 자리다.
+  // 서버에 물을 것이 없는 것이지 아직 안 물어본 것이 아니다.
+  const mode = interjectMode({ polled: codex || inbox !== null, live, done, failed: !!fail });
   if (!mode) return null;
 
   // **모드가 갈리면 쓴 글은 남기고 실패 Alert만 지운다**(§21). `ENXIO`의 다음 행동이 `위 글을
@@ -255,7 +306,10 @@ function Interject({
   // 남은 폼의 입력칸이 `disabled`가 돼 §21이 `readOnly`로 지키려던 선택·복사를 잃는다. §21이
   // 그릇의 흐림을 의도한 자리는 하나뿐이고, 그 화면의 사유는 실패 Alert가 말한다(사유 한 줄도
   // 같이 안 뜬다).
-  const off = !followup && live && !inbox; // 입구가 없다 = 그릇 통째로 비활성(§21)
+  // 입구가 없다 = 그릇 통째로 비활성(§21). codex는 **입구가 생길 일이 없는** 워커라 같은 자리다
+  // (`tick.sh:263-270`이 `--input-format stream-json` 인접에서만 FIFO를 판다 — §4-3).
+  // `inbox`를 안 보고 따로 적는 이유: 사유 문구가 갈리고, 그 판정이 폴링에 안 걸려야 한다.
+  const off = !followup && live && (codex || !inbox);
   const empty = !text.trim();
 
   const send = async () => {
@@ -376,7 +430,11 @@ function Interject({
           (§21 실측). 비활성 컨트롤은 WCAG 예외지만 **왜 못 쓰는지 설명하는 문장은 예외가 아니다**. */}
       {off && (
         <p id={offId} className="text-xs text-muted-foreground">
-          이 세션은 참견을 받지 못합니다 — 티켓에 inbox가 없습니다
+          {/* codex는 사유가 티켓이 아니라 **엔진**이다(§4-3 · §비주얼 §23 ⑤). `inbox가 없습니다`도
+              참이지만 그건 결과고, 사람이 고칠 수 있는 것으로 읽힌다 — 이 워커는 그런 워커다. */}
+          {codex
+            ? "이 워커의 엔진은 codex입니다 — 참견은 claude 엔진에서만 됩니다"
+            : "이 세션은 참견을 받지 못합니다 — 티켓에 inbox가 없습니다"}
         </p>
       )}
 

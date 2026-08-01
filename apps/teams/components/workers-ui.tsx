@@ -62,6 +62,10 @@ export type WorkerRow = {
   lockPid: number | null;
   holding: string | null;
   engine: string;
+  /** `engine`의 첫 토큰 basename — §0-4 인증 배너와 **같은 `engineName`**이다. 서버가 계산해
+   *  넘긴다: `lib/workers.ts`가 `node:fs`를 타서 이 파일이 그 함수를 못 import한다(§규약).
+   *  세션 스트림·참견이 이 값 하나로 갈린다(§4-3 · §비주얼 §23 ⑤) */
+  engineName: string;
   lastLog: string | null;
   registerCmd: string;
   unregisterCmd: string;
@@ -353,7 +357,9 @@ export function WorkerRowActions({ projectId, row }: { projectId: string; row: W
             </DialogHeader>
             {/* `live`는 초기값일 뿐이고 매 폴링마다 서버가 티켓 상태로 다시 판정한다 —
                 여는 순간 티켓이 끝났으면 첫 응답에서 폴링이 멈춘다. */}
-            <SessionStream project={projectId} stem={holding} live />
+            {/* 엔진 이름을 같이 넘긴다 — codex면 상자 대신 사유가, 참견 폼엔 비활성 + 사유가
+                뜬다(§4-3 · §비주얼 §23 ⑤). 여기서는 화면이 그 값을 직접 쓰고 있는 행이다. */}
+            <SessionStream project={projectId} stem={holding} live engine={row.engineName} />
           </DialogContent>
         </Dialog>
       )}
