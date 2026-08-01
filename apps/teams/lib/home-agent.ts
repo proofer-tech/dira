@@ -70,7 +70,7 @@ import { engineCell, listWorkers, type Worker } from "./workers.ts";
 /** §7: **상한 5분.** `runWorker`의 60초와 다른 값이다 — 저건 python 스캔이고 이건 세션이다. */
 const TIMEOUT_MS = 5 * 60_000;
 
-/** 세션에 존재하는 도구 전부(§7 표 `쓰기 도구가 없다`). **쉼표 한 토큰**이다(머리 주석의 variadic 함정). */
+/** 세션에 존재하는 도구 전부(§7 표 `세션의 도구는 Read·Glob·Grep 셋뿐이다`). **쉼표 한 토큰**이다(머리 주석의 variadic 함정). */
 const TOOLS = "Read,Glob,Grep";
 
 /** 도구 표면을 정하는 플래그 **전부**. 세 조각이 각자 다른 층을 막으므로 하나라도 빠지면 표면이
