@@ -35,6 +35,8 @@ import {
   firstWorkerCmd,
   listWorkers,
   readCommonContext,
+  ENGINES,
+  MODEL_RE,
 } from "@/lib/workers";
 
 // 워커는 GUI 밖에서(cron이) 상태를 바꾼다 — 프리렌더하면 빌드 시점 현황이 굳는다.
@@ -110,7 +112,13 @@ export default async function Workers({ params }: { params: Promise<{ project: s
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-lg font-semibold">워커</h1>
         {rows.length > 0 && (
-          <CreateWorkerButton projectId={id} canTemplate firstCmd={firstWorkerCmd(project.root)} />
+          <CreateWorkerButton
+            projectId={id}
+            canTemplate
+            firstCmd={firstWorkerCmd(project.root)}
+            engines={ENGINES}
+            modelPattern={MODEL_RE.source}
+          />
         )}
       </div>
 
@@ -147,6 +155,8 @@ export default async function Workers({ params }: { params: Promise<{ project: s
                 projectId={id}
                 canTemplate={false}
                 firstCmd={firstWorkerCmd(project.root)}
+                engines={ENGINES}
+                modelPattern={MODEL_RE.source}
               />
             }
           />

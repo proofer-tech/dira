@@ -24,6 +24,7 @@ import {
   stopWorker,
   writeCommonContext,
   writeContext,
+  type EngineId,
   type WorkerContext,
   type WorktreePrep,
 } from "@/lib/workers";
@@ -68,11 +69,15 @@ function fail(e: unknown): WorkerActionResult {
 export async function createWorkerAction(
   projectId: string,
   name: string,
+  /** 고른 엔진·모델 (§4-3). 기본값은 화면과 같은 `claude` + `모델 지정 안 함`이고, **값 검증은
+   *  서버가 한다** — `createWorker`가 `engineArgv`로 모르는 엔진·셸 메타문자를 거부한다. */
+  engine: string = "claude",
+  model: string = "",
 ): Promise<WorkerActionResult> {
   try {
     const root = await rootOf(projectId);
     const worker = name.trim();
-    const { path, template } = await createWorker(root, worker);
+    const { path, template } = await createWorker(root, worker, engine as EngineId, model);
     // **등록이 실패해도 파일 생성을 되돌리지 않는다** — 만든 것을 지우면 사람이 이름을 다시
     // 정해야 한다. 실패는 `cronError`로 넘기고 화면이 등록 명령어를 그 자리에 보여준다.
     const cronError = await registerCron(path).then(

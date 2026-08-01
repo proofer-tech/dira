@@ -41,6 +41,13 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { relativeUnder } from "@/lib/urls";
 import { cn } from "@/lib/utils";
 
@@ -112,6 +119,139 @@ function CrontabApproval() {
   );
 }
 
+// ── 엔진 · 모델 필드 한 쌍 (§4-3 · §비주얼 §23 ③) ───────────────────────────
+
+/** 서버가 **값으로** 내려주는 카탈로그 = `lib/workers.ts`의 `ENGINES` 그대로다. 그 모듈은
+ *  `node:fs`를 물어 클라이언트가 import할 수 없고, 목록을 여기 다시 적으면 화면이 파일에
+ *  안 들어가는 이름을 그리게 된다(두 벌은 반드시 갈린다). */
+export type EngineCatalog = readonly { id: string; models: readonly string[] }[];
+
+/** 고른 값. `모델 지정 안 함`은 **빈 문자열**이고(`NO_MODEL`) 라벨은 화면이 붙인다(§23 ③).
+ *  `custom`이면 `model`은 사람이 친 글자다 — 목록 값과 같은 자리를 쓴다. */
+export type EnginePick = { engine: string; model: string; custom?: boolean };
+
+/** 목록에 없는 **화면만의 항목**. 값이 곧 라벨이고 모델 이름과 겹칠 수 없다 — 서버의
+ *  `MODEL_RE`가 한글도 `…`도 안 받는다. */
+const CUSTOM = "직접 입력…";
+
+/** 지금 값으로 만들 수 있는가. 직접 입력만 걸린다 — 빈 값(`+`가 0글자를 안 받는다)과 셸
+ *  메타문자가 여기서 막힌다. **즉시 거절일 뿐이고** 진짜 검증은 서버가 다시 한다(§23 ④). */
+export const enginePickOk = (pick: EnginePick, modelPattern: string) =>
+  !pick.custom || new RegExp(modelPattern).test(pick.model);
+
+/** 워커 행의 팝오버와 생성 폼이 **같은 것**을 그린다(§23 ③). 두 자리에서 라벨 id가 겹치지
+ *  않게 `idPrefix`만 갈린다. */
+export function EngineFields({
+  engines,
+  modelPattern,
+  value,
+  onChange,
+  idPrefix = "worker",
+}: {
+  engines: EngineCatalog;
+  /** 서버 `MODEL_RE.source`. 화면이 정규식을 따로 적지 않는다 */
+  modelPattern: string;
+  value: EnginePick;
+  onChange: (v: EnginePick) => void;
+  idPrefix?: string;
+}) {
+  const models = engines.find((e) => e.id === value.engine)?.models ?? [];
+  // 빈 칸은 아직 거절이 아니다 — `직접 입력…`을 고르자마자 빨간 줄이 뜨면 사람이 무엇을
+  // 잘못했는지 모른다. 못 만든다는 사실은 부르는 쪽의 1차 버튼이 말한다(`enginePickOk`).
+  const bad = !!value.custom && value.model !== "" && !new RegExp(modelPattern).test(value.model);
+  const hintId = `${idPrefix}-model-hint`;
+  return (
+    <>
+      <div className="space-y-2">
+        <Label htmlFor={`${idPrefix}-engine`}>엔진</Label>
+        {/* 엔진을 바꾸면 모델은 `모델 지정 안 함`으로 돌아간다 — 목록이 엔진에 딸려 있어서
+            `opus`를 든 채 codex로 넘어가면 화면이 없는 조합을 보여준다(§23 ③). */}
+        <Select value={value.engine} onValueChange={(v) => onChange({ engine: String(v), model: "" })}>
+          <SelectTrigger id={`${idPrefix}-engine`} className="w-full font-mono">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {engines.map((e) => (
+              <SelectItem key={e.id} value={e.id} className="font-mono">
+                {e.id}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor={`${idPrefix}-model`}>모델</Label>
+        <Select
+          value={value.custom ? CUSTOM : value.model}
+          onValueChange={(v) =>
+            onChange(
+              String(v) === CUSTOM
+                ? { engine: value.engine, model: "", custom: true }
+                : { engine: value.engine, model: String(v) },
+            )
+          }
+        >
+          {/* 모델 이름은 argv에 들어가는 토큰이라 mono다. `모델 지정 안 함`·`직접 입력…`은
+              문장이라 sans다(§23 ③). */}
+          <SelectTrigger
+            id={`${idPrefix}-model`}
+            className={cn("w-full", value.model && !value.custom && "font-mono")}
+          >
+            {/* **라벨은 화면이 붙인다**(§23 ③). `모델 지정 안 함`의 값은 빈 문자열이라
+                Select에 맡기면 트리거에 **빈 줄 하나**가 뜬다(실측 — 항목 라벨은 팝업이
+                열린 뒤에야 등록된다). 이 절이 막는 빈칸이 되살아나는 자리다. */}
+            <SelectValue>{(v) => (v ? String(v) : "모델 지정 안 함")}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {models.map((m) => (
+              <SelectItem key={m} value={m} className={m ? "font-mono" : undefined}>
+                {m || "모델 지정 안 함"}
+              </SelectItem>
+            ))}
+            <SelectItem value={CUSTOM}>{CUSTOM}</SelectItem>
+          </SelectContent>
+        </Select>
+        {value.custom && (
+          <>
+            {/* 받는 것은 **모델 이름 한 토큰**이다 — argv 전체가 아니다(§23 ④). 라벨은 위
+                Select가 갖고 있어서 칸은 `aria-label`로 자기 이름을 댄다. */}
+            <Input
+              aria-label="모델 이름 직접 입력"
+              aria-describedby={hintId}
+              className="font-mono"
+              placeholder="모델 이름"
+              value={value.model}
+              onChange={(e) =>
+                onChange({ engine: value.engine, model: e.target.value, custom: true })
+              }
+            />
+            {bad ? (
+              // 원인이 값이 아니라 한 문장이고 다음 행동은 포커스가 놓인 그 칸이다 —
+              // `Alert`가 아닌 이유가 이것이다(§22 ③ · §23 ④).
+              <p id={hintId} role="alert" className="flex items-center gap-1.5 text-xs text-destructive">
+                <TriangleAlert className="size-3.5" aria-hidden />
+                공백·따옴표는 쓸 수 없습니다 — 모델 이름 한 토큰만
+              </p>
+            ) : (
+              <p id={hintId} className="text-xs text-muted-foreground">
+                엔진에 그대로 넘어갑니다 — 공백·따옴표 없는 한 토큰
+              </p>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* 예고 — codex는 고장이 아니라 기능 집합이 다르다(§23 ⑤). 새 그릇을 만들지 않는다 */}
+      {value.engine === "codex" && (
+        <p className="text-xs text-muted-foreground">
+          codex 워커는 참견과 세션 스트림이 없습니다 — 티켓 수행은 같습니다.
+        </p>
+      )}
+    </>
+  );
+}
+
 // ── 생성 ────────────────────────────────────────────────────────────────────
 
 /** §6 에러 3요소의 1번 — **어느 단계에서 멈췄나**. 인덱스는 `WorktreePrep.done`(= 끝난 단계 수)이다.
@@ -128,6 +268,8 @@ export function CreateWorkerButton({
   projectId,
   canTemplate,
   firstCmd,
+  engines,
+  modelPattern,
   variant,
 }: {
   projectId: string;
@@ -135,10 +277,14 @@ export function CreateWorkerButton({
   canTemplate: boolean;
   /** 워커 0개일 때 손으로 첫 워커를 만드는 명령 */
   firstCmd: string;
+  engines: EngineCatalog;
+  modelPattern: string;
   variant?: "default" | "outline";
 }) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
+  // 기본값은 `claude` + `모델 지정 안 함` — **안 고른 사람이 지금과 똑같은 워커를 얻는다**(§4-3).
+  const [pick, setPick] = useState<EnginePick>({ engine: "claude", model: "" });
   const [result, setResult] = useState<WorkerActionResult | null>(null);
   const [pending, start] = useTransition();
   const created = result?.created;
@@ -150,6 +296,7 @@ export function CreateWorkerButton({
         setOpen(o);
         if (!o) {
           setName("");
+          setPick({ engine: "claude", model: "" });
           setResult(null);
         }
       }}
@@ -234,18 +381,28 @@ export function CreateWorkerButton({
             </div>
           </div>
         ) : (
-          <div className="space-y-2">
-            <Label htmlFor="worker-name">이름</Label>
-            <Input
-              id="worker-name"
-              className="font-mono"
-              placeholder="w4"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="worker-name">이름</Label>
+              <Input
+                id="worker-name"
+                className="font-mono"
+                placeholder="w4"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                영문·숫자·_·-. 파일은 workers/&lt;이름&gt;.sh 가 됩니다
+              </p>
+            </div>
+            {/* 엔진은 템플릿에서 물려받지 않는다 — 고른 값이 `TICKET_ENGINE` 블록으로
+                들어간다(§4-3). 안 고르면 `tick.sh`가 잡는 그 값 그대로다. */}
+            <EngineFields
+              engines={engines}
+              modelPattern={modelPattern}
+              value={pick}
+              onChange={setPick}
             />
-            <p className="text-xs text-muted-foreground">
-              영문·숫자·_·-. 파일은 workers/&lt;이름&gt;.sh 가 됩니다
-            </p>
             {result?.message && <Failure title="워커를 만들지 못했습니다" message={result.message} />}
           </div>
         )}
@@ -258,8 +415,12 @@ export function CreateWorkerButton({
           </DialogClose>
           {canTemplate && !created && (
             <Button
-              disabled={pending || !name.trim()}
-              onClick={() => start(async () => setResult(await createWorkerAction(projectId, name)))}
+              disabled={pending || !name.trim() || !enginePickOk(pick, modelPattern)}
+              onClick={() =>
+                start(async () =>
+                  setResult(await createWorkerAction(projectId, name, pick.engine, pick.model)),
+                )
+              }
             >
               {pending ? "만드는 중…" : "만들기"}
             </Button>

@@ -634,8 +634,12 @@ export const ENGINES: readonly {
 
 /** 모델 문자열은 **사람이 직접 입력**할 수 있고 그대로 셸 배열의 맨 낱말이 된다. 여기가 그
  *  신뢰 경계다 — 인용 없는 토큰이므로 셸 메타문자가 하나라도 있으면 거부한다(클라이언트 검증은
- *  검증이 아니다. 이 함수가 서버에서 돈다). 실재하는 모델 이름은 전부 이 문자 집합 안이다. */
-const MODEL_RE = /^[A-Za-z0-9._:/-]+$/;
+ *  검증이 아니다. 이 함수가 서버에서 돈다). 실재하는 모델 이름은 전부 이 문자 집합 안이다.
+ *
+ *  **화면도 같은 정규식을 쓴다**(§23 ④의 즉시 거절 한 줄). 클라이언트 컴포넌트는 이 모듈을
+ *  import할 수 없어서(`node:fs`) 서버 페이지가 `MODEL_RE.source`를 prop으로 내린다 — 두 벌로
+ *  적으면 화면이 받는 값과 서버가 받는 값이 갈린다. */
+export const MODEL_RE = /^[A-Za-z0-9._:/-]+$/;
 
 /** 고른 값 → argv 토큰. 템플릿은 고정이고 모델 자리만 끼운다. */
 export function engineArgv(id: EngineId, model: string = NO_MODEL): string[] {
@@ -1419,11 +1423,18 @@ async function workerFile(root: string, name: string): Promise<string> {
  *  워커 파일에만 적혀 있고 GUI가 알 방법이 없다. 그래서 **워커 0개인 큐에서는 만들 수 없고**,
  *  화면이 그 사실과 손으로 만드는 법을 알린다.
  *
- *  복사한 뒤 **`TICKET_CWD` 줄만** 새 이름으로 다시 쓴다(§4-2). 나머지 줄은 손대지 않는다 —
- *  엔진 경로·게이트·컨텍스트가 템플릿에서 와야 하는 이유는 그대로다. */
+ *  복사한 뒤 **`TICKET_CWD` 줄과 `TICKET_ENGINE` 블록만** 새 값으로 다시 쓴다(§4-2 · §4-3).
+ *  나머지 줄은 손대지 않는다 — 엔진 경로·게이트·컨텍스트가 템플릿에서 와야 하는 이유는 그대로다.
+ *
+ *  엔진을 템플릿에서 **물려받지 않는 이유는 `TICKET_CWD`와 같다**(§4 생성 1항): 딸려 오면
+ *  생성 폼에서 고른 값이 조용히 무시되고, 사람은 새 워커가 왜 다른 엔진으로 도는지 모른다.
+ *  기본값 `claude` + `NO_MODEL`은 **`tick.sh`가 잡는 그 값**이라 안 고른 사람은 종전과 같은
+ *  워커를 얻는다(§4-3) — 블록이 명시로 적힌다는 것만 다르다. */
 export async function createWorker(
   root: string,
   name: string,
+  engine: EngineId = "claude",
+  model: string = NO_MODEL,
 ): Promise<{ path: string; template: string }> {
   // 템플릿 확인이 먼저다 — workers/가 아예 없는 큐에서 `resolveWithin`의 ENOENT를 먼저 만나면
   // 사용자가 받는 문장이 "경로 없음"이 되어 진짜 이유(템플릿 없음)를 가린다.
@@ -1440,8 +1451,11 @@ export async function createWorker(
   const file = await workerFile(root, name);
   const template = existing[0];
   const text = await readFile(path.join(dir, template), "utf8");
+  // 값 검증(모르는 엔진 · 셸 메타문자가 든 모델)은 `engineArgv`가 한다 — 이 경로도 신뢰
+  // 경계고, 던지면 **파일을 만들기 전에** 멈춘다.
+  const next = applyEngineBlock(rewriteCwd(text, root, name), engine, model);
   // O_EXCL. 있는 워커를 덮어쓰면 돌고 있는 cron 줄의 내용이 바뀐다.
-  await writeFile(file, rewriteCwd(text, root, name), { flag: "wx" });
+  await writeFile(file, next, { flag: "wx" });
   await chmod(file, 0o755);
   // 워크트리 준비 명령은 여기서 안 준다 — 생성 액션이 `prepareWorktree`로 **직접 만들고**,
   // 명령은 그게 실패했을 때만(`WorktreePrep.rest`) 화면에 나온다(§4 생성 4항).

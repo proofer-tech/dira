@@ -722,9 +722,10 @@ test("createWorker — 기존 워커를 템플릿으로 755 생성, 덮어쓰기
   const { path: file, template } = await createWorker(root, "w2");
   assert.strictEqual(template, "w1.sh");
   assert.strictEqual(statSync(file).mode & 0o777, 0o755);
+  // 안 고른 사람의 기본값도 **블록으로 적힌다** — `tick.sh`가 잡는 그 값이라 워커는 같다(§4-3)
   assert.strictEqual(
     execFileSync("cat", [file], { encoding: "utf8" }),
-    `#!/bin/bash\nTICKET_CWD="${root}/worktrees/w2"\n. tick.sh\n`,
+    `#!/bin/bash\nTICKET_CWD="${root}/worktrees/w2"\n${renderEngineBlock("claude")}\n. tick.sh\n`,
   );
   // O_EXCL: 돌고 있는 워커를 덮어쓰지 않는다
   await assert.rejects(createWorker(root, "w2"), /EEXIST/);
@@ -769,7 +770,10 @@ test("createWorker — TICKET_CWD를 템플릿에서 물려받지 않는다 (w4�
   // 줄이 없는 템플릿(엔진 기본값을 쓰던 워커)이면 `#!` 다음 줄에 넣는다
   const bare = makeRoot({ "w1.sh": "#!/bin/bash\n. tick.sh\n" });
   const made = await createWorker(bare, "w2");
-  assert.strictEqual(readFileSync(made.path, "utf8"), `#!/bin/bash\nTICKET_CWD="${bare}/worktrees/w2"\n. tick.sh\n`);
+  assert.strictEqual(
+    readFileSync(made.path, "utf8"),
+    `#!/bin/bash\nTICKET_CWD="${bare}/worktrees/w2"\n${renderEngineBlock("claude")}\n. tick.sh\n`,
+  );
   // `. tick.sh` 줄을 못 읽어도 자리표시자가 없다 — 이제 경로가 root에서 나온다
   assert.strictEqual(
     worktreeCmds(bare, "w2")[0],
@@ -781,19 +785,48 @@ test("createWorker — TICKET_CWD를 템플릿에서 물려받지 않는다 (w4�
   const e2 = await createWorker(exp, "w2");
   assert.strictEqual(
     readFileSync(e2.path, "utf8"),
-    `#!/bin/bash\nexport TICKET_CWD="${exp}/worktrees/w2"\n. tick.sh\n`,
+    `#!/bin/bash\nexport TICKET_CWD="${exp}/worktrees/w2"\n${renderEngineBlock("claude")}\n. tick.sh\n`,
   );
 });
 
-test("createWorker — TICKET_CWD 말고는 한 줄도 안 바뀐다 (게이트·source·컨텍스트가 산다)", async () => {
+test("createWorker — TICKET_CWD·TICKET_ENGINE 말고는 한 줄도 안 바뀐다 (게이트·source·컨텍스트가 산다)", async () => {
   const root = makeRoot({ "w1.sh": WT_SH });
   const { path: file } = await createWorker(root, "w4");
   const before = WT_SH.split("\n");
   const after = readFileSync(file, "utf8").split("\n");
-  assert.strictEqual(after.length, before.length); // 줄이 늘지도 줄지도 않았다
-  const diff = before.map((l, i) => [i, l, after[i]] as const).filter(([, l, r]) => l !== r);
+  // 는 줄은 엔진 블록 하나뿐이고, 자리는 `source` 줄 바로 위다
+  assert.strictEqual(after.length, before.length + 1);
+  const at = after.findIndex((l) => l.startsWith("TICKET_ENGINE=("));
+  assert.strictEqual(after[at + 1], '. "$HOME/Projects/dira/tick.sh"');
+  const rest = after.filter((_, i) => i !== at);
+  const diff = before.map((l, i) => [i, l, rest[i]] as const).filter(([, l, r]) => l !== r);
   assert.strictEqual(diff.length, 1, `바뀐 줄: ${JSON.stringify(diff)}`);
   assert.strictEqual(diff[0][1].startsWith("TICKET_CWD="), true);
+});
+
+test("createWorker — 엔진은 고른 값이다. 템플릿에서 딸려 오지 않는다 (§4-3 생성 폼)", async () => {
+  // 템플릿은 codex로 도는 워커다 — 여기서 물려받으면 고른 값이 조용히 무시된다
+  const tmpl = `#!/bin/bash\nTICKET_CWD="/tmp/x"\n${renderEngineBlock("codex", "gpt-5.5")}\n. tick.sh\n`;
+  const root = makeRoot({ "w1.sh": tmpl });
+
+  const a = await createWorker(root, "w2", "claude", "opus");
+  // 블록은 여전히 하나다(치환이지 삽입이 아니다 — 2개면 그 워커를 다시는 못 고친다)
+  assert.strictEqual(readFileSync(a.path, "utf8").split("TICKET_ENGINE=(").length - 1, 1);
+  // 안 고른 사람 = 기본값 `claude` + `모델 지정 안 함`. codex 템플릿에서도 그렇다(§4-3)
+  await createWorker(root, "w3");
+
+  // 판정은 **화면이 읽는 그 길**로 한다 — listWorkers가 읽은 값의 역파싱이다
+  const got = Object.fromEntries(
+    (await listWorkers(root, [], SFX)).map((w) => [w.name, parseEngineValue(w.engine)]),
+  );
+  assert.deepStrictEqual(got.w2, { engineId: "claude", model: "opus" });
+  assert.deepStrictEqual(got.w3, { engineId: "claude", model: NO_MODEL });
+  assert.deepStrictEqual(got.w1, { engineId: "codex", model: "gpt-5.5" }); // 템플릿은 그대로다
+
+  // 신뢰 경계: 값 검증은 파일을 만들기 **전에** 던진다 — 반쯤 만들어진 워커가 남지 않는다
+  await assert.rejects(createWorker(root, "w4", "claude", "a b; rm -rf /"), /쓸 수 없는 문자/);
+  await assert.rejects(createWorker(root, "w4", "gemini" as "claude"), /모르는 엔진/);
+  assert.strictEqual((await listWorkers(root, [], SFX)).some((w) => w.name === "w4"), false);
 });
 
 // ── prepareWorktree (§4 생성 4항) ───────────────────────────────────────────
