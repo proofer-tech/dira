@@ -4,7 +4,7 @@
  *
  *  **큐 파일을 하나도 안 건드린다.** 다른 화면의 `actions.ts`가 티켓·워커·프로토콜 파일을 쓰는
  *  자리인 것과 반대다(§7 — 질문이 티켓으로 들어가지 않고 답이 티켓으로 나오지 않는다).
- *  여기서 나가는 쓰기는 `$TICKET_LOCAL/home-sessions.json`의 **한 줄**뿐이다.
+ *  여기서 나가는 쓰기는 `$TICKET_LOCAL/home-sessions.json`의 **대화 목록**뿐이다(§대화가 여럿이다).
  *
  *  판정과 실행은 전부 `lib/home-agent.ts`다 — 이 파일은 프로젝트 검증 + 위임이 전부다
  *  (`sendInterject`가 `lib/interject.ts`에 대해 갖는 관계와 같다).
@@ -12,7 +12,7 @@
  *  **`revalidatePath`를 부르지 않는다.** 대화의 출처는 트랜스크립트 파일이고 그건 Next 캐시가
  *  모르는 것이라 폴링이 직접 읽는다. 티켓도 레지스트리도 안 바뀌므로 다시 그릴 화면이 없다. */
 import {
-  clearSessionId,
+  newConversation,
   pollHome,
   startAsk,
   type Answer,
@@ -56,10 +56,11 @@ export async function pollHomeAnswer(
   }
 }
 
-/** `새 대화` — **session id 한 줄을 지우는 게 전부다**(§7). 옛 트랜스크립트는 안 지운다
+/** `새 대화` — **목록에 줄을 하나 여는 게 전부다**(§7 §대화가 여럿이다 — 종전은 그 한 줄을
+ *  지우는 것이었고 요구 `c5d22429`로 뒤집혔다). 옛 대화도 옛 트랜스크립트도 남는다
  *  (`~/.claude`는 남의 디렉터리다). 도는 중에 못 부르게 막는 것은 화면이다(§24 — `aria-disabled`);
  *  여기서 다시 막지 않는 이유는 막을 대상이 파일이 아니라 **떠 있는 프로세스**라서다. 그건
  *  이 앱에 없는 취소 버튼의 일이고(§7), 이 함수가 하는 일은 다음 질문이 새 세션이 되게 하는 것뿐이다. */
 export async function clearHome(projectId: string): Promise<void> {
-  await clearSessionId((await required(projectId)).id);
+  await newConversation((await required(projectId)).id);
 }

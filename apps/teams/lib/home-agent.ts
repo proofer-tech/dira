@@ -63,7 +63,7 @@ import path from "node:path";
 import { findClaude, tokenPath } from "./auth.ts";
 import type { Run } from "./engine.ts";
 import { registryPath, resolveConfig, type Project, type ProjectConfig } from "./projects.ts";
-import { isAwaiting, listTickets, statusOf, type Ticket } from "./queue.ts";
+import { isAwaiting, listTickets, reqTitle, statusOf, type Ticket } from "./queue.ts";
 import { findTranscript, sessionIdOf, tailEvents, type StreamEvent } from "./transcript.ts";
 import { engineCell, listWorkers, type Worker } from "./workers.ts";
 
@@ -90,10 +90,30 @@ export const TOOL_FLAGS: readonly string[] = [
   TOOLS,
 ];
 
-// ── 프로젝트 → session id 한 줄 (§7) ────────────────────────────────────────
+// ── 프로젝트 → 대화 목록 (§7 §대화가 여럿이다) ──────────────────────────────
 //
 // **대화 이력 저장소를 만들지 않는다.** `claude`가 자기 트랜스크립트를 이미 쓰고 있고 그걸 읽는
-// 코어가 `lib/transcript.ts`에 있다. GUI가 남기는 것은 프로젝트 → session id 한 줄뿐이다.
+// 코어가 `lib/transcript.ts`에 있다. GUI가 남기는 것은 프로젝트 → **session id 목록**뿐이다
+// (종전은 한 줄이었다 — 요구 `c5d22429`로 값이 문자열에서 목록이 됐다. 파일도 자리도 그대로다).
+
+/** 목록의 한 줄. **내용은 여기 없다** — 트랜스크립트가 정본이고 이 줄은 그 파일을 찾는 열쇠다. */
+export type Conversation = {
+  /** session id(UUID). `--resume` 인자이자 트랜스크립트 글롭의 값이다 */
+  id: string;
+  /** 첫 질문의 첫 줄(`reqTitle`). 옛 형식에서 올라온 줄은 첫 질문을 모르므로 빈다 */
+  title: string;
+  /** ISO. 옛 형식에서 올라온 줄은 모른다 — 빈 문자열이다(지어내지 않는다) */
+  created: string;
+  /** **아직 세션이 안 떴다.** 다음 질문이 `--resume`이 아니라 `--session-id`로 연다 */
+  fresh?: true;
+};
+
+/** 한 프로젝트가 이 파일에 갖는 것 전부. `current`는 **목록에 있는 줄**만 가리킨다. */
+export type Home = { conversations: Conversation[]; current: string | null };
+
+/** §7: **프로젝트당 최근 20개.** 넘으면 오래된 줄이 이 파일에서 빠진다 —
+ *  **트랜스크립트는 안 지운다**(`~/.claude`는 남의 디렉터리다). */
+const LIMIT = 20;
 
 /** 레지스트리·토큰·키맵과 **같은 디렉터리**(엔진의 `$LOCAL`). **`gui-projects.json`에 넣지 않는다** —
  *  등록 정보와 대화 상태는 수명이 다르다(§7). 파일 하나에 프로젝트 전부를 담는다. */
@@ -112,30 +132,89 @@ async function readSessions(): Promise<Record<string, unknown>> {
   }
 }
 
-/** **경로가 되는 값의 관문은 `sessionIdOf` 하나다.** 이 값은 그대로 `--resume` 인자가 되고
- *  `findTranscript`가 `~/.claude/projects/*​/<이것>.jsonl`을 찾는 데 쓴다 — 사람이 이 파일을
- *  손으로 고칠 수 있으므로 UUID가 아닌 것은 세션이 없는 것과 같다(§경로 방어). */
-export async function readSessionId(projectId: string): Promise<string | null> {
-  const v = (await readSessions())[projectId];
-  return sessionIdOf({ session_id: typeof v === "string" ? v : "" });
+/** 한 프로젝트의 값 → 대화 목록.
+ *
+ *  **옛 형식(문자열 한 줄)이 대화 한 개짜리 목록이 된다.** 이 파일은 사람 머신에 이미 있고,
+ *  못 읽으면 그 사람은 돌던 대화를 잃는다. 제목·만든 시각은 그 형식에 없던 값이라 **비운다** —
+ *  트랜스크립트를 열어 지어내지 않는다(그 파일은 여기서 읽는 것이 아니다).
+ *
+ *  **경로가 되는 값의 관문은 `sessionIdOf` 하나다.** 목록의 각 줄이 그 관문을 통과하고
+ *  통과 못 하는 줄은 없는 것으로 친다 — 사람이 이 파일을 손으로 고칠 수 있고, 이 값은 그대로
+ *  `--resume` 인자가 되고 `findTranscript`가 `~/.claude/projects/*​/<이것>.jsonl`을 찾는 데 쓴다. */
+function parseHome(v: unknown): Home {
+  const uuid = (x: unknown) => sessionIdOf({ session_id: typeof x === "string" ? x : "" });
+  if (typeof v === "string") {
+    const id = uuid(v);
+    return id ? { conversations: [{ id, title: "", created: "" }], current: id } : { conversations: [], current: null };
+  }
+  const o = (v && typeof v === "object" && !Array.isArray(v) ? v : {}) as Record<string, unknown>;
+  const conversations = (Array.isArray(o.conversations) ? o.conversations : []).flatMap((r): Conversation[] => {
+    const c = (r && typeof r === "object" ? r : {}) as Record<string, unknown>;
+    const id = uuid(c.id);
+    if (!id) return [];
+    return [
+      {
+        id,
+        title: typeof c.title === "string" ? c.title : "",
+        created: typeof c.created === "string" ? c.created : "",
+        ...(c.fresh === true ? { fresh: true as const } : {}),
+      },
+    ];
+  });
+  const cur = uuid(o.current);
+  return { conversations, current: cur && conversations.some((c) => c.id === cur) ? cur : null };
 }
 
-async function writeSessions(next: Record<string, unknown>): Promise<void> {
+/** 목록 읽기 — 화면이 대화 목록을 그리는 출처(§비주얼 §24). */
+export async function readHome(projectId: string): Promise<Home> {
+  return parseHome((await readSessions())[projectId]);
+}
+
+/** 한 프로젝트만 갈아 끼운다 — 파일 하나에 프로젝트 전부가 사므로 나머지는 읽은 그대로 다시 쓴다. */
+async function writeHome(projectId: string, home: Home): Promise<void> {
   const p = sessionsPath();
   await mkdir(path.dirname(p), { recursive: true });
-  await writeFile(p, JSON.stringify(next, null, 2) + "\n");
+  await writeFile(p, JSON.stringify({ ...(await readSessions()), [projectId]: home }, null, 2) + "\n");
 }
 
-export async function writeSessionId(projectId: string, sessionId: string): Promise<void> {
-  await writeSessions({ ...(await readSessions()), [projectId]: sessionId });
+/** 지금 보는 대화의 session id. 없으면 null(= 다음 질문이 새 줄을 연다). */
+export async function readSessionId(projectId: string): Promise<string | null> {
+  return (await readHome(projectId)).current;
 }
 
-/** 화면의 `새 대화`가 부르는 것 — **그 한 줄을 지우는 게 전부다.** 옛 트랜스크립트는 안 지운다
- *  (`~/.claude`는 남의 디렉터리다 — §7). */
-export async function clearSessionId(projectId: string): Promise<void> {
-  const all = await readSessions();
-  delete all[projectId];
-  await writeSessions(all);
+/** 목록 끝에 줄 하나를 붙이고 **오래된 쪽을 상한에서 자른다**(§7 상한 20). 새 줄은 항상 끝이라
+ *  앞에서 자르는 것이 곧 "가장 오래된 줄이 빠진다"이고, 방금 연 대화는 잘릴 수 없다. */
+function append(home: Home, row: Conversation): Home {
+  return { conversations: [...home.conversations, row].slice(-LIMIT), current: row.id };
+}
+
+const openRow = (): Conversation => ({
+  id: randomUUID(),
+  title: "",
+  created: new Date().toISOString(),
+  fresh: true,
+});
+
+/** 화면의 `새 대화` — **지우는 것이 아니라 여는 것이다**(§7 — 요구 `c5d22429`로 뒤집혔다).
+ *  옛 대화는 목록에 남고 옛 트랜스크립트도 그대로다. 세션은 아직 안 뜬다(`fresh`) —
+ *  뜨는 것은 이 대화의 첫 질문이다. */
+export async function newConversation(projectId: string): Promise<string> {
+  const home = await readHome(projectId);
+  // 아직 아무것도 안 물은 대화를 또 열지 않는다 — 두 번 누르면 빈 줄이 둘이고, 상한 20이 그걸로 찬다
+  const empty = home.conversations.find((c) => c.id === home.current && c.fresh && !c.title);
+  if (empty) return empty.id;
+  const row = openRow();
+  await writeHome(projectId, append(home, row));
+  return row.id;
+}
+
+/** 대화 전환 — `current` 교체가 전부다. **목록에 없는 값은 안 받는다**: 이 값은 경로가 되고,
+ *  클라이언트가 들고 오는 문자열이다(관문이 `sessionIdOf` 하나인 것과 같은 이유). */
+export async function switchConversation(projectId: string, sessionId: string): Promise<boolean> {
+  const home = await readHome(projectId);
+  if (!home.conversations.some((c) => c.id === sessionId)) return false;
+  await writeHome(projectId, { ...home, current: sessionId });
+  return true;
 }
 
 // ── 상태 스냅샷 (§7 표) ─────────────────────────────────────────────────────
@@ -301,23 +380,56 @@ export async function ask(project: Pick<Project, "id" | "name" | "root">, questi
     };
   }
 
-  const prev = await readSessionId(project.id);
-  const sessionId = prev ?? randomUUID();
+  const { sessionId, resumed } = await beginTurn(project.id, q);
   const prompt = buildPrompt(await snapshotOf(project), q);
 
-  // **돌기 전에 남긴다.** 화면은 답을 기다리는 동안 이 sid로 트랜스크립트를 폴링한다(§7) —
-  // 끝난 뒤에 쓰면 도는 동안 화면이 볼 것이 없다.
-  if (!prev) await writeSessionId(project.id, sessionId);
-
   const run = await runClaude(bin, path.dirname(project.root), prompt, [
-    ...(prev ? ["--resume", sessionId] : ["--session-id", sessionId]),
+    ...(resumed ? ["--resume", sessionId] : ["--session-id", sessionId]),
   ]);
 
-  // 첫 질문이 실패했으면 남긴 줄을 도로 지운다 — 안 열린 세션에 `--resume`을 걸면 **다음 질문도**
-  // 실패하고, 사람은 그 화면을 영영 못 쓴다. 이어붙인 질문의 실패는 세션이 멀쩡하므로 안 지운다.
-  if (!run.ok && !prev) await clearSessionId(project.id);
+  if (!resumed) await settleFirstTurn(project.id, sessionId, run.ok);
 
-  return { ...run, sessionId, resumed: prev !== null };
+  return { ...run, sessionId, resumed };
+}
+
+/** 질문이 돌기 **전에** 파일에 남는 것: 줄 하나와 제목. 끝난 뒤에 쓰면 도는 동안 화면이 폴링할
+ *  sid가 없다(§7).
+ *
+ *  `current`가 없으면(첫 질문 · 파일이 빈 상태) 여기서 줄을 연다 — 사람이 `새 대화`를 누르지
+ *  않고 그냥 물었을 때의 경로다. **제목은 첫 질문의 첫 줄**이고(`reqTitle` — 요구 접수 모드와
+ *  같은 자, 80자에서 `…`) 이미 제목이 있는 대화는 안 건드린다: 제목은 그 대화의 첫 질문이지
+ *  마지막 질문이 아니다. */
+async function beginTurn(projectId: string, question: string): Promise<{ sessionId: string; resumed: boolean }> {
+  const home = await readHome(projectId);
+  const cur = home.conversations.find((c) => c.id === home.current);
+  const row = cur ?? openRow();
+  const next: Conversation = { ...row, title: row.title || reqTitle(question) };
+  await writeHome(
+    projectId,
+    cur
+      ? { ...home, conversations: home.conversations.map((c) => (c.id === cur.id ? next : c)) }
+      : append(home, next),
+  );
+  return { sessionId: next.id, resumed: !next.fresh };
+}
+
+/** 세션을 **여는** 질문이 끝난 뒤. 성공이면 그 줄은 이제 열린 세션이다(다음 질문은 `--resume`).
+ *
+ *  실패면 **id만 새것으로 갈고 줄은 남긴다.** 안 열린 세션에 `--resume`을 걸면 다음 질문도 실패하고
+ *  (그게 종전에 줄을 통째로 지우던 이유다), 반대로 그 uuid를 그대로 두면 이미 뜬 세션에
+ *  `--session-id`를 다시 거는 경우(타임아웃·인증 실패는 세션이 먼저 생긴다)가 남는다. 새 uuid는
+ *  둘 다 아니다. 사람이 연 줄과 제목은 그대로 남는다 — 다음 질문이 그 자리에서 다시 연다. */
+async function settleFirstTurn(projectId: string, sessionId: string, ok: boolean): Promise<void> {
+  const home = await readHome(projectId);
+  const row = home.conversations.find((c) => c.id === sessionId);
+  if (!row) return; // 도는 사이에 `새 대화`·전환이 있었다 — 남의 줄을 고치지 않는다
+  const next: Conversation = ok
+    ? { id: row.id, title: row.title, created: row.created }
+    : { ...row, id: randomUUID() };
+  await writeHome(projectId, {
+    conversations: home.conversations.map((c) => (c.id === sessionId ? next : c)),
+    current: home.current === sessionId ? next.id : home.current,
+  });
 }
 
 async function runClaude(

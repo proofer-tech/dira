@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -13,13 +13,15 @@ const {
   buildPrompt,
   questionOf,
   toTurns,
+  ask,
   startAsk,
   pollHome,
   isAsking,
   sessionsPath,
   readSessionId,
-  writeSessionId,
-  clearSessionId,
+  readHome,
+  newConversation,
+  switchConversation,
   TOOL_FLAGS,
 } = await import("./home-agent.ts");
 const { tailEvents } = await import("./transcript.ts");
@@ -233,28 +235,170 @@ function renderSnapshot0(): string {
   });
 }
 
-test("session id 한 줄 — 쓰고 · 읽고 · 지운다. UUID가 아니면 없는 것과 같다", async () => {
+const uuid = (n: number) => `021f80d9-294c-4bea-948b-3b6f0c4501${String(n).padStart(2, "0")}`;
+
+test("대화 목록 — 새 대화 · 전환 · 경로 관문. UUID가 아닌 줄은 없는 것과 같다", async () => {
   assert.strictEqual(sessionsPath(), path.join(LOCAL, "home-sessions.json"));
-  assert.strictEqual(await readSessionId("p1"), null); // 파일이 없다
-
-  const sid = "021f80d9-294c-4bea-948b-3b6f0c45016b";
-  await writeSessionId("p1", sid);
-  await writeSessionId("p2", "11111111-2222-3333-4444-555555555555");
-  assert.strictEqual(await readSessionId("p1"), sid);
-
-  // 한 프로젝트를 지워도 나머지는 남는다 — 파일 하나에 프로젝트 전부가 산다
-  await clearSessionId("p1");
+  assert.deepStrictEqual(await readHome("p1"), { conversations: [], current: null }); // 파일이 없다
   assert.strictEqual(await readSessionId("p1"), null);
-  assert.strictEqual(await readSessionId("p2"), "11111111-2222-3333-4444-555555555555");
+
+  // 이미 대화가 하나 있는 프로젝트(= 첫 질문이 끝난 상태)
+  const a = uuid(1);
+  writeFileSync(
+    sessionsPath(),
+    JSON.stringify({ p1: { conversations: [{ id: a, title: "옛 대화", created: "2026-07-31T00:00:00.000Z" }], current: a } }),
+  );
+
+  // `새 대화`는 **여는 것**이다 — 옛 대화가 목록에 남고 `current`는 새 줄이다(§7)
+  const b = await newConversation("p1");
+  await newConversation("p2"); // 파일 하나에 프로젝트 전부가 산다
+  const home = await readHome("p1");
+  assert.deepStrictEqual(
+    home.conversations.map((c) => c.id),
+    [a, b],
+  );
+  assert.strictEqual(home.current, b);
+  assert.strictEqual(await readSessionId("p1"), b);
+  // 아직 세션이 안 떴다 = 첫 질문이 `--resume`이 아니라 `--session-id`로 연다
+  assert.strictEqual(home.conversations[1]?.fresh, true);
+  // 제목이 아직 없는 대화도 목록에 뜬다(첫 질문이 제목을 채운다)
+  assert.strictEqual(home.conversations[1]?.title, "");
+  // 아무것도 안 물은 대화를 또 열지 않는다 — 두 번 누르면 빈 줄이 둘이고 상한 20이 그걸로 찬다
+  assert.strictEqual(await newConversation("p1"), b);
+  assert.strictEqual((await readHome("p1")).conversations.length, 2);
+
+  // 전환 = `current` 교체뿐. 목록에 없는 값은 안 받는다 — 이 값은 경로가 된다
+  assert.strictEqual(await switchConversation("p1", a), true);
+  assert.strictEqual(await readSessionId("p1"), a);
+  assert.strictEqual(await switchConversation("p1", uuid(99)), false); // 남의 대화·없는 대화
+  assert.strictEqual(await switchConversation("p1", "../../etc/passwd"), false);
+  assert.strictEqual(await readSessionId("p1"), a);
+  assert.strictEqual((await readHome("p2")).conversations.length, 1); // 다른 프로젝트는 그대로
 
   // 사람이 손으로 고친 값. 이게 통과하면 `--resume`과 트랜스크립트 글롭에 그대로 흘러간다
-  writeFileSync(sessionsPath(), JSON.stringify({ p3: "../../etc/passwd", p4: 7 }));
-  assert.strictEqual(await readSessionId("p3"), null);
-  assert.strictEqual(await readSessionId("p4"), null);
+  writeFileSync(
+    sessionsPath(),
+    JSON.stringify({
+      p3: { conversations: [{ id: "../../etc/passwd" }, { id: 7 }, { id: uuid(3) }], current: "../../etc/passwd" },
+    }),
+  );
+  assert.deepStrictEqual((await readHome("p3")).conversations, [{ id: uuid(3), title: "", created: "" }]);
+  assert.strictEqual(await readSessionId("p3"), null); // 목록에 없는 `current`는 없는 것이다
 
   // 깨진 JSON은 빈 맵이다 — 홈 화면이 500이 되는 것보다 대화 하나를 새로 시작하는 게 낫다
   writeFileSync(sessionsPath(), "{ not json");
-  assert.strictEqual(await readSessionId("p2"), null);
+  assert.deepStrictEqual(await readHome("p1"), { conversations: [], current: null });
+});
+
+test("옛 형식(문자열 한 줄)은 대화 한 개짜리 목록으로 읽힌다 — 사람 머신에 이미 있는 파일이다", async () => {
+  const sid = "11111111-2222-3333-4444-555555555555";
+  writeFileSync(sessionsPath(), JSON.stringify({ old: sid, broken: "not-a-uuid" }));
+
+  assert.deepStrictEqual(await readHome("old"), {
+    conversations: [{ id: sid, title: "", created: "" }], // 첫 질문도 만든 시각도 그 형식에 없다
+    current: sid, // 돌던 대화가 그대로 열린다 — 못 읽으면 그 사람은 그걸 잃는다
+  });
+  assert.strictEqual(await readSessionId("old"), sid);
+  assert.deepStrictEqual(await readHome("broken"), { conversations: [], current: null });
+
+  // 그 위에 `새 대화`를 열면 옛 대화가 목록에 남는다(종전은 지우는 것이었다)
+  const next = await newConversation("old");
+  assert.deepStrictEqual((await readHome("old")).conversations.map((c) => c.id), [sid, next]);
+});
+
+test("상한 20 — 21번째 대화를 열면 가장 오래된 줄이 파일에서 빠진다", async () => {
+  const rows = Array.from({ length: 20 }, (_, i) => ({ id: uuid(i), title: `대화 ${i}`, created: "" }));
+  writeFileSync(sessionsPath(), JSON.stringify({ cap: { conversations: rows, current: uuid(19) } }));
+  const full = await readHome("cap");
+  assert.strictEqual(full.conversations.length, 20);
+  const oldest = full.conversations[0]!.id;
+
+  const fresh = await newConversation("cap");
+  const after = await readHome("cap");
+  assert.strictEqual(after.conversations.length, 20);
+  assert.ok(!after.conversations.some((c) => c.id === oldest), "가장 오래된 줄이 빠져야 한다");
+  assert.strictEqual(after.conversations.at(-1)?.id, fresh); // 방금 연 대화는 잘리지 않는다
+  assert.strictEqual(after.current, fresh);
+});
+
+/** PATH에 놓는 가짜 `claude`. 진짜 세션을 띄우지 않고도 **파일에 남는 것**과 **넘어간 플래그**가
+ *  걸린다 — `--session-id`(연다)와 `--resume`(잇는다)이 갈리는 자리가 이 티켓의 핵심이다. */
+function fakeClaude(body: string): string {
+  const dir = mkdtempSync(path.join(tmpdir(), "ha-bin-"));
+  mkdirSync(path.join(LOCAL, "ask"), { recursive: true }); // 자식의 cwd(큐의 부모)는 실재해야 한다
+  tmps.push(dir);
+  writeFileSync(path.join(dir, "claude"), `#!/bin/sh\nprintf '%s %s\\n' "$1" "$2" >> "$FAKE_LOG"\n${body}\n`, {
+    mode: 0o755,
+  });
+  return dir;
+}
+
+test("제목 · 세션을 여는 질문과 잇는 질문 — 첫 줄을 80자에서 자르고, 둘째 질문은 `--resume`이다", async () => {
+  const project = { id: "title-test", name: "큐", root: path.join(LOCAL, "ask/.dira") };
+  const log = path.join(LOCAL, "fake.log");
+  const path0 = process.env.PATH;
+  process.env.PATH = fakeClaude(`echo '{"is_error":false,"result":"답"}'`);
+  process.env.FAKE_LOG = log;
+  try {
+    // 첫 질문은 `새 대화` 없이도 줄을 연다
+    const first = await ask(project, "  워커 w2는 지금 뭘 하나\n둘째 줄은 제목이 아니다  ");
+    assert.strictEqual(first.ok, true, first.output);
+    assert.strictEqual(first.resumed, false);
+    const one = await readHome(project.id);
+    assert.strictEqual(one.conversations.length, 1);
+    assert.strictEqual(one.conversations[0]?.title, "워커 w2는 지금 뭘 하나");
+    assert.strictEqual(one.conversations[0]?.fresh, undefined); // 세션이 떴다
+    assert.strictEqual(one.current, first.sessionId);
+
+    // 둘째 질문은 같은 대화다 — 제목은 **첫** 질문이지 마지막 질문이 아니다
+    const second = await ask(project, "그럼 w1은?");
+    assert.strictEqual(second.resumed, true);
+    assert.strictEqual(second.sessionId, first.sessionId);
+    const two = await readHome(project.id);
+    assert.strictEqual(two.conversations.length, 1);
+    assert.strictEqual(two.conversations[0]?.title, "워커 w2는 지금 뭘 하나");
+
+    // 80자에서 자른다(`reqTitle` — 요구 접수 모드와 같은 자)
+    await newConversation(project.id);
+    await ask(project, "가".repeat(200));
+    const three = await readHome(project.id);
+    assert.strictEqual(three.conversations.length, 2); // `새 대화`가 연 줄이 남아 있다
+    assert.strictEqual(three.conversations.at(-1)?.title, "가".repeat(80) + "…");
+
+    // 세션을 여는 질문만 `--session-id`고 나머지는 `--resume`이다
+    assert.deepStrictEqual(readFileSync(log, "utf8").trim().split("\n"), [
+      "-p --session-id",
+      "-p --resume",
+      "-p --session-id",
+    ]);
+  } finally {
+    process.env.PATH = path0;
+    delete process.env.FAKE_LOG;
+  }
+});
+
+test("첫 질문이 실패한 대화 — 줄과 제목은 남고 session id만 새것으로 갈린다", async () => {
+  const project = { id: "fail-test", name: "큐", root: path.join(LOCAL, "ask/.dira") };
+  const path0 = process.env.PATH;
+  process.env.PATH = fakeClaude("exit 1"); // 아무것도 출력하지 않고 죽는다(§24 실패 ①)
+  process.env.FAKE_LOG = path.join(LOCAL, "fail.log");
+  try {
+    const opened = await newConversation(project.id);
+    const r = await ask(project, "안 열릴 질문");
+    assert.strictEqual(r.ok, false);
+    assert.strictEqual(r.sessionId, opened);
+
+    const home = await readHome(project.id);
+    assert.strictEqual(home.conversations.length, 1); // 사람이 연 줄은 안 지운다
+    assert.strictEqual(home.conversations[0]?.title, "안 열릴 질문");
+    // 안 열린 세션에 `--resume`을 걸면 다음 질문도 실패한다 — 그래서 `fresh`가 남고 id가 갈린다
+    assert.strictEqual(home.conversations[0]?.fresh, true);
+    assert.notStrictEqual(home.conversations[0]?.id, opened);
+    assert.strictEqual(home.current, home.conversations[0]?.id);
+  } finally {
+    process.env.PATH = path0;
+    delete process.env.FAKE_LOG;
+  }
 });
 
 test("한 프로젝트에 한 질문 — 둘째는 기다리지 않고 거절되고, 폴링 한 번이 답을 집어 간다", async () => {

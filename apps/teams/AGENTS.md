@@ -33,7 +33,7 @@ apps/teams/
     p/[project]/home/   프로젝트 홈 — 질의 에이전트(§7). `actions.ts`가 셋(묻기·폴링·새 대화)이고
                         **큐 파일을 하나도 안 건드리는 유일한 화면 액션**이다 — 질문이 티켓으로
                         들어가지 않고 답이 티켓으로 나오지 않는다. 나가는 쓰기는
-                        `$TICKET_LOCAL/home-sessions.json`의 한 줄뿐이다
+                        `$TICKET_LOCAL/home-sessions.json`의 대화 목록뿐이다
     globals.css         Tailwind v4 + shadcn 토큰. 색은 여기서만 정의한다
   lib/
     projects.ts          프로젝트 레지스트리 읽기·쓰기, 검증, 설정 해석, 목록 요약,
@@ -78,7 +78,7 @@ apps/teams/
                         pty를 주고(네이티브 모듈 0) 세션이 하나뿐인 모듈 상태다 — 왜 `cat |`이고
                         왜 종료를 pty 안 표식으로 아는지는 그 파일 주석에 실측과 함께 있다
     home-agent.ts       홈 에이전트(DESIGN.md §7) 실행층. 상태 스냅샷 조립 · `claude` 세션 spawn ·
-                        프로젝트 → session id 한 줄(`$TICKET_LOCAL/home-sessions.json`).
+                        프로젝트 → session id 목록(`$TICKET_LOCAL/home-sessions.json` — §대화가 여럿이다).
                         **GUI가 큐를 안 거치고 세션을 소유하는 유일한 곳** — `engine.ts`와 짝이
                         아니다(저긴 이미 있는 워커 스크립트에 하위명령을 넘긴다). 커맨드를 확정한
                         실측은 그 파일 머리 주석에 있다. 특히 **도구 목록을 줄이는 것은 `--tools`
