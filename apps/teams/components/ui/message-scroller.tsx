@@ -46,7 +46,16 @@ function MessageScrollerViewport({
       className={cn(
         // 등록 항목의 `scroll-fade-b`·`scrollbar-*` 넷을 덜어냈다(§비주얼 §13 — 장식이고,
         // "아래에 더 있다"는 `최신으로` 버튼이 이미 글자로 말한다). `globals.css`는 한 줄도 안 는다
-        "w-full min-h-0 min-w-0 overflow-y-auto overscroll-contain contain-content",
+        //
+        // **`overflow-x-hidden`은 축약이 아니라 계약이다**(`462d90be`): CSS는 `overflow-y`만
+        // `auto`인 상태를 허용하지 않는다 — 한쪽이 `auto`면 남은 쪽의 `visible`은 **`auto`로
+        // 계산된다**(CSS Overflow 3). 그래서 자손이 1px만 삐져나와도 가로 스크롤바가 15px을 먹고
+        // **상시** 그려졌다(답과 입력칸 사이 회색 띠 — 1440×900 실측). §비주얼 §24의 "스크롤하는
+        // 요소는 Viewport 하나"는 그 하나가 **세로로만** 스크롤한다는 뜻이라, 축을 계산에 맡기지
+        // 않고 여기서 못박는다. 넓은 것(표·펜스)은 자기 그릇이 `overflow-x-auto`로 받으므로
+        // (`components/markdown.tsx`) 여기서 잘리는 건 없다.
+        // `command.tsx`·`select.tsx`도 같은 짝을 쓴다
+        "w-full min-h-0 min-w-0 overflow-x-hidden overflow-y-auto overscroll-contain contain-content",
         className
       )}
       {...props}

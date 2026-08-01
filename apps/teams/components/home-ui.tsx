@@ -336,7 +336,11 @@ export function HomeUI({ project, initial }: { project: string; initial: HomeChu
                            나란히 서면 이 에이전트가 페르소나로 읽힌다). */
                         <Message align="end">
                           <MessageContent>
-                            <MessageHeader className="sr-only">질문</MessageHeader>
+                            {/* `m-0`이 `sr-only`의 `margin:-1px`을 지운다(`462d90be`). 그 유틸은
+                                절대배치 1×1px 상자를 만드는데, 여기선 `align="end"` 탓에 그 상자가
+                                **오른쪽 끝에** 서서 음수 margin만큼 1px 넘쳤다. 안 보이는 라벨
+                                하나가 스레드 전체에 가로 스크롤바를 세웠다(1440×900 실측) */}
+                            <MessageHeader className="sr-only m-0">질문</MessageHeader>
                             <Bubble variant="outline" align="end">
                               <BubbleContent>
                                 <Markdown text={t.text} />
