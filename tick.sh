@@ -283,7 +283,11 @@ if [ -n "$INBOX" ]; then
   "${ENGINE[@]}" <"$INBOX" >"$OUTF" 2>>"$LOGF" 9>&- &
   CPID=$!
 else
-  "${ENGINE[@]}" >"$OUTF" 2>>"$LOGF" &
+  # </dev/null: 비스트리밍 엔진에는 참견 채널이 없으니 stdin을 물려줄 이유가 없다. 그런데
+  # `codex exec`는 프롬프트를 argv로 받고도 stdin을 EOF까지 읽는다("Reading additional input
+  # from stdin..."). 터미널에서 워커를 손으로 돌리면 fd0이 tty라 EOF가 안 와 turn이 시작조차
+  # 못 한다(실측 210초 정지, 상한은 TICKET_MAXRUN=5400s). cron은 이미 닫힌 fd0을 줘서 안 걸린다.
+  "${ENGINE[@]}" </dev/null >"$OUTF" 2>>"$LOGF" &
   CPID=$!
 fi
 # Codex에는 Claude식 --session-id가 없으므로 실제 엔진 pid도 남겨 reap이 생존을 확인한다.
