@@ -165,14 +165,202 @@ export function ConfigTable({ view }: { view: ResolvedView }) {
   );
 }
 
-// ── 생성 다이얼로그 (DESIGN.md §0-3) ────────────────────────────────────────
+// ── 생성 폼 (DESIGN.md §0-3) ────────────────────────────────────────────────
 
-/** 없는 큐를 만든다. **새 컴포넌트·새 색 토큰 0개** — 필드 사양은 등록 카드 표 그대로고
+/** 생성이 무엇을 하는지 한 줄. 다이얼로그에서는 `DialogDescription`, 0건 인라인 카드에서는
+ *  `h2` 아래 `text-xs text-muted-foreground`다 — 같은 문장이 두 그릇에서 같아야 한다(§비주얼 §7). */
+const CREATE_BLURB =
+  ".dira를 만들고 워커 하나를 crontab에 올립니다 — 1분 뒤부터 티켓을 물어갑니다.";
+
+/** 없는 큐를 만든다. **새 컴포넌트·새 색 토큰 0개** — 필드 사양은 §0-3 표 그대로고
  *  결과는 등록과 같은 해석 결과 표다(§비주얼 §7 생성 다이얼로그 항).
  *
- *  성공하면 다이얼로그가 닫히고 결과는 **목록 아래 결과 슬롯**으로 올라간다(`onCreated`) — 여는
- *  자리가 둘이라 결과를 여기 두면 어느 트리거로 열었느냐에 따라 결과가 다른 자리에 뜬다.
- *  트리거도 여기 없다: `h1` 우측과 0건 빈 상태 두 자리라 부모가 연다(§비주얼 §7). */
+ *  **그릇이 둘이다**: 목록이 있으면 `<CreateDialog>`, 프로젝트 0개면 온보딩의 인라인
+ *  `Card`다 — 생성이 정문이라 0건의 1차 콘텐츠가 이 폼이다(§0 · §비주얼 §7 온보딩 항).
+ *  둘이 동시에 서지 않으므로 필드 `id`가 겹치지 않는다.
+ *
+ *  **상태가 여기 있는 이유**: 다이얼로그가 닫히면 이 컴포넌트가 언마운트돼 값이 저절로
+ *  비워진다(부모가 손으로 되돌리지 않는다).
+ *
+ *  성공하면 결과는 **목록 아래 결과 슬롯**으로 올라간다(`onCreated`) — 서는 자리가 둘이라
+ *  결과를 여기 두면 어느 그릇으로 만들었느냐에 따라 결과가 다른 자리에 뜬다(§0 마지막 항). */
+function CreateForm({
+  dialog,
+  onCreated,
+  onRegister,
+  home,
+}: {
+  /** 다이얼로그 안이면 푸터에 `취소`가 같이 선다. 인라인 카드는 제출 하나다(§비주얼 §7 온보딩) */
+  dialog?: boolean;
+  onCreated: (s: CreateState) => void;
+  /** `.dira`가 이미 있는 **큐**였다 — 만들지 않고 등록으로 보낸다(§0-3 답변 4(b)).
+   *  경로만 채우고 등록 다이얼로그를 여는 것은 부모다 */
+  onRegister: (root: string) => void;
+  /** 피커가 고른 절대경로를 `프로젝트 폴더`(사람이 `~`로 칠 수 있다) 상대로 환산할 때 쓴다 */
+  home: string;
+}) {
+  const [pending, start] = useTransition();
+  const [state, setState] = useState<CreateState>({});
+  const [name, setName] = useState("");
+  // 피커가 값을 넣으려면 제어 입력이어야 한다.
+  const [dir, setDir] = useState("");
+  const [spec, setSpec] = useState("");
+  const slug = slugify(name);
+  const showId = (name.trim() !== "" && slug === "") || !!state.needId;
+  const err = state.error;
+
+  const submit = (
+    <Button type="submit" disabled={pending}>
+      {pending ? "만드는 중…" : "프로젝트 만들기"}
+    </Button>
+  );
+
+  return (
+    <form
+      className="space-y-4"
+      onSubmit={(e) => {
+        e.preventDefault();
+        const f = new FormData(e.currentTarget);
+        const get = (k: string) => String(f.get(k) ?? "");
+        start(async () => {
+          const r = await createProject(
+            name,
+            get("dir"),
+            get("branch"),
+            get("spec"),
+            get("id") || undefined,
+          );
+          setState(r);
+          if (r.done) onCreated(r);
+        });
+      }}
+    >
+      <div className="space-y-2">
+        <Label htmlFor="create-name">이름</Label>
+        <Input
+          id="create-name"
+          placeholder="dira 자체"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
+        {slug && <p className="font-mono text-xs text-muted-foreground">URL: /p/{slug}</p>}
+        {err?.code === "name" && <p className="text-xs text-destructive">{err.message}</p>}
+      </div>
+
+      {showId && (
+        <div className="space-y-2">
+          <Label htmlFor="create-id">URL 조각</Label>
+          <Input id="create-id" name="id" className="font-mono" placeholder="dira" />
+          <p className="text-xs text-muted-foreground">
+            {err && (err.code === "needId" || err.code === "badId" || err.code === "dupId")
+              ? err.message
+              : "이름에서 URL 조각을 만들 수 없습니다. 직접 정해 주세요 (영문 소문자·숫자·하이픈)."}
+          </p>
+        </div>
+      )}
+
+      <div className="space-y-2">
+        <Label htmlFor="create-dir">프로젝트 폴더</Label>
+        {/* 데스크톱이 아니면 `<PickPath>`가 아무것도 안 그린다 — 그때 이 줄은 입력 하나다 */}
+        <div className="flex items-center gap-2">
+          <Input
+            id="create-dir"
+            name="dir"
+            className="font-mono"
+            placeholder="~/Projects/myproject"
+            value={dir}
+            onChange={(e) => setDir(e.target.value)}
+          />
+          <PickPath mode="directory" label="프로젝트 폴더" onPick={setDir} />
+        </div>
+        {/* `.dira`가 아니라 그 부모다 — 등록 폼과 갈리는 지점이라 도움말로 못박는다 */}
+        <p className="text-xs text-muted-foreground">여기에 .dira를 만듭니다. ~는 확장됩니다</p>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="create-branch">통합 브랜치</Label>
+        <Input id="create-branch" name="branch" defaultValue="main" />
+        {err?.code === "branch" && <p className="text-xs text-destructive">{err.message}</p>}
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="create-spec">스펙 문서</Label>
+        <div className="flex items-center gap-2">
+          <Input
+            id="create-spec"
+            name="spec"
+            className="font-mono"
+            placeholder="docs/DESIGN.md"
+            value={spec}
+            onChange={(e) => setSpec(e.target.value)}
+          />
+          {/* 이 칸은 **프로젝트 루트 상대**다(§데스크톱 앱 N3 표) — 위 칸 아래를 고르면
+              그만큼 줄이고, 밖을 고르면 절대경로 그대로 둔다. 위 칸이 비었으면 줄일
+              기준이 없어 역시 절대경로다 */}
+          <PickPath
+            mode="file"
+            label="스펙 문서"
+            onPick={(p) => setSpec(relativeUnder(p, expandTilde(dir, home)))}
+          />
+        </div>
+        <p className="text-xs text-muted-foreground">
+          선택. 비우면 그 줄(AGENTS.md 지도 표 한 행)을 자리표시자 그대로 둡니다
+        </p>
+      </div>
+
+      {/* `.dira`가 이미 있다 — 만들지 않았다. 큐면 등록으로 보낸다(§0-3 표) */}
+      {state.exists && (
+        <Alert>
+          <TriangleAlert aria-hidden />
+          <AlertTitle>만들지 않았습니다</AlertTitle>
+          <AlertDescription className="grid gap-2">
+            <span className="break-all">{state.exists.message}</span>
+            {state.exists.queue && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="justify-self-start"
+                onClick={() => onRegister(state.exists!.root)}
+              >
+                등록으로
+              </Button>
+            )}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {err && err.code !== "name" && err.code !== "branch" && !showId && (
+        <Alert variant="destructive">
+          <TriangleAlert aria-hidden />
+          <AlertTitle>만들지 못했습니다</AlertTitle>
+          <AlertDescription>
+            <span className="break-all">{err.message}</span>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* 첫 등록은 macOS `앱 관리` 승인 창을 지난다(§제약 4) — 그동안 crontab이 블록되고
+          여기는 `만드는 중…`으로 서 있다. 창을 못 알아보면 3분 뒤 등록만 실패한다. */}
+      {pending && (
+        <p className="text-xs text-muted-foreground">
+          권한 창이 뜨면 [허용]을 누르세요 — crontab 등록이 그 대답을 기다립니다.
+        </p>
+      )}
+
+      {dialog ? (
+        <DialogFooter>
+          <DialogClose render={<Button variant="outline" />}>취소</DialogClose>
+          {submit}
+        </DialogFooter>
+      ) : (
+        <div className="flex justify-end">{submit}</div>
+      )}
+    </form>
+  );
+}
+
+/** 생성 폼의 다이얼로그 그릇. 트리거는 여기 없다 — `h1` 우측 하나뿐이고 부모가 연다
+ *  (0건에서는 폼 자신이 인라인으로 서므로 트리거가 없다. §비주얼 §7). */
 function CreateDialog({
   open,
   onOpenChange,
@@ -183,191 +371,28 @@ function CreateDialog({
   open: boolean;
   onOpenChange: (o: boolean) => void;
   onCreated: (s: CreateState) => void;
-  /** `.dira`가 이미 있는 **큐**였다 — 만들지 않고 등록으로 보낸다(§0-3 답변 4(b)).
-   *  경로만 채우고 그릇은 부모가 고른다: 0건이면 인라인 폼, 아니면 등록 다이얼로그다 */
   onRegister: (root: string) => void;
-  /** 피커가 고른 절대경로를 `프로젝트 폴더`(사람이 `~`로 칠 수 있다) 상대로 환산할 때 쓴다 */
   home: string;
 }) {
-  const [pending, start] = useTransition();
-  const [state, setState] = useState<CreateState>({});
-  const [name, setName] = useState("");
-  // 피커가 값을 넣으려면 제어 입력이어야 한다. 닫을 때 비우는 건 종전과 같다 —
-  // 다이얼로그가 닫히면 그동안은 비제어 입력이 언마운트로 비워졌다.
-  const [dir, setDir] = useState("");
-  const [spec, setSpec] = useState("");
-  const slug = slugify(name);
-  const showId = (name.trim() !== "" && slug === "") || !!state.needId;
-  const err = state.error;
-
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(o) => {
-        onOpenChange(o);
-        if (!o) {
-          setState({});
-          setDir("");
-          setSpec("");
-        }
-      }}
-    >
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>새 프로젝트</DialogTitle>
-          <DialogDescription>
-            .dira를 만들고 워커 하나를 crontab에 올립니다 — 1분 뒤부터 티켓을 물어갑니다.
-          </DialogDescription>
+          <DialogDescription>{CREATE_BLURB}</DialogDescription>
         </DialogHeader>
-        <form
-          className="space-y-4"
-          onSubmit={(e) => {
-            e.preventDefault();
-            const f = new FormData(e.currentTarget);
-            const get = (k: string) => String(f.get(k) ?? "");
-            start(async () => {
-              const r = await createProject(
-                name,
-                get("dir"),
-                get("branch"),
-                get("spec"),
-                get("id") || undefined,
-              );
-              setState(r);
-              if (r.done) {
-                onCreated(r);
-                onOpenChange(false);
-                setState({});
-                setName("");
-                setDir("");
-                setSpec("");
-              }
-            });
+        <CreateForm
+          dialog
+          home={home}
+          onCreated={(s) => {
+            onCreated(s);
+            onOpenChange(false);
           }}
-        >
-          <div className="space-y-2">
-            <Label htmlFor="create-name">이름</Label>
-            <Input
-              id="create-name"
-              placeholder="dira 자체"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-            {slug && <p className="font-mono text-xs text-muted-foreground">URL: /p/{slug}</p>}
-            {err?.code === "name" && <p className="text-xs text-destructive">{err.message}</p>}
-          </div>
-
-          {showId && (
-            <div className="space-y-2">
-              <Label htmlFor="create-id">URL 조각</Label>
-              <Input id="create-id" name="id" className="font-mono" placeholder="dira" />
-              <p className="text-xs text-muted-foreground">
-                {err && (err.code === "needId" || err.code === "badId" || err.code === "dupId")
-                  ? err.message
-                  : "이름에서 URL 조각을 만들 수 없습니다. 직접 정해 주세요 (영문 소문자·숫자·하이픈)."}
-              </p>
-            </div>
-          )}
-
-          <div className="space-y-2">
-            <Label htmlFor="create-dir">프로젝트 폴더</Label>
-            {/* 데스크톱이 아니면 `<PickPath>`가 아무것도 안 그린다 — 그때 이 줄은 입력 하나다 */}
-            <div className="flex items-center gap-2">
-              <Input
-                id="create-dir"
-                name="dir"
-                className="font-mono"
-                placeholder="~/Projects/myproject"
-                value={dir}
-                onChange={(e) => setDir(e.target.value)}
-              />
-              <PickPath mode="directory" label="프로젝트 폴더" onPick={setDir} />
-            </div>
-            {/* `.dira`가 아니라 그 부모다 — 등록 폼과 갈리는 지점이라 도움말로 못박는다 */}
-            <p className="text-xs text-muted-foreground">여기에 .dira를 만듭니다. ~는 확장됩니다</p>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="create-branch">통합 브랜치</Label>
-            <Input id="create-branch" name="branch" defaultValue="main" />
-            {err?.code === "branch" && <p className="text-xs text-destructive">{err.message}</p>}
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="create-spec">스펙 문서</Label>
-            <div className="flex items-center gap-2">
-              <Input
-                id="create-spec"
-                name="spec"
-                className="font-mono"
-                placeholder="docs/DESIGN.md"
-                value={spec}
-                onChange={(e) => setSpec(e.target.value)}
-              />
-              {/* 이 칸은 **프로젝트 루트 상대**다(§데스크톱 앱 N3 표) — 위 칸 아래를 고르면
-                  그만큼 줄이고, 밖을 고르면 절대경로 그대로 둔다. 위 칸이 비었으면 줄일
-                  기준이 없어 역시 절대경로다 */}
-              <PickPath
-                mode="file"
-                label="스펙 문서"
-                onPick={(p) => setSpec(relativeUnder(p, expandTilde(dir, home)))}
-              />
-            </div>
-            <p className="text-xs text-muted-foreground">
-              선택. 비우면 그 줄(AGENTS.md 지도 표 한 행)을 자리표시자 그대로 둡니다
-            </p>
-          </div>
-
-          {/* `.dira`가 이미 있다 — 만들지 않았다. 큐면 등록으로 보낸다(§0-3 표) */}
-          {state.exists && (
-            <Alert>
-              <TriangleAlert aria-hidden />
-              <AlertTitle>만들지 않았습니다</AlertTitle>
-              <AlertDescription className="grid gap-2">
-                <span className="break-all">{state.exists.message}</span>
-                {state.exists.queue && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="justify-self-start"
-                    onClick={() => {
-                      onRegister(state.exists!.root);
-                      onOpenChange(false);
-                      setState({});
-                    }}
-                  >
-                    등록으로
-                  </Button>
-                )}
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {err && err.code !== "name" && err.code !== "branch" && !showId && (
-            <Alert variant="destructive">
-              <TriangleAlert aria-hidden />
-              <AlertTitle>만들지 못했습니다</AlertTitle>
-              <AlertDescription>
-                <span className="break-all">{err.message}</span>
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {/* 첫 등록은 macOS `앱 관리` 승인 창을 지난다(§제약 4) — 그동안 crontab이 블록되고
-              여기는 `만드는 중…`으로 서 있다. 창을 못 알아보면 3분 뒤 등록만 실패한다. */}
-          {pending && (
-            <p className="text-xs text-muted-foreground">
-              권한 창이 뜨면 [허용]을 누르세요 — crontab 등록이 그 대답을 기다립니다.
-            </p>
-          )}
-
-          <DialogFooter>
-            <DialogClose render={<Button variant="outline" />}>취소</DialogClose>
-            <Button type="submit" disabled={pending}>
-              {pending ? "만드는 중…" : "프로젝트 만들기"}
-            </Button>
-          </DialogFooter>
-        </form>
+          onRegister={(r) => {
+            onRegister(r);
+            onOpenChange(false);
+          }}
+        />
       </DialogContent>
     </Dialog>
   );
@@ -382,9 +407,10 @@ function CreateDialog({
  *  그 `h1` 행이 헤더 바로 올라가면서(§비주얼 §4 루트 셸 항) **셸까지 이 조각이 그린다** —
  *  `<header>`를 서버에 남기고 버튼만 여기로 내리면 헤더 행과 결과 슬롯이 두 트리로 갈린다.
  *
- *  **0건에서 등록에 성공해도 이 컴포넌트는 자리를 안 옮긴다** — 같은 응답에서 화면이
- *  온보딩→목록으로 바뀌는데, 폼이 그때 다이얼로그로 옮겨 앉으면 결과 표가 remount로 사라진다
- *  (§0 마지막 항). 그래서 그릇을 바꾸는 시점은 결과가 아니라 `닫기`다. */
+ *  **0건에서 성공해도 이 컴포넌트는 자리를 안 옮긴다** — 같은 응답에서 화면이 온보딩→목록으로
+ *  바뀌는데, 결과 카드가 그때 다른 자리로 옮겨 앉으면 remount로 사라진다(§0 마지막 항).
+ *  그래서 그릇을 바꾸는 시점은 결과가 아니라 `닫기`다. **성공 경로가 둘이고 슬롯은 하나다** —
+ *  인라인 생성 폼이든 등록 다이얼로그든 결과 카드는 폼이 있던 그 자리에 뜬다(§비주얼 §7). */
 export function ProjectsSection({
   empty,
   auth,
@@ -419,13 +445,16 @@ export function ProjectsSection({
   // 생성 결과 = 등록과 **같은 표** + 그 위 세 줄(만든 파일 수 · 유도한 엔진 레포 · crontab 등록).
   const view = made?.done ?? state.done;
   const c = made?.created;
+  // 결과가 떠 있는 동안 0건 온보딩은 통째로 사라진다 — 목록이 생긴 뒤의 화면에 온보딩이
+  // 남아 있을 이유가 없다(§비주얼 §7 온보딩 항 마지막).
+  const showResult = !!view && !dismissed;
 
   // `useActionState` 대신 직접 부른다 — 성공 시 다이얼로그를 닫고 결과 슬롯을 되살리는 일이
-  // 렌더 결과가 아니라 이벤트라서다(생성 다이얼로그와 같은 방식).
-  // ponytail: `<form action={서버액션}>`이 주던 JS-없이 제출이 사라진다. 이 화면의 등록은
-  // 이제 다이얼로그(=JS)가 기본 자리라 값이 0건 인라인 폼에만 남는다 — 되살리려면
-  // `useActionState` + `useEffect(닫기)`다.
-  const form = (
+  // 렌더 결과가 아니라 이벤트라서다(생성 폼과 같은 방식).
+  // ponytail: `<form action={서버액션}>`이 주던 JS-없이 제출이 사라진다. 등록 폼은 이제
+  // 0건에서도 다이얼로그(=JS)라 값이 남는 자리가 없다 — 되살리려면 `useActionState` +
+  // `useEffect(닫기)`다.
+  const registerForm = (
     <form
       className="space-y-4"
       onSubmit={(e) => {
@@ -484,6 +513,24 @@ export function ProjectsSection({
           <PickPath mode="directory" label="큐 경로" onPick={setRoot} />
         </div>
         <p className="text-xs text-muted-foreground">절대경로. ~는 확장됩니다</p>
+        {/* 온보딩에서 내려온 도움말 산문 세 덩이 — 전부 **등록할 큐의 경로를 어떻게 찾는가**라
+            자기가 채우는 칸 밑이 자리다(§0 · §비주얼 §7 산문 항). 위 한 줄은 입력 **형식**이고
+            여기는 **찾는 법**이라 지우지 않는다. 본문이 아니라 필드 도움말 층이므로
+            `text-sm`이 아니라 `text-xs text-muted-foreground`다 — 새 크기 단계 0개.
+            접지도 자르지도 않는다: 처음 등록하는 사람에게 이 세 덩이가 이 다이얼로그의
+            존재 이유다. 목록이 있는 상태에서 열어도 보인다(0건 전용이 아니다) */}
+        <div className="space-y-2">
+          <p className="text-xs text-muted-foreground">
+            큐 디렉터리는 프로젝트 루트 아래 .dira 입니다. 안에 tickets/ 와 workers/ 가 있습니다.
+          </p>
+          <p className="font-mono text-xs text-muted-foreground">~/Projects/myproject/.dira</p>
+          <p className="font-mono text-xs text-muted-foreground">~/Projects/dira/.dira</p>
+        </div>
+        <div className="space-y-2">
+          <p className="text-xs text-muted-foreground">어디 있는지 모르겠다면:</p>
+          {/* 스캔하는 건 GUI 프로세스가 아니라 사용자의 셸이다 — 경계는 여전히 명시적이다 */}
+          <CopyCommand cmd="ls -d ~/Projects/*/.dira" />
+        </div>
       </div>
 
       {err && (err.code === "root" || err.code === "dupRoot" || err.code === "unknown") && (
@@ -510,19 +557,21 @@ export function ProjectsSection({
       {/* 루트 셸 — 마크만 있던 바에 이 화면의 `h1` 행이 **통째로** 올라온다(§비주얼 §4 루트 셸 항).
           내비·전환기는 넣지 않는다: 목적지가 아직 정해지지 않았다. href는 `/` = 자기 자신이다(§14).
           헤딩은 `프로젝트` 고정이다 — 0건이라고 `dira`로 바꾸면 마크 옆에 같은 말이 두 번 선다.
-          0건이면 우측이 `설정` 하나다: 등록 폼이 이미 펼쳐져 있는데 그 폼을 여는 버튼을 같은
+          0건이면 우측이 `설정` 하나다: 생성 폼이 이미 펼쳐져 있는데 그 폼을 여는 버튼을 같은
           화면에 세우지 않는다(§비주얼 §7). `설정`은 **우측 맨 끝**이고 0건에서도 선다 —
           두 셸이 같은 자리에 같은 것을 갖는다(§0-4 자리 표 · §비주얼 §4) */}
       <header className="sticky top-0 z-50 flex h-12 items-center gap-6 border-b bg-background px-6">
         <BrandMark href="/" />
         <h1 className="text-lg font-semibold">프로젝트</h1>
         <div className="ml-auto flex items-center gap-2">
+          {/* **만드는 것이 정문이고 등록이 우회로다**(§0 위계 항 · 요구 `7ee8168e`).
+              자리·라벨은 그대로고 바뀐 것은 변종 둘뿐이다 — primary가 행의 오른쪽 끝(§4-3) */}
           {!empty && (
             <>
-              <Button size="sm" onClick={() => setRegistering(true)}>
+              <Button variant="outline" size="sm" onClick={() => setRegistering(true)}>
                 프로젝트 등록
               </Button>
-              <Button variant="outline" size="sm" onClick={() => setCreating(true)}>
+              <Button size="sm" onClick={() => setCreating(true)}>
                 새로 만들기
               </Button>
             </>
@@ -553,19 +602,21 @@ export function ProjectsSection({
 
           {/* 0건 본문의 첫 줄. 두 글자 규칙(0건이면 `dira`)은 본문에 남지만 태그는 `h2`다 —
               헤더가 `h1`을 가져갔고 페이지의 `h1`은 하나다(§비주얼 §4 · §7) */}
-          {empty && (
+          {empty && !showResult && (
             <div className="max-w-3xl space-y-2">
               <h2 className="text-lg font-semibold">dira</h2>
               <p className="text-sm text-muted-foreground">
-                등록된 프로젝트가 없습니다. 큐 디렉터리를 등록하면 시작합니다.
+                등록된 프로젝트가 없습니다. 큐를 하나 만들면 시작합니다.
               </p>
             </div>
           )}
 
           {children}
 
-          {/* 결과 슬롯 — 등록·생성 어느 쪽으로 성공해도 같은 자리다. 평소엔 아무것도 없다(§비주얼 §7) */}
-          {view && !dismissed ? (
+          {/* 결과 슬롯 — 등록·생성 어느 쪽으로 성공해도 같은 자리다. 0건에서는 그 자리가
+              "목록 아래"가 아니라 "인라인 생성 폼이 있던 자리"일 뿐 슬롯은 하나다(§비주얼 §7).
+              평소엔 아무것도 없다 */}
+          {showResult ? (
             <Card className="max-w-3xl gap-3 p-4">
               <div className="flex items-center justify-between gap-4">
                 <h2 className="text-sm font-medium">
@@ -621,64 +672,63 @@ export function ProjectsSection({
             </Card>
           ) : (
             empty && (
-              // 0건 온보딩 — 폼이 1차 콘텐츠다. `새로 만들기`는 설명 한 줄이 붙어야 등록과 갈린다
-              // (§0-3 트리거 두 자리 중 하나. 헤더의 액션 자리와 동시에 서지 않는다)
+              // 0건 온보딩 — **생성 폼이 1차 콘텐츠다**(§0 · §비주얼 §7. 종전에는 등록 폼이었다).
+              // 등록은 한 줄 + `outline` 버튼으로 내려가 다이얼로그를 연다 — 두 줄이 통째로 맞바뀌었다.
+              // 그 줄이 **폼 위**에 서는 이유: 아래로 내리면 `프로젝트 만들기`(제출) 바로 밑에
+              // `프로젝트 등록` 버튼이 붙어 같은 폼의 두 번째 제출로 읽힌다. 위계를 지는 것은
+              // 세로 순서가 아니라 크기다(한 줄 + outline 대 카드 한 장).
               <>
                 <div className="flex max-w-3xl items-center justify-between gap-4">
-                  <p className="text-sm text-muted-foreground">아직 큐가 없다면 새로 만듭니다.</p>
-                  <Button variant="outline" size="sm" onClick={() => setCreating(true)}>
-                    새로 만들기
+                  <p className="text-sm text-muted-foreground">
+                    이미 만들어 둔 큐가 있다면 등록합니다.
+                  </p>
+                  <Button variant="outline" size="sm" onClick={() => setRegistering(true)}>
+                    프로젝트 등록
                   </Button>
                 </div>
+                {/* 그릇만 `Dialog` → `Card p-4`다. `DialogTitle`이 들던 `새 프로젝트`가 `h2`가
+                    되고 `DialogDescription` 한 줄은 그 아래 그대로 남는다 — 이 화면에서
+                    처음 만드는 사람에게 그 문장이 가장 필요하다(§비주얼 §7 온보딩 항) */}
                 <Card className="max-w-3xl gap-4 p-4">
-                  <h2 className="text-sm font-medium">프로젝트 등록</h2>
-                  {form}
+                  <div className="space-y-1">
+                    <h2 className="text-sm font-medium">새 프로젝트</h2>
+                    <p className="text-xs text-muted-foreground">{CREATE_BLURB}</p>
+                  </div>
+                  <CreateForm
+                    home={home}
+                    onCreated={(s) => {
+                      setMade(s);
+                      setDismissed(false);
+                    }}
+                    onRegister={(r) => {
+                      setRoot(r);
+                      setRegistering(true);
+                    }}
+                  />
                 </Card>
               </>
             )
           )}
-
-          {/* 프로젝트 0개일 때의 안내 산문. §6의 `<EmptyState>` 규칙(한 줄 + 버튼 1개)을 여기서만
-              쓰지 않는다 — 한 줄로는 "무엇을 등록해야 하는지"를 못 알려준다(§8 충돌 기록).
-              목록이 생기면 통째로 사라진다(§비주얼 §7) */}
-          {empty && (
-            <div className="max-w-3xl space-y-6">
-              <div className="space-y-2">
-                <p className="text-sm text-muted-foreground">
-                  큐 디렉터리는 프로젝트 루트 아래 .dira 입니다. 안에 tickets/ 와 workers/ 가
-                  있습니다.
-                </p>
-                <p className="font-mono text-xs text-muted-foreground">
-                  ~/Projects/myproject/.dira
-                </p>
-                <p className="font-mono text-xs text-muted-foreground">~/Projects/dira/.dira</p>
-              </div>
-              <div className="space-y-2">
-                <p className="text-sm text-muted-foreground">어디 있는지 모르겠다면:</p>
-                {/* 스캔하는 건 GUI 프로세스가 아니라 사용자의 셸이다 — 경계는 여전히 명시적이다 */}
-                <CopyCommand cmd="ls -d ~/Projects/*/.dira" />
-              </div>
-            </div>
-          )}
         </div>
       </main>
 
-      {/* 폼은 하나고 그릇만 둘이다 — 0건이면 위 인라인 카드, 아니면 이 다이얼로그다.
-          둘이 동시에 서지 않으므로 필드 `id`가 겹치지 않는다 */}
-      {!empty && (
-        <Dialog open={registering} onOpenChange={setRegistering}>
-          <DialogContent className="sm:max-w-lg">
-            <DialogHeader>
-              <DialogTitle>프로젝트 등록</DialogTitle>
-              <DialogDescription>
-                이미 있는 .dira 큐를 목록에 올립니다. 파일은 만들지 않습니다.
-              </DialogDescription>
-            </DialogHeader>
-            {form}
-          </DialogContent>
-        </Dialog>
-      )}
+      {/* **등록 폼이 서는 그릇은 이제 다이얼로그 하나뿐이다 — 0건에서도 그렇다**(§비주얼 §7).
+          인라인 자리는 생성 폼이 가져갔다. `max-h`+`overflow`는 내려온 산문 때문에 필요하다:
+          `DialogContent`에는 둘 다 없고 `<html>`이 `overflow-hidden`이라, 세로로 좁은 창에서는
+          스크롤도 없이 잘린다 — 잘리는 것이 하필 복사 명령이다(§21이 쓰는 그 값 그대로) */}
+      <Dialog open={registering} onOpenChange={setRegistering}>
+        <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>프로젝트 등록</DialogTitle>
+            <DialogDescription>
+              이미 있는 .dira 큐를 목록에 올립니다. 파일은 만들지 않습니다.
+            </DialogDescription>
+          </DialogHeader>
+          {registerForm}
+        </DialogContent>
+      </Dialog>
 
+      {/* 0건에서는 이 다이얼로그가 열리지 않는다 — 생성 폼이 인라인으로 서 있어 트리거가 없다 */}
       <CreateDialog
         open={creating}
         onOpenChange={setCreating}
@@ -689,7 +739,7 @@ export function ProjectsSection({
         }}
         onRegister={(r) => {
           setRoot(r);
-          if (!empty) setRegistering(true); // 0건이면 폼이 이미 펼쳐져 있다
+          setRegistering(true);
         }}
       />
     </>
