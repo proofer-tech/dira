@@ -1,11 +1,15 @@
-/** 워커별 토큰 소비 (DESIGN.md §0-8 판정 1).
+/** 토큰의 두 축 (DESIGN.md §0-8). **쓴 양**(판정 1)과 **남은 양**(판정 2)이 한 파일에 산다 —
+ *  둘 다 토큰이고, 하단 status bar가 한 칸에서 둘을 갈아 끼운다(게이지가 못 서면 소비량이 선다).
  *
- *  입력은 **이미 쌓이고 있는 `<루트>/workers/logs/`**다 — 새 엔진 규약도 새 저장소도 없다.
- *  파일명이 워커·시각을 주고, 마지막 줄 JSON의 `usage` 넷을 더한 수가 그 세션의 토큰이다.
- *  `$` 환산도 모델별 분해도 없다(§0-8 Q3=(a): `total_cost_usd`는 읽지도 않는다).
+ *  - 판정 1(소비): 입력은 **이미 쌓이고 있는 `<루트>/workers/logs/`**다 — 새 엔진 규약도 새
+ *    저장소도 없다. 파일명이 워커·시각을 주고, 마지막 줄 JSON의 `usage` 넷을 더한 수가 그
+ *    세션의 토큰이다. `$` 환산도 모델별 분해도 없다(Q3=(a): `total_cost_usd`는 읽지도 않는다).
+ *  - 판정 2(잔여): 엔진마다 원본이 다르다 — claude는 GET 1회, codex는 rollout 파일이다.
+ *    **부르는 주체는 서버뿐이고 토큰은 응답에 담기지 않는다**(아래 `engineLimits`).
  *
  *  **읽기 전용이다.** 이 모듈은 아무 파일도 쓰지 않는다. */
-import { readdir } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import path from "node:path";
 import { lastJsonLine } from "./workers.ts";
 
@@ -115,8 +119,11 @@ export async function listUsage(root: string, windowMs = DEFAULT_WINDOW_MS): Pro
 
 /** 읽히는 크기로 줄인다 — `0` · `995` · `1.2k` · `18k` · `2.6M`.
  *
- *  **화면 파일이 아니라 여기 있는 이유**: 워커 화면의 열과 §0-8 하단 status bar가 같은 수를
- *  같은 모양으로 써야 한다. 자리마다 적으면 한쪽만 자릿수를 바꿔도 두 화면이 갈린다.
+ *  **화면 파일이 아니라 여기 있는 이유**: 워커 화면의 열과 상단 합계가 같은 수를 같은 모양으로
+ *  써야 한다. 자리마다 적으면 한쪽만 자릿수를 바꿔도 두 화면이 갈린다.
+ *  **하단 status bar는 이 함수를 안 쓴다** — 게이지가 못 선 칸의 소비량은 `toLocaleString()`
+ *  천 단위 구분이다(§비주얼 §26 ⑤가 `1.2M`으로 줄이는 것을 명시적으로 거절했다. 그 자리는
+ *  게이지 대신 서는 유일한 절대 수라 자릿수가 정보다).
  *
  *  가수가 10 미만일 때만 소수 한 자리다(`1.2k`는 정보고 `18.4k`는 소음이다). 경계를 `999_500`에
  *  두는 것은 반올림 뒤 `1000k`가 나오지 않게 하려는 것이다.
@@ -126,4 +133,181 @@ export function formatTokens(n: number): string {
   if (n < 1000) return String(Math.round(n));
   const [v, unit] = n < 999_500 ? [n / 1000, "k"] : [n / 1_000_000, "M"];
   return (v < 10 ? v.toFixed(1) : String(Math.round(v))) + unit;
+}
+
+// ── 엔진별 잔여 한도 (§0-8 판정 2 · 하단 status bar) ─────────────────────────
+//
+// 한도는 **계정 스코프**라 워커별로 갈리지 않는다 — 키가 엔진 이름 하나다(`engineName`).
+// 읽는 주체는 서버뿐이다: claude는 `~/.claude/.credentials.json`(0600)을 읽고 codex는
+// `~/.codex/`를 읽는다. 둘 다 브라우저가 못 보는 자리고, **나가는 것은 `%`와 리셋 시각뿐**이다.
+
+/** 한 엔진 칸이 그릴 것. **값이 없으면 사유뿐이다** — 빈 트랙도 `0%`도 추정치도 만들지 않는다
+ *  (§0-8 판정 2: 화면이 거짓말하지 않는다). `error`는 화면이 `한도를 읽을 수 없습니다` 옆
+ *  네이티브 `title`에 싣는 원문이고 **토큰 문자열은 여기 담기지 않는다**. */
+export type EngineLimit =
+  /** `usedPercent`는 **쓴 %**다(claude `utilization` · codex `used_percent`). 게이지가 차는
+   *  쪽이 이 수다 — 뒤집으면 화면이 정확히 반대로 거짓말한다(§비주얼 §26 ②).
+   *  `resetsAt`은 ms 에폭이거나 `null`(그때는 남은 시간 항목만 빠진다 — §26 ④). */
+  { usedPercent: number; resetsAt: number | null } | { error: string };
+
+/** **5초 폴링에 매달지 않는다**(§0-8 남는 규칙). 셸은 라우트마다 다시 렌더되고 보드는 5초마다
+ *  `router.refresh()`를 부르므로, TTL이 없으면 claude 엔드포인트를 초당 여러 번 두드린다.
+ *  429의 `retry-after`가 ≈1시간이었다 — 여긴 자주 두드릴 곳이 아니다. */
+const LIMIT_TTL_MS = 60_000;
+
+/** 값이 아니라 **Promise를 캐시한다** — 동시에 들어온 요청 여럿이 호출 하나를 나눠 갖는다.
+ *  실패도 TTL 동안 캐시된다(그게 "실패해도 더 두드리지 않는다"다).
+ *
+ *  ponytail: 엔진 이름 몇 개짜리 Map이라 비우지 않는다. */
+const limitCache = new Map<string, { at: number; value: Promise<EngineLimit> }>();
+
+/** 엔진 이름들 → 칸마다의 잔여. **호출은 TTL당 엔진 하나에 1회**다.
+ *  던지지 않는다 — 실패는 전부 `{ error }`로 돌아온다(바가 사라지면 안 된다). */
+export async function engineLimits(engines: string[]): Promise<Record<string, EngineLimit>> {
+  const now = Date.now();
+  const out: Record<string, EngineLimit> = {};
+  await Promise.all(
+    [...new Set(engines)].map(async (engine) => {
+      let hit = limitCache.get(engine);
+      if (!hit || now - hit.at >= LIMIT_TTL_MS) {
+        limitCache.set(engine, (hit = { at: now, value: readLimit(engine) }));
+      }
+      out[engine] = await hit.value;
+    }),
+  );
+  return out;
+}
+
+function readLimit(engine: string): Promise<EngineLimit> {
+  if (engine === "claude") return claudeLimit();
+  if (engine === "codex") return codexLimit();
+  // 원본을 모르는 엔진은 폴백이다. **추정치를 지어내지 않는다**(§0-8).
+  return Promise.resolve({ error: `${engine}: 한도를 주는 원본을 모릅니다` });
+}
+
+/** 설치된 CLI 번들이 부르는 그 경로다(§0-8 판정 2 실측). 타임아웃도 번들의 5000ms 그대로. */
+const CLAUDE_USAGE_URL = "https://api.anthropic.com/api/oauth/usage";
+
+/** claude — `GET /api/oauth/usage`의 `five_hour`.
+ *
+ *  토큰은 **CLI 로그인 토큰**(`~/.claude/.credentials.json`)이다. §0-4의 장기 토큰
+ *  (`~/.config/dira/oauth-token`)에는 `user:profile`이 없어 같은 URL이 429다(실측 2026-08-01).
+ *  **매 호출마다 파일을 다시 읽는다** — access token이 8시간짜리고 CLI가 제자리 갱신한다.
+ *  만료되면 401이고 그 칸은 폴백이다(우리는 `refreshToken`으로 갱신하지 않는다 —
+ *  사람 계정에 토큰을 발급하는 행위다).
+ *
+ *  **비공개 API라 계약이 없다** — 키마다 `null` 가드를 걸고, 하나라도 어긋나면 게이지를
+ *  안 그린다(§0-8 판정 2). */
+async function claudeLimit(): Promise<EngineLimit> {
+  const file = path.join(homedir(), ".claude", ".credentials.json");
+  let token: unknown;
+  try {
+    const raw: unknown = JSON.parse(await readFile(file, "utf8"));
+    token = (raw as { claudeAiOauth?: { accessToken?: unknown } })?.claudeAiOauth?.accessToken;
+  } catch (e) {
+    return { error: `${file}: ${(e as Error).message}` };
+  }
+  if (typeof token !== "string" || !token) {
+    return { error: `${file}: claudeAiOauth.accessToken이 없습니다` };
+  }
+  let res: Response;
+  try {
+    res = await fetch(CLAUDE_USAGE_URL, {
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      // TTL 캐시가 우리 것이므로 Next의 fetch 캐시는 끈다(같은 값을 두 겹으로 들지 않는다).
+      cache: "no-store",
+      signal: AbortSignal.timeout(5_000),
+    });
+  } catch (e) {
+    // 타임아웃·네트워크 단절. **사유를 지어내지 않는다** — 원문 그대로 title에 싣는다.
+    return { error: `GET ${CLAUDE_USAGE_URL}: ${(e as Error).message}` };
+  }
+  if (!res.ok) return { error: `GET ${CLAUDE_USAGE_URL}: HTTP ${res.status}` };
+  const body: unknown = await res.json().catch(() => null);
+  const five = (body as { five_hour?: { utilization?: unknown; resets_at?: unknown } } | null)
+    ?.five_hour;
+  if (typeof five?.utilization !== "number" || !Number.isFinite(five.utilization)) {
+    return { error: `GET ${CLAUDE_USAGE_URL}: 응답에 five_hour.utilization이 없습니다` };
+  }
+  // ISO 8601 문자열이다(codex의 유닉스 초와 다르다). 못 읽으면 이 항목만 빠진다(§26 ④).
+  const at = typeof five.resets_at === "string" ? Date.parse(five.resets_at) : NaN;
+  return { usedPercent: five.utilization, resetsAt: Number.isFinite(at) ? at : null };
+}
+
+/** codex — rollout 파일의 마지막 `token_count` 이벤트. **새 네트워크 호출이 0이다.**
+ *
+ *  `~/.codex/sessions/<YYYY>/<MM>/<DD>/rollout-<시각>-<uuid>.jsonl`이고 디렉터리·파일 이름이
+ *  전부 0 패딩이라 **사전순 = 시각순**이다. 가장 최근 날짜 디렉터리에서 새 파일부터 훑고,
+ *  `rate_limits`를 실은 **첫 파일이 판정**이다 — 그게 지금 계정 상태다. 그 파일의
+ *  `primary`가 `null`이면 한도에 닿은 것이고, 더 오래된 파일의 살아 있던 수로 덮지 않는다.
+ *
+ *  ponytail: 최근 날짜 디렉터리의 파일 5개까지만 본다. 자정 직후 첫 세션이 아직 `token_count`를
+ *  안 실었으면 그 몇 분은 폴백이다 — 넓히려면 이전 날짜 디렉터리로 한 단계 더 내려간다. */
+async function codexLimit(): Promise<EngineLimit> {
+  const sessions = path.join(homedir(), ".codex", "sessions");
+  let dir: string | null = sessions;
+  for (let i = 0; i < 3 && dir; i++) dir = await newestNumericChild(dir);
+  if (!dir) return { error: `${sessions}: rollout 파일이 없습니다` };
+  const files = (await readdir(dir).catch(() => [] as string[]))
+    .filter((n) => n.startsWith("rollout-") && n.endsWith(".jsonl"))
+    .sort()
+    .reverse()
+    .slice(0, 5);
+  for (const f of files) {
+    const full = path.join(dir, f);
+    const rl = lastRateLimits(await readFile(full, "utf8").catch(() => ""));
+    if (!rl) continue; // 이 세션은 턴이 없었다 — 한 칸 더 오래된 파일을 본다
+    const p = rl.primary;
+    if (!p || typeof p.used_percent !== "number" || !Number.isFinite(p.used_percent)) {
+      // 한도에 닿으면 codex가 이 수를 아예 안 싣는다(실측 `primary: null`). 게이지를 안 그린다.
+      return { error: `${full}: rate_limits.primary가 null입니다` };
+    }
+    const at = typeof p.resets_at === "number" ? p.resets_at * 1000 : NaN; // 유닉스 **초**다
+    return { usedPercent: p.used_percent, resetsAt: Number.isFinite(at) ? at : null };
+  }
+  return { error: `${dir}: 최근 rollout에 rate_limits가 없습니다` };
+}
+
+/** `<YYYY>`·`<MM>`·`<DD>` 중 가장 최근 것. 0 패딩 숫자만 받으므로 사전순으로 고른다. */
+async function newestNumericChild(dir: string): Promise<string | null> {
+  const names = (await readdir(dir).catch(() => [] as string[])).filter((n) => /^\d+$/.test(n));
+  const pick = names.sort().pop();
+  return pick ? path.join(dir, pick) : null;
+}
+
+type CodexRateLimits = { primary?: { used_percent?: unknown; resets_at?: unknown } | null };
+
+/** rollout 한 파일의 **마지막** `rate_limits`. 줄을 뒤에서부터 훑는다 — 한 세션에 여러 번
+ *  실리고 마지막 것이 최신이다. 파일 전체를 읽는 이유는 `token_count`가 파일 앞쪽에만 있는
+ *  세션이 실재하기 때문이다(실측: 첫 턴에서 한도에 걸려 끝난 세션). 파일은 수백 KB다. */
+export function lastRateLimits(text: string): CodexRateLimits | null {
+  const lines = text.split("\n");
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (!lines[i].includes('"rate_limits"')) continue;
+    try {
+      const rec: unknown = JSON.parse(lines[i]);
+      const rl = (rec as { payload?: { rate_limits?: CodexRateLimits } })?.payload?.rate_limits;
+      if (rl && typeof rl === "object") return rl;
+    } catch {
+      // 잘린 줄이다(세션이 쓰는 중). 더 오래된 줄을 본다 — 사유를 지어내지 않는다.
+    }
+  }
+  return null;
+}
+
+/** 리셋 시각 표기 (§비주얼 §26 ④). 오늘 안이면 `HH:MM`, 다른 날이면 `M/D`.
+ *
+ *  **카운트다운을 안 쓴다** — `4시간 12분 남음`은 5초마다 움직이고, 안 움직이는 수가 스캔에
+ *  낫다. **24시간제**고 `toLocaleTimeString`을 안 쓴다(로케일에 따라 `오후 5:40`이 나와 폭이
+ *  흔들린다 — `session-stream.tsx`의 `localTime`과 같은 판단, 다만 초는 안 쓴다).
+ *  창이 5시간(claude)과 30일(codex)이라 한 표기가 둘을 못 받아서 갈림이 하나 있다. */
+export function resetLabel(at: number, now = Date.now()): string {
+  const d = new Date(at);
+  const n = new Date(now);
+  const sameDay =
+    d.getFullYear() === n.getFullYear() &&
+    d.getMonth() === n.getMonth() &&
+    d.getDate() === n.getDate();
+  const p = (v: number) => String(v).padStart(2, "0");
+  return sameDay ? `${p(d.getHours())}:${p(d.getMinutes())}` : `${d.getMonth() + 1}/${d.getDate()}`;
 }

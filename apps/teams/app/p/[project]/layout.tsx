@@ -3,6 +3,7 @@
  *  프로젝트는 URL이 담는다. 모듈 전역에 "현재 프로젝트"를 두지 않는다 — 서버 컴포넌트는 동시에
  *  여러 요청을 처리하므로 전역에 담으면 엉뚱한 큐에 쓰는 사고가 난다. */
 import { homedir } from "node:os";
+import { Suspense } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CircleDot, CloudOff, TriangleAlert, Unplug } from "lucide-react";
@@ -17,8 +18,10 @@ import { StatusBadge } from "@/components/status-badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { readAuth } from "@/lib/auth";
 import { readSummary, readProjects } from "@/lib/projects";
+import { engineLimits, listUsage, resetLabel, type EngineLimit } from "@/lib/usage";
 import { engineName } from "@/lib/workers";
 import { tildePath } from "@/lib/urls";
+import { cn } from "@/lib/utils";
 
 export default async function ProjectLayout({
   children,
@@ -55,10 +58,17 @@ export default async function ProjectLayout({
         // (판정 불가를 "괜찮다"로 바꾸면 §0-4가 닫으려던 침묵이 그대로 돌아온다).
         // 워커도 `readSummary`가 이미 읽어 둔 것이다 — 새 fs 읽기 0(§성능 예산).
         claude: !s.connected || s.workers.some((w) => engineName(w.engine) === "claude"),
+        // §0-8 하단 status bar용. 엔진 목록은 **그 프로젝트 워커들의 `engineName`**에서 온다 —
+        // 배너가 쓰는 그 함수 그대로다(두 벌 적지 않는다). 소비량 폴백은 워커별 합을 엔진으로
+        // 접어야 해서 실효 이름도 같이 든다. `readSummary`가 이미 읽은 워커라 **새 fs 읽기 0**.
+        engines: s.workers.map((w) => ({ worker: w.effName, engine: engineName(w.engine) })),
       };
     }),
   );
   const current = items.find((t) => t.id === id)!;
+  const root = projects.find((t) => t.id === id)!.root;
+  // 칸의 순서 = 워커가 선 순서. 중복은 접는다 — 같은 엔진을 무는 워커가 둘이어도 한도는 하나다.
+  const engines = [...new Set(current.engines.map((w) => w.engine))].filter(Boolean);
   // 토큰은 머신당 하나라 프로젝트 요약에 들어 있지 않다(§0-4). 증상("내 큐가 안 돈다")이
   // 나타나는 화면이 여기라 판정도 여기서 한다. 값은 헤더 `설정` 버튼과 배너 CTA가 같이 쓴다 —
   // 진입점 둘이 같은 컴포넌트를 두 번 쓰고 전역 상태는 만들지 않는다(§0-4).
@@ -195,6 +205,134 @@ export default async function ProjectLayout({
           </Alert>
         )}
       </main>
+
+      {/* 토큰 status bar (§0-8 그릇 · §비주얼 §26). `sticky`도 `fixed`도 아니다 — 스크롤이
+          `main` 안에 갇혀 있어(§비주얼 §4) 헤더 다음 형제로 서기만 하면 뷰포트 바닥에 붙는다.
+          `footer`가 `body` 직계라 `contentinfo` 랜드마크가 공짜다(`role`을 손으로 안 붙인다).
+          **워커가 0개면 노드 자체가 없다** — 빈 28px을 남기면 보드가 이유 없이 짧아진다.
+          버튼이 0개고 `aria-live`도 없다: 이 바는 말하기만 한다(§0-8 · §26 ①). */}
+      {engines.length > 0 && (
+        <footer className="flex h-7 shrink-0 items-center gap-6 overflow-hidden border-t bg-background px-6">
+          {/* 값을 여기서 `await`하면 외부 GET(최대 5초)이 셸 전체를 붙잡아 보드가 그만큼 늦는다.
+              경계를 세워 **껍데기와 엔진 이름을 먼저 세우고 게이지·`%`는 도착하면 채운다**
+              (§26 ⑧ 로딩 — 스켈레톤도 스피너도 없다. 높이가 처음부터 28px이라 아무것도 안 밀린다).
+              폴링 갱신은 transition이라 fallback이 다시 뜨지 않는다. */}
+          <Suspense
+            fallback={engines.map((e) => (
+              <EngineCell key={e} engine={e} />
+            ))}
+          >
+            <EngineCells root={root} workers={current.engines} engines={engines} />
+          </Suspense>
+        </footer>
+      )}
     </>
+  );
+}
+
+/** 잔여를 읽어 칸을 채운다. **읽는 주체는 서버다**(§0-8) — 토큰은 여기서 나가지 않고
+ *  브라우저로 가는 것은 `%`와 리셋 시각뿐이다. 외부 호출은 `engineLimits`의 TTL 캐시 뒤에 있다. */
+async function EngineCells({
+  root,
+  workers,
+  engines,
+}: {
+  root: string;
+  workers: { worker: string; engine: string }[];
+  engines: string[];
+}) {
+  const limits = await engineLimits(engines);
+  // 소비량은 **게이지가 못 선 칸에서만** 쓴다(§26 ⑤). 전부 정상이면 로그를 아예 안 읽는다.
+  const usage = engines.some((e) => "error" in limits[e]) ? await listUsage(root) : null;
+  return engines.map((e) => (
+    <EngineCell
+      key={e}
+      engine={e}
+      limit={limits[e]}
+      // 그 엔진을 무는 워커들의 합이다. 키는 로그 파일명에서 온 **실효 `TICKET_NAME`**이고
+      // NFC로 맞추는 것은 `parseLogName`이 readdir의 NFD를 정규화하기 때문이다(워커 화면과 같다).
+      tokens={
+        usage
+          ? workers
+              .filter((w) => w.engine === e)
+              .reduce((n, w) => n + (usage.byWorker[w.worker.normalize("NFC")] ?? 0), 0)
+          : 0
+      }
+    />
+  ));
+}
+
+/** 한 엔진 칸 (§비주얼 §26 ②·③·⑤). 셋 중 하나다 —
+ *  **도착 전**(`limit`이 없다: 이름만) · **값**(게이지 + `%` + 리셋) · **못 구함**(소비량 + 사유).
+ *  어느 쪽이든 높이는 같다: 바가 `h-7` 고정 + `items-center`이고 들어오는 것이 전부 `text-xs`
+ *  (16px)인데 게이지는 8px이라 어느 칸도 더 높아질 수 없다. */
+function EngineCell({
+  engine,
+  limit,
+  tokens = 0,
+}: {
+  engine: string;
+  limit?: EngineLimit;
+  tokens?: number;
+}) {
+  const value = limit && !("error" in limit) ? limit : null;
+  // 임계는 **사용률 90% 하나**다(§26 ③). 단계를 둘로 나누지 않는다 — 색은 예외 하나만 표시한다.
+  const over = !!value && value.usedPercent >= 90;
+  return (
+    <div className="flex items-center gap-2">
+      {/* §23의 `엔진` 열과 같은 서체·같은 자르기다. 전문은 `title`에 남는다 */}
+      <code className="max-w-32 shrink-0 truncate font-mono text-xs" title={engine}>
+        {engine}
+      </code>
+      {value && (
+        <>
+          {/* 트랙 + 필 `div` 2개. `role="progressbar"`를 안 쓴다 — 값을 바로 옆 글자가 이미
+              전부 말하고 있어 붙이면 같은 수를 두 번 읽는다(§26 ③). 그래서 `aria-hidden`이다.
+              transition도 없다: 5초마다 도는 애니메이션은 상시 요소에서 소음이다 */}
+          <div
+            aria-hidden
+            className="hidden h-2 w-24 shrink-0 overflow-hidden rounded-full bg-muted sm:block"
+          >
+            <div
+              className={cn(
+                "h-full rounded-full",
+                over ? "bg-status-stale" : "bg-muted-foreground",
+              )}
+              // 폭이 데이터라 클래스로 못 쓴다. **필이 차는 쪽이 쓴 쪽이다** — 잔여로 채우면
+              // 소진 직전이 빈 막대가 되어 옆 칸의 "게이지 없음"(⑤)과 한눈에 안 갈린다.
+              style={{ width: `${Math.min(100, Math.max(0, value.usedPercent))}%` }}
+            />
+          </div>
+          {/* `사용` 두 글자가 이 `%`의 단위다 — 없으면 쓴 쪽인지 남은 쪽인지 화면만 봐서 못 가른다.
+              `tabular-nums`가 없으면 폴링마다 자릿수 폭이 흔들려 옆 칸이 밀린다 */}
+          <span className={cn("text-xs whitespace-nowrap tabular-nums", over && "text-status-stale")}>
+            {Math.round(value.usedPercent)}% 사용
+          </span>
+          {/* `resets_at`이 없으면 **이 항목만** 빠진다. 칸이 통째로 폴백으로 넘어가지 않는다(§26 ④) */}
+          {value.resetsAt !== null && (
+            <span className="hidden text-xs whitespace-nowrap text-muted-foreground tabular-nums md:inline">
+              · {resetLabel(value.resetsAt)} 리셋
+            </span>
+          )}
+        </>
+      )}
+      {limit && "error" in limit && (
+        <>
+          {/* 게이지를 안 그린다 — 빈 트랙도 `0%`도 회색 막대도 없다(§0-8 판정 2). 그 자리에
+              판정 1의 소비량이 선다. `1.2M`으로 줄이지 않는다: 여기가 이 바의 유일한 절대 수다 */}
+          <span className="text-xs whitespace-nowrap tabular-nums">
+            {tokens.toLocaleString()} 토큰
+          </span>
+          {/* 색도 아이콘도 안 쓴다 — 에러가 아니라 **부재**다. 원인 원문은 삼키지 않고
+              네이티브 `title`에 남긴다(얇은 한 줄에 블록을 세울 자리가 없다 — §26 ⑤) */}
+          <span
+            className="text-xs whitespace-nowrap text-muted-foreground"
+            title={limit.error}
+          >
+            · 한도를 읽을 수 없습니다
+          </span>
+        </>
+      )}
+    </div>
   );
 }

@@ -3,7 +3,15 @@ import assert from "node:assert";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { DEFAULT_WINDOW_MS, formatTokens, listUsage, parseLogName } from "./usage.ts";
+import {
+  DEFAULT_WINDOW_MS,
+  engineLimits,
+  formatTokens,
+  lastRateLimits,
+  listUsage,
+  parseLogName,
+  resetLabel,
+} from "./usage.ts";
 
 /** 픽스처 큐 하나. 로그 디렉터리까지 만들어 준다. */
 function makeRoot(): string {
@@ -106,4 +114,63 @@ test("formatTokens — 0은 빈칸이 아니고 큰 수는 읽히게 줄인다",
   // 반올림 경계 — `1000k`가 나오면 안 된다
   assert.equal(formatTokens(999_499), "999k");
   assert.equal(formatTokens(999_500), "1.0M");
+});
+
+// ── 판정 2 (엔진별 잔여) ──────────────────────────────────────────────────
+
+test("lastRateLimits — 마지막 것이 이긴다 · 잘린 줄을 건너뛴다 · 없으면 null", () => {
+  const line = (pct: number | null, ts: string) =>
+    JSON.stringify({
+      timestamp: ts,
+      type: "event_msg",
+      payload: {
+        type: "token_count",
+        rate_limits: {
+          limit_id: "codex",
+          primary: pct === null ? null : { used_percent: pct, window_minutes: 43200, resets_at: 1787984956 },
+          secondary: null,
+          plan_type: "free",
+        },
+      },
+    });
+
+  // 한 세션에 여러 번 실린다 — **마지막이 최신이다**
+  const two = ["{\"type\":\"session_meta\"}", line(42, "a"), "{\"type\":\"response_item\"}", line(44, "b")];
+  assert.equal(lastRateLimits(two.join("\n")).primary.used_percent, 44);
+
+  // 세션이 쓰는 중이라 마지막 줄이 잘렸다 — 그 앞 줄로 물러난다(사유를 지어내지 않는다)
+  assert.equal(lastRateLimits([line(42, "a"), line(44, "b").slice(0, 60)].join("\n")).primary.used_percent, 42);
+
+  // 한도에 닿으면 codex가 수를 아예 안 싣는다. `rate_limits`는 있고 `primary`만 null이다
+  assert.equal(lastRateLimits(line(null, "a")).primary, null);
+
+  // 턴이 없던 세션 — `token_count`가 아예 없다
+  assert.equal(lastRateLimits("{\"type\":\"session_meta\"}\n"), null);
+  assert.equal(lastRateLimits(""), null);
+});
+
+test("resetLabel — 오늘은 HH:MM · 다른 날은 M/D (24시간제)", () => {
+  const now = new Date(2026, 7, 1, 15, 30).getTime(); // 2026-08-01 15:30 로컬
+  // claude 5시간 창 — 실측 `resets_at`이 KST 19:00이었다
+  assert.equal(resetLabel(new Date(2026, 7, 1, 19, 0).getTime(), now), "19:00");
+  // 오후를 `오후 5:40`으로 쓰지 않는다(로케일마다 폭이 흔들린다)
+  assert.equal(resetLabel(new Date(2026, 7, 1, 17, 40).getTime(), now), "17:40");
+  assert.equal(resetLabel(new Date(2026, 7, 1, 9, 5).getTime(), now), "09:05"); // 0 패딩
+  // codex 30일 창 — 실측 `resets_at` 1787984956 = 2026-08-29 15:29
+  assert.equal(resetLabel(new Date(2026, 7, 29, 15, 29).getTime(), now), "8/29");
+  // 자정 경계: 5분 뒤여도 날짜가 다르면 `M/D`다 — 시각만 쓰면 "오늘 그 시각"으로 읽힌다
+  assert.equal(resetLabel(new Date(2026, 7, 2, 0, 5).getTime(), new Date(2026, 7, 1, 23, 55).getTime()), "8/2");
+});
+
+test("engineLimits — 원본 모르는 엔진은 사유뿐 · TTL 안에서는 다시 안 부른다", async () => {
+  // 게이지를 그릴 수 없는 엔진은 `{ error }`다. 빈 트랙도 `0%`도 만들지 않는다(§0-8 판정 2).
+  const first = await engineLimits(["mystery-engine", "mystery-engine"]);
+  assert.deepEqual(Object.keys(first), ["mystery-engine"]); // 중복은 접힌다 = 호출도 한 번이다
+  assert.ok("error" in first["mystery-engine"]);
+  assert.match(first["mystery-engine"].error, /원본을 모릅니다/);
+
+  // TTL(60초) 안이면 **같은 객체**가 돌아온다 — 캐시가 값이 아니라 Promise를 들고 있다는 증거고,
+  // 이게 "5초 폴링마다 외부 호출을 하지 않는다"의 실체다.
+  const second = await engineLimits(["mystery-engine"]);
+  assert.strictEqual(second["mystery-engine"], first["mystery-engine"]);
 });
