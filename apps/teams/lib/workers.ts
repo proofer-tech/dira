@@ -61,6 +61,8 @@ export type Worker = {
   context: WorkerContext;
   /** 공통 컨텍스트 `source` 줄이 있는가. false면 이 워커는 공통을 못 받는다 (§4-1) */
   commonSource: boolean;
+  /** 자가 정리 `source` 줄이 있는가. false면 dira를 지워도 이 워커의 cron 줄이 남는다 (§4-4) */
+  selfHealSource: boolean;
   /** `TICKET_CWD` (셸 없이 읽은 절대경로). null = 줄이 없다 → 엔진 기본값은 루트의 부모다 */
   cwd: string | null;
   /** 작업 디렉터리 결함 (§4). **0개가 정상이고 그때 화면은 아무것도 늘지 않는다** */
@@ -925,6 +927,8 @@ export async function listWorkers(root: string, tickets: Ticket[] = []): Promise
       context: await contextOf(root, text, parsed.cwd),
       // 이 줄이 없는 워커는 공통을 못 받는다 — 화면이 경고 + `공통 적용`을 띄운다(§4-1).
       commonSource: commonSourceRe.test(text),
+      // 이 줄이 없는 워커는 자기 cron 줄을 못 뺀다 — 화면이 경고 + `자가 정리 적용`(§4-4 §소급).
+      selfHealSource: selfHealSourceRe.test(text),
       cwd: parsed.cwd,
       defects: [], // 공유 판정이 목록 전체를 봐야 하므로 행을 다 만든 뒤에 채운다
     });
@@ -1160,6 +1164,11 @@ export function selfHealSourceLine(root: string, repo: string): string {
   return `. ${dq(path.join(root, SELF_HEAL_FILE))} ${dq(path.join(repo, "tick.sh"))}   # 제거 자기치유(§4-4)`;
 }
 
+/** ponytail: `self-heal.sh`를 `.` 하는 줄이면 무엇이든 있는 것으로 본다(경로 비교를 안 한다) —
+ *  `commonSourceRe`와 같은 천장이고 같은 이유다(경로 비교엔 NFC 정규화 + `$HOME` 전개가 같이
+ *  필요하다). 다른 큐의 `self-heal.sh`를 가리키는 줄까지 통과시키는 것이 대가다. */
+const selfHealSourceRe = /^[ \t]*(?:\.|source)[ \t]+[^\n]*self-heal\.sh/m;
+
 /** `<루트>/self-heal.sh`의 전문. GUI가 만들고 관리한다(선례: `context.sh`·`dispatch-gate.sh`).
  *  **엔진이 아니다** — `tick.sh`·`tickets.py`는 이 기능으로 한 줄도 안 바뀐다(불변식 1).
  *
@@ -1236,6 +1245,58 @@ fi
 [ "$_dira_gone" = 1 ] && exit 0
 unset _dira_engine _dira_gone _dira_tab _dira_cut
 `;
+
+/** 소급 (§4-4 §소급): `<루트>/self-heal.sh`를 **없으면 만들고**, 워커 파일의 `. tick.sh`
+ *  **바로 위**에 `source` 줄을 끼운다. 줄이 이미 있으면 `false`(no-op) — 두 번 넣지 않는다.
+ *
+ *  **엔진 경로는 그 워커의 `. tick.sh` 줄에서 읽는다.** 엔진 코드가 어디 있는지는 워커 파일에만
+ *  적혀 있어 GUI가 다른 데서 알 수 없다(`createWorker`가 템플릿을 요구하는 것과 같은 이유).
+ *  셸 없이 못 펴면(`$DIRA_REPO/tick.sh` 같은 값) **쓰지 않고** 사유를 준다 — 이 줄이 틀리면
+ *  자가 정리가 멀쩡한 엔진을 없다고 보고 산 워커의 cron 줄을 뺀다.
+ *
+ *  ponytail: 줄이 있는데 `self-heal.sh`가 없는 상태(사람이 파일만 지웠다)는 카드가 경고하지
+ *  않는다 — 판정이 §4-1 `commonSource`와 같은 축(줄 하나)이다. 그 상태가 생기면 그때 잰다. */
+export async function applySelfHeal(root: string, name: string): Promise<boolean> {
+  const file = await workerFile(root, name);
+  const text = await readFile(file, "utf8");
+
+  // 실행 파일이 아니다(워커가 `.` 한다) — `context.sh`·`dispatch-gate.sh`와 같은 644.
+  // **있으면 안 덮는다**: 파일이 두 번 늘지 않는다는 것이 이 액션의 계약이다.
+  const heal = path.join(root, SELF_HEAL_FILE);
+  const exists = await stat(heal).then(
+    () => true,
+    () => false,
+  );
+  if (!exists) await atomicWrite(heal, SELF_HEAL_SH, 0o644);
+  if (selfHealSourceRe.test(text)) return false;
+
+  const m = text.match(sourceTick); // `/m` 앵커라 index가 그 줄 처음이다
+  if (!m || m.index === undefined) {
+    throw new Error(
+      `${name}.sh에 \`. <레포>/tick.sh\` 줄이 없습니다 — 자가 정리를 넣을 자리를 GUI가 짚을 수 없습니다. 파일을 손으로 편집하세요.`,
+    );
+  }
+  const tick = shellValue(m[1]);
+  if (tick === null || !path.isAbsolute(expandHome(tick))) {
+    throw new Error(
+      `${name}.sh의 엔진 경로를 셸 없이 펼 수 없습니다: ${m[1].trim()}. 파일을 손으로 편집하세요.`,
+    );
+  }
+  const line = selfHealSourceLine(root, path.dirname(expandHome(tick)));
+  const next = text.slice(0, m.index) + line + "\n" + text.slice(m.index);
+  // 자기 검증 둘: ① 그 줄만 늘었다(다른 바이트를 안 밟았다) ② `. tick.sh`가 **바로 다음 줄**이다.
+  const back = next.match(sourceTick);
+  if (
+    next.replace(line + "\n", "") !== text ||
+    !back ||
+    back.index !== m.index + line.length + 1 ||
+    !selfHealSourceRe.test(next)
+  ) {
+    throw new Error("줄을 넣은 뒤 파일이 예상과 달라집니다. 쓰지 않았습니다.");
+  }
+  await atomicWrite(file, next, (await stat(file)).mode & 0o777); // 755를 잃지 않는다
+  return true;
+}
 
 /** 워크트리 준비 명령 **2줄 + 검증 1줄**(§4 생성 4항). GUI가 실패했을 때 사람이 셸에서
  *  이어서 실행하는 문자열이다 — 성공하면 아무 데도 안 보인다.

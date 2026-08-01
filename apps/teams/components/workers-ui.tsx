@@ -11,6 +11,7 @@ import { useState, useTransition } from "react";
 import { ArrowDown, ArrowUp, Check, CircleQuestionMark, TriangleAlert, X } from "lucide-react";
 import {
   applyCommonSourceAction,
+  applySelfHealAction,
   copyContextAction,
   createWorkerAction,
   deleteWorkerAction,
@@ -73,6 +74,8 @@ export type WorkerRow = {
   context: { ok: true; items: ContextRow[] } | { ok: false; reason: string };
   /** 공통 컨텍스트 `source` 줄이 있는가. false면 이 워커는 공통을 못 받는다 (§4-1) */
   commonSource: boolean;
+  /** 자가 정리 `source` 줄이 있는가. false면 dira를 지워도 이 워커의 cron 줄이 남는다 (§4-4) */
+  selfHealSource: boolean;
   /** `TICKET_CWD`. null = 줄이 없다(엔진 기본값 = 루트의 부모) */
   cwd: string | null;
   /** 작업 디렉터리 결함 (§4). **0개가 정상**이고 그때 행은 아무것도 늘지 않는다.
@@ -810,7 +813,11 @@ export function WorkerContextCard({
   const [copyTo, setCopyTo] = useState<string | null>(null);
   const [copyError, setCopyError] = useState<string | null>(null);
   const [applyError, setApplyError] = useState<string | null>(null);
+  const [healError, setHealError] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  // 자가 정리는 **다른 파일에 다른 줄을 쓴다**(§4-4) — 전이를 나눠야 한쪽이 도는 동안
+  // 나머지 버튼이 남의 라벨(`적용 중…`)로 서지 않는다.
+  const [healing, startHeal] = useTransition();
   const gets = row.commonSource ? common : [];
 
   return (
@@ -861,6 +868,40 @@ export function WorkerContextCard({
                 {pending ? "적용 중…" : "공통 적용"}
               </Button>
               {applyError && <Failure title="공통을 적용하지 못했습니다" message={applyError} />}
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* 이 줄이 없으면 그 워커는 자기 cron 줄을 뺄 코드를 못 만난다 — dira를 지워도 줄이 남아
+          cron이 1분마다 없는 파일을 부른다(§4-4 §소급). 모양은 위 `공통 적용`과 같다. */}
+      {!row.selfHealSource && (
+        <Alert>
+          <TriangleAlert aria-hidden className="text-status-stale" />
+          <AlertTitle>이 워커는 지워도 cron 줄이 남습니다</AlertTitle>
+          <AlertDescription>
+            <div className="space-y-2">
+              <p>
+                {row.name}.sh에 <span className="font-mono text-xs">self-heal.sh</span>를{" "}
+                <span className="font-mono text-xs">.</span> 하는 줄이 없습니다 — dira를 지우면 이
+                워커의 crontab 2줄을 뺄 코드가 돌지 않고, cron이 1분마다 없는 파일을 부릅니다.
+                적용하면 <span className="font-mono text-xs">. tick.sh</span> 바로 위에 한 줄이
+                들어갑니다(엔진 경로는 이 파일의 그 줄에서 읽습니다).
+              </p>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={healing}
+                onClick={() =>
+                  startHeal(async () => {
+                    const r = await applySelfHealAction(projectId, row.name);
+                    setHealError(r.ok ? null : (r.message ?? "줄을 넣지 못했습니다."));
+                  })
+                }
+              >
+                {healing ? "적용 중…" : "자가 정리 적용"}
+              </Button>
+              {healError && <Failure title="자가 정리를 적용하지 못했습니다" message={healError} />}
             </div>
           </AlertDescription>
         </Alert>

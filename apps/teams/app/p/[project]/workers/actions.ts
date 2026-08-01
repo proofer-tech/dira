@@ -12,6 +12,7 @@ import { runWorker } from "@/lib/engine";
 import { getProject } from "@/lib/projects";
 import {
   applyCommonSource,
+  applySelfHeal,
   copyContext,
   createWorker,
   cronRegisterCmd,
@@ -197,6 +198,21 @@ export async function applyCommonSourceAction(
 ): Promise<WorkerActionResult> {
   try {
     await applyCommonSource(await rootOf(projectId), name);
+    revalidatePath(`/p/${projectId}`, "layout");
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** `<루트>/self-heal.sh`를 없으면 만들고 `source` 줄을 `. tick.sh` 위에 끼운다 (§4-4 §소급).
+ *  이 줄이 없으면 dira를 지워도 그 워커의 cron 줄이 crontab에 남는다. 이미 있으면 no-op이다. */
+export async function applySelfHealAction(
+  projectId: string,
+  name: string,
+): Promise<WorkerActionResult> {
+  try {
+    await applySelfHeal(await rootOf(projectId), name);
     revalidatePath(`/p/${projectId}`, "layout");
     return { ok: true };
   } catch (e) {

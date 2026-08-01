@@ -14,7 +14,7 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { listTickets } from "./queue.ts";
 
@@ -24,6 +24,7 @@ process.env.TICKET_LOCAL = LOCAL;
 
 const {
   applyCommonSource,
+  applySelfHeal,
   commonSourceLine,
   copyContext,
   createWorker,
@@ -1202,6 +1203,57 @@ test("applyCommonSource — 삽입 위치는 닫는 `)` 다음 줄, 두 번째�
   // 블록이 없으면 어디에 넣을지 추측하지 않는다
   await assert.rejects(applyCommonSource(root, "bad"), /손으로 편집하세요/);
   await assert.rejects(applyCommonSource(root, "../evil"), /영문·숫자/);
+});
+
+test("applySelfHeal — 픽스처 큐 왕복 1회: 경고 뜸 → 적용 → 경고 사라짐 → bash -n (§4-4 §소급)", async () => {
+  const root = makeRoot({
+    "w1.sh": CTX_SH,
+    "rel.sh": "#!/bin/bash\n. tick.sh\n", // 상대경로 = 셸 없이 못 편다
+    "none.sh": "#!/bin/bash\necho x\n", // `. tick.sh` 줄이 없다 = 워커가 아니다
+  });
+  const file = path.join(root, "workers", "w1.sh");
+  chmodSync(file, 0o755);
+  const heal = path.join(root, SELF_HEAL_FILE);
+
+  // ① 경고가 뜬다 = 줄이 없다. 파일도 아직 없다
+  assert.strictEqual((await listWorkers(root)).find((w) => w.name === "w1")!.selfHealSource, false);
+  assert.strictEqual(existsSync(heal), false);
+
+  // ② 적용
+  assert.strictEqual(await applySelfHeal(root, "w1"), true);
+  // 파일은 GUI가 관리하는 그 문자열 그대로 + 644(실행 파일이 아니다 — 워커가 `.` 한다)
+  assert.strictEqual(readFileSync(heal, "utf8"), SELF_HEAL_SH);
+  assert.strictEqual(statSync(heal).mode & 0o777, 0o644);
+  // 엔진 경로는 워커 자신의 `. tick.sh` 줄에서 읽는다 — `$HOME`이 펴진 값이다
+  const line = selfHealSourceLine(root, path.join(homedir(), "Projects", "dira"));
+  const text = readFileSync(file, "utf8");
+  // **바로 위**다. 아래면 엔진이 없을 때 이 줄에 닿기 전에 워커가 죽는다
+  assert.strictEqual(
+    text,
+    CTX_SH.replace('. "$HOME/Projects/dira/tick.sh"', `${line}\n. "$HOME/Projects/dira/tick.sh"`),
+  );
+  assert.strictEqual(statSync(file).mode & 0o777, 0o755); // 755를 잃지 않는다
+
+  // ③ 두 파일 다 진짜 bash가 읽는다
+  execFileSync("bash", ["-n", file]);
+  execFileSync("bash", ["-n", heal]);
+
+  // ④ 경고가 사라진다
+  assert.strictEqual((await listWorkers(root)).find((w) => w.name === "w1")!.selfHealSource, true);
+
+  // ⑤ 두 번째는 no-op — 줄도 파일도 두 벌이 안 된다
+  assert.strictEqual(await applySelfHeal(root, "w1"), false);
+  assert.strictEqual(readFileSync(file, "utf8"), text);
+  assert.strictEqual(text.split("self-heal.sh").length - 1, 1);
+  writeFileSync(heal, "손으로 고친 자국\n"); // 있는 파일은 안 덮는다
+  assert.strictEqual(await applySelfHeal(root, "w1"), false);
+  assert.strictEqual(readFileSync(heal, "utf8"), "손으로 고친 자국\n");
+
+  // ⑥ 못 펴는 엔진 경로·앵커 없음·이름 규칙은 **쓰지 않고** 사유를 준다
+  await assert.rejects(applySelfHeal(root, "rel"), /셸 없이 펼 수 없습니다/);
+  await assert.rejects(applySelfHeal(root, "none"), /이 줄이 없습니다|줄이 없습니다/);
+  await assert.rejects(applySelfHeal(root, "../evil"), /영문·숫자/);
+  assert.strictEqual(readFileSync(path.join(root, "workers", "rel.sh"), "utf8"), "#!/bin/bash\n. tick.sh\n");
 });
 
 /** `-l`과 `crontab -`이 **같은 파일**을 본다 — 쓴 뒤 다시 읽어 확인하는 `applyCrontab`의 경로다
