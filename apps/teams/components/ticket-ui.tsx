@@ -774,8 +774,20 @@ function DepsPicker({
  *  title 칸도 없다 — 첫 줄에서 만든다.
  *
  *  버튼이 곧 `DialogTrigger`다(§3 — 라우트가 없다). `mode=req` hidden input이 서버가 kind·persona를
- *  고정하는 경로고, **성공이 `redirect`가 아니라 `{ ok, hash }`로 돌아오는 경로**이기도 하다. */
-export function RequestDialog({ project }: { project: string }) {
+ *  고정하는 경로고, **성공이 `redirect`가 아니라 `{ ok, hash }`로 돌아오는 경로**이기도 하다.
+ *
+ *  **인스턴스는 둘이다**(§3 `키(r)는 프로젝트 셸 어디서나 듣는다`): 보드 우상단의 `button`과
+ *  프로젝트 셸의 `hotkey`. 트리거가 곧 그 인스턴스의 정체라 `SettingsDialog`(§0-4)와 같은
+ *  모양이고, 전역 상태도 URL 파라미터도 만들지 않는다 — 동시에 열릴 수 없다. */
+export function RequestDialog({
+  project,
+  trigger = "button",
+}: {
+  project: string;
+  /** `button` = 보드 우상단. `hotkey` = 프로젝트 셸에 한 번 마운트되는 **트리거 없는** 것 —
+   *  버튼을 안 그리고 `r`을 듣는 유일한 인스턴스다(§3). */
+  trigger?: "button" | "hotkey";
+}) {
   const [state, action, pending] = useActionState<NewTicketState, FormData>(createTicket, {});
   // 본문은 **controlled**여야 한다: React 19는 form action이 끝나면 폼을 리셋하므로, uncontrolled면
   // 발행이 실패한 순간 사람이 쓴 글이 사라진다(실측). 실패 사유만 남고 본문이 비면 사유가 무의미하다.
@@ -798,16 +810,19 @@ export function RequestDialog({ project }: { project: string }) {
     setDismissed(state);
   });
 
-  // `r`(§0-6 `board.request`). **보드에만 있는 컴포넌트라 범위가 저절로 맞는다.** 여는 것도
-  // 닫는 경로 넷과 같은 `guard.close`다 — 상태를 새로 만들지 않는다.
+  // `r`(§0-6 `board.request`). **셸 인스턴스 하나만 듣는다** — 보드에는 이 컴포넌트가 둘이고
+  // 둘 다 들으면 키 한 번에 다이얼로그가 둘 열린다(§3 · `SettingsDialog`이 `icon`만 듣는 그 모양).
+  // 여는 것도 닫는 경로 넷과 같은 `guard.close`다 — 상태를 새로 만들지 않는다.
   useHotkey("board.request", (e) => {
+    if (trigger !== "hotkey") return;
     e.preventDefault();
     guard.close(true);
   });
 
   return (
     <Dialog open={guard.open} onOpenChange={guard.close}>
-      <DialogTrigger render={<Button size="sm" />}>요구 접수</DialogTrigger>
+      {/* 셸 것은 버튼을 안 그린다 — 헤더에 여섯 번째 것이 붙지 않고 보드 우상단 쌍도 무수정이다(§3) */}
+      {trigger === "button" && <DialogTrigger render={<Button size="sm" />}>요구 접수</DialogTrigger>}
       {/* 천장은 발행 다이얼로그와 같은 한 줄이다 — 이 폼의 `<Textarea>`는 `field-sizing-content`라
           본문만큼 자라는데 여기엔 `max-h`도 `overflow`도 없어 900 화면에서 본문 34줄이면 스크롤도
           없이 잘렸다. 칩 줄이 그 지점을 26줄로 당긴다(§비주얼 §27 높이 항 — 첨부가 만든 결함이

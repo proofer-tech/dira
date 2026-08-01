@@ -15,6 +15,7 @@ import {
 } from "@/components/project-switcher";
 import { SettingsDialog } from "@/components/settings-dialog";
 import { StatusBadge } from "@/components/status-badge";
+import { RequestDialog } from "@/components/ticket-ui";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { readAuth } from "@/lib/auth";
 import { readSummary, readProjects } from "@/lib/projects";
@@ -187,7 +188,16 @@ export default async function ProjectLayout({
           </Alert>
         )}
         {current.connected ? (
-          children
+          <>
+            {/* 요구 접수 다이얼로그 — **버튼 없이 `r`만 듣는다**(§3 · §0-6 `board.request`).
+                요구는 워커 화면에서 세션이 죽는 걸 보다가, 티켓 상세를 읽다가 생긴다 —
+                보드로 한 번 이동하게 하면 그 이동이 요구를 삼킨다. 보드에도 이 컴포넌트가
+                있지만 그쪽은 버튼이고 키를 안 듣는다(§0-4 `SettingsDialog`과 같은 모양).
+                **`connected`일 때만 선다**: 못 읽는 큐에는 접수해도 파일을 못 쓰는데,
+                열리고 나서 실패 사유를 보여 주면 사람이 글을 다 쓴 뒤에 잃는다(§3). */}
+            <RequestDialog project={id} trigger="hotkey" />
+            {children}
+          </>
         ) : (
           // 경로가 없는 건 파괴가 아니라 부재다 — destructive를 쓰지 않는다(§8).
           <Alert className="max-w-3xl">
