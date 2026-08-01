@@ -398,7 +398,11 @@ export function HomeUI({ project, initial }: { project: string; initial: HomeChu
                       **상한 5분을 적는 유일한 자리다** — 초를 세는 시계를 두지 않는다. */}
                   {busy && (
                     <MessageScrollerItem key="running" messageId="running">
-                      <Prose text={partial} />
+                      {/* 첫 글자 전에는 산문을 **안 그린다**(§24 흐름 항). 빈 `partial`을 넘기면
+                          §10이 `(내용 없음)`을 내는데, 여기만 *끝난 빈 것*이 아니라 *아직 안 온 것*
+                          이라 그 문장이 거짓이다(실측 7.6초 동안 읽힌다). 로딩을 말하는 것은
+                          아래 띠고, §10도 끝난 답의 렌더도 그대로 둔다. */}
+                      {partial !== "" && <Prose text={partial} />}
                       <Band>
                         <span
                           aria-hidden
