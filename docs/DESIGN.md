@@ -3576,13 +3576,93 @@ $ crontab -l | diff -q - /tmp/cron-probe.bak                        # 차이 없
 - **§비주얼 §24가 거절한 "도는 동안만 그렸다 지우는 절충"과 다르다.** 그 문장이 막은 것은
   **도구 호출 줄**(새로고침 전후로 화면에 있는 것이 갈린다)이고, 여기서 갈리는 것은 같은 답의
   **완성도**다. 도는 중에 새로고침해도 서버가 그 누적분을 그대로 준다 — 화면이 갈리지 않는다.
-- **전달 방식은 실측이 정한다**(SSE인지, 폴링 주기를 낮춘 지금 경로인지). 엔진이 부분 텍스트를
-  어떤 형식으로 주는지가 먼저다 — `--output-format json`은 마지막 한 줄뿐이라 이 값이 없다.
+- **전달 방식은 실측이 정했다 — 폴링 주기를 낮춘 지금 경로다**(도는 동안 500ms · SSE 아님).
+  근거는 아래 §답은 흐른다 — 실측의 마지막 문단이고, 델타 간격을 재서 갈랐다.
   **새 npm 패키지로 스트리밍을 들이지 않는다**(§제약 — GUI 의존성도 근거를 스펙에 적는다).
-  실측 티켓이 이 문단을 채운다.
 - **`--output-format`이 바뀌어도 성패·사유 판정은 지금 자리 그대로다**(§비주얼 §24 실패 5종의
   `reason` 코드). 스트림 마지막 결과 객체가 그 값을 그대로 들고 있어야 하고, 아니면 실측이
   대체 경로를 적는다.
+
+#### 답은 흐른다 — 실측 (이 머신, 2026-08-01 · `88ff08f8` · claude 2.1.220)
+
+요구 `c5d22429`의 답 3=(b)가 답을 **토큰 단위로 흐르게** 하라고 했다. 지금 실행층은
+`--output-format json`이라 **마지막 한 줄**밖에 없어 부분 텍스트의 원본이 아예 없다.
+아래는 무엇을 어떤 형식으로 받을 수 있는지를 **직접 돌려서** 잰 것이다 — 플래그 이름을 믿고
+틀렸던 자리가 바로 옆에 있다(`89962e56`, `--allowed-tools`).
+
+커맨드는 지금 `TOOL_FLAGS`가 **무수정**이고 뒤 셋만 갈린다:
+
+```
+claude -p --session-id <uuid> --tools Read,Glob,Grep --strict-mcp-config \
+  --permission-mode manual --allowed-tools Read,Glob,Grep \
+  --output-format stream-json --include-partial-messages --verbose "<프롬프트>"
+```
+
+- **`--verbose`는 선택이 아니다.** 빼면 stdout이 0바이트고 stderr 한 줄로 죽는다:
+  `Error: When using --print, --output-format=stream-json requires --verbose`
+- **부분 텍스트를 주는 것은 `--include-partial-messages` 하나다.** 같은 프롬프트 A/B:
+
+  | 플래그 | stdout |
+  |---|---|
+  | `--output-format stream-json --verbose` | `system` … **`assistant` 한 건(완성된 답 통째)** · `result`. `stream_event` **0건** |
+  | 여기에 `--include-partial-messages` | 위 + `stream_event` 39건 — `content_block_delta`가 답을 나눠 나른다 |
+
+원문(위 커맨드로 `a.txt`를 읽고 다섯 문장 설명 · 프로세스 시작을 0ms · `session_id`와 `uuid`는
+길이만 줄였다):
+
+```
+ 7608ms {"type":"stream_event","event":{"type":"content_block_start","index":0,
+         "content_block":{"type":"text","text":""}},"session_id":"b72e…","parent_tool_use_id":null,"uuid":"9271…"}
+ 7608ms {"type":"stream_event","event":{"type":"content_block_delta","index":0,
+         "delta":{"type":"text_delta","text":"`"}}, …}
+ 8100ms … {"type":"text_delta","text":"a.txt`의 내용은 `hello from a.txt` 한 줄이 "}
+ 8586ms … {"type":"text_delta","text":"전부다. 요청이 \"이 디렉터리의 a.txt\"였"}
+   ⋮   (델타 10건)
+11776ms … {"type":"text_delta","text":" 텍스트로 그대로 해석했다."}
+11782ms {"type":"stream_event","event":{"type":"content_block_stop","index":0}, …}
+11890ms {"type":"result","is_error":false, … ,"subtype":"success","api_error_status":null,"result":"`a.txt`의 …"}
+```
+
+읽어야 하는 것은 **`text_delta` 한 종류뿐**이고, 나머지는 이 화면이 안 그린다:
+
+| 온 것 | 처리 |
+|---|---|
+| `content_block_delta` · `delta.type == "text_delta"` | **누적한다.** 이게 흐르는 답이다 |
+| `thinking_delta` | 버린다. 본문이 **빈 문자열로 온다**(`{"thinking":"","estimated_tokens":50}`) — 붙여도 아무것도 안 붙는다 |
+| `signature_delta` · `input_json_delta` | 버린다. 뒤엣것은 도구 인자다(`{"file_path": "/private/tmp/…`) — §비주얼 §24가 도구 호출 줄을 안 그린다 |
+| `message_start` | **누적기를 비운다.** `index`는 메시지 안에서만 유일하다 — 도구를 한 번 쓴 위 세션에서 `index: 0`이 두 번 났다(첫 메시지의 `thinking`, 둘째 메시지의 `text`) |
+| `parent_tool_use_id` | `isSidechain`의 자리다(§2-1이 `sidechain`으로 거르는 그것) |
+
+**델타는 토큰 하나가 아니라 글자 뭉치다.** 출력 539토큰짜리 답 하나가 델타 **10건**이고 간격
+중앙값 **480ms**(196~718ms). 이 수가 아래 전달 방식 판정의 근거다.
+
+**성패·사유 판정은 그대로 산다.** `runClaude`가 읽던 세 키가 전부 `{"type":"result"}` 한 줄에 있다
+— 인증 실패는 `HOME=<빈 디렉터리>` + 못 쓰는 토큰으로 냈고, `json` 형식에서 잰 값(§비주얼 §24 ②)과
+**글자로 같다**:
+
+| 키 | 성공 | 인증 실패 |
+|---|---|---|
+| `is_error` | `false` | `true` |
+| `subtype` | `success` | `success` — **여전히 안 갈린다** |
+| `api_error_status` | `null` | `401` |
+| `result` | 답 전문 | `"Failed to authenticate. API Error: 401 OAuth access token is invalid."` |
+| `permission_denials` | `[]` | (없음) |
+| rc | 0 | 1 |
+
+실패 때는 `stream_event`가 **0건**이라 누적분이 비어 있다 — 흐르다 만 글과 안 흐른 글이
+구분된다. 다만 **`result`를 `마지막 줄`로 집지 않는다**: `--verbose`가 `system`(`init` ·
+`status` · `hook_started` · `hook_response` · `api_retry`) · `rate_limit_event`를 같은 stdout에
+섞는다. 줄마다 파싱해 `type`으로 가른다.
+
+**전달 방식 — 폴링 주기를 낮춘다. SSE를 만들지 않는다.** 새 npm 패키지는 **어느 쪽도 필요 없다**
+(Next.js Route Handler가 `ReadableStream`을 그대로 돌려준다). 그래서 갈리는 것은 의존성이 아니라
+코드 양과 **얻는 시간**인데, 얻는 시간이 위에서 잰 480ms에 묶여 있다 — 도는 동안 500ms 폴링이면
+델타 하나가 평균 250ms 늦게 붙고, 500ms에 한 뭉치씩 붙는 글에서 그건 안 보인다. 누적은 어느 쪽이든
+서버가 한다(`runs` 맵이 이미 그 자리다 — 도는 중에 새로고침해도 같은 것을 그려야 하므로 SSE여도
+이 맵은 남는다). 그러면 SSE가 더 만드는 것은 **라우트 하나 · 재연결 · abort 처리**이고, 지금
+`pollHomeAnswer`(서버 액션)는 `partial` 문자열 한 칸이 늘 뿐이다. 주기는 **도는 동안만** 500ms다
+— 안 도는 화면은 여전히 폴링하지 않는다. 천장은 적어 둔다: 5분을 다 쓰면 왕복 600회이고 한 번이
+`readSessionId` + 트랜스크립트 tail이다. 사람이 "답이 끊겨 보인다"고 말하는 날 SSE로 올린다.
 
 #### 도는 답을 멈춘다 — `중지` (답 1=(c))
 
@@ -3597,9 +3677,55 @@ $ crontab -l | diff -q - /tmp/cron-probe.bak                        # 차이 없
 | 상태 | 실패가 아니라 **`중지됨`**이다. §비주얼 §24 실패 5종에 여섯 번째를 만들지 않는다(사람이 한 일은 고장이 아니다) |
 | 그 뒤 | 입력칸이 곧바로 열린다. 다음 질문은 **같은 대화에 이어진다**(`--resume`) |
 
-**중지된 턴이 트랜스크립트에 어떻게 남는지는 실측 대상이다.** 부분 답이 기록되지 않으면 다음
-`--resume`이 그 턴을 못 보거나 세션이 깨질 수 있다 — 깨지면 그 사실을 화면이 말하고(새 대화를
-권한다), 실행층 티켓의 `## Done when`이 이걸 판정한다.
+**중지된 턴이 트랜스크립트에 어떻게 남는지는 쟀다 — 아래 §도는 답을 멈춘다 — 실측.** 결론만
+먼저: **남는다.** 받은 데까지가 기록되고 `--resume`이 같은 파일에 이어진다. 세션이 깨지는 경우를
+화면이 말할 일은 없어졌고, 대신 **사람도 에이전트도 쓰지 않은 줄 셋**을 화면이 걸러야 한다.
+
+#### 도는 답을 멈춘다 — 실측 (이 머신, 2026-08-01 · `88ff08f8`)
+
+`SIGTERM`으로 죽인 턴은 **트랜스크립트에 남고**, 같은 session id로 `--resume`이 **그대로 돈다.**
+40문장을 쓰게 해 놓고 `text_delta` 8건째(35.7초)에 죽였다. 이 절은 잰 것만 적는다 — `중지`를
+둘지는 바로 위 절이 이미 정했다.
+
+**⑴ 죽는 방식 — 종료 코드 `143`이고, 신호에 즉사한 게 아니다.** 재는 쪽(python `Popen.wait()`)이
+신호사에는 음수(`-15`)를 주는데 **양수 143**이 왔다 — `claude`가 `SIGTERM`을 받아 **스스로**
+그 코드로 나간다는 뜻이다. 나가면서 stdout에 **완성 `assistant` 이벤트를 하나 더 뱉는다**(받은
+데까지의 텍스트가 거기 그대로 있다). `SIGKILL` 재시도 사다리를 만들 근거가 없다.
+
+**⑵ 트랜스크립트 — 남는다.** `~/.claude/projects/<cwd>/<sid>.jsonl` 레코드 10건, 뒤 다섯:
+
+```
+5 user        '숫자 1부터 40까지 각 숫자마다 한 문장씩, …'
+6 last-prompt
+7 assistant   ['thinking'] ''
+8 assistant   ['text'] '1. 1은 곱셈의 항등원으로서 …'      ← 받은 데까지가 그대로 있다
+9 user        ['text'] '[Request interrupted by user]'
+```
+
+**⑶ `--resume` — 이어진다.** 같은 sid로 다시 물어 `is_error: false`로 답했고, 답의 첫 문장이
+`"2번 문장을 쓰다가 중간에 끊겼습니다."`였다 — 끊긴 자리를 모델이 알고 있다. **새 파일이 아니라
+같은 파일에 이어진다**(레코드 10 → 19 · 27947 → 34586 바이트). `findTranscript(sid)` ·
+`tailEvents(offset)`가 중지를 사이에 두고도 그대로 돈다 — 화면이 세션을 갈아 끼울 일이 없다.
+
+**⑷ 중지가 화면에 남기는 가짜 줄은 셋이다.** 위 파일을 §2-1 읽기 코어에 그대로 먹여 봤다
+(`tailEvents` → `toTurns`, 실제 출력):
+
+```
+[question] 숫자 1부터 40까지 각 숫자마다 한 문장씩, …      ← 사람이 쓴 질문
+[answer]   1. 1은 곱셈의 항등원으로서 …                  ← 받은 데까지. 남는다
+[question] [Request interrupted by user]                 ← 중지가 남긴 것
+[question] Continue from where you left off.             ← `--resume`이 넣은 것
+[answer]   No response requested.                        ← 그 답
+[question] 방금 어디까지 썼는지 한 문장으로 말하고, …      ← 사람이 쓴 다음 질문
+[answer]   2번 문장을 쓰다가 중간에 끊겼습니다. …
+```
+
+`recordToEvents`가 `role === "user"`인 `text` 블록을 전부 `prompt`로 만들기 때문이다
+(`lib/transcript.ts`). 가운데 셋은 사람도 에이전트도 쓰지 않은 말이고, `Continue from where you
+left off.` 쌍은 **중지한 세션을 이어야 나타난다** — 중지 직후 화면에는 없다가 다음 질문에
+따라 들어온다. 중지를 붙이는 티켓이 이 셋을 **거른다**(§비주얼 §24가 그리는 것은 질문과 답
+둘뿐이다). 문자열 세 개로 거르는 것이 지금 가진 유일한 단서다 — 이 레코드들에는 사람이 쓴 것과
+구분되는 플래그가 없다.
 
 #### 끝난 답에 붙는 것 둘 — `복사` · `다시 답하기` (답 1=(c))
 
@@ -3695,133 +3821,6 @@ designer가 정한다 — 스트림 줄(§비주얼 §9) · 말풍선(§13) · �
 
 **폴링은 답이 도는 동안만 돈다**(§2-1의 `live`와 같은 모양). 홈 화면 자체는 5초 폴링을 하지
 않는다 — 큐를 따라가는 화면이 아니다.
-
-#### 답은 흐른다 — 실측 (이 머신, 2026-08-01 · `88ff08f8` · claude 2.1.220)
-
-요구 `c5d22429`의 답 3=(b)가 답을 **토큰 단위로 흐르게** 하라고 했다. 지금 실행층은
-`--output-format json`이라 **마지막 한 줄**밖에 없어 부분 텍스트의 원본이 아예 없다.
-아래는 무엇을 어떤 형식으로 받을 수 있는지를 **직접 돌려서** 잰 것이다 — 플래그 이름을 믿고
-틀렸던 자리가 바로 옆에 있다(`89962e56`, `--allowed-tools`).
-
-커맨드는 지금 `TOOL_FLAGS`가 **무수정**이고 뒤 셋만 갈린다:
-
-```
-claude -p --session-id <uuid> --tools Read,Glob,Grep --strict-mcp-config \
-  --permission-mode manual --allowed-tools Read,Glob,Grep \
-  --output-format stream-json --include-partial-messages --verbose "<프롬프트>"
-```
-
-- **`--verbose`는 선택이 아니다.** 빼면 stdout이 0바이트고 stderr 한 줄로 죽는다:
-  `Error: When using --print, --output-format=stream-json requires --verbose`
-- **부분 텍스트를 주는 것은 `--include-partial-messages` 하나다.** 같은 프롬프트 A/B:
-
-  | 플래그 | stdout |
-  |---|---|
-  | `--output-format stream-json --verbose` | `system` … **`assistant` 한 건(완성된 답 통째)** · `result`. `stream_event` **0건** |
-  | 여기에 `--include-partial-messages` | 위 + `stream_event` 39건 — `content_block_delta`가 답을 나눠 나른다 |
-
-원문(위 커맨드로 `a.txt`를 읽고 다섯 문장 설명 · 프로세스 시작을 0ms · `session_id`와 `uuid`는
-길이만 줄였다):
-
-```
- 7608ms {"type":"stream_event","event":{"type":"content_block_start","index":0,
-         "content_block":{"type":"text","text":""}},"session_id":"b72e…","parent_tool_use_id":null,"uuid":"9271…"}
- 7608ms {"type":"stream_event","event":{"type":"content_block_delta","index":0,
-         "delta":{"type":"text_delta","text":"`"}}, …}
- 8100ms … {"type":"text_delta","text":"a.txt`의 내용은 `hello from a.txt` 한 줄이 "}
- 8586ms … {"type":"text_delta","text":"전부다. 요청이 \"이 디렉터리의 a.txt\"였"}
-   ⋮   (델타 10건)
-11776ms … {"type":"text_delta","text":" 텍스트로 그대로 해석했다."}
-11782ms {"type":"stream_event","event":{"type":"content_block_stop","index":0}, …}
-11890ms {"type":"result","is_error":false, … ,"subtype":"success","api_error_status":null,"result":"`a.txt`의 …"}
-```
-
-읽어야 하는 것은 **`text_delta` 한 종류뿐**이고, 나머지는 이 화면이 안 그린다:
-
-| 온 것 | 처리 |
-|---|---|
-| `content_block_delta` · `delta.type == "text_delta"` | **누적한다.** 이게 흐르는 답이다 |
-| `thinking_delta` | 버린다. 본문이 **빈 문자열로 온다**(`{"thinking":"","estimated_tokens":50}`) — 붙여도 아무것도 안 붙는다 |
-| `signature_delta` · `input_json_delta` | 버린다. 뒤엣것은 도구 인자다(`{"file_path": "/private/tmp/…`) — §비주얼 §24가 도구 호출 줄을 안 그린다 |
-| `message_start` | **누적기를 비운다.** `index`는 메시지 안에서만 유일하다 — 도구를 한 번 쓴 위 세션에서 `index: 0`이 두 번 났다(첫 메시지의 `thinking`, 둘째 메시지의 `text`) |
-| `parent_tool_use_id` | `isSidechain`의 자리다(§2-1이 `sidechain`으로 거르는 그것) |
-
-**델타는 토큰 하나가 아니라 글자 뭉치다.** 출력 539토큰짜리 답 하나가 델타 **10건**이고 간격
-중앙값 **480ms**(196~718ms). 이 수가 아래 전달 방식 판정의 근거다.
-
-**성패·사유 판정은 그대로 산다.** `runClaude`가 읽던 세 키가 전부 `{"type":"result"}` 한 줄에 있다
-— 인증 실패는 `HOME=<빈 디렉터리>` + 못 쓰는 토큰으로 냈고, `json` 형식에서 잰 값(§비주얼 §24 ②)과
-**글자로 같다**:
-
-| 키 | 성공 | 인증 실패 |
-|---|---|---|
-| `is_error` | `false` | `true` |
-| `subtype` | `success` | `success` — **여전히 안 갈린다** |
-| `api_error_status` | `null` | `401` |
-| `result` | 답 전문 | `"Failed to authenticate. API Error: 401 OAuth access token is invalid."` |
-| `permission_denials` | `[]` | (없음) |
-| rc | 0 | 1 |
-
-실패 때는 `stream_event`가 **0건**이라 누적분이 비어 있다 — 흐르다 만 글과 안 흐른 글이
-구분된다. 다만 **`result`를 `마지막 줄`로 집지 않는다**: `--verbose`가 `system`(`init` ·
-`status` · `hook_started` · `hook_response` · `api_retry`) · `rate_limit_event`를 같은 stdout에
-섞는다. 줄마다 파싱해 `type`으로 가른다.
-
-**전달 방식 — 폴링 주기를 낮춘다. SSE를 만들지 않는다.** 새 npm 패키지는 **어느 쪽도 필요 없다**
-(Next.js Route Handler가 `ReadableStream`을 그대로 돌려준다). 그래서 갈리는 것은 의존성이 아니라
-코드 양과 **얻는 시간**인데, 얻는 시간이 위에서 잰 480ms에 묶여 있다 — 도는 동안 500ms 폴링이면
-델타 하나가 평균 250ms 늦게 붙고, 500ms에 한 뭉치씩 붙는 글에서 그건 안 보인다. 누적은 어느 쪽이든
-서버가 한다(`runs` 맵이 이미 그 자리다 — 도는 중에 새로고침해도 같은 것을 그려야 하므로 SSE여도
-이 맵은 남는다). 그러면 SSE가 더 만드는 것은 **라우트 하나 · 재연결 · abort 처리**이고, 지금
-`pollHomeAnswer`(서버 액션)는 `partial` 문자열 한 칸이 늘 뿐이다. 주기는 **도는 동안만** 500ms다
-— 안 도는 화면은 여전히 폴링하지 않는다. 천장은 적어 둔다: 5분을 다 쓰면 왕복 600회이고 한 번이
-`readSessionId` + 트랜스크립트 tail이다. 사람이 "답이 끊겨 보인다"고 말하는 날 SSE로 올린다.
-
-#### 도는 답을 멈춘다 — 실측 (이 머신, 2026-08-01 · `88ff08f8`)
-
-`SIGTERM`으로 죽인 턴은 **트랜스크립트에 남고**, 같은 session id로 `--resume`이 **그대로 돈다.**
-40문장을 쓰게 해 놓고 `text_delta` 8건째(35.7초)에 죽였다. 이 절은 잰 것만 적는다 — `중지` 버튼을
-둘지는 요구 `c5d22429`의 답이 정했고, 아래 §안 만드는 것의 `취소 버튼` 항 정리는 pm이 한다.
-
-**⑴ 죽는 방식 — 종료 코드 `143`이고, 신호에 즉사한 게 아니다.** 재는 쪽(python `Popen.wait()`)이
-신호사에는 음수(`-15`)를 주는데 **양수 143**이 왔다 — `claude`가 `SIGTERM`을 받아 **스스로**
-그 코드로 나간다는 뜻이다. 나가면서 stdout에 **완성 `assistant` 이벤트를 하나 더 뱉는다**(받은
-데까지의 텍스트가 거기 그대로 있다). `SIGKILL` 재시도 사다리를 만들 근거가 없다.
-
-**⑵ 트랜스크립트 — 남는다.** `~/.claude/projects/<cwd>/<sid>.jsonl` 레코드 10건, 뒤 다섯:
-
-```
-5 user        '숫자 1부터 40까지 각 숫자마다 한 문장씩, …'
-6 last-prompt
-7 assistant   ['thinking'] ''
-8 assistant   ['text'] '1. 1은 곱셈의 항등원으로서 …'      ← 받은 데까지가 그대로 있다
-9 user        ['text'] '[Request interrupted by user]'
-```
-
-**⑶ `--resume` — 이어진다.** 같은 sid로 다시 물어 `is_error: false`로 답했고, 답의 첫 문장이
-`"2번 문장을 쓰다가 중간에 끊겼습니다."`였다 — 끊긴 자리를 모델이 알고 있다. **새 파일이 아니라
-같은 파일에 이어진다**(레코드 10 → 19 · 27947 → 34586 바이트). `findTranscript(sid)` ·
-`tailEvents(offset)`가 중지를 사이에 두고도 그대로 돈다 — 화면이 세션을 갈아 끼울 일이 없다.
-
-**⑷ 중지가 화면에 남기는 가짜 줄은 셋이다.** 위 파일을 §2-1 읽기 코어에 그대로 먹여 봤다
-(`tailEvents` → `toTurns`, 실제 출력):
-
-```
-[question] 숫자 1부터 40까지 각 숫자마다 한 문장씩, …      ← 사람이 쓴 질문
-[answer]   1. 1은 곱셈의 항등원으로서 …                  ← 받은 데까지. 남는다
-[question] [Request interrupted by user]                 ← 중지가 남긴 것
-[question] Continue from where you left off.             ← `--resume`이 넣은 것
-[answer]   No response requested.                        ← 그 답
-[question] 방금 어디까지 썼는지 한 문장으로 말하고, …      ← 사람이 쓴 다음 질문
-[answer]   2번 문장을 쓰다가 중간에 끊겼습니다. …
-```
-
-`recordToEvents`가 `role === "user"`인 `text` 블록을 전부 `prompt`로 만들기 때문이다
-(`lib/transcript.ts`). 가운데 셋은 사람도 에이전트도 쓰지 않은 말이고, `Continue from where you
-left off.` 쌍은 **중지한 세션을 이어야 나타난다** — 중지 직후 화면에는 없다가 다음 질문에
-따라 들어온다. 중지를 붙이는 티켓이 이 셋을 **거른다**(§비주얼 §24가 그리는 것은 질문과 답
-둘뿐이다). 문자열 세 개로 거르는 것이 지금 가진 유일한 단서다 — 이 레코드들에는 사람이 쓴 것과
-구분되는 플래그가 없다.
 
 #### 안 만드는 것
 
