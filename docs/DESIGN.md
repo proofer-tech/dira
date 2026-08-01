@@ -1497,44 +1497,120 @@ Q4=(a) 워커 화면 + 하단 status bar**). 요구 문장은 "토큰이 얼마�
 - 창 밖의 파일은 **파일명만 보고 건너뛴다**(열지 않는다). 창을 넓히는 것이 파일 여는 수를
   늘리는 유일한 축이다.
 
-#### 판정 2 — 엔진별 잔여. **쟀다** (`1d62c935`, 2026-08-01)
+#### 판정 2 — 엔진별 잔여. **쟀다** (`1d62c935` · `d8c085be`, 2026-08-01)
 
 | 엔진 | 원본이 있나 | 무엇을 주나 (키) | 창 | 새 네트워크 호출 |
 |---|---|---|---|---|
-| `claude` | **엔드포인트는 있다. 우리 토큰으로는 못 뚫었다** | `five_hour`·`seven_day`·`seven_day_opus`·`seven_day_sonnet` 각각 `{utilization, resets_at}` | **5시간 · 7일** | 필요하다(GET 1회) — **지금은 429** |
+| `claude` | **있다. 뚫었다 — `HTTP 200`** | `five_hour`·`seven_day` 각각 `{utilization, resets_at}` + `limits[]{kind, group, percent, severity, resets_at, is_active}` | **5시간 · 7일** | 필요하다(GET 1회) |
 | `codex` | **있다. 그리고 파일이다** | `rate_limits.primary.{used_percent, window_minutes, resets_at}` | **720시간(30일)** | **0** |
 
 **Q2의 `엔진마다 다를 것 같은데`가 사실로 확인됐다 — 5시간과 30일이다.** 하나의 창을 골라
 두 엔진에 씌우면 둘 중 하나가 거짓이 된다. status bar의 칸은 **엔진마다 자기 창을 말한다.**
 
-##### `claude` — 경로는 찾았고, 우리 토큰이 거절당한다
+##### `claude` — 뚫렸다. 막고 있던 것은 경로가 아니라 **토큰 서랍**이었다
 
 - **엔드포인트.** `GET https://api.anthropic.com/api/oauth/usage`. 설치된 CLI 번들
   (`~/.local/share/claude/versions/2.1.220`, 256MB Mach-O)의 문자열에서 나왔다 —
   `fetchUtilization: GET /api/oauth/usage` · `Hi.get("/api/oauth/usage",{timeout:5000,
   refreshOAuth:!0})`, base는 `Ds().BASE_API_URL`. **네트워크를 가로채지 않았다.**
-- **응답 키**(같은 번들의 zod 스키마): `five_hour` · `seven_day` · `seven_day_opus` ·
-  `seven_day_sonnet` · `seven_day_oauth_apps` · `cinder_cove` 가 각각
-  `{utilization: number|null, resets_at: string|null}`이고, 그 옆에 `extra_usage{is_enabled,
-  monthly_limit, used_credits, utilization, currency, disabled_reason}` ·
-  `limits[]{kind, group, percent, resets_at, scope.model.display_name}`.
-- **창.** 번들의 상수가 못 박는다: `five_hour` → `windowSeconds:18000`(5시간),
-  `seven_day` → `windowSeconds:604800`(7일). 추정이 아니라 코드에 적힌 값이다.
-- **실측 결과는 `HTTP 429`다.** `~/.config/dira/oauth-token`(`sk-ant-oat01…`)으로 GET 했더니
-  `{"type":"rate_limit_error"}` + `retry-after: 3554`(≈59분). `anthropic-ratelimit-*` 헤더는
-  하나도 안 온다. **왜인지도 같은 번들이 말한다** — `setup-token` 세션의 토큰은 스코프가
-  `user:inference` 하나뿐이고(`OAuth token has no scope accepted by /api/oauth/validate …
-  env-var and setup-token sessions default to user:inference only`), 상태줄 계약 역시
-  `missing profile scope — rate_limits will be null`이라고 적어 놓았다. **§0-4가 놓아 준
-  장기 토큰으로는 이 값을 못 읽는다.** 사람의 (c) 승인은 유효하지만 승인만으로는 안 열린다.
-- **디스크에도 없다**(질문 1의 실측 3 재확인). `~/.claude.json`에 `utilization` 0건 —
+- **토큰은 `~/.claude/.credentials.json`이다 — `~/.config/dira/oauth-token`이 아니다.**
+  두 서랍의 차이가 429와 200을 갈랐고, 차이는 스코프 하나다:
+
+  | 서랍 | 스코프 | 결과 |
+  |---|---|---|
+  | `~/.config/dira/oauth-token` (§0-4, `claude setup-token`) | `user:inference` | **`HTTP 429`** `rate_limit_error` |
+  | `~/.claude/.credentials.json` (`claudeAiOauth.accessToken`, CLI 로그인) | `user:file_upload` · `user:inference` · `user:mcp_servers` · **`user:profile`** · `user:sessions:claude_code` | **`HTTP 200`** |
+
+  `1d62c935`가 번들에서 읽어낸 진단이 맞았다 — `missing profile scope`. 다만 결론이
+  "못 읽는다"가 아니라 **"저 토큰으로는 못 읽는다"**였다. 같은 머신에 `user:profile`을 가진
+  토큰이 이미 있다(CLI가 로그인할 때 놓는 것이다). **§0-4의 장기 토큰은 이 값에 쓰이지 않는다.**
+- **실측 응답**(2026-08-01 15:30 KST, 200):
+  ```json
+  {"five_hour":{"utilization":38.0,"resets_at":"2026-08-01T10:00:00.460377+00:00",
+                "limit_dollars":null,"used_dollars":null,"remaining_dollars":null},
+   "seven_day":{"utilization":53.0,"resets_at":"2026-08-02T09:59:59.460399+00:00", …},
+   "seven_day_opus":null,"seven_day_sonnet":null,"seven_day_oauth_apps":null, …,
+   "extra_usage":{"is_enabled":false,"monthly_limit":100000,"used_credits":0.0,"utilization":0.0, …},
+   "limits":[{"kind":"session","group":"session","percent":38,"severity":"normal",
+              "resets_at":"2026-08-01T10:00:00.460377+00:00","scope":null,"is_active":false},
+             {"kind":"weekly_all","group":"weekly","percent":53,"severity":"normal",
+              "resets_at":"2026-08-02T09:59:59.460399+00:00","scope":null,"is_active":true},
+             {"kind":"weekly_scoped","group":"weekly","percent":0,"severity":"normal",
+              "resets_at":null,"scope":{"model":{"display_name":"Fable"}},"is_active":false}],
+   "spend":{…},"member_dashboard_available":false}
+  ```
+  **status bar가 쓰는 것은 `five_hour.{utilization, resets_at}` 둘이다.** `utilization`은
+  **쓴 %**다(잔여가 아니다 — 38%면 62% 남았다). `resets_at`은 **ISO 8601 문자열**이고
+  (codex의 유닉스 초와 다르다) 위 값은 KST 19:00 — 5시간 격자에 맞는다.
+- **창.** 번들의 상수가 못 박고(`five_hour` → `windowSeconds:18000` · `seven_day` →
+  `windowSeconds:604800`) 응답의 `resets_at`이 그것과 맞는다. 추정이 아니다.
+- **번들 스키마보다 응답이 넓다.** 실제 응답에는 zod에 없던 `limit_dollars`/`used_dollars`/
+  `remaining_dollars` · `seven_day_cowork` · `spend{}` · `limits[].severity`·`is_active`가 더
+  있고, 반대로 `seven_day_opus`·`seven_day_sonnet`은 **이 계정에서 `null`이다**
+  (`subscriptionType: max`, `rateLimitTier: default_claude_max_5x`). **비공개 API라 계약이
+  없다 — 읽는 쪽이 키 하나하나에 `null` 가드를 건다. 없는 키는 게이지를 안 그리는 사유다**
+  (아래 폴백 항).
+- **`anthropic-ratelimit-*` 헤더는 200에도 안 온다.** 값은 본문에만 있다. 429일 때의
+  `retry-after`는 고정 시각으로 수렴하지 않았다(15:03 → 3554, 15:30 → 2635; 같은 마감이면
+  1927이어야 한다) — **5시간 창의 리셋이 아니라 엔드포인트 자체의 롤링 스로틀이다.** 게이지가
+  쓸 값이 아니다.
+- **천장 둘.** ① **access token은 짧다** — 실측: 파일 mtime `11:43` · `expiresAt` `19:43`
+  (읽은 시각 15:30). **8시간짜리고 CLI가 갱신하며 다시 쓴다.** 옆에 `refreshToken`이 있지만
+  **우리는 갱신하지 않는다**
+  (사람 계정에 토큰을 발급하는 행위다). CLI가 돌면서 파일을 제자리 갱신하므로 **매 호출마다
+  파일을 다시 읽고, 401이면 폴백**한다. ② **읽는 것은 서버뿐이다** — `~/.claude/.credentials.json`은
+  `0600`이고 브라우저가 볼 수 없다(아래 남는 규칙).
+- **디스크의 캐시에는 없다**(질문 1의 실측 3 재확인). `~/.claude.json`에 `utilization` 0건 —
   번들에는 `cachedUsageUtilization`이라는 키가 있으나 이 머신 파일에는 안 쓰여 있다.
   `stats-cache.json`은 날짜별 메시지 수, `policy-limits.json`은 정책 플래그다.
   세션 트랜스크립트 4개 0건. **워커 로그의 `result` 줄에도 없다** — 키는 `usage` ·
   `modelUsage` · `total_cost_usd` · `stop_reason` …로 전부 소비 쪽이다(판정 1이 쓰는 그 줄이다).
-- **그래서 지금 claude 칸에는 게이지가 안 선다.** 아래 폴백 항이 그 자리를 받는다. 뚫을 길이
-  하나 남았고 그게 판정 3이 낸 `d8c085be`(`claude-usage` 레포 읽기)다 — 그 티켓이 답을 주기
-  전까지 **스펙은 이 엔드포인트를 status bar의 출처로 박지 않는다.**
+  **즉 잔여는 이 GET 말고 다른 길이 없다.**
+
+##### `claude-usage` 레포가 실제로 준 것 (`d8c085be`)
+
+답변 `4a2fe086` Q2가 준 `https://github.com/phuryn/claude-usage`(MIT, python 표준 라이브러리만)를
+읽었다. **찾던 넷이 하나도 없었다.**
+
+| 찾던 것 | 이 레포에 있나 |
+|---|---|
+| ① URL | **없다.** 레포 전체에 `api.anthropic.com`이 0건이다(HTTP 호출 자체가 없다) |
+| ② 인증 | **없다.** 토큰을 읽지 않는다 |
+| ③ 잔여·한도·리셋 키 | **없다.** `five_hour`·`rate_limit`·`utilization`·`resets_at` 전부 0건 |
+| ④ 창 | **없다.** 한도 창 개념이 없다 |
+
+**이 레포는 잔여를 구하지 않는다 — 소비만 센다.** README 첫 줄이 그렇게 말한다:
+*"Pro and Max subscribers get a progress bar. This gives you the full picture."* — 잔여 게이지는
+Claude Code가 이미 주는 것이고, 이 도구는 **그것이 안 보여주는 소비 내역** 쪽이다. 같은 저자의
+자매 레포 `burnstop`도 같다(HTTP 0건, `Claude Code shows usage after the fact (/usage)`).
+
+**그래서 판정 2의 claude 칸을 연 것은 이 레포가 아니다** — 레포를 읽고 "잔여는 이 길로 안 온다"가
+확정되자 남은 길이 하나뿐이었고(§0-4가 아닌 다른 토큰 서랍), 그게 위의 200이다.
+
+###### 이 레포가 준 경고 하나 — 그리고 그게 우리 200에 걸리는지 (**사람 결정**)
+
+`burnstop/docs/spikes.md`가 프록시 설계를 버린 이유를 적어 놨다:
+
+> *"As of Feb 2026 Anthropic prohibits **forwarding consumer (Pro/Max) OAuth tokens through any
+> third-party tool, proxy, or gateway**; accounts have been banned for it."*
+
+**위의 200은 그 금지에 해당하지 않는다고 읽는다.** 근거는 셋이다 — ① 토큰이 **제3자에게 가지
+않는다**. 우리 서버는 같은 머신의 같은 사용자로 돌고, 토큰을 보내는 상대는 CLI가 보내는 그
+`api.anthropic.com` 하나다. ② **프록시가 아니다.** 모델 호출을 중계하지 않고 읽기 전용 `GET`
+하나다. ③ 브라우저로 나가는 것은 `%`와 `resets_at`뿐이다(위 남는 규칙).
+
+**그래도 이건 우리가 혼자 정할 판단이 아니다.** 답변 `6b0f2a71` Q1=(c)는 "비공개 API에 의존해도
+좋다"였고 이 ToS 문장은 그 승인 뒤에 나온 사실이다. **`180b031a`(status bar 구현)가 이 경로를
+쓰기 전에 사람이 한 번 본다** — `378d84dc`(pm).
+
+- **다만 이 레포가 판정 1에 주는 사실이 하나 있다.** 소비의 원본으로 `workers/logs/`가 아니라
+  **`~/.claude/projects/**/*.jsonl`을 턴 단위로 읽는다** — `type=="assistant"` 레코드의
+  `message.usage.{input,output,cache_creation_input,cache_read_input}_tokens`를 **`message.id`로
+  중복 제거**해서(스트리밍이 한 응답을 여러 줄로 적는다) 합친다. 이 경로는 **세션이 끝나기를
+  기다리지 않고, 신호로 죽은 세션의 토큰도 이미 적혀 있다** — 즉 판정 1이 안고 있는 천장
+  (`이 합계에 없는 세션 n개`, 실측 62%)이 여기서는 없다. **채택은 이 티켓이 정하지 않는다**
+  (판정 1은 워커별로 갈라야 하는데 트랜스크립트에는 워커 이름이 없다 — `cwd`로 유도해야 하고
+  그건 새 판정이다). 사실만 적어 둔다.
 
 ##### `codex` — 스트림에는 없고, rollout 파일에 있다
 
@@ -1567,11 +1643,17 @@ Q4=(a) 워커 화면 + 하단 status bar**). 요구 문장은 "토큰이 얼마�
 ##### 남는 규칙
 
 - **읽는 주체는 서버다.** 브라우저에서 부르지 않는다 — 토큰이 클라이언트로 나가고 CORS도 없다.
-  codex 경로는 파일 읽기라 더더욱 서버다(`~/.codex/`는 브라우저가 못 본다).
+  codex 경로는 파일 읽기라 더더욱 서버다(`~/.codex/`는 브라우저가 못 본다). claude 경로는
+  `~/.claude/.credentials.json`(`0600`)을 읽으므로 마찬가지다. **토큰은 응답에 담기지 않는다** —
+  브라우저로 나가는 것은 `%`와 `resets_at`뿐이다.
 - **호출은 폴링에 매달지 않는다.** 5초 폴링마다 외부 호출은 §성능 예산이 아니고 계정에도 예의가
   아니다. **서버 메모리에 TTL 캐시 하나**(최소 60초)를 두고 그 뒤에만 다시 부른다.
-- **못 구한 엔진은 게이지를 그리지 않는다.** 빈 막대·`0%`·추정치를 그리지 않는다. 그 자리에는
+  429의 `retry-after`가 ≈1시간이었다 — 이 엔드포인트는 자주 두드릴 곳이 아니다.
+- **값을 못 얻은 칸은 게이지를 그리지 않는다.** 빈 막대·`0%`·추정치를 그리지 않는다. 그 자리에는
   판정 1의 소비량과 `한도를 읽을 수 없습니다`가 선다 — §0-5의 `사유를 지어내지 않는다`와 같은 줄이다.
+  **원본이 없는 엔진은 이제 없다**(판정 2). 이 항이 받는 것은 그때그때의 실패다: claude는
+  토큰 만료(401)·타임아웃·`five_hour: null`, codex는 `primary: null`(벽에 닿은 상태)과
+  rollout 파일 없음.
 
 #### 그릇 — 자리가 둘이다 (답변 Q4)
 
@@ -1599,12 +1681,11 @@ Q4=(a) 워커 화면 + 하단 status bar**). 요구 문장은 "토큰이 얼마�
   안 변하고, 칸이 옆으로 늘어난다. 이 바는 **상시 표시**라서 높이가 곧 본문에서 뺏는 세로다.
 - **`%`는 잔여의 표현이다**(판정 2가 값을 못 주면 `%`도 바도 없다 — 아래 못 구한 엔진 항).
 
-**Q2(잔여를 못 구하는 엔진의 자리)는 자리를 고르는 대신 레포 하나를 줬다** —
-`https://github.com/phuryn/claude-usage`(`usage 진짜 자세하게 구해오는데 오픈소스라 코드를 보면
-알 수 있을 것 같습니다`). 즉 답은 "못 구한다는 전제를 먼저 의심하라"다. **판정 2의 폴백 문장은
-그대로 둔다**(못 구하면 게이지를 안 그린다 — 화면이 거짓말하지 않는 규칙은 답과 무관하다).
-바뀌는 것은 순서다: 폴백을 그리기 전에 **저 레포를 읽는 실측이 한 번 더 있다**(`d8c085be`).
-읽는 것은 코드와 문서뿐이고, 이 레포에 의존성으로 들이지 않는다(제약 1).
+**Q2(잔여를 못 구하는 엔진의 자리)가 "못 구한다는 전제를 먼저 의심하라"고 답했고, 그게 맞았다.**
+실측 두 번(`1d62c935` · `d8c085be`) 뒤에 **claude와 codex 둘 다 값이 있다** — 지금 값이 없는
+엔진은 하나도 없다. 폴백 문장(못 구하면 게이지를 안 그린다)은 그대로 두되, 그것이 받는 경우는
+"이 엔진은 원본이 없다"가 아니라 **"이번 호출/파일이 값을 못 줬다"**다(401·타임아웃·`null` 키·
+codex `primary: null`).
 
 #### 이 절이 정하지 않는 것
 
