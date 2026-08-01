@@ -789,9 +789,12 @@ const FRESH_MS = 10 * 60 * 1000;
 
 /** 세션 로그는 **마지막 한 줄이 JSON**이고 그 앞은 세션 stderr다(`tick.sh:222`가 `2>>"$LOGF"`).
  *  실측 파일은 1.4KB지만 상한이 없어서 꼬리 64KB만 읽는다 — `tickets.py:transcript_state`의
- *  선례 그대로고 `readFile` 전체 읽기가 아니다. 파일이 64KB 미만이면 전체다. */
+ *  선례 그대로고 `readFile` 전체 읽기가 아니다. 파일이 64KB 미만이면 전체다.
+ *
+ *  **`lib/usage.ts`가 같은 함수를 쓴다**(§0-8 판정 1: 세션 토큰도 이 마지막 줄에 있다).
+ *  두 벌 적으면 한쪽만 꼬리 크기를 바꿔도 두 화면의 판정이 갈린다. */
 const TAIL_BYTES = 64 * 1024;
-async function lastJsonLine(file: string): Promise<Record<string, unknown> | null> {
+export async function lastJsonLine(file: string): Promise<Record<string, unknown> | null> {
   let fh: Awaited<ReturnType<typeof open>> | undefined;
   try {
     fh = await open(file, "r");
