@@ -76,7 +76,7 @@ import type { Run } from "./engine.ts";
 import { registryPath, resolveConfig, type Project, type ProjectConfig } from "./projects.ts";
 import { isAwaiting, listTickets, reqTitle, statusOf, type Ticket } from "./queue.ts";
 import { findTranscript, sessionIdOf, tailEvents, type StreamEvent } from "./transcript.ts";
-import { engineCell, listWorkers, type Worker } from "./workers.ts";
+import { engineCell, listWorkers, workerOf, type Worker } from "./workers.ts";
 
 /** §7: **상한 5분.** `runWorker`의 60초와 다른 값이다 — 저건 python 스캔이고 이건 세션이다. */
 const TIMEOUT_MS = 5 * 60_000;
@@ -226,6 +226,50 @@ export async function switchConversation(projectId: string, sessionId: string): 
   if (!home.conversations.some((c) => c.id === sessionId)) return false;
   await writeHome(projectId, { ...home, current: sessionId });
   return true;
+}
+
+// ── 워커 세션 목록 (§7 좌측 패널 — 요구 `48b13597` 답 3=(c)) ────────────────
+//
+// **저장소를 만들지 않는다** — 대화 목록과 같은 선이다. 워커 세션의 열쇠(`session_id`)는 이미
+// 티켓 fm에 있고(엔진이 claim할 때 쓴다) 내용은 트랜스크립트가 정본이다. 여기서 하는 일은
+// **큐에서 파생**하는 것뿐이라 이 목록에는 폴링 주기도 캐시도 없다.
+
+/** 좌측 패널의 워커 세션 한 줄. 대화 한 줄(`Conversation`)과 자리가 같고 출처가 다르다 —
+ *  저건 우리가 쓴 파일이고 이건 큐에서 파생된다. */
+export type WorkerSession = {
+  /** 티켓 fm의 `session_id`. `--resume` 인자이자 트랜스크립트 열쇠다 —
+   *  **`sessionIdOf`를 통과한 값만** 이 목록에 든다(경로가 되는 값의 관문이 그 함수 하나다) */
+  id: string;
+  /** `owner:`의 워커 이름(`workerOf`). 형식이 아니면 **빈 문자열**이다 —
+   *  모르는 것을 `?`로 그리지 않는다(§1 보드와 같은 선). 화면이 빈 값을 감춘다 */
+  worker: string;
+  /** 티켓 제목. `title:` 없는 fm이면 빈다 */
+  title: string;
+  /** 티켓 식별자. 화면이 티켓 상세로 거는 링크가 이것이다(§식별자 — 표시값 `hash`가 아니다) */
+  stem: string;
+  /** `.wip` = 지금 도는 세션. 목록에서 **먼저 온다** */
+  running: boolean;
+};
+
+/** §7: 끝난 세션은 **최근 10개**(대화 20과 같은 자리에 박는 수다 — 세지 않으면 티켓 수백 장이
+ *  좌측에 선다). 도는 것(`.wip`)은 안 자른다: 그건 지금 이 큐의 사실이고 워커 수만큼이다. */
+const WORKER_SESSION_LIMIT = 10;
+
+/** 큐 → 워커 세션 목록. **순수 함수다**(`renderSnapshot`과 같은 선 — fs를 안 탄다).
+ *
+ *  열린 티켓은 안 든다: 상태 셋 중 세션이 붙은 것은 `.wip`(도는 중)과 `.done`(끝난 기록)이다.
+ *  `reap`이 되돌린 티켓의 `session_id`는 그 세션이 실패한 기록이라 목록에 세우지 않는다. */
+export function workerSessions(tickets: Ticket[]): WorkerSession[] {
+  const rows = (state: Ticket["state"]) =>
+    tickets
+      .filter((t) => t.state === state)
+      .sort((a, b) => b.mtime - a.mtime) // 최신순. filter가 새 배열을 줘서 제자리 정렬이 안전하다
+      .flatMap((t) => {
+        const id = sessionIdOf(t.fm);
+        if (!id) return []; // 키 없음 · 사람이 손으로 쓴 값 — 둘 다 없는 줄이다
+        return [{ id, worker: workerOf(t.fm.owner ?? "") ?? "", title: t.title, stem: t.stem, running: state === "wip" }];
+      });
+  return [...rows("wip"), ...rows("done").slice(0, WORKER_SESSION_LIMIT)];
 }
 
 // ── 상태 스냅샷 (§7 표) ─────────────────────────────────────────────────────

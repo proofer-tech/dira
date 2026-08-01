@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -29,6 +29,7 @@ const {
   readHome,
   newConversation,
   switchConversation,
+  workerSessions,
   TOOL_FLAGS,
 } = await import("./home-agent.ts");
 type HomeChunk = Awaited<ReturnType<typeof pollHome>>;
@@ -36,6 +37,8 @@ const { tailEvents } = await import("./transcript.ts");
 const { resolveConfig } = await import("./projects.ts");
 const { listTickets } = await import("./queue.ts");
 const { listWorkers, lockPath } = await import("./workers.ts");
+
+const p2 = (n: number) => String(n).padStart(2, "0");
 
 const tmps: string[] = [LOCAL, HOME];
 process.on("exit", () => tmps.forEach((p) => rmSync(p, { recursive: true, force: true })));
@@ -138,6 +141,56 @@ test("renderSnapshot — 워커 0개도 사실이다 (빈 표 대신 한 줄)", 
   assert.match(s, /## 워커 0개/);
   assert.match(s, /워커가 없다/);
   assert.match(s, /열림 0 · 진행중 0 · 완료 0/);
+});
+
+test("workerSessions — `.wip` 전부가 먼저, `.done`은 최근 10개. session id 없는·깨진 줄은 없는 것과 같다", async () => {
+  const root = path.join(mkdtempSync(path.join(tmpdir(), "ha-ws-")), ".dira");
+  tmps.push(path.dirname(root));
+  const tickets = path.join(root, "tickets");
+  mkdirSync(tickets, { recursive: true });
+  // mtime을 손으로 박는다 — 같은 초에 쓰이면 정렬을 판정할 수 없다
+  const put = (name: string, fm: string, min: number) => {
+    const p = path.join(tickets, name);
+    writeFileSync(p, `---\n${fm}---\n\n본문\n`);
+    const t = new Date(2026, 7, 1, 12, min);
+    utimesSync(p, t, t);
+  };
+  const sid = (n: number) => `0000000${n.toString(16)}-1111-2222-3333-444444444444`;
+
+  // 도는 것 둘 — 하나는 `session_id`가 없다(디스패치 직전에 사람이 손으로 만든 `.wip`)
+  put("wip00001.wip.md", `ticket: wip00001\ntitle: 도는 티켓\nsession_id: ${sid(1)}\nowner: developer / w1-deadbeef\n`, 30);
+  put("wip00002.wip.md", "ticket: wip00002\ntitle: 세션 없는 wip\nowner: developer / w2-deadbeef\n", 40);
+  // 끝난 것 12 + 깨진 값 하나. 12개는 분 단위로 갈라 최신 10개가 무엇인지 계산할 수 있게 한다
+  for (let i = 0; i < 12; i++) {
+    put(`done00${p2(i)}.done.md`, `ticket: done00${p2(i)}\ntitle: 끝난 ${i}\nsession_id: ${sid(i)}\nowner: pm / w3-deadbeef\n`, i);
+  }
+  put("done00zz.done.md", "ticket: done00zz\ntitle: 손으로 쓴 값\nsession_id: 방금 그 세션\nowner: pm / w3-deadbeef\n", 99);
+
+  const rows = workerSessions(await listTickets(root, await resolveConfig({ root })));
+
+  // ① 상한 10은 `.done`에만 걸린다 — 도는 것은 안 자른다
+  assert.strictEqual(rows.length, 11);
+  // ② 도는 것이 먼저. `session_id` 없는 `.wip`은 없는 줄이다(도는데도 목록에 못 선다)
+  assert.deepStrictEqual(
+    rows.map((r) => r.running),
+    [true, ...Array(10).fill(false)],
+  );
+  assert.deepStrictEqual(rows[0], {
+    id: sid(1),
+    worker: "w1",
+    title: "도는 티켓",
+    stem: "wip00001",
+    running: true,
+  });
+  // ③ `.done`은 mtime 내림차순이고 잘리는 것은 **오래된 쪽**이다 (11 … 2 · 0·1이 빠진다)
+  assert.deepStrictEqual(
+    rows.slice(1).map((r) => r.stem),
+    [11, 10, 9, 8, 7, 6, 5, 4, 3, 2].map((i) => `done00${p2(i)}`),
+  );
+  // ④ 손으로 쓴 `session_id`는 mtime이 제일 새것이어도 안 든다 — 관문이 `sessionIdOf` 하나다
+  assert.ok(!rows.some((r) => r.stem === "done00zz"));
+  // ⑤ 워커 이름은 `owner:`에서 온다(`workerOf`) — 형식이 아니면 빈 문자열이고 여긴 다 형식이다
+  assert.deepStrictEqual([...new Set(rows.map((r) => r.worker))], ["w1", "w3"]);
 });
 
 test("buildPrompt — 스냅샷이 질문 앞에 오고 읽기 전용이라는 말이 들어간다", () => {
