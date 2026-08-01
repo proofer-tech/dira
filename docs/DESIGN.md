@@ -1471,8 +1471,8 @@ Q4=(a) 워커 화면 + 하단 status bar**). 요구 문장은 "토큰이 얼마�
     우리가 계수를 지어내면 **화면이 정확해 보이는 거짓말**을 한다. 합 하나를 그리고 그 이름을
     `토큰`이라고 쓴다.
 - **창은 엔진의 한도 창을 따른다**(Q2 — `이건 엔진마다 다를 것 같은데`). `오늘`·`자정` 축을
-  쓰지 않는다. 창 길이는 판정 2의 실측이 준다. **실측 전 기본값은 5시간 롤링**이고, 창의
-  시작 시각은 우리가 모르므로 근사다 — 화면이 `최근 5시간`이라고 그렇게 말한다.
+  쓰지 않는다. 창 길이는 판정 2의 실측이 줬다: **claude 5시간 · codex 720시간(30일).**
+  창의 시작 시각은 우리가 모르므로 롤링 근사다 — 화면이 `최근 5시간`이라고 그렇게 말한다.
 
 **비용 — 캐시가 이 판정의 전제다.** `logs/`는 지금 파일 778개 · **215MB**(최대 14MB짜리가 있다)
 이고 최근 5시간에만 115개다. 매 폴링(5초)마다 115개를 여는 것은 §성능 예산(p50 ≤ 250ms)이 아니다.
@@ -1497,17 +1497,77 @@ Q4=(a) 워커 화면 + 하단 status bar**). 요구 문장은 "토큰이 얼마�
 - 창 밖의 파일은 **파일명만 보고 건너뛴다**(열지 않는다). 창을 넓히는 것이 파일 여는 수를
   늘리는 유일한 축이다.
 
-#### 판정 2 — 엔진별 잔여. **원본을 아직 못 봤다 — 실측이 먼저다**
+#### 판정 2 — 엔진별 잔여. **쟀다** (`1d62c935`, 2026-08-01)
 
-- **`claude`.** 잔여·리셋 값은 `~/.claude/`(`stats-cache.json`·`policy-limits.json`·transcript)
-  어디에도 없고 CLI에 비대화형 usage 명령도 없다(질문 1의 실측 3). 남은 길은 대화형 `/usage`가
-  부르는 **비공개 엔드포인트**를 GUI 서버가 장기 토큰으로 직접 부르는 것이다. **공개 계약이
-  아니라 예고 없이 깨진다 — 사람이 (c)로 승인했다.**
-- **`codex`.** `codex exec --json` 스트림이 rate limit을 이벤트로 실어 보낼 가능성이 있다.
-  사실이면 **새 네트워크 호출이 0이다**(값이 이미 우리 로그 파일 안에 있다). 미확인이다.
-- **그래서 실측 티켓이 이 절의 첫 줄이고, 스펙은 지금 엔드포인트를 박지 않는다.** 확인 못 한
-  경로를 스펙에 적는 것이 이 레포가 말하는 "화면이 거짓말한다"의 스펙 버전이다.
+| 엔진 | 원본이 있나 | 무엇을 주나 (키) | 창 | 새 네트워크 호출 |
+|---|---|---|---|---|
+| `claude` | **엔드포인트는 있다. 우리 토큰으로는 못 뚫었다** | `five_hour`·`seven_day`·`seven_day_opus`·`seven_day_sonnet` 각각 `{utilization, resets_at}` | **5시간 · 7일** | 필요하다(GET 1회) — **지금은 429** |
+| `codex` | **있다. 그리고 파일이다** | `rate_limits.primary.{used_percent, window_minutes, resets_at}` | **720시간(30일)** | **0** |
+
+**Q2의 `엔진마다 다를 것 같은데`가 사실로 확인됐다 — 5시간과 30일이다.** 하나의 창을 골라
+두 엔진에 씌우면 둘 중 하나가 거짓이 된다. status bar의 칸은 **엔진마다 자기 창을 말한다.**
+
+##### `claude` — 경로는 찾았고, 우리 토큰이 거절당한다
+
+- **엔드포인트.** `GET https://api.anthropic.com/api/oauth/usage`. 설치된 CLI 번들
+  (`~/.local/share/claude/versions/2.1.220`, 256MB Mach-O)의 문자열에서 나왔다 —
+  `fetchUtilization: GET /api/oauth/usage` · `Hi.get("/api/oauth/usage",{timeout:5000,
+  refreshOAuth:!0})`, base는 `Ds().BASE_API_URL`. **네트워크를 가로채지 않았다.**
+- **응답 키**(같은 번들의 zod 스키마): `five_hour` · `seven_day` · `seven_day_opus` ·
+  `seven_day_sonnet` · `seven_day_oauth_apps` · `cinder_cove` 가 각각
+  `{utilization: number|null, resets_at: string|null}`이고, 그 옆에 `extra_usage{is_enabled,
+  monthly_limit, used_credits, utilization, currency, disabled_reason}` ·
+  `limits[]{kind, group, percent, resets_at, scope.model.display_name}`.
+- **창.** 번들의 상수가 못 박는다: `five_hour` → `windowSeconds:18000`(5시간),
+  `seven_day` → `windowSeconds:604800`(7일). 추정이 아니라 코드에 적힌 값이다.
+- **실측 결과는 `HTTP 429`다.** `~/.config/dira/oauth-token`(`sk-ant-oat01…`)으로 GET 했더니
+  `{"type":"rate_limit_error"}` + `retry-after: 3554`(≈59분). `anthropic-ratelimit-*` 헤더는
+  하나도 안 온다. **왜인지도 같은 번들이 말한다** — `setup-token` 세션의 토큰은 스코프가
+  `user:inference` 하나뿐이고(`OAuth token has no scope accepted by /api/oauth/validate …
+  env-var and setup-token sessions default to user:inference only`), 상태줄 계약 역시
+  `missing profile scope — rate_limits will be null`이라고 적어 놓았다. **§0-4가 놓아 준
+  장기 토큰으로는 이 값을 못 읽는다.** 사람의 (c) 승인은 유효하지만 승인만으로는 안 열린다.
+- **디스크에도 없다**(질문 1의 실측 3 재확인). `~/.claude.json`에 `utilization` 0건 —
+  번들에는 `cachedUsageUtilization`이라는 키가 있으나 이 머신 파일에는 안 쓰여 있다.
+  `stats-cache.json`은 날짜별 메시지 수, `policy-limits.json`은 정책 플래그다.
+  세션 트랜스크립트 4개 0건. **워커 로그의 `result` 줄에도 없다** — 키는 `usage` ·
+  `modelUsage` · `total_cost_usd` · `stop_reason` …로 전부 소비 쪽이다(판정 1이 쓰는 그 줄이다).
+- **그래서 지금 claude 칸에는 게이지가 안 선다.** 아래 폴백 항이 그 자리를 받는다. 뚫을 길이
+  하나 남았고 그게 판정 3이 낸 `d8c085be`(`claude-usage` 레포 읽기)다 — 그 티켓이 답을 주기
+  전까지 **스펙은 이 엔드포인트를 status bar의 출처로 박지 않는다.**
+
+##### `codex` — 스트림에는 없고, rollout 파일에 있다
+
+- **`codex exec --json` stdout에는 rate limit이 없다.** 이벤트 종류가
+  `thread.started` · `turn.started` · `turn.completed` · `turn.failed` · `item.*`뿐이고
+  `TurnCompletedEvent`가 싣는 것은 `usage`(입출력 토큰 수)다. 한도 정보를 나르는 이벤트가 없다.
+- **실패 스트림에 실리는 것**(오늘 실측, 이 계정은 §4-3대로 한도에 걸려 있다): 두 줄이다.
+  `{"type":"error","message":"You've hit your usage limit. … try again at Aug 29th, 2026 3:29 PM."}`
+  와 같은 문장을 담은 `turn.failed`. **리셋 시각이 사람이 읽는 영어 문장 안에만 있다** —
+  게이지가 쓸 수 있는 수가 아니다.
+- **값은 rollout 파일에 있다.** `~/.codex/sessions/<YYYY>/<MM>/<DD>/rollout-<시각>-<uuid>.jsonl`의
+  `{"type":"event_msg","payload":{"type":"token_count","rate_limits":{…}}}`.
+  `codex exec`도 이 파일을 쓴다(방금 돈 세션의 `session_meta.originator == "codex_exec"`).
+  **읽기만 하면 되므로 새 네트워크 호출이 0이다.**
+- **키.** `rate_limits{limit_id, limit_name, primary, secondary, credits{has_credits, unlimited,
+  balance}, individual_limit, spend_control_reached, plan_type, rate_limit_reached_type}`이고
+  `primary`/`secondary`가 `{used_percent, window_minutes, resets_at}`이다.
+  `resets_at`은 **유닉스 초**다(claude의 ISO 문자열과 다르다).
+- **창은 `window_minutes: 43200` — 720시간(30일)이다.** 성공 샘플(2026-07-30 rollout):
+  `used_percent 42.0 → 44.0`, `resets_at 1787984957` = 2026-08-29 15:29(KST), `plan_type:"free"`.
+  그 값이 오늘 실패 메시지의 `Aug 29th, 2026 3:29 PM`과 같다 — 두 경로가 같은 사실을 가리킨다.
+- **천장 둘.** ① **한도에 닿으면 숫자가 사라진다** — 오늘 실패 세션의 `token_count`는
+  `rate_limits`를 싣지만 `primary: null` · `plan_type: null`이다. 즉 codex 칸은 벽에 닿는 순간
+  게이지를 잃고, 그 순간을 말하는 것은 §0-5다. ② **파일은 codex가 돌 때만 갱신된다.** 마지막
+  turn 이후로는 값이 굳는다. 화면은 그 값의 시각을 알고 있다(`timestamp`가 줄마다 있다).
+- **지금 이 큐에는 codex 워커가 0개다**(`.dira/workers/*.sh` 전부
+  `TICKET_ENGINE=(claude …)`), 그래서 `workers/logs/`에 codex 로그도 없다. codex 칸은
+  §4-3이 엔진을 고를 수 있게 한 뒤에 실재한다.
+
+##### 남는 규칙
+
 - **읽는 주체는 서버다.** 브라우저에서 부르지 않는다 — 토큰이 클라이언트로 나가고 CORS도 없다.
+  codex 경로는 파일 읽기라 더더욱 서버다(`~/.codex/`는 브라우저가 못 본다).
 - **호출은 폴링에 매달지 않는다.** 5초 폴링마다 외부 호출은 §성능 예산이 아니고 계정에도 예의가
   아니다. **서버 메모리에 TTL 캐시 하나**(최소 60초)를 두고 그 뒤에만 다시 부른다.
 - **못 구한 엔진은 게이지를 그리지 않는다.** 빈 막대·`0%`·추정치를 그리지 않는다. 그 자리에는
