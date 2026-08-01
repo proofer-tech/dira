@@ -32,6 +32,7 @@ import { createTicket, type NewTicketState } from "@/app/p/[project]/(board)/act
 import type { UnassignRun } from "@/lib/engine";
 // 스레드를 엮는 쪽은 서버(`lib/queue.ts threadOf`)다 — 여기 오는 건 타입뿐이라 `node:*`를 안 끈다
 import type { ThreadItem } from "@/lib/queue";
+import { AttachmentField, useAttachments } from "@/components/attachment-field";
 import { useHotkey } from "@/components/keymap-provider";
 import { Markdown } from "@/components/markdown";
 import { PersonaDot } from "@/components/persona-badge";
@@ -785,11 +786,15 @@ export function RequestDialog({ project }: { project: string }) {
   const [dismissed, setDismissed] = useState<NewTicketState>({});
   const live = state !== dismissed;
   const done = live && state.ok ? state.hash : null;
+  const att = useAttachments(project);
 
   // 닫히면 빈 칸으로 돌아간다 — 접수한 본문이 남아 있으면 같은 요구가 두 번 접수된다(§3).
   // 접수 확인 화면(`done`)은 **묻지 않는다**: 이미 접수돼서 잃을 것이 없다.
-  const guard = useCloseGuard(!done && body !== "", () => {
+  // **첨부도 `dirty`에 든다**(§8 §거동) — 본문보다 되돌리기 어려운 것이 이쪽이다.
+  // 칩은 비지만 올라간 파일은 안 지운다(§8 수명).
+  const guard = useCloseGuard(!done && (body !== "" || att.dirty), () => {
     setBody("");
+    att.reset();
     setDismissed(state);
   });
 
@@ -803,7 +808,11 @@ export function RequestDialog({ project }: { project: string }) {
   return (
     <Dialog open={guard.open} onOpenChange={guard.close}>
       <DialogTrigger render={<Button size="sm" />}>요구 접수</DialogTrigger>
-      <DialogContent className="sm:max-w-xl">
+      {/* 천장은 발행 다이얼로그와 같은 한 줄이다 — 이 폼의 `<Textarea>`는 `field-sizing-content`라
+          본문만큼 자라는데 여기엔 `max-h`도 `overflow`도 없어 900 화면에서 본문 34줄이면 스크롤도
+          없이 잘렸다. 칩 줄이 그 지점을 26줄로 당긴다(§비주얼 §27 높이 항 — 첨부가 만든 결함이
+          아니라 148px 앞당기는 결함이다). `dialog.tsx`는 안 고친다 */}
+      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>요구 접수</DialogTitle>
           {!done && (
@@ -844,15 +853,17 @@ export function RequestDialog({ project }: { project: string }) {
               placeholder={"무엇이 필요한지 그냥 쓰세요.\n첫 줄이 제목이 됩니다."}
               value={body}
               onChange={(e) => setBody(e.target.value)}
+              onPaste={att.onPaste}
             />
             {/* 실패는 이 자리에 남는다 — 닫으면 본문과 함께 사라진다(§3) */}
             {live && state.error && <Failure title="접수하지 못했습니다" message={state.error} />}
-            {/* 사람이 지목한 자리다(요구 `027d8e96`) — 오른쪽 끝(§비주얼 §4-3) */}
-            <div className="flex justify-end">
+            {/* 칩 줄 · 실패 사유 줄 · 액션 행(§27). 제출 버튼은 사람이 지목한 자리 그대로
+                행의 오른쪽 끝이고(요구 `027d8e96` · §비주얼 §4-3) 손잡이가 그 왼쪽에 앉는다 */}
+            <AttachmentField att={att}>
               <Button type="submit" disabled={pending}>
                 {pending ? "접수 중…" : "요구 접수"}
               </Button>
-            </div>
+            </AttachmentField>
           </form>
         )}
         <DiscardConfirm guard={guard} />
@@ -912,16 +923,19 @@ export function NewTicketDialog({
   const [body, setBody] = useState(blankBody);
   // 마지막으로 닫은 결과. `RequestDialog`와 같은 이유 — 실패 사유가 본문 없이 살아남지 않게 한다(§3)
   const [dismissed, setDismissed] = useState<NewTicketState>({});
+  const att = useAttachments(project);
 
   // **kind·persona select는 세지 않는다**: base-ui가 자기 상태로 들고 있어 읽을 수 없고,
-  // 사람이 "쓰던 내용"이라 부르는 것도 아니다(§3). 성공에는 확인이 끼지 않는다 — 그 경로는
-  // 서버 액션의 `redirect`가 컴포넌트째 언마운트한다.
+  // 사람이 "쓰던 내용"이라 부르는 것도 아니다(§3). **첨부는 센다**(§8 §거동 — 칩이 하나라도
+  // 있으면 묻는다). 성공에는 확인이 끼지 않는다 — 그 경로는 서버 액션의 `redirect`가
+  // 컴포넌트째 언마운트한다.
   const guard = useCloseGuard(
-    title !== blankTitle || body !== blankBody || picked.length > 0,
+    title !== blankTitle || body !== blankBody || picked.length > 0 || att.dirty,
     () => {
       setTitle(blankTitle);
       setBody(blankBody);
       setPicked([]);
+      att.reset();
       setDismissed(state);
     },
   );
@@ -1057,6 +1071,7 @@ export function NewTicketDialog({
               className="font-mono"
               value={body}
               onChange={(e) => setBody(e.target.value)}
+              onPaste={att.onPaste}
             />
           </div>
 
@@ -1064,11 +1079,12 @@ export function NewTicketDialog({
           {state !== dismissed && state.error && (
             <Failure title="발행하지 못했습니다" message={state.error} />
           )}
-          <div className="flex justify-end">
+          {/* 칩 줄 · 실패 사유 줄 · 액션 행(§27). 1차 액션은 여전히 가장 오른쪽이다 */}
+          <AttachmentField att={att}>
             <Button type="submit" disabled={pending}>
               {pending ? "발행 중…" : "발행"}
             </Button>
-          </div>
+          </AttachmentField>
         </form>
         <DiscardConfirm guard={guard} />
       </DialogContent>

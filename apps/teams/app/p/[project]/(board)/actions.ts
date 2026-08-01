@@ -16,6 +16,7 @@ import { open, readdir } from "node:fs/promises";
 import path from "node:path";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { verifyAttachments, withAttachments } from "@/lib/attachments";
 import { NAME_RE, isHash } from "@/lib/paths";
 import { reqTitle, stemOf } from "@/lib/queue";
 import { getProject, resolveConfig } from "@/lib/projects";
@@ -52,8 +53,7 @@ export async function createTicket(
     const config = await resolveConfig(project);
 
     // textarea는 CRLF로 온다(HTML 폼 규격). 그대로 쓰면 파일 줄끝이 갈린다.
-    let body = String(form.get("body") ?? "").replace(/\r\n/g, "\n");
-    if (body && !body.endsWith("\n")) body += "\n";
+    const body = String(form.get("body") ?? "").replace(/\r\n/g, "\n");
 
     // 요구 접수 모드(`?mode=req`)는 자연어 한 칸만 받고 나머지를 **서버가 고정한다**
     // (DESIGN.md §3 요구 접수 모드). 폼이 안 보내도 여기서 정해지므로 요청을 손으로 만들어도 같다.
@@ -91,6 +91,17 @@ export async function createTicket(
       if (!isHash(d) || !stems.has(d)) throw new Error(`큐에 없는 deps 해시입니다: ${d}`);
     }
 
+    // 첨부(§8). 화면이 `saveAttachment`로 이미 올려 둔 **경로**만 온다 — 바이트는 이 액션을
+    // 지나지 않는다. 돌아온 경로가 `attachments/` 아래인지는 서버가 다시 본다(신뢰 경계).
+    // **title 뒤에 붙이는 이유**: 표기가 본문의 마지막 문단이라(§8) 본문이 비고 첨부만 있으면
+    // `reqTitle`이 안내 한 줄을 제목으로 삼는다.
+    const attached = await verifyAttachments(
+      project,
+      form.getAll("attachment").map((a) => String(a)),
+    );
+    let content = withAttachments(body, attached);
+    if (content && !content.endsWith("\n")) content += "\n";
+
     const text = (h: string) =>
       [
         "---",
@@ -101,7 +112,7 @@ export async function createTicket(
         ...(deps.length ? [`deps: [${deps.join(", ")}]`] : []),
         "---",
         "",
-        body,
+        content,
       ].join("\n");
 
     // 해시는 서버가 만든다(`randomUUID` 8 hex). `stems` 검사로 접미사 붙은 이름까지 걸러도

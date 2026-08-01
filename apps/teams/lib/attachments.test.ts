@@ -1,9 +1,24 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { MAX_BYTES, safeName, saveAttachment, withAttachments } from "./attachments.ts";
+import {
+  MAX_BYTES,
+  safeName,
+  saveAttachment,
+  verifyAttachments,
+  withAttachments,
+} from "./attachments.ts";
 
 /** 픽스처 큐는 임시 디렉터리다 — **진짜 `.dira`를 건드리지 않는다.**
  *  realpath를 거치는 이유: macOS의 `/tmp`가 `/private/tmp` 심링크라 `resolveWithin`이 돌려주는
@@ -66,6 +81,30 @@ test("이름 정규화 — 치환 · 80자 · 앞뒤 점", () => {
   assert.strictEqual(safeName("x".repeat(200) + ".png"), "x".repeat(80));
   assert.strictEqual(safeName("한글.png".normalize("NFD")), "한글.png"); // macOS가 주는 NFD
   assert.strictEqual(safeName("../../etc/passwd"), "_.._etc_passwd");
+});
+
+test("verifyAttachments — attachments/ 밖 경로는 본문에 못 실린다", async () => {
+  // 폼이 돌려보내는 경로는 브라우저를 거친다 — hidden input은 값이 아니라 표기다.
+  const outside = path.join(root, "tickets", "5bbed7c9.wip.md");
+  mkdirSync(path.dirname(outside), { recursive: true });
+  writeFileSync(outside, "비밀");
+  await assert.rejects(() => verifyAttachments(project, [outside]), /attachments\/ 밖/);
+  // `..`로 기어 올라가는 것도 같은 판정이다(문자열이 `attachments/`로 시작해도 소용없다).
+  await assert.rejects(
+    () => verifyAttachments(project, [path.join(attachDir, "..", "tickets", "5bbed7c9.wip.md")]),
+    /attachments\/ 밖/,
+  );
+  // 심링크로 나가는 것도 막는다 — 문자열 비교로는 못 막는 자리다.
+  const link = path.join(attachDir, "escape.md");
+  symlinkSync(outside, link);
+  await assert.rejects(() => verifyAttachments(project, [link]), /attachments\/ 밖/);
+
+  // 진짜로 올린 것은 그대로 통과한다.
+  const ok = await saveAttachment(project, upload("note.txt", "본문"));
+  assert.ok(ok.ok);
+  assert.deepStrictEqual(await verifyAttachments(project, [ok.path]), [ok.path]);
+  // 빈 목록은 fs를 안 만진다 — `attachments/`가 아직 없는 프로젝트에서도 던지지 않는다.
+  assert.deepStrictEqual(await verifyAttachments({ root: path.join(tmp, "없는큐") }, []), []);
 });
 
 test("withAttachments — 빈 목록은 원문 그대로", () => {

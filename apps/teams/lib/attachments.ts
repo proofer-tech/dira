@@ -98,6 +98,31 @@ export async function saveAttachment(
   }
 }
 
+/** 폼으로 **돌아온** 경로를 프롬프트에 싣기 전에 다시 판정한다. 신뢰 경계다.
+ *
+ *  경로를 만든 것은 위 `saveAttachment`지만 돌아오는 길은 브라우저다 — 화면이 그리는
+ *  `<input type="hidden" name="attachment">`는 값의 **표기**이지 값이 아니고, 요청은 손으로
+ *  만들 수 있다. 밖을 가리키는 경로가 그대로 본문에 실리면 그 티켓을 받은 세션이 `Read`로
+ *  큐 밖 파일을 연다 — §8이 자리를 `attachments/` 하나로 못박은 것이 여기서 무너진다.
+ *
+ *  판정은 `saveAttachment`와 **같은 `resolveWithin`**이다(규칙이 둘이면 한쪽이 낡는다).
+ *  빈 목록이면 fs를 안 만진다: `attachments/`는 첫 첨부에 생기므로 아직 없을 수 있다. */
+export async function verifyAttachments(
+  project: Pick<Project, "root">,
+  paths: string[],
+): Promise<string[]> {
+  if (paths.length === 0) return [];
+  const dir = path.join(project.root, "attachments");
+  try {
+    return await Promise.all(paths.map((p) => resolveWithin(dir, p)));
+  } catch (e) {
+    // §6 3요소 — 무엇이(원문에 경로가 들어 있다) · 왜 · 다음 행동.
+    throw new Error(
+      `첨부 경로가 attachments/ 밖입니다 — 붙인 파일을 지우고 다시 고르세요: ${(e as Error).message}`,
+    );
+  }
+}
+
 /** 본문 + 첨부 경로 → 프롬프트에 실릴 문자열(§8 §프롬프트에 붙는 모양).
  *
  *  **첨부가 없으면 `text` 그대로다** — 빈 줄 하나도 붙이지 않는다. 네 자리 중 셋이 이 결과를
