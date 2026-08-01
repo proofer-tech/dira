@@ -745,10 +745,14 @@ function DepsPicker({
                     </span>
                     <span className="flex min-w-0 grow items-center gap-2">
                       <span className="shrink-0 font-mono text-xs">{o.hash}</span>
-                      <span className="truncate text-sm text-muted-foreground">
+                      <span className="truncate text-sm text-muted-foreground group-data-selected/command-item:text-foreground">
                         {o.title || "(제목 없음)"}
                       </span>
-                      {o.met && <span className="shrink-0 text-xs text-muted-foreground">완료</span>}
+                      {o.met && (
+                        <span className="shrink-0 text-xs text-muted-foreground group-data-selected/command-item:text-foreground">
+                          완료
+                        </span>
+                      )}
                     </span>
                   </CommandItem>
                 ))}
