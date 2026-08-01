@@ -476,15 +476,20 @@ export type Persona = {
 
 /** 이름 검증 + 경로 조립은 **서버에서만** 한다(신뢰 경계). 규칙은 `tickets.py PERSONA_RE`와 같다 —
  *  엔진이 이 값으로 경로를 만들므로 `../../.ssh` 같은 이름은 프롬프트에 실려 나간다.
- *  통과해도 문자열을 믿지 않고 `resolveWithin`으로 기준 디렉터리 안인지 확인한다(심링크 포함). */
-async function profilePath(dir: string, name: string): Promise<string> {
+ *  통과해도 문자열을 믿지 않고 `resolveWithin`으로 기준 디렉터리 안인지 확인한다(심링크 포함).
+ *
+ *  파일명을 인자로 받는 이유: 페르소나 디렉터리에 사는 파일이 `PROFILE.md` 하나가 아니다
+ *  (`skills.md` — §5-1, `lib/skills.ts`). 방어가 두 벌이 되면 한쪽만 고쳐지는 날이 온다. */
+export async function personaFilePath(dir: string, name: string, file: string): Promise<string> {
   if (!NAME_RE.test(name)) {
     throw new Error(
-      `페르소나 이름은 영문·숫자·_·- 만 됩니다: ${name || "(비어 있음)"} — 엔진이 이 이름으로 <personas>/<이름>/PROFILE.md 경로를 만듭니다.`,
+      `페르소나 이름은 영문·숫자·_·- 만 됩니다: ${name || "(비어 있음)"} — 엔진이 이 이름으로 <personas>/<이름>/${file} 경로를 만듭니다.`,
     );
   }
-  return resolveWithin(dir, path.join(name, "PROFILE.md"));
+  return resolveWithin(dir, path.join(name, file));
 }
+
+const profilePath = (dir: string, name: string) => personaFilePath(dir, name, "PROFILE.md");
 
 /** 디렉터리에 있는 페르소나 ∪ 티켓이 부르는 페르소나. 이름 순.
  *

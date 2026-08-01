@@ -48,6 +48,10 @@ apps/teams/
     queue.ts            티켓 읽기 코어 (tickets.py 미러). 프로젝트를 인자로 받는다
     workers.ts          워커 파일·락·crontab 판정, TICKET_CONTEXT 블록 파싱·치환
     protocols.ts        프로토콜 파일트리·읽기·쓰기. 기준은 **해석된 TICKET_PROTOCOLS**(루트 아니다)
+    skills.ts           페르소나 스킬 (§5-1): 이 머신에 설치된 스킬 발견(`~/.claude` — **큐 밖**)
+                        + `<personas>/<이름>/skills.md` 읽기·쓰기. `projects.ts`에 안 얹은 이유는
+                        그 파일 머리 주석에 있다 — 여기 든 것 절반이 프로젝트를 인자로도 안 받는다.
+                        경로 방어는 `projects.ts`의 `personaFilePath` 하나를 같이 쓴다
     scaffold.ts         새 프로젝트 스캐폴딩 (DESIGN.md §0-3). **등록되지 않은 경로에 파일을 쓰는
                         유일한 곳** — 경계가 파일 목록 자체고 전부 `wx`다(있는 파일은 안 덮는다)
     engine.ts           엔진 서브프로세스 호출 (워커 `reap`·`unassign` · `tickets.py find`)
