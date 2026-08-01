@@ -1388,9 +1388,15 @@ id · 기본 키 · **이름** · **순서** 넷이다.
   않는 것이 정상 동작이고, 되돌릴 것이 없으므로 사람에게 말하지 않는다.
 - **열려 있는 것이 있으면 그쪽이 먼저 먹고 이동은 없다.** 다이얼로그(티켓 발행 · 요구 접수 · 설정) ·
   전환기 팔레트 · 키 캡처 상자. 겹침 목록을 우리가 관리하지 않는다 — 실측 근거가 있다:
-  Radix `DismissableLayer`가 `document`에 **capture 단계**로 붙고 자기가 닫을 때
-  `event.preventDefault()`를 부른다(`@radix-ui/react-dismissable-layer` `handleKeyDown`).
-  그래서 이 핸들러는 **`window`의 bubble 단계**에 붙고 `e.defaultPrevented`면 그냥 돌아간다.
+  이 앱의 겹침은 전부 **Base UI**다(`@base-ui/react`. Radix는 소스가 import하지 않는
+  전이 의존성일 뿐이고 포털도 `[data-base-ui-portal]`이다). Base UI `useDismiss`가
+  `document`의 **bubble 단계**에 붙고 자기가 닫을 때 `event.preventDefault()`와
+  `event.stopPropagation()`을 **둘 다** 부른다(`floating-ui-react/hooks/useDismiss`
+  `closeOnEscapeKeyDown`). 그래서 이 핸들러는 **`window`의 bubble 단계**에 붙는다 —
+  문서 bubble이 window bubble보다 먼저라 이벤트가 여기까지 오지 않는다. 실측으로도 겹침 7종
+  전부 `window`에 도착하지 않았다(`d66ffdcf` `## 결과`). `e.defaultPrevented` 가드는
+  그래도 남긴다: `escapeKeyBubbles`·`isPropagationAllowed`인 레이어는 `stopPropagation`을
+  건너뛰고 `preventDefault`만 부르므로, 그때는 이 가드가 유일한 방어선이다.
   캡처 상자는 한 겹 더 안전하다 — `stopPropagation()`이 이벤트를 `window`까지 안 보낸다(§비주얼 §22 ②).
 - **글을 쓰는 중이면 안 듣는다.** 이벤트가 `input` · `textarea` · `[contenteditable]` 안에서 났으면
   그냥 통과시킨다(§0-6 `언제 안 듣는가`의 그 판정 그대로). 참견 칸이나 티켓 편집기에 쓰던 글이
@@ -7283,7 +7289,7 @@ ring-[3px]`)을 그대로 받는다. `outline-none`만 남기는 코드는 반�
 "식별자는 자르지 않는다"를 깨지 않는다.
 
 **툴팁은 네이티브 `title`이다.** shadcn `tooltip`으로 감싸지 않는다 — 줄이 수백 개고
-그만큼의 Radix 인스턴스를 만들 이유가 없다. §2가 배지 사유에 이미 `title`을 쓴 것과 같은 처리다.
+그만큼의 Base UI 인스턴스를 만들 이유가 없다. §2가 배지 사유에 이미 `title`을 쓴 것과 같은 처리다.
 
 **자동 스크롤**
 
