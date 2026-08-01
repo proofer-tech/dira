@@ -81,9 +81,10 @@ apps/teams/
                         프로젝트 → session id 한 줄(`$TICKET_LOCAL/home-sessions.json`).
                         **GUI가 큐를 안 거치고 세션을 소유하는 유일한 곳** — `engine.ts`와 짝이
                         아니다(저긴 이미 있는 워커 스크립트에 하위명령을 넘긴다). 커맨드를 확정한
-                        실측 넷은 그 파일 머리 주석에 있다. 특히 **`--permission-mode manual`이
-                        쓰기를 막는 유일한 조각**이다(이 머신 설정이 `bypassPermissions`라
-                        `--allowed-tools`만으로는 안 막힌다 — A/B 실측). 대화 이력 저장소를
+                        실측은 그 파일 머리 주석에 있다. 특히 **도구 목록을 줄이는 것은 `--tools`
+                        (+ MCP를 빼는 `--strict-mcp-config`)뿐**이다 — `--allowed-tools`는 권한
+                        자동승인 목록이라 목록 밖 `Bash`가 그대로 돈다(A/B 실측 `89962e56`).
+                        `--permission-mode manual`은 그 뒤에 남은 것의 관문이다. 대화 이력 저장소를
                         만들지 않는다: 렌더는 `transcript.ts`가 읽는 그 트랜스크립트다
     usage.ts            토큰의 **두 축**(§0-8). 판정 1(소비): `workers/logs/` 파일명 → 워커·시각,
                         마지막 줄 JSON → 그 세션의 토큰(`lastJsonLine`을 `workers.ts`와 **같이 쓴다**).

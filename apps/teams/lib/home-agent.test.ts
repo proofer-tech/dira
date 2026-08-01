@@ -20,6 +20,7 @@ const {
   readSessionId,
   writeSessionId,
   clearSessionId,
+  TOOL_FLAGS,
 } = await import("./home-agent.ts");
 const { tailEvents } = await import("./transcript.ts");
 const { resolveConfig } = await import("./projects.ts");
@@ -133,6 +134,19 @@ test("buildPrompt — 스냅샷이 질문 앞에 오고 읽기 전용이라는 �
   const p = buildPrompt("SNAP", "w1이 지금 무슨 일을 하고 있나?");
   assert.ok(p.indexOf("SNAP") < p.indexOf("w1이 지금"));
   assert.match(p, /티켓을 만들지도\n고치지도 않는다/);
+});
+
+test("TOOL_FLAGS — 도구 표면을 정하는 세 조각이 다 있다 (89962e56)", () => {
+  // `--allowed-tools`는 **도구를 빼지 않는다**(권한 자동승인 목록이다). 이 셋이 빠지면 세션에
+  // `Bash`가 살아나고 화면은 자기 가드에 대해 거짓말한다 — 그게 `89962e56` 그 사건이다.
+  // 실측 A/B는 `home-agent.ts` 머리 주석에 있다. 값이 아니라 **존재**를 못박는다.
+  for (const flag of ["--tools", "--strict-mcp-config", "--permission-mode"]) {
+    assert.ok(TOOL_FLAGS.includes(flag), `${flag}가 빠졌다 — 도구 표면이 §7 표보다 넓어진다`);
+  }
+  // 값은 variadic 함정 때문에 **쉼표 한 토큰**이어야 한다(공백으로 나누면 질문까지 도구로 먹는다)
+  assert.strictEqual(TOOL_FLAGS[TOOL_FLAGS.indexOf("--tools") + 1], "Read,Glob,Grep");
+  // `--dangerously-skip-permissions`는 §7이 명시적으로 뺀 것이다
+  assert.ok(!TOOL_FLAGS.some((f) => f.includes("dangerously")));
 });
 
 test("questionOf — 스냅샷·지시문을 떼고 사람이 쓴 질문만 남는다 (§비주얼 §24 말풍선)", () => {

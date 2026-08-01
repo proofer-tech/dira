@@ -9,25 +9,42 @@
  *
  *  ```
  *  <claude> -p  --session-id <uuid> | --resume <uuid>
+ *               --tools Read,Glob,Grep
+ *               --strict-mcp-config
  *               --permission-mode manual
  *               --allowed-tools Read,Glob,Grep
  *               --output-format json
  *               "<프롬프트>"
  *  ```
  *
- *  네 조각의 근거는 전부 실측이다(이 머신, 2026-08-01):
+ *  근거는 전부 실측이다(이 머신, 2026-08-01 · 티켓 `89962e56`):
  *
- *  - **`--permission-mode manual`이 쓰기를 막는 유일한 조각이다.** `--allowed-tools`만으로는
- *    **안 막힌다** — 이 머신의 `~/.claude/settings.json`이 `"defaultMode":"bypassPermissions"`라
- *    허용목록 밖 도구도 그냥 통과한다. 같은 프롬프트("이 큐에 티켓 파일을 만들어라")로 A/B를
- *    돌렸더니 이 플래그가 없는 쪽은 `.dira/tickets/aaaa1111.md`를 **실제로 만들었고**, 있는 쪽은
- *    `permission_denials`에 `Write`·`Bash`가 찍히고 파일이 안 생겼다. `manual`은 "매번 물어본다"고,
- *    `-p`는 물어볼 사람이 없어 거부로 떨어진다. GUI 서버는 사람의 셸 설정을 그대로 물려받으므로
- *    **머신 설정을 믿지 않고 우리가 매번 덮어쓴다**(§7: `--dangerously-skip-permissions`를 쓰지 않는다).
- *  - **`--allowed-tools`는 그 위에서 읽기 셋만 통과시킨다.** `manual`만 두면 `Read`도 거부돼
- *    에이전트가 아무것도 못 읽는다. 값은 **쉼표로 붙인 한 토큰**이어야 한다 — 이 옵션은 variadic
- *    (`<tools...>`)이라 `--allowed-tools Read Glob Grep "<질문>"`으로 띄우면 질문까지 도구
- *    이름으로 먹고 `Input must be provided either through stdin or as a prompt argument`로 죽는다.
+ *  - **도구 목록을 줄이는 것은 `--tools`뿐이다.** `--allowed-tools`는 이름과 달리 도구를 빼지
+ *    않는다 — **권한 자동승인 목록**이라, 목록 밖 도구도 도구 목록에는 그대로 있고 사람이 없는
+ *    `-p`에서도 하네스가 승인하는 것은 그냥 돈다. `Bash`가 그랬다. 같은 cwd·같은 프롬프트
+ *    (``Bash 도구로 `cat a.txt` 를 실행하고 결과를 그대로 보고해라``) A/B:
+ *
+ *    | 플래그 | 트랜스크립트 | `permission_denials` |
+ *    |---|---|---|
+ *    | `--allowed-tools Read,Glob,Grep` | `TOOL_USE: Bash {cat a.txt}` **is_error: false** | `[]` |
+ *    | `--tools Read,Glob,Grep` | `TOOL_USE: Read` 1건 · **Bash 0건** | `[]` |
+ *
+ *    아래 칸의 답이 그대로 근거다: "Bash 도구는 이번 세션에 없어서(사용 가능한 도구는
+ *    Glob/Grep/Read뿐) Read로 대신 읽었다." **거부가 아니라 부재다** — 그래서 `permission_denials`가
+ *    양쪽 다 비어 있다. 이 빈 배열을 "안 두드렸다"로 읽으면 위 칸을 안전으로 오독한다.
+ *  - **`--strict-mcp-config`가 MCP 도구를 뺀다.** `--tools`는 문서 그대로 **built-in set**만
+ *    줄인다 — 이걸 빼면 사람 머신에 붙은 MCP 서버의 도구가 그대로 남는다(실측: 답이 원격
+ *    샌드박스 실행 도구를 스스로 후보로 꼽았다). 붙이면 도구가 셋으로 떨어진다:
+ *    "현재 제게 실제로 주어진 도구는 3개입니다: Glob · Grep · Read. **MCP 도구: 없습니다.**"
+ *    GUI 서버는 사람 셸의 설정을 물려받으므로 이 표면은 우리 코드가 아니라 그 머신이 정한다.
+ *  - **`--permission-mode manual`은 위 둘이 놓친 것의 마지막 관문이다.** 이 머신의
+ *    `~/.claude/settings.json`이 `"defaultMode":"bypassPermissions"`라, 이걸 안 덮으면 도구 목록에
+ *    남은 것은 무엇이든 그냥 통과한다(§7: `--dangerously-skip-permissions`를 쓰지 않는다).
+ *  - **`--allowed-tools`는 그 `manual` 위에서 읽기 셋을 물어보지 않게 한다.** 이제 도구 집합의
+ *    가드가 아니다 — 그 일은 `--tools`가 한다. 값은 **쉼표로 붙인 한 토큰**이어야 한다: 이 옵션도
+ *    `--tools`도 variadic(`<tools...>`)이라 `--allowed-tools Read Glob Grep "<질문>"`으로 띄우면
+ *    질문까지 도구 이름으로 먹고 `Input must be provided either through stdin or as a prompt
+ *    argument`로 죽는다.
  *  - **모델 플래그가 없다.** §7이 `claude` 고정 · `모델 지정 안 함`으로 박았다(codex는 트랜스크립트를
  *    안 남겨서 고를 수 있게 하는 순간 이 화면이 빈다 — §4-3 표).
  *  - **`--output-format json`.** 마지막 한 줄이 `{is_error, result, session_id, permission_denials}`다.
@@ -53,8 +70,25 @@ import { engineCell, listWorkers, type Worker } from "./workers.ts";
 /** §7: **상한 5분.** `runWorker`의 60초와 다른 값이다 — 저건 python 스캔이고 이건 세션이다. */
 const TIMEOUT_MS = 5 * 60_000;
 
-/** 통과시키는 도구. **쉼표 한 토큰**이다(위 머리 주석의 variadic 함정). */
-const ALLOWED_TOOLS = "Read,Glob,Grep";
+/** 세션에 존재하는 도구 전부(§7 표 `쓰기 도구가 없다`). **쉼표 한 토큰**이다(머리 주석의 variadic 함정). */
+const TOOLS = "Read,Glob,Grep";
+
+/** 도구 표면을 정하는 플래그 **전부**. 세 조각이 각자 다른 층을 막으므로 하나라도 빠지면 표면이
+ *  넓어진다(머리 주석의 A/B): `--tools`가 built-in 목록을 셋으로 만들고, `--strict-mcp-config`가
+ *  사람 머신의 MCP 도구를 빼고, `--permission-mode manual`이 남은 것의 관문이다.
+ *  `--allowed-tools`는 그 `manual`이 읽기 셋을 물어보지 않게 하는 조각이지 도구 가드가 아니다.
+ *
+ *  **`home-agent.test.ts`가 이 배열을 검증한다.** `--allowed-tools`만 남기는 회귀가 `89962e56`
+ *  그 사건이었고, 그건 코드를 봐서는 안 틀려 보인다 — 플래그 이름이 하는 일을 말해주지 않는다. */
+export const TOOL_FLAGS: readonly string[] = [
+  "--tools",
+  TOOLS,
+  "--strict-mcp-config",
+  "--permission-mode",
+  "manual",
+  "--allowed-tools",
+  TOOLS,
+];
 
 // ── 프로젝트 → session id 한 줄 (§7) ────────────────────────────────────────
 //
@@ -295,10 +329,7 @@ async function runClaude(
   const args = [
     "-p",
     ...session,
-    "--permission-mode",
-    "manual",
-    "--allowed-tools",
-    ALLOWED_TOOLS,
+    ...TOOL_FLAGS,
     "--output-format",
     "json",
     prompt, // variadic 옵션 뒤에 오면 먹힌다 — `--output-format json`이 사이를 끊어 준다
