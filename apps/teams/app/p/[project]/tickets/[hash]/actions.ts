@@ -177,6 +177,12 @@ const LOCKED: Record<"wip" | "done", string> = {
   done: "완료 티켓은 편집할 수 없습니다 — 완료는 이 큐의 불변 기록입니다.",
 };
 
+/** 할당 해제가 막히는 상태는 `.done` **하나**라 Record가 아니다 — `.wip`의 해제는 이 액션의
+ *  본래 용도고(죽은 세션 복구), 열린 티켓의 ghost 해제도 살아 있다. 화면의 잠금 `Alert`와 같은
+ *  사실을 말한다: 막는 것이 아니라 남기는 것이 목적이다. */
+const UNASSIGN_LOCKED_DONE =
+  "완료 티켓은 할당 해제할 수 없습니다 — 담당 세션 기록(session_id·owner)은 누가 한 일인지를 남기려고 그대로 둡니다.";
+
 const DELETE_LOCKED: Record<"wip" | "done", string> = {
   wip: "진행중 티켓은 삭제할 수 없습니다 — 세션에 할당된 티켓입니다.",
   done: "완료 티켓은 삭제할 수 없습니다 — 이 해시를 deps로 둔 티켓이 영구 대기합니다.",
@@ -224,10 +230,18 @@ export async function saveTicket(_prev: SaveState, form: FormData): Promise<Save
 }
 
 /** 할당 해제 — **엔진에 위임한다**(제약 2). `assigned`가 아니면 부르지 않는다: 이 명령은
- *  진행중 접미사도 떼므로, 할당 안 된 `.wip`에 부르면 세션 없이 잡힌 상태를 사람이 흔드는 셈이다. */
+ *  진행중 접미사도 떼므로, 할당 안 된 `.wip`에 부르면 세션 없이 잡힌 상태를 사람이 흔드는 셈이다.
+ *
+ *  `.done`도 거부한다(사람 요구 `8ec6cd6d`). 완료 티켓은 `session_id`를 든 채 완료되므로
+ *  `assigned`만 보면 통과하는데, 거기서 이 명령이 하는 일은 `clear`가 담당 세션 기록을 지우는
+ *  것뿐이다 — 큐는 그대로고 기록만 없어진다. 화면에서 버튼을 뺐지만(page.tsx) 화면 제약은
+ *  검증이 아니다(`deleteTicket`의 `DELETE_LOCKED`와 같은 근거). */
 export async function unassignTicket(projectId: string, hash: string): Promise<UnassignRun> {
   try {
     const t = await target(projectId, hash);
+    if (t.state === "done") {
+      return { ok: false, output: UNASSIGN_LOCKED_DONE, worker: null };
+    }
     if (!t.assigned) {
       return { ok: false, output: "할당된 티켓이 아닙니다(session_id가 비어 있습니다).", worker: null };
     }

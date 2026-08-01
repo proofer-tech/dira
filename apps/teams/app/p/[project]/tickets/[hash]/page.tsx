@@ -258,7 +258,10 @@ export default async function TicketDetail({
               <AlertDescription>
                 완료는 이 큐의 불변 기록입니다 — 후행의 <span className="font-mono">deps</span>{" "}
                 해소와 <span className="font-mono">req:</span> 역참조가 이 파일의 존재에 걸려 있어
-                편집·삭제를 막습니다. 이어서 할 일이 있으면 새 티켓을 만드세요.
+                편집·삭제·할당 해제를 막습니다. 담당 세션 기록(
+                <span className="font-mono">session_id</span>·<span className="font-mono">owner</span>
+                )은 누가 한 일인지를 남기려고 그대로 둡니다. 이어서 할 일이 있으면 새 티켓을
+                만드세요.
               </AlertDescription>
             </Alert>
           )}
@@ -268,12 +271,19 @@ export default async function TicketDetail({
               **`.wip` 잠금 `Alert`도 이 컴포넌트가 그린다**(§2 · 사람 요구 `bfb1374a`) — 버튼이
               그 카드 안 오른쪽 끝에 붙는데 카드를 여기 두면 상태를 든 버튼만 넘길 수가 없다.
               `.done` 잠금 `Alert`는 위에 그대로 있다(둘은 배타라 화면 순서가 안 바뀐다).
-              마크만 서버가 그려 넘긴다 — `WipWorker`는 `node:fs`를 타서 클라이언트로 못 간다. */}
+              마크만 서버가 그려 넘긴다 — `WipWorker`는 `node:fs`를 타서 클라이언트로 못 간다.
+
+              **`.done`에서는 `assigned`를 끈다**(사람 요구 `8ec6cd6d`). 디스패치된 티켓은
+              완료돼도 `session_id`를 들고 있어 `assigned`가 거의 항상 참인데, 거기서 해제는 큐를
+              바꾸지 못하고(`release`가 뗄 접미사가 없고 `select`·`reap` 어느 쪽도 완료를 안 본다)
+              `clear`가 담당 세션 기록만 지운다. `assigned`·`wip`이 둘 다 거짓이면 이 컴포넌트가
+              통째로 사라진다 — 비활성 버튼이 아니라 없는 것이고, 사유는 위 잠금 `Alert`가 말한다.
+              서버 액션 `unassignTicket`도 같은 판정을 한 번 더 한다(화면 제약은 검증이 아니다). */}
           <UnassignButton
             project={id}
             hash={hash}
             worker={workers[0]?.name ?? null}
-            assigned={ticket.assigned}
+            assigned={ticket.assigned && ticket.state !== "done"}
             ghost={ticket.state === "open" && ticket.assigned}
             wip={ticket.state === "wip"}
             mark={<WipWorker t={ticket} />}
