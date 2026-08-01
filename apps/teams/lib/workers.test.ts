@@ -456,7 +456,9 @@ test("cron 명령어 — NFC crontab 줄 · NFD 경로에서 해제가 진짜로
 
   const other = "* * * * * /usr/local/bin/other.sh";
   const nfcLine = `* * * * * "${p.normalize("NFC")}" >> "${log.normalize("NFC")}" 2>&1`;
-  const nfdLine = `* * * * * "${p}" >> "${log}" 2>&1`;
+  // 등록 단위는 2줄이다(제약 4) — `printf`가 두 줄을 다 넣어야 30초 폴링이 된다
+  const nfdRun = `"${p}" >> "${log}" 2>&1`;
+  const nfdLines = `* * * * * ${nfdRun}\n* * * * * sleep 30; ${nfdRun}`;
 
   const c = withWritableCrontab(`${other}\n${nfcLine}\n`);
   try {
@@ -467,12 +469,12 @@ test("cron 명령어 — NFC crontab 줄 · NFD 경로에서 해제가 진짜로
     // 등록: 인용이 살아 있어야 셸이 한 인자로 받는다(공백·작은따옴표·`$`)
     c.feedBack();
     c.run(cronRegisterCmd({ path: p }));
-    assert.strictEqual(c.out(), `${other}\n${nfdLine}\n`);
+    assert.strictEqual(c.out(), `${other}\n${nfdLines}\n`);
 
     // 사람이 같은 명령을 두 번 복사해 실행해도 중복 줄이 안 생긴다 (NFD 줄도 걸러진다)
     c.feedBack();
     c.run(cronRegisterCmd({ path: p }));
-    assert.strictEqual(c.out(), `${other}\n${nfdLine}\n`);
+    assert.strictEqual(c.out(), `${other}\n${nfdLines}\n`);
   } finally {
     c.restore();
   }
@@ -493,12 +495,13 @@ const FIXTURE = [
 
 test("cronRegister/cronUnregister — 대상 줄만 바뀌고 나머지는 바이트 그대로 (제약 4)", () => {
   const p = "/Users/x/Projects/p/.dira/workers/w9.sh";
-  const line = `* * * * * "${p}" >> "/Users/x/Projects/p/.dira/workers/cron.log" 2>&1`;
+  const run = `"${p}" >> "/Users/x/Projects/p/.dira/workers/cron.log" 2>&1`;
+  const lines = `* * * * * ${run}\n* * * * * sleep 30; ${run}`;
 
-  // 등록: 딱 한 줄이 늘고 나머지 텍스트가 완전히 동일하다
+  // 등록: 딱 2줄이 늘고(등록 단위, 제약 4) 나머지 텍스트가 완전히 동일하다
   const added = cronRegister(FIXTURE, p);
-  assert.strictEqual(added, `${FIXTURE}${line}\n`); // FIXTURE가 개행으로 끝난다
-  assert.strictEqual(added.split("\n").length - FIXTURE.split("\n").length, 1);
+  assert.strictEqual(added, `${FIXTURE}${lines}\n`); // FIXTURE가 개행으로 끝난다
+  assert.strictEqual(added.split("\n").length - FIXTURE.split("\n").length, 2);
   // 남의 프로젝트 줄·주석·환경변수·빈 줄이 그대로다
   assert.strictEqual(added.split("\n").filter((l) => l.includes("stream")).length, 1);
 
@@ -522,9 +525,9 @@ test("cronRegister — NFD 경로가 NFC로 적힌 줄과 매칭된다 (a622f9e4
   const nfcLine = `* * * * * "${nfd.normalize("NFC")}" >> "${"/Users/x/공유 드라이브/it's/workers/cron.log".normalize("NFC")}" 2>&1`;
   const tab = `# 주석\n${nfcLine}\n@reboot /Users/x/bin/other.sh\n`;
 
-  // 이미 등록된 줄이 NFC라도 중복이 생기지 않는다
+  // 이미 등록된 줄이 NFC라도 중복이 생기지 않는다(등록 단위 2줄이 정확히 한 벌)
   const re = cronRegister(tab, nfd);
-  assert.strictEqual(re.split("\n").filter((l) => l.includes("workers/w1.sh".normalize("NFD"))).length, 1);
+  assert.strictEqual(re.split("\n").filter((l) => l.includes("workers/w1.sh".normalize("NFD"))).length, 2);
   assert.strictEqual(re.includes(nfcLine), false); // NFC 줄이 지워지고
   assert.strictEqual(re.includes(nfd), true); //      정규화 안 한 경로가 들어갔다
   // 해제도 NFC 줄을 진짜로 지운다(한 형태만 보면 조용한 실패다)
@@ -536,6 +539,11 @@ test("cronRegister — 후행 개행이 없는 crontab에서도 줄이 이어 �
   assert.strictEqual(out, `@reboot /Users/x/bin/other.sh\n${cronLine({ path: "/tmp/w1.sh" })}\n`);
   // 빈 crontab(= 등록된 워커 없음)
   assert.strictEqual(cronRegister("", "/tmp/w1.sh"), `${cronLine({ path: "/tmp/w1.sh" })}\n`);
+  // 그 `cronLine`이 진짜 2줄이다 — 아니면 위 두 단언은 1줄짜리를 그대로 통과시킨다
+  assert.deepStrictEqual(cronLine({ path: "/tmp/w1.sh" }).split("\n"), [
+    `* * * * * "/tmp/w1.sh" >> "/tmp/cron.log" 2>&1`,
+    `* * * * * sleep 30; "/tmp/w1.sh" >> "/tmp/cron.log" 2>&1`,
+  ]);
 });
 
 test("createWorker — 기존 워커를 템플릿으로 755 생성, 덮어쓰기·워커 0개는 거부", async () => {
@@ -1079,7 +1087,7 @@ test("stopWorker — 그 줄만 빠지고 파일·락은 그대로. 두 번째�
   }
 });
 
-test("startWorker — 중단의 역방향. 줄이 정확히 1줄 늘고, 두 번째는 no-op이다(§4 재등록)", async () => {
+test("startWorker — 중단의 역방향. 줄이 정확히 2줄 늘고, 두 번째는 no-op이다(§4 재등록)", async () => {
   const root = makeRoot({ "w1.sh": "#!/bin/bash\n", "w2.sh": "#!/bin/bash\n" });
   const dir = path.join(root, "workers");
   const [w1, w2] = ["w1.sh", "w2.sh"].map((n) => path.join(dir, n));
@@ -1091,7 +1099,7 @@ test("startWorker — 중단의 역방향. 줄이 정확히 1줄 늘고, 두 번
   try {
     assert.strictEqual(await startWorker(root, "w1"), true);
     assert.strictEqual(c.tab(), `${other}${cronLine({ path: w2 })}\n${cronLine({ path: w1 })}\n`);
-    assert.strictEqual(count(w1), 1);
+    assert.strictEqual(count(w1), 2); // 등록 단위 2줄(제약 4)이 정확히 한 벌
     assert.strictEqual(statSync(lockPath(dir, "w1")).isDirectory(), true); // 락 그대로
     const w = (await listWorkers(root)).find((x) => x.name === "w1")!;
     assert.strictEqual(w.cron, true);
@@ -1104,7 +1112,7 @@ test("startWorker — 중단의 역방향. 줄이 정확히 1줄 늘고, 두 번
     assert.strictEqual(await startWorker(root, "w1"), false); // 화면이 말하는 사실은 이쪽이다
     // 텍스트는 실제로 바뀌었다(w1 줄이 w2 뒤로 갔다) — 그런데도 위가 no-op이라고 말한다
     assert.strictEqual(c.tab(), `${other}${cronLine({ path: w2 })}\n${cronLine({ path: w1 })}\n`);
-    assert.strictEqual(count(w1), 1);
+    assert.strictEqual(count(w1), 2);
     assert.strictEqual(count("backup.sh"), 1); // 남의 잡은 그대로
 
     await assert.rejects(startWorker(root, "없는워커"), /없는 워커입니다/);

@@ -787,10 +787,14 @@ export function workerGroups(workers: Worker[]): { status: WorkerStatus; names: 
 const sq = (s: string) => `'${s.replaceAll("'", `'\\''`)}'`;
 const dq = (s: string) => `"${s.replace(/(["$`\\])/g, "\\$1")}"`;
 
-/** README §워커와 같은 모양의 cron 한 줄. */
+/** README §워커와 같은 모양의 cron **2줄**(개행으로 이어져 있다 — 등록 단위가 2줄이다, 제약 4).
+ *  cron의 제일 잔 필드가 분이라(`man 5 crontab`) 30초 폴링은 `sleep 30` 줄을 하나 더 두어 낸다.
+ *  **한 줄에 `;`로 붙이지 않는다** — 워커는 동기 프로세스라 앞 호출이 세션을 물면 뒷반쪽이
+ *  30초 뒤가 아니라 그 세션이 끝난 뒤에 뜬다(`tick.sh:129`). 두 줄이어야 :00·:30이 결정적이다. */
 export function cronLine(worker: Pick<Worker, "path">): string {
   const log = path.join(path.dirname(worker.path), "cron.log");
-  return `* * * * * ${dq(worker.path)} >> ${dq(log)} 2>&1`;
+  const run = `${dq(worker.path)} >> ${dq(log)} 2>&1`;
+  return `* * * * * ${run}\n* * * * * sleep 30; ${run}`;
 }
 
 /** `grep -F`는 **바이트로** 비교한다. crontab 줄은 사람이 넣은 NFC인데 `readdir`가 준 경로는
@@ -800,10 +804,13 @@ export function cronLine(worker: Pick<Worker, "path">): string {
 const grepBothForms = (p: string) =>
   [...new Set([p.normalize("NFC"), p.normalize("NFD")])].map((v) => `-e ${sq(v)}`).join(" ");
 
-/** 먼저 지우고 넣는다 — 사람이 두 번 복사해 실행해도 중복 줄이 안 생긴다(미등록일 땐 no-op). */
+/** 먼저 지우고 넣는다 — 사람이 두 번 복사해 실행해도 중복 줄이 안 생긴다(미등록일 땐 no-op).
+ *  `echo`가 아니라 `printf '%s\n'`인 건 등록 단위가 2줄이라서다: 인자마다 형식이 한 번씩 도니까
+ *  줄을 따로 인용해 넘길 수 있고, 사람이 복사한 명령은 여전히 **한 줄**이다. */
 export function cronRegisterCmd(worker: Pick<Worker, "path">): string {
   const keep = `crontab -l 2>/dev/null | grep -Fv ${grepBothForms(worker.path)}`;
-  return `(${keep}; echo ${sq(cronLine(worker))}) | crontab -`;
+  const lines = cronLine(worker).split("\n").map(sq).join(" ");
+  return `(${keep}; printf '%s\\n' ${lines}) | crontab -`;
 }
 
 /** 이 파일 경로가 들어간 줄을 지운다(`-F` = 경로를 정규식으로 해석하지 않는다). */
@@ -830,7 +837,7 @@ export function cronUnregister(text: string, workerPath: string): string {
     .join("\n");
 }
 
-/** 먼저 그 경로의 줄을 다 지우고 한 줄을 넣는다 — 두 번 등록해도 중복 줄이 안 생긴다
+/** 먼저 그 경로의 줄을 다 지우고 2줄(`cronLine`)을 넣는다 — 두 번 등록해도 중복 줄이 안 생긴다
  *  (`cronRegisterCmd`와 같은 의미). 줄에 들어가는 경로는 정규화하지 **않는다** — 셸이 실제로
  *  실행할 문자열이라 파일시스템이 준 바이트 그대로여야 한다. */
 export function cronRegister(text: string, workerPath: string): string {

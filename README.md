@@ -80,16 +80,21 @@ EOF
 ~/Projects/myproject/.dira/workers/w1.sh dryrun
 ```
 
-cron 등록(**워커당 한 줄**):
+cron 등록(**워커당 두 줄**):
 
 ```
 * * * * * $HOME/Projects/myproject/.dira/workers/w1.sh >> $HOME/Projects/myproject/.dira/workers/cron.log 2>&1
+* * * * * sleep 30; $HOME/Projects/myproject/.dira/workers/w1.sh >> $HOME/Projects/myproject/.dira/workers/cron.log 2>&1
 ```
 
-중지는 그 줄 삭제. 진행 상황은 `<루트>/workers/runner.log`, 세션별 출력은
+cron의 제일 잔 필드가 분이라(`man 5 crontab`) 30초 폴링은 이렇게 낸다. **한 줄에 `;`로 붙이지
+않는다** — 워커는 동기 프로세스라 앞 호출이 세션을 물면 뒷반쪽이 30초 뒤가 아니라 그 세션이
+끝난 뒤에 뜬다. 두 줄이어야 :00·:30이 결정적이다. 중복 디스패치는 워커 락이 막는다.
+
+중지는 그 두 줄 삭제. 진행 상황은 `<루트>/workers/runner.log`, 세션별 출력은
 `<루트>/workers/logs/<시각>-<워커>-<해시>.log`.
 
-**동시에 두 건을 돌리려면 워커를 하나 더 둔다** — `w2.sh`를 만들고 cron에 한 줄 더. 워커 하나는
+**동시에 두 건을 돌리려면 워커를 하나 더 둔다** — `w2.sh`를 만들고 cron에 두 줄 더. 워커 하나는
 한 번에 티켓 1건만 물고(락), 앞 실행이 아직 세션을 쥐고 있으면 그 분의 tick은 그냥 넘어간다.
 동시 실행 상한 같은 설정값은 없다. **동시성 = 워커 개수**다.
 
