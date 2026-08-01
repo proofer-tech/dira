@@ -132,7 +132,7 @@ function toView(project: Project, config: ProjectConfig, workers: string[]): Res
     },
     workers.length
       ? { key: "워커", value: `${workers.join(" ")} (${workers.length}개)`, mono: true, badges: [] }
-      : { key: "워커", value: "없음 — 이 큐는 돌지 않습니다", mono: false, badges: [] },
+      : { key: "워커", value: "없음 — 이 프로젝트는 돌지 않습니다", mono: false, badges: [] },
   ];
 
   return {

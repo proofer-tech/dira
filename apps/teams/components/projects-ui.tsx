@@ -510,7 +510,7 @@ export function ProjectsSection({
             onChange={(e) => setRoot(e.target.value)}
           />
           {/* 고르는 것은 `.dira` 자신이다(디렉터리) — dotfile이라 main이 `showHiddenFiles`를 켠다 */}
-          <PickPath mode="directory" label="큐 경로" onPick={setRoot} />
+          <PickPath mode="directory" label=".dira 경로" onPick={setRoot} />
         </div>
         <p className="text-xs text-muted-foreground">절대경로. ~는 확장됩니다</p>
         {/* 온보딩에서 내려온 도움말 산문 세 덩이 — 전부 **등록할 큐의 경로를 어떻게 찾는가**라
@@ -521,7 +521,7 @@ export function ProjectsSection({
             존재 이유다. 목록이 있는 상태에서 열어도 보인다(0건 전용이 아니다) */}
         <div className="space-y-2">
           <p className="text-xs text-muted-foreground">
-            큐 디렉터리는 프로젝트 루트 아래 .dira 입니다. 안에 tickets/ 와 workers/ 가 있습니다.
+            .dira는 프로젝트 루트 아래 폴더입니다. 안에 tickets/ 와 workers/ 가 있습니다.
           </p>
           <p className="font-mono text-xs text-muted-foreground">~/Projects/myproject/.dira</p>
           <p className="font-mono text-xs text-muted-foreground">~/Projects/dira/.dira</p>
@@ -606,7 +606,7 @@ export function ProjectsSection({
             <div className="max-w-3xl space-y-2">
               <h2 className="text-lg font-semibold">dira</h2>
               <p className="text-sm text-muted-foreground">
-                등록된 프로젝트가 없습니다. 큐를 하나 만들면 시작합니다.
+                등록된 프로젝트가 없습니다. 하나 만들면 시작합니다.
               </p>
             </div>
           )}
@@ -680,7 +680,7 @@ export function ProjectsSection({
               <>
                 <div className="flex max-w-3xl items-center justify-between gap-4">
                   <p className="text-sm text-muted-foreground">
-                    이미 만들어 둔 큐가 있다면 등록합니다.
+                    이미 만들어 둔 .dira가 있다면 등록합니다.
                   </p>
                   <Button variant="outline" size="sm" onClick={() => setRegistering(true)}>
                     프로젝트 등록
@@ -721,7 +721,7 @@ export function ProjectsSection({
           <DialogHeader>
             <DialogTitle>프로젝트 등록</DialogTitle>
             <DialogDescription>
-              이미 있는 .dira 큐를 목록에 올립니다. 파일은 만들지 않습니다.
+              이미 있는 .dira를 목록에 올립니다. 파일은 만들지 않습니다.
             </DialogDescription>
           </DialogHeader>
           {registerForm}
@@ -903,7 +903,7 @@ export function ProjectRows({ rows }: { rows: ProjectRow[] }) {
                     ) : (
                       // 해석 결과 표가 쓰는 문구 그대로 — 같은 사실을 두 자리에서 다른
                       // 말로 하지 않는다(app/actions.ts 워커 행)
-                      <span className={EMPTY}>없음 — 이 큐는 돌지 않습니다</span>
+                      <span className={EMPTY}>없음 — 이 프로젝트는 돌지 않습니다</span>
                     )}
                   </div>
                 </TableCell>

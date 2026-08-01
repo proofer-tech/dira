@@ -192,7 +192,7 @@ export default async function ProjectLayout({
           // 경로가 없는 건 파괴가 아니라 부재다 — destructive를 쓰지 않는다(§8).
           <Alert className="max-w-3xl">
             <Unplug aria-hidden className="text-status-stale" />
-            <AlertTitle>프로젝트 &quot;{current.name}&quot;의 큐를 읽을 수 없습니다</AlertTitle>
+            <AlertTitle>프로젝트 &quot;{current.name}&quot;의 .dira를 읽을 수 없습니다</AlertTitle>
             <AlertDescription className="grid gap-3">
               <span className="font-mono text-xs break-all">{current.error}</span>
               <span className="flex items-center gap-4">

@@ -126,13 +126,13 @@ test("preflight — .dira 유무와 큐 여부로 갈린다", async (t) => {
   const empty = await preflight(dir);
   assert.equal(empty.ok, false);
   assert.equal(empty.ok === false && empty.queue, false);
-  assert.match(empty.ok === false ? empty.message : "", /dira 큐가 아닙니다/);
+  assert.match(empty.ok === false ? empty.message : "", /dira 프로젝트가 아닙니다/);
 
   await mkdir(path.join(root, "tickets"));
   const queue = await preflight(dir);
   assert.equal(queue.ok, false);
   assert.equal(queue.ok === false && queue.queue, true);
-  assert.match(queue.ok === false ? queue.message : "", /이미 큐가 있습니다/);
+  assert.match(queue.ok === false ? queue.message : "", /이미 dira 프로젝트입니다/);
   // 화면이 이 값을 등록 카드에 그대로 넣는다 — `.dira`까지다(입력한 프로젝트 폴더가 아니다)
   assert.equal(queue.ok === false && queue.root, root);
 

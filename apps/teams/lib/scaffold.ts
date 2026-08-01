@@ -92,8 +92,8 @@ export async function preflight(projectDir: string): Promise<Preflight> {
     // 화면이 이 값을 등록 카드의 `경로`에 그대로 넣는다(큐면 "만들지 말고 등록하세요"의 다음 행동).
     root,
     message: queue
-      ? `${root}에 이미 큐가 있습니다. 만들지 않고 등록하세요.`
-      : `${root}가 이미 있지만 dira 큐가 아닙니다. 안을 고쳐 큐로 만들거나, 지우고 다시 만드세요.`,
+      ? `${root}는 이미 dira 프로젝트입니다. 만들지 않고 등록하세요.`
+      : `${root}가 이미 있지만 dira 프로젝트가 아닙니다. 안에 tickets/ 와 workers/ 를 만들거나, 지우고 다시 만드세요.`,
   };
 }
 

@@ -200,7 +200,7 @@ export async function addProject(name: string, rootInput: string, id?: string): 
       "root",
       // 다음 행동을 준다(§비주얼 §7 문구 표). 이 경로에는 빈 `.dira`도 들어오는데, 스캐폴딩으로
       // 채우지 않는 것이 §0-3의 결정이다 — 사람이 무엇을 지우는지 알고 지우는 편이 낫다.
-      "이 디렉터리에 tickets/도 workers/도 없습니다 — dira 큐가 아닙니다. 안을 고쳐 큐로 만들거나, 지우고 [새로 만들기]로 다시 만드세요.",
+      "이 디렉터리에 tickets/도 workers/도 없습니다 — dira 프로젝트가 아닙니다. 안에 tickets/ 와 workers/ 를 만들거나, 지우고 [새로 만들기]로 다시 만드세요.",
     );
   }
 
