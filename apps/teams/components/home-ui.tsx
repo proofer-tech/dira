@@ -378,9 +378,10 @@ export function HomeUI({ project, initial }: { project: string; initial: HomeChu
                                 붙는다. 트랜스크립트가 정본이라 거기서 줄을 지울 수 없다.
                                 도는 중에 눌러도 여기서 막지 않는다: 서버가 §24 실패 ④로
                                 판정하고 그 Alert가 왜 안 갔는지를 말한다(화면의 잠금 셋에
-                                네 번째를 더하면 끝난 답 20개의 버튼이 같이 흐려진다). */}
+                                네 번째를 더하면 끝난 답 20개의 버튼이 같이 흐려진다).
+                                **`ghost`다**(§24 개정 ③ — `복사`와 같은 근거. 그 함수 주석). */}
                             <Button
-                              variant="outline"
+                              variant="ghost"
                               size="xs"
                               onClick={() => void run(questionFor(turns, i))}
                             >
@@ -548,10 +549,17 @@ function Prose({ text }: { text: string }) {
 }
 
 /** 산문 아래 **24px 띠**(§비주얼 §24). 클래스는 §18 ④ 진행 표식의 것 그대로이고, 상태에 따라
- *  갈리는 것은 **안에 무엇이 서느냐**뿐이다. 왼쪽부터 채운다(`ml-auto` 없음). */
+ *  갈리는 것은 **안에 무엇이 서느냐**뿐이다. 왼쪽부터 채운다(`ml-auto` 없음).
+ *
+ *  **`mt-2`(8px)가 산문과 이 띠를 가른다**(§24 §산문 ↔ 띠 세로 간격 — `51546e85`가 값을 안 적어
+ *  실물이 0px이었다). 아래가 항목 사이 `gap-4`(16)라 위가 그 절반이면 **띠가 위 산문에 속한다는
+ *  것이 간격만으로 참**이 된다. 여백을 `<Markdown>`의 `[&>:last-child]:mb-0` 쪽으로 내지 않는
+ *  이유는 주인이 달라서다 — 문단 margin으로 내면 띠가 없는 자리(사람 말풍선)까지 같이 움직인다.
+ *  띠 **안**의 세로 여백 0은 무수정이다: 그 0이 답이 끝날 때 높이가 안 튀게 하는 수다.
+ *  `mt-2`가 띠 자신의 클래스라 도는 답과 끝난 답이 **같이** 받는다. */
 function Band({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex items-center gap-2 px-3 text-xs leading-6 text-muted-foreground">
+    <div className="mt-2 flex items-center gap-2 px-3 text-xs leading-6 text-muted-foreground">
       {children}
     </div>
   );
@@ -562,12 +570,17 @@ function Band({ children }: { children: React.ReactNode }) {
  *  `<CopyCommand>`를 안 쓴다(§24) — 그 그릇은 `font-mono break-all` 블록 + 버튼이고 담는 것이
  *  터미널 한 줄이라, 답 전문을 넣으면 답이 화면에 두 번(두 번째는 mono로) 선다. 빌리는 것은
  *  그 파일의 **관용구**다: 아이콘만 `Check`로 1.5초 바뀌고 글자는 그대로 — 폭이 한 px도 안
- *  움직여서 옆의 `다시 답하기`가 안 밀린다(§4-3). 토스트도 안 띄운다(그건 서버 액션의 것이다). */
+ *  움직여서 옆의 `다시 답하기`가 안 밀린다(§4-3). 토스트도 안 띄운다(그건 서버 액션의 것이다).
+ *
+ *  **`ghost`다**(§24 개정 ③ — 종전 `outline`). `중지`가 `outline`인 근거는 *테두리가 구두점
+ *  노릇을 한다*였는데 이 띠에는 잇댈 글자가 없다 — 무테 전폭 산문 아래에서 답 컬럼의 유일한
+ *  사각형이 이 버튼 둘이었다. 걷히는 것은 `border` 1px과 `bg-background` 한 겹뿐이고 글자·
+ *  아이콘·`h-6` 히트 영역은 그대로다(호버 전용과 갈리는 자리가 정확히 여기다). */
 function CopyAnswer({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <Button
-      variant="outline"
+      variant="ghost"
       size="xs"
       onClick={async () => {
         await navigator.clipboard.writeText(text);
@@ -627,9 +640,10 @@ function Failure({ fail }: { fail: Answer }) {
  *  명시적으로 뺐고, 상한이 20이라 눈으로 훑으면 끝난다. 이 조합은 이 레포에 이미 두 번 선
  *  관용구다(§12 페르소나 색 스와치 · §23 워커 행 엔진 컨트롤). **새 shadcn 0.**
  *
- *  트리거 값은 **§4-1 전환기의 것 그대로**이고(`ghost sm` · `role="combobox"` · `ChevronsUpDown`)
- *  자리만 갈린다 — 헤더 오른쪽이 아니라 `h1` 옆이다. 같은 글리프가 오히려 값이다: 이 앱에서
- *  `ChevronsUpDown`은 *이 자리의 것을 다른 것으로 갈아 끼운다* 하나를 뜻하고 큐와 대화가 그 둘이다.
+ *  트리거 값은 §4-1 전환기의 것에서 **`h-8` 하나를 뺀 것**이고(`ghost sm` · `role="combobox"` ·
+ *  `ChevronsUpDown`) 자리도 갈린다 — 헤더 오른쪽이 아니라 `h1` 옆이다. 같은 글리프가 오히려
+ *  값이다: 이 앱에서 `ChevronsUpDown`은 *이 자리의 것을 다른 것으로 갈아 끼운다* 하나를 뜻하고
+ *  큐와 대화가 그 둘이다.
  *
  *  **정렬 · 제목 · 시각은 `chatRows`가 정한다**(`lib/urls.ts` — JSX를 `pnpm test`가 못 읽는다).
  *  `session id`는 안 그린다: UUID 36자이고 사람이 이 화면에서 그 값을 쓸 일이 없다(§6과 같은 자). */
@@ -662,7 +676,11 @@ function ChatList({
             title={busy ? LOCKED : undefined}
             // `max-w-xs` = 320px ≈ `text-sm` 한글 22자. 제목이 첫 질문의 첫 줄이라 그 이상은
             // 부제가 아니라 문단이다 — 자르고, 전문을 볼 자리는 그 대화의 첫 말풍선이다(§24).
-            className="h-8 max-w-xs gap-2 aria-disabled:opacity-50 data-[popup-open]:bg-muted"
+            // 높이는 `size="sm"`의 `h-7`(28) 그대로다 — **`h-8`을 안 건다**(§24 개정 ③).
+            // 그 32는 §4-4가 헤더(`h-12`) 안에서 인터랙티브 박스를 통일하려던 수인데 여기는
+            // 헤더가 아니라, 옆의 `새 대화`(28)와 한 행에서 4px 어긋났다. 행 높이 32는 이
+            // 버튼이 아니라 `h1` 행 자신의 `h-8`이 계속 정한다.
+            className="max-w-xs gap-2 aria-disabled:opacity-50 data-[popup-open]:bg-muted"
           >
             <span className="truncate text-sm">{title}</span>
             <ChevronsUpDown aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
