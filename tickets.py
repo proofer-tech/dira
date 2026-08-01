@@ -366,6 +366,65 @@ def transcript_state(path):
     return idle, kind
 
 
+def transcript_of(fm):
+    """이 티켓 세션의 트랜스크립트 경로. fm `transcript:` 우선, 없으면 `session_id`로 찾는다.
+
+    디스패처가 붙인 `transcript:`는 reap이 지우기 전까지만 있고, 손 클레임 세션엔 아예 없다.
+    그래서 `session_id`로 `~/.claude/projects/*/<sid>.jsonl`도 본다. 못 찾으면 빈 문자열.
+    """
+    tr = (fm.get("transcript") or "").strip().strip("\"'")
+    if tr and os.path.isfile(tr):
+        return tr
+    sid = (fm.get("session_id") or "").strip().strip("\"'")
+    # 티켓 파일은 사람도 고치는 입력이다. glob 메타문자·경로 구분자가 섞이면 큐 밖을 훑는다.
+    if not re.match(r"^[A-Za-z0-9._-]+$", sid or ""):
+        return ""
+    hits = glob.glob(os.path.expanduser("~/.claude/projects/*/{}.jsonl".format(sid)))
+    return hits[0] if hits else ""
+
+
+def _rec_text(rec):
+    """트랜스크립트 레코드에서 사람이 읽을 텍스트. 없으면 빈 문자열.
+
+    ponytail: 중첩 content는 str()로 뭉갠다. 읽히기만 하면 되는 인용이라 구조는 필요 없다.
+    """
+    c = (rec.get("message") or {}).get("content")
+    if c is None:
+        c = rec.get("content") or rec.get("error") or rec.get("summary")
+    if isinstance(c, list):
+        c = " ".join(str(it.get("text") or it.get("content") or "") if isinstance(it, dict)
+                     else str(it) for it in c)
+    return " ".join(str(c or "").split())
+
+
+def transcript_tail(path, limit=1500):
+    """트랜스크립트 끝에서 마지막 텍스트/에러 레코드 한 건(`[역할] 본문`). 못 읽으면 빈 문자열.
+
+    transcript_state와 같은 방식이다 -- 끝에서 64KB만 seek해 읽고 역순으로 json을 파싱한다.
+    """
+    try:
+        with open(path, "rb") as f:
+            f.seek(0, os.SEEK_END)
+            f.seek(max(0, f.tell() - 65536))
+            tail = f.read().decode("utf-8", "replace").strip().split("\n")
+    except OSError:
+        return ""
+    for line in reversed(tail):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            rec = json.loads(line)
+        except ValueError:
+            continue
+        txt = _rec_text(rec)
+        if txt:
+            return "[{}] {}".format(
+                str((rec.get("message") or {}).get("role") or rec.get("type") or "?"),
+                txt[:limit])
+    return ""
+
+
 def in_progress(troot):
     """상태 접미사가 진행중인 티켓 경로들(NFC/NFD 무관)."""
     return [p for p in tickets_in(troot)
@@ -374,6 +433,47 @@ def in_progress(troot):
 
 # 회수할 때 비우는 할당·생존 신호. 남겨 두면 열린 티켓이 '할당됨'으로 보여 select가 영구 제외한다.
 REAP_CLEAR = ("session_id", "assigned_at", "owner", "pid", "claimed_at", "transcript")
+
+
+def _section(body, pat, limit):
+    """본문에서 `## <pat>` 절(같은 이름이 여럿이면 마지막 것)의 내용을 limit자까지. 없으면 "".
+
+    h3 이하는 절 안에 남긴다(`^##\\s`는 `### `에 걸리지 않는다) -- 답변 화면도 같은 규칙이다.
+    """
+    # 제목 매칭은 NFC로 한다(맥에서 온 본문은 `블록`이 NFD로 적혀 있을 수 있다). 인용은 원문 그대로.
+    starts = [i for i, l in enumerate(body) if re.match(r"^##\s*" + nfc(pat), nfc(l))]
+    if not starts:
+        return ""
+    out = []
+    for l in body[starts[-1] + 1:]:
+        if re.match(r"^##\s", l):
+            break
+        out.append(l)
+    return "\n".join(out).strip()[:limit]
+
+
+def _quote(text):
+    return "\n".join(("> " + l) if l.strip() else ">" for l in text.split("\n"))
+
+
+def ask_context(fm, body):
+    """자동 상신 질문에 붙일 판단 재료 -- 티켓 Goal · 블록 · 죽은 세션 로그 꼬리.
+
+    정형문("3회 죽었다")만으로는 사람이 답할 자료가 화면에 없었다(요구 11990127: jaso에서
+    3라운드가 "다시 시도해보세요"로 소모됐다). 인용 상한은 답변 다이얼로그가 스크롤 없이
+    읽히는 길이다. 세션 로그는 티켓 파일 어디에도 없는 유일한 정보라 없으면 없다고 적는다.
+    """
+    out = ""
+    goal = _section(body, "Goal", 600)
+    if goal:
+        out += "\n### 티켓 Goal\n\n{}\n".format(_quote(goal))
+    blk = _section(body, "블록", 1200)
+    if blk:
+        out += "\n### 티켓 블록\n\n{}\n".format(_quote(blk))
+    tr = transcript_of(fm)
+    tail = transcript_tail(tr, 1500) if tr else ""
+    return out + "\n### 죽은 세션 마지막 기록\n\n{}\n".format(
+        _quote(tail or "트랜스크립트를 찾지 못했습니다"))
 
 
 def ask_human(path, h, attempts, why):
@@ -389,12 +489,16 @@ def ask_human(path, h, attempts, why):
     a = uuid.uuid4().hex[:8]
     fm, lines, end = read_fm(path)
     body = lines[end:]
+    try:
+        ctx = ask_context(fm, body)
+    except Exception as e:                   # 자료 수집 실패가 답변 요청 자체를 막지 않는다
+        ctx = "\n### 죽은 세션 마지막 기록\n\n> 자료를 읽지 못했습니다: {}\n".format(e)
     with open(path, "a", encoding="utf-8") as f:
-        f.write("\n## 질문 {}\n\n자동 회수 {}회 실패({}). 엔진은 더 시도하지 않습니다 — {}\n".format(
+        f.write("\n## 질문 {}\n\n자동 회수 {}회 실패({}). 엔진은 더 시도하지 않습니다 — {}\n{}".format(
             sum(1 for l in body if re.match(r"^##\s*질문", l)) + 1, attempts, why,
             "위 `## 블록`에 적힌 결정을 답해주세요."
             if any(re.match(r"^##\s*블록", l) for l in body)
-            else "세션이 왜 계속 죽는지, 이 티켓을 계속 갈지 답해주세요."))
+            else "세션이 왜 계속 죽는지, 이 티켓을 계속 갈지 답해주세요.", ctx))
     # 잠금(deps)을 먼저 걸고 할당을 나중에 푼다. 순서를 바꾸면 그 사이에 티켓이
     # 잠금 없이 열려 다음 tick이 답변 없이 집어 간다.
     set_deps(path, deps_of(lines, end) + [a])
