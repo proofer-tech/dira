@@ -162,8 +162,10 @@ export function HomeUI({ project, initial }: { project: string; initial: HomeChu
   };
 
   return (
-    // 폭은 `max-w-3xl`이다(§24) — 읽는 산문 + 폼이고 테이블이 아니라서 §4 폼 규칙 그대로다.
-    <div className="max-w-3xl space-y-6">
+    // 폭 제한 없음 — §4 폼 규칙의 **셋째 예외**(§24 폭 항, 사람 요청 `bcf8299d`).
+    // 여기서는 폼도 같이 넓어진다: 홈에는 폼·산문 밖의 자리가 없어서 앞의 두 예외처럼
+    // "페이지만 풀고 폼은 `max-w-3xl`"을 얹으면 화면이 한 픽셀도 안 움직인다.
+    <div className="space-y-6">
       <div className="flex items-center justify-between gap-2">
         <h1 className="text-lg font-semibold">홈</h1>
         {/* 0건이면 안 그린다 — 비울 것이 없다(§24). 도는 중에는 `aria-disabled`다:
