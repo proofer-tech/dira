@@ -1,12 +1,18 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
 // 진짜 락 디렉터리(~/.config/dira/run)도 진짜 레지스트리도 밟지 않는다. import 전에 건다.
 const LOCAL = mkdtempSync(path.join(tmpdir(), "ha-local-"));
 process.env.TICKET_LOCAL = LOCAL;
+// **`~`도 옮긴다** — 아래 왕복 테스트가 `findTranscript`(= `$HOME/.claude/projects/*`)를 그대로
+// 타야 흐르는 답과 정본이 갈리는 자리를 진짜로 잰다. 사람의 트랜스크립트 864개를 안 밟는다.
+const HOME = mkdtempSync(path.join(tmpdir(), "ha-home-"));
+process.env.HOME = HOME;
+const TRANSCRIPTS = path.join(HOME, ".claude", "projects", "fake-cwd");
+mkdirSync(TRANSCRIPTS, { recursive: true });
 
 const {
   renderSnapshot,
@@ -15,6 +21,7 @@ const {
   toTurns,
   ask,
   startAsk,
+  stopAsk,
   pollHome,
   isAsking,
   sessionsPath,
@@ -24,12 +31,13 @@ const {
   switchConversation,
   TOOL_FLAGS,
 } = await import("./home-agent.ts");
+type HomeChunk = Awaited<ReturnType<typeof pollHome>>;
 const { tailEvents } = await import("./transcript.ts");
 const { resolveConfig } = await import("./projects.ts");
 const { listTickets } = await import("./queue.ts");
 const { listWorkers, lockPath } = await import("./workers.ts");
 
-const tmps: string[] = [LOCAL];
+const tmps: string[] = [LOCAL, HOME];
 process.on("exit", () => tmps.forEach((p) => rmSync(p, { recursive: true, force: true })));
 
 /** 워커 2개 · 티켓 4건짜리 임시 큐. w1은 살아 있는 락을 쥐고 `.wip` 티켓 하나를 물고 있다. */
@@ -337,7 +345,8 @@ test("제목 · 세션을 여는 질문과 잇는 질문 — 첫 줄을 80자에
   const project = { id: "title-test", name: "큐", root: path.join(LOCAL, "ask/.dira") };
   const log = path.join(LOCAL, "fake.log");
   const path0 = process.env.PATH;
-  process.env.PATH = fakeClaude(`echo '{"is_error":false,"result":"답"}'`);
+  // stream-json은 결과가 마지막 줄이 아니라 `type`으로 갈린다(§7 §답은 흐른다 — 실측)
+  process.env.PATH = fakeClaude(`echo '{"type":"result","is_error":false,"result":"답"}'`);
   process.env.FAKE_LOG = log;
   try {
     // 첫 질문은 `새 대화` 없이도 줄을 연다
@@ -399,6 +408,204 @@ test("첫 질문이 실패한 대화 — 줄과 제목은 남고 session id만 �
     process.env.PATH = path0;
     delete process.env.FAKE_LOG;
   }
+});
+
+test("toTurns — 중지가 남기는 가짜 줄 셋은 대화가 아니다 (§7 §도는 답을 멈춘다 실측 ⑷)", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "ha-ghost-"));
+  tmps.push(dir);
+  const file = path.join(dir, "s.jsonl");
+  const user = (uuid: string, text: string) =>
+    JSON.stringify({
+      type: "user",
+      uuid,
+      timestamp: "2026-08-01T05:00:00.000Z",
+      message: { role: "user", content: [{ type: "text", text }] },
+    });
+  const asst = (uuid: string, text: string) =>
+    JSON.stringify({
+      type: "assistant",
+      uuid,
+      timestamp: "2026-08-01T05:00:01.000Z",
+      message: { role: "assistant", content: [{ type: "text", text }] },
+    });
+  writeFileSync(
+    file,
+    [
+      user("u1", buildPrompt("SNAP", "40문장 써라")),
+      asst("a1", "1. 1은 곱셈의 항등원이라"),
+      user("u2", "[Request interrupted by user]"), // 중지가 남긴 것
+      user("u3", "Continue from where you left off."), // `--resume`이 넣은 것
+      asst("a2", "No response requested."), // 그 답
+      user("u4", buildPrompt("SNAP", "어디까지 썼나")),
+      "",
+    ].join("\n"),
+  );
+  const { events } = await tailEvents(file, 0);
+  assert.deepStrictEqual(
+    toTurns(events).map((t) => t.text),
+    ["40문장 써라", "1. 1은 곱셈의 항등원이라", "어디까지 썼나"],
+  );
+  // 전문 일치라 **사람이 인용한 같은 문장은 안 삼킨다** — 이 셋에는 사람 글과 구분되는 플래그가 없다
+  writeFileSync(file, user("u5", "왜 `[Request interrupted by user]`가 뜨나") + "\n");
+  assert.strictEqual((await tailEvents(file, 0)).events.length, 1);
+  assert.strictEqual(toTurns((await tailEvents(file, 0)).events).length, 1);
+});
+
+// ── 왕복 (§7 §답은 흐른다 · §도는 답을 멈춘다) ────────────────────────────────
+//
+// **진짜 `claude` 대신 우리가 쓴 `claude`를 PATH 앞에 세운다.** 실행층이 지키는 것은 자식이
+// 무엇을 하느냐가 아니라 **그 stdout에서 무엇을 읽고 누가 핸들을 들고 있느냐**라, 그 계약을
+// 그대로 흉내내는 30줄짜리 sh가 5분짜리 진짜 세션보다 정확한 픽스처다(실제 왕복은 티켓 `## 결과`).
+// 스트리밍 이벤트 · 결과 객체 · 트랜스크립트 · `SIGTERM` 뒤 rc 143이 전부 실측 원문 모양이다.
+const FAKE = mkdtempSync(path.join(tmpdir(), "ha-bin-"));
+tmps.push(FAKE);
+const ARGV = path.join(FAKE, "argv.log");
+writeFileSync(
+  path.join(FAKE, "claude"),
+  `#!/bin/sh
+# 가짜 claude. argv는 \`-p (--session-id|--resume) <uuid> …\`라 sid가 늘 $3이다.
+sid="$3"
+echo "$@" | head -1 >> "${ARGV}"   # 마지막 인자(프롬프트)가 여러 줄이라 첫 줄만 = 호출 한 번
+tr="${TRANSCRIPTS}/$sid.jsonl"
+say() { printf '%s\\n' "$1"; }
+keep() {  # 중지·성공 양쪽에서 트랜스크립트가 정본이 된다(실측 ⑵)
+  printf '{"type":"user","uuid":"u%s","timestamp":"2026-08-01T05:00:00.000Z","message":{"role":"user","content":"물음"}}\\n' "$$" >> "$tr"
+  printf '{"type":"assistant","uuid":"a%s","timestamp":"2026-08-01T05:00:09.000Z","message":{"role":"assistant","content":[{"type":"text","text":"%s"}]}}\\n' "$$" "$1" >> "$tr"
+}
+delta() { say '{"type":"stream_event","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"'"$1"'"}},"parent_tool_use_id":null}'; }
+case "$FAKE_MODE" in
+  auth)   # 실패 ② — stream_event 0건이라 누적분이 비어 있다
+    say '{"type":"result","is_error":true,"subtype":"success","api_error_status":401,"result":"Failed to authenticate. API Error: 401 OAuth access token is invalid."}'
+    exit 1 ;;
+  hang)   # 중지 대상. SIGTERM을 받아 **스스로** 143으로 나가면서 받은 데까지를 남긴다
+    trap 'keep "받은 데까지"; exit 143' TERM
+    say '{"type":"stream_event","event":{"type":"message_start"},"parent_tool_use_id":null}'
+    delta "받은 데까지"
+    # 포그라운드 sleep이면 trap이 그게 끝난 뒤에 돈다. stdout을 떼는 것도 필수 —
+    # 안 떼면 죽은 뒤에도 손자가 파이프를 물고 있어 부모의 \`close\`가 안 온다
+    sleep 60 >/dev/null 2>&1 & wait ;;
+  *)
+    say '{"type":"system","subtype":"init"}'   # --verbose가 섞는 줄. 결과가 아니다
+    say '{"type":"stream_event","event":{"type":"message_start"},"parent_tool_use_id":null}'
+    say '{"type":"stream_event","event":{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":""}},"parent_tool_use_id":null}'
+    delta "앞부분"
+    [ "$FAKE_MODE" = "stream" ] && sleep 2   # 델타 사이의 480ms(실측) 자리 — 도는 중을 재는 창
+    delta " 뒷부분"
+    keep "앞부분 뒷부분"
+    say '{"type":"rate_limit_event"}'        # 결과를 "마지막 줄"로 집으면 여기서 틀린다
+    say '{"type":"result","is_error":false,"subtype":"success","api_error_status":null,"result":"앞부분 뒷부분"}' ;;
+esac
+`,
+  { mode: 0o755 },
+);
+chmodSync(path.join(FAKE, "claude"), 0o755);
+const withFake = <T>(mode: string, fn: () => Promise<T>): Promise<T> => {
+  const path0 = process.env.PATH;
+  process.env.PATH = `${FAKE}:${path0 ?? ""}`; // 앞에 선다. `sleep`을 쓰므로 원래 PATH도 남긴다
+  process.env.FAKE_MODE = mode;
+  return fn().finally(() => {
+    process.env.PATH = path0;
+  });
+};
+
+/** 자식의 cwd는 **큐의 부모**다(`ask`) — 없는 디렉터리면 `spawn`이 `ENOENT`다. 실행층이 도는
+ *  조건을 픽스처가 지운 채로 재면 세 테스트가 다 실패 ①로 뭉친다. */
+const CWD = path.join(mkdtempSync(path.join(tmpdir(), "ha-cwd-")), ".dira");
+tmps.push(path.dirname(CWD));
+
+/** 화면이 하는 일과 **같은 폴링**: 세션·offset을 들고 다니고 `reset`이면 갈아 끼운다. */
+function poller(projectId: string) {
+  let session: string | null = null;
+  let offset = 0;
+  const turns: string[] = [];
+  const next = async (): Promise<HomeChunk> => {
+    const c = await pollHome(projectId, session, offset);
+    session = c.sessionId;
+    offset = c.offset;
+    if (c.reset) turns.length = 0;
+    turns.push(...c.turns.map((t) => t.text));
+    return c;
+  };
+  const until = async (want: (c: HomeChunk) => boolean): Promise<HomeChunk> => {
+    for (let i = 0; i < 600; i++) {
+      const c = await next();
+      if (want(c)) return c;
+      await new Promise((r) => setTimeout(r, 25));
+    }
+    throw new Error(`15초 안에 조건이 안 됐다 (turns=${JSON.stringify(turns)})`);
+  };
+  return { turns, next, until };
+}
+
+test("흐르는 답 — 도는 동안은 stdout 누적분, 끝나면 정본이 트랜스크립트로 넘어간다", async () => {
+  const project = { id: "stream-test", name: "큐", root: CWD };
+  await withFake("stream", async () => {
+    assert.strictEqual(await startAsk(project, "질문"), null);
+
+    // ① 도는 중에 부분 텍스트가 온다. `thinking_delta`는 안 붙는다(본문이 빈 문자열이다)
+    const mid = await poller(project.id).until((c) => c.partial !== "");
+    assert.strictEqual(mid.partial, "앞부분");
+    assert.strictEqual(mid.running, true);
+    assert.strictEqual(mid.turns.length, 0); // 트랜스크립트에는 아직 아무것도 없다
+
+    // ② 끝나는 순간 — 누적분이 비고 같은 응답의 `turns`가 그 답을 진짜 줄로 데려온다.
+    //    **한 답이 두 벌로 그려지지 않는 자리가 이 두 줄이다.**
+    const p = poller(project.id);
+    const end = await p.until((c) => !c.running);
+    assert.strictEqual(end.partial, "");
+    assert.deepStrictEqual(p.turns, ["물음", "앞부분 뒷부분"]);
+    assert.strictEqual(end.failed, null);
+    assert.strictEqual(end.stopped, false);
+  });
+});
+
+test("`중지` — SIGTERM 하나로 끝나고, 받은 글은 남고, 다음 질문이 `--resume`으로 이어진다", async () => {
+  const project = { id: "stop-test", name: "큐", root: CWD };
+  await withFake("hang", async () => {
+    const p = poller(project.id);
+    assert.strictEqual(await startAsk(project, "긴 질문"), null);
+    await p.until((c) => c.partial !== "");
+
+    assert.strictEqual(stopAsk(project.id), true);
+    assert.strictEqual(stopAsk(project.id), false); // 두 번 눌러도 신호는 하나다
+
+    const end = await p.until((c) => !c.running);
+    // **실패가 아니다**(§7: 실패 5종에 여섯 번째를 만들지 않는다). 받은 글은 트랜스크립트에 남는다
+    assert.strictEqual(end.stopped, true);
+    assert.strictEqual(end.failed, null);
+    assert.strictEqual(end.partial, "");
+    assert.deepStrictEqual(p.turns, ["물음", "받은 데까지"]);
+    // 입력칸이 곧바로 열린다 — 서버가 아는 "도는 질문"이 없다
+    assert.strictEqual(isAsking(project.id), false);
+  });
+
+  // 다음 질문은 **같은 대화**다. 중지가 세션 한 줄을 지우지 않았고, argv가 `--resume`이다
+  const sid = await readSessionId(project.id);
+  assert.ok(sid);
+  await withFake("", async () => {
+    assert.strictEqual(await startAsk(project, "다음 질문"), null);
+    await poller(project.id).until((c) => !c.running);
+  });
+  const argv = readFileSync(ARGV, "utf8").trim().split("\n");
+  assert.match(argv.at(-1) ?? "", new RegExp(`^-p --resume ${sid} `));
+  assert.match(argv.at(-2) ?? "", new RegExp(`^-p --session-id ${sid} `)); // 첫 질문이 연 세션
+  // 새 형식이 도구 표면을 안 넓혔다 — 늘어난 것은 출력 형식 셋뿐이다
+  assert.match(argv.at(-1) ?? "", /--tools Read,Glob,Grep .*--output-format stream-json --include-partial-messages --verbose/);
+});
+
+test("실패 ② 인증 — 새 형식에서도 판정은 `api_error_status` 401이다", async () => {
+  const project = { id: "auth-test", name: "큐", root: CWD };
+  await withFake("auth", async () => {
+    assert.strictEqual(await startAsk(project, "질문"), null);
+    const end = await poller(project.id).until((c) => !c.running);
+    assert.strictEqual(end.failed?.reason, "auth");
+    assert.match(end.failed?.output ?? "", /401 OAuth access token is invalid/);
+    assert.strictEqual(end.partial, ""); // 흐르다 만 글과 안 흐른 글이 구분된다
+    assert.strictEqual(end.stopped, false);
+  });
+  // 세션을 못 연 채로 끝났으므로 그 줄은 **여전히 `fresh`다** — 다음 질문은 `--session-id`로
+  // 다시 연다(안 열린 세션에 `--resume`을 걸면 그 화면은 영영 안 산다)
+  assert.strictEqual((await readHome(project.id)).conversations.at(-1)?.fresh, true);
 });
 
 test("한 프로젝트에 한 질문 — 둘째는 기다리지 않고 거절되고, 폴링 한 번이 답을 집어 간다", async () => {

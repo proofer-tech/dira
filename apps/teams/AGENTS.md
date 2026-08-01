@@ -30,7 +30,7 @@ apps/teams/
                         `protocols/actions.ts`). 발행·요구 접수는 **라우트가 아니라 보드의
                         다이얼로그**라 `createTicket`이 `(board)/`에 산다(DESIGN.md §3).
                         클라이언트에서 `@/app/p/[project]/…/actions`로 그냥 import된다
-    p/[project]/home/   프로젝트 홈 — 질의 에이전트(§7). `actions.ts`가 셋(묻기·폴링·새 대화)이고
+    p/[project]/home/   프로젝트 홈 — 질의 에이전트(§7). `actions.ts`가 넷(묻기·폴링·중지·새 대화)이고
                         **큐 파일을 하나도 안 건드리는 유일한 화면 액션**이다 — 질문이 티켓으로
                         들어가지 않고 답이 티켓으로 나오지 않는다. 나가는 쓰기는
                         `$TICKET_LOCAL/home-sessions.json`의 대화 목록뿐이다
@@ -85,7 +85,13 @@ apps/teams/
                         (+ MCP를 빼는 `--strict-mcp-config`)뿐**이다 — `--allowed-tools`는 권한
                         자동승인 목록이라 목록 밖 `Bash`가 그대로 돈다(A/B 실측 `89962e56`).
                         `--permission-mode manual`은 그 뒤에 남은 것의 관문이다. 대화 이력 저장소를
-                        만들지 않는다: 렌더는 `transcript.ts`가 읽는 그 트랜스크립트다
+                        만들지 않는다: 렌더는 `transcript.ts`가 읽는 그 트랜스크립트다.
+                        **출처가 둘인 유일한 화면이다**(§7 §답은 흐른다): 도는 동안은 자식의 stdout
+                        (`--output-format stream-json --include-partial-messages --verbose` →
+                        `text_delta` 누적 = `HomeChunk.partial`)이고, 끝나는 순간 정본이
+                        트랜스크립트로 넘어간다(같은 응답에서 `partial`이 비고 `turns`가 그 답을
+                        데려온다 — 한 답을 두 벌로 안 그린다). `중지`는 그 자식에 `SIGTERM` 하나고
+                        (`SIGKILL` 사다리 없음) 실패가 아니라 `stopped`다
     usage.ts            토큰의 **두 축**(§0-8). 판정 1(소비): `workers/logs/` 파일명 → 워커·시각,
                         마지막 줄 JSON → 그 세션의 토큰(`lastJsonLine`을 `workers.ts`와 **같이 쓴다**).
                         판정 2(잔여): `engineLimits`가 엔진 이름 → `%`·리셋 시각을 준다 —

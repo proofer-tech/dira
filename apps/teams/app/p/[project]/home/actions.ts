@@ -15,6 +15,7 @@ import {
   newConversation,
   pollHome,
   startAsk,
+  stopAsk,
   type Answer,
   type HomeChunk,
 } from "@/lib/home-agent";
@@ -52,7 +53,27 @@ export async function pollHomeAnswer(
     await required(projectId);
     return await pollHome(projectId, sessionId, offset);
   } catch {
-    return { sessionId: null, turns: [], offset: 0, reset: true, running: false, failed: null };
+    return {
+      sessionId: null,
+      turns: [],
+      offset: 0,
+      reset: true,
+      running: false,
+      partial: "",
+      stopped: false,
+      failed: null,
+    };
+  }
+}
+
+/** `중지`(§7 §도는 답을 멈춘다) — 도는 자식에 `SIGTERM`. **답이 사라지지 않는다**: 받은 데까지가
+ *  트랜스크립트에 남고 다음 질문은 같은 대화에 `--resume`으로 이어진다(실측 ⑵⑶).
+ *  돌려주는 것은 죽일 것이 있었나이고, 상태가 화면에 붙는 것은 그 다음 폴링의 `stopped`다. */
+export async function stopHome(projectId: string): Promise<boolean> {
+  try {
+    return stopAsk((await required(projectId)).id);
+  } catch {
+    return false; // 등록이 풀린 프로젝트 — 죽일 것도 말할 것도 없다
   }
 }
 
