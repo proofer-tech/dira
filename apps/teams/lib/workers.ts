@@ -69,10 +69,6 @@ export type Worker = {
   worktree?: string[];
 };
 
-/** tick.sh 46행. 워커가 덮어쓰지 않으면 실제로 이게 돈다 — "기본값"이라고 얼버무리지 않는다. */
-const DEFAULT_ENGINE =
-  'claude -p "{prompt}" --session-id "{sid}" --dangerously-skip-permissions --output-format json';
-
 /** 엔진 이름 = **첫 토큰의 basename**. `tick.sh:52`의 `basename "${TICKET_ENGINE[0]}"`와 같은
  *  식이다 — 인증 판정(§0-4)이 이 값 하나에 걸리므로 식을 두 벌로 적지 않고 화면이 이걸 부른다.
  *  ponytail: 셸을 실행하지 않으니 따옴표만 벗긴다 — `$VAR` 전개는 `parseWorkerFile`의 다른
@@ -219,11 +215,19 @@ export type ContextBlock =
   | { ok: true; items: { path: string; desc: string }[]; start: number; end: number }
   | { ok: false; reason: string };
 
-/** 워커 파일 텍스트에서 `TICKET_CONTEXT=( … )` 블록을 찾아 항목과 **치환 구간**을 돌려준다.
- *  모양이 조금이라도 예상과 다르면 `ok: false` — 반쪽만 고치는 것보다 거부가 낫다. */
-export function parseContextBlock(text: string, arr = "TICKET_CONTEXT"): ContextBlock {
+type ArrayBlock =
+  | { ok: true; entries: string[]; start: number; end: number }
+  | { ok: false; reason: string; missing?: true };
+
+/** bash 배열 블록의 **경계와 원시 항목**. 거부 규칙(`할당이 2개`·`+=`·`블록 안에 주석`·
+ *  `닫는 )가 없다`·인용 의미가 갈리는 항목)의 **유일한 출처**다.
+ *
+ *  뜻은 부르는 쪽이 붙인다: 컨텍스트는 `경로|설명`으로 가르고(`splitEntry`), 엔진(§4-3)은
+ *  argv 토큰이라 가르지 않는다. 같은 규약을 두 벌 적지 않으려고 여기서 갈렸다. */
+function parseArrayBlock(text: string, arr: string): ArrayBlock {
   const opens = [...text.matchAll(contextOpen(arr))];
-  if (opens.length === 0) return { ok: false, reason: `${arr}=( … ) 블록이 없습니다` };
+  // `missing`은 **없음**만 표시한다 — 모양이 다른 블록과 갈려야 엔진(§4-3)이 없을 때만 삽입한다.
+  if (opens.length === 0) return { ok: false, reason: `${arr}=( … ) 블록이 없습니다`, missing: true };
   if (opens.length > 1) {
     return {
       ok: false,
@@ -239,7 +243,7 @@ export function parseContextBlock(text: string, arr = "TICKET_CONTEXT"): Context
   for (;;) {
     while (i < text.length && " \t\r\n".includes(text[i])) i++;
     if (i >= text.length) return { ok: false, reason: "닫는 `)`가 없습니다" };
-    if (text[i] === ")") return { ok: true, items: entries.map(splitEntry), start, end: i + 1 };
+    if (text[i] === ")") return { ok: true, entries, start, end: i + 1 };
     if (text[i] === "#") {
       // 블록 전체를 치환하므로 안의 주석은 사라진다. 지우는 대신 거부한다.
       return { ok: false, reason: "블록 안에 주석이 있습니다" };
@@ -262,6 +266,13 @@ export function parseContextBlock(text: string, arr = "TICKET_CONTEXT"): Context
     entries.push(e[1] ?? e[2] ?? e[3]);
     i += e[0].length;
   }
+}
+
+/** 워커 파일 텍스트에서 `TICKET_CONTEXT=( … )` 블록을 찾아 항목과 **치환 구간**을 돌려준다.
+ *  모양이 조금이라도 예상과 다르면 `ok: false` — 반쪽만 고치는 것보다 거부가 낫다. */
+export function parseContextBlock(text: string, arr = "TICKET_CONTEXT"): ContextBlock {
+  const b = parseArrayBlock(text, arr);
+  return b.ok ? { ok: true, items: b.entries.map(splitEntry), start: b.start, end: b.end } : b;
 }
 
 /** 파일에 들어갈 블록 텍스트. 항상 큰따옴표로 쓴다 — `$TICKET_CWD`는 살리고 공백은 죽인다. */
@@ -547,6 +558,157 @@ export async function applyCommonSource(root: string, name: string): Promise<boo
   }
   await atomicWrite(file, next, (await stat(file)).mode & 0o777); // 755를 잃지 않는다
   return true;
+}
+
+// ── 엔진 · 모델 선택 (DESIGN.md §4-3) ───────────────────────────────────────
+//
+// 고르는 단위는 **엔진 × 모델 한 쌍**이고, 커맨드는 **엔진마다 고정 문자열 한 벌**이다.
+// 부품에서 합성하지 않는다 — 두 템플릿이 서로 바꿔 쓸 수 없는 자리가 넷이라서다(§4-3 표):
+// `--input-format stream-json` 인접(tick.sh:263-270 FIFO 판정) · claude에 `{prompt}` 없음 ·
+// codex에 `{prompt}` 있음 · claude의 `--session-id "{sid}"`(tick.sh:94 reap · §2-1 스트림 파일명).
+
+export type EngineId = "claude" | "codex";
+
+/** `모델 지정 안 함` = 모델 플래그를 아예 안 붙인다(엔진 CLI 자기 기본값). 목록 맨 앞이고
+ *  새 워커의 기본값이다 — 가장 안 낡는 선택지다(§4-3). */
+export const NO_MODEL = "";
+
+/** 고정 템플릿 안에서 `[flag, model]`로 펴지는 자리. `NO_MODEL`이면 통째로 사라진다. */
+const MODEL_SLOT = " model";
+
+export const ENGINE_ARR = "TICKET_ENGINE";
+
+/** 화면이 그리는 목록의 유일한 출처. **모델 이름은 실측으로만 오른다** — 확인 못 한 이름을
+ *  올리는 것이 §4-3이 말하는 "화면이 거짓말한다"이다. 갱신 명령은 `f6dd8478` §결과에 있다. */
+export const ENGINES: readonly {
+  id: EngineId;
+  /** 모델 플래그. `claude --model` · `codex -m` (둘 다 실재한다 — §4-3) */
+  flag: string;
+  /** 목록. 맨 앞은 항상 `NO_MODEL`이고, 여기 없는 이름은 화면의 `직접 입력`이 받는다 */
+  models: readonly string[];
+  /** argv 토큰 **고정 문자열**. `{prompt}`·`{sid}`는 글자 그대로다(tick.sh:236이 치환한다) */
+  argv: readonly string[];
+}[] = [
+  {
+    id: "claude",
+    flag: "--model",
+    // 별칭은 정의상 최신을 가리키는 고정 포인터라 풀네임과 달리 안 낡는다(§4-3 근거 2).
+    models: [NO_MODEL, "opus", "sonnet", "fable"],
+    argv: [
+      "claude",
+      "-p",
+      "--session-id",
+      '"{sid}"',
+      "--dangerously-skip-permissions",
+      MODEL_SLOT,
+      "--input-format",
+      "stream-json",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+    ],
+  },
+  {
+    id: "codex",
+    flag: "-m",
+    // `codex debug models`의 `visibility: "list"` 5종 중 숨김(`codex-auto-review`)을 뺀 넷.
+    models: [NO_MODEL, "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "gpt-5.4-mini"],
+    // 뒤 두 플래그는 장식이 아니다(실측 — 티켓 §결과):
+    // `-s danger-full-access` 없으면 기본 샌드박스가 read-only라 **자기 워크트리에도 못 쓴다**.
+    // `workspace-write`로도 부족하다 — `.dira`가 워크트리 밖(큐)을 가리켜 티켓 rename이 막힌다.
+    // `--skip-git-repo-check` 없으면 레포가 아닌 TICKET_CWD에서 매 tick 즉시 거부된다.
+    argv: [
+      "codex",
+      "exec",
+      "--json",
+      "-s",
+      "danger-full-access",
+      "--skip-git-repo-check",
+      MODEL_SLOT,
+      '"{prompt}"',
+    ],
+  },
+];
+
+/** 모델 문자열은 **사람이 직접 입력**할 수 있고 그대로 셸 배열의 맨 낱말이 된다. 여기가 그
+ *  신뢰 경계다 — 인용 없는 토큰이므로 셸 메타문자가 하나라도 있으면 거부한다(클라이언트 검증은
+ *  검증이 아니다. 이 함수가 서버에서 돈다). 실재하는 모델 이름은 전부 이 문자 집합 안이다. */
+const MODEL_RE = /^[A-Za-z0-9._:/-]+$/;
+
+/** 고른 값 → argv 토큰. 템플릿은 고정이고 모델 자리만 끼운다. */
+export function engineArgv(id: EngineId, model: string = NO_MODEL): string[] {
+  const e = ENGINES.find((x) => x.id === id);
+  if (!e) throw new Error(`모르는 엔진입니다: ${id}`);
+  if (model !== NO_MODEL && !MODEL_RE.test(model)) {
+    throw new Error(`모델 이름에 쓸 수 없는 문자가 있습니다(영문·숫자·. _ : / - 만): ${model}`);
+  }
+  return e.argv.flatMap((t) => (t === MODEL_SLOT ? (model ? [e.flag, model] : []) : [t]));
+}
+
+/** `tick.sh:51-53`. 워커가 덮어쓰지 않으면 실제로 이게 돈다 — "기본값"이라고 얼버무리지 않는다.
+ *  **카탈로그에서 유도한다**: 손으로 적었더니 엔진이 스트리밍 입력으로 바뀐 뒤에도 옛 argv
+ *  (`-p "{prompt}" … --output-format json`)로 남아, 대입 없는 워커의 `엔진` 열이 안 도는 커맨드를
+ *  말하고 §4-3 역파싱이 그 워커 전부를 `커스텀`으로 읽었다. 두 벌이면 반드시 갈린다. */
+const DEFAULT_ENGINE = engineArgv("claude").join(" ");
+
+/** 파일에 들어갈 블록 텍스트. 한 줄이다 — 사람이 고칠 자리가 아니라 GUI가 소유하는 대입이다. */
+export function renderEngineBlock(id: EngineId, model: string = NO_MODEL): string {
+  return `${ENGINE_ARR}=(${engineArgv(id, model).join(" ")})`;
+}
+
+/** 역파싱: 워커 파일에서 읽은 `engine` 문자열 → 고른 값. 카탈로그 템플릿과 **글자로** 안 맞으면
+ *  `null`(= 손으로 쓴 커스텀 엔진)이다. 행이 지금 값을 표시하려면 이게 필요하다(§4-3). */
+export function parseEngineValue(engine: string): { engineId: EngineId; model: string } | null {
+  const toks = engine.trim().split(/\s+/);
+  for (const e of ENGINES) {
+    const i = toks.indexOf(e.flag);
+    const model = i >= 0 && i + 1 < toks.length ? toks[i + 1] : NO_MODEL;
+    // 모델을 뽑아 템플릿을 다시 그려 통째로 대조한다 — 토큰 하나라도 다르면 커스텀이다.
+    if (MODEL_RE.test(model) || model === NO_MODEL) {
+      if (engineArgv(e.id, model).join(" ") === toks.join(" ")) return { engineId: e.id, model };
+    }
+  }
+  return null;
+}
+
+/** 블록 치환, 없으면 **삽입**. 파일을 안 건드리는 순수 함수다.
+ *
+ *  §4는 컨텍스트에 대해 "없으면 GUI가 넣지 않는다(삽입 자리를 짚을 앵커가 없다)"고 정했는데
+ *  엔진은 그 논리가 안 선다: 지금 이 큐의 워커 전부에 `TICKET_ENGINE` 대입이 없어서 거부하면
+ *  기능이 **모든 기존 워커에서 안 열린다**(§4-3). 대입 하나뿐이라 `source` 줄 위 어디에 놓든
+ *  결과가 같으므로 고를 것이 없다 — 추측이 아니다. */
+function applyEngineBlock(text: string, id: EngineId, model: string): string {
+  const block = renderEngineBlock(id, model);
+  const b = parseArrayBlock(text, ENGINE_ARR);
+  if (b.ok) return text.slice(0, b.start) + block + text.slice(b.end);
+  // 모양이 다른 블록(`+=`·2개·주석·안 닫힘)은 종전대로 거부다. 없는 것만 삽입이다.
+  if (!b.missing) throw new Error(`${b.reason}. 파일을 손으로 편집하세요.`);
+  const m = text.match(sourceTick); // `/m` 앵커라 index가 그 줄 처음이다
+  if (!m || m.index === undefined) {
+    throw new Error("`. <레포>/tick.sh` 줄이 없습니다 — 이 파일은 워커가 아닙니다.");
+  }
+  return text.slice(0, m.index) + block + "\n" + text.slice(m.index);
+}
+
+/** 워커의 엔진·모델을 쓴다. 자기검증(**읽기 경로로 다시 읽는다**) → 원자적 교체.
+ *  `running` 워커에도 쓴다 — 도는 세션은 이미 뜬 argv로 돌고 다음 tick부터 새 엔진이다(§4-3). */
+export async function writeEngine(
+  root: string,
+  name: string,
+  id: EngineId,
+  model: string = NO_MODEL,
+): Promise<{ engineId: EngineId; model: string }> {
+  const file = await workerFile(root, name);
+  const text = await readFile(file, "utf8");
+  const next = applyEngineBlock(text, id, model);
+  // 자기 검증은 `parseWorkerFile` → `parseEngineValue`, 즉 **화면이 읽는 그 길**로 한다.
+  const engine = parseWorkerFile(next).engine;
+  const back = engine ? parseEngineValue(engine) : null;
+  if (!back || back.engineId !== id || back.model !== model) {
+    throw new Error(`쓴 블록을 다시 읽으면 값이 달라집니다(${engine ?? "대입 없음"}). 쓰지 않았습니다.`);
+  }
+  await atomicWrite(file, next, (await stat(file)).mode & 0o777); // 755를 잃지 않는다
+  return back;
 }
 
 /** tick 하나의 **결과**인 동사는 이 셋뿐이다(DESIGN.md §0-5 판정 1단계). 나머지는 건너뛴다:
