@@ -56,17 +56,17 @@ test("parseLogName — 워커 이름에 `-`가 들어가도 가운데 전부가 
   }
 });
 
-test("listUsage — 창 안만 · 워커별 합 · 안 끝난 세션은 running", async () => {
+test("listUsage — 창 안만 · 워커별 합 · 토큰 못 읽은 세션은 unaccounted", async () => {
   const root = makeRoot();
   //                                      = 1+2+3+4 = 10
   putLog(root, logName(10, "w1", "aaaaaaaa"), usage(1, 2, 3, 4));
   putLog(root, logName(20, "w1", "bbbbbbbb"), usage(10, 20, 30, 40)); // w1 합 = 110
   putLog(root, logName(30, "dev-box-2", "cccccccc"), usage(0, 0, 0, 7)); // `-` 이름
-  // 창 밖 + **안 끝난** 로그. 열었다면 running이 1 늘고, 안 열었으면 아무 일도 없다.
+  // 창 밖 + **안 끝난** 로그. 열었다면 unaccounted가 1 늘고, 안 열었으면 아무 일도 없다.
   putLog(root, logName(60 * 9, "w1", "dddddddd"), null);
   // 창 밖 + 끝난 로그. 열었다면 합에 들어간다.
   putLog(root, logName(60 * 9, "w1", "eeeeeeee"), usage(0, 0, 0, 1_000_000));
-  // 창 안 + 안 끝난 로그 → 합에 안 들어가고 running으로 센다
+  // 창 안 + 안 끝난 로그 → 합에 안 들어가고 unaccounted로 센다
   putLog(root, logName(5, "w2", "ffffffff"), null);
   // 마지막 줄이 JSON이지만 `usage`가 없다(stderr의 hook JSON — 실측에 실재한다).
   // 0으로 단정하지 않는다 = 아직 안 끝난 것으로 본다.
@@ -75,7 +75,7 @@ test("listUsage — 창 안만 · 워커별 합 · 안 끝난 세션은 running"
   const u = await listUsage(root, DEFAULT_WINDOW_MS);
   assert.deepEqual(u.byWorker, { w1: 110, "dev-box-2": 7 });
   assert.equal(u.total, 117);
-  assert.equal(u.running, 2); // 창 밖 미완료는 세지 않는다 = 열지 않았다
+  assert.equal(u.unaccounted, 2); // 창 밖 미완료는 세지 않는다 = 열지 않았다
 });
 
 test("listUsage — 끝난 로그는 캐시하고 안 끝난 로그는 캐시하지 않는다", async () => {
@@ -85,7 +85,7 @@ test("listUsage — 끝난 로그는 캐시하고 안 끝난 로그는 캐시하
   putLog(root, wip, null);
 
   const first = await listUsage(root);
-  assert.deepEqual(first, { byWorker: { w1: 100 }, total: 100, running: 1 });
+  assert.deepEqual(first, { byWorker: { w1: 100 }, total: 100, unaccounted: 1 });
 
   // 끝난 파일의 내용을 갈아 끼운다. 다시 열었다면 값이 바뀐다 — 안 바뀌면 캐시가 산 것이다.
   writeFileSync(done, JSON.stringify(usage(0, 0, 0, 999_999)) + "\n");
@@ -93,7 +93,7 @@ test("listUsage — 끝난 로그는 캐시하고 안 끝난 로그는 캐시하
   putLog(root, wip, usage(0, 0, 0, 5));
 
   const second = await listUsage(root);
-  assert.deepEqual(second, { byWorker: { w1: 100, w2: 5 }, total: 105, running: 0 });
+  assert.deepEqual(second, { byWorker: { w1: 100, w2: 5 }, total: 105, unaccounted: 0 });
 });
 
 test("formatTokens — 0은 빈칸이 아니고 큰 수는 읽히게 줄인다", () => {

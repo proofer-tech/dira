@@ -18,15 +18,15 @@ export type Usage = {
   byWorker: Record<string, number>;
   /** `byWorker`의 합 */
   total: number;
-  /** 창 안인데 **토큰을 못 읽은** 로그 수. 이 수가 이 판정의 천장이다 — `usage`는 세션 종료 시
-   *  한 번 쓰이므로 90분짜리 세션은 90분 동안 0으로 보인다. 화면이 침묵하면 사람은 "덜 썼다"로
-   *  읽고, 그게 §0-8이 없애려던 오독이다.
+  /** 창 안인데 **토큰을 못 읽어 이 합계 밖에 있는** 세션 수. 이 수가 이 판정의 천장이다 —
+   *  `usage`는 세션 종료 시 한 번 쓰이므로 90분짜리 세션은 90분 동안 0으로 보이고, 신호로
+   *  죽은 세션은 그 줄을 영영 안 쓴다. 화면이 침묵하면 사람은 "덜 썼다"로 읽고, 그게 §0-8이
+   *  없애려던 오독이다.
    *
-   *  **실측(이 큐, 창 5시간): 61건 중 13건이 여기 든다 — 진짜 도는 것은 5건이고 나머지 8건은
-   *  끝났는데 stdout이 비어 토큰이 영영 안 온다.** 그래서 §0-8이 글자로 정한 문구
-   *  `진행중 세션 n개는 끝난 뒤 반영됩니다`가 실측과 어긋난다 — `4a884d8d`로 PM에 올렸다.
-   *  이 필드의 값은 어느 답이 와도 같다(합계 밖에 있는 세션 수). */
-  running: number;
+   *  **`도는 세션 수`가 아니다.** 실측(이 큐, 창 5시간) 13건 중 8건이 rc 143/137로 죽은
+   *  세션이라 그 토큰은 앞으로도 안 온다(`4a884d8d`). 로그만으로는 도는 것과 죽은 것을
+   *  못 가르므로(hook JSON이 stderr에 먼저 깔린다) 두 수로 가르지 않는다 — §0-8 판정 1. */
+  unaccounted: number;
 };
 
 /** `<YYYYMMDD>-<HHMMSS>-<워커>-<해시>.log` (실측 `20260801-145504-w6-3c56c1c3.log`).
@@ -88,7 +88,7 @@ export async function listUsage(root: string, windowMs = DEFAULT_WINDOW_MS): Pro
 
   const byWorker: Record<string, number> = {};
   let total = 0;
-  let running = 0;
+  let unaccounted = 0;
 
   await Promise.all(
     names.map(async (file) => {
@@ -98,9 +98,9 @@ export async function listUsage(root: string, windowMs = DEFAULT_WINDOW_MS): Pro
       let tokens = cache.get(full);
       if (tokens === undefined) {
         const got = tokensOf(await lastJsonLine(full));
-        // 안 끝난 세션은 **캐시하지 않는다** — 다음 폴링에 다시 본다.
+        // 토큰을 못 읽은 세션은 **캐시하지 않는다** — 다음 폴링에 다시 본다.
         if (got === null) {
-          running++;
+          unaccounted++;
           return;
         }
         cache.set(full, (tokens = got));
@@ -110,7 +110,7 @@ export async function listUsage(root: string, windowMs = DEFAULT_WINDOW_MS): Pro
     }),
   );
 
-  return { byWorker, total, running };
+  return { byWorker, total, unaccounted };
 }
 
 /** 읽히는 크기로 줄인다 — `0` · `995` · `1.2k` · `18k` · `2.6M`.

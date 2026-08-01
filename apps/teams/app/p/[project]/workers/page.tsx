@@ -126,17 +126,17 @@ export default async function Workers({ params }: { params: Promise<{ project: s
         <div className="flex flex-wrap items-baseline gap-x-2">
           <h1 className="text-lg font-semibold">워커</h1>
           {/* 상단 합계 = 아래 열의 합(§0-8 그릇). 새 컴포넌트를 만들지 않는다 — 한 줄이다.
-              `진행중 n개`는 이 판정의 천장을 말한다: 토큰은 세션이 끝날 때 한 번 쓰이므로
-              도는 세션은 합계 밖에 있다. 침묵하면 사람이 "덜 썼다"로 읽는다(§0-8).
-              문구는 §0-8이 글자로 정한 것이다 — 실측과 어긋나는 부분은 `4a884d8d`로 PM에 올려
-              두었고, 답이 오면 이 문자열만 바뀐다(수는 어느 답이 와도 같다). */}
+              뒤에 붙는 수는 이 판정의 천장을 말한다: 토큰은 세션이 끝날 때 한 번 쓰이고
+              신호로 죽은 세션은 아예 안 쓰므로 그만큼 합계가 실제보다 적다. 침묵하면 사람이
+              "덜 썼다"로 읽는다(§0-8). **`끝난 뒤 반영됩니다`라고 약속하지 않는다** — 실측
+              13건 중 8건이 rc 143/137로 죽어 토큰이 영영 안 온다(`4a884d8d`). */}
           {rows.length > 0 && (
             <p className="text-xs text-muted-foreground">
               최근 5시간 토큰{" "}
               <span className="font-mono tabular-nums text-foreground">
                 {formatTokens(usage.total)}
               </span>
-              {usage.running > 0 && ` · 진행중 세션 ${usage.running}개는 끝난 뒤 반영됩니다`}
+              {usage.unaccounted > 0 && ` · 이 합계에 없는 세션 ${usage.unaccounted}개`}
             </p>
           )}
         </div>
