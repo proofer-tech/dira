@@ -602,34 +602,48 @@ export function WorkerRowActions({ projectId, row }: { projectId: string; row: W
   const [error, setError] = useState<WorkerActionResult | null>(null);
   const [streaming, setStreaming] = useState(false);
   // 스트림을 열 수 있는 유일한 조건(§4 · §2-1 Q2=(a)): 지금 돌고 있고, 물고 있는 티켓을 안다.
-  // `running`인데 `holding`이 null이면(owner 역추적 실패) 버튼이 없다 — 빈 스트림을 그리지 않는다.
+  // `running`인데 `holding`이 null이면(owner 역추적 실패) 버튼이 **비활성**이다 — 자리는 남고
+  // 다이얼로그는 안 뜬다(빈 스트림을 그리지 않는다는 §4 판정은 그대로다).
   const holding = row.status === "running" ? row.holding : null;
 
   return (
     <div className="flex items-center justify-end gap-1">
-      {/* 판정도 rename도 엔진이 한다 — GUI는 부르고 출력을 보여줄 뿐이다(제약 2) */}
+      {/* 판정도 rename도 엔진이 한다 — GUI는 부르고 출력을 보여줄 뿐이다(제약 2).
+          `min-w-16`(64px)은 §비주얼 §4-3 슬롯 고정 — `reap…`가 `reap`보다 넓어서 누른 자리가
+          커지면 안 된다(실측 45.6 → 56.6px. 옆 토글과 달리 56px으로는 0.6px 넘친다) */}
       <Button
         variant="ghost"
         size="sm"
+        className="min-w-16"
         disabled={pending}
         onClick={() => start(async () => setReap(await reapWorkerAction(projectId, row.name)))}
       >
         {pending ? "reap…" : "reap"}
       </Button>
-      {holding && (
-        <Button variant="ghost" size="sm" onClick={() => setStreaming(true)}>
-          스트림
-        </Button>
-      )}
+      {/* 못 여는 행에서도 **지우지 않고 비활성으로 남긴다**(§4 세션 스트림 · §비주얼 §4-3 —
+          요구 `3d717e8b`). 지우면 오른쪽 정렬이라 그 행만 `reap`이 옆으로 옮겨 앉는다.
+          사유 문구·툴팁은 안 붙인다 — 같은 행 `물고 있는 티켓` 열이 `—`인 것이 이미 말한다.
+          `aria-disabled`가 아니라 `disabled`다: 이 행에는 해당이 없는 조작이라 탭 순서에
+          죽은 정거장을 만들지 않는다(선례 = 아래 컨텍스트 항목 행 `▲▼`) */}
+      <Button
+        variant="ghost"
+        size="sm"
+        disabled={!holding}
+        onClick={() => setStreaming(true)}
+      >
+        스트림
+      </Button>
       {/* 같은 줄에 대한 반대 동작이라 둘이 동시에 뜨는 상태가 없다 — 판정은 `status`가 아니라
           `cron`이다(§4 재등록): 뺄 줄이 있으면 `중단`, 없으면 `재등록`이다. `running`인데
-          미등록인 워커에도 `재등록`이 뜬다(락과 crontab은 직교한다 — §워커 상태 판정) */}
+          미등록인 워커에도 `재등록`이 뜬다(락과 crontab은 직교한다 — §워커 상태 판정).
+          배타 토글은 한 슬롯이고 **넓은 쪽(`재등록` 55.2px) 폭으로 고정**한다(§비주얼 §4-3) —
+          안 하면 자수가 갈리는 만큼 왼쪽 버튼들이 행마다 다른 x에 선다(실측 11.1px) */}
       {row.cron ? (
-        <Button variant="ghost" size="sm" onClick={() => setStopping(true)}>
+        <Button variant="ghost" size="sm" className="min-w-14" onClick={() => setStopping(true)}>
           중단
         </Button>
       ) : (
-        <Button variant="ghost" size="sm" onClick={() => setRegistering(true)}>
+        <Button variant="ghost" size="sm" className="min-w-14" onClick={() => setRegistering(true)}>
           재등록
         </Button>
       )}
