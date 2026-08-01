@@ -642,6 +642,9 @@ export type Turn = {
   key: string; // `StreamEvent.key` 그대로 — `<레코드 uuid>:<블록 index>`
   role: "question" | "answer";
   text: string;
+  /** 이 답은 사람이 `중지`로 끊었다(답에만 붙는다). **새로고침해도 `중지됨`이 남는 근거**가
+   *  이 한 칸이다 — 근거는 파일에 있다(아래 `INTERRUPTED`) */
+  stopped?: true;
 };
 
 /** **사람도 에이전트도 쓰지 않은 줄 셋**(§7 §도는 답을 멈춘다 — 실측 ⑷). `중지`가 첫째를 남기고,
@@ -658,6 +661,12 @@ const GHOST_LINES = new Set([
   "No response requested.",
 ]);
 
+/** 셋 중 하나는 **버리기만 하면 사실을 잃는다.** 이 줄은 `중지`가 박은 것이라(§7 실측 ⑵) 그
+ *  존재가 곧 *앞 답이 중지됐다*이고, §비주얼 §24가 새로고침 뒤에도 `중지됨`을 요구하는 근거가
+ *  이것 하나다(GUI는 그 사실을 아무 데도 저장하지 않는다 — 도는 동안만 `runs` 맵에 있다).
+ *  그래서 말풍선으로는 안 그리되 **앞 답에 표식으로 옮겨 적는다**. */
+const INTERRUPTED = "[Request interrupted by user]";
+
 /** 사건 → 대화 줄. 남는 것은 사용자 프롬프트와 assistant `text` 둘뿐이고 나머지(생각·도구·결과)는
  *  이 화면에 없다. 서브에이전트 줄(`sidechain`)도 뺀다 — 이 세션의 도구는 읽기 셋뿐이라 날 일이
  *  없지만, 나면 그건 대화가 아니라 로그다. */
@@ -666,9 +675,15 @@ export function toTurns(events: StreamEvent[]): Turn[] {
   for (const e of events) {
     if (e.sidechain) continue;
     const text = e.kind === "prompt" ? questionOf(e.body) : e.kind === "text" ? e.body.trim() : "";
-    if (text && !GHOST_LINES.has(text)) {
-      turns.push({ key: e.key, role: e.kind === "prompt" ? "question" : "answer", text });
+    if (!text) continue;
+    if (GHOST_LINES.has(text)) {
+      // 중지 표식은 **바로 앞 답의 것**이다. 앞이 답이 아니면(글자가 한 자도 안 왔다) 옮겨 적을
+      // 자리가 없다 — 그때는 띠가 설 산문 블록 자체가 없다(§비주얼 §24는 띠를 답에 붙인다).
+      const last = turns.at(-1);
+      if (text === INTERRUPTED && last?.role === "answer") last.stopped = true;
+      continue;
     }
+    turns.push({ key: e.key, role: e.kind === "prompt" ? "question" : "answer", text });
   }
   return turns;
 }

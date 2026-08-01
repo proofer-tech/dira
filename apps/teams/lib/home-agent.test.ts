@@ -445,6 +445,24 @@ test("toTurns — 중지가 남기는 가짜 줄 셋은 대화가 아니다 (§7
     toTurns(events).map((t) => t.text),
     ["40문장 써라", "1. 1은 곱셈의 항등원이라", "어디까지 썼나"],
   );
+  // **버리기만 하면 사실을 잃는 줄이 하나 있다**(§비주얼 §24 — 새로고침해도 `중지됨`이 남는다).
+  // `[Request interrupted by user]`의 존재가 곧 *앞 답이 중지됐다*이고, GUI는 그 사실을
+  // 아무 데도 저장하지 않는다. 말풍선으로는 안 그리되 앞 답의 칸에 옮겨 적는다.
+  assert.deepStrictEqual(
+    toTurns(events).map((t) => t.stopped),
+    [undefined, true, undefined],
+  );
+  // 글자가 한 자도 안 온 채로 멈췄다 — 옮겨 적을 답이 없다. 앞의 질문에 붙이지 않는다
+  // (§비주얼 §24는 띠를 답의 산문 블록에 붙이고, 여기는 그 블록 자체가 없다)
+  writeFileSync(
+    file,
+    [user("u6", buildPrompt("SNAP", "묻자마자 멈춤")), user("u7", "[Request interrupted by user]"), ""].join("\n"),
+  );
+  assert.deepStrictEqual(
+    toTurns((await tailEvents(file, 0)).events).map((t) => [t.text, t.stopped]),
+    [["묻자마자 멈춤", undefined]],
+  );
+
   // 전문 일치라 **사람이 인용한 같은 문장은 안 삼킨다** — 이 셋에는 사람 글과 구분되는 플래그가 없다
   writeFileSync(file, user("u5", "왜 `[Request interrupted by user]`가 뜨나") + "\n");
   assert.strictEqual((await tailEvents(file, 0)).events.length, 1);

@@ -19,11 +19,16 @@
  *  오른쪽에 서는 것이 언제나 이 앱을 쓰는 사람이라는 §13의 판정은 그대로고, 갈린 것은 상대 쪽
  *  그릇뿐이다: 답이 이 화면의 1차 콘텐츠라 `max-w-[80%]`가 읽을 것을 20% 좁힌다.
  *  보이는 라벨 둘(`질문`·`답`)이 사라지므로 **`sr-only`가 협상 대상이 아니다** — 남는 구분이
- *  정렬과 테두리뿐이면 화면을 못 보는 사람에게는 구분이 0이다(§0 "색만으로 의미 전달 금지"). */
+ *  정렬과 테두리뿐이면 화면을 못 보는 사람에게는 구분이 0이다(§0 "색만으로 의미 전달 금지").
+ *
+ *  **답 아래 24px 띠는 언제나 하나이고 안이 상태로 갈린다**(§24 개정 ② `51546e85`): 도는 중이면
+ *  진행 표식(§18 ④) + `중지`, 끝났으면 `복사` + `다시 답하기`, 중지된 답이면 그 앞에 `중지됨`
+ *  한 마디가 더 선다. 상태마다 띠를 따로 세우지 않는 이유는 **답이 끝나는 순간 높이가 안
+ *  튀어야** 해서다 — 자동 스크롤이 바닥을 물고 있는 화면에서 24px 점프가 가장 나쁘다(§13). */
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowDown, Send, TriangleAlert } from "lucide-react";
-import { askHome, clearHome, pollHomeAnswer } from "@/app/p/[project]/home/actions";
+import { ArrowDown, Check, Copy, Send, TriangleAlert } from "lucide-react";
+import { askHome, clearHome, pollHomeAnswer, stopHome } from "@/app/p/[project]/home/actions";
 import { CopyCommand } from "@/components/copy-command";
 import { useKeymap } from "@/components/keymap-provider";
 import { Markdown } from "@/components/markdown";
@@ -105,6 +110,13 @@ export function HomeUI({ project, initial }: { project: string; initial: HomeChu
   const [starting, setStarting] = useState(false); // `askHome` 왕복 한 번. 도는 것과 다른 값이다
   const [fail, setFail] = useState<Answer | null>(initial.failed);
   const [text, setText] = useState("");
+  // **도는 동안 받은 글**(§7 §답은 흐른다). 출처가 `turns`와 다르다 — 이건 자식의 stdout이고
+  // 저건 트랜스크립트다. 끝나는 순간 서버가 빈 문자열을 주고 같은 응답의 `turns`가 그 답을
+  // 진짜 줄로 데려온다. **한 답이 두 벌로 안 그려지는 자리가 그 교대다** — 여기서 다시 안 막는다.
+  const [partial, setPartial] = useState(initial.partial);
+  // `중지`를 눌렀다. **낙관적으로 라벨을 안 바꾼다**(§24) — 그 버튼 하나가 `aria-disabled`가
+  // 될 뿐이고, 띠가 액션 줄로 바뀌는 것은 서버가 끝을 알린 뒤다.
+  const [stopping, setStopping] = useState(false);
   // 폴링이 들고 다니는 두 값. 렌더에 안 쓰므로 상태가 아니다(바뀔 때마다 그릴 것이 없다).
   const session = useRef(initial.sessionId);
   const offset = useRef(initial.offset);
@@ -117,6 +129,10 @@ export function HomeUI({ project, initial }: { project: string; initial: HomeChu
   // **답이 도는 동안만 돈다**(§7 — 홈은 5초 폴링을 하지 않는다. 큐를 따라가는 화면이 아니다).
   // 끝나는 근거는 서버가 돌려주는 `running` 하나고(§2-1의 `live`와 같은 모양), 그 응답이
   // 마지막 사건까지 담고 있다 — 실행층이 **끝났는지를 파일보다 먼저** 읽는 이유가 그것이다.
+  //
+  // **주기가 500ms다**(§7 §답은 흐른다 — SSE를 만들지 않는 대가로 정한 수). 델타 하나가 평균
+  // 250ms 늦게 붙고, 실측 델타 간격이 480ms라 그 지연은 화면에서 안 보인다. 5분을 다 쓰면
+  // 왕복 600회이고 한 번이 `readSessionId` + 트랜스크립트 tail이다.
   useEffect(() => {
     if (!running) return;
     let stop = false;
@@ -125,9 +141,15 @@ export function HomeUI({ project, initial }: { project: string; initial: HomeChu
       if (stop) return;
       session.current = r.sessionId;
       offset.current = r.offset;
+      setPartial(r.partial);
       // `reset` = 세션이 갈렸다(서버가 0부터 다시 읽었다). 이어붙이면 옛 대화가 두 벌이 된다.
-      if (r.reset) setTurns(r.turns);
-      else if (r.turns.length) setTurns((prev) => [...prev, ...r.turns]);
+      setTurns((prev) => {
+        const next = r.reset ? r.turns : r.turns.length ? [...prev, ...r.turns] : prev;
+        // **중지 표식을 서버 응답에서도 받는다.** 트랜스크립트의 `[Request interrupted by user]`가
+        // `toTurns`에서 같은 칸을 채우지만(새로고침이 사는 근거), 그 줄이 이 폴링보다 늦게
+        // 쓰이는 창이 있다 — 그때 화면이 `중지됨`을 통째로 놓친다. 두 근거가 같은 칸을 채운다.
+        return r.stopped ? markStopped(next) : next;
+      });
       if (r.failed) setFail(r.failed);
       if (!r.running) {
         setRunning(false);
@@ -135,7 +157,7 @@ export function HomeUI({ project, initial }: { project: string; initial: HomeChu
       }
     };
     void poll();
-    const timer = setInterval(poll, 2000);
+    const timer = setInterval(poll, 500);
     return () => {
       stop = true;
       clearInterval(timer);
@@ -145,24 +167,37 @@ export function HomeUI({ project, initial }: { project: string; initial: HomeChu
   const empty = !text.trim();
   const busy = running || starting;
 
-  const send = async () => {
-    if (busy || empty) return;
+  /** 질문 하나를 띄운다. **입력칸과 `다시 답하기`가 같은 경로다**(§24 — 후자가 하는 일이
+   *  "옛 질문을 입력칸에 넣고 보내는 것"과 같다). 갈리는 것은 칸을 비우느냐뿐이라 그쪽은 밖에 둔다. */
+  const run = async (question: string) => {
     setStarting(true);
     setFail(null);
+    setStopping(false); // 앞 답을 중지한 뒤라도 이번 답의 `중지`는 눌린 적이 없다
+    setPartial("");
+    const r = await askHome(project, question);
+    setStarting(false);
+    if (r) setFail(r);
+    else setRunning(true); // 폴링 효과가 붙는다. 질문 말풍선도 그 첫 응답이 데려온다
+    input.current?.focus();
+    return r;
+  };
+
+  const send = async () => {
+    if (busy || empty) return;
     // 보낸 글을 칸에서 비운다 — **다음 질문을 미리 쓸 수 있다는 것이 §24가 입력칸을 안 잠근
     // 이유**다. 실패하면 그 글을 도로 넣는다(§21 실패 규칙: 쓴 글은 남는다). 그 사이에 사람이
     // 다음 질문을 쓰기 시작했으면 **그쪽이 이긴다** — 사람이 방금 친 글을 덮지 않는다.
     const sent = text;
     setText("");
-    const r = await askHome(project, sent);
-    setStarting(false);
-    if (r) {
-      setFail(r);
-      setText((now) => now || sent);
-    } else {
-      setRunning(true); // 폴링 효과가 붙는다. 질문 말풍선도 그 첫 응답이 데려온다
-    }
-    input.current?.focus();
+    if (await run(sent)) setText((now) => now || sent);
+  };
+
+  /** `중지`(§7 §도는 답을 멈춘다) — 서버가 자식 하나에 `SIGTERM`을 보낸다. **여기서 화면을
+   *  안 바꾼다**: 받은 글도 `중지됨`도 다음 폴링이 데려온다(낙관적 에코 금지와 같은 축). */
+  const stop = async () => {
+    if (stopping) return;
+    setStopping(true);
+    await stopHome(project);
   };
 
   // 대화 0건 = 온보딩이다. `busy`가 참이면 스레드가 선다 — 그 안에 진행 표식이 있어야 하고,
@@ -226,7 +261,7 @@ export function HomeUI({ project, initial }: { project: string; initial: HomeChu
             <MessageScroller className="flex-1">
               <MessageScrollerViewport aria-label="대화" className="flex-1">
                 <MessageScrollerContent>
-                  {turns.map((t) => (
+                  {turns.map((t, i) => (
                     <MessageScrollerItem key={t.key} messageId={t.key}>
                       {t.role === "question" ? (
                         /* 사람 질문 — §13 말풍선 그대로(`outline` · `align="end"`). 헤더는 말풍선
@@ -244,31 +279,63 @@ export function HomeUI({ project, initial }: { project: string; initial: HomeChu
                           </MessageContent>
                         </Message>
                       ) : (
-                        /* 에이전트 답 — **전폭 산문**이다(§24). `Bubble`도 `Message`도 안 쓴다:
-                           저 한 벌이 주는 것은 좌우 배치 기계장치고 전폭에는 쓸 데가 없다.
-                           `px-3`은 말풍선 안 글자의 `p-3`에 맞춘다 — 두 역할의 글자가 같은 축에
-                           선다. 자 단위 상한을 안 얹는다(§24 — 요청 `bcf8299d`가 지운 값이
-                           `max-w-3xl` = 읽는 산문 폭이었다).
-                           `// ponytail: 상한이 필요해지면 여기 `max-w-[70ch]` 한 클래스다.` */
-                        <div className="px-3">
-                          <span className="sr-only">답</span>
-                          <Markdown text={t.text} />
-                        </div>
+                        /* 에이전트 답 — **전폭 산문 + 그 아래 띠 하나**(§24). `Bubble`도
+                           `Message`도 안 쓴다: 저 한 벌이 주는 것은 좌우 배치 기계장치고 전폭에는
+                           쓸 데가 없다. 띠가 이 항목 **안**에 있는 이유는 §24 그대로다 — 도는
+                           답이 언제나 마지막이라 보이는 자리가 같고, 답이 끝날 때 높이가 안 튄다. */
+                        <>
+                          <Prose text={t.text} />
+                          <Band>
+                            {/* 중지된 답 — **실패가 아니다**(§7). `<StatusBadge>`도 색도 없다:
+                                이건 큐의 상태가 아니라 답 하나가 끝난 방식이라 13번째 상태를
+                                만들지 않는다(§24). 자리는 진행 표식 문구가 앉던 그 자리다. */}
+                            {t.stopped && <span className="text-xs text-muted-foreground">중지됨</span>}
+                            <CopyAnswer text={t.text} />
+                            {/* **답을 갈아 끼우지 않는다**(§7) — 질문·답이 스레드 끝에 한 벌 더
+                                붙는다. 트랜스크립트가 정본이라 거기서 줄을 지울 수 없다.
+                                도는 중에 눌러도 여기서 막지 않는다: 서버가 §24 실패 ④로
+                                판정하고 그 Alert가 왜 안 갔는지를 말한다(화면의 잠금 셋에
+                                네 번째를 더하면 끝난 답 20개의 버튼이 같이 흐려진다). */}
+                            <Button
+                              variant="outline"
+                              size="xs"
+                              onClick={() => void run(questionFor(turns, i))}
+                            >
+                              다시 답하기
+                            </Button>
+                          </Band>
+                        </>
                       )}
                     </MessageScrollerItem>
                   ))}
-                  {/* 진행 표식(§18 ④) — 상자 **안** 마지막 자식이고 다음에 설 답의 자리다.
-                      그릇 · 클래스 · 모션 · `aria-hidden`은 그 절 그대로고 문구만 갈린다.
-                      `px-3`은 §9의 36px 들여쓰기가 아니라 **에이전트 산문 블록**의 그것에 맞는다.
-                      **상한 5분을 적는 유일한 자리다**(§24) — 초를 세는 시계를 두지 않는다. */}
+                  {/* 도는 답 — **트랜스크립트에 아직 없는 한 항목**이다. 안은 끝난 답과 같은
+                      모양이고(산문 + 띠) 띠 안만 진행 표식(§18 ④) + `중지`로 갈린다. 항목이
+                      하나라 도착한 조각이 **같은 산문 블록**에 이어 붙는다 — 문단마다 항목을
+                      쪼개면 스크롤 위치가 매 폴링마다 튄다(§24).
+                      **상한 5분을 적는 유일한 자리다** — 초를 세는 시계를 두지 않는다. */}
                   {busy && (
-                    <div className="flex items-center gap-2 px-3 text-xs leading-6 text-muted-foreground">
-                      <span
-                        aria-hidden
-                        className="mx-1 size-2 shrink-0 animate-wip-pulse rounded-full bg-muted-foreground motion-reduce:animate-none"
-                      />
-                      답을 찾는 중 · 최대 5분
-                    </div>
+                    <MessageScrollerItem key="running" messageId="running">
+                      <Prose text={partial} />
+                      <Band>
+                        <span
+                          aria-hidden
+                          className="mx-1 size-2 shrink-0 animate-wip-pulse rounded-full bg-muted-foreground motion-reduce:animate-none"
+                        />
+                        답하는 중 · 최대 5분
+                        {/* `ml-auto`가 없다 — 이 화면의 띠는 1440에서 ≈1392px이라 오른쪽 끝으로
+                            밀면 버튼이 자기가 멈추는 글자에서 1200px 떨어져 홀로 뜬다
+                            (§4-3 예외 2번 — 조작 대상 옆에 있는 것이 위치의 뜻이다). */}
+                        <Button
+                          variant="outline"
+                          size="xs"
+                          aria-disabled={stopping}
+                          className="aria-disabled:opacity-50"
+                          onClick={() => void stop()}
+                        >
+                          중지
+                        </Button>
+                      </Band>
+                    </MessageScrollerItem>
                   )}
                 </MessageScrollerContent>
               </MessageScrollerViewport>
@@ -365,6 +432,72 @@ export function HomeUI({ project, initial }: { project: string; initial: HomeChu
       </div>
     </div>
   );
+}
+
+/** 에이전트 답의 산문 블록 — 도는 답과 끝난 답이 **같은 것을 쓴다**(§24: 답이 끝나는 순간
+ *  그릇이 안 갈려야 높이가 안 튄다). `px-3`은 말풍선 안 글자의 `p-3`에 맞춘다 — 두 역할의
+ *  글자가 같은 축에 선다. 자 단위 상한을 안 얹는다(요청 `bcf8299d`가 지운 값이 `max-w-3xl`
+ *  = 읽는 산문 폭이었다).
+ *  `// ponytail: 상한이 필요해지면 여기 `max-w-[70ch]` 한 클래스다.` */
+function Prose({ text }: { text: string }) {
+  return (
+    <div className="px-3">
+      <span className="sr-only">답</span>
+      <Markdown text={text} />
+    </div>
+  );
+}
+
+/** 산문 아래 **24px 띠**(§비주얼 §24). 클래스는 §18 ④ 진행 표식의 것 그대로이고, 상태에 따라
+ *  갈리는 것은 **안에 무엇이 서느냐**뿐이다. 왼쪽부터 채운다(`ml-auto` 없음). */
+function Band({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-2 px-3 text-xs leading-6 text-muted-foreground">
+      {children}
+    </div>
+  );
+}
+
+/** `복사` — **원문 마크다운**이다(§7). 렌더된 HTML이 아니다: 사람이 그것을 티켓·문서에 붙인다.
+ *
+ *  `<CopyCommand>`를 안 쓴다(§24) — 그 그릇은 `font-mono break-all` 블록 + 버튼이고 담는 것이
+ *  터미널 한 줄이라, 답 전문을 넣으면 답이 화면에 두 번(두 번째는 mono로) 선다. 빌리는 것은
+ *  그 파일의 **관용구**다: 아이콘만 `Check`로 1.5초 바뀌고 글자는 그대로 — 폭이 한 px도 안
+ *  움직여서 옆의 `다시 답하기`가 안 밀린다(§4-3). 토스트도 안 띄운다(그건 서버 액션의 것이다). */
+function CopyAnswer({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <Button
+      variant="outline"
+      size="xs"
+      onClick={async () => {
+        await navigator.clipboard.writeText(text);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      }}
+    >
+      {copied ? <Check aria-hidden /> : <Copy aria-hidden />}
+      복사
+    </Button>
+  );
+}
+
+/** `다시 답하기`가 다시 보낼 글 — **그 답 바로 위의 사람 질문**이다. 가짜 줄 셋은 `toTurns`가
+ *  이미 걸렀으므로(§7 실측 ⑷) 뒤로 훑어 처음 만나는 `question`이 곧 그 답을 부른 질문이다.
+ *  못 찾으면(우리가 안 만든 세션의 첫 줄이 답인 경우) 빈 문자열이고, `startAsk`가 거절한다. */
+function questionFor(turns: Turn[], i: number): string {
+  for (let j = i - 1; j >= 0; j--) if (turns[j]?.role === "question") return turns[j].text;
+  return "";
+}
+
+/** 서버가 `stopped`를 알린 순간의 **마지막 답**에 표식을 옮겨 적는다. 트랜스크립트 쪽 근거
+ *  (`toTurns`)와 같은 칸을 채우고, 둘 중 먼저 오는 것이 이긴다. */
+function markStopped(turns: Turn[]): Turn[] {
+  for (let i = turns.length - 1; i >= 0; i--) {
+    if (turns[i]?.role !== "answer") continue;
+    return turns.map((t, j) => (j === i ? { ...t, stopped: true as const } : t));
+  }
+  return turns;
 }
 
 /** 실패 한 장 (§비주얼 §24 실패 5종 · §6 3요소). */
