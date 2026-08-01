@@ -114,7 +114,11 @@ export function SessionStream({
   };
 
   return (
-    <div className="space-y-2">
+    // `min-w-0`은 워커 다이얼로그가 가로로 새는 것을 막는다(§비주얼 §21 · 요구 `fff27e81`).
+    // `DialogContent`가 `grid`라 이 절은 그리드 아이템이고 `min-width: auto` = 내용의 min-content다.
+    // 펼친 `<pre>`의 `break-words`는 min-content를 안 줄여서(줄이는 건 `break-all`) 긴 한 줄이
+    // 그대로 열 폭이 된다 — 실측 768px 다이얼로그의 `scrollWidth`가 13125px이었다.
+    <div className="min-w-0 space-y-2">
       {codex ? (
         /* §비주얼 §23 ⑤ 사후 — §9가 이미 세워 둔 `<EmptyState>`에 문구만 갈아 끼운다.
            `Alert`가 아니다: 사람이 할 일이 없고(원문도 다음 행동도 없다), §9가 스트림 부재를
