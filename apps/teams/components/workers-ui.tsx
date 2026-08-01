@@ -8,7 +8,15 @@
  *  파일 하나에 모은 이유는 projects-ui.tsx와 같다 — 세 다이얼로그가 같은 문구·같은 명령어를
  *  쓰므로 쪼개면 자리가 갈린다. */
 import { useState, useTransition } from "react";
-import { ArrowDown, ArrowUp, Check, CircleQuestionMark, TriangleAlert, X } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  Check,
+  ChevronDown,
+  CircleQuestionMark,
+  TriangleAlert,
+  X,
+} from "lucide-react";
 import {
   applyCommonSourceAction,
   applySelfHealAction,
@@ -19,6 +27,7 @@ import {
   registerWorkerAction,
   saveCommonContextAction,
   saveContextAction,
+  setEngineAction,
   stopWorkerAction,
   type ContextResult,
   type WorkerActionResult,
@@ -41,6 +50,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -48,6 +58,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { relativeUnder } from "@/lib/urls";
 import { cn } from "@/lib/utils";
 
@@ -69,7 +80,15 @@ export type WorkerRow = {
   cron: boolean;
   lockPid: number | null;
   holding: string | null;
-  engine: string;
+  /** `엔진` 열이 그리는 것 — 판정은 서버(`engineCell`)가 한다. 표시 4종의 출처가 하나여야
+   *  화면 둘이 안 갈린다(§비주얼 §23 ①). `argv`는 셀 `title`의 전문이고 `value`는 팝오버
+   *  초기값이다(`null` = 카탈로그 밖 = 손으로 쓴 값) */
+  engine: {
+    label: string;
+    badge: "assumed" | "custom" | null;
+    argv: string;
+    value: { engineId: string; model: string } | null;
+  };
   /** `engine`의 첫 토큰 basename — §0-4 인증 배너와 **같은 `engineName`**이다. 서버가 계산해
    *  넘긴다: `lib/workers.ts`가 `node:fs`를 타서 이 파일이 그 함수를 못 import한다(§규약).
    *  세션 스트림·참견이 이 값 하나로 갈린다(§4-3 · §비주얼 §23 ⑤) */
@@ -168,7 +187,9 @@ export function EngineFields({
             `opus`를 든 채 codex로 넘어가면 화면이 없는 조합을 보여준다(§23 ③). */}
         <Select value={value.engine} onValueChange={(v) => onChange({ engine: String(v), model: "" })}>
           <SelectTrigger id={`${idPrefix}-engine`} className="w-full font-mono">
-            <SelectValue />
+            {/* 생성 폼은 항상 값이 있고(기본값 `claude`), 비는 자리는 워커 행에서 **손으로 쓴
+                값**을 열었을 때 하나다 — 그때도 빈 줄이 아니라 말이 뜬다(§23 ③ 팝오버 초기값). */}
+            <SelectValue placeholder="고르지 않음" />
           </SelectTrigger>
           <SelectContent>
             {engines.map((e) => (
@@ -249,6 +270,143 @@ export function EngineFields({
         </p>
       )}
     </>
+  );
+}
+
+// ── 워커 행의 `엔진` 셀 (§비주얼 §23 ① ②) ──────────────────────────────────
+
+/** 잘린 값·배지 설명. `projects-ui.tsx`의 같은 이름과 같은 모양이다 — §0 해석 결과 표의
+ *  배지를 그대로 빌린다(사실이 같아서 새 어휘를 만들지 않았다, §23 ①). */
+function Hint({ text, children }: { text: string; children: React.ReactNode }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger render={<span />}>{children}</TooltipTrigger>
+      <TooltipContent>{text}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+/** 둘 다 색이 없다 — 색은 예외를 표시하는데(§0) 넷 다 정상이다(§23 ①). */
+const BADGE: Record<"assumed" | "custom", { label: string; hint: string }> = {
+  assumed: {
+    label: "기본값 가정",
+    hint: "이 워커에는 TICKET_ENGINE 대입이 없습니다 — tick.sh 기본값(46행)을 쓰는 중입니다",
+  },
+  custom: {
+    label: "손으로 쓴 값",
+    hint: "카탈로그에 없는 명령입니다 — 아래 원문이 그대로 돕니다",
+  },
+};
+
+/** `엔진` 열 — **값이 곧 트리거다**(§23 ②). `size="sm"`이 `h-7`이라 `h-9` 행 높이가 안 변하고,
+ *  열려 있는 동안 `TableRow`의 `has-aria-expanded:bg-muted/50`가 그 행을 저절로 tint한다.
+ *  팝오버 안은 생성 폼과 **같은 `<EngineFields>`**다 — 목록도 문구도 한 벌이다(§23 ③). */
+export function EngineCell({
+  projectId,
+  row,
+  engines,
+  modelPattern,
+}: {
+  projectId: string;
+  row: WorkerRow;
+  engines: EngineCatalog;
+  modelPattern: string;
+}) {
+  // 파일에서 읽은 값이 초기값이다. 손으로 쓴 값(`value === null`)이면 **고른 것이 없는 채로**
+  // 연다 — 열어 본 것만으로 그 줄이 덮이는 길이 없다(§23 ③).
+  const initial = (): EnginePick => ({
+    engine: row.engine.value?.engineId ?? "",
+    model: row.engine.value?.model ?? "",
+  });
+  const [open, setOpen] = useState(false);
+  const [pick, setPick] = useState<EnginePick>(initial);
+  const [result, setResult] = useState<WorkerActionResult | null>(null);
+  const [pending, start] = useTransition();
+  const ready = pick.engine !== "" && enginePickOk(pick, modelPattern) && !pending;
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <Popover
+        open={open}
+        onOpenChange={(o) => {
+          setOpen(o);
+          // 닫는 것이 곧 취소다 — 저장 전에는 아무것도 안 썼다(§23 ②). 다시 열면 파일 값이다.
+          if (!o) {
+            setPick(initial());
+            setResult(null);
+          }
+        }}
+      >
+        <PopoverTrigger
+          render={
+            <Button
+              variant="ghost"
+              size="sm"
+              // `text-foreground`다 — 행 hover와 팝오버 열림이 둘 다 `bg-muted/50`이고 거기서
+              // `--muted-foreground`는 라이트 4.54로 §9가 금지한 조합이다(§23 대비 검증).
+              className="-ml-2.5 font-mono text-xs font-normal text-foreground"
+            />
+          }
+        >
+          <span className="block max-w-[14rem] truncate">{row.engine.label}</span>
+          <ChevronDown aria-hidden className="size-3" />
+        </PopoverTrigger>
+        <PopoverContent align="start">
+          <EngineFields
+            engines={engines}
+            modelPattern={modelPattern}
+            value={pick}
+            onChange={setPick}
+            idPrefix={`engine-${row.name}`}
+          />
+          {/* 손으로 쓴 값은 무엇을 덮는지 먼저 보여준다(§23 ③) */}
+          {row.engine.badge === "custom" && (
+            <div className="space-y-1">
+              <p className="font-mono text-xs break-all">{row.engine.argv}</p>
+              <p className="text-xs text-muted-foreground">저장하면 이 줄을 덮어씁니다</p>
+            </div>
+          )}
+          <p className="text-xs text-muted-foreground">
+            {row.status === "running"
+              ? "지금 도는 세션은 그대로입니다 — 다음 tick부터 적용됩니다."
+              : "다음 tick부터 적용됩니다."}
+          </p>
+          {/* 거부(할당 2개·`+=`·주석·닫는 `)` 없음·`source` 줄 없음)는 파일을 안 쓴 것이다.
+              팝오버는 열린 채로 남고 고른 값도 남는다 — 사람이 파일을 고치고 다시 누른다(§23) */}
+          {result && !result.ok && (
+            <Failure
+              title={`${row.name}.sh의 TICKET_ENGINE 블록을 GUI가 고칠 수 없습니다`}
+              message={result.message ?? ""}
+            />
+          )}
+          <div className="flex justify-end">
+            <Button
+              size="sm"
+              // `disabled`가 아니라 `aria-disabled`다(§23 로딩 항) — 못 누른다는 사실만 말한다.
+              aria-disabled={!ready}
+              className="aria-disabled:opacity-50"
+              onClick={() => {
+                if (!ready) return;
+                start(async () => {
+                  const r = await setEngineAction(projectId, row.name, pick.engine, pick.model);
+                  setResult(r);
+                  // 성공하면 닫는다. 새 값은 **서버가 파일을 다시 읽어** 그린다(낙관적 에코가
+                  // 아니다) — 토스트를 띄우지 않는 이유도 그것이다(§23 ②).
+                  if (r.ok) setOpen(false);
+                });
+              }}
+            >
+              {pending ? "저장 중…" : "저장"}
+            </Button>
+          </div>
+        </PopoverContent>
+      </Popover>
+      {row.engine.badge && (
+        <Hint text={BADGE[row.engine.badge].hint}>
+          <Badge variant="outline">{BADGE[row.engine.badge].label}</Badge>
+        </Hint>
+      )}
+    </div>
   );
 }
 

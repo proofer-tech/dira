@@ -39,6 +39,7 @@ const {
   SELF_HEAL_SH,
   selfHealSourceLine,
   engineArgv,
+  engineCell,
   ENGINES,
   NO_MODEL,
   parseEngineValue,
@@ -225,7 +226,7 @@ test("주석 처리된 할당문은 설정이 아니다 (worker.sh.example이 �
   });
   const [w] = await listWorkers(root);
   assert.strictEqual(w.name, "w1");
-  assert.match(w.engine, /^claude -p /); // tick.sh 기본값
+  assert.strictEqual(w.engine, null); // 대입이 아예 없다 = tick.sh 기본값으로 돈다
   // 주석의 TICKET_NAME=w9를 먹었다면 락을 엉뚱한 이름으로 찾는다
   putLock(path.join(root, "workers"), "w1", process.pid);
   assert.strictEqual((await listWorkers(root))[0].status, "running");
@@ -817,7 +818,7 @@ test("createWorker — 엔진은 고른 값이다. 템플릿에서 딸려 오지
 
   // 판정은 **화면이 읽는 그 길**로 한다 — listWorkers가 읽은 값의 역파싱이다
   const got = Object.fromEntries(
-    (await listWorkers(root, [], SFX)).map((w) => [w.name, parseEngineValue(w.engine)]),
+    (await listWorkers(root, [], SFX)).map((w) => [w.name, engineCell(w.engine).value]),
   );
   assert.deepStrictEqual(got.w2, { engineId: "claude", model: "opus" });
   assert.deepStrictEqual(got.w3, { engineId: "claude", model: NO_MODEL });
@@ -1534,6 +1535,42 @@ test("renderEngineBlock ↔ parseEngineValue — 카탈로그 전 조합이 왕�
   assert.strictEqual(parseEngineValue(renderEngineBlock("codex").replace("--json", "$(x)")), null);
 });
 
+test("engineCell — 엔진 열에 빈칸이 되는 경우가 없다 (§비주얼 §23 ① 표시 4종)", () => {
+  // ① 모델 있음 ② 모델 없음 — 둘 다 배지가 없다(파일에 있는 값을 그대로 그린다)
+  assert.deepStrictEqual(engineCell(engineArgv("claude", "opus").join(" ")), {
+    label: "claude · opus",
+    badge: null,
+    argv: engineArgv("claude", "opus").join(" "),
+    value: { engineId: "claude", model: "opus" },
+  });
+  assert.strictEqual(engineCell(engineArgv("codex").join(" ")).label, "codex");
+
+  // ③ 대입 없음 — **`claude`를 그리고 배지를 붙인다.** `기본값`이라고 얼버무리지 않는다.
+  //    argv는 실제로 도는 tick.sh 기본값이고, 팝오버는 그 값에서 시작한다.
+  const none = engineCell(null);
+  assert.deepStrictEqual(none, {
+    label: "claude",
+    badge: "assumed",
+    argv: engineArgv("claude").join(" "),
+    value: { engineId: "claude", model: NO_MODEL },
+  });
+  // 같은 명령이 파일에 **적혀 있으면** 배지가 없다 — 이 한 비트가 셋째와 첫째를 가른다
+  assert.strictEqual(engineCell(none.argv).badge, null);
+
+  // ④ 카탈로그 밖 = 손으로 쓴 값. 첫 토큰 basename이 값이고 원문은 argv로 남는다
+  assert.deepStrictEqual(engineCell("/opt/bin/mock-engine --flag {prompt}"), {
+    label: "mock-engine",
+    badge: "custom",
+    argv: "/opt/bin/mock-engine --flag {prompt}",
+    value: null, // 팝오버가 빈 채로 열린다 — 고르지 않으면 저장이 안 눌린다
+  });
+
+  // 넷 다 label이 비지 않는다(이 절이 막는 것이 빈칸이다)
+  for (const e of [null, "", "x", engineArgv("codex", "gpt-5.5").join(" ")]) {
+    assert.notStrictEqual(engineCell(e).label, "", `빈칸: ${e}`);
+  }
+});
+
 test("writeEngine — 대입이 없는 워커에 source 줄 바로 위로 삽입하고, 다시 읽으면 같은 값이다", async () => {
   const root = makeRoot({ "w1.sh": NOENG_SH });
   const file = path.join(root, "workers", "w1.sh");
@@ -1551,15 +1588,20 @@ test("writeEngine — 대입이 없는 워커에 source 줄 바로 위로 삽입
   // 나머지 줄은 한 글자도 안 바뀐다
   assert.strictEqual(lines.filter((_, i) => i !== at).join("\n"), NOENG_SH);
 
-  // 목록에 뜨는 값 = listWorkers가 읽은 engine → 역파싱
+  // 목록에 뜨는 값 = listWorkers가 읽은 engine → 행이 그리는 것(§비주얼 §23 ①)
   const [w] = await listWorkers(root, [], SFX);
-  assert.deepStrictEqual(parseEngineValue(w.engine), { engineId: "codex", model: "gpt-5.5" });
+  assert.deepStrictEqual(engineCell(w.engine), {
+    label: "codex · gpt-5.5",
+    badge: null, // 대입이 파일에 있다 — `기본값 가정`이 아니다
+    argv: w.engine,
+    value: { engineId: "codex", model: "gpt-5.5" },
+  });
 
   // 있는 블록은 치환이다(삽입이 두 번 일어나면 "할당이 2개"로 자기 파일을 거부하게 된다)
   await writeEngine(root, "w1", "claude", "opus");
   const back = readFileSync(file, "utf8");
   assert.strictEqual(back.split("TICKET_ENGINE=(").length - 1, 1);
-  assert.deepStrictEqual(parseEngineValue((await listWorkers(root, [], SFX))[0].engine), {
+  assert.deepStrictEqual(engineCell((await listWorkers(root, [], SFX))[0].engine).value, {
     engineId: "claude",
     model: "opus",
   });

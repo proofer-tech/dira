@@ -24,6 +24,7 @@ import {
   stopWorker,
   writeCommonContext,
   writeContext,
+  writeEngine,
   type EngineId,
   type WorkerContext,
   type WorktreePrep,
@@ -153,6 +154,27 @@ export async function deleteWorkerAction(
 ): Promise<WorkerActionResult> {
   try {
     await deleteWorker(await rootOf(projectId), name);
+    revalidatePath(`/p/${projectId}`, "layout");
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** 엔진·모델 (§4-3) — `TICKET_ENGINE` 블록 치환, 대입이 없으면 `source` 줄 위에 삽입.
+ *
+ *  **`running` 워커도 그대로 쓴다.** 도는 세션은 이미 뜬 argv로 돌고 다음 tick부터 새 엔진이다 —
+ *  화면이 그렇게 말한다. 검증(엔진 id · 모델 문자열 · 워커 이름 · 블록 모양)은 전부
+ *  `writeEngine` 안에 있다. 클라이언트가 뭘 보내든 그 문이 하나다(생성이 `createWorker`에
+ *  기대는 것과 같다). */
+export async function setEngineAction(
+  projectId: string,
+  name: string,
+  engine: string,
+  model: string,
+): Promise<WorkerActionResult> {
+  try {
+    await writeEngine(await rootOf(projectId), name, engine as EngineId, model);
     revalidatePath(`/p/${projectId}`, "layout");
     return { ok: true };
   } catch (e) {

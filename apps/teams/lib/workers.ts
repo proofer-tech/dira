@@ -51,8 +51,11 @@ export type Worker = {
   lockPid: number | null;
   /** 지금 물고 있는 티켓 해시 (`.wip` 티켓의 `owner:` 역추적) */
   holding: string | null;
-  /** TICKET_ENGINE (표시용). 워커에 없으면 tick.sh의 기본값 */
-  engine: string;
+  /** TICKET_ENGINE 대입. **`null` = 대입이 아예 없다**(= tick.sh 기본값으로 돈다).
+   *  기본값으로 덮어쓰지 않는 이유는 화면이 그 둘을 갈라야 해서다 — 대입 없음은
+   *  `[기본값 가정]` 배지가 붙고 claude 기본 블록은 안 붙는다(§비주얼 §23 ① 표시 4종).
+   *  실효 값이 필요한 자리는 `engineName`·`engineCell`이 `null`을 받아 기본값을 편다 */
+  engine: string | null;
   /** runner.log에서 이 워커의 마지막 줄 */
   lastLog: string | null;
   /** 외부 요인으로 죽은 마지막 세션 (§0-5). **정상 상태에서는 항상 `null`이다** */
@@ -75,8 +78,9 @@ export type Worker = {
  *  식이다 — 인증 판정(§0-4)이 이 값 하나에 걸리므로 식을 두 벌로 적지 않고 화면이 이걸 부른다.
  *  ponytail: 셸을 실행하지 않으니 따옴표만 벗긴다 — `$VAR` 전개는 `parseWorkerFile`의 다른
  *  값들과 같은 선이다(전개해야 하면 `shellValue`가 이미 있는 자리로 옮긴다). */
-export function engineName(engine: string): string {
-  const first = engine.trim().split(/\s+/)[0] ?? "";
+export function engineName(engine: string | null): string {
+  // `null` = 대입이 없다 = tick.sh 기본값이 실제로 돈다. 인증 배너(§0-4)가 그 워커에도 서야 한다.
+  const first = (engine ?? DEFAULT_ENGINE).trim().split(/\s+/)[0] ?? "";
   return path.basename(first.replace(/^(['"])(.*)\1$/, "$2"));
 }
 
@@ -677,6 +681,37 @@ export function parseEngineValue(engine: string): { engineId: EngineId; model: s
   return null;
 }
 
+/** `엔진` 열이 그리는 것 — **표시 4종의 유일한 출처**(§비주얼 §23 ①). 빈칸이 되는 경우가 없다.
+ *
+ *  | 파일의 대입 | label | badge |
+ *  |---|---|---|
+ *  | 카탈로그와 맞음 · 모델 있음 | `claude · opus` | 없음 |
+ *  | 〃 · 모델 없음 | `codex` | 없음 |
+ *  | **없음**(`engine === null`) | `claude` | `assumed` — 실제로 도는 값을 그리고 배지가 사실을 말한다 |
+ *  | 카탈로그와 안 맞음 | `mock-engine`(첫 토큰 basename) | `custom` |
+ *
+ *  판정이 서버에 있는 이유: 클라이언트가 카탈로그를 다시 대조하면 같은 4종이 두 벌이 된다. */
+export function engineCell(engine: string | null): {
+  label: string;
+  badge: "assumed" | "custom" | null;
+  /** 셀 `title`에 붙는 argv 전문. 대입이 없으면 **실제로 도는** tick.sh 기본값이다 */
+  argv: string;
+  /** 팝오버의 초기값. `null`이면 고른 것이 없는 채로 열린다(손으로 쓴 값을 덮어쓰지 않는다) */
+  value: { engineId: EngineId; model: string } | null;
+} {
+  // `??`가 아니라 `||`다: 빈 블록(`TICKET_ENGINE=()`)도 tick.sh 51~53행이 기본값으로 되돌린다 —
+  // 그 워커도 "기본값을 쓰는 중"이 사실이고, 빈 label로 셀이 비는 길이 여기서 닫힌다.
+  const argv = engine || DEFAULT_ENGINE;
+  const value = parseEngineValue(argv);
+  if (!value) return { label: engineName(argv), badge: "custom", argv, value: null };
+  return {
+    label: value.model ? `${value.engineId} · ${value.model}` : value.engineId,
+    badge: engine ? null : "assumed",
+    argv,
+    value,
+  };
+}
+
 /** 블록 치환, 없으면 **삽입**. 파일을 안 건드리는 순수 함수다.
  *
  *  §4는 컨텍스트에 대해 "없으면 GUI가 넣지 않는다(삽입 자리를 짚을 앵커가 없다)"고 정했는데
@@ -924,7 +959,7 @@ export async function listWorkers(root: string, tickets: Ticket[] = []): Promise
       cron: inCron,
       lockPid: pid,
       holding: holdingOf(tickets, eff),
-      engine: parsed.engine ?? DEFAULT_ENGINE,
+      engine: parsed.engine, // null = 대입 없음. 여기서 기본값으로 덮으면 화면이 둘을 못 가른다
       lastLog: logs[eff]?.last ?? null,
       // 파일을 여는 것은 **마지막 결과가 `FAIL`인 워커뿐**이다 — 정상 상태에서는 0회다(§0-5 비용).
       lastFailure: await failureOf(path.join(dir, "logs"), logs[eff]?.result ?? null),
