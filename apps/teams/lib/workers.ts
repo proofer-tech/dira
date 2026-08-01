@@ -1130,6 +1130,98 @@ export const sourceTick = /^[ \t]*(?:\.|source)[ \t]+(.*tick\.sh["']?)[ \t]*$/m;
  *  두 모양이 갈리지 않는다. */
 export const tickSourceLine = (repo: string) => `. ${dq(path.join(repo, "tick.sh"))}`;
 
+// ── 자가 정리 (DESIGN.md §4-4) ───────────────────────────────────────────────
+//
+// 앱을 지우면 `<레포>/tick.sh`가 사라져 **엔진 안의 코드는 그때 실행될 수 없다.** 그 순간에도
+// 도는 것은 cron이 부르는 워커 `.sh` 하나뿐이라 판정이 `. tick.sh` **위**에 산다.
+// 파일을 **쓰는** 쪽(`SELF_HEAL_SH`)과 워커에 넣는 **줄**(`selfHealSourceLine`)이 한 자리에
+// 있어야 두 모양이 안 갈린다 — `sourceTick`/`tickSourceLine`과 같은 이유다.
+
+export const SELF_HEAL_FILE = "self-heal.sh";
+
+/** 워커 파일이 자가 정리를 부르는 한 줄 (§4-4). `. tick.sh` **바로 위**에 들어간다 —
+ *  아래에 두면 엔진이 없을 때 이 줄에 닿기 전에 워커가 죽는다. */
+export function selfHealSourceLine(root: string, repo: string): string {
+  return `. ${dq(path.join(root, SELF_HEAL_FILE))} ${dq(path.join(repo, "tick.sh"))}   # 제거 자기치유(§4-4)`;
+}
+
+/** `<루트>/self-heal.sh`의 전문. GUI가 만들고 관리한다(선례: `context.sh`·`dispatch-gate.sh`).
+ *  **엔진이 아니다** — `tick.sh`·`tickets.py`는 이 기능으로 한 줄도 안 바뀐다(불변식 1).
+ *
+ *  §4-4 표 3줄이 이 문자열의 계약이고, `workers.test.ts`가 진짜 bash로 실행해 확인한다. */
+export const SELF_HEAL_SH = `# dira 자가 정리 (DESIGN.md §4-4) — GUI가 만들고 관리한다. 손으로 고치지 않는다.
+#
+# 워커가 \`. tick.sh\` 바로 위에서 **엔진 경로를 인자로 주며** source한다:
+#   . "<루트>/self-heal.sh" "<레포>/tick.sh"
+# source에 인자를 주면 그 동안만 위치 인자가 갈리고 돌아오면 복구된다 — 실측(bash 3.2 · /bin/sh):
+#   $ bash -c 'set -- tick; . /tmp/s.sh xyz; echo "after: \$1"'   # in: xyz / after: tick
+# 그래서 뒤에 오는 \`. tick.sh\`의 \$1(list·dryrun·tick)이 이 줄 때문에 갈리지 않는다.
+#
+# \$0은 cron이 부른 워커 .sh 그대로다 = crontab 줄에 적힌 **같은 바이트**라 NFC/NFD 정규화가
+# 필요 없다(§4의 grepBothForms가 여기엔 없는 이유).
+#
+# 지우는 대상이 머신 전역 파일이라 **못 읽거나 애매하면 아무것도 안 뺀다**: crontab -l이
+# 실패하거나 비었으면 no-op이고, 바뀐 게 없으면 crontab을 아예 쓰지 않는다.
+# ponytail: 줄을 실제로 뺄 때 후행 빈 줄은 \$( )가 먹는다(cron 의미는 같다). 남는 줄 자체는
+#           재인용·재정렬 없이 바이트 그대로다 — 테스트가 남의 잡·주석·빈 줄로 못박는다.
+
+_dira_engine=\${1:-}
+# 인자가 비었으면(줄이 잘못 심겼다) 엔진이 있는지 **알 수 없다.** 그때 ①을 돌리면 살아 있는
+# 워커가 자기 줄을 지운다 — 애매하면 안 뺀다. ②는 인자와 무관하므로 그대로 돈다.
+if [ -n "$_dira_engine" ] && [ ! -f "$_dira_engine" ]; then _dira_gone=1; else _dira_gone=0; fi
+_dira_tab=$(crontab -l 2>/dev/null) || _dira_tab=
+
+if [ -n "$_dira_tab" ]; then
+  _dira_keep=
+  _dira_live=0
+  _dira_cut=0
+
+  while IFS= read -r _dira_l; do
+    # dira 줄인가 = \`<…>/workers/<이름>.sh\`를 실행하는가. cronLine이 쓰는 모양이 그것 하나다.
+    # ponytail: 큰따옴표 인용만 본다 — 경로에 \`"\`가 든 워커는 안 걸리고 그 줄은 그대로 남는다
+    #           (보수적인 쪽으로 틀린다). 그런 큐가 생기면 그때 인용 해제를 붙인다.
+    _dira_p=
+    case $_dira_l in
+      '#'*) ;;   # 주석은 cron이 실행하지 않는다 = dira 줄이 아니다
+      *) _dira_p=$(printf '%s\\n' "$_dira_l" | sed -n 's|.*"\\(/[^"]*/workers/[^"/]*\\.sh\\)".*|\\1|p') ;;
+    esac
+
+    _dira_drop=0
+    if [ "$_dira_gone" = 1 ]; then
+      # ① 엔진이 없다 = 앱·레포를 지웠다. 내 줄(등록 단위 2줄)을 빼고 이 tick은 여기서 끝낸다.
+      case $_dira_l in *"$0"*) _dira_drop=1 ;; esac
+    elif [ -n "$_dira_p" ] && [ ! -f "$_dira_p" ]; then
+      # ② 죽은 줄은 자기를 못 뺀다(부를 .sh가 없다). 살아 있는 워커가 대신 뺀다 — 남의 줄이어도.
+      _dira_drop=1
+    fi
+
+    if [ "$_dira_drop" = 1 ]; then
+      _dira_cut=1
+    else
+      _dira_keep="$_dira_keep$_dira_l
+"
+      [ -n "$_dira_p" ] && _dira_live=$((_dira_live + 1))
+    fi
+  done <<_DIRA_SELF_HEAL
+$_dira_tab
+_DIRA_SELF_HEAL
+
+  if [ "$_dira_cut" = 1 ]; then
+    printf '%s' "$_dira_keep" | crontab -
+    # ③ 마지막 dira 줄이 빠졌다 = 이 머신에 dira가 없다. 지우는 것은 **키맵 하나**다 —
+    #    .dira 아래(큐·워크트리·cron.log)는 사람의 작업물이라 남긴다(요구 51a03986 답 1-2).
+    [ "$_dira_live" = 0 ] && rm -f "\${TICKET_LOCAL:-$HOME/.config/dira}/keymap.json"
+  fi
+
+  unset _dira_keep _dira_live _dira_l _dira_p _dira_drop
+fi
+
+# ①은 여기서 끝낸다. source된 파일이라 중단이 return이 아니라 exit다 — return이면 워커가
+# 없는 tick.sh로 그냥 넘어가 cron.log에 No such file을 1분마다 쌓는다(dispatch-gate.sh와 같은 이유).
+[ "$_dira_gone" = 1 ] && exit 0
+unset _dira_engine _dira_gone _dira_tab _dira_cut
+`;
+
 /** 워크트리 준비 명령 **2줄 + 검증 1줄**(§4 생성 4항). GUI가 실패했을 때 사람이 셸에서
  *  이어서 실행하는 문자열이다 — 성공하면 아무 데도 안 보인다.
  *

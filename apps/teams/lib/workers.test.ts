@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert";
 import { execFileSync } from "node:child_process";
 import {
+  existsSync,
   mkdirSync,
   chmodSync,
   mkdtempSync,
@@ -33,6 +34,9 @@ const {
   cronUnregisterCmd,
   cronWriteError,
   deleteWorker,
+  SELF_HEAL_FILE,
+  SELF_HEAL_SH,
+  selfHealSourceLine,
   engineArgv,
   ENGINES,
   NO_MODEL,
@@ -551,6 +555,131 @@ test("cronRegister — 후행 개행이 없는 crontab에서도 줄이 이어 �
     `* * * * * "/tmp/w1.sh" >> "/tmp/cron.log" 2>&1`,
     `* * * * * sleep 30; "/tmp/w1.sh" >> "/tmp/cron.log" 2>&1`,
   ]);
+});
+
+// ── 자가 정리 §4-4 ──────────────────────────────────────────────────────────
+
+/** §4-4 표 3줄을 **진짜 bash로** 판정한다. 워커 파일을 실제로 만들어 `bash <워커>`로 돌리므로
+ *  `$0`이 cron이 주는 것과 같은 문자열이다(계약이 그 위에 서 있다).
+ *
+ *  진짜 crontab도 진짜 dira 큐도 안 건드린다(선례 §로드맵 P53): `crontab`은 PATH 앞 스텁이
+ *  가로채고(`-l`은 `tab.txt`, `crontab -`은 `out.txt`에 쓴다), 큐·엔진 레포·`TICKET_LOCAL`은
+ *  전부 `mkdtemp` 디렉터리다. */
+function selfHealBed(names: string[], engine: boolean) {
+  const mk = (tag: string) => {
+    const d = mkdtempSync(path.join(tmpdir(), `fst-${tag}-`));
+    tmps.push(d);
+    return d;
+  };
+  const root = mk("root");
+  const repo = mk("repo");
+  const local = mk("keymap");
+  const bin = mk("bin");
+  mkdirSync(path.join(root, "workers"));
+  if (engine) writeFileSync(path.join(repo, "tick.sh"), "#!/bin/bash\necho TICK\n");
+  writeFileSync(path.join(root, SELF_HEAL_FILE), SELF_HEAL_SH);
+
+  const wpath = (n: string) => path.join(root, "workers", `${n}.sh`);
+  for (const n of names) {
+    // 진짜 워커와 같은 배치: 자가 정리는 `. tick.sh` **바로 위**다.
+    const body = `#!/bin/bash\n${selfHealSourceLine(root, repo)}\necho ALIVE\n`;
+    writeFileSync(wpath(n), body, { mode: 0o755 });
+  }
+
+  const keymap = path.join(local, "keymap.json");
+  writeFileSync(keymap, `{"board.search":"Mod+f"}`);
+  const tab = path.join(bin, "tab.txt");
+  const out = path.join(bin, "out.txt");
+  const J = JSON.stringify;
+  writeFileSync(
+    path.join(bin, "crontab"),
+    `#!/bin/sh\nif [ "$1" = "-l" ]; then [ -f ${J(tab)} ] || exit 1; cat ${J(tab)}; else cat > ${J(out)}; fi\n`,
+    { mode: 0o755 },
+  );
+
+  return {
+    wpath,
+    lines: (n: string) => cronLine({ path: wpath(n) }),
+    setTab: (text: string) => writeFileSync(tab, text),
+    /** `crontab -l`이 실패하는 상태(= 이 사용자에게 crontab이 없다) */
+    noTab: () => rmSync(tab, { force: true }),
+    run: (n: string) =>
+      execFileSync("bash", [wpath(n)], {
+        encoding: "utf8",
+        env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, TICKET_LOCAL: local },
+      }),
+    wrote: () => existsSync(out),
+    out: () => readFileSync(out, "utf8"),
+    keymapLeft: () => existsSync(keymap),
+  };
+}
+
+const OTHERS = [
+  "PATH=/usr/local/bin:/usr/bin:/bin",
+  "# 백업 — 손대지 말 것",
+  "0 3 * * * /Users/x/bin/backup.sh >> /tmp/backup.log 2>&1",
+  "",
+  "@reboot /Users/x/bin/other.sh",
+];
+
+test("§4-4 ① 엔진이 없으면 자기 줄 2줄이 빠지고 tick.sh로 안 넘어간다", () => {
+  const bed = selfHealBed(["w1", "w2"], false);
+  const tab = [...OTHERS, bed.lines("w1"), bed.lines("w2"), ""].join("\n");
+  bed.setTab(tab);
+
+  // rc=0이 아니면 execFileSync가 던진다. `ALIVE`가 없다 = `. tick.sh` 자리에 안 닿았다(exit 0).
+  assert.strictEqual(bed.run("w1"), "");
+  // 자기 줄만 2줄 빠지고 남의 잡·주석·빈 줄·다른 워커 줄은 바이트 그대로다
+  assert.strictEqual(bed.out(), [...OTHERS, bed.lines("w2"), ""].join("\n"));
+  // w2의 dira 줄이 남았으므로 키맵은 안 지운다
+  assert.strictEqual(bed.keymapLeft(), true);
+});
+
+test("§4-4 ② 엔진이 있으면 `.sh`가 없는 dira 줄만 빠진다 (남의 줄이어도, 남의 잡은 안 본다)", () => {
+  const bed = selfHealBed(["w1"], true);
+  const dead = cronLine({ path: "/Users/x/Projects/gone/.dira/workers/w7.sh" });
+  // `workers/*.sh`를 부르지 않는 남의 잡 + 주석 처리된 dira 줄은 판정 대상이 아니다
+  const commented = `# ${cronLine({ path: "/Users/x/Projects/gone/.dira/workers/w8.sh" }).split("\n")[0]}`;
+  const keep = [...OTHERS, commented, bed.lines("w1")];
+  bed.setTab([...keep, dead, ""].join("\n"));
+
+  assert.strictEqual(bed.run("w1"), "ALIVE\n"); // 워커는 계속 돈다(tick.sh로 넘어간다)
+  assert.strictEqual(bed.out(), [...keep, ""].join("\n"));
+  assert.strictEqual(bed.keymapLeft(), true); // 살아 있는 dira 줄이 남았다
+
+  // 뺄 줄이 없으면 crontab을 아예 쓰지 않는다 — 위 결과를 다시 먹여도 no-op이다
+  const bed2 = selfHealBed(["w1"], true);
+  bed2.setTab([...OTHERS, bed2.lines("w1"), ""].join("\n"));
+  assert.strictEqual(bed2.run("w1"), "ALIVE\n");
+  assert.strictEqual(bed2.wrote(), false);
+  assert.strictEqual(bed2.keymapLeft(), true);
+});
+
+test("§4-4 ③ 마지막 dira 줄이 빠지면 키맵만 지운다", () => {
+  const bed = selfHealBed(["w1"], false); // 앱을 지웠다 = 이 머신의 마지막 dira
+  bed.setTab([...OTHERS, bed.lines("w1"), ""].join("\n"));
+
+  assert.strictEqual(bed.run("w1"), "");
+  assert.strictEqual(bed.out(), [...OTHERS, ""].join("\n")); // 남의 잡은 그대로
+  assert.strictEqual(bed.keymapLeft(), false);
+});
+
+test("§4-4 crontab을 못 읽거나 비었으면 아무것도 안 쓴다 (rc=0)", () => {
+  const bed = selfHealBed(["w1"], true);
+  bed.noTab(); // `crontab -l`이 rc=1 (이 사용자에게 crontab이 없다)
+  assert.strictEqual(bed.run("w1"), "ALIVE\n");
+  assert.strictEqual(bed.wrote(), false);
+
+  bed.setTab(""); // 빈 crontab
+  assert.strictEqual(bed.run("w1"), "ALIVE\n");
+  assert.strictEqual(bed.wrote(), false);
+
+  // 엔진이 없어도 마찬가지다 — 쓰지 않고, 키맵도 안 지우고, exit 0으로 끝난다
+  const gone = selfHealBed(["w1"], false);
+  gone.noTab();
+  assert.strictEqual(gone.run("w1"), "");
+  assert.strictEqual(gone.wrote(), false);
+  assert.strictEqual(gone.keymapLeft(), true);
 });
 
 test("createWorker — 기존 워커를 템플릿으로 755 생성, 덮어쓰기·워커 0개는 거부", async () => {
