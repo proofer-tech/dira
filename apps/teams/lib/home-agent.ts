@@ -885,7 +885,24 @@ export type HomeChunk = {
   stopped: boolean;
   /** 끝난 **실패**. 성공은 말풍선이 이미 말했으므로 여기 안 담는다 */
   failed: Answer | null;
+  /** **폴링을 끊어도 되는가**(`pollDone`). `running`의 반대가 아니다 — 아래 주석이 그 자리다 */
+  done: boolean;
 };
+
+/** **폴링을 끊는 근거**(§7 §폴링은 서버가 잊어도 안 끊긴다 — 요구 `116b3c37`). `running: false`
+ *  하나로는 못 끊는다: `runs`는 프로세스 메모리라 dev의 recompile·서버 재시작에 휘발하고, 그러면
+ *  자식이 아직 도는데도 그 값이 false로 온다. **그 응답의 `turns`는 비어 있다**(답이 트랜스크립트에
+ *  아직 안 쓰였다) — 화면이 거기서 끊으면 질문만 든 채 얼고 새로고침 전까지 안 산다.
+ *
+ *  그래서 보는 것은 **끝의 증거가 이 응답 안에 같이 왔는가** 하나다: 새 줄 · 실패 · `중지됨`.
+ *  정상 종료는 언제나 걸린다 — `pollHome`이 끝을 파일보다 먼저 읽으므로(첫 줄) 마지막 응답이 그
+ *  답을 함께 데려온다. **비어 있다는 것 자체가 비정상의 표식**이라 화면은 안 끊고 더 본다
+ *  (천장은 화면 쪽 5분이다 — `TIMEOUT_MS`와 같은 수).
+ *
+ *  `stopped`가 셋째인 이유: 사람이 글자 한 자 오기 전에 `중지`를 누르면 새 줄도 실패도 없다.
+ *  그건 정상 종료이므로(맵이 살아서 `done`을 채웠다) 여기서 안 걸면 입력칸이 5분 잠긴다. */
+export const pollDone = (c: Pick<HomeChunk, "running" | "turns" | "failed" | "stopped">): boolean =>
+  !c.running && (c.turns.length > 0 || c.failed !== null || c.stopped);
 
 /** 트랜스크립트를 `offset` 뒤부터 읽어 대화 줄 + 새 offset(§2-1 읽기 코어 재사용).
  *
@@ -897,6 +914,8 @@ export async function pollHome(
   sessionId: string | null,
   offset: number,
 ): Promise<HomeChunk> {
+  /** 나가는 문 셋이 **같은 판정 하나**를 지난다 — 둘이 예외 경로라 잊기 쉬운 자리다 */
+  const chunk = (c: Omit<HomeChunk, "done">): HomeChunk => ({ ...c, done: pollDone(c) });
   // **끝났는지를 읽는 것이 파일을 읽는 것보다 먼저다.** 뒤집으면 tail과 종료 사이에 쓰인 마지막
   // 줄을 못 읽은 채로 `running: false`를 돌려주고, 폴링이 멈춰서 답이 새로고침 전까지 안 뜬다.
   const entry = runs.get(projectId);
@@ -927,12 +946,12 @@ export async function pollHome(
   const partial = running ? (entry?.live.partial ?? "") : "";
 
   if (!sid) {
-    return { sessionId: null, conversations, workers, turns: [], offset: 0, reset, running, partial, stopped, failed };
+    return chunk({ sessionId: null, conversations, workers, turns: [], offset: 0, reset, running, partial, stopped, failed });
   }
 
   const file = await findTranscript(sid);
   if (!file) {
-    return {
+    return chunk({
       sessionId: sid,
       conversations,
       workers,
@@ -949,8 +968,8 @@ export async function pollHome(
         (done
           ? { ...done, ok: false, reason: "no-transcript", output: `~/.claude/projects/*/${sid}.jsonl` }
           : null),
-    };
+    });
   }
   const r = await tailEvents(file, at);
-  return { sessionId: sid, conversations, workers, turns: toTurns(r.events), offset: r.offset, reset, running, partial, stopped, failed };
+  return chunk({ sessionId: sid, conversations, workers, turns: toTurns(r.events), offset: r.offset, reset, running, partial, stopped, failed });
 }

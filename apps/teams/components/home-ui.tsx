@@ -98,6 +98,13 @@ const LOCKED = "답이 끝나거나 중지한 뒤에 열 수 있습니다";
  *  둘을 통틀어 가리키고, 그래서 **체크가 패널 전체에 하나다**(§24). */
 type Panel = Home & { workers: WorkerSession[] };
 
+/** 폴링 주기 둘과 천장(§7 §답은 흐른다 · §폴링은 서버가 잊어도 안 끊긴다). 자세한 근거는
+ *  아래 `useEffect` 머리 주석. 셋 다 이 파일 안에서만 쓴다 — 서버의 `TIMEOUT_MS`는 같은 수지만
+ *  같은 값이 될 수 없다(저 모듈은 `node:child_process`를 물고 있어 클라이언트로 못 건너온다). */
+const FAST_MS = 500;
+const SLOW_MS = 2_000;
+const CEILING_MS = 5 * 60_000;
+
 /** §비주얼 §24 실패 5종. **`reason` 코드로 갈린다** — `output` 문장을 되짚으면 문구를 한 자
  *  고치는 날 화면이 조용히 뭉친다(§21 `FAIL` 표와 같은 규약). `other`는 §24에 항이 없는
  *  나머지고 제목 한 줄 + 원문이다. `cmd`가 있는 것은 ① 하나뿐이다. */
@@ -164,12 +171,20 @@ export function HomeUI({ project, initial }: { project: string; initial: HomeChu
   const sendCombo = useKeymap().bindings["interject.send"];
 
   // **답이 도는 동안만 돈다**(§7 — 홈은 5초 폴링을 하지 않는다. 큐를 따라가는 화면이 아니다).
-  // 끝나는 근거는 서버가 돌려주는 `running` 하나고(§2-1의 `live`와 같은 모양), 그 응답이
-  // 마지막 사건까지 담고 있다 — 실행층이 **끝났는지를 파일보다 먼저** 읽는 이유가 그것이다.
+  // 끝나는 근거는 **`running`이 아니라 `done`**이다(§7 §폴링은 서버가 잊어도 안 끊긴다 —
+  // 요구 `116b3c37`). 판정은 서버 한 줄에 있고(`pollDone`) 여기는 그 값을 읽을 뿐이다:
+  // `running: false`가 왔는데 새 줄도 실패도 `중지됨`도 없으면 그건 끝이 아니라 **맵이
+  // 휘발한 것**이라(dev recompile) 안 끊고 트랜스크립트를 더 본다. 종전에는 그 한 번에
+  // 끊어서 화면이 질문만 든 채 얼었고, 새로고침만이 살렸다.
   //
-  // **주기가 500ms다**(§7 §답은 흐른다 — SSE를 만들지 않는 대가로 정한 수). 델타 하나가 평균
-  // 250ms 늦게 붙고, 실측 델타 간격이 480ms라 그 지연은 화면에서 안 보인다. 5분을 다 쓰면
-  // 왕복 600회이고 한 번이 `readSessionId` + 트랜스크립트 tail이다.
+  // **주기가 둘이다.** 도는 동안은 500ms(§7 §답은 흐른다 — SSE를 만들지 않는 대가로 정한 수.
+  // 델타 하나가 평균 250ms 늦게 붙고 실측 델타 간격이 480ms라 안 보인다). 서버가 잊은 뒤에는
+  // **2초**다(§2-1과 같은 수) — 흐르는 글은 이미 맵과 함께 사라졌고 여기서 기다리는 것은
+  // 완성된 답 한 덩어리라 500ms를 유지할 이유가 없다.
+  //
+  // **천장 5분**(§7 — `ask`의 `TIMEOUT_MS`와 같은 수. 저 값은 서버 모듈에 있어 여기로 못
+  // 건너온다 — 클라이언트 번들이 `node:child_process`를 못 문다). 그 뒤로도 답이 없으면 끊고
+  // 잠금을 푼다. 무한히 묻는 화면을 만들지 않는다.
   //
   // **앞 왕복이 끝난 뒤에 다음을 예약한다 — `setInterval`이 아니다**(`bcfcdda4`). 저건 왕복
   // 시간을 안 보고 500ms마다 쏘므로, 왕복이 그보다 길어지는 순간 두 `poll`이 동시에 살아
@@ -181,7 +196,10 @@ export function HomeUI({ project, initial }: { project: string; initial: HomeChu
     if (!running) return;
     let stop = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    const deadline = Date.now() + CEILING_MS;
     const poll = async () => {
+      // 왕복이 통째로 실패하면(catch) 서버가 삐끗한 것이다 — 느린 쪽으로 물러난다.
+      let wait = SLOW_MS;
       try {
         const r = await pollHomeAnswer(project, session.current, offset.current);
         if (stop) return;
@@ -198,15 +216,23 @@ export function HomeUI({ project, initial }: { project: string; initial: HomeChu
           return r.stopped ? markStopped(next) : next;
         });
         if (r.failed) setFail(r.failed);
-        if (!r.running) {
+        if (r.done) {
           setRunning(false);
           return; // 다음을 예약하지 않는다 = 이 줄이 폴링을 끊는 자리다
         }
+        wait = r.running ? FAST_MS : SLOW_MS;
       } catch {
         // 이 왕복 하나만 버린다 — `setInterval`이 한 틱 실패에 안 멈추던 것과 같은 자리다.
         // 여기서 멈추면 서버가 잠깐 삐끗한 대가로 도는 답이 화면에서 영구히 얼어붙는다.
       }
-      if (!stop) timer = setTimeout(poll, 500);
+      if (stop) return;
+      if (Date.now() >= deadline) {
+        // 천장. 답은 못 받았지만 잠금은 푼다 — 5분 뒤에도 잠긴 입력칸은 고장이고, 답이
+        // 늦게라도 파일에 서면 새로고침이 데려온다(그 경로는 종전부터 살아 있다).
+        setRunning(false);
+        return;
+      }
+      timer = setTimeout(poll, wait);
     };
     void poll();
     return () => {

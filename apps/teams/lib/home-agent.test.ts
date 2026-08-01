@@ -23,6 +23,7 @@ const {
   startAsk,
   stopAsk,
   pollHome,
+  pollDone,
   isAsking,
   sessionsPath,
   readSessionId,
@@ -857,4 +858,25 @@ test("워커 세션 — 사라진 `current`는 대화 0건과 같고, 고르면 
   assert.strictEqual(refused?.reason, "other"); // 여섯 번째 실패 코드를 안 만든다
   assert.match(refused?.output ?? "", /도는 워커 세션에는 여기서 말을 걸 수 없습니다 · 참견은 aaaa1111 상세에서/);
   assert.strictEqual(isAsking(id), false); // 세션을 아예 안 띄웠다
+});
+
+test("폴링을 끊는 근거는 `running`이 아니라 **답이 왔다**다 (§7 §폴링은 서버가 잊어도 안 끊긴다)", () => {
+  const answer = { key: "1", role: "answer" as const, text: "답" };
+  const fail = { ok: false as const, reason: "other" as const, output: "x", sessionId: "", resumed: false };
+  const chunk = (c: Partial<Parameters<typeof pollDone>[0]>) =>
+    pollDone({ running: false, turns: [], failed: null, stopped: false, ...c });
+
+  // ① 정상 종료 — 끝을 파일보다 먼저 읽으므로(`pollHome` 첫 줄) 마지막 응답이 답을 같이
+  //    데려온다. 여기서 끊는다.
+  assert.strictEqual(chunk({ turns: [answer] }), true);
+  // ② 빈 종료 — `running: false`인데 아무 증거도 없다. `runs`가 휘발한 자리다(dev recompile).
+  //    **안 끊는다** — 종전에는 여기서 끊어서 화면이 질문만 든 채 얼었다.
+  assert.strictEqual(chunk({}), false);
+  // ③ 도는 중 — 예나 지금이나 안 끊는다.
+  assert.strictEqual(chunk({ running: true }), false);
+  // ④ 실패도 끝의 증거다(§24 실패 5종 — 화면이 Alert를 세우고 입력칸을 연다).
+  assert.strictEqual(chunk({ failed: fail }), true);
+  // ⑤ 글자 한 자 오기 전에 누른 `중지` — 새 줄도 실패도 없지만 **정상 종료**다(맵이 살아서
+  //    `stopped`를 채웠다). 안 걸면 입력칸이 5분 잠긴다.
+  assert.strictEqual(chunk({ stopped: true }), true);
 });
