@@ -9,7 +9,14 @@ import { existsSync } from "node:fs";
 import { chmod, mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { expandHome } from "./paths.ts";
-import { renderContextBlock, sourceTick, tickSourceLine } from "./workers.ts";
+import {
+  SELF_HEAL_FILE,
+  SELF_HEAL_SH,
+  renderContextBlock,
+  selfHealSourceLine,
+  sourceTick,
+  tickSourceLine,
+} from "./workers.ts";
 
 /** `templates/` 아래 경로가 곧 `.dira/` 아래 경로다(1:1). §0-3 스캐폴딩 집합 중 복사본들. */
 const TEMPLATE_FILES = [
@@ -143,6 +150,10 @@ export async function scaffold(
   // `parseContextBlock`은 주석 블록에 안 걸리게 줄 처음에 앵커하므로(의도된 동작) 새 프로젝트의
   // 워커 화면에서 컨텍스트 카드가 "블록이 없습니다"로 닫힌다. 문자열은 GUI가 0항목을 쓸 때 내는
   // 것과 **같다**(`renderContextBlock([])`) — 새 모양을 만들지 않는다. 주석 예시 블록은 그대로다.
+  // **자가 정리도 여기서 태어난다**(§4-4): `<루트>/self-heal.sh` + 워커의 `source` 한 줄.
+  // 2번째 워커부터는 기존 워커 복사(`createWorker`)라 줄이 저절로 승계된다 — 첫 워커에만 쓴다.
+  // 실행 파일이 아니라 source되는 파일이라 모드는 기본값이다(`context.sh`·`dispatch-gate.sh`와 같다).
+  await put(SELF_HEAL_FILE, SELF_HEAL_SH);
   const example = await readFile(path.join(repo.path, "worker.sh.example"), "utf8");
   // 치환값은 함수로 준다 — 경로에 `$&`·`$1`이 들어 있으면 문자열 치환은 그걸 해석한다.
   const w1 = example.replace(
@@ -151,7 +162,9 @@ export async function scaffold(
     // 엔진의 요구로 읽힌다(아니다. 엔진은 미정의 배열을 그대로 받는다 — tick.sh 147행).
     () =>
       `# 컨텍스트(선택). GUI 워커 화면이 이 블록을 고친다 — 항목 문법은 위 주석 예시.\n` +
-      `${renderContextBlock([])}\n\n${tickSourceLine(repo.path)}`,
+      `${renderContextBlock([])}\n\n` +
+      // `. tick.sh` **바로 위**다. 아래면 엔진이 없을 때 이 줄에 닿기 전에 워커가 죽는다(§4-4).
+      `${selfHealSourceLine(root, repo.path)}\n${tickSourceLine(repo.path)}`,
   );
   await put("workers/w1.sh", w1, 0o755);
 

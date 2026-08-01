@@ -17,6 +17,7 @@ const SET = [
   ".dira/personas/qa/PROFILE.md",
   ".dira/personas/designer/PROFILE.md",
   ".dira/workers/w1.sh",
+  ".dira/self-heal.sh",
 ];
 
 /** 활성 `TICKET_CWD` 대입. `# TICKET_CWD=...`(worker.sh.example의 주석)은 안 걸린다 —
@@ -84,6 +85,15 @@ test("scaffold — §0-3 집합 그대로, 두 번째는 전부 skipped", async 
   assert.ok(b.start < sh.indexOf(`. "${path.join(repo.path, "tick.sh")}"`), "블록이 source 위여야");
   assert.match(sh, /^# TICKET_CONTEXT=\(/m);
   execFileSync("bash", ["-n", w1]);
+
+  // ⑦ 자가 정리(§4-4) — 파일이 같이 생기고, `source` 줄이 `. tick.sh` **바로 위**다.
+  const heal = path.join(project, ".dira/self-heal.sh");
+  execFileSync("bash", ["-n", heal]);
+  const healLine = `. "${heal}" "${path.join(repo.path, "tick.sh")}"`;
+  const lines = sh.split("\n");
+  const at = lines.findIndex((l) => l.startsWith(healLine));
+  assert.ok(at >= 0, `자가 정리 줄이 없다: ${sh.slice(-300)}`);
+  assert.equal(lines[at + 1], `. "${path.join(repo.path, "tick.sh")}"`);
 
   // ④ 두 번 돌리면 전부 skipped이고 내용이 안 바뀐다
   const second = await scaffold(project, { branch: "other", specDoc: "docs/S.md" });
