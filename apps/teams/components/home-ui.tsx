@@ -41,6 +41,12 @@ import {
   stopHome,
   switchHome,
 } from "@/app/p/[project]/home/actions";
+import {
+  AttachmentButton,
+  AttachmentChips,
+  AttachmentProblems,
+  useAttachments,
+} from "@/components/attachment-field";
 import { CopyCommand } from "@/components/copy-command";
 import { useKeymap } from "@/components/keymap-provider";
 import { Markdown } from "@/components/markdown";
@@ -139,6 +145,9 @@ export function HomeUI({ project, initial }: { project: string; initial: HomeChu
   const session = useRef(initial.sessionId);
   const offset = useRef(initial.offset);
   const input = useRef<HTMLTextAreaElement>(null);
+  // 첨부(§8) — 나가는 곳이 `claude`의 argv다. 조립은 서버의 `withAttachments` 하나이고
+  // (§8 §표기는 하나다) 파일은 홈 에이전트 cwd 아래라 `Read`가 그대로 연다(§7 도구 셋).
+  const att = useAttachments(project);
   // 보내는 키와 손잡이의 `<kbd>`가 **같은 값 하나**에서 나온다(§0-6: 표기를 하드코딩하지 않는다).
   // §24가 이 폼을 §21의 **세 번째 모드**로 못박았으므로 액션도 그 하나를 같이 쓴다 —
   // 키설정에 9번째 줄을 만들지 않는다(§0-6의 액션 8개는 그 화면의 계약이다).
@@ -188,12 +197,14 @@ export function HomeUI({ project, initial }: { project: string; initial: HomeChu
 
   /** 질문 하나를 띄운다. **입력칸과 `다시 답하기`가 같은 경로다**(§24 — 후자가 하는 일이
    *  "옛 질문을 입력칸에 넣고 보내는 것"과 같다). 갈리는 것은 칸을 비우느냐뿐이라 그쪽은 밖에 둔다. */
-  const run = async (question: string) => {
+  const run = async (question: string, paths: string[] = []) => {
     setStarting(true);
     setFail(null);
     setStopping(false); // 앞 답을 중지한 뒤라도 이번 답의 `중지`는 눌린 적이 없다
     setPartial("");
-    const r = await askHome(project, question);
+    // `다시 답하기`는 첨부 없이 부른다(§24 — 그 버튼이 다시 보내는 것은 **옛 질문 한 줄**이고,
+    // 그 글에 첨부 경로가 필요했으면 이미 그 안에 적혀 있다).
+    const r = await askHome(project, question, paths);
     setStarting(false);
     if (r) setFail(r);
     else setRunning(true); // 폴링 효과가 붙는다. 질문 말풍선도 그 첫 응답이 데려온다
@@ -207,8 +218,12 @@ export function HomeUI({ project, initial }: { project: string; initial: HomeChu
     // 이유**다. 실패하면 그 글을 도로 넣는다(§21 실패 규칙: 쓴 글은 남는다). 그 사이에 사람이
     // 다음 질문을 쓰기 시작했으면 **그쪽이 이긴다** — 사람이 방금 친 글을 덮지 않는다.
     const sent = text;
+    const paths = att.paths;
     setText("");
-    if (await run(sent)) setText((now) => now || sent);
+    // **칩은 성공에만 빈다** — 실패하면 쓴 글이 돌아오듯 붙인 파일도 그대로 있어야 다시
+    // 보낼 수 있다(§21 실패 규칙). 올라간 파일은 어느 쪽이든 안 지운다(§8 수명).
+    if (await run(sent, paths)) setText((now) => now || sent);
+    else att.reset();
   };
 
   /** `중지`(§7 §도는 답을 멈춘다) — 서버가 자식 하나에 `SIGTERM`을 보낸다. **여기서 화면을
@@ -423,6 +438,7 @@ export function HomeUI({ project, initial }: { project: string; initial: HomeChu
               // 걸리는 화면에서 다음 질문을 미리 쓸 수 없게 된다. 못 보내는 실효는 `send()`의
               // 첫 줄이고, 서버가 한 번 더 판정한다(§24 실패 ④).
               onChange={(e) => setText(e.target.value)}
+              onPaste={att.onPaste}
               // `⌘↵`로 보낸다. `Enter`는 줄바꿈이다(§21). `matchCombo`가 `isComposing`을 막아
               // 받침을 확정하는 `Enter`에 글이 날아가지 않는다.
               onKeyDown={(e) => {
@@ -432,7 +448,14 @@ export function HomeUI({ project, initial }: { project: string; initial: HomeChu
                 }
               }}
             />
+            {/* 칩 줄 — 손잡이 addon **위**다(§27 세로 순서). 폭이 1392라 10개가 2줄(62)이고
+                그 62는 여유가 아니라 **스레드**에서 나온다(§27 §24 항 — 스레드가 `flex-1`이다). */}
+            <AttachmentChips att={att} />
             <InputGroupAddon align="block-end">
+              {/* 손잡이가 줄의 맨 왼쪽이다(§27). 이 줄에는 보조 문구가 없어 셋뿐이다:
+                  `첨부 → ml-auto ⌘↵ → 보내기`. 도는 동안에도 안 잠근다 — 입력칸과 같은
+                  판단이다(§24: 다음 질문을 미리 쓸 수 있다). */}
+              <AttachmentButton att={att} />
               {/* `bg-muted`를 깔지 않는다 — `--muted-foreground`가 라이트 4.34로 AA 미달이다(§21).
                   `ml-auto`가 여기 걸려서 1차 버튼이 줄의 가장 오른쪽이다(§4-3). */}
               <kbd className="ml-auto border px-1 font-mono text-xs text-muted-foreground">
@@ -452,6 +475,10 @@ export function HomeUI({ project, initial }: { project: string; initial: HomeChu
               </InputGroupButton>
             </InputGroupAddon>
           </InputGroup>
+
+          {/* 첨부 실패 사유(§27) — 그룹 **밖** · 폼 안 한 줄이다. 아래 `<Failure>`와 겹쳐 설 수
+              있어서 Alert를 안 쓴다. */}
+          <AttachmentProblems att={att} />
 
           {/* 실패는 사유를 삼키지 않는다(§6 3요소 — 제목 · mono 원문 · 다음 행동). 자리는 §21
               그대로 입력칸 아래 · 폼 안이다. ①만 `<CopyCommand>`를 단다: 사람이 실행해야 하는

@@ -11,6 +11,7 @@
  *
  *  **`revalidatePath`를 부르지 않는다.** 대화의 출처는 트랜스크립트 파일이고 그건 Next 캐시가
  *  모르는 것이라 폴링이 직접 읽는다. 티켓도 레지스트리도 안 바뀌므로 다시 그릴 화면이 없다. */
+import { verifyAttachments, withAttachments } from "@/lib/attachments";
 import {
   newConversation,
   pollHome,
@@ -33,11 +34,20 @@ async function required(projectId: string) {
 
 /** 질문 하나를 띄운다. 돌려주는 것은 **실패뿐**이고(`null` = 시작했다) 답의 도착은 폴링이 말한다.
  *  이미 도는 질문이 있으면 `busy`로 거절한다(§24 실패 ④) — 기다리게 하지 않는다. */
-export async function askHome(projectId: string, question: string): Promise<Answer | null> {
+export async function askHome(
+  projectId: string,
+  question: string,
+  /** 첨부(§8) — 화면이 이미 올려 둔 **경로**만 온다(바이트는 이 액션을 안 지난다). 돌아온 경로가
+   *  `attachments/` 아래인지는 서버가 다시 본다(신뢰 경계). 조립은 `withAttachments` 하나이고,
+   *  그 경로는 홈 에이전트 cwd(`dirname(root)`) 아래라 `Read`가 그대로 연다(§7 · §8 표). */
+  attachments: string[] = [],
+): Promise<Answer | null> {
   try {
-    return await startAsk(await required(projectId), question);
+    const project = await required(projectId);
+    const attached = await verifyAttachments(project, attachments);
+    return await startAsk(project, withAttachments(question, attached));
   } catch (e) {
-    // 여기 오는 건 프로젝트 조회가 던진 것뿐이다(§24 표에 항이 없다) — `other`다.
+    // 여기 오는 건 프로젝트 조회와 첨부 경로 판정이 던진 것뿐이다(§24 표에 항이 없다) — `other`다.
     return { ok: false, reason: "other", output: (e as Error).message, sessionId: "", resumed: false };
   }
 }

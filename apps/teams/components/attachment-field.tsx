@@ -13,14 +13,17 @@
  *  한 컴포넌트가 입력칸까지 삼키면 자리마다 다른 `<Textarea>`/`<InputGroupTextarea>`의 props를
  *  통째로 프록시해야 한다. 훅이 상태를 들고, 컴포넌트가 §27의 아래 두 줄을 든다.
  *
- *  ponytail: 지금 그리는 그릇은 `<Textarea>` 다이얼로그 하나다(§27 표의 왼쪽 열 —
- *  `<InputGroup>`의 addon 두 개짜리 배치)는 그 자리를 붙이는 티켓(`f575987c`)이 `att`를 그대로
- *  받아 자기 JSX로 그리면 된다. 지금 없는 자리를 위해 `variant` prop을 미리 파지 않는다. */
+ *  **그릇이 둘이라 그리는 것도 둘이다**(§27 표의 두 열): 다이얼로그는 `<AttachmentField>` 한 벌이
+ *  칩 줄·실패 줄·액션 행을 다 들고, `<InputGroup>`(참견·이어받기·홈)은 조각 셋을 호출자의
+ *  그룹 안팎에 나눠 심는다 — 칩은 addon, 손잡이는 **호출자의 액션 addon 안**, 실패 줄은 그룹
+ *  **밖**이라(§21 `has-disabled:opacity-50`) 한 컴포넌트로는 그 셋을 한 자리에 못 놓는다.
+ *  갈리는 것은 래퍼뿐이고 칩 하나(`AttachmentChip`)·상태(`useAttachments`)·문구는 한 벌이다. */
 import { useRef, useState, type ReactNode } from "react";
 import { Paperclip, TriangleAlert, X } from "lucide-react";
 import { uploadAttachment } from "@/app/p/[project]/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { InputGroupAddon, InputGroupButton } from "@/components/ui/input-group";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 /** §8 상한. 한 칸에 10개. 서버는 이 수를 모른다 — 화면이 거절하는 값이다. */
@@ -140,17 +143,8 @@ export function AttachmentField({ att, children }: { att: Attachments; children?
           ))}
         </div>
       )}
-      {/* 왜 + 다음 행동. 그룹 **밖**이고 `<Failure>` Alert가 아니다 — 제출 실패 Alert와 한 폼에
-          겹쳐 설 수 있어서 한 줄로 둔다(§27 실패 항) */}
-      {att.problems.length > 0 && (
-        <div className="space-y-1">
-          {att.problems.map((p) => (
-            <p key={p} className="text-xs text-destructive">
-              {p}
-            </p>
-          ))}
-        </div>
-      )}
+      <AttachmentProblems att={att} />
+
       {/* 폼에 실리는 값. 서버가 `attachments/` 아래인지 다시 판정한다(`verifyAttachments`) */}
       {att.paths.map((p) => (
         <input key={p} type="hidden" name="attachment" value={p} />
@@ -182,6 +176,81 @@ export function AttachmentField({ att, children }: { att: Attachments; children?
         </Button>
         {children}
       </div>
+    </>
+  );
+}
+
+/** 왜 + 다음 행동. 그룹 **밖**이고 `<Failure>` Alert가 아니다 — 제출 실패 Alert와 한 폼에
+ *  겹쳐 설 수 있어서 한 줄로 둔다(§27 실패 항). `<InputGroup>` 쪽 호출자는 이걸 그룹 **뒤**에
+ *  세운다: 안에 넣으면 `has-disabled:opacity-50`이 겹쳐 §21이 금지한 대비가 된다. */
+export function AttachmentProblems({ att }: { att: Attachments }) {
+  if (att.problems.length === 0) return null;
+  return (
+    <div className="space-y-1">
+      {att.problems.map((p) => (
+        <p key={p} className="text-xs text-destructive">
+          {p}
+        </p>
+      ))}
+    </div>
+  );
+}
+
+/** 칩 줄 — `<InputGroup>` 배치(§27 표 오른쪽 열). 손잡이 addon **앞**에 두고 둘 다 `order-last`라
+ *  DOM 순서가 그대로 선다. addon이 `role="group"`을 이미 갖고 있어 이름만 얹는다. 0개면 줄이 없다. */
+export function AttachmentChips({ att }: { att: Attachments }) {
+  if (att.chips.length === 0) return null;
+  return (
+    <InputGroupAddon
+      align="block-end"
+      className="flex-wrap"
+      aria-label={`첨부 ${att.chips.length}개`}
+    >
+      {att.chips.map((c) => (
+        <AttachmentChip key={c.id} chip={c} onRemove={() => att.remove(c.id)} />
+      ))}
+    </InputGroupAddon>
+  );
+}
+
+/** 손잡이 — **호출자의 액션 addon 안 첫 자식**이다(§27: `첨부 → (문구) → ml-auto ⌘↵ → 보내기`).
+ *  새 줄을 만들지 않으므로 줄 높이가 안 변한다(§21의 104 · §27 실측 38px).
+ *
+ *  **`disabled`가 아니라 `aria-disabled`다**(§21 · §27 표) — `InputGroup`의 흐림이
+ *  `:has(:disabled)`라 버튼 하나만 잠가도 그릇이 통째로 흐려진다. 못 누른다는 실효는 `onClick`이
+ *  지킨다. `locked`는 **못 보내는 칸**이다(입구 없음 · 끝난 세션): 그 칸에 파일만 올라가면 그
+ *  파일은 아무 데도 안 간다 — 호출자가 `onPaste`도 같이 뗀다.
+ *
+ *  파일 입력은 `sr-only`가 아니라 `hidden`이다. `InputGroupAddon`의 onClick이 addon 여백을 누르면
+ *  `parentElement.querySelector("input")`을 focus하는데(실측 — 그 그릇의 컨트롤은 `textarea`라
+ *  지금까지 아무것도 못 찾았다), `sr-only`면 그 포커스가 **보이지 않는 요소**에 앉는다.
+ *  `display:none`은 focus가 안 먹고 `.click()`은 그대로 먹는다. */
+export function AttachmentButton({ att, locked }: { att: Attachments; locked?: boolean }) {
+  const picker = useRef<HTMLInputElement>(null);
+  const off = !!locked || att.chips.length >= MAX_FILES;
+  return (
+    <>
+      <input
+        ref={picker}
+        type="file"
+        multiple
+        className="hidden"
+        onChange={(e) => {
+          att.add(Array.from(e.target.files ?? []));
+          // 비우지 않으면 같은 파일을 두 번 고를 때 change가 안 뜬다.
+          e.target.value = "";
+        }}
+      />
+      <InputGroupButton
+        aria-disabled={off}
+        className="aria-disabled:opacity-50"
+        onClick={() => {
+          if (!off) picker.current?.click();
+        }}
+      >
+        <Paperclip aria-hidden />
+        첨부
+      </InputGroupButton>
     </>
   );
 }

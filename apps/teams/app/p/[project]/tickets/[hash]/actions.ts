@@ -14,6 +14,7 @@
 import { open, readFile, unlink } from "node:fs/promises";
 import path from "node:path";
 import { revalidatePath } from "next/cache";
+import { verifyAttachments, withAttachments } from "@/lib/attachments";
 import { findTicket, unassign, type UnassignRun } from "@/lib/engine";
 import { followup, type FollowupResult } from "@/lib/followup";
 import { interject, type InterjectResult } from "@/lib/interject";
@@ -126,12 +127,17 @@ export async function sendInterject(
   projectId: string,
   stem: string,
   text: string,
+  /** 첨부(§8) — 화면이 이미 올려 둔 **경로**만 온다. 바이트는 이 액션을 지나지 않는다.
+   *  돌아온 경로가 `attachments/` 아래인지는 서버가 다시 본다(신뢰 경계 — `(board)/actions.ts`와
+   *  같은 두 줄이다). 본문 조립은 `withAttachments` 하나고 자리 넷이 그것을 같이 쓴다(§8). */
+  attachments: string[] = [],
 ): Promise<InterjectResult> {
   try {
     const project = await getProject(projectId);
     if (!project) throw new Error(`등록되지 않은 프로젝트입니다: ${projectId}`);
     const config = await resolveConfig(project);
-    return await interject(project.root, config, stem, text);
+    const attached = await verifyAttachments(project, attachments);
+    return await interject(project.root, config, stem, withAttachments(text, attached));
   } catch (e) {
     // 여기 오는 건 프로젝트 조회·설정 해석이 던진 것뿐이다(§21 실패 4종에 없다) — `other`다.
     const error = (e as Error).message;
@@ -153,12 +159,16 @@ export async function sendFollowup(
   projectId: string,
   stem: string,
   text: string,
+  /** `sendInterject`와 같은 두 줄이다(§8). 표기가 본문 **끝**이라 `followup`이 첫 줄에서 뽑는
+   *  title은 사람이 쓴 글 그대로다 — `createTicket`이 title을 먼저 계산하는 것과 같은 이유다. */
+  attachments: string[] = [],
 ): Promise<FollowupResult> {
   try {
     const project = await getProject(projectId);
     if (!project) throw new Error(`등록되지 않은 프로젝트입니다: ${projectId}`);
     const config = await resolveConfig(project);
-    const r = await followup(project.root, config, stem, text);
+    const attached = await verifyAttachments(project, attachments);
+    const r = await followup(project.root, config, stem, withAttachments(text, attached));
     if (r.ok) revalidatePath(`/p/${projectId}`);
     return r;
   } catch (e) {

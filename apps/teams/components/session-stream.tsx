@@ -16,6 +16,12 @@ import { useEffect, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowDown, ChevronRight, FilePlus2, Send, TriangleAlert } from "lucide-react";
 import { sendFollowup, sendInterject, tailSession } from "@/app/p/[project]/tickets/[hash]/actions";
+import {
+  AttachmentButton,
+  AttachmentChips,
+  AttachmentProblems,
+  useAttachments,
+} from "@/components/attachment-field";
 import { EmptyState } from "@/components/empty-state";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -283,6 +289,9 @@ function Interject({
     detail: string;
   } | null>(null);
   const input = useRef<HTMLTextAreaElement>(null);
+  // 첨부(§8) — **두 모드가 한 벌을 쓴다.** 나가는 곳만 갈린다(FIFO 한 줄 / 새 티켓 본문)이고
+  // 조립은 서버의 `withAttachments` 하나다(§8 §표기는 하나다).
+  const att = useAttachments(project);
   // 티켓 stem을 id로 쓰지 않는다 — 파일명에서 온 값이라 공백이 섞이면 `aria-describedby`가 끊긴다.
   const offId = useId();
   // 보내는 키와 손잡이의 `<kbd>`가 **같은 값 하나**에서 나온다(§0-6: 표기를 하드코딩하지 않는다).
@@ -322,7 +331,7 @@ function Interject({
     setSent(false);
     setFail(null);
     if (followup) {
-      const r = await sendFollowup(project, stem, text);
+      const r = await sendFollowup(project, stem, text, att.paths);
       if (r.ok) {
         // 성공에는 확인이 끼지 않는다 — **내비게이션이 확인이다**(§21 · §3 발행과 같은 길).
         // `sending`을 안 내리는 것이 이동 전 두 번째 클릭을 막는 유일한 관문이다(티켓 2장).
@@ -333,10 +342,11 @@ function Interject({
       setSending(false);
       setFail({ mode, ...FAIL_DONE[r.reason], detail: r.detail });
     } else {
-      const r = await sendInterject(project, stem, text);
+      const r = await sendInterject(project, stem, text, att.paths);
       setSending(false);
       if (r.ok) {
         setText("");
+        att.reset(); // 칩은 글과 **같은 타이밍**에 빈다. 올라간 파일은 안 지운다(§8 수명)
         setSent(true);
       } else {
         setFail({ mode, ...FAIL[r.reason], detail: r.detail });
@@ -367,6 +377,8 @@ function Interject({
           // — 그 글을 새 티켓에 옮기는 것이 실패 4종의 `다음 행동`이다(§21).
           readOnly={closed}
           disabled={off}
+          // 붙여넣기도 **못 보내는 칸에서는 안 먹는다**(§8) — 손잡이와 같은 판정 하나다.
+          onPaste={off || closed ? undefined : att.onPaste}
           onChange={(e) => {
             setText(e.target.value);
             setSent(false); // `보냈습니다`는 다음 타이핑에 사라진다(§21)
@@ -384,8 +396,16 @@ function Interject({
             }
           }}
         />
+        {/* 칩 줄 — 손잡이 addon **위**다(§27 세로 순서 `입력칸 → 칩 줄 → 손잡이 줄`).
+            끝난 세션(`closed`)에도 남긴다: 무엇을 붙였는지가 사라지면 §21이 남긴 글로
+            새 티켓을 쓸 때 그 목록을 다시 못 본다. */}
+        <AttachmentChips att={att} />
         {!closed && (
           <InputGroupAddon align="block-end">
+            {/* 손잡이는 줄의 맨 왼쪽 — `ml-auto` 앞이 2차 액션의 자리다(§27 · §4-3).
+                **`inbox`가 없으면 같이 잠근다**: 못 보내는 칸에 파일만 올라가면 그 파일은
+                아무 데도 안 간다. */}
+            <AttachmentButton att={att} locked={off} />
             {/* 같은 슬롯을 두 모드가 나눠 쓴다(§21): `live`는 성공 뒤 한 번, 완료 모드는 **상시**
                 무엇이 몇 장 생기는지. 완료 모드에는 성공 문구가 없어서(페이지가 이동한다)
                 비어 있는 자리를 쓰는 것이고 요소가 늘지 않는다 — 절 높이 692가 그대로다. */}
@@ -429,6 +449,10 @@ function Interject({
           </InputGroupAddon>
         )}
       </InputGroup>
+
+      {/* 첨부 실패 사유(§27) — 그룹 **밖**이고 `<Failure>` Alert가 아니다. 아래 제출 실패
+          Alert와 한 폼에 겹쳐 설 수 있어서 한 줄이다(겹쳐도 76+16이 아니라 16이다). */}
+      <AttachmentProblems att={att} />
 
       {/* 비활성 사유는 그룹 **밖**이다 — 안에 넣으면 `has-disabled:opacity-50`이 겹쳐 대비 1.85다
           (§21 실측). 비활성 컨트롤은 WCAG 예외지만 **왜 못 쓰는지 설명하는 문장은 예외가 아니다**. */}
