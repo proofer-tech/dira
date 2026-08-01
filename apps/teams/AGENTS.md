@@ -73,6 +73,14 @@ apps/teams/
                         개행 없는 한 줄 · 0600). `.authwarn`은 안 건드린다. 드라이버는 `script`로
                         pty를 주고(네이티브 모듈 0) 세션이 하나뿐인 모듈 상태다 — 왜 `cat |`이고
                         왜 종료를 pty 안 표식으로 아는지는 그 파일 주석에 실측과 함께 있다
+    home-agent.ts       홈 에이전트(DESIGN.md §7) 실행층. 상태 스냅샷 조립 · `claude` 세션 spawn ·
+                        프로젝트 → session id 한 줄(`$TICKET_LOCAL/home-sessions.json`).
+                        **GUI가 큐를 안 거치고 세션을 소유하는 유일한 곳** — `engine.ts`와 짝이
+                        아니다(저긴 이미 있는 워커 스크립트에 하위명령을 넘긴다). 커맨드를 확정한
+                        실측 넷은 그 파일 머리 주석에 있다. 특히 **`--permission-mode manual`이
+                        쓰기를 막는 유일한 조각**이다(이 머신 설정이 `bypassPermissions`라
+                        `--allowed-tools`만으로는 안 막힌다 — A/B 실측). 대화 이력 저장소를
+                        만들지 않는다: 렌더는 `transcript.ts`가 읽는 그 트랜스크립트다
     utils.ts            shadcn cn() — 건드리지 않는다
     *.test.ts           node --test
   components/           손으로 만드는 컴포넌트 (DESIGN.md §5 커스텀)

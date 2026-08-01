@@ -1,0 +1,323 @@
+/** 홈 에이전트(DESIGN.md §7)의 실행층 — **화면이 없는 서버 층**이다.
+ *
+ *  이 파일이 `lib/`에서 유일하게 하는 일: GUI가 **큐를 안 거치고** `claude` 세션을 하나 띄운다.
+ *  질문이 티켓으로 들어가지 않고 답이 티켓으로 나오지 않는다(요구 `feb754bf`: "요구사항을
+ *  처리하는것 말고"). `engine.ts`와 짝이 아니다 — 저기는 **이미 있는 워커 스크립트**에
+ *  하위명령을 넘기고, 여기는 우리가 argv를 조립해 세션을 소유한다.
+ *
+ *  ## 커맨드 (실측으로 확정 · §7 표의 넷)
+ *
+ *  ```
+ *  <claude> -p  --session-id <uuid> | --resume <uuid>
+ *               --permission-mode manual
+ *               --allowed-tools Read,Glob,Grep
+ *               --output-format json
+ *               "<프롬프트>"
+ *  ```
+ *
+ *  네 조각의 근거는 전부 실측이다(이 머신, 2026-08-01):
+ *
+ *  - **`--permission-mode manual`이 쓰기를 막는 유일한 조각이다.** `--allowed-tools`만으로는
+ *    **안 막힌다** — 이 머신의 `~/.claude/settings.json`이 `"defaultMode":"bypassPermissions"`라
+ *    허용목록 밖 도구도 그냥 통과한다. 같은 프롬프트("이 큐에 티켓 파일을 만들어라")로 A/B를
+ *    돌렸더니 이 플래그가 없는 쪽은 `.dira/tickets/aaaa1111.md`를 **실제로 만들었고**, 있는 쪽은
+ *    `permission_denials`에 `Write`·`Bash`가 찍히고 파일이 안 생겼다. `manual`은 "매번 물어본다"고,
+ *    `-p`는 물어볼 사람이 없어 거부로 떨어진다. GUI 서버는 사람의 셸 설정을 그대로 물려받으므로
+ *    **머신 설정을 믿지 않고 우리가 매번 덮어쓴다**(§7: `--dangerously-skip-permissions`를 쓰지 않는다).
+ *  - **`--allowed-tools`는 그 위에서 읽기 셋만 통과시킨다.** `manual`만 두면 `Read`도 거부돼
+ *    에이전트가 아무것도 못 읽는다. 값은 **쉼표로 붙인 한 토큰**이어야 한다 — 이 옵션은 variadic
+ *    (`<tools...>`)이라 `--allowed-tools Read Glob Grep "<질문>"`으로 띄우면 질문까지 도구
+ *    이름으로 먹고 `Input must be provided either through stdin or as a prompt argument`로 죽는다.
+ *  - **모델 플래그가 없다.** §7이 `claude` 고정 · `모델 지정 안 함`으로 박았다(codex는 트랜스크립트를
+ *    안 남겨서 고를 수 있게 하는 순간 이 화면이 빈다 — §4-3 표).
+ *  - **`--output-format json`.** 마지막 한 줄이 `{is_error, result, session_id, permission_denials}`다.
+ *    화면이 그리는 것은 트랜스크립트(§2-1 읽기 코어)이고 여기서 필요한 건 성패와 사유뿐이라
+ *    stream-json을 파싱하지 않는다.
+ *
+ *  프롬프트는 **argv 마지막 토큰**이다(stdin이 아니다). 그리고 자식의 stdin을 **즉시 닫는다** —
+ *  안 닫으면 `claude`가 `Warning: no stdin data received in 3s`로 3초를 버린다(실측 11.3s → 5.9s).
+ *  `promisify(execFile)`을 못 쓰는 이유가 이것이다: 저 래퍼는 자식 핸들을 안 주고, `stdio` 옵션은
+ *  `execFile`이 통째로 버린다(넘겨도 경고가 그대로 난다 — 실측). tick.sh 비스트리밍 경로가
+ *  `</dev/null`을 붙인 것과 같은 사건이다(`7d9fbe9`). */
+import { execFile, type ExecFileException } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { findClaude, tokenPath } from "./auth.ts";
+import type { Run } from "./engine.ts";
+import { registryPath, resolveConfig, type Project, type ProjectConfig } from "./projects.ts";
+import { isAwaiting, listTickets, statusOf, type Ticket } from "./queue.ts";
+import { sessionIdOf } from "./transcript.ts";
+import { engineCell, listWorkers, type Worker } from "./workers.ts";
+
+/** §7: **상한 5분.** `runWorker`의 60초와 다른 값이다 — 저건 python 스캔이고 이건 세션이다. */
+const TIMEOUT_MS = 5 * 60_000;
+
+/** 통과시키는 도구. **쉼표 한 토큰**이다(위 머리 주석의 variadic 함정). */
+const ALLOWED_TOOLS = "Read,Glob,Grep";
+
+// ── 프로젝트 → session id 한 줄 (§7) ────────────────────────────────────────
+//
+// **대화 이력 저장소를 만들지 않는다.** `claude`가 자기 트랜스크립트를 이미 쓰고 있고 그걸 읽는
+// 코어가 `lib/transcript.ts`에 있다. GUI가 남기는 것은 프로젝트 → session id 한 줄뿐이다.
+
+/** 레지스트리·토큰·키맵과 **같은 디렉터리**(엔진의 `$LOCAL`). **`gui-projects.json`에 넣지 않는다** —
+ *  등록 정보와 대화 상태는 수명이 다르다(§7). 파일 하나에 프로젝트 전부를 담는다. */
+export function sessionsPath(): string {
+  return path.join(path.dirname(registryPath()), "home-sessions.json");
+}
+
+/** 파일 없음·JSON 깨짐을 **빈 맵으로 흡수한다.** 최악이 "대화 하나를 잃고 새로 시작"이라
+ *  던져서 홈 화면을 500으로 만들 값이 없다(`readKeymap`과 같은 선). */
+async function readSessions(): Promise<Record<string, unknown>> {
+  try {
+    const o: unknown = JSON.parse(await readFile(sessionsPath(), "utf8"));
+    return o && typeof o === "object" && !Array.isArray(o) ? (o as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+
+/** **경로가 되는 값의 관문은 `sessionIdOf` 하나다.** 이 값은 그대로 `--resume` 인자가 되고
+ *  `findTranscript`가 `~/.claude/projects/*​/<이것>.jsonl`을 찾는 데 쓴다 — 사람이 이 파일을
+ *  손으로 고칠 수 있으므로 UUID가 아닌 것은 세션이 없는 것과 같다(§경로 방어). */
+export async function readSessionId(projectId: string): Promise<string | null> {
+  const v = (await readSessions())[projectId];
+  return sessionIdOf({ session_id: typeof v === "string" ? v : "" });
+}
+
+async function writeSessions(next: Record<string, unknown>): Promise<void> {
+  const p = sessionsPath();
+  await mkdir(path.dirname(p), { recursive: true });
+  await writeFile(p, JSON.stringify(next, null, 2) + "\n");
+}
+
+export async function writeSessionId(projectId: string, sessionId: string): Promise<void> {
+  await writeSessions({ ...(await readSessions()), [projectId]: sessionId });
+}
+
+/** 화면의 `새 대화`가 부르는 것 — **그 한 줄을 지우는 게 전부다.** 옛 트랜스크립트는 안 지운다
+ *  (`~/.claude`는 남의 디렉터리다 — §7). */
+export async function clearSessionId(projectId: string): Promise<void> {
+  const all = await readSessions();
+  delete all[projectId];
+  await writeSessions(all);
+}
+
+// ── 상태 스냅샷 (§7 표) ─────────────────────────────────────────────────────
+//
+// **아는 것 중 대부분은 에이전트가 직접 읽는다** — repo·프로토콜·스펙·티켓 본문은 전부 파일이라
+// 읽기 도구로 닿는다. GUI가 하는 일은 **어디를 보라고 짚는 것**이지 내용을 프롬프트에 복사하는
+// 것이 아니다(이 레포의 스펙 문서 하나가 9천 줄이다).
+//
+// 파일이 아닌 것 하나가 여기 든다: "w2가 지금 무슨 일을 하나"는 락 디렉터리 · `.wip` 소유자 ·
+// `TICKET_ENGINE` 해석의 합이다. 그 판정은 새로 쓰지 않고 `listWorkers`·`statusOf`·`isAwaiting`·
+// `engineCell`을 그대로 부른다 — 화면과 다른 수를 말하면 이 에이전트는 거짓말을 한다.
+
+export type SnapshotInput = {
+  project: Pick<Project, "name" | "root">;
+  config: ProjectConfig;
+  tickets: Ticket[];
+  workers: Worker[];
+};
+
+/** 스냅샷 문자열. **순수 함수다**(fs를 안 탄다) — `home-agent.test.ts`가 이걸 검증한다.
+ *
+ *  `readSummary`를 부르지 않고 같은 판정 함수를 직접 부른다: 저건 `listWorkers`를 **티켓 없이**
+ *  불러서 `holding`이 항상 null이고(§7 표가 요구하는 "물고 있는 티켓"이 통째로 빈다), 여기서
+ *  다시 부르면 큐를 두 번 읽는다. 세는 식(`state === "open"` …)은 그 파일과 글자로 같다. */
+export function renderSnapshot({ project, config, tickets, workers }: SnapshotInput): string {
+  const count = (s: Ticket["state"]) => tickets.filter((t) => t.state === s).length;
+  const title = (stem: string) => tickets.find((t) => t.stem === stem)?.title ?? "";
+
+  const rows = workers.map((w) => {
+    const e = engineCell(w.engine);
+    // `assumed` = 워커 파일에 `TICKET_ENGINE` 대입이 아예 없다(= tick.sh 기본값이 실제로 돈다).
+    // `custom` = 카탈로그와 안 맞는 손편집. 둘 다 사실이라 라벨 옆에 그대로 적는다(§비주얼 §23 ①).
+    const engine = e.badge ? `${e.label} (${e.badge === "assumed" ? "기본값 가정" : "커스텀"})` : e.label;
+    // 제목이 비는 티켓이 있다(`title:` 없는 fm) — 그때 `— ` 꼬리를 남기지 않는다
+    const held = w.holding ? [w.holding, title(w.holding)].filter(Boolean).join(" — ") : "—";
+    return `| ${w.name} | ${w.status} | ${w.cron ? "등록" : "미등록"} | ${engine} | ${held} |`;
+  });
+
+  return [
+    "# 지금 이 프로젝트의 상태",
+    "",
+    "GUI가 **이 질문을 보내는 순간** 큐에서 읽어 조립한 스냅샷이다. 아래 수치는 지금 값이고,",
+    "여기 없는 것은 파일을 직접 읽어서 답한다.",
+    "",
+    `- 프로젝트: ${project.name}`,
+    `- 큐 루트: ${project.root}`,
+    `- 작업 디렉터리(= 이 세션의 cwd): ${path.dirname(project.root)}`,
+    `- 상태 접미사: 진행중 \`${config.inProgress}\` · 완료 \`${config.done}\` (접미사가 없으면 열린 티켓)`,
+    "",
+    `## 티켓 ${tickets.length}건`,
+    "",
+    `- 열림 ${count("open")} · 진행중 ${count("wip")} · 완료 ${count("done")}`,
+    `- 할당됨 ${tickets.filter((t) => statusOf(t) === "assigned").length}건` +
+      ` · 답변 대기 ${tickets.filter(isAwaiting).length}건`,
+    "",
+    `## 워커 ${workers.length}개`,
+    "",
+    ...(workers.length === 0
+      ? ["워커가 없다 — 이 큐는 아무것도 디스패치하지 않는다."]
+      : [
+          "| 워커 | 상태 | cron | 엔진 | 물고 있는 티켓 |",
+          "|---|---|---|---|---|",
+          ...rows,
+          "",
+          "상태 4종: `running`(락 있음 + pid 생존) · `idle`(락 없음 + cron 등록) ·",
+          "`stopped`(락 없음 + cron 미등록) · `stale`(락 있음 + pid 죽음, 회수 대상).",
+        ]),
+    "",
+    "## 여기 없는 것은 이 파일들을 읽어라",
+    "",
+    `- 티켓 전부: \`${path.join(project.root, "tickets")}/\` — 파일명이 곧 상태다`,
+    `- 프로토콜: \`${config.protocols}/\``,
+    `- 페르소나: \`${config.personas}/\``,
+    `- 제품 스펙(단일 출처): \`${path.join(path.dirname(project.root), "docs/DESIGN.md")}\``,
+    `- 엔진 계약: \`${path.join(path.dirname(project.root), "README.md")}\``,
+  ].join("\n");
+}
+
+/** 큐를 한 번 읽어 스냅샷을 만든다. 못 읽으면 **사유를 그대로 담은 스냅샷**이다 — 던지면
+ *  질문 자체가 사라지고, 삼키면 에이전트가 "워커가 없다"고 거짓말한다(§6 에러 3요소). */
+export async function snapshotOf(project: Pick<Project, "name" | "root">): Promise<string> {
+  try {
+    const config = await resolveConfig(project);
+    const tickets = await listTickets(project.root, config);
+    const workers = await listWorkers(project.root, tickets);
+    return renderSnapshot({ project, config, tickets, workers });
+  } catch (e) {
+    return [
+      "# 지금 이 프로젝트의 상태",
+      "",
+      `**큐를 읽지 못했다**: ${(e as Error).message}`,
+      `- 큐 루트: ${project.root}`,
+      "",
+      "워커·티켓 수는 모른다. 모르는 것을 추측해서 답하지 마라.",
+    ].join("\n");
+  }
+}
+
+/** 스냅샷 + 질문. **질문마다 새로 붙인다** — 세션 첫 턴에만 넣으면 두 번째 질문부터 낡은 상태를
+ *  말한다(§7). 읽기 전용이라는 사실을 글로도 적는 이유: 플래그가 막는 것과 별개로, 막힌 도구를
+ *  두드리다 답을 못 하고 끝나는 턴이 사람에게는 그냥 고장으로 보인다. */
+export function buildPrompt(snapshot: string, question: string): string {
+  return `${snapshot}
+
+---
+
+너는 이 큐를 보는 GUI의 **질의응답 에이전트**다. 읽고 답하는 것이 전부다 — 티켓을 만들지도
+고치지도 않는다(쓰기 도구는 애초에 막혀 있다). 사실만 말하고, 모르면 어느 파일을 봐야 하는지
+말한다. 답은 한국어로, 화면의 대화 칸에 들어갈 길이로 쓴다.
+
+## 질문
+
+${question}`;
+}
+
+// ── 실행 ────────────────────────────────────────────────────────────────────
+
+/** `Run`(`lib/engine.ts`)과 **같은 모양**에 세션 두 값을 더한 것. rc와 사유를 삼키지 않는다. */
+export type Answer = Run & {
+  /** 이 답이 들어간 세션. 화면이 `findTranscript`에 그대로 넘긴다 */
+  sessionId: string;
+  /** 이어붙인 질문인가(`--resume`) — 첫 질문이면 false */
+  resumed: boolean;
+};
+
+/** 질문 하나 = 프로세스 하나(§7). 첫 질문이 세션을 열고 다음 질문이 그것을 잇는다.
+ *
+ *  **cwd는 큐의 부모**(`dirname(project.root)`)다 — 등록값이 `<프로젝트>/.dira`라 그 부모가 repo다.
+ *  트랜스크립트 디렉터리 이름도 이 cwd에서 나오므로 여기를 바꾸면 §2-1 읽기 코어가 못 찾는다.
+ *
+ *  **동시 실행을 막지 않는다**(§7: "한 프로젝트에 한 번에 한 질문"). 그 잠금은 입력 칸을 잠그는
+ *  화면의 일이고, 여기에 큐잉 층을 만들지 않는다. */
+export async function ask(project: Pick<Project, "id" | "name" | "root">, question: string): Promise<Answer> {
+  const q = question.trim();
+  if (!q) return { ok: false, output: "질문이 비어 있습니다.", sessionId: "", resumed: false };
+
+  // `claude`를 우리가 PATH에서 찾는다 — 셸에 맡기면 손에 남는 게 rc 127뿐이다(§0-4 `bcf66f01`).
+  const bin = findClaude();
+  if (!bin) {
+    return {
+      ok: false,
+      output: `PATH에서 claude를 찾지 못했습니다. (PATH=${process.env.PATH ?? ""})`,
+      sessionId: "",
+      resumed: false,
+    };
+  }
+
+  const prev = await readSessionId(project.id);
+  const sessionId = prev ?? randomUUID();
+  const prompt = buildPrompt(await snapshotOf(project), q);
+
+  // **돌기 전에 남긴다.** 화면은 답을 기다리는 동안 이 sid로 트랜스크립트를 폴링한다(§7) —
+  // 끝난 뒤에 쓰면 도는 동안 화면이 볼 것이 없다.
+  if (!prev) await writeSessionId(project.id, sessionId);
+
+  const run = await runClaude(bin, path.dirname(project.root), prompt, [
+    ...(prev ? ["--resume", sessionId] : ["--session-id", sessionId]),
+  ]);
+
+  // 첫 질문이 실패했으면 남긴 줄을 도로 지운다 — 안 열린 세션에 `--resume`을 걸면 **다음 질문도**
+  // 실패하고, 사람은 그 화면을 영영 못 쓴다. 이어붙인 질문의 실패는 세션이 멀쩡하므로 안 지운다.
+  if (!run.ok && !prev) await clearSessionId(project.id);
+
+  return { ...run, sessionId, resumed: prev !== null };
+}
+
+async function runClaude(bin: string, cwd: string, prompt: string, session: string[]): Promise<Run> {
+  const args = [
+    "-p",
+    ...session,
+    "--permission-mode",
+    "manual",
+    "--allowed-tools",
+    ALLOWED_TOOLS,
+    "--output-format",
+    "json",
+    prompt, // variadic 옵션 뒤에 오면 먹힌다 — `--output-format json`이 사이를 끊어 준다
+  ];
+
+  // tick.sh 57~59행과 **같은 한 줄**: claude 엔진일 때만 헤드리스 OAuth 토큰을 넣는다.
+  // GUI가 Finder에서 뜬 `.app`이면 사람 셸의 환경을 못 물려받는다 — 그때 이 파일이 유일한 인증이다.
+  const env = { ...process.env };
+  const tok = await readFile(tokenPath(), "utf8").catch(() => null);
+  if (tok?.trim()) env.CLAUDE_CODE_OAUTH_TOKEN = tok.replace(/[\r\n]/g, "");
+
+  const { err, stdout, stderr } = await new Promise<{
+    err: ExecFileException | null;
+    stdout: string;
+    stderr: string;
+  }>((resolve) => {
+    const child = execFile(
+      bin,
+      args,
+      { cwd, env, timeout: TIMEOUT_MS, maxBuffer: 4 << 20 },
+      (e, out, errOut) => resolve({ err: e, stdout: out, stderr: errOut }),
+    );
+    child.stdin?.end(); // 머리 주석: 안 닫으면 3초를 버린다
+  });
+
+  if (err?.killed) {
+    return { ok: false, output: `${TIMEOUT_MS / 60_000}분 안에 답이 끝나지 않아 중단했습니다.` };
+  }
+
+  // `--output-format json`은 마지막 줄 하나가 결과 객체다. 앞줄(경고 등)은 결과가 아니다.
+  const last = stdout.trim().split("\n").pop() ?? "";
+  let d: { is_error?: unknown; result?: unknown; subtype?: unknown };
+  try {
+    d = JSON.parse(last) as typeof d;
+  } catch {
+    // 파싱 실패 = 엔진이 결과를 못 낸 것이다. 원문을 그대로 올린다 — 여기서 문구를 지어내면
+    // 사람이 손으로 같은 커맨드를 돌려 볼 단서가 사라진다(§6 에러 3요소).
+    return { ok: false, output: (stdout + stderr).trim() || err?.message || "엔진이 아무것도 출력하지 않았습니다." };
+  }
+  const text = typeof d.result === "string" ? d.result : "";
+  if (d.is_error === true || !text) {
+    return { ok: false, output: [text, String(d.subtype ?? ""), stderr.trim()].filter(Boolean).join("\n") || "엔진이 빈 답을 냈습니다." };
+  }
+  return { ok: true, output: text };
+}
