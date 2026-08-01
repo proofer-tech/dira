@@ -218,6 +218,17 @@ PROFILE="${TICKET_PERSONAS:-$TICKET_ROOT/personas}/$TPERSONA/PROFILE.md"
 if [ -z "$TPERSONA" ]; then
   :
 elif [ -r "$PROFILE" ]; then
+  # 스킬 사이드카(같은 디렉터리 skills.md)는 프로필 바로 뒤에 붙는다. 없는 것이 정상이라 WARN 없다.
+  # Claude 엔진일 때만이다 - codex엔 스킬 개념이 없어서 "없는 도구를 쓰라"는 문장이 된다.
+  SKILLS="${TICKET_PERSONAS:-$TICKET_ROOT/personas}/$TPERSONA/skills.md"
+  SKILLBLOCK=""
+  if [ -r "$SKILLS" ] && [ "$(basename "${TICKET_ENGINE[0]}")" = "claude" ]; then
+    SKILLBLOCK="
+===== $TPERSONA 스킬 ($SKILLS) =====
+$(cat "$SKILLS")
+===== 스킬 끝 =====
+"
+  fi
   PROMPT="당신은 이 프로젝트의 '$TPERSONA'입니다. 아래 프로필이 당신의 역할·권한·판단 기준이고,
 티켓을 수행하는 동안 이 페르소나로 일관되게 행동하세요. 프로필과 티켓 지시가 충돌하면 티켓을 따르되
 충돌 사실을 티켓 본문에 남기세요.
@@ -225,7 +236,7 @@ elif [ -r "$PROFILE" ]; then
 ===== $TPERSONA PROFILE ($PROFILE) =====
 $(cat "$PROFILE")
 ===== PROFILE 끝 =====
-
+$SKILLBLOCK
 $PROMPT"
 else
   log "WARN 페르소나 프로필 없음: $PROFILE (페르소나 없이 디스패치)"
