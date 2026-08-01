@@ -1,6 +1,15 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { interjectMode, parentPath, relationPath, type Anchor } from "./urls.ts";
+import { interjectMode, parentPath, projectPath, relationPath, type Anchor } from "./urls.ts";
+
+/** 전환기는 **같은 화면 종류를 유지한다**(DESIGN.md §0-1). 홈이 그 규칙의 다섯 번째 줄이다 —
+ *  홈에서 프로젝트를 바꾸면 보드가 아니라 그쪽 홈이다. 티켓 상세만 예외로 보드로 떨어진다. */
+test("projectPath — 홈 → 홈이다(§7)", () => {
+  assert.equal(projectPath("/p/a/home", "b"), "/p/b/home");
+  assert.equal(projectPath("/p/a/workers", "b"), "/p/b/workers");
+  assert.equal(projectPath("/p/a", "b"), "/p/b"); // 보드
+  assert.equal(projectPath("/p/a/tickets/fff28e90", "b"), "/p/b"); // 해시는 큐마다 독립이다
+});
 
 /** 화면 부모 표 (DESIGN.md §0-7). `Esc`의 목적지가 이 함수 하나에서 나온다 — 표가 코드와
  *  갈리면 `Esc`가 선언에 없는 곳으로 가거나(더 나쁘게) 보드에서 화면이 흔들린다. */
@@ -8,6 +17,7 @@ test("parentPath — 부모가 없는 화면은 `null`이다(§0-7 표 1·2행)"
   assert.equal(parentPath("/"), null);
   assert.equal(parentPath("/p/a"), null);
   assert.equal(parentPath("/p/a/"), null); // 보드의 정본 URL과 같은 화면이다
+  assert.equal(parentPath("/p/a/home"), null); // 홈도 부모가 없다 — `Esc`는 무동작이다(§7)
 });
 
 test("parentPath — 프로젝트 화면 넷의 부모는 보드다(§0-7 표 3~6행)", () => {

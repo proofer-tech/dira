@@ -74,9 +74,10 @@ export default async function ProjectLayout({
   return (
     <>
       <header className="sticky top-0 z-50 flex h-12 items-center gap-6 border-b bg-background px-6">
-        {/* href는 그 프로젝트의 첫 화면 = 지금은 보드다 — `/`(프로젝트 관리)로 가는 길은
-            전환기 하단 항목 하나로 남는다(§4). 나머지 값은 루트 셸과 같다(§14 · BrandMark). */}
-        <BrandMark href={`/p/${id}`} />
+        {/* href는 그 프로젝트의 첫 화면 = **홈**이다(§7 · §비주얼 §4가 예고한 이동). 보드의 URL은
+            안 움직인다 — `/p/<project>/`는 그대로다. `/`(프로젝트 관리)로 가는 길은 전환기 하단
+            항목 하나로 남는다(§4). 나머지 값은 루트 셸과 같다(§14 · BrandMark). */}
+        <BrandMark href={`/p/${id}/home`} />
         <ProjectNav id={id} />
         {/* 우측 끝은 전환기 오른쪽의 `설정`이다 — 두 셸이 같은 자리에 같은 것을 갖는다
             (§비주얼 §4). 헤더의 `gap-6`이 아니라 이 둘 사이는 `gap-2`라 묶어서 오른쪽으로 민다 */}
