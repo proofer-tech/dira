@@ -10,7 +10,6 @@ import {
   lastRateLimits,
   listUsage,
   parseLogName,
-  resetLabel,
 } from "./usage.ts";
 
 /** 픽스처 큐 하나. 로그 디렉터리까지 만들어 준다. */
@@ -147,19 +146,6 @@ test("lastRateLimits — 마지막 것이 이긴다 · 잘린 줄을 건너뛴�
   // 턴이 없던 세션 — `token_count`가 아예 없다
   assert.equal(lastRateLimits("{\"type\":\"session_meta\"}\n"), null);
   assert.equal(lastRateLimits(""), null);
-});
-
-test("resetLabel — 오늘은 HH:MM · 다른 날은 M/D (24시간제)", () => {
-  const now = new Date(2026, 7, 1, 15, 30).getTime(); // 2026-08-01 15:30 로컬
-  // claude 5시간 창 — 실측 `resets_at`이 KST 19:00이었다
-  assert.equal(resetLabel(new Date(2026, 7, 1, 19, 0).getTime(), now), "19:00");
-  // 오후를 `오후 5:40`으로 쓰지 않는다(로케일마다 폭이 흔들린다)
-  assert.equal(resetLabel(new Date(2026, 7, 1, 17, 40).getTime(), now), "17:40");
-  assert.equal(resetLabel(new Date(2026, 7, 1, 9, 5).getTime(), now), "09:05"); // 0 패딩
-  // codex 30일 창 — 실측 `resets_at` 1787984956 = 2026-08-29 15:29
-  assert.equal(resetLabel(new Date(2026, 7, 29, 15, 29).getTime(), now), "8/29");
-  // 자정 경계: 5분 뒤여도 날짜가 다르면 `M/D`다 — 시각만 쓰면 "오늘 그 시각"으로 읽힌다
-  assert.equal(resetLabel(new Date(2026, 7, 2, 0, 5).getTime(), new Date(2026, 7, 1, 23, 55).getTime()), "8/2");
 });
 
 test("engineLimits — 원본 모르는 엔진은 사유뿐 · TTL 안에서는 다시 안 부른다", async () => {

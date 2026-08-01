@@ -1,11 +1,17 @@
 "use client";
 
-/** 홈 대화 뷰 (DESIGN.md §7 · §비주얼 §24) — 묻고 · 답이 그려지고 · 새 대화.
+/** 홈 대화 뷰 (DESIGN.md §7 · §비주얼 §24) — 묻고 · 답이 그려지고 · 대화를 갈아 끼운다.
  *
  *  **새 그릇을 하나도 안 짓는다**(§24). 말풍선 스레드는 §13(`MessageScroller*` · `Message` ·
  *  `Bubble variant="outline"`), 입력 form은 §21 그대로(`input-group` · `⌘↵` · `aria-disabled`),
- *  진행 표식은 §18 ④의 클래스 목록, 실패는 §6 3요소다. 이 파일이 정하는 것은 **무엇을 어디에
- *  쓰느냐**뿐이고 새 컴포넌트 · 새 토큰은 0이다.
+ *  진행 표식은 §18 ④의 클래스 목록, 실패는 §6 3요소, 대화 목록은 `popover` + `button` 목록이다
+ *  (§12 · §23이 이미 쓰는 관용구). 이 파일이 정하는 것은 **무엇을 어디에 쓰느냐**뿐이고
+ *  새 컴포넌트 · 새 토큰은 0이다.
+ *
+ *  **대화가 여럿이다**(§7 — 요구 `c5d22429`). 목록도 `current`도 서버 파일에 있고
+ *  (`home-sessions.json`), 화면은 **폴링 응답 하나**로 그 둘과 스레드를 같이 받는다.
+ *  라우트는 안 는다 — 대화 선택이 URL이 아니라 그 파일이다. 그래서 `새 대화`는 지우는 버튼이
+ *  아니라 **여는 버튼**이고 `alert-dialog` 확인이 없다: 옛 대화가 한 클릭 거리에 남는다.
  *
  *  **`<SessionStream>`을 가져오지 않는다**(§7 · §24). 저건 티켓 `stem`에 묶여 있고 참견·이어받기
  *  폼을 달고 있다 — 끌어오면 그 안에 티켓 없는 경로가 하나 더 생긴다. 재사용하는 것은 화면이
@@ -27,23 +33,18 @@
  *  튀어야** 해서다 — 자동 스크롤이 바닥을 물고 있는 화면에서 24px 점프가 가장 나쁘다(§13). */
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowDown, Check, Copy, Send, TriangleAlert } from "lucide-react";
-import { askHome, clearHome, pollHomeAnswer, stopHome } from "@/app/p/[project]/home/actions";
+import { ArrowDown, Check, ChevronsUpDown, Copy, Send, TriangleAlert } from "lucide-react";
+import {
+  askHome,
+  clearHome,
+  pollHomeAnswer,
+  stopHome,
+  switchHome,
+} from "@/app/p/[project]/home/actions";
 import { CopyCommand } from "@/components/copy-command";
 import { useKeymap } from "@/components/keymap-provider";
 import { Markdown } from "@/components/markdown";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { Button } from "@/components/ui/button";
 import {
@@ -61,8 +62,10 @@ import {
   MessageScrollerProvider,
   MessageScrollerViewport,
 } from "@/components/ui/message-scroller";
-import type { Answer, AnswerReason, HomeChunk, Turn } from "@/lib/home-agent";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import type { Answer, AnswerReason, Home, HomeChunk, Turn } from "@/lib/home-agent";
 import { formatCombo, matchCombo } from "@/lib/keymap";
+import { chatRows } from "@/lib/urls";
 import { cn } from "@/lib/utils";
 
 /** 화면이 답할 수 있다고 약속하는 범위가 곧 이 넷이다(§24 — 요구 원문의 예시 +
@@ -73,6 +76,12 @@ const EXAMPLES = [
   "답변 대기 티켓이 왜 안 도나",
   "이 프로젝트의 프로토콜을 요약해 달라",
 ];
+
+/** 대화 목록 트리거와 `새 대화`가 **같은 문구 · 같은 잠금**을 쓴다(§24). 종전 문구
+ *  (`답이 도는 동안에는 비울 수 없습니다`)는 비우는 버튼의 말이었고, 지금은 비우지 않는다.
+ *  전환을 막는 이유는 §7이다 — 대화를 갈아 끼우면 흐르던 글이 화면에서 사라지는데,
+ *  한 프로젝트에 한 질문이라 옮겨 간 대화에서 물을 수도 없다. 푸는 열쇠가 `중지`다. */
+const LOCKED = "답이 끝나거나 중지한 뒤에 열 수 있습니다";
 
 /** §비주얼 §24 실패 5종. **`reason` 코드로 갈린다** — `output` 문장을 되짚으면 문구를 한 자
  *  고치는 날 화면이 조용히 뭉친다(§21 `FAIL` 표와 같은 규약). `other`는 §24에 항이 없는
@@ -117,6 +126,15 @@ export function HomeUI({ project, initial }: { project: string; initial: HomeChu
   // `중지`를 눌렀다. **낙관적으로 라벨을 안 바꾼다**(§24) — 그 버튼 하나가 `aria-disabled`가
   // 될 뿐이고, 띠가 액션 줄로 바뀌는 것은 서버가 끝을 알린 뒤다.
   const [stopping, setStopping] = useState(false);
+  // **대화 목록 + 지금 보는 줄**(§7 §대화가 여럿이다 · §24). 서버가 폴링마다 같이 준다 —
+  // 첫 질문이 제목을 파일에 쓰므로(`beginTurn`) 답이 도는 동안 트리거의 `새 대화`가 그 질문의
+  // 첫 줄로 갈린다. **`session` ref와 다른 값이 아니다**: 저건 폴링이 offset을 어느 파일의
+  // 것으로 볼지 정하는 부기고 이건 화면이 그리는 이름이다. 둘이 갈리는 순간은 하나 —
+  // 전환을 누르고 서버 응답이 오기 전, **트리거만 낙관적으로** 바뀐 그 한 프레임이다(§24 로딩 항).
+  const [home, setHome] = useState<Home>({
+    conversations: initial.conversations,
+    current: initial.sessionId,
+  });
   // 폴링이 들고 다니는 두 값. 렌더에 안 쓰므로 상태가 아니다(바뀔 때마다 그릴 것이 없다).
   const session = useRef(initial.sessionId);
   const offset = useRef(initial.offset);
@@ -142,6 +160,7 @@ export function HomeUI({ project, initial }: { project: string; initial: HomeChu
       session.current = r.sessionId;
       offset.current = r.offset;
       setPartial(r.partial);
+      setHome({ conversations: r.conversations, current: r.sessionId });
       // `reset` = 세션이 갈렸다(서버가 0부터 다시 읽었다). 이어붙이면 옛 대화가 두 벌이 된다.
       setTurns((prev) => {
         const next = r.reset ? r.turns : r.turns.length ? [...prev, ...r.turns] : prev;
@@ -200,6 +219,19 @@ export function HomeUI({ project, initial }: { project: string; initial: HomeChu
     await stopHome(project);
   };
 
+  /** **대화 하나를 통째로 갈아 끼운다.** `새 대화`와 전환이 여기서 같은 일이 된다 — 둘 다 서버가
+   *  `current`를 바꾸고 그 대화의 트랜스크립트를 읽어 응답 하나로 돌려준다(§24 로딩 항:
+   *  스켈레톤이 없는 이유가 이 한 왕복이다. 새 스레드가 도착한 시점에 통째로 바뀐다).
+   *  폴링이 들고 다니던 두 값도 여기서 갈린다 — **갈아탄 대화의 파일은 다른 파일**이라 들고 있던
+   *  바이트 수가 거기서는 아무 뜻이 없다. 실패 Alert도 지운다: 옛 대화에서 난 일이다. */
+  const apply = (c: HomeChunk) => {
+    session.current = c.sessionId;
+    offset.current = c.offset;
+    setHome({ conversations: c.conversations, current: c.sessionId });
+    setTurns(c.turns);
+    setFail(null);
+  };
+
   // 대화 0건 = 온보딩이다. `busy`가 참이면 스레드가 선다 — 그 안에 진행 표식이 있어야 하고,
   // 질문 말풍선도 첫 폴링 응답이 데려온다(낙관적 에코가 없다).
   const onboarding = turns.length === 0 && !busy;
@@ -214,23 +246,42 @@ export function HomeUI({ project, initial }: { project: string; initial: HomeChu
     // 그 안에서 `flex-1`로 남은 높이를 받는다. **`min-h-0`이 빠지면** flex 자식 기본값
     // (`min-height:auto`)이 내용만큼 늘어나 `main`이 도로 스크롤하고 폼이 화면 밖으로 밀린다.
     <div className="flex min-h-0 flex-1 flex-col gap-6">
-      <div className="flex shrink-0 items-center justify-between gap-2">
+      {/* `h1` 행 — **높이 고정 한 행**이다(§24 세로 배치 표). `h-8`을 못박는 이유가 둘: 이 행의
+          컨트롤 둘이 0건에서 같이 사라지므로 높이를 내용에 맡기면 첫 질문에 행이 자라 스레드가
+          통째로 밀리고, `size="sm"`은 이 레포에서 `h-7`(28)이라 버튼이 32를 못 정한다.
+          `gap-3`은 `h1`과 목록 트리거 사이다 — `새 대화`는 `ml-auto`로 오른쪽 끝이다(§4-3). */}
+      <div className="flex h-8 shrink-0 items-center gap-3">
         <h1 className="text-lg font-semibold">홈</h1>
-        {/* 0건이면 안 그린다 — 비울 것이 없다(§24). 도는 중에는 `aria-disabled`다:
-            이건 프로세스를 죽이는 버튼이 아니다(§7 — 이 앱에 취소가 없다). */}
-        {turns.length > 0 && (
-          <NewChat
-            project={project}
+        {/* **지금 보는 대화의 이름**이다 — 액션이 아니라 `h1`의 부제고, 그래서 오른쪽 묶음이
+            아니라 여기다(§24). 대화 0건이면 안 그린다: 열 목록이 없다. 1건에서는 그린다 —
+            트리거의 일이 전환만이 아니라 **표시**이고, 표시는 1건에서도 참이다(§4-1과 같다). */}
+        {home.conversations.length > 0 && (
+          <ChatList
+            home={home}
             busy={busy}
-            onCleared={() => {
-              // 다음 질문이 **새 세션**이다 — 옛 파일의 바이트 수를 들고 있으면 새 트랜스크립트의
-              // 앞부분을 통째로 건너뛴다. 서버도 같은 판정을 한다(`pollHome`의 `reset`).
-              session.current = null;
-              offset.current = 0;
-              setTurns([]);
-              setFail(null);
+            onPick={async (id) => {
+              setHome((now) => ({ ...now, current: id })); // 트리거만 낙관적으로(§24 로딩 항)
+              apply(await switchHome(project, id));
             }}
           />
+        )}
+        {/* **여는 버튼이다**(§24 개정 — 확인이 걷혔다). 지금 대화의 턴이 0건이면 안 그린다:
+            이미 빈 대화에 앉아 있는데 빈 대화를 또 열 이유가 없다. 도는 중에는 목록 트리거와
+            같은 잠금이다 — `disabled`가 아닌 이유는 §21과 같다(왜 못 누르는지 말할 자리). */}
+        {turns.length > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="ml-auto aria-disabled:opacity-50"
+            aria-disabled={busy || undefined}
+            title={busy ? LOCKED : undefined}
+            onClick={async () => {
+              if (busy) return;
+              apply(await clearHome(project));
+            }}
+          >
+            새 대화
+          </Button>
         )}
       </div>
 
@@ -522,66 +573,78 @@ function Failure({ fail }: { fail: Answer }) {
   );
 }
 
-/** `새 대화` — **확인을 끼운다**(§24). 지우는 것은 GUI가 든 session id 한 줄이지만 사람이 잃는
- *  것은 방금 읽은 답 전부다(이 앱에 대화 목록도 검색도 없다 — §7 안 만드는 것). 이 앱이
- *  되돌릴 수 없는 삭제에 `alert-dialog`를 쓰는 다섯 번째 자리다(§5). */
-function NewChat({
-  project,
+/** 대화 목록 (§비주얼 §24 · §7 §대화가 여럿이다) — **`popover` 단독 + `button` 목록**이다.
+ *
+ *  **`command`를 안 쓴다: 그것이 검색이라서다.** `CommandInput`이 곧 검색칸인데 §7이 대화 검색을
+ *  명시적으로 뺐고, 상한이 20이라 눈으로 훑으면 끝난다. 이 조합은 이 레포에 이미 두 번 선
+ *  관용구다(§12 페르소나 색 스와치 · §23 워커 행 엔진 컨트롤). **새 shadcn 0.**
+ *
+ *  트리거 값은 **§4-1 전환기의 것 그대로**이고(`ghost sm` · `role="combobox"` · `ChevronsUpDown`)
+ *  자리만 갈린다 — 헤더 오른쪽이 아니라 `h1` 옆이다. 같은 글리프가 오히려 값이다: 이 앱에서
+ *  `ChevronsUpDown`은 *이 자리의 것을 다른 것으로 갈아 끼운다* 하나를 뜻하고 큐와 대화가 그 둘이다.
+ *
+ *  **정렬 · 제목 · 시각은 `chatRows`가 정한다**(`lib/urls.ts` — JSX를 `pnpm test`가 못 읽는다).
+ *  `session id`는 안 그린다: UUID 36자이고 사람이 이 화면에서 그 값을 쓸 일이 없다(§6과 같은 자). */
+function ChatList({
+  home,
   busy,
-  onCleared,
+  onPick,
 }: {
-  project: string;
+  home: Home;
   busy: boolean;
-  onCleared: () => void;
+  onPick: (id: string) => void;
 }) {
-  const [clearing, setClearing] = useState(false);
-  if (busy) {
-    // 도는 중에는 다이얼로그를 아예 안 연다. `aria-disabled`인 이유는 §21과 같다 —
-    // `disabled`는 포커스를 잃고 `title`도 안 뜬다(왜 못 누르는지 말할 자리가 사라진다).
-    return (
-      <Button
-        variant="outline"
-        size="sm"
-        aria-disabled
-        className="aria-disabled:opacity-50"
-        title="답이 도는 동안에는 비울 수 없습니다"
-      >
-        새 대화
-      </Button>
-    );
-  }
+  const [open, setOpen] = useState(false);
+  const rows = chatRows(home.conversations);
+  // 제목이 없는 대화는 목록에서와 **같은 낱말**로 선다 — `새 대화`(§24: 방금 누른 버튼의 이름이
+  // 그대로 그 줄의 정체다). `current`가 없는 상태(사람이 파일을 고쳤다)도 같은 자리에 온다.
+  const title = rows.find((r) => r.id === home.current)?.title ?? "새 대화";
   return (
-    <AlertDialog>
-      <AlertDialogTrigger
+    // 도는 중에는 아예 안 열린다. 트리거는 `aria-disabled`라 포커스도 `title`도 남는다(§21).
+    <Popover open={open} onOpenChange={(v) => setOpen(v && !busy)}>
+      <PopoverTrigger
         render={
-          <Button variant="outline" size="sm">
-            새 대화
+          <Button
+            variant="ghost"
+            size="sm"
+            role="combobox"
+            aria-expanded={open}
+            aria-label="대화 전환"
+            aria-disabled={busy || undefined}
+            title={busy ? LOCKED : undefined}
+            // `max-w-xs` = 320px ≈ `text-sm` 한글 22자. 제목이 첫 질문의 첫 줄이라 그 이상은
+            // 부제가 아니라 문단이다 — 자르고, 전문을 볼 자리는 그 대화의 첫 말풍선이다(§24).
+            className="h-8 max-w-xs gap-2 aria-disabled:opacity-50 data-[popup-open]:bg-muted"
+          >
+            <span className="truncate text-sm">{title}</span>
+            <ChevronsUpDown aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
           </Button>
         }
       />
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>대화를 비웁니다</AlertDialogTitle>
-          <AlertDialogDescription>
-            지금 대화가 화면에서 사라집니다. 되돌릴 수 없습니다 — 이 앱에 대화 목록이 없습니다.
-            트랜스크립트 파일은 그대로 남습니다.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel autoFocus>취소</AlertDialogCancel>
-          <AlertDialogAction
-            disabled={clearing}
-            onClick={async () => {
-              setClearing(true);
-              await clearHome(project);
-              setClearing(false);
-              onCleared();
-            }}
-          >
-            비우기
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+      {/* 폭도 높이도 §4-1이 이미 쓰는 수다 — 20줄 × 36이 320px 상자에서 스크롤한다 */}
+      <PopoverContent align="start" className="w-[28rem] p-1">
+        <div className="max-h-80 overflow-y-auto">
+          {rows.map((r) => (
+            <button
+              key={r.id}
+              type="button"
+              className="flex w-full cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-left hover:bg-accent"
+              onClick={() => {
+                setOpen(false);
+                if (r.id !== home.current) onPick(r.id);
+              }}
+            >
+              {/* 체크 칸은 줄마다 항상 있다(폭 16px 고정) — 지금 것에만 아이콘이 든다.
+                  여기 빈칸은 위·아래 줄의 체크와 짝을 이뤄 *이건 지금 것이 아니다*를 말한다(§24) */}
+              <span className="w-4 shrink-0">
+                {r.id === home.current && <Check aria-hidden className="size-4" />}
+              </span>
+              <span className="min-w-0 grow truncate text-sm">{r.title}</span>
+              <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{r.time}</span>
+            </button>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }

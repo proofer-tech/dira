@@ -1,6 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { interjectMode, parentPath, projectPath, relationPath, type Anchor } from "./urls.ts";
+import {
+  chatRows,
+  interjectMode,
+  parentPath,
+  projectPath,
+  relationPath,
+  timeLabel,
+  type Anchor,
+} from "./urls.ts";
 
 /** 전환기는 **같은 화면 종류를 유지한다**(DESIGN.md §0-1). 홈이 그 규칙의 다섯 번째 줄이다 —
  *  홈에서 프로젝트를 바꾸면 보드가 아니라 그쪽 홈이다. 티켓 상세만 예외로 보드로 떨어진다. */
@@ -115,4 +123,51 @@ test("interjectMode — `.done`이 실패 잔해를 이긴다(글은 남고 Aler
   // `.wip` → `.done`으로 굳는 그 폴링. 읽기 전용 잔해가 아니라 **보낼 수 있는 이어받기 칸**이다 —
   // `ENXIO`의 다음 행동(`위 글을 복사해 새 티켓으로`)을 같은 칸이 바로 할 수 있게 된다.
   assert.equal(m({ done: true, failed: true }), "followup");
+});
+
+/** §비주얼 §26 ④. `lib/usage.ts`에 있던 `resetLabel`이 이 파일로 온 검증이다 — 홈 대화 목록(§24)이
+ *  같은 서식을 **클라이언트에서** 쓰게 되면서 옮겼고(저 파일은 `node:fs`다), 값은 한 자도 안 갈렸다. */
+test("timeLabel — 오늘은 HH:MM · 다른 날은 M/D (24시간제)", () => {
+  const now = new Date(2026, 7, 1, 15, 30).getTime(); // 2026-08-01 15:30 로컬
+  // claude 5시간 창 — 실측 `resets_at`이 KST 19:00이었다
+  assert.equal(timeLabel(new Date(2026, 7, 1, 19, 0).getTime(), now), "19:00");
+  // 오후를 `오후 5:40`으로 쓰지 않는다(로케일마다 폭이 흔들린다)
+  assert.equal(timeLabel(new Date(2026, 7, 1, 17, 40).getTime(), now), "17:40");
+  assert.equal(timeLabel(new Date(2026, 7, 1, 9, 5).getTime(), now), "09:05"); // 0 패딩
+  // codex 30일 창 — 실측 `resets_at` 1787984956 = 2026-08-29 15:29
+  assert.equal(timeLabel(new Date(2026, 7, 29, 15, 29).getTime(), now), "8/29");
+  // 자정 경계: 5분 뒤여도 날짜가 다르면 `M/D`다 — 시각만 쓰면 "오늘 그 시각"으로 읽힌다
+  assert.equal(timeLabel(new Date(2026, 7, 2, 0, 5).getTime(), new Date(2026, 7, 1, 23, 55).getTime()), "8/2");
+});
+
+/** 홈 대화 목록의 한 줄 (§비주얼 §24 대화 목록). 파일이 주는 순서와 화면이 그리는 순서가 다르고
+ *  (파일은 만든 순, 화면은 최근이 위) 제목·시각 둘 다 비어 있을 수 있어서 판정이 여기 산다. */
+test("chatRows — 최근이 위 · 제목 없는 대화는 `새 대화` · 시각은 §26 ④", () => {
+  const now = new Date(2026, 7, 1, 17, 30).getTime();
+  const iso = (...a: [number, number, number, number, number]) => new Date(...a).toISOString();
+  const rows = chatRows(
+    [
+      // 파일에 든 순서 = 만든 순(오래된 것이 앞). `append`가 끝에 붙인다
+      { id: "c1", title: "이 큐의 프로토콜을 요약해 달라", created: iso(2026, 6, 31, 9, 41) },
+      { id: "c2", title: "답변 대기 티켓이 왜 안 도나", created: iso(2026, 7, 1, 9, 41) },
+      { id: "c3", title: "", created: iso(2026, 7, 1, 17, 26) }, // 아직 아무것도 안 물었다
+    ],
+    now,
+  );
+  assert.deepEqual(rows, [
+    { id: "c3", title: "새 대화", time: "17:26" }, // 최근이 위 · 제목이 없으면 `새 대화`
+    { id: "c2", title: "답변 대기 티켓이 왜 안 도나", time: "09:41" },
+    { id: "c1", title: "이 큐의 프로토콜을 요약해 달라", time: "7/31" }, // 다른 날은 `M/D`
+  ]);
+
+  // 옛 형식(문자열 한 줄)에서 올라온 줄 — 만든 시각이 없다. **지어내지 않고 빈 칸이고 맨 아래다**
+  assert.deepEqual(
+    chatRows([{ id: "old", title: "", created: "" }, { id: "new", title: "", created: iso(2026, 7, 1, 17, 30) }], now),
+    [
+      { id: "new", title: "새 대화", time: "17:30" },
+      { id: "old", title: "새 대화", time: "" },
+    ],
+  );
+
+  assert.deepEqual(chatRows([]), []); // 0건 — 트리거를 안 그리는 화면의 근거다
 });

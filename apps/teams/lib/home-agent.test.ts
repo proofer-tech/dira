@@ -329,6 +329,63 @@ test("상한 20 — 21번째 대화를 열면 가장 오래된 줄이 파일에�
   assert.strictEqual(after.current, fresh);
 });
 
+/** 화면이 대화 목록을 **폴링 응답 하나**에서 받는다(§비주얼 §24 — 트리거도 스레드도 그 한 벌이다).
+ *  두 가지를 같이 못박는다: 목록이 그 응답에 들어 있다는 것과, **전환한 대화의 트랜스크립트가
+ *  그려진다**는 것. 뒤엣것이 `switchConversation` 단독 검증과 갈리는 자리다 — 저건 파일에 무엇을
+ *  쓰느냐이고 여기는 **그래서 화면에 무엇이 그려지느냐**다. */
+test("폴링이 대화 목록을 데려온다 — 전환하면 그 대화의 트랜스크립트가 그려지고, 21개째여도 20줄이다", async () => {
+  const a = uuid(41);
+  const b = uuid(42);
+  const record = (u: string, role: string, content: string) =>
+    JSON.stringify({
+      type: role === "user" ? "user" : "assistant",
+      uuid: u,
+      timestamp: "2026-08-01T05:00:00.000Z",
+      message: role === "user" ? { role, content } : { role, content: [{ type: "text", text: content }] },
+    }) + "\n";
+  writeFileSync(path.join(TRANSCRIPTS, `${a}.jsonl`), record("qa", "user", "옛 질문") + record("aa", "assistant", "옛 답"));
+  writeFileSync(path.join(TRANSCRIPTS, `${b}.jsonl`), record("qb", "user", "새 질문") + record("ab", "assistant", "새 답"));
+  writeFileSync(
+    sessionsPath(),
+    JSON.stringify({
+      list: {
+        conversations: [
+          { id: a, title: "옛 대화", created: "2026-07-31T00:00:00.000Z" },
+          { id: b, title: "새 대화의 첫 질문", created: "2026-08-01T00:00:00.000Z" },
+        ],
+        current: b,
+      },
+    }),
+  );
+
+  // 화면의 첫 렌더(= `page.tsx`)가 부르는 그 호출. 목록 · `current` · 스레드가 한 응답이다
+  const first = await pollHome("list", null, 0);
+  assert.deepStrictEqual(first.conversations.map((c) => c.title), ["옛 대화", "새 대화의 첫 질문"]);
+  assert.strictEqual(first.sessionId, b); // `current`가 곧 `sessionId`다 — 화면의 체크가 이 값이다
+  assert.deepStrictEqual(first.turns.map((t) => t.text), ["새 질문", "새 답"]);
+
+  // 전환 = 서버 액션이 하는 일 두 줄(`switchConversation` → 처음부터 다시 폴링)
+  assert.strictEqual(await switchConversation("list", a), true);
+  const after = await pollHome("list", null, 0);
+  assert.strictEqual(after.sessionId, a);
+  assert.deepStrictEqual(after.turns.map((t) => t.text), ["옛 질문", "옛 답"]); // 그 대화가 그려진다
+  assert.strictEqual(after.conversations.length, 2); // 목록은 그대로 — 전환은 `current` 교체뿐이다
+
+  // **상한 20은 실행층이 자르고 화면은 받은 줄을 그대로 그린다**(§7). 20줄이 찬 상태에서
+  // `새 대화`를 누르면 21번째가 아니라 **여전히 20줄**이고 가장 오래된 줄이 빠진 것이다.
+  const full = Array.from({ length: 20 }, (_, i) => ({ id: uuid(i), title: `대화 ${i}`, created: "" }));
+  writeFileSync(sessionsPath(), JSON.stringify({ list: { conversations: full, current: uuid(19) } }));
+  const opened = await newConversation("list"); // 21개째
+  const capped = await pollHome("list", null, 0);
+  assert.strictEqual(capped.conversations.length, 20);
+  assert.strictEqual(capped.sessionId, opened);
+  assert.ok(!capped.conversations.some((c) => c.id === uuid(0)), "가장 오래된 줄이 빠져야 한다");
+  assert.strictEqual(capped.turns.length, 0); // 방금 연 대화 — 트랜스크립트가 아직 없다
+  assert.strictEqual(capped.failed, null); // 그건 실패 ⑤가 아니다(물은 적이 없다)
+  // 제목이 아직 없는 대화도 목록에 뜬다 — 화면이 그 줄을 `새 대화`라고 적는다(`chatRows`)
+  assert.strictEqual(capped.conversations.at(-1)?.title, "")
+});
+
 /** PATH에 놓는 가짜 `claude`. 진짜 세션을 띄우지 않고도 **파일에 남는 것**과 **넘어간 플래그**가
  *  걸린다 — `--session-id`(연다)와 `--resume`(잇는다)이 갈리는 자리가 이 티켓의 핵심이다. */
 function fakeClaude(body: string): string {

@@ -67,6 +67,45 @@ export function parentPath(pathname: string): string | null {
  *  이 파일이어야 하는 이유는 배지가 클라이언트 컴포넌트에도 들어가서다(`node:fs`를 못 끌고 온다). */
 export const elapsedSuffix = (days?: number) => (days ? ` · ${days}일` : "");
 
+/** 시각 한 칸 (DESIGN.md §비주얼 §26 ④) — **오늘 안이면 `HH:MM`, 다른 날이면 `M/D`.**
+ *
+ *  **24시간제**고 `toLocaleTimeString`을 안 쓴다: 로케일에 따라 `오후 5:40`이 나와 폭이 흔들린다
+ *  (`session-stream.tsx`의 `localTime`과 같은 판단, 다만 초는 안 쓴다).
+ *
+ *  **쓰는 곳이 둘이다** — 사용량 리셋 시각(§26 ④, 서버 렌더)과 **홈 대화 목록의 만든 시각**
+ *  (§비주얼 §24, 클라이언트 렌더). `lib/usage.ts`에 있던 `resetLabel`이 여기로 온 이유가 그것이다:
+ *  저 파일은 `node:fs`를 import해서 클라이언트 번들에 못 들어간다(`elapsedSuffix`와 같은 축).
+ *  §24가 대화 목록에 **"새 서식 0"**을 박았으므로 두 화면이 같은 함수를 쓴다. */
+export function timeLabel(at: number, now = Date.now()): string {
+  const d = new Date(at);
+  const n = new Date(now);
+  const sameDay =
+    d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate();
+  const p = (v: number) => String(v).padStart(2, "0");
+  return sameDay ? `${p(d.getHours())}:${p(d.getMinutes())}` : `${d.getMonth() + 1}/${d.getDate()}`;
+}
+
+/** 홈 대화 목록의 한 줄들 (§비주얼 §24 대화 목록) — **정렬 · 제목 · 시각이 여기서 끝난다.**
+ *
+ *  - **만든 시각 내림차순**(최근이 위). ISO 문자열이라 사전순이 곧 시간순이고, 옛 형식에서
+ *    올라온 줄은 `created`가 빈 문자열이라 **맨 아래**로 간다(그 줄이 실제로 가장 오래된 것이다).
+ *  - **제목이 없으면 `새 대화`.** `(제목 없음)`이 아니다 — 비어 있는 것이 정상이고, 방금 사람이
+ *    누른 버튼의 이름이 그대로 그 줄의 정체다(§24).
+ *  - 시각을 못 읽으면(옛 형식) **빈 칸**이다. 지어내지 않는다.
+ *
+ *  판정이 컴포넌트가 아니라 여기 있는 이유는 `elapsedSuffix`와 같다 — `pnpm test`가 JSX를 못 읽는다. */
+export function chatRows(
+  conversations: { id: string; title: string; created: string }[],
+  now = Date.now(),
+): { id: string; title: string; time: string }[] {
+  return [...conversations]
+    .sort((a, b) => b.created.localeCompare(a.created))
+    .map((c) => {
+      const at = Date.parse(c.created);
+      return { id: c.id, title: c.title || "새 대화", time: Number.isNaN(at) ? "" : timeLabel(at, now) };
+    });
+}
+
 /** 세션 스트림(§2-1)의 사건 줄을 **펼칠 수 있나** — 셰브런·`<details>`를 거는 유일한 판정.
  *  본문이 없으면 펼쳐도 빈 상자라 어포던스를 주지 않는다: `thinking` 본문은 암호화돼
  *  빈 문자열로 오는 게 전부다(실측 75/75). §2-1의 계약은 "펼치면 원문"이고, 원문이 없는 줄에서

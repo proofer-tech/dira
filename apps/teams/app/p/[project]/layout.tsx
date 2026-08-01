@@ -18,9 +18,9 @@ import { StatusBadge } from "@/components/status-badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { readAuth } from "@/lib/auth";
 import { readSummary, readProjects } from "@/lib/projects";
-import { engineLimits, listUsage, resetLabel, type EngineLimit } from "@/lib/usage";
+import { engineLimits, listUsage, type EngineLimit } from "@/lib/usage";
 import { engineName } from "@/lib/workers";
-import { tildePath } from "@/lib/urls";
+import { tildePath, timeLabel } from "@/lib/urls";
 import { cn } from "@/lib/utils";
 
 export default async function ProjectLayout({
@@ -311,7 +311,7 @@ function EngineCell({
           {/* `resets_at`이 없으면 **이 항목만** 빠진다. 칸이 통째로 폴백으로 넘어가지 않는다(§26 ④) */}
           {value.resetsAt !== null && (
             <span className="hidden text-xs whitespace-nowrap text-muted-foreground tabular-nums md:inline">
-              · {resetLabel(value.resetsAt)} 리셋
+              · {timeLabel(value.resetsAt)} 리셋
             </span>
           )}
         </>

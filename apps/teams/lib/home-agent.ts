@@ -755,6 +755,12 @@ export async function startAsk(
 /** 폴링 한 번 = 화면이 아는 전부. 페이지의 첫 렌더도 이걸 부른다(`offset` 0 · `sessionId` null). */
 export type HomeChunk = {
   sessionId: string | null;
+  /** **대화 목록**(§7 §대화가 여럿이다 · §비주얼 §24). `sessionId`가 곧 이 목록의 `current`다.
+   *  폴링이 이걸 같이 데려오는 이유는 셋이다 — ① 이 함수가 `readHome`을 **이미** 부른다(공짜다)
+   *  ② 첫 질문이 제목을 파일에 쓰므로(`beginTurn`) 그 답이 도는 동안 트리거의 `새 대화`가
+   *  질문의 첫 줄로 갈려야 한다 ③ 화면이 아는 전부가 이 응답 하나라는 계약이 안 갈린다.
+   *  **상한 20은 여기서 안 재는다** — 실행층이 파일에서 자르고 화면은 받은 줄을 그대로 그린다 */
+  conversations: Conversation[];
   turns: Turn[];
   offset: number;
   /** 세션이 갈렸다(`새 대화` 뒤 첫 질문 · 첫 질문 실패 뒤 재시도) — 화면은 **갈아 끼운다** */
@@ -785,7 +791,8 @@ export async function pollHome(
   const done = entry?.result ?? null;
   if (done) runs.delete(projectId);
 
-  const sid = await readSessionId(projectId);
+  // 목록과 `current`를 **한 번에** 읽는다 — 화면이 둘 다 이 응답에서 받는다(위 `conversations`).
+  const { conversations, current: sid } = await readHome(projectId);
   const reset = sid !== sessionId;
   const at = reset || !Number.isSafeInteger(offset) || offset < 0 ? 0 : offset;
   const failed = done && !done.ok ? done : null;
@@ -798,12 +805,13 @@ export async function pollHome(
   // 순서가 근거다 — `done`을 파일보다 먼저 읽으므로 `partial`이 비는 응답은 이미 그 줄을 담고 있다.
   const partial = running ? (entry?.live.partial ?? "") : "";
 
-  if (!sid) return { sessionId: null, turns: [], offset: 0, reset, running, partial, stopped, failed };
+  if (!sid) return { sessionId: null, conversations, turns: [], offset: 0, reset, running, partial, stopped, failed };
 
   const file = await findTranscript(sid);
   if (!file) {
     return {
       sessionId: sid,
+      conversations,
       turns: [],
       offset: at,
       reset,
@@ -820,5 +828,5 @@ export async function pollHome(
     };
   }
   const r = await tailEvents(file, at);
-  return { sessionId: sid, turns: toTurns(r.events), offset: r.offset, reset, running, partial, stopped, failed };
+  return { sessionId: sid, conversations, turns: toTurns(r.events), offset: r.offset, reset, running, partial, stopped, failed };
 }

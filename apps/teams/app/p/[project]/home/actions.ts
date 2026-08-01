@@ -16,6 +16,7 @@ import {
   pollHome,
   startAsk,
   stopAsk,
+  switchConversation,
   type Answer,
   type HomeChunk,
 } from "@/lib/home-agent";
@@ -55,6 +56,7 @@ export async function pollHomeAnswer(
   } catch {
     return {
       sessionId: null,
+      conversations: [], // 못 읽는 큐 = 열 목록도 없다. 트리거가 안 그려진다(§24 0건)
       turns: [],
       offset: 0,
       reset: true,
@@ -81,7 +83,29 @@ export async function stopHome(projectId: string): Promise<boolean> {
  *  지우는 것이었고 요구 `c5d22429`로 뒤집혔다). 옛 대화도 옛 트랜스크립트도 남는다
  *  (`~/.claude`는 남의 디렉터리다). 도는 중에 못 부르게 막는 것은 화면이다(§24 — `aria-disabled`);
  *  여기서 다시 막지 않는 이유는 막을 대상이 파일이 아니라 **떠 있는 프로세스**라서다. 그건
- *  이 앱에 없는 취소 버튼의 일이고(§7), 이 함수가 하는 일은 다음 질문이 새 세션이 되게 하는 것뿐이다. */
-export async function clearHome(projectId: string): Promise<void> {
+ *  `중지`의 일이고(§7), 이 함수가 하는 일은 다음 질문이 새 세션이 되게 하는 것뿐이다.
+ *
+ *  **돌려주는 것은 폴링 한 번**이다(아래 `switchHome`과 같은 모양) — 화면이 새 목록과 빈 스레드를
+ *  이 응답 하나로 갈아 끼운다. 새 대화에는 트랜스크립트가 아직 없으므로 `turns`가 0건이다. */
+export async function clearHome(projectId: string): Promise<HomeChunk> {
   await newConversation((await required(projectId)).id);
+  return pollHomeAnswer(projectId, null, 0);
+}
+
+/** 대화 전환(§비주얼 §24 대화 목록) — **`current`를 갈고 그 대화를 읽어 돌려준다.**
+ *
+ *  **`sessionId`는 신뢰 경계 밖이다**(클라이언트가 고른 줄). 관문은 `switchConversation`이고
+ *  그것이 보는 것은 **목록에 있는 줄인가** 하나다 — 없으면 파일을 안 건드리고, 아래 폴링이
+ *  지금 대화를 그대로 다시 그린다(화면이 튀지 않는다).
+ *
+ *  스켈레톤이 없는 이유가 이 한 왕복이다(§24 로딩 항 — 서버가 트랜스크립트를 읽어 통째로 준다).
+ *  `sessionId: null`로 폴링하는 것은 **offset을 0부터 다시 세라**는 뜻이다: 갈아탄 대화의 파일은
+ *  다른 파일이라 들고 있던 바이트 수가 거기서는 아무 뜻이 없다(`pollHome`의 `reset`). */
+export async function switchHome(projectId: string, sessionId: string): Promise<HomeChunk> {
+  try {
+    await switchConversation((await required(projectId)).id, sessionId);
+  } catch {
+    // 등록이 풀린 프로젝트 — 갈아 끼울 것이 없다. 아래 폴링이 빈 대화로 물러난다(위와 같은 선)
+  }
+  return pollHomeAnswer(projectId, null, 0);
 }

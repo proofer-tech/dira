@@ -295,19 +295,8 @@ export function lastRateLimits(text: string): CodexRateLimits | null {
   return null;
 }
 
-/** 리셋 시각 표기 (§비주얼 §26 ④). 오늘 안이면 `HH:MM`, 다른 날이면 `M/D`.
- *
- *  **카운트다운을 안 쓴다** — `4시간 12분 남음`은 5초마다 움직이고, 안 움직이는 수가 스캔에
- *  낫다. **24시간제**고 `toLocaleTimeString`을 안 쓴다(로케일에 따라 `오후 5:40`이 나와 폭이
- *  흔들린다 — `session-stream.tsx`의 `localTime`과 같은 판단, 다만 초는 안 쓴다).
- *  창이 5시간(claude)과 30일(codex)이라 한 표기가 둘을 못 받아서 갈림이 하나 있다. */
-export function resetLabel(at: number, now = Date.now()): string {
-  const d = new Date(at);
-  const n = new Date(now);
-  const sameDay =
-    d.getFullYear() === n.getFullYear() &&
-    d.getMonth() === n.getMonth() &&
-    d.getDate() === n.getDate();
-  const p = (v: number) => String(v).padStart(2, "0");
-  return sameDay ? `${p(d.getHours())}:${p(d.getMinutes())}` : `${d.getMonth() + 1}/${d.getDate()}`;
-}
+/** 리셋 시각 표기(§비주얼 §26 ④)는 **`lib/urls.ts`의 `timeLabel`**이다 — 홈 대화 목록(§24)이
+ *  같은 서식을 클라이언트에서 쓰게 되면서 옮겼다(이 파일은 `node:fs`라 번들에 못 들어간다).
+ *  **카운트다운을 안 쓴다**는 판정은 그 함수 주석과 §26 ④에 그대로 있다 — `4시간 12분 남음`은
+ *  5초마다 움직이고, 안 움직이는 수가 스캔에 낫다. 창이 5시간(claude)과 30일(codex)이라
+ *  한 표기가 둘을 못 받는 갈림도 그 자리 그대로다. */
