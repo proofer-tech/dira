@@ -79,29 +79,39 @@ export function SessionStream({
   const codex = engine === "codex";
 
   // 진행중이면 2초 폴링, 완료면 1회 읽고 멈춘다(§2-1). `live`가 false로 바뀌는 순간(세션이 끝났다)
-  // 그 응답을 마지막으로 타이머를 끊는다 — 완료 티켓에서 요청이 반복되지 않는 근거가 이 줄이다.
+  // 그 응답을 마지막으로 폴링을 끊는다 — 완료 티켓에서 요청이 반복되지 않는 근거가 이 줄이다.
+  //
+  // **앞 왕복이 끝난 뒤에 다음을 예약한다**(`bcfcdda4` — 홈과 같은 고장을 같은 방법으로 막는다).
+  // `setInterval`이면 왕복이 주기보다 길어지는 순간 두 `poll`이 같은 `offset.current`를 읽고
+  // 서버가 같은 바이트 구간을 두 벌 주고 둘 다 `[...prev, ...r.events]`로 이어붙는다 —
+  // 사건 줄이 두 벌 서고 key가 같아 React가 경고를 찍는다. 여기가 홈보다 조용한 이유는 주기가
+  // 2초라서일 뿐이다(왕복 하나가 트랜스크립트 tail이라 큰 세션·느린 디스크면 넘길 수 있다).
   useEffect(() => {
     // 있을 수 없는 파일을 2초마다 묻지 않는다 — codex는 트랜스크립트를 아예 안 남긴다(§4-3 표).
     if (codex) return;
     let stop = false;
-    let timer: ReturnType<typeof setInterval> | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const poll = async () => {
-      const r = await tailSession(project, stem, offset.current);
-      if (stop) return;
-      offset.current = r.offset;
-      if (r.events.length) setEvents((prev) => [...prev, ...r.events]);
-      setInbox(r.inbox); // 참견 폼의 활성 판정(§2-2) — 서버가 매 폴링마다 fm에서 다시 읽는다
-      setDone(r.done); // 폼의 모드(§21) — `.wip`이 `.done`이 되는 그 폴링에서 칸이 이어받기가 된다
-      if (!r.live) {
-        setLive(false);
-        clearInterval(timer);
+      try {
+        const r = await tailSession(project, stem, offset.current);
+        if (stop) return;
+        offset.current = r.offset;
+        if (r.events.length) setEvents((prev) => [...prev, ...r.events]);
+        setInbox(r.inbox); // 참견 폼의 활성 판정(§2-2) — 서버가 매 폴링마다 fm에서 다시 읽는다
+        setDone(r.done); // 폼의 모드(§21) — `.wip`이 `.done`이 되는 그 폴링에서 칸이 이어받기가 된다
+        if (!r.live) {
+          setLive(false);
+          return; // 다음을 예약하지 않는다 = 폴링이 끊기는 자리다
+        }
+      } catch {
+        // 이 왕복 하나만 버린다 — `setInterval`이 한 틱 실패에 안 멈추던 것과 같은 자리다.
       }
+      if (!stop && initialLive) timer = setTimeout(poll, 2000);
     };
     void poll();
-    if (initialLive) timer = setInterval(poll, 2000);
     return () => {
       stop = true;
-      clearInterval(timer);
+      clearTimeout(timer);
     };
   }, [project, stem, initialLive, codex]);
 

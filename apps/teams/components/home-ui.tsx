@@ -160,35 +160,48 @@ export function HomeUI({ project, initial }: { project: string; initial: HomeChu
   // **주기가 500ms다**(§7 §답은 흐른다 — SSE를 만들지 않는 대가로 정한 수). 델타 하나가 평균
   // 250ms 늦게 붙고, 실측 델타 간격이 480ms라 그 지연은 화면에서 안 보인다. 5분을 다 쓰면
   // 왕복 600회이고 한 번이 `readSessionId` + 트랜스크립트 tail이다.
+  //
+  // **앞 왕복이 끝난 뒤에 다음을 예약한다 — `setInterval`이 아니다**(`bcfcdda4`). 저건 왕복
+  // 시간을 안 보고 500ms마다 쏘므로, 왕복이 그보다 길어지는 순간 두 `poll`이 동시에 살아
+  // **같은 `offset.current`를 읽는다.** 서버는 죄 없이 같은 바이트 구간을 두 벌 주고 둘 다
+  // 이어붙어 같은 질문·같은 답이 스레드에 두세 벌 선다(key가 같아 React가 경고까지 찍는다).
+  // 파일은 멀쩡하고 새로고침이면 사라지는 **화면만의 고장**이라 더 조용했다. 실측으로 400ms
+  // 지연을 주입해 왕복 중앙값을 535ms로 올리면 100% 났다(QA `2ad9906c`).
   useEffect(() => {
     if (!running) return;
     let stop = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const poll = async () => {
-      const r = await pollHomeAnswer(project, session.current, offset.current);
-      if (stop) return;
-      session.current = r.sessionId;
-      offset.current = r.offset;
-      setPartial(r.partial);
-      setHome({ conversations: r.conversations, current: r.sessionId });
-      // `reset` = 세션이 갈렸다(서버가 0부터 다시 읽었다). 이어붙이면 옛 대화가 두 벌이 된다.
-      setTurns((prev) => {
-        const next = r.reset ? r.turns : r.turns.length ? [...prev, ...r.turns] : prev;
-        // **중지 표식을 서버 응답에서도 받는다.** 트랜스크립트의 `[Request interrupted by user]`가
-        // `toTurns`에서 같은 칸을 채우지만(새로고침이 사는 근거), 그 줄이 이 폴링보다 늦게
-        // 쓰이는 창이 있다 — 그때 화면이 `중지됨`을 통째로 놓친다. 두 근거가 같은 칸을 채운다.
-        return r.stopped ? markStopped(next) : next;
-      });
-      if (r.failed) setFail(r.failed);
-      if (!r.running) {
-        setRunning(false);
-        clearInterval(timer);
+      try {
+        const r = await pollHomeAnswer(project, session.current, offset.current);
+        if (stop) return;
+        session.current = r.sessionId;
+        offset.current = r.offset;
+        setPartial(r.partial);
+        setHome({ conversations: r.conversations, current: r.sessionId });
+        // `reset` = 세션이 갈렸다(서버가 0부터 다시 읽었다). 이어붙이면 옛 대화가 두 벌이 된다.
+        setTurns((prev) => {
+          const next = r.reset ? r.turns : r.turns.length ? [...prev, ...r.turns] : prev;
+          // **중지 표식을 서버 응답에서도 받는다.** 트랜스크립트의 `[Request interrupted by user]`가
+          // `toTurns`에서 같은 칸을 채우지만(새로고침이 사는 근거), 그 줄이 이 폴링보다 늦게
+          // 쓰이는 창이 있다 — 그때 화면이 `중지됨`을 통째로 놓친다. 두 근거가 같은 칸을 채운다.
+          return r.stopped ? markStopped(next) : next;
+        });
+        if (r.failed) setFail(r.failed);
+        if (!r.running) {
+          setRunning(false);
+          return; // 다음을 예약하지 않는다 = 이 줄이 폴링을 끊는 자리다
+        }
+      } catch {
+        // 이 왕복 하나만 버린다 — `setInterval`이 한 틱 실패에 안 멈추던 것과 같은 자리다.
+        // 여기서 멈추면 서버가 잠깐 삐끗한 대가로 도는 답이 화면에서 영구히 얼어붙는다.
       }
+      if (!stop) timer = setTimeout(poll, 500);
     };
     void poll();
-    const timer = setInterval(poll, 500);
     return () => {
       stop = true;
-      clearInterval(timer);
+      clearTimeout(timer);
     };
   }, [project, running]);
 
