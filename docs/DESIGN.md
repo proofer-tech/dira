@@ -2579,8 +2579,15 @@ CLI(엔진)이고 그 안에서 모델은 또 갈린다 — `claude --model` · 
 
 답변 1-(b)는 목록을 **어디서 얻을지**까지는 말하지 않았다. 되묻지 않고 정한다. 근거 셋:
 
-1. **두 CLI 다 모델 목록 조회 명령이 없다**(실측 2026-08-01 — `claude --help` · `codex --help`
-   전체. `codex`의 서브커맨드 20종에도 없다). "엔진에 물어본다"는 길은 실재하지 않는다.
+1. **`claude`에는 모델 목록 조회 명령이 없고, `codex`의 것은 화면이 부를 물건이 아니다**
+   (실측 2026-08-01 — `claude --help` 전체 · `codex debug models`, `codex-cli 0.146.0`).
+   `codex debug models`는 카탈로그를 JSON으로 낸다. 최상위 서브커맨드 20종에는 없고
+   `debug`의 하위라서 `codex --help` 한 번으로는 안 보인다. 이걸 화면이 쓰지 않는 이유는
+   셋이다 — 매 렌더 호출은 §성능 예산(요청당 서브프로세스 0~1회)에 맞지 않고, `debug`
+   하위는 안정 인터페이스라는 보증이 없고, 이 카탈로그는 서버에서 받아 캐시한 값이라
+   (`codex doctor` → `models etag present true`) 계정·버전에 따라 갈린다.
+   **대신 사람이 목록을 갱신할 때 쓰는 명령이다** — 실측 전문과 갱신 방법은 `f6dd8478`
+   §결과에 있고 `apps/teams/lib/workers.ts`의 `ENGINES` 주석이 그 티켓을 가리킨다.
 2. **`claude`의 목록은 낡지 않는다.** `--model`이 문서에서 **별칭**을 먼저 말한다 —
    `'fable', 'opus', 'sonnet'`은 "an alias for the latest model"이다. 별칭은 정의상 최신을
    가리키는 고정 포인터라, 이걸 박는 것은 풀네임(`claude-fable-5`)을 박는 것과 다르다.
