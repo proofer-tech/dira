@@ -8,8 +8,20 @@ import path from "node:path";
 const LOCAL = mkdtempSync(path.join(tmpdir(), "ha-local-"));
 process.env.TICKET_LOCAL = LOCAL;
 
-const { renderSnapshot, buildPrompt, sessionsPath, readSessionId, writeSessionId, clearSessionId } =
-  await import("./home-agent.ts");
+const {
+  renderSnapshot,
+  buildPrompt,
+  questionOf,
+  toTurns,
+  startAsk,
+  pollHome,
+  isAsking,
+  sessionsPath,
+  readSessionId,
+  writeSessionId,
+  clearSessionId,
+} = await import("./home-agent.ts");
+const { tailEvents } = await import("./transcript.ts");
 const { resolveConfig } = await import("./projects.ts");
 const { listTickets } = await import("./queue.ts");
 const { listWorkers, lockPath } = await import("./workers.ts");
@@ -123,6 +135,90 @@ test("buildPrompt — 스냅샷이 질문 앞에 오고 읽기 전용이라는 �
   assert.match(p, /티켓을 만들지도\n고치지도 않는다/);
 });
 
+test("questionOf — 스냅샷·지시문을 떼고 사람이 쓴 질문만 남는다 (§비주얼 §24 말풍선)", () => {
+  const q = "w2가 지금 무슨 일을 하고 있나";
+  assert.strictEqual(questionOf(buildPrompt(renderSnapshot0(), q)), q);
+  // 표식이 없는 글(우리가 안 만든 턴 · 사람이 터미널에서 이어 쓴 질문)은 **전문 그대로**다.
+  // 여기서 잘라내면 화면이 그 턴을 통째로 삼킨다.
+  assert.strictEqual(questionOf("그냥 물어본 말"), "그냥 물어본 말");
+  // 질문 안에 같은 표식이 또 있어도 **첫 번째(우리 것)**에서 갈린다 — 뒤에서 자르면 사람 글이 잘린다
+  assert.strictEqual(questionOf(buildPrompt("SNAP", "## 질문\n\n중첩된 글")), "## 질문\n\n중첩된 글");
+});
+
+test("toTurns — 트랜스크립트 한 벌에서 대화 줄 두 종만 나온다 (도구·생각 줄 없음)", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "ha-tr-"));
+  tmps.push(dir);
+  const file = path.join(dir, "session.jsonl");
+  const rec = (o: unknown) => JSON.stringify(o);
+  writeFileSync(
+    file,
+    [
+      // ① 첫 질문 — 프롬프트 전체(스냅샷 + 지시문 + 질문)가 한 레코드다
+      rec({
+        type: "user",
+        uuid: "u1",
+        timestamp: "2026-08-01T05:00:00.000Z",
+        message: { role: "user", content: buildPrompt("SNAP\n## 티켓 4건", "w2는 뭘 하나") },
+      }),
+      // ② 답 — 한 레코드가 생각 · 도구 · 텍스트를 같이 담는다. 남아야 하는 것은 텍스트뿐이다
+      rec({
+        type: "assistant",
+        uuid: "a1",
+        timestamp: "2026-08-01T05:00:04.000Z",
+        message: {
+          role: "assistant",
+          content: [
+            { type: "thinking", thinking: "" },
+            { type: "tool_use", name: "Read", input: { file_path: "/x/y.md" } },
+            { type: "text", text: "w2는 `aaaa0001`을 물고 있습니다." },
+          ],
+        },
+      }),
+      // ③ 서브에이전트 줄은 대화가 아니라 로그다(§24)
+      rec({
+        type: "assistant",
+        uuid: "a2",
+        isSidechain: true,
+        timestamp: "2026-08-01T05:00:05.000Z",
+        message: { role: "assistant", content: [{ type: "text", text: "서브가 한 말" }] },
+      }),
+      "",
+    ].join("\n"),
+  );
+
+  const { events } = await tailEvents(file, 0);
+  const turns = toTurns(events);
+  assert.deepStrictEqual(
+    turns.map((t) => [t.role, t.text]),
+    [
+      ["question", "w2는 뭘 하나"],
+      ["answer", "w2는 `aaaa0001`을 물고 있습니다."],
+    ],
+  );
+  // 키는 사건 키 그대로 — 두 줄이 같은 키를 받으면 폴링이 붙일 때 React가 한 줄을 덮는다
+  assert.strictEqual(new Set(turns.map((t) => t.key)).size, 2);
+});
+
+/** 위 테스트가 실제 스냅샷 모양으로 돌게 하는 최소 픽스처(내용은 상관없다 — 떼어내는 대상이다) */
+function renderSnapshot0(): string {
+  return renderSnapshot({
+    project: { name: "큐", root: "/tmp/x/.dira" },
+    config: {
+      personas: "/tmp/x/.dira/personas",
+      protocols: "/tmp/x/.dira/protocols",
+      inProgress: ".wip",
+      done: ".done",
+      cwd: "/tmp/x",
+      cwdByWorker: {},
+      assumed: [],
+      unresolved: [],
+      conflicts: [],
+    },
+    tickets: [],
+    workers: [],
+  });
+}
+
 test("session id 한 줄 — 쓰고 · 읽고 · 지운다. UUID가 아니면 없는 것과 같다", async () => {
   assert.strictEqual(sessionsPath(), path.join(LOCAL, "home-sessions.json"));
   assert.strictEqual(await readSessionId("p1"), null); // 파일이 없다
@@ -145,4 +241,35 @@ test("session id 한 줄 — 쓰고 · 읽고 · 지운다. UUID가 아니면 �
   // 깨진 JSON은 빈 맵이다 — 홈 화면이 500이 되는 것보다 대화 하나를 새로 시작하는 게 낫다
   writeFileSync(sessionsPath(), "{ not json");
   assert.strictEqual(await readSessionId("p2"), null);
+});
+
+test("한 프로젝트에 한 질문 — 둘째는 기다리지 않고 거절되고, 폴링 한 번이 답을 집어 간다", async () => {
+  // `claude`를 못 찾게 만들어 질문 하나를 **즉시** 끝낸다(§24 실패 ① spawn). 진짜 세션을
+  // 띄우지 않고도 이 파일이 지키는 것(맵의 수명 · 실패 코드 · 다시 열림)이 전부 걸린다.
+  const project = { id: "busy-test", name: "큐", root: path.join(LOCAL, "nowhere/.dira") };
+  const path0 = process.env.PATH;
+  process.env.PATH = "";
+  try {
+    assert.strictEqual(await startAsk(project, "질문 하나"), null); // 시작했다
+    assert.strictEqual(isAsking(project.id), true);
+
+    // 둘째 — 큐잉이 아니라 **거절**이다(§7: 동시 실행 제한 층을 만들지 않는다)
+    const second = await startAsk(project, "질문 둘");
+    assert.strictEqual(second?.reason, "busy");
+    assert.strictEqual(second?.ok, false);
+
+    // 폴링이 끝난 답을 집어 가면서 지운다 — 그래야 다음 질문이 열린다
+    const chunk = await pollHome(project.id, null, 0);
+    assert.strictEqual(chunk.running, false);
+    assert.strictEqual(chunk.failed?.reason, "spawn");
+    assert.match(chunk.failed?.output ?? "", /PATH에서 claude를 찾지 못했습니다/);
+    assert.strictEqual(isAsking(project.id), false);
+
+    // 같은 실패를 두 번 그리지 않는다 — 집어 간 뒤의 폴링에는 실패가 없다
+    assert.strictEqual((await pollHome(project.id, null, 0)).failed, null);
+    assert.strictEqual(await startAsk(project, "질문 셋"), null); // 다시 열렸다
+    await pollHome(project.id, null, 0); // 뒷정리
+  } finally {
+    process.env.PATH = path0;
+  }
 });
