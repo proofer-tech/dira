@@ -3908,17 +3908,47 @@ left off.` 쌍은 **중지한 세션을 이어야 나타난다** — 중지 직�
 - 스냅샷(§7 표)은 **이 대화에서도 질문마다 붙는다.** 워커 세션이라고 빼지 않는다 — 이어 묻는
   쪽은 홈 에이전트이고, "지금 무슨 일을 하나"가 그 세션 안의 낡은 상태로 답해지면 안 된다.
 
-##### 실측이 정할 것 하나 — `--resume`이 다른 cwd에서 도는가
+##### `--resume`은 다른 cwd에서 돈다 — 실측 (이 머신, 2026-08-01 · `claude` 2.1.220 · `b96e7996`)
 
 워커 세션의 트랜스크립트는 **워크트리 cwd** 아래 산다(`~/.claude/projects/<cwd-slug>/<sid>.jsonl`).
 홈의 cwd는 `dirname(project.root)`라 **다른 디렉터리**다. `--resume <워커 sid>`가 그 자리에서
 도는지는 재야 안다 — 플래그 이름을 믿고 틀렸던 자리가 이 문서에 둘 있다(`89962e56`
 `--allowed-tools` · `--verbose`).
 
-- **되면 위 그대로다.**
-- **안 되면 워커 세션은 읽기 전용으로 떨어진다**(답지 1-(a)). 좌측에서 골라 **보는 것**까지는
-  무조건 서고(`findTranscript`가 session id로 도는 것은 cwd와 무관하다 — §2-1이 이미 그렇게 읽는다),
-  입력칸만 잠긴다. 잰 사람이 **이 자리에 사유를 적는다.**
+**쟀다. 된다 — 위 세 절이 그대로 선다.** `w1`이 티켓 `37871a70`을 돌던 세션
+(`557cb391-…`, 트랜스크립트는 `-Users-hsol-Projects-dira--dira-worktrees-w1/` 아래)을 **홈의
+cwd**(`/Users/hsol/Projects/dira`)에서 **`TOOL_FLAGS` 무수정**으로 이었다:
+
+```
+$ cd /Users/hsol/Projects/dira && claude -p --resume 557cb391-a660-48cf-8c9d-d72e243a999b \
+    --tools Read,Glob,Grep --strict-mcp-config --permission-mode manual --allowed-tools Read,Glob,Grep \
+    --output-format stream-json --include-partial-messages --verbose \
+    "이 세션에서 네가 한 티켓이 무엇인지 한 문장으로 말하고, 지금 이 프로세스의 작업 디렉터리(cwd) 절대경로를 그대로 한 줄 적어라."
+rc=0 · stderr 0바이트
+{"type":"system","subtype":"init","cwd":"/Users/hsol/Projects/dira","tools":["Glob","Grep","Read"],"mcp_servers":[]}
+{"type":"result","subtype":"success","is_error":false,"api_error_status":null,
+ "session_id":"557cb391-…","num_turns":2,
+ "result":"**티켓** — `37871a70`: `r`(요구 접수)을 보드뿐 아니라 프로젝트 셸 어디서나 듣게 하는 작업으로, … 이 세션에서 나는 막혀 있던 master 통합(rebase → `git push . HEAD:master`, `d6cb04c`)만 마치고 티켓을 `.done`으로 넘겼다."}
+```
+
+박히는 사실 넷:
+
+- **이어진다.** 답이 그 세션의 티켓·커밋 해시를 말한다 — 남의 cwd에서 만든 대화 이력이 그대로 있다.
+- **cwd는 이은 쪽의 것이다.** `init.cwd`가 홈의 cwd고, 답도 "하네스가 준 환경 블록의 primary
+  working directory가 `/Users/hsol/Projects/dira`"라고 스스로 적었다(그 세션이 돌던 워크트리가
+  아니다). 이어 묻는 턴이 읽는 파일은 **repo 루트 기준**이다 — 홈 에이전트의 계약 그대로다.
+- **도구는 셋뿐이다.** `tools: ["Glob","Grep","Read"]` · `mcp_servers: []`. `--resume`이 그 세션의
+  넓은 표면(워커는 쓰기 도구 전부)을 물려오지 않는다 — **이어 묻는 쪽의 플래그가 이긴다.**
+  답지 1-(b)가 서는 근거가 이 줄이다.
+- **트랜스크립트는 원래 자리에 이어 붙는다.** 새 파일이 안 생겼다(`worktrees-w1/` 아래 그 파일
+  하나 · 166,015 → 207,993 바이트). 그래서 `findTranscript`의 *매치가 정확히 1개* 계약이 안 깨진다 —
+  홈 cwd 슬러그 아래 같은 이름의 파일이 하나 더 생기면 그 함수가 **null**을 돌려줘 보는 것까지
+  같이 죽었을 것이다. 그 자리를 실행으로도 확인했다(cwd `/Users/hsol/Projects/dira`에서
+  `findTranscript("557cb391-…")` → `…/-Users-hsol-Projects-dira--dira-worktrees-w1/557cb391-….jsonl`).
+
+**안 갔지만 남긴다 — 안 됐으면 워커 세션은 읽기 전용으로 떨어진다**(답지 1-(a)). 좌측에서 골라
+**보는 것**까지는 무조건 섰고(`findTranscript`가 session id로 도는 것은 cwd와 무관하다 — 위
+마지막 항이 그것을 따로 확인했다), 입력칸만 잠겼을 것이다.
 
 ##### 안 만드는 것
 
@@ -6486,7 +6516,7 @@ lib이 만드는 것은 **판정 1**(소비)이라 입력이 겹치지 않는다
 
 | P77 | 홈 좌측에 대화·워커 세션 히스토리 — 요구 왕복 + 스펙 확정 `48b13597` | pm | 답 `46c02cf7` | 완료 — §7에 §좌측 패널 신설(패널 자리 · 워커 세션 목록 · `current` 한 칸 · 홈 권한으로 잇기 · 실측 갈래 · 안 만드는 것). 답 = **1(b) · 2(c) · 3(c)** |
 | P77 | 비주얼 §24 — 좌측 패널 · popover 걷기 `01e5293b` | designer | — | 대기 |
-| P77 | 워커 세션 목록 파생 + `--resume` 교차 cwd 실측 `b96e7996` | developer | — | 대기 |
+| P77 | 워커 세션 목록 파생 + `--resume` 교차 cwd 실측 `b96e7996` | developer | — | 완료 — `home-agent.ts`에 `workerSessions(tickets)`(새 파일 0개) + `node --test`. **실측: 된다**(§7 §`--resume`은 다른 cwd에서 돈다) — 읽기 전용 폴백은 안 갔다 |
 | P77 | 좌측 패널 그릇 · 대화 목록 이동 `d5c8ca71` | developer | `01e5293b` | 대기 |
 | P77 | 워커 세션 그룹 결선 — 열기 · 이어 묻기 `e85e8186` | developer | `b96e7996` · `d5c8ca71` | 대기 |
 | P77 | QA — 두 목록 · 이어 대화 · 권한이 새지 않는가 `0a284011` | qa | `e85e8186` | 대기 |
