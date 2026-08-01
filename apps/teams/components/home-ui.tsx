@@ -4,9 +4,9 @@
  *
  *  **새 그릇을 하나도 안 짓는다**(§24). 말풍선 스레드는 §13(`MessageScroller*` · `Message` ·
  *  `Bubble variant="outline"`), 입력 form은 §21 그대로(`input-group` · `⌘↵` · `aria-disabled`),
- *  진행 표식은 §18 ④의 클래스 목록, 실패는 §6 3요소, 대화 목록은 `popover` + `button` 목록이다
- *  (§12 · §23이 이미 쓰는 관용구). 이 파일이 정하는 것은 **무엇을 어디에 쓰느냐**뿐이고
- *  새 컴포넌트 · 새 토큰은 0이다.
+ *  진행 표식은 §18 ④의 클래스 목록, 실패는 §6 3요소, 대화 목록은 **좌측 패널의 `button` 목록**
+ *  이다(`div` 둘 + `button` — `01e5293b`이 팝오버를 걷었다). 이 파일이 정하는 것은
+ *  **무엇을 어디에 쓰느냐**뿐이고 새 컴포넌트 · 새 토큰은 0이다.
  *
  *  **대화가 여럿이다**(§7 — 요구 `c5d22429`). 목록도 `current`도 서버 파일에 있고
  *  (`home-sessions.json`), 화면은 **폴링 응답 하나**로 그 둘과 스레드를 같이 받는다.
@@ -33,7 +33,7 @@
  *  튀어야** 해서다 — 자동 스크롤이 바닥을 물고 있는 화면에서 24px 점프가 가장 나쁘다(§13). */
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowDown, Check, ChevronsUpDown, Copy, Send, TriangleAlert } from "lucide-react";
+import { ArrowDown, Check, Copy, Send, TriangleAlert } from "lucide-react";
 import {
   askHome,
   clearHome,
@@ -68,7 +68,6 @@ import {
   MessageScrollerProvider,
   MessageScrollerViewport,
 } from "@/components/ui/message-scroller";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { Answer, AnswerReason, Home, HomeChunk, Turn } from "@/lib/home-agent";
 import { formatCombo, matchCombo } from "@/lib/keymap";
 import { chatRows } from "@/lib/urls";
@@ -83,7 +82,9 @@ const EXAMPLES = [
   "이 프로젝트의 프로토콜을 요약해 달라",
 ];
 
-/** 대화 목록 트리거와 `새 대화`가 **같은 문구 · 같은 잠금**을 쓴다(§24). 종전 문구
+/** 패널의 줄 전부와 `새 대화`가 **같은 문구 · 같은 잠금**을 쓴다(§24 §잠금 두 자리 ① —
+ *  팝오버 시절에는 트리거 하나였고 지금은 줄 전부다. 같은 사실이 자리 수만큼 늘었을 뿐이라
+ *  문구를 새로 쓰지 않는다). 종전 문구
  *  (`답이 도는 동안에는 비울 수 없습니다`)는 비우는 버튼의 말이었고, 지금은 비우지 않는다.
  *  전환을 막는 이유는 §7이다 — 대화를 갈아 끼우면 흐르던 글이 화면에서 사라지는데,
  *  한 프로젝트에 한 질문이라 옮겨 간 대화에서 물을 수도 없다. 푸는 열쇠가 `중지`다. */
@@ -275,26 +276,15 @@ export function HomeUI({ project, initial }: { project: string; initial: HomeChu
     // (`min-height:auto`)이 내용만큼 늘어나 `main`이 도로 스크롤하고 폼이 화면 밖으로 밀린다.
     <div className="flex min-h-0 flex-1 flex-col gap-6">
       {/* `h1` 행 — **높이 고정 한 행**이다(§24 세로 배치 표). `h-8`을 못박는 이유가 둘: 이 행의
-          컨트롤 둘이 0건에서 같이 사라지므로 높이를 내용에 맡기면 첫 질문에 행이 자라 스레드가
-          통째로 밀리고, `size="sm"`은 이 레포에서 `h-7`(28)이라 버튼이 32를 못 정한다.
-          `gap-3`은 `h1`과 목록 트리거 사이다 — `새 대화`는 `ml-auto`로 오른쪽 끝이다(§4-3). */}
+          컨트롤이 0건에서 사라지므로 높이를 내용에 맡기면 첫 질문에 행이 자라 아래가 통째로
+          밀리고, `size="sm"`은 이 레포에서 `h-7`(28)이라 버튼이 32를 못 정한다.
+          **자식이 셋에서 둘로 줄었다**(`01e5293b` — 대화 목록 트리거가 좌측 패널로 내려갔다).
+          `gap-3`은 이제 자식 둘 사이에 안 쓰인다(`ml-auto`가 그 사이를 다 먹는다) — 클래스를
+          빼지 않는 근거는 §24 세로 배치 표에 있다. `새 대화`는 `ml-auto`로 오른쪽 끝이다(§4-3). */}
       <div className="flex h-8 shrink-0 items-center gap-3">
         <h1 className="text-lg font-semibold">홈</h1>
-        {/* **지금 보는 대화의 이름**이다 — 액션이 아니라 `h1`의 부제고, 그래서 오른쪽 묶음이
-            아니라 여기다(§24). 대화 0건이면 안 그린다: 열 목록이 없다. 1건에서는 그린다 —
-            트리거의 일이 전환만이 아니라 **표시**이고, 표시는 1건에서도 참이다(§4-1과 같다). */}
-        {home.conversations.length > 0 && (
-          <ChatList
-            home={home}
-            busy={busy}
-            onPick={async (id) => {
-              setHome((now) => ({ ...now, current: id })); // 트리거만 낙관적으로(§24 로딩 항)
-              apply(await switchHome(project, id));
-            }}
-          />
-        )}
         {/* **여는 버튼이다**(§24 개정 — 확인이 걷혔다). 지금 대화의 턴이 0건이면 안 그린다:
-            이미 빈 대화에 앉아 있는데 빈 대화를 또 열 이유가 없다. 도는 중에는 목록 트리거와
+            이미 빈 대화에 앉아 있는데 빈 대화를 또 열 이유가 없다. 도는 중에는 패널 줄 전부와
             같은 잠금이다 — `disabled`가 아닌 이유는 §21과 같다(왜 못 누르는지 말할 자리). */}
         {turns.length > 0 && (
           <Button
@@ -313,222 +303,249 @@ export function HomeUI({ project, initial }: { project: string; initial: HomeChu
         )}
       </div>
 
-      {/* 대화 컬럼 — 남은 높이 전부다. **자식이 언제나 셋이고 순서가 안 바뀐다**(§24):
-          [0건: 인사 | 그 외: 스레드] · [폼] · [0건: 예시 4개 | 그 외: null].
-          조건이 거짓인 자리를 배열에서 빼지 않는 이유는 폼이다 — 같은 인덱스에 남아야 React가
-          다시 마운트하지 않고, 그래야 첫 질문을 보낸 순간 포커스와 IME 상태가 안 날아간다(§21).
-          0건일 때 `justify-center` 한 클래스가 그 묶음을 세로 가운데로 올린다(§24 온보딩 항) —
-          자리 이동은 이 클래스가 사라지는 것으로 끝난다. */}
-      <div className={cn("flex min-h-0 flex-1 flex-col gap-2", onboarding && "justify-center")}>
-        {onboarding ? (
-          /* 대화 0건 = 이 화면의 온보딩이다(§6 빈 상태 규칙의 셋째 예외 — 한 줄로는 이 에이전트에게
-             무엇을 물어볼 수 있는지를 못 알려준다). 스레드 상자는 아예 안 그린다 — 빈 상자가 서는
-             순간이 없다(§13). 폼은 이 묶음의 **가운데 줄**이다: 온보딩이 폼을 대신하지 않는다. */
-          <div className="space-y-2">
-            <h2 className="text-sm font-medium">이 프로젝트에 대해 묻는다</h2>
-            <p className="text-sm text-muted-foreground">
-              티켓 · 워커 · 프로토콜 · repo를 읽고 답합니다. 프로젝트를 고치지는 않습니다.
-            </p>
-          </div>
-        ) : (
-          /* 스레드(§13 그대로). **높이가 확정이라 `flex-1`이다**(§24) — §13이 `max-h`를 못박은
-             근거는 부모가 `Card`·`DialogContent`라 높이가 auto라는 것이었고, 여기 부모 사슬은
-             뷰포트 → `main` → 페이지 → 대화 컬럼으로 끝까지 flex다. 종전 `max-h-[32rem]`은 §24
-             개정이 취소했다(홈은 이제 상자가 아니라 화면이다 — §9의 512는 그 절에서 무수정).
-             스크롤하는 요소는 여전히 Viewport 하나고, 화면에서 스크롤하는 것도 그것 하나다. */
-          <MessageScrollerProvider autoScroll>
-            <MessageScroller className="flex-1">
-              <MessageScrollerViewport aria-label="대화" className="flex-1">
-                <MessageScrollerContent>
-                  {turns.map((t, i) => (
-                    <MessageScrollerItem key={t.key} messageId={t.key}>
-                      {t.role === "question" ? (
-                        /* 사람 질문 — §13 말풍선 그대로(`outline` · `align="end"`). 헤더는 말풍선
-                           **밖 · 위**이고(§13) 라벨만 `sr-only`로 내려간다: 클래스 하나로 끝나서
-                           새 요소가 아니다. 아바타는 없다(§24가 한 줄로 거절했다 — 페르소나 색과
-                           나란히 서면 이 에이전트가 페르소나로 읽힌다). */
-                        <Message align="end">
-                          <MessageContent>
-                            {/* `m-0`이 `sr-only`의 `margin:-1px`을 지운다(`462d90be`). 그 유틸은
-                                절대배치 1×1px 상자를 만드는데, 여기선 `align="end"` 탓에 그 상자가
-                                **오른쪽 끝에** 서서 음수 margin만큼 1px 넘쳤다. 안 보이는 라벨
-                                하나가 스레드 전체에 가로 스크롤바를 세웠다(1440×900 실측) */}
-                            <MessageHeader className="sr-only m-0">질문</MessageHeader>
-                            <Bubble variant="outline" align="end">
-                              <BubbleContent>
-                                <Markdown text={t.text} />
-                              </BubbleContent>
-                            </Bubble>
-                          </MessageContent>
-                        </Message>
-                      ) : (
-                        /* 에이전트 답 — **전폭 산문 + 그 아래 띠 하나**(§24). `Bubble`도
-                           `Message`도 안 쓴다: 저 한 벌이 주는 것은 좌우 배치 기계장치고 전폭에는
-                           쓸 데가 없다. 띠가 이 항목 **안**에 있는 이유는 §24 그대로다 — 도는
-                           답이 언제나 마지막이라 보이는 자리가 같고, 답이 끝날 때 높이가 안 튄다. */
-                        <>
-                          <Prose text={t.text} />
-                          <Band>
-                            {/* 중지된 답 — **실패가 아니다**(§7). `<StatusBadge>`도 색도 없다:
-                                이건 큐의 상태가 아니라 답 하나가 끝난 방식이라 13번째 상태를
-                                만들지 않는다(§24). 자리는 진행 표식 문구가 앉던 그 자리다. */}
-                            {t.stopped && <span className="text-xs text-muted-foreground">중지됨</span>}
-                            <CopyAnswer text={t.text} />
-                            {/* **답을 갈아 끼우지 않는다**(§7) — 질문·답이 스레드 끝에 한 벌 더
-                                붙는다. 트랜스크립트가 정본이라 거기서 줄을 지울 수 없다.
-                                도는 중에 눌러도 여기서 막지 않는다: 서버가 §24 실패 ④로
-                                판정하고 그 Alert가 왜 안 갔는지를 말한다(화면의 잠금 셋에
-                                네 번째를 더하면 끝난 답 20개의 버튼이 같이 흐려진다).
-                                **`ghost`다**(§24 개정 ③ — `복사`와 같은 근거. 그 함수 주석). */}
-                            <Button
-                              variant="ghost"
-                              size="xs"
-                              onClick={() => void run(questionFor(turns, i))}
-                            >
-                              다시 답하기
-                            </Button>
-                          </Band>
-                        </>
-                      )}
-                    </MessageScrollerItem>
-                  ))}
-                  {/* 도는 답 — **트랜스크립트에 아직 없는 한 항목**이다. 안은 끝난 답과 같은
-                      모양이고(산문 + 띠) 띠 안만 진행 표식(§18 ④) + `중지`로 갈린다. 항목이
-                      하나라 도착한 조각이 **같은 산문 블록**에 이어 붙는다 — 문단마다 항목을
-                      쪼개면 스크롤 위치가 매 폴링마다 튄다(§24).
-                      **상한 5분을 적는 유일한 자리다** — 초를 세는 시계를 두지 않는다. */}
-                  {busy && (
-                    <MessageScrollerItem key="running" messageId="running">
-                      {/* 첫 글자 전에는 산문을 **안 그린다**(§24 흐름 항). 빈 `partial`을 넘기면
-                          §10이 `(내용 없음)`을 내는데, 여기만 *끝난 빈 것*이 아니라 *아직 안 온 것*
-                          이라 그 문장이 거짓이다(실측 7.6초 동안 읽힌다). 로딩을 말하는 것은
-                          아래 띠고, §10도 끝난 답의 렌더도 그대로 둔다. */}
-                      {partial !== "" && <Prose text={partial} />}
-                      <Band>
-                        <span
-                          aria-hidden
-                          className="mx-1 size-2 shrink-0 animate-wip-pulse rounded-full bg-muted-foreground motion-reduce:animate-none"
-                        />
-                        답하는 중 · 최대 5분
-                        {/* `ml-auto`가 없다 — 이 화면의 띠는 1440에서 ≈1392px이라 오른쪽 끝으로
-                            밀면 버튼이 자기가 멈추는 글자에서 1200px 떨어져 홀로 뜬다
-                            (§4-3 예외 2번 — 조작 대상 옆에 있는 것이 위치의 뜻이다). */}
-                        <Button
-                          variant="outline"
-                          size="xs"
-                          aria-disabled={stopping}
-                          className="aria-disabled:opacity-50"
-                          onClick={() => void stop()}
-                        >
-                          중지
-                        </Button>
-                      </Band>
-                    </MessageScrollerItem>
-                  )}
-                </MessageScrollerContent>
-              </MessageScrollerViewport>
-              {/* 아래가 가려졌을 때만 뜬다(`data-active`). 라벨을 `sr-only`로 숨기지 않는다(§13) */}
-              <MessageScrollerButton>
-                <ArrowDown aria-hidden />
-                최신으로
-              </MessageScrollerButton>
-            </MessageScroller>
-          </MessageScrollerProvider>
+      {/* 2단 행(§24 세로 배치 표 · §좌측 패널) — `h1` 행 아래 남은 높이를 통째로 받는다.
+          `gap-8`(32)이 세로 리듬 `gap-6`(24)보다 큰 것이 두 단을 한 격자로 안 읽히게 하고,
+          그래서 §11처럼 구분선을 안 넣는다. */}
+      <div className="flex min-h-0 flex-1 gap-8">
+        {/* 좌측 패널 — 지금은 `대화` 그룹 하나다(`워커 세션` 그룹은 `e85e8186`). 대화 0건이면
+            **패널째 안 그린다**(§24 §0건 — 두 그룹이 다 0건인 갈래 ①이고, 그 자리에 서는 것이
+            온보딩이다). 1건에서는 그린다: 패널의 일이 여는 것만이 아니라 **지금 보는 것의 이름**
+            이고, 그 표시는 1건에서도 참이다(§4-1과 같다). */}
+        {home.conversations.length > 0 && (
+          <SidePanel
+            home={home}
+            busy={busy}
+            onPick={async (id) => {
+              setHome((now) => ({ ...now, current: id })); // 체크만 낙관적으로(§24 로딩 항)
+              apply(await switchHome(project, id));
+            }}
+          />
         )}
 
-        {/* §21의 세 번째 모드다(§24) — 그릇 · 자람 · `⌘↵` · 포커스 · `aria-disabled` 판정은
-            그 절 그대로고 갈리는 것은 이름 둘(`질문` · `이 프로젝트에 대해 묻기`)뿐이다.
-            손잡이 줄 왼쪽은 **빈다**: `보냈습니다 · 아래 스트림에 뜹니다`는 여기서 틀린 말이고
-            (도착을 말하는 것은 말풍선이다) 상시 문구를 놓을 것도 없다(생기는 파일이 없다).
-            **`shrink-0`** — 스레드가 아무리 길어도 이 자리를 잃지 않는다(§24 세로 배치). */}
-        <form
-          className="shrink-0 space-y-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void send();
-          }}
+        {/* 대화 컬럼 — 남은 폭·높이 전부다. **자식이 언제나 셋이고 순서가 안 바뀐다**(§24):
+            [0건: 인사 | 그 외: 스레드] · [폼] · [0건: 예시 4개 | 그 외: null].
+            조건이 거짓인 자리를 배열에서 빼지 않는 이유는 폼이다 — 같은 인덱스에 남아야 React가
+            다시 마운트하지 않고, 그래야 첫 질문을 보낸 순간 포커스와 IME 상태가 안 날아간다(§21).
+            0건일 때 `justify-center` 한 클래스가 그 묶음을 세로 가운데로 올린다(§24 온보딩 항) —
+            자리 이동은 이 클래스가 사라지는 것으로 끝난다. **`min-w-0`이 없으면** flex 자식
+            기본값(`min-width:auto`)이라 답 안의 펜스·표 한 줄이 이 단을 밀어 패널을 찌그러뜨린다
+            (세로에서 `min-h-0`이 하는 일을 가로에서 이 클래스가 한다). */}
+        <div
+          className={cn(
+            "flex min-h-0 min-w-0 flex-1 flex-col gap-2",
+            onboarding && "justify-center",
+          )}
         >
-          <InputGroup>
-            <InputGroupTextarea
-              ref={input}
-              aria-label="질문"
-              placeholder="이 프로젝트에 대해 묻기"
-              className="max-h-32"
-              value={text}
-              // **도는 동안에도 편집 가능한 채로 둔다**(§24): `disabled`면 `:has(:disabled)`가
-              // 그릇을 통째로 흐려 placeholder가 §21이 금지한 1.85로 떨어지고, 답이 5분까지
-              // 걸리는 화면에서 다음 질문을 미리 쓸 수 없게 된다. 못 보내는 실효는 `send()`의
-              // 첫 줄이고, 서버가 한 번 더 판정한다(§24 실패 ④).
-              onChange={(e) => setText(e.target.value)}
-              onPaste={att.onPaste}
-              // `⌘↵`로 보낸다. `Enter`는 줄바꿈이다(§21). `matchCombo`가 `isComposing`을 막아
-              // 받침을 확정하는 `Enter`에 글이 날아가지 않는다.
-              onKeyDown={(e) => {
-                if (matchCombo(e.nativeEvent, sendCombo)) {
-                  e.preventDefault();
-                  void send();
-                }
-              }}
-            />
-            {/* 칩 줄 — 손잡이 addon **위**다(§27 세로 순서). 폭이 1392라 10개가 2줄(62)이고
-                그 62는 여유가 아니라 **스레드**에서 나온다(§27 §24 항 — 스레드가 `flex-1`이다). */}
-            <AttachmentChips att={att} />
-            <InputGroupAddon align="block-end">
-              {/* 손잡이가 줄의 맨 왼쪽이다(§27). 이 줄에는 보조 문구가 없어 셋뿐이다:
-                  `첨부 → ml-auto ⌘↵ → 보내기`. 도는 동안에도 안 잠근다 — 입력칸과 같은
-                  판단이다(§24: 다음 질문을 미리 쓸 수 있다). */}
-              <AttachmentButton att={att} />
-              {/* `bg-muted`를 깔지 않는다 — `--muted-foreground`가 라이트 4.34로 AA 미달이다(§21).
-                  `ml-auto`가 여기 걸려서 1차 버튼이 줄의 가장 오른쪽이다(§4-3). */}
-              <kbd className="ml-auto border px-1 font-mono text-xs text-muted-foreground">
-                {formatCombo(sendCombo)}
-              </kbd>
-              {/* **`disabled`가 아니라 `aria-disabled`다**(§21 실측 — `InputGroup`의 흐림이
-                  `:has(:disabled)`라 버튼 하나만 잠가도 그릇이 통째로 흐려진다). */}
-              <InputGroupButton
-                type="submit"
-                variant="default"
-                size="xs"
-                aria-disabled={busy || empty}
-                className="aria-disabled:opacity-50"
-              >
-                <Send aria-hidden />
-                {busy ? "보내는 중…" : "보내기"}
-              </InputGroupButton>
-            </InputGroupAddon>
-          </InputGroup>
+          {onboarding ? (
+            /* 대화 0건 = 이 화면의 온보딩이다(§6 빈 상태 규칙의 셋째 예외 — 한 줄로는 이 에이전트에게
+               무엇을 물어볼 수 있는지를 못 알려준다). 스레드 상자는 아예 안 그린다 — 빈 상자가 서는
+               순간이 없다(§13). 폼은 이 묶음의 **가운데 줄**이다: 온보딩이 폼을 대신하지 않는다. */
+            <div className="space-y-2">
+              <h2 className="text-sm font-medium">이 프로젝트에 대해 묻는다</h2>
+              <p className="text-sm text-muted-foreground">
+                티켓 · 워커 · 프로토콜 · repo를 읽고 답합니다. 프로젝트를 고치지는 않습니다.
+              </p>
+            </div>
+          ) : (
+            /* 스레드(§13 그대로). **높이가 확정이라 `flex-1`이다**(§24) — §13이 `max-h`를 못박은
+               근거는 부모가 `Card`·`DialogContent`라 높이가 auto라는 것이었고, 여기 부모 사슬은
+               뷰포트 → `main` → 페이지 → 대화 컬럼으로 끝까지 flex다. 종전 `max-h-[32rem]`은 §24
+               개정이 취소했다(홈은 이제 상자가 아니라 화면이다 — §9의 512는 그 절에서 무수정).
+               스크롤하는 요소는 여전히 Viewport 하나고, 화면에서 스크롤하는 것도 그것 하나다. */
+            <MessageScrollerProvider autoScroll>
+              <MessageScroller className="flex-1">
+                <MessageScrollerViewport aria-label="대화" className="flex-1">
+                  <MessageScrollerContent>
+                    {turns.map((t, i) => (
+                      <MessageScrollerItem key={t.key} messageId={t.key}>
+                        {t.role === "question" ? (
+                          /* 사람 질문 — §13 말풍선 그대로(`outline` · `align="end"`). 헤더는 말풍선
+                             **밖 · 위**이고(§13) 라벨만 `sr-only`로 내려간다: 클래스 하나로 끝나서
+                             새 요소가 아니다. 아바타는 없다(§24가 한 줄로 거절했다 — 페르소나 색과
+                             나란히 서면 이 에이전트가 페르소나로 읽힌다). */
+                          <Message align="end">
+                            <MessageContent>
+                              {/* `m-0`이 `sr-only`의 `margin:-1px`을 지운다(`462d90be`). 그 유틸은
+                                  절대배치 1×1px 상자를 만드는데, 여기선 `align="end"` 탓에 그 상자가
+                                  **오른쪽 끝에** 서서 음수 margin만큼 1px 넘쳤다. 안 보이는 라벨
+                                  하나가 스레드 전체에 가로 스크롤바를 세웠다(1440×900 실측) */}
+                              <MessageHeader className="sr-only m-0">질문</MessageHeader>
+                              <Bubble variant="outline" align="end">
+                                <BubbleContent>
+                                  <Markdown text={t.text} />
+                                </BubbleContent>
+                              </Bubble>
+                            </MessageContent>
+                          </Message>
+                        ) : (
+                          /* 에이전트 답 — **전폭 산문 + 그 아래 띠 하나**(§24). `Bubble`도
+                             `Message`도 안 쓴다: 저 한 벌이 주는 것은 좌우 배치 기계장치고 전폭에는
+                             쓸 데가 없다. 띠가 이 항목 **안**에 있는 이유는 §24 그대로다 — 도는
+                             답이 언제나 마지막이라 보이는 자리가 같고, 답이 끝날 때 높이가 안 튄다. */
+                          <>
+                            <Prose text={t.text} />
+                            <Band>
+                              {/* 중지된 답 — **실패가 아니다**(§7). `<StatusBadge>`도 색도 없다:
+                                  이건 큐의 상태가 아니라 답 하나가 끝난 방식이라 13번째 상태를
+                                  만들지 않는다(§24). 자리는 진행 표식 문구가 앉던 그 자리다. */}
+                              {t.stopped && <span className="text-xs text-muted-foreground">중지됨</span>}
+                              <CopyAnswer text={t.text} />
+                              {/* **답을 갈아 끼우지 않는다**(§7) — 질문·답이 스레드 끝에 한 벌 더
+                                  붙는다. 트랜스크립트가 정본이라 거기서 줄을 지울 수 없다.
+                                  도는 중에 눌러도 여기서 막지 않는다: 서버가 §24 실패 ④로
+                                  판정하고 그 Alert가 왜 안 갔는지를 말한다(화면의 잠금 셋에
+                                  네 번째를 더하면 끝난 답 20개의 버튼이 같이 흐려진다).
+                                  **`ghost`다**(§24 개정 ③ — `복사`와 같은 근거. 그 함수 주석). */}
+                              <Button
+                                variant="ghost"
+                                size="xs"
+                                onClick={() => void run(questionFor(turns, i))}
+                              >
+                                다시 답하기
+                              </Button>
+                            </Band>
+                          </>
+                        )}
+                      </MessageScrollerItem>
+                    ))}
+                    {/* 도는 답 — **트랜스크립트에 아직 없는 한 항목**이다. 안은 끝난 답과 같은
+                        모양이고(산문 + 띠) 띠 안만 진행 표식(§18 ④) + `중지`로 갈린다. 항목이
+                        하나라 도착한 조각이 **같은 산문 블록**에 이어 붙는다 — 문단마다 항목을
+                        쪼개면 스크롤 위치가 매 폴링마다 튄다(§24).
+                        **상한 5분을 적는 유일한 자리다** — 초를 세는 시계를 두지 않는다. */}
+                    {busy && (
+                      <MessageScrollerItem key="running" messageId="running">
+                        {/* 첫 글자 전에는 산문을 **안 그린다**(§24 흐름 항). 빈 `partial`을 넘기면
+                            §10이 `(내용 없음)`을 내는데, 여기만 *끝난 빈 것*이 아니라 *아직 안 온 것*
+                            이라 그 문장이 거짓이다(실측 7.6초 동안 읽힌다). 로딩을 말하는 것은
+                            아래 띠고, §10도 끝난 답의 렌더도 그대로 둔다. */}
+                        {partial !== "" && <Prose text={partial} />}
+                        <Band>
+                          <span
+                            aria-hidden
+                            className="mx-1 size-2 shrink-0 animate-wip-pulse rounded-full bg-muted-foreground motion-reduce:animate-none"
+                          />
+                          답하는 중 · 최대 5분
+                          {/* `ml-auto`가 없다 — 이 화면의 띠는 1440에서 ≈1392px이라 오른쪽 끝으로
+                              밀면 버튼이 자기가 멈추는 글자에서 1200px 떨어져 홀로 뜬다
+                              (§4-3 예외 2번 — 조작 대상 옆에 있는 것이 위치의 뜻이다). */}
+                          <Button
+                            variant="outline"
+                            size="xs"
+                            aria-disabled={stopping}
+                            className="aria-disabled:opacity-50"
+                            onClick={() => void stop()}
+                          >
+                            중지
+                          </Button>
+                        </Band>
+                      </MessageScrollerItem>
+                    )}
+                  </MessageScrollerContent>
+                </MessageScrollerViewport>
+                {/* 아래가 가려졌을 때만 뜬다(`data-active`). 라벨을 `sr-only`로 숨기지 않는다(§13) */}
+                <MessageScrollerButton>
+                  <ArrowDown aria-hidden />
+                  최신으로
+                </MessageScrollerButton>
+              </MessageScroller>
+            </MessageScrollerProvider>
+          )}
 
-          {/* 첨부 실패 사유(§27) — 그룹 **밖** · 폼 안 한 줄이다. 아래 `<Failure>`와 겹쳐 설 수
-              있어서 Alert를 안 쓴다. */}
-          <AttachmentProblems att={att} />
-
-          {/* 실패는 사유를 삼키지 않는다(§6 3요소 — 제목 · mono 원문 · 다음 행동). 자리는 §21
-              그대로 입력칸 아래 · 폼 안이다. ①만 `<CopyCommand>`를 단다: 사람이 실행해야 하는
-              명령이 있는 사유가 그것뿐이고, 나머지는 다음 행동이 문장 하나다. */}
-          {fail && <Failure fail={fail} />}
-        </form>
-
-        {/* 셋째 자리 — 0건이면 예시 4개, 아니면 `null`이다. **자리를 배열에서 빼지 않는다**(위). */}
-        {onboarding ? (
-          <div className="flex flex-wrap gap-2">
-            {EXAMPLES.map((q) => (
-              // **제출하지 않는다**(§24): ① 한 질문이 프로세스 하나고 상한이 5분이다 — 클릭 한 번에
-              // 5분짜리를 시작시키지 않는다. ② 예시는 문장을 고쳐 쓰라고 있다(`w2`가 그 큐에 없을 수
-              // 있다). 채워진 뒤 손잡이의 `보내기`가 곧 두 번째 클릭이다.
-              <Button
-                key={q}
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setText(q);
-                  input.current?.focus();
+          {/* §21의 세 번째 모드다(§24) — 그릇 · 자람 · `⌘↵` · 포커스 · `aria-disabled` 판정은
+              그 절 그대로고 갈리는 것은 이름 둘(`질문` · `이 프로젝트에 대해 묻기`)뿐이다.
+              손잡이 줄 왼쪽은 **빈다**: `보냈습니다 · 아래 스트림에 뜹니다`는 여기서 틀린 말이고
+              (도착을 말하는 것은 말풍선이다) 상시 문구를 놓을 것도 없다(생기는 파일이 없다).
+              **`shrink-0`** — 스레드가 아무리 길어도 이 자리를 잃지 않는다(§24 세로 배치). */}
+          <form
+            className="shrink-0 space-y-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void send();
+            }}
+          >
+            <InputGroup>
+              <InputGroupTextarea
+                ref={input}
+                aria-label="질문"
+                placeholder="이 프로젝트에 대해 묻기"
+                className="max-h-32"
+                value={text}
+                // **도는 동안에도 편집 가능한 채로 둔다**(§24): `disabled`면 `:has(:disabled)`가
+                // 그릇을 통째로 흐려 placeholder가 §21이 금지한 1.85로 떨어지고, 답이 5분까지
+                // 걸리는 화면에서 다음 질문을 미리 쓸 수 없게 된다. 못 보내는 실효는 `send()`의
+                // 첫 줄이고, 서버가 한 번 더 판정한다(§24 실패 ④).
+                onChange={(e) => setText(e.target.value)}
+                onPaste={att.onPaste}
+                // `⌘↵`로 보낸다. `Enter`는 줄바꿈이다(§21). `matchCombo`가 `isComposing`을 막아
+                // 받침을 확정하는 `Enter`에 글이 날아가지 않는다.
+                onKeyDown={(e) => {
+                  if (matchCombo(e.nativeEvent, sendCombo)) {
+                    e.preventDefault();
+                    void send();
+                  }
                 }}
-              >
-                {q}
-              </Button>
-            ))}
-          </div>
-        ) : null}
+              />
+              {/* 칩 줄 — 손잡이 addon **위**다(§27 세로 순서). 폭이 1392라 10개가 2줄(62)이고
+                  그 62는 여유가 아니라 **스레드**에서 나온다(§27 §24 항 — 스레드가 `flex-1`이다). */}
+              <AttachmentChips att={att} />
+              <InputGroupAddon align="block-end">
+                {/* 손잡이가 줄의 맨 왼쪽이다(§27). 이 줄에는 보조 문구가 없어 셋뿐이다:
+                    `첨부 → ml-auto ⌘↵ → 보내기`. 도는 동안에도 안 잠근다 — 입력칸과 같은
+                    판단이다(§24: 다음 질문을 미리 쓸 수 있다). */}
+                <AttachmentButton att={att} />
+                {/* `bg-muted`를 깔지 않는다 — `--muted-foreground`가 라이트 4.34로 AA 미달이다(§21).
+                    `ml-auto`가 여기 걸려서 1차 버튼이 줄의 가장 오른쪽이다(§4-3). */}
+                <kbd className="ml-auto border px-1 font-mono text-xs text-muted-foreground">
+                  {formatCombo(sendCombo)}
+                </kbd>
+                {/* **`disabled`가 아니라 `aria-disabled`다**(§21 실측 — `InputGroup`의 흐림이
+                    `:has(:disabled)`라 버튼 하나만 잠가도 그릇이 통째로 흐려진다). */}
+                <InputGroupButton
+                  type="submit"
+                  variant="default"
+                  size="xs"
+                  aria-disabled={busy || empty}
+                  className="aria-disabled:opacity-50"
+                >
+                  <Send aria-hidden />
+                  {busy ? "보내는 중…" : "보내기"}
+                </InputGroupButton>
+              </InputGroupAddon>
+            </InputGroup>
+
+            {/* 첨부 실패 사유(§27) — 그룹 **밖** · 폼 안 한 줄이다. 아래 `<Failure>`와 겹쳐 설 수
+                있어서 Alert를 안 쓴다. */}
+            <AttachmentProblems att={att} />
+
+            {/* 실패는 사유를 삼키지 않는다(§6 3요소 — 제목 · mono 원문 · 다음 행동). 자리는 §21
+                그대로 입력칸 아래 · 폼 안이다. ①만 `<CopyCommand>`를 단다: 사람이 실행해야 하는
+                명령이 있는 사유가 그것뿐이고, 나머지는 다음 행동이 문장 하나다. */}
+            {fail && <Failure fail={fail} />}
+          </form>
+
+          {/* 셋째 자리 — 0건이면 예시 4개, 아니면 `null`이다. **자리를 배열에서 빼지 않는다**(위). */}
+          {onboarding ? (
+            <div className="flex flex-wrap gap-2">
+              {EXAMPLES.map((q) => (
+                // **제출하지 않는다**(§24): ① 한 질문이 프로세스 하나고 상한이 5분이다 — 클릭 한 번에
+                // 5분짜리를 시작시키지 않는다. ② 예시는 문장을 고쳐 쓰라고 있다(`w2`가 그 큐에 없을 수
+                // 있다). 채워진 뒤 손잡이의 `보내기`가 곧 두 번째 클릭이다.
+                <Button
+                  key={q}
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setText(q);
+                    input.current?.focus();
+                  }}
+                >
+                  {q}
+                </Button>
+              ))}
+            </div>
+          ) : null}
+        </div>
       </div>
     </div>
   );
@@ -634,20 +651,27 @@ function Failure({ fail }: { fail: Answer }) {
   );
 }
 
-/** 대화 목록 (§비주얼 §24 · §7 §대화가 여럿이다) — **`popover` 단독 + `button` 목록**이다.
+/** 좌측 패널 (§비주얼 §24 §좌측 패널 · §7 §좌측 패널) — **`div` 둘 + `button` 목록**이다.
  *
- *  **`command`를 안 쓴다: 그것이 검색이라서다.** `CommandInput`이 곧 검색칸인데 §7이 대화 검색을
- *  명시적으로 뺐고, 상한이 20이라 눈으로 훑으면 끝난다. 이 조합은 이 레포에 이미 두 번 선
- *  관용구다(§12 페르소나 색 스와치 · §23 워커 행 엔진 컨트롤). **새 shadcn 0.**
+ *  **팝오버가 걷혔다**(`01e5293b`, 요구 `48b13597`). 걷힌 것은 **자리와 그릇 둘뿐**이고 줄의
+ *  값은 한 자도 안 갈렸다 — `button` 목록 · 제목 `truncate` · §26 ④ 시각 서식 · 지금 것에
+ *  `Check` · 도는 동안 `aria-disabled` + 같은 `title`. 사유는 §7이다: 같은 목록이 두 자리에
+ *  서면 어느 쪽이 정본인지 화면이 말을 못 한다.
  *
- *  트리거 값은 §4-1 전환기의 것에서 **`h-8` 하나를 뺀 것**이고(`ghost sm` · `role="combobox"` ·
- *  `ChevronsUpDown`) 자리도 갈린다 — 헤더 오른쪽이 아니라 `h1` 옆이다. 같은 글리프가 오히려
- *  값이다: 이 앱에서 `ChevronsUpDown`은 *이 자리의 것을 다른 것으로 갈아 끼운다* 하나를 뜻하고
- *  큐와 대화가 그 둘이다.
+ *  **`sidebar`를 안 쓴다**(§5 미설치 표) — §4가 그것을 버린 근거(부수 컴포넌트 5개)가 그대로고
+ *  여기 필요한 것은 `div` 둘 + `button`이다. `scroll-area`도 안 쓴다(네이티브로 충분하다).
+ *  **`command`를 안 쓰는 근거는 팝오버 때보다 세졌다** — 그 그릇이 곧 검색칸인데 이제는 상시
+ *  패널이라 §7이 뺀 기능이 늘 화면에 서게 된다.
+ *
+ *  **스크롤은 패널 자신 하나다**(`overflow-y-auto`). 그룹마다 스크롤러를 두지 않는다 — 256px
+ *  안에 스크롤바가 둘이면 어느 쪽이 움직이는지 안 읽힌다(§24).
+ *
+ *  **`워커 세션` 그룹은 여기 없다** — `e85e8186`의 것이다. 그래서 지금 이 패널이 빠지는 조건은
+ *  `대화` 0건 하나이고, 그 판정은 부르는 쪽에 있다(§24 §0건 — 그룹째 · 둘 다면 패널째).
  *
  *  **정렬 · 제목 · 시각은 `chatRows`가 정한다**(`lib/urls.ts` — JSX를 `pnpm test`가 못 읽는다).
  *  `session id`는 안 그린다: UUID 36자이고 사람이 이 화면에서 그 값을 쓸 일이 없다(§6과 같은 자). */
-function ChatList({
+function SidePanel({
   home,
   busy,
   onPick,
@@ -656,61 +680,47 @@ function ChatList({
   busy: boolean;
   onPick: (id: string) => void;
 }) {
-  const [open, setOpen] = useState(false);
   const rows = chatRows(home.conversations);
-  // 제목이 없는 대화는 목록에서와 **같은 낱말**로 선다 — `새 대화`(§24: 방금 누른 버튼의 이름이
-  // 그대로 그 줄의 정체다). `current`가 없는 상태(사람이 파일을 고쳤다)도 같은 자리에 온다.
-  const title = rows.find((r) => r.id === home.current)?.title ?? "새 대화";
   return (
-    // 도는 중에는 아예 안 열린다. 트리거는 `aria-disabled`라 포커스도 `title`도 남는다(§21).
-    <Popover open={open} onOpenChange={(v) => setOpen(v && !busy)}>
-      <PopoverTrigger
-        render={
-          <Button
-            variant="ghost"
-            size="sm"
-            role="combobox"
-            aria-expanded={open}
-            aria-label="대화 전환"
+    <div className="flex w-64 shrink-0 flex-col gap-4 overflow-y-auto">
+      <div>
+        {/* 그룹 머리 — §3 테이블 헤더 행의 세 값 그대로(`text-xs` · `font-medium` ·
+            `--muted-foreground`). `sticky`를 안 붙인다: 그룹이 둘뿐이고 줄 모양이 서로 달라
+            어느 그룹인지를 줄 자신이 말한다(§24). 붙이면 `bg-*` 한 면이 늘어 대비 표에 잴
+            조합이 생긴다. */}
+        <div className="px-2 text-xs font-medium text-muted-foreground">대화</div>
+        {rows.map((r) => (
+          // 줄 사이 간격이 0이다 — 줄이 자기 `py`로 리듬을 만든다(§3 테이블 행과 같은 처리).
+          // 도는 동안 잠긴다(§24 §잠금 두 자리 ①): `disabled`가 아니라 `aria-disabled`라
+          // 포커스도 `title`도 남는다(§21·§23 — 탭 순서에 죽은 정거장을 만들지 않는다).
+          <button
+            key={r.id}
+            type="button"
             aria-disabled={busy || undefined}
             title={busy ? LOCKED : undefined}
-            // `max-w-xs` = 320px ≈ `text-sm` 한글 22자. 제목이 첫 질문의 첫 줄이라 그 이상은
-            // 부제가 아니라 문단이다 — 자르고, 전문을 볼 자리는 그 대화의 첫 말풍선이다(§24).
-            // 높이는 `size="sm"`의 `h-7`(28) 그대로다 — **`h-8`을 안 건다**(§24 개정 ③).
-            // 그 32는 §4-4가 헤더(`h-12`) 안에서 인터랙티브 박스를 통일하려던 수인데 여기는
-            // 헤더가 아니라, 옆의 `새 대화`(28)와 한 행에서 4px 어긋났다. 행 높이 32는 이
-            // 버튼이 아니라 `h1` 행 자신의 `h-8`이 계속 정한다.
-            className="max-w-xs gap-2 aria-disabled:opacity-50 data-[popup-open]:bg-muted"
+            // `hover:bg-muted`와 보조 글자의 `group-hover:text-foreground`는 **짝이다** —
+            // `--muted-foreground` on `--muted`는 §21이 금지한 4.34다. 두 값 다 `ghost` 변종이
+            // 이 화면에서 이미 같이 쓰는 것이라(`복사`·`다시 답하기`) 새로 잴 조합이 0이다.
+            className="group flex w-full cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-left hover:bg-muted aria-disabled:opacity-50"
+            onClick={() => {
+              if (busy) return;
+              if (r.id !== home.current) onPick(r.id);
+            }}
           >
-            <span className="truncate text-sm">{title}</span>
-            <ChevronsUpDown aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
-          </Button>
-        }
-      />
-      {/* 폭도 높이도 §4-1이 이미 쓰는 수다 — 20줄 × 36이 320px 상자에서 스크롤한다 */}
-      <PopoverContent align="start" className="w-[28rem] p-1">
-        <div className="max-h-80 overflow-y-auto">
-          {rows.map((r) => (
-            <button
-              key={r.id}
-              type="button"
-              className="flex w-full cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-left hover:bg-accent"
-              onClick={() => {
-                setOpen(false);
-                if (r.id !== home.current) onPick(r.id);
-              }}
-            >
-              {/* 체크 칸은 줄마다 항상 있다(폭 16px 고정) — 지금 것에만 아이콘이 든다.
-                  여기 빈칸은 위·아래 줄의 체크와 짝을 이뤄 *이건 지금 것이 아니다*를 말한다(§24) */}
-              <span className="w-4 shrink-0">
-                {r.id === home.current && <Check aria-hidden className="size-4" />}
-              </span>
-              <span className="min-w-0 grow truncate text-sm">{r.title}</span>
-              <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{r.time}</span>
-            </button>
-          ))}
-        </div>
-      </PopoverContent>
-    </Popover>
+            {/* 체크 칸은 줄마다 항상 있다(폭 16px 고정) — 지금 것에만 아이콘이 든다.
+                여기 빈칸은 위·아래 줄의 체크와 짝을 이뤄 *이건 지금 것이 아니다*를 말한다(§24) */}
+            <span className="w-4 shrink-0">
+              {r.id === home.current && <Check aria-hidden className="size-4" />}
+            </span>
+            {/* 216px 안쪽이라 제목이 ≈12자에서 잘린다(§24 §폭) — 식별자가 아니라 첫 질문의
+                첫 줄이고, 전문을 볼 자리는 그 대화를 열었을 때의 첫 말풍선이다(§6 경로 예외). */}
+            <span className="min-w-0 grow truncate text-sm">{r.title}</span>
+            <span className="shrink-0 text-xs text-muted-foreground tabular-nums group-hover:text-foreground">
+              {r.time}
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
