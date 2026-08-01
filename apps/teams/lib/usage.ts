@@ -112,3 +112,18 @@ export async function listUsage(root: string, windowMs = DEFAULT_WINDOW_MS): Pro
 
   return { byWorker, total, running };
 }
+
+/** 읽히는 크기로 줄인다 — `0` · `995` · `1.2k` · `18k` · `2.6M`.
+ *
+ *  **화면 파일이 아니라 여기 있는 이유**: 워커 화면의 열과 §0-8 하단 status bar가 같은 수를
+ *  같은 모양으로 써야 한다. 자리마다 적으면 한쪽만 자릿수를 바꿔도 두 화면이 갈린다.
+ *
+ *  가수가 10 미만일 때만 소수 한 자리다(`1.2k`는 정보고 `18.4k`는 소음이다). 경계를 `999_500`에
+ *  두는 것은 반올림 뒤 `1000k`가 나오지 않게 하려는 것이다.
+ *
+ *  // ponytail: `M`이 천장이다. 창이 5시간이라 `G`가 나올 수 없다 — 나오면 한 줄 더 붙인다. */
+export function formatTokens(n: number): string {
+  if (n < 1000) return String(Math.round(n));
+  const [v, unit] = n < 999_500 ? [n / 1000, "k"] : [n / 1_000_000, "M"];
+  return (v < 10 ? v.toFixed(1) : String(Math.round(v))) + unit;
+}

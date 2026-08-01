@@ -85,6 +85,10 @@ apps/teams/
                         쓰기를 막는 유일한 조각**이다(이 머신 설정이 `bypassPermissions`라
                         `--allowed-tools`만으로는 안 막힌다 — A/B 실측). 대화 이력 저장소를
                         만들지 않는다: 렌더는 `transcript.ts`가 읽는 그 트랜스크립트다
+    usage.ts            워커별 토큰 소비 (§0-8 판정 1). `workers/logs/` 파일명 → 워커·시각,
+                        마지막 줄 JSON → 그 세션의 토큰(`lastJsonLine`을 `workers.ts`와 **같이 쓴다**).
+                        **아무 파일도 쓰지 않는다.** 큰 수를 줄이는 `formatTokens`도 여기다 —
+                        워커 화면의 열과 하단 status bar가 같은 모양을 써야 한다(자리마다 적으면 갈린다)
     utils.ts            shadcn cn() — 건드리지 않는다
     *.test.ts           node --test
   components/           손으로 만드는 컴포넌트 (DESIGN.md §5 커스텀)

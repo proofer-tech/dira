@@ -44,6 +44,11 @@ export type WorkerFailure = {
 export type Worker = {
   /** 파일 stem. 액션(생성·삭제·reap)이 가리키는 이름이다 */
   name: string;
+  /** 실효 `TICKET_NAME` (`tick.sh:37` — 대입이 없으면 파일 stem이다). **락·runner.log 줄·세션
+   *  로그 파일명(`tick.sh:264`)·`owner:`가 전부 이 이름이지 `name`이 아니다.** 밖으로 내는 이유는
+   *  §0-8 소비 토큰이 그 로그 파일명에서 워커를 읽기 때문이다 — `name`으로 붙이면 `TICKET_NAME`을
+   *  대입한 워커만 조용히 `0`으로 뜬다(`lastLog`가 이미 이 키로 붙는다) */
+  effName: string;
   path: string;
   status: WorkerStatus;
   /** crontab에 이 파일 경로가 있는가 */
@@ -957,6 +962,7 @@ export async function listWorkers(root: string, tickets: Ticket[] = []): Promise
     const inCron = cron.includes(nfc(full));
     out.push({
       name,
+      effName: eff,
       path: full,
       status: held ? (pid && alive(pid) ? "running" : "stale") : inCron ? "idle" : "stopped",
       cron: inCron,

@@ -28,6 +28,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { listTickets } from "@/lib/queue";
+import { formatTokens, listUsage } from "@/lib/usage";
 import { getProject, resolveConfig, usingDefault } from "@/lib/projects";
 import {
   cronUnregisterCmd,
@@ -89,6 +90,14 @@ export default async function Workers({ params }: { params: Promise<{ project: s
   // 파일이 없으면 항목 0개다 — 오류가 아니다(§4-1). 카드는 빈 상태 + `공통 항목 추가`로 뜬다.
   const common = await readCommonContext(project.root);
   const commonItems = common.ok ? common.items : [];
+  // 창 안(기본 5시간)에 끝난 세션들의 워커별 토큰 (§0-8 판정 1). 창 밖 로그는 열지도 않는다.
+  const usage = await listUsage(project.root);
+  // 소비의 키는 로그 파일명에서 온 **실효 `TICKET_NAME`**이고 표의 행은 파일 stem이다 — 그 둘이
+  // 갈린 워커만 조용히 `0`으로 뜨지 않게 여기서 한 번 옮긴다. NFC로 맞추는 것은 `parseLogName`이
+  // readdir이 준 NFD를 정규화하기 때문이다(같은 이유로 `queue.ts`도 정규화한다).
+  const tokens: Record<string, number> = Object.fromEntries(
+    workers.map((w) => [w.name, usage.byWorker[w.effName.normalize("NFC")] ?? 0]),
+  );
 
   const rows: WorkerRow[] = workers.map((w) => ({
     ...w,
@@ -114,7 +123,23 @@ export default async function Workers({ params }: { params: Promise<{ project: s
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-4">
-        <h1 className="text-lg font-semibold">워커</h1>
+        <div className="flex flex-wrap items-baseline gap-x-2">
+          <h1 className="text-lg font-semibold">워커</h1>
+          {/* 상단 합계 = 아래 열의 합(§0-8 그릇). 새 컴포넌트를 만들지 않는다 — 한 줄이다.
+              `진행중 n개`는 이 판정의 천장을 말한다: 토큰은 세션이 끝날 때 한 번 쓰이므로
+              도는 세션은 합계 밖에 있다. 침묵하면 사람이 "덜 썼다"로 읽는다(§0-8).
+              문구는 §0-8이 글자로 정한 것이다 — 실측과 어긋나는 부분은 `4a884d8d`로 PM에 올려
+              두었고, 답이 오면 이 문자열만 바뀐다(수는 어느 답이 와도 같다). */}
+          {rows.length > 0 && (
+            <p className="text-xs text-muted-foreground">
+              최근 5시간 토큰{" "}
+              <span className="font-mono tabular-nums text-foreground">
+                {formatTokens(usage.total)}
+              </span>
+              {usage.running > 0 && ` · 진행중 세션 ${usage.running}개는 끝난 뒤 반영됩니다`}
+            </p>
+          )}
+        </div>
         {rows.length > 0 && (
           <CreateWorkerButton
             projectId={id}
@@ -185,6 +210,8 @@ export default async function Workers({ params }: { params: Promise<{ project: s
               <TableHead className="h-9 px-3 text-xs">상태</TableHead>
               <TableHead className="h-9 px-3 text-xs">물고 있는 티켓</TableHead>
               <TableHead className="h-9 px-3 text-right text-xs">pid</TableHead>
+              {/* pid 옆이다 — 둘 다 오른쪽 정렬 숫자라 눈이 한 번에 훑는다 */}
+              <TableHead className="h-9 px-3 text-right text-xs">토큰(5시간)</TableHead>
               <TableHead className="h-9 px-3 text-xs">엔진</TableHead>
               <TableHead className="h-9 px-3 text-xs">마지막 활동</TableHead>
               <TableHead className="h-9 px-3 text-right text-xs">액션</TableHead>
@@ -222,6 +249,12 @@ export default async function Workers({ params }: { params: Promise<{ project: s
                 <TableCell className="px-3 py-0 text-right font-mono text-xs tabular-nums">
                   {w.lockPid ?? <span className="text-muted-foreground">—</span>}
                 </TableCell>
+                {/* `stopped`·`idle`도 창 안에 쓴 것이 있으면 값이 뜬다 — 소비는 지금 상태가
+                    아니라 과거의 사실이다(§0-8 그릇). **없으면 `—`가 아니라 `0`이다**: 이 창에
+                    안 썼다는 것은 확인된 사실이고, `—`는 모른다는 뜻으로 읽힌다 */}
+                <TableCell className="px-3 py-0 text-right font-mono text-xs tabular-nums">
+                  {formatTokens(tokens[w.name] ?? 0)}
+                </TableCell>
                 {/* 상한은 `td`가 아니라 안쪽 `span`에 건다 — auto table layout은 `td`의
                     max-width를 상한으로 지키지 않는다(§비주얼 §6). `w-px`는 이 컬럼을 남는
                     폭 배분에서 빼는 것이고(배분은 안쪽 max-width를 보지 않는다), 그래야
@@ -258,7 +291,7 @@ export default async function Workers({ params }: { params: Promise<{ project: s
                   자주 켜졌다 꺼지는 쪽을 아래 두어야 위 블록의 `CopyCommand`가 자리를 안 옮긴다. */}
               {(w.defects.length > 0 || w.lastFailure) && (
                 <TableRow className="hover:bg-transparent">
-                  <TableCell colSpan={7} className="px-3 py-2">
+                  <TableCell colSpan={8} className="px-3 py-2">
                     <div className="space-y-2">
                       {w.defects.length > 0 && (
                         // role은 status다 — 5초 폴링이 이 표를 다시 그리므로 alert면 재낭독 위험이다(§4-4)

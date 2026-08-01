@@ -3,7 +3,7 @@ import assert from "node:assert";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { DEFAULT_WINDOW_MS, listUsage, parseLogName } from "./usage.ts";
+import { DEFAULT_WINDOW_MS, formatTokens, listUsage, parseLogName } from "./usage.ts";
 
 /** 픽스처 큐 하나. 로그 디렉터리까지 만들어 준다. */
 function makeRoot(): string {
@@ -94,4 +94,16 @@ test("listUsage — 끝난 로그는 캐시하고 안 끝난 로그는 캐시하
 
   const second = await listUsage(root);
   assert.deepEqual(second, { byWorker: { w1: 100, w2: 5 }, total: 105, running: 0 });
+});
+
+test("formatTokens — 0은 빈칸이 아니고 큰 수는 읽히게 줄인다", () => {
+  assert.equal(formatTokens(0), "0"); // 화면이 `—` 대신 이걸 그린다
+  assert.equal(formatTokens(995), "995");
+  assert.equal(formatTokens(1_234), "1.2k");
+  assert.equal(formatTokens(18_432), "18k"); // 가수가 10 이상이면 소수는 소음이다
+  assert.equal(formatTokens(2_600_000), "2.6M");
+  assert.equal(formatTokens(215_000_000), "215M");
+  // 반올림 경계 — `1000k`가 나오면 안 된다
+  assert.equal(formatTokens(999_499), "999k");
+  assert.equal(formatTokens(999_500), "1.0M");
 });
