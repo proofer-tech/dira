@@ -66,7 +66,8 @@ export async function pollHomeAnswer(
   } catch {
     return {
       sessionId: null,
-      conversations: [], // 못 읽는 큐 = 열 목록도 없다. 트리거가 안 그려진다(§24 0건)
+      conversations: [], // 못 읽는 큐 = 열 목록도 없다. 패널이 안 그려진다(§24 0건)
+      workers: [], // 〃 — 워커 세션은 그 큐에서 파생된다(§7 좌측 패널)
       turns: [],
       offset: 0,
       reset: true,

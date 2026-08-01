@@ -34,7 +34,7 @@ const {
 } = await import("./home-agent.ts");
 type HomeChunk = Awaited<ReturnType<typeof pollHome>>;
 const { tailEvents } = await import("./transcript.ts");
-const { resolveConfig } = await import("./projects.ts");
+const { registryPath, resolveConfig } = await import("./projects.ts");
 const { listTickets } = await import("./queue.ts");
 const { listWorkers, lockPath } = await import("./workers.ts");
 
@@ -180,6 +180,7 @@ test("workerSessions — `.wip` 전부가 먼저, `.done`은 최근 10개. sessi
     worker: "w1",
     title: "도는 티켓",
     stem: "wip00001",
+    hash: "wip00001", // 링크는 `stem` · 화면 글자는 `hash`다(§식별자). 이 픽스처에서는 같다
     running: true,
   });
   // ③ `.done`은 mtime 내림차순이고 잘리는 것은 **오래된 쪽**이다 (11 … 2 · 0·1이 빠진다)
@@ -765,4 +766,95 @@ test("한 프로젝트에 한 질문 — 둘째는 기다리지 않고 거절되
   } finally {
     process.env.PATH = path0;
   }
+});
+
+/** 좌측 패널의 워커 세션 그룹 — **큐에서 파생되고 저장되지 않는다**(§7 좌측 패널 · `e85e8186`).
+ *
+ *  네 판정을 한 픽스처에 걸어 둔다. 넷이 한 테스트인 이유는 셋이 **같은 한 칸**(`current`)의
+ *  갈래여서다: 무엇을 가리키느냐에 따라 화면이 대화 · 워커 세션 · 온보딩으로 갈린다.
+ *
+ *  1. **`current`가 큐에서 사라진 세션이면 대화 0건과 같다** — 500도 실패 ⑤도 아니다.
+ *  2. **고르면 그 세션의 트랜스크립트가 그려지고 `conversations`에 줄이 안 생긴다**(답 2(c)).
+ *  3. **끝난 워커 세션에 이어 묻기는 `--resume <워커 sid>` + 홈 플래그 한 벌이다**(답 1(b)).
+ *  4. **도는 워커 세션에는 이어 묻지 못한다** — 화면의 잠금과 별개로 서버가 거절한다. */
+test("워커 세션 — 사라진 `current`는 대화 0건과 같고, 고르면 그 트랜스크립트가 그려지고, 이어 묻기는 `--resume`이다", async () => {
+  const id = "worker-sessions";
+  const root = path.join(mkdtempSync(path.join(tmpdir(), "ha-ws2-")), ".dira");
+  tmps.push(path.dirname(root));
+  mkdirSync(path.join(root, "tickets"), { recursive: true });
+  // 자식의 cwd는 큐의 부모다 — `mkdtemp`가 만든 그 디렉터리라 이미 실재한다
+  writeFileSync(registryPath(), JSON.stringify({ version: 1, projects: [{ id, name: "큐", root }] }));
+
+  const run = uuid(51); // 도는 워커 세션(`.wip`)
+  const done = uuid(52); // 끝난 워커 세션(`.done`)
+  const ghost = uuid(53); // 큐에 없는 세션 — 티켓이 사라진 뒤의 `current`
+  const put = (name: string, fm: string) =>
+    writeFileSync(path.join(root, "tickets", name), `---\n${fm}---\n\n본문\n`);
+  put("aaaa1111.wip.md", `ticket: aaaa1111\ntitle: 도는 티켓\nsession_id: ${run}\nowner: developer / w1-deadbeef\n`);
+  put("aaaa2222.done.md", `ticket: aaaa2222\ntitle: 끝난 티켓\nsession_id: ${done}\nowner: pm / w3-deadbeef\n`);
+  // 워커 세션의 트랜스크립트는 **워크트리 cwd 슬러그** 아래 산다 — `findTranscript`가 cwd와
+  // 무관하게 찾는다는 것이 이 티켓이 서는 근거다(§7 실측, `b96e7996`)
+  writeFileSync(
+    path.join(TRANSCRIPTS, `${done}.jsonl`),
+    JSON.stringify({
+      type: "user",
+      uuid: "wq",
+      timestamp: "2026-08-01T05:00:00.000Z",
+      message: { role: "user", content: "워커가 받은 지시" },
+    }) +
+      "\n" +
+      JSON.stringify({
+        type: "assistant",
+        uuid: "wa",
+        timestamp: "2026-08-01T05:00:09.000Z",
+        message: { role: "assistant", content: [{ type: "text", text: "워커가 한 말" }] },
+      }) +
+      "\n",
+  );
+
+  // ① 사라진 세션을 가리키는 `current`. 파일에는 그 값이 그대로 있다(관문은 `sessionIdOf`뿐)
+  writeFileSync(sessionsPath(), JSON.stringify({ [id]: { conversations: [], current: ghost } }));
+  assert.strictEqual((await readHome(id)).current, ghost);
+  const gone = await pollHome(id, null, 0);
+  assert.strictEqual(gone.sessionId, null); // **대화 0건과 같다** — 체크가 갈 자리가 없다
+  assert.deepStrictEqual(gone.turns, []);
+  assert.strictEqual(gone.failed, null); // 실패 ⑤가 아니다(줄 자체가 없다)
+  // 목록은 그대로 선다 — 도는 것이 먼저고 워커 이름·제목·해시가 큐에서 온다
+  assert.deepStrictEqual(
+    gone.workers.map((w) => [w.id, w.worker, w.title, w.hash, w.running]),
+    [
+      [run, "w1", "도는 티켓", "aaaa1111", true],
+      [done, "w3", "끝난 티켓", "aaaa2222", false],
+    ],
+  );
+  assert.strictEqual(await switchConversation(id, ghost), false); // 실재하지 않는 줄은 안 받는다
+
+  // ② 고르면 그 세션이 홈 스레드에 열린다. **`conversations`에 줄이 안 생긴다**
+  assert.strictEqual(await switchConversation(id, done), true);
+  const opened = await pollHome(id, null, 0);
+  assert.strictEqual(opened.sessionId, done);
+  assert.deepStrictEqual(opened.turns.map((t) => t.text), ["워커가 받은 지시", "워커가 한 말"]);
+  assert.deepStrictEqual(opened.conversations, []); // 바뀐 것은 `current` 한 칸이다
+  assert.deepStrictEqual((await readHome(id)).conversations, []);
+
+  // ③ 끝난 워커 세션에 이어 묻기 — 홈 플래그 한 벌 · `--resume <워커 sid>`
+  const project = { id, name: "큐", root };
+  await withFake("", async () => {
+    assert.strictEqual(await startAsk(project, "이 세션에서 무엇을 했나"), null);
+    await poller(id).until((c) => !c.running);
+  });
+  const argv = readFileSync(ARGV, "utf8").trim().split("\n");
+  assert.match(argv.at(-1) ?? "", new RegExp(`^-p --resume ${done} `));
+  assert.match(argv.at(-1) ?? "", /--tools Read,Glob,Grep --strict-mcp-config --permission-mode manual/);
+  // 이어 물어도 대화 목록은 0건이다 — 사람 대화 20을 워커 세션이 밀어내지 않는다
+  assert.deepStrictEqual((await readHome(id)).conversations, []);
+  assert.strictEqual((await readHome(id)).current, done);
+
+  // ④ 도는 워커 세션 — 서버가 거절한다(화면의 `보내기` 잠금은 폼 상태라 새로고침에 풀린다)
+  assert.strictEqual(await switchConversation(id, run), true); // 보는 것까지는 선다
+  const refused = await startAsk(project, "지금 무엇을 하고 있나");
+  assert.strictEqual(refused?.ok, false);
+  assert.strictEqual(refused?.reason, "other"); // 여섯 번째 실패 코드를 안 만든다
+  assert.match(refused?.output ?? "", /도는 워커 세션에는 여기서 말을 걸 수 없습니다 · 참견은 aaaa1111 상세에서/);
+  assert.strictEqual(isAsking(id), false); // 세션을 아예 안 띄웠다
 });

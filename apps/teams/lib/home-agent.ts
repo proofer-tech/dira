@@ -73,7 +73,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { findClaude, tokenPath } from "./auth.ts";
 import type { Run } from "./engine.ts";
-import { registryPath, resolveConfig, type Project, type ProjectConfig } from "./projects.ts";
+import { getProject, registryPath, resolveConfig, type Project, type ProjectConfig } from "./projects.ts";
 import { isAwaiting, listTickets, reqTitle, statusOf, type Ticket } from "./queue.ts";
 import { findTranscript, sessionIdOf, tailEvents, type StreamEvent } from "./transcript.ts";
 import { engineCell, listWorkers, workerOf, type Worker } from "./workers.ts";
@@ -119,7 +119,9 @@ export type Conversation = {
   fresh?: true;
 };
 
-/** 한 프로젝트가 이 파일에 갖는 것 전부. `current`는 **목록에 있는 줄**만 가리킨다. */
+/** 한 프로젝트가 이 파일에 갖는 것 전부. **`current`는 대화 목록 밖을 가리킬 수 있다** —
+ *  좌측 패널의 워커 세션을 고르면 그 session id가 여기 들어오고 `conversations`에는 줄이
+ *  안 생긴다(§7 §고르면 홈 대화 스레드에 열린다 — 워커 세션이 사람 대화 20을 밀어내면 안 된다). */
 export type Home = { conversations: Conversation[]; current: string | null };
 
 /** §7: **프로젝트당 최근 20개.** 넘으면 오래된 줄이 이 파일에서 빠진다 —
@@ -172,8 +174,11 @@ function parseHome(v: unknown): Home {
       },
     ];
   });
-  const cur = uuid(o.current);
-  return { conversations, current: cur && conversations.some((c) => c.id === cur) ? cur : null };
+  // **`current`의 관문은 `sessionIdOf` 하나다**(§7 §고르면 홈 대화 스레드에 열린다 — 종전
+  // *"목록에 있는 줄만 가리킨다"*에서 넓혔다). 워커 세션을 고르면 대화 목록에 없는 값이 여기
+  // 들어오기 때문이다. **무엇을 가리키는지는 읽는 쪽이 판정한다**(`pollHome`) — 대화도 워커
+  // 세션도 아니면 화면은 대화 0건과 같이 뜬다(온보딩). 경로가 되는 값의 방어는 그대로 이 한 줄이다.
+  return { conversations, current: uuid(o.current) || null };
 }
 
 /** 목록 읽기 — 화면이 대화 목록을 그리는 출처(§비주얼 §24). */
@@ -219,11 +224,17 @@ export async function newConversation(projectId: string): Promise<string> {
   return row.id;
 }
 
-/** 대화 전환 — `current` 교체가 전부다. **목록에 없는 값은 안 받는다**: 이 값은 경로가 되고,
- *  클라이언트가 들고 오는 문자열이다(관문이 `sessionIdOf` 하나인 것과 같은 이유). */
+/** 좌측 패널에서 한 줄을 고른다 — `current` 교체가 전부다. **실재하지 않는 값은 안 받는다**:
+ *  이 값은 경로가 되고, 클라이언트가 들고 오는 문자열이다(관문이 `sessionIdOf` 하나인 것과 같은
+ *  이유). 실재하는 줄은 둘이다 — **대화 목록의 한 줄**이거나 **큐에서 파생된 워커 세션 한 줄**
+ *  (§7 좌측 패널). 워커 세션이어도 `conversations`에는 줄을 안 만든다: 파일에 갈리는 것은
+ *  `current` 한 칸이다. */
 export async function switchConversation(projectId: string, sessionId: string): Promise<boolean> {
   const home = await readHome(projectId);
-  if (!home.conversations.some((c) => c.id === sessionId)) return false;
+  const known =
+    home.conversations.some((c) => c.id === sessionId) ||
+    (await workerSessionsById(projectId)).some((w) => w.id === sessionId);
+  if (!known) return false;
   await writeHome(projectId, { ...home, current: sessionId });
   return true;
 }
@@ -247,6 +258,9 @@ export type WorkerSession = {
   title: string;
   /** 티켓 식별자. 화면이 티켓 상세로 거는 링크가 이것이다(§식별자 — 표시값 `hash`가 아니다) */
   stem: string;
+  /** 티켓 **표시값**(`fm.ticket || 파일명`). 줄에 적히는 해시가 이것이다(§식별자) —
+   *  `ticket:`이 파일명과 갈린 티켓에서 링크(`stem`)와 글자가 다를 수 있다 */
+  hash: string;
   /** `.wip` = 지금 도는 세션. 목록에서 **먼저 온다** */
   running: boolean;
 };
@@ -267,9 +281,39 @@ export function workerSessions(tickets: Ticket[]): WorkerSession[] {
       .flatMap((t) => {
         const id = sessionIdOf(t.fm);
         if (!id) return []; // 키 없음 · 사람이 손으로 쓴 값 — 둘 다 없는 줄이다
-        return [{ id, worker: workerOf(t.fm.owner ?? "") ?? "", title: t.title, stem: t.stem, running: state === "wip" }];
+        return [
+          {
+            id,
+            worker: workerOf(t.fm.owner ?? "") ?? "",
+            title: t.title,
+            stem: t.stem,
+            hash: t.hash,
+            running: state === "wip",
+          },
+        ];
       });
   return [...rows("wip"), ...rows("done").slice(0, WORKER_SESSION_LIMIT)];
+}
+
+/** 한 프로젝트의 워커 세션 목록. **못 읽으면 빈 목록이다** — 패널 전용 실패를 만들지 않는다
+ *  (§비주얼 §24 다섯 상태 에러: 큐를 못 읽는 사건은 §4-1 3번이 본문을 통째로 사유 블록으로
+ *  바꾸고 패널도 같이 없다).
+ *
+ *  // ponytail: 폴링(500ms)마다 큐를 다시 읽는다. `listTickets`가 mtime+size 캐시를 들고 있어
+ *  //           두 번째부터는 파일당 `stat` 하나이고, 그 대가로 `.wip` → `.done`이 답이 도는
+ *  //           중에도 목록에 붙는다. 무거워지면 첫 응답과 전환 응답에만 담는다. */
+async function listWorkerSessions(project: Pick<Project, "root">): Promise<WorkerSession[]> {
+  try {
+    return workerSessions(await listTickets(project.root, await resolveConfig(project)));
+  } catch {
+    return [];
+  }
+}
+
+/** 같은 것을 프로젝트 id로 — 등록이 풀렸으면 큐 루트를 모르므로 빈 목록이다. */
+async function workerSessionsById(projectId: string): Promise<WorkerSession[]> {
+  const project = await getProject(projectId);
+  return project ? listWorkerSessions(project) : [];
 }
 
 // ── 상태 스냅샷 (§7 표) ─────────────────────────────────────────────────────
@@ -484,6 +528,10 @@ export async function ask(
 async function beginTurn(projectId: string, question: string): Promise<{ sessionId: string; resumed: boolean }> {
   const home = await readHome(projectId);
   const cur = home.conversations.find((c) => c.id === home.current);
+  // **대화 목록에 없는 `current` = 워커 세션이다**(§7 좌측 패널 — 답 1(b)·2(c)). 그 sid를 그대로
+  // 이어붙이고 **파일을 한 바이트도 안 건드린다**: `conversations`에 줄이 생기면 워커 세션이
+  // 사람 대화 20을 밀어낸다. 제목도 안 쓴다 — 이 줄의 이름은 큐에 있다(티켓 제목).
+  if (!cur && home.current) return { sessionId: home.current, resumed: true };
   const row = cur ?? openRow();
   const next: Conversation = { ...row, title: row.title || reqTitle(question) };
   await writeHome(
@@ -785,6 +833,22 @@ export async function startAsk(
   if (!q) {
     return { ok: false, reason: "other", output: "질문이 비어 있습니다.", sessionId: "", resumed: false };
   }
+  // **도는 워커 세션에는 이어 묻지 못한다**(§7 §이어 묻는 것은 홈 에이전트다). 화면이 이미
+  // `보내기`를 잠그지만(§비주얼 §24 §잠금 두 자리 ②) 여기서 한 번 더 본다 — 그 절이 든 근거는
+  // 자리가 아니라 **파일**이다: 홈이 같은 트랜스크립트에 `--resume`으로 붙으면 한 파일에 두
+  // 프로세스가 쓴다. 화면의 잠금은 폼 상태라 새로고침·낡은 탭이면 없는 것과 같다.
+  // **여섯 번째 실패를 안 만든다**(§24 5종 그대로 + `other`) — 다음 행동은 이 한 줄이 준다.
+  const cur = await readSessionId(project.id);
+  const held = cur ? (await listWorkerSessions(project)).find((w) => w.id === cur && w.running) : undefined;
+  if (held) {
+    return {
+      ok: false,
+      reason: "other",
+      output: `도는 워커 세션에는 여기서 말을 걸 수 없습니다 · 참견은 ${held.hash} 상세에서`,
+      sessionId: held.id,
+      resumed: true,
+    };
+  }
   const entry = { result: null as Answer | null, live: newLive() };
   runs.set(project.id, entry);
   void ask(project, q, entry.live).then(
@@ -805,6 +869,10 @@ export type HomeChunk = {
    *  질문의 첫 줄로 갈려야 한다 ③ 화면이 아는 전부가 이 응답 하나라는 계약이 안 갈린다.
    *  **상한 20은 여기서 안 재는다** — 실행층이 파일에서 자르고 화면은 받은 줄을 그대로 그린다 */
   conversations: Conversation[];
+  /** **좌측 패널의 워커 세션 그룹**(§7 좌측 패널 · §비주얼 §24). 대화 목록과 같은 응답에 담는
+   *  이유도 같다 — 화면이 아는 전부가 이 응답 하나다. 출처만 다르다(저건 우리가 쓴 파일이고
+   *  이건 큐에서 파생된다). 못 읽으면 빈 목록이다(`listWorkerSessions`) */
+  workers: WorkerSession[];
   turns: Turn[];
   offset: number;
   /** 세션이 갈렸다(`새 대화` 뒤 첫 질문 · 첫 질문 실패 뒤 재시도) — 화면은 **갈아 끼운다** */
@@ -836,7 +904,16 @@ export async function pollHome(
   if (done) runs.delete(projectId);
 
   // 목록과 `current`를 **한 번에** 읽는다 — 화면이 둘 다 이 응답에서 받는다(위 `conversations`).
-  const { conversations, current: sid } = await readHome(projectId);
+  const { conversations, current } = await readHome(projectId);
+  const workers = await workerSessionsById(projectId);
+  // **`current`가 아무것도 안 가리킬 수 있다.** 보던 워커 세션의 티켓이 큐에서 사라지면 이름도
+  // 줄도 없다 — 그때는 **대화 0건과 같다**(§7 §고르면 홈 대화 스레드에 열린다: 온보딩이 선다.
+  // 트랜스크립트는 안 지운다). **실패 ⑤가 아니다** — 그건 줄이 있는데 트랜스크립트만 없는
+  // 경우고(§비주얼 §24 다섯 상태 에러), 둘을 가르는 것이 이 판정 하나다.
+  const sid =
+    current && (conversations.some((c) => c.id === current) || workers.some((w) => w.id === current))
+      ? current
+      : null;
   const reset = sid !== sessionId;
   const at = reset || !Number.isSafeInteger(offset) || offset < 0 ? 0 : offset;
   const failed = done && !done.ok ? done : null;
@@ -849,13 +926,16 @@ export async function pollHome(
   // 순서가 근거다 — `done`을 파일보다 먼저 읽으므로 `partial`이 비는 응답은 이미 그 줄을 담고 있다.
   const partial = running ? (entry?.live.partial ?? "") : "";
 
-  if (!sid) return { sessionId: null, conversations, turns: [], offset: 0, reset, running, partial, stopped, failed };
+  if (!sid) {
+    return { sessionId: null, conversations, workers, turns: [], offset: 0, reset, running, partial, stopped, failed };
+  }
 
   const file = await findTranscript(sid);
   if (!file) {
     return {
       sessionId: sid,
       conversations,
+      workers,
       turns: [],
       offset: at,
       reset,
@@ -872,5 +952,5 @@ export async function pollHome(
     };
   }
   const r = await tailEvents(file, at);
-  return { sessionId: sid, conversations, turns: toTurns(r.events), offset: r.offset, reset, running, partial, stopped, failed };
+  return { sessionId: sid, conversations, workers, turns: toTurns(r.events), offset: r.offset, reset, running, partial, stopped, failed };
 }

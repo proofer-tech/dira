@@ -33,6 +33,7 @@
  *  튀어야** 해서다 — 자동 스크롤이 바닥을 물고 있는 화면에서 24px 점프가 가장 나쁘다(§13). */
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { ArrowDown, Check, Copy, Send, TriangleAlert } from "lucide-react";
 import {
   askHome,
@@ -50,6 +51,7 @@ import {
 import { CopyCommand } from "@/components/copy-command";
 import { useKeymap } from "@/components/keymap-provider";
 import { Markdown } from "@/components/markdown";
+import { StatusBadge } from "@/components/status-badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { Button } from "@/components/ui/button";
@@ -68,7 +70,7 @@ import {
   MessageScrollerProvider,
   MessageScrollerViewport,
 } from "@/components/ui/message-scroller";
-import type { Answer, AnswerReason, Home, HomeChunk, Turn } from "@/lib/home-agent";
+import type { Answer, AnswerReason, Home, HomeChunk, Turn, WorkerSession } from "@/lib/home-agent";
 import { formatCombo, matchCombo } from "@/lib/keymap";
 import { chatRows } from "@/lib/urls";
 import { cn } from "@/lib/utils";
@@ -89,6 +91,12 @@ const EXAMPLES = [
  *  전환을 막는 이유는 §7이다 — 대화를 갈아 끼우면 흐르던 글이 화면에서 사라지는데,
  *  한 프로젝트에 한 질문이라 옮겨 간 대화에서 물을 수도 없다. 푸는 열쇠가 `중지`다. */
 const LOCKED = "답이 끝나거나 중지한 뒤에 열 수 있습니다";
+
+/** 좌측 패널이 그리는 것 전부 — **`home-sessions.json`의 형식(`Home`) + 큐에서 파생된 워커 세션**
+ *  (§7 좌측 패널). 파일 쪽 타입에 워커 목록을 얹지 않는 이유는 저장하지 않기 때문이다: 저건
+ *  우리가 쓰는 파일의 모양이고 이 목록은 매 응답 큐에서 다시 파생된다. `current` 한 칸이
+ *  둘을 통틀어 가리키고, 그래서 **체크가 패널 전체에 하나다**(§24). */
+type Panel = Home & { workers: WorkerSession[] };
 
 /** §비주얼 §24 실패 5종. **`reason` 코드로 갈린다** — `output` 문장을 되짚으면 문구를 한 자
  *  고치는 날 화면이 조용히 뭉친다(§21 `FAIL` 표와 같은 규약). `other`는 §24에 항이 없는
@@ -138,8 +146,9 @@ export function HomeUI({ project, initial }: { project: string; initial: HomeChu
   // 첫 줄로 갈린다. **`session` ref와 다른 값이 아니다**: 저건 폴링이 offset을 어느 파일의
   // 것으로 볼지 정하는 부기고 이건 화면이 그리는 이름이다. 둘이 갈리는 순간은 하나 —
   // 전환을 누르고 서버 응답이 오기 전, **트리거만 낙관적으로** 바뀐 그 한 프레임이다(§24 로딩 항).
-  const [home, setHome] = useState<Home>({
+  const [home, setHome] = useState<Panel>({
     conversations: initial.conversations,
+    workers: initial.workers,
     current: initial.sessionId,
   });
   // 폴링이 들고 다니는 두 값. 렌더에 안 쓰므로 상태가 아니다(바뀔 때마다 그릴 것이 없다).
@@ -179,7 +188,7 @@ export function HomeUI({ project, initial }: { project: string; initial: HomeChu
         session.current = r.sessionId;
         offset.current = r.offset;
         setPartial(r.partial);
-        setHome({ conversations: r.conversations, current: r.sessionId });
+        setHome({ conversations: r.conversations, workers: r.workers, current: r.sessionId });
         // `reset` = 세션이 갈렸다(서버가 0부터 다시 읽었다). 이어붙이면 옛 대화가 두 벌이 된다.
         setTurns((prev) => {
           const next = r.reset ? r.turns : r.turns.length ? [...prev, ...r.turns] : prev;
@@ -208,6 +217,15 @@ export function HomeUI({ project, initial }: { project: string; initial: HomeChu
 
   const empty = !text.trim();
   const busy = running || starting;
+  // **지금 보는 것이 워커 세션인가**(§7 좌측 패널 — `current`가 대화 목록 밖을 가리킬 수 있다).
+  // 이 한 값이 화면에서 셋을 정한다: 패널의 체크가 어느 그룹에 서는지 · 손잡이 줄 왼쪽 문구 ·
+  // `보내기`가 잠기는지. 큐에서 사라진 세션이면 서버가 이미 `sessionId: null`로 물러나므로
+  // (`pollHome`) 여기서도 `undefined`고 화면은 **대화 0건과 같다**(온보딩) — 실패가 아니다.
+  const worker = home.workers.find((w) => w.id === home.current);
+  // **도는 세션에는 말을 걸 수 없다**(§24 §잠금 두 자리 ② — 근거는 자리가 아니라 파일이다:
+  // 홈이 `--resume`으로 붙으면 한 트랜스크립트에 두 프로세스가 쓴다). 잠기는 것은 `보내기`
+  // 하나이고 **입력칸은 아니다** — 쓰던 글이 다른 세션으로 갈아탄 뒤에도 남는 것이 값이다.
+  const readOnly = worker?.running === true;
 
   /** 질문 하나를 띄운다. **입력칸과 `다시 답하기`가 같은 경로다**(§24 — 후자가 하는 일이
    *  "옛 질문을 입력칸에 넣고 보내는 것"과 같다). 갈리는 것은 칸을 비우느냐뿐이라 그쪽은 밖에 둔다. */
@@ -227,7 +245,9 @@ export function HomeUI({ project, initial }: { project: string; initial: HomeChu
   };
 
   const send = async () => {
-    if (busy || empty) return;
+    // `readOnly`가 여기 있는 것이 실효 잠금이다(§24 ② — `보내기`의 `aria-disabled`는 표시다).
+    // 서버도 같은 판정을 한 번 더 한다: 이 폼 상태는 새로고침에 풀린다(`startAsk`).
+    if (busy || empty || readOnly) return;
     // 보낸 글을 칸에서 비운다 — **다음 질문을 미리 쓸 수 있다는 것이 §24가 입력칸을 안 잠근
     // 이유**다. 실패하면 그 글을 도로 넣는다(§21 실패 규칙: 쓴 글은 남는다). 그 사이에 사람이
     // 다음 질문을 쓰기 시작했으면 **그쪽이 이긴다** — 사람이 방금 친 글을 덮지 않는다.
@@ -256,7 +276,7 @@ export function HomeUI({ project, initial }: { project: string; initial: HomeChu
   const apply = (c: HomeChunk) => {
     session.current = c.sessionId;
     offset.current = c.offset;
-    setHome({ conversations: c.conversations, current: c.sessionId });
+    setHome({ conversations: c.conversations, workers: c.workers, current: c.sessionId });
     setTurns(c.turns);
     setFail(null);
   };
@@ -307,10 +327,11 @@ export function HomeUI({ project, initial }: { project: string; initial: HomeChu
           `gap-8`(32)이 세로 리듬 `gap-6`(24)보다 큰 것이 두 단을 한 격자로 안 읽히게 하고,
           그래서 §11처럼 구분선을 안 넣는다. */}
       <div className="flex min-h-0 flex-1 gap-8">
-        {/* 좌측 패널 — 지금은 `대화` 그룹 하나다(`워커 세션` 그룹은 `e85e8186`). 대화 0건이면
-            **패널째 안 그린다**(§24 §0건 — 두 그룹이 다 0건인 갈래 ①이고, 그 자리에 서는 것이
-            온보딩이다). 1건에서는 그린다: 패널의 일이 여는 것만이 아니라 **지금 보는 것의 이름**
-            이고, 그 표시는 1건에서도 참이다(§4-1과 같다). */}
+        {/* 좌측 패널 — 그룹이 둘이다(`대화` · `워커 세션`). **대화 0건이면 패널째 안 그린다**
+            (§24 §0건 갈래 ① — 워커 세션이 있어도 같이 빠진다: 첫 화면의 정본은 온보딩이고 그
+            옆에 세션 목록이 서면 시선이 갈린다. 워커가 무엇을 했는지 보는 자리는 그 전에도 티켓
+            상세와 워커 화면이다). 1건에서는 그린다: 패널의 일이 여는 것만이 아니라 **지금 보는
+            것의 이름**이고, 그 표시는 1건에서도 참이다(§4-1과 같다). */}
         {home.conversations.length > 0 && (
           <SidePanel
             home={home}
@@ -494,6 +515,9 @@ export function HomeUI({ project, initial }: { project: string; initial: HomeChu
                     `첨부 → ml-auto ⌘↵ → 보내기`. 도는 동안에도 안 잠근다 — 입력칸과 같은
                     판단이다(§24: 다음 질문을 미리 쓸 수 있다). */}
                 <AttachmentButton att={att} />
+                {/* 보조 문구 — `첨부` 다음 · `ml-auto` 앞이 2차 자리다(§27 손잡이 줄 순서).
+                    **대화에서는 없다**(§21 표의 `없다`가 거기서는 그대로 참이다). */}
+                {worker && <WorkerNote project={project} worker={worker} />}
                 {/* `bg-muted`를 깔지 않는다 — `--muted-foreground`가 라이트 4.34로 AA 미달이다(§21).
                     `ml-auto`가 여기 걸려서 1차 버튼이 줄의 가장 오른쪽이다(§4-3). */}
                 <kbd className="ml-auto border px-1 font-mono text-xs text-muted-foreground">
@@ -505,7 +529,7 @@ export function HomeUI({ project, initial }: { project: string; initial: HomeChu
                   type="submit"
                   variant="default"
                   size="xs"
-                  aria-disabled={busy || empty}
+                  aria-disabled={busy || empty || readOnly}
                   className="aria-disabled:opacity-50"
                 >
                   <Send aria-hidden />
@@ -651,6 +675,40 @@ function Failure({ fail }: { fail: Answer }) {
   );
 }
 
+/** 손잡이 줄 왼쪽 문구 — **워커 세션을 볼 때만 선다**(§비주얼 §24 §손잡이 줄 왼쪽 문구).
+ *  §21이 이 칸을 `없다`로 둔 판정은 **대화에서 무수정**이고, 갈리는 것은 두 경우뿐이다:
+ *
+ *  | 보는 것 | 문구 |
+ *  |---|---|
+ *  | 도는 워커 세션 | `도는 세션에는 여기서 말을 걸 수 없습니다 · 참견은 <해시> 상세에서` |
+ *  | 끝난 워커 세션 | `읽기 도구 셋으로 이 세션에 이어 묻습니다 · <해시>` |
+ *
+ *  **끝난 세션에도 한 줄이 서는 이유는 권한이 눈에 안 보이기 때문이다**(§24): 화면이 `w4`의
+ *  세션을 열어 두고 있으면 그 세션의 힘(쓰기 도구 · 워크트리 cwd)이 있다고 읽히는데, 이어 묻는
+ *  것은 **홈 에이전트이고 도구는 `Read`·`Glob`·`Grep` 셋**이다(§7 답 1(b) — 실측으로
+ *  `--resume`이 이어 묻는 쪽의 플래그를 쓴다). 해시는 **링크다**(mono + 링크 — §5 `<Hash>`의
+ *  관용구. 이 레포에는 그 컴포넌트가 없고 6개 화면이 같은 세 클래스를 인라인한다). 목적지는
+ *  `stem`이고 글자는 `hash`다(§식별자). `min-w-0 truncate`는 §21 텍스트 잘림 그대로다. */
+function WorkerNote({ project, worker }: { project: string; worker: WorkerSession }) {
+  return (
+    <span className="min-w-0 truncate text-xs text-muted-foreground">
+      {worker.running ? "도는 세션에는 여기서 말을 걸 수 없습니다 · 참견은 " : "읽기 도구 셋으로 이 세션에 이어 묻습니다 · "}
+      <Link
+        href={`/p/${project}/tickets/${encodeURIComponent(worker.stem)}`}
+        className="rounded-sm font-mono underline"
+      >
+        {worker.hash}
+      </Link>
+      {worker.running && " 상세에서"}
+    </span>
+  );
+}
+
+/** 패널 줄 한 벌의 클래스. **두 그룹이 이 문자열을 같이 쓰고 갈리는 것은 정렬 하나다**(§24
+ *  한 줄의 모양 표 — `대화`는 `items-center`(1행 36px), `워커 세션`은 `items-start`(2행 52px)).
+ *  나머지(폭 · `px-2 py-1.5` · hover · 잠금)가 두 줄에서 같아야 체크 칸이 한 x에 선다. */
+const ROW = "group flex w-full cursor-pointer gap-2 rounded-sm px-2 py-1.5 text-left hover:bg-muted aria-disabled:opacity-50";
+
 /** 좌측 패널 (§비주얼 §24 §좌측 패널 · §7 §좌측 패널) — **`div` 둘 + `button` 목록**이다.
  *
  *  **팝오버가 걷혔다**(`01e5293b`, 요구 `48b13597`). 걷힌 것은 **자리와 그릇 둘뿐**이고 줄의
@@ -666,17 +724,19 @@ function Failure({ fail }: { fail: Answer }) {
  *  **스크롤은 패널 자신 하나다**(`overflow-y-auto`). 그룹마다 스크롤러를 두지 않는다 — 256px
  *  안에 스크롤바가 둘이면 어느 쪽이 움직이는지 안 읽힌다(§24).
  *
- *  **`워커 세션` 그룹은 여기 없다** — `e85e8186`의 것이다. 그래서 지금 이 패널이 빠지는 조건은
- *  `대화` 0건 하나이고, 그 판정은 부르는 쪽에 있다(§24 §0건 — 그룹째 · 둘 다면 패널째).
+ *  **그룹이 둘이고 지금 보는 것은 통틀어 하나다**(§24). 워커 세션을 고르면 `대화` 그룹의 체크가
+ *  빠진다 — 본문이 그리는 것이 언제나 하나여서다. 이 패널이 빠지는 조건은 여전히 `대화` 0건
+ *  하나이고(그 판정은 부르는 쪽에 있다) `워커 세션`은 0건이면 **그룹째** 안 선다(§24 §0건).
  *
  *  **정렬 · 제목 · 시각은 `chatRows`가 정한다**(`lib/urls.ts` — JSX를 `pnpm test`가 못 읽는다).
+ *  워커 세션 줄의 순서·상한·값은 서버의 `workerSessions`가 정한다(§7 — `.wip` 전부 + `.done` 10).
  *  `session id`는 안 그린다: UUID 36자이고 사람이 이 화면에서 그 값을 쓸 일이 없다(§6과 같은 자). */
 function SidePanel({
   home,
   busy,
   onPick,
 }: {
-  home: Home;
+  home: Panel;
   busy: boolean;
   onPick: (id: string) => void;
 }) {
@@ -701,7 +761,7 @@ function SidePanel({
             // `hover:bg-muted`와 보조 글자의 `group-hover:text-foreground`는 **짝이다** —
             // `--muted-foreground` on `--muted`는 §21이 금지한 4.34다. 두 값 다 `ghost` 변종이
             // 이 화면에서 이미 같이 쓰는 것이라(`복사`·`다시 답하기`) 새로 잴 조합이 0이다.
-            className="group flex w-full cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-left hover:bg-muted aria-disabled:opacity-50"
+            className={cn(ROW, "items-center")}
             onClick={() => {
               if (busy) return;
               if (r.id !== home.current) onPick(r.id);
@@ -721,6 +781,56 @@ function SidePanel({
           </button>
         ))}
       </div>
+
+      {/* `워커 세션` (§24 §좌측 패널 · §7 §워커 세션 목록) — 0건이면 **그룹째** 안 그린다.
+          한 줄이 **2행**인 것은 담는 사실이 다섯이라서다(워커 · 제목 · 해시 · 도는지 · 지금 것):
+          256px 한 줄에 넣으면 제목이 5자에서 잘려 식별이 안 된다. 시각을 안 그린다 — 이 그룹의
+          정렬 근거는 **도는지**이고 그건 배지가 말한다(대화 쪽은 시각 내림차순이라 그 수가
+          정렬 근거를 화면에 세운다). §19 워커 칩도 안 쓴다: 저건 *지금 물고 있다*(`.wip` 전용)고
+          이 줄은 *이 세션을 돈 워커*라 끝난 줄에도 서야 한다 — `owner`의 원문 표기를 쓴다. */}
+      {home.workers.length > 0 && (
+        <div>
+          <div className="px-2 text-xs font-medium text-muted-foreground">워커 세션</div>
+          {home.workers.map((w) => (
+            <button
+              key={w.id}
+              type="button"
+              aria-disabled={busy || undefined}
+              title={busy ? LOCKED : undefined}
+              // 갈리는 클래스가 `items-start` 하나다 — 체크가 **윗줄에 정렬**되고 2줄 묶음이
+              // 그 오른쪽에 통째로 앉는다(§24 한 줄의 모양 표).
+              className={cn(ROW, "items-start")}
+              onClick={() => {
+                if (busy) return;
+                if (w.id !== home.current) onPick(w.id);
+              }}
+            >
+              <span className="w-4 shrink-0">
+                {w.id === home.current && <Check aria-hidden className="size-4" />}
+              </span>
+              <div className="flex min-w-0 grow flex-col gap-0.5">
+                {/* 윗줄 = 티켓 제목. 두 그룹의 1행이 같은 x에서 시작해 세로로 훑는 눈이
+                    한 번에 읽는다(§24). ≈15자에서 잘리고 전문은 해시가 가는 상세에 있다 */}
+                <span className="truncate text-sm">{w.title}</span>
+                {/* 아랫줄 = 어디 것인가. 워커 이름이 빈 값이면(형식이 아닌 `owner:`) 감춘다 —
+                    모르는 것을 `?`로 그리지 않는다. **해시는 여기서 글자다** — 이 줄 전체가
+                    `button`이라 안에 링크를 넣으면 상호작용 요소가 겹친다(HTML 위반 · 키보드가
+                    두 정거장). 티켓 상세로 가는 길은 고른 뒤 손잡이 줄의 `<Hash>`다(아래
+                    `<WorkerNote>`) — 갈린 자리를 designer에게 `kind: feedback`으로 넘겼다 */}
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="font-mono text-muted-foreground group-hover:text-foreground">
+                    {[w.worker, w.hash].filter(Boolean).join(" · ")}
+                  </span>
+                  {/* 값이 둘뿐인 것은 이 절의 선택이 아니라 **목록의 성질**이다(출처가 `.wip` +
+                      `.done`이라 나머지 넷은 파일 상태로 이미 빠진다). 모든 줄에 붙인다 —
+                      도는 것에만 붙이면 나머지 줄의 빈 자리가 *모른다*로 읽힌다(§4-3 슬롯 규칙) */}
+                  <StatusBadge status={w.running ? "wip" : "done"} className="shrink-0" />
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
