@@ -214,10 +214,17 @@ function openWindow(origin: string): BrowserWindow {
 
   // N1 — 빨간 버튼은 앱을 끝내지 않고 창을 숨긴다. 파괴하지 않으므로 `열기`가 이미 그려진
   // 보드를 그대로 되돌린다(다시 로드하면 그 시점부터 콜드 스타트다). 종료 경로에서만 통과시킨다.
+  //
+  // 전체 화면 창을 그대로 숨기면 macOS가 그 Space를 남긴다 — 검은 화면 하나가 그대로 선다.
+  // 벗고 **나서** 숨긴다. `setFullScreen(false)` 직후는 아직 애니메이션 중이라 같은 증상이라
+  // `leave-full-screen`을 기다린다. `once` — `on`이면 닫을 때마다 쌓인다.
   win.on("close", (e) => {
     if (quitting) return;
     e.preventDefault();
-    win.hide();
+    if (win.isFullScreen()) {
+      win.once("leave-full-screen", () => win.hide());
+      win.setFullScreen(false);
+    } else win.hide();
   });
 
   win.loadURL(origin);
