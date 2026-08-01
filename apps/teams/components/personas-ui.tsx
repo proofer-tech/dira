@@ -6,11 +6,12 @@
  *  `workers-ui.tsx`와 같다 — 같은 화면의 세 액션이 같은 문구(엔진이 WARN만 남긴다 · 이름 규칙)를
  *  쓰므로 쪼개면 자리가 갈린다. */
 import { useState, useTransition } from "react";
-import { ChevronRight, Trash2, TriangleAlert } from "lucide-react";
+import { Check, ChevronRight, Trash2, TriangleAlert } from "lucide-react";
 import {
   createPersonaAction,
   deletePersonaAction,
   savePersonaAction,
+  savePersonaSkillsAction,
   setPersonaColorAction,
   type PersonaResult,
 } from "@/app/p/[project]/personas/actions";
@@ -31,6 +32,15 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandSeparator,
+} from "@/components/ui/command";
+import {
   Dialog,
   DialogClose,
   DialogContent,
@@ -44,6 +54,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
+import type { Skill } from "@/lib/skills";
 import { PERSONA_COLORS, personaDotClass } from "@/lib/urls";
 import { cn } from "@/lib/utils";
 
@@ -53,6 +64,10 @@ export type PersonaRow = {
   file: string;
   body: string | null;
   refs: { open: number; wip: number; total: number };
+  /** `skills.md`의 목록 줄(§5-1). 문법에 안 맞는 줄은 여기 없고 파일에는 그대로 있다 */
+  skills: Skill[];
+  /** `skills.md` **파일 전체** 자수 — 접힌 줄의 자수가 이걸 더한다(§비주얼 §25 ①) */
+  skillsChars: number;
 };
 
 /** §6 에러 3요소 중 1·2번. 사유는 원문 그대로 — 삼키지 않는다. */
@@ -232,16 +247,26 @@ export function PersonaCard({
   projectId,
   row,
   color,
+  installed,
+  configDir,
 }: {
   projectId: string;
   row: PersonaRow;
   /** 레지스트리의 팔레트 키. 없거나 팔레트 밖이면 빈 점이다(§12) */
   color?: string;
+  /** 이 머신에 설치된 스킬(§5-1). 페르소나 수와 무관하게 서버가 한 번 읽어 내렸다 */
+  installed: Skill[];
+  /** 해석된 `<config>` — 후보가 0개일 때 "어디를 봤는지"를 적는다(§비주얼 §25 다섯 상태) */
+  configDir: string;
 }) {
   // 저장된 원문을 state로 들고 있는다 — 서버가 다시 렌더해 주기를 기다리지 않고 저장 직후에
   // `프로필 없음` 배지와 삭제 버튼이 바로 맞는다(workers-ui의 컨텍스트 카드와 같은 이유).
   const [saved, setSaved] = useState(row.body);
   const [body, setBody] = useState(row.body ?? "");
+  // 스킬도 같은 이유로 state다. **자수는 서버가 쓴 뒤 되읽어 준 값**이다 — 파일에는 사람이
+  // 덧붙인 산문도 있어서 목록만으로는 계산이 안 된다(§비주얼 §25).
+  const [skills, setSkills] = useState(row.skills);
+  const [skillsChars, setSkillsChars] = useState(row.skillsChars);
   const [result, setResult] = useState<PersonaResult | null>(null);
   // 삭제·색은 둘 다 접힌 줄에서 누르므로 사유도 접힌 채 보여야 한다 — 자리가 하나다.
   const [rowError, setRowError] = useState<{ title: string; message: string } | null>(null);
@@ -285,10 +310,18 @@ export function PersonaCard({
           <span className="min-w-0 truncate text-xs text-muted-foreground" title={row.file}>
             {refs ? `티켓 ${refs}` : "참조하는 티켓 없음"}
           </span>
+          {/* `티켓 n` 뒤 · 자수 앞 — "무엇을 참조하나 → 무엇을 쓰나 → 얼마나 먹나"다(§비주얼 §25 ①).
+              0개면 안 그린다: 뒤에 붙는 고정폭 메타라 빠져도 줄이 안 흔들린다 */}
+          {skills.length > 0 && (
+            <span className="text-xs whitespace-nowrap text-muted-foreground">
+              스킬 {skills.length}
+            </span>
+          )}
           {/* 프로필 본문은 **모든 디스패치 프롬프트에 인라인된다** — 길이가 곧 비용이다(§5).
-              접힌 줄에 둬야 "누가 프롬프트를 얼마나 먹는가"를 목록에서 비교할 수 있다 */}
+              접힌 줄에 둬야 "누가 프롬프트를 얼마나 먹는가"를 목록에서 비교할 수 있다.
+              `skills.md`도 매 디스패치에 인라인되므로 **합**이다(§비주얼 §25 ① — 분해하지 않는다) */}
           <span className="font-mono text-xs whitespace-nowrap text-muted-foreground">
-            {body.length}자
+            {body.length + skillsChars}자
           </span>
           {/* 저장 버튼은 펼쳐야 보인다 — 접은 채 잊으면 이게 유일한 표시다(§5) */}
           {dirty && (
@@ -340,6 +373,21 @@ export function PersonaCard({
               {pending ? "저장 중…" : "저장"}
             </Button>
           </div>
+
+          {/* 스킬 절(§비주얼 §25 ②). `<summary>` 밖이라 `preventDefault`가 없다 —
+              반사적으로 붙이면 다이얼로그가 안 열린다 */}
+          <SkillsSection
+            projectId={projectId}
+            name={row.name}
+            skills={skills}
+            chars={skillsChars}
+            installed={installed}
+            configDir={configDir}
+            onSaved={(next, chars) => {
+              setSkills(next);
+              setSkillsChars(chars);
+            }}
+          />
         </div>
       </details>
 
@@ -349,6 +397,247 @@ export function PersonaCard({
         </div>
       )}
     </div>
+  );
+}
+
+// ── 스킬 (DESIGN.md §5-1 · §비주얼 §25) ─────────────────────────────────────
+
+/** 카드 본문의 두 번째 블록. 저장은 **한 경로**다 — `제거`도 다이얼로그의 `저장`도
+ *  `savePersonaSkillsAction`(=`writePersonaSkills`)에 목록 전체를 넘긴다. 0개가 되면 파일이 사라진다.
+ *
+ *  실패 자리가 둘로 갈리는 이유는 §비주얼 §25 다섯 상태다 — **누른 곳**에 뜬다.
+ *  `제거`는 여기 절 아래, 다이얼로그의 `저장`은 그 `DialogFooter` 위다. */
+function SkillsSection({
+  projectId,
+  name,
+  skills,
+  chars,
+  installed,
+  configDir,
+  onSaved,
+}: {
+  projectId: string;
+  name: string;
+  skills: Skill[];
+  chars: number;
+  installed: Skill[];
+  configDir: string;
+  onSaved: (skills: Skill[], chars: number) => void;
+}) {
+  const [removing, setRemoving] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [, start] = useTransition();
+
+  /** 쓰기의 유일한 창구. **고른 이름만** 보낸다(설명은 서버가 채운다) — 성공하면 서버가
+   *  되읽은 목록·자수로 화면을 맞춘다. */
+  const save = async (picked: string[]) => {
+    const r = await savePersonaSkillsAction(projectId, name, picked);
+    if (r.ok) onSaved(r.skills ?? [], r.chars ?? 0);
+    return r;
+  };
+
+  return (
+    <section className="space-y-2 border-t pt-3">
+      <div className="flex items-baseline gap-2">
+        <h3 className="text-sm font-medium">스킬</h3>
+        {/* 0개일 때 `0자`는 참이지만 아무것도 안 말한다 — 바로 아래 한 줄이 이미 말했다 */}
+        {skills.length > 0 && <span className="text-xs text-muted-foreground">{chars}자</span>}
+        <AddSkillsDialog current={skills} installed={installed} configDir={configDir} save={save} />
+      </div>
+
+      {skills.length === 0 ? (
+        // `<EmptyState>`가 아니다 — 화면의 1차 콘텐츠가 아니고 다음 행동은 절 머리에 있다(§25 ②)
+        <p className="text-xs text-muted-foreground">
+          고른 스킬이 없습니다 — 디스패치 프롬프트에 스킬 절이 실리지 않습니다.
+        </p>
+      ) : (
+        <>
+          {/* 어휘는 §비주얼 §23 ⑤의 문형 그대로다(`<무엇>은 claude 엔진에서만 …`). 이건 경고가
+              아니라 상시 참인 사실이라 `Alert`가 아니다 — 이 화면에는 엔진 값이 아예 없다 */}
+          <p className="text-xs text-muted-foreground">
+            스킬은 claude 엔진에서만 실립니다 — codex 워커가 물면 이 절은 프롬프트에 안 갑니다.
+          </p>
+          <ul className="space-y-1">
+            {skills.map((s) => (
+              <li key={s.name} className="flex items-baseline gap-2">
+                {/* 이름은 프롬프트에 그대로 실려 지목이 되는 토큰이다 — 안 자른다(§6 식별자) */}
+                <code className="shrink-0 font-mono text-xs">{s.name}</code>
+                <span
+                  className="min-w-0 grow truncate text-xs text-muted-foreground"
+                  title={s.description}
+                >
+                  {s.description}
+                </span>
+                {/* 확인 다이얼로그를 안 붙인다 — 되돌리는 비용이 `스킬 추가`를 한 번 여는 것이다.
+                    어휘도 가른다: 디렉터리는 `삭제`, 목록 한 줄은 `제거`(§25 ②) */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="self-center"
+                  disabled={removing !== null}
+                  onClick={() =>
+                    start(async () => {
+                      setRemoving(s.name);
+                      setError(null);
+                      const r = await save(
+                        skills.filter((x) => x.name !== s.name).map((x) => x.name),
+                      );
+                      setRemoving(null);
+                      if (!r.ok) setError(r.message ?? "스킬을 저장하지 못했습니다.");
+                    })
+                  }
+                >
+                  {removing === s.name ? "제거 중…" : "제거"}
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+
+      {error && <Failure title="스킬을 저장하지 못했습니다" message={error} />}
+    </section>
+  );
+}
+
+/** `스킬 추가` — `Dialog` + `Command`(§비주얼 §25 ③). `CommandDialog`가 아니다: 그 껍데기는
+ *  제목이 `sr-only`이고 액션 행이 없는 명령 팔레트다.
+ *
+ *  **체크를 끌 수 있다.** 이 그릇이 드는 것은 선택 상태 하나고, 이미 든 스킬을 체크된 채로
+ *  보여주기로 한 순간(§5-1) 그 체크를 못 끄게 만들 정직한 방법이 없다. `저장`이 파일을 한 번 쓴다. */
+function AddSkillsDialog({
+  current,
+  installed,
+  configDir,
+  save,
+}: {
+  current: Skill[];
+  installed: Skill[];
+  configDir: string;
+  save: (picked: string[]) => Promise<PersonaResult>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [picked, setPicked] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+
+  // 후보에 없는데 이미 든 스킬. 안 그리면 `저장` 한 번에 조용히 사라진다(§25 ③)
+  const orphans = current.filter((c) => !installed.some((i) => i.name === c.name));
+  const toggle = (name: string) =>
+    setPicked(picked.includes(name) ? picked.filter((x) => x !== name) : [...picked, name]);
+
+  const item = (s: Skill, note?: string) => (
+    <CommandItem
+      key={s.name}
+      value={`${s.name} ${s.description}`}
+      className="items-start gap-2 px-2 py-2"
+      onSelect={() => toggle(s.name)}
+    >
+      {/* 앞자리 체크 — deps 팝오버·필터 팝오버와 같은 조립이다. 안 고른 항목도 같은 폭이다 */}
+      <span className="w-4 shrink-0 pt-0.5">
+        {picked.includes(s.name) && <Check aria-hidden className="size-4" />}
+      </span>
+      <span className="flex min-w-0 grow flex-col gap-0.5">
+        <span className="font-mono text-xs">{s.name}</span>
+        {/* 선택(hover·키보드 커서)에서 밑면이 `bg-muted`가 되고 그 위 `--muted-foreground`는
+            라이트 4.34로 AA 미달이다 — 항목의 `data-selected:text-foreground`를 자식이 덮으므로
+            자식이 같은 변종을 한 번 더 든다(§비주얼 §25 대비 검증) */}
+        <span className="line-clamp-2 text-xs text-muted-foreground group-data-selected/command-item:text-foreground">
+          {note ?? s.description}
+        </span>
+      </span>
+    </CommandItem>
+  );
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o);
+        // 열 때마다 파일의 현재 목록에서 시작한다 — 닫고 다시 열면 화면이 파일과 같다
+        if (o) {
+          setPicked(current.map((s) => s.name));
+          setQuery("");
+          setError(null);
+        }
+      }}
+    >
+      <DialogTrigger render={<Button variant="outline" size="sm" className="ml-auto self-center" />}>
+        스킬 추가
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>스킬 추가</DialogTitle>
+          <DialogDescription>
+            이 머신에 설치된 스킬입니다. 고른 것이 이 페르소나의 디스패치 프롬프트에 실립니다.
+          </DialogDescription>
+        </DialogHeader>
+
+        <Command>
+          <CommandInput
+            placeholder="스킬 검색 — 이름 또는 설명"
+            value={query}
+            onValueChange={setQuery}
+          />
+          <CommandList>
+            {installed.length + orphans.length > 0 && (
+              <CommandEmpty>{`"${query}"와 일치하는 스킬 0건`}</CommandEmpty>
+            )}
+            {orphans.length > 0 ? (
+              <>
+                <CommandGroup heading="이 머신에 없음">
+                  {orphans.map((s) =>
+                    item(s, "설치된 스킬 목록에 없습니다 — 다른 머신에서 고른 것일 수 있습니다"),
+                  )}
+                </CommandGroup>
+                <CommandSeparator />
+                <CommandGroup heading="설치된 스킬">{installed.map((s) => item(s))}</CommandGroup>
+              </>
+            ) : (
+              // 전부 후보 안에 있으면(정상) 머리 없는 평평한 목록이다 — 항상 켜진 머리는
+              // 한 줄을 먹고 아무것도 안 가른다(§25 ③)
+              installed.map((s) => item(s))
+            )}
+            {/* 후보 0개는 필터 결과가 아니라 이 머신의 사실이라 **어디를 봤는지** 적는다.
+                에러가 아니다 — 스킬을 하나도 안 깐 머신은 정상이다(§25 다섯 상태) */}
+            {installed.length === 0 && (
+              <div className="space-y-1 px-2 py-6 text-center">
+                <p className="text-sm">이 머신에서 스킬을 찾지 못했습니다</p>
+                <p className="font-mono text-xs break-all text-muted-foreground">
+                  {configDir}/skills/*/SKILL.md
+                </p>
+                <p className="font-mono text-xs break-all text-muted-foreground">
+                  {configDir}/plugins/marketplaces/*/skills/*/SKILL.md
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  CLAUDE_CONFIG_DIR이 없으면 &lt;config&gt;는 ~/.claude입니다
+                </p>
+              </div>
+            )}
+          </CommandList>
+        </Command>
+
+        {/* 실패하면 다이얼로그가 열린 채로 남고 체크도 남는다 — 사유를 읽고 다시 누른다 */}
+        {error && <Failure title="스킬을 저장하지 못했습니다" message={error} />}
+        <DialogFooter>
+          <DialogClose render={<Button variant="outline" />}>취소</DialogClose>
+          <Button
+            disabled={pending}
+            onClick={() =>
+              start(async () => {
+                setError(null);
+                const r = await save(picked);
+                if (r.ok) setOpen(false);
+                else setError(r.message ?? "스킬을 저장하지 못했습니다.");
+              })
+            }
+          >
+            {pending ? "저장 중…" : "저장"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

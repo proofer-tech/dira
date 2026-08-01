@@ -122,23 +122,55 @@ const HEADER = `## 스킬
 
 `;
 
-/** 파일이 없으면 `[]`. 기준 디렉터리(해석된 `TICKET_PERSONAS`)가 아직 없는 큐도 같다 —
+/** 목록 + **파일 전체 자수**. 화면이 둘 다 든다: 목록은 문법에 맞는 줄만이고(사람이 덧붙인
+ *  산문은 안 그린다), 접힌 줄의 자수는 `tick.sh`가 주입하는 **파일 전체**를 센다(§비주얼 §25).
+ *  한 번 읽어 둘로 나눠주는 이유가 그것이다 — 화면이 같은 파일을 두 번 열지 않는다.
+ *
+ *  파일이 없으면 `[]`·`0`. 기준 디렉터리(해석된 `TICKET_PERSONAS`)가 아직 없는 큐도 같다 —
  *  이름 위반·기준 밖 경로는 그대로 던진다(신뢰 경계는 조용히 넘어가지 않는다). */
-export async function readPersonaSkills(dir: string, name: string): Promise<Skill[]> {
+export async function readPersonaSkillsFile(
+  dir: string,
+  name: string,
+): Promise<{ skills: Skill[]; chars: number }> {
   let file: string;
   try {
     file = await personaFilePath(dir, name, "skills.md");
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e; // realpath(기준 디렉터리) 실패만
-    return [];
+    return { skills: [], chars: 0 };
   }
   const text = await readFile(file, "utf8").catch(() => null);
-  if (text === null) return [];
-  return text
-    .split("\n")
-    .map((l) => ITEM_RE.exec(l.trimEnd()))
-    .filter((m) => m !== null)
-    .map((m) => ({ name: m[1], description: m[2] }));
+  if (text === null) return { skills: [], chars: 0 };
+  return {
+    skills: text
+      .split("\n")
+      .map((l) => ITEM_RE.exec(l.trimEnd()))
+      .filter((m) => m !== null)
+      .map((m) => ({ name: m[1], description: m[2] })),
+    chars: text.length,
+  };
+}
+
+export const readPersonaSkills = async (dir: string, name: string): Promise<Skill[]> =>
+  (await readPersonaSkillsFile(dir, name)).skills;
+
+/** 화면이 고른 **이름들** → 파일에 쓸 목록. 다이얼로그도 목록의 `제거`도 이름만 보내고
+ *  설명은 서버가 채운다 — 클라이언트가 준 문자열이 그대로 파일이 되지 않는다.
+ *
+ *  **이미 든 것의 순서를 지키고 새로 고른 것을 뒤에 붙인다.** 체크 순서로 재배열하면 아무것도
+ *  안 고른 저장에서도 파일의 줄이 뒤섞인다.
+ *
+ *  설명은 **설치본이 이긴다**(§5-1 — `SKILL.md`의 `description`을 그대로 옮긴다). 후보에 없는
+ *  스킬만 파일에 적힌 설명을 들고 남는다(§5-1 — 지우지 않는다). 어느 쪽에도 없는 이름은 뺀다:
+ *  설명을 지어낼 자리가 없고, 그 이름이 어디서 왔는지 아는 것이 화면뿐이라면 참이 아니다. */
+export function pickedSkills(picked: string[], current: Skill[], installed: Skill[]): Skill[] {
+  const byName = new Map(current.map((s) => [s.name, s]));
+  for (const s of installed) byName.set(s.name, s);
+  const order = [
+    ...current.filter((s) => picked.includes(s.name)).map((s) => s.name),
+    ...picked.filter((n) => !current.some((s) => s.name === n)),
+  ];
+  return order.map((n) => byName.get(n)).filter((s) => s !== undefined);
 }
 
 /** 저장. **0개면 파일을 지운다**(§5-1 — 주입할 게 없으면 파일이 없는 게 사실이다. 사람이 덧붙인

@@ -17,6 +17,13 @@ import {
   savePersona,
   setPersonaColor,
 } from "@/lib/projects";
+import {
+  listInstalledSkills,
+  pickedSkills,
+  readPersonaSkillsFile,
+  writePersonaSkills,
+  type Skill,
+} from "@/lib/skills";
 
 export type PersonaResult = { ok: boolean; message?: string };
 
@@ -67,6 +74,34 @@ export async function setPersonaColorAction(
     await setPersonaColor(projectId, name, color);
     revalidatePath(`/p/${projectId}`, "layout");
     return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** 스킬 목록 저장 — 0개면 `writePersonaSkills`가 파일을 지운다(DESIGN.md §5-1).
+ *
+ *  **받는 것은 고른 이름뿐이다.** 설명은 서버가 파일과 `SKILL.md`에서 읽어 채운다(`pickedSkills`) —
+ *  클라이언트가 준 문자열이 그대로 큐의 파일이 되지 않고, 다이얼로그의 `저장`과 목록의 `제거`가
+ *  같은 한 경로를 쓴다.
+ *
+ *  **쓴 뒤 그 파일을 다시 읽어 돌려준다.** 접힌 줄의 자수는 `skills.md` **파일 전체**를 세는데
+ *  (§비주얼 §25) 사람이 손으로 덧붙인 산문까지 든 값이라 클라이언트가 계산할 수 없다. 화면이
+ *  저장 직후에 참인 수를 그리는 길이 이 한 번의 되읽기다 — 두 번째 왕복을 만들지 않는다. */
+export async function savePersonaSkillsAction(
+  projectId: string,
+  name: string,
+  picked: string[],
+): Promise<PersonaResult & { skills?: Skill[]; chars?: number }> {
+  try {
+    const dir = await personasDir(projectId);
+    const [{ skills: current }, installed] = await Promise.all([
+      readPersonaSkillsFile(dir, name),
+      listInstalledSkills(),
+    ]);
+    await writePersonaSkills(dir, name, pickedSkills(picked, current, installed));
+    revalidatePath(`/p/${projectId}/personas`);
+    return { ok: true, ...(await readPersonaSkillsFile(dir, name)) };
   } catch (e) {
     return fail(e);
   }
