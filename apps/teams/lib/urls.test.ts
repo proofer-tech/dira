@@ -1,6 +1,35 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { interjectMode, relationPath, type Anchor } from "./urls.ts";
+import { interjectMode, parentPath, relationPath, type Anchor } from "./urls.ts";
+
+/** 화면 부모 표 (DESIGN.md §0-7). `Esc`의 목적지가 이 함수 하나에서 나온다 — 표가 코드와
+ *  갈리면 `Esc`가 선언에 없는 곳으로 가거나(더 나쁘게) 보드에서 화면이 흔들린다. */
+test("parentPath — 부모가 없는 화면은 `null`이다(§0-7 표 1·2행)", () => {
+  assert.equal(parentPath("/"), null);
+  assert.equal(parentPath("/p/a"), null);
+  assert.equal(parentPath("/p/a/"), null); // 보드의 정본 URL과 같은 화면이다
+});
+
+test("parentPath — 프로젝트 화면 넷의 부모는 보드다(§0-7 표 3~6행)", () => {
+  assert.equal(parentPath("/p/a/workers"), "/p/a");
+  assert.equal(parentPath("/p/a/personas"), "/p/a");
+  assert.equal(parentPath("/p/a/protocols"), "/p/a");
+  assert.equal(parentPath("/p/a/tickets/fff28e90"), "/p/a");
+  assert.equal(parentPath("/p/a/tickets/new"), "/p/a"); // 발행도 보드에서 들어간다(§비주얼 §4)
+});
+
+test("parentPath — 한글 stem은 인코딩돼도 같은 부모다", () => {
+  // Next는 세그먼트를 퍼센트 인코딩된 원문으로 넘긴다(`decodeHash`) — 목적지가 프로젝트
+  // id뿐이라 풀지 않는다. 두 표기가 갈리면 한글 티켓에서만 `Esc`가 죽는다.
+  assert.equal(parentPath("/p/a/tickets/한글제목"), "/p/a");
+  assert.equal(parentPath("/p/a/tickets/%ED%95%9C%EA%B8%80%EC%A0%9C%EB%AA%A9"), "/p/a");
+});
+
+test("parentPath — 표에 없는 경로에 부모를 지어내지 않는다", () => {
+  assert.equal(parentPath("/settings"), null);
+  assert.equal(parentPath("/p/a/bogus"), null);
+  assert.equal(parentPath("/p/a/ticketsss"), null); // 접두만 같은 것에 안 걸린다
+});
 
 /** 칸반 호버 관계선 기하 (DESIGN.md §비주얼 §17). 레인이 하한 폭 288(`min-w-72`)까지
  *  좁아진 배치다 — 카드는 280폭, 카드 테두리 사이 거터는 24다. 레인은 `flex-1`이라 보통은

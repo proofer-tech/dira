@@ -41,8 +41,9 @@ export function useKeymap(): Keymap {
 }
 
 /** 입력칸 안에서 난 이벤트인가. `[contenteditable]`은 `="false"`도 잡지만 이 앱에 그런 노드가
- *  없다 — §0-6이 적은 선택자 그대로다. */
-function isTyping(target: EventTarget | null): boolean {
+ *  없다 — §0-6이 적은 선택자 그대로다. 키맵 밖의 고정 키(`Esc` — §0-7)도 같은 판정을 써야 해서
+ *  export한다. 선택자가 두 벌이 되면 한쪽에서만 쓰던 글이 날아간다. */
+export function isTyping(target: EventTarget | null): boolean {
   return target instanceof Element && target.closest("input, textarea, [contenteditable]") !== null;
 }
 

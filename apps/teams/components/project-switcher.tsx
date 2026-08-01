@@ -6,7 +6,7 @@
  *  전환기는 헤더 우측 한 자리에 "지금 어느 큐인지"와 "다른 큐로 가는 길"을 겹쳐 둔다. 카운트는
  *  여기서 세지 않는다 — 셸이 서버에서 세서 props로 넘긴다. 내비는 활성 링크 판정에 현재 경로가
  *  필요해서 여기 있다(서버 레이아웃은 pathname을 모른다). */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Check, ChevronsUpDown, Settings2 } from "lucide-react";
@@ -23,9 +23,9 @@ import {
   CommandShortcut,
 } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { projectPath } from "@/lib/urls";
+import { parentPath, projectPath } from "@/lib/urls";
 import { formatCombo } from "@/lib/keymap";
-import { useHotkey, useKeymap } from "@/components/keymap-provider";
+import { isTyping, useHotkey, useKeymap } from "@/components/keymap-provider";
 
 /** 헤더 좌측 브랜드 마크 (§비주얼 §14 `헤더 표시`). **두 셸이 같이 쓴다** — 프로젝트 스코프 셸과
  *  루트 셸에서 값이 전부 같고 다른 건 `href` 하나다(§4: 프로젝트는 `/p/<project>`, 루트는 `/`).
@@ -213,6 +213,25 @@ export function ProjectNav({ id }: { id: string }) {
   // `stopPropagation`이 이벤트를 window까지 안 보낸다(§0-6 `언제 안 듣는가`).
   useHotkey("nav.board", () => router.push(base));
   useHotkey("nav.workers", () => router.push(`${base}/workers`));
+
+  // `Esc`가 부모로 올린다(§0-7). **키맵에 없는 고정 키**라 `useHotkey`를 못 쓴다(그 훅은
+  // `ActionId`를 받는다) — 대신 같은 두 가드를 손으로 댄다. 위 `b`·`w`와 같은 이유로
+  // 이 컴포넌트가 있는 프로젝트 셸에서만 걸린다.
+  // - **bubble 단계**여야 한다: Radix `DismissableLayer`가 capture로 먼저 받아 닫으면서
+  //   `preventDefault()`를 부른다 — 열린 것이 있으면 `defaultPrevented`로 알아채고 물러난다.
+  //   겹침 목록을 우리가 들지 않는 이유가 이것이다(§0-7 거동).
+  // - `isTyping`이면 통과시킨다. 이 기능의 유일한 데이터 손실 표면이다(참견·티켓 편집기).
+  // `preventDefault`는 안 한다 — 글쇠 하나에 뺏을 브라우저 기본이 없다.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented || isTyping(e.target)) return;
+      const parent = parentPath(pathname);
+      if (parent) router.push(parent);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [pathname, router]);
+
   return (
     <nav className="flex items-center gap-4">
       {NAV.map(({ seg, label }) => {
