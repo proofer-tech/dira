@@ -62,7 +62,7 @@ const EXAMPLES = [
   "w2가 지금 무슨 일을 하고 있나",
   "w4는 어떤 엔진으로 도나",
   "답변 대기 티켓이 왜 안 도나",
-  "이 큐의 프로토콜을 요약해 달라",
+  "이 프로젝트의 프로토콜을 요약해 달라",
 ];
 
 /** §비주얼 §24 실패 5종. **`reason` 코드로 갈린다** — `output` 문장을 되짚으면 문구를 한 자
@@ -191,9 +191,9 @@ export function HomeUI({ project, initial }: { project: string; initial: HomeChu
            무엇을 물어볼 수 있는지를 못 알려준다). 스레드 상자는 아예 안 그린다 — 빈 상자가 서는
            순간이 없다(§13). 폼은 그대로 아래에 있다: 온보딩이 폼을 대신하지 않는다. */
         <div className="space-y-2">
-          <h2 className="text-sm font-medium">이 큐에 대해 묻는다</h2>
+          <h2 className="text-sm font-medium">이 프로젝트에 대해 묻는다</h2>
           <p className="text-sm text-muted-foreground">
-            티켓 · 워커 · 프로토콜 · repo를 읽고 답합니다. 큐를 고치지는 않습니다.
+            티켓 · 워커 · 프로토콜 · repo를 읽고 답합니다. 프로젝트를 고치지는 않습니다.
           </p>
           <div className="flex flex-wrap gap-2 pt-1">
             {EXAMPLES.map((q) => (
@@ -269,7 +269,7 @@ export function HomeUI({ project, initial }: { project: string; initial: HomeChu
       )}
 
       {/* §21의 세 번째 모드다(§24) — 그릇 · 자람 · `⌘↵` · 포커스 · `aria-disabled` 판정은
-          그 절 그대로고 갈리는 것은 이름 둘(`질문` · `이 큐에 대해 묻기`)뿐이다.
+          그 절 그대로고 갈리는 것은 이름 둘(`질문` · `이 프로젝트에 대해 묻기`)뿐이다.
           손잡이 줄 왼쪽은 **빈다**: `보냈습니다 · 아래 스트림에 뜹니다`는 여기서 틀린 말이고
           (도착을 말하는 것은 말풍선이다) 상시 문구를 놓을 것도 없다(생기는 파일이 없다). */}
       <form
@@ -283,7 +283,7 @@ export function HomeUI({ project, initial }: { project: string; initial: HomeChu
           <InputGroupTextarea
             ref={input}
             aria-label="질문"
-            placeholder="이 큐에 대해 묻기"
+            placeholder="이 프로젝트에 대해 묻기"
             className="max-h-32"
             value={text}
             // **도는 동안에도 편집 가능한 채로 둔다**(§24): `disabled`면 `:has(:disabled)`가

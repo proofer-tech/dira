@@ -416,8 +416,8 @@ export function EngineCell({
  *  성공(3)은 여기 없다 — 그 화면에는 에러가 없다. */
 const WORKTREE_STEP = [
   "워크트리를 만들지 못했습니다",
-  "큐 심링크를 만들지 못했습니다",
-  "큐 심링크가 이 큐를 가리키지 않습니다",
+  ".dira 심링크를 만들지 못했습니다",
+  ".dira 심링크가 이 프로젝트를 가리키지 않습니다",
 ];
 
 /** 워커 생성. **한 동작으로 끝난다** — 파일을 만들고 crontab 한 줄까지 서버가 등록한다(제약 4).
@@ -473,7 +473,7 @@ export function CreateWorkerButton({
           // 돌지 않는 워커 파일이 생기고, 사람은 왜 안 도는지 모른다.
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              이 큐에는 템플릿으로 쓸 워커가 없습니다. GUI는 기존 워커를 복사해서만 만들 수
+              이 프로젝트에는 템플릿으로 쓸 워커가 없습니다. GUI는 기존 워커를 복사해서만 만들 수
               있습니다 — 엔진 코드(tick.sh)가 어디 있는지는 워커 파일에만 적혀 있습니다.
               첫 워커는 손으로 만듭니다.
             </p>
@@ -518,7 +518,7 @@ export function CreateWorkerButton({
                 <p className="text-sm font-medium">
                   작업 디렉터리{" "}
                   <span className="font-mono text-xs break-all">{created.worktree.dir}</span>를
-                  만들고, 그 안의 <span className="font-mono text-xs">.dira</span>가 이 큐를
+                  만들고, 그 안의 <span className="font-mono text-xs">.dira</span>가 이 프로젝트를
                   가리키는 것까지 확인했습니다.
                 </p>
               ) : (
@@ -830,7 +830,7 @@ export function WorkerRowActions({ projectId, row }: { projectId: string; row: W
           ) : (
             <>
               <p className="text-sm text-muted-foreground">
-                파일을 지웁니다. 이 큐의 티켓은 삭제되지 않습니다.
+                파일을 지웁니다. 이 프로젝트의 티켓은 삭제되지 않습니다.
               </p>
               {row.cron && (
                 <p className="text-sm">

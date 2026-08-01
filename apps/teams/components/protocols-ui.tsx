@@ -333,7 +333,7 @@ function DeleteButton({ projectId, rel }: { projectId: string; rel: string }) {
             <TriangleAlert aria-hidden className="text-status-stale" />
             <AlertTitle>모든 세션이 협업 프로토콜 없이 시작합니다</AlertTitle>
             <AlertDescription>
-              tick.sh는 이 파일이 없으면 그냥 넘어갑니다 — 에러도 경고도 없습니다. 큐는 계속 돌고,
+              tick.sh는 이 파일이 없으면 그냥 넘어갑니다 — 에러도 경고도 없습니다. 이 프로젝트는 계속 돌고,
               세션만 규약을 모릅니다.
             </AlertDescription>
           </Alert>

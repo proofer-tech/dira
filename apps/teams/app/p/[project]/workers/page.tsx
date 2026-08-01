@@ -69,8 +69,8 @@ const DEFECT: Record<WorkerRow["defects"][number]["kind"], { title: string; why:
     why: "tick.sh가 ERROR cwd 없음을 남기고 락을 풀어 티켓을 되돌립니다 — 물었다 놓기만 합니다.",
   },
   "missing-link": {
-    title: "큐 심링크 없음",
-    why: "세션이 미끼 큐를 보고 자기 티켓을 못 찾습니다 — 완료 신고도 못 하고 reap이 attempts만 올립니다.",
+    title: ".dira 심링크 없음",
+    why: "세션이 미끼 .dira를 보고 자기 티켓을 못 찾습니다 — 완료 신고도 못 하고 reap이 attempts만 올립니다.",
   },
   "shared-cwd": {
     title: "작업 디렉터리 공유",
@@ -178,7 +178,7 @@ export default async function Workers({ params }: { params: Promise<{ project: s
       {rows.length === 0 ? (
         <div className="max-w-3xl space-y-4">
           <EmptyState
-            text="워커 없음 — 큐가 돌지 않는다"
+            text="워커 없음 — 이 프로젝트는 돌지 않는다"
             action={
               <CreateWorkerButton
                 projectId={id}
@@ -309,7 +309,7 @@ export default async function Workers({ params }: { params: Promise<{ project: s
                                 </p>
                               ))}
                               <p>
-                                준비 명령은 이 큐의 배치인{" "}
+                                준비 명령은 이 프로젝트의 배치인{" "}
                                 <span className="font-mono text-xs break-all">
                                   {project.root}/worktrees/{w.name}
                                 </span>
