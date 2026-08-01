@@ -8,7 +8,7 @@ import test from "node:test";
 import { releaseNotes } from "./release-notes.ts";
 
 const SLUG = { owner: "hsol", repo: "dira" };
-const R6 = "0.2.0을 받아뒀습니다. 앱을 다시 켤 때 적용됩니다.";
+const R6 = "0.2.0을 받아뒀습니다. 앱을 종료하면 몇 초 뒤 적용됩니다.";
 const compare = (...msgs: string[]) => JSON.stringify({ commits: msgs.map((message) => ({ commit: { message } })) });
 const boom = (why: string) => async () => {
   throw new Error(why);

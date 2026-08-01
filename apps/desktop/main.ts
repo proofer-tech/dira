@@ -417,7 +417,7 @@ async function checkForUpdate(manual: boolean) {
         ? {
             type: "info",
             message: `${r.updateInfo.version}을 받고 있습니다.`,
-            detail: "다 받으면 알려드립니다. 앱을 다시 켤 때 적용됩니다.",
+            detail: "다 받으면 알려드립니다. 앱을 종료하면 적용됩니다.",
             buttons: ["확인"],
           }
         : {
