@@ -476,8 +476,8 @@ def ask_context(fm, body):
         _quote(tail or "트랜스크립트를 찾지 못했습니다"))
 
 
-def ask_human(path, h, attempts, why):
-    """자동 회수 상한을 넘긴 티켓을 답변 요청으로 올린다.
+def ask_human(path, h, attempts, why, blocked=False):
+    """자동 회수 상한을 넘겼거나 신선한 `## 블록`이 붙은 티켓을 답변 요청으로 올린다.
 
     `.wip`에 굳혀 두면(구 `HOLD`) GUI가 `.wip`을 편집할 수 없어 **사람이 눈으로 발견할 때까지
     방치된다** (2026-07-31 5aa9486d: 인증서가 없어 막힌 티켓이 attempts 45까지 로그만 쌓았다).
@@ -493,11 +493,15 @@ def ask_human(path, h, attempts, why):
         ctx = ask_context(fm, body)
     except Exception as e:                   # 자료 수집 실패가 답변 요청 자체를 막지 않는다
         ctx = "\n### 죽은 세션 마지막 기록\n\n> 자료를 읽지 못했습니다: {}\n".format(e)
+    # 사유는 경로마다 사실이 다르다. 블록은 세션이 실패한 게 아니라 벽을 보고 판정하고 멈춘 것이다.
+    cause = ("세션이 `## 블록`을 남기고 멈췄습니다" if blocked
+             else "자동 회수 {}회 실패({})".format(attempts, why))
+    # 지시어는 `아래`다 -- 인용(결정 6)은 정형문 다음에 붙고, 화면에선 답변칸이 본문 위에 있다.
     with open(path, "a", encoding="utf-8") as f:
-        f.write("\n## 질문 {}\n\n자동 회수 {}회 실패({}). 엔진은 더 시도하지 않습니다 — {}\n{}".format(
-            sum(1 for l in body if re.match(r"^##\s*질문", l)) + 1, attempts, why,
-            "위 `## 블록`에 적힌 결정을 답해주세요."
-            if any(re.match(r"^##\s*블록", l) for l in body)
+        f.write("\n## 질문 {}\n\n{}. 엔진은 더 시도하지 않습니다 — {}\n{}".format(
+            sum(1 for l in body if re.match(r"^##\s*질문", l)) + 1, cause,
+            "아래 인용한 `## 블록`에 적힌 결정을 답해주세요."
+            if any(re.match(r"^##\s*블록", nfc(l)) for l in body)
             else "세션이 왜 계속 죽는지, 이 티켓을 계속 갈지 답해주세요.", ctx))
     # 잠금(deps)을 먼저 걸고 할당을 나중에 푼다. 순서를 바꾸면 그 사이에 티켓이
     # 잠금 없이 열려 다음 tick이 답변 없이 집어 간다.
@@ -507,11 +511,11 @@ def ask_human(path, h, attempts, why):
     upd = {"attempts": "0", "awaiting": a}
     upd.update({k: "" for k in REAP_CLEAR})
     set_fm_keys(path, upd)
-    return "ASK {} awaiting={} - 자동 회수 {}회 실패, 답변 요청으로 전환".format(h, a, attempts)
+    return "ASK {} awaiting={} - {}, 답변 요청으로 전환".format(h, a, cause)
 
 
 def reclaim(path, fm, why):
-    """attempts 상한까지 백로그로 복귀. 상한을 넘으면 답변 요청으로 올린다(사람 개입 대기)."""
+    """attempts 상한까지 백로그로 복귀. 상한을 넘거나 신선한 블록이 있으면 답변 요청으로 올린다."""
     h = ticket_hash(path, fm)
     attempts = int((fm.get("attempts") or "0").strip() or 0) + 1
     # 되돌리기(rename)를 먼저 이긴다. frontmatter를 먼저 쓰면 리퍼 둘이 겹칠 때 진 쪽의
@@ -522,8 +526,15 @@ def reclaim(path, fm, why):
         path = release(path)
     except (SystemExit, OSError) as e:
         return "REAP-FAIL {} {}".format(h, e)
-    if attempts > REAP_MAX_ATTEMPTS:
-        return ask_human(path, h, attempts, why)
+    # 본문의 마지막 `##` 절이 `블록`이면 세션이 벽을 보고 "이건 사람이 푼다"고 판정한 것이라
+    # 재실행이 얻는 게 없다 -- attempts와 무관하게 사람에게 올린다(DESIGN.md 결정 7).
+    # 묵은 블록 뒤에는 ask_human이 붙인 `## 질문 n`이 반드시 오므로 마지막 절 하나로 갈린다.
+    # 빗나가면 현행 동작(자동 회수 2회)으로 떨어질 뿐이라 티켓을 잃지 않는다.
+    lines, end = read_fm(path)[1:]
+    heads = [l for l in lines[end:] if re.match(r"^##\s", nfc(l))]
+    blocked = bool(heads) and bool(re.match(r"^##\s*블록", nfc(heads[-1])))
+    if attempts > REAP_MAX_ATTEMPTS or blocked:
+        return ask_human(path, h, attempts, why, blocked)
     upd = {"attempts": attempts}
     upd.update({k: "" for k in REAP_CLEAR})
     set_fm_keys(path, upd)

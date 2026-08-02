@@ -61,7 +61,10 @@ try:
 
     a = open(os.path.join(ws, "tickets/aaaa1111.md"), encoding="utf-8").read()
     assert "## 질문 1" in a, "A: 질문 절이 없다\n" + a
-    assert "자동 회수 3회 실패" in a, "A: 정형문 첫 줄이 바뀌었다\n" + a
+    # A는 마지막 절이 `## 블록`이라 결정 7의 블록 경로다 — 세션은 실패한 게 아니라 판정하고 멈췄다.
+    # 회수 횟수를 세는 정형문은 블록이 없는 B가 지킨다.
+    assert "블록`을 남기고 멈췄습니다" in a, "A: 정형문 첫 줄이 바뀌었다\n" + a
+    assert "자동 회수" not in a, "A: 실패하지 않은 세션을 실패로 적었다\n" + a
     assert "### 티켓 Goal" in a and "> 토큰 갱신을 고친다." in a, "A: Goal 인용 없음\n" + a
     assert "Done when" not in a.split("### 티켓 Goal")[1].split("###")[0], "A: 다음 절까지 먹었다\n" + a
     assert "### 티켓 블록" in a and "> 인증서가 없어서" in a, "A: 블록 인용 없음\n" + a
@@ -70,6 +73,7 @@ try:
     assert "이거 해줘" not in a, "A: 마지막 레코드가 아니라 앞 레코드를 붙였다\n" + a
 
     b = open(os.path.join(ws, "tickets/bbbb2222.md"), encoding="utf-8").read()
+    assert "자동 회수 3회 실패" in b, "B: 상한 초과 정형문 첫 줄이 바뀌었다\n" + b
     assert "트랜스크립트를 찾지 못했습니다" in b, "B: 못 찾았다는 말이 없다\n" + b
     assert "### 티켓 블록" not in b, "B: 없는 절을 붙였다\n" + b
     assert "> " + "G" * 600 + "\n" in b, "B: Goal 600자 상한이 안 걸렸다"

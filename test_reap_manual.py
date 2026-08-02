@@ -60,6 +60,14 @@ try:
                              "attempts: " + str(T.REAP_MAX_ATTEMPTS),
                              "assigned_at: " + iso(-T.REAP_GRACE_SEC - 60)],
             body="## 목표\n테스트\n\n## 블록\n인증서가 없다.\n")
+    # I) 신선한 블록(마지막 절 = `## 블록`) -> attempts 0인데도 1회로 답변 요청(결정 7)
+    pi = mk(ws, "iiii9999", ["session_id: nosuchsession-zzzz", "deps: [aaaa0000]",
+                             "assigned_at: " + iso(-T.REAP_GRACE_SEC - 60)],
+            body="## 목표\n테스트\n\n## 블록\n사람이 로그인해야 한다.\n")
+    # J) 묵은 블록(뒤에 `## 질문 1`이 붙었다) -> 종전대로 자동 회수 1회
+    pj = mk(ws, "jjjj0000", ["session_id: nosuchsession-zzzz",
+                             "assigned_at: " + iso(-T.REAP_GRACE_SEC - 60)],
+            body="## 목표\n테스트\n\n## 블록\n사람이 로그인해야 한다.\n\n## 질문 1\n\n답해주세요.\n")
 
     msgs = T.reap(ws)
     joined = "\n".join(msgs)
@@ -97,6 +105,25 @@ try:
     grow = [r for r in T.scan(ws) if r["hash"] == "gggg7777"][0]
     assert grow["unmet"] and not grow["assigned"], "G: 답변 전에 디스패치 후보다"
 
+    # I) 블록을 남긴 세션은 재실행이 얻는 게 없다. attempts를 태우지 않고 바로 사람에게.
+    iopen = os.path.join(ws, "tickets/iiii9999.md")
+    assert not os.path.exists(pi) and os.path.exists(iopen), "I: 신선한 블록인데 .wip에 굳었다"
+    assert "ASK iiii9999" in joined, "I: 1회로 답변 요청 안 됨(백로그로 되돌렸다)\n" + joined
+    ifm, ilines, iend = T.read_fm(iopen)
+    iawait = ifm["awaiting"].strip()
+    assert len(iawait) == 8, "I: awaiting 미기록 " + repr(iawait)
+    assert T.deps_of(ilines, iend) == ["aaaa0000", iawait], "I: 기존 dep 유실 또는 잠금 누락"
+    ibody = "\n".join(ilines[iend:])
+    assert "## 질문 1" in ibody, "I: 질문 절이 없다\n" + ibody
+    assert "자동 회수" not in ibody, "I: 실패하지 않은 세션을 실패로 적었다\n" + ibody
+    assert "아래 인용한 `## 블록`" in ibody, "I: 지시어가 `아래`가 아니다\n" + ibody
+
+    # J) 답을 받은 뒤 그냥 죽은 세션까지 블록으로 오인하면 정당한 자동 회수 2회가 사라진다
+    jopen = os.path.join(ws, "tickets/jjjj0000.md")
+    assert not os.path.exists(pj) and os.path.exists(jopen), "J: 백로그 복귀 안 됨"
+    assert "REAP jjjj0000 attempts=1" in joined, "J: 묵은 블록을 신선으로 봤다\n" + joined
+    assert not T.read_fm(jopen)[0].get("awaiting", "").strip(), "J: 묵은 블록에 awaiting을 걸었다"
+
     # H) 유령 회귀(5f0498c9): 리퍼 둘이 겹쳐도 사라진 .wip을 되살리지 않는다
     ph = mk(ws, "hhhh8888", ["session_id: nosuchsession-zzzz",
                              "assigned_at: " + iso(-T.REAP_GRACE_SEC - 60)])
@@ -105,7 +132,7 @@ try:
     assert "REAP-FAIL hhhh8888" in T.reclaim(ph, hfm, "진 쪽"), "H: 진 쪽이 조용히 성공했다"
     assert not os.path.exists(ph), "H: 진 쪽이 .wip을 되살렸다 - 주인 없는 유령이 남는다"
 
-    print("PASS 8/8")
+    print("PASS 10/10")
     for m in msgs:
         print("  " + m)
 finally:
