@@ -1,0 +1,197 @@
+/* 랜딩은 VitePress 기본 레이아웃 밖에서 자기 폭을 쓴다. */
+.dira-landing { --vp-c-bg: var(--bg); }
+.dira-landing .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 24px; }
+
+/* VitePress 기본 네브바(.VPNav)는 매뉴얼 페이지에는 필요하지만 랜딩은
+   자기 헤더(아래 header 규칙)를 따로 그린다 — 겹쳐 뜨는 것을 막는다.
+   .dira-landing 스코프 밖(매뉴얼 페이지)의 기본 테마는 건드리지 않는다. */
+.dira-landing .VPNav { display: none; }
+.dira-landing #VPContent { padding-top: 0; margin-top: 0; }
+
+/* 아래는 docs/index.html:12-199에서 그대로 옮긴 것이다. 값은 손대지 않는다 —
+   oklch 상태 색 넷(--active/--blocked/--done/--stale)은 앱 화면의 레인 색과 같은 값이다.
+   선택자는 VitePress 기본 테마(header·footer·h1·pre·a 등 같은 태그·클래스를 쓴다)와
+   충돌하지 않도록 `.dira-landing` 아래로 스코프했다 — 값 자체는 바꾸지 않았다. */
+:root {
+  --bg: #FFFFFF;
+  --fg: #0A0A0A;
+  --panel: #FAFAFA;
+  --muted-fg: #71717A;
+  --faint: #A1A1AA;
+  --border: #E4E4E7;
+  --active:  oklch(0.52 0.18 258);
+  --blocked: oklch(0.52 0.13 75);
+  --done:    oklch(0.50 0.13 155);
+  --stale:   oklch(0.52 0.19 25);
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  --maxw: 1080px;
+}
+.dira-landing {
+  background: var(--bg); color: var(--fg);
+  font: 15px/1.7 -apple-system, BlinkMacSystemFont, "Pretendard", "Apple SD Gothic Neo", "Segoe UI", sans-serif;
+  word-break: keep-all; overflow-wrap: anywhere;
+  -webkit-font-smoothing: antialiased;
+}
+.dira-landing a { color: inherit; }
+.dira-landing code, .dira-landing kbd { font-family: var(--mono); font-size: 0.88em; }
+
+/* ── announcement bar ───────────────────────────── */
+.dira-landing .ann {
+  background: var(--fg); color: #FAFAFA;
+  font-size: 13px; line-height: 1; position: relative; z-index: 20;
+}
+.dira-landing .ann .wrap { display: flex; align-items: center; justify-content: center; gap: 12px; height: 38px; }
+.dira-landing .ann a {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 10px; border-radius: 99px; text-decoration: none;
+  background: rgba(255,255,255,.12); font-size: 12px; font-weight: 500;
+}
+.dira-landing .ann a:hover { background: rgba(255,255,255,.2); }
+.dira-landing .ann span { color: #D4D4D8; }
+
+/* ── header ─────────────────────────────────────── */
+.dira-landing header {
+  position: sticky; top: 0; z-index: 10;
+  height: 60px; display: flex; align-items: center;
+  background: var(--bg); border-bottom: 1px solid var(--border);
+}
+.dira-landing header .wrap { display: flex; align-items: center; gap: 12px; width: 100%; }
+.dira-landing .brand { display: flex; align-items: center; gap: 8px; text-decoration: none; font-family: var(--mono); font-weight: 600; font-size: 16px; letter-spacing: -0.03em; }
+.dira-landing .brand svg { width: 20px; height: 20px; fill: currentColor; }
+.dira-landing header nav { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+
+.dira-landing .btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 34px; padding: 0 14px; border-radius: 8px;
+  font-size: 13.5px; font-weight: 500; text-decoration: none;
+  border: 1px solid var(--border); background: var(--bg); color: var(--fg); white-space: nowrap;
+}
+.dira-landing .btn:hover { background: var(--panel); }
+.dira-landing .btn-primary { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.dira-landing .btn-primary:hover { background: #262626; }
+.dira-landing .btn-lg { height: 44px; padding: 0 22px; font-size: 15px; border-radius: 10px; }
+
+/* ── shared type ────────────────────────────────── */
+.dira-landing .eyebrow {
+  margin: 0 0 14px; font-family: var(--mono);
+  font-size: 11.5px; font-weight: 600; letter-spacing: .13em;
+  text-transform: uppercase; color: var(--faint);
+}
+.dira-landing h1 {
+  margin: 0 0 20px; font-size: clamp(38px, 6vw, 62px); line-height: 1.08;
+  letter-spacing: -0.045em; font-weight: 700;
+}
+.dira-landing h2 { margin: 0 0 14px; font-size: clamp(26px, 3.4vw, 36px); line-height: 1.22; letter-spacing: -0.035em; font-weight: 700; }
+.dira-landing h3 { margin: 0 0 6px; font-size: 15.5px; letter-spacing: -0.02em; font-weight: 650; }
+.dira-landing .body { margin: 0; color: var(--muted-fg); font-size: 15.5px; line-height: 1.72; }
+.dira-landing .body b, .dira-landing .body strong { color: var(--fg); font-weight: 650; }
+
+/* ── hero ───────────────────────────────────────── */
+.dira-landing .hero { padding: 96px 0 0; text-align: center; }
+.dira-landing .hero h1 { max-width: 15em; margin-inline: auto; }
+.dira-landing .hero .body { max-width: 34em; margin: 0 auto 34px; }
+.dira-landing .cta { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+.dira-landing .cta-note { margin: 16px 0 0; font-size: 12.5px; color: var(--faint); font-family: var(--mono); }
+
+/* ── pillar grid ────────────────────────────────── */
+.dira-landing .pillars { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 60px; text-align: left; }
+.dira-landing .pillar { border: 1px solid var(--border); border-radius: 12px; padding: 20px; background: var(--panel); }
+.dira-landing .tag {
+  display: inline-block; margin-bottom: 12px; padding: 3px 9px; border-radius: 5px;
+  font-family: var(--mono); font-size: 10.5px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase;
+}
+.dira-landing .t-queue  { color: var(--blocked); background: color-mix(in oklab, var(--blocked) 12%, transparent); }
+.dira-landing .t-worker { color: var(--active);  background: color-mix(in oklab, var(--active) 12%, transparent); }
+.dira-landing .t-ui     { color: var(--done);    background: color-mix(in oklab, var(--done) 12%, transparent); }
+.dira-landing .t-engine { color: var(--stale);   background: color-mix(in oklab, var(--stale) 12%, transparent); }
+.dira-landing .pillar p { margin: 0; font-size: 14px; color: var(--muted-fg); line-height: 1.6; }
+
+/* ── figures ────────────────────────────────────── */
+.dira-landing figure { margin: 0; }
+.dira-landing .shot { display: block; width: 100%; height: auto; border: 1px solid var(--border); border-radius: 12px; background: #fff; }
+.dira-landing figcaption { margin-top: 14px; font-size: 13.5px; line-height: 1.68; color: var(--muted-fg); }
+.dira-landing figcaption b { color: var(--fg); font-weight: 650; }
+.dira-landing figure.narrow { max-width: 880px; margin-inline: auto; }
+.dira-landing .hero figure { margin-top: 64px; text-align: left; }
+
+/* ── stats ──────────────────────────────────────── */
+.dira-landing .stats { margin-top: 88px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.dira-landing .stats ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, 1fr); }
+.dira-landing .stats li { padding: 26px 20px; border-left: 1px solid var(--border); }
+.dira-landing .stats li:first-child { border-left: 0; padding-left: 0; }
+.dira-landing .stats b { display: block; font-size: 28px; font-weight: 700; letter-spacing: -0.03em; font-family: var(--mono); line-height: 1.2; }
+.dira-landing .stats span { display: block; margin-top: 4px; font-size: 12.5px; color: var(--faint); line-height: 1.5; }
+
+/* ── content rows ───────────────────────────────── */
+.dira-landing section { padding: 96px 0; }
+.dira-landing section + section { padding-top: 0; }
+.dira-landing .row { display: grid; grid-template-columns: minmax(0, 400px) minmax(0, 1fr); gap: 56px; align-items: start; }
+.dira-landing .row.flip > .col-text { order: 2; }
+.dira-landing .row.flip > .col-vis  { order: 1; }
+.dira-landing .col-text { position: sticky; top: 96px; }
+
+.dira-landing .marks { list-style: none; margin: 20px 0 0; padding: 0; }
+.dira-landing .marks li { position: relative; padding: 5px 0 5px 20px; font-size: 14px; color: var(--muted-fg); line-height: 1.6; }
+.dira-landing .marks li::before { content: "—"; position: absolute; left: 0; color: var(--faint); }
+.dira-landing .marks b { color: var(--fg); font-weight: 650; }
+
+.dira-landing .arrows { margin: 24px 0 0; display: flex; flex-wrap: wrap; gap: 6px 20px; }
+.dira-landing .arrows a {
+  font-size: 13.5px; font-weight: 550; text-decoration: none;
+  border-bottom: 1px solid var(--border); padding-bottom: 2px;
+}
+.dira-landing .arrows a:hover { border-color: var(--fg); }
+.dira-landing .arrows a::after { content: " →"; color: var(--faint); }
+
+/* ── engine ─────────────────────────────────────── */
+.dira-landing .two { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: start; margin-top: 40px; }
+.dira-landing pre {
+  margin: 0; padding: 20px; overflow-x: auto;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+  font-family: var(--mono); font-size: 13px; line-height: 1.75;
+}
+.dira-landing pre .c { color: var(--faint); }
+.dira-landing .why { list-style: none; margin: 0; padding: 0; }
+.dira-landing .why li { padding: 18px 0; border-top: 1px solid var(--border); }
+.dira-landing .why li:last-child { border-bottom: 1px solid var(--border); }
+.dira-landing .why h3 { margin-bottom: 5px; }
+.dira-landing .why p { margin: 0; font-size: 14px; color: var(--muted-fg); line-height: 1.65; }
+.dira-landing .why .m { color: var(--stale); font-weight: 600; }
+
+/* ── limits ─────────────────────────────────────── */
+.dira-landing .limits { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 0 48px; }
+.dira-landing .limits li { padding: 14px 0 14px 20px; position: relative; font-size: 14px; color: var(--muted-fg); line-height: 1.6; border-top: 1px solid var(--border); }
+.dira-landing .limits li::before { content: "—"; position: absolute; left: 0; color: var(--faint); }
+.dira-landing .limits b { color: var(--fg); font-weight: 650; }
+
+/* ── closing ────────────────────────────────────── */
+.dira-landing .closing { background: var(--panel); border-top: 1px solid var(--border); padding: 96px 0; text-align: center; }
+.dira-landing .closing .body { max-width: 34em; margin: 0 auto 34px; }
+
+/* ── footer ─────────────────────────────────────── */
+.dira-landing footer { border-top: 1px solid var(--border); padding: 56px 0 40px; }
+.dira-landing .fgrid { display: grid; grid-template-columns: 1.6fr repeat(3, 1fr); gap: 40px; }
+.dira-landing .fbrand { display: flex; align-items: center; gap: 8px; font-family: var(--mono); font-weight: 600; font-size: 16px; letter-spacing: -0.03em; }
+.dira-landing .fbrand svg { width: 20px; height: 20px; fill: currentColor; }
+.dira-landing .fnote { margin: 12px 0 0; font-size: 13px; color: var(--faint); max-width: 24em; line-height: 1.6; }
+.dira-landing .fcol h4 { margin: 0 0 12px; font-size: 12px; font-family: var(--mono); font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); }
+.dira-landing .fcol ul { list-style: none; margin: 0; padding: 0; }
+.dira-landing .fcol li { padding: 4px 0; }
+.dira-landing .fcol a { font-size: 13.5px; color: var(--muted-fg); text-decoration: none; }
+.dira-landing .fcol a:hover { color: var(--fg); }
+.dira-landing .fbot { margin-top: 48px; padding-top: 24px; border-top: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 12.5px; color: var(--faint); }
+.dira-landing .fbot .sep { margin-left: auto; }
+
+@media (max-width: 900px) {
+  .dira-landing .row, .dira-landing .two, .dira-landing .pillars, .dira-landing .limits { grid-template-columns: 1fr; }
+  .dira-landing .row { gap: 28px; }
+  .dira-landing .row.flip > .col-text, .dira-landing .row.flip > .col-vis { order: 0; }
+  .dira-landing .col-text { position: static; }
+  .dira-landing .stats ul { grid-template-columns: 1fr 1fr; }
+  .dira-landing .stats li:nth-child(3) { border-left: 0; padding-left: 0; }
+  .dira-landing .stats li:nth-child(n+3) { border-top: 1px solid var(--border); }
+  .dira-landing .fgrid { grid-template-columns: 1fr 1fr; }
+  .dira-landing section, .dira-landing .closing { padding: 64px 0; }
+  .dira-landing .hero { padding-top: 56px; }
+  .dira-landing .limits li:first-child + li { border-top: 1px solid var(--border); }
+}
