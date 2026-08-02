@@ -220,7 +220,9 @@ MIT 오픈소스라 짧다. 다만 한 조항은 형식이 아니라 실질이�
 | 사업자등록번호 | 337-81-03650 |
 | 주소 | 서울 강남구 강남대로112길 47, 2층 421A |
 | 문의 | info@proofer.tech |
-| 개인정보 보호책임자 | **[확정 필요 — 아래 §열린 항목]** |
+| 개인정보 보호책임자 | 임한솔 (대표) · info@proofer.tech |
+
+통신판매업 신고번호는 적지 않는다 — 판매가 없다. 유료 플랜이 생기면 그때 신고와 함께 는다.
 
 ## 배포
 
@@ -257,10 +259,26 @@ master push가 곧 배포다. `release.yml`의 bump 커밋도 배포를 태우�
 
 ## 열린 항목
 
-1. **GA4 데이터 보존 기간** — 방침 §보유·파기에 들어갈 값. 확인 경로가 셋 다 사람 손을 요구한다:
-   gstack QA 크롬 프로필은 인증 쿠키 0건이라 로그아웃 상태고, `chrome-cdp`는 실행 중인 크롬을
-   강제 종료하며, `gcloud auth print-access-token`은 재인증에서 막힌다. `gcloud auth login`
-   한 번이면 Admin API `properties/548085611/dataRetentionSettings`로 읽는다.
-2. **개인정보 보호책임자** — proofer.tech에 기재가 없다. 개인정보 보호법 §30 필수 기재사항이라
-   비울 수 없다. 대표자 임한솔 / info@proofer.tech로 기재하는 것이 기본값이고, 별도 지정자가
-   있으면 그 이름·직위로 바꾼다.
+**GA4 데이터 보존 기간** 하나가 남았다. 방침 §보유·파기의 값이다. 2026-08-02 시도 기록:
+
+| 경로 | 결과 |
+|---|---|
+| gstack QA 크롬 프로필 + CDP | 막힘. `Default/Cookies`에 쿠키 18건이지만 `SID`·`SAPISID`·`__Secure-1PSID` **0건** — 로그아웃 상태 |
+| `bin/chrome-cdp` | 안 씀. 실행 중인 사용자 크롬을 `osascript quit` → `pkill`로 끈다 |
+| `gcloud auth print-access-token --scopes=…analytics.readonly` | 막힘. gcloud 기본 자격의 스코프 목록이 고정이고 analytics가 없다 |
+| 기본 스코프 토큰으로 Admin API | `403 ACCESS_TOKEN_SCOPE_INSUFFICIENT` |
+
+남은 길은 ADC 로그인이다:
+
+```
+gcloud auth application-default login \
+  --scopes=openid,https://www.googleapis.com/auth/userinfo.email,https://www.googleapis.com/auth/analytics.readonly
+```
+
+그 뒤 `properties/548085611/dataRetentionSettings`를 읽는다. Analytics Admin API가 ADC의
+할당량 프로젝트에서 꺼져 있으면 한 번 더 막힐 수 있다. **값 하나 때문에 이 길을 뚫는 것이
+아깝다면 GA4 콘솔에서 눈으로 보고 적는 것이 맞다** — 이 값은 방침에 한 줄로 들어가고,
+바뀌는 일이 거의 없다.
+
+이 값이 없으면 방침의 나머지 전부는 확정이고 보존 기간 한 줄만 비어 있다. 랜딩·매뉴얼 구현은
+이것을 기다리지 않는다.
