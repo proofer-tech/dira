@@ -393,7 +393,8 @@ export function HomeUI({ project, initial }: { project: string; initial: HomeChu
             <div className="space-y-2">
               <h2 className="text-sm font-medium">이 프로젝트에 대해 묻는다</h2>
               <p className="text-sm text-muted-foreground">
-                티켓 · 워커 · 프로토콜 · repo를 읽고 답합니다. 프로젝트를 고치지는 않습니다.
+                티켓 · 워커 · 프로토콜 · repo를 읽고 답합니다. 고치는 것은 페르소나 · 프로토콜 ·
+                워커 스크립트 셋뿐입니다.
               </p>
             </div>
           ) : (
@@ -710,18 +711,20 @@ function Failure({ fail }: { fail: Answer }) {
  *  | 보는 것 | 문구 |
  *  |---|---|
  *  | 도는 워커 세션 | `도는 세션에는 여기서 말을 걸 수 없습니다 · 참견은 <해시> 상세에서` |
- *  | 끝난 워커 세션 | `읽기 도구 셋으로 이 세션에 이어 묻습니다 · <해시>` |
+ *  | 끝난 워커 세션 | `워커 권한 없이 이 세션에 이어 묻습니다 · <해시>` |
  *
  *  **끝난 세션에도 한 줄이 서는 이유는 권한이 눈에 안 보이기 때문이다**(§24): 화면이 `w4`의
- *  세션을 열어 두고 있으면 그 세션의 힘(쓰기 도구 · 워크트리 cwd)이 있다고 읽히는데, 이어 묻는
- *  것은 **홈 에이전트이고 도구는 `Read`·`Glob`·`Grep` 셋**이다(§7 답 1(b) — 실측으로
- *  `--resume`이 이어 묻는 쪽의 플래그를 쓴다). 해시는 **링크다**(mono + 링크 — §5 `<Hash>`의
+ *  세션을 열어 두고 있으면 그 세션의 힘(워크트리 cwd에서 뭐든 고치는 쓰기)이 있다고 읽히는데,
+ *  이어 묻는 것은 **홈 에이전트이고 그 힘은 홈의 것**이다(§7 답 1(b) — 실측으로 `--resume`이
+ *  이어 묻는 쪽의 플래그를 쓴다). **이 줄은 도구를 안 센다**(§7 §화면 표기): 종전
+ *  `읽기 도구 셋으로 …`는 요구 `20e4a6f4`가 쓰기를 열자 한 번에 거짓이 됐다 — 개수를 세는 문구는
+ *  홈의 집합이 갈릴 때마다 죽고, 이 자리가 말할 사실은 *누구의 힘이냐* 하나다. 해시는 **링크다**(mono + 링크 — §5 `<Hash>`의
  *  관용구. 이 레포에는 그 컴포넌트가 없고 6개 화면이 같은 세 클래스를 인라인한다). 목적지는
  *  `stem`이고 글자는 `hash`다(§식별자). `min-w-0 truncate`는 §21 텍스트 잘림 그대로다. */
 function WorkerNote({ project, worker }: { project: string; worker: WorkerSession }) {
   return (
     <span className="min-w-0 truncate text-xs text-muted-foreground">
-      {worker.running ? "도는 세션에는 여기서 말을 걸 수 없습니다 · 참견은 " : "읽기 도구 셋으로 이 세션에 이어 묻습니다 · "}
+      {worker.running ? "도는 세션에는 여기서 말을 걸 수 없습니다 · 참견은 " : "워커 권한 없이 이 세션에 이어 묻습니다 · "}
       <Link
         href={`/p/${project}/tickets/${encodeURIComponent(worker.stem)}`}
         className="rounded-sm font-mono underline"

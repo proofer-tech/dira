@@ -31,7 +31,7 @@ const {
   newConversation,
   switchConversation,
   workerSessions,
-  TOOL_FLAGS,
+  toolFlags,
 } = await import("./home-agent.ts");
 type HomeChunk = Awaited<ReturnType<typeof pollHome>>;
 const { tailEvents } = await import("./transcript.ts");
@@ -195,23 +195,52 @@ test("workerSessions — `.wip` 전부가 먼저, `.done`은 최근 10개. sessi
   assert.deepStrictEqual([...new Set(rows.map((r) => r.worker))], ["w1", "w3"]);
 });
 
-test("buildPrompt — 스냅샷이 질문 앞에 오고 읽기 전용이라는 말이 들어간다", () => {
+test("buildPrompt — 스냅샷이 질문 앞에 오고 경계가 글로 들어간다", () => {
   const p = buildPrompt("SNAP", "w1이 지금 무슨 일을 하고 있나?");
   assert.ok(p.indexOf("SNAP") < p.indexOf("w1이 지금"));
+  // 이 문장은 `20e4a6f4`가 쓰기를 열어도 **그대로 산다**(§7 §안 만드는 것 무수정)
   assert.match(p, /티켓을 만들지도\n고치지도 않는다/);
+  // 종전 `(쓰기 도구는 애초에 막혀 있다)`가 거짓이 된 자리 — 새 경계가 셋 다 글로 서고
+  // 막힌 쪽도 이름으로 선다(막힌 것을 두드리다 끝나는 턴이 사람에게는 고장으로 보인다)
+  for (const s of ["personas/**", "protocols/**", "workers/*.sh", "worktrees/**", "tickets/**"]) {
+    assert.ok(p.includes(s), `프롬프트에 ${s}가 없다 — §7 §쓰기가 닿는 곳 셋`);
+  }
+  assert.ok(!p.includes("쓰기 도구는 애초에 막혀"));
 });
 
-test("TOOL_FLAGS — 도구 표면을 정하는 세 조각이 다 있다 (89962e56)", () => {
-  // `--allowed-tools`는 **도구를 빼지 않는다**(권한 자동승인 목록이다). 이 셋이 빠지면 세션에
-  // `Bash`가 살아나고 화면은 자기 가드에 대해 거짓말한다 — 그게 `89962e56` 그 사건이다.
-  // 실측 A/B는 `home-agent.ts` 머리 주석에 있다. 값이 아니라 **존재**를 못박는다.
-  for (const flag of ["--tools", "--strict-mcp-config", "--permission-mode"]) {
-    assert.ok(TOOL_FLAGS.includes(flag), `${flag}가 빠졌다 — 도구 표면이 §7 표보다 넓어진다`);
+test("toolFlags — 네 조각과 경로 스코프 셋 (89962e56 · 7e35d300)", () => {
+  const flags = toolFlags("/Users/x/proj/.dira");
+
+  // ① 네 조각이 다 있다. `--allowed-tools`는 **도구를 빼지 않고**(권한 목록이다) 나머지 셋 중
+  // 하나라도 빠지면 세션에 `Bash`가 살아난다 — 그게 `89962e56` 그 사건이다. 지금은 넷째가
+  // 경로 스코프까지 지므로 그것도 **존재**로 못박는다. 실측은 `home-agent.ts` 머리 주석에 있다.
+  for (const flag of ["--tools", "--strict-mcp-config", "--permission-mode", "--allowed-tools"]) {
+    assert.ok(flags.includes(flag), `${flag}가 빠졌다 — 도구 표면이 §7 표보다 넓어진다`);
   }
-  // 값은 variadic 함정 때문에 **쉼표 한 토큰**이어야 한다(공백으로 나누면 질문까지 도구로 먹는다)
-  assert.strictEqual(TOOL_FLAGS[TOOL_FLAGS.indexOf("--tools") + 1], "Read,Glob,Grep");
-  // `--dangerously-skip-permissions`는 §7이 명시적으로 뺀 것이다
-  assert.ok(!TOOL_FLAGS.some((f) => f.includes("dangerously")));
+  // ② `--tools` 값은 variadic 함정 때문에 **쉼표 한 토큰**이다(공백으로 나누면 질문까지 도구로 먹는다)
+  assert.strictEqual(flags[flags.indexOf("--tools") + 1], "Read,Glob,Grep,Write,Edit");
+
+  const scope = flags.slice(flags.indexOf("--allowed-tools") + 1);
+  // ③ 쓰기가 닿는 곳 셋이 다 있다. `Write`·`Edit` 양쪽에 붙어야 한다 — 한쪽만 스코프면
+  // 다른 쪽이 큐 전체를 연다(절대경로는 `//` 접두다 — 실측 문법)
+  for (const dir of ["personas/**", "protocols/**", "workers/*.sh"]) {
+    for (const tool of ["Write", "Edit"]) {
+      assert.ok(
+        scope.includes(`${tool}(///Users/x/proj/.dira/${dir})`),
+        `${tool}(…/${dir})가 없다 — §7 §쓰기가 닿는 곳 셋`,
+      );
+    }
+  }
+  // ④ 밖이어야 하는 둘이 **어느 스코프에도 안 나온다**. `worktrees/` 아래는 실제 프로젝트 코드고
+  // `tickets/`는 요구가 명시적으로 뺐다(§7 §안 만드는 것 무수정)
+  for (const out of ["worktrees", "tickets"]) {
+    assert.ok(!scope.some((s) => s.includes(out)), `${out}가 스코프에 들었다 — 요구가 막으라고 한 것이다`);
+  }
+  // ⑤ 스코프 없는 맨 `Write`·`Edit`는 큐 전체를 연다 — 그것도 없어야 한다
+  assert.ok(!scope.includes("Write") && !scope.includes("Edit"));
+  // ⑥ `--dangerously-skip-permissions`(스코프를 통째로 끈다) · `Bash`(셸은 경로로 못 막는다)는 §7이 뺀 것이다
+  assert.ok(!flags.some((f) => f.includes("dangerously")));
+  assert.ok(!flags.some((f) => f.includes("Bash")));
 });
 
 test("questionOf — 스냅샷·지시문을 떼고 사람이 쓴 질문만 남는다 (§비주얼 §24 말풍선)", () => {
@@ -727,7 +756,10 @@ test("`중지` — SIGTERM 하나로 끝나고, 받은 글은 남고, 다음 질
   assert.match(argv.at(-1) ?? "", new RegExp(`^-p --resume ${sid} `));
   assert.match(argv.at(-2) ?? "", new RegExp(`^-p --session-id ${sid} `)); // 첫 질문이 연 세션
   // 새 형식이 도구 표면을 안 넓혔다 — 늘어난 것은 출력 형식 셋뿐이다
-  assert.match(argv.at(-1) ?? "", /--tools Read,Glob,Grep .*--output-format stream-json --include-partial-messages --verbose/);
+  assert.match(
+    argv.at(-1) ?? "",
+    /--tools Read,Glob,Grep,Write,Edit .*--output-format stream-json --include-partial-messages --verbose/,
+  );
 });
 
 test("실패 ② 인증 — 새 형식에서도 판정은 `api_error_status` 401이다", async () => {
@@ -853,7 +885,9 @@ test("워커 세션 — 사라진 `current`는 대화 0건과 같고, 고르면 
   });
   const argv = readFileSync(ARGV, "utf8").trim().split("\n");
   assert.match(argv.at(-1) ?? "", new RegExp(`^-p --resume ${done} `));
-  assert.match(argv.at(-1) ?? "", /--tools Read,Glob,Grep --strict-mcp-config --permission-mode manual/);
+  assert.match(argv.at(-1) ?? "", /--tools Read,Glob,Grep,Write,Edit --strict-mcp-config --permission-mode manual/);
+  // 경로 스코프가 **이 프로젝트의 큐 루트**로 서 있다(`toolFlags(root)` — 상수 배열이면 못 하는 일이다)
+  assert.ok((argv.at(-1) ?? "").includes(`Edit(//${root}/personas/**)`));
   // 이어 물어도 대화 목록은 0건이다 — 사람 대화 20을 워커 세션이 밀어내지 않는다
   assert.deepStrictEqual((await readHome(id)).conversations, []);
   assert.strictEqual((await readHome(id)).current, done);

@@ -9,10 +9,10 @@
  *
  *  ```
  *  <claude> -p  --session-id <uuid> | --resume <uuid>
- *               --tools Read,Glob,Grep
+ *               --tools Read,Glob,Grep,Write,Edit
  *               --strict-mcp-config
  *               --permission-mode manual
- *               --allowed-tools Read,Glob,Grep
+ *               --allowed-tools Read Glob Grep 'Write(//<큐 루트>/personas/**)' 'Edit(…)' … (6개)
  *               --output-format stream-json --include-partial-messages --verbose
  *               "<프롬프트>"
  *  ```
@@ -40,11 +40,14 @@
  *  - **`--permission-mode manual`은 위 둘이 놓친 것의 마지막 관문이다.** 이 머신의
  *    `~/.claude/settings.json`이 `"defaultMode":"bypassPermissions"`라, 이걸 안 덮으면 도구 목록에
  *    남은 것은 무엇이든 그냥 통과한다(§7: `--dangerously-skip-permissions`를 쓰지 않는다).
- *  - **`--allowed-tools`는 그 `manual` 위에서 읽기 셋을 물어보지 않게 한다.** 이제 도구 집합의
- *    가드가 아니다 — 그 일은 `--tools`가 한다. 값은 **쉼표로 붙인 한 토큰**이어야 한다: 이 옵션도
- *    `--tools`도 variadic(`<tools...>`)이라 `--allowed-tools Read Glob Grep "<질문>"`으로 띄우면
- *    질문까지 도구 이름으로 먹고 `Input must be provided either through stdin or as a prompt
- *    argument`로 죽는다.
+ *  - **`--allowed-tools`는 그 `manual` 위에서 물어보지 않을 것을 적는다 — 그리고 거기 쓴 경로가
+ *    실제로 경계다**(`7e35d300` 실측 · §7 §경계를 지는 것). 여전히 **도구 집합의 가드는 아니다**
+ *    (그 일은 `--tools`가 한다) — 바뀐 것은 `Write(//<경로>/**)` 꼴의 스코프가 먹는다는 것 하나다.
+ *    그래서 이 옵션 값은 **argv 여러 토큰**이다(실측이 그 모양으로 쟀다). variadic(`<tools...>`)
+ *    함정은 그대로 있으므로 **바로 뒤에 `--output-format`이 오는 자리를 지킨다**: 마지막에 두면
+ *    `--allowed-tools … "<질문>"`이 되어 질문까지 도구 이름으로 먹고 `Input must be provided
+ *    either through stdin or as a prompt argument`로 죽는다. `--tools` 값은 그와 별개로 **쉼표로
+ *    붙인 한 토큰**이다.
  *  - **모델 플래그가 없다.** §7이 `claude` 고정 · `모델 지정 안 함`으로 박았다(codex는 트랜스크립트를
  *    안 남겨서 고를 수 있게 하는 순간 이 화면이 빈다 — §4-3 표).
  *  - **`--output-format stream-json --include-partial-messages --verbose`** (`88ff08f8` 실측 ·
@@ -81,25 +84,38 @@ import { engineCell, listWorkers, workerOf, type Worker } from "./workers.ts";
 /** §7: **상한 5분.** `runWorker`의 60초와 다른 값이다 — 저건 python 스캔이고 이건 세션이다. */
 const TIMEOUT_MS = 5 * 60_000;
 
-/** 세션에 존재하는 도구 전부(§7 표 `세션의 도구는 Read·Glob·Grep 셋뿐이다`). **쉼표 한 토큰**이다(머리 주석의 variadic 함정). */
-const TOOLS = "Read,Glob,Grep";
+/** 세션에 존재하는 도구 전부(§7 표 `세션의 도구는 Read·Glob·Grep·Write·Edit 다섯뿐이다`).
+ *  **쉼표 한 토큰**이다(머리 주석의 variadic 함정). `Bash`가 없는 것이 경로 스코프의 전제다 —
+ *  셸은 리다이렉트·`sh -c`로 어느 경로든 쓰므로 그게 있으면 아래 스코프가 아무것도 안 막는다. */
+const TOOLS = "Read,Glob,Grep,Write,Edit";
 
-/** 도구 표면을 정하는 플래그 **전부**. 세 조각이 각자 다른 층을 막으므로 하나라도 빠지면 표면이
- *  넓어진다(머리 주석의 A/B): `--tools`가 built-in 목록을 셋으로 만들고, `--strict-mcp-config`가
- *  사람 머신의 MCP 도구를 빼고, `--permission-mode manual`이 남은 것의 관문이다.
- *  `--allowed-tools`는 그 `manual`이 읽기 셋을 물어보지 않게 하는 조각이지 도구 가드가 아니다.
+/** 쓰기가 닿는 곳 **셋**(§7 §쓰기가 닿는 곳 셋). **큐 루트 아래의 상대 글롭**이라 값이
+ *  프로젝트마다 다르다 — 아래가 상수 배열(`TOOL_FLAGS`)이 아니라 함수인 이유가 이 한 줄이다.
+ *  여기 없는 것은 밖이다: `worktrees/**`(아래에 실제 프로젝트 코드가 있다) · `tickets/**` · 큐 밖 전부. */
+const WRITABLE = ["personas/**", "protocols/**", "workers/*.sh"];
+
+/** 도구 표면을 정하는 플래그 **전부**. **네 조각이 각자 다른 층을 막으므로** 하나라도 빠지면
+ *  표면이 넓어진다(머리 주석의 A/B): `--tools`가 built-in 목록을 다섯으로 만들고,
+ *  `--strict-mcp-config`가 사람 머신의 MCP 도구를 빼고, `--permission-mode manual`이 남은 것의
+ *  관문이고, **`--allowed-tools`가 그 관문 위에서 경로 스코프를 건다.**
  *
- *  **`home-agent.test.ts`가 이 배열을 검증한다.** `--allowed-tools`만 남기는 회귀가 `89962e56`
+ *  넷째가 종전에는 "읽기 셋을 물어보지 않게 하는 조각"이었다. 지금은 **권한 목록이면서 동시에
+ *  경계 그 자체**다(`7e35d300` 실측: `..`도 심링크도 못 뚫는다 — 양방향 보수적 교집합).
+ *  그래도 **혼자서는 도구 가드가 아니다**(`89962e56` 그대로) — `manual`을 빼면 이 목록 밖 도구가
+ *  그냥 돌고, 이 목록을 빼면 `manual`이 다 물어보다 턴이 끝난다. **둘 중 하나를 빼는 변경은
+ *  경계를 통째로 없앤다.**
+ *
+ *  **`home-agent.test.ts`가 이 반환값을 검증한다.** `--allowed-tools`만 남기는 회귀가 `89962e56`
  *  그 사건이었고, 그건 코드를 봐서는 안 틀려 보인다 — 플래그 이름이 하는 일을 말해주지 않는다. */
-export const TOOL_FLAGS: readonly string[] = [
-  "--tools",
-  TOOLS,
-  "--strict-mcp-config",
-  "--permission-mode",
-  "manual",
-  "--allowed-tools",
-  TOOLS,
-];
+export function toolFlags(root: string): string[] {
+  // 절대경로는 **슬래시 둘로 시작한다**(`Write(//<절대경로>/**)` — 실측 `7e35d300`. `**`는 깊이 무제한).
+  const scope = WRITABLE.flatMap((glob) => {
+    const p = `//${path.join(root, glob)}`;
+    return [`Write(${p})`, `Edit(${p})`];
+  });
+  // `--allowed-tools`의 값은 여기서 **토큰 여러 개**다 — 뒤에 `--output-format`이 와야 한다(머리 주석).
+  return ["--tools", TOOLS, "--strict-mcp-config", "--permission-mode", "manual", "--allowed-tools", "Read", "Glob", "Grep", ...scope];
+}
 
 // ── 프로젝트 → 대화 목록 (§7 §대화가 여럿이다) ──────────────────────────────
 //
@@ -418,16 +434,21 @@ export async function snapshotOf(project: Pick<Project, "name" | "root">): Promi
 const QUESTION_MARK = "\n## 질문\n\n";
 
 /** 스냅샷 + 질문. **질문마다 새로 붙인다** — 세션 첫 턴에만 넣으면 두 번째 질문부터 낡은 상태를
- *  말한다(§7). 읽기 전용이라는 사실을 글로도 적는 이유: 플래그가 막는 것과 별개로, 막힌 도구를
- *  두드리다 답을 못 하고 끝나는 턴이 사람에게는 그냥 고장으로 보인다. */
+ *  말한다(§7). **경계를 글로도 적는 이유**는 종전에 `(쓰기 도구는 애초에 막혀 있다)`를 넣은 것과
+ *  같다: 플래그가 막는 것과 별개로, **막힌 것을 두드리다 답을 못 하고 끝나는 턴**이 사람에게는
+ *  그냥 고장으로 보인다. 그 자리가 이제 경계 **밖**(`worktrees/**`·`tickets/**`)이다.
+ *  `티켓을 만들지도 고치지도 않는다`는 그대로 산다(§7 §안 만드는 것 무수정 — `tickets/**`는
+ *  스코프 밖이다). 경로를 절대경로로 안 쓰는 것은 스냅샷이 이미 큐 루트를 적어 주기 때문이다. */
 export function buildPrompt(snapshot: string, question: string): string {
   return `${snapshot}
 
 ---
 
-너는 이 큐를 보는 GUI의 **질의응답 에이전트**다. 읽고 답하는 것이 전부다 — 티켓을 만들지도
-고치지도 않는다(쓰기 도구는 애초에 막혀 있다). 사실만 말하고, 모르면 어느 파일을 봐야 하는지
-말한다. 답은 한국어로, 화면의 대화 칸에 들어갈 길이로 쓴다.
+너는 이 큐를 보는 GUI의 **질의응답 에이전트**다. 묻는 것에 답하는 것이 본업이고, 티켓을 만들지도
+고치지도 않는다. **고칠 수 있는 것은 큐 루트 아래 \`personas/**\` · \`protocols/**\` ·
+\`workers/*.sh\` 셋뿐이다** — 그 밖(\`worktrees/**\` 아래 프로젝트 코드 · \`tickets/**\` · 큐 밖
+전부)은 도구가 거부한다. 거부되면 우회하지 말고 무엇이 왜 막혔는지 그대로 말한다. 사실만 말하고,
+모르면 어느 파일을 봐야 하는지 말한다. 답은 한국어로, 화면의 대화 칸에 들어갈 길이로 쓴다.
 ${QUESTION_MARK}${question}`;
 }
 
@@ -505,7 +526,7 @@ export async function ask(
 
   const run = await runClaude(
     bin,
-    path.dirname(project.root),
+    project.root, // 큐 루트 하나로 cwd(그 부모)와 경로 스코프가 같이 나온다 — 둘이 갈릴 자리가 없다
     prompt,
     [...(resumed ? ["--resume", sessionId] : ["--session-id", sessionId])],
     live,
@@ -639,9 +660,11 @@ function judge(result: ResultLine | null, live: Live, stderr: string): Run & { r
   return { ok: true, output: text };
 }
 
+/** `root`는 **큐 루트**다. cwd(그 부모 — 머리 주석)와 경로 스코프가 **한 값에서 나온다** —
+ *  둘을 따로 받으면 스코프가 다른 큐를 가리키는 조합이 만들어질 수 있다. */
 async function runClaude(
   bin: string,
-  cwd: string,
+  root: string,
   prompt: string,
   session: string[],
   live: Live,
@@ -649,7 +672,7 @@ async function runClaude(
   const args = [
     "-p",
     ...session,
-    ...TOOL_FLAGS,
+    ...toolFlags(root),
     "--output-format",
     "stream-json",
     "--include-partial-messages",
@@ -664,7 +687,7 @@ async function runClaude(
   if (tok?.trim()) env.CLAUDE_CODE_OAUTH_TOKEN = tok.replace(/[\r\n]/g, "");
 
   return await new Promise((resolve) => {
-    const child = spawn(bin, args, { cwd, env });
+    const child = spawn(bin, args, { cwd: path.dirname(root), env });
     live.child = child;
     // `중지`가 spawn보다 먼저 왔다(스냅샷 조립 중에 눌렀다) — 뜨자마자 죽인다.
     // 그래서 중지의 근거가 핸들이 아니라 `stopping` 플래그다.
