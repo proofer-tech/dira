@@ -14,8 +14,6 @@ import { SessionStream } from "@/components/session-stream";
 import { DepBadge, StatusBadge, daysSince } from "@/components/status-badge";
 import { WipWorker } from "@/components/worker-mark";
 import {
-  AnswerCard,
-  AnswerThread,
   DeleteTicketButton,
   NewTicketDialog,
   TicketEditForm,
@@ -141,38 +139,64 @@ export default async function TicketDetail({
     .filter((p) => p.body !== null)
     .map((p) => p.name);
 
-  // 세션 스트림 절은 **한 번만 만든다.** 자리가 둘이라(§2 자리 표 · §비주얼 §11 순서 줄) 조건을
-  // 두 자리에 흩뿌리면 둘이 어긋나 절이 사라지거나 두 벌로 뜬다 — 여기서 만들고 아래는 `transcript`
-  // 하나로 꽂을 자리만 고른다. 절 안은 종전 그대로다(높이 · 자동 스크롤 · 참견 폼 · 빈 상태 문구).
-  const streamSection = sessionId ? (
-    <section className="space-y-2">
-      <h2 className="text-sm font-medium">세션 스트림</h2>
-      {/* codex면 트랜스크립트가 **있을 수 없다**(§4-3 표) — 그래도 컴포넌트를 세운다:
-          왜 없는지와 참견 폼의 사유가 그 안에 있고, 두 진입점(여기 · 워커 행)이 같은
-          조각을 그린다(§비주얼 §23 ⑤). */}
-      {transcript || engine === "codex" ? (
-        <SessionStream
-          project={id}
-          stem={ticket.stem}
-          live={ticket.state === "wip"}
-          engine={engine}
-        />
-      ) : (
-        // 액션이 없다 — 사람이 할 일이 없다(§9). `action` 자리엔 왜 없는지 사람이 직접 쳐 볼
-        // 글롭을 넣는다. **여기 남는 것은 "왜"를 모르는 경우뿐이다**(§비주얼 §23 ⑤):
-        // 완료 티켓 리플레이처럼 되짚을 워커가 없어 엔진을 모르는 자리. 참이고, 왜인지
-        // 모르는 채로 참이다 — 없는 값을 추측해 `codex입니다`라고 쓰지 않는다.
-        <EmptyState
-          text="트랜스크립트 없음"
-          action={
-            <span className="font-mono text-xs break-all text-muted-foreground">
-              {`~/.claude/projects/*/${sessionId}.jsonl`}
-            </span>
-          }
-        />
-      )}
-    </section>
-  ) : null;
+  // 답변 대기인가 — 입력칸의 답변 모드이자 절이 서는 세 조건 중 하나다(§2-3 ①·③).
+  // `.wip`은 `isAwaiting`의 `state === "open"`이 구조적으로 막는다(제약 5).
+  const awaiting = isAwaiting(ticket);
+
+  // **`진행 기록` 절**(§2-3 · §비주얼 §29) — 종전 절 셋(답변 카드 · 세션 스트림 · 질문·답변)이
+  // 한 절 · 한 스크롤 상자 · 한 입력칸이 됐다. 절은 **한 번만 만든다**: 자리가 둘이라
+  // (§2-3 ④ · §비주얼 §11 순서 줄) 조건을 두 자리에 흩뿌리면 둘이 어긋나 절이 사라지거나 두
+  // 벌로 뜬다 — 여기서 만들고 아래는 `above` 하나로 꽂을 자리만 고른다.
+  //
+  // **절이 서는 조건이 셋이다**(§2-3 ①): `session_id`가 있다 / 스레드가 비어 있지 않다 /
+  // 답변 대기다. 종전엔 `session_id` 하나였고, 그러면 **한 번도 디스패치된 적 없는 요구사항의
+  // 답변칸이 통째로 사라진다**(보드에서 접수한 요구가 정확히 그 모양이다).
+  const progressSection =
+    sessionId || thread.length > 0 || awaiting ? (
+      <section className="space-y-2">
+        {/* 이름이 `세션 스트림`이 아닌 이유: 이 절이 이제 세션이 안 남긴 것(사람이 쓴 답변)도
+            든다. `질문·답변`이 아닌 이유도 같다 — `진행 기록`은 **이 티켓에 무슨 일이 있었나**
+            한 가지를 가리킨다(§0-9 · §2-3 ①). `Card`가 아니라 `<section>` + `h2`다. */}
+        <h2 className="text-sm font-medium">진행 기록</h2>
+        {/* codex면 트랜스크립트가 **있을 수 없다**(§4-3 표) — 그래도 컴포넌트를 세운다:
+            왜 없는지와 참견 폼의 사유가 그 안에 있고, 두 진입점(여기 · 워커 행)이 같은
+            조각을 그린다(§비주얼 §23 ⑤). 스레드·답변 대기만 있는 경우(극단 A — 세션이 붙은
+            적 없는 요구사항)도 여기로 온다: 상자는 `max-h`가 되고 **스트림이 없다는 말을
+            하지 않는다**(§29 ④ — `대기` 배지가 이미 말한다). */}
+        {transcript || engine === "codex" || thread.length > 0 || awaiting ? (
+          <SessionStream
+            project={id}
+            stem={ticket.stem}
+            live={ticket.state === "wip"}
+            engine={engine}
+            thread={thread}
+            // 스트림 지분이 있는가 = 트랜스크립트 파일 하나다(§29 ② — 고정 높이와 머리 줄의 근거)
+            stream={!!transcript}
+            awaiting={awaiting}
+            answerFile={awaiting ? `${awaitingOf(ticket)}${config.done}.md` : undefined}
+          />
+        ) : (
+          // 상자 안이 통째로 빌 때만 남는 자리다(§29 ④ 빈 상태 3행). 액션이 없다 — 사람이 할
+          // 일이 없다(§9). `action` 자리엔 왜 없는지 사람이 직접 쳐 볼 글롭을 넣는다.
+          // **여기 남는 것은 "왜"를 모르는 경우뿐이다**(§비주얼 §23 ⑤): 완료 티켓 리플레이처럼
+          // 되짚을 워커가 없어 엔진을 모르는 자리. 참이고, 왜인지 모르는 채로 참이다 —
+          // 없는 값을 추측해 `codex입니다`라고 쓰지 않는다.
+          <EmptyState
+            text="트랜스크립트 없음"
+            action={
+              <span className="font-mono text-xs break-all text-muted-foreground">
+                {`~/.claude/projects/*/${sessionId}.jsonl`}
+              </span>
+            }
+          />
+        )}
+      </section>
+    ) : null;
+
+  // 자리 — **볼 것이 있으면 본문 위, 부재의 사유만 그리면 본문 아래**(§2-3 ④. 종전 규칙
+  // `42ed33bc`, 답 `7208f987` = (c)가 조건 하나만 넓어진 채 그대로 선다). 갈리는 값은 종전과
+  // 같은 성격이다: 볼 것이 있는가. 부재의 사유만 그리는 절은 본문을 밀 값이 없다.
+  const above = !!transcript || thread.length > 0 || awaiting;
 
   // 복사 다이얼로그의 deps 선택지. 보드와 **같은 한 줄**이다(§3 — deps가 가리키는 이름은
   // `ticket:`이 아니라 stem이고, 큐 순서를 뒤집어야 방금 만든 티켓이 맨 위다).
@@ -328,25 +352,13 @@ export default async function TicketDetail({
             mark={<WipWorker t={ticket} />}
           />
 
-          {/* 답변 대기일 때만. `.wip`은 `isAwaiting`의 state 조건이 구조적으로 막는다(제약 5).
-              자리는 **제목 직하**다(§2, 사람 요청 `14c88df4`) — 이 화면을 여는 이유가 답을 쓰는 것
-              하나인데 종전은 본문 편집 폼까지 지나야 답변칸이 나왔다. 잠금 Alert·할당 해제는 이 위에
-              남는다: "무엇을 할 수 없는가"가 액션보다 앞이다. */}
-          {isAwaiting(ticket) && (
-            <AnswerCard
-              project={id}
-              hash={hash}
-              answerFile={`${awaitingOf(ticket)}${config.done}.md`}
-              thread={thread}
-            />
-          )}
-
-          {/* 트랜스크립트가 있으면 여기다 — 답변 카드 아래 · 본문 위(§2 자리 표. 요구 `42ed33bc`,
-              답 `7208f987` = (c)). 스트림을 보러 여는 화면에서 본문·질문답변을 지나 스크롤하지
-              않는다. 대가는 알고 고른 것이다: 절이 580px이라 1440×900에서 본문 시작이 접힌 자리
-              아래로 내려간다. 가르는 값은 **트랜스크립트 파일 하나**고 `.wip`인지가 아니다 —
-              완료 티켓의 멈춘 리플레이도 여기로 올라온다. */}
-          {transcript && streamSection}
+          {/* 볼 것이 있으면 여기다 — 본문 위(§2-3 ④). 스트림·왕복을 보러 여는 화면에서 본문을
+              지나 스크롤하지 않고, 답변 대기 요구사항에서는 이 절이 **사실상 제목 직하**다
+              (`14c88df4`의 근거가 여기서 유지된다 — 그 위에는 "무엇을 할 수 없는가"만 남는다).
+              대가는 알고 고른 것이다: 절이 580px이라 1440×900에서 본문 시작이 접힌 자리 아래로
+              내려간다. **답이 달려도 절이 안 움직인다**(`9feae652`가 만든 두 번째 자리는
+              없어졌다) — 같은 티켓을 두 번 여는 사람이 같은 지도를 받는다. */}
+          {above && progressSection}
 
           <section className="space-y-2">
             <h2 className="text-sm font-medium">본문</h2>
@@ -374,23 +386,10 @@ export default async function TicketDetail({
             )}
           </section>
 
-          {/* 답이 달린 뒤의 같은 스레드 — 읽기 전용 기록이다(§2 · 사람 요청 `9feae652`).
-              답은 `<A>.done.md`에 따로 살아서, 답변 카드가 사라지면(`isAwaiting`이 꺼진다)
-              답변 본문이 화면 어디에도 없었다. 조건은 하나다: 카드가 없고 스레드가 있으면 뜬다 —
-              상태를 따로 묻지 않는다(대기 중에는 카드가 이미 같은 스레드를 들고 있어서, 두 벌이
-              뜨지 않는 것도 이 조건이 같이 준다). 입력칸도 `답변 달기`도 없다. */}
-          {!isAwaiting(ticket) && thread.length > 0 && (
-            <section className="space-y-2">
-              <h2 className="text-sm font-medium">질문·답변</h2>
-              <AnswerThread thread={thread} />
-            </section>
-          )}
-
-          {/* 트랜스크립트가 없으면 종전 자리 — 왼쪽 단 마지막이다(§2 자리 표). 따라갈 사건이 0개고
-              그리는 것은 부재의 사유라(codex 안내 · `트랜스크립트 없음`) 본문을 밀 값이 없다.
-              §비주얼 §9 `h-[32rem]`은 어느 자리든 안 묻는다 — 고정 높이 + 자체 스크롤이라 위에
-              무엇이 쌓이든 절(564px)이 한 화면(852px)에 담긴다. */}
-          {!transcript && streamSection}
+          {/* 부재의 사유만 그리면 종전 자리 — 왼쪽 단 마지막이다(§2-3 ④). 따라갈 사건이 0개고
+              스레드도 답변 대기도 없어 그리는 것이 안내 한 줄뿐이라(codex 안내 ·
+              `트랜스크립트 없음`) 본문을 밀 값이 없다. */}
+          {!above && progressSection}
         </div>
 
         {/* 오른쪽 단 — 왼쪽을 스크롤하는 동안 따라다닌다(§2). 세 값이 한 벌이다:

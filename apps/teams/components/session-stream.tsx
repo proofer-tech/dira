@@ -1,15 +1,19 @@
 "use client";
 
-/** 세션 스트림 (DESIGN.md §2-1 · §비주얼 §9). 티켓이 진행되는 과정의 `tail -f`.
+/** 진행 기록 (DESIGN.md §2-3 · §비주얼 §29) — 종전 세션 스트림(§2-1 · §9)이 **한 상자**로 넓어졌다.
  *
- *  **줄 모양이 둘뿐이고 그 둘이 서로 안 닮은 것**이 이 파일의 전부다(§9):
- *  접힌 `<Marker>` 한 줄(회색·mono 섞임) / 전면 전문 줄(검정·여러 줄).
- *  색 토큰은 하나도 안 쓴다 — 스트림에는 상태가 없다. 갈리는 건 밝기·폭·서체 셋이다.
+ *  상자 안에 문법이 둘이다. 세션이 흘린 **스트림 줄**(§9 — 접힌 `<Marker>` 한 줄 / 전면 전문 줄.
+ *  색 토큰은 하나도 안 쓴다. 갈리는 건 밝기·폭·서체 셋이다)과 사람 둘이 주고받은 **말풍선**
+ *  (§13 — 테두리 네 변 + 좌우 정렬이 역할을 가른다). 넷째 축은 **그릇**이다(§29 ①): 줄에는
+ *  테두리가 없고 말풍선에는 있다. 순서는 `mergeProgress`(`lib/urls.ts`)가 정한다 — 시간순 한 줄기다.
  *
  *  읽기·파싱은 전부 `lib/transcript.ts`고 여기는 그리기만 한다. 접기는 네이티브 `<details>`,
- *  툴팁은 네이티브 `title`, 스크롤도 네이티브 — shadcn은 `button`과 `marker` 둘뿐이다(§5).
+ *  툴팁은 네이티브 `title`, 스크롤도 네이티브 — `message-scroller`는 이 상자에 안 들어간다
+ *  (§29 ③ — `맨 아래로`가 머리 줄로 나갔다. 보드 답변 다이얼로그는 그대로 쓴다).
  *
- *  **codex 워커에는 이 화면도 참견도 없다**(§4-3 · §비주얼 §23 ⑤). 판정은 `engine` prop 하나고
+ *  **입력칸은 하나고 모드가 셋이다**(§2-3 ③ · 아래 `ProgressForm`): 참견 / 답변 / 이어받기.
+ *
+ *  **codex 워커에는 스트림도 참견도 없다**(§4-3 · §비주얼 §23 ⑤). 판정은 `engine` prop 하나고
  *  (서버가 `engineName`을 적용해 넘긴다) 상자 자리엔 `<EmptyState>`, 폼 자리엔 비활성 + 사유
  *  한 줄이 선다. **진입점을 지우지 않는다** — 조용히 사라지면 사람은 고장으로 읽는다. */
 import { useEffect, useId, useRef, useState } from "react";
@@ -23,7 +27,10 @@ import {
   useAttachments,
 } from "@/components/attachment-field";
 import { EmptyState } from "@/components/empty-state";
+import { Markdown } from "@/components/markdown";
+import { AnswerForm } from "@/components/ticket-ui";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { Button } from "@/components/ui/button";
 import {
   InputGroup,
@@ -32,12 +39,15 @@ import {
   InputGroupTextarea,
 } from "@/components/ui/input-group";
 import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/marker";
+import { Message, MessageContent, MessageHeader } from "@/components/ui/message";
 import { useKeymap } from "@/components/keymap-provider";
 import { formatCombo, matchCombo } from "@/lib/keymap";
 import type { FollowupReason } from "@/lib/followup";
 import type { InterjectReason } from "@/lib/interject";
+// 스레드를 엮는 쪽은 서버(`lib/queue.ts threadOf`)다 — 여기 오는 건 타입뿐이라 `node:*`를 안 끈다
+import type { ThreadItem } from "@/lib/queue";
 import type { StreamEvent } from "@/lib/transcript";
-import { expandable, interjectMode, type InterjectMode } from "@/lib/urls";
+import { expandable, interjectMode, mergeProgress, type InterjectMode } from "@/lib/urls";
 import { cn } from "@/lib/utils";
 
 /** 레코드의 `timestamp`는 UTC다 — **로컬 시간으로 렌더한다**(§2-1: `13:55:10Z` = KST `22:55:10`).
@@ -57,6 +67,10 @@ export function SessionStream({
   stem,
   live: initialLive,
   engine,
+  thread = [],
+  stream = true,
+  awaiting = false,
+  answerFile,
 }: {
   project: string;
   stem: string;
@@ -65,6 +79,19 @@ export function SessionStream({
    *  적용해 넘긴다 — `lib/workers.ts`는 `node:fs`를 타서 이 파일이 못 import한다.
    *  `null`/`undefined`는 모른다는 뜻이고(완료 티켓 리플레이) 그때는 종전 그대로 그린다. */
   engine?: string | null;
+  /** 요구사항 왕복 스레드(§2-3 ②) — 서버가 `threadOf`로 엮어 넘긴다. 보드 답변 다이얼로그와
+   *  **같은 함수**의 출력이다(§2-3 ⑤). 비면 상자에 스트림 줄만 있다 = 종전 §9 그대로다. */
+  thread?: ThreadItem[];
+  /** 이 상자에 **스트림 줄이 흐르는가**(§29 ② 갈림길). 서버가 트랜스크립트 파일 하나로 판정한다.
+   *  참이면 `h-[32rem]` 고정 + 머리 줄(버튼이 떴다 사라질 때 안 튄다), 거짓이면 `max-h-[32rem]` +
+   *  머리 줄 없음 — 흐르는 것이 없으면 고정 높이의 근거도 머리 줄의 근거도 없다.
+   *  기본값이 참인 이유: 워커 다이얼로그(§4)는 병합 대상이 아니고 §9 그대로여야 한다. */
+  stream?: boolean;
+  /** 답변 대기인가 — 입력칸의 **답변 모드**(§2-3 ③). `.wip`에서는 절대 참이 아니다
+   *  (`isAwaiting`이 `state === "open"`을 본다 — 제약 5를 구조가 지킨다). */
+  awaiting?: boolean;
+  /** 답변 모드가 만들 파일 이름 — `tickets/<awaiting>.done.md`. 사람이 무엇이 생기는지 보고 누른다 */
+  answerFile?: string;
 }) {
   const [events, setEvents] = useState<StreamEvent[]>([]);
   const [live, setLive] = useState(initialLive);
@@ -115,12 +142,16 @@ export function SessionStream({
     };
   }, [project, stem, initialLive, codex]);
 
-  // 붙어 있을 때만 따라간다. 첫 렌더가 맨 아래에서 시작하는 것도 이 효과다(§9).
+  // 붙어 있을 때만 따라간다. 첫 렌더가 맨 아래에서 시작하는 것도 이 효과다(§9) — 그 자리가
+  // **병합이 노린 자리다**: 답 없는 마지막 질문이 맨 끝이라(§2-3 ②) 첫 화면이 곧 "지금 무엇을
+  // 묻고 있나"이고 그 밑이 답 쓰는 칸이다.
+  // `thread`도 본다 — 답이 달리면 서버가 다시 그리는데(`revalidatePath`) 말풍선이 늘 때도
+  // 사건 줄이 붙을 때와 **같은 한 줄의 판정**이 받는다(§29 ③. 두 번째 자동 스크롤 구현이 없다).
   useEffect(() => {
     if (detached) return;
     const el = box.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [events, detached]);
+  }, [events, thread, detached]);
 
   // `<details>`를 여는 순간 자동 스크롤을 뗀다(바닥 판정과 무관하게) — 안 떼면 방금 연 블록이
   // 뒤에 온 사건에 밀려 화면 밖으로 나간다. 닫으면 다시 바닥 판정으로 돌아간다.
@@ -129,17 +160,23 @@ export function SessionStream({
     else if (box.current) setDetached(!atBottom(box.current));
   };
 
+  // 시간순 한 줄기(§2-3 ②) — 순서 규칙은 `lib/urls.ts`의 순수 함수가 들고 있고 테스트가 못박는다.
+  const items = mergeProgress(events, thread);
+  // 말풍선의 key는 **스레드 안의 자리**다. 병합 배열의 index로 잡으면 사건이 붙을 때마다 맨 끝
+  // 질문(답 없는 꼬리 · §2-3 ②)의 key가 밀려 매 폴링에 `<Markdown>`이 다시 마운트된다.
+  const threadKey = new Map(thread.map((t, i) => [t, `t${i}`]));
+
   return (
     // `min-w-0`은 워커 다이얼로그가 가로로 새는 것을 막는다(§비주얼 §21 · 요구 `fff27e81`).
     // `DialogContent`가 `grid`라 이 절은 그리드 아이템이고 `min-width: auto` = 내용의 min-content다.
     // 펼친 `<pre>`의 `break-words`는 min-content를 안 줄여서(줄이는 건 `break-all`) 긴 한 줄이
     // 그대로 열 폭이 된다 — 실측 768px 다이얼로그의 `scrollWidth`가 13125px이었다.
     <div className="min-w-0 space-y-2">
-      {codex ? (
+      {codex && (
         /* §비주얼 §23 ⑤ 사후 — §9가 이미 세워 둔 `<EmptyState>`에 문구만 갈아 끼운다.
            `Alert`가 아니다: 사람이 할 일이 없고(원문도 다음 행동도 없다), §9가 스트림 부재를
            이미 `부재이지 고장이 아니다`로 판정했고, codex 워커에겐 이게 상시 상태라 정상
-           상태에 켜진 경고가 된다(§0-2). 상자도 폴링도 없다 — 빈 스트림을 돌리지 않는다. */
+           상태에 켜진 경고가 된다(§0-2). 폴링도 안 돈다 — 빈 스트림을 돌리지 않는다. */
         <EmptyState
           text="이 워커의 엔진은 codex입니다"
           action={
@@ -148,46 +185,67 @@ export function SessionStream({
             </span>
           }
         />
-      ) : (
+      )}
+      {/* 상자는 **그릴 것이 있을 때만** 선다. codex이고 스레드도 없으면 위 `<EmptyState>` 하나가
+          이 자리의 전부다(종전 그대로) — 빈 상자를 하나 더 그리는 것은 소음이다(§29 ④). */}
+      {(stream || items.length > 0) && (
         <>
-          {/* 폴링 상태는 배지가 아니다 — 티켓 상태 배지가 이미 화면 머리에 있고, 같은 사실을 두
+          {/* 머리 줄은 **스트림이 흐를 때만**이다(§29 ②) — 0줄이면 `맨 아래로`도 폴링 상태 문구도
+              영영 안 떠서 빈 32px 띠만 남는다.
+              폴링 상태는 배지가 아니다 — 티켓 상태 배지가 이미 화면 머리에 있고, 같은 사실을 두
               모양으로 그리면 어느 쪽이 정본인지 모르게 된다(§9). 색도 아이콘도 없다.
               **`따라가는 중`은 여기 없다** — 상자 안 맨 아래로 옮겼다(§2-1 · §18 ④). 사건이
               쌓일수록 머리 문구가 "지금"에서 멀어져서다. 진행중이면 이 줄에는 `맨 아래로` 버튼만
-              남고, `h-8`은 그대로 둔다(버튼이 떴다 사라질 때 상자가 위아래로 튀지 않는다). */}
-          <div className="flex h-8 items-center justify-end gap-2">
-            {!live && (
-              <p className="mr-auto text-xs text-muted-foreground">끝난 세션 · 갱신 없음</p>
-            )}
-            {detached && (
-              <Button variant="ghost" size="sm" onClick={() => setDetached(false)}>
-                <ArrowDown aria-hidden className="size-3.5" />
-                맨 아래로
-              </Button>
-            )}
-          </div>
+              남고, `h-8`은 그대로 둔다(버튼이 떴다 사라질 때 상자가 위아래로 튀지 않는다).
+              **`최신으로`(§13)가 여기로 합쳐졌다**(§29 ③): 상자 안 바닥 가운데에는 이미 임자가
+              있고(`따라가는 중`), 머리 줄에서는 뜨는 층이 아니라 그림자·알약의 근거가 죽는다. */}
+          {stream && (
+            <div className="flex h-8 items-center justify-end gap-2">
+              {!live && (
+                <p className="mr-auto text-xs text-muted-foreground">끝난 세션 · 갱신 없음</p>
+              )}
+              {detached && (
+                <Button variant="ghost" size="sm" onClick={() => setDetached(false)}>
+                  <ArrowDown aria-hidden className="size-3.5" />
+                  맨 아래로
+                </Button>
+              )}
+            </div>
+          )}
 
           {/* 배경에 틴트를 깔지 않는다 — `--muted`를 깔면 접힌 줄의 `--muted-foreground`가 4.34로
-              AA 미달이다(§9 함정 1). 512px인 이유는 머리와 바닥이 한 화면에 같이 들어와서다. */}
+              AA 미달이고(§9 함정 1) 말풍선 실측표 7종도 이 면 위에서 잰 값이다(§29 ①).
+              512px인 이유는 머리와 바닥이 한 화면에 같이 들어와서다 — 참견 최악 840에 852까지
+              여유가 12px이라 한 단계도 못 키운다(§29 ②). 흐르는 것이 없으면 `max-`다:
+              답변 대기 한 건짜리 요구사항에 470px짜리 빈 상자를 그리지 않는다. */}
           <div
             ref={box}
             onScroll={(e) => setDetached(!atBottom(e.currentTarget))}
-            className="h-[32rem] overflow-y-auto rounded-md border bg-background py-2"
+            className={cn(
+              "overflow-y-auto rounded-md border bg-background py-2",
+              stream ? "h-[32rem]" : "max-h-[32rem]",
+            )}
           >
-            {events.map((e) =>
-              e.label ? (
-                <Row key={e.key} e={e} onToggle={onToggle} />
+            {items.map((it) =>
+              it.event ? (
+                it.event.label ? (
+                  <Row key={it.event.key} e={it.event} onToggle={onToggle} />
+                ) : (
+                  <FullText key={it.event.key} e={it.event} />
+                )
               ) : (
-                <FullText key={e.key} e={e} />
+                <ThreadRow key={threadKey.get(it.thread)} item={it.thread} />
               ),
             )}
-            {/* 진행 표식(§18 ④) — 마지막 사건 다음 줄이 올 자리를 지킨다. `<Marker>`도
-                `<details>`도 아니다: §9가 Marker 기본값을 하나도 안 덮기로 했는데 여기는
-                `text-xs`여야 한다(폴링 상태 3종이 한 종류인 채로 자리만 옮겼다). 눌러 볼 것이
-                없으니 hover도 없다. `mx-1`이 8px 점을 16px 칸(= MarkerIcon 폭) 가운데 세워 문구를
-                다른 두 줄과 같은 x=36px에 맞춘다. // ponytail: 정렬용 래퍼 대신 마진 4px. 점이
-                커지면 그때 래퍼. 문구를 같이 드는 이유는 `prefers-reduced-motion`이다 — 모션만으로
-                말하지 않는다. */}
+            {/* 진행 표식(§18 ④) — 마지막 사건 다음 줄이 올 자리를 지킨다. **말풍선 아래로 안
+                내려간다**: `.wip`인 동안 상자의 맨 끝은 항상 스트림 사건이고(답 없는 질문은
+                열린 티켓에만 있다 — §29 ③) 옛 답변은 `birth`가 지금 세션 첫 사건보다 앞이다.
+                `<Marker>`도 `<details>`도 아니다: §9가 Marker 기본값을 하나도 안 덮기로 했는데
+                여기는 `text-xs`여야 한다(폴링 상태 3종이 한 종류인 채로 자리만 옮겼다). 눌러 볼
+                것이 없으니 hover도 없다. `mx-1`이 8px 점을 16px 칸(= MarkerIcon 폭) 가운데 세워
+                문구를 다른 두 줄과 같은 x=36px에 맞춘다. // ponytail: 정렬용 래퍼 대신 마진 4px.
+                점이 커지면 그때 래퍼. 문구를 같이 드는 이유는 `prefers-reduced-motion`이다 —
+                모션만으로 말하지 않는다. */}
             {live && (
               <div className="flex items-center gap-2 px-3 text-xs leading-6 text-muted-foreground">
                 <span
@@ -201,20 +259,56 @@ export function SessionStream({
         </>
       )}
 
-      {/* 참견 입력 form — 상자 **밖 · 밑**이다(§2-2 · §비주얼 §21). 여기 한 곳에 다니까 티켓 상세와
+      {/* 입력칸 — 상자 **밖 · 밑**이다(§2-2 · §비주얼 §21). 여기 한 곳에 다니까 티켓 상세와
           워커 다이얼로그가 같은 폼을 그린다(§2-1 Q2=(a)). 항상 마운트해 두고 그릴지 말지는
           컴포넌트가 스스로 판정한다 — 조건을 바깥에 두면 `live`가 내려가는 순간(2초 폴링) 실패
           사유와 사람이 쓴 글이 언마운트로 같이 증발한다(§21 예외 항).
           **codex에서도 자리를 지운다는 뜻이 아니다**(§비주얼 §23 ⑤): 비활성 + 사유 한 줄로 뜬다 —
           진입점을 지우면 화면은 "왜 없는지"를 말할 자리를 잃는다. */}
-      <Interject
+      <ProgressForm
         project={project}
         stem={stem}
         live={live}
         inbox={inbox}
         done={done}
         codex={codex}
+        awaiting={awaiting}
+        answerFile={answerFile}
       />
+    </div>
+  );
+}
+
+/** 말풍선 한 항목(§비주얼 §29 ①) — 질문은 왼쪽, 답변은 오른쪽. 역할을 가르는 것은 **정렬**이고
+ *  스트림 줄과 가르는 것은 **그릇**(테두리 네 변 + `rounded-xl`)이다. 색은 하나도 안 쓴다.
+ *
+ *  `px-3`은 스트림 줄과 **같은 거터다**(새 좌우 여백을 만들지 않는다 — `Message`가 `w-full`이라
+ *  그 안쪽 폭이 곧 줄 내용 폭이고 `max-w-[80%]`가 그 위에서 문다: 1440에서 696px).
+ *  `py-2`가 §13 `gap-4`를 그대로 낸다(말풍선끼리 8+8=16 · 줄과는 8 — 패딩이라 합쳐지지 않는다).
+ *  **시각을 안 붙인다**: 질문은 자기 파일이 없어 시각이 없고, 지어내지 않기로 한 것이 §2-3 ②다 —
+ *  답변에만 붙이면 한 쌍의 헤더가 서로 다른 모양이 된다. 순서는 자리가 말한다.
+ *  hover도 없다 — 펼칠 것이 없다(스트림 줄의 `hover:bg-muted/50`은 어포던스다). */
+function ThreadRow({ item }: { item: ThreadItem }) {
+  const align = item.role === "question" ? "start" : "end";
+  return (
+    <div className="px-3 py-2">
+      <Message align={align}>
+        <MessageContent>
+          {/* 헤더는 말풍선 **밖 · 위**다(§13) — 안에 넣으면 본문의 소유자가 `<Markdown>` 하나가
+              아니게 되고 §10 루트의 `[&>:first-child]:mt-0`이 거짓이 된다. 앉는 면이 `--card`가
+              아니라 `--background`라 `--muted-foreground`가 4.73 / 7.63이다(§29 ① — 병합으로
+              한 칸 좋아지는 유일한 자리고, 새로 잰 것이 아니라 §9 표의 1행이다) */}
+          <MessageHeader>
+            {item.heading || (item.role === "question" ? "질문" : "답변")}
+            {item.hash && <span className="ml-2 font-mono">{item.hash}</span>}
+          </MessageHeader>
+          <Bubble variant="outline" align={align}>
+            <BubbleContent>
+              <Markdown text={item.text} />
+            </BubbleContent>
+          </Bubble>
+        </MessageContent>
+      </Message>
     </div>
   );
 }
@@ -256,11 +350,17 @@ const FAIL_DONE: Record<FollowupReason, { title: string; next?: string }> = {
   },
 };
 
-/** 참견 입력 form (DESIGN.md §2-2 · §비주얼 §21). 읽기만 하던 이 화면에 처음 생기는 쓰는 자리다.
+/** 진행 기록의 입력칸 — **하나고 모드가 셋이다**(DESIGN.md §2-3 ③ · §2-2 · §비주얼 §21).
  *
- *  **같은 칸이 모드가 둘이다**(요구 `8050f011`): `.wip`이면 **참견** — 도는 세션의 FIFO로 간다.
- *  `.done`이면 **이어받기** — 새 열린 티켓 1장이 생기고 화면이 그 상세로 간다. 갈리는 것은
- *  이름 셋(라벨·placeholder·버튼)과 보낸 뒤뿐이고, 그릇·키(`⌘↵`)·절 높이는 하나다(§21 완료 모드).
+ *  `.wip`이면 **참견**(도는 세션의 FIFO로 간다) · **답변 대기면 답변**(`tickets/<awaiting>.done.md`
+ *  한 장이 생겨 이 티켓이 다시 큐에 뜬다) · `.done`이면 **이어받기**(새 열린 티켓 1장 + 그 상세로
+ *  이동). 셋이 배타인 것은 이 병합이 발견한 사실이 아니라 이미 참이던 사실이다 — `awaiting`은
+ *  열린 티켓에만 걸리고(제약 5) `.wip`과 `.done`은 서로 배타다. 종전 화면은 그 사실을 모르고
+ *  못 쓰는 칸을 하나 더 그리고 있었다.
+ *
+ *  참견·이어받기가 갈리는 것은 이름 셋(라벨·placeholder·버튼)과 보낸 뒤뿐이고, 그릇·키(`⌘↵`)·절
+ *  높이는 하나다(§21 완료 모드). **답변 모드만 그릇이 다르다** — `AnswerForm` 한 벌을 보드
+ *  다이얼로그와 같이 쓴다(§2-3 ③ "답변 폼은 두 자리가 쓰는 한 벌이다").
  *
  *  **낙관적 에코를 그리지 않는다.** 보낸 문장은 다음 폴링(2초)의 `queue-operation` `enqueue` 줄로
  *  위 상자에 돌아온다(§2-2 "도착 확인은 스트림이 한다"). 여기서 말풍선을 먼저 그리면 엔진이 못
@@ -270,13 +370,15 @@ const FAIL_DONE: Record<FollowupReason, { title: string; next?: string }> = {
  *  상태도 `inbox`도 **서버가 매번 다시 판정한다**(`lib/interject.ts` · `lib/followup.ts`).
  *  여기 있는 `live`·`inbox`·`done`은 **그릴 것을 고르는 데만** 쓰고 보내도 되는지의 근거로 쓰지
  *  않는다 — 2초 사이에 세션이 끝난다. 모드가 어긋나면 서버가 조용히 바꾸지 않고 실패 + 사유다. */
-function Interject({
+function ProgressForm({
   project,
   stem,
   live,
   inbox,
   done,
   codex,
+  awaiting,
+  answerFile,
 }: {
   project: string;
   stem: string;
@@ -285,6 +387,8 @@ function Interject({
   done: boolean;
   /** 물고 있는 워커가 codex다 — 참견이 아예 없는 워커다(§4-3 · §비주얼 §23 ⑤) */
   codex: boolean;
+  awaiting: boolean;
+  answerFile?: string;
 }) {
   const router = useRouter();
   const [text, setText] = useState("");
@@ -311,8 +415,24 @@ function Interject({
   // **codex는 `polled`가 이미 참이다**: 폴링을 아예 안 도는데(위 효과) `inbox`가 `null`인 채로
   // 두면 `첫 폴링 전`으로 읽혀 폼이 통째로 사라진다 — §23이 지우지 말라고 한 그 자리다.
   // 서버에 물을 것이 없는 것이지 아직 안 물어본 것이 아니다.
-  const mode = interjectMode({ polled: codex || inbox !== null, live, done, failed: !!fail });
+  const mode = interjectMode({ polled: codex || inbox !== null, live, done, failed: !!fail, awaiting });
   if (!mode) return null;
+
+  // 답변 모드 — 그릇이 갈리는 유일한 모드다(§2-3 ③). `answerFile`이 없으면 그릴 것이 없다
+  // (워커 다이얼로그가 그 값을 안 넘긴다. 거기엔 답변 대기 티켓이 애초에 없다 — `.wip`만 물린다).
+  // **문구 한 줄이 폼 위에 남는다**: 종전 답변 카드 머리(`Card`)가 없어졌고, 그 문장은 이 버튼이
+  // 무엇을 하는지를 말한다(§2-3 ③). 보드 다이얼로그에서는 `DialogDescription`이 같은 말을 하므로
+  // 폼 안에 넣지 않는다 — 넣으면 거기서 두 번 뜬다.
+  if (mode === "answer") {
+    return answerFile ? (
+      <div className="space-y-2">
+        <p className="text-xs text-muted-foreground">
+          답변을 달면 이 티켓이 다시 큐에 뜨고 담당 세션이 이어서 봅니다.
+        </p>
+        <AnswerForm project={project} hash={stem} answerFile={answerFile} />
+      </div>
+    ) : null;
+  }
 
   // **모드가 갈리면 쓴 글은 남기고 실패 Alert만 지운다**(§21). `ENXIO`의 다음 행동이 `위 글을
   // 복사해 새 티켓으로 지시하세요`인데 그 순간 같은 칸이 바로 그 일을 하는 칸이 된다 — 글을

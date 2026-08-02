@@ -52,13 +52,6 @@ import {
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { Button } from "@/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
   Command,
   CommandEmpty,
   CommandInput,
@@ -357,9 +350,12 @@ export function UnassignButton({
 
 // ── 요구사항 왕복 ───────────────────────────────────────────────────────────
 
-/** 질문·답변 스레드만. 답변 대기면 폼과 같이(`AnswerFields`), 답이 달린 뒤엔 상세 왼쪽 단의
- *  읽기 전용 `질문·답변` 절로 혼자 뜬다(§2 · 사람 요청 `9feae652`) — 답은 `<A>.done.md`에 따로
- *  살아서 카드가 사라지면 답변 본문이 화면 어디에도 없었다. 그리는 것은 두 자리가 똑같다. */
+/** 질문·답변 스레드만 — **보드 카드의 답변 다이얼로그 전용이다**(§1 · §2-3 ⑤).
+ *
+ *  티켓 상세에는 이제 이 스크롤러가 없다: 같은 스레드가 `진행 기록` 한 상자 안에서 세션 사건과
+ *  시간순으로 섞인다(§2-3 · §비주얼 §29 — 그 상자는 `message-scroller`를 안 쓴다).
+ *  여기 값은 §13 그대로다. **바뀐 것은 버튼 글자 하나뿐이다**(§29 ③ — 같은 아이콘·같은 동작인
+ *  버튼이 두 화면에서 다른 이름이면 §0-9가 깨진다). */
 export function AnswerThread({ thread }: { thread: ThreadItem[] }) {
   return (
     <>
@@ -415,10 +411,12 @@ export function AnswerThread({ thread }: { thread: ThreadItem[] }) {
             </MessageScrollerViewport>
             {/* 아래가 가려졌을 때만 뜬다(`data-active`) — 안 가려지면 스스로 사라진다.
                 라벨을 `sr-only`로 숨기지 않는다(§13 — 아이콘만이면 "한 화면 아래로"와 안 갈린다).
-                variant·size·자리는 컴포넌트 기본값이 이미 §13 값이다 */}
+                variant·size·자리는 컴포넌트 기본값이 이미 §13 값이다.
+                **문구는 `맨 아래로`다**(§29 ③ — 상세의 병합 상자와 같은 말을 쓴다. 그릇·자리·모양은
+                §13 그대로다: 여기는 스크롤 위에 뜨는 층이라 그림자 근거가 산다) */}
             <MessageScrollerButton>
               <ArrowDown aria-hidden />
-              최신으로
+              맨 아래로
             </MessageScrollerButton>
           </MessageScroller>
         </MessageScrollerProvider>
@@ -427,71 +425,57 @@ export function AnswerThread({ thread }: { thread: ThreadItem[] }) {
   );
 }
 
-/** 스레드 + 답변 폼. **상세의 카드와 보드의 다이얼로그가 같은 것을 그린다** — 그릇만 다르고
- *  스레드·폼·서버 액션은 하나다(§1 보드 요구사항 항). 엮는 쪽은 `lib/queue.ts threadOf`다. */
-function AnswerFields({
+/** 답변 폼 **한 벌** — 두 자리가 쓴다(§2-3 ③ · ⑤): 보드의 답변 다이얼로그(`AnswerFields` 안)와
+ *  티켓 상세 `진행 기록` 절의 답변 모드 입력칸(`session-stream.tsx`).
+ *
+ *  **여기서 갈리는 것이 하나도 없는 것이 계약이다** — 같은 서버 액션 · 같은 문구 · 같은 실패.
+ *  `hash`는 stem이고(§식별자) 두 호출자가 같은 값을 넘긴다. 종전 답변 카드 머리의 한 줄
+ *  (`답변을 달면 …`)은 이 폼에 없다: 다이얼로그는 `DialogDescription`이, 상세는 절의 폼 위 한 줄이
+ *  같은 말을 한다 — 여기 넣으면 다이얼로그에서 두 번 뜬다. */
+export function AnswerForm({
   project,
   hash,
   answerFile,
-  thread,
 }: {
   project: string;
   hash: string;
   answerFile: string;
-  thread: ThreadItem[];
 }) {
   const [state, action, pending] = useActionState<SaveState, FormData>(answerRequirement, {});
   // 답변 칸의 id는 한 화면에 하나뿐이다 — 보드에서도 열려 있는 다이얼로그는 하나다.
   return (
-    <>
-      <AnswerThread thread={thread} />
-      {/* 입력칸과 `답변 달기`는 상자 **밖 · 밑**이다 — 다이얼로그를 화면 높이로 늘리는 안은 버렸다(§2) */}
-      <form action={action} className="space-y-3">
-        <input type="hidden" name="project" value={project} />
-        <input type="hidden" name="hash" value={hash} />
-        <Label htmlFor="a-body">답변</Label>
-        <Textarea id="a-body" name="body" rows={8} className="font-mono" required />
-        {state.error && <Failure title="답변을 달지 못했습니다" message={state.error} />}
-        {/* 보조 텍스트는 버튼 왼쪽이다(§비주얼 §4-3) */}
-        <div className="flex flex-wrap items-center justify-end gap-3">
-          <span className="text-xs text-muted-foreground">
-            <span className="font-mono">tickets/{answerFile}</span>를 만듭니다
-          </span>
-          {/* 아이콘이 `답변 대기` 배지와 이 CTA를 잇는다 — 색은 안 쓴다(§비주얼 §15).
-              보드 카드의 트리거와 같은 글자꼴이다 */}
-          <Button type="submit" disabled={pending}>
-            <MessageSquareReply aria-hidden />
-            {pending ? "답변 다는 중…" : "답변 달기"}
-          </Button>
-        </div>
-      </form>
-    </>
+    /* 입력칸과 `답변 달기`는 상자 **밖 · 밑**이다 — 다이얼로그를 화면 높이로 늘리는 안은 버렸다(§2) */
+    <form action={action} className="space-y-3">
+      <input type="hidden" name="project" value={project} />
+      <input type="hidden" name="hash" value={hash} />
+      <Label htmlFor="a-body">답변</Label>
+      <Textarea id="a-body" name="body" rows={8} className="font-mono" required />
+      {state.error && <Failure title="답변을 달지 못했습니다" message={state.error} />}
+      {/* 보조 텍스트는 버튼 왼쪽이다(§비주얼 §4-3) */}
+      <div className="flex flex-wrap items-center justify-end gap-3">
+        <span className="text-xs text-muted-foreground">
+          <span className="font-mono">tickets/{answerFile}</span>를 만듭니다
+        </span>
+        {/* 아이콘이 `답변 대기` 배지와 이 CTA를 잇는다 — 색은 안 쓴다(§비주얼 §15).
+            보드 카드의 트리거와 같은 글자꼴이다 */}
+        <Button type="submit" disabled={pending}>
+          <MessageSquareReply aria-hidden />
+          {pending ? "답변 다는 중…" : "답변 달기"}
+        </Button>
+      </div>
+    </form>
   );
 }
 
-/** 답변 카드 — **답변 대기일 때만** 렌더된다(판정은 서버가 `isAwaiting`으로 한다).
- *
- *  버튼이 하는 일은 `tickets/<awaiting>.done.md`를 만드는 것 하나뿐이다. 그 파일이 생기면
- *  요구사항의 unmet이 비어 큐에 다시 뜬다 — `다시 큐에` 버튼을 따로 두지 않는 이유다
- *  (답만 쓰고 안 누른 상태가 생긴다. DESIGN.md §요구사항 레이어 버린 대안). */
-export function AnswerCard(props: {
-  project: string;
-  hash: string;
-  /** 만들어질 답변 파일 이름. 사람이 무엇이 생기는지 보고 누른다(접미사는 프로젝트별이다) */
-  answerFile: string;
-  thread: ThreadItem[];
-}) {
+/** 스레드 + 답변 폼 — **보드의 답변 다이얼로그가 그리는 것**이다(§1 보드 요구사항 항).
+ *  엮는 쪽은 `lib/queue.ts threadOf`고 폼은 `AnswerForm` 한 벌이다. 상세는 이 조합을 안 쓴다:
+ *  거기서는 스레드가 `진행 기록` 상자 안으로 들어가고 폼만 그 아래에 선다(§2-3 ①). */
+function AnswerFields({ thread, ...props }: { project: string; hash: string; answerFile: string; thread: ThreadItem[] }) {
   return (
-    // 폭은 페이지 루트가 문다(§비주얼 §11) — 왼쪽 단이 이미 정한 폭을 다시 자르지 않는다
-    <Card>
-      <CardHeader>
-        <CardTitle>답변</CardTitle>
-        <CardDescription>답변을 달면 이 티켓이 다시 큐에 뜨고 담당 세션이 이어서 봅니다.</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <AnswerFields {...props} />
-      </CardContent>
-    </Card>
+    <>
+      <AnswerThread thread={thread} />
+      <AnswerForm {...props} />
+    </>
   );
 }
 
