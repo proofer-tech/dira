@@ -503,9 +503,21 @@ test("readSummary — 연결됨은 카운트, 연결 안 됨은 사유 원문 + 
     "---\nticket: dddd4444\nsession_id: dead-beef\n---\n",
   );
 
+  // 답변 대기(§0-10 ④) = 열림 + `awaiting`이 미충족 dep이다. 판정은 `isAwaiting` 하나고
+  // 여기서 검증하는 것은 `readSummary`가 그걸 `assigned`와 같은 자리에서 거르는가다.
+  writeFileSync(
+    path.join(root, "tickets", "eeee5555.md"),
+    "---\nticket: eeee5555\ndeps: [ffff6666]\nawaiting: ffff6666\n---\n",
+  );
+  // `잠금 없는 답변 대기`는 종에 안 든다 — `awaiting`만 있고 `deps`가 없다(돌고 있는 티켓이다)
+  writeFileSync(
+    path.join(root, "tickets", "gggg7777.md"),
+    "---\nticket: gggg7777\nawaiting: hhhh8888\n---\n",
+  );
+
   const ok = await readSummary({ root });
   assert.strictEqual(ok.connected, true);
-  assert.strictEqual(ok.open, 2); // .done은 열림이 아니다 (.wip도 아니다)
+  assert.strictEqual(ok.open, 4); // .done은 열림이 아니다 (.wip도 아니다)
   assert.strictEqual(ok.wip, 1);
   assert.strictEqual(ok.done, 1);
   // 픽스처의 실제 파일 수와 맞는다 — 3종이 큐 전체를 나눠 갖는다
@@ -516,6 +528,12 @@ test("readSummary — 연결됨은 카운트, 연결 안 됨은 사유 원문 + 
   assert.deepStrictEqual(ok.personas, ["designer", "developer", "qa"]);
   assert.deepStrictEqual(ok.workers.map((w) => w.name), ["w1"]);
   assert.deepStrictEqual(ok.assigned, [{ hash: "cccc3333", stem: "cccc3333" }]);
+  // 잠금 없는 `gggg7777`은 빠진다. `mtime`은 배지 경과일의 기준이라 같이 든다(0이 아니다)
+  assert.deepStrictEqual(
+    ok.awaiting.map((t) => [t.hash, t.stem]),
+    [["eeee5555", "eeee5555"]],
+  );
+  assert.ok(ok.awaiting[0].mtime > 0);
 
   // 경로가 사라진 프로젝트: 0건이 아니라 "모른다"다(DESIGN.md §4-1)
   const gone = await readSummary({ root: path.join(root, "없는디렉터리") });
@@ -525,5 +543,6 @@ test("readSummary — 연결됨은 카운트, 연결 안 됨은 사유 원문 + 
   assert.strictEqual(gone.done, null);
   assert.deepStrictEqual(gone.personas, []); // 판정 불가 = 빈 배열(사유가 그 자리에 있다)
   assert.deepStrictEqual(gone.assigned, []); // 판정 불가 = 배너·배지가 없다(§0-2)
+  assert.deepStrictEqual(gone.awaiting, []); // ④도 같은 규칙이다(§0-10 — 그 자리엔 `연결 안 됨`)
   assert.match(gone.error!, /ENOENT/);
 });

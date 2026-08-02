@@ -6,7 +6,14 @@ import { homedir } from "node:os";
 import { Suspense } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Bell, CircleDot, CloudOff, TriangleAlert, Unplug } from "lucide-react";
+import {
+  Bell,
+  CircleDot,
+  CloudOff,
+  MessageSquareReply,
+  TriangleAlert,
+  Unplug,
+} from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import {
   BrandMark,
@@ -15,7 +22,7 @@ import {
   ProjectSwitcher,
 } from "@/components/project-switcher";
 import { SettingsDialog, type AuthView } from "@/components/settings-dialog";
-import { StatusBadge } from "@/components/status-badge";
+import { StatusBadge, daysSince } from "@/components/status-badge";
 import { RequestDialog, UnassignButton } from "@/components/ticket-ui";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -54,6 +61,8 @@ export default async function ProjectLayout({
         connected: s.connected,
         error: s.error,
         assigned: s.assigned, // §0-2 알림용. 전환기는 이 필드를 쓰지 않는다
+        // §0-10 ④ 알림용. 판정은 `readSummary`가 `isAwaiting`으로 이미 했다 — 새 fs 읽기 0
+        awaiting: s.awaiting,
         // §0-10 ③의 `할당 해제`가 부를 워커. 티켓 상세와 **같은 규칙**이다(`workers[0]`) —
         // 어느 워커 스크립트든 같은 큐를 되돌리므로 첫 번째면 된다. 0개면 컴포넌트가 비활성 + 사유다
         worker: s.workers[0]?.name ?? null,
@@ -89,15 +98,19 @@ export default async function ProjectLayout({
     claudeUsed: items.some((t) => t.claude),
   };
 
-  // 셸 알림 종이 세는 셋 (§0-10). **판정식은 §0-4 · §0-5 · §0-2가 그대로 갖는다** — 아래 셋은
-  // 배너가 쓰던 그 조건 그대로이고 바뀐 것은 그리는 자리와 문구뿐이다. 순서도 그대로다:
+  // 셸 알림 종이 세는 넷 (§0-10). **판정식은 §0-4 · §0-5 · §0-2 · 결정 5가 그대로 갖는다** —
+  // 아래 넷은 그 절들이 쓰던 조건 그대로이고 바뀐 것은 그리는 자리와 문구뿐이다. 순서도 그대로다:
   // 인증이 없으면 아무것도 안 돌고, 다음이 워커 전원, 마지막이 티켓 몇 건이다(위로 갈수록 넓다).
+  // ③과 ④는 둘 다 티켓이라 범위가 같고, 그때는 **사고가 설계보다 위**다(③은 엔진이 만들지 않는
+  // 조합이고 ④는 왕복의 정상 단계다 — ④가 종에 드는 것은 이상 상태라서가 아니라 사람이 답을
+  // 써야 그 큐가 다시 돌기 때문이다. §0-10 *④는 왜 여기 드나* · 결정 4는 무수정이다).
   const alerts = {
     auth: !auth.savedAt && current.claude,
     failures: current.connected && current.failures.length > 0,
     assigned: current.connected && current.assigned.length > 0,
+    awaiting: current.connected && current.awaiting.length > 0,
   };
-  // 배지는 **켜진 알림의 개수 0~3**이다 — 건수를 합치지 않는다(§0-10: 단위가 셋 다 다르다).
+  // 배지는 **켜진 알림의 개수 0~4**이다 — 건수를 합치지 않는다(§0-10: 단위가 넷 다 다르다).
   const alertCount = Object.values(alerts).filter(Boolean).length;
   const alertLabel = alertCount > 0 ? `알림 ${alertCount}건` : "알림 없음";
 
@@ -157,6 +170,7 @@ export default async function ProjectLayout({
                 alerts={alerts}
                 failures={current.failures}
                 assigned={current.assigned}
+                awaiting={current.awaiting}
                 worker={current.worker}
               />
             </PopoverContent>
@@ -228,7 +242,7 @@ export default async function ProjectLayout({
  *
  *  항목 하나가 배너 하나를 대신한다 — 해부(아이콘 열 16px + `gap-x-2`)는 `Alert`의 것 그대로고
  *  그릇만 `div`다. `Alert`로 감싸지 않는 이유: `--popover`가 `--card`와 같은 값이라 같은 색
- *  상자 안에 같은 색 상자가 셋 서고, 사람이 치우라고 한 사각형 더미가 팝오버 안으로 이사한다.
+ *  상자 안에 같은 색 상자가 넷 서고, 사람이 치우라고 한 사각형 더미가 팝오버 안으로 이사한다.
  *  **꺼진 알림은 항목이 아예 없다** — 회색으로 눕히지 않는다. */
 function NotificationItems({
   id,
@@ -236,13 +250,15 @@ function NotificationItems({
   alerts,
   failures,
   assigned,
+  awaiting,
   worker,
 }: {
   id: string;
   auth: AuthView;
-  alerts: { auth: boolean; failures: boolean; assigned: boolean };
+  alerts: { auth: boolean; failures: boolean; assigned: boolean; awaiting: boolean };
   failures: { name: string; reason: string }[];
   assigned: { hash: string; stem: string }[];
+  awaiting: { hash: string; stem: string; mtime: number }[];
   worker: string | null;
 }) {
   const rows = [
@@ -338,6 +354,55 @@ function NotificationItems({
                 wip={false}
               />
             </div>
+          ))}
+        </div>
+      </>
+    ),
+    // ④ 답변을 기다리는 티켓 (§요구사항 레이어 결정 5 · §0-10 ④). **이상 상태가 아니다** —
+    // 아이콘·색은 §2 `답변 대기` 배지 그대로이고(②와 같은 blocked 축: 밖의 조건이 풀리면 열린다.
+    // 여기서 그 조건은 *사람의 답*이다) `--status-stale`을 쓰는 것은 여전히 ①③뿐이다.
+    // 판정은 `isAwaiting` 하나이므로 보드의 배지와 갈릴 수 없다. `잠금 없는 답변 대기`는
+    // 저절로 빠진다 — 그건 그 함수가 이미 false로 본다(§0-10 이 절이 정하지 않는 것).
+    alerts.awaiting && (
+      <>
+        <MessageSquareReply aria-hidden className="mt-0.5 size-4 text-status-blocked" />
+        <p className="col-start-2 text-sm font-medium">
+          답변을 기다리는 티켓 {awaiting.length}건
+        </p>
+        {/* `요구사항`이라고 안 적는다 — `awaiting`은 `kind: request`만의 것이 아니다.
+            `reap`이 자동 회수 상한을 넘길 때 아무 티켓에나 건다(§0-10) */}
+        <p className="col-start-2 text-sm text-foreground">
+          사람이 답을 써야 이 티켓들이 다시 큐에 뜹니다. 고장난 것은 없습니다.
+        </p>
+        <div className="col-start-2 grid gap-2">
+          {/* 나열 순서는 큐 순서 그대로다 — 오래된 것을 위로 올리지 않는다(§0-10: 순서를
+              판정하기 시작하면 그 판정이 두 번째 진실이 된다). 상위 N건으로도 안 자른다 */}
+          {awaiting.map((t) => (
+            // 한 행이 **한 줄**이다(③과 갈리는 지점 — 둘째 줄이 없다).
+            <span key={t.stem} className="flex items-center gap-1">
+              <Link
+                href={`/p/${id}/tickets/${encodeURIComponent(t.stem)}`}
+                className="rounded-sm font-mono text-xs underline"
+              >
+                {t.hash}
+              </Link>
+              {/* 경과일은 `<StatusBadge>`가 이미 그린다(`daysSince(mtime)`) — 여기서 새로
+                  계산하지 않는다. 0일이면 라벨이 `답변 대기` 하나고 그 판단도 배지 안에 있다 */}
+              <StatusBadge status="awaiting" days={daysSince(t.mtime)} />
+              {/* **링크지 버튼이 아니다** — 답변 폼은 `textarea` 하나가 아니라 `O_EXCL`로
+                  파일을 만드는 폼이고, 448px 팝오버에 두 벌째를 그리면 같은 서버 액션의
+                  진입점이 둘이 된다(§0-10 ④). 그래서 그 폼이 이미 사는 자리로 보낸다.
+                  자리는 행의 오른쪽 끝(`ml-auto`)이다 — ③의 버튼이 왼쪽인 근거(조작 대상이
+                  윗줄에 있다 · 회색 문구를 데려온다)가 여기엔 둘 다 없고, 배지 폭이 경과일
+                  자릿수로 갈려서 이어 붙이면 링크가 행마다 다른 x에 선다(§비주얼 §28 ④).
+                  모양은 ①의 CTA와 같은 벌이다(`text-sm underline`) */}
+              <Link
+                href={`/p/${id}/tickets/${encodeURIComponent(t.stem)}`}
+                className="ml-auto rounded-sm text-sm underline"
+              >
+                답변 쓰기
+              </Link>
+            </span>
           ))}
         </div>
       </>

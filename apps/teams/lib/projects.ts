@@ -7,7 +7,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { DEFAULT_KEYMAP, defaultBindings, type Bindings, type Keymap } from "./keymap.ts";
 import { NAME_RE, PROJECT_ID_RE, expandHome, resolveWithin, shellPath, shellValue } from "./paths.ts";
-import { listTickets, statusOf, type Ticket } from "./queue.ts";
+import { isAwaiting, listTickets, statusOf, type Ticket } from "./queue.ts";
 import { listWorkers, type Worker } from "./workers.ts";
 import { PERSONA_COLORS, slugify, tildePath } from "./urls.ts";
 
@@ -416,6 +416,16 @@ export type ProjectSummary = {
    *  불가능하면 배너·배지가 없는 게 답이고(§0-2 마지막 항), 그 자리에는 이미 `연결 안 됨`
    *  사유가 뜬다. */
   assigned: { hash: string; stem: string }[];
+  /** `답변 대기`(열림 + `awaiting`이 미충족 deps에 있다) 티켓 — 사람이 답을 써야 그 큐가 다시
+   *  도는 유일한 상태다(§0-10 ④ · §요구사항 레이어 결정 5). 판정은 `isAwaiting` 하나뿐이고
+   *  보드·상세가 쓰는 그 함수다 — **두 벌째 판정을 만들지 않는다.** `assigned`와 같은 자리에서
+   *  같은 `listTickets` 결과를 한 번 더 거르므로 **새 fs 읽기가 0**이다.
+   *  `mtime`을 같이 드는 것은 배지의 경과일(`답변 대기 · 3일`) 때문이다 — 계산은 종전대로
+   *  `daysSince`(`components/status-badge.tsx`) 하나다.
+   *
+   *  못 읽은 프로젝트는 빈 배열이다(`assigned`의 그 규칙 그대로 — 판정 자체가 불가능하면
+   *  항목이 없는 게 답이고 그 자리에는 `연결 안 됨`이 이미 서 있다). */
+  awaiting: { hash: string; stem: string; mtime: number }[];
 };
 
 /** 프로젝트 하나를 훑는다. 경로가 없으면 읽기를 시도하지 않고 사유만 담는다.
@@ -442,6 +452,9 @@ export async function readSummary(project: Pick<Project, "root">): Promise<Proje
       assigned: tickets
         .filter((t) => statusOf(t) === "assigned")
         .map((t) => ({ hash: t.hash, stem: t.stem })),
+      awaiting: tickets
+        .filter(isAwaiting)
+        .map((t) => ({ hash: t.hash, stem: t.stem, mtime: t.mtime })),
     };
   } catch (e) {
     return {
@@ -453,6 +466,7 @@ export async function readSummary(project: Pick<Project, "root">): Promise<Proje
       personas: [],
       workers: [],
       assigned: [],
+      awaiting: [],
     };
   }
 }
