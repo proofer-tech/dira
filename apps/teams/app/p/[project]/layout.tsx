@@ -6,17 +6,21 @@ import { homedir } from "node:os";
 import { Suspense } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { CircleDot, CloudOff, TriangleAlert, Unplug } from "lucide-react";
+import { Bell, CircleDot, CloudOff, TriangleAlert, Unplug } from "lucide-react";
+import { EmptyState } from "@/components/empty-state";
 import {
   BrandMark,
   RefreshButton,
   ProjectNav,
   ProjectSwitcher,
 } from "@/components/project-switcher";
-import { SettingsDialog } from "@/components/settings-dialog";
+import { SettingsDialog, type AuthView } from "@/components/settings-dialog";
 import { StatusBadge } from "@/components/status-badge";
-import { RequestDialog } from "@/components/ticket-ui";
+import { RequestDialog, UnassignButton } from "@/components/ticket-ui";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { readAuth } from "@/lib/auth";
 import { readSummary, readProjects } from "@/lib/projects";
 import { engineLimits, listUsage, type EngineLimit } from "@/lib/usage";
@@ -49,9 +53,12 @@ export default async function ProjectLayout({
         running: s.workers.filter((w) => w.status === "running").length,
         connected: s.connected,
         error: s.error,
-        assigned: s.assigned, // §0-2 배너용. 전환기는 이 필드를 쓰지 않는다
-        // §0-5 배너용. `readSummary`가 이미 `listWorkers`를 불렀으므로 워커를 다시 읽지 않는다.
-        // 정상 상태에서는 항상 빈 배열이고 그때 배너 노드가 아예 없다.
+        assigned: s.assigned, // §0-2 알림용. 전환기는 이 필드를 쓰지 않는다
+        // §0-10 ③의 `할당 해제`가 부를 워커. 티켓 상세와 **같은 규칙**이다(`workers[0]`) —
+        // 어느 워커 스크립트든 같은 큐를 되돌리므로 첫 번째면 된다. 0개면 컴포넌트가 비활성 + 사유다
+        worker: s.workers[0]?.name ?? null,
+        // §0-5 알림용. `readSummary`가 이미 `listWorkers`를 불렀으므로 워커를 다시 읽지 않는다.
+        // 정상 상태에서는 항상 빈 배열이고 그때 항목 노드가 아예 없다.
         failures: s.workers.flatMap((w) =>
           w.lastFailure ? [{ name: w.name, reason: w.lastFailure.reason }] : [],
         ),
@@ -82,6 +89,18 @@ export default async function ProjectLayout({
     claudeUsed: items.some((t) => t.claude),
   };
 
+  // 셸 알림 종이 세는 셋 (§0-10). **판정식은 §0-4 · §0-5 · §0-2가 그대로 갖는다** — 아래 셋은
+  // 배너가 쓰던 그 조건 그대로이고 바뀐 것은 그리는 자리와 문구뿐이다. 순서도 그대로다:
+  // 인증이 없으면 아무것도 안 돌고, 다음이 워커 전원, 마지막이 티켓 몇 건이다(위로 갈수록 넓다).
+  const alerts = {
+    auth: !auth.savedAt && current.claude,
+    failures: current.connected && current.failures.length > 0,
+    assigned: current.connected && current.assigned.length > 0,
+  };
+  // 배지는 **켜진 알림의 개수 0~3**이다 — 건수를 합치지 않는다(§0-10: 단위가 셋 다 다르다).
+  const alertCount = Object.values(alerts).filter(Boolean).length;
+  const alertLabel = alertCount > 0 ? `알림 ${alertCount}건` : "알림 없음";
+
   return (
     <>
       <header className="sticky top-0 z-50 flex h-12 items-center gap-6 border-b bg-background px-6">
@@ -93,100 +112,65 @@ export default async function ProjectLayout({
         {/* 우측 끝은 전환기 오른쪽의 `설정`이다 — 두 셸이 같은 자리에 같은 것을 갖는다
             (§비주얼 §4). 헤더의 `gap-6`이 아니라 이 둘 사이는 `gap-2`라 묶어서 오른쪽으로 민다 */}
         <div className="ml-auto flex items-center gap-2">
+          {/* 순서는 `[종] [전환기] [설정]`이다(§0-10 자리 · §비주얼 §28 ①). `설정`이 우측 맨 끝이라는
+              §비주얼 §4의 못은 안 뽑는다 — 루트 셸(`/`)에는 종이 없고 거기도 `설정`이 끝이다.
+              묶음의 `gap-2`는 무수정이고 종이 새 간격을 만들지 않는다 */}
+          <Popover>
+            {/* 배너가 들고 있던 `role="status"`(polite)를 종 옆의 라이브 리전이 물려받는다
+                (§0-10 접근성). **팝오버 안에 두지 않는다** — 닫혀 있는 동안 DOM에 없으면
+                낭독되지 않는다. 5초 폴링이 같은 문자열을 다시 그려도 텍스트가 안 바뀌면 낭독이
+                없다(§비주얼 §4-2가 assertive를 polite로 내린 그 근거) */}
+            <span role="status" className="sr-only">
+              {alertLabel}
+            </span>
+            <PopoverTrigger
+              render={
+                // `disabled`가 아니다 — 0건이어도 눌리고 열린다(§0-10 답 `Q2=(나)`).
+                // `relative`는 배지의 기준 상자다. 켜진 종에는 색을 안 준다(ghost 기본 currentColor).
+                <Button variant="ghost" size="icon" aria-label={alertLabel} className="relative">
+                  {/* `BellRing`·`BellDot`을 쓰지 않는다 — 켜짐/꺼짐은 **색만** 가른다(§비주얼 §28 ①).
+                      크기는 Button 기본(size-4)이라 클래스로 다시 주지 않는다 */}
+                  <Bell aria-hidden className={alertCount === 0 ? "text-muted-foreground" : undefined} />
+                  {alertCount > 0 && (
+                    // 솔리드다 — 종의 획 위에 겹치는 유일한 배지라 면이 불투명해야 한다(§28 ②).
+                    // 수를 읽는 것은 트리거의 접근가능 이름이라 여긴 `aria-hidden`이다.
+                    <Badge
+                      aria-hidden
+                      className="absolute top-0.5 right-0.5 h-4 min-w-4 justify-center rounded-full border-transparent bg-status-stale px-1 leading-none text-background"
+                    >
+                      {alertCount}
+                    </Badge>
+                  )}
+                </Button>
+              }
+            />
+            {/* 폭은 전환기 팔레트와 같은 448px이다 — 헤더 우측에서 열리는 상자 둘의 왼쪽 끝이
+                어긋나지 않는다(§28 ④). 넘치면 스크롤한다: **상위 N건으로 자르지 않는다**
+                (§0-2 · §0-5 · §0-10). `5rem` = 헤더 48 + sideOffset 4 + status bar 28 */}
+            <PopoverContent
+              align="end"
+              className="max-h-[calc(100vh-5rem)] w-[28rem] overflow-y-auto"
+            >
+              <NotificationItems
+                id={id}
+                auth={auth}
+                alerts={alerts}
+                failures={current.failures}
+                assigned={current.assigned}
+                worker={current.worker}
+              />
+            </PopoverContent>
+          </Popover>
           <ProjectSwitcher projects={items} currentId={id} />
           <SettingsDialog auth={auth} />
         </div>
       </header>
 
       {/* 스크롤하는 것은 이 `main`이다(§비주얼 §4). `min-h-0`이 없으면 flex 자식 기본값
-          (`min-height: auto`)이 내용만큼 늘어나 문서가 도로 길어진다. flex 컬럼인 이유는
-          배너다: 배너가 뜨면 남는 높이가 줄어 보드가 그만큼 짧아진다(§1) */}
+          (`min-height: auto`)이 내용만큼 늘어나 문서가 도로 길어진다.
+          **배너 자리는 비었다**(§0-10) — `Alert` 셋이 헤더의 알림 종으로 갔고 본문이 그만큼
+          위로 올라온다. 알림 유무로 보드 높이가 흔들리던 것이 없어진다 */}
       <main className="flex min-h-0 w-full flex-1 flex-col gap-6 overflow-y-auto px-6 py-6">
-        {/* 디스패치되지 않는 티켓 알림 (§0-2). 셸에 있으므로 보드뿐 아니라 워커·페르소나·
-            프로토콜에도 뜬다 — 그래야 "해결 전까지 보인다"가 성립한다. dismiss·읽음 상태가 없다:
-            폴링이 매번 다시 판정하므로 0건이 되면 이 노드가 사라지고, 안 되면 남는다.
-            0건이면 `보류 없음`을 말하지 않는다 — 정상 상태에서 켜진 경고는 안 읽히게 된다. */}
-        {/* 인증 배너 (§0-4). 토큰 파일이 없으면 `tick.sh:61`이 매 tick마다 조용히 `exit 0`한다 —
-            화면에는 "티켓이 `대기`인데 아무 일도 안 일어난다"만 보인다. 그 침묵을 여기서 깬다.
-            **세 번째 `Alert` 변종이다** — 새 컴포넌트 0개. dismiss도 없다: 토큰 파일이 생기면
-            이 판정이 저절로 꺼진다(§0-2와 같은 논리). 아래 두 배너보다 먼저 선다 —
-            인증이 없으면 그 프로젝트에서 아무것도 안 돈다.
-            **토큰은 Claude 전용이다**(§0-4): `tick.sh:52`·`60`은 `TICKET_ENGINE[0]`의 basename이
-            `claude`일 때만 이 파일을 읽고 그때만 디스패치를 막는다. 그래서 이 프로젝트의 워커를
-            읽었고 claude가 0이면 세우지 않는다 — 못 읽었으면(연결 안 됨) 종전대로 세운다. */}
-        {!auth.savedAt && current.claude && (
-          <Alert role="status" className="max-w-3xl">
-            <TriangleAlert aria-hidden className="text-status-stale" />
-            <AlertTitle>Claude 인증이 없어 티켓이 디스패치되지 않습니다</AlertTitle>
-            <AlertDescription className="grid gap-3 text-foreground">
-              <span>Claude 장기 토큰이 없어 워커가 매번 조용히 종료합니다.</span>
-              {/* CTA는 행의 오른쪽 끝이다(§비주얼 §4-3). **`/`로 보내지 않는다** — 그 자리에서
-                  헤더 버튼과 같은 다이얼로그를 연다. 이동이 0회가 된다(§0-4) */}
-              <span className="flex justify-end">
-                <SettingsDialog auth={auth} trigger="link" />
-              </span>
-            </AlertDescription>
-          </Alert>
-        )}
-        {/* 외부 요인 실패 (§0-5 · §비주얼 §4-4). **네 번째 `Alert` 변종이다** — 새 컴포넌트 0.
-            인증 아래, 할당됨 위다: 인증이 없으면 아무것도 안 돌고, 이건 워커 전원이 멈추며,
-            할당됨은 티켓 몇 건이다(위로 갈수록 범위가 넓다). dismiss도 만료도 없다 —
-            `lastFailure`의 신선도 창 10분과 다음 성공 tick이 판정을 저절로 끈다.
-            색이 stale이 아니라 blocked인 이유: 이건 **사람이 아무것도 안 해도 꺼진다**(§4-4). */}
-        {current.connected && current.failures.length > 0 && (
-          <Alert role="status" className="max-w-3xl">
-            <CloudOff aria-hidden className="text-status-blocked" />
-            <AlertTitle>세션이 즉시 실패하는 워커 {current.failures.length}개</AlertTitle>
-            <AlertDescription className="grid gap-3 text-foreground">
-              <span>디스패치는 계속 돌지만 세션이 즉시 실패하고 티켓은 백로그로 돌아갑니다.</span>
-              {/* `grid gap-2` — 한 워커가 한 줄에서 시작한다. flex-wrap이면 두 워커가 한 줄에
-                  섞여 어느 사유가 누구 것인지가 무너진다(§4-4). 상위 N개로 자르지 않는다 */}
-              <span className="grid gap-2">
-                {current.failures.map((f) => (
-                  <span key={f.name} className="flex items-baseline gap-2">
-                    <span className="shrink-0 font-mono text-xs">{f.name}</span>
-                    {/* 엔진이 준 문자열 그대로다 — 번역도 분류도 자르기도 하지 않는다.
-                        `break-all`이 아닌 이유: `7:40pm`이 갈리면 이 배너의 유일한 실행 정보가
-                        깨진다(§4-4 줄바꿈) */}
-                    <span className="min-w-0 font-mono text-xs break-words">{f.reason}</span>
-                  </span>
-                ))}
-              </span>
-              <span>사유가 가리키는 시각이 지나면 다음 tick이 저절로 집습니다.</span>
-            </AlertDescription>
-          </Alert>
-        )}
-        {current.connected && current.assigned.length > 0 && (
-          // role은 status로 내린다 — 사건이 아니라 해결 전까지 상주하는 상태고, 5초 폴링이
-          // 셸을 다시 렌더하므로 assertive면 재낭독 위험이 있다(§4-2 라이브 리전).
-          <Alert role="status" className="max-w-3xl">
-            {/* 배지와 같은 아이콘·같은 색이다(§비주얼 §2 이상 상태) — destructive가 아니다 */}
-            <CircleDot aria-hidden className="text-status-stale" />
-            {/* 제목이 받는 건 건수 하나다 — 위험 문장은 본문 첫 줄로 내린다(§4-2) */}
-            <AlertTitle>디스패치되지 않는 티켓 {current.assigned.length}건</AlertTitle>
-            {/* text-foreground로 덮는다 — 기본 muted-foreground는 --muted 위에서 4.34로 AA
-                미달이라(§1 함정 1) 배경에 따라 통과·미달이 갈리는 색을 상주 경고 본문에 두지 않는다 */}
-            <AlertDescription className="grid gap-3 text-foreground">
-              <span>큐에서 영구 제외되고 reap도 손대지 않습니다.</span>
-              {/* 상위 N건으로 자르지 않는다 — 이 상태가 여럿이면 그게 더 큰 사건이다 */}
-              <span className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                {current.assigned.map((t) => (
-                  <span key={t.stem} className="flex items-center gap-1">
-                    {/* 링크는 stem이다 — 상태가 바뀌어도 URL이 안 변한다(§식별자) */}
-                    <Link
-                      href={`/p/${id}/tickets/${encodeURIComponent(t.stem)}`}
-                      className="rounded-sm font-mono text-xs underline"
-                    >
-                      {t.hash}
-                    </Link>
-                    <StatusBadge status="assigned" />
-                  </span>
-                ))}
-              </span>
-              <span>티켓 상세의 할당 해제로 되돌립니다.</span>
-            </AlertDescription>
-          </Alert>
-        )}
         {current.connected ? (
           <>
             {/* 요구 접수 다이얼로그 — **버튼 없이 `r`만 듣는다**(§3 · §0-6 `board.request`).
@@ -238,6 +222,145 @@ export default async function ProjectLayout({
       )}
     </>
   );
+}
+
+/** 알림 종 팝오버의 내용 (§0-10 문구 표 · §비주얼 §28 ⑤).
+ *
+ *  항목 하나가 배너 하나를 대신한다 — 해부(아이콘 열 16px + `gap-x-2`)는 `Alert`의 것 그대로고
+ *  그릇만 `div`다. `Alert`로 감싸지 않는 이유: `--popover`가 `--card`와 같은 값이라 같은 색
+ *  상자 안에 같은 색 상자가 셋 서고, 사람이 치우라고 한 사각형 더미가 팝오버 안으로 이사한다.
+ *  **꺼진 알림은 항목이 아예 없다** — 회색으로 눕히지 않는다. */
+function NotificationItems({
+  id,
+  auth,
+  alerts,
+  failures,
+  assigned,
+  worker,
+}: {
+  id: string;
+  auth: AuthView;
+  alerts: { auth: boolean; failures: boolean; assigned: boolean };
+  failures: { name: string; reason: string }[];
+  assigned: { hash: string; stem: string }[];
+  worker: string | null;
+}) {
+  const rows = [
+    // ① 인증 (§0-4). 토큰 파일이 없으면 `tick.sh:61`이 매 tick마다 조용히 `exit 0`한다 —
+    // 화면에는 "티켓이 `대기`인데 아무 일도 안 일어난다"만 보인다. 그 침묵을 여기서 깬다.
+    alerts.auth && (
+      <>
+        <TriangleAlert aria-hidden className="mt-0.5 size-4 text-status-stale" />
+        <p className="col-start-2 text-sm font-medium">Claude 토큰이 없습니다</p>
+        {/* `text-muted-foreground`를 안 쓴다 — 배경에 따라 통과·미달이 갈리는 색을 읽어야 하는
+            유일한 문장에 두지 않는다(§1 함정 1 · §비주얼 §4-2가 배너에서 덮은 그 오버라이드) */}
+        <p className="col-start-2 text-sm text-foreground">
+          워커가 티켓을 집어도 세션을 못 열고 그대로 끝냅니다.
+        </p>
+        {/* CTA는 행의 오른쪽 끝이다(§비주얼 §4-3). **`/`로 보내지 않는다** — 그 자리에서
+            헤더 버튼과 같은 다이얼로그를 연다. 이동이 0회가 된다(§0-4) */}
+        <span className="col-start-2 flex justify-end">
+          <SettingsDialog auth={auth} trigger="link" />
+        </span>
+      </>
+    ),
+    // ② 외부 요인 실패 (§0-5). 색이 stale이 아니라 blocked인 이유: 이건 **사람이 아무것도
+    // 안 해도 꺼진다**(§비주얼 §4-4). 만료도 dismiss도 없다 — `lastFailure`의 신선도 창
+    // 10분과 다음 성공 tick이 판정을 저절로 끈다.
+    alerts.failures && (
+      <>
+        <CloudOff aria-hidden className="mt-0.5 size-4 text-status-blocked" />
+        <p className="col-start-2 text-sm font-medium">
+          세션이 열리자마자 죽는 워커 {failures.length}개
+        </p>
+        <p className="col-start-2 text-sm text-foreground">
+          티켓은 그때마다 대기로 정확히 돌아옵니다. 잃는 것은 없습니다.
+        </p>
+        {/* `grid gap-2` — 한 워커가 한 줄에서 시작한다. flex-wrap이면 두 워커가 한 줄에 섞여
+            어느 사유가 누구 것인지가 무너진다(§4-4). 상위 N개로 자르지 않는다 */}
+        <div className="col-start-2 grid gap-2">
+          {failures.map((f) => (
+            <span key={f.name} className="flex items-baseline gap-2">
+              <span className="shrink-0 font-mono text-xs">{f.name}</span>
+              {/* 엔진이 준 문자열 그대로다 — 번역도 분류도 자르기도 하지 않는다.
+                  `break-all`이 아닌 이유: `7:40pm`이 갈리면 이 항목의 유일한 실행 정보가
+                  깨진다(§4-4 줄바꿈). 폭이 줄어 최장 사유가 1줄 → 2줄이 된다(§28 ⑤) */}
+              <span className="min-w-0 font-mono text-xs break-words">{f.reason}</span>
+            </span>
+          ))}
+        </div>
+        {/* 조작이 0개인 것은 §0-5가 답변 `Q2=(a)`로 확정한 것이다. 바뀐 것은 **없다는 사실을
+            말하게 한 것**이다 — 종전 문구는 할 일이 없다고 말하지 않아서 사람이 없는 버튼을
+            찾고 있었다(§0-10 문구 표 ②) */}
+        <p className="col-start-2 text-sm text-foreground">
+          사유에 적힌 시각이 지나면 저절로 다시 집습니다 — 지금 할 일은 없습니다.
+        </p>
+      </>
+    ),
+    // ③ 아무도 집지 않는 티켓 (§0-2). 배지와 같은 아이콘·같은 색이다(§비주얼 §2 이상 상태) —
+    // destructive가 아니다. 상위 N건으로 자르지 않는다: 이 상태가 여럿이면 그게 더 큰 사건이다.
+    alerts.assigned && (
+      <>
+        <CircleDot aria-hidden className="mt-0.5 size-4 text-status-stale" />
+        <p className="col-start-2 text-sm font-medium">
+          아무도 집지 않는 티켓 {assigned.length}건
+        </p>
+        <p className="col-start-2 text-sm text-foreground">
+          워커가 잡아 둔 채 놓지 않아서, 이 티켓들은 순서가 와도 넘어갑니다.
+        </p>
+        <div className="col-start-2 grid gap-2">
+          {assigned.map((t) => (
+            // 한 행이 두 줄이고 그 사이는 `gap-1`이다 — 붙은 두 줄이 한 티켓임을 간격이 말한다.
+            <div key={t.stem} className="grid gap-1">
+              <span className="flex items-center gap-1">
+                {/* 링크는 stem이다 — 상태가 바뀌어도 URL이 안 변한다(§식별자) */}
+                <Link
+                  href={`/p/${id}/tickets/${encodeURIComponent(t.stem)}`}
+                  className="rounded-sm font-mono text-xs underline"
+                >
+                  {t.hash}
+                </Link>
+                <StatusBadge status="assigned" />
+              </span>
+              {/* 새 서버 액션이 아니다 — 티켓 상세가 쓰는 그 컴포넌트다(제약 2: claim/release를
+                  TS로 다시 구현하지 않는다). 성공 `Alert`·실패 `<Failure>`도 그 안에 이미 있고
+                  이 행 아래 그대로 뜬다. 버튼이 행 오른쪽 끝이 아닌 이유는 §비주얼 §4-3 예외 2다
+                  (조작 대상은 바로 윗줄의 해시다).
+                  **`ghost={false}`**: 켜면 행마다 세 줄짜리 문단이 하나 더 서는데 그 말을 위
+                  본문이 항목 머리에서 이미 하고, 쓰는 낱말이 `select`·`reap`이다(§비주얼 §28 ⑤).
+                  `hash`에 stem을 넘긴다 — 엔진 인자는 파일명이다(AGENTS.md §식별자) */}
+              <UnassignButton
+                project={id}
+                hash={t.stem}
+                worker={worker}
+                assigned
+                ghost={false}
+                wip={false}
+              />
+            </div>
+          ))}
+        </div>
+      </>
+    ),
+  ].filter(Boolean);
+
+  // 0건이어도 팝오버는 열린다 — 사라진 것은 경고고 남은 것은 그릇이다(§0-10 답 `Q2=(나)`).
+  // `<EmptyState>`를 그대로 쓴다: 팝오버라고 예외를 만들면 그 컴포넌트가 강제하려던 것이
+  // 여기서 처음 샌다(§비주얼 §6 · §28 ⑥). 버튼도 아이콘도 없다.
+  if (rows.length === 0) return <EmptyState text="알림 없음" />;
+  return rows.map((row, i) => (
+    // 구분선은 두 번째 항목부터다 — `gap-2.5`만으로는 다섯 줄짜리 항목 셋이 어디서 끊기는지
+    // 안 읽힌다. 배너 시절 `Alert` 테두리가 하던 일이고 `pt-2.5`가 그 간격 한가운데다(§28 ④).
+    <div
+      key={i}
+      className={cn(
+        "grid grid-cols-[1rem_1fr] items-start gap-x-2 gap-y-1",
+        i > 0 && "border-t pt-2.5",
+      )}
+    >
+      {row}
+    </div>
+  ));
 }
 
 /** 잔여를 읽어 칸을 채운다. **읽는 주체는 서버다**(§0-8) — 토큰은 여기서 나가지 않고

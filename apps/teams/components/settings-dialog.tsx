@@ -10,9 +10,9 @@
  *  인증 층은 셋이다: ①상태 · ②`claude setup-token`을 GUI가 몬다 · ③직접 넣기.
  *  **③은 ②가 된 뒤에도 남는다** — 남의 TUI를 긁는 일이라 깨질 수 있고, 깨지면 여기가 바닥이다.
  *
- *  진입점 둘(헤더 버튼 · 프로젝트 셸 배너 CTA)은 **이 컴포넌트를 두 번 쓴다.** 전역 상태도
+ *  진입점 둘(헤더 버튼 · 셸 알림 종 ① 항목의 CTA)은 **이 컴포넌트를 두 번 쓴다.** 전역 상태도
  *  URL 파라미터도 만들지 않는다 — 동시에 열릴 수 없고, 상태는 어느 쪽이든 서버가 준 같은
- *  props에서 온다(§0-4). 트리거를 JSX로 받지 않고 두 값 중 하나로 받는 이유는 배너가
+ *  props에서 온다(§0-4). 트리거를 JSX로 받지 않고 두 값 중 하나로 받는 이유는 부르는 쪽이
  *  **서버 컴포넌트**라서다: 넘길 수 있는 것은 값이고, 모양은 두 가지뿐이다. */
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
@@ -232,7 +232,8 @@ export function SettingsDialog({
   trigger = "icon",
 }: {
   auth: AuthView;
-  /** `icon` = 두 셸 헤더 우측 끝. `link` = 프로젝트 셸 인증 배너의 `인증하기`(§비주얼 §4-3). */
+  /** `icon` = 두 셸 헤더 우측 끝. `link` = 셸 알림 종 ① 항목의 `토큰 저장`(§0-10 문구 표 ①).
+   *  라벨이 `인증하기`에서 갈린 것은 자리가 배너에서 종으로 옮겨 가면서다(§0-4 개정). */
   trigger?: "icon" | "link";
 }) {
   const [open, setOpen] = useState(false);
@@ -247,8 +248,8 @@ export function SettingsDialog({
   const needsAuth = !savedAt && auth.claudeUsed;
 
   // `?`(§0-6 `settings.open`) — 두 셸 어디서나 이 다이얼로그를 연다. **`icon` 트리거만 듣는다**:
-  // 프로젝트 셸에는 이 컴포넌트가 둘(헤더 버튼 · 인증 배너 CTA)이고 둘 다 들으면 키 한 번에
-  // 다이얼로그가 둘 열린다. 헤더 버튼은 두 셸에 항상 하나씩 있고 배너는 조건부라 이쪽이 기준이다 —
+  // 프로젝트 셸에는 이 컴포넌트가 둘(헤더 버튼 · 알림 종 ① 항목의 CTA)이고 둘 다 들으면 키 한 번에
+  // 다이얼로그가 둘 열린다. 헤더 버튼은 두 셸에 항상 하나씩 있고 종 안은 조건부라 이쪽이 기준이다 —
   // 전역 상태도 URL 파라미터도 만들지 않는다는 §0-4의 자리 그대로다.
   // 글 쓰는 중 가드는 `useHotkey`가 들고, 캡처 중에는 위 캡처 상자의 `stopPropagation`이
   // 이벤트를 window까지 안 보낸다 — 이 키도 그래서 안 듣는다(§0-6 `언제 안 듣는가`).
@@ -300,7 +301,7 @@ export function SettingsDialog({
             </Button>
           ) : (
             <button type="button" className="text-sm underline">
-              인증하기
+              토큰 저장
             </button>
           )
         }
