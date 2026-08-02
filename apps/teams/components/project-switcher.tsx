@@ -23,7 +23,8 @@ import {
   CommandShortcut,
 } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { parentPath, projectPath } from "@/lib/urls";
+import { parentPath, projectPath, screenOf } from "@/lib/urls";
+import { trackEvent } from "@/app/actions";
 import { formatCombo } from "@/lib/keymap";
 import { isTyping, useHotkey, useKeymap } from "@/components/keymap-provider";
 
@@ -39,6 +40,27 @@ import { isTyping, useHotkey, useKeymap } from "@/components/keymap-provider";
  *
  *  ponytail: 훅이 없는 정적 마크업인데 이 파일의 `"use client"`에 얹혀 클라이언트 번들로 간다.
  *  새 파일을 늘리지 않는 쪽을 택했다(AGENTS.md §구조). 마크업 몇 백 바이트라 재는 값이 아니다. */
+/** `screen_view` 하나 (DESIGN.md §0-11 이벤트 표). 루트 레이아웃에 한 번 서서 **화면 7종 전부**를
+ *  덮는다 — 페이지마다 심으면 enum이 7곳에 흩어지고 한 곳이 조용히 빠진다.
+ *
+ *  **URL이 아니라 enum 하나가 나간다**(익명 규칙). 접는 것은 `screenOf` 하나고 표 밖의 경로
+ *  (404·모르는 길)는 `null`이라 아무것도 안 보낸다.
+ *
+ *  **서버 컴포넌트에서 못 보낸다**: 보드가 5초마다 `router.refresh()`를 돌아(`BoardPolling`)
+ *  렌더마다 보내면 한 사람이 한 화면에 머문 시간이 조회수가 된다. 이 훅은 `screen`이 **바뀔 때만**
+ *  돈다 — 폴링은 이 컴포넌트를 언마운트하지 않으므로 refresh로는 안 난다.
+ *
+ *  **새 파일 대신 여기 둔 이유**는 `BrandMark`와 같다(AGENTS.md §구조). 이 파일이 이미
+ *  `usePathname()`을 쓰는 셸의 클라이언트 조각이고, 그리는 것이 없어 번들에 붙는 것은 몇 줄이다. */
+export function ScreenView() {
+  const screen = screenOf(usePathname());
+  useEffect(() => {
+    // await하지 않는다 — 통계 왕복이 화면 전환을 못 막는다(§0-11 §어떻게 보내나).
+    if (screen) void trackEvent("screen_view", { screen });
+  }, [screen]);
+  return null;
+}
+
 export function BrandMark({ href }: { href: string }) {
   return (
     <Link

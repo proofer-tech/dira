@@ -7206,7 +7206,7 @@ developer를 기다릴 것이 0이다.
 |---|---|---|---|---|
 | P82 | 사용 통계 · 의견 보내기 스펙 확정 `de191616` | pm | — | 완료 — §0-11 · §0-12 신설 · §About의 `Help 메뉴는 사라진다` 뒤집음. **되묻지 않았다** |
 | P82 | `lib/analytics.ts` — 세션 · MP 전송 · 끄기 판정 `1c3d96b0` | developer | — | 대기 |
-| P82 | 이벤트 8종을 트리거 자리에 심는다 `1a1f8917` | developer | `1c3d96b0` | 대기 |
+| P82 | 이벤트 8종을 트리거 자리에 심는다 `1a1f8917` | developer | `1c3d96b0` | 완료 — 트리거 6곳(`screen_view`는 루트 레이아웃 하나로 화면 7종) + `trackEvent` 액션 하나. `feedback_submit`·`analytics_off`는 그 액션이 곧 함수다 |
 | P82 | `설정` > `사용 통계` 섹션 — 끄기/켜기 `538c9131` | developer | `1c3d96b0` | 대기 |
 | P82 | 의견 보내기 폼 + 이슈 URL 조립 `b808993d` | developer | `1c3d96b0` | 대기 |
 | P82 | 껍데기 배선 — `Help` 메뉴 · 트리거 · 자격값 env · CI `252fd905` | developer | `b808993d` | 대기 |

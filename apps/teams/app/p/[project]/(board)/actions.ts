@@ -16,6 +16,7 @@ import { open, readdir } from "node:fs/promises";
 import path from "node:path";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { track } from "@/lib/analytics";
 import { verifyAttachments, withAttachments } from "@/lib/attachments";
 import { kickIdleWorker } from "@/lib/kick";
 import { NAME_RE, isHash } from "@/lib/paths";
@@ -136,6 +137,10 @@ export async function createTicket(
     if (!hash) {
       throw new Error("해시를 10번 뽑았는데 전부 이미 쓰이고 있습니다 — 큐 디렉터리를 확인하세요.");
     }
+
+    // §0-11 — 파일이 실제로 태어난 뒤다. `kind`가 비어 있으면(선택 항목이다) 엔진에서 일반
+    // 작업으로 도는 티켓이라 표의 `work`로 센다. 제목·본문·해시는 안 간다(익명 규칙).
+    void track("ticket_create", { kind: (kind || "work") as "work" | "request" | "feedback" });
 
     // 즉시 디스패치(§4-5). 열린 티켓이 방금 태어났다 — cron을 60초 기다리지 않는다.
     // 결과를 안 본다: 실패해도 cron이 ≤60초 뒤에 같은 일을 하고, 화면에 보고할 자리도 없다.

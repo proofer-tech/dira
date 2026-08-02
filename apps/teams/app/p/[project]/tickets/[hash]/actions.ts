@@ -14,6 +14,7 @@
 import { open, readFile, unlink } from "node:fs/promises";
 import path from "node:path";
 import { revalidatePath } from "next/cache";
+import { track } from "@/lib/analytics";
 import { verifyAttachments, withAttachments } from "@/lib/attachments";
 import { findTicket, unassign, type UnassignRun } from "@/lib/engine";
 import { followup, type FollowupResult } from "@/lib/followup";
@@ -363,6 +364,9 @@ export async function answerRequirement(_prev: SaveState, form: FormData): Promi
     } finally {
       await fh.close();
     }
+
+    // §0-11 — 답변 파일이 실제로 쓰인 뒤다. 파라미터가 없다: 답변 본문도 해시도 안 간다.
+    void track("answer_submit", {});
 
     revalidatePath(`/p/${projectId}/tickets/${encodeURIComponent(t.stem)}`);
     revalidatePath(`/p/${projectId}`); // 배지가 `deps 대기` → `대기`로 바뀐다 = 재큐의 증거

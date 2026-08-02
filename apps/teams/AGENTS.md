@@ -10,6 +10,7 @@ apps/teams/
   app/                  App Router. fs 접근은 전부 여기(서버) 아니면 lib/
     layout.tsx          html·폰트·TooltipProvider + **키맵을 읽는 유일한 곳**(§0-6 배선 —
                         두 셸이 다 이 아래고 파일 하나짜리 읽기다. 셸마다 읽지 않는다)
+                        + `<ScreenView/>` — `screen_view`를 보내는 유일한 자리(§0-11)
     (list)/page.tsx     프로젝트 목록·등록 (`/`). 라우트 그룹이라 URL은 `/`다
     (list)/loading.tsx  이 그룹만 덮는다 — app/ 최상단에 두면 모든 라우트가 즉시 스트리밍돼
                         레이아웃의 notFound()가 404 상태를 못 세운다(실측)
@@ -19,6 +20,10 @@ apps/teams/
                         `lib/queue.ts`의 `isAwaiting` 하나고 여기서 다시 쓰지 않는다.
                         화면이 필요한 데이터는 종전대로 서버 컴포넌트가 `lib/`를 직접 부른다
     actions.ts          Server Action (프로젝트 등록·이름·순서·해제·재해석). 큐 파일은 안 건드린다
+                        + **사용 통계 액션 셋**(§0-11): `trackEvent`(화면에서 GA로 나가는
+                        **유일한 길** — 새 API 라우트를 안 만든다. `app/api/`는 Electron main
+                        창구 하나다) · `readAnalyticsAction`·`setAnalyticsAction`(끄는 자리).
+                        서버 쪽 트리거는 이걸 안 거치고 `lib/analytics.ts`의 `track()`을 직접 부른다
     p/[project]/         프로젝트 스코프. layout.tsx가 셸(헤더·내비·전환기)
     p/[project]/(board)/ 보드(`/p/<project>`). 라우트 그룹이라 URL은 그대로다.
                         loading.tsx(테이블 스켈레톤)를 **보드에만** 걸려고 감쌌다 —
@@ -46,7 +51,9 @@ apps/teams/
                         키를 듣는 것도 그리는 것도 클라이언트 컴포넌트다(`urls.ts`와 같은 축).
                         화면에 키를 적는 코드는 `formatCombo` 하나만 쓴다
     urls.ts             슬러그·전환 경로·`~` 축약·배지 경과 접미사·스트림 폼 모드·시각 표기
-                        (`timeLabel` §26 ④)·홈 대화 목록 한 줄(`chatRows` §24). **순수 함수만** —
+                        (`timeLabel` §26 ④)·홈 대화 목록 한 줄(`chatRows` §24)
+                        + **통계 화면 enum `Screen`·`screenOf`**(§0-11 — 경로를 enum 하나로 접는
+                        유일한 곳. `analytics.ts`가 이 타입을 가져다 쓴다). **순수 함수만** —
                         클라이언트가 import한다(배지도 클라이언트 컴포넌트에 들어간다).
                         JSX는 `node --test`가 못 읽으므로 컴포넌트의 순수 판정은 여기서 검증한다
     paths.ts            경로 탈출 방어 (신뢰 경계) + 셸 값 해석(`shellValue` — projects·workers 공용)
@@ -140,6 +147,10 @@ apps/teams/
                         (§비주얼 §14). 마크는 두 셸(`p/[project]/layout.tsx` · `(list)/page.tsx`)이
                         같이 쓰고 `href`만 다르다 — 셸마다 인라인하면 §14가 2벌로 고정한 사본이
                         3벌이 된다. 새 파일 대신 여기 둔 이유는 아래 "새 파일을 늘리지 않는다"
+                        + **`<ScreenView/>`**(§0-11) — 루트 레이아웃에 한 번 서서 화면 7종의
+                        `screen_view`를 다 보낸다. 같은 이유로 여기 산다(이미 `usePathname()`을
+                        쓰는 셸 조각이고 그리는 것이 없다). **서버 컴포넌트로는 못 옮긴다** —
+                        보드가 5초마다 refresh해서 렌더마다 보내면 체류 시간이 조회수가 된다
     settings-dialog.tsx `설정` 다이얼로그(섹션 셋 — 인증 §0-4 · 키설정 §0-6 · 사용 통계 §0-11)
                         + 그것을 여는 트리거. **두 셸 헤더 우측 끝과
                         프로젝트 셸 인증 배너 CTA가 같이 쓴다** — 자리가 둘이라 어느 한쪽에

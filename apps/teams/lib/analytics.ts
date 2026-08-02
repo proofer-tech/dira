@@ -13,6 +13,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { registryPath } from "./projects.ts";
+import type { Screen } from "./urls.ts";
 
 /** 레지스트리·토큰·키맵과 **같은 디렉터리**다(엔진의 `$LOCAL`). `lib/auth.ts:16`과 같은 한 줄.
  *  **`.dira` 안이 아니다** — 머신당 하나이고 큐를 오염시키지 않는다(§0-11 사용자 세션 표). */
@@ -25,7 +26,7 @@ export function analyticsPath(): string {
 // **이 타입이 표를 닫는다.** 표 밖의 이름·파라미터는 컴파일이 거부한다. GA4는 모르는 이름도
 // 받아 주므로 타입이 막지 않으면 화면에 조용히 쌓인다. 늘리려면 §0-11 표를 먼저 고친다.
 
-export type Screen = "root" | "board" | "ticket" | "workers" | "personas" | "protocols" | "home";
+// `Screen`과 경로 → enum 매핑(`screenOf`)은 `urls.ts`에 산다 — 그것을 부르는 쪽이 클라이언트다.
 
 export type Events = {
   app_open: { app_version: string; shell: "desktop" | "browser" };

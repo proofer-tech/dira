@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { KeymapProvider } from "@/components/keymap-provider";
+import { ScreenView } from "@/components/project-switcher";
 import { readKeymap } from "@/lib/projects";
 import "./globals.css";
 
@@ -43,6 +44,8 @@ export default async function RootLayout({
           **그래서 모든 화면의 `main`이 스크롤러여야 한다** — 안 그러면 넘친 내용이 못 닿는다 */}
       <body className="flex h-full flex-col">
         {/* 툴팁은 잘린 경로 전문·배지 설명에 쓴다. shadcn tooltip이 Provider를 요구한다 */}
+        {/* `screen_view`를 보내는 유일한 자리(§0-11). 화면 7종이 전부 이 아래고 그리는 것이 없다 */}
+        <ScreenView />
         <TooltipProvider>
           <KeymapProvider keymap={keymap}>{children}</KeymapProvider>
         </TooltipProvider>

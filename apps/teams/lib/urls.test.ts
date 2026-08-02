@@ -6,6 +6,7 @@ import {
   parentPath,
   projectPath,
   relationPath,
+  screenOf,
   timeLabel,
   type Anchor,
 } from "./urls.ts";
@@ -47,6 +48,33 @@ test("parentPath — 표에 없는 경로에 부모를 지어내지 않는다", 
   assert.equal(parentPath("/settings"), null);
   assert.equal(parentPath("/p/a/bogus"), null);
   assert.equal(parentPath("/p/a/ticketsss"), null); // 접두만 같은 것에 안 걸린다
+});
+
+/** 사용 통계 화면 enum (DESIGN.md §0-11 이벤트 표 · 익명 규칙). 이 매핑이 틀리면 GA에 **경로가
+ *  아니라 잘못된 화면 이름**이 쌓이고, 표 밖 경로에 이름을 지어내면 없는 화면이 뜬다. */
+test("screenOf — 화면 7종이 표 그대로 나온다(§0-11 `screen_view`)", () => {
+  assert.equal(screenOf("/"), "root");
+  assert.equal(screenOf("/p/dira"), "board");
+  assert.equal(screenOf("/p/dira/"), "board"); // 보드의 정본 URL과 같은 화면이다
+  assert.equal(screenOf("/p/dira/tickets/fff28e90"), "ticket");
+  assert.equal(screenOf("/p/dira/workers"), "workers");
+  assert.equal(screenOf("/p/dira/personas"), "personas");
+  assert.equal(screenOf("/p/dira/protocols"), "protocols");
+  assert.equal(screenOf("/p/dira/home"), "home");
+});
+
+test("screenOf — 프로젝트 이름도 티켓 해시도 값에 안 남는다(익명 규칙)", () => {
+  // 나가는 것은 enum 하나다. 두 경로가 담은 이름·해시가 결과에 한 글자도 없어야 한다.
+  assert.equal(screenOf("/p/비밀프로젝트/tickets/%ED%95%9C%EA%B8%80"), "ticket");
+  assert.equal(screenOf("/p/비밀프로젝트/workers"), "workers");
+});
+
+test("screenOf — 표에 없는 경로는 `null`이라 아무것도 안 보낸다", () => {
+  assert.equal(screenOf("/nosuchpage"), null);
+  assert.equal(screenOf("/p/dira/bogus"), null);
+  assert.equal(screenOf("/p/dira/ticketsss"), null); // 접두만 같은 것에 안 걸린다
+  assert.equal(screenOf("/p/dira/tickets"), null); // 해시 없는 자리에는 화면이 없다
+  assert.equal(screenOf("/p/dira/workers/x"), null);
 });
 
 /** 칸반 호버 관계선 기하 (DESIGN.md §비주얼 §17). 레인이 하한 폭 288(`min-w-72`)까지

@@ -9,7 +9,13 @@
 import { homedir } from "node:os";
 import path from "node:path";
 import { revalidatePath } from "next/cache";
-import { readAnalytics, setAnalyticsEnabled, track } from "@/lib/analytics";
+import {
+  readAnalytics,
+  setAnalyticsEnabled,
+  track,
+  type EventName,
+  type Events,
+} from "@/lib/analytics";
 import {
   normalizeToken,
   pollSetup,
@@ -172,6 +178,7 @@ export async function registerProject(
   const id = String(form.get("id") ?? "").trim();
   try {
     const project = await addProject(name, root, id || undefined);
+    void track("project_add", { method: "register" }); // §0-11 — 성공 경로에서만 (이름·경로는 안 간다)
     revalidatePath("/", "layout"); // 목록 + 모든 프로젝트 화면의 전환기
     return { done: await viewOf(project) };
   } catch (e) {
@@ -239,6 +246,8 @@ export async function createProject(
     };
 
     const project = await addProject(name, made.root, id?.trim() || undefined);
+    // 스캐폴딩만 되고 등록이 실패하면 여기 안 온다 — 프로젝트가 하나 는 것이 이 이벤트다(§0-11).
+    void track("project_add", { method: "create" });
     revalidatePath("/", "layout");
     return { created, done: await viewOf(project) };
   } catch (e) {
@@ -389,6 +398,24 @@ export async function setAnalyticsAction(
   if (!enabled) await track("analytics_off", {});
   await setAnalyticsEnabled(enabled);
   return readAnalytics();
+}
+
+/** 사용 통계 — **화면에서 GA로 나가는 유일한 길**(DESIGN.md §0-11 §어떻게 보내나).
+ *  새 API 라우트를 만들지 않는다: `app/api/`는 Electron main이 쓰는 창구 하나뿐이다.
+ *
+ *  **`track()`을 await하지 않는다.** 전송이 늦어도(오프라인이면 5초 타임아웃까지 간다) 이 액션은
+ *  즉시 끝나야 한다 — 클라이언트 라우터가 서버 액션 요청을 줄 세우므로 여기서 기다리면 뒤에 선
+ *  진짜 동작이 그만큼 늦는다. `track()`은 던지지 않으므로 떠 있는 promise가 서버를 깨우지 않는다.
+ *  **`analytics_off`만 예외로 바로 위 `setAnalyticsAction`이 직접 `await`한다** — 끄기 직전에
+ *  나가야 하는 한 건이라 순서가 계약이다.
+ *
+ *  **서버 쪽 트리거는 이 액션을 안 거친다** — 그 자리들은 이미 서버라 `track()`을 직접 부른다
+ *  (`registerProject`·`createProject`·`createWorkerAction`·`createTicket`·`answerRequirement`).
+ *  여기를 지나는 것은 화면에서만 나는 둘이다: `screen_view` · `feedback_submit`(`b808993d`).
+ *
+ *  이름·파라미터는 `Events` 타입이 닫는다 — 표 밖의 이름은 컴파일이 거부한다(§0-11 표가 단일 출처). */
+export async function trackEvent<N extends EventName>(name: N, params: Events[N]): Promise<void> {
+  void track(name, params);
 }
 
 /** 설정 다이얼로그의 `다시 읽기` — 워커 파일이 바뀌었을 수 있다. */

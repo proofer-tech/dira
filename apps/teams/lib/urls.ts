@@ -61,6 +61,30 @@ export function parentPath(pathname: string): string | null {
   return /^\/(tickets|workers|personas|protocols)(\/|$)/.test(rest) ? `/p/${id}` : null;
 }
 
+/** 사용 통계의 화면 enum (DESIGN.md §0-11 이벤트 표 `screen_view`). **`lib/analytics.ts`가
+ *  이 타입을 가져다 쓴다** — 정의가 여기 있는 이유는 매핑(`screenOf`)이 `usePathname()`을 받는
+ *  클라이언트 코드라서다(저 파일은 `node:fs`를 탄다). */
+export type Screen = "root" | "board" | "ticket" | "workers" | "personas" | "protocols" | "home";
+
+/** 경로 → 화면 enum. **`screen_view`가 보내는 값을 만드는 유일한 곳이다**(§0-11 익명 규칙):
+ *  `/p/<project>/tickets/<hash>`는 프로젝트 이름과 티켓 해시를 둘 다 담으므로 URL은 안 나가고
+ *  이 함수가 접은 enum 하나만 나간다.
+ *
+ *  **표에 없는 경로는 `null`이고 아무것도 안 보낸다** — 404·모르는 경로에 화면 이름을
+ *  지어내면 통계에 없는 화면이 뜬다(`parentPath`가 표 밖을 `null`로 두는 것과 같은 규칙). */
+export function screenOf(pathname: string): Screen | null {
+  if (pathname === "/") return "root";
+  const [, id, rest = ""] = /^\/p\/([^/]+)(\/.*)?$/.exec(pathname) ?? [];
+  if (!id) return null;
+  if (rest === "" || rest === "/") return "board";
+  // 없는 해시는 404로 떨어지지만 그 판정은 서버에 있다 — 클라이언트가 아는 것은 자리뿐이다.
+  if (/^\/tickets\/./.test(rest)) return "ticket";
+  const seg = rest.slice(1);
+  return seg === "workers" || seg === "personas" || seg === "protocols" || seg === "home"
+    ? seg
+    : null;
+}
+
 /** 배지의 경과 접미사 — `답변 대기 · 3일`의 ` · 3일` (DESIGN.md §비주얼 §2 경과 표시 표).
  *  **`0`이면 붙이지 않는다**: `· 0일`은 고장으로 읽힌다. `undefined`(경과를 안 주는 상태)와 같은 처리다.
  *  판정만 여기 있는 이유는 `pnpm test`가 JSX를 못 읽어서다 — `status-badge.tsx`에 두면 검증이 없다.

@@ -8,6 +8,7 @@
  *  검증과 문구는 `lib/`에 있다. 이 파일이 하는 일은 **프로젝트 id → 등록된 root** 해석과
  *  Error를 직렬화 가능한 결과로 바꾸는 것뿐이다(클라이언트로 Error는 못 넘어간다). */
 import { revalidatePath } from "next/cache";
+import { track } from "@/lib/analytics";
 import { runWorker } from "@/lib/engine";
 import { getProject } from "@/lib/projects";
 import {
@@ -89,6 +90,13 @@ export async function createWorkerAction(
     // 되돌리지 않는다 — 둘 다 트리와 무관하게 유효하고, 등록을 사람 손에 되돌리면
     // `44f876aa`가 없앤 speed bump가 다른 이름으로 돌아온다.
     const worktree = await prepareWorktree(root, worker);
+    // §0-11 — 워커 파일이 생겼을 때만. `cron_ok`은 crontab 등록까지 갔는지고(파일만 생기고
+    // 등록이 실패하는 경로가 이 액션의 계약이다) 워커 이름은 안 간다(익명 규칙).
+    // `engine`은 서버가 이미 검증했지만 인자 타입이 `string`이라 표 밖 값은 `other`로 접는다.
+    void track("worker_create", {
+      engine: engine === "claude" || engine === "codex" ? engine : "other",
+      cron_ok: !cronError,
+    });
     revalidatePath(`/p/${projectId}`, "layout"); // 목록·전환기의 워커 요약도 같이 바뀐다
     return {
       ok: true,
