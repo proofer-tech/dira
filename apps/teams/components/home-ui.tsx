@@ -816,7 +816,8 @@ function SidePanel({
                     모르는 것을 `?`로 그리지 않는다. **해시는 여기서 글자다** — 이 줄 전체가
                     `button`이라 안에 링크를 넣으면 상호작용 요소가 겹친다(HTML 위반 · 키보드가
                     두 정거장). 티켓 상세로 가는 길은 고른 뒤 손잡이 줄의 `<Hash>`다(아래
-                    `<WorkerNote>`) — 갈린 자리를 designer에게 `kind: feedback`으로 넘겼다 */}
+                    `<WorkerNote>`) — 판정 `077d3b2d`: 이대로 둔다. 되돌리려면 §24
+                    §줄의 해시는 링크가 아니다가 거절한 셋이 아니라 `button` 그릇째 개정이다 */}
                 <div className="flex items-center gap-2 text-xs">
                   <span className="font-mono text-muted-foreground group-hover:text-foreground">
                     {[w.worker, w.hash].filter(Boolean).join(" · ")}
