@@ -593,6 +593,20 @@ test("cronRegister — 후행 개행이 없는 crontab에서도 줄이 이어 �
   ]);
 });
 
+test("화면이 말하는 폴링 간격 = `cronLine`이 진짜 넣는 간격 (눈으로 안 맞춘다)", () => {
+  // 손으로 적은 사본은 갈린다 — 화면 넷이 `1분 뒤부터`라고 말하는 동안 등록은 30초였다(2f34f31b).
+  // `cronLine`의 `sleep N` 줄에서 초를 **유도해** 사용자에게 보이는 문자열 전부와 대조한다.
+  const sleep = cronLine({ path: "/tmp/w1.sh" }).match(/\bsleep (\d+);/);
+  assert.ok(sleep, "cronLine에 `sleep N` 줄이 없다 — 등록 단위가 2줄이 아니다");
+  const src = ["components/projects-ui.tsx", "components/workers-ui.tsx", "app/actions.ts"]
+    .concat("app/p/[project]/workers/actions.ts")
+    .map((f) => readFileSync(path.join(import.meta.dirname, "..", f), "utf8"))
+    .join("\n");
+  const said = [...src.matchAll(/(\S+)\s*뒤부터 티켓을 물어갑니다/g)].map((m) => m[1]);
+  assert.ok(said.length >= 4, `문구를 못 찾았다(${said.length}건) — 정규식이 화면과 갈렸다`);
+  assert.deepStrictEqual([...new Set(said)], [`${sleep[1]}초`]);
+});
+
 // ── 자가 정리 §4-4 ──────────────────────────────────────────────────────────
 
 /** §4-4 표 3줄을 **진짜 bash로** 판정한다. 워커 파일을 실제로 만들어 `bash <워커>`로 돌리므로

@@ -420,7 +420,7 @@ const WORKTREE_STEP = [
   ".dira 심링크가 이 프로젝트를 가리키지 않습니다",
 ];
 
-/** 워커 생성. **한 동작으로 끝난다** — 파일을 만들고 crontab 한 줄까지 서버가 등록한다(제약 4).
+/** 워커 생성. **한 동작으로 끝난다** — 파일을 만들고 crontab 두 줄까지 서버가 등록한다(제약 4).
  *  등록이 실패했을 때만 성공 화면이 종전의 등록 명령어로 되돌아간다. */
 export function CreateWorkerButton({
   projectId,
@@ -492,7 +492,7 @@ export function CreateWorkerButton({
             </p>
             {created.cron ? (
               <p className="text-sm font-medium">
-                crontab에 등록했습니다 — 1분 뒤부터 티켓을 물어갑니다.
+                crontab에 등록했습니다 — 30초 뒤부터 티켓을 물어갑니다.
               </p>
             ) : (
               // 파일은 있고 등록만 실패했다. 되돌리지 않고 사람이 셸에서 마무리하게 한다.
@@ -756,7 +756,7 @@ export function WorkerRowActions({ projectId, row }: { projectId: string; row: W
         </DialogContent>
       </Dialog>
 
-      {/* 재등록 — `중단`의 역방향이고 crontab 한 줄이 전부다(§4 재등록). 파일은 이미 있으니
+      {/* 재등록 — `중단`의 역방향이고 crontab 두 줄이 전부다(§4 재등록). 파일은 이미 있으니
           만들 것도 지울 것도 없고, 실패했을 때만 복사 명령으로 돌아간다(= 생성의 등록 실패
           화면과 같은 모양이고 명령도 서버가 만든 그 값이다) */}
       <Dialog

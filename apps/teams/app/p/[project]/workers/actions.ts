@@ -148,7 +148,7 @@ export async function registerWorkerAction(
     return {
       ok: true,
       message: added
-        ? "crontab에 넣었습니다 — 1분 뒤부터 티켓을 물어갑니다."
+        ? "crontab에 넣었습니다 — 30초 뒤부터 티켓을 물어갑니다."
         : "이미 crontab에 있었습니다 — 바꾼 것이 없습니다.",
     };
   } catch (e) {

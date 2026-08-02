@@ -170,7 +170,7 @@ export function ConfigTable({ view }: { view: ResolvedView }) {
 /** 생성이 무엇을 하는지 한 줄. 다이얼로그에서는 `DialogDescription`, 0건 인라인 카드에서는
  *  `h2` 아래 `text-xs text-muted-foreground`다 — 같은 문장이 두 그릇에서 같아야 한다(§비주얼 §7). */
 const CREATE_BLURB =
-  ".dira를 만들고 워커 하나를 crontab에 올립니다 — 1분 뒤부터 티켓을 물어갑니다.";
+  ".dira를 만들고 워커 하나를 crontab에 올립니다 — 30초 뒤부터 티켓을 물어갑니다.";
 
 /** 없는 큐를 만든다. **새 컴포넌트·새 색 토큰 0개** — 필드 사양은 §0-3 표 그대로고
  *  결과는 등록과 같은 해석 결과 표다(§비주얼 §7 생성 다이얼로그 항).
@@ -654,7 +654,7 @@ export function ProjectsSection({
                     엔진 레포 <span className="font-mono text-xs">{c.repo}</span>
                   </p>
                   {c.cron ? (
-                    <p>crontab에 등록됨 — 1분 뒤부터 티켓을 물어갑니다</p>
+                    <p>crontab에 등록됨 — 30초 뒤부터 티켓을 물어갑니다</p>
                   ) : (
                     // 등록 실패는 성공 보고를 막지 않는다(§0-3). 파일은 그대로 두고 명령을 준다.
                     <Alert variant="destructive">
