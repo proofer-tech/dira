@@ -20,6 +20,7 @@ const version = theme.value.diraVersion;
       dira
     </a>
     <nav>
+      <a class="btn" href="/docs/">매뉴얼</a>
       <a class="btn" href="https://github.com/proofer-tech/dira">GitHub</a>
       <a class="btn btn-primary" href="https://github.com/proofer-tech/dira/releases/latest">앱 받기</a>
     </nav>
@@ -37,7 +38,7 @@ const version = theme.value.diraVersion;
   </p>
   <div class="cta">
     <a class="btn btn-primary btn-lg" href="https://github.com/proofer-tech/dira/releases/latest">macOS 앱 받기</a>
-    <a class="btn btn-lg" href="/docs/install">엔진만 쓰기</a>
+    <a class="btn btn-lg" href="/docs/install">설치 가이드</a>
   </div>
   <p class="cta-note">v{{ version }} · macOS (Apple Silicon) · MIT · 자동 업데이트</p>
 </div>
