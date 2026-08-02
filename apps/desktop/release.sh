@@ -74,6 +74,10 @@ git push origin master --follow-tags || exit 1
 # 덮어서, 올라가는 `.dmg`는 sign-dmg가 막으려던 상태 그대로다 — 받는 맥의 첫 더블클릭이
 # Gatekeeper에 막히고 올린 사람은 모른다 (§릴리스 R4-5). 그래서 publish는 electron-builder가
 # 아니라 gh가 한다. `build.publish`는 그대로다 — latest-mac.yml을 굽는 것이 그 설정이다.
+# 그 「gh가 한다」를 코드로 박는 것이 `dist`의 `--publish never`다. 빼면 CI에서는 조용하지만
+# (push 트리거라 `GITHUB_REF`가 태그가 아니다) 사람 맥에서는 electron-builder가 자기 몫의
+# **draft 릴리스**를 따로 만들어 올린다 — 아래 `gh release create`가 만드는 published 옆에
+# 같은 버전 draft가 하나 더 남는다.
 pnpm run dist || exit 1
 
 # 올리기 전에 세 자산이 실제로 있는지 본다. 특히 latest-mac.yml이 빠지면 자동 업데이트는
