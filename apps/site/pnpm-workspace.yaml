@@ -1,0 +1,5 @@
+# apps/teams·apps/desktop과 같은 벌이다 — 각자 독립 프로젝트다(`ci.yml` 주석).
+packages: []
+allowBuilds:
+  # vite(vitepress 내부 의존)가 postinstall로 받는 네이티브 바이너리. 빌드에 필수.
+  esbuild: true
