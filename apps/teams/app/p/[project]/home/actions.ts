@@ -15,6 +15,7 @@ import { verifyAttachments, withAttachments } from "@/lib/attachments";
 import {
   newConversation,
   pollHome,
+  readSessionId,
   startAsk,
   stopAsk,
   switchConversation,
@@ -72,6 +73,7 @@ export async function pollHomeAnswer(
       offset: 0,
       reset: true,
       running: false,
+      runningSessions: [], // 못 찾은 프로젝트에서 도는 것은 없다(§7 §대화마다 따로 돈다)
       partial: "",
       stopped: false,
       failed: null,
@@ -86,10 +88,15 @@ export async function pollHomeAnswer(
 
 /** `중지`(§7 §도는 답을 멈춘다) — 도는 자식에 `SIGTERM`. **답이 사라지지 않는다**: 받은 데까지가
  *  트랜스크립트에 남고 다음 질문은 같은 대화에 `--resume`으로 이어진다(실측 ⑵⑶).
- *  돌려주는 것은 죽일 것이 있었나이고, 상태가 화면에 붙는 것은 그 다음 폴링의 `stopped`다. */
+ *  돌려주는 것은 죽일 것이 있었나이고, 상태가 화면에 붙는 것은 그 다음 폴링의 `stopped`다.
+ *
+ *  **멈추는 것은 지금 보는 대화 하나다**(§7 §대화마다 따로 돈다 — 대화마다 따로 돌므로 프로젝트
+ *  단위로 죽이면 남의 대화까지 밟는다). 그 대화가 곧 `current`라 화면이 값을 안 들고 온다 —
+ *  버튼은 보는 대화에만 서고, 남의 대화를 멈추는 버튼은 안 만든다(가서 누른다). */
 export async function stopHome(projectId: string): Promise<boolean> {
   try {
-    return stopAsk((await required(projectId)).id);
+    const sid = await readSessionId((await required(projectId)).id);
+    return sid ? stopAsk(sid) : false;
   } catch {
     return false; // 등록이 풀린 프로젝트 — 죽일 것도 말할 것도 없다
   }

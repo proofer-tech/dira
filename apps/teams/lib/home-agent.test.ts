@@ -732,8 +732,11 @@ test("`중지` — SIGTERM 하나로 끝나고, 받은 글은 남고, 다음 질
     assert.strictEqual(await startAsk(project, "긴 질문"), null);
     await p.until((c) => c.partial !== "");
 
-    assert.strictEqual(stopAsk(project.id), true);
-    assert.strictEqual(stopAsk(project.id), false); // 두 번 눌러도 신호는 하나다
+    // **`중지`는 그 대화의 자식 하나다** — 인자가 project id가 아니라 session id다(§7)
+    const live = await readSessionId(project.id);
+    assert.ok(live);
+    assert.strictEqual(stopAsk(live), true);
+    assert.strictEqual(stopAsk(live), false); // 두 번 눌러도 신호는 하나다
 
     const end = await p.until((c) => !c.running);
     // **실패가 아니다**(§7: 실패 5종에 여섯 번째를 만들지 않는다). 받은 글은 트랜스크립트에 남는다
@@ -777,7 +780,7 @@ test("실패 ② 인증 — 새 형식에서도 판정은 `api_error_status` 401
   assert.strictEqual((await readHome(project.id)).conversations.at(-1)?.fresh, true);
 });
 
-test("한 프로젝트에 한 질문 — 둘째는 기다리지 않고 거절되고, 폴링 한 번이 답을 집어 간다", async () => {
+test("한 대화에 한 질문 — 둘째는 기다리지 않고 거절되고, 폴링 한 번이 답을 집어 간다", async () => {
   // `claude`를 못 찾게 만들어 질문 하나를 **즉시** 끝낸다(§24 실패 ① spawn). 진짜 세션을
   // 띄우지 않고도 이 파일이 지키는 것(맵의 수명 · 실패 코드 · 다시 열림)이 전부 걸린다.
   const project = { id: "busy-test", name: "큐", root: path.join(LOCAL, "nowhere/.dira") };
@@ -785,9 +788,12 @@ test("한 프로젝트에 한 질문 — 둘째는 기다리지 않고 거절되
   process.env.PATH = "";
   try {
     assert.strictEqual(await startAsk(project, "질문 하나"), null); // 시작했다
-    assert.strictEqual(isAsking(project.id), true);
+    // 이 질문은 **이미 끝났다**(spawn이 즉시 실패한다) — 그래서 `도는 중`은 아니다.
+    assert.strictEqual(isAsking(project.id), false);
 
-    // 둘째 — 큐잉이 아니라 **거절**이다(§7: 동시 실행 제한 층을 만들지 않는다)
+    // 같은 대화의 둘째 — 큐잉이 아니라 **거절**이다(§7: 동시 실행 제한 층을 만들지 않는다).
+    // 끝났어도 **아무도 안 집어 간 결과 객체가 그 줄에 있으면** 거절이다: 덮으면 그 실패가
+    // 사람에게 한 번도 안 보인다(§7 §끝난 답을 아무도 안 집어 가는 창).
     const second = await startAsk(project, "질문 둘");
     assert.strictEqual(second?.reason, "busy");
     assert.strictEqual(second?.ok, false);
@@ -806,6 +812,64 @@ test("한 프로젝트에 한 질문 — 둘째는 기다리지 않고 거절되
   } finally {
     process.env.PATH = path0;
   }
+});
+
+/** **대화마다 따로 돈다**(§7 §대화마다 따로 돈다 — 요구 `4e9e54c5`, 답 `16601d5c` = (b)).
+ *
+ *  다섯을 한 픽스처에 건다. 다섯이 한 테스트인 이유는 전부 **맵의 키 하나**가 프로젝트에서
+ *  세션으로 갈린 결과여서다 — 따로 재면 A가 도는 동안이라는 조건을 다섯 번 다시 만들어야 한다.
+ *
+ *  1. A가 도는 동안 **B의 질문이 받아들여진다**(종전에는 `busy`였다).
+ *  2. **같은 대화의** 둘째 질문은 종전대로 실패 ④다.
+ *  3. `runningSessions`에 **둘 다** 든다. `running`은 보고 있는 대화(B)의 것이다.
+ *  4. `중지`가 **그 대화의 자식만** 죽인다 — B는 그대로 돈다.
+ *  5. **끝난 A의 결과 객체가 그 대화를 여는 폴링까지 남고**, `running`은 그 사이 false다. */
+test("대화마다 따로 돈다 — A가 도는 중 B가 받아들여지고, 같은 대화 둘째만 `busy`다", async () => {
+  const id = "concurrent";
+  const project = { id, name: "큐", root: CWD };
+  await withFake("hang", async () => {
+    const a = await newConversation(id);
+    assert.strictEqual(await startAsk(project, "A 질문"), null);
+    await poller(id).until((c) => c.partial !== ""); // A가 실제로 떴다
+
+    // ② 같은 대화의 둘째 — 문구도 코드도 무수정이다
+    const again = await startAsk(project, "A 둘째");
+    assert.strictEqual(again?.ok, false);
+    assert.strictEqual(again?.reason, "busy");
+    assert.strictEqual(again?.sessionId, a);
+
+    // ① 다른 대화는 받는다 — 잠긴 단위가 프로젝트가 아니라 대화다
+    const b = await newConversation(id);
+    assert.notStrictEqual(b, a);
+    assert.strictEqual(await startAsk(project, "B 질문"), null);
+
+    // ③ 도는 목록에 둘 다 든다. `running`은 보고 있는 대화(= `current` = B)의 것이다
+    const both = await poller(id).until((c) => c.runningSessions.length === 2);
+    assert.deepStrictEqual([...both.runningSessions].sort(), [a, b].sort());
+    assert.strictEqual(both.sessionId, b);
+    assert.strictEqual(both.running, true);
+
+    // ④ `중지`는 A의 자식 하나만 죽인다 — B를 멈추는 경로가 없다
+    assert.strictEqual(stopAsk(a), true);
+    const onlyB = await poller(id).until((c) => c.runningSessions.length === 1);
+    assert.deepStrictEqual(onlyB.runningSessions, [b]);
+    assert.strictEqual(onlyB.running, true); // 보고 있는 B는 그대로 돈다
+
+    // ⑤ 끝난 A를 집어 갈 폴링이 여태 없었다. **그래도 결과가 남아 있다** — 안 남기면 A에서 난
+    //    실패 5종이 사람에게 한 번도 안 보인다. 그리고 남아 있는 동안 A는 `도는 중`이 아니다
+    assert.strictEqual(await switchConversation(id, a), true);
+    const seenA = await pollHome(id, null, 0);
+    assert.strictEqual(seenA.sessionId, a);
+    assert.strictEqual(seenA.running, false); // 맵에 있어도 `result`가 찼으면 안 돈다
+    assert.strictEqual(seenA.answered, true); // 이 폴링이 집어 갔다
+    assert.strictEqual(seenA.stopped, true);
+    assert.deepStrictEqual(seenA.runningSessions, [b]); // B는 여전히 돈다
+    // 집어 간 뒤에는 없다 — 같은 것을 두 번 그리지 않는다(종전과 같은 선)
+    assert.strictEqual((await pollHome(id, null, 0)).answered, false);
+
+    stopAsk(b);
+    await poller(id).until((c) => c.runningSessions.length === 0);
+  });
 });
 
 /** 좌측 패널의 워커 세션 그룹 — **큐에서 파생되고 저장되지 않는다**(§7 좌측 패널 · `e85e8186`).

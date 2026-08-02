@@ -499,12 +499,16 @@ const newLive = (): Live => ({ partial: "", child: null, stopping: false });
  *  **cwd는 큐의 부모**(`dirname(project.root)`)다 — 등록값이 `<프로젝트>/.dira`라 그 부모가 repo다.
  *  트랜스크립트 디렉터리 이름도 이 cwd에서 나오므로 여기를 바꾸면 §2-1 읽기 코어가 못 찾는다.
  *
- *  **동시 실행을 막지 않는다**(§7: "한 프로젝트에 한 번에 한 질문"). 그 잠금은 입력 칸을 잠그는
- *  화면의 일이고, 여기에 큐잉 층을 만들지 않는다. */
+ *  **동시 실행을 막지 않는다**(§7 §대화마다 따로 돈다). 잠금의 단위는 **한 대화에 한 질문**이고
+ *  그 판정은 `startAsk`에 있다 — 여기에 큐잉 층도 동시 상한도 만들지 않는다. */
 export async function ask(
   project: Pick<Project, "id" | "name" | "root">,
   question: string,
   live: Live = newLive(),
+  /** 질문이 들어갈 세션을 **밖에서 정해 온다.** `startAsk`가 `runs`에 등록할 키가 이 값이라
+   *  그쪽이 `beginTurn`을 먼저 부른다(§7 §서버가 갈리는 자리 넷 ②). 안 주면 여기서 정한다 —
+   *  이 함수를 그대로 부르는 자리(테스트)가 종전과 같이 돈다. */
+  turn?: { sessionId: string; resumed: boolean },
 ): Promise<Answer> {
   const q = question.trim();
   if (!q) return { ok: false, reason: "other", output: "질문이 비어 있습니다.", sessionId: "", resumed: false };
@@ -521,7 +525,7 @@ export async function ask(
     };
   }
 
-  const { sessionId, resumed } = await beginTurn(project.id, q);
+  const { sessionId, resumed } = turn ?? (await beginTurn(project.id, q));
   const prompt = buildPrompt(await snapshotOf(project), q);
 
   const run = await runClaude(
@@ -577,6 +581,15 @@ async function settleFirstTurn(projectId: string, sessionId: string, ok: boolean
   const next: Conversation = ok
     ? { id: row.id, title: row.title, created: row.created }
     : { ...row, id: randomUUID() };
+  // **`runs`의 키가 그 줄을 따라간다**(§7 §서버가 갈리는 자리 넷 ①: 키가 session id다).
+  // 실패한 첫 턴은 여기서 id를 갈므로, 안 옮기면 그 대화를 여는 폴링이 `runs.get(<새 id>)`에서
+  // 아무것도 못 찾고 **실패 5종이 사람에게 한 번도 안 보인다.** 객체를 그대로 옮기므로
+  // `startAsk`의 `.then`이 채우는 `result`는 새 키 아래에 들어간다.
+  const entry = runs.get(sessionId);
+  if (entry && next.id !== sessionId) {
+    runs.delete(sessionId);
+    runs.set(next.id, entry);
+  }
   await writeHome(projectId, {
     conversations: home.conversations.map((c) => (c.id === sessionId ? next : c)),
     current: home.current === sessionId ? next.id : home.current,
@@ -803,17 +816,29 @@ export function toTurns(events: StreamEvent[]): Turn[] {
   return turns;
 }
 
-/** 지금 이 프로젝트에서 도는 질문. **`result`가 채워지는 순간이 곧 끝**이고, 그걸 집어 가는 것은
- *  폴링 한 번이다(집어 가면서 지운다).
+/** 지금 도는 질문 — **키가 session id다**(§7 §대화마다 따로 돈다. 종전은 `project.id`였고 그
+ *  한 칸이 "한 프로젝트에 한 질문"의 정체였다). UUID라 프로젝트끼리 겹칠 수 없고, 값에
+ *  `projectId`가 같이 있어 한 프로젝트에서 도는 줄만 걸러낸다.
+ *
+ *  **`result`가 채워지는 순간이 곧 끝**이고 **`도는 중`의 정의가 그 한 칸이다** — 맵에 있나가
+ *  아니다. A가 끝나는 순간 사람이 B를 보고 있을 수 있어 **집어 갈 폴링이 없기 때문**이고,
+ *  그래서 끝난 객체를 안 지우고 **그 대화를 여는 폴링까지** 들고 있는다(지우면 A의 실패 5종이
+ *  사람에게 한 번도 안 보인다). 남는 것은 대화 수(상한 20)만큼의 문자열 몇 개다.
  *
  *  이 맵이 **§24 실패 ④의 근거**다 — 화면의 잠금은 새로고침 한 번에 풀리므로(폼 상태다) 서버가
- *  한 번 더 판정한다. 큐잉 층이 아니다: 둘째 질문은 기다리지 않고 **거절**된다(§7).
+ *  한 번 더 판정한다. 큐잉 층이 아니다: **같은 대화의** 둘째 질문은 기다리지 않고 **거절**된다.
+ *  동시 상한은 안 박는다(§7 §상한을 안 두는 근거 — 세는 값은 이 맵에 이미 있다).
  *  // ponytail: 프로세스 메모리다. dev의 HMR·재시작에 날아가면 폴링이 멈추고 답은 다음
  *  //           새로고침에 트랜스크립트에서 그대로 뜬다 — 잃는 것은 실패 Alert 한 장과
  *  //           **자식 핸들**(그때 `중지`는 죽일 것을 못 찾는다. 상한 5분이 뒤에 있다). */
-const runs = new Map<string, { result: Answer | null; live: Live }>();
+const runs = new Map<string, { projectId: string; result: Answer | null; live: Live }>();
 
-export const isAsking = (projectId: string): boolean => runs.has(projectId);
+/** 이 프로젝트에서 **지금 도는** session id 전부 — 패널이 진행 표식을 그리는 출처다(§7 표).
+ *  끝났는데 아직 아무도 안 집어 간 줄은 여기 없다(`result`가 찼다 = 안 돈다). */
+const runningIn = (projectId: string): string[] =>
+  [...runs].filter(([, r]) => r.projectId === projectId && !r.result).map(([id]) => id);
+
+export const isAsking = (projectId: string): boolean => runningIn(projectId).length > 0;
 
 /** `중지`(§7 §도는 답을 멈춘다) — **우리가 띄운 자식 하나에 `SIGTERM`을 보내는 게 전부다.**
  *
@@ -821,11 +846,14 @@ export const isAsking = (projectId: string): boolean => runs.has(projectId);
  *  **스스로** rc 143으로 나가고(신호사면 rc가 음수로 온다) 나가면서 받은 데까지를 트랜스크립트에
  *  남긴다. 그래도 안 죽는 날이 오면 상한 5분이 여전히 뒤에 서 있다.
  *
+ *  **죽이는 것은 그 대화의 자식 하나다**(§7 §서버가 갈리는 자리 넷 ③) — 인자가 project id가
+ *  아니라 session id인 것이 그 전부다. 남의 대화를 멈추는 경로를 안 만든다(가서 누른다).
+ *
  *  돌려주는 것은 **죽일 것이 있었나**다 — 누르는 사이에 답이 도착했으면 false다(화면은 그 다음
  *  폴링이 이미 `running: false`를 말한다). 여기서 맵을 지우지 않는다: 자식이 실제로 닫히면
  *  `runClaude`가 `stopped`를 채우고, 그걸 집어 가는 것은 종전대로 폴링 한 번이다. */
-export function stopAsk(projectId: string): boolean {
-  const live = runs.get(projectId)?.live;
+export function stopAsk(sessionId: string): boolean {
+  const live = runs.get(sessionId)?.live;
   if (!live || live.stopping) return false;
   live.stopping = true; // 아직 spawn 전이면 `runClaude`가 뜨자마자 이걸 보고 죽인다
   live.child?.kill("SIGTERM");
@@ -837,21 +865,15 @@ export function stopAsk(projectId: string): boolean {
  *  ③ 실패 ④를 판정할 곳이 서버여야 한다. 셋 다 "누가 도는지"를 서버가 알아야 한다는 한 사실이다.
  *
  *  돌려주는 것은 **실패뿐**이다(`null` = 시작했다). 성공의 도착은 폴링이 말한다.
- *  검사와 등록 사이에 `await`가 없다 — 두 요청이 동시에 통과하지 못하는 근거가 그것이다. */
+ *
+ *  **잠금의 단위는 한 대화다**(§7 §대화마다 따로 돈다). A가 도는 동안 B의 질문은 그냥 받는다 —
+ *  그래서 질문이 들어갈 **session id를 먼저 정하고**(`beginTurn`) 그 키로 본다. 검사와 등록
+ *  사이에 `await`가 없다는 종전 근거는 무수정이다: 옮긴 `await` **뒤에** 둘이 붙어 있어야
+ *  두 요청이 같이 통과하지 못한다. */
 export async function startAsk(
   project: Pick<Project, "id" | "name" | "root">,
   question: string,
 ): Promise<Answer | null> {
-  if (runs.has(project.id)) {
-    const sid = await readSessionId(project.id);
-    return {
-      ok: false,
-      reason: "busy",
-      output: `session ${sid ?? "(시작 중)"}`,
-      sessionId: sid ?? "",
-      resumed: true,
-    };
-  }
   const q = question.trim();
   if (!q) {
     return { ok: false, reason: "other", output: "질문이 비어 있습니다.", sessionId: "", resumed: false };
@@ -872,9 +894,18 @@ export async function startAsk(
       resumed: true,
     };
   }
-  const entry = { result: null as Answer | null, live: newLive() };
-  runs.set(project.id, entry);
-  void ask(project, q, entry.live).then(
+  // 여기까지가 마지막 `await`다 — 아래 **검사와 등록 사이에는 없다**(머리 주석).
+  const turn = await beginTurn(project.id, q);
+  if (runs.has(turn.sessionId)) {
+    // **같은 대화의 둘째 질문만** 실패 ④다(§24 문구 무수정 — 다른 대화는 여기까지 안 온다).
+    // `running`(= `result`가 비었나)이 아니라 **맵에 있나**로 보는 것이 여기서는 맞다: 끝났는데
+    // 아직 아무도 안 집어 간 결과 객체를 덮으면 그 실패가 사람에게 한 번도 안 보인다. 화면이
+    // 입력칸을 여는 것은 그 객체를 집어 간 폴링 뒤이고, 집어 가면서 이 줄이 지워진다.
+    return { ok: false, reason: "busy", output: `session ${turn.sessionId}`, sessionId: turn.sessionId, resumed: true };
+  }
+  const entry = { projectId: project.id, result: null as Answer | null, live: newLive() };
+  runs.set(turn.sessionId, entry);
+  void ask(project, q, entry.live, turn).then(
     (a) => (entry.result = a),
     // `ask`는 던지지 않게 쓰여 있지만(안이 전부 catch다) 여기서 던지면 unhandled rejection으로
     // 서버가 죽고 화면은 영영 `도는 중`이다. 마지막 관문 하나를 둔다.
@@ -900,7 +931,14 @@ export type HomeChunk = {
   offset: number;
   /** 세션이 갈렸다(`새 대화` 뒤 첫 질문 · 첫 질문 실패 뒤 재시도) — 화면은 **갈아 끼운다** */
   reset: boolean;
+  /** **보고 있는 대화**가 도는가(§7 §대화마다 따로 돈다 — 이 한 칸의 뜻은 무수정이다).
+   *  갈린 것은 매달린 곳이다: 프로젝트가 아니라 이 세션이다 */
   running: boolean;
+  /** **이 프로젝트에서 도는 session id 전부**(§7 §서버가 갈리는 자리 넷 ④). 보고 있는 대화가
+   *  아닌 줄도 든다 — 패널이 진행 표식을 그리는 출처이자, 화면이 폴링을 계속하는 근거다
+   *  (보는 대화가 먼저 끝나도 A가 돌고 있으면 그 표식이 살아 있어야 한다). `running`이 참이면
+   *  `sessionId`가 이 목록에 있다 */
+  runningSessions: string[];
   /** **도는 동안 받은 글**(§7 §답은 흐른다). 출처가 `turns`와 다르다 — 이건 자식 프로세스의
    *  stdout이고 저건 트랜스크립트다. `running`이 false면 **언제나 빈 문자열**이다(아래 주석) */
   partial: string;
@@ -949,14 +987,6 @@ export async function pollHome(
 ): Promise<HomeChunk> {
   /** 나가는 문 셋이 **같은 판정 하나**를 지난다 — 둘이 예외 경로라 잊기 쉬운 자리다 */
   const chunk = (c: Omit<HomeChunk, "done">): HomeChunk => ({ ...c, done: pollDone(c) });
-  // **끝났는지를 읽는 것이 파일을 읽는 것보다 먼저다.** 뒤집으면 tail과 종료 사이에 쓰인 마지막
-  // 줄을 못 읽은 채로 `running: false`를 돌려주고, 폴링이 멈춰서 답이 새로고침 전까지 안 뜬다.
-  const entry = runs.get(projectId);
-  const done = entry?.result ?? null;
-  if (done) runs.delete(projectId);
-  // **끝을 집어 간 폴링은 이 한 번뿐이다**(위에서 지웠다) — 그래서 이 값이 곧 `pollDone`이다.
-  const answered = done !== null;
-
   // 목록과 `current`를 **한 번에** 읽는다 — 화면이 둘 다 이 응답에서 받는다(위 `conversations`).
   const { conversations, current } = await readHome(projectId);
   const workers = await workerSessionsById(projectId);
@@ -970,8 +1000,20 @@ export async function pollHome(
       : null;
   const reset = sid !== sessionId;
   const at = reset || !Number.isSafeInteger(offset) || offset < 0 ? 0 : offset;
+
+  // **끝났는지를 읽는 것이 트랜스크립트를 읽는 것보다 먼저다.** 뒤집으면 tail과 종료 사이에 쓰인
+  // 마지막 줄을 못 읽은 채로 `running: false`를 돌려주고, 폴링이 멈춰서 답이 새로고침 전까지
+  // 안 뜬다. (`readHome`은 그 파일이 아니다 — sid를 모르면 볼 칸을 못 고른다.)
+  // **집어 가는 것은 보고 있는 대화 하나뿐이다**(§7: 남의 대화의 결과 객체는 그 대화를 열 때까지
+  // 남는다). `running`이 맵의 유무가 아니라 `result`가 비었나인 근거도 이것이다.
+  const entry = sid ? runs.get(sid) : undefined;
+  const done = entry?.result ?? null;
+  if (sid && done) runs.delete(sid);
+  // **끝을 집어 간 폴링은 이 한 번뿐이다**(위에서 지웠다) — 그래서 이 값이 곧 `pollDone`이다.
+  const answered = done !== null;
   const failed = done && !done.ok ? done : null;
-  const running = runs.has(projectId);
+  const running = entry !== undefined && done === null;
+  const runningSessions = runningIn(projectId);
   const stopped = done?.stopped === true;
   // **누적분과 트랜스크립트가 겹치는 자리가 여기다**(§7: 완료된 답을 두 벌로 그리지 않는다).
   // 도는 동안은 이 문자열이 그 답의 전부이고, 끝나는 순간 **정본이 트랜스크립트로 넘어간다** —
@@ -981,7 +1023,7 @@ export async function pollHome(
   const partial = running ? (entry?.live.partial ?? "") : "";
 
   if (!sid) {
-    return chunk({ sessionId: null, conversations, workers, turns: [], offset: 0, reset, running, partial, stopped, failed, answered });
+    return chunk({ sessionId: null, conversations, workers, turns: [], offset: 0, reset, running, runningSessions, partial, stopped, failed, answered });
   }
 
   const file = await findTranscript(sid);
@@ -994,6 +1036,7 @@ export async function pollHome(
       offset: at,
       reset,
       running,
+      runningSessions,
       partial,
       stopped,
       answered,
@@ -1007,5 +1050,5 @@ export async function pollHome(
     });
   }
   const r = await tailEvents(file, at);
-  return chunk({ sessionId: sid, conversations, workers, turns: toTurns(r.events), offset: r.offset, reset, running, partial, stopped, failed, answered });
+  return chunk({ sessionId: sid, conversations, workers, turns: toTurns(r.events), offset: r.offset, reset, running, runningSessions, partial, stopped, failed, answered });
 }
