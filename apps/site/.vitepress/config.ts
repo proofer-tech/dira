@@ -7,9 +7,8 @@ export default defineConfig({
   description:
     "티켓을 큐에 넣으면 cron에 물린 워커가 claude 세션에 넘긴다. 파일시스템이 곧 큐인 티켓 디스패처.",
   cleanUrls: true,
-  // 죽은 내부 링크는 빌드를 깨뜨린다. 매뉴얼 18장의 링크 검사를 이것으로 대신한다.
-  // 유예다. 매뉴얼 18장이 다 들어오는 Task 8에서 `false`로 되돌린다.
-  ignoreDeadLinks: [/^\/docs\//],
+  // 죽은 내부 링크는 빌드를 깨뜨린다. 매뉴얼 18장이 다 들어왔으므로 유예 없이 전수 검사한다.
+  ignoreDeadLinks: false,
   head: [["link", { rel: "icon", href: "/icon.svg", type: "image/svg+xml" }]],
   themeConfig: {
     diraVersion,
@@ -46,23 +45,22 @@ export default defineConfig({
             { text: "페르소나와 프로토콜", link: "/docs/personas" },
           ],
         },
-        // 운영 + 레퍼런스 — Task 8
-        // {
-        //   text: "운영",
-        //   items: [
-        //     { text: "트러블슈팅", link: "/docs/troubleshooting" },
-        //     { text: "로그 읽는 법", link: "/docs/logs" },
-        //     { text: "사용 통계와 끄는 법", link: "/docs/analytics" },
-        //   ],
-        // },
-        // {
-        //   text: "레퍼런스",
-        //   items: [
-        //     { text: "워커 환경변수", link: "/docs/ref-env" },
-        //     { text: "CLI", link: "/docs/ref-cli" },
-        //     { text: "frontmatter 필드", link: "/docs/ref-frontmatter" },
-        //   ],
-        // },
+        {
+          text: "운영",
+          items: [
+            { text: "트러블슈팅", link: "/docs/troubleshooting" },
+            { text: "로그 읽는 법", link: "/docs/logs" },
+            { text: "사용 통계와 끄는 법", link: "/docs/analytics" },
+          ],
+        },
+        {
+          text: "레퍼런스",
+          items: [
+            { text: "워커 환경변수", link: "/docs/ref-env" },
+            { text: "CLI", link: "/docs/ref-cli" },
+            { text: "frontmatter 필드", link: "/docs/ref-frontmatter" },
+          ],
+        },
       ],
     },
     socialLinks: [{ icon: "github", link: "https://github.com/proofer-tech/dira" }],
