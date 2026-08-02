@@ -199,7 +199,7 @@ test("validateBinding — 겹치면 상대 액션 id를 담아 거절한다", ()
   assert.strictEqual(validateBinding(BOUND, "board.new", "n"), null);
   assert.strictEqual(validateBinding(BOUND, "board.new", "j"), null);
   // 받침 없는 이름은 `와`다
-  assert.match(validateBinding(BOUND, "board.new", "Mod+Enter")!.reason, /참견 보내기와 겹칩니다/);
+  assert.match(validateBinding(BOUND, "board.new", "Mod+Enter")!.reason, /보내기와 겹칩니다/);
 });
 
 test("validateBinding — 못 쓰는 키는 사유와 함께 거절한다", () => {

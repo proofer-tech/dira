@@ -36,7 +36,9 @@ export const DEFAULT_KEYMAP: KeyAction[] = [
   { id: "board.request", name: "요구 접수", combo: "r" },
   { id: "nav.board", name: "보드로 이동", combo: "b" },
   { id: "nav.workers", name: "워커로 이동", combo: "w" },
-  { id: "interject.send", name: "참견 보내기", combo: "Mod+Enter" },
+  // 듣는 칸이 셋이다(참견 form · 홈 질의 칸 · 요구 접수 다이얼로그) — 이름에 `참견`을 적으면
+  // 목록이 거짓말을 한다(§0-6). id는 `keymap.json`의 키라 안 바꾼다.
+  { id: "interject.send", name: "보내기", combo: "Mod+Enter" },
 ];
 
 export type Bindings = Record<ActionId, string>;

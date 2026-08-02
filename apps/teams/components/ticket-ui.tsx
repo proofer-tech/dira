@@ -31,10 +31,11 @@ import {
 } from "@/app/p/[project]/tickets/[hash]/actions";
 import { createTicket, type NewTicketState } from "@/app/p/[project]/(board)/actions";
 import type { UnassignRun } from "@/lib/engine";
+import { matchCombo } from "@/lib/keymap";
 // 스레드를 엮는 쪽은 서버(`lib/queue.ts threadOf`)다 — 여기 오는 건 타입뿐이라 `node:*`를 안 끈다
 import type { ThreadItem } from "@/lib/queue";
 import { AttachmentField, useAttachments } from "@/components/attachment-field";
-import { useHotkey } from "@/components/keymap-provider";
+import { useHotkey, useKeymap } from "@/components/keymap-provider";
 import { Markdown } from "@/components/markdown";
 import { PersonaDot } from "@/components/persona-badge";
 import { DepBadge } from "@/components/status-badge";
@@ -850,6 +851,9 @@ export function RequestDialog({
   const live = state !== dismissed;
   const done = live && state.ok ? state.hash : null;
   const att = useAttachments(project);
+  // `⌘↵`(§3 · §0-6). 참견·홈 질의 칸과 **같은 바인딩**이다 — 액션을 새로 만들면 §0-6 충돌
+  // 검증이 기본 키맵을 거절한다. 조합 문자열은 여기 안 적는다: 사람이 키를 바꾸면 이 칸도 따라간다.
+  const sendCombo = useKeymap().bindings["interject.send"];
 
   // 닫히면 빈 칸으로 돌아간다 — 접수한 본문이 남아 있으면 같은 요구가 두 번 접수된다(§3).
   // 접수 확인 화면(`done`)은 **묻지 않는다**: 이미 접수돼서 잃을 것이 없다.
@@ -920,6 +924,18 @@ export function RequestDialog({
               value={body}
               onChange={(e) => setBody(e.target.value)}
               onPaste={att.onPaste}
+              // `⌘↵`로 접수한다. `Enter`는 줄바꿈 그대로고, 한글 조합 중의 `Enter`는
+              // `matchCombo`의 `isComposing` 가드가 막는다(§3 · §21과 같은 규칙, 세 번째 칸이다).
+              //
+              // **폼을 제출한다 — 서버 액션을 직접 부르지 않는다**(§3). `requestSubmit()`이라야
+              // `required`(빈 본문) 검사도 `<form action>` 경로도 버튼과 같은 길로 돈다
+              // (`submit()`은 검증을 건너뛰고 React의 action도 안 탄다). `pending`은 버튼의
+              // `disabled`가 하는 일을 여기서 한 번 더 한다 — 키에는 `disabled`가 없다.
+              onKeyDown={(e) => {
+                if (!matchCombo(e.nativeEvent, sendCombo)) return;
+                e.preventDefault();
+                if (!pending) e.currentTarget.form?.requestSubmit();
+              }}
             />
             {/* 실패는 이 자리에 남는다 — 닫으면 본문과 함께 사라진다(§3) */}
             {live && state.error && <Failure title="접수하지 못했습니다" message={state.error} />}
