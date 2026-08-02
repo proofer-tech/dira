@@ -125,6 +125,11 @@ apps/teams/
                         서버가 `mp/collect`로 POST한다. **던지지 않고 호출자는 await하지 않는다**
                         (Promise를 주는 이유는 하나 — 테스트가 전송을 관찰한다). 이벤트 이름 8개는
                         `Events` 타입이 닫는다 — 표 밖의 이름은 컴파일이 거부한다(§0-11 표가 단일 출처)
+    feedback.ts         의견 → GitHub 프리필 URL (§0-12). **순수 함수뿐이다** — 여는 것은
+                        `window.open`이라 부르는 쪽이 클라이언트다(`urls.ts`와 같은 축.
+                        `node:*` import 금지). 제목 40자 컷 · 본문 두 줄 · **URL 상한 6,000바이트**
+                        (실측값과 근거는 그 파일 상수 옆에 있다)와 자르기가 여기 한 곳에 있다.
+                        `urls.ts`에 안 얹은 이유: 저기는 앱 안 경로고 여기는 앱 밖으로 나가는 URL이다
     utils.ts            shadcn cn() — 건드리지 않는다
     *.test.ts           node --test
   components/           손으로 만드는 컴포넌트 (DESIGN.md §5 커스텀)
@@ -137,6 +142,14 @@ apps/teams/
     persona-badge.tsx   persona 값 표시의 유일한 출처 (점+이름 배지 · 점만 그리는 모드).
                         색은 레지스트리에 있고 자리가 5곳이다 — 조회를 자리마다 다시 쓰면
                         어느 화면 하나가 조용히 색 없이 남는다. 팔레트 표는 `lib/urls.ts`
+    feedback-dialog.tsx `의견 보내기` 폼(§0-12) — `textarea` 하나 + 보내기. **열림 상태를 안 갖는다**
+                        (`open`/`onOpenChange`를 받는다): 진입점이 `Help` 메뉴 하나라 여는 신호가
+                        밖(main → 렌더러)에서 온다. 보내기는 `window.open` 하나고
+                        (`setWindowOpenHandler`가 외부로 보낸다 — **새 IPC 0개**) 서버로 가는 것은
+                        `feedback_submit` 하나고 그 길은 `trackEvent` 하나다(§0-11). **의견 본문은 GA로 안 간다**.
+                        URL 조립은 `lib/feedback.ts`고 여기는 그리기 + 두 줄 공개뿐이다.
+                        **새 파일인 이유**: 두 셸 어디서나 떠야 해서 기존 파일 어디에 얹어도
+                        나머지 셸이 그 파일을 import한다(`keymap-provider.tsx`와 같은 축)
     keymap-provider.tsx 서버가 읽은 키맵을 클라이언트로 나르는 통로 (§0-6 배선):
                         `KeymapProvider`(`useContext` 하나) · `useKeymap()` ·
                         **`useHotkey()`**. 전역 키를 거는 코드는 이 훅만 쓴다 — 글 쓰는 중

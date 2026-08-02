@@ -54,8 +54,10 @@ function credentials(): { id: string; secret: string } | null {
   return id && secret ? { id, secret } : null;
 }
 
-/** `app_open`의 두 파라미터. 버전을 넘기는 것은 데스크톱 셸뿐이라 그 유무가 곧 셸 판정이다. */
-function shellParams(): Events["app_open"] {
+/** `app_open`의 두 파라미터. 버전을 넘기는 것은 데스크톱 셸뿐이라 그 유무가 곧 셸 판정이다.
+ *  **§0-12 의견 폼의 `버전` 줄도 이 함수를 쓴다** — 자리마다 `process.env`를 다시 읽으면
+ *  이슈에 적히는 셸 이름과 GA의 셸 이름이 갈린다. */
+export function shellParams(): Events["app_open"] {
   const v = process.env.DIRA_APP_VERSION;
   return { app_version: v || "dev", shell: v ? "desktop" : "browser" };
 }
@@ -163,7 +165,9 @@ async function post(
  *  `enabled: false` · 전송 실패. 셋 다 조용하다: 던지지 않고, 재시도 큐도 없다
  *  (통계 한 건이 그만큼의 값이 없다).
  *
- *  호출자는 `await`하지 않는다 — 전송 실패·타임아웃·오프라인이 화면의 어떤 동작도 못 막는다. */
+ *  호출자는 `await`하지 않는다 — 전송 실패·타임아웃·오프라인이 화면의 어떤 동작도 못 막는다.
+ *  **서버 액션이 `void track(...)`로 먼저 반환해도 POST는 끝까지 나간다**(실측 `b808993d`:
+ *  `feedbackSubmitAction`에서 새 세션 첫 이벤트 — `app_open` + `feedback_submit` 둘 다 관찰). */
 export async function track<N extends EventName>(name: N, params: Events[N]): Promise<void> {
   try {
     const cred = credentials();

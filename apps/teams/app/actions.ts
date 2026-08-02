@@ -10,13 +10,6 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { revalidatePath } from "next/cache";
 import {
-  readAnalytics,
-  setAnalyticsEnabled,
-  track,
-  type EventName,
-  type Events,
-} from "@/lib/analytics";
-import {
   normalizeToken,
   pollSetup,
   readAuth,
@@ -26,6 +19,16 @@ import {
   stopSetup,
   type SetupState,
 } from "@/lib/auth";
+import {
+  readAnalytics,
+  sessionIdentity,
+  setAnalyticsEnabled,
+  shellParams,
+  track,
+  type EventName,
+  type Events,
+} from "@/lib/analytics";
+import type { FeedbackMeta } from "@/lib/feedback";
 import { DEFAULT_KEYMAP, comboOf, validateBinding, type KeyLike } from "@/lib/keymap";
 import {
   ProjectError,
@@ -416,6 +419,20 @@ export async function setAnalyticsAction(
  *  이름·파라미터는 `Events` 타입이 닫는다 — 표 밖의 이름은 컴파일이 거부한다(§0-11 표가 단일 출처). */
 export async function trackEvent<N extends EventName>(name: N, params: Events[N]): Promise<void> {
   void track(name, params);
+}
+
+/** 의견 폼이 열릴 때 한 번 — 이슈에 같이 실릴 두 줄이다(DESIGN.md §0-12).
+ *
+ *  **통계를 껐어도 준다.** 여기는 GA로 나가는 전송이 아니라 사람이 자기 손으로 여는 공개
+ *  이슈고, 폼이 이 값을 그대로 보여 준 뒤다(§0-12). `install_id`가 아직 없으면 이 조회가
+ *  만든다 — `sessionIdentity()`의 계약 그대로다.
+ *
+ *  폼을 그릴 때 서버 컴포넌트에서 미리 내려보내지 않는 이유: 진입점이 메뉴 하나라
+ *  (`252fd905`) 미리 내리면 **모든 화면**이 열지도 않을 다이얼로그를 위해 파일을 읽는다. */
+export async function feedbackMetaAction(): Promise<FeedbackMeta> {
+  const { app_version, shell } = shellParams();
+  const { installId, sessionId } = await sessionIdentity();
+  return { version: `${app_version} (${shell})`, session: `${installId}/${sessionId}` };
 }
 
 /** 설정 다이얼로그의 `다시 읽기` — 워커 파일이 바뀌었을 수 있다. */
