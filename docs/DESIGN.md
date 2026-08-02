@@ -7886,7 +7886,7 @@ C1의 "루트에 `package.json`도 워크스페이스도 없다"를 뒤집고 `p
 | 묶음 | 티켓 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
 | P89 | 요구 왕복 없음 + 스펙 확정 + 프로토콜 문장 `0c5af060` | pm | — | 완료 — §2-4 신설 · `protocols/AGENTS.md` §티켓 수명 2에 켜는 규칙. **되묻지 않았다**(근거 §2-4 끝 표) |
-| P89 | `.wip` 본문이 파일을 따라간다 `2e6e7a84` | developer | — | 대기 |
+| P89 | `.wip` 본문이 파일을 따라간다 `2e6e7a84` | developer | — | 완료 — 서버 액션 `ticketMtime`(mtime + `.wip`인가, **둘뿐**) + 본문 절의 null 조각 `WipBodyPolling`(3초 · 숨은 탭 건너뜀 · mtime이 움직인 회차에만 `router.refresh()`). `<SessionStream>`에 **안 얹었다**(그쪽은 `if (codex) return`). CDP 실측: 상자 +4.26s · 문단 +4.64s · 문단 삭제 +4.19s. 안 바뀐 20초에 `ticketMtime` 6회(5~103ms) · **페이지 재렌더 0회**(GET 없음. 재렌더 한 번은 1.3~2.5s) · `.done`에선 `ticketMtime` 0회 |
 
 **티켓 1장이다 — 나머지 절반은 코드가 아니라 프로토콜이라 이 세션이 이미 넣었다.**
 `protocols/AGENTS.md`는 git이 아니라 canonical 큐에 사는 파일이라(워크트리의 `.dira`는 심링크)
