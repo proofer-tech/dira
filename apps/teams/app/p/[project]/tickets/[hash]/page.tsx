@@ -18,6 +18,7 @@ import {
   NewTicketDialog,
   TicketEditForm,
   UnassignButton,
+  WipBodyPolling,
 } from "@/components/ticket-ui";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
@@ -362,6 +363,13 @@ export default async function TicketDetail({
 
           <section className="space-y-2">
             <h2 className="text-sm font-medium">본문</h2>
+            {/* `.wip`이면 이 절이 파일을 따라간다(§2-4 ③) — 세션이 `## Done when` 상자를 켜는
+                대로 새로고침 없이 바뀐다. 판정은 **상태 하나**고 엔진을 안 본다: `.done`은 불변
+                기록이고 열림은 편집 폼이라(사람이 쓰던 글) 둘 다 이 조각을 안 세운다. 기준선
+                mtime은 큐 스캔이 이미 읽어 둔 값이라 `stat`이 늘지 않는다. */}
+            {ticket.state === "wip" && (
+              <WipBodyPolling project={id} stem={ticket.stem} mtime={ticket.mtime} />
+            )}
             {/* **열린 티켓만 편집 폼이다.** `.wip`(세션이 물고 있다)과 `.done`(불변 기록)은 같은
                 읽기 전용 자리를 쓴다 — 사유는 위 Alert가 각자 말한다. 판정을 상태 하나로 두는
                 이유: `!== "open"`이면 나중에 상태가 늘어도 기본이 읽기 전용이다. */}

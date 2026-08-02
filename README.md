@@ -287,6 +287,22 @@ cd apps/teams && pnpm install && pnpm dev     # http://localhost:7331
 위 **의존성 0은 엔진에 대한 약속**이고 GUI는 그 밖이다 — 별개 Next.js 앱이라 자기 의존성을 가지며,
 안 쓰면 `pnpm install`을 할 일도 없다. 제품 스펙은 [`docs/DESIGN.md`](docs/DESIGN.md).
 
+## 릴리스
+
+```bash
+cd apps/desktop && pnpm release <patch|minor|major>
+```
+
+**사람만 치는 명령이다.** 원격에 push하는 유일한 자리이고, 협업 프로토콜 §git이 세션에게
+원격 push를 금지한다 — 에이전트 세션은 이걸 실행하지 않는다. `master`에 들어온 커밋을
+`patch`로 굽는 자동 경로는 따로 있고(`.github/workflows/release.yml`), `minor`·`major`를
+손으로 낼 자리가 이 명령이다.
+
+서명·공증 준비물(Developer ID 인증서·Apple 계정)이 하나라도 없으면 **버전을 올리기 전에**
+멈추고 무엇이 없는지 이름을 찍는다 — 태그만 남고 자산이 없는 릴리스는 나오지 않는다.
+
+절차·순서·조건의 정본은 [`docs/DESIGN.md`](docs/DESIGN.md) §릴리스다.
+
 ## 워커 레퍼런스
 
 워커는 `tick.sh`를 `.`(source)하는 셸 스크립트다. 필수는 그 source 한 줄뿐이고, 위에 값을 얹어

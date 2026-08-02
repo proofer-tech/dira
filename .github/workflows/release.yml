@@ -36,6 +36,14 @@ concurrency:
 
 jobs:
   release:
+    # 사람이 자기 맥에서 `pnpm release minor`를 치면 release.sh 4번이 **사람 자격으로** master를
+    # 민다 — 아래 GITHUB_TOKEN 예외는 CI가 민 push에만 걸려서, 이게 없으면 러너가 그 위에
+    # patch를 한 번 더 얹는다(v0.2.0 뒤에 v0.2.1이 서고 뒤엣것의 릴리즈 노트는 빈 구간이다).
+    # 판정 문자열은 release.sh가 만드는 커밋 제목 `release v<x.y.z>` 하나뿐이다(§릴리스 R4-1).
+    # startsWith(...) 하나만 쓰는 것이 오답이다 — workflow_dispatch에는 head_commit이 아예 없어서
+    # 손으로 내는 minor·major의 판정이 GHA의 null 처리에 매달리고, 막히면 낼 자리가 사라진다.
+    # 첫 항(`!= 'push'`)이 앞에 있으면 dispatch는 거기서 끝나 startsWith에 닿지 않는다.
+    if: github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'release v')
     runs-on: macos-latest
     permissions:
       contents: write

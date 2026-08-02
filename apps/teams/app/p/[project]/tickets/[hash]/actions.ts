@@ -11,7 +11,7 @@
  *
  *  여기 오는 `hash`는 **푼 값**이다(페이지가 `decodeHash`로 한 번 푼다). 조회에만 쓴다 —
  *  엔진 인자와 `revalidatePath`는 찾아낸 파일의 `stem`이고(§식별자), URL이라 다시 인코딩한다. */
-import { open, readFile, unlink } from "node:fs/promises";
+import { open, readFile, stat, unlink } from "node:fs/promises";
 import path from "node:path";
 import { revalidatePath } from "next/cache";
 import { track } from "@/lib/analytics";
@@ -114,6 +114,31 @@ export async function tailSession(
     return { ...(await tailEvents(file, at)), live, inbox, done };
   } catch {
     return { events: [], offset: at, live: false, inbox: false, done: false };
+  }
+}
+
+/** 티켓 파일이 바뀌었나 (DESIGN.md §2-4 ③) — `.wip` 상세의 본문이 파일을 따라가는 근거다.
+ *  세션이 `## Done when` 상자를 켜거나 `## 결과`·`## 블록`을 덧붙이면 mtime이 움직인다.
+ *
+ *  **나가는 것은 수 하나와 불리언 하나다.** 본문을 안 실어 보내는 이유: 바뀐 회차에 화면이
+ *  `router.refresh()`를 부르면 서버 컴포넌트가 본문·상자·상태 배지를 **한 렌더에** 다시 준다 —
+ *  상자만 따로 갱신하는 두 번째 렌더 규칙이 생기지 않는다(§2-4 ③ "본문 전체가 따라간다").
+ *  그래서 **안 바뀐 회차의 값이 0이다**: 여기 드는 비용은 readdir + 티켓 파일 하나 + `stat`이고
+ *  페이지 재렌더(큐 전체 스캔 + 워커 + 트랜스크립트 조회)는 mtime이 움직인 회차에만 돈다.
+ *
+ *  **`tailSession`에 얹지 않았다.** 그 폴링은 `codex`에서 아예 안 돈다(트랜스크립트가 없다,
+ *  §4-3 표) — 얹으면 codex 워커가 문 티켓의 본문이 안 따라간다. 판정은 여기서도 상태 하나다.
+ *
+ *  `live`(= `.wip`)는 화면이 폴링을 멈출 근거다 — 못 찾는 티켓을 다시 묻지 않는다. */
+export async function ticketMtime(
+  projectId: string,
+  stem: string,
+): Promise<{ mtime: number; live: boolean }> {
+  try {
+    const t = await target(projectId, stem);
+    return { mtime: (await stat(t.path)).mtimeMs, live: t.state === "wip" };
+  } catch {
+    return { mtime: 0, live: false };
   }
 }
 
