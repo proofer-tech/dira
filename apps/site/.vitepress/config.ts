@@ -36,17 +36,16 @@ export default defineConfig({
             { text: "동시성", link: "/docs/concurrency" },
           ],
         },
-        // 쓰기 — Task 7
-        // {
-        //   text: "쓰기",
-        //   items: [
-        //     { text: "티켓 쓰는 법", link: "/docs/ticket-writing" },
-        //     { text: "상태는 파일명", link: "/docs/states" },
-        //     { text: "화면에서 하는 일", link: "/docs/screens" },
-        //     { text: "도는 세션에 말 걸기", link: "/docs/barge-in" },
-        //     { text: "페르소나와 프로토콜", link: "/docs/personas" },
-        //   ],
-        // },
+        {
+          text: "쓰기",
+          items: [
+            { text: "티켓 쓰는 법", link: "/docs/ticket-writing" },
+            { text: "상태는 파일명", link: "/docs/states" },
+            { text: "화면에서 하는 일", link: "/docs/screens" },
+            { text: "도는 세션에 말 걸기", link: "/docs/barge-in" },
+            { text: "페르소나와 프로토콜", link: "/docs/personas" },
+          ],
+        },
         // 운영 + 레퍼런스 — Task 8
         // {
         //   text: "운영",
