@@ -65,8 +65,64 @@ const version = theme.value.diraVersion;
   </ol>
 </section>
 
-<!-- SECTION 3: 4기둥 — Task 4 -->
-<!-- SECTION 4: 실제 화면 — Task 4 -->
+<section class="wrap">
+  <div class="pillars">
+    <div class="pillar">
+      <span class="tag t-queue">큐</span>
+      <h3>티켓 하나가 파일 하나다</h3>
+      <p>디렉터리 하나가 큐 전부다. 상태는 파일명 접미사에 있고, 나머지는 frontmatter다. DB도 인덱스도 없다.</p>
+    </div>
+    <div class="pillar">
+      <span class="tag t-worker">워커</span>
+      <h3>크론잡 하나가 티켓 한 건을 문다</h3>
+      <p>동시성은 설정값이 아니라 워커 파일의 개수다. 더 돌리려면 워커를 하나 더 만든다.</p>
+    </div>
+    <div class="pillar">
+      <span class="tag t-ui">화면</span>
+      <h3>도는 세션을 보고, 말을 건다</h3>
+      <p>보드·티켓·워커·페르소나·프로토콜. 끝난 뒤 로그를 뒤지는 대신 도는 동안 개입한다.</p>
+    </div>
+    <div class="pillar">
+      <span class="tag t-engine">엔진</span>
+      <h3>bash와 python3 표준 라이브러리</h3>
+      <p>그 밖으로 나가지 않는다. 상주 루프도, DB도, 인덱스도 없다.</p>
+    </div>
+  </div>
+</section>
+
+<div class="wrap stats">
+  <ul>
+    <li><b>0</b><span>엔진 의존성<br>bash + python3 표준 라이브러리</span></li>
+    <li><b>6</b><span>이 레포에서 동시에 도는 워커</span></li>
+    <li><b>405</b><span>자기 큐가 처리한 티켓<br>완료 397</span></li>
+    <li><b>4일</b><span>첫 커밋에서 첫 릴리스까지<br>커밋 389</span></li>
+  </ul>
+  <p class="stats-note">2026-08-01 기준</p>
+</div>
+
+<section class="wrap">
+  <div class="gallery">
+    <figure>
+      <img class="shot" src="/shots/barge.gif" loading="lazy" alt="세션 스트림이 도구 호출을 한 줄씩 늘려 가는 동안, 아래 입력창에 문장을 넣고 보내기를 누르자 그 문장이 참견 줄로 스트림에 나타나고 세션이 이어서 방향을 바꾼다." width="1760">
+      <figcaption>
+        <b>실제 왕복이다. 재현이 아니다.</b> 티켓은 <q>세 파일을 읽어 세 줄로 쓴다</q>였고,
+        참견은 <q>지금 읽은 것까지만, 한 줄로</q>였다.
+        세션은 <code>c.md</code>를 읽지 않고 멈춰 <b>한 줄짜리 파일</b>을 남겼다.
+      </figcaption>
+      <p class="arrows"><a href="/docs/barge-in">말 거는 법</a></p>
+    </figure>
+    <figure>
+      <img class="shot" src="/shots/07-qa-thread.png" loading="lazy" alt="요구 티켓의 질문·답변 스레드. 질문 아래에 답변 말풍선이 오른쪽으로 붙어 있고, frontmatter에 awaiting 해시가 있다." width="1600">
+      <figcaption>오른쪽 <code>awaiting:</code>에 걸린 해시는 <b>아직 없는 파일</b>이다. 답변을 쓰면 그 파일이 생긴다.</figcaption>
+      <p class="arrows"><a href="/docs/ticket-writing">티켓 쓰는 법</a></p>
+    </figure>
+    <figure>
+      <img class="shot" src="/shots/04-ticket-running.png" loading="lazy" alt="진행중 티켓 상세. 왼쪽에 본문과 Done when 체크리스트, 오른쪽에 frontmatter 표와 관계." width="1600">
+      <figcaption>티켓 한 장의 전부. 왼쪽은 사람이 쓴 마크다운, 오른쪽 <code>session_id</code>·<code>pid</code>·<code>owner</code>·<code>inbox</code>는 <b>디스패처가 쓰고 사람은 건드리지 않는다.</b></figcaption>
+      <p class="arrows"><a href="/docs/states">상태 읽는 법</a></p>
+    </figure>
+  </div>
+</section>
 
 <section class="wrap">
   <p class="eyebrow">60초</p>
@@ -112,7 +168,21 @@ chmod +x ~/myproject/.dira/workers/w1.sh
   </div>
 </section>
 
-<!-- SECTION 6: 여기 없는 것 — Task 4 -->
+<section class="wrap">
+  <p class="eyebrow">먼저 알아야 할 것</p>
+  <h2>여기 없는 것</h2>
+  <p class="body" style="max-width:44em; margin-bottom:32px">비목표는 아직 못 만든 것이 아니라 안 만들기로 한 것이다.</p>
+  <ul class="limits">
+    <li><b>서버로 배포하지 않는다.</b> 호스팅·도메인·원격 접속이 없다. 앱은 당신 맥에서 돌고 그 맥의 파일시스템에 붙는다.</li>
+    <li><b>인증·멀티유저가 없다.</b> 파일시스템 권한이 곧 권한이다.</li>
+    <li><b>데스크톱 앱은 macOS(Apple Silicon)뿐이다.</b> 엔진 자체는 macOS와 Linux에서 돈다.</li>
+    <li><b>실시간 푸시가 없다.</b> 폴링이다. 모바일 레이아웃도 없다.</li>
+    <li><b>프로젝트를 자동으로 찾지 않는다.</b> 디스크를 스캔하지 않고 당신이 등록한다.</li>
+    <li><b>우선순위가 없다.</b> 순서는 생성일과 <code>deps</code>뿐이다.</li>
+    <li><b>티켓 수백 건 규모를 전제한다.</b> 매 tick마다 큐를 glob으로 훑는다. 인덱스가 없다.</li>
+    <li><b>워커를 만들 때마다 macOS가 <code>앱 관리</code> 권한을 묻는다.</b> 승인이 다음 등록까지 남지 않는다.</li>
+  </ul>
+</section>
 
 <section class="wrap">
   <p class="eyebrow">플랜</p>
