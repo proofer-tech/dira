@@ -323,13 +323,18 @@ export type ThreadItem = {
   text: string;
   /** 답변 티켓의 stem. 질문은 없다(요구사항 본문의 일부다) */
   hash?: string;
+  /** 답변 파일의 `birth`(ms) — **진행 기록의 시각이다**(§2-3 ②. `mergeProgress`가 쓴다).
+   *  질문은 없다: 자기 파일이 없어서 시각이 없고, 짝인 답변 바로 앞에 붙는 것이 그 시각을 대신한다. */
+  birth?: number;
 };
 
 /** 요구사항 왕복 스레드 — 본문의 `## 질문 n` 절과 `deps` 중 `kind: answer`인 티켓을 번갈아.
  *  답변은 birth 순이다(라운드 순서고, `deps`에 적힌 순서는 PM이 append한 순서일 뿐이다).
  *
  *  **상세(§2 답변 카드)와 보드 카드의 답변 다이얼로그(§1)가 같은 함수를 쓴다** — 두 곳에서 따로
- *  엮으면 같은 요구사항이 화면마다 다른 스레드로 보인다. */
+ *  엮으면 같은 요구사항이 화면마다 다른 스레드로 보인다. 그래서 **순서·짝 규칙은 안 바꾼다**:
+ *  §2-3이 더한 것은 답변의 `birth`를 실어 보내는 것 하나고, 그 값으로 진행 기록이 스트림 사건과
+ *  같은 줄기에 섞인다(`mergeProgress`). 다이얼로그는 그 필드를 안 본다. */
 export function threadOf(tickets: Ticket[], t: Ticket, sfx: Suffixes): ThreadItem[] {
   const questions = questionsOf(t.body);
   const answers = t.deps
@@ -345,6 +350,7 @@ export function threadOf(tickets: Ticket[], t: Ticket, sfx: Suffixes): ThreadIte
         heading: answers[i].title,
         text: answers[i].body.trim(),
         hash: answers[i].stem,
+        birth: answers[i].birth,
       });
     }
   }

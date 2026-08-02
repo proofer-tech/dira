@@ -137,9 +137,10 @@ export function chatRows(
  *  `elapsedSuffix`와 같은 이유로 여기 산다 — `pnpm test`가 JSX를 못 읽고, 스트림은 클라이언트다. */
 export const expandable = (e: { body: string }) => e.body !== "";
 
-/** 스트림 아래 입력 form의 **모드** (§비주얼 §21 `어느 폼을 그리나`). 같은 칸이 티켓 상태에 따라
- *  둘로 갈린다: `.wip`이면 `참견`(도는 세션에 말이 간다), `.done`이면 `이어받기`(새 열린 티켓
- *  1장이 생긴다). 열림에는 이 입구가 없다(§2-2 안 만드는 것 3).
+/** 스트림 아래 입력 form의 **모드** (§비주얼 §21 `어느 폼을 그리나` · §2-3 ③). 같은 칸이 티켓
+ *  상태에 따라 셋으로 갈린다: `.wip`이면 `참견`(도는 세션에 말이 간다), **답변 대기면 `답변`**
+ *  (`tickets/<awaiting>.done.md`가 생긴다), `.done`이면 `이어받기`(새 열린 티켓 1장이 생긴다).
+ *  그 외 열림에는 이 입구가 없다(§2-2 안 만드는 것 3).
  *
  *  **`live` 하나로는 안 갈린다** — `.done`과 열림이 둘 다 `live === false`다. 그래서 폴링이
  *  `done` 비트를 같이 들고 온다(`tailSession`).
@@ -150,18 +151,78 @@ export const expandable = (e: { body: string }) => e.body !== "";
  *    다음 폴링이 곧 `live`를 내리고, 그때 폼이 사라지면 방금 실패한 사유와 사람이 쓴 글이 같이
  *    증발한다(§21 예외 항). `.done`이 되면 그쪽이 이긴다 — 실패 Alert만 지우고 글은 남긴다.
  *
+ *  **`awaiting`은 `.wip` 뒤에서 본다.** §2-3 ③의 표는 세 모드가 배타라고 적고 있고 실제로도
+ *  그렇다(`awaiting`은 열린 티켓에만 걸린다 — 제약 5). 그래도 순서를 이렇게 두는 이유는
+ *  **제약 5를 호출부의 예의가 아니라 이 함수의 구조로 지키기 위해서다**: 둘이 동시에 참인 값이
+ *  어쩌다 들어와도 `.wip`에서 답변칸이 서지 않는다.
+ *
  *  `elapsedSuffix`와 같은 이유로 JSX가 아니라 여기 산다(`pnpm test`가 JSX를 못 읽는다). */
-export type InterjectMode = "interject" | "followup" | null;
+export type InterjectMode = "interject" | "followup" | "answer" | null;
 
 export function interjectMode(s: {
   polled: boolean;
   live: boolean;
   done: boolean;
   failed: boolean;
+  /** 답변 대기인가 — 열림 + `awaiting` 미충족(`queue.ts`의 `awaitingAnswer`). 서버가 준다 */
+  awaiting?: boolean;
 }): InterjectMode {
   if (!s.polled) return null;
   if (s.done) return "followup";
-  return s.live || s.failed ? "interject" : null;
+  if (s.live || s.failed) return "interject";
+  return s.awaiting ? "answer" : null;
+}
+
+/** 진행 기록 한 줄 (§2-3 ②) — 스트림 사건 **또는** 스레드 칸이고, 원본을 통째로 들고 있다.
+ *  뭉개지 않는 것이 §2-3 ⑥3이다: 화면이 둘을 다른 모양으로 그려야 해서 둘을 한 모양으로
+ *  접은 중간 타입을 만들지 않는다. */
+export type ProgressItem<E, T> = { event: E; thread?: never } | { event?: never; thread: T };
+
+/** 세션 스트림 사건과 질문·답변 스레드를 **시간순 한 줄기**로 (§2-3 ②). 읽기 전용 조립이다.
+ *
+ *  규칙은 §2-3 ②의 표 그대로다:
+ *  - 사건은 자기 `ts`. **`ts`가 없거나 못 읽으면 앞 사건과 같은 시각**이다 — 트랜스크립트의
+ *    줄 순서가 곧 시간순이라(§2-1) 사건끼리의 순서는 준 순서 그대로 유지된다.
+ *  - 답변은 답변 티켓의 `birth`. 질문은 **자기 시각이 없어서** 짝인 답변과 한 덩어리로 움직인다
+ *    (`threadOf`가 이미 index로 짝을 엮는다 — 질문에 시각을 지어내지 않는다).
+ *  - 답이 아직 없는 꼬리 질문은 **맨 끝**이다. 정렬 규칙이 아니라 UX 결정이고(§2-3 ②),
+ *    바로 밑 입력칸이 그 답을 쓰는 자리다.
+ *
+ *  라운드 2 이상에서 옛 답변이 지금 세션의 첫 사건보다 위에 서는 것이 이 함수가 지키는 값이다 —
+ *  스트림은 여전히 지금 `session_id` 하나고(§2-1 Q2=(a)) 옛 라운드는 스레드로만 남는다.
+ *
+ *  타입을 제네릭으로 받는 이유는 하나다: 이 파일은 `node:*`를 못 타서 `StreamEvent`(transcript.ts)도
+ *  `ThreadItem`(queue.ts)도 여기서 import하지 않는다. 화면은 자기 타입을 그대로 돌려받는다. */
+export function mergeProgress<E extends { ts?: string }, T extends { role: string; birth?: number }>(
+  events: E[],
+  thread: T[],
+): ProgressItem<E, T>[] {
+  // 사건의 시각. 못 읽으면 앞 사건 값을 물려받는다(첫 줄이면 0 = 그 자리가 맨 앞이다).
+  let prev = 0;
+  const at = events.map((e) => {
+    const t = Date.parse(e.ts ?? "");
+    return (prev = Number.isNaN(t) ? prev : t);
+  });
+  // 스레드를 덩어리로. 답변이 덩어리를 닫고, 그 앞에 쌓인 질문들이 답변 바로 앞에 붙는다.
+  const chunks: { at: number; items: T[] }[] = [];
+  let pending: T[] = [];
+  for (const item of thread) {
+    pending.push(item);
+    if (item.role === "answer") {
+      chunks.push({ at: item.birth ?? 0, items: pending });
+      pending = [];
+    }
+  }
+  if (pending.length) chunks.push({ at: Infinity, items: pending }); // 답 없는 꼬리 질문 = 맨 끝
+  // 두 줄기를 앞에서부터 흘려 합친다. 사건끼리의 순서는 손대지 않는다.
+  const out: ProgressItem<E, T>[] = [];
+  let i = 0;
+  for (const c of chunks) {
+    while (i < events.length && at[i] <= c.at) out.push({ event: events[i++] });
+    for (const item of c.items) out.push({ thread: item });
+  }
+  while (i < events.length) out.push({ event: events[i++] });
+  return out;
 }
 
 /** 페르소나 색 팔레트 키 (DESIGN.md §비주얼 §12). 레지스트리에 이 문자열 그대로 저장된다.

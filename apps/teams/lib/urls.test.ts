@@ -3,6 +3,7 @@ import assert from "node:assert";
 import {
   chatRows,
   interjectMode,
+  mergeProgress,
   parentPath,
   projectPath,
   relationPath,
@@ -151,6 +152,83 @@ test("interjectMode — `.done`이 실패 잔해를 이긴다(글은 남고 Aler
   // `.wip` → `.done`으로 굳는 그 폴링. 읽기 전용 잔해가 아니라 **보낼 수 있는 이어받기 칸**이다 —
   // `ENXIO`의 다음 행동(`위 글을 복사해 새 티켓으로`)을 같은 칸이 바로 할 수 있게 된다.
   assert.equal(m({ done: true, failed: true }), "followup");
+});
+
+test("interjectMode — 답변 대기면 `answer`다(§2-3 ③ 표 2행)", () => {
+  assert.equal(m({ awaiting: true }), "answer"); // 열림 + `awaiting` 미충족
+  assert.equal(m({ awaiting: false }), null); // 그냥 열림 — 칸이 없다
+});
+
+test("interjectMode — `.wip`에서 `answer`가 절대 안 나온다(제약 5)", () => {
+  // 세 모드가 배타인 것은 이미 참이던 사실이지만(`awaiting`은 열린 티켓에만 걸린다),
+  // 그 사실을 호출부가 아니라 **이 함수가 구조로** 지킨다. 둘이 같이 참인 값이 들어와도
+  // `.wip`에 답변칸이 서지 않는다 — 서면 `.wip`인 요구사항에 답이 달린다.
+  assert.equal(m({ live: true, awaiting: true }), "interject");
+  assert.equal(m({ failed: true, awaiting: true }), "interject"); // 실패 잔해도 같다
+  assert.equal(m({ done: true, awaiting: true }), "followup"); // `.done`은 종전대로 이긴다
+});
+
+/** 진행 기록의 순서 (DESIGN.md §2-3 ②). **이 묶음에서 조용히 틀릴 수 있는 유일한 것이 순서다** —
+ *  틀려도 화면은 멀쩡히 그려지고, 사람은 인과가 뒤집힌 기록을 사실로 읽는다. */
+const ev = (ts: string, key = ts) => ({ key, ts });
+const q = (heading: string) => ({ role: "question" as const, heading });
+const a = (heading: string, birth: number) => ({ role: "answer" as const, heading, birth });
+/** 순서만 보는 납작한 표기 — `event`면 그 사건의 key, `thread`면 그 칸의 heading. */
+const order = (rows: { event?: { key: string }; thread?: { heading: string } }[]) =>
+  rows.map((r) => r.event?.key ?? r.thread!.heading);
+
+test("mergeProgress ① — 사건만이면 준 순서 그대로다", () => {
+  const events = [ev("2026-08-01T01:00:00Z"), ev("2026-08-01T02:00:00Z")];
+  assert.deepEqual(order(mergeProgress(events, [])), [
+    "2026-08-01T01:00:00Z",
+    "2026-08-01T02:00:00Z",
+  ]);
+  assert.deepEqual(mergeProgress([], []), []); // 절이 아예 안 서는 티켓
+});
+
+test("mergeProgress ② — 스레드만(세션 없음)이면 스레드가 그대로 나온다", () => {
+  // 한 번도 디스패치된 적 없는 요구사항이다 — `session_id`가 없어 사건이 0건이고,
+  // 그래도 절은 선다(§2-3 ① 절이 서는 조건 3행).
+  const thread = [q("질문 1"), a("답변 1", 100), q("질문 2")];
+  assert.deepEqual(order(mergeProgress([], thread)), ["질문 1", "답변 1", "질문 2"]);
+});
+
+test("mergeProgress ③ — 옛 답변이 지금 세션 첫 사건보다 앞에 선다(라운드 2)", () => {
+  // 스트림은 여전히 지금 `session_id` 하나다(§2-1 Q2=(a)) — 옛 세션 사건은 화면에 없고
+  // 옛 라운드의 질문·답변만 남는다. 그래도 순서는 맞는다: 답변의 `birth`가 첫 사건보다 앞이다.
+  const first = Date.parse("2026-08-01T03:00:00Z");
+  const thread = [q("질문 1"), a("답변 1", first - 3600_000)];
+  const events = [ev("2026-08-01T03:00:00Z", "e1"), ev("2026-08-01T03:00:05Z", "e2")];
+  assert.deepEqual(order(mergeProgress(events, thread)), ["질문 1", "답변 1", "e1", "e2"]);
+
+  // 답변이 세션 도중에 달렸으면 그 자리에 낀다 — 질문은 짝인 답변 **바로 앞**이다.
+  const mid = [q("질문 1"), a("답변 1", Date.parse("2026-08-01T03:00:02Z"))];
+  assert.deepEqual(order(mergeProgress(events, mid)), ["e1", "질문 1", "답변 1", "e2"]);
+});
+
+test("mergeProgress ④ — 답 없는 마지막 질문은 배열 맨 끝이다", () => {
+  // 정렬 규칙이 아니라 UX 결정이다(§2-3 ②): 바로 밑 입력칸이 그 답을 쓰는 자리다.
+  const thread = [q("질문 1"), a("답변 1", Date.parse("2026-08-01T01:00:00Z")), q("질문 2")];
+  const events = [ev("2026-08-01T02:00:00Z", "e1"), ev("2026-08-01T09:00:00Z", "e2")];
+  const rows = mergeProgress(events, thread);
+  assert.deepEqual(order(rows), ["질문 1", "답변 1", "e1", "e2", "질문 2"]);
+  assert.equal(rows[rows.length - 1].thread?.heading, "질문 2");
+});
+
+test("mergeProgress — `ts` 없는 레코드는 앞 사건 뒤 그대로다(§2-1 줄 순서가 곧 시간순)", () => {
+  const events = [ev("2026-08-01T01:00:00Z", "e1"), { key: "e2", ts: "" }, ev("2026-08-01T05:00:00Z", "e3")];
+  const thread = [q("질문 1"), a("답변 1", Date.parse("2026-08-01T03:00:00Z"))];
+  // `e2`는 앞 사건(`e1`, 01:00)의 시각을 물려받으므로 03:00 답변보다 위에 남는다.
+  assert.deepEqual(order(mergeProgress(events, thread)), ["e1", "e2", "질문 1", "답변 1", "e3"]);
+});
+
+test("mergeProgress — 원본을 통째로 들고 있다(뭉개지 않는다 — §2-3 ⑥3)", () => {
+  // 화면이 사건과 사람의 말을 다른 모양으로 그려야 한다. 중간 타입으로 접으면 그게 불가능해진다.
+  const e = { key: "e1", ts: "2026-08-01T01:00:00Z", kind: "text", body: "본문" };
+  const t = { role: "answer", heading: "답변 1", text: "답", hash: "abc", birth: 1 };
+  const rows = mergeProgress([e], [t]);
+  assert.deepEqual(rows, [{ thread: t }, { event: e }]);
+  assert.equal(rows[1].event, e); // 사본이 아니라 같은 객체다
 });
 
 /** §비주얼 §26 ④. `lib/usage.ts`에 있던 `resetLabel`이 이 파일로 온 검증이다 — 홈 대화 목록(§24)이
