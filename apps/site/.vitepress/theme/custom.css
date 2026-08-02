@@ -163,7 +163,16 @@ html { scroll-behavior: smooth; }
 @media (max-width: 900px) { .dira-landing .steps { grid-template-columns: 1fr; } }
 
 /* ── engine ─────────────────────────────────────── */
-.dira-landing .two { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: start; margin-top: 40px; }
+/* minmax(0, 1fr) — 트랙 최소폭을 0으로 눌러야 한다. 그냥 1fr이면 트랙의 자동
+   최소 크기가 내용(여기선 white-space:pre인 <pre>)에 맞춰져, 긴 코드 줄이
+   트랙을 밀어내고 페이지 전체에 가로 스크롤이 생긴다. <pre>의 overflow-x:auto가
+   그 대신 코드 블록 안에서 스크롤을 받게 하려면 트랙이 컨테이너 폭에 묶여 있어야 한다. */
+.dira-landing .two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 48px; align-items: start; margin-top: 40px; }
+/* 트랙의 minmax(0, …)만으로는 안 끊긴다 — grid item(직계 <div> 둘)의 min-width가
+   기본값 auto라, 자동 최소 크기가 안의 <pre> 내용 폭으로 정해져 트랙이 여전히
+   밀린다(실측: 390px 뷰포트에서 트랙이 394px로 계산됨). 아이템에도 min-width:0을
+   줘야 트랙의 minmax(0, …)가 실제로 먹는다. */
+.dira-landing .two > * { min-width: 0; }
 .dira-landing pre {
   margin: 0; padding: 20px; overflow-x: auto;
   background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
@@ -202,7 +211,11 @@ html { scroll-behavior: smooth; }
 .dira-landing .fbot .sep { margin-left: auto; }
 
 @media (max-width: 900px) {
-  .dira-landing .row, .dira-landing .two, .dira-landing .pillars, .dira-landing .limits, .dira-landing .gallery { grid-template-columns: 1fr; }
+  .dira-landing .row, .dira-landing .pillars, .dira-landing .limits, .dira-landing .gallery { grid-template-columns: 1fr; }
+  /* .two는 plain 1fr로 접으면 안 된다 — 단일 트랙이어도 안의 <pre>(white-space:pre)
+     때문에 트랙 최소폭이 여전히 내용에 맞춰져 390px에서 페이지가 가로로 샌다.
+     minmax(0, 1fr)로 트랙 최소폭을 0으로 눌러야 <pre>의 overflow-x:auto가 대신 받는다. */
+  .dira-landing .two { grid-template-columns: minmax(0, 1fr); }
   .dira-landing .row { gap: 28px; }
   .dira-landing .row.flip > .col-text, .dira-landing .row.flip > .col-vis { order: 0; }
   .dira-landing .col-text { position: static; }
