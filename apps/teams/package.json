@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p ${PORT:-7331}",
-    "build": "next build",
+    "build": "NODE_ENV=production next build",
     "start": "next start -p ${PORT:-7331}",
     "lint": "eslint",
     "test": "node --test \"lib/**/*.test.ts\""

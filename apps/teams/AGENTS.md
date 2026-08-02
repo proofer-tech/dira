@@ -296,6 +296,15 @@ catch가 무조건 그 경로라 파일 배치로는 못 고친다(위 둘째 �
 
 `pnpm build`가 타입체크를 겸한다. 따로 `tsc`를 돌리지 않는다.
 
+**`build` 스크립트의 `NODE_ENV=production`을 지우지 마라.** `next build`는 물려받은
+`NODE_ENV`를 존중한다(`next/dist/bin/next:66` — `process.env.NODE_ENV || 'production'`).
+`next dev`는 자기 프로세스에 `NODE_ENV=development`를 박고(같은 파일 `:95`), dira 앱이
+그 프로세스에서 워커를 detach spawn하므로(`lib/kick.ts:32`) **앱이 띄운 세션은 전부
+`NODE_ENV=development`를 물려받는다.** 그 환경에서 굽던 옛 `next build`는 커밋과 무관하게
+항상 `/_global-error` 프리렌더에서 `TypeError: Cannot read properties of null (reading
+'useContext')`로 죽었다 — 없는 결함을 보고하게 만들고 나가도 되는 릴리즈를 막았다
+(티켓 `bb6d332e`). 여기서 못박으면 CI·`apps/desktop`의 `pnpm dist`·세션이 한 줄로 같이 낫는다.
+
 ## 규칙
 
 **fs 접근은 전부 서버.** Server Component / Server Action / `lib/`. 클라이언트 컴포넌트에서
