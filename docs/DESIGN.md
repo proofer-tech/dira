@@ -5305,6 +5305,35 @@ lightweight 태그는 4의 `--follow-tags`가 안 민다(같은 날 실측).
 지점이 그것이다. **세션은 이 스크립트를 실행하지 않는다.** 만들고, 1에서 멈추는 경로까지만
 확인한다(그게 developer 티켓의 판정이다).
 
+**R4-1. 4의 push를 `release.yml`이 다시 굽지 않는다 — 안 막으면 릴리스가 두 개 난다.**
+
+> 요구 `793eb7e0` / 답 `a74323c5`(2026-08-02). 답이 "매번 원격 push가 막혀 배포를 못 하면
+> 차라리 `pnpm release`로 만들어서 `major`·`minor`도 옵션으로 넣자"였다. **그 명령은 이미
+> 여기 있다**(R4, `apps/desktop/release.sh`, 인자 셋 다 받는다). 없던 것은 명령이 아니라
+> **사람이 그걸 실제로 쳤을 때 릴리스가 하나만 나는 보장**이다.
+
+사람이 자기 맥에서 `pnpm release minor`를 치면 4가 `master`를 민다. 그 push는 **사람 자격으로**
+나가므로 C3의 push 트리거를 깨우고 — `GITHUB_TOKEN`이 민 push는 워크플로를 다시 트리거하지
+않는다는 예외는 CI가 민 것에만 걸린다 — 러너가 같은 `release.sh`를 `patch`로 한 번 더 돌린다.
+**`v0.2.0` 바로 뒤에 `v0.2.1`이 선다.** 받는 사람은 몇 분 사이에 업데이트를 두 번 받고, 뒤엣것의
+릴리즈 노트가 가리키는 구간은 비어 있다(R7의 compare가 커밋 0개를 돌려준다).
+
+막는 것은 job 조건 한 줄이다 — **끝 커밋이 릴리스 커밋이면 굽지 않는다.**
+
+```yaml
+if: github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'release v')
+```
+
+- `release.sh`가 만드는 커밋 제목은 `release v<x.y.z>` 하나뿐이라(2·3번) 그 문자열이 판정이 된다.
+- **`workflow_dispatch`는 그대로 통과한다** — 그쪽 이벤트에는 `head_commit`이 없어서 첫 항에서
+  끝난다. 조건을 `startsWith(...)` 하나로 쓰면 dispatch가 전부 막힌다.
+- **세션이 미는 보통 커밋은 여전히 굽는다.** C3의 "master에 들어오면 자동으로 간다"는 무수정이다.
+  갈리는 것은 "사람이 이미 구운 것을 다시 굽지 않는다" 하나뿐이다.
+
+**`minor`·`major`를 내는 자리는 둘이고 둘 다 사람이다.** 사람 맥의 `pnpm release <bump>`와
+GitHub의 `workflow_dispatch`(`bump` 입력). 앞엣것은 사람 맥의 인증서로 굽고 뒤엣것은 러너의
+임시 키체인으로 굽는다 — 스크립트와 순서는 같다(C3 첫 불릿).
+
 **R5. 앱이 하는 일은 셋이고 새 화면은 0개다.**
 
 | # | 무엇 | 자리 | 계약 |
@@ -5511,7 +5540,11 @@ https://hsol.info
 - **트리거는 `master` push 전부다 — path 필터가 없다**(요구 2026-08-01). 대가를 알고 고른
   값이다: 스펙·README만 고친 커밋도 `patch`를 올리고, 받는 사람에게는 내용이 같은 버전이
   내려간다. 줄이려면 `paths`를 넣으면 되고 그건 한 줄이다. 손으로 `minor`·`major`를 낼
-  자리는 `workflow_dispatch`다.
+  자리는 `workflow_dispatch`와 **사람 맥의 `pnpm release <bump>`** 둘이다(R4).
+- **예외는 하나 — 끝 커밋이 `release v…`면 굽지 않는다**(요구 `793eb7e0`, 2026-08-02).
+  사람이 맥에서 `pnpm release minor`를 치면 R4의 4번이 사람 자격으로 `master`를 밀어 이
+  트리거를 깨우고, 러너가 그 위에 `patch`를 한 번 더 얹는다 — 릴리스가 둘이 된다.
+  job 조건 한 줄로 막는다. 계약과 근거는 **R4-1**이 갖는다.
 - **`release`의 첫 8회는 전부 `인증서를 임시 키체인에 넣는다`에서 죽었다** — 시크릿이 아직
   비어 있었다(실측 2026-08-01, 요구 `9ae1d143`). 약속대로 **bump 전에, 이름을 찍고** 멈춘
   것이다. 그 뒤 손으로 낸 `workflow_dispatch` 1회가 통과해 `v0.1.2`를 굽고 올렸다.
@@ -7744,6 +7777,29 @@ developer가 CDP로 띄우면 나오는 것 넷이고(진행중 = 참견칸 / �
 `awaiting` + 없는 dep이라 §13 · 종 ④ · 판정식이 그대로 그린다. 바뀌는 것은 **그 상태에 닿는
 시각**뿐이고, 그것이 조용히 틀릴 수 있는 유일한 자리는 `reclaim`의 분기라서 통째로
 `test_reap_manual.py`의 신규 케이스 2개에 잡힌다(신선 → `ASK` / 묵음 → `REAP attempts=1`).
+
+**P88. 사람 맥의 `pnpm release <bump>`가 릴리스를 하나만 낸다** — 요구 `793eb7e0` / 답 `a74323c5`
+(2026-08-02). → §릴리스 **R4-1** · §CI C3 두 번째 불릿.
+
+| 묶음 | 티켓 | 페르소나 | deps | 상태 |
+|---|---|---|---|---|
+| P88 | `release.yml` 재굽기 가드 + README 릴리스 절 `e464418e` | developer | — | 대기 |
+
+**티켓 1장이다.** 고치는 자리가 `release.yml`의 job 조건 한 줄과 `README.md`의 새 절 하나고,
+둘은 같은 한 문장("사람이 치는 명령이 무엇이고 그게 두 번 안 굽는다")의 앞뒤다.
+
+**만들 명령이 없다 — 답이 요청한 `pnpm release <patch|minor|major>`는 이미 있다**
+(`apps/desktop/release.sh`, R4, 인자 셋 다 받는다). 그래서 이 묶음은 "만든다"가 아니라
+"쳤을 때 릴리스가 둘이 나는 것을 막고, 어디를 치는지 README에 적는다"다.
+
+**루트 `package.json`은 안 만든다.** 그러면 `pnpm release`를 레포 루트에서 칠 수 있지만,
+C1의 "루트에 `package.json`도 워크스페이스도 없다"를 뒤집고 `pnpm install`의 자리가 셋이 된다 —
+`cd apps/desktop`이라는 여섯 글자와 바꿀 값이 아니다.
+
+**QA를 안 세웠다.** 판정이 릴리스를 실제로 내야 나오는데(사람만 낼 수 있다) 그건 다음 릴리스가
+저절로 한다 — 사람이 `pnpm release`를 치고 GitHub Releases에 버전이 **하나만** 서면 통과다.
+그 전까지 확인 가능한 것은 조건식의 참·거짓 셋(`push`+릴리스 커밋 / `push`+보통 커밋 /
+`workflow_dispatch`)이고 그게 developer 티켓의 `## Done when`이다.
 
 ## 수용조건 (전체)
 
