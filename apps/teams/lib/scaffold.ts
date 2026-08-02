@@ -6,7 +6,7 @@
  *  실패해도 되돌리지 않는다 — 그 경로에 사람의 파일이 있을 수 있고, 덮지 않기로 한 것이 이
  *  기능의 유일한 방어다. */
 import { existsSync } from "node:fs";
-import { chmod, mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, readdir, realpath, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { expandHome } from "./paths.ts";
 import {
@@ -110,7 +110,15 @@ export async function scaffold(
 ): Promise<{ root: string; repo: string; written: string[]; skipped: string[] }> {
   const repo = engineRepo();
   if ("error" in repo) throw new Error(repo.error);
-  const { project, root } = queueRoot(projectDir);
+  const { project, root: given } = queueRoot(projectDir);
+
+  // **realpath를 여기서 한 번 태운다**(751e3004). 레지스트리는 root를 realpath로 저장하는데
+  // (`addProject` · DESIGN.md:272) 이 함수가 사람이 친 경로를 그대로 돌려주면, 같은 큐가
+  // 경로 두 벌로 갈린다: crontab에는 raw 줄이 들어가고 워커 화면은 realpath된 registry root로
+  // 대조하니 **방금 만든 w1이 `crontab 미등록`으로 뜬다.** 심링크 구간이 하나만 있어도 그렇다
+  // (맥의 `/tmp`·`/var`, 심링크된 홈·마운트). 만들기 전에는 realpath가 ENOENT라 `mkdir` 뒤다.
+  await mkdir(given, { recursive: true });
+  const root = await realpath(given);
 
   const written: string[] = [];
   const skipped: string[] = [];

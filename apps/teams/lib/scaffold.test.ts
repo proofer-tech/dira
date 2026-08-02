@@ -1,11 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { engineRepo, fillPlaceholders, preflight, scaffold } from "./scaffold.ts";
-import { parseContextBlock } from "./workers.ts";
+import { cronLine, parseContextBlock } from "./workers.ts";
 
 /** §0-3 스캐폴딩 집합. **이 목록이 계약이다** — 여기 없는 파일을 쓰면 실패한다. */
 const SET = [
@@ -57,8 +57,9 @@ test("scaffold — §0-3 집합 그대로, 두 번째는 전부 skipped", async 
   const first = await scaffold(project, { branch: "main" });
   assert.deepEqual(first.written.sort(), [...SET].sort());
   assert.deepEqual(first.skipped, []);
-  // 다음 단계(registerCron·addProject)가 쓰는 값 — 부르는 쪽이 경로를 다시 조립하지 않는다
-  assert.equal(first.root, path.join(project, ".dira"));
+  // 다음 단계(registerCron·addProject)가 쓰는 값 — 부르는 쪽이 경로를 다시 조립하지 않는다.
+  // realpath된 경로다(751e3004) — mkdtemp는 맥에서 `/var`(→ `/private/var`) 아래다.
+  assert.equal(first.root, await realpath(path.join(project, ".dira")));
   assert.equal(first.repo, repo.path);
 
   const agents = path.join(project, ".dira/protocols/AGENTS.md");
@@ -87,7 +88,8 @@ test("scaffold — §0-3 집합 그대로, 두 번째는 전부 skipped", async 
   execFileSync("bash", ["-n", w1]);
 
   // ⑦ 자가 정리(§4-4) — 파일이 같이 생기고, `source` 줄이 `. tick.sh` **바로 위**다.
-  const heal = path.join(project, ".dira/self-heal.sh");
+  // 워커에 박히는 경로는 스캐폴딩이 돌려준 root 기준이다(= realpath, 751e3004).
+  const heal = path.join(first.root, "self-heal.sh");
   execFileSync("bash", ["-n", heal]);
   const healLine = `. "${heal}" "${path.join(repo.path, "tick.sh")}"`;
   const lines = sh.split("\n");
@@ -109,6 +111,43 @@ test("scaffold — specDoc을 주면 세 번째 자리표시자도 사라진다"
   const agents = await readFile(path.join(dir, ".dira/protocols/AGENTS.md"), "utf8");
   assert.doesNotMatch(agents, /<프로젝트>|<통합 브랜치>|<프로젝트 스펙 문서>/);
   assert.ok(agents.includes("docs/DESIGN.md"));
+});
+
+/** 751e3004 — `createProject`는 같은 root 문자열로 두 가지를 한다: crontab 줄(`registerCron`)과
+ *  레지스트리 등록(`addProject`). `addProject`가 realpath로 저장하므로(DESIGN.md:272) 스캐폴딩이
+ *  raw 경로를 돌려주면 두 벌이 되고, `listWorkers`는 registry root로 대조하니 앱이 1분 전에 직접
+ *  등록한 w1이 `crontab 미등록`으로 뜬다. 사람이 `재등록`을 누르면 줄이 하나 더 들어가 같은
+ *  워커가 1분에 두 번 돈다.
+ *
+ *  진짜 crontab은 건드리지 않는다 — `cronLine`은 문자열만 만드는 순수 함수다.
+ *  진짜 레지스트리도 아니다 — `TICKET_LOCAL`을 임시 디렉터리로 돌린다(`projects.test.ts` 수법). */
+test("scaffold — 심링크 낀 경로: crontab 줄의 경로 = 레지스트리 root (751e3004)", async (t) => {
+  const dir = await tmp();
+  const local = await tmp();
+  const prev = process.env.TICKET_LOCAL;
+  process.env.TICKET_LOCAL = local;
+  t.after(async () => {
+    process.env.TICKET_LOCAL = prev;
+    await rm(dir, { recursive: true, force: true });
+    await rm(local, { recursive: true, force: true });
+  });
+  // 사람이 치는 경로에 심링크 구간이 하나만 있으면 된다(맥의 `/tmp`·`/var`, 심링크된 홈·마운트).
+  await mkdir(path.join(dir, "real"));
+  await symlink(path.join(dir, "real"), path.join(dir, "link"));
+  const project = path.join(dir, "link", "fx");
+
+  const made = await scaffold(project, { branch: "main" });
+  assert.equal(made.root, await realpath(path.join(dir, "real", "fx", ".dira")));
+
+  // 액션이 하는 그대로: 같은 `made.root`로 crontab 줄을 만들고 레지스트리에 등록한다.
+  const workerPath = path.join(made.root, "workers", "w1.sh");
+  const line = cronLine({ path: workerPath });
+  const { addProject } = await import("./projects.ts");
+  const saved = await addProject("fx 큐", made.root);
+
+  assert.equal(saved.root, made.root); // 저장된 root = 스캐폴딩이 돌려준 root
+  // 워커 화면의 판정(`listWorkers`)은 registry root로 조립한 경로가 crontab 줄에 있는가다.
+  assert.ok(line.includes(path.join(saved.root, "workers", "w1.sh")), line);
 });
 
 test("scaffold — 상대경로는 서버 cwd에 쓰지 않고 거부한다", async () => {
