@@ -81,6 +81,36 @@ export function BrandMark({ href }: { href: string }) {
   );
 }
 
+/** 알림 종 팝오버의 그릇 (§비주얼 §28 ④ `누르면`). 트리거·내용 마크업은 셸(서버 컴포넌트)에
+ *  그대로 있고 여기는 `children`으로 받는다 — 여기 있는 것은 **열림 상태 하나**다(§0-10:
+ *  종은 새 저장소를 안 만든다 — URL도 전역도 아니다).
+ *
+ *  **화면을 바꾸는 링크를 누르면 닫는다.** 셸 레이아웃은 이동해도 언마운트되지 않아서, 안 닫으면
+ *  448px 상자가 방금 연 상세 위에 그대로 남는다(`46992e91` 실측 ⓑ).
+ *
+ *  판정이 링크마다가 아니라 이 한 곳인 이유: 규칙이 걸린 대상은 ④의 링크가 아니라 **화면을
+ *  바꾸는 링크 전부**고, 이 상자 안에서 그건 `<a>` 하나로 정확히 갈린다 — 남아야 하는 둘
+ *  (①의 `토큰 저장` · ③의 `할당 해제`)은 둘 다 `<button>`이다. 링크가 하나 늘어도 따라간다.
+ *
+ *  포탈 안의 클릭이 이 `div`로 올라오는 것은 React 합성 이벤트가 DOM이 아니라 **React 트리**를
+ *  타기 때문이다 — `PopoverContent`는 `Popover.Portal` 안에 있어도 여기의 자식이다.
+ *  `contents`라 상자를 만들지 않는다: 헤더 묶음의 `gap-2`가 무수정으로 남는다(§28 ①). */
+export function NotificationPopover({ children }: { children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <div
+        className="contents"
+        onClick={(e) => {
+          if (e.target instanceof Element && e.target.closest("a")) setOpen(false);
+        }}
+      >
+        {children}
+      </div>
+    </Popover>
+  );
+}
+
 export type SwitcherProject = {
   id: string;
   name: string;

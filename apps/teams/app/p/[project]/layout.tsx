@@ -17,6 +17,7 @@ import {
 import { EmptyState } from "@/components/empty-state";
 import {
   BrandMark,
+  NotificationPopover,
   RefreshButton,
   ProjectNav,
   ProjectSwitcher,
@@ -27,7 +28,7 @@ import { RequestDialog, UnassignButton } from "@/components/ticket-ui";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { readAuth } from "@/lib/auth";
 import { readSummary, readProjects } from "@/lib/projects";
 import { engineLimits, listUsage, type EngineLimit } from "@/lib/usage";
@@ -128,7 +129,10 @@ export default async function ProjectLayout({
           {/* 순서는 `[종] [전환기] [설정]`이다(§0-10 자리 · §비주얼 §28 ①). `설정`이 우측 맨 끝이라는
               §비주얼 §4의 못은 안 뽑는다 — 루트 셸(`/`)에는 종이 없고 거기도 `설정`이 끝이다.
               묶음의 `gap-2`는 무수정이고 종이 새 간격을 만들지 않는다 */}
-          <Popover>
+          {/* 그릇이 `Popover`가 아니라 `NotificationPopover`인 이유는 그 컴포넌트 주석에 있다
+              (§28 ④ `누르면` — 안에서 화면을 바꾸는 링크를 누르면 닫는다). 트리거·내용 마크업은
+              **여기 그대로**다: 열림 상태 하나만 클라이언트로 넘어갔고 이 레이아웃은 서버 컴포넌트다 */}
+          <NotificationPopover>
             {/* 배너가 들고 있던 `role="status"`(polite)를 종 옆의 라이브 리전이 물려받는다
                 (§0-10 접근성). **팝오버 안에 두지 않는다** — 닫혀 있는 동안 DOM에 없으면
                 낭독되지 않는다. 5초 폴링이 같은 문자열을 다시 그려도 텍스트가 안 바뀌면 낭독이
@@ -174,7 +178,7 @@ export default async function ProjectLayout({
                 worker={current.worker}
               />
             </PopoverContent>
-          </Popover>
+          </NotificationPopover>
           <ProjectSwitcher projects={items} currentId={id} />
           <SettingsDialog auth={auth} />
         </div>
