@@ -193,8 +193,16 @@ MIT 오픈소스라 짧다. 다만 한 조항은 형식이 아니라 실질이�
 
 ### 보유·파기
 
-- GA4 수집 데이터: **[GA4 콘솔 보존 설정값 — 확인 대기]**
+GA4는 이벤트 데이터와 사용자 데이터의 보존 기간을 따로 잡는다. 방침도 갈라서 적는다
+(2026-08-02 콘솔 확인값):
+
+| 대상 | 보존 기간 |
+|---|---|
+| 이벤트 데이터 — 이벤트 8종과 그 파라미터 | **2개월** |
+| 사용자 데이터 — 설치 식별자에 연결된 데이터 | **14개월** |
+
 - 로컬 `analytics.json`: 사용자 기기에만 존재. 파일을 지우면 소멸하고 다음부터 새 설치로 센다
+- 합산 기반 표준 보고서는 위 보존 기간의 영향을 받지 않는다(GA4 동작)
 
 ### 처리위탁·국외이전
 
@@ -259,26 +267,22 @@ master push가 곧 배포다. `release.yml`의 bump 커밋도 배포를 태우�
 
 ## 열린 항목
 
-**GA4 데이터 보존 기간** 하나가 남았다. 방침 §보유·파기의 값이다. 2026-08-02 시도 기록:
+**없다.** 스펙 전체가 확정이다.
+
+마지막까지 열려 있던 GA4 보존 기간은 2026-08-02에 콘솔 값으로 채웠다(이벤트 2개월 ·
+사용자 14개월). 자동으로 읽으려던 경로 넷이 다 막혔던 기록은 아래에 남긴다 — 다음에 같은
+값을 찾는 사람이 네 번 다시 밟지 않게.
 
 | 경로 | 결과 |
 |---|---|
-| gstack QA 크롬 프로필 + CDP | 막힘. `Default/Cookies`에 쿠키 18건이지만 `SID`·`SAPISID`·`__Secure-1PSID` **0건** — 로그아웃 상태 |
+| gstack QA 크롬 프로필 + CDP | 막힘. `Default/Cookies`에 쿠키 18건이지만 `SID`·`SAPISID`·`__Secure-1PSID` **0건** — 사람이 로그인해 둬도 하루면 풀린다 |
 | `bin/chrome-cdp` | 안 씀. 실행 중인 사용자 크롬을 `osascript quit` → `pkill`로 끈다 |
 | `gcloud auth print-access-token --scopes=…analytics.readonly` | 막힘. gcloud 기본 자격의 스코프 목록이 고정이고 analytics가 없다 |
 | 기본 스코프 토큰으로 Admin API | `403 ACCESS_TOKEN_SCOPE_INSUFFICIENT` |
 
-남은 길은 ADC 로그인이다:
+**교훈은 값 하나에 자동화를 뚫지 말라는 것이다.** 남은 길이었던 ADC 로그인
+(`gcloud auth application-default login --scopes=…/analytics.readonly`)은 Analytics Admin API
+활성화라는 벽이 하나 더 있었고, 콘솔에서 눈으로 읽는 데는 10초가 걸렸다. 이 값은 방침에
+두 줄로 들어가고 바뀌는 일이 거의 없다.
 
-```
-gcloud auth application-default login \
-  --scopes=openid,https://www.googleapis.com/auth/userinfo.email,https://www.googleapis.com/auth/analytics.readonly
-```
-
-그 뒤 `properties/548085611/dataRetentionSettings`를 읽는다. Analytics Admin API가 ADC의
-할당량 프로젝트에서 꺼져 있으면 한 번 더 막힐 수 있다. **값 하나 때문에 이 길을 뚫는 것이
-아깝다면 GA4 콘솔에서 눈으로 보고 적는 것이 맞다** — 이 값은 방침에 한 줄로 들어가고,
-바뀌는 일이 거의 없다.
-
-이 값이 없으면 방침의 나머지 전부는 확정이고 보존 기간 한 줄만 비어 있다. 랜딩·매뉴얼 구현은
-이것을 기다리지 않는다.
+보존 기간이 바뀌면 `apps/site/privacy.md`의 표만 고치고 재배포한다.
