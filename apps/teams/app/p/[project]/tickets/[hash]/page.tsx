@@ -141,6 +141,39 @@ export default async function TicketDetail({
     .filter((p) => p.body !== null)
     .map((p) => p.name);
 
+  // 세션 스트림 절은 **한 번만 만든다.** 자리가 둘이라(§2 자리 표 · §비주얼 §11 순서 줄) 조건을
+  // 두 자리에 흩뿌리면 둘이 어긋나 절이 사라지거나 두 벌로 뜬다 — 여기서 만들고 아래는 `transcript`
+  // 하나로 꽂을 자리만 고른다. 절 안은 종전 그대로다(높이 · 자동 스크롤 · 참견 폼 · 빈 상태 문구).
+  const streamSection = sessionId ? (
+    <section className="space-y-2">
+      <h2 className="text-sm font-medium">세션 스트림</h2>
+      {/* codex면 트랜스크립트가 **있을 수 없다**(§4-3 표) — 그래도 컴포넌트를 세운다:
+          왜 없는지와 참견 폼의 사유가 그 안에 있고, 두 진입점(여기 · 워커 행)이 같은
+          조각을 그린다(§비주얼 §23 ⑤). */}
+      {transcript || engine === "codex" ? (
+        <SessionStream
+          project={id}
+          stem={ticket.stem}
+          live={ticket.state === "wip"}
+          engine={engine}
+        />
+      ) : (
+        // 액션이 없다 — 사람이 할 일이 없다(§9). `action` 자리엔 왜 없는지 사람이 직접 쳐 볼
+        // 글롭을 넣는다. **여기 남는 것은 "왜"를 모르는 경우뿐이다**(§비주얼 §23 ⑤):
+        // 완료 티켓 리플레이처럼 되짚을 워커가 없어 엔진을 모르는 자리. 참이고, 왜인지
+        // 모르는 채로 참이다 — 없는 값을 추측해 `codex입니다`라고 쓰지 않는다.
+        <EmptyState
+          text="트랜스크립트 없음"
+          action={
+            <span className="font-mono text-xs break-all text-muted-foreground">
+              {`~/.claude/projects/*/${sessionId}.jsonl`}
+            </span>
+          }
+        />
+      )}
+    </section>
+  ) : null;
+
   // 복사 다이얼로그의 deps 선택지. 보드와 **같은 한 줄**이다(§3 — deps가 가리키는 이름은
   // `ticket:`이 아니라 stem이고, 큐 순서를 뒤집어야 방금 만든 티켓이 맨 위다).
   // 이미 읽은 `tickets`를 넘긴다 — `readdir`도 큐 스캔도 다시 하지 않는다.
@@ -308,6 +341,13 @@ export default async function TicketDetail({
             />
           )}
 
+          {/* 트랜스크립트가 있으면 여기다 — 답변 카드 아래 · 본문 위(§2 자리 표. 요구 `42ed33bc`,
+              답 `7208f987` = (c)). 스트림을 보러 여는 화면에서 본문·질문답변을 지나 스크롤하지
+              않는다. 대가는 알고 고른 것이다: 절이 580px이라 1440×900에서 본문 시작이 접힌 자리
+              아래로 내려간다. 가르는 값은 **트랜스크립트 파일 하나**고 `.wip`인지가 아니다 —
+              완료 티켓의 멈춘 리플레이도 여기로 올라온다. */}
+          {transcript && streamSection}
+
           <section className="space-y-2">
             <h2 className="text-sm font-medium">본문</h2>
             {/* **열린 티켓만 편집 폼이다.** `.wip`(세션이 물고 있다)과 `.done`(불변 기록)은 같은
@@ -346,40 +386,11 @@ export default async function TicketDetail({
             </section>
           )}
 
-          {/* 세션 스트림(§2-1)은 왼쪽 단 마지막이다. §비주얼 §9 `h-[32rem]`은 이 배치를 안 묻는다 —
-              고정 높이 + 자체 스크롤이라 페이지 어디에 놓이든 절(564px)이 한 화면(852px)에 담긴다.
-              종전 주석이 근거로 삼던 "frontmatter 표 다음"이라는 서술이 틀렸던 것이고 수는 맞았다
-              (§비주얼 §11 재판정). 페이지 높이에 맡기지 않는 둘째 근거는 그대로다: 2094줄
-              트랜스크립트가 페이지를 늘리면 브라우저 스크롤과 자동 스크롤이 서로를 민다. */}
-          {sessionId && (
-            <section className="space-y-2">
-              <h2 className="text-sm font-medium">세션 스트림</h2>
-              {/* codex면 트랜스크립트가 **있을 수 없다**(§4-3 표) — 그래도 컴포넌트를 세운다:
-                  왜 없는지와 참견 폼의 사유가 그 안에 있고, 두 진입점(여기 · 워커 행)이 같은
-                  조각을 그린다(§비주얼 §23 ⑤). */}
-              {transcript || engine === "codex" ? (
-                <SessionStream
-                  project={id}
-                  stem={ticket.stem}
-                  live={ticket.state === "wip"}
-                  engine={engine}
-                />
-              ) : (
-                // 액션이 없다 — 사람이 할 일이 없다(§9). `action` 자리엔 왜 없는지 사람이 직접 쳐 볼
-                // 글롭을 넣는다. **여기 남는 것은 "왜"를 모르는 경우뿐이다**(§비주얼 §23 ⑤):
-                // 완료 티켓 리플레이처럼 되짚을 워커가 없어 엔진을 모르는 자리. 참이고, 왜인지
-                // 모르는 채로 참이다 — 없는 값을 추측해 `codex입니다`라고 쓰지 않는다.
-                <EmptyState
-                  text="트랜스크립트 없음"
-                  action={
-                    <span className="font-mono text-xs break-all text-muted-foreground">
-                      {`~/.claude/projects/*/${sessionId}.jsonl`}
-                    </span>
-                  }
-                />
-              )}
-            </section>
-          )}
+          {/* 트랜스크립트가 없으면 종전 자리 — 왼쪽 단 마지막이다(§2 자리 표). 따라갈 사건이 0개고
+              그리는 것은 부재의 사유라(codex 안내 · `트랜스크립트 없음`) 본문을 밀 값이 없다.
+              §비주얼 §9 `h-[32rem]`은 어느 자리든 안 묻는다 — 고정 높이 + 자체 스크롤이라 위에
+              무엇이 쌓이든 절(564px)이 한 화면(852px)에 담긴다. */}
+          {!transcript && streamSection}
         </div>
 
         {/* 오른쪽 단 — 왼쪽을 스크롤하는 동안 따라다닌다(§2). 세 값이 한 벌이다:
