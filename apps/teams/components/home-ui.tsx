@@ -92,6 +92,11 @@ const EXAMPLES = [
  *  한 프로젝트에 한 질문이라 옮겨 간 대화에서 물을 수도 없다. 푸는 열쇠가 `중지`다. */
 const LOCKED = "답이 끝나거나 중지한 뒤에 열 수 있습니다";
 
+/** `새 대화`의 두 번째 잠금(§24 §0건에서 사라지지 않는다) — 지금 대화의 턴이 0건이면 버튼이
+ *  **사라지지 않고 자리를 지킨다**(`h1` 행 시절과 갈리는 값이다: 패널에서는 사라짐이 목록을
+ *  12px 끌어올린다). 두 잠금이 겹치면 `LOCKED`가 이긴다 — 첫 질문 직후가 그 순간이다. */
+const NO_TURNS = "지금 대화가 이미 비어 있습니다 — 여기에 물어보세요";
+
 /** 좌측 패널이 그리는 것 전부 — **`home-sessions.json`의 형식(`Home`) + 큐에서 파생된 워커 세션**
  *  (§7 좌측 패널). 파일 쪽 타입에 워커 목록을 얹지 않는 이유는 저장하지 않기 때문이다: 저건
  *  우리가 쓰는 파일의 모양이고 이 목록은 매 응답 큐에서 다시 파생된다. `current` 한 칸이
@@ -324,32 +329,13 @@ export function HomeUI({ project, initial }: { project: string; initial: HomeChu
     // 그 안에서 `flex-1`로 남은 높이를 받는다. **`min-h-0`이 빠지면** flex 자식 기본값
     // (`min-height:auto`)이 내용만큼 늘어나 `main`이 도로 스크롤하고 폼이 화면 밖으로 밀린다.
     <div className="flex min-h-0 flex-1 flex-col gap-6">
-      {/* `h1` 행 — **높이 고정 한 행**이다(§24 세로 배치 표). `h-8`을 못박는 이유가 둘: 이 행의
-          컨트롤이 0건에서 사라지므로 높이를 내용에 맡기면 첫 질문에 행이 자라 아래가 통째로
-          밀리고, `size="sm"`은 이 레포에서 `h-7`(28)이라 버튼이 32를 못 정한다.
-          **자식이 셋에서 둘로 줄었다**(`01e5293b` — 대화 목록 트리거가 좌측 패널로 내려갔다).
-          `gap-3`은 이제 자식 둘 사이에 안 쓰인다(`ml-auto`가 그 사이를 다 먹는다) — 클래스를
-          빼지 않는 근거는 §24 세로 배치 표에 있다. `새 대화`는 `ml-auto`로 오른쪽 끝이다(§4-3). */}
-      <div className="flex h-8 shrink-0 items-center gap-3">
+      {/* `h1` 행 — **높이 고정 한 행**이다(§24 세로 배치 표). **자식이 `h1` 하나다**: `01e5293b`이
+          셋을 둘로 줄였고(대화 목록 트리거가 패널로) `f1941cab`이 둘을 하나로 줄였다
+          (`새 대화`가 패널로 — 요구 `6f9dce32`). 그래서 `gap-3`과 `ml-auto`가 같이 빠졌다.
+          남은 셋은 전부 일이 있다 — `flex`+`items-center`가 28짜리 `h1`을 32 행에 세우고,
+          `shrink-0`이 스레드에 안 눌리게 하고, `h-8`이 32를 정한다. **이 행의 액션은 0개다.** */}
+      <div className="flex h-8 shrink-0 items-center">
         <h1 className="text-lg font-semibold">홈</h1>
-        {/* **여는 버튼이다**(§24 개정 — 확인이 걷혔다). 지금 대화의 턴이 0건이면 안 그린다:
-            이미 빈 대화에 앉아 있는데 빈 대화를 또 열 이유가 없다. 도는 중에는 패널 줄 전부와
-            같은 잠금이다 — `disabled`가 아닌 이유는 §21과 같다(왜 못 누르는지 말할 자리). */}
-        {turns.length > 0 && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="ml-auto aria-disabled:opacity-50"
-            aria-disabled={busy || undefined}
-            title={busy ? LOCKED : undefined}
-            onClick={async () => {
-              if (busy) return;
-              apply(await clearHome(project));
-            }}
-          >
-            새 대화
-          </Button>
-        )}
       </div>
 
       {/* 2단 행(§24 세로 배치 표 · §좌측 패널) — `h1` 행 아래 남은 높이를 통째로 받는다.
@@ -365,6 +351,8 @@ export function HomeUI({ project, initial }: { project: string; initial: HomeChu
           <SidePanel
             home={home}
             busy={busy}
+            noTurns={turns.length === 0}
+            onNew={async () => apply(await clearHome(project))}
             onPick={async (id) => {
               setHome((now) => ({ ...now, current: id })); // 체크만 낙관적으로(§24 로딩 항)
               apply(await switchHome(project, id));
@@ -766,10 +754,16 @@ const ROW = "group flex w-full cursor-pointer gap-2 rounded-sm px-2 py-1.5 text-
 function SidePanel({
   home,
   busy,
+  noTurns,
+  onNew,
   onPick,
 }: {
   home: Panel;
   busy: boolean;
+  /** 지금 대화의 턴이 0건인가 — `새 대화`의 두 번째 잠금(§24 §0건). 패널이 그리는 값이 아니라
+   *  스레드 쪽 상태라 `Panel`에 안 얹고 프롭으로 받는다. */
+  noTurns: boolean;
+  onNew: () => void;
   onPick: (id: string) => void;
 }) {
   const rows = chatRows(home.conversations);
@@ -779,8 +773,33 @@ function SidePanel({
         {/* 그룹 머리 — §3 테이블 헤더 행의 세 값 그대로(`text-xs` · `font-medium` ·
             `--muted-foreground`). `sticky`를 안 붙인다: 그룹이 둘뿐이고 줄 모양이 서로 달라
             어느 그룹인지를 줄 자신이 말한다(§24). 붙이면 `bg-*` 한 면이 늘어 대비 표에 잴
-            조합이 생긴다. */}
-        <div className="px-2 text-xs font-medium text-muted-foreground">대화</div>
+            조합이 생긴다.
+            **머리가 24px 행이 됐다**(`f1941cab`) — 이 머리가 `새 대화`를 오른쪽에 들어서다.
+            두 머리를 다르게 두지 않으므로 `워커 세션`도 같은 `h-6`이다(§24 §그릇·자리 표). */}
+        <div className="flex h-6 items-center">
+          <span className="px-2 text-xs font-medium text-muted-foreground">대화</span>
+          {/* `새 대화` (§24 §`새 대화` — 요구 `6f9dce32`로 `h1` 행에서 여기로 내려왔다).
+              **하는 일과 잠금은 한 자도 안 갈렸다**: 여는 버튼이고(확인 없음) 도는 중에는 패널
+              줄 전부와 같은 `aria-disabled` + 같은 `LOCKED`다. 갈린 값은 자리·그릇·0건 셋이다 —
+              `ghost` `size="xs"`(`h-6`·`text-xs`·`px-2`)로 무테 레일에 앉고, 머리 낱말의
+              `text-muted-foreground`를 **안 상속해서**(그 클래스가 `span` 쪽에 있다) 왼쪽은
+              라벨 · 오른쪽은 컨트롤이 읽힌다. 0건이면 사라지지 않고 자리를 지킨다 —
+              사라지면 목록이 12px 뛰는데 그 순간이 하필 첫 질문을 보내는 때다.
+              **두 잠금이 겹치면 도는 중이 이긴다**(첫 질문 직후: `busy`인데 턴은 아직 0). */}
+          <Button
+            variant="ghost"
+            size="xs"
+            className="ml-auto aria-disabled:opacity-50"
+            aria-disabled={busy || noTurns || undefined}
+            title={busy ? LOCKED : noTurns ? NO_TURNS : undefined}
+            onClick={() => {
+              if (busy || noTurns) return;
+              onNew();
+            }}
+          >
+            새 대화
+          </Button>
+        </div>
         {rows.map((r) => (
           // 줄 사이 간격이 0이다 — 줄이 자기 `py`로 리듬을 만든다(§3 테이블 행과 같은 처리).
           // 도는 동안 잠긴다(§24 §잠금 두 자리 ①): `disabled`가 아니라 `aria-disabled`라
@@ -822,7 +841,10 @@ function SidePanel({
           이 줄은 *이 세션을 돈 워커*라 끝난 줄에도 서야 한다 — `owner`의 원문 표기를 쓴다. */}
       {home.workers.length > 0 && (
         <div>
-          <div className="px-2 text-xs font-medium text-muted-foreground">워커 세션</div>
+          {/* `대화` 머리와 같은 `h-6`이다 — 머리 높이는 그룹의 성질이 아니라 패널의 눈금이다(§24). */}
+          <div className="flex h-6 items-center px-2 text-xs font-medium text-muted-foreground">
+            워커 세션
+          </div>
           {home.workers.map((w) => (
             <button
               key={w.id}
