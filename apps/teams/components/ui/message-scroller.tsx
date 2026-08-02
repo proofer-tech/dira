@@ -36,13 +36,67 @@ function MessageScroller({
   )
 }
 
+/** 바닥에 붙어 있나. 프리미티브 `scrollEdgeThreshold` 기본값 8px 안이면 붙은 것으로 본다 —
+ *  `최신으로`가 `data-active`로 뜨는 경계와 같은 값이다(§비주얼 §13). §9의 32는 그 절의 값이라
+ *  안 가져온다(`session-stream.tsx`의 `atBottom`이 그것이다). */
+const atBottom = (el: HTMLElement) => el.scrollHeight - el.scrollTop - el.clientHeight <= 8
+
 function MessageScrollerViewport({
   className,
+  ref,
+  onScroll,
   ...props
 }: React.ComponentProps<typeof MessageScrollerPrimitive.Viewport>) {
+  // **바닥에 붙어 있으면 놓지 않는다**(§비주얼 §24 §답이 흐르는 동안 `따라가기` 행 —
+  // 사람 보고 `4f95f79f` · 티켓 `d887073a`). 프리미티브만으로는 그 행이 두 군데서 거짓이었다:
+  //
+  // ① **제스처가 방향도 바닥 여부도 안 본다.** `userScrollIntent`가 `wheel`·`touchmove`·방향키
+  //    하나에 무조건 `following-bottom` → `free-scrolling`으로 떨어진다. 바닥에 붙은 채로
+  //    **아래로** 한 틱만 굴리면 화면은 1px도 안 움직이고 `scroll` 이벤트도 안 난다 — 모드를
+  //    되돌리는 유일한 자리가 그 이벤트라 **영영 안 돌아온다**. 그 뒤로는 답이 흘러도 안
+  //    따라가는데 `최신으로`도 안 뜬다(바닥이라 `data-active=false`). 사람이 본 것이 이것이다:
+  //    "직접 올린 게 아닌데 매번 손으로 내려야 한다"(1440×900 실측 — 한 틱 뒤 gap 48→278px).
+  // ② **따라가도 한 프레임 늦다.** 바닥으로 미는 두 경로(Content `childList` MutationObserver ·
+  //    Content·Viewport ResizeObserver)가 전부 `requestAnimationFrame`으로 미뤄져서, 조각이
+  //    붙은 프레임은 **어긋난 자리로 한 번 그려지고** 다음 프레임에 붙는다(프레임 단위 실측:
+  //    45초 스트리밍에 2프레임짜리 어긋남 49회, 최대 264px).
+  //
+  // 둘 다 **여기 ResizeObserver 하나**로 끝난다. RO 콜백은 레이아웃 뒤 · **페인트 전**이라
+  // 여기서 민 `scrollTop`은 어긋난 프레임을 아예 안 만들고(②), 프리미티브 모드를 안 보고
+  // 밀므로 ①의 굳은 `free-scrolling`도 지나간다. 민 뒤에 나는 `scroll` 이벤트가 프리미티브의
+  // `updateMode`를 태워 모드까지 `following-bottom`으로 되돌려 놓는다.
+  //
+  // **사람이 위로 올리면 안 따라간다**(§24가 지키라는 것) — `scroll` 이벤트가 `stuck`을 끄고,
+  // 그때부터 RO는 아무것도 안 민다. `최신으로`를 누르면 바닥으로 가는 `scroll`이 도로 켠다.
+  // `session-stream.tsx`의 `atBottom` + `detached`와 같은 관용구다(§9 §자동 스크롤).
+  const stuck = React.useRef(true)
+  const viewport = React.useRef<HTMLDivElement | null>(null)
+
+  React.useEffect(() => {
+    // ponytail: 관찰 대상은 Viewport의 첫 자식 = Content다(Root > Viewport > Content). 프리미티브가
+    // Content 엘리먼트를 밖으로 안 준다 — 구조가 바뀌면 여기가 먼저 조용해지니 이 줄이 표식이다
+    const el = viewport.current
+    const content = el?.firstElementChild
+    if (!el || !content || typeof ResizeObserver === "undefined") return
+    const ro = new ResizeObserver(() => {
+      if (stuck.current) el.scrollTop = el.scrollHeight
+    })
+    ro.observe(content)
+    return () => ro.disconnect()
+  }, [])
+
   return (
     <MessageScrollerPrimitive.Viewport
       data-slot="message-scroller-viewport"
+      ref={(el: HTMLDivElement | null) => {
+        viewport.current = el
+        if (typeof ref === "function") ref(el)
+        else if (ref) ref.current = el
+      }}
+      onScroll={(e) => {
+        stuck.current = atBottom(e.currentTarget)
+        onScroll?.(e)
+      }}
       className={cn(
         // 등록 항목의 `scroll-fade-b`·`scrollbar-*` 넷을 덜어냈다(§비주얼 §13 — 장식이고,
         // "아래에 더 있다"는 `최신으로` 버튼이 이미 글자로 말한다). `globals.css`는 한 줄도 안 는다
