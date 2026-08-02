@@ -442,14 +442,23 @@ export function AnswerForm({
   answerFile: string;
 }) {
   const [state, action, pending] = useActionState<SaveState, FormData>(answerRequirement, {});
-  // 답변 칸의 id는 한 화면에 하나뿐이다 — 보드에서도 열려 있는 다이얼로그는 하나다.
   return (
     /* 입력칸과 `답변 달기`는 상자 **밖 · 밑**이다 — 다이얼로그를 화면 높이로 늘리는 안은 버렸다(§2) */
     <form action={action} className="space-y-3">
       <input type="hidden" name="project" value={project} />
       <input type="hidden" name="hash" value={hash} />
-      <Label htmlFor="a-body">답변</Label>
-      <Textarea id="a-body" name="body" rows={8} className="font-mono" required />
+      {/* 보이는 `<Label>`도 `a-body` id도 없다(§29 ②) — 이름을 이미 말하는 것이 두 자리 다 있다:
+          상세는 절 제목 `진행 기록`, 다이얼로그는 `DialogTitle`(`답변 — <제목>`). placeholder는
+          라벨이 아니라서 `aria-label`이 접근 가능한 이름을 받는다. 문구는 참견·이어받기와 같은
+          문법(`[대상]에 [행위]기`)이다 — 한 칸이 모드를 말하는 방식이 셋 다 같아진다 */}
+      <Textarea
+        aria-label="답변"
+        placeholder="질문에 답 쓰기"
+        name="body"
+        rows={8}
+        className="font-mono"
+        required
+      />
       {state.error && <Failure title="답변을 달지 못했습니다" message={state.error} />}
       {/* 보조 텍스트는 버튼 왼쪽이다(§비주얼 §4-3) */}
       <div className="flex flex-wrap items-center justify-end gap-3">
