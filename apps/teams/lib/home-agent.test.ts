@@ -614,6 +614,13 @@ case "$FAKE_MODE" in
     # 포그라운드 sleep이면 trap이 그게 끝난 뒤에 돈다. stdout을 떼는 것도 필수 —
     # 안 떼면 죽은 뒤에도 손자가 파이프를 물고 있어 부모의 \`close\`가 안 온다
     sleep 60 >/dev/null 2>&1 & wait ;;
+  late)   # QA \`0a284011\` 실측 — **답 줄이 먼저 서고 프로세스는 한참 뒤에 죽는다**(5~40초 vs 14초).
+          # 도는 중의 폴링이 그 줄을 집어 가므로 마지막 응답의 \`turns\`가 빈다
+    say '{"type":"stream_event","event":{"type":"message_start"},"parent_tool_use_id":null}'
+    delta "답"
+    keep "답"
+    sleep 1
+    say '{"type":"result","is_error":false,"subtype":"success","api_error_status":null,"result":"답"}' ;;
   *)
     say '{"type":"system","subtype":"init"}'   # --verbose가 섞는 줄. 결과가 아니다
     say '{"type":"stream_event","event":{"type":"message_start"},"parent_tool_use_id":null}'
@@ -862,21 +869,48 @@ test("워커 세션 — 사라진 `current`는 대화 0건과 같고, 고르면 
 
 test("폴링을 끊는 근거는 `running`이 아니라 **답이 왔다**다 (§7 §폴링은 서버가 잊어도 안 끊긴다)", () => {
   const answer = { key: "1", role: "answer" as const, text: "답" };
-  const fail = { ok: false as const, reason: "other" as const, output: "x", sessionId: "", resumed: false };
   const chunk = (c: Partial<Parameters<typeof pollDone>[0]>) =>
-    pollDone({ running: false, turns: [], failed: null, stopped: false, ...c });
+    pollDone({ running: false, turns: [], answered: false, ...c });
 
-  // ① 정상 종료 — 끝을 파일보다 먼저 읽으므로(`pollHome` 첫 줄) 마지막 응답이 답을 같이
-  //    데려온다. 여기서 끊는다.
-  assert.strictEqual(chunk({ turns: [answer] }), true);
+  // ① **정상 종료 — `turns`가 비어도 끝이다.** 이 한 줄이 QA `0a284011`이 잡은 자리다:
+  //    답 줄은 프로세스가 죽기 한참 전에 트랜스크립트에 서고 도는 중의 폴링이 그것을 이미
+  //    집어 갔다(`offset`이 밀렸다). 실행층이 결과 객체를 넘긴 것(`answered`)이 근거다.
+  assert.strictEqual(chunk({ answered: true }), true);
   // ② 빈 종료 — `running: false`인데 아무 증거도 없다. `runs`가 휘발한 자리다(dev recompile).
   //    **안 끊는다** — 종전에는 여기서 끊어서 화면이 질문만 든 채 얼었다.
   assert.strictEqual(chunk({}), false);
   // ③ 도는 중 — 예나 지금이나 안 끊는다.
   assert.strictEqual(chunk({ running: true }), false);
-  // ④ 실패도 끝의 증거다(§24 실패 5종 — 화면이 Alert를 세우고 입력칸을 연다).
-  assert.strictEqual(chunk({ failed: fail }), true);
-  // ⑤ 글자 한 자 오기 전에 누른 `중지` — 새 줄도 실패도 없지만 **정상 종료**다(맵이 살아서
-  //    `stopped`를 채웠다). 안 걸면 입력칸이 5분 잠긴다.
-  assert.strictEqual(chunk({ stopped: true }), true);
+  // ④ 휘발한 뒤의 복구 경로. 맵이 없어 `answered`는 영영 false이고, 늦게 끝낸 자식이 쓴 답
+  //    줄을 집어 가는 이 폴링이 끊는 자리다.
+  assert.strictEqual(chunk({ turns: [answer] }), true);
+  // ⑤ 실패·`중지됨`은 따로 안 본다 — 둘 다 결과 객체가 있어야 채워지므로 ①에 이미 든다.
+  //    글자 한 자 오기 전에 누른 `중지`(새 줄도 실패도 없다)가 그 경계다.
+  assert.strictEqual(chunk({ answered: true, turns: [] }), true);
+});
+
+/** **답이 뜬 그 폴링에서 잠금을 푼다**(`ef6cfc76` — QA `0a284011` 실측 재현).
+ *
+ *  위 단위 판정을 실행층 왕복에 걸어 둔다: 눈으로는 `pollDone`의 두 항이 다 그럴듯해서
+ *  (`turns`도 끝의 증거이긴 하다) **어느 응답에 무엇이 들어 있는지**를 재야 갈린다. */
+test("답 줄을 도는 중에 집어 가도 프로세스가 죽는 폴링에서 끊는다 (`turns`가 빈 종료)", async () => {
+  const project = { id: "late-exit", name: "큐", root: CWD };
+  await withFake("late", async () => {
+    assert.strictEqual(await startAsk(project, "질문"), null);
+    const p = poller(project.id);
+
+    // ① 답 줄이 **도는 중에** 온다 — 여기서 `offset`이 밀린다. 아직 끝이 아니다
+    const mid = await p.until((c) => c.turns.length > 0);
+    assert.strictEqual(mid.running, true);
+    assert.strictEqual(mid.answered, false);
+    assert.strictEqual(mid.done, false);
+
+    // ② 프로세스가 죽는 폴링 — **`turns`는 비어 있는데 끝이다.** 종전에는 여기가 false라
+    //    화면이 천장 5분까지 `보내기`·패널 줄·`새 대화`를 잠갔다(실측 295~300초)
+    const end = await p.until((c) => !c.running);
+    assert.deepStrictEqual(end.turns, []);
+    assert.strictEqual(end.answered, true);
+    assert.strictEqual(end.done, true);
+    assert.deepStrictEqual(p.turns, ["물음", "답"]); // 답은 이미 화면에 있다
+  });
 });

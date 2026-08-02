@@ -75,6 +75,7 @@ export async function pollHomeAnswer(
       partial: "",
       stopped: false,
       failed: null,
+      answered: false, // 집어 갈 실행층이 없다 — 여기는 프로젝트 자체를 못 찾은 자리다
       // **여기만 `done`을 손으로 참으로 준다**(`pollDone`은 이걸 거짓이라 볼 것이다 — 답이
       // 안 왔으니까). 저 판정이 기다리는 것은 *도는 답*이고 여기는 물러난 자리라 기다릴 답이
       // 없다. 참을 안 주면 화면이 있지도 않은 프로젝트를 5분 동안 다시 묻는다(머리 주석).
