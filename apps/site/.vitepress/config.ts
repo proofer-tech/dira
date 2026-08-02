@@ -27,16 +27,15 @@ export default defineConfig({
             { text: "첫 티켓 굴리기", link: "/docs/first-ticket" },
           ],
         },
-        // 설정 — Task 6
-        // {
-        //   text: "설정",
-        //   items: [
-        //     { text: "워커 만들기", link: "/docs/worker" },
-        //     { text: "cron 등록", link: "/docs/cron" },
-        //     { text: "헤드리스 인증", link: "/docs/auth" },
-        //     { text: "동시성", link: "/docs/concurrency" },
-        //   ],
-        // },
+        {
+          text: "설정",
+          items: [
+            { text: "워커 만들기", link: "/docs/worker" },
+            { text: "cron 등록", link: "/docs/cron" },
+            { text: "헤드리스 인증", link: "/docs/auth" },
+            { text: "동시성", link: "/docs/concurrency" },
+          ],
+        },
         // 쓰기 — Task 7
         // {
         //   text: "쓰기",
