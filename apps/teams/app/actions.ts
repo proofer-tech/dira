@@ -9,6 +9,7 @@
 import { homedir } from "node:os";
 import path from "node:path";
 import { revalidatePath } from "next/cache";
+import { readAnalytics, setAnalyticsEnabled, track } from "@/lib/analytics";
 import {
   normalizeToken,
   pollSetup,
@@ -367,6 +368,27 @@ export async function resetKeymapAction(id?: string): Promise<{ error?: string }
   if (targets.length === 0) return { error: `모르는 액션입니다: ${id}` };
   await writeKeymap(Object.fromEntries(targets.map((a) => [a.id, a.combo])));
   return {};
+}
+
+/** 사용 통계 섹션 층 ① (DESIGN.md §0-11 §끄는 자리) — 다이얼로그가 열릴 때 한 줄이 읽는다.
+ *
+ *  **프롭으로 안 내린다.** 이 다이얼로그를 그리는 자리가 셋이라(두 셸 헤더 · 인증 배너 CTA)
+ *  값 하나 때문에 레이아웃 둘과 컴포넌트 둘의 프롭이 같이 는다. 열리는 순간의 파일 한 줄 읽기다. */
+export async function readAnalyticsAction(): Promise<{ configured: boolean; enabled: boolean }> {
+  return readAnalytics();
+}
+
+/** 사용 통계 섹션 층 ② — 끄기/켜기 버튼 하나.
+ *
+ *  **`analytics_off`는 끄기 직전에 나간다**(§0-11 이벤트 표). 순서가 뒤집히면 `track()`이
+ *  방금 쓴 `enabled: false`를 읽고 그 마지막 한 건을 자기가 버린다 — 그래서 **여기서만**
+ *  `await`한다(다른 트리거는 안 기다린다). 자격값이 없는 빌드에서는 즉시 돌아온다. */
+export async function setAnalyticsAction(
+  enabled: boolean,
+): Promise<{ configured: boolean; enabled: boolean }> {
+  if (!enabled) await track("analytics_off", {});
+  await setAnalyticsEnabled(enabled);
+  return readAnalytics();
 }
 
 /** 설정 다이얼로그의 `다시 읽기` — 워커 파일이 바뀌었을 수 있다. */

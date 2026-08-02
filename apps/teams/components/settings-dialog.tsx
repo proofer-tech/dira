@@ -3,9 +3,9 @@
 /** `설정` 다이얼로그 — 두 셸(`/` · `/p/<project>`)이 헤더 **우측 끝**에 같이 갖는 앱 액션
  *  (DESIGN.md §0-4 자리 표 · §비주얼 §4). 라우트가 아니다.
  *
- *  섹션은 **인증 · 키설정 둘**이다(§0-4 · §0-6). 그릇 이름이 `인증`이 아니라 `설정`인 이유가
- *  "다음 항목이 올 때 자리를 또 옮기지 않는다"였고 키설정이 그 다음 항목이다 — 섹션이 하나 늘 뿐
- *  자리도 라우트도 다이얼로그 폭도 안 바뀐다.
+ *  섹션은 **인증 · 키설정 · 사용 통계 셋**이다(§0-4 · §0-6 · §0-11). 그릇 이름이 `인증`이 아니라
+ *  `설정`인 이유가 "다음 항목이 올 때 자리를 또 옮기지 않는다"였고 키설정이 그 다음, 사용 통계가
+ *  그 다음이다 — 섹션이 하나 늘 뿐 자리도 라우트도 다이얼로그 폭도 안 바뀐다.
  *
  *  인증 층은 셋이다: ①상태 · ②`claude setup-token`을 GUI가 몬다 · ③직접 넣기.
  *  **③은 ②가 된 뒤에도 남는다** — 남의 TUI를 긁는 일이라 깨질 수 있고, 깨지면 여기가 바닥이다.
@@ -18,9 +18,11 @@ import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { RotateCcw, Settings, TriangleAlert } from "lucide-react";
 import {
+  readAnalyticsAction,
   resetKeymapAction,
   saveTokenAction,
   sendSetupCodeAction,
+  setAnalyticsAction,
   setBindingAction,
   startSetupAction,
   pollSetupAction,
@@ -211,6 +213,61 @@ function KeymapSection() {
           <Button variant="ghost" size="sm" disabled={busy} onClick={() => reset()}>
             전부 기본값으로
           </Button>
+        </div>
+      )}
+    </section>
+  );
+}
+
+/** §0-11 §끄는 자리 — 층은 둘이다: ①지금 보내는지 한 줄 ②끄기/켜기 버튼 하나.
+ *
+ *  **`switch`도 `checkbox`도 설치하지 않는다**(§비주얼 §5의 이 판정 문단). 켜짐/꺼짐 둘뿐인
+ *  상태는 라벨이 바뀌는 버튼 하나가 이미 말한다 — 위 인증 섹션의 버튼들과 같은 벌이다.
+ *
+ *  값은 **다이얼로그가 열릴 때** 읽는다(닫히면 이 컴포넌트가 unmount된다). 서버 프롭으로 안
+ *  내리는 이유는 `readAnalyticsAction`의 주석에 있다. */
+function AnalyticsSection() {
+  const [view, setView] = useState<{ configured: boolean; enabled: boolean } | null>(null);
+  const [pending, start] = useTransition();
+
+  useEffect(() => {
+    void readAnalyticsAction().then(setView);
+  }, []);
+
+  return (
+    <section className="space-y-2 border-t pt-4">
+      <h3 className="text-sm font-medium">사용 통계</h3>
+      <p className="text-xs text-muted-foreground">
+        몇 벌이 도는지와 어떤 화면 동작이 있었는지만 익명으로 보냅니다. 경로·프로젝트 이름·티켓
+        내용은 보내지 않습니다.
+      </p>
+
+      {/* 파일을 읽어 오기 전에는 층 둘 다 안 그린다 — 기본값을 먼저 그리면 껐던 사람에게
+          `보내는 중입니다`가 한 번 번쩍인다(그 한 줄이 이 섹션의 유일한 사실이다) */}
+      {view && (
+        <div className="flex items-center justify-between gap-4">
+          {/* ① 자격값이 없으면 켜짐/꺼짐과 무관하게 아무것도 안 나간다 — 그렇게 말한다 */}
+          <p className="text-sm">
+            {!view.configured
+              ? "보내지 않습니다 — 이 빌드에 설정이 없습니다"
+              : view.enabled
+                ? "보내는 중입니다"
+                : "보내지 않습니다 — 껐습니다"}
+          </p>
+          {/* ② 안 보내는 빌드에는 버튼이 없다 — 거기 선 `끄기`는 켜져 있다는 거짓말이다.
+              끌 것이 없는 자리에 끄는 버튼을 두지 않는다(위 한 줄이 이미 전부를 말했다) */}
+          {view.configured && (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={pending}
+              onClick={() =>
+                start(async () => setView(await setAnalyticsAction(!view.enabled)))
+              }
+            >
+              {pending ? "저장 중…" : view.enabled ? "끄기" : "켜기"}
+            </Button>
+          )}
         </div>
       )}
     </section>
@@ -457,6 +514,7 @@ export function SettingsDialog({
         </form>
 
         <KeymapSection />
+        <AnalyticsSection />
       </DialogContent>
     </Dialog>
   );
