@@ -86,6 +86,27 @@ jobs:
       - run: pnpm test
         working-directory: apps/desktop
 
+      # GA4 자격값을 번들에 넣는다 (§0-11 §자격값). **레포 파일에는 안 들어간다** — 시크릿에서
+      # 받아 `apps/desktop/ga.json`으로 떨어뜨리고 `build.files`가 `.app` 안으로 나른다.
+      # 그 파일은 `.gitignore`에 있어서 release.sh의 「워킹 트리가 깨끗하다」 확인에 안 걸린다.
+      #
+      # **없으면 그대로 성공한다** — 인증서 5개와 다른 규칙이다. 저건 없으면 남의 맥에서 안
+      # 열리는 자산이 나가지만, 자격값이 없는 앱은 통계를 안 보낼 뿐 정상 동작한다(§0-11).
+      # 값 둘을 실제로 올리는 것은 사람이 한다. 올라오면 다음 릴리스부터 실린다.
+      - name: GA4 자격값
+        working-directory: apps/desktop
+        env:
+          GA_MEASUREMENT_ID: ${{ secrets.GA_MEASUREMENT_ID }}
+          GA_API_SECRET: ${{ secrets.GA_API_SECRET }}
+        run: |
+          if [ -z "$GA_MEASUREMENT_ID" ] || [ -z "$GA_API_SECRET" ]; then
+            echo "GA 시크릿이 없다 — 통계를 안 보내는 앱으로 굽는다(정상)."
+            exit 0
+          fi
+          # 따옴표·개행이 섞인 값도 안전하게 넣으려고 node로 쓴다(printf면 이스케이프가 샌다).
+          node -e 'require("fs").writeFileSync("ga.json", JSON.stringify({GA_MEASUREMENT_ID: process.env.GA_MEASUREMENT_ID, GA_API_SECRET: process.env.GA_API_SECRET}))'
+          echo "ga.json을 만들었다 — 이 빌드는 통계를 보낸다."
+
       # release.sh가 커밋·태그·push를 한다. 저자가 없으면 git commit이 거기서 죽는다.
       #
       # **되먹임이 없는 이유가 여기 걸려 있다.** bump 커밋은 `apps/desktop/package.json`만

@@ -8,9 +8,14 @@
  *  마지막 `Submit`은 사람이 GitHub에서 누른다. 서버로 가는 것은 `feedback_submit` 하나고
  *  **거기에 의견 본문은 없다**(§0-11 익명 규칙).
  *
- *  **열림 상태를 안 갖는다.** 진입점이 `Help > 의견 보내기` 메뉴 하나라(§0-12) 여는 신호는
- *  main → 렌더러에서 오고 그 배선은 `252fd905`다. 그래서 `open`/`onOpenChange`를 받는다 —
- *  여기서 상태를 들면 배선하는 쪽이 그것을 밖에서 못 연다.
+ *  **여는 신호는 하나다** — `apps/desktop/main.ts`의 `Help > 의견 보내기`가 지금 떠 있는 문서에
+ *  던지는 `dira:feedback` 이벤트다(§0-12 · `252fd905`). 그래서 열림 상태가 여기 산다: 진입점이
+ *  그 메뉴 **하나뿐**이라 밖에서 받을 `open` prop이 갈 곳이 없다. 늘어난 렌더러 노출은 0개다 —
+ *  preload에 새 API가 없고 `ipcRenderer`도 `fs`도 안 넘어온다(§데스크톱 앱 못박는 것 4).
+ *  브라우저(`pnpm dev`)에는 그 신호를 보내는 메뉴가 없어서 이 다이얼로그가 뜨지 않는다(§0-12).
+ *
+ *  **루트 레이아웃에 한 번 선다**(`app/layout.tsx`) — 화면 이동도 리로드도 없이 지금 보고 있는
+ *  화면 위에 떠야 해서 자리가 거기다.
  *
  *  **새 파일인 이유**: 이 다이얼로그는 두 셸 어디서나 떠야 하고(메뉴는 화면을 안 가린다)
  *  기존 파일 어디에 얹어도 나머지 셸이 그 파일을 import한다 — `keymap-provider.tsx`와 같은 축. */
@@ -28,15 +33,17 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 
-export function FeedbackDialog({
-  open,
-  onOpenChange,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
+export function FeedbackDialog() {
+  const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   const [meta, setMeta] = useState<FeedbackMeta | null>(null);
+
+  // main이 던지는 단방향 신호 하나. `window` 이벤트라 그 위에 아무 통로도 안 만든다.
+  useEffect(() => {
+    const show = () => setOpen(true);
+    window.addEventListener("dira:feedback", show);
+    return () => window.removeEventListener("dira:feedback", show);
+  }, []);
 
   // 열릴 때 한 번만 읽는다 — 두 값 다 이 앱 실행 동안 안 바뀐다(§0-11 세션 정의).
   // 다시 물으면 `session_id`의 30분 창만 밀린다.
@@ -49,7 +56,7 @@ export function FeedbackDialog({
   const built = meta && text.trim() ? issueUrl(text, meta) : null;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>의견 보내기</DialogTitle>
@@ -69,7 +76,7 @@ export function FeedbackDialog({
             // 자유 입력은 GA로 안 간다(익명 규칙). 기다리지 않는다: 통계 한 건이 폼을 못 막는다
             void trackEvent("feedback_submit", {});
             setText("");
-            onOpenChange(false);
+            setOpen(false);
           }}
         >
           {/* **천장을 건다**(`field-sizing-content`라 본문만큼 자란다). 없으면 긴 의견에서

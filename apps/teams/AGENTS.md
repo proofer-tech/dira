@@ -11,6 +11,8 @@ apps/teams/
     layout.tsx          html·폰트·TooltipProvider + **키맵을 읽는 유일한 곳**(§0-6 배선 —
                         두 셸이 다 이 아래고 파일 하나짜리 읽기다. 셸마다 읽지 않는다)
                         + `<ScreenView/>` — `screen_view`를 보내는 유일한 자리(§0-11)
+                        + `<FeedbackDialog/>` — 의견 폼(§0-12). 화면 이동 없이 **지금 화면 위에**
+                        떠야 해서 자리가 여기다(닫혀 있으면 안 그린다)
     (list)/page.tsx     프로젝트 목록·등록 (`/`). 라우트 그룹이라 URL은 `/`다
     (list)/loading.tsx  이 그룹만 덮는다 — app/ 최상단에 두면 모든 라우트가 즉시 스트리밍돼
                         레이아웃의 notFound()가 404 상태를 못 세운다(실측)
@@ -142,9 +144,10 @@ apps/teams/
     persona-badge.tsx   persona 값 표시의 유일한 출처 (점+이름 배지 · 점만 그리는 모드).
                         색은 레지스트리에 있고 자리가 5곳이다 — 조회를 자리마다 다시 쓰면
                         어느 화면 하나가 조용히 색 없이 남는다. 팔레트 표는 `lib/urls.ts`
-    feedback-dialog.tsx `의견 보내기` 폼(§0-12) — `textarea` 하나 + 보내기. **열림 상태를 안 갖는다**
-                        (`open`/`onOpenChange`를 받는다): 진입점이 `Help` 메뉴 하나라 여는 신호가
-                        밖(main → 렌더러)에서 온다. 보내기는 `window.open` 하나고
+    feedback-dialog.tsx `의견 보내기` 폼(§0-12) — `textarea` 하나 + 보내기. **여는 신호가 하나다**:
+                        데스크톱 셸의 `Help > 의견 보내기`가 던지는 `dira:feedback` window 이벤트
+                        (`apps/desktop/main.ts` — preload에 새 API가 0개다. 못박는 것 4).
+                        진입점이 그 메뉴 하나뿐이라 열림 상태를 자기가 든다. 보내기는 `window.open` 하나고
                         (`setWindowOpenHandler`가 외부로 보낸다 — **새 IPC 0개**) 서버로 가는 것은
                         `feedback_submit` 하나고 그 길은 `trackEvent` 하나다(§0-11). **의견 본문은 GA로 안 간다**.
                         URL 조립은 `lib/feedback.ts`고 여기는 그리기 + 두 줄 공개뿐이다.

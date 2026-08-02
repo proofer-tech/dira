@@ -22,3 +22,8 @@ next-env.d.ts
 
 # Electron 패키징 산출물 (apps/desktop). electron-builder가 매 빌드마다 다시 만든다
 apps/desktop/dist/
+
+# GA4 자격값 (§0-11). release.yml이 GitHub Actions 시크릿에서 빌드 때 만들고 번들에 실린다.
+# **레포에는 절대 안 들어간다** — 공개 레포이고 GA_API_SECRET은 쓰기 자격이다(§0-11 §자격값).
+# 없는 것이 정상 상태다: 자격값이 없으면 앱은 아무것도 안 보낸다.
+apps/desktop/ga.json

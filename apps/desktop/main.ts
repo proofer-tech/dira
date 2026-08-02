@@ -123,6 +123,27 @@ function extractEngine(): string | null {
   }
 }
 
+/** §0-11 자격값 — **레포에 없다.** `release.yml`이 GitHub Actions 시크릿 둘을 빌드 때 이 파일로
+ *  떨어뜨리고(`.gitignore`에 있다) 패키징 목록(package.json `build.files`)이 `.app` 안으로 나른다.
+ *  main은 값을 보기만 하고 전송은 서버가 한다(`apps/teams/lib/analytics.ts`).
+ *
+ *  **없으면 없는 채로 간다.** 그것이 `pnpm dev`와 손으로 빌드한 `.app`의 정상 상태다 — 자격값이
+ *  없으면 서버가 아무것도 안 보내서(§0-11) 우리 세션이 통계를 오염시키지 않는다. 그래서 실패를
+ *  로그로도 안 남긴다: 없는 것이 정상인 값에 매번 에러 줄이 뜨면 진짜 에러가 묻힌다.
+ *  **짝일 때만 넘긴다** — 한쪽만 있으면 서버는 어차피 안 보낸다(둘 다 있어야가 그쪽 계약이다).
+ *  ponytail: 키 둘짜리 JSON 하나. `.env` 파서도 번들 치환 스텝도 들이지 않는다. */
+function gaCredentials(): Record<string, string> {
+  try {
+    const o: unknown = JSON.parse(readFileSync(fileURLToPath(new URL("ga.json", import.meta.url)), "utf8"));
+    const { GA_MEASUREMENT_ID: id, GA_API_SECRET: secret } = (o ?? {}) as Record<string, unknown>;
+    if (typeof id !== "string" || typeof secret !== "string" || !id || !secret) return {};
+    console.log(`[dira] GA 자격값을 실었습니다 — ${id}`); // 시크릿은 안 찍는다
+    return { GA_MEASUREMENT_ID: id, GA_API_SECRET: secret };
+  } catch {
+    return {};
+  }
+}
+
 function startServer(port: number): ChildProcess {
   const engine = extractEngine();
   // node 바이너리가 PATH에 있다고 가정하지 않는다 — Electron 자신을 노드로 돌린다.
@@ -134,6 +155,10 @@ function startServer(port: number): ChildProcess {
       PORT: String(port),
       HOSTNAME: "127.0.0.1",
       ...(engine ? { DIRA_ENGINE: engine } : {}),
+      // §0-11 — 이 셋이 통계의 전부다. **버전을 넘기는 것이 곧 셸 판정이다**(`shellParams()`:
+      // 값이 있으면 `desktop`, 없으면 `browser`). 손으로 적지 않는다 — package.json이 정본이다.
+      DIRA_APP_VERSION: app.getVersion(),
+      ...gaCredentials(),
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -514,6 +539,27 @@ async function showAbout() {
   else if (response === 2) shell.openExternal("mailto:molmoty@gmail.com");
 }
 
+// ── Help > 의견 보내기 (§0-12) ──────────────────────────────────────────────
+
+/** **늘어난 렌더러 노출이 0개다.** preload에 새 API가 없고 `ipcRenderer`도 `fs`도 안 넘어간다
+ *  (못박는 것 4) — main이 지금 떠 있는 문서에 이벤트 하나를 던지고 끝이다. 듣는 쪽은
+ *  `apps/teams/components/feedback-dialog.tsx` 하나다.
+ *
+ *  **`loadURL`로 다시 열지 않는다**(§0-12): 쓰던 글·펼친 스트림·필터가 날아간다. 지금 보고 있는
+ *  화면 **위에** 다이얼로그가 뜬다 — 화면 이동도 리로드도 없다.
+ *
+ *  창이 숨어 있으면(N1 — 빨간 버튼은 숨긴다) 먼저 꺼낸다. 안 그러면 안 보이는 창에서 폼이 열린다.
+ *  ponytail: 렌더러 크래시로 창이 **파괴된** 뒤 첫 클릭은 신호가 떨어진다(`showWindow`가 창을
+ *  다시 만들고, 그 문서는 아직 리스너를 안 걸었다). 한 번 더 누르면 열린다 — 그 경로를 위해
+ *  로드 완료·하이드레이션까지 기다리는 배선을 만들 값이 없다. */
+function openFeedback() {
+  if (!readyOrigin) return console.log("[dira] 의견 보내기 — 서버가 아직 준비 중입니다");
+  showWindow(readyOrigin);
+  win?.webContents
+    .executeJavaScript(`window.dispatchEvent(new Event("dira:feedback"))`)
+    .catch((e: Error) => console.error(`[dira] 의견 폼을 열지 못했습니다: ${e.message}`));
+}
+
 /** `About dira`의 click을 잡으려면 **`{ role: "appMenu" }` 한 줄을 항목들로 펼쳐야 한다** —
  *  role `about`은 `app.showAboutPanel()`로 직행해서 가로챌 자리가 없다. 그 한 줄이 지금
  *  ⌘Q·⌘H·`Services`를 통째로 낳고 있어서, 펼치면서 하나라도 빠뜨리면 증상이 메뉴가 아니라
@@ -546,6 +592,10 @@ function installAppMenu() {
       { role: "editMenu" },
       { role: "viewMenu" },
       { role: "windowMenu" },
+      // §0-12 — `Window` 다음이고 **항목은 하나다**. `About dira`는 위 앱 메뉴 첫 항목 그대로다
+      // (여기로 안 옮긴다). 메뉴 이름이 영어인 것은 옆의 role 라벨이 영어로 박혀 있어서고,
+      // 우리가 만든 **항목**은 앱 안의 다른 항목들처럼 한글이다(트레이 `열기`·`종료`와 같은 벌).
+      { label: "Help", submenu: [{ label: "의견 보내기", click: openFeedback }] },
     ]),
   );
 }

@@ -27,6 +27,7 @@
       "release-notes.ts",
       "preload.cjs",
       "package.json",
+      "ga.json",
       "trayTemplate.png",
       "trayTemplate@2x.png",
       "node_modules/**/*"

@@ -156,6 +156,23 @@ pnpm dist        # teams 빌드 + 조립 + electron-builder
 PATH를 물어** 서버에 물려 준다 — `.app`에서만 되는·안 되는 것을 볼 때 이 경계를 먼저 의심한다.
 재현은 `env -i HOME=$HOME open -g -na dist/mac-arm64/dira.app`이다(셸 환경을 지우고 띄운다).
 
+## 자식 서버에 넘기는 env
+
+`startServer()` 한 곳이 전부다. 화면이 아는 것은 이 값들뿐이고 main은 값을 보기만 한다.
+
+| 값 | 어디서 오나 |
+|---|---|
+| `PATH` | 로그인 셸이 답한 값 (바로 위) |
+| `DIRA_ENGINE` | 번들의 엔진을 userData로 꺼낸 경로 (못박는 것 8) |
+| `DIRA_APP_VERSION` | `app.getVersion()`. **유무가 곧 셸 판정이다** — 있으면 `desktop`, 없으면 `browser`(§0-11 `shellParams()`) |
+| `GA_MEASUREMENT_ID` · `GA_API_SECRET` | `ga.json`이 있으면 그 안의 두 값 (§0-11) |
+
+**`ga.json`은 레포에 없다**(`.gitignore`). `release.yml`이 GitHub Actions 시크릿 둘에서 빌드 때
+만들고 `build.files`가 `.app` 안으로 나른다 — 공개 레포이고 `GA_API_SECRET`은 그 GA4 속성에
+**쓰는** 자격이다. **없는 것이 정상 상태다**: `pnpm dev`와 손으로 구운 `.app`은 통계를 한 건도
+안 보낸다(우리 세션이 통계를 오염시키지 않는다). 실려 있으면 기동 로그에 한 줄 찍힌다 —
+`[dira] GA 자격값을 실었습니다 — G-…`(시크릿은 안 찍는다).
+
 ## 서명 · 공증 (`5aa9486d`)
 
 **끝났다** — `.app`·`.dmg` 둘 다 `Developer ID Application: Hansol Lim (L9E4Y653DY)`으로
