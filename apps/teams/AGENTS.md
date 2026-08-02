@@ -110,6 +110,14 @@ apps/teams/
                         워커 화면의 열과 상단 합계가 같은 모양을 써야 한다(자리마다 적으면 갈린다).
                         **하단 status bar는 `formatTokens`를 안 쓴다** — 그 칸의 소비량은
                         `toLocaleString()`이다(§비주얼 §26 ⑤가 `1.2M`을 명시적으로 거절했다)
+    analytics.ts        사용 통계 GA4 전송 (§0-11). **규칙 넷이 여기 한 곳에 있다** — 세션 정의
+                        (`install_id`는 `$TICKET_LOCAL/analytics.json`, `session_id`는 모듈 메모리
+                        30분) · 자격값 읽기(`GA_MEASUREMENT_ID`·`GA_API_SECRET`, 없으면 안 보냄) ·
+                        끄기 판정 · 익명 규칙. 트리거 자리에 `if (enabled)`를 흩뿌리지 않는다.
+                        **`gtag.js`를 안 쓴다**(렌더러에 원격 JS를 안 들인다 — 못박는 것 4):
+                        서버가 `mp/collect`로 POST한다. **던지지 않고 호출자는 await하지 않는다**
+                        (Promise를 주는 이유는 하나 — 테스트가 전송을 관찰한다). 이벤트 이름 8개는
+                        `Events` 타입이 닫는다 — 표 밖의 이름은 컴파일이 거부한다(§0-11 표가 단일 출처)
     utils.ts            shadcn cn() — 건드리지 않는다
     *.test.ts           node --test
   components/           손으로 만드는 컴포넌트 (DESIGN.md §5 커스텀)
