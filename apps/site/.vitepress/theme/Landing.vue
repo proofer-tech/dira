@@ -41,6 +41,11 @@ const version = theme.value.diraVersion;
     <a class="btn btn-lg" href="/docs/install">설치 가이드</a>
   </div>
   <p class="cta-note">v{{ version }} · macOS (Apple Silicon) · MIT · 자동 업데이트</p>
+
+  <figure>
+    <img class="shot" src="/shots/02-board.png" alt="dira 보드 화면. 대기·진행중·완료 세 레인에 티켓 카드가 놓여 있다." width="1600">
+    <figcaption>이 화면은 <b>dira가 자기 자신을 만들고 있는 큐</b>다. 완료 387건이 전부 이 레포의 커밋이다.</figcaption>
+  </figure>
 </div>
 
 <section class="wrap">
@@ -109,7 +114,7 @@ const version = theme.value.diraVersion;
         참견은 <q>지금 읽은 것까지만, 한 줄로</q>였다.
         세션은 <code>c.md</code>를 읽지 않고 멈춰 <b>한 줄짜리 파일</b>을 남겼다.
       </figcaption>
-      <p class="arrows"><a href="/docs/barge-in">말 거는 법</a></p>
+      <p class="arrows"><a href="/docs/barge-in">도는 세션에 말 걸기</a></p>
     </figure>
     <figure>
       <img class="shot" src="/shots/07-qa-thread.png" loading="lazy" alt="요구 티켓의 질문·답변 스레드. 질문 아래에 답변 말풍선이 오른쪽으로 붙어 있고, frontmatter에 awaiting 해시가 있다." width="1600">
@@ -119,7 +124,7 @@ const version = theme.value.diraVersion;
     <figure>
       <img class="shot" src="/shots/04-ticket-running.png" loading="lazy" alt="진행중 티켓 상세. 왼쪽에 본문과 Done when 체크리스트, 오른쪽에 frontmatter 표와 관계." width="1600">
       <figcaption>티켓 한 장의 전부. 왼쪽은 사람이 쓴 마크다운, 오른쪽 <code>session_id</code>·<code>pid</code>·<code>owner</code>·<code>inbox</code>는 <b>디스패처가 쓰고 사람은 건드리지 않는다.</b></figcaption>
-      <p class="arrows"><a href="/docs/states">상태 읽는 법</a></p>
+      <p class="arrows"><a href="/docs/states">상태는 파일명</a></p>
     </figure>
   </div>
 </section>
