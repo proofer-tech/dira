@@ -1,3 +1,11 @@
+/* Task 2 리뷰 Minor: 원본 docs/index.html:28의 `html { -webkit-text-size-adjust: 100%;
+   scroll-behavior: smooth; }` 중 scroll-behavior가 이식 과정에서 빠졌다 — 같은 페이지
+   앵커 이동이 스무스 대신 순간이동했다. html 선택자라 `.dira-landing`으로 스코프할 수
+   없어 전역으로 되살린다(-webkit-text-size-adjust·box-sizing은 VitePress base.css가
+   이미 같은 값을 주므로 다시 넣지 않는다). prefers-reduced-motion은 base.css가
+   `scroll-behavior: auto !important`로 덮으므로 접근성 저하는 없다. */
+html { scroll-behavior: smooth; }
+
 /* 랜딩은 VitePress 기본 레이아웃 밖에서 자기 폭을 쓴다. */
 .dira-landing { --vp-c-bg: var(--bg); }
 .dira-landing .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 24px; }
@@ -142,6 +150,13 @@
 }
 .dira-landing .arrows a:hover { border-color: var(--fg); }
 .dira-landing .arrows a::after { content: " →"; color: var(--faint); }
+
+/* ── steps (30초 설명) ──────────────────────────── */
+.dira-landing .steps { list-style: none; margin: 32px 0 0; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+.dira-landing .steps li { border: 1px solid var(--border); border-radius: 12px; padding: 22px; background: var(--panel); }
+.dira-landing .steps b { display: block; margin-bottom: 8px; font-size: 15px; letter-spacing: -0.02em; }
+.dira-landing .steps p { margin: 0; font-size: 14px; color: var(--muted-fg); line-height: 1.65; }
+@media (max-width: 900px) { .dira-landing .steps { grid-template-columns: 1fr; } }
 
 /* ── engine ─────────────────────────────────────── */
 .dira-landing .two { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: start; margin-top: 40px; }
