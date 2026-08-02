@@ -60,6 +60,12 @@ apps/teams/
     scaffold.ts         새 프로젝트 스캐폴딩 (DESIGN.md §0-3). **등록되지 않은 경로에 파일을 쓰는
                         유일한 곳** — 경계가 파일 목록 자체고 전부 `wx`다(있는 파일은 안 덮는다)
     engine.ts           엔진 서브프로세스 호출 (워커 `reap`·`unassign` · `tickets.py find`)
+    kick.ts             즉시 디스패치(§4-5). 사람의 조작이 열린 티켓을 만들거나 되돌리면 그 자리에서
+                        `idle` 워커 하나를 인자 없이 **detach spawn**한다. 부르는 곳은 서버 액션
+                        5곳(`createTicket`·`answerRequirement`·`sendFollowup`·`unassignTicket`·
+                        `saveTicket`). **`engine.ts`에 못 얹는다**: 저긴 `execFile` + 60초 타임아웃이
+                        계약이고("rc와 출력을 그대로 넘긴다") 그 길로 부르면 5~25분짜리 세션을
+                        60초마다 죽인다. 여기는 결과가 없다 — **던지지 않고** 화면에 보고도 없다
     transcript.ts       세션 스트림(§2-1) 읽기 코어. 트랜스크립트 경로 찾기 · 바이트 오프셋 테일 ·
                         jsonl 레코드 → 사건 매핑. **root 밖(`~/.claude/projects`)을 읽는 유일한 곳** —
                         방어는 `session_id` UUID 정규식 하나다(사람 입력을 받지 않는다)

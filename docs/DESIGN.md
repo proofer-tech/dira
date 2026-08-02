@@ -6901,7 +6901,7 @@ developer를 기다릴 것이 0이다.
 | 묶음 | 티켓 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
 | P81 | 즉시 디스패치 스펙 확정 `fbcac7e9` | pm | — | 완료 — §4-5 신설(트리거 5곳 · detach spawn · idle 1개) |
-| P81 | 서버 액션 5곳에서 idle 워커 kick `1160a67f` | developer | — | 대기 |
+| P81 | 서버 액션 5곳에서 idle 워커 kick `1160a67f` | developer | — | 완료 — `lib/kick.ts`(detach spawn). 실측: 발행 → **1초 뒤** DISPATCH, 세션 pid 100초 생존 |
 
 **되묻지 않았다.** 요구가 든 예 셋 중 둘은 화면에 그 액션이 그대로 있고(`답변` =
 `answerRequirement`, `참견` = §2-2), `명시적인 할당`은 이 GUI에 워커를 지목하는 손잡이가 없어서

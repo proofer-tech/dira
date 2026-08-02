@@ -17,6 +17,7 @@ import path from "node:path";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { verifyAttachments, withAttachments } from "@/lib/attachments";
+import { kickIdleWorker } from "@/lib/kick";
 import { NAME_RE, isHash } from "@/lib/paths";
 import { reqTitle, stemOf } from "@/lib/queue";
 import { getProject, resolveConfig } from "@/lib/projects";
@@ -135,6 +136,10 @@ export async function createTicket(
     if (!hash) {
       throw new Error("해시를 10번 뽑았는데 전부 이미 쓰이고 있습니다 — 큐 디렉터리를 확인하세요.");
     }
+
+    // 즉시 디스패치(§4-5). 열린 티켓이 방금 태어났다 — cron을 60초 기다리지 않는다.
+    // 결과를 안 본다: 실패해도 cron이 ≤60초 뒤에 같은 일을 하고, 화면에 보고할 자리도 없다.
+    await kickIdleWorker(project.root);
   } catch (e) {
     return { error: (e as Error).message };
   }

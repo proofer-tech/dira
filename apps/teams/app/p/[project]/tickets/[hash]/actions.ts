@@ -18,6 +18,7 @@ import { verifyAttachments, withAttachments } from "@/lib/attachments";
 import { findTicket, unassign, type UnassignRun } from "@/lib/engine";
 import { followup, type FollowupResult } from "@/lib/followup";
 import { interject, type InterjectResult } from "@/lib/interject";
+import { kickIdleWorker } from "@/lib/kick";
 import { NAME_RE, isHash, resolveWithin } from "@/lib/paths";
 import { findTranscript, sessionIdOf, tailEvents, type StreamEvent } from "@/lib/transcript";
 import {
@@ -169,7 +170,10 @@ export async function sendFollowup(
     const config = await resolveConfig(project);
     const attached = await verifyAttachments(project, attachments);
     const r = await followup(project.root, config, stem, withAttachments(text, attached));
-    if (r.ok) revalidatePath(`/p/${projectId}`);
+    if (r.ok) {
+      revalidatePath(`/p/${projectId}`);
+      await kickIdleWorker(project.root); // §4-5 — 이어받기는 **새 열린 티켓 한 장**이다
+    }
     return r;
   } catch (e) {
     // 여기 오는 건 프로젝트 조회·설정 해석이 던진 것뿐이다 — 모드 어긋남이 아니므로 `other`다.
@@ -233,6 +237,9 @@ export async function saveTicket(_prev: SaveState, form: FormData): Promise<Save
     await writeTicket(t.path, { title, kind, persona }, body);
     revalidatePath(`/p/${projectId}/tickets/${encodeURIComponent(t.stem)}`);
     revalidatePath(`/p/${projectId}`); // 보드의 title·kind·persona 컬럼
+    // §4-5 — 편집으로 persona가 붙거나 deps 한 줄이 빠지면 그 순간 디스패치 가능해진다.
+    // "정말 가능해졌나"는 판정하지 않는다(그러면 §큐 판정이 두 벌이다) — 그냥 tick 한 번이다.
+    await kickIdleWorker(t.root);
     return { ok: true };
   } catch (e) {
     return { error: (e as Error).message };
@@ -259,6 +266,7 @@ export async function unassignTicket(projectId: string, hash: string): Promise<U
     const r = await unassign(t.root, t.stem);
     revalidatePath(`/p/${projectId}/tickets/${encodeURIComponent(t.stem)}`);
     revalidatePath(`/p/${projectId}`);
+    if (r.ok) await kickIdleWorker(t.root); // §4-5 — `.wip` → 열림. 되돌린 티켓이 바로 다시 물린다
     return r;
   } catch (e) {
     return { ok: false, output: (e as Error).message, worker: null };
@@ -358,6 +366,8 @@ export async function answerRequirement(_prev: SaveState, form: FormData): Promi
 
     revalidatePath(`/p/${projectId}/tickets/${encodeURIComponent(t.stem)}`);
     revalidatePath(`/p/${projectId}`); // 배지가 `deps 대기` → `대기`로 바뀐다 = 재큐의 증거
+    // §4-5 — 답변 파일이 태어나 `<R>`의 deps가 충족됐다. 그 재큐를 cron이 아니라 지금 문다.
+    await kickIdleWorker(project.root);
     return { ok: true };
   } catch (e) {
     return { error: (e as Error).message };
