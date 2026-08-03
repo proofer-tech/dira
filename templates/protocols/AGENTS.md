@@ -111,6 +111,6 @@ $ git -C <프로젝트> diff --cached --stat              # 무엇이 걸려 있
 
 | 문서 | 무엇 |
 |---|---|
-| `.dira/protocols/tickets.md` | 티켓 파일 작성법. **새 티켓 만들기 전에 읽는다** |
+| `.dira/protocols/tickets.md` | 티켓 쪼개는 기준. 문법은 코어 `CORE-TICKETS.md`에 있다 |
 | `.dira/personas/<이름>/PROFILE.md` | 각 역할의 권한·판단 기준 |
 | `<프로젝트 스펙 문서>` | (프로젝트마다 채운다) |
