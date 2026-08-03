@@ -185,6 +185,34 @@ test("lastActivity — 히트 0이면 null (읽을 파일이 없어도 null)", a
   assert.equal(await lastActivity(path.join(tmp, "empty.jsonl")), null);
 });
 
+test("lastActivity — 요약이 빈 tool_use는 건너뛰고 그 앞의 히트를 준다 (§1-1 §개정)", async () => {
+  const f = path.join(tmp, "last-empty-summary.jsonl");
+  writeFileSync(
+    f,
+    assistant([{ type: "tool_use", name: "Read", input: { file_path: `${APP_CWD}/lib/queue.ts` } }]) +
+      // `Bash`의 `description`은 옵션이라 자주 없고, `Grep`·`Glob`은 아예 요약을 안 받는다
+      assistant([{ type: "tool_use", name: "Bash", input: { command: "ls" } }]) +
+      assistant([{ type: "tool_use", name: "Grep", input: { pattern: "x" } }]),
+  );
+  const e = await lastActivity(f);
+  assert.equal(e?.label, "Read"); // 도구 목록이 아니라 *세울 글자가 없다*로 갈린다
+  assert.equal(e?.summary, `${APP_DIR}/lib/queue.ts`);
+});
+
+test("lastActivity — 한 레코드 안에서 text가 요약 빈 tool_use를 이긴다 (§1-1 §개정)", async () => {
+  const f = path.join(tmp, "last-text-wins.jsonl");
+  writeFileSync(
+    f,
+    assistant([
+      { type: "text", text: "테스트를 돌려 본다" },
+      { type: "tool_use", name: "Bash", input: { command: "pnpm test" } },
+    ]),
+  );
+  const e = await lastActivity(f);
+  assert.equal(e?.kind, "text");
+  assert.equal(e?.body, "테스트를 돌려 본다");
+});
+
 test("lastActivity — 깨진 줄·반쪽 줄을 만나도 멈추지 않고 계속 올라간다", async () => {
   const f = path.join(tmp, "last-broken.jsonl");
   const whole = assistant([{ type: "tool_use", name: "Write", input: { file_path: `${APP_CWD}/x.ts` } }]);

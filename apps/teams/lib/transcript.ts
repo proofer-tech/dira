@@ -128,10 +128,16 @@ export async function tailEvents(
 
 /** 이 세션이 **방금 한 일** 하나 — `.wip` 칸반 카드 맨 아래 줄의 값이다(§1-1).
  *
- *  파일 **전문**을 읽고 **뒤에서부터** 줄 단위로 훑어 첫 `tool_use`·assistant `text`에서 멈춘다.
- *  `tool_result`·`thinking`·`prompt`·`interject`는 *진행중이다*만 말하는데 그건 이미 셋이 말한다
- *  (레인 · §18 점 · §19 워커 마크) — 걸러도 갱신은 산다(§1-1 실측: 남는 둘의 간격 p50 8.6s).
- *  히트 0 · 읽기 실패는 둘 다 `null`이고 화면은 **줄 자체를 안 세운다**(§1-1 §없을 때 · §경계).
+ *  파일 **전문**을 읽고 **뒤에서부터** 줄 단위로 훑어 **세울 글자가 있는** 첫 `tool_use`·assistant
+ *  `text`에서 멈춘다. `tool_result`·`thinking`·`prompt`·`interject`는 *진행중이다*만 말하는데 그건
+ *  이미 셋이 말한다(레인 · §18 점 · §19 워커 마크) — 걸러도 갱신은 산다(§1-1 실측: 남는 둘의
+ *  간격 p50 8.6s). 히트 0 · 읽기 실패는 둘 다 `null`이고 화면은 **줄 자체를 안 세운다**
+ *  (§1-1 §없을 때 · §경계).
+ *
+ *  **요약이 빈 `tool_use`는 안 고르고 뒤로 더 훑는다**(§1-1 §개정 · 요구 `d8772349`). 그 줄이
+ *  `Bash`처럼 도구 이름만 서는 것이 실측 히트의 8.2%(화면 시간 8.5%)였다. 지우지 않고 물러서는
+ *  이유는 지우면 카드가 24px 줄었다 늘었다 하며 레인 안 카드를 밀어서다(§36 §버린 안). 물러선
+ *  값의 나이는 p50 16.9초 · p90 119.1초이고, 뒤로 더 훑는 사건 수는 p50 2 · 최대 27이다.
  *
  *  **꼬리 창으로는 못 맞힌다.** 거대한 `tool_result` 한 줄이 창을 통째로 먹어서(실측 한 줄 최대
  *  1307KB) 64KB 창의 적중률이 90.00%다 — 놓치는 조건이 *방금 큰 도구 결과가 왔을 때*라
@@ -163,7 +169,14 @@ export async function lastActivity(file: string): Promise<StreamEvent | null> {
     }
     // 같은 레코드 안에서는 뒤 블록이 더 나중이다(assistant 한 장이 thinking+text+tool_use를 담는다)
     const hit = recordToEvents(rec)
-      .filter((e) => e.kind === "tool_use" || e.kind === "text")
+      .filter(
+        (e) =>
+          (e.kind === "tool_use" || e.kind === "text") &&
+          // **세울 글자가 없으면 안 고른다**(§1-1 §개정). 화면(§36 `wipLine`)이 세우는 것과 같은
+          // 식이다 — `label`이 있으면 `summary`, 없으면 `body` 첫 줄. 도구 이름을 나열하지
+          // 않는 이유는 지목된 `Bash`(87.6%) 말고 나머지 12.4%도 성질이 같아서다.
+          (e.label ? e.summary : e.body.split("\n")[0]).trim() !== "",
+      )
       .pop();
     if (hit) return hit;
   }
