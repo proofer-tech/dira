@@ -9,6 +9,7 @@ import { notFound } from "next/navigation";
 import {
   Bell,
   CircleDot,
+  Clock,
   CloudOff,
   MessageSquareReply,
   TriangleAlert,
@@ -24,7 +25,7 @@ import {
   ProjectSwitcher,
 } from "@/components/project-switcher";
 import { SettingsDialog, type AuthView } from "@/components/settings-dialog";
-import { StatusBadge, daysSince } from "@/components/status-badge";
+import { StatusBadge, daysSince, statusLabel } from "@/components/status-badge";
 import { RequestDialog, UnassignButton } from "@/components/ticket-ui";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -33,7 +34,7 @@ import { PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { readAuth } from "@/lib/auth";
 import { readSummary, readProjects } from "@/lib/projects";
 import { engineLimits, listUsage, type EngineLimit } from "@/lib/usage";
-import { engineName } from "@/lib/workers";
+import { engineName, workerGroups } from "@/lib/workers";
 import { tildePath, timeLabel } from "@/lib/urls";
 import { cn } from "@/lib/utils";
 
@@ -92,6 +93,10 @@ export default async function ProjectLayout({
         // 배너가 쓰는 그 함수 그대로다(두 벌 적지 않는다). 소비량 폴백은 워커별 합을 엔진으로
         // 접어야 해서 실효 이름도 같이 든다. `readSummary`가 이미 읽은 워커라 **새 fs 읽기 0**.
         engines: s.workers.map((w) => ({ worker: w.effName, engine: engineName(w.engine) })),
+        // §1-2 idle 워커 풀용. 바로 위 `engines` 행과 **같은 `s.workers`**를 한 번 더 접는
+        // 것뿐이라 새 fs 읽기 0 · 서브프로세스 0이고, 보드 툴바에서 종전 워커 조회 1회가
+        // 통째로 빠진다(§1-2 §비용). 빈 그룹은 안 담기므로 `groups.length > 0`이 곧 **워커 > 0**이다.
+        groups: workerGroups(s.workers),
       };
     }),
   );
@@ -99,6 +104,14 @@ export default async function ProjectLayout({
   const root = projects.find((t) => t.id === id)!.root;
   // 칸의 순서 = 워커가 선 순서. 중복은 접는다 — 같은 엔진을 무는 워커가 둘이어도 한도는 하나다.
   const engines = [...new Set(current.engines.map((w) => w.engine))].filter(Boolean);
+  // idle 워커 풀의 값(§1-2 · §비주얼 §38). 필터도 검색도 이 값을 안 좁힌다 — 셸이 그리므로
+  // 구조적으로 못 좁힌다. `idle`이 0개면 값 자리에 문장이 온다(§38 §문구 둘). `전원 running`은
+  // `running`이 하나라도 있을 때만 참이다 — `crontab -l`이 실패하면 전원 `stopped`가 되고
+  // 그때는 아는 것만 말한다(`없음`).
+  const idle = current.groups.find((g) => g.status === "idle");
+  const idlePool =
+    idle?.names.join(" ") ??
+    (current.groups.some((g) => g.status === "running") ? "없음 — 전원 running" : "없음");
   // 토큰은 머신당 하나라 프로젝트 요약에 들어 있지 않다(§0-4). 증상("내 큐가 안 돈다")이
   // 나타나는 화면이 여기라 판정도 여기서 한다. 값은 헤더 `설정` 버튼과 배너 CTA가 같이 쓴다 —
   // 진입점 둘이 같은 컴포넌트를 두 번 쓰고 전역 상태는 만들지 않는다(§0-4).
@@ -236,8 +249,11 @@ export default async function ProjectLayout({
           `main` 안에 갇혀 있어(§비주얼 §4) 헤더 다음 형제로 서기만 하면 뷰포트 바닥에 붙는다.
           `footer`가 `body` 직계라 `contentinfo` 랜드마크가 공짜다(`role`을 손으로 안 붙인다).
           **워커가 0개면 노드 자체가 없다** — 빈 28px을 남기면 보드가 이유 없이 짧아진다.
-          버튼이 0개고 `aria-live`도 없다: 이 바는 말하기만 한다(§0-8 · §26 ①). */}
-      {engines.length > 0 && (
+          버튼이 0개고 `aria-live`도 없다: 이 바는 말하기만 한다(§0-8 · §26 ①).
+          **조건이 `엔진 > 0`이 아니라 `워커 > 0`이다**(§1-2 §빈 상태 둘) — `TICKET_ENGINE`을
+          못 읽은 워커만 있으면 엔진 칸이 0개인데, 그때도 idle 풀은 말할 것이 있다. 엔진 칸이
+          0개여도 높이는 `h-7` 그대로다. */}
+      {current.groups.length > 0 && (
         <footer className="flex h-7 shrink-0 items-center gap-6 overflow-hidden border-t bg-background px-6">
           {/* 값을 여기서 `await`하면 외부 GET(최대 5초)이 셸 전체를 붙잡아 보드가 그만큼 늦는다.
               경계를 세워 **껍데기와 엔진 이름을 먼저 세우고 게이지·`%`는 도착하면 채운다**
@@ -250,6 +266,29 @@ export default async function ProjectLayout({
           >
             <EngineCells root={root} workers={current.engines} engines={engines} />
           </Suspense>
+          {/* idle 워커 풀 — 바의 마지막 자식 · `ml-auto`로 오른쪽 끝(§비주얼 §38 §자리).
+              **그릇을 안 갖는다**: 이 바에 그릇이 하나도 없어서 얹으면 유일하게 누를 것처럼
+              보인다. 주어가 머신(엔진 한도)에서 프로젝트(이 큐의 워커)로 바뀌는 것은 넓은 폭에선
+              빈칸이, 좁은 폭에선 앞머리 `Clock`이 긋는다 — `·`는 엔진 칸의 절 구분자라 안 쓴다.
+              `Suspense` 밖이라 껍데기와 같이 즉시 선다(값이 이미 손에 있다 — §38 §다섯 상태 로딩).
+              묶는 컴포넌트를 안 만든다 — `// ponytail: 두 번째 자리가 생기면 그때 묶는다` */}
+          <div className="ml-auto flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+            <Clock aria-hidden className="size-3 shrink-0" />
+            {/* 라벨은 §2 워커 4상태 표의 말이다 — 손으로 적지 않는다(`유휴`를 만들지 않는다).
+                `sr-only` 접두어로 낭독이 `idle 워커 w3 w9`가 된다: 앞에 읽히는 것이 엔진 한도라
+                낱말 하나로 주어를 안 바꾸면 `idle`이 엔진의 상태로 들린다(§38 §접근성) */}
+            <span className="shrink-0">
+              {statusLabel("idle")}
+              <span className="sr-only"> 워커</span>
+            </span>
+            {/* 자른다 — 이 바는 `h-7` + `overflow-hidden`이라 감기면 **세로로** 잘려 라벨까지
+                사라진다(§1-2 §자르기 개정). `truncate`는 값 `<span>`에만 걸고(풀에 걸면 `…`가
+                안 선다) 부모의 `min-w-0`이 그것을 실제로 걸리게 한다. `max-w-*`는 없다 —
+                바의 마지막 요소라 뒤에 밀 것이 없고, 상한을 얹으면 넓은 화면에서 이유 없이 자른다 */}
+            <span className="truncate font-mono" title={idlePool}>
+              {idlePool}
+            </span>
+          </div>
         </footer>
       )}
     </>
