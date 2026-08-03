@@ -106,6 +106,8 @@ export default async function ProjectLayout({
   const auth = {
     path: tildePath(rawAuth.path, home),
     savedAt: rawAuth.savedAt,
+    // 층 ⓪은 **찾은 절대경로 그대로**다 — 여러 벌 깔린 맥에서 어느 것을 쓰는지가 그 줄에 있다(§0-4 ⓪)
+    cli: rawAuth.cli,
     // 헤더 버튼의 `인증 필요`는 머신 스코프라 **등록된 프로젝트 전부**를 보고 끈다 —
     // 전부 읽었고 전부 claude가 0일 때만 꺼진다(§0-4). 배너는 그 프로젝트만 본다(`current.claude`).
     claudeUsed: items.some((t) => t.claude),

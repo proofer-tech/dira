@@ -50,6 +50,9 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 export type AuthView = {
   path: string;
   savedAt: string | null;
+  /** 층 ⓪ 준비물 — `claude` 실행파일을 찾은 절대경로, 없으면 `null`. 판정은 서버의
+   *  `findClaude()`고 층 ②가 실제로 모는 값과 같다(§0-4 ⓪). */
+  cli: string | null;
   /** claude 엔진 워커가 어딘가에 있는가 — **끄는 쪽에 증거가 필요하다**(§0-4). 등록된 프로젝트를
    *  전부 읽었고 그 전부에서 claude가 0일 때만 `false`고, 그때만 `인증 필요`가 안 뜬다.
    *  못 읽은 프로젝트·프로젝트 0건은 판정 불가라 `true`다. 판정은 부르는 쪽(서버)이 한다. */
@@ -382,6 +385,19 @@ export function SettingsDialog({
           <p className="text-xs text-muted-foreground">
             워커가 Claude에 붙을 때 쓰는 장기 토큰입니다. 이 컴퓨터에 하나뿐입니다.
           </p>
+
+          {/* ⓪ 준비물 — 한 줄. 없으면 설치를 대신하지도 바깥으로 링크하지도 않는다(§0-4 ⓪) */}
+          {auth.cli ? (
+            <p className="text-sm">
+              claude CLI —{" "}
+              <span className="font-mono text-xs break-all text-muted-foreground">{auth.cli}</span>
+            </p>
+          ) : (
+            <p className="flex items-center gap-2 text-sm">
+              <TriangleAlert aria-hidden className="size-4 shrink-0 text-status-stale" />
+              claude CLI를 찾지 못했습니다 — 워커가 세션을 띄우지 못합니다
+            </p>
+          )}
 
           {/* ① 상태 — 한 줄. 배지를 세우지 않는다(§0-4) */}
           {savedAt ? (

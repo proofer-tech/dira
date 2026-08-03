@@ -21,12 +21,17 @@ export type AuthStatus = {
   /** 파일이 없으면 `null`. 있으면 mtime을 CLI `list`와 같은 표기로.
    *  **유효한지는 판정하지 않는다** — 다음 디스패치에서 드러난다(§0-4). */
   savedAt: string | null;
+  /** 준비물 층 ⓪ — `claude` 실행파일의 절대경로, 없으면 `null`(§0-4 ⓪).
+   *  버전을 묻지 않는다: 서버 렌더에 남의 프로세스를 붙이지 않는다. */
+  cli: string | null;
 };
 
 export async function readAuth(): Promise<AuthStatus> {
   const p = tokenPath();
   const s = await stat(p).catch(() => null);
-  return { path: p, savedAt: s?.isFile() ? when(s.mtime) : null };
+  // 층 ②가 몰 대상을 고르는 **그 함수** 그대로다 — 두 벌로 적으면 "있다고 했는데 눌렀더니
+  // 없다"가 생긴다(§0-4 ⓪). PATH 훑기 몇 회라 서버 렌더에 붙여도 싸다.
+  return { path: p, savedAt: s?.isFile() ? when(s.mtime) : null, cli: findClaude() };
 }
 
 /** 붙여 넣은 값을 저장할 형태로 만든다. 못 쓰면 사유를 던진다.

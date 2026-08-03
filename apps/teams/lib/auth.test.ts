@@ -190,6 +190,22 @@ test("startSetup — claude가 PATH에 없으면 사유가 사람 말이다 (127
   assert.strictEqual(findClaude(), path.join(BIN, "claude"));
 });
 
+/** 층 ⓪ — 화면이 그리는 값은 `readAuth().cli`고 그 판정은 층 ②가 모는 `findClaude()` 그대로다.
+ *  두 벌로 적으면 "있다고 했는데 눌렀더니 없다"가 생긴다(§0-4 ⓪). 픽스처는 위 PATH 스텁 그대로다. */
+test("readAuth — CLI 경로를 같이 돌려주고, 없으면 null이다 (판정은 findClaude 하나)", async () => {
+  stubClaude("exit 0");
+  assert.strictEqual((await readAuth()).cli, path.join(BIN, "claude"));
+  assert.strictEqual((await readAuth()).cli, findClaude()); // 화면이 보는 값 = 버튼이 쓰는 값
+
+  const real = process.env.PATH;
+  process.env.PATH = "/usr/bin:/bin:/usr/sbin:/sbin"; // launchd 기본값 = 스텁이 안 보인다
+  try {
+    assert.strictEqual((await readAuth()).cli, null);
+  } finally {
+    process.env.PATH = real;
+  }
+});
+
 test("findClaude — 실행 권한이 없거나 디렉터리면 건너뛴다", () => {
   const shadow = mkdtempSync(path.join(tmpdir(), "fst-shadow-"));
   process.on("exit", () => rmSync(shadow, { recursive: true, force: true }));

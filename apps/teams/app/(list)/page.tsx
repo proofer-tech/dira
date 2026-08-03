@@ -59,7 +59,7 @@ export default async function Home() {
   return (
     <ProjectsSection
       empty={rows.length === 0}
-      auth={{ path: tildePath(auth.path, home), savedAt: auth.savedAt, claudeUsed }}
+      auth={{ path: tildePath(auth.path, home), savedAt: auth.savedAt, cli: auth.cli, claudeUsed }}
       home={home}
       registryError={
         registryError ? { message: registryError, openCmd: `open -e "${registryPath()}"` } : null
