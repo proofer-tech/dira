@@ -2,7 +2,17 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
-@custom-variant dark (&:is(.dark *));
+/* 조건이 둘이다(§비주얼 §0-1 표 ①). `.dark` 조상 = §37이 라이트에서 검은 패널을 세우는
+   손잡이고, 미디어 쿼리 = 이 앱의 다크모드 배선(토글 UI 없음 · §0). **클래스 조건을 지우지
+   않는다** — 지우면 §37과 그 티켓이 조용히 깨진다. */
+@custom-variant dark {
+  &:is(.dark *) {
+    @slot;
+  }
+  @media (prefers-color-scheme: dark) {
+    @slot;
+  }
+}
 
 @theme inline {
   --color-background: var(--background);
@@ -101,6 +111,9 @@
   /* 나란히 선 영역이 자기 몸을 갖는 면(§비주얼 §33). 라이트는 고른 값이 아니라 상한이다 —
      이 위의 `--muted-foreground`가 4.53이고 한 단만 내려도(0.98) 4.47로 AA가 깨진다. */
   --surface: oklch(0.985 0 0);
+
+  /* 밝은 스크롤바·밝은 native 입력칸이 어두운 페이지에 남지 않게 한다(§비주얼 §0-1 표 ③) */
+  color-scheme: light dark;
 }
 
 .dark {
@@ -145,6 +158,53 @@
   --surface: oklch(0.18 0 0);
 }
 
+/* 위 `.dark` 블록과 같은 값 한 벌(§비주얼 §0-1 표 ②). 순수 CSS로 한 규칙을 "`.dark` 조상이
+   있거나 OS가 다크" 두 조건에 동시에 걸 수 없어서 값이 두 벌이다 — 짝을 붙여 둔 이유가
+   표류를 한 화면에서 보는 것이다. **값의 정본은 §비주얼 §1·§12 표이고 여기서 손으로 고치지
+   않는다.** 위를 고치면 아래도 같이 고친다. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: oklch(0.145 0 0);
+    --foreground: oklch(0.985 0 0);
+    --card: oklch(0.205 0 0);
+    --card-foreground: oklch(0.985 0 0);
+    --popover: oklch(0.205 0 0);
+    --popover-foreground: oklch(0.985 0 0);
+    --primary: oklch(0.922 0 0);
+    --primary-foreground: oklch(0.205 0 0);
+    --secondary: oklch(0.269 0 0);
+    --secondary-foreground: oklch(0.985 0 0);
+    --muted: oklch(0.269 0 0);
+    --muted-foreground: oklch(0.708 0 0);
+    --accent: oklch(0.269 0 0);
+    --accent-foreground: oklch(0.985 0 0);
+    --destructive: oklch(0.704 0.191 22.216);
+    --border: oklch(1 0 0 / 10%);
+    --input: oklch(1 0 0 / 15%);
+    --ring: oklch(0.556 0 0);
+    --chart-1: oklch(0.87 0 0);
+    --chart-2: oklch(0.556 0 0);
+    --chart-3: oklch(0.439 0 0);
+    --chart-4: oklch(0.371 0 0);
+    --chart-5: oklch(0.269 0 0);
+    --sidebar: oklch(0.205 0 0);
+    --sidebar-foreground: oklch(0.985 0 0);
+    --sidebar-primary: oklch(0.488 0.243 264.376);
+    --sidebar-primary-foreground: oklch(0.985 0 0);
+    --sidebar-accent: oklch(0.269 0 0);
+    --sidebar-accent-foreground: oklch(0.985 0 0);
+    --sidebar-border: oklch(1 0 0 / 10%);
+    --sidebar-ring: oklch(0.556 0 0);
+
+    --status-active: oklch(0.75 0.15 258);
+    --status-blocked: oklch(0.8 0.13 80);
+    --status-done: oklch(0.76 0.14 155);
+    --status-stale: oklch(0.75 0.15 25);
+
+    --surface: oklch(0.18 0 0);
+  }
+}
+
 /* 페르소나 색 — 상태 색과 **다른 토큰 그룹**이다(DESIGN.md §비주얼 §12). 상태 4개는 뜻이
    박혀 있고 이 8개는 사람이 임의로 고르는 신원 표식이라 뜻이 없다. 빨강 계열(hue 0~40)은
    `--status-stale`이 독점하므로 팔레트에서 뺐다. 명도는 모드마다 하나로 고정(라이트 0.58 ·
@@ -169,6 +229,20 @@
   --persona-blue: oklch(0.76 0.12 270);
   --persona-violet: oklch(0.76 0.165 310);
   --persona-pink: oklch(0.76 0.17 345);
+}
+
+/* 위 `.dark` 블록과 같은 값 한 벌(§비주얼 §0-1 표 ②). 정본은 §비주얼 §12 표다 */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --persona-orange: oklch(0.76 0.15 45);
+    --persona-yellow: oklch(0.76 0.155 90);
+    --persona-green: oklch(0.76 0.17 140);
+    --persona-teal: oklch(0.76 0.135 180);
+    --persona-sky: oklch(0.76 0.15 230);
+    --persona-blue: oklch(0.76 0.12 270);
+    --persona-violet: oklch(0.76 0.165 310);
+    --persona-pink: oklch(0.76 0.17 345);
+  }
 }
 
 @theme inline {
