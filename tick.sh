@@ -5,6 +5,7 @@
 #   <루트>/workers/w1.sh              티켓 1건 디스패치 (cron 진입점)
 #   <루트>/workers/w1.sh list         열린 티켓 큐 상태
 #   <루트>/workers/w1.sh unassign H   티켓 H의 할당(session_id) 해제 -> 큐 복귀
+#                        (산 세션이면 거부하고 exit 3. --force면 그 pid를 죽여서 푼다)
 #   <루트>/workers/w1.sh reap         스테일 수거만 1회
 #   <루트>/workers/w1.sh dryrun       실행 없이 선정 결과만 출력
 # 워커 계약(설정 가능한 값)은 worker.sh.example 참조.
@@ -76,7 +77,14 @@ case "$CMD" in
   list)
     python3 "$PY" list "$TICKET_ROOT"; exit $? ;;
   unassign)
-    H="${2:-}"; [ -z "$H" ] && { echo "사용법: $(basename "$0") unassign <티켓해시>"; exit 2; }
+    USAGE="사용법: $(basename "$0") unassign <티켓해시> [--force]"
+    H="${2:-}"; [ -z "$H" ] && { echo "$USAGE"; exit 2; }
+    # --force = 산 세션을 죽여서 푼다. 그 밖의 인자는 사용법(exit 2).
+    FORCE=""; shift 2
+    for a in ${@+"$@"}; do
+      [ "$a" = "--force" ] && { FORCE=1; continue; }
+      echo "$USAGE" >&2; exit 2
+    done
     P=$(python3 "$PY" find "$TICKET_ROOT" "$H") || exit 1
     # 산 세션을 두고 할당만 풀면 티켓이 다시 열려 두 워커가 같은 티켓을 문다
     # (2026-08-01 실사고: b7bacafb·a461c2f7이 각각 세션 2개를 달았다). 죽은 뒤에 풀어라.
@@ -104,9 +112,45 @@ case "$CMD" in
       done
     fi
     if [ -n "$ALIVE" ]; then
-      echo "거부: $H 의 세션이 아직 살아 있다($ALIVE). 먼저 끝내거나 죽인 뒤 다시 시도하세요." >&2
-      log "UNASSIGN-DENY $H $ALIVE 생존"
-      exit 1
+      # 죽일 수 있는 것은 pid 갈래뿐이다. session= 갈래(handclaim이 조상 pid를 못 찾은 티켓)는
+      # 강제도 대상이 없다 - 종전 문구를 재사용하지 않는다. 이미 강제를 시도한 사람에게
+      # "죽인 뒤 다시 시도하세요"는 할 말이 아니다.
+      case "$ALIVE" in
+        session=*)
+          echo "거부: $H 의 세션이 살아 있는데 티켓에 pid가 없다($ALIVE). 강제로 끊을 대상이 없으니 그 세션을 직접 끝내야 한다." >&2
+          log "UNASSIGN-DENY $H $ALIVE pid 없음"
+          exit 1 ;;
+      esac
+      if [ -z "$FORCE" ]; then
+        echo "거부: $H 의 세션이 아직 살아 있다($ALIVE). 먼저 끝내거나 죽인 뒤 다시 시도하세요." >&2
+        log "UNASSIGN-DENY $H $ALIVE 생존"
+        # 3 = 산 세션이라 거부했다(--force면 풀 수 있다). 화면이 이 코드로 확인을 띄운다 -
+        # 문구를 정규식으로 읽으면 문구를 고치는 순간 확인이 조용히 사라진다.
+        exit 3
+      fi
+      # 강제: pid를 죽이면 그 세션의 부모 tick.sh가 wait에서 실패 판정으로 떨어져 이미
+      # clear + release를 한다. 새 상태 전이가 아니라 그 경로를 밟게 하고 결과를 기다리는 것이다.
+      kill -TERM "$UPID" 2>/dev/null
+      log "UNASSIGN-FORCE $H $ALIVE 강제 중단"
+      N=0
+      while [ -e "$P" ] && [ "$N" -lt 15 ]; do sleep 1; N=$((N+1)); done
+      if [ -e "$P" ]; then
+        # 손 클레임 티켓(tickets.py handclaim)에는 풀어 줄 부모가 없다 - 여기서 우리가 푼다.
+        # 단, pid가 아직 살아 있으면 풀지 않는다. 산 세션을 두고 할당만 푸는 것이 바로
+        # 2026-08-01 실사고(b7bacafb·a461c2f7)의 원인이다.
+        # ps는 좀비(부모가 아직 wait 안 한 죽은 자식)도 "있다"고 답한다. 그건 도는 세션이 아니다.
+        case "$(ps -p "$UPID" -o state= 2>/dev/null | tr -d ' ')" in
+          ''|Z*) ;;
+          *) echo "실패: $H 의 pid $UPID 가 ${N}s 뒤에도 살아 있다. 할당은 그대로 둔다." >&2
+             log "UNASSIGN-FORCE $H pid=$UPID 안 죽음 - 해제 보류"
+             exit 1 ;;
+        esac
+        python3 "$PY" clear "$P" || exit 1
+        RP=$(python3 "$PY" release "$P") || exit 1
+        [ "$RP" != "$P" ] && echo "백로그 복귀: $(basename "$RP")"
+      fi
+      log "UNASSIGN $H 강제(pid=$UPID ${N}s)"; echo "강제 할당 해제: $H"
+      exit 0
     fi
     python3 "$PY" clear "$P" || exit 1
     RP=$(python3 "$PY" release "$P") || exit 1
@@ -394,6 +438,10 @@ try: o = json.loads(sys.stdin.readline())
 except Exception: sys.exit(1)
 sys.exit(0 if isinstance(o, dict) and o.get("type") == "result" else 1)'
 }
+# TIMEOUT과 KILLED를 가르는 값은 경과다(§2-5 §로그). 사람이 죽이든 감시자가 죽이든 신호는 같은
+# 143이라, 경과를 안 보면 21초 만에 죽은 세션이 "상한 초과"로 기록된다. 감시자의 시계와 같은
+# 자리에서 잡는다 - 그 앞의 주입 대기(TICKET_FEED_TIMEOUT)는 세션이 돈 시간이 아니다.
+T0=$SECONDS
 ( SECONDS=0
   while [ "$SECONDS" -lt "$TICKET_MAXRUN" ]; do
     kill -0 "$CPID" 2>/dev/null || exit 0
@@ -451,7 +499,13 @@ if [ -n "${FAILED:-}" ]; then
     log "FAIL $THASH 세션이 result is_error로 끝났다 -> 할당 회수 + 백로그 복귀. 로그 $(basename "$LOGF")"
   else
     case $RC in
-      143|137) log "TIMEOUT $THASH ${TICKET_MAXRUN}s 초과 강제종료 -> 할당 회수 + 백로그 복귀. 로그 $(basename "$LOGF")" ;;
+      143|137)
+        EL=$((SECONDS - T0))
+        if [ "$EL" -lt "$TICKET_MAXRUN" ]; then
+          log "KILLED $THASH ${EL}s 만에 밖에서 종료(rc=$RC) -> 할당 회수 + 백로그 복귀. 로그 $(basename "$LOGF")"
+        else
+          log "TIMEOUT $THASH ${TICKET_MAXRUN}s 초과 강제종료 -> 할당 회수 + 백로그 복귀. 로그 $(basename "$LOGF")"
+        fi ;;
       *)       log "FAIL $THASH rc=$RC -> 할당 회수 + 백로그 복귀. 로그 $(basename "$LOGF")" ;;
     esac
   fi
