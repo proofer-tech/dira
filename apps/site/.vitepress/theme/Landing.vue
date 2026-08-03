@@ -132,45 +132,40 @@ const version = theme.value.diraVersion;
 </section>
 
 <section class="wrap">
-  <p class="eyebrow">60초</p>
-  <h2>설치는 clone이 끝이다</h2>
+  <p class="eyebrow">설치</p>
+  <h2>받는 것은 .dmg 하나입니다</h2>
   <p class="body" style="max-width:44em">
-    엔진은 <b>bash와 python3 표준 라이브러리</b> 밖으로 나가지 않습니다.
-    빌드도, 패키지 매니저도, 설정 파일도 없습니다.
+    엔진이 앱 안에 들어 있습니다. 받아서 여는 것이 전부이고,
+    <b>터미널을 켤 일이 없습니다.</b>
   </p>
   <div class="two" style="margin-top:32px">
     <div>
-      <pre><span class="c"># ① 엔진을 받는다</span>
-git clone \
-  https://github.com/proofer-tech/dira.git \
-  ~/Projects/dira
-
-<span class="c"># ② 워커 하나. 놓인 자리가 곧 큐의 루트다</span>
-mkdir -p ~/myproject/.dira/workers
-cat &gt; ~/myproject/.dira/workers/w1.sh &lt;&lt;'EOF'
-#!/bin/bash
-. "$HOME/Projects/dira/tick.sh"
-EOF
-chmod +x ~/myproject/.dira/workers/w1.sh
-
-<span class="c"># ③ cron 두 줄</span>
-* * * * * ~/myproject/.dira/workers/w1.sh
-* * * * * sleep 30; ~/…/w1.sh</pre>
+      <ul class="marks">
+        <li><b>① <code>.dmg</code>를 열고 끌어다 놓습니다.</b> <code>dira.app</code>을
+        <code>응용 프로그램</code>으로 옮기면 그것으로 설치가 끝납니다. 서명·공증된 빌드라
+        처음 열 때 맥이 낯선 앱이라며 막지 않습니다</li>
+        <li><b>② 앱을 처음 열면 폼 하나가 펼쳐져 있습니다.</b> 이름과 프로젝트 폴더를 넣고
+        <code>프로젝트 만들기</code>를 누릅니다</li>
+        <li><b>③ 30초 뒤부터 워커가 큐를 훑습니다.</b> 티켓을 하나 써 두면 그때부터 물어 갑니다</li>
+      </ul>
     </div>
     <div>
       <ul class="marks">
-        <li><b>루트를 어디에도 적지 않습니다.</b> <code>workers/</code>의 부모 디렉터리가 곧 큐입니다</li>
-        <li><b>두 줄인 이유는 cron이 1분보다 잘게는 못 돌기 때문입니다.</b> 30초 간격을 그렇게 냅니다.
-        한 줄에 <code>;</code>로 붙이면 안 됩니다. 워커는 앞 세션이 끝나야 다음으로 넘어갑니다.
-        뒤에 붙인 쪽이 30초 뒤가 아니라 앞 세션이 끝난 뒤에 뜹니다</li>
-        <li><b>멈추려면 그 두 줄을 지웁니다</b></li>
-        <li>돌리기 전에 <code>w1.sh dryrun</code>을 걸면 어떤 티켓이 뽑히는지, 프롬프트가 어떻게
-        나가는지만 먼저 봅니다</li>
+        <li><b>그 버튼 하나에 셋이 들어 있습니다.</b> 빈 큐와 프로토콜·페르소나·워커
+        <code>w1.sh</code>가 <code>.dira</code> 안에 생기고, 그 워커를 30초마다 부르는 줄이
+        cron에 올라가고, 앱 목록에 프로젝트가 잡힙니다. 프로젝트 소스에는 손대지 않습니다</li>
+        <li><b>cron에 쓸 때 맥이 <code>앱 관리</code> 권한을 묻습니다.</b>
+        <code>허용</code>을 누르면 하던 등록이 그대로 이어집니다</li>
+        <li><b>미리 깔아 둘 것은 에이전트 CLI 하나입니다.</b> 기본값은 <code>claude</code>이고,
+        깔려 있는지는 앱 <code>설정</code>이 첫 줄에서 말해 줍니다. cron이 쓸 토큰도 그 자리에서
+        발급합니다</li>
+        <li><b>화면 없이 엔진만 돌릴 수도 있습니다.</b> Linux에서 굴리거나 화면이 필요 없으면
+        레포를 직접 받는 <a href="/docs/install#앱-없이-엔진만-쓰기">그 갈래</a>로 가세요</li>
       </ul>
       <p class="arrows">
         <a href="/docs/install">전체 설치 가이드</a>
-        <a href="/docs/first-ticket">첫 티켓 굴리기</a>
-        <a href="/docs/auth">cron 인증 설정</a>
+        <a href="/docs/first-ticket">첫 프로젝트 만들기</a>
+        <a href="/docs/cron">엔진만으로 돌리기</a>
       </p>
     </div>
   </div>
