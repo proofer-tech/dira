@@ -26,10 +26,18 @@ html { scroll-behavior: smooth; }
 }
 .dira-landing .wrap > * { grid-column: content; min-width: 0; }
 
-/* VitePress 기본 네브바(.VPNav)는 매뉴얼 페이지에는 필요하지만 랜딩은
-   자기 헤더(아래 header 규칙)를 따로 그린다 — 겹쳐 뜨는 것을 막는다.
-   .dira-landing 스코프 밖(매뉴얼 페이지)의 기본 테마는 건드리지 않는다. */
+/* VitePress 기본 네브바 둘(.VPNav · .VPLocalNav)은 매뉴얼 페이지에는 필요하지만
+   랜딩은 자기 헤더(아래 header 규칙)를 따로 그린다 — 겹쳐 뜨는 것을 막는다.
+   아래 것은 900px 이하에서 `position: fixed; top: 0; z-index: 20`으로 48px 떠서
+   랜딩 헤더(`sticky; top: 0; z-index: 10`)를 통째로 덮어 링크 셋과 워드마크를
+   못 누르게 만든다. **스크롤 전에는 DOM에 아예 없어서** 정지 상태 점검으로는
+   안 잡힌다(개편 세션 셋이 다 놓쳤다). 랜딩에서는 사이드바도 outline도 없어
+   vitepress가 스스로 `empty` 클래스를 붙이고 안에 든 것은 `Return to top` 버튼
+   하나뿐이다 — 워드마크가 `href="/"`라 이미 같은 일을 한다.
+   .dira-landing 스코프 밖(매뉴얼 페이지)의 기본 테마는 건드리지 않는다 —
+   거기서는 `Menu` · `On this page`를 여는 실제 내비게이션이다. */
 .dira-landing .VPNav { display: none; }
+.dira-landing .VPLocalNav { display: none; }
 .dira-landing #VPContent { padding-top: 0; margin-top: 0; }
 
 /* 라틴 등폭 한 패밀리만 자체 호스팅한다(§랜딩 §개편 §방향·토큰 «서체»). 라틴 서브셋
