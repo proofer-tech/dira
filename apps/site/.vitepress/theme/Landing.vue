@@ -107,17 +107,20 @@ onMounted(async () => {
   <h2>말하면 이루어집니다</h2>
   <ol class="steps">
     <li>
+      <span class="sig">.md</span>
       <b>① 요구사항을 접수하세요</b>
       <p>자연스럽게 대화하듯이 무엇을 원하는지를 적어주시면 끝입니다. 나머지 귀찮고 복잡한
       일들은 에이전트가 알아서 합니다.</p>
     </li>
     <li>
+      <span class="sig">.wip</span>
       <b>② 일사불란하게 움직입니다</b>
       <p>최초 요구사항을 받은 에이전트가 요구사항을 구체화하여 작업 단위 티켓으로 분리하고,
       적절한 페르소나를 가진 워커를 알아서 할당하여 에이전트간 협업을 통해 주신 요구사항을
       완료합니다.</p>
     </li>
     <li>
+      <span class="sig">.done</span>
       <b>③ 끝이에요. 쉽죠?</b>
       <p>워커들이 뭘 읽고 어떻게 고치는지 실시간으로 확인할 수 있습니다. 진행중에 막히면
       사용자에게 물어도 봅니다. 그저 사람과 일하듯이 자연스럽게 요구하고 대답하다 보면,
@@ -147,11 +150,13 @@ onMounted(async () => {
       <p class="arrows"><a href="/docs/barge-in">도는 세션에 말 걸기</a></p>
     </figure>
     <figure>
+      <span class="sig">awaiting:</span>
       <a class="zoom" href="/shots/07-qa-thread.png" target="_blank" rel="noopener" title="원본 크기로 열기"><img class="shot" src="/shots/07-qa-thread.png" loading="lazy" alt="요구 티켓의 질문·답변 스레드. 질문 아래에 답변 말풍선이 오른쪽으로 붙어 있고, frontmatter에 awaiting 해시가 있습니다." width="1440" height="450"></a>
       <figcaption>어련히 모르면 물어보지 않겠어요? 에이전트들이 업무를 수행하다 모르는 게 생기면 물어봅니다. 질문에 대답해주세요. 그럼 또 알아서 하러 갑니다.</figcaption>
       <p class="arrows"><a href="/docs/requirements#되묻기와-답변-대기">문의 · 답변</a></p>
     </figure>
     <figure>
+      <span class="sig">unassign</span>
       <a class="zoom" href="/shots/04-ticket-running.png" target="_blank" rel="noopener" title="원본 크기로 열기"><img class="shot" src="/shots/04-ticket-running.png" loading="lazy" alt="진행중 티켓 상세. 왼쪽에 본문과 Done when 체크리스트, 오른쪽에 frontmatter 표와 관계." width="1600" height="1000"></a>
       <figcaption>일이 어떻게 진행되고 있는지 티켓 단위로 확인해볼 수 있습니다. 만약 내가 생각했던 것과 다른 방향으로 진행되고 있다면, 티켓을 할당 해제하여 중단시킬 수도 있고, 아직 시작하지 않은 티켓은 본문을 수정하여 내가 원하는 방향대로 자세히 수정할 수도 있습니다.</figcaption>
       <p class="arrows"><a href="/docs/screens#티켓-상세">업무 투명성</a></p>
@@ -165,7 +170,7 @@ onMounted(async () => {
   <p class="body" style="max-width:44em">
     받아서 열기만 하면 되고, 터미널을 켤 일이 없습니다.
   </p>
-  <div class="two" style="margin-top:32px">
+  <div class="two">
     <div>
       <ul class="marks">
         <li><b>① <code>.dmg</code>를 열고 끌어다 놓습니다.</b> <code>dira.app</code>을

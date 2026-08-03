@@ -14636,7 +14636,7 @@ React가 refresh마다 밖에서 붙인 `.dark`를 벗긴다(0.5초). 이 사실
 | P137 | 방향·토큰 판정표 `cbbc95e6` | designer | — | 대기 |
 | P137 | 토큰 + 셸 `d1c01437` | developer | `cbbc95e6` | 대기 |
 | P137 | 히어로 + `.stats` `7e545df4` | developer | `d1c01437` | 대기 |
-| P137 | 중단부 + 플랜 + closing `dc5527c3` | developer | `d1c01437` | 대기 |
+| P137 | 중단부 + 플랜 + closing `dc5527c3` | developer | `d1c01437` | 완료 — `.steps`·`.gallery`·`.two`·`.plans`·`.closing`이 12열 격자 · 상태 색 넷 · 모서리 0 · 왼쪽 정렬로 선다. 하이라인 5 → **8**(다섯 폭 전부), 다섯 폭 실측 `## 결과`에 |
 | P137 | 움직이는 티켓 `207d3c67` | designer | `7e545df4` | 대기 |
 | P137 | 최종 판정 `348ff93b` | qa | `7e545df4` `dc5527c3` `207d3c67` | 대기 |
 
