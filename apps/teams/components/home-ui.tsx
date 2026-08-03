@@ -456,8 +456,8 @@ export function HomeUI({
             <div className="space-y-2">
               <h2 className="text-sm font-medium">이 프로젝트에 대해 묻는다</h2>
               <p className="text-sm text-muted-foreground">
-                티켓 · 워커 · 프로토콜 · repo를 읽고 답합니다. 고치는 것은 페르소나 · 프로토콜 ·
-                워커 스크립트 셋뿐입니다.
+                티켓과 프로젝트 자원(페르소나 · 프로토콜 · 워커)들을 읽고 답합니다. 프로젝트
+                자원을 수정하도록 할 수도 있습니다.
               </p>
             </div>
           ) : (
