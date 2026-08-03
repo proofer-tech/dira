@@ -5,6 +5,13 @@ const { theme } = useData();
 // 초기값은 빌드 시점의 `apps/desktop/package.json`. 비우면 hydration이 어긋난다.
 const version = ref(theme.value.diraVersion);
 onMounted(async () => {
+  // github-buttons는 모듈 최상단에서 window를 읽는다 — SSR에서 죽으므로 동적 import다.
+  // 위젯을 못 만들면 원래 <a>가 그대로 남는다(그게 이 배치를 고르는 근거다).
+  const star = document.getElementById("star-btn");
+  if (star) {
+    const { render } = await import("github-buttons");
+    render(star, (widget) => star.replaceWith(widget));
+  }
   try {
     const r = await fetch(
       "https://api.github.com/repos/proofer-tech/dira/releases/latest",
@@ -170,8 +177,13 @@ onMounted(async () => {
       </ul>
       <p>로컬 엔진과 앱은 영원히 무료로 제공합니다. dira는 빌더들의
       멀티 에이전트 생태계를 응원합니다.</p>
+      <!-- 이 <a>에는 바인딩을 걸지 않는다. 정적이어야 리본 version 갱신 때 다시 안 그려지고,
+           onMounted에서 갈아 끼운 위젯이 그대로 남는다(DESIGN §진짜 별 버튼 §SSR·hydration). -->
       <div class="cta">
-        <a class="btn" href="https://github.com/proofer-tech/dira">GitHub에서 별 주기</a>
+        <a class="btn" id="star-btn"
+           href="https://github.com/proofer-tech/dira"
+           aria-label="Star proofer-tech/dira on GitHub"
+           data-icon="octicon-star" data-show-count="true" data-size="large">Star</a>
       </div>
     </li>
     <li>
