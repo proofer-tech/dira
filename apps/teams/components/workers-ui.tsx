@@ -7,7 +7,7 @@
  *  fs를 만지는 건 서버 액션뿐이다.
  *  파일 하나에 모은 이유는 projects-ui.tsx와 같다 — 세 다이얼로그가 같은 문구·같은 명령어를
  *  쓰므로 쪼개면 자리가 갈린다. */
-import { createContext, useContext, useState, useTransition } from "react";
+import { createContext, Fragment, useContext, useState, useTransition } from "react";
 import {
   ArrowDown,
   ArrowUp,
@@ -1189,6 +1189,45 @@ export function WorkerActivityCell({ row }: { row: WorkerRow }) {
   );
 }
 
+/** 펼친 활동 패널의 동사 색 — §비주얼 §37 §다섯 묶음. 동사 열넷이 **색 넷**으로 접힌다
+ *  (축은 *그 줄 뒤에 티켓이 어디 있나*라 §2가 티켓 상태에 이미 준 축이고 새 색이 0개다).
+ *  **여기 없는 동사는 색이 없다** — 다른 프로젝트의 `runner.log`엔 다른 동사가 있어서
+ *  (실측: `stream`의 `AUTH`) 아무 묶음에나 넣지 않는다. `SKIP`은 62%라 색이 아니라
+ *  줄을 통째로 물린다(아래). */
+const ACTIVITY_VERB_COLOR: Record<string, string> = {
+  DISPATCH: "text-status-active",
+  DONE: "text-status-done",
+  HOLD: "text-status-blocked",
+  REAP: "text-status-blocked",
+  UNASSIGN: "text-status-blocked",
+  WARN: "text-status-blocked",
+  ASK: "text-status-blocked",
+  FAIL: "text-status-stale",
+  TIMEOUT: "text-status-stale",
+  STALL: "text-status-stale",
+  ERROR: "text-status-stale",
+  "REAP-FAIL": "text-status-stale",
+  "UNASSIGN-DENY": "text-status-stale",
+};
+
+/** `runner.log` 한 줄을 `<span>` 셋으로 쪼갠다 — 시각 접두어(흐리게) · 동사(색) · 나머지.
+ *  **쪼개는 것은 표시까지고 글자는 한 자도 안 바뀐다**(§4-8 §검증 — 패널 `textContent`가
+ *  `recentLog.join("\n")}`과 같아야 한다). 모양이 안 맞는 줄은 통째로 기본 글자색이다 —
+ *  `SKIP`처럼 물리면 못 읽는 줄이 조용히 숨는다(§37). 컴포넌트가 아니라 표시 헬퍼다. */
+function activityLine(line: string) {
+  const m = /^(\S+ \S+ \[[^\]]+\] )(\S+)(.*)$/.exec(line);
+  if (!m) return line;
+  // `SKIP` 62%: 접두어·동사·본문이 전부 `--muted-foreground`라 나머지 넷이 앞으로 나온다.
+  if (m[2] === "SKIP") return <span className="text-muted-foreground">{line}</span>;
+  return (
+    <>
+      <span className="text-muted-foreground">{m[1]}</span>
+      <span className={ACTIVITY_VERB_COLOR[m[2]]}>{m[2]}</span>
+      {m[3]}
+    </>
+  );
+}
+
 /** 공통 컨텍스트 카드 — 워커 표 **바로 아래**(§4-1 · §35 #1). 편집기는 워커별 것과 같은 컴포넌트다.
  *  `context.sh`가 없으면 항목 0개이고 **오류가 아니다** — 빈 상태 + `공통 항목 추가`다. */
 export function CommonContextCard({
@@ -1396,12 +1435,30 @@ export function WorkerContextRow({
           )}
 
           {/* 펼친 활동 — `runner.log`의 이 워커 최근 20줄, **최신이 위**(셀에 뜬 그 줄이 첫 줄이라
-              이 줄을 눌러 폈다가 자명하다). 가공 0이다: 필터·색·아이콘·링크 없이 시각 접두어까지
-              줄 그대로고, 이 패널이 있는 이유가 잘린 것을 보는 것이라 잘림도 0이다(§4-7).
+              이 줄을 눌러 폈다가 자명하다). 필터·아이콘·링크는 여전히 0이고 시각 접두어까지 줄
+              그대로다(§4-7). 이 패널이 있는 이유가 잘린 것을 보는 것이라 잘림도 0이다.
+
+              **패널이 자기 모드를 든다** — `dark` 한 클래스가 라이트에서 페이지에서 떨어진 검은
+              몸(17.91)을, 다크에서 카드 층 한 단 위(1.10 + 테두리 1.46)를 만든다. 값은 전부
+              §비주얼 §37 §값 표의 `클래스` 칸이고 새 색 토큰 0 · `globals.css` 0줄이다.
+              `mt-1`이 `pt-1`을 대신하는 이유: 그 4px이 **면 밖**이어야 한다.
+              `tabIndex={0}` — `overflow-y-auto` 상자는 크롬에서 기본으로 포커스를 못 받아
+              키보드만 쓰는 사람이 감긴 줄에 못 닿는다(WCAG 2.1.1 · §37 §접근성).
+              `whitespace-pre-wrap break-all` 무수정 — `pre`로 바꾸면 표가 1869.5px로 벌어진다.
               ponytail: 연속으로 같은 본문이 서면 `× n`으로 접는 것이 다음 단계다. 지금은 안 만든다. */}
           {activity && (
-            <div className="pt-1 font-mono text-xs break-all whitespace-pre-wrap">
-              {row.recentLog.join("\n")}
+            <div
+              data-activity-panel
+              tabIndex={0}
+              className="dark mt-1 max-h-96 overflow-y-auto rounded-md border bg-card p-3 font-mono text-xs break-all whitespace-pre-wrap text-foreground"
+            >
+              {row.recentLog.map((line, i) => (
+                // 줄 사이의 `"\n"`이 `textContent`를 `join("\n")`과 같게 만든다(§4-8 §검증).
+                <Fragment key={i}>
+                  {i > 0 && "\n"}
+                  {activityLine(line)}
+                </Fragment>
+              ))}
             </div>
           )}
 
