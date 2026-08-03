@@ -471,7 +471,14 @@ export default async function Board({
                     // 레인 높이는 스트립이 준다(flex 기본 stretch) — 머리는 그 위에 고정으로 남고
                     // 카드 스택만 스크롤한다. 머리를 스크롤러 안에 넣고 sticky를 걸지 않는 이유는
                     // §1에 있다: 건수는 레인 전체에 대한 진술이라 흔들릴 이유가 없다.
-                    <div key={s} className="flex min-w-72 flex-1 flex-col gap-2">
+                    // `bg-surface rounded-lg border p-2`는 표면 층이다(§비주얼 §33) — 레인 셋이
+                    // 같은 종류의 반복이라 셋 다 면을 든다. 가르는 것은 면 대 페이지(1.04)가 아니라
+                    // **면 사이의 거터**다. `ring-1`이 아니라 `border`인 이유: 이 컬럼은
+                    // `overflow-x-auto` 스트립 안이고 ring은 border box 밖이라 양끝에서 잘린다.
+                    // 패딩이 상자 안이라 `flex-1 min-w-72` 폭 배분·레인 피치(304)는 안 바뀌고,
+                    // 카드만 18px(테두리 2 + 패딩 16) 좁아진다. 그 8px을 여기서 내는 이유는
+                    // 카드에 가로 여백이 없어서다(홈 패널은 줄이 이미 내므로 안 준다).
+                    <div key={s} className="flex min-w-72 flex-1 flex-col gap-2 rounded-lg border bg-surface p-2">
                       <div className="flex items-center justify-between gap-2">
                         <StatusBadge status={s} />
                         <span className="text-xs tabular-nums text-muted-foreground">
