@@ -7,6 +7,25 @@ const version = ref(theme.value.diraVersion);
 // 초기값 = 실패값. SSR·fetch 실패·`.dmg` 없음 셋 다 지금 동작(릴리스 페이지)으로 떨어진다.
 const dmg = ref("https://github.com/proofer-tech/dira/releases/latest");
 onMounted(async () => {
+  // 스크롤 진입 등장(DESIGN §랜딩 §모션 §판정표 ⑥). JS로 움직이므로 base.css의 전역
+  // 킬 스위치 밖이다 — matchMedia를 직접 보고 reduce면 무장을 아예 안 한다.
+  // 별 위젯이 갈아 끼우는 a[data-icon] 둘에는 안 건다(관찰 대상은 main 직계 블록이다).
+  if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries)
+          if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); }
+      },
+      { rootMargin: "0px 0px -10% 0px" },
+    );
+    for (const el of document.querySelectorAll(".reveal")) {
+      // 이미 그려진 글이 깜빡였다 다시 나타나는 것을 막는다 — 첫 화면은 무장하지 않는다.
+      if (el.getBoundingClientRect().top >= window.innerHeight) {
+        el.classList.add("armed");
+        io.observe(el);
+      }
+    }
+  }
   // github-buttons는 모듈 최상단에서 window를 읽는다 — SSR에서 죽으므로 동적 import다.
   // 위젯을 못 만들면 원래 <a>가 그대로 남는다(그게 이 배치를 고르는 근거다).
   // 둘을 같은 틱에 그려야 api.github.com XHR이 하나다(DESIGN §헤더 별 버튼 §값).
@@ -80,7 +99,7 @@ onMounted(async () => {
   </figure>
 </div>
 
-<section class="wrap">
+<section class="wrap reveal">
   <h2>말하면 이루어집니다</h2>
   <ol class="steps">
     <li>
@@ -103,7 +122,7 @@ onMounted(async () => {
   </ol>
 </section>
 
-<div class="wrap stats">
+<div class="wrap stats reveal">
   <ul>
     <li><b>0</b><span>엔진 의존성<br>bash + python3 표준 라이브러리</span></li>
     <li><b>6</b><span>이 레포에서 동시에 도는 워커</span></li>
@@ -113,7 +132,7 @@ onMounted(async () => {
   <p class="stats-note">2026-08-03 기준</p>
 </div>
 
-<section class="wrap">
+<section class="wrap reveal">
   <div class="gallery">
     <figure>
       <a class="zoom" href="/shots/barge.gif" target="_blank" rel="noopener" title="원본 크기로 열기"><img class="shot" src="/shots/barge.gif" loading="lazy" alt="세션 스트림이 도구 호출을 한 줄씩 늘려 가는 동안, 아래 입력창에 문장을 넣고 보내기를 누르자 그 문장이 참견 줄로 스트림에 나타나고 세션이 이어서 방향을 바꿉니다." width="1760" height="1408"></a>
@@ -136,7 +155,7 @@ onMounted(async () => {
   </div>
 </section>
 
-<section class="wrap">
+<section class="wrap reveal">
   <p class="eyebrow">설치</p>
   <h2>다운로드하여 설치하면 끝</h2>
   <p class="body" style="max-width:44em">
@@ -171,7 +190,7 @@ onMounted(async () => {
   </div>
 </section>
 
-<section class="wrap plan-sec">
+<section class="wrap plan-sec reveal">
   <p class="eyebrow">플랜</p>
   <h2>쓸 수 있는 것은 전부 무료입니다</h2>
   <!-- 카드는 순서가 없어 <ul>이다(.plans는 .steps에서 분리했다 — 30초 설명과 규칙이 갈린다). -->
@@ -222,7 +241,7 @@ onMounted(async () => {
 
 </main>
 
-<div class="closing">
+<div class="closing reveal">
   <div class="wrap">
     <h2>나만의 AI 팀을 만들어보세요</h2>
     <p class="body">

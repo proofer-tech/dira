@@ -13404,7 +13404,7 @@ P125 세션이 이미 반대 방향에서 같은 판정을 적어 뒀다(hunk 3�
 |---|---|---|---|---|
 | P128 | 스펙 확정 `c9c53edb` | pm | — | 진행중 — §랜딩에 §모션 신설(사실 6행 · `prefers-reduced-motion` 실측 · 서는 못 6 · 안 하는 것 4 · 산출 네 칸 · 검증 6줄) |
 | P128 | 모션 판정표 `a2772553` | designer | — | 완료 — §모션에 §판정표 신설. **6행 · 아홉 칸 전부 실측**(후보 CSS를 `<style>`로 세우고 `.arrows a:hover`는 CSSOM으로 걷어 같은 창에서 쟀다 — 예측치 0칸). 속성이 `transform`·`opacity`가 아닌 행은 ① 하나(색 셋, 이유를 칸에 적었다). `matchMedia`가 적힌 행도 ⑥ 하나 — 나머지 다섯은 CSS라 `base.css`가 덮는다. `Landing.vue`가 갈리는 행은 ⑥ 하나(`class="reveal"` 6개 + `onMounted`), 텍스트 노드 0글자. `.steps`·`.plans` 카드 호버는 **반려**(링크가 아닌 것에 눌릴 되먹임을 준다 — §서는 못 ①). 새 색 0 · 새 토큰 0 · 새 의존성 0, `@keyframes` 1 · `IntersectionObserver` 1 |
-| P128 | 판정표 구현 `a14e5293` | developer | `a2772553` | 대기 |
+| P128 | 판정표 구현 `a14e5293` | developer | `a2772553` | 완료 — 6행 전부 구현, 표에 없는 모션 0. `custom.css` 다섯 · `Landing.vue`는 ⑥만(`class="reveal"` 6개 + `onMounted` 17줄), 텍스트 노드 0글자. **판정표의 실측 수가 전부 재현됐다** — `.btn` 여섯 `65·91.9·169.1·114.7·169.1·150.9` → `:active` `63.1·89.2·164.1·111.2·164.1·146.4`(1440·390 같은 값), `.zoom` 1440 `204‥521.3` → `200.8‥524.5`·390 `24‥366` → `20.6‥369.4`, 레일 `119.828px × 1px` `scaleX(0)`→`scaleX(1)`, 무장 수 `6·6·6·5`. 네 폭 전부 블록 7개 정지 박스가 이 티켓 앞뒤로 **한 자리도 안 갈렸고**(`docH`도 같다) JS off · `reduce` 둘 다 `opacity` 7개가 전부 `1`, `390` `scrollWidth` `390`. `prefers-reduced-motion` `@media` 0건 · `outline` 선언 0건 · `package.json` 0줄. **§검증의 `grep -c 'prefers-reduced-motion'` → `0`은 값이 틀렸다** — 그 문자열은 `custom.css:5`의 기존 주석(§모션이 §8710에서 인용한 그 줄)에 이미 있어 이 티켓 앞에도 `1`이었다. 실제로 판정되는 것은 `grep -c '@media (prefers-reduced-motion'` → `0`이고 그것이 통과한다 |
 
 **되묻지 않았다.** 그릇이 이름으로 왔고(`ui-animation`) designer가 그 스킬을 갖고 있다.
 감각어(*"와... 소리"*)로 온 요구지만 **재는 축이 하나뿐이라 갈릴 것이 없다** — 이 페이지의

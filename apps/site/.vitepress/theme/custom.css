@@ -58,12 +58,18 @@ html { scroll-behavior: smooth; }
   font-size: 13px; line-height: 1; position: relative; z-index: 20;
 }
 .dira-landing .ann .wrap { display: flex; align-items: center; justify-content: center; gap: 12px; height: 38px; }
+/* ①② 호버가 0초에 튀던 것과 눌림 되먹임이 0건이던 것(§모션 §판정표 ①②). transform은
+   ①과 같은 선언에 항목으로 붙는다 — 새 규칙이 아니다. 정지 상태 값은 한 개도 안 바뀐다. */
 .dira-landing .ann a {
   display: inline-flex; align-items: center; gap: 4px;
   padding: 4px 10px; border-radius: 99px; text-decoration: none;
   background: rgba(255,255,255,.12); font-size: 12px; font-weight: 500;
+  transition: background-color 150ms ease-out, border-color 150ms ease-out, color 150ms ease-out,
+              transform 120ms cubic-bezier(0.22, 1, 0.36, 1);
 }
-.dira-landing .ann a:hover { background: rgba(255,255,255,.2); }
+.dira-landing .ann a:hover,
+.dira-landing .ann a:focus-visible { background: rgba(255,255,255,.2); }
+.dira-landing .ann a:active { transform: scale(0.97); }
 .dira-landing .ann span { color: #D4D4D8; }
 
 /* ── header ─────────────────────────────────────── */
@@ -85,10 +91,17 @@ html { scroll-behavior: smooth; }
   height: 34px; padding: 0 14px; border-radius: 8px;
   font-size: 13.5px; font-weight: 500; text-decoration: none;
   border: 1px solid var(--border); background: var(--bg); color: var(--fg); white-space: nowrap;
+  transition: background-color 150ms ease-out, border-color 150ms ease-out, color 150ms ease-out,
+              transform 120ms cubic-bezier(0.22, 1, 0.36, 1);
 }
-.dira-landing .btn:hover { background: var(--panel); }
+.dira-landing .btn:hover,
+.dira-landing .btn:focus-visible { background: var(--panel); }
+.dira-landing .btn:active { transform: scale(0.97); }
+/* 판정표 ①의 네 자리 중 .btn-primary만 transition 선언이 없다 — 이 파일의 세 자리
+   모두 `class="btn btn-primary"`라 위 .btn 선언을 이미 받는다. 같은 값을 두 벌 적지 않는다. */
 .dira-landing .btn-primary { background: var(--fg); color: var(--bg); border-color: var(--fg); }
-.dira-landing .btn-primary:hover { background: #262626; }
+.dira-landing .btn-primary:hover,
+.dira-landing .btn-primary:focus-visible { background: #262626; }
 .dira-landing .btn-lg { height: 44px; padding: 0 22px; font-size: 15px; border-radius: 10px; }
 
 /* ── shared type ────────────────────────────────── */
@@ -115,6 +128,28 @@ html { scroll-behavior: smooth; }
 .dira-landing .cta { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
 .dira-landing .cta-note { margin: 16px 0 0; font-size: 12.5px; color: var(--faint); font-family: var(--mono); }
 
+/* ⑤ 페이지가 열리는 순간(§모션 §판정표 ⑤). 총 770ms에 끝나고 다시 안 돈다 —
+   WCAG 2.2.2가 묶는 "5초 넘게 무한히"의 반대다. JS가 0줄이라 matchMedia를 안 본다:
+   base.css의 `animation-duration: 1ms !important` + 여기 fill-mode both가 reduce에서
+   마지막 키프레임에 즉시 안착시킨다(§모션 §이미 덮여 있다 — 여기에 @media를 다시 쓰지 않는다). */
+@keyframes dira-rise { from { opacity: 0; transform: translateY(12px); } }
+.dira-landing .hero > * { animation: dira-rise 520ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+.dira-landing .hero > *:nth-child(2) { animation-delay: 50ms; }
+.dira-landing .hero > *:nth-child(3) { animation-delay: 100ms; }
+.dira-landing .hero > *:nth-child(4) { animation-delay: 150ms; }
+.dira-landing .hero > *:nth-child(5) { animation-delay: 200ms; }
+.dira-landing .hero > *:nth-child(6) { animation-delay: 250ms; }
+
+/* ⑥ 스크롤 진입(§모션 §판정표 ⑥). 규칙이 둘뿐인 것이 §서는 못 ②를 지키는 방법이다 —
+   `.armed`는 onMounted의 IntersectionObserver만 붙이므로 JS가 죽으면 둘 다 안 걸리고
+   여섯이 그냥 서 있다. 쉬는 상태를 opacity: 0으로 두지 않는다. */
+.dira-landing .reveal.armed {
+  opacity: 0; transform: translateY(16px);
+  transition: opacity 520ms cubic-bezier(0.22, 1, 0.36, 1),
+              transform 520ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.dira-landing .reveal.armed.in { opacity: 1; transform: none; }
+
 /* ── figures ────────────────────────────────────── */
 .dira-landing figure { margin: 0; }
 .dira-landing .shot { display: block; width: 100%; height: auto; border: 1px solid var(--border); border-radius: 12px; background: #fff; }
@@ -137,7 +172,15 @@ html { scroll-behavior: smooth; }
    크기로 연다 — ponytail: 라이트박스를 들이지 않고 브라우저의 이미지 뷰어를 그대로 쓴다.
    열을 줄이는 쪽은 안 된다: 1열 1032px에서도 캡처가 0.65배라 여전히 안 읽히고,
    3열이 아니면 세 캡션을 한 줄에 맞추는 ④가 성립하지 않는다. */
-.dira-landing .gallery .zoom { display: block; cursor: zoom-in; }
+/* ③ 커서를 못 보는 자리(터치 · 키보드)에 눌러진다는 것을 준다(§모션 §판정표 ③).
+   1.02에서 1.00으로 눌린다 — 정지 상태는 scale(1)이라 열 박스가 안 갈린다. */
+.dira-landing .gallery .zoom {
+  display: block; cursor: zoom-in;
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.dira-landing .gallery .zoom:hover,
+.dira-landing .gallery .zoom:focus-visible { transform: scale(1.02); }
+.dira-landing .gallery .zoom:active { transform: scale(1); transition-duration: 90ms; }
 @media (min-width: 901px) {
   /* ④ 세 캡처의 종횡비가 1.25 · 3.2 · 1.6이라 그냥 두면 캡션 시작 높이가 셋 다 다르다.
      figure를 subgrid로 만들어 이미지 · 캡션 · 링크가 세 열에서 같은 행을 쓰게 한다.
@@ -158,11 +201,22 @@ html { scroll-behavior: smooth; }
 .dira-landing .marks b { color: var(--fg); font-weight: 650; }
 
 .dira-landing .arrows { margin: 24px 0 0; display: flex; flex-wrap: wrap; gap: 6px 20px; }
+/* ④ 본문 링크 여섯이 "더 읽을 데로 가는 문"인 것을 헤더 버튼과 다른 표현으로 말한다
+   (§모션 §판정표 ④). 회색 레일 위로 --fg 레일이 왼쪽에서 자란다 — 종전
+   `:hover { border-color: var(--fg) }` 한 줄이 그 자리를 내준다. position: relative는
+   박스를 안 바꾼다(폭 119.8 그대로). ::after는 안 건드린다. */
 .dira-landing .arrows a {
   font-size: 13.5px; font-weight: 550; text-decoration: none;
   border-bottom: 1px solid var(--border); padding-bottom: 2px;
+  position: relative;
 }
-.dira-landing .arrows a:hover { border-color: var(--fg); }
+.dira-landing .arrows a::before {
+  content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 1px;
+  background: var(--fg); transform: scaleX(0); transform-origin: left;
+  transition: transform 260ms cubic-bezier(0.25, 1, 0.5, 1);
+}
+.dira-landing .arrows a:hover::before,
+.dira-landing .arrows a:focus-visible::before { transform: scaleX(1); }
 .dira-landing .arrows a::after { content: " →"; color: var(--faint); }
 
 /* ── steps (30초 설명) · plans (플랜 카드) ───────── */
@@ -246,8 +300,14 @@ html { scroll-behavior: smooth; }
 .dira-landing .fcol h4 { margin: 0 0 12px; font-size: 12px; font-family: var(--mono); font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); }
 .dira-landing .fcol ul { list-style: none; margin: 0; padding: 0; }
 .dira-landing .fcol li { padding: 4px 0; }
-.dira-landing .fcol a { font-size: 13.5px; color: var(--muted-fg); text-decoration: none; }
-.dira-landing .fcol a:hover { color: var(--fg); }
+/* ① 판정표의 네 번째 자리(§모션 §판정표 ①). 여기서 갈리는 것은 color 하나지만
+   같은 자리의 나머지 셋과 같은 선언을 쓴다 — 값을 다시 판단하지 않는다. */
+.dira-landing .fcol a {
+  font-size: 13.5px; color: var(--muted-fg); text-decoration: none;
+  transition: background-color 150ms ease-out, border-color 150ms ease-out, color 150ms ease-out;
+}
+.dira-landing .fcol a:hover,
+.dira-landing .fcol a:focus-visible { color: var(--fg); }
 .dira-landing .fbot { margin-top: 48px; padding-top: 24px; border-top: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 12.5px; color: var(--faint); }
 
 @media (max-width: 900px) {
