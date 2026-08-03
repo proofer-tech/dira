@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist_Mono } from "next/font/google";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { KeymapProvider } from "@/components/keymap-provider";
 import { FeedbackDialog } from "@/components/feedback-dialog";
@@ -8,11 +8,8 @@ import { ScreenView } from "@/components/project-switcher";
 import { readKeymap } from "@/lib/projects";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
+// sans는 `globals.css`의 `@font-face`(원티드산스 · `public/fonts/`)가 든다 — 그래서 Geist
+// 임포트가 여기 없다. `Geist_Mono`만 남는다(`--font-mono` 무수정 · P149 못 ⑧).
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
@@ -35,7 +32,7 @@ export default async function RootLayout({
   return (
     <html
       lang="ko"
-      className={`${geistSans.variable} ${geistMono.variable} h-full overflow-hidden antialiased`}
+      className={`${geistMono.variable} h-full overflow-hidden antialiased`}
     >
       {/* 세로 스크롤의 주체는 `main`이다 — 문서가 아니다(§비주얼 §4). `h-full`이라 셸이 뷰포트
           높이를 잡고, 헤더 아래를 `main`이 채운다(그 `main`이 자기 안에서 스크롤한다). 보드는

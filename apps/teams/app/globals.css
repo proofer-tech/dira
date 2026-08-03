@@ -14,12 +14,31 @@
   }
 }
 
+/* 본문 sans를 자체 호스팅한다 — 원티드산스(P149 `e9f1b451` · §비주얼 §3 · §전달 방식 표).
+   자산은 `wanted-sans@1.0.3` tarball에서 꺼낸 **공식 complete 한 파일**이고 아래 선언은 그
+   패키지의 `WantedSansVariable.css`를 그대로 옮긴 것이다(`src` 경로만 `/fonts/…`로 바꿨다).
+   랜딩(`apps/site`)은 같은 얼굴을 split 92개로 싣는데 여기는 통합본 하나다 — 앱은 로컬에서
+   뜨므로 방문자가 네트워크로 받는 바이트가 0이고, 그러면 분할이 사는 것이 0이라 규칙 92개만
+   얻는다. `unicode-range`가 없는 이유가 그것이다. 앱이 그리는 한글은 티켓 제목·본문이라
+   임의이므로 커스텀 서브셋도 쓸 수 없다 — 전체 커버리지가 계약이다.
+   npm 패키지가 아니라 `public/` 자산이라 `package.json`은 0줄이다. OFL-1.1 사본은
+   `public/fonts/WantedSans-OFL.txt`. 가변축이 `wght 400..1000`이고 400 미만을 쓰는 자리가 0이다. */
+@font-face {
+  font-family: "Wanted Sans Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400 1000;
+  src: url("/fonts/WantedSansVariable.woff2") format("woff2-variations");
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  /* 등폭은 이 개정에서 한 자도 안 갈린다(P149 못 ⑧) — 워드마크·앱 캡처가 랜딩과 같은
+     얼굴이어야 한다. sans만 원티드산스로 간다. */
+  --font-sans: "Wanted Sans Variable";
   --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-geist-sans);
+  --font-heading: "Wanted Sans Variable";
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
