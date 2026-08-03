@@ -14,8 +14,12 @@ import { NAME_RE, isHash, resolveWithin } from "./paths.ts";
 import { findPath, listTickets, type Suffixes } from "./queue.ts";
 import { listWorkers } from "./workers.ts";
 
-/** rc와 출력을 그대로 넘긴다. 실패해도 삼키지 않는다 — 화면이 원문을 보여준다(§6 에러 3요소). */
-export type Run = { ok: boolean; output: string };
+/** rc와 출력을 그대로 넘긴다. 실패해도 삼키지 않는다 — 화면이 원문을 보여준다(§6 에러 3요소).
+ *
+ *  `code`는 **엔진의 종료 코드**다(§2-5 §종료 코드). 화면이 갈래를 이 수로 가른다 — 거부 문구를
+ *  정규식으로 읽으면 문구를 고치는 순간 그 갈래가 조용히 사라진다. 성공(`ok`)이면 `0`이고,
+ *  스폰 자체가 실패하면(`ENOENT` 등 코드가 수가 아닌 경우) `undefined`다. */
+export type Run = { ok: boolean; output: string; code?: number };
 
 /** `<root>/workers/<name>.sh <args…>`.
  *
@@ -40,11 +44,14 @@ export async function runWorker(root: string, name: string, args: string[]): Pro
       timeout: 60_000,
       maxBuffer: 4 << 20,
     });
-    return { ok: true, output: (stdout + stderr).trim() };
+    return { ok: true, output: (stdout + stderr).trim(), code: 0 };
   } catch (e) {
     const err = e as NodeJS.ErrnoException & { stdout?: string; stderr?: string };
     const out = ((err.stdout ?? "") + (err.stderr ?? "")).trim();
-    return { ok: false, output: out || err.message };
+    // `err.code`는 종료 코드(수)이거나 스폰 실패의 문자열(`ENOENT`)이다 — 수일 때만 싣는다.
+    // 신호로 죽으면(`killed`) 코드가 아예 없다. 어느 쪽이든 `undefined`가 "코드가 없다"다.
+    const code = typeof err.code === "number" ? err.code : undefined;
+    return { ok: false, output: out || err.message, code };
   }
 }
 
@@ -59,8 +66,12 @@ export type UnassignRun = Run & { worker: string | null };
  *
  *  워커 이름을 **인자로 받지 않는다**: 디스크 목록의 첫 워커를 쓴다. `unassign`은 큐 전체를 보므로
  *  같은 루트의 어느 워커로 불러도 같고(README §워커 레퍼런스), 그러면 사용자 입력이 경로가 되는
- *  지점이 하나 줄어든다. 워커가 0개면 부를 스크립트가 없다 — 호출자가 액션을 비활성화한다. */
-export async function unassign(root: string, hash: string): Promise<UnassignRun> {
+ *  지점이 하나 줄어든다. 워커가 0개면 부를 스크립트가 없다 — 호출자가 액션을 비활성화한다.
+ *
+ *  `force`면 `--force`가 붙는다(§2-5). 산 세션을 만나면 엔진이 그 세션을 끊고 푼다 — **죽이는
+ *  것도 푸는 것도 엔진 안이다**(제약 2·3: GUI는 `process.kill`도 생존 판정도 하지 않는다).
+ *  플래그가 갈라 놓는 자리는 거부하던 그 한 곳뿐이라 죽은 세션에는 붙어도 아무 일이 없다. */
+export async function unassign(root: string, hash: string, force = false): Promise<UnassignRun> {
   if (!isHash(hash)) return { ok: false, output: `해시 형식이 아닙니다: ${hash}`, worker: null };
   const workers = await listWorkers(root);
   if (workers.length === 0) {
@@ -71,7 +82,8 @@ export async function unassign(root: string, hash: string): Promise<UnassignRun>
     };
   }
   const name = workers[0].name;
-  return { ...(await runWorker(root, name, ["unassign", hash])), worker: name };
+  const args = force ? ["unassign", hash, "--force"] : ["unassign", hash];
+  return { ...(await runWorker(root, name, args)), worker: name };
 }
 
 /** 해시 → 실제 티켓 경로. 없으면 null(404의 근거).

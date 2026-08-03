@@ -10,7 +10,8 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { findTicket, unassign } from "./engine.ts";
+import { spawn } from "node:child_process";
+import { findTicket, runWorker, unassign } from "./engine.ts";
 import { listTickets, type Suffixes } from "./queue.ts";
 
 const DEFAULT: Suffixes = { inProgress: ".wip", done: ".done" };
@@ -128,4 +129,71 @@ test("unassign — 워커 0개면 부를 스크립트가 없다(화면은 이 �
   assert.match(run.output, /워커가 없습니다/);
   // 형식 밖 해시는 스크립트를 부르지도 않는다
   assert.strictEqual((await unassign(scratch(["w1"]), "../../x")).ok, false);
+});
+
+/** §2-5 — 산 세션은 종료 코드 `3`으로 거부되고, `--force`면 그 세션을 끊고 풀린다.
+ *
+ *  **판정은 코드다. 거부 문구가 아니다**: 화면이 문구를 정규식으로 읽으면 문구를 고치는 순간
+ *  확인 다이얼로그가 조용히 사라진다. 그래서 여기서 못박는 것은 `run.code === 3` 하나다.
+ *
+ *  산 pid는 진짜로 만든다(`sleep`) — `ps`가 답해야 `tick.sh`의 생존 판정이 돈다. 조상 사슬
+ *  면제에는 안 걸린다: 이 자식은 워커 스크립트의 **형제**지 조상이 아니다(주인 세션이 자기 손으로
+ *  푸는 경로만 면제다). 부모 `tick.sh`가 없는 손 클레임 모양이라 푸는 것은 강제 경로 자신이다.
+ *
+ *  **16초쯤 걸린다** — 강제 경로가 부모의 release를 15초까지 기다린 뒤 자기가 푼다(`tick.sh:136`).
+ *  줄일 방법은 엔진의 유예를 건드리는 것뿐인데 그건 읽기 전용이고, 그 기다림 자체가 이 경로다. */
+test("unassign — 산 세션은 코드 3으로 거부하고 --force면 끊고 푼다", async () => {
+  const r = scratch(["w1"]);
+  process.env.TICKET_LOCAL = path.join(r, "local");
+  const wip = path.join(r, "tickets", "aaaa9999.wip.md");
+  const victim = spawn("sleep", ["30"], { stdio: "ignore" });
+  try {
+    writeFileSync(
+      wip,
+      `---\nticket: aaaa9999\ntitle: 산 세션이 물고 있다\nsession_id: sess-live\npid: ${victim.pid}\nowner: developer / w1\n---\n본문\n`,
+    );
+
+    // 플래그 없이는 종전대로 거부다 — 티켓은 `.wip` 그대로고 코드가 3이다
+    const denied = await unassign(r, "aaaa9999");
+    assert.strictEqual(denied.ok, false);
+    assert.strictEqual(denied.code, 3, denied.output); // ← 화면이 확인을 띄우는 계약
+    assert.strictEqual(existsSync(wip), true);
+
+    // 강제 — 세션이 죽고 티켓이 백로그로 돌아간다
+    const forced = await unassign(r, "aaaa9999", true);
+    assert.strictEqual(forced.ok, true, forced.output);
+    assert.strictEqual(forced.code, 0);
+    assert.match(forced.output, /강제 할당 해제: aaaa9999/);
+    assert.strictEqual(existsSync(wip), false); // 진행중 접미사가 떨어졌다
+    const back = readFileSync(path.join(r, "tickets", "aaaa9999.md"), "utf8");
+    assert.match(back, /^session_id:\s*$/m);
+    assert.match(back, /^pid:\s*$/m);
+    assert.strictEqual(victim.killed || victim.exitCode !== null || victim.signalCode !== null, true);
+  } finally {
+    victim.kill("SIGKILL"); // 거부 쪽에서 죽으면 `sleep 30`이 남는다
+  }
+});
+
+/** 죽은 세션은 `--force`가 붙어도 종전 경로다(§2-5 — 플래그가 갈라 놓는 자리는 거부하던 한 곳뿐).
+ *  회귀다: 강제가 별도 전이를 만들면 여기서 문구가 갈린다. */
+test("unassign — 죽은 세션은 --force가 붙어도 종전 경로다", async () => {
+  const r = scratch(["w1"]);
+  process.env.TICKET_LOCAL = path.join(r, "local");
+  writeFileSync(
+    path.join(r, "tickets", "bbbb8888.wip.md"),
+    "---\nticket: bbbb8888\ntitle: 죽은 세션\nsession_id: sess-dead\n---\n본문\n",
+  );
+  const run = await unassign(r, "bbbb8888", true);
+  assert.strictEqual(run.ok, true, run.output);
+  assert.strictEqual(run.code, 0);
+  assert.match(run.output, /할당 해제: bbbb8888/); // `강제 할당 해제`가 아니다
+});
+
+/** 모르는 플래그는 사용법(코드 `2`)이다 — `3`과 갈려야 화면이 확인을 안 띄운다. */
+test("unassign — 코드가 갈래를 가른다(2는 사용법이라 확인이 아니다)", async () => {
+  const r = scratch(["w1"]);
+  process.env.TICKET_LOCAL = path.join(r, "local");
+  const run = await runWorker(r, "w1", ["unassign", "cccc7777", "--forse"]);
+  assert.strictEqual(run.ok, false);
+  assert.strictEqual(run.code, 2);
 });

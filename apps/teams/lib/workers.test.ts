@@ -435,7 +435,7 @@ function stamp(minutesAgo: number): string {
 const LIMIT = "You've hit your session limit · resets 7:40pm (Asia/Seoul)";
 
 test("lastFailure — 외부 요인으로 죽은 세션만, 신선할 때만 잡는다 (§0-5)", async () => {
-  const names = ["w1", "w2", "w3", "w4", "w5", "w6", "w7", "w8", "w9"];
+  const names = ["w1", "w2", "w3", "w4", "w5", "w6", "w7", "w8", "w9", "w10"];
   const root = makeRoot(Object.fromEntries(names.map((n) => [`${n}.sh`, "#!/bin/bash\n"])));
   const dir = path.join(root, "workers");
   mkdirSync(path.join(dir, "logs"));
@@ -482,6 +482,11 @@ test("lastFailure — 외부 요인으로 죽은 세션만, 신선할 때만 잡
       `${t1} [w8] ${fail("88888888", "w8")}`,
       // 9) 로그가 100KB여도 꼬리에서 마지막 줄을 집는다
       `${t1} [w9] ${fail("99999999", "w9")}`,
+      // 10) FAIL 뒤에 KILLED → null (§2-5 · §0-5 판정 1). **`KILLED`를 결과 낱말로 안 세면
+      //     이 워커의 배너가 그 앞의 오래된 FAIL을 읽는다** — 강제 중단은 사람이 끊은 것이고
+      //     환경 탓이 아니라 `TIMEOUT`과 같은 칸이다
+      `${t3} [w10] ${fail("aaaaaaaa", "w10")}`,
+      `${t1} [w10] KILLED aaaaaaaa 21s 만에 밖에서 종료(rc=143) -> 할당 회수 + 백로그 복귀. 로그 fail-w10.log`,
       "",
     ].join("\n"),
   );
@@ -501,6 +506,7 @@ test("lastFailure — 외부 요인으로 죽은 세션만, 신선할 때만 잡
   assert.strictEqual(ws.w7.lastFailure, null);
   assert.strictEqual(ws.w8.lastFailure, null);
   assert.strictEqual(ws.w9.lastFailure?.reason, LIMIT);
+  assert.strictEqual(ws.w10.lastFailure, null); // KILLED가 결과 줄이다 — 앞의 FAIL을 안 읽는다
   // 결과 줄을 새로 뽑아도 `recentLog[0]`은 여전히 **마지막 줄**이다(셀이 지금 쓰는 값이다)
   assert.match(ws.w4.recentLog[0], /DISPATCH d4444444/);
   assert.match(ws.w5.recentLog[0], /SKIP/);

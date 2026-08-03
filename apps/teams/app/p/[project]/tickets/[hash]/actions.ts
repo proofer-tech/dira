@@ -278,8 +278,16 @@ export async function saveTicket(_prev: SaveState, form: FormData): Promise<Save
  *  `.done`도 거부한다(사람 요구 `8ec6cd6d`). 완료 티켓은 `session_id`를 든 채 완료되므로
  *  `assigned`만 보면 통과하는데, 거기서 이 명령이 하는 일은 `clear`가 담당 세션 기록을 지우는
  *  것뿐이다 — 큐는 그대로고 기록만 없어진다. 화면에서 버튼을 뺐지만(page.tsx) 화면 제약은
- *  검증이 아니다(`deleteTicket`의 `DELETE_LOCKED`와 같은 근거). */
-export async function unassignTicket(projectId: string, hash: string): Promise<UnassignRun> {
+ *  검증이 아니다(`deleteTicket`의 `DELETE_LOCKED`와 같은 근거).
+ *
+ *  `force`는 **사람이 확인 다이얼로그에서 누른 뒤에만** 온다(§2-5). 이 액션은 그 판단을 하지
+ *  않는다 — 산 세션인지는 엔진이 종료 코드 `3`으로 답하고, 화면은 그 코드를 보고 묻는다.
+ *  `.done`은 여기서 먼저 막히므로 `--force`가 완료 티켓에 닿는 경로가 없다(요구 `8ec6cd6d`). */
+export async function unassignTicket(
+  projectId: string,
+  hash: string,
+  force = false,
+): Promise<UnassignRun> {
   try {
     const t = await target(projectId, hash);
     if (t.state === "done") {
@@ -289,7 +297,7 @@ export async function unassignTicket(projectId: string, hash: string): Promise<U
       return { ok: false, output: "할당된 티켓이 아닙니다(session_id가 비어 있습니다).", worker: null };
     }
     // URL 문자열이 아니라 **찾아낸 파일의 stem**을 넘긴다 — 엔진 `find`는 파일명만 본다.
-    const r = await unassign(t.root, t.stem);
+    const r = await unassign(t.root, t.stem, force);
     revalidatePath(`/p/${projectId}/tickets/${encodeURIComponent(t.stem)}`);
     revalidatePath(`/p/${projectId}`);
     if (r.ok) await kickIdleWorker(t.root); // §4-5 — `.wip` → 열림. 되돌린 티켓이 바로 다시 물린다

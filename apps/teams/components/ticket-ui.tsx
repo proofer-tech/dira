@@ -256,16 +256,47 @@ export function UnassignButton({
   // `.wip`은 할당 여부와 무관하게 잠금 카드가 서야 한다 — 버튼만 그 안에서 빠진다
   if (!wip && !assigned && !run) return null; // 할당 안 된 티켓엔 이 액션이 없다
 
+  const call = (force: boolean) =>
+    start(async () => setRun(await unassignTicket(project, hash, force)));
+
+  // 코드 `3` = 산 세션이라 엔진이 거부했다 — `--force`면 풀 수 있다(§2-5 §종료 코드).
+  // **거부 문구를 읽지 않는다**: 문구를 고치는 순간 확인이 조용히 사라진다. 생존 판정은
+  // 엔진 한 벌이고(제약 3) 화면은 그 답을 받아 묻기만 한다 — 첫 클릭은 실패가 아니라
+  // **질문을 받아 오는 왕복**이다. 그래서 이때 실패 `Alert`는 뜨지 않는다(아래 `output`).
+  const asking = run?.code === 3;
+
   const button = (
-    <Button
-      variant="outline"
-      size="sm"
-      disabled={pending || !worker}
-      onClick={() => start(async () => setRun(await unassignTicket(project, hash)))}
-    >
+    <Button variant="outline" size="sm" disabled={pending || !worker} onClick={() => call(false)}>
       <Unlink aria-hidden />
       {pending ? "할당 해제 중…" : "할당 해제"}
     </Button>
+  );
+
+  /* 여섯 번째 `AlertDialog`이고 앞 다섯과 성격이 다르다(§5 · §2-5 §확인) — 지우는 것이 아니라
+     **끊는 것**이고, 버튼이 여는 것이 아니라 엔진이 거부한 뒤에 열린다. 그래서 `AlertDialogTrigger`가
+     없고 `open`을 상태가 쥔다(`DiscardConfirm`과 같은 모양이다).
+     본문은 사실 셋을 다 말한다: 세션이 죽는다 · 커밋 안 된 변경은 남는다 · 티켓은 백로그로
+     돌아간다. 둘째 줄이 없으면 사람이 파일이 날아간 줄 알고 안 누르거나, 눌러 놓고 지워졌다고
+     믿는다(요구 본문의 `진행한 작업을 삭제`가 화면이 보는 사실과 다르다). */
+  const confirm = (
+    <AlertDialog open={asking} onOpenChange={(next) => !next && setRun(null)}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>도는 세션을 끊습니다</AlertDialogTitle>
+          <AlertDialogDescription>
+            <span className="font-mono">{hash}</span>를 물고 있는 세션이 아직 살아 있습니다. 강제로
+            중단하면 그 세션이 죽고, 티켓은 백로그로 돌아가 다시 디스패치됩니다. 워크트리에 커밋하지
+            않은 변경은 지워지지 않고 그대로 남습니다.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel autoFocus>취소</AlertDialogCancel>
+          <AlertDialogAction variant="destructive" disabled={pending} onClick={() => call(true)}>
+            강제 중단
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
   // 누를 수 있는지/무엇이 불리는지. 자리가 둘(잠금 카드 설명 · 종전 버튼 옆)이라 한 번만 쓴다
   const why = worker ? (
@@ -282,8 +313,10 @@ export function UnassignButton({
   // 스크립트 출력은 그대로 보여준다: 백로그 복귀 여부가 여기 적혀 온다.
   // **잠금 카드 밖 아래**다 — 해제가 성공하면 티켓이 `.wip`이 아니게 돼 카드가 통째로
   // 사라지고, 안에 있으면 출력도 같이 사라진다(§2 · 위 실측과 같은 사건).
+  // 코드 `3`은 실패가 아니라 질문이다 — 그 자리를 다이얼로그가 받는다(§2-5 §확인).
   const output =
     run &&
+    !asking &&
     (run.ok ? (
       <Alert>
         <Unlink aria-hidden />
@@ -326,6 +359,7 @@ export function UnassignButton({
           )}
         </Alert>
         {output}
+        {confirm}
       </div>
     );
 
@@ -346,6 +380,7 @@ export function UnassignButton({
         </p>
       )}
       {output}
+      {confirm}
     </div>
   );
 }

@@ -769,13 +769,16 @@ export async function writeEngine(
   return back;
 }
 
-/** tick 하나의 **결과**인 동사는 이 셋뿐이다(DESIGN.md §0-5 판정 1단계). 나머지는 건너뛴다:
+/** tick 하나의 **결과**인 동사는 이 넷뿐이다(DESIGN.md §0-5 판정 1단계). 나머지는 건너뛴다:
  *  - `DISPATCH` — 아직 안 끝났다. 이걸 결과로 세면 **배너가 깜빡인다**(실측에서 FAIL은 DISPATCH
  *    6~13초 뒤에 오는데 보드 폴링이 5초라 매분 그 창에 걸린다).
  *  - `SKIP`·`HOLD` — "지금 물 티켓이 없다"이지 환경이 나았다는 증거가 아니다.
  *  - `WARN`·`REAP`·`UNASSIGN`·`ERROR`·`NOTE` — tick 결과가 아니다. `ERROR cwd 없음`은 §4
- *    작업 디렉터리 결함이 이미 자기 자리에서 말한다 — 같은 사실을 두 자리에 쓰지 않는다. */
-const RESULT_VERBS = new Set(["DONE", "FAIL", "TIMEOUT"]);
+ *    작업 디렉터리 결함이 이미 자기 자리에서 말한다 — 같은 사실을 두 자리에 쓰지 않는다.
+ *
+ *  `KILLED`는 §2-5가 더한다 — 상한을 안 넘고 신호로 죽은 세션(`강제 할당 해제`가 만든다).
+ *  안 더하면 강제 중단한 워커의 배너가 **그 앞의 오래된 결과 줄**을 읽는다. */
+const RESULT_VERBS = new Set(["DONE", "FAIL", "TIMEOUT", "KILLED"]);
 
 /** `마지막 활동` 셀을 펼치면 서는 줄 수 (§4-7). tick 한 바퀴가 6~8줄이라 20줄이면 최근 티켓
  *  두어 개가 통째로 보인다. */
@@ -841,7 +844,8 @@ const failLine = /^(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d) \[[^\]]*\] FAIL (\S+) .* 로
 
 /** §0-5 판정 2·3단계. 마지막 **결과** 줄 하나 → 외부 요인 실패이거나 `null`.
  *  `DONE`이면 `null`이다 — 이게 "다음 성공 tick에 저절로 꺼진다"다. **`TIMEOUT`도 `null`**:
- *  rc 143/137은 90분 상한에 걸린 매달린 세션이고 환경 탓이 아니다(그래서 이 정규식이 `FAIL`만 문다). */
+ *  rc 143/137은 90분 상한에 걸린 매달린 세션이고 환경 탓이 아니다(그래서 이 정규식이 `FAIL`만 문다).
+ *  **`KILLED`도 같은 칸이다**(§2-5) — 사람이 끊은 것이라 배너가 말할 것이 없다. */
 async function failureOf(logsDir: string, line: string | null): Promise<WorkerFailure | null> {
   const m = line && failLine.exec(line);
   if (!m) return null;
