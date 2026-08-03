@@ -164,7 +164,8 @@ html { scroll-behavior: smooth; }
 
 /* ── steps (30초 설명) ──────────────────────────── */
 .dira-landing .steps { list-style: none; margin: 32px 0 0; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
-.dira-landing .steps li { border: 1px solid var(--border); border-radius: 12px; padding: 22px; background: var(--panel); }
+/* `> li` — 카드 테두리는 직계 자식만. §플랜이 카드 안에 .marks(중첩 <li>)를 넣는다. */
+.dira-landing .steps > li { border: 1px solid var(--border); border-radius: 12px; padding: 22px; background: var(--panel); }
 /* `> li >` 로 카드 제목만 잡는다 — 그냥 `.steps b`면 본문 <p> 안의 강조까지 block이
    되어 한 문단이 세 토막으로 끊긴다(§랜딩 ①). */
 .dira-landing .steps > li > b { display: block; margin-bottom: 8px; font-size: 15px; letter-spacing: -0.02em; }

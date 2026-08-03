@@ -157,11 +157,40 @@ onMounted(async () => {
   <p class="eyebrow">플랜</p>
   <h2>전부 무료입니다</h2>
   <p class="body" style="max-width:40em">
-    로컬 엔진과 앱은 영원히 무료로 제공합니다. dira는 빌더들의 멀티 에이전트 생태계를 응원합니다.
+    로컬 엔진과 앱은 영원히 무료로 제공합니다.
   </p>
-  <div class="cta" style="justify-content:flex-start; margin-top:24px">
-    <a class="btn" href="https://github.com/proofer-tech/dira">GitHub에서 Watch</a>
-  </div>
+  <!-- 카드는 순서가 없어 <ul>이다(.steps는 30초 설명에서 <ol>로 쓰지만 규칙은 클래스에 걸려 있다). -->
+  <ul class="steps">
+    <li>
+      <b>Free</b>
+      <ul class="marks">
+        <li>현재 로컬 앱 또는 엔진을 직접 설치하여 쓰는건 무료입니다</li>
+        <li>(준비중) 동료들과 P2P 협업</li>
+        <li>(준비중) 엔진 MCP</li>
+      </ul>
+      <p style="margin-top:16px">dira는 빌더들의 멀티 에이전트 생태계를 응원합니다.</p>
+      <div class="cta" style="justify-content:flex-start; margin-top:16px">
+        <a class="btn" href="https://github.com/proofer-tech/dira">GitHub Star</a>
+      </div>
+    </li>
+    <li>
+      <b>Pro</b>
+      <ul class="marks">
+        <li>(준비중) 클라우드 프로젝트</li>
+        <li>(준비중) dira 자체 클라우드 LLM 사용</li>
+        <li>(준비중) 결과물 웹 호스팅</li>
+        <li>(준비중) 클라우드 워커</li>
+      </ul>
+    </li>
+    <li>
+      <b>Enterprise</b>
+      <ul class="marks">
+        <li>(준비중) 엔터프라이즈 전용 커스텀</li>
+        <li>(준비중) 사내툴과 연동</li>
+      </ul>
+    </li>
+  </ul>
+  <p class="body" style="margin-top:24px">(준비중) 페르소나 마켓</p>
 </section>
 
 </main>
