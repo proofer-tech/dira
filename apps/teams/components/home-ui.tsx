@@ -49,6 +49,7 @@ import {
   useAttachments,
 } from "@/components/attachment-field";
 import { CopyCommand } from "@/components/copy-command";
+import { FindBar } from "@/components/find-bar";
 import { useKeymap } from "@/components/keymap-provider";
 import { Markdown } from "@/components/markdown";
 import { StatusBadge } from "@/components/status-badge";
@@ -169,6 +170,10 @@ export function HomeUI({ project, initial }: { project: string; initial: HomeChu
   const session = useRef(initial.sessionId);
   const offset = useRef(initial.offset);
   const input = useRef<HTMLTextAreaElement>(null);
+  // **`⌘F`가 훑을 자리 하나**(§7 §무엇을 훑나 · §비주얼 §30) — 스레드 뷰포트다. 좌측 패널 ·
+  // 입력칸 · 셸 헤더가 이 밖이라 *무엇을 안 훑나*가 이 ref 하나로 참이 된다. 대화 0건(온보딩)
+  // 이면 스크롤러 자체가 안 서서 `null`이고, 그래서 그 화면의 결과가 `0/0`이다(§30 ⑥).
+  const thread = useRef<HTMLDivElement>(null);
   // 첨부(§8) — 나가는 곳이 `claude`의 argv다. 조립은 서버의 `withAttachments` 하나이고
   // (§8 §표기는 하나다) 파일은 홈 에이전트 cwd 아래라 `Read`가 그대로 연다(§7 도구 셋).
   const att = useAttachments(project);
@@ -432,7 +437,7 @@ export function HomeUI({ project, initial }: { project: string; initial: HomeChu
                스크롤하는 요소는 여전히 Viewport 하나고, 화면에서 스크롤하는 것도 그것 하나다. */
             <MessageScrollerProvider autoScroll>
               <MessageScroller className="flex-1">
-                <MessageScrollerViewport aria-label="대화" className="flex-1">
+                <MessageScrollerViewport ref={thread} aria-label="대화" className="flex-1">
                   <MessageScrollerContent>
                     {turns.map((t, i) => (
                       <MessageScrollerItem key={t.key} messageId={t.key}>
@@ -628,6 +633,12 @@ export function HomeUI({ project, initial }: { project: string; initial: HomeChu
           ) : null}
         </div>
       </div>
+
+      {/* 찾기 바(§7 §대화 안에서 찾기 · §비주얼 §30) — **화면 컴포넌트의 마지막 자식**이다.
+          포털을 안 쓴다: `fixed`가 뷰포트에 붙는 조건은 조상 사슬에 `transform`·`filter`·
+          `contain`이 없는 것 하나이고 이 사슬에는 없다. 열림 상태도 `⌘F`도 바가 자기가 든다 —
+          **홈에만 있는 컴포넌트라 §0-6 `board.search`의 홈 갈래가 저절로 맞는다**. */}
+      <FindBar scope={thread} restore={input} />
     </div>
   );
 }

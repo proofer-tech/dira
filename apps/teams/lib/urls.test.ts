@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert";
 import {
   chatRows,
+  findMatches,
   interjectMode,
   mergeProgress,
   parentPath,
@@ -276,4 +277,24 @@ test("chatRows — 최근이 위 · 제목 없는 대화는 `새 대화` · 시�
   );
 
   assert.deepEqual(chatRows([]), []); // 0건 — 트리거를 안 그리는 화면의 근거다
+});
+
+/** 찾기 바가 훑는 자 (DESIGN.md §7 §대화 안에서 찾기 · §비주얼 §30) — **대소문자 무시
+ *  부분일치 하나**다. `<FindBar>`는 이 목록으로 `Range`를 만들 뿐이라 판정이 전부 여기 있다. */
+test("findMatches — 대소문자 무시 · 0건 · 빈 검색어", () => {
+  // 대소문자 무시: 질의도 원문도 어느 쪽이 대문자든 같은 자리를 준다
+  assert.deepEqual(findMatches("Ticket ticket TICKET", "ticket"), [0, 7, 14]);
+  assert.deepEqual(findMatches("ticket", "TiCkEt"), [0]);
+
+  // 0건 — 빈 배열이다. 화면은 이 길이로 `0/0`을 그린다
+  assert.deepEqual(findMatches("w2가 지금 무슨 일을 하나", "w4"), []);
+  assert.deepEqual(findMatches("", "w2"), []);
+
+  // 빈 검색어 — **0건과 다른 사실이다**(§30 ③: 안 찾은 것과 못 찾은 것). 여기서는 둘 다
+  // 빈 배열이고, 건수 칸을 비우는 판정은 화면이 질의 문자열로 한다
+  assert.deepEqual(findMatches("아무 글", ""), []);
+
+  // 한글 부분일치 · 겹치는 일치는 안 센다(§30 ④ 겹침 없음)
+  assert.deepEqual(findMatches("답변 대기 티켓이 왜 안 도나", "티켓"), [6]);
+  assert.deepEqual(findMatches("aaaa", "aa"), [0, 2]);
 });

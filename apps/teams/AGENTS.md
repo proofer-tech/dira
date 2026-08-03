@@ -234,6 +234,19 @@ apps/teams/
                         서버가 트랜스크립트를 읽어 동기로 그린다) 이 화면은 상태를 여섯 개 든다
     markdown.tsx        읽기 전용 마크다운 렌더(§비주얼 §10). **왕복 스레드와 `.wip` 본문의
                         유일한 출처** — 편집기는 종전대로 원문이다. 자리별 오버라이드 없음
+    find-bar.tsx        찾기 바(§7 §대화 안에서 찾기 · §비주얼 §30) — `⌘F`로 열고 **지금 화면에
+                        서 있는 글**에서 찾는다. **서버가 한 줄도 안 든다**(새 라우트 0 · 새 액션 0):
+                        훑는 것이 이미 그려진 DOM이다. **DOM도 안 고친다** — 일치한 곳은
+                        `CSS.highlights` + `::highlight()` 둘(`globals.css`)이라 스트리밍 중인
+                        스레드를 React가 다시 그려도 다투지 않고, 다시 그려질 때마다 다시 걷는
+                        것은 `MutationObserver` 하나다. 순수 판정(문자열 → 일치 오프셋)은
+                        `lib/urls.ts`의 `findMatches`다(JSX를 `pnpm test`가 못 읽는다).
+                        **한 벌이 두 화면에 선다**(홈 · §데스크톱 앱 N5)라 갈리는 값 둘만 props다 —
+                        훑을 자리(`scope`)와 닫을 때 돌아갈 포커스(`restore`). 열림 상태와
+                        `board.search` 훅은 자기가 든다: **홈에만 마운트되므로 범위가 저절로 맞는다**
+                        (`board-ui.tsx`가 같은 액션의 보드 갈래를 쓰는 그대로).
+                        **새 파일인 이유**: 쓰는 곳이 두 화면이라 어느 한쪽에 얹으면 나머지가
+                        그 파일을 import한다(`keymap-provider.tsx`와 같은 축)
     copy-command.tsx    실행 대신 복사시키는 명령 블록
   components/ui/        shadcn CLI 산출물. 손으로 만들지 않는다.
                         **예외 1건: `alert.tsx` 기본 변종에서 `*:[svg]:text-current`를 뺐다**

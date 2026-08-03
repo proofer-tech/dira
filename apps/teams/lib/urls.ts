@@ -312,3 +312,22 @@ export function relativeUnder(picked: string, baseAbs: string): string {
   const base = baseAbs.replace(/\/+$/, "") + "/";
   return base !== "/" && picked.startsWith(base) ? picked.slice(base.length) : picked;
 }
+
+/** 한 문자열에서 **일치한 곳의 시작 오프셋 전부** (DESIGN.md §7 §대화 안에서 찾기 · §비주얼 §30).
+ *  `<FindBar>`가 텍스트 노드마다 이걸 불러 `Range`를 만든다 — **JSX는 `node --test`가 못 읽으므로
+ *  컴포넌트의 순수 판정이 여기 산다**(AGENTS.md). 훑는 자는 §1 보드 검색과 같은 것 하나다:
+ *  **대소문자 무시 부분일치**. 정규식도 단어 단위도 대소문자 토글도 없다(§30 ⑦).
+ *
+ *  **겹치는 일치는 안 센다** — `aaa`에서 `aa`는 1건이다. 겹치면 §30 ④의 *겹침 없음*이 깨져
+ *  `3/12`가 가리키는 자리가 둘이 되고, 두 레지스트리를 가르는 뺄셈도 성립하지 않는다.
+ *
+ *  ponytail: `toLowerCase()`가 길이를 바꾸는 글자(`İ` → 2자)가 섞이면 오프셋이 그만큼 밀린다.
+ *  이 화면의 글은 한글·ASCII라 안 걸린다 — 걸리는 큐가 나오면 원문을 그대로 훑는 스캔으로 바꾼다. */
+export function findMatches(text: string, query: string): number[] {
+  if (!query) return [];
+  const hay = text.toLowerCase();
+  const needle = query.toLowerCase();
+  const out: number[] = [];
+  for (let i = hay.indexOf(needle); i !== -1; i = hay.indexOf(needle, i + needle.length)) out.push(i);
+  return out;
+}

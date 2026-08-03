@@ -192,6 +192,18 @@
   }
 }
 
+/* 대화·본문 안에서 찾기(DESIGN.md §비주얼 §30). `::highlight()`는 등록 이름으로만 선택되는
+   가상 요소라 유틸리티·인라인 style로 쓸 수 없다 — 이 파일이 이 규칙의 유일한 자리다.
+   대비는 실측했다(§30 ④ 표) — 값을 손으로 고치지 않는다. */
+::highlight(dira-find) {
+  background-color: color-mix(in oklab, var(--primary) 25%, transparent);
+  text-decoration: underline;
+}
+::highlight(dira-find-current) {
+  background-color: var(--primary);
+  color: var(--primary-foreground);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
