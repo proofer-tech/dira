@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
@@ -10,6 +10,8 @@ import {
   lastRateLimits,
   listUsage,
   parseLogName,
+  RATE_WINDOW_MS,
+  usageRates,
 } from "./usage.ts";
 
 /** 픽스처 큐 하나. 로그 디렉터리까지 만들어 준다. */
@@ -159,4 +161,97 @@ test("engineLimits — 원본 모르는 엔진은 사유뿐 · TTL 안에서는 
   // 이게 "5초 폴링마다 외부 호출을 하지 않는다"의 실체다.
   const second = await engineLimits(["mystery-engine"]);
   assert.strictEqual(second["mystery-engine"], first["mystery-engine"]);
+});
+
+// ── 소모 속도 (§0-8 판정 4) ─────────────────────────────────────────────────
+
+/** 트랜스크립트 픽스처 하나. `<projects>/<enc(<root>/worktrees/)><나머지>/<sid>.jsonl`이고
+ *  **mtime을 가장 최신 레코드 시각에 맞춘다** — 창 밖 파일을 `mtime`만 보고 건너뛰는 경로가
+ *  진짜 파일에서 그대로 도는지 재려면 그 값이 진짜여야 한다. */
+function putTranscript(
+  projects: string,
+  root: string,
+  rest: string,
+  recs: { minsAgo: number; id: string; tokens: number }[],
+): void {
+  const enc = (p: string) => p.replace(/[^a-zA-Z0-9]/g, "-");
+  const dir = path.join(projects, enc(path.join(root, "worktrees") + path.sep) + rest);
+  mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, "11111111-2222-3333-4444-555555555555.jsonl");
+  const lines = recs.map((r) =>
+    JSON.stringify({
+      type: "assistant",
+      timestamp: new Date(Date.now() - r.minsAgo * 60_000).toISOString(),
+      message: { id: r.id, usage: { input_tokens: r.tokens } },
+    }),
+  );
+  // assistant가 아닌 줄은 안 센다(실측 파일의 절반이 그것이다)
+  lines.push('{"type":"user","message":{"role":"user"}}');
+  writeFileSync(file, lines.join("\n") + "\n");
+  const newest = (Date.now() - Math.min(...recs.map((r) => r.minsAgo)) * 60_000) / 1000;
+  utimesSync(file, newest, newest);
+}
+
+/** 큐 픽스처에 워크트리를 세운다 — 이게 있어야 접두 규칙이 `worktrees/` 갈래로 간다. */
+function makeTreeRoot(): { root: string; projects: string } {
+  const root = makeRoot();
+  mkdirSync(path.join(root, "worktrees", "w1"), { recursive: true });
+  return { root, projects: mkdtempSync(path.join(tmpdir(), "projects-")) };
+}
+
+test("usageRates — `message.id` 중복은 한 번만 센다", async () => {
+  const { root, projects } = makeTreeRoot();
+  // 스트리밍이 한 응답을 여러 줄로 적는다(실측 78 레코드 → 고유 54).
+  putTranscript(projects, root, "w1", [
+    { minsAgo: 1, id: "msg_A", tokens: 600 },
+    { minsAgo: 1, id: "msg_A", tokens: 600 },
+    { minsAgo: 1, id: "msg_A", tokens: 600 },
+    { minsAgo: 2, id: "msg_B", tokens: 400 },
+  ]);
+  const rates = await usageRates(root, [{ worker: "w1", engine: "claude" }], projects);
+  // 1000 토큰 ÷ 창 10분. 중복을 안 접었다면 220이다
+  assert.deepEqual(rates, { claude: 100 });
+});
+
+test("usageRates — 창 밖 레코드도 창 밖 파일도 안 센다", async () => {
+  const { root, projects } = makeTreeRoot();
+  const out = RATE_WINDOW_MS / 60_000 + 5; // 창(10분) 밖
+  // 창 안 파일 안의 창 밖 레코드 — 파일은 열리고 레코드가 걸러진다
+  putTranscript(projects, root, "w1", [
+    { minsAgo: 1, id: "msg_A", tokens: 300 },
+    { minsAgo: out, id: "msg_OLD", tokens: 9_000_000 },
+  ]);
+  // 통째로 창 밖인 파일 — **mtime만 보고 안 연다**
+  putTranscript(projects, root, "w2", [{ minsAgo: out, id: "msg_OLD2", tokens: 9_000_000 }]);
+  const rates = await usageRates(
+    root,
+    [
+      { worker: "w1", engine: "claude" },
+      { worker: "w2", engine: "claude" },
+    ],
+    projects,
+  );
+  assert.deepEqual(rates, { claude: 30 });
+});
+
+test("usageRates — 칸마다 그 엔진을 무는 워커만 · 원본 없는 엔진은 키가 없다", async () => {
+  const { root, projects } = makeTreeRoot();
+  putTranscript(projects, root, "w1", [{ minsAgo: 1, id: "a", tokens: 500 }]);
+  putTranscript(projects, root, "w2", [{ minsAgo: 1, id: "b", tokens: 700 }]);
+  // 워크트리 **하위 디렉터리**에서 뜬 세션도 그 워커의 것이다(`…-worktrees-w2-apps-desktop`)
+  putTranscript(projects, root, "w2-apps-desktop", [{ minsAgo: 1, id: "c", tokens: 300 }]);
+  // 등록이 풀린 워커 — 무는 엔진이 없으니 어느 칸에도 안 든다
+  putTranscript(projects, root, "w9", [{ minsAgo: 1, id: "d", tokens: 9_000_000 }]);
+
+  const rates = await usageRates(
+    root,
+    [
+      { worker: "w1", engine: "claude" },
+      { worker: "w2", engine: "codex" },
+    ],
+    projects,
+  );
+  // codex는 `~/.claude/projects/`에 세션이 없다 — `0`이 아니라 **키가 통째로 없다**.
+  // w2 쪽 1000 토큰이 claude 칸에 새지 않는 것도 여기서 갈린다.
+  assert.deepEqual(rates, { claude: 50 });
 });

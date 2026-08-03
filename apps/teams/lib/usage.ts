@@ -8,7 +8,7 @@
  *    **부르는 주체는 서버뿐이고 토큰은 응답에 담기지 않는다**(아래 `engineLimits`).
  *
  *  **읽기 전용이다.** 이 모듈은 아무 파일도 쓰지 않는다. */
-import { readdir, readFile } from "node:fs/promises";
+import { access, readdir, readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import { lastJsonLine } from "./workers.ts";
@@ -133,6 +133,174 @@ export function formatTokens(n: number): string {
   if (n < 1000) return String(Math.round(n));
   const [v, unit] = n < 999_500 ? [n / 1000, "k"] : [n / 1_000_000, "M"];
   return (v < 10 ? v.toFixed(1) : String(Math.round(v))) + unit;
+}
+
+// ── 소모 속도 `<n> 토큰/분` (§0-8 판정 4 · 요구 `b1e932ae`) ──────────────────
+//
+// **판정 1의 로그로는 못 만든다.** `tick.sh`가 엔진 stdout을 세션이 끝난 뒤에 한 번에 옮겨서
+// (`:395` → `:474`) 도는 세션의 `.log`가 **0바이트**인데, 분당 값은 바로 그 도는 세션이 만드는
+// 수다. 그래서 출처는 **트랜스크립트**다 — `~/.claude/projects/<인코딩된 cwd>/<sid>.jsonl`의
+// `type=="assistant"` 레코드(실측 창 15분: 로그 222건 · 트랜스크립트 440건 · 로그에만 있는
+// 메시지 0건). `lib/transcript.ts`가 §2-1 스트림을 그리는 바로 그 파일이라 **새 권한이 아니다.**
+//
+// 이 절도 **읽기 전용이다** — `~/.claude/`에 아무것도 쓰지 않는다(이 파일 머리의 계약).
+
+/** 창은 **10분**이다. 지난 4시간의 매 분에 화면에 떴을 값 240개를 창별로 뽑아 골랐다
+ *  (§0-8 판정 4 표). 1분은 0이 깜빡이고(§0-5가 상시 요소에 대해 거절한 모양), 30분은 흔들림을
+ *  0.2 줄이는 대가로 **20분을 더 거짓말한다**(워커가 멈춘 뒤 0으로 내려오는 데 걸리는 시간이
+ *  곧 창의 길이다). 화면이 `title`에 `최근 10분`을 적어 이 창을 말한다. */
+export const RATE_WINDOW_MS = 10 * 60 * 1000;
+
+/** 10분 창의 값이 30초에 움직이는 폭이 5%를 못 넘는다 — 5초 폴링 6번 중 1번만 스캔을 치른다
+ *  (§0-8 판정 4 §비용). `engineLimits`와 **같은 모양**이다: 값이 아니라 Promise를 캐시한다. */
+const RATE_TTL_MS = 30_000;
+
+/** 트랜스크립트를 원본으로 갖는 엔진. **오늘은 claude 하나다** — `~/.claude/projects/`는
+ *  claude가 쓰는 파일이라 codex 세션이 거기 없다. 그래서 codex 칸은 `0`이 아니라 이 항목이
+ *  **통째로 빠진다**(§0-8 판정 4: 못 구하는 값에 `0`을 그리지 않는다. 판정 2와 같은 줄이다).
+ *
+ *  ponytail: codex의 같은 값은 rollout의 `token_count`에 있다(`codexLimit`이 읽는 그 파일).
+ *  지금 이 큐에 codex 워커가 0개라 재현할 방법이 없는 배선을 안 세운다 — 생기면 여기 한 줄. */
+const RATE_SOURCE = new Set(["claude"]);
+
+/** cwd → `~/.claude/projects/`의 디렉터리 이름. 규칙은 **비영숫자 전부 `-`**다
+ *  (CLI 번들 2.1.220에서 읽었다. 이 머신 워커 8/8 일치). */
+const enc = (p: string) => p.replace(/[^a-zA-Z0-9]/g, "-");
+
+const rateCache = new Map<string, { at: number; value: Promise<Record<string, number>> }>();
+
+/** 엔진 이름 → **토큰/분**. **원본이 없는 엔진은 키 자체가 없다**(화면이 그 항목을 통째로 뺀다).
+ *  창 안에 세션이 없어서 나온 진짜 `0`은 키가 있는 `0`이라 둘이 갈린다.
+ *
+ *  `workers`는 셸이 이미 들고 있는 `{ 실효 이름, engineName }` 배열이다(`layout.tsx`) —
+ *  칸마다 그 엔진을 무는 워커들의 세션만 센다(§0-8 판정 4 §표기). **새 fs 읽기가 아니다.**
+ *  `projects`는 테스트가 픽스처를 주는 자리다(`findTranscript`와 같은 선). */
+export async function usageRates(
+  root: string,
+  workers: { worker: string; engine: string }[],
+  projects = path.join(homedir(), ".claude", "projects"),
+): Promise<Record<string, number>> {
+  const out: Record<string, number> = {};
+  for (const w of workers) if (RATE_SOURCE.has(w.engine)) out[w.engine] = 0;
+  if (!Object.keys(out).length) return out; // 스캔조차 안 한다
+
+  const key = `${root}\0${projects}`;
+  const now = Date.now();
+  let hit = rateCache.get(key);
+  if (!hit || now - hit.at >= RATE_TTL_MS) {
+    rateCache.set(key, (hit = { at: now, value: scanRate(root, projects) }));
+  }
+  for (const [rest, tokens] of Object.entries(await hit.value)) {
+    // 나머지가 빈 문자열 = 워크트리를 안 쓰는 배치라 워커 전부가 그 한 cwd에서 뜬다 — 못 가른다.
+    const hits = rest === "" ? workers : [workerOfRest(rest, workers)];
+    for (const engine of new Set(hits.map((w) => w?.engine))) {
+      if (engine !== undefined && engine in out) out[engine] += tokens;
+    }
+  }
+  const mins = RATE_WINDOW_MS / 60_000;
+  for (const e of Object.keys(out)) out[e] /= mins;
+  return out;
+}
+
+/** 접두를 뗀 나머지 → 그 세션을 띄운 워커. 나머지가 하위 경로를 달고 올 수 있어서
+ *  (`…-worktrees-w2-apps-desktop`이 실재한다) **가장 긴 이름이 이긴다** — `w2`와 `w2-apps`가
+ *  같이 있어도 안 겹친다. 어느 워커도 아니면 `null`이다(등록이 풀린 워커의 세션 — 무는 엔진이
+ *  없으니 어느 칸에도 못 든다. 실측: 창 10분에서 그 몫이 0이다). */
+function workerOfRest<T extends { worker: string }>(rest: string, workers: T[]): T | null {
+  let best: T | null = null;
+  let bestLen = -1;
+  for (const w of workers) {
+    const e = enc(w.worker);
+    if ((rest === e || rest.startsWith(`${e}-`)) && e.length > bestLen) {
+      [best, bestLen] = [w, e.length];
+    }
+  }
+  return best;
+}
+
+/** 이 프로젝트의 트랜스크립트 디렉터리들 → 창 안 토큰. 키는 **접두를 뗀 나머지**다.
+ *
+ *  **`workers/<w>.sh`의 `TICKET_CWD`를 파싱하지 않는다** — 실측으로 이 큐의 워커 8개 중 넷이
+ *  `TICKET_CWD="$HOME/…"`로 셸 변수를 안 펼친 채 적혀 있어서, 문자열 그대로 인코딩하면 없는
+ *  디렉터리가 나오고 **에러가 아니라 0이 된다**(화면이 절반만 세면서 통과한다). 대신 큐 루트에서
+ *  유도한 접두로 고른다 — CORE §워커 작업 디렉터리가 못 박은 그 규칙이다. */
+async function scanRate(root: string, projects: string): Promise<Record<string, number>> {
+  const trees = path.join(root, "worktrees");
+  // 워크트리를 쓰면 그 아래 **전부**가 이 프로젝트다(하위 디렉터리에서 뜬 세션도 든다).
+  // 안 쓰면 워커의 자리가 큐의 부모라 그 하나다 — 조건이 `worktrees/`의 유무 하나다.
+  const byTree = await access(trees).then(
+    () => true,
+    () => false,
+  );
+  const prefix = byTree ? enc(trees + path.sep) : enc(path.dirname(root));
+  const since = Date.now() - RATE_WINDOW_MS;
+  // 워크트리를 안 쓸 때는 **정확히 일치**여야 한다 — 접두로 잡으면 형제 프로젝트가 딸려 온다
+  // (`enc("/…/proj")`가 `enc("/…/proj2")`의 접두다).
+  const names = (await readdir(projects).catch(() => [] as string[])).filter((n) =>
+    byTree ? n.startsWith(prefix) : n === prefix,
+  );
+
+  const out: Record<string, number> = {};
+  await Promise.all(
+    names.map(async (name) => {
+      const dir = path.join(projects, name);
+      const files = (await readdir(dir).catch(() => [] as string[])).filter((f) =>
+        f.endsWith(".jsonl"),
+      );
+      const sums = await Promise.all(
+        files.map(async (f) => {
+          const full = path.join(dir, f);
+          // **창 밖 파일은 `mtime`만 보고 건너뛴다 — 열지 않는다.** 판정 1이 파일명으로 하는
+          // 일을 여기서는 mtime이 한다(트랜스크립트 파일명은 `<sid>.jsonl`이라 시각이 없다).
+          const st = await stat(full).catch(() => null);
+          if (!st || st.mtimeMs < since) return 0;
+          return windowTokens(await readFile(full).catch(() => Buffer.alloc(0)), since);
+        }),
+      );
+      out[name.slice(prefix.length)] = sums.reduce((a, b) => a + b, 0);
+    }),
+  );
+  return out;
+}
+
+const NL = 0x0a;
+const ASSISTANT = Buffer.from('"type":"assistant"');
+
+/** 한 트랜스크립트에서 **창 안** assistant 레코드의 토큰 합.
+ *
+ *  - **`message.id`로 중복 제거한다.** 스트리밍이 한 응답을 여러 줄로 적는다(실측 78 → 고유 54).
+ *    첫 등장과 마지막 등장의 합이 같았으므로 먼저 만난 것을 잡는다.
+ *  - **꼬리 읽기를 쓰지 않는다. 재 보고 버렸다** — 창 10분에서 꼬리 64KB가 전문의 **35%**만 줬다
+ *    (활성 세션의 한 턴이 MB급이라 꼬리가 창을 못 덮는다. 커버 2/15).
+ *  - **문자열로 펴지 않는다.** `readFile(f,"utf8").split("\n")`이면 15MB를 통째로 디코드하고 줄
+ *    배열을 만든다 — 실측(이 큐 · 창 안 15파일 15.3MB) **428ms 대 28.6ms**로 15배다. 바이트로
+ *    훑고 **assistant 줄만** 디코드한다(`tailEvents`가 이미 쓰는 관용구이고, `\n`이 UTF-8
+ *    시퀀스 안에 안 나와서 안전하다). `hit`이 단조 증가라 재탐색을 해도 전체가 O(n)이다. */
+function windowTokens(buf: Buffer, since: number): number {
+  const seen = new Set<string>();
+  let sum = 0;
+  let hit = buf.indexOf(ASSISTANT);
+  for (let start = 0; start < buf.length; ) {
+    let end = buf.indexOf(NL, start);
+    if (end < 0) end = buf.length;
+    if (hit >= 0 && hit < start) hit = buf.indexOf(ASSISTANT, start);
+    if (hit >= 0 && hit < end) {
+      let rec: { timestamp?: unknown; message?: Record<string, unknown> } | null = null;
+      try {
+        rec = JSON.parse(buf.toString("utf8", start, end));
+      } catch {
+        // 세션이 쓰는 중이라 잘린 줄이다(`tailEvents`와 같은 판단)
+      }
+      const at = typeof rec?.timestamp === "string" ? Date.parse(rec.timestamp) : NaN;
+      const id = rec?.message?.id;
+      if (Number.isFinite(at) && at >= since && !(typeof id === "string" && seen.has(id))) {
+        if (typeof id === "string") seen.add(id);
+        sum += tokensOf(rec?.message ?? null) ?? 0;
+      }
+    }
+    start = end + 1;
+  }
+  return sum;
 }
 
 // ── 엔진별 잔여 한도 (§0-8 판정 2 · 하단 status bar) ─────────────────────────
