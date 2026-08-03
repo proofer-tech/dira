@@ -54,7 +54,7 @@
 # TICKET_PROMPT_FMT="%s 티켓을 확인해 주세요. ..."   # printf 포맷: %s = 티켓 해시 하나뿐
 #
 # 상태 3종(없음/진행중/완료)·해시 파일명·claim 락은 프로토콜 자체이므로 워커로 열지 않는다.
-# 성격(kind)·수행자(persona)는 디렉터리가 아니라 티켓 frontmatter에 있다.
+# 분류(kind)·수행자(persona)는 디렉터리가 아니라 티켓 frontmatter에 있다.
 
 # --- 필수: 엔진 코드를 불러 실행한다(레포 경로에 맞게 고칠 것) ---
 . "$HOME/Projects/dira/tick.sh"
