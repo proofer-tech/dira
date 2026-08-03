@@ -8,7 +8,11 @@ html { scroll-behavior: smooth; }
 
 /* 랜딩은 VitePress 기본 레이아웃 밖에서 자기 폭을 쓴다. */
 .dira-landing { --vp-c-bg: var(--bg); }
-.dira-landing .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 24px; }
+/* ① padding 단축이 아니라 padding-inline이다. 단축(특정도 0-2-0)이면 아래
+   `.dira-landing section`의 `padding: 96px 0`(0-1-1)을 이겨서 섹션 세로 패딩이
+   전부 죽는다 — 실측으로 블록 사이가 네 폭 전부 `0·60·88·0·0·0·0`px이었다.
+   자기 축만 선언하면 세로는 section이, 가로는 여기가 갖는다(§랜딩 §UX·심미성 ①). */
+.dira-landing .wrap { max-width: var(--maxw); margin: 0 auto; padding-inline: 24px; }
 
 /* VitePress 기본 네브바(.VPNav)는 매뉴얼 페이지에는 필요하지만 랜딩은
    자기 헤더(아래 header 규칙)를 따로 그린다 — 겹쳐 뜨는 것을 막는다.
@@ -18,14 +22,19 @@ html { scroll-behavior: smooth; }
 
 /* 아래는 docs/index.html:12-199에서 그대로 옮긴 것이다. 값은 손대지 않는다 —
    oklch 상태 색 넷(--active/--blocked/--done/--stale)은 앱 화면의 레인 색과 같은 값이다.
+   예외 하나 — --muted-fg·--faint는 대비 미달이라 아래 ③ 주석의 근거로 내렸다.
    선택자는 VitePress 기본 테마(header·footer·h1·pre·a 등 같은 태그·클래스를 쓴다)와
    충돌하지 않도록 `.dira-landing` 아래로 스코프했다 — 값 자체는 바꾸지 않았다. */
 :root {
   --bg: #FFFFFF;
   --fg: #0A0A0A;
   --panel: #FAFAFA;
-  --muted-fg: #71717A;
-  --faint: #A1A1AA;
+  /* ③ 이 둘만 원본에서 한 단씩 내렸다. 옛 값(#71717A · #A1A1AA)은 흰 배경에서
+     4.83:1 · 2.56:1이고, 쓰이는 자리가 전부 11.5~13px라 --faint가 22개 요소에서
+     AA 4.5:1을 못 넘었다. 두 단 위계는 그대로 유지한 채 둘 다 통과시킨다
+     (흰 7.73:1 · 4.83:1, --panel 7.41:1 · 4.63:1). oklch 상태 색 넷은 안 건드린다. */
+  --muted-fg: #52525B;
+  --faint: #71717A;
   --border: #E4E4E7;
   --active:  oklch(0.52 0.18 258);
   --blocked: oklch(0.52 0.13 75);
@@ -95,14 +104,19 @@ html { scroll-behavior: smooth; }
 .dira-landing .body b, .dira-landing .body strong { color: var(--fg); font-weight: 650; }
 
 /* ── hero ───────────────────────────────────────── */
-.dira-landing .hero { padding: 96px 0 0; text-align: center; }
+/* ② 세로만 선언한다. `padding: 96px 0 0` 단축이던 시절엔 이쪽이 `.wrap`을 이겨
+   좌우 24px을 지웠고, 390에서 히어로만 `x=0 w=390`으로 화면 끝에 닿았다(①의 반대 방향). */
+.dira-landing .hero { padding-top: 96px; text-align: center; }
 .dira-landing .hero h1 { max-width: 15em; margin-inline: auto; }
 .dira-landing .hero .body { max-width: 34em; margin: 0 auto 34px; }
 .dira-landing .cta { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
 .dira-landing .cta-note { margin: 16px 0 0; font-size: 12.5px; color: var(--faint); font-family: var(--mono); }
 
 /* ── pillar grid ────────────────────────────────── */
-.dira-landing .pillars { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 60px; text-align: left; }
+/* ④ 4열이다. 2×2면 카드가 509px인데 15.5px 제목 + 2줄뿐이라 가로가 비고 네 개념이
+   두 쌍으로 읽힌다 — 바로 아래 .stats가 같은 4항목을 4열로 놓아 셈도 어긋났다.
+   거터도 .steps(20px)에 맞춘다. 900px 이하 1열은 아래 @media 그대로다. */
+.dira-landing .pillars { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; text-align: left; }
 .dira-landing .pillar { border: 1px solid var(--border); border-radius: 12px; padding: 20px; background: var(--panel); }
 .dira-landing .tag {
   display: inline-block; margin-bottom: 12px; padding: 3px 9px; border-radius: 5px;
@@ -119,11 +133,10 @@ html { scroll-behavior: smooth; }
 .dira-landing .shot { display: block; width: 100%; height: auto; border: 1px solid var(--border); border-radius: 12px; background: #fff; }
 .dira-landing figcaption { margin-top: 14px; font-size: 13.5px; line-height: 1.68; color: var(--muted-fg); }
 .dira-landing figcaption b { color: var(--fg); font-weight: 650; }
-.dira-landing figure.narrow { max-width: 880px; margin-inline: auto; }
 .dira-landing .hero figure { margin-top: 64px; text-align: left; }
 
 /* ── stats ──────────────────────────────────────── */
-.dira-landing .stats { margin-top: 88px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.dira-landing .stats { border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
 .dira-landing .stats ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, 1fr); }
 .dira-landing .stats li { padding: 26px 20px; border-left: 1px solid var(--border); }
 .dira-landing .stats li:first-child { border-left: 0; padding-left: 0; }
@@ -152,11 +165,6 @@ html { scroll-behavior: smooth; }
 /* ── content rows ───────────────────────────────── */
 .dira-landing section { padding: 96px 0; }
 .dira-landing section + section { padding-top: 0; }
-.dira-landing .row { display: grid; grid-template-columns: minmax(0, 400px) minmax(0, 1fr); gap: 56px; align-items: start; }
-.dira-landing .row.flip > .col-text { order: 2; }
-.dira-landing .row.flip > .col-vis  { order: 1; }
-.dira-landing .col-text { position: sticky; top: 96px; }
-
 .dira-landing .marks { list-style: none; margin: 20px 0 0; padding: 0; }
 .dira-landing .marks li { position: relative; padding: 5px 0 5px 20px; font-size: 14px; color: var(--muted-fg); line-height: 1.6; }
 .dira-landing .marks li::before { content: "—"; position: absolute; left: 0; color: var(--faint); }
@@ -200,12 +208,6 @@ html { scroll-behavior: smooth; }
   font-family: var(--mono); font-size: 13px; line-height: 1.75;
 }
 .dira-landing pre .c { color: var(--faint); }
-.dira-landing .why { list-style: none; margin: 0; padding: 0; }
-.dira-landing .why li { padding: 18px 0; border-top: 1px solid var(--border); }
-.dira-landing .why li:last-child { border-bottom: 1px solid var(--border); }
-.dira-landing .why h3 { margin-bottom: 5px; }
-.dira-landing .why p { margin: 0; font-size: 14px; color: var(--muted-fg); line-height: 1.65; }
-.dira-landing .why .m { color: var(--stale); font-weight: 600; }
 
 /* ── limits ─────────────────────────────────────── */
 .dira-landing .limits { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 0 48px; }
@@ -230,16 +232,18 @@ html { scroll-behavior: smooth; }
 .dira-landing .fcol a:hover { color: var(--fg); }
 .dira-landing .fbot { margin-top: 48px; padding-top: 24px; border-top: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 12.5px; color: var(--faint); }
 .dira-landing .fbot .sep { margin-left: auto; }
+/* ⑥ 줄바꿈이 시작되는 폭에서는 오른쪽 밀기를 끈다. margin-left:auto가 줄바꿈 뒤에도
+   살아서 마지막 줄에 혼자 남은 항목을 오른쪽 끝으로 밀었다(390에서 sep만 x=192,
+   앞 세 항목은 x=24). 임계는 572px 미만 실측이라 599px에서 끊는다 —
+   768 이상은 한 줄이라 오른쪽 끝 정렬이 뜻대로 남는다. */
+@media (max-width: 599px) { .dira-landing .fbot .sep { margin-left: 0; } }
 
 @media (max-width: 900px) {
-  .dira-landing .row, .dira-landing .pillars, .dira-landing .limits, .dira-landing .gallery { grid-template-columns: 1fr; }
+  .dira-landing .pillars, .dira-landing .limits, .dira-landing .gallery { grid-template-columns: 1fr; }
   /* .two는 plain 1fr로 접으면 안 된다 — 단일 트랙이어도 안의 <pre>(white-space:pre)
      때문에 트랙 최소폭이 여전히 내용에 맞춰져 390px에서 페이지가 가로로 샌다.
      minmax(0, 1fr)로 트랙 최소폭을 0으로 눌러야 <pre>의 overflow-x:auto가 대신 받는다. */
   .dira-landing .two { grid-template-columns: minmax(0, 1fr); }
-  .dira-landing .row { gap: 28px; }
-  .dira-landing .row.flip > .col-text, .dira-landing .row.flip > .col-vis { order: 0; }
-  .dira-landing .col-text { position: static; }
   .dira-landing .stats ul { grid-template-columns: 1fr 1fr; }
   .dira-landing .stats li:nth-child(3) { border-left: 0; padding-left: 0; }
   .dira-landing .stats li:nth-child(n+3) { border-top: 1px solid var(--border); }
