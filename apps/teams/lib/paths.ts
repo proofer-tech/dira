@@ -33,6 +33,16 @@ export function expandHome(p: string): string {
   return p;
 }
 
+/** 엔진의 `$LOCAL`(`tick.sh:33`) — 머신 로컬 저장 디렉터리. 레지스트리·토큰·키맵·
+ *  `analytics.json`·`alerts.json`·락이 전부 여기 산다.
+ *
+ *  `shellValue`와 같은 이유로 여기 있다: `projects.ts`의 `registryPath()`와 `workers.ts`의
+ *  `lockPath()`가 같은 규칙을 쓰는데 둘이 서로를 import하면 순환이다. **`TICKET_LOCAL` 존중이
+ *  한 곳에만 있다** — 두 벌이면 한쪽만 고쳐도 GUI가 엔진과 다른 디렉터리를 본다. */
+export function localDir(): string {
+  return expandHome(process.env.TICKET_LOCAL || path.join(homedir(), ".config", "dira"));
+}
+
 /** 셸 값 한 줄을 해석한다. 해석 못 하면 null(호출자가 기본값 + `기본값 가정`으로 처리).
  *
  *  **셸을 실행하지 않는다.** 등록된 경로의 임의 코드가 GUI 권한으로 도는 걸 막는 게 이 함수의

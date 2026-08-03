@@ -6,13 +6,25 @@
  *  되돌아간다 — 그래서 그 둘은 남아 있다.
  *  상태 전이(reap·unassign)는 여기서 다시 구현하지 않는다 — `lib/engine.ts`가 워커를 부른다. */
 import { createHash } from "node:crypto";
-import { chmod, open, readFile, readdir, realpath, rename, stat, symlink, unlink, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  open,
+  readFile,
+  readdir,
+  realpath,
+  rename,
+  stat,
+  symlink,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { cache } from "react";
-import { NAME_RE, expandHome, resolveWithin, shellPath, shellValue } from "./paths.ts";
+import { NAME_RE, expandHome, localDir, resolveWithin, shellPath, shellValue } from "./paths.ts";
 import type { Ticket } from "./queue.ts";
 
 export type WorkerStatus = "running" | "idle" | "stopped" | "stale";
@@ -98,9 +110,8 @@ export function engineName(engine: string | null): string {
  *
  *  여기 들어가는 `<이름>`은 파일 stem이 아니라 **실효 `TICKET_NAME`**이다(tick.sh 37·87행). */
 export function lockPath(workersDir: string, name: string): string {
-  const local = process.env.TICKET_LOCAL || path.join(homedir(), ".config", "dira");
   const h = createHash("sha1").update(path.join(workersDir, name)).digest("hex").slice(0, 8);
-  return path.join(expandHome(local), "run", `${name}-${h}.lock`);
+  return path.join(localDir(), "run", `${name}-${h}.lock`);
 }
 
 /** 락은 디렉터리다(`mkdir`가 원자적 획득). 안의 `pid` 파일이 소유 프로세스다. */
@@ -841,6 +852,78 @@ async function failureOf(logsDir: string, line: string | null): Promise<WorkerFa
   return reason ? { at, hash, reason, log } : null; // 사유가 비면 화면에 그릴 것이 없다
 }
 
+// ── 읽음 처리 (DESIGN.md §0-5 §읽음 처리) ───────────────────────────────────
+//
+// **판정 4단계**: 위 3단계가 만든 실패의 `log`가 그 루트의 읽음 목록에 있으면 `null`이다.
+// 판정 **뒤에** 걷는 필터라서 큐 파일은 한 바이트도 안 바뀌고, 적히는 사실은 *큐가 나았다*가
+// 아니라 *이 머신이 이 실패를 봤다*이다. 판정이 하나이므로 종 항목과 워커 행이 같이 걷힌다.
+
+/** 레지스트리·토큰·키맵·`analytics.json`과 **같은 디렉터리**다(`lib/analytics.ts:20`의 그 한 줄).
+ *  **`.dira` 안이 아니다** — 머신당 하나이고 큐를 오염시키지 않는다. */
+export function alertsPath(): string {
+  return path.join(localDir(), "alerts.json");
+}
+
+/** `{ "<큐 루트 절대경로>": { "<로그 파일명>": "<그 FAIL 줄의 시각>" } }`.
+ *  **루트로 한 겹 나눈다** — 워커 이름(`w1`)은 템플릿 복사라 프로젝트끼리 겹친다. */
+type Alerts = Record<string, Record<string, string>>;
+
+/** 없음·못 읽음·JSON 아님·모양 다름 = **읽음 0개**다. 실패를 지어내지도 숨기지도 않는다 —
+ *  손으로 고칠 수 있는 파일 하나가 배너를 켜거나 끄면 그게 두 번째 진실이다. */
+async function readAlerts(): Promise<Alerts> {
+  let obj: unknown;
+  try {
+    obj = JSON.parse(await readFile(alertsPath(), "utf8"));
+  } catch {
+    return {};
+  }
+  const out: Alerts = {};
+  if (!obj || typeof obj !== "object") return out;
+  for (const [root, marks] of Object.entries(obj as Record<string, unknown>)) {
+    if (!marks || typeof marks !== "object") continue;
+    const kept = Object.entries(marks as Record<string, unknown>).filter(
+      ([, at]) => typeof at === "string",
+    ) as [string, string][];
+    if (kept.length > 0) out[root] = Object.fromEntries(kept);
+  }
+  return out;
+}
+
+/** 실패 **하나**를 읽음으로 표시한다. 단위가 워커가 아니라 그 실패의 로그 파일명이라
+ *  (`tick.sh:264`가 디스패치마다 새로 만든다) 읽음 처리한 뒤 새 `FAIL`이 오면 파일명이 달라
+ *  항목이 다시 켜진다 — 워커로 잡으면 다음 사고까지 같이 묻힌다.
+ *
+ *  **쓸 때 신선도 창보다 오래된 항목을 버린다**(루트 전부에서). 그 실패는 이미 `lastFailure`에서
+ *  빠졌으므로 마크가 가릴 것이 없다 — 파일이 안 자란다. 별도 만료 규칙이 없다: 읽음은 창과
+ *  함께 죽는다.
+ *
+ *  ponytail: 읽은 것 위에 덮어쓴다(`saveSettings`와 같은 벌). 두 창이 동시에 누르면 뒤엣것이
+ *  이겨 앞의 마크가 날아갈 수 있고 최악이 항목이 다시 보이는 것이라 락을 두지 않는다. */
+export async function markAlertsRead(
+  root: string,
+  failures: readonly Pick<WorkerFailure, "log" | "at">[],
+): Promise<void> {
+  const alerts = await readAlerts();
+  const marks = { ...alerts[root] };
+  for (const f of failures) marks[f.log] = f.at;
+
+  const now = Date.now();
+  // `at`은 runner.log가 쓴 `2026-07-31 18:09:49`다 — `failureOf`와 **같은 식으로** 판다.
+  const fresh = (at: string) => {
+    const ts = Date.parse(at.replace(" ", "T"));
+    return Number.isFinite(ts) && now - ts <= FRESH_MS;
+  };
+  const next: Alerts = {};
+  for (const [r, m] of Object.entries({ ...alerts, [root]: marks })) {
+    const kept = Object.entries(m).filter(([, at]) => fresh(at));
+    if (kept.length > 0) next[r] = Object.fromEntries(kept);
+  }
+
+  const p = alertsPath();
+  await mkdir(path.dirname(p), { recursive: true });
+  await writeFile(p, JSON.stringify(next, null, 2) + "\n", "utf8");
+}
+
 /** `owner:` → 워커 이름. tick.sh 207행이 `<페르소나> / <TICKET_NAME>-<sid[:8]>`를 쓰므로
  *  그 형식일 때만 뒤쪽 이름을 돌려주고, 아니면 `null`이다 — **모르는 것을 `?`로 그리지 않는다**
  *  (DESIGN.md §1 보드). 판정 방향이 둘(워커→티켓 `holdingOf` · 티켓→워커 칸반 카드)이라
@@ -980,6 +1063,13 @@ export async function listWorkers(root: string, tickets: Ticket[] = []): Promise
       cwd: parsed.cwd,
       defects: [], // 공유 판정이 목록 전체를 봐야 하므로 행을 다 만든 뒤에 채운다
     });
+  }
+
+  // 판정 4단계 (§0-5 §읽음 처리). **살아 있는 실패가 0개면 `alerts.json`을 열지 않는다** —
+  // 정상 상태에서 이 파일을 여는 횟수가 0이다(§0-5 §비용의 그 셈 그대로).
+  if (out.some((w) => w.lastFailure)) {
+    const marks = (await readAlerts())[root] ?? {};
+    for (const w of out) if (w.lastFailure && marks[w.lastFailure.log]) w.lastFailure = null;
   }
 
   // tick.sh 39행: TICKET_CWD 줄이 없는 워커의 실효 cwd는 루트의 부모다(contextOf와 같은 기준).

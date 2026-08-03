@@ -6,7 +6,15 @@ import { mkdir, readFile, readdir, realpath, rm, stat, writeFile } from "node:fs
 import { homedir } from "node:os";
 import path from "node:path";
 import { DEFAULT_KEYMAP, defaultBindings, type Bindings, type Keymap } from "./keymap.ts";
-import { NAME_RE, PROJECT_ID_RE, expandHome, resolveWithin, shellPath, shellValue } from "./paths.ts";
+import {
+  NAME_RE,
+  PROJECT_ID_RE,
+  expandHome,
+  localDir,
+  resolveWithin,
+  shellPath,
+  shellValue,
+} from "./paths.ts";
 import { isAwaiting, listTickets, statusOf, type Ticket } from "./queue.ts";
 import { listWorkers, type Worker } from "./workers.ts";
 import { PERSONA_COLORS, slugify, tildePath } from "./urls.ts";
@@ -46,8 +54,7 @@ export type ProjectConfig = {
 
 /** 엔진이 머신 로컬 상태를 두는 곳(oauth-token, run/)과 같은 디렉터리. 레포에 넣지 않는다. */
 export function registryPath(): string {
-  const local = process.env.TICKET_LOCAL || path.join(homedir(), ".config", "dira");
-  return path.join(expandHome(local), "gui-projects.json");
+  return path.join(localDir(), "gui-projects.json");
 }
 
 /** 프로젝트로 이름을 바꾸기 전의 레지스트리(`gui-tenants.json`, 배열 키 `tenants`).

@@ -15,6 +15,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
+import { createRequire, syncBuiltinESMExports } from "node:module";
 import path from "node:path";
 import { listTickets } from "./queue.ts";
 
@@ -23,6 +24,8 @@ const LOCAL = mkdtempSync(path.join(tmpdir(), "fst-local-"));
 process.env.TICKET_LOCAL = LOCAL;
 
 const {
+  alertsPath,
+  markAlertsRead,
   applyCommonSource,
   applySelfHeal,
   commonSourceLine,
@@ -463,6 +466,122 @@ test("lastFailure — 외부 요인으로 죽은 세션만, 신선할 때만 잡
   // 결과 줄을 새로 뽑아도 `lastLog`는 여전히 **마지막 줄**이다(화면이 지금 쓰는 값이다)
   assert.match(ws.w4.lastLog!, /DISPATCH d4444444/);
   assert.match(ws.w5.lastLog!, /SKIP/);
+});
+
+// ── 읽음 처리 (§0-5 §읽음 처리) ─────────────────────────────────────────────
+
+/** 워커마다 `FAIL` 한 줄 + 그 로그 파일 하나. 로그 파일명이 읽음의 **키**라 인자로 받는다. */
+function failRoot(specs: { name: string; log: string; minutesAgo?: number }[]): string {
+  const root = makeRoot(Object.fromEntries(specs.map((s) => [`${s.name}.sh`, "#!/bin/bash\n"])));
+  const dir = path.join(root, "workers");
+  mkdirSync(path.join(dir, "logs"));
+  const lines: string[] = [];
+  for (const s of specs) {
+    writeFileSync(
+      path.join(dir, "logs", s.log),
+      JSON.stringify({ is_error: true, terminal_reason: "api_error", result: LIMIT }) + "\n",
+    );
+    lines.push(
+      `${stamp(s.minutesAgo ?? 1)} [${s.name}] FAIL a1111111 rc=1 -> 할당 회수 + 백로그 복귀. 로그 ${s.log}`,
+    );
+  }
+  writeFileSync(path.join(dir, "runner.log"), lines.join("\n") + "\n");
+  return root;
+}
+
+const putAlerts = (obj: unknown) =>
+  writeFileSync(alertsPath(), typeof obj === "string" ? obj : JSON.stringify(obj));
+
+test("읽음 처리 ① 표시한 실패는 `null`이다 — 다른 루트의 같은 파일명은 안 묻는다 (§0-5)", async () => {
+  const root = failRoot([{ name: "w1", log: "fail-w1.log" }]);
+  const other = failRoot([{ name: "w1", log: "fail-w1.log" }]);
+
+  // 마크가 없으면 종전 판정 그대로다(대조군 — 아래 `null`이 픽스처 탓이 아니라는 근거).
+  rmSync(alertsPath(), { force: true });
+  assert.strictEqual((await listWorkers(root))[0].lastFailure?.log, "fail-w1.log");
+
+  putAlerts({ [root]: { "fail-w1.log": stamp(1) } });
+  assert.strictEqual((await listWorkers(root))[0].lastFailure, null);
+  // 루트로 한 겹 나누는 이유: 워커 이름도 로그 파일명 모양도 프로젝트끼리 겹친다.
+  assert.strictEqual((await listWorkers(other))[0].lastFailure?.log, "fail-w1.log");
+});
+
+test("읽음 처리 ② 같은 워커라도 로그 파일명이 다른 실패는 안 묻힌다 (다음 사고가 다시 켜진다)", async () => {
+  const root = failRoot([{ name: "w1", log: "fail-w1-new.log" }]);
+  putAlerts({ [root]: { "fail-w1-old.log": stamp(1) } }); // 앞 사고를 읽음으로 표시해 둔 상태
+  const w = (await listWorkers(root))[0];
+  assert.strictEqual(w.lastFailure?.log, "fail-w1-new.log");
+});
+
+test("읽음 처리 ③ 쓸 때 신선도 창(10분)이 지난 마크를 버린다 — 파일이 안 자란다", async () => {
+  const root = failRoot([{ name: "w1", log: "fail-w1.log" }]);
+  const old = "/다른/큐/.dira";
+  putAlerts({
+    [root]: { "지난-사고.log": stamp(20), "덜-지난-사고.log": stamp(9) },
+    [old]: { "남의-지난-사고.log": stamp(30) }, // 마크가 전부 죽은 루트는 키째 사라진다
+  });
+
+  const at = stamp(0);
+  await markAlertsRead(root, [{ log: "fail-w1.log", at }]);
+
+  assert.deepStrictEqual(JSON.parse(readFileSync(alertsPath(), "utf8")), {
+    [root]: { "덜-지난-사고.log": stamp(9), "fail-w1.log": at },
+  });
+  // 방금 쓴 마크가 실제로 판정을 걷는다(파일 모양만 맞고 판정이 안 붙는 길을 닫는다).
+  assert.strictEqual((await listWorkers(root))[0].lastFailure, null);
+});
+
+test("읽음 처리 ④ 파일이 없거나 JSON이 아니면 읽음 0개다 (실패를 지어내지도 숨기지도 않는다)", async () => {
+  const root = failRoot([{ name: "w1", log: "fail-w1.log" }]);
+  for (const put of [
+    () => rmSync(alertsPath(), { force: true }),
+    () => putAlerts("{ 이건 JSON이 아니다"),
+    () => putAlerts([root]), // 배열 — 모양이 다르다
+    () => putAlerts({ [root]: "fail-w1.log" }), // 루트 값이 객체가 아니다
+    () => putAlerts({ [root]: { "fail-w1.log": 1 } }), // 시각이 문자열이 아니다
+  ]) {
+    put();
+    assert.strictEqual((await listWorkers(root))[0].lastFailure?.log, "fail-w1.log");
+  }
+});
+
+/** `alerts.json`을 **실제로 여는 횟수**를 센다. "정상 상태의 새 I/O가 0"은 눈으로 못 맞춘다.
+ *  `syncBuiltinESMExports()`가 `workers.ts`가 이미 import한 바인딩까지 갱신한다(node:module). */
+function countAlertOpens<T>(body: () => Promise<T>): Promise<[T, number]> {
+  const fsp = createRequire(import.meta.url)("node:fs/promises");
+  const real = fsp.readFile;
+  let n = 0;
+  fsp.readFile = (p: unknown, ...rest: unknown[]) => {
+    if (String(p) === alertsPath()) n++;
+    return real(p, ...rest);
+  };
+  syncBuiltinESMExports();
+  return body().then(
+    (v): [T, number] => {
+      fsp.readFile = real;
+      syncBuiltinESMExports();
+      return [v, n];
+    },
+    (e) => {
+      fsp.readFile = real;
+      syncBuiltinESMExports();
+      throw e;
+    },
+  );
+}
+
+test("읽음 처리 — 살아 있는 실패가 0개면 `alerts.json`을 열지 않는다 (§0-5 §비용)", async () => {
+  putAlerts({});
+  // 20분 전 FAIL = 신선도 창 밖 = 살아 있는 실패 0개. 워커도 로그도 그대로 있다.
+  const quiet = failRoot([{ name: "w1", log: "fail-w1.log", minutesAgo: 20 }]);
+  const [ws, n] = await countAlertOpens(() => listWorkers(quiet));
+  assert.strictEqual(ws[0].lastFailure, null);
+  assert.strictEqual(n, 0);
+
+  // 대조군: 실패가 하나라도 살아 있으면 연다(위 0이 가로채기 실패로 나온 0이 아니라는 근거).
+  const loud = failRoot([{ name: "w1", log: "fail-w1.log" }]);
+  const [, m] = await countAlertOpens(() => listWorkers(loud));
+  assert.strictEqual(m, 1);
 });
 
 /** `-l`은 `tab`을 읽고, `crontab -`은 `out`에 쓴다. 만들어진 명령을 **진짜 셸에** 먹여
