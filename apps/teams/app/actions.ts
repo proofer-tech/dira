@@ -45,7 +45,7 @@ import {
   type ProjectConfig,
 } from "@/lib/projects";
 import { preflight, scaffold } from "@/lib/scaffold";
-import { cronRegisterCmd, listWorkers, registerCron } from "@/lib/workers";
+import { cronRegisterCmd, listWorkers, markAlertsRead, registerCron } from "@/lib/workers";
 import { tildePath } from "@/lib/urls";
 
 /** 해석 결과 표 한 행. 서버가 배지까지 정해서 넘긴다 — 클라이언트는 그리기만 한다. */
@@ -381,6 +381,26 @@ export async function resetKeymapAction(id?: string): Promise<{ error?: string }
   if (targets.length === 0) return { error: `모르는 액션입니다: ${id}` };
   await writeKeymap(Object.fromEntries(targets.map((a) => [a.id, a.combo])));
   return {};
+}
+
+/** 알림 ②의 `읽음으로 표시` (DESIGN.md §0-5 §읽음 처리). 그 순간 나열된 실패 **전부**를
+ *  읽음으로 적는다 — 단위가 워커도 항목도 아니라 실패 하나고 키가 그 로그 파일명이다.
+ *
+ *  **루트는 클라이언트가 안 보낸다.** 등록된 `id`로 레지스트리에서 찾고, 없으면 아무것도 안
+ *  쓴다(셸 레이아웃의 `notFound()`와 같은 규칙 — 등록된 root가 이 앱의 권한 범위다).
+ *  `log`·`at`은 파일 경로가 아니라 `alerts.json`의 키·값으로만 쓰인다(`lib/workers.ts`).
+ *
+ *  **큐 파일은 한 바이트도 안 바뀐다** — 적히는 사실은 *큐가 나았다*가 아니라 *이 머신이 이
+ *  실패를 봤다*이다(§0-5). 판정이 하나라 종 항목과 워커 화면(§4)의 사유 블록이 같이 걷힌다:
+ *  그래서 무효화도 레이아웃까지다(`saveTokenAction`이 배너를 끄는 그 한 줄과 같다). */
+export async function markFailuresReadAction(
+  id: string,
+  failures: { log: string; at: string }[],
+): Promise<void> {
+  const root = (await readProjects()).find((t) => t.id === id)?.root;
+  if (!root) return;
+  await markAlertsRead(root, failures);
+  revalidatePath("/", "layout");
 }
 
 /** 사용 통계 섹션 층 ① (DESIGN.md §0-11 §끄는 자리) — 다이얼로그가 열릴 때 한 줄이 읽는다.

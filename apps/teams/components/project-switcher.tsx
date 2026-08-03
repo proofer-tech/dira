@@ -6,7 +6,7 @@
  *  전환기는 헤더 우측 한 자리에 "지금 어느 큐인지"와 "다른 큐로 가는 길"을 겹쳐 둔다. 카운트는
  *  여기서 세지 않는다 — 셸이 서버에서 세서 props로 넘긴다. 내비는 활성 링크 판정에 현재 경로가
  *  필요해서 여기 있다(서버 레이아웃은 pathname을 모른다). */
-import { useEffect, useState } from "react";
+import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Check, ChevronsUpDown, Settings2 } from "lucide-react";
@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { parentPath, projectPath, screenOf } from "@/lib/urls";
-import { trackEvent } from "@/app/actions";
+import { markFailuresReadAction, trackEvent } from "@/app/actions";
 import { formatCombo } from "@/lib/keymap";
 import { isTyping, useHotkey, useKeymap } from "@/components/keymap-provider";
 
@@ -108,6 +108,46 @@ export function NotificationPopover({ children }: { children: React.ReactNode })
         {children}
       </div>
     </Popover>
+  );
+}
+
+/** ② `세션이 열리자마자 죽는 워커 <n>개`의 `읽음으로 표시` (§0-5 §읽음 처리 · §비주얼 §28 ⑤).
+ *
+ *  **지금 나열된 실패를 그대로 넘긴다.** 단위가 워커도 항목도 아니라 실패 하나이고 키가 그
+ *  로그 파일명이라(§0-5) 서버에서 다시 세면 렌더와 클릭 사이에 온 **새 실패까지** 묻는다 —
+ *  사람이 못 본 사고가 조용히 사라지는 길이다. 프로젝트 루트는 그래도 클라이언트가 안 보낸다:
+ *  액션이 `id`로 레지스트리에서 찾는다(신뢰 경계).
+ *
+ *  **초점을 먼저 옮긴다**(§28 ⑤ 초점). 항목이 걷히면 이 버튼 노드가 사라지고 초점이 `body`로
+ *  떨어져 Tab도 `Esc`도 끊긴다 — 걷히기 **전에** 그릇으로 옮겨 두면 순서에 안 걸린다.
+ *
+ *  ponytail: 결과 표시가 없다. 성공하면 항목이 통째로 사라지는 것이 결과고, 로컬 파일 한 번
+ *  쓰기라 실패할 길이 디스크뿐이다. 라벨도 안 바꾼다(§28 ⑤ — 새 문구는 §0-10이 정한다). */
+export function MarkFailuresReadButton({
+  project,
+  failures,
+}: {
+  project: string;
+  failures: { log: string; at: string }[];
+}) {
+  const [pending, start] = useTransition();
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      disabled={pending}
+      onClick={(e) => {
+        e.currentTarget.closest<HTMLElement>('[data-slot="popover-content"]')?.focus();
+        start(async () => {
+          await markFailuresReadAction(
+            project,
+            failures.map((f) => ({ log: f.log, at: f.at })),
+          );
+        });
+      }}
+    >
+      읽음으로 표시
+    </Button>
   );
 }
 

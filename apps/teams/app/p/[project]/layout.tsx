@@ -17,6 +17,7 @@ import {
 import { EmptyState } from "@/components/empty-state";
 import {
   BrandMark,
+  MarkFailuresReadButton,
   NotificationPopover,
   RefreshButton,
   ProjectNav,
@@ -69,8 +70,19 @@ export default async function ProjectLayout({
         worker: s.workers[0]?.name ?? null,
         // §0-5 알림용. `readSummary`가 이미 `listWorkers`를 불렀으므로 워커를 다시 읽지 않는다.
         // 정상 상태에서는 항상 빈 배열이고 그때 항목 노드가 아예 없다.
+        // `log`·`at`은 `읽음으로 표시`가 쓰는 키다(§0-5 §읽음 처리 — 단위가 워커가 아니라
+        // **실패 하나**고 그 키가 로그 파일명이다). 화면에 그리는 것은 여전히 이름과 사유뿐이다.
         failures: s.workers.flatMap((w) =>
-          w.lastFailure ? [{ name: w.name, reason: w.lastFailure.reason }] : [],
+          w.lastFailure
+            ? [
+                {
+                  name: w.name,
+                  reason: w.lastFailure.reason,
+                  log: w.lastFailure.log,
+                  at: w.lastFailure.at,
+                },
+              ]
+            : [],
         ),
         // §0-4 인증 배너용. claude 엔진 워커가 있는가 — **못 읽었으면 판정 불가 = true**다
         // (판정 불가를 "괜찮다"로 바꾸면 §0-4가 닫으려던 침묵이 그대로 돌아온다).
@@ -260,7 +272,7 @@ function NotificationItems({
   id: string;
   auth: AuthView;
   alerts: { auth: boolean; failures: boolean; assigned: boolean; awaiting: boolean };
-  failures: { name: string; reason: string }[];
+  failures: { name: string; reason: string; log: string; at: string }[];
   assigned: { hash: string; stem: string }[];
   awaiting: { hash: string; stem: string; mtime: number }[];
   worker: string | null;
@@ -309,12 +321,17 @@ function NotificationItems({
             </span>
           ))}
         </div>
-        {/* 조작이 0개인 것은 §0-5가 답변 `Q2=(a)`로 확정한 것이다. 바뀐 것은 **없다는 사실을
-            말하게 한 것**이다 — 종전 문구는 할 일이 없다고 말하지 않아서 사람이 없는 버튼을
-            찾고 있었다(§0-10 문구 표 ②) */}
+        {/* 큐를 움직이는 조작은 여전히 0개다(§0-5 답 `Q2=(a)`) — 아래 버튼은 큐를 안 건드리고
+            보는 것만 바꾼다(§0-5 §읽음 처리). 문구는 §0-10 문구 표 ②가 정본이다 */}
         <p className="col-start-2 text-sm text-foreground">
-          사유에 적힌 시각이 지나면 저절로 다시 집습니다 — 지금 할 일은 없습니다.
+          사유에 적힌 시각이 지나면 저절로 다시 집습니다 — 고칠 일은 없습니다.
         </p>
+        {/* 항목 하나에 **하나**다 — 나열의 워커마다 붙지 않는다(§0-10). 자리는 문장 아래 자기
+            행의 오른쪽 끝이다(§비주얼 §28 ⑤: 문장이 이미 2줄이라 옆에 붙이면 3줄이 된다).
+            그릇은 ①의 CTA 행과 같은 마크업이고 버튼 벌은 ③의 `할당 해제`에서 물려받는다 */}
+        <span className="col-start-2 flex justify-end">
+          <MarkFailuresReadButton project={id} failures={failures} />
+        </span>
       </>
     ),
     // ③ 아무도 집지 않는 티켓 (§0-2). 배지와 같은 아이콘·같은 색이다(§비주얼 §2 이상 상태) —
