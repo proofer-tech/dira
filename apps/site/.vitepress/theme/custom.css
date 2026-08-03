@@ -165,11 +165,16 @@ html { scroll-behavior: smooth; }
 
 /* ── hero ───────────────────────────────────────── */
 /* ② 세로만 선언한다. `padding: 96px 0 0` 단축이던 시절엔 이쪽이 `.wrap`을 이겨
-   좌우 24px을 지웠고, 390에서 히어로만 `x=0 w=390`으로 화면 끝에 닿았다(①의 반대 방향). */
-.dira-landing .hero { padding-top: 96px; text-align: center; }
-.dira-landing .hero h1 { max-width: 15em; margin-inline: auto; }
-.dira-landing .hero .body { max-width: 34em; margin: 0 auto 34px; }
-.dira-landing .cta { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+   좌우 24px을 지웠고, 390에서 히어로만 `x=0 w=390`으로 화면 끝에 닿았다(①의 반대 방향).
+   가운데 정렬이 여기서 걷힌다(§방향·토큰 «정렬» — 시작선 하나). 같이 걸려 있던
+   `.hero h1`의 `margin-inline: auto`와 `.cta`의 `justify-content: center`도 같이 걷는다.
+   h1의 `max-width: 15em`은 «디스플레이 스케일»이 96px 상한을 주면서 1440px이 되어
+   아무것도 안 물게 됐고, `auto` 마진이 빠지면 규칙 자체가 빈다 — 그래서 규칙을 놓는다.
+   격자 트랙 안에서 `margin-inline: auto`는 stretch를 이겨 자식을 max-content로 줄인다
+   (실측: 1024에서 h1이 710px). 정렬을 걷는 것이 그 축소를 같이 되돌린다. */
+.dira-landing .hero { padding-top: 96px; }
+.dira-landing .hero .body { max-width: 34em; margin: 0 0 32px; }
+.dira-landing .cta { display: flex; flex-wrap: wrap; gap: 12px; }
 .dira-landing .cta-note { margin: 16px 0 0; font-size: 12.5px; color: var(--faint); font-family: var(--mono); }
 
 /* ⑤ 페이지가 열리는 순간(§모션 §판정표 ⑤). 총 770ms에 끝나고 다시 안 돈다 —
@@ -195,16 +200,25 @@ html { scroll-behavior: smooth; }
 .dira-landing .reveal.armed.in { opacity: 1; transform: none; }
 
 /* ── figures ────────────────────────────────────── */
+/* 캡처 액자의 `border-radius: 12px`이 여기서 놓인다(§방향·토큰 «모서리» — 한 종 `0`).
+   `.hero figure`의 `text-align: left`는 히어로가 왼쪽이 되면서 죽은 규칙이 됐다
+   (§고칠 자리 ⑤ «죽은 규칙 0»이 유지돼야 하는 값이라 남기지 않는다). */
 .dira-landing figure { margin: 0; }
-.dira-landing .shot { display: block; width: 100%; height: auto; border: 1px solid var(--border); border-radius: 12px; background: #fff; }
-.dira-landing figcaption { margin-top: 14px; font-size: 13.5px; line-height: 1.68; color: var(--muted-fg); }
+.dira-landing .shot { display: block; width: 100%; height: auto; border: 1px solid var(--border); background: #fff; }
+.dira-landing figcaption { margin-top: 16px; font-size: 13.5px; line-height: 1.68; color: var(--muted-fg); }
 .dira-landing figcaption b { color: var(--fg); font-weight: 650; }
-.dira-landing .hero figure { margin-top: 64px; text-align: left; }
+.dira-landing .hero figure { margin-top: 64px; }
 
 /* ── stats ──────────────────────────────────────── */
+/* 위·아래 룰이 화면 끝까지 간다 — `.stats`가 `.wrap`이고 그 격자가 `max-width`를 놓은
+   뒤로 이 요소 자체가 뷰포트 폭이다(§방향·토큰 «하이라인» — 1080에서 끊기던 둘이
+   여덟에 흡수되는 자리). 안의 `ul`·`.stats-note`는 `content` 열에 서서 1080이다.
+   `repeat(4, 1fr)`을 12열 `span 3`으로 다시 적지 않는다 — 이 격자의 거터는 0이고
+   (칸을 가르는 것이 gap이 아니라 `border-left`다) 거터 0에서 둘은 같은 트랙이다.
+   §지금 값의 거터 세 값 20·40·48은 `.plans`·`.gallery`·`.two`이고 여기는 그 셋이 아니다. */
 .dira-landing .stats { border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
 .dira-landing .stats ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, 1fr); }
-.dira-landing .stats li { padding: 26px 20px; border-left: 1px solid var(--border); }
+.dira-landing .stats li { padding: 24px; border-left: 1px solid var(--border); }
 .dira-landing .stats li:first-child { border-left: 0; padding-left: 0; }
 .dira-landing .stats b { display: block; font-size: 28px; font-weight: 700; letter-spacing: -0.03em; font-family: var(--mono); line-height: 1.2; }
 .dira-landing .stats span { display: block; margin-top: 4px; font-size: 12.5px; color: var(--faint); line-height: 1.5; }
@@ -365,7 +379,7 @@ html { scroll-behavior: smooth; }
   .dira-landing .stats li:nth-child(n+3) { border-top: 1px solid var(--border); }
   .dira-landing .fgrid { grid-template-columns: 1fr 1fr; }
   .dira-landing section, .dira-landing .closing { padding: 64px 0; }
-  .dira-landing .hero { padding-top: 56px; }
+  .dira-landing .hero { padding-top: 48px; }
 }
 
 /* 헤더가 접히는 폭은 브레이크포인트가 아니라 내용이 정한다 — 개수가 도착하면 헤더가 427px을
