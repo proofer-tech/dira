@@ -16134,10 +16134,10 @@ lucide-react다. 커스텀 표(§5 8개)도 무수정이다 — 이 절의 산�
 | 자리 | **2단의 왼쪽 · 본문 맨 위**(위 세로 배치 표 §2단 행). ~~`h1` 행 아래 2단의 왼쪽. `h1` 행은 **2단 위에 통째로 남는다**~~ — **`7ddaee8c`가 갈래 자체를 없앴다**: 위에 걸릴 행이 0개라 *패널이 제목 행까지 올라가나*를 물을 자리가 없다. 근거 셋은 지우지 않고 남긴다(제목 행이 되살아나면 그대로 다시 걸린다) — ~~패널이 그 행까지 올라가면 `홈`과 `새 대화`가 서로 다른 열에 앉아 §4-3 액션 행이 깨진다~~ **그 근거는 `f1941cab`이 없앴다**(`새 대화`가 이 패널로 내려와 `h1` 행에 액션이 0개다). ~~**남는 근거는 둘이고 종전보다 세다**: ① `h1`은 **화면 이름**이라 이 앱 전부에서 본문 위 전폭 한 행이다(§4-3) — 패널이 그 행까지 올라가면 홈만 제목이 컬럼 안에 든다. ② 올라가면 `대화` 그룹 머리가 `홈` **바로 옆**에 앉아 부제로 읽힌다 — 위 §대화 목록 항이 트리거를 그 자리에서 거절한 것과 같은 자다~~ → **그 둘도 같이 죽었다** — 둘 다 *`홈`이 화면에 서 있다*를 전제로 한다 |
 | 폭 | **`w-64`(256px) · `shrink-0`** — 아래 §폭이 갈린다 |
 | 높이 | 2단 행의 `flex-1`을 그대로 받는다 = ~~**창 − 180**(900에서 720)~~ → **창 − 124**(900에서 **776**, `7ddaee8c`). 대화 컬럼과 **같은 높이**다 |
-| 스크롤 | **패널 자신 하나**(`overflow-y-auto`). 그룹마다 스크롤러를 두지 않는다 — 256px 안에 스크롤바가 둘이면 어느 쪽이 움직이는지 읽히지 않고, **두 그룹의 합에 상한이 있다**: 대화 20(§7) + 워커 세션 `.wip` 전부(≤ 워커 수) + `.done` 최근 10(§7 §워커 세션 목록). 6워커 큐에서 **최대 20×36 + 16×52 = 1552px**이고 776 창(`7ddaee8c` 전 720)에서 그 절반이 접힌다 |
+| 스크롤 | **패널 자신 하나**(`overflow-y-auto`). 그룹마다 스크롤러를 두지 않는다 — 256px 안에 스크롤바가 둘이면 어느 쪽이 움직이는지 읽히지 않고, **두 그룹의 합에 상한이 있다**: 대화 20(§7) + 워커 세션 `.wip` 전부(≤ 워커 수) + `.done` 최근 10(§7 §워커 세션 목록). 6워커 큐에서 ~~**최대 20×36 + 16×52 = 1552px**~~ → **줄만 20×36 + 16×58 = 1648px**(§34 ⑤ 실측 — 이 수는 `≈`로 셌고 워커 줄이 58이다)이고 776 창(`7ddaee8c` 전 720)에서 그 절반이 접힌다 |
 | 그룹 사이 | `gap-4`(16). 그룹 안 줄 사이는 **0** — 줄이 자기 `py`로 리듬을 만든다(§3 테이블 행과 같은 처리) |
 | 그룹 머리 | **행이다** — `<div className="flex h-6 items-center">` 안에 낱말 `<span className="px-2 text-xs font-medium text-muted-foreground">`. 서식 셋은 **§3 테이블 헤더 행 그대로**(`text-xs` · `font-medium` · `--muted-foreground`)이고 **새 서식 0**. 낱말은 **`대화`** · **`워커 세션`** |
-| 그룹 머리가 **24px 행**이 된 이유 (`f1941cab`) | `대화` 머리가 **`새 대화`를 오른쪽에 든다**(아래 §`새 대화` 항). 그러면 그 머리만 16 → 24가 되는데, **두 머리를 다르게 두지 않는다** — `워커 세션`도 같은 `h-6`이다. 머리 높이는 그룹의 성질이 아니라 **패널의 눈금**이고, 24는 이 문서가 이미 쓰는 세로 수다(`8 · 16 · 24`). 패널이 세로로 **16px 는다**(머리 둘 × 8) — 위 §스크롤 항의 상한 1552가 1568이 될 뿐이고 그 수는 이미 776을 넘어 있어 판정이 안 갈린다 |
+| 그룹 머리가 **24px 행**이 된 이유 (`f1941cab`) | `대화` 머리가 **`새 대화`를 오른쪽에 든다**(아래 §`새 대화` 항). 그러면 그 머리만 16 → 24가 되는데, **두 머리를 다르게 두지 않는다** — `워커 세션`도 같은 `h-6`이다. 머리 높이는 그룹의 성질이 아니라 **패널의 눈금**이고, 24는 이 문서가 이미 쓰는 세로 수다(`8 · 16 · 24`). 패널이 세로로 **16px 는다**(머리 둘 × 8) — 위 §스크롤 항의 상한에 머리 둘이 얹힐 뿐이고(줄 1648 + 머리 48 + 그룹 사이 16 + 면 `py-2` 16 = **1728**, §34 ⑤) 그 수는 이미 776을 넘어 있어 판정이 안 갈린다 |
 | 머리를 `sticky`로 안 붙인다 | 그룹이 둘뿐이고 **줄 모양이 서로 다르다**(1행 vs 2행 · mono 메타 줄의 유무). 스크롤 중에 어느 그룹인지를 줄 자신이 말하므로 머리를 따라다니게 할 값이 없다 — 붙이면 `bg-*` 한 면이 늘어 대비 표에 잴 것이 생긴다 |
 | 세로 순서 | **`대화` → `워커 세션`.** 이 화면의 1차 콘텐츠가 대화이고(§7 — 홈에 서는 것은 에이전트 하나다) 워커 세션은 거기서 이어 묻는 재료다 |
 
@@ -16158,7 +16158,7 @@ lucide-react다. 커스텀 표(§5 8개)도 무수정이다 — 이 절의 산�
 
 | 부분 | `대화` 줄 | `워커 세션` 줄 |
 |---|---|---|
-| 그릇 | `<button className="group flex w-full items-center gap-2 px-2 py-1.5 text-left">` · 높이 ≈36px — **위 §대화 목록 항의 값 그대로** | 같은 `button`에서 **`items-center` → `items-start`** 하나만 갈린다. 안이 `Check` + `<div className="flex min-w-0 grow flex-col gap-0.5">` 두 자식이고 그 `div`가 두 줄을 든다 · 높이 ≈52px |
+| 그릇 | `<button className="group flex w-full items-center gap-2 px-2 py-1.5 text-left">` · 높이 ~~≈36px~~ → **36px**(§34 §값 여덟 — `p-2`가 되면서 이 `≈`가 실측과 만났다. 종전은 32였다) — **위 §대화 목록 항의 값 그대로** | 같은 `button`에서 **`items-center` → `items-start`** 하나만 갈린다. 안이 `Check` + `<div className="flex min-w-0 grow flex-col gap-0.5">` 두 자식이고 그 `div`가 두 줄을 든다 · 높이 ~~≈52px~~ → **58px**(`<StatusBadge>`가 `h-5`다 — §34 ⑤. 종전은 54였다) |
 | 체크 칸 | 왼쪽 `Check size-4` · **폭 16px 고정**(§4-1 전환기 그대로) | 같다. `items-start`라 **윗줄에 정렬**되고, 2줄 묶음이 그 오른쪽에 통째로 앉는다 |
 | 윗줄 | 제목 `text-sm truncate min-w-0 grow` + 시각 `text-xs text-muted-foreground shrink-0 tabular-nums` | **티켓 제목** `text-sm truncate` 하나. 시각을 **안 그린다** — 아래 |
 | 아랫줄 | 없다 | `<div className="flex items-center gap-2 text-xs">` — 워커 이름 + `·` + 해시(둘 다 `font-mono text-muted-foreground` — **해시도 글자다. `<Hash>`가 아니다**, 아래 §줄의 해시는 링크가 아니다) · `<StatusBadge>` 하나 |
@@ -20016,7 +20016,7 @@ text-muted-foreground`다 — **두 값이 같은 행에서 만난다.** 페이�
 
 | 자리 | 지금 그릇 | 서는 `Sidebar*` 부품 | 바꾸는 값 | 안 바꾸는 값 |
 |---|---|---|---|---|
-| **홈 좌측 패널** (§24) | `div`(`w-64 shrink-0 … rounded-lg border bg-surface py-2`) + 그룹 `div` 둘 + `button` 목록 | `SidebarProvider`(2단 행 **자신**) → `Sidebar collapsible="none"` → `SidebarContent` → `SidebarGroup` ×2 → 머리 `SidebarGroupLabel` · 줄 `SidebarMenu`>`SidebarMenuItem`>`SidebarMenuButton` | **`Check` 칸이 걷힌다**(③) → 줄 안쪽 214 → **238px** · 줄 높이 32 → **36**, 워커 줄 50 → **54**(`py-1.5` → `p-2`) · `rounded-sm` → `rounded-md` · 자식 변종 이름 `group-hover:` → **`group-hover/menu-button:`** · 머리의 `px-2`가 `새 대화`를 줄과 같은 x로 당긴다 · 선택에 `aria-current="true"`가 붙는다(③) | 폭 `w-64 shrink-0` · 높이 `창 − 124` · 면 `bg-surface`+`border`+`rounded-lg`(②) · 그룹 머리 `h-6`과 서식 셋 · `새 대화`가 `대화` 머리 오른쪽 끝 · 2행 줄이 이는 사실 다섯 · §26 ④ 시각 서식 · `답하는 중` · `<StatusBadge>` · 0건 세 갈래 · 스크롤 하나 |
+| **홈 좌측 패널** (§24) | `div`(`w-64 shrink-0 … rounded-lg border bg-surface py-2`) + 그룹 `div` 둘 + `button` 목록 | `SidebarProvider`(2단 행 **자신**) → `Sidebar collapsible="none"` → `SidebarContent` → `SidebarGroup` ×2 → 머리 `SidebarGroupLabel` · 줄 `SidebarMenu`>`SidebarMenuItem`>`SidebarMenuButton` | **`Check` 칸이 걷힌다**(③) → 줄 안쪽 214 → **238px** · 줄 높이 32 → **36**, 워커 줄 54 → **58**(`py-1.5` → `p-2` — 구현 실측 `bac53a2e`가 ~~50 → 54~~를 고쳤다, ⑤) · `rounded-sm` → `rounded-md` · 자식 변종 이름 `group-hover:` → **`group-hover/menu-button:`** · 머리의 `px-2`가 `새 대화`를 줄과 같은 x로 당긴다 · 선택에 `aria-current="true"`가 붙는다(③) | 폭 `w-64 shrink-0` · 높이 `창 − 124` · 면 `bg-surface`+`border`+`rounded-lg`(②) · 그룹 머리 `h-6`과 서식 셋 · `새 대화`가 `대화` 머리 오른쪽 끝 **이고 색이 `--foreground`다**(⑤ — 클래스가 하나 는다. 값이 안 갈려서 이 칸이다) · 2행 줄이 이는 사실 다섯 · §26 ④ 시각 서식 · `답하는 중` · `<StatusBadge>` · 0건 세 갈래 · 스크롤 하나 |
 | **프로토콜 트리** (§6) | `<nav aria-label="프로토콜 파일" class="w-full shrink-0 space-y-0.5 lg:w-80">` + `Link`·`div` 평면 목록. **면도 테두리도 없다** | 같은 사슬. 그룹 하나(`SidebarGroupLabel` 없음 — 머리 낱말이 원래 0개다) · 파일·코어 줄 `SidebarMenuButton size="sm" render={<Link>}` · **디렉터리 줄은 `SidebarMenuItem` 안의 `div` 그대로**(누를 수 없는 줄에 `<button>`을 세우면 탭 정거장이 는다) | **면이 선다** — `bg-surface`+`border`+`rounded-lg`(④) · 랜드마크가 `<nav>` 태그에서 `Sidebar`의 `role="navigation" aria-label`로 옮긴다(부품에 `render`가 없어 태그를 못 바꾼다. 새 요소 0) · 줄 그릇 `Link` → `SidebarMenuButton render={<Link>}`(줄마다 클라이언트 컴포넌트 한 겹) · 선택 `bg-muted font-medium` → `isActive`(**같은 값이다**, ③) + `aria-current="page"` · 줄 사이 `space-y-0.5` → `SidebarMenu`의 `gap-0.5` | `?file=`과 서버 판정 · 기본 선택 루트 `AGENTS.md` · 코어 줄이 맨 위 · `?core=1` · `Lock` · 편집 없음 · `InlineBadge` · `Folder`/`FileText` · `paddingLeft: depth*0.75+0.5rem` · `break-all` · `text-xs` · `lg:` 브레이크포인트(`w-full lg:w-80`) |
 | **페르소나 목록** (§5) | `<nav aria-label="페르소나" class="w-full shrink-0 space-y-0.5 lg:w-80">` + `button` 목록(2행 · baseline). 면 없다 | 같은 사슬. 줄은 **`render`가 없는 `SidebarMenuButton`**(= `<button>`) + `items-start`, 안에 `flex-col gap-0.5` 두 줄 | **면이 선다**(④) · 랜드마크를 **안 세운다** — 줄이 링크가 아니라 버튼이라 내비가 아니다. 이름은 `SidebarMenu`(ul)의 `aria-label="페르소나"`가 든다 · 선택 `bg-muted font-medium` → `isActive`(같은 값) · `space-y-0.5` → `gap-0.5` | **선택이 URL에 안 담긴다**(§34 서는 못 4 — `render={<Link>}`를 쓰지 않는다. 담으면 서버 재렌더가 편집 중 textarea를 언마운트한다) · 편집 보존 · 왼쪽 줄의 값 여덟 · baseline 정렬 · `PersonaDot self-center` · 줄 안에 버튼 0개 · `aria-current="true"`(이미 있다) · 오른쪽 칸 전부 · 0개면 `<EmptyState>`(2단도 사이드바도 안 그린다) · `lg:` 브레이크포인트 |
 
@@ -20033,7 +20033,9 @@ text-muted-foreground`다 — **두 값이 같은 행에서 만난다.** 페이�
            className="w-64 shrink-0 rounded-lg border bg-surface">   ← 면은 클래스가 낸다 (②)
     <SidebarContent className="gap-4 py-2">    ← 스크롤·그룹 사이 간격·면의 세로 패딩
       <SidebarGroup className="p-0">           ← 가로 패딩 0 (§33 — 줄이 이미 낸다)
-        <SidebarGroupLabel className="h-6 text-muted-foreground">대화<Button …/></…>
+        <SidebarGroupLabel className="h-6 text-muted-foreground">  ← 낱말 색이 머리 **행**에 산다
+          대화<Button variant="ghost" className="ml-auto text-foreground" …/>   ← 상속을 되돌린다 (⑤)
+        </…>
         <SidebarMenu aria-label="대화">
           <SidebarMenuItem>
             <SidebarMenuButton className="h-auto" isActive aria-current …>
@@ -20162,6 +20164,55 @@ Provider가 있어야 한다. 자리는 **`p/[project]/layout.tsx` 한 곳이 �
 2단이다. **결론이 바뀐다** — 그 둘은 위 표대로 면을 든다. **워커·프로젝트 목록은 그대로 안 든다**
 (단이 하나라 ①이 여전히 거짓이다). 행을 지우지 않고 **둘로 쪼갠다.**
 
+#### ⑤ 구현이 실측으로 만난 세 자리 (`bac53a2e` → `c6057625`, 2026-08-03)
+
+판정표대로 홈을 구현한 세션이 **표와 어긋난 자리 셋**을 보고했다. 구현은 셋 다 표의 의도대로
+끝났고(어긴 행 0개), 여기서 갈리는 것은 **표의 값**이다. 셋 다 실측을 받았다 — 위 판정표 ·
+§값 여덟 · §안 하는 것 다섯의 해당 칸을 이 절 기준으로 고쳤다.
+
+**1. `새 대화`는 `--foreground`다. 클래스 하나가 는다.**
+
+종전 DOM은 `text-muted-foreground`가 **낱말 `span` 쪽**에 있어 버튼이 안 상속했다.
+조립 스케치대로 그 색을 머리 **행**(`SidebarGroupLabel`)에 얹으면 `Button variant="ghost"`가
+자기 글자색을 안 정하므로 **`새 대화`가 조용히 muted로 내려간다.** 구현은 `text-foreground`
+한 클래스로 막았고 그 판단이 맞다. 판정표에서 이 클래스는 **`안 바꾸는 값` 칸**이다 —
+`SidebarGroupLabel`의 `h-6 text-muted-foreground`와 같은 성질이다(부품 기본을 덮어 §24의
+값을 지키는 클래스이지, 값이 갈리는 것이 아니다). 스케치에도 적었다.
+
+**muted로 내려가는 쪽은 세 겹으로 죽는다**(라이트/다크, `--surface` 면 위 실측):
+
+| `새 대화`의 색 | 정지 | `ghost` 호버(`bg-muted`) | **0건 `aria-disabled:opacity-50`** |
+|---|---|---|---|
+| `--foreground` (채택) | 18.96 / 18.01 | 18.15 / 14.48 | **3.68 / 5.15** |
+| `--muted-foreground` (상속, 버림) | 4.53 / 7.25 | **4.34** / 5.83 | **1.93** / 2.69 |
+
+① **0건에서 안 읽힌다 — 이것이 결정적이다.** §24가 그 상태에서 버튼을 **안 지운다**고
+못박았고(*사라지면 목록이 12px 뛰는데 그 순간이 하필 첫 질문을 보내는 때다*) 그 자리는
+`title`로 사유를 읽히려는 자리다. 라이트 **1.93**은 그 글자를 못 읽게 한다. 비활성 컨트롤이
+대비 요건 밖인 것과 별개로, **읽으라고 남겨 둔 글자**다. ② 호버가 **4.34** — §21이 이름을
+박아 금지한 그 수다(`--muted-foreground` on `--muted`). `ghost`가 `hover:text-foreground`를
+들고 있어 실제로는 그 값을 스쳐 지나지만, 정지색을 muted로 두면 호버마다 글자색이
+4.53 → 18.96으로 뛴다 — 면이 이미 말한 것을 색이 한 번 더 말하는 겹이다. ③ §24가 못박은
+*왼쪽은 라벨 · 오른쪽은 컨트롤*이 **정지 상태에서 색으로 읽히는 계약**이다. 둘이 같은 색이면
+머리 행이 낱말 둘로 읽힌다.
+
+**2. 워커 줄의 종전 높이는 50이 아니라 54였다.** `<StatusBadge>`가 16이 아니라 **20**이다
+(`badge.tsx`가 `h-5`를 **명시**한다 — `text-xs` 16 + `py-0.5` 4로 세도 같은 수다).
+종전 `6+6+20+2+20 = 54` · 지금 `8+8+20+2+20 = 58`이고, **표가 예측한 차이 +4는 맞았다.**
+절대값만 4씩 밀려 있었다. 1440×900에서 교체 전후를 각각 빌드해 잰 값이다:
+
+| | 종전 | 지금 |
+|---|---|---|
+| 대화 줄 | 32 | **36** (표 그대로) |
+| 워커 줄 | **54** | **58** |
+
+스크롤 상한도 같은 만큼 민다(§값 여덟). **776 창 판정은 안 갈린다** — 그 수는 종전에도
+지금도 창을 한참 넘는다. §24 §스크롤 항의 1552/1568도 같이 고쳤다 — 그 수는 `≈`로 센 것이다.
+
+**3. lucide `Check`은 파일에서 안 빠진다 — 패널에서만 빠진다.** ③이 걷는 것은 **줄의 표식**
+하나고, 같은 `home-ui.tsx`의 답 아래 띠가 `복사`를 누른 뒤 그 글리프를 든다(§24 §띠).
+패널 1건 → **0건**은 맞고 `import`는 그대로다. §안 하는 것 다섯 아래 문장을 그렇게 고쳤다.
+
 #### §24가 잰 값 여덟 — 어느 부품이 이어받나
 
 | §24의 값 | 무엇이 드나 | 갈리나 |
@@ -20169,11 +20220,11 @@ Provider가 있어야 한다. 자리는 **`p/[project]/layout.tsx` 한 곳이 �
 | 폭 `w-64`(256) · `shrink-0` | `Sidebar`의 className. 부품 기본 `w-(--sidebar-width)`(16rem)와 **같은 수**지만 `shrink-0`이 없어 같이 준다 | **안 갈린다** |
 | 높이 `창 − 124` | `SidebarProvider`(`min-h-svh` → `min-h-0 flex-1`) → `Sidebar h-full` → `SidebarContent flex-1 overflow-auto`. 스크롤이 바깥 상자에서 `SidebarContent`로 내려간다 | **안 갈린다** — 상자 하나에 스크롤 하나다 |
 | 그룹 머리 `h-6` + `text-xs font-medium text-muted-foreground` | `SidebarGroupLabel className="h-6 text-muted-foreground"` | **안 갈린다.** 부품 기본은 `h-8` + `text-sidebar-foreground/70`(면 위 7.48 / 9.09)이고 둘 다 덮는다 — **알파 전경은 밑면을 따라다녀서** §33이 면을 다시 판정할 때마다 다시 재야 하는 값이다. 불투명 `--muted-foreground`는 §3 테이블 헤더와 같은 서식이고 그 수(4.53 / 7.25)가 이미 재져 있다 |
-| 줄 모양 둘 | `SidebarMenuButton` + `h-auto`(부품 기본 `h-8`은 접기용 고정 높이다) · 2행 줄은 `items-start` | **갈린다** — `py-1.5`(6) → `p-2`(8)이라 **36px · 54px**. 종전 실측은 `6+6+20 = 32` · `6+6+20+2+16 = 50`이고 §24가 `≈`로 적어 둔 36 · 52와 4 · 2px 어긋나 있었다. 스크롤 상한 1568 → **1584**, 776 창에서 그 판정은 안 갈린다 |
+| 줄 모양 둘 | `SidebarMenuButton` + `h-auto`(부품 기본 `h-8`은 접기용 고정 높이다) · 2행 줄은 `items-start` | **갈린다** — `py-1.5`(6) → `p-2`(8)이라 **36px · 58px**. 종전은 `6+6+20 = 32` · `6+6+20+2+20 = 54`다. 스크롤 상한 **줄만 20×36 + 16×58 = 1648**(+ 머리 둘 48 + 그룹 사이 16 + 면 `py-2` 16 = **1728**), 776 창에서 그 판정은 안 갈린다 |
 | §26 ④ 시각 서식 · `답하는 중` | 줄의 마지막 `span`(클래스 무수정) | **안 갈린다.** 부품의 `[&>span:last-child]:truncate`가 그 `span`에 걸리지만 `shrink-0`이라 아무 일도 안 한다. 제목의 `truncate`는 종전대로 **명시 클래스**다 |
 | `Check` | — | **걷힌다**(③). 줄 안쪽 `254 − p-2 16` = **238px** · 대화 제목 ≈12 → **≈14자** · 워커 제목 ≈15 → **≈17자** · 도는 줄 ≈11 → **≈12자**. 2행 줄의 하한(`94 + 8 + 70 = 172`)은 종전에도 지금도 남는다 |
 | 0건 세 갈래 | 부품 밖 조건문 | **안 갈린다** — 그룹째면 `SidebarGroup`을 안 그리고, 둘 다 0건이면 `SidebarProvider`째 안 그린다(2단이 무너지고 대화 컬럼이 폭 전부를 든다 — §24 그대로) |
-| `새 대화`의 자리 | `SidebarGroupLabel` 안의 `Button`(`ml-auto`) | **거의 안 갈린다.** `SidebarGroupAction`은 안 쓴다 — `absolute` 정사각 `w-5` **아이콘 전용** 버튼이고 §24가 글자 버튼으로 못박았다(글리프를 안 얹는다). 머리 행이 `px-2`를 들면서 버튼 오른쪽 끝이 줄과 **같은 x**로 들어온다(종전 8px 밖) |
+| `새 대화`의 자리 | `SidebarGroupLabel` 안의 `Button`(`ml-auto`) | **거의 안 갈린다.** `SidebarGroupAction`은 안 쓴다 — `absolute` 정사각 `w-5` **아이콘 전용** 버튼이고 §24가 글자 버튼으로 못박았다(글리프를 안 얹는다). 머리 행이 `px-2`를 들면서 버튼 오른쪽 끝이 줄과 **같은 x**로 들어온다(종전 8px 밖). **글자색을 지키는 데 클래스가 하나 든다** — `text-foreground`(⑤) |
 
 **`SidebarGroup`은 `p-0`이다.** 부품 기본 `p-2`를 그대로 두면 §33이 거절한 *패널 면의 가로
 패딩*이 생겨 216px이 16px 줄고 잘리는 자리가 옮겨 간다. 세로 8px은 `SidebarContent`의 `py-2`가
@@ -20200,7 +20251,9 @@ group/menu-button`이라 **이름 없는 `group-hover:`가 안 맞는다** — �
 | 문구를 새로 쓰기 | **0.** 위 어디에도 새 문자열이 없다 |
 
 **새 색 토큰 0 · 새 커스텀 0 · 새 아이콘 0 · `globals.css` 0줄 · `add` 인자 무수정**(§5가 이미
-`sidebar`를 적었다). 줄어드는 것이 하나 있다 — **홈에서 lucide `Check`이 빠진다**(③).
+`sidebar`를 적었다). 줄어드는 것이 하나 있다 — **홈 패널에서 lucide `Check`이 빠진다**(③).
+**파일에서는 안 빠진다**(구현 실측 `bac53a2e`, ⑤): 같은 `home-ui.tsx`의 답 아래 띠가 `복사`를
+누른 뒤 그 글리프를 든다(§24 §띠). 패널만 1건 → **0건**이고 import는 그대로다.
 
 #### 사실 표 한 줄이 틀렸다 — `SidebarProvider`가 `⌘B`를 먹는다
 
