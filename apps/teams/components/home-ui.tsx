@@ -84,17 +84,15 @@ const EXAMPLES = [
   "이 프로젝트의 프로토콜을 요약해 달라",
 ];
 
-/** 패널의 줄 전부와 `새 대화`가 **같은 문구 · 같은 잠금**을 쓴다(§24 §잠금 두 자리 ① —
- *  팝오버 시절에는 트리거 하나였고 지금은 줄 전부다. 같은 사실이 자리 수만큼 늘었을 뿐이라
- *  문구를 새로 쓰지 않는다). 종전 문구
- *  (`답이 도는 동안에는 비울 수 없습니다`)는 비우는 버튼의 말이었고, 지금은 비우지 않는다.
- *  전환을 막는 이유는 §7이다 — 대화를 갈아 끼우면 흐르던 글이 화면에서 사라지는데,
- *  한 프로젝트에 한 질문이라 옮겨 간 대화에서 물을 수도 없다. 푸는 열쇠가 `중지`다. */
-const LOCKED = "답이 끝나거나 중지한 뒤에 열 수 있습니다";
-
-/** `새 대화`의 두 번째 잠금(§24 §0건에서 사라지지 않는다) — 지금 대화의 턴이 0건이면 버튼이
- *  **사라지지 않고 자리를 지킨다**(`h1` 행 시절과 갈리는 값이다: 패널에서는 사라짐이 목록을
- *  12px 끌어올린다). 두 잠금이 겹치면 `LOCKED`가 이긴다 — 첫 질문 직후가 그 순간이다. */
+/** `새 대화`의 잠금 — **이제 이것 하나다**(§24 §~~잠금 두 자리~~ → 잠금 한 자리. 요구
+ *  `4e9e54c5`가 ①을 걷었다: 답이 도는 동안 패널 줄도 이 버튼도 안 잠긴다. 옛 문구
+ *  `답이 끝나거나 중지한 뒤에 열 수 있습니다`가 쓰이던 자리가 셋 다 사라져 상수째 걷었다 —
+ *  ②는 그 문자열을 안 쓴다. 손잡이 줄 왼쪽의 `<WorkerNote>`가 그 자리다).
+ *
+ *  지금 대화의 턴이 0건이면 버튼이 **사라지지 않고 자리를 지킨다**(패널에서는 사라짐이 목록을
+ *  12px 끌어올린다). **조건이 하나 늘었다**(`1a925a73`) — `턴 0건` **그리고 그 대화에 도는 것이
+ *  없다**: 첫 질문 직후는 턴이 아직 0건인데(낙관적 에코가 없다) 그 대화엔 방금 보낸 질문이 있다.
+ *  종전에는 걷힌 ①이 이겨서 그 창을 가려 줬고, 그것만 걷으면 화면이 거짓말을 한다. */
 const NO_TURNS = "지금 대화가 이미 비어 있습니다 — 여기에 물어보세요";
 
 /** 좌측 패널이 그리는 것 전부 — **`home-sessions.json`의 형식(`Home`) + 큐에서 파생된 워커 세션**
@@ -143,6 +141,10 @@ export function HomeUI({ project, initial }: { project: string; initial: HomeChu
   // **새로고침해도 따라간다**: 서버가 "지금 도는 질문이 있다"를 알고 있어서(§7 실행층의 맵)
   // 이 값이 참으로 시작하면 폴링 효과가 그대로 다시 붙는다.
   const [running, setRunning] = useState(initial.running);
+  // **이 프로젝트에서 도는 대화 전부**(§7 §대화마다 따로 돈다 — `runningSessions`). `running`과
+  // 다른 값이다: 저건 **보고 있는** 대화 하나고 이건 목록의 어느 줄이 도는가다. 화면에서 둘을
+  // 한다 — 패널 줄의 표식(§24 §도는 대화의 표식)과 **폴링을 계속하는 근거**.
+  const [runningIds, setRunningIds] = useState<string[]>(initial.runningSessions);
   const [starting, setStarting] = useState(false); // `askHome` 왕복 한 번. 도는 것과 다른 값이다
   const [fail, setFail] = useState<Answer | null>(initial.failed);
   const [text, setText] = useState("");
@@ -200,11 +202,25 @@ export function HomeUI({ project, initial }: { project: string; initial: HomeChu
   // 이어붙어 같은 질문·같은 답이 스레드에 두세 벌 선다(key가 같아 React가 경고까지 찍는다).
   // 파일은 멀쩡하고 새로고침이면 사라지는 **화면만의 고장**이라 더 조용했다. 실측으로 400ms
   // 지연을 주입해 왕복 중앙값을 535ms로 올리면 100% 났다(QA `2ad9906c`).
+  //
+  // **도는 것이 이 프로젝트에 하나라도 있으면 돈다**(요구 `4e9e54c5`). 종전 조건은 `running`
+  // 하나였고 그건 **보고 있는** 대화의 것이라, 옮겨 간 대화에서 폴링이 끊겨 패널의 표식이
+  // 죽었다. 끊는 자리도 같이 갈린다 — 보던 대화가 끝나도(`done`) 남이 돌면 안 끊는다.
+  // **`running`이 deps에 남아 있는 것이 값이다**: 새 질문이 시작되는 순간 사슬이 통째로
+  // 다시 걸려서, 그 전에 떠 있던 왕복(등록 전의 서버를 본 것)이 `stop`에 걸려 죽는다 —
+  // 안 그러면 그 응답의 `running: false`가 방금 시작한 답을 화면에서 지운다.
+  // **불리언 하나로 좁혀서 deps에 넣는다** — 목록 자체를 넣으면 폴링이 새 배열을 줄 때마다
+  // 사슬이 다시 걸려 500ms 주기가 매번 처음부터 선다(같은 값이 든 다른 배열이다).
+  const anyRunning = runningIds.length > 0;
   useEffect(() => {
-    if (!running) return;
+    if (!running && !anyRunning) return;
     let stop = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const deadline = Date.now() + CEILING_MS;
+    // **천장은 답 하나에 5분이다**(무수정). 사슬이 여러 대화를 이어 물게 됐으므로 **처음 보는
+    // 세션이 뜰 때마다 그 5분을 다시 센다** — 안 그러면 A가 4분째일 때 시작한 B가 1분 만에
+    // 잘린다(그 답은 파일에 서고 새로고침이 데려오지만, 화면은 그동안 얼어 있다).
+    const seen = new Set<string>();
+    let deadline = Date.now() + CEILING_MS;
     const poll = async () => {
       // 왕복이 통째로 실패하면(catch) 서버가 삐끗한 것이다 — 느린 쪽으로 물러난다.
       let wait = SLOW_MS;
@@ -215,6 +231,13 @@ export function HomeUI({ project, initial }: { project: string; initial: HomeChu
         offset.current = r.offset;
         setPartial(r.partial);
         setHome({ conversations: r.conversations, workers: r.workers, current: r.sessionId });
+        setRunningIds(r.runningSessions);
+        for (const id of r.runningSessions) {
+          if (!seen.has(id)) {
+            seen.add(id);
+            deadline = Date.now() + CEILING_MS; // 처음 보는 답 — 이 사슬의 천장을 다시 센다
+          }
+        }
         // `reset` = 세션이 갈렸다(서버가 0부터 다시 읽었다). 이어붙이면 옛 대화가 두 벌이 된다.
         setTurns((prev) => {
           const next = r.reset ? r.turns : r.turns.length ? [...prev, ...r.turns] : prev;
@@ -226,7 +249,9 @@ export function HomeUI({ project, initial }: { project: string; initial: HomeChu
         if (r.failed) setFail(r.failed);
         if (r.done) {
           setRunning(false);
-          return; // 다음을 예약하지 않는다 = 이 줄이 폴링을 끊는 자리다
+          // **보던 대화가 끝났다고 사슬을 안 끊는다** — 남이 돌면 패널의 표식이 이 왕복에
+          // 매달려 있다(§24 §도는 대화의 표식). 도는 것이 0이 되는 그때가 끊는 자리다.
+          if (r.runningSessions.length === 0) return;
         }
         wait = r.running ? FAST_MS : SLOW_MS;
       } catch {
@@ -247,7 +272,7 @@ export function HomeUI({ project, initial }: { project: string; initial: HomeChu
       stop = true;
       clearTimeout(timer);
     };
-  }, [project, running]);
+  }, [project, running, anyRunning]);
 
   const empty = !text.trim();
   const busy = running || starting;
@@ -306,13 +331,25 @@ export function HomeUI({ project, initial }: { project: string; initial: HomeChu
    *  `current`를 바꾸고 그 대화의 트랜스크립트를 읽어 응답 하나로 돌려준다(§24 로딩 항:
    *  스켈레톤이 없는 이유가 이 한 왕복이다. 새 스레드가 도착한 시점에 통째로 바뀐다).
    *  폴링이 들고 다니던 두 값도 여기서 갈린다 — **갈아탄 대화의 파일은 다른 파일**이라 들고 있던
-   *  바이트 수가 거기서는 아무 뜻이 없다. 실패 Alert도 지운다: 옛 대화에서 난 일이다. */
+   *  바이트 수가 거기서는 아무 뜻이 없다.
+   *
+   *  **도는 대화로 돌아오면 흐르던 글이 그 자리에서 이어진다**(요구 `4e9e54c5`) — 누적분은
+   *  세션에 매달려 서버에 있으므로(§7 — `runs`의 키가 세션이다) 이 한 왕복이 그것까지 데려온다.
+   *  그래서 여기서 갈아 끼우는 것이 스레드만이 아니다: `running`·`partial`이 같이 갈리고,
+   *  그 `running`이 폴링 효과를 이 대화에 다시 붙인다. `stopping`도 푼다 — 앞 대화에서 누른 것이다.
+   *  **실패 Alert는 지우는 것이 아니라 갈아 끼운다**(`c.failed`): 내가 B를 보는 동안 A가 실패했으면
+   *  그 결과 객체가 A를 여는 폴링까지 서버에 남아 있고(`ff3ceda5`), 여기서 버리면 그 실패가
+   *  사람에게 **한 번도** 안 보인다. 옛 대화의 실패가 남지 않는 것은 종전과 같다(대개 `null`이다). */
   const apply = (c: HomeChunk) => {
     session.current = c.sessionId;
     offset.current = c.offset;
     setHome({ conversations: c.conversations, workers: c.workers, current: c.sessionId });
-    setTurns(c.turns);
-    setFail(null);
+    setTurns(c.stopped ? markStopped(c.turns) : c.turns);
+    setRunning(c.running);
+    setRunningIds(c.runningSessions);
+    setPartial(c.partial);
+    setStopping(false);
+    setFail(c.failed);
   };
 
   // 대화 0건 = 온보딩이다. `busy`가 참이면 스레드가 선다 — 그 안에 진행 표식이 있어야 하고,
@@ -350,8 +387,10 @@ export function HomeUI({ project, initial }: { project: string; initial: HomeChu
         {home.conversations.length > 0 && (
           <SidePanel
             home={home}
-            busy={busy}
-            noTurns={turns.length === 0}
+            runningIds={runningIds}
+            // `새 대화`의 잠금 하나(§24 §0건) — **`busy`가 두 번째 조각이다**: 첫 질문 직후는
+            // 턴이 0건인데도 그 대화가 비어 있지 않다(위 `NO_TURNS` 주석).
+            noTurns={turns.length === 0 && !busy}
             onNew={async () => apply(await clearHome(project))}
             onPick={async (id) => {
               setHome((now) => ({ ...now, current: id })); // 체크만 낙관적으로(§24 로딩 항)
@@ -727,7 +766,17 @@ function WorkerNote({ project, worker }: { project: string; worker: WorkerSessio
 /** 패널 줄 한 벌의 클래스. **두 그룹이 이 문자열을 같이 쓰고 갈리는 것은 정렬 하나다**(§24
  *  한 줄의 모양 표 — `대화`는 `items-center`(1행 36px), `워커 세션`은 `items-start`(2행 52px)).
  *  나머지(폭 · `px-2 py-1.5` · hover · 잠금)가 두 줄에서 같아야 체크 칸이 한 x에 선다. */
-const ROW = "group flex w-full cursor-pointer gap-2 rounded-sm px-2 py-1.5 text-left hover:bg-muted aria-disabled:opacity-50";
+/** (`aria-disabled:opacity-50`이 빠졌다 — 두 그룹의 줄에 `aria-disabled`를 거는 자리가
+ *  요구 `4e9e54c5`로 사라졌다. 남기면 이 문자열이 없는 잠금을 가리킨다) */
+const ROW = "group flex w-full cursor-pointer gap-2 rounded-sm px-2 py-1.5 text-left hover:bg-muted";
+
+/** 줄 오른쪽 끝의 글자 한 겹 — **`대화`의 시각과 도는 줄의 표식이 같은 그릇이다**(§24
+ *  §도는 대화의 표식: 그릇 새 요소 0 · 클래스 무수정). 두 그룹이 이 문자열을 같이 써서
+ *  표식의 x가 같다. 색도 아이콘도 0이고(`<StatusBadge status="wip">`는 이 패널에서 이미
+ *  *티켓이 `.wip`*을 말한다) **모션도 0이다** — 도는 줄이 여럿 설 수 있어 움직임이 아무것도
+ *  안 가리킨다. `· 최대 5분`은 안 붙인다: 상한을 적는 자리는 스레드의 띠 하나다. */
+const MARK = "shrink-0 text-xs text-muted-foreground tabular-nums group-hover:text-foreground";
+const RUNNING = "답하는 중";
 
 /** 좌측 패널 (§비주얼 §24 §좌측 패널 · §7 §좌측 패널) — **`div` 둘 + `button` 목록**이다.
  *
@@ -753,15 +802,17 @@ const ROW = "group flex w-full cursor-pointer gap-2 rounded-sm px-2 py-1.5 text-
  *  `session id`는 안 그린다: UUID 36자이고 사람이 이 화면에서 그 값을 쓸 일이 없다(§6과 같은 자). */
 function SidePanel({
   home,
-  busy,
+  runningIds,
   noTurns,
   onNew,
   onPick,
 }: {
   home: Panel;
-  busy: boolean;
-  /** 지금 대화의 턴이 0건인가 — `새 대화`의 두 번째 잠금(§24 §0건). 패널이 그리는 값이 아니라
-   *  스레드 쪽 상태라 `Panel`에 안 얹고 프롭으로 받는다. */
+  /** 지금 도는 session id 전부 — **줄의 오른쪽 끝을 정하는 값 하나다**(§24 §도는 대화의 표식).
+   *  두 그룹이 같은 목록을 본다: 대화 줄은 시각이 자리를 내주고, 워커 줄은 비어 있던 자리다. */
+  runningIds: string[];
+  /** `새 대화`를 잠글까 — `턴 0건` **그리고** `그 대화에 도는 것이 없다`(§24 §0건 · `1a925a73`).
+   *  판정이 스레드 쪽 상태 둘에서 나오므로 `Panel`에 안 얹고 프롭으로 받는다. */
   noTurns: boolean;
   onNew: () => void;
   onPick: (id: string) => void;
@@ -779,21 +830,23 @@ function SidePanel({
         <div className="flex h-6 items-center">
           <span className="px-2 text-xs font-medium text-muted-foreground">대화</span>
           {/* `새 대화` (§24 §`새 대화` — 요구 `6f9dce32`로 `h1` 행에서 여기로 내려왔다).
-              **하는 일과 잠금은 한 자도 안 갈렸다**: 여는 버튼이고(확인 없음) 도는 중에는 패널
-              줄 전부와 같은 `aria-disabled` + 같은 `LOCKED`다. 갈린 값은 자리·그릇·0건 셋이다 —
+              **도는 중 잠금이 걷혔다**(요구 `4e9e54c5` — 답이 도는 동안 다른 대화로 옮겨 거기서
+              묻는 것이 그 요구의 전부이고, 새 줄을 여는 것이 곧 그 일이다). 남은 잠금은 0건
+              하나다. 여는 버튼인 것은 무수정이다(확인 없음). 갈린 값은 자리·그릇·0건 셋이다 —
               `ghost` `size="xs"`(`h-6`·`text-xs`·`px-2`)로 무테 레일에 앉고, 머리 낱말의
               `text-muted-foreground`를 **안 상속해서**(그 클래스가 `span` 쪽에 있다) 왼쪽은
               라벨 · 오른쪽은 컨트롤이 읽힌다. 0건이면 사라지지 않고 자리를 지킨다 —
               사라지면 목록이 12px 뛰는데 그 순간이 하필 첫 질문을 보내는 때다.
-              **두 잠금이 겹치면 도는 중이 이긴다**(첫 질문 직후: `busy`인데 턴은 아직 0). */}
+              **0건 판정에 조각이 하나 늘었다** — 걷힌 잠금이 가려 주던 창(첫 질문 직후:
+              턴 0건인데 그 대화는 안 비었다)을 부르는 쪽이 닫는다(위 `noTurns` 프롭). */}
           <Button
             variant="ghost"
             size="xs"
             className="ml-auto aria-disabled:opacity-50"
-            aria-disabled={busy || noTurns || undefined}
-            title={busy ? LOCKED : noTurns ? NO_TURNS : undefined}
+            aria-disabled={noTurns || undefined}
+            title={noTurns ? NO_TURNS : undefined}
             onClick={() => {
-              if (busy || noTurns) return;
+              if (noTurns) return;
               onNew();
             }}
           >
@@ -802,19 +855,17 @@ function SidePanel({
         </div>
         {rows.map((r) => (
           // 줄 사이 간격이 0이다 — 줄이 자기 `py`로 리듬을 만든다(§3 테이블 행과 같은 처리).
-          // 도는 동안 잠긴다(§24 §잠금 두 자리 ①): `disabled`가 아니라 `aria-disabled`라
-          // 포커스도 `title`도 남는다(§21·§23 — 탭 순서에 죽은 정거장을 만들지 않는다).
+          // **도는 동안에도 눌린다**(§24 §잠금 한 자리 — ①이 걷혔다. 요구 `4e9e54c5`):
+          // 옮겨 간 대화에서 묻는 것까지 열렸고 흐르던 글도 안 사라진다. 이 줄에 남은 값은
+          // 잠금이 아니라 **표식**이고, 그것이 오른쪽 끝 `span` 하나다(아래).
           <button
             key={r.id}
             type="button"
-            aria-disabled={busy || undefined}
-            title={busy ? LOCKED : undefined}
             // `hover:bg-muted`와 보조 글자의 `group-hover:text-foreground`는 **짝이다** —
             // `--muted-foreground` on `--muted`는 §21이 금지한 4.34다. 두 값 다 `ghost` 변종이
             // 이 화면에서 이미 같이 쓰는 것이라(`복사`·`다시 답하기`) 새로 잴 조합이 0이다.
             className={cn(ROW, "items-center")}
             onClick={() => {
-              if (busy) return;
               if (r.id !== home.current) onPick(r.id);
             }}
           >
@@ -826,9 +877,10 @@ function SidePanel({
             {/* 216px 안쪽이라 제목이 ≈12자에서 잘린다(§24 §폭) — 식별자가 아니라 첫 질문의
                 첫 줄이고, 전문을 볼 자리는 그 대화를 열었을 때의 첫 말풍선이다(§6 경로 예외). */}
             <span className="min-w-0 grow truncate text-sm">{r.title}</span>
-            <span className="shrink-0 text-xs text-muted-foreground tabular-nums group-hover:text-foreground">
-              {r.time}
-            </span>
+            {/* **시각이 도는 동안 자리를 내준다**(§24 §도는 대화의 표식) — 같은 `span` · 같은
+                클래스 · 갈리는 것은 자식 문자열 하나다. 둘을 같이 세우면 제목이 ≈8자로 내려간다.
+                시각은 답이 끝나면 돌아온다(폴링 응답에서 이 목록이 빠지는 순간이다). */}
+            <span className={MARK}>{runningIds.includes(r.id) ? RUNNING : r.time}</span>
           </button>
         ))}
       </div>
@@ -849,13 +901,10 @@ function SidePanel({
             <button
               key={w.id}
               type="button"
-              aria-disabled={busy || undefined}
-              title={busy ? LOCKED : undefined}
               // 갈리는 클래스가 `items-start` 하나다 — 체크가 **윗줄에 정렬**되고 2줄 묶음이
-              // 그 오른쪽에 통째로 앉는다(§24 한 줄의 모양 표).
+              // 그 오른쪽에 통째로 앉는다(§24 한 줄의 모양 표). 잠금은 여기서도 걷혔다(위).
               className={cn(ROW, "items-start")}
               onClick={() => {
-                if (busy) return;
                 if (w.id !== home.current) onPick(w.id);
               }}
             >
@@ -864,8 +913,14 @@ function SidePanel({
               </span>
               <div className="flex min-w-0 grow flex-col gap-0.5">
                 {/* 윗줄 = 티켓 제목. 두 그룹의 1행이 같은 x에서 시작해 세로로 훑는 눈이
-                    한 번에 읽는다(§24). ≈15자에서 잘리고 전문은 해시가 가는 상세에 있다 */}
-                <span className="truncate text-sm">{w.title}</span>
+                    한 번에 읽는다(§24). ≈15자에서 잘리고 전문은 해시가 가는 상세에 있다.
+                    **오른쪽 끝이 표식의 자리다**(§24 §도는 대화의 표식) — 이 그룹은 윗줄에
+                    시각을 안 그려 비어 있던 자리이고, 그래서 표식의 x가 `대화` 줄과 같다.
+                    도는 줄에서만 `gap-2`가 걸린다(안 서면 제목이 폭 전부를 갖는다 — 무수정). */}
+                <div className="flex items-center gap-2">
+                  <span className="min-w-0 grow truncate text-sm">{w.title}</span>
+                  {runningIds.includes(w.id) && <span className={MARK}>{RUNNING}</span>}
+                </div>
                 {/* 아랫줄 = 어디 것인가. 워커 이름이 빈 값이면(형식이 아닌 `owner:`) 감춘다 —
                     모르는 것을 `?`로 그리지 않는다. **해시는 여기서 글자다** — 이 줄 전체가
                     `button`이라 안에 링크를 넣으면 상호작용 요소가 겹친다(HTML 위반 · 키보드가
