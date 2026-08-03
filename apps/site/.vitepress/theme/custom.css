@@ -82,9 +82,6 @@ html { scroll-behavior: smooth; }
 .dira-landing .brand { display: flex; align-items: center; gap: 8px; text-decoration: none; font-family: var(--mono); font-weight: 600; font-size: 16px; letter-spacing: -0.03em; }
 .dira-landing .brand svg { width: 20px; height: 20px; fill: currentColor; }
 .dira-landing header nav { margin-left: auto; display: flex; align-items: center; gap: 8px; }
-/* github-buttons가 갈아 끼운 host <span>. 줄상자 여백 7.5px을 없애야 28px 위젯의 중심이
-   이웃 .btn(34px)과 맞는다 — 안 걸면 3.7px 위로 뜬다(DESIGN §헤더 별 버튼 §뽑는 못). */
-.dira-landing header nav > span { line-height: 0; }
 
 .dira-landing .btn {
   display: inline-flex; align-items: center; gap: 6px;
@@ -103,6 +100,17 @@ html { scroll-behavior: smooth; }
 .dira-landing .btn-primary:hover,
 .dira-landing .btn-primary:focus-visible { background: #262626; }
 .dira-landing .btn-lg { height: 44px; padding: 0 22px; font-size: 15px; border-radius: 10px; }
+/* 별 개수 칸(DESIGN §별 버튼을 우리 버튼으로 §개수 칸의 모양 A안). 새 색 0 · 새 토큰 0.
+   .btn이 inline-flex라 stretch가 구분선을 버튼 높이만큼 끌어 준다. 오른쪽 여백은 .btn의
+   padding 14px을 음수 마진으로 이어받는다 — .btn의 padding 선언은 버튼 넷이 같이 쓴다.
+   선택자에 .btn.star를 얹지 않는다 — 아래 @media의 `header .star-count`(0,2,1)보다 특정도가
+   높아져서(0,4,0) 480에서 display:none이 지고 개수가 그대로 보인다(실측으로 한 번 그랬다). */
+.dira-landing .star-count {
+  align-self: stretch; display: flex; align-items: center;
+  margin-right: -14px; padding: 0 14px;
+  border-left: 1px solid var(--border);
+  color: var(--faint); font-variant-numeric: tabular-nums;
+}
 
 /* ── shared type ────────────────────────────────── */
 .dira-landing .eyebrow {
@@ -322,4 +330,11 @@ html { scroll-behavior: smooth; }
   .dira-landing .fgrid { grid-template-columns: 1fr 1fr; }
   .dira-landing section, .dira-landing .closing { padding: 64px 0; }
   .dira-landing .hero { padding-top: 56px; }
+}
+
+/* 헤더가 접히는 폭은 브레이크포인트가 아니라 내용이 정한다 — 개수가 도착하면 헤더가 427px을
+   요구해 .brand가 두 줄이 된다. 헤더 것만 숨겨 375로 닫는다(DESIGN §별 버튼 §390).
+   Free 카드 것은 안 숨긴다 — 카드가 한 열을 통째로 써서 390에서도 한 줄이다. */
+@media (max-width: 480px) {
+  .dira-landing header .star-count { display: none; }
 }

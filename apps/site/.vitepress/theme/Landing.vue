@@ -6,10 +6,11 @@ const { theme } = useData();
 const version = ref(theme.value.diraVersion);
 // 초기값 = 실패값. SSR·fetch 실패·`.dmg` 없음 셋 다 지금 동작(릴리스 페이지)으로 떨어진다.
 const dmg = ref("https://github.com/proofer-tech/dira/releases/latest");
+// 빈 문자열 = 개수를 못 읽은 상태. SSR HTML에도 클라이언트 첫 렌더에도 개수 칸이 없다.
+const stars = ref("");
 onMounted(async () => {
   // 스크롤 진입 등장(DESIGN §랜딩 §모션 §판정표 ⑥). JS로 움직이므로 base.css의 전역
   // 킬 스위치 밖이다 — matchMedia를 직접 보고 reduce면 무장을 아예 안 한다.
-  // 별 위젯이 갈아 끼우는 a[data-icon] 둘에는 안 건다(관찰 대상은 main 직계 블록이다).
   if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
     const io = new IntersectionObserver(
       (entries) => {
@@ -26,14 +27,15 @@ onMounted(async () => {
       }
     }
   }
-  // github-buttons는 모듈 최상단에서 window를 읽는다 — SSR에서 죽으므로 동적 import다.
-  // 위젯을 못 만들면 원래 <a>가 그대로 남는다(그게 이 배치를 고르는 근거다).
-  // 둘을 같은 틱에 그려야 api.github.com XHR이 하나다(DESIGN §헤더 별 버튼 §값).
-  const stars = document.querySelectorAll('a[data-icon="octicon-star"]');
-  if (stars.length) {
-    const { render } = await import("github-buttons");
-    for (const star of stars) render(star, (widget) => star.replaceWith(widget));
-  }
+  try {
+    // 위젯이 부르던 바로 그 URL이다(DESIGN §별 버튼을 우리 버튼으로 §고르는 것 ②).
+    // 못 읽으면 stars가 빈 채로 남아 개수 칸이 아예 안 선다 — 콘솔에도 아무것도 안 띄운다.
+    const repo = await (
+      await fetch("https://api.github.com/repos/proofer-tech/dira")
+    ).json();
+    if (typeof repo.stargazers_count === "number")
+      stars.value = repo.stargazers_count.toLocaleString("en-US");
+  } catch {}
   try {
     const r = await fetch(
       "https://api.github.com/repos/proofer-tech/dira/releases/latest",
@@ -67,11 +69,13 @@ onMounted(async () => {
     </a>
     <nav>
       <a class="btn" href="/docs/">매뉴얼</a>
-      <!-- 이 <a>에도 바인딩을 걸지 않는다 — 아래 Free 카드의 별 버튼과 같은 이유다. -->
-      <a class="btn"
-         href="https://github.com/proofer-tech/dira"
-         aria-label="Star proofer-tech/dira on GitHub"
-         data-icon="octicon-star" data-show-count="true" data-size="large">Star</a>
+      <a class="btn star"
+         href="https://github.com/proofer-tech/dira" target="_blank" rel="noopener"
+         aria-label="Star proofer-tech/dira on GitHub">
+        <svg viewBox="0 0 16 16" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="M8 .25a.75.75 0 0 1 .673.418l1.882 3.815 4.21.612a.75.75 0 0 1 .416 1.279l-3.046 2.97.719 4.192a.751.751 0 0 1-1.088.791L8 12.347l-3.766 1.98a.75.75 0 0 1-1.088-.79l.72-4.194L.818 6.374a.75.75 0 0 1 .416-1.28l4.21-.611L7.327.668A.75.75 0 0 1 8 .25Zm0 2.445L6.615 5.5a.75.75 0 0 1-.564.41l-3.097.45 2.24 2.184a.75.75 0 0 1 .216.664l-.528 3.084 2.769-1.456a.75.75 0 0 1 .698 0l2.77 1.456-.53-3.084a.75.75 0 0 1 .216-.664l2.24-2.183-3.096-.45a.75.75 0 0 1-.564-.41L8 2.694Z"/></svg>
+        Star
+        <span class="star-count" v-if="stars" aria-hidden="true">{{ stars }}</span>
+      </a>
       <a class="btn btn-primary" :href="dmg">앱 다운로드</a>
     </nav>
   </div>
@@ -204,13 +208,15 @@ onMounted(async () => {
       </ul>
       <p>로컬 엔진과 앱은 영원히 무료로 제공합니다. dira는 빌더들의
       멀티 에이전트 생태계를 응원합니다.</p>
-      <!-- 이 <a>에는 바인딩을 걸지 않는다. 정적이어야 리본 version 갱신 때 다시 안 그려지고,
-           onMounted에서 갈아 끼운 위젯이 그대로 남는다(DESIGN §진짜 별 버튼 §SSR·hydration). -->
+      <!-- 헤더의 별 버튼과 같은 마크업이다(DESIGN §별 버튼을 우리 버튼으로 §값). -->
       <div class="cta">
-        <a class="btn"
-           href="https://github.com/proofer-tech/dira"
-           aria-label="Star proofer-tech/dira on GitHub"
-           data-icon="octicon-star" data-show-count="true" data-size="large">Star</a>
+        <a class="btn star"
+           href="https://github.com/proofer-tech/dira" target="_blank" rel="noopener"
+           aria-label="Star proofer-tech/dira on GitHub">
+          <svg viewBox="0 0 16 16" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="M8 .25a.75.75 0 0 1 .673.418l1.882 3.815 4.21.612a.75.75 0 0 1 .416 1.279l-3.046 2.97.719 4.192a.751.751 0 0 1-1.088.791L8 12.347l-3.766 1.98a.75.75 0 0 1-1.088-.79l.72-4.194L.818 6.374a.75.75 0 0 1 .416-1.28l4.21-.611L7.327.668A.75.75 0 0 1 8 .25Zm0 2.445L6.615 5.5a.75.75 0 0 1-.564.41l-3.097.45 2.24 2.184a.75.75 0 0 1 .216.664l-.528 3.084 2.769-1.456a.75.75 0 0 1 .698 0l2.77 1.456-.53-3.084a.75.75 0 0 1 .216-.664l2.24-2.183-3.096-.45a.75.75 0 0 1-.564-.41L8 2.694Z"/></svg>
+          Star
+          <span class="star-count" v-if="stars" aria-hidden="true">{{ stars }}</span>
+        </a>
       </div>
     </li>
     <li>
