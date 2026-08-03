@@ -401,7 +401,9 @@ export function AnswerThread({ thread }: { thread: ThreadItem[] }) {
                               답변 쪽만 세로선 + 상자 두 겹이 된다(§13) */}
                           <Bubble variant="outline" align={align}>
                             <BubbleContent>
-                              <Markdown text={item.text} />
+                              {/* 답변 본문은 **사람이 입력칸에 친 글**이라 줄바꿈을 그린다
+                                  (§10 면제). 질문 쪽은 PM이 손으로 감은 절이라 켜면 톱니가 된다 */}
+                              <Markdown text={item.text} breaks={item.role === "answer" ? "all" : undefined} />
                             </BubbleContent>
                           </Bubble>
                         </MessageContent>

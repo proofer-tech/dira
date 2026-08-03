@@ -8,6 +8,7 @@ import { Children } from "react";
 import { Square, SquareCheck } from "lucide-react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { softBreaks } from "@/lib/markdown-breaks";
 
 /** `h4~h6`도 `h3`과 같은 값이다 — 단계를 더 만들지 않는다(이 큐의 본문에 4단계 중첩이 없다). */
 const H3 = "mt-4 mb-1 text-base font-medium";
@@ -123,18 +124,26 @@ const components: Components = {
   img: () => null,
 };
 
-/** 소프트 줄바꿈은 공백으로 합친다(마크다운 표준 — `remark-breaks`를 켜지 않는다). 이 큐의 본문은
- *  100자 근처에서 손으로 감겨 있어서, 그 줄바꿈을 그리면 렌더 폭과 원문 폭이 다른 만큼 문단이
- *  톱니가 된다. 원문의 줄 그대로가 필요한 자리는 펜스다.
+/** 소프트 줄바꿈은 공백으로 합친다(마크다운 표준). 이 큐의 본문은 100자 근처에서 손으로 감겨
+ *  있어서, 그 줄바꿈을 그리면 렌더 폭과 원문 폭이 다른 만큼 문단이 톱니가 된다. 원문의 줄
+ *  그대로가 필요한 자리는 펜스다.
+ *
+ *  **`breaks`는 그 규칙의 면제다**(§10 면제 항 · 요구 `ecb4ffe3`) — 근거인 `손으로 감겨 있다`가
+ *  **파일에 글을 쓰는 에이전트**의 성질이라, 사람이 입력칸에 친 글에서만 물러난다. 기본값은
+ *  끄기고 켜는 자리는 §10 표의 셋뿐이다(홈의 사람 질문 말풍선 · 왕복의 `answer` 두 곳 ·
+ *  요구 티켓 본문의 첫 `##` 앞). 변환은 `lib/markdown-breaks.ts`에 있다.
  *
  *  로딩·에러 상태는 없다 — 서버가 이미 읽은 문자열을 동기로 그린다. 본문은 자르지 않는다. */
-export function Markdown({ text }: { text: string }) {
+export function Markdown({ text, breaks }: { text: string; breaks?: "all" | "untilHeading" }) {
   if (!text.trim()) return <p className="text-sm text-muted-foreground">(내용 없음)</p>;
   return (
     // `min-w-0`이 없으면 다이얼로그(grid)에서 아래 표·펜스의 `overflow-x-auto`가 무력화된다.
     // 리듬은 요소가 각자 들고 있다 — `space-y-*`를 걸지 않는다(제목 위 여백 > 문단 사이 간격).
     <div className="min-w-0 text-base leading-7 break-words [&>:first-child]:mt-0 [&>:last-child]:mb-0 [&_li>ol]:my-1 [&_li>ul]:my-1">
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+      <ReactMarkdown
+        remarkPlugins={breaks ? [remarkGfm, softBreaks(breaks)] : [remarkGfm]}
+        components={components}
+      >
         {text}
       </ReactMarkdown>
     </div>

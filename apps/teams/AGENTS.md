@@ -140,6 +140,10 @@ apps/teams/
                         `node:*` import 금지). 제목 40자 컷 · 본문 두 줄 · **URL 상한 6,000바이트**
                         (실측값과 근거는 그 파일 상수 옆에 있다)와 자르기가 여기 한 곳에 있다.
                         `urls.ts`에 안 얹은 이유: 저기는 앱 안 경로고 여기는 앱 밖으로 나가는 URL이다
+    markdown-breaks.ts  `<Markdown breaks>`의 remark 플러그인 (§비주얼 §10 **면제** — 사람이 입력칸에
+                        친 줄바꿈만 그린다). `remark-breaks`를 안 들인 이유는 `untilHeading`이다:
+                        요구 티켓 본문은 첫 `##` **앞까지만** 켜는데 그 패키지는 트리 전체다.
+                        `components/`가 아니라 여기 사는 이유는 JSX를 `node --test`가 못 읽어서다
     utils.ts            shadcn cn() — 건드리지 않는다
     *.test.ts           node --test
   components/           손으로 만드는 컴포넌트 (DESIGN.md §5 커스텀)

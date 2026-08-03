@@ -455,7 +455,10 @@ export function HomeUI({ project, initial }: { project: string; initial: HomeChu
                               <MessageHeader className="sr-only m-0">질문</MessageHeader>
                               <Bubble variant="outline" align="end">
                                 <BubbleContent>
-                                  <Markdown text={t.text} />
+                                  {/* 이 자리에 오는 문자열은 **전부 입력칸에서 왔다** — 사람이
+                                      친 줄바꿈을 그대로 그린다(§10 면제). 아래 에이전트 답의
+                                      `Prose`는 안 켠다: 그건 감아서 쓰는 쪽의 글이다 */}
+                                  <Markdown text={t.text} breaks="all" />
                                 </BubbleContent>
                               </Bubble>
                             </MessageContent>

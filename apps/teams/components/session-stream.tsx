@@ -304,7 +304,9 @@ function ThreadRow({ item }: { item: ThreadItem }) {
           </MessageHeader>
           <Bubble variant="outline" align={align}>
             <BubbleContent>
-              <Markdown text={item.text} />
+              {/* 상세의 왕복과 같은 판정이다(§10 면제) — 답변은 사람이 친 글이라 줄바꿈을 그리고
+                  질문은 PM이 감은 절이라 안 그린다. 두 자리가 갈리면 같은 글이 화면마다 다르다 */}
+              <Markdown text={item.text} breaks={item.role === "answer" ? "all" : undefined} />
             </BubbleContent>
           </Bubble>
         </MessageContent>

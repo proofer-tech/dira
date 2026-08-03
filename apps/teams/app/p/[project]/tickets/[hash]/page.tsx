@@ -377,7 +377,18 @@ export default async function TicketDetail({
               // 읽기만 한다 — 원문일 이유가 없다(§비주얼 §10). 편집 폼 쪽은 종전대로 원문이다.
               // `## 질문 n`은 빼고 그린다 — 아래 스레드가 답까지 짝지어 들고 있는 유일한 출처다.
               // 걸러낸 뒤 남는 게 없으면 제목만 남는 절이 아니라 빈 상태다.
-              bodyRead ? <Markdown text={bodyRead} /> : <EmptyState text="본문 없음" />
+              // 요구 접수는 입력칸 값을 그대로 본문으로 쓴다(§3) — 그 앞부분만 사람이 친
+              // 줄바꿈을 그린다(§10 면제). 뒤에 붙는 `## 결과`는 에이전트가 감은 글이라
+              // **같은 본문 안에서 갈린다**: 첫 `heading`에서 멈추는 변환이라 블록은 하나다
+              // (쪼개면 루트의 `[&>:first-child]:mt-0`이 뒤쪽에도 걸려 `mt-6`이 죽는다).
+              bodyRead ? (
+                <Markdown
+                  text={bodyRead}
+                  breaks={ticket.fm.kind === "request" ? "untilHeading" : undefined}
+                />
+              ) : (
+                <EmptyState text="본문 없음" />
+              )
             ) : (
               // 폼에는 frontmatter **원문**을 넣는다. `ticket.persona`는 PERSONA_RE를 못 넘긴 값을
               // ''로 만든 것이라, 그대로 저장하면 사람이 적어둔 값을 조용히 지운다.
