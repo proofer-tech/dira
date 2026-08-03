@@ -46,7 +46,8 @@ export default defineConfig({
           items: [
             { text: "워커 늘리기", link: "/docs/worker" },
             { text: "동시에 몇 개 돌릴까", link: "/docs/concurrency" },
-            { text: "페르소나와 프로토콜", link: "/docs/personas" },
+            { text: "페르소나", link: "/docs/personas" },
+            { text: "프로토콜", link: "/docs/protocols" },
             { text: "인증", link: "/docs/auth" },
           ],
         },
