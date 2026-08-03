@@ -6,7 +6,7 @@
 import { notFound } from "next/navigation";
 import { TriangleAlert } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
-import { CreatePersonaButton, PersonaCard } from "@/components/personas-ui";
+import { CreatePersonaButton, PersonasPane } from "@/components/personas-ui";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { listTickets } from "@/lib/queue";
@@ -74,8 +74,8 @@ export default async function Personas({ params }: { params: Promise<{ project: 
               <p>
                 엔진은 이 이름을 만나면 <span className="font-mono text-xs">WARN</span>만 남기고{" "}
                 <strong className="font-medium">페르소나 없이</strong> 디스패치합니다 — 디스패치가
-                실패하는 게 아니라, 세션이 역할·권한을 모르는 채로 시작합니다. 아래 카드의 빈
-                본문을 채워 저장하면 파일이 만들어집니다.
+                실패하는 게 아니라, 세션이 역할·권한을 모르는 채로 시작합니다. 그 이름을 왼쪽에서
+                고르고 오른쪽의 빈 본문을 채워 저장하면 파일이 만들어집니다.
               </p>
               {/* §5-1 · §비주얼 §25 ④ — 새 경고 UI를 만들지 않고 이 Alert에 한 절을 덧붙인다.
                   §32 ⑤가 그 문장을 메모리까지 넓혔다: 사실이 하나고 근거가 하나라(둘 다 페르소나
@@ -95,22 +95,18 @@ export default async function Personas({ params }: { params: Promise<{ project: 
       )}
 
       {personas.length === 0 ? (
+        // 0개면 2단을 안 그린다(§5) — 고를 것도 그릴 것도 없는 빈 칸 두 개가 서면 고장으로 읽힌다
         <EmptyState text="페르소나 없음" action={<CreatePersonaButton projectId={id} />} />
       ) : (
-        // ponytail: 폭 제한 없음 — §5의 §4 예외. 카드 목록만 전체 폭이고 경고 Alert는 문단 폭이다
-        <div className="space-y-3">
-          {rows.map((p) => (
-            // 색은 큐가 아니라 레지스트리에 있다(§5) — 같은 서버 렌더에 실려서 점 스켈레톤이 없다
-            <PersonaCard
-              key={p.name}
-              projectId={id}
-              row={p}
-              color={project.personaColors?.[p.name]}
-              installed={installed}
-              configDir={claudeConfigDir()}
-            />
-          ))}
-        </div>
+        // ponytail: 폭 제한 없음 — §5의 §4 예외. 2단만 전체 폭이고 경고 Alert는 문단 폭이다.
+        // 색은 큐가 아니라 레지스트리에 있다(§5) — 같은 서버 렌더에 실려서 점 스켈레톤이 없다
+        <PersonasPane
+          projectId={id}
+          rows={rows}
+          colors={project.personaColors ?? {}}
+          installed={installed}
+          configDir={claudeConfigDir()}
+        />
       )}
     </div>
   );

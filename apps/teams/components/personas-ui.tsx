@@ -17,7 +17,7 @@ import {
   type PersonaResult,
 } from "@/app/p/[project]/personas/actions";
 import { Markdown } from "@/components/markdown";
-// 접힌 줄의 점도 보드·칸반·필터와 **같은 컴포넌트**다(§5) — 색 조회의 출처는 하나다
+// 왼쪽 목록 줄의 점도 보드·칸반·필터와 **같은 컴포넌트**다(§5) — 색 조회의 출처는 하나다
 import { PersonaDot } from "@/components/persona-badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
@@ -68,7 +68,7 @@ export type PersonaRow = {
   refs: { open: number; wip: number; total: number };
   /** `skills.md`의 목록 줄(§5-1). 문법에 안 맞는 줄은 여기 없고 파일에는 그대로 있다 */
   skills: Skill[];
-  /** `skills.md` **파일 전체** 자수 — 접힌 줄의 자수가 이걸 더한다(§비주얼 §25 ①) */
+  /** `skills.md` **파일 전체** 자수 — 왼쪽 목록 줄의 자수가 이걸 더한다(§비주얼 §25 ①) */
   skillsChars: number;
   /** `memory/*.md` 한 단계 글롭. 세션이 쓰고 사람이 지운다(§5-2). **`text`가 파일 전체라
    *  자수는 화면이 더한다** — `skillsChars`처럼 따로 받지 않는다(목록 밖 글자가 없다) */
@@ -100,8 +100,8 @@ function refsLabel(refs: PersonaRow["refs"]): string | null {
 
 // ── 색 (DESIGN.md §5 · §비주얼 §12) ─────────────────────────────────────────
 
-/** 접힌 줄의 점이 곧 트리거다(§12). `<summary>` 안이라 클릭이 곧 펼침 토글인데 — 삭제 버튼과
- *  같은 처방으로 `preventDefault`다(호출부에서 감싼다. `stopPropagation`은 안 통한다).
+/** **오른쪽 칸 머리**의 점이 곧 트리거다(§5 · §12). 왼쪽 목록 줄의 점은 읽기 전용이고, 이 자리는
+ *  `<summary>`도 선택 버튼도 아니라 `preventDefault` 처방이 아예 없다 — 2단이 그걸 없앴다.
  *  `command`도 `select`도 아니다: 9개는 검색할 양이 아니고 항목의 내용이 글자가 아니라 색이다. */
 function ColorPicker({
   projectId,
@@ -246,192 +246,253 @@ export function CreatePersonaButton({
 
 // ── 편집 · 삭제 ─────────────────────────────────────────────────────────────
 
-/** 페르소나 하나. `body: null`(프로필 없음)이면 빈 textarea가 열리고 **저장이 곧 생성**이다 —
+/** 화면이 들고 있는 한 페르소나의 편집 상태. **오른쪽 칸이 아니라 `PersonasPane`이 든다** —
+ *  고른 페르소나만 오른쪽에 서므로 이 상태가 오른쪽에 살면 다른 줄을 고르는 순간 언마운트돼
+ *  저장 안 한 편집이 사라진다(§5 "다른 페르소나의 편집도 살아 있다"). 왼쪽 줄의 `저장 안 됨` ·
+ *  `스킬 n` · `메모리 n` · 자수도 이 값을 읽으므로 어차피 한 자리에 있어야 한다. */
+type PersonaEdit = {
+  /** 파일에 저장된 원문. `null` = PROFILE.md가 없다 */
+  saved: string | null;
+  /** textarea의 현재 값 */
+  body: string;
+  skills: Skill[];
+  /** **서버가 쓴 뒤 되읽어 준 값**이다 — 파일에는 사람이 덧붙인 산문도 있어서 목록만으로는
+   *  계산이 안 된다(§비주얼 §25) */
+  skillsChars: number;
+  memories: Memory[];
+};
+
+/** 서버가 방금 준 값 그대로. 아직 손대지 않은 페르소나는 이걸 읽으므로 **다른 세션이 파일을
+ *  고치면 목록이 따라간다** — 오버레이에 들어가는 것은 사람이 만진 이름뿐이다. */
+const initialEdit = (row: PersonaRow): PersonaEdit => ({
+  saved: row.body,
+  body: row.body ?? "",
+  skills: row.skills,
+  skillsChars: row.skillsChars,
+  memories: row.memories,
+});
+
+const editChars = (e: PersonaEdit) =>
+  e.body.length + e.skillsChars + e.memories.reduce((n, m) => n + m.text.length, 0);
+
+/** 2단 — 왼쪽이 목록, 오른쪽이 고른 페르소나(§5). 조립은 §6 프로토콜 화면과 같다
+ *  (왼쪽 고정폭 + 오른쪽 `grow`, 좁으면 세로로 쌓인다).
+ *
+ *  **선택을 URL에 담지 않는다**(§5). 담으면 서버가 다시 렌더하면서 앞 페르소나의 textarea가
+ *  언마운트돼 저장 안 한 편집이 사라진다 — §6이 `?file=`을 쓰는 것은 그 화면에 열려 있는
+ *  편집기가 하나뿐이기 때문이다. `// ponytail: 딥링크가 생기면 그때 `?persona=`로 초기 선택만`. */
+export function PersonasPane({
+  projectId,
+  rows,
+  colors,
+  installed,
+  configDir,
+}: {
+  projectId: string;
+  /** 1개 이상이다 — 0개는 호출부가 `<EmptyState>`로 갈라 2단을 안 그린다 */
+  rows: PersonaRow[];
+  /** 레지스트리의 팔레트 키 맵. 없거나 팔레트 밖이면 빈 점이다(§12) */
+  colors: Record<string, string>;
+  /** 이 머신에 설치된 스킬(§5-1). 페르소나 수와 무관하게 서버가 한 번 읽어 내렸다 */
+  installed: Skill[];
+  /** 해석된 `<config>` — 후보가 0개일 때 "어디를 봤는지"를 적는다(§비주얼 §25 다섯 상태) */
+  configDir: string;
+}) {
+  const [selected, setSelected] = useState<string | null>(null);
+  // 손댄 이름만 들어간다. 고른 줄이 지워지면 `find`가 비고 첫 줄로 떨어진다(기본 선택과 같은 값).
+  const [edits, setEdits] = useState<Record<string, PersonaEdit>>({});
+  const current = rows.find((r) => r.name === selected) ?? rows[0];
+  const editOf = (row: PersonaRow) => edits[row.name] ?? initialEdit(row);
+
+  return (
+    <div className="flex flex-col gap-6 lg:flex-row">
+      {/* 왼쪽 목록 — 줄 자체가 선택을 받는다. **안에 버튼이 없다**(§5): 색·삭제가 오른쪽 머리로
+          갔으므로 버튼 안의 버튼도 `preventDefault` 처방도 없다 */}
+      <nav aria-label="페르소나" className="w-full shrink-0 space-y-0.5 lg:w-80">
+        {rows.map((row) => {
+          const e = editOf(row);
+          const refs = refsLabel(row.refs);
+          return (
+            <button
+              key={row.name}
+              type="button"
+              // 색 말고도 표식이 있다(§비주얼 §0) — §6 프로토콜 트리의 선택 줄과 같은 값이다
+              aria-current={row.name === current.name ? "true" : undefined}
+              onClick={() => setSelected(row.name)}
+              className={cn(
+                "block w-full cursor-pointer space-y-0.5 rounded-md px-2 py-1.5 text-left hover:bg-muted",
+                row.name === current.name && "bg-muted font-medium",
+              )}
+            >
+              {/* 값이 여덟이고 칸이 좁다 — 이름 줄과 메타 줄로 세운다(§5). 값을 빼지 않는다.
+                  글자는 밑선이고(§5 정렬 표) 껍데기(점 · 배지 2종)는 행의 세로 중앙이다 */}
+              <span className="flex items-baseline gap-2">
+                {/* 왼쪽 줄의 점은 **읽기 전용**이다 — 고르는 자리는 오른쪽 머리다(§5) */}
+                <PersonaDot color={colors[row.name]} />
+                <span className="min-w-0 truncate font-mono text-sm">{row.name}</span>
+                {e.saved === null && (
+                  <Badge variant="outline" className="self-center">
+                    프로필 없음
+                  </Badge>
+                )}
+                {/* 저장 버튼이 오른쪽에 있다 — 다른 줄을 고른 채 잊으면 이게 유일한 표시다(§5) */}
+                {e.body !== (e.saved ?? "") && (
+                  <Badge variant="outline" className="ml-auto self-center">
+                    저장 안 됨
+                  </Badge>
+                )}
+              </span>
+              <span className="flex items-baseline gap-2 text-xs text-muted-foreground">
+                <span className="min-w-0 truncate" title={row.file}>
+                  {refs ? `티켓 ${refs}` : "참조하는 티켓 없음"}
+                </span>
+                {/* `티켓 n` 뒤 · 자수 앞 — "무엇을 참조하나 → 무엇을 쓰나 → 얼마나 먹나"다
+                    (§비주얼 §25 ①). 0개면 안 그린다: 고정폭 메타라 빠져도 줄이 안 흔들린다 */}
+                {e.skills.length > 0 && <span className="whitespace-nowrap">스킬 {e.skills.length}</span>}
+                {/* `스킬 n` 뒤 · `자수` 앞이다(§비주얼 §32 ①) — "무엇을 참조하나 → 무엇을 쓰나 →
+                    **무엇을 배웠나** → 얼마나 먹나". `장`을 안 붙인다: 앞 둘과 같은 종류의 값이다 */}
+                {e.memories.length > 0 && (
+                  <span className="whitespace-nowrap">메모리 {e.memories.length}</span>
+                )}
+                {/* 프로필 본문은 **모든 디스패치 프롬프트에 인라인된다** — 길이가 곧 비용이다(§5).
+                    목록에 둬야 "누가 프롬프트를 얼마나 먹는가"를 비교할 수 있다. `skills.md` ·
+                    `memory/*.md`도 매 디스패치에 인라인되므로 **셋의 합**이다(§비주얼 §32 ①) */}
+                <span className="ml-auto font-mono whitespace-nowrap">{editChars(e)}자</span>
+              </span>
+            </button>
+          );
+        })}
+      </nav>
+
+      <div className="min-w-0 grow">
+        <PersonaDetail
+          // 이름이 바뀌면 절 안의 지역 상태(저장 결과 · 실패 사유 · 제거 중)를 새로 시작한다.
+          // **편집 상태는 여기 없다** — 위 `edits`에 있어서 이 재마운트가 아무것도 안 버린다
+          key={current.name}
+          projectId={projectId}
+          row={current}
+          edit={editOf(current)}
+          onEdit={(next) => setEdits((prev) => ({ ...prev, [current.name]: next }))}
+          color={colors[current.name]}
+          installed={installed}
+          configDir={configDir}
+        />
+      </div>
+    </div>
+  );
+}
+
+/** 오른쪽 칸 하나. `body: null`(프로필 없음)이면 빈 textarea가 열리고 **저장이 곧 생성**이다 —
  *  티켓이 부르는데 프로필이 없는 이름을 그 자리에서 채우게 하려고 경로를 하나로 둔다. */
-export function PersonaCard({
+function PersonaDetail({
   projectId,
   row,
+  edit,
+  onEdit,
   color,
   installed,
   configDir,
 }: {
   projectId: string;
   row: PersonaRow;
-  /** 레지스트리의 팔레트 키. 없거나 팔레트 밖이면 빈 점이다(§12) */
+  edit: PersonaEdit;
+  onEdit: (next: PersonaEdit) => void;
   color?: string;
-  /** 이 머신에 설치된 스킬(§5-1). 페르소나 수와 무관하게 서버가 한 번 읽어 내렸다 */
   installed: Skill[];
-  /** 해석된 `<config>` — 후보가 0개일 때 "어디를 봤는지"를 적는다(§비주얼 §25 다섯 상태) */
   configDir: string;
 }) {
-  // 저장된 원문을 state로 들고 있는다 — 서버가 다시 렌더해 주기를 기다리지 않고 저장 직후에
-  // `프로필 없음` 배지와 삭제 버튼이 바로 맞는다(workers-ui의 컨텍스트 카드와 같은 이유).
-  const [saved, setSaved] = useState(row.body);
-  const [body, setBody] = useState(row.body ?? "");
-  // 스킬도 같은 이유로 state다. **자수는 서버가 쓴 뒤 되읽어 준 값**이다 — 파일에는 사람이
-  // 덧붙인 산문도 있어서 목록만으로는 계산이 안 된다(§비주얼 §25).
-  const [skills, setSkills] = useState(row.skills);
-  const [skillsChars, setSkillsChars] = useState(row.skillsChars);
-  // 메모리는 지우는 것뿐이라 되읽기가 없다 — 자수가 파일 전체의 합이고 그 파일을 화면이 들고
-  // 있어서, 지운 파일의 길이를 빼면 참인 수다(§비주얼 §32 ①).
-  const [memories, setMemories] = useState(row.memories);
   const [result, setResult] = useState<PersonaResult | null>(null);
-  // 삭제·색은 둘 다 접힌 줄에서 누르므로 사유도 접힌 채 보여야 한다 — 자리가 하나다.
-  const [rowError, setRowError] = useState<{ title: string; message: string } | null>(null);
+  // 삭제·색은 둘 다 이 칸 머리에서 누르므로 사유도 머리 아래다 — 실패는 **누른 곳**이다(§5).
+  const [headError, setHeadError] = useState<{ title: string; message: string } | null>(null);
   const [pending, start] = useTransition();
-  const refs = refsLabel(row.refs);
-  const dirty = body !== (saved ?? "");
-  const memoryChars = memories.reduce((n, m) => n + m.text.length, 0);
+  const dirty = edit.body !== (edit.saved ?? "");
 
   return (
-    // 네이티브 `<details>`다 — shadcn accordion을 설치하지 않는다(§비주얼 컴포넌트 인벤토리).
-    // 접힘은 표시 상태일 뿐이라 본문이 언마운트되지 않는다 = 편집 중인 textarea가 살아 있다.
-    // ponytail: 펼침 상태를 URL에 담지 않는다. 딥링크(`?open=<이름>`)가 실제로 생기면 그때.
-    // 바깥 div는 삭제 실패 사유 때문이다 — 삭제를 접힌 줄에서 누르므로 사유도 접힌 채 보여야 한다.
-    <div className="rounded-md border">
-      <details className="group">
-        {/* 글자는 밑선(§5) — 이 줄은 mono `text-sm` 이름과 `text-xs` 메타가 섞여 줄상자 높이가
-            20px/16px로 다르다. `items-center`는 상자를 맞추므로 글자 밑선이 어긋난다.
-            껍데기(chevron · 색 점 · 배지 2종 · 삭제)는 글자가 아니라 행의 세로 중앙이라
-            `self-center`로 뺀다. 밑선에 서는 것은 글자 세 자리(이름 · 티켓 참조 · 자수)뿐이다. */}
-        <summary className="flex cursor-pointer list-none items-baseline gap-2 p-3 [&::-webkit-details-marker]:hidden">
-          <ChevronRight
-            aria-hidden
-            className="size-4 shrink-0 self-center text-muted-foreground transition-transform group-open:rotate-90"
-          />
-          {/* 색을 고르는 자리는 이 화면 하나뿐이다(§5). 삭제와 같은 이유로 preventDefault다 */}
-          <span className="self-center" onClick={(e) => e.preventDefault()}>
-            <ColorPicker
+    <div className="space-y-3">
+      {/* 머리 — 색 점(팔레트 팝오버 트리거) · 이름 · `삭제`(§5). 전부 껍데기라 세로 중앙이다 */}
+      <div className="flex items-center gap-2">
+        {/* 색을 고르는 자리는 이 화면 하나뿐이고, 그 자리가 여기다(§5) */}
+        <ColorPicker
+          projectId={projectId}
+          name={row.name}
+          color={color}
+          onError={(message) =>
+            setHeadError(message ? { title: "색을 저장하지 못했습니다", message } : null)
+          }
+        />
+        <span className="font-mono text-sm break-all">{row.name}</span>
+        {edit.saved !== null && (
+          <span className="ml-auto">
+            <DeleteButton
               projectId={projectId}
-              name={row.name}
-              color={color}
-              onError={(message) =>
-                setRowError(message ? { title: "색을 저장하지 못했습니다", message } : null)
-              }
+              row={row}
+              onError={(message) => setHeadError({ title: "삭제하지 못했습니다", message })}
             />
           </span>
-          <span className="font-mono text-sm">{row.name}</span>
-          {saved === null && (
-            <Badge variant="outline" className="self-center">
-              프로필 없음
-            </Badge>
-          )}
-          <span className="min-w-0 truncate text-xs text-muted-foreground" title={row.file}>
-            {refs ? `티켓 ${refs}` : "참조하는 티켓 없음"}
-          </span>
-          {/* `티켓 n` 뒤 · 자수 앞 — "무엇을 참조하나 → 무엇을 쓰나 → 얼마나 먹나"다(§비주얼 §25 ①).
-              0개면 안 그린다: 뒤에 붙는 고정폭 메타라 빠져도 줄이 안 흔들린다 */}
-          {skills.length > 0 && (
-            <span className="text-xs whitespace-nowrap text-muted-foreground">
-              스킬 {skills.length}
-            </span>
-          )}
-          {/* `스킬 n` 뒤 · `자수` 앞이다(§비주얼 §32 ①) — "무엇을 참조하나 → 무엇을 쓰나 →
-              **무엇을 배웠나** → 얼마나 먹나". `장`을 안 붙인다: 앞 둘과 같은 종류의 값이다 */}
-          {memories.length > 0 && (
-            <span className="text-xs whitespace-nowrap text-muted-foreground">
-              메모리 {memories.length}
-            </span>
-          )}
-          {/* 프로필 본문은 **모든 디스패치 프롬프트에 인라인된다** — 길이가 곧 비용이다(§5).
-              접힌 줄에 둬야 "누가 프롬프트를 얼마나 먹는가"를 목록에서 비교할 수 있다.
-              `skills.md`·`memory/*.md`도 매 디스패치에 인라인되므로 **셋의 합**이다
-              (§비주얼 §32 ① — 세 수로 분해하지 않는다. 사람 손 없이 자라는 몫이 메모리다) */}
-          <span className="font-mono text-xs whitespace-nowrap text-muted-foreground">
-            {body.length + skillsChars + memoryChars}자
-          </span>
-          {/* 저장 버튼은 펼쳐야 보인다 — 접은 채 잊으면 이게 유일한 표시다(§5) */}
-          {dirty && (
-            <Badge variant="outline" className="self-center">
-              저장 안 됨
-            </Badge>
-          )}
-          {saved !== null && (
-            // 삭제는 접힌 줄에 있고 펼침을 토글하지 않는다. summary의 활성화 동작을 막는 건
-            // preventDefault다 — stopPropagation은 activationTarget이 이미 정해져 안 통한다.
-            <span className="ml-auto self-center" onClick={(e) => e.preventDefault()}>
-              <DeleteButton
-                projectId={projectId}
-                row={row}
-                onError={(message) => setRowError({ title: "삭제하지 못했습니다", message })}
-              />
-            </span>
-          )}
-        </summary>
+        )}
+      </div>
 
-        <div className="space-y-3 border-t p-3">
-          {/* 원문 편집이다 — 마크다운 렌더는 넣지 않는다(§6 프로토콜 에디터와 같은 결정) */}
-          <Textarea
-            aria-label={`${row.name} PROFILE.md`}
-            className="font-mono"
-            rows={16}
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-          />
-          {result && !result.ok && (
-            <Failure title="저장하지 못했습니다" message={result.message ?? ""} />
-          )}
-          {/* 오른쪽 정렬, 1차 액션이 가장 오른쪽 — 결과 문구는 버튼 왼쪽이다(§비주얼 §4-3) */}
-          <div className="flex items-center justify-end gap-4">
-            {result?.ok && !dirty && (
-              <span className="text-sm text-muted-foreground">저장됐습니다.</span>
-            )}
-            <Button
-              size="sm"
-              disabled={pending || !dirty}
-              onClick={() =>
-                start(async () => {
-                  const r = await savePersonaAction(projectId, row.name, body);
-                  setResult(r);
-                  if (r.ok) setSaved(body);
-                })
-              }
-            >
-              {pending ? "저장 중…" : "저장"}
-            </Button>
-          </div>
+      {headError && <Failure title={headError.title} message={headError.message} />}
 
-          {/* 스킬 절(§비주얼 §25 ②). `<summary>` 밖이라 `preventDefault`가 없다 —
-              반사적으로 붙이면 다이얼로그가 안 열린다 */}
-          <SkillsSection
-            projectId={projectId}
-            name={row.name}
-            skills={skills}
-            chars={skillsChars}
-            installed={installed}
-            configDir={configDir}
-            onSaved={(next, chars) => {
-              setSkills(next);
-              setSkillsChars(chars);
-            }}
-          />
+      {/* 원문 편집이다 — 마크다운 렌더는 넣지 않는다(§6 프로토콜 에디터와 같은 결정) */}
+      <Textarea
+        aria-label={`${row.name} PROFILE.md`}
+        className="font-mono"
+        rows={16}
+        value={edit.body}
+        onChange={(e) => onEdit({ ...edit, body: e.target.value })}
+      />
+      {result && !result.ok && <Failure title="저장하지 못했습니다" message={result.message ?? ""} />}
+      {/* 오른쪽 정렬, 1차 액션이 가장 오른쪽 — 결과 문구는 버튼 왼쪽이다(§비주얼 §4-3) */}
+      <div className="flex items-center justify-end gap-4">
+        {result?.ok && !dirty && <span className="text-sm text-muted-foreground">저장됐습니다.</span>}
+        <Button
+          size="sm"
+          disabled={pending || !dirty}
+          onClick={() =>
+            start(async () => {
+              const body = edit.body;
+              const r = await savePersonaAction(projectId, row.name, body);
+              setResult(r);
+              if (r.ok) onEdit({ ...edit, saved: body, body });
+            })
+          }
+        >
+          {pending ? "저장 중…" : "저장"}
+        </Button>
+      </div>
 
-          {/* 메모리 절(§비주얼 §32 ②) — 스킬 절 **바로 뒤**다. 화면이 주입 순서를 그대로 보인다
-              (PROFILE → 스킬 → 메모리). 0장이어도 그린다: `삭제`가 사는 자리를 사람이 배우는
-              화면이 여기뿐이고, 오늘 이 큐의 카드가 전부 0장이다 */}
-          <MemorySection
-            projectId={projectId}
-            name={row.name}
-            dir={row.file.replace(/\/PROFILE\.md$/, "")}
-            memories={memories}
-            chars={memoryChars}
-            onDeleted={(file) => setMemories(memories.filter((m) => m.file !== file))}
-          />
-        </div>
-      </details>
+      {/* 스킬 절(§비주얼 §25 ②). 값이 한 줄도 안 바뀐다 — 카드에서 오른쪽 칸으로 따라왔을 뿐이다 */}
+      <SkillsSection
+        projectId={projectId}
+        name={row.name}
+        skills={edit.skills}
+        chars={edit.skillsChars}
+        installed={installed}
+        configDir={configDir}
+        onSaved={(skills, skillsChars) => onEdit({ ...edit, skills, skillsChars })}
+      />
 
-      {rowError && (
-        <div className="p-3 pt-0">
-          <Failure title={rowError.title} message={rowError.message} />
-        </div>
-      )}
+      {/* 메모리 절(§비주얼 §32 ②) — 스킬 절 **바로 뒤**다. 화면이 주입 순서를 그대로 보인다
+          (PROFILE → 스킬 → 메모리). 0장이어도 그린다: `삭제`가 사는 자리를 사람이 배우는
+          화면이 여기뿐이고, 오늘 이 큐의 카드가 전부 0장이다 */}
+      <MemorySection
+        projectId={projectId}
+        name={row.name}
+        dir={row.file.replace(/\/PROFILE\.md$/, "")}
+        memories={edit.memories}
+        chars={edit.memories.reduce((n, m) => n + m.text.length, 0)}
+        onDeleted={(file) =>
+          onEdit({ ...edit, memories: edit.memories.filter((m) => m.file !== file) })
+        }
+      />
     </div>
   );
 }
 
 // ── 스킬 (DESIGN.md §5-1 · §비주얼 §25) ─────────────────────────────────────
 
-/** 카드 본문의 두 번째 블록. 저장은 **한 경로**다 — `제거`도 다이얼로그의 `저장`도
+/** 오른쪽 칸 본문의 두 번째 블록. 저장은 **한 경로**다 — `제거`도 다이얼로그의 `저장`도
  *  `savePersonaSkillsAction`(=`writePersonaSkills`)에 목록 전체를 넘긴다. 0개가 되면 파일이 사라진다.
  *
  *  실패 자리가 둘로 갈리는 이유는 §비주얼 §25 다섯 상태다 — **누른 곳**에 뜬다.
@@ -531,10 +592,10 @@ function SkillsSection({
 
 // ── 메모리 (DESIGN.md §5-2 · §비주얼 §32) ───────────────────────────────────
 
-/** 카드 본문의 세 번째 블록. **읽기와 삭제뿐이다** — 쓰는 쪽이 세션이라 절 머리에 버튼이 없고
+/** 오른쪽 칸 본문의 세 번째 블록. **읽기와 삭제뿐이다** — 쓰는 쪽이 세션이라 절 머리에 버튼이 없고
  *  편집 textarea도 없다(§5-2 §화면).
  *
- *  스킬 절과 껍데기·머리·목록이 같은 값인 것은 의도다(§32 ⓪) — 두 절이 한 카드에 위아래로 서므로
+ *  스킬 절과 껍데기·머리·목록이 같은 값인 것은 의도다(§32 ⓪) — 두 절이 한 칸에 위아래로 서므로
  *  값이 갈리면 그 자체가 "다른 성격"이라는 거짓말이 된다. 갈리는 것은 다섯뿐이고 전부 §32에 있다. */
 function MemorySection({
   projectId,
@@ -572,10 +633,10 @@ function MemorySection({
         <ul className="space-y-1">
           {memories.map((m) => (
             <li key={m.file}>
-              {/* 중첩 `<details>`다 — 카드 자신이 바깥 `<details>`고 이건 그 안이다.
-                  **그래서 그룹에 이름을 준다**: 이름 없는 `group-open:`은 조상인 카드의 `group`을
-                  물어서 카드가 펼쳐진 동안 chevron이 항상 돌아 있다(항목은 접혀 있는데도).
-                  `accordion`·`collapsible`은 안 깐다 — 세 번째 자리도 같은 값이다(§32 ③) */}
+              {/* 이 화면에 남은 유일한 `<details>`다 — 2단이 되면서 바깥 카드의 `<details>`는
+                  없어졌다. **그래도 그룹 이름은 그대로 둔다**: 이름 없는 `group-open:`은 조상의
+                  `group`을 물어서 바깥에 `group`이 다시 생기는 날 chevron이 조용히 틀린다.
+                  `accordion`·`collapsible`은 안 깐다 — 이 자리도 같은 값이다(§32 ③) */}
               <details className="group/mem">
                 <summary className="flex cursor-pointer list-none items-baseline gap-2 [&::-webkit-details-marker]:hidden">
                   <ChevronRight
@@ -590,8 +651,9 @@ function MemorySection({
                   <span className="min-w-0 grow truncate text-xs text-muted-foreground">
                     {m.excerpt}
                   </span>
-                  {/* 줄 자신이 `<summary>`라 클릭이 곧 펼침 토글이다 — 여기서는 `preventDefault`가
-                      다시 필요하다(§32 ③ · 접힌 줄의 삭제·색 점과 같은 처방) */}
+                  {/* 줄 자신이 `<summary>`라 클릭이 곧 펼침 토글이다 — **여기만 `preventDefault`가
+                      남는다**(§32 ③). 왼쪽 목록 줄과 오른쪽 머리는 `<summary>`가 아니라 없앴다.
+                      `stopPropagation`은 activationTarget이 이미 정해져 안 통한다 */}
                   <span className="ml-auto self-center" onClick={(e) => e.preventDefault()}>
                     <DeleteMemoryButton
                       projectId={projectId}
@@ -823,8 +885,8 @@ function AddSkillsDialog({
   );
 }
 
-/** 삭제 확인. `PersonaCard`에서 뽑은 이유는 재사용이 아니라 자리다 — 60줄짜리 다이얼로그가
- *  `<summary>` 안에 들어가면 접힌 줄이 뭘 담는지가 안 보인다. 호출부는 하나다. */
+/** 삭제 확인. 뽑은 이유는 재사용이 아니라 자리다 — 60줄짜리 다이얼로그가 오른쪽 칸 머리에
+ *  그대로 들어가면 그 머리가 뭘 담는지가 안 보인다. 호출부는 하나다. */
 function DeleteButton({
   projectId,
   row,
