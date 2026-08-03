@@ -930,7 +930,7 @@ html { scroll-behavior: smooth; }
   -webkit-font-smoothing: antialiased;
 }
 .dira-landing a { color: inherit; }
-.dira-landing code, .dira-landing kbd { font-family: var(--mono); font-size: 0.88em; }
+.dira-landing code { font-family: var(--mono); font-size: 0.88em; }
 
 /* ── announcement bar ───────────────────────────── */
 .dira-landing .ann {
@@ -1011,9 +1011,7 @@ html { scroll-behavior: smooth; }
   letter-spacing: -0.045em; font-weight: 700;
 }
 .dira-landing h2 { margin: 0 0 16px; font-size: clamp(26px, 3.4vw, 44px); line-height: 1.22; letter-spacing: -0.035em; font-weight: 700; }
-.dira-landing h3 { margin: 0 0 8px; font-size: 15.5px; letter-spacing: -0.02em; font-weight: 650; }
 .dira-landing .body { margin: 0; color: var(--muted-fg); font-size: 15.5px; line-height: 1.72; }
-.dira-landing .body b, .dira-landing .body strong { color: var(--fg); font-weight: 650; }
 
 /* ── hero ───────────────────────────────────────── */
 /* ② 세로만 선언한다. `padding: 96px 0 0` 단축이던 시절엔 이쪽이 `.wrap`을 이겨
@@ -1058,7 +1056,6 @@ html { scroll-behavior: smooth; }
 .dira-landing figure { margin: 0; }
 .dira-landing .shot { display: block; width: 100%; height: auto; border: 1px solid var(--border); background: #fff; }
 .dira-landing figcaption { margin-top: 16px; font-size: 13.5px; line-height: 1.68; color: var(--muted-fg); }
-.dira-landing figcaption b { color: var(--fg); font-weight: 650; }
 .dira-landing .hero figure { margin-top: 64px; }
 
 /* ── stats ──────────────────────────────────────── */
