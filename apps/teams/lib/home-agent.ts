@@ -72,7 +72,7 @@
  *  `SIGTERM`)와 stdout 버퍼 — 후자는 이제 상한이 없다(줄 단위로 먹고 버린다). */
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { findClaude, tokenPath } from "./auth.ts";
 import type { Run } from "./engine.ts";
@@ -202,11 +202,22 @@ export async function readHome(projectId: string): Promise<Home> {
   return parseHome((await readSessions())[projectId]);
 }
 
-/** 한 프로젝트만 갈아 끼운다 — 파일 하나에 프로젝트 전부가 사므로 나머지는 읽은 그대로 다시 쓴다. */
+/** 한 프로젝트만 갈아 끼운다 — 파일 하나에 프로젝트 전부가 사므로 나머지는 읽은 그대로 다시 쓴다.
+ *
+ *  **임시 파일에 쓰고 `rename`으로 갈아 끼운다**(플레이크 `083fb571`). `writeFile`은 **자르고
+ *  쓰므로** 그 사이의 폴링이 반쪽 JSON을 읽고, `readSessions`가 그 예외를 `{}`로 흡수해
+ *  `pollHome`의 `sid`가 null이 된다 — 화면이 순간 **대화 0건(온보딩)**으로 깜빡이고 그 폴링은
+ *  `running: false`를 실패 없이 돌려준다. 실측(이 머신, 8프로젝트 × 대화 20 크기로 400회 왕복):
+ *  `writeFile` 367~398회 읽기 중 82~103회가 깨진 JSON, `rename`은 770~844회 중 0회.
+ *  같은 값을 두 요청이 겹쳐 쓰면 나중 것이 이기는 것은 종전과 같다 — 여기서 없앤 것은 **찢긴
+ *  읽기**뿐이고, 읽고-고쳐-쓰는 창은 대화 파일 하나라 다투는 자리가 아니다(§7).
+ *  이름에 uuid를 붙이는 이유는 프로젝트 둘이 동시에 물으면 이 함수가 겹쳐 도는 것 하나다. */
 async function writeHome(projectId: string, home: Home): Promise<void> {
   const p = sessionsPath();
   await mkdir(path.dirname(p), { recursive: true });
-  await writeFile(p, JSON.stringify({ ...(await readSessions()), [projectId]: home }, null, 2) + "\n");
+  const tmp = `${p}.${randomUUID()}.tmp`;
+  await writeFile(tmp, JSON.stringify({ ...(await readSessions()), [projectId]: home }, null, 2) + "\n");
+  await rename(tmp, p);
 }
 
 /** 지금 보는 대화의 session id. 없으면 null(= 다음 질문이 새 줄을 연다). */
@@ -582,14 +593,19 @@ async function settleFirstTurn(projectId: string, sessionId: string, ok: boolean
     ? { id: row.id, title: row.title, created: row.created }
     : { ...row, id: randomUUID() };
   // **`runs`의 키가 그 줄을 따라간다**(§7 §서버가 갈리는 자리 넷 ①: 키가 session id다).
-  // 실패한 첫 턴은 여기서 id를 갈므로, 안 옮기면 그 대화를 여는 폴링이 `runs.get(<새 id>)`에서
-  // 아무것도 못 찾고 **실패 5종이 사람에게 한 번도 안 보인다.** 객체를 그대로 옮기므로
-  // `startAsk`의 `.then`이 채우는 `result`는 새 키 아래에 들어간다.
+  // 실패한 첫 턴은 여기서 id를 갈므로, 안 걸어 두면 그 대화를 여는 폴링이 `runs.get(<새 id>)`에서
+  // 아무것도 못 찾고 **실패 5종이 사람에게 한 번도 안 보인다.** 객체를 그대로 걸므로
+  // `startAsk`의 `.then`이 채우는 `result`는 새 키 아래에도 들어간다(같은 객체다).
+  //
+  // **옛 키를 여기서 떼지 않는다**(플레이크 `083fb571`). 폴링은 **파일을 읽고 맵을 읽으므로**
+  // 둘이 어긋나는 순간이 있으면 그 틈의 폴링이 `entry === undefined`를 보고 `running: false`를
+  // **실패 없이** 돌려준다 — 화면이 `pollDone`(= `!running && turns.length > 0`)으로 폴링을 끊는
+  // 자리라, 트랜스크립트가 이미 있는 첫 턴 실패(상한 초과)면 그 실패가 영영 안 뜨고 다음 질문이
+  // 실패 ④로 막힌다. 떼는 쪽을 뒤로 미뤄도 창은 반대편에 그대로 생긴다(파일이 새 id인데 맵은
+  // 옛 id다). 그래서 **두 키가 동시에 같은 객체를 가리키게 두고**, 결과를 집어 가는 폴링이
+  // 그 객체를 가진 키를 전부 지운다(`dropRun`). 옛 키는 그 줄이 파일에서 이미 갈려 다시 안 잡힌다.
   const entry = runs.get(sessionId);
-  if (entry && next.id !== sessionId) {
-    runs.delete(sessionId);
-    runs.set(next.id, entry);
-  }
+  if (entry && next.id !== sessionId) runs.set(next.id, entry);
   await writeHome(projectId, {
     conversations: home.conversations.map((c) => (c.id === sessionId ? next : c)),
     current: home.current === sessionId ? next.id : home.current,
@@ -833,6 +849,15 @@ export function toTurns(events: StreamEvent[]): Turn[] {
  *  //           **자식 핸들**(그때 `중지`는 죽일 것을 못 찾는다. 상한 5분이 뒤에 있다). */
 const runs = new Map<string, { projectId: string; result: Answer | null; live: Live }>();
 
+/** 결과를 집어 간 폴링이 그 줄을 뗀다. **키가 아니라 객체로 지운다** — 첫 턴이 실패하면
+ *  `settleFirstTurn`이 같은 객체를 옛 id와 새 id **둘 다**에 걸어 두기 때문이다(그 주석이 근거다).
+ *  키 하나만 지우면 나머지 하나가 남아 다음 질문이 실패 ④(`busy`)로 막힌다. 맵 크기는 대화 수
+ *  남짓이라 훑는 값이 아니다. */
+const dropRun = (entry: object | undefined): void => {
+  if (!entry) return;
+  for (const [k, v] of runs) if (v === entry) runs.delete(k);
+};
+
 /** 이 프로젝트에서 **지금 도는** session id 전부 — 패널이 진행 표식을 그리는 출처다(§7 표).
  *  끝났는데 아직 아무도 안 집어 간 줄은 여기 없다(`result`가 찼다 = 안 돈다). */
 const runningIn = (projectId: string): string[] =>
@@ -1008,7 +1033,7 @@ export async function pollHome(
   // 남는다). `running`이 맵의 유무가 아니라 `result`가 비었나인 근거도 이것이다.
   const entry = sid ? runs.get(sid) : undefined;
   const done = entry?.result ?? null;
-  if (sid && done) runs.delete(sid);
+  if (done) dropRun(entry);
   // **끝을 집어 간 폴링은 이 한 번뿐이다**(위에서 지웠다) — 그래서 이 값이 곧 `pollDone`이다.
   const answered = done !== null;
   const failed = done && !done.ok ? done : null;
