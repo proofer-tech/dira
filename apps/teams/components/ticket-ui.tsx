@@ -888,7 +888,7 @@ export function RequestDialog({
           {!done && (
             <DialogDescription>
               필요한 것을 자연어로 쓰면 <span className="font-mono text-xs">kind: request</span>{" "}
-              티켓이 되고 PM이 받아 해석합니다. 첫 줄이 제목이 됩니다.
+              티켓이 되고 해석합니다. 첫 줄이 제목이 됩니다.
             </DialogDescription>
           )}
         </DialogHeader>
