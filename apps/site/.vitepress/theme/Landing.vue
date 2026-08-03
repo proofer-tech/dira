@@ -33,7 +33,7 @@ const version = theme.value.diraVersion;
   <p class="eyebrow">로컬 에이전트 러너</p>
   <h1>에이전트 팀이 일하는 걸 화면에서 봅니다</h1>
   <p class="body">
-    할 일을 마크다운 파일 하나로 적어 두면, 1분마다 깨어나는 워커가 그걸 집어
+    할 일을 마크다운 파일 하나로 적어 두면, 30초마다 깨어나는 워커가 그걸 집어
     <code>claude -p</code> 세션에 넘깁니다. 세션이 지금 무엇을 하는지 화면에서 보고,
     <b>도는 중에 말을 겁니다.</b>
   </p>
@@ -45,7 +45,7 @@ const version = theme.value.diraVersion;
 
   <figure>
     <img class="shot" src="/shots/02-board.png" alt="dira 보드 화면. 대기·진행중·완료 세 레인에 티켓 카드가 놓여 있습니다." width="1600">
-    <figcaption>이 화면은 <b>dira가 자기를 만드는 큐</b>입니다. 완료 622건이 전부 이 레포의 커밋입니다.</figcaption>
+    <figcaption>이 화면은 <b>dira가 자기를 만드는 큐</b>입니다. 카드에 적힌 티켓이 전부 dira 자신을 고치는 일입니다.</figcaption>
   </figure>
 </div>
 
@@ -61,8 +61,9 @@ const version = theme.value.diraVersion;
     <li>
       <b>② 워커가 뭅니다</b>
       <p><b>워커</b>는 셸 스크립트 한 줄입니다. macOS에는 정해 둔 시각마다 명령을 자동으로
-      실행해 주는 cron이 있습니다. 거기 걸어 두면 1분에 한 번 깨어나, 열린 티켓 하나를 골라
-      <code>claude -p</code> 세션에 넘기고 끝날 때까지 기다립니다.</p>
+      실행해 주는 cron이 있고, 프로젝트를 만들 때 앱이 그 워커를 거기 걸어 둡니다. 30초마다
+      깨어나 열린 티켓 하나를 골라 <code>claude -p</code> 세션에 넘기고 끝날 때까지
+      기다립니다.</p>
     </li>
     <li>
       <b>③ 도는 걸 봅니다</b>
@@ -87,7 +88,7 @@ const version = theme.value.diraVersion;
     <div class="pillar">
       <span class="tag t-ui">화면</span>
       <h3>도는 세션을 보고, 말을 겁니다</h3>
-      <p>보드·티켓·워커·페르소나·프로토콜. 세션이 도는 중에 문장을 넣어 방향을 바꿉니다.</p>
+      <p>홈·보드·워커·페르소나·프로토콜. 세션이 도는 중에 문장을 넣어 방향을 바꿉니다.</p>
     </div>
     <div class="pillar">
       <span class="tag t-engine">엔진</span>
@@ -113,14 +114,14 @@ const version = theme.value.diraVersion;
       <a class="zoom" href="/shots/barge.gif" target="_blank" rel="noopener" title="원본 크기로 열기"><img class="shot" src="/shots/barge.gif" loading="lazy" alt="세션 스트림이 도구 호출을 한 줄씩 늘려 가는 동안, 아래 입력창에 문장을 넣고 보내기를 누르자 그 문장이 참견 줄로 스트림에 나타나고 세션이 이어서 방향을 바꿉니다." width="1760" height="1408"></a>
       <figcaption>
         <b>실제 왕복입니다. 재현이 아닙니다.</b> 티켓은 <q>세 파일을 읽어 세 줄로 쓴다</q>였고,
-        참견은 <q>지금 읽은 것까지만, 한 줄로</q>였습니다.
+        참견은 <q>지금 읽은 것까지만 정리하고, summary.md는 한국어 한 줄로 줄여주세요.</q>였습니다.
         세션은 <code>c.md</code>를 읽지 않고 멈춰 <b>한 줄짜리 파일</b>을 남겼습니다.
       </figcaption>
       <p class="arrows"><a href="/docs/barge-in">도는 세션에 말 걸기</a></p>
     </figure>
     <figure>
       <a class="zoom" href="/shots/07-qa-thread.png" target="_blank" rel="noopener" title="원본 크기로 열기"><img class="shot" src="/shots/07-qa-thread.png" loading="lazy" alt="요구 티켓의 질문·답변 스레드. 질문 아래에 답변 말풍선이 오른쪽으로 붙어 있고, frontmatter에 awaiting 해시가 있습니다." width="1440" height="450"></a>
-      <figcaption>오른쪽 <code>awaiting:</code>에 걸린 해시는 <b>아직 없는 파일</b>입니다. 답변을 쓰면 그 파일이 생깁니다.</figcaption>
+      <figcaption>질문에 답을 쓰면 그 답이 <b>큐에 티켓 파일 하나</b>로 놓입니다. 오른쪽 <code>awaiting:</code>에 걸린 해시가 그 파일입니다.</figcaption>
       <p class="arrows"><a href="/docs/ticket-writing">티켓 쓰는 법</a></p>
     </figure>
     <figure>
@@ -192,7 +193,7 @@ const version = theme.value.diraVersion;
   <h2>지금은 전부 무료입니다</h2>
   <p class="body" style="max-width:40em">
     엔진도 앱도 MIT 라이선스입니다. 계정도, 서버도, 요금도 없습니다.
-    <b>여럿이 한 큐를 같이 쓰는 방법을 준비하고 있습니다.</b> 날짜도 가격도 아직 약속하지 않습니다.
+    <b>받아서 그냥 씁니다.</b>
   </p>
   <div class="cta" style="justify-content:flex-start; margin-top:24px">
     <a class="btn" href="https://github.com/proofer-tech/dira">GitHub에서 Watch</a>
