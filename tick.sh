@@ -38,8 +38,8 @@ TICKET_NAME="${TICKET_NAME:-$(basename "$0" .sh)}"
 # 기본 작업 디렉터리 = 루트의 부모(<프로젝트>/.dira/workers/w1.sh -> <프로젝트>)
 TICKET_CWD="${TICKET_CWD:-$(dirname "$TICKET_ROOT")}"
 TICKET_MAXRUN="${TICKET_MAXRUN:-5400}"
-# 최초 프롬프트가 FIFO를 다 통과할 때까지 기다리는 상한. 프롬프트는 FIFO 버퍼(macOS 16KB)보다
-# 크므로 엔진이 stdin을 빨아야만 write가 끝난다 - 엔진이 기동 중 멎으면 영영 안 끝난다.
+# 디스패치가 실제로 섰다고 볼 때까지 기다리는 상한(프롬프트 주입 완료 + 엔진 init).
+# 프롬프트는 파이프 버퍼보다 크므로 엔진이 stdin을 빨아야만 주입이 끝난다 - 기동 중 멎으면 영영 안 끝난다.
 TICKET_FEED_TIMEOUT="${TICKET_FEED_TIMEOUT:-120}"
 # 프롬프트 포맷의 %s = 티켓 해시 하나뿐이다(역할 호칭은 페르소나 프로필이 대신한다).
 TICKET_PROMPT_FMT="${TICKET_PROMPT_FMT:-%s 티켓을 확인해 주세요. (해당 티켓은 이미 진행중으로 잡아두었습니다. 수행을 마치면 완료 상태로 rename하고, 막히면 티켓 본문에 블록 이력을 남겨주세요.)}"
@@ -122,8 +122,8 @@ case "$CMD" in
   *) echo "알 수 없는 명령: $CMD"; exit 2 ;;
 esac
 
-# 참견 입구(FIFO). 스트리밍 입력 엔진일 때만 실제 경로가 들어간다.
-INBOX=""
+# 참견 입구(FIFO)와 최초 프롬프트 파일. 스트리밍 입력 엔진일 때만 실제 경로가 들어간다.
+INBOX=""; PRIMEF=""
 
 # --- 워커 락: 한 워커는 한 번에 티켓 1건 ---
 # 워커는 동기 프로세스다. 앞 실행이 아직 세션을 물고 있으면 이번 tick은 그냥 넘긴다
@@ -146,7 +146,7 @@ if [ "$CMD" = "tick" ]; then
   fi
   printf %s "$$" > "$LOCK/pid"
   # 빈 값이면 rm -f ""가 되고 아무 일도 안 한다 -- 어떻게 죽든 FIFO가 남지 않게 여기 한 번만 건다.
-  trap 'rm -rf "$LOCK"; rm -f "$INBOX"' EXIT
+  trap 'rm -rf "$LOCK"; rm -f "$INBOX" "$PRIMEF" "${PRIMEF:+$PRIMEF.fed}"' EXIT
 fi
 
 # --- 스테일 수거: 세션이 죽었는데 진행중으로 남은 티켓을 백로그로 되돌린다 ---
@@ -321,9 +321,23 @@ if [ -n "$INBOX" ]; then
   # 안 풀린다. 읽기도 같이 잡으면 open이 즉시 돌아오고 우리가 항상 writer라 엔진이 EOF를 안 본다
   # (최초 프롬프트를 쓴 직후 세션이 끝나는 걸 막는 것이 이 fd의 일이다). 우리는 읽지 않는다.
   exec 9<>"$INBOX"
+  # 최초 프롬프트는 FIFO가 아니라 **파일**로 먹인다. FIFO로 밀면 엔진 기동이 겹칠 때 교착한다:
+  # 프롬프트(실측 58KB)가 파이프 버퍼(64KB)를 넘으면 write가 블록하고, 그 상태의 엔진은
+  # init조차 못 내고 멎는다. 2026-08-04 실측 - 동시 6개 FIFO 대형 프롬프트는 6/6 STALL,
+  # 같은 프롬프트를 파일로 먹이면 6/6이 2초에 init. 1개만 띄우면 FIFO로도 되므로 한동안
+  # 안 보이다가 워커가 늘면서 터졌다(7/30 실패 0% -> 8/3 22시 86%).
+  # cat 두 방으로 이어 붙여 참견 입구는 그대로 산다: 프롬프트 다음 줄부터 FIFO가 stdin이다.
+  # 그룹에도 9>&-를 건다. cat이 fd 9(쓰기 끝)를 물려받으면 우리가 닫아도 자기가 writer라
+  # EOF를 못 봐서 세션이 죽은 뒤에도 영영 남는다.
+  PRIMEF="$LOCAL/run/prime-$SID.json"
+  python3 -c 'import json,sys
+sys.stdout.write(json.dumps({"type":"user","message":{"role":"user","content":sys.argv[1]}},
+                            ensure_ascii=False, separators=(",", ":")) + "\n")' "$PROMPT" > "$PRIMEF"
   # 9>&-로 엔진의 fd 9 사본을 닫는다. 물려주면 엔진이 자기 쓰기 끝을 쥐고 있어, 아래에서
   # 우리가 fd 9를 닫아도 EOF를 영영 못 본다(FIFO의 writer가 0이 되어야 EOF다).
-  "${ENGINE[@]}" <"$INBOX" >"$OUTF" 2>>"$LOGF" 9>&- &
+  # `.fed` 표식이 곧 "프롬프트가 엔진 stdin으로 다 들어갔다"이다. 파이프 버퍼보다 큰 프롬프트를
+  # 안 빠는 엔진에서는 첫 cat이 막혀 표식이 안 생긴다 - 옛 feeder 생존 판정과 같은 근거다.
+  { cat "$PRIMEF" && : > "$PRIMEF.fed"; cat "$INBOX"; } 9>&- | "${ENGINE[@]}" >"$OUTF" 2>>"$LOGF" 9>&- &
   CPID=$!
 else
   # </dev/null: 비스트리밍 엔진에는 참견 채널이 없으니 stdin을 물려줄 이유가 없다. 그런데
@@ -339,28 +353,24 @@ fi
 python3 "$PY" setpid "$TPATH" "$CPID"
 
 if [ -n "$INBOX" ]; then
-  # 최초 프롬프트 = FIFO에 JSON 한 줄. 사람이 나중에 미는 참견도 같은 모양이다.
-  # 백그라운드로 쓴다. 프롬프트는 FIFO 버퍼보다 크므로 엔진이 stdin을 안 빨면 write가
-  # 블록하는데, 전경에서 쓰면 아래 감시자·wait이 통째로 안 돌아 워커가 영구 정지한다
-  # (2026-08-01 실사고: 워커 4개가 최대 2시간 멈췄고 reap도 손을 못 댔다).
-  python3 -c 'import json,sys
-sys.stdout.write(json.dumps({"type":"user","message":{"role":"user","content":sys.argv[1]}},
-                            ensure_ascii=False, separators=(",", ":")) + "\n")' "$PROMPT" >&9 &
-  FEEDER=$!
+  # 디스패치가 섰는지는 둘을 같이 본다. 하나만으로는 새는 구멍이 있다:
+  #   주입 완료(.fed)만: 프롬프트가 버퍼에 다 들어가도 엔진이 기동에서 멎으면 못 본다
+  #                      - 2026-08-04의 실제 사고가 그 모양이었다(init도 없이 0% CPU).
+  #   init만:            프롬프트를 한 글자도 안 빠는 엔진이 init만 뱉고 자면 통과한다.
+  # 상한을 넘기면 세션을 죽여 아래 wait이 평범한 FAIL 경로로 떨어지게 한다(clear + release + 복귀).
+  started() { [ -e "$PRIMEF.fed" ] && grep -q '"subtype":"init"' "$OUTF" 2>/dev/null; }
   FED=0
-  while kill -0 "$FEEDER" 2>/dev/null && [ "$FED" -lt "$TICKET_FEED_TIMEOUT" ]; do
+  while [ "$FED" -lt "$TICKET_FEED_TIMEOUT" ] && kill -0 "$CPID" 2>/dev/null; do
+    started && break
     sleep 1; FED=$((FED+1))
   done
-  if kill -0 "$FEEDER" 2>/dev/null; then
-    # 엔진이 프롬프트를 다 받지 못했다 -> 이 디스패치는 실패다. 세션을 죽여 아래 wait이
-    # 평범한 FAIL 경로로 떨어지게 한다(clear + release + 백로그 복귀).
-    kill -9 "$FEEDER" 2>/dev/null
-    kill -KILL "$CPID" 2>/dev/null
-    log "STALL $THASH 엔진이 ${TICKET_FEED_TIMEOUT}s 동안 stdin을 안 읽었다 - 프롬프트 주입 실패"
-  else
+  if started; then
     # 프롬프트를 넣은 뒤에 입구를 광고한다. 순서를 뒤집으면 화면이 먼저 밀어 넣은 참견이
     # 티켓 지시 줄 사이에 끼어들어 JSON 한 줄이 깨진다.
     python3 "$PY" setinbox "$TPATH" "$INBOX"
+  else
+    kill -KILL "$CPID" 2>/dev/null
+    log "STALL $THASH ${TICKET_FEED_TIMEOUT}s 안에 프롬프트 주입+init을 못 봤다 - 기동 실패 (fed=$([ -e "$PRIMEF.fed" ] && echo y || echo n))"
   fi
 fi
 # 감시자는 짧은 sleep으로 돈다. 한 방 `sleep $TICKET_MAXRUN`이면 세션이 끝난 뒤에도 그 sleep이
@@ -391,7 +401,8 @@ sys.exit(0 if isinstance(o, dict) and o.get("type") == "result" else 1)'
 WPID=$!
 wait "$CPID"; RC=$?
 kill "$WPID" 2>/dev/null; wait "$WPID" 2>/dev/null
-[ -n "$INBOX" ] && { exec 9>&-; rm -f "$INBOX"; }
+# fd 9를 먼저 닫아야 FIFO를 읽던 cat이 EOF를 보고 빠진다(엔진은 이미 죽었다).
+[ -n "$INBOX" ] && { exec 9>&-; rm -f "$INBOX" "$PRIMEF" "${PRIMEF:+$PRIMEF.fed}"; }
 OUT=$(cat "$OUTF" 2>/dev/null); rm -f "$OUTF"
 printf '%s\n' "$OUT" >> "$LOGF"
 
