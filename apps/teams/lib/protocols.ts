@@ -11,6 +11,7 @@
 import { link, lstat, mkdir, readFile, readdir, realpath, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { expandHome, resolveWithin } from "./paths.ts";
+import { engineRepo } from "./scaffold.ts";
 
 export type ProtocolEntry = {
   /** 기준 디렉터리 기준 상대경로. URL(`?file=`)에 실리는 값이자 모든 액션의 입력이다 */
@@ -61,6 +62,25 @@ function byTreeOrder(a: ProtocolEntry, b: ProtocolEntry): number {
     if (A[i] !== B[i]) return A[i].localeCompare(B[i]);
   }
   return A.length - B.length;
+}
+
+/** 코어 프로토콜 — **큐에 없다.** `<엔진 레포>/protocols/CORE.md`에 살고 엔진이 매 세션
+ *  프롬프트 맨 앞에 인라인한다(`tick.sh:266`, DESIGN.md §프롬프트 층 결정 5). 그래서 이 모듈이
+ *  코어에 주는 것은 이 읽기 하나뿐이다 — 저장·생성·삭제·이름변경은 전부 기준 디렉터리(= 큐 안)
+ *  안에서만 도는 함수라, 화면을 잠그는 것과 별개로 **코어를 쓰는 경로 자체가 서버에 없다.**
+ *
+ *  못 읽으면 던지지 않고 사유를 준다: 엔진 레포를 못 찾는 배치가 정상이고(엔진도 `[ -r ]`로
+ *  넘어간다) 화면은 그 항목만 빼고 종전대로 돌아야 한다. */
+export async function readCore(): Promise<{ path: string; text: string } | { error: string }> {
+  const repo = engineRepo();
+  if ("error" in repo) return { error: repo.error };
+  const full = path.join(repo.path, "protocols", "CORE.md");
+  try {
+    return { path: full, text: await readFile(full, "utf8") };
+  } catch (e) {
+    const err = e as NodeJS.ErrnoException;
+    return { error: `코어 프로토콜을 읽지 못했습니다 — ${full} (${err.code ?? err.message})` };
+  }
 }
 
 /** 편집기가 열 수 있는 것과 못 여는 것. `text`가 null이면 `reason`이 이유다. */
