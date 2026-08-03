@@ -54,7 +54,7 @@ function TicketLine({ t, href }: { t: Ticket; href: string }) {
       {/* 오른쪽 단(352px)에서 title에 남는 폭이 ≈200px(≈14자)다 — 잘린 문장을 툴팁이 받는다
           (§6 "title은 truncate + 툴팁 전문"). 해시는 자르지 않는다 */}
       <Link href={href} title={t.title} className="truncate text-sm hover:underline">
-        <span className="font-mono text-xs">{t.hash}</span> {t.title}
+        <span className="font-mono text-xs text-muted-foreground">{t.hash}</span> {t.title}
       </Link>
     </div>
   );
