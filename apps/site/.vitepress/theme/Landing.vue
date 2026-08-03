@@ -44,7 +44,7 @@ const version = theme.value.diraVersion;
   <p class="cta-note">v{{ version }} · macOS (Apple Silicon) · MIT · 자동 업데이트</p>
 
   <figure>
-    <img class="shot" src="/shots/02-board.png" alt="dira 보드 화면. 대기·진행중·완료 세 레인에 티켓 카드가 놓여 있다." width="1600">
+    <img class="shot" src="/shots/02-board.png" alt="dira 보드 화면. 대기·진행중·완료 세 레인에 티켓 카드가 놓여 있습니다." width="1600">
     <figcaption>이 화면은 <b>dira가 자기 자신을 만들고 있는 큐</b>입니다. 완료 622건이 전부 이 레포의 커밋입니다.</figcaption>
   </figure>
 </div>
@@ -81,7 +81,7 @@ const version = theme.value.diraVersion;
     </div>
     <div class="pillar">
       <span class="tag t-worker">워커</span>
-      <h3>크론잡 하나가 티켓 한 건을 문다</h3>
+      <h3>워커 하나가 티켓 한 건을 문다</h3>
       <p>동시에 몇 건을 굴릴지는 워커 파일 개수가 정합니다. 더 돌리고 싶으면 워커를 하나 더 만드세요.</p>
     </div>
     <div class="pillar">
@@ -110,7 +110,7 @@ const version = theme.value.diraVersion;
 <section class="wrap">
   <div class="gallery">
     <figure>
-      <a class="zoom" href="/shots/barge.gif" target="_blank" rel="noopener" title="원본 크기로 열기"><img class="shot" src="/shots/barge.gif" loading="lazy" alt="세션 스트림이 도구 호출을 한 줄씩 늘려 가는 동안, 아래 입력창에 문장을 넣고 보내기를 누르자 그 문장이 참견 줄로 스트림에 나타나고 세션이 이어서 방향을 바꾼다." width="1760" height="1408"></a>
+      <a class="zoom" href="/shots/barge.gif" target="_blank" rel="noopener" title="원본 크기로 열기"><img class="shot" src="/shots/barge.gif" loading="lazy" alt="세션 스트림이 도구 호출을 한 줄씩 늘려 가는 동안, 아래 입력창에 문장을 넣고 보내기를 누르자 그 문장이 참견 줄로 스트림에 나타나고 세션이 이어서 방향을 바꿉니다." width="1760" height="1408"></a>
       <figcaption>
         <b>실제 왕복입니다. 재현이 아닙니다.</b> 티켓은 <q>세 파일을 읽어 세 줄로 쓴다</q>였고,
         참견은 <q>지금 읽은 것까지만, 한 줄로</q>였습니다.
@@ -119,7 +119,7 @@ const version = theme.value.diraVersion;
       <p class="arrows"><a href="/docs/barge-in">도는 세션에 말 걸기</a></p>
     </figure>
     <figure>
-      <a class="zoom" href="/shots/07-qa-thread.png" target="_blank" rel="noopener" title="원본 크기로 열기"><img class="shot" src="/shots/07-qa-thread.png" loading="lazy" alt="요구 티켓의 질문·답변 스레드. 질문 아래에 답변 말풍선이 오른쪽으로 붙어 있고, frontmatter에 awaiting 해시가 있다." width="1440" height="450"></a>
+      <a class="zoom" href="/shots/07-qa-thread.png" target="_blank" rel="noopener" title="원본 크기로 열기"><img class="shot" src="/shots/07-qa-thread.png" loading="lazy" alt="요구 티켓의 질문·답변 스레드. 질문 아래에 답변 말풍선이 오른쪽으로 붙어 있고, frontmatter에 awaiting 해시가 있습니다." width="1440" height="450"></a>
       <figcaption>오른쪽 <code>awaiting:</code>에 걸린 해시는 <b>아직 없는 파일</b>입니다. 답변을 쓰면 그 파일이 생깁니다.</figcaption>
       <p class="arrows"><a href="/docs/ticket-writing">티켓 쓰는 법</a></p>
     </figure>

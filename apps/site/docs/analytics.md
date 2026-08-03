@@ -63,4 +63,4 @@ rm ~/.config/dira/analytics.json
 
 무엇을 왜 보내는지, 보존 기간과 위탁처는 [개인정보처리방침](/privacy)에 있습니다.
 
-다음은 [워커 환경변수](/docs/ref-env)입니다.
+다음은 [엔진만으로 돌리기](/docs/cron)입니다.
