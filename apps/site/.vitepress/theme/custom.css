@@ -162,15 +162,50 @@ html { scroll-behavior: smooth; }
 .dira-landing .arrows a:hover { border-color: var(--fg); }
 .dira-landing .arrows a::after { content: " →"; color: var(--faint); }
 
-/* ── steps (30초 설명) ──────────────────────────── */
-.dira-landing .steps { list-style: none; margin: 32px 0 0; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+/* ── steps (30초 설명) · plans (플랜 카드) ───────── */
+/* 두 블록이 공유하는 것은 격자와 카드 상자뿐이다 — 값이 같은 규칙에 선택자만 병기하고,
+   갈리는 값(제목 · 항목 · 정렬 · 패딩)은 아래 .plans 전용 블록에만 적는다. 복사가 아니라
+   분리다(§랜딩 §플랜 카드 §고칠 자리 ①). `> li > b`에는 안 단다 — ②가 통째로 갈린다. */
+.dira-landing .steps,
+.dira-landing .plans { list-style: none; margin: 32px 0 0; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
 /* `> li` — 카드 테두리는 직계 자식만. §플랜이 카드 안에 .marks(중첩 <li>)를 넣는다. */
-.dira-landing .steps > li { border: 1px solid var(--border); border-radius: 12px; padding: 22px; background: var(--panel); }
+.dira-landing .steps > li,
+.dira-landing .plans > li { border: 1px solid var(--border); border-radius: 12px; padding: 22px; background: var(--panel); }
 /* `> li >` 로 카드 제목만 잡는다 — 그냥 `.steps b`면 본문 <p> 안의 강조까지 block이
    되어 한 문단이 세 토막으로 끊긴다(§랜딩 ①). */
 .dira-landing .steps > li > b { display: block; margin-bottom: 8px; font-size: 15px; letter-spacing: -0.02em; }
-.dira-landing .steps p { margin: 0; font-size: 14px; color: var(--muted-fg); line-height: 1.65; }
-@media (max-width: 900px) { .dira-landing .steps { grid-template-columns: 1fr; } }
+.dira-landing .steps p,
+.dira-landing .plans p { margin: 0; font-size: 14px; color: var(--muted-fg); line-height: 1.65; }
+@media (max-width: 900px) {
+  .dira-landing .steps,
+  .dira-landing .plans { grid-template-columns: 1fr; }
+}
+
+/* 카드가 자기 내용 높이로 선다. stretch면 Pro·Enterprise 아래가 통째로 비고,
+   그 빈칸을 채울 값이 정본에 없다(금액도 CTA도 안 만든다). */
+.dira-landing .plans { align-items: start; }
+.dira-landing .plans > li { padding: 24px; }
+/* 지금 쓸 수 있는 것은 Free 하나다. 두께 · 면 · 크기는 그대로라 격자가 안 흔들린다.
+   색만으로 지는 의미가 아니다 — 그 사실은 카드 안에 글자로 이미 서 있다. */
+.dira-landing .plans > li:first-child { border-color: var(--fg); }
+.dira-landing .plans > li > b {
+  display: block; font-size: 20px; font-weight: 700; letter-spacing: -0.03em; line-height: 1.3;
+  margin: 0 0 16px; padding-bottom: 16px; border-bottom: 1px solid var(--border);
+}
+/* 뱃지를 오른쪽 레일로 보내 항목 이름 아홉이 한 왼쪽 선에 선다. `—` 글머리는 뺀다 —
+   표식이 둘이면 선이 둘로 갈린다. */
+.dira-landing .plans .marks li { display: flex; gap: 10px; align-items: flex-start; justify-content: space-between; padding: 6px 0; }
+.dira-landing .plans .marks li::before { content: none; }
+.dira-landing .soon {
+  flex: none; font-size: 11.5px; line-height: 18px; font-weight: 600; letter-spacing: -0.01em;
+  padding: 0 8px; border-radius: 99px; border: 1px solid var(--border);
+  background: var(--bg); color: var(--faint);
+}
+/* 응원 문구가 목록의 넷째 줄로 안 읽히게 — 카드가 제목 / 항목 / 맺음 세 단이 된다. */
+.dira-landing .plans li > p { margin: 16px 0 0; padding-top: 16px; border-top: 1px solid var(--border); }
+.dira-landing .plans .cta { justify-content: flex-start; margin-top: 16px; }
+.dira-landing .plan-sec > .body { max-width: 40em; }
+.dira-landing .plans + .body { margin-top: 24px; }
 
 /* ── engine ─────────────────────────────────────── */
 /* minmax(0, 1fr) — 트랙 최소폭을 0으로 눌러야 한다. 그냥 1fr이면 트랙의 자동

@@ -153,45 +153,45 @@ onMounted(async () => {
   </div>
 </section>
 
-<section class="wrap">
+<section class="wrap plan-sec">
   <p class="eyebrow">플랜</p>
   <h2>쓸 수 있는 것은 전부 무료입니다</h2>
-  <p class="body" style="max-width:40em">
+  <p class="body">
     아직 없는 항목에는 준비중이라고 적었습니다.
   </p>
-  <!-- 카드는 순서가 없어 <ul>이다(.steps는 30초 설명에서 <ol>로 쓰지만 규칙은 클래스에 걸려 있다). -->
-  <ul class="steps">
+  <!-- 카드는 순서가 없어 <ul>이다(.plans는 .steps에서 분리했다 — 30초 설명과 규칙이 갈린다). -->
+  <ul class="plans">
     <li>
       <b>Free</b>
       <ul class="marks">
         <li>로컬 앱과 엔진을 직접 설치해 쓰기</li>
-        <li>(준비중) 동료들과 P2P 협업</li>
-        <li>(준비중) 엔진 MCP</li>
+        <li>동료들과 P2P 협업 <span class="soon">준비중</span></li>
+        <li>엔진 MCP <span class="soon">준비중</span></li>
       </ul>
-      <p style="margin-top:16px">로컬 엔진과 앱은 영원히 무료로 제공합니다. dira는 빌더들의
+      <p>로컬 엔진과 앱은 영원히 무료로 제공합니다. dira는 빌더들의
       멀티 에이전트 생태계를 응원합니다.</p>
-      <div class="cta" style="justify-content:flex-start; margin-top:16px">
+      <div class="cta">
         <a class="btn" href="https://github.com/proofer-tech/dira">GitHub에서 별 주기</a>
       </div>
     </li>
     <li>
       <b>Pro</b>
       <ul class="marks">
-        <li>(준비중) 클라우드 프로젝트</li>
-        <li>(준비중) dira 자체 클라우드 LLM 사용</li>
-        <li>(준비중) 결과물 웹 호스팅</li>
-        <li>(준비중) 클라우드 워커</li>
+        <li>클라우드 프로젝트 <span class="soon">준비중</span></li>
+        <li>dira 자체 클라우드 LLM 사용 <span class="soon">준비중</span></li>
+        <li>결과물 웹 호스팅 <span class="soon">준비중</span></li>
+        <li>클라우드 워커 <span class="soon">준비중</span></li>
       </ul>
     </li>
     <li>
       <b>Enterprise</b>
       <ul class="marks">
-        <li>(준비중) 엔터프라이즈 전용 커스텀</li>
-        <li>(준비중) 사내툴과 연동</li>
+        <li>엔터프라이즈 전용 커스텀 <span class="soon">준비중</span></li>
+        <li>사내툴과 연동 <span class="soon">준비중</span></li>
       </ul>
     </li>
   </ul>
-  <p class="body" style="margin-top:24px">생태계도 같이 만듭니다. (준비중) 페르소나 마켓</p>
+  <p class="body">생태계도 같이 만듭니다. 페르소나 마켓 <span class="soon">준비중</span></p>
 </section>
 
 </main>
