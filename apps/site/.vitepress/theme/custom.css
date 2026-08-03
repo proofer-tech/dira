@@ -207,8 +207,9 @@ html { scroll-behavior: smooth; }
 /* 응원 문구가 목록의 넷째 줄로 안 읽히게 — 카드가 제목 / 항목 / 맺음 세 단이 된다. */
 .dira-landing .plans li > p { margin: 16px 0 0; padding-top: 16px; border-top: 1px solid var(--border); }
 .dira-landing .plans .cta { justify-content: flex-start; margin-top: 16px; }
-.dira-landing .plan-sec > .body { max-width: 40em; }
-.dira-landing .plans + .body { margin-top: 24px; }
+/* 페르소나 마켓은 전 열을 잡는 자기 행이다. :last-child로 잡지 않는다 — 뒤에 카드가
+   하나 더 붙는 날 조용히 옮겨 간다. */
+.dira-landing .plans > li.wide { grid-column: 1 / -1; }
 
 /* ── engine ─────────────────────────────────────── */
 /* minmax(0, 1fr) — 트랙 최소폭을 0으로 눌러야 한다. 그냥 1fr이면 트랙의 자동

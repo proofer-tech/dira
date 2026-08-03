@@ -204,8 +204,14 @@ onMounted(async () => {
         <li>사내툴과 연동 <span class="soon">준비중</span></li>
       </ul>
     </li>
+    <!-- 열이 아니라 행이 는다 — 이 카드는 유료 열 셋과 같은 열에 안 서고 전 열을 잡는다. -->
+    <li class="wide">
+      <b>페르소나 마켓 <span class="soon">준비중</span></b>
+      <ul class="marks">
+        <li>생태계도 같이 만듭니다</li>
+      </ul>
+    </li>
   </ul>
-  <p class="body">생태계도 같이 만듭니다. 페르소나 마켓 <span class="soon">준비중</span></p>
 </section>
 
 </main>
