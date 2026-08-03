@@ -234,7 +234,31 @@ test("TICKET_NAME 재정의 — 락·로그는 파일명이 아니라 실효 이
   assert.strictEqual(w.name, "a"); // 액션이 가리키는 건 파일이다
   assert.strictEqual(w.status, "running"); // 파일명으로 찾았으면 stopped로 거짓말했다
   assert.strictEqual(w.engine, 'codex exec --json "{prompt}"');
-  assert.match(w.lastLog!, /\[reviewer\] SKIP/);
+  assert.match(w.recentLog[0], /\[reviewer\] SKIP/);
+});
+
+test("recentLog — 이 워커의 최근 20줄, 최신이 앞 (§4-7)", async () => {
+  const root = makeRoot({
+    "w1.sh": "#!/bin/bash\n",
+    "w2.sh": "#!/bin/bash\n",
+    "w3.sh": "#!/bin/bash\n",
+  });
+  const lines: string[] = [];
+  // w1은 25줄(20줄 상한을 넘긴다) · w2는 1줄 · w3은 0줄(파일에 아예 없다)
+  for (let i = 1; i <= 25; i++) lines.push(`2026-08-03 00:00:${String(i).padStart(2, "0")} [w1] SKIP ${i}`);
+  lines.push("2026-08-03 00:01:00 [w2] DISPATCH abcd1234 kind=work sid=zzz log=x.log", "");
+  writeFileSync(path.join(root, "workers", "runner.log"), lines.join("\n"));
+
+  const ws = Object.fromEntries((await listWorkers(root)).map((w) => [w.name, w]));
+  assert.strictEqual(ws.w1.recentLog.length, 20); // 상한
+  assert.match(ws.w1.recentLog[0], /SKIP 25$/); // 최신이 앞 — 셀이 쓰는 값이다
+  assert.match(ws.w1.recentLog[19], /SKIP 6$/); // 오래된 쪽이 뒤
+  // 남의 줄이 안 섞인다 + 시각 접두어까지 줄 그대로다(가공 0)
+  assert.ok(ws.w1.recentLog.every((l) => l.includes("[w1]")));
+  assert.deepStrictEqual(ws.w2.recentLog, [
+    "2026-08-03 00:01:00 [w2] DISPATCH abcd1234 kind=work sid=zzz log=x.log",
+  ]);
+  assert.deepStrictEqual(ws.w3.recentLog, []); // 줄이 0개 — 셀은 `—`에 `disabled`다
 });
 
 test("주석 처리된 할당문은 설정이 아니다 (worker.sh.example이 통째로 주석이다)", async () => {
@@ -477,9 +501,9 @@ test("lastFailure — 외부 요인으로 죽은 세션만, 신선할 때만 잡
   assert.strictEqual(ws.w7.lastFailure, null);
   assert.strictEqual(ws.w8.lastFailure, null);
   assert.strictEqual(ws.w9.lastFailure?.reason, LIMIT);
-  // 결과 줄을 새로 뽑아도 `lastLog`는 여전히 **마지막 줄**이다(화면이 지금 쓰는 값이다)
-  assert.match(ws.w4.lastLog!, /DISPATCH d4444444/);
-  assert.match(ws.w5.lastLog!, /SKIP/);
+  // 결과 줄을 새로 뽑아도 `recentLog[0]`은 여전히 **마지막 줄**이다(셀이 지금 쓰는 값이다)
+  assert.match(ws.w4.recentLog[0], /DISPATCH d4444444/);
+  assert.match(ws.w5.recentLog[0], /SKIP/);
 });
 
 // ── 읽음 처리 (§0-5 §읽음 처리) ─────────────────────────────────────────────

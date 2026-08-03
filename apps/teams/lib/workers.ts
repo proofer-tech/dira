@@ -59,7 +59,7 @@ export type Worker = {
   /** 실효 `TICKET_NAME` (`tick.sh:37` — 대입이 없으면 파일 stem이다). **락·runner.log 줄·세션
    *  로그 파일명(`tick.sh:264`)·`owner:`가 전부 이 이름이지 `name`이 아니다.** 밖으로 내는 이유는
    *  §0-8 소비 토큰이 그 로그 파일명에서 워커를 읽기 때문이다 — `name`으로 붙이면 `TICKET_NAME`을
-   *  대입한 워커만 조용히 `0`으로 뜬다(`lastLog`가 이미 이 키로 붙는다) */
+   *  대입한 워커만 조용히 `0`으로 뜬다(`recentLog`가 이미 이 키로 붙는다) */
   effName: string;
   path: string;
   status: WorkerStatus;
@@ -73,8 +73,9 @@ export type Worker = {
    *  `[기본값 가정]` 배지가 붙고 claude 기본 블록은 안 붙는다(§비주얼 §23 ① 표시 4종).
    *  실효 값이 필요한 자리는 `engineName`·`engineCell`이 `null`을 받아 기본값을 편다 */
   engine: string | null;
-  /** runner.log에서 이 워커의 마지막 줄 */
-  lastLog: string | null;
+  /** runner.log에서 이 워커의 **최근 20줄**(최신이 앞). 셀은 `[0]`을 쓰고 펼치면 전부 선다
+   *  (§4-7). 마지막 한 줄을 따로 들지 않는 것은 두 필드가 갈릴 자리를 안 만드는 것이다 */
+  recentLog: string[];
   /** 외부 요인으로 죽은 마지막 세션 (§0-5). **정상 상태에서는 항상 `null`이다** */
   lastFailure: WorkerFailure | null;
   /** TICKET_CONTEXT 항목(경로·설명·존재 여부) 또는 못 읽은 사유 */
@@ -776,21 +777,27 @@ export async function writeEngine(
  *    작업 디렉터리 결함이 이미 자기 자리에서 말한다 — 같은 사실을 두 자리에 쓰지 않는다. */
 const RESULT_VERBS = new Set(["DONE", "FAIL", "TIMEOUT"]);
 
+/** `마지막 활동` 셀을 펼치면 서는 줄 수 (§4-7). tick 한 바퀴가 6~8줄이라 20줄이면 최근 티켓
+ *  두어 개가 통째로 보인다. */
+const RECENT_LINES = 20;
+
 /** runner.log는 워커 전체가 한 파일에 섞여 쌓인다: `2026-07-30 13:19:01 [w3] SKIP …`.
- *  실효 `TICKET_NAME` → 마지막 줄 + **마지막 결과 줄**(§0-5 판정 1단계).
+ *  실효 `TICKET_NAME` → **최근 20줄**(최신이 앞) + **마지막 결과 줄**(§0-5 판정 1단계).
  *
- *  ponytail: 파일 전체를 읽고 뒤에서 훑는다. 이 레포 로그가 13KB고 사람이 가끔 지운다.
- *  MB 단위가 되면 뒤에서 N바이트만 읽는 경로로 바꾼다. */
+ *  ponytail: 파일 전체를 읽고 뒤에서 훑는다(실측 1.5MB · 15,858줄 · 13.5ms). **꼬리만 읽으면
+ *  오래 멈춘 워커의 마지막 줄을 잃는다** — 그 줄이 파일 앞쪽에 있어서 `stopped` 워커의 마지막
+ *  활동이 `—`가 된다(§4-7). 상한이 문제면 로테이션이 먼저다(`tick.sh`의 일이다). */
 async function lastLogByWorker(
   workersDir: string,
-): Promise<Record<string, { last: string; result: string | null }>> {
+): Promise<Record<string, { recent: string[]; result: string | null }>> {
   const text = await readFile(path.join(workersDir, "runner.log"), "utf8").catch(() => "");
-  const out: Record<string, { last: string; result: string | null }> = {};
+  const out: Record<string, { recent: string[]; result: string | null }> = {};
   const lines = text.split("\n");
   for (let i = lines.length - 1; i >= 0; i--) {
     const m = /^\S+ \S+ \[([^\]]+)\] (\S+)/.exec(lines[i]);
     if (!m) continue;
-    const e = (out[m[1]] ??= { last: lines[i], result: null }); // 뒤에서 왔으니 첫 생성이 마지막 줄
+    const e = (out[m[1]] ??= { recent: [], result: null });
+    if (e.recent.length < RECENT_LINES) e.recent.push(lines[i]); // 뒤에서 왔으니 최신이 앞이다
     if (e.result === null && RESULT_VERBS.has(m[2])) e.result = lines[i];
   }
   return out;
@@ -1052,7 +1059,7 @@ export async function listWorkers(root: string, tickets: Ticket[] = []): Promise
       lockPid: pid,
       holding: holdingOf(tickets, eff),
       engine: parsed.engine, // null = 대입 없음. 여기서 기본값으로 덮으면 화면이 둘을 못 가른다
-      lastLog: logs[eff]?.last ?? null,
+      recentLog: logs[eff]?.recent ?? [],
       // 파일을 여는 것은 **마지막 결과가 `FAIL`인 워커뿐**이다 — 정상 상태에서는 0회다(§0-5 비용).
       lastFailure: await failureOf(path.join(dir, "logs"), logs[eff]?.result ?? null),
       context: await contextOf(root, text, parsed.cwd),

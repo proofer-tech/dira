@@ -16,6 +16,7 @@ import {
   EngineCell,
   ExpandScope,
   WorkerContextCell,
+  WorkerActivityCell,
   WorkerContextRow,
   WorkerRowActions,
   type WorkerRow,
@@ -259,11 +260,10 @@ export default async function Workers({ params }: { params: Promise<{ project: s
                 <TableCell className="w-px px-3 py-0">
                   <WorkerContextCell row={w} />
                 </TableCell>
-                <TableCell
-                  className="w-px px-3 py-0 font-mono text-xs text-muted-foreground"
-                  title={w.lastLog ?? ""}
-                >
-                  <span className="block max-w-[20rem] truncate">{w.lastLog ?? "—"}</span>
+                {/* **이 표의 셋째 컨트롤 셀**(§4-7) — 값(마지막 한 줄)이 곧 토글이고 펼치면 같은
+                    둘째 행이 이 워커의 최근 20줄을 잘림 없이 받는다. 셀에 뜨는 값은 무수정이다 */}
+                <TableCell className="w-px px-3 py-0">
+                  <WorkerActivityCell row={w} />
                 </TableCell>
                 <TableCell className="px-3 py-0">
                   <WorkerRowActions projectId={id} row={w} />

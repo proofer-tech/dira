@@ -95,7 +95,8 @@ export type WorkerRow = {
    *  넘긴다: `lib/workers.ts`가 `node:fs`를 타서 이 파일이 그 함수를 못 import한다(§규약).
    *  세션 스트림·참견이 이 값 하나로 갈린다(§4-3 · §비주얼 §23 ⑤) */
   engineName: string;
-  lastLog: string | null;
+  /** runner.log에서 이 워커의 최근 20줄(최신이 앞). `[0]`이 `마지막 활동` 셀이고 펼치면 전부 선다 */
+  recentLog: string[];
   registerCmd: string;
   unregisterCmd: string;
   /** TICKET_CONTEXT 항목 또는 GUI가 못 고치는 사유 */
@@ -1114,15 +1115,18 @@ function ContextEditor({
 
 // ── 표 안의 컨텍스트 (§비주얼 §35) ──────────────────────────────────────────
 
-/** 지금 펼쳐진 워커 이름 하나. **한 번에 한 행만 펼친다**(§35 #2 — §5 §동시 선택 `하나`와 같은
- *  규칙). URL에 안 담는다: 이 화면은 5초마다 다시 그리므로(§4-4) 담으면 매번 서버 렌더가 돌아
- *  편집 중이던 항목 입력이 언마운트된다. `// ponytail: 딥링크가 생기면 그때`. */
-const ExpandCtx = createContext<[string | null, (name: string | null) => void]>([null, () => {}]);
+/** 지금 펼쳐진 워커 **하나와 그 워커의 어느 패널인가**. **한 번에 한 패널만 펼친다**(§35 #2가
+ *  §4-7에서 한 칸 넓어진다 — 한 행에 토글이 둘이라 워커 이름만으로는 어느 쪽인지 못 가른다.
+ *  컨텍스트를 펼친 채 활동을 누르면 컨텍스트가 닫힌다). URL에 안 담는다: 이 화면은 5초마다 다시
+ *  그리므로(§4-4) 담으면 매번 서버 렌더가 돌아 편집 중이던 항목 입력이 언마운트된다.
+ *  `// ponytail: 딥링크가 생기면 그때`. */
+type Expanded = { name: string; panel: "context" | "activity" } | null;
+const ExpandCtx = createContext<[Expanded, (v: Expanded) => void]>([null, () => {}]);
 
 /** 표 본문이 드는 펼침 상태 하나. **DOM을 한 조각도 안 그리므로** `<TableBody>` 안에 그대로
  *  선다 — 서버가 그린 행들을 children으로 받는다(행 마크업은 페이지에 그대로 있다). */
 export function ExpandScope({ children }: { children: React.ReactNode }) {
-  const state = useState<string | null>(null);
+  const state = useState<Expanded>(null);
   return <ExpandCtx.Provider value={state}>{children}</ExpandCtx.Provider>;
 }
 
@@ -1135,7 +1139,7 @@ export function ExpandScope({ children }: { children: React.ReactNode }) {
  *  둘째 행이 항상 말한다). 버튼을 지우지 않는 것은 §4 §세션 스트림과 같은 규칙이다. */
 export function WorkerContextCell({ row }: { row: WorkerRow }) {
   const [open, setOpen] = useContext(ExpandCtx);
-  const expanded = open === row.name;
+  const expanded = open?.name === row.name && open.panel === "context";
   return (
     <Button
       variant="ghost"
@@ -1145,9 +1149,37 @@ export function WorkerContextCell({ row }: { row: WorkerRow }) {
       // `엔진` 열과 같은 이유로 `text-foreground`다 — 행 hover·펼침이 둘 다 `bg-muted/50`이고
       // 거기서 `--muted-foreground`는 라이트 4.54라 §9가 금지한 조합이다(§23 대비 검증).
       className="-ml-2.5 font-mono text-xs font-normal text-foreground"
-      onClick={() => setOpen(expanded ? null : row.name)}
+      onClick={() => setOpen(expanded ? null : { name: row.name, panel: "context" })}
     >
       {row.context.ok ? row.context.items.length : "—"}
+      {expanded ? (
+        <ChevronDown aria-hidden className="size-3" />
+      ) : (
+        <ChevronRight aria-hidden className="size-3" />
+      )}
+    </Button>
+  );
+}
+
+/** `마지막 활동` 열 — **이 표의 셋째 컨트롤 셀**(§4-7). 조립은 위 `컨텍스트` 셀 그대로이고 셀에
+ *  뜨는 값은 **무수정**이다: 여전히 마지막 한 줄 · `max-w-[20rem] truncate` · `title` 전문.
+ *  달라지는 것은 그 값이 이제 토글이라는 것뿐이고, 펼치면 둘째 행이 최근 20줄을 잘림 없이 받는다.
+ *  줄이 0개면 종전대로 `—` + `disabled`다(사유를 안 붙인다 — 그 `—`가 이미 말한다). */
+export function WorkerActivityCell({ row }: { row: WorkerRow }) {
+  const [open, setOpen] = useContext(ExpandCtx);
+  const expanded = open?.name === row.name && open.panel === "activity";
+  const last = row.recentLog[0];
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      disabled={!last}
+      aria-expanded={expanded}
+      title={last ?? ""}
+      className="-ml-2.5 font-mono text-xs font-normal text-foreground"
+      onClick={() => setOpen(expanded ? null : { name: row.name, panel: "activity" })}
+    >
+      <span className="block max-w-[20rem] truncate">{last ?? "—"}</span>
       {expanded ? (
         <ChevronDown aria-hidden className="size-3" />
       ) : (
@@ -1218,7 +1250,8 @@ export function WorkerContextRow({
   warnings?: React.ReactNode;
 }) {
   const [open] = useContext(ExpandCtx);
-  const expanded = open === row.name;
+  const expanded = open?.name === row.name && open.panel === "context";
+  const activity = open?.name === row.name && open.panel === "activity";
   const saved = row.context.ok ? row.context.items : [];
   const [copyTo, setCopyTo] = useState<string | null>(null);
   const [copyError, setCopyError] = useState<string | null>(null);
@@ -1231,7 +1264,8 @@ export function WorkerContextRow({
   const gets = row.commonSource ? common : [];
   // 접혀 있어도 이 행이 서는 조건 — 경고 다섯 중 하나라도 있으면이다(§35 #4).
   const warned = !!warnings || !row.commonSource || !row.selfHealSource || !row.context.ok;
-  if (!warned && !expanded) return null;
+  // 활동 펼침도 이 행이 받는다(§4-7) — 조건을 안 넓히면 셀을 눌러도 받을 행이 없다.
+  if (!warned && !expanded && !activity) return null;
 
   return (
     <TableRow className="hover:bg-transparent">
@@ -1356,6 +1390,16 @@ export function WorkerContextRow({
                 addLabel="항목 추가"
                 save={(items) => saveContextAction(projectId, row.name, items)}
               />
+            </div>
+          )}
+
+          {/* 펼친 활동 — `runner.log`의 이 워커 최근 20줄, **최신이 위**(셀에 뜬 그 줄이 첫 줄이라
+              이 줄을 눌러 폈다가 자명하다). 가공 0이다: 필터·색·아이콘·링크 없이 시각 접두어까지
+              줄 그대로고, 이 패널이 있는 이유가 잘린 것을 보는 것이라 잘림도 0이다(§4-7).
+              ponytail: 연속으로 같은 본문이 서면 `× n`으로 접는 것이 다음 단계다. 지금은 안 만든다. */}
+          {activity && (
+            <div className="pt-1 font-mono text-xs break-all whitespace-pre-wrap">
+              {row.recentLog.join("\n")}
             </div>
           )}
 
