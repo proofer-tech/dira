@@ -162,7 +162,7 @@ function when(ms: number): string {
  *  박스들의 합집합이라 strut을 못 이긴다.
  *
  *  갈리는 축은 **서체 하나**다: `label`은 도구명이라 항상 mono, `summary`는 §9 판정
- *  (`summaryMono`)을 그대로 받아 쓴다. 알파는 1.0이다 — 호버(`bg-muted/50`)에서 대비가 4.53까지
+ *  (`summaryMono`)을 그대로 받아 쓴다. 알파는 1.0이다 — 호버(`card-tint`)에서 대비가 4.53까지
  *  내려가므로 `/70`·`/80`을 얹으면 4.5:1이 깨진다(§36 §실측 §대비). `text-muted-foreground`가
  *  사라진 것은 `wip-shimmer`가 **그 토큰을** 그라디언트 양 끝과 `reduce` 정본으로 직접 들기
  *  때문이다(값이 갈린 것이 아니다). `흐릿하게`는 이제 `text-2xs`(11px)가 낸다.
@@ -611,7 +611,7 @@ export default async function Board({
                               // 관계선이 상대를 찾는 이름이다(§1: 못 찾으면 안 그린다). 링크·엔진과
                               // 같은 `stem`이라 `relationEdges`가 준 간선과 그냥 맞는다
                               data-stem={t.stem}
-                              className="relative gap-2 px-4 focus-within:bg-muted/50 hover:bg-muted/50"
+                              className="card-tint relative gap-2 px-4"
                             >
                               {/* 칸반 카드는 레인이 상태를 말하므로 배지를 달지 않는다 — 예외가
                                   `답변 대기`다. 자기 레인 없이 `대기`에 앉고, 답변 stem은 큐에
@@ -621,7 +621,7 @@ export default async function Board({
                                   <DepBadge>가 그 표시다(사람 요청 `bd2062cb`) */}
                               <div className="flex items-start justify-between gap-2">
                                 {/* §비주얼 §31 ① 갈래 A — 밑줄 없음. 링크임은 카드의
-                                    `hover:bg-muted/50` + 커서 + 이 앵커에 걸리는 포커스 링이 말한다 */}
+                                    `card-tint` 호버 + 커서 + 이 앵커에 걸리는 포커스 링이 말한다 */}
                                 <Link
                                   href={href(t)}
                                   className="rounded-sm font-mono text-xs text-muted-foreground after:absolute after:inset-0"
