@@ -34,6 +34,7 @@ import {
   BoardLaneMotion,
   BoardPolling,
   BoardRelations,
+  BoardRows,
   BoardSearch,
 } from "@/components/board-ui";
 import { EmptyState } from "@/components/empty-state";
@@ -655,81 +656,85 @@ export default async function Board({
                       </TableCell>
                     </TableRow>
                   ) : (
-                    tableRows.map((t) => (
-                      // 행 전체가 상세로 가는 링크다 — 해시 셀의 링크를 행 크기로 늘린다(§7 대비:
-                      // 여기는 행 액션 버튼이 없어서 행 링크가 안전하다). deps 배지는 그 위에 뜬다.
-                      <TableRow key={t.path} className="relative h-9 focus-within:bg-muted/50">
-                        <TableCell className="px-3 py-0">
-                          {isAwaiting(t) ? (
-                            <StatusBadge status="awaiting" days={daysSince(t.mtime)} />
-                          ) : (
-                            <StatusBadge status={statusOf(t)} />
-                          )}
-                        </TableCell>
-                        <TableCell className="px-3 py-0">
-                          {/* §비주얼 §31 ② 갈래 A — ①과 같다. 밑줄 없음 */}
-                          <Link
-                            href={href(t)}
-                            className="rounded-sm font-mono text-xs text-muted-foreground after:absolute after:inset-0"
-                          >
-                            {t.hash}
-                          </Link>
-                        </TableCell>
-                        {/* title은 자르고 전문은 `title` 속성으로 본다(§6). tooltip은 클라이언트
-                            컴포넌트라 행마다 하나씩 두면 테이블이 통째로 클라이언트가 된다 */}
-                        <TableCell className="px-3 py-0">
-                          {/* 폭 상한은 1440에서 컬럼 8개가 다 들어가도록 잡은 값이다(§4 사이드바를
-                              쓰지 않는 이유). deps가 4개 넘게 달린 행은 가로 스크롤로 넘긴다 */}
-                          <span className="block max-w-[34ch] truncate text-sm" title={t.title}>
-                            {t.title || "(제목 없음)"}
-                          </span>
-                        </TableCell>
-                        <TableCell className="px-3 py-0 text-sm">{t.kind || "—"}</TableCell>
-                        {/* 배지가 셀의 `text-sm`을 대체한다(§비주얼 §12) — 셀에 남은 `text-sm`은
-                            배지가 없는 `—`(담당 없음) 한 글자용이다. Badge는 제 `text-xs`를 갖는다 */}
-                        <TableCell className="px-3 py-0 text-sm">
-                          {t.persona ? (
-                            <PersonaBadge
-                              name={t.persona}
-                              color={colors[t.persona]}
-                              state={t.state}
-                            />
-                          ) : (
-                            "—"
-                          )}
-                        </TableCell>
-                        <TableCell className="px-3 py-0">
-                          {t.deps.length === 0 ? (
-                            <span className="text-sm text-muted-foreground">—</span>
-                          ) : (
-                            // 배지는 늘어난 행 링크 위에 뜨게 둔다 — 안 그러면 deps 클릭이 행에 먹힌다
-                            <span className="relative z-10 flex items-center gap-1">
-                              {depBadges(tickets, t, config).map((d) => (
-                                <DepBadge
-                                  key={d.hash}
-                                  hash={d.hash}
-                                  kind={d.kind}
-                                  href={d.hit ? href(d.hit) : undefined}
-                                />
-                              ))}
+                    // 행은 여기서 **전부** 그린다 — DOM에 넣는 수만 `BoardRows`가 30행씩
+                    // 늘린다(§1 보드 §테이블 바디는 30행씩 그린다). 건수 줄은 이 값과 무관하다.
+                    <BoardRows>
+                      {tableRows.map((t) => (
+                        // 행 전체가 상세로 가는 링크다 — 해시 셀의 링크를 행 크기로 늘린다(§7 대비:
+                        // 여기는 행 액션 버튼이 없어서 행 링크가 안전하다). deps 배지는 그 위에 뜬다.
+                        <TableRow key={t.path} className="relative h-9 focus-within:bg-muted/50">
+                          <TableCell className="px-3 py-0">
+                            {isAwaiting(t) ? (
+                              <StatusBadge status="awaiting" days={daysSince(t.mtime)} />
+                            ) : (
+                              <StatusBadge status={statusOf(t)} />
+                            )}
+                          </TableCell>
+                          <TableCell className="px-3 py-0">
+                            {/* §비주얼 §31 ② 갈래 A — ①과 같다. 밑줄 없음 */}
+                            <Link
+                              href={href(t)}
+                              className="rounded-sm font-mono text-xs text-muted-foreground after:absolute after:inset-0"
+                            >
+                              {t.hash}
+                            </Link>
+                          </TableCell>
+                          {/* title은 자르고 전문은 `title` 속성으로 본다(§6). tooltip은 클라이언트
+                              컴포넌트라 행마다 하나씩 두면 테이블이 통째로 클라이언트가 된다 */}
+                          <TableCell className="px-3 py-0">
+                            {/* 폭 상한은 1440에서 컬럼 8개가 다 들어가도록 잡은 값이다(§4 사이드바를
+                                쓰지 않는 이유). deps가 4개 넘게 달린 행은 가로 스크롤로 넘긴다 */}
+                            <span className="block max-w-[34ch] truncate text-sm" title={t.title}>
+                              {t.title || "(제목 없음)"}
                             </span>
-                          )}
-                        </TableCell>
-                        <TableCell className="px-3 py-0 text-xs tabular-nums text-muted-foreground">
-                          {when(t.birth)}
-                        </TableCell>
-                        <TableCell className="px-3 py-0">
-                          {/* 값·컬럼 무수정 — 전문이 그대로 남고 그 안의 워커 이름만 마크로 선다
-                              (§비주얼 §19 ②). 폭 제약·`title` 툴팁도 종전 그대로다 */}
-                          <span
-                            className="block max-w-[24ch] truncate font-mono text-xs text-muted-foreground"
-                            title={t.fm.owner ?? ""}
-                          >
-                            <WipWorker t={t} full />
-                          </span>
-                        </TableCell>
-                      </TableRow>
-                    ))
+                          </TableCell>
+                          <TableCell className="px-3 py-0 text-sm">{t.kind || "—"}</TableCell>
+                          {/* 배지가 셀의 `text-sm`을 대체한다(§비주얼 §12) — 셀에 남은 `text-sm`은
+                              배지가 없는 `—`(담당 없음) 한 글자용이다. Badge는 제 `text-xs`를 갖는다 */}
+                          <TableCell className="px-3 py-0 text-sm">
+                            {t.persona ? (
+                              <PersonaBadge
+                                name={t.persona}
+                                color={colors[t.persona]}
+                                state={t.state}
+                              />
+                            ) : (
+                              "—"
+                            )}
+                          </TableCell>
+                          <TableCell className="px-3 py-0">
+                            {t.deps.length === 0 ? (
+                              <span className="text-sm text-muted-foreground">—</span>
+                            ) : (
+                              // 배지는 늘어난 행 링크 위에 뜨게 둔다 — 안 그러면 deps 클릭이 행에 먹힌다
+                              <span className="relative z-10 flex items-center gap-1">
+                                {depBadges(tickets, t, config).map((d) => (
+                                  <DepBadge
+                                    key={d.hash}
+                                    hash={d.hash}
+                                    kind={d.kind}
+                                    href={d.hit ? href(d.hit) : undefined}
+                                  />
+                                ))}
+                              </span>
+                            )}
+                          </TableCell>
+                          <TableCell className="px-3 py-0 text-xs tabular-nums text-muted-foreground">
+                            {when(t.birth)}
+                          </TableCell>
+                          <TableCell className="px-3 py-0">
+                            {/* 값·컬럼 무수정 — 전문이 그대로 남고 그 안의 워커 이름만 마크로 선다
+                                (§비주얼 §19 ②). 폭 제약·`title` 툴팁도 종전 그대로다 */}
+                            <span
+                              className="block max-w-[24ch] truncate font-mono text-xs text-muted-foreground"
+                              title={t.fm.owner ?? ""}
+                            >
+                              <WipWorker t={t} full />
+                            </span>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </BoardRows>
                   )}
                 </TableBody>
               </Table>
