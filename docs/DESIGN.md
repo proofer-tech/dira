@@ -6344,7 +6344,7 @@ osascript -e 'tell application "System Events" to get name of every process whos
 | N3 | **경로 피커** | 경로를 타이핑하는 입력 4곳 옆에 `찾기` 버튼. 데스크톱이 아니면 버튼이 없다 |
 | N4 | **로그인 시 자동 실행** | 트레이 메뉴의 체크 항목. 상태는 OS가 갖는다(`getLoginItemSettings`) — 새 설정 파일을 만들지 않는다 |
 | N5 | **찾기 바** | `.app`에는 크롬 찾기 바가 없다(브라우저 UI라 Electron 창에 안 딸려 온다). `Edit` 메뉴에 `찾기` 한 항목 + 렌더러의 찾기 바. **보드·홈에는 안 뜬다** — 그 두 화면은 `⌘F`가 자기 일을 한다(§0-6) |
-| N6 | **일이 남았으면 안 잔다** | 트레이 메뉴의 체크 항목(N4 옆). 켜져 있고 큐에 `대기`·`진행중` 티켓이 있으면 맥이 **유휴 잠자기로 들어가지 않는다.** 화면은 그대로 꺼진다 — 막는 것은 시스템 잠자기 하나다. **뚜껑을 닫으면 잔다**(아래) |
+| N6 | **일이 남았으면 안 잔다** | 트레이 메뉴의 체크 항목(N4 옆). 켜져 있고 큐에 `대기`·`진행중` 티켓이 있으면 맥이 **잠자기로 들어가지 않는다 — 시간이 지나도, 뚜껑을 닫아도.** 화면은 그대로 꺼진다. 뚜껑 쪽은 **전원이 꽂혀 있을 때만** 먹는다(아래) |
 
 **N1은 전체 화면에서 닫아도 아무것도 남기지 않는다.** macOS에서 전체 화면(초록 버튼) 창을 그대로
 `hide()`하면 그 창이 살던 Space가 **검은 화면으로 남는다** — 사람은 창을 내렸는데 화면 하나가
@@ -6404,9 +6404,10 @@ osascript -e 'tell application "System Events" to get name of every process whos
 | 무엇을 세나 | 등록된 프로젝트 **전부**에서 `statusOf(t)`가 `open` 또는 `wip`인 티켓. 하나라도 있으면 잡는다 |
 | 어디서 계산하나 | **서버.** `GET /api/work` → `{ busy: boolean }`. main은 큐를 안 읽는다(못박는 것 5) — `/api/awaiting`이 `isAwaiting` 하나를 부르듯 이쪽은 `statusOf` 하나를 부른다 |
 | 주기 | **30초. N2 폴링과 같은 타이머다** — `setInterval`을 하나 더 만들지 않는다 |
-| assertion | `powerSaveBlocker.start("prevent-app-suspension")`. 화면은 꺼지고 시스템만 깬 채로 둔다 — `"prevent-display-sleep"`이 아니다. 밤새 밝은 화면을 요구한 사람이 없다 |
+| assertion | 자식 프로세스 **`/usr/bin/caffeinate -is -w <main pid>` 하나.** `-i`가 유휴를, `-s`가 뚜껑을 막는다. **`-d`는 넣지 않는다**(답 `887338ea` — `디스플레이는 꺼도 되니깐`). 화면은 그대로 꺼진다 |
+| 왜 `powerSaveBlocker`가 아닌가 | **그것으로는 뚜껑을 못 막는다.** Electron이 부를 수 있는 assertion이 `NoIdleSleep`·`NoDisplaySleep` 둘뿐이고 뚜껑을 막는 `PreventSystemSleep`에 닿는 갈래가 없다(아래 §뚜껑도 막는다). 새 의존성은 아니다 — `caffeinate`는 macOS 기본 바이너리다 |
 | 폴링이 실패하면 | **놓는다**(`stop`). 잡은 채로 두면 서버가 죽은 뒤에도 맥이 영영 안 자고, 그 상태는 화면이 없어서 아무도 못 본다. 놓으면 맥이 자고 큐가 멈추는데 **그건 아침에 보인다** — 고장은 눈에 띄는 쪽으로 넘어뜨린다 |
-| 앱이 죽을 때 | assertion은 프로세스와 함께 사라진다. 못박는 것 3과 같은 성질이고 여기서는 OS가 보장한다 |
+| 앱이 죽을 때 | **`-w <main pid>`가 푼다** — 지켜보던 pid가 사라지면 `caffeinate`가 스스로 나가고 assertion도 같이 죽는다. 정상 종료 때 `kill`하는 것과 **둘 다** 있어야 한다: 자식 프로세스는 부모가 죽어도 안 죽고(고아가 되면 `ppid 1`로 살아남아 그 맥이 영영 안 잔다), 그 상태는 화면이 없어서 아무도 못 본다. 못박는 것 3과 같은 성질인데 여기서는 OS가 아니라 `-w`가 보장한다 |
 
 **`대기`·`진행중` 둘뿐인 것은 요구의 문장 그대로이고, 그게 옳은 판정이기도 하다.** 나머지 셋은
 각각 이유가 있어서 빠진다 — `deps 대기`는 선행이 도는 동안 그 선행이 이미 잡고 있고,
@@ -6418,23 +6419,46 @@ osascript -e 'tell application "System Events" to get name of every process whos
 같은 자리다. 실측(2026-08-03): 이 맥에 `/Applications/dira.app`이 설치돼 있는데 지금 도는 것은
 `next dev -p 7331`이다. **밤새 돌릴 거면 그날은 `.app`을 켜 둔다**가 이 기능의 사용법이다.
 
-#### 뚜껑은 여기 없다 — root가 필요하다 (미결 `d1dfd80d` 질문 1)
+#### 뚜껑도 막는다 — `-s`는 셋째 assertion이다 (답 `887338ea`)
 
-요구는 `시간이 지나도`와 `커버를 닫아도` 둘을 적었는데 **앞의 하나만 위 표가 덮는다.**
-갈린 이유가 취향이 아니라 권한이라 여기 적어 둔다.
+요구는 `시간이 지나도`와 `커버를 닫아도` 둘을 적었고 **둘 다 위 표가 덮는다.**
+2026-08-03까지 이 절은 *"뚜껑은 root가 필요하다"*였다. **그 판정이 틀렸다.** 틀린 자리를
+지우지 않고 남긴다 — 다음 세션이 같은 표를 다시 세우지 않도록.
 
 | 무엇 | 무엇을 막나 | 권한 |
 |---|---|---|
-| `powerSaveBlocker` · `caffeinate -dimsu` | **유휴 잠자기.** IOKit assertion이고 뚜껑은 못 막는다 | 없음 |
-| `pmset -a disablesleep 1` (`pmset -g`의 `SleepDisabled`) | 뚜껑을 포함한 **전부** | **root** |
+| `powerSaveBlocker` (Electron) | **유휴 잠자기만.** 부를 수 있는 것이 `NoIdleSleep`·`NoDisplaySleep` 둘뿐이다 | 없음 |
+| **`caffeinate -is`** (`PreventUserIdleSystemSleep` + `PreventSystemSleep`) | **유휴 + 뚜껑.** 뚜껑 쪽은 **전원이 꽂혀 있을 때만**(`man caffeinate:26`) | 없음 ← **채택** |
+| `pmset -a disablesleep 1` (`pmset -g`의 `SleepDisabled`) | 뚜껑을 포함한 전부. 전원과 무관 | **root** ← 버린 안 |
 | 외부 디스플레이 + 전원 (클램셸 모드) | 뚜껑 | 없음 — 우리 코드 0줄, macOS가 한다 |
 
-`man pmset` 35행이 `pmset must be run as root in order to modify any settings`다. 그리고
-`disablesleep`은 **시스템 전역이고 영속이다** — 앱이 크래시하면 켜 둔 채로 남고, 그 맥은
-`sudo pmset -a disablesleep 0`을 손으로 칠 때까지 영영 안 잔다(가방 안에서 뜨거워지는 그것이다).
-관리자 비번을 묻는 것과 그 위험을 지는 것은 **사람의 맥에 대한 결정이지 pm이 낼 결정이 아니다.**
-그래서 뚜껑은 요구 `d1dfd80d`의 `## 질문 1`로 되물었고, **답이 무엇으로 오든 위 표는 안 바뀐다** —
-유휴 잠자기 쪽은 셋 중 어느 답에도 걸리지 않아서 먼저 발행했다.
+**앞 판정이 틀린 이유는 assertion을 두 종류로 셌기 때문이다.** IOKit에는 셋이 있는데
+(`NoIdleSleep` · `NoDisplaySleep` · `PreventSystemSleep`) **Electron이 부를 수 있는 것이 앞의
+둘뿐이라**, `powerSaveBlocker`로 재 본 결과를 "IOKit assertion으로는 뚜껑을 못 막는다"로 읽었다.
+껍데기의 한계를 OS의 한계로 읽은 것이다. 셋째는 `caffeinate -s`가 잡는다:
+
+```
+$ caffeinate -is &  ;  pmset -g assertions
+   pid 53252(caffeinate): ... PreventUserIdleSystemSleep named: "caffeinate command-line tool"
+   pid 53252(caffeinate): ... PreventSystemSleep         named: "caffeinate command-line tool"
+```
+
+Chromium이 그 둘만 매핑한다는 것은 소스에 있다(`services/device/wake_lock/power_save_blocker/
+power_save_blocker_mac.cc`) — `kPreventAppSuspension → kIOPMAssertionTypeNoIdleSleep`,
+`kPreventDisplaySleep → kIOPMAssertionTypeNoDisplaySleep`. 셋째로 가는 갈래가 없다.
+
+**뚜껑이 실제로 안 자는 것은 사람이 쟀다**(답 `887338ea` — `caffeinate -dis 잘되는것같은데요?`).
+세션은 뚜껑을 닫을 수 없어서 이 한 줄만은 실측이 사람 쪽에 있다. 세션이 잴 수 있는 것은
+**assertion이 잡혔는지**까지이고, 그래서 티켓의 판정도 거기까지다.
+
+**`pmset disablesleep`은 버린다.** root를 요구하고(`man pmset:35`) **시스템 전역·영속**이라
+앱이 크래시하면 그 맥은 `sudo pmset -a disablesleep 0`을 손으로 칠 때까지 영영 안 잔다.
+`caffeinate`는 성질이 반대다 — 자기 프로세스가 죽으면 assertion이 같이 죽고, `-w`까지 걸면
+**우리 앱이 죽어도** 스스로 나간다. 관리자 비번을 받을 이유가 없어졌다.
+
+**천장은 root가 아니라 전원이다.** `-s`는 배터리에서 무효라(`man caffeinate:26`) 그때는 뚜껑을
+닫으면 잔다. 유휴 쪽(`-i`)은 배터리에서도 먹는다. **밤새 뚜껑을 닫고 돌릴 거면 전원을 꽂는다**가
+이 기능의 사용법이고, 바로 위 §천장(`.app`을 켜 둔다)과 같은 자리다.
 
 ### 배포 — 서명 · 공증
 
@@ -11241,8 +11265,9 @@ designer를 안 세운 이유는 그릇·토큰·배치가 0줄이라서고, wri
 
 | # | 티켓 | persona | deps | 상태 |
 |---|---|---|---|---|
-| P116 | 스펙 확정 + 뚜껑 되묻기 `d1dfd80d` | pm | — | 진행중 — §데스크톱 앱 N6 신설(값 표 10행 · 빠지는 상태 셋의 이유 · `.app` 천장 · 뚜껑 권한 표). 뚜껑은 `## 질문 1`(답 `887338ea`) |
-| P116 | N6 유휴 잠자기 방지 + 트레이 토글 `9d17918c` | developer | — | 대기 |
+| P116 | 스펙 확정 + 뚜껑 되묻기 `d1dfd80d` | pm | — | 완료 — §데스크톱 앱 N6 신설, 뚜껑은 `## 질문 1`(답 `887338ea`)로 되물어 §뚜껑도 막는다로 확정 |
+| P116 | N6 유휴 잠자기 방지 + 트레이 토글 `9d17918c` | developer | — | 완료(`2d908e6`) — `powerSaveBlocker`로 유휴만 |
+| P116 | 뚜껑까지 — `caffeinate -is -w`로 교체 `41bbc9c6` | developer | `9d17918c` | 대기 |
 
 **되묻는데 티켓을 먼저 냈다.** 요구가 둘을 적었고(`시간이 지나도` · `커버를 닫아도`) **앞의
 하나는 어느 답에도 안 걸린다** — 뚜껑을 (a)포기 / (b)`sudo pmset` / (c)클램셸 모드 중 무엇으로
@@ -11256,8 +11281,21 @@ designer를 안 세운 이유는 그릇·토큰·배치가 0줄이라서고, wri
 
 **조사를 쓴 자리는 "지금 값을 무엇으로 재나"다.** `pmset -g`가 `SleepDisabled 0`을 주고
 `pmset -g assertions`가 이 맥의 Electron 하나(`pid 36932(Claude)`)가 든 것을 이름까지 준다 —
-`NoIdleSleepAssertion named: "Electron"`. **유휴 assertion과 뚜껑이 다른 층이라는 것이 그
-출력에 그대로 있다.** 추측으로 "아마 caffeinate로 되겠지"라고 적었으면 티켓이 안 되는 일을 시켰다.
+`NoIdleSleepAssertion named: "Electron"`.
+
+**그런데 그 실측에서 내린 결론이 틀렸다**(답 `887338ea`). 위 문단은 2026-08-03까지
+*"유휴 assertion과 뚜껑이 다른 층이라는 것이 그 출력에 그대로 있다"*로 이어졌는데, 그 출력이
+말한 것은 **Electron이 무엇을 잡는가**뿐이고 **OS가 무엇을 잡을 수 있는가**가 아니었다.
+`PreventSystemSleep`이라는 셋째 assertion이 있고 `caffeinate -s`가 그것을 잡는다 —
+root도 새 의존성도 아니다(§뚜껑도 막는다). **재는 것은 맞았는데 잰 것을 무엇으로 읽을지가
+틀린 자리다.** 껍데기(Electron)로 잰 한계를 밑바닥(IOKit)의 한계로 읽으면 이 모양이 난다.
+그래서 `pmset disablesleep`·관리자 비번은 통째로 버린 안이 됐고, 남은 천장은 권한이 아니라
+**전원**이다(`-s`는 배터리에서 무효).
+
+**되묻기는 그래도 값을 했다.** 갈래 (d)가 *"`caffeinate -dis` 켜 놓고 뚜껑을 닫아 실제로 자는지
+재 주십시오 — 제가 못 하는 검증입니다"*였고, 사람이 그것을 재서 (a)·(b)를 가른 것이 아니라
+**전제를 무너뜨렸다.** 세션이 못 하는 실측을 갈래에 하나 넣어 두는 것이 답을 고르게 하는 것보다
+크게 남는 경우가 있다.
 
 **판정을 pm이 정한 자리는 셋이다.** ① 기본값 꺼짐(배터리를 쓰는 기능이라 업데이트가 남의 맥의
 잠자기를 조용히 바꾸지 않는다) ② 폴링 실패 시 놓는다(잡은 채로 두는 고장은 화면이 없어 안
@@ -11266,6 +11304,13 @@ designer를 안 세운 이유는 그릇·토큰·배치가 0줄이라서고, wri
 
 **`deps`가 0이다.** 열린 티켓 여덟 중 `apps/desktop/main.ts`·`apps/teams/app/api/`를 만지는
 것이 하나도 없다(랜딩 `Landing.vue` 넷 · 코어 `protocols/` 셋 · 파비콘 하나).
+
+**뚜껑 티켓 `41bbc9c6`은 `9d17918c`를 `deps`로 받는다.** 그 티켓이 만든 `holdSleep()` 한 함수의
+**속만** 갈아 끼우는 일이라 선행 없이는 고칠 대상이 없다. 발행 시점에 `9d17918c`가 이미
+`.done`(`2d908e6`)이라 이 `deps`는 큐를 직렬화하지 않는다 — 순서의 기록으로만 남는다.
+**범위를 `holdSleep()` 안으로 묶는 것이 이 티켓 설계의 전부다.** 마커 파일 · `/api/work` ·
+30초 타이머 · 폴링 실패 시 놓기 · 트레이 라벨과 자리는 **전부 그대로**이고, 그 다섯을
+`## Done when`에 "안 건드린다"로 적어 둔다. 안 적으면 받는 세션이 N6을 처음부터 다시 만든다.
 
 ### P117 — 랜딩 히어로 GIF (요구 `c8749939`)
 
