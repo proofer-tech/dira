@@ -27,6 +27,30 @@ onMounted(async () => {
       }
     }
   }
+  // 여행하는 티켓의 레인(DESIGN §랜딩 §개편 §움직이는 티켓). 절 마크업에 표식을 안 심는다 —
+  // 관측 대상은 <main> 직계 블록 여섯(`.wrap`)이고, 첫 블록이 레인 0 · 마지막 둘이 레인 2 ·
+  // 그 사이가 레인 1이다. 블록이 늘거나 순서가 바뀌어도 이 셋의 뜻이 안 갈린다.
+  // `.armed`와 같은 배치다 — JS가 죽으면 data-lane이 없고 카드는 레인 0에 그냥 서 있다.
+  // reduce에서도 레인은 그대로 간다: 이름이 갈리는 것은 모션이 아니라 내용이고,
+  // 미끄러지는 420ms만 base.css의 `transition-duration: 0s !important`가 지운다.
+  const travel = document.querySelector(".travel");
+  if (travel) {
+    const blocks = [...document.querySelectorAll("main > .wrap:not(.travel)")];
+    const inband = new Set();
+    const io2 = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries)
+          e.isIntersecting ? inband.add(e.target) : inband.delete(e.target);
+        // <main>을 지나면(닫는 절·footer) 띠가 빈다 — 그때는 마지막 레인을 그대로 둔다.
+        if (!inband.size) return;
+        // 띠 안에 둘 이상이면 아래쪽이 이긴다 — 스크롤이 빨라도 레인이 뒤로 안 샌다.
+        const i = Math.max(...[...inband].map((b) => blocks.indexOf(b)));
+        travel.dataset.lane = i === 0 ? "0" : i < blocks.length - 2 ? "1" : "2";
+      },
+      { rootMargin: "-45% 0px -45% 0px" },
+    );
+    for (const b of blocks) io2.observe(b);
+  }
   try {
     // 위젯이 부르던 바로 그 URL이다(DESIGN §별 버튼을 우리 버튼으로 §고르는 것 ②).
     // 못 읽으면 stars가 빈 채로 남아 개수 칸이 아예 안 선다 — 콘솔에도 아무것도 안 띄운다.
@@ -82,6 +106,17 @@ onMounted(async () => {
 </header>
 
 <main>
+
+<!-- 여행하는 티켓 한 장(DESIGN §랜딩 §개편 §움직이는 티켓). 페이지가 파는 것을 페이지가
+     수행한다 — 이 제품에서 레인을 건너는 것은 애니메이션이 아니라 `rename` 한 번이다
+     (코어 §큐의 불변식 1). 실리는 글자는 전부 제품이 쓰는 식별자이고 산문 노드가 0개다.
+     장식이라 aria-hidden이다(§서는 못 ②). 절마다 새 카드를 세우지 않는다 — 이 한 장이
+     <main> 안에서 sticky로 붙어 페이지를 끝까지 따라간다. -->
+<div class="travel wrap" aria-hidden="true">
+  <div class="lanes">
+    <span class="tk"><span class="tk-hash">a1b2c3d4</span><span class="tk-name"><i>.md</i><i>.wip.md</i><i>.done.md</i></span></span>
+  </div>
+</div>
 
 <div class="hero wrap">
   <p class="eyebrow">로컬 멀티 에이전트 매니지먼트 시스템</p>

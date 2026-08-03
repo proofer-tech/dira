@@ -437,3 +437,61 @@ html { scroll-behavior: smooth; }
 @media (max-width: 480px) {
   .dira-landing header .star-count { display: none; }
 }
+
+/* ── 여행하는 티켓 ──────────────────────────────── */
+/* §랜딩 §개편 §움직이는 티켓(ⓕ). 카드 한 장이 <main> 안에서 sticky로 붙어 페이지를 끝까지
+   따라가며 레인 셋을 건넌다. 조상에 overflow 계열이 하나도 없다(MAIN → HTML 여덟 단계
+   전부 `visible`, 실측) — sticky가 조용히 죽는 자리가 없다. `top: 60px`은 header 높이다.
+   z-index는 header(10)보다 낮다: 둘이 겹치는 순간이 없지만 순서를 못박아 둔다.
+   밴드는 `.wrap`이라 위·아래 룰이 화면 끝까지 가고(«하이라인» 여덟에 흡수) 레인은
+   `content` 열에 선다. 세로 padding은 밴드가 갖는다 — 안의 격자는 세로를 안 갖는다. */
+.dira-landing .travel {
+  position: sticky; top: 60px; z-index: 5;
+  background: var(--bg);
+  border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+  padding: 8px 0;
+}
+.dira-landing .lanes { position: relative; display: grid; grid-template-columns: repeat(3, 1fr); }
+/* 레인을 가르는 하이라인 둘. 빈 요소를 세우지 않는다 — 칸에 들어가는 것이 카드 하나뿐이라
+   나머지 둘은 그릴 내용이 없다. 위아래로 8px씩 나가 밴드의 padding까지 긋는다. */
+.dira-landing .lanes::before,
+.dira-landing .lanes::after {
+  content: ""; position: absolute; top: -8px; bottom: -8px; width: 1px; background: var(--border);
+}
+.dira-landing .lanes::before { left: 33.333%; }
+.dira-landing .lanes::after { left: 66.667%; }
+/* 카드가 레인 폭을 그대로 잡는다(1열 격자 아이템 + stretch) — 그래서 `translateX(100%)`가
+   정확히 한 레인이고, 폭이 갈려도 계산이 안 갈린다. 움직이는 속성은 transform 하나다. */
+.dira-landing .tk {
+  grid-column: 1; display: flex; align-items: center;
+  height: 28px; padding: 0 10px;
+  background: var(--panel); border-left: 3px solid var(--faint);
+  font-family: var(--mono); font-size: 11px; letter-spacing: -0.01em; color: var(--fg);
+  transform: translateX(calc(var(--lane, 0) * 100%));
+  transition: transform 420ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+/* 이름 칸은 세 줄을 쌓아 놓고 한 줄만 보인다 — 보이는 줄이 갈리는 것이 `rename`이다.
+   `rename`은 원자적이라(코어 §불변식 1·2) 보간할 중간 상태가 없다: 이 translateY와
+   레일 색에는 transition을 안 건다. 카드가 420ms 미끄러지는 동안 이름은 이미 새 이름이다.
+   칸 폭은 셋 중 가장 긴 `.done.md`로 고정된다(flex 아이템의 max-content) — 레인이
+   갈려도 카드 폭이 안 흔들린다. */
+.dira-landing .tk-name { display: block; height: 16px; overflow: hidden; }
+.dira-landing .tk-name i {
+  display: block; height: 16px; line-height: 16px; font-style: normal;
+  transform: translateY(calc(var(--lane, 0) * -16px));
+}
+/* 레인 셋은 큐의 상태 셋 그대로다(없음 / `.wip` / `.done`). 넷째 레인을 만들지 않는다 —
+   `--blocked`·`--stale`은 이 셋 밖의 사정이라 파일명이 안 갈린다. 아직 상태가 없는
+   레인 0은 무채색이다(§방향·토큰 «색»의 `.steps` ①·`.gallery` ①과 같은 자리). */
+.dira-landing .travel[data-lane="1"] { --lane: 1; }
+.dira-landing .travel[data-lane="2"] { --lane: 2; }
+.dira-landing .travel[data-lane="1"] .tk { border-left-color: var(--active); }
+.dira-landing .travel[data-lane="2"] .tk { border-left-color: var(--done); }
+
+@media (max-width: 480px) {
+  /* 390에서 `content` 열이 342라 레인이 114px인데 한 줄 카드는 128.6px이다. 레인을 셋으로
+     두고 카드를 두 줄로 접는다 — 다섯 폭 전부에서 여행이 그대로 산다. 밴드 높이는 안 갈린다. */
+  .dira-landing .tk { display: block; height: auto; padding: 4px 8px; line-height: 14px; }
+  .dira-landing .tk-name { height: 14px; }
+  .dira-landing .tk-name i { height: 14px; line-height: 14px; transform: translateY(calc(var(--lane, 0) * -14px)); }
+}
