@@ -5339,6 +5339,9 @@ TIMEOUT`(또는 `DONE`)로 6~8줄이라, 20줄이면 **최근 티켓 두어 개*
 
 #### 검증
 
+**패널 루트에 `data-activity-panel`을 붙인다.** 아래 첫 판정이 요소를 잡는 유일한 손잡이이고,
+클래스로 잡으면 designer가 클래스를 바꾸는 순간 판정이 조용히 통과한다. 새 스타일 훅이 아니다.
+
 ```bash
 # 텍스트가 안 바뀌었다 — 패널을 펼치고
 #   document.querySelector('[data-activity-panel]').textContent === recentLog.join("\n")
