@@ -72,31 +72,6 @@ const version = theme.value.diraVersion;
   </ol>
 </section>
 
-<section class="wrap">
-  <div class="pillars">
-    <div class="pillar">
-      <span class="tag t-queue">큐</span>
-      <h3>티켓은 파일입니다</h3>
-      <p>상태는 파일 이름 끝에 붙고, 나머지 정보는 파일 맨 위 frontmatter에 적습니다.</p>
-    </div>
-    <div class="pillar">
-      <span class="tag t-worker">워커</span>
-      <h3>워커는 티켓을 한 건씩 뭅니다</h3>
-      <p>워커 파일 개수가 곧 동시에 도는 건수입니다. 더 돌리고 싶으면 워커를 하나 더 만드세요.</p>
-    </div>
-    <div class="pillar">
-      <span class="tag t-ui">화면</span>
-      <h3>세션이 도는 모습이 화면에 뜹니다</h3>
-      <p>홈·보드·워커·페르소나·프로토콜. 세션이 도는 중에 문장을 넣어 방향을 바꿉니다.</p>
-    </div>
-    <div class="pillar">
-      <span class="tag t-engine">엔진</span>
-      <h3>bash와 python3 표준 라이브러리</h3>
-      <p>그 밖으로 나가지 않습니다. 늘 떠 있는 프로세스도, 데이터베이스도, 인덱스도 없습니다.</p>
-    </div>
-  </div>
-</section>
-
 <div class="wrap stats">
   <ul>
     <li><b>0</b><span>엔진 의존성<br>bash + python3 표준 라이브러리</span></li>
@@ -150,11 +125,6 @@ const version = theme.value.diraVersion;
     </div>
     <div>
       <ul class="marks">
-        <li><b>그 버튼을 누르면 셋이 한꺼번에 일어납니다.</b> 빈 큐와 프로토콜·페르소나·워커
-        <code>w1.sh</code>가 <code>.dira</code> 안에 생기고, 그 워커를 부르는 줄이
-        cron에 올라가고, 앱 목록에 프로젝트가 잡힙니다. 프로젝트 소스에는 손대지 않습니다</li>
-        <li><b>cron에 쓸 때 맥이 <code>앱 관리</code> 권한을 묻습니다.</b>
-        <code>허용</code>을 누르면 하던 등록이 그대로 이어집니다</li>
         <li><b>에이전트 CLI 하나만 미리 깔아 두면 됩니다.</b> 기본값은 <code>claude</code>이고,
         깔려 있는지는 앱 <code>설정</code>이 첫 줄에서 말해 줍니다. cron이 쓸 토큰도 그 자리에서
         발급합니다</li>
@@ -168,21 +138,6 @@ const version = theme.value.diraVersion;
       </p>
     </div>
   </div>
-</section>
-
-<section class="wrap">
-  <h2>여기 없는 것</h2>
-  <p class="body" style="max-width:44em; margin-bottom:32px">아래는 아직 못 만든 것이 아니라, 안 만들기로 한 것입니다.</p>
-  <ul class="limits">
-    <li><b>서버로 배포하지 않습니다.</b> 호스팅도 도메인도 원격 접속도 없습니다. 앱은 설치한 맥에서만 돌고, 그 맥의 파일을 직접 읽고 씁니다.</li>
-    <li><b>로그인도 계정 구분도 없습니다.</b> 그 맥의 파일 권한이 곧 권한입니다.</li>
-    <li><b>데스크톱 앱은 macOS(Apple Silicon)만 됩니다.</b> 엔진 자체는 macOS와 Linux에서 돕니다.</li>
-    <li><b>실시간 알림이 없습니다.</b> 화면이 주기적으로 다시 읽어 옵니다. 모바일 레이아웃도 없습니다.</li>
-    <li><b>프로젝트를 자동으로 찾지 않습니다.</b> 디스크를 훑지 않고, 쓸 프로젝트를 직접 등록합니다.</li>
-    <li><b>우선순위가 없습니다.</b> 순서는 만든 날짜와 <code>deps</code>(먼저 끝나야 하는 티켓) 둘이 정합니다.</li>
-    <li><b>티켓 수백 건 규모를 전제합니다.</b> 워커가 깨어날 때마다 큐 디렉터리를 통째로 훑습니다. 인덱스가 없습니다.</li>
-    <li><b>워커를 만들 때마다 macOS가 <code>앱 관리</code> 권한을 묻습니다.</b> 한 번 허용해도 다음 등록 때 또 묻습니다.</li>
-  </ul>
 </section>
 
 <section class="wrap">

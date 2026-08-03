@@ -112,22 +112,6 @@ html { scroll-behavior: smooth; }
 .dira-landing .cta { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
 .dira-landing .cta-note { margin: 16px 0 0; font-size: 12.5px; color: var(--faint); font-family: var(--mono); }
 
-/* ── pillar grid ────────────────────────────────── */
-/* ④ 4열이다. 2×2면 카드가 509px인데 15.5px 제목 + 2줄뿐이라 가로가 비고 네 개념이
-   두 쌍으로 읽힌다 — 바로 아래 .stats가 같은 4항목을 4열로 놓아 셈도 어긋났다.
-   거터도 .steps(20px)에 맞춘다. 900px 이하 1열은 아래 @media 그대로다. */
-.dira-landing .pillars { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; text-align: left; }
-.dira-landing .pillar { border: 1px solid var(--border); border-radius: 12px; padding: 20px; background: var(--panel); }
-.dira-landing .tag {
-  display: inline-block; margin-bottom: 12px; padding: 3px 9px; border-radius: 5px;
-  font-family: var(--mono); font-size: 10.5px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase;
-}
-.dira-landing .t-queue  { color: var(--blocked); background: color-mix(in oklab, var(--blocked) 12%, transparent); }
-.dira-landing .t-worker { color: var(--active);  background: color-mix(in oklab, var(--active) 12%, transparent); }
-.dira-landing .t-ui     { color: var(--done);    background: color-mix(in oklab, var(--done) 12%, transparent); }
-.dira-landing .t-engine { color: var(--stale);   background: color-mix(in oklab, var(--stale) 12%, transparent); }
-.dira-landing .pillar p { margin: 0; font-size: 14px; color: var(--muted-fg); line-height: 1.6; }
-
 /* ── figures ────────────────────────────────────── */
 .dira-landing figure { margin: 0; }
 .dira-landing .shot { display: block; width: 100%; height: auto; border: 1px solid var(--border); border-radius: 12px; background: #fff; }
@@ -209,12 +193,6 @@ html { scroll-behavior: smooth; }
 }
 .dira-landing pre .c { color: var(--faint); }
 
-/* ── limits ─────────────────────────────────────── */
-.dira-landing .limits { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 0 48px; }
-.dira-landing .limits li { padding: 14px 0 14px 20px; position: relative; font-size: 14px; color: var(--muted-fg); line-height: 1.6; border-top: 1px solid var(--border); }
-.dira-landing .limits li::before { content: "—"; position: absolute; left: 0; color: var(--faint); }
-.dira-landing .limits b { color: var(--fg); font-weight: 650; }
-
 /* ── closing ────────────────────────────────────── */
 .dira-landing .closing { background: var(--panel); border-top: 1px solid var(--border); padding: 96px 0; text-align: center; }
 .dira-landing .closing .body { max-width: 34em; margin: 0 auto 34px; }
@@ -239,7 +217,7 @@ html { scroll-behavior: smooth; }
 @media (max-width: 599px) { .dira-landing .fbot .sep { margin-left: 0; } }
 
 @media (max-width: 900px) {
-  .dira-landing .pillars, .dira-landing .limits, .dira-landing .gallery { grid-template-columns: 1fr; }
+  .dira-landing .gallery { grid-template-columns: 1fr; }
   /* .two는 plain 1fr로 접으면 안 된다 — 단일 트랙이어도 안의 <pre>(white-space:pre)
      때문에 트랙 최소폭이 여전히 내용에 맞춰져 390px에서 페이지가 가로로 샌다.
      minmax(0, 1fr)로 트랙 최소폭을 0으로 눌러야 <pre>의 overflow-x:auto가 대신 받는다. */
@@ -250,5 +228,4 @@ html { scroll-behavior: smooth; }
   .dira-landing .fgrid { grid-template-columns: 1fr 1fr; }
   .dira-landing section, .dira-landing .closing { padding: 64px 0; }
   .dira-landing .hero { padding-top: 56px; }
-  .dira-landing .limits li:first-child + li { border-top: 1px solid var(--border); }
 }
