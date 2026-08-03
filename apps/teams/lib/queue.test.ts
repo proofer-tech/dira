@@ -27,6 +27,7 @@ import {
   reqOf,
   reqTitle,
   resolveDep,
+  sortTableRows,
   sortTickets,
   statusOf,
   stemOf,
@@ -537,6 +538,27 @@ test("보드 — 5상태 판정 · 필터 AND/OR · 검색 대상 · 정렬", as
     sortTickets(tickets, "status", false).map((t) => statusOf(t)),
     ["open", "open", "open", "blocked", "blocked", "blocked", "assigned", "wip", "done"],
   );
+
+  // 테이블만 기본이 다르다 — 생성일 내림차순(§1 보드 §테이블 기본 순서. 요구 `1208e64a`).
+  // 파라미터 없는 화면의 첫 행이 `birth`가 가장 큰 티켓이라는 것.
+  const queueOrder = hashes(tickets);
+  assert.deepStrictEqual(hashes(sortTableRows(tickets, null, false)), [...queueOrder].reverse());
+  assert.strictEqual(
+    sortTableRows(tickets, null, false)[0],
+    [...tickets].sort((a, b) => b.birth - a.birth)[0],
+  );
+  // 입력을 제자리에서 뒤집지 않는다 — 같은 목록을 칸반·건수·관계선이 큐 순서로 계속 쓴다
+  assert.deepStrictEqual(hashes(tickets), queueOrder);
+  assert.deepStrictEqual(hashes(sortTickets(tickets, null, false)), queueOrder);
+  // 파라미터가 실리면 기본이 끼어들지 않는다 — 헤더 클릭 3단계가 종전 규칙 그대로다
+  for (const [key, desc] of [
+    ["created", false],
+    ["title", true],
+  ] as const)
+    assert.deepStrictEqual(
+      hashes(sortTableRows(tickets, key, desc)),
+      hashes(sortTickets(tickets, key, desc)),
+    );
 });
 
 // ── 요구사항 왕복 (DESIGN.md §요구사항 레이어) ───────────────────────────────

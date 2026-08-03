@@ -52,6 +52,7 @@ import {
 import {
   HIDE_DONE_STATUSES,
   SORT_KEYS,
+  TABLE_DEFAULT_SORT,
   awaitingOf,
   filterTickets,
   inDefaultList,
@@ -59,6 +60,7 @@ import {
   listTickets,
   depBadges,
   relationEdges,
+  sortTableRows,
   sortTickets,
   statusOf,
   threadOf,
@@ -157,6 +159,10 @@ export default async function Board({
   const sortKey = SORT_KEYS.find((k) => k === sortParam) ?? null; // 모르는 값은 큐 순서로 떨어진다
   const desc = sp.get("dir") === "desc";
   const rows = sortTickets(filterTickets(tickets, query), sortKey, desc);
+  // 테이블만 기본 순서가 다르다 — 생성일 내림차순(§1 보드 §테이블 기본 순서). 뒤집는 자리가
+  // 여기(테이블 렌더 직전)인 이유: 아래 칸반·건수·관계선은 전부 `rows`(큐 순서)를 그대로 쓴다.
+  // 파라미터가 실려 있으면 `rows`와 같은 순서다(같은 키·같은 방향이라 결과가 같다).
+  const tableRows = sortTableRows(rows, sortKey, desc);
   // 건수의 분모는 **기본 목록에 드는 수**다(`kind: answer` 제외 후, §1 보드). `tickets.length`를
   // 쓰면 필터를 안 걸었는데도 `12 / 14건`으로 보여 답변 파일이 필터처럼 읽힌다.
   // `tickets`(전체)는 deps 해석·선택지 목록이 계속 쓴다 — 거기서 답변을 빼면 요구사항의 답변 dep이
@@ -201,8 +207,10 @@ export default async function Board({
   const href = (t: Ticket) => `/p/${id}/tickets/${encodeURIComponent(t.stem)}`;
   const qs = (next: URLSearchParams) => (next.toString() ? `?${next}` : `/p/${id}`);
 
-  /** 헤더 클릭 3단계: 오름차순 → 내림차순 → 큐 순서로 복귀. 정렬을 끌 방법이 없으면
-   *  기본 순서(= CLI와 같은 순서)를 다시 못 본다. */
+  /** 헤더 클릭 3단계: 오름차순 → 내림차순 → 기본 복귀. 정렬을 끌 방법이 없으면 기본 순서를
+   *  다시 못 본다. 돌아가는 곳은 파라미터가 없는 화면이고 그 테이블은 생성일 내림차순이다
+   *  (§테이블 기본 순서). `생성일`은 마지막 두 칸이 같은 순서를 그리지만(파라미터 유무만
+   *  다르다) **특례를 만들지 않는다** — 규칙이 8컬럼에 하나여야 한다. */
   const sortHref = (key: SortKey) => {
     const next = new URLSearchParams(sp);
     if (sortKey === key && desc) {
@@ -601,8 +609,16 @@ export default async function Board({
                 <TableHeader className="sticky top-0 z-20">
                   <TableRow className="h-9 hover:bg-transparent">
                     {COLUMNS.map(({ key, label }) => {
-                      const active = sortKey === key;
-                      const Icon = !active ? ChevronsUpDown : desc ? ArrowDown : ArrowUp;
+                      // 파라미터가 없으면 화면이 `생성일` 내림차순으로 서 있다 — 그 자리에서
+                      // 헤더도 활성 + `ArrowDown`이다(§1 보드. 아니면 헤더가 거짓말을 한다).
+                      // 클릭 3단계는 이 표시와 무관하게 `sortHref`가 실제 `sortKey`로 정한다 —
+                      // `생성일`에 특례가 없다.
+                      const active = key === (sortKey ?? TABLE_DEFAULT_SORT);
+                      const Icon = !active
+                        ? ChevronsUpDown
+                        : desc || !sortKey
+                          ? ArrowDown
+                          : ArrowUp;
                       return (
                         // 배경은 셀이 든다(위 `thead` 주석). 행의 `border-b`는 collapse된 표에서
                         // 고정된 헤더를 안 따라오므로 밑줄을 `inset` 그림자로 셀에 직접 그린다
@@ -627,7 +643,7 @@ export default async function Board({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {rows.length === 0 ? (
+                  {tableRows.length === 0 ? (
                     // 필터 0건 — 헤더는 남긴다(컬럼이 사라지면 필터를 지운 건지 데이터가 없는 건지
                     // 구분이 안 된다). 문구·액션이 빈 큐와 다른 이유도 같다(§6).
                     <TableRow className="hover:bg-transparent">
@@ -636,7 +652,7 @@ export default async function Board({
                       </TableCell>
                     </TableRow>
                   ) : (
-                    rows.map((t) => (
+                    tableRows.map((t) => (
                       // 행 전체가 상세로 가는 링크다 — 해시 셀의 링크를 행 크기로 늘린다(§7 대비:
                       // 여기는 행 액션 버튼이 없어서 행 링크가 안전하다). deps 배지는 그 위에 뜬다.
                       <TableRow key={t.path} className="relative h-9 focus-within:bg-muted/50">

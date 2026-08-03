@@ -457,6 +457,17 @@ export function sortTickets(tickets: Ticket[], key: SortKey | null, desc: boolea
   });
 }
 
+/** 테이블 기본 순서 = **생성일 내림차순**(§1 보드 §테이블 기본 순서. 요구 `1208e64a`).
+ *  테이블을 여는 사람이 찾는 것은 디스패치 차례가 아니라 방금 무슨 일이 있었나다. */
+export const TABLE_DEFAULT_SORT: SortKey = "created";
+
+/** 테이블 렌더 직전에 한 번 — `sort`가 URL에 없을 때만 기본을 씌운다. `sortTickets`를 안 뒤집는
+ *  이유: 칸반·건수·관계선이 같은 목록을 큐 순서로 쓴다(순서는 표현이지 상태가 아니다). URL에는
+ *  아무것도 안 붙는다(§정본 URL) — 그래서 기본이 파라미터가 아니라 여기 있다. */
+export function sortTableRows(tickets: Ticket[], key: SortKey | null, desc: boolean): Ticket[] {
+  return key ? sortTickets(tickets, key, desc) : sortTickets(tickets, TABLE_DEFAULT_SORT, true);
+}
+
 // ── 관계 (티켓 상세 §2) ─────────────────────────────────────────────────────
 
 /** 상태 접미사를 뗀 파일명 stem. deps 해시가 가리키는 이름이 이것이다(tickets.py _find_stem). */
