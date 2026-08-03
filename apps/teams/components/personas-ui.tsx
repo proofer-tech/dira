@@ -55,6 +55,15 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarGroup,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+} from "@/components/ui/sidebar";
 import { Textarea } from "@/components/ui/textarea";
 import type { Memory, Skill } from "@/lib/skills";
 import { PERSONA_COLORS, personaDotClass } from "@/lib/urls";
@@ -278,6 +287,12 @@ const editChars = (e: PersonaEdit) =>
 /** 2단 — 왼쪽이 목록, 오른쪽이 고른 페르소나(§5). 조립은 §6 프로토콜 화면과 같다
  *  (왼쪽 고정폭 + 오른쪽 `grow`, 좁으면 세로로 쌓인다).
  *
+ *  **왼쪽 그릇이 shadcn `sidebar`다**(`0740c4dc`, 요구 `14529463` — §비주얼 §34 판정표
+ *  `페르소나 목록` 행). `2e303100`이 이 2단을 세울 때 적은 *새 shadcn 컴포넌트 0개다*를 그
+ *  요구가 뒤집었다. **갈린 것은 그릇과 면 둘뿐**이고 §5의 값은 한 자도 안 갈렸다 —
+ *  줄이 이는 값 여덟 · baseline 정렬 · 줄 안에 버튼 0개 · 오른쪽 칸 전부 · 0개면
+ *  `<EmptyState>`(그 판정은 부르는 쪽에 있다: 2단도 사이드바도 안 그린다).
+ *
  *  **선택을 URL에 담지 않는다**(§5). 담으면 서버가 다시 렌더하면서 앞 페르소나의 textarea가
  *  언마운트돼 저장 안 한 편집이 사라진다 — §6이 `?file=`을 쓰는 것은 그 화면에 열려 있는
  *  편집기가 하나뿐이기 때문이다. `// ponytail: 딥링크가 생기면 그때 `?persona=`로 초기 선택만`. */
@@ -305,64 +320,106 @@ export function PersonasPane({
   const editOf = (row: PersonaRow) => edits[row.name] ?? initialEdit(row);
 
   return (
-    <div className="flex flex-col gap-6 lg:flex-row">
+    // **이 2단 행 자신이 `SidebarProvider`다**(§비주얼 §34 ①) — `Sidebar`가 `collapsible="none"`
+    // 에서도 `useSidebar()`를 무조건 부르므로 Provider가 있어야 하는데, Provider가 내는 것도
+    // `flex` `div` 하나라 **새 요소가 0개다.** `layout.tsx`에 세우지 않는 이유는 2단이 없는
+    // 다섯 화면에도 그 `div`가 얹혀서다(§34 §범위).
+    // **`min-h-0`이 Provider 기본 `min-h-svh`를 덮는다**(`cn`이 `min-h-*`를 병합한다) —
+    // 안 덮으면 페르소나가 적은 큐에서 빈 화면 높이가 생긴다.
+    <SidebarProvider className="min-h-0 flex-col gap-6 lg:flex-row">
       {/* 왼쪽 목록 — 줄 자체가 선택을 받는다. **안에 버튼이 없다**(§5): 색·삭제가 오른쪽 머리로
-          갔으므로 버튼 안의 버튼도 `preventDefault` 처방도 없다 */}
-      <nav aria-label="페르소나" className="w-full shrink-0 space-y-0.5 lg:w-80">
-        {rows.map((row) => {
-          const e = editOf(row);
-          const refs = refsLabel(row.refs);
-          return (
-            <button
-              key={row.name}
-              type="button"
-              // 색 말고도 표식이 있다(§비주얼 §0) — §6 프로토콜 트리의 선택 줄과 같은 값이다
-              aria-current={row.name === current.name ? "true" : undefined}
-              onClick={() => setSelected(row.name)}
-              className={cn(
-                "block w-full cursor-pointer space-y-0.5 rounded-md px-2 py-1.5 text-left hover:bg-muted",
-                row.name === current.name && "bg-muted font-medium",
-              )}
-            >
-              {/* 값이 여덟이고 칸이 좁다 — 이름 줄과 메타 줄로 세운다(§5). 값을 빼지 않는다.
-                  글자는 밑선이고(§5 정렬 표) 껍데기(점 · 배지 2종)는 행의 세로 중앙이다 */}
-              <span className="flex items-baseline gap-2">
-                {/* 왼쪽 줄의 점은 **읽기 전용**이다 — 고르는 자리는 오른쪽 머리다(§5) */}
-                <PersonaDot color={colors[row.name]} />
-                <span className="min-w-0 truncate font-mono text-sm">{row.name}</span>
-                {e.saved === null && (
-                  <Badge variant="outline" className="self-center">
-                    프로필 없음
-                  </Badge>
-                )}
-                {/* 저장 버튼이 오른쪽에 있다 — 다른 줄을 고른 채 잊으면 이게 유일한 표시다(§5) */}
-                {e.body !== (e.saved ?? "") && (
-                  <Badge variant="outline" className="ml-auto self-center">
-                    저장 안 됨
-                  </Badge>
-                )}
-              </span>
-              <span className="flex items-baseline gap-2 text-xs text-muted-foreground">
-                <span className="min-w-0 truncate" title={row.file}>
-                  {refs ? `티켓 ${refs}` : "참조하는 티켓 없음"}
-                </span>
-                {/* `티켓 n` 뒤 · 자수 앞 — "무엇을 참조하나 → 무엇을 쓰나 → 얼마나 먹나"다
-                    (§비주얼 §25 ①). 0개면 안 그린다: 고정폭 메타라 빠져도 줄이 안 흔들린다 */}
-                {e.skills.length > 0 && <span className="whitespace-nowrap">스킬 {e.skills.length}</span>}
-                {/* `스킬 n` 뒤 · `자수` 앞이다(§비주얼 §32 ①) — "무엇을 참조하나 → 무엇을 쓰나 →
-                    **무엇을 배웠나** → 얼마나 먹나". `장`을 안 붙인다: 앞 둘과 같은 종류의 값이다 */}
-                {e.memories.length > 0 && (
-                  <span className="whitespace-nowrap">메모리 {e.memories.length}</span>
-                )}
-                {/* 프로필 본문은 **모든 디스패치 프롬프트에 인라인된다** — 길이가 곧 비용이다(§5).
-                    목록에 둬야 "누가 프롬프트를 얼마나 먹는가"를 비교할 수 있다. `skills.md` ·
-                    `memory/*.md`도 매 디스패치에 인라인되므로 **셋의 합**이다(§비주얼 §32 ①) */}
-                <span className="ml-auto font-mono whitespace-nowrap">{editChars(e)}자</span>
-              </span>
-            </button>
-          );
-        })}
-      </nav>
+          갔으므로 버튼 안의 버튼도 `preventDefault` 처방도 없다.
+          **그릇이 `nav` + `button` 목록에서 shadcn `sidebar`로 갈렸다**(요구 `14529463` ·
+          §비주얼 §34 판정표 `페르소나 목록` 행). **랜드마크를 안 세운다** — 줄이 링크가 아니라
+          버튼이라 내비가 아니다. 이름은 아래 `SidebarMenu`(ul)의 `aria-label`이 든다.
+          **면이 선다**(§34 ④ — 이 자리는 종전에 면도 테두리도 없었다). 면을 내는 것은
+          `bg-surface`이고 부품 기본 `bg-sidebar`를 덮는다(§34 ②): 그 토큰은 라이트에서
+          `--surface`와 **같은 값**이지만 다크에서 `--card`(0.205)라, 그대로 두면 카드 대 면이
+          1.00이 되고 칸반 레인(0.18)과 갈려 층이 셋이라는 §33의 계약이 화면마다 깨진다.
+          폭은 종전 그대로 `w-full … lg:w-80`이다 — CSS 변수 `--sidebar-width`로는 브레이크포인트를
+          못 주므로 `Sidebar`의 className이 든다(§34 ①). */}
+      <Sidebar collapsible="none" className="w-full shrink-0 rounded-lg border bg-surface lg:w-80">
+        {/* `py-2`가 면의 세로 패딩이고, 부품 기본 `min-h-0 flex-1 overflow-auto`가 스크롤을 든다.
+            **가로 패딩은 0이다**(`SidebarGroup className="p-0"`) — 줄이 `p-2`로 그 8px을 이미
+            들고 있어 면이 더하면 줄 안쪽이 16px 줄어 잘리는 자리가 옮겨 간다(§33 · §34 §값 여덟).
+            그룹이 하나뿐이라 `SidebarContent`의 그룹 사이 `gap`도, `SidebarGroupLabel`도 없다 —
+            이 목록은 머리 낱말이 원래 0개다(§5). */}
+        <SidebarContent className="py-2">
+          <SidebarGroup className="p-0">
+            {/* 줄 사이 간격이 0.5(2px)였던 자리를 `SidebarMenu`의 `gap-0.5`가 든다(§34 판정표) */}
+            <SidebarMenu aria-label="페르소나" className="gap-0.5">
+              {rows.map((row) => {
+                const e = editOf(row);
+                const refs = refsLabel(row.refs);
+                const active = row.name === current.name;
+                return (
+                  <SidebarMenuItem key={row.name}>
+                    {/* **선택 표식이 `isActive` 하나다**(§34 ③) — 겹이 둘이고(면
+                        `bg-sidebar-accent` = `--muted` 값 + `font-medium`) 종전 `bg-muted
+                        font-medium`과 **같은 값**이다. `aria-current`는 종전에도 있었다.
+                        **`render`를 안 준다** — 기본 태그 `<button>`이고, 여기에
+                        `render={<Link>}`를 쓰면 선택이 URL에 담겨 서버 재렌더가 편집 중
+                        textarea를 언마운트한다(§34 서는 못 4 · 아래 절 머리 주석).
+                        남는 클래스가 셋이다: 부품에 없는 `cursor-pointer` · 접기용 고정 높이
+                        `h-8`을 덮는 `h-auto`(2행 줄이 눌린다) · 2행 묶음을 윗줄에 붙이는
+                        `items-start`. */}
+                    <SidebarMenuButton
+                      type="button"
+                      className="h-auto cursor-pointer items-start"
+                      isActive={active}
+                      aria-current={active ? "true" : undefined}
+                      onClick={() => setSelected(row.name)}
+                    >
+                      {/* 값이 여덟이고 칸이 좁다 — 이름 줄과 메타 줄로 세운다(§5). 값을 빼지 않는다.
+                          글자는 밑선이고(§5 정렬 표) 껍데기(점 · 배지 2종)는 행의 세로 중앙이다.
+                          **`span`이 아니라 `div`다** — 부품의 `[&>span:last-child]:truncate`가
+                          직계 `span`을 물어서, 이 묶음이 `span`이면 두 줄짜리 상자에 `truncate`가
+                          걸린다(홈의 2행 줄과 같은 처리) */}
+                      <div className="flex min-w-0 grow flex-col gap-0.5">
+                        <span className="flex items-baseline gap-2">
+                          {/* 왼쪽 줄의 점은 **읽기 전용**이다 — 고르는 자리는 오른쪽 머리다(§5) */}
+                          <PersonaDot color={colors[row.name]} />
+                          <span className="min-w-0 truncate font-mono text-sm">{row.name}</span>
+                          {e.saved === null && (
+                            <Badge variant="outline" className="self-center">
+                              프로필 없음
+                            </Badge>
+                          )}
+                          {/* 저장 버튼이 오른쪽에 있다 — 다른 줄을 고른 채 잊으면 이게 유일한 표시다(§5) */}
+                          {e.body !== (e.saved ?? "") && (
+                            <Badge variant="outline" className="ml-auto self-center">
+                              저장 안 됨
+                            </Badge>
+                          )}
+                        </span>
+                        <span className="flex items-baseline gap-2 text-xs text-muted-foreground">
+                          <span className="min-w-0 truncate" title={row.file}>
+                            {refs ? `티켓 ${refs}` : "참조하는 티켓 없음"}
+                          </span>
+                          {/* `티켓 n` 뒤 · 자수 앞 — "무엇을 참조하나 → 무엇을 쓰나 → 얼마나 먹나"다
+                              (§비주얼 §25 ①). 0개면 안 그린다: 고정폭 메타라 빠져도 줄이 안 흔들린다 */}
+                          {e.skills.length > 0 && (
+                            <span className="whitespace-nowrap">스킬 {e.skills.length}</span>
+                          )}
+                          {/* `스킬 n` 뒤 · `자수` 앞이다(§비주얼 §32 ①) — "무엇을 참조하나 → 무엇을 쓰나 →
+                              **무엇을 배웠나** → 얼마나 먹나". `장`을 안 붙인다: 앞 둘과 같은 종류의 값이다 */}
+                          {e.memories.length > 0 && (
+                            <span className="whitespace-nowrap">메모리 {e.memories.length}</span>
+                          )}
+                          {/* 프로필 본문은 **모든 디스패치 프롬프트에 인라인된다** — 길이가 곧 비용이다(§5).
+                              목록에 둬야 "누가 프롬프트를 얼마나 먹는가"를 비교할 수 있다. `skills.md` ·
+                              `memory/*.md`도 매 디스패치에 인라인되므로 **셋의 합**이다(§비주얼 §32 ①) */}
+                          <span className="ml-auto font-mono whitespace-nowrap">{editChars(e)}자</span>
+                        </span>
+                      </div>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
+            </SidebarMenu>
+          </SidebarGroup>
+        </SidebarContent>
+      </Sidebar>
 
       <div className="min-w-0 grow">
         <PersonaDetail
@@ -378,7 +435,7 @@ export function PersonasPane({
           configDir={configDir}
         />
       </div>
-    </div>
+    </SidebarProvider>
   );
 }
 
