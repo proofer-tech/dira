@@ -184,9 +184,9 @@ html { scroll-behavior: smooth; }
   .dira-landing .plans { grid-template-columns: 1fr; }
 }
 
-/* 카드가 자기 내용 높이로 선다. stretch면 Pro·Enterprise 아래가 통째로 비고,
-   그 빈칸을 채울 값이 정본에 없다(금액도 CTA도 안 만든다). */
-.dira-landing .plans { align-items: start; }
+/* 카드 셋이 같은 높이로 선다 — 그리드 기본값(normal = stretch)이라 적을 선언이 없다.
+   Pro·Enterprise 아래가 비는데 그 빈칸을 채울 값이 정본에 없다(금액도 CTA도 안 만든다).
+   흰 자리가 산출물이다 — 빠뜨린 자리로 읽고 채우지 않는다. */
 .dira-landing .plans > li { padding: 24px; }
 /* 지금 쓸 수 있는 것은 Free 하나다. 두께 · 면 · 크기는 그대로라 격자가 안 흔들린다.
    색만으로 지는 의미가 아니다 — 그 사실은 카드 안에 글자로 이미 서 있다. */
