@@ -6,7 +6,7 @@
  *
  *  **여기가 틀리면 사건이 조용히 사라진다.** 그래서 이 파일의 계약은 두 줄이다:
  *  모르는 것은 던지지 말고 건너뛴다, 그리고 **불완전한 마지막 줄은 버리고 offset을 되돌린다**. */
-import { access, open, readdir } from "node:fs/promises";
+import { access, open, readdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 
@@ -52,7 +52,8 @@ export async function findTranscript(
   } catch {
     return null; // projects 디렉터리 자체가 없는 머신(Codex 큐 등)도 빈 상태다
   }
-  // ponytail: 디렉터리 수만큼 access(실측 이 머신 864개). `fs.glob`이 하는 일과 같고
+  // ponytail: 디렉터리 수만큼 access(**디렉터리** 실측 이 머신 75개 · 2026-08-04. 그 아래 트랜스크립트
+  // 파일은 1900개대이고 §2-1 본문의 `864개`가 세는 것이 그 축이다). `fs.glob`이 하는 일과 같고
   // @types/node@20에 없는 API를 안 쓴다. 느려지면 <session_id> → 경로를 프로세스 캐시에 둔다.
   const hits = (
     await Promise.all(
@@ -123,6 +124,50 @@ export async function tailEvents(
   } finally {
     await fh.close();
   }
+}
+
+/** 이 세션이 **방금 한 일** 하나 — `.wip` 칸반 카드 맨 아래 줄의 값이다(§1-1).
+ *
+ *  파일 **전문**을 읽고 **뒤에서부터** 줄 단위로 훑어 첫 `tool_use`·assistant `text`에서 멈춘다.
+ *  `tool_result`·`thinking`·`prompt`·`interject`는 *진행중이다*만 말하는데 그건 이미 셋이 말한다
+ *  (레인 · §18 점 · §19 워커 마크) — 걸러도 갱신은 산다(§1-1 실측: 남는 둘의 간격 p50 8.6s).
+ *  히트 0 · 읽기 실패는 둘 다 `null`이고 화면은 **줄 자체를 안 세운다**(§1-1 §없을 때 · §경계).
+ *
+ *  **꼬리 창으로는 못 맞힌다.** 거대한 `tool_result` 한 줄이 창을 통째로 먹어서(실측 한 줄 최대
+ *  1307KB) 64KB 창의 적중률이 90.00%다 — 놓치는 조건이 *방금 큰 도구 결과가 왔을 때*라
+ *  세션이 제일 바쁠 때 줄이 꺼진다(§1-1 §꼬리 창을 안 쓰는 이유).
+ *
+ *  ponytail: 트랜스크립트 전문을 읽고 뒤에서 훑는다(실측 p90 1.5MB · 5건 3.6ms). 파일이 수십
+ *  MB가 되거나 진행중이 두 자릿수가 되면 그때 꼬리 창 + 미스 시 직전 값 유지(세션별 오프셋 캐시) */
+export async function lastActivity(file: string): Promise<StreamEvent | null> {
+  let buf: Buffer;
+  try {
+    buf = await readFile(file);
+  } catch {
+    return null; // 삭제·권한·아직 없는 파일 — 사람에게는 `히트 0`과 같은 뜻이다(*지금 말할 게 없다*)
+  }
+  // 줄을 끊는 것은 **바이트**다(`tailEvents`와 같은 근거 — `\n`은 UTF-8 멀티바이트 시퀀스 안에
+  // 나타나지 않는다). 그래서 **훑은 줄만 문자열이 된다**: 전문을 `toString().split("\n")`으로 한 번에
+  // 펴면 11MB 파일 하나에 50ms가 드는데(실측) 실제로 파싱하는 것은 뒤 두세 줄·수 KB다.
+  let end = buf.length; // 지금 보는 줄은 `[개행+1, end)`
+  while (end > 0) {
+    const nl = buf.lastIndexOf(0x0a, end - 1); // -1이면 파일의 첫 줄이다
+    const line = buf.toString("utf8", nl + 1, end);
+    end = nl < 0 ? 0 : nl;
+    if (!line.trim()) continue; // 마지막 줄은 개행 뒤 빈 문자열이고, append 중이면 반쪽 줄이다
+    let rec: unknown;
+    try {
+      rec = JSON.parse(line);
+    } catch {
+      continue; // 깨진 줄에 **멈추지 않는다** — 그 한 줄 때문에 줄이 꺼지는 것이 최악이다
+    }
+    // 같은 레코드 안에서는 뒤 블록이 더 나중이다(assistant 한 장이 thinking+text+tool_use를 담는다)
+    const hit = recordToEvents(rec)
+      .filter((e) => e.kind === "tool_use" || e.kind === "text")
+      .pop();
+    if (hit) return hit;
+  }
+  return null;
 }
 
 /** **사람이 쓴 참견이 아니라 하니스가 스스로 밀어 넣은 봉투**를 거른다.

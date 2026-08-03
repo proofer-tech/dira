@@ -3,7 +3,7 @@ import assert from "node:assert";
 import { appendFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { findTranscript, recordToEvents, sessionIdOf, tailEvents } from "./transcript.ts";
+import { findTranscript, lastActivity, recordToEvents, sessionIdOf, tailEvents } from "./transcript.ts";
 import { expandable } from "./urls.ts";
 
 /** 픽스처는 전부 임시 디렉터리다 — **`~/.claude/projects`를 건드리지 않는다**(§수용조건).
@@ -123,6 +123,83 @@ test("tailEvents — 흘릴 수 없는 레코드를 조용히 건너뛴다. 던�
   );
   const r = await tailEvents(f, 0);
   assert.deepEqual(r.events.map((e) => e.body), ["살아남는다"]);
+});
+
+// ---------- 방금 한 일 (§1-1 · lastActivity) ----------
+
+test("lastActivity — 마지막이 tool_result·thinking이어도 그 앞의 tool_use를 준다", async () => {
+  const f = path.join(tmp, "last-tool-use.jsonl");
+  writeFileSync(
+    f,
+    assistant([{ type: "text", text: "먼저 읽어 본다" }]) +
+      assistant([{ type: "tool_use", name: "Read", input: { file_path: `${APP_CWD}/lib/queue.ts` } }]) +
+      rec({
+        type: "user",
+        uuid: "u-r",
+        timestamp: "2026-07-30T13:55:11.000Z",
+        message: { role: "user", content: [{ type: "tool_result", content: "300줄" }] },
+      }) +
+      assistant([{ type: "thinking", thinking: "생각 중" }]),
+  );
+  const e = await lastActivity(f);
+  assert.equal(e?.kind, "tool_use");
+  assert.equal(e?.label, "Read");
+  assert.equal(e?.summary, `${APP_DIR}/lib/queue.ts`); // §9 서체 판정도 그대로 실려 온다
+  assert.equal(e?.summaryMono, true);
+});
+
+test("lastActivity — 같은 레코드 안에서는 뒤 블록이 이긴다. 사용자 프롬프트는 히트가 아니다", async () => {
+  const f = path.join(tmp, "last-in-record.jsonl");
+  writeFileSync(
+    f,
+    assistant([
+      { type: "thinking", thinking: "먼저 생각" },
+      { type: "text", text: "이제 고친다" },
+      { type: "tool_use", name: "Bash", input: { description: "테스트를 돌린다" } },
+    ]) + rec({ type: "user", uuid: "u-p", timestamp: "2026-07-30T13:56:00.000Z", message: { role: "user", content: "사람이 말했다" } }),
+  );
+  const e = await lastActivity(f);
+  assert.equal(e?.kind, "tool_use");
+  assert.equal(e?.label, "Bash");
+  assert.equal(e?.summary, "테스트를 돌린다");
+  assert.equal(e?.summaryMono, false); // `description`은 읽는 문장이라 sans
+});
+
+test("lastActivity — 히트 0이면 null (읽을 파일이 없어도 null)", async () => {
+  const only = path.join(tmp, "no-hit.jsonl");
+  // 거르는 넷만 있는 파일: thinking · tool_result · 참견 · 사용자 프롬프트
+  writeFileSync(
+    only,
+    assistant([{ type: "thinking", thinking: "생각만 했다" }]) +
+      rec({
+        type: "user",
+        uuid: "u-r2",
+        timestamp: "2026-07-30T13:57:00.000Z",
+        message: { role: "user", content: [{ type: "tool_result", content: "결과만 있다" }] },
+      }) +
+      ENQ,
+  );
+  assert.equal(await lastActivity(only), null);
+  assert.equal(await lastActivity(path.join(tmp, "없는파일.jsonl")), null); // 읽기 실패도 빈 상태다
+  writeFileSync(path.join(tmp, "empty.jsonl"), "");
+  assert.equal(await lastActivity(path.join(tmp, "empty.jsonl")), null);
+});
+
+test("lastActivity — 깨진 줄·반쪽 줄을 만나도 멈추지 않고 계속 올라간다", async () => {
+  const f = path.join(tmp, "last-broken.jsonl");
+  const whole = assistant([{ type: "tool_use", name: "Write", input: { file_path: `${APP_CWD}/x.ts` } }]);
+  writeFileSync(
+    f,
+    whole +
+      "{ 파싱 불가능한 줄\n" +
+      "\n" +
+      rec({ type: "unknown-future-type", timestamp: "2026-07-30T13:58:00.000Z" }) +
+      // append 중인 반쪽 줄. 개행이 없어서 마지막 배열 원소가 된다
+      assistant([{ type: "tool_use", name: "Edit", input: { file_path: `${APP_CWD}/y.ts` } }]).slice(0, 40),
+  );
+  const e = await lastActivity(f);
+  assert.equal(e?.label, "Write"); // 반쪽 `Edit`을 건너뛰고 온전한 그 앞 줄을 준다
+  assert.equal(e?.summary, `${APP_DIR}/x.ts`);
 });
 
 // ---------- 참견 (§2-2 · §2-1 queue-operation) ----------

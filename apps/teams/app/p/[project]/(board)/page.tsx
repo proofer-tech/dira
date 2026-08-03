@@ -72,6 +72,7 @@ import {
   type Ticket,
 } from "@/lib/queue";
 import { getProject, listPersonas, resolveConfig } from "@/lib/projects";
+import { findTranscript, lastActivity, sessionIdOf, type StreamEvent } from "@/lib/transcript";
 import { listWorkers, workerGroups } from "@/lib/workers";
 
 // 큐는 GUI 밖에서(cron·세션이) 바뀐다. 프리렌더하면 빌드 시점 내용이 굳는다.
@@ -126,6 +127,39 @@ function when(ms: number): string {
   const d = new Date(ms);
   const p = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+/** 히트 하나 → `.wip` 카드 맨 아래 그 한 줄. 클래스 넷은 §비주얼 §36 §값 표를 그대로 옮긴 것이다.
+ *
+ *  **새 컴포넌트를 만들지 않는다**(§36 §인벤토리 — 새 커스텀 0 · 새 토큰 0 · 새 유틸 클래스 0):
+ *  한 카드에 한 번 쓰는 4줄짜리 JSX라 이 함수가 만든 노드를 `<Card>`의 마지막 자식으로 놓는다.
+ *
+ *  `aria-hidden`이다 — 5초마다 갈리는 글이라 붙이면 스크린리더가 카드마다 계속 말한다.
+ *  `aria-live`도 `role="status"`도 안 붙는다(§18이 같은 이유로 거절했다). 정본은 §2-3이고
+ *  카드 전체가 이미 거기로 가는 링크라 이 줄에는 링크도 툴팁도 안 붙인다(§1-1 §뽑는 못).
+ *
+ *  `h-4`가 있는 이유(§36 §실측 §줄 상자): Geist Mono의 인라인 박스가 strut보다 높아서 mono가
+ *  섞인 줄만 줄 상자가 17px이 된다. 빼면 줄이 `tool_use`↔`text`로 갈릴 때마다(p50 8.6초)
+ *  **카드가 1px씩 흔들린다.** `leading-4`로는 안 잡힌다 — 줄 상자는 인라인 박스들의 합집합이다.
+ *
+ *  갈리는 축은 **서체 하나**다: `label`은 도구명이라 항상 mono, `summary`는 §9 판정
+ *  (`summaryMono`)을 그대로 받아 쓴다. 알파는 1.0이다 — 호버(`bg-muted/50`)에서 대비가 4.53까지
+ *  내려가므로 `/70`·`/80`을 얹으면 4.5:1이 깨진다(§36 §실측 §대비). `흐릿하게`는 `text-xs`가 낸다.
+ *
+ *  구분자 ` · `는 **둘 다 있을 때만** 넣는다 — `tool_use`인데 요약이 빈 도구가 실측 9.5%다.
+ *  assistant `text`는 `label`·`summary`가 둘 다 비므로(실측 히트의 13.9%) §2-1과 같은 처방으로
+ *  `body`의 첫 줄을 세운다 — 리더도 §2-1도 안 고치고 **소비자가 정하는 판정 한 줄**이다(§36). */
+function wipLine(e: StreamEvent | null) {
+  if (!e) return null;
+  const summary = e.label ? e.summary : e.body.split("\n")[0];
+  if (!e.label && !summary.trim()) return null; // 세울 글자가 없으면 줄도 없다(§1-1 §없을 때)
+  return (
+    <div aria-hidden className="h-4 truncate text-xs text-muted-foreground">
+      {e.label && <span className="font-mono">{e.label}</span>}
+      {e.label && summary ? " · " : null}
+      {summary && <span className={e.summaryMono ? "font-mono" : undefined}>{summary}</span>}
+    </div>
+  );
 }
 
 export default async function Board({
@@ -297,6 +331,31 @@ export default async function Board({
    *  20건 자르기와 레인 세로 스크롤은 여기서 못 보므로 클라이언트가 DOM·rect로 마저 거른다. */
   const relations =
     view === "kanban" ? relationEdges(tickets, config, new Set(rows.map((t) => t.stem))) : null;
+  /** `.wip` 카드가 **방금 한 일** 한 줄(§1-1 · 모양은 §비주얼 §36) — 카드와 **같은 프레임**에
+   *  서버에서 계산한다. 새 클라이언트 컴포넌트 0 · 새 Server Action 0 · 새 폴링 루프 0 ·
+   *  새 라우트 0이고, 갱신은 종전 5초 폴링(`BoardPolling`)의 서버 렌더가 그냥 낸다.
+   *
+   *  읽는 범위가 두 겹으로 좁다. **칸반에서만** 돌고(`?view=table`은 트랜스크립트 읽기 0회 —
+   *  위 `relations`와 같은 분기다), 그 안에서도 **지금 그려지는 `진행중` 레인 카드**뿐이다:
+   *  `rows`는 필터·검색을 이미 통과한 목록이고 진행중 레인은 자르기가 없어서(`DONE_LANE_LIMIT`은
+   *  완료 몫이다) 이 필터가 곧 화면의 카드 집합이다. 실측 비용은 5건에 약 9ms다(§1-1 §비용).
+   *
+   *  실패는 전부 `null`이고 그 카드에는 **줄이 없다** — `session_id` 없음 · 글롭 매치 ≠ 1(codex
+   *  큐는 트랜스크립트가 아예 없다) · 히트 0 · 읽기 실패가 사람에게 같은 뜻이다(§1-1 §없을 때). */
+  const wipLines =
+    view === "kanban"
+      ? new Map(
+          await Promise.all(
+            rows
+              .filter((t) => statusOf(t) === "wip")
+              .map(async (t) => {
+                const sid = sessionIdOf(t.fm);
+                const file = sid ? await findTranscript(sid) : null;
+                return [t.path, wipLine(file ? await lastActivity(file) : null)] as const;
+              }),
+          ),
+        )
+      : null;
   const viewHref = (v: (typeof VIEWS)[number]["value"]) => {
     const next = new URLSearchParams(sp);
     if (v === "table") next.set("view", v);
@@ -617,6 +676,15 @@ export default async function Board({
                                   thread={threadOf(tickets, t, config)}
                                 />
                               )}
+                              {/* **카드의 마지막 자식** — 이 세션이 방금 한 일 한 줄(§1-1 ·
+                                  §비주얼 §36). `.wip`에만 있다: 진행중 레인 카드만 위에서 읽었고
+                                  나머지는 `wipLines`에 키가 아예 없다(완료 카드에 세우면
+                                  갱신이 멈춘 자리에서 `방금`이 거짓말이다). 위 `AnswerDialog`와
+                                  자리를 다투지 않는다 — `isAwaiting`은 `state === "open"`만
+                                  참이라 한 카드에 둘이 같이 서지 않는다.
+                                  자기 margin은 0이다: 위 8px은 `<Card>`의 `gap-2`, 아래 16px은
+                                  `py-4`가 이미 낸다(§36 §자리와 간격 — 새 간격 값 0) */}
+                              {wipLines?.get(t.path)}
                             </Card>
                           ))
                         )}
