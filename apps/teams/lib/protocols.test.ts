@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { resolveConfig } from "./projects.ts";
 import {
+  CORE_INLINED,
   createFile,
   deleteFile,
   listTree,
@@ -142,23 +143,32 @@ test("저장 · 생성(O_EXCL) · 이름변경(덮어쓰지 않는다) · 삭제
 test("코어는 엔진 레포에서 읽고, 못 읽으면 사유다. 쓰는 경로는 없다", async (t) => {
   t.after(() => void delete process.env.DIRA_ENGINE);
   const engine = path.join(tmp, "engine");
-  mkdirSync(path.join(engine, "protocols"), { recursive: true });
+  const coreDir = path.join(engine, "protocols");
+  mkdirSync(engine, { recursive: true });
   process.env.DIRA_ENGINE = engine;
-  const full = path.join(engine, "protocols", "CORE.md");
+  const full = path.join(coreDir, "CORE.md");
 
   // ① 엔진 레포를 못 찾으면(tick.sh 없음) 던지지 않는다 — 화면은 항목만 빼고 종전대로 돈다
   const noRepo = await readCore();
   assert.ok("error" in noRepo && noRepo.error.includes(engine), `사유에 경로가 없다: ${JSON.stringify(noRepo)}`);
 
-  // ② 레포는 찾았는데 코어 파일이 없다 → 사유에 **본 경로**가 그대로 담긴다(삼키지 않는다)
+  // ② 레포는 찾았는데 코어 디렉터리가 없다 → 사유에 **본 경로**가 그대로 담긴다(삼키지 않는다)
   writeFileSync(path.join(engine, "tick.sh"), "");
-  const noFile = await readCore();
-  assert.ok("error" in noFile && noFile.error.includes(full), `사유에 경로가 없다: ${JSON.stringify(noFile)}`);
-  assert.ok("error" in noFile && noFile.error.includes("ENOENT"), "무엇이 왜 안 됐는지 남아야 한다");
+  const noDir = await readCore();
+  assert.ok("error" in noDir && noDir.error.includes(coreDir), `사유에 경로가 없다: ${JSON.stringify(noDir)}`);
+  assert.ok("error" in noDir && noDir.error.includes("ENOENT"), "무엇이 왜 안 됐는지 남아야 한다");
+
+  // ②' 디렉터리는 있는데 `.md`가 하나도 없다 → 이것도 사유다(빈 트리로 조용히 넘기지 않는다)
+  mkdirSync(coreDir);
+  writeFileSync(path.join(coreDir, "메모.txt"), "코어가 아니다\n");
+  const noMd = await readCore();
+  assert.ok("error" in noMd && noMd.error.includes(coreDir), `사유에 경로가 없다: ${JSON.stringify(noMd)}`);
 
   // ③ 있으면 경로 + 전문. 이 둘이 화면의 출처 표시와 인라인 문자 수다
   writeFileSync(full, "코어 규약\n");
-  assert.deepStrictEqual(await readCore(), { path: full, text: "코어 규약\n" });
+  assert.deepStrictEqual(await readCore(), {
+    files: [{ name: "CORE.md", path: full, text: "코어 규약\n" }],
+  });
 
   // ④ **서버에 코어를 쓰는 경로가 없다.** 편집 함수는 전부 기준 디렉터리(= 큐 안)만 받는다 —
   //    화면만 잠근 게 아니라는 증거다. 사유뿐 아니라 파일이 실제로 그대로인 것까지 본다.
@@ -167,4 +177,36 @@ test("코어는 엔진 레포에서 읽고, 못 읽으면 사유다. 쓰는 경�
   await assert.rejects(() => renameFile(shared, "tickets.md", full), /기준 디렉터리 밖/);
   await assert.rejects(() => createFile(shared, full), /기준 디렉터리 밖/);
   assert.strictEqual(readFileSync(full, "utf8"), "코어 규약\n");
+});
+
+test("코어는 한 장이 아니다 — 디렉터리의 *.md 전부 · CORE.md가 먼저 · 재귀 없음", async (t) => {
+  t.after(() => void delete process.env.DIRA_ENGINE);
+  const engine = path.join(tmp, "engine-multi");
+  const coreDir = path.join(engine, "protocols");
+  mkdirSync(path.join(coreDir, "부속"), { recursive: true });
+  writeFileSync(path.join(engine, "tick.sh"), "");
+  process.env.DIRA_ENGINE = engine;
+
+  writeFileSync(path.join(coreDir, "CORE-TICKETS.md"), "티켓 문법\n");
+  writeFileSync(path.join(coreDir, "CORE.md"), "코어 규약\n"); // 사전순으로는 뒤다 — 그래도 먼저다
+  writeFileSync(path.join(coreDir, "CORE-ZZZ.md"), "나중\n");
+  writeFileSync(path.join(coreDir, "메모.txt"), "md가 아니다\n");
+  writeFileSync(path.join(coreDir, "부속", "깊은것.md"), "한 단계만 읽는다\n");
+  mkdirSync(path.join(coreDir, "함정.md")); // 이름만 .md인 디렉터리 — readFile이 EISDIR로 터진다
+
+  const core = await readCore();
+  assert.ok("files" in core, `사유가 왔다: ${JSON.stringify(core)}`);
+  assert.deepStrictEqual(
+    core.files.map((f) => [f.name, f.text]),
+    [
+      ["CORE.md", "코어 규약\n"], // 인라인되는 것이 맨 위
+      ["CORE-TICKETS.md", "티켓 문법\n"],
+      ["CORE-ZZZ.md", "나중\n"],
+    ],
+  );
+  assert.deepStrictEqual(
+    core.files.map((f) => f.path),
+    core.files.map((f) => path.join(coreDir, f.name)),
+  );
+  assert.strictEqual(CORE_INLINED, "CORE.md"); // 배지가 붙는 유일한 이름
 });

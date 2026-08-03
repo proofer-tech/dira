@@ -21,7 +21,14 @@ import {
   SidebarProvider,
 } from "@/components/ui/sidebar";
 import { Textarea } from "@/components/ui/textarea";
-import { listTree, readCore, readTextFile, type ProtocolFile } from "@/lib/protocols";
+import {
+  CORE_INLINED,
+  listTree,
+  readCore,
+  readTextFile,
+  type CoreFile,
+  type ProtocolFile,
+} from "@/lib/protocols";
 import { getProject, resolveConfig, usingDefault } from "@/lib/projects";
 
 // 프로토콜 파일은 세션이 GUI 밖에서 고친다 — 프리렌더하면 빌드 시점 내용이 굳는다.
@@ -43,17 +50,21 @@ export default async function Protocols({
   const tree = await listTree(config.protocols);
 
   // 코어는 큐가 아니라 엔진 레포에 있고 읽기 전용이라 `?file=`(기준 디렉터리 상대경로)에 실을 수
-  // 없다 — 별도 `?core=`다. 못 읽으면 트리에서 항목만 빠진다(§프롬프트 층 결정 5).
+  // 없다 — 별도 `?core=<파일명>`이다. 못 읽으면 트리에서 항목만 빠진다(§프롬프트 층 결정 5·6).
   const core = await readCore();
-  const opened = wantCore !== undefined;
+  const coreFiles = "files" in core ? core.files : [];
+  // `core`도 사용자 입력이지만 **경로로 조립하지 않는다** — 실제로 나열해 나온 이름과 맞춰만 본다.
+  const openedCore = wantCore === undefined ? null : coreFiles.find((f) => f.name === wantCore);
 
   // `file`은 사용자 입력이다 — 서버에서 기준 디렉터리 안인지 확인한다. 밖이면 404가 아니라
   // 거부 사유를 그대로 보여준다(§6 에러 3요소: 무엇이 왜 거부됐는지 삼키지 않는다).
   let selected: ProtocolFile | null = null;
   let rejected: string | null = null;
-  if (opened) {
+  if (wantCore !== undefined) {
     // 항목이 안 보이는데 URL로 들어온 경우다 — 사유를 삼키지 않는다.
-    if ("error" in core) rejected = core.error;
+    if (!openedCore) {
+      rejected = "error" in core ? core.error : `코어 프로토콜에 없는 파일입니다: ${wantCore}`;
+    }
   } else if (file) {
     try {
       selected = await readTextFile(config.protocols, file);
@@ -105,7 +116,7 @@ export default async function Protocols({
       )}
 
       {/* 프로젝트 파일이 하나도 없어도 코어는 매 세션에 실린다 — 그때도 볼 자리를 남긴다 */}
-      {(tree.length > 0 || "path" in core) && (
+      {(tree.length > 0 || coreFiles.length > 0) && (
         // **이 행 자신이 `SidebarProvider`다**(§비주얼 §34 ①) — `Sidebar`가 `collapsible="none"`
         // 에서도 `useSidebar()`를 무조건 부르므로 Provider가 있어야 하는데, Provider가 내는 것도
         // `flex` `div` 하나라 **새 요소가 0개다.** `layout.tsx`에 세우지 않는 이유는 2단이 없는
@@ -133,22 +144,26 @@ export default async function Protocols({
                 {/* `SidebarGroupLabel`이 없다 — 이 패널은 머리 낱말이 원래 0개다(§34 판정표).
                     줄 사이 `space-y-0.5` → 부품의 `gap-0.5`. */}
                 <SidebarMenu className="gap-0.5">
-                  {"path" in core && (
-                    // 맨 위 · 자물쇠 · 편집 없음. 큐 밖 파일이라 `?file=`이 아니다.
-                    <SidebarMenuItem>
+                  {/* 맨 위 · 자물쇠 · 편집 없음. 큐 밖 파일이라 `?file=`이 아니다.
+                      배지는 인라인되는 `CORE.md`에만 — 나머지는 프로젝트 층의 비인라인 파일과
+                      같이 트리에서 배지가 없다(§프롬프트 층 결정 6 배지 표). */}
+                  {coreFiles.map((f) => (
+                    <SidebarMenuItem key={f.name}>
                       <SidebarMenuButton
                         size="sm"
                         className={ROW}
-                        isActive={opened}
-                        aria-current={opened ? "page" : undefined}
-                        render={<Link href={`/p/${id}/protocols?core=1`} />}
+                        isActive={f.name === openedCore?.name}
+                        aria-current={f.name === openedCore?.name ? "page" : undefined}
+                        render={
+                          <Link href={`/p/${id}/protocols?core=${encodeURIComponent(f.name)}`} />
+                        }
                       >
                         <Lock aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
-                        <span className="font-mono break-all">CORE.md</span>
-                        <InlineBadge chars={[...core.text].length} />
+                        <span className="font-mono break-all">{f.name}</span>
+                        {f.name === CORE_INLINED && <InlineBadge chars={[...f.text].length} />}
                       </SidebarMenuButton>
                     </SidebarMenuItem>
-                  )}
+                  ))}
                   {tree.map((e) =>
                     e.isDir ? (
                       // 디렉터리 줄은 `SidebarMenuItem` 안의 `div` 그대로다(§34 판정표) —
@@ -201,8 +216,8 @@ export default async function Protocols({
                   <span className="font-mono text-xs break-all">{rejected}</span>
                 </AlertDescription>
               </Alert>
-            ) : opened && "path" in core ? (
-              <CoreView path={core.path} text={core.text} />
+            ) : openedCore ? (
+              <CoreView file={openedCore} />
             ) : !selected ? (
               <p className="text-sm text-muted-foreground">왼쪽에서 파일을 고르세요.</p>
             ) : selected.text === null ? (
@@ -251,25 +266,46 @@ const ROW =
 /** 코어는 **읽기 전용**이다(§프롬프트 층 결정 5). `ProtocolEditor`에 플래그를 다는 대신 서버
  *  컴포넌트로 따로 그린다 — 저장·이름변경·삭제 버튼이 코드에 아예 없고 클라이언트 액션도 안 실린다.
  *  잠금이 조건문 하나가 아니라 배치다(서버 액션은 어차피 큐 안 경로만 받는다). */
-function CoreView({ path, text }: { path: string; text: string }) {
+function CoreView({ file }: { file: CoreFile }) {
+  const inlined = file.name === CORE_INLINED;
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="font-mono text-sm break-all">{path}</span>
-        <InlineBadge chars={[...text].length} />
+        <span className="font-mono text-sm break-all">{file.path}</span>
+        {inlined ? (
+          <InlineBadge chars={[...file.text].length} />
+        ) : (
+          <span className="text-xs text-muted-foreground">세션이 필요할 때 읽음</span>
+        )}
       </div>
 
       <p className="text-sm text-muted-foreground">
-        이 파일은 큐가 아니라 엔진 레포에 있습니다 — <span className="font-mono text-xs">tick.sh</span>가
-        전문을 <b className="font-medium">모든 프로젝트</b>의 모든 세션 프롬프트 맨 앞에 붙입니다.
+        이 파일은 큐가 아니라 엔진 레포에 있습니다 —{" "}
+        {inlined ? (
+          <>
+            <span className="font-mono text-xs">tick.sh</span>가 전문을{" "}
+            <b className="font-medium">모든 프로젝트</b>의 모든 세션 프롬프트 맨 앞에 붙입니다.
+          </>
+        ) : (
+          <>
+            <span className="font-mono text-xs">{CORE_INLINED}</span>가 가리키면 세션이 필요할 때
+            직접 읽습니다(프롬프트에 인라인되지는 않습니다).
+          </>
+        )}{" "}
         여기서는 읽기만 합니다(이 화면이 고치는 것은 프로젝트 층입니다).
       </p>
 
-      <Textarea aria-label="CORE.md 원문" className="font-mono" rows={28} readOnly value={text} />
+      <Textarea
+        aria-label={`${file.name} 원문`}
+        className="font-mono"
+        rows={28}
+        readOnly
+        value={file.text}
+      />
 
       <div className="flex items-center justify-end">
         <span className="text-xs text-muted-foreground tabular-nums">
-          {[...text].length.toLocaleString()}자
+          {[...file.text].length.toLocaleString()}자
         </span>
       </div>
     </div>

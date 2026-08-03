@@ -64,23 +64,46 @@ function byTreeOrder(a: ProtocolEntry, b: ProtocolEntry): number {
   return A.length - B.length;
 }
 
-/** 코어 프로토콜 — **큐에 없다.** `<엔진 레포>/protocols/CORE.md`에 살고 엔진이 매 세션
- *  프롬프트 맨 앞에 인라인한다(`tick.sh:266`, DESIGN.md §프롬프트 층 결정 5). 그래서 이 모듈이
- *  코어에 주는 것은 이 읽기 하나뿐이다 — 저장·생성·삭제·이름변경은 전부 기준 디렉터리(= 큐 안)
- *  안에서만 도는 함수라, 화면을 잠그는 것과 별개로 **코어를 쓰는 경로 자체가 서버에 없다.**
+/** 코어 프로토콜 한 장. `name`이 화면의 선택 키다(`?core=`) — 경로를 URL에 싣지 않는다. */
+export type CoreFile = { name: string; path: string; text: string };
+
+/** 인라인되는 유일한 코어. 나머지 `CORE-*.md`는 세션이 필요할 때 읽는다(§프롬프트 층 결정 6). */
+export const CORE_INLINED = "CORE.md";
+
+/** 코어 프로토콜 — **큐에 없다.** `<엔진 레포>/protocols/`에 살고 엔진이 그중 `CORE.md`를 매 세션
+ *  프롬프트 맨 앞에 인라인한다(`tick.sh:266`, DESIGN.md §프롬프트 층 결정 5·6). 나머지 `CORE-*.md`는
+ *  거기서 가리키면 세션이 직접 읽는다 — 화면에 안 보이면 사람이 세션 행동을 추적할 자리가 없어진다.
+ *  그래서 이 모듈이 코어에 주는 것은 이 읽기 하나뿐이다 — 저장·생성·삭제·이름변경은 전부 기준
+ *  디렉터리(= 큐 안)에서만 도는 함수라, 화면을 잠그는 것과 별개로 **쓰는 경로 자체가 서버에 없다.**
  *
+ *  글롭은 **한 단계만**이다(`tick.sh:235`의 메모리 글롭과 같은 깊이) — 하위 디렉터리는 안 따라간다.
  *  못 읽으면 던지지 않고 사유를 준다: 엔진 레포를 못 찾는 배치가 정상이고(엔진도 `[ -r ]`로
- *  넘어간다) 화면은 그 항목만 빼고 종전대로 돌아야 한다. */
-export async function readCore(): Promise<{ path: string; text: string } | { error: string }> {
+ *  넘어간다) 화면은 그 항목들만 빼고 종전대로 돌아야 한다. */
+export async function readCore(): Promise<{ files: CoreFile[] } | { error: string }> {
   const repo = engineRepo();
   if ("error" in repo) return { error: repo.error };
-  const full = path.join(repo.path, "protocols", "CORE.md");
+  const dir = path.join(repo.path, "protocols");
+  let names: string[];
   try {
-    return { path: full, text: await readFile(full, "utf8") };
+    // 디렉터리 엔트리로 거른다 — `foo.md`라는 이름의 디렉터리가 있으면 readFile이 EISDIR로 터진다
+    names = (await readdir(dir, { withFileTypes: true }))
+      .filter((d) => d.isFile() && d.name.endsWith(".md"))
+      .map((d) => d.name);
   } catch (e) {
     const err = e as NodeJS.ErrnoException;
-    return { error: `코어 프로토콜을 읽지 못했습니다 — ${full} (${err.code ?? err.message})` };
+    return { error: `코어 프로토콜을 읽지 못했습니다 — ${dir} (${err.code ?? err.message})` };
   }
+  if (names.length === 0) return { error: `코어 프로토콜이 없습니다 — ${dir}` };
+
+  names.sort((a, b) =>
+    a === CORE_INLINED ? -1 : b === CORE_INLINED ? 1 : a.localeCompare(b),
+  );
+  const files: CoreFile[] = [];
+  for (const name of names) {
+    const full = path.join(dir, name);
+    files.push({ name, path: full, text: await readFile(full, "utf8") });
+  }
+  return { files };
 }
 
 /** 편집기가 열 수 있는 것과 못 여는 것. `text`가 null이면 `reason`이 이유다. */
