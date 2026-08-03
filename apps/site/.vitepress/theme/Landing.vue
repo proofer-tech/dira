@@ -4,6 +4,8 @@ import { useData } from "vitepress";
 const { theme } = useData();
 // 초기값은 빌드 시점의 `apps/desktop/package.json`. 비우면 hydration이 어긋난다.
 const version = ref(theme.value.diraVersion);
+// 초기값 = 실패값. SSR·fetch 실패·`.dmg` 없음 셋 다 지금 동작(릴리스 페이지)으로 떨어진다.
+const dmg = ref("https://github.com/proofer-tech/dira/releases/latest");
 onMounted(async () => {
   // github-buttons는 모듈 최상단에서 window를 읽는다 — SSR에서 죽으므로 동적 import다.
   // 위젯을 못 만들면 원래 <a>가 그대로 남는다(그게 이 배치를 고르는 근거다).
@@ -17,8 +19,12 @@ onMounted(async () => {
     const r = await fetch(
       "https://api.github.com/repos/proofer-tech/dira/releases/latest",
     );
-    const tag = (await r.json()).tag_name;
-    if (tag) version.value = tag.replace(/^v/, "");
+    const rel = await r.json();
+    if (rel.tag_name) version.value = rel.tag_name.replace(/^v/, "");
+    // 자산은 셋인데 `.dmg`는 하나다. `download`/`target`은 안 붙인다 — 받아지게 하는 것은
+    // GitHub이 자산 응답에 붙이는 Content-Disposition: attachment다(DESIGN §서는 못 ①②).
+    const asset = rel.assets?.find((a) => a.name.endsWith(".dmg"));
+    if (asset) dmg.value = asset.browser_download_url;
   } catch {
     // 릴리스를 못 읽으면 초기값 그대로 둔다 — 화면에도 콘솔에도 아무것도 안 띄운다.
   }
@@ -47,7 +53,7 @@ onMounted(async () => {
          href="https://github.com/proofer-tech/dira"
          aria-label="Star proofer-tech/dira on GitHub"
          data-icon="octicon-star" data-show-count="true" data-size="large">Star</a>
-      <a class="btn btn-primary" href="https://github.com/proofer-tech/dira/releases/latest">앱 다운로드</a>
+      <a class="btn btn-primary" :href="dmg">앱 다운로드</a>
     </nav>
   </div>
 </header>
@@ -63,7 +69,7 @@ onMounted(async () => {
     시스템을 아주 쉽게 구축해보세요.
   </p>
   <div class="cta">
-    <a class="btn btn-primary btn-lg" href="https://github.com/proofer-tech/dira/releases/latest">macOS 앱 다운로드</a>
+    <a class="btn btn-primary btn-lg" :href="dmg">macOS 앱 다운로드</a>
     <a class="btn btn-lg" href="/docs/install">설치 가이드</a>
   </div>
   <p class="cta-note">with Claude Code · Codex</p>
@@ -223,7 +229,7 @@ onMounted(async () => {
       dira와 함께 PC에 나만의 멀티 에이전트 시스템을 아주 쉽게 구축해보세요.
     </p>
     <div class="cta">
-      <a class="btn btn-primary btn-lg" href="https://github.com/proofer-tech/dira/releases/latest">macOS 앱 다운로드</a>
+      <a class="btn btn-primary btn-lg" :href="dmg">macOS 앱 다운로드</a>
       <a class="btn btn-lg" href="https://github.com/proofer-tech/dira">GitHub에서 보기</a>
     </div>
   </div>
@@ -242,7 +248,7 @@ onMounted(async () => {
       <div class="fcol">
         <h4>제품</h4>
         <ul>
-          <li><a href="https://github.com/proofer-tech/dira/releases/latest">다운로드</a></li>
+          <li><a :href="dmg">다운로드</a></li>
           <li><a href="https://github.com/proofer-tech/dira/releases">릴리스</a></li>
           <li><a href="/docs/what-is-dira">엔진</a></li>
         </ul>
