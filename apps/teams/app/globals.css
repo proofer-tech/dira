@@ -276,6 +276,60 @@
   }
 }
 
+@theme {
+  /* `.wip` 카드 방금 한 일 줄(§비주얼 §36 §고른 값 ③). 이 앱이 `text-xs`(12px) 아래로
+     내려가는 **유일한 자리**다. 임의값(`text-[11px]`)이 아니라 토큰인 이유는 여기서 고른
+     쪽이 다음 자리의 선례가 되기 때문이다 — 두 곳에 같은 수가 손으로 적히면 11과 11.5가
+     갈려도 아무도 못 본다. 10px도 재 보고 버렸다(한글이 무너진다). */
+  --text-2xs: 0.6875rem; /* 11px */
+  --text-2xs--line-height: 0.875rem; /* 14px */
+}
+
+/* @theme 안에 두지 않는다 — 거기 둔 @keyframes는 짝이 되는 `animate-*` 클래스가 화면에
+   있을 때만 실린다(위 `--animate-wip-pulse`가 그 경우다). 이 절은 클래스가 아니라
+   아래 @utility가 부르므로 최상위에 둔다. */
+@keyframes wip-shimmer {
+  from {
+    background-position-x: 100%; /* 빛이 줄 왼쪽 밖에 있다 = 정지 상태 */
+  }
+  to {
+    background-position-x: 0%; /* 줄 오른쪽 밖으로 나간다 */
+  }
+}
+
+/* §비주얼 §0 애니메이션 금지의 **셋째 예외**(사람 요구 `b646dd4a` · 값 §36 §고른 값 ②).
+   §18은 `opacity`가 제자리에서 흔들리고 이 절은 **잉크의 색이 위치를 따라 흐른다** —
+   두 절이 건드리는 속성이 아예 달라서 `animate-wip-pulse`를 재사용하지 않는다(§36 못 ②).
+   그라디언트의 두 끝이 `--muted-foreground`와 `--foreground`이고 **둘 다 채도 0**이라
+   어느 프레임의 어느 픽셀도 휘도가 그 둘 사이에 갇힌다 → 대비 하한이 곧 정지 값이다
+   (라이트 호버 4.53 · 다크 호버 6.39). 라이트에서 잉크가 *깊어지는* 것이 맞다 —
+   흰 페이지 위에서 글자를 밝히면 그게 대비를 깎는 것이라 머리의 `빛은 더하기만 한다`를
+   어긴다. 여기서 더해지는 것은 밝기가 아니라 대비다.
+
+   **켜는 것과 끄는 것이 한 블록이다.** `motion-reduce:` 유틸리티 셋을 JSX에 흩어 놓으면
+   셋 중 둘만 붙는 사고가 나고, 그때 화면은 멀쩡해 보이는데 계약만 깨진다(1/255다).
+   `animation: none` 하나로는 부족하다 — 그라디언트가 주차된 채 남아 정본과 PNG가 갈린다. */
+@utility wip-shimmer {
+  color: transparent;
+  background-image: linear-gradient(
+    90deg,
+    var(--muted-foreground) 45%,
+    var(--foreground) 50%,
+    var(--muted-foreground) 55%
+  );
+  background-size: 250% 100%;
+  background-position-x: 100%;
+  background-repeat: no-repeat;
+  background-clip: text;
+  animation: wip-shimmer 3s linear infinite;
+
+  @media (prefers-reduced-motion: reduce) {
+    background-image: none; /* 주차된 그라디언트를 남기지 않는다 */
+    color: var(--muted-foreground); /* 꺼진 상태의 정본 — 알파 1.0 */
+    animation: none;
+  }
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

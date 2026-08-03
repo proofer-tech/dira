@@ -128,35 +128,58 @@ function when(ms: number): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
-/** 히트 하나 → `.wip` 카드 맨 아래 그 한 줄. 클래스 넷은 §비주얼 §36 §값 표를 그대로 옮긴 것이다.
+/** 히트 하나 → `.wip` 카드 바닥에 붙은 스트립. 클래스 두 줄은 §비주얼 §36 §값 표를 그대로
+ *  옮긴 것이다(사람 요구 `b646dd4a` — 면 · 모션 · 크기).
  *
- *  **새 컴포넌트를 만들지 않는다**(§36 §인벤토리 — 새 커스텀 0 · 새 토큰 0 · 새 유틸 클래스 0):
- *  한 카드에 한 번 쓰는 4줄짜리 JSX라 이 함수가 만든 노드를 `<Card>`의 마지막 자식으로 놓는다.
+ *  **새 컴포넌트를 만들지 않는다**(§36 §인벤토리 — 새 커스텀 0 · 새 색 토큰 0 · 새 npm 0):
+ *  한 카드에 한 번 쓰는 JSX라 이 함수가 만든 노드를 `<Card>`의 마지막 자식으로 놓는다.
  *
- *  `aria-hidden`이다 — 5초마다 갈리는 글이라 붙이면 스크린리더가 카드마다 계속 말한다.
- *  `aria-live`도 `role="status"`도 안 붙는다(§18이 같은 이유로 거절했다). 정본은 §2-3이고
- *  카드 전체가 이미 거기로 가는 링크라 이 줄에는 링크도 툴팁도 안 붙인다(§1-1 §뽑는 못).
+ *  **그릇이 둘인 이유는 `box-sizing: border-box`다** — `h-3.5`와 `pt-2 border-t`를 같은
+ *  요소에 주면 글자가 상자 밖으로 밀린다. 바깥이 면을, 안이 글자를 든다.
  *
- *  `h-4`가 있는 이유(§36 §실측 §줄 상자): Geist Mono의 인라인 박스가 strut보다 높아서 mono가
- *  섞인 줄만 줄 상자가 17px이 된다. 빼면 줄이 `tool_use`↔`text`로 갈릴 때마다(p50 8.6초)
- *  **카드가 1px씩 흔들린다.** `leading-4`로는 안 잡힌다 — 줄 상자는 인라인 박스들의 합집합이다.
+ *  `aria-hidden`은 **바깥**에 붙는다 — 선까지 통째로 숨는다. 5초마다 갈리는 글이라 붙이면
+ *  스크린리더가 카드마다 계속 말한다. `aria-live`도 `role="status"`도 안 붙는다(§18이 같은
+ *  이유로 거절했다). 정본은 §2-3이고 카드 전체가 이미 거기로 가는 링크라 이 줄에는 링크도
+ *  툴팁도 안 붙인다(§1-1 §뽑는 못).
+ *
+ *  **면은 전폭 규칙선이고 칠하지 않는다**(§36 §고른 값 ①). `-mx-4`가 카드 `px-4`를 상쇄해
+ *  선이 카드 양 끝에 닿고(`티켓 속성`과 갈리는 것이 색도 크기도 아니라 이 사실이다),
+ *  `px-4`가 글자를 제자리로 되돌리고, `-mb-2`가 카드 아래 16px 중 8px을 먹는다 —
+ *  보이는 리듬이 8 / 선 / 8 / 줄 / 8이고 넷 다 카드가 이미 쓰는 값이라 새 간격 값이 0이다.
+ *  칠하면 대비가 갈린다: 라이트에서 불투명하게 쓸 수 있는 값이 `--surface`(4.53) 하나뿐이고
+ *  반투명은 카드 호버가 밑에서 비쳐 4.44로 미달이다. 선은 밑면을 한 칸도 안 건드린다.
+ *
+ *  **모션은 `wip-shimmer` 하나**(`globals.css` — 켜는 것과 끄는 것이 거기 한 블록에 있다).
+ *  `prefers-reduced-motion` 처방을 이 파일에 흩어 놓지 않는 것이 계약이다(§36 §고른 값 ② ·
+ *  §검증 — 그 grep이 이 파일에서 0이어야 한다). 셋 중 둘만 붙으면 화면은 멀쩡해 보이는데
+ *  계약만 깨진다.
+ *
+ *  `h-3.5`가 있는 이유(§36 §실측 §줄 상자): Geist Mono의 인라인 박스가 strut보다 높아서
+ *  mono가 섞인 줄만 줄 상자가 11px에서 15px이 된다(12px 시절엔 17px이었다 — 갈리는 수가
+ *  두 크기 모두 1px이다). 빼면 줄이 `tool_use`↔`text`로 갈릴 때마다(p50 8.6초) **카드가
+ *  1px씩 흔들린다.** 짝 토큰(`--text-2xs--line-height`)으로도 안 잡힌다 — 줄 상자는 인라인
+ *  박스들의 합집합이라 strut을 못 이긴다.
  *
  *  갈리는 축은 **서체 하나**다: `label`은 도구명이라 항상 mono, `summary`는 §9 판정
  *  (`summaryMono`)을 그대로 받아 쓴다. 알파는 1.0이다 — 호버(`bg-muted/50`)에서 대비가 4.53까지
- *  내려가므로 `/70`·`/80`을 얹으면 4.5:1이 깨진다(§36 §실측 §대비). `흐릿하게`는 `text-xs`가 낸다.
+ *  내려가므로 `/70`·`/80`을 얹으면 4.5:1이 깨진다(§36 §실측 §대비). `text-muted-foreground`가
+ *  사라진 것은 `wip-shimmer`가 **그 토큰을** 그라디언트 양 끝과 `reduce` 정본으로 직접 들기
+ *  때문이다(값이 갈린 것이 아니다). `흐릿하게`는 이제 `text-2xs`(11px)가 낸다.
  *
- *  구분자 ` · `는 **둘 다 있을 때만** 넣는다 — `tool_use`인데 요약이 빈 도구가 실측 9.5%다.
- *  assistant `text`는 `label`·`summary`가 둘 다 비므로(실측 히트의 13.9%) §2-1과 같은 처방으로
- *  `body`의 첫 줄을 세운다 — 리더도 §2-1도 안 고치고 **소비자가 정하는 판정 한 줄**이다(§36). */
+ *  구분자 ` · `는 **둘 다 있을 때만** 넣는다. assistant `text`는 `label`·`summary`가 둘 다
+ *  비므로(실측 히트의 13.9%) §2-1과 같은 처방으로 `body`의 첫 줄을 세운다 — 리더도 §2-1도
+ *  안 고치고 **소비자가 정하는 판정 한 줄**이다(§36). */
 function wipLine(e: StreamEvent | null) {
   if (!e) return null;
   const summary = e.label ? e.summary : e.body.split("\n")[0];
   if (!e.label && !summary.trim()) return null; // 세울 글자가 없으면 줄도 없다(§1-1 §없을 때)
   return (
-    <div aria-hidden className="h-4 truncate text-xs text-muted-foreground">
-      {e.label && <span className="font-mono">{e.label}</span>}
-      {e.label && summary ? " · " : null}
-      {summary && <span className={e.summaryMono ? "font-mono" : undefined}>{summary}</span>}
+    <div aria-hidden className="-mx-4 -mb-2 border-t px-4 pt-2">
+      <div className="h-3.5 truncate text-2xs wip-shimmer">
+        {e.label && <span className="font-mono">{e.label}</span>}
+        {e.label && summary ? " · " : null}
+        {summary && <span className={e.summaryMono ? "font-mono" : undefined}>{summary}</span>}
+      </div>
     </div>
   );
 }
@@ -652,8 +675,9 @@ export default async function Board({
                                   갱신이 멈춘 자리에서 `방금`이 거짓말이다). 위 `AnswerDialog`와
                                   자리를 다투지 않는다 — `isAwaiting`은 `state === "open"`만
                                   참이라 한 카드에 둘이 같이 서지 않는다.
-                                  자기 margin은 0이다: 위 8px은 `<Card>`의 `gap-2`, 아래 16px은
-                                  `py-4`가 이미 낸다(§36 §자리와 간격 — 새 간격 값 0) */}
+                                  간격은 8 / 선 / 8 / 줄 / 8이다: 위 8px은 `<Card>`의 `gap-2`,
+                                  선 아래 8px은 `pt-2`, 카드 바닥까지 8px은 `py-4`(16)에서
+                                  `-mb-2`(8)를 뺀 값이다(§36 §자리와 간격 — 새 간격 값 0) */}
                               {wipLines?.get(t.path)}
                             </Card>
                           ))
