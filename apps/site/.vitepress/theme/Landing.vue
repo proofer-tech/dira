@@ -57,7 +57,7 @@ onMounted(async () => {
   <p class="cta-note">with Claude Code · Codex</p>
 
   <figure>
-    <img class="shot" src="/shots/02-board.png" alt="dira 보드 화면. 대기·진행중·완료 세 레인에 티켓 카드가 놓여 있습니다." width="1600">
+    <img class="shot" src="/shots/board.gif" alt="dira 보드 화면. 대기·진행중·완료 세 레인에 티켓 카드가 놓여 있고, 그중 한 장이 다음 레인으로 건너갑니다." width="1600" height="1000">
     <figcaption>놀라운 사실: dira 앱 또한 dira로 만들어졌습니다.</figcaption>
   </figure>
 </div>
