@@ -276,6 +276,30 @@ test("관계 — stemOf · resolveDep(`re-` 폴백) · 역참조", async () => {
   assert.deepStrictEqual(by("eeee5555").unmet, ["zzzz9999"]);
 });
 
+// `resolveDep`이 stem 맵을 memo하고 나서(f62d3236) 깨질 수 있는 두 자리다: 같은 배열을 다른
+// 접미사로 풀 때 앞의 맵이 재사용되면 안 되고, 중복 stem은 종전 `tickets.find`와 같이
+// **배열에서 먼저 나온 것**이 이겨야 한다.
+test("관계 — resolveDep 맵이 접미사별로 갈리고 중복 stem은 먼저 나온 것이 이긴다", async () => {
+  const root = newRoot();
+  const ko: Suffixes = { inProgress: "-진행중", done: "-완료" };
+  const en: Suffixes = { inProgress: ".wip", done: ".done" };
+  await write(root, "xxxx1111-완료.md", fm({ ticket: "xxxx1111", title: "한글 접미사" }));
+  await write(root, "dup2222.md", fm({ ticket: "dup2222", title: "열림" }));
+  await write(root, "dup2222-완료.md", fm({ ticket: "dup2222", title: "같은 stem" }));
+
+  const tickets = await listTickets(root, ko);
+  // 같은 배열 · 다른 접미사 — en에서는 `-완료`가 안 떨어지므로 stem이 `xxxx1111-완료`다
+  assert.strictEqual(resolveDep(tickets, "xxxx1111", ko)?.hash, "xxxx1111");
+  assert.strictEqual(resolveDep(tickets, "xxxx1111", en), null);
+  assert.strictEqual(resolveDep(tickets, "xxxx1111-완료", en)?.hash, "xxxx1111");
+
+  // 중복 stem: 판정이 `find`와 같아야 한다(엔진 `_find_stem`도 먼저 나온 파일이 이긴다)
+  assert.strictEqual(
+    resolveDep(tickets, "dup2222", ko),
+    tickets.find((t) => stemOf(t.path, ko) === "dup2222"),
+  );
+});
+
 test("관계 — depBadges 네 종류 판정 + 조치 필요한 것이 왼쪽 (§비주얼 §2)", async () => {
   const root = newRoot();
   const sfx: Suffixes = { inProgress: "-진행중", done: "-완료" };

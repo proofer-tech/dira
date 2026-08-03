@@ -486,10 +486,38 @@ export function stemOf(p: string, sfx: Suffixes): string {
  *  ponytail: find_any는 frontmatter가 깨진 파일도 후보로 보지만(파일 목록을 훑는다) 여기 넘어오는
  *  `tickets`는 그 파일들이 빠진 목록이다. 그런 파일은 엔진 scan에도 안 잡혀 화면에 띄울 게 없으므로
  *  링크가 없는 `큐에 없는 해시`로 보인다 — unmet 판정 자체는 listTickets가 파일 목록으로 한다. */
+/** stem → 티켓. **처음 나온 것이 이긴다** — 종전 `tickets.find`와 같은 판정이고 `stemIndex`가
+ *  파일 목록에 하는 것과 같은 규칙이다(중복 stem은 먼저 나온 파일이 이긴다).
+ *
+ *  같은 배열·같은 접미사면 다시 안 만든다. `relationEdges`가 티켓마다 `deps` 전부 + `req:` 하나에
+ *  `resolveDep`을 불러서 전체가 O(n²)였다(786건에서 96ms — 요구 `e6a179dc`). WeakMap이라
+ *  `tickets`가 GC되면 같이 사라지고, `sortTickets`가 새 배열을 주므로(`[...tickets].sort`)
+ *  캐시된 배열의 내용이 뒤에서 바뀌는 자리가 없다. */
+const stemMaps = new WeakMap<Ticket[], Map<string, Map<string, Ticket>>>();
+
+function stemMap(tickets: Ticket[], sfx: Suffixes): Map<string, Ticket> {
+  let perSfx = stemMaps.get(tickets);
+  if (!perSfx) stemMaps.set(tickets, (perSfx = new Map()));
+  const key = `${sfx.done} ${sfx.inProgress}`;
+  let m = perSfx.get(key);
+  if (!m) {
+    m = new Map();
+    for (const t of tickets) {
+      const s = stemOf(t.path, sfx);
+      if (!m.has(s)) m.set(s, t);
+    }
+    perSfx.set(key, m);
+  }
+  return m;
+}
+
 export function resolveDep(tickets: Ticket[], dep: string, sfx: Suffixes): Ticket | null {
-  const byStem = (want: string) => tickets.find((t) => stemOf(t.path, sfx) === want) ?? null;
+  const byStem = stemMap(tickets, sfx);
   const want = nfc(dep);
-  return byStem(want) ?? (want.startsWith(nfc("re-")) ? null : byStem(nfc("re-") + want));
+  return (
+    byStem.get(want) ??
+    (want.startsWith(nfc("re-")) ? null : (byStem.get(nfc("re-") + want) ?? null))
+  );
 }
 
 /** deps 해시 → 배지 종류. **판정이 사는 유일한 곳**이다(§비주얼 §2 deps 배지).
@@ -526,7 +554,7 @@ export function depBadges(
 }
 
 /** 역참조 — **이 티켓을 deps에 가진** 티켓들. 전체 큐를 훑는다(deps는 한 방향으로만 적히므로).
- *  ponytail: 티켓 수 × deps 수 선형 스캔. 큐가 수천 건 되면 stem → 티켓 맵을 한 번 만든다. */
+ *  조회는 `stemMap`이라 전체가 deps 수에 선형이다. */
 export function referrers(tickets: Ticket[], target: Ticket, sfx: Suffixes): Ticket[] {
   return tickets.filter(
     (t) => t.path !== target.path && t.deps.some((d) => resolveDep(tickets, d, sfx) === target),
@@ -559,8 +587,7 @@ export function derivedFrom(tickets: Ticket[], target: Ticket, sfx: Suffixes): T
  *  객체가 아니라 `Map`인 이유는 `personaDotClass`와 같다 — 키가 **파일명에서 오는 남의
  *  문자열**이라 `obj["__proto__"] ??= []`가 Object.prototype에 push하는 자리다.
  *
- *  ponytail: `resolveDep`이 매번 선형 탐색이라 티켓 수 × deps 수다(`referrers`와 같은 천장).
- *            큐가 수천 건 되면 stem → 티켓 맵을 한 번 만들어 둘이 같이 쓴다. */
+ *  `resolveDep`이 `stemMap`을 쓰므로 전체가 deps 수에 선형이다(`referrers`와 같은 자리). */
 export type RelationEdge = { to: string; kind: "deps" | "req" };
 
 export function relationEdges(
