@@ -209,12 +209,6 @@ html { scroll-behavior: smooth; }
 .dira-landing .fcol a { font-size: 13.5px; color: var(--muted-fg); text-decoration: none; }
 .dira-landing .fcol a:hover { color: var(--fg); }
 .dira-landing .fbot { margin-top: 48px; padding-top: 24px; border-top: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 12.5px; color: var(--faint); }
-.dira-landing .fbot .sep { margin-left: auto; }
-/* ⑥ 줄바꿈이 시작되는 폭에서는 오른쪽 밀기를 끈다. margin-left:auto가 줄바꿈 뒤에도
-   살아서 마지막 줄에 혼자 남은 항목을 오른쪽 끝으로 밀었다(390에서 sep만 x=192,
-   앞 세 항목은 x=24). 임계는 572px 미만 실측이라 599px에서 끊는다 —
-   768 이상은 한 줄이라 오른쪽 끝 정렬이 뜻대로 남는다. */
-@media (max-width: 599px) { .dira-landing .fbot .sep { margin-left: 0; } }
 
 @media (max-width: 900px) {
   .dira-landing .gallery { grid-template-columns: 1fr; }

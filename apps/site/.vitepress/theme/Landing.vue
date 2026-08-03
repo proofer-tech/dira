@@ -219,7 +219,6 @@ onMounted(async () => {
       <span>© 2026 프루퍼 주식회사. MIT.</span>
       <a href="/terms">이용약관</a>
       <a href="/privacy">개인정보처리방침</a>
-      <span class="sep">bash + python3 표준 라이브러리</span>
     </div>
   </div>
 </footer>
