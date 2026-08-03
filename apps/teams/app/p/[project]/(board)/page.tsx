@@ -28,7 +28,7 @@
 import { stat } from "node:fs/promises";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowDown, ArrowUp, ChevronsUpDown, X } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronsUpDown, Clock, X } from "lucide-react";
 import {
   BoardFilter,
   BoardLaneMotion,
@@ -72,6 +72,7 @@ import {
   type Ticket,
 } from "@/lib/queue";
 import { getProject, listPersonas, resolveConfig } from "@/lib/projects";
+import { listWorkers, workerGroups } from "@/lib/workers";
 
 // 큐는 GUI 밖에서(cron·세션이) 바뀐다. 프리렌더하면 빌드 시점 내용이 굳는다.
 export const dynamic = "force-dynamic";
@@ -183,6 +184,19 @@ export default async function Board({
   const hiddenDone = query.status.includes("done")
     ? 0
     : filterTickets(tickets, { ...query, status: ["done"] }).length;
+
+  // 툴바 오른쪽 끝의 idle 워커 풀(§1-2 · §비주얼 §38). **필터가 이 값을 안 좁힌다** — 필터는
+  // 티켓의 것이고 워커에는 persona도 kind도 없다. 그래서 `rows`가 아니라 `project.root`만 본다.
+  // 인자를 하나만 넘긴다(`tickets` 없음): 이 줄이 쓰는 것은 `status`뿐이고 `holding`은 안 본다.
+  // 서브프로세스는 안 는다 — `crontab -l`은 `crontabText()`가 `cache()` 뒤에서 요청당 1회다.
+  const groups = workerGroups(await listWorkers(project.root));
+  const idle = groups.find((g) => g.status === "idle");
+  // 워커가 있는데 `idle`이 0개면 줄이 그대로 서고 값 자리에 문장이 온다(§38 §문구 둘). `전원
+  // running`은 `running`이 하나라도 있을 때만 참이다 — `crontab -l`이 실패하면 전원 `stopped`가
+  // 되고 그때는 아는 것만 말한다(`없음`).
+  const idlePool =
+    idle?.names.join(" ") ??
+    (groups.some((g) => g.status === "running") ? "없음 — 전원 running" : "없음");
 
   // 선택지를 하드코딩하지 않는다 — kind는 프로젝트마다 다르고, persona는 그 큐의 페르소나다.
   // persona 목록은 **페르소나 화면과 같은 `listPersonas`**로 만든다. 여기서 `readdir`을 다시
@@ -404,7 +418,10 @@ export default async function Board({
                   {v.label}
                 </Button>
               ))}
-              <span className="text-xs tabular-nums text-muted-foreground">
+              {/* `shrink-0`은 idle 워커 풀 몫이다(§비주얼 §38 §기존 마크업에서 느는 것) — 안
+                  붙이면 긴 워커 이름이 왔을 때 flex가 **건수 쪽을 먼저** 줄여 `티/켓/727/건`으로
+                  세로쓰기가 된다(390 실측). 양보하는 것은 2차 진술인 풀이고 건수가 아니다 */}
+              <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
                 {rows.length === total ? `티켓 ${total}건` : `티켓 ${rows.length} / ${total}건`}
                 {/* 완료가 빠졌다는 사실은 여기서만 말한다 — 두 뷰 공통이고 0건 화면에서도 뜬다
                     (큐가 완료뿐이면 이 링크가 유일한 출구다). 상태 6값 URL로 간 화면에서는
@@ -427,6 +444,25 @@ export default async function Board({
                   <span className="ml-1">(디스패치되지 않는 {undispatched}건은 상단 알림)</span>
                 )}
               </span>
+              {/* idle 워커 풀 — 두 뷰 공통이고 필터가 안 좁힌다(§1-2). 워커가 0개면 아무것도 안
+                  그린다: 그 사실은 §0 목록 행이 이미 말한다. **그릇을 안 갖는다**(§비주얼 §38) —
+                  이 줄의 이웃 다섯이 전부 32px 그릇이라 여섯 번째 그릇은 누를 것으로 읽힌다.
+                  건수 진술과 같은 몸(맨 `<span>` · 16px · `--muted-foreground`)을 쓰고, 건수의
+                  네 번째 절로 붙어 읽히는 것은 `·` 대신 앞머리 `Clock`이 끊는다.
+                  묶는 컴포넌트를 안 만든다 — `// ponytail: 두 번째 자리가 생기면 그때 묶는다` */}
+              {groups.length > 0 && (
+                <span className="flex min-w-0 flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                  <Clock aria-hidden className="size-3 shrink-0" />
+                  {/* 라벨은 §2 워커 4상태 표의 말이다 — 손으로 적지 않는다(`유휴`를 만들지 않는다).
+                      `sr-only` 접두어로 낭독이 `idle 워커 w3 w9`가 된다(§19가 칩에 단 그 낱말이다).
+                      `aria-live`도 `role="status"`도 안 붙인다: 5초 폴링에 다음 행동이 없다 */}
+                  {statusLabel("idle")}
+                  <span className="sr-only"> 워커</span>
+                  {/* 안 자른다 — 잘린 이름으로는 워커 화면에서 어느 행인지 못 찾는다(§1-2).
+                      `min-w-0` + `break-words`가 대신 이름 사이·하이픈에서 감는다 */}
+                  <span className="min-w-0 break-words font-mono">{idlePool}</span>
+                </span>
+              )}
             </div>
           </div>
 
