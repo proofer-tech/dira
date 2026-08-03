@@ -7,6 +7,13 @@
   3. `pid:`가 없는 산 세션(`session=` 갈래)은 강제도 거부한다 - 죽일 대상이 없다. 종전 문구를 안 쓴다.
   4. 상한 미만에 죽은 세션은 `TIMEOUT`이 아니라 `KILLED <해시> <경과>s`로 남는다.
 
+개정(§2-5 §개정)이 더한 것 셋:
+  5. 강제로 끊은 티켓은 **답변 대기로 잠긴 채** 열린다 - 잠금이 부모의 clear+release를 지나서 살고,
+     `select`가 안 뽑는다. 사람이 답변 파일을 쓰면 풀린다.
+  6. 잠그는 것은 `deps`·`awaiting`·`## 질문 n` 셋뿐이다 - `attempts`와 REAP_CLEAR 여섯은 안 건드린다
+     (죽이기 전에 `pid:`를 지우면 kill이 실패했을 때 아무도 두 번 다시 안 보는 `.wip`이 남는다).
+  7. 안 잠그는 두 경로: 이미 죽은 세션에 붙은 `--force` · 플래그 없는 `unassign`.
+
 도그푸딩 큐를 건드리지 않는다 - 전부 임시 큐 + 가짜 스트리밍 엔진이다.
 실패하면 assert로 죽는다.
 """
@@ -20,6 +27,7 @@ import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 TICK = os.path.join(HERE, "tick.sh")
+PY = os.path.join(HERE, "tickets.py")
 
 # init 한 줄을 뱉고 stdin을 빨면서 사는 엔진. 안 빨면 프롬프트 주입이 안 끝나 STALL로 죽는다.
 # `exec`는 test_feed_stall.py와 같은 이유다 - 프로세스를 하나로 만들어 kill이 진짜 엔진에 닿게 한다.
@@ -115,6 +123,38 @@ try:
     assert not re.search(r"^(session_id|pid|inbox):[ \t]*\S", body, re.M), \
         "할당 값이 안 비었다\n" + body
     assert "UNASSIGN bbbb0002 강제" in readlog(), readlog()
+    assert "답변 대기로 잠갔다" in r.stdout, "성공 stdout이 잠금을 안 말한다: " + r.stdout
+
+    # --- 3b) 그 티켓은 답변 대기로 잠긴 채 열렸다 - 아무도 못 가져간다(§개정) ---
+    m = re.search(r"^awaiting: ([0-9a-f]{8})$", body, re.M)
+    assert m, "awaiting이 없다\n" + body
+    a = m.group(1)
+    assert a in re.search(r"^deps: \[(.*)\]$", body, re.M).group(1), "deps에 안 걸렸다\n" + body
+    assert "사람이 강제 중단했습니다" in body and "무엇을 바꿔서 갈지 답해주세요" in body, \
+        "§문구 표의 사유·지시가 없다\n" + body
+    assert "ASK bbbb0002 awaiting={} - 사람이 강제 중단했습니다".format(a) in readlog(), readlog()
+    sel = run(sys.executable, PY, "select", root, env=env).stdout
+    assert "bbbb0002" not in sel, "잠갔는데 select가 뽑는다: " + sel
+    lst = run(sys.executable, PY, "list", root, env=env).stdout
+    assert "deps 대기 " + a in lst, lst
+
+    # 잠금은 셋뿐이다 - attempts와 REAP_CLEAR는 안 건드린다(kill이 실패해도 pid가 남아야 한다)
+    mkfile(os.path.join(tickets, "bbbb0012.wip.md"),
+           WIP.format(h="bbbb0012", sid="s1", pid="pid: 4242\nowner: dev / w1\nattempts: 1\n"))
+    r = run(sys.executable, PY, "askhuman", os.path.join(tickets, "bbbb0012.wip.md"), env=env)
+    assert r.returncode == 0 and r.stdout.startswith("ASK bbbb0012 awaiting="), r.stdout + r.stderr
+    body = open(os.path.join(tickets, "bbbb0012.wip.md"), encoding="utf-8").read()
+    assert "pid: 4242" in body and "owner: dev / w1" in body and "session_id: s1" in body, \
+        "할당 필드를 건드렸다 - kill 전에 pid가 사라지면 실패한 티켓을 아무도 못 본다\n" + body
+    assert "attempts: 1" in body, "attempts를 0으로 되돌렸다\n" + body
+
+    # 답을 쓰면 풀린다 - 잠긴 티켓을 다시 굴리는 손잡이는 답변칸 하나다
+    os.remove(os.path.join(tickets, "bbbb0012.wip.md"))
+    mkfile(os.path.join(tickets, a + ".done.md"),
+           "---\nticket: {}\nkind: answer\n---\n\n## 답변 1\n\n가라\n".format(a))
+    sel = run(sys.executable, PY, "select", root, env=env).stdout
+    assert "bbbb0002" in sel, "답을 썼는데 안 풀렸다: " + sel
+    os.remove(os.path.join(tickets, a + ".done.md"))
 
     # --- 4) 죽은 세션 + --force: 종전 경로 그대로다(회귀) ---
     dead = subprocess.Popen(["sleep", "0"])
@@ -124,6 +164,16 @@ try:
     r = run(w1, "unassign", "cccc0003", "--force", env=env)
     assert r.returncode == 0, "죽은 세션인데 강제가 막혔다: {}\n{}".format(r.returncode, r.stderr)
     assert os.path.exists(os.path.join(tickets, "cccc0003.md")), "죽은 세션이 안 풀렸다"
+    body = open(os.path.join(tickets, "cccc0003.md"), encoding="utf-8").read()
+    assert "awaiting:" not in body, "사람이 끊은 게 아니라 회수인데 잠갔다(§잠그지 않는 것)\n" + body
+
+    # --- 4b) 플래그 없는 unassign도 안 잠근다 - PM 요구사항 왕복이 부르는 자리다 ---
+    mkfile(os.path.join(tickets, "cccc0013.wip.md"),
+           WIP.format(h="cccc0013", sid="", pid=""))
+    r = run(w1, "unassign", "cccc0013", env=env)
+    assert r.returncode == 0, "플래그 없는 해제가 실패했다: {}\n{}".format(r.returncode, r.stderr)
+    body = open(os.path.join(tickets, "cccc0013.md"), encoding="utf-8").read()
+    assert "awaiting:" not in body, "플래그 없는 unassign이 잠갔다 - 요구사항 왕복이 깨진다\n" + body
 
     # --- 5) pid 없는 산 세션(session= 갈래): --force도 거부하고 문구가 다르다 ---
     sid = "dddd0004-sid"
@@ -166,6 +216,15 @@ try:
     tick.wait(timeout=60)
     assert os.path.exists(os.path.join(tickets, "eeee0005.md")), \
         "강제 뒤 백로그로 안 돌아왔다: " + str(os.listdir(tickets))
+
+    # 잠금이 부모의 clear+release를 지나서 산다(§순서가 계약이다 1) - 창이 0이다
+    body = open(os.path.join(tickets, "eeee0005.md"), encoding="utf-8").read()
+    assert re.search(r"^awaiting: [0-9a-f]{8}$", body, re.M), \
+        "부모가 풀면서 잠금이 사라졌다\n" + body
+    assert not re.search(r"^(session_id|pid|inbox):[ \t]*\S", body, re.M), \
+        "할당 값은 부모가 지웠어야 한다\n" + body
+    assert "eeee0005" not in run(sys.executable, PY, "select", root, env=env).stdout, \
+        "강제 중단한 티켓을 다음 tick이 다시 집는다 - 중단이 중단이 아니다"
 
     log = readlog()
     assert "TIMEOUT eeee0005" not in log, "상한 미만에 죽었는데 TIMEOUT으로 적었다\n" + log

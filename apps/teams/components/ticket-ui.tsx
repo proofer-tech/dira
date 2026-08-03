@@ -275,9 +275,11 @@ export function UnassignButton({
   /* 여섯 번째 `AlertDialog`이고 앞 다섯과 성격이 다르다(§5 · §2-5 §확인) — 지우는 것이 아니라
      **끊는 것**이고, 버튼이 여는 것이 아니라 엔진이 거부한 뒤에 열린다. 그래서 `AlertDialogTrigger`가
      없고 `open`을 상태가 쥔다(`DiscardConfirm`과 같은 모양이다).
-     본문은 사실 셋을 다 말한다: 세션이 죽는다 · 커밋 안 된 변경은 남는다 · 티켓은 백로그로
-     돌아간다. 둘째 줄이 없으면 사람이 파일이 날아간 줄 알고 안 누르거나, 눌러 놓고 지워졌다고
-     믿는다(요구 본문의 `진행한 작업을 삭제`가 화면이 보는 사실과 다르다). */
+     본문은 사실 셋을 다 말한다: 세션이 죽는다 · 커밋 안 된 변경은 남는다 · 티켓은 돌아가되
+     답을 쓰기 전에는 아무 워커도 안 가져간다. 둘째 줄이 없으면 사람이 파일이 날아간 줄 알고
+     안 누르거나, 눌러 놓고 지워졌다고 믿는다(요구 본문의 `진행한 작업을 삭제`가 화면이 보는
+     사실과 다르다). 셋째 줄은 개정(§2-5 §개정)이 갈았다 — 엔진이 죽이기 직전에 답변 대기로
+     잠그므로 `다시 디스패치됩니다`가 이제 거짓이다. */
   const confirm = (
     <AlertDialog open={asking} onOpenChange={(next) => !next && setRun(null)}>
       <AlertDialogContent>
@@ -285,8 +287,9 @@ export function UnassignButton({
           <AlertDialogTitle>도는 세션을 끊습니다</AlertDialogTitle>
           <AlertDialogDescription>
             <span className="font-mono">{hash}</span>를 물고 있는 세션이 아직 살아 있습니다. 강제로
-            중단하면 그 세션이 죽고, 티켓은 백로그로 돌아가 다시 디스패치됩니다. 워크트리에 커밋하지
-            않은 변경은 지워지지 않고 그대로 남습니다.
+            중단하면 그 세션이 죽고, 티켓은 답변 대기로 잠깁니다 — 답변칸에 답을 쓰기 전에는 아무
+            워커도 다시 가져가지 않습니다. 워크트리에 커밋하지 않은 변경은 지워지지 않고 그대로
+            남습니다.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

@@ -128,6 +128,11 @@ case "$CMD" in
         # 문구를 정규식으로 읽으면 문구를 고치는 순간 확인이 조용히 사라진다.
         exit 3
       fi
+      # 죽이기 **전에** 답변 대기로 잠근다(§2-5 §개정). 열림에는 잠금이 없어서 같은 워커가
+      # 1~4초 뒤 다시 문다 - 중단이 중단이 아니게 된다. 여기가 세 가지가 동시에 성립하는
+      # 유일한 구간이다: 창이 0이고(deps·awaiting은 clear+release를 지나 산다), 티켓 파일을
+      # 쓰는 것이 나 혼자고(부모는 wait에 서 있다), 인용할 transcript가 아직 안 지워졌다.
+      if ASK=$(python3 "$PY" askhuman "$P"); then log "$ASK"; else log "ASK-FAIL $H 답변 대기 잠금 실패"; fi
       # 강제: pid를 죽이면 그 세션의 부모 tick.sh가 wait에서 실패 판정으로 떨어져 이미
       # clear + release를 한다. 새 상태 전이가 아니라 그 경로를 밟게 하고 결과를 기다리는 것이다.
       kill -TERM "$UPID" 2>/dev/null
@@ -141,7 +146,7 @@ case "$CMD" in
         # ps는 좀비(부모가 아직 wait 안 한 죽은 자식)도 "있다"고 답한다. 그건 도는 세션이 아니다.
         case "$(ps -p "$UPID" -o state= 2>/dev/null | tr -d ' ')" in
           ''|Z*) ;;
-          *) echo "실패: $H 의 pid $UPID 가 ${N}s 뒤에도 살아 있다. 할당은 그대로 둔다." >&2
+          *) echo "실패: $H 의 pid $UPID 가 ${N}s 뒤에도 살아 있다. 할당은 그대로 둔다. 답변 대기 잠금은 걸려 있다 — 그 세션이 끝나면 백로그가 아니라 답변 대기로 선다." >&2
              log "UNASSIGN-FORCE $H pid=$UPID 안 죽음 - 해제 보류"
              exit 1 ;;
         esac
@@ -149,7 +154,8 @@ case "$CMD" in
         RP=$(python3 "$PY" release "$P") || exit 1
         [ "$RP" != "$P" ] && echo "백로그 복귀: $(basename "$RP")"
       fi
-      log "UNASSIGN $H 강제(pid=$UPID ${N}s)"; echo "강제 할당 해제: $H"
+      log "UNASSIGN $H 강제(pid=$UPID ${N}s)"
+      echo "강제 할당 해제: $H — 답변 대기로 잠갔다(답을 쓸 때까지 아무 워커도 안 가져간다)"
       exit 0
     fi
     python3 "$PY" clear "$P" || exit 1

@@ -8,6 +8,7 @@ list   <루트>          열린 티켓 전체 상태 표
 find   <루트> <hash>   해시로 티켓 경로 찾기
 reap   <루트>          세션이 죽은 진행중 티켓을 백로그로 회수 (스테일 수거)
 handclaim <path> [owner]  대화형 세션이 손으로 잡기. claim + pid/claimed_at/transcript 기록
+askhuman <path>        사람이 강제 중단한 티켓을 답변 대기로 잠그기 (deps + awaiting + `## 질문 n`)
 
 큐는 루트 한 곳이고 하위 디렉터리는 없다. 디렉터리가 뜻하던 것은 전부 frontmatter로 갔다 --
 누가 수행하는지는 `persona:`(없으면 페르소나 없는 평범한 에이전트), 성격은 `kind:`.
@@ -476,7 +477,7 @@ def ask_context(fm, body):
         _quote(tail or "트랜스크립트를 찾지 못했습니다"))
 
 
-def ask_human(path, h, attempts, why, blocked=False):
+def ask_human(path, h, attempts, why, blocked=False, killed=False):
     """자동 회수 상한을 넘겼거나 신선한 `## 블록`이 붙은 티켓을 답변 요청으로 올린다.
 
     `.wip`에 굳혀 두면(구 `HOLD`) GUI가 `.wip`을 편집할 수 없어 **사람이 눈으로 발견할 때까지
@@ -485,6 +486,10 @@ def ask_human(path, h, attempts, why, blocked=False):
     재디스패치가 막히고(무한 재시도를 막던 HOLD의 목적은 그대로), GUI는 `awaiting`을 읽어
     `답변 대기` 배지와 답변칸을 그린다. 사람이 답변 파일(`<A><완료>.md`)을 만들면 잠금이 저절로
     풀려 큐에 다시 뜬다(DESIGN.md §요구사항 레이어 결정 3과 같은 장치).
+
+    `killed`는 셋째 갈래다(DESIGN.md §2-5 §개정) -- 사람이 `--force`로 끊는 순간 `tick.sh`가
+    죽이기 **직전에** 부른다. 사고가 아니라 사람이 낸 판단이라 사유 문구가 다르고,
+    할당 필드(attempts·REAP_CLEAR)는 안 건드린다(아래).
     """
     a = uuid.uuid4().hex[:8]
     fm, lines, end = read_fm(path)
@@ -494,22 +499,29 @@ def ask_human(path, h, attempts, why, blocked=False):
     except Exception as e:                   # 자료 수집 실패가 답변 요청 자체를 막지 않는다
         ctx = "\n### 죽은 세션 마지막 기록\n\n> 자료를 읽지 못했습니다: {}\n".format(e)
     # 사유는 경로마다 사실이 다르다. 블록은 세션이 실패한 게 아니라 벽을 보고 판정하고 멈춘 것이다.
-    cause = ("세션이 `## 블록`을 남기고 멈췄습니다" if blocked
+    cause = ("사람이 강제 중단했습니다" if killed
+             else "세션이 `## 블록`을 남기고 멈췄습니다" if blocked
              else "자동 회수 {}회 실패({})".format(attempts, why))
+    ask = ("이 티켓을 계속 갈지, 무엇을 바꿔서 갈지 답해주세요." if killed
+           else "아래 인용한 `## 블록`에 적힌 결정을 답해주세요."
+           if any(re.match(r"^##\s*블록", nfc(l)) for l in body)
+           else "세션이 왜 계속 죽는지, 이 티켓을 계속 갈지 답해주세요.")
     # 지시어는 `아래`다 -- 인용(결정 6)은 정형문 다음에 붙고, 화면에선 답변칸이 본문 위에 있다.
     with open(path, "a", encoding="utf-8") as f:
         f.write("\n## 질문 {}\n\n{}. 엔진은 더 시도하지 않습니다 — {}\n{}".format(
-            sum(1 for l in body if re.match(r"^##\s*질문", l)) + 1, cause,
-            "아래 인용한 `## 블록`에 적힌 결정을 답해주세요."
-            if any(re.match(r"^##\s*블록", nfc(l)) for l in body)
-            else "세션이 왜 계속 죽는지, 이 티켓을 계속 갈지 답해주세요.", ctx))
+            sum(1 for l in body if re.match(r"^##\s*질문", l)) + 1, cause, ask, ctx))
     # 잠금(deps)을 먼저 걸고 할당을 나중에 푼다. 순서를 바꾸면 그 사이에 티켓이
     # 잠금 없이 열려 다음 tick이 답변 없이 집어 간다.
     set_deps(path, deps_of(lines, end) + [a])
     # attempts를 "0" 문자열로 쓴다(0은 falsy라 set_fm_keys가 빈 값으로 적는다) --
     # 답을 받아 다시 디스패치된 뒤엔 자동 회수 2회를 처음부터 다시 쓴다
-    upd = {"attempts": "0", "awaiting": a}
-    upd.update({k: "" for k in REAP_CLEAR})
+    upd = {"awaiting": a}
+    # 강제 중단은 아직 `.wip`이고 pid가 살아 있는 티켓에 건다. 여기서 REAP_CLEAR를 비우면
+    # 죽이기 전에 `pid:`가 사라지고, kill이 실패하면 pid도 session_id도 없는 `.wip`이 남아
+    # reap_manual이 두 번 다시 안 본다. 할당 필드는 종전대로 부모 tick.sh가 clear로 지운다.
+    if not killed:
+        upd["attempts"] = "0"
+        upd.update({k: "" for k in REAP_CLEAR})
     set_fm_keys(path, upd)
     return "ASK {} awaiting={} - {}, 답변 요청으로 전환".format(h, a, cause)
 
@@ -722,6 +734,15 @@ def main():
     if cmd == "setinbox":
         # 도는 세션에 말을 거는 FIFO 경로. 세션이 끝나면 그 파일은 사라진다.
         set_fm_keys(sys.argv[2], {"inbox": sys.argv[3]})
+        return
+
+    if cmd == "askhuman":
+        # 사람이 강제 중단한 티켓을 답변 대기로 잠근다(DESIGN.md §2-5 §개정). tick.sh가
+        # `kill -TERM` **직전에** 부른다 - 잠금(deps·awaiting)은 부모의 clear+release를
+        # 지나서 살아남으므로, 티켓은 열리자마자 잠긴 채로 선다(창이 0이다).
+        path = sys.argv[2]
+        print(ask_human(path, ticket_hash(path, read_fm(path)[0]), 0,
+                        "사람이 강제 중단", killed=True))
         return
 
     if cmd == "clear":
