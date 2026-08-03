@@ -43,7 +43,7 @@ echo "$H"
 | `kind:` | | `work` \| `request` \| `feedback` \| `answer` |
 | `persona:` | | 프로젝트가 정의한 페르소나 이름(`<큐>/personas/` 아래). 없으면 페르소나 없이 디스패치(정상) |
 | `deps:` | | `[a1b2c3d4, e5f6a7b8]`. 전부 `.done`이어야 큐에 뜬다 |
-| `awaiting:` | | 지금 기다리는 **답변 stem 1개**. **같은 값을 `deps`에도 넣는다** — 잠금은 `deps`고 이건 GUI가 `답변 대기`로 읽는 표시다. 요구를 쪼개는 세션이 `kind: request`에 쓰고, `reap`이 자동 회수 상한을 넘긴 티켓에 쓴다(성격 무관). 답이 달려도 **지우지 않는다**(이력) — 아직 기다리는 중인지는 `tickets/<awaiting>.done.md`의 존재로 판정한다 |
+| `awaiting:` | | 지금 기다리는 **답변 stem 1개**. **같은 값을 `deps`에도 넣는다** — 잠금은 `deps`고 이건 GUI가 `답변 대기`로 읽는 표시다. 요구를 쪼개는 세션이 `kind: request`에 쓰고, `reap`이 자동 회수 상한을 넘긴 티켓에 쓴다(분류 무관). 답이 달려도 **지우지 않는다**(이력) — 아직 기다리는 중인지는 `tickets/<awaiting>.done.md`의 존재로 판정한다 |
 | `req:` | | 출처 요구사항 stem. 요구사항에서 쪼갠 작업 티켓에 붙인다. `deps`가 아니다 — 선후가 아니라 출처다 |
 
 `awaiting:`·`req:`를 쓰는 절차와 근거는 프로젝트 문서(페르소나 프로필·설계 문서)에 있다.
@@ -54,7 +54,7 @@ echo "$H"
 `tickets/<A>.done.md`를 새로 생성한다(`title: 답변 — <R> #n`). 열린 상태로 만들면 페르소나 없는
 티켓이 되어 아무 워커에게나 디스패치된다 — 아무도 그것을 수행하지 않기 때문에 `feedback`이
 아니라 `answer`다. 세션이 이 파일을 만들 일은 없다. "`kind: request`의 답은 원본에 덧붙이지 않고
-새 파일로 만든다"([CORE.md](CORE.md) §티켓 성격)의 요구사항 왕복 버전이 이것이다.
+새 파일로 만든다"([CORE.md](CORE.md) §티켓 분류)의 요구사항 왕복 버전이 이것이다.
 
 `session_id:`·`assigned_at:`·`owner:`·`attempts:`·`pid:`·`claimed_at:`·`transcript:`·`inbox:`는
 **디스패처가 쓴다. 사람이 넣지 않는다.** 새 티켓에 `session_id:`를 넣으면 할당된 것으로 보여

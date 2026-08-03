@@ -110,7 +110,7 @@ export default async function Protocols({
           <p className="text-sm text-muted-foreground">
             프로토콜이 없어도 이 프로젝트는 돕니다 — <span className="font-mono text-xs">tick.sh</span>는{" "}
             <span className="font-mono text-xs">AGENTS.md</span>가 없으면 그냥 넘어갑니다. 세션이
-            협업 규약(티켓 성격별 처리·핸드오프·보고)을 모른 채 시작할 뿐입니다.
+            협업 규약(티켓 분류별 처리·핸드오프·보고)을 모른 채 시작할 뿐입니다.
           </p>
         </div>
       )}

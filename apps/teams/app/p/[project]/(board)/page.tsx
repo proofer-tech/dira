@@ -343,7 +343,7 @@ export default async function Board({
   const trimDone = !sp.has("status");
 
   const applied = [
-    ...query.kind.map((v) => ({ param: "kind", value: v, text: `성격: ${KIND_LABELS[v] ?? v}` })),
+    ...query.kind.map((v) => ({ param: "kind", value: v, text: `분류: ${KIND_LABELS[v] ?? v}` })),
     ...query.persona.map((v) => ({ param: "persona", value: v, text: `페르소나: ${v}` })),
     // 여기만 `query`가 아니라 **URL 그대로**다 — 배지는 "사람이 건 필터"의 목록이고 기본값은
     // 사람이 건 게 아니다. 기본 화면에 배지 5개와 `필터 초기화`가 뜨면 안 된다(§1 보드).
@@ -477,7 +477,7 @@ export default async function Board({
             <BoardSearch />
             <BoardFilter
               param="kind"
-              label="성격"
+              label="분류"
               options={kinds.map((k) => ({ value: k, label: KIND_LABELS[k] ?? k }))}
             />
             <BoardFilter
