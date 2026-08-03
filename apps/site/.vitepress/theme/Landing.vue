@@ -168,9 +168,6 @@ onMounted(async () => {
 <section class="wrap plan-sec">
   <p class="eyebrow">플랜</p>
   <h2>쓸 수 있는 것은 전부 무료입니다</h2>
-  <p class="body">
-    아직 없는 항목에는 준비중이라고 적었습니다.
-  </p>
   <!-- 카드는 순서가 없어 <ul>이다(.plans는 .steps에서 분리했다 — 30초 설명과 규칙이 갈린다). -->
   <ul class="plans">
     <li>
