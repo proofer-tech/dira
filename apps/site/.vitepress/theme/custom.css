@@ -229,15 +229,13 @@ html { scroll-behavior: smooth; }
    40 → 24로 페이지의 한 값에 붙는다. */
 .dira-landing .gallery { display: grid; grid-template-columns: repeat(12, 1fr); gap: 24px; align-items: start; }
 /* 그림 위 변의 3px 레일. 셋 다 같은 상자라 캡처 셋의 시작 높이가 안 흔들린다 —
-   ②③만 상태 색이 들어가고 ①은 무채색으로 남는다(상태가 아닌 것이라 식별자도 없다).
+   ②③만 상태 색이 들어가고 ①은 무채색으로 남는다(상태가 아닌 것이다).
    넷은 앱 `--status-*`와 값도 뜻도 같아서(`apps/teams/app/globals.css:106-109`) 같은
-   페이지에 걸린 앱 캡처 속 같은 색이 다른 것을 가리키지 않는다. 면으로는 안 쓴다. */
+   페이지에 걸린 앱 캡처 속 같은 색이 다른 것을 가리키지 않는다. 면으로는 안 쓴다.
+   레일 아래 식별자는 걷혔다(§랜딩 §갤러리 식별자) — 레일이 캡처 위 변에 바로 붙는다. */
 .dira-landing .gallery figure { grid-column: span 4; border-top: 3px solid var(--border); }
 .dira-landing .gallery figure:nth-child(2) { border-top-color: var(--blocked); }
 .dira-landing .gallery figure:nth-child(3) { border-top-color: var(--stale); }
-.dira-landing .gallery figure:nth-child(2) .sig { color: var(--blocked); }
-.dira-landing .gallery figure:nth-child(3) .sig { color: var(--stale); }
-.dira-landing .gallery .sig { margin: 12px 0; }
 /* ③ 열 폭 317px에 1600px 캡처를 넣으면 캡처 안의 티켓 제목이 4px다. 클릭하면 원본
    크기로 연다 — ponytail: 라이트박스를 들이지 않고 브라우저의 이미지 뷰어를 그대로 쓴다.
    열을 줄이는 쪽은 안 된다: 1열 1032px에서도 캡처가 0.65배라 여전히 안 읽히고,
@@ -255,15 +253,15 @@ html { scroll-behavior: smooth; }
   /* ④ 세 캡처의 종횡비가 1.25 · 3.2 · 1.6이라 그냥 두면 캡션 시작 높이가 셋 다 다르다.
      figure를 subgrid로 만들어 이미지 · 캡션 · 링크가 세 열에서 같은 행을 쓰게 한다.
      잘라서 높이를 맞추지 않는다 — 캡션이 캡처의 오른쪽 끝을 가리키는 것이 있어서
-     (07-qa-thread의 `awaiting:`) object-fit:cover로 자르면 캡션이 없는 것을 가리킨다.
+     (07-qa-thread의 오른쪽 frontmatter) object-fit:cover로 자르면 캡션이 없는 것을 가리킨다.
      행 간격은 figcaption · .arrows의 margin-top이 이미 주므로 row-gap은 0이다.
-     행이 넷인 것은 레일 아래 식별자가 1행을 쓰기 때문이다 — ①은 그 자리가 비고,
-     그래서 자동 배치에 맡기면 ①의 캡션이 1행으로 올라간다. 셋을 행으로 못박는다. */
-  .dira-landing .gallery { grid-template-rows: auto auto auto auto; row-gap: 0; }
-  .dira-landing .gallery figure { display: grid; grid-row: span 4; grid-template-rows: subgrid; }
-  .dira-landing .gallery .zoom { grid-row: 2; align-self: start; }
-  .dira-landing .gallery figcaption { grid-row: 3; }
-  .dira-landing .gallery .arrows { grid-row: 4; }
+     행은 셋이다 — 캡처 · 캡션 · 링크. 셋을 행으로 못박는다(§랜딩 §갤러리 식별자로
+     레일 아래 식별자가 걷히며 넷에서 하나 줄었다). */
+  .dira-landing .gallery { grid-template-rows: auto auto auto; row-gap: 0; }
+  .dira-landing .gallery figure { display: grid; grid-row: span 3; grid-template-rows: subgrid; }
+  .dira-landing .gallery .zoom { grid-row: 1; align-self: start; }
+  .dira-landing .gallery figcaption { grid-row: 2; }
+  .dira-landing .gallery .arrows { grid-row: 3; }
 }
 
 /* ── content rows ───────────────────────────────── */
@@ -299,11 +297,11 @@ html { scroll-behavior: smooth; }
 .dira-landing .arrows a:focus-visible::before { transform: scaleX(1); }
 .dira-landing .arrows a::after { content: " →"; color: var(--faint); }
 
-/* 상태 레일 아래에 서는 등폭 식별자 한 낱말(§방향·토큰 «색»의 모양 절반). 새로 서는
-   문자열이 전부 제품이 이미 쓰는 식별자다 — `.md`(상태 없음) · `.wip` · `.done`은 코어
-   §큐의 불변식 1이 정한 파일명 3종이고, `awaiting:` · `unassign`은 그 캡처가 담고 있는
-   것이다. 한글 문장 · 제목 · 라벨은 0개다(§서는 못 ②). aria-hidden을 안 단다 — 색을 못
-   보는 사람에게 상태를 지는 것이 바로 이 낱말이다. 색은 아래 두 블록이 자리마다 준다. */
+/* 상태 레일 아래에 서는 등폭 식별자 한 낱말(§방향·토큰 «색»의 모양 절반). 서는 문자열이
+   전부 제품이 이미 쓰는 식별자다 — `.md`(상태 없음) · `.wip` · `.done`은 코어 §큐의
+   불변식 1이 정한 파일명 3종이고, 지금 이 셋뿐이다(`.gallery` 둘은 §랜딩 §갤러리 식별자로
+   걷혔다). 한글 문장 · 제목 · 라벨은 0개다(§서는 못 ②). aria-hidden을 안 단다 — 색을 못
+   보는 사람에게 상태를 지는 것이 바로 이 낱말이다. 색은 아래 .steps 블록이 자리마다 준다. */
 .dira-landing .sig {
   display: block; margin: 0 0 12px; font-family: var(--mono);
   font-size: 11.5px; font-weight: 600; letter-spacing: .04em; color: var(--faint);
