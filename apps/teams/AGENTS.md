@@ -223,10 +223,18 @@ apps/teams/
                         폴링도 안 돈다. **진입점은 안 지운다** — 조용히 사라지면 고장으로 읽힌다.
                         `engineName`은 **서버가** 적용해 넘긴다(그 파일이 `node:fs`를 탄다)
     home-ui.tsx         홈 대화 뷰(§7 · §비주얼 §24) — 말풍선 스레드 · 입력 form · **좌측 패널
-                        (`대화` + `워커 세션` 두 그룹)**(`div` 둘 + `button`. 팝오버는 `01e5293b`이
-                        걷었다 — 같은 목록이 두 자리에 서면 정본이 없다. `command`도 `sidebar`도
-                        안 쓴다 — 전자는 그릇이 곧 검색칸인데 §7이 대화 검색을 뺐고, 후자는 부수
-                        의존 5개다). **`current` 한 칸이 두 그룹을 통틀어 가리킨다** — 워커 세션을
+                        (`대화` + `워커 세션` 두 그룹)**(shadcn `sidebar`. 팝오버는 `01e5293b`이
+                        걷었다 — 같은 목록이 두 자리에 서면 정본이 없다. **`command`는 여전히
+                        안 쓴다** — 그릇이 곧 검색칸인데 §7이 대화 검색을 뺐다. `sidebar`를
+                        버렸던 근거(부수 의존 5개)는 **틀린 수**여서 §비주얼 §34가 뽑았다:
+                        실측으로 느는 파일 셋 · **새 npm 0**). 사슬은 `SidebarProvider`(2단 행
+                        자신) → `Sidebar collapsible="none"` → `SidebarContent` → `SidebarGroup`
+                        ×2 → `SidebarGroupLabel` + `SidebarMenu`>`Item`>`MenuButton`이고
+                        **접기·`SidebarTrigger`·`SidebarRail`·모바일 `Sheet`가 0개다**(§34
+                        §안 하는 것 — `collapsible="none"` 분기가 `isMobile` 검사 앞에서 반환한다).
+                        면은 `bg-surface`가 낸다(`bg-sidebar`는 다크에서 `--card`값이라 카드 대
+                        면이 1.00이 된다 — §비주얼 §33 층 셋이 깨진다).
+                        **`current` 한 칸이 두 그룹을 통틀어 가리킨다** — 워커 세션을
                         고르면 그 트랜스크립트가 같은 스레드에 그려지고 `conversations`에는 줄이
                         안 생기며, 끝난 세션에는 **홈 플래그 한 벌로 이어 묻는다**(§7 답 1(b)·2(c)).
                         도는 세션은 `보내기`가 잠기고(그 근거는 자리가 아니라 파일이다 — 한
@@ -276,10 +284,26 @@ apps/teams/
                         그 파일을 import한다(`keymap-provider.tsx`와 같은 축)
     copy-command.tsx    실행 대신 복사시키는 명령 블록
   components/ui/        shadcn CLI 산출물. 손으로 만들지 않는다.
-                        **예외 1건: `alert.tsx` 기본 변종에서 `*:[svg]:text-current`를 뺐다**
-                        (`b532bf8b`). 그게 아이콘의 `text-status-*`를 21곳 전부에서 덮어
-                        §비주얼 §2의 색 겹이 죽어 있었다. `shadcn add alert`를 다시 돌리면
-                        되살아난다 — 돌린 뒤 그 한 조각만 다시 뺀다
+                        **예외 셋. `add`를 다시 돌리면 전부 되살아난다 — 돌린 뒤 그 조각만
+                        다시 뺀다**(그래서 여기 적혀 있다):
+                        ① `alert.tsx` 기본 변종의 `*:[svg]:text-current`를 뺐다(`b532bf8b`).
+                        그게 아이콘의 `text-status-*`를 21곳 전부에서 덮어 §비주얼 §2의 색 겹이
+                        죽어 있었다
+                        ② `sidebar.tsx`의 `SIDEBAR_KEYBOARD_SHORTCUT` 1줄과 그 `useEffect`
+                        6줄을 뺐다(`bac53a2e` · 근거는 §비주얼 §34 §사실 표 한 줄이 틀렸다).
+                        `SidebarProvider`가 **무조건** `window`에 keydown을 걸어 `⌘B`를 먹고
+                        `sidebar_state` 쿠키를 낳는데(제어 프롭 분기 **밖**이라 프롭으로 못 막는다)
+                        이 앱은 접기를 안 켜서 잃는 기능이 0이다. §0-6이 이 앱 키의 단일 출처다.
+                        **뒤집는 조건**: 접기를 켜면 되살리고 그 키를 §0-6 표에 아홉 번째로 넣는다
+                        ③ `hooks/use-mobile.ts`를 `useSyncExternalStore`로 다시 적었다
+                        (`bac53a2e`). 원본의 `useEffect` 안 `setState`를 이 앱 lint
+                        (`react-hooks/set-state-in-effect`)가 **에러**로 잡는다. 값·타이밍은 같다
+    sidebar.tsx         `sidebar` 부품 24개. 쓰는 것은 여덟이고(§비주얼 §34 §안 쓰는 export)
+                        세 화면 **안**의 좌측 패널이 그릇으로 쓴다 — 앱 내비는 상단 바 그대로다(§4)
+  hooks/                shadcn CLI가 만든 첫 훅 디렉터리(`components.json`의 `aliases.hooks`).
+                        **손으로 만들지 않는다** — `components/ui/`와 같은 자리다
+    use-mobile.ts       `sidebar`가 데려왔다. `Sidebar collapsible="none"`은 이 값을 안 읽지만
+                        (`isMobile` 검사 앞에서 반환한다) `SidebarProvider`가 무조건 부른다
   components.json       shadcn 설정
 ```
 

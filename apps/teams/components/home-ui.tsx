@@ -34,6 +34,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+// `Check`은 **패널에서 빠졌다**(§비주얼 §34 ③). import는 남는다 — 같은 파일의 `복사` 버튼이
+// 눌린 뒤 1.2초 동안 그 글리프를 든다(§24 §띠). §34가 *lucide `Check`이 빠진다*고 적은 것은
+// 좌측 패널 얘기다.
 import { ArrowDown, Check, Copy, Send, TriangleAlert } from "lucide-react";
 import {
   askHome,
@@ -71,6 +74,16 @@ import {
   MessageScrollerProvider,
   MessageScrollerViewport,
 } from "@/components/ui/message-scroller";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+} from "@/components/ui/sidebar";
 import type { Answer, AnswerReason, Home, HomeChunk, Turn, WorkerSession } from "@/lib/home-agent";
 import { formatCombo, matchCombo } from "@/lib/keymap";
 import { chatRows } from "@/lib/urls";
@@ -391,8 +404,17 @@ export function HomeUI({
       {/* 2단 행(§24 세로 배치 표 · §좌측 패널) — 페이지 루트의 **유일한 flex 항목**이라
           `main`의 패딩 안 남은 높이를 통째로 받는다.
           `gap-8`(32)이 세로 리듬 `gap-6`(24)보다 큰 것이 두 단을 한 격자로 안 읽히게 하고,
-          그래서 §11처럼 구분선을 안 넣는다. */}
-      <div className="flex min-h-0 flex-1 gap-8">
+          그래서 §11처럼 구분선을 안 넣는다.
+          **이 행 자신이 `SidebarProvider`다**(§비주얼 §34 ①) — `Sidebar`가 `collapsible="none"`
+          에서도 `useSidebar()`를 무조건 부르므로 Provider가 있어야 하는데, Provider가 내는 것도
+          `flex` `div` 하나라 **새 요소가 0개다.** `layout.tsx`에 세우지 않는 이유는 2단이 없는
+          다섯 화면에도 그 `div`가 얹혀서다(§34 §범위 — 그 화면들은 한 줄도 안 만진다).
+          **`min-h-0`이 Provider 기본 `min-h-svh`를 덮는다**(`cn`이 `min-h-*`를 병합한다) —
+          안 덮으면 아래 §높이의 `창 − 124`가 깨진다.
+          **0건이어도 이 행은 그대로 선다.** 안 그리는 것은 `Sidebar` 쪽이고(아래 조건문),
+          그릇을 조건부로 갈아 끼우면 첫 질문을 보내는 순간 대화 컬럼이 통째로 remount돼
+          폼의 포커스·IME가 날아간다(아래 §자식이 언제나 셋과 같은 근거). */}
+      <SidebarProvider className="min-h-0 flex-1 gap-8">
         {/* 좌측 패널 — 그룹이 둘이다(`대화` · `워커 세션`). **대화 0건이면 패널째 안 그린다**
             (§24 §0건 갈래 ① — 워커 세션이 있어도 같이 빠진다: 첫 화면의 정본은 온보딩이고 그
             옆에 세션 목록이 서면 시선이 갈린다. 워커가 무엇을 했는지 보는 자리는 그 전에도 티켓
@@ -646,7 +668,7 @@ export function HomeUI({
             </div>
           ) : null}
         </div>
-      </div>
+      </SidebarProvider>
 
       {/* 찾기 바(§7 §대화 안에서 찾기 · §비주얼 §30) — **화면 컴포넌트의 마지막 자식**이다.
           포털을 안 쓴다: `fixed`가 뷰포트에 붙는 조건은 조상 사슬에 `transform`·`filter`·
@@ -789,36 +811,49 @@ function WorkerNote({ project, worker }: { project: string; worker: WorkerSessio
 }
 
 /** 패널 줄 한 벌의 클래스. **두 그룹이 이 문자열을 같이 쓰고 갈리는 것은 정렬 하나다**(§24
- *  한 줄의 모양 표 — `대화`는 `items-center`(1행 36px), `워커 세션`은 `items-start`(2행 52px)).
- *  나머지(폭 · `px-2 py-1.5` · hover · 잠금)가 두 줄에서 같아야 체크 칸이 한 x에 선다. */
-/** (`aria-disabled:opacity-50`이 빠졌다 — 두 그룹의 줄에 `aria-disabled`를 거는 자리가
- *  요구 `4e9e54c5`로 사라졌다. 남기면 이 문자열이 없는 잠금을 가리킨다) */
-const ROW = "group flex w-full cursor-pointer gap-2 rounded-sm px-2 py-1.5 text-left hover:bg-muted";
+ *  한 줄의 모양 표 — `대화`는 `items-center`(1행), `워커 세션`은 `items-start`(2행)).
+ *  나머지(폭 · 패딩 · hover · 잠금)가 두 줄에서 같아야 제목이 한 x에서 시작한다.
+ *
+ *  **거의 다 `SidebarMenuButton`이 든다**(§비주얼 §34 판정표) — `flex w-full items-center
+ *  gap-2 rounded-md p-2 text-left text-sm` · `hover:bg-sidebar-accent`(= `--muted` 값,
+ *  §34 ②) · `data-active:bg-sidebar-accent data-active:font-medium`. 여기 남는 둘은
+ *  부품에 없는 것과 덮어야 하는 것뿐이다:
+ *  - `cursor-pointer` — 부품이 안 준다.
+ *  - `h-auto` — 부품 기본 `h-8`은 **접기용 고정 높이**다. 덮어야 2행 줄이 안 눌린다.
+ *    이걸로 줄 높이가 `p-2`를 따라 32 → **36**(1행) · 50 → **54**(2행)가 된다(§34 §값 여덟). */
+const ROW = "h-auto cursor-pointer";
 
 /** 줄 오른쪽 끝의 글자 한 겹 — **`대화`의 시각과 도는 줄의 표식이 같은 그릇이다**(§24
  *  §도는 대화의 표식: 그릇 새 요소 0 · 클래스 무수정). 두 그룹이 이 문자열을 같이 써서
  *  표식의 x가 같다. 색도 아이콘도 0이고(`<StatusBadge status="wip">`는 이 패널에서 이미
  *  *티켓이 `.wip`*을 말한다) **모션도 0이다** — 도는 줄이 여럿 설 수 있어 움직임이 아무것도
- *  안 가리킨다. `· 최대 5분`은 안 붙인다: 상한을 적는 자리는 스레드의 띠 하나다. */
-const MARK = "shrink-0 text-xs text-muted-foreground tabular-nums group-hover:text-foreground";
+ *  안 가리킨다. `· 최대 5분`은 안 붙인다: 상한을 적는 자리는 스레드의 띠 하나다.
+ *
+ *  **`group-hover:` → `group-hover/menu-button:`**(§34 §값 여덟). `SidebarMenuButton`의 첫
+ *  클래스가 `peer/menu-button group/menu-button`이라 **이름 없는 `group-hover:`가 안 맞는다** —
+ *  그대로 두면 §24가 짝지어 둔 보조 글자 승격(4.34 → 18.15)이 조용히 죽는다. 같은 요소에
+ *  `group`을 하나 더 얹는 길도 있지만 스코프가 둘이 되어 다음 세션이 어느 쪽이 도는지 못 읽는다. */
+const MARK =
+  "shrink-0 text-xs text-muted-foreground tabular-nums group-hover/menu-button:text-foreground";
 const RUNNING = "답하는 중";
 
-/** 좌측 패널 (§비주얼 §24 §좌측 패널 · §7 §좌측 패널) — **`div` 둘 + `button` 목록**이다.
+/** 좌측 패널 (§비주얼 §24 §좌측 패널 · §7 §좌측 패널 · §비주얼 §34) — **shadcn `sidebar`**다.
  *
  *  **팝오버가 걷혔다**(`01e5293b`, 요구 `48b13597`). 걷힌 것은 **자리와 그릇 둘뿐**이고 줄의
- *  값은 한 자도 안 갈렸다 — `button` 목록 · 제목 `truncate` · §26 ④ 시각 서식 · 지금 것에
- *  `Check` · 도는 동안 `aria-disabled` + 같은 `title`. 사유는 §7이다: 같은 목록이 두 자리에
- *  서면 어느 쪽이 정본인지 화면이 말을 못 한다.
+ *  값은 한 자도 안 갈렸다 — 제목 `truncate` · §26 ④ 시각 서식 · 도는 동안 `aria-disabled` +
+ *  같은 `title`. 사유는 §7이다: 같은 목록이 두 자리에 서면 어느 쪽이 정본인지 화면이 말을 못 한다.
  *
- *  **`sidebar`를 안 쓴다**(§5 미설치 표) — §4가 그것을 버린 근거(부수 컴포넌트 5개)가 그대로고
- *  여기 필요한 것은 `div` 둘 + `button`이다. `scroll-area`도 안 쓴다(네이티브로 충분하다).
- *  **`command`를 안 쓰는 근거는 팝오버 때보다 세졌다** — 그 그릇이 곧 검색칸인데 이제는 상시
- *  패널이라 §7이 뺀 기능이 늘 화면에 서게 된다.
+ *  **`div` 둘 + `button` 목록이 `sidebar` 부품으로 갈렸다**(`bac53a2e`, 요구 `14529463` —
+ *  §34가 그 판정표다). §5 미설치 표의 `sidebar`·`separator` 줄과 §4의 *그만큼의 값이 없다*
+ *  한 문장이 같이 뽑혔다: 그 근거였던 *부수 컴포넌트 5개*가 틀린 수였다(실측 셋 · **새 npm 0**).
+ *  **`command`는 여전히 안 쓴다** — 그 그릇이 곧 검색칸인데 이 패널은 상시라 §7이 뺀 기능이
+ *  늘 화면에 서게 된다. `scroll-area`도 안 쓴다(`SidebarContent`가 네이티브로 이미 한다).
  *
- *  **스크롤은 패널 자신 하나다**(`overflow-y-auto`). 그룹마다 스크롤러를 두지 않는다 — 256px
- *  안에 스크롤바가 둘이면 어느 쪽이 움직이는지 안 읽힌다(§24).
+ *  **스크롤은 패널 자신 하나다** — 바깥 상자에서 `SidebarContent`(`flex-1 overflow-auto`)로
+ *  내려갔을 뿐 상자 하나에 스크롤 하나다. 그룹마다 스크롤러를 두지 않는다 — 256px 안에
+ *  스크롤바가 둘이면 어느 쪽이 움직이는지 안 읽힌다(§24).
  *
- *  **그룹이 둘이고 지금 보는 것은 통틀어 하나다**(§24). 워커 세션을 고르면 `대화` 그룹의 체크가
+ *  **그룹이 둘이고 지금 보는 것은 통틀어 하나다**(§24). 워커 세션을 고르면 `대화` 그룹의 표식이
  *  빠진다 — 본문이 그리는 것이 언제나 하나여서다. 이 패널이 빠지는 조건은 여전히 `대화` 0건
  *  하나이고(그 판정은 부르는 쪽에 있다) `워커 세션`은 0건이면 **그룹째** 안 선다(§24 §0건).
  *
@@ -847,73 +882,104 @@ function SidePanel({
     // 표면 층(§비주얼 §33) — **가르는 쌍에서 드는 것은 목록 쪽 하나다.** 대화 스레드는
     // 무수정이고(산문은 페이지 폭을 그대로 쓴다), 둘 다 얹으면 남는 경계가 `gap-8`뿐이라
     // 시작한 자리로 돌아온다. 경계를 실제로 세우는 것은 면(1.04)이 아니라 `border`(1.21)다.
-    // **가로 패딩은 0이다** — 줄이 `px-2`로 그 8px을 이미 들고 있어 면이 더하면 §24가 잰
-    // 제목 폭 216px이 16px 줄어 잘리는 자리가 옮겨 간다. 테두리 2px만 먹어 216 → 214다.
-    <div className="flex w-64 shrink-0 flex-col gap-4 overflow-y-auto rounded-lg border bg-surface py-2">
-      <div>
-        {/* 그룹 머리 — §3 테이블 헤더 행의 세 값 그대로(`text-xs` · `font-medium` ·
-            `--muted-foreground`). `sticky`를 안 붙인다: 그룹이 둘뿐이고 줄 모양이 서로 달라
-            어느 그룹인지를 줄 자신이 말한다(§24). 붙이면 `bg-*` 한 면이 늘어 대비 표에 잴
-            조합이 생긴다.
-            **머리가 24px 행이 됐다**(`f1941cab`) — 이 머리가 `새 대화`를 오른쪽에 들어서다.
-            두 머리를 다르게 두지 않으므로 `워커 세션`도 같은 `h-6`이다(§24 §그릇·자리 표). */}
-        <div className="flex h-6 items-center">
-          <span className="px-2 text-xs font-medium text-muted-foreground">대화</span>
-          {/* `새 대화` (§24 §`새 대화` — 요구 `6f9dce32`로 `h1` 행에서 여기로 내려왔다).
+    // **면을 `bg-surface`가 낸다**(§34 ②) — 부품 기본 `bg-sidebar`를 덮는다. 그 토큰은
+    // 라이트에서 `--surface`와 **같은 값**이지만 다크에서 `--card`(0.205)라, 그대로 두면
+    // 카드 대 면이 1.00이 되고 칸반 레인(0.18)과 이 패널(0.205)이 갈려 층이 셋이라는
+    // §33의 계약이 화면마다 깨진다.
+    // **가로 패딩은 0이다** — 줄이 `p-2`로 그 8px을 이미 들고 있어 면이 더하면 §24가 잰
+    // 제목 폭이 16px 줄어 잘리는 자리가 옮겨 간다. `SidebarGroup`의 기본 `p-2`를 `p-0`으로
+    // 덮는 것이 같은 이유다. 세로 8px은 `SidebarContent`의 `py-2`가 든다(종전 면 그대로).
+    <Sidebar
+      collapsible="none"
+      className="w-64 shrink-0 rounded-lg border bg-surface"
+    >
+      {/* `gap-4`가 두 그룹 사이 간격(종전 flex 상자의 값 그대로), `py-2`가 면의 세로 패딩.
+          부품 기본 `min-h-0 flex-1 overflow-auto`가 스크롤을 든다 — 종전 `overflow-y-auto`
+          자리다. `no-scrollbar`도 같이 오는데 `globals.css`에 그 유틸이 없어(실측 0건)
+          생성되지 않는다: 스크롤바가 종전대로 보인다. */}
+      <SidebarContent className="gap-4 py-2">
+        <SidebarGroup className="p-0">
+          {/* 그룹 머리 — §3 테이블 헤더 행의 세 값 그대로(`text-xs` · `font-medium` ·
+              `--muted-foreground`). 부품 기본은 `h-8` + `text-sidebar-foreground/70`이고
+              **둘 다 덮는다**: 알파 전경은 밑면을 따라다녀서 §33이 면을 다시 판정할 때마다
+              다시 재야 하는 값이다(불투명 `--muted-foreground`는 이미 재져 있다 — 4.53/7.25).
+              `sticky`를 안 붙인다: 그룹이 둘뿐이고 줄 모양이 서로 달라 어느 그룹인지를 줄
+              자신이 말한다(§24). 붙이면 `bg-*` 한 면이 늘어 대비 표에 잴 조합이 생긴다.
+              **머리가 24px 행이 됐다**(`f1941cab`) — 이 머리가 `새 대화`를 오른쪽에 들어서다.
+              두 머리를 다르게 두지 않으므로 `워커 세션`도 같은 `h-6`이다(§24 §그릇·자리 표). */}
+          <SidebarGroupLabel className="h-6 text-muted-foreground">
+            대화
+            {/* `새 대화` (§24 §`새 대화` — 요구 `6f9dce32`로 `h1` 행에서 여기로 내려왔다).
               **도는 중 잠금이 걷혔다**(요구 `4e9e54c5` — 답이 도는 동안 다른 대화로 옮겨 거기서
               묻는 것이 그 요구의 전부이고, 새 줄을 여는 것이 곧 그 일이다). 남은 잠금은 0건
               하나다. 여는 버튼인 것은 무수정이다(확인 없음). 갈린 값은 자리·그릇·0건 셋이다 —
-              `ghost` `size="xs"`(`h-6`·`text-xs`·`px-2`)로 무테 레일에 앉고, 머리 낱말의
-              `text-muted-foreground`를 **안 상속해서**(그 클래스가 `span` 쪽에 있다) 왼쪽은
-              라벨 · 오른쪽은 컨트롤이 읽힌다. 0건이면 사라지지 않고 자리를 지킨다 —
+              `ghost` `size="xs"`(`h-6`·`text-xs`·`px-2`)로 무테 레일에 앉고, 왼쪽은 라벨 ·
+              오른쪽은 컨트롤이 읽힌다. 0건이면 사라지지 않고 자리를 지킨다 —
               사라지면 목록이 12px 뛰는데 그 순간이 하필 첫 질문을 보내는 때다.
+              **`text-foreground`가 는다** — 머리 낱말의 `text-muted-foreground`가 종전엔
+              `span` 쪽에 있어 안 상속됐는데 이제 `SidebarGroupLabel`(= 머리 행 자신)이 든다.
+              한 클래스로 종전 색을 지킨다: §24가 못박은 *왼쪽은 라벨 · 오른쪽은 컨트롤*이
+              그릇 교체로 조용히 죽는 자리다. `ghost`의 `hover:text-foreground`와도 같은 값이다.
+              **머리 행이 `px-2`를 들면서 이 버튼의 오른쪽 끝이 줄과 같은 x로 들어온다**
+              (종전 8px 밖 — §34 §값 여덟이 세는 유일한 자리 변화다).
               **0건 판정에 조각이 하나 늘었다** — 걷힌 잠금이 가려 주던 창(첫 질문 직후:
-              턴 0건인데 그 대화는 안 비었다)을 부르는 쪽이 닫는다(위 `noTurns` 프롭). */}
-          <Button
-            variant="ghost"
-            size="xs"
-            className="ml-auto aria-disabled:opacity-50"
-            aria-disabled={noTurns || undefined}
-            title={noTurns ? NO_TURNS : undefined}
-            onClick={() => {
-              if (noTurns) return;
-              onNew();
-            }}
-          >
-            새 대화
-          </Button>
-        </div>
-        {rows.map((r) => (
-          // 줄 사이 간격이 0이다 — 줄이 자기 `py`로 리듬을 만든다(§3 테이블 행과 같은 처리).
-          // **도는 동안에도 눌린다**(§24 §잠금 한 자리 — ①이 걷혔다. 요구 `4e9e54c5`):
-          // 옮겨 간 대화에서 묻는 것까지 열렸고 흐르던 글도 안 사라진다. 이 줄에 남은 값은
-          // 잠금이 아니라 **표식**이고, 그것이 오른쪽 끝 `span` 하나다(아래).
-          <button
-            key={r.id}
-            type="button"
-            // `hover:bg-muted`와 보조 글자의 `group-hover:text-foreground`는 **짝이다** —
-            // `--muted-foreground` on `--muted`는 §21이 금지한 4.34다. 두 값 다 `ghost` 변종이
-            // 이 화면에서 이미 같이 쓰는 것이라(`복사`·`다시 답하기`) 새로 잴 조합이 0이다.
-            className={cn(ROW, "items-center")}
-            onClick={() => {
-              if (r.id !== home.current) onPick(r.id);
-            }}
-          >
-            {/* 체크 칸은 줄마다 항상 있다(폭 16px 고정) — 지금 것에만 아이콘이 든다.
-                여기 빈칸은 위·아래 줄의 체크와 짝을 이뤄 *이건 지금 것이 아니다*를 말한다(§24) */}
-            <span className="w-4 shrink-0">
-              {r.id === home.current && <Check aria-hidden className="size-4" />}
-            </span>
-            {/* 216px 안쪽이라 제목이 ≈12자에서 잘린다(§24 §폭) — 식별자가 아니라 첫 질문의
-                첫 줄이고, 전문을 볼 자리는 그 대화를 열었을 때의 첫 말풍선이다(§6 경로 예외). */}
-            <span className="min-w-0 grow truncate text-sm">{r.title}</span>
-            {/* **시각이 도는 동안 자리를 내준다**(§24 §도는 대화의 표식) — 같은 `span` · 같은
-                클래스 · 갈리는 것은 자식 문자열 하나다. 둘을 같이 세우면 제목이 ≈8자로 내려간다.
-                시각은 답이 끝나면 돌아온다(폴링 응답에서 이 목록이 빠지는 순간이다). */}
-            <span className={MARK}>{runningIds.includes(r.id) ? RUNNING : r.time}</span>
-          </button>
-        ))}
-      </div>
+              턴 0건인데 그 대화는 안 비었다)을 부르는 쪽이 닫는다(위 `noTurns` 프롭).
+              `SidebarGroupAction`을 안 쓴다: `absolute` 정사각 `w-5` **아이콘 전용** 버튼이고
+              §24가 이것을 글자 버튼으로 못박았다(글리프를 안 얹는다). */}
+            <Button
+              variant="ghost"
+              size="xs"
+              className="ml-auto text-foreground aria-disabled:opacity-50"
+              aria-disabled={noTurns || undefined}
+              title={noTurns ? NO_TURNS : undefined}
+              onClick={() => {
+                if (noTurns) return;
+                onNew();
+              }}
+            >
+              새 대화
+            </Button>
+          </SidebarGroupLabel>
+          {/* 줄 사이 간격이 0이다 — 줄이 자기 `p-2`로 리듬을 만든다(§3 테이블 행과 같은 처리).
+              부품 기본 `gap-0`이 그 값이라 덮을 것이 없다. */}
+          <SidebarMenu aria-label="대화">
+            {rows.map((r) => (
+              // **도는 동안에도 눌린다**(§24 §잠금 한 자리 — ①이 걷혔다. 요구 `4e9e54c5`):
+              // 옮겨 간 대화에서 묻는 것까지 열렸고 흐르던 글도 안 사라진다. 이 줄에 남은 값은
+              // 잠금이 아니라 **표식**이고, 그것이 오른쪽 끝 `span` 하나다(아래).
+              <SidebarMenuItem key={r.id}>
+                {/* **선택 표식이 `isActive` 하나다**(§34 ③) — 겹이 둘이다: 면
+                    `bg-sidebar-accent`(= `--muted` 값, §24가 hover에 쓰던 그것) + `font-medium`.
+                    §0이 요구하는 *색 말고도 하나*를 굵기가 든다. `Check`이 걷힌 자리에
+                    **`aria-current`가 처음 선다** — 종전 체크는 `aria-hidden`이라 AT에 표식이
+                    0개였다. `isActive`가 내는 것은 `data-active` 하나로 화면에만 산다.
+                    **`hover:bg-sidebar-accent`와 보조 글자의 `group-hover/menu-button:
+                    text-foreground`는 짝이다** — `--muted-foreground` on `--muted`는 §21이
+                    금지한 4.34다. */}
+                <SidebarMenuButton
+                  className={ROW}
+                  isActive={r.id === home.current}
+                  aria-current={r.id === home.current ? "true" : undefined}
+                  onClick={() => {
+                    if (r.id !== home.current) onPick(r.id);
+                  }}
+                >
+                  {/* 체크 칸이 걷혀 줄 안쪽이 238px이다(§34 ③) — 제목이 ≈14자에서 잘린다
+                      (§24 §폭). 식별자가 아니라 첫 질문의 첫 줄이고, 전문을 볼 자리는 그
+                      대화를 열었을 때의 첫 말풍선이다(§6 경로 예외). */}
+                  <span className="min-w-0 grow truncate text-sm">{r.title}</span>
+                  {/* **시각이 도는 동안 자리를 내준다**(§24 §도는 대화의 표식) — 같은 `span` ·
+                      같은 클래스 · 갈리는 것은 자식 문자열 하나다. 둘을 같이 세우면 제목이
+                      ≈8자로 내려간다. 시각은 답이 끝나면 돌아온다(폴링 응답에서 이 목록이
+                      빠지는 순간이다). 부품의 `[&>span:last-child]:truncate`가 이 `span`에
+                      걸리지만 `shrink-0`이라 아무 일도 안 한다 — 제목의 `truncate`는 종전대로
+                      **명시 클래스**다. */}
+                  <span className={MARK}>{runningIds.includes(r.id) ? RUNNING : r.time}</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            ))}
+          </SidebarMenu>
+        </SidebarGroup>
 
       {/* `워커 세션` (§24 §좌측 패널 · §7 §워커 세션 목록) — 0건이면 **그룹째** 안 그린다.
           한 줄이 **2행**인 것은 담는 사실이 다섯이라서다(워커 · 제목 · 해시 · 도는지 · 지금 것):
@@ -922,25 +988,24 @@ function SidePanel({
           정렬 근거를 화면에 세운다). §19 워커 칩도 안 쓴다: 저건 *지금 물고 있다*(`.wip` 전용)고
           이 줄은 *이 세션을 돈 워커*라 끝난 줄에도 서야 한다 — `owner`의 원문 표기를 쓴다. */}
       {home.workers.length > 0 && (
-        <div>
+        <SidebarGroup className="p-0">
           {/* `대화` 머리와 같은 `h-6`이다 — 머리 높이는 그룹의 성질이 아니라 패널의 눈금이다(§24). */}
-          <div className="flex h-6 items-center px-2 text-xs font-medium text-muted-foreground">
+          <SidebarGroupLabel className="h-6 text-muted-foreground">
             워커 세션
-          </div>
+          </SidebarGroupLabel>
+          <SidebarMenu aria-label="워커 세션">
           {home.workers.map((w) => (
-            <button
-              key={w.id}
-              type="button"
-              // 갈리는 클래스가 `items-start` 하나다 — 체크가 **윗줄에 정렬**되고 2줄 묶음이
-              // 그 오른쪽에 통째로 앉는다(§24 한 줄의 모양 표). 잠금은 여기서도 걷혔다(위).
+            <SidebarMenuItem key={w.id}>
+            <SidebarMenuButton
+              // 갈리는 클래스가 `items-start` 하나다 — 2줄 묶음이 통째로 앉고 부품 기본
+              // `items-center`를 덮는다(§24 한 줄의 모양 표). 잠금은 여기서도 걷혔다(위).
               className={cn(ROW, "items-start")}
+              isActive={w.id === home.current}
+              aria-current={w.id === home.current ? "true" : undefined}
               onClick={() => {
                 if (w.id !== home.current) onPick(w.id);
               }}
             >
-              <span className="w-4 shrink-0">
-                {w.id === home.current && <Check aria-hidden className="size-4" />}
-              </span>
               <div className="flex min-w-0 grow flex-col gap-0.5">
                 {/* 윗줄 = 티켓 제목. 두 그룹의 1행이 같은 x에서 시작해 세로로 훑는 눈이
                     한 번에 읽는다(§24). ≈15자에서 잘리고 전문은 해시가 가는 상세에 있다.
@@ -958,7 +1023,7 @@ function SidePanel({
                     `<WorkerNote>`) — 판정 `077d3b2d`: 이대로 둔다. 되돌리려면 §24
                     §줄의 해시는 링크가 아니다가 거절한 셋이 아니라 `button` 그릇째 개정이다 */}
                 <div className="flex items-center gap-2 text-xs">
-                  <span className="font-mono text-muted-foreground group-hover:text-foreground">
+                  <span className="font-mono text-muted-foreground group-hover/menu-button:text-foreground">
                     {[w.worker, w.hash].filter(Boolean).join(" · ")}
                   </span>
                   {/* 값이 둘뿐인 것은 이 절의 선택이 아니라 **목록의 성질**이다(출처가 `.wip` +
@@ -967,10 +1032,13 @@ function SidePanel({
                   <StatusBadge status={w.running ? "wip" : "done"} className="shrink-0" />
                 </div>
               </div>
-            </button>
+            </SidebarMenuButton>
+            </SidebarMenuItem>
           ))}
-        </div>
+          </SidebarMenu>
+        </SidebarGroup>
       )}
-    </div>
+      </SidebarContent>
+    </Sidebar>
   );
 }
