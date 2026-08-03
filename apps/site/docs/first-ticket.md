@@ -52,7 +52,7 @@ crontab은 cron이 읽는 예약 목록입니다. 여기에 한 줄이 올라가
 <프로젝트>/.dira/
   tickets/                                    빈 큐
   protocols/AGENTS.md                         협업 프로토콜 — 브랜치·스펙 문서가 치환된 상태
-  protocols/tickets.md                        티켓 파일 작성법
+  protocols/tickets.md                        티켓 쪼개는 기준 — 문법은 dira의 코어가 들고 있다
   personas/{pm,developer,qa,designer}/PROFILE.md
   workers/w1.sh                               워커 하나. 실행 권한까지 붙어 있다
 ```

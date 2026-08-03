@@ -4,9 +4,9 @@
  *
  *  이 폼의 존재 이유는 **엔진이 실제로 디스패치할 수 있는 파일**을 만드는 것이다. 닫는 `---`이
  *  하나 없으면 티켓은 조용히 큐에서 사라지고, deps 해시가 한 글자 틀리면 영원히 대기한다
- *  (`protocols/tickets.md` §함정). 그래서 사람이 칠 수 있는 자리를 title·본문으로 줄이고
- *  나머지는 선택지로만 받는다 — 그리고 **서버에서 전부 다시 본다**. 폼이 `<select>`여도 요청은
- *  손으로 만들 수 있으므로 클라이언트 제약은 검증이 아니다.
+ *  (엔진 레포 `protocols/CORE-TICKETS.md` §함정). 그래서 사람이 칠 수 있는 자리를 title·본문으로
+ *  줄이고 나머지는 선택지로만 받는다 — 그리고 **서버에서 전부 다시 본다**. 폼이 `<select>`여도
+ *  요청은 손으로 만들 수 있으므로 클라이언트 제약은 검증이 아니다.
  *
  *  `[hash]/actions.ts`와 따로 두는 이유는 화면이 다르기 때문이다(그쪽은 있는 파일을 고친다).
  *  `"use server"` 파일은 모든 export가 async 함수여야 해서 헬퍼를 서로 import하지 못한다 —
@@ -26,7 +26,7 @@ import { getProject, resolveConfig } from "@/lib/projects";
 /** `ok`·`hash`는 **요구 접수 경로에서만** 온다 — 발행은 종전대로 `redirect`라 값을 돌려주지 않는다. */
 export type NewTicketState = { error?: string; ok?: true; hash?: string };
 
-/** `protocols/tickets.md` frontmatter 표의 `kind`. 폼의 select와 서버 판정이 같은 목록을 쓴다. */
+/** `protocols/CORE-TICKETS.md` §frontmatter 표의 `kind`. 폼의 select와 서버 판정이 같은 목록을 쓴다. */
 const KINDS = ["work", "request", "feedback"];
 
 /** frontmatter 값으로 들어갈 한 줄. 개행이 섞이면 frontmatter가 깨져 티켓이 큐에서 사라진다. */
@@ -41,7 +41,7 @@ function fmValue(name: string, raw: string): string {
  *  그린다(DESIGN.md §3 요구 접수 모드).
  *
  *  `session_id`·`owner`·`assigned_at`은 **쓰지 않는다**: 디스패처가 쓰는 키고, 새 티켓에 넣으면
- *  이미 할당된 것으로 보여 영원히 디스패치되지 않는다(`protocols/tickets.md`). */
+ *  이미 할당된 것으로 보여 영원히 디스패치되지 않는다(`protocols/CORE-TICKETS.md` §frontmatter). */
 export async function createTicket(
   _prev: NewTicketState,
   form: FormData,

@@ -218,9 +218,10 @@ rename이 그 자체로 락이기 때문**이다(아래 [동작](#동작) 참조
 출발점을 들고 있다.
 
 ```
+protocols/CORE-TICKETS.md          <- 티켓 문법. 엔진 레포의 것이라 복사하지 않는다
 templates/
   protocols/AGENTS.md              <- 큐를 다루는 규약. 전원 프롬프트에 실린다
-  protocols/tickets.md             <- 티켓 파일 작성법. AGENTS.md가 가리키고 필요할 때 읽힌다
+  protocols/tickets.md             <- 티켓 쪼개는 기준. 문법은 위 코어를 읽는다
   personas/pm/PROFILE.md           <- 무엇을 만들지 정하고 쪼개서 티켓으로 내보낸다
   personas/developer/PROFILE.md    <- 티켓을 돌아가는 코드로 바꾸고 증거를 남긴다
   personas/qa/PROFILE.md           <- "됐다"는 주장을 돌려보고 깬다
