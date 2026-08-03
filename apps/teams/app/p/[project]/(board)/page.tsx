@@ -104,6 +104,16 @@ const DONE_LANE_LIMIT = 20;
  *  `assigned`는 필터에만 남는다. */
 const STATUS_OPTIONS = ["open", "blocked", "awaiting", "assigned", "wip", "done"] as const;
 
+/** `kind:` → 화면 문구(§1 보드 §보드가 `kind`를 한글로 말한다). **선택지 목록이 아니라 라벨
+ *  대응표다** — `kind`는 프로젝트마다 다르므로 표에 없는 값은 파일에 적힌 그대로 그린다
+ *  (`KIND_LABELS[v] ?? v`. 상태 필터의 `known ? statusLabel(known) : v`와 같은 모양). */
+const KIND_LABELS: Record<string, string> = {
+  work: "작업",
+  request: "요구사항",
+  feedback: "피드백",
+  answer: "답변",
+};
+
 /** 뷰 전환은 `<Link>` 2개다 — `tabs`를 설치하지 않은 이유가 이것이다(DESIGN.md §5). */
 const VIEWS = [
   { value: "table", label: "테이블" },
@@ -333,8 +343,8 @@ export default async function Board({
   const trimDone = !sp.has("status");
 
   const applied = [
-    ...query.kind.map((v) => ({ param: "kind", value: v, text: `kind: ${v}` })),
-    ...query.persona.map((v) => ({ param: "persona", value: v, text: `persona: ${v}` })),
+    ...query.kind.map((v) => ({ param: "kind", value: v, text: `성격: ${KIND_LABELS[v] ?? v}` })),
+    ...query.persona.map((v) => ({ param: "persona", value: v, text: `페르소나: ${v}` })),
     // 여기만 `query`가 아니라 **URL 그대로**다 — 배지는 "사람이 건 필터"의 목록이고 기본값은
     // 사람이 건 게 아니다. 기본 화면에 배지 5개와 `필터 초기화`가 뜨면 안 된다(§1 보드).
     ...sp.getAll("status").map((v) => {
@@ -467,12 +477,12 @@ export default async function Board({
             <BoardSearch />
             <BoardFilter
               param="kind"
-              label="kind"
-              options={kinds.map((k) => ({ value: k, label: k }))}
+              label="성격"
+              options={kinds.map((k) => ({ value: k, label: KIND_LABELS[k] ?? k }))}
             />
             <BoardFilter
               param="persona"
-              label="persona"
+              label="페르소나"
               options={personas.map((p) => ({ value: p, label: p, color: colors[p] }))}
               dot
             />
@@ -641,7 +651,7 @@ export default async function Board({
                                   `flex-wrap`은 워커 마크 몫이다(§비주얼 §19 잘림): 워커 이름은
                                   식별자라 안 자르고, 길면 카드가 한 줄 자라며 배지를 안 민다 */}
                               <span className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
-                                {t.kind || "—"} ·
+                                {t.kind ? (KIND_LABELS[t.kind] ?? t.kind) : "—"} ·
                                 {t.persona ? (
                                   <PersonaBadge
                                     name={t.persona}
@@ -808,7 +818,9 @@ export default async function Board({
                               {t.title || "(제목 없음)"}
                             </span>
                           </TableCell>
-                          <TableCell className="px-3 py-0 text-sm">{t.kind || "—"}</TableCell>
+                          <TableCell className="px-3 py-0 text-sm">
+                            {t.kind ? (KIND_LABELS[t.kind] ?? t.kind) : "—"}
+                          </TableCell>
                           {/* 배지가 셀의 `text-sm`을 대체한다(§비주얼 §12) — 셀에 남은 `text-sm`은
                               배지가 없는 `—`(담당 없음) 한 글자용이다. Badge는 제 `text-xs`를 갖는다 */}
                           <TableCell className="px-3 py-0 text-sm">
