@@ -37,10 +37,15 @@ export function decodeHash(raw: string): string {
  *  (호출자가 `usePathname()`을 넘기므로 공짜로 버려진다 — 프로젝트마다 persona·kind 값이 다르다).
  *
  *  티켓 상세만 예외로 보드로 떨어뜨린다: 해시는 프로젝트마다 독립이라
- *  (DESIGN.md §데이터 모델) 옮겨 붙이면 남의 큐에 없는 티켓을 열어 404가 된다. */
+ *  (DESIGN.md §데이터 모델) 옮겨 붙이면 남의 큐에 없는 티켓을 열어 404가 된다.
+ *
+ *  **페르소나 선택도 같은 예외다**(§5 §선택이 경로에 담긴다 ④): `/personas/<이름>`의 이름은
+ *  프로젝트마다 독립이라 옮겨 붙이면 남의 큐에 없는 이름을 연다. 화면 종류는 유지되므로
+ *  보드가 아니라 **`/personas`(선택 없음)로** 떨어진다 — 세그먼트는 명시 선택만 담는다. */
 export function projectPath(pathname: string, id: string): string {
   const rest = /^\/p\/[^/]+(\/.*)?$/.exec(pathname)?.[1] ?? "";
   if (/^\/tickets\/(?!new(\/|$))./.test(rest)) return `/p/${id}`;
+  if (/^\/personas\/./.test(rest)) return `/p/${id}/personas`;
   return `/p/${id}${rest === "/" ? "" : rest}`;
 }
 
@@ -79,10 +84,11 @@ export function screenOf(pathname: string): Screen | null {
   if (rest === "" || rest === "/") return "board";
   // 없는 해시는 404로 떨어지지만 그 판정은 서버에 있다 — 클라이언트가 아는 것은 자리뿐이다.
   if (/^\/tickets\/./.test(rest)) return "ticket";
+  // 페르소나는 선택이 경로에 담긴다(§5 §선택이 경로에 담긴다 ①) — 세그먼트가 더 붙어도 같은
+  // 화면이다. **이름은 통계로 안 나간다**(§0-11 익명 규칙): 접힌 enum 하나가 그대로 나간다.
+  if (/^\/personas(\/|$)/.test(rest)) return "personas";
   const seg = rest.slice(1);
-  return seg === "workers" || seg === "personas" || seg === "protocols" || seg === "home"
-    ? seg
-    : null;
+  return seg === "workers" || seg === "protocols" || seg === "home" ? seg : null;
 }
 
 /** **N5의 찾기 바가 이 경로에 서나** (DESIGN.md §데스크톱 앱 N5). 보드·홈은 `⌘F`가 자기 일을

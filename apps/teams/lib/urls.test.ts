@@ -82,6 +82,23 @@ test("screenOf — 표에 없는 경로는 `null`이라 아무것도 안 보낸�
   assert.equal(screenOf("/p/dira/workers/x"), null);
 });
 
+/** 페르소나 선택이 경로에 담긴다 (DESIGN.md §5 §선택이 경로에 담긴다 — 깨지는 자리 표 ①②④).
+ *  세그먼트 하나가 더 붙는 것을 아무도 예상하지 않고 쓴 판정 셋이다. 넓히지 않으면 그 화면이
+ *  통계에서 통째로 빠지고(①), 찾기 바가 사라지고(②), 전환기가 남의 큐에 없는 이름을 연다(④). */
+test("페르소나 이름이 경로에 붙어도 같은 화면이다(§5 ①②)", () => {
+  assert.equal(screenOf("/p/a/personas/designer"), "personas"); // 이름은 값에 안 남는다(§0-11)
+  assert.equal(screenOf("/p/a/personas"), "personas"); // 세그먼트 없는 정본 URL도 종전대로
+  assert.equal(hasFindBar("/p/a/personas/designer"), true); // ①을 고치면 저절로 선다 — N5
+  assert.equal(parentPath("/p/a/personas/designer"), "/p/a"); // 안 고쳤다. 정규식이 이미 문다
+});
+
+test("projectPath — 페르소나 이름은 옮겨 붙이지 않는다(§5 ④)", () => {
+  // 이름은 프로젝트마다 독립이라 붙여 옮기면 남의 큐에 없는 이름을 연다(티켓 해시와 같은 이유).
+  // 화면 종류는 유지되므로 보드가 아니라 선택 없는 `/personas`로 떨어진다.
+  assert.equal(projectPath("/p/a/personas/designer", "b"), "/p/b/personas");
+  assert.equal(projectPath("/p/a/personas", "b"), "/p/b/personas"); // 종전 그대로
+});
+
 /** N5의 찾기 바가 서는 자리 (DESIGN.md §데스크톱 앱 N5 표 1행). **보드·홈에서 서면 `⌘F`가
  *  두 벌이 된다** — 그 두 화면은 §0-6의 자기 갈래가 같은 키를 먹고 있어서 `preventDefault`가
  *  둘 다 걸리고 사람이 누른 키가 검색창 포커스와 이 바 열기를 동시에 한다. */
