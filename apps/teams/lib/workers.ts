@@ -1084,6 +1084,21 @@ export async function listWorkers(root: string, tickets: Ticket[] = []): Promise
   return out;
 }
 
+/** 홈 온보딩 예시 앞의 둘이 부를 워커 이름 (DESIGN.md §비주얼 §24 §앞의 둘은 이 큐에 실제로
+ *  등록된 워커 이름) — `[<활성>, <다른>]` 또는 워커가 0개면 `[]`다(그 두 버튼이 안 그려진다).
+ *
+ *  `<활성>`은 `running`인 첫 워커, 없으면 목록의 첫 워커다(`쉬는 중`이라는 답도 이 화면이
+ *  약속하는 범위 안이다). `<다른>`은 이름이 다른 첫 워커고, 워커가 하나뿐이면 `<활성>`과
+ *  같은 이름이다 — 같은 이름 두 번이 없는 이름 한 번보다 낫다.
+ *
+ *  **순수 함수다.** 부르는 곳은 `home/page.tsx`의 서버 렌더 한 번이고 폴링(`HomeChunk`)에는
+ *  안 싣는다(§24 — `listWorkers`가 `crontab -l`을 물어서 500ms마다 프로세스가 뜬다). */
+export function exampleWorkers(workers: Pick<Worker, "name" | "status">[]): string[] {
+  const active = workers.find((w) => w.status === "running") ?? workers[0];
+  if (!active) return [];
+  return [active.name, (workers.find((w) => w.name !== active.name) ?? active).name];
+}
+
 /** 목록 행의 워커 줄 — 상태별 묶음(DESIGN.md §비주얼 §7). `running 1 / idle 1` 요약을 대체한다:
  *  같은 모양에 이름을 채워 넣은 것이다.
  *

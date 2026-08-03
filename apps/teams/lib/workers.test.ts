@@ -43,6 +43,7 @@ const {
   selfHealSourceLine,
   engineArgv,
   engineCell,
+  exampleWorkers,
   ENGINES,
   NO_MODEL,
   parseEngineValue,
@@ -140,6 +141,19 @@ test("listWorkers — running · stale · stopped 판정", async () => {
     { status: "stale", names: ["w2"] },
   ]);
   assert.deepStrictEqual(workerGroups([]), []);
+});
+
+test("exampleWorkers — 온보딩 예시 앞의 둘 (§비주얼 §24)", () => {
+  const w = (name: string, status: string) => ({ name, status }) as Parameters<typeof exampleWorkers>[0][number];
+
+  // 워커 0개 = 그 두 버튼을 안 그린다(예시 2개). 빈 문자열 이름을 만들어 내지 않는다.
+  assert.deepStrictEqual(exampleWorkers([]), []);
+  // 워커 하나뿐이면 같은 이름 두 번이다 — 없는 이름 한 번보다 낫다
+  assert.deepStrictEqual(exampleWorkers([w("w1", "running")]), ["w1", "w1"]);
+  // running이 없으면 목록의 첫 워커로 떨어진다(`쉬는 중`도 이 화면이 약속하는 답이다)
+  assert.deepStrictEqual(exampleWorkers([w("w1", "stopped"), w("w2", "idle")]), ["w1", "w2"]);
+  // running이 있으면 그게 <활성>이고, <다른>은 이름이 다른 첫 워커다(목록의 첫째가 아니다)
+  assert.deepStrictEqual(exampleWorkers([w("w1", "idle"), w("w2", "running")]), ["w2", "w1"]);
 });
 
 /** `crontab -l`을 가로챈다. 진짜 crontab을 읽으면 이 머신의 등록 상태에 따라 결과가 흔들린다.

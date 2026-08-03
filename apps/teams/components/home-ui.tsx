@@ -76,14 +76,13 @@ import { formatCombo, matchCombo } from "@/lib/keymap";
 import { chatRows } from "@/lib/urls";
 import { cn } from "@/lib/utils";
 
-/** 화면이 답할 수 있다고 약속하는 범위가 곧 이 넷이다(§24 — 요구 원문의 예시 +
- *  §7이 스냅샷에 넣기로 한 것). 늘리려면 스냅샷이 먼저 늘어야 한다. */
-const EXAMPLES = [
-  "w2가 지금 무슨 일을 하고 있나",
-  "w4는 어떤 엔진으로 도나",
-  "답변 대기 티켓이 왜 안 도나",
-  "이 프로젝트의 프로토콜을 요약해 달라",
-];
+/** 화면이 답할 수 있다고 약속하는 범위가 곧 온보딩 예시 넷이다(§24 — 요구 원문의 예시 +
+ *  §7이 스냅샷에 넣기로 한 것). 늘리려면 스냅샷이 먼저 늘어야 한다.
+ *
+ *  **여기 사는 것은 뒤의 둘뿐이다.** 앞의 둘은 워커 이름을 담아서 이 큐에 실제로 등록된
+ *  워커에서 나와야 하고(§24 §앞의 둘은 이 큐에 실제로 등록된 워커 이름), 그 문장은 서버가
+ *  만들어 `examples` prop으로 온다 — 워커 0개인 큐에서는 빈 배열이라 예시가 2개다. */
+const EXAMPLES = ["답변 대기 티켓이 왜 안 도나", "이 프로젝트의 프로토콜을 요약해 달라"];
 
 /** `새 대화`의 잠금 — **이제 이것 하나다**(§24 §~~잠금 두 자리~~ → 잠금 한 자리. 요구
  *  `4e9e54c5`가 ①을 걷었다: 답이 도는 동안 패널 줄도 이 버튼도 안 잠긴다. 옛 문구
@@ -137,7 +136,17 @@ const FAIL: Record<AnswerReason, { title: string; next?: string; cmd?: string }>
   other: { title: "답을 받지 못했습니다" },
 };
 
-export function HomeUI({ project, initial }: { project: string; initial: HomeChunk }) {
+export function HomeUI({
+  project,
+  initial,
+  examples,
+}: {
+  project: string;
+  /** 온보딩 예시 **앞의 둘**(§24) — 서버가 `listWorkers`로 만든 문장이고, 워커 0개면 빈 배열이다.
+   *  `initial`(폴링 응답)에 안 얹혀 있는 것이 요점이다: 이 값은 페이지를 연 시점에 굳는다. */
+  examples: string[];
+  initial: HomeChunk;
+}) {
   const [turns, setTurns] = useState<Turn[]>(initial.turns);
   // **새로고침해도 따라간다**: 서버가 "지금 도는 질문이 있다"를 알고 있어서(§7 실행층의 맵)
   // 이 값이 참으로 시작하면 폴링 효과가 그대로 다시 붙는다.
@@ -613,13 +622,15 @@ export function HomeUI({ project, initial }: { project: string; initial: HomeChu
             {fail && <Failure fail={fail} />}
           </form>
 
-          {/* 셋째 자리 — 0건이면 예시 4개, 아니면 `null`이다. **자리를 배열에서 빼지 않는다**(위). */}
+          {/* 셋째 자리 — 0건이면 예시 4개(워커 0개인 큐에서만 2개), 아니면 `null`이다.
+              **자리를 배열에서 빼지 않는다**(위). */}
           {onboarding ? (
             <div className="flex flex-wrap gap-2">
-              {EXAMPLES.map((q) => (
+              {[...examples, ...EXAMPLES].map((q) => (
                 // **제출하지 않는다**(§24): ① 한 질문이 프로세스 하나고 상한이 5분이다 — 클릭 한 번에
-                // 5분짜리를 시작시키지 않는다. ② 예시는 문장을 고쳐 쓰라고 있다(`w2`가 그 큐에 없을 수
-                // 있다). 채워진 뒤 손잡이의 `보내기`가 곧 두 번째 클릭이다.
+                // 5분짜리를 시작시키지 않는다. ② 예시는 문장을 고쳐 쓰라고 있다(이름은 이제 이 큐의
+                // 진짜 워커지만 페이지를 연 뒤 그 워커가 지워지면 낡는다). 채워진 뒤 손잡이의
+                // `보내기`가 곧 두 번째 클릭이다.
                 <Button
                   key={q}
                   variant="outline"
