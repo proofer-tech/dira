@@ -1,3 +1,16 @@
+// `"use client"`가 여기 있는 이유는 상호작용이 아니라 **`data-slot` 판정**이다.
+// `<Trigger data-slot="…-trigger" render={<Button/>} />`은 자리가 36곳인데 두 쪽이 같은 속성을
+// 서로 다른 값으로 준다. base-ui는 `mergeProps(트리거props, render.props)`로 **render 쪽을
+// 이기게** 하지만(`internals/useRenderElement.mjs`), 그 `render.props`는 flight 참조가 이미
+// 풀렸을 때만 보인다 — 아직 lazy면 `render.props`가 `undefined`라 트리거 쪽이 이긴다.
+// 이 파일이 서버에서도 도는 공유 컴포넌트면 RSC 페이로드에 `Button`이 **미리 렌더돼** 내부의
+// `data-slot="button"`이 `render.props`로 새고, 그 순간부터 승자가 청크 도착 순서에 달린다
+// (실측: 같은 코드가 dev SSR에선 `popover-trigger`, prod SSR에선 `button`이었다 — 서버와
+// 클라이언트가 갈리면 그게 hydration 불일치다).
+// 경계를 여기 세우면 페이로드가 `Button`을 안 펼치고 props에 `data-slot`이 실리지 않는다.
+// 판정은 하나다 — **감싼 트리거가 이긴다.** 36곳 전부에 같은 값이 나온다.
+"use client"
+
 import { Button as ButtonPrimitive } from "@base-ui/react/button"
 import { cva, type VariantProps } from "class-variance-authority"
 
