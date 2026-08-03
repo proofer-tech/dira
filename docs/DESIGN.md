@@ -7204,6 +7204,55 @@ git clone 받으라는건지 모르겠네요."
 독자가 누르는 순간 어긋난다. 같은 `<a>`의 `href` 하나를 위해 티켓을 셋으로 가르지 않는다.
 `Landing.vue`의 나머지 태그·클래스·속성은 종전대로 writer의 것이 아니다.
 
+### 페이지 타이틀 (요구 `06c39d0a`)
+
+요구가 값을 통째로 담고 왔다 — 랜딩은 `dira - 로컬 멀티 에이전트 매니지먼트 시스템`,
+`매뉴얼 | dira` 같은 하위 페이지는 그대로 둔다. **갈리는 것은 랜딩 한 장뿐이다.**
+
+| 자리 | 지금 값 | 바꾸는 값 |
+|---|---|---|
+| `/` (`apps/site/index.md`) | `dira` | `dira - 로컬 멀티 에이전트 매니지먼트 시스템` |
+| `/docs/` · `/docs/install` · `/privacy` · `/terms` … | `매뉴얼 \| dira` · `설치 \| dira` · … | 그대로 |
+
+**지금 랜딩이 `dira`인 이유**를 적어 둔다 — 안 적으면 다음 사람이 `dira | dira`를 예상한다.
+`index.md`에는 `h1`도 frontmatter `title`도 없어서 `pageData.title`이 비고 `config.ts:6`의
+`title: "dira"`로 떨어진다. vitepress `createTitle`은 페이지 제목이 사이트 제목과 같으면
+` | <사이트 제목>` 접미어를 안 붙인다(`vitepress@1.6.4` `dist/client/shared.js:69-80`).
+
+**고치는 자리는 `apps/site/index.md`의 frontmatter 두 줄이다.**
+
+- `title: dira - 로컬 멀티 에이전트 매니지먼트 시스템`
+- `titleTemplate: false` — **없으면 뒤에 ` | dira`가 붙는다.** 위 가드는 페이지 제목이 사이트
+  제목과 같을 때만 걸리므로, 제목을 바꾸는 순간 접미어가 살아난다.
+
+**`config.ts`의 `title: "dira"`를 안 건드린다.** 그 값이 하위 페이지 접미어의 출처이고 헤더
+브랜드이기도 하다. 거기를 고치면 요구가 그대로 두라고 한 `매뉴얼 | dira`가 같이 갈린다.
+
+**문자열은 사람이 준 값이라 한 글자도 안 바꾼다.** `-`는 앞뒤에 공백 하나씩을 둔 ASCII 하이픈
+하나다 — 줄표(`—`)로 올리지 않는다. `매니지먼트`도 그대로 둔다. §사이트 문체 §2가 줄표와
+직역체를 판정 대상으로 세워 두었지만 그 판정은 우리가 쓴 문장에 걸리는 것이고, 여기 값은
+요구 본문이 정본이다.
+
+**화면에는 아무것도 안 나타난다.** `layout: page`는 frontmatter `title`을 본문에 렌더하지
+않는다. 히어로 `h1`은 `Landing.vue` 안에 있어서 이 두 줄과 겹치는 자리가 0이고, `Landing.vue`와
+`custom.css`를 만지는 다른 랜딩 티켓들과도 hunk가 겹치지 않는다.
+
+**같은 `dira`지만 이 요구 밖인 것 셋.** `apps/teams/app/layout.tsx`의 `title: "dira"`는 앱이지
+랜딩이 아니다. `docs/index.html`은 GitHub Pages 리다이렉트 stub이다(그 파일 머리말 참고).
+`config.ts`의 `description`은 타이틀이 아니다.
+
+**검증은 빌드 산출물의 `<title>` 셋이다.** 랜딩이 바뀌었고 하위 두 장이 안 바뀐 것을 한 번에 본다.
+
+```bash
+pnpm --dir apps/site build
+grep -o '<title>[^<]*</title>' apps/site/.vitepress/dist/index.html \
+  apps/site/.vitepress/dist/docs/index.html apps/site/.vitepress/dist/docs/install.html
+```
+
+**테스트를 안 붙인다.** 사이트 패키지에 `node --test`가 이미 붙어 있지만(`privacy.test.ts`),
+거기 사는 것은 **두 파일이 어긋나면 깨지는 불변식**이다. 이 값은 사람이 고른 문자열 하나라
+지킬 상대가 없고, 위 `grep` 한 줄이 CI의 `pnpm build` 뒤에서 같은 일을 한다.
+
 ## 매뉴얼 (`apps/site/docs/`)
 
 요구 `91fc8378`. **첫 판은 엔진 매뉴얼이었다** — 워커 파일을 heredoc으로 찍고, cron 두 줄을
@@ -10607,6 +10656,25 @@ designer를 안 세운 이유는 그릇·토큰·배치가 0줄이라서고, wri
 **`repo`가 읽는 목록에서 빠지는 것을 회귀로 올리지 않는다.** 근거는 §7 §온보딩 줄이 다시
 갈렸다의 죽은 것 2에 있다 — 읽기 도구에 경로 스코프가 없어서 지금도 repo를 읽지만, 화면이
 덜 말하기로 한 것은 사람이 고른 값이다.
+
+### P113 — 랜딩 페이지 타이틀 (요구 `06c39d0a`)
+
+| # | 티켓 | persona | deps | 상태 |
+|---|---|---|---|---|
+| P113 | 요구 왕복 없음 + 스펙 확정 `06c39d0a` | pm | — | 완료 — §랜딩 §페이지 타이틀 신설(지금 값의 근거 · 고치는 두 줄 · `titleTemplate: false`가 필요한 이유 · 안 건드리는 자리 넷 · 검증) |
+| P113 | 랜딩 frontmatter 두 줄 `4e3118ae` | developer | — | 대기 |
+
+**되묻지 않았다 — 요구 본문이 바꿀 값과 안 바꿀 값을 둘 다 담고 왔다.** `매뉴얼 | dira`를
+그대로 둔다는 한 마디가 `config.ts`의 `title`을 못 건드리게 하는 판정까지 겸한다.
+
+**조사를 쓴 자리는 "지금 값이 무엇인가"다.** 배포 도메인이 아직 회사 페이지를 주고 있어
+`curl`로 못 재서, vitepress `createTitle`의 소스를 열어 `dira | dira`가 아니라 `dira`인
+근거를 확인했다. 그 가드가 제목을 바꾸는 순간 풀린다는 것이 `titleTemplate: false`의 이유이고,
+이 한 줄을 안 짚으면 구현이 `... | dira`를 만든 채 통과한다.
+
+**티켓이 하나인 것은 자리가 한 파일 두 줄이기 때문이다.** designer·writer를 안 세운 이유는
+그릴 것도 쓸 글도 0이라서다 — 문자열이 이미 사람의 값이다. 랜딩을 만지는 다른 열린 티켓들은
+전부 `Landing.vue`·`custom.css`라 겹치는 hunk가 없어 `deps`도 0이다.
 
 ## 수용조건 (전체)
 
