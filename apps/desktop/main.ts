@@ -2,10 +2,10 @@
 // 그 전에 userData로 꺼내 `DIRA_ENGINE`으로 넘긴다, 못박는 것 8), 창이 그것을 열고,
 // 창을 닫아도 메뉴바에 남고(N1), 답변 대기 티켓이 새로 생기면 알리고(N2), 화면이 부르면
 // 네이티브 경로 다이얼로그를 띄우고(N3), 로그인 시 자동 실행을 켜고 끄고(N4), 큐에 일이 남아
-// 있으면 유휴 잠자기를 막고(N6), 새 버전을 찾아 받아두고 받은 시점에 릴리즈 노트를 만들어
-// 보여준다(U1·U2·U3 — 설치는 다음 실행 때).
+// 있으면 잠자기를 막고(N6 — 유휴도 뚜껑도), 새 버전을 찾아 받아두고 받은 시점에 릴리즈 노트를
+// 만들어 보여준다(U1·U2·U3 — 설치는 다음 실행 때).
 // 스펙: ../../docs/DESIGN.md §데스크톱 앱 ("못박는 것" 1~8, N1~N6) · §릴리스 · 자동 업데이트 (R5~R8).
-import { app, BrowserWindow, Menu, MenuItem, Notification, Tray, dialog, ipcMain, nativeImage, powerSaveBlocker, shell } from "electron";
+import { app, BrowserWindow, Menu, MenuItem, Notification, Tray, dialog, ipcMain, nativeImage, shell } from "electron";
 // 이름 가져오기(`import { autoUpdater }`)가 아닌 이유: electron-updater는 CJS이고 그 이름을
 // `Object.defineProperty(exports, ...)`의 getter로 단다 — cjs-module-lexer가 못 보는 형태라
 // ESM 이름 가져오기가 `SyntaxError`로 죽는다. 기본 가져오기는 `module.exports` 그 자체다.
@@ -189,6 +189,7 @@ async function waitForReady(origin: string, proc: ChildProcess): Promise<string 
 function killServer() {
   if (child && child.exitCode === null) child.kill("SIGTERM");
   child = null;
+  holdSleep(false); // N6의 caffeinate도 여기서 놓는다 — `-w`는 크래시용이고 정상 경로가 아니다
 }
 
 /** 실패 화면. §비주얼 §6 에러 3요소 — 무엇이 실패했는지 · 원인 원문 · 다음 행동. */
@@ -320,20 +321,25 @@ function noSleepFlag(): string {
   return join(app.getPath("userData"), "no-sleep");
 }
 
-/** 잡은 assertion의 id. `null`이면 안 잡았다. **이미 그 상태면 아무것도 안 한다** — `start`를
- *  두 번 부르면 새 id가 나고 앞의 것은 참조를 잃어 프로세스가 죽을 때까지 안 풀린다. */
-let blockerId: number | null = null;
+/** assertion을 잡고 있는 `caffeinate` 자식. `null`이면 안 잡았다. **이미 그 상태면 아무것도
+ *  안 한다** — 두 번 띄우면 앞의 것이 참조를 잃어 아무도 못 죽인다. */
+let sleepProc: ChildProcess | null = null;
 
 function holdSleep(on: boolean) {
-  if (on === (blockerId !== null)) return;
+  if (on === (sleepProc !== null)) return;
   if (on) {
-    // 화면은 그대로 꺼진다. 막는 것은 시스템 잠자기 하나다 — `prevent-display-sleep`이 아니다.
-    blockerId = powerSaveBlocker.start("prevent-app-suspension");
-    console.log(`[dira] 유휴 잠자기를 막습니다 (#${blockerId})`);
+    // `-i` 유휴 + `-s` 뚜껑. Electron이 부를 수 있는 IOKit assertion은 `NoIdleSleep`·
+    // `NoDisplaySleep` 둘뿐이라 뚜껑을 막는 `PreventSystemSleep`에 닿는 갈래가 아예
+    // 없다(§뚜껑도 막는다). `-d`는 안 넣는다 — 화면은 그대로 꺼진다.
+    // `-w <내 pid>`는 크래시용 그물이다: 내가 죽으면 caffeinate가 스스로 나간다.
+    // 정상 종료의 `kill`을 대신하지 않는다 — 둘 다 있어야 고아가 안 남는다.
+    // ponytail: `-s`는 배터리에서 무효다(`man caffeinate`). 전원이 천장이고 고칠 것이 아니다.
+    sleepProc = spawn("/usr/bin/caffeinate", ["-is", "-w", String(process.pid)]);
+    console.log(`[dira] 잠자기를 막습니다 — caffeinate -is (#${sleepProc.pid})`);
   } else {
-    powerSaveBlocker.stop(blockerId!);
-    console.log(`[dira] 유휴 잠자기를 놓습니다 (#${blockerId})`);
-    blockerId = null;
+    console.log(`[dira] 잠자기를 놓습니다 (#${sleepProc!.pid})`);
+    sleepProc!.kill();
+    sleepProc = null;
   }
 }
 
@@ -352,7 +358,7 @@ async function pollWork(origin: string) {
     }
     holdSleep((body as { busy: boolean }).busy);
   } catch (e) {
-    console.error(`[dira] 일 폴링 실패: ${(e as Error).message} — 유휴 잠자기를 놓습니다`);
+    console.error(`[dira] 일 폴링 실패: ${(e as Error).message} — 잠자기를 놓습니다`);
     holdSleep(false);
   }
 }

@@ -11380,7 +11380,7 @@ designer를 안 세운 이유는 그릇·토큰·배치가 0줄이라서고, wri
 |---|---|---|---|---|
 | P116 | 스펙 확정 + 뚜껑 되묻기 `d1dfd80d` | pm | — | 완료 — §데스크톱 앱 N6 신설, 뚜껑은 `## 질문 1`(답 `887338ea`)로 되물어 §뚜껑도 막는다로 확정 |
 | P116 | N6 유휴 잠자기 방지 + 트레이 토글 `9d17918c` | developer | — | 완료(`2d908e6`) — `powerSaveBlocker`로 유휴만 |
-| P116 | 뚜껑까지 — `caffeinate -is -w`로 교체 `41bbc9c6` | developer | `9d17918c` | 대기 |
+| P116 | 뚜껑까지 — `caffeinate -is -w`로 교체 `41bbc9c6` | developer | `9d17918c` | 완료 — `holdSleep()` 속만 교체, `powerSaveBlocker` import 제거. 실측: 켠 쪽 `PreventUserIdleSystemSleep`+`PreventSystemSleep` 둘, 끈 쪽 0줄, `kill -9` 뒤 고아 0 |
 
 **되묻는데 티켓을 먼저 냈다.** 요구가 둘을 적었고(`시간이 지나도` · `커버를 닫아도`) **앞의
 하나는 어느 답에도 안 걸린다** — 뚜껑을 (a)포기 / (b)`sudo pmset` / (c)클램셸 모드 중 무엇으로
