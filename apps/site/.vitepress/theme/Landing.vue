@@ -31,7 +31,7 @@ const version = theme.value.diraVersion;
 
 <div class="hero wrap">
   <p class="eyebrow">로컬 에이전트 러너</p>
-  <h1>에이전트 팀이 일하는 걸 화면에서 본다</h1>
+  <h1>에이전트 팀이 일하는 걸 화면에서 봅니다</h1>
   <p class="body">
     할 일을 마크다운 파일 하나로 적어 두면, 1분마다 깨어나는 워커가 그걸 집어
     <code>claude -p</code> 세션에 넘깁니다. 세션이 지금 무엇을 하는지 화면에서 보고,
@@ -51,21 +51,21 @@ const version = theme.value.diraVersion;
 
 <section class="wrap">
   <p class="eyebrow">30초</p>
-  <h2>파일 하나 쓰면 워커가 물어 간다</h2>
+  <h2>파일 하나 쓰면 워커가 물어 갑니다</h2>
   <ol class="steps">
     <li>
-      <b>① 티켓을 쓴다</b>
+      <b>① 티켓을 씁니다</b>
       <p>마크다운 파일 하나입니다. 무엇을 원하는지, 무엇이 되면 끝인지를 적습니다.
       큐는 그 파일이 담긴 <b>디렉터리 하나</b>가 전부입니다.</p>
     </li>
     <li>
-      <b>② 워커가 문다</b>
+      <b>② 워커가 뭅니다</b>
       <p><b>워커</b>는 셸 스크립트 한 줄입니다. macOS에는 정해 둔 시각마다 명령을 자동으로
       실행해 주는 cron이 있습니다. 거기 걸어 두면 1분에 한 번 깨어나, 열린 티켓 하나를 골라
       <code>claude -p</code> 세션에 넘기고 끝날 때까지 기다립니다.</p>
     </li>
     <li>
-      <b>③ 도는 걸 본다</b>
+      <b>③ 도는 걸 봅니다</b>
       <p>세션이 무엇을 읽고 무엇을 고치는지 화면에서 따라갑니다.
       <b>끝난 뒤 로그를 뒤지는 게 아니라, 도는 동안 말을 겁니다.</b></p>
     </li>
@@ -76,17 +76,17 @@ const version = theme.value.diraVersion;
   <div class="pillars">
     <div class="pillar">
       <span class="tag t-queue">큐</span>
-      <h3>티켓 하나가 파일 하나다</h3>
+      <h3>티켓 하나가 파일 하나입니다</h3>
       <p>디렉터리 하나가 큐의 전부입니다. 상태는 파일 이름 끝에 붙고, 나머지 정보는 파일 맨 위 frontmatter에 적습니다.</p>
     </div>
     <div class="pillar">
       <span class="tag t-worker">워커</span>
-      <h3>워커 하나가 티켓 한 건을 문다</h3>
+      <h3>워커 하나가 티켓 한 건을 뭅니다</h3>
       <p>동시에 몇 건을 굴릴지는 워커 파일 개수가 정합니다. 더 돌리고 싶으면 워커를 하나 더 만드세요.</p>
     </div>
     <div class="pillar">
       <span class="tag t-ui">화면</span>
-      <h3>도는 세션을 보고, 말을 건다</h3>
+      <h3>도는 세션을 보고, 말을 겁니다</h3>
       <p>보드·티켓·워커·페르소나·프로토콜. 세션이 도는 중에 문장을 넣어 방향을 바꿉니다.</p>
     </div>
     <div class="pillar">
@@ -194,7 +194,7 @@ chmod +x ~/myproject/.dira/workers/w1.sh
 
 <section class="wrap">
   <p class="eyebrow">플랜</p>
-  <h2>지금은 전부 무료다</h2>
+  <h2>지금은 전부 무료입니다</h2>
   <p class="body" style="max-width:40em">
     엔진도 앱도 MIT 라이선스입니다. 계정도, 서버도, 요금도 없습니다.
     <b>여럿이 한 큐를 같이 쓰는 방법을 준비하고 있습니다.</b> 날짜도 가격도 아직 약속하지 않습니다.
@@ -208,7 +208,7 @@ chmod +x ~/myproject/.dira/workers/w1.sh
 
 <div class="closing">
   <div class="wrap">
-    <h2>큐는 디렉터리 하나다</h2>
+    <h2>큐는 디렉터리 하나입니다</h2>
     <p class="body">
       이름은 <code>dir</code>와 <code>jira</code>를 합친 것입니다. 큐가 디렉터리 하나라서 <code>dir</code>이고,
       그 디렉터리를 티켓으로 보는 도구라서 <code>jira</code>에서 따왔습니다.
