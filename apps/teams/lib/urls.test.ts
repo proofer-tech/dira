@@ -9,6 +9,8 @@ import {
   parentPath,
   projectPath,
   relationPath,
+  rowLimit,
+  ROW_PAGE,
   screenOf,
   timeLabel,
   type Anchor,
@@ -101,6 +103,21 @@ const card = (left: number, y: number): Anchor => ({
   right: left + 280,
   cx: left + 140,
   y,
+});
+
+/** `?rows=`는 사람이 손으로 고칠 수 있는 값이고, 서버(자를 수)와 바디(다음 URL)가 **같은 수**를
+ *  유도해야 한다(§성능 예산 §초과분 ②). 갈리면 표가 30행씩 밀리거나 영영 안 이어진다. */
+test("rowLimit — 정본 URL도 쓰레기 값도 30행으로 떨어진다(§1 §테이블 바디는 30행씩)", () => {
+  assert.equal(ROW_PAGE, 30);
+  for (const v of [null, "", "0", "abc", "-5", "10", "30"]) assert.equal(rowLimit(v), 30);
+});
+
+test("rowLimit — 30보다 큰 값은 그대로 산다(내려 읽던 자리가 폴링에 안 되감긴다)", () => {
+  assert.equal(rowLimit("60"), 60);
+  assert.equal(rowLimit("786"), 786);
+  // 소수·공백이 섞여도 `Number`가 판정한다 — `parseInt`처럼 앞자리만 먹고 넘어가지 않는다
+  assert.equal(rowLimit(" 90 "), 90);
+  assert.equal(rowLimit("60px"), 30);
 });
 
 test("relationPath — 이웃 레인은 거터(24) 안에서 끝난다", () => {

@@ -73,6 +73,7 @@ import {
 } from "@/lib/queue";
 import { getProject, listPersonas, resolveConfig } from "@/lib/projects";
 import { findTranscript, lastActivity, sessionIdOf, type StreamEvent } from "@/lib/transcript";
+import { rowLimit } from "@/lib/urls";
 
 // 큐는 GUI 밖에서(cron·세션이) 바뀐다. 프리렌더하면 빌드 시점 내용이 굳는다.
 export const dynamic = "force-dynamic";
@@ -224,6 +225,12 @@ export default async function Board({
   // 여기(테이블 렌더 직전)인 이유: 아래 칸반·건수·관계선은 전부 `rows`(큐 순서)를 그대로 쓴다.
   // 파라미터가 실려 있으면 `rows`와 같은 순서다(같은 키·같은 방향이라 결과가 같다).
   const tableRows = sortTableRows(rows, sortKey, desc);
+  // 표뷰가 **실제로 그리는** 행 수(§성능 예산 §초과분 ②). 자르는 자리가 정렬 **뒤**인 것이
+  // 계약이다 — 위 `sortTickets`·`sortTableRows`를 거친 목록의 앞 n행이라 표가 큐를 거짓으로
+  // 그리지 않는다. 건수 줄(`total`)도 관계선도 이 값을 안 본다. 칸반은 무관하다(레인 자르기는
+  // 종전 그대로다). 값의 유도는 `lib/urls.ts`의 `rowLimit` 하나다 — 바디가 그 수에 30을 더해
+  // 다음 URL을 만든다.
+  const shownRows = rowLimit(sp.get("rows"));
   // 건수의 분모는 **기본 목록에 드는 수**다(`kind: answer` 제외 후, §1 보드). `tickets.length`를
   // 쓰면 필터를 안 걸었는데도 `12 / 14건`으로 보여 답변 파일이 필터처럼 읽힌다.
   // `tickets`(전체)는 deps 해석·선택지 목록이 계속 쓴다 — 거기서 답변을 빼면 요구사항의 답변 dep이
@@ -266,7 +273,13 @@ export default async function Board({
 
   // 링크는 **stem**이다 — 엔진이 찾는 이름이고, 상태가 바뀌어도(접미사) URL이 안 변한다(§식별자).
   const href = (t: Ticket) => `/p/${id}/tickets/${encodeURIComponent(t.stem)}`;
-  const qs = (next: URLSearchParams) => (next.toString() ? `?${next}` : `/p/${id}`);
+  // 서버가 그리는 링크는 전부 이걸 지난다(정렬 헤더 · 필터 해제 · 전체 보기 · 완료만 · 뷰 전환).
+  // **`rows`를 지운다** — 그 링크들이 데려가는 곳은 다른 목록이라 30행부터가 맞다(§1 §되감기).
+  // 클라이언트 쪽 같은 규칙은 `board-ui.tsx`의 `useUrlNav`에 있다.
+  const qs = (next: URLSearchParams) => {
+    next.delete("rows");
+    return next.toString() ? `?${next}` : `/p/${id}`;
+  };
 
   /** 헤더 클릭 3단계: 오름차순 → 내림차순 → 기본 복귀. 정렬을 끌 방법이 없으면 기본 순서를
    *  다시 못 본다. 돌아가는 곳은 파라미터가 없는 화면이고 그 테이블은 생성일 내림차순이다
@@ -762,10 +775,11 @@ export default async function Board({
                       </TableCell>
                     </TableRow>
                   ) : (
-                    // 행은 여기서 **전부** 그린다 — DOM에 넣는 수만 `BoardRows`가 30행씩
-                    // 늘린다(§1 보드 §테이블 바디는 30행씩 그린다). 건수 줄은 이 값과 무관하다.
-                    <BoardRows>
-                      {tableRows.map((t) => (
+                    // 행은 여기서 **앞 `shownRows`개만** 그린다 — 바닥에 닿으면 `BoardRows`가
+                    // `?rows=`를 30 올려 다음 몫을 받아 온다(§1 보드 §테이블 바디는 30행씩 ·
+                    // §성능 예산 §초과분 ②). 건수 줄은 이 값과 무관하다.
+                    <BoardRows more={tableRows.length > shownRows}>
+                      {tableRows.slice(0, shownRows).map((t) => (
                         // 행 전체가 상세로 가는 링크다 — 해시 셀의 링크를 행 크기로 늘린다(§7 대비:
                         // 여기는 행 액션 버튼이 없어서 행 링크가 안전하다). deps 배지는 그 위에 뜬다.
                         <TableRow key={t.path} className="relative h-9 focus-within:bg-muted/50">

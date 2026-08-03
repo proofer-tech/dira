@@ -100,6 +100,20 @@ export function hasFindBar(pathname: string): boolean {
  *  이 파일이어야 하는 이유는 배지가 클라이언트 컴포넌트에도 들어가서다(`node:fs`를 못 끌고 온다). */
 export const elapsedSuffix = (days?: number) => (days ? ` · ${days}일` : "");
 
+/** 테이블 바디가 한 번에 그리는 행 수(§1 보드 §테이블 바디는 30행씩 그린다. 요구 `1208e64a`). */
+export const ROW_PAGE = 30;
+
+/** 표뷰가 **서버에서 그릴** 행 수 — `?rows=` 하나가 정한다(§성능 예산 §초과분 ②).
+ *
+ *  **서버와 클라이언트가 같은 수를 유도해야 한다**: 서버는 이 수만큼 잘라 그리고 바디는 이 수에
+ *  30을 더해 다음 URL을 만든다. 자리마다 적으면 한쪽이 조용히 30행씩 밀린다.
+ *
+ *  **하한이 `ROW_PAGE`다.** 파라미터가 없는 정본 URL은 물론이고 `?rows=0`·`?rows=abc` 같은
+ *  사람 입력도 전부 30행으로 떨어진다(`Number("")`가 0인 것도 여기서 같이 접힌다).
+ *  상한은 두지 않는다 — 큰 값이면 전체를 그리는 종전 동작이고 그게 이 절이 고치려던 것의
+ *  반대편일 뿐, 새 위험이 아니다(읽는 파일 수는 `rows`와 무관하다). */
+export const rowLimit = (rows: string | null) => Math.max(ROW_PAGE, Number(rows) || 0);
+
 /** 시각 한 칸 (DESIGN.md §비주얼 §26 ④) — **오늘 안이면 `HH:MM`, 다른 날이면 `M/D`.**
  *
  *  **24시간제**고 `toLocaleTimeString`을 안 쓴다: 로케일에 따라 `오후 5:40`이 나와 폭이 흔들린다

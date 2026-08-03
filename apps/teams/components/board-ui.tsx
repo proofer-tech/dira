@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/command";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { relationPath, type Anchor } from "@/lib/urls";
+import { relationPath, rowLimit, ROW_PAGE, type Anchor } from "@/lib/urls";
 import type { RelationEdge } from "@/lib/queue";
 
 /** 필터·검색은 히스토리를 남기지 않는다(`replace`) — 글자마다 한 칸씩 쌓이면 뒤로가기로
@@ -34,7 +34,12 @@ function useUrlNav() {
   const pathname = usePathname();
   // 문자열로 받는다 — 객체 신원으로 비교하면 폴링 리렌더마다 effect가 다시 돈다(디바운스가 안 끝난다).
   const qs = useSearchParams().toString();
-  const replace = (next: URLSearchParams) => {
+  /** `rows`(표뷰가 지금 받아 둔 행 수)는 **목록이 갈리면 지운다** — 검색·필터가 바뀌면 다른
+   *  목록이고 30행부터가 맞다(§1 §테이블 바디는 30행씩). 이 훅을 거치는 것이 그 둘뿐이라
+   *  판정이 여기 한 줄이고, 서버가 그리는 링크(정렬·필터 해제·뷰 전환)는 `page.tsx`의 `qs()`가
+   *  같은 일을 한다. 그 값을 **세우는** 자리는 표 바디 하나뿐이다(`keepRows`). */
+  const replace = (next: URLSearchParams, keepRows = false) => {
+    if (!keepRows) next.delete("rows");
     const s = next.toString();
     router.replace(s ? `${pathname}?${s}` : pathname, { scroll: false });
   };
@@ -218,58 +223,65 @@ export function BoardPolling() {
   return null;
 }
 
-/** 테이블 바디가 한 번에 그리는 행 수(§1 보드 §테이블 바디는 30행씩 그린다. 요구 `1208e64a`). */
-const ROW_PAGE = 30;
-
-/** 테이블 `tbody` — 30행만 DOM에 넣고 바닥에 닿으면 30행 더(§1 보드). **자르기가 아니다**:
+/** 테이블 `tbody` — 30행씩 그리고 바닥에 닿으면 30행 더(§1 보드). **자르기가 아니다**:
  *  계속 내리면 필터에 걸린 행이 전부 나온다.
  *
- *  **서버는 행을 전부 그려서 내려보낸다** — 여기 오는 `children`이 그 전부고 갈리는 것은 DOM에
- *  넣는 수뿐이다. 그래서 `?page=`도 `더 보기` 버튼도 행을 나눠 오는 API도 없다(필터·검색·정렬이
- *  서버에 남는다는 계약이 무수정이고, 건수 줄도 `rows.length`를 그대로 쓴다).
+ *  **자르는 쪽이 서버다**(§성능 예산 §초과분 ② — 페이로드 786행 3.1MB). 여기가 클라이언트
+ *  경계라 `children`으로 오는 행은 **전부 RSC 페이로드로 직렬화된다** — DOM에 30행만 넣어도
+ *  오가는 것은 786행이고 그게 5초 폴링마다다. 그래서 서버가 `?rows=`만큼만 그리고 여기는
+ *  받은 것을 그대로 그린다. 필터·검색·정렬은 종전대로 서버에 남고(자르는 것은 **정렬한 뒤**의
+ *  앞 n행이다) 건수 줄도 그리는 수와 무관하다 — 갈린 것은 기전뿐이고 동작은 §1 그대로다.
  *
  *  **바닥 판정은 `IntersectionObserver` 하나다.** 마지막 행 뒤에 1px 감시행을 두고 그게 보이면
- *  30행 붙인다. root는 기본값(뷰포트)으로 충분하다 — 교차 사각형은 조상의 클립(= 헤더가 sticky로
- *  붙어 있는 그 스크롤 컨테이너)을 타고 계산되므로 **새 스크롤러도 컨테이너 조회도 없다**.
+ *  `?rows=`를 30 올린다. root는 기본값(뷰포트)으로 충분하다 — 교차 사각형은 조상의 클립(= 헤더가
+ *  sticky로 붙어 있는 그 스크롤 컨테이너)을 타고 계산되므로 **새 스크롤러도 컨테이너 조회도 없다**.
  *
- *  **되감는 것은 URL이 갈릴 때뿐이다**(§1): 5초 폴링은 `children`만 새로 주고 이 state는 산다 —
- *  80행까지 내려 읽던 사람이 갱신 한 번에 30행으로 돌아가면 이 화면은 읽을 수가 없다. 정렬·필터·
- *  검색이 바뀌면 다른 목록이라 30행부터다(`BoardSearch`와 같은 렌더 중 동기화). */
-export function BoardRows({ children }: { children: React.ReactNode }) {
-  const rows = Children.toArray(children);
-  const qs = useSearchParams().toString();
-  const [seen, setSeen] = useState(qs);
-  const [shown, setShown] = useState(ROW_PAGE);
-  if (seen !== qs) {
-    setSeen(qs);
-    setShown(ROW_PAGE);
-  }
-
-  const more = shown < rows.length;
+ *  **되감는 것은 URL이 갈릴 때뿐이다**(§1): 5초 폴링은 `router.refresh()`라 URL이 그대로고
+ *  서버가 **지금 받아 둔 만큼**을 다시 그린다 — 80행까지 내려 읽던 사람이 갱신 한 번에 30행으로
+ *  돌아가면 이 화면은 읽을 수가 없다. 정렬·필터·검색이 바뀌면 다른 목록이라 30행부터고, 그
+ *  판정은 `rows`를 지우는 두 자리(`useUrlNav`·`page.tsx`의 `qs()`)에 있다. */
+export function BoardRows({ more, children }: { more: boolean; children: React.ReactNode }) {
+  const { qs, replace } = useUrlNav();
+  const shown = Children.count(children);
   const sentinel = useRef<HTMLTableRowElement>(null);
-  // `more`가 의존에 있는 이유: 감시행은 다 그리면 사라지고 폴링으로 행이 늘면 다시 돌아온다
+
+  // `qs`가 의존에 있는 이유: 감시행은 다 그리면 사라지고 폴링으로 행이 늘면 다시 돌아온다
   // (그때 새 노드라 다시 observe해야 한다). `shown`은 감시행이 시야에 남아 있을 때 —
   // 화면이 30행보다 길면 — 다음 30행이 이어서 붙게 한다.
   useEffect(() => {
     const el = sentinel.current;
     if (!el) return;
     const io = new IntersectionObserver((e) => {
-      if (e[0].isIntersecting) setShown((n) => n + ROW_PAGE);
+      if (!e[0].isIntersecting) return;
+      const next = new URLSearchParams(qs);
+      // **요청은 그려진 행에서 센다**(URL이 아니다). URL은 `router.replace` 직후 바로 갱신되고
+      // 행은 서버 응답이 와야 늘어서, URL로 세면 응답을 기다리는 동안 감시행이 계속 보이는 만큼
+      // `rows`가 60·90·120으로 달아난다. 이미 요청해 둔 몫이면 아무것도 안 한다.
+      if (shown + ROW_PAGE <= rowLimit(next.get("rows"))) return;
+      next.set("rows", String(shown + ROW_PAGE));
+      replace(next, true);
     });
     io.observe(el);
     return () => io.disconnect();
-  }, [more, shown]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- replace는 매 렌더 새 함수다(qs가 실질 의존)
+  }, [qs, shown]);
 
   // 다른 목록이면 **상자도 맨 위부터**다. 검색·필터는 `replace(scroll: false)`라 스크롤이 바닥에
   // 남는데(그래야 글자마다 화면이 튀지 않는다) 새 목록을 30행만 그리면 그 위치가 곧 바닥이라
   // 감시행이 즉시 다시 걸린다 — 30행부터 그리라는 §1이 눈에 보이지 않는다.
+  // **`rows`는 빼고 본다** — 그 값이 오르는 것은 같은 목록을 이어 읽는 중이라는 뜻이다.
+  const list = (() => {
+    const p = new URLSearchParams(qs);
+    p.delete("rows");
+    return p.toString();
+  })();
   useEffect(() => {
     sentinel.current?.closest("[data-slot=table-container]")?.scrollTo(0, 0);
-  }, [qs]);
+  }, [list]);
 
   return (
     <>
-      {rows.slice(0, shown)}
+      {children}
       {/* 1px 감시행. 높이가 0이면 교차비가 0으로 굳어 안 걸린다 */}
       {more && (
         <tr ref={sentinel} aria-hidden>
