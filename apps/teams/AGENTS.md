@@ -262,7 +262,7 @@ apps/teams/
     find-bar.tsx        찾기 바(§7 §대화 안에서 찾기 · §비주얼 §30) — `⌘F`로 열고 **지금 화면에
                         서 있는 글**에서 찾는다. **서버가 한 줄도 안 든다**(새 라우트 0 · 새 액션 0):
                         훑는 것이 이미 그려진 DOM이다. **DOM도 안 고친다** — 일치한 곳은
-                        `CSS.highlights` + `::highlight()` 둘(`globals.css`)이라 스트리밍 중인
+                        `CSS.highlights` + `::highlight()` 둘(이 파일의 `<style>` — §비주얼 §30 ⑧)이라 스트리밍 중인
                         스레드를 React가 다시 그려도 다투지 않고, 다시 그려질 때마다 다시 걷는
                         것은 `MutationObserver` 하나다. 순수 판정(문자열 → 일치 오프셋)은
                         `lib/urls.ts`의 `findMatches`다(JSX를 `pnpm test`가 못 읽는다).

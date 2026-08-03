@@ -33,10 +33,27 @@ import {
 } from "@/components/ui/input-group";
 import { findMatches, hasFindBar } from "@/lib/urls";
 
-/** 레지스트리 둘 — `globals.css`의 `::highlight()` 두 규칙과 **같은 이름**이다(§30 ④).
+/** 레지스트리 둘 — 아래 `<style>`의 `::highlight()` 두 규칙과 **같은 이름**이다(§30 ④).
  *  갈리면 하이라이트가 조용히 색 없이 선다(등록 이름으로만 선택되는 가상 요소다). */
 const FIND = "dira-find";
 const CURRENT = "dira-find-current";
+
+/** 두 규칙이 `globals.css`가 아니라 여기 있는 이유는 §30 ⑧이다 — Next 16.2.12에 박힌
+ *  lightningcss가 `::highlight()`를 몰라서 빌드·`next dev`가 경고 7건을 찍는다(기능은 멀쩡하다).
+ *  **값은 §30 ④가 정본이다 — 손으로 고치지 않는다.** 대비는 그 표에서 이미 쟀다.
+ *  React 19가 `precedence`를 보고 `<head>`로 올리고 `href`로 중복을 지운다(두 화면에 한 벌).
+ *  바가 닫히면 규칙도 같이 내려간다 — 고아가 안 남는다(닫을 때 `CSS.highlights.delete()` 둘).
+ *  Next를 올려 이 경고가 사라지면 `globals.css`로 되돌린다(§30 ⑧ 마지막 문단). */
+const CSS_RULES = `
+::highlight(dira-find) {
+  background-color: color-mix(in oklab, var(--primary) 25%, transparent);
+  text-decoration: underline;
+}
+::highlight(dira-find-current) {
+  background-color: var(--primary);
+  color: var(--primary-foreground);
+}
+`;
 
 /** **훑지 않는 자리.** §7이 훑을 것으로 적은 것은 *말풍선과 산문* 둘인데, 스레드 DOM에는 그
  *  둘 말고 `sr-only` 라벨(`질문`·`답`)과 띠의 버튼 글자(`복사`·`다시 답하기`·`중지`)가 같이
@@ -211,6 +228,9 @@ export function FindBar({
     // `bg-background`가 여기 있는 이유는 `InputGroup`이 라이트에서 배경 없이 살기 때문이다:
     // 그 밑으로 산문이 비치면 글자가 겹친다. `shadow-md`는 `popover.tsx`가 이미 쓰는 값이다.
     <div className="fixed top-14 right-6 rounded-lg bg-background shadow-md">
+      <style href="dira-find" precedence="default">
+        {CSS_RULES}
+      </style>
       {/* 그릇이 `<form>`이라 **`Enter`는 다음이 0줄이다**(§30 ⑤). `⇧Enter`만 아래에서 가로챈다 */}
       <form onSubmit={(e) => { e.preventDefault(); go(1); }}>
         <InputGroup className="h-9 w-80">
