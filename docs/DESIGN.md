@@ -8764,6 +8764,43 @@ VitePress `base.css`의 **첫 블록**이 전역 킬 스위치다(실측 —
 
 폭은 앞 절들과 같은 `1440 · 1024 · 768 · 390` 넷이다.
 
+#### 판정표
+
+designer 판정(`a2772553`, `ui-animation` 스킬). 헤드리스 CDP로 `1440 · 1024 · 768 · 390` 네 폭에서
+쟀다(2026-08-04, 커밋 `9025934` 기준). **`지금 값`과 `바꾸는 값`은 전부 브라우저에서 받아 적은
+수다** — 후보 CSS를 `<style>`로 세우고 `.arrows a:hover`는 CSSOM으로 걷어 낸 뒤, 같은 창에서
+잰 값이다. 예측치는 한 칸도 없다.
+
+**여섯 중 다섯이 `custom.css`만 만진다.** `Landing.vue`가 갈리는 것은 ⑥ 하나이고 거기서도
+`class="reveal"` 여섯 개와 `onMounted` 안 열 줄이다 — **텍스트 노드는 0글자다**(`957d68f5`의
+`50` · `66` · `223`행을 안 고른다).
+
+| # | 자리 | 무엇 | 지금 값 | 바꾸는 값 | 속성 | 지속시간 | 이징 | 트리거 |
+|---|---|---|---|---|---|---|---|---|
+| ① | `.ann a`(61) · `.btn`(83) · `.btn-primary`(90) · `.fcol a`(248) | 호버가 **0초에 튄다.** 색이 갈리는 것을 봤다기보다 다른 화면이 된 것처럼 읽힌다. 다섯 중 `.arrows a`는 ④가 따로 받고 여기는 넷이다 | `custom.css`에 `transition` **0건**. `.dira-landing *`에서 `transition-duration ≠ 0s`인 요소가 **22개** 잡히지만 **22개 전부 `.VPNav` 안**이고 그 그릇은 `display: none`이다(실측 `inVPNav 22 / outside 0`) — 랜딩 화면에 전환이 걸린 요소는 **0개**다. 대상 실측(1440) `.ann a` 1 · `.btn` 6(별 위젯이 둘을 갈아 끼운 뒤) · `.fcol a` 10 | 네 선택자에 `transition`을 걸고 **`:hover`가 주던 값을 `:focus-visible`에도 같이 준다**(§서는 못 ④ — 호버에 모션을 붙이면 포커스도 같은 것을 받는다). **정지 상태 값은 한 개도 안 바뀐다** — `background`·`border-color`·`color`의 끝 값이 지금 그대로다(§서는 못 ⑤) | **`transform`·`opacity`가 아니다.** `background-color` · `border-color` · `color` 셋이다 — 이 넷이 호버에서 갈리는 것이 색뿐이라(§사실 둘째의 규칙 다섯) 옮길 거리가 0이고, 색을 `opacity`로 바꾸면 §UX·심미성 ③이 AA에 맞춰 잰 22개가 무효가 된다. 셋 다 paint만 하고 매 프레임 레이아웃을 다시 안 잡는다 | `150ms` | `ease-out` | `:hover` · `:focus-visible` |
+| ② | `.btn`(83) · `.ann a`(61) | **눌렸다는 것을 아무것도 안 말한다.** 링크는 누르는 순간과 다음 화면 사이가 비어 있고, 그 사이가 네트워크면 사람이 두 번 누른다 | `:active` 선언 **0건**(§사실 셋째). tabbable 40개(1440 실측) 중 눌림 되먹임을 가진 것이 0개다 | `:active { transform: scale(0.97) }`. 실측 — `.btn` 여섯의 폭이 `65 · 91.9 · 169.1 · 114.7 · 169.1 · 150.9` → `63.1 · 89.2 · 164.1 · 111.2 · 164.1 · 146.4`(1440 · 390 같은 값). 손을 떼면 원래 박스로 돌아오므로 **정지 상태 박스는 무변**이다 | `transform` | `120ms` | `cubic-bezier(0.22, 1, 0.36, 1)` | `:active` (①과 같은 `transition` 선언에 `transform`을 한 항목으로 붙인다 — 새 규칙이 아니다) |
+| ③ | `.zoom`(140) 3개 | 가진 것이 `cursor: zoom-in` **하나**다(§사실 다섯째). 커서를 못 보는 자리(터치 · 키보드)에서는 이 그림이 눌러지는 것인지가 화면에 없다 | `transform` **0건**. 열 박스 실측 1440 `317.3 × (254.3 · 100.5 · 199.1)` · 390 `342 × (274 · 108.3 · 214.5)` | 호버·포커스에 `scale(1.02)`, 누르는 동안 `scale(1)` — **1.02에서 1.00으로 눌린다**. 실측 — 1440에서 열 셋이 `204‥521.3` → `200.8‥524.5`로 좌우 **3.2px**씩 40px 거터 안으로 번지고, 390에서 `24‥366` → `20.6‥369.4`로 **3.4px**씩 24px 페이지 거터 안이다. **두 폭 다 `scrollWidth`가 폭과 같다**(`1440` · `390`) | `transform` | `220ms` (누름은 `90ms`) | `cubic-bezier(0.22, 1, 0.36, 1)` | `:hover` · `:focus-visible` · `:active` |
+| ④ | `.arrows a`(161-166) 6개 | 본문 안 링크의 호버가 나머지 넷과 **똑같은 색 하나**다. 이 여섯이 페이지에서 유일하게 "더 읽을 데로 가는 문"인데 헤더 버튼과 구별되는 표현이 없다 | 6개. `border-bottom: 1px solid var(--border)` · `position: static` · `::after { content: " →" }`. 호버는 `border-color: var(--fg)` 한 줄뿐이다 | `.arrows a`에 `position: relative`(실측 — 폭 `119.8` 그대로, 박스 무변)를 주고 `::before`로 `--fg` 1px 레일을 깔아 `scaleX(0) → scaleX(1)`로 **왼쪽에서 자란다**(실측 pseudo `119.828px × 1px`, 1440 · 390 같은 값). **기존 `.arrows a:hover { border-color: var(--fg) }` 한 줄은 지운다** — 회색 레일 위로 검은 선이 자라는 것이 그 자리에 선다. `::after`는 안 건드린다(실측 `content: " →"` 유지) | `transform` (`scaleX`) | `260ms` | `cubic-bezier(0.25, 1, 0.5, 1)` | `:hover` · `:focus-visible` |
+| ⑤ | `.hero > *`(112) 6개 — `.eyebrow` · `h1` · `.body` · `.cta` · `.cta-note` · `figure` | **페이지가 열리는 순간이 정지 화면이다.** 랜딩은 한 사람이 한 번 보는 화면이라 이 자리가 "와"를 낼 수 있는 유일한 자리이고(자주 보는 UI였으면 안 넣는다), 첫 화면은 이미 보이므로 ⑥의 스크롤 진입 밖이다 | `@keyframes` **0건** · `animation` **0건**(§사실 첫째). 히어로 직계 6개, 실측 `top` 1440 `194 · 227.5 · 314.5 · 428.5 · 488.5 · 573.7` · 390 `154 · 187.5 · 289.6 · 430.2 · 490.2 · 575.5` | `@keyframes dira-rise { from { opacity: 0; transform: translateY(12px) } }` **하나**를 만들고 `.hero > *`에 `animation: dira-rise 520ms … both`. `:nth-child(2)`~`(6)`에 `50 · 100 · 150 · 200 · 250ms` 지연 — **총 770ms에 끝나고 다시 안 돈다**(§서는 못 ③). 실측 — 끝난 뒤 여섯의 `top`이 위 `지금 값`과 **같은 수**다 | `transform` · `opacity` | `520ms` (스태거 `50ms` ×5 → 총 `770ms`) | `cubic-bezier(0.22, 1, 0.36, 1)` | **마운트** — CSS `animation` 하나이고 **JS가 0줄**이다. 그래서 `matchMedia`를 안 본다: `base.css`의 `animation-duration: 1ms` + 여기 `fill-mode: both`가 마지막 키프레임에 즉시 안착시킨다. 실측 — `reduce`에서 여섯의 `opacity`가 전부 `1`이고 `top`이 위와 같다 |
+| ⑥ | `main` 직계 뒤 5개 + `.closing` — `Landing.vue`에 `class="reveal"` 6개, `<script setup>`의 `onMounted` | 문서가 `4299`(1440)~`6068`px(768)인데 **내리는 동안 아무 일도 안 일어난다.** 스크롤로 지나가는 단위 7개 중 6개가 정지 화면이다(§사실 여섯째) | 블록 7개 실측(1440) — 히어로 `y 98 / h 1158.1` · 말하면 `1256.1 / 462.9` · `.stats` `1719 / 164.6` · 갤러리 `1883.7 / 623.5` · 설치 `2507.2 / 448.9` · 플랜 `2956.1 / 626.1` · closing `3582.2 / 355.6`. 전부 `opacity: 1` | CSS는 **둘뿐**이다 — `.reveal.armed { opacity: 0; transform: translateY(16px) }` · `.reveal.armed.in { opacity: 1; transform: none }`. `.armed`를 붙이는 것은 `onMounted`의 `IntersectionObserver`(`rootMargin: 0px 0px -10% 0px`)이고, **마운트 시점에 `getBoundingClientRect().top < innerHeight`인 블록은 무장하지 않는다** — 이미 그려진 글이 깜빡였다 다시 나타나는 것을 막는다(실측 무장 수 1440 · 1024 · 768 `6` · 390 `5`). 실측 — 네 폭 전부 끝까지 내렸다 올린 뒤 블록 7개의 `x·y·w·h`가 앞뒤 **한 자리도 안 갈리고** `opacity`가 전부 `1`, `docH`·`scrollW`도 같다 | `transform` · `opacity` | `520ms` | `cubic-bezier(0.22, 1, 0.36, 1)` | **스크롤 진입.** **쉬는 상태가 보인다** — `.armed`가 없으면 규칙 둘이 다 안 걸리므로 JS가 죽어도 여섯이 그냥 서 있다(실측 `setScriptExecutionDisabled(true)`에서 블록 7개 `opacity` 전부 `1`, `y`가 정상과 같다 — §서는 못 ②). **JS로 움직이므로 `matchMedia('(prefers-reduced-motion: reduce)')`를 직접 본다** — 참이면 무장을 아예 안 한다(실측 `reduce`에서 블록 7개 `opacity` 전부 `1`) |
+
+**`prefers-reduced-motion`이 행마다 갈리는 이유가 ⑤와 ⑥의 차이다.** ①②③④⑤는 CSS라
+`base.css` 첫 블록이 이미 죽인다 — **`custom.css`에 `@media`를 다시 쓰지 않는다**(그 절 §정본이
+두 벌이 된다). ⑥만 JS라 자기가 본다. 표에서 `matchMedia`가 적힌 행이 하나뿐인 것이 그 판정이다.
+
+**`.steps` · `.plans` 카드에는 아무것도 안 붙였다.** 카드가 뜨는 호버는 이 페이지에서 가장 쉬운
+"깔쌈"인데, 그 여덟은 **링크가 아니다** — 눌러도 아무 일이 없는 것에 눌릴 것 같은 되먹임을
+주는 것이 §서는 못 ①(모션이 사실을 나르지 않는다)의 반대 방향이다. `8c19fcda`가 `.plans`에
+넷째 카드를 세우는 중인 것과 무관하게 그 절은 이 표의 자리가 아니다.
+
+**범위가 넓어진 `<script setup>`을 쓰는 것은 ⑥ 하나다.** 그 절이 붙여 둔 두 줄을 둘 다 지킨다 —
+`window`를 최상단에서 안 읽고(전부 `onMounted` 안), 별 위젯이 갈아 끼우는 `a[data-icon=…]` **둘에
+직접 옵저버를 안 건다**(⑥이 관찰하는 것은 `main` 직계 블록이고, ①②는 리스너가 아니라 CSS라
+노드가 갈려도 새 노드에 그대로 걸린다).
+
+**새 색 0 · 새 토큰 0 · 새 의존성 0 · 새 컴포넌트 0.** `@keyframes` 1개(⑤)와
+`IntersectionObserver` 1개(⑥)가 이 표가 만드는 전부다(§서는 못 ⑥).
+
 #### 검증
 
 ```bash
@@ -12907,7 +12944,7 @@ P125 세션이 이미 반대 방향에서 같은 판정을 적어 뒀다(hunk 3�
 | # | 티켓 | persona | deps | 상태 |
 |---|---|---|---|---|
 | P128 | 스펙 확정 `c9c53edb` | pm | — | 진행중 — §랜딩에 §모션 신설(사실 6행 · `prefers-reduced-motion` 실측 · 서는 못 6 · 안 하는 것 4 · 산출 네 칸 · 검증 6줄) |
-| P128 | 모션 판정표 `a2772553` | designer | — | 대기 |
+| P128 | 모션 판정표 `a2772553` | designer | — | 완료 — §모션에 §판정표 신설. **6행 · 아홉 칸 전부 실측**(후보 CSS를 `<style>`로 세우고 `.arrows a:hover`는 CSSOM으로 걷어 같은 창에서 쟀다 — 예측치 0칸). 속성이 `transform`·`opacity`가 아닌 행은 ① 하나(색 셋, 이유를 칸에 적었다). `matchMedia`가 적힌 행도 ⑥ 하나 — 나머지 다섯은 CSS라 `base.css`가 덮는다. `Landing.vue`가 갈리는 행은 ⑥ 하나(`class="reveal"` 6개 + `onMounted`), 텍스트 노드 0글자. `.steps`·`.plans` 카드 호버는 **반려**(링크가 아닌 것에 눌릴 되먹임을 준다 — §서는 못 ①). 새 색 0 · 새 토큰 0 · 새 의존성 0, `@keyframes` 1 · `IntersectionObserver` 1 |
 | P128 | 판정표 구현 `a14e5293` | developer | `a2772553` | 대기 |
 
 **되묻지 않았다.** 그릇이 이름으로 왔고(`ui-animation`) designer가 그 스킬을 갖고 있다.
