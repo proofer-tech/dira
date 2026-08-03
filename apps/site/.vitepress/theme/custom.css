@@ -133,6 +133,21 @@ html { scroll-behavior: smooth; }
 
 /* ── gallery (실제 화면) ─────────────────────────── */
 .dira-landing .gallery { display: grid; grid-template-columns: repeat(3, 1fr); gap: 40px; align-items: start; }
+/* ③ 열 폭 317px에 1600px 캡처를 넣으면 캡처 안의 티켓 제목이 4px다. 클릭하면 원본
+   크기로 연다 — ponytail: 라이트박스를 들이지 않고 브라우저의 이미지 뷰어를 그대로 쓴다.
+   열을 줄이는 쪽은 안 된다: 1열 1032px에서도 캡처가 0.65배라 여전히 안 읽히고,
+   3열이 아니면 세 캡션을 한 줄에 맞추는 ④가 성립하지 않는다. */
+.dira-landing .gallery .zoom { display: block; cursor: zoom-in; }
+@media (min-width: 901px) {
+  /* ④ 세 캡처의 종횡비가 1.25 · 3.2 · 1.6이라 그냥 두면 캡션 시작 높이가 셋 다 다르다.
+     figure를 subgrid로 만들어 이미지 · 캡션 · 링크가 세 열에서 같은 행을 쓰게 한다.
+     잘라서 높이를 맞추지 않는다 — 캡션이 캡처의 오른쪽 끝을 가리키는 것이 있어서
+     (07-qa-thread의 `awaiting:`) object-fit:cover로 자르면 캡션이 없는 것을 가리킨다.
+     행 간격은 figcaption · .arrows의 margin-top이 이미 주므로 row-gap은 0이다. */
+  .dira-landing .gallery { grid-template-rows: auto auto auto; row-gap: 0; }
+  .dira-landing .gallery figure { display: grid; grid-row: span 3; grid-template-rows: subgrid; }
+  .dira-landing .gallery .zoom { align-self: start; }
+}
 
 /* ── content rows ───────────────────────────────── */
 .dira-landing section { padding: 96px 0; }
@@ -158,7 +173,9 @@ html { scroll-behavior: smooth; }
 /* ── steps (30초 설명) ──────────────────────────── */
 .dira-landing .steps { list-style: none; margin: 32px 0 0; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
 .dira-landing .steps li { border: 1px solid var(--border); border-radius: 12px; padding: 22px; background: var(--panel); }
-.dira-landing .steps b { display: block; margin-bottom: 8px; font-size: 15px; letter-spacing: -0.02em; }
+/* `> li >` 로 카드 제목만 잡는다 — 그냥 `.steps b`면 본문 <p> 안의 강조까지 block이
+   되어 한 문단이 세 토막으로 끊긴다(§랜딩 ①). */
+.dira-landing .steps > li > b { display: block; margin-bottom: 8px; font-size: 15px; letter-spacing: -0.02em; }
 .dira-landing .steps p { margin: 0; font-size: 14px; color: var(--muted-fg); line-height: 1.65; }
 @media (max-width: 900px) { .dira-landing .steps { grid-template-columns: 1fr; } }
 
@@ -173,8 +190,12 @@ html { scroll-behavior: smooth; }
    밀린다(실측: 390px 뷰포트에서 트랙이 394px로 계산됨). 아이템에도 min-width:0을
    줘야 트랙의 minmax(0, …)가 실제로 먹는다. */
 .dira-landing .two > * { min-width: 0; }
+/* pre-wrap — 390px에서 `cat > ~/myproject/.dira/workers/w1.sh <<'EOF'` 한 줄이
+   자기 폭(325px)을 넘어 코드 블록 안에 가로 스크롤이 생겼다(§랜딩 ⑥). 넓은 폭에서는
+   가장 긴 줄이 트랙 안에 들어가 줄바꿈이 일어나지 않으므로 전역으로 켠다.
+   overflow-x는 끊을 수 없는 긴 토큰을 위해 남긴다. */
 .dira-landing pre {
-  margin: 0; padding: 20px; overflow-x: auto;
+  margin: 0; padding: 20px; overflow-x: auto; white-space: pre-wrap;
   background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
   font-family: var(--mono); font-size: 13px; line-height: 1.75;
 }

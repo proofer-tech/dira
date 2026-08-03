@@ -108,7 +108,7 @@ const version = theme.value.diraVersion;
 <section class="wrap">
   <div class="gallery">
     <figure>
-      <img class="shot" src="/shots/barge.gif" loading="lazy" alt="세션 스트림이 도구 호출을 한 줄씩 늘려 가는 동안, 아래 입력창에 문장을 넣고 보내기를 누르자 그 문장이 참견 줄로 스트림에 나타나고 세션이 이어서 방향을 바꾼다." width="1760">
+      <a class="zoom" href="/shots/barge.gif" target="_blank" rel="noopener" title="원본 크기로 열기"><img class="shot" src="/shots/barge.gif" loading="lazy" alt="세션 스트림이 도구 호출을 한 줄씩 늘려 가는 동안, 아래 입력창에 문장을 넣고 보내기를 누르자 그 문장이 참견 줄로 스트림에 나타나고 세션이 이어서 방향을 바꾼다." width="1760" height="1408"></a>
       <figcaption>
         <b>실제 왕복이다. 재현이 아니다.</b> 티켓은 <q>세 파일을 읽어 세 줄로 쓴다</q>였고,
         참견은 <q>지금 읽은 것까지만, 한 줄로</q>였다.
@@ -117,12 +117,12 @@ const version = theme.value.diraVersion;
       <p class="arrows"><a href="/docs/barge-in">도는 세션에 말 걸기</a></p>
     </figure>
     <figure>
-      <img class="shot" src="/shots/07-qa-thread.png" loading="lazy" alt="요구 티켓의 질문·답변 스레드. 질문 아래에 답변 말풍선이 오른쪽으로 붙어 있고, frontmatter에 awaiting 해시가 있다." width="1600">
+      <a class="zoom" href="/shots/07-qa-thread.png" target="_blank" rel="noopener" title="원본 크기로 열기"><img class="shot" src="/shots/07-qa-thread.png" loading="lazy" alt="요구 티켓의 질문·답변 스레드. 질문 아래에 답변 말풍선이 오른쪽으로 붙어 있고, frontmatter에 awaiting 해시가 있다." width="1440" height="450"></a>
       <figcaption>오른쪽 <code>awaiting:</code>에 걸린 해시는 <b>아직 없는 파일</b>이다. 답변을 쓰면 그 파일이 생긴다.</figcaption>
       <p class="arrows"><a href="/docs/ticket-writing">티켓 쓰는 법</a></p>
     </figure>
     <figure>
-      <img class="shot" src="/shots/04-ticket-running.png" loading="lazy" alt="진행중 티켓 상세. 왼쪽에 본문과 Done when 체크리스트, 오른쪽에 frontmatter 표와 관계." width="1600">
+      <a class="zoom" href="/shots/04-ticket-running.png" target="_blank" rel="noopener" title="원본 크기로 열기"><img class="shot" src="/shots/04-ticket-running.png" loading="lazy" alt="진행중 티켓 상세. 왼쪽에 본문과 Done when 체크리스트, 오른쪽에 frontmatter 표와 관계." width="1600" height="1000"></a>
       <figcaption>티켓 한 장의 전부. 왼쪽은 사람이 쓴 마크다운, 오른쪽 <code>session_id</code>·<code>pid</code>·<code>owner</code>·<code>inbox</code>는 <b>디스패처가 쓰고 사람은 건드리지 않는다.</b></figcaption>
       <p class="arrows"><a href="/docs/states">상태는 파일명</a></p>
     </figure>
@@ -232,7 +232,7 @@ chmod +x ~/myproject/.dira/workers/w1.sh
         <ul>
           <li><a href="https://github.com/proofer-tech/dira/releases/latest">다운로드</a></li>
           <li><a href="https://github.com/proofer-tech/dira/releases">릴리스</a></li>
-          <li><a href="#engine">엔진</a></li>
+          <li><a href="/docs/what-is-dira">엔진</a></li>
         </ul>
       </div>
       <div class="fcol">

@@ -8989,7 +8989,7 @@ PM이 넓혀서 사람의 문장을 되돌릴 자리가 아니다 — **알고 �
 
 | 묶음 | 티켓 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
-| P97 | 랜딩 레이아웃 6건 `3fc53b23` | developer | — | 대기 |
+| P97 | 랜딩 레이아웃 6건 `3fc53b23` | developer | — | 완료 — 여섯 자리 전부 네 폭 CDP 실측으로 닫았다. ① `.steps b` → `.steps > li > b`(본문 `<b>`가 `display:inline`). ② 갤러리 3장에 `height` 속성(로드 전 높이 2px → 254.3/100.5/199.1로 로드 후와 동일 = 점프 0). ③ 열은 3열·317.3px 그대로 두고 **원본 열기 링크**(`<a class="zoom" target="_blank">`)를 붙였다 — 열을 줄여도 안 읽히고(1열 1032px에서도 캡처가 0.65배다) 줄이면 ④가 성립하지 않는다. 실측: 클릭 → 새 탭에 1600×1000 원본. ④ `figure`를 **subgrid**로 묶어 캡션 행을 맞췄다(1440에서 세 `figcaption.top`이 2401.7로 일치) — `object-fit:cover`로 자르지 않았다. 07-qa-thread의 캡션이 캡처 **오른쪽 끝**의 `awaiting:`을 가리켜서, 자르면 캡션이 없는 것을 가리킨다. ⑤ `#engine` → `/docs/what-is-dira`(**앵커를 만들지 않았다**). ⑥ `<pre>`에 `white-space: pre-wrap`(390에서 `scrollWidth 392 > clientWidth 340` → `340 = 340`, `documentElement.scrollWidth = 390`). **새 의존성 0 · 텍스트 노드 무수정**(문장은 `249cebbb`) |
 | P97 | 랜딩 카피 + 숫자 맞추기 `249cebbb` | writer | `3fc53b23` | 대기 |
 | P97 | 시작하기 4장 + 매뉴얼 첫 화면 `83ecf4b8` | writer | — | 대기 |
 | P97 | 지켜보기 2장 `9d811844` | writer | — | 대기 |
