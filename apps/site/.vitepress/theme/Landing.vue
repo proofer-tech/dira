@@ -1,14 +1,27 @@
 <script setup>
+import { onMounted, ref } from "vue";
 import { useData } from "vitepress";
 const { theme } = useData();
-const version = theme.value.diraVersion;
+// 초기값은 빌드 시점의 `apps/desktop/package.json`. 비우면 hydration이 어긋난다.
+const version = ref(theme.value.diraVersion);
+onMounted(async () => {
+  try {
+    const r = await fetch(
+      "https://api.github.com/repos/proofer-tech/dira/releases/latest",
+    );
+    const tag = (await r.json()).tag_name;
+    if (tag) version.value = tag.replace(/^v/, "");
+  } catch {
+    // 릴리스를 못 읽으면 초기값 그대로 둔다 — 화면에도 콘솔에도 아무것도 안 띄운다.
+  }
+});
 </script>
 
 <template>
 
 <div class="ann">
   <div class="wrap">
-    <span>v{{ version }}가 나와 있습니다. 앱이 스스로 받습니다.</span>
+    <span>자동 업데이트를 켜고 최신 버전(v{{ version }})의 dira를 써보세요!</span>
     <a href="https://github.com/proofer-tech/dira/releases">릴리스 보기</a>
   </div>
 </div>
