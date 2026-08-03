@@ -7,12 +7,13 @@
  *  fs를 만지는 건 서버 액션뿐이다.
  *  파일 하나에 모은 이유는 projects-ui.tsx와 같다 — 세 다이얼로그가 같은 문구·같은 명령어를
  *  쓰므로 쪼개면 자리가 갈린다. */
-import { useState, useTransition } from "react";
+import { createContext, useContext, useState, useTransition } from "react";
 import {
   ArrowDown,
   ArrowUp,
   Check,
   ChevronDown,
+  ChevronRight,
   CircleQuestionMark,
   TriangleAlert,
   X,
@@ -58,6 +59,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { TableCell, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { relativeUnder } from "@/lib/urls";
 import { cn } from "@/lib/utils";
@@ -903,6 +905,48 @@ function ExistsMark({ row }: { row: ContextRow }) {
   );
 }
 
+/** 블록 모양이 예상과 달라 GUI가 못 고칠 때의 사유 패널. **편집기 밖에 사는 이유**(§비주얼 §35
+ *  §다섯째 경고): 이것은 워커 하나짜리 경고 다섯 중 하나라 접힌 행에서도 서야 한다 — 편집기
+ *  안에 두면 펼쳐야 보이는 경고가 된다. 공통 카드는 종전대로 편집기가 이걸 부른다. */
+function ContextRejection({
+  file,
+  arr,
+  filePath,
+  reason,
+}: {
+  file: string;
+  arr: string;
+  filePath: string;
+  reason: string;
+}) {
+  // 사유가 `블록이 없습니다`일 때**만** 넣을 줄까지 준다(§4) — 나머지 사유는 파일에 이미
+  // 있는 것을 사람이 보고 정할 일이지만 이건 답이 한 줄로 정해져 있다. 문자열은
+  // `parseContextBlock`이 내는 그 사유와 글자로 맞춘다(lib/workers.ts 199행).
+  const missing = reason === `${arr}=( … ) 블록이 없습니다`;
+  return (
+    <>
+      <Failure title={`${file}의 ${arr} 블록을 GUI가 고칠 수 없습니다`} message={reason} />
+      <p className="text-sm text-muted-foreground">
+        추측해서 쓰지 않습니다 — 엉뚱한 라인을 밟으면 워커가 죽고 cron이 조용히 실패합니다.
+        <span className="font-mono text-xs break-all"> {filePath}</span>를 손으로 편집한 뒤 이
+        화면을 새로고침하세요.
+      </p>
+      {missing && (
+        <>
+          <p className="text-sm text-muted-foreground">
+            넣을 줄은 이것 하나입니다 — 필수 <code className="font-mono text-xs">. …/tick.sh</code>{" "}
+            줄 <strong className="font-medium text-foreground">위</strong> 아무 곳에 붙이면
+            열립니다. GUI가 대신 넣지는 않습니다(삽입 자리를 짚을 앵커가 없습니다).
+          </p>
+          {/* ponytail: `renderContextBlock([], arr)`과 같은 문자열을 손으로 적는다 — 서버
+              전용 모듈(fs)이라 클라이언트에서 import할 수 없다. 0항목 모양이 바뀌면 여기도. */}
+          <CopyCommand cmd={`${arr}=()`} />
+        </>
+      )}
+    </>
+  );
+}
+
 /** 항목 목록 편집 + 저장. **워커 카드와 공통 카드가 같은 이 컴포넌트를 쓴다**(§4-1: "편집기는
  *  워커별 것과 같은 컴포넌트다"). 파일 이름·블록 이름·저장 액션만 갈린다. */
 function ContextEditor({
@@ -951,32 +995,7 @@ function ContextEditor({
   };
 
   if (!context.ok) {
-    // 사유가 `블록이 없습니다`일 때**만** 넣을 줄까지 준다(§4) — 나머지 사유는 파일에 이미
-    // 있는 것을 사람이 보고 정할 일이지만 이건 답이 한 줄로 정해져 있다. 문자열은
-    // `parseContextBlock`이 내는 그 사유와 글자로 맞춘다(lib/workers.ts 199행).
-    const missing = context.reason === `${arr}=( … ) 블록이 없습니다`;
-    return (
-      <>
-        <Failure title={`${file}의 ${arr} 블록을 GUI가 고칠 수 없습니다`} message={context.reason} />
-        <p className="text-sm text-muted-foreground">
-          추측해서 쓰지 않습니다 — 엉뚱한 라인을 밟으면 워커가 죽고 cron이 조용히 실패합니다.
-          <span className="font-mono text-xs break-all"> {filePath}</span>를 손으로 편집한 뒤 이
-          화면을 새로고침하세요.
-        </p>
-        {missing && (
-          <>
-            <p className="text-sm text-muted-foreground">
-              넣을 줄은 이것 하나입니다 — 필수 <code className="font-mono text-xs">. …/tick.sh</code>{" "}
-              줄 <strong className="font-medium text-foreground">위</strong> 아무 곳에 붙이면
-              열립니다. GUI가 대신 넣지는 않습니다(삽입 자리를 짚을 앵커가 없습니다).
-            </p>
-            {/* ponytail: `renderContextBlock([], arr)`과 같은 문자열을 손으로 적는다 — 서버
-                전용 모듈(fs)이라 클라이언트에서 import할 수 없다. 0항목 모양이 바뀌면 여기도. */}
-            <CopyCommand cmd={`${arr}=()`} />
-          </>
-        )}
-      </>
-    );
+    return <ContextRejection file={file} arr={arr} filePath={filePath} reason={context.reason} />;
   }
 
   return (
@@ -1093,7 +1112,52 @@ function ContextEditor({
   );
 }
 
-/** 공통 컨텍스트 카드 — 워커 화면 **최상단**(§4-1). 편집기는 워커별 것과 같은 컴포넌트다.
+// ── 표 안의 컨텍스트 (§비주얼 §35) ──────────────────────────────────────────
+
+/** 지금 펼쳐진 워커 이름 하나. **한 번에 한 행만 펼친다**(§35 #2 — §5 §동시 선택 `하나`와 같은
+ *  규칙). URL에 안 담는다: 이 화면은 5초마다 다시 그리므로(§4-4) 담으면 매번 서버 렌더가 돌아
+ *  편집 중이던 항목 입력이 언마운트된다. `// ponytail: 딥링크가 생기면 그때`. */
+const ExpandCtx = createContext<[string | null, (name: string | null) => void]>([null, () => {}]);
+
+/** 표 본문이 드는 펼침 상태 하나. **DOM을 한 조각도 안 그리므로** `<TableBody>` 안에 그대로
+ *  선다 — 서버가 그린 행들을 children으로 받는다(행 마크업은 페이지에 그대로 있다). */
+export function ExpandScope({ children }: { children: React.ReactNode }) {
+  const state = useState<string | null>(null);
+  return <ExpandCtx.Provider value={state}>{children}</ExpandCtx.Provider>;
+}
+
+/** `컨텍스트` 열 — **셀이 곧 토글이다**(§35 #3). 모양은 `엔진` 열 그대로다(§23 ②): `size="sm"`이
+ *  `h-7`이라 `h-9` 행 높이가 안 변하고, `aria-expanded`를 달면 `TableRow`의
+ *  `has-aria-expanded:bg-muted/50`이 펼친 행을 저절로 tint한다(새 클래스 0).
+ *
+ *  값은 이 워커의 `TICKET_CONTEXT` 항목 수다. **0개는 `—`가 아니라 `0`**이고(안 갖고 있다는 것은
+ *  확인된 사실이다 — 토큰 열과 같은 이유), 못 읽는 워커는 `—` + `disabled`다(사유는 같은 행의
+ *  둘째 행이 항상 말한다). 버튼을 지우지 않는 것은 §4 §세션 스트림과 같은 규칙이다. */
+export function WorkerContextCell({ row }: { row: WorkerRow }) {
+  const [open, setOpen] = useContext(ExpandCtx);
+  const expanded = open === row.name;
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      disabled={!row.context.ok}
+      aria-expanded={expanded}
+      // `엔진` 열과 같은 이유로 `text-foreground`다 — 행 hover·펼침이 둘 다 `bg-muted/50`이고
+      // 거기서 `--muted-foreground`는 라이트 4.54라 §9가 금지한 조합이다(§23 대비 검증).
+      className="-ml-2.5 font-mono text-xs font-normal text-foreground"
+      onClick={() => setOpen(expanded ? null : row.name)}
+    >
+      {row.context.ok ? row.context.items.length : "—"}
+      {expanded ? (
+        <ChevronDown aria-hidden className="size-3" />
+      ) : (
+        <ChevronRight aria-hidden className="size-3" />
+      )}
+    </Button>
+  );
+}
+
+/** 공통 컨텍스트 카드 — 워커 표 **바로 아래**(§4-1 · §35 #1). 편집기는 워커별 것과 같은 컴포넌트다.
  *  `context.sh`가 없으면 항목 0개이고 **오류가 아니다** — 빈 상태 + `공통 항목 추가`다. */
 export function CommonContextCard({
   projectId,
@@ -1127,13 +1191,22 @@ export function CommonContextCard({
   );
 }
 
-/** 워커 하나의 컨텍스트 편집. 저장은 `TICKET_CONTEXT=( … )` **블록 전체 치환**이고, 블록 모양이
- *  예상과 다르면 서버가 거부한다 — 그때는 편집 UI를 아예 열지 않고 손으로 고치라고 알린다. */
-export function WorkerContextCard({
+/** 워커 하나의 **둘째 행**(§비주얼 §35 #2·#4) — 경고 다섯과 펼친 컨텍스트 편집이 여기 산다.
+ *  종전 `WorkerContextCard`가 표 아래에 N장 서던 것을 그 워커의 행 안으로 접은 것이고, 카드가
+ *  들고 있던 것은 그대로다(편집기 · `→ <워커>` 복사 · 다이얼로그. 항목 수는 `컨텍스트` 열로 올라갔다).
+ *
+ *  **경고는 접힘과 무관하게 항상 보인다** — 펼쳐야 보이는 경고를 만들지 않는다(§35 #4).
+ *  순서는 `결함 → 실패 → 공통 미수신 → 자가 정리 미적용 → 컨텍스트 거부 사유`이고 앞의 둘은
+ *  서버가 그려 `warnings`로 넘긴다(그 마크업은 페이지에 그대로 있다).
+ *
+ *  저장은 `TICKET_CONTEXT=( … )` **블록 전체 치환**이고, 블록 모양이 예상과 다르면 서버가
+ *  거부한다 — 그때는 편집 UI를 아예 열지 않고 손으로 고치라고 알린다. */
+export function WorkerContextRow({
   projectId,
   row,
   others,
   common,
+  warnings,
 }: {
   projectId: string;
   row: WorkerRow;
@@ -1141,7 +1214,11 @@ export function WorkerContextCard({
   others: string[];
   /** 공통 항목. `row.commonSource`가 false면 이 워커는 못 받으므로 그리지 않는다 (§4-1) */
   common: ContextRow[];
+  /** 작업 디렉터리 결함(§4) · 외부 요인 실패(§0-5). 둘 다 없으면 `null`이다 */
+  warnings?: React.ReactNode;
 }) {
+  const [open] = useContext(ExpandCtx);
+  const expanded = open === row.name;
   const saved = row.context.ok ? row.context.items : [];
   const [copyTo, setCopyTo] = useState<string | null>(null);
   const [copyError, setCopyError] = useState<string | null>(null);
@@ -1152,147 +1229,173 @@ export function WorkerContextCard({
   // 나머지 버튼이 남의 라벨(`적용 중…`)로 서지 않는다.
   const [healing, startHeal] = useTransition();
   const gets = row.commonSource ? common : [];
+  // 접혀 있어도 이 행이 서는 조건 — 경고 다섯 중 하나라도 있으면이다(§35 #4).
+  const warned = !!warnings || !row.commonSource || !row.selfHealSource || !row.context.ok;
+  if (!warned && !expanded) return null;
 
   return (
-    <div className="space-y-3 rounded-md border p-3">
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-2">
-          <span className="font-mono text-sm">{row.name}</span>
-          <span className="text-xs text-muted-foreground">
-            {row.context.ok ? `${saved.length}개` : "읽지 못했습니다"}
-          </span>
+    <TableRow className="hover:bg-transparent">
+      <TableCell colSpan={9} className="px-3 py-2">
+        <div className="space-y-2">
+          {warnings}
+
+          {/* `source` 줄이 없으면 이 워커만 공통에서 빠진다. 조용히 넘기면 "전원이 본다"는 전제가
+              화면에서 거짓이 된다(§4-1) — 사실을 말하고 그 자리에서 줄을 넣게 한다. */}
+          {!row.commonSource && (
+            <Alert>
+              <TriangleAlert aria-hidden className="text-status-stale" />
+              <AlertTitle>이 워커는 공통 컨텍스트를 받지 않습니다</AlertTitle>
+              <AlertDescription>
+                <div className="space-y-2">
+                  <p>
+                    {row.name}.sh에 <span className="font-mono text-xs">context.sh</span>를{" "}
+                    <span className="font-mono text-xs">.</span> 하는 줄이 없습니다 — 위 공통 항목{" "}
+                    {common.length}개가 이 워커의 세션에는 붙지 않습니다.
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={pending}
+                    onClick={() =>
+                      start(async () => {
+                        const r = await applyCommonSourceAction(projectId, row.name);
+                        setApplyError(r.ok ? null : (r.message ?? "줄을 넣지 못했습니다."));
+                      })
+                    }
+                  >
+                    {pending ? "적용 중…" : "공통 적용"}
+                  </Button>
+                  {applyError && <Failure title="공통을 적용하지 못했습니다" message={applyError} />}
+                </div>
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* 이 줄이 없으면 그 워커는 자기 cron 줄을 뺄 코드를 못 만난다 — dira를 지워도 줄이 남아
+              cron이 1분마다 없는 파일을 부른다(§4-4 §소급). 모양은 위 `공통 적용`과 같다. */}
+          {!row.selfHealSource && (
+            <Alert>
+              <TriangleAlert aria-hidden className="text-status-stale" />
+              <AlertTitle>이 워커는 지워도 cron 줄이 남습니다</AlertTitle>
+              <AlertDescription>
+                <div className="space-y-2">
+                  <p>
+                    {row.name}.sh에 <span className="font-mono text-xs">self-heal.sh</span>를{" "}
+                    <span className="font-mono text-xs">.</span> 하는 줄이 없습니다 — dira를 지우면 이
+                    워커의 crontab 2줄을 뺄 코드가 돌지 않고, cron이 1분마다 없는 파일을 부릅니다.
+                    적용하면 <span className="font-mono text-xs">. tick.sh</span> 바로 위에 한 줄이
+                    들어갑니다(엔진 경로는 이 파일의 그 줄에서 읽습니다).
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={healing}
+                    onClick={() =>
+                      startHeal(async () => {
+                        const r = await applySelfHealAction(projectId, row.name);
+                        setHealError(r.ok ? null : (r.message ?? "줄을 넣지 못했습니다."));
+                      })
+                    }
+                  >
+                    {healing ? "적용 중…" : "자가 정리 적용"}
+                  </Button>
+                  {healError && <Failure title="자가 정리를 적용하지 못했습니다" message={healError} />}
+                </div>
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* 다섯째 경고 — 블록을 못 읽는 워커의 사유(§35 §다섯째 경고). 편집기 안이 아니라 여기
+              있는 이유는 접힌 행에서도 서야 해서다. 이 워커는 펼침이 없다(`컨텍스트` 열이 `disabled`). */}
+          {!row.context.ok && (
+            <ContextRejection
+              file={`${row.name}.sh`}
+              arr="TICKET_CONTEXT"
+              filePath={row.path}
+              reason={row.context.reason}
+            />
+          )}
+
+          {/* 펼친 자리 — 산문 한 덩이(화면에 최대 한 번이다. 한 번에 한 행이라) + 복사 + 편집기.
+              ponytail: 접으면 편집기가 언마운트돼 저장 안 한 편집이 사라진다. 한 번에 한 행이
+              §35의 규칙이라 이 대가를 받는다 — 되돌리기가 그 자리에 이미 있다. */}
+          {expanded && row.context.ok && (
+            <div className="space-y-3 pt-1">
+              <p className="text-sm text-muted-foreground">
+                워커별 <span className="font-mono text-xs">TICKET_CONTEXT</span> — 세션 프롬프트 꼬리에
+                항목의 경로와 설명이 붙습니다. <strong className="font-medium">없는 항목은 에러가 아닙니다</strong>{" "}
+                — 엔진이 건너뛰고 runner.log에 <span className="font-mono text-xs">WARN</span>만 남깁니다
+                (클라우드 마운트가 안 붙은 상태에서 세션이 헛짚지 않게). 목록 최상단의{" "}
+                <span className="font-mono text-xs">공통</span> 배지 행은 아래 공통 컨텍스트이고 여기서는
+                고칠 수 없습니다 — 그 항목은 워커 파일에 없습니다.
+              </p>
+              {others.length > 0 && (
+                <div className="flex items-center justify-end gap-1">
+                  <span className="text-xs text-muted-foreground">이 설정을 복사:</span>
+                  {others.map((o) => (
+                    <Button key={o} variant="ghost" size="sm" className="font-mono" onClick={() => setCopyTo(o)}>
+                      → {o}
+                    </Button>
+                  ))}
+                </div>
+              )}
+              <ContextEditor
+                file={`${row.name}.sh`}
+                arr="TICKET_CONTEXT"
+                filePath={row.path}
+                context={row.context}
+                common={gets}
+                // ponytail: `TICKET_CWD` 줄이 없는 워커(엔진 기본값 = 루트의 부모)는 기준이 없어 피커가
+                // 안 뜬다 — 타이핑은 종전대로다. 필요해지면 페이지가 root를 같이 넘긴다
+                cwd={row.cwd ?? undefined}
+                emptyText={
+                  gets.length > 0
+                    ? "이 워커의 자기 항목은 없습니다 — 위 공통 항목만 받습니다."
+                    : "항목이 없습니다 — 이 워커의 세션은 참조 컨텍스트 없이 시작합니다."
+                }
+                addLabel="항목 추가"
+                save={(items) => saveContextAction(projectId, row.name, items)}
+              />
+            </div>
+          )}
+
+          {/* 워커 간 복사 — 받는 쪽 블록이 통째로 없어진다. 되돌리기가 없으므로 먼저 알린다 */}
+          <Dialog open={!!copyTo} onOpenChange={(o) => !o && setCopyTo(null)}>
+            <DialogContent className="sm:max-w-xl">
+              <DialogHeader>
+                <DialogTitle>
+                  컨텍스트 복사 — {row.name} → {copyTo}
+                </DialogTitle>
+                <DialogDescription>
+                  {copyTo}.sh의 TICKET_CONTEXT 블록을 {row.name}의 항목 {saved.length}개로 바꿉니다.
+                  {copyTo}의 기존 항목은 남지 않습니다.
+                </DialogDescription>
+              </DialogHeader>
+              <p className="text-sm text-muted-foreground">
+                <span className="font-mono text-xs">$TICKET_CWD</span>는 펴지 않고 문자열째로 옮깁니다 —
+                받는 워커는 자기 작업 디렉터리를 가리킵니다. 컨텍스트가 워커마다 갈라져 있으면 같은
+                티켓이 어느 워커에 물리느냐로 결과가 달라집니다.
+              </p>
+              {copyError && <Failure title="복사하지 못했습니다" message={copyError} />}
+              <DialogFooter>
+                <DialogClose render={<Button variant="outline" />}>취소</DialogClose>
+                <Button
+                  disabled={pending}
+                  onClick={() =>
+                    start(async () => {
+                      const r = await copyContextAction(projectId, row.name, copyTo!);
+                      setCopyError(r.ok ? null : (r.message ?? "복사하지 못했습니다."));
+                      if (r.ok) setCopyTo(null);
+                    })
+                  }
+                >
+                  {pending ? "복사 중…" : "복사"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
-        {row.context.ok && others.length > 0 && (
-          <div className="flex items-center gap-1">
-            <span className="text-xs text-muted-foreground">이 설정을 복사:</span>
-            {others.map((o) => (
-              <Button key={o} variant="ghost" size="sm" className="font-mono" onClick={() => setCopyTo(o)}>
-                → {o}
-              </Button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* `source` 줄이 없으면 이 워커만 공통에서 빠진다. 조용히 넘기면 "전원이 본다"는 전제가
-          화면에서 거짓이 된다(§4-1) — 사실을 말하고 그 자리에서 줄을 넣게 한다. */}
-      {!row.commonSource && (
-        <Alert>
-          <TriangleAlert aria-hidden className="text-status-stale" />
-          <AlertTitle>이 워커는 공통 컨텍스트를 받지 않습니다</AlertTitle>
-          <AlertDescription>
-            <div className="space-y-2">
-              <p>
-                {row.name}.sh에 <span className="font-mono text-xs">context.sh</span>를{" "}
-                <span className="font-mono text-xs">.</span> 하는 줄이 없습니다 — 위 공통 항목{" "}
-                {common.length}개가 이 워커의 세션에는 붙지 않습니다.
-              </p>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={pending}
-                onClick={() =>
-                  start(async () => {
-                    const r = await applyCommonSourceAction(projectId, row.name);
-                    setApplyError(r.ok ? null : (r.message ?? "줄을 넣지 못했습니다."));
-                  })
-                }
-              >
-                {pending ? "적용 중…" : "공통 적용"}
-              </Button>
-              {applyError && <Failure title="공통을 적용하지 못했습니다" message={applyError} />}
-            </div>
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {/* 이 줄이 없으면 그 워커는 자기 cron 줄을 뺄 코드를 못 만난다 — dira를 지워도 줄이 남아
-          cron이 1분마다 없는 파일을 부른다(§4-4 §소급). 모양은 위 `공통 적용`과 같다. */}
-      {!row.selfHealSource && (
-        <Alert>
-          <TriangleAlert aria-hidden className="text-status-stale" />
-          <AlertTitle>이 워커는 지워도 cron 줄이 남습니다</AlertTitle>
-          <AlertDescription>
-            <div className="space-y-2">
-              <p>
-                {row.name}.sh에 <span className="font-mono text-xs">self-heal.sh</span>를{" "}
-                <span className="font-mono text-xs">.</span> 하는 줄이 없습니다 — dira를 지우면 이
-                워커의 crontab 2줄을 뺄 코드가 돌지 않고, cron이 1분마다 없는 파일을 부릅니다.
-                적용하면 <span className="font-mono text-xs">. tick.sh</span> 바로 위에 한 줄이
-                들어갑니다(엔진 경로는 이 파일의 그 줄에서 읽습니다).
-              </p>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={healing}
-                onClick={() =>
-                  startHeal(async () => {
-                    const r = await applySelfHealAction(projectId, row.name);
-                    setHealError(r.ok ? null : (r.message ?? "줄을 넣지 못했습니다."));
-                  })
-                }
-              >
-                {healing ? "적용 중…" : "자가 정리 적용"}
-              </Button>
-              {healError && <Failure title="자가 정리를 적용하지 못했습니다" message={healError} />}
-            </div>
-          </AlertDescription>
-        </Alert>
-      )}
-
-      <ContextEditor
-        file={`${row.name}.sh`}
-        arr="TICKET_CONTEXT"
-        filePath={row.path}
-        context={row.context}
-        common={gets}
-        // ponytail: `TICKET_CWD` 줄이 없는 워커(엔진 기본값 = 루트의 부모)는 기준이 없어 피커가
-        // 안 뜬다 — 타이핑은 종전대로다. 필요해지면 페이지가 root를 같이 넘긴다
-        cwd={row.cwd ?? undefined}
-        emptyText={
-          gets.length > 0
-            ? "이 워커의 자기 항목은 없습니다 — 위 공통 항목만 받습니다."
-            : "항목이 없습니다 — 이 워커의 세션은 참조 컨텍스트 없이 시작합니다."
-        }
-        addLabel="항목 추가"
-        save={(items) => saveContextAction(projectId, row.name, items)}
-      />
-
-      {/* 워커 간 복사 — 받는 쪽 블록이 통째로 없어진다. 되돌리기가 없으므로 먼저 알린다 */}
-      <Dialog open={!!copyTo} onOpenChange={(o) => !o && setCopyTo(null)}>
-        <DialogContent className="sm:max-w-xl">
-          <DialogHeader>
-            <DialogTitle>
-              컨텍스트 복사 — {row.name} → {copyTo}
-            </DialogTitle>
-            <DialogDescription>
-              {copyTo}.sh의 TICKET_CONTEXT 블록을 {row.name}의 항목 {saved.length}개로 바꿉니다.
-              {copyTo}의 기존 항목은 남지 않습니다.
-            </DialogDescription>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            <span className="font-mono text-xs">$TICKET_CWD</span>는 펴지 않고 문자열째로 옮깁니다 —
-            받는 워커는 자기 작업 디렉터리를 가리킵니다. 컨텍스트가 워커마다 갈라져 있으면 같은
-            티켓이 어느 워커에 물리느냐로 결과가 달라집니다.
-          </p>
-          {copyError && <Failure title="복사하지 못했습니다" message={copyError} />}
-          <DialogFooter>
-            <DialogClose render={<Button variant="outline" />}>취소</DialogClose>
-            <Button
-              disabled={pending}
-              onClick={() =>
-                start(async () => {
-                  const r = await copyContextAction(projectId, row.name, copyTo!);
-                  setCopyError(r.ok ? null : (r.message ?? "복사하지 못했습니다."));
-                  if (r.ok) setCopyTo(null);
-                })
-              }
-            >
-              {pending ? "복사 중…" : "복사"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
+      </TableCell>
+    </TableRow>
   );
 }

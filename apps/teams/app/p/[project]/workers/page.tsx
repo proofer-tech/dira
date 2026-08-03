@@ -14,7 +14,9 @@ import {
   CommonContextCard,
   CreateWorkerButton,
   EngineCell,
-  WorkerContextCard,
+  ExpandScope,
+  WorkerContextCell,
+  WorkerContextRow,
   WorkerRowActions,
   type WorkerRow,
 } from "@/components/workers-ui";
@@ -151,30 +153,6 @@ export default async function Workers({ params }: { params: Promise<{ project: s
         )}
       </div>
 
-      {/* 공통 컨텍스트 — 워커 전원이 보는 항목의 사본 하나(§4-1). 최상단이다: 워커별 목록보다
-          먼저 읽어야 무엇이 겹치는지 알 수 있다. 새 화면도 새 내비 항목도 만들지 않는다. */}
-      {rows.length > 0 && (
-        <section className="space-y-3">
-          <div>
-            <h2 className="text-sm font-semibold">공통 컨텍스트</h2>
-            <p className="text-sm text-muted-foreground">
-              워커 전원이 <span className="font-mono text-xs">source</span>하는 파일 하나입니다 —
-              <span className="font-mono text-xs break-all"> {project.root}/context.sh</span>. 여기
-              항목은 각 워커 컨텍스트 목록의 <strong className="font-medium">최상단</strong>에
-              들어가고, 워커별 목록에서는 지울 수 없습니다. 한 줄을 고치면 전원에게 반영됩니다.
-              <span className="font-mono text-xs">$TICKET_CWD</span>는 워커마다 갈리므로 존재 여부는{" "}
-              <strong className="font-medium">전원에게 있을 때만</strong> 있음입니다 — 워커에 따라
-              갈리면 단정하지 않습니다(확인 못 했습니다).
-            </p>
-          </div>
-          <CommonContextCard
-            projectId={id}
-            filePath={`${project.root}/context.sh`}
-            context={common}
-          />
-        </section>
-      )}
-
       {rows.length === 0 ? (
         <div className="max-w-3xl space-y-4">
           <EmptyState
@@ -213,11 +191,16 @@ export default async function Workers({ params }: { params: Promise<{ project: s
               {/* pid 옆이다 — 둘 다 오른쪽 정렬 숫자라 눈이 한 번에 훑는다 */}
               <TableHead className="h-9 px-3 text-right text-xs">토큰(5시간)</TableHead>
               <TableHead className="h-9 px-3 text-xs">엔진</TableHead>
+              {/* 엔진 오른쪽이다 — 설정을 그 자리에서 고치는 열끼리 이웃한다(§비주얼 §35 #3) */}
+              <TableHead className="h-9 px-3 text-xs">컨텍스트</TableHead>
               <TableHead className="h-9 px-3 text-xs">마지막 활동</TableHead>
               <TableHead className="h-9 px-3 text-right text-xs">액션</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
+            {/* 펼침 상태 하나를 이 본문 전체가 나눠 쓴다 — **한 번에 한 행만** 펼친다(§35 #2).
+                DOM을 안 그리는 컴포넌트라 `tbody`의 자식 규칙을 깨지 않는다 */}
+            <ExpandScope>
             {rows.map((w) => (
               <Fragment key={w.name}>
               <TableRow className="h-9">
@@ -271,6 +254,11 @@ export default async function Workers({ params }: { params: Promise<{ project: s
                     modelPattern={MODEL_RE.source}
                   />
                 </TableCell>
+                {/* **이 표의 둘째 컨트롤 셀**(§비주얼 §35 #3) — 값이 곧 토글이고 그 아래 둘째
+                    행이 이 워커의 컨텍스트 편집이다. 대비 처방은 `엔진` 열을 그대로 상속한다 */}
+                <TableCell className="w-px px-3 py-0">
+                  <WorkerContextCell row={w} />
+                </TableCell>
                 <TableCell
                   className="w-px px-3 py-0 font-mono text-xs text-muted-foreground"
                   title={w.lastLog ?? ""}
@@ -281,18 +269,24 @@ export default async function Workers({ params }: { params: Promise<{ project: s
                   <WorkerRowActions projectId={id} row={w} />
                 </TableCell>
               </TableRow>
-              {/* 결함은 락을 만들지 않으므로 위 배지로는 안 보인다(§4) — 이 워커는 화면에 정상으로
-                  뜨면서 티켓을 처리하지 못한다. 모양은 §4-1 `source` 줄 경고와 같은 Alert다.
-                  결함 0개면 이 행 자체가 없다 — 정상 상태에 켜져 있는 경고를 만들지 않는다.
+              {/* 이 워커의 둘째 행 — 경고 다섯과 펼친 컨텍스트가 한 셀에 산다(§비주얼 §35 #4).
+                  경고가 하나도 없고 접혀 있으면 행 자체가 없다 — 정상 상태에 켜져 있는 경고를
+                  만들지 않는다. 여기서 넘기는 둘은 서버가 그린다:
 
-                  외부 요인 실패(§0-5)도 **같은 행 같은 셀**에 담는다(§4-4) — `TableRow`를 하나 더
+                  결함은 락을 만들지 않으므로 위 배지로는 안 보인다(§4) — 이 워커는 화면에 정상으로
+                  뜨면서 티켓을 처리하지 못한다. 모양은 §4-1 `source` 줄 경고와 같은 Alert다.
+                  외부 요인 실패(§0-5)도 **같은 행 같은 셀**이다(§4-4) — `TableRow`를 하나 더
                   만들면 행 경계선이 둘 사이에 그어져 같은 워커 것으로 안 읽힌다. 순서는
                   결함이 위·실패가 아래다: 사람이 할 일이 있는 쪽이 위고, 신선도 10분 창이라
                   자주 켜졌다 꺼지는 쪽을 아래 두어야 위 블록의 `CopyCommand`가 자리를 안 옮긴다. */}
-              {(w.defects.length > 0 || w.lastFailure) && (
-                <TableRow className="hover:bg-transparent">
-                  <TableCell colSpan={8} className="px-3 py-2">
-                    <div className="space-y-2">
+              <WorkerContextRow
+                projectId={id}
+                row={w}
+                others={rows.filter((o) => o.name !== w.name).map((o) => o.name)}
+                common={commonItems}
+                warnings={
+                  w.defects.length > 0 || w.lastFailure ? (
+                    <>
                       {w.defects.length > 0 && (
                         // role은 status다 — 5초 폴링이 이 표를 다시 그리므로 alert면 재낭독 위험이다(§4-4)
                         <Alert role="status">
@@ -350,38 +344,41 @@ export default async function Workers({ params }: { params: Promise<{ project: s
                           </AlertDescription>
                         </Alert>
                       )}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              )}
+                    </>
+                  ) : null
+                }
+              />
               </Fragment>
             ))}
+            </ExpandScope>
           </TableBody>
         </Table>
       )}
 
+      {/* 공통 컨텍스트 — 워커 전원이 보는 항목의 사본 하나(§4-1). **표 바로 아래다**(§비주얼 §35 #1):
+          워커별 목록과 나란히 봐야 무엇이 겹치는지 알 수 있고, 그 목록은 이제 표의 둘째 행 안에
+          있다. 새 화면도 새 내비 항목도 만들지 않는다. */}
       {rows.length > 0 && (
-        <section className="space-y-3 pt-4">
+        // `pt-4`가 없다 — ⑤와 달리 이 절은 표에 붙어 있어야 한다(§35 #1: 나란히 봐야 무엇이
+        // 겹치는지 안다). §35의 실측값도 이 간격에서 나온 값이다(그 절의 `접힘` 810·843).
+        <section className="space-y-3">
           <div>
-            <h2 className="text-sm font-semibold">컨텍스트</h2>
+            <h2 className="text-sm font-semibold">공통 컨텍스트</h2>
             <p className="text-sm text-muted-foreground">
-              워커별 <span className="font-mono text-xs">TICKET_CONTEXT</span> — 세션 프롬프트 꼬리에
-              항목의 경로와 설명이 붙습니다. <strong className="font-medium">없는 항목은 에러가 아닙니다</strong>{" "}
-              — 엔진이 건너뛰고 runner.log에 <span className="font-mono text-xs">WARN</span>만 남깁니다
-              (클라우드 마운트가 안 붙은 상태에서 세션이 헛짚지 않게). 목록 최상단의{" "}
-              <span className="font-mono text-xs">공통</span> 배지 행은 위 공통 컨텍스트이고 여기서는
-              고칠 수 없습니다 — 그 항목은 워커 파일에 없습니다.
+              워커 전원이 <span className="font-mono text-xs">source</span>하는 파일 하나입니다 —
+              <span className="font-mono text-xs break-all"> {project.root}/context.sh</span>. 여기
+              항목은 각 워커 컨텍스트 목록의 <strong className="font-medium">최상단</strong>에
+              들어가고, 워커별 목록에서는 지울 수 없습니다. 한 줄을 고치면 전원에게 반영됩니다.
+              <span className="font-mono text-xs">$TICKET_CWD</span>는 워커마다 갈리므로 존재 여부는{" "}
+              <strong className="font-medium">전원에게 있을 때만</strong> 있음입니다 — 워커에 따라
+              갈리면 단정하지 않습니다(확인 못 했습니다).
             </p>
           </div>
-          {rows.map((w) => (
-            <WorkerContextCard
-              key={w.name}
-              projectId={id}
-              row={w}
-              others={rows.filter((o) => o.name !== w.name).map((o) => o.name)}
-              common={commonItems}
-            />
-          ))}
+          <CommonContextCard
+            projectId={id}
+            filePath={`${project.root}/context.sh`}
+            context={common}
+          />
         </section>
       )}
 
