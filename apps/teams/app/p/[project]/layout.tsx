@@ -334,9 +334,10 @@ function NotificationItems({
             <div key={t.stem} className="grid gap-1">
               <span className="flex items-center gap-1">
                 {/* 링크는 stem이다 — 상태가 바뀌어도 URL이 안 변한다(§식별자) */}
+                {/* §비주얼 §31 ④ 갈래 B — 이 자리의 유일한 링크라 `underline`은 남는다 */}
                 <Link
                   href={`/p/${id}/tickets/${encodeURIComponent(t.stem)}`}
-                  className="rounded-sm font-mono text-xs underline"
+                  className="rounded-sm font-mono text-xs text-muted-foreground underline"
                 >
                   {t.hash}
                 </Link>
@@ -384,9 +385,10 @@ function NotificationItems({
           {awaiting.map((t) => (
             // 한 행이 **한 줄**이다(③과 갈리는 지점 — 둘째 줄이 없다).
             <span key={t.stem} className="flex items-center gap-1">
+              {/* §비주얼 §31 ⑤ — ④와 같다 */}
               <Link
                 href={`/p/${id}/tickets/${encodeURIComponent(t.stem)}`}
-                className="rounded-sm font-mono text-xs underline"
+                className="rounded-sm font-mono text-xs text-muted-foreground underline"
               >
                 {t.hash}
               </Link>

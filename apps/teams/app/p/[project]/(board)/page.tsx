@@ -500,9 +500,11 @@ export default async function Board({
                                   `deps 대기`는 배지를 얹지 않는다 — 아래 deps 줄의 주황색
                                   <DepBadge>가 그 표시다(사람 요청 `bd2062cb`) */}
                               <div className="flex items-start justify-between gap-2">
+                                {/* §비주얼 §31 ① 갈래 A — 밑줄 없음. 링크임은 카드의
+                                    `hover:bg-muted/50` + 커서 + 이 앵커에 걸리는 포커스 링이 말한다 */}
                                 <Link
                                   href={href(t)}
-                                  className="rounded-sm font-mono text-xs after:absolute after:inset-0"
+                                  className="rounded-sm font-mono text-xs text-muted-foreground after:absolute after:inset-0"
                                 >
                                   {t.hash}
                                 </Link>
@@ -646,9 +648,10 @@ export default async function Board({
                           )}
                         </TableCell>
                         <TableCell className="px-3 py-0">
+                          {/* §비주얼 §31 ② 갈래 A — ①과 같다. 밑줄 없음 */}
                           <Link
                             href={href(t)}
-                            className="rounded-sm font-mono text-xs after:absolute after:inset-0"
+                            className="rounded-sm font-mono text-xs text-muted-foreground after:absolute after:inset-0"
                           >
                             {t.hash}
                           </Link>
