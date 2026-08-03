@@ -658,7 +658,8 @@ export default async function Board({
                     // 필터 0건 — 헤더는 남긴다(컬럼이 사라지면 필터를 지운 건지 데이터가 없는 건지
                     // 구분이 안 된다). 문구·액션이 빈 큐와 다른 이유도 같다(§6).
                     <TableRow className="hover:bg-transparent">
-                      <TableCell colSpan={COLUMNS.length} className="px-3 py-6">
+                      {/* 검색어가 길면 그 한 줄이 표를 넓힌다 — `colSpan` 셀은 `whitespace-normal`(§6). */}
+                      <TableCell colSpan={COLUMNS.length} className="px-3 py-6 whitespace-normal">
                         {noMatch}
                       </TableCell>
                     </TableRow>

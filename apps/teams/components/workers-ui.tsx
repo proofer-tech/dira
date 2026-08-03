@@ -1269,7 +1269,9 @@ export function WorkerContextRow({
 
   return (
     <TableRow className="hover:bg-transparent">
-      <TableCell colSpan={9} className="px-3 py-2">
+      {/* 셀에 줄바꿈을 허용한다 — `TableCell` 기본값이 `nowrap`이라 패널 산문이 한 줄로 서고
+          auto table layout이 그 max-content를 컬럼 폭 배분에 넣는다(§비주얼 §6 텍스트 잘림). */}
+      <TableCell colSpan={9} className="px-3 py-2 whitespace-normal">
         <div className="space-y-2">
           {warnings}
 
