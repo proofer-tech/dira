@@ -32,7 +32,7 @@ dira를 설치하고, 쓰고, 운영하는 데 필요한 것을 20장에 담았�
 
 ## 늘리기
 
-- [워커 늘리기](/docs/worker)
+- [워커](/docs/worker)
 - [동시에 몇 개 돌릴까](/docs/concurrency)
 - [페르소나](/docs/personas)
 - [프로토콜](/docs/protocols)
