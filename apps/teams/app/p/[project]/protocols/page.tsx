@@ -11,10 +11,18 @@ import { FileText, Folder, Lock, TriangleAlert } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { InlineBadge, NewFileButton, ProtocolEditor } from "@/components/protocols-ui";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarGroup,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+} from "@/components/ui/sidebar";
 import { Textarea } from "@/components/ui/textarea";
 import { listTree, readCore, readTextFile, type ProtocolFile } from "@/lib/protocols";
 import { getProject, resolveConfig, usingDefault } from "@/lib/projects";
-import { cn } from "@/lib/utils";
 
 // 프로토콜 파일은 세션이 GUI 밖에서 고친다 — 프리렌더하면 빌드 시점 내용이 굳는다.
 export const dynamic = "force-dynamic";
@@ -98,50 +106,91 @@ export default async function Protocols({
 
       {/* 프로젝트 파일이 하나도 없어도 코어는 매 세션에 실린다 — 그때도 볼 자리를 남긴다 */}
       {(tree.length > 0 || "path" in core) && (
-        <div className="flex flex-col gap-6 lg:flex-row">
-          {/* 트리 — 서버 렌더 링크. 들여쓰기가 중첩을 그린다(트리 컴포넌트를 만들지 않는다) */}
-          <nav aria-label="프로토콜 파일" className="w-full shrink-0 space-y-0.5 lg:w-80">
-            {"path" in core && (
-              // 맨 위 · 자물쇠 · 편집 없음. 큐 밖 파일이라 `?file=`이 아니다.
-              <Link
-                href={`/p/${id}/protocols?core=1`}
-                className={cn(
-                  "flex min-h-8 items-center gap-1.5 rounded-md px-2 py-1 pl-2 text-xs hover:bg-muted",
-                  opened && "bg-muted font-medium",
-                )}
-              >
-                <Lock aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
-                <span className="font-mono break-all">CORE.md</span>
-                <InlineBadge chars={[...core.text].length} />
-              </Link>
-            )}
-            {tree.map((e) =>
-              e.isDir ? (
-                <div
-                  key={e.rel}
-                  className="flex h-8 items-center gap-1.5 px-2 text-xs text-muted-foreground"
-                  style={{ paddingLeft: `${e.depth * 0.75 + 0.5}rem` }}
-                >
-                  <Folder aria-hidden className="size-3.5 shrink-0" />
-                  <span className="font-mono break-all">{e.name}</span>
-                </div>
-              ) : (
-                <Link
-                  key={e.rel}
-                  href={`/p/${id}/protocols?file=${encodeURIComponent(e.rel)}`}
-                  className={cn(
-                    "flex min-h-8 items-center gap-1.5 rounded-md px-2 py-1 text-xs hover:bg-muted",
-                    e.rel === selected?.rel && "bg-muted font-medium",
+        // **이 행 자신이 `SidebarProvider`다**(§비주얼 §34 ①) — `Sidebar`가 `collapsible="none"`
+        // 에서도 `useSidebar()`를 무조건 부르므로 Provider가 있어야 하는데, Provider가 내는 것도
+        // `flex` `div` 하나라 **새 요소가 0개다.** `layout.tsx`에 세우지 않는 이유는 2단이 없는
+        // 다섯 화면에도 그 `div`가 얹혀서다(§34 §범위). **`min-h-0`이 기본 `min-h-svh`를 덮는다** —
+        // 안 덮으면 이 화면 아래로 빈 뷰포트 높이가 생긴다.
+        <SidebarProvider className="min-h-0 flex-col gap-6 lg:flex-row">
+          {/* 트리 — 서버 렌더 링크. 들여쓰기가 중첩을 그린다(트리 컴포넌트를 만들지 않는다).
+              **면이 선다**(§34 ④ — 가로 형제 · 경계 확정 · 종류가 다른 쌍에서 목록 쪽이 든다):
+              `bg-surface`+`border`+`rounded-lg`. `bg-sidebar`를 덮는 이유는 그 토큰이 다크에서
+              `--card`(0.205)라 카드가 면 위에서 사라져서다(§34 ②).
+              **랜드마크가 `<nav>` 태그에서 이 `role`/`aria-label`로 옮겼다** — 부품에 `render`가
+              없어 태그를 못 바꾸고, 새 요소는 0개다.
+              **폭은 `--sidebar-width`가 아니라 className이 든다** — 좁은 폭에서 `w-full`이어야
+              하는데 CSS 변수로는 브레이크포인트를 못 준다(§34 ①). */}
+          <Sidebar
+            collapsible="none"
+            role="navigation"
+            aria-label="프로토콜 파일"
+            className="w-full shrink-0 rounded-lg border bg-surface lg:w-80"
+          >
+            {/* `py-2`가 면의 세로 패딩. 그룹이 하나뿐이라 그룹 사이 `gap`은 덮을 것이 없다.
+                가로 패딩은 0이다(`SidebarGroup p-0`) — 줄이 자기 `px-2`로 그 8px을 이미 든다. */}
+            <SidebarContent className="py-2">
+              <SidebarGroup className="p-0">
+                {/* `SidebarGroupLabel`이 없다 — 이 패널은 머리 낱말이 원래 0개다(§34 판정표).
+                    줄 사이 `space-y-0.5` → 부품의 `gap-0.5`. */}
+                <SidebarMenu className="gap-0.5">
+                  {"path" in core && (
+                    // 맨 위 · 자물쇠 · 편집 없음. 큐 밖 파일이라 `?file=`이 아니다.
+                    <SidebarMenuItem>
+                      <SidebarMenuButton
+                        size="sm"
+                        className={ROW}
+                        isActive={opened}
+                        aria-current={opened ? "page" : undefined}
+                        render={<Link href={`/p/${id}/protocols?core=1`} />}
+                      >
+                        <Lock aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
+                        <span className="font-mono break-all">CORE.md</span>
+                        <InlineBadge chars={[...core.text].length} />
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
                   )}
-                  style={{ paddingLeft: `${e.depth * 0.75 + 0.5}rem` }}
-                >
-                  <FileText aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
-                  <span className="font-mono break-all">{e.name}</span>
-                  {e.inlineChars !== undefined && <InlineBadge chars={e.inlineChars} />}
-                </Link>
-              ),
-            )}
-          </nav>
+                  {tree.map((e) =>
+                    e.isDir ? (
+                      // 디렉터리 줄은 `SidebarMenuItem` 안의 `div` 그대로다(§34 판정표) —
+                      // 누를 수 없는 줄에 `<button>`을 세우면 탭 정거장이 는다.
+                      <SidebarMenuItem key={e.rel}>
+                        <div
+                          className="flex h-8 items-center gap-1.5 px-2 text-xs text-muted-foreground"
+                          style={{ paddingLeft: `${e.depth * 0.75 + 0.5}rem` }}
+                        >
+                          <Folder aria-hidden className="size-3.5 shrink-0" />
+                          <span className="font-mono break-all">{e.name}</span>
+                        </div>
+                      </SidebarMenuItem>
+                    ) : (
+                      <SidebarMenuItem key={e.rel}>
+                        <SidebarMenuButton
+                          size="sm"
+                          className={ROW}
+                          isActive={e.rel === selected?.rel}
+                          aria-current={e.rel === selected?.rel ? "page" : undefined}
+                          render={
+                            <Link href={`/p/${id}/protocols?file=${encodeURIComponent(e.rel)}`} />
+                          }
+                          // 중첩은 평면 목록 + 인라인 `paddingLeft`다(§34 §안 쓰는 export —
+                          // `SidebarMenuSub`는 마크업이 실제로 중첩돼야 하고 겹을 하나만 그려
+                          // 깊이 3 이상을 못 낸다). `p-2`의 왼쪽 8px을 이 값이 덮는다.
+                          style={{ paddingLeft: `${e.depth * 0.75 + 0.5}rem` }}
+                        >
+                          <FileText
+                            aria-hidden
+                            className="size-3.5 shrink-0 text-muted-foreground"
+                          />
+                          <span className="font-mono break-all">{e.name}</span>
+                          {e.inlineChars !== undefined && <InlineBadge chars={e.inlineChars} />}
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    ),
+                  )}
+                </SidebarMenu>
+              </SidebarGroup>
+            </SidebarContent>
+          </Sidebar>
 
           <div className="min-w-0 grow">
             {rejected ? (
@@ -175,11 +224,29 @@ export default async function Protocols({
               />
             )}
           </div>
-        </div>
+        </SidebarProvider>
       )}
     </div>
   );
 }
+
+/** 트리 줄 한 벌의 클래스 — **코어 줄과 파일 줄이 같이 쓴다**(둘 다 `render={<Link>}`).
+ *  대부분은 `SidebarMenuButton size="sm"`이 든다(`flex w-full items-center gap-2 rounded-md
+ *  p-2 text-left text-xs` · `hover:bg-sidebar-accent`(= `--muted` 값, §비주얼 §34 ②) ·
+ *  `data-active:bg-sidebar-accent data-active:font-medium`). 여기 남는 넷은 **§34 판정표의
+ *  `안 바꾸는 값` 칸을 지키는 것들**이다 — 그 표가 바꾼다고 적지 않은 값은 안 갈린다:
+ *  - `h-auto min-h-8` — 부품 기본 `h-7`은 접기용 **고정** 높이다. 파일명이 `break-all`로
+ *    두 줄이 되는 자리라(깊은 경로) 고정 높이면 `overflow-hidden`이 아랫줄을 먹는다.
+ *  - `py-1` — `p-2`를 그대로 두면 `InlineBadge`(20px)가 든 줄만 36px이 되어 32px인 나머지
+ *    줄과 어긋난다. 세로 4px은 종전 값이고 한 줄 줄 높이는 `min-h-8`이 그대로 든다.
+ *  - `gap-1.5` — 부품 기본 `gap-2`. 아이콘과 파일명 사이는 종전 6px이다.
+ *  - `[&_svg]:size-3.5` — 부품 기본 `[&_svg]:size-4`가 **자식 선택자라 아이콘의 `size-3.5`를
+ *    이긴다**(0,1,1 vs 0,1,0). 안 덮으면 `Folder`/`FileText`/`Lock`이 조용히 16px이 된다.
+ *  - `[&>span:last-child]:whitespace-normal` — 같은 이유로 부품의 `[&>span:last-child]:truncate`가
+ *    파일명 `span`을 물어 `break-all`을 죽인다(배지가 없는 줄에서 그 `span`이 마지막이다).
+ *    긴 파일명은 잘리는 게 아니라 접힌다 — 판정표의 `안 바꾸는 값`이 `break-all`이다. */
+const ROW =
+  "h-auto min-h-8 gap-1.5 py-1 [&_svg]:size-3.5 [&>span:last-child]:whitespace-normal";
 
 /** 코어는 **읽기 전용**이다(§프롬프트 층 결정 5). `ProtocolEditor`에 플래그를 다는 대신 서버
  *  컴포넌트로 따로 그린다 — 저장·이름변경·삭제 버튼이 코드에 아예 없고 클라이언트 액션도 안 실린다.
