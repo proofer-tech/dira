@@ -31,7 +31,7 @@ const version = theme.value.diraVersion;
 
 <div class="hero wrap">
   <p class="eyebrow">로컬 에이전트 러너</p>
-  <h1>에이전트 팀을 화면으로 본다</h1>
+  <h1>에이전트 팀이 일하는 걸 화면에서 본다</h1>
   <p class="body">
     할 일을 마크다운 파일 하나로 적어 두면, 1분마다 깨어나는 워커가 그걸 집어
     <code>claude -p</code> 세션에 넘깁니다. 세션이 지금 무엇을 하는지 화면에서 보고,
@@ -45,23 +45,23 @@ const version = theme.value.diraVersion;
 
   <figure>
     <img class="shot" src="/shots/02-board.png" alt="dira 보드 화면. 대기·진행중·완료 세 레인에 티켓 카드가 놓여 있습니다." width="1600">
-    <figcaption>이 화면은 <b>dira가 자기 자신을 만들고 있는 큐</b>입니다. 완료 622건이 전부 이 레포의 커밋입니다.</figcaption>
+    <figcaption>이 화면은 <b>dira가 자기를 만드는 큐</b>입니다. 완료 622건이 전부 이 레포의 커밋입니다.</figcaption>
   </figure>
 </div>
 
 <section class="wrap">
   <p class="eyebrow">30초</p>
-  <h2>파일 하나 쓰면, cron이 물어 간다</h2>
+  <h2>파일 하나 쓰면 워커가 물어 간다</h2>
   <ol class="steps">
     <li>
       <b>① 티켓을 쓴다</b>
       <p>마크다운 파일 하나입니다. 무엇을 원하는지, 무엇이 되면 끝인지를 적습니다.
-      큐는 그 파일들이 담긴 <b>디렉터리 하나</b>가 전부입니다.</p>
+      큐는 그 파일이 담긴 <b>디렉터리 하나</b>가 전부입니다.</p>
     </li>
     <li>
       <b>② 워커가 문다</b>
-      <p><b>워커</b>는 셸 스크립트 한 줄입니다. 정해진 시각마다 명령을 자동으로 실행해 주는
-      macOS의 cron에 걸어 두면, 1분에 한 번 깨어나 열린 티켓 하나를 골라
+      <p><b>워커</b>는 셸 스크립트 한 줄입니다. macOS에는 정해 둔 시각마다 명령을 자동으로
+      실행해 주는 cron이 있습니다. 거기 걸어 두면 1분에 한 번 깨어나, 열린 티켓 하나를 골라
       <code>claude -p</code> 세션에 넘기고 끝날 때까지 기다립니다.</p>
     </li>
     <li>
@@ -161,10 +161,11 @@ chmod +x ~/myproject/.dira/workers/w1.sh
       <ul class="marks">
         <li><b>루트를 어디에도 적지 않습니다.</b> <code>workers/</code>의 부모 디렉터리가 곧 큐입니다</li>
         <li><b>두 줄인 이유는 cron이 1분보다 잘게는 못 돌기 때문입니다.</b> 30초 간격을 그렇게 냅니다.
-        한 줄에 <code>;</code>로 붙이면 안 됩니다. 워커는 앞 세션이 끝나야 다음으로 넘어가서,
-        뒤쪽 반이 30초 뒤가 아니라 그 세션이 끝난 뒤에 뜹니다</li>
+        한 줄에 <code>;</code>로 붙이면 안 됩니다. 워커는 앞 세션이 끝나야 다음으로 넘어갑니다.
+        뒤에 붙인 쪽이 30초 뒤가 아니라 앞 세션이 끝난 뒤에 뜹니다</li>
         <li><b>멈추려면 그 두 줄을 지웁니다</b></li>
-        <li>돌리기 전에 <code>w1.sh dryrun</code>으로 어떤 티켓이 뽑히는지와 프롬프트만 먼저 봅니다</li>
+        <li>돌리기 전에 <code>w1.sh dryrun</code>을 걸면 어떤 티켓이 뽑히는지, 프롬프트가 어떻게
+        나가는지만 먼저 봅니다</li>
       </ul>
       <p class="arrows">
         <a href="/docs/install">전체 설치 가이드</a>
@@ -185,7 +186,7 @@ chmod +x ~/myproject/.dira/workers/w1.sh
     <li><b>데스크톱 앱은 macOS(Apple Silicon)만 됩니다.</b> 엔진 자체는 macOS와 Linux에서 돕니다.</li>
     <li><b>실시간 알림이 없습니다.</b> 화면이 주기적으로 다시 읽어 옵니다. 모바일 레이아웃도 없습니다.</li>
     <li><b>프로젝트를 자동으로 찾지 않습니다.</b> 디스크를 훑지 않고, 쓸 프로젝트를 직접 등록합니다.</li>
-    <li><b>우선순위가 없습니다.</b> 순서를 정하는 것은 만든 날짜와 <code>deps</code>(먼저 끝나야 하는 티켓) 둘뿐입니다.</li>
+    <li><b>우선순위가 없습니다.</b> 순서는 만든 날짜와 <code>deps</code>(먼저 끝나야 하는 티켓) 둘이 정합니다.</li>
     <li><b>티켓 수백 건 규모를 전제합니다.</b> 워커가 깨어날 때마다 큐 디렉터리를 통째로 훑습니다. 인덱스가 없습니다.</li>
     <li><b>워커를 만들 때마다 macOS가 <code>앱 관리</code> 권한을 묻습니다.</b> 한 번 허용해도 다음 등록 때 또 묻습니다.</li>
   </ul>
