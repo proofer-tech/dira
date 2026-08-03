@@ -113,7 +113,7 @@ onMounted(async () => {
     <figure>
       <a class="zoom" href="/shots/04-ticket-running.png" target="_blank" rel="noopener" title="원본 크기로 열기"><img class="shot" src="/shots/04-ticket-running.png" loading="lazy" alt="진행중 티켓 상세. 왼쪽에 본문과 Done when 체크리스트, 오른쪽에 frontmatter 표와 관계." width="1600" height="1000"></a>
       <figcaption>일이 어떻게 진행되고 있는지 티켓 단위로 확인해볼 수 있습니다. 만약 내가 생각했던 것과 다른 방향으로 진행되고 있다면, 티켓을 할당 해제하여 중단시킬 수도 있고, 아직 시작하지 않은 티켓은 본문을 수정하여 내가 원하는 방향대로 자세히 수정할 수도 있습니다.</figcaption>
-      <p class="arrows"><a href="/docs/ticket-writing#고칠-수-있는-티켓-못-고치는-티켓">업무 투명성</a></p>
+      <p class="arrows"><a href="/docs/screens#티켓-상세">업무 투명성</a></p>
     </figure>
   </div>
 </section>
