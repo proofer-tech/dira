@@ -30,44 +30,44 @@ const version = theme.value.diraVersion;
 <main>
 
 <div class="hero wrap">
-  <p class="eyebrow">로컬 에이전트 러너</p>
-  <h1>에이전트 팀이 일하는 걸 화면에서 봅니다</h1>
+  <p class="eyebrow">로컬 멀티 에이전트 매니지먼트 시스템</p>
+  <h1>나만의 AI 팀을 만들어보세요</h1>
   <p class="body">
-    할 일을 마크다운 파일로 적어 두면, 30초마다 깨어나는 워커가 그걸 집어
-    <code>claude -p</code> 세션에 넘깁니다. 세션이 지금 무엇을 하는지 화면에서 보고,
-    도는 중에 말을 겁니다.
+    요구사항을 정말 아무렇게나 던져도 찰떡같이 알아들어 티켓을 나누고 에이전트간 협업을 통해
+    완수하며 그 과정을 마치 jira처럼 실시간으로 볼 수 있습니다. PC에 나만의 멀티 에이전트
+    시스템을 아주 쉽게 구축해보세요.
   </p>
   <div class="cta">
     <a class="btn btn-primary btn-lg" href="https://github.com/proofer-tech/dira/releases/latest">macOS 앱 받기</a>
     <a class="btn btn-lg" href="/docs/install">설치 가이드</a>
   </div>
-  <p class="cta-note">v{{ version }} · macOS (Apple Silicon) · MIT · 자동 업데이트</p>
+  <p class="cta-note">with Claude Code · Codex</p>
 
   <figure>
     <img class="shot" src="/shots/02-board.png" alt="dira 보드 화면. 대기·진행중·완료 세 레인에 티켓 카드가 놓여 있습니다." width="1600">
-    <figcaption>이 화면은 dira가 자기를 만드는 큐입니다. 카드에 적힌 티켓이 전부 dira 자신을 고치는 일입니다.</figcaption>
+    <figcaption>놀라운 사실: dira 앱 또한 dira로 만들어졌습니다.</figcaption>
   </figure>
 </div>
 
 <section class="wrap">
-  <h2>파일을 쓰면 워커가 물어 갑니다</h2>
+  <h2>말하면 이루어집니다</h2>
   <ol class="steps">
     <li>
-      <b>① 티켓을 씁니다</b>
-      <p>마크다운 파일 하나입니다. 무엇을 원하는지, 무엇이 되면 끝인지를 적습니다.
-      그 파일이 담긴 디렉터리가 곧 큐입니다.</p>
+      <b>① 요구사항을 접수하세요</b>
+      <p>자연스럽게 대화하듯이 무엇을 원하는지를 적어주시면 끝입니다. 나머지 귀찮고 복잡한
+      일들은 에이전트가 알아서 합니다.</p>
     </li>
     <li>
-      <b>② 워커가 뭅니다</b>
-      <p>워커는 셸 스크립트 한 줄입니다. macOS에는 정해 둔 시각마다 명령을 자동으로
-      실행해 주는 cron이 있고, 프로젝트를 만들 때 앱이 그 워커를 거기 걸어 둡니다. 30초에
-      한 번씩 깨어나 열린 티켓 하나를 골라 <code>claude -p</code> 세션에 넘기고 끝날 때까지
-      기다립니다.</p>
+      <b>② 일사불란하게 움직입니다</b>
+      <p>최초 요구사항을 받은 에이전트가 요구사항을 구체화하여 작업 단위 티켓으로 분리하고,
+      적절한 페르소나를 가진 워커를 알아서 할당하여 에이전트간 협업을 통해 주신 요구사항을
+      완료합니다.</p>
     </li>
     <li>
-      <b>③ 도는 걸 봅니다</b>
-      <p>세션이 무엇을 읽고 무엇을 고치는지 화면에서 따라갑니다. 도구 호출이 한 줄씩 쌓이고,
-      그 사이에 말을 겁니다.</p>
+      <b>③ 끝이에요. 쉽죠?</b>
+      <p>워커들이 뭘 읽고 어떻게 고치는지 실시간으로 확인할 수 있습니다. 진행중에 막히면
+      사용자에게 물어도 봅니다. 그저 사람과 일하듯이 자연스럽게 요구하고 대답하다 보면,
+      원하던 기능이 완성됩니다!</p>
     </li>
   </ol>
 </section>
@@ -87,28 +87,27 @@ const version = theme.value.diraVersion;
     <figure>
       <a class="zoom" href="/shots/barge.gif" target="_blank" rel="noopener" title="원본 크기로 열기"><img class="shot" src="/shots/barge.gif" loading="lazy" alt="세션 스트림이 도구 호출을 한 줄씩 늘려 가는 동안, 아래 입력창에 문장을 넣고 보내기를 누르자 그 문장이 참견 줄로 스트림에 나타나고 세션이 이어서 방향을 바꿉니다." width="1760" height="1408"></a>
       <figcaption>
-        실제 왕복입니다. 티켓은 <q>세 파일을 읽어 세 줄로 쓴다</q>였고,
-        참견은 <q>지금 읽은 것까지만 정리하고, summary.md는 한국어 한 줄로 줄여주세요.</q>였습니다.
-        세션은 <code>c.md</code>를 읽지 않고 멈춰 한 줄짜리 파일을 남겼습니다.
+        "그럴 수 있죠 이해해요, 어떻게 사람이 완벽할까요?" 반드시 완벽한 요구사항을 줄
+        필요가 없습니다. 가볍게 요구하고 작업중에도 참견할 수 있습니다.
       </figcaption>
       <p class="arrows"><a href="/docs/barge-in">도는 세션에 말 걸기</a></p>
     </figure>
     <figure>
       <a class="zoom" href="/shots/07-qa-thread.png" target="_blank" rel="noopener" title="원본 크기로 열기"><img class="shot" src="/shots/07-qa-thread.png" loading="lazy" alt="요구 티켓의 질문·답변 스레드. 질문 아래에 답변 말풍선이 오른쪽으로 붙어 있고, frontmatter에 awaiting 해시가 있습니다." width="1440" height="450"></a>
-      <figcaption>질문에 답을 쓰면 그 답이 큐에 티켓 파일로 놓입니다. 오른쪽 <code>awaiting:</code>에 걸린 해시가 그 파일입니다.</figcaption>
-      <p class="arrows"><a href="/docs/ticket-writing">티켓 쓰는 법</a></p>
+      <figcaption>어련히 모르면 물어보지 않겠어요? 에이전트들이 업무를 수행하다 모르는 게 생기면 물어봅니다. 질문에 대답해주세요. 그럼 또 알아서 하러 갑니다.</figcaption>
+      <p class="arrows"><a href="/docs/requirements">문의 · 답변</a></p>
     </figure>
     <figure>
       <a class="zoom" href="/shots/04-ticket-running.png" target="_blank" rel="noopener" title="원본 크기로 열기"><img class="shot" src="/shots/04-ticket-running.png" loading="lazy" alt="진행중 티켓 상세. 왼쪽에 본문과 Done when 체크리스트, 오른쪽에 frontmatter 표와 관계." width="1600" height="1000"></a>
-      <figcaption>티켓 한 장의 전부. 왼쪽은 사람이 쓴 마크다운, 오른쪽 <code>session_id</code>·<code>pid</code>·<code>owner</code>·<code>inbox</code>는 디스패처가 쓰고 사람은 건드리지 않습니다.</figcaption>
-      <p class="arrows"><a href="/docs/states">상태는 파일명</a></p>
+      <figcaption>일이 어떻게 진행되고 있는지 티켓 단위로 확인해볼 수 있습니다. 만약 내가 생각했던 것과 다른 방향으로 진행되고 있다면, 티켓을 할당 해제하여 중단시킬 수도 있고, 아직 시작하지 않은 티켓은 본문을 수정하여 내가 원하는 방향대로 자세히 수정할 수도 있습니다.</figcaption>
+      <p class="arrows"><a href="/docs/ticket-writing">업무 투명성</a></p>
     </figure>
   </div>
 </section>
 
 <section class="wrap">
   <p class="eyebrow">설치</p>
-  <h2>.dmg 하나에 엔진까지 들어 있습니다</h2>
+  <h2>다운로드하여 설치하면 끝</h2>
   <p class="body" style="max-width:44em">
     받아서 열기만 하면 되고, 터미널을 켤 일이 없습니다.
   </p>
@@ -125,9 +124,10 @@ const version = theme.value.diraVersion;
     </div>
     <div>
       <ul class="marks">
-        <li><b>에이전트 CLI 하나만 미리 깔아 두면 됩니다.</b> 기본값은 <code>claude</code>이고,
-        깔려 있는지는 앱 <code>설정</code>이 첫 줄에서 말해 줍니다. cron이 쓸 토큰도 그 자리에서
-        발급합니다</li>
+        <li><b>엔진은 <code>claude</code>와 <code>codex</code> 중에 고릅니다.</b> 워커를 만들
+        때 모델까지 같이 정하고, 목록에 없는 이름은 직접 적어 넣습니다. 만든 뒤에도 워커 화면의
+        <code>엔진</code> 열을 눌러 바꿉니다. 세션 스트림과 참견은 <code>claude</code> 쪽에만
+        있습니다. 앱은 Apple Silicon 맥에서만 돕니다</li>
         <li><b>화면 없이 엔진만 돌릴 수도 있습니다.</b> Linux에서 굴리거나 화면이 필요 없으면
         레포를 직접 받는 <a href="/docs/install#앱-없이-엔진만-쓰기">그 갈래</a>로 가세요</li>
       </ul>
@@ -144,7 +144,7 @@ const version = theme.value.diraVersion;
   <p class="eyebrow">플랜</p>
   <h2>전부 무료입니다</h2>
   <p class="body" style="max-width:40em">
-    엔진도 앱도 MIT 라이선스입니다. 계정도 서버도 없고, 낼 요금도 없습니다. 받아서 그냥 씁니다.
+    로컬 엔진과 앱은 영원히 무료로 제공합니다. dira는 빌더들의 멀티 에이전트 생태계를 응원합니다.
   </p>
   <div class="cta" style="justify-content:flex-start; margin-top:24px">
     <a class="btn" href="https://github.com/proofer-tech/dira">GitHub에서 Watch</a>
@@ -155,10 +155,9 @@ const version = theme.value.diraVersion;
 
 <div class="closing">
   <div class="wrap">
-    <h2>디렉터리를 티켓으로 봅니다</h2>
+    <h2>나만의 AI 팀을 만들어보세요</h2>
     <p class="body">
-      이름은 <code>dir</code>와 <code>jira</code>를 합친 것입니다. 큐가 디렉터리 하나라서 <code>dir</code>이고,
-      티켓으로 보는 도구라서 <code>jira</code>에서 따왔습니다.
+      dira와 함께 PC에 나만의 멀티 에이전트 시스템을 아주 쉽게 구축해보세요.
     </p>
     <div class="cta">
       <a class="btn btn-primary btn-lg" href="https://github.com/proofer-tech/dira/releases/latest">macOS 앱 받기</a>
@@ -175,7 +174,7 @@ const version = theme.value.diraVersion;
           <svg viewBox="0 0 32 32" fill-rule="evenodd" aria-hidden="true"><path d="M4.5 2H11.5L15.5 8H27.5A2.5 2.5 0 0 1 30 10.5V27.5A2.5 2.5 0 0 1 27.5 30H4.5A2.5 2.5 0 0 1 2 27.5V4.5A2.5 2.5 0 0 1 4.5 2ZM9.5 12H22.5A1.5 1.5 0 0 1 24 13.5V15A3 3 0 0 0 24 21V22.5A1.5 1.5 0 0 1 22.5 24H9.5A1.5 1.5 0 0 1 8 22.5V21A3 3 0 0 0 8 15V13.5A1.5 1.5 0 0 1 9.5 12Z"/></svg>
           dira
         </div>
-        <p class="fnote">이 페이지의 화면은 전부 실제 큐에서 찍었습니다. 목업이 없습니다.</p>
+        <p class="fnote">로컬 멀티 에이전트 매니지먼트 시스템</p>
       </div>
       <div class="fcol">
         <h4>제품</h4>
