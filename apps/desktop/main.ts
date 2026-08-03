@@ -1,10 +1,11 @@
-// dira 데스크톱 셸. 하는 일은 여섯이다 — Next standalone 서버를 자식으로 띄우고(번들의 엔진을
+// dira 데스크톱 셸. 하는 일은 일곱이다 — Next standalone 서버를 자식으로 띄우고(번들의 엔진을
 // 그 전에 userData로 꺼내 `DIRA_ENGINE`으로 넘긴다, 못박는 것 8), 창이 그것을 열고,
 // 창을 닫아도 메뉴바에 남고(N1), 답변 대기 티켓이 새로 생기면 알리고(N2), 화면이 부르면
-// 네이티브 경로 다이얼로그를 띄우고(N3), 로그인 시 자동 실행을 켜고 끄고(N4), 새 버전을
-// 찾아 받아두고 받은 시점에 릴리즈 노트를 만들어 보여준다(U1·U2·U3 — 설치는 다음 실행 때).
-// 스펙: ../../docs/DESIGN.md §데스크톱 앱 ("못박는 것" 1~8, N1~N4) · §릴리스 · 자동 업데이트 (R5~R8).
-import { app, BrowserWindow, Menu, MenuItem, Notification, Tray, dialog, ipcMain, nativeImage, shell } from "electron";
+// 네이티브 경로 다이얼로그를 띄우고(N3), 로그인 시 자동 실행을 켜고 끄고(N4), 큐에 일이 남아
+// 있으면 유휴 잠자기를 막고(N6), 새 버전을 찾아 받아두고 받은 시점에 릴리즈 노트를 만들어
+// 보여준다(U1·U2·U3 — 설치는 다음 실행 때).
+// 스펙: ../../docs/DESIGN.md §데스크톱 앱 ("못박는 것" 1~8, N1~N6) · §릴리스 · 자동 업데이트 (R5~R8).
+import { app, BrowserWindow, Menu, MenuItem, Notification, Tray, dialog, ipcMain, nativeImage, powerSaveBlocker, shell } from "electron";
 // 이름 가져오기(`import { autoUpdater }`)가 아닌 이유: electron-updater는 CJS이고 그 이름을
 // `Object.defineProperty(exports, ...)`의 getter로 단다 — cjs-module-lexer가 못 보는 형태라
 // ESM 이름 가져오기가 `SyntaxError`로 죽는다. 기본 가져오기는 `module.exports` 그 자체다.
@@ -307,6 +308,65 @@ async function pollAwaiting(origin: string) {
   }
 }
 
+// ── N6 일이 남았으면 안 잔다 ────────────────────────────────────────────────
+//
+// 막는 것은 워커가 아니라 **cron**이다 — 맥이 자면 매분 워커를 띄우는 그것이 안 뜬다.
+// 그래서 세는 것이 `진행중`만이 아니라 `대기`이고, 판정은 서버(`GET /api/work`)가 한다.
+// 폴링은 N2와 **같은 타이머**다(§데스크톱 앱 N6 — `setInterval`을 하나 더 만들지 않는다).
+
+/** N6 토글의 상태는 이 파일의 **존재 여부** 하나다. U2와 방향이 반대인 것은(있으면 켬)
+ *  기본값이 반대라서다 — 배터리를 쓰는 기능이라 사람이 한 번 켜는 것이 맞다. */
+function noSleepFlag(): string {
+  return join(app.getPath("userData"), "no-sleep");
+}
+
+/** 잡은 assertion의 id. `null`이면 안 잡았다. **이미 그 상태면 아무것도 안 한다** — `start`를
+ *  두 번 부르면 새 id가 나고 앞의 것은 참조를 잃어 프로세스가 죽을 때까지 안 풀린다. */
+let blockerId: number | null = null;
+
+function holdSleep(on: boolean) {
+  if (on === (blockerId !== null)) return;
+  if (on) {
+    // 화면은 그대로 꺼진다. 막는 것은 시스템 잠자기 하나다 — `prevent-display-sleep`이 아니다.
+    blockerId = powerSaveBlocker.start("prevent-app-suspension");
+    console.log(`[dira] 유휴 잠자기를 막습니다 (#${blockerId})`);
+  } else {
+    powerSaveBlocker.stop(blockerId!);
+    console.log(`[dira] 유휴 잠자기를 놓습니다 (#${blockerId})`);
+    blockerId = null;
+  }
+}
+
+/** 폴링 실패는 **놓는다**(N6). 잡은 채로 두면 서버가 죽은 뒤에도 맥이 영영 안 자는데 그 상태는
+ *  화면이 없어서 아무도 못 본다 — 놓으면 큐가 멈추고 **그건 아침에 보인다.**
+ *  토글이 꺼져 있으면 서버에 묻지도 않는다(30초마다 도는 fetch가 30초마다 도는 로그가 된다). */
+async function pollWork(origin: string) {
+  if (!existsSync(noSleepFlag())) return holdSleep(false);
+  try {
+    const res = await fetch(`${origin}/api/work`, { signal: AbortSignal.timeout(10_000) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const body: unknown = await res.json();
+    // 신뢰 경계. `busy`가 boolean이 아니면 판정이 아니라 사고다 — truthy로 읽지 않는다.
+    if (typeof (body as { busy?: unknown })?.busy !== "boolean") {
+      throw new Error(`busy가 없는 응답: ${JSON.stringify(body).slice(0, 200)}`);
+    }
+    holdSleep((body as { busy: boolean }).busy);
+  } catch (e) {
+    console.error(`[dira] 일 폴링 실패: ${(e as Error).message} — 유휴 잠자기를 놓습니다`);
+    holdSleep(false);
+  }
+}
+
+/** N6 토글. 켜면 30초를 안 기다리고 그 자리에서 한 번 묻는다(U2가 켠 직후 한 번 검사하는 그
+ *  관용구다). 끄면 `pollWork`의 첫 줄이 바로 놓는다. */
+function setNoSleep(on: boolean, origin: string) {
+  const flag = noSleepFlag();
+  if (on) writeFileSync(flag, "");
+  else rmSync(flag, { force: true });
+  console.log(`[dira] 일이 남았으면 안 잔다 ${on ? "켬" : "끔"} — ${flag} ${on ? "만듦" : "지움"}`);
+  pollWork(origin);
+}
+
 /** N3 경로 피커. main이 하는 일은 다이얼로그를 띄우고 **고른 절대경로 하나**를 돌려주는 것뿐이다
  *  — 상대경로 환산도 검증도 여기 없다(환산은 `lib/urls.ts`, 검증은 서버가 종전대로 한다).
  *  `mode`는 렌더러가 보내는 값이라 두 글자 말고는 받지 않는다. `.dira`가 dotfile이라
@@ -490,6 +550,13 @@ function trayMenu(origin: string): Menu {
       click: (item) => app.setLoginItemSettings({ openAtLogin: item.checked }),
     },
     {
+      // N6. N4 아래·U2 위다. 상태의 원본은 마커 파일이고 **있으면 켬**이다(기본은 꺼짐).
+      label: "일이 남았으면 안 잔다",
+      type: "checkbox",
+      checked: existsSync(noSleepFlag()),
+      click: (item) => setNoSleep(item.checked, origin),
+    },
+    {
       // U2 (R5·R8). N4 옆이고 상태의 원본은 마커 파일이라 여기도 열 때마다 읽는다.
       label: "자동 업데이트",
       type: "checkbox",
@@ -650,7 +717,11 @@ async function boot() {
   if (!existsSync(autoUpdateFlag())) checkForUpdate(false);
 
   await pollAwaiting(origin); // 첫 응답 = 씨 뿌리기
-  setInterval(() => pollAwaiting(origin), POLL_MS);
+  // 타이머는 하나다 (N6) — N2와 같은 30초를 나눠 쓴다.
+  setInterval(() => {
+    pollAwaiting(origin);
+    pollWork(origin);
+  }, POLL_MS);
 }
 
 // ── 못박는 것 6 — 인스턴스는 하나다 ────────────────────────────────────────

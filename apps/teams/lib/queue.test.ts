@@ -459,6 +459,14 @@ test("보드 — 5상태 판정 · 필터 AND/OR · 검색 대상 · 정렬", as
   assert.strictEqual(statusOf(by("dddd4444")), "wip");
   assert.strictEqual(statusOf(by("eeee5555")), "done");
 
+  // N6 `일이 남았으면 안 잔다`가 세는 것 — `대기`·`진행중` 둘뿐이다(§데스크톱 앱 N6).
+  // `/api/work`가 이 식 하나다. 넓히면(= 나머지 셋이 섞이면) 저 셋만 남은 큐에서도 맥이 안 잔다.
+  const busy = (ts: Ticket[]) => ts.some((t) => statusOf(t) === "open" || statusOf(t) === "wip");
+  assert.ok(busy(tickets));
+  assert.ok(!busy(tickets.filter((t) => statusOf(t) === "blocked"))); // 답변 대기도 여기 든다
+  assert.ok(!busy(tickets.filter((t) => ["assigned", "done"].includes(statusOf(t)))));
+  assert.ok(busy([by("aaaa1111")]) && busy([by("dddd4444")])); // 하나만 있어도 잡는다
+
   // 필터 없음 = 큐 그대로(순서까지)
   assert.deepStrictEqual(hashes(filterTickets(tickets, none)), hashes(tickets));
 

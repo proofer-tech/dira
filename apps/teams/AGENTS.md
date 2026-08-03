@@ -20,14 +20,16 @@ apps/teams/
     (list)/loading.tsx  이 그룹만 덮는다 — app/ 최상단에 두면 모든 라우트가 즉시 스트리밍돼
                         레이아웃의 notFound()가 404 상태를 못 세운다(실측)
     not-found.tsx       404. `p/[project]/layout.tsx`의 notFound()를 받는 경계가 여기다
-    api/awaiting/       유일한 API 라우트. **화면이 쓰지 않는다** — Electron main이 답변 대기를
-                        물어보는 창구다(DESIGN.md §데스크톱 앱 N2 · 못박는 것 5). 판정은
-                        `lib/queue.ts`의 `isAwaiting` 하나고 여기서 다시 쓰지 않는다.
+    api/awaiting/       **화면이 쓰지 않는다** — Electron main이 답변 대기를 물어보는 창구다
+                        (DESIGN.md §데스크톱 앱 N2 · 못박는 것 5). 판정은 `lib/queue.ts`의
+                        `isAwaiting` 하나고 여기서 다시 쓰지 않는다.
                         화면이 필요한 데이터는 종전대로 서버 컴포넌트가 `lib/`를 직접 부른다
+    api/work/           같은 성격의 둘째 창구 — `{busy}` 하나다(N6 `일이 남았으면 안 잔다`).
+                        판정은 `statusOf`가 `open`|`wip`인 티켓의 유무 하나다
     actions.ts          Server Action (프로젝트 등록·이름·순서·해제·재해석). 큐 파일은 안 건드린다
                         + **사용 통계 액션 셋**(§0-11): `trackEvent`(화면에서 GA로 나가는
                         **유일한 길** — 새 API 라우트를 안 만든다. `app/api/`는 Electron main
-                        창구 하나다) · `readAnalyticsAction`·`setAnalyticsAction`(끄는 자리).
+                        창구뿐이다) · `readAnalyticsAction`·`setAnalyticsAction`(끄는 자리).
                         서버 쪽 트리거는 이걸 안 거치고 `lib/analytics.ts`의 `track()`을 직접 부른다
     p/[project]/         프로젝트 스코프. layout.tsx가 셸(헤더·내비·전환기)
     p/[project]/(board)/ 보드(`/p/<project>`). 라우트 그룹이라 URL은 그대로다.
