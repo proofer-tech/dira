@@ -85,6 +85,15 @@ export function screenOf(pathname: string): Screen | null {
     : null;
 }
 
+/** **N5의 찾기 바가 이 경로에 서나** (DESIGN.md §데스크톱 앱 N5). 보드·홈은 `⌘F`가 자기 일을
+ *  하고(§0-6) 나머지 다섯은 이 바가 크롬 찾기 바를 대신한다 — `screenOf`가 이미 그 다섯을
+ *  이름으로 갈라 놓아서 여기서 경로를 다시 파싱하지 않는다(두 벌이 되면 한쪽만 화면이 는다).
+ *  **표 밖(`null` — 404·모르는 경로)에는 안 선다**: N5가 적은 자리가 그 다섯이다. */
+export function hasFindBar(pathname: string): boolean {
+  const s = screenOf(pathname);
+  return s !== null && s !== "board" && s !== "home";
+}
+
 /** 배지의 경과 접미사 — `답변 대기 · 3일`의 ` · 3일` (DESIGN.md §비주얼 §2 경과 표시 표).
  *  **`0`이면 붙이지 않는다**: `· 0일`은 고장으로 읽힌다. `undefined`(경과를 안 주는 상태)와 같은 처리다.
  *  판정만 여기 있는 이유는 `pnpm test`가 JSX를 못 읽어서다 — `status-badge.tsx`에 두면 검증이 없다.

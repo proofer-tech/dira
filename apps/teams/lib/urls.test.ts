@@ -3,6 +3,7 @@ import assert from "node:assert";
 import {
   chatRows,
   findMatches,
+  hasFindBar,
   interjectMode,
   mergeProgress,
   parentPath,
@@ -77,6 +78,18 @@ test("screenOf — 표에 없는 경로는 `null`이라 아무것도 안 보낸�
   assert.equal(screenOf("/p/dira/ticketsss"), null); // 접두만 같은 것에 안 걸린다
   assert.equal(screenOf("/p/dira/tickets"), null); // 해시 없는 자리에는 화면이 없다
   assert.equal(screenOf("/p/dira/workers/x"), null);
+});
+
+/** N5의 찾기 바가 서는 자리 (DESIGN.md §데스크톱 앱 N5 표 1행). **보드·홈에서 서면 `⌘F`가
+ *  두 벌이 된다** — 그 두 화면은 §0-6의 자기 갈래가 같은 키를 먹고 있어서 `preventDefault`가
+ *  둘 다 걸리고 사람이 누른 키가 검색창 포커스와 이 바 열기를 동시에 한다. */
+test("hasFindBar — 보드·홈만 빼고 다섯 화면에 선다(§데스크톱 앱 N5)", () => {
+  assert.equal(hasFindBar("/p/dira"), false); // 보드 — `board-ui.tsx`가 먹는다
+  assert.equal(hasFindBar("/p/dira/"), false); // 보드의 정본 URL과 같은 화면이다
+  assert.equal(hasFindBar("/p/dira/home"), false); // 홈 — 자기 `<FindBar>`가 이미 있다(§7)
+  for (const p of ["/", "/p/dira/workers", "/p/dira/personas", "/p/dira/protocols", "/p/dira/tickets/fff28e90"])
+    assert.equal(hasFindBar(p), true, p);
+  assert.equal(hasFindBar("/nosuchpage"), false); // 표 밖에는 안 선다(404)
 });
 
 /** 칸반 호버 관계선 기하 (DESIGN.md §비주얼 §17). 레인이 하한 폭 288(`min-w-72`)까지

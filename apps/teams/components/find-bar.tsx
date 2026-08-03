@@ -20,8 +20,10 @@
  *  있으므로 **범위가 저절로 맞는다**(보드가 `board-ui.tsx`에서 같은 자를 쓰는 그대로). */
 
 import { useEffect, useRef, useState, type RefObject } from "react";
+import { usePathname } from "next/navigation";
 import { ChevronDown, ChevronUp, X } from "lucide-react";
 import { useHotkey } from "@/components/keymap-provider";
+import { useIsDesktop } from "@/components/path-picker";
 import {
   InputGroup,
   InputGroupAddon,
@@ -29,7 +31,7 @@ import {
   InputGroupInput,
   InputGroupText,
 } from "@/components/ui/input-group";
-import { findMatches } from "@/lib/urls";
+import { findMatches, hasFindBar } from "@/lib/urls";
 
 /** 레지스트리 둘 — `globals.css`의 `::highlight()` 두 규칙과 **같은 이름**이다(§30 ④).
  *  갈리면 하이라이트가 조용히 색 없이 선다(등록 이름으로만 선택되는 가상 요소다). */
@@ -115,6 +117,18 @@ export function FindBar({
     input.current?.focus();
     input.current?.select();
   });
+
+  // 데스크톱 `Edit > 찾기`가 던지는 단방향 신호 하나(§데스크톱 앱 N5) — `Help > 의견 보내기`가
+  // `dira:feedback`을 던지는 관용구 그대로다. **preload에 새 API 0 · 새 IPC 채널 0.**
+  // 훅이 아니라 여기서 듣는 이유는 열림 상태가 이 컴포넌트에 살아서다(위 주석) — 밖으로
+  // 끌어내면 두 화면이 같은 상태를 두 벌 든다. 그래서 홈의 바도 이 메뉴에 답한다.
+  useEffect(() => {
+    const show = () => {
+      if (supported()) setOpen(true);
+    };
+    window.addEventListener("dira:find", show);
+    return () => window.removeEventListener("dira:find", show);
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -255,4 +269,36 @@ export function FindBar({
       </form>
     </div>
   );
+}
+
+/** 훑을 자리 — **지금 화면의 `main`**이다. 모든 화면의 `main`이 스크롤러라(`app/layout.tsx`)
+ *  본문 전체가 그 안에 있고, `center()`가 찾는 스크롤 조상도 그것이다.
+ *  ref로 안 꿴 이유: `main`을 그리는 것이 두 셸의 레이아웃(서버 컴포넌트)이라 ref를 붙이려면
+ *  화면마다 클라이언트 조각이 하나씩 는다. getter라 **읽는 순간**(= 바가 열린 뒤) 푼다. */
+const MAIN: RefObject<HTMLElement | null> = {
+  get current() {
+    return document.querySelector("main");
+  },
+};
+/** 돌아갈 포커스가 없다 — 이 화면들의 바는 `⌘F`(또는 메뉴)로만 뜨고 떠나온 입력칸이 없다.
+ *  홈이 프롬프트 칸을 주는 자리다(§30 ⑤). `restore.current?.focus()`가 그대로 무동작이다. */
+const NONE: RefObject<HTMLElement | null> = { current: null };
+
+/** **N5의 찾기 바** (DESIGN.md §데스크톱 앱 N5) — 보드·홈이 아닌 모든 화면(`/` · 워커 ·
+ *  페르소나 · 프로토콜 · 티켓 상세)에 위 `<FindBar>`를 세운다. 갈리는 값 둘만 채우고
+ *  나머지는 홈과 한 수도 안 갈린다.
+ *
+ *  **데스크톱에서만 선다.** `.app`에는 크롬 찾기 바가 없어서 이것이 대신 서고, 브라우저에는
+ *  그 바가 그대로 있으므로 **우리 코드가 0줄인 것이 그 화면의 계약이다** — 안 그리면
+ *  `useHotkey`도 안 걸리고 `preventDefault`도 없다. 판정은 `path-picker.tsx`가 이미 쓰는
+ *  `window.dira`의 유무 하나다(N3).
+ *
+ *  **루트 레이아웃에 한 번 선다**(`app/layout.tsx`) — 붙는 화면이 다섯이고 그중 둘은
+ *  레이아웃이 같아서(워커·페르소나·프로토콜·상세가 `p/[project]/layout.tsx` 아래다) 화면마다
+ *  얹으면 같은 두 줄이 다섯 벌이 된다. 여기 서면 **빼는 곳이 정규식 한 줄**이다. */
+export function DesktopFindBar() {
+  const desktop = useIsDesktop();
+  const path = usePathname();
+  if (!desktop || !hasFindBar(path)) return null;
+  return <FindBar scope={MAIN} restore={NONE} />;
 }

@@ -4,7 +4,7 @@
 // 네이티브 경로 다이얼로그를 띄우고(N3), 로그인 시 자동 실행을 켜고 끄고(N4), 새 버전을
 // 찾아 받아두고 받은 시점에 릴리즈 노트를 만들어 보여준다(U1·U2·U3 — 설치는 다음 실행 때).
 // 스펙: ../../docs/DESIGN.md §데스크톱 앱 ("못박는 것" 1~8, N1~N4) · §릴리스 · 자동 업데이트 (R5~R8).
-import { app, BrowserWindow, Menu, Notification, Tray, dialog, ipcMain, nativeImage, shell } from "electron";
+import { app, BrowserWindow, Menu, MenuItem, Notification, Tray, dialog, ipcMain, nativeImage, shell } from "electron";
 // 이름 가져오기(`import { autoUpdater }`)가 아닌 이유: electron-updater는 CJS이고 그 이름을
 // `Object.defineProperty(exports, ...)`의 getter로 단다 — cjs-module-lexer가 못 보는 형태라
 // ESM 이름 가져오기가 `SyntaxError`로 죽는다. 기본 가져오기는 `module.exports` 그 자체다.
@@ -539,7 +539,7 @@ async function showAbout() {
   else if (response === 2) shell.openExternal("mailto:molmoty@gmail.com");
 }
 
-// ── Help > 의견 보내기 (§0-12) ──────────────────────────────────────────────
+// ── 메뉴 → 렌더러 (§0-12 `Help > 의견 보내기` · N5 `Edit > 찾기`) ────────────
 
 /** **늘어난 렌더러 노출이 0개다.** preload에 새 API가 없고 `ipcRenderer`도 `fs`도 안 넘어간다
  *  (못박는 것 4) — main이 지금 떠 있는 문서에 이벤트 하나를 던지고 끝이다. 듣는 쪽은
@@ -551,14 +551,22 @@ async function showAbout() {
  *  창이 숨어 있으면(N1 — 빨간 버튼은 숨긴다) 먼저 꺼낸다. 안 그러면 안 보이는 창에서 폼이 열린다.
  *  ponytail: 렌더러 크래시로 창이 **파괴된** 뒤 첫 클릭은 신호가 떨어진다(`showWindow`가 창을
  *  다시 만들고, 그 문서는 아직 리스너를 안 걸었다). 한 번 더 누르면 열린다 — 그 경로를 위해
- *  로드 완료·하이드레이션까지 기다리는 배선을 만들 값이 없다. */
-function openFeedback() {
-  if (!readyOrigin) return console.log("[dira] 의견 보내기 — 서버가 아직 준비 중입니다");
+ *  로드 완료·하이드레이션까지 기다리는 배선을 만들 값이 없다.
+ *
+ *  **이 길이 둘이 되어 함수가 하나다**(N5 — `Edit > 찾기`). 갈리는 것은 이벤트 이름과 로그
+ *  문구뿐이라 두 벌로 두면 위 네 문단의 근거가 한쪽에서만 지켜진다. */
+function dispatchToWindow(event: string, what: string) {
+  if (!readyOrigin) return console.log(`[dira] ${what} — 서버가 아직 준비 중입니다`);
   showWindow(readyOrigin);
   win?.webContents
-    .executeJavaScript(`window.dispatchEvent(new Event("dira:feedback"))`)
-    .catch((e: Error) => console.error(`[dira] 의견 폼을 열지 못했습니다: ${e.message}`));
+    .executeJavaScript(`window.dispatchEvent(new Event(${JSON.stringify(event)}))`)
+    .catch((e: Error) => console.error(`[dira] ${what}를 열지 못했습니다: ${e.message}`));
 }
+
+const openFeedback = () => dispatchToWindow("dira:feedback", "의견 폼");
+/** N5 — 듣는 쪽은 `apps/teams/components/find-bar.tsx`다. **바가 뜨지 않는 화면**
+ *  (보드 · 홈 — 그 둘은 `⌘F`가 자기 일을 한다)에서는 그 컴포넌트가 안 서 있어 무동작이다. */
+const openFind = () => dispatchToWindow("dira:find", "찾기 바");
 
 /** `About dira`의 click을 잡으려면 **`{ role: "appMenu" }` 한 줄을 항목들로 펼쳐야 한다** —
  *  role `about`은 `app.showAboutPanel()`로 직행해서 가로챌 자리가 없다. 그 한 줄이 지금
@@ -570,34 +578,46 @@ function openFeedback() {
  *  않는다**(Electron 문서). 실제로 되긴 되는데 콘솔이
  *  `representedObject is not a WeakPtrToElectronMenuModelAsNSObject`로 도배된다(실측 279줄). */
 function installAppMenu() {
-  Menu.setApplicationMenu(
-    Menu.buildFromTemplate([
-      {
-        label: app.name,
-        submenu: [
-          { label: `About ${app.name}`, click: showAbout },
-          // U1 — `About dira` **바로 아래**가 맥 관례다 (R5).
-          { label: "업데이트 확인…", click: () => checkForUpdate(true) },
-          { type: "separator" },
-          { role: "services" },
-          { type: "separator" },
-          { role: "hide" },
-          { role: "hideOthers" },
-          { role: "unhide" },
-          { type: "separator" },
-          { role: "quit" },
-        ],
-      },
-      { role: "fileMenu" },
-      { role: "editMenu" },
-      { role: "viewMenu" },
-      { role: "windowMenu" },
-      // §0-12 — `Window` 다음이고 **항목은 하나다**. `About dira`는 위 앱 메뉴 첫 항목 그대로다
-      // (여기로 안 옮긴다). 메뉴 이름이 영어인 것은 옆의 role 라벨이 영어로 박혀 있어서고,
-      // 우리가 만든 **항목**은 앱 안의 다른 항목들처럼 한글이다(트레이 `열기`·`종료`와 같은 벌).
-      { label: "Help", submenu: [{ label: "의견 보내기", click: openFeedback }] },
-    ]),
-  );
+  const menu = Menu.buildFromTemplate([
+    {
+      label: app.name,
+      submenu: [
+        { label: `About ${app.name}`, click: showAbout },
+        // U1 — `About dira` **바로 아래**가 맥 관례다 (R5).
+        { label: "업데이트 확인…", click: () => checkForUpdate(true) },
+        { type: "separator" },
+        { role: "services" },
+        { type: "separator" },
+        { role: "hide" },
+        { role: "hideOthers" },
+        { role: "unhide" },
+        { type: "separator" },
+        { role: "quit" },
+      ],
+    },
+    { role: "fileMenu" },
+    { role: "editMenu" },
+    { role: "viewMenu" },
+    { role: "windowMenu" },
+    // §0-12 — `Window` 다음이고 **항목은 하나다**. `About dira`는 위 앱 메뉴 첫 항목 그대로다
+    // (여기로 안 옮긴다). 메뉴 이름이 영어인 것은 옆의 role 라벨이 영어로 박혀 있어서고,
+    // 우리가 만든 **항목**은 앱 안의 다른 항목들처럼 한글이다(트레이 `열기`·`종료`와 같은 벌).
+    { label: "Help", submenu: [{ label: "의견 보내기", click: openFeedback }] },
+  ]);
+
+  // N5 — `Edit`은 **매크로 그대로 두고 빌드된 서브메뉴에 항목만 붙인다.** 위 주석의 그 자리다:
+  // 펼치다 하나 빠뜨리면 증상이 메뉴가 아니라 키보드에서 난다(⌘Z·⌘X·⌘C·⌘V·⌘A).
+  // **accelerator를 등록하지 않고 라벨에 키도 안 적는다** — `⌘F`는 키맵의 값이라(§0-6) main이
+  // 그 값을 모르고, 메뉴가 accelerator를 잡으면 keydown이 렌더러에 아예 안 온다.
+  // `role`은 Electron이 소문자로 눕힌다(`editmenu`). 못 찾으면 조용히 넘기지 않는다 —
+  // 메뉴가 통째로 사라지는 것이 아니라 항목 하나만 없어지는 실패라 로그가 유일한 단서다.
+  const edit = menu.items.find((i) => i.role === "editmenu")?.submenu;
+  if (edit) {
+    edit.append(new MenuItem({ type: "separator" }));
+    edit.append(new MenuItem({ label: "찾기", click: openFind }));
+  } else console.error("[dira] Edit 메뉴를 못 찾아 `찾기` 항목을 붙이지 못했습니다");
+
+  Menu.setApplicationMenu(menu);
 }
 
 function showWindow(origin: string) {

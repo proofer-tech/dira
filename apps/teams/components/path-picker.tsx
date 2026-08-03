@@ -27,6 +27,12 @@ const NEVER = () => () => {};
 const isDesktop = () => !!window.dira;
 const NOT_DESKTOP = () => false;
 
+/** **데스크톱 셸인가**(§데스크톱 앱 N3). 판정이 두 곳이라(이 버튼 · §N5 찾기 바 —
+ *  `find-bar.tsx`) export한다: 두 벌이 되면 한쪽이 SSR 어긋남 처리를 빠뜨린다. */
+export function useIsDesktop(): boolean {
+  return useSyncExternalStore(NEVER, isDesktop, NOT_DESKTOP);
+}
+
 export function PickPath({
   mode,
   label,
@@ -37,7 +43,7 @@ export function PickPath({
   label: string;
   onPick: (abs: string) => void;
 }) {
-  const desktop = useSyncExternalStore(NEVER, isDesktop, NOT_DESKTOP);
+  const desktop = useIsDesktop();
   if (!desktop) return null;
 
   return (

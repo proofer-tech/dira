@@ -8562,7 +8562,7 @@ B에서 묻고, 둘 다 답이 오고, A로 돌아오면 A의 답이 있다. 그
 | P94 | 검색 액션 하나로 — 이름 · 기본키 `33d8594d` | developer | — | 대기 |
 | P94 | 찾기 바 시각 사양 — §비주얼 신설 `8101b296` | designer | — | 완료 — **§비주얼 §30 신설**(자리 `fixed top-14 right-6` · 바 **320×36** 실측 · `input-group` 그릇 · 건수 `min-w-14` · `::highlight()` 둘 · 키보드 · 다섯 상태). **새 shadcn 0 · 새 색 토큰 0 · 새 lucide 0 · 새 커스텀 1**(`<FindBar>` — §5 커스텀 표 8 → 9) **· `globals.css` 11줄** · 새로 잰 대비 **4**. §7 그릇 행 · N5 근거 문단에 포인터 한 줄씩 |
 | P94 | 홈 — 대화 안에서 찾기 (`<FindBar>` 신설) `8e31c515` | developer | `33d8594d` · `8101b296` | 완료 — `components/find-bar.tsx` 신설 + `globals.css` `::highlight()` 둘 + `lib/urls.ts`의 `findMatches`(`node --test`) + 홈이 스레드 뷰포트 ref와 프롬프트 칸을 넘긴다. **새 라우트 0 · 새 서버 액션 0 · 새 의존성 0**. 훑기는 `CSS.highlights` + `MutationObserver` 하나라 스트리밍 중에도 안 깨진다(실측: 도는 답에서 건수 `1/8 → 1/36`, `cur`가 내내 1) |
-| P94 | 데스크톱 — `Edit > 찾기` + 나머지 화면 `8cc970e7` | developer | `8e31c515` | 대기 |
+| P94 | 데스크톱 — `Edit > 찾기` + 나머지 화면 `8cc970e7` | developer | `8e31c515` | 완료 — `<DesktopFindBar>`가 루트 레이아웃에 한 번 서서 `8e31c515`의 `<FindBar>`를 **보드·홈이 아닌 다섯 화면**에 세운다(훑을 자리는 `main`). 판정 둘 다 이미 있던 것을 접었다 — 셸은 `useIsDesktop`(N3), 화면은 `lib/urls.ts`의 `hasFindBar`(= `screenOf`). **preload 무수정 · 새 IPC 0 · `findInPage` 안 씀** — `Edit > 찾기`는 `dira:find` window 이벤트 하나고 `Edit`은 role 매크로 그대로다(빌드된 서브메뉴에 append. ⌘Z·⌘X·⌘C·⌘V·⌘A 실측 확인 · accelerator 없음). 브라우저에서는 **우리 코드 0줄**(실측: 그 다섯 화면의 `⌘F`가 `defaultPrevented=false`) |
 | P94 | QA — 두 셸 × 세 갈래 `dacdbeaf` | qa | `8cc970e7` | 대기 |
 
 **되물은 것은 한 번이고 갈래가 셋이었다.** 요구 문장이 화면 셋을 나열하는데 그중 하나(보드)는

@@ -13,6 +13,9 @@ apps/teams/
                         + `<ScreenView/>` — `screen_view`를 보내는 유일한 자리(§0-11)
                         + `<FeedbackDialog/>` — 의견 폼(§0-12). 화면 이동 없이 **지금 화면 위에**
                         떠야 해서 자리가 여기다(닫혀 있으면 안 그린다)
+                        + `<DesktopFindBar/>` — N5 찾기 바(§데스크톱 앱). 붙는 화면이 다섯이고
+                        레이아웃이 둘로 갈려서 자리가 여기다. **`KeymapProvider` 안**이어야
+                        한다(`⌘F`가 그 컨텍스트를 읽는다) — 위 둘과 갈리는 유일한 조건이다
     (list)/page.tsx     프로젝트 목록·등록 (`/`). 라우트 그룹이라 URL은 `/`다
     (list)/loading.tsx  이 그룹만 덮는다 — app/ 최상단에 두면 모든 라우트가 즉시 스트리밍돼
                         레이아웃의 notFound()가 404 상태를 못 세운다(실측)
@@ -55,7 +58,9 @@ apps/teams/
     urls.ts             슬러그·전환 경로·`~` 축약·배지 경과 접미사·스트림 폼 모드·시각 표기
                         (`timeLabel` §26 ④)·홈 대화 목록 한 줄(`chatRows` §24)
                         + **통계 화면 enum `Screen`·`screenOf`**(§0-11 — 경로를 enum 하나로 접는
-                        유일한 곳. `analytics.ts`가 이 타입을 가져다 쓴다). **순수 함수만** —
+                        유일한 곳. `analytics.ts`가 이 타입을 가져다 쓴다)
+                        + `hasFindBar`(§데스크톱 앱 N5 — 그 enum을 접어 보드·홈만 뺀다.
+                        경로를 다시 파싱하지 않는다). **순수 함수만** —
                         클라이언트가 import한다(배지도 클라이언트 컴포넌트에 들어간다).
                         JSX는 `node --test`가 못 읽으므로 컴포넌트의 순수 판정은 여기서 검증한다
     paths.ts            경로 탈출 방어 (신뢰 경계) + 셸 값 해석(`shellValue` — projects·workers 공용)
@@ -243,8 +248,20 @@ apps/teams/
                         `lib/urls.ts`의 `findMatches`다(JSX를 `pnpm test`가 못 읽는다).
                         **한 벌이 두 화면에 선다**(홈 · §데스크톱 앱 N5)라 갈리는 값 둘만 props다 —
                         훑을 자리(`scope`)와 닫을 때 돌아갈 포커스(`restore`). 열림 상태와
-                        `board.search` 훅은 자기가 든다: **홈에만 마운트되므로 범위가 저절로 맞는다**
+                        `board.search` 훅은 자기가 든다: **마운트되는 자리가 곧 범위다**
                         (`board-ui.tsx`가 같은 액션의 보드 갈래를 쓰는 그대로).
+                        메뉴에서 여는 길 하나를 같이 듣는다 — 데스크톱 셸의 `Edit > 찾기`가 던지는
+                        `dira:find` window 이벤트(`feedback-dialog.tsx`와 같은 관용구.
+                        **preload에 새 API 0 · 새 IPC 채널 0**)
+                        + **`<DesktopFindBar>`**(§데스크톱 앱 N5) — 위 바를 **보드·홈이 아닌
+                        모든 화면**에 세우는 껍데기. 채우는 것은 갈리는 값 둘(`main` · 없음)이고
+                        판정 둘이 전부다: 데스크톱인가(`useIsDesktop` — `path-picker.tsx`와
+                        **같은 판정 하나**를 쓴다. 브라우저에는 크롬 찾기 바가 있어서
+                        **우리 코드 0줄이 그 화면의 계약이다**)와 이 경로에 서나
+                        (`lib/urls.ts`의 `hasFindBar` — `screenOf`를 접는다).
+                        **루트 레이아웃에 한 번 선다**(`app/layout.tsx`, `KeymapProvider` 안):
+                        붙는 화면이 다섯이고 레이아웃이 둘로 갈려서 화면마다 얹으면 같은 두 줄이
+                        다섯 벌이 된다. 같은 이유로 여기 산다(새 파일 0)
                         **새 파일인 이유**: 쓰는 곳이 두 화면이라 어느 한쪽에 얹으면 나머지가
                         그 파일을 import한다(`keymap-provider.tsx`와 같은 축)
     copy-command.tsx    실행 대신 복사시키는 명령 블록

@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { KeymapProvider } from "@/components/keymap-provider";
 import { FeedbackDialog } from "@/components/feedback-dialog";
+import { DesktopFindBar } from "@/components/find-bar";
 import { ScreenView } from "@/components/project-switcher";
 import { readKeymap } from "@/lib/projects";
 import "./globals.css";
@@ -51,7 +52,14 @@ export default async function RootLayout({
             **화면 이동 없이 지금 화면 위에** 떠야 해서 자리가 여기다. 닫혀 있으면 안 그린다 */}
         <FeedbackDialog />
         <TooltipProvider>
-          <KeymapProvider keymap={keymap}>{children}</KeymapProvider>
+          <KeymapProvider keymap={keymap}>
+            {children}
+            {/* §데스크톱 앱 N5 찾기 바. **`KeymapProvider` 안**이어야 한다 — `⌘F`는 키맵의
+                값이고 `useHotkey`가 그 컨텍스트를 읽는다(§0-6). 자리가 여기인 이유는
+                `<FeedbackDialog/>`와 같다: 붙는 화면이 다섯이고 레이아웃이 둘로 갈린다.
+                뜨지 않는 화면(보드·홈)과 셸(브라우저)은 저 컴포넌트가 판정해 `null`이다 */}
+            <DesktopFindBar />
+          </KeymapProvider>
         </TooltipProvider>
       </body>
     </html>
