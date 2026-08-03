@@ -8989,6 +8989,100 @@ pnpm --dir apps/site build                                       # 빌드가 산
 거기에 위 §실측 표를 다시 돌린 값이 붙는다. **여섯 폭 전부** 새 카드 폭 = `.plans` 폭 ·
 형제 카드 셋 앞뒤 동일 · `scrollWidth === 폭`.
 
+### 다운로드 버튼이 자산을 바로 준다 (요구 `9064961c`)
+
+요구 — "랜딩페이지 다운로드버튼눌렀을 때 깃헙으로 이탈되는게 싫음. 누르면 깃헙 릴리즈에 올라온
+dmg 파일 다운로드 바로 됐으면 좋겠음 (물론 당연히 깃헙 릴리즈에 있는 파일을 따로 복사해서
+올린다거나 하는게 아니라 직접 연동되어야 함. 방법은 고민해주세요 리버스프록시가 될수도있고)"
+
+**되묻지 않았다.** *무엇을*은 본문에 있고(누르면 `.dmg`가 받아진다) *어떻게*는 명시로
+위임됐다("방법은 고민해주세요"). 고르는 것이 위임된 요구는 §히어로 GIF와 같은 자리다.
+
+#### 지금 값
+
+| 자리 | 값 |
+|---|---|
+| 다운로드 버튼 **넷** | `Landing.vue` `50`(헤더 `앱 다운로드`) · `66`(히어로 `macOS 앱 다운로드`) · `226`(closing 같은 라벨) · `245`(푸터 `다운로드`). 넷 다 `href="https://github.com/proofer-tech/dira/releases/latest"`다 |
+| 그 URL이 주는 것 | 릴리스 **페이지**(HTML)다. 사람이 랜딩을 떠나 GitHub에서 자산 목록을 한 번 더 펼치고 파일을 고른다 — 요구가 싫다고 한 것이 이 이탈이다 |
+| 최신 릴리스 자산 | 셋. `dira-0.1.6-arm64.dmg`(124.1MB) · `dira-0.1.6-arm64-mac.zip` · `latest-mac.yml`. **`.dmg`는 하나다** |
+| 자산 URL이 주는 것 | `302` → `release-assets.githubusercontent.com`, `response-content-disposition=attachment; filename=dira-0.1.6-arm64.dmg`. **첨부라 브라우저가 문서를 안 바꾼다** — 랜딩에 그대로 서 있고 받기만 시작한다 |
+| 이미 도는 요청 | `Landing.vue:17`이 마운트 뒤 `api.github.com/…/releases/latest`를 부른다(§리본 버전). 그 응답에 `assets[]`가 **이미 실려 오는데 지금은 `tag_name`만 읽고 버린다** |
+| 자산 이름 | `artifactName`이 없어서 electron-builder 기본값이다(`apps/desktop/package.json` §build) → 이름에 **버전이 들어간다**. 릴리스마다 갈린다 |
+
+```bash
+gh api repos/proofer-tech/dira/releases/latest --jq '[.assets[].name]'
+curl -sI https://github.com/proofer-tech/dira/releases/download/v0.1.6/dira-0.1.6-arm64.dmg | head -3
+grep -c 'href="https://github.com/proofer-tech/dira/releases/latest"' apps/site/.vitepress/theme/Landing.vue  # 4
+```
+
+#### 정하는 값 — 이미 받아 놓고 버리는 필드를 쓴다
+
+| 항목 | 값 |
+|---|---|
+| 출처 | 위 표 다섯째 행의 **그 응답**. 새 요청 **0** · 새 엔드포인트 **0** · 새 npm **0** |
+| 읽는 필드 | `assets[]` 중 `name`이 `.dmg`로 끝나는 **첫** 항목의 `browser_download_url` |
+| 실측값 | `https://github.com/proofer-tech/dira/releases/download/v0.1.6/dira-0.1.6-arm64.dmg` |
+| 초기값 = 실패값 | **지금 값 그대로** `https://github.com/proofer-tech/dira/releases/latest`. 서버가 그린 HTML도, fetch가 실패했을 때도, `.dmg` 자산을 못 찾았을 때도 이 값이다 |
+| 바꾸는 자리 | 위 넷. `href`를 바인딩으로 바꾼다 |
+| 안 바꾸는 자리 | 리본 `릴리스 보기`(33) · 푸터 `릴리스`(246) — 라벨이 *보기*이고 목적지가 페이지인 것이 맞다. `config.ts:39` 매뉴얼 nav · `docs/install.md:3` — **랜딩 밖이다** |
+
+**초기값이 오늘 동작이라는 것이 이 안의 값이다.** JS가 안 돌아도, rate limit(60/시간·IP)에
+걸려도, 하이드레이션 전에 눌러도 **잃는 것이 0**이다 — 지금과 똑같이 릴리스 페이지가 열린다.
+§리본 버전이 같은 fetch에 세운 판정(`실패했을 때 화면에도 콘솔에도 아무것도 안 띄운다`)을
+그대로 쓴다.
+
+#### 서는 못 다섯
+
+| # | 서는 것 | 근거 |
+|---|---|---|
+| ① | **`download` 속성을 붙이지 않는다** | 교차 출처라 브라우저가 무시한다. 붙이면 아무 일도 안 하는데 다음 세션이 그것을 "받아지는 근거"로 읽는다. 받아지게 하는 것은 GitHub이 붙이는 `Content-Disposition`이다 |
+| ② | **`target="_blank"`을 붙이지 않는다** | 첨부는 문서를 안 바꾸므로 새 탭은 빈 탭 하나를 남기고 끝난다 |
+| ③ | **arch 안내를 새로 만들지 않는다** | 앞뒤가 같다 — 릴리스 페이지에도 arm64 하나뿐이고, 받는 파일 이름이 계속 arch를 말한다(`dira-0.1.6-arm64.dmg`). §옮기다 거짓이 되는 자리 ③이 `cta-note`에서 `macOS (Apple Silicon)`이 빠진 것을 이미 적어 뒀는데 **이 요구가 그것을 안 고친다**(고치면 카피라 writer 티켓이다) |
+| ④ | **arch 판정을 코드로 만들지 않는다** | `.dmg`가 하나다. `navigator`로 맥의 arch를 맞히는 코드는 고를 것이 없는 자리에서 틀리기만 한다(크롬은 Apple Silicon에서도 `Intel`이라고 답한다). 자산이 둘이 되면 그때 고른다 |
+| ⑤ | **텍스트 노드가 한 글자도 안 바뀐다** | 라벨 넷이 그대로다 → **writer 티켓이 없다.** 새 CSS **0** · 새 색 **0** · 새 컴포넌트 **0** → **designer 티켓도 없다** |
+
+#### 버린 안 넷
+
+| 안 | 왜 안 하나 |
+|---|---|
+| **리버스 프록시 / `vercel.json` rewrite** (`/download` → 자산으로 302) | 요구가 예로 든 안이다. §리본 버전이 **같은 우회를 이미 거절했다** — `vitepress dev`에는 rewrite가 없어 로컬에서 안 돈다. 게다가 `apps/site`는 `origin/master`에 커밋 **0개**라 사이트가 아직 안 떠 있다(§리본 버전 §지금 값이 왜 갈리나). 얻는 것은 URL에서 `github.com`이 안 보이는 것 하나인데, **요구가 싫다고 한 것은 도메인이 아니라 페이지를 떠나는 것**이고 그건 첨부 응답이 이미 해결한다 |
+| 자산을 우리가 복사해 어딘가에 올린다 | 요구 본문이 명시로 금지했다 |
+| **`artifactName`을 버전 없는 이름으로 고정**하고 `…/releases/latest/download/dira-arm64.dmg`를 정적으로 건다 | JS 없이 서는 것이 장점이다. 대가가 **릴리스 파이프라인**이라 안 고른다 — 받은 파일 이름에서 버전이 사라져 `~/Downloads`에 같은 이름이 쌓이고(어느 것이 어느 버전인지 이름이 말하지 않는다), `latest-mac.yml`과 자동 업데이트 경로가 같이 갈린다. **랜딩 링크 하나를 위해 남의 맥으로 나가는 자산의 이름을 바꾸지 않는다** |
+| 빌드 때 `theme.diraVersion`으로 URL을 조립한다 | 그 값은 **다음에 구울 값**이라(§리본 버전) 어긋나는 창에서 **404를 주는 다운로드 버튼**이 된다. 지금 fallback(릴리스 페이지가 열린다)보다 나쁘다 |
+
+#### 낡는 문장 하나
+
+§설치 절이 clone을 정본으로 말한다와 §`앱 받기` → `앱 다운로드`가 근거로 든 *"헤더 · 히어로
+CTA · `cta-note` · closing · 푸터 `다운로드`가 전부 `releases/latest`를 가리킨다"*는 이 절 뒤로
+낡는다. **그 논증은 그대로 선다** — 같은 목적지의 라벨이 한 페이지에서 갈리면 결함이라는 것이
+그 문장의 내용이고, 목적지가 릴리스 **페이지**에서 그 릴리스의 **자산**으로 옮겨갈 뿐 넷은
+여전히 한 목적지다. 두 절 다 닫힌 기록이라 고치지 않는다.
+
+#### 티켓 하나 — `deps` 0
+
+developer 하나다(위 ⑤). **`a14e5293`(모션 판정표 구현)에 `deps`를 안 건다** — 같은
+`Landing.vue`를 물지만 계약이 안 겹치고(저쪽은 텍스트 노드도 `href`도 안 건드린다) 어느
+순서로 들어도 결과가 같다. 다만 `<script setup>`의 `onMounted` 몸통이 18줄뿐이라 **rebase
+충돌이 날 수 있다** — 티켓 `## 참고`에 "양쪽 다 살린다"와 각자가 무는 줄을 적어 둔다.
+`deps`로 앞뒤를 잡으면 이 요구가 designer 세션 하나를 기다리게 되고, 그 값이 30초짜리 충돌
+해결보다 비싸다.
+
+#### 검증
+
+```bash
+grep -c 'href="https://github.com/proofer-tech/dira/releases/latest"' apps/site/.vitepress/theme/Landing.vue  # 4 → 0
+grep -c 'releases/latest' apps/site/.vitepress/theme/Landing.vue   # 5 → 2 (API 엔드포인트 · fallback 상수)
+pnpm --dir apps/site test && pnpm --dir apps/site build            # version.test.ts가 살고 빌드가 산다
+```
+
+**화면 판정은 헤드리스 CDP다**(`AGENTS.md` §브라우저). `pnpm --dir apps/site dev`를 띄우고
+넷 각각에서 이 셋을 본다.
+
+1. 마운트가 끝난 뒤 `href`가 위 §정하는 값의 **실측값과 같다**(`gh api`로 뽑은 그 URL).
+2. 누르면 **`location.href`가 안 바뀐다.** 랜딩에 그대로 서 있고 받기가 시작된다
+   (`Page.downloadWillBegin` 또는 `Browser.setDownloadBehavior`로 잡는다 — 124MB라 받다 만다).
+3. **네트워크를 끊고 새로 그리면** `href`가 `…/releases/latest`다(초기값 = 실패값).
+
 ## 매뉴얼 (`apps/site/docs/`)
 
 요구 `91fc8378`. **첫 판은 엔진 매뉴얼이었다** — 워커 파일을 heredoc으로 찍고, cron 두 줄을
@@ -13074,6 +13168,34 @@ P128(`c9c53edb`)을 올렸다. **충돌을 푼 뒤 새로 온 두 절을 이번�
 안 내면 확인이 영영 안 뜬다. 착수는 가능하지만 **먼저 들면 성공한 채로 화면이 거짓말하는
 상태가 남는다** — `deps`가 착수 가능성만이 아닌 그 경우다. 반대로 엔진이 먼저 들면 잠깐
 CLI만 강제할 수 있는 중간 상태인데, 그건 지금보다 나은 상태다(더하기 먼저, 빼기 나중).
+
+### P131 — 다운로드 버튼이 자산을 바로 준다 (요구 `9064961c`)
+
+→ §랜딩 §다운로드 버튼이 자산을 바로 준다.
+
+| # | 티켓 | persona | deps | 상태 |
+|---|---|---|---|---|
+| P131 | 스펙 확정 `9064961c` | pm | — | 완료 — §랜딩에 §다운로드 버튼이 자산을 바로 준다 신설(지금 값 6행 + 실측 3줄 · 정하는 값 6행 · 서는 못 5 · 버린 안 4 · 낡는 문장 1 · 검증 3+3) |
+| P131 | 버튼 넷을 자산 URL로 `4a5b56fe` | developer | — | 대기 |
+
+**되묻지 않았다.** *무엇을*이 본문에 있고 *어떻게*가 명시로 위임됐다("방법은 고민해주세요").
+요구가 예로 든 리버스 프록시는 **조사 결과 버렸다** — §리본 버전이 같은 우회(`vercel.json`
+rewrite)를 이미 거절했고(로컬에서 안 돈다), `apps/site`가 `origin/master`에 커밋 0개라 프록시를
+세울 자리 자체가 아직 없다. **요구가 싫다고 한 것은 도메인이 아니라 페이지를 떠나는 것**이다.
+
+**조사가 티켓을 한 장으로 줄였다.** `Landing.vue:17`이 이미 `releases/latest`를 부르고 있는데
+`tag_name` 하나만 읽고 `assets[]`를 버린다 — 자산 URL이 **이미 받아 놓은 응답 안에** 있다.
+새 요청 0 · 새 엔드포인트 0 · 새 npm 0이고, 안 봤으면 프록시든 빌드 때 조립이든 배관을 하나
+새로 세우는 티켓이 나갔다. `302`의 `Content-Disposition: attachment`를 실제로 재서(`curl -sI`)
+**문서가 안 바뀐다**는 것이 이 안의 근거 전부다.
+
+**초기값을 오늘 값으로 두는 것이 이 안의 값이다.** JS가 안 돌아도 · rate limit에 걸려도 ·
+하이드레이션 전에 눌러도 지금과 똑같이 릴리스 페이지가 열린다 — **잃는 것이 0인 개선**이라
+`## 블록`으로 갈 실패 모양이 없다.
+
+**`artifactName` 고정(정적 링크)을 버린 것이 유일하게 아까운 자리다.** JS 없이 서는 값을
+주는데, 대가가 받은 파일 이름에서 버전이 사라지는 것과 자동 업데이트 경로가 같이 갈리는
+것이다. 랜딩 링크 하나를 위해 남의 맥으로 나가는 자산 이름을 바꾸지 않는다.
 
 ## 수용조건 (전체)
 
