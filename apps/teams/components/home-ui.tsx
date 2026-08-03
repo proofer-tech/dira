@@ -365,17 +365,17 @@ export function HomeUI({ project, initial }: { project: string; initial: HomeChu
     // `main`이 이미 `flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto`라(§4 셸) 페이지가
     // 그 안에서 `flex-1`로 남은 높이를 받는다. **`min-h-0`이 빠지면** flex 자식 기본값
     // (`min-height:auto`)이 내용만큼 늘어나 `main`이 도로 스크롤하고 폼이 화면 밖으로 밀린다.
-    <div className="flex min-h-0 flex-1 flex-col gap-6">
-      {/* `h1` 행 — **높이 고정 한 행**이다(§24 세로 배치 표). **자식이 `h1` 하나다**: `01e5293b`이
-          셋을 둘로 줄였고(대화 목록 트리거가 패널로) `f1941cab`이 둘을 하나로 줄였다
-          (`새 대화`가 패널로 — 요구 `6f9dce32`). 그래서 `gap-3`과 `ml-auto`가 같이 빠졌다.
-          남은 셋은 전부 일이 있다 — `flex`+`items-center`가 28짜리 `h1`을 32 행에 세우고,
-          `shrink-0`이 스레드에 안 눌리게 하고, `h-8`이 32를 정한다. **이 행의 액션은 0개다.** */}
-      <div className="flex h-8 shrink-0 items-center">
-        <h1 className="text-lg font-semibold">홈</h1>
-      </div>
+    <div className="flex min-h-0 flex-1 flex-col">
+      {/* 화면 제목은 낱말 하나다(§24 §화면 제목은 `sr-only`다 — 요구 `e8445560`). 32px 행과
+          감싸던 `div`가 통째로 걷혔고 `홈`은 스크린리더에만 남는다. **`gap-6`도 같이 걷었다**:
+          `sr-only`는 `position:absolute`라 flex 항목이 아니어서 페이지 루트의 항목이 2단 행
+          하나가 되고 gap이 설 사이가 0개다 — 값이 이미 0이라 걷어도 화면이 안 움직이지만,
+          남겨 두면 다음 세션이 뺄셈의 24를 찾다가 이 클래스를 근거로 32px 행을 되살린다.
+          그래서 스레드가 32 + 24 = **56px을 되찾는다**(§24 §높이 — `창 − 236`). */}
+      <h1 className="sr-only">홈</h1>
 
-      {/* 2단 행(§24 세로 배치 표 · §좌측 패널) — `h1` 행 아래 남은 높이를 통째로 받는다.
+      {/* 2단 행(§24 세로 배치 표 · §좌측 패널) — 페이지 루트의 **유일한 flex 항목**이라
+          `main`의 패딩 안 남은 높이를 통째로 받는다.
           `gap-8`(32)이 세로 리듬 `gap-6`(24)보다 큰 것이 두 단을 한 격자로 안 읽히게 하고,
           그래서 §11처럼 구분선을 안 넣는다. */}
       <div className="flex min-h-0 flex-1 gap-8">
