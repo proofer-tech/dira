@@ -33,7 +33,7 @@ import { Button } from "@/components/ui/button";
 import { PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { readAuth } from "@/lib/auth";
 import { readSummary, readProjects } from "@/lib/projects";
-import { engineLimits, listUsage, type EngineLimit } from "@/lib/usage";
+import { engineLimits, formatTokens, listUsage, usageRates, type EngineLimit } from "@/lib/usage";
 import { engineName, workerGroups } from "@/lib/workers";
 import { tildePath, timeLabel } from "@/lib/urls";
 import { cn } from "@/lib/utils";
@@ -252,7 +252,12 @@ export default async function ProjectLayout({
           버튼이 0개고 `aria-live`도 없다: 이 바는 말하기만 한다(§0-8 · §26 ①).
           **조건이 `엔진 > 0`이 아니라 `워커 > 0`이다**(§1-2 §빈 상태 둘) — `TICKET_ENGINE`을
           못 읽은 워커만 있으면 엔진 칸이 0개인데, 그때도 idle 풀은 말할 것이 있다. 엔진 칸이
-          0개여도 높이는 `h-7` 그대로다. */}
+          0개여도 높이는 `h-7` 그대로다.
+          **`flex-wrap`이 아니다** — 감으면 28이 56이 되고 그게 §0-8 판정 3이 "얇은 한 줄"로
+          못 박은 그것이다. 세 단계(`lg` 속도 · `md` 리셋 · `sm` 게이지)를 다 거치고도 넘치면
+          `ml-auto` idle 풀이 먼저 0폭이 되고 그다음 넘친 칸이 `overflow-hidden`으로 잘린다.
+          // ponytail: 엔진 2개는 어느 폭에서도 안 넘친다. 3개는 640–966 · 1024–1177에서 넘치고
+          // 1178px부터 다 선다 — 오늘 이 큐의 엔진은 1개다. 3개가 실재하면 그때 넷째 단계를 본다. */}
       {current.groups.length > 0 && (
         <footer className="flex h-7 shrink-0 items-center gap-6 overflow-hidden border-t bg-background px-6">
           {/* 값을 여기서 `await`하면 외부 GET(최대 5초)이 셸 전체를 붙잡아 보드가 그만큼 늦는다.
@@ -503,7 +508,9 @@ async function EngineCells({
   workers: { worker: string; engine: string }[];
   engines: string[];
 }) {
-  const limits = await engineLimits(engines);
+  // 소모 속도는 트랜스크립트 스캔(30초 TTL)이고 한도는 외부 GET이라 **따로 도착한다**(§26 ⑧).
+  // 직렬로 `await`하면 스캔이 GET 뒤에 줄을 서므로 같이 띄운다 — 둘 다 자기 캐시 뒤에 있다.
+  const [limits, rates] = await Promise.all([engineLimits(engines), usageRates(root, workers)]);
   // 소비량은 **게이지가 못 선 칸에서만** 쓴다(§26 ⑤). 전부 정상이면 로그를 아예 안 읽는다.
   const usage = engines.some((e) => "error" in limits[e]) ? await listUsage(root) : null;
   return engines.map((e) => (
@@ -511,6 +518,10 @@ async function EngineCells({
       key={e}
       engine={e}
       limit={limits[e]}
+      // **키가 없는 엔진은 이 항목이 통째로 빠진다**(오늘 codex — `~/.claude/projects/`는
+      // claude가 쓰는 파일이다). 창 안에 세션이 없어서 나온 진짜 `0`은 키가 있는 `0`이라
+      // `0 토큰/분`으로 선다. `undefined`와 `0`이 그 둘을 가른다(§0-8 판정 4)
+      rate={rates[e]}
       // 그 엔진을 무는 워커들의 합이다. 키는 로그 파일명에서 온 **실효 `TICKET_NAME`**이고
       // NFC로 맞추는 것은 `parseLogName`이 readdir의 NFD를 정규화하기 때문이다(워커 화면과 같다).
       tokens={
@@ -532,14 +543,29 @@ function EngineCell({
   engine,
   limit,
   tokens = 0,
+  rate,
 }: {
   engine: string;
   limit?: EngineLimit;
   tokens?: number;
+  rate?: number;
 }) {
   const value = limit && !("error" in limit) ? limit : null;
   // 임계는 **사용률 90% 하나**다(§26 ③). 단계를 둘로 나누지 않는다 — 색은 예외 하나만 표시한다.
   const over = !!value && value.usedPercent >= 90;
+  // 소모 속도(§26 ② 다섯째 슬롯). 정상 칸과 폴백 칸(⑤)에 **한 글자도 같은 것**이 서므로
+  // 여기서 한 번 만들어 두 자리에 넣는다 — 두 벌 적으면 갈릴 자리가 생긴다.
+  // 잉크가 `--muted-foreground`인 것은 이 칸에서 **주어가 다른 유일한 값**이기 때문이다
+  // (프로젝트 스코프 · 창 10분). 임계 90%에서도 색이 안 바뀐다 — 한도의 수가 아니다.
+  // `lg` 미만에서 **먼저** 빠진다(⑦): 빠져도 남은 넷의 뜻이 안 갈리는 유일한 값이다.
+  const rateSlot = rate === undefined ? null : (
+    <span
+      className="hidden text-xs whitespace-nowrap text-muted-foreground tabular-nums lg:inline"
+      title="최근 10분 · 이 프로젝트의 워커 세션"
+    >
+      · {formatTokens(rate)} 토큰/분
+    </span>
+  );
   return (
     <div className="flex items-center gap-2">
       {/* §23의 `엔진` 열과 같은 서체·같은 자르기다. 전문은 `title`에 남는다 */}
@@ -570,6 +596,9 @@ function EngineCell({
           <span className={cn("text-xs whitespace-nowrap tabular-nums", over && "text-status-stale")}>
             {Math.round(value.usedPercent)}% 사용
           </span>
+          {/* 자리는 `% 사용` **바로 다음 · 리셋 시각 앞**이다(§26 ②) — 요구가 말한 `한도 옆`에
+              리셋 시각이 끼어 앉지 않는다. 구분자는 이 칸의 절 구분자 `·` 그대로다 */}
+          {rateSlot}
           {/* `resets_at`이 없으면 **이 항목만** 빠진다. 칸이 통째로 폴백으로 넘어가지 않는다(§26 ④) */}
           {value.resetsAt !== null && (
             <span className="hidden text-xs whitespace-nowrap text-muted-foreground tabular-nums md:inline">
@@ -585,6 +614,10 @@ function EngineCell({
           <span className="text-xs whitespace-nowrap tabular-nums">
             {tokens.toLocaleString()} 토큰
           </span>
+          {/* 이 칸에만 절대 수 둘이 나란히 선다(창 5시간 누적 · 창 10분 속도). 같은 사실이
+              아니라는 것을 **단위 · 잉크 · `title`** 셋이 말한다(§26 ⑤) — 안 갈라 두면
+              "120만 중 250만" 같은 없는 관계로 읽힌다. 좁아져도 사유는 안 뺀다 */}
+          {rateSlot}
           {/* 색도 아이콘도 안 쓴다 — 에러가 아니라 **부재**다. 원인 원문은 삼키지 않고
               네이티브 `title`에 남긴다(얇은 한 줄에 블록을 세울 자리가 없다 — §26 ⑤) */}
           <span
