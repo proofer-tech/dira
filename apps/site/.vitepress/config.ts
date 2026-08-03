@@ -1,6 +1,27 @@
 import { defineConfig } from "vitepress";
 import { diraVersion } from "../version.ts";
 
+// vitepress 기본 slugify는 `str.normalize("NFKD")`로 시작한다. NFKD가 한글 음절을 자모로 쪼개고
+// 뒤따르는 결합문자 제거(U+0300~U+036F)는 자모를 안 건드려서, 산출 `id`가 NFD로 남는다.
+// 소스에 NFC로 적은 `#한글-앵커`는 눈으로 똑같아 보이는데 절대 안 맞고 링크가 안 뛴다.
+// 기본 구현 그대로에 `.normalize("NFC")` 하나만 더해 모든 `id`를 NFC로 고정한다.
+// ponytail: @mdit-vue/shared가 직접 의존이 아니라 6줄짜리 정규식 체인을 인라인했다.
+//           vitepress가 이 체인을 바꾸면 여기도 따라 바꾼다.
+const rControl = /[\u0000-\u001f]/g;
+const rSpecial = /[\s~`!@#$%^&*()\-_+=[\]{}|\\;:"'“”‘’<>,.?/]+/g;
+const rCombining = /[\u0300-\u036F]/g;
+const slugify = (str: string) =>
+  str
+    .normalize("NFKD")
+    .replace(rCombining, "")
+    .replace(rControl, "")
+    .replace(rSpecial, "-")
+    .replace(/-{2,}/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .replace(/^(\d)/, "_$1")
+    .toLowerCase()
+    .normalize("NFC");
+
 export default defineConfig({
   lang: "ko-KR",
   title: "dira",
@@ -10,6 +31,7 @@ export default defineConfig({
   // 죽은 내부 링크는 빌드를 깨뜨린다. 매뉴얼 19장이 다 들어왔으므로 유예 없이 전수 검사한다.
   ignoreDeadLinks: false,
   head: [["link", { rel: "icon", href: "/icon.svg", type: "image/svg+xml" }]],
+  markdown: { anchor: { slugify } },
   themeConfig: {
     diraVersion,
     nav: [
