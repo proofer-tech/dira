@@ -229,6 +229,21 @@ $(cat "$SKILLS")
 ===== 스킬 끝 =====
 "
   fi
+  # 메모리 사이드카(같은 디렉터리 memory/*.md)는 스킬 블록 뒤에 붙는다. 여기는 엔진을 안 가린다 -
+  # 메모리는 이 큐에서 알아낸 사실이라 codex에도 참이다. 없는 것이 정상이라 WARN 없다.
+  # 글롭은 한 단계다(memory/<하위>/x.md는 안 읽는다). 순서는 bash 글롭이 이미 오름차순으로 준다.
+  MEMDIR="${TICKET_PERSONAS:-$TICKET_ROOT/personas}/$TPERSONA/memory"
+  MEMBLOCK=""
+  for m in "$MEMDIR"/*.md; do
+    [ -f "$m" ] || continue
+    MEMBLOCK="$MEMBLOCK
+--- $(basename "$m")
+$(cat "$m")"
+  done
+  [ -n "$MEMBLOCK" ] && MEMBLOCK="
+===== $TPERSONA 메모리 ($MEMDIR) =====$MEMBLOCK
+===== 메모리 끝 =====
+"
   PROMPT="당신은 이 프로젝트의 '$TPERSONA'입니다. 아래 프로필이 당신의 역할·권한·판단 기준이고,
 티켓을 수행하는 동안 이 페르소나로 일관되게 행동하세요. 프로필과 티켓 지시가 충돌하면 티켓을 따르되
 충돌 사실을 티켓 본문에 남기세요.
@@ -236,7 +251,7 @@ $(cat "$SKILLS")
 ===== $TPERSONA PROFILE ($PROFILE) =====
 $(cat "$PROFILE")
 ===== PROFILE 끝 =====
-$SKILLBLOCK
+$SKILLBLOCK$MEMBLOCK
 $PROMPT"
 else
   log "WARN 페르소나 프로필 없음: $PROFILE (페르소나 없이 디스패치)"
