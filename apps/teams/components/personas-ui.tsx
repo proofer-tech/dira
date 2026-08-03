@@ -10,11 +10,13 @@ import { Check, ChevronRight, Trash2, TriangleAlert } from "lucide-react";
 import {
   createPersonaAction,
   deletePersonaAction,
+  deletePersonaMemoryAction,
   savePersonaAction,
   savePersonaSkillsAction,
   setPersonaColorAction,
   type PersonaResult,
 } from "@/app/p/[project]/personas/actions";
+import { Markdown } from "@/components/markdown";
 // 접힌 줄의 점도 보드·칸반·필터와 **같은 컴포넌트**다(§5) — 색 조회의 출처는 하나다
 import { PersonaDot } from "@/components/persona-badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -54,7 +56,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
-import type { Skill } from "@/lib/skills";
+import type { Memory, Skill } from "@/lib/skills";
 import { PERSONA_COLORS, personaDotClass } from "@/lib/urls";
 import { cn } from "@/lib/utils";
 
@@ -68,6 +70,9 @@ export type PersonaRow = {
   skills: Skill[];
   /** `skills.md` **파일 전체** 자수 — 접힌 줄의 자수가 이걸 더한다(§비주얼 §25 ①) */
   skillsChars: number;
+  /** `memory/*.md` 한 단계 글롭. 세션이 쓰고 사람이 지운다(§5-2). **`text`가 파일 전체라
+   *  자수는 화면이 더한다** — `skillsChars`처럼 따로 받지 않는다(목록 밖 글자가 없다) */
+  memories: Memory[];
 };
 
 /** §6 에러 3요소 중 1·2번. 사유는 원문 그대로 — 삼키지 않는다. */
@@ -267,12 +272,16 @@ export function PersonaCard({
   // 덧붙인 산문도 있어서 목록만으로는 계산이 안 된다(§비주얼 §25).
   const [skills, setSkills] = useState(row.skills);
   const [skillsChars, setSkillsChars] = useState(row.skillsChars);
+  // 메모리는 지우는 것뿐이라 되읽기가 없다 — 자수가 파일 전체의 합이고 그 파일을 화면이 들고
+  // 있어서, 지운 파일의 길이를 빼면 참인 수다(§비주얼 §32 ①).
+  const [memories, setMemories] = useState(row.memories);
   const [result, setResult] = useState<PersonaResult | null>(null);
   // 삭제·색은 둘 다 접힌 줄에서 누르므로 사유도 접힌 채 보여야 한다 — 자리가 하나다.
   const [rowError, setRowError] = useState<{ title: string; message: string } | null>(null);
   const [pending, start] = useTransition();
   const refs = refsLabel(row.refs);
   const dirty = body !== (saved ?? "");
+  const memoryChars = memories.reduce((n, m) => n + m.text.length, 0);
 
   return (
     // 네이티브 `<details>`다 — shadcn accordion을 설치하지 않는다(§비주얼 컴포넌트 인벤토리).
@@ -317,11 +326,19 @@ export function PersonaCard({
               스킬 {skills.length}
             </span>
           )}
+          {/* `스킬 n` 뒤 · `자수` 앞이다(§비주얼 §32 ①) — "무엇을 참조하나 → 무엇을 쓰나 →
+              **무엇을 배웠나** → 얼마나 먹나". `장`을 안 붙인다: 앞 둘과 같은 종류의 값이다 */}
+          {memories.length > 0 && (
+            <span className="text-xs whitespace-nowrap text-muted-foreground">
+              메모리 {memories.length}
+            </span>
+          )}
           {/* 프로필 본문은 **모든 디스패치 프롬프트에 인라인된다** — 길이가 곧 비용이다(§5).
               접힌 줄에 둬야 "누가 프롬프트를 얼마나 먹는가"를 목록에서 비교할 수 있다.
-              `skills.md`도 매 디스패치에 인라인되므로 **합**이다(§비주얼 §25 ① — 분해하지 않는다) */}
+              `skills.md`·`memory/*.md`도 매 디스패치에 인라인되므로 **셋의 합**이다
+              (§비주얼 §32 ① — 세 수로 분해하지 않는다. 사람 손 없이 자라는 몫이 메모리다) */}
           <span className="font-mono text-xs whitespace-nowrap text-muted-foreground">
-            {body.length + skillsChars}자
+            {body.length + skillsChars + memoryChars}자
           </span>
           {/* 저장 버튼은 펼쳐야 보인다 — 접은 채 잊으면 이게 유일한 표시다(§5) */}
           {dirty && (
@@ -387,6 +404,18 @@ export function PersonaCard({
               setSkills(next);
               setSkillsChars(chars);
             }}
+          />
+
+          {/* 메모리 절(§비주얼 §32 ②) — 스킬 절 **바로 뒤**다. 화면이 주입 순서를 그대로 보인다
+              (PROFILE → 스킬 → 메모리). 0장이어도 그린다: `삭제`가 사는 자리를 사람이 배우는
+              화면이 여기뿐이고, 오늘 이 큐의 카드가 전부 0장이다 */}
+          <MemorySection
+            projectId={projectId}
+            name={row.name}
+            dir={row.file.replace(/\/PROFILE\.md$/, "")}
+            memories={memories}
+            chars={memoryChars}
+            onDeleted={(file) => setMemories(memories.filter((m) => m.file !== file))}
           />
         </div>
       </details>
@@ -497,6 +526,159 @@ function SkillsSection({
 
       {error && <Failure title="스킬을 저장하지 못했습니다" message={error} />}
     </section>
+  );
+}
+
+// ── 메모리 (DESIGN.md §5-2 · §비주얼 §32) ───────────────────────────────────
+
+/** 카드 본문의 세 번째 블록. **읽기와 삭제뿐이다** — 쓰는 쪽이 세션이라 절 머리에 버튼이 없고
+ *  편집 textarea도 없다(§5-2 §화면).
+ *
+ *  스킬 절과 껍데기·머리·목록이 같은 값인 것은 의도다(§32 ⓪) — 두 절이 한 카드에 위아래로 서므로
+ *  값이 갈리면 그 자체가 "다른 성격"이라는 거짓말이 된다. 갈리는 것은 다섯뿐이고 전부 §32에 있다. */
+function MemorySection({
+  projectId,
+  name,
+  dir,
+  memories,
+  chars,
+  onDeleted,
+}: {
+  projectId: string;
+  name: string;
+  /** `<personas>/<이름>` — 확인 다이얼로그가 지울 파일의 전체 경로를 적는다(§32 ④) */
+  dir: string;
+  memories: Memory[];
+  chars: number;
+  onDeleted: (file: string) => void;
+}) {
+  const [error, setError] = useState<string | null>(null);
+
+  return (
+    <section className="space-y-2 border-t pt-3">
+      <div className="flex items-baseline gap-2">
+        <h3 className="text-sm font-medium">메모리</h3>
+        {/* 0장일 때 `0자`는 참이지만 아무것도 안 말한다(§25 ②와 같은 판정) */}
+        {memories.length > 0 && <span className="text-xs text-muted-foreground">{chars}자</span>}
+      </div>
+
+      {memories.length === 0 ? (
+        // 스킬 절의 빈 상태와 방향이 다르다 — 여기는 다음 행동이 사람에게 없어서 이 한 줄이
+        // **누가 채우는가**를 말한다. 없으면 버튼 없는 빈 절이 고장으로 읽힌다(§32 ②)
+        <p className="text-xs text-muted-foreground">
+          메모리가 없습니다 — 세션이 회고에서 남기면 여기에 쌓입니다.
+        </p>
+      ) : (
+        <ul className="space-y-1">
+          {memories.map((m) => (
+            <li key={m.file}>
+              {/* 중첩 `<details>`다 — 카드 자신이 바깥 `<details>`고 이건 그 안이다.
+                  **그래서 그룹에 이름을 준다**: 이름 없는 `group-open:`은 조상인 카드의 `group`을
+                  물어서 카드가 펼쳐진 동안 chevron이 항상 돌아 있다(항목은 접혀 있는데도).
+                  `accordion`·`collapsible`은 안 깐다 — 세 번째 자리도 같은 값이다(§32 ③) */}
+              <details className="group/mem">
+                <summary className="flex cursor-pointer list-none items-baseline gap-2 [&::-webkit-details-marker]:hidden">
+                  <ChevronRight
+                    aria-hidden
+                    className="size-4 shrink-0 self-center text-muted-foreground transition-transform group-open/mem:rotate-90"
+                  />
+                  {/* 파일명이 곧 개념 이름이고 `[[링크]]`가 가리키는 값이다 — 안 자른다(§6 식별자).
+                      `.md`를 떼는 것은 계약이다(§5-2). 확장자가 붙는 자리는 삭제 확인 하나다 */}
+                  <code className="shrink-0 font-mono text-xs">{m.file.replace(/\.md$/, "")}</code>
+                  {/* `title`을 안 붙인다 — 전문을 보는 자리가 이 줄을 누르는 것이다(§32 ③).
+                      발췌가 비는 파일(빈 파일·공백뿐)도 파일명으로 목록에 선다(§5-2) */}
+                  <span className="min-w-0 grow truncate text-xs text-muted-foreground">
+                    {m.excerpt}
+                  </span>
+                  {/* 줄 자신이 `<summary>`라 클릭이 곧 펼침 토글이다 — 여기서는 `preventDefault`가
+                      다시 필요하다(§32 ③ · 접힌 줄의 삭제·색 점과 같은 처방) */}
+                  <span className="ml-auto self-center" onClick={(e) => e.preventDefault()}>
+                    <DeleteMemoryButton
+                      projectId={projectId}
+                      name={name}
+                      dir={dir}
+                      memory={m}
+                      onDone={(message) => {
+                        setError(message);
+                        if (!message) onDeleted(m.file);
+                      }}
+                    />
+                  </span>
+                </summary>
+                {/* 상한이 없으면 한 줄이 116자다(§32 §폭 실측). `pl-6` = chevron 16 + gap 8이라
+                    전문이 파일명 왼쪽 끝에 맞는다. `<Markdown>` 값은 한 클래스도 안 덮는다(§10) */}
+                <div className="max-w-3xl pt-1 pb-3 pl-6">
+                  <Markdown text={m.text} />
+                </div>
+              </details>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {/* 실패는 **누른 곳**이다 — 이건 펼쳐야 만질 수 있어서 절 맨 아래다(§32 다섯 상태) */}
+      {error && <Failure title="메모리를 지우지 못했습니다" message={error} />}
+    </section>
+  );
+}
+
+/** 되돌리는 경로가 화면에 없다(추가도 편집도 이 절에 없고 쓰는 쪽이 세션이다) — 그래서
+ *  스킬의 `제거`와 달리 `Trash2` + `alert-dialog`다(§32 ④ · §5 인벤토리의 다섯 번째 자리).
+ *
+ *  **본문을 다이얼로그에 다시 그리지 않는다** — 읽는 자리는 펼친 전문이고 순서가 그렇게 되어
+ *  있다(펴서 읽고 → 지운다). `[[링크]]` 참조 경고도 없다: 화면은 링크를 파싱하지 않는다. */
+function DeleteMemoryButton({
+  projectId,
+  name,
+  dir,
+  memory,
+  onDone,
+}: {
+  projectId: string;
+  name: string;
+  dir: string;
+  memory: Memory;
+  /** 성공하면 `null`, 실패하면 사유 — 자리는 호출자(절 맨 아래)다 */
+  onDone: (message: string | null) => void;
+}) {
+  const [pending, start] = useTransition();
+
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger
+        render={
+          <Button variant="ghost" size="sm" disabled={pending}>
+            <Trash2 aria-hidden />
+            {pending ? "삭제 중…" : "삭제"}
+          </Button>
+        }
+      />
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>메모리 삭제 — {memory.file.replace(/\.md$/, "")}</AlertDialogTitle>
+          <AlertDialogDescription>
+            <span className="font-mono text-xs break-all">{`${dir}/memory/${memory.file}`}</span>{" "}
+            파일을 지웁니다. 되돌릴 수 없습니다 — 이 화면에 편집도 추가도 없습니다. 다음
+            디스패치부터 이 개념은 프롬프트에서 빠집니다.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel autoFocus>취소</AlertDialogCancel>
+          <AlertDialogAction
+            variant="destructive"
+            disabled={pending}
+            onClick={() =>
+              start(async () => {
+                const r = await deletePersonaMemoryAction(projectId, name, memory.file);
+                onDone(r.ok ? null : (r.message ?? "메모리를 지우지 못했습니다."));
+              })
+            }
+          >
+            삭제
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 

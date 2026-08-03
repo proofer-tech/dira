@@ -18,6 +18,7 @@ import {
   setPersonaColor,
 } from "@/lib/projects";
 import {
+  deletePersonaMemory,
   listInstalledSkills,
   pickedSkills,
   readPersonaSkillsFile,
@@ -102,6 +103,24 @@ export async function savePersonaSkillsAction(
     await writePersonaSkills(dir, name, pickedSkills(picked, current, installed));
     revalidatePath(`/p/${projectId}/personas`);
     return { ok: true, ...(await readPersonaSkillsFile(dir, name)) };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** 메모리 파일 하나 삭제(DESIGN.md §5-2 §화면). **추가·편집 액션은 없다** — 쓰는 쪽이 세션이다.
+ *
+ *  방어는 `deletePersonaMemory` 안에 있다: 클라이언트가 준 파일명은 그 페르소나의 `memory/`를
+ *  실제로 나열해 나온 목록 안에 있을 때만 지운다. 여기서 경로를 조립하지 않는다. */
+export async function deletePersonaMemoryAction(
+  projectId: string,
+  name: string,
+  file: string,
+): Promise<PersonaResult> {
+  try {
+    await deletePersonaMemory(await personasDir(projectId), name, file);
+    revalidatePath(`/p/${projectId}/personas`);
+    return { ok: true };
   } catch (e) {
     return fail(e);
   }

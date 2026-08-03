@@ -1,4 +1,4 @@
-/** 페르소나 스킬 읽기·쓰기 (DESIGN.md §5-1).
+/** 페르소나 사이드카 읽기·쓰기 — 스킬(§5-1)과 메모리(§5-2).
  *
  *  두 세계가 만나는 자리다: **이 머신에 설치된 스킬**(`<config>/skills/…` — 큐 밖·GUI 밖·머신
  *  로컬)과 **이 페르소나가 고른 스킬**(`<personas>/<이름>/skills.md` — 큐 안. 엔진이 디스패치
@@ -8,6 +8,10 @@
  *  **새 파일인 이유**(AGENTS.md "새 파일을 늘리지 않는다"): 붙일 자리가 `projects.ts`인데
  *  저기는 레지스트리·설정 해석·페르소나 CRUD로 이미 600줄이고, 여기 든 것 중 절반
  *  (`~/.claude` 훑기)은 **큐와 무관**하다 — 프로젝트를 인자로도 안 받는다. 티켓 `d608feb3`.
+ *
+ *  **메모리(`memory/*.md`)가 여기 사는 이유**는 스킬과 같은 물건이기 때문이다 — 같은 디렉터리의
+ *  사이드카고, 같은 `personaFilePath`로 방어하고, 같은 화면이 같은 렌더에서 둘을 같이 읽는다.
+ *  갈리는 것은 쓰는 쪽뿐이다(스킬은 GUI, 메모리는 세션 — §5-2). 티켓 `bb48630b`.
  *
  *  경로 방어는 `projects.ts`의 `personaFilePath` 하나다(이름이 신뢰 경계 — §경로 방어). */
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
@@ -214,4 +218,71 @@ export async function writePersonaSkills(dir: string, name: string, skills: Skil
     out.push(...items);
   }
   await writeFile(file, out.join("\n").replace(/\n*$/, "\n"), "utf8");
+}
+
+// ── 페르소나 메모리 (`<personas>/<이름>/memory/*.md` · §5-2) ─────────────────
+
+/** 개념 하나 = 파일 하나. `file`은 **확장자를 단 파일명**이다(삭제가 이 값으로 선다 — 화면이
+ *  `.md`를 떼는 것은 표시 규칙이다. §비주얼 §32 ③). `text`는 파일 원문 그대로다. */
+export type Memory = { file: string; excerpt: string; text: string };
+
+/** 화면 발췌 — **첫 비어 있지 않은 줄**, 선두 `# `는 뗀다(§5-2 형식 표). 파싱 계약은 이 두 줄이
+ *  전부다. 빈 파일·공백뿐인 파일은 빈 문자열이고, 그래도 목록에서 안 숨긴다(§5-2: 못 읽는
+ *  파일은 없다 — 발췌가 비면 파일명만 그린다). */
+export function memoryExcerpt(text: string): string {
+  const line = text.split("\n").find((l) => l.trim() !== "") ?? "";
+  return line.trim().replace(/^# /, "");
+}
+
+/** 목록 + **파일 전체 자수의 합**. 접힌 줄의 자수가 이 값을 `PROFILE.md`·`skills.md`에 더한다
+ *  (§비주얼 §32 ①) — 엔진이 인라인하는 것이 파일 전체라 파일명 줄도 `관련:`·`출처:` 줄도 센다.
+ *  `--- <파일명>` 구분 줄은 주입이 만드는 글자라 안 센다.
+ *
+ *  글롭은 **한 단계**다(`tick.sh`의 `for m in "$MEMDIR"/*.md`와 같은 판정 — 하위 디렉터리는
+ *  안 읽는다). `memory/`가 없으면 `[]`·`0`이고 그게 정상이다(§5-2 — WARN도 없다). */
+export async function readPersonaMemory(
+  dir: string,
+  name: string,
+): Promise<{ memories: Memory[]; chars: number }> {
+  const files = await memoryFiles(dir, name);
+  const memories = await Promise.all(
+    files.map(async (file) => {
+      const text = await readFile(path.join(file.dir, file.name), "utf8").catch(() => "");
+      return { file: file.name, excerpt: memoryExcerpt(text), text };
+    }),
+  );
+  return { memories, chars: memories.reduce((n, m) => n + m.text.length, 0) };
+}
+
+/** 삭제. **클라이언트가 준 이름은 이 디렉터리를 실제로 나열해 나온 목록 안에 있을 때만** 지운다
+ *  (§5-2 §화면 · §경로 방어) — 경로를 문자열로 조립하지 않는다는 규칙의 이 화면 버전이다.
+ *  목록에 없으면 던진다: 이름이 신뢰 경계이고, 조용히 지나가면 화면이 안 지운 것을 지웠다고 한다.
+ *
+ *  **NFC로 대조한다.** 파일명이 한글이면 fs가 NFD로 돌려주는 자리가 있고(macOS HFS+) 그러면
+ *  화면이 그린 이름과 글자가 같아도 `===`가 거짓이다 — `queue.ts`가 티켓 이름에 쓰는 규칙과 같다. */
+export async function deletePersonaMemory(dir: string, name: string, file: string): Promise<void> {
+  const files = await memoryFiles(dir, name);
+  const target = files.find((f) => f.name.normalize("NFC") === file.normalize("NFC"));
+  if (!target) throw new Error(`메모리 파일이 목록에 없습니다: ${file}`);
+  await rm(path.join(target.dir, target.name));
+}
+
+/** `<personas>/<이름>/memory/*.md` — 파일만, 이름 오름차순. 기준 디렉터리가 없는 큐도 정상이다.
+ *  **읽기와 삭제가 같은 목록을 쓴다**(위 둘): 화이트리스트가 화면이 그린 목록과 갈리면 방어가
+ *  아니라 다른 규칙이 된다. */
+async function memoryFiles(dir: string, name: string): Promise<{ dir: string; name: string }[]> {
+  let base: string;
+  try {
+    base = await personaFilePath(dir, name, "memory");
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e; // realpath(기준 디렉터리) 실패만
+    return [];
+  }
+  const ents = await readdir(base, { withFileTypes: true }).catch(() => []);
+  return ents
+    .filter((e) => e.isFile() && e.name.endsWith(".md"))
+    .map((e) => ({ dir: base, name: e.name }))
+    // ponytail: `localeCompare`다(`listInstalledSkills`와 같은 벌). bash 글롭의 순서는 워커의
+    // LC_COLLATE에 달렸으므로 비ASCII 파일명에서 주입 순서와 갈릴 수 있다 — 실제로 갈리면 그때.
+    .sort((a, b) => a.name.localeCompare(b.name));
 }

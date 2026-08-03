@@ -4,8 +4,11 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
+  deletePersonaMemory,
   listInstalledSkills,
+  memoryExcerpt,
   pickedSkills,
+  readPersonaMemory,
   readPersonaSkills,
   readPersonaSkillsFile,
   writePersonaSkills,
@@ -160,4 +163,108 @@ test("고른 이름 → 저장할 목록 (pickedSkills)", () => {
   // 어느 쪽에도 없는 이름은 뺀다 — 설명을 지어낼 자리가 없다
   assert.deepEqual(pickedSkills(["없는스킬"], current, installed), []);
   assert.deepEqual(pickedSkills([], current, installed), []); // 0개 = 파일이 사라진다
+});
+
+// ── 메모리 (DESIGN.md §5-2 · §비주얼 §32) ───────────────────────────────────
+
+/** 픽스처 — 세션이 쓰는 파일이라 GUI가 형식을 강제하지 못한다. 여기 든 넷이 그 스펙트럼이다.
+ *
+ *      memory/워크트리 push 경합.md   `# `로 시작한다 → 기호를 뗀 첫 줄이 발췌
+ *      memory/beta.md                 앞이 빈 줄이다 → 첫 **비어 있지 않은** 줄이 발췌
+ *      memory/blank.md                공백뿐이다 → 발췌가 빈다(숨기지 않는다)
+ *      memory/note.txt                `.md`가 아니다 → 글롭 밖
+ *      memory/nested/deep.md          한 단계 아래다 → 안 읽는다(tick.sh와 같은 판정)
+ */
+function memoryFixture(persona: string) {
+  const dir = path.join(personas, persona, "memory");
+  mkdirSync(path.join(dir, "nested"), { recursive: true });
+  writeFileSync(path.join(dir, "워크트리 push 경합.md"), "# 워크트리 push 경합\n\n본문이다.\n");
+  writeFileSync(path.join(dir, "beta.md"), "\n\n제목 없이 시작한다\n둘째 줄\n");
+  writeFileSync(path.join(dir, "blank.md"), "   \n\n");
+  writeFileSync(path.join(dir, "note.txt"), "글롭 밖이다");
+  writeFileSync(path.join(dir, "nested", "deep.md"), "한 단계 아래는 안 읽는다");
+  return dir;
+}
+
+test("메모리 읽기 — 한 단계 글롭 · 발췌는 첫 비어 있지 않은 줄 · 이름 오름차순", async () => {
+  const dir = memoryFixture("mem");
+  const { memories } = await readPersonaMemory(personas, "mem");
+
+  assert.deepEqual(
+    memories.map((m) => [m.file, m.excerpt]),
+    [
+      ["beta.md", "제목 없이 시작한다"], // 앞의 빈 줄을 건너뛴다
+      ["blank.md", ""], // 발췌가 비어도 목록에 선다 — 화면이 파일명을 그린다
+      ["워크트리 push 경합.md", "워크트리 push 경합"], // `# `를 뗀다
+    ],
+  );
+  // 본문은 원문 그대로다(화면이 `<Markdown>`으로 그린다)
+  assert.equal(memories[2].text, readFileSync(path.join(dir, "워크트리 push 경합.md"), "utf8"));
+});
+
+test("자수는 파일 전체의 합 — 접힌 줄의 `자수`가 이걸 더한다", async () => {
+  const dir = memoryFixture("chars");
+  const { chars } = await readPersonaMemory(personas, "chars");
+  const sum = ["beta.md", "blank.md", "워크트리 push 경합.md"]
+    .map((f) => readFileSync(path.join(dir, f), "utf8").length)
+    .reduce((a, b) => a + b, 0);
+  assert.equal(chars, sum);
+  assert.ok(chars > 0);
+
+  // `memory/`가 없는 페르소나 · 없는 이름 — 정상이다(WARN도 예외도 없다)
+  assert.deepEqual(await readPersonaMemory(personas, "developer"), { memories: [], chars: 0 });
+  assert.deepEqual(await readPersonaMemory(personas, "no-such-persona"), { memories: [], chars: 0 });
+});
+
+test("발췌 규칙 두 줄 (memoryExcerpt)", () => {
+  assert.equal(memoryExcerpt("# 제목\n본문"), "제목");
+  assert.equal(memoryExcerpt("\n\n  들여쓴 첫 줄  \n"), "들여쓴 첫 줄");
+  assert.equal(memoryExcerpt("## 두 단계는 안 뗀다"), "## 두 단계는 안 뗀다"); // 계약은 `# `다
+  assert.equal(memoryExcerpt("#제목아님"), "#제목아님"); // 공백이 없으면 마크다운 제목이 아니다
+  assert.equal(memoryExcerpt(""), "");
+  assert.equal(memoryExcerpt("  \n\t\n"), "");
+});
+
+test("삭제 — 나열해 나온 목록 안에 있을 때만 지운다(§경로 방어)", async () => {
+  const dir = memoryFixture("del");
+  const outside = path.join(personas, "del", "PROFILE.md");
+  writeFileSync(outside, "지워지면 안 된다");
+
+  // 목록 밖 이름은 전부 거부다 — 경로 조립도 탈출도 그 앞에서 끝난다
+  for (const bad of [
+    "../PROFILE.md",
+    "../../del/PROFILE.md",
+    "note.txt", // 글롭 밖이라 목록에 없다
+    "nested", // 디렉터리는 목록에 없다
+    "없는파일.md",
+    "",
+  ]) {
+    await assert.rejects(() => deletePersonaMemory(personas, "del", bad), /목록에 없습니다/);
+  }
+  assert.equal(existsSync(outside), true);
+  assert.equal(existsSync(path.join(dir, "note.txt")), true);
+
+  // 페르소나 이름도 신뢰 경계다(스킬과 같은 문지기)
+  await assert.rejects(() => deletePersonaMemory(personas, "../escape", "beta.md"), /페르소나 이름은/);
+
+  // 목록 안이면 그 파일만 사라진다
+  await deletePersonaMemory(personas, "del", "beta.md");
+  assert.equal(existsSync(path.join(dir, "beta.md")), false);
+  assert.deepEqual((await readPersonaMemory(personas, "del")).memories.map((m) => m.file), [
+    "blank.md",
+    "워크트리 push 경합.md",
+  ]);
+});
+
+test("한글 파일명은 NFC로 대조한다 — 화면이 그린 이름과 fs의 이름이 다를 수 있다", async () => {
+  const dir = path.join(personas, "nfc", "memory");
+  mkdirSync(dir, { recursive: true });
+  const name = "한글메모.md";
+  writeFileSync(path.join(dir, name), "# 한글메모\n");
+
+  // 화면이 되돌려주는 값이 정규화 형태만 다른 경우(macOS의 NFD ↔ NFC)
+  const other = name.normalize(name.normalize("NFC") === name ? "NFD" : "NFC");
+  assert.notEqual(other, name); // 글자는 같고 코드포인트가 다르다
+  await deletePersonaMemory(personas, "nfc", other);
+  assert.deepEqual((await readPersonaMemory(personas, "nfc")).memories, []);
 });

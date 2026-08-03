@@ -67,10 +67,13 @@ apps/teams/
     queue.ts            티켓 읽기 코어 (tickets.py 미러). 프로젝트를 인자로 받는다
     workers.ts          워커 파일·락·crontab 판정, TICKET_CONTEXT 블록 파싱·치환
     protocols.ts        프로토콜 파일트리·읽기·쓰기. 기준은 **해석된 TICKET_PROTOCOLS**(루트 아니다)
-    skills.ts           페르소나 스킬 (§5-1): 이 머신에 설치된 스킬 발견(`~/.claude` — **큐 밖**)
-                        + `<personas>/<이름>/skills.md` 읽기·쓰기. `projects.ts`에 안 얹은 이유는
+    skills.ts           페르소나 사이드카 — 스킬(§5-1)과 **메모리**(§5-2): 이 머신에 설치된 스킬
+                        발견(`~/.claude` — **큐 밖**) + `<personas>/<이름>/skills.md` 읽기·쓰기
+                        + `memory/*.md` 한 단계 글롭 읽기·삭제. `projects.ts`에 안 얹은 이유는
                         그 파일 머리 주석에 있다 — 여기 든 것 절반이 프로젝트를 인자로도 안 받는다.
-                        경로 방어는 `projects.ts`의 `personaFilePath` 하나를 같이 쓴다
+                        경로 방어는 `projects.ts`의 `personaFilePath` 하나를 같이 쓴다.
+                        메모리 삭제의 화이트리스트는 **읽기가 쓰는 그 목록**이다(갈리면 방어가
+                        아니라 다른 규칙이 된다) — 한글 파일명 때문에 NFC로 대조한다
     scaffold.ts         새 프로젝트 스캐폴딩 (DESIGN.md §0-3). **등록되지 않은 경로에 파일을 쓰는
                         유일한 곳** — 경계가 파일 목록 자체고 전부 `wx`다(있는 파일은 안 덮는다)
     engine.ts           엔진 서브프로세스 호출 (워커 `reap`·`unassign` · `tickets.py find`)
@@ -191,7 +194,10 @@ apps/teams/
                         `진행 기록` 절의 답변 모드(`session-stream.tsx`가 import한다). 같은 서버
                         액션 · 같은 문구 · 같은 실패다. `AnswerThread`(§13 말풍선 스크롤러)는
                         **다이얼로그 전용이다** — 상세의 스레드는 병합 상자 안에 있다(§2-3 ⑤)
-    personas-ui.tsx     생성 · PROFILE.md 편집 · 삭제 (페르소나 화면의 클라이언트 조각)
+    personas-ui.tsx     생성 · PROFILE.md 편집 · 삭제 + 스킬 절(§25) · **메모리 절**(§5-2 · §32 —
+                        중첩 `<details>`. 그룹에 **이름을 준다**(`group/mem`): 이름 없는
+                        `group-open:`은 조상인 카드의 `group`을 물어 항목이 접혀 있어도 chevron이
+                        돈다) (페르소나 화면의 클라이언트 조각)
     protocols-ui.tsx    md 에디터 · 새 파일 · 이름변경 · 삭제 (프로토콜의 클라이언트 조각)
     session-stream.tsx  **진행 기록**(§2-3 · §비주얼 §29) — 종전 세션 스트림(§2-1 · §9)이 한 상자다.
                         2초 폴링 + 자동 스크롤 + 네이티브 <details>. 읽기·파싱은 전부
