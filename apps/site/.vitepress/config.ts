@@ -62,6 +62,7 @@ export default defineConfig({
         {
           text: "부록",
           items: [
+            { text: "마치면서", link: "/docs/closing" },
             { text: "엔진만으로 돌리기", link: "/docs/cron" },
             { text: "워커 환경변수", link: "/docs/ref-env" },
             { text: "CLI", link: "/docs/ref-cli" },
