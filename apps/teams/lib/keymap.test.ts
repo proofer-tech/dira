@@ -27,7 +27,7 @@ test("DEFAULT_KEYMAP — §0-6 액션 표 8줄과 id·기본키가 같다", () =
     [
       ["project.search", "Mod+k"],
       ["settings.open", "?"],
-      ["board.search", "/"],
+      ["board.search", "Mod+f"],
       ["board.new", "n"],
       ["board.request", "r"],
       ["nav.board", "b"],
@@ -192,9 +192,10 @@ const BOUND = Object.fromEntries(DEFAULT_KEYMAP.map((a) => [a.id, a.combo])) as 
 >[0];
 
 test("validateBinding — 겹치면 상대 액션 id를 담아 거절한다", () => {
-  const e = validateBinding(BOUND, "board.new", "/")!;
+  const e = validateBinding(BOUND, "board.new", "Mod+f")!;
   assert.strictEqual(e.conflict, "board.search");
-  assert.match(e.reason, /보드 검색과 겹칩니다/); // 문구가 상대 액션의 **이름**을 말한다
+  // 문구가 상대 액션의 **이름**을 말한다. `^`가 있어야 `프로젝트 검색`과 안 헷갈린다
+  assert.match(e.reason, /^검색과 겹칩니다/);
   // 자기 자신과는 안 겹친다(안 바꾸고 저장해도 통과한다)
   assert.strictEqual(validateBinding(BOUND, "board.new", "n"), null);
   assert.strictEqual(validateBinding(BOUND, "board.new", "j"), null);

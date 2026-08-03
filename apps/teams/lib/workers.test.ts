@@ -637,7 +637,9 @@ function selfHealBed(names: string[], engine: boolean) {
   }
 
   const keymap = path.join(local, "keymap.json");
-  writeFileSync(keymap, `{"board.search":"Mod+f"}`);
+  // **기본값이 아닌 조합**이어야 한다 — 이 파일은 `바꾼 것만` 담는다(§0-6). `Mod+f`가 기본이
+  // 된 뒤로 그 값을 쓰면 "사람이 바꾼 값이 지워지지 않는다"를 보는 검사가 사라진다.
+  writeFileSync(keymap, `{"board.search":"Mod+j"}`);
   const tab = path.join(bin, "tab.txt");
   const out = path.join(bin, "out.txt");
   const J = JSON.stringify;

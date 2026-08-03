@@ -31,7 +31,9 @@ export type KeyAction = {
 export const DEFAULT_KEYMAP: KeyAction[] = [
   { id: "project.search", name: "프로젝트 검색", combo: "Mod+k" },
   { id: "settings.open", name: "설정 열기", combo: "?" },
-  { id: "board.search", name: "보드 검색", combo: "/" },
+  // 이름이 `보드 검색`이 아니다 — 이 키는 화면에 따라 하는 일이 갈린다(보드는 검색 칸 · 홈은
+  // 대화 안에서 찾기 · 나머지는 페이지 내 찾기). 목록에 `보드`라고 적으면 화면이 거짓말을 한다(§0-6).
+  { id: "board.search", name: "검색", combo: "Mod+f" },
   { id: "board.new", name: "티켓 발행", combo: "n" },
   { id: "board.request", name: "요구 접수", combo: "r" },
   { id: "nav.board", name: "보드로 이동", combo: "b" },

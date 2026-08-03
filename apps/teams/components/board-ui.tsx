@@ -67,9 +67,10 @@ export function BoardSearch() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- replace는 매 렌더 새 함수다(qs가 실질 의존)
   }, [text, qs]);
 
-  // `/`(§0-6 `board.search`). **보드에만 있는 컴포넌트라 범위가 저절로 맞는다.** 글 쓰는 중
-  // 가드는 `useHotkey`가 이미 건다 — 여기서 다시 짜지 않는다. `preventDefault`는 포커스가
-  // 옮겨간 칸에 `/`가 그대로 찍히는 것을 막는다(이 키의 기본 동작이 글자 입력이다).
+  // `⌘F`(§0-6 `board.search`의 **보드 갈래**). **보드에만 있는 컴포넌트라 범위가 저절로 맞는다.**
+  // `Mod` 조합이라 글 쓰는 중에도 듣는다 — 검색 칸에 글을 쓰다 눌러도 온다(`useHotkey`의 가드는
+  // 글쇠 하나짜리 키에만 걸린다). `preventDefault`는 크롬 찾기 바를 뺏는다 — 이 화면에서 찾기는
+  // 우리 것이라고 요구가 말했다(`6218440d`).
   useHotkey("board.search", (e) => {
     e.preventDefault();
     input.current?.focus();
