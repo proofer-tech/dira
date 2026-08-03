@@ -5,7 +5,7 @@
  *  fs를 만지는 건 서버 액션뿐이다(`app/p/[project]/personas/actions.ts`). 파일 하나에 모은 이유는
  *  `workers-ui.tsx`와 같다 — 같은 화면의 세 액션이 같은 문구(엔진이 WARN만 남긴다 · 이름 규칙)를
  *  쓰므로 쪼개면 자리가 갈린다. */
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { Check, ChevronRight, Trash2, TriangleAlert } from "lucide-react";
 import {
   createPersonaAction,
@@ -66,7 +66,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Textarea } from "@/components/ui/textarea";
 import type { Memory, Skill } from "@/lib/skills";
-import { PERSONA_COLORS, personaDotClass } from "@/lib/urls";
+import { decodeHash, PERSONA_COLORS, personaDotClass } from "@/lib/urls";
 import { cn } from "@/lib/utils";
 
 /** 서버가 읽어 넘긴 한 항목. `body: null` = PROFILE.md가 없다(엔진의 WARN 케이스). */
@@ -281,6 +281,16 @@ const initialEdit = (row: PersonaRow): PersonaEdit => ({
   memories: row.memories,
 });
 
+/** 주소 → 페르소나 세그먼트(없으면 `null`). **`popstate` 하나가 쓴다** — 서버가 `params`로
+ *  받는 것과 같은 값을 만들어야 해서 디코드도 같은 `decodeHash`다(§5 §선택이 경로에 담긴다).
+ *  `lib/urls.ts`에 안 두는 이유는 그 파일이 **서버와 클라이언트가 같이 쓰는 것**만 담아서다 —
+ *  서버는 이 파싱을 안 한다(Next가 이미 세그먼트를 쪼개 준다). 검증은 `pnpm test`가 아니라
+ *  CDP 뒤로가기 실측이다(JSX 파일이라 `node --test`가 못 읽는다 — AGENTS.md). */
+const personaSegment = (pathname: string): string | null => {
+  const rest = /\/personas\/(.+)$/.exec(pathname)?.[1];
+  return rest === undefined ? null : rest.split("/").map(decodeHash).join("/");
+};
+
 const editChars = (e: PersonaEdit) =>
   e.body.length + e.skillsChars + e.memories.reduce((n, m) => n + m.text.length, 0);
 
@@ -293,17 +303,23 @@ const editChars = (e: PersonaEdit) =>
  *  줄이 이는 값 여덟 · baseline 정렬 · 줄 안에 버튼 0개 · 오른쪽 칸 전부 · 0개면
  *  `<EmptyState>`(그 판정은 부르는 쪽에 있다: 2단도 사이드바도 안 그린다).
  *
- *  **선택을 URL에 담지 않는다**(§5). 담으면 서버가 다시 렌더하면서 앞 페르소나의 textarea가
- *  언마운트돼 저장 안 한 편집이 사라진다 — §6이 `?file=`을 쓰는 것은 그 화면에 열려 있는
- *  편집기가 하나뿐이기 때문이다. `// ponytail: 딥링크가 생기면 그때 `?persona=`로 초기 선택만`. */
+ *  **선택은 경로가 담고 `pushState`로 담는다**(§5 §선택이 경로에 담긴다. 사람 요구 `8429c041`).
+ *  `router.push`도 `<Link>`도 아니다 — 그러면 서버가 다시 렌더하면서 앞 페르소나의 textarea가
+ *  언마운트돼 저장 안 한 편집이 사라진다(그 못은 그대로 선다. 뽑은 것은 *딥링크 경로가 없다*는
+ *  근거뿐이다). native History API는 Next 16이 그대로 받아서 `usePathname()`은 따라오고 서버
+ *  왕복은 없다. `?persona=` 쿼리는 안 만든다 — 값이 두 벌이 된다. */
 export function PersonasPane({
   projectId,
+  initial,
   rows,
   colors,
   installed,
   configDir,
 }: {
   projectId: string;
+  /** 경로의 페르소나 세그먼트(없으면 `null` = 명시 선택 없음 → 목록 첫 줄). 서버가 준 것은
+   *  **첫 값뿐**이다 — 그 뒤 선택은 이 컴포넌트와 `popstate`가 든다 */
+  initial: string | null;
   /** 1개 이상이다 — 0개는 호출부가 `<EmptyState>`로 갈라 2단을 안 그린다 */
   rows: PersonaRow[];
   /** 레지스트리의 팔레트 키 맵. 없거나 팔레트 밖이면 빈 점이다(§12) */
@@ -313,10 +329,28 @@ export function PersonasPane({
   /** 해석된 `<config>` — 후보가 0개일 때 "어디를 봤는지"를 적는다(§비주얼 §25 다섯 상태) */
   configDir: string;
 }) {
-  const [selected, setSelected] = useState<string | null>(null);
-  // 손댄 이름만 들어간다. 고른 줄이 지워지면 `find`가 비고 첫 줄로 떨어진다(기본 선택과 같은 값).
+  const [selected, setSelected] = useState<string | null>(initial);
   const [edits, setEdits] = useState<Record<string, PersonaEdit>>({});
-  const current = rows.find((r) => r.name === selected) ?? rows[0];
+
+  // **뒤로가기가 왼쪽 선택과 오른쪽 칸을 같이 되돌린다**(§5 표 ③ — 지금은 URL만 되돌아가고
+  // 화면이 안 따라온다). `pushState`는 이 이벤트를 안 쏘므로 여기 오는 것은 사람의 뒤로/앞으로뿐이다.
+  useEffect(() => {
+    const sync = () => setSelected(personaSegment(location.pathname));
+    addEventListener("popstate", sync);
+    return () => removeEventListener("popstate", sync);
+  }, []);
+
+  /** 선택을 바꾸는 유일한 자리 — 상태와 주소를 같이 옮긴다. `router.push`가 아닌 것이 계약이다
+   *  (서버 왕복이 없어 편집 중 textarea가 안 죽는다 — 위 절 머리). */
+  const select = (name: string | null) => {
+    setSelected(name);
+    const seg = name === null ? "" : `/${encodeURIComponent(name)}`;
+    history.pushState(null, "", `/p/${projectId}/personas${seg}`);
+  };
+
+  // 명시 선택이 없으면 목록 첫 줄이다(§5 표 — 안 갈린다). 있는데 목록에 없으면 오른쪽 칸에
+  // 사유가 뜬다: 세그먼트가 둘 이상인 경로도 같은 자리로 온다(이어 붙인 값이 이름과 안 맞는다).
+  const current = selected === null ? rows[0] : rows.find((r) => r.name === selected);
   const editOf = (row: PersonaRow) => edits[row.name] ?? initialEdit(row);
 
   return (
@@ -351,7 +385,7 @@ export function PersonasPane({
               {rows.map((row) => {
                 const e = editOf(row);
                 const refs = refsLabel(row.refs);
-                const active = row.name === current.name;
+                const active = row.name === current?.name;
                 return (
                   <SidebarMenuItem key={row.name}>
                     {/* **선택 표식이 `isActive` 하나다**(§34 ③) — 겹이 둘이고(면
@@ -368,7 +402,7 @@ export function PersonasPane({
                       className="h-auto cursor-pointer items-start"
                       isActive={active}
                       aria-current={active ? "true" : undefined}
-                      onClick={() => setSelected(row.name)}
+                      onClick={() => select(row.name)}
                     >
                       {/* 값이 여덟이고 칸이 좁다 — 이름 줄과 메타 줄로 세운다(§5). 값을 빼지 않는다.
                           글자는 밑선이고(§5 정렬 표) 껍데기(점 · 배지 2종)는 행의 세로 중앙이다.
@@ -422,18 +456,33 @@ export function PersonasPane({
       </Sidebar>
 
       <div className="min-w-0 grow">
-        <PersonaDetail
-          // 이름이 바뀌면 절 안의 지역 상태(저장 결과 · 실패 사유 · 제거 중)를 새로 시작한다.
-          // **편집 상태는 여기 없다** — 위 `edits`에 있어서 이 재마운트가 아무것도 안 버린다
-          key={current.name}
-          projectId={projectId}
-          row={current}
-          edit={editOf(current)}
-          onEdit={(next) => setEdits((prev) => ({ ...prev, [current.name]: next }))}
-          color={colors[current.name]}
-          installed={installed}
-          configDir={configDir}
-        />
+        {current === undefined ? (
+          // **404가 아니다** — 왼쪽 목록은 계속 선다(§5). 그릇은 §6 프로토콜의 `?core=` 거부와
+          // 같은 것 그대로다: 새 컴포넌트도 새 문구도 0이다.
+          <Alert variant="destructive">
+            <TriangleAlert aria-hidden />
+            <AlertTitle>이 경로는 열 수 없습니다</AlertTitle>
+            <AlertDescription>
+              <span className="font-mono text-xs break-all">{selected}</span>
+            </AlertDescription>
+          </Alert>
+        ) : (
+          <PersonaDetail
+            // 이름이 바뀌면 절 안의 지역 상태(저장 결과 · 실패 사유 · 제거 중)를 새로 시작한다.
+            // **편집 상태는 여기 없다** — 위 `edits`에 있어서 이 재마운트가 아무것도 안 버린다
+            key={current.name}
+            projectId={projectId}
+            row={current}
+            edit={editOf(current)}
+            onEdit={(next) => setEdits((prev) => ({ ...prev, [current.name]: next }))}
+            // 지운 뒤에도 그 이름이 주소에 남으면 다음 렌더가 `이 경로는 열 수 없습니다`가 된다 —
+            // 기본 선택(목록 첫 줄)으로 돌리는 것이 §5의 값이다. 주소도 같이 돌아간다.
+            onDeleted={() => select(null)}
+            color={colors[current.name]}
+            installed={installed}
+            configDir={configDir}
+          />
+        )}
       </div>
     </SidebarProvider>
   );
@@ -446,6 +495,7 @@ function PersonaDetail({
   row,
   edit,
   onEdit,
+  onDeleted,
   color,
   installed,
   configDir,
@@ -454,6 +504,7 @@ function PersonaDetail({
   row: PersonaRow;
   edit: PersonaEdit;
   onEdit: (next: PersonaEdit) => void;
+  onDeleted: () => void;
   color?: string;
   installed: Skill[];
   configDir: string;
@@ -483,6 +534,7 @@ function PersonaDetail({
             <DeleteButton
               projectId={projectId}
               row={row}
+              onDeleted={onDeleted}
               onError={(message) => setHeadError({ title: "삭제하지 못했습니다", message })}
             />
           </span>
@@ -947,10 +999,12 @@ function AddSkillsDialog({
 function DeleteButton({
   projectId,
   row,
+  onDeleted,
   onError,
 }: {
   projectId: string;
   row: PersonaRow;
+  onDeleted: () => void;
   onError: (message: string) => void;
 }) {
   const [pending, start] = useTransition();
@@ -999,7 +1053,8 @@ function DeleteButton({
             onClick={() =>
               start(async () => {
                 const r = await deletePersonaAction(projectId, row.name);
-                if (!r.ok) onError(r.message ?? "삭제하지 못했습니다.");
+                if (r.ok) onDeleted();
+                else onError(r.message ?? "삭제하지 못했습니다.");
               })
             }
           >

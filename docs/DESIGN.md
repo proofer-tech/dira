@@ -15522,7 +15522,7 @@ dep을 미충족으로 보므로 `select`가 통째로 제외한다. 새 fm 키 
 |---|---|---|---|---|
 | P143 | 스펙 확정 `8429c041` | pm | — | 완료 — §5 못 둘 무효 표시 + §선택이 경로에 담긴다 신설(실측 2표 · 깨지는 자리 4항 · 없는 이름 · 검증), §0-7 표 경로 칸 |
 | P143 | `screenOf`·`projectPath`가 `/personas/<이름>`을 안다 `c6bd18ae` | developer | — | 대기 |
-| P143 | 라우트 · pushState · 뒤로가기 · 없는 이름 `e53b7bf4` | developer | `c6bd18ae` | 대기 |
+| P143 | 라우트 · pushState · 뒤로가기 · 없는 이름 `e53b7bf4` | developer | `c6bd18ae` | 완료 — optional catch-all + `pushState` + `popstate`. 편집 보존·뒤로가기·없는 이름 실측, `revalidatePath` 다섯 자리 전부 깊은 경로에 닿는 것 확인(무수정) |
 
 **되물을 축이 없었다.** 요구가 주소를 그대로 적어 왔다(`/p/dira/personas/designer`). 조사는
 *무엇을 만들지*가 아니라 **뽑을 못이 정말 뽑히나**였다 — §5가 "선택을 URL에 담지 않는다"를

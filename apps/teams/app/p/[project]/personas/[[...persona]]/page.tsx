@@ -1,8 +1,17 @@
-/** 페르소나 `/p/<project>/personas` — `<해석된 TICKET_PERSONAS>/<이름>/PROFILE.md` 편집 (DESIGN.md §5).
+/** 페르소나 `/p/<project>/personas[/<이름>]` — `<해석된 TICKET_PERSONAS>/<이름>/PROFILE.md` 편집
+ *  (DESIGN.md §5 · §선택이 경로에 담긴다).
  *
  *  **디렉터리는 `resolveConfig(project).personas`에서 받는다.** `<루트>/personas`라고 가정하면
  *  `TICKET_PERSONAS`를 재정의한 큐에서 엉뚱한 디렉터리를 편집한다(README §워커 레퍼런스가
- *  재정의를 열어뒀다). 경로 방어의 기준 디렉터리도 프로젝트 root가 아니라 그 값이다. */
+ *  재정의를 열어뒀다). 경로 방어의 기준 디렉터리도 프로젝트 root가 아니라 그 값이다.
+ *
+ *  **optional catch-all 하나다** — `/personas`와 `/personas/<이름>`이 같은 이 파일이고
+ *  세그먼트 없는 자리에서 리다이렉트하지 않는다(기본 선택은 목록 첫 줄, 서버가 고른다 —
+ *  §6의 `?file=` 없는 자리와 같은 규약).
+ *
+ *  **이 값으로 경로를 조립하지 않는다.** 나열해 나온 이름과 맞춰만 보고(§6 `?core=`와 같다)
+ *  안 맞으면 오른쪽 칸에 사유가 뜬다 — 그 판정은 `PersonasPane`이 든다(선택이 클라이언트
+ *  상태라 서버에서 한 번 더 갈라 봐야 두 벌이 된다). */
 import { notFound } from "next/navigation";
 import { TriangleAlert } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
@@ -10,6 +19,7 @@ import { CreatePersonaButton, PersonasPane } from "@/components/personas-ui";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { listTickets } from "@/lib/queue";
+import { decodeHash } from "@/lib/urls";
 import { getProject, listPersonas, resolveConfig, usingDefault } from "@/lib/projects";
 import {
   claudeConfigDir,
@@ -21,8 +31,12 @@ import {
 // 프로필 파일은 GUI 밖에서도 바뀌고(에디터) 참조 건수는 디스패처가 바꾼다 — 굳히지 않는다.
 export const dynamic = "force-dynamic";
 
-export default async function Personas({ params }: { params: Promise<{ project: string }> }) {
-  const { project: id } = await params;
+export default async function Personas({
+  params,
+}: {
+  params: Promise<{ project: string; persona?: string[] }>;
+}) {
+  const { project: id, persona } = await params;
   const project = await getProject(id);
   if (!project) notFound();
 
@@ -102,6 +116,10 @@ export default async function Personas({ params }: { params: Promise<{ project: 
         // 색은 큐가 아니라 레지스트리에 있다(§5) — 같은 서버 렌더에 실려서 점 스켈레톤이 없다
         <PersonasPane
           projectId={id}
+          // 세그먼트는 퍼센트 인코딩된 원문으로 온다(`lib/urls.ts` `decodeHash` 주석). 여럿이면
+          // 이어 붙여 넘긴다 — 이름 규칙이 `^[A-Za-z0-9_-]+$`라 슬래시가 든 이름은 없고,
+          // 안 맞는 값 하나로 같은 사유가 뜬다(§5 §선택이 경로에 담긴다).
+          initial={persona?.map(decodeHash).join("/") ?? null}
           rows={rows}
           colors={project.personaColors ?? {}}
           installed={installed}
