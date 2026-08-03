@@ -190,7 +190,7 @@ const version = theme.value.diraVersion;
 
 <section class="wrap">
   <p class="eyebrow">플랜</p>
-  <h2>지금은 전부 무료입니다</h2>
+  <h2>전부 무료입니다</h2>
   <p class="body" style="max-width:40em">
     엔진도 앱도 MIT 라이선스입니다. 계정도, 서버도, 요금도 없습니다.
     <b>받아서 그냥 씁니다.</b>
