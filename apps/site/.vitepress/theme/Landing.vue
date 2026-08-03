@@ -47,7 +47,7 @@ onMounted(async () => {
          href="https://github.com/proofer-tech/dira"
          aria-label="Star proofer-tech/dira on GitHub"
          data-icon="octicon-star" data-show-count="true" data-size="large">Star</a>
-      <a class="btn btn-primary" href="https://github.com/proofer-tech/dira/releases/latest">앱 받기</a>
+      <a class="btn btn-primary" href="https://github.com/proofer-tech/dira/releases/latest">앱 다운로드</a>
     </nav>
   </div>
 </header>
@@ -63,7 +63,7 @@ onMounted(async () => {
     시스템을 아주 쉽게 구축해보세요.
   </p>
   <div class="cta">
-    <a class="btn btn-primary btn-lg" href="https://github.com/proofer-tech/dira/releases/latest">macOS 앱 받기</a>
+    <a class="btn btn-primary btn-lg" href="https://github.com/proofer-tech/dira/releases/latest">macOS 앱 다운로드</a>
     <a class="btn btn-lg" href="/docs/install">설치 가이드</a>
   </div>
   <p class="cta-note">with Claude Code · Codex</p>
@@ -217,7 +217,7 @@ onMounted(async () => {
       dira와 함께 PC에 나만의 멀티 에이전트 시스템을 아주 쉽게 구축해보세요.
     </p>
     <div class="cta">
-      <a class="btn btn-primary btn-lg" href="https://github.com/proofer-tech/dira/releases/latest">macOS 앱 받기</a>
+      <a class="btn btn-primary btn-lg" href="https://github.com/proofer-tech/dira/releases/latest">macOS 앱 다운로드</a>
       <a class="btn btn-lg" href="https://github.com/proofer-tech/dira">GitHub에서 보기</a>
     </div>
   </div>
