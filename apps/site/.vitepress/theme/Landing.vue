@@ -7,10 +7,11 @@ const version = ref(theme.value.diraVersion);
 onMounted(async () => {
   // github-buttons는 모듈 최상단에서 window를 읽는다 — SSR에서 죽으므로 동적 import다.
   // 위젯을 못 만들면 원래 <a>가 그대로 남는다(그게 이 배치를 고르는 근거다).
-  const star = document.getElementById("star-btn");
-  if (star) {
+  // 둘을 같은 틱에 그려야 api.github.com XHR이 하나다(DESIGN §헤더 별 버튼 §값).
+  const stars = document.querySelectorAll('a[data-icon="octicon-star"]');
+  if (stars.length) {
     const { render } = await import("github-buttons");
-    render(star, (widget) => star.replaceWith(widget));
+    for (const star of stars) render(star, (widget) => star.replaceWith(widget));
   }
   try {
     const r = await fetch(
@@ -41,7 +42,11 @@ onMounted(async () => {
     </a>
     <nav>
       <a class="btn" href="/docs/">매뉴얼</a>
-      <a class="btn" href="https://github.com/proofer-tech/dira">GitHub</a>
+      <!-- 이 <a>에도 바인딩을 걸지 않는다 — 아래 Free 카드의 별 버튼과 같은 이유다. -->
+      <a class="btn"
+         href="https://github.com/proofer-tech/dira"
+         aria-label="Star proofer-tech/dira on GitHub"
+         data-icon="octicon-star" data-show-count="true" data-size="large">Star</a>
       <a class="btn btn-primary" href="https://github.com/proofer-tech/dira/releases/latest">앱 받기</a>
     </nav>
   </div>
@@ -180,7 +185,7 @@ onMounted(async () => {
       <!-- 이 <a>에는 바인딩을 걸지 않는다. 정적이어야 리본 version 갱신 때 다시 안 그려지고,
            onMounted에서 갈아 끼운 위젯이 그대로 남는다(DESIGN §진짜 별 버튼 §SSR·hydration). -->
       <div class="cta">
-        <a class="btn" id="star-btn"
+        <a class="btn"
            href="https://github.com/proofer-tech/dira"
            aria-label="Star proofer-tech/dira on GitHub"
            data-icon="octicon-star" data-show-count="true" data-size="large">Star</a>

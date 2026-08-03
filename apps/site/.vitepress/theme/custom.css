@@ -76,6 +76,9 @@ html { scroll-behavior: smooth; }
 .dira-landing .brand { display: flex; align-items: center; gap: 8px; text-decoration: none; font-family: var(--mono); font-weight: 600; font-size: 16px; letter-spacing: -0.03em; }
 .dira-landing .brand svg { width: 20px; height: 20px; fill: currentColor; }
 .dira-landing header nav { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+/* github-buttons가 갈아 끼운 host <span>. 줄상자 여백 7.5px을 없애야 28px 위젯의 중심이
+   이웃 .btn(34px)과 맞는다 — 안 걸면 3.7px 위로 뜬다(DESIGN §헤더 별 버튼 §뽑는 못). */
+.dira-landing header nav > span { line-height: 0; }
 
 .dira-landing .btn {
   display: inline-flex; align-items: center; gap: 6px;
