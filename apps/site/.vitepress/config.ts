@@ -21,7 +21,7 @@ export default defineConfig({
         {
           text: "시작하기",
           items: [
-            { text: "dira가 뭔가", link: "/docs/what-is-dira" },
+            { text: "dira에 대하여", link: "/docs/what-is-dira" },
             { text: "설치", link: "/docs/install" },
             { text: "첫 프로젝트 만들기", link: "/docs/first-ticket" },
             { text: "요구사항 접수하기", link: "/docs/requirements" },
@@ -30,7 +30,7 @@ export default defineConfig({
         {
           text: "지켜보기",
           items: [
-            { text: "화면에서 보는 것", link: "/docs/screens" },
+            { text: "화면 소개", link: "/docs/screens" },
             { text: "도는 세션에 말 걸기", link: "/docs/barge-in" },
           ],
         },
@@ -54,7 +54,7 @@ export default defineConfig({
         {
           text: "운영",
           items: [
-            { text: "안 돌 때", link: "/docs/troubleshooting" },
+            { text: "트러블슈팅", link: "/docs/troubleshooting" },
             { text: "로그 읽는 법", link: "/docs/logs" },
             { text: "사용 통계와 끄는 법", link: "/docs/analytics" },
           ],

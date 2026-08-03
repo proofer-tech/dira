@@ -8,21 +8,21 @@ dira를 설치하고, 쓰고, 운영하는 데 필요한 것을 21장에 담았�
 처음이시면 아래 네 장을 순서대로 읽으세요. 다 읽고 나면 하고 싶은 말을 한 칸에 넣고, 그 한
 문단이 티켓 여러 장으로 쪼개져 도는 것을 보고 계실 겁니다.
 
-1. [dira가 뭔가](/docs/what-is-dira) — 5분. 티켓·큐·워커·세션 네 낱말을 세웁니다
+1. [dira에 대하여](/docs/what-is-dira) — 5분. 티켓·큐·워커·세션 네 낱말을 세웁니다
 2. [설치](/docs/install) — `.dmg` 하나를 받습니다
 3. [첫 프로젝트 만들기](/docs/first-ticket) — 폴더를 고르면 큐도 워커도 자동 실행도 한 번에 섭니다
 4. [요구사항 접수하기](/docs/requirements) — 하고 싶은 말을 넣으면 pm이 쪼갭니다
 
 ## 시작하기
 
-- [dira가 뭔가](/docs/what-is-dira)
+- [dira에 대하여](/docs/what-is-dira)
 - [설치](/docs/install)
 - [첫 프로젝트 만들기](/docs/first-ticket)
 - [요구사항 접수하기](/docs/requirements)
 
 ## 지켜보기
 
-- [화면에서 보는 것](/docs/screens)
+- [화면 소개](/docs/screens)
 - [도는 세션에 말 걸기](/docs/barge-in)
 
 ## 직접 쓰기
@@ -40,7 +40,7 @@ dira를 설치하고, 쓰고, 운영하는 데 필요한 것을 21장에 담았�
 
 ## 운영
 
-- [안 돌 때](/docs/troubleshooting)
+- [트러블슈팅](/docs/troubleshooting)
 - [로그 읽는 법](/docs/logs)
 - [사용 통계와 끄는 법](/docs/analytics)
 

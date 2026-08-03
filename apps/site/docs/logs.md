@@ -64,7 +64,7 @@ crontab 줄이 리다이렉트하는 대상입니다(`>> .../cron.log 2>&1`). �
 1. **아무 일도 안 일어난 것 같다** → `runner.log`부터 보세요. `DISPATCH`가 있는지, 있다면
    그 뒤에 `DONE`/`FAIL`/`TIMEOUT`이 붙었는지 봅니다.
 2. **`runner.log`조차 갱신되지 않는다** → `cron.log`를 보세요. 워커 자체가 안 뜬 것입니다
-   (마운트 문제는 [안 돌 때](/docs/troubleshooting) §워커가 아예 안 뜬다 참고).
+   (마운트 문제는 [트러블슈팅](/docs/troubleshooting) §워커가 아예 안 뜬다 참고).
 3. **`FAIL`/`TIMEOUT`은 찍혔는데 이유를 알아야 한다** → 그 줄의 `log=` 파일명으로 `logs/`의
    세션별 로그를 여세요.
 
