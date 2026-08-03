@@ -399,10 +399,18 @@ sys.exit(0 if isinstance(o, dict) and o.get("type") == "result" else 1)'
   done
   kill -TERM "$CPID" 2>/dev/null; sleep 20; kill -KILL "$CPID" 2>/dev/null ) &
 WPID=$!
+# bash의 `wait PID`는 그 PID가 속한 **파이프라인 전체**를 기다린다. 프롬프트를 파일로 옮기면서
+# 엔진 앞에 `{ cat "$PRIMEF"; cat "$INBOX"; }`가 붙었고, 그 cat은 우리가 fd 9를 닫아야 EOF를 본다.
+# 먼저 wait하면 서로를 기다려 교착한다 - 세션이 result를 내고 죽어도 워커가 티켓을 안 놓는다
+# (2026-08-04 실측: 6/6이 init까지 갔는데 DONE 0, 죽은 엔진 옆에 cat만 남아 MAXRUN까지 잡혔다).
+# 그래서 엔진만 따로 지켜보고, fd 9를 닫아 cat을 빼낸 다음에 job을 회수한다.
+if [ -n "$INBOX" ]; then
+  while kill -0 "$CPID" 2>/dev/null; do sleep 1; done
+  exec 9>&-
+fi
 wait "$CPID"; RC=$?
 kill "$WPID" 2>/dev/null; wait "$WPID" 2>/dev/null
-# fd 9를 먼저 닫아야 FIFO를 읽던 cat이 EOF를 보고 빠진다(엔진은 이미 죽었다).
-[ -n "$INBOX" ] && { exec 9>&-; rm -f "$INBOX" "$PRIMEF" "${PRIMEF:+$PRIMEF.fed}"; }
+[ -n "$INBOX" ] && rm -f "$INBOX" "$PRIMEF" "${PRIMEF:+$PRIMEF.fed}"
 OUT=$(cat "$OUTF" 2>/dev/null); rm -f "$OUTF"
 printf '%s\n' "$OUT" >> "$LOGF"
 
