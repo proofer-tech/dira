@@ -52,6 +52,9 @@
   --color-status-blocked: var(--status-blocked);
   --color-status-done: var(--status-done);
   --color-status-stale: var(--status-stale);
+
+  /* 표면 층 (§비주얼 §33) — bg-surface 노출. 페이지와 카드 사이 한 단이다 */
+  --color-surface: var(--surface);
 }
 
 :root {
@@ -94,6 +97,10 @@
   --status-blocked: oklch(0.52 0.13 75); /* deps 대기 */
   --status-done: oklch(0.5 0.13 155); /* 완료 */
   --status-stale: oklch(0.52 0.19 25); /* stale · 할당됨 · 연결 안 됨 */
+
+  /* 나란히 선 영역이 자기 몸을 갖는 면(§비주얼 §33). 라이트는 고른 값이 아니라 상한이다 —
+     이 위의 `--muted-foreground`가 4.53이고 한 단만 내려도(0.98) 4.47로 AA가 깨진다. */
+  --surface: oklch(0.985 0 0);
 }
 
 .dark {
@@ -133,6 +140,9 @@
   --status-blocked: oklch(0.8 0.13 80);
   --status-done: oklch(0.76 0.14 155);
   --status-stale: oklch(0.75 0.15 25);
+
+  /* 페이지(0.145)와 카드(0.205) 사이 한 단. 면 대 페이지가 라이트 1.04 · 다크 1.05로 같은 세기다 */
+  --surface: oklch(0.18 0 0);
 }
 
 /* 페르소나 색 — 상태 색과 **다른 토큰 그룹**이다(DESIGN.md §비주얼 §12). 상태 4개는 뜻이

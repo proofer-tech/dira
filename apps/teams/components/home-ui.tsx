@@ -830,7 +830,12 @@ function SidePanel({
 }) {
   const rows = chatRows(home.conversations);
   return (
-    <div className="flex w-64 shrink-0 flex-col gap-4 overflow-y-auto">
+    // 표면 층(§비주얼 §33) — **가르는 쌍에서 드는 것은 목록 쪽 하나다.** 대화 스레드는
+    // 무수정이고(산문은 페이지 폭을 그대로 쓴다), 둘 다 얹으면 남는 경계가 `gap-8`뿐이라
+    // 시작한 자리로 돌아온다. 경계를 실제로 세우는 것은 면(1.04)이 아니라 `border`(1.21)다.
+    // **가로 패딩은 0이다** — 줄이 `px-2`로 그 8px을 이미 들고 있어 면이 더하면 §24가 잰
+    // 제목 폭 216px이 16px 줄어 잘리는 자리가 옮겨 간다. 테두리 2px만 먹어 216 → 214다.
+    <div className="flex w-64 shrink-0 flex-col gap-4 overflow-y-auto rounded-lg border bg-surface py-2">
       <div>
         {/* 그룹 머리 — §3 테이블 헤더 행의 세 값 그대로(`text-xs` · `font-medium` ·
             `--muted-foreground`). `sticky`를 안 붙인다: 그룹이 둘뿐이고 줄 모양이 서로 달라
