@@ -337,7 +337,12 @@ sys.stdout.write(json.dumps({"type":"user","message":{"role":"user","content":sy
   # 우리가 fd 9를 닫아도 EOF를 영영 못 본다(FIFO의 writer가 0이 되어야 EOF다).
   # `.fed` 표식이 곧 "프롬프트가 엔진 stdin으로 다 들어갔다"이다. 파이프 버퍼보다 큰 프롬프트를
   # 안 빠는 엔진에서는 첫 cat이 막혀 표식이 안 생긴다 - 옛 feeder 생존 판정과 같은 근거다.
-  { cat "$PRIMEF" && : > "$PRIMEF.fed"; cat "$INBOX"; } 9>&- | "${ENGINE[@]}" >"$OUTF" 2>>"$LOGF" 9>&- &
+  # FIFO는 그룹 진입 때 fd 8로 **미리** 연다. 두 번째 cat이 그때 가서 열면, 워커가 먼저 끝나
+  # fd 9가 닫힌 뒤엔 writer 없는 FIFO를 여는 셈이라 open에서 영영 막힌다 - 그 cat이 워커의
+  # stderr를 쥔 채 남아 호출자(capture_output·테스트)가 EOF를 못 본다. 여기서 열면 fd 9가
+  # 아직 살아 있어 open이 즉시 돌아오고, 나중에 fd 9가 닫히면 EOF로 정상 종료한다.
+  # 그룹의 stderr도 로그로 보낸다(워커 stderr를 물려주지 않는다). 9>&-는 위 fd 9와 같은 이유다.
+  { cat "$PRIMEF" && : > "$PRIMEF.fed"; cat <&8; } 8<"$INBOX" 9>&- 2>>"$LOGF" | "${ENGINE[@]}" >"$OUTF" 2>>"$LOGF" 9>&- &
   CPID=$!
 else
   # </dev/null: 비스트리밍 엔진에는 참견 채널이 없으니 stdin을 물려줄 이유가 없다. 그런데
@@ -400,7 +405,7 @@ sys.exit(0 if isinstance(o, dict) and o.get("type") == "result" else 1)'
   kill -TERM "$CPID" 2>/dev/null; sleep 20; kill -KILL "$CPID" 2>/dev/null ) &
 WPID=$!
 # bash의 `wait PID`는 그 PID가 속한 **파이프라인 전체**를 기다린다. 프롬프트를 파일로 옮기면서
-# 엔진 앞에 `{ cat "$PRIMEF"; cat "$INBOX"; }`가 붙었고, 그 cat은 우리가 fd 9를 닫아야 EOF를 본다.
+# 엔진 앞에 `{ cat "$PRIMEF"; cat <&8; }`가 붙었고, 그 cat은 우리가 fd 9를 닫아야 EOF를 본다.
 # 먼저 wait하면 서로를 기다려 교착한다 - 세션이 result를 내고 죽어도 워커가 티켓을 안 놓는다
 # (2026-08-04 실측: 6/6이 init까지 갔는데 DONE 0, 죽은 엔진 옆에 cat만 남아 MAXRUN까지 잡혔다).
 # 그래서 엔진만 따로 지켜보고, fd 9를 닫아 cat을 빼낸 다음에 job을 회수한다.
