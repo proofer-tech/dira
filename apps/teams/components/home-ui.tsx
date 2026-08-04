@@ -886,9 +886,11 @@ function SidePanel({
     // 라이트에서 `--surface`와 **같은 값**이지만 다크에서 `--card`(0.205)라, 그대로 두면
     // 카드 대 면이 1.00이 되고 칸반 레인(0.18)과 이 패널(0.205)이 갈려 층이 셋이라는
     // §33의 계약이 화면마다 깨진다.
-    // **가로 패딩은 0이다** — 줄이 `p-2`로 그 8px을 이미 들고 있어 면이 더하면 §24가 잰
-    // 제목 폭이 16px 줄어 잘리는 자리가 옮겨 간다. `SidebarGroup`의 기본 `p-2`를 `p-0`으로
-    // 덮는 것이 같은 이유다. 세로 8px은 `SidebarContent`의 `py-2`가 든다(종전 면 그대로).
+    // **가로 여백은 16px이다**(요구 `6c196339` — 사람이 `1em 정도만` 늘리라고 적었다).
+    // §39 §새로 정하는 것 ①이 재 놓고 버린 안 B가 그 값이고(줄 x 16 · 줄 폭 223 · 제목 글자가
+    // 헤더·footer와 같은 x 24), 그때 A를 고른 근거였던 *글자를 팔아 여백을 사지 않는다*를
+    // 요구가 뒤집었다. 자리는 `SidebarContent`의 `px-4` 한 곳이다 — `SidebarGroup p-0` 둘을
+    // 각각 고치는 것과 같은 값이고 그룹이 늘어도 다시 안 고친다. 세로 8px은 종전 `py-2`다.
     //
     // **카드 겹이 걷혀 레일이 됐다**(요구 `bc2dc213` · §비주얼 §39). 이 화면에서만이고
     // 프로토콜·페르소나 패널은 종전 카드 그대로다 — 사람이 `다른곳들의 디자인과 다르게`라고
@@ -915,7 +917,7 @@ function SidePanel({
           부품 기본 `min-h-0 flex-1 overflow-auto`가 스크롤을 든다 — 종전 `overflow-y-auto`
           자리다. `no-scrollbar`도 같이 오는데 `globals.css`에 그 유틸이 없어(실측 0건)
           생성되지 않는다: 스크롤바가 종전대로 보인다. */}
-      <SidebarContent className="gap-4 py-2">
+      <SidebarContent className="gap-4 px-4 py-2">
         <SidebarGroup className="p-0">
           {/* 그룹 머리 — §3 테이블 헤더 행의 세 값 그대로(`text-xs` · `font-medium` ·
               `--muted-foreground`). 부품 기본은 `h-8` + `text-sidebar-foreground/70`이고
