@@ -13,7 +13,7 @@
 |---|---|
 | `tick.sh` `tickets.py` | 엔진. bash + python3 표준 라이브러리만. 워커가 cron에서 이걸 물고 티켓 1건을 헤드리스 에이전트 세션에 넘긴다 |
 | `protocols/CORE.md` `protocols/CORE-TICKETS.md` | **어느 프로젝트에나 실리는** 큐 규약. 어기면 결과물이 아니라 큐가 망가진다 |
-| `templates/protocols/AGENTS.md` | 새 프로젝트가 복사해 가는 협업 프로토콜 원본 → [[프로토콜 두 벌]] |
+| `templates/` | 새 프로젝트가 복사해 가는 원본 — 협업 프로토콜(`protocols/AGENTS.md`)과 페르소나 프로필(`personas/<이름>/PROFILE.md`). 큐에 도는 사본이 따로 있다 → [[프로토콜 두 벌]] |
 | `docs/DESIGN.md` | GUI(`dira teams`) 제품 스펙의 **단일 출처**. 요구·결정·로드맵이 전부 여기 |
 | `apps/teams/` | 큐를 보는 로컬 Next.js 웹 UI. 엔진과 격리돼 있고 의존성 0 약속의 바깥이다 → [[단축키 기본값]] |
 | `apps/site/` | 랜딩 · 매뉴얼(VitePress) |
