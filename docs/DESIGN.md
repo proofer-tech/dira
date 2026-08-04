@@ -8871,11 +8871,44 @@ if: github.event_name != 'push' || !startsWith(github.event.head_commit.message,
 - **`workflow_dispatch`는 그대로 통과한다** — 그쪽 이벤트에는 `head_commit`이 없어서 첫 항에서
   끝난다. 조건을 `startsWith(...)` 하나로 쓰면 dispatch가 전부 막힌다.
 - **세션이 미는 보통 커밋은 여전히 굽는다.** C3의 "master에 들어오면 자동으로 간다"는 무수정이다.
-  갈리는 것은 "사람이 이미 구운 것을 다시 굽지 않는다" 하나뿐이다.
+  갈리는 것은 "사람이 이미 구운 것을 다시 굽지 않는다" 하나뿐이다. **그 커밋이 러너에 닿는
+  시점은 세션이 미는 순간이 아니다** — 세션의 push는 로컬 `master`에서 멈춘다(→ R4-2).
 
 **`minor`·`major`를 내는 자리는 둘이고 둘 다 사람이다.** 사람 맥의 `pnpm release <bump>`와
 GitHub의 `workflow_dispatch`(`bump` 입력). 앞엣것은 사람 맥의 인증서로 굽고 뒤엣것은 러너의
 임시 키체인으로 굽는다 — 스크립트와 순서는 같다(C3 첫 불릿).
+
+**R4-2. 큐의 `master`는 origin의 `master`가 아니다 — 릴리스 전에 origin을 먼저 들인다.**
+
+> 요구 `db7b5b49`(2026-08-04). C3이 「`master`에 앱이 들어오면 자동으로 간다」고 적은 그
+> `master`는 **origin의 것**이다. 세션이 미는 것은 `~/Projects/dira`의 로컬 `master`이고
+> (프로토콜 §git — `git push . HEAD:master`), 둘을 잇는 것은 사람이 치는 한 줄뿐이다.
+> 어느 절도 그 사실을 안 적어서 「릴리즈 해주세요」가 세션에게 오면 할 일이 안 보인다.
+
+**갈래는 릴리스마다 정확히 한 커밋씩 벌어진다.** 릴리스가 나면 러너가 R4의 2·3번으로
+`release v<x.y.z>` bump 커밋을 만들어 **origin에만** 민다. 로컬 `master`는 그걸 받을 길이
+없다 — 세션은 origin을 안 만지고 `fetch`도 안 돈다. 그래서 다음 릴리스를 낼 때 로컬은
+origin의 조상이 아니고 **`git push origin master`가 non-fast-forward로 거부된다.**
+
+**판정은 오른쪽 수 하나다. 로컬이 앞선 수백 커밋은 갈래의 원인이 아니다.**
+
+```
+git fetch origin master && git rev-list --left-right --count master...origin/master
+```
+
+**`pnpm release`도 같이 막힌다 — R4의 1번은 원격과의 갈래를 안 본다.** 로컬 버전이 한 칸
+뒤진 채로 `patch`를 치면 2번의 bump가 **이미 원격에 있는 버전**을 만들고 3번의
+`git tag -a v<x.y.z>`가 그 태그에 걸려 죽는다. 남는 것은 되돌려야 하는 bump 커밋 하나다 —
+「1이 2보다 앞이다」가 이 실패를 못 막는 유일한 자리다.
+
+**들이는 것은 병합이고 세션이 한다.** `git merge origin/master` → `git push . HEAD:master`.
+**rebase는 안 된다** — 로컬 `master`는 워커 워크트리 전부가 조상으로 쥐고 있다. 릴리스
+커밋이 만지는 파일은 `apps/desktop/package.json` 하나뿐이라(R2) 로컬이 그 사이 버전을
+안 만졌으면 충돌이 0이다. 미리 판정하는 것은 `git merge-tree --write-tree master origin/master`
+한 줄이고, 워크트리를 안 건드린다.
+
+**그 뒤에 사람이 한 줄 친다.** `git push origin master`(→ `patch`) 또는
+`gh workflow run release.yml -f bump=minor`. 세션은 어느 쪽도 못 한다(프로토콜 §git · R4 4번).
 
 **R5. 앱이 하는 일은 셋이고 새 화면은 0개다.**
 
@@ -17837,6 +17870,40 @@ P155의 예산이 된다(768 **3장** · 대비 4행 재현).
 파일이 제일 먼저 준다. 지금 초과분 19장을 한 세션이 몰아서 접으면 그 세션은 남의 페르소나
 메모리 170 KB를 읽고 무엇을 합칠지 판정해야 하는데, 그건 압축을 고른 근거(*자기가 방금 만진
 파일 안에서 혼자 정한다*)를 정면으로 버린다.
+
+### P159 — 릴리스를 막는 것은 origin과의 갈래 하나다 (요구 `db7b5b49`)
+
+→ §릴리스 **R4-2**(신설) · §CI C3 넷째 불릿(한 줄 추가).
+
+**요구가 시킨 일의 마지막 한 줄을 세션이 못 한다.** 릴리스는 origin `master` push가 부르고
+(C3) 원격 push는 프로토콜 §git이 세션에게 금지한 자리다 — `release.sh` 주석도 *「세션은 이걸
+스스로 돌리지 않는다」*를 못박아 뒀다. 그래서 이 요구는 **절반이 티켓이고 절반이 사람**이다
+(pm 왕복의 그 모양 — 답이 무엇으로 와도 세션 몫의 코드는 안 갈린다).
+
+**막는 것은 갈래 하나이고 나머지는 전부 초록이다**(실측 2026-08-04 15:0x, 이 워크트리):
+
+| 잰 것 | 값 |
+|---|---|
+| origin에만 있는 커밋 | **`82de8b0 release v0.1.6` 하나** — 로컬은 이것을 조상으로 안 갖는다 |
+| 로컬 `apps/desktop/package.json` | **`0.1.5`** — 원격은 `v0.1.6`을 태그·릴리스까지 올려 뒀다 |
+| 병합 충돌 | **0** (`merge-tree --write-tree` exit 0, 결과 트리의 그 파일이 `0.1.6`) |
+| 엔진 테스트 5종 | 전부 exit 0 |
+| `apps/teams` `pnpm test` / `pnpm build` | **322/322** / exit 0 |
+| `apps/desktop` `pnpm test` | **5/5** |
+| Actions 시크릿 | **7개 전부**(인증서 5 + GA 2) |
+| `release.yml` 마지막 실행 | run `30750969643` **성공 6분 3초** |
+
+**`pnpm build`를 잰 것이 이 표에서 제일 값이 크다.** `pnpm dist`가 첫 줄에서 그것을 부르므로
+(`apps/desktop/package.json` §scripts) 거기서 죽으면 릴리스가 통째로 죽는다. `ci.yml`이 빨간
+것과 `release.yml`이 도는 것은 서로를 안 기다리니(C1) **`ci.yml`로는 이 판정이 안 선다.**
+
+**로컬이 앞선 수백 커밋은 원인이 아니다.** 갈래를 만드는 것은 오른쪽 한 커밋이고, 그것이
+릴리스마다 하나씩 다시 생긴다 — 그래서 이 절이 일회성 조치가 아니라 R4-2라는 규약이 됐다.
+
+| # | 티켓 | persona | deps | 상태 |
+|---|---|---|---|---|
+| P159 | 스펙 확정 `db7b5b49` | pm | — | 완료 — 실측 8(위 표). 되물은 것은 축이 아니라 **사람 몫의 마지막 한 줄**이다 |
+| P159 | origin/master를 로컬 master로 들인다 `57527e00` | developer | — | 대기 |
 
 ## 수용조건 (전체)
 
