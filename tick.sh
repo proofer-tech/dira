@@ -304,6 +304,28 @@ $(cat "$PROTOCOL")
 $PROMPT"
 fi
 
+# --- 온톨로지 목차: <루트>/ontology/**/*.md 의 `## ` 줄만 인라인한다 ---
+# 메모리는 페르소나의 것이고 온톨로지는 큐 전체의 것이라 블록을 가른다 - 그래서 페르소나 if 밖이고
+# `persona:`가 없는 티켓에도 실린다. 본문은 안 싣는다(목차가 후보를 좁히고, 본문에 닿는 길은
+# 세션의 grep이다 - 그래서 블록 크기가 파일 수 + 절 수에만 선형이고 본문 크기와 무관하다).
+# 재귀지만 globstar는 안 켠다(이 파일에 shopt가 0곳이고 켜면 그 아래 모든 글롭의 뜻이 갈린다).
+# 파일명에 공백이 있어서 find 출력은 `while IFS= read -r`로 받는다 - `for`로 돌리면 파일 하나가
+# 조각으로 갈려 에러 없이 틀린 목록이 선다. 없거나 비면 안 붙고 WARN도 없다(없는 것이 정상이다).
+ONTDIR="$TICKET_ROOT/ontology"
+ONTBLOCK=""
+while IFS= read -r o; do
+  ONTBLOCK="$ONTBLOCK
+--- ${o#"$ONTDIR"/}
+$(grep '^## ' "$o")"
+done < <(find "$ONTDIR" -type f -name '*.md' 2>/dev/null | LC_ALL=C sort)
+[ -n "$ONTBLOCK" ] && PROMPT="아래는 이 큐의 온톨로지 목차입니다(파일 경로와 각 파일의 '## ' 절 제목).
+본문은 안 실려 있으니 필요한 개념은 $ONTDIR 를 grep해서 여세요.
+
+===== 온톨로지 목차 ($ONTDIR) =====$ONTBLOCK
+===== 온톨로지 끝 =====
+
+$PROMPT"
+
 # --- 페르소나: 티켓 frontmatter `persona:` -> <personas>/<이름>/PROFILE.md ---
 # 프로필 본문을 프롬프트 머리에 인라인한다(경로만 주면 세션이 안 읽고 시작할 수 있다).
 # persona가 비어 있으면 페르소나 없는 평범한 에이전트가 그냥 처리한다(정상 경로, 경고 없음).
