@@ -1,5 +1,10 @@
-// 자리만이다. 랜딩 본문(`index.md` + `Landing.vue`)은 랜딩 포트 티켓(§순서 ⑥)이 옮긴다 —
-// 그때까지 사람이 보는 랜딩은 vitepress가 굽는 것이고 이 파일은 배포되지 않는다.
+import { diraVersion } from "../version";
+import Landing from "./landing";
+
+// `index.md`(`layout: page`) + `Landing.vue`가 여기로 왔다(§사이트 기반 §갈아 끼우는 것).
+// 두 파일로 갈린 자리는 하나다 — `version.ts`가 `node:fs`로 `apps/desktop/package.json`을
+// 읽으므로 그 줄은 서버에 남아야 한다. 종전 `themeConfig.diraVersion` → `useData()` 왕복과
+// 같은 값이 같은 시점(빌드)에 온다. 메타데이터·`<title>`은 §순서 ⑦이 세운다.
 export default function Page() {
-  return <main>dira</main>;
+  return <Landing version={diraVersion} />;
 }
