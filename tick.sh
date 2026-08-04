@@ -55,8 +55,27 @@ TICKET_ENGINE=(${TICKET_ENGINE[@]+"${TICKET_ENGINE[@]}"})
 # 상태 접미사는 tickets.py가 환경변수로 읽는다(미설정이면 .wip/.done).
 export TICKET_INPROGRESS="${TICKET_INPROGRESS:-}" TICKET_DONE="${TICKET_DONE:-}"
 
+ENGINE_NAME="$(basename "${TICKET_ENGINE[0]}")"
+# 엔진 불능(리밋·네트워크) 쿨다운. 머신 로컬이라 워커 전원·프로젝트 전체가 공유한다 - 토큰이
+# 계정당 하나라 한 워커가 겪은 불능은 나머지에도 참이다. 엔진마다 갈린다(다른 계정·다른 창).
+# 파일은 두 줄이다: 1줄 만료 epoch, 2줄 그때의 엔진 지문. 지문이 갈리면 창이 남아 있어도 즉시 푼다.
+CDOWN="$LOCAL/run/cooldown-$ENGINE_NAME"
+CDOWN_W=300   # 리밋이 복귀 시각을 안 줄 때(네트워크 실패 등)의 창 + 만료 직후 재무장 창
+
+# 엔진 지문 = 인증 토큰 + 엔진 argv(모델 플래그가 여기 있다). 사람이 계정을 바꾸거나 모델을
+# 갈면 값이 갈리고, 그 순간 쿨다운이 풀린다 - 리밋이 준 복귀 시각을 그대로 기다리면 계정을
+# 바꿔도 몇 시간을 놀기 때문이다(요구 15ceae18이 그 사고다).
+engine_fp() {
+  python3 -c 'import hashlib,sys
+try: tok = open(sys.argv[1], "rb").read()
+except OSError: tok = b""
+print(hashlib.sha1(tok + b"\0" + "\0".join(sys.argv[2:]).encode()).hexdigest()[:12])' \
+    "$LOCAL/oauth-token" "${TICKET_ENGINE[@]}"
+}
+arm_cdown() { printf '%s\n%s\n' "$1" "$(engine_fp)" > "$CDOWN"; }
+
 # Claude를 명시적으로 쓸 때만 헤드리스 OAuth 토큰을 읽는다. Codex의 인증은 자체 설정을 쓴다.
-if [ "$(basename "${TICKET_ENGINE[0]}")" = "claude" ]; then
+if [ "$ENGINE_NAME" = "claude" ]; then
   # claude setup-token 으로 발급 후: printf %s '<토큰>' > ~/.config/dira/oauth-token
   [ -r "$LOCAL/oauth-token" ] && export CLAUDE_CODE_OAUTH_TOKEN="$(tr -d '\r\n' < "$LOCAL/oauth-token")"
 fi
@@ -64,7 +83,7 @@ fi
 CMD="${1:-tick}"
 
 # 비대화형 Claude만 장기 토큰이 없으면 디스패치하지 않는다. Codex 등 다른 엔진은 자체 인증을 쓴다.
-if [ "$CMD" = "tick" ] && [ "$(basename "${TICKET_ENGINE[0]}")" = "claude" ] \
+if [ "$CMD" = "tick" ] && [ "$ENGINE_NAME" = "claude" ] \
   && [ ! -r "$LOCAL/oauth-token" ] && [ ! -t 1 ]; then
   if [ ! -f "$LOCAL/.authwarn" ]; then
     log "AUTH 대기: claude setup-token 발급 후 $LOCAL/oauth-token 에 저장 필요"
@@ -207,6 +226,23 @@ if [ "$CMD" = "tick" ]; then
   done
 fi
 
+# --- 엔진 쿨다운 게이트: 불능이면 창이 닫힐 때까지 멈춘다 ---
+# 선정·claim보다 앞이라 이 창 동안 티켓은 한 글자도 안 갈린다(진행중↔대기 왕복이 안 생긴다).
+# reap은 이 앞에 그대로 둔다 - 스테일 수거는 엔진 가용성과 무관하다.
+if [ "$CMD" = "tick" ] && [ -f "$CDOWN" ]; then
+  UNTIL=""; WAS_FP=""
+  { read -r UNTIL; read -r WAS_FP; } < "$CDOWN"
+  case "$UNTIL" in ''|*[!0-9]*) UNTIL=0 ;; esac
+  NOW=$(date +%s)
+  if [ "$WAS_FP" != "$(engine_fp)" ]; then
+    rm -f "$CDOWN"
+    log "NOTE 엔진 쿨다운 해제 - 토큰·모델이 바뀌었다(남은 창 $((UNTIL - NOW))초를 안 기다린다)"
+  elif [ "$NOW" -lt "$UNTIL" ]; then
+    log "SKIP 엔진 쿨다운 · $((UNTIL - NOW))초 남음"
+    exit 0
+  fi
+fi
+
 # --- 티켓 선정: 상태접미사 없고 session_id 비어있는 것 중 생성일 최고참 1건 ---
 CANDS=$(python3 "$PY" select "$TICKET_ROOT") || { log "ERROR select 실패"; exit 1; }
 [ -z "$CANDS" ] && exit 0
@@ -227,6 +263,14 @@ done <<EOF
 $CANDS
 EOF
 [ -z "$TPATH" ] && exit 0
+
+# 재무장: 쿨다운이 만료돼서 여기까지 왔으면 나가면서 창을 다시 감는다. 그래야 한 창의 재시도가
+# 이 워커 하나로 고정된다(안 감으면 8워커가 같은 창에서 한꺼번에 나가 헛디스패치가 8회 또 돈다).
+# **파일이 있을 때만 쓴다** - 정상 상태에서 쓰면 워커 하나가 나갈 때마다 나머지가 막혀 큐가 직렬화된다.
+# 여기 창은 복귀 시각이 아니라 짧은 300초다 - 다음 FAIL(실측 13초)까지만 나머지를 막으면 된다.
+if [ "$CMD" = "tick" ] && [ -f "$CDOWN" ]; then
+  arm_cdown "$(( $(date +%s) + CDOWN_W ))"
+fi
 
 PROMPT=$(printf "$TICKET_PROMPT_FMT" "$THASH")
 
@@ -475,21 +519,30 @@ printf '%s\n' "$OUT" >> "$LOGF"
 
 # 실제 세션키와 판정을 응답에서 읽는다. 옛 경로는 응답 전체가 JSON 하나이고,
 # stream-json은 JSONL이라 `result` 줄이 판정이다(전체 json.load는 거기서 깨진다).
+# 셋째 칸 terminal_reason이 엔진 불능(api_error)과 진짜 세션 실패를 가른다. api_error_status로는
+# 못 가른다 - 429가 아닌 네트워크 실패(ENOTFOUND)엔 그 키가 없는데 똑같이 불능이다.
+# 넷째 칸은 리밋이 알려준 복귀 시각(epoch). `status: rejected`인 것만 센다 - 같은 이벤트가
+# `allowed_warning`으로도 오고(실측 1,058건) 그건 아직 통과한 요청이라 기다릴 이유가 없다.
 VERDICT=$(printf '%s' "$OUT" | python3 -c \
   'import json,sys
-raw = sys.stdin.read(); sid = ""; ok = ""
+raw = sys.stdin.read(); sid = ""; ok = ""; reason = ""; reset = ""
 for ln in raw.splitlines():
     try: o = json.loads(ln)
     except Exception: continue
-    if isinstance(o, dict) and o.get("type") == "result":
+    if not isinstance(o, dict): continue
+    if o.get("type") == "result":
         sid = o.get("session_id", "") or sid
         ok = "err" if o.get("is_error") else "ok"
+        reason = o.get("terminal_reason", "") or ""
+    elif o.get("type") == "rate_limit_event":
+        info = o.get("rate_limit_info") or {}
+        if info.get("status") == "rejected" and isinstance(info.get("resetsAt"), int):
+            reset = str(info["resetsAt"])
 if not sid:
     try: sid = json.loads(raw).get("session_id", "")
     except Exception: pass
-print(sid + "|" + ok)' 2>/dev/null)
-REAL="${VERDICT%%|*}"
-VERDICT="${VERDICT#*|}"
+print("|".join((sid, ok, reason, reset)))' 2>/dev/null)
+IFS='|' read -r REAL VERDICT REASON RESET <<< "$VERDICT"
 
 # 스트리밍 입력에서는 우리가 죽여서 끝내므로 RC(143)는 판정이 아니다. `result` 줄이 판정이다.
 if [ -n "$INBOX" ]; then
@@ -501,6 +554,15 @@ if [ -n "${FAILED:-}" ]; then
   # 실행 실패(또는 상한 초과 강제종료) -> 할당 회수해서 다음 tick이 다시 집도록
   python3 "$PY" clear "$TPATH"
   python3 "$PY" release "$TPATH" >/dev/null 2>&1
+  # 엔진 불능이면 창을 건다. 티켓은 종전대로 백로그로 돌아가고, 다음 tick들이 게이트에서 멈춘다.
+  # 리밋이 복귀 시각을 줬으면(실측 api_error의 80%, 앞으로 최대 4.2시간) 임의의 5분이 아니라
+  # 그 시각까지 기다린다. 안 줬거나 이미 지난 값이면 300초로 떨어진다(실측 min이 -355초다).
+  if [ "$REASON" = "api_error" ]; then
+    NOW=$(date +%s); UNTIL=$(( NOW + CDOWN_W ))
+    case "$RESET" in ''|*[!0-9]*) ;; *) [ "$RESET" -gt "$UNTIL" ] && UNTIL="$RESET" ;; esac
+    arm_cdown "$UNTIL"
+    log "NOTE 엔진 불능 - $((UNTIL - NOW))초 쿨다운(복귀 ${RESET:-미상})"
+  fi
   if [ "$VERDICT" = "err" ]; then
     log "FAIL $THASH 세션이 result is_error로 끝났다 -> 할당 회수 + 백로그 복귀. 로그 $(basename "$LOGF")"
   else
@@ -523,5 +585,6 @@ if [ -n "$REAL" ] && [ "$REAL" != "$SID" ]; then
   python3 "$PY" assign "$TPATH" "$REAL"
   log "NOTE $THASH 세션키 정정 $SID -> $REAL"
 fi
+rm -f "$CDOWN"          # 세션이 끝까지 갔다 = 엔진이 산다. 창이 남아 있으면 여기서 푼다.
 log "DONE $THASH sid=${REAL:-$SID}"
 exit 0
