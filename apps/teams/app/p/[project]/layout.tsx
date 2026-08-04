@@ -256,8 +256,9 @@ export default async function ProjectLayout({
           **`flex-wrap`이 아니다** — 감으면 28이 56이 되고 그게 §0-8 판정 3이 "얇은 한 줄"로
           못 박은 그것이다. 세 단계(`lg` 속도 · `md` 리셋 · `sm` 게이지)를 다 거치고도 넘치면
           `ml-auto` idle 풀이 먼저 0폭이 되고 그다음 넘친 칸이 `overflow-hidden`으로 잘린다.
-          // ponytail: 엔진 2개는 어느 폭에서도 안 넘친다. 3개는 640–966 · 1024–1177에서 넘치고
-          // 1178px부터 다 선다 — 오늘 이 큐의 엔진은 1개다. 3개가 실재하면 그때 넷째 단계를 본다. */}
+          // ponytail: 엔진 2개는 어느 폭에서도 안 넘친다. 3개는 360–439 · 640–751 · 768–963 ·
+          // 1024–1202에서 넘치고 1203px부터 다 선다 — 오늘 이 큐의 엔진은 1개다.
+          // 3개가 실재하면 그때 넷째 단계를 본다. */}
       {current.groups.length > 0 && (
         <footer className="flex h-7 shrink-0 items-center gap-6 overflow-hidden border-t bg-background px-6">
           {/* 값을 여기서 `await`하면 외부 GET(최대 5초)이 셸 전체를 붙잡아 보드가 그만큼 늦는다.
