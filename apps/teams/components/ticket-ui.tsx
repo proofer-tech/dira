@@ -905,7 +905,7 @@ export function RequestDialog({
     setDismissed(state);
   });
 
-  // `r`(§0-6 `board.request`). **셸 인스턴스 하나만 듣는다** — 보드에는 이 컴포넌트가 둘이고
+  // `⌘/`(§0-6 `board.request`). **셸 인스턴스 하나만 듣는다** — 보드에는 이 컴포넌트가 둘이고
   // 둘 다 들으면 키 한 번에 다이얼로그가 둘 열린다(§3 · `SettingsDialog`이 `icon`만 듣는 그 모양).
   // 여는 것도 닫는 경로 넷과 같은 `guard.close`다 — 상태를 새로 만들지 않는다.
   useHotkey("board.request", (e) => {
@@ -1062,7 +1062,7 @@ export function NewTicketDialog({
     },
   );
 
-  // `n`(§0-6 `board.new`). **이 컴포넌트만 보드 밖에도 산다**(티켓 상세의 복제) — 그래서
+  // `⌘I`(§0-6 `board.new`). **이 컴포넌트만 보드 밖에도 산다**(티켓 상세의 복제) — 그래서
   // 범위가 저절로 맞지 않고 부르는 쪽이 켠다. 여는 자리는 `RequestDialog`와 같은 `guard.close`다.
   useHotkey("board.new", (e) => {
     if (!hotkey) return;

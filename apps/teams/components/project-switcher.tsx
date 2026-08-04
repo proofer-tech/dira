@@ -302,11 +302,13 @@ export function ProjectNav({ id }: { id: string }) {
   const base = `/p/${id}`;
   const rest = pathname.startsWith(base) ? pathname.slice(base.length) : "";
 
-  // `b`·`w`(§0-6 `nav.board`·`nav.workers`) — 바로 위 두 링크가 하는 일 그대로다. **프로젝트
+  // `⌘B`·`⌘E`(§0-6 `nav.board`·`nav.workers`) — 바로 위 두 링크가 하는 일 그대로다. **프로젝트
   // 셸에서만 듣는다**: 이 컴포넌트가 그 셸에만 있어서 `/`(프로젝트 목록)에는 리스너가 아예
-  // 안 걸린다(갈 프로젝트가 없다). `preventDefault`는 안 한다 — 글쇠 하나에 뺏을 브라우저
-  // 기본이 없다. 글 쓰는 중 가드는 `useHotkey`가 들고, 키 지정 중에는 캡처 상자의
-  // `stopPropagation`이 이벤트를 window까지 안 보낸다(§0-6 `언제 안 듣는가`).
+  // 안 걸린다(갈 프로젝트가 없다). `preventDefault`는 안 한다 — 이 둘이 뺏을 브라우저 기본이
+  // 없다(실측 `6831bfeb`: 크롬 `⌘B`·`⌘E` 둘 다 페이지에 그대로 오고 기본 동작이 없다).
+  // **글 쓰는 중 가드는 `useHotkey`가 든다 — 이 둘은 화면을 떠나는 액션이라 `Mod` 조합인데도
+  // 안 듣는다**(그래야 참견 칸에 쓰던 글이 `⌘B` 한 번에 안 사라진다). 키 지정 중에는 캡처
+  // 상자의 `stopPropagation`이 이벤트를 window까지 안 보낸다(§0-6 `언제 안 듣는가`).
   useHotkey("nav.board", () => router.push(base));
   useHotkey("nav.workers", () => router.push(`${base}/workers`));
 
@@ -316,8 +318,8 @@ export function ProjectNav({ id }: { id: string }) {
   // - **bubble 단계**여야 한다: Radix `DismissableLayer`가 capture로 먼저 받아 닫으면서
   //   `preventDefault()`를 부른다 — 열린 것이 있으면 `defaultPrevented`로 알아채고 물러난다.
   //   겹침 목록을 우리가 들지 않는 이유가 이것이다(§0-7 거동).
-  // - `isTyping`이면 통과시킨다. 이 기능의 유일한 데이터 손실 표면이다(참견·티켓 편집기).
-  // `preventDefault`는 안 한다 — 글쇠 하나에 뺏을 브라우저 기본이 없다.
+  // - `isTyping`이면 통과시킨다. 데이터 손실 표면이 여기와 바로 위 두 줄이다(참견·티켓 편집기).
+  // `preventDefault`는 안 한다 — `Esc`에 뺏을 브라우저 기본이 없다.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || e.defaultPrevented || isTyping(e.target)) return;

@@ -30,14 +30,17 @@ export type KeyAction = {
 /** §0-6 액션 표. **순서가 목록의 순서다**(전역 → 보드 → 이동 → 입력칸). */
 export const DEFAULT_KEYMAP: KeyAction[] = [
   { id: "project.search", name: "프로젝트 검색", combo: "Mod+k" },
-  { id: "settings.open", name: "설정 열기", combo: "?" },
+  // `Mod+,`(맥의 설정 관례)는 크롬이 페이지에 안 넘긴다 — 그 바로 오른쪽 물리 키다(§0-6 인벤토리).
+  { id: "settings.open", name: "설정 열기", combo: "Mod+;" },
   // 이름이 `보드 검색`이 아니다 — 이 키는 화면에 따라 하는 일이 갈린다(보드는 검색 칸 · 홈은
   // 대화 안에서 찾기 · 나머지는 페이지 내 찾기). 목록에 `보드`라고 적으면 화면이 거짓말을 한다(§0-6).
   { id: "board.search", name: "검색", combo: "Mod+f" },
-  { id: "board.new", name: "티켓 발행", combo: "n" },
-  { id: "board.request", name: "요구 접수", combo: "r" },
-  { id: "nav.board", name: "보드로 이동", combo: "b" },
-  { id: "nav.workers", name: "워커로 이동", combo: "w" },
+  // 니모닉 글자가 막히면 그 낱말의 다음 자유 글자다(§0-6 인벤토리) — `ticket` → `t`✗ → `i`,
+  // `worker` → `w`✗ `o`✗ `r`✗ `k`(이미 씀) → `e`. `Mod+/`는 사람이 이름으로 지목했다(`7fa34329`).
+  { id: "board.new", name: "티켓 발행", combo: "Mod+i" },
+  { id: "board.request", name: "요구 접수", combo: "Mod+/" },
+  { id: "nav.board", name: "보드로 이동", combo: "Mod+b" },
+  { id: "nav.workers", name: "워커로 이동", combo: "Mod+e" },
   // 듣는 칸이 셋이다(참견 form · 홈 질의 칸 · 요구 접수 다이얼로그) — 이름에 `참견`을 적으면
   // 목록이 거짓말을 한다(§0-6). id는 `keymap.json`의 키라 안 바꾼다.
   { id: "interject.send", name: "보내기", combo: "Mod+Enter" },
@@ -113,10 +116,15 @@ export function matchCombo(e: KeyLike, combo: string): boolean {
   return normalizeKey(e.key) === c.key;
 }
 
+/** 지금 화면을 떠나는 액션. **글 쓰는 중이면 안 듣는다** — 조합에 `Mod`가 있어도 그렇다.
+ *  `⌘B`가 참견 칸에서 듣는 순간 쓰던 글이 사라진다(§0-6 `언제 안 듣는가`). 나머지 여섯은
+ *  팔레트·다이얼로그·찾기 바로 이 화면 **위에** 뜨거나 칸 안에서 쓰는 키라 글이 남는다. */
+const LEAVES_SCREEN = new Set<ActionId>(["nav.board", "nav.workers"]);
+
 /** **전역 핸들러(window)가 들어야 하는가** — 매칭 + 글 쓰는 중 가드(§0-6 `언제 안 듣는가`).
- *  신규 키 6개 중 5개가 글쇠 하나라 이 한 줄이 없으면 검색 칸에 `n`을 치는 순간 발행
- *  다이얼로그가 열린다. **`Mod`가 있는 조합은 가드를 받지 않는다** — `Mod+k`는 지금도
- *  검색 칸에서 듣는다(§4-1 "어디서나").
+ *  판정은 **`Mod`가 없거나 화면을 떠나는 액션이면 안 듣는다**로, 항이 둘인 것이 요건이다:
+ *  기본값이 전부 `Mod` 조합이라 앞 항만으로는 아무도 안 막고, 뒤 항만 두면 `board.new`를
+ *  `n`으로 되돌린 사람이 검색 칸에 `n`을 치는 순간 발행 다이얼로그가 열린다.
  *
  *  **캡처 중(키 지정)에 죽이는 자리는 여기가 아니다** — 캡처 상자의 `stopPropagation`이
  *  이벤트를 window까지 안 보낸다(`settings-dialog.tsx`). 여기에 플래그를 또 두면 같은 사실이
@@ -126,8 +134,13 @@ export function matchCombo(e: KeyLike, combo: string): boolean {
  *  여기 들이지 않으려는 것이다 — 이 파일은 `node --test`가 그냥 읽는다(AGENTS.md §검증).
  *
  *  조합자 표기 순서가 `Mod+…`로 고정이라(위 `parseCombo`) 접두 비교로 충분하다. */
-export function shouldFire(e: KeyLike, combo: string, typing: boolean): boolean {
-  if (typing && !combo.startsWith("Mod+")) return false;
+export function shouldFire(
+  e: KeyLike,
+  action: ActionId,
+  combo: string,
+  typing: boolean,
+): boolean {
+  if (typing && (!combo.startsWith("Mod+") || LEAVES_SCREEN.has(action))) return false;
   return matchCombo(e, combo);
 }
 

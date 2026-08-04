@@ -17594,7 +17594,7 @@ P155의 예산이 된다(768 **3장** · 대비 4행 재현).
 | # | 티켓 | persona | deps | 상태 |
 |---|---|---|---|---|
 | P156 | 스펙 확정 `7fa34329` | pm | — | 완료 — 왕복 0회(답이 세션 중에 인라인으로 왔다). 실측 4(Electron role 표 · `⌥`가 glyph modifier라 기본값에 못 쓴다 · `Mod+Shift+<글자>`가 표현 불가 · `keymap.json`이 이 머신에 없어 기본값이 그대로 값이다) |
-| P156 | 기본 키 다섯 + 글 쓰는 중 가드 `6831bfeb` | developer | — | 대기 |
+| P156 | 기본 키 다섯 + 글 쓰는 중 가드 `6831bfeb` | developer | — | 완료 — `lib/keymap.ts` 표 다섯 줄 + `shouldFire` 항 하나(`LEAVES_SCREEN`). 실측 3(목록 여덟 줄이 `formatCombo`로 새 키를 그린다 · `⌘B`는 `contenteditable`에만 기본이 있고 이 앱엔 그 노드가 0개 · `⌘E`는 어디에도 없다 · Electron role 표에 다섯 조합이 하나도 없다) |
 
 **티켓이 하나다.** 갈리는 것이 `lib/keymap.ts` 한 파일의 표 하나와 그 표가 낳는 가드 하나뿐이고,
 화면·표기·설정 목록은 **전부 `formatCombo`와 `DEFAULT_KEYMAP`에서 나온다**(§0-6이 *표기를

@@ -26,12 +26,12 @@ test("DEFAULT_KEYMAP — §0-6 액션 표 8줄과 id·기본키가 같다", () =
     DEFAULT_KEYMAP.map((a) => [a.id, a.combo]),
     [
       ["project.search", "Mod+k"],
-      ["settings.open", "?"],
+      ["settings.open", "Mod+;"],
       ["board.search", "Mod+f"],
-      ["board.new", "n"],
-      ["board.request", "r"],
-      ["nav.board", "b"],
-      ["nav.workers", "w"],
+      ["board.new", "Mod+i"],
+      ["board.request", "Mod+/"],
+      ["nav.board", "Mod+b"],
+      ["nav.workers", "Mod+e"],
       ["interject.send", "Mod+Enter"],
     ],
   );
@@ -76,7 +76,7 @@ test("readKeymap — 모르는 액션 id·이상한 값은 무시하고 아는 �
   const k = await readKeymap();
   assert.strictEqual(k.broken, false);
   assert.strictEqual(k.bindings["project.search"], "Mod+j"); // 바꾼 것
-  assert.strictEqual(k.bindings["board.new"], "n"); // 문자열이 아니면 기본값
+  assert.strictEqual(k.bindings["board.new"], "Mod+i"); // 문자열이 아니면 기본값
   assert.ok(!("nope.gone" in k.bindings));
 });
 
@@ -96,7 +96,7 @@ test("writeKeymap — 기본값과 같아진 값은 파일에서 빠진다(되�
   put({ "project.search": "Mod+j", "board.new": "m" });
   await writeKeymap({ "project.search": "Mod+k" }); // 기본값으로 되돌린다
   assert.deepStrictEqual(JSON.parse(readFileSync(FILE, "utf8")), { "board.new": "m" });
-  await writeKeymap({ "board.new": "n" });
+  await writeKeymap({ "board.new": "Mod+i" });
   assert.deepStrictEqual(JSON.parse(readFileSync(FILE, "utf8")), {});
   clear();
 });
@@ -132,15 +132,23 @@ test("matchCombo — 조합 중(isComposing)이면 무조건 false", () => {
   assert.ok(!matchCombo(ev({ key: "n", isComposing: true }), "n"));
 });
 
-test("shouldFire — 글 쓰는 중이면 Mod 없는 조합만 죽는다", () => {
-  // 검색 칸에 `n`을 쳐도 발행 다이얼로그가 열리지 않는다 — 이 기능 전체의 성패다(§0-6)
-  assert.ok(!shouldFire(ev({ key: "n" }), "n", true));
-  assert.ok(shouldFire(ev({ key: "n" }), "n", false));
-  // `Mod+k`는 가드를 안 받는다 — §4-1이 "어디서나"라고 적었다
-  assert.ok(shouldFire(ev({ key: "k", metaKey: true }), "Mod+k", true));
+test("shouldFire — 글 쓰는 중이면 `Mod` 없는 조합과 화면을 떠나는 액션이 죽는다", () => {
+  // ① 화면을 떠나는 액션은 `Mod` 조합인데도 안 듣는다 — 참견 칸의 `⌘B`가 글을 지우면 안 된다
+  assert.ok(!shouldFire(ev({ key: "b", metaKey: true }), "nav.board", "Mod+b", true));
+  assert.ok(!shouldFire(ev({ key: "e", metaKey: true }), "nav.workers", "Mod+e", true));
+  // ② 안 쓰는 중이면 듣는다
+  assert.ok(shouldFire(ev({ key: "b", metaKey: true }), "nav.board", "Mod+b", false));
+  // ③ 화면 위에 뜨는 액션은 글 쓰는 중에도 듣는다(다이얼로그가 뜰 뿐 쓰던 글은 남는다).
+  //    `Mod+k`가 §4-1의 "어디서나"이고 `Mod+f`·`Mod+i`가 같은 벌이다
+  assert.ok(shouldFire(ev({ key: "i", metaKey: true }), "board.new", "Mod+i", true));
+  assert.ok(shouldFire(ev({ key: "k", metaKey: true }), "project.search", "Mod+k", true));
+  // ④ 기본값을 맨글쇠로 되돌린 사람도 종전 거동을 그대로 받는다 — 검색 칸에 `n`을 쳐도
+  //    발행 다이얼로그가 열리지 않는다. 판정의 두 항 중 앞 항이 이 사람만을 위해 산다(§0-6)
+  assert.ok(!shouldFire(ev({ key: "n" }), "board.new", "n", true));
+  assert.ok(shouldFire(ev({ key: "n" }), "board.new", "n", false));
   // 가드를 통과해도 매칭은 매칭이다
-  assert.ok(!shouldFire(ev({ key: "j" }), "n", false));
-  assert.ok(!shouldFire(ev({ key: "n", isComposing: true }), "n", false));
+  assert.ok(!shouldFire(ev({ key: "j" }), "board.new", "n", false));
+  assert.ok(!shouldFire(ev({ key: "n", isComposing: true }), "board.new", "n", false));
 });
 
 test("comboOf — 누른 키를 저장형으로. `matchCombo`가 그 값을 도로 잡는다", () => {
@@ -163,10 +171,12 @@ test("comboOf — 누른 키를 저장형으로. `matchCombo`가 그 값을 도�
 });
 
 test("comboOf — 글자 키의 Shift는 안 적는다(같은 물리 키가 두 값이 되면 충돌을 못 잡는다)", () => {
-  // `Shift+/`의 `e.key`는 이미 `?`다 — `Shift+?`로 적으면 §0-6 기본키 `?`와 안 겹치는 값이 된다
+  // `Shift+/`의 `e.key`는 이미 `?`다 — `Shift+?`로 적으면 `?`로 지정해 둔 값과 안 겹치는 값이 된다
   const q = comboOf(ev({ key: "?", shiftKey: true }));
   assert.strictEqual(q, "?");
-  assert.strictEqual(validateBinding(BOUND, "board.new", q)!.conflict, "settings.open");
+  // 기본값이 전부 `Mod` 조합이 된 뒤로 `?`는 **되돌린 사람의 값**이다(종전 `settings.open` 기본키)
+  const back = { ...BOUND, "settings.open": "?" };
+  assert.strictEqual(validateBinding(back, "board.new", q)!.conflict, "settings.open");
   // 이름 있는 키는 Shift가 뜻을 바꾸므로 적는다
   assert.strictEqual(comboOf(ev({ key: "Enter", metaKey: true, shiftKey: true })), "Mod+Shift+Enter");
 });
@@ -182,6 +192,14 @@ test("formatCombo — 화면 표기는 여기 하나에서 나온다", () => {
   assert.strictEqual(formatCombo("Mod+Enter"), "⌘↵");
   assert.strictEqual(formatCombo("?"), "?");
   assert.strictEqual(formatCombo("n"), "N");
+  // 새 기본값 다섯도 여기서 나온다 — 목록·힌트에 표기를 하드코딩하지 않는다(§0-6)
+  assert.deepStrictEqual(["Mod+;", "Mod+i", "Mod+/", "Mod+b", "Mod+e"].map(formatCombo), [
+    "⌘;",
+    "⌘I",
+    "⌘/",
+    "⌘B",
+    "⌘E",
+  ]);
   assert.strictEqual(formatCombo("Mod+Shift+ArrowUp"), "⇧⌘↑");
 });
 
@@ -197,7 +215,7 @@ test("validateBinding — 겹치면 상대 액션 id를 담아 거절한다", ()
   // 문구가 상대 액션의 **이름**을 말한다. `^`가 있어야 `프로젝트 검색`과 안 헷갈린다
   assert.match(e.reason, /^검색과 겹칩니다/);
   // 자기 자신과는 안 겹친다(안 바꾸고 저장해도 통과한다)
-  assert.strictEqual(validateBinding(BOUND, "board.new", "n"), null);
+  assert.strictEqual(validateBinding(BOUND, "board.new", "Mod+i"), null);
   assert.strictEqual(validateBinding(BOUND, "board.new", "j"), null);
   // 받침 없는 이름은 `와`다
   assert.match(validateBinding(BOUND, "board.new", "Mod+Enter")!.reason, /보내기와 겹칩니다/);

@@ -48,7 +48,9 @@ export function isTyping(target: EventTarget | null): boolean {
 }
 
 /** **전역 키 하나** — `window`에 걸고 글 쓰는 중 가드를 받는다. 판정은 `lib/keymap.ts`의
- *  `shouldFire` 하나고 여기는 DOM만 댄다(가드를 부르는 쪽마다 다시 짜지 않는다).
+ *  `shouldFire` 하나고 여기는 DOM만 댄다(가드를 부르는 쪽마다 다시 짜지 않는다). 가드가
+ *  액션마다 갈리므로(화면을 떠나는 액션은 `Mod` 조합이어도 안 듣는다 — §0-6) `action`을
+ *  같이 넘긴다. 이 훅은 그 값을 이미 손에 들고 있어서 새 배선이 없다.
  *
  *  `preventDefault`는 호출자가 한다 — 브라우저 기본을 뺏어도 되는지는 액션마다 다르다. */
 export function useHotkey(action: ActionId, handler: (e: KeyboardEvent) => void): void {
@@ -61,9 +63,9 @@ export function useHotkey(action: ActionId, handler: (e: KeyboardEvent) => void)
   });
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (shouldFire(e, combo, isTyping(e.target))) latest.current(e);
+      if (shouldFire(e, action, combo, isTyping(e.target))) latest.current(e);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [combo]);
+  }, [action, combo]);
 }

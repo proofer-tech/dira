@@ -73,8 +73,8 @@ export function BoardSearch() {
   }, [text, qs]);
 
   // `⌘F`(§0-6 `board.search`의 **보드 갈래**). **보드에만 있는 컴포넌트라 범위가 저절로 맞는다.**
-  // `Mod` 조합이라 글 쓰는 중에도 듣는다 — 검색 칸에 글을 쓰다 눌러도 온다(`useHotkey`의 가드는
-  // 글쇠 하나짜리 키에만 걸린다). `preventDefault`는 크롬 찾기 바를 뺏는다 — 이 화면에서 찾기는
+  // `Mod` 조합이고 화면을 안 떠나는 액션이라 글 쓰는 중에도 듣는다 — 검색 칸에 글을 쓰다 눌러도
+  // 온다(`useHotkey`의 가드는 그 둘로 판정한다). `preventDefault`는 크롬 찾기 바를 뺏는다 — 이 화면에서 찾기는
   // 우리 것이라고 요구가 말했다(`6218440d`).
   useHotkey("board.search", (e) => {
     e.preventDefault();
