@@ -17101,7 +17101,7 @@ print(len(win), sum(os.path.getsize('public/fonts/WantedSansVariable.split.%d.wo
 | P153 | 스펙 확정 `bd3cd201` | pm | — | 완료 — 왕복 1회(답 (a)). 실측 4(게이트는 이 큐 것이고 제품이 아니다 · 홈 도구 다섯에 `Bash` 0 · 템플릿 페르소나 4 vs 큐 5 · 완료 855건) |
 | P153 | 페르소나 파일 + 스캐폴딩 기본 `39ee5ae0` | developer | — | 완료 — `templates/personas/archive-manager/PROFILE.md` + `scaffold.ts`·`scaffold.test.ts` 한 줄씩. 큐 사본도 설치(gitignore라 커밋에 안 보인다) |
 | P153 | 홈 에이전트가 페르소나로 돈다 `089035b0` | developer | — | 대기 |
-| P153 | 완료 트리거 한 줄 (AGENTS.md 두 벌) `1ddd4fa1` | developer | `39ee5ae0` | 대기 |
+| P153 | 완료 트리거 한 줄 (AGENTS.md 두 벌) `1ddd4fa1` | developer | `39ee5ae0` | 완료 — `a3d9a29`. 큐 사본은 gitignore라 커밋에 없다. 수행 중 사람이 준 요구 둘 중 *가져가지 않는다*는 두 벌에 같이 박았고, *겹쳐 보인다*(화면 규약)는 `f147f60d`(pm)로 넘겼다 |
 
 **이 절을 쓰는 20분 사이에 `P151`이 두 벌이었다가 풀렸다.** 다른 두 세션이 각자 `P151`로
 push했고(랜딩 채널톡 · 홈 사이드바), 남이 push한 번호는 안 고치는 것이 규약이라 나는 그 다음
