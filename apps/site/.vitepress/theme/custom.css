@@ -6,8 +6,24 @@
    `scroll-behavior: auto !important`로 덮으므로 접근성 저하는 없다. */
 html { scroll-behavior: smooth; }
 
-/* 랜딩은 VitePress 기본 레이아웃 밖에서 자기 폭을 쓴다. */
-.dira-landing { --vp-c-bg: var(--bg); }
+/* 랜딩은 VitePress 기본 레이아웃 밖에서 자기 폭을 쓴다.
+   아래 두 값은 OS 다크에서 새는 두 자리를 막는다(§랜딩 §개편 §다크에서 새는 두 자리).
+   다크로 두면 vitepress가 루트에 어두운 스킴 클래스를 붙이는데 이 규칙이 밑면을 이미
+   흰색으로 못박아 놔서, 흰 랜딩 위로 어두운 값 둘만 샌다 — 다크 모드를 만드는 일이 아니라
+   다크에서도 랜딩을 라이트로 못박는 일이다. 선택자는 하나도 안 늘린다(`.VPSkipLink`는
+   `.Layout .dira-landing` 안이라 이 스코프가 닿는다).
+   ① 브랜드 색 변수 = `.VPSkipLink`(첫 Tab 정거장) 글자색. `#3451b2`는 vitepress 라이트
+      `--vp-c-indigo-1`의 사본이다(`vitepress/dist/client/theme-default/styles/vars.css:52`.
+      어두운 쪽은 같은 파일 `:86`에서 `#a8b1ff`로 갈리고 그게 흰 위 2.02였다 — AA 4.5 미달).
+      vitepress를 올리는 날 이 값이 갈렸는지 볼 자리가 이 주석뿐이다.
+   ② 스킴 선언 = 브라우저 기본 포커스 링(정거장 전부)의 유일한 손잡이다. UA 라이트 링을
+      그대로 받으므로 우리 색이 하나도 안 는다. vitepress `base.css:26`의 루트 규칙은
+      무수정이라 매뉴얼 페이지의 어두운 화면은 그대로 선다. */
+.dira-landing {
+  --vp-c-bg: var(--bg);
+  --vp-c-brand-1: #3451b2;
+  color-scheme: light;
+}
 /* ① 3트랙 full-bleed 격자(§랜딩 §개편 §방향·토큰 «격자»). 기본 자식은 `content` 열에
    서고, 화면 끝까지 가야 하는 밴드·룰은 자기 규칙에 `grid-column: full`을 적는다 —
    그것이 하이라인을 3 → 8로 늘리는 손잡이이고 뒤따르는 두 티켓이 소비하는 프리미티브다.
