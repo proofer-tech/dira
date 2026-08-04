@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, ref } from "vue";
+import { onMounted, onUnmounted, ref } from "vue";
 import { useData } from "vitepress";
 const { theme } = useData();
 // 초기값은 빌드 시점의 `apps/desktop/package.json`. 비우면 hydration이 어긋난다.
@@ -73,7 +73,29 @@ onMounted(async () => {
   } catch {
     // 릴리스를 못 읽으면 초기값 그대로 둔다 — 화면에도 콘솔에도 아무것도 안 띄운다.
   }
+  // 상담 위젯(DESIGN §랜딩 §채널톡 상담 위젯 §자리·값). 공식 설치 스니펫 그대로다 —
+  // 큐 shim을 세우고 async <script>를 붙인다. npm 래퍼(`react-channel-plugin`)는 이 열 줄을
+  // React 훅으로 감싼 것뿐이라 Vue에서 얻는 것이 0이다(§실측 ④ — `package.json`이 0줄 갈린다).
+  if (!window.ChannelIO) {
+    const ch = (...args) => ch.c(args);
+    ch.q = [];
+    ch.c = (args) => ch.q.push(args);
+    window.ChannelIO = ch;
+    const s = document.createElement("script");
+    s.async = true;
+    s.src = "https://cdn.channel.io/plugin/ch-plugin-web.js";
+    document.head.appendChild(s);
+  }
+  // 플러그인 키는 공개값이다 — proofer 클라이언트 번들에도 그대로 있다(§실측 ⑤).
+  // 지금 이 채널은 도메인이 안 떠 있어 boot이 401이고 런처가 안 뜬다(§답이 왔다, 답변 `2b829e22`).
+  window.ChannelIO("boot", {
+    pluginKey: "22e3f817-68e9-4717-a399-f2d78154abea",
+    language: "ko",
+  });
 });
+// vitepress는 SPA라 랜딩을 떠나도 문서가 다시 안 뜬다 — 걷지 않으면 요구가 지목하지 않은
+// 매뉴얼 26장 위에 런처가 남는다(§자리·값). 그래서 `랜딩페이지에`를 참으로 만드는 것이 이 줄이다.
+onUnmounted(() => window.ChannelIO?.("shutdown"));
 </script>
 
 <template>
