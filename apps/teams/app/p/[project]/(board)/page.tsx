@@ -28,7 +28,7 @@
 import { stat } from "node:fs/promises";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowDown, ArrowUp, ChevronsUpDown, X } from "lucide-react";
+import { Archive, ArrowDown, ArrowUp, ChevronsUpDown, X } from "lucide-react";
 import {
   BoardFilter,
   BoardLaneMotion,
@@ -200,12 +200,18 @@ function wipLine(e: StreamEvent | null) {
 /** 완료 카드 하단의 아카이브 한 줄(§5-3 §표시 규약 ③) — 그릇·간격은 위 `wipLine`과 **같은 값**이다
  *  (§비주얼 §36 ①. 사람이 그 스트립을 이름으로 지목했다 — 새 유틸 0 · 새 토큰 0 · 새 간격 값 0).
  *
- *  갈리는 셋만 적는다. **모션 없음**: `wip-shimmer`가 말하는 것은 *지금 갱신되고 있다*인데 이 줄은
- *  티켓 하나의 상태 전이 두어 번이다(§비주얼 머리의 예외 목록을 안 연다). **`aria-hidden` 없음**:
- *  `.wip` 줄이 그걸 다는 이유는 5초마다 갈리는 글이라서고, 이 줄은 안 갈리는 **링크**라 숨기면
- *  포커스만 잡히는 보이지 않는 링크가 된다. **`relative z-10`**: 카드 전체가 이미 `after:inset-0`
- *  링크라 deps 배지·`AnswerDialog`와 같은 층에 올려야 눌린다 — 보드에서 아카이브 티켓으로 가는
- *  유일한 길이다.
+ *  갈리는 셋만 적는다. **`wip-shimmer`는 안 붙인다**: 그 빛이 말하는 것은 *지금 갱신되고 있다*인데
+ *  이 줄의 글자는 폴링으로 안 갈린다(§5-3 §개정 ② 첫 행 — 두 줄이 건드리는 속성이 아예 다르다).
+ *  **줄에 `aria-hidden` 없음**: `.wip` 줄이 그걸 다는 이유는 5초마다 갈리는 글이라서고, 이 줄은
+ *  안 갈리는 **링크**라 숨기면 포커스만 잡히는 보이지 않는 링크가 된다. **`relative z-10`**:
+ *  카드 전체가 이미 `after:inset-0` 링크라 deps 배지·`AnswerDialog`와 같은 층에 올려야 눌린다 —
+ *  보드에서 아카이브 티켓으로 가는 유일한 길이다.
+ *
+ *  **표식 하나가 §18의 밝기로 숨쉰다**(§비주얼 §42 — 사람 요구 `2f9fce51`이 '아카이브' 인지와
+ *  '진행중' 인지 둘을 요구했다). 아이콘이 앞의 것을, 모션이 뒤의 것을 말한다. 붙는 곳은 **표식
+ *  자신**이고 글자·링크·스트립에는 안 붙는다 — `opacity`는 자식 전부를 먹어서 부모에 붙이면
+ *  글자가 알파 0.3까지 같이 내려간다(§18 §함정). 12px은 14px 줄 상자에 위아래 1px씩 남는 값이라
+ *  카드 높이가 안 는다(`size-3.5`는 여유가 0이다). `globals.css`는 0줄 갈린다 — §18 재사용이다.
  *
  *  문구는 셋뿐이고 **상태 배지를 안 쓴다**: 카드의 배지는 *이 카드의 상태*를 말하는 자리라
  *  같은 실루엣이 다른 티켓의 상태를 말하면 사람이 완료 카드를 `진행중`으로 읽는다. 해시도 안
@@ -215,8 +221,14 @@ function archiveLine(a: Ticket | undefined, href: (t: Ticket) => string) {
   return (
     <div className="-mx-4 -mb-2 border-t px-4 pt-2">
       <div className="h-3.5 truncate text-2xs">
-        <Link href={href(a)} className="relative z-10">
-          {isAwaiting(a) ? "아카이브 답변 대기" : a.state === "wip" ? "아카이브 진행중" : "아카이브 대기"}
+        <Link href={href(a)} className="relative z-10 inline-flex items-center gap-1">
+          <Archive
+            aria-hidden
+            className="size-3 shrink-0 animate-wip-pulse motion-reduce:animate-none"
+          />
+          <span>
+            {isAwaiting(a) ? "아카이빙 답변 대기" : a.state === "wip" ? "아카이빙중" : "아카이빙 대기"}
+          </span>
         </Link>
       </div>
     </div>
