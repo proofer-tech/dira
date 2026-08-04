@@ -813,6 +813,18 @@ async function lastLogByWorker(
  *  // ponytail: 고정 10분. 폴링(5초)·cron(1분)보다 한참 크고 사유의 수명보다 짧으면 된다 */
 const FRESH_MS = 10 * 60 * 1000;
 
+/** 살아 있는 엔진 쿨다운의 만료 시각(ms epoch). 없거나 못 읽으면 `0`(= 늘 과거)이라 판정이
+ *  조용히 종전 10분으로 떨어진다.
+ *
+ *  자리는 **`tick.sh:62`가 정본**이다(`$LOCAL/run/cooldown-<engineName>`) — 새 경로 규약을
+ *  만들지 않는다. 파일은 두 줄이고 **1줄째 epoch만 읽는다**(2줄째 엔진 지문은 엔진의 것이다). */
+async function cooldownUntil(engine: string): Promise<number> {
+  const p = path.join(localDir(), "run", `cooldown-${engine}`);
+  const head = (await readFile(p, "utf8").catch(() => "")).split("\n", 1)[0].trim();
+  const sec = Number(head); // 빈 문자열·숫자 아님 → 0/NaN → 만료된 것과 같은 칸이다
+  return Number.isFinite(sec) ? sec * 1000 : 0;
+}
+
 /** 세션 로그는 **마지막 한 줄이 JSON**이고 그 앞은 세션 stderr다(`tick.sh:222`가 `2>>"$LOGF"`).
  *  실측 파일은 1.4KB지만 상한이 없어서 꼬리 64KB만 읽는다 — `tickets.py:transcript_state`의
  *  선례 그대로고 `readFile` 전체 읽기가 아니다. 파일이 64KB 미만이면 전체다.
@@ -846,14 +858,23 @@ const failLine = /^(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d) \[[^\]]*\] FAIL (\S+) .* 로
  *  `DONE`이면 `null`이다 — 이게 "다음 성공 tick에 저절로 꺼진다"다. **`TIMEOUT`도 `null`**:
  *  rc 143/137은 90분 상한에 걸린 매달린 세션이고 환경 탓이 아니다(그래서 이 정규식이 `FAIL`만 문다).
  *  **`KILLED`도 같은 칸이다**(§2-5) — 사람이 끊은 것이라 배너가 말할 것이 없다. */
-async function failureOf(logsDir: string, line: string | null): Promise<WorkerFailure | null> {
+async function failureOf(
+  logsDir: string,
+  line: string | null,
+  coolUntil: () => Promise<number>,
+): Promise<WorkerFailure | null> {
   const m = line && failLine.exec(line);
   if (!m) return null;
   const [, at, hash, log] = m;
   // `2026-07-31 18:09:49`는 `Date`가 엔진마다 다르게 무는 모양이다. `T`를 넣으면 오프셋 없는
   // ISO = 로컬 시각으로 규격이 정해져 있고, tick.sh의 `date '+%F %T'`도 이 머신의 로컬이다.
   const ts = Date.parse(at.replace(" ", "T"));
-  if (!Number.isFinite(ts) || Date.now() - ts > FRESH_MS) return null;
+  if (!Number.isFinite(ts)) return null;
+  // §4-9 §배너가 꺼지는 구멍. 창이 지났어도 **살아 있는 쿨다운이 10분보다 정확한 증거다** — 그
+  // 파일은 *지금 엔진이 불능이고 언제까지다*를 직접 말한다. 그동안은 새 `FAIL`이 구조적으로 안
+  // 생기므로(게이트가 `select` 앞에서 `exit 0`) 창만 보면 큐가 멈춘 채로 배너가 꺼진다.
+  // 값은 10분 그대로이고 조건이 하나 는다 — 쿨다운이 없거나 만료면 위 문장 그대로다.
+  if (Date.now() - ts > FRESH_MS && Date.now() >= (await coolUntil())) return null;
   // 파일명은 엔진이 준 값이지만 그대로 이어 붙이지 않는다 — logs/ 밖으로 나가는 이름은 이름이 아니다.
   const rec = await lastJsonLine(path.join(logsDir, path.basename(log)));
   if (!rec || rec.is_error !== true) return null; // 파싱 실패·`is_error` 아님 → 사유가 없다
@@ -1041,6 +1062,16 @@ export async function listWorkers(root: string, tickets: Ticket[] = []): Promise
 
   const [cronRaw, logs] = await Promise.all([crontabText(), lastLogByWorker(dir)]);
   const cron = nfc(cronRaw);
+  // 쿨다운은 **엔진마다** 하나이고 머신 전역이다(`tick.sh:62`). 워커마다 열지 않도록 이 패스
+  // 안에서 엔진 이름으로 한 번만 읽는다 — 오늘 엔진 종류는 1개다. 실패가 없는 워커는 아예 안
+  // 부르므로(§0-5 §비용) 정상 상태에서는 이 읽기도 0회다.
+  const cooldowns = new Map<string, Promise<number>>();
+  const coolUntil = (engine: string | null) => () => {
+    const n = engineName(engine);
+    const hit = cooldowns.get(n) ?? cooldownUntil(n);
+    cooldowns.set(n, hit);
+    return hit;
+  };
   const out: Worker[] = [];
   for (const file of names) {
     const name = file.slice(0, -3);
@@ -1065,7 +1096,11 @@ export async function listWorkers(root: string, tickets: Ticket[] = []): Promise
       engine: parsed.engine, // null = 대입 없음. 여기서 기본값으로 덮으면 화면이 둘을 못 가른다
       recentLog: logs[eff]?.recent ?? [],
       // 파일을 여는 것은 **마지막 결과가 `FAIL`인 워커뿐**이다 — 정상 상태에서는 0회다(§0-5 비용).
-      lastFailure: await failureOf(path.join(dir, "logs"), logs[eff]?.result ?? null),
+      lastFailure: await failureOf(
+        path.join(dir, "logs"),
+        logs[eff]?.result ?? null,
+        coolUntil(parsed.engine),
+      ),
       context: await contextOf(root, text, parsed.cwd),
       // 이 줄이 없는 워커는 공통을 못 받는다 — 화면이 경고 + `공통 적용`을 띄운다(§4-1).
       commonSource: commonSourceRe.test(text),

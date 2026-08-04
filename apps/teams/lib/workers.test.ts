@@ -512,6 +512,41 @@ test("lastFailure — 외부 요인으로 죽은 세션만, 신선할 때만 잡
   assert.match(ws.w5.recentLog[0], /SKIP/);
 });
 
+test("lastFailure — 살아 있는 엔진 쿨다운이 신선도 창을 대신한다 (§4-9 §배너가 꺼지는 구멍)", async () => {
+  // 쿨다운이 걸린 동안에는 새 `FAIL`이 구조적으로 안 생겨서(게이트가 `exit 0`) 10분 창만 보면
+  // 큐가 멈춘 채로 배너가 꺼진다. 실측 10.30시간 중 9.05시간(88%)이 그 상태였다.
+  const root = makeRoot({ "w1.sh": "#!/bin/bash\n" });
+  const dir = path.join(root, "workers");
+  mkdirSync(path.join(dir, "logs"));
+  writeFileSync(
+    path.join(dir, "logs", "fail-w1.log"),
+    JSON.stringify({ is_error: true, terminal_reason: "api_error", result: LIMIT }) + "\n",
+  );
+  const at = stamp(15); // 창(10분) 밖이다 — 쿨다운이 없으면 종전대로 `null`이다
+  writeFileSync(
+    path.join(dir, "runner.log"),
+    `${at} [w1] FAIL a1111111 rc=1 -> 할당 회수 + 백로그 복귀. 로그 fail-w1.log\n`,
+  );
+
+  // 자리는 `tick.sh:62`. 워커에 `TICKET_ENGINE`이 없으니 엔진 이름은 기본값 `claude`다.
+  const cd = path.join(LOCAL, "run", "cooldown-claude");
+  mkdirSync(path.dirname(cd), { recursive: true });
+  const put = (line1: string) => writeFileSync(cd, `${line1}\n지문\n`);
+  const secs = (n: number) => String(Math.floor(Date.now() / 1000) + n);
+
+  // ⓐ 15분 전 FAIL + 살아 있는 쿨다운 → 산다. 그 파일이 *지금 불능이고 언제까지다*를 말한다
+  put(secs(3600));
+  assert.strictEqual((await listWorkers(root))[0].lastFailure?.hash, "a1111111");
+
+  // ⓑ 만료된 쿨다운 / 1줄째가 숫자가 아님 / 파일 없음 → 종전 10분 그대로 `null`
+  put(secs(-1));
+  assert.strictEqual((await listWorkers(root))[0].lastFailure, null);
+  put("epoch가 아니다");
+  assert.strictEqual((await listWorkers(root))[0].lastFailure, null);
+  rmSync(cd);
+  assert.strictEqual((await listWorkers(root))[0].lastFailure, null);
+});
+
 // ── 읽음 처리 (§0-5 §읽음 처리) ─────────────────────────────────────────────
 
 /** 워커마다 `FAIL` 한 줄 + 그 로그 파일 하나. 로그 파일명이 읽음의 **키**라 인자로 받는다. */
