@@ -32,6 +32,18 @@ export default defineConfig({
   ignoreDeadLinks: false,
   head: [["link", { rel: "icon", href: "/icon.svg", type: "image/svg+xml" }]],
   markdown: { anchor: { slugify } },
+  // 기본 테마가 빌드 때 모든 페이지 `<head>`에 굽는 Inter 프리로드를 랜딩에서만 뺀다.
+  // 랜딩 본문은 `.dira-landing` 스코프의 `--sans`(원티드산스)라 그 얼굴을 부르는 자리가 없고,
+  // 받는 폰트 바이트의 15.1%(67,981 B)를 그리는 글리프 0으로 먹으면서 사는 얼굴보다 먼저 나간다.
+  // 매뉴얼 26장·404는 기본 테마 그대로라 Inter가 실제로 라틴 본문을 그린다 — 전역 제거가 아니다.
+  // `transformHead`로는 안 된다: 반환값이 `mergeHead`로 덧붙기만 하고, 이 태그는 사용자 `head`가
+  // 아니라 빌드 내부 `additionalHeadTags`라 그 배열에도 없다(chunk-D3CUZ4fa.js:49436 · :49603).
+  // ponytail: 자산 파일명이 빌드 해시라 얼굴 이름으로 찾는다. 매뉴얼도 원티드산스로 가는 날엔
+  //           `page` 조건을 지우거나 이 훅을 통째로 지운다.
+  transformHtml: (html, _id, ctx) =>
+    ctx.page === "index.md"
+      ? html.replace(/<link rel="preload"[^>]*inter-roman-latin[^>]*>/g, "")
+      : html,
   themeConfig: {
     diraVersion,
     nav: [
