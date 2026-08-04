@@ -8410,6 +8410,13 @@ https://hsol.info
 랜딩(`Landing.vue`의 텍스트 노드) · `terms.md` · `privacy.md`. 코드 주석 · 커밋 메시지 ·
 티켓 본문 · 이 문서는 아니다.
 
+> **이 목록이 `config.ts`의 `description` 한 줄을 놓치고 있었다**(요구 `2d21963d`, 2026-08-04).
+> 범위가 **자리**로 적혀 있어서 그 파일은 「코드 주석」으로 빠지는데, 그 한 줄은 주석이 아니라
+> `<meta name="description">`로 25장에 실려 **검색 스니펫을 그리는 문장**이다. §1의 검사가
+> 그 파일에 한 번도 안 돌았고 실제로 해라체 1건이 서 있다. **간다** — 가르는 것은 자리가
+> 아니라 종결어미의 유무이고(§1) 그 성질이 여기서 참이다. → §랜딩 §SEO·오픈그래프 ⑤.
+> **이 목록에 `config.ts`를 통째로 더하지 않는다**: 같은 파일의 주석 여덟 줄은 여전히 밖이다.
+
 **`apps/teams`의 화면 문자열은 이 절이 아니다.** 요구가 지목한 것이 `apps/site` 하나고,
 화면 문구는 §0-9와 각 화면 절이 이미 정본을 갖고 있다. 사이트가 경어체로 서면 앱과 어투가
 갈리는데, 그건 이 요구의 범위 밖이라 여기서 정하지 않는다.
@@ -11325,6 +11332,190 @@ pnpm --dir apps/site build                                            # 통과
 CDP 다섯 폭(1440 · 1024 · 901 · 768 · 390)에서 위 §실측 표의 **뒤** 열이 재현되는지 본다.
 `앞` 열도 같이 재서 재현이 되는지 먼저 확인한다 — 안 되면 자산이 바뀐 것이 아니라 측정이
 틀린 것이다. `.reveal`은 `armed` 클래스를 걷고 잰다.
+
+### SEO·오픈그래프 (요구 `2d21963d`)
+
+요구 두 줄이고 값을 안 담고 왔다 — `랜딩페이지 SEO 작업` · `공유를 위한 오픈그래프 요소들도`.
+**되물을 축은 0이다**: 도메인이 이미 정본이고(아래) 새로 쓸 문장이 하나뿐이다.
+
+#### 지금 값 — 빌드 산출물 26장을 세었다
+
+| 무엇 | 지금 |
+|---|---|
+| `og:*` | **0건** |
+| `twitter:*` | 0건 |
+| `link rel="canonical"` | 0건 |
+| `sitemap.xml` | 없다 |
+| `robots.txt` | 없다 |
+| `<meta name="description">` | **25장이 같은 문자열**(`config.ts:28`) · `404.html`만 `Not Found` |
+| 랜딩 `<head>` | 1,258 B |
+
+`npx vitepress build .` → `.vitepress/dist`. 26장 = 마크다운 25장 + 테마가 굽는 `404.html`.
+지금 랜딩 `<head>`에 서 있는 것은 `charset` · `viewport` · `<title>` · `description` ·
+`generator` · 자산 프리로드 · `icon.svg` 뿐이다.
+
+#### 도메인은 이 절이 정하는 값이 아니다
+
+`https://dira.proofer.tech`가 세 자리에 이미 정본으로 박혀 있다 — `privacy.md:36`(공개된
+법적 문서) · `docs/index.html:13`의 `rel="canonical"`(GitHub Pages 리다이렉트) ·
+`vercel.json`. **여기서 호스팅을 새로 정하지 않는다.** §비목표의 `호스팅·도메인이 없다`는
+앱이 서비스가 아니라는 줄이고, 사이트 도메인은 그 줄이 갈린 뒤에 선 값이다.
+
+**그런데 사이트는 아직 안 떠 있다.** `apps/site`는 `origin/master`에 커밋 **0개**이고
+`https://dira.proofer.tech/`는 200으로 회사 홈페이지(`<title>프루퍼 : …`)를 준다 —
+§리본 버전이 잰 그대로이고 이 요구에서 다시 재도 같다. 그래서 **이 개정의 효과는 배포
+전까지 0이고 검증은 빌드 산출물로만 선다.** Facebook Sharing Debugger · Twitter Card
+Validator · 카카오톡 미리보기 · Search Console 사이트맵 제출은 **전부 배포 뒤 사람의
+일**이라 어느 티켓의 `## Done when`에도 넣지 않는다(세션은 origin을 만지지 않는다).
+
+#### 고치는 자리 다섯
+
+| # | 자리 | 무엇 | 누구 |
+|---|---|---|---|
+| ① | `config.ts` | `sitemap: { hostname: "https://dira.proofer.tech" }` 한 줄 | developer |
+| ② | `config.ts` | `transformPageData`가 페이지마다 아래 §태그를 얹는다 | developer |
+| ③ | `apps/site/public/robots.txt` **신설** | 4줄 | developer |
+| ④ | `apps/site/public/og.png` **신설** | 1200×630 | designer |
+| ⑤ | `config.ts:28` `description` | 해라체 한 줄을 경어체로 | writer |
+
+**새 의존성 0이다.** `sitemap`은 vitepress 1.6.4에 이미 번들돼 있고(`chunk-D3CUZ4fa.js` —
+`package.json` 0줄) 나머지는 태그와 텍스트 파일이다. 플러그인을 들이지 않는다.
+
+##### ② 태그 — 페이지마다 열한 줄
+
+| 태그 | 값 | 근거 |
+|---|---|---|
+| `link rel="canonical"` | 그 페이지 절대 URL | 자기참조 canonical |
+| `og:type` | `website` | 26장 한 값 — 아래 §안 하는 것 |
+| `og:site_name` | `dira` | `config.ts`의 `title` |
+| `og:locale` | `ko_KR` | `lang: ko-KR` |
+| `og:url` | 그 페이지 절대 URL | |
+| `og:title` | 그 페이지 제목 | 랜딩은 `dira - 로컬 멀티 에이전트 매니지먼트 시스템`(§페이지 타이틀) |
+| `og:description` | 그 페이지 description | 랜딩·매뉴얼 전부 ⑤의 문장으로 떨어진다 |
+| `og:image` | `https://dira.proofer.tech/og.png` | **절대 URL이어야 한다.** 상대 경로는 플랫폼이 못 읽는다 |
+| `og:image:width` · `:height` | `1200` · `630` | ④ |
+| `twitter:card` | `summary_large_image` | |
+
+**절대 URL 만드는 규칙은 `relativePath`에서 유도한다** — `index.md`로 끝나면 그 조각을 지우고,
+아니면 `.md`를 지운다. `cleanUrls: true`라 `.html`을 붙이지 않는다. 실측 산출:
+`/` · `/docs/` · `/docs/install` · `/privacy`. `404.html`은 마크다운 페이지가 아니라
+이 훅을 안 지나므로 태그가 0이고, **그게 맞다**(색인 대상이 아니다).
+
+##### ③ `robots.txt`
+
+`public/`은 그대로 dist 루트에 복사된다(실측). 하는 일은 두 개다 — 전면 허용과 사이트맵 지시:
+
+```
+User-agent: *
+Allow: /
+
+Sitemap: https://dira.proofer.tech/sitemap.xml
+```
+
+##### ④ `og.png` — 정해진 것과 designer가 정하는 것
+
+| 정해진 것 | 값 | 근거 |
+|---|---|---|
+| 자리 | `apps/site/public/og.png` | `public/`은 파일명이 곧 URL이다(빌드 해시가 안 붙는다) |
+| 크기 | **1200 × 630** | OG 권장 1.91:1. 다른 비는 플랫폼이 그 비로 잘라 위아래가 날아간다 |
+| 형식 | PNG | 우리 마크가 단색 평면 도형이다(`icon.svg` — `#3E89F7` 패스 하나) |
+| 밑면 | **불투명** | alpha가 있으면 플랫폼이 검정·흰색 아무 밑면에나 깐다 |
+| 바이트 | ≤ 300 KB | 지금 `public/` 최대가 337 KB(`shots/barge.gif`)이고 카드 그림은 그보다 가벼워야 한다 |
+
+**기존 자산으로 때울 수 없다 — 여덟 장을 재 봤다.** `shots/`가 1600×444 · 1600×1000 ·
+1440×265 · 1600×760 · 1440×450 · 1600×700이고 **1.91:1이 하나도 없다.** 그대로 쓰면
+잘리는 자리가 designer가 안 정한 자리가 된다.
+
+**designer가 정하는 것은 구성이다.** 판정 축은 **작게 축소돼도 읽히나** 하나다 —
+카카오톡·슬랙은 카드를 작게 그린다.
+
+**그림을 나중에 갈면 파일명을 갈거나 사람이 플랫폼 캐시를 지워야 한다.** 플랫폼이 URL로
+캐시하고 `public/`에는 해시가 안 붙는다. 이 사실을 적어 두는 것이 전부다 — 지금 이름을
+피하지 않는다(공유가 아직 0건이다).
+
+#### 함정 둘 — 둘 다 빌드가 통과한 채로 조용히 틀린다
+
+**① `pageData.description`은 `undefined`가 아니라 `""`다.** 그래서 `??`는 안 걸린다.
+사이트 `description`으로 떨어뜨리는 fallback을 `??`로 쓰면 `og:description`이 **빈
+문자열로 나가고 빌드는 통과한다.** 두 연산자를 다 재서 박는다:
+
+| fallback | 빈 `og:description` 페이지 |
+|---|---|
+| `pageData.description ?? …` | **25 / 26** |
+| `pageData.description \|\| …` | **0 / 26** |
+
+`og:title`도 같은 벌이라 `||`로 쓴다. 사이트 값은 `transformPageData`의 둘째 인자에서
+온다(`siteConfig.site.description` · `siteConfig.site.title` — 실측으로 그 값이 맞다).
+
+**② `lastmod`는 공짜가 아니다.** 사이트맵에 `lastmod`를 넣으려면 `lastUpdated: true`가
+필요하고, **그 한 줄이 화면 24장에 `Last updated` 줄을 새로 세운다**(실측: `lastmod` 25/25 ·
+새 줄 24장). SEO 요구가 시킨 것이 아니고 그 라벨은 문체 판정이 붙는 자리다 — **안 켠다.**
+`lastmod` 없는 사이트맵도 유효하다.
+
+#### `description` 한 줄이 §사이트 문체의 무규칙 지대에 서 있다
+
+§사이트 문체 §적용 범위가 **자리**로 적혀 있다(매뉴얼 19장 · `docs/index.md` ·
+`Landing.vue` · `terms.md` · `privacy.md`). `config.ts`는 그 목록에 없고 「코드 주석은
+아니다」로도 빠진다. 그런데 그 파일의 `description` 한 줄은 **주석이 아니라 사람이 읽는
+문장**이고, 오늘도 `<meta name="description">`로 25장에 실려 검색 스니펫을 그린다.
+이 개정이 그것을 공유 카드(`og:description`)에까지 올린다.
+
+§1의 검사를 그 파일에 돌리면 주석을 뺀 뒤 **1건**이다:
+
+```bash
+grep -nE '[가-힣]다[.<]' apps/site/.vitepress/config.ts | grep -vE '니다[.<]' | grep -vE ':\s*//'
+# 29:    "티켓을 큐에 넣으면 … claude 세션에 넘긴다. 파일시스템이 곧 큐인 티켓 디스패처.",
+```
+
+**간다.** §1이 면제를 성질로 갈랐고(종결어미의 유무) 그 성질이 여기서 참이다.
+**문장은 writer가 쓴다 — 이 절에 초안을 안 적는다.**
+
+**같은 파일의 나머지는 안 간다.** 주석 여덟 줄은 §적용 범위가 명시로 뺀 자리다.
+`title: "dira"`와 `themeConfig.nav` 라벨은 종결어미가 없다.
+
+#### 왜 랜딩 한 장이 아니라 26장인가
+
+요구가 `랜딩페이지`를 지목했다. 그래도 태그는 26장 전부에 얹는다 — **넓히는 데 새 판단이
+0이다.** 훅 하나가 같은 표를 한 번 더 부르는 것이고 자리도 `config.ts` 한 파일이라 리뷰
+단위가 안 는다. 랜딩만 하려면 `index.md` frontmatter `head`로도 되는데, `og:url`과
+canonical은 **페이지마다 달라야 하는 값**이라 그러면 하위 25장이 공유될 때 카드가 0이 된다.
+
+**안 넓히는 자리는 개별 `description`이다**(아래 첫 줄).
+
+#### 안 하는 것
+
+| 안 하는 것 | 왜 |
+|---|---|
+| 매뉴얼 25장의 개별 `description` | 새 문장 25개다(writer 25회). 요구가 지목한 자리가 랜딩이고, `og:description` 중복은 검색 스니펫 중복과 달리 카드를 안 망친다. **중복 25장은 위 §지금 값 표에 실측으로 남는다** — 다음 요구가 이 자리를 지목하면 거기서 시작한다 |
+| JSON-LD(`SoftwareApplication`) | 리치 결과가 평점·가격을 요구하고 우리는 둘 다 없다(§비목표 — 요금을 받지 않는다). 넣어도 화면이 안 갈린다 |
+| `twitter:title` · `twitter:description` · `twitter:image` | 없으면 트위터가 `og:*`를 읽는다. 넣으면 같은 값이 두 벌이 된다 |
+| 매뉴얼의 `og:type: article` | 26장 한 값이 새 판단 0이고 카드 모양이 안 갈린다 |
+| 사이트맵 `lastmod` | 위 §함정 ② |
+| `Landing.vue` · `custom.css` | **0줄이다.** 이 개정은 화면 픽셀을 하나도 안 건드린다 |
+| 배포 · 도메인 연결 · Search Console 등록 | 사람의 일이다(위 §도메인) |
+
+#### 검증
+
+```bash
+pnpm --dir apps/site build            # 통과 · 로그에 `generating sitemap`이 뜬다
+D=apps/site/.vitepress/dist
+grep -o '<loc>' $D/sitemap.xml | wc -l                                            # 25 (404 제외)
+grep -c 'dira.proofer.tech/sitemap.xml' $D/robots.txt                             # 1
+grep -rlo 'property="og:description" content=""' $D --include='*.html' | wc -l    # 0  ← 함정 ①
+grep -rlo 'property="og:image"' $D --include='*.html' | wc -l                      # 25
+grep -o '<meta property="og:url"[^>]*>' $D/index.html $D/docs/install.html
+#   index.html        → https://dira.proofer.tech/
+#   docs/install.html → https://dira.proofer.tech/docs/install
+git diff --stat -- apps/site/.vitepress/theme/                                     # 빈 출력
+node --test apps/site/*.test.ts                                                    # pass 3
+```
+
+`og.png`가 들어온 뒤에는 `test -f $D/og.png`가 하나 더 붙는다(④와 ①②③이 서로를 기다리지
+않으므로 두 티켓이 각자 자기 것만 잰다 — 아래 로드맵 §deps).
+
+랜딩 `<head>`가 **1,258 → 1,947 B**(+689)다. 26장 합 약 +17.9 KB이고 §성능 예산과 만나는
+자리가 없다(그 예산은 앱 응답 시간이다).
+
 
 ## 매뉴얼 (`apps/site/docs/`)
 
@@ -16477,6 +16668,32 @@ print(len(win), sum(os.path.getsize('public/fonts/WantedSansVariable.split.%d.wo
 
 랜딩만 대상이면 `16 354640`이다(= **346.3 KB**. 네트워크는 HTTP 헤더가 붙어 357,664 B).
 `dist/**/*.html` 전부의 합집합으로 돌리면 §안 넓히는 자리의 `33 693128`이 나온다.
+
+### P150 — 랜딩 SEO·오픈그래프 (요구 `2d21963d`)
+
+→ §랜딩 §SEO·오픈그래프. 지금 산출물에 `og:*` · `canonical` · `sitemap.xml` · `robots.txt`가
+**전부 0**이다. 새 의존성 0(`sitemap`은 vitepress에 번들) · `Landing.vue`·`custom.css` 0줄 ·
+화면 픽셀 0. **효과는 배포 전까지 0이다** — `apps/site`는 `origin/master`에 커밋 0개다.
+
+| # | 티켓 | persona | deps | 상태 |
+|---|---|---|---|---|
+| P150 | 스펙 확정 `2d21963d` | pm | — | 완료 — 실측 5표(산출물 26장 태그 0건 · `??`↔`\|\|` fallback · `lastUpdated` 부작용 24장 · `shots/` 여덟 장 비율 · `<head>` 바이트). 도메인은 이미 정본이라 되묻지 않았다. §사이트 문체의 무규칙 지대 한 줄을 찾아 ⑤로 갈랐다 |
+| P150 | `config.ts` 배선 + `robots.txt` `46cc91f3` | developer | — | 대기 — ①②③. `sitemap` 한 줄 + `transformPageData` 태그 열한 줄 + 4줄 파일. **`??` 대신 `||`**(스펙 §함정 ①) |
+| P150 | `og.png` 1200×630 `07e94bfa` | designer | — | 대기 — ④. 크기·형식·불투명·바이트가 정해져 있고 구성이 designer의 것이다. 기존 `shots/` 여덟 장은 1.91:1이 하나도 없다 |
+| P150 | `description` 경어체 `c69a2a0e` | writer | `46cc91f3` | 대기 — ⑤. 한 문장이다. `deps`는 착수 불가라서가 아니라 **같은 hunk**라서다(아래 §deps) |
+
+#### deps는 hunk 하나 때문에 걸렸다
+
+`config.ts`에서 `description:`이 **28~29행**이고 `head:`가 **33행**이다. developer는 33행
+뒤에 얹고 writer는 29행을 고치는데, git 기본 컨텍스트 3줄이면 두 hunk가 30~32에서 겹친다.
+**같은 파일이라서가 아니라 같은 hunk라서 걸었다.** 순서는 developer 먼저다 — 요구의 본체가
+배선이고, writer 쪽이 막혀도 배선은 서 있어야 한다.
+
+**`07e94bfa`(designer)는 아무것도 안 기다린다.** `og:image` 태그가 자산보다 먼저 들면 카드가
+그림 없이 뜨는 중간 상태가 생기는데, **사이트가 안 떠 있어서 그 상태를 볼 사람이 0이다.**
+여기에 `deps`를 걸면 사이트맵·robots가 그림 하나를 기다린다 — 그쪽이 비싸다.
+**의도된 중간 상태이고, 두 티켓이 각자 자기 것만 잰다**(§검증 마지막 문단).
+
 
 ## 수용조건 (전체)
 
