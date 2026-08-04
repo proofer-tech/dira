@@ -44,6 +44,34 @@ export default defineConfig({
     ctx.page === "index.md"
       ? html.replace(/<link rel="preload"[^>]*inter-roman-latin[^>]*>/g, "")
       : html,
+  // 번들된 sitemap 생성기. `lastmod`는 안 넣는다 — `lastUpdated: true`가 필요하고 그 한 줄이
+  // 화면 24장에 `Last updated` 줄을 세운다. `lastmod` 없는 사이트맵도 유효하다.
+  sitemap: { hostname: "https://dira.proofer.tech" },
+  // 페이지마다 canonical·og·twitter 열한 줄. `404.html`은 마크다운 페이지가 아니라 이 훅을
+  // 안 지나므로 태그가 0이고 그게 맞다(색인 대상이 아니다).
+  transformPageData(pageData, { siteConfig }) {
+    const origin = "https://dira.proofer.tech";
+    // `cleanUrls: true`라 `.html`을 붙이지 않는다. `index.md`는 조각째 지운다.
+    const url = `${origin}/${pageData.relativePath.replace(/index\.md$/, "").replace(/\.md$/, "")}`;
+    // `||`다 — `pageData.description`은 빈 문자열이라 `??`가 안 걸리고 빈 태그가 나간다.
+    const title = pageData.title || siteConfig.site.title;
+    const description = pageData.description || siteConfig.site.description;
+    pageData.frontmatter.head ??= [];
+    pageData.frontmatter.head.push(
+      ["link", { rel: "canonical", href: url }],
+      ["meta", { property: "og:type", content: "website" }],
+      ["meta", { property: "og:site_name", content: "dira" }],
+      ["meta", { property: "og:locale", content: "ko_KR" }],
+      ["meta", { property: "og:url", content: url }],
+      ["meta", { property: "og:title", content: title }],
+      ["meta", { property: "og:description", content: description }],
+      // 절대 URL이어야 한다 — 상대 경로는 플랫폼이 못 읽는다.
+      ["meta", { property: "og:image", content: `${origin}/og.png` }],
+      ["meta", { property: "og:image:width", content: "1200" }],
+      ["meta", { property: "og:image:height", content: "630" }],
+      ["meta", { name: "twitter:card", content: "summary_large_image" }],
+    );
+  },
   themeConfig: {
     diraVersion,
     nav: [
