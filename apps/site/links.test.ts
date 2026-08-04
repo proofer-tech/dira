@@ -24,6 +24,13 @@ const files = [...mdIn("."), ...mdIn("docs")].map((f) => f.replace(/^\.\//, ""))
 /** 페이지 id — `index` · `privacy` · `docs/install`. 링크를 이 모양으로 풀어서 대조한다. */
 const pages = new Set(files.map((f) => f.slice(0, -3)));
 
+/** 캡처를 거는 자리는 마크다운만이 아니다 — 랜딩은 `app/landing.tsx`에서 원시 `<img src>`로 건다.
+ *  마크다운의 원시 `<img>`는 오늘 0곳이라, tsx를 안 보면 §걷히는 계약 ②가 실제로는 아무것도
+ *  안 잰다(마크다운 `![]()` 아홉 장만 재고 랜딩 넉 장은 새어 나간다). */
+const tsxFiles = readdirSync(join(SITE, "app"), { recursive: true })
+  .filter((f): f is string => typeof f === "string" && f.endsWith(".tsx"))
+  .map((f) => posix.join("app", f));
+
 const EXTERNAL = /^(?:[a-z]+:|\/\/)/i;
 /** 마크다운 링크·이미지와 원시 `<img src>`. `!`가 붙으면 이미지다.
  *  ponytail: 코드펜스 안을 안 가른다. 지금 펜스 48개에 링크 0건이고, 생기면 이 검사가
@@ -31,11 +38,17 @@ const EXTERNAL = /^(?:[a-z]+:|\/\/)/i;
 const LINK = /(!?)\[[^\]]*\]\(([^)]+)\)|<img[^>]*\ssrc="([^"]+)"/g;
 
 type Ref = { file: string; url: string; image: boolean };
-const refs: Ref[] = files.flatMap((file) =>
+const scan = (file: string): Ref[] =>
   [...readFileSync(join(SITE, file), "utf8").matchAll(LINK)]
     .map((m) => ({ file, url: m[2] ?? m[3], image: m[1] === "!" || m[3] !== undefined }))
-    .filter((r) => !EXTERNAL.test(r.url) && !r.url.startsWith("#")),
-);
+    .filter((r) => !EXTERNAL.test(r.url) && !r.url.startsWith("#"));
+
+/** tsx에서는 `<img src>`만 가져간다 — `[...](...)`는 tsx에서 링크가 아니고(산문 대괄호가 걸린다),
+ *  라우트 링크는 `<Link href>`라 이 검사의 범위 밖이다(§걷히는 계약 ①은 마크다운이 지던 것이다). */
+const refs: Ref[] = [
+  ...files.flatMap(scan),
+  ...tsxFiles.flatMap((f) => scan(f).filter((r) => r.image)),
+];
 
 /** 확장자가 있으면 자산, `.md`/`.html`은 페이지다. */
 const isAsset = (url: string) => /\.[a-z0-9]+$/i.test(url) && !/\.(md|html)$/i.test(url);
@@ -61,7 +74,8 @@ test("내부 링크가 전부 라우트로 풀린다", () => {
 
 test("거는 그림이 전부 public/에 있다", () => {
   const images = refs.filter((r) => r.image || isAsset(r.url));
-  assert.ok(images.length >= 9, `그림 참조가 ${images.length}개다 — 아홉 장보다 적다`);
+  // 마크다운 `![]()` 9 + 마크다운에서 자산으로 거는 링크 1 + 랜딩 tsx의 원시 `<img src>` 4.
+  assert.ok(images.length >= 13, `그림 참조가 ${images.length}개다 — 열세 장보다 적다`);
 
   const missing = images.filter(
     ({ url }) => !existsSync(join(SITE, "public", url.replace(/[?#].*$/, ""))),
