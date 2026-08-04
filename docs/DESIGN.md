@@ -11517,6 +11517,141 @@ node --test apps/site/*.test.ts                                                 
 자리가 없다(그 예산은 앱 응답 시간이다).
 
 
+### 채널톡 상담 위젯 (요구 `85b4af17`)
+
+요구 `85b4af17` — *"랜딩페이지에 ~/Projects/proofer 보고 채널톡 위젯 붙여주세요."*
+
+**그릇을 이름으로 지목한 요구다.** 무엇을 붙일지(채널톡)도 어디를 보고 할지(`~/Projects/proofer`)도
+본문에 있어서 고를 축이 없다. 조사는 **그 그릇을 지금 막는 못 찾기**이고, 못은 하나였다.
+
+#### 뽑는 못 하나 · 서는 못 넷
+
+| | 못 | 어디 | 판정 |
+|---|---|---|---|
+| 뽑는다 | **외부 CDN에서 아무것도 안 받는다** | §개편 §서는 못 ⑤ | 요구가 정면으로 지목한다. **근거는 안 죽는다** — 그 칸이 적어 둔 *"이 사이트에는 개인정보처리방침이 있다 — 구글 폰트 CDN은 방문자 IP를 제3자에 보낸다"*가 그대로 참이고, 그래서 아래 §방침이 먼저다. 뽑히는 것은 금지 한 줄이고 근거는 티켓 하나가 된다 |
+| 선다 | **`apps/site/package.json`이 0줄 갈린다** | §개편 §서는 못 ④ · §UX·심미성 §안 하는 것 다섯째 | proofer가 쓰는 `react-channel-plugin`은 **React 래퍼**다. 하는 일이 공식 설치 스니펫과 같아서(아래 §실측 ④) Vue에서 얻는 것이 0이다. `devDependencies`는 `vitepress`·`vue` 둘로 남는다 |
+| 선다 | **정지 상태가 정본이고 JS가 없어도 글이 보인다** | §개편 §서는 못 ⑥ | 위젯은 더하기만 한다. JS가 죽으면 런처가 없고 산문은 그대로다 |
+| 선다 | **기존 산문을 한 조각도 지우지 않는다** | §개편 §서는 못 ① | 텍스트 노드가 0개 갈린다(`check-landing-prose.py` 83노드) |
+| 선다 | **다크 모드를 만들지 않는다** | §개편 §서는 못 ③ | 위젯 안은 채널코퍼레이션의 값이고 우리 토큰을 안 받는다. 랜딩은 라이트 전용 그대로다 |
+
+#### 실측 (2026-08-04, 헤드리스 CDP)
+
+공식 설치 스니펫에 proofer의 플러그인 키를 넣어 로컬 정적 페이지에서 쟀다. **같은 값을
+`https://proofer.tech/`에서도 확인했다** — 요구가 기준으로 든 표면도 실측 대상이다.
+
+**① 외부 요청 7건 — 두 도메인**
+
+| 도메인 | 건 | 무엇 |
+|---|---|---|
+| `cdn.channel.io` | 4 | `/plugin/ch-plugin-web.js`(로더) · `/plugin/ch-plugin-core-<빌드>.js` · `…vendor.js` · `…vendor-datadog.js` |
+| `api.channel.io` | 3 | `/front/v8/elastic/plugins/<키>?` ×2 (200) · `/front/v8/elastic/plugins/<키>/boot` (401 — ③) |
+
+**② 저장소 — 쿠키가 한 벌 난다**
+
+| 자리 | 값 |
+|---|---|
+| 쿠키 | `_dd_s_v2` — Datadog RUM 세션. `Secure` · `SameSite=Strict`이고 **우리 도메인에 first-party로** 난다(채널톡 코어가 datadog vendor 청크를 같이 받는다 — ①) |
+| `localStorage` | `Channel.last_seen_tab_id_` · `Channel.plugin_info.<키>` · `Channel.notification_sound_` |
+| `sessionStorage` | `_dd_tab_id` |
+
+**쿠키는 boot이 실패해도 난다.** 스니펫이 붙는 순간 `privacy.md` §4(*"앱도 웹사이트도 쿠키를
+심지 않습니다 … 심는 쿠키가 없으니 이 사이트에는 쿠키 동의 배너도 없습니다"*)가 거짓이 된다 —
+채널이 살아 있는지와 무관하다. 이 한 줄이 아래 §방침의 `deps` 근거다.
+
+**③ 지금 그 키로는 런처가 안 뜬다 — 베낄 원본이 안 돈다**
+
+| 잰 자리 | 결과 |
+|---|---|
+| 로컬 프로브 | `plugins/<키>?` **200** · `/boot` **401** `{"type":"unauthenticatedError", … "인증 정보가 변경되어 로그아웃되었습니다"}` |
+| `https://proofer.tech/` | **같다.** `#ch-plugin`은 서는데 `#ch-plugin-entry`가 `1440×0`이고 런처 요소가 없다 |
+| 3rd-party 쿠키 차단 해제 | 안 갈린다(`--disable-features=TrackingProtection3pcd`로 다시 재도 401) |
+
+플러그인 키 자체는 유효하고(`plugins/<키>` 200) boot만 거부되니 **계정·플랜 쪽 상태**다.
+콘솔을 보는 것이 사람의 일이라 아래 §미결로 남긴다.
+
+**④ `react-channel-plugin`이 하는 일 = 공식 스니펫**
+
+`lib/ReactChannelIO.js:11`이 `PLUGIN_URL = 'https://cdn.channel.io/plugin/ch-plugin-web.js'`이고,
+`createPluginQueue()`가 `window.ChannelIO` 큐 shim을 세운 뒤 `ChannelIO('boot', option)`을 부른다.
+`lib/ChannelIO.js`는 `window.ChannelIO(...)` 한 줄 위임이다. **React 훅으로 감싼 것뿐이라 Vue에서
+얻는 것이 0이고**, 그래서 서는 못 ④(`package.json` 0줄)를 안 뽑는다.
+
+**⑤ 플러그인 키는 공개값이다** — `NEXT_PUBLIC_*`이라 proofer 클라이언트 번들에 그대로 들어 있고
+(`.next/static/chunks` 2개), 배포된 `proofer.tech`가 보내는 요청 URL에도 같은 값이 실린다.
+**빌드 환경변수를 새로 세우지 않는다** — 비밀이 아닌 값에 Vercel 환경변수를 붙이면 `vitepress dev`가
+그것을 못 받아 로컬에서 안 뜬다(§리본 버전 §Vercel rewrite로 우회하지 않는다와 같은 자리다).
+
+#### 자리 · 값
+
+| 자리 | 값 |
+|---|---|
+| 스니펫 | `Landing.vue`의 `<script setup>`. `onMounted` 끝에서 boot, `onUnmounted`에서 `shutdown` |
+| SDK 로더 | **공식 설치 스니펫 그대로**(큐 shim + `async` `<script src="https://cdn.channel.io/plugin/ch-plugin-web.js">`). 새 파일 0 |
+| 플러그인 키 | `22e3f817-68e9-4717-a399-f2d78154abea` — proofer와 같은 채널. 소스에 그대로 적는다(위 ⑤) |
+| `boot` 옵션 | `{ pluginKey, language: "ko" }`. proofer 루트가 쓰는 그것이다(`app/(root)/components/Providers.tsx:12`) |
+| 런처 | **기본 런처 그대로.** `hideChannelButtonOnBoot`도 커스텀 런처도 안 쓴다 |
+
+**`shutdown`이 `랜딩페이지에`를 참으로 만든다.** vitepress는 SPA라 랜딩 → 매뉴얼 이동에서 문서가
+다시 안 뜬다 — 걷지 않으면 요구가 지목하지 않은 26장 위에 런처가 남는다. 구현이 그 이동을 재서
+`## 결과`에 적는다.
+
+#### 방침이 먼저다 — 채널톡 약관이 기재를 의무로 적어 놨다
+
+채널톡 이용약관(2026-08-04 `channel.io/ko/terms/privacy` 확인):
+
+> 사업자는 개인정보 처리위탁에 관한 관련 법령에 따라 채널톡(주식회사 채널코퍼레이션)을 개인정보
+> 수탁업체로 명시하여, 채널톡에 고객 개인정보의 처리업무를 위탁한다는 내용을 사업자의
+> 개인정보처리방침에 기재할 의무가 있습니다.
+
+**우리가 고를 값이 아니다.** 그래서 스니펫 티켓이 방침 티켓을 `deps`로 받는다 — 순서를 뒤집으면
+`privacy.md` §4가 거짓인 창이 열리고(위 §실측 ②) 그 파일은 법적 고지다.
+
+| 자리 | 무엇이 갈리나 |
+|---|---|
+| §1 처리 목적 | 지금 앱 통계 하나다. **문의 응대**가 는다 |
+| §2 처리 항목 | 위젯이 방문자 IP·브라우저 정보와 **사람이 채팅에 직접 적는 것**을 채널코퍼레이션에 보낸다는 사실이 는다. 앱 식별자 둘과 이벤트 8종 표는 안 갈린다 |
+| §3 처리하지 않는 항목 | **안 고친다.** 그 목록은 이벤트 파라미터에 대한 것이고 `Events` 타입이 닫는다 — 위젯은 그 표에 안 들어간다. **왜 안 고치는지를 한 줄로 적는다** |
+| §4 쿠키 | **뒤집힌다.** `_dd_s_v2`가 나므로 *"쿠키를 심지 않습니다"*도 *"심는 쿠키가 없으니 배너도 없다"*도 거짓이다 |
+| §6 처리위탁 및 국외이전 | 행 하나. 수탁자 `주식회사 채널코퍼레이션`(대표 최시원 · 144-81-21513) · 업무 `상담 위젯 문의 응대`. **`이전 국가` 칸은 writer가 채널톡 방침에서 확인한다** — 국내 법인이라 `—`가 될 수 있고, 그러면 절 제목이 여전히 맞는지 같이 본다 |
+| §10 시행일 | 개정일로 올린다 |
+
+`apps/site/privacy.test.ts`는 이 개정으로 안 깨진다 — 재는 것이 §2 이벤트 8종과 §3 낱말 넷이고
+둘 다 안 갈린다. **그 테스트를 느슨하게 고치지 않는다.**
+
+#### 안 하는 것
+
+- **매뉴얼 26장에 안 붙인다.** 요구가 `랜딩페이지에`라고 적었다. 넓히는 것은 새 요구다.
+- **커스텀 런처를 안 만든다.** proofer도 루트는 기본 런처다(`Providers.tsx` — `autoBoot`만).
+  몇 장에 있는 `CustomerServiceWidget`은 그 장들의 값이고 요구가 `보고`라고 한 자리가 아니다.
+- **npm 패키지를 안 들인다**(위 §실측 ④ · 서는 못 ④).
+- **서버 프록시를 세우지 않는다.** 우리 오리진으로 감싸도 방문자 브라우저가 채널톡을 띄우는 것은
+  그대로라 얻는 것이 0이고, `vercel.json` rewrite는 `vitepress dev`에서 안 돈다.
+- **쿠키 동의 배너를 세우지 않는다.** 이 요구가 시킨 것이 아니다. §4가 배너의 부재를 근거까지
+  적어 뒀고 그 근거가 죽으므로, 그 자리를 무엇으로 다시 쓰는지가 writer의 판정이다 —
+  배너가 필요하다고 보면 고쳐 넣지 말고 `kind: feedback`으로 올린다.
+
+#### 검증
+
+```bash
+python3 -c "import json;print(sorted(json.load(open('apps/site/package.json'))['devDependencies']))"
+# ['vitepress', 'vue'] — 새 npm 0
+grep -c 'cdn.channel.io' apps/site/.vitepress/theme/Landing.vue   # 1
+grep -c "shutdown" apps/site/.vitepress/theme/Landing.vue         # 1
+python3 apps/site/check-landing-prose.py                          # 사라진 것 0개 (83노드)
+pnpm --dir apps/site build                                        # 통과
+```
+
+빌드한 `dist/`를 띄워 CDP로 넷을 잰다 — ① `cdn.channel.io` 요청 4건이 200으로 떨어진다
+② `document.querySelector('#ch-plugin')`이 산다 ③ **`/boot` 응답 상태와 본문을 `## 결과`에 적는다**
+(401이면 위 §실측 ③ 그대로이고 그것으로 통과다 — 채널 상태는 아래 §미결이 정한다)
+④ 매뉴얼로 이동한 뒤 런처가 안 남는다.
+
+#### 미결 — 채널 상태는 사람이 본다
+
+위 §실측 ③이다. 세션은 채널톡 콘솔에 못 들어가고, 재 본 두 표면이 같은 401을 준다.
+답이 `키가 갈렸다`면 위 §자리·값의 키 한 칸이 갈리고 티켓이 하나 더 난다. 답이 `계정 쪽을
+고쳤다`면 갈리는 것이 0이다. **어느 쪽이든 아래 티켓 둘의 내용이 안 갈리므로 답을 기다리지 않는다.**
+
 ## 매뉴얼 (`apps/site/docs/`)
 
 요구 `91fc8378`. **첫 판은 엔진 매뉴얼이었다** — 워커 파일을 heredoc으로 찍고, cron 두 줄을
@@ -16694,6 +16829,17 @@ print(len(win), sum(os.path.getsize('public/fonts/WantedSansVariable.split.%d.wo
 여기에 `deps`를 걸면 사이트맵·robots가 그림 하나를 기다린다 — 그쪽이 비싸다.
 **의도된 중간 상태이고, 두 티켓이 각자 자기 것만 잰다**(§검증 마지막 문단).
 
+
+### P151 — 랜딩에 채널톡 상담 위젯 (요구 `85b4af17`)
+
+→ §랜딩 §채널톡 상담 위젯. **`외부 CDN에서 아무것도 안 받는다`를 뽑는다.** 새 npm 0 · 새 파일 0이고,
+채널톡 약관이 개인정보처리방침 기재를 **의무**로 적어 놔서 방침이 스니펫보다 먼저 든다.
+
+| # | 티켓 | persona | deps | 상태 |
+|---|---|---|---|---|
+| P151 | 스펙 확정 `85b4af17` | pm | — | 완료 — 못 하나를 뽑고 넷을 근거와 함께 남겼다. 실측 5(외부 요청 7건 · 쿠키 `_dd_s_v2` · **원본 proofer.tech가 지금 401이라 런처가 안 뜬다** · React 래퍼 = 공식 스니펫 · 키는 공개값) |
+| P151 | `privacy.md`가 위젯이 무엇을 보내는지 말한다 `38c73830` | writer | — | 대기 |
+| P151 | `Landing.vue`가 위젯을 붙인다 `f08546f2` | developer | `38c73830` | 대기 |
 
 ## 수용조건 (전체)
 
