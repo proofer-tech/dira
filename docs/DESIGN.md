@@ -13344,12 +13344,51 @@ false`). 매뉴얼 티켓의 `## Done when`은 전부 이 한 줄을 포함한�
 | `public/`(폰트 92 + 캡처 10 + `og.png`·`icon.svg`·`robots.txt`) | Next `public/`이 같은 뜻이다 | 0 |
 | `version.ts` → `themeConfig.diraVersion` → `useData()` | `version.ts`를 서버 컴포넌트가 직접 읽는다. **`version.test.ts`는 0줄 갈린다** | 0 |
 | `404.html`(기본 테마) | `app/not-found.tsx` | 0 |
-| `vercel.json`(`framework: null` · `outputDirectory: .vitepress/dist`) | 정적 산출(`output: "export"`) · `outputDirectory`를 그 자리로. **URL 26개가 한 자도 안 갈린다**(`cleanUrls: true` ↔ 정적 export의 `<경로>.html`) | 0 |
+| **`privacy.md` · `terms.md`**(기본 테마가 굽던 루트 2장) | 매뉴얼 셸이 아니라 **자기 라우트 둘**(`app/privacy/page.tsx` · `app/terms/page.tsx`)로 굽는다. 마크다운 렌더는 매뉴얼과 같은 것을 쓴다 | 0 |
+| `vercel.json`(`framework: null` · `outputDirectory: .vitepress/dist`) | 정적 산출(`output: "export"`) · `outputDirectory`를 그 자리로. **URL 26개가 한 자도 안 갈린다**(`cleanUrls: true` ↔ 정적 export의 `<경로>.html`) — **다만 목차 한 장은 파일 자리가 갈린다**(아래 §목차 한 장) | 0 |
 
 **`tailwindcss`를 안 들인다.** `custom.css`가 `var(--vp-*)`를 **0회** 쓰고 최상위 규칙 128개가
 전부 `.dira-landing` 스코프라 **파일이 거의 그대로 옮겨진다.** 죽는 것은 vitepress 크롬을 끄던
 3종뿐이고(`.VPNav`·`.VPLocalNav`·`.VPSkipLink` — 끌 크롬이 없어진다) `--vp-c-bg`·`--vp-c-brand-1`
 재정의 두 줄은 아래 §다크에서 새는 두 자리로 간다.
+
+#### 목차 한 장 — 파일 자리는 갈리고 URL은 안 갈린다 (지적 `16e32b57`)
+
+위 표의 **URL 26개가 한 자도 안 갈린다**는 그대로 선다. **갈리는 것은 파일 자리 한 개**다 —
+Next는 `/docs`를 `out/docs.html`로 굽고 디렉터리 인덱스를 안 만든다.
+
+| | vitepress `.vitepress/dist` | Next `out/` |
+|---|---|---|
+| 매뉴얼 21장 | `docs/<이름>.html` | `docs/<이름>.html` — 같다 |
+| 매뉴얼 목차 | `docs/index.html` | **`docs.html`** |
+
+**`trailingSlash: true`를 켜지 않는다.** 실측으로 기각한다(2026-08-04 · `pnpm build:next`
+exit 0 · 두 갈래를 다 구웠다):
+
+| | 산출 html | 파일 자리가 갈리는 페이지 | §검증 ①의 basename 목록 |
+|---|---|---|---|
+| **끈 채로**(지금) | 25 | **1**(목차뿐) | 25종 — 한 줄이 `index` → `docs` |
+| **켜면** | 26 | **21**(장마다 `docs/<이름>/index.html`) | **2종뿐** — `index` ×25 · `404` ×1 |
+
+**켜면 갈리는 수가 1에서 21로 늘고, 그 위에 §검증 ①이 아무것도 못 잰다.** 26장의 basename이
+두 값으로 접혀서 목록 대조가 통과·실패를 가르지 못한다. 그래서 `next.config.ts`는 0줄 갈리고
+**대신 §검증 ①의 명령을 파일명이 아니라 경로로 재도록 고쳤다**(아래 §검증 ①). 그 명령에서는
+두 산출의 26줄이 **글자 그대로 같아진다** — `docs/index.html`과 `docs.html`이 둘 다 `docs`다.
+
+**`/docs`와 `/docs/` 두 모양이 다 서는지는 이 요구가 재는 것이 아니다.** 이 사이트는 지금도
+확장자 없는 URL을 계약으로 쓰고(`config.ts:30` `cleanUrls: true` · 내부 링크 128건에 `.html`
+**0건**) 목차를 가리키는 링크는 트레일링 슬래시 모양(`/docs/`)이다(vitepress 네브 1 ·
+`Landing.vue` 2 · `app/landing.tsx` 2 — 이식이 그대로 옮겼다). **그 계약을 호스트가 어떻게
+해석하는지는 한 번도 재지 않았다** — `origin/master`에 `apps/site` 커밋이 0개다(§지금 값).
+재는 대상이 목차 한 장이 아니라 **26장 전부**이고, 재는 자리는 **첫 배포**다. 그때
+`/docs` · `/docs/` · 장 하나를 슬래시 양쪽으로 눌러 보고, 200이 안 나오면 처방은
+`vercel.json`(`cleanUrls`/`trailingSlash`)이다 — `next.config.ts`가 아니다.
+**이 절이 그 판정을 미리 닫지 않는다.** 로드맵 P163에 배포 티켓이 없어서 여기서 잴 수 없다.
+
+**`_not-found.html`이 한 장 더 나온다.** 정적 export가 `404.html`과 함께 자기 내부 라우트를
+굽는다(실측: `out/`에 둘 다 있다). **URL 집합은 여전히 26이고 파일이 27**이다 — 아무 데서도
+링크되지 않고 `sitemap.xml`에도 안 들어간다(`7a521c0a`의 *URL 집합이 지금과 같다*가 그것을
+잰다). 그래서 §검증 ①의 명령이 이 한 줄을 이름으로 뺀다.
 
 #### 캡처 아홉 — `width`/`height`가 계약이다
 
@@ -13436,6 +13475,7 @@ false`). 매뉴얼 티켓의 `## Done when`은 전부 이 한 줄을 포함한�
 | ④ | 링크·캡처 검사(`links.test.ts`) — 위 §걷히는 계약 ①② | developer | ③ |
 | ⑤ | 매뉴얼 셸 — 사이드바 · 아웃라인 · 이전/다음 · 모바일 · 다크 · 스킵링크 | developer | ②③ |
 | ⑥ | 랜딩 포트 — `Landing.vue` → `app/page.tsx` · `custom.css` 이식 · 리셋과 킬 스위치(③④) | developer | ① |
+| ⑥-2 | `privacy` · `terms` 두 장 — **처음 표에서 빠져 있었다**(지적 `16e32b57`이 URL 집합을 세다 찾았다) | developer | ③ |
 | ⑦ | 메타데이터 · 사이트맵 · `404` | developer | ③⑥ |
 | ⑧ | 전환 — `build`·`vercel.json`·`ci.yml`을 Next로, `.vitepress/` 삭제, 검사 도구 재조준 | developer | ④⑤⑦ |
 | ⑨ | 전수 판정 — 앞뒤 대조 | qa | ⑧ |
@@ -13711,7 +13751,16 @@ ls <산출>/assets | grep -c inter    # 0 (종전 14파일 642,756 B)
 
 ```bash
 # ① URL 26개가 한 자도 안 갈렸다 — 앞뒤 목록이 같다
-find <산출>/ -name '*.html' | sed 's|.*/||;s|\.html$||' | sort   # 26줄, 앞뒤 동일
+#    파일명이 아니라 **경로**로 잰다. 목차 한 장이 `docs/index.html`(vitepress) 대
+#    `docs.html`(Next)이고 둘 다 URL은 `/docs`다(위 §목차 한 장). `_not-found`는
+#    정적 export의 내부 라우트라 이름으로 뺀다.
+urls() { find "$1" -name '*.html' | sed "s|^$1/||;s|\.html\$||;s|/index\$||" \
+         | grep -v '^_not-found$' | sort; }
+diff <(urls <이식 전 산출>) <(urls <산출>)   # 각 26줄 · 출력 0줄
+#    종전 문구 `sed 's|.*/||;...'`(basename)는 **무효** — 목차 한 장에서 거짓으로 떨어지고,
+#    `trailingSlash: true`를 켠 갈래에서는 26줄이 두 값으로 접혀 아무것도 안 잰다(§목차 한 장).
+#    2026-08-04 실측: 이 명령으로 diff가 `privacy`·`terms` 두 줄뿐이었다 — 그 둘은
+#    라우트가 아직 없어서고(§갈아 끼우는 것의 그 행), 목차 한 줄은 이미 같았다.
 
 # ② 랜딩 산문이 온전하다 — 이식 판정의 전부다
 python3 apps/site/check-landing-prose.py <이식 전 ref>   # 산문 노드 83개 / 사라진 것 0개
@@ -19128,6 +19177,13 @@ git 안인 자리는 없다"*를 닫아 놓고, **같은 심링크가 로컬 공
 반쯤 옮긴 상태를 볼 사람이 0이라, 두 빌드를 한 디렉터리에 나란히 세우고 **마지막 티켓 하나가
 `build`·`vercel.json`·`ci.yml`을 뒤집고 `.vitepress/`를 지운다.** 그동안 CI가 종전대로 초록이다.
 
+**URL 집합을 실제로 세어 보니 26장 중 2장이 임자가 없었다**(지적 `16e32b57`) — `privacy`·
+`terms`가 §갈아 끼우는 것 표에서 빠져 있었고, `links.test.ts`는 그 둘을 **마크다운으로** 보기
+때문에 초록으로 통과한다. 그대로 뒤집으면 두 장이 조용히 배포에서 없어진다(§걷히는 계약과 같은
+모양이다) → `b30956f9`가 앞에 선다. 같은 지적이 물은 목차 한 장(`docs/index.html` 대
+`docs.html`)은 **URL이 안 갈리는 것으로 판정했고**, 값을 재던 §검증 ①의 명령이 파일명을 보고
+있어서 거짓으로 떨어진 것이다 — 경로로 재도록 고쳤다(§목차 한 장).
+
 | # | 티켓 | persona | deps | 상태 |
 |---|---|---|---|---|
 | P163 | 스펙 확정 `93139a0d` | pm | — | 완료 — 왕복 0회. 실측 9(위) · 발행 9장 |
@@ -19138,7 +19194,9 @@ git 안인 자리는 없다"*를 닫아 놓고, **같은 심링크가 로컬 공
 | P163 | 매뉴얼 셸 구현 `bed0630a` | developer | `a1782bd7` `bf676da8` | 대기 |
 | P163 | 랜딩 포트 + 리셋·킬 스위치 `388ef12a` | developer | `4b86e685` | 완료 · `9442b0f` — 산문 83/0 · 네 폭 169박스 동일 |
 | P163 | 메타데이터 · 사이트맵 · `404` `7a521c0a` | developer | `bf676da8` `388ef12a` | 대기 |
-| P163 | 전환 — 빌드·배포·CI를 뒤집고 vitepress를 지운다 `1ff5f751` | developer | `7fe32c70` `bed0630a` `7a521c0a` | 대기 |
+| P163 | 목차 URL 지적 판정 + `privacy`·`terms` 누락 `16e32b57` | pm | `bf676da8` | 완료 — `trailingSlash` **기각**(1 → 21 · §검증 ①이 죽는다). §검증 ①을 경로 비교로 고쳤다. 26장 중 **2장이 임자 0**이었다 → `b30956f9` |
+| P163 | `privacy` · `terms` 두 장 `b30956f9` | developer | `bf676da8` | 대기 |
+| P163 | 전환 — 빌드·배포·CI를 뒤집고 vitepress를 지운다 `1ff5f751` | developer | `7fe32c70` `bed0630a` `7a521c0a` `b30956f9` | 대기 |
 | P163 | 앞뒤 전수 대조 `af556aaf` | qa | `1ff5f751` | 대기 |
 
 **`deps`가 여덟인데 직렬이 아니다.** 랜딩(`388ef12a`)과 매뉴얼(`bf676da8`)은 파일이 안 겹치고
