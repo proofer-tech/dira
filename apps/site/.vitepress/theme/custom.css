@@ -1311,7 +1311,7 @@ html { scroll-behavior: smooth; }
    정확히 한 레인이고, 폭이 갈려도 계산이 안 갈린다. 움직이는 속성은 transform 하나다. */
 .dira-landing .tk {
   grid-column: 1; display: flex; align-items: center;
-  height: 28px; padding: 0 10px;
+  height: 28px; padding: 0 12px;
   background: var(--panel); border-left: 3px solid var(--faint);
   font-family: var(--mono); font-size: 11px; letter-spacing: -0.01em; color: var(--fg);
   transform: translateX(calc(var(--lane, 0) * 100%));
@@ -1336,7 +1336,7 @@ html { scroll-behavior: smooth; }
 .dira-landing .travel[data-lane="2"] .tk { border-left-color: var(--done); }
 
 @media (max-width: 480px) {
-  /* 390에서 `content` 열이 342라 레인이 114px인데 한 줄 카드는 128.6px이다. 레인을 셋으로
+  /* 390에서 `content` 열이 342라 레인이 114px인데 한 줄 카드는 130.84px이다. 레인을 셋으로
      두고 카드를 두 줄로 접는다 — 다섯 폭 전부에서 여행이 그대로 산다. 밴드 높이는 안 갈린다. */
   .dira-landing .tk { display: block; height: auto; padding: 4px 8px; line-height: 14px; }
   .dira-landing .tk-name { height: 14px; }
