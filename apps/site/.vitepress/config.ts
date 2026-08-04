@@ -26,7 +26,7 @@ export default defineConfig({
   lang: "ko-KR",
   title: "dira",
   description:
-    "티켓을 큐에 넣으면 cron에 물린 워커가 claude 세션에 넘긴다. 파일시스템이 곧 큐인 티켓 디스패처.",
+    "티켓을 큐에 넣으면 cron에 물린 워커가 claude 세션에 넘깁니다. 파일시스템이 곧 큐인 티켓 디스패처.",
   cleanUrls: true,
   // 죽은 내부 링크는 빌드를 깨뜨린다. 매뉴얼 19장이 다 들어왔으므로 유예 없이 전수 검사한다.
   ignoreDeadLinks: false,
