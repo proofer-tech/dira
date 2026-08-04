@@ -32,6 +32,7 @@ const {
   switchConversation,
   workerSessions,
   toolFlags,
+  personaBlock,
 } = await import("./home-agent.ts");
 type HomeChunk = Awaited<ReturnType<typeof pollHome>>;
 const { tailEvents } = await import("./transcript.ts");
@@ -198,17 +199,72 @@ test("workerSessions — `.wip` 전부가 먼저, `.done`은 최근 10개. sessi
 test("buildPrompt — 스냅샷이 질문 앞에 오고 경계가 글로 들어간다", () => {
   const p = buildPrompt("SNAP", "w1이 지금 무슨 일을 하고 있나?");
   assert.ok(p.indexOf("SNAP") < p.indexOf("w1이 지금"));
-  // 이 문장은 `20e4a6f4`가 쓰기를 열어도 **그대로 산다**(§7 §안 만드는 것 무수정)
-  assert.match(p, /티켓을 만들지도\n고치지도 않는다/);
-  // 종전 `(쓰기 도구는 애초에 막혀 있다)`가 거짓이 된 자리 — 새 경계가 셋 다 글로 서고
+  // 종전 `(쓰기 도구는 애초에 막혀 있다)`가 거짓이 된 자리 — 새 경계가 다섯 다 글로 서고
   // 막힌 쪽도 이름으로 선다(막힌 것을 두드리다 끝나는 턴이 사람에게는 고장으로 보인다)
-  for (const s of ["personas/**", "protocols/**", "workers/*.sh", "worktrees/**", "tickets/**"]) {
-    assert.ok(p.includes(s), `프롬프트에 ${s}가 없다 — §7 §쓰기가 닿는 곳 셋`);
+  for (const s of ["personas/**", "protocols/**", "workers/*.sh", "DIRA.md", "ontology/**", "worktrees/**", "tickets/**"]) {
+    assert.ok(p.includes(s), `프롬프트에 ${s}가 없다 — §7 §쓰기가 닿는 곳이 다섯이 된다`);
   }
   assert.ok(!p.includes("쓰기 도구는 애초에 막혀"));
+  // **고정 지시문이 죽었다**(§7 §페르소나가 실린다) — PROFILE이 누구인지를 말하고, *티켓을
+  // 고치지 않는다*는 이 페르소나가 하는 일(본문에 링크를 단다)과 정면으로 부딪쳤다.
+  assert.ok(!p.includes("질의응답 에이전트"));
+  assert.ok(!p.includes("고치지도 않는다"));
+  // 살린 것 둘: 티켓을 **만드는** 경로가 없다는 것과, 거부를 그대로 말하라는 줄
+  assert.match(p, /새 티켓을 만들지 않는다/);
+  assert.match(p, /거부되면 우회하지 말고 무엇이 왜 막혔는지 그대로 말한다/);
+  // 페르소나를 안 주면 **한 글자도 안 붙는다** — 스캐폴딩 전 큐에서 홈이 그대로 돈다
+  assert.ok(p.startsWith("SNAP"));
 });
 
-test("toolFlags — 네 조각과 경로 스코프 셋 (89962e56 · 7e35d300)", () => {
+test("buildPrompt — 페르소나 블록이 스냅샷 앞에 선다 (§7 §페르소나가 실린다)", () => {
+  const p = buildPrompt("SNAP", "질문", "PERSONA");
+  assert.ok(p.startsWith("PERSONA\n\n"));
+  assert.ok(p.indexOf("PERSONA") < p.indexOf("SNAP"));
+  // 순수 함수의 계약: 인자로 받은 것만 붙인다(fs를 안 탄다 — 읽기는 `personaBlock`이 한다)
+  assert.strictEqual(questionOf(p), "질문");
+});
+
+test("personaBlock — 세 조각이 tick.sh:265와 같은 순서로 · 없으면 빈 문자열", async () => {
+  const personas = mkdtempSync(path.join(tmpdir(), "ha-personas-"));
+  tmps.push(personas);
+
+  // ① 디렉터리가 통째로 없다 — 빈 문자열이고 WARN도 없다(§7: 이 티켓이 `39ee5ae0` 없이 먼저 든다)
+  assert.strictEqual(await personaBlock(personas), "");
+
+  // ② PROFILE만 있다 — 사이드카 블록이 아예 안 선다
+  const dir = path.join(personas, "archive-manager");
+  mkdirSync(path.join(dir, "memory"), { recursive: true });
+  writeFileSync(path.join(dir, "PROFILE.md"), "나는 아카이브 담당이다.\n");
+  const only = await personaBlock(personas);
+  assert.match(only, /===== archive-manager PROFILE \(.*PROFILE\.md\) =====\n나는 아카이브 담당이다\.\n\n===== PROFILE 끝 =====/);
+  assert.ok(!only.includes("스킬 끝") && !only.includes("메모리 끝"));
+
+  // ③ 셋 다 — 순서가 PROFILE → skills → memory이고 memory는 **이름 오름차순**이다
+  writeFileSync(path.join(dir, "skills.md"), "## 스킬\n- ontology\n");
+  writeFileSync(path.join(dir, "memory", "b-두번째.md"), "둘째 개념\n");
+  writeFileSync(path.join(dir, "memory", "a-첫째.md"), "첫째 개념\n");
+  writeFileSync(path.join(dir, "memory", "안읽는다.txt"), "md가 아니다\n");
+  // 글롭은 **한 단계**다 — 하위 디렉터리는 안 읽는다(tick.sh와 같은 선)
+  mkdirSync(path.join(dir, "memory", "sub"), { recursive: true });
+  writeFileSync(path.join(dir, "memory", "sub", "깊다.md"), "안 실린다\n");
+  const full = await personaBlock(personas);
+  assert.deepStrictEqual(
+    ["PROFILE 끝", "스킬 끝", "메모리 끝", "--- a-첫째.md", "--- b-두번째.md"].map((s) => full.indexOf(s) >= 0),
+    [true, true, true, true, true],
+  );
+  assert.ok(full.indexOf("PROFILE 끝") < full.indexOf("스킬 끝"));
+  assert.ok(full.indexOf("스킬 끝") < full.indexOf("메모리 끝"));
+  assert.ok(full.indexOf("--- a-첫째.md") < full.indexOf("--- b-두번째.md"));
+  assert.ok(!full.includes("md가 아니다"));
+  assert.ok(!full.includes("안 실린다"));
+  // 이름은 프로필 머리 문장에도 선다(워커 쪽 문장과 같은 자리 — 누구로 도는지가 첫 줄이다)
+  assert.match(full, /^당신은 이 프로젝트의 'archive-manager'입니다\./);
+
+  // ④ 이름이 다르면 아무것도 없다 — 고정 페르소나 하나만 읽는다
+  assert.strictEqual(await personaBlock(personas, "pm"), "");
+});
+
+test("toolFlags — 네 조각과 경로 스코프 다섯 + `Edit`만 (89962e56 · 7e35d300 · bd3cd201)", () => {
   const flags = toolFlags("/Users/x/proj/.dira");
 
   // ① 네 조각이 다 있다. `--allowed-tools`는 **도구를 빼지 않고**(권한 목록이다) 나머지 셋 중
@@ -221,24 +277,39 @@ test("toolFlags — 네 조각과 경로 스코프 셋 (89962e56 · 7e35d300)", 
   assert.strictEqual(flags[flags.indexOf("--tools") + 1], "Read,Glob,Grep,Write,Edit");
 
   const scope = flags.slice(flags.indexOf("--allowed-tools") + 1);
-  // ③ 쓰기가 닿는 곳 셋이 다 있다. `Write`·`Edit` 양쪽에 붙어야 한다 — 한쪽만 스코프면
-  // 다른 쪽이 큐 전체를 연다(절대경로는 `//` 접두다 — 실측 문법)
-  for (const dir of ["personas/**", "protocols/**", "workers/*.sh"]) {
+  // ③ 쓰기가 닿는 곳 **다섯**이 다 있다. `Write`·`Edit` 양쪽에 붙어야 한다 — 한쪽만 스코프면
+  // 다른 쪽이 큐 전체를 연다(절대경로는 `//` 접두다 — 실측 문법). **셋은 큐 루트 아래이고
+  // 둘은 repo(`dirname(root)`) 아래다** — 온톨로지·`DIRA.md`는 git에 들어가야 해서 큐 밖이다
+  for (const p of [
+    "/Users/x/proj/.dira/personas/**",
+    "/Users/x/proj/.dira/protocols/**",
+    "/Users/x/proj/.dira/workers/*.sh",
+    "/Users/x/proj/DIRA.md",
+    "/Users/x/proj/ontology/**",
+  ]) {
     for (const tool of ["Write", "Edit"]) {
-      assert.ok(
-        scope.includes(`${tool}(///Users/x/proj/.dira/${dir})`),
-        `${tool}(…/${dir})가 없다 — §7 §쓰기가 닿는 곳 셋`,
-      );
+      assert.ok(scope.includes(`${tool}(//${p})`), `${tool}(//${p})가 없다 — §7 §쓰기가 닿는 곳이 다섯이 된다`);
     }
   }
-  // ④ 밖이어야 하는 둘이 **어느 스코프에도 안 나온다**. `worktrees/` 아래는 실제 프로젝트 코드고
-  // `tickets/`는 요구가 명시적으로 뺐다(§7 §안 만드는 것 무수정)
-  for (const out of ["worktrees", "tickets"]) {
+  // ④ **`tickets/**`는 `Edit`만이다.** 시킨 것은 본문에 링크를 추가지 티켓 발행이 아니라
+  // (§5-3 산출물 ③) `Write`를 안 준다 — 이게 §7 §안 만드는 것의 `에이전트가 티켓을 만드는
+  // 경로`가 안 뒤집힌 자리다. **`Write(…/tickets/**)`가 붙는 날이 그 줄이 뒤집히는 날이다.**
+  assert.ok(scope.includes("Edit(///Users/x/proj/.dira/tickets/**)"));
+  assert.strictEqual(
+    scope.filter((s) => s.startsWith("Write(") && s.includes("tickets")).length,
+    0,
+    "Write(…/tickets/**)가 붙었다 — 티켓 발행 경로가 열린다(§7 §안 만드는 것)",
+  );
+  // ⑤ 밖이어야 하는 것들이 **어느 스코프에도 안 나온다**. `worktrees/` 아래는 실제 프로젝트
+  // 코드고, repo에서 열린 것은 이름 둘뿐이라 소스·`docs/`·엔진은 그대로 막혀 있다
+  for (const out of ["worktrees", "docs", "apps", "tick.sh"]) {
     assert.ok(!scope.some((s) => s.includes(out)), `${out}가 스코프에 들었다 — 요구가 막으라고 한 것이다`);
   }
-  // ⑤ 스코프 없는 맨 `Write`·`Edit`는 큐 전체를 연다 — 그것도 없어야 한다
+  // repo 스코프가 **repo 전체를 열지 않는다** — `//<repo>/**` 같은 글롭이 없다
+  assert.ok(!scope.some((s) => /\(\/\/\/Users\/x\/proj\/\*\*\)$/.test(s)));
+  // ⑥ 스코프 없는 맨 `Write`·`Edit`는 큐 전체를 연다 — 그것도 없어야 한다
   assert.ok(!scope.includes("Write") && !scope.includes("Edit"));
-  // ⑥ `--dangerously-skip-permissions`(스코프를 통째로 끈다) · `Bash`(셸은 경로로 못 막는다)는 §7이 뺀 것이다
+  // ⑦ `--dangerously-skip-permissions`(스코프를 통째로 끈다) · `Bash`(셸은 경로로 못 막는다)는 §7이 뺀 것이다
   assert.ok(!flags.some((f) => f.includes("dangerously")));
   assert.ok(!flags.some((f) => f.includes("Bash")));
 });
@@ -952,6 +1023,27 @@ test("워커 세션 — 사라진 `current`는 대화 0건과 같고, 고르면 
   assert.match(argv.at(-1) ?? "", /--tools Read,Glob,Grep,Write,Edit --strict-mcp-config --permission-mode manual/);
   // 경로 스코프가 **이 프로젝트의 큐 루트**로 서 있다(`toolFlags(root)` — 상수 배열이면 못 하는 일이다)
   assert.ok((argv.at(-1) ?? "").includes(`Edit(//${root}/personas/**)`));
+  // repo 스코프 둘은 **큐 루트의 부모** 기준이다(같은 한 값에서 cwd와 같이 나온다)
+  assert.ok((argv.at(-1) ?? "").includes(`Write(//${path.dirname(root)}/DIRA.md)`));
+  assert.ok((argv.at(-1) ?? "").includes(`Edit(//${root}/tickets/**)`));
+  assert.ok(!(argv.at(-1) ?? "").includes(`Write(//${root}/tickets/**)`));
+  // **이 큐엔 `personas/`가 없다** — 프롬프트 첫 줄이 스냅샷이다(argv 로그는 첫 줄만 남는다).
+  // 페르소나가 없는 큐에서 홈이 그대로 도는 것이 계약이다(§7 — WARN도 없다)
+  assert.match(argv.at(-1) ?? "", / --verbose # 지금 이 프로젝트의 상태$/);
+
+  // ③-b 페르소나 파일이 생기면 **다음 질문부터** 프롬프트 맨 앞에 선다. 이 한 줄이
+  //     `resolveConfig` → `personaBlock` → `buildPrompt` → spawn까지 이어졌음의 증거다.
+  const profileDir = path.join(root, "personas", "archive-manager");
+  mkdirSync(profileDir, { recursive: true });
+  writeFileSync(path.join(profileDir, "PROFILE.md"), "나는 이 큐의 아카이브 담당이다.\n");
+  await withFake("", async () => {
+    assert.strictEqual(await startAsk(project, "이제 누구냐"), null);
+    await poller(id).until((c) => !c.running);
+  });
+  assert.match(
+    readFileSync(ARGV, "utf8").trim().split("\n").at(-1) ?? "",
+    /--verbose 당신은 이 프로젝트의 'archive-manager'입니다\. /,
+  );
   // 이어 물어도 대화 목록은 0건이다 — 사람 대화 20을 워커 세션이 밀어내지 않는다
   assert.deepStrictEqual((await readHome(id)).conversations, []);
   assert.strictEqual((await readHome(id)).current, done);

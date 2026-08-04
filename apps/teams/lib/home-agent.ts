@@ -12,7 +12,7 @@
  *               --tools Read,Glob,Grep,Write,Edit
  *               --strict-mcp-config
  *               --permission-mode manual
- *               --allowed-tools Read Glob Grep 'Write(//<큐 루트>/personas/**)' 'Edit(…)' … (6개)
+ *               --allowed-tools Read Glob Grep 'Write(//<큐 루트>/personas/**)' 'Edit(…)' … (11개)
  *               --output-format stream-json --include-partial-messages --verbose
  *               "<프롬프트>"
  *  ```
@@ -72,7 +72,7 @@
  *  `SIGTERM`)와 stdout 버퍼 — 후자는 이제 상한이 없다(줄 단위로 먹고 버린다). */
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { findClaude, tokenPath } from "./auth.ts";
 import type { Run } from "./engine.ts";
@@ -89,10 +89,22 @@ const TIMEOUT_MS = 5 * 60_000;
  *  셸은 리다이렉트·`sh -c`로 어느 경로든 쓰므로 그게 있으면 아래 스코프가 아무것도 안 막는다. */
 const TOOLS = "Read,Glob,Grep,Write,Edit";
 
-/** 쓰기가 닿는 곳 **셋**(§7 §쓰기가 닿는 곳 셋). **큐 루트 아래의 상대 글롭**이라 값이
+/** 쓰기가 닿는 곳(§7 §쓰기가 닿는 곳이 **다섯**이 된다 — 요구 `bd3cd201`). **상대 글롭**이라 값이
  *  프로젝트마다 다르다 — 아래가 상수 배열(`TOOL_FLAGS`)이 아니라 함수인 이유가 이 한 줄이다.
- *  여기 없는 것은 밖이다: `worktrees/**`(아래에 실제 프로젝트 코드가 있다) · `tickets/**` · 큐 밖 전부. */
+ *  여기 없는 것은 밖이다: `worktrees/**`(아래에 실제 프로젝트 코드가 있다) · repo의 나머지
+ *  전부(소스 · `docs/**` · 엔진) · 큐 밖 전부. */
 const WRITABLE = ["personas/**", "protocols/**", "workers/*.sh"];
+
+/** 같은 것이 **큐 루트가 아니라 repo(`dirname(root)`) 기준**인 둘 — 아카이빙 산출물의 자리다
+ *  (§5-3 산출물 ①②). **repo를 여는 것이 아니라 이름 둘을 여는 것이다**: 큐는 git에 안 들어가는
+ *  것이 불변식이라(CORE §큐의 불변식 3) 온톨로지를 큐 안에 두면 clone한 사람에게 0장이다. */
+const WRITABLE_REPO = ["DIRA.md", "ontology/**"];
+
+/** **`Write`를 안 주는 자리.** 시킨 것은 *티켓 본문에 링크를 추가*(산출물 ③)이지 티켓 발행이
+ *  아니다 — `Edit`만 주면 §7 §안 만드는 것의 `에이전트가 티켓을 만드는 경로`가 안 뒤집힌다.
+ *  두 도구가 `--allowed-tools`에서 따로 걸리므로 가르는 비용이 0이다. **`Write(…/tickets/**)`가
+ *  붙는 날이 그 줄이 뒤집히는 날이다** — 그때까지 이 상수는 `WRITABLE`과 갈려 있어야 한다. */
+const EDIT_ONLY = ["tickets/**"];
 
 /** 도구 표면을 정하는 플래그 **전부**. **네 조각이 각자 다른 층을 막으므로** 하나라도 빠지면
  *  표면이 넓어진다(머리 주석의 A/B): `--tools`가 built-in 목록을 다섯으로 만들고,
@@ -109,10 +121,14 @@ const WRITABLE = ["personas/**", "protocols/**", "workers/*.sh"];
  *  그 사건이었고, 그건 코드를 봐서는 안 틀려 보인다 — 플래그 이름이 하는 일을 말해주지 않는다. */
 export function toolFlags(root: string): string[] {
   // 절대경로는 **슬래시 둘로 시작한다**(`Write(//<절대경로>/**)` — 실측 `7e35d300`. `**`는 깊이 무제한).
-  const scope = WRITABLE.flatMap((glob) => {
-    const p = `//${path.join(root, glob)}`;
-    return [`Write(${p})`, `Edit(${p})`];
-  });
+  const abs = (base: string, glob: string) => `//${path.join(base, glob)}`;
+  const scope = [
+    ...WRITABLE.map((g) => abs(root, g)),
+    // repo = 큐 루트의 부모(등록값이 `<프로젝트>/.dira`다 — cwd와 같은 값이 여기서도 나온다)
+    ...WRITABLE_REPO.map((g) => abs(path.dirname(root), g)),
+  ].flatMap((p) => [`Write(${p})`, `Edit(${p})`]);
+  // `Write`가 **안 붙는** 자리. 이 줄에 `Write`를 더하는 것이 §7 §안 만드는 것을 뒤집는 변경이다.
+  scope.push(...EDIT_ONLY.map((g) => `Edit(${abs(root, g)})`));
   // `--allowed-tools`의 값은 여기서 **토큰 여러 개**다 — 뒤에 `--output-format`이 와야 한다(머리 주석).
   return ["--tools", TOOLS, "--strict-mcp-config", "--permission-mode", "manual", "--allowed-tools", "Read", "Glob", "Grep", ...scope];
 }
@@ -444,22 +460,75 @@ export async function snapshotOf(project: Pick<Project, "name" | "root">): Promi
  *  스냅샷 쪽에는 이 문자열이 나타날 수 없다(그 글의 `##` 절 이름은 넷이고 표 행은 한 줄짜리다). */
 const QUESTION_MARK = "\n## 질문\n\n";
 
-/** 스냅샷 + 질문. **질문마다 새로 붙인다** — 세션 첫 턴에만 넣으면 두 번째 질문부터 낡은 상태를
- *  말한다(§7). **경계를 글로도 적는 이유**는 종전에 `(쓰기 도구는 애초에 막혀 있다)`를 넣은 것과
- *  같다: 플래그가 막는 것과 별개로, **막힌 것을 두드리다 답을 못 하고 끝나는 턴**이 사람에게는
- *  그냥 고장으로 보인다. 그 자리가 이제 경계 **밖**(`worktrees/**`·`tickets/**`)이다.
- *  `티켓을 만들지도 고치지도 않는다`는 그대로 산다(§7 §안 만드는 것 무수정 — `tickets/**`는
- *  스코프 밖이다). 경로를 절대경로로 안 쓰는 것은 스냅샷이 이미 큐 루트를 적어 주기 때문이다. */
-export function buildPrompt(snapshot: string, question: string): string {
-  return `${snapshot}
+// ── 페르소나 (§5-3 · §7 §페르소나가 실린다) ─────────────────────────────────
+
+/** 홈 에이전트가 도는 페르소나(§5-3). **큐가 고르는 값이 아니다** — 워커 쪽은 티켓 fm의
+ *  `persona:`가 고르고 여기는 하나로 고정이다(§5-3 §입구가 둘이고 PROFILE은 한 벌이다:
+ *  두 입구가 **같은 세 파일**을 읽고 갈리는 것은 도구와 커밋 권한뿐이다). */
+const HOME_PERSONA = "archive-manager";
+
+/** 페르소나 세 조각을 **`tick.sh:265`와 같은 순서**로 읽어 한 블록으로 만든다 —
+ *  `PROFILE.md` → `skills.md` → `memory/*.md`(**한 단계** 글롭 · 이름 오름차순).
+ *
+ *  **`buildPrompt` 밖에서 읽는다.** 저 함수는 순수로 남아야 하고(`home-agent.test.ts`가 그걸
+ *  검증한다) fs를 들이는 순간 그 테스트가 죽는다 — 그래서 조립된 문자열을 인자로 넘긴다.
+ *
+ *  **파일이 없으면 빈 문자열이고 WARN도 없다**(§7). `PROFILE.md`가 없으면 사이드카도 안 싣는다 —
+ *  `tick.sh`가 `persona:`가 빈 티켓에 내린 판정과 같은 선이고, 스캐폴딩 전 큐·옛 큐에서 홈 화면이
+ *  그대로 도는 근거가 이것이다(이 티켓이 `39ee5ae0` 없이 먼저 들어도 되는 이유다). */
+export async function personaBlock(personasDir: string, name: string = HOME_PERSONA): Promise<string> {
+  const dir = path.join(personasDir, name);
+  const read = (...p: string[]) => readFile(path.join(dir, ...p), "utf8").catch(() => null);
+
+  const profile = await read("PROFILE.md");
+  if (profile === null) return "";
+
+  const skills = await read("skills.md");
+  // 글롭이 한 단계인 것은 tick.sh와 같다(`memory/<하위>/x.md`는 안 읽는다). 디렉터리 이름이
+  // `*.md`여도 `readFile`이 EISDIR로 떨어져 null이 되므로 `[ -f ]` 검사가 따로 필요 없다.
+  const memDir = path.join(dir, "memory");
+  const mem: string[] = [];
+  for (const f of (await readdir(memDir).catch(() => [] as string[])).filter((n) => n.endsWith(".md")).sort()) {
+    const body = await readFile(path.join(memDir, f), "utf8").catch(() => null);
+    if (body !== null) mem.push(`--- ${f}\n${body}`);
+  }
+
+  return [
+    `당신은 이 프로젝트의 '${name}'입니다. 아래 프로필이 당신의 역할·권한·판단 기준이고,`,
+    "이 대화 내내 이 페르소나로 일관되게 행동하세요.",
+    "",
+    `===== ${name} PROFILE (${path.join(dir, "PROFILE.md")}) =====`,
+    profile,
+    "===== PROFILE 끝 =====",
+    ...(skills === null
+      ? []
+      : ["", `===== ${name} 스킬 (${path.join(dir, "skills.md")}) =====`, skills, "===== 스킬 끝 ====="]),
+    ...(mem.length === 0 ? [] : ["", `===== ${name} 메모리 (${memDir}) =====`, ...mem, "===== 메모리 끝 ====="]),
+  ].join("\n");
+}
+
+/** 페르소나 + 스냅샷 + 경계 + 질문. **순수 함수다**(fs를 안 탄다 — 읽기는 `personaBlock`이
+ *  밖에서 하고 조립된 문자열이 인자로 온다). **질문마다 새로 붙인다** — 세션 첫 턴에만 넣으면
+ *  두 번째 질문부터 낡은 상태를 말한다(§7).
+ *
+ *  **종전 고정 지시문(`너는 이 큐를 보는 GUI의 질의응답 에이전트다 …`)은 죽었다**(§7 §페르소나가
+ *  실린다). PROFILE과 정면으로 부딪쳐서다 — 저 문단은 *티켓을 고치지 않는다*고 적었고 이 페르소나가
+ *  하는 일이 **티켓 본문에 링크를 다는 것**이다(§5-3 산출물 ③). 누구인지는 이제 PROFILE이 말한다.
+ *
+ *  **경계 문장만 살렸다.** 플래그가 막는 것과 별개로 글이 필요한 이유는 종전과 같다: **막힌 것을
+ *  두드리다 답을 못 하고 끝나는 턴**은 사람에게 그냥 고장으로 보인다. 그 자리가 이제
+ *  `worktrees/**`와 repo의 나머지다. `티켓을 만들지 않는다`는 남고 *고치지 않는다*는 죽었다 —
+ *  `tickets/**`가 `Edit`으로만 열린 것이 정확히 그 갈림이다(§7 §안 만드는 것 무수정).
+ *  경로를 절대경로로 안 쓰는 것은 스냅샷이 이미 큐 루트를 적어 주기 때문이다. */
+export function buildPrompt(snapshot: string, question: string, persona = ""): string {
+  return `${persona ? `${persona}\n\n` : ""}${snapshot}
 
 ---
 
-너는 이 큐를 보는 GUI의 **질의응답 에이전트**다. 묻는 것에 답하는 것이 본업이고, 티켓을 만들지도
-고치지도 않는다. **고칠 수 있는 것은 큐 루트 아래 \`personas/**\` · \`protocols/**\` ·
-\`workers/*.sh\` 셋뿐이다** — 그 밖(\`worktrees/**\` 아래 프로젝트 코드 · \`tickets/**\` · 큐 밖
-전부)은 도구가 거부한다. 거부되면 우회하지 말고 무엇이 왜 막혔는지 그대로 말한다. 사실만 말하고,
-모르면 어느 파일을 봐야 하는지 말한다. 답은 한국어로, 화면의 대화 칸에 들어갈 길이로 쓴다.
+**고칠 수 있는 것은 이것뿐이다** — 큐 루트 아래 \`personas/**\` · \`protocols/**\` ·
+\`workers/*.sh\`, repo의 \`DIRA.md\` · \`ontology/**\`, 그리고 \`tickets/**\`는 **본문 편집만**
+(새 티켓을 만들지 않는다). 그 밖(\`worktrees/**\` 아래 프로젝트 코드 · repo의 나머지 전부 · 큐 밖
+전부)은 도구가 거부한다. 거부되면 우회하지 말고 무엇이 왜 막혔는지 그대로 말한다.
 ${QUESTION_MARK}${question}`;
 }
 
@@ -537,7 +606,10 @@ export async function ask(
   }
 
   const { sessionId, resumed } = turn ?? (await beginTurn(project.id, q));
-  const prompt = buildPrompt(await snapshotOf(project), q);
+  // 페르소나 디렉터리는 워커 스크립트가 옮길 수 있다(`TICKET_PERSONAS`) — 기본값을 여기 다시 쓰지
+  // 않고 `resolveConfig`가 해석한 값을 그대로 쓴다. 못 읽으면 페르소나 없이 간다(§7: WARN 없다).
+  const personas = (await resolveConfig(project).catch(() => null))?.personas;
+  const prompt = buildPrompt(await snapshotOf(project), q, personas ? await personaBlock(personas) : "");
 
   const run = await runClaude(
     bin,
