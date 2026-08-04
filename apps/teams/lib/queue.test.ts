@@ -11,6 +11,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   HIDE_DONE_STATUSES,
+  archivedBy,
+  archivesOf,
   awaitingOf,
   awaitingUnlocked,
   derivedFrom,
@@ -865,8 +867,8 @@ test("보드 — 답변 대기는 deps 대기의 하위 종류 · kind: answer �
   assert.ok(!preset.some((h) => statusOf(by(h)) === "done")); // 완료는 없다
 
   // `kind: answer`는 기본 목록에 없다 — 필터에서 고르면 보인다(숨기는 게 아니다)
-  assert.strictEqual(inDefaultList(by("a2222222"), []), false);
-  assert.strictEqual(inDefaultList(by("a2222222"), ["answer"]), true);
+  assert.strictEqual(inDefaultList(by("a2222222"), [], []), false);
+  assert.strictEqual(inDefaultList(by("a2222222"), ["answer"], []), true);
   assert.ok(!hashes(filterTickets(tickets, none)).includes("a2222222"));
   assert.deepStrictEqual(hashes(filterTickets(tickets, { ...none, kind: ["answer"] })), [
     "a2222222",
@@ -877,6 +879,28 @@ test("보드 — 답변 대기는 deps 대기의 하위 종류 · kind: answer �
   // 경과일 기준은 mtime이다 — 답변 대기 배지의 `· <n>일`
   assert.ok(by("r0000001").mtime > 0);
   assert.strictEqual(Math.floor((Date.now() - by("r0000001").mtime) / 86_400_000), 0);
+});
+
+test("아카이브 티켓은 기본 목록에서 빠지고 persona 필터가 꺼낸다 (§5-3 §표시 규약 ②)", async () => {
+  const root = newRoot();
+  await write(root, "aaaa1111.done.md", fm({ ticket: "aaaa1111", title: "끝난 일", kind: "work", persona: "developer" }));
+  await write(root, "arch0001.md", fm({ ticket: "arch0001", title: "아카이브 — aaaa1111", kind: "work",
+    persona: "archive-manager", archives: "aaaa1111" }));
+
+  const tickets = await listTickets(root, DEFAULT);
+  const by = (h: string) => tickets.find((t) => t.hash === h)!;
+  const hashes = (ts: Ticket[]) => ts.map((t) => t.hash);
+  const none = { kind: [], persona: [], status: [], q: "" };
+
+  // ① 기본 제외 — 카드도 행도 건수도 없다(대상 카드 하단 한 줄로만 선다)
+  assert.strictEqual(inDefaultList(by("arch0001"), [], []), false);
+  assert.deepStrictEqual(hashes(filterTickets(tickets, none)), ["aaaa1111"]);
+  // ② persona 탈출구 — 그 티켓의 persona를 명시하면 뜬다(숨기는 게 아니다)
+  assert.strictEqual(inDefaultList(by("arch0001"), [], ["archive-manager"]), true);
+  assert.deepStrictEqual(hashes(filterTickets(tickets, { ...none, persona: ["archive-manager"] })), ["arch0001"]);
+  // 양방향 해석은 `resolveDep` 그대로다 — `.done` 접미사가 붙은 대상도 stem으로 찾는다
+  assert.strictEqual(resolveDep(tickets, archivesOf(by("arch0001")), DEFAULT), by("aaaa1111"));
+  assert.deepStrictEqual(hashes(archivedBy(tickets, by("aaaa1111"), DEFAULT)), ["arch0001"]);
 });
 
 test("reqTitle — 첫 비어있지 않은 줄, 80자에서 자르고 …", () => {

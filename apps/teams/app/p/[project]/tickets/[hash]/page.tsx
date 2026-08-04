@@ -24,6 +24,8 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 import { findTicket } from "@/lib/engine";
 import {
+  archivedBy,
+  archivesOf,
   awaitingOf,
   awaitingUnlocked,
   bodyWithoutQuestions,
@@ -116,6 +118,12 @@ export default async function TicketDetail({
   const req = reqOf(ticket);
   const reqTicket = req ? resolveDep(tickets, req, config) : null;
   const derived = derivedFrom(tickets, ticket, config);
+
+  // 아카이브 (§5-3 §표시 규약 ④). 양방향이고 그릇은 위 출처/파생 그대로다 — 새 컴포넌트 0.
+  // `deps`와도 `req`와도 섞지 않는다: 선후도 출처도 아니라 **이 티켓을 기록으로 옮긴 티켓**이다.
+  const archives = archivesOf(ticket);
+  const archiveTarget = archives ? resolveDep(tickets, archives, config) : null;
+  const archivers = archivedBy(tickets, ticket, config);
 
   // 세션 스트림 (§2-1). 갈림길은 **세션이 붙은 적이 있는가** 하나다(§9 빈 상태 표):
   // `session_id`가 없거나 UUID가 아니면 절 자체를 감추고(상태 배지가 이미 말한다), 있는데
@@ -529,6 +537,40 @@ export default async function TicketDetail({
                         ))}
                       </div>
                     )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 아카이브 — 같은 절의 다섯째 줄이고 양방향이다(§5-3 §표시 규약 ④). 보드에서는 이
+                관계가 대상 카드 하단 한 줄로 서고, 여기서는 양쪽 상세가 서로를 가리킨다.
+                아카이브가 없는 평범한 티켓엔 아무것도 안 붙는다 — 말할 값이 0이다. */}
+            {(archives || archivers.length > 0) && (
+              <div className="space-y-4 border-t pt-4">
+                {archives && (
+                  <div className="space-y-2">
+                    <p className="text-xs text-muted-foreground">아카이브 대상</p>
+                    {archiveTarget ? (
+                      <TicketLine t={archiveTarget} href={href(archiveTarget)} />
+                    ) : (
+                      // 큐에 없는 stem — `req:`와 같은 처리다. 사유만 바꾼다: 아카이브 키도
+                      // 엔진 잠금이 아니라서 이 티켓이 굶지는 않는다(대상을 잃을 뿐이다).
+                      <DepBadge
+                        hash={archives}
+                        kind="missing"
+                        hint="큐에 없는 아카이브 대상 stem — 대상을 따라갈 수 없다"
+                      />
+                    )}
+                  </div>
+                )}
+                {archivers.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-xs text-muted-foreground">아카이브</p>
+                    <div className="space-y-1">
+                      {archivers.map((t) => (
+                        <TicketLine key={t.path} t={t} href={href(t)} />
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>

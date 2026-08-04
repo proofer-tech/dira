@@ -272,6 +272,12 @@ export function awaitingUnlocked(t: Ticket): boolean {
 /** 출처 요구사항 stem. `deps`가 아니다 — 선후가 아니라 출처고, 엮으면 큐가 직렬화된다(결정 5). */
 export const reqOf = (t: Ticket): string => unquote(t.fm.req ?? "");
 
+/** 이 티켓이 아카이빙하는 대상 stem(§5-3 §표시 규약 ①). 스칼라 하나다 — 목록이 아니다.
+ *
+ *  **`req:`를 재사용하지 않는다**: pm이 쪼개기 중복을 `grep -l '^req: <stem>'`로 막는데
+ *  요구사항이 아카이빙되면 그 grep이 아카이브 티켓을 물어 "이미 쪼갰다"로 읽힌다. */
+export const archivesOf = (t: Ticket): string => unquote(t.fm.archives ?? "");
+
 /** 본문의 `## 질문 n` 절. 다음 `#`/`##` 제목 전까지가 그 질문의 몸통이다(h3 이하는 안에 남는다). */
 export function questionsOf(body: string): { heading: string; text: string }[] {
   const out: { heading: string; text: string }[] = [];
@@ -381,14 +387,20 @@ export type BoardQuery = {
 
 /** `kind: answer`는 **기본 목록에서 뺀다**(§1 보드). 답변은 수행할 티켓이 아니라 요구사항 상세에서
  *  읽는 기록이고 CLI `list`에도 뜨지 않는다(`.done`으로 태어난다) — 여기서 빼는 게 패리티다.
- *  kind 필터에서 `answer`를 고르면 보인다. 숨기는 게 아니라 기본에서 빼는 것이다. */
-export const inDefaultList = (t: Ticket, kind: string[]) =>
-  t.kind !== "answer" || kind.includes("answer");
+ *  kind 필터에서 `answer`를 고르면 보인다. 숨기는 게 아니라 기본에서 빼는 것이다.
+ *
+ *  **`archives:`를 든 티켓도 같은 자리에서 빠진다**(§5-3 §표시 규약 ②) — 카드 대신 대상 카드
+ *  하단 한 줄로 서므로 독립 카드가 없다. 꺼내는 길은 **persona 필터**다(`answer`를 kind 필터로
+ *  꺼내는 것과 같은 규칙). 판정을 `persona === "archive-manager"`로 쓰지 않는 이유가 ①에 있다 —
+ *  페르소나를 개명하면 카드가 도로 뜬다. */
+export const inDefaultList = (t: Ticket, kind: string[], persona: string[]) =>
+  (t.kind !== "answer" || kind.includes("answer")) &&
+  (!archivesOf(t) || persona.includes(t.persona));
 
 export function filterTickets(tickets: Ticket[], query: BoardQuery): Ticket[] {
   const needle = norm(query.q.trim());
   return tickets.filter((t) => {
-    if (!inDefaultList(t, query.kind)) return false;
+    if (!inDefaultList(t, query.kind, query.persona)) return false;
     if (query.kind.length && !query.kind.includes(t.kind)) return false;
     if (query.persona.length && !query.persona.includes(t.persona)) return false;
     // `답변 대기`는 `deps 대기`의 하위 종류다 — `blocked`를 고르면 답변 대기도 들어오고,
@@ -569,6 +581,16 @@ export function derivedFrom(tickets: Ticket[], target: Ticket, sfx: Suffixes): T
   return tickets.filter((t) => {
     const req = reqOf(t);
     return !!req && t.path !== target.path && resolveDep(tickets, req, sfx) === target;
+  });
+}
+
+/** 이 티켓을 아카이빙하는 티켓 — `archives:`가 이 티켓을 가리키는 것들(§5-3 §표시 규약 ④).
+ *  `derivedFrom`과 같은 모양·같은 `resolveDep`이다. 보통 하나지만 사람이 손으로 더 냈거나
+ *  재발행된 경우가 있어 목록이다(보드 카드는 그중 하나만 그린다 — ③). */
+export function archivedBy(tickets: Ticket[], target: Ticket, sfx: Suffixes): Ticket[] {
+  return tickets.filter((t) => {
+    const a = archivesOf(t);
+    return !!a && t.path !== target.path && resolveDep(tickets, a, sfx) === target;
   });
 }
 

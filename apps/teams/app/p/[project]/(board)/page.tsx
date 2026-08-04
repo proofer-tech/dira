@@ -57,6 +57,7 @@ import {
   HIDE_DONE_STATUSES,
   SORT_KEYS,
   TABLE_DEFAULT_SORT,
+  archivesOf,
   awaitingOf,
   filterTickets,
   inDefaultList,
@@ -64,6 +65,7 @@ import {
   listTickets,
   depBadges,
   relationEdges,
+  resolveDep,
   sortTableRows,
   sortTickets,
   statusOf,
@@ -195,6 +197,32 @@ function wipLine(e: StreamEvent | null) {
   );
 }
 
+/** 완료 카드 하단의 아카이브 한 줄(§5-3 §표시 규약 ③) — 그릇·간격은 위 `wipLine`과 **같은 값**이다
+ *  (§비주얼 §36 ①. 사람이 그 스트립을 이름으로 지목했다 — 새 유틸 0 · 새 토큰 0 · 새 간격 값 0).
+ *
+ *  갈리는 셋만 적는다. **모션 없음**: `wip-shimmer`가 말하는 것은 *지금 갱신되고 있다*인데 이 줄은
+ *  티켓 하나의 상태 전이 두어 번이다(§비주얼 머리의 예외 목록을 안 연다). **`aria-hidden` 없음**:
+ *  `.wip` 줄이 그걸 다는 이유는 5초마다 갈리는 글이라서고, 이 줄은 안 갈리는 **링크**라 숨기면
+ *  포커스만 잡히는 보이지 않는 링크가 된다. **`relative z-10`**: 카드 전체가 이미 `after:inset-0`
+ *  링크라 deps 배지·`AnswerDialog`와 같은 층에 올려야 눌린다 — 보드에서 아카이브 티켓으로 가는
+ *  유일한 길이다.
+ *
+ *  문구는 셋뿐이고 **상태 배지를 안 쓴다**: 카드의 배지는 *이 카드의 상태*를 말하는 자리라
+ *  같은 실루엣이 다른 티켓의 상태를 말하면 사람이 완료 카드를 `진행중`으로 읽는다. 해시도 안
+ *  세운다 — 카드에 이미 대상 해시가 있어서 둘째 해시가 서면 어느 것이 이 카드인지 흔들린다. */
+function archiveLine(a: Ticket | undefined, href: (t: Ticket) => string) {
+  if (!a) return null;
+  return (
+    <div className="-mx-4 -mb-2 border-t px-4 pt-2">
+      <div className="h-3.5 truncate text-2xs">
+        <Link href={href(a)} className="relative z-10">
+          {isAwaiting(a) ? "아카이브 답변 대기" : a.state === "wip" ? "아카이브 진행중" : "아카이브 대기"}
+        </Link>
+      </div>
+    </div>
+  );
+}
+
 export default async function Board({
   params,
   searchParams,
@@ -245,7 +273,7 @@ export default async function Board({
   // 쓰면 필터를 안 걸었는데도 `12 / 14건`으로 보여 답변 파일이 필터처럼 읽힌다.
   // `tickets`(전체)는 deps 해석·선택지 목록이 계속 쓴다 — 거기서 답변을 빼면 요구사항의 답변 dep이
   // `큐에 없는 해시`(영구 대기)로 거짓 표시된다.
-  const total = tickets.filter((t) => inDefaultList(t, query.kind)).length;
+  const total = tickets.filter((t) => inDefaultList(t, query.kind, query.persona)).length;
   // 레인 3개 밖으로 떨어지는 행 = `할당됨`. 분모가 아니라 **표시 건수(`rows`)** 기준이다 —
   // 각주는 "지금 화면의 건수와 레인 합계가 왜 다른가"를 설명하는 것이고, 필터가 걸리면
   // 레인도 같이 좁아진다. `rows.length - 레인합계`와 같은 값이다(`statusOf`는 5상태 중 하나).
@@ -388,6 +416,23 @@ export default async function Board({
           ),
         )
       : null;
+  /** 대상 path → 그 카드에 설 아카이브 티켓(§5-3 §표시 규약 ③). **fs 0건** — 위에서 이미 읽은
+   *  `tickets`를 한 번 훑을 뿐이라 새 라우트·Server Action·폴링이 0이고 §성능 예산이 무수정이다.
+   *
+   *  거르는 둘이 계약이다. **아카이브가 `.done`이면 줄이 없다**(끝난 아카이브는 기본 상태라
+   *  말할 값이 0이다 — 안 그러면 완료 레인 20장이 전부 같은 문장을 인다). **대상이 `.done`일
+   *  때만** 선다: 발행부터 rename까지 몇 초 대상이 `.wip`인 창이 있는데 그때는 `.wip` 줄이
+   *  이긴다(같은 슬롯이라 겹치지 않는다). 대상이 둘 이상이면 `birth`가 가장 큰 하나만 — 줄이
+   *  둘이 되면 카드 높이가 갈린다. */
+  const archives = new Map<string, Ticket>();
+  for (const a of tickets) {
+    const key = archivesOf(a);
+    if (!key || a.state === "done") continue;
+    const target = resolveDep(tickets, key, config);
+    if (!target || target.state !== "done") continue;
+    const prev = archives.get(target.path);
+    if (!prev || a.birth > prev.birth) archives.set(target.path, a);
+  }
   const viewHref = (v: (typeof VIEWS)[number]["value"]) => {
     const next = new URLSearchParams(sp);
     if (v === "table") next.set("view", v);
@@ -698,10 +743,13 @@ export default async function Board({
                                   갱신이 멈춘 자리에서 `방금`이 거짓말이다). 위 `AnswerDialog`와
                                   자리를 다투지 않는다 — `isAwaiting`은 `state === "open"`만
                                   참이라 한 카드에 둘이 같이 서지 않는다.
+                                  **완료 카드에는 아카이브 한 줄이 같은 슬롯에 선다**(§5-3
+                                  §표시 규약 ③): 두 Map의 조건이 `.wip`↔`.done`으로 배타라
+                                  한 카드가 둘을 같이 들 수 없다.
                                   간격은 8 / 선 / 8 / 줄 / 8이다: 위 8px은 `<Card>`의 `gap-2`,
                                   선 아래 8px은 `pt-2`, 카드 바닥까지 8px은 `py-4`(16)에서
                                   `-mb-2`(8)를 뺀 값이다(§36 §자리와 간격 — 새 간격 값 0) */}
-                              {wipLines?.get(t.path)}
+                              {wipLines?.get(t.path) ?? archiveLine(archives.get(t.path), href)}
                             </Card>
                           ))
                         )}
