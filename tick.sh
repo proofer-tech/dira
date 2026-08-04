@@ -326,16 +326,21 @@ $(cat "$SKILLS")
   # 메모리 사이드카(같은 디렉터리 memory/*.md)는 스킬 블록 뒤에 붙는다. 여기는 엔진을 안 가린다 -
   # 메모리는 이 큐에서 알아낸 사실이라 codex에도 참이다. 없는 것이 정상이라 WARN 없다.
   # 글롭은 한 단계다(memory/<하위>/x.md는 안 읽는다). 순서는 bash 글롭이 이미 오름차순으로 준다.
+  # 싣는 것은 본문이 아니라 파일별 `## ` 목차다 - 본문에 닿는 길은 세션의 grep이고 엔진이 만드는
+  # 색인은 0이다. 목차는 전량 실리므로 "있는 줄 몰라서 못 여는" 상태가 없다.
+  # 절이 없는 파일도 `--- <파일명>` 줄은 남는다(그게 전량의 뜻이다). 되돌리려면 MEMTOC 대신 $(cat "$m").
   MEMDIR="${TICKET_PERSONAS:-$TICKET_ROOT/personas}/$TPERSONA/memory"
   MEMBLOCK=""
   for m in "$MEMDIR"/*.md; do
     [ -f "$m" ] || continue
+    MEMTOC="$(grep '^## ' "$m")"   # 매치 0건이면 빈 문자열(set -e가 없어 rc 1은 무해하다)
     MEMBLOCK="$MEMBLOCK
---- $(basename "$m")
-$(cat "$m")"
+--- $(basename "$m")${MEMTOC:+
+$MEMTOC}"
   done
   [ -n "$MEMBLOCK" ] && MEMBLOCK="
-===== $TPERSONA 메모리 ($MEMDIR) =====$MEMBLOCK
+===== $TPERSONA 메모리 ($MEMDIR) =====
+본문은 안 실렸다 - 아래는 파일별 '## ' 목차다. 필요한 개념은 위 경로를 grep해서 그 파일을 읽는다.$MEMBLOCK
 ===== 메모리 끝 =====
 "
   PROMPT="당신은 이 프로젝트의 '$TPERSONA'입니다. 아래 프로필이 당신의 역할·권한·판단 기준이고,

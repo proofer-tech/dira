@@ -87,16 +87,26 @@ try:
     assert dryrun(wcl, local) == base, "빈 memory/가 프롬프트를 바꿨다"
     assert warns(root) == [], "memory/가 비었는데 WARN이 났다: {}".format(warns(root))
 
-    # 3) 두 장 -> 스킬 블록 뒤에, 파일명 오름차순으로, 사이에 `--- <파일명>` 한 줄
-    #    (생성 순서를 역순으로 둬서 fs 순서가 아니라 이름 순인 것을 본다)
-    write(os.path.join(memdir, "b개념.md"), "# 나중\n메모리-B-마커\n")
-    write(os.path.join(memdir, "a개념.md"), "# 먼저\n메모리-A-마커\n")
+    # 3) 세 장 -> 스킬 블록 뒤에, 파일명 오름차순으로, 파일마다 `--- <파일명>` + 그 파일의 `## ` 목차만.
+    #    본문은 한 줄도 안 실린다. 절이 없는 파일도 `--- <파일명>` 줄은 남는다(목차가 전량 실려야
+    #    "있는 줄 몰라서 못 여는" 상태가 없다). 생성 순서를 역순으로 둬서 fs 순서가 아니라 이름 순인 것을 본다.
+    write(os.path.join(memdir, "c절없음.md"), "# 절이 없다\n본문-C-마커\n")
+    write(os.path.join(memdir, "b개념.md"), "# 나중\n본문-B-마커\n## B절\n본문-B2-마커\n")
+    write(os.path.join(memdir, "a개념.md"), "# 먼저\n본문-A-마커\n## A절1\n본문\n## A절2\n### A소절\n")
     got = dryrun(wcl, local)
-    block = ("\n===== dev 메모리 ({}) =====\n"
-             "--- a개념.md\n# 먼저\n메모리-A-마커\n"
-             "--- b개념.md\n# 나중\n메모리-B-마커\n"
-             "===== 메모리 끝 =====\n").format(memdir)
-    assert block in got, "메모리 블록이 프롬프트에 안 붙었다\n" + got
+    guide = ("본문은 안 실렸다 - 아래는 파일별 '## ' 목차다. "
+             "필요한 개념은 위 경로를 grep해서 그 파일을 읽는다.")
+    block = ("\n===== dev 메모리 ({}) =====\n{}\n"
+             "--- a개념.md\n## A절1\n## A절2\n"
+             "--- b개념.md\n## B절\n"
+             "--- c절없음.md\n"
+             "===== 메모리 끝 =====\n").format(memdir, guide)
+    assert block in got, "메모리 목차 블록이 프롬프트에 안 붙었다\n" + got
+    # 본문은 안 붙는다 -- `## `이 아닌 줄은 제목(`# `)도 소절(`### `)도 문단도 전부 빠진다
+    for marker in ("본문-A-마커", "본문-B-마커", "본문-B2-마커", "본문-C-마커",
+                   "# 먼저", "# 나중", "### A소절"):
+        assert marker not in got, "본문이 실렸다: {}\n{}".format(marker, got)
+    assert memdir in got, "메모리 디렉터리 절대경로가 안 실렸다(grep할 자리다)\n" + got
     assert got.index("===== 스킬 끝 =====") < got.index("===== dev 메모리") \
         < got.index("please pick up 5c111001"), "메모리 블록 자리가 틀렸다\n" + got
     assert got.replace(block, "") == base, \
@@ -107,17 +117,22 @@ try:
     assert block in other, "codex 엔진에 메모리 블록이 안 붙었다\n" + other
     assert "스킬-마커" not in other, "codex 엔진에 스킬 블록이 붙었다(기존 계약)\n" + other
 
-    # 5) 하위 디렉터리는 안 읽는다(글롭 한 단계)
-    write(os.path.join(memdir, "하위", "x.md"), "# 하위\n하위-마커\n")
-    assert "하위-마커" not in dryrun(wcl, local), "memory/<하위>/x.md를 읽었다"
+    # 5) 하위 디렉터리는 안 읽는다(글롭 한 단계). 목차만 실리므로 마커도 `## ` 줄로 둔다 --
+    #    본문 마커면 본문이 안 실리는 것만으로 통과해서 글롭 한 단계를 안 재게 된다.
+    write(os.path.join(memdir, "하위", "x.md"), "# 하위\n## 하위-절-마커\n")
+    deep = dryrun(wcl, local)
+    assert "하위-절-마커" not in deep, "memory/<하위>/x.md를 읽었다\n" + deep
+    assert "--- x.md" not in deep, "memory/<하위>/x.md가 목차에 실렸다\n" + deep
 
     # 6) PROFILE.md가 없으면 메모리도 안 붙는다(메모리는 페르소나 프롬프트 안에서만 산다)
     os.remove(os.path.join(root, "tickets", "5c111001.md"))
-    write(os.path.join(root, "personas", "nop", "memory", "m.md"), "# 고아\n고아-메모리-마커\n")
+    write(os.path.join(root, "personas", "nop", "memory", "m.md"), "# 고아\n## 고아-절-마커\n")
     mk(root, "5c111002", fm="kind: work\npersona: nop\n")
     orphan = dryrun(wcl, local)
-    assert "고아-메모리-마커" not in orphan, "PROFILE 없는 페르소나에 메모리가 붙었다\n" + orphan
+    assert "고아-절-마커" not in orphan, "PROFILE 없는 페르소나에 메모리가 붙었다\n" + orphan
+    assert "--- m.md" not in orphan, "PROFILE 없는 페르소나에 메모리 목차가 붙었다\n" + orphan
 
-    print("PASS 메모리 주입·자리·오름차순·엔진 무관·글롭 한 단계·PROFILE 선행·WARN 0줄")
+    print("PASS 목차 주입·본문 미주입·절대경로·자리·오름차순·절 없는 파일·"
+          "엔진 무관·글롭 한 단계·PROFILE 선행·WARN 0줄")
 finally:
     shutil.rmtree(tmp, ignore_errors=True)
