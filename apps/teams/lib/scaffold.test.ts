@@ -16,6 +16,7 @@ const SET = [
   ".dira/personas/developer/PROFILE.md",
   ".dira/personas/qa/PROFILE.md",
   ".dira/personas/designer/PROFILE.md",
+  ".dira/personas/archive-manager/PROFILE.md",
   ".dira/workers/w1.sh",
   ".dira/self-heal.sh",
 ];

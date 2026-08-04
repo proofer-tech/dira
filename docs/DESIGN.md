@@ -17099,7 +17099,7 @@ print(len(win), sum(os.path.getsize('public/fonts/WantedSansVariable.split.%d.wo
 | # | 티켓 | persona | deps | 상태 |
 |---|---|---|---|---|
 | P153 | 스펙 확정 `bd3cd201` | pm | — | 완료 — 왕복 1회(답 (a)). 실측 4(게이트는 이 큐 것이고 제품이 아니다 · 홈 도구 다섯에 `Bash` 0 · 템플릿 페르소나 4 vs 큐 5 · 완료 855건) |
-| P153 | 페르소나 파일 + 스캐폴딩 기본 `39ee5ae0` | developer | — | 대기 |
+| P153 | 페르소나 파일 + 스캐폴딩 기본 `39ee5ae0` | developer | — | 완료 — `templates/personas/archive-manager/PROFILE.md` + `scaffold.ts`·`scaffold.test.ts` 한 줄씩. 큐 사본도 설치(gitignore라 커밋에 안 보인다) |
 | P153 | 홈 에이전트가 페르소나로 돈다 `089035b0` | developer | — | 대기 |
 | P153 | 완료 트리거 한 줄 (AGENTS.md 두 벌) `1ddd4fa1` | developer | `39ee5ae0` | 대기 |
 
