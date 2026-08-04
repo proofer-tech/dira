@@ -7,9 +7,23 @@
     "dev": "vitepress dev",
     "build": "vitepress build",
     "preview": "vitepress preview",
+    "dev:next": "next dev",
+    "build:next": "next build",
     "test": "node --test \"*.test.ts\""
   },
+  "dependencies": {
+    "next": "16.2.12",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
+    "shiki": "^3.13.0"
+  },
   "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "typescript": "^5",
     "vitepress": "^1.6.4",
     "vue": "^3.5.13"
   }
