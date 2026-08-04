@@ -201,7 +201,7 @@ test("buildPrompt — 스냅샷이 질문 앞에 오고 경계가 글로 들어�
   assert.ok(p.indexOf("SNAP") < p.indexOf("w1이 지금"));
   // 종전 `(쓰기 도구는 애초에 막혀 있다)`가 거짓이 된 자리 — 새 경계가 다섯 다 글로 서고
   // 막힌 쪽도 이름으로 선다(막힌 것을 두드리다 끝나는 턴이 사람에게는 고장으로 보인다)
-  for (const s of ["personas/**", "protocols/**", "workers/*.sh", "DIRA.md", "ontology/**", "worktrees/**", "tickets/**"]) {
+  for (const s of ["personas/**", "protocols/**", "workers/*.sh", "AGENTS.md", "ontology/**", "worktrees/**", "tickets/**"]) {
     assert.ok(p.includes(s), `프롬프트에 ${s}가 없다 — §7 §쓰기가 닿는 곳이 다섯이 된다`);
   }
   assert.ok(!p.includes("쓰기 도구는 애초에 막혀"));
@@ -278,14 +278,14 @@ test("toolFlags — 네 조각과 경로 스코프 다섯 + `Edit`만 (89962e56 
 
   const scope = flags.slice(flags.indexOf("--allowed-tools") + 1);
   // ③ 쓰기가 닿는 곳 **다섯**이 다 있다. `Write`·`Edit` 양쪽에 붙어야 한다 — 한쪽만 스코프면
-  // 다른 쪽이 큐 전체를 연다(절대경로는 `//` 접두다 — 실측 문법). **셋은 큐 루트 아래이고
-  // 둘은 repo(`dirname(root)`) 아래다** — 온톨로지·`DIRA.md`는 git에 들어가야 해서 큐 밖이다
+  // 다른 쪽이 큐 전체를 연다(절대경로는 `//` 접두다 — 실측 문법). **다섯이 다 큐 루트 아래다**
+  // — 종전 뒤 둘이 repo(`dirname(root)`) 기준이던 것이 개정 `22a803de`로 큐 안으로 왔다
   for (const p of [
     "/Users/x/proj/.dira/personas/**",
     "/Users/x/proj/.dira/protocols/**",
     "/Users/x/proj/.dira/workers/*.sh",
-    "/Users/x/proj/DIRA.md",
-    "/Users/x/proj/ontology/**",
+    "/Users/x/proj/.dira/ontology/**",
+    "/Users/x/proj/.dira/AGENTS.md",
   ]) {
     for (const tool of ["Write", "Edit"]) {
       assert.ok(scope.includes(`${tool}(//${p})`), `${tool}(//${p})가 없다 — §7 §쓰기가 닿는 곳이 다섯이 된다`);
@@ -301,12 +301,15 @@ test("toolFlags — 네 조각과 경로 스코프 다섯 + `Edit`만 (89962e56 
     "Write(…/tickets/**)가 붙었다 — 티켓 발행 경로가 열린다(§7 §안 만드는 것)",
   );
   // ⑤ 밖이어야 하는 것들이 **어느 스코프에도 안 나온다**. `worktrees/` 아래는 실제 프로젝트
-  // 코드고, repo에서 열린 것은 이름 둘뿐이라 소스·`docs/`·엔진은 그대로 막혀 있다
+  // 코드고, repo 쪽 예외가 **0**이라 소스·`docs/`·엔진은 그대로 막혀 있다
   for (const out of ["worktrees", "docs", "apps", "tick.sh"]) {
     assert.ok(!scope.some((s) => s.includes(out)), `${out}가 스코프에 들었다 — 요구가 막으라고 한 것이다`);
   }
-  // repo 스코프가 **repo 전체를 열지 않는다** — `//<repo>/**` 같은 글롭이 없다
-  assert.ok(!scope.some((s) => /\(\/\/\/Users\/x\/proj\/\*\*\)$/.test(s)));
+  // repo(`dirname(root)`) 기준 항이 **0**이다 — 경로 스코프 전부가 큐 루트 아래로 시작한다
+  // (개정 `22a803de`. 이 한 줄이 요구 `20e4a6f4`를 예외 없이 세우는 자리다)
+  for (const s of scope.filter((s) => s.includes("("))) {
+    assert.match(s, /^(Write|Edit)\(\/\/\/Users\/x\/proj\/\.dira\//, `${s}가 큐 루트 밖이다`);
+  }
   // ⑥ 스코프 없는 맨 `Write`·`Edit`는 큐 전체를 연다 — 그것도 없어야 한다
   assert.ok(!scope.includes("Write") && !scope.includes("Edit"));
   // ⑦ `--dangerously-skip-permissions`(스코프를 통째로 끈다) · `Bash`(셸은 경로로 못 막는다)는 §7이 뺀 것이다
@@ -1023,8 +1026,9 @@ test("워커 세션 — 사라진 `current`는 대화 0건과 같고, 고르면 
   assert.match(argv.at(-1) ?? "", /--tools Read,Glob,Grep,Write,Edit --strict-mcp-config --permission-mode manual/);
   // 경로 스코프가 **이 프로젝트의 큐 루트**로 서 있다(`toolFlags(root)` — 상수 배열이면 못 하는 일이다)
   assert.ok((argv.at(-1) ?? "").includes(`Edit(//${root}/personas/**)`));
-  // repo 스코프 둘은 **큐 루트의 부모** 기준이다(같은 한 값에서 cwd와 같이 나온다)
-  assert.ok((argv.at(-1) ?? "").includes(`Write(//${path.dirname(root)}/DIRA.md)`));
+  // 아카이빙 산출물 둘도 **큐 루트 아래**다 — repo 기준 항이 0이다(개정 `22a803de`)
+  assert.ok((argv.at(-1) ?? "").includes(`Write(//${root}/AGENTS.md)`));
+  assert.ok(!(argv.at(-1) ?? "").includes(`//${path.dirname(root)}/DIRA.md`));
   assert.ok((argv.at(-1) ?? "").includes(`Edit(//${root}/tickets/**)`));
   assert.ok(!(argv.at(-1) ?? "").includes(`Write(//${root}/tickets/**)`));
   // **이 큐엔 `personas/`가 없다** — 프롬프트 첫 줄이 스냅샷이다(argv 로그는 첫 줄만 남는다).

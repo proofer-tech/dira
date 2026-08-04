@@ -92,13 +92,15 @@ const TOOLS = "Read,Glob,Grep,Write,Edit";
 /** 쓰기가 닿는 곳(§7 §쓰기가 닿는 곳이 **다섯**이 된다 — 요구 `bd3cd201`). **상대 글롭**이라 값이
  *  프로젝트마다 다르다 — 아래가 상수 배열(`TOOL_FLAGS`)이 아니라 함수인 이유가 이 한 줄이다.
  *  여기 없는 것은 밖이다: `worktrees/**`(아래에 실제 프로젝트 코드가 있다) · repo의 나머지
- *  전부(소스 · `docs/**` · 엔진) · 큐 밖 전부. */
-const WRITABLE = ["personas/**", "protocols/**", "workers/*.sh"];
-
-/** 같은 것이 **큐 루트가 아니라 repo(`dirname(root)`) 기준**인 둘 — 아카이빙 산출물의 자리다
- *  (§5-3 산출물 ①②). **repo를 여는 것이 아니라 이름 둘을 여는 것이다**: 큐는 git에 안 들어가는
- *  것이 불변식이라(CORE §큐의 불변식 3) 온톨로지를 큐 안에 두면 clone한 사람에게 0장이다. */
-const WRITABLE_REPO = ["DIRA.md", "ontology/**"];
+ *  전부(소스 · `docs/**` · 엔진) · 큐 밖 전부.
+ *
+ *  뒤 둘이 아카이빙 산출물의 자리다(§5-3 산출물 ①②). **종전에 그 둘만 repo(`dirname(root)`)
+ *  기준이었다** — 큐는 git에 안 들어가는 것이 불변식이라(CORE §큐의 불변식 3) 온톨로지를 큐 안에
+ *  두면 clone한 사람에게 0장이라는 근거였다. 그 값은 뒤집힌 것이 아니라 **대가로 지불됐다**
+ *  (§5-3 §아카이빙 산출물은 큐 안에 산다 §파는 것). 대신 repo 쪽 예외가 **0**이 되어
+ *  요구 `20e4a6f4`(실제 프로젝트는 못 고친다)가 예외 없이 선다 — 개정 `22a803de`.
+ *  `AGENTS.md`는 아직 그 자리에 파일이 없을 수 있어 `Write`가 필요하다. */
+const WRITABLE = ["personas/**", "protocols/**", "workers/*.sh", "ontology/**", "AGENTS.md"];
 
 /** **`Write`를 안 주는 자리.** 시킨 것은 *티켓 본문에 링크를 추가*(산출물 ③)이지 티켓 발행이
  *  아니다 — `Edit`만 주면 §7 §안 만드는 것의 `에이전트가 티켓을 만드는 경로`가 안 뒤집힌다.
@@ -122,11 +124,8 @@ const EDIT_ONLY = ["tickets/**"];
 export function toolFlags(root: string): string[] {
   // 절대경로는 **슬래시 둘로 시작한다**(`Write(//<절대경로>/**)` — 실측 `7e35d300`. `**`는 깊이 무제한).
   const abs = (base: string, glob: string) => `//${path.join(base, glob)}`;
-  const scope = [
-    ...WRITABLE.map((g) => abs(root, g)),
-    // repo = 큐 루트의 부모(등록값이 `<프로젝트>/.dira`다 — cwd와 같은 값이 여기서도 나온다)
-    ...WRITABLE_REPO.map((g) => abs(path.dirname(root), g)),
-  ].flatMap((p) => [`Write(${p})`, `Edit(${p})`]);
+  // 다섯 다 큐 루트 아래다 — repo(`dirname(root)`) 기준 항이 **0**이다(개정 `22a803de`).
+  const scope = WRITABLE.map((g) => abs(root, g)).flatMap((p) => [`Write(${p})`, `Edit(${p})`]);
   // `Write`가 **안 붙는** 자리. 이 줄에 `Write`를 더하는 것이 §7 §안 만드는 것을 뒤집는 변경이다.
   scope.push(...EDIT_ONLY.map((g) => `Edit(${abs(root, g)})`));
   // `--allowed-tools`의 값은 여기서 **토큰 여러 개**다 — 뒤에 `--output-format`이 와야 한다(머리 주석).
@@ -517,7 +516,7 @@ export async function personaBlock(personasDir: string, name: string = HOME_PERS
  *
  *  **경계 문장만 살렸다.** 플래그가 막는 것과 별개로 글이 필요한 이유는 종전과 같다: **막힌 것을
  *  두드리다 답을 못 하고 끝나는 턴**은 사람에게 그냥 고장으로 보인다. 그 자리가 이제
- *  `worktrees/**`와 repo의 나머지다. `티켓을 만들지 않는다`는 남고 *고치지 않는다*는 죽었다 —
+ *  `worktrees/**`와 repo 전부다(개정 `22a803de`로 repo 쪽 예외가 0이 됐다). `티켓을 만들지 않는다`는 남고 *고치지 않는다*는 죽었다 —
  *  `tickets/**`가 `Edit`으로만 열린 것이 정확히 그 갈림이다(§7 §안 만드는 것 무수정).
  *  경로를 절대경로로 안 쓰는 것은 스냅샷이 이미 큐 루트를 적어 주기 때문이다. */
 export function buildPrompt(snapshot: string, question: string, persona = ""): string {
@@ -526,8 +525,8 @@ export function buildPrompt(snapshot: string, question: string, persona = ""): s
 ---
 
 **고칠 수 있는 것은 이것뿐이다** — 큐 루트 아래 \`personas/**\` · \`protocols/**\` ·
-\`workers/*.sh\`, repo의 \`DIRA.md\` · \`ontology/**\`, 그리고 \`tickets/**\`는 **본문 편집만**
-(새 티켓을 만들지 않는다). 그 밖(\`worktrees/**\` 아래 프로젝트 코드 · repo의 나머지 전부 · 큐 밖
+\`workers/*.sh\` · \`ontology/**\` · \`AGENTS.md\`, 그리고 \`tickets/**\`는 **본문 편집만**
+(새 티켓을 만들지 않는다). 그 밖(\`worktrees/**\` 아래 프로젝트 코드 · repo 전부 · 큐 밖
 전부)은 도구가 거부한다. 거부되면 우회하지 말고 무엇이 왜 막혔는지 그대로 말한다.
 ${QUESTION_MARK}${question}`;
 }
