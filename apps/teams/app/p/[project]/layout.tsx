@@ -517,32 +517,62 @@ async function EngineCells({
   const [limits, rates] = await Promise.all([engineLimits(engines), usageRates(root, workers)]);
   // 소비량은 **게이지가 못 선 칸에서만** 쓴다(§26 ⑤). 전부 정상이면 로그를 아예 안 읽는다.
   const usage = engines.some((e) => "error" in limits[e]) ? await listUsage(root) : null;
-  return engines.map((e) => (
-    <EngineCell
-      key={e}
-      engine={e}
-      limit={limits[e]}
-      // **키가 없는 엔진은 이 항목이 통째로 빠진다**(오늘 codex — `~/.claude/projects/`는
-      // claude가 쓰는 파일이다). 창 안에 세션이 없어서 나온 진짜 `0`은 키가 있는 `0`이라
-      // `0 토큰/분`으로 선다. `undefined`와 `0`이 그 둘을 가른다(§0-8 판정 4)
-      rate={rates[e]}
-      // 그 엔진을 무는 워커들의 합이다. 키는 로그 파일명에서 온 **실효 `TICKET_NAME`**이고
-      // NFC로 맞추는 것은 `parseLogName`이 readdir의 NFD를 정규화하기 때문이다(워커 화면과 같다).
-      tokens={
-        usage
-          ? workers
-              .filter((w) => w.engine === e)
-              .reduce((n, w) => n + (usage.byWorker[w.worker.normalize("NFC")] ?? 0), 0)
-          : 0
-      }
-    />
-  ));
+  // 트랙의 k번째 구간은 `%`를 가진 k번째 칸의 것이다(§26 ② §매핑) — 칸과 같은 `engines` 순회에서
+  // 값 있는 엔진만 골라 그 순서 그대로 구간을 만든다. 두 목록을 따로 만들지 않는다.
+  const segments = engines
+    .map((e) => limits[e])
+    .filter((limit): limit is { usedPercent: number; resetsAt: number | null } => !("error" in limit));
+  return (
+    <>
+      {/* 바 전체의 스택 바 하나 — 엔진 칸을 떠나 트랙의 첫 자식이 됐다(§26 ③). 값을 못 구한
+          엔진은 구간을 안 얻으므로 폭이 `96 × 구간 수`다. 전부 폴백이면 노드 자체가 없다. */}
+      {segments.length > 0 && (
+        <div
+          aria-hidden
+          className="hidden h-2 shrink-0 overflow-hidden rounded-full bg-muted sm:flex"
+        >
+          {segments.map((limit, i) => (
+            // 구간 경계는 안 그린다 — 필이 구간 왼쪽에 정렬되므로 필의 왼쪽 끝이 경계다(§26 ③).
+            <div key={i} className="h-full w-24 shrink-0">
+              <div
+                className={cn(
+                  "h-full",
+                  limit.usedPercent >= 90 ? "bg-status-stale" : "bg-muted-foreground",
+                )}
+                style={{ width: `${Math.min(100, Math.max(0, limit.usedPercent))}%` }}
+              />
+            </div>
+          ))}
+        </div>
+      )}
+      {engines.map((e) => (
+        <EngineCell
+          key={e}
+          engine={e}
+          limit={limits[e]}
+          // **키가 없는 엔진은 이 항목이 통째로 빠진다**(오늘 codex — `~/.claude/projects/`는
+          // claude가 쓰는 파일이다). 창 안에 세션이 없어서 나온 진짜 `0`은 키가 있는 `0`이라
+          // `0 토큰/분`으로 선다. `undefined`와 `0`이 그 둘을 가른다(§0-8 판정 4)
+          rate={rates[e]}
+          // 그 엔진을 무는 워커들의 합이다. 키는 로그 파일명에서 온 **실효 `TICKET_NAME`**이고
+          // NFC로 맞추는 것은 `parseLogName`이 readdir의 NFD를 정규화하기 때문이다(워커 화면과 같다).
+          tokens={
+            usage
+              ? workers
+                  .filter((w) => w.engine === e)
+                  .reduce((n, w) => n + (usage.byWorker[w.worker.normalize("NFC")] ?? 0), 0)
+              : 0
+          }
+        />
+      ))}
+    </>
+  );
 }
 
 /** 한 엔진 칸 (§비주얼 §26 ②·③·⑤). 셋 중 하나다 —
- *  **도착 전**(`limit`이 없다: 이름만) · **값**(게이지 + `%` + 리셋) · **못 구함**(소비량 + 사유).
- *  어느 쪽이든 높이는 같다: 바가 `h-7` 고정 + `items-center`이고 들어오는 것이 전부 `text-xs`
- *  (16px)인데 게이지는 8px이라 어느 칸도 더 높아질 수 없다. */
+ *  **도착 전**(`limit`이 없다: 이름만) · **값**(`%` + 리셋 — 게이지는 `EngineCells`의 스택 바가
+ *  대신 그린다) · **못 구함**(소비량 + 사유). 어느 쪽이든 높이는 같다: 바가 `h-7` 고정 +
+ *  `items-center`이고 들어오는 것이 전부 `text-xs`(16px)다. */
 function EngineCell({
   engine,
   limit,
@@ -578,24 +608,10 @@ function EngineCell({
       </code>
       {value && (
         <>
-          {/* 트랙 + 필 `div` 2개. `role="progressbar"`를 안 쓴다 — 값을 바로 옆 글자가 이미
-              전부 말하고 있어 붙이면 같은 수를 두 번 읽는다(§26 ③). 그래서 `aria-hidden`이다.
-              transition도 없다: 5초마다 도는 애니메이션은 상시 요소에서 소음이다 */}
-          <div
-            aria-hidden
-            className="hidden h-2 w-24 shrink-0 overflow-hidden rounded-full bg-muted sm:block"
-          >
-            <div
-              className={cn(
-                "h-full rounded-full",
-                over ? "bg-status-stale" : "bg-muted-foreground",
-              )}
-              // 폭이 데이터라 클래스로 못 쓴다. **필이 차는 쪽이 쓴 쪽이다** — 잔여로 채우면
-              // 소진 직전이 빈 막대가 되어 옆 칸의 "게이지 없음"(⑤)과 한눈에 안 갈린다.
-              style={{ width: `${Math.min(100, Math.max(0, value.usedPercent))}%` }}
-            />
-          </div>
-          {/* `사용` 두 글자가 이 `%`의 단위다 — 없으면 쓴 쪽인지 남은 쪽인지 화면만 봐서 못 가른다.
+          {/* 게이지는 이 칸을 떠나 바 전체의 스택 바 하나가 됐다(§26 ③ — `56dae0e6` 개정).
+              이 칸이 얻는 것은 그 트랙 안의 구간 하나이고, `%`를 가진 몇 번째 칸인지가 매핑이다
+              (`EngineCells`가 같은 `engines` 순회로 만든다 — 두 목록을 안 따로 만든다).
+              `사용` 두 글자가 이 `%`의 단위다 — 없으면 쓴 쪽인지 남은 쪽인지 화면만 봐서 못 가른다.
               `tabular-nums`가 없으면 폴링마다 자릿수 폭이 흔들려 옆 칸이 밀린다 */}
           <span className={cn("text-xs whitespace-nowrap tabular-nums", over && "text-status-stale")}>
             {Math.round(value.usedPercent)}% 사용
