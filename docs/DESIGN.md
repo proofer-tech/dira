@@ -20690,7 +20690,7 @@ P168처럼 앞의 실측값이 뒤의 입력이 되는 회차가 아니다).
 
 | ID | 무엇 | 담당 | deps | 상태 |
 |---|---|---|---|---|
-| P171-1 | `tick.sh` — `personas/<이름>/engine` 읽어 `TICKET_ENGINE` 재구성, `ENGINE_NAME`·쿨다운·claude 인증 게이트를 선정 루프 뒤로 이동 `53ba2fd9` | developer | — | 대기 |
+| P171-1 | `tick.sh` — `personas/<이름>/engine` 읽어 `TICKET_ENGINE` 재구성, `ENGINE_NAME`·쿨다운·claude 인증 게이트를 선정 루프 뒤로 이동 `53ba2fd9` | developer | — | 완료 |
 | P171-2 | 워커 행 엔진 컨트롤(§23) 삭제 + 같은 컨트롤을 페르소나 편집 화면(§5-4 `LimitField` 옆)에 이전 `86a7af3f` | developer | — | 완료 |
 
 **둘은 병렬이다.** 계약(파일 자리 `personas/<이름>/engine` · 형식 `TICKET_ENGINE=(...)` 한 줄)만
@@ -33536,6 +33536,12 @@ PENGINE="${TICKET_PERSONAS:-$TICKET_ROOT/personas}/$TPERSONA/engine"
   판정 자체가 갈리는 첫 사례다** — 지금까지 아홉·열째는 claim 여부만 바꿨고 **claim된 뒤 무엇이
   뜨는지**는 안 바꿨다. 그래서 새 상태 전이는 없지만(여전히 `.wip`/`.done` 두 종) 디스패치되는
   프로세스 자체가 후보마다 달라질 수 있다는 것이 이번 크기다.
+  **완료** — `53ba2fd9`(developer, 커밋 `87e3d7f`)가 위 스케치 그대로 구현했다. `ENGINE_NAME`·
+  `CDOWN`·claude 인증 게이트를 선정 루프 안으로 옮기고, 매 후보마다 `TICKET_ENGINE`을
+  `BASE_ENGINE`(워커 대입값 스냅샷)으로 리셋한 뒤 페르소나 `engine`이 있으면 override — 앞
+  후보의 override가 다음 후보로 새지 않는다. `test_persona_engine.py` 신설(dryrun 반영·실제
+  디스패치 반영·쿨다운 중인 재구성 엔진 SKIP + 다음 후보 디스패치), 기존 `test_*.py` 13개
+  전부 통과.
 - **GUI 쪽 (2)는 별도 티켓**(`86a7af3f`, developer)이고 엔진 승인 대상이 아니다 — `apps/teams`
   안의 일이고 §23의 컴포넌트를 재사용해 대상 파일만 바꾼다. 두 티켓은 이 절의 계약(파일 자리·
   형식)만 공유하고 서로의 코드에 의존하지 않아 `deps` 없이 병렬로 나간다.
