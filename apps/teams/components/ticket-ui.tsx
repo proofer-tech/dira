@@ -541,6 +541,7 @@ export function AnswerForm({
   answerFile: string;
 }) {
   const [state, action, pending] = useActionState<SaveState, FormData>(answerRequirement, {});
+  const sendCombo = useKeymap().bindings["interject.send"];
   return (
     /* 입력칸과 `답변 달기`는 상자 **밖 · 밑**이다 — 다이얼로그를 화면 높이로 늘리는 안은 버렸다(§2) */
     <form action={action} className="space-y-3">
@@ -557,6 +558,12 @@ export function AnswerForm({
         rows={8}
         className="font-mono"
         required
+        // `⌘↵`로도 단다(§2 답변 항, 요구 `54f40caa`) — §3 요구 접수 칸과 같은 규칙 그대로다.
+        onKeyDown={(e) => {
+          if (!matchCombo(e.nativeEvent, sendCombo)) return;
+          e.preventDefault();
+          if (!pending) e.currentTarget.form?.requestSubmit();
+        }}
       />
       {state.error && <Failure title="답변을 달지 못했습니다" message={state.error} />}
       {/* 보조 텍스트는 버튼 왼쪽이다(§비주얼 §4-3) */}
