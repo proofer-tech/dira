@@ -19,6 +19,7 @@ import {
   cronRegisterCmd,
   cronUnregisterCmd,
   deleteWorker,
+  ENGINES,
   prepareWorktree,
   registerCron,
   startWorker,
@@ -93,8 +94,10 @@ export async function createWorkerAction(
     // §0-11 — 워커 파일이 생겼을 때만. `cron_ok`은 crontab 등록까지 갔는지고(파일만 생기고
     // 등록이 실패하는 경로가 이 액션의 계약이다) 워커 이름은 안 간다(익명 규칙).
     // `engine`은 서버가 이미 검증했지만 인자 타입이 `string`이라 표 밖 값은 `other`로 접는다.
+    // **이름을 세지 않는다**(§4-3 개정): 카탈로그에 있으면 그 id 그대로고 없으면 `other`다 —
+    // `=== "claude" || === "codex"`로 적었더니 셋째 엔진이 `기타`로 들어갔다.
     void track("worker_create", {
-      engine: engine === "claude" || engine === "codex" ? engine : "other",
+      engine: ENGINES.find((x) => x.id === engine)?.id ?? "other",
       cron_ok: !cronError,
     });
     revalidatePath(`/p/${projectId}`, "layout"); // 목록·전환기의 워커 요약도 같이 바뀐다

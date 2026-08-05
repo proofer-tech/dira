@@ -61,7 +61,7 @@ import {
 } from "@/components/ui/select";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { relativeUnder } from "@/lib/urls";
+import { engineMissing, relativeUnder } from "@/lib/urls";
 import { cn } from "@/lib/utils";
 
 /** 서버가 읽어 넘긴 컨텍스트 한 항목. `path`는 워커 파일에 든 셸 문자열이라 `$TICKET_CWD`가
@@ -178,6 +178,8 @@ export function EngineFields({
   idPrefix?: string;
 }) {
   const models = engines.find((e) => e.id === value.engine)?.models ?? [];
+  // 고른 엔진에 **없는** 기능들(§4-3 · §23 ⑤ 예고 줄). 판정도 이름도 `lib/urls.ts` 한 자리다.
+  const missing = engineMissing(value.engine);
   // 빈 칸은 아직 거절이 아니다 — `직접 입력…`을 고르자마자 빨간 줄이 뜨면 사람이 무엇을
   // 잘못했는지 모른다. 못 만든다는 사실은 부르는 쪽의 1차 버튼이 말한다(`enginePickOk`).
   const bad = !!value.custom && value.model !== "" && !new RegExp(modelPattern).test(value.model);
@@ -266,10 +268,14 @@ export function EngineFields({
         )}
       </div>
 
-      {/* 예고 — codex는 고장이 아니라 기능 집합이 다르다(§23 ⑤). 새 그릇을 만들지 않는다 */}
-      {value.engine === "codex" && (
+      {/* 예고 — 고장이 아니라 기능 집합이 다르다(§23 ⑤). 새 그릇을 만들지 않는다.
+          **없는 기능을 세어서 문장을 만든다**(§4-3 개정): codex는 둘 다 없고 grok은 참견만
+          없다 — `=== "codex"`로 적으면 grok에서 이 줄이 통째로 안 뜬다.
+          카탈로그에 없는 이름(워커 행에서 연 **손으로 쓴 값**)은 그리지 않는다: 그 워커의
+          기능 집합을 우리가 모른다(§23 ③ 팝오버 초기값이 비는 그 자리다). */}
+      {engines.some((e) => e.id === value.engine) && missing.length > 0 && (
         <p className="text-xs text-muted-foreground">
-          codex 워커는 참견과 세션 스트림이 없습니다 — 티켓 수행은 같습니다.
+          {value.engine} 워커는 {missing.join("과 ")}이 없습니다 — 티켓 수행은 같습니다.
         </p>
       )}
     </>

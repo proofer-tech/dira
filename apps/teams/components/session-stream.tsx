@@ -13,9 +13,11 @@
  *
  *  **입력칸은 하나고 모드가 셋이다**(§2-3 ③ · 아래 `ProgressForm`): 참견 / 답변 / 이어받기.
  *
- *  **codex 워커에는 스트림도 참견도 없다**(§4-3 · §비주얼 §23 ⑤). 판정은 `engine` prop 하나고
- *  (서버가 `engineName`을 적용해 넘긴다) 상자 자리엔 `<EmptyState>`, 폼 자리엔 비활성 + 사유
- *  한 줄이 선다. **진입점을 지우지 않는다** — 조용히 사라지면 사람은 고장으로 읽는다. */
+ *  **엔진마다 기능 집합이 갈린다**(§4-3 · §비주얼 §23 ⑤). 입력은 `engine` prop 하나지만
+ *  (서버가 `engineName`을 적용해 넘긴다) 판정은 **둘**이다 — `engineCan("stream", …)`과
+ *  `engineCan("interject", …)`(`lib/urls.ts`. codex는 둘 다 안 되고 grok은 앞만 된다).
+ *  없는 쪽은 상자 자리에 `<EmptyState>`, 폼 자리에 비활성 + 사유 한 줄이다.
+ *  **진입점을 지우지 않는다** — 조용히 사라지면 사람은 고장으로 읽는다. */
 import { useEffect, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowDown, ChevronRight, FilePlus2, Send, TriangleAlert } from "lucide-react";
@@ -47,7 +49,7 @@ import type { InterjectReason } from "@/lib/interject";
 // 스레드를 엮는 쪽은 서버(`lib/queue.ts threadOf`)다 — 여기 오는 건 타입뿐이라 `node:*`를 안 끈다
 import type { ThreadItem } from "@/lib/queue";
 import type { StreamEvent } from "@/lib/transcript";
-import { expandable, interjectMode, mergeProgress, type InterjectMode } from "@/lib/urls";
+import { engineCan, expandable, interjectMode, mergeProgress, type InterjectMode } from "@/lib/urls";
 import { cn } from "@/lib/utils";
 
 /** 레코드의 `timestamp`는 UTC다 — **로컬 시간으로 렌더한다**(§2-1: `13:55:10Z` = KST `22:55:10`).
@@ -101,9 +103,12 @@ export function SessionStream({
   const offset = useRef(0);
   const box = useRef<HTMLDivElement>(null);
 
-  // codex 워커에는 이 화면이 **없다**(§4-3 · §비주얼 §23 ⑤). 고장이 아니라 기능 집합의 차이라
-  // 진입점은 그대로 두고 그 자리에서 왜 없는지를 말한다. 판정은 엔진 이름 하나고 모델은 안 본다.
-  const codex = engine === "codex";
+  // 이 워커에 이 화면이 **없을 수 있다**(§4-3 · §비주얼 §23 ⑤). 고장이 아니라 기능 집합의
+  // 차이라 진입점은 그대로 두고 그 자리에서 왜 없는지를 말한다. 판정은 엔진 이름 하나고 모델은
+  // 안 본다. **둘은 한 값이 아니다** — grok은 스트림이 되고 참견은 안 된다(§4-3 표 · §grok).
+  // `=== false`인 것이 규약이다: `null`(엔진을 모르는 완료 티켓)은 종전 그대로 그린다.
+  const noStream = engineCan("stream", engine ?? null) === false;
+  const noInterject = engineCan("interject", engine ?? null) === false;
 
   // 진행중이면 2초 폴링, 완료면 1회 읽고 멈춘다(§2-1). `live`가 false로 바뀌는 순간(세션이 끝났다)
   // 그 응답을 마지막으로 폴링을 끊는다 — 완료 티켓에서 요청이 반복되지 않는 근거가 이 줄이다.
@@ -115,7 +120,7 @@ export function SessionStream({
   // 2초라서일 뿐이다(왕복 하나가 트랜스크립트 tail이라 큰 세션·느린 디스크면 넘길 수 있다).
   useEffect(() => {
     // 있을 수 없는 파일을 2초마다 묻지 않는다 — codex는 트랜스크립트를 아예 안 남긴다(§4-3 표).
-    if (codex) return;
+    if (noStream) return;
     let stop = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const poll = async () => {
@@ -140,7 +145,7 @@ export function SessionStream({
       stop = true;
       clearTimeout(timer);
     };
-  }, [project, stem, initialLive, codex]);
+  }, [project, stem, initialLive, noStream]);
 
   // 붙어 있을 때만 따라간다. 첫 렌더가 맨 아래에서 시작하는 것도 이 효과다(§9) — 그 자리가
   // **병합이 노린 자리다**: 답 없는 마지막 질문이 맨 끝이라(§2-3 ②) 첫 화면이 곧 "지금 무엇을
@@ -172,16 +177,18 @@ export function SessionStream({
     // 펼친 `<pre>`의 `break-words`는 min-content를 안 줄여서(줄이는 건 `break-all`) 긴 한 줄이
     // 그대로 열 폭이 된다 — 실측 768px 다이얼로그의 `scrollWidth`가 13125px이었다.
     <div className="min-w-0 space-y-2">
-      {codex && (
+      {noStream && (
         /* §비주얼 §23 ⑤ 사후 — §9가 이미 세워 둔 `<EmptyState>`에 문구만 갈아 끼운다.
            `Alert`가 아니다: 사람이 할 일이 없고(원문도 다음 행동도 없다), §9가 스트림 부재를
            이미 `부재이지 고장이 아니다`로 판정했고, codex 워커에겐 이게 상시 상태라 정상
-           상태에 켜진 경고가 된다(§0-2). 폴링도 안 돈다 — 빈 스트림을 돌리지 않는다. */
+           상태에 켜진 경고가 된다(§0-2). 폴링도 안 돈다 — 빈 스트림을 돌리지 않는다.
+           **문구가 엔진 이름을 말한다**: 이 자리에 서는 엔진이 codex 하나가 아니게 됐다
+           (집합 밖 = 손으로 쓴 `TICKET_ENGINE`도 여기로 온다 — §4-3 개정). */
         <EmptyState
-          text="이 워커의 엔진은 codex입니다"
+          text={`이 워커의 엔진은 ${engine}입니다`}
           action={
             <span className="text-xs text-muted-foreground">
-              세션 스트림은 claude 엔진에서만 됩니다 — codex는 트랜스크립트를 남기지 않습니다
+              세션 스트림은 claude 엔진에서만 됩니다 — {engine}는 트랜스크립트를 남기지 않습니다
             </span>
           }
         />
@@ -271,7 +278,9 @@ export function SessionStream({
         live={live}
         inbox={inbox}
         done={done}
-        codex={codex}
+        noStream={noStream}
+        noInterject={noInterject}
+        engine={engine}
         awaiting={awaiting}
         answerFile={answerFile}
       />
@@ -378,7 +387,9 @@ function ProgressForm({
   live,
   inbox,
   done,
-  codex,
+  noStream,
+  noInterject,
+  engine,
   awaiting,
   answerFile,
 }: {
@@ -387,8 +398,13 @@ function ProgressForm({
   live: boolean;
   inbox: boolean | null;
   done: boolean;
-  /** 물고 있는 워커가 codex다 — 참견이 아예 없는 워커다(§4-3 · §비주얼 §23 ⑤) */
-  codex: boolean;
+  /** 물고 있는 워커에 세션 스트림이 없다 = **폴링이 안 돈다**(§4-3 표 2행). 아래 `polled`가
+   *  이 값을 보는 이유가 그것이고, 참견 판정과는 다른 값이다 — grok에서 둘이 갈린다 */
+  noStream: boolean;
+  /** 물고 있는 워커에 참견이 없다 — 입구가 생길 일이 없는 워커다(§4-3 · §비주얼 §23 ⑤) */
+  noInterject: boolean;
+  /** 비활성 사유가 부르는 엔진 이름. `noInterject`가 참일 때만 쓴다 */
+  engine?: string | null;
   awaiting: boolean;
   answerFile?: string;
 }) {
@@ -414,10 +430,17 @@ function ProgressForm({
   const sendCombo = useKeymap().bindings["interject.send"];
 
   // 어느 폼을 그리나 — 판정은 `lib/urls.ts` 하나다(§21 표 4행 + 예외 둘. 그 파일에 검증이 있다).
-  // **codex는 `polled`가 이미 참이다**: 폴링을 아예 안 도는데(위 효과) `inbox`가 `null`인 채로
-  // 두면 `첫 폴링 전`으로 읽혀 폼이 통째로 사라진다 — §23이 지우지 말라고 한 그 자리다.
-  // 서버에 물을 것이 없는 것이지 아직 안 물어본 것이 아니다.
-  const mode = interjectMode({ polled: codex || inbox !== null, live, done, failed: !!fail, awaiting });
+  // **스트림이 없는 워커는 `polled`가 이미 참이다**: 폴링을 아예 안 도는데(위 효과) `inbox`가
+  // `null`인 채로 두면 `첫 폴링 전`으로 읽혀 폼이 통째로 사라진다 — §23이 지우지 말라고 한 그
+  // 자리다. 서버에 물을 것이 없는 것이지 아직 안 물어본 것이 아니다. **참견 판정이 아니라
+  // 스트림 판정을 보는 자리다**: grok은 폴링이 돌아 `inbox`가 제때 차므로 claude와 같은 길이다.
+  const mode = interjectMode({
+    polled: noStream || inbox !== null,
+    live,
+    done,
+    failed: !!fail,
+    awaiting,
+  });
   if (!mode) return null;
 
   // 답변 모드 — 그릇이 갈리는 유일한 모드다(§2-3 ③). `answerFile`이 없으면 그릴 것이 없다
@@ -451,10 +474,10 @@ function ProgressForm({
   // 남은 폼의 입력칸이 `disabled`가 돼 §21이 `readOnly`로 지키려던 선택·복사를 잃는다. §21이
   // 그릇의 흐림을 의도한 자리는 하나뿐이고, 그 화면의 사유는 실패 Alert가 말한다(사유 한 줄도
   // 같이 안 뜬다).
-  // 입구가 없다 = 그릇 통째로 비활성(§21). codex는 **입구가 생길 일이 없는** 워커라 같은 자리다
-  // (`tick.sh:263-270`이 `--input-format stream-json` 인접에서만 FIFO를 판다 — §4-3).
+  // 입구가 없다 = 그릇 통째로 비활성(§21). 참견이 없는 엔진은 **입구가 생길 일이 없는** 워커라
+  // 같은 자리다(`tick.sh:263-270`이 `--input-format stream-json` 인접에서만 FIFO를 판다 — §4-3).
   // `inbox`를 안 보고 따로 적는 이유: 사유 문구가 갈리고, 그 판정이 폴링에 안 걸려야 한다.
-  const off = !followup && live && (codex || !inbox);
+  const off = !followup && live && (noInterject || !inbox);
   const empty = !text.trim();
 
   const send = async () => {
@@ -590,10 +613,12 @@ function ProgressForm({
           (§21 실측). 비활성 컨트롤은 WCAG 예외지만 **왜 못 쓰는지 설명하는 문장은 예외가 아니다**. */}
       {off && (
         <p id={offId} className="text-xs text-muted-foreground">
-          {/* codex는 사유가 티켓이 아니라 **엔진**이다(§4-3 · §비주얼 §23 ⑤). `inbox가 없습니다`도
-              참이지만 그건 결과고, 사람이 고칠 수 있는 것으로 읽힌다 — 이 워커는 그런 워커다. */}
-          {codex
-            ? "이 워커의 엔진은 codex입니다 — 참견은 claude 엔진에서만 됩니다"
+          {/* 참견이 없는 엔진은 사유가 티켓이 아니라 **엔진**이다(§4-3 · §비주얼 §23 ⑤).
+              `inbox가 없습니다`도 참이지만 그건 결과고, 사람이 고칠 수 있는 것으로 읽힌다 —
+              이 워커는 그런 워커다. **엔진 이름을 말한다**: 이 자리에 서는 엔진이 codex
+              하나가 아니게 됐고(grok도 온다), 이름이 없으면 사람이 어느 쪽인지 모른다. */}
+          {noInterject
+            ? `이 워커의 엔진은 ${engine}입니다 — 참견은 claude 엔진에서만 됩니다`
             : "이 세션은 참견을 받지 못합니다 — 티켓에 inbox가 없습니다"}
         </p>
       )}

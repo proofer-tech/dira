@@ -42,7 +42,7 @@ import {
 } from "@/lib/queue";
 import { getProject, listPersonas, resolveConfig } from "@/lib/projects";
 import { findTranscript, sessionIdOf } from "@/lib/transcript";
-import { decodeHash } from "@/lib/urls";
+import { decodeHash, engineCan } from "@/lib/urls";
 import { holderEngine, listWorkers } from "@/lib/workers";
 
 // 큐는 GUI 밖에서(cron·세션이) 바뀐다. 프리렌더하면 빌드 시점 내용이 굳는다.
@@ -130,9 +130,9 @@ export default async function TicketDetail({
   // 글롭 매치가 0개·2개 이상이면 `트랜스크립트 없음`이다. **어느 쪽도 에러로 그리지 않는다.**
   const sessionId = sessionIdOf(ticket.fm);
   const transcript = sessionId ? await findTranscript(sessionId) : null;
-  // 갈림길이 하나 늘었다: **이 티켓을 물고 있는 워커의 엔진**(§4-3 · §비주얼 §23 ⑤). codex면
-  // 스트림도 참견도 없는 워커라 화면이 그걸 말한다 — 진입점을 지우지 않는다. 완료 티켓은
-  // 아무도 안 물고 있어 `null`이고, 그때는 종전 빈 상태 그대로다(추측해서 문구를 고르지 않는다).
+  // 갈림길이 하나 늘었다: **이 티켓을 물고 있는 워커의 엔진**(§4-3 · §비주얼 §23 ⑤). 그 엔진에
+  // 없는 기능이 있으면 화면이 그걸 말한다 — 진입점을 지우지 않는다. 완료 티켓은 아무도 안 물고
+  // 있어 `null`이고, 그때는 종전 빈 상태 그대로다(추측해서 문구를 고르지 않는다).
   const engine = holderEngine(workers, ticket.stem);
 
   // 요구사항 왕복 스레드 — 보드 카드의 답변 다이얼로그와 **같은 함수**가 엮는다(§1 · §2).
@@ -167,12 +167,13 @@ export default async function TicketDetail({
             든다. `질문·답변`이 아닌 이유도 같다 — `진행 기록`은 **이 티켓에 무슨 일이 있었나**
             한 가지를 가리킨다(§0-9 · §2-3 ①). `Card`가 아니라 `<section>` + `h2`다. */}
         <h2 className="text-sm font-medium">진행 기록</h2>
-        {/* codex면 트랜스크립트가 **있을 수 없다**(§4-3 표) — 그래도 컴포넌트를 세운다:
+        {/* 스트림이 없는 엔진(오늘 codex)이면 트랜스크립트가 **있을 수 없다**(§4-3 표) —
+            그래도 컴포넌트를 세운다:
             왜 없는지와 참견 폼의 사유가 그 안에 있고, 두 진입점(여기 · 워커 행)이 같은
             조각을 그린다(§비주얼 §23 ⑤). 스레드·답변 대기만 있는 경우(극단 A — 세션이 붙은
             적 없는 요구사항)도 여기로 온다: 상자는 `max-h`가 되고 **스트림이 없다는 말을
             하지 않는다**(§29 ④ — `대기` 배지가 이미 말한다). */}
-        {transcript || engine === "codex" || thread.length > 0 || awaiting ? (
+        {transcript || engineCan("stream", engine) === false || thread.length > 0 || awaiting ? (
           <SessionStream
             project={id}
             stem={ticket.stem}

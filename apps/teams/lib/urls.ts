@@ -166,6 +166,43 @@ export function chatRows(
  *  `elapsedSuffix`와 같은 이유로 여기 산다 — `pnpm test`가 JSX를 못 읽고, 스트림은 클라이언트다. */
 export const expandable = (e: { body: string }) => e.body !== "";
 
+/** 기능 → **그 기능이 되는 엔진 이름 집합** (§4-3 §codex를 고르면 GUI 기능 둘이 죽는다, 표).
+ *
+ *  **`=== "codex"`로 적지 않는다**(§4-3 개정 2026-08-05, 요구 `390f788b`). 엔진이 둘일 때는
+ *  *codex다* 와 *claude가 아니다* 가 같은 집합이라 판정이 전자로 적혀 있었고, 셋째 엔진이 서면
+ *  그 둘이 갈린다 — grok이 그 비교를 통과하지 못해 claude로 읽히고 참견 form이 서서 아무 일도
+ *  안 한다. 그래서 **집합이 여기 한 벌 있고 부르는 쪽은 엔진 이름을 세지 않는다.**
+ *
+ *  `label`은 그 기능을 화면이 부르는 이름이다 — 없는 기능을 열거하는 문장(§비주얼 §23 ⑤ 예고
+ *  줄)이 이름을 따로 적으면 표를 고칠 때 문장이 안 따라온다.
+ *
+ *  `urls.ts`에 사는 이유는 이 파일 머리의 그 이유다: 판정하는 자리가 서버(§2 티켓 상세 ·
+ *  §0-8 잔여)와 클라이언트(§2-1 스트림 · §4 워커 폼) 양쪽이고, `lib/workers.ts`는 `node:fs`를
+ *  물어 클라이언트 번들에 못 들어간다. */
+const FEATURE_ENGINES = {
+  /** §2-2 참견 — `--input-format stream-json` 인접이 있어야 `tick.sh:263-270`이 FIFO를 판다 */
+  interject: { label: "참견", engines: ["claude"] },
+  /** §2-1 세션 스트림 — 트랜스크립트 파일이 있어야 한다. grok은 자리·형식이 다를 뿐 **있다** */
+  stream: { label: "세션 스트림", engines: ["claude", "grok"] },
+} as const;
+
+export type EngineFeature = keyof typeof FEATURE_ENGINES;
+
+/** 이 엔진에서 그 기능이 되는가. `engine`이 `null`이면 **`null`**이다 — 된다도 안 된다도 아니고
+ *  (완료 티켓은 아무도 안 물고 있어 되짚을 워커가 없다) 화면은 없는 값을 추측해 문구를 고르지
+ *  않는다(§비주얼 §23 ⑤ 마지막 항). 집합 밖 이름(손으로 쓴 `TICKET_ENGINE`)은 `false`다. */
+export function engineCan(feature: EngineFeature, engine: string | null): boolean | null {
+  const ok: readonly string[] = FEATURE_ENGINES[feature].engines;
+  return engine === null ? null : ok.includes(engine);
+}
+
+/** 이 엔진에 **없는** 기능들의 화면 이름. claude면 빈 배열이라 부르는 쪽이 아무것도 안 그린다. */
+export function engineMissing(engine: string): string[] {
+  return Object.values(FEATURE_ENGINES)
+    .filter((f) => !(f.engines as readonly string[]).includes(engine))
+    .map((f) => f.label);
+}
+
 /** 스트림 아래 입력 form의 **모드** (§비주얼 §21 `어느 폼을 그리나` · §2-3 ③). 같은 칸이 티켓
  *  상태에 따라 셋으로 갈린다: `.wip`이면 `참견`(도는 세션에 말이 간다), **답변 대기면 `답변`**
  *  (`tickets/<awaiting>.done.md`가 생긴다), `.done`이면 `이어받기`(새 열린 티켓 1장이 생긴다).

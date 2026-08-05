@@ -156,7 +156,9 @@ export const RATE_WINDOW_MS = 10 * 60 * 1000;
 const RATE_TTL_MS = 30_000;
 
 /** 트랜스크립트를 원본으로 갖는 엔진. **오늘은 claude 하나다** — `~/.claude/projects/`는
- *  claude가 쓰는 파일이라 codex 세션이 거기 없다. 그래서 codex 칸은 `0`이 아니라 이 항목이
+ *  claude가 쓰는 파일이라 codex·grok 세션이 거기 없다(grok은 `~/.grok/sessions/`에 자기
+ *  형식으로 남긴다 — §4-3 §grok. 그 파싱은 §2-1 스트림 쪽 일이고 여기는 안 쓴다). 그래서
+ *  그 칸은 `0`이 아니라 이 항목이
  *  **통째로 빠진다**(§0-8 판정 4: 못 구하는 값에 `0`을 그리지 않는다. 판정 2와 같은 줄이다).
  *
  *  ponytail: codex의 같은 값은 rollout의 `token_count`에 있다(`codexLimit`이 읽는 그 파일).
@@ -346,9 +348,18 @@ export async function engineLimits(engines: string[]): Promise<Record<string, En
   return out;
 }
 
+/** 잔여 한도의 **원본이 있는 엔진 집합**이고 값이 그 원본이다(§0-8 판정 2 · §4-3 개정
+ *  2026-08-05). `=== "codex"`로 갈래를 적으면 셋째 엔진이 어느 한쪽으로 조용히 떨어진다 —
+ *  `codexLimit()`은 codex의 rollout 파일을 읽고 **grok에는 그런 파일이 없다.**
+ *  키에 없는 엔진(오늘 grok)은 아래 폴백이다. */
+const LIMIT_SOURCE: Record<string, () => Promise<EngineLimit>> = {
+  claude: claudeLimit,
+  codex: codexLimit,
+};
+
 function readLimit(engine: string): Promise<EngineLimit> {
-  if (engine === "claude") return claudeLimit();
-  if (engine === "codex") return codexLimit();
+  const read = LIMIT_SOURCE[engine];
+  if (read) return read();
   // 원본을 모르는 엔진은 폴백이다. **추정치를 지어내지 않는다**(§0-8).
   return Promise.resolve({ error: `${engine}: 한도를 주는 원본을 모릅니다` });
 }

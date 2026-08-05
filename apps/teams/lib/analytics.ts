@@ -14,6 +14,8 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { registryPath } from "./projects.ts";
 import type { Screen } from "./urls.ts";
+// 타입만 가져온다(컴파일에 지워진다) — `workers.ts`의 `node:fs`가 여기 붙지 않는다.
+import type { EngineId } from "./workers.ts";
 
 /** 레지스트리·토큰·키맵과 **같은 디렉터리**다(엔진의 `$LOCAL`). `lib/auth.ts:16`과 같은 한 줄.
  *  **`.dira` 안이 아니다** — 머신당 하나이고 큐를 오염시키지 않는다(§0-11 사용자 세션 표). */
@@ -32,7 +34,10 @@ export type Events = {
   app_open: { app_version: string; shell: "desktop" | "browser" };
   screen_view: { screen: Screen };
   project_add: { method: "create" | "register" };
-  worker_create: { engine: "claude" | "codex" | "other"; cron_ok: boolean };
+  /** `engine`은 **카탈로그의 `EngineId` 그대로**이고 `other`가 표 밖(손으로 쓴 값)을 받는다.
+   *  이름을 여기 다시 적지 않는 이유가 §4-3 개정이다 — 셋째 엔진을 `기타`로 접으면 계측이
+   *  그 회차를 못 본다. `ENGINES`에 한 벌이 늘면 이 유니온이 저절로 는다. */
+  worker_create: { engine: EngineId | "other"; cron_ok: boolean };
   ticket_create: { kind: "work" | "request" | "feedback" };
   answer_submit: Record<string, never>;
   feedback_submit: Record<string, never>;

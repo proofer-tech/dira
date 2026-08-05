@@ -2,6 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert";
 import {
   chatRows,
+  engineCan,
+  engineMissing,
   findMatches,
   hasFindBar,
   interjectMode,
@@ -168,6 +170,46 @@ test("relationPath — 제어점의 y가 앵커의 y와 같다(선이 레인 머
     .map(Number);
   assert.equal(c1y, 120);
   assert.equal(c2y, 480);
+});
+
+/** 기능 → 되는 엔진 집합 (DESIGN.md §4-3 개정 2026-08-05, 요구 `390f788b`).
+ *
+ *  **이게 틀리면 화면이 조용히 거짓말한다.** grok이 `=== "codex"`를 통과하지 못해 claude로
+ *  읽히면 참견 form이 활성으로 서서 보낸 글이 아무 데도 안 가고, 반대로 스트림을 codex와 한
+ *  집합으로 묶으면 있는 트랜스크립트를 안 읽고 `없습니다`를 그린다. 어느 쪽도 에러가 안 난다 —
+ *  그래서 여섯 자리가 이 함수 하나에 걸려 있고 검증도 여기 하나다. */
+test("engineCan — 기능마다 집합이 다르다. grok에서 둘이 갈린다(§4-3 표)", () => {
+  // 표 1행: 참견은 `{claude}` — FIFO는 `--input-format stream-json` 인접에서만 파인다
+  assert.equal(engineCan("interject", "claude"), true);
+  assert.equal(engineCan("interject", "codex"), false);
+  assert.equal(engineCan("interject", "grok"), false);
+  // 표 2행: 세션 스트림은 `{claude, grok}` — **이 한 칸이 이 회차의 전부다**
+  assert.equal(engineCan("stream", "claude"), true);
+  assert.equal(engineCan("stream", "codex"), false);
+  assert.equal(engineCan("stream", "grok"), true);
+});
+
+test("engineCan — 엔진을 모르면 `null`이고 집합 밖 이름은 `false`다", () => {
+  // 완료 티켓은 아무도 안 물고 있어 되짚을 워커가 없다. `false`로 접으면 화면이 없는 값을
+  // 추측해 `이 워커의 엔진은 null입니다`를 그린다(§비주얼 §23 ⑤ 마지막 항).
+  assert.equal(engineCan("stream", null), null);
+  assert.equal(engineCan("interject", null), null);
+  // 손으로 쓴 `TICKET_ENGINE`은 아는 이름이 아니다 — 되는 집합에 없으니 안 되는 것이다.
+  assert.equal(engineCan("stream", "aider"), false);
+  assert.equal(engineCan("interject", "aider"), false);
+});
+
+test("engineMissing — 없는 기능의 이름만, 표 순서대로(§비주얼 §23 ⑤ 예고 줄)", () => {
+  // 이 배열이 그대로 `<엔진> 워커는 <…과 …>이 없습니다` 한 줄이 된다. claude에서 비는 것이
+  // 곧 그 줄이 안 뜨는 근거다 — 정상 상태에 안내를 켜지 않는다(§0-2).
+  assert.deepEqual(engineMissing("claude"), []);
+  assert.deepEqual(engineMissing("codex"), ["참견", "세션 스트림"]);
+  assert.deepEqual(engineMissing("grok"), ["참견"]);
+  // 종전 문장이 한 글자도 안 갈린다는 근거(회귀) — codex 워커의 예고 줄 그대로다.
+  assert.equal(
+    `codex 워커는 ${engineMissing("codex").join("과 ")}이 없습니다 — 티켓 수행은 같습니다.`,
+    "codex 워커는 참견과 세션 스트림이 없습니다 — 티켓 수행은 같습니다.",
+  );
 });
 
 /** 스트림 아래 입력 form의 모드 (DESIGN.md §비주얼 §21 `어느 폼을 그리나` 표 + 예외 둘).
