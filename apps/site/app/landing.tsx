@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import "./fonts.css";
 import "./landing.css";
 
 // `.vitepress/theme/Landing.vue`를 옮긴 것이다(§사이트 기반 §갈아 끼우는 것). 텍스트 노드는

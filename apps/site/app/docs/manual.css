@@ -1,0 +1,646 @@
+/* 매뉴얼 셸 전역 CSS. 기본 테마(vitepress)가 주던 크롬을 우리 손으로 다시 그린 것이고,
+   값은 전부 `docs/DESIGN.md` §매뉴얼 셸 시각 사양(`a1782bd7`)의 표에서 왔다.
+   랜딩(`landing.css`)과 한 벌로 안 합친다 — 랜딩은 라이트 전용이고 매뉴얼은 두 모드다.
+   그쪽 리셋은 `p`·`ul`의 여백을 0으로 눕히는 것이라 산문 위에서 그대로 쓸 수 없다. */
+
+/* ── ② 토큰 — 라이트·다크 두 벌 ─────────────────────────────────────────────
+   색 12종 중 7종이 랜딩 `:root`에서 그대로 오고 5종이 새 값이다. 다크 밑면·잉크는
+   라이트의 두 값을 맞바꾼 것이라 새 hex가 아니다. `color-scheme`은 선언하지 않는다 —
+   그 한 줄이 라이트를 못박던 자리이고, 포커스 링은 아래에서 명시로 그린다. */
+:root {
+  --bg: #FFFFFF;
+  --panel: #FAFAFA;
+  --fg: #0A0A0A;
+  --muted-fg: #52525B;
+  --faint: #71717A;
+  --border: #E4E4E7;
+  --link: #1364CE;
+  --sans: "Wanted Sans Variable", -apple-system, BlinkMacSystemFont, "Pretendard", "Apple SD Gothic Neo", "Segoe UI", sans-serif;
+  --mono: "Geist Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  --nav: 64px;
+  --localnav: 48px;
+}
+.dark {
+  --bg: #0A0A0A;
+  --panel: #18181B;
+  --fg: #FAFAFA;
+  --muted-fg: #A1A1AA;
+  --faint: #82828C;
+  --border: #27272A;
+  --link: #61A4FF;
+}
+
+/* 킬 스위치. 랜딩 `landing.css` ①과 같은 블록이다 — vitepress `base.css`가 지던 것을
+   셸마다 명시로 세운다(그 파일 하나가 두 화면을 다 덮던 자리가 없어진다). */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-delay: -1ms !important;
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0s !important;
+    transition-delay: 0s !important;
+  }
+}
+
+/* 리셋은 여기까지다. 산문의 여백·목록 표시는 브라우저 기본을 그대로 쓰고 아래 §산문이
+   값만 덮는다 — 눕혔다 다시 세우면 규칙이 두 배가 된다. */
+*,
+::before,
+::after {
+  box-sizing: border-box;
+}
+html {
+  font-size: 16px;
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+  /* 앵커로 뛴 헤딩이 sticky 네브 밑에 숨지 않게 한다. */
+  scroll-padding-top: calc(var(--nav) + 16px);
+}
+body {
+  margin: 0;
+  min-width: 320px;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ⑧ 포커스 링 — UA 기본(`outline: auto`)을 우리 색으로 바꾼다. 라이트 5.61 · 다크 7.79로
+   둘 다 비텍스트 하한 3:1의 두 배 위다. */
+:focus-visible {
+  outline: 2px solid var(--link);
+  outline-offset: 2px;
+}
+
+/* ⑧ 스킵링크 — 첫 Tab 정거장. 잉크를 반전해서 라이트 19.80 · 다크 18.97이고 새 색이 0이다.
+   자리·크기는 기본 테마 값 그대로(top 14 · left 16 · 12px · pad 8/16 · radius 8). */
+.skip {
+  position: fixed;
+  top: 14px;
+  left: 16px;
+  z-index: 60;
+  padding: 8px 16px;
+  border-radius: 8px;
+  background: var(--fg);
+  color: var(--bg);
+  font-size: 12px;
+  font-weight: 500;
+  text-decoration: none;
+  transform: translateY(-200%);
+}
+.skip:focus {
+  transform: none;
+}
+
+/* ── ① 네브바 ────────────────────────────────────────────────────────────── */
+.nav {
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 40;
+  height: var(--nav);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 32px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+/* 제목은 랜딩 워드마크 그대로다 — `--mono` 16/600 `-0.03em` + 20px 아이콘. */
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  color: var(--fg);
+  text-decoration: none;
+}
+.brand svg {
+  width: 20px;
+  height: 20px;
+  display: block;
+  fill: currentColor;
+}
+.nav-menu {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+.nav-menu a {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--muted-fg);
+  text-decoration: none;
+}
+.nav-menu a:hover,
+.nav-menu a.on {
+  color: var(--fg);
+}
+.social,
+.appearance,
+.hamburger,
+.menu-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: none;
+  color: var(--muted-fg);
+  cursor: pointer;
+  padding: 0;
+}
+.social {
+  width: 36px;
+  height: 36px;
+}
+.social svg {
+  width: 20px;
+  height: 20px;
+  display: block;
+  fill: currentColor;
+}
+.appearance {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+}
+.appearance svg {
+  width: 18px;
+  height: 18px;
+  display: block;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.appearance .moon,
+.dark .appearance .sun {
+  display: none;
+}
+.dark .appearance .moon {
+  display: block;
+}
+/* 햄버거는 `<768`에서만 선다(48×64). 여는 것은 네브 메뉴 둘이다 — 사이드바는 아래
+   로컬네브의 `메뉴`가 연다. 기본 테마의 플라이아웃은 열 중첩 메뉴가 0개라 버렸다. */
+.hamburger {
+  display: none;
+  width: 48px;
+  height: var(--nav);
+  margin-right: -16px;
+}
+.hamburger svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+/* ── 로컬네브 — `<960`에서 사이드바를 여는 유일한 길 ───────────────────────
+   높이 48이고 아웃라인 드롭다운을 버려서 모바일 크롬 합이 112 → 88px이다. */
+.localnav {
+  display: none;
+  position: fixed;
+  inset: var(--nav) 0 auto;
+  z-index: 30;
+  height: var(--localnav);
+  align-items: center;
+  padding: 0 32px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+.menu-btn {
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  font-family: inherit;
+}
+.menu-btn svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+/* ── ⑥ 골격 ───────────────────────────────────────────────────────────────
+   레이아웃 상한 1440 · 사이드바 272 · 아웃라인 224 · 본문 상한 688 · 여백 32(<768 24). */
+.shell {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding-top: var(--nav);
+  display: grid;
+  grid-template-columns: 272px minmax(0, 1fr);
+  align-items: start;
+}
+.content {
+  padding: 32px;
+  min-width: 0;
+}
+.doc {
+  max-width: 688px;
+}
+
+/* ── ④ 사이드바 ──────────────────────────────────────────────────────────
+   면만으로는 페이지 대비가 1.04라 경계가 안 선다. 오른쪽 1px `--border`가 그 자리다. */
+/* `sticky`다 — `fixed`면 격자 항목에서 빠져서 272px 칸이 비고 본문이 그 칸으로 들어간다
+   (실측: 1440에서 본문 폭이 688이 아니라 208로 나왔다). 서랍이 되는 `<960`에서만 `fixed`다. */
+.sidebar {
+  position: sticky;
+  top: var(--nav);
+  height: calc(100vh - var(--nav));
+  width: 272px;
+  z-index: 20;
+  overflow-y: auto;
+  padding: 24px 24px 96px;
+  border-right: 1px solid var(--border);
+  background: var(--panel);
+}
+.sidebar section + section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.sidebar h2 {
+  margin: 0 0 4px;
+  font-size: 14px;
+  line-height: 24px;
+  font-weight: 600;
+  color: var(--fg);
+}
+.sidebar a {
+  display: block;
+  line-height: 32px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--muted-fg);
+  text-decoration: none;
+}
+.sidebar a:hover {
+  color: var(--fg);
+}
+/* 현재 항목은 색만으로 말하지 않는다 — 굵기도 같이 간다. */
+.sidebar a[aria-current="page"] {
+  color: var(--link);
+  font-weight: 600;
+}
+
+/* ── ④ 아웃라인 — `≥1280`에서만 서고 1단으로 못박는다(22장 전수 h3 중첩 0건) ──── */
+.outline {
+  display: none;
+  position: sticky;
+  top: calc(var(--nav) + 32px);
+  align-self: start;
+  width: 224px;
+  padding-left: 16px;
+  border-left: 1px solid var(--border);
+}
+.outline h2 {
+  margin: 0;
+  font-size: 14px;
+  line-height: 32px;
+  font-weight: 600;
+  color: var(--fg);
+}
+.outline a {
+  display: block;
+  position: relative;
+  font-size: 14px;
+  line-height: 20px;
+  padding: 6px 0;
+  font-weight: 400;
+  color: var(--muted-fg);
+  text-decoration: none;
+  /* 224px에 14px이면 한 줄이 14~15자다. 두 줄까지 접고 그 뒤 자른다. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+.outline a:hover {
+  color: var(--fg);
+}
+.outline a.on {
+  color: var(--link);
+}
+.outline a.on::before {
+  content: "";
+  position: absolute;
+  left: -17px;
+  top: 9px;
+  width: 2px;
+  height: 18px;
+  background: var(--link);
+}
+
+/* ── ③ 산문 ─────────────────────────────────────────────────────────────── */
+.doc {
+  font-size: 16px;
+  line-height: 28px;
+  color: var(--fg);
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
+.doc h1 {
+  margin: 0 0 24px;
+  font-size: 32px;
+  line-height: 40px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+.doc h2 {
+  margin: 48px 0 16px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+  font-size: 24px;
+  line-height: 32px;
+  font-weight: 600;
+}
+.doc h3 {
+  margin: 32px 0 16px;
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 600;
+}
+.doc p {
+  margin: 16px 0;
+}
+.doc ul,
+.doc ol {
+  margin: 16px 0;
+  padding-left: 20px;
+}
+.doc li {
+  line-height: 24px;
+  margin: 8px 0;
+}
+/* 밑줄은 남긴다 — 색만으로 의미를 전달하지 않는다. */
+.doc a {
+  color: var(--link);
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.doc strong {
+  font-weight: 600;
+}
+.doc blockquote {
+  margin: 16px 0;
+  padding-left: 16px;
+  border-left: 2px solid var(--border);
+  color: var(--muted-fg);
+}
+.doc :not(pre) > code {
+  font-family: var(--mono);
+  font-size: 0.875em;
+  padding: 2px 5px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--panel);
+  color: var(--fg);
+}
+/* 흰 밑면 캡처가 흰 페이지에서 경계를 잃는다. */
+.doc img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+/* ⑦③ 표가 390에서 잘려서 못 읽던 자리. 그릇이 가로 스크롤을 지고 표에 최소폭을 준다 —
+   560에서 최악 셀이 15줄 → 8줄이고 그 장 표 높이 합이 45% 준다. */
+.table-scroll {
+  margin: 16px 0;
+  overflow-x: auto;
+}
+.doc table {
+  min-width: 560px;
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  line-height: 24px;
+}
+.doc th,
+.doc td {
+  padding: 8px 16px;
+  border: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+.doc th {
+  color: var(--muted-fg);
+  font-weight: 600;
+}
+.doc tbody tr:nth-child(2n) {
+  background: var(--panel);
+}
+
+/* ── ⑤ 코드블록 ─────────────────────────────────────────────────────────── */
+.code {
+  position: relative;
+  margin: 16px 0;
+}
+.doc pre {
+  margin: 0;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel) !important;
+  overflow-x: auto;
+  font-size: 14px;
+  line-height: 23.8px;
+}
+.doc pre code {
+  font-family: var(--mono);
+}
+/* shiki 이중 테마. `--shiki-light`/`--shiki-dark` 두 변수만 나가고 어느 쪽을 칠할지는
+   여기가 정한다(클라이언트 JS 0바이트). */
+.doc .shiki span {
+  color: var(--shiki-light);
+}
+.dark .doc .shiki span {
+  color: var(--shiki-dark);
+}
+.code .lang {
+  position: absolute;
+  top: 2px;
+  right: 8px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--faint);
+  pointer-events: none;
+}
+/* ⑦① 기본 테마의 복사 버튼은 `tabIndex 0`인데 포커스를 줘도 `opacity: 0`이었다.
+   호버·포커스·터치(포인터가 거친 기기)에서 보이게 한다. */
+.copy {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--muted-fg);
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 150ms ease-out;
+}
+/* `:focus-visible`가 아니라 `:focus`다 — 크롬은 프로그램이 준 포커스(`.focus()`)를
+   `:focus-visible`로 안 쳐서, 그 선택자로는 정거장이 도로 안 보이는 창이 남는다. */
+.code:hover .copy,
+.copy:hover,
+.copy:focus {
+  opacity: 1;
+}
+@media (pointer: coarse) {
+  .copy {
+    opacity: 1;
+  }
+}
+
+/* ── 꼬리 — 편집 링크 · 이전/다음 ────────────────────────────────────────── */
+.docfooter {
+  max-width: 688px;
+  margin-top: 48px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+}
+.edit a {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--link);
+  text-decoration: none;
+}
+.prevnext {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 24px;
+}
+.prevnext a {
+  min-height: 66px;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  text-decoration: none;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+}
+.prevnext .side {
+  font-size: 12px;
+  color: var(--muted-fg);
+}
+.prevnext .title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--link);
+}
+.prevnext .next {
+  grid-column: 2;
+  text-align: right;
+}
+
+.backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 15;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+/* ── ⑥ 브레이크포인트 셋 ────────────────────────────────────────────────── */
+@media (min-width: 1280px) {
+  .shell {
+    grid-template-columns: 272px minmax(0, 1fr) 224px;
+  }
+  .outline {
+    display: block;
+  }
+}
+
+@media (max-width: 959px) {
+  .shell {
+    grid-template-columns: minmax(0, 1fr);
+    padding-top: calc(var(--nav) + var(--localnav));
+  }
+  .localnav {
+    display: flex;
+  }
+  /* 사이드바가 서랍이 된다. `메뉴`가 여는 유일한 길이다. */
+  .sidebar {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    height: auto;
+    padding-top: 88px;
+    transform: translateX(-100%);
+    transition: transform 200ms ease-out;
+  }
+  html.sidebar-open .sidebar {
+    transform: none;
+  }
+  html.sidebar-open .backdrop {
+    display: block;
+  }
+}
+
+@media (max-width: 767px) {
+  .nav,
+  .localnav,
+  .content {
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+  .content {
+    padding-top: 24px;
+    padding-bottom: 24px;
+  }
+  .hamburger {
+    display: flex;
+  }
+  /* 네브 메뉴 둘이 햄버거 아래 드롭다운으로 접힌다. */
+  .nav-menu {
+    display: none;
+    position: fixed;
+    inset: var(--nav) 0 auto;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    margin: 0;
+    padding: 8px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+  }
+  html.nav-open .nav-menu {
+    display: flex;
+  }
+  .nav-menu a {
+    line-height: 40px;
+  }
+  .doc h1 {
+    font-size: 28px;
+    line-height: 36px;
+  }
+  .prevnext {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .prevnext .next {
+    grid-column: 1;
+  }
+}

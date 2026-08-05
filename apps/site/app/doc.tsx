@@ -14,7 +14,7 @@ import { createHighlighter } from "shiki";
 const rControl = /[\u0000-\u001f]/g;
 const rSpecial = /[\s~`!@#$%^&*()\-_+=[\]{}|\\;:"'“”‘’<>,.?/]+/g;
 const rCombining = /[\u0300-\u036F]/g;
-const slugify = (str: string) =>
+export const slugify = (str: string) =>
   str
     .normalize("NFKD")
     .replace(rCombining, "")
@@ -54,15 +54,29 @@ function drop<T extends { node?: unknown }>(p: T) {
 type Node = { value?: string; children?: Node[] };
 const textOf = (n: Node): string => n.value ?? (n.children ?? []).map(textOf).join("");
 
-// vitepress가 지금 굽는 것과 같은 이중 테마. `defaultColor: false`라 `color:` 없이
-// `--shiki-light`/`--shiki-dark` 두 변수만 나가고, 어느 모드를 칠할지는 CSS가 정한다.
-const THEMES = { light: "github-light", dark: "github-dark" } as const;
+// `defaultColor: false`라 `color:` 없이 `--shiki-light`/`--shiki-dark` 두 변수만 나가고,
+// 어느 모드를 칠할지는 CSS가 정한다(클라이언트 0바이트).
+// 쌍은 `-default`다(§매뉴얼 셸 시각 사양 ⑤ §대비) — 22장 코드펜스 25개(2,587자)를 실제로
+// 칠해 보면 종전 쌍은 라이트 2종 1.55% · 다크 1종 7.31%가 AA 미달이고, `-default` 쌍은
+// 라이트 주석 한 색(4.36)만 짧다. 그 한 색을 `--faint`로 치환하면 미달 0 · 새 색 0이다.
+const THEMES = { light: "github-light-default", dark: "github-dark-default" } as const;
+const COLOR_REPLACEMENTS = { "#6e7781": "#71717A" };
 const highlighting = createHighlighter({
   themes: [THEMES.light, THEMES.dark],
   langs: ["bash", "markdown"],
 });
 
-export default async function Doc({ source }: { source: string }) {
+/** `id`·`className`은 부르는 쪽이 준다 — 매뉴얼 셸에서 이 `<main>`이 스킵링크의 목적지이자
+ *  산문 타이포의 그릇이다. 루트 산문 2장은 세울 크롬이 0이라 그대로 둔다. */
+export default async function Doc({
+  source,
+  id,
+  className,
+}: {
+  source: string;
+  id?: string;
+  className?: string;
+}) {
   const hl = await highlighting;
 
   const components: Components = {
@@ -74,17 +88,31 @@ export default async function Doc({ source }: { source: string }) {
       const lang = /language-(\w+)/.exec(cls)?.[1] ?? "text";
       const src = code?.type === "element" ? textOf(code as Node) : "";
       return (
-        <div
-          dangerouslySetInnerHTML={{
-            __html: hl.codeToHtml(src.replace(/\n$/, ""), {
-              lang: hl.getLoadedLanguages().includes(lang) ? lang : "text",
-              themes: THEMES,
-              defaultColor: false,
-            }),
-          }}
-        />
+        <div className="code">
+          <div
+            dangerouslySetInnerHTML={{
+              __html: hl.codeToHtml(src.replace(/\n$/, ""), {
+                lang: hl.getLoadedLanguages().includes(lang) ? lang : "text",
+                themes: THEMES,
+                defaultColor: false,
+                colorReplacements: COLOR_REPLACEMENTS,
+              }),
+            }}
+          />
+          <span className="lang">{lang}</span>
+          {/* ⑦① 기본 테마의 이 버튼은 탭 정거장인데 포커스에서도 안 보였다. CSS가 고친다. */}
+          <button type="button" className="copy" aria-label="코드 복사">
+            복사
+          </button>
+        </div>
       );
     },
+    // ⑦③ 표가 390에서 잘려서 스크롤로도 못 닿던 자리. 그릇이 가로 스크롤을 진다.
+    table: (p) => (
+      <div className="table-scroll">
+        <table {...drop(p)} />
+      </div>
+    ),
     // 크기를 못 찾으면 조용히 넘기지 않고 빌드를 세운다 — `width`/`height` 없는 이미지가
     // 로드되며 페이지를 미는 것이 계약을 깨는 자리이고, 그 신호를 끄면 아무도 못 본다.
     // ponytail: 보는 곳이 `public/shots/`뿐이다. 매뉴얼이 다른 자리의 그림을 걸게 되면 넓힌다.
@@ -105,7 +133,7 @@ export default async function Doc({ source }: { source: string }) {
   };
 
   return (
-    <main>
+    <main id={id} className={className}>
       {/* `singleTilde: false`가 계약이다. GFM 기본값은 물결 하나도 취소선으로 읽어서
           `0~9와 a~f`가 `0<del>9와 a</del>f`가 된다 — markdown-it(vitepress)은 `~~` 둘만 본다.
           22장의 산문이 물결을 범위 기호로 쓰므로 여기가 갈리면 글자가 사라진다. */}
