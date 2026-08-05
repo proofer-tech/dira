@@ -5,8 +5,9 @@
  *  `.authwarn`은 건드리지 않는다: 엔진이 "이미 한 번 경고했다"를 적어 두는 자기 파일이고,
  *  토큰이 생기면 61행 조건이 먼저 꺼져 다시 보지 않는다(§0-4). */
 import { spawn, type ChildProcess } from "node:child_process";
+import { createHash } from "node:crypto";
 import { accessSync, constants, statSync } from "node:fs";
-import { chmod, mkdir, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { registryPath } from "./projects.ts";
 
@@ -54,6 +55,139 @@ export async function saveToken(token: string): Promise<void> {
   await mkdir(path.dirname(p), { recursive: true });
   await writeFile(p, token, { mode: 0o600 });
   await chmod(p, 0o600);
+}
+
+// ── 여러 계정 — `tokens.json` 그릇, `oauth-token`은 파생값이다 (DESIGN.md §0-13) ────
+//
+// **정본은 여기 하나다.** `oauth-token`은 `active`가 가리키는 토큰의 내용을 그대로 받는
+// 파생 파일이고, 엔진 계약(개행 없는 한 줄 · `0600` · 같은 경로)은 `saveToken()` 그대로다 —
+// `tokens.json`을 엔진은 보지도 않는다.
+
+/** §0-13 §자리의 JSON 항목 그대로. `label`은 선택이고 `exhaustedUntil`은 자동 회전(P169-3)만 쓴다. */
+export type TokenEntry = {
+  id: string;
+  label?: string;
+  token: string;
+  addedAt: string;
+  enabled: boolean;
+  exhaustedUntil: number | null;
+};
+
+type ClaudeTokens = { active: string; tokens: TokenEntry[] };
+/** claude 하나만 다룬다(§0-13 §범위) — 최상위 키는 다른 엔진이 자격증명을 우리 파일로 가질 때를
+ *  위해 미리 산다. 오늘은 `claude` 밖의 키를 아무도 안 쓴다. */
+export type TokensFile = { claude?: ClaudeTokens };
+
+/** 레지스트리·`oauth-token`·키맵과 **같은 디렉터리**다. `tokenPath()`와 같은 한 줄. */
+export function tokensPath(): string {
+  return path.join(path.dirname(registryPath()), "tokens.json");
+}
+
+function tokenId(token: string): string {
+  return createHash("sha256").update(token).digest("hex").slice(0, 12);
+}
+
+function newEntry(token: string, label?: string): TokenEntry {
+  return { id: tokenId(token), label, token, addedAt: new Date().toISOString(), enabled: true, exhaustedUntil: null };
+}
+
+/** §0-13 §상태의 그 한 줄 — **여기 한 곳에만** 있다. P169-2(화면)·P169-3(회전)·P169-4(알림) 셋이
+ *  전부 이 함수를 부른다. 두 벌로 적으면 화면은 "쓸 게 남았다"는데 회전은 안 도는 상태가 생긴다. */
+export function isEligible(
+  t: Pick<TokenEntry, "enabled" | "exhaustedUntil">,
+  nowSec: number = Math.floor(Date.now() / 1000),
+): boolean {
+  return t.enabled && (t.exhaustedUntil == null || t.exhaustedUntil <= nowSec);
+}
+
+/** 없음·깨짐·객체 아님 셋 다 `{}`다 — `analytics.ts`의 `readSettings`와 같은 관용구. */
+async function readTokensFile(): Promise<TokensFile> {
+  try {
+    const o: unknown = JSON.parse(await readFile(tokensPath(), "utf8"));
+    return o && typeof o === "object" && !Array.isArray(o) ? (o as TokensFile) : {};
+  } catch {
+    return {};
+  }
+}
+
+/** `writeFile`의 `mode`는 새로 만들 때만 먹는다 — `saveToken()`과 같은 이유로 `chmod`를
+ *  따로 부른다. 이 파일은 비밀을 **여러 개** 담으므로 `oauth-token`과 같은 등급인 `0600`이다. */
+async function writeTokensFile(next: TokensFile): Promise<void> {
+  const p = tokensPath();
+  await mkdir(path.dirname(p), { recursive: true });
+  await writeFile(p, JSON.stringify(next, null, 2) + "\n", { mode: 0o600 });
+  await chmod(p, 0o600);
+}
+
+/** `oauth-token`은 여기서만 다시 쓴다. eligible이 하나도 없으면 지운다 →
+ *  §0-4의 `Claude 토큰이 없습니다`가 저절로 선다(§0-13 §상태). */
+async function syncOauthToken(file: TokensFile): Promise<void> {
+  const engine = file.claude;
+  if (!engine || !engine.tokens.some((t) => isEligible(t))) {
+    await rm(tokenPath(), { force: true });
+    return;
+  }
+  const active = engine.tokens.find((t) => t.id === engine.active);
+  if (active) await saveToken(active.token);
+}
+
+/** `tokens.json`에 쓰는 유일한 통로. `active`가 바뀌든 상태가 바뀌든 이 함수를 지나가면
+ *  `oauth-token` 파생값이 저절로 맞는다 — P169-2·3·4는 다음 상태를 만들어 여기 넘기기만 한다. */
+export async function writeTokens(file: TokensFile): Promise<void> {
+  await writeTokensFile(file);
+  await syncOauthToken(file);
+}
+
+/** 지금 `oauth-token`의 내용. 없거나 `normalizeToken`이 거부하면(빈 파일 등) `null` —
+ *  마이그레이션도 손편집 판정도 이 경우는 건너뛴다. */
+async function currentOauthToken(): Promise<string | null> {
+  const raw = await readFile(tokenPath(), "utf8").catch(() => null);
+  if (raw == null) return null;
+  try {
+    return normalizeToken(raw);
+  } catch {
+    return null;
+  }
+}
+
+/** 읽을 때마다 두 보정을 먼저 맞춘다 — 부르는 쪽은 어느 쪽도 몰라도 된다(§0-13 §자리).
+ *  ① `tokens.json`이 없고 `oauth-token`만 있으면 그 값을 항목 하나로 들여온다(마이그레이션.
+ *     **잃는 것이 0이다** — 지금 도는 큐의 인증이 그 파일 하나다).
+ *  ② 목록 어디에도 없는 `oauth-token` 값이면(사람이 손으로 고쳤다) 덮어쓰지 않고 새 항목으로
+ *     들여와 활성화한다. */
+export async function readTokens(): Promise<TokensFile> {
+  const file = await readTokensFile();
+  const current = await currentOauthToken();
+  if (current == null) return file;
+
+  if (!file.claude) {
+    const entry = newEntry(current);
+    const next: TokensFile = { claude: { active: entry.id, tokens: [entry] } };
+    await writeTokens(next);
+    return next;
+  }
+
+  if (!file.claude.tokens.some((t) => t.token === current)) {
+    const entry = newEntry(current);
+    const next: TokensFile = { claude: { active: entry.id, tokens: [...file.claude.tokens, entry] } };
+    await writeTokens(next);
+    return next;
+  }
+
+  return file;
+}
+
+/** 추가한다 — 같은 토큰이면 항목이 늘지 않고(같은 `id`) 그 항목을 활성으로 만든다.
+ *  새로 넣은 토큰도 활성으로 만든다(§0-13 §화면 — 방금 인증한 사람이 원하는 것이 그것이다). */
+export async function addToken(raw: string, label?: string): Promise<TokenEntry> {
+  const token = normalizeToken(raw);
+  const id = tokenId(token);
+  const file = await readTokens();
+  const tokens = file.claude?.tokens ?? [];
+  const existing = tokens.find((t) => t.id === id);
+  const entry = existing ?? newEntry(token, label);
+  await writeTokens({ claude: { active: id, tokens: existing ? tokens : [...tokens, entry] } });
+  return entry;
 }
 
 // ── ② 발급 — `claude setup-token`을 GUI가 pty로 몬다 (§0-4) ─────────────────

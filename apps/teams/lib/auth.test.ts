@@ -9,6 +9,7 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -18,15 +19,20 @@ process.env.TICKET_LOCAL = LOCAL;
 process.on("exit", () => rmSync(LOCAL, { recursive: true, force: true }));
 
 const {
+  addToken,
   findClaude,
+  isEligible,
   normalizeToken,
   ptyLines,
   pollSetup,
   readAuth,
+  readTokens,
   saveToken,
   startSetup,
   stopSetup,
   tokenPath,
+  tokensPath,
+  writeTokens,
 } = await import("./auth.ts");
 
 test("tokenPath — TICKET_LOCAL을 존중하고 레지스트리와 같은 디렉터리다", () => {
@@ -234,4 +240,90 @@ test("stopSetup — 다이얼로그를 닫으면 돌던 자식이 죽는다", as
   stopSetup();
   assert.strictEqual(pollSetup().running, false);
   await until(() => !alive(pid));
+});
+
+// ── 여러 계정 — `tokens.json` 그릇 (DESIGN.md §0-13) ─────────────────────────
+//
+// 위 테스트들이 이미 `tokenPath()`(oauth-token)를 여러 번 써 놓은 LOCAL이라, 마이그레이션·
+// 손편집 판정을 깨끗한 전제에서 재려고 **이 구획만 다른 TICKET_LOCAL**을 쓴다. `tokenPath()`·
+// `tokensPath()`는 호출마다 `process.env.TICKET_LOCAL`을 다시 읽으므로(재-import 불필요) 안전하다.
+const LOCAL2 = mkdtempSync(path.join(tmpdir(), "fst-auth-tokens-"));
+process.on("exit", () => rmSync(LOCAL2, { recursive: true, force: true }));
+
+const sha256_12 = (s: string) => createHash("sha256").update(s).digest("hex").slice(0, 12);
+
+test("isEligible — enabled && (exhaustedUntil이 없거나 지났다), 그 한 줄", () => {
+  assert.strictEqual(isEligible({ enabled: true, exhaustedUntil: null }), true);
+  assert.strictEqual(isEligible({ enabled: false, exhaustedUntil: null }), false);
+  const now = Math.floor(Date.now() / 1000);
+  assert.strictEqual(isEligible({ enabled: true, exhaustedUntil: now + 60 }, now), false); // 아직 산다
+  assert.strictEqual(isEligible({ enabled: true, exhaustedUntil: now - 1 }, now), true); // 창이 지났다
+});
+
+test("마이그레이션 — tokens.json이 없고 oauth-token만 있으면 항목 하나로 들여온다", async () => {
+  process.env.TICKET_LOCAL = LOCAL2; // 이 구획부터 TICKET_LOCAL을 갈아 끼운다(위 §안내)
+  assert.ok(!existsSync(tokensPath()));
+  await saveToken("sk-ant-oat01-migrate-me");
+
+  const file = await readTokens();
+  const entry = file.claude!.tokens[0];
+  assert.strictEqual(file.claude!.tokens.length, 1);
+  assert.strictEqual(entry.token, "sk-ant-oat01-migrate-me");
+  assert.strictEqual(entry.id, sha256_12("sk-ant-oat01-migrate-me"));
+  assert.strictEqual(entry.enabled, true);
+  assert.strictEqual(file.claude!.active, entry.id);
+  // 잃는 것이 0이다 — oauth-token 내용이 그대로다
+  assert.strictEqual(readFileSync(tokenPath(), "utf8"), "sk-ant-oat01-migrate-me");
+  // tokens.json도 0600이다
+  assert.strictEqual(statSync(tokensPath()).mode & 0o777, 0o600);
+});
+
+test("addToken — 같은 토큰을 두 번 추가해도 항목이 늘지 않는다(같은 id)", async () => {
+  const a = await addToken("sk-ant-oat01-dup");
+  const b = await addToken("sk-ant-oat01-dup");
+  assert.strictEqual(a.id, b.id);
+  assert.strictEqual(a.id, sha256_12("sk-ant-oat01-dup"));
+
+  const file = await readTokens();
+  assert.strictEqual(file.claude!.tokens.filter((t) => t.id === a.id).length, 1);
+});
+
+test("addToken — active가 바뀔 때마다 oauth-token을 다시 쓴다(개행 없는 한 줄 · 0600)", async () => {
+  await addToken("sk-ant-oat01-first");
+  assert.strictEqual(readFileSync(tokenPath(), "utf8"), "sk-ant-oat01-first");
+
+  await addToken("sk-ant-oat01-second");
+  assert.strictEqual(readFileSync(tokenPath(), "utf8"), "sk-ant-oat01-second");
+  assert.strictEqual(statSync(tokenPath()).mode & 0o777, 0o600);
+
+  const file = await readTokens();
+  assert.strictEqual(file.claude!.active, sha256_12("sk-ant-oat01-second"));
+});
+
+test("손편집 들여오기 — oauth-token이 목록 어느 것과도 안 맞으면 덮어쓰지 않고 새 항목으로 들여온다", async () => {
+  const before = await readTokens();
+  const beforeCount = before.claude!.tokens.length;
+
+  writeFileSync(tokenPath(), "sk-ant-oat01-hand-edited", { mode: 0o600 });
+  const after = await readTokens();
+
+  assert.strictEqual(after.claude!.tokens.length, beforeCount + 1);
+  const entry = after.claude!.tokens.find((t) => t.token === "sk-ant-oat01-hand-edited");
+  assert.ok(entry, "손편집 값이 새 항목으로 안 들어왔다");
+  assert.strictEqual(after.claude!.active, entry!.id);
+  // 옛 항목들은 그대로다 — 조용히 지우지 않는다
+  assert.ok(before.claude!.tokens.every((t) => after.claude!.tokens.some((u) => u.id === t.id)));
+});
+
+test("eligible이 0이 되면 oauth-token을 지운다", async () => {
+  const id = sha256_12("sk-ant-oat01-solo");
+  await writeTokens({
+    claude: { active: id, tokens: [{ id, token: "sk-ant-oat01-solo", addedAt: "x", enabled: true, exhaustedUntil: null }] },
+  });
+  assert.ok(existsSync(tokenPath()));
+
+  await writeTokens({
+    claude: { active: id, tokens: [{ id, token: "sk-ant-oat01-solo", addedAt: "x", enabled: false, exhaustedUntil: null }] },
+  });
+  assert.ok(!existsSync(tokenPath()), "eligible 0인데 oauth-token이 안 지워졌다");
 });
