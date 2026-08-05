@@ -188,13 +188,13 @@ export default async function Workers({ params }: { params: Promise<{ project: s
               <TableHead className="h-9 px-3 text-xs">이름</TableHead>
               <TableHead className="h-9 px-3 text-xs">상태</TableHead>
               <TableHead className="h-9 px-3 text-xs">물고 있는 티켓</TableHead>
-              <TableHead className="h-9 px-3 text-right text-xs">pid</TableHead>
-              {/* pid 옆이다 — 둘 다 오른쪽 정렬 숫자라 눈이 한 번에 훑는다 */}
-              <TableHead className="h-9 px-3 text-right text-xs">토큰(5시간)</TableHead>
               <TableHead className="h-9 px-3 text-xs">엔진</TableHead>
               {/* 엔진 오른쪽이다 — 설정을 그 자리에서 고치는 열끼리 이웃한다(§비주얼 §35 #3) */}
               <TableHead className="h-9 px-3 text-xs">컨텍스트</TableHead>
               <TableHead className="h-9 px-3 text-xs">마지막 활동</TableHead>
+              <TableHead className="h-9 px-3 text-right text-xs">pid</TableHead>
+              {/* pid 옆이다 — 둘 다 오른쪽 정렬 숫자라 눈이 한 번에 훑는다 */}
+              <TableHead className="h-9 px-3 text-right text-xs">토큰(5시간)</TableHead>
               <TableHead className="h-9 px-3 text-right text-xs">액션</TableHead>
             </TableRow>
           </TableHeader>
@@ -230,15 +230,6 @@ export default async function Workers({ params }: { params: Promise<{ project: s
                     <span className="text-muted-foreground">—</span>
                   )}
                 </TableCell>
-                <TableCell className="px-3 py-0 text-right font-mono text-xs tabular-nums">
-                  {w.lockPid ?? <span className="text-muted-foreground">—</span>}
-                </TableCell>
-                {/* `stopped`·`idle`도 창 안에 쓴 것이 있으면 값이 뜬다 — 소비는 지금 상태가
-                    아니라 과거의 사실이다(§0-8 그릇). **없으면 `—`가 아니라 `0`이다**: 이 창에
-                    안 썼다는 것은 확인된 사실이고, `—`는 모른다는 뜻으로 읽힌다 */}
-                <TableCell className="px-3 py-0 text-right font-mono text-xs tabular-nums">
-                  {formatTokens(tokens[w.name] ?? 0)}
-                </TableCell>
                 {/* 상한은 `td`가 아니라 안쪽 `span`에 건다 — auto table layout은 `td`의
                     max-width를 상한으로 지키지 않는다(§비주얼 §6). `w-px`는 이 컬럼을 남는
                     폭 배분에서 빼는 것이고(배분은 안쪽 max-width를 보지 않는다), 그래야
@@ -264,6 +255,15 @@ export default async function Workers({ params }: { params: Promise<{ project: s
                     둘째 행이 이 워커의 최근 20줄을 잘림 없이 받는다. 셀에 뜨는 값은 무수정이다 */}
                 <TableCell className="w-px px-3 py-0">
                   <WorkerActivityCell row={w} />
+                </TableCell>
+                <TableCell className="px-3 py-0 text-right font-mono text-xs tabular-nums">
+                  {w.lockPid ?? <span className="text-muted-foreground">—</span>}
+                </TableCell>
+                {/* `stopped`·`idle`도 창 안에 쓴 것이 있으면 값이 뜬다 — 소비는 지금 상태가
+                    아니라 과거의 사실이다(§0-8 그릇). **없으면 `—`가 아니라 `0`이다**: 이 창에
+                    안 썼다는 것은 확인된 사실이고, `—`는 모른다는 뜻으로 읽힌다 */}
+                <TableCell className="px-3 py-0 text-right font-mono text-xs tabular-nums">
+                  {formatTokens(tokens[w.name] ?? 0)}
                 </TableCell>
                 <TableCell className="px-3 py-0">
                   <WorkerRowActions projectId={id} row={w} />
