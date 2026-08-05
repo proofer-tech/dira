@@ -15,13 +15,14 @@ import { DepBadge, StatusBadge, daysSince } from "@/components/status-badge";
 import { WipWorker } from "@/components/worker-mark";
 import {
   DeleteTicketButton,
+  FrontmatterTable,
   NewTicketDialog,
   TicketEditForm,
   UnassignButton,
   WipBodyPolling,
 } from "@/components/ticket-ui";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
 import { findTicket } from "@/lib/engine";
 import {
   archivedBy,
@@ -436,38 +437,10 @@ export default async function TicketDetail({
             {/* `table-fixed`가 §비주얼 §11의 216px 값 열을 **실제로** 만든다. 기본 `auto`에서는
                 `session_id` 36자의 min-content가 표를 352px 밖으로 밀고, `Table` 컨테이너의
                 `overflow-x-auto`가 그걸 가로 스크롤로 받아 값이 잘려 보인다(1440 실측).
-                `break-words`는 min-content 기여를 바꾸지 않으므로 폭을 고정해야 줄이 접힌다. */}
-            <Table className="table-fixed">
-              <TableBody>
-                {Object.entries(ticket.fm).map(([k, v]) => (
-                  <TableRow key={k} className="h-9">
-                    {/* 최장 키 `assigned_at` 11자 ≈ 84 + `px-3` 24 = 108 ≤ 112. `w-40`은 352px
-                        안에서 키 열이 값 열보다 넓어진다 */}
-                    <TableCell className="w-28 px-3 py-0 text-sm text-muted-foreground">
-                      {k}
-                    </TableCell>
-                    {/* 값은 거의 다 식별자·경로·시각이다. 문장인 title만 예외로 읽는 글꼴.
-                        `break-all`이 아니라 `break-words`다 — 216px 값 열에서 `session_id`가
-                        넘치는데 전자는 16진수 한가운데를, 후자는 하이픈·`/`에서 끊는다.
-                        `whitespace-normal`은 shadcn `TableCell`의 `whitespace-nowrap`을 벗기는
-                        값이다 — 안 벗기면 `break-words`가 걸릴 자리가 아예 없어 값이 잘린다 */}
-                    <TableCell className="px-3 py-0 whitespace-normal">
-                      <span className={k === "title" ? "text-sm" : "font-mono text-xs break-words"}>
-                        {v || "—"}
-                      </span>
-                    </TableCell>
-                  </TableRow>
-                ))}
-                <TableRow className="h-9">
-                  <TableCell className="w-28 px-3 py-0 text-sm text-muted-foreground">
-                    파일
-                  </TableCell>
-                  <TableCell className="px-3 py-0 font-mono text-xs break-words whitespace-normal">
-                    {path.basename(ticket.path)}
-                  </TableCell>
-                </TableRow>
-              </TableBody>
-            </Table>
+                `break-words`는 min-content 기여를 바꾸지 않으므로 폭을 고정해야 줄이 접힌다.
+                기본 노출을 `assigned_at`까지로 줄이는 토글(§43 ①)은 클라이언트 상태라
+                `FrontmatterTable`(ticket-ui.tsx)이 가진다. */}
+            <FrontmatterTable fm={ticket.fm} file={path.basename(ticket.path)} />
           </section>
 
           <section className="space-y-4">
@@ -475,35 +448,38 @@ export default async function TicketDetail({
             {/* **선행을 unmet으로 걸러내지 않는다**(§2, `b9775505`) — 걸러면 충족된 선행이 라벨 없이
                 떠서 `막고 있는 것 없음` 바로 밑에 배지가 붙고 한 라벨 안에서 두 문장이 서로를 부정했다.
                 막혀 있는지는 머리의 상태 배지가 말하고, 개별 해시의 상태는 배지 아이콘이 말한다.
-                라벨은 건수를 세어주지 않는다 — 보드 카드와 같은 문구다(사람 요청 `1f2ac454`). */}
-            <div className="space-y-2">
-              <p className="text-xs text-muted-foreground">선행 — 이 티켓의 deps</p>
-              {deps.length === 0 ? (
-                <EmptyState text="선행 없음" />
-              ) : (
-                <div className="flex flex-wrap items-center gap-2">
-                  {deps.map((d) => (
-                    <DepBadge
-                      key={d.hash}
-                      hash={d.hash}
-                      kind={d.kind}
-                      href={d.hit ? href(d.hit) : undefined}
-                    />
-                  ))}
-                </div>
+                한 줄로 합친다(§43 ②) — `[선행 배지들] → 이 티켓 → [후행 배지들]`. 후행도
+                `TicketLine`(제목 포함) 대신 `DepBadge`로 그린다 — 선행과 같은 모양이라야 한 줄에
+                자연스럽게 섞인다. 선행·후행 둘 다 0건이어도 이 행은 남는다 — "이 티켓" 칩이
+                막힌 것 없음도 진술한다. */}
+            <div className="flex flex-wrap items-center gap-2">
+              {deps.map((d) => (
+                <DepBadge
+                  key={d.hash}
+                  hash={d.hash}
+                  kind={d.kind}
+                  href={d.hit ? href(d.hit) : undefined}
+                />
+              ))}
+              {deps.length > 0 && (
+                <span aria-hidden className="text-muted-foreground">
+                  →
+                </span>
               )}
-            </div>
-            <div className="space-y-2">
-              <p className="text-xs text-muted-foreground">후행 — 이 티켓을 deps로 둔 티켓</p>
-              {blocked.length === 0 ? (
-                <EmptyState text="후행 없음" />
-              ) : (
-                <div className="space-y-1">
-                  {blocked.map((t) => (
-                    <TicketLine key={t.path} t={t} href={href(t)} />
-                  ))}
-                </div>
+              <Badge variant="secondary">이 티켓</Badge>
+              {blocked.length > 0 && (
+                <span aria-hidden className="text-muted-foreground">
+                  →
+                </span>
               )}
+              {blocked.map((t) => (
+                <DepBadge
+                  key={t.path}
+                  hash={t.hash}
+                  kind={t.state === "done" ? "met" : "unmet"}
+                  href={href(t)}
+                />
+              ))}
             </div>
 
             {/* 출처/파생 — 같은 절 안이지만 구분선으로 갈라 둔다(§2 "`deps` 관계와 섞지 않는다").

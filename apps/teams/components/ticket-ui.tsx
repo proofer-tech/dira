@@ -87,6 +87,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 
 /** 실패 사유는 원문 그대로. 삼키지 않는다(§6 에러 3요소). */
@@ -99,6 +100,62 @@ function Failure({ title, message }: { title: string; message: string }) {
         <span className="font-mono text-xs break-all">{message}</span>
       </AlertDescription>
     </Alert>
+  );
+}
+
+// ── frontmatter 표 ───────────────────────────────────────────────────────────
+
+/** 오른쪽 단의 frontmatter 표(§43 ①). 기본 노출은 `assigned_at` 키까지 + 항상 붙는 `파일` 행 —
+ *  `pid`·`owner`·`inbox` 등 그 뒤 키는 "펼치기"를 눌러야 보인다. 클라이언트 로컬 상태(새로고침하면
+ *  다시 접힘)라 여기서 관리한다 — 서버에 저장할 값이 아니다.
+ *
+ *  자르는 지점은 `assigned_at` 키의 인덱스다. 그 키가 없으면(한 번도 claim 안 된 백로그 티켓)
+ *  자를 지점이 없으므로 토글 자체를 그리지 않고 전 필드를 그대로 보여준다. */
+export function FrontmatterTable({ fm, file }: { fm: Record<string, string>; file: string }) {
+  const [open, setOpen] = useState(false);
+  const entries = Object.entries(fm);
+  const cutIdx = entries.findIndex(([k]) => k === "assigned_at");
+  const visible = cutIdx === -1 ? entries : entries.slice(0, cutIdx + 1);
+  const collapsed = cutIdx === -1 ? [] : entries.slice(cutIdx + 1);
+
+  const row = ([k, v]: [string, string]) => (
+    <TableRow key={k} className="h-9">
+      {/* 최장 키 `assigned_at` 11자 ≈ 84 + `px-3` 24 = 108 ≤ 112. `w-28`은 352px 안에서
+          키 열이 값 열보다 넓어진다(page.tsx §비주얼 §11과 같은 값) */}
+      <TableCell className="w-28 px-3 py-0 text-sm text-muted-foreground">{k}</TableCell>
+      <TableCell className="px-3 py-0 whitespace-normal">
+        <span className={k === "title" ? "text-sm" : "font-mono text-xs break-words"}>
+          {v || "—"}
+        </span>
+      </TableCell>
+    </TableRow>
+  );
+
+  return (
+    <>
+      <Table className="table-fixed">
+        <TableBody>
+          {visible.map(row)}
+          {open && collapsed.map(row)}
+          <TableRow className="h-9">
+            <TableCell className="w-28 px-3 py-0 text-sm text-muted-foreground">파일</TableCell>
+            <TableCell className="px-3 py-0 font-mono text-xs break-words whitespace-normal">
+              {file}
+            </TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
+      {cutIdx !== -1 && (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-auto px-0 text-xs text-muted-foreground hover:text-foreground"
+          onClick={() => setOpen((v) => !v)}
+        >
+          {open ? "접기" : "펼치기"}
+        </Button>
+      )}
+    </>
   );
 }
 
