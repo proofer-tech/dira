@@ -291,9 +291,9 @@ export function ProjectSwitcher({
  *  로고 하나만 남기라고 했다. 툴팁·라벨로 대신하지도 않는다("그냥 로고 클릭"이 요구다). */
 const NAV = [
   { seg: "", label: "보드" },
-  { seg: "/workers", label: "워커" },
   { seg: "/personas", label: "페르소나" },
   { seg: "/protocols", label: "프로토콜" },
+  { seg: "/workers", label: "워커" },
 ];
 
 export function ProjectNav({ id }: { id: string }) {
