@@ -14437,7 +14437,18 @@ ls <산출>/assets | grep -c inter    # 0 (종전 14파일 642,756 B)
 
 ### 검증
 
-**패리티가 판정이다.** 앞 화면은 ⑧ 전까지 `npx vitepress build .`로 언제든 굽는다.
+**패리티가 판정이다.** ~~앞 화면은 ⑧ 전까지 `npx vitepress build .`로 언제든 굽는다.~~
+**⑧(`1ff5f751`)이 돌았다 — 그 명령은 지금 트리에서 안 돈다.** 앞 화면은 **삭제 직전 커밋
+`51b7bba`에서만** 굽는다. ⑨을 받는 세션이 대조 표본을 만드는 길이 이 셋뿐이다:
+
+```bash
+# 앞 화면을 되세운다 — 워크트리를 더럽히지 않는다(별도 디렉터리로 뽑는다)
+git archive 51b7bba | (mkdir -p /tmp/site-before && cd /tmp/site-before && tar -xf -)
+cd /tmp/site-before/apps/site && pnpm install && npx vitepress build .   # .vitepress/dist
+```
+
+`check-landing-prose.py`는 이 되세우기가 필요 없다 — **기본 ref가 `51b7bba`로 못박혀 있고**
+`git show`로 그 한 파일만 읽는다(못 읽으면 사유를 내고 종료한다).
 
 ```bash
 # ① URL 26개가 한 자도 안 갈렸다 — 앞뒤 목록이 같다
@@ -14479,6 +14490,20 @@ grep -rc 'vitepress' apps/site/package.json   # 0
 
 **`## Done when`에 `pnpm --dir apps/site build`를 계속 쓴다.** ⑧ 전까지는 vitepress를,
 뒤로는 Next를 부른다 — 스크립트 이름이 계약이라 §매뉴얼 §검증의 문장이 안 갈린다.
+
+#### 뒤집으니 결함 둘이 났다 — 둘 다 워커 트리에서 안 보인다 (`1ff5f751`)
+
+⑧까지 여섯 세션이 `next build`를 exit 0으로 돌렸는데도 이 둘이 살아 있었다. **둘 다 옛 빌드가
+무시하던 값**이고, 그래서 초록 여섯 개가 아무것도 안 재던 자리다. 처방은 커밋에 있고, 여기 적는
+것은 **왜 안 보였나**다 — 같은 모양이 또 나면 재는 방법이 이것이라서다.
+
+| 결함 | 왜 워커 트리에서 안 보이나 | 재는 법 |
+|---|---|---|
+| `version.ts:7`의 `../desktop/package.json`이 `Module not found` | turbopack이 **lockfile로 root를 추론한다.** `apps/site/`가 자기 `pnpm-lock.yaml`을 갖고 있어 깨끗한 체크아웃에서는 root가 그 디렉터리로 떨어지고 `../desktop`이 밖이 된다. 워커 트리에는 `~/pnpm-workspace.yaml`이 **조상으로** 있어서 root가 위로 올라간다 | 워크트리에서 재면 안 잡힌다. `git archive HEAD`를 빈 디렉터리에 풀고 거기서 세 줄을 돌린다 — CI가 보는 것이 그쪽이다 |
+| `_global-error` 프리렌더가 `useContext` of null로 죽는다 | **디스패치 환경이 `NODE_ENV=development`를 걸어 둔다.** `next build`가 그 값을 그대로 믿는다. 옛 빌드는 이 변수를 안 봤고, `npx next build`를 손으로 친 세션은 자기 셸에 그 값이 없으면 통과한다 | `NODE_ENV=development pnpm --dir apps/site build`. 지금은 스크립트가 `production`을 못박아서 이 명령도 통과한다 |
+
+**`git archive`로 재는 것을 ⑨의 절차에 넣는다.** 위 첫 행은 워크트리에서 초록이 나오는 동안
+CI에서 빨간불이었다 — `pnpm --dir apps/site build` 한 줄로는 그 갈림을 못 잰다.
 
 ## 로드맵
 
@@ -19889,7 +19914,7 @@ git 안인 자리는 없다"*를 닫아 놓고, **같은 심링크가 로컬 공
 | P163 | `privacy` · `terms` 두 장 `b30956f9` | developer | `bf676da8` | 완료 · `7e190c8` — 본문 106/28블록 전수 일치 · `urls()` diff 0줄. **⑤(셸)이 틀린 사실을 달고 있었다** → 지적 `f74ad5a7` |
 | P163 | 루트 산문 2장의 셸 지적 판정 `f74ad5a7` | pm | — | 완료 — 갈래 **ⓑ**(되살린다 · 예외 0). 걸린 것이 아웃라인 하나가 아니라 **열 중 여덟**이었고 두 라우트는 **CSS가 0건**이다. 가르는 성질은 *출처가 `themeConfig.sidebar` 배열인가* → `be29ed31` |
 | P163 | 루트 산문 2장의 셸 `be29ed31` | developer | `bed0630a` | 대기 |
-| P163 | 전환 — 빌드·배포·CI를 뒤집고 vitepress를 지운다 `1ff5f751` | developer | `7fe32c70` `bed0630a` `7a521c0a` `b30956f9` | 대기 |
+| P163 | 전환 — 빌드·배포·CI를 뒤집고 vitepress를 지운다 `1ff5f751` | developer | `7fe32c70` `bed0630a` `7a521c0a` `b30956f9` | 완료 · `79d17ba` — 검증 일곱 전부 통과(URL 26 diff **0줄** · 산문 83/0 · 테스트 12/12 · `grep -c vitepress` **0**). `ci.yml` **0줄 갈렸다**. **뒤집으니 결함 둘이 났다**(§뒤집으니 결함 둘) — `turbopack.root` 추론과 `NODE_ENV=development`, 둘 다 워커 트리에서 안 보이고 CI에서만 빨간불이었다. 검사 도구 재조준 둘(`sidebar.test.ts`의 자를 `docs/*.md`로 · `check-landing-prose.py` 기본 ref를 `51b7bba`로) — 양성 대조군을 둘 다 돌렸다 |
 | P163 | 앞뒤 전수 대조 `af556aaf` | qa | `1ff5f751` | 대기 |
 | P163 | 셸 사양 §①⑥의 `112 → 88px` 산술 지적 판정 `8dc2e3d6` | designer | `a1782bd7` | 완료 — **수를 고친다**(지적의 ①). 두 부품이 flex 형제라 88의 산술이 없었다 → `<960` 112 그대로 · `960–1279` 112 → **64**. `96px 크롬`도 같이 걷었다(`--vp-nav-height`는 64 하나). 버림 판정·48·64는 그대로. **갈린 픽셀 0** |
 | P163 | 같은 지적 재발 `8f4e2c1a` | designer | `a1782bd7` | 완료 — **`8dc2e3d6`의 중복**이고 그 판정(`f1a17a7`)이 이 티켓 파일보다 **24분 앞선다**. 정본 표·근거 산문에 그 수가 **0건**이고, 남은 것은 무효 표시 둘과 위 행 하나다. 새 판정 0 · developer 티켓 0 · 무효 표시에 재발 한 문단 |
