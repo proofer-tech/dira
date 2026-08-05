@@ -57,6 +57,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 /** 머신당 하나뿐인 Claude 장기 토큰의 자리와 저장 시각. 프로젝트마다 있지 않다(§0-4). */
@@ -426,6 +427,9 @@ export function SettingsDialog({
   const [result, setResult] = useState<{ savedAt?: string; error?: string }>({});
   const [setup, setSetup] = useState<SetupState | null>(null);
   const [code, setCode] = useState("");
+  // §0-13 §화면 — 층 ②·③(발급·직접 넣기)을 토큰 목록 자리에 딸린 하나의 자리로 접는다.
+  // 닫혀 있다가도 인증이 필요하면 자동으로 펼친다(아래 `onOpenChange` · `setup?.savedAt` effect).
+  const [addOpen, setAddOpen] = useState(false);
   // 저장 직후엔 서버 프롭이 아직 옛 값이다 — 방금 쓴 것이 이긴다(층 ②·③ 어느 쪽이든)
   const savedAt = setup?.savedAt ?? result.savedAt ?? auth.savedAt;
   // 토큰이 없어도 **claude 워커가 하나도 없으면** 이 컴퓨터는 이 토큰을 안 쓴다 — 안 말한다(§0-4)
@@ -454,11 +458,15 @@ export function SettingsDialog({
       open={open}
       onOpenChange={(o) => {
         setOpen(o);
-        if (!o) {
+        if (o) {
+          // 토큰이 없어 인증이 필요하면 열자마자 그 경로가 보인다 — 클릭을 더 요구하지 않는다.
+          setAddOpen(needsAuth);
+        } else {
           setToken("");
           setResult({});
           setCode("");
           setSetup(null);
+          setAddOpen(false);
           // 닫으면 죽인다 — 살아남은 `setup-token`은 pty를 물고 다음 시도를 막는다(§0-4)
           void stopSetupAction();
         }
@@ -526,122 +534,137 @@ export function SettingsDialog({
 
           {/* ① 목록 — 토큰 하나가 아니라 여러 계정을 확인·활성화/비활성화·삭제한다(§0-13 §화면) */}
           <TokensSection refreshKey={savedAt} />
-        </section>
 
-        {/* ② 발급 — CLI에게 터미널을 대신 내어 준다 */}
-        <div className="space-y-2 border-t pt-4">
-          <div className="flex items-center justify-between gap-4">
-            <Label>브라우저로 인증</Label>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={setup?.running}
-              onClick={() => start(async () => setSetup(await startSetupAction()))}
-            >
-              {setup?.running ? "진행 중…" : setup ? "다시 시도" : "브라우저로 인증하기"}
-            </Button>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            claude setup-token을 대신 실행합니다. 새 탭에서 승인한 뒤 받은 코드를 여기에 붙여
-            넣으면 토큰이 제자리에 저장됩니다.
-          </p>
-
-          {setup && setup.lines.length > 0 && (
-            // 원문 그대로 흘리면 `Opening[12Gbrowser[20Gto`가 뜬다 — 서버가 escape를 걷어낸
-            // 뒤 사람이 읽을 줄만 넘긴다(§0-4)
-            <div className="max-h-40 overflow-y-auto rounded-md border bg-muted/40 p-2">
-              {setup.lines.map((l, i) => (
-                <p key={i} className="font-mono text-xs break-all text-muted-foreground">
-                  {l}
+          {/* ②·③(발급·직접 넣기)은 상시 렌더되는 블록이 아니라 이 트리거 하나로 접힌다
+              (§0-13 §화면 — 목록 통합). 로직·문구·에러 처리는 무수정, 렌더 위치만 옮겼다. */}
+          <Popover open={addOpen} onOpenChange={setAddOpen}>
+            <PopoverTrigger render={<Button variant="outline" size="sm" />}>추가</PopoverTrigger>
+            <PopoverContent align="start" className="w-96 max-h-[70vh] space-y-4 overflow-y-auto">
+              {/* ② 발급 — CLI에게 터미널을 대신 내어 준다 */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-4">
+                  <Label>브라우저로 인증</Label>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={setup?.running}
+                    onClick={() => start(async () => setSetup(await startSetupAction()))}
+                  >
+                    {setup?.running ? "진행 중…" : setup ? "다시 시도" : "브라우저로 인증하기"}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  claude setup-token을 대신 실행합니다. 새 탭에서 승인한 뒤 받은 코드를 여기에
+                  붙여 넣으면 토큰이 제자리에 저장됩니다.
                 </p>
-              ))}
-            </div>
-          )}
 
-          {/* CLI가 코드를 기다린다(실측: `Paste code here if prompted`). 이 입력이 그 통로다 —
-              프롬프트 문구로 감지하지 않는다: 남의 TUI 문구는 바뀌고, 안 쓰면 그만인 칸이다 */}
-          {setup?.running && (
-            <form
-              className="flex items-center gap-2"
-              onSubmit={(e) => {
-                e.preventDefault();
-                start(async () => {
-                  setSetup(await sendSetupCodeAction(code));
-                  setCode("");
-                });
-              }}
-            >
-              <Input
-                className="font-mono"
-                placeholder="브라우저에서 받은 코드"
-                autoComplete="off"
-                spellCheck={false}
-                value={code}
-                onChange={(e) => setCode(e.target.value)}
-              />
-              <Button type="submit" variant="outline" disabled={!code.trim()}>
-                코드 보내기
-              </Button>
-            </form>
-          )}
+                {setup && setup.lines.length > 0 && (
+                  // 원문 그대로 흘리면 `Opening[12Gbrowser[20Gto`가 뜬다 — 서버가 escape를 걷어낸
+                  // 뒤 사람이 읽을 줄만 넘긴다(§0-4)
+                  <div className="max-h-40 overflow-y-auto rounded-md border bg-muted/40 p-2">
+                    {setup.lines.map((l, i) => (
+                      <p key={i} className="font-mono text-xs break-all text-muted-foreground">
+                        {l}
+                      </p>
+                    ))}
+                  </div>
+                )}
 
-          {/* 조용히 실패하지 않는다 — 사유 원문 + 다음 행동(§비주얼 §6 에러 3요소).
-              층 ③은 바로 아래 그대로 서 있다: 이 폴백이 제품의 바닥이다(§0-4 천장 항) */}
-          {setup?.error && (
-            <Alert variant="destructive">
-              <TriangleAlert aria-hidden />
-              <AlertTitle>토큰을 받지 못했습니다</AlertTitle>
-              <AlertDescription className="grid gap-1">
-                <span>{setup.error}</span>
-                {/* 원인 원문은 위 진행 로그가 이미 그대로 담고 있다 — 여기 문장을 `font-mono`로
-                    쓰지 않는다(§비주얼 §3). 다음 행동은 `다시 시도`와 아래 층 ③ 둘이다 */}
-                <span>&quot;직접 넣기&quot;에 이미 발급받은 토큰을 붙여 넣어도 됩니다.</span>
-              </AlertDescription>
-            </Alert>
-          )}
-          {setup?.savedAt && <p className="text-xs">토큰을 받아 저장했습니다.</p>}
-        </div>
+                {/* CLI가 코드를 기다린다(실측: `Paste code here if prompted`). 이 입력이 그
+                    통로다 — 프롬프트 문구로 감지하지 않는다: 남의 TUI 문구는 바뀌고, 안 쓰면
+                    그만인 칸이다 */}
+                {setup?.running && (
+                  <form
+                    className="flex items-center gap-2"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      start(async () => {
+                        const s = await sendSetupCodeAction(code);
+                        setSetup(s);
+                        setCode("");
+                        if (s.savedAt) setAddOpen(false);
+                      });
+                    }}
+                  >
+                    <Input
+                      className="font-mono"
+                      placeholder="브라우저에서 받은 코드"
+                      autoComplete="off"
+                      spellCheck={false}
+                      value={code}
+                      onChange={(e) => setCode(e.target.value)}
+                    />
+                    <Button type="submit" variant="outline" disabled={!code.trim()}>
+                      코드 보내기
+                    </Button>
+                  </form>
+                )}
 
-        {/* ③ 직접 넣기 */}
-        <form
-          className="space-y-2 border-t pt-4"
-          onSubmit={(e) => {
-            e.preventDefault();
-            start(async () => {
-              const r = await saveTokenAction(token);
-              setResult(r);
-              if (r.savedAt) setToken("");
-            });
-          }}
-        >
-          <Label htmlFor="auth-token">토큰</Label>
-          <div className="flex items-center gap-2">
-            <Input
-              id="auth-token"
-              className="font-mono"
-              placeholder="sk-ant-oat…"
-              autoComplete="off"
-              spellCheck={false}
-              value={token}
-              onChange={(e) => {
-                setToken(e.target.value);
-                setResult({});
-              }}
-            />
-            <Button type="submit" disabled={pending}>
-              {pending ? "저장 중…" : "저장"}
-            </Button>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            이미 발급받은 토큰이 있으면 여기에 붙여 넣습니다. 목록에 추가되고 바로 활성화됩니다.
-          </p>
-          {result.error && <p className="text-xs text-destructive">{result.error}</p>}
-          {/* 삼키지 않는 것이 요건이지 미리 아는 것이 요건이 아니다 — 형식으로 거르지 않으므로
-              "저장했다"까지만 말한다(§0-4) */}
-          {result.savedAt && (
-            <p className="text-xs">저장했습니다. 유효한지는 다음 디스패치에서 드러납니다.</p>
-          )}
-        </form>
+                {/* 조용히 실패하지 않는다 — 사유 원문 + 다음 행동(§비주얼 §6 에러 3요소).
+                    층 ③은 바로 아래 그대로 서 있다: 이 폴백이 제품의 바닥이다(§0-4 천장 항) */}
+                {setup?.error && (
+                  <Alert variant="destructive">
+                    <TriangleAlert aria-hidden />
+                    <AlertTitle>토큰을 받지 못했습니다</AlertTitle>
+                    <AlertDescription className="grid gap-1">
+                      <span>{setup.error}</span>
+                      {/* 원인 원문은 위 진행 로그가 이미 그대로 담고 있다 — 여기 문장을
+                          `font-mono`로 쓰지 않는다(§비주얼 §3). 다음 행동은 `다시 시도`와 아래
+                          층 ③ 둘이다 */}
+                      <span>&quot;직접 넣기&quot;에 이미 발급받은 토큰을 붙여 넣어도 됩니다.</span>
+                    </AlertDescription>
+                  </Alert>
+                )}
+                {setup?.savedAt && <p className="text-xs">토큰을 받아 저장했습니다.</p>}
+              </div>
+
+              {/* ③ 직접 넣기 */}
+              <form
+                className="space-y-2 border-t pt-4"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  start(async () => {
+                    const r = await saveTokenAction(token);
+                    setResult(r);
+                    if (r.savedAt) {
+                      setToken("");
+                      setAddOpen(false);
+                    }
+                  });
+                }}
+              >
+                <Label htmlFor="auth-token">토큰</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="auth-token"
+                    className="font-mono"
+                    placeholder="sk-ant-oat…"
+                    autoComplete="off"
+                    spellCheck={false}
+                    value={token}
+                    onChange={(e) => {
+                      setToken(e.target.value);
+                      setResult({});
+                    }}
+                  />
+                  <Button type="submit" disabled={pending}>
+                    {pending ? "저장 중…" : "저장"}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  이미 발급받은 토큰이 있으면 여기에 붙여 넣습니다. 목록에 추가되고 바로
+                  활성화됩니다.
+                </p>
+                {result.error && <p className="text-xs text-destructive">{result.error}</p>}
+                {/* 삼키지 않는 것이 요건이지 미리 아는 것이 요건이 아니다 — 형식으로 거르지
+                    않으므로 "저장했다"까지만 말한다(§0-4) */}
+                {result.savedAt && (
+                  <p className="text-xs">저장했습니다. 유효한지는 다음 디스패치에서 드러납니다.</p>
+                )}
+              </form>
+            </PopoverContent>
+          </Popover>
+        </section>
 
         <KeymapSection />
         <AnalyticsSection />
