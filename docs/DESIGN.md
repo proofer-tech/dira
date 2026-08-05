@@ -5867,6 +5867,7 @@ CLI(엔진)이고 그 안에서 모델은 또 갈린다 — `claude --model` · 
 | `claude` | `모델 지정 안 함` · `opus` · `sonnet` · `fable` | 있음 |
 | `codex` | `모델 지정 안 함` + 실측으로 확인된 이름 | 있음 |
 | `grok` | `모델 지정 안 함` · `grok-4.5` | 있음 |
+| `agy` | `모델 지정 안 함` + `agy models` 11종 (아래 §agy ⑤) | 있음 |
 
 - **`모델 지정 안 함`이 값 하나다.** 엔진 CLI의 자기 기본값을 쓴다는 뜻이고, 가장 안 낡는
   선택지다. 목록의 기본값이자 새 워커의 기본값이다.
@@ -5888,6 +5889,8 @@ claude   claude -p --session-id "{sid}" --dangerously-skip-permissions \
 codex    codex exec --json [-m <m>] "{prompt}"
 grok     grok -p "{prompt}" --session-id "{sid}" --permission-mode bypassPermissions \
            [-m <m>] --output-format streaming-messages-json
+agy      agy --output-format stream-json --dangerously-skip-permissions \
+           --print-timeout <T> [--model <m>] -p "{prompt}"
 ```
 
 claude 쪽 원본은 `tick.sh:51-53`의 기본값이고 **모델 자리만 늘었다.** 합성을 금지하는 이유는
@@ -5900,6 +5903,8 @@ claude 쪽 원본은 `tick.sh:51-53`의 기본값이고 **모델 자리만 늘�
 | codex·grok 템플릿에 `{prompt}`가 **있다** | 둘 다 프롬프트를 argv에서 1회만 읽는다. 빼면 세션이 빈 프롬프트로 뜬다 |
 | claude·grok 템플릿의 `--session-id "{sid}"` | `tick.sh:94`의 reap 생존 판정과 §2-1 스트림 파일 이름이 이 값이다 |
 | grok 템플릿에 `--input-format`이 **없다** | 그 플래그가 grok CLI에 아예 없다(실측 — 아래 §grok). 없는 것이 곧 FIFO를 안 파는 근거고, 그래서 grok은 codex와 **같은 비스트리밍 경로**로 산다 |
+| agy 템플릿의 `-p "{prompt}"`가 **맨 뒤**다 | `-p`=`--print`가 **다음 토큰을 값으로 먹는다**. 앞으로 옮기면 에러가 아니라 **플래그가 프롬프트가 된다** — 조용히 엉뚱한 세션이 돈다(실측, 아래 §agy ③) |
+| agy 템플릿에 `--print-timeout <T>`가 **있다** | 기본이 **5분**이라 안 넣으면 5분 넘는 티켓이 통째로 잘린다. 워커 세션은 5~25분이 정상이고 최장 2시간14분을 봤다 — 이 한 자리가 없으면 agy 워커는 **긴 티켓만 골라서** 죽는다 |
 
 **grok 템플릿에 `--sandbox`가 없는 것은 누락이 아니다.** grok의 기본 sandbox 프로파일이 이미
 `off`이고(실측 — 세션 `summary.json`의 `sandbox_profile`), `--permission-mode bypassPermissions`
@@ -5952,11 +5957,11 @@ claude 쪽 원본은 `tick.sh:51-53`의 기본값이고 **모델 자리만 늘�
 엔진을 고르는 것은 커맨드 한 줄을 바꾸는 것이 아니라 **그 워커의 기능 집합을 바꾸는 것**이다.
 답변 2-(a)는 그걸 감수하되 화면이 사실대로 말하는 쪽이다. **`tick.sh`는 한 줄도 안 고친다.**
 
-| 기능 | 무엇에 기대나 | codex | grok |
-|---|---|---|---|
-| §2-2 참견 | `--input-format stream-json` 인접 → FIFO(`tick.sh:263-270`) | **안 된다.** 프롬프트를 1회만 읽는다 | **안 된다.** 그 플래그가 CLI에 없다 |
-| §2-1 세션 스트림 | `~/.claude/projects/<…>/<session_id>.jsonl`(`transcript.ts`) | **안 된다.** 트랜스크립트 자리도 형식도 다르다 | **된다.** 자리와 형식이 다를 뿐 파일이 있다 — 아래 §grok |
-| §0-4 인증 배너 | `CLAUDE_CODE_OAUTH_TOKEN`(`tick.sh:58`) | **이미 처리돼 있다** — 아래 | **이미 처리돼 있다** — 같은 함수다 |
+| 기능 | 무엇에 기대나 | codex | grok | agy |
+|---|---|---|---|---|
+| §2-2 참견 | `--input-format stream-json` 인접 → FIFO(`tick.sh:263-270`) | **안 된다.** 프롬프트를 1회만 읽는다 | **안 된다.** 그 플래그가 CLI에 없다 | **안 된다.** 그 플래그가 CLI에 없다 |
+| §2-1 세션 스트림 | `~/.claude/projects/<…>/<session_id>.jsonl`(`transcript.ts`) | **안 된다.** 트랜스크립트 자리도 형식도 다르다 | **된다.** 자리와 형식이 다를 뿐 파일이 있다 — 아래 §grok | **안 된다.** 파일이 JSONL이 아니라 **SQLite**다 — 아래 §agy |
+| §0-4 인증 배너 | `CLAUDE_CODE_OAUTH_TOKEN`(`tick.sh:58`) | **이미 처리돼 있다** — 아래 | **이미 처리돼 있다** — 같은 함수다 | **이미 처리돼 있다** — 같은 함수다 |
 
 **표의 둘째 줄이 codex와 grok에서 갈리는 것이 이 회차의 전부다.** 나머지 두 줄은 값이 같고,
 그래서 이 절의 문구·판정 함수(`engineName`)는 한 줄도 안 갈린다.
@@ -6169,6 +6174,130 @@ codex에서 이 줄이 죽은 이유는 파일이 없어서였고, grok에는 �
 - **§2-2 참견은 여기 안 딸려 온다.** 스트림이 서도 입구가 없다 — 위 표 첫 줄이 `안 된다`인
   이유가 출력이 아니라 입력이라서다. 스트림 자리에는 사건이 흐르고 참견 form 자리에는
   §4-3의 그 문장이 그대로 선다.
+
+#### agy — 넷째 엔진 (요구 `789e97bb`, 실측 2026-08-05)
+
+사람 요구: *"클로드 기준으로 대응 가능한 기능들은 최대한 대응해서 엔진과 모델에 antigravity
+(agy)도 지원해주세요."* 답 `95ae3a01`(로그인 완료) · `085208d3`(**(A)** + `login.keychain-db` 확인).
+**왕복 2회**를 돌았고 둘 다 인증 벽이었다. 이 회차의 전부는 **막은 것이 인증이 아니라 기동
+도메인이었다**는 것이고, 그 값이 실측으로 뒤집혔다.
+
+**실측 환경**: `~/.local/bin/agy` · `agy 1.1.10`(Go 단일 바이너리) · 계정 `hsol@proofer.tech`
+컨슈머(`cache/onboarding.json`의 `consumerOnboardingComplete: true`).
+
+##### ① 이 엔진만 토큰이 파일이 아니라 macOS 로그인 키체인이다
+
+claude는 `~/.config/dira/oauth-token` → `CLAUDE_CODE_OAUTH_TOKEN`(`tick.sh:78`), grok은
+`~/.grok/auth.json`이다. **파일은 cron에서 산다.** agy만 키체인이라 우리 기동 방식과 안 맞았다 —
+cron이 만든 세션은 GUI 로그인 세션이 아니라서 로그인 키체인이 **검색 목록에 없다.** agy는
+파일 폴백(`~/.gemini/oauth_creds.json`)으로 떨어지는데 그 파일의 스코프가 넷인데 agy가 요구하는
+것은 일곱(`cclog`·`experimentsandconfigs`·`aicode`가 더 필요)이라 폴백도 실패하고, 대화형
+OAuth로 가서 **사람이 없으니 60초를 태우고 죽는다.**
+
+**같은 머신에서 두 도메인을 나란히 재서 원인을 못박았다**(2026-08-05, 이 큐의 cron 워커 세션):
+
+| 재는 자리 | cron 세션 | GUI 도메인 LaunchAgent |
+|---|---|---|
+| `security list-keychains` | `System.keychain` 하나 | **`login.keychain-db` 있다** |
+| `agy models` | `Please sign in to view available models.` | **`rc=0` · 모델 11종** |
+| `agy --print` 1턴 | 60.45초 뒤 `authentication timed out` | **`rc=0` · 실제 응답** |
+
+배제한 것 셋도 전부 실측이다 — 셸 샌드박스가 아니고(끄고 같은 결과), `GEMINI_API_KEY`
+우회가 없고(바이너리에 이름은 있으나 이 경로엔 안 쓴다), `launchctl asuser`는 root를 요구한다.
+
+**그런데 `launchctl bootstrap gui/$UID <plist>`는 cron 세션에서 `rc=0`이다**(실측). `asuser`와
+갈리는 자리이고, **이 한 줄이 아래 기동 갈래를 셋으로 만든다.**
+
+##### ② 답이 고른 (A)는 이 제품에서 가장 비싼 길이다 — 사람이 정한 것은 갈래가 아니라 크기다
+
+답변 2가 고른 (A)는 *워커 기동을 cron → 사용자 LaunchAgent로 옮긴다*였고, 질문이 그 답에 붙여
+둔 대가는 *"워커 여덟의 기동 방식이 바뀐다"*였다. **그 추정이 낮았다.** 이 제품에서 cron은
+기동기가 아니라 **워커 상태 모델**이다:
+
+| cron에 걸려 있는 것 | 자리 |
+|---|---|
+| `stopped` 판정 = crontab에 그 줄이 없다 | `lib/workers.ts` · `lib/kick.ts`(idle 판정) |
+| 등록·해제 = `crontab -l \| … \| crontab -` | `workers/actions.ts` · `components/workers-ui.tsx` |
+| §4-4 제거 — cron 줄이 스스로 빠진다 | `self-heal.sh` |
+| 새 프로젝트 스캐폴딩이 만드는 것 | `lib/scaffold.ts` |
+| 단언 | `lib/workers.test.ts` 100건 |
+
+즉 (A)를 글자대로 하면 **엔진 하나를 붙이려고 워커 상태 모델을 다시 쓰는 회차**가 된다.
+
+**사람이 정한 판단은 확정이고 안 뒤집는다.** 물었던 것은 *(B) agy를 안 올린다* 대 *(A) 대가를
+치르고 올린다*였고 답은 후자다 — **그 크기 판단은 사람의 것이었고 받았다.** 뒤집는 것은 그게
+아니라 **어떤 기동 메커니즘으로 같은 값을 얻나**이고, 그건 공학 축이라 실측이 고른다.
+위 ①의 마지막 줄이 (A)보다 싼 후보를 열었다:
+
+| 갈래 | 무엇 | 제품 변경 | 상태 |
+|---|---|---|---|
+| (a) | 키체인을 cron 세션에서 **직접 읽는다** — 검색 목록·ACL이 허락하나 | **0줄** | 미측 |
+| (b) | **디스패치 단위 GUI 도메인 hop** — 워커는 cron에 그대로, agy 프로세스만 GUI 도메인 | 워커 `.sh` 한 자리 | **원리는 실측됨**(`bootstrap rc=0`) |
+| (c) | = 답변의 (A). 워커 여덟 기동 이관 | 상태 모델 재작성 | 승인은 있다 · **대가가 답변 시점에 안 적혀 있었다** |
+
+**P168-1이 (a)→(b) 순으로 재고 되는 것을 구현한다. (c)만 남으면 구현하지 않고 보고한다** —
+그때 필요한 것은 티켓이 아니라 위 표를 사람에게 다시 보이는 스펙 회차다. 싼 갈래가 서면
+(c)의 대가를 **아예 안 치른다**, 그리고 사람이 승인한 값(*agy가 돈다*)은 어느 갈래에서도 같다.
+
+##### ③ 있는 것 · 없는 것 — `--help` 전문 기준
+
+| 자리 | claude | codex | grok | agy |
+|---|---|---|---|---|
+| 프롬프트 전달 | FIFO | argv | argv `-p <P>` | **argv `-p <P>`** |
+| 모델 플래그 | `--model` | `-m` | `-m` | **`--model`** |
+| 모델 목록 조회 | 없다 | `codex debug models` | `grok models` | **`agy models`** |
+| 세션 id 주입 | `--session-id` | 없다 | `--session-id` | **없다** (`--conversation <ID>` 재개뿐) |
+| `--input-format` | 있다 | 없다 | 없다 | **없다** |
+| 권한 우회 | `--dangerously-skip-permissions` | `-s danger-full-access` | `--permission-mode bypassPermissions` | **`--dangerously-skip-permissions`** |
+| 트랜스크립트 | JSONL | 없다 | `updates.jsonl` | **SQLite** `~/.gemini/antigravity-cli/conversations/<uuid>.db` |
+| 추론 강도 | 없다 | 없다 | `--reasoning-effort` | **`--effort`** + **모델 이름 접미사** |
+
+**`-p`가 값을 먹는 것이 이 회차에서 제일 비싼 한 줄이다.** `-p`는 `--print`의 별칭인데 **다음
+토큰을 프롬프트 값으로 가져간다.** 그래서 `agy -p --output-format stream-json "say ok"`는
+에러가 안 난다 — `--output-format`이 **프롬프트가 되고** 모델이 *출력 형식이란 무엇인가*를
+설명하는 산문을 낸다(실측). 조용히 엉뚱한 세션이 도는 모양이고, 템플릿이 `-p "{prompt}"`를
+맨 뒤에 두는 이유가 이것이다.
+
+##### ④ 죽는 기능 둘은 **코드 0줄**이다 — P166-3이 미리 갚아 놨다
+
+`engineCan`이 이미 *되는 엔진 집합*으로 적혀 있고(`lib/urls.ts`) **집합 밖 이름은 `false`**다.
+`engineMissing("agy")`는 두 이름을 그대로 낸다. 그래서 **agy를 `FEATURE_ENGINES`에 안 적는 것이
+곧 정확한 화면이다** — 요구의 *"최대한 대응"*이 여기서는 *아무것도 안 하는 것*으로 이뤄진다.
+`=== "codex"`가 여섯 자리에 남아 있었다면 이 회차에 그 여섯이 다시 갈렸다.
+
+§2-1 스트림을 agy에서 짓지 않는 이유는 grok과 반대다 — grok은 파일이 있어서 지었고, agy는
+**형식이 SQLite**라 `transcript.ts`의 NDJSON 계약에 안 들어온다. 뒤집으려면 GUI에 sqlite
+리더가 한 벌 늘고, 그건 이 요구의 범위가 아니라 별개 회차다.
+
+##### ⑤ 모델 — `agy models` 11종 (실측 2026-08-05, GUI 도메인에서)
+
+`gemini-3.6-flash-high` · `gemini-3.6-flash-medium` · `gemini-3.6-flash-low` ·
+`gemini-3.5-flash-high` · `gemini-3.5-flash-medium` · `gemini-3.5-flash-low` ·
+`gemini-3.1-pro-high` · `gemini-3.1-pro-low` · `claude-sonnet-4-6` ·
+`claude-opus-4-6-thinking` · `gpt-oss-120b-medium`
+
+- **별칭이 아니라 풀네임이라 반드시 낡는다** — grok과 같은 자리이고 claude의 근거 2가 안 선다.
+  갱신은 사람이 `agy models`로 한다. 목록 순서는 그 명령이 낸 순서 그대로다(맨 앞은 `모델 지정 안 함`).
+- **`--effort`가 있는데 단위를 안 넓힌다.** grok 천장 2와 같은 결론인데 **근거가 하나 더 있다** —
+  agy는 강도가 **모델 이름 접미사**(`-high`·`-medium`·`-low`)로 이미 목록에 들어와 있다.
+  엔진 × 모델만으로 강도까지 골라지므로 셋째 축이 살 이유가 이 엔진에서는 0이다.
+
+##### ⑥ 안 고치는 것 · 천장
+
+**`tick.sh`·`tickets.py`는 한 줄도 안 고친다.** `--input-format`이 없어 codex·grok과 같은
+**비스트리밍 경로(rc 판정)**로 살고, `--session-id`가 없어 `live_session_ids()`의 정규식이 아니라
+**pid로 reap된다**(codex와 같은 자리). `ENGINE_NAME=agy`라 claude 전용 두 분기를 저절로 비껴가고
+쿨다운 파일은 `cooldown-agy`로 갈라진다.
+
+천장 둘을 적어 두고 티켓으로 내지 않는다.
+
+1. **`--print-timeout` 기본 5분이 워커 수명과 안 맞는다.** 템플릿이 `<T>`를 채워서 막지만,
+   그 값은 `TICKET_MAXRUN`(기본 5,400초)과 **두 자리에 따로 적히는 같은 수**다. 어긋나면
+   조용히 짧은 쪽이 이긴다. 한 자리로 묶는 것은 §4-3의 *고정 템플릿*이 값 하나를 더 갖는
+   일이라 이 회차가 안 한다 — 필요해지면 이 문단이 그 티켓의 머리다.
+2. **불능의 모양을 아직 안 쟀다.** grok은 조용히 매달렸고(`rc=124`, stdout 0줄) codex는 빠르게
+   시끄러웠다(`rc=1`). agy가 어느 쪽인지는 §4-9 엔진 쿨다운이 걸리나를 정하는데, 그걸 재려면
+   네트워크를 죽여야 해서 P168-2에 붙인다. **거기서 나온 값이 이 항목을 대체한다.**
 
 ### 4-4. 제거 — cron 줄이 스스로 빠진다 (`<루트>/self-heal.sh`)
 
@@ -19994,6 +20123,50 @@ echo '{"version":1,"projects":[{"id":"fx","name":"fixture","root":"'$FX'/.dira"}
   > $FX/local/gui-projects.json
 TICKET_LOCAL=$FX/local npx next dev -p <포트>   # 사람의 7331을 건드리지 않는다
 ```
+
+---
+
+### P168 — 넷째 엔진 `agy` (요구 `789e97bb`)
+
+→ §4-3 개정(템플릿 4벌 · 모델 표 · 기능 표에 열 하나 · §agy 신설). **엔진 무수정.**
+
+**왕복 2회.** 둘 다 인증 벽이었고 둘 다 티켓 0장으로 끝났다 — 첫 회는 *로그인이 안 돼 있다*,
+둘째 회는 *로그인은 됐는데 cron 세션이 키체인을 못 본다*. 답 `085208d3`이 **(A)**를 골랐다.
+
+| | 값 |
+|---|---|
+| 실측 | 두 도메인 대조 3행(`list-keychains` · `agy models` · `--print` 1턴) · `bootstrap gui/$UID` `rc=0` · 모델 11종 · `-p`가 값을 먹는다 · cron 결합 5자리 |
+| 갈릴 뻔했다가 안 갈린 축 | 목록 출처(§4-3 선례) · `--effort`(강도가 **모델 이름 접미사**라 셋째 축이 0) · 죽는 기능 둘의 표현(P166-3의 집합이 이미 답이다) |
+| 진짜 어려운 자리 | **사람이 고른 (A)의 대가가 답변 시점에 안 적혀 있었다.** 이 제품에서 cron은 기동기가 아니라 워커 상태 모델이라 (A)를 글자대로 하면 엔진 하나에 상태 모델을 다시 쓴다 |
+| 안 고치는 것 | `tick.sh` · `tickets.py`(제약 1) · `FEATURE_ENGINES`(안 적는 것이 정확한 화면이다) · §0-4 배너 판정 |
+
+**사람이 정한 크기는 안 뒤집는다 — 메커니즘만 실측이 고른다.** 물었던 축은 *(B) 안 올린다* 대
+*(A) 대가를 치르고 올린다*였고 답은 (A)다. 그 판단은 확정이다. 다만 `bootstrap gui/$UID`가
+cron 세션에서 통한다는 실측이 (A)보다 싼 갈래 둘을 열었고(§agy ②의 (a)·(b)), 셋 다 사람이
+승인한 **같은 값**(agy가 돈다)을 낸다. **싼 것부터 재는 것이 승인을 어기는 것이 아니다.**
+
+| # | 티켓 | persona | deps | 상태 |
+|---|---|---|---|---|
+| P168-1 | agy 인증 갈래 — (a)→(b) 실측 + 되는 것 구현 | developer | — | 대기 |
+| P168-2 | argv 템플릿 · 출력 형식 · 불능 모양 왕복 실측 | developer | P168-1 | 대기 |
+| P168-3 | `ENGINES`에 agy 한 벌 + 역파싱 + 테스트 | developer | P168-2 | 대기 |
+| P168-4 | agy 워커 왕복 — 픽스처 큐 | qa | P168-3 | 대기 |
+
+**넷이 전부 하드 선후다 — 이 회차만 그렇다.** 앞 티켓의 **실측값이 뒷 티켓의 입력**이라
+`deps`로 안 엮으면 뒷 세션이 추측을 적는다. P166이 P166-2·P166-3을 안 엮었던 것과 갈리는
+자리다: 거기서는 중간 상태가 공짜였고(카탈로그만 서도 고를 수 있고 판정만 서도 무해했다),
+여기서는 **P168-1 없이 뜬 세션이 60초 벽에서 그대로 죽는다.** 두 회차가 이미 그 벽에서
+티켓 0장으로 끝났고, 그게 `deps`를 거는 근거다.
+
+**P168-1은 `.done`으로 끝나지 않을 수 있고, 그게 설계다.** (a)나 (b)가 서면 구현하고 `.done`이다.
+**(c)만 남으면 구현하지 않고 `## 블록`으로 멈춘다** — `.done`으로 닫으면 `deps`가 충족돼
+P168-2가 벽으로 디스패치된다. 멈추면 `reap`이 사람 질문으로 올리고, 그때 사람이 받아야 할 것은
+§agy ②의 비용 표다((c) = 워커 상태 모델 재작성). 읽기 전용 영역을 고쳐야 하는 경우라 `## 블록`이
+정확히 그 자리다(CORE §막혔을 때).
+
+**P168-1이 P168-3에 넘기는 것은 argv 접두사 한 줄이다.** (b)가 서면 템플릿이 `agy …`로 시작하지
+않게 되므로, P168-1의 `## 결과`에 **P168-3이 `engineArgv`에 글자 그대로 박을 문자열**을 적는다.
+(a)가 서면 그 줄은 빈 문자열이고 템플릿은 §4-3에 적힌 그대로다.
 
 ## 수용조건 (전체)
 
