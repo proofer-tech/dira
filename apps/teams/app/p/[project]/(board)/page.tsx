@@ -74,7 +74,7 @@ import {
   type Ticket,
 } from "@/lib/queue";
 import { getProject, listPersonas, resolveConfig } from "@/lib/projects";
-import { findTranscript, lastActivity, sessionIdOf, type StreamEvent } from "@/lib/transcript";
+import { findStream, lastActivity, sessionIdOf, type StreamEvent } from "@/lib/transcript";
 import { rowLimit } from "@/lib/urls";
 
 // 큐는 GUI 밖에서(cron·세션이) 바뀐다. 프리렌더하면 빌드 시점 내용이 굳는다.
@@ -422,8 +422,8 @@ export default async function Board({
               .filter((t) => statusOf(t) === "wip")
               .map(async (t) => {
                 const sid = sessionIdOf(t.fm);
-                const file = sid ? await findTranscript(sid) : null;
-                return [t.path, wipLine(file ? await lastActivity(file) : null)] as const;
+                const s = sid ? await findStream(sid) : null;
+                return [t.path, wipLine(s ? await lastActivity(s.file, s.grok) : null)] as const;
               }),
           ),
         )

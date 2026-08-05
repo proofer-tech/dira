@@ -195,14 +195,19 @@ export async function tailEvents(
  *  세션이 제일 바쁠 때 줄이 꺼진다(§1-1 §꼬리 창을 안 쓰는 이유).
  *
  *  ponytail: 트랜스크립트 전문을 읽고 뒤에서 훑는다(실측 p90 1.5MB · 5건 3.6ms). 파일이 수십
- *  MB가 되거나 진행중이 두 자릿수가 되면 그때 꼬리 창 + 미스 시 직전 값 유지(세션별 오프셋 캐시) */
-export async function lastActivity(file: string): Promise<StreamEvent | null> {
+ *  MB가 되거나 진행중이 두 자릿수가 되면 그때 꼬리 창 + 미스 시 직전 값 유지(세션별 오프셋 캐시)
+ *
+ *  **`grok`이면 줄마다 `grokRecord`를 한 번 지난다** — `tailEvents`와 같은 규칙(§4-3 §grok · §1-1
+ *  §grok 확장). claude 경로는 `grok`을 안 주면(기본 `false`) 이 줄 전에 아무것도 안 바뀐다. */
+export async function lastActivity(file: string, grok = false): Promise<StreamEvent | null> {
   let buf: Buffer;
   try {
     buf = await readFile(file);
   } catch {
     return null; // 삭제·권한·아직 없는 파일 — 사람에게는 `히트 0`과 같은 뜻이다(*지금 말할 게 없다*)
   }
+  // grok 레코드에는 `cwd`가 없다 — `tailEvents`와 같은 자리에서 디렉터리 이름을 되돌린다
+  const cwd = grok ? grokCwd(path.basename(path.dirname(path.dirname(file)))) : undefined;
   // 줄을 끊는 것은 **바이트**다(`tailEvents`와 같은 근거 — `\n`은 UTF-8 멀티바이트 시퀀스 안에
   // 나타나지 않는다). 그래서 **훑은 줄만 문자열이 된다**: 전문을 `toString().split("\n")`으로 한 번에
   // 펴면 11MB 파일 하나에 50ms가 드는데(실측) 실제로 파싱하는 것은 뒤 두세 줄·수 KB다.
@@ -217,6 +222,10 @@ export async function lastActivity(file: string): Promise<StreamEvent | null> {
       rec = JSON.parse(line);
     } catch {
       continue; // 깨진 줄에 **멈추지 않는다** — 그 한 줄 때문에 줄이 꺼지는 것이 최악이다
+    }
+    if (grok) {
+      rec = grokRecord(rec, cwd);
+      if (rec === null) continue; // 대응물 없는 종류는 건너뛴다(`tailEvents`와 같은 규칙)
     }
     // 같은 레코드 안에서는 뒤 블록이 더 나중이다(assistant 한 장이 thinking+text+tool_use를 담는다)
     const hit = recordToEvents(rec)

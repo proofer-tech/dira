@@ -686,3 +686,33 @@ test("grok — 본문 없는 tool_call_update는 안 흘린다 (`결과 · 0줄`
   const { events } = await tailEvents(f, 0, true);
   assert.deepEqual(events.map((e) => [e.key, e.summary, e.body]), [["s-4:0", "1줄", "진짜 출력"]]);
 });
+
+// ---------- lastActivity — grok 확장 (§1-1 §grok 확장 · 지적 `0f948b35`) ----------
+
+test("lastActivity — grok이면 ACP 청크를 §4-3 §grok의 같은 규칙으로 접어 마지막 히트를 고른다", async () => {
+  const f = GROK_FILE;
+  writeFileSync(
+    f,
+    gup(1785892158, "g-1", { sessionUpdate: "user_message_chunk", content: { type: "text", text: "가나다" } }) +
+      gup(1785892159, "g-2", {
+        sessionUpdate: "tool_call",
+        rawInput: { file_path: `${GROK_CWD}/target.txt`, content: "done\n" },
+        _meta: { "x.ai/tool": { label: "Write" } },
+      }) +
+      gup(1785892160, "g-3", { sessionUpdate: "tool_call_update", content: [{ type: "content", content: { type: "text", text: "결과" } }] }),
+  );
+  const e = await lastActivity(f, true);
+  assert.equal(e?.kind, "tool_use");
+  assert.equal(e?.label, "Write");
+  assert.equal(e?.summary, "target.txt"); // 디렉터리 이름을 되돌린 cwd로 접힌다(claude와 같은 규칙)
+  assert.equal(e?.summaryMono, true);
+});
+
+test("lastActivity — grok을 안 주면(기본 false) claude 레코드 모양을 그대로 기대한다 — 회귀 없음", async () => {
+  const f = path.join(tmp, "last-claude-default.jsonl");
+  writeFileSync(f, assistant([{ type: "tool_use", name: "Read", input: { file_path: `${APP_CWD}/lib/queue.ts` } }]));
+  const withDefault = await lastActivity(f);
+  const withExplicitFalse = await lastActivity(f, false);
+  assert.deepEqual(withDefault, withExplicitFalse);
+  assert.equal(withDefault?.label, "Read");
+});
