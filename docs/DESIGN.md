@@ -6081,6 +6081,13 @@ argv의 `--input-format stream-json` 하나다.
 (그래서 `tick.sh:611`의 세션키 정정이 안 돈다) · 마지막 줄이 `result`/`is_error: false` ·
 `terminal_reason`은 **키 자체가 없다**(아래 천장 1의 근거다) · 도구 호출로 파일을 실제로 썼다.
 
+**워커 왕복도 픽스처 큐에서 통과했다**(QA `b391166e`, 2026-08-05). 위 §codex는 왕복 실측이 없다의
+표에서 codex가 못 닫은 마지막 행 — *세션이 티켓을 수행하고 `.done`으로 rename한다* — 이 **grok
+열에서 닫혔다**(`DISPATCH` → claim → `.wip` → 파일 쓰기 + 자기 티켓 rename → `DONE`, 워커 `rc=0`).
+같은 회차가 argv를 `sysctl(KERN_PROCARGS2)`로 재서 **프롬프트 7,364 B가 인자 하나**(`argc=9`,
+개행 117개를 품은 채)로 들어간 것과, `live_session_ids()`가 도는 grok 세션을 보고 죽은 뒤엔 못
+보는 것을 대조군까지 확인했다. **codex 열은 종전대로 미확인이다.**
+
 **놀라운 자리는 출력 형식이다 — grok의 `streaming-messages-json`이 `tick.sh`가 파싱하는 그 형식이다.**
 첫 줄이 `{"type":"system","subtype":"init","session_id":…}`이고 마지막 줄이
 `{"type":"result","subtype":"success","is_error":false,…,"session_id":…}`다. `started()`의 grep
@@ -19715,7 +19722,7 @@ Next.js 위에서 하는 편이 지금보다 싸다.
 | P166-2 | `ENGINES`에 grok 한 벌 + 역파싱 + 테스트 | developer | — | **완료** `38f98fe4` |
 | P166-3 | 기능 판정을 `되는 엔진 집합`으로 — `=== "codex"` 여섯 자리 | developer | — | 대기 |
 | P166-4 | grok 세션 스트림 — `updates.jsonl` 출처 하나가 는다 | developer | P166-2 · P166-3 | 대기 |
-| P166-5 | grok 워커 왕복 — 픽스처 큐 | qa | P166-2 | 대기 |
+| P166-5 | grok 워커 왕복 — 픽스처 큐 | qa | P166-2 | **완료** `b391166e` — 8/8 통과 |
 
 **P166-2와 P166-3은 `deps`로 안 엮었다.** 만나는 자리가 `EngineId` 유니온 하나인데 P166-3은 그
 값을 **세지 않는 방향**으로 고치는 일이라(집합으로 적는다) 어느 쪽이 먼저여도 중간 상태가 공짜다 —
