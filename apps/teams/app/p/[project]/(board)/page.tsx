@@ -30,6 +30,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Archive, ArrowDown, ArrowUp, ChevronsUpDown, X } from "lucide-react";
 import {
+  BoardDoneLane,
   BoardFilter,
   BoardLaneMotion,
   BoardPolling,
@@ -75,7 +76,7 @@ import {
 } from "@/lib/queue";
 import { getProject, listPersonas, resolveConfig } from "@/lib/projects";
 import { findStream, lastActivity, sessionIdOf, type StreamEvent } from "@/lib/transcript";
-import { rowLimit } from "@/lib/urls";
+import { doneLimit, rowLimit } from "@/lib/urls";
 
 // 큐는 GUI 밖에서(cron·세션이) 바뀐다. 프리렌더하면 빌드 시점 내용이 굳는다.
 export const dynamic = "force-dynamic";
@@ -93,12 +94,6 @@ export const dynamic = "force-dynamic";
  *  말한다. 그 티켓이 사는 곳은 셸의 알림 배너다(§0-2). **테이블·필터에서는 빼지 않는다** —
  *  빼면 GUI가 CLI `list`보다 덜 보인다. */
 const STATUSES = ["open", "wip", "done"] as const;
-
-/** 칸반 `완료` 레인이 그리는 카드 수(§1 보드 · 사람 요청 `38108932`). 사람이 원한 것은
- *  "완료를 거른다"가 아니라 "과거 완료를 한꺼번에 보지 않는다"라 자르는 축이 상태가 아니라
- *  **시간**이고, 자르는 자리는 필터가 아니라 이 레인 하나다. 나머지는 레인 아래 한 줄이
- *  `?status=done`으로 데려간다 — 테이블도 건수도 자르지 않는다. */
-const DONE_LANE_LIMIT = 20;
 
 /** 상태 필터 선택지 = 엔진 5상태 + 파생 `답변 대기`(§1 보드 · §요구사항 레이어 결정 5).
  *  **레인 3개와 개수가 다르고 그게 정상이다** — 필터는 엔진의 상태를 고르는 것이고(CLI `list`
@@ -324,10 +319,11 @@ export default async function Board({
   // 링크는 **stem**이다 — 엔진이 찾는 이름이고, 상태가 바뀌어도(접미사) URL이 안 변한다(§식별자).
   const href = (t: Ticket) => `/p/${id}/tickets/${encodeURIComponent(t.stem)}`;
   // 서버가 그리는 링크는 전부 이걸 지난다(정렬 헤더 · 필터 해제 · 전체 보기 · 완료만 · 뷰 전환).
-  // **`rows`를 지운다** — 그 링크들이 데려가는 곳은 다른 목록이라 30행부터가 맞다(§1 §되감기).
-  // 클라이언트 쪽 같은 규칙은 `board-ui.tsx`의 `useUrlNav`에 있다.
+  // **`rows`·`done`을 지운다** — 그 링크들이 데려가는 곳은 다른 목록이라 처음 몫부터가 맞다
+  // (§1 §되감기 · §완료 항). 클라이언트 쪽 같은 규칙은 `board-ui.tsx`의 `useUrlNav`에 있다.
   const qs = (next: URLSearchParams) => {
     next.delete("rows");
+    next.delete("done");
     return next.toString() ? `?${next}` : `/p/${id}`;
   };
 
@@ -366,21 +362,6 @@ export default async function Board({
     for (const s of STATUS_OPTIONS) next.append("status", s);
     return qs(next);
   })();
-
-  /** 잘린 완료로 가는 URL = 상태가 `done` 하나뿐인 화면. 위 `allStatusHref`와 같은 모양이고
-   *  다른 파라미터(검색·정렬·뷰)는 그대로 남는다. 새 파라미터를 만들지 않는 이유가 이것이다 —
-   *  "과거 완료 전부"는 이미 있는 화면이다. */
-  const doneOnlyHref = (() => {
-    const next = new URLSearchParams(sp);
-    next.delete("status");
-    next.append("status", "done");
-    return qs(next);
-  })();
-
-  // 자르는 화면은 **기본 화면 하나**다. `status`가 URL에 실려 있으면 사람이 상태를 직접 고른
-  // 화면이고, 위 링크가 데려가는 `?status=done`이 바로 그 화면이다 — 거기서 또 자르면 출구가
-  // 자기 자신으로 돌아온다("과거 완료를 한꺼번에 안 본다"지 "못 본다"가 아니다).
-  const trimDone = !sp.has("status");
 
   const applied = [
     ...query.kind.map((v) => ({ param: "kind", value: v, text: `분류: ${KIND_LABELS[v] ?? v}` })),
@@ -629,12 +610,107 @@ export default async function Board({
                   // 정렬한다 — `?sort=`는 칸반에도 살아 있어서 정렬을 걸면 "최근 20건"이
                   // "제목순 20건"이 된다(URL 정렬은 이 레인에 끼어들지 않는다).
                   // 자르는 것은 카드뿐이다: 아래 머리 건수는 `group.length`(자르기 전) 그대로다.
+                  // 어느 화면에서든(기본 보드 · `?status=done` 포함) `doneLimit(?done=)`장만
+                  // 그린다 — `trimDone` 갈래는 없다(§1 §완료 항, 요구 `79cad792`).
                   let cards = group;
                   if (s === "done") {
-                    cards = [...group].sort((a, b) => b.birth - a.birth);
-                    if (trimDone) cards = cards.slice(0, DONE_LANE_LIMIT);
+                    cards = [...group].sort((a, b) => b.birth - a.birth).slice(0, doneLimit(sp.get("done")));
                   }
                   const trimmed = group.length - cards.length;
+                  const cardEls = cards.map((t) => (
+                    // 카드 전체가 상세로 가는 링크다(테이블 행과 같은 규칙 — 행 액션 버튼이
+                    // 없어서 안전하다). deps 배지는 늘어난 링크 위에 뜬다.
+                    <Card
+                      key={t.path}
+                      // 관계선이 상대를 찾는 이름이다(§1: 못 찾으면 안 그린다). 링크·엔진과
+                      // 같은 `stem`이라 `relationEdges`가 준 간선과 그냥 맞는다
+                      data-stem={t.stem}
+                      className="card-tint relative gap-2 px-4"
+                    >
+                      {/* 칸반 카드는 레인이 상태를 말하므로 배지를 달지 않는다 — 예외가
+                          `답변 대기`다. 자기 레인 없이 `대기`에 앉고, 답변 stem은 큐에
+                          없는 해시라 deps 태그가 `?`로만 떠서 "사람이 답할 차례"라는
+                          말을 못 한다. 그래서 이 배지 하나만 남는다(§1 보드 요구사항 항).
+                          `deps 대기`는 배지를 얹지 않는다 — 아래 deps 줄의 주황색
+                          <DepBadge>가 그 표시다(사람 요청 `bd2062cb`) */}
+                      <div className="flex items-start justify-between gap-2">
+                        {/* §비주얼 §31 ① 갈래 A — 밑줄 없음. 링크임은 카드의
+                            `card-tint` 호버 + 커서 + 이 앵커에 걸리는 포커스 링이 말한다 */}
+                        <Link
+                          href={href(t)}
+                          className="rounded-sm font-mono text-xs text-muted-foreground after:absolute after:inset-0"
+                        >
+                          {t.hash}
+                        </Link>
+                        {isAwaiting(t) && (
+                          <StatusBadge status="awaiting" days={daysSince(t.mtime)} />
+                        )}
+                      </div>
+                      {/* 카드 title은 2줄까지(§6). 전문은 `title` 속성으로 본다 */}
+                      <span className="line-clamp-2 text-sm" title={t.title}>
+                        {t.title || "(제목 없음)"}
+                      </span>
+                      {/* 배지가 줄 안에 섞이므로 flex다 — 텍스트 baseline 정렬에 맡기면
+                          20px 배지가 줄을 밀어 카드마다 높이가 갈린다.
+                          `flex-wrap`은 워커 마크 몫이다(§비주얼 §19 잘림): 워커 이름은
+                          식별자라 안 자르고, 길면 카드가 한 줄 자라며 배지를 안 민다 */}
+                      <span className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
+                        {t.kind ? (KIND_LABELS[t.kind] ?? t.kind) : "—"} ·
+                        {t.persona ? (
+                          <PersonaBadge
+                            name={t.persona}
+                            color={colors[t.persona]}
+                            state={t.state}
+                          />
+                        ) : (
+                          "—"
+                        )}
+                        <WipWorker t={t} />
+                      </span>
+                      {t.deps.length > 0 && (
+                        // 라벨은 세어주지 않는다 — 어느 해시가 무엇인지는 <DepBadge>가
+                        // 색·아이콘으로, 스크린리더에는 배지 안 `sr-only` 문구로 말한다.
+                        <span className="relative z-10 flex flex-wrap items-center gap-1">
+                          <span className="text-xs text-muted-foreground">deps</span>
+                          {depBadges(tickets, t, config).map((d) => (
+                            <DepBadge
+                              key={d.hash}
+                              hash={d.hash}
+                              kind={d.kind}
+                              href={d.hit ? href(d.hit) : undefined}
+                            />
+                          ))}
+                        </span>
+                      )}
+                      {/* 답변은 여기서 바로 단다(§1 요구사항 항, 사람 요청 `14c88df4`) —
+                          상세와 같은 스레드(`threadOf`) · 같은 폼 · 같은 액션이다. 판정은
+                          위 배지와 **같은 식**이고, 테이블 행에는 붙이지 않는다(§1 행 액션 없음).
+                          자리는 카드 맨 아래다: 위는 티켓이 무엇인가고 여기부터가 할 수 있는
+                          일이다(deps 배지도 같은 `z-10` 층에 있다) */}
+                      {isAwaiting(t) && (
+                        <AnswerDialog
+                          project={id}
+                          hash={t.stem}
+                          title={t.title}
+                          answerFile={`${awaitingOf(t)}${config.done}.md`}
+                          thread={threadOf(tickets, t, config)}
+                        />
+                      )}
+                      {/* **카드의 마지막 자식** — 이 세션이 방금 한 일 한 줄(§1-1 ·
+                          §비주얼 §36). `.wip`에만 있다: 진행중 레인 카드만 위에서 읽었고
+                          나머지는 `wipLines`에 키가 아예 없다(완료 카드에 세우면
+                          갱신이 멈춘 자리에서 `방금`이 거짓말이다). 위 `AnswerDialog`와
+                          자리를 다투지 않는다 — `isAwaiting`은 `state === "open"`만
+                          참이라 한 카드에 둘이 같이 서지 않는다.
+                          **완료 카드에는 아카이브 한 줄이 같은 슬롯에 선다**(§5-3
+                          §표시 규약 ③): 두 Map의 조건이 `.wip`↔`.done`으로 배타라
+                          한 카드가 둘을 같이 들 수 없다.
+                          간격은 8 / 선 / 8 / 줄 / 8이다: 위 8px은 `<Card>`의 `gap-2`,
+                          선 아래 8px은 `pt-2`, 카드 바닥까지 8px은 `py-4`(16)에서
+                          `-mb-2`(8)를 뺀 값이다(§36 §자리와 간격 — 새 간격 값 0) */}
+                      {wipLines?.get(t.path) ?? archiveLine(archives.get(t.path), href)}
+                    </Card>
+                  ));
                   return (
                     // 레인 높이는 스트립이 준다(flex 기본 stretch) — 머리는 그 위에 고정으로 남고
                     // 카드 스택만 스크롤한다. 머리를 스크롤러 안에 넣고 sticky를 걸지 않는 이유는
@@ -669,111 +745,13 @@ export default async function Board({
                           <p className="rounded-md border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">
                             0건
                           </p>
+                        ) : s === "done" ? (
+                          // 완료 레인만 무한스크롤이다(§1 §완료 항, 요구 `79cad792`) — 감시행이
+                          // 보이면 `?done=`을 20 올려 나머지를 이어 그린다. 잘린 나머지로 가는
+                          // 옛 출구 링크는 죽었다: 스크롤이 그 자리에서 같은 일(신호 + 이동)을 한다.
+                          <BoardDoneLane more={trimmed > 0}>{cardEls}</BoardDoneLane>
                         ) : (
-                          cards.map((t) => (
-                            // 카드 전체가 상세로 가는 링크다(테이블 행과 같은 규칙 — 행 액션 버튼이
-                            // 없어서 안전하다). deps 배지는 늘어난 링크 위에 뜬다.
-                            <Card
-                              key={t.path}
-                              // 관계선이 상대를 찾는 이름이다(§1: 못 찾으면 안 그린다). 링크·엔진과
-                              // 같은 `stem`이라 `relationEdges`가 준 간선과 그냥 맞는다
-                              data-stem={t.stem}
-                              className="card-tint relative gap-2 px-4"
-                            >
-                              {/* 칸반 카드는 레인이 상태를 말하므로 배지를 달지 않는다 — 예외가
-                                  `답변 대기`다. 자기 레인 없이 `대기`에 앉고, 답변 stem은 큐에
-                                  없는 해시라 deps 태그가 `?`로만 떠서 "사람이 답할 차례"라는
-                                  말을 못 한다. 그래서 이 배지 하나만 남는다(§1 보드 요구사항 항).
-                                  `deps 대기`는 배지를 얹지 않는다 — 아래 deps 줄의 주황색
-                                  <DepBadge>가 그 표시다(사람 요청 `bd2062cb`) */}
-                              <div className="flex items-start justify-between gap-2">
-                                {/* §비주얼 §31 ① 갈래 A — 밑줄 없음. 링크임은 카드의
-                                    `card-tint` 호버 + 커서 + 이 앵커에 걸리는 포커스 링이 말한다 */}
-                                <Link
-                                  href={href(t)}
-                                  className="rounded-sm font-mono text-xs text-muted-foreground after:absolute after:inset-0"
-                                >
-                                  {t.hash}
-                                </Link>
-                                {isAwaiting(t) && (
-                                  <StatusBadge status="awaiting" days={daysSince(t.mtime)} />
-                                )}
-                              </div>
-                              {/* 카드 title은 2줄까지(§6). 전문은 `title` 속성으로 본다 */}
-                              <span className="line-clamp-2 text-sm" title={t.title}>
-                                {t.title || "(제목 없음)"}
-                              </span>
-                              {/* 배지가 줄 안에 섞이므로 flex다 — 텍스트 baseline 정렬에 맡기면
-                                  20px 배지가 줄을 밀어 카드마다 높이가 갈린다.
-                                  `flex-wrap`은 워커 마크 몫이다(§비주얼 §19 잘림): 워커 이름은
-                                  식별자라 안 자르고, 길면 카드가 한 줄 자라며 배지를 안 민다 */}
-                              <span className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
-                                {t.kind ? (KIND_LABELS[t.kind] ?? t.kind) : "—"} ·
-                                {t.persona ? (
-                                  <PersonaBadge
-                                    name={t.persona}
-                                    color={colors[t.persona]}
-                                    state={t.state}
-                                  />
-                                ) : (
-                                  "—"
-                                )}
-                                <WipWorker t={t} />
-                              </span>
-                              {t.deps.length > 0 && (
-                                // 라벨은 세어주지 않는다 — 어느 해시가 무엇인지는 <DepBadge>가
-                                // 색·아이콘으로, 스크린리더에는 배지 안 `sr-only` 문구로 말한다.
-                                <span className="relative z-10 flex flex-wrap items-center gap-1">
-                                  <span className="text-xs text-muted-foreground">deps</span>
-                                  {depBadges(tickets, t, config).map((d) => (
-                                    <DepBadge
-                                      key={d.hash}
-                                      hash={d.hash}
-                                      kind={d.kind}
-                                      href={d.hit ? href(d.hit) : undefined}
-                                    />
-                                  ))}
-                                </span>
-                              )}
-                              {/* 답변은 여기서 바로 단다(§1 요구사항 항, 사람 요청 `14c88df4`) —
-                                  상세와 같은 스레드(`threadOf`) · 같은 폼 · 같은 액션이다. 판정은
-                                  위 배지와 **같은 식**이고, 테이블 행에는 붙이지 않는다(§1 행 액션 없음).
-                                  자리는 카드 맨 아래다: 위는 티켓이 무엇인가고 여기부터가 할 수 있는
-                                  일이다(deps 배지도 같은 `z-10` 층에 있다) */}
-                              {isAwaiting(t) && (
-                                <AnswerDialog
-                                  project={id}
-                                  hash={t.stem}
-                                  title={t.title}
-                                  answerFile={`${awaitingOf(t)}${config.done}.md`}
-                                  thread={threadOf(tickets, t, config)}
-                                />
-                              )}
-                              {/* **카드의 마지막 자식** — 이 세션이 방금 한 일 한 줄(§1-1 ·
-                                  §비주얼 §36). `.wip`에만 있다: 진행중 레인 카드만 위에서 읽었고
-                                  나머지는 `wipLines`에 키가 아예 없다(완료 카드에 세우면
-                                  갱신이 멈춘 자리에서 `방금`이 거짓말이다). 위 `AnswerDialog`와
-                                  자리를 다투지 않는다 — `isAwaiting`은 `state === "open"`만
-                                  참이라 한 카드에 둘이 같이 서지 않는다.
-                                  **완료 카드에는 아카이브 한 줄이 같은 슬롯에 선다**(§5-3
-                                  §표시 규약 ③): 두 Map의 조건이 `.wip`↔`.done`으로 배타라
-                                  한 카드가 둘을 같이 들 수 없다.
-                                  간격은 8 / 선 / 8 / 줄 / 8이다: 위 8px은 `<Card>`의 `gap-2`,
-                                  선 아래 8px은 `pt-2`, 카드 바닥까지 8px은 `py-4`(16)에서
-                                  `-mb-2`(8)를 뺀 값이다(§36 §자리와 간격 — 새 간격 값 0) */}
-                              {wipLines?.get(t.path) ?? archiveLine(archives.get(t.path), href)}
-                            </Card>
-                          ))
-                        )}
-                        {/* 잘린 나머지의 출구. 목적지는 새 화면이 아니라 이미 있는 `?status=done`
-                            이고, 거기서는 완료가 전부 뜬다(자르는 것은 이 레인뿐이다) */}
-                        {trimmed > 0 && (
-                          <Link
-                            href={doneOnlyHref}
-                            className="block rounded-md px-3 py-2 text-center text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
-                          >
-                            과거 완료 {trimmed}건 →
-                          </Link>
+                          cardEls
                         )}
                       </div>
                     </div>

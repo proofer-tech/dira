@@ -120,6 +120,13 @@ export const ROW_PAGE = 30;
  *  반대편일 뿐, 새 위험이 아니다(읽는 파일 수는 `rows`와 무관하다). */
 export const rowLimit = (rows: string | null) => Math.max(ROW_PAGE, Number(rows) || 0);
 
+/** 칸반 `완료` 레인이 그리는 카드 수(§1 보드 §완료 항, 요구 `79cad792`) — `?done=` 하나가 정한다.
+ *  **`rowLimit`과 나란한 값이다**: 서버는 이 수만큼 자르고 레인 감시행은 이 수에 20을 더해
+ *  다음 URL을 만든다. 하한도 같은 이유로 `DONE_LANE_LIMIT`이고 상한은 없다(큰 값이면 전체를
+ *  그리는 것이고 그게 새 위험이 아니다 — `rowLimit` 주석과 같다). */
+export const DONE_LANE_LIMIT = 20;
+export const doneLimit = (done: string | null) => Math.max(DONE_LANE_LIMIT, Number(done) || 0);
+
 /** 시각 한 칸 (DESIGN.md §비주얼 §26 ④) — **오늘 안이면 `HH:MM`, 다른 날이면 `M/D`.**
  *
  *  **24시간제**고 `toLocaleTimeString`을 안 쓴다: 로케일에 따라 `오후 5:40`이 나와 폭이 흔들린다

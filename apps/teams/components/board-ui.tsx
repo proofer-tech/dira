@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/command";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { relationPath, rowLimit, ROW_PAGE, type Anchor } from "@/lib/urls";
+import { doneLimit, DONE_LANE_LIMIT, relationPath, rowLimit, ROW_PAGE, type Anchor } from "@/lib/urls";
 import type { RelationEdge } from "@/lib/queue";
 
 /** 필터·검색은 히스토리를 남기지 않는다(`replace`) — 글자마다 한 칸씩 쌓이면 뒤로가기로
@@ -34,12 +34,15 @@ function useUrlNav() {
   const pathname = usePathname();
   // 문자열로 받는다 — 객체 신원으로 비교하면 폴링 리렌더마다 effect가 다시 돈다(디바운스가 안 끝난다).
   const qs = useSearchParams().toString();
-  /** `rows`(표뷰가 지금 받아 둔 행 수)는 **목록이 갈리면 지운다** — 검색·필터가 바뀌면 다른
-   *  목록이고 30행부터가 맞다(§1 §테이블 바디는 30행씩). 이 훅을 거치는 것이 그 둘뿐이라
-   *  판정이 여기 한 줄이고, 서버가 그리는 링크(정렬·필터 해제·뷰 전환)는 `page.tsx`의 `qs()`가
-   *  같은 일을 한다. 그 값을 **세우는** 자리는 표 바디 하나뿐이다(`keepRows`). */
-  const replace = (next: URLSearchParams, keepRows = false) => {
-    if (!keepRows) next.delete("rows");
+  /** `rows`(표뷰가 지금 받아 둔 행 수)·`done`(칸반 완료 레인이 지금까지 그린 카드 수)은
+   *  **목록이 갈리면 지운다** — 검색·필터가 바뀌면 다른 목록이고 처음 몫부터가 맞다
+   *  (§1 §테이블 바디는 30행씩 · §완료 항 `?done=`, 요구 `79cad792`). 이 훅을 거치는 것이 그
+   *  둘뿐이라 판정이 여기 한 줄이고, 서버가 그리는 링크(정렬·필터 해제·뷰 전환)는 `page.tsx`의
+   *  `qs()`가 같은 일을 한다. 그 값을 **세우는** 자리는 각자의 감시행 하나뿐이다(`keep`) —
+   *  둘을 동시에 세우는 자리는 없다(표와 칸반 레인은 같은 렌더에 안 같이 갈린다). */
+  const replace = (next: URLSearchParams, keep?: "rows" | "done") => {
+    if (keep !== "rows") next.delete("rows");
+    if (keep !== "done") next.delete("done");
     const s = next.toString();
     router.replace(s ? `${pathname}?${s}` : pathname, { scroll: false });
   };
@@ -259,7 +262,7 @@ export function BoardRows({ more, children }: { more: boolean; children: React.R
       // `rows`가 60·90·120으로 달아난다. 이미 요청해 둔 몫이면 아무것도 안 한다.
       if (shown + ROW_PAGE <= rowLimit(next.get("rows"))) return;
       next.set("rows", String(shown + ROW_PAGE));
-      replace(next, true);
+      replace(next, "rows");
     });
     io.observe(el);
     return () => io.disconnect();
@@ -288,6 +291,41 @@ export function BoardRows({ more, children }: { more: boolean; children: React.R
           <td className="h-px p-0" />
         </tr>
       )}
+    </>
+  );
+}
+
+/** 칸반 `완료` 레인 카드 스택 — 20건씩 그리고 바닥에 닿으면 20건 더(§1 보드 §완료 항, 요구
+ *  `79cad792`). 감시행 판정은 `BoardRows`와 **같다**(1px 감시행 · `IntersectionObserver` 기본
+ *  root · 이미 요청해 둔 몫이면 아무것도 안 한다) — 그릇만 `<tr>`이 아니라 `<div>`다(카드 스택은
+ *  `data-lane` 스크롤러이지 표가 아니다). `되감기`도 표와 같은 이유로 손대지 않는다: 5초
+ *  폴링은 `router.refresh()`라 URL이 그대로고 서버가 지금 받아 둔 만큼을 다시 그린다. */
+export function BoardDoneLane({ more, children }: { more: boolean; children: React.ReactNode }) {
+  const { qs, replace } = useUrlNav();
+  const shown = Children.count(children);
+  const sentinel = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = sentinel.current;
+    if (!el) return;
+    const io = new IntersectionObserver((e) => {
+      if (!e[0].isIntersecting) return;
+      const next = new URLSearchParams(qs);
+      // **요청은 그려진 카드에서 센다**(URL이 아니다) — `BoardRows`와 같은 이유다.
+      if (shown + DONE_LANE_LIMIT <= doneLimit(next.get("done"))) return;
+      next.set("done", String(shown + DONE_LANE_LIMIT));
+      replace(next, "done");
+    });
+    io.observe(el);
+    return () => io.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- replace는 매 렌더 새 함수다(qs가 실질 의존)
+  }, [qs, shown]);
+
+  return (
+    <>
+      {children}
+      {/* 1px 감시행. 높이가 0이면 교차비가 0으로 굳어 안 걸린다 */}
+      {more && <div ref={sentinel} aria-hidden className="h-px" />}
     </>
   );
 }

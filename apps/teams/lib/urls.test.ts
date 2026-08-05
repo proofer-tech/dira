@@ -2,6 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert";
 import {
   chatRows,
+  doneLimit,
+  DONE_LANE_LIMIT,
   engineCan,
   engineMissing,
   findMatches,
@@ -137,6 +139,18 @@ test("rowLimit — 30보다 큰 값은 그대로 산다(내려 읽던 자리가 
   // 소수·공백이 섞여도 `Number`가 판정한다 — `parseInt`처럼 앞자리만 먹고 넘어가지 않는다
   assert.equal(rowLimit(" 90 "), 90);
   assert.equal(rowLimit("60px"), 30);
+});
+
+/** `?done=`은 칸반 `완료` 레인의 무한스크롤 몫이다(§1 §완료 항, 요구 `79cad792`) — `rowLimit`과
+ *  같은 유도라 서버(자를 수)와 레인 감시행(다음 URL)이 어긋나면 20건씩 밀리거나 영영 안 이어진다. */
+test("doneLimit — 정본 URL도 쓰레기 값도 20건으로 떨어진다(§1 §완료 항)", () => {
+  assert.equal(DONE_LANE_LIMIT, 20);
+  for (const v of [null, "", "0", "abc", "-5", "10", "20"]) assert.equal(doneLimit(v), 20);
+});
+
+test("doneLimit — 20보다 큰 값은 그대로 산다(내려 읽던 자리가 폴링에 안 되감긴다)", () => {
+  assert.equal(doneLimit("40"), 40);
+  assert.equal(doneLimit("206"), 206);
 });
 
 test("relationPath — 이웃 레인은 거터(24) 안에서 끝난다", () => {
