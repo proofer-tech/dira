@@ -65,8 +65,12 @@ export function FeedbackDialog() {
           </DialogDescription>
         </DialogHeader>
 
+        {/* `min-w-0` — 답변 다이얼로그와 같은 결함이다(§비주얼 §3 간격 관용구 · §로드맵 §P167).
+            `DialogContent`가 `grid`라 아이템의 `min-width: auto`가 min-content로 굳고, 아래
+            `<Textarea>`는 `field-sizing-content`라 안 쪼개지는 긴 토큰 한 줄이 그대로 그 값이
+            된다(실측: 100자 토큰에서 그릇 544 → 707.2 · 팝업 576에 가로 스크롤바) */}
         <form
-          className="space-y-4"
+          className="min-w-0 space-y-4"
           onSubmit={(e) => {
             e.preventDefault();
             if (!built) return;

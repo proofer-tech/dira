@@ -570,7 +570,11 @@ export function AnswerDialog({
             답변을 달면 이 티켓이 다시 큐에 뜨고 담당 세션이 이어서 봅니다.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-4">
+        {/* `min-w-0` — `DialogContent`가 `grid`라 아이템의 `min-width: auto`가 min-content로
+            굳는다(실측 890 / 팝업 672). 안쪽 표·펜스의 `overflow-x-auto`가 그것에 무력화돼
+            팝업이 가로로 넓어졌다(§비주얼 §3 간격 관용구 · §로드맵 §P167). 고치는 자리는
+            여기 하나다 — `dialog.tsx`는 안 고친다(선례 둘: §10 렌더러 루트 · P71 `ee0aa308`) */}
+        <div className="min-w-0 space-y-4">
           <AnswerFields {...props} />
         </div>
       </DialogContent>
@@ -952,7 +956,10 @@ export function RequestDialog({
             </div>
           </div>
         ) : (
-          <form action={action} className="space-y-4">
+          // `min-w-0` — 위 답변 다이얼로그와 **같은 결함 · 같은 처방**이다(§비주얼 §3 간격 관용구).
+          // 이 폼의 `<Textarea>`는 `field-sizing-content`라 안 쪼개지는 긴 토큰 한 줄이 그대로
+          // min-content가 된다(실측: 100자 토큰에서 그릇 544 → 707.2 · 팝업 576에 가로 스크롤바)
+          <form action={action} className="min-w-0 space-y-4">
             <input type="hidden" name="project" value={project} />
             <input type="hidden" name="mode" value="req" />
             <Textarea
@@ -1098,7 +1105,10 @@ export function NewTicketDialog({
             )}
           </DialogDescription>
         </DialogHeader>
-        <form action={action} className="space-y-4">
+        {/* `min-w-0` — 답변 다이얼로그와 같은 결함이다(§비주얼 §3 간격 관용구). 본문 `<Textarea>`가
+            `field-sizing-content`라 안 쪼개지는 긴 토큰 한 줄이 min-content로 올라간다
+            (실측: 100자 토큰에서 그릇 640 → 727.6 · 팝업 672에 가로 스크롤바) */}
+        <form action={action} className="min-w-0 space-y-4">
           <input type="hidden" name="project" value={project} />
           <div className="space-y-2">
             <Label htmlFor="n-title">title</Label>
