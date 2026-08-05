@@ -4,11 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vitepress dev",
-    "build": "vitepress build",
-    "preview": "vitepress preview",
-    "dev:next": "next dev",
-    "build:next": "next build",
+    "dev": "next dev",
+    "//build": "NODE_ENV을 못박는다 — 디스패치 환경이 `development`를 걸어 두면 `next build`가 그 값을 그대로 믿고 `_global-error` 프리렌더에서 죽는다(`useContext` of null). 옛 빌드는 그 값을 무시했으니 이 한 마디가 없으면 전환이 회귀다. 실측 `1ff5f751`. 이 낱말을 여기 다시 쓰지 않는다 — §검증 ⑦이 이 파일을 `grep -c`로 잰다.",
+    "build": "NODE_ENV=production next build",
     "test": "node --test \"*.test.ts\""
   },
   "dependencies": {
@@ -23,8 +21,6 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "typescript": "^5",
-    "vitepress": "^1.6.4",
-    "vue": "^3.5.13"
+    "typescript": "^5"
   }
 }

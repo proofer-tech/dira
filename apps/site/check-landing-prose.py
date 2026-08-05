@@ -16,6 +16,11 @@ import re, subprocess, sys
 OLD = "apps/site/.vitepress/theme/Landing.vue"   # 비교대상 ref에서 읽는다
 NEW = "apps/site/app/landing.tsx"                # 지금 트리에서 읽는다
 
+# `OLD`는 §순서 ⑧(`1ff5f751`)이 `.vitepress/`를 지운 뒤로 **history에만 산다.** 그래서 기본값이
+# `master`면 이 도구가 자기 대조 표본을 못 찾아 죽는다 — 이 해시가 그 삭제 직전 커밋이고,
+# master의 조상이라 앞으로도 유효하다. 다른 ref를 대려면 인자로 준다.
+DEFAULT_REF = "51b7bba"
+
 
 def nodes(src):
     # 마크업이 시작하는 자리부터 본다 — 그 앞의 스크립트에는 한글 주석이 산다
@@ -31,8 +36,11 @@ def nodes(src):
     return out
 
 
-ref = sys.argv[1] if len(sys.argv) > 1 else "master"
-old = nodes(subprocess.run(["git", "show", f"{ref}:{OLD}"], capture_output=True, text=True).stdout)
+ref = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_REF
+src = subprocess.run(["git", "show", f"{ref}:{OLD}"], capture_output=True, text=True).stdout
+if not src:
+    sys.exit(f"{ref}:{OLD} 를 못 읽었다 — 이식 전 ref를 인자로 준다 (기본 {DEFAULT_REF})")
+old = nodes(src)
 new = nodes(open(NEW).read())
 joined = " | ".join(new)
 missing = [s for s in old if s not in joined]

@@ -23,7 +23,7 @@
     "allowJs": true,
     "esModuleInterop": true
   },
-  "//": "`include`가 Next이 타입검사하는 범위다. `.vitepress/`(Vue)와 `*.test.ts`(`./version.ts` 확장자 import)는 tsc가 못 읽으니 안 넣는다 — 둘 다 각자 vitepress·node --test가 진다.",
+  "//": "`include`가 Next이 타입검사하는 범위다. `*.test.ts`(`./version.ts` 확장자 import)는 tsc가 못 읽으니 안 넣는다 — 그건 `node --test`가 진다. (종전에는 `.vitepress/`(Vue)도 여기서 빠져 있었다 — §순서 ⑧이 그 디렉터리를 지웠다.)",
   "include": [
     "next-env.d.ts",
     "next.config.ts",

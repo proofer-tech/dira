@@ -1,6 +1,4 @@
 node_modules
-.vitepress/dist
-.vitepress/cache
 .next
 out
 next-env.d.ts

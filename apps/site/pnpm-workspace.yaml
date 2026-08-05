@@ -1,8 +1,6 @@
 # apps/teams·apps/desktop과 같은 벌이다 — 각자 독립 프로젝트다(`ci.yml` 주석).
 packages: []
 allowBuilds:
-  # vite(vitepress 내부 의존)가 postinstall로 받는 네이티브 바이너리. 빌드에 필수.
-  esbuild: true
   # next의 선택 의존. 이미지 최적화 전용이라 `output: "export"` + `next/image` 0곳인 이 사이트가
   # 부르는 자리가 없다(§사이트 기반 §안 하는 것). 안 지어도 빌드가 돈다.
   sharp: false
