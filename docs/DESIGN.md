@@ -7147,8 +7147,8 @@ system/hook_started ×4 → system/hook_response ×4 → system/init
   | grok | `result.is_error == true`이고 `terminal_reason` 키가 없고 `errors`를 이어 붙인 문자열이 같은 세 낱말 중 하나를 포함 | `api_error` |
 
   - **`reason` 값을 새로 안 만든다.** 셋 다 `api_error`로 떨어지므로 §자리 표 ④의
-    `[ "$REASON" = "api_error" ]` 게이트(`tick.sh:680`)는 **한 글자도 안 갈린다.** 갈리는 것은
-    VERDICT를 뽑는 파이썬 한 곳(`tick.sh:646-661`)뿐이고, 그 파이썬이 이미 매 줄의 `type`을
+    `[ "$REASON" = "api_error" ]` 게이트(`tick.sh:685`)는 **한 글자도 안 갈린다.** 갈리는 것은
+    VERDICT를 뽑는 파이썬 한 곳(`tick.sh:651-666`)뿐이고, 그 파이썬이 이미 매 줄의 `type`을
     보며 도므로 새 순회도 새 프로세스도 0이다.
   - **`resetsAt`은 claude만 준다.** codex·grok은 그 칸이 비어 창이 §판정 2의 기존 분기(*없거나
     이미 지난 값이면 300초*)로 그대로 떨어진다 — 새 분기가 필요 없다.
