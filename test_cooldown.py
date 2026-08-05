@@ -188,7 +188,7 @@ try:
     tick()
     assert "SKIP 엔진 쿨다운" in log()[before:], "복귀 시각 창이 안 막는다"
 
-    # --- ⑥ 토큰·모델이 갈리면 남은 창을 안 기다리고 즉시 재시도한다 ---
+    # --- ⑥ 토큰이 갈리면 남은 창을 안 기다리고 즉시 재시도한다 ---
     mode("ok")
     mkfile(token, "tok-2")                      # 사람이 계정을 바꿨다
     before = len(log())
@@ -201,12 +201,19 @@ try:
     mode("limit")
     tick()
     assert cooldown() == str(resets), "다시 걸린 창이 없다"
+    # --- ⑦ 모델만 다른 tick은 **남의 창을 못 지운다** ---
+    # 창은 이름이 엔진별일 뿐 머신에 하나인데 argv는 큐마다 다르다. 지문이 argv를 물면
+    # "지문이 갈리면 푼다"가 남의 창을 지우는 동작이 된다 - 실측 2026-08-05: `--model sonnet`인
+    # dira와 모델 플래그가 없는 stream이 서로의 창을 1분마다 풀어서, 16:30까지 닫혀 있어야 할
+    # 창에서 같은 티켓을 27번 태웠다. 모델을 갈아도 5시간 리밋은 계정에 걸린 채다.
     before = len(log())
-    tick(EXTRA="--model opus")                  # 사람이 모델을 갈았다
+    tick(EXTRA="--model opus")                  # 모델이 다른 큐가 같은 창을 만난다
     added = log()[before:]
-    assert "NOTE 엔진 쿨다운 해제" in added, "모델이 갈렸는데 안 풀렸다:\n" + added
+    assert "NOTE 엔진 쿨다운 해제" not in added, "모델만 갈렸는데 남의 창을 지웠다:\n" + added
+    assert "SKIP 엔진 쿨다운" in added, "모델이 다른 큐가 창을 안 지킨다:\n" + added
+    assert cooldown() == str(resets), "창이 짧아졌다(재무장까지 갔다)"
 
-    print("OK - 엔진 쿨다운 (복귀 시각 · 게이트 · 재무장 · 해제 · 토큰/모델 교체)")
+    print("OK - 엔진 쿨다운 (복귀 시각 · 게이트 · 재무장 · 토큰 교체 해제 · 모델 교체는 안 푼다)")
 finally:
     subprocess.run(["pkill", "-f", os.path.join(tmp, "fake-engine.sh")], capture_output=True)
     shutil.rmtree(tmp, ignore_errors=True)

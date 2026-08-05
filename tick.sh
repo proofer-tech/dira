@@ -62,15 +62,20 @@ ENGINE_NAME="$(basename "${TICKET_ENGINE[0]}")"
 CDOWN="$LOCAL/run/cooldown-$ENGINE_NAME"
 CDOWN_W=300   # 리밋이 복귀 시각을 안 줄 때(네트워크 실패 등)의 창 + 만료 직후 재무장 창
 
-# 엔진 지문 = 인증 토큰 + 엔진 argv(모델 플래그가 여기 있다). 사람이 계정을 바꾸거나 모델을
-# 갈면 값이 갈리고, 그 순간 쿨다운이 풀린다 - 리밋이 준 복귀 시각을 그대로 기다리면 계정을
-# 바꿔도 몇 시간을 놀기 때문이다(요구 15ceae18이 그 사고다).
+# 엔진 지문 = **인증 토큰만**. 사람이 계정을 바꾸면 값이 갈리고 그 순간 쿨다운이 풀린다 -
+# 리밋이 준 복귀 시각을 그대로 기다리면 계정을 바꿔도 몇 시간을 놀기 때문이다(요구 15ceae18).
+#
+# 엔진 argv(모델 플래그)는 **일부러 안 넣는다**. 창은 이름이 엔진별일 뿐 머신에 하나인데
+# argv는 큐마다 다르다 - 넣었더니 "지문이 갈리면 푼다"가 *남의 창을 지우는* 동작이 됐다
+# (실측 2026-08-05: `--model sonnet`인 dira와 모델 플래그가 없는 stream이 서로의 창을
+# 1분마다 풀어서, 16:30까지 닫혀 있어야 할 창에서 같은 티켓을 27번 태웠다).
+# 모델을 갈아도 5시간 리밋은 계정에 걸린 채라 애초에 풀 근거가 아니다.
 engine_fp() {
   python3 -c 'import hashlib,sys
 try: tok = open(sys.argv[1], "rb").read()
 except OSError: tok = b""
-print(hashlib.sha1(tok + b"\0" + "\0".join(sys.argv[2:]).encode()).hexdigest()[:12])' \
-    "$LOCAL/oauth-token" "${TICKET_ENGINE[@]}"
+print(hashlib.sha1(tok).hexdigest()[:12])' \
+    "$LOCAL/oauth-token"
 }
 arm_cdown() { printf '%s\n%s\n' "$1" "$(engine_fp)" > "$CDOWN"; }
 
