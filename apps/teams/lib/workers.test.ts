@@ -102,6 +102,8 @@ test("engineName — tick.sh:52의 basename \"${TICKET_ENGINE[0]}\"과 판정이
     '/usr/local/bin/claude -p "{prompt}" --session-id "{sid}"', // 절대경로
     '"/usr/local/bin/claude" -p "{prompt}"', // 따옴표 친 절대경로
     'codex exec --dangerously-bypass-approvals-and-sandbox "{prompt}"', // 다른 엔진
+    // 셋째 엔진(§4-3 §grok). basename 판정은 claude·codex와 **같은 식 하나**여야 한다
+    'grok -p "{prompt}" --session-id "{sid}" --permission-mode bypassPermissions',
   ];
   for (const engine of cases) {
     const bash = execFileSync(
@@ -112,6 +114,7 @@ test("engineName — tick.sh:52의 basename \"${TICKET_ENGINE[0]}\"과 판정이
     assert.strictEqual(engineName(engine), bash, engine);
   }
   assert.strictEqual(engineName(cases[3]), "codex"); // 이 워커에는 배너가 안 선다
+  assert.strictEqual(engineName(cases[4]), "grok"); // 여기도 안 선다 — 같은 함수가 판정한다
   assert.strictEqual(engineName(""), ""); // 값이 깨져 못 읽었으면 claude가 아니다 = 이름도 없다
 });
 
@@ -1674,7 +1677,7 @@ TICKET_CONTEXT=(
 . "$HOME/Projects/dira/tick.sh"
 `;
 
-test("엔진 템플릿 — 바꿔 쓸 수 없는 자리 넷을 못박는다 (§4-3 표)", () => {
+test("엔진 템플릿 — 바꿔 쓸 수 없는 자리 다섯을 못박는다 (§4-3 표)", () => {
   const claude = engineArgv("claude");
   // ① `--input-format stream-json` 인접. tick.sh:263-270이 이 인접성 하나로 FIFO를 판다 —
   //    떨어지면 §2-2 참견이 조용히 죽는다. 판정식을 엔진과 같은 모양으로 다시 쓴다.
@@ -1696,6 +1699,34 @@ test("엔진 템플릿 — 바꿔 쓸 수 없는 자리 넷을 못박는다 (§4
   assert.ok(codex.join(" ").includes("-s danger-full-access"));
   assert.ok(codex.includes("--skip-git-repo-check"));
 
+  // ⑤ grok 템플릿에는 `--input-format`이 **없다.** 그 플래그가 CLI에 아예 없고(실측 §4-3 §grok),
+  //    없는 것이 곧 FIFO를 안 파는 근거다 — 들어가면 tick.sh:263-270이 참견 채널을 잘못 판다.
+  const grok = engineArgv("grok");
+  assert.ok(!grok.includes("--input-format"), grok.join(" "));
+  assert.ok(!grok.includes("--sandbox")); // grok 기본 sandbox가 이미 off다(근거 없는 플래그 금지)
+  // grok은 codex와 같은 비스트리밍 경로이므로 프롬프트가 argv로 간다. 다만 위치 인자가 아니라
+  // `-p`의 값이라 **맨 끝이 아니다** — 그래서 이 단언은 codex의 것과 모양이 갈린다.
+  assert.deepStrictEqual(grok, [
+    "grok",
+    "-p",
+    '"{prompt}"',
+    "--session-id",
+    '"{sid}"',
+    "--permission-mode",
+    "bypassPermissions",
+    "--output-format",
+    "streaming-messages-json",
+  ]);
+  // 모델을 주면 `-m <모델>`이 그 자리에 끼고 나머지 토큰 순서가 안 바뀐다
+  assert.deepStrictEqual(engineArgv("grok", "grok-4.5"), [
+    ...grok.slice(0, 7),
+    "-m",
+    "grok-4.5",
+    ...grok.slice(7),
+  ]);
+  // ④의 나머지 절반 — grok에도 `--session-id "{sid}"`가 있다(tick.sh:94 reap · §2-1 스트림)
+  assert.ok(grok.join(" ").includes('--session-id "{sid}"'));
+
   // 모델 목록 맨 앞은 `모델 지정 안 함` = 플래그를 안 붙인다
   for (const e of ENGINES) {
     assert.strictEqual(e.models[0], NO_MODEL);
@@ -1708,6 +1739,10 @@ test("엔진 템플릿 — 바꿔 쓸 수 없는 자리 넷을 못박는다 (§4
     "sonnet",
     "fable",
   ]);
+  // grok은 `grok models`가 오늘 내는 이름 하나뿐이다 — 확인 못 한 이름을 올리지 않는다(§4-3)
+  const g = ENGINES.find((e) => e.id === "grok")!;
+  assert.strictEqual(g.flag, "-m");
+  assert.deepStrictEqual([...g.models], [NO_MODEL, "grok-4.5"]);
 });
 
 test("엔진 카탈로그의 claude = tick.sh의 실제 기본값이다 (눈으로 안 맞춘다)", () => {
@@ -1741,6 +1776,22 @@ test("renderEngineBlock ↔ parseEngineValue — 카탈로그 전 조합이 왕�
       assert.strictEqual(engineName(value), e.id);
     }
   }
+  // 스펙이 글자로 박아 둔 grok 두 문자열을 **손으로 적어** 되읽는다 — 위 루프는 카탈로그를
+  // 다시 그려 대조하므로 카탈로그가 틀리면 같이 틀린다. 여기가 스펙 대조다(§4-3 §템플릿 3벌).
+  assert.deepStrictEqual(
+    parseEngineValue(
+      'grok -p "{prompt}" --session-id "{sid}" --permission-mode bypassPermissions' +
+        " --output-format streaming-messages-json",
+    ),
+    { engineId: "grok", model: NO_MODEL },
+  );
+  assert.deepStrictEqual(
+    parseEngineValue(
+      'grok -p "{prompt}" --session-id "{sid}" --permission-mode bypassPermissions' +
+        " -m grok-4.5 --output-format streaming-messages-json",
+    ),
+    { engineId: "grok", model: "grok-4.5" },
+  );
   // 손으로 쓴 커스텀은 null이다 — 토큰 하나만 달라도 카탈로그가 아니다
   assert.strictEqual(parseEngineValue("claude -p --dangerously-skip-permissions"), null);
   assert.strictEqual(parseEngineValue("codex exec --json \"{prompt}\""), null);

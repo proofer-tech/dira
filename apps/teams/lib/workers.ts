@@ -586,11 +586,13 @@ export async function applyCommonSource(root: string, name: string): Promise<boo
 // ── 엔진 · 모델 선택 (DESIGN.md §4-3) ───────────────────────────────────────
 //
 // 고르는 단위는 **엔진 × 모델 한 쌍**이고, 커맨드는 **엔진마다 고정 문자열 한 벌**이다.
-// 부품에서 합성하지 않는다 — 두 템플릿이 서로 바꿔 쓸 수 없는 자리가 넷이라서다(§4-3 표):
+// 부품에서 합성하지 않는다 — 세 템플릿이 서로 바꿔 쓸 수 없는 자리가 다섯이라서다(§4-3 표):
 // `--input-format stream-json` 인접(tick.sh:263-270 FIFO 판정) · claude에 `{prompt}` 없음 ·
-// codex에 `{prompt}` 있음 · claude의 `--session-id "{sid}"`(tick.sh:94 reap · §2-1 스트림 파일명).
+// codex·grok에 `{prompt}` 있음 · claude·grok의 `--session-id "{sid}"`(tick.sh:94 reap ·
+// §2-1 스트림 파일명) · grok에 `--input-format`이 **없음**(그 플래그가 CLI에 아예 없다 —
+// 없는 것이 곧 FIFO를 안 파는 근거라서, 넣으면 grok 워커가 뜨지도 못한다).
 
-export type EngineId = "claude" | "codex";
+export type EngineId = "claude" | "codex" | "grok";
 
 /** `모델 지정 안 함` = 모델 플래그를 아예 안 붙인다(엔진 CLI 자기 기본값). 목록 맨 앞이고
  *  새 워커의 기본값이다 — 가장 안 낡는 선택지다(§4-3). */
@@ -605,7 +607,7 @@ export const ENGINE_ARR = "TICKET_ENGINE";
  *  올리는 것이 §4-3이 말하는 "화면이 거짓말한다"이다. 갱신 명령은 `f6dd8478` §결과에 있다. */
 export const ENGINES: readonly {
   id: EngineId;
-  /** 모델 플래그. `claude --model` · `codex -m` (둘 다 실재한다 — §4-3) */
+  /** 모델 플래그. `claude --model` · `codex -m` · `grok -m` (셋 다 실재한다 — §4-3) */
   flag: string;
   /** 목록. 맨 앞은 항상 `NO_MODEL`이고, 여기 없는 이름은 화면의 `직접 입력`이 받는다 */
   models: readonly string[];
@@ -649,6 +651,28 @@ export const ENGINES: readonly {
       "--skip-git-repo-check",
       MODEL_SLOT,
       '"{prompt}"',
+    ],
+  },
+  {
+    id: "grok",
+    flag: "-m",
+    // `grok models`가 오늘 내는 이름 하나(실측 2026-08-05, `grok 0.2.118`). **별칭이 아니라
+    // 풀네임이라 반드시 낡는다** — claude의 근거 2가 grok에는 안 선다. 갱신은 `grok models`.
+    models: [NO_MODEL, "grok-4.5"],
+    // `--sandbox`가 없는 것은 누락이 아니다 — grok 기본 sandbox 프로파일이 이미 `off`이고
+    // `--permission-mode bypassPermissions` 하나로 파일 쓰기까지 지난다(실측 §4-3 §grok).
+    // codex가 `-s danger-full-access`를 **필요로 했던 것**과 갈리는 자리다.
+    argv: [
+      "grok",
+      "-p",
+      '"{prompt}"',
+      "--session-id",
+      '"{sid}"',
+      "--permission-mode",
+      "bypassPermissions",
+      MODEL_SLOT,
+      "--output-format",
+      "streaming-messages-json",
     ],
   },
 ];
