@@ -18,6 +18,7 @@ import { homedir, tmpdir } from "node:os";
 import { createRequire, syncBuiltinESMExports } from "node:module";
 import path from "node:path";
 import { listTickets } from "./queue.ts";
+import { tokensPath } from "./auth.ts";
 
 // 진짜 락 디렉터리(~/.config/dira/run)를 밟지 않는다. import 전에 건다.
 const LOCAL = mkdtempSync(path.join(tmpdir(), "fst-local-"));
@@ -627,14 +628,15 @@ test("읽음 처리 ④ 파일이 없거나 JSON이 아니면 읽음 0개다 (�
   }
 });
 
-/** `alerts.json`을 **실제로 여는 횟수**를 센다. "정상 상태의 새 I/O가 0"은 눈으로 못 맞춘다.
- *  `syncBuiltinESMExports()`가 `workers.ts`가 이미 import한 바인딩까지 갱신한다(node:module). */
-function countAlertOpens<T>(body: () => Promise<T>): Promise<[T, number]> {
+/** 주어진 경로를 **실제로 여는 횟수**를 센다. "정상 상태의 새 I/O가 0"은 눈으로 못 맞춘다.
+ *  `syncBuiltinESMExports()`가 `workers.ts`가 이미 import한 바인딩까지 갱신한다(node:module).
+ *  `alerts.json`·`tokens.json` 둘 다 같은 셈이라 경로만 인자로 받는다(§0-5 §비용 · §0-13). */
+function countFileOpens<T>(file: string, body: () => Promise<T>): Promise<[T, number]> {
   const fsp = createRequire(import.meta.url)("node:fs/promises");
   const real = fsp.readFile;
   let n = 0;
   fsp.readFile = (p: unknown, ...rest: unknown[]) => {
-    if (String(p) === alertsPath()) n++;
+    if (String(p) === file) n++;
     return real(p, ...rest);
   };
   syncBuiltinESMExports();
@@ -656,14 +658,82 @@ test("읽음 처리 — 살아 있는 실패가 0개면 `alerts.json`을 열지 
   putAlerts({});
   // 20분 전 FAIL = 신선도 창 밖 = 살아 있는 실패 0개. 워커도 로그도 그대로 있다.
   const quiet = failRoot([{ name: "w1", log: "fail-w1.log", minutesAgo: 20 }]);
-  const [ws, n] = await countAlertOpens(() => listWorkers(quiet));
+  const [ws, n] = await countFileOpens(alertsPath(), () => listWorkers(quiet));
   assert.strictEqual(ws[0].lastFailure, null);
   assert.strictEqual(n, 0);
 
   // 대조군: 실패가 하나라도 살아 있으면 연다(위 0이 가로채기 실패로 나온 0이 아니라는 근거).
   const loud = failRoot([{ name: "w1", log: "fail-w1.log" }]);
-  const [, m] = await countAlertOpens(() => listWorkers(loud));
+  const [, m] = await countFileOpens(alertsPath(), () => listWorkers(loud));
   assert.strictEqual(m, 1);
+});
+
+// ── §0-13 §`모두 소진`은 새 알림이 아니다 — §0-5 판정에 조건 하나 ──────────────
+
+/** §0-13 §자리의 JSON 항목. 이 파일이 신경 쓰는 것은 `enabled`·`exhaustedUntil`뿐이다. */
+const tokenEntry = (id: string, over: { enabled?: boolean; exhaustedUntil?: number | null } = {}) => ({
+  id,
+  token: `sk-ant-oat01-${id}`,
+  addedAt: new Date().toISOString(),
+  enabled: true,
+  exhaustedUntil: null,
+  ...over,
+});
+const exhausted = Math.floor(Date.now() / 1000) + 3600; // 아직 안 풀린 소진 시각
+
+test("lastFailure — eligible 토큰이 남아 있으면 §0-10 ② 항목을 안 세운다 (§0-13)", async () => {
+  const root = failRoot([{ name: "w1", log: "fail-w1.log" }]); // 1분 전 = 신선도 창 안
+  rmSync(alertsPath(), { force: true });
+
+  // ⓐ tokens.json이 없다 — 목록을 안 쓰는 판(오늘 전부). 종전 판정 그대로 선다.
+  rmSync(tokensPath(), { force: true });
+  assert.strictEqual((await listWorkers(root))[0].lastFailure?.log, "fail-w1.log");
+
+  // ⓑ 활성 토큰은 소진됐지만 다른 토큰이 eligible이다 — 회전이 아직 안 끝난 60초, 항목을 안 세운다.
+  writeFileSync(
+    tokensPath(),
+    JSON.stringify({
+      claude: { active: "a", tokens: [tokenEntry("a", { exhaustedUntil: exhausted }), tokenEntry("b")] },
+    }),
+  );
+  assert.strictEqual((await listWorkers(root))[0].lastFailure, null);
+
+  // ⓒ 전부 소진(비활성 포함) — eligible이 0이다. 요구의 *모두*가 여기라 항목이 선다.
+  writeFileSync(
+    tokensPath(),
+    JSON.stringify({
+      claude: {
+        active: "a",
+        tokens: [
+          tokenEntry("a", { exhaustedUntil: exhausted }),
+          tokenEntry("b", { enabled: false }),
+        ],
+      },
+    }),
+  );
+  assert.strictEqual((await listWorkers(root))[0].lastFailure?.log, "fail-w1.log");
+
+  // ⓓ tokens.json이 깨졌다(JSON 아님) — 없음과 같은 칸, 종전 판정 그대로.
+  writeFileSync(tokensPath(), "{ 이건 JSON이 아니다");
+  assert.strictEqual((await listWorkers(root))[0].lastFailure?.log, "fail-w1.log");
+
+  rmSync(tokensPath(), { force: true });
+});
+
+test("lastFailure — 정상 상태(살아 있는 실패 0개)에서 `tokens.json`을 열지 않는다 (§0-13)", async () => {
+  writeFileSync(tokensPath(), JSON.stringify({ claude: { active: "a", tokens: [tokenEntry("a")] } }));
+  // 20분 전 FAIL = 신선도 창 밖, 쿨다운도 없다 = 살아 있는 실패 0개.
+  const quiet = failRoot([{ name: "w1", log: "fail-w1.log", minutesAgo: 20 }]);
+  const [ws, n] = await countFileOpens(tokensPath(), () => listWorkers(quiet));
+  assert.strictEqual(ws[0].lastFailure, null);
+  assert.strictEqual(n, 0);
+
+  // 대조군: 실패가 살아 있으면 그때는 연다.
+  const loud = failRoot([{ name: "w1", log: "fail-w1.log" }]);
+  const [, m] = await countFileOpens(tokensPath(), () => listWorkers(loud));
+  assert.strictEqual(m, 1);
+
+  rmSync(tokensPath(), { force: true });
 });
 
 /** `-l`은 `tab`을 읽고, `crontab -`은 `out`에 쓴다. 만들어진 명령을 **진짜 셸에** 먹여

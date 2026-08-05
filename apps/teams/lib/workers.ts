@@ -26,6 +26,7 @@ import { promisify } from "node:util";
 import { cache } from "react";
 import { NAME_RE, expandHome, localDir, resolveWithin, shellPath, shellValue } from "./paths.ts";
 import type { Ticket } from "./queue.ts";
+import { isEligible, tokensPath, type TokensFile } from "./auth.ts";
 
 export type WorkerStatus = "running" | "idle" | "stopped" | "stale";
 
@@ -914,6 +915,20 @@ export async function lastJsonLine(file: string): Promise<Record<string, unknown
  *  파일명은 **꼬리에서 집는다 — 조립하지 않는다**(엔진이 이미 적어 준다). */
 const failLine = /^(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d) \[[^\]]*\] FAIL (\S+) .* 로그 (\S+)$/;
 
+/** §0-13 §`모두 소진`은 새 알림이 아니다. `tokens.json`을 **마이그레이션 없이** 원본 그대로
+ *  읽는다 — `readTokens()`(`lib/auth.ts`)를 부르면 파일이 없을 때 `oauth-token`을 항목 하나로
+ *  들여와 **새로 쓴다**, 이 판정 경로가 그 부작용을 내면 "파일 없으면 종전 그대로"가 깨진다.
+ *  없음·깨짐·모양 다름 = 목록을 안 쓰는 판(오늘 전부) = `false`, 종전 판정 그대로 간다. */
+async function anyTokenEligible(): Promise<boolean> {
+  try {
+    const raw: unknown = JSON.parse(await readFile(tokensPath(), "utf8"));
+    const tokens = (raw as TokensFile)?.claude?.tokens;
+    return Array.isArray(tokens) && tokens.some((t) => isEligible(t));
+  } catch {
+    return false;
+  }
+}
+
 /** §0-5 판정 2·3단계. 마지막 **결과** 줄 하나 → 외부 요인 실패이거나 `null`.
  *  `DONE`이면 `null`이다 — 이게 "다음 성공 tick에 저절로 꺼진다"다. **`TIMEOUT`도 `null`**:
  *  rc 143/137은 90분 상한에 걸린 매달린 세션이고 환경 탓이 아니다(그래서 이 정규식이 `FAIL`만 문다).
@@ -941,7 +956,12 @@ async function failureOf(
   const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
   // 실측 6건이 `result: null`이고 그때 사유는 `terminal_reason`("aborted_streaming")뿐이다.
   const reason = str(rec.result) || str(rec.terminal_reason);
-  return reason ? { at, hash, reason, log } : null; // 사유가 비면 화면에 그릴 것이 없다
+  if (!reason) return null; // 사유가 비면 화면에 그릴 것이 없다
+  // §0-13 §`모두 소진`은 새 알림이 아니다. 회전이 아직 지문을 못 푼 cron 한 칸(최대 60초) 동안
+  // 쿨다운은 살아 있어도 **쓸 토큰이 남아 있으면** 이 배너는 거짓말이다 — 요구는 *모두* 걸렸을
+  // 때만 보내라고 못박았다. 읽는 것은 여기까지 온 살아 있는 실패뿐이라 정상 상태의 I/O는 0이다.
+  if (await anyTokenEligible()) return null;
+  return { at, hash, reason, log };
 }
 
 // ── 읽음 처리 (DESIGN.md §0-5 §읽음 처리) ───────────────────────────────────
