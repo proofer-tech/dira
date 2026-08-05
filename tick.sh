@@ -648,8 +648,13 @@ printf '%s\n' "$OUT" >> "$LOGF"
 # 못 가른다 - 429가 아닌 네트워크 실패(ENOTFOUND)엔 그 키가 없는데 똑같이 불능이다.
 # 넷째 칸은 리밋이 알려준 복귀 시각(epoch). `status: rejected`인 것만 센다 - 같은 이벤트가
 # `allowed_warning`으로도 오고(실측 1,058건) 그건 아직 통과한 요청이라 기다릴 이유가 없다.
+# reason 판정은 엔진 중립이다(§4-9 §개정 2026-08-05, 승인 04bd819d=(b)) - claude는 그대로
+# result.terminal_reason을 읽고, codex(최상위 error 줄)·grok(result.errors, terminal_reason
+# 키 없음)은 한도 낱말 셋(usage limit·rate limit·quota) 매치로 같은 api_error에 떨어진다.
+# 값을 새로 안 만든다 - 셋 다 "api_error"라 [ "$REASON" = "api_error" ] 게이트는 무수정이다.
 VERDICT=$(printf '%s' "$OUT" | python3 -c \
   'import json,sys
+LIMIT_WORDS = ("usage limit", "rate limit", "quota")
 raw = sys.stdin.read(); sid = ""; ok = ""; reason = ""; reset = ""
 for ln in raw.splitlines():
     try: o = json.loads(ln)
@@ -658,11 +663,20 @@ for ln in raw.splitlines():
     if o.get("type") == "result":
         sid = o.get("session_id", "") or sid
         ok = "err" if o.get("is_error") else "ok"
-        reason = o.get("terminal_reason", "") or ""
+        if "terminal_reason" in o:
+            reason = o.get("terminal_reason", "") or ""
+        elif o.get("is_error"):
+            errs = " ".join(str(e) for e in (o.get("errors") or [])).lower()
+            if any(k in errs for k in LIMIT_WORDS):
+                reason = "api_error"
     elif o.get("type") == "rate_limit_event":
         info = o.get("rate_limit_info") or {}
         if info.get("status") == "rejected" and isinstance(info.get("resetsAt"), int):
             reset = str(info["resetsAt"])
+    elif o.get("type") == "error":
+        msg = str(o.get("message", "")).lower()
+        if any(k in msg for k in LIMIT_WORDS):
+            reason = "api_error"
 if not sid:
     try: sid = json.loads(raw).get("session_id", "")
     except Exception: pass
@@ -676,17 +690,32 @@ else
   [ $RC -ne 0 ] && FAILED=1
 fi
 if [ -n "${FAILED:-}" ]; then
-  # 실행 실패(또는 상한 초과 강제종료) -> 할당 회수해서 다음 tick이 다시 집도록
-  python3 "$PY" clear "$TPATH"
-  python3 "$PY" release "$TPATH" >/dev/null 2>&1
+  # 실행 실패(또는 상한 초과 강제종료) -> 할당 회수해서 다음 tick이 다시 집도록. 단 세션이
+  # 이미 .done으로 닫은 뒤 죽었으면 $TPATH가 없다 - 되돌릴 할당이 없으므로 안 부른다
+  # (§4-10 §자리 표 ①, 승인 04bd819d=(b)). 안 부르면 clear의 FileNotFoundError traceback도 안 난다.
+  # 존재 여부는 release() 호출 **전에** 한 번만 잰다 - release가 성공하면 그 자체가 파일을
+  # 열림 이름으로 rename해 지워버려서, 나중에 다시 재면 정상 케이스도 항상 "없다"로 읽힌다.
+  if [ -f "$TPATH" ]; then
+    python3 "$PY" clear "$TPATH"
+    python3 "$PY" release "$TPATH" >/dev/null 2>&1
+  else
+    CLOSED=1
+  fi
   # 엔진 불능이면 창을 건다. 티켓은 종전대로 백로그로 돌아가고, 다음 tick들이 게이트에서 멈춘다.
   # 리밋이 복귀 시각을 줬으면(실측 api_error의 80%, 앞으로 최대 4.2시간) 임의의 5분이 아니라
   # 그 시각까지 기다린다. 안 줬거나 이미 지난 값이면 300초로 떨어진다(실측 min이 -355초다).
+  # 티켓이 닫혔든 말든 엔진이 불능인지 여부와는 무관하다 - 위 가드 밖에 그대로 둔다.
   if [ "$REASON" = "api_error" ]; then
     NOW=$(date +%s); UNTIL=$(( NOW + CDOWN_W ))
     case "$RESET" in ''|*[!0-9]*) ;; *) [ "$RESET" -gt "$UNTIL" ] && UNTIL="$RESET" ;; esac
     arm_cdown "$UNTIL"
     log "NOTE 엔진 불능 - $((UNTIL - NOW))초 쿨다운(복귀 ${RESET:-미상})"
+  fi
+  if [ -n "${CLOSED:-}" ]; then
+    # 세션이 끝까지 수행하고 .done rename까지 자기 손으로 마친 뒤 죽었다 - 큐의 사실은 완료다.
+    # FAIL이 아니라 §0-5 판정 1 화이트리스트에 이미 있는 DONE을 재사용해 사유만 붙인다.
+    log "DONE $THASH sid=${REAL:-$SID} (세션은 rc=${RC}로 죽었다)"
+    exit 0
   fi
   if [ "$VERDICT" = "err" ]; then
     log "FAIL $THASH 세션이 result is_error로 끝났다 -> 할당 회수 + 백로그 복귀. 로그 $(basename "$LOGF")"
@@ -706,7 +735,8 @@ if [ -n "${FAILED:-}" ]; then
   exit $RC
 fi
 
-if [ -n "$REAL" ] && [ "$REAL" != "$SID" ]; then
+# 같은 가정이다 - 정상 종료한 세션도 이미 티켓을 .done으로 닫았을 수 있다(§자리 표 ④).
+if [ -n "$REAL" ] && [ "$REAL" != "$SID" ] && [ -f "$TPATH" ]; then
   python3 "$PY" assign "$TPATH" "$REAL"
   log "NOTE $THASH 세션키 정정 $SID -> $REAL"
 fi

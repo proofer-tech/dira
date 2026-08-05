@@ -34,6 +34,23 @@ TICKET_ENGINE=("{tmp}/fake-engine.sh" "{{sid}}" "--input-format" "stream-json" $
 . "{tick}"
 """
 
+# codex 모양 재현용: 스트리밍 플래그가 없다 - INBOX가 안 서고 RC로 판정한다(§4-9 §개정).
+WORKER2 = """\
+#!/bin/bash
+TICKET_NAME="w2"
+TICKET_CWD="{tmp}"
+TICKET_PROMPT_FMT="please pick up %s"
+TICKET_ENGINE=("{tmp}/codex-engine.sh" "{{sid}}")
+. "{tick}"
+"""
+
+# 비스트리밍 가짜 엔진: 최상위 `error` 줄 한 개만 내고 죽는다(codex `exec`의 실측 모양).
+CODEX_ENGINE = """\
+#!/bin/bash
+printf '{"type":"error","message":"usage limit reached, try again later"}\\n'
+exit 1
+"""
+
 # 가짜 스트림 엔진. `mode` 파일이 갈래를 정한다:
 #   api_error = 복귀 시각을 안 주는 불능(네트워크 실패)  |  limit = 리밋이 복귀 시각을 준 불능
 #   other     = 진짜 세션 실패                          |  ok    = 정상 완료
@@ -53,6 +70,24 @@ case "$(cat "{tmp}/mode")" in
     printf '{{"type":"rate_limit_event","rate_limit_info":{{"status":"rejected","resetsAt":%s,"rateLimitType":"five_hour","overageDisabledReason":"out_of_credits"}}}}\\n' "$(cat "{tmp}/resets")"
     printf "$ERR"',"terminal_reason":"api_error","api_error_status":429}}\\n' "$1" ;;
   other) printf "$ERR"',"terminal_reason":"aborted_streaming"}}\\n' "$1" ;;
+  donedeath)
+    # 세션이 자기 손으로 .done rename까지 마친 뒤 죽는 모양(§4-10). tick.sh는 이 순간
+    # $TPATH를 다시 안 보므로 claim된 .wip.md를 찾아 직접 닫는다. 이 큐엔 성공한 앞선 티켓들의
+    # .wip.md도 그대로 남아 있다(가짜 엔진은 성공해도 .done으로 안 바꾼다 - 그건 세션의 몫이다,
+    # CORE.md §티켓 수명). 그래서 이름이 아니라 **가장 최근에 claim된**(mtime 최신) 것을 고른다.
+    # tick.sh의 setinbox도 init 직후에 같은 파일을 쓰므로, 그 기록(`inbox:`)이 보일 때까지
+    # 기다린 뒤에 rename한다 - 안 그러면 이 테스트가 §4-10과 무관한 setinbox 경합을 만든다
+    # (실사고는 세션이 한참 뒤에 죽는 모양이라 이 간극이 실제로는 항상 넓다).
+    wip=$(ls -t "{tmp}/dira/tickets"/*.wip.md 2>/dev/null | head -1)
+    i=0
+    while [ "$i" -lt 25 ] && ! grep -q '^inbox: ' "$wip" 2>/dev/null; do
+      sleep 0.2; i=$((i+1))
+    done
+    mv "$wip" "${{wip%.wip.md}}.done.md"
+    printf "$ERR"',"terminal_reason":"aborted_streaming"}}\\n' "$1" ;;
+  grok)
+    # grok 모양: is_error true · terminal_reason 키 없음 · errors에 한도 낱말(§4-9 §개정).
+    printf '{{"is_error":true,"session_id":"%s","type":"result","errors":["usage limit reached, please retry"]}}\\n' "$1" ;;
   *)     printf '{{"is_error":false,"num_turns":1,"session_id":"%s","type":"result","subtype":"success"}}\\n' "$1" ;;
 esac
 exec sleep 60
@@ -82,6 +117,10 @@ try:
     mkfile(os.path.join(tmp, "fake-engine.sh"), ENGINE.format(tmp=tmp), 0o755)
     w1 = mkfile(os.path.join(root, "workers", "w1.sh"),
                 WORKER.format(tmp=tmp, tick=TICK), 0o755)
+    mkfile(os.path.join(tmp, "codex-engine.sh"), CODEX_ENGINE, 0o755)
+    w2 = mkfile(os.path.join(root, "workers", "w2.sh"),
+                WORKER2.format(tmp=tmp, tick=TICK), 0o755)
+    cool2 = os.path.join(local, "run", "cooldown-codex-engine.sh")
     for h in ("aaaa0001", "bbbb0002", "cccc0003", "dddd0004"):
         mkfile(os.path.join(tickets, h + ".md"),
                "---\nticket: {}\ntitle: t\nkind: work\n---\n\n## Goal\ntest\n".format(h))
@@ -93,6 +132,14 @@ try:
     def tick(**over):
         return subprocess.run([w1, "tick"], capture_output=True, text=True,
                               env=dict(env, **over), timeout=180)
+
+    def tick2(**over):
+        return subprocess.run([w2, "tick"], capture_output=True, text=True,
+                              env=dict(env, **over), timeout=180)
+
+    def epoch_of(path):
+        with open(path, encoding="utf-8") as f:
+            return f.read().split("\n")[0].strip()
 
     def log():
         try:
@@ -213,7 +260,53 @@ try:
     assert "SKIP 엔진 쿨다운" in added, "모델이 다른 큐가 창을 안 지킨다:\n" + added
     assert cooldown() == str(resets), "창이 짧아졌다(재무장까지 갔다)"
 
-    print("OK - 엔진 쿨다운 (복귀 시각 · 게이트 · 재무장 · 토큰 교체 해제 · 모델 교체는 안 푼다)")
+    # --- ⑧ 세션이 .done으로 닫은 뒤 죽으면: FAIL이 아니라 DONE(...세션은 rc=... 죽었다) (§4-10) ---
+    # ⑦이 남긴 창(2시간짜리 resets)부터 지운다 - 지문은 그대로 두고 만료만 시킨다.
+    mode("donedeath")
+    expire()
+    before = len(log())
+    r = tick()  # 남은 열린 티켓은 dddd0004 하나 - donedeath 엔진이 그 .wip.md를 스스로 닫는다
+    added = log()[before:]
+    assert "FAIL dddd0004" not in added, "닫힌 티켓인데 FAIL로 기록됐다:\n" + added
+    assert "DONE dddd0004 sid=" in added and "(세션은 rc=" in added and "로 죽었다)" in added, \
+        "DONE ...세션은 rc=...로 죽었다 표기가 없다:\n" + added
+    assert "Traceback" not in (r.stderr or ""), "clear의 traceback이 stderr에 남았다:\n" + r.stderr
+    assert r.returncode == 0, "rc가 정상이 아니다: {}".format(r.returncode)
+    assert "dddd0004.done.md" in ls(), "티켓이 .done으로 안 남았다: " + str(ls())
+
+    # --- ⑨ grok 모양: result.is_error + errors에 한도 낱말, terminal_reason 키 없음 -> 쿨다운 ---
+    mkfile(os.path.join(tickets, "zzzz0005.md"),
+           "---\nticket: zzzz0005\ntitle: t\nkind: work\n---\n\n## Goal\ntest\n")
+    mode("grok")
+    expire()  # ⑧의 claim이 나가면서 창을 now+300으로 재무장했다(§자리 - 파일이 있으면 무조건) - 지운다
+    before = len(log())
+    t0 = int(time.time())
+    tick()
+    t1 = int(time.time())
+    added = log()[before:]
+    assert "FAIL zzzz0005" in added, "grok 모양이 FAIL로 안 떨어졌다:\n" + added
+    assert t0 + W <= int(cooldown()) <= t1 + W, \
+        "grok 모양(errors에 한도 낱말)인데 쿨다운이 안 걸렸다: {}\n".format(cooldown()) + log()
+    # scan()은 생성시각(birth) 오름차순이라 이름이 아니라 만든 순서가 우선이다 - FAIL로 되돌아온
+    # 이 티켓을 치우지 않으면 ⑩에서 codex 엔진보다 먼저 다시 집힌다.
+    os.remove(os.path.join(tickets, "zzzz0005.md"))
+
+    # --- ⑩ codex 모양: 최상위 error 줄 + usage limit 문자열, rc!=0(비스트리밍) -> 쿨다운 ---
+    mkfile(os.path.join(tickets, "ffff0006.md"),
+           "---\nticket: ffff0006\ntitle: t\nkind: work\n---\n\n## Goal\ntest\n")
+    before = len(log())
+    t0 = int(time.time())
+    tick2()
+    t1 = int(time.time())
+    added = log()[before:]
+    assert "FAIL ffff0006" in added, "codex 모양이 FAIL로 안 떨어졌다:\n" + added
+    assert os.path.exists(cool2), "codex 모양(최상위 error+usage limit)인데 쿨다운이 안 걸렸다\n" + log()
+    assert t0 + W <= int(epoch_of(cool2)) <= t1 + W, \
+        "codex 쿨다운 창이 now+{}가 아니다: {}".format(W, epoch_of(cool2))
+
+    print("OK - 엔진 쿨다운 (복귀 시각 · 게이트 · 재무장 · 토큰 교체 해제 · 모델 교체는 안 푼다 · "
+          ".done 뒤 죽은 세션 · codex/grok 한도 판정)")
 finally:
     subprocess.run(["pkill", "-f", os.path.join(tmp, "fake-engine.sh")], capture_output=True)
+    subprocess.run(["pkill", "-f", os.path.join(tmp, "codex-engine.sh")], capture_output=True)
     shutil.rmtree(tmp, ignore_errors=True)
