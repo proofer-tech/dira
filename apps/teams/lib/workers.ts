@@ -586,13 +586,15 @@ export async function applyCommonSource(root: string, name: string): Promise<boo
 // ── 엔진 · 모델 선택 (DESIGN.md §4-3) ───────────────────────────────────────
 //
 // 고르는 단위는 **엔진 × 모델 한 쌍**이고, 커맨드는 **엔진마다 고정 문자열 한 벌**이다.
-// 부품에서 합성하지 않는다 — 세 템플릿이 서로 바꿔 쓸 수 없는 자리가 다섯이라서다(§4-3 표):
+// 부품에서 합성하지 않는다 — 네 템플릿이 서로 바꿔 쓸 수 없는 자리가 일곱이라서다(§4-3 표):
 // `--input-format stream-json` 인접(tick.sh:263-270 FIFO 판정) · claude에 `{prompt}` 없음 ·
-// codex·grok에 `{prompt}` 있음 · claude·grok의 `--session-id "{sid}"`(tick.sh:94 reap ·
+// codex·grok·agy에 `{prompt}` 있음 · claude·grok의 `--session-id "{sid}"`(tick.sh:94 reap ·
 // §2-1 스트림 파일명) · grok에 `--input-format`이 **없음**(그 플래그가 CLI에 아예 없다 —
-// 없는 것이 곧 FIFO를 안 파는 근거라서, 넣으면 grok 워커가 뜨지도 못한다).
+// 없는 것이 곧 FIFO를 안 파는 근거라서, 넣으면 grok 워커가 뜨지도 못한다) · agy의
+// `-p "{prompt}"`가 **맨 뒤**(앞으로 옮기면 `-p`가 다음 토큰을 프롬프트로 먹는다) · agy의
+// `--print-timeout 5400s`(기본 5분이라 없으면 긴 티켓이 통째로 잘린다).
 
-export type EngineId = "claude" | "codex" | "grok";
+export type EngineId = "claude" | "codex" | "grok" | "agy";
 
 /** `모델 지정 안 함` = 모델 플래그를 아예 안 붙인다(엔진 CLI 자기 기본값). 목록 맨 앞이고
  *  새 워커의 기본값이다 — 가장 안 낡는 선택지다(§4-3). */
@@ -607,7 +609,7 @@ export const ENGINE_ARR = "TICKET_ENGINE";
  *  올리는 것이 §4-3이 말하는 "화면이 거짓말한다"이다. 갱신 명령은 `f6dd8478` §결과에 있다. */
 export const ENGINES: readonly {
   id: EngineId;
-  /** 모델 플래그. `claude --model` · `codex -m` · `grok -m` (셋 다 실재한다 — §4-3) */
+  /** 모델 플래그. `claude --model` · `codex -m` · `grok -m` · `agy --model` (넷 다 실재한다 — §4-3) */
   flag: string;
   /** 목록. 맨 앞은 항상 `NO_MODEL`이고, 여기 없는 이름은 화면의 `직접 입력`이 받는다 */
   models: readonly string[];
@@ -673,6 +675,40 @@ export const ENGINES: readonly {
       MODEL_SLOT,
       "--output-format",
       "streaming-messages-json",
+    ],
+  },
+  {
+    id: "agy",
+    flag: "--model",
+    // `agy models` 11종(실측 2026-08-05, GUI 도메인 — §4-3 §agy ⑤). **별칭이 아니라 풀네임이라
+    // 반드시 낡는다** — claude의 근거 2가 agy에는 안 선다. 갱신은 사람이 `agy models`로 한다.
+    // `--effort`가 따로 있는데 단위를 안 넓힌다 — 강도가 이미 이름 접미사(-high/-medium/-low)다.
+    models: [
+      NO_MODEL,
+      "gemini-3.6-flash-high",
+      "gemini-3.6-flash-medium",
+      "gemini-3.6-flash-low",
+      "gemini-3.5-flash-high",
+      "gemini-3.5-flash-medium",
+      "gemini-3.5-flash-low",
+      "gemini-3.1-pro-high",
+      "gemini-3.1-pro-low",
+      "claude-sonnet-4-6",
+      "claude-opus-4-6-thinking",
+      "gpt-oss-120b-medium",
+    ],
+    // `-p "{prompt}"`가 맨 뒤인 이유와 `--print-timeout 5400s`가 있는 이유는 위 헤더 주석과
+    // §4-3 표(agy 행 둘)에 있다. `<T>`가 아니라 고정값인 것은 §4-3 §agy ⑥ 천장 1과 같은 자리다.
+    argv: [
+      "agy",
+      "--output-format",
+      "stream-json",
+      "--dangerously-skip-permissions",
+      "--print-timeout",
+      "5400s",
+      MODEL_SLOT,
+      "-p",
+      '"{prompt}"',
     ],
   },
 ];

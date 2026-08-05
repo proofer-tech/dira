@@ -1677,7 +1677,7 @@ TICKET_CONTEXT=(
 . "$HOME/Projects/dira/tick.sh"
 `;
 
-test("엔진 템플릿 — 바꿔 쓸 수 없는 자리 다섯을 못박는다 (§4-3 표)", () => {
+test("엔진 템플릿 — 바꿔 쓸 수 없는 자리 일곱을 못박는다 (§4-3 표)", () => {
   const claude = engineArgv("claude");
   // ① `--input-format stream-json` 인접. tick.sh:263-270이 이 인접성 하나로 FIFO를 판다 —
   //    떨어지면 §2-2 참견이 조용히 죽는다. 판정식을 엔진과 같은 모양으로 다시 쓴다.
@@ -1726,6 +1726,14 @@ test("엔진 템플릿 — 바꿔 쓸 수 없는 자리 다섯을 못박는다 (
   ]);
   // ④의 나머지 절반 — grok에도 `--session-id "{sid}"`가 있다(tick.sh:94 reap · §2-1 스트림)
   assert.ok(grok.join(" ").includes('--session-id "{sid}"'));
+
+  // ⑥ agy에도 {prompt}가 있고 **맨 끝이 `-p "{prompt}"`다** — 앞으로 옮기면 `-p`가 다음
+  //    토큰을 프롬프트로 먹는다(§4-3 §agy). ⑦ `--print-timeout`은 `<T>`가 아니라 고정값
+  //    `5400s`다 — 기본 5분이면 긴 티켓이 통째로 잘린다.
+  const agy = engineArgv("agy");
+  assert.deepStrictEqual(agy.slice(-2), ["-p", '"{prompt}"']);
+  assert.ok(agy.join(" ").includes("--print-timeout 5400s"), agy.join(" "));
+  assert.ok(!agy.includes("--input-format"));
 
   // 모델 목록 맨 앞은 `모델 지정 안 함` = 플래그를 안 붙인다
   for (const e of ENGINES) {

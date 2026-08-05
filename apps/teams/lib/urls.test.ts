@@ -187,6 +187,9 @@ test("engineCan — 기능마다 집합이 다르다. grok에서 둘이 갈린�
   assert.equal(engineCan("stream", "claude"), true);
   assert.equal(engineCan("stream", "codex"), false);
   assert.equal(engineCan("stream", "grok"), true);
+  // agy는 `FEATURE_ENGINES` 어느 집합에도 없다(4dfe01fb) — 두 기능 다 `false`
+  assert.equal(engineCan("interject", "agy"), false);
+  assert.equal(engineCan("stream", "agy"), false);
 });
 
 test("engineCan — 엔진을 모르면 `null`이고 집합 밖 이름은 `false`다", () => {
@@ -205,6 +208,9 @@ test("engineMissing — 없는 기능의 이름만, 표 순서대로(§비주얼
   assert.deepEqual(engineMissing("claude"), []);
   assert.deepEqual(engineMissing("codex"), ["참견", "세션 스트림"]);
   assert.deepEqual(engineMissing("grok"), ["참견"]);
+  // agy는 FEATURE_ENGINES에 없어서 둘 다 빠진다(4dfe01fb) — 카탈로그에 새 엔진을 더할 때
+  // 이 표에 줄을 안 더하면 이 자리가 그것을 잡는다.
+  assert.deepEqual(engineMissing("agy"), ["참견", "세션 스트림"]);
   // 종전 문장이 한 글자도 안 갈린다는 근거(회귀) — codex 워커의 예고 줄 그대로다.
   assert.equal(
     `codex 워커는 ${engineMissing("codex").join("과 ")}이 없습니다 — 티켓 수행은 같습니다.`,
