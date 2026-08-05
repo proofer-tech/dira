@@ -54,12 +54,12 @@ TICKET_ENGINE=(${TICKET_ENGINE[@]+"${TICKET_ENGINE[@]}"})
   --input-format stream-json --output-format stream-json --verbose)
 # 상태 접미사는 tickets.py가 환경변수로 읽는다(미설정이면 .wip/.done).
 export TICKET_INPROGRESS="${TICKET_INPROGRESS:-}" TICKET_DONE="${TICKET_DONE:-}"
+# 이 시점의 값이 "기본 엔진"이다(워커 대입 -> 없으면 위 기본값). `personas/<이름>/engine`이
+# 있으면 티켓 선정 루프 안에서 후보의 persona가 확정된 뒤 이 배열을 덮어쓴다(§제약 1 §결정
+# 기록 §열한 번째) - 그래서 ENGINE_NAME 계산·쿨다운·claude 인증 게이트도 전부 그 뒤로
+# 옮겨졌다. 여기서 하던 계산은 이제 없다(아래 선정 루프 참조).
+BASE_ENGINE=("${TICKET_ENGINE[@]}")
 
-ENGINE_NAME="$(basename "${TICKET_ENGINE[0]}")"
-# 엔진 불능(리밋·네트워크) 쿨다운. 머신 로컬이라 워커 전원·프로젝트 전체가 공유한다 - 토큰이
-# 계정당 하나라 한 워커가 겪은 불능은 나머지에도 참이다. 엔진마다 갈린다(다른 계정·다른 창).
-# 파일은 두 줄이다: 1줄 만료 epoch, 2줄 그때의 엔진 지문. 지문이 갈리면 창이 남아 있어도 즉시 푼다.
-CDOWN="$LOCAL/run/cooldown-$ENGINE_NAME"
 CDOWN_W=300   # 리밋이 복귀 시각을 안 줄 때(네트워크 실패 등)의 창 + 만료 직후 재무장 창
 
 # 엔진 지문 = **인증 토큰만**. 사람이 계정을 바꾸면 값이 갈리고 그 순간 쿨다운이 풀린다 -
@@ -79,23 +79,7 @@ print(hashlib.sha1(tok).hexdigest()[:12])' \
 }
 arm_cdown() { printf '%s\n%s\n' "$1" "$(engine_fp)" > "$CDOWN"; }
 
-# Claude를 명시적으로 쓸 때만 헤드리스 OAuth 토큰을 읽는다. Codex의 인증은 자체 설정을 쓴다.
-if [ "$ENGINE_NAME" = "claude" ]; then
-  # claude setup-token 으로 발급 후: printf %s '<토큰>' > ~/.config/dira/oauth-token
-  [ -r "$LOCAL/oauth-token" ] && export CLAUDE_CODE_OAUTH_TOKEN="$(tr -d '\r\n' < "$LOCAL/oauth-token")"
-fi
-
 CMD="${1:-tick}"
-
-# 비대화형 Claude만 장기 토큰이 없으면 디스패치하지 않는다. Codex 등 다른 엔진은 자체 인증을 쓴다.
-if [ "$CMD" = "tick" ] && [ "$ENGINE_NAME" = "claude" ] \
-  && [ ! -r "$LOCAL/oauth-token" ] && [ ! -t 1 ]; then
-  if [ ! -f "$LOCAL/.authwarn" ]; then
-    log "AUTH 대기: claude setup-token 발급 후 $LOCAL/oauth-token 에 저장 필요"
-    touch "$LOCAL/.authwarn"
-  fi
-  exit 0
-fi
 
 case "$CMD" in
   list)
@@ -199,7 +183,7 @@ esac
 # 참견 입구(FIFO)와 최초 프롬프트 파일. 스트리밍 입력 엔진일 때만 실제 경로가 들어간다.
 INBOX=""; PRIMEF=""
 # 선정·claim 임계구역 잠금(§5-4). 트랩보다 먼저 선언한다 - 잠금을 잡기 전에 종료하는 경로가
-# 여럿이고(쿨다운 게이트) set -u에서 미정의 변수를 트랩이 읽으면 그 자리에서 죽는다.
+# 여럿이고(선정 잠금 획득 실패 등) set -u에서 미정의 변수를 트랩이 읽으면 그 자리에서 죽는다.
 SLOCK=""
 
 # --- 워커 락: 한 워커는 한 번에 티켓 1건 ---
@@ -234,22 +218,10 @@ if [ "$CMD" = "tick" ]; then
   done
 fi
 
-# --- 엔진 쿨다운 게이트: 불능이면 창이 닫힐 때까지 멈춘다 ---
-# 선정·claim보다 앞이라 이 창 동안 티켓은 한 글자도 안 갈린다(진행중↔대기 왕복이 안 생긴다).
-# reap은 이 앞에 그대로 둔다 - 스테일 수거는 엔진 가용성과 무관하다.
-if [ "$CMD" = "tick" ] && [ -f "$CDOWN" ]; then
-  UNTIL=""; WAS_FP=""
-  { read -r UNTIL; read -r WAS_FP; } < "$CDOWN"
-  case "$UNTIL" in ''|*[!0-9]*) UNTIL=0 ;; esac
-  NOW=$(date +%s)
-  if [ "$WAS_FP" != "$(engine_fp)" ]; then
-    rm -f "$CDOWN"
-    log "NOTE 엔진 쿨다운 해제 - 토큰·모델이 바뀌었다(남은 창 $((UNTIL - NOW))초를 안 기다린다)"
-  elif [ "$NOW" -lt "$UNTIL" ]; then
-    log "SKIP 엔진 쿨다운 · $((UNTIL - NOW))초 남음"
-    exit 0
-  fi
-fi
+# 엔진 쿨다운 게이트·claude 인증 게이트는 여기 없다 - 페르소나가 엔진을 정하므로 어느
+# 엔진인지가 어느 후보를 고르느냐에 달렸다(§제약 1 §결정 기록 §열한 번째). 둘 다 아래 선정
+# 루프 안, 후보의 persona가 확정된 뒤로 옮겼다 - reap만 이 앞에 그대로 둔다(스테일 수거는
+# 엔진 가용성과 무관하다).
 
 # --- 선정·claim 임계구역: 페르소나 상한은 여기 없으면 상한이 아니다 ---
 # 상한(§5-4)은 `personas/<이름>/limit` 한 줄이고 **세는 것과 잡는 것이 한 임계구역**이어야 한다.
@@ -258,7 +230,7 @@ fi
 # 다섯 장 열려 있으면 다섯 워커가 모두 `0 < 1`을 읽고 각자 다른 티켓을 잡는다. 로그에는 아무
 # 이상이 안 남아서 아무도 못 잡는다.
 # 그릇은 위 워커 락과 같은 관용구다(mkdir + pid + kill -0 스테일 회수). 다른 점 하나 - 워커 락은
-# 워커 이름별이고 이것은 **머신에 하나**다. reap과 쿨다운 게이트는 이 앞에 그대로 둔다.
+# 워커 이름별이고 이것은 **머신에 하나**다. reap은 이 앞에 그대로 둔다.
 # **못 얻으면 기다리지 않고 종료한다**: 다음 cron이 60초 뒤에 오고, 죽은 워커가 물고 있어도
 # 큐가 서지 않는다(스테일 회수가 그 위에 있다). 대가는 §5-4가 적은 `마지막 워커가 1초 늦게
 # 뜬다`가 아니다 - 줄을 서지 않고 나가므로 **같은 순간에 깬 워커 중 한 명만 뜬다**
@@ -329,6 +301,7 @@ CANDS=$(python3 "$PY" select "$TICKET_ROOT") || { log "ERROR select 실패"; exi
 SID=$(python3 -c 'import uuid;print(uuid.uuid4())')
 TPATH=""; THASH=""; TKIND=""; TPERSONA=""
 OVER=""    # 이 판에서 이미 상한이던 페르소나들. 후보가 여럿이어도 SKIP은 페르소나당 한 줄이다
+ENGOVER="" # 이 판에서 이미 디스패치 불가이던 엔진들. 후보가 여럿이어도 SKIP은 엔진당 한 줄이다
 while IFS='|' read -r c_path c_hash c_kind c_persona; do
   [ -z "$c_path" ] && continue
   # 상한에 걸려 안 뜨는 것은 SKIP이다(새 로그 낱말 0). 다른 페르소나 후보는 계속 본다 -
@@ -345,6 +318,55 @@ while IFS='|' read -r c_path c_hash c_kind c_persona; do
       fi
     fi
   fi
+
+  # --- 엔진 재구성: 확정된 후보의 persona:가 personas/<이름>/engine을 가지면 그 값으로,
+  # 없으면 종전 그대로(워커 대입 -> 기본값)다(§제약 1 §결정 기록 §열한 번째). 매 후보마다
+  # 기본값으로 되돌린 뒤 다시 얹는다 - 안 그러면 앞 후보의 override가 다음 후보로 샌다.
+  TICKET_ENGINE=("${BASE_ENGINE[@]}")
+  if [ -n "$c_persona" ]; then
+    PENGINE="${TICKET_PERSONAS:-$TICKET_ROOT/personas}/$c_persona/engine"
+    [ -r "$PENGINE" ] && . "$PENGINE"
+  fi
+  ENGINE_NAME="$(basename "${TICKET_ENGINE[0]}")"
+  CDOWN="$LOCAL/run/cooldown-$ENGINE_NAME"
+
+  # 어느 엔진인지가 후보에 달렸으므로 ENGINE_NAME·claude 인증·쿨다운도 후보 확정 뒤에 판정한다
+  # (dryrun은 미리보기라 건너뛴다 - 종전에도 이 게이트는 CMD=tick 전용이었다). 디스패치 불가면
+  # 페르소나 상한과 같은 자리에서 skip-and-continue다(같은 로그 낱말 SKIP) - 이 엔진을 못
+  # 쓴다고 다른 엔진 쓰는 후보까지 굶기지 않는다. 건너뛸 후보가 없으면 이번 tick은 그냥
+  # 아무것도 안 고르고 끝난다(TPATH가 빈 채로 루프가 끝난다).
+  if [ "$CMD" = "tick" ]; then
+    case " $ENGOVER " in *" $ENGINE_NAME "*) continue ;; esac
+    if [ "$ENGINE_NAME" = "claude" ]; then
+      # claude setup-token 으로 발급 후: printf %s '<토큰>' > ~/.config/dira/oauth-token
+      [ -r "$LOCAL/oauth-token" ] && export CLAUDE_CODE_OAUTH_TOKEN="$(tr -d '\r\n' < "$LOCAL/oauth-token")"
+      # 비대화형 claude만 장기 토큰이 없으면 이 엔진으로 못 뜬다. `.authwarn`으로 "최초 1회만
+      # 남긴다"는 종전 계약 그대로 두고, 스크립트 종료 대신 이 후보만 건너뛴다.
+      if [ ! -r "$LOCAL/oauth-token" ] && [ ! -t 1 ]; then
+        if [ ! -f "$LOCAL/.authwarn" ]; then
+          log "SKIP AUTH 대기 $ENGINE_NAME (claude setup-token 발급 후 $LOCAL/oauth-token 에 저장 필요)"
+          touch "$LOCAL/.authwarn"
+        fi
+        ENGOVER="$ENGOVER $ENGINE_NAME"
+        continue
+      fi
+    fi
+    if [ -f "$CDOWN" ]; then
+      UNTIL=""; WAS_FP=""
+      { read -r UNTIL; read -r WAS_FP; } < "$CDOWN"
+      case "$UNTIL" in ''|*[!0-9]*) UNTIL=0 ;; esac
+      NOW=$(date +%s)
+      if [ "$WAS_FP" != "$(engine_fp)" ]; then
+        rm -f "$CDOWN"
+        log "NOTE 엔진 쿨다운 해제 - 토큰·모델이 바뀌었다(남은 창 $((UNTIL - NOW))초를 안 기다린다)"
+      elif [ "$NOW" -lt "$UNTIL" ]; then
+        ENGOVER="$ENGOVER $ENGINE_NAME"
+        log "SKIP 엔진 쿨다운 · $((UNTIL - NOW))초 남음"
+        continue
+      fi
+    fi
+  fi
+
   if [ "$CMD" = "dryrun" ]; then
     TPATH="$c_path"; THASH="$c_hash"; TKIND="$c_kind"; TPERSONA="$c_persona"; break
   fi
