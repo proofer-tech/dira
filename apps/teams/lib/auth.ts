@@ -190,6 +190,84 @@ export async function addToken(raw: string, label?: string): Promise<TokenEntry>
   return entry;
 }
 
+// ── 화면 — 목록 하나, 값은 가린다 (DESIGN.md §0-13 §화면 · P169-2) ────────────
+
+/** 값 전체를 그리지 않는다 — `복사` 버튼도 만들지 않는다(§0-13 §화면). 짧으면 전부 가린다. */
+function maskToken(token: string): string {
+  return token.length <= 14 ? "•".repeat(token.length) : `${token.slice(0, 10)}…${token.slice(-4)}`;
+}
+
+/** §0-13 §화면의 네 상태. `대기`·`비활성`·`소진`은 `isEligible`의 두 축이고 `활성`은 지금
+ *  `oauth-token`에 있는 것(`active`가 가리키는 항목) 하나뿐이다 — 축을 새로 안 만든다. */
+export type TokenStatus =
+  | { kind: "active" }
+  | { kind: "pending" }
+  | { kind: "disabled" }
+  | { kind: "exhausted"; resumesAt: string };
+
+export type TokenRow = {
+  id: string;
+  label: string;
+  masked: string;
+  addedAt: string;
+  status: TokenStatus;
+};
+
+/** 화면이 그리는 목록 그대로 — 원문 토큰은 여기서 나가지 않는다(가린 문자열만). */
+export async function readTokenRows(): Promise<TokenRow[]> {
+  const file = await readTokens();
+  const engine = file.claude;
+  if (!engine) return [];
+  const now = Math.floor(Date.now() / 1000);
+  return engine.tokens.map((t, i) => ({
+    id: t.id,
+    label: t.label ?? `계정 ${i + 1}`,
+    masked: maskToken(t.token),
+    addedAt: when(new Date(t.addedAt)),
+    // `active`가 가리키는 항목이어도 **eligible이 아니면 활성이 아니다** — eligible이 하나도
+    // 없을 때 `active`는 되돌릴 값이 없어 그 자리에 머물지만(reconcileActive), 그때 `oauth-token`은
+    // `writeTokens`가 이미 지웠다(§0-13 §상태). 가리키는 값과 실제로 쓰이는 값이 갈리는 그 한
+    // 경우를 여기서 놓치면 방금 끈 토큰이 화면에 계속 `활성`으로 남는다.
+    status:
+      t.id === engine.active && isEligible(t, now)
+        ? { kind: "active" }
+        : !t.enabled
+          ? { kind: "disabled" }
+          : t.exhaustedUntil != null && t.exhaustedUntil > now
+            ? { kind: "exhausted", resumesAt: when(new Date(t.exhaustedUntil * 1000)) }
+            : { kind: "pending" },
+  }));
+}
+
+/** `active`가 여전히 eligible이면 그대로 두고, 아니면 다음 eligible로 넘긴다(§0-13 §상태 —
+ *  "활성 토큰을 비활성화·삭제하면 그 자리에서 다음 eligible로 넘어간다"). 하나도 없으면
+ *  손대지 않는다 — eligible 0이면 `writeTokens`가 그 경우 `oauth-token`을 지운다. */
+function reconcileActive(active: string, tokens: TokenEntry[]): string {
+  const current = tokens.find((t) => t.id === active);
+  if (current && isEligible(current)) return active;
+  return tokens.find((t) => isEligible(t))?.id ?? active;
+}
+
+/** 행의 `활성화`/`비활성화` 버튼 — `enabled`만 바꾼다(§0-13 §상태: 이 축은 사람만 쓴다).
+ *  `oauth-token` 쓰기는 `writeTokens` 안에서만 일어난다 — 이 함수도, 부르는 화면도 직접 쓰지 않는다. */
+export async function setTokenEnabled(id: string, enabled: boolean): Promise<void> {
+  const file = await readTokens();
+  const engine = file.claude;
+  if (!engine) return;
+  const tokens = engine.tokens.map((t) => (t.id === id ? { ...t, enabled } : t));
+  await writeTokens({ claude: { active: reconcileActive(engine.active, tokens), tokens } });
+}
+
+/** 행의 `삭제` 버튼 — 마지막 하나를 지워도 막지 않는다(§0-13 §상태). */
+export async function deleteToken(id: string): Promise<void> {
+  const file = await readTokens();
+  const engine = file.claude;
+  if (!engine) return;
+  const tokens = engine.tokens.filter((t) => t.id !== id);
+  const active = tokens.length ? reconcileActive(engine.active, tokens) : "";
+  await writeTokens({ claude: { active, tokens } });
+}
+
 // ── ② 발급 — `claude setup-token`을 GUI가 pty로 몬다 (§0-4) ─────────────────
 
 /** pty 한 덩어리를 **사람이 읽을 줄**로 바꾼다. 출력이 Ink TUI라 낱말 사이가 공백이 아니라
@@ -355,7 +433,8 @@ export function startSetup(): SetupState {
     }
     s.settled = true; // 저장은 비동기다 — 다음 청크가 두 번 저장하지 않게 여기서 잠근다
     kill(s);
-    saveToken(normalizeToken(m[0]))
+    // 덮어쓰기가 아니라 목록 append + 활성화다(§0-13 §화면) — `addToken`이 이미 그렇게 한다
+    addToken(m[0])
       .then(readAuth)
       .then((a) => {
         s.savedAt = a.savedAt ?? undefined;

@@ -16,23 +16,36 @@
  *  **서버 컴포넌트**라서다: 넘길 수 있는 것은 값이고, 모양은 두 가지뿐이다. */
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { RotateCcw, Settings, TriangleAlert } from "lucide-react";
 import {
+  CirclePlay,
+  Circle as CircleIcon,
+  Clock,
+  Power,
+  RotateCcw,
+  Settings,
+  Trash2,
+  TriangleAlert,
+} from "lucide-react";
+import {
+  deleteTokenAction,
   readAnalyticsAction,
+  readTokenRowsAction,
   resetKeymapAction,
   saveTokenAction,
   sendSetupCodeAction,
   setAnalyticsAction,
   setBindingAction,
+  setTokenEnabledAction,
   startSetupAction,
   pollSetupAction,
   stopSetupAction,
 } from "@/app/actions";
-import type { SetupState } from "@/lib/auth";
+import type { SetupState, TokenRow, TokenStatus } from "@/lib/auth";
 import { useHotkey, useKeymap } from "@/components/keymap-provider";
 import { DEFAULT_KEYMAP, MODIFIER_KEYS, formatCombo } from "@/lib/keymap";
 import { cn } from "@/lib/utils";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -277,6 +290,117 @@ function AnalyticsSection() {
   );
 }
 
+/** 행 하나의 상태 배지 — §0-13 §화면의 네 상태. 색·아이콘 레시피는 `status-badge.tsx`와 같은
+ *  토큰(`text-status-active`·`text-status-stale`)을 그대로 쓴다(`projects-ui.tsx`도 같은 문자열을
+ *  그대로 반복한다 — Tailwind가 클래스명을 정적으로 봐야 해서 이 프로젝트는 상수로 묶지 않는다). */
+function TokenStatusBadge({ status }: { status: TokenStatus }) {
+  switch (status.kind) {
+    case "active":
+      return (
+        <Badge
+          variant="outline"
+          className="text-status-active bg-status-active/10 border-status-active/30"
+        >
+          <CirclePlay aria-hidden />
+          활성
+        </Badge>
+      );
+    case "pending":
+      return (
+        <Badge variant="secondary">
+          <CircleIcon aria-hidden />
+          대기
+        </Badge>
+      );
+    case "disabled":
+      return (
+        <Badge variant="outline">
+          <Power aria-hidden />
+          비활성
+        </Badge>
+      );
+    case "exhausted":
+      return (
+        <Badge
+          variant="outline"
+          className="text-status-stale bg-status-stale/10 border-status-stale/30"
+        >
+          <Clock aria-hidden />
+          소진 · {status.resumesAt}
+        </Badge>
+      );
+  }
+}
+
+/** §0-13 §화면 — 인증 섹션의 목록 층. 값은 다이얼로그가 열릴 때 읽는다(`AnalyticsSection`과
+ *  같은 이유 — `readTokenRowsAction`의 주석에 있다: 다이얼로그를 그리는 자리가 셋이라 값 하나
+ *  때문에 레이아웃 둘·컴포넌트 둘의 프롭이 같이 늘어난다).
+ *
+ *  `추가`는 새 버튼을 만들지 않는다 — 바로 아래 층 ②·③(발급·직접 넣기)이 이미 그 자리다. 결과가
+ *  덮어쓰기에서 append로 바뀌었을 뿐이다(§0-13 §화면). 활성화는 `setTokenEnabledAction` →
+ *  `lib/auth.ts`의 `writeTokens` 안에서만 `oauth-token`을 다시 쓴다 — 이 컴포넌트는 직접 안 쓴다. */
+function TokensSection({ refreshKey }: { refreshKey: string | null }) {
+  const [rows, setRows] = useState<TokenRow[] | null>(null);
+  const [pending, start] = useTransition();
+
+  // `refreshKey`는 부르는 쪽의 `savedAt`이다 — 층 ②·③이 토큰을 저장하면 그 값이 바뀌어 목록을
+  // 다시 읽는다("인증하기/토큰추가 시 토큰 목록에 추가됩니다", §0-13 §화면). 새 폴링 루프를
+  // 따로 만들지 않는다 — 이미 있는 신호를 의존성으로 빌린다.
+  useEffect(() => {
+    void readTokenRowsAction().then(setRows);
+  }, [refreshKey]);
+
+  const setEnabled = (row: TokenRow, enabled: boolean) =>
+    start(async () => setRows(await setTokenEnabledAction(row.id, enabled)));
+  const remove = (row: TokenRow) => start(async () => setRows(await deleteTokenAction(row.id)));
+
+  if (rows === null) return null; // 아직 안 읽었다 — 빈 목록과 헷갈리지 않는다
+  if (rows.length === 0) {
+    return <p className="text-sm text-muted-foreground">등록된 토큰이 없습니다.</p>;
+  }
+
+  return (
+    <ul className="space-y-1.5">
+      {rows.map((row) => (
+        <li
+          key={row.id}
+          className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-md border p-2"
+        >
+          <div className="min-w-0 space-y-0.5">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium">{row.label}</span>
+              <TokenStatusBadge status={row.status} />
+            </div>
+            {/* 가린 값 — 값 전체를 그리지 않는다. `복사` 버튼도 없다(§0-13 §화면) */}
+            <p className="font-mono text-xs break-all text-muted-foreground">
+              {row.masked} <span className="font-sans">· {row.addedAt} 추가</span>
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={pending}
+              onClick={() => setEnabled(row, row.status.kind === "disabled")}
+            >
+              {row.status.kind === "disabled" ? "활성화" : "비활성화"}
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={`${row.label} 삭제`}
+              disabled={pending}
+              onClick={() => remove(row)}
+            >
+              <Trash2 aria-hidden />
+            </Button>
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 /** 화면에 키를 적는 그릇 하나 — 값은 §비주얼 §21이 박았다(**배경 없음**: `bg-muted`를 깔면
  *  라이트 4.34로 AA 미달). 안에 들어가는 글자는 `formatCombo`가 만든다. */
 function Kbd({ className, children }: { className?: string; children: React.ReactNode }) {
@@ -383,7 +507,8 @@ export function SettingsDialog({
               워커뿐이다(`tick.sh:52`). 다른 엔진(Codex 등)은 자체 인증을 쓴다(§0-4) */}
           <h3 className="text-sm font-medium">Claude 인증</h3>
           <p className="text-xs text-muted-foreground">
-            워커가 Claude에 붙을 때 쓰는 장기 토큰입니다. 이 컴퓨터에 하나뿐입니다.
+            워커가 Claude에 붙을 때 쓰는 장기 토큰 목록입니다. 이 컴퓨터에 하나뿐이고, 계정
+            여러 개를 두면 리밋을 만난 쪽 대신 다음 계정으로 돌아갑니다.
           </p>
 
           {/* ⓪ 준비물 — 한 줄. 없으면 설치를 대신하지도 바깥으로 링크하지도 않는다(§0-4 ⓪) */}
@@ -399,19 +524,8 @@ export function SettingsDialog({
             </p>
           )}
 
-          {/* ① 상태 — 한 줄. 배지를 세우지 않는다(§0-4) */}
-          {savedAt ? (
-            <p className="text-sm">
-              인증됨 —{" "}
-              <span className="font-mono text-xs break-all text-muted-foreground">{auth.path}</span>{" "}
-              <span className="text-muted-foreground">· {savedAt} 저장</span>
-            </p>
-          ) : (
-            <p className="flex items-center gap-2 text-sm">
-              <TriangleAlert aria-hidden className="size-4 shrink-0 text-status-stale" />
-              인증 안 됨 — claude 엔진 워커가 티켓을 물어가지 않습니다
-            </p>
-          )}
+          {/* ① 목록 — 토큰 하나가 아니라 여러 계정을 확인·활성화/비활성화·삭제한다(§0-13 §화면) */}
+          <TokensSection refreshKey={savedAt} />
         </section>
 
         {/* ② 발급 — CLI에게 터미널을 대신 내어 준다 */}
@@ -519,7 +633,7 @@ export function SettingsDialog({
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            이미 발급받은 토큰이 있으면 여기에 붙여 넣습니다. 다시 저장하면 덮어씁니다.
+            이미 발급받은 토큰이 있으면 여기에 붙여 넣습니다. 목록에 추가되고 바로 활성화됩니다.
           </p>
           {result.error && <p className="text-xs text-destructive">{result.error}</p>}
           {/* 삼키지 않는 것이 요건이지 미리 아는 것이 요건이 아니다 — 형식으로 거르지 않으므로

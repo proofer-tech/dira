@@ -10,14 +10,17 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { revalidatePath } from "next/cache";
 import {
-  normalizeToken,
+  addToken,
+  deleteToken,
   pollSetup,
   readAuth,
-  saveToken,
+  readTokenRows,
   sendSetupCode,
+  setTokenEnabled,
   startSetup,
   stopSetup,
   type SetupState,
+  type TokenRow,
 } from "@/lib/auth";
 import {
   readAnalytics,
@@ -305,13 +308,15 @@ export async function unregisterProjectAction(id: string): Promise<ActionResult>
   }
 }
 
-/** 인증 다이얼로그 층 ③ — 붙여 넣은 토큰을 제자리에 놓는다(DESIGN.md §0-4).
+/** 인증 다이얼로그 층 ③ — 붙여 넣은 토큰을 제자리에 놓는다(DESIGN.md §0-4 · §0-13).
  *
  *  **유효성은 판정하지 않는다** — 접두사로 거르면 형식이 바뀔 때 멀쩡한 토큰을 GUI가 거부한다.
- *  실제 유효성은 워커가 돌아야 드러나고, 다이얼로그가 그렇게 말한다. */
+ *  실제 유효성은 워커가 돌아야 드러나고, 다이얼로그가 그렇게 말한다.
+ *
+ *  **덮어쓰기가 아니라 목록 append + 활성화다**(§0-13 §화면) — `addToken`이 그 계약을 지킨다. */
 export async function saveTokenAction(raw: string): Promise<{ savedAt?: string; error?: string }> {
   try {
-    await saveToken(normalizeToken(raw));
+    await addToken(raw);
   } catch (e) {
     return { error: (e as Error).message };
   }
@@ -320,11 +325,34 @@ export async function saveTokenAction(raw: string): Promise<{ savedAt?: string; 
   return { savedAt: (await readAuth()).savedAt ?? undefined };
 }
 
+/** 인증 섹션 §0-13 §화면 — 목록 층. `AnalyticsSection`과 같은 이유로 프롭이 아니라 다이얼로그가
+ *  열릴 때 읽는다(`readAnalyticsAction`의 그 주석과 같다 — 다이얼로그를 그리는 자리가 셋이라
+ *  값 하나 때문에 레이아웃 둘·컴포넌트 둘의 프롭이 같이 늘어난다). */
+export async function readTokenRowsAction(): Promise<TokenRow[]> {
+  return readTokenRows();
+}
+
+/** 행의 `활성화`/`비활성화` 버튼. `oauth-token` 쓰기는 이 액션이 하지 않는다 —
+ *  `setTokenEnabled`(→`writeTokens`) 안에서만 일어난다(§0-13 §화면). */
+export async function setTokenEnabledAction(id: string, enabled: boolean): Promise<TokenRow[]> {
+  await setTokenEnabled(id, enabled);
+  revalidatePath("/", "layout"); // 활성 토큰이 이 자리에서 바뀔 수 있다 — 배너·트리거 배지도 같이 본다
+  return readTokenRows();
+}
+
+/** 행의 `삭제` 버튼. 마지막 하나를 지워도 막지 않는다(§0-13 §상태) — 화면은 그 결과(§0-10 ①)를
+ *  그대로 보여줄 뿐이다. */
+export async function deleteTokenAction(id: string): Promise<TokenRow[]> {
+  await deleteToken(id);
+  revalidatePath("/", "layout");
+  return readTokenRows();
+}
+
 /** 인증 다이얼로그 층 ② — `claude setup-token`을 GUI가 pty로 몬다(DESIGN.md §0-4).
  *
  *  **OAuth를 직접 구현하지 않는다.** 공식 CLI가 이미 그 일을 하고, 다시 짜면 문서화되지 않은
  *  엔드포인트에 제품이 묶인다. 여기 넷은 `lib/auth.ts`의 드라이버를 그대로 노출할 뿐이고,
- *  **저장은 층 ③과 같은 `saveToken()`이 한다** — 저장 경로가 두 벌이 되지 않는다.
+ *  **저장은 층 ③과 같은 `addToken()`이 한다** — 저장 경로가 두 벌이 되지 않는다(§0-13 §화면).
  *
  *  진행 상황은 폴링이다(§아키텍처 상태 갱신 — 이 앱에 소켓은 없다. 세션 스트림과 같은 방식). */
 export async function startSetupAction(): Promise<SetupState> {

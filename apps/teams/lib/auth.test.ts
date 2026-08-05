@@ -20,14 +20,17 @@ process.on("exit", () => rmSync(LOCAL, { recursive: true, force: true }));
 
 const {
   addToken,
+  deleteToken,
   findClaude,
   isEligible,
   normalizeToken,
   ptyLines,
   pollSetup,
   readAuth,
+  readTokenRows,
   readTokens,
   saveToken,
+  setTokenEnabled,
   startSetup,
   stopSetup,
   tokenPath,
@@ -326,4 +329,87 @@ test("eligible이 0이 되면 oauth-token을 지운다", async () => {
     claude: { active: id, tokens: [{ id, token: "sk-ant-oat01-solo", addedAt: "x", enabled: false, exhaustedUntil: null }] },
   });
   assert.ok(!existsSync(tokenPath()), "eligible 0인데 oauth-token이 안 지워졌다");
+});
+
+// ── 화면 — 목록 · 활성화/비활성화 · 삭제 (DESIGN.md §0-13 §화면 · P169-2) ───────
+//
+// 이 구획도 깨끗한 전제가 필요해서(위 손편집 테스트가 LOCAL2에 항목을 여럿 남겨 놨다) 새
+// TICKET_LOCAL을 쓴다.
+const LOCAL3 = mkdtempSync(path.join(tmpdir(), "fst-auth-rows-"));
+process.on("exit", () => rmSync(LOCAL3, { recursive: true, force: true }));
+
+test("readTokenRows — label 기본값·가린 값·상태 넷을 그대로 낸다", async () => {
+  process.env.TICKET_LOCAL = LOCAL3;
+  const a = await addToken("sk-ant-oat01-aaaaaaaaaaaaaaaaaaaa", "A계정");
+  const b = await addToken("sk-ant-oat01-bbbbbbbbbbbbbbbbbbbb"); // label 없음 → 계정 n
+  await setTokenEnabled(a.id, false); // 활성이 아니므로 그냥 비활성이 된다(b가 활성인 채로 남는다)
+
+  const rows = await readTokenRows();
+  assert.strictEqual(rows.length, 2);
+
+  const rowA = rows.find((r) => r.id === a.id)!;
+  assert.strictEqual(rowA.label, "A계정");
+  assert.ok(!rowA.masked.includes(a.token), "가린 값에 원문이 그대로 있다");
+  assert.match(rowA.masked, /^sk-ant-oat…[a-z]{4}$/);
+  assert.deepStrictEqual(rowA.status, { kind: "disabled" });
+
+  const rowB = rows.find((r) => r.id === b.id)!;
+  assert.strictEqual(rowB.label, "계정 2"); // 순번은 배열 순서다 — b가 두 번째로 추가됐다
+  assert.deepStrictEqual(rowB.status, { kind: "active" }); // 지금 oauth-token에 있는 것
+});
+
+test("readTokenRows — eligible이 0이 되면 active가 가리키던 그 항목도 활성으로 안 보인다", async () => {
+  // active를 옮길 데가 없으면 `active` 필드는 그 자리에 머문다(reconcileActive) — 하지만
+  // `oauth-token`은 이미 지워졌으므로 화면이 그 항목을 `활성`으로 그리면 거짓말이다
+  const local = mkdtempSync(path.join(tmpdir(), "fst-auth-noeligible-"));
+  process.env.TICKET_LOCAL = local;
+  const now = Math.floor(Date.now() / 1000);
+  const a = await addToken("sk-ant-oat01-lastone"); // 유일한 토큰 — 활성이다
+
+  await writeTokens({
+    claude: {
+      active: a.id,
+      tokens: [{ id: a.id, token: "sk-ant-oat01-lastone", addedAt: "x", enabled: false, exhaustedUntil: now + 999 }],
+    },
+  });
+  assert.ok(!existsSync(tokenPath()), "eligible 0인데 oauth-token이 안 지워졌다");
+
+  const rows = await readTokenRows();
+  assert.strictEqual(rows.length, 1);
+  assert.notStrictEqual(rows[0].status.kind, "active", "지워진 oauth-token을 여전히 활성으로 그린다");
+  assert.strictEqual(rows[0].status.kind, "disabled"); // enabled:false가 이겼다(§0-13 §상태 표시 순서)
+});
+
+test("setTokenEnabled — 활성 토큰을 비활성화하면 그 자리에서 다음 eligible로 넘어간다", async () => {
+  const local = mkdtempSync(path.join(tmpdir(), "fst-auth-rotate-"));
+  process.env.TICKET_LOCAL = local;
+  const a = await addToken("sk-ant-oat01-rotate-a");
+  const b = await addToken("sk-ant-oat01-rotate-b"); // b가 활성이다(마지막에 추가한 것)
+
+  await setTokenEnabled(b.id, false);
+  const file = await readTokens();
+  assert.strictEqual(file.claude!.active, a.id, "다음 eligible(a)로 안 넘어갔다");
+  assert.strictEqual(readFileSync(tokenPath(), "utf8"), "sk-ant-oat01-rotate-a");
+
+  // 남은 것마저 꺼지면 eligible이 0이다 — oauth-token이 지워진다(막지 않는다)
+  await setTokenEnabled(a.id, false);
+  assert.ok(!existsSync(tokenPath()));
+});
+
+test("deleteToken — 활성 토큰을 지워도 다음 eligible로 넘어가고, 마지막 하나도 막지 않는다", async () => {
+  const local = mkdtempSync(path.join(tmpdir(), "fst-auth-delete-"));
+  process.env.TICKET_LOCAL = local;
+  const a = await addToken("sk-ant-oat01-del-a");
+  const b = await addToken("sk-ant-oat01-del-b"); // b가 활성이다
+
+  await deleteToken(b.id);
+  let file = await readTokens();
+  assert.strictEqual(file.claude!.tokens.length, 1);
+  assert.strictEqual(file.claude!.active, a.id);
+  assert.strictEqual(readFileSync(tokenPath(), "utf8"), "sk-ant-oat01-del-a");
+
+  await deleteToken(a.id); // 마지막 하나 — 막지 않는다
+  file = await readTokens();
+  assert.strictEqual(file.claude!.tokens.length, 0);
+  assert.ok(!existsSync(tokenPath()));
 });
