@@ -193,6 +193,9 @@ esac
 
 # 참견 입구(FIFO)와 최초 프롬프트 파일. 스트리밍 입력 엔진일 때만 실제 경로가 들어간다.
 INBOX=""; PRIMEF=""
+# 선정·claim 임계구역 잠금(§5-4). 트랩보다 먼저 선언한다 - 잠금을 잡기 전에 종료하는 경로가
+# 여럿이고(쿨다운 게이트) set -u에서 미정의 변수를 트랩이 읽으면 그 자리에서 죽는다.
+SLOCK=""
 
 # --- 워커 락: 한 워커는 한 번에 티켓 1건 ---
 # 워커는 동기 프로세스다. 앞 실행이 아직 세션을 물고 있으면 이번 tick은 그냥 넘긴다
@@ -215,7 +218,7 @@ if [ "$CMD" = "tick" ]; then
   fi
   printf %s "$$" > "$LOCK/pid"
   # 빈 값이면 rm -f ""가 되고 아무 일도 안 한다 -- 어떻게 죽든 FIFO가 남지 않게 여기 한 번만 건다.
-  trap 'rm -rf "$LOCK"; rm -f "$INBOX" "$PRIMEF" "${PRIMEF:+$PRIMEF.fed}"' EXIT
+  trap 'rm -rf "$LOCK" "$SLOCK"; rm -f "$INBOX" "$PRIMEF" "${PRIMEF:+$PRIMEF.fed}"' EXIT
 fi
 
 # --- 스테일 수거: 세션이 죽었는데 진행중으로 남은 티켓을 백로그로 되돌린다 ---
@@ -243,14 +246,100 @@ if [ "$CMD" = "tick" ] && [ -f "$CDOWN" ]; then
   fi
 fi
 
+# --- 선정·claim 임계구역: 페르소나 상한은 여기 없으면 상한이 아니다 ---
+# 상한(§5-4)은 `personas/<이름>/limit` 한 줄이고 **세는 것과 잡는 것이 한 임계구역**이어야 한다.
+# 지금 구조는 select가 후보를 전부 주고 각 워커가 위에서부터 claim하니 카운트가 claim보다 앞이다.
+# 워커 8개는 cron 같은 분에 뜨고 같은 1초에 최대 5개가 DISPATCH된다(실측) - 상한 1의 티켓이
+# 다섯 장 열려 있으면 다섯 워커가 모두 `0 < 1`을 읽고 각자 다른 티켓을 잡는다. 로그에는 아무
+# 이상이 안 남아서 아무도 못 잡는다.
+# 그릇은 위 워커 락과 같은 관용구다(mkdir + pid + kill -0 스테일 회수). 다른 점 하나 - 워커 락은
+# 워커 이름별이고 이것은 **머신에 하나**다. reap과 쿨다운 게이트는 이 앞에 그대로 둔다.
+# **못 얻으면 기다리지 않고 종료한다**: 다음 cron이 60초 뒤에 오고, 죽은 워커가 물고 있어도
+# 큐가 서지 않는다(스테일 회수가 그 위에 있다). 대가는 §5-4가 적은 `마지막 워커가 1초 늦게
+# 뜬다`가 아니다 - 줄을 서지 않고 나가므로 **같은 순간에 깬 워커 중 한 명만 뜬다**
+# (실측 3회: 워커 5개 동시 · 안 걸리는 상한 하나 -> 디스패치 1건. 상한 파일이 없으면 5건).
+# 즉 상한을 한 번 쓰면 그 큐의 디스패치가 분당 1건으로 눌린다. 세션이 5~25분이라 정상 상태는
+# 견디지만 냉시동이 워커 수만큼 느려진다 - 뒤집으려면 짧은 재시도가 필요하고 그건 스펙의 일이다.
+#
+# **상한 파일이 하나도 없으면 잠금을 안 잡는다.** `상한 없음`이 기본값이고(스캐폴딩이 이 파일을
+# 안 만든다) 그 판은 §5-4 표대로 **종전 그대로**여야 한다 - 지킬 상한이 0개인데 직렬화하면
+# 같은 분에 깬 워커 여덟 중 하나만 뜬다. 파일이 하나라도 생기면 그때부터 전원이 줄을 선다.
+LIMITED=""
+for lf in "${TICKET_PERSONAS:-$TICKET_ROOT/personas}"/*/limit; do
+  [ -f "$lf" ] && { LIMITED=1; break; }
+done
+if [ "$CMD" = "tick" ] && [ -n "$LIMITED" ]; then
+  SLOCK="$LOCAL/run/select.lock"
+  if ! mkdir "$SLOCK" 2>/dev/null; then
+    SOWNER=$(cat "$SLOCK/pid" 2>/dev/null)
+    if [ -n "$SOWNER" ] && kill -0 "$SOWNER" 2>/dev/null; then
+      # 남의 잠금이다. 비워야 트랩이 주인의 잠금을 지우지 않는다.
+      SLOCK=""
+      log "SKIP 다른 워커가 선정 중이다 pid=$SOWNER"
+      exit 0
+    fi
+    log "WARN 스테일 선정 잠금 회수 pid=${SOWNER:-?}"
+    rm -rf "$SLOCK"
+    mkdir "$SLOCK" 2>/dev/null || { SLOCK=""; log "SKIP 선정 잠금 재획득 실패"; exit 0; }
+  fi
+  printf %s "$$" > "$SLOCK/pid"
+fi
+
+# `personas/<이름>/limit` -> 정수 하나, 또는 "" = 상한 없음. 파서를 만들지 않는다.
+# 양끝 공백·후행 개행은 값이 아니다 - 화면이 쓰는 사이드카는 전부 끝에 `\n`이 붙어서
+# `2\n`·` 2 `·`2\n\n`이 전부 정수 2여야 한다(`read`가 첫 줄만 읽고 양끝 공백을 떼는 것이
+# 그 규약 그대로다). 정수가 아니면 **상한 없음 + WARN**이고 0으로 읽지 않는다 - 오타 하나가
+# 페르소나를 영구히 굶기는 쪽으로 떨어지면 안 된다.
+persona_limit() {
+  LIMF="${TICKET_PERSONAS:-$TICKET_ROOT/personas}/$1/limit"
+  [ -f "$LIMF" ] || return 0
+  PL=""; read -r PL < "$LIMF" 2>/dev/null
+  case "$PL" in
+    '') ;;                                             # 빈 파일 = 상한 없음(기본값)
+    *[!0-9]*) log "WARN 페르소나 상한이 정수가 아니다: $LIMF ($PL) - 상한 없이 돈다" ;;
+    *) printf %s "$PL" ;;
+  esac
+}
+
+# 그 페르소나가 지금 물고 있는 수. 단위는 `.wip` 하나고 사본이 없다 - 보드가 세는 수와 같은
+# 수이고, 손 claim(session_id 없이 진행중인 티켓)도 그래서 공짜로 같이 센다. 락 디렉터리 같은
+# 두 번째 표현을 만들면 스테일이 그 페르소나를 영구히 0으로 굶긴다.
+# 판정은 tickets.py를 그대로 불러 쓴다(NFC·상태 접미사·persona 문자 규칙이 한 벌이어야 한다).
+persona_wip() {
+  python3 -c 'import sys
+sys.path.insert(0, sys.argv[1])
+import tickets as T
+n = 0
+for p in T.in_progress(sys.argv[2]):
+    try: fm, _, end = T.read_fm(p)
+    except (OSError, UnicodeDecodeError): continue
+    if end >= 0 and T.persona_of(fm) == sys.argv[3]: n += 1
+print(n)' "$CODE" "$TICKET_ROOT" "$1"
+}
+
 # --- 티켓 선정: 상태접미사 없고 session_id 비어있는 것 중 생성일 최고참 1건 ---
 CANDS=$(python3 "$PY" select "$TICKET_ROOT") || { log "ERROR select 실패"; exit 1; }
 [ -z "$CANDS" ] && exit 0
 
 SID=$(python3 -c 'import uuid;print(uuid.uuid4())')
 TPATH=""; THASH=""; TKIND=""; TPERSONA=""
+OVER=""    # 이 판에서 이미 상한이던 페르소나들. 후보가 여럿이어도 SKIP은 페르소나당 한 줄이다
 while IFS='|' read -r c_path c_hash c_kind c_persona; do
   [ -z "$c_path" ] && continue
+  # 상한에 걸려 안 뜨는 것은 SKIP이다(새 로그 낱말 0). 다른 페르소나 후보는 계속 본다 -
+  # 한 페르소나가 상한이어도 나머지를 굶기지 않는 것이 이 요구의 절반이다.
+  if [ -n "$c_persona" ]; then
+    case " $OVER " in *" $c_persona "*) continue ;; esac
+    PLIM=$(persona_limit "$c_persona")
+    if [ -n "$PLIM" ]; then
+      PWIP=$(persona_wip "$c_persona")
+      if [ "$PWIP" -ge "$PLIM" ]; then
+        OVER="$OVER $c_persona"
+        log "SKIP 페르소나 상한 $c_persona $PWIP/$PLIM"
+        continue
+      fi
+    fi
+  fi
   if [ "$CMD" = "dryrun" ]; then
     TPATH="$c_path"; THASH="$c_hash"; TKIND="$c_kind"; TPERSONA="$c_persona"; break
   fi
@@ -262,6 +351,10 @@ while IFS='|' read -r c_path c_hash c_kind c_persona; do
 done <<EOF
 $CANDS
 EOF
+# 임계구역 끝. 세션을 띄우기 **전에** 놓는다 - 잡은 뒤로는 상한 판정에 영향이 없고, 여기서 안
+# 놓으면 워커 하나가 최대 MAXRUN(5,400초) 동안 나머지 전부의 선정을 막는다.
+# 비워야 트랩이 다음 주인의 잠금을 지우지 않는다.
+[ -n "$SLOCK" ] && { rm -rf "$SLOCK"; SLOCK=""; }
 [ -z "$TPATH" ] && exit 0
 
 # 재무장: 쿨다운이 만료돼서 여기까지 왔으면 나가면서 창을 다시 감는다. 그래야 한 창의 재시도가
