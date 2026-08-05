@@ -6545,6 +6545,26 @@ OAuth로 가서 **사람이 없으니 60초를 태우고 죽는다.**
 아니면 (b)(새 중계 프로그램)나 (c)(워커 상태 모델 재작성)로 이미 답한 대로 갈지 — 어느 쪽이든
 사람이 브라우저를 한 번 눌러야 갈리는 첫 번째 실측이라 세션이 대신 좁힐 수 없다.
 
+**답 `8b95a8f2` — 사람이 (d)를 밟았고, 통한다(4dfe01fb 3회차).** `gcloud auth
+application-default login`을 실행해 `~/.config/gcloud/application_default_credentials.json`이
+생겼다(`type: authorized_user`, 2026-08-05 15:58). 그 뒤 `agy models`가 rc=0 · 모델 11종을
+그대로 낸다 — ①이 낸 실패("Please sign in")가 사라졌다. **컨슈머 계정에서도 된다** — 안 닫힌
+것 셋 중 2번(엔터프라이즈 등급 한정 여부)이 이걸로 닫힌다.
+
+인증 벽 자체가 **코드 0줄로 닫힌다**: ADC는 macOS 키체인을 전혀 안 거치는 별개의 파일 기반
+체계(Google Cloud SDK 표준 자격증명 탐색 — env var → 이 파일 → GCE 메타데이터 순, ①이 문제
+삼은 `security list-keychains`와 무관)라서, ①이 세운 축("파일이면 cron 그대로 붙는다")이
+agy에도 그대로 적용된다. `apps/teams/lib/workers.ts`의 `agy` argv는 이미(`690171e`) 리터럴
+배열이라 (b)·(c) 어느 쪽도 필요 없다 — 고칠 자리가 없다.
+
+**못 닫은 것 — launchd `Background` 세션 타입을 이 세션에서 강제로 재현하지 못했다.**
+`launchctl bootstrap gui/$UID`·`user/$UID`에 `LimitLoadToSessionType=Background` plist를
+올리면 둘 다 `Bootstrap failed: 5: Input/output error`다(root 없이 Aqua 세션에서 Background
+전용 에이전트를 직접 주입하는 것 자체가 launchd가 막는 조합으로 보인다). 대신 낸 근거:
+ADC가 키체인을 아예 안 거친다는 것(Google SDK 표준 동작)과, 파일 기반 자격증명은 이미 claude·
+codex·grok 셋에서 도메인 무관하게 산다는 것 — 둘을 합치면 도메인을 직접 재현하지 않아도 결론이
+선다. `2acb96f7`(또는 그 재디스패치)이 실제 cron 워커에서 도는 순간이 최종 실측이다.
+
 ##### ③ 있는 것 · 없는 것 — `--help` 전문 기준
 
 | 자리 | claude | codex | grok | agy |
