@@ -1,9 +1,20 @@
+import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
 // 셸이 지는 것은 `lang`뿐이고 그것도 `config.ts`의 `lang: "ko-KR"`를 그대로 옮긴 값이다.
 // 리셋·킬 스위치·랜딩 전역 CSS는 `app/landing.css` 한 벌이고 `landing.tsx`가 문다 —
 // 여기서 물면 매뉴얼 셸(§순서 ⑤)까지 그 리셋을 받는다. 랜딩은 라이트 전용이고 매뉴얼은
 // 두 모드라(§사이트 기반 §그대로 서는 못) 두 셸이 각자 자기 전역 CSS를 갖는다.
+
+// `config.ts:33`의 `head` 한 줄이 여기로 온다 — 그 배열이 26장 전부에
+// `<link rel="icon" href="/icon.svg" type="image/svg+xml">`를 굽고 있었다. 자리가 루트
+// 레이아웃인 것은 페이지 `metadata`가 `title`·`description`만 덮고 `icons`는 물려받기 때문이다.
+// 파일을 `app/icon.svg`로 옮기면 Next가 자동으로 잡지만 그러면 URL에 해시가 붙어서
+// **주소가 갈린다** — `public/icon.svg`가 정본이라는 것이 §갈아 끼우는 것의 그 행이다.
+export const metadata: Metadata = {
+  icons: { icon: { url: "/icon.svg", type: "image/svg+xml" } },
+};
+
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="ko-KR">

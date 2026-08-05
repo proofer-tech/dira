@@ -32,23 +32,17 @@ export default defineConfig({
   ignoreDeadLinks: false,
   head: [["link", { rel: "icon", href: "/icon.svg", type: "image/svg+xml" }]],
   markdown: { anchor: { slugify } },
-  // 기본 테마가 빌드 때 모든 페이지 `<head>`에 굽는 Inter 프리로드를 랜딩에서만 뺀다.
-  // 랜딩 본문은 `.dira-landing` 스코프의 `--sans`(원티드산스)라 그 얼굴을 부르는 자리가 없고,
-  // 받는 폰트 바이트의 15.1%(67,981 B)를 그리는 글리프 0으로 먹으면서 사는 얼굴보다 먼저 나간다.
-  // 매뉴얼 26장·404는 기본 테마 그대로라 Inter가 실제로 라틴 본문을 그린다 — 전역 제거가 아니다.
-  // `transformHead`로는 안 된다: 반환값이 `mergeHead`로 덧붙기만 하고, 이 태그는 사용자 `head`가
-  // 아니라 빌드 내부 `additionalHeadTags`라 그 배열에도 없다(chunk-D3CUZ4fa.js:49436 · :49603).
-  // ponytail: 자산 파일명이 빌드 해시라 얼굴 이름으로 찾는다. 매뉴얼도 원티드산스로 가는 날엔
-  //           `page` 조건을 지우거나 이 훅을 통째로 지운다.
-  transformHtml: (html, _id, ctx) =>
-    ctx.page === "index.md"
-      ? html.replace(/<link rel="preload"[^>]*inter-roman-latin[^>]*>/g, "")
-      : html,
+  // 랜딩에서만 Inter 프리로드를 빼던 `transformHtml` 훅이 여기 있었다. **문제째 없어졌다** —
+  // 그 태그를 굽던 것이 기본 테마이고 Next 산출에는 Inter를 부르는 자리가 0이다
+  // (§사이트 기반 §갈아 끼우는 것 — 그 자리의 `ponytail:` 주석이 이 판정을 미리 적어 뒀다).
   // 번들된 sitemap 생성기. `lastmod`는 안 넣는다 — `lastUpdated: true`가 필요하고 그 한 줄이
   // 화면 24장에 `Last updated` 줄을 세운다. `lastmod` 없는 사이트맵도 유효하다.
   sitemap: { hostname: "https://dira.proofer.tech" },
   // 페이지마다 canonical·og·twitter 열한 줄. `404.html`은 마크다운 페이지가 아니라 이 훅을
   // 안 지나므로 태그가 0이고 그게 맞다(색인 대상이 아니다).
+  // 이 훅과 위 `sitemap` 한 줄은 `app/meta.ts`·`app/sitemap.ts`로 갔다. 여기 남아 있는 것은
+  // **앞 화면**이다 — §검증이 *"앞 화면은 ⑧ 전까지 `npx vitepress build .`로 언제든 굽는다"*고
+  // 적어 뒀고 이 절의 판정이 앞뒤 대조다. 이 파일은 전환 티켓(§순서 ⑧)이 통째로 지운다.
   transformPageData(pageData, { siteConfig }) {
     const origin = "https://dira.proofer.tech";
     // `cleanUrls: true`라 `.html`을 붙이지 않는다. `index.md`는 조각째 지운다.
