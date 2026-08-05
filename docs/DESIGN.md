@@ -3787,7 +3787,7 @@ grep -c '성격' worker.sh.example                                       # 0  �
 | `claude` | `~/.config/dira/oauth-token` → `CLAUDE_CODE_OAUTH_TOKEN`(`tick.sh:78-80`) | **우리 파일이다.** GUI가 이미 쓴다(`lib/auth.ts`) |
 | `codex` | `~/.codex/auth.json` · `CODEX_HOME` · `OPENAI_API_KEY` | 파일이지만 우리 것이 아니다. **쿨다운도 안 건다**(§4-9) |
 | `grok` | `~/.grok/auth.json` | 파일이지만 우리 것이 아니다 |
-| `agy` | **macOS 로그인 키체인** — 파일이 아니다 | **못 한다.** 그리고 cron에서 아직 안 돈다(§4-3 §agy ①, P168-1 대기) |
+| `agy` | **macOS 로그인 키체인** — 파일이 아니다(다만 ADC라는 파일 기반 대안이 `4dfe01fb`에서 났다, §4-3 §agy②) | **못 한다.** cron에서 카탈로그는 이제 돌지만(P168-1~3 완료) 실제 완주는 P168-4가 아직 못 닫았다 |
 
 **그래서 이 절은 claude 하나를 다룬다.** 새 판정이 아니다 — §0-4가 *"지금 이 절이 다루는 것은
 Claude 하나다"* 라고 적고 **여는 조건까지 적어 뒀다**(*claude 아닌 워커가 하나라도 생길 때*).
