@@ -177,6 +177,27 @@ export function SessionStream({
     // 펼친 `<pre>`의 `break-words`는 min-content를 안 줄여서(줄이는 건 `break-all`) 긴 한 줄이
     // 그대로 열 폭이 된다 — 실측 768px 다이얼로그의 `scrollWidth`가 13125px이었다.
     <div className="min-w-0 space-y-2">
+      {/* 머리 줄 — `진행 기록` h2와 `맨 아래로`가 같은 행에 선다(§비주얼 §29 ③ P173).
+          h2는 이 절이 서는 다섯 상태 전부에서 무조건 렌더된다(종전엔 `page.tsx`가 이 h2를
+          따로 그렸다 — `<SessionStream>`이 안 서는 "둘 다 0" 빈 상태만 거기 남는다) — 그래서
+          이 줄도 이제 조건부가 아니다(종전엔 `stream`일 때만 줄 자체가 섰다). 오른쪽 무리
+          (`!live` 문구 + 버튼)만 `stream`일 때 뜬다 — 흐르는 스트림이 없으면 "지금 스트림
+          상태"를 말할 것이 없다(§29 ②). `h-8` 고정은 그 무리가 떴다 사라질 때 줄이 안
+          튀게 하는 것이 근거다(§18 ④ · §21). */}
+      <div className="flex h-8 items-center justify-between gap-2">
+        <h2 className="text-sm font-medium">진행 기록</h2>
+        {stream && (
+          <div className="flex items-center gap-2">
+            {!live && <p className="text-xs text-muted-foreground">끝난 세션 · 갱신 없음</p>}
+            {detached && (
+              <Button variant="ghost" size="sm" onClick={() => setDetached(false)}>
+                <ArrowDown aria-hidden className="size-3.5" />
+                맨 아래로
+              </Button>
+            )}
+          </div>
+        )}
+      </div>
       {noStream && (
         /* §비주얼 §23 ⑤ 사후 — §9가 이미 세워 둔 `<EmptyState>`에 문구만 갈아 끼운다.
            `Alert`가 아니다: 사람이 할 일이 없고(원문도 다음 행동도 없다), §9가 스트림 부재를
@@ -196,74 +217,49 @@ export function SessionStream({
       {/* 상자는 **그릴 것이 있을 때만** 선다. codex이고 스레드도 없으면 위 `<EmptyState>` 하나가
           이 자리의 전부다(종전 그대로) — 빈 상자를 하나 더 그리는 것은 소음이다(§29 ④). */}
       {(stream || items.length > 0) && (
-        <>
-          {/* 머리 줄은 **스트림이 흐를 때만**이다(§29 ②) — 0줄이면 `맨 아래로`도 폴링 상태 문구도
-              영영 안 떠서 빈 32px 띠만 남는다.
-              폴링 상태는 배지가 아니다 — 티켓 상태 배지가 이미 화면 머리에 있고, 같은 사실을 두
-              모양으로 그리면 어느 쪽이 정본인지 모르게 된다(§9). 색도 아이콘도 없다.
-              **`따라가는 중`은 여기 없다** — 상자 안 맨 아래로 옮겼다(§2-1 · §18 ④). 사건이
-              쌓일수록 머리 문구가 "지금"에서 멀어져서다. 진행중이면 이 줄에는 `맨 아래로` 버튼만
-              남고, `h-8`은 그대로 둔다(버튼이 떴다 사라질 때 상자가 위아래로 튀지 않는다).
-              **`최신으로`(§13)가 여기로 합쳐졌다**(§29 ③): 상자 안 바닥 가운데에는 이미 임자가
-              있고(`따라가는 중`), 머리 줄에서는 뜨는 층이 아니라 그림자·알약의 근거가 죽는다. */}
-          {stream && (
-            <div className="flex h-8 items-center justify-end gap-2">
-              {!live && (
-                <p className="mr-auto text-xs text-muted-foreground">끝난 세션 · 갱신 없음</p>
-              )}
-              {detached && (
-                <Button variant="ghost" size="sm" onClick={() => setDetached(false)}>
-                  <ArrowDown aria-hidden className="size-3.5" />
-                  맨 아래로
-                </Button>
-              )}
+        /* 배경에 틴트를 깔지 않는다 — `--muted`를 깔면 접힌 줄의 `--muted-foreground`가 4.34로
+            AA 미달이고(§9 함정 1) 말풍선 실측표 7종도 이 면 위에서 잰 값이다(§29 ①).
+            512px인 이유는 머리와 바닥이 한 화면에 같이 들어와서다 — 참견 최악 840에 852까지
+            여유가 12px이라 한 단계도 못 키운다(§29 ②). 흐르는 것이 없으면 `max-`다:
+            답변 대기 한 건짜리 요구사항에 470px짜리 빈 상자를 그리지 않는다. */
+        <div
+          ref={box}
+          onScroll={(e) => setDetached(!atBottom(e.currentTarget))}
+          className={cn(
+            "overflow-y-auto rounded-md border bg-background py-2",
+            stream ? "h-[32rem]" : "max-h-[32rem]",
+          )}
+        >
+          {items.map((it) =>
+            it.event ? (
+              it.event.label ? (
+                <Row key={it.event.key} e={it.event} onToggle={onToggle} />
+              ) : (
+                <FullText key={it.event.key} e={it.event} />
+              )
+            ) : (
+              <ThreadRow key={threadKey.get(it.thread)} item={it.thread} />
+            ),
+          )}
+          {/* 진행 표식(§18 ④) — 마지막 사건 다음 줄이 올 자리를 지킨다. **말풍선 아래로 안
+              내려간다**: `.wip`인 동안 상자의 맨 끝은 항상 스트림 사건이고(답 없는 질문은
+              열린 티켓에만 있다 — §29 ③) 옛 답변은 `birth`가 지금 세션 첫 사건보다 앞이다.
+              `<Marker>`도 `<details>`도 아니다: §9가 Marker 기본값을 하나도 안 덮기로 했는데
+              여기는 `text-xs`여야 한다(폴링 상태 3종이 한 종류인 채로 자리만 옮겼다). 눌러 볼
+              것이 없으니 hover도 없다. `mx-1`이 8px 점을 16px 칸(= MarkerIcon 폭) 가운데 세워
+              문구를 다른 두 줄과 같은 x=36px에 맞춘다. // ponytail: 정렬용 래퍼 대신 마진 4px.
+              점이 커지면 그때 래퍼. 문구를 같이 드는 이유는 `prefers-reduced-motion`이다 —
+              모션만으로 말하지 않는다. */}
+          {live && (
+            <div className="flex items-center gap-2 px-3 text-xs leading-6 text-muted-foreground">
+              <span
+                aria-hidden
+                className="mx-1 size-2 shrink-0 animate-wip-pulse rounded-full bg-muted-foreground motion-reduce:animate-none"
+              />
+              따라가는 중 · 2초마다
             </div>
           )}
-
-          {/* 배경에 틴트를 깔지 않는다 — `--muted`를 깔면 접힌 줄의 `--muted-foreground`가 4.34로
-              AA 미달이고(§9 함정 1) 말풍선 실측표 7종도 이 면 위에서 잰 값이다(§29 ①).
-              512px인 이유는 머리와 바닥이 한 화면에 같이 들어와서다 — 참견 최악 840에 852까지
-              여유가 12px이라 한 단계도 못 키운다(§29 ②). 흐르는 것이 없으면 `max-`다:
-              답변 대기 한 건짜리 요구사항에 470px짜리 빈 상자를 그리지 않는다. */}
-          <div
-            ref={box}
-            onScroll={(e) => setDetached(!atBottom(e.currentTarget))}
-            className={cn(
-              "overflow-y-auto rounded-md border bg-background py-2",
-              stream ? "h-[32rem]" : "max-h-[32rem]",
-            )}
-          >
-            {items.map((it) =>
-              it.event ? (
-                it.event.label ? (
-                  <Row key={it.event.key} e={it.event} onToggle={onToggle} />
-                ) : (
-                  <FullText key={it.event.key} e={it.event} />
-                )
-              ) : (
-                <ThreadRow key={threadKey.get(it.thread)} item={it.thread} />
-              ),
-            )}
-            {/* 진행 표식(§18 ④) — 마지막 사건 다음 줄이 올 자리를 지킨다. **말풍선 아래로 안
-                내려간다**: `.wip`인 동안 상자의 맨 끝은 항상 스트림 사건이고(답 없는 질문은
-                열린 티켓에만 있다 — §29 ③) 옛 답변은 `birth`가 지금 세션 첫 사건보다 앞이다.
-                `<Marker>`도 `<details>`도 아니다: §9가 Marker 기본값을 하나도 안 덮기로 했는데
-                여기는 `text-xs`여야 한다(폴링 상태 3종이 한 종류인 채로 자리만 옮겼다). 눌러 볼
-                것이 없으니 hover도 없다. `mx-1`이 8px 점을 16px 칸(= MarkerIcon 폭) 가운데 세워
-                문구를 다른 두 줄과 같은 x=36px에 맞춘다. // ponytail: 정렬용 래퍼 대신 마진 4px.
-                점이 커지면 그때 래퍼. 문구를 같이 드는 이유는 `prefers-reduced-motion`이다 —
-                모션만으로 말하지 않는다. */}
-            {live && (
-              <div className="flex items-center gap-2 px-3 text-xs leading-6 text-muted-foreground">
-                <span
-                  aria-hidden
-                  className="mx-1 size-2 shrink-0 animate-wip-pulse rounded-full bg-muted-foreground motion-reduce:animate-none"
-                />
-                따라가는 중 · 2초마다
-              </div>
-            )}
-          </div>
-        </>
+        </div>
       )}
 
       {/* 입력칸 — 상자 **밖 · 밑**이다(§2-2 · §비주얼 §21). 여기 한 곳에 다니까 티켓 상세와

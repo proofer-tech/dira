@@ -165,10 +165,6 @@ export default async function TicketDetail({
   const progressSection =
     sessionId || thread.length > 0 || awaiting ? (
       <section className="space-y-2">
-        {/* 이름이 `세션 스트림`이 아닌 이유: 이 절이 이제 세션이 안 남긴 것(사람이 쓴 답변)도
-            든다. `질문·답변`이 아닌 이유도 같다 — `진행 기록`은 **이 티켓에 무슨 일이 있었나**
-            한 가지를 가리킨다(§0-9 · §2-3 ①). `Card`가 아니라 `<section>` + `h2`다. */}
-        <h2 className="text-sm font-medium">진행 기록</h2>
         {/* 스트림이 없는 엔진(오늘 codex)이면 트랜스크립트가 **있을 수 없다**(§4-3 표) —
             그래도 컴포넌트를 세운다:
             왜 없는지와 참견 폼의 사유가 그 안에 있고, 두 진입점(여기 · 워커 행)이 같은
@@ -188,19 +184,27 @@ export default async function TicketDetail({
             answerFile={awaiting ? `${awaitingOf(ticket)}${config.done}.md` : undefined}
           />
         ) : (
-          // 상자 안이 통째로 빌 때만 남는 자리다(§29 ④ 빈 상태 3행). 액션이 없다 — 사람이 할
-          // 일이 없다(§9). `action` 자리엔 왜 없는지 사람이 직접 쳐 볼 글롭을 넣는다.
-          // **여기 남는 것은 "왜"를 모르는 경우뿐이다**(§비주얼 §23 ⑤): 완료 티켓 리플레이처럼
-          // 되짚을 워커가 없어 엔진을 모르는 자리. 참이고, 왜인지 모르는 채로 참이다 —
-          // 없는 값을 추측해 `codex입니다`라고 쓰지 않는다.
-          <EmptyState
-            text="트랜스크립트 없음"
-            action={
-              <span className="font-mono text-xs break-all text-muted-foreground">
-                {`~/.claude/projects/*/${sessionId}.jsonl`}
-              </span>
-            }
-          />
+          <>
+            {/* 이름이 `세션 스트림`이 아닌 이유: 이 절이 이제 세션이 안 남긴 것(사람이 쓴 답변)도
+                든다. `질문·답변`이 아닌 이유도 같다 — `진행 기록`은 **이 티켓에 무슨 일이
+                있었나** 한 가지를 가리킨다(§0-9 · §2-3 ①). `Card`가 아니라 `<section>` + `h2`다.
+                `SessionStream`이 서는 분기에서는 그 컴포넌트가 이 h2를 머리 줄에 물고 간다
+                (§비주얼 §29 ③ P173) — 여기는 상자 안이 통째로 빌 때만 남는 자리다. */}
+            <h2 className="text-sm font-medium">진행 기록</h2>
+            {/* 상자 안이 통째로 빌 때만 남는 자리다(§29 ④ 빈 상태 3행). 액션이 없다 — 사람이 할
+                일이 없다(§9). `action` 자리엔 왜 없는지 사람이 직접 쳐 볼 글롭을 넣는다.
+                **여기 남는 것은 "왜"를 모르는 경우뿐이다**(§비주얼 §23 ⑤): 완료 티켓
+                리플레이처럼 되짚을 워커가 없어 엔진을 모르는 자리. 참이고, 왜인지 모르는 채로
+                참이다 — 없는 값을 추측해 `codex입니다`라고 쓰지 않는다. */}
+            <EmptyState
+              text="트랜스크립트 없음"
+              action={
+                <span className="font-mono text-xs break-all text-muted-foreground">
+                  {`~/.claude/projects/*/${sessionId}.jsonl`}
+                </span>
+              }
+            />
+          </>
         )}
       </section>
     ) : null;
