@@ -214,6 +214,9 @@ export type TokenStatus =
 export type TokenRow = {
   id: string;
   label: string;
+  /** 실제로 저장된 값(없으면 빈 문자열) — 편집 칸의 초기값이다. `label`은 표시용
+   *  순번 대체가 섞여 있어 그대로 프리필하면 "계정 1"이 문자 그대로 저장돼 버린다. */
+  rawLabel: string;
   masked: string;
   addedAt: string;
   status: TokenStatus;
@@ -228,6 +231,7 @@ export async function readTokenRows(): Promise<TokenRow[]> {
   return engine.tokens.map((t, i) => ({
     id: t.id,
     label: t.label ?? `계정 ${i + 1}`,
+    rawLabel: t.label ?? "",
     masked: maskToken(t.token),
     addedAt: when(new Date(t.addedAt)),
     // `active`가 가리키는 항목이어도 **eligible이 아니면 활성이 아니다** — eligible이 하나도
@@ -272,6 +276,17 @@ export async function setActiveToken(id: string): Promise<void> {
   const engine = file.claude;
   if (!engine || !engine.tokens.some((t) => t.id === id)) return;
   await writeTokens({ claude: { active: id, tokens: engine.tokens } });
+}
+
+/** 행의 라벨 편집(P180-1, §0-13 §라벨). `label`만 간다 — `active`도 손대지 않는다(다른 축과
+ *  무관하다). 빈 값(trim 후)이면 키를 지운다 — `readTokenRows`의 `label ?? 계정 N`이 되살아난다. */
+export async function setTokenLabel(id: string, label: string): Promise<void> {
+  const file = await readTokens();
+  const engine = file.claude;
+  if (!engine) return;
+  const trimmed = label.trim();
+  const tokens = engine.tokens.map((t) => (t.id === id ? { ...t, label: trimmed || undefined } : t));
+  await writeTokens({ claude: { active: engine.active, tokens } });
 }
 
 /** 행의 `삭제` 버튼 — 마지막 하나를 지워도 막지 않는다(§0-13 §상태). */

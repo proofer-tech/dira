@@ -32,6 +32,7 @@ const {
   saveToken,
   setActiveToken,
   setTokenEnabled,
+  setTokenLabel,
   startSetup,
   stopSetup,
   tokenPath,
@@ -464,4 +465,31 @@ test("setActiveToken — `대기` 행의 `사용`이 그 id를 활성으로 만�
   // 목록에 없는 id는 조용히 무시한다 — active가 안 바뀐다
   await setActiveToken("no-such-id");
   assert.strictEqual((await readTokens()).claude!.active, b.id);
+});
+
+test("setTokenLabel — label만 갈고, 지우면(빈 값) 계정 N 순번으로 돌아간다 (P180-1)", async () => {
+  const local = mkdtempSync(path.join(tmpdir(), "fst-auth-label-"));
+  process.env.TICKET_LOCAL = local;
+  const a = await addToken("sk-ant-oat01-label-a"); // 첫 토큰 — 활성이다
+  await addToken("sk-ant-oat01-label-b"); // eligible 활성(a)이 있으므로 대기다(P179)
+
+  await setTokenLabel(a.id, "a@example.com");
+  let rows = await readTokenRows();
+  assert.strictEqual(rows.find((r) => r.id === a.id)!.label, "a@example.com");
+  assert.strictEqual(rows.find((r) => r.id === a.id)!.rawLabel, "a@example.com");
+  // token·id·enabled·exhaustedUntil·active는 그대로다 — label 한 줄만 갈렸다
+  let file = await readTokens();
+  const entryA = file.claude!.tokens.find((t) => t.id === a.id)!;
+  assert.strictEqual(entryA.token, "sk-ant-oat01-label-a");
+  assert.strictEqual(entryA.enabled, true);
+  assert.strictEqual(entryA.exhaustedUntil, null);
+  assert.strictEqual(file.claude!.active, a.id);
+
+  await setTokenLabel(a.id, "   "); // 공백만 — 빈 값과 같다
+  rows = await readTokenRows();
+  const rowA = rows.find((r) => r.id === a.id)!;
+  assert.strictEqual(rowA.label, "계정 1");
+  assert.strictEqual(rowA.rawLabel, "");
+  file = await readTokens();
+  assert.strictEqual("label" in file.claude!.tokens.find((t) => t.id === a.id)!, false);
 });

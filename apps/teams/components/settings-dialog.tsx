@@ -20,6 +20,7 @@ import {
   CirclePlay,
   Circle as CircleIcon,
   Clock,
+  Pencil,
   Power,
   RotateCcw,
   Settings,
@@ -36,6 +37,7 @@ import {
   setAnalyticsAction,
   setBindingAction,
   setTokenEnabledAction,
+  setTokenLabelAction,
   startSetupAction,
   pollSetupAction,
   stopSetupAction,
@@ -346,6 +348,10 @@ function TokenStatusBadge({ status }: { status: TokenStatus }) {
 function TokensSection({ refreshKey }: { refreshKey: string | null }) {
   const [rows, setRows] = useState<TokenRow[] | null>(null);
   const [pending, start] = useTransition();
+  // 행 라벨 편집(P180-1, §0-13 §라벨) — 한 번에 한 행만 연다. `editValue`는 `rawLabel`에서
+  // 시작한다(표시용 `label`은 `계정 N` 순번이 섞여 있어 그대로 프리필하면 그 문자열이 저장된다).
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState("");
 
   // `refreshKey`는 부르는 쪽의 `savedAt`이다 — 층 ②·③이 토큰을 저장하면 그 값이 바뀌어 목록을
   // 다시 읽는다("인증하기/토큰추가 시 토큰 목록에 추가됩니다", §0-13 §화면). 새 폴링 루프를
@@ -358,6 +364,11 @@ function TokensSection({ refreshKey }: { refreshKey: string | null }) {
     start(async () => setRows(await setTokenEnabledAction(row.id, enabled)));
   const remove = (row: TokenRow) => start(async () => setRows(await deleteTokenAction(row.id)));
   const use = (row: TokenRow) => start(async () => setRows(await useTokenAction(row.id)));
+  const saveLabel = (row: TokenRow) =>
+    start(async () => {
+      setRows(await setTokenLabelAction(row.id, editValue));
+      setEditingId(null);
+    });
 
   if (rows === null) return null; // 아직 안 읽었다 — 빈 목록과 헷갈리지 않는다
   if (rows.length === 0) {
@@ -373,7 +384,45 @@ function TokensSection({ refreshKey }: { refreshKey: string | null }) {
         >
           <div className="min-w-0 space-y-0.5">
             <div className="flex items-center gap-2">
-              <span className="text-sm font-medium">{row.label}</span>
+              {editingId === row.id ? (
+                <form
+                  className="flex items-center gap-1"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    saveLabel(row);
+                  }}
+                >
+                  <Input
+                    autoFocus
+                    className="h-7 w-40 text-sm"
+                    placeholder="이메일 등 알아볼 이름"
+                    value={editValue}
+                    onChange={(e) => setEditValue(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Escape") setEditingId(null);
+                    }}
+                  />
+                  <Button type="submit" size="sm" variant="outline" disabled={pending}>
+                    저장
+                  </Button>
+                </form>
+              ) : (
+                <>
+                  <span className="text-sm font-medium">{row.label}</span>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={`${row.label} 라벨 편집`}
+                    disabled={pending}
+                    onClick={() => {
+                      setEditingId(row.id);
+                      setEditValue(row.rawLabel);
+                    }}
+                  >
+                    <Pencil aria-hidden />
+                  </Button>
+                </>
+              )}
               <TokenStatusBadge status={row.status} />
             </div>
             {/* 가린 값 — 값 전체를 그리지 않는다. `복사` 버튼도 없다(§0-13 §화면) */}
@@ -435,6 +484,7 @@ export function SettingsDialog({
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
   const [token, setToken] = useState("");
+  const [label, setLabel] = useState(""); // 층 ③ 라벨 칸(선택, P180-1 · §0-13 §라벨)
   const [result, setResult] = useState<{ savedAt?: string; error?: string }>({});
   const [setup, setSetup] = useState<SetupState | null>(null);
   const [code, setCode] = useState("");
@@ -474,6 +524,7 @@ export function SettingsDialog({
           setAddOpen(needsAuth);
         } else {
           setToken("");
+          setLabel("");
           setResult({});
           setCode("");
           setSetup(null);
@@ -635,10 +686,11 @@ export function SettingsDialog({
                 onSubmit={(e) => {
                   e.preventDefault();
                   start(async () => {
-                    const r = await saveTokenAction(token);
+                    const r = await saveTokenAction(token, label);
                     setResult(r);
                     if (r.savedAt) {
                       setToken("");
+                      setLabel("");
                       setAddOpen(false);
                     }
                   });
@@ -662,6 +714,15 @@ export function SettingsDialog({
                     {pending ? "저장 중…" : "저장"}
                   </Button>
                 </div>
+                {/* 선택 칸 — 형식을 검증하지 않는다(§0-13 §라벨). 비우면 종전대로 `계정 N` */}
+                <Label htmlFor="auth-token-label">라벨(선택)</Label>
+                <Input
+                  id="auth-token-label"
+                  placeholder="이메일 등 알아볼 이름"
+                  autoComplete="off"
+                  value={label}
+                  onChange={(e) => setLabel(e.target.value)}
+                />
                 <p className="text-xs text-muted-foreground">
                   이미 발급받은 토큰이 있으면 여기에 붙여 넣습니다. 목록에 대기로 추가됩니다 —
                   지금 쓸 토큰은 목록에서 &quot;사용&quot;으로 고릅니다.
