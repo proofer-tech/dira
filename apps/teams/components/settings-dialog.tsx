@@ -43,7 +43,7 @@ import {
   stopSetupAction,
   useTokenAction,
 } from "@/app/actions";
-import type { SetupState, TokenRow, TokenStatus } from "@/lib/auth";
+import type { OtherEngineAuth, SetupState, TokenRow, TokenStatus } from "@/lib/auth";
 import { useHotkey, useKeymap } from "@/components/keymap-provider";
 import { DEFAULT_KEYMAP, MODIFIER_KEYS, formatCombo } from "@/lib/keymap";
 import { cn } from "@/lib/utils";
@@ -74,6 +74,9 @@ export type AuthView = {
    *  전부 읽었고 그 전부에서 claude가 0일 때만 `false`고, 그때만 `인증 필요`가 안 뜬다.
    *  못 읽은 프로젝트·프로젝트 0건은 판정 불가라 `true`다. 판정은 부르는 쪽(서버)이 한다. */
   claudeUsed: boolean;
+  /** §4-3 카탈로그의 claude 아닌 나머지 — 상태 층뿐이다(§0-4 §개정 `b0966e66`).
+   *  claude 블록은 이 필드가 있든 없든 한 줄도 안 갈린다. */
+  otherEngines: OtherEngineAuth[];
 };
 
 /** §0-6 섹션의 층 셋 — ①목록 ②캡처 ③되돌리기. 값은 전부 `DEFAULT_KEYMAP`·props에서 오고
@@ -462,6 +465,37 @@ function TokensSection({ refreshKey }: { refreshKey: string | null }) {
   );
 }
 
+/** claude 아닌 엔진 한 줄 — 사실 둘(CLI 경로 · 자격증명 파일)만 말한다. 판정을 안 내리므로
+ *  `TriangleAlert`도 색도 안 쓴다 — claude ⓪처럼 "이게 없으면 워커가 못 뜬다"를 아는 것이
+ *  아니라 "찾았다/못 찾았다"만 아는 층이다(§0-4 §개정 `b0966e66`). */
+function OtherEngineRow({ engine }: { engine: OtherEngineAuth }) {
+  const cred =
+    engine.engine === "agy" ? (
+      "인증은 macOS 로그인 키체인에 있습니다 — 이 화면이 읽지 않습니다"
+    ) : engine.credPath ? (
+      <>
+        <span className="font-mono text-xs break-all">{engine.credPath}</span> · {engine.credMtime}
+      </>
+    ) : engine.engine === "codex" ? (
+      "발견 못 함 — OPENAI_API_KEY로 도는 워커는 이 판정 밖입니다"
+    ) : (
+      "발견 못 함 — 터미널에서 grok 로그인이 필요합니다"
+    );
+  return (
+    <div className="space-y-1 border-t pt-2">
+      <h4 className="text-xs font-medium text-muted-foreground">{engine.engine}</h4>
+      <p className="text-sm">
+        {engine.cli ? (
+          <span className="font-mono text-xs break-all">{engine.cli}</span>
+        ) : (
+          "설치되지 않았습니다"
+        )}
+      </p>
+      <p className="text-sm text-muted-foreground">{cred}</p>
+    </div>
+  );
+}
+
 /** 화면에 키를 적는 그릇 하나 — 값은 §비주얼 §21이 박았다(**배경 없음**: `bg-muted`를 깔면
  *  라이트 4.34로 AA 미달). 안에 들어가는 글자는 `formatCombo`가 만든다. */
 function Kbd({ className, children }: { className?: string; children: React.ReactNode }) {
@@ -736,6 +770,12 @@ export function SettingsDialog({
               </form>
             </PopoverContent>
           </Popover>
+
+          {/* claude 아닌 나머지 §4-3 카탈로그 엔진 — 상태 층뿐이다(§0-4 §개정 `b0966e66`).
+              위 claude 블록(층 ⓪~③ + 목록)은 이 아래로 한 줄도 안 갈린다. */}
+          {auth.otherEngines.map((e) => (
+            <OtherEngineRow key={e.engine} engine={e} />
+          ))}
         </section>
 
         <KeymapSection />

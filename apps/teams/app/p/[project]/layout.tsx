@@ -31,7 +31,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { readAuth } from "@/lib/auth";
+import { readAuth, readOtherEngineAuth } from "@/lib/auth";
 import { readSummary, readProjects } from "@/lib/projects";
 import { engineLimits, formatTokens, listUsage, usageRates, type EngineLimit } from "@/lib/usage";
 import { engineName, workerGroups } from "@/lib/workers";
@@ -116,6 +116,8 @@ export default async function ProjectLayout({
   // 나타나는 화면이 여기라 판정도 여기서 한다. 값은 헤더 `설정` 버튼과 배너 CTA가 같이 쓴다 —
   // 진입점 둘이 같은 컴포넌트를 두 번 쓰고 전역 상태는 만들지 않는다(§0-4).
   const rawAuth = await readAuth();
+  // §4-3 카탈로그 나머지 엔진의 상태 층 — 판정 없이 사실만(§0-4 §개정 `b0966e66`).
+  const otherEngines = await readOtherEngineAuth();
   const auth = {
     path: tildePath(rawAuth.path, home),
     savedAt: rawAuth.savedAt,
@@ -124,6 +126,7 @@ export default async function ProjectLayout({
     // 헤더 버튼의 `인증 필요`는 머신 스코프라 **등록된 프로젝트 전부**를 보고 끈다 —
     // 전부 읽었고 전부 claude가 0일 때만 꺼진다(§0-4). 배너는 그 프로젝트만 본다(`current.claude`).
     claudeUsed: items.some((t) => t.claude),
+    otherEngines,
   };
 
   // 셸 알림 종이 세는 넷 (§0-10). **판정식은 §0-4 · §0-5 · §0-2 · 결정 5가 그대로 갖는다** —

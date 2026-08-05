@@ -8,6 +8,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { createHash } from "node:crypto";
 import { accessSync, constants, statSync } from "node:fs";
 import { chmod, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import path from "node:path";
 import { registryPath } from "./projects.ts";
 
@@ -33,6 +34,52 @@ export async function readAuth(): Promise<AuthStatus> {
   // 층 ②가 몰 대상을 고르는 **그 함수** 그대로다 — 두 벌로 적으면 "있다고 했는데 눌렀더니
   // 없다"가 생긴다(§0-4 ⓪). PATH 훑기 몇 회라 서버 렌더에 붙여도 싸다.
   return { path: p, savedAt: s?.isFile() ? when(s.mtime) : null, cli: findClaude() };
+}
+
+// ── 다른 엔진의 상태 층 — 사실 둘만, 판정은 안 한다 (§0-4 §개정 `b0966e66`) ──────────
+//
+// §4-3 카탈로그(claude·codex·grok·agy)와 엔진 선택 컨트롤이 서면서, 엔진을 고르는 사람이
+// 인증이 섰는지 볼 자리가 이 다이얼로그에 없었다. 여기서 여는 것은 **상태 층뿐**이다 —
+// `login status`류 서브프로세스를 부르지 않고, `auth.json`의 JWT `exp`도 읽지 않는다
+// (그 값을 재는 것은 아직 안 여는 발급·관리 층의 일이다).
+
+export type OtherEngine = "codex" | "grok" | "agy";
+
+/** 실행파일 이름 = §4-3 템플릿의 첫 토큰. 엔진이 하나 늘면 이 표에만 더한다. */
+const OTHER_ENGINE_BINS: Record<OtherEngine, string> = { codex: "codex", grok: "grok", agy: "agy" };
+
+/** codex·grok의 자격증명 파일 자리(§4-3 §개정 표). agy는 파일이 아니라 macOS 키체인이라
+ *  여기 없다 — `readOtherEngineAuth`가 그 엔진만 상시 문구로 답한다. */
+const CRED_FILE: Partial<Record<OtherEngine, string>> = {
+  codex: path.join(".codex", "auth.json"),
+  grok: path.join(".grok", "auth.json"),
+};
+
+export type OtherEngineAuth = {
+  engine: OtherEngine;
+  /** `findExecutable(bin)`과 같은 값 — 없으면 `null`(§0-4 ⓪과 같은 축). */
+  cli: string | null;
+  /** 자격증명 파일의 절대경로. agy는 항상 `null`이다. */
+  credPath: string | null;
+  credMtime: string | null;
+};
+
+/** `home`은 테스트가 픽스처 디렉터리로 갈아 끼우는 자리다(`usage.ts`의 `root` 기본 인자와
+ *  같은 관용구) — 실제 홈을 밟지 않고 파일 유무 두 갈래를 잰다. */
+export async function readOtherEngineAuth(home = homedir()): Promise<OtherEngineAuth[]> {
+  return Promise.all(
+    (Object.keys(OTHER_ENGINE_BINS) as OtherEngine[]).map(async (engine) => {
+      const rel = CRED_FILE[engine];
+      const credPath = rel ? path.join(home, rel) : null;
+      const s = credPath ? await stat(credPath).catch(() => null) : null;
+      return {
+        engine,
+        cli: findExecutable(OTHER_ENGINE_BINS[engine]),
+        credPath: s ? credPath : null,
+        credMtime: s ? when(s.mtime) : null,
+      };
+    }),
+  );
 }
 
 /** 붙여 넣은 값을 저장할 형태로 만든다. 못 쓰면 사유를 던진다.
@@ -406,14 +453,16 @@ function settle(s: NonNullable<typeof setup>, error?: string): void {
   kill(s);
 }
 
-/** `claude`를 **우리가** PATH에서 찾는다. 셸에게 맡기면 못 찾았을 때 손에 남는 것이 종료 코드
- *  `127`뿐이고, 사람은 그 숫자에서 원인을 못 읽는다 — §0-4의 "조용히 실패하지 않는다"는 사유가
- *  읽힐 때만 지켜진다(`bcf66f01`). 찾았으면 절대경로를 그대로 몬다.
+/** PATH에서 실행파일 하나를 **우리가** 찾는다. 셸에게 맡기면 못 찾았을 때 손에 남는 것이 종료
+ *  코드 `127`뿐이고, 사람은 그 숫자에서 원인을 못 읽는다 — §0-4의 "조용히 실패하지 않는다"는
+ *  사유가 읽힐 때만 지켜진다(`bcf66f01`). 찾았으면 절대경로를 그대로 몬다.
+ *  §0-4 §개정(`b0966e66`)에서 `findClaude()`가 하드코딩했던 이름을 뺐다 — 판정 원본은 이
+ *  함수 하나고, 엔진마다 두 벌로 적지 않는다.
  *  ponytail: PATH만 본다 — 셸 alias·function은 이 자식(`sh -c`)이 어차피 못 쓴다. */
-export function findClaude(): string | null {
+export function findExecutable(name: string): string | null {
   for (const dir of (process.env.PATH ?? "").split(":")) {
     if (!dir) continue;
-    const p = path.join(dir, "claude");
+    const p = path.join(dir, name);
     try {
       if (!statSync(p).isFile()) continue; // 디렉터리도 X_OK를 통과한다
       accessSync(p, constants.X_OK);
@@ -423,6 +472,11 @@ export function findClaude(): string | null {
     }
   }
   return null;
+}
+
+/** claude 전용 별칭 — 층 ②가 몰 대상이 이 값이라 호출자를 두 벌로 안 바꾼다. */
+export function findClaude(): string | null {
+  return findExecutable("claude");
 }
 
 /** 층 ②를 시작한다. 앞선 시도가 남아 있으면 먼저 죽인다 — pty를 두 번 물 수 없다. */

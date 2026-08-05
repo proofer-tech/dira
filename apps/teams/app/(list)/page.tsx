@@ -1,7 +1,7 @@
 /** 프로젝트 목록·등록 `/` — 앱의 홈. 프로젝트가 0개면 이 화면이 온보딩이다 (DESIGN.md §0 · §7). */
 import { homedir } from "node:os";
 import { ProjectsSection, ProjectRows, type ProjectRow } from "@/components/projects-ui";
-import { readAuth } from "@/lib/auth";
+import { readAuth, readOtherEngineAuth } from "@/lib/auth";
 import { readSummary, readProjects, registryPath } from "@/lib/projects";
 import { tildePath } from "@/lib/urls";
 import { engineName, workerGroups } from "@/lib/workers";
@@ -14,6 +14,8 @@ export default async function Home() {
 
   // 인증은 **머신당 하나**다 — 프로젝트마다 있지 않아 이 화면이 그 자리다(§0-4 자리 표).
   const auth = await readAuth();
+  // §4-3 카탈로그 나머지 엔진의 상태 층 — 판정 없이 사실만(§0-4 §개정 `b0966e66`).
+  const otherEngines = await readOtherEngineAuth();
 
   // 레지스트리가 깨졌으면 GUI가 고쳐 쓰려 들지 않는다 — 원문 + 파일 경로를 보여주고 사람이 연다.
   let registryError: string | null = null;
@@ -59,7 +61,13 @@ export default async function Home() {
   return (
     <ProjectsSection
       empty={rows.length === 0}
-      auth={{ path: tildePath(auth.path, home), savedAt: auth.savedAt, cli: auth.cli, claudeUsed }}
+      auth={{
+        path: tildePath(auth.path, home),
+        savedAt: auth.savedAt,
+        cli: auth.cli,
+        claudeUsed,
+        otherEngines,
+      }}
       home={home}
       registryError={
         registryError ? { message: registryError, openCmd: `open -e "${registryPath()}"` } : null

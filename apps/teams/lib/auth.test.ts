@@ -22,11 +22,13 @@ const {
   addToken,
   deleteToken,
   findClaude,
+  findExecutable,
   isEligible,
   normalizeToken,
   ptyLines,
   pollSetup,
   readAuth,
+  readOtherEngineAuth,
   readTokenRows,
   readTokens,
   saveToken,
@@ -492,4 +494,47 @@ test("setTokenLabel — label만 갈고, 지우면(빈 값) 계정 N 순번으�
   assert.strictEqual(rowA.rawLabel, "");
   file = await readTokens();
   assert.strictEqual("label" in file.claude!.tokens.find((t) => t.id === a.id)!, false);
+});
+
+// ── 다른 엔진의 상태 층 — 판정 없이 사실만 (DESIGN.md §0-4 §개정 `b0966e66`) ─────────
+
+test("findExecutable — 일반화한 탐색이 findClaude와 같은 경로를 낸다", () => {
+  // BIN에는 이미 위에서 만든 `claude` 스텁이 있다 — 이름만 바꿔 부르면 같은 값이어야 한다
+  assert.strictEqual(findExecutable("claude"), findClaude());
+  assert.strictEqual(findExecutable("생전-없는-실행파일"), null);
+});
+
+test("readOtherEngineAuth — codex·grok은 파일 유무로 문구가 갈리고, agy는 상시 문구다", async () => {
+  const home = mkdtempSync(path.join(tmpdir(), "fst-auth-home-"));
+  process.on("exit", () => rmSync(home, { recursive: true, force: true }));
+
+  const before = await readOtherEngineAuth(home);
+  assert.deepStrictEqual(
+    before.map((e) => e.engine),
+    ["codex", "grok", "agy"],
+  );
+  assert.strictEqual(before.find((e) => e.engine === "codex")!.credPath, null);
+  assert.strictEqual(before.find((e) => e.engine === "grok")!.credPath, null);
+  const agy = before.find((e) => e.engine === "agy")!;
+  assert.strictEqual(agy.credPath, null);
+  assert.strictEqual(agy.credMtime, null); // 키체인이라 파일 유무를 애초에 안 잰다
+
+  mkdirSync(path.join(home, ".codex"), { recursive: true });
+  writeFileSync(path.join(home, ".codex", "auth.json"), "{}");
+
+  const after = await readOtherEngineAuth(home);
+  const codex = after.find((e) => e.engine === "codex")!;
+  assert.strictEqual(codex.credPath, path.join(home, ".codex", "auth.json"));
+  assert.match(codex.credMtime!, /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
+  assert.strictEqual(after.find((e) => e.engine === "grok")!.credPath, null); // grok은 안 갈렸다
+});
+
+test("readOtherEngineAuth — CLI 탐색은 findExecutable(엔진 실행파일 이름) 그대로다", async () => {
+  writeFileSync(path.join(BIN, "codex"), "#!/bin/sh\n", { mode: 0o755 });
+  const rows = await readOtherEngineAuth(mkdtempSync(path.join(tmpdir(), "fst-auth-home2-")));
+  assert.strictEqual(rows.find((e) => e.engine === "codex")!.cli, path.join(BIN, "codex"));
+  // 이 머신에 진짜 grok·agy가 깔려 있을 수 있다(§0-4는 그걸 몰라야 한다는 계약이 아니다) —
+  // 값이 없다는 것이 아니라 **같은 판정 함수를 부른다는 것**을 잰다
+  assert.strictEqual(rows.find((e) => e.engine === "grok")!.cli, findExecutable("grok"));
+  assert.strictEqual(rows.find((e) => e.engine === "agy")!.cli, findExecutable("agy"));
 });
