@@ -8,9 +8,11 @@ import {
   listInstalledSkills,
   memoryExcerpt,
   pickedSkills,
+  readPersonaLimit,
   readPersonaMemory,
   readPersonaSkills,
   readPersonaSkillsFile,
+  writePersonaLimit,
   writePersonaSkills,
 } from "./skills.ts";
 
@@ -267,4 +269,62 @@ test("한글 파일명은 NFC로 대조한다 — 화면이 그린 이름과 fs�
   assert.notEqual(other, name); // 글자는 같고 코드포인트가 다르다
   await deletePersonaMemory(personas, "nfc", other);
   assert.deepEqual((await readPersonaMemory(personas, "nfc")).memories, []);
+});
+
+// ── 동시 워커 상한 (`limit` · §5-4) ─────────────────────────────────────────
+
+test("상한 — 쓰는 바이트가 `n\\n` 하나다(엔진과의 이음매)", async () => {
+  const file = path.join(personas, "lim", "limit");
+  await writePersonaLimit(personas, "lim", 2);
+  assert.equal(readFileSync(file, "utf8"), "2\n"); // §5-4 §양끝 공백 — 선례와 같은 바이트
+  assert.equal(await readPersonaLimit(personas, "lim"), 2);
+
+  // 0은 유효한 값이다(그 페르소나 일시 정지 — §5-4 표). 빈 값과 갈린다
+  await writePersonaLimit(personas, "lim", 0);
+  assert.equal(readFileSync(file, "utf8"), "0\n");
+  assert.equal(await readPersonaLimit(personas, "lim"), 0);
+});
+
+test("상한 — null이면 파일을 지운다(= 상한 없음)", async () => {
+  const file = path.join(personas, "lim", "limit");
+  assert.ok(existsSync(file));
+  await writePersonaLimit(personas, "lim", null);
+  assert.equal(existsSync(file), false);
+  assert.equal(await readPersonaLimit(personas, "lim"), null);
+  await writePersonaLimit(personas, "lim", null); // 없는 파일을 또 지워도 조용하다
+});
+
+test("상한 — 양끝 공백은 값이 아니고, 정수가 아니면 상한 없음이다", async () => {
+  const dir = path.join(personas, "loose");
+  mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, "limit");
+  // 사람이 에디터로 쓴 모양들. 엔진과 판정이 같아야 한다(§5-4 §양끝 공백)
+  for (const [text, want] of [
+    ["2\n", 2],
+    [" 2 ", 2],
+    ["2\n\n", 2],
+    ["", null],
+    ["   \n", null],
+    ["abc", null], // 0으로 읽지 않는다 — 오타가 페르소나를 굶기면 안 된다
+    ["2.5", null],
+    ["-1", null],
+  ] as const) {
+    writeFileSync(file, text);
+    assert.equal(await readPersonaLimit(personas, "loose"), want, JSON.stringify(text));
+  }
+  // 파일도 디렉터리도 없는 페르소나는 조용히 null이다(파일 없음 = 기본값)
+  assert.equal(await readPersonaLimit(personas, "no-such-persona"), null);
+});
+
+test("상한 — 이름이 신뢰 경계고, 정수가 아닌 값은 쓰지 않는다", async () => {
+  for (const bad of ["../escape", "a/b", "", "."]) {
+    await assert.rejects(() => readPersonaLimit(personas, bad), /페르소나 이름은/);
+    await assert.rejects(() => writePersonaLimit(personas, bad, 1), /페르소나 이름은/);
+  }
+  assert.equal(existsSync(path.join(tmp, "escape")), false);
+
+  for (const bad of [1.5, -1, NaN]) {
+    await assert.rejects(() => writePersonaLimit(personas, "lim", bad), /0 이상의 정수/);
+  }
+  assert.equal(existsSync(path.join(personas, "lim", "limit")), false);
 });

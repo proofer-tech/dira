@@ -24,6 +24,7 @@ import { getProject, listPersonas, resolveConfig, usingDefault } from "@/lib/pro
 import {
   claudeConfigDir,
   listInstalledSkills,
+  readPersonaLimit,
   readPersonaMemory,
   readPersonaSkillsFile,
 } from "@/lib/skills";
@@ -52,11 +53,13 @@ export default async function Personas({
   ]);
   const rows = await Promise.all(
     personas.map(async (p) => {
-      const [{ skills, chars }, { memories }] = await Promise.all([
+      // 상한도 같은 렌더에 실린다(§5-4 §화면) — 왼쪽 줄이 그리는 값이라 스킬·메모리와 같은 벌이다
+      const [{ skills, chars }, { memories }, limit] = await Promise.all([
         readPersonaSkillsFile(config.personas, p.name),
         readPersonaMemory(config.personas, p.name),
+        readPersonaLimit(config.personas, p.name),
       ]);
-      return { ...p, skills, skillsChars: chars, memories };
+      return { ...p, skills, skillsChars: chars, memories, limit };
     }),
   );
   const missing = personas.filter((p) => p.body === null);

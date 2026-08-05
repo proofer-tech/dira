@@ -22,6 +22,7 @@ import {
   listInstalledSkills,
   pickedSkills,
   readPersonaSkillsFile,
+  writePersonaLimit,
   writePersonaSkills,
   type Skill,
 } from "@/lib/skills";
@@ -103,6 +104,30 @@ export async function savePersonaSkillsAction(
     await writePersonaSkills(dir, name, pickedSkills(picked, current, installed));
     revalidatePath(`/p/${projectId}/personas`);
     return { ok: true, ...(await readPersonaSkillsFile(dir, name)) };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** 동시 워커 상한 저장(DESIGN.md §5-4 §화면). **빈 값이면 파일을 지운다**(= 상한 없음).
+ *
+ *  **받는 것은 입력칸의 문자열 그대로다.** 숫자로 파싱하는 자리가 서버 하나여야 한다 —
+ *  클라이언트 검증은 검증이 아니고, `<input type="number">`도 사람이 아무거나 칠 수 있다.
+ *  `0`은 유효한 값이다(그 페르소나 일시 정지 — §5-4 표). */
+export async function savePersonaLimitAction(
+  projectId: string,
+  name: string,
+  value: string,
+): Promise<PersonaResult & { limit?: number | null }> {
+  try {
+    const text = value.trim();
+    if (text !== "" && !/^\d+$/.test(text)) {
+      throw new Error(`상한은 0 이상의 정수여야 합니다: ${value}`);
+    }
+    const limit = text === "" ? null : Number(text);
+    await writePersonaLimit(await personasDir(projectId), name, limit);
+    revalidatePath(`/p/${projectId}/personas`);
+    return { ok: true, limit };
   } catch (e) {
     return fail(e);
   }

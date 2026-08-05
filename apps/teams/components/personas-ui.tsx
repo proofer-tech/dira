@@ -12,6 +12,7 @@ import {
   deletePersonaAction,
   deletePersonaMemoryAction,
   savePersonaAction,
+  savePersonaLimitAction,
   savePersonaSkillsAction,
   setPersonaColorAction,
   type PersonaResult,
@@ -82,6 +83,9 @@ export type PersonaRow = {
   /** `memory/*.md` 한 단계 글롭. 세션이 쓰고 사람이 지운다(§5-2). **`text`가 파일 전체라
    *  자수는 화면이 더한다** — `skillsChars`처럼 따로 받지 않는다(목록 밖 글자가 없다) */
   memories: Memory[];
+  /** `limit` 사이드카의 정수(§5-4). `null` = 파일 없음·빈 파일·정수 아님 = **상한 없음**.
+   *  자수에 안 더한다 — 이 파일은 프롬프트에 안 실린다(엔진이 디스패치 앞에서 읽는 정책값이다) */
+  limit: number | null;
 };
 
 /** §6 에러 3요소 중 1·2번. 사유는 원문 그대로 — 삼키지 않는다. */
@@ -269,6 +273,9 @@ type PersonaEdit = {
    *  계산이 안 된다(§비주얼 §25) */
   skillsChars: number;
   memories: Memory[];
+  /** **저장된 값이다** — 입력칸의 초안이 아니다(초안은 오른쪽 머리가 든다). 왼쪽 줄의
+   *  `상한 n`이 이걸 그리므로 저장 직후에 여기까지 올라와야 목록이 파일과 같아진다 */
+  limit: number | null;
 };
 
 /** 서버가 방금 준 값 그대로. 아직 손대지 않은 페르소나는 이걸 읽으므로 **다른 세션이 파일을
@@ -279,6 +286,7 @@ const initialEdit = (row: PersonaRow): PersonaEdit => ({
   skills: row.skills,
   skillsChars: row.skillsChars,
   memories: row.memories,
+  limit: row.limit,
 });
 
 /** 주소 → 페르소나 세그먼트(없으면 `null`). **`popstate` 하나가 쓴다** — 서버가 `params`로
@@ -440,6 +448,13 @@ export function PersonasPane({
                           {e.memories.length > 0 && (
                             <span className="whitespace-nowrap">메모리 {e.memories.length}</span>
                           )}
+                          {/* `메모리 n` 뒤 · `자수` 앞이다(§5-4 §화면) — 앞의 셋이 *무엇이 실리나*고
+                              이건 정책값이라 실리는 것들 뒤에 선다. **파일이 없으면 아무것도 안
+                              그린다**: 빈 값이 기본이라 `상한 없음`을 쓸 자리가 아니다.
+                              **`상한 n / 지금 m`을 안 그린다** — 지금 도는 수는 보드가 준다(§5-4) */}
+                          {e.limit !== null && (
+                            <span className="whitespace-nowrap">상한 {e.limit}</span>
+                          )}
                           {/* 프로필 본문은 **모든 디스패치 프롬프트에 인라인된다** — 길이가 곧 비용이다(§5).
                               목록에 둬야 "누가 프롬프트를 얼마나 먹는가"를 비교할 수 있다. `skills.md` ·
                               `memory/*.md`도 매 디스패치에 인라인되므로 **셋의 합**이다(§비주얼 §32 ①) */}
@@ -529,6 +544,17 @@ function PersonaDetail({
           }
         />
         <span className="font-mono text-sm break-all">{row.name}</span>
+        {/* 이름 **옆**이다(§5-4 §화면). 정책값이라 프로필·스킬·메모리와 달리 절을 안 만든다 —
+            머리에 한 칸이고, 실패 사유도 머리 아래(색·삭제와 같은 자리) */}
+        <LimitField
+          projectId={projectId}
+          name={row.name}
+          limit={edit.limit}
+          onSaved={(limit) => onEdit({ ...edit, limit })}
+          onError={(message) =>
+            setHeadError(message ? { title: "상한을 저장하지 못했습니다", message } : null)
+          }
+        />
         {edit.saved !== null && (
           <span className="ml-auto">
             <DeleteButton
@@ -596,6 +622,72 @@ function PersonaDetail({
         }
       />
     </div>
+  );
+}
+
+// ── 동시 워커 상한 (DESIGN.md §5-4 §화면) ───────────────────────────────────
+
+/** 오른쪽 칸 머리의 숫자 입력 하나 + `저장`. **비우면 파일을 지운다**(= 상한 없음).
+ *
+ *  **판정은 서버가 한다** — `type="number"`는 힌트고 사람은 아무거나 칠 수 있다(생성 폼의 이름
+ *  규칙과 같은 근거: 클라이언트 검증은 검증이 아니고, 규칙이 두 군데 있으면 갈린다).
+ *  여기서 막는 것은 **안 바뀐 값의 저장**뿐이다.
+ *
+ *  초안이 이 컴포넌트의 지역 상태인 것은 스킬 다이얼로그와 같은 벌이다 — 다른 줄을 고르면
+ *  `PersonaDetail`이 `key`로 다시 서서 파일의 값으로 돌아간다. §5가 못박은 *편집이 살아 있다*는
+ *  `PROFILE.md` textarea의 계약이고, 그건 종전대로 `PersonasPane`이 든다. */
+function LimitField({
+  projectId,
+  name,
+  limit,
+  onSaved,
+  onError,
+}: {
+  projectId: string;
+  name: string;
+  /** 파일의 값(`null` = 상한 없음). 입력칸의 빈 문자열이 이 `null`과 같은 뜻이다 */
+  limit: number | null;
+  onSaved: (limit: number | null) => void;
+  onError: (message: string | null) => void;
+}) {
+  const saved = limit === null ? "" : String(limit);
+  const [value, setValue] = useState(saved);
+  const [pending, start] = useTransition();
+
+  return (
+    <>
+      <Label htmlFor={`limit-${name}`} className="text-xs text-muted-foreground">
+        상한
+      </Label>
+      <Input
+        id={`limit-${name}`}
+        type="number"
+        min={0}
+        step={1}
+        // 빈 칸이 곧 `상한 없음`이라 placeholder가 그 뜻을 말한다 — 값이 아니라 기본값이다
+        placeholder="없음"
+        className="h-8 w-20 font-mono"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+      />
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={pending || value.trim() === saved}
+        onClick={() =>
+          start(async () => {
+            const r = await savePersonaLimitAction(projectId, name, value);
+            onError(r.ok ? null : (r.message ?? "상한을 저장하지 못했습니다."));
+            if (r.ok) {
+              onSaved(r.limit ?? null);
+              setValue(r.limit === null || r.limit === undefined ? "" : String(r.limit));
+            }
+          })
+        }
+      >
+        {pending ? "저장 중…" : "저장"}
+      </Button>
+    </>
   );
 }
 

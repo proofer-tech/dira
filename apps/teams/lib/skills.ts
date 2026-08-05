@@ -1,4 +1,4 @@
-/** 페르소나 사이드카 읽기·쓰기 — 스킬(§5-1)과 메모리(§5-2).
+/** 페르소나 사이드카 읽기·쓰기 — 스킬(§5-1) · 메모리(§5-2) · 동시 워커 상한(§5-4).
  *
  *  두 세계가 만나는 자리다: **이 머신에 설치된 스킬**(`<config>/skills/…` — 큐 밖·GUI 밖·머신
  *  로컬)과 **이 페르소나가 고른 스킬**(`<personas>/<이름>/skills.md` — 큐 안. 엔진이 디스패치
@@ -12,6 +12,9 @@
  *  **메모리(`memory/*.md`)가 여기 사는 이유**는 스킬과 같은 물건이기 때문이다 — 같은 디렉터리의
  *  사이드카고, 같은 `personaFilePath`로 방어하고, 같은 화면이 같은 렌더에서 둘을 같이 읽는다.
  *  갈리는 것은 쓰는 쪽뿐이다(스킬은 GUI, 메모리는 세션 — §5-2). 티켓 `bb48630b`.
+ *  **상한(`limit`)도 같은 자리다** — 같은 디렉터리의 사이드카고 같은 `personaFilePath`로
+ *  방어하고 같은 화면이 같은 렌더에서 셋을 같이 읽는다. 읽는 쪽이 하나 더 있는 것만 갈린다
+ *  (엔진이 디스패치 앞에서 읽는다 — §5-4). 티켓 `e94030b4`.
  *
  *  경로 방어는 `projects.ts`의 `personaFilePath` 하나다(이름이 신뢰 경계 — §경로 방어). */
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
@@ -218,6 +221,47 @@ export async function writePersonaSkills(dir: string, name: string, skills: Skil
     out.push(...items);
   }
   await writeFile(file, out.join("\n").replace(/\n*$/, "\n"), "utf8");
+}
+
+// ── 페르소나 동시 워커 상한 (`<personas>/<이름>/limit` · §5-4) ───────────────
+
+/** 파일 하나에 정수 하나. **파서를 안 만든다**(§5-4). 없는 파일 · 빈 파일 · 정수가 아닌 내용은
+ *  전부 `null`(= 상한 없음)이고 그게 기본값이다 — 화면은 `null`에 아무것도 안 그린다.
+ *
+ *  **양끝 공백을 떼는 것이 계약이다**(§5-4 §양끝 공백). 쓰는 쪽(아래)이 `n\n`을 쓰고 사람이
+ *  에디터로 ` 2 `를 쓸 수 있으므로, 읽는 쪽 둘(엔진과 이 함수)이 같은 값을 봐야 한다.
+ *  `Number()`가 아니라 `^\d+$`인 이유: `Number(" 2 ")`는 2지만 `Number("")`도 0이고
+ *  `Number("2x")`는 NaN이라 세 갈래를 한 판정으로 못 가른다. 오타 하나가 페르소나를 0으로
+ *  굶기는 쪽으로 떨어지면 안 된다(§5-4 표). */
+export async function readPersonaLimit(dir: string, name: string): Promise<number | null> {
+  let file: string;
+  try {
+    file = await personaFilePath(dir, name, "limit");
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e; // realpath(기준 디렉터리) 실패만
+    return null;
+  }
+  const text = (await readFile(file, "utf8").catch(() => "")).trim();
+  return /^\d+$/.test(text) ? Number(text) : null;
+}
+
+/** 저장. **`null`이면 파일을 지운다**(= 상한 없음. §5-4 §화면 "비우면 파일을 지운다").
+ *  쓰는 바이트는 `n\n` 하나다 — 선례가 `writePersonaSkills`의 `+ "\n"`이고, 이 한 줄이
+ *  엔진과의 이음매다(§5-4 §양끝 공백. 판정은 §검증 ⑧ = 다른 티켓).
+ *
+ *  **정수가 아닌 값은 거절한다.** 여기서 조용히 넘어가면 화면이 쓴 상한이 엔진에서
+ *  `상한 없음`이 되고 화면에는 아무 이상이 안 보인다(§5-4가 짚은 바로 그 자리다). */
+export async function writePersonaLimit(dir: string, name: string, limit: number | null): Promise<void> {
+  const file = await personaFilePath(dir, name, "limit");
+  if (limit === null) {
+    await rm(file, { force: true });
+    return;
+  }
+  if (!Number.isInteger(limit) || limit < 0) {
+    throw new Error(`상한은 0 이상의 정수여야 합니다: ${limit}`);
+  }
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(file, `${limit}\n`, "utf8");
 }
 
 // ── 페르소나 메모리 (`<personas>/<이름>/memory/*.md` · §5-2) ─────────────────
