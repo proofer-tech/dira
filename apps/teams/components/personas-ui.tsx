@@ -571,30 +571,6 @@ function PersonaDetail({
           }
         />
         <span className="font-mono text-sm break-all">{row.name}</span>
-        {/* 이름 **옆**이다(§5-4 §화면). 정책값이라 프로필·스킬·메모리와 달리 절을 안 만든다 —
-            머리에 한 칸이고, 실패 사유도 머리 아래(색·삭제와 같은 자리) */}
-        <LimitField
-          projectId={projectId}
-          name={row.name}
-          limit={edit.limit}
-          onSaved={(limit) => onEdit({ ...edit, limit })}
-          onError={(message) =>
-            setHeadError(message ? { title: "상한을 저장하지 못했습니다", message } : null)
-          }
-        />
-        {/* 상한 옆이다(§제약 1 §결정 기록 §열한 번째 · §23 컨트롤 재사용) — 같은 정책값 자리,
-            같은 저장 규약(빈 값/파일 없음 = 미지정, 저장 성공이 곧 확인이라 토스트 없음) */}
-        <EngineField
-          projectId={projectId}
-          name={row.name}
-          engine={edit.engine}
-          engines={engines}
-          modelPattern={modelPattern}
-          onSaved={(engine) => onEdit({ ...edit, engine })}
-          onError={(message) =>
-            setHeadError(message ? { title: "엔진을 저장하지 못했습니다", message } : null)
-          }
-        />
         {edit.saved !== null && (
           <span className="ml-auto">
             <DeleteButton
@@ -608,6 +584,21 @@ function PersonaDetail({
       </div>
 
       {headError && <Failure title={headError.title} message={headError.message} />}
+
+      {/* §비주얼 §44 ① — 정책값 둘(상한·엔진)은 신원(머리)도 프롬프트 3절(PROFILE·스킬·메모리)도
+          아니라 그 사이에 낀 절 하나다. 프롬프트 3절은 디스패치에 실리는 순서를 그대로 보이는데
+          정책값은 한 바이트도 안 실려서, 그 연속 **앞**에 선다(뒤에 두면 textarea 16행 아래로
+          내려가 스크롤 없이 안 보인다) */}
+      <DispatchPolicySection
+        projectId={projectId}
+        name={row.name}
+        limit={edit.limit}
+        engine={edit.engine}
+        engines={engines}
+        modelPattern={modelPattern}
+        onLimitSaved={(limit) => onEdit({ ...edit, limit })}
+        onEngineSaved={(engine) => onEdit({ ...edit, engine })}
+      />
 
       {/* 원문 편집이다 — 마크다운 렌더는 넣지 않는다(§6 프로토콜 에디터와 같은 결정) */}
       <Textarea
@@ -665,69 +656,151 @@ function PersonaDetail({
   );
 }
 
-// ── 동시 워커 상한 (DESIGN.md §5-4 §화면) ───────────────────────────────────
+// ── 디스패치 정책 — 상한 · 엔진 (DESIGN.md §비주얼 §44) ─────────────────────
 
-/** 오른쪽 칸 머리의 숫자 입력 하나 + `저장`. **비우면 파일을 지운다**(= 상한 없음).
+/** §44 ①이 신설한 절. 스킬·메모리 절과 껍데기(`space-y-2 border-t pt-3`)가 글자 하나까지
+ *  같다 — 머리에 버튼·자수가 없는 것만 다르다(값 둘이 각자 자기 트리거를 든다, §44 ②). */
+function DispatchPolicySection({
+  projectId,
+  name,
+  limit,
+  engine,
+  engines,
+  modelPattern,
+  onLimitSaved,
+  onEngineSaved,
+}: {
+  projectId: string;
+  name: string;
+  limit: number | null;
+  engine: { engineId: string; model: string } | null;
+  engines: EngineCatalog;
+  modelPattern: string;
+  onLimitSaved: (limit: number | null) => void;
+  onEngineSaved: (engine: { engineId: string; model: string } | null) => void;
+}) {
+  return (
+    <section className="space-y-2 border-t pt-3">
+      <div className="flex items-baseline gap-2">
+        <h3 className="text-sm font-medium">디스패치 정책</h3>
+      </div>
+      {/* `flex-wrap`이 좁은 폭 대응 전부다 — 각 필드가 `라벨 트리거` 한 덩어리라 쌍 안에서는
+          안 갈라진다(§44 §좁은 폭 줄바꿈) */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+        <LimitField projectId={projectId} name={name} limit={limit} onSaved={onLimitSaved} />
+        <EngineField
+          projectId={projectId}
+          name={name}
+          engine={engine}
+          engines={engines}
+          modelPattern={modelPattern}
+          onSaved={onEngineSaved}
+        />
+      </div>
+    </section>
+  );
+}
+
+/** 값이 곧 트리거인 팝오버(§44 ③ — 엔진과 같은 저장 관용구로 통일). **비우면 파일을 지운다**
+ *  (= 상한 없음), 판정은 서버가 한다(`type="number"`는 힌트일 뿐).
  *
- *  **판정은 서버가 한다** — `type="number"`는 힌트고 사람은 아무거나 칠 수 있다(생성 폼의 이름
- *  규칙과 같은 근거: 클라이언트 검증은 검증이 아니고, 규칙이 두 군데 있으면 갈린다).
- *  여기서 막는 것은 **안 바뀐 값의 저장**뿐이다.
- *
- *  초안이 이 컴포넌트의 지역 상태인 것은 스킬 다이얼로그와 같은 벌이다 — 다른 줄을 고르면
- *  `PersonaDetail`이 `key`로 다시 서서 파일의 값으로 돌아간다. §5가 못박은 *편집이 살아 있다*는
- *  `PROFILE.md` textarea의 계약이고, 그건 종전대로 `PersonasPane`이 든다. */
+ *  초안이 이 컴포넌트의 지역 상태인 것은 종전과 같다 — 다른 줄을 고르면 `PersonaDetail`이
+ *  `key`로 다시 서서 파일의 값으로 돌아간다. 팝오버를 닫는 것(`Esc`·바깥 클릭)이 곧 취소다 —
+ *  `취소` 버튼을 따로 두지 않는다(§44 ③ 닫기 행). */
 function LimitField({
   projectId,
   name,
   limit,
   onSaved,
-  onError,
 }: {
   projectId: string;
   name: string;
   /** 파일의 값(`null` = 상한 없음). 입력칸의 빈 문자열이 이 `null`과 같은 뜻이다 */
   limit: number | null;
   onSaved: (limit: number | null) => void;
-  onError: (message: string | null) => void;
 }) {
   const saved = limit === null ? "" : String(limit);
+  const [open, setOpen] = useState(false);
   const [value, setValue] = useState(saved);
+  const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  const ready = !pending && value.trim() !== saved;
+  const labelId = `persona-limit-${name}-label`;
+  const triggerId = `persona-limit-${name}-value`;
+
+  const save = () =>
+    start(async () => {
+      const r = await savePersonaLimitAction(projectId, name, value);
+      if (r.ok) {
+        onSaved(r.limit ?? null);
+        setValue(r.limit === null || r.limit === undefined ? "" : String(r.limit));
+        setError(null);
+        setOpen(false);
+      } else {
+        setError(r.message ?? "상한을 저장하지 못했습니다.");
+      }
+    });
 
   return (
-    <>
-      <Label htmlFor={`limit-${name}`} className="text-xs text-muted-foreground">
+    <span className="flex items-center gap-2">
+      <span id={labelId} className="text-xs text-muted-foreground">
         상한
-      </Label>
-      <Input
-        id={`limit-${name}`}
-        type="number"
-        min={0}
-        step={1}
-        // 빈 칸이 곧 `상한 없음`이라 placeholder가 그 뜻을 말한다 — 값이 아니라 기본값이다
-        placeholder="없음"
-        className="h-8 w-20 font-mono"
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-      />
-      <Button
-        size="sm"
-        variant="outline"
-        disabled={pending || value.trim() === saved}
-        onClick={() =>
-          start(async () => {
-            const r = await savePersonaLimitAction(projectId, name, value);
-            onError(r.ok ? null : (r.message ?? "상한을 저장하지 못했습니다."));
-            if (r.ok) {
-              onSaved(r.limit ?? null);
-              setValue(r.limit === null || r.limit === undefined ? "" : String(r.limit));
-            }
-          })
-        }
+      </span>
+      <Popover
+        open={open}
+        onOpenChange={(o) => {
+          setOpen(o);
+          // 닫는 것이 곧 취소다 — 저장 전에는 아무것도 안 썼다. 다시 열면 파일 값이다.
+          if (!o) {
+            setValue(saved);
+            setError(null);
+          }
+        }}
       >
-        {pending ? "저장 중…" : "저장"}
-      </Button>
-    </>
+        <PopoverTrigger
+          id={triggerId}
+          aria-labelledby={`${labelId} ${triggerId}`}
+          render={<Button variant="ghost" size="sm" className="font-normal" />}
+        >
+          {/* 값이 있으면 argv 토큰이라 mono, `없음`은 문장이라 sans(§44 ② 값 서체) */}
+          <span className={limit !== null ? "font-mono text-xs" : undefined}>
+            {limit === null ? "없음" : limit}
+          </span>
+          <ChevronDown aria-hidden className="size-3" />
+        </PopoverTrigger>
+        <PopoverContent align="start">
+          <div className="space-y-2">
+            <Label htmlFor={`limit-${name}`}>동시 워커 상한</Label>
+            <Input
+              id={`limit-${name}`}
+              type="number"
+              min={0}
+              step={1}
+              placeholder="없음"
+              className="w-full font-mono"
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">비우면 상한 없음 · 0이면 디스패치 정지</p>
+          <p className="text-xs text-muted-foreground">다음 티켓 선정부터 적용됩니다.</p>
+          {error && <Failure title="상한을 저장하지 못했습니다" message={error} />}
+          {/* 상한에는 왼쪽 보조 버튼이 없다(§44 ③) — `저장`만 `ml-auto`로 오른쪽 끝 */}
+          <div className="flex items-center justify-between gap-2">
+            <Button
+              size="sm"
+              className="ml-auto"
+              aria-disabled={!ready}
+              onClick={() => {
+                if (ready) save();
+              }}
+            >
+              {pending ? "저장 중…" : "저장"}
+            </Button>
+          </div>
+        </PopoverContent>
+      </Popover>
+    </span>
   );
 }
 
@@ -870,7 +943,7 @@ function EngineFields({
   );
 }
 
-/** 오른쪽 칸 머리의 값이 곧 팝오버 트리거다(§23 ② 그대로) — `LimitField` 옆(§23 §화면 재사용).
+/** 상한 옆 자리(§44 ① 컨트롤 행)의 값이 곧 팝오버 트리거다(§23 ② 그대로 재사용).
  *  **파일이 없으면 "지정 없음"이다** — §23 표시 4종의 `[기본값 가정]`과 같은 원칙(색 없음)이되,
  *  뜻은 다르다: 워커 행은 "그래도 claude가 돈다"지만 여기는 **그 워커 자신의 엔진이 이긴다**. */
 function EngineField({
@@ -880,7 +953,6 @@ function EngineField({
   engines,
   modelPattern,
   onSaved,
-  onError,
 }: {
   projectId: string;
   name: string;
@@ -889,40 +961,54 @@ function EngineField({
   engines: EngineCatalog;
   modelPattern: string;
   onSaved: (engine: { engineId: string; model: string } | null) => void;
-  onError: (message: string | null) => void;
 }) {
   const initial = (): EnginePick => ({ engine: engine?.engineId ?? "", model: engine?.model ?? "" });
   const [open, setOpen] = useState(false);
   const [pick, setPick] = useState<EnginePick>(initial);
+  const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const ready = pick.engine !== "" && enginePickOk(pick, modelPattern) && !pending;
+  const labelId = `persona-engine-${name}-label`;
+  const triggerId = `persona-engine-${name}-value`;
+  const display = engine ? (engine.model ? `${engine.engineId} · ${engine.model}` : engine.engineId) : "지정 없음";
 
   const save = (id: string | null, model: string) =>
     start(async () => {
       const r = await savePersonaEngineAction(projectId, name, id, model);
-      onError(r.ok ? null : (r.message ?? "엔진을 저장하지 못했습니다."));
       if (r.ok) {
         onSaved(r.engine ?? null);
+        setError(null);
         setOpen(false);
+      } else {
+        setError(r.message ?? "엔진을 저장하지 못했습니다.");
       }
     });
 
   return (
-    <>
-      <Label className="text-xs text-muted-foreground">엔진</Label>
+    <span className="flex items-center gap-2">
+      <span id={labelId} className="text-xs text-muted-foreground">
+        엔진
+      </span>
       <Popover
         open={open}
         onOpenChange={(o) => {
           setOpen(o);
           // 닫는 것이 곧 취소다 — 저장 전에는 아무것도 안 썼다(§23 ②). 다시 열면 파일 값이다.
-          if (!o) setPick(initial());
+          if (!o) {
+            setPick(initial());
+            setError(null);
+          }
         }}
       >
         <PopoverTrigger
-          render={<Button variant="ghost" size="sm" className="font-mono text-xs font-normal" />}
+          id={triggerId}
+          aria-labelledby={`${labelId} ${triggerId}`}
+          render={<Button variant="ghost" size="sm" className="font-normal" />}
         >
-          <span className="max-w-[14rem] truncate">
-            {engine ? (engine.model ? `${engine.engineId} · ${engine.model}` : engine.engineId) : "지정 없음"}
+          {/* 값이 있으면 argv 토큰이라 mono, `지정 없음`은 문장이라 sans(§44 ② 값 서체) ·
+              `title`이 잘린 전문 자리다(§44 ⑤ 텍스트 잘림 — 지금까지 이 값이 없었다) */}
+          <span className={cn("max-w-[14rem] truncate", engine && "font-mono text-xs")} title={display}>
+            {display}
           </span>
           <ChevronDown aria-hidden className="size-3" />
         </PopoverTrigger>
@@ -935,6 +1021,7 @@ function EngineField({
             idPrefix={`persona-engine-${name}`}
           />
           <p className="text-xs text-muted-foreground">다음 티켓 선정부터 적용됩니다.</p>
+          {error && <Failure title="엔진을 저장하지 못했습니다" message={error} />}
           <div className="flex items-center justify-between gap-2">
             {engine && (
               <Button
@@ -959,7 +1046,7 @@ function EngineField({
           </div>
         </PopoverContent>
       </Popover>
-    </>
+    </span>
   );
 }
 
