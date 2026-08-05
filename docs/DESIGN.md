@@ -6500,6 +6500,51 @@ OAuth로 가서 **사람이 없으니 60초를 태우고 죽는다.**
 필요하다"와 "티켓이 한 세션에 안 들어간다"에 그대로 해당한다.** `4dfe01fb`가 `## 블록`으로 멈추고
 사람에게 넘기는 것은 이 판단이다: (b)를 이 프로그램으로 마저 만들지, 아니면 지금 (c)로 넘어갈지.
 
+**답 `0a2f86dc`가 물은 것은 (a)/(b)/(c) 중 하나가 아니라 전제 자체였다** — *"claude처럼 토큰
+한 번 받아서 헤드리스로 쓰는 법을 리서치해달라"*. ①이 "agy만 키체인"이라고 적은 전제를 다시
+잰 결과, **(d) 넷째 갈래가 있다** — agy 자체가 키체인이 아닌 **파일** 토큰으로 로그인하는 길을
+이미 갖고 있다:
+
+- `agy 1.1.10` 바이너리(`strings ~/.local/bin/agy`)에 Google **ADC**(Application Default
+  Credentials) 문자열이 박혀 있다: `"ADC authentication failed... 1. Run: gcloud auth
+  application-default login 2. Or check GOOGLE_APPLICATION_CREDENTIALS env var."` ·
+  `"You are logged in using Application Default Credentials (ADC)."` ·
+  리터럴 `application_default_credentials.json`. 같은 버전의 `agy changelog`(1.1.10)도
+  독립적으로 이를 확인한다 — *"Added sign-in with Application Default Credentials so you can
+  use Agent Platform."*
+- ADC의 자격증명은 **일반 파일**이다(`~/.config/gcloud/application_default_credentials.json`,
+  또는 `GOOGLE_APPLICATION_CREDENTIALS` 환경변수가 가리키는 서비스 계정 JSON 키) — claude의
+  `~/.config/dira/oauth-token`·grok의 `~/.grok/auth.json`과 같은 부류다. **파일이면 ①이 이미
+  적은 "파일은 cron에서 산다"가 그대로 적용돼 키체인·GUI 도메인 hop이 통째로 필요 없어진다.**
+  (b)의 plist 중계 프로그램도, (c)의 워커 상태 모델 재작성도 안 든다.
+- 이 머신엔 이미 `gcloud`가 설치돼 있고(`~/google-cloud-sdk/bin/gcloud`) 계정
+  `hsol@proofer.tech`로 **일반** `gcloud auth login`은 돼 있다(`~/.config/gcloud/credentials.db`
+  존재, 2026-07-17·08-02 갱신) — 다만 **ADC 로그인은 별개 명령**이고 `application_default_
+  credentials.json`은 이 머신에 없다(`gcloud auth login` ≠ `gcloud auth application-default
+  login`). 아직 안 밟은 단계다.
+
+**안 닫힌 것 셋, 그래서 (d)는 연구 결과이지 결정이 아니다.**
+
+1. `gcloud auth application-default login`은 **브라우저 OAuth 동의 화면**을 한 번 띄운다 —
+   세션이 대신 누를 수 없고, agy 인터랙티브 로그인에 쓴 구글 계정과 같은 계정으로 승인해야
+   의미가 있다. 사람이 직접 밟아야 하는 단계다.
+2. changelog 문구 `"so you can use Agent Platform"`이 ADC 로그인을 **Google Cloud "Agent
+  Platform"/Gemini Enterprise 등급에 한정**하는지, 지금 쓰는 컨슈머 계정(`consumerOnboarding
+  Complete: true`, ①)에서도 되는지 **실측 전에는 모른다** — 로그인해 보기 전엔 갈리지 않는 축.
+3. 서비스 계정 키(`GOOGLE_APPLICATION_CREDENTIALS`) 경로는 브라우저가 아예 없지만 Google Cloud
+  콘솔에서 프로젝트·서비스 계정을 새로 만드는 사람 쪽 작업이 하나 더 있다.
+
+**이 세션이 실제로 `gcloud auth application-default login`을 실행하거나 키체인을 더 뒤지지
+않은 이유** — 브라우저 동의·키체인 항목 하나하나에 대한 시스템 승인 팝업은 **사람의 화면을
+가로막는 행동**이고(§CDP를 띄울 때와 같은 성질의 위험), 이 세션이 `security dump-keychain`을
+돌려 실제로 그 팝업 폭탄을 냈다 — 사람이 직접 멈췄다. **다음 세션은 `security dump-keychain`·
+`gcloud auth application-default login`처럼 키체인 전체를 순회하거나 대화형 동의를 요구하는
+명령을 사람 승인 없이 실행하지 않는다.**
+
+**결정해줄 것.** (d)를 밟을지(사람이 브라우저에서 ADC 로그인 1회 + 그 계정이 맞는지 확인),
+아니면 (b)(새 중계 프로그램)나 (c)(워커 상태 모델 재작성)로 이미 답한 대로 갈지 — 어느 쪽이든
+사람이 브라우저를 한 번 눌러야 갈리는 첫 번째 실측이라 세션이 대신 좁힐 수 없다.
+
 ##### ③ 있는 것 · 없는 것 — `--help` 전문 기준
 
 | 자리 | claude | codex | grok | agy |
