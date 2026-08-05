@@ -4,9 +4,15 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { createHighlighter } from "shiki";
 
-// 마크다운 한 장을 굽는다. 소비자는 매뉴얼 22장(`app/docs/[[...slug]]`)과 루트 산문 2장
-// (`privacy`·`terms`)이고, 셋 다 같은 렌더를 써야 앵커 `id`·코드 토큰·표가 안 갈린다
-// (§사이트 기반 §갈아 끼우는 것의 `privacy`·`terms` 행 — *마크다운 렌더는 매뉴얼과 같은 것*).
+import "./fonts.css";
+import "./manual.css";
+import { Behaviors, DarkToggle, MenuToggle, NavToggle, NO_FLASH } from "./shell";
+
+// 마크다운 한 장을 셸에 담아 굽는다. 소비자는 셋이고(매뉴얼 22장 `app/docs/[[...slug]]` ·
+// 루트 산문 2장 `privacy`·`terms`) **한 벌**을 쓴다 — 렌더가 같아야 앵커 `id`·코드 토큰·표가
+// 안 갈리고, 셸이 같아야 크롬 여덟이 두 장에서 사라지지 않는다(§사이트 기반 §루트 산문 2장의
+// 셸 — 자리로 가르면 여덟이 같이 면제되고 그것이 지적 `f74ad5a7`을 낳은 자리다).
+// 파일이 하나인 것은 `Shell`이 `Doc`을 담는 그릇이라서다. 라우트 세그먼트 밖에 산다.
 
 // vitepress `config.ts:10-23`의 여섯 줄 그대로다. NFKD가 한글 음절을 자모로 쪼개고 결합문자
 // 제거가 자모를 안 건드려서 산출 `id`가 NFD로 남는 것을 끝의 `.normalize("NFC")`가 고정한다.
@@ -66,9 +72,9 @@ const highlighting = createHighlighter({
   langs: ["bash", "markdown"],
 });
 
-/** `id`·`className`은 부르는 쪽이 준다 — 매뉴얼 셸에서 이 `<main>`이 스킵링크의 목적지이자
- *  산문 타이포의 그릇이다. 루트 산문 2장은 세울 크롬이 0이라 그대로 둔다. */
-export default async function Doc({
+/** `id`·`className`은 부르는 쪽이 준다 — 이 `<main>`이 스킵링크의 목적지이자 산문 타이포의
+ *  그릇이다. 부르는 곳은 아래 `Shell` 하나다. */
+async function Doc({
   source,
   id,
   className,
@@ -144,5 +150,159 @@ export default async function Doc({
         {source}
       </ReactMarkdown>
     </main>
+  );
+}
+
+/** 아웃라인 — `## ` 한 단만 모은다(24장 전수에서 h3 중첩이 0건이라 2단 렌더는 대상이 없다.
+ *  `/privacy`가 항목 10으로 매뉴얼 최대 9보다 많지만 §④의 *1단으로 못박는다*는 그대로 선다).
+ *  펜스 안의 `## `는 헤딩이 아니라 건너뛴다. 24장 헤딩에 든 인라인 표시는 백틱뿐이라 백틱만
+ *  지우면 위 `Doc`이 `<h2>`에 넣는 글자와 같은 값이 나오고, `id`는 같은 파일의 `slugify`를
+ *  그대로 불러서 앵커가 갈릴 자리가 없다. 그 전제를 아래 `throw`가 지킨다 —
+ *  **백틱 밖만 본다**: `TICKET_CWD` 같은 코드 안의 `_`는 강조가 아니다. */
+function outlineOf(src: string, file: string) {
+  const out: { id: string; text: string }[] = [];
+  let fence = false;
+  for (const line of src.split("\n")) {
+    if (/^\s*(```|~~~)/.test(line)) fence = !fence;
+    else if (!fence && line.startsWith("## ")) {
+      const raw = line.slice(3).trim();
+      const outside = raw
+        .split("`")
+        .filter((_, i) => i % 2 === 0)
+        .join("");
+      if (/[*_[\]]/.test(outside))
+        throw new Error(`아웃라인이 못 읽는 헤딩 표시다: ${file} — "${raw}"`);
+      const text = raw.replace(/`/g, "");
+      out.push({ id: slugify(text), text });
+    }
+  }
+  return out;
+}
+
+const REPO = "https://github.com/proofer-tech/dira";
+
+type Item = { text: string; link: string };
+
+/** 셸. 값은 `docs/DESIGN.md` §매뉴얼 셸 시각 사양(`a1782bd7`)이 정하고, **어느 장이 무엇을
+ *  받나**는 §루트 산문 2장의 셸이 정한다 — `sidebar`가 있는 라우트에만 사이드바와 이전/다음이
+ *  선다. 그 둘이 `themeConfig.sidebar` 배열에서 나오는 크롬 전부이고, 나머지 여덟(네브바 ·
+ *  메뉴 · 소셜 · 스킵링크 · 다크 토글 · 산문 타이포 · 편집 링크 · 아웃라인)은 사이트 전역이거나
+ *  그 장 본문에서 나오므로 세 라우트가 다 받는다.
+ *
+ *  `editPath`는 `apps/site/` 아래 상대경로다 — vitepress `editLink.pattern`의 `:path`가
+ *  그 값이었다(`config.ts:132`). */
+export function Shell({
+  source,
+  path,
+  editPath,
+  sidebar,
+  prev,
+  next,
+}: {
+  source: string;
+  path: string;
+  editPath: string;
+  sidebar?: { text: string; items: Item[] }[];
+  prev?: Item;
+  next?: Item;
+}) {
+  const outline = outlineOf(source, editPath);
+
+  return (
+    <>
+      <script dangerouslySetInnerHTML={{ __html: NO_FLASH }} />
+      <a className="skip" href="#main">
+        본문으로 건너뛰기
+      </a>
+
+      <header className="nav">
+        <a className="brand" href="/" aria-label="dira">
+          <svg viewBox="0 0 32 32" fillRule="evenodd" aria-hidden="true">
+            <path d="M2 0H10A2 2 0 0 1 12 2V6H30A2 2 0 0 1 32 8V30A2 2 0 0 1 30 32H2A2 2 0 0 1 0 30V2A2 2 0 0 1 2 0ZM10 10H22A2 2 0 0 1 24 12V14A4 4 0 0 0 24 22V24A2 2 0 0 1 22 26H10A2 2 0 0 1 8 24V22A4 4 0 0 0 8 14V12A2 2 0 0 1 10 10Z" />
+          </svg>
+          dira
+        </a>
+        <nav className="nav-menu">
+          {/* 매뉴얼 밖(`/privacy`·`/terms`)에서는 켜지지 않는다 — 기본 테마의 `activeMatch`가
+              그 링크의 경로(`/docs/`)라 두 장에서 활성 항목이 0이었다. */}
+          <a className={path.startsWith("/docs") ? "on" : undefined} href="/docs/">
+            매뉴얼
+          </a>
+          <a href={`${REPO}/releases/latest`}>다운로드</a>
+        </nav>
+        <a className="social" href={REPO} aria-label="github" target="_blank" rel="noopener">
+          <svg viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.42 7.42 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z" />
+          </svg>
+        </a>
+        <DarkToggle />
+        <NavToggle />
+      </header>
+
+      {/* 로컬네브는 사이드바를 여는 줄이다 — 열 사이드바가 없으면 남는 것이 0이라 줄째로
+          사라진다(§루트 산문 2장의 셸 §폭: 두 장은 `<960`에서도 크롬이 네브바 하나다). */}
+      {sidebar && (
+        <div className="localnav">
+          <MenuToggle />
+        </div>
+      )}
+
+      <div className={sidebar ? "shell" : "shell noside"}>
+        {sidebar && (
+          <>
+            <aside className="sidebar" aria-label="매뉴얼 목차">
+              {sidebar.map((g) => (
+                <section key={g.text}>
+                  <h2>{g.text}</h2>
+                  {g.items.map((i) => (
+                    <a key={i.link} href={i.link} aria-current={i.link === path ? "page" : undefined}>
+                      {i.text}
+                    </a>
+                  ))}
+                </section>
+              ))}
+            </aside>
+            <div className="backdrop" />
+          </>
+        )}
+
+        <div className="content">
+          <Doc source={source} id="main" className="doc" />
+
+          <footer className="docfooter">
+            <div className="edit">
+              <a href={`${REPO}/edit/master/apps/site/${editPath}`}>이 페이지 고치기</a>
+            </div>
+            {(prev || next) && (
+              <nav className="prevnext" aria-label="이전 다음 문서">
+                {prev && (
+                  <a className="prev" href={prev.link}>
+                    <span className="side">이전</span>
+                    <span className="title">{prev.text}</span>
+                  </a>
+                )}
+                {next && (
+                  <a className="next" href={next.link}>
+                    <span className="side">다음</span>
+                    <span className="title">{next.text}</span>
+                  </a>
+                )}
+              </nav>
+            )}
+          </footer>
+        </div>
+
+        <aside className="outline" aria-label="이 페이지">
+          <h2>이 페이지</h2>
+          {outline.map((h) => (
+            <a key={h.id} href={`#${h.id}`}>
+              {h.text}
+            </a>
+          ))}
+        </aside>
+      </div>
+
+      <Behaviors />
+    </>
   );
 }
