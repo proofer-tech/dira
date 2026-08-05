@@ -177,8 +177,12 @@ export async function readTokens(): Promise<TokensFile> {
   return file;
 }
 
-/** 추가한다 — 같은 토큰이면 항목이 늘지 않고(같은 `id`) 그 항목을 활성으로 만든다.
- *  새로 넣은 토큰도 활성으로 만든다(§0-13 §화면 — 방금 인증한 사람이 원하는 것이 그것이다). */
+/** 추가한다 — 같은 토큰이면 항목이 늘지 않는다(같은 `id`).
+ *
+ *  **`active`는 안 건드린다** — `reconcileActive`에 맡긴다(§0-13 §화면, P179 뒤집힘). eligible한
+ *  활성이 이미 있으면(중복 추가 포함) 그 자리에 머물고 새 항목은 `대기`로 들어간다. eligible이
+ *  하나도 없을 때만(첫 토큰 · 전부 소진/비활성) 방금 넣은 항목이 그 판정으로 활성이 된다 —
+ *  판정을 두 벌로 적지 않는다. 지금 쓸 토큰을 사람이 직접 고르는 손은 `setActiveToken`이다. */
 export async function addToken(raw: string, label?: string): Promise<TokenEntry> {
   const token = normalizeToken(raw);
   const id = tokenId(token);
@@ -186,7 +190,9 @@ export async function addToken(raw: string, label?: string): Promise<TokenEntry>
   const tokens = file.claude?.tokens ?? [];
   const existing = tokens.find((t) => t.id === id);
   const entry = existing ?? newEntry(token, label);
-  await writeTokens({ claude: { active: id, tokens: existing ? tokens : [...tokens, entry] } });
+  const nextTokens = existing ? tokens : [...tokens, entry];
+  const active = reconcileActive(file.claude?.active ?? "", nextTokens);
+  await writeTokens({ claude: { active, tokens: nextTokens } });
   return entry;
 }
 
@@ -256,6 +262,16 @@ export async function setTokenEnabled(id: string, enabled: boolean): Promise<voi
   if (!engine) return;
   const tokens = engine.tokens.map((t) => (t.id === id ? { ...t, enabled } : t));
   await writeTokens({ claude: { active: reconcileActive(engine.active, tokens), tokens } });
+}
+
+/** 행의 `사용` 버튼 — 지금 쓸 토큰을 사람이 직접 고른다(§0-13 §화면 · P179). `대기` 행에만
+ *  붙는 버튼이라 대상은 이미 eligible이지만, 목록에 없는 id가 오면 조용히 무시한다(방어).
+ *  `비활성`·`소진`을 이걸로 활성화하지 않는다 — 화면이 애초에 그 행엔 버튼을 안 그린다. */
+export async function setActiveToken(id: string): Promise<void> {
+  const file = await readTokens();
+  const engine = file.claude;
+  if (!engine || !engine.tokens.some((t) => t.id === id)) return;
+  await writeTokens({ claude: { active: id, tokens: engine.tokens } });
 }
 
 /** 행의 `삭제` 버튼 — 마지막 하나를 지워도 막지 않는다(§0-13 §상태). */
@@ -433,7 +449,8 @@ export function startSetup(): SetupState {
     }
     s.settled = true; // 저장은 비동기다 — 다음 청크가 두 번 저장하지 않게 여기서 잠근다
     kill(s);
-    // 덮어쓰기가 아니라 목록 append + 활성화다(§0-13 §화면) — `addToken`이 이미 그렇게 한다
+    // 덮어쓰기가 아니라 목록 append다 — 활성은 `addToken`의 `reconcileActive` 판정을 그대로
+    // 따른다(§0-13 §화면, P179). eligible한 활성이 이미 있으면 대기로 들어간다
     addToken(m[0])
       .then(readAuth)
       .then((a) => {

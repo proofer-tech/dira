@@ -39,6 +39,7 @@ import {
   startSetupAction,
   pollSetupAction,
   stopSetupAction,
+  useTokenAction,
 } from "@/app/actions";
 import type { SetupState, TokenRow, TokenStatus } from "@/lib/auth";
 import { useHotkey, useKeymap } from "@/components/keymap-provider";
@@ -338,8 +339,10 @@ function TokenStatusBadge({ status }: { status: TokenStatus }) {
  *  때문에 레이아웃 둘·컴포넌트 둘의 프롭이 같이 늘어난다).
  *
  *  `추가`는 새 버튼을 만들지 않는다 — 바로 아래 층 ②·③(발급·직접 넣기)이 이미 그 자리다. 결과가
- *  덮어쓰기에서 append로 바뀌었을 뿐이다(§0-13 §화면). 활성화는 `setTokenEnabledAction` →
- *  `lib/auth.ts`의 `writeTokens` 안에서만 `oauth-token`을 다시 쓴다 — 이 컴포넌트는 직접 안 쓴다. */
+ *  덮어쓰기가 아니라 append고, **활성은 안 움직인다**(§0-13 §화면, P179) — 새/중복 토큰은 `대기`로
+ *  들어간다(eligible한 활성이 없을 때만 예외로 활성이 된다). 지금 쓸 토큰은 `대기` 행의 `사용`
+ *  버튼으로 사람이 직접 고른다. 활성화·사용 어느 쪽도 `oauth-token` 쓰기는 이 컴포넌트가 직접
+ *  하지 않는다 — `setTokenEnabledAction`·`useTokenAction`이 `lib/auth.ts`의 `writeTokens` 안에서만 한다. */
 function TokensSection({ refreshKey }: { refreshKey: string | null }) {
   const [rows, setRows] = useState<TokenRow[] | null>(null);
   const [pending, start] = useTransition();
@@ -354,6 +357,7 @@ function TokensSection({ refreshKey }: { refreshKey: string | null }) {
   const setEnabled = (row: TokenRow, enabled: boolean) =>
     start(async () => setRows(await setTokenEnabledAction(row.id, enabled)));
   const remove = (row: TokenRow) => start(async () => setRows(await deleteTokenAction(row.id)));
+  const use = (row: TokenRow) => start(async () => setRows(await useTokenAction(row.id)));
 
   if (rows === null) return null; // 아직 안 읽었다 — 빈 목록과 헷갈리지 않는다
   if (rows.length === 0) {
@@ -378,6 +382,13 @@ function TokensSection({ refreshKey }: { refreshKey: string | null }) {
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-1">
+            {/* `대기` 행에만 붙는다 — `비활성`·`소진`은 각각 `활성화` 버튼(사람 축)과
+                §4-9 "지우는 손잡이는 안 만든다"가 이미 막은 자리다(§0-13 §화면 · P179) */}
+            {row.status.kind === "pending" && (
+              <Button variant="outline" size="sm" disabled={pending} onClick={() => use(row)}>
+                사용
+              </Button>
+            )}
             <Button
               variant="outline"
               size="sm"
@@ -532,7 +543,7 @@ export function SettingsDialog({
             </p>
           )}
 
-          {/* ① 목록 — 토큰 하나가 아니라 여러 계정을 확인·활성화/비활성화·삭제한다(§0-13 §화면) */}
+          {/* ① 목록 — 토큰 하나가 아니라 여러 계정을 확인·사용·활성화/비활성화·삭제한다(§0-13 §화면) */}
           <TokensSection refreshKey={savedAt} />
 
           {/* ②·③(발급·직접 넣기)은 상시 렌더되는 블록이 아니라 이 트리거 하나로 접힌다
@@ -652,8 +663,8 @@ export function SettingsDialog({
                   </Button>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  이미 발급받은 토큰이 있으면 여기에 붙여 넣습니다. 목록에 추가되고 바로
-                  활성화됩니다.
+                  이미 발급받은 토큰이 있으면 여기에 붙여 넣습니다. 목록에 대기로 추가됩니다 —
+                  지금 쓸 토큰은 목록에서 &quot;사용&quot;으로 고릅니다.
                 </p>
                 {result.error && <p className="text-xs text-destructive">{result.error}</p>}
                 {/* 삼키지 않는 것이 요건이지 미리 아는 것이 요건이 아니다 — 형식으로 거르지

@@ -30,6 +30,7 @@ const {
   readTokenRows,
   readTokens,
   saveToken,
+  setActiveToken,
   setTokenEnabled,
   startSetup,
   stopSetup,
@@ -144,6 +145,10 @@ async function until(p: () => boolean, ms = 8_000) {
 }
 
 test("startSetup — pty로 몰고, 토큰을 집어 저장하고, 프로세스를 남기지 않는다", async () => {
+  // 앞선 `saveToken` 테스트들이 이 LOCAL의 oauth-token에 이미 값을 남겨 놨다 — 그 값이
+  // 마이그레이션으로 eligible한 활성이 되면 addToken이 새 값을 대기로 넣는다(P179).
+  // 이 테스트는 "pty가 잡은 값이 저장된다"만 재므로 빈 TICKET_LOCAL로 격리한다.
+  process.env.TICKET_LOCAL = mkdtempSync(path.join(tmpdir(), "fst-auth-setup-"));
   // pty 폭이 200이어야 토큰이 줄바꿈으로 안 쪼개진다 — 스텁이 그 값을 직접 찍는다
   stubClaude(`stty size\nprintf 'Opening\\033[12Gbrowser\\r\\n'\nprintf 'sk-ant-oat01-${"x".repeat(40)}\\r\\n'\nsleep 60`);
   armPidfile();
@@ -291,16 +296,47 @@ test("addToken — 같은 토큰을 두 번 추가해도 항목이 늘지 않는
   assert.strictEqual(file.claude!.tokens.filter((t) => t.id === a.id).length, 1);
 });
 
-test("addToken — active가 바뀔 때마다 oauth-token을 다시 쓴다(개행 없는 한 줄 · 0600)", async () => {
+test("addToken — 빈 목록에 첫 토큰을 넣으면 활성이 되고 oauth-token이 쓰인다(개행 없는 한 줄 · 0600)", async () => {
+  const local = mkdtempSync(path.join(tmpdir(), "fst-auth-addactive-"));
+  process.env.TICKET_LOCAL = local; // 이 테스트 구획은 빈 상태에서 재야 하므로 별도 LOCAL
+
   await addToken("sk-ant-oat01-first");
   assert.strictEqual(readFileSync(tokenPath(), "utf8"), "sk-ant-oat01-first");
-
-  await addToken("sk-ant-oat01-second");
-  assert.strictEqual(readFileSync(tokenPath(), "utf8"), "sk-ant-oat01-second");
   assert.strictEqual(statSync(tokenPath()).mode & 0o777, 0o600);
 
   const file = await readTokens();
-  assert.strictEqual(file.claude!.active, sha256_12("sk-ant-oat01-second"));
+  assert.strictEqual(file.claude!.active, sha256_12("sk-ant-oat01-first"));
+});
+
+test("addToken — eligible한 활성이 있으면 새로 추가해도 active가 안 움직인다(대기로 들어간다, P179)", async () => {
+  const local = mkdtempSync(path.join(tmpdir(), "fst-auth-addpending-"));
+  process.env.TICKET_LOCAL = local;
+  await addToken("sk-ant-oat01-first"); // 첫 토큰 — eligible 0이었으므로 활성이 된다
+
+  await addToken("sk-ant-oat01-second");
+  assert.strictEqual(readFileSync(tokenPath(), "utf8"), "sk-ant-oat01-first", "active가 움직였다");
+
+  const file = await readTokens();
+  assert.strictEqual(file.claude!.active, sha256_12("sk-ant-oat01-first"));
+  const second = file.claude!.tokens.find((t) => t.id === sha256_12("sk-ant-oat01-second"));
+  assert.ok(second, "새 항목이 목록에 없다");
+
+  // 중복 추가(이미 대기인 second를 다시 추가)도 active를 안 움직인다
+  await addToken("sk-ant-oat01-second");
+  assert.strictEqual((await readTokens()).claude!.active, sha256_12("sk-ant-oat01-first"));
+});
+
+test("addToken — eligible이 0이면(전부 소진/비활성) 새 토큰이 활성이 된다(§0-13 §화면, reconcileActive 재사용)", async () => {
+  const local = mkdtempSync(path.join(tmpdir(), "fst-auth-addrevive-"));
+  process.env.TICKET_LOCAL = local;
+  const a = await addToken("sk-ant-oat01-onlyone"); // 유일한 토큰 — 활성이다
+  await setTokenEnabled(a.id, false); // eligible 0 — oauth-token이 지워진다
+  assert.ok(!existsSync(tokenPath()));
+
+  await addToken("sk-ant-oat01-fresh");
+  const file = await readTokens();
+  assert.strictEqual(file.claude!.active, sha256_12("sk-ant-oat01-fresh"), "eligible 0인데 새 토큰이 활성이 안 됐다");
+  assert.strictEqual(readFileSync(tokenPath(), "utf8"), "sk-ant-oat01-fresh");
 });
 
 test("손편집 들여오기 — oauth-token이 목록 어느 것과도 안 맞으면 덮어쓰지 않고 새 항목으로 들여온다", async () => {
@@ -340,9 +376,9 @@ process.on("exit", () => rmSync(LOCAL3, { recursive: true, force: true }));
 
 test("readTokenRows — label 기본값·가린 값·상태 넷을 그대로 낸다", async () => {
   process.env.TICKET_LOCAL = LOCAL3;
-  const a = await addToken("sk-ant-oat01-aaaaaaaaaaaaaaaaaaaa", "A계정");
-  const b = await addToken("sk-ant-oat01-bbbbbbbbbbbbbbbbbbbb"); // label 없음 → 계정 n
-  await setTokenEnabled(a.id, false); // 활성이 아니므로 그냥 비활성이 된다(b가 활성인 채로 남는다)
+  const a = await addToken("sk-ant-oat01-aaaaaaaaaaaaaaaaaaaa", "A계정"); // 첫 토큰 — 활성이다
+  const b = await addToken("sk-ant-oat01-bbbbbbbbbbbbbbbbbbbb"); // label 없음 → 계정 n, 대기로 들어간다(P179)
+  await setTokenEnabled(a.id, false); // 활성(a)을 끄면 그 자리에서 b로 넘어간다
 
   const rows = await readTokenRows();
   assert.strictEqual(rows.length, 2);
@@ -383,33 +419,49 @@ test("readTokenRows — eligible이 0이 되면 active가 가리키던 그 항�
 test("setTokenEnabled — 활성 토큰을 비활성화하면 그 자리에서 다음 eligible로 넘어간다", async () => {
   const local = mkdtempSync(path.join(tmpdir(), "fst-auth-rotate-"));
   process.env.TICKET_LOCAL = local;
-  const a = await addToken("sk-ant-oat01-rotate-a");
-  const b = await addToken("sk-ant-oat01-rotate-b"); // b가 활성이다(마지막에 추가한 것)
+  const a = await addToken("sk-ant-oat01-rotate-a"); // 첫 토큰 — 활성이다
+  const b = await addToken("sk-ant-oat01-rotate-b"); // eligible 활성(a)이 있으므로 대기다(P179)
 
-  await setTokenEnabled(b.id, false);
+  await setTokenEnabled(a.id, false); // 활성(a)을 끈다 — b로 넘어가야 한다
   const file = await readTokens();
-  assert.strictEqual(file.claude!.active, a.id, "다음 eligible(a)로 안 넘어갔다");
-  assert.strictEqual(readFileSync(tokenPath(), "utf8"), "sk-ant-oat01-rotate-a");
+  assert.strictEqual(file.claude!.active, b.id, "다음 eligible(b)로 안 넘어갔다");
+  assert.strictEqual(readFileSync(tokenPath(), "utf8"), "sk-ant-oat01-rotate-b");
 
   // 남은 것마저 꺼지면 eligible이 0이다 — oauth-token이 지워진다(막지 않는다)
-  await setTokenEnabled(a.id, false);
+  await setTokenEnabled(b.id, false);
   assert.ok(!existsSync(tokenPath()));
 });
 
 test("deleteToken — 활성 토큰을 지워도 다음 eligible로 넘어가고, 마지막 하나도 막지 않는다", async () => {
   const local = mkdtempSync(path.join(tmpdir(), "fst-auth-delete-"));
   process.env.TICKET_LOCAL = local;
-  const a = await addToken("sk-ant-oat01-del-a");
-  const b = await addToken("sk-ant-oat01-del-b"); // b가 활성이다
+  const a = await addToken("sk-ant-oat01-del-a"); // 첫 토큰 — 활성이다
+  const b = await addToken("sk-ant-oat01-del-b"); // eligible 활성(a)이 있으므로 대기다(P179)
 
-  await deleteToken(b.id);
+  await deleteToken(a.id); // 활성 토큰을 지운다 — b로 넘어가야 한다
   let file = await readTokens();
   assert.strictEqual(file.claude!.tokens.length, 1);
-  assert.strictEqual(file.claude!.active, a.id);
-  assert.strictEqual(readFileSync(tokenPath(), "utf8"), "sk-ant-oat01-del-a");
+  assert.strictEqual(file.claude!.active, b.id);
+  assert.strictEqual(readFileSync(tokenPath(), "utf8"), "sk-ant-oat01-del-b");
 
-  await deleteToken(a.id); // 마지막 하나 — 막지 않는다
+  await deleteToken(b.id); // 마지막 하나 — 막지 않는다
   file = await readTokens();
   assert.strictEqual(file.claude!.tokens.length, 0);
   assert.ok(!existsSync(tokenPath()));
+});
+
+test("setActiveToken — `대기` 행의 `사용`이 그 id를 활성으로 만들고 oauth-token을 다시 쓴다(P179)", async () => {
+  const local = mkdtempSync(path.join(tmpdir(), "fst-auth-use-"));
+  process.env.TICKET_LOCAL = local;
+  await addToken("sk-ant-oat01-use-a"); // 첫 토큰 — 활성이 된다
+  const b = await addToken("sk-ant-oat01-use-b"); // 대기다(P179)
+
+  await setActiveToken(b.id);
+  const file = await readTokens();
+  assert.strictEqual(file.claude!.active, b.id);
+  assert.strictEqual(readFileSync(tokenPath(), "utf8"), "sk-ant-oat01-use-b");
+
+  // 목록에 없는 id는 조용히 무시한다 — active가 안 바뀐다
+  await setActiveToken("no-such-id");
+  assert.strictEqual((await readTokens()).claude!.active, b.id);
 });

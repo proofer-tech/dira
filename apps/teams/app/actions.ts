@@ -16,6 +16,7 @@ import {
   readAuth,
   readTokenRows,
   sendSetupCode,
+  setActiveToken,
   setTokenEnabled,
   startSetup,
   stopSetup,
@@ -313,7 +314,10 @@ export async function unregisterProjectAction(id: string): Promise<ActionResult>
  *  **유효성은 판정하지 않는다** — 접두사로 거르면 형식이 바뀔 때 멀쩡한 토큰을 GUI가 거부한다.
  *  실제 유효성은 워커가 돌아야 드러나고, 다이얼로그가 그렇게 말한다.
  *
- *  **덮어쓰기가 아니라 목록 append + 활성화다**(§0-13 §화면) — `addToken`이 그 계약을 지킨다. */
+ *  **덮어쓰기가 아니라 목록 append다 — 활성은 안 움직인다**(§0-13 §화면, P179). eligible한 활성이
+ *  이미 있으면 그 자리에 머물고 이 토큰은 `대기`로 들어간다; eligible이 하나도 없을 때만(첫 토큰 등)
+ *  이 토큰이 활성이 된다 — `addToken`이 `reconcileActive`로 그 계약을 지킨다. 지금 쓸 토큰을
+ *  직접 고르는 손은 `useTokenAction`(대기 행의 `사용` 버튼)이다. */
 export async function saveTokenAction(raw: string): Promise<{ savedAt?: string; error?: string }> {
   try {
     await addToken(raw);
@@ -337,6 +341,14 @@ export async function readTokenRowsAction(): Promise<TokenRow[]> {
 export async function setTokenEnabledAction(id: string, enabled: boolean): Promise<TokenRow[]> {
   await setTokenEnabled(id, enabled);
   revalidatePath("/", "layout"); // 활성 토큰이 이 자리에서 바뀔 수 있다 — 배너·트리거 배지도 같이 본다
+  return readTokenRows();
+}
+
+/** `대기` 행의 `사용` 버튼 — 지금 쓸 토큰을 사람이 직접 고른다(§0-13 §화면 · P179). `oauth-token`
+ *  쓰기는 `setActiveToken`(→`writeTokens`) 안에서만 일어난다. */
+export async function useTokenAction(id: string): Promise<TokenRow[]> {
+  await setActiveToken(id);
+  revalidatePath("/", "layout"); // 활성 토큰이 이 자리에서 바뀐다 — 배너·트리거 배지도 같이 본다
   return readTokenRows();
 }
 
