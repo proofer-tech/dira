@@ -13,7 +13,6 @@ import { CopyCommand } from "@/components/copy-command";
 import {
   CommonContextCard,
   CreateWorkerButton,
-  EngineCell,
   ExpandScope,
   WorkerContextCell,
   WorkerActivityCell,
@@ -40,9 +39,6 @@ import {
   firstWorkerCmd,
   listWorkers,
   readCommonContext,
-  ENGINES,
-  MODEL_RE,
-  engineCell,
 } from "@/lib/workers";
 
 // 워커는 GUI 밖에서(cron이) 상태를 바꾼다 — 프리렌더하면 빌드 시점 현황이 굳는다.
@@ -104,8 +100,6 @@ export default async function Workers({ params }: { params: Promise<{ project: s
 
   const rows: WorkerRow[] = workers.map((w) => ({
     ...w,
-    // 표시 4종의 판정은 서버가 한다(§비주얼 §23 ①) — 화면이 카탈로그를 다시 대조하면 두 벌이 된다
-    engine: engineCell(w.engine),
     // 세션 스트림·참견이 이 값 하나로 갈린다(§4-3). 클라이언트가 `engineName`을 못 부르므로
     // (그 파일이 `node:fs`를 탄다) 서버가 여기서 한 번 적용한다 — 판정식은 여전히 하나다.
     engineName: engineName(w.engine),
@@ -144,13 +138,7 @@ export default async function Workers({ params }: { params: Promise<{ project: s
           )}
         </div>
         {rows.length > 0 && (
-          <CreateWorkerButton
-            projectId={id}
-            canTemplate
-            firstCmd={firstWorkerCmd(project.root)}
-            engines={ENGINES}
-            modelPattern={MODEL_RE.source}
-          />
+          <CreateWorkerButton projectId={id} canTemplate firstCmd={firstWorkerCmd(project.root)} />
         )}
       </div>
 
@@ -163,8 +151,6 @@ export default async function Workers({ params }: { params: Promise<{ project: s
                 projectId={id}
                 canTemplate={false}
                 firstCmd={firstWorkerCmd(project.root)}
-                engines={ENGINES}
-                modelPattern={MODEL_RE.source}
               />
             }
           />
@@ -188,8 +174,6 @@ export default async function Workers({ params }: { params: Promise<{ project: s
               <TableHead className="h-9 px-3 text-xs">이름</TableHead>
               <TableHead className="h-9 px-3 text-xs">상태</TableHead>
               <TableHead className="h-9 px-3 text-xs">물고 있는 티켓</TableHead>
-              <TableHead className="h-9 px-3 text-xs">엔진</TableHead>
-              {/* 엔진 오른쪽이다 — 설정을 그 자리에서 고치는 열끼리 이웃한다(§비주얼 §35 #3) */}
               <TableHead className="h-9 px-3 text-xs">컨텍스트</TableHead>
               <TableHead className="h-9 px-3 text-xs">마지막 활동</TableHead>
               <TableHead className="h-9 px-3 text-right text-xs">pid</TableHead>
@@ -230,24 +214,8 @@ export default async function Workers({ params }: { params: Promise<{ project: s
                     <span className="text-muted-foreground">—</span>
                   )}
                 </TableCell>
-                {/* 상한은 `td`가 아니라 안쪽 `span`에 건다 — auto table layout은 `td`의
-                    max-width를 상한으로 지키지 않는다(§비주얼 §6). `w-px`는 이 컬럼을 남는
-                    폭 배분에서 빼는 것이고(배분은 안쪽 max-width를 보지 않는다), 그래야
-                    상한이 문다. 실제 폭은 내용이 정한다 */}
-                <TableCell className="w-px px-3 py-0" title={w.engine.argv}>
-                  {/* **이 표에서 컨트롤인 셀은 여기 하나다**(§4-3 액션 정렬 예외 2 — 조작 대상
-                      옆이다): 값이 곧 팝오버 트리거고 거기서 엔진·모델을 고른다(§비주얼 §23 ②).
-                      `title`은 종전대로 argv 전문이고, 대입이 없는 워커에서는 **실제로 도는**
-                      tick.sh 기본값이다 */}
-                  <EngineCell
-                    projectId={id}
-                    row={w}
-                    engines={ENGINES}
-                    modelPattern={MODEL_RE.source}
-                  />
-                </TableCell>
-                {/* **이 표의 둘째 컨트롤 셀**(§비주얼 §35 #3) — 값이 곧 토글이고 그 아래 둘째
-                    행이 이 워커의 컨텍스트 편집이다. 대비 처방은 `엔진` 열을 그대로 상속한다 */}
+                {/* **이 표의 첫 컨트롤 셀**(§비주얼 §35 #3) — 값이 곧 토글이고 그 아래 둘째
+                    행이 이 워커의 컨텍스트 편집이다(§9, `text-foreground` 대비 처방) */}
                 <TableCell className="w-px px-3 py-0">
                   <WorkerContextCell row={w} />
                 </TableCell>

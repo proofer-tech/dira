@@ -22,6 +22,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { expandHome } from "./paths.ts";
 import { personaFilePath } from "./projects.ts";
+import { type EngineId, NO_MODEL, parseEngineValue, renderEngineBlock } from "./workers.ts";
 
 /** 목록 한 항목. `description`은 `SKILL.md` frontmatter 원문 그대로다 — **자르지 않는다**(§5-1:
  *  "언제 이걸 쓰는가"가 유도의 본체다. 길이는 비용이고 비용은 화면의 자수가 정직하게 보인다). */
@@ -262,6 +263,56 @@ export async function writePersonaLimit(dir: string, name: string, limit: number
   }
   await mkdir(path.dirname(file), { recursive: true });
   await writeFile(file, `${limit}\n`, "utf8");
+}
+
+// ── 페르소나별 실행 엔진 (`<personas>/<이름>/engine` · §제약 1 §결정 기록 §열한 번째) ────
+
+/** 내용은 워커 파일이 쓰는 것과 **글자 하나까지 같은 한 줄** — `TICKET_ENGINE=(...)`
+ *  (`renderEngineBlock` 그대로, §23 카탈로그 무수정 · 요구 `3917dbda` 답 `7563d133`).
+ *  `tick.sh`가 이 파일을 그대로 `source`하므로 새 파서를 만들지 않는다 — 배열 블록 한 줄만 읽는다.
+ *
+ *  파일 없음 · 못 읽음 · 모양이 다름 · 카탈로그와 안 맞는 값은 전부 `null`(= 지정 없음 — 그
+ *  페르소나는 워커 자신의 엔진을 그대로 쓴다). `limit`과 같은 원칙: 파서를 안 만들고, 오타 하나가
+ *  조용히 다른 뜻으로 읽히지 않는다. */
+export async function readPersonaEngine(
+  dir: string,
+  name: string,
+): Promise<{ engineId: EngineId; model: string } | null> {
+  let file: string;
+  try {
+    file = await personaFilePath(dir, name, "engine");
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
+    return null;
+  }
+  const text = (await readFile(file, "utf8").catch(() => "")).trim();
+  const m = /^TICKET_ENGINE=\((.*)\)$/.exec(text);
+  return m ? parseEngineValue(m[1]) : null;
+}
+
+/** 저장. `id === null`이면 파일을 지운다(= 지정 없음, `writePersonaLimit`과 같은 규약).
+ *
+ *  자기검증은 **쓴 뒤 읽기 경로로 다시 읽는다**(`readPersonaEngine` — 워커 파일 대상이던
+ *  `writeEngine`과 같은 패턴). 값이 다르면 **안 쓴 것으로 실패한다** — 쓴 파일을 지운다. */
+export async function writePersonaEngine(
+  dir: string,
+  name: string,
+  id: EngineId | null,
+  model: string = NO_MODEL,
+): Promise<{ engineId: EngineId; model: string } | null> {
+  const file = await personaFilePath(dir, name, "engine");
+  if (id === null) {
+    await rm(file, { force: true });
+    return null;
+  }
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(file, `${renderEngineBlock(id, model)}\n`, "utf8");
+  const back = await readPersonaEngine(dir, name);
+  if (!back || back.engineId !== id || back.model !== model) {
+    await rm(file, { force: true });
+    throw new Error(`쓴 블록을 다시 읽으면 값이 달라집니다. 쓰지 않았습니다.`);
+  }
+  return back;
 }
 
 // ── 페르소나 메모리 (`<personas>/<이름>/memory/*.md` · §5-2) ─────────────────

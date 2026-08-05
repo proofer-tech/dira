@@ -8,13 +8,16 @@ import {
   listInstalledSkills,
   memoryExcerpt,
   pickedSkills,
+  readPersonaEngine,
   readPersonaLimit,
   readPersonaMemory,
   readPersonaSkills,
   readPersonaSkillsFile,
+  writePersonaEngine,
   writePersonaLimit,
   writePersonaSkills,
 } from "./skills.ts";
+import { renderEngineBlock } from "./workers.ts";
 
 /** 설치된 스킬 픽스처 — **이 머신의 `~/.claude`를 읽지 않는다.** 머신마다 결과가 달라
  *  회귀 판정이 안 된다(티켓 d608feb3). `<config>`를 인자로 주입한다.
@@ -327,4 +330,60 @@ test("상한 — 이름이 신뢰 경계고, 정수가 아닌 값은 쓰지 않�
     await assert.rejects(() => writePersonaLimit(personas, "lim", bad), /0 이상의 정수/);
   }
   assert.equal(existsSync(path.join(personas, "lim", "limit")), false);
+});
+
+// ── 페르소나별 실행 엔진 (§제약 1 §결정 기록 §열한 번째) ────────────────────
+
+test("엔진 — 왕복. 쓰는 바이트가 워커 파일과 같은 한 줄이다", async () => {
+  const file = path.join(personas, "eng", "engine");
+  assert.deepEqual(await writePersonaEngine(personas, "eng", "codex", "gpt-5.5"), {
+    engineId: "codex",
+    model: "gpt-5.5",
+  });
+  assert.equal(readFileSync(file, "utf8"), `${renderEngineBlock("codex", "gpt-5.5")}\n`);
+  assert.deepEqual(await readPersonaEngine(personas, "eng"), { engineId: "codex", model: "gpt-5.5" });
+
+  // 모델 없이 — NO_MODEL이면 플래그가 통째로 사라진다(카탈로그 규약, §4-3)
+  await writePersonaEngine(personas, "eng", "claude");
+  assert.deepEqual(await readPersonaEngine(personas, "eng"), { engineId: "claude", model: "" });
+});
+
+test("엔진 — null이면 파일을 지운다(= 지정 없음)", async () => {
+  const file = path.join(personas, "eng", "engine");
+  assert.ok(existsSync(file));
+  await writePersonaEngine(personas, "eng", null);
+  assert.equal(existsSync(file), false);
+  assert.equal(await readPersonaEngine(personas, "eng"), null);
+  await writePersonaEngine(personas, "eng", null); // 없는 파일을 또 지워도 조용하다
+});
+
+test("엔진 — 파일 없음 · 모양이 다름은 지정 없음이다(파서를 안 만든다)", async () => {
+  const dir = path.join(personas, "loose-eng");
+  mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, "engine");
+  for (const text of ["", "claude", "TICKET_ENGINE=(mock-engine --flag)", "TICKET_ENGINE=(claude"]) {
+    writeFileSync(file, text);
+    assert.equal(await readPersonaEngine(personas, "loose-eng"), null, JSON.stringify(text));
+  }
+  assert.equal(await readPersonaEngine(personas, "no-such-persona"), null);
+});
+
+test("엔진 — 모르는 엔진·위험한 모델은 거부하고 파일을 안 남긴다(신뢰 경계)", async () => {
+  await assert.rejects(
+    () => writePersonaEngine(personas, "bad-eng", "gemini" as "claude"),
+    /모르는 엔진/,
+  );
+  await assert.rejects(
+    () => writePersonaEngine(personas, "bad-eng", "codex", "a b; rm -rf /"),
+    /쓸 수 없는 문자/,
+  );
+  assert.equal(existsSync(path.join(personas, "bad-eng", "engine")), false);
+});
+
+test("엔진 — 이름이 신뢰 경계다", async () => {
+  for (const bad of ["../escape", "a/b", "", "."]) {
+    await assert.rejects(() => readPersonaEngine(personas, bad), /페르소나 이름은/);
+    await assert.rejects(() => writePersonaEngine(personas, bad, "claude"), /페르소나 이름은/);
+  }
+  assert.equal(existsSync(path.join(tmp, "escape")), false);
 });

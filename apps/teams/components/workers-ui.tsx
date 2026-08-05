@@ -28,7 +28,6 @@ import {
   registerWorkerAction,
   saveCommonContextAction,
   saveContextAction,
-  setEngineAction,
   stopWorkerAction,
   type ContextResult,
   type WorkerActionResult,
@@ -51,17 +50,8 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { TableCell, TableRow } from "@/components/ui/table";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { engineMissing, relativeUnder } from "@/lib/urls";
+import { relativeUnder } from "@/lib/urls";
 import { cn } from "@/lib/utils";
 
 /** 서버가 읽어 넘긴 컨텍스트 한 항목. `path`는 워커 파일에 든 셸 문자열이라 `$TICKET_CWD`가
@@ -82,16 +72,7 @@ export type WorkerRow = {
   cron: boolean;
   lockPid: number | null;
   holding: string | null;
-  /** `엔진` 열이 그리는 것 — 판정은 서버(`engineCell`)가 한다. 표시 4종의 출처가 하나여야
-   *  화면 둘이 안 갈린다(§비주얼 §23 ①). `argv`는 셀 `title`의 전문이고 `value`는 팝오버
-   *  초기값이다(`null` = 카탈로그 밖 = 손으로 쓴 값) */
-  engine: {
-    label: string;
-    badge: "assumed" | "custom" | null;
-    argv: string;
-    value: { engineId: string; model: string } | null;
-  };
-  /** `engine`의 첫 토큰 basename — §0-4 인증 배너와 **같은 `engineName`**이다. 서버가 계산해
+  /** 실행 중인 엔진의 첫 토큰 basename — §0-4 인증 배너와 **같은 `engineName`**이다. 서버가 계산해
    *  넘긴다: `lib/workers.ts`가 `node:fs`를 타서 이 파일이 그 함수를 못 import한다(§규약).
    *  세션 스트림·참견이 이 값 하나로 갈린다(§4-3 · §비주얼 §23 ⑤) */
   engineName: string;
@@ -141,284 +122,6 @@ function CrontabApproval() {
   );
 }
 
-// ── 엔진 · 모델 필드 한 쌍 (§4-3 · §비주얼 §23 ③) ───────────────────────────
-
-/** 서버가 **값으로** 내려주는 카탈로그 = `lib/workers.ts`의 `ENGINES` 그대로다. 그 모듈은
- *  `node:fs`를 물어 클라이언트가 import할 수 없고, 목록을 여기 다시 적으면 화면이 파일에
- *  안 들어가는 이름을 그리게 된다(두 벌은 반드시 갈린다). */
-export type EngineCatalog = readonly { id: string; models: readonly string[] }[];
-
-/** 고른 값. `모델 지정 안 함`은 **빈 문자열**이고(`NO_MODEL`) 라벨은 화면이 붙인다(§23 ③).
- *  `custom`이면 `model`은 사람이 친 글자다 — 목록 값과 같은 자리를 쓴다. */
-export type EnginePick = { engine: string; model: string; custom?: boolean };
-
-/** 목록에 없는 **화면만의 항목**. 값이 곧 라벨이고 모델 이름과 겹칠 수 없다 — 서버의
- *  `MODEL_RE`가 한글도 `…`도 안 받는다. */
-const CUSTOM = "직접 입력…";
-
-/** 지금 값으로 만들 수 있는가. 직접 입력만 걸린다 — 빈 값(`+`가 0글자를 안 받는다)과 셸
- *  메타문자가 여기서 막힌다. **즉시 거절일 뿐이고** 진짜 검증은 서버가 다시 한다(§23 ④). */
-export const enginePickOk = (pick: EnginePick, modelPattern: string) =>
-  !pick.custom || new RegExp(modelPattern).test(pick.model);
-
-/** 워커 행의 팝오버와 생성 폼이 **같은 것**을 그린다(§23 ③). 두 자리에서 라벨 id가 겹치지
- *  않게 `idPrefix`만 갈린다. */
-export function EngineFields({
-  engines,
-  modelPattern,
-  value,
-  onChange,
-  idPrefix = "worker",
-}: {
-  engines: EngineCatalog;
-  /** 서버 `MODEL_RE.source`. 화면이 정규식을 따로 적지 않는다 */
-  modelPattern: string;
-  value: EnginePick;
-  onChange: (v: EnginePick) => void;
-  idPrefix?: string;
-}) {
-  const models = engines.find((e) => e.id === value.engine)?.models ?? [];
-  // 고른 엔진에 **없는** 기능들(§4-3 · §23 ⑤ 예고 줄). 판정도 이름도 `lib/urls.ts` 한 자리다.
-  const missing = engineMissing(value.engine);
-  // 빈 칸은 아직 거절이 아니다 — `직접 입력…`을 고르자마자 빨간 줄이 뜨면 사람이 무엇을
-  // 잘못했는지 모른다. 못 만든다는 사실은 부르는 쪽의 1차 버튼이 말한다(`enginePickOk`).
-  const bad = !!value.custom && value.model !== "" && !new RegExp(modelPattern).test(value.model);
-  const hintId = `${idPrefix}-model-hint`;
-  return (
-    <>
-      <div className="space-y-2">
-        <Label htmlFor={`${idPrefix}-engine`}>엔진</Label>
-        {/* 엔진을 바꾸면 모델은 `모델 지정 안 함`으로 돌아간다 — 목록이 엔진에 딸려 있어서
-            `opus`를 든 채 codex로 넘어가면 화면이 없는 조합을 보여준다(§23 ③). */}
-        <Select value={value.engine} onValueChange={(v) => onChange({ engine: String(v), model: "" })}>
-          <SelectTrigger id={`${idPrefix}-engine`} className="w-full font-mono">
-            {/* 생성 폼은 항상 값이 있고(기본값 `claude`), 비는 자리는 워커 행에서 **손으로 쓴
-                값**을 열었을 때 하나다 — 그때도 빈 줄이 아니라 말이 뜬다(§23 ③ 팝오버 초기값). */}
-            <SelectValue placeholder="고르지 않음" />
-          </SelectTrigger>
-          <SelectContent>
-            {engines.map((e) => (
-              <SelectItem key={e.id} value={e.id} className="font-mono">
-                {e.id}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor={`${idPrefix}-model`}>모델</Label>
-        <Select
-          value={value.custom ? CUSTOM : value.model}
-          onValueChange={(v) =>
-            onChange(
-              String(v) === CUSTOM
-                ? { engine: value.engine, model: "", custom: true }
-                : { engine: value.engine, model: String(v) },
-            )
-          }
-        >
-          {/* 모델 이름은 argv에 들어가는 토큰이라 mono다. `모델 지정 안 함`·`직접 입력…`은
-              문장이라 sans다(§23 ③). */}
-          <SelectTrigger
-            id={`${idPrefix}-model`}
-            className={cn("w-full", value.model && !value.custom && "font-mono")}
-          >
-            {/* **라벨은 화면이 붙인다**(§23 ③). `모델 지정 안 함`의 값은 빈 문자열이라
-                Select에 맡기면 트리거에 **빈 줄 하나**가 뜬다(실측 — 항목 라벨은 팝업이
-                열린 뒤에야 등록된다). 이 절이 막는 빈칸이 되살아나는 자리다. */}
-            <SelectValue>{(v) => (v ? String(v) : "모델 지정 안 함")}</SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            {models.map((m) => (
-              <SelectItem key={m} value={m} className={m ? "font-mono" : undefined}>
-                {m || "모델 지정 안 함"}
-              </SelectItem>
-            ))}
-            <SelectItem value={CUSTOM}>{CUSTOM}</SelectItem>
-          </SelectContent>
-        </Select>
-        {value.custom && (
-          <>
-            {/* 받는 것은 **모델 이름 한 토큰**이다 — argv 전체가 아니다(§23 ④). 라벨은 위
-                Select가 갖고 있어서 칸은 `aria-label`로 자기 이름을 댄다. */}
-            <Input
-              aria-label="모델 이름 직접 입력"
-              aria-describedby={hintId}
-              className="font-mono"
-              placeholder="모델 이름"
-              value={value.model}
-              onChange={(e) =>
-                onChange({ engine: value.engine, model: e.target.value, custom: true })
-              }
-            />
-            {bad ? (
-              // 원인이 값이 아니라 한 문장이고 다음 행동은 포커스가 놓인 그 칸이다 —
-              // `Alert`가 아닌 이유가 이것이다(§22 ③ · §23 ④).
-              <p id={hintId} role="alert" className="flex items-center gap-1.5 text-xs text-destructive">
-                <TriangleAlert className="size-3.5" aria-hidden />
-                공백·따옴표는 쓸 수 없습니다 — 모델 이름 한 토큰만
-              </p>
-            ) : (
-              <p id={hintId} className="text-xs text-muted-foreground">
-                엔진에 그대로 넘어갑니다 — 공백·따옴표 없는 한 토큰
-              </p>
-            )}
-          </>
-        )}
-      </div>
-
-      {/* 예고 — 고장이 아니라 기능 집합이 다르다(§23 ⑤). 새 그릇을 만들지 않는다.
-          **없는 기능을 세어서 문장을 만든다**(§4-3 개정): codex는 둘 다 없고 grok은 참견만
-          없다 — `=== "codex"`로 적으면 grok에서 이 줄이 통째로 안 뜬다.
-          카탈로그에 없는 이름(워커 행에서 연 **손으로 쓴 값**)은 그리지 않는다: 그 워커의
-          기능 집합을 우리가 모른다(§23 ③ 팝오버 초기값이 비는 그 자리다). */}
-      {engines.some((e) => e.id === value.engine) && missing.length > 0 && (
-        <p className="text-xs text-muted-foreground">
-          {value.engine} 워커는 {missing.join("과 ")}이 없습니다 — 티켓 수행은 같습니다.
-        </p>
-      )}
-    </>
-  );
-}
-
-// ── 워커 행의 `엔진` 셀 (§비주얼 §23 ① ②) ──────────────────────────────────
-
-/** 잘린 값·배지 설명. `projects-ui.tsx`의 같은 이름과 같은 모양이다 — §0 해석 결과 표의
- *  배지를 그대로 빌린다(사실이 같아서 새 어휘를 만들지 않았다, §23 ①). */
-function Hint({ text, children }: { text: string; children: React.ReactNode }) {
-  return (
-    <Tooltip>
-      <TooltipTrigger render={<span />}>{children}</TooltipTrigger>
-      <TooltipContent>{text}</TooltipContent>
-    </Tooltip>
-  );
-}
-
-/** 둘 다 색이 없다 — 색은 예외를 표시하는데(§0) 넷 다 정상이다(§23 ①). */
-const BADGE: Record<"assumed" | "custom", { label: string; hint: string }> = {
-  assumed: {
-    label: "기본값 가정",
-    hint: "이 워커에는 TICKET_ENGINE 대입이 없습니다 — tick.sh 기본값(46행)을 쓰는 중입니다",
-  },
-  custom: {
-    label: "손으로 쓴 값",
-    hint: "카탈로그에 없는 명령입니다 — 아래 원문이 그대로 돕니다",
-  },
-};
-
-/** `엔진` 열 — **값이 곧 트리거다**(§23 ②). `size="sm"`이 `h-7`이라 `h-9` 행 높이가 안 변하고,
- *  열려 있는 동안 `TableRow`의 `has-aria-expanded:bg-muted/50`가 그 행을 저절로 tint한다.
- *  팝오버 안은 생성 폼과 **같은 `<EngineFields>`**다 — 목록도 문구도 한 벌이다(§23 ③). */
-export function EngineCell({
-  projectId,
-  row,
-  engines,
-  modelPattern,
-}: {
-  projectId: string;
-  row: WorkerRow;
-  engines: EngineCatalog;
-  modelPattern: string;
-}) {
-  // 파일에서 읽은 값이 초기값이다. 손으로 쓴 값(`value === null`)이면 **고른 것이 없는 채로**
-  // 연다 — 열어 본 것만으로 그 줄이 덮이는 길이 없다(§23 ③).
-  const initial = (): EnginePick => ({
-    engine: row.engine.value?.engineId ?? "",
-    model: row.engine.value?.model ?? "",
-  });
-  const [open, setOpen] = useState(false);
-  const [pick, setPick] = useState<EnginePick>(initial);
-  const [result, setResult] = useState<WorkerActionResult | null>(null);
-  const [pending, start] = useTransition();
-  const ready = pick.engine !== "" && enginePickOk(pick, modelPattern) && !pending;
-
-  return (
-    <div className="flex items-center gap-1.5">
-      <Popover
-        open={open}
-        onOpenChange={(o) => {
-          setOpen(o);
-          // 닫는 것이 곧 취소다 — 저장 전에는 아무것도 안 썼다(§23 ②). 다시 열면 파일 값이다.
-          if (!o) {
-            setPick(initial());
-            setResult(null);
-          }
-        }}
-      >
-        <PopoverTrigger
-          render={
-            <Button
-              variant="ghost"
-              size="sm"
-              // `text-foreground`다 — 행 hover와 팝오버 열림이 둘 다 `bg-muted/50`이고 거기서
-              // `--muted-foreground`는 라이트 4.54로 §9가 금지한 조합이다(§23 대비 검증).
-              className="-ml-2.5 font-mono text-xs font-normal text-foreground"
-            />
-          }
-        >
-          <span className="block max-w-[14rem] truncate">{row.engine.label}</span>
-          <ChevronDown aria-hidden className="size-3" />
-        </PopoverTrigger>
-        <PopoverContent align="start">
-          <EngineFields
-            engines={engines}
-            modelPattern={modelPattern}
-            value={pick}
-            onChange={setPick}
-            idPrefix={`engine-${row.name}`}
-          />
-          {/* 손으로 쓴 값은 무엇을 덮는지 먼저 보여준다(§23 ③) */}
-          {row.engine.badge === "custom" && (
-            <div className="space-y-1">
-              <p className="font-mono text-xs break-all">{row.engine.argv}</p>
-              <p className="text-xs text-muted-foreground">저장하면 이 줄을 덮어씁니다</p>
-            </div>
-          )}
-          <p className="text-xs text-muted-foreground">
-            {row.status === "running"
-              ? "지금 도는 세션은 그대로입니다 — 다음 tick부터 적용됩니다."
-              : "다음 tick부터 적용됩니다."}
-          </p>
-          {/* 거부(할당 2개·`+=`·주석·닫는 `)` 없음·`source` 줄 없음)는 파일을 안 쓴 것이다.
-              팝오버는 열린 채로 남고 고른 값도 남는다 — 사람이 파일을 고치고 다시 누른다(§23) */}
-          {result && !result.ok && (
-            <Failure
-              title={`${row.name}.sh의 TICKET_ENGINE 블록을 GUI가 고칠 수 없습니다`}
-              message={result.message ?? ""}
-            />
-          )}
-          <div className="flex justify-end">
-            <Button
-              size="sm"
-              // `disabled`가 아니라 `aria-disabled`다(§23 로딩 항) — 못 누른다는 사실만 말한다.
-              aria-disabled={!ready}
-              className="aria-disabled:opacity-50"
-              onClick={() => {
-                if (!ready) return;
-                start(async () => {
-                  const r = await setEngineAction(projectId, row.name, pick.engine, pick.model);
-                  setResult(r);
-                  // 성공하면 닫는다. 새 값은 **서버가 파일을 다시 읽어** 그린다(낙관적 에코가
-                  // 아니다) — 토스트를 띄우지 않는 이유도 그것이다(§23 ②).
-                  if (r.ok) setOpen(false);
-                });
-              }}
-            >
-              {pending ? "저장 중…" : "저장"}
-            </Button>
-          </div>
-        </PopoverContent>
-      </Popover>
-      {row.engine.badge && (
-        <Hint text={BADGE[row.engine.badge].hint}>
-          <Badge variant="outline">{BADGE[row.engine.badge].label}</Badge>
-        </Hint>
-      )}
-    </div>
-  );
-}
-
 // ── 생성 ────────────────────────────────────────────────────────────────────
 
 /** §6 에러 3요소의 1번 — **어느 단계에서 멈췄나**. 인덱스는 `WorktreePrep.done`(= 끝난 단계 수)이다.
@@ -435,8 +138,6 @@ export function CreateWorkerButton({
   projectId,
   canTemplate,
   firstCmd,
-  engines,
-  modelPattern,
   variant,
 }: {
   projectId: string;
@@ -444,14 +145,10 @@ export function CreateWorkerButton({
   canTemplate: boolean;
   /** 워커 0개일 때 손으로 첫 워커를 만드는 명령 */
   firstCmd: string;
-  engines: EngineCatalog;
-  modelPattern: string;
   variant?: "default" | "outline";
 }) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
-  // 기본값은 `claude` + `모델 지정 안 함` — **안 고른 사람이 지금과 똑같은 워커를 얻는다**(§4-3).
-  const [pick, setPick] = useState<EnginePick>({ engine: "claude", model: "" });
   const [result, setResult] = useState<WorkerActionResult | null>(null);
   const [pending, start] = useTransition();
   const created = result?.created;
@@ -463,7 +160,6 @@ export function CreateWorkerButton({
         setOpen(o);
         if (!o) {
           setName("");
-          setPick({ engine: "claude", model: "" });
           setResult(null);
         }
       }}
@@ -562,14 +258,6 @@ export function CreateWorkerButton({
                 영문·숫자·_·-. 파일은 workers/&lt;이름&gt;.sh 가 됩니다
               </p>
             </div>
-            {/* 엔진은 템플릿에서 물려받지 않는다 — 고른 값이 `TICKET_ENGINE` 블록으로
-                들어간다(§4-3). 안 고르면 `tick.sh`가 잡는 그 값 그대로다. */}
-            <EngineFields
-              engines={engines}
-              modelPattern={modelPattern}
-              value={pick}
-              onChange={setPick}
-            />
             {result?.message && <Failure title="워커를 만들지 못했습니다" message={result.message} />}
           </div>
         )}
@@ -582,12 +270,8 @@ export function CreateWorkerButton({
           </DialogClose>
           {canTemplate && !created && (
             <Button
-              disabled={pending || !name.trim() || !enginePickOk(pick, modelPattern)}
-              onClick={() =>
-                start(async () =>
-                  setResult(await createWorkerAction(projectId, name, pick.engine, pick.model)),
-                )
-              }
+              disabled={pending || !name.trim()}
+              onClick={() => start(async () => setResult(await createWorkerAction(projectId, name)))}
             >
               {pending ? "만드는 중…" : "만들기"}
             </Button>

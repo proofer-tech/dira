@@ -24,10 +24,12 @@ import { getProject, listPersonas, resolveConfig, usingDefault } from "@/lib/pro
 import {
   claudeConfigDir,
   listInstalledSkills,
+  readPersonaEngine,
   readPersonaLimit,
   readPersonaMemory,
   readPersonaSkillsFile,
 } from "@/lib/skills";
+import { ENGINES, MODEL_RE } from "@/lib/workers";
 
 // 프로필 파일은 GUI 밖에서도 바뀌고(에디터) 참조 건수는 디스패처가 바꾼다 — 굳히지 않는다.
 export const dynamic = "force-dynamic";
@@ -53,13 +55,15 @@ export default async function Personas({
   ]);
   const rows = await Promise.all(
     personas.map(async (p) => {
-      // 상한도 같은 렌더에 실린다(§5-4 §화면) — 왼쪽 줄이 그리는 값이라 스킬·메모리와 같은 벌이다
-      const [{ skills, chars }, { memories }, limit] = await Promise.all([
+      // 상한·엔진도 같은 렌더에 실린다(§5-4 §화면 · §제약 1 §결정 기록 §열한 번째) — 오른쪽 칸
+      // 머리가 그리는 값이라 스킬·메모리와 같은 벌이다
+      const [{ skills, chars }, { memories }, limit, engine] = await Promise.all([
         readPersonaSkillsFile(config.personas, p.name),
         readPersonaMemory(config.personas, p.name),
         readPersonaLimit(config.personas, p.name),
+        readPersonaEngine(config.personas, p.name),
       ]);
-      return { ...p, skills, skillsChars: chars, memories, limit };
+      return { ...p, skills, skillsChars: chars, memories, limit, engine };
     }),
   );
   const missing = personas.filter((p) => p.body === null);
@@ -127,6 +131,8 @@ export default async function Personas({
           colors={project.personaColors ?? {}}
           installed={installed}
           configDir={claudeConfigDir()}
+          engines={ENGINES}
+          modelPattern={MODEL_RE.source}
         />
       )}
     </div>

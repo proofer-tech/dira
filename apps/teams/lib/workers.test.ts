@@ -49,7 +49,6 @@ const {
   NO_MODEL,
   parseEngineValue,
   renderEngineBlock,
-  writeEngine,
   registerCron,
   engineName,
   holderEngine,
@@ -1736,17 +1735,6 @@ test("cronWriteError — 권한 거부만 '앱 관리'로 번역하고 나머지
 
 // ── 엔진 · 모델 선택 (§4-3) ─────────────────────────────────────────────────
 
-/** 이 큐의 워커와 같은 모양 — `TICKET_ENGINE` 대입이 **없다**(§4-3: 그래서 삽입이 필요하다). */
-const NOENG_SH = `#!/bin/bash
-TICKET_CWD="$HOME/wt/w1"
-
-TICKET_CONTEXT=(
-  "$TICKET_CWD/docs/DESIGN.md|스펙"
-)
-. "$HOME/Projects/dira/dispatch-gate.sh"
-. "$HOME/Projects/dira/tick.sh"
-`;
-
 test("엔진 템플릿 — 바꿔 쓸 수 없는 자리 일곱을 못박는다 (§4-3 표)", () => {
   const claude = engineArgv("claude");
   // ① `--input-format stream-json` 인접. tick.sh:263-270이 이 인접성 하나로 FIFO를 판다 —
@@ -1914,66 +1902,3 @@ test("engineCell — 엔진 열에 빈칸이 되는 경우가 없다 (§비주�
   }
 });
 
-test("writeEngine — 대입이 없는 워커에 source 줄 바로 위로 삽입하고, 다시 읽으면 같은 값이다", async () => {
-  const root = makeRoot({ "w1.sh": NOENG_SH });
-  const file = path.join(root, "workers", "w1.sh");
-  chmodSync(file, 0o755); // 워커는 실행 파일이다 — 쓰기가 755를 잃으면 cron이 조용히 실패한다
-  assert.deepStrictEqual(await writeEngine(root, "w1", "codex", "gpt-5.5"), {
-    engineId: "codex",
-    model: "gpt-5.5",
-  });
-  const text = readFileSync(file, "utf8");
-  // 자리: 필수 `source` 줄 **바로 위**. 아래에 넣으면 tick.sh가 이미 기본값을 잡은 뒤다
-  const lines = text.split("\n");
-  const at = lines.findIndex((l) => l.startsWith("TICKET_ENGINE=("));
-  assert.ok(at > 0);
-  assert.strictEqual(lines[at + 1], '. "$HOME/Projects/dira/tick.sh"');
-  // 나머지 줄은 한 글자도 안 바뀐다
-  assert.strictEqual(lines.filter((_, i) => i !== at).join("\n"), NOENG_SH);
-
-  // 목록에 뜨는 값 = listWorkers가 읽은 engine → 행이 그리는 것(§비주얼 §23 ①)
-  const [w] = await listWorkers(root, [], SFX);
-  assert.deepStrictEqual(engineCell(w.engine), {
-    label: "codex · gpt-5.5",
-    badge: null, // 대입이 파일에 있다 — `기본값 가정`이 아니다
-    argv: w.engine,
-    value: { engineId: "codex", model: "gpt-5.5" },
-  });
-
-  // 있는 블록은 치환이다(삽입이 두 번 일어나면 "할당이 2개"로 자기 파일을 거부하게 된다)
-  await writeEngine(root, "w1", "claude", "opus");
-  const back = readFileSync(file, "utf8");
-  assert.strictEqual(back.split("TICKET_ENGINE=(").length - 1, 1);
-  assert.deepStrictEqual(engineCell((await listWorkers(root, [], SFX))[0].engine).value, {
-    engineId: "claude",
-    model: "opus",
-  });
-  assert.strictEqual(statSync(file).mode & 0o777, 0o755);
-});
-
-test("writeEngine — 대입 없음만 삽입이다. 모양이 다른 블록·source 줄 없음·위험한 모델은 거부", async () => {
-  const root = makeRoot({
-    "dup.sh": `TICKET_ENGINE=(claude)\nTICKET_ENGINE=(codex)\n. "$HOME/tick.sh"\n`,
-    "plus.sh": `TICKET_ENGINE+=(claude)\n. "$HOME/tick.sh"\n`,
-    "cmt.sh": `TICKET_ENGINE=(\n  # 임시\n  claude\n)\n. "$HOME/tick.sh"\n`,
-    "open.sh": `TICKET_ENGINE=(claude\n. "$HOME/tick.sh"\n`,
-    "notick.sh": `#!/bin/bash\nTICKET_CWD="$HOME/wt/x"\n`,
-    "ok.sh": NOENG_SH,
-  });
-  // 거부 4종은 TICKET_CONTEXT와 **같은 규약**이다(§4-3). 손으로 고치라고 알린다
-  for (const [name, re] of [
-    ["dup", /2개입니다/],
-    ["plus", /추가 할당/],
-    ["cmt", /주석이 있습니다/],
-    ["open", /닫는 `\)`가 없습니다/],
-  ] as const) {
-    await assert.rejects(writeEngine(root, name, "claude"), re, name);
-    assert.match(readFileSync(path.join(root, "workers", `${name}.sh`), "utf8"), /TICKET_ENGINE/);
-  }
-  // 블록도 없고 source 줄도 없으면 그 파일은 워커가 아니다 — 자리를 추측하지 않는다
-  await assert.rejects(writeEngine(root, "notick", "claude"), /워커가 아닙니다/);
-  // 모델은 `직접 입력`이 있어 사람 입력이 그대로 셸 낱말이 된다 — 신뢰 경계다
-  for (const bad of ["o3; rm -rf /", "$(id)", "a b", "`x`", '"x"'])
-    await assert.rejects(writeEngine(root, "ok", "codex", bad), /쓸 수 없는 문자/, bad);
-  assert.strictEqual(readFileSync(path.join(root, "workers", "ok.sh"), "utf8"), NOENG_SH);
-});

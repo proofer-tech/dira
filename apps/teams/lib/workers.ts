@@ -809,27 +809,6 @@ function applyEngineBlock(text: string, id: EngineId, model: string): string {
   return text.slice(0, m.index) + block + "\n" + text.slice(m.index);
 }
 
-/** 워커의 엔진·모델을 쓴다. 자기검증(**읽기 경로로 다시 읽는다**) → 원자적 교체.
- *  `running` 워커에도 쓴다 — 도는 세션은 이미 뜬 argv로 돌고 다음 tick부터 새 엔진이다(§4-3). */
-export async function writeEngine(
-  root: string,
-  name: string,
-  id: EngineId,
-  model: string = NO_MODEL,
-): Promise<{ engineId: EngineId; model: string }> {
-  const file = await workerFile(root, name);
-  const text = await readFile(file, "utf8");
-  const next = applyEngineBlock(text, id, model);
-  // 자기 검증은 `parseWorkerFile` → `parseEngineValue`, 즉 **화면이 읽는 그 길**로 한다.
-  const engine = parseWorkerFile(next).engine;
-  const back = engine ? parseEngineValue(engine) : null;
-  if (!back || back.engineId !== id || back.model !== model) {
-    throw new Error(`쓴 블록을 다시 읽으면 값이 달라집니다(${engine ?? "대입 없음"}). 쓰지 않았습니다.`);
-  }
-  await atomicWrite(file, next, (await stat(file)).mode & 0o777); // 755를 잃지 않는다
-  return back;
-}
-
 /** tick 하나의 **결과**인 동사는 이 넷뿐이다(DESIGN.md §0-5 판정 1단계). 나머지는 건너뛴다:
  *  - `DISPATCH` — 아직 안 끝났다. 이걸 결과로 세면 **배너가 깜빡인다**(실측에서 FAIL은 DISPATCH
  *    6~13초 뒤에 오는데 보드 폴링이 5초라 매분 그 창에 걸린다).

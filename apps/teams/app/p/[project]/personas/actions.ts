@@ -22,10 +22,12 @@ import {
   listInstalledSkills,
   pickedSkills,
   readPersonaSkillsFile,
+  writePersonaEngine,
   writePersonaLimit,
   writePersonaSkills,
   type Skill,
 } from "@/lib/skills";
+import type { EngineId } from "@/lib/workers";
 
 export type PersonaResult = { ok: boolean; message?: string };
 
@@ -128,6 +130,31 @@ export async function savePersonaLimitAction(
     await writePersonaLimit(await personasDir(projectId), name, limit);
     revalidatePath(`/p/${projectId}/personas`);
     return { ok: true, limit };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** 페르소나별 실행 엔진 저장(§제약 1 §결정 기록 §열한 번째 · §23 컨트롤 재사용).
+ *  **`engine`이 `null`이면 파일을 지운다**(= 지정 없음 — 그 페르소나는 워커 자신의 엔진을 쓴다).
+ *
+ *  카탈로그 검증(모르는 엔진·셸 메타문자가 든 모델)은 `writePersonaEngine`(→`renderEngineBlock`→
+ *  `engineArgv`) 안에서 던진다 — 이 액션은 그 문 하나를 통과시킬 뿐이다(§23 ④와 같은 신뢰 경계). */
+export async function savePersonaEngineAction(
+  projectId: string,
+  name: string,
+  engine: string | null,
+  model: string,
+): Promise<PersonaResult & { engine?: { engineId: EngineId; model: string } | null }> {
+  try {
+    const result = await writePersonaEngine(
+      await personasDir(projectId),
+      name,
+      engine as EngineId | null,
+      model,
+    );
+    revalidatePath(`/p/${projectId}/personas`);
+    return { ok: true, engine: result };
   } catch (e) {
     return fail(e);
   }

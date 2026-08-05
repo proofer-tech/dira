@@ -6,12 +6,13 @@
  *  `workers-ui.tsx`와 같다 — 같은 화면의 세 액션이 같은 문구(엔진이 WARN만 남긴다 · 이름 규칙)를
  *  쓰므로 쪼개면 자리가 갈린다. */
 import { useEffect, useState, useTransition } from "react";
-import { Check, ChevronRight, Trash2, TriangleAlert } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Trash2, TriangleAlert } from "lucide-react";
 import {
   createPersonaAction,
   deletePersonaAction,
   deletePersonaMemoryAction,
   savePersonaAction,
+  savePersonaEngineAction,
   savePersonaLimitAction,
   savePersonaSkillsAction,
   setPersonaColorAction,
@@ -57,6 +58,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Sidebar,
   SidebarContent,
   SidebarGroup,
@@ -67,7 +75,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Textarea } from "@/components/ui/textarea";
 import type { Memory, Skill } from "@/lib/skills";
-import { decodeHash, PERSONA_COLORS, personaDotClass } from "@/lib/urls";
+import { decodeHash, engineMissing, PERSONA_COLORS, personaDotClass } from "@/lib/urls";
 import { cn } from "@/lib/utils";
 
 /** 서버가 읽어 넘긴 한 항목. `body: null` = PROFILE.md가 없다(엔진의 WARN 케이스). */
@@ -86,6 +94,9 @@ export type PersonaRow = {
   /** `limit` 사이드카의 정수(§5-4). `null` = 파일 없음·빈 파일·정수 아님 = **상한 없음**.
    *  자수에 안 더한다 — 이 파일은 프롬프트에 안 실린다(엔진이 디스패치 앞에서 읽는 정책값이다) */
   limit: number | null;
+  /** `engine` 사이드카의 값(§제약 1 §결정 기록 §열한 번째). `null` = 파일 없음·모양이 다름 =
+   *  **지정 없음**(그 페르소나는 워커 자신의 엔진을 쓴다). `limit`과 같은 이유로 자수에 안 더한다 */
+  engine: { engineId: string; model: string } | null;
 };
 
 /** §6 에러 3요소 중 1·2번. 사유는 원문 그대로 — 삼키지 않는다. */
@@ -276,6 +287,8 @@ type PersonaEdit = {
   /** **저장된 값이다** — 입력칸의 초안이 아니다(초안은 오른쪽 머리가 든다). 왼쪽 줄의
    *  `상한 n`이 이걸 그리므로 저장 직후에 여기까지 올라와야 목록이 파일과 같아진다 */
   limit: number | null;
+  /** **저장된 값이다** — 팝오버의 초안은 `EngineField`가 지역 상태로 든다(상한과 같은 벌) */
+  engine: { engineId: string; model: string } | null;
 };
 
 /** 서버가 방금 준 값 그대로. 아직 손대지 않은 페르소나는 이걸 읽으므로 **다른 세션이 파일을
@@ -287,6 +300,7 @@ const initialEdit = (row: PersonaRow): PersonaEdit => ({
   skillsChars: row.skillsChars,
   memories: row.memories,
   limit: row.limit,
+  engine: row.engine,
 });
 
 /** 주소 → 페르소나 세그먼트(없으면 `null`). **`popstate` 하나가 쓴다** — 서버가 `params`로
@@ -323,6 +337,8 @@ export function PersonasPane({
   colors,
   installed,
   configDir,
+  engines,
+  modelPattern,
 }: {
   projectId: string;
   /** 경로의 페르소나 세그먼트(없으면 `null` = 명시 선택 없음 → 목록 첫 줄). 서버가 준 것은
@@ -336,6 +352,11 @@ export function PersonasPane({
   installed: Skill[];
   /** 해석된 `<config>` — 후보가 0개일 때 "어디를 봤는지"를 적는다(§비주얼 §25 다섯 상태) */
   configDir: string;
+  /** 엔진 카탈로그 — `lib/workers.ts`의 `ENGINES` 그대로(§23 재사용, `node:fs`라 클라이언트가
+   *  직접 못 부른다) */
+  engines: EngineCatalog;
+  /** 서버 `MODEL_RE.source`. 화면이 정규식을 따로 적지 않는다(§23 재사용) */
+  modelPattern: string;
 }) {
   const [selected, setSelected] = useState<string | null>(initial);
   const [edits, setEdits] = useState<Record<string, PersonaEdit>>({});
@@ -496,6 +517,8 @@ export function PersonasPane({
             color={colors[current.name]}
             installed={installed}
             configDir={configDir}
+            engines={engines}
+            modelPattern={modelPattern}
           />
         )}
       </div>
@@ -514,6 +537,8 @@ function PersonaDetail({
   color,
   installed,
   configDir,
+  engines,
+  modelPattern,
 }: {
   projectId: string;
   row: PersonaRow;
@@ -523,6 +548,8 @@ function PersonaDetail({
   color?: string;
   installed: Skill[];
   configDir: string;
+  engines: EngineCatalog;
+  modelPattern: string;
 }) {
   const [result, setResult] = useState<PersonaResult | null>(null);
   // 삭제·색은 둘 다 이 칸 머리에서 누르므로 사유도 머리 아래다 — 실패는 **누른 곳**이다(§5).
@@ -553,6 +580,19 @@ function PersonaDetail({
           onSaved={(limit) => onEdit({ ...edit, limit })}
           onError={(message) =>
             setHeadError(message ? { title: "상한을 저장하지 못했습니다", message } : null)
+          }
+        />
+        {/* 상한 옆이다(§제약 1 §결정 기록 §열한 번째 · §23 컨트롤 재사용) — 같은 정책값 자리,
+            같은 저장 규약(빈 값/파일 없음 = 미지정, 저장 성공이 곧 확인이라 토스트 없음) */}
+        <EngineField
+          projectId={projectId}
+          name={row.name}
+          engine={edit.engine}
+          engines={engines}
+          modelPattern={modelPattern}
+          onSaved={(engine) => onEdit({ ...edit, engine })}
+          onError={(message) =>
+            setHeadError(message ? { title: "엔진을 저장하지 못했습니다", message } : null)
           }
         />
         {edit.saved !== null && (
@@ -687,6 +727,238 @@ function LimitField({
       >
         {pending ? "저장 중…" : "저장"}
       </Button>
+    </>
+  );
+}
+
+// ── 실행 엔진 (§제약 1 §결정 기록 §열한 번째 · §비주얼 §23 컨트롤 재사용) ───────
+
+/** 서버가 **값으로** 내려주는 카탈로그 = `lib/workers.ts`의 `ENGINES` 그대로다. 그 모듈은
+ *  `node:fs`를 물어 클라이언트가 import할 수 없고, 목록을 여기 다시 적으면 화면이 파일에
+ *  안 들어가는 이름을 그리게 된다(두 벌은 반드시 갈린다). §23 ①이 워커 행에 쓰던 것과 같은
+ *  카탈로그를 이 화면이 옮겨 받는다(대상만 워커 파일 → `personas/<이름>/engine`으로 갈린다). */
+export type EngineCatalog = readonly { id: string; models: readonly string[] }[];
+
+/** 고른 값. `모델 지정 안 함`은 **빈 문자열**이고(`NO_MODEL`) 라벨은 화면이 붙인다(§23 ③).
+ *  `custom`이면 `model`은 사람이 친 글자다 — 목록 값과 같은 자리를 쓴다. `engine`이 빈 문자열이면
+ *  **지정 없음**이다(엔진 Select가 비어 있는 채로 열린다 — §23 ③ 손으로 쓴 값과 같은 표현). */
+type EnginePick = { engine: string; model: string; custom?: boolean };
+
+/** 목록에 없는 **화면만의 항목**. 값이 곧 라벨이고 모델 이름과 겹칠 수 없다 — 서버의
+ *  `MODEL_RE`가 한글도 `…`도 안 받는다. */
+const CUSTOM = "직접 입력…";
+
+/** 지금 값으로 만들 수 있는가. 직접 입력만 걸린다 — 빈 값(`+`가 0글자를 안 받는다)과 셸
+ *  메타문자가 여기서 막힌다. **즉시 거절일 뿐이고** 진짜 검증은 서버가 다시 한다(§23 ④). */
+const enginePickOk = (pick: EnginePick, modelPattern: string) =>
+  !pick.custom || new RegExp(modelPattern).test(pick.model);
+
+/** §23 ③의 엔진·모델 필드 한 쌍 — 워커 행 팝오버·생성 폼이 쓰던 것을 그대로 옮겼다. */
+function EngineFields({
+  engines,
+  modelPattern,
+  value,
+  onChange,
+  idPrefix,
+}: {
+  engines: EngineCatalog;
+  /** 서버 `MODEL_RE.source`. 화면이 정규식을 따로 적지 않는다 */
+  modelPattern: string;
+  value: EnginePick;
+  onChange: (v: EnginePick) => void;
+  idPrefix: string;
+}) {
+  const models = engines.find((e) => e.id === value.engine)?.models ?? [];
+  // 고른 엔진에 **없는** 기능들(§4-3 · §23 ⑤ 예고 줄). 판정도 이름도 `lib/urls.ts` 한 자리다.
+  const missing = engineMissing(value.engine);
+  // 빈 칸은 아직 거절이 아니다 — `직접 입력…`을 고르자마자 빨간 줄이 뜨면 사람이 무엇을
+  // 잘못했는지 모른다. 못 만든다는 사실은 부르는 쪽의 1차 버튼이 말한다(`enginePickOk`).
+  const bad = !!value.custom && value.model !== "" && !new RegExp(modelPattern).test(value.model);
+  const hintId = `${idPrefix}-model-hint`;
+  return (
+    <>
+      <div className="space-y-2">
+        <Label htmlFor={`${idPrefix}-engine`}>엔진</Label>
+        {/* 엔진을 바꾸면 모델은 `모델 지정 안 함`으로 돌아간다 — 목록이 엔진에 딸려 있어서
+            `opus`를 든 채 codex로 넘어가면 화면이 없는 조합을 보여준다(§23 ③). */}
+        <Select value={value.engine} onValueChange={(v) => onChange({ engine: String(v), model: "" })}>
+          <SelectTrigger id={`${idPrefix}-engine`} className="w-full font-mono">
+            {/* 비는 자리는 **지정 없음**이다 — 그 페르소나는 워커 자신의 엔진을 쓴다 */}
+            <SelectValue placeholder="지정 없음" />
+          </SelectTrigger>
+          <SelectContent>
+            {engines.map((e) => (
+              <SelectItem key={e.id} value={e.id} className="font-mono">
+                {e.id}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor={`${idPrefix}-model`}>모델</Label>
+        <Select
+          value={value.custom ? CUSTOM : value.model}
+          onValueChange={(v) =>
+            onChange(
+              String(v) === CUSTOM
+                ? { engine: value.engine, model: "", custom: true }
+                : { engine: value.engine, model: String(v) },
+            )
+          }
+        >
+          {/* 모델 이름은 argv에 들어가는 토큰이라 mono다. `모델 지정 안 함`·`직접 입력…`은
+              문장이라 sans다(§23 ③). */}
+          <SelectTrigger
+            id={`${idPrefix}-model`}
+            className={cn("w-full", value.model && !value.custom && "font-mono")}
+          >
+            {/* **라벨은 화면이 붙인다**(§23 ③). `모델 지정 안 함`의 값은 빈 문자열이라
+                Select에 맡기면 트리거에 **빈 줄 하나**가 뜬다(실측 — 항목 라벨은 팝업이
+                열린 뒤에야 등록된다). 이 절이 막는 빈칸이 되살아나는 자리다. */}
+            <SelectValue>{(v) => (v ? String(v) : "모델 지정 안 함")}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {models.map((m) => (
+              <SelectItem key={m} value={m} className={m ? "font-mono" : undefined}>
+                {m || "모델 지정 안 함"}
+              </SelectItem>
+            ))}
+            <SelectItem value={CUSTOM}>{CUSTOM}</SelectItem>
+          </SelectContent>
+        </Select>
+        {value.custom && (
+          <>
+            {/* 받는 것은 **모델 이름 한 토큰**이다 — argv 전체가 아니다(§23 ④). 라벨은 위
+                Select가 갖고 있어서 칸은 `aria-label`로 자기 이름을 댄다. */}
+            <Input
+              aria-label="모델 이름 직접 입력"
+              aria-describedby={hintId}
+              className="font-mono"
+              placeholder="모델 이름"
+              value={value.model}
+              onChange={(e) =>
+                onChange({ engine: value.engine, model: e.target.value, custom: true })
+              }
+            />
+            {bad ? (
+              // 원인이 값이 아니라 한 문장이고 다음 행동은 포커스가 놓인 그 칸이다 —
+              // `Alert`가 아닌 이유가 이것이다(§22 ③ · §23 ④).
+              <p id={hintId} role="alert" className="flex items-center gap-1.5 text-xs text-destructive">
+                <TriangleAlert className="size-3.5" aria-hidden />
+                공백·따옴표는 쓸 수 없습니다 — 모델 이름 한 토큰만
+              </p>
+            ) : (
+              <p id={hintId} className="text-xs text-muted-foreground">
+                엔진에 그대로 넘어갑니다 — 공백·따옴표 없는 한 토큰
+              </p>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* 예고 — 고장이 아니라 기능 집합이 다르다(§23 ⑤). 새 그릇을 만들지 않는다.
+          **없는 기능을 세어서 문장을 만든다**(§4-3 개정): codex는 둘 다 없고 grok은 참견만
+          없다 — `=== "codex"`로 적으면 grok에서 이 줄이 통째로 안 뜬다. */}
+      {engines.some((e) => e.id === value.engine) && missing.length > 0 && (
+        <p className="text-xs text-muted-foreground">
+          {value.engine} 워커는 {missing.join("과 ")}이 없습니다 — 티켓 수행은 같습니다.
+        </p>
+      )}
+    </>
+  );
+}
+
+/** 오른쪽 칸 머리의 값이 곧 팝오버 트리거다(§23 ② 그대로) — `LimitField` 옆(§23 §화면 재사용).
+ *  **파일이 없으면 "지정 없음"이다** — §23 표시 4종의 `[기본값 가정]`과 같은 원칙(색 없음)이되,
+ *  뜻은 다르다: 워커 행은 "그래도 claude가 돈다"지만 여기는 **그 워커 자신의 엔진이 이긴다**. */
+function EngineField({
+  projectId,
+  name,
+  engine,
+  engines,
+  modelPattern,
+  onSaved,
+  onError,
+}: {
+  projectId: string;
+  name: string;
+  /** 파일의 값. `null` = 지정 없음 */
+  engine: { engineId: string; model: string } | null;
+  engines: EngineCatalog;
+  modelPattern: string;
+  onSaved: (engine: { engineId: string; model: string } | null) => void;
+  onError: (message: string | null) => void;
+}) {
+  const initial = (): EnginePick => ({ engine: engine?.engineId ?? "", model: engine?.model ?? "" });
+  const [open, setOpen] = useState(false);
+  const [pick, setPick] = useState<EnginePick>(initial);
+  const [pending, start] = useTransition();
+  const ready = pick.engine !== "" && enginePickOk(pick, modelPattern) && !pending;
+
+  const save = (id: string | null, model: string) =>
+    start(async () => {
+      const r = await savePersonaEngineAction(projectId, name, id, model);
+      onError(r.ok ? null : (r.message ?? "엔진을 저장하지 못했습니다."));
+      if (r.ok) {
+        onSaved(r.engine ?? null);
+        setOpen(false);
+      }
+    });
+
+  return (
+    <>
+      <Label className="text-xs text-muted-foreground">엔진</Label>
+      <Popover
+        open={open}
+        onOpenChange={(o) => {
+          setOpen(o);
+          // 닫는 것이 곧 취소다 — 저장 전에는 아무것도 안 썼다(§23 ②). 다시 열면 파일 값이다.
+          if (!o) setPick(initial());
+        }}
+      >
+        <PopoverTrigger
+          render={<Button variant="ghost" size="sm" className="font-mono text-xs font-normal" />}
+        >
+          <span className="max-w-[14rem] truncate">
+            {engine ? (engine.model ? `${engine.engineId} · ${engine.model}` : engine.engineId) : "지정 없음"}
+          </span>
+          <ChevronDown aria-hidden className="size-3" />
+        </PopoverTrigger>
+        <PopoverContent align="start">
+          <EngineFields
+            engines={engines}
+            modelPattern={modelPattern}
+            value={pick}
+            onChange={setPick}
+            idPrefix={`persona-engine-${name}`}
+          />
+          <p className="text-xs text-muted-foreground">다음 티켓 선정부터 적용됩니다.</p>
+          <div className="flex items-center justify-between gap-2">
+            {engine && (
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={pending}
+                onClick={() => save(null, "")}
+              >
+                지정 해제
+              </Button>
+            )}
+            <Button
+              size="sm"
+              className="ml-auto aria-disabled:opacity-50"
+              aria-disabled={!ready}
+              onClick={() => {
+                if (ready) save(pick.engine, pick.model);
+              }}
+            >
+              {pending ? "저장 중…" : "저장"}
+            </Button>
+          </div>
+        </PopoverContent>
+      </Popover>
     </>
   );
 }
