@@ -6076,6 +6076,11 @@ argv의 `--input-format stream-json` 하나다.
 | 트랜스크립트 | `~/.claude/projects/<enc cwd>/<sid>.jsonl` | 없다 | **`~/.grok/sessions/<pct-enc cwd>/<sid>/updates.jsonl`** |
 | 권한 우회 | `--dangerously-skip-permissions` | `-s danger-full-access` | `--permission-mode bypassPermissions` |
 
+**위 템플릿을 글자 그대로 한 번 돌려서 확인했다**(플래그를 따로따로 잰 것이 아니다):
+`rc=0` · 첫 줄이 `system`/`init`이고 그 `session_id`가 **우리가 준 `--session-id`와 같다**
+(그래서 `tick.sh:611`의 세션키 정정이 안 돈다) · 마지막 줄이 `result`/`is_error: false` ·
+`terminal_reason`은 **키 자체가 없다**(아래 천장 1의 근거다) · 도구 호출로 파일을 실제로 썼다.
+
 **놀라운 자리는 출력 형식이다 — grok의 `streaming-messages-json`이 `tick.sh`가 파싱하는 그 형식이다.**
 첫 줄이 `{"type":"system","subtype":"init","session_id":…}`이고 마지막 줄이
 `{"type":"result","subtype":"success","is_error":false,…,"session_id":…}`다. `started()`의 grep
