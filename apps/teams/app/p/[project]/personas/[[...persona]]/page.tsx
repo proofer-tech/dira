@@ -29,7 +29,7 @@ import {
   readPersonaMemory,
   readPersonaSkillsFile,
 } from "@/lib/skills";
-import { ENGINES, MODEL_RE } from "@/lib/workers";
+import { ENGINES, listWorkers, MODEL_RE, personaEngineHint } from "@/lib/workers";
 
 // 프로필 파일은 GUI 밖에서도 바뀌고(에디터) 참조 건수는 디스패처가 바꾼다 — 굳히지 않는다.
 export const dynamic = "force-dynamic";
@@ -49,10 +49,14 @@ export default async function Personas({
   // 스킬·메모리는 `listPersonas`와 **같은 렌더**에 실린다(§비주얼 §25 · §32 로딩 — 카드를 펼칠 때
   // 값이 이미 손에 있어 스켈레톤이 없고, 항목을 펼칠 때 요청이 없다).
   // 후보 목록(이 머신)은 페르소나 수와 무관하게 한 번이다.
-  const [personas, installed] = await Promise.all([
+  // 워커 목록도 같은 렌더에 실린다 — 엔진 미지정 힌트(§23 §개정)가 그 실효값을 여기서 읽는다.
+  // `holding`은 이 힌트에 안 쓰이므로 티켓을 안 넘긴다(listWorkers 기본값 그대로).
+  const [personas, installed, workers] = await Promise.all([
     listPersonas(config.personas, tickets),
     listInstalledSkills(),
+    listWorkers(project.root),
   ]);
+  const engineHint = personaEngineHint(workers.map((w) => w.engine));
   const rows = await Promise.all(
     personas.map(async (p) => {
       // 상한·엔진도 같은 렌더에 실린다(§5-4 §화면 · §제약 1 §결정 기록 §열한 번째) — 오른쪽 칸
@@ -133,6 +137,7 @@ export default async function Personas({
           configDir={claudeConfigDir()}
           engines={ENGINES}
           modelPattern={MODEL_RE.source}
+          engineHint={engineHint}
         />
       )}
     </div>

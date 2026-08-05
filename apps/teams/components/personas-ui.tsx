@@ -339,6 +339,7 @@ export function PersonasPane({
   configDir,
   engines,
   modelPattern,
+  engineHint,
 }: {
   projectId: string;
   /** 경로의 페르소나 세그먼트(없으면 `null` = 명시 선택 없음 → 목록 첫 줄). 서버가 준 것은
@@ -357,6 +358,10 @@ export function PersonasPane({
   engines: EngineCatalog;
   /** 서버 `MODEL_RE.source`. 화면이 정규식을 따로 적지 않는다(§23 재사용) */
   modelPattern: string;
+  /** 엔진 `지정 없음`에 다는 실효값 힌트(§23 §개정 · 요구 `445ff9e1`). 워커가 0개거나 판정할
+   *  것이 없으면 `null` — 페르소나 이름과 무관하게 워커 목록 하나에서 나온 값이라 모든 카드가
+   *  같은 문자열을 받는다(engine 파일이 있는 카드는 어차피 안 그린다). */
+  engineHint: string | null;
 }) {
   const [selected, setSelected] = useState<string | null>(initial);
   const [edits, setEdits] = useState<Record<string, PersonaEdit>>({});
@@ -519,6 +524,7 @@ export function PersonasPane({
             configDir={configDir}
             engines={engines}
             modelPattern={modelPattern}
+            engineHint={engineHint}
           />
         )}
       </div>
@@ -539,6 +545,7 @@ function PersonaDetail({
   configDir,
   engines,
   modelPattern,
+  engineHint,
 }: {
   projectId: string;
   row: PersonaRow;
@@ -550,6 +557,7 @@ function PersonaDetail({
   configDir: string;
   engines: EngineCatalog;
   modelPattern: string;
+  engineHint: string | null;
 }) {
   const [result, setResult] = useState<PersonaResult | null>(null);
   // 삭제·색은 둘 다 이 칸 머리에서 누르므로 사유도 머리 아래다 — 실패는 **누른 곳**이다(§5).
@@ -596,6 +604,7 @@ function PersonaDetail({
         engine={edit.engine}
         engines={engines}
         modelPattern={modelPattern}
+        engineHint={engineHint}
         onLimitSaved={(limit) => onEdit({ ...edit, limit })}
         onEngineSaved={(engine) => onEdit({ ...edit, engine })}
       />
@@ -667,6 +676,7 @@ function DispatchPolicySection({
   engine,
   engines,
   modelPattern,
+  engineHint,
   onLimitSaved,
   onEngineSaved,
 }: {
@@ -676,6 +686,9 @@ function DispatchPolicySection({
   engine: { engineId: string; model: string } | null;
   engines: EngineCatalog;
   modelPattern: string;
+  /** §23 §개정 · §44 ④. 엔진이 지정 없음이고 워커가 1개 이상일 때만 그린다 — `engine`이 있으면
+   *  트리거의 값이 곧 사실이라 힌트가 없다(§23 §개정 표). */
+  engineHint: string | null;
   onLimitSaved: (limit: number | null) => void;
   onEngineSaved: (engine: { engineId: string; model: string } | null) => void;
 }) {
@@ -697,6 +710,11 @@ function DispatchPolicySection({
           onSaved={onEngineSaved}
         />
       </div>
+      {/* 컨트롤 행 **아래**, 절 안의 전폭 한 줄이다(§44 ④) — 트리거에 매달지 않는다. 상한에는
+          이런 줄이 없다: 상한 없음은 위임이 아니라 값이다(§44 ② 어휘 표). */}
+      {engine === null && engineHint && (
+        <p className="text-xs text-muted-foreground">{engineHint}</p>
+      )}
     </section>
   );
 }

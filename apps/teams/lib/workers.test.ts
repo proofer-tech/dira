@@ -48,6 +48,7 @@ const {
   ENGINES,
   NO_MODEL,
   parseEngineValue,
+  personaEngineHint,
   renderEngineBlock,
   registerCron,
   engineName,
@@ -1900,5 +1901,27 @@ test("engineCell — 엔진 열에 빈칸이 되는 경우가 없다 (§비주�
   for (const e of [null, "", "x", engineArgv("codex", "gpt-5.5").join(" ")]) {
     assert.notStrictEqual(engineCell(e).label, "", `빈칸: ${e}`);
   }
+});
+
+test("personaEngineHint — 미지정 힌트 (§비주얼 §23 §개정 · 요구 445ff9e1)", () => {
+  // 워커 0개 — 돌 것이 없어 기본값도 없다
+  assert.strictEqual(personaEngineHint([]), null);
+
+  // 전부 같은 실효 엔진(대입 없음도 `claude`로 같이 셈된다 — engineCell이 기본값을 편다)
+  assert.strictEqual(
+    personaEngineHint([null, null, engineArgv("claude").join(" ")]),
+    "미지정 — 티켓을 집는 워커의 엔진을 씁니다 (지금 전부 claude)",
+  );
+
+  // 워커별로 다름 — 수 내림차순, 구분자 ` / `. 동률(1건씩)은 처음 나온 순서를 지킨다(안정 정렬).
+  assert.strictEqual(
+    personaEngineHint([
+      engineArgv("claude").join(" "),
+      engineArgv("claude").join(" "),
+      engineArgv("codex").join(" "),
+      engineArgv("claude", "opus").join(" "),
+    ]),
+    "미지정 — 티켓을 집는 워커의 엔진을 씁니다 (지금 claude ×2 / codex ×1 / claude · opus ×1)",
+  );
 });
 
