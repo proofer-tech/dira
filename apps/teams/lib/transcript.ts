@@ -4,6 +4,11 @@
  *  (`~/.claude/projects/<디렉터리>/<session_id>.jsonl`)다. 엔진도 같은 파일을 본다
  *  (`tickets.py:299 newest_transcript` · `:319 transcript_state`).
  *
+ *  **출처가 하나 더 있다 — grok**(§4-3 §grok §세션 스트림, 요구 `390f788b`).
+ *  `~/.grok/sessions/<pct-enc cwd>/<sid>/updates.jsonl`이고 자리·형식이 갈릴 뿐 사건은 같다.
+ *  그 형식은 **`grokRecord`가 claude 레코드 모양으로 접고 나머지 전부는 두 엔진이 공유한다** —
+ *  요약·키·첫 프롬프트 접기가 두 벌이 되면 화면이 엔진마다 다르게 보인다.
+ *
  *  **여기가 틀리면 사건이 조용히 사라진다.** 그래서 이 파일의 계약은 두 줄이다:
  *  모르는 것은 던지지 말고 건너뛴다, 그리고 **불완전한 마지막 줄은 버리고 offset을 되돌린다**. */
 import { access, open, readdir, readFile } from "node:fs/promises";
@@ -38,28 +43,24 @@ export function sessionIdOf(fm: Record<string, string>): string | null {
   return UUID_RE.test(v) ? v : null;
 }
 
-/** `~/.claude/projects/*​/<session_id>.jsonl` 글롭. 매치가 **정확히 1개**일 때만 경로다.
+/** `<root>/<디렉터리>/<leaf>` 글롭. 매치가 **정확히 1개**일 때만 경로다.
  *  0개·2개 이상이면 빈 상태(null) — 디렉터리 이름을 유도하지 않는다(§2-1).
- *  `root`는 테스트가 픽스처 디렉터리를 주기 위한 것이다. 사용자 입력이 들어오는 자리가 아니다. */
-export async function findTranscript(
-  sessionId: string,
-  root = path.join(homedir(), ".claude", "projects"),
-): Promise<string | null> {
-  if (!UUID_RE.test(sessionId)) return null;
+ *
+ *  ponytail: 디렉터리 수만큼 access(**디렉터리** 실측 이 머신 75개 · 2026-08-04. 그 아래 트랜스크립트
+ *  파일은 1900개대이고 §2-1 본문의 `864개`가 세는 것이 그 축이다). `fs.glob`이 하는 일과 같고
+ *  @types/node@20에 없는 API를 안 쓴다. 느려지면 <session_id> → 경로를 프로세스 캐시에 둔다. */
+async function globOne(root: string, leaf: string): Promise<string | null> {
   let dirs;
   try {
     dirs = await readdir(root, { withFileTypes: true });
   } catch {
-    return null; // projects 디렉터리 자체가 없는 머신(Codex 큐 등)도 빈 상태다
+    return null; // 그 CLI를 안 쓰는 머신은 디렉터리 자체가 없다 — 빈 상태다
   }
-  // ponytail: 디렉터리 수만큼 access(**디렉터리** 실측 이 머신 75개 · 2026-08-04. 그 아래 트랜스크립트
-  // 파일은 1900개대이고 §2-1 본문의 `864개`가 세는 것이 그 축이다). `fs.glob`이 하는 일과 같고
-  // @types/node@20에 없는 API를 안 쓴다. 느려지면 <session_id> → 경로를 프로세스 캐시에 둔다.
   const hits = (
     await Promise.all(
       dirs.map(async (d) => {
         if (!d.isDirectory()) return null;
-        const p = path.join(root, d.name, `${sessionId}.jsonl`);
+        const p = path.join(root, d.name, leaf);
         return access(p).then(
           () => p,
           () => null,
@@ -70,14 +71,58 @@ export async function findTranscript(
   return hits.length === 1 ? hits[0] : null; // 0개·2개 이상은 빈 상태
 }
 
+/** `~/.claude/projects/*​/<session_id>.jsonl`.
+ *  `root`는 테스트가 픽스처 디렉터리를 주기 위한 것이다. 사용자 입력이 들어오는 자리가 아니다. */
+export async function findTranscript(
+  sessionId: string,
+  root = path.join(homedir(), ".claude", "projects"),
+): Promise<string | null> {
+  if (!UUID_RE.test(sessionId)) return null;
+  return globOne(root, `${sessionId}.jsonl`);
+}
+
+/** `~/.grok/sessions/*​/<session_id>/updates.jsonl` (§4-3 §grok · 실측 `grok 0.2.118`).
+ *
+ *  **`chat_history.jsonl`이 아니다.** 그건 모델에 보내는 원본 대화 배열이라 `timestamp`·`uuid`가
+ *  없다 — 이 파일이 요구하는 두 값이다. `updates.jsonl`은 ACP 세션 업데이트 NDJSON이다.
+ *
+ *  **디렉터리 이름을 cwd에서 찍지 않고 claude와 같은 글롭을 돈다.** 규칙(퍼센트 인코딩)을 아는
+ *  것과 그 자리에서 cwd를 아는 것은 다른 문제다: 완료 티켓은 무는 워커가 없어 `holderEngine`이
+ *  `null`인데 스트림은 리플레이로 서야 하고(claude가 그렇다), cwd를 화면에서 받으면 경로가 되는
+ *  입력이 둘로 는다(§경로 방어는 `session_id` 하나만 통과시킨다). **규칙 자체는 `grokCwd`가
+ *  되돌리는 방향으로 쓴다** — claude의 규칙(`usage.ts:166`)과 한 함수가 아니다. */
+export async function findGrokTranscript(
+  sessionId: string,
+  root = path.join(homedir(), ".grok", "sessions"),
+): Promise<string | null> {
+  if (!UUID_RE.test(sessionId)) return null;
+  return globOne(root, path.join(sessionId, "updates.jsonl"));
+}
+
+/** 세션 id → 트랜스크립트 파일 + **어느 엔진 형식인가**(§2-1 · §4-3 §grok).
+ *
+ *  **엔진 이름을 묻지 않는다.** 두 CLI가 각자 자기 트리에만 자기 세션을 남기므로 *파일이 어느
+ *  트리에 있느냐*가 곧 형식이고, 그래서 이 값이 `holderEngine`과 독립이다 — 워커가 이미 놓아 준
+ *  완료 티켓에서도 스트림이 선다. claude를 먼저 보므로 claude 큐에서는 읽기가 종전과 같다
+ *  (`~/.grok`을 아예 안 연다). */
+export async function findStream(sessionId: string): Promise<{ file: string; grok: boolean } | null> {
+  const claude = await findTranscript(sessionId);
+  if (claude) return { file: claude, grok: false };
+  const grok = await findGrokTranscript(sessionId);
+  return grok ? { file: grok, grok: true } : null;
+}
+
 /** `offset` 뒤에 붙은 바이트만 읽어 사건 + 새 offset. 2MB를 매번 다시 읽지 않는다.
  *
  *  - **불완전한 마지막 줄을 버린다.** 새 offset은 마지막 `\n`까지로 되돌리고 다음 폴링이
  *    그 줄을 처음부터 다시 읽는다. 잘린 줄을 파싱해 건너뛰면 그 사건이 영구히 사라진다.
- *  - `offset`이 파일 크기보다 크면 `0`부터 다시 읽는다(있을 수 없는 상태지만 무한 빈 응답보다 낫다). */
+ *  - `offset`이 파일 크기보다 크면 `0`부터 다시 읽는다(있을 수 없는 상태지만 무한 빈 응답보다 낫다).
+ *  - `grok`이면 줄마다 `grokRecord`를 한 번 지난다. **위 두 계약이 그 경로에서도 그대로다** —
+ *    깨진 꼬리 줄은 여전히 버려지고(offset이 되돌아온다), 접히지 않는 종류는 건너뛴다. */
 export async function tailEvents(
   file: string,
   offset: number,
+  grok = false,
 ): Promise<{ events: StreamEvent[]; offset: number }> {
   let fh;
   try {
@@ -100,6 +145,8 @@ export async function tailEvents(
     const events: StreamEvent[] = [];
     let promptSeen = start > 0; // offset>0이면 세션 프롬프트도 그 `enqueue`도 이미 지나갔다
     let enqueueSeen = start > 0;
+    // grok 레코드에는 `cwd`가 없다 — 담긴 자리가 **디렉터리 이름**이라 그것을 되돌려 쓴다
+    const cwd = grok ? grokCwd(path.basename(path.dirname(path.dirname(file)))) : undefined;
     for (const line of chunk.subarray(0, cut).toString("utf8").split("\n")) {
       if (!line.trim()) continue;
       let rec: unknown;
@@ -107,6 +154,10 @@ export async function tailEvents(
         rec = JSON.parse(line);
       } catch {
         continue; // 파싱 불가능한 줄은 조용히 건너뛴다. 스트림이 멈추는 것이 최악이다
+      }
+      if (grok) {
+        rec = grokRecord(rec, cwd);
+        if (rec === null) continue; // 대응물 없는 종류(`hook_execution` 등)는 건너뛴다
       }
       // **첫 `enqueue`는 안 흘린다**(§2-1) — 세션 프롬프트와 같은 글이고 이미 접힌 줄로 있다.
       // 판정은 `content` 비교가 아니라 **레코드 단위 첫 하나**이고(실측: record 0), 그래서
@@ -203,6 +254,98 @@ const isEnqueue = (rec: unknown): boolean => {
   const r = rec as { type?: unknown; operation?: unknown };
   return r.type === "queue-operation" && r.operation === "enqueue";
 };
+
+/** grok 세션 디렉터리 이름 → cwd. **규칙은 퍼센트 인코딩이다**
+ *  (`/private/tmp/x` ↔ `%2Fprivate%2Ftmp%2Fx` — 실측 2026-08-05 · `grok 0.2.118`).
+ *
+ *  **claude의 규칙과 한 함수가 아니다.** 저쪽은 *비영숫자 전부 `-`*이고(`usage.ts:166`) 되돌릴 수
+ *  없다. 이쪽은 정확히 되돌아오고, 우리가 쓰는 방향이 그 되돌리기다 — 파일을 찾는 것은 글롭이
+ *  하고(`findGrokTranscript`) 이 값은 도구 요약의 상대경로에만 든다(claude가 레코드의 `cwd`로
+ *  하는 그 일이다. §4-3 §grok "엔진마다 규칙 하나다"). */
+export function grokCwd(dir: string): string | undefined {
+  try {
+    return decodeURIComponent(dir);
+  } catch {
+    return undefined; // 홀로 선 `%` — 요약이 절대경로로 선다(빈 상태가 아니다)
+  }
+}
+
+/** ACP `content` 블록 → 글자. 실측은 `{type:"text", text}` 하나다 */
+const grokText = (c: unknown): string => {
+  const b = (c ?? {}) as { text?: unknown };
+  return typeof b.text === "string" ? b.text : "";
+};
+
+/** `tool_call_update`의 `content` 블록 → claude `tool_result` 블록. 실측 두 종류다
+ *  (`content` 67 · `diff` 8). `diff`는 **경로만** 세운다 — 앞선 `tool_use` 줄이 입력을 이미
+ *  들고 있어서 여기서 diff 본문을 다시 펴면 같은 글이 두 번 흐른다.
+ *  모르는 종류는 그대로 넘겨 `resultText`가 `[종류]`로 접는다(계약 그대로). */
+const grokBlock = (raw: unknown): unknown => {
+  const b = (raw ?? {}) as { type?: unknown; content?: unknown; path?: unknown };
+  if (b.type === "content") return { type: "text", text: grokText(b.content) };
+  if (b.type === "diff" && typeof b.path === "string") return { type: "text", text: b.path };
+  return raw;
+};
+
+/** grok `updates.jsonl` 한 줄 → **claude 트랜스크립트 레코드 모양**(§4-3 §grok §세션 스트림).
+ *  접히지 않는 줄은 `null`이고 부르는 쪽이 건너뛴다 — 실측에 `hook_execution` 99 ·
+ *  `retry_state` 14 · `turn_completed` 10 · `plan` 1이 있고 claude에 대응물이 없다.
+ *
+ *  `sessionUpdate` → §2-1 `kind`가 스펙이 정한 다섯이다: `user_message_chunk`→`prompt` ·
+ *  `agent_thought_chunk`→`thinking` · `agent_message_chunk`→`text` · `tool_call`→`tool_use` ·
+ *  `tool_call_update`→`tool_result`.
+ *
+ *  **갈리는 값 셋.** `timestamp`가 unix **초**다(claude는 ISO 문자열 — `StreamEvent.ts`는
+ *  종전대로 UTC ISO라 화면이 무수정이다) · `uuid`가 없어서 키가 `params._meta.eventId`다
+ *  (초 단위라 `timestamp`로는 한 초에 온 줄들을 못 가른다) · 도구 이름표가
+ *  `update._meta["x.ai/tool"].label`이다.
+ *
+ *  ponytail: 그 이름표로 `toolSummary`가 걸리는 것은 claude와 낱말이 같은 `Write` 하나다
+ *  (`file_path`까지 같다). `Run Command`의 `description`·`Read`의 `target_file`도 세우려면
+ *  grok 도구 이름표를 하나 둬야 하는데 그 표는 도구가 늘 때마다 낡는다 — 지금은 접힌 줄에
+ *  라벨이 서고 펼치면 `rawInput` 전문이 있다. 요약이 빈 도구가 눈에 걸리면 그때 표를 만든다. */
+function grokRecord(rec: unknown, cwd?: string): unknown {
+  if (!rec || typeof rec !== "object") return null;
+  const r = rec as { timestamp?: unknown; params?: unknown };
+  const at = typeof r.timestamp === "number" ? new Date(r.timestamp * 1000) : null;
+  if (!at || Number.isNaN(at.getTime())) return null;
+  const p = (r.params ?? {}) as { update?: unknown; _meta?: unknown };
+  const u = p.update;
+  if (!u || typeof u !== "object") return null;
+  const up = u as { sessionUpdate?: unknown; content?: unknown; rawInput?: unknown; _meta?: unknown };
+  const eventId = ((p._meta ?? {}) as { eventId?: unknown }).eventId;
+  const label = (((up._meta ?? {}) as Record<string, unknown>)["x.ai/tool"] ?? {}) as {
+    label?: unknown;
+  };
+  const msg = (role: "user" | "assistant", content: unknown[]) => ({
+    timestamp: at.toISOString(),
+    uuid: typeof eventId === "string" ? eventId : undefined,
+    cwd,
+    message: { role, content },
+  });
+  switch (up.sessionUpdate) {
+    case "user_message_chunk":
+      return msg("user", [{ type: "text", text: grokText(up.content) }]);
+    case "agent_message_chunk":
+      return msg("assistant", [{ type: "text", text: grokText(up.content) }]);
+    case "agent_thought_chunk":
+      return msg("assistant", [{ type: "thinking", thinking: grokText(up.content) }]);
+    case "tool_call":
+      return msg("assistant", [
+        { type: "tool_use", name: label.label, input: up.rawInput },
+      ]);
+    case "tool_call_update": {
+      // **본문 없는 갱신은 안 흘린다.** 한 도구 호출에 갱신이 여러 번 오고(실측 세션 하나에서
+      // 호출 24 · 갱신 85) 그중 26건은 상태만 바뀐 줄이라 `결과 · 0줄`이 스트림을 덮는다.
+      // 같은 판정이 이 파일에 이미 있다 — 본문 없는 `enqueue`를 안 흘리는 그 줄(피드백
+      // `edec37eb`)이고, 판정을 `resultText`로 하므로 **사건이 쓸 글과 같은 값**을 본다.
+      const content = (Array.isArray(up.content) ? up.content : []).map(grokBlock);
+      return resultText(content).trim() ? msg("user", [{ type: "tool_result", content }]) : null;
+    }
+    default:
+      return null;
+  }
+}
 
 type Block = {
   type?: string;

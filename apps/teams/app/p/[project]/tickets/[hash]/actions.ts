@@ -21,7 +21,7 @@ import { followup, type FollowupResult } from "@/lib/followup";
 import { interject, type InterjectResult } from "@/lib/interject";
 import { kickIdleWorker } from "@/lib/kick";
 import { NAME_RE, isHash, resolveWithin } from "@/lib/paths";
-import { findTranscript, sessionIdOf, tailEvents, type StreamEvent } from "@/lib/transcript";
+import { findStream, sessionIdOf, tailEvents, type StreamEvent } from "@/lib/transcript";
 import {
   awaitingOf,
   isAwaiting,
@@ -109,9 +109,11 @@ export async function tailSession(
     const inbox = t.inbox;
     const done = t.state === "done";
     if (!t.sessionId) return { events: [], offset: at, live, inbox, done };
-    const file = await findTranscript(t.sessionId);
-    if (!file) return { events: [], offset: at, live, inbox, done };
-    return { ...(await tailEvents(file, at)), live, inbox, done };
+    // 어느 엔진 형식인지는 **파일이 어느 트리에 있나**가 정한다(§4-3 §grok) — 이 폴링이 워커
+    // 목록을 읽지 않는 이유다. 2초마다 새로 무는 fs는 종전 그대로 티켓 하나 + 글롭이다.
+    const s = await findStream(t.sessionId);
+    if (!s) return { events: [], offset: at, live, inbox, done };
+    return { ...(await tailEvents(s.file, at, s.grok)), live, inbox, done };
   } catch {
     return { events: [], offset: at, live: false, inbox: false, done: false };
   }

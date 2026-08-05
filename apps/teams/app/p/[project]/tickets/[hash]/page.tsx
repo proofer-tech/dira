@@ -41,7 +41,7 @@ import {
   type Ticket,
 } from "@/lib/queue";
 import { getProject, listPersonas, resolveConfig } from "@/lib/projects";
-import { findTranscript, sessionIdOf } from "@/lib/transcript";
+import { findStream, sessionIdOf } from "@/lib/transcript";
 import { decodeHash, engineCan } from "@/lib/urls";
 import { holderEngine, listWorkers } from "@/lib/workers";
 
@@ -128,8 +128,9 @@ export default async function TicketDetail({
   // 세션 스트림 (§2-1). 갈림길은 **세션이 붙은 적이 있는가** 하나다(§9 빈 상태 표):
   // `session_id`가 없거나 UUID가 아니면 절 자체를 감추고(상태 배지가 이미 말한다), 있는데
   // 글롭 매치가 0개·2개 이상이면 `트랜스크립트 없음`이다. **어느 쪽도 에러로 그리지 않는다.**
+  // 출처가 둘이다(claude · grok) — 어느 쪽이든 여기서는 **파일이 하나 있나**로만 쓴다(§4-3 §grok).
   const sessionId = sessionIdOf(ticket.fm);
-  const transcript = sessionId ? await findTranscript(sessionId) : null;
+  const transcript = sessionId ? await findStream(sessionId) : null;
   // 갈림길이 하나 늘었다: **이 티켓을 물고 있는 워커의 엔진**(§4-3 · §비주얼 §23 ⑤). 그 엔진에
   // 없는 기능이 있으면 화면이 그걸 말한다 — 진입점을 지우지 않는다. 완료 티켓은 아무도 안 물고
   // 있어 `null`이고, 그때는 종전 빈 상태 그대로다(추측해서 문구를 고르지 않는다).

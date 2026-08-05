@@ -3,7 +3,16 @@ import assert from "node:assert";
 import { appendFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { findTranscript, lastActivity, recordToEvents, sessionIdOf, tailEvents } from "./transcript.ts";
+import {
+  findGrokTranscript,
+  findStream,
+  findTranscript,
+  grokCwd,
+  lastActivity,
+  recordToEvents,
+  sessionIdOf,
+  tailEvents,
+} from "./transcript.ts";
 import { expandable } from "./urls.ts";
 
 /** 픽스처는 전부 임시 디렉터리다 — **`~/.claude/projects`를 건드리지 않는다**(§수용조건).
@@ -491,4 +500,189 @@ test("사건 매핑 — 깨진 입력에도 던지지 않는다", () => {
     recordToEvents({ type: "assistant", timestamp: "t", message: { role: "assistant", content: [null, 7, {}] } }),
     [],
   );
+});
+
+// ---------- grok — 출처 하나가 는다 (§4-3 §grok §세션 스트림 · 티켓 30ce9d73) ----------
+
+/** `~/.grok/sessions/<pct-enc cwd>/<sid>/updates.jsonl`. 픽스처도 **같은 이름 규칙**이라
+ *  `grokCwd`가 되돌리는 값이 실제 cwd가 된다(도구 요약의 상대경로가 여기서 나온다). */
+const GROK_ROOT = path.join(tmp, "grok-sessions");
+const GROK_CWD = "/private/tmp/grok-w";
+const GROK_SID = "019fcf77-682d-7853-9fa1-21cfae87637e"; // grok이 스스로 만드는 id는 UUIDv7이다
+mkdirSync(path.join(GROK_ROOT, encodeURIComponent(GROK_CWD), GROK_SID), { recursive: true });
+mkdirSync(path.join(GROK_ROOT, encodeURIComponent("/private/tmp"), UUID), { recursive: true });
+const GROK_FILE = path.join(GROK_ROOT, encodeURIComponent(GROK_CWD), GROK_SID, "updates.jsonl");
+writeFileSync(GROK_FILE, "");
+writeFileSync(path.join(GROK_ROOT, encodeURIComponent("/private/tmp"), UUID, "updates.jsonl"), "");
+
+/** grok 업데이트 한 줄. `timestamp`는 unix **초**이고 키는 `params._meta.eventId`다 */
+const gup = (sec: number, eventId: string, update: object, method = "session/update") =>
+  rec({ timestamp: sec, method, params: { sessionId: GROK_SID, update, _meta: { eventId } } });
+
+test("grokCwd — 규칙은 퍼센트 인코딩이다. claude의 `-` 규칙과 한 함수가 아니다 (§4-3 §grok)", () => {
+  assert.equal(encodeURIComponent("/private/tmp/x"), "%2Fprivate%2Ftmp%2Fx"); // 티켓이 적은 그 예
+  assert.equal(grokCwd("%2Fprivate%2Ftmp%2Fx"), "/private/tmp/x"); // 우리가 쓰는 방향
+  // claude 규칙(`usage.ts:166` — 비영숫자 전부 `-`)은 같은 cwd에 **다른 이름**을 주고 되돌릴 수
+  // 없다. 두 규칙이 한 함수가 아니라는 것이 이 한 줄이다.
+  assert.equal("/private/tmp/x".replace(/[^a-zA-Z0-9]/g, "-"), "-private-tmp-x");
+  assert.equal(grokCwd("%"), undefined); // 홀로 선 `%` — 던지지 않는다
+});
+
+test("findGrokTranscript — updates.jsonl 하나일 때만 경로다. UUID 방어는 claude와 같다", async () => {
+  assert.equal(await findGrokTranscript(GROK_SID, GROK_ROOT), GROK_FILE);
+  assert.equal(await findGrokTranscript("00000000-0000-0000-0000-000000000000", GROK_ROOT), null);
+  assert.equal(await findGrokTranscript(GROK_SID, path.join(tmp, "없는디렉터리")), null);
+  for (const bad of ["", "*", "../../../etc/passwd", `${GROK_SID}/..`, GROK_SID.toUpperCase()]) {
+    assert.equal(await findGrokTranscript(bad, GROK_ROOT), null, bad);
+  }
+});
+
+test("findStream — 파일이 어느 트리에 있나가 곧 형식이다 (엔진 이름을 안 묻는다)", async () => {
+  // 실제 `~`를 보는 함수라 여기서는 **판정 규칙만** 본다: claude 쪽이 잡히면 grok을 안 열고
+  // (`grok: false`), 어느 쪽도 없으면 `null`이다. 두 root를 갈아 끼우는 인자가 없는 것이 계약이다
+  // (`session_id` 하나만 경로가 된다 — §경로 방어).
+  assert.equal(await findStream("00000000-0000-0000-0000-000000000000"), null);
+});
+
+test("sessionIdOf — grok의 두 id가 다 통과한다. UUID_RE를 안 고쳤다 (§4-3 §grok)", () => {
+  // `tick.sh`가 `uuid.uuid4()`로 만들어 `--session-id`로 주는 값과, grok이 스스로 만드는 UUIDv7.
+  // **고칠 필요가 없다**는 것을 단언으로 남긴다 — 못 고치는 것이 아니다.
+  assert.equal(sessionIdOf({ session_id: "9e18d96d-e8e0-414a-acf3-ffc3ec33ae8f" }), "9e18d96d-e8e0-414a-acf3-ffc3ec33ae8f");
+  assert.equal(sessionIdOf({ session_id: GROK_SID }), GROK_SID); // 019f… = v7
+});
+
+test("grok — ACP 청크 다섯이 §2-1의 kind로 접히고 나머지는 건너뛴다", async () => {
+  // **실제 자리에 쓴다** — 요약의 상대경로가 디렉터리 이름을 되돌린 cwd에서 나오므로
+  // 파일을 아무 데나 두면 그 한 줄이 안 걸린다(`%2Fprivate%2Ftmp%2Fgrok-w/<sid>/updates.jsonl`).
+  const f = GROK_FILE;
+  writeFileSync(
+    f,
+    // 대응물 없는 줄 셋이 먼저 온다 — 하나도 사건이 되지 않는다
+    gup(1785892150, "e-1", { sessionUpdate: "hook_execution", event_name: "session_start" }, "_x.ai/session/update") +
+      gup(1785892151, "e-2", { sessionUpdate: "turn_completed" }, "_x.ai/session/update") +
+      gup(1785892152, "e-3", { sessionUpdate: "plan", entries: [] }) +
+      gup(1785892158, "e-4", { sessionUpdate: "user_message_chunk", content: { type: "text", text: "가나다" } }) +
+      gup(1785892159, "e-5", { sessionUpdate: "agent_thought_chunk", content: { type: "text", text: "생각한다" } }) +
+      gup(1785892159, "e-6", {
+        sessionUpdate: "tool_call",
+        toolCallId: "call-1",
+        title: "write",
+        rawInput: { file_path: `${GROK_CWD}/target.txt`, content: "done\n" },
+        _meta: { "x.ai/tool": { name: "write", label: "Write" } },
+      }) +
+      gup(1785892160, "e-7", {
+        sessionUpdate: "tool_call_update",
+        toolCallId: "call-1",
+        content: [
+          { type: "content", content: { type: "text", text: "한 줄\n두 줄" } },
+          { type: "diff", path: `${GROK_CWD}/target.txt`, oldText: "", newText: "done\n" },
+        ],
+      }) +
+      gup(1785892163, "e-8", { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "DONE" } }),
+  );
+  const { events } = await tailEvents(f, 0, true);
+  assert.deepEqual(events.map((e) => e.kind), [
+    "prompt",
+    "thinking",
+    "tool_use",
+    "tool_result",
+    "text",
+  ]);
+  // 키가 `eventId`다 — `timestamp`가 초라서 e-5·e-6이 같은 초에 있다(그것으로는 못 가른다)
+  assert.deepEqual(events.map((e) => e.key), ["e-4:0", "e-5:0", "e-6:0", "e-7:0", "e-8:0"]);
+  // 첫 프롬프트는 claude와 같은 규칙으로 접힌다
+  assert.deepEqual([events[0].label, events[0].summary, events[0].body], ["세션 프롬프트", "3자", "가나다"]);
+  assert.deepEqual([events[1].label, events[1].summary], ["생각", "4자"]);
+  // 도구 이름표는 `_meta["x.ai/tool"].label`이고, 요약의 상대경로는 **디렉터리 이름을 되돌린 cwd**다
+  assert.deepEqual([events[2].label, events[2].summary, events[2].summaryMono], ["Write", "target.txt", true]);
+  assert.equal(events[2].body, JSON.stringify({ file_path: `${GROK_CWD}/target.txt`, content: "done\n" }, null, 2));
+  assert.deepEqual([events[3].label, events[3].body], ["결과", `한 줄\n두 줄\n${GROK_CWD}/target.txt`]);
+  assert.deepEqual([events[4].label, events[4].body], ["", "DONE"]);
+});
+
+test("grok — timestamp가 unix 초다. StreamEvent.ts는 종전대로 UTC ISO다", async () => {
+  const f = path.join(tmp, "grok-ts.jsonl");
+  writeFileSync(
+    f,
+    gup(1785892158, "t-1", { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "초" } }) +
+      // 숫자가 아닌·말이 안 되는 `timestamp`는 건너뛴다(claude의 `timestamp` 없음과 같은 자리)
+      gup(Number.NaN, "t-2", { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "NaN" } }) +
+      rec({ timestamp: "2026-08-05T01:00:00Z", method: "session/update", params: { update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "문자열" } } } }),
+  );
+  const { events } = await tailEvents(f, 0, true);
+  assert.deepEqual(events.map((e) => e.body), ["초"]);
+  assert.equal(events[0].ts, "2026-08-05T01:09:18.000Z"); // 1785892158초의 UTC ISO
+});
+
+test("grok — 깨진 꼬리 줄을 버리고 offset을 되돌린다 (계약이 grok 경로에서도 참이다)", async () => {
+  const f = path.join(tmp, "grok-partial.jsonl");
+  const head = gup(1785892158, "p-1", { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "첫 줄" } });
+  const whole = gup(1785892159, "p-2", { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "두 번째 줄" } });
+  writeFileSync(f, head + whole.slice(0, 60)); // 중간에서 끊긴다
+
+  const a = await tailEvents(f, 0, true);
+  assert.deepEqual(a.events.map((e) => e.body), ["첫 줄"]);
+  assert.equal(a.offset, Buffer.byteLength(head)); // 잘린 줄 앞으로 되돌아왔다
+
+  appendFileSync(f, whole.slice(60));
+  const b = await tailEvents(f, a.offset, true);
+  assert.deepEqual(b.events.map((e) => e.body), ["두 번째 줄"]); // 온전히 한 번 나온다
+  assert.deepEqual((await tailEvents(f, b.offset, true)).events, []); // 중복되지 않는다
+});
+
+// ---------- claude 스트림 무회귀 (개정 전후로 배열이 같다) ----------
+
+/** 개정 **전** 코드가 이 픽스처에서 낸 `tailEvents` 결과 전문이다(사건 7 · offset 1148).
+ *  손으로 적은 기댓값이 아니라 **개정 직전 커밋이 실제로 낸 출력**이라, 여기 한 글자가 갈리면
+ *  grok을 붙이면서 claude 줄을 밟았다는 뜻이다. cwd가 실제로 없는 절대경로인 것은 의도다 —
+ *  `toolSummary`는 `path.isAbsolute`만 보고 fs를 안 만지므로 이 골든이 머신에 안 매인다. */
+const CLAUDE_CWD = "/Users/hsol/Projects/dira";
+const CLAUDE_FIXTURE =
+  rec({ type: "queue-operation", operation: "enqueue", timestamp: "2026-08-05T01:00:00.000Z", content: "세션 프롬프트다" }) +
+  rec({ type: "user", uuid: "u0", timestamp: "2026-08-05T01:00:01.000Z", cwd: CLAUDE_CWD, message: { role: "user", content: "세션 프롬프트다" } }) +
+  rec({ type: "assistant", uuid: "u1", timestamp: "2026-08-05T01:00:02.000Z", cwd: CLAUDE_CWD, isSidechain: true, message: { role: "assistant", content: [
+    { type: "thinking", thinking: "생각한다" },
+    { type: "text", text: "말한다" },
+    { type: "tool_use", name: "Bash", input: { command: "ls", description: "목록을 본다" } },
+    { type: "tool_use", name: "Read", input: { file_path: `${CLAUDE_CWD}/apps/teams/lib/transcript.ts` } },
+  ] } }) +
+  rec({ type: "user", uuid: "u2", timestamp: "2026-08-05T01:00:03.000Z", cwd: CLAUDE_CWD, message: { role: "user", content: [
+    { type: "tool_result", content: [{ type: "text", text: "a\nb" }, { type: "image" }] },
+  ] } }) +
+  rec({ type: "queue-operation", operation: "enqueue", timestamp: "2026-08-05T01:00:04.000Z", content: "사람이 참견한다" }) +
+  rec({ type: "unknown-future", timestamp: "2026-08-05T01:00:05.000Z" });
+
+const CLAUDE_GOLDEN = [
+  { key: "u0:0", ts: "2026-08-05T01:00:01.000Z", sidechain: false, kind: "prompt", label: "세션 프롬프트", summary: "8자", body: "세션 프롬프트다", summaryMono: false },
+  { key: "u1:0", ts: "2026-08-05T01:00:02.000Z", sidechain: true, kind: "thinking", label: "생각", summary: "4자", body: "생각한다", summaryMono: false },
+  { key: "u1:1", ts: "2026-08-05T01:00:02.000Z", sidechain: true, kind: "text", label: "", summary: "", body: "말한다", summaryMono: false },
+  { key: "u1:2", ts: "2026-08-05T01:00:02.000Z", sidechain: true, kind: "tool_use", label: "Bash", summary: "목록을 본다", summaryMono: false, body: '{\n  "command": "ls",\n  "description": "목록을 본다"\n}' },
+  { key: "u1:3", ts: "2026-08-05T01:00:02.000Z", sidechain: true, kind: "tool_use", label: "Read", summary: "apps/teams/lib/transcript.ts", summaryMono: true, body: `{\n  "file_path": "${CLAUDE_CWD}/apps/teams/lib/transcript.ts"\n}` },
+  { key: "u2:0", ts: "2026-08-05T01:00:03.000Z", sidechain: false, kind: "tool_result", label: "결과", summary: "3줄", body: "a\nb\n[image]", summaryMono: false },
+  { key: "2026-08-05T01:00:04.000Z:q", ts: "2026-08-05T01:00:04.000Z", kind: "interject", label: "", summary: "", summaryMono: false, body: "사람이 참견한다", sidechain: false },
+];
+
+test("claude 스트림 무회귀 — 개정 전 골든과 사건 배열·offset이 한 글자도 안 갈린다", async () => {
+  const f = path.join(tmp, "claude-golden.jsonl");
+  writeFileSync(f, CLAUDE_FIXTURE);
+  const r = await tailEvents(f, 0);
+  assert.deepEqual(r.events, CLAUDE_GOLDEN);
+  assert.equal(r.offset, Buffer.byteLength(CLAUDE_FIXTURE));
+  assert.equal(r.offset, 1148); // 개정 전 실측값
+  // 세 번째 인자를 안 주면 claude다 — `grok: false`가 기본값인 것이 무회귀의 근거다
+  assert.deepEqual((await tailEvents(f, 0, false)).events, CLAUDE_GOLDEN);
+});
+
+test("grok — 본문 없는 tool_call_update는 안 흘린다 (`결과 · 0줄`이 스트림을 덮는다)", async () => {
+  const f = path.join(tmp, "grok-empty-update.jsonl");
+  writeFileSync(
+    f,
+    // 실측 모양: 한 호출에 갱신이 여러 번 오고 상태만 바뀐 줄은 `content`가 없다
+    gup(1785892159, "s-1", { sessionUpdate: "tool_call_update", toolCallId: "c1" }) +
+      gup(1785892159, "s-2", { sessionUpdate: "tool_call_update", toolCallId: "c1", content: [] }) +
+      gup(1785892160, "s-3", { sessionUpdate: "tool_call_update", toolCallId: "c1", content: [{ type: "content", content: { type: "text", text: "  " } }] }) +
+      gup(1785892161, "s-4", { sessionUpdate: "tool_call_update", toolCallId: "c1", content: [{ type: "content", content: { type: "text", text: "진짜 출력" } }] }),
+  );
+  const { events } = await tailEvents(f, 0, true);
+  assert.deepEqual(events.map((e) => [e.key, e.summary, e.body]), [["s-4:0", "1줄", "진짜 출력"]]);
 });
