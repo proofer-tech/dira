@@ -20413,7 +20413,7 @@ P166-5가 그 행을 grok 열에서는 통과로 만들 수 있는 첫 기회다
 | # | 티켓 | persona | deps | 상태 |
 |---|---|---|---|---|
 | P167-1 | 재현 + 원인 확정 `9c788af5` | pm | — | 진행중 — 헤드리스로 재현. §3 간격에 `DialogContent` 관용구 한 항목, 발행 1장 |
-| P167-2 | 답변 다이얼로그 그릇에 `min-w-0` + 다이얼로그 전수 실측 `9150e761` | developer | — | 대기 |
+| P167-2 | 답변 다이얼로그 그릇에 `min-w-0` + 다이얼로그 전수 실측 `9150e761` | developer | — | 완료 — `AnswerDialog` 처방은 착수 시점에 이미 master(`7947efe`, 별도 티켓 `4ed54d05`)에 있었다: `RequestDialog`·`NewTicketDialog`·`FeedbackDialog`까지 네 그릇에 `min-w-0`(rebase 충돌 → master 쪽 채택, 이 티켓의 diff는 0줄). 나머지 실측은 이 티켓이 했다 — `overflow-y-auto` 일곱 전부 헤드리스로 열어 `scrollWidth === clientWidth` 확인(`SettingsDialog` 512 · `projects-ui` 등록 512 · `workers-ui` 세션 스트림 768 — 참견 칸에 100자 안 쪼개지는 토큰을 넣어도 안 샌다, P71의 `min-w-0`이 이미 막아 뒀다). 티켓 상세(`main` 1440 · 말풍선 696)는 무수정 확인. 새어 나가는 요소 0곳
 
 **되묻지 않았다 — `ee0aa308`·`3d717e8b`과 같은 방법으로 PM이 재현했다.** 요구는 증상만 말했다
 ("간혹 … 가로로 넓어져서"). 지금 큐에 열린 답변 대기가 0건이라 픽스처 큐(`TICKET_LOCAL`)에
