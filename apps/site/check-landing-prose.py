@@ -21,6 +21,10 @@ NEW = "apps/site/app/landing.tsx"                # 지금 트리에서 읽는다
 # master의 조상이라 앞으로도 유효하다. 다른 ref를 대려면 인자로 준다.
 DEFAULT_REF = "51b7bba"
 
+# 사람이 카피를 직접 바꾸며 지운 노드 — `old`가 아니라 `missing`에서만 거른다(§old에서 거르면
+# 노드 수가 82로 줄어 스펙의 `83노드` 인용이 낡는다). 출처: .dira/tickets/be8f8074.done.md
+REMOVED_NODES = {"쓸 수 있는 것은 전부 무료입니다"}
+
 
 def nodes(src):
     # 마크업이 시작하는 자리부터 본다 — 그 앞의 스크립트에는 한글 주석이 산다
@@ -43,7 +47,7 @@ if not src:
 old = nodes(src)
 new = nodes(open(NEW).read())
 joined = " | ".join(new)
-missing = [s for s in old if s not in joined]
+missing = [s for s in old if s not in joined and s not in REMOVED_NODES]
 print(f"{ref} 산문 노드 {len(old)}개 / 사라진 것 {len(missing)}개 (지금 {len(new)}개)")
 for m in missing:
     print("  MISSING:", m[:78])

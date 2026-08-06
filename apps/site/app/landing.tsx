@@ -278,7 +278,7 @@ export default function Landing({ version: initialVersion }: { version: string }
 
 <section className="wrap plan-sec reveal">
   <p className="eyebrow">플랜</p>
-  <h2>쓸 수 있는 것은 전부 무료입니다</h2>
+  <h2>내 PC에서 무료로 시작해보세요</h2>
   {/* 카드는 순서가 없어 <ul>이다(.plans는 .steps에서 분리했다 — 30초 설명과 규칙이 갈린다). */}
   <ul className="plans">
     <li>
