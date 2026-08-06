@@ -160,7 +160,7 @@ export function BoardFilter({
             size="sm"
             role="combobox"
             aria-expanded={open}
-            className="h-8 max-w-52 gap-2 data-[popup-open]:bg-muted"
+            className="h-8 max-w-52 gap-2"
           >
             <span className="truncate">
               {label}

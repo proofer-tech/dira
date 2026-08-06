@@ -235,11 +235,11 @@ export function ProjectSwitcher({
             role="combobox"
             aria-expanded={open}
             aria-label="프로젝트 전환"
-            className="ml-auto h-8 max-w-md gap-2 data-[popup-open]:bg-muted"
+            className="ml-auto h-8 max-w-md gap-2"
           >
             <span className="truncate text-sm text-foreground">{current.name}</span>
             {!current.connected && <StatusBadge status="disconnected" />}
-            <span className="truncate font-mono text-xs text-muted-foreground">
+            <span className="truncate font-mono text-xs text-muted-foreground group-aria-expanded/button:text-foreground">
               {current.shortRoot}
             </span>
             <ChevronsUpDown aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
