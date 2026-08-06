@@ -120,12 +120,12 @@ const VIEWS = [
 const COLUMNS: { key: SortKey; label: string }[] = [
   { key: "status", label: "상태" },
   { key: "hash", label: "해시" },
-  { key: "title", label: "title" },
-  { key: "kind", label: "kind" },
-  { key: "persona", label: "persona" },
-  { key: "deps", label: "deps" },
+  { key: "title", label: "제목" },
+  { key: "kind", label: "분류" },
+  { key: "persona", label: "페르소나" },
+  { key: "deps", label: "의존성" },
   { key: "created", label: "생성일" },
-  { key: "owner", label: "owner" },
+  { key: "owner", label: "담당" },
 ];
 
 /** CLI `list`와 같은 표기(`%Y-%m-%d %H:%M`). 서버에서 만든다 — 로컬 도구라 서버와 브라우저가
