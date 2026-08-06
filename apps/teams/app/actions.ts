@@ -15,7 +15,6 @@ import {
   pollSetup,
   readAuth,
   readTokenRows,
-  sendSetupCode,
   setActiveToken,
   setTokenEnabled,
   setTokenLabel,
@@ -372,11 +371,11 @@ export async function deleteTokenAction(id: string): Promise<TokenRow[]> {
   return readTokenRows();
 }
 
-/** 인증 다이얼로그 층 ② — `claude setup-token`을 GUI가 pty로 몬다(DESIGN.md §0-4).
+/** 인증 다이얼로그 층 ② — dira 자체 OAuth 플로우(DESIGN.md §0-13 §라벨 §확정, P180-2).
  *
- *  **OAuth를 직접 구현하지 않는다.** 공식 CLI가 이미 그 일을 하고, 다시 짜면 문서화되지 않은
- *  엔드포인트에 제품이 묶인다. 여기 넷은 `lib/auth.ts`의 드라이버를 그대로 노출할 뿐이고,
- *  **저장은 층 ③과 같은 `addToken()`이 한다** — 저장 경로가 두 벌이 되지 않는다(§0-13 §화면).
+ *  PKCE + 로컬 콜백 서버로 승인 코드를 직접 받는다 — `claude` 실행파일이 없어도 돈다.
+ *  여기 셋은 `lib/auth.ts`의 드라이버를 그대로 노출할 뿐이고, **저장은 층 ③과 같은
+ *  `addToken()`이 한다** — 저장 경로가 두 벌이 되지 않는다(§0-13 §화면).
  *
  *  진행 상황은 폴링이다(§아키텍처 상태 갱신 — 이 앱에 소켓은 없다. 세션 스트림과 같은 방식). */
 export async function startSetupAction(): Promise<SetupState> {
@@ -391,14 +390,7 @@ export async function pollSetupAction(): Promise<SetupState> {
   return s;
 }
 
-/** 승인 뒤 브라우저가 주는 코드를 CLI에 넣는다. **실측(2.1.220)에서 이 단계가 있다** —
- *  마지막 화면이 `Paste code here if prompted >`이고, 넣지 않으면 CLI가 거기서 멈춘다. */
-export async function sendSetupCodeAction(code: string): Promise<SetupState> {
-  return sendSetupCode(code);
-}
-
-/** 다이얼로그를 닫으면 부른다. **자식을 남기지 않는다** — 살아남은 `setup-token`은 pty를 물고
- *  사람의 다음 시도를 막는다(§0-4). */
+/** 다이얼로그를 닫으면 부른다. **로컬 서버를 남기지 않는다**(§0-4와 같은 태도). */
 export async function stopSetupAction(): Promise<void> {
   stopSetup();
 }
