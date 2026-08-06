@@ -61,7 +61,20 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+} from "@/components/ui/sidebar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+
+/** §0-15 트리 4노드 — 순서가 §45 ③ 트리 그림·검색 인덱스의 순서다. */
+type SettingsNode = "claude" | "other" | "keymap" | "stats";
 
 /** 머신당 하나뿐인 Claude 장기 토큰의 자리와 저장 시각. 프로젝트마다 있지 않다(§0-4). */
 export type AuthView = {
@@ -81,7 +94,7 @@ export type AuthView = {
 
 /** §0-6 섹션의 층 셋 — ①목록 ②캡처 ③되돌리기. 값은 전부 `DEFAULT_KEYMAP`·props에서 오고
  *  **이 파일에 키 문자열이 없다**(표기는 `formatCombo` 하나가 그린다). */
-function KeymapSection() {
+function KeymapSection({ className }: { className?: string }) {
   // 루트 레이아웃이 읽어 내린 값이다(§0-6 배선) — 다이얼로그가 열릴 때 이미 손에 있다
   const keymap = useKeymap();
   const router = useRouter();
@@ -103,7 +116,7 @@ function KeymapSection() {
     });
 
   return (
-    <section className="space-y-2 border-t pt-4">
+    <section className={cn("space-y-2 border-t pt-4 md:border-t-0 md:pt-0", className)}>
       <h3 className="text-sm font-medium">키설정</h3>
       <p className="text-xs text-muted-foreground">
         단축키입니다. 이 컴퓨터에 하나뿐이고 등록된 프로젝트 전부에 적용됩니다.
@@ -249,7 +262,7 @@ function KeymapSection() {
  *
  *  값은 **다이얼로그가 열릴 때** 읽는다(닫히면 이 컴포넌트가 unmount된다). 서버 프롭으로 안
  *  내리는 이유는 `readAnalyticsAction`의 주석에 있다. */
-function AnalyticsSection() {
+function AnalyticsSection({ className }: { className?: string }) {
   const [view, setView] = useState<{ configured: boolean; enabled: boolean } | null>(null);
   const [pending, start] = useTransition();
 
@@ -258,7 +271,7 @@ function AnalyticsSection() {
   }, []);
 
   return (
-    <section className="space-y-2 border-t pt-4">
+    <section className={cn("space-y-2 border-t pt-4 md:border-t-0 md:pt-0", className)}>
       <h3 className="text-sm font-medium">사용 통계</h3>
       <p className="text-xs text-muted-foreground">
         몇 벌이 도는지와 어떤 화면 동작이 있었는지만 익명으로 보냅니다. 경로·프로젝트 이름·티켓
@@ -525,6 +538,8 @@ export function SettingsDialog({
   // §0-13 §화면 — 층 ②·③(발급·직접 넣기)을 토큰 목록 자리에 딸린 하나의 자리로 접는다.
   // 닫혀 있다가도 인증이 필요하면 자동으로 펼친다(아래 `onOpenChange` · `setup?.savedAt` effect).
   const [addOpen, setAddOpen] = useState(false);
+  // §0-15 트리 선택 — 첫 선택은 항상 `claude`다(§45 ③), 종 CTA로 열려도 같다
+  const [activeNode, setActiveNode] = useState<SettingsNode>("claude");
   // 저장 직후엔 서버 프롭이 아직 옛 값이다 — 방금 쓴 것이 이긴다(층 ②·③ 어느 쪽이든)
   const savedAt = setup?.savedAt ?? result.savedAt ?? auth.savedAt;
   // 토큰이 없어도 **claude 워커가 하나도 없으면** 이 컴퓨터는 이 토큰을 안 쓴다 — 안 말한다(§0-4)
@@ -556,6 +571,7 @@ export function SettingsDialog({
         if (o) {
           // 토큰이 없어 인증이 필요하면 열자마자 그 경로가 보인다 — 클릭을 더 요구하지 않는다.
           setAddOpen(needsAuth);
+          setActiveNode("claude");
         } else {
           setToken("");
           setLabel("");
@@ -594,11 +610,10 @@ export function SettingsDialog({
           )
         }
       />
-      {/* 폭은 §비주얼 §22가 무수정으로 못박은 값이다. **높이만 푼다** — 키설정 섹션이 붙으면서
-          내용이 785px이 됐고 `dialog.tsx`에는 `max-h`가 없다. 짧은 창(실측 757px)에서 그릇이
-          위아래로 삐져나가고 `fixed` + 가운데 정렬이라 스크롤할 길이 없다 = `전부 기본값으로`에
-          손이 안 닿는다 */}
-      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-lg">
+      {/* 폭·높이는 §비주얼 §45(요구 `6793ecb7`)가 못박은 값이다 — 패널 내용폭 480 정박에서
+          역산된다. `md:overflow-hidden`이 다이얼로그 쪽 스크롤을 닫는다 — md+에서는 패널만
+          스크롤한다(아래 SidebarProvider). md 미만은 종전처럼 다이얼로그 하나가 스크롤한다. */}
+      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto md:overflow-hidden sm:max-w-[44rem]">
         <DialogHeader>
           <DialogTitle>설정</DialogTitle>
           <DialogDescription>
@@ -606,180 +621,253 @@ export function SettingsDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <section className="space-y-2">
-          {/* 제목이 엔진 이름을 말한다 — 이 토큰을 읽는 것은 `TICKET_ENGINE[0]`이 claude인
-              워커뿐이다(`tick.sh:52`). 다른 엔진(Codex 등)은 자체 인증을 쓴다(§0-4) */}
-          <h3 className="text-sm font-medium">Claude 인증</h3>
-          <p className="text-xs text-muted-foreground">
-            워커가 Claude에 붙을 때 쓰는 장기 토큰 목록입니다. 이 컴퓨터에 하나뿐이고, 계정
-            여러 개를 두면 리밋을 만난 쪽 대신 다음 계정으로 돌아갑니다.
-          </p>
+        {/* 2단 행 자신이다(§45 ① · §34 ①) — `Sidebar`가 `collapsible="none"`에서도
+            `useSidebar()`를 무조건 부르므로 Provider가 있어야 한다. `min-h-0`이 Provider 기본
+            `min-h-svh`를 덮는다 — 안 덮으면 다이얼로그가 뷰포트 높이만큼 자란다. `min-w-0`은
+            그리드 아이템(`DialogContent`가 `grid`)의 `min-width: auto` 함정을 막는다(§3). */}
+        <SidebarProvider className="min-h-0 min-w-0 flex-col gap-4 md:h-[32rem] md:max-h-[calc(100dvh-11rem)] md:flex-row">
+          {/* md 미만(767 이하)은 트리가 없다 — 종전 모양(섹션 넷 세로 나열 + 단일 스크롤)이
+              그대로 서고 검색 줄만 산다(§45 ③). */}
+          <Sidebar collapsible="none" className="hidden w-44 shrink-0 rounded-lg border bg-surface md:flex">
+            <SidebarContent className="gap-4 px-2 py-2">
+              <SidebarGroup className="p-0">
+                <SidebarGroupLabel className="text-muted-foreground">인증</SidebarGroupLabel>
+                <SidebarMenu aria-label="인증">
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      isActive={activeNode === "claude"}
+                      aria-current={activeNode === "claude" ? "true" : undefined}
+                      onClick={() => setActiveNode("claude")}
+                    >
+                      <span>Claude 계정</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      isActive={activeNode === "other"}
+                      aria-current={activeNode === "other" ? "true" : undefined}
+                      onClick={() => setActiveNode("other")}
+                    >
+                      <span>기타 엔진</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                </SidebarMenu>
+              </SidebarGroup>
+              {/* 둘째 그룹은 머리가 없다 — `키설정`·`사용 통계`는 최상위 노드 자신이 항목인
+                  분류다(§45 ③). 묶는 낱말을 새로 만들지 않는다. */}
+              <SidebarGroup className="p-0">
+                <SidebarMenu aria-label="설정 분류">
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      isActive={activeNode === "keymap"}
+                      aria-current={activeNode === "keymap" ? "true" : undefined}
+                      onClick={() => setActiveNode("keymap")}
+                    >
+                      <span>키설정</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      isActive={activeNode === "stats"}
+                      aria-current={activeNode === "stats" ? "true" : undefined}
+                      onClick={() => setActiveNode("stats")}
+                    >
+                      <span>사용 통계</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                </SidebarMenu>
+              </SidebarGroup>
+            </SidebarContent>
+          </Sidebar>
 
-          {/* ⓪ 준비물 — 한 줄. 없으면 설치를 대신하지도 바깥으로 링크하지도 않는다(§0-4 ⓪) */}
-          {auth.cli ? (
-            <p className="text-sm">
-              claude CLI —{" "}
-              <span className="font-mono text-xs break-all text-muted-foreground">{auth.cli}</span>
-            </p>
-          ) : (
-            <p className="flex items-center gap-2 text-sm">
-              <TriangleAlert aria-hidden className="size-4 shrink-0 text-status-stale" />
-              claude CLI를 찾지 못했습니다 — 워커가 세션을 띄우지 못합니다
-            </p>
-          )}
+          {/* 패널 — 선택된 노드 하나만 렌더한다(md+). 넷 다 항상 마운트해 두고 `md:hidden`으로
+              가린다 — 조건부 마운트는 트리 선택마다 언마운트된 섹션의 데이터를 다시 읽고
+              (`TokensSection`·`AnalyticsSection`의 마운트 시 fetch), 입력 중이던 캡처 상자·
+              편집 칸의 상태를 날린다. 패딩 0 — 오른쪽 여백은 `DialogContent p-4`가 이미 낸다. */}
+          <div className="relative min-w-0 flex-1 md:overflow-y-auto">
+            <section className={cn("space-y-2", activeNode !== "claude" && "md:hidden")}>
+              {/* 제목이 엔진 이름을 말한다 — 이 토큰을 읽는 것은 `TICKET_ENGINE[0]`이 claude인
+                  워커뿐이다(`tick.sh:52`). 다른 엔진(Codex 등)은 자체 인증을 쓴다(§0-4) */}
+              <h3 className="text-sm font-medium">Claude 인증</h3>
+              <p className="text-xs text-muted-foreground">
+                워커가 Claude에 붙을 때 쓰는 장기 토큰 목록입니다. 이 컴퓨터에 하나뿐이고, 계정
+                여러 개를 두면 리밋을 만난 쪽 대신 다음 계정으로 돌아갑니다.
+              </p>
 
-          {/* ① 목록 — 토큰 하나가 아니라 여러 계정을 확인·사용·활성화/비활성화·삭제한다(§0-13 §화면) */}
-          <TokensSection refreshKey={savedAt} />
-
-          {/* ②·③(발급·직접 넣기)은 상시 렌더되는 블록이 아니라 이 트리거 하나로 접힌다
-              (§0-13 §화면 — 목록 통합). 로직·문구·에러 처리는 무수정, 렌더 위치만 옮겼다. */}
-          <Popover open={addOpen} onOpenChange={setAddOpen}>
-            <PopoverTrigger render={<Button variant="outline" size="sm" />}>추가</PopoverTrigger>
-            <PopoverContent align="start" className="w-96 max-h-[70vh] space-y-4 overflow-y-auto">
-              {/* ② 발급 — CLI에게 터미널을 대신 내어 준다 */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between gap-4">
-                  <Label>브라우저로 인증</Label>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={setup?.running}
-                    onClick={() => start(async () => setSetup(await startSetupAction()))}
-                  >
-                    {setup?.running ? "진행 중…" : setup ? "다시 시도" : "브라우저로 인증하기"}
-                  </Button>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  claude setup-token을 대신 실행합니다. 새 탭에서 승인한 뒤 받은 코드를 여기에
-                  붙여 넣으면 토큰이 제자리에 저장됩니다.
+              {/* ⓪ 준비물 — 한 줄. 없으면 설치를 대신하지도 바깥으로 링크하지도 않는다(§0-4 ⓪) */}
+              {auth.cli ? (
+                <p className="text-sm">
+                  claude CLI —{" "}
+                  <span className="font-mono text-xs break-all text-muted-foreground">{auth.cli}</span>
                 </p>
+              ) : (
+                <p className="flex items-center gap-2 text-sm">
+                  <TriangleAlert aria-hidden className="size-4 shrink-0 text-status-stale" />
+                  claude CLI를 찾지 못했습니다 — 워커가 세션을 띄우지 못합니다
+                </p>
+              )}
 
-                {setup && setup.lines.length > 0 && (
-                  // 원문 그대로 흘리면 `Opening[12Gbrowser[20Gto`가 뜬다 — 서버가 escape를 걷어낸
-                  // 뒤 사람이 읽을 줄만 넘긴다(§0-4)
-                  <div className="max-h-40 overflow-y-auto rounded-md border bg-muted/40 p-2">
-                    {setup.lines.map((l, i) => (
-                      <p key={i} className="font-mono text-xs break-all text-muted-foreground">
-                        {l}
-                      </p>
-                    ))}
+              {/* ① 목록 — 토큰 하나가 아니라 여러 계정을 확인·사용·활성화/비활성화·삭제한다(§0-13 §화면) */}
+              <TokensSection refreshKey={savedAt} />
+
+              {/* ②·③(발급·직접 넣기)은 상시 렌더되는 블록이 아니라 이 트리거 하나로 접힌다
+                  (§0-13 §화면 — 목록 통합). 로직·문구·에러 처리는 무수정, 렌더 위치만 옮겼다. */}
+              <Popover open={addOpen} onOpenChange={setAddOpen}>
+                <PopoverTrigger render={<Button variant="outline" size="sm" />}>추가</PopoverTrigger>
+                <PopoverContent align="start" className="w-96 max-h-[70vh] space-y-4 overflow-y-auto">
+                  {/* ② 발급 — CLI에게 터미널을 대신 내어 준다 */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-4">
+                      <Label>브라우저로 인증</Label>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={setup?.running}
+                        onClick={() => start(async () => setSetup(await startSetupAction()))}
+                      >
+                        {setup?.running ? "진행 중…" : setup ? "다시 시도" : "브라우저로 인증하기"}
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      claude setup-token을 대신 실행합니다. 새 탭에서 승인한 뒤 받은 코드를 여기에
+                      붙여 넣으면 토큰이 제자리에 저장됩니다.
+                    </p>
+
+                    {setup && setup.lines.length > 0 && (
+                      // 원문 그대로 흘리면 `Opening[12Gbrowser[20Gto`가 뜬다 — 서버가 escape를 걷어낸
+                      // 뒤 사람이 읽을 줄만 넘긴다(§0-4)
+                      <div className="max-h-40 overflow-y-auto rounded-md border bg-muted/40 p-2">
+                        {setup.lines.map((l, i) => (
+                          <p key={i} className="font-mono text-xs break-all text-muted-foreground">
+                            {l}
+                          </p>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* CLI가 코드를 기다린다(실측: `Paste code here if prompted`). 이 입력이 그
+                        통로다 — 프롬프트 문구로 감지하지 않는다: 남의 TUI 문구는 바뀌고, 안 쓰면
+                        그만인 칸이다 */}
+                    {setup?.running && (
+                      <form
+                        className="flex items-center gap-2"
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          start(async () => {
+                            const s = await sendSetupCodeAction(code);
+                            setSetup(s);
+                            setCode("");
+                            if (s.savedAt) setAddOpen(false);
+                          });
+                        }}
+                      >
+                        <Input
+                          className="font-mono"
+                          placeholder="브라우저에서 받은 코드"
+                          autoComplete="off"
+                          spellCheck={false}
+                          value={code}
+                          onChange={(e) => setCode(e.target.value)}
+                        />
+                        <Button type="submit" variant="outline" disabled={!code.trim()}>
+                          코드 보내기
+                        </Button>
+                      </form>
+                    )}
+
+                    {/* 조용히 실패하지 않는다 — 사유 원문 + 다음 행동(§비주얼 §6 에러 3요소).
+                        층 ③은 바로 아래 그대로 서 있다: 이 폴백이 제품의 바닥이다(§0-4 천장 항) */}
+                    {setup?.error && (
+                      <Alert variant="destructive">
+                        <TriangleAlert aria-hidden />
+                        <AlertTitle>토큰을 받지 못했습니다</AlertTitle>
+                        <AlertDescription className="grid gap-1">
+                          <span>{setup.error}</span>
+                          {/* 원인 원문은 위 진행 로그가 이미 그대로 담고 있다 — 여기 문장을
+                              `font-mono`로 쓰지 않는다(§비주얼 §3). 다음 행동은 `다시 시도`와 아래
+                              층 ③ 둘이다 */}
+                          <span>&quot;직접 넣기&quot;에 이미 발급받은 토큰을 붙여 넣어도 됩니다.</span>
+                        </AlertDescription>
+                      </Alert>
+                    )}
+                    {setup?.savedAt && <p className="text-xs">토큰을 받아 저장했습니다.</p>}
                   </div>
-                )}
 
-                {/* CLI가 코드를 기다린다(실측: `Paste code here if prompted`). 이 입력이 그
-                    통로다 — 프롬프트 문구로 감지하지 않는다: 남의 TUI 문구는 바뀌고, 안 쓰면
-                    그만인 칸이다 */}
-                {setup?.running && (
+                  {/* ③ 직접 넣기 */}
                   <form
-                    className="flex items-center gap-2"
+                    className="space-y-2 border-t pt-4"
                     onSubmit={(e) => {
                       e.preventDefault();
                       start(async () => {
-                        const s = await sendSetupCodeAction(code);
-                        setSetup(s);
-                        setCode("");
-                        if (s.savedAt) setAddOpen(false);
+                        const r = await saveTokenAction(token, label);
+                        setResult(r);
+                        if (r.savedAt) {
+                          setToken("");
+                          setLabel("");
+                          setAddOpen(false);
+                        }
                       });
                     }}
                   >
+                    <Label htmlFor="auth-token">토큰</Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        id="auth-token"
+                        className="font-mono"
+                        placeholder="sk-ant-oat…"
+                        autoComplete="off"
+                        spellCheck={false}
+                        value={token}
+                        onChange={(e) => {
+                          setToken(e.target.value);
+                          setResult({});
+                        }}
+                      />
+                      <Button type="submit" disabled={pending}>
+                        {pending ? "저장 중…" : "저장"}
+                      </Button>
+                    </div>
+                    {/* 선택 칸 — 형식을 검증하지 않는다(§0-13 §라벨). 비우면 종전대로 `계정 N` */}
+                    <Label htmlFor="auth-token-label">라벨(선택)</Label>
                     <Input
-                      className="font-mono"
-                      placeholder="브라우저에서 받은 코드"
+                      id="auth-token-label"
+                      placeholder="이메일 등 알아볼 이름"
                       autoComplete="off"
-                      spellCheck={false}
-                      value={code}
-                      onChange={(e) => setCode(e.target.value)}
+                      value={label}
+                      onChange={(e) => setLabel(e.target.value)}
                     />
-                    <Button type="submit" variant="outline" disabled={!code.trim()}>
-                      코드 보내기
-                    </Button>
+                    <p className="text-xs text-muted-foreground">
+                      이미 발급받은 토큰이 있으면 여기에 붙여 넣습니다. 목록에 대기로 추가됩니다 —
+                      지금 쓸 토큰은 목록에서 &quot;사용&quot;으로 고릅니다.
+                    </p>
+                    {result.error && <p className="text-xs text-destructive">{result.error}</p>}
+                    {/* 삼키지 않는 것이 요건이지 미리 아는 것이 요건이 아니다 — 형식으로 거르지
+                        않으므로 "저장했다"까지만 말한다(§0-4) */}
+                    {result.savedAt && (
+                      <p className="text-xs">저장했습니다. 유효한지는 다음 디스패치에서 드러납니다.</p>
+                    )}
                   </form>
-                )}
+                </PopoverContent>
+              </Popover>
+            </section>
 
-                {/* 조용히 실패하지 않는다 — 사유 원문 + 다음 행동(§비주얼 §6 에러 3요소).
-                    층 ③은 바로 아래 그대로 서 있다: 이 폴백이 제품의 바닥이다(§0-4 천장 항) */}
-                {setup?.error && (
-                  <Alert variant="destructive">
-                    <TriangleAlert aria-hidden />
-                    <AlertTitle>토큰을 받지 못했습니다</AlertTitle>
-                    <AlertDescription className="grid gap-1">
-                      <span>{setup.error}</span>
-                      {/* 원인 원문은 위 진행 로그가 이미 그대로 담고 있다 — 여기 문장을
-                          `font-mono`로 쓰지 않는다(§비주얼 §3). 다음 행동은 `다시 시도`와 아래
-                          층 ③ 둘이다 */}
-                      <span>&quot;직접 넣기&quot;에 이미 발급받은 토큰을 붙여 넣어도 됩니다.</span>
-                    </AlertDescription>
-                  </Alert>
-                )}
-                {setup?.savedAt && <p className="text-xs">토큰을 받아 저장했습니다.</p>}
-              </div>
+            {/* claude 아닌 나머지 §4-3 카탈로그 엔진 — 자기 트리 노드를 갖는다(§0-15 §트리).
+                조작·문구는 한 줄도 안 바뀐다 — 섹션 껍데기만 갈린다. */}
+            <section
+              className={cn(
+                "space-y-2 border-t pt-4 md:border-t-0 md:pt-0",
+                activeNode !== "other" && "md:hidden",
+              )}
+            >
+              {auth.otherEngines.map((e) => (
+                <OtherEngineRow key={e.engine} engine={e} />
+              ))}
+            </section>
 
-              {/* ③ 직접 넣기 */}
-              <form
-                className="space-y-2 border-t pt-4"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  start(async () => {
-                    const r = await saveTokenAction(token, label);
-                    setResult(r);
-                    if (r.savedAt) {
-                      setToken("");
-                      setLabel("");
-                      setAddOpen(false);
-                    }
-                  });
-                }}
-              >
-                <Label htmlFor="auth-token">토큰</Label>
-                <div className="flex items-center gap-2">
-                  <Input
-                    id="auth-token"
-                    className="font-mono"
-                    placeholder="sk-ant-oat…"
-                    autoComplete="off"
-                    spellCheck={false}
-                    value={token}
-                    onChange={(e) => {
-                      setToken(e.target.value);
-                      setResult({});
-                    }}
-                  />
-                  <Button type="submit" disabled={pending}>
-                    {pending ? "저장 중…" : "저장"}
-                  </Button>
-                </div>
-                {/* 선택 칸 — 형식을 검증하지 않는다(§0-13 §라벨). 비우면 종전대로 `계정 N` */}
-                <Label htmlFor="auth-token-label">라벨(선택)</Label>
-                <Input
-                  id="auth-token-label"
-                  placeholder="이메일 등 알아볼 이름"
-                  autoComplete="off"
-                  value={label}
-                  onChange={(e) => setLabel(e.target.value)}
-                />
-                <p className="text-xs text-muted-foreground">
-                  이미 발급받은 토큰이 있으면 여기에 붙여 넣습니다. 목록에 대기로 추가됩니다 —
-                  지금 쓸 토큰은 목록에서 &quot;사용&quot;으로 고릅니다.
-                </p>
-                {result.error && <p className="text-xs text-destructive">{result.error}</p>}
-                {/* 삼키지 않는 것이 요건이지 미리 아는 것이 요건이 아니다 — 형식으로 거르지
-                    않으므로 "저장했다"까지만 말한다(§0-4) */}
-                {result.savedAt && (
-                  <p className="text-xs">저장했습니다. 유효한지는 다음 디스패치에서 드러납니다.</p>
-                )}
-              </form>
-            </PopoverContent>
-          </Popover>
-
-          {/* claude 아닌 나머지 §4-3 카탈로그 엔진 — 상태 층뿐이다(§0-4 §개정 `b0966e66`).
-              위 claude 블록(층 ⓪~③ + 목록)은 이 아래로 한 줄도 안 갈린다. */}
-          {auth.otherEngines.map((e) => (
-            <OtherEngineRow key={e.engine} engine={e} />
-          ))}
-        </section>
-
-        <KeymapSection />
-        <AnalyticsSection />
+            <KeymapSection className={cn(activeNode !== "keymap" && "md:hidden")} />
+            <AnalyticsSection className={cn(activeNode !== "stats" && "md:hidden")} />
+          </div>
+        </SidebarProvider>
       </DialogContent>
     </Dialog>
   );
