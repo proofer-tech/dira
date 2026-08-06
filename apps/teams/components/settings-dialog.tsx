@@ -7,9 +7,8 @@
  *  `설정`인 이유가 "다음 항목이 올 때 자리를 또 옮기지 않는다"였고 키설정이 그 다음, 사용 통계가
  *  그 다음이다 — 섹션이 하나 늘 뿐 자리도 라우트도 다이얼로그 폭도 안 바뀐다.
  *
- *  인증 층은 셋이다: ①상태 · ②dira 자체 OAuth(PKCE + 로컬 콜백 서버) · ③직접 넣기.
- *  **③은 ②가 된 뒤에도 남는다** — 문서화되지 않은 엔드포인트에 묶인 일이라 깨질 수 있고,
- *  깨지면 여기가 바닥이다(DESIGN.md §0-13 §라벨 §확정).
+ *  인증 층은 셋이다: ①상태 · ②`claude setup-token`을 GUI가 몬다 · ③직접 넣기.
+ *  **③은 ②가 된 뒤에도 남는다** — 남의 TUI를 긁는 일이라 깨질 수 있고, 깨지면 여기가 바닥이다.
  *
  *  진입점 둘(헤더 버튼 · 셸 알림 종 ① 항목의 CTA)은 **이 컴포넌트를 두 번 쓴다.** 전역 상태도
  *  URL 파라미터도 만들지 않는다 — 동시에 열릴 수 없고, 상태는 어느 쪽이든 서버가 준 같은
@@ -34,6 +33,7 @@ import {
   readTokenRowsAction,
   resetKeymapAction,
   saveTokenAction,
+  sendSetupCodeAction,
   setAnalyticsAction,
   setBindingAction,
   setTokenEnabledAction,
@@ -521,6 +521,7 @@ export function SettingsDialog({
   const [label, setLabel] = useState(""); // 층 ③ 라벨 칸(선택, P180-1 · §0-13 §라벨)
   const [result, setResult] = useState<{ savedAt?: string; error?: string }>({});
   const [setup, setSetup] = useState<SetupState | null>(null);
+  const [code, setCode] = useState("");
   // §0-13 §화면 — 층 ②·③(발급·직접 넣기)을 토큰 목록 자리에 딸린 하나의 자리로 접는다.
   // 닫혀 있다가도 인증이 필요하면 자동으로 펼친다(아래 `onOpenChange` · `setup?.savedAt` effect).
   const [addOpen, setAddOpen] = useState(false);
@@ -540,16 +541,10 @@ export function SettingsDialog({
   });
 
   // 진행 로그는 폴링으로 받는다 — 이 앱에 소켓은 없다(세션 스트림과 같은 방식).
-  // 돌고 있을 때만 돈다: `running`이 꺼지면 effect가 정리되고 폴링이 멈춘다.
-  // 성공은 코드 제출 콜백이 아니라 이 폴링으로 도착한다(로컬 서버가 브라우저에서 직접 받는다) —
-  // 닫는 손도 그 도착 자리(콜백 안)에 같이 둔다.
+  // 돌고 있을 때만 돈다: `running`이 꺼지면 effect가 정리되고 폴링이 멈춘다
   useEffect(() => {
     if (!setup?.running) return;
-    const id = setInterval(async () => {
-      const s = await pollSetupAction();
-      setSetup(s);
-      if (s.savedAt) setAddOpen(false);
-    }, 1000);
+    const id = setInterval(async () => setSetup(await pollSetupAction()), 1000);
     return () => clearInterval(id);
   }, [setup?.running]);
 
@@ -565,9 +560,10 @@ export function SettingsDialog({
           setToken("");
           setLabel("");
           setResult({});
+          setCode("");
           setSetup(null);
           setAddOpen(false);
-          // 닫으면 죽인다 — 살아남은 로컬 콜백 서버는 다음 시도가 쓸 포트를 막지 않는다
+          // 닫으면 죽인다 — 살아남은 `setup-token`은 pty를 물고 다음 시도를 막는다(§0-4)
           void stopSetupAction();
         }
       }}
@@ -640,8 +636,7 @@ export function SettingsDialog({
           <Popover open={addOpen} onOpenChange={setAddOpen}>
             <PopoverTrigger render={<Button variant="outline" size="sm" />}>추가</PopoverTrigger>
             <PopoverContent align="start" className="w-96 max-h-[70vh] space-y-4 overflow-y-auto">
-              {/* ② 발급 — dira 자체 OAuth. 새 탭에서 승인하면 로컬 콜백 서버가 코드를 직접
-                  받는다 — 코드를 손으로 옮겨 붙일 칸이 없다(§0-13 §라벨 §확정) */}
+              {/* ② 발급 — CLI에게 터미널을 대신 내어 준다 */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between gap-4">
                   <Label>브라우저로 인증</Label>
@@ -655,11 +650,13 @@ export function SettingsDialog({
                   </Button>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  새 탭에서 승인하면 이메일을 확인해 라벨로 자동 기입하고, 토큰이 제자리에
-                  저장됩니다.
+                  claude setup-token을 대신 실행합니다. 새 탭에서 승인한 뒤 받은 코드를 여기에
+                  붙여 넣으면 토큰이 제자리에 저장됩니다.
                 </p>
 
                 {setup && setup.lines.length > 0 && (
+                  // 원문 그대로 흘리면 `Opening[12Gbrowser[20Gto`가 뜬다 — 서버가 escape를 걷어낸
+                  // 뒤 사람이 읽을 줄만 넘긴다(§0-4)
                   <div className="max-h-40 overflow-y-auto rounded-md border bg-muted/40 p-2">
                     {setup.lines.map((l, i) => (
                       <p key={i} className="font-mono text-xs break-all text-muted-foreground">
@@ -667,6 +664,36 @@ export function SettingsDialog({
                       </p>
                     ))}
                   </div>
+                )}
+
+                {/* CLI가 코드를 기다린다(실측: `Paste code here if prompted`). 이 입력이 그
+                    통로다 — 프롬프트 문구로 감지하지 않는다: 남의 TUI 문구는 바뀌고, 안 쓰면
+                    그만인 칸이다 */}
+                {setup?.running && (
+                  <form
+                    className="flex items-center gap-2"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      start(async () => {
+                        const s = await sendSetupCodeAction(code);
+                        setSetup(s);
+                        setCode("");
+                        if (s.savedAt) setAddOpen(false);
+                      });
+                    }}
+                  >
+                    <Input
+                      className="font-mono"
+                      placeholder="브라우저에서 받은 코드"
+                      autoComplete="off"
+                      spellCheck={false}
+                      value={code}
+                      onChange={(e) => setCode(e.target.value)}
+                    />
+                    <Button type="submit" variant="outline" disabled={!code.trim()}>
+                      코드 보내기
+                    </Button>
+                  </form>
                 )}
 
                 {/* 조용히 실패하지 않는다 — 사유 원문 + 다음 행동(§비주얼 §6 에러 3요소).

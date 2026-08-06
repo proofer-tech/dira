@@ -4,11 +4,10 @@
  *  따라 쓰는 것뿐이다 — 경로 `$TICKET_LOCAL/oauth-token`, 내용은 **개행 없는 한 줄**, 권한 `0600`.
  *  `.authwarn`은 건드리지 않는다: 엔진이 "이미 한 번 경고했다"를 적어 두는 자기 파일이고,
  *  토큰이 생기면 61행 조건이 먼저 꺼져 다시 보지 않는다(§0-4). */
-import { spawn } from "node:child_process";
-import { createHash, randomBytes } from "node:crypto";
+import { spawn, type ChildProcess } from "node:child_process";
+import { createHash } from "node:crypto";
 import { accessSync, constants, statSync } from "node:fs";
 import { chmod, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { homedir } from "node:os";
 import path from "node:path";
 import { registryPath } from "./projects.ts";
@@ -347,7 +346,32 @@ export async function deleteToken(id: string): Promise<void> {
   await writeTokens({ claude: { active, tokens } });
 }
 
-// ── ② 발급 — dira 자체 OAuth 플로우 (DESIGN.md §0-13 §라벨 §확정, P180-2) ──────
+// ── ② 발급 — `claude setup-token`을 GUI가 pty로 몬다 (§0-4) ─────────────────
+
+/** pty 한 덩어리를 **사람이 읽을 줄**로 바꾼다. 출력이 Ink TUI라 낱말 사이가 공백이 아니라
+ *  커서 이동(`Opening\x1b[12Gbrowser`)이다 — 통째로 걷어내면 `Openingbrowser`가 된다.
+ *  그래서 **가로 이동만 공백 한 칸으로 바꾸고** 나머지 escape를 지운다.
+ *
+ *  덩어리가 아니라 **누적 원문 전체**를 받는다. 매 폴링마다 다시 계산하는 대신 청크 경계에서
+ *  잘린 escape를 이어 붙이는 상태를 안 들고 다니려는 것이다(원문은 수 KB고 120초 뒤 끝난다).
+ *  ponytail: 이동 폭(`[46G`)을 공백 하나로 접는다 — 진행 로그지 터미널 재현이 아니다.
+ *  배너 아스키아트를 지우는 것도 이 규칙이다(글자·숫자가 없는 줄은 버린다). */
+export function ptyLines(raw: string): string[] {
+  const text = raw
+    // OSC — 색 질의(`\x1b]11;?`)와 하이퍼링크(`\x1b]8;;<URL>`). URL은 눈에 보이는 본문으로도
+    // 한 번 더 나오므로 여기서 버려도 로그에서 사라지지 않는다
+    .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, "")
+    .replace(/\x1b\[[0-9;]*[GC]/g, " ") // CHA·CUF = 낱말 사이 간격
+    .replace(/\x1b\[[0-9;?>=!]*[ -/]*[@-~]/g, "") // 나머지 CSI
+    .replace(/\x1b./g, ""); // ESC 7 · ESC 8 …
+  const out: string[] = [];
+  for (const seg of text.split("\n")) {
+    const line = seg.replace(/\s+/g, " ").trim();
+    if (!/[A-Za-z0-9]/.test(line)) continue; // 배너 아스키아트·스피너 프레임
+    if (line !== out[out.length - 1]) out.push(line); // Ink가 같은 줄을 다시 그린다
+  }
+  return out;
+}
 
 /** 다이얼로그가 그리는 것 전부. 세션이 없으면 `running: false` + 빈 로그다. */
 export type SetupState = {
@@ -359,88 +383,67 @@ export type SetupState = {
   error?: string;
 };
 
-/** claude CLI 자신의 client_id다(실측 2026-08-06 — CLI 바이너리 문자열 상수를
- *  `platform.claude.com/oauth/authorize` 바로 옆에서 뽑았다. `strings`로 걸러지는 위치가 아니라
- *  raw 오프셋을 읽어야 나온다 — 조립된 상수 객체가 그 자리에 있었다). dira가 새로 등록한
- *  자리가 아니라 CLI가 이미 등록된 자리에 얹는다 — §0-13 §라벨 §확정이 치르기로 한
- *  "엔드포인트에 묶이는 대가"가 이 값이다. */
-const CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
-/** CLI 상수 `CLAUDE_AI_AUTHORIZE_URL`(구독 계정, CLI 기본값)이다. `CONSOLE_AUTHORIZE_URL`
- *  (콘솔/조직 계정 — P180-2가 잘못 골랐던 값)이 아니다 — 조직이 없는 구독 계정이 그 호스트에서는
- *  승인 페이지 대신 조직 온보딩(`Join your team`)으로 떨어졌다(실측, 요구 `b8950201`). */
-const AUTHORIZE_URL = "https://claude.com/cai/oauth/authorize";
-const TOKEN_URL = "https://platform.claude.com/v1/oauth/token";
-/** CLI가 `setup-token` 뒤에도 이메일을 확인할 때 부르는 그 GET(§0-13 §라벨 실측과 같은 값). */
-const PROFILE_URL = "https://api.anthropic.com/api/oauth/profile";
-/** 승인 뒤 브라우저를 보낼 곳. CLI가 쓰는 그 성공 페이지 그대로다 — 새 화면을 안 만든다. */
-const SUCCESS_URL = "https://platform.claude.com/oauth/code/success?app=claude-code";
-/** setup-token과 같은 1년(초) — CLI 상수 그대로(실측). §0-13 §라벨 §확정의 "장기 토큰" 요건. */
-const TOKEN_TTL_SECONDS = 31536000;
-/** setup-token의 `user:inference` 하나에 `user:profile`을 더한다. CLI 기본 로그인 스코프는
- *  이보다 넓다(세션·mcp·파일업로드까지) — 프로필 GET 하나에 그 셋은 안 쓴다(§0-13 §라벨 §확정 —
- *  스코프 조합은 실측이 고른다). */
-const SCOPES = ["user:inference", "user:profile"];
+/** **pty가 필수다.** 파이프로는 CLI가 첫 화면도 안 그린다(§0-4 실측표 1행).
+ *
+ *  `cat |`이 있는 이유: macOS `script`는 stdin이 **소켓**이면 `tcgetattr/ioctl: Operation not
+ *  supported on socket`으로 즉시 죽는다. Node의 `stdio: "pipe"`가 소켓쌍이라 그냥 물리면 그
+ *  경로다(실측). 셸 파이프는 진짜 `pipe(2)`라 `script`가 ENOTTY를 보고 pty를 연다.
+ *  **stdin은 열린 채로 둔다**(실측표 2행) — 이 통로가 나중에 코드를 넣는 길이기도 하다.
+ *
+ *  `stty cols 200`이 있는 이유: 위 경로로 열린 pty는 winsize가 **0×0**이다(실측). 그대로 두면
+ *  Ink가 좁게 잡아 토큰이 줄바꿈으로 쪼개진다.
+ *
+ *  마지막 `echo`가 있는 이유: **CLI가 끝난 것을 프로세스 종료로는 알 수 없다.** `sh`는 파이프라인
+ *  두 짝을 다 기다리는데 `cat`은 우리가 stdin을 열어 두는 한 안 끝난다 — 즉시 죽는 스텁으로
+ *  15초를 기다려도 `close`도 stdout `end`도 오지 않았다(실측). 그러면 실패 사유가 전부 "120초
+ *  타임아웃"으로 뭉개진다. 그래서 **종료를 pty 안에서 한 줄로 실어 보낸다** — 프로세스 트리를
+ *  헤집는 것보다 짧고, 종료 코드도 같이 온다. FIFO로 `cat`을 없애는 길은 막혀 있다: macOS는
+ *  FIFO의 `tcgetattr`에 ENOTTY가 아니라 EOPNOTSUPP를 줘서 `script`가 그냥 죽는다(실측). */
+const EXIT_MARK = "__dira_setup_exit:";
+const setupCmd = (bin: string) =>
+  "cat | script -q /dev/null sh -c " +
+  // 홑따옴표 안이다 — 경로에 `'`가 있으면 명령이 갈라진다. 사람이 고른 경로가 아니라 PATH의
+  // 디렉터리라 실현되기 어렵지만, 셸 문자열을 조립하는 자리라 값싸게 막아 둔다
+  `'stty cols 200 rows 50; ${bin.replace(/'/g, "'\\''")} setup-token; echo "${EXIT_MARK}$?"'`;
 const SETUP_TIMEOUT_MS = 120_000;
-
-function base64url(buf: Buffer): string {
-  return buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
-
-/** PKCE 한 쌍(RFC 7636 S256). `verifier`는 세션이 들고 있다가 토큰 교환 때 되돌려 준다 —
- *  authorize 요청에는 그 해시(`challenge`)만 나간다. */
-function newPkce(): { verifier: string; challenge: string } {
-  const verifier = base64url(randomBytes(32));
-  const challenge = base64url(createHash("sha256").update(verifier).digest());
-  return { verifier, challenge };
-}
-
-/** 화면·순수 테스트가 재는 자리 — 네트워크 없이 URL 모양만 검증한다. */
-export function buildAuthorizeUrl(opts: { challenge: string; state: string; port: number }): string {
-  const u = new URL(AUTHORIZE_URL);
-  u.searchParams.set("code", "true");
-  u.searchParams.set("client_id", CLIENT_ID);
-  u.searchParams.set("response_type", "code");
-  u.searchParams.set("redirect_uri", `http://127.0.0.1:${opts.port}/callback`);
-  u.searchParams.set("scope", SCOPES.join(" "));
-  u.searchParams.set("code_challenge", opts.challenge);
-  u.searchParams.set("code_challenge_method", "S256");
-  u.searchParams.set("state", opts.state);
-  return u.toString();
-}
-
-/** `/api/oauth/profile` 응답에서 이메일 하나만 뽑는다(실측 2026-08-06 — 이미 있는 CLI 로그인
- *  토큰으로 GET 한 번: `{account:{email:"…"}}`). 모양이 다르면 `null` — 라벨은 빈 채로 저장되고
- *  행 편집(P180-1)이 폴백이다. */
-export function profileEmail(body: unknown): string | null {
-  if (!body || typeof body !== "object") return null;
-  const account = (body as { account?: unknown }).account;
-  if (!account || typeof account !== "object") return null;
-  const email = (account as { email?: unknown }).email;
-  return typeof email === "string" && email ? email : null;
-}
+/** 남의 TUI를 긁는 일이라 접두사에 묶인다 — 저장 검증(`normalizeToken`)이 접두사로 거르지
+ *  **않는** 것과 축이 다르다. 여기선 화면 잡음 속에서 토큰을 골라낼 표식이 이것뿐이다. */
+const TOKEN_RE = /sk-ant-[A-Za-z0-9._-]{20,}/;
 
 // ponytail: 토큰은 머신당 하나라 동시에 몰 이유가 없다 — 세션도 하나다.
 let setup: {
-  server: Server;
-  port: number;
-  state: string;
-  verifier: string;
+  child: ChildProcess;
+  raw: string;
   timer: NodeJS.Timeout;
   settled: boolean;
-  lines: string[];
   savedAt?: string;
   error?: string;
 } | null = null;
 
 function view(s: NonNullable<typeof setup> | null): SetupState {
   if (!s) return { running: false, lines: [] };
-  return { running: !s.settled, lines: s.lines, savedAt: s.savedAt, error: s.error };
+  return {
+    running: !s.settled,
+    lines: ptyLines(s.raw)
+      // 종료 표식은 우리가 심은 것이지 CLI가 사람에게 한 말이 아니다 — 로그에서 뺀다
+      .filter((l) => !l.startsWith(EXIT_MARK))
+      // CLI는 토큰을 화면에 그대로 찍는다. 여기는 파일이 아니라 **화면**이라 가린다 —
+      // 이미 제자리에 저장했으므로 사람이 이 값을 눈으로 옮겨 적을 일이 없다
+      .map((l) => l.replace(new RegExp(TOKEN_RE, "g"), "sk-ant-…")),
+    savedAt: s.savedAt,
+    error: s.error,
+  };
 }
 
-/** 로컬 콜백 서버를 닫고 타임아웃을 걷는다. */
+/** 프로세스 그룹째 죽인다. `detached`로 띄웠으므로 `-pid`가 그룹이다 — `script`·`cat`·`claude`
+ *  셋이라 자식만 죽이면 pty를 문 `claude`가 남아 다음 시도를 막는다(§0-4). */
 function kill(s: NonNullable<typeof setup>): void {
   clearTimeout(s.timer);
-  s.server.close();
+  try {
+    if (s.child.pid) process.kill(-s.child.pid, "SIGKILL");
+  } catch {
+    // 이미 죽었다
+  }
 }
 
 function settle(s: NonNullable<typeof setup>, error?: string): void {
@@ -448,101 +451,6 @@ function settle(s: NonNullable<typeof setup>, error?: string): void {
   s.settled = true;
   s.error = error;
   kill(s);
-}
-
-/** 코드를 토큰으로 바꾸고, profile GET **1회**로 이메일을 집어 라벨로 저장한다(§0-13 §라벨
- *  §확정 — profile GET은 발급 직후 1회뿐이고 목록 렌더·확인 버튼은 다시 안 부른다). profile GET이
- *  실패해도 이미 받은 토큰은 저장된다 — 라벨만 비어 `계정 N`으로 선다. 실패 사유는 진행 로그에 남는다. */
-async function exchangeAndSave(s: NonNullable<typeof setup>, code: string): Promise<void> {
-  try {
-    const body = {
-      grant_type: "authorization_code",
-      code,
-      redirect_uri: `http://127.0.0.1:${s.port}/callback`,
-      client_id: CLIENT_ID,
-      code_verifier: s.verifier,
-      state: s.state,
-      expires_in: TOKEN_TTL_SECONDS,
-    };
-    s.lines.push("토큰을 교환하는 중…");
-    const tokenRes = await fetch(TOKEN_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    const tokenJson = (await tokenRes.json().catch(() => null)) as { access_token?: unknown } | null;
-    if (!tokenRes.ok || typeof tokenJson?.access_token !== "string" || !tokenJson.access_token) {
-      throw new Error(`토큰 교환 실패 (${tokenRes.status})`);
-    }
-    const accessToken = tokenJson.access_token;
-
-    let label: string | undefined;
-    s.lines.push("이메일을 가져오는 중…");
-    try {
-      const profileRes = await fetch(PROFILE_URL, {
-        headers: { Authorization: `Bearer ${accessToken}`, "Cache-Control": "no-cache" },
-      });
-      if (profileRes.ok) {
-        const email = profileEmail(await profileRes.json().catch(() => null));
-        if (email) label = email;
-        else s.lines.push("이메일을 찾지 못했습니다 — 응답 모양이 다릅니다.");
-      } else {
-        s.lines.push(`이메일을 가져오지 못했습니다 (${profileRes.status}).`);
-      }
-    } catch (e) {
-      s.lines.push(`이메일을 가져오지 못했습니다: ${(e as Error).message}`);
-    }
-
-    // 덮어쓰기가 아니라 목록 append다 — 활성은 `addToken`의 `reconcileActive` 판정을 그대로
-    // 따른다(§0-13 §화면, P179). eligible한 활성이 이미 있으면 대기로 들어간다
-    await addToken(accessToken, label);
-    s.savedAt = (await readAuth()).savedAt ?? undefined;
-    s.lines.push("토큰을 저장했습니다.");
-  } catch (e) {
-    s.error = `토큰을 받지 못했습니다: ${(e as Error).message}`;
-  } finally {
-    kill(s);
-  }
-}
-
-/** 로컬 서버가 받는 유일한 경로. `state`가 안 맞으면(CSRF) 거부한다 — code 하나만으로는
- *  안 믿는다. 이미 처리된 뒤 온 재요청(브라우저 재시도)은 조용히 안내만 하고 다시 교환하지
- *  않는다 — `exchangeAndSave`가 두 번 불리면 addToken이 같은 토큰을 두 번 저장 시도한다. */
-function handleCallback(s: NonNullable<typeof setup>, req: IncomingMessage, res: ServerResponse): void {
-  const url = new URL(req.url ?? "/", "http://127.0.0.1");
-  if (url.pathname !== "/callback") {
-    res.writeHead(404);
-    res.end();
-    return;
-  }
-  if (s.settled) {
-    res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
-    res.end("이미 처리됐습니다. 이 창을 닫아도 됩니다.");
-    return;
-  }
-  const code = url.searchParams.get("code");
-  const gotState = url.searchParams.get("state");
-  if (!code || gotState !== s.state) {
-    res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8" });
-    res.end("잘못된 요청입니다. 이 창을 닫고 dira로 돌아가 다시 시도해 주세요.");
-    settle(s, "인증 코드를 받지 못했습니다.");
-    return;
-  }
-  s.settled = true; // 교환은 비동기다 — 다음 요청이 두 번 교환하지 않게 여기서 잠근다
-  res.writeHead(302, { Location: SUCCESS_URL });
-  res.end();
-  s.lines.push("승인을 받았습니다.");
-  void exchangeAndSave(s, code);
-}
-
-/** macOS `open`으로 기본 브라우저를 연다 — 의존성 0(플랫폼 명령 하나, §0-4 pty 항의 같은 태도).
- *  실패해도 흐름은 안 죽는다 — 진행 로그에 남은 URL을 사람이 직접 열 수 있다. */
-function openBrowser(url: string): void {
-  try {
-    spawn("open", [url], { detached: true, stdio: "ignore" }).unref();
-  } catch {
-    // 사람이 진행 로그의 URL을 직접 연다
-  }
 }
 
 /** PATH에서 실행파일 하나를 **우리가** 찾는다. 셸에게 맡기면 못 찾았을 때 손에 남는 것이 종료
@@ -571,40 +479,66 @@ export function findClaude(): string | null {
   return findExecutable("claude");
 }
 
-/** 층 ②를 시작한다 — dira 자체 OAuth(PKCE + 로컬 콜백 서버). 앞선 시도가 남아 있으면
- *  먼저 정리한다(로컬 서버는 포트를 두 번 못 문다). `claude` 실행파일이 없어도 돈다 —
- *  §0-13 §라벨 §확정이 걷어낸 pty 의존성이 이 함수다. */
+/** 층 ②를 시작한다. 앞선 시도가 남아 있으면 먼저 죽인다 — pty를 두 번 물 수 없다. */
 export function startSetup(): SetupState {
   stopSetup();
-  const { verifier, challenge } = newPkce();
-  const state = base64url(randomBytes(32));
-  const server = createServer();
+  const bin = findClaude();
+  // 세션을 만들지 않고 그 자리에서 끝낸다 — 몰 대상이 없다. 다음 행동(층 ③)은 화면이 붙인다
+  if (!bin) {
+    return {
+      running: false,
+      lines: [],
+      error: `PATH에서 claude를 찾지 못했습니다. (PATH=${process.env.PATH ?? ""})`,
+    };
+  }
+  const child = spawn("sh", ["-c", setupCmd(bin)], {
+    stdio: ["pipe", "pipe", "pipe"],
+    detached: true,
+  });
   const s: NonNullable<typeof setup> = {
-    server,
-    port: 0,
-    state,
-    verifier,
+    child,
+    raw: "",
     settled: false,
-    lines: [],
     timer: setTimeout(
-      () => settle(s, `${SETUP_TIMEOUT_MS / 1000}초 안에 승인을 받지 못했습니다.`),
+      () => settle(s, `${SETUP_TIMEOUT_MS / 1000}초 안에 토큰을 받지 못했습니다.`),
       SETUP_TIMEOUT_MS,
     ),
   };
   setup = s;
-  server.on("request", (req, res) => handleCallback(s, req, res));
-  server.on("error", (e) => settle(s, `로컬 서버를 열지 못했습니다: ${e.message}`));
-  server.listen(0, "127.0.0.1", () => {
-    const addr = server.address();
-    if (!addr || typeof addr === "string") {
-      settle(s, "로컬 서버 포트를 얻지 못했습니다.");
+
+  const feed = (d: Buffer) => {
+    if (s.settled) return;
+    s.raw = (s.raw + d.toString()).slice(-256_000);
+    const m = TOKEN_RE.exec(s.raw);
+    if (!m) {
+      // 토큰이 먼저다 — 잡았으면 종료 표식이 같은 청크에 있어도 성공이다
+      const bye = s.raw.match(new RegExp(`${EXIT_MARK}(\\d+)`));
+      if (bye) settle(s, `토큰을 받지 못한 채 끝났습니다 (종료 코드 ${bye[1]}).`);
       return;
     }
-    s.port = addr.port;
-    const url = buildAuthorizeUrl({ challenge, state, port: s.port });
-    s.lines.push("브라우저를 여는 중…", url);
-    openBrowser(url);
-  });
+    s.settled = true; // 저장은 비동기다 — 다음 청크가 두 번 저장하지 않게 여기서 잠근다
+    kill(s);
+    // 덮어쓰기가 아니라 목록 append다 — 활성은 `addToken`의 `reconcileActive` 판정을 그대로
+    // 따른다(§0-13 §화면, P179). eligible한 활성이 이미 있으면 대기로 들어간다
+    addToken(m[0])
+      .then(readAuth)
+      .then((a) => {
+        s.savedAt = a.savedAt ?? undefined;
+      })
+      .catch((e: Error) => {
+        s.error = `토큰을 잡았지만 저장하지 못했습니다: ${e.message}`;
+      });
+  };
+  child.stdout?.on("data", feed);
+  child.stderr?.on("data", feed); // 같은 로그에 섞는다 — 사람이 볼 곳이 하나다
+  child.on("error", (e) => settle(s, `실행하지 못했습니다: ${e.message}`));
+
+  /** 그물이지 주 경로가 아니다. **CLI의 종료는 위 `EXIT_MARK`가 알린다** — 즉시 죽는 스텁으로
+   *  재 보니 `close`도 stdout `end`도 15초 동안 오지 않았다: `sh`가 `cat`을 기다리느라 살아
+   *  있고, 그 `sh`가 stdout 파이프도 같이 쥐고 있다. 이 둘은 `sh`까지 죽었을 때만 온다. */
+  const ended = () => settle(s, "토큰을 받지 못한 채 끝났습니다.");
+  child.stdout?.on("end", ended);
+  child.on("close", ended); // stdout이 어떤 이유로 안 끝났을 때의 그물
   return view(s);
 }
 
@@ -612,8 +546,15 @@ export function pollSetup(): SetupState {
   return view(setup);
 }
 
-/** 다이얼로그를 닫으면 부른다. **로컬 서버를 남기지 않는다**(§0-4와 같은 태도 — 남으면
- *  다음 시도가 같은 포트를 못 연다는 성질은 없지만, 열어 둔 포트·타이머를 남기지 않는다). */
+/** 승인 뒤 브라우저가 주는 코드를 CLI에 넣는다(실측: 마지막 화면이 `Paste code here`다).
+ *  `\r`인 이유는 pty에서 Enter가 CR이라서다. */
+export function sendSetupCode(code: string): SetupState {
+  if (!setup || setup.settled) return view(setup);
+  setup.child.stdin?.write(code.trim() + "\r");
+  return view(setup);
+}
+
+/** 다이얼로그를 닫으면 부른다. **자식을 남기지 않는다**(§0-4). */
 export function stopSetup(): void {
   if (setup) kill(setup);
   setup = null;

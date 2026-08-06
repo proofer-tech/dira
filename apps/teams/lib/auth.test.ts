@@ -10,7 +10,6 @@ import {
   writeFileSync,
 } from "node:fs";
 import { createHash } from "node:crypto";
-import { get as httpGet } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -21,13 +20,12 @@ process.on("exit", () => rmSync(LOCAL, { recursive: true, force: true }));
 
 const {
   addToken,
-  buildAuthorizeUrl,
   deleteToken,
   findClaude,
   findExecutable,
   isEligible,
   normalizeToken,
-  profileEmail,
+  ptyLines,
   pollSetup,
   readAuth,
   readOtherEngineAuth,
@@ -77,185 +75,136 @@ test("normalizeToken — 비었거나 안에 공백이 있으면 거부, 접두�
   assert.strictEqual(normalizeToken(" whatever-the-cli-gives "), "whatever-the-cli-gives");
 });
 
-// ── ② 발급 — dira 자체 OAuth (DESIGN.md §0-13 §라벨 §확정, P180-2) ────────────
+// ── ② 발급 — pty 드라이버 (DESIGN.md §0-4) ─────────────────────────────────
 
-test("buildAuthorizeUrl — client_id·PKCE·스코프·redirect_uri가 로컬 포트를 문다", () => {
-  const url = new URL(buildAuthorizeUrl({ challenge: "chal123", state: "st1", port: 54321 }));
-  assert.strictEqual(url.origin + url.pathname, "https://claude.com/cai/oauth/authorize");
-  assert.strictEqual(url.searchParams.get("client_id"), "9d1c250a-e61b-44d9-88ed-5944d1962f5e");
-  assert.strictEqual(url.searchParams.get("response_type"), "code");
-  assert.strictEqual(url.searchParams.get("redirect_uri"), "http://127.0.0.1:54321/callback");
-  assert.strictEqual(url.searchParams.get("code_challenge"), "chal123");
-  assert.strictEqual(url.searchParams.get("code_challenge_method"), "S256");
-  assert.strictEqual(url.searchParams.get("state"), "st1");
-  // setup-token의 user:inference 하나에 user:profile을 더한다 — 그 이상은 안 묻는다
-  assert.strictEqual(url.searchParams.get("scope"), "user:inference user:profile");
+/** 픽스처는 **진짜 출력**이다: `script`로 `claude setup-token` 2.1.220을 실제로 몰아
+ *  받은 바이트에서 각 모양을 한 줄씩 뽑았다(2026-07-31, `2ef82410`). */
+const REAL = [
+  "\x1b7\x1b[r\x1b8\x1b[?25h\x1b[?25l\x1b[?2004h\x1b[?2031hWelcome\x1b[9Gto\x1b[12GClaude\x1b[19GCode\x1b[24Gv2.1.220\r\r\n",
+  "..........................................................\r\r\n",
+  "\x1b[6G*\x1b[46G█████▓▓░\r\r\n",
+  "\x1b]11;?\x07\x1b[c\x1b[>0q\x1b[c\x1b[2G✻\x1b[4GOpening\x1b[12Gbrowser\x1b[20Gto\x1b[23Gsign\x1b[28Gin…\r\r\n",
+  "\r\x1b[1C\x1b[1A✽\r\r\n",
+  "\r\x1b[1C\x1b[1A✢\r\r\n",
+  "\r\x1b[1C\x1b[1ABrowser didn't open?\x1b[23GUse the url\x1b[35Gbelow\x1b[41Gto\x1b[44Gsign\x1b[49Gin\r\r\n",
+  "\x1b]8;id=105chpj;https://claude.com/cai/oauth/authorize?code=true\x07https://claude.com/cai/oauth/authorize?code=true\x1b]8;;\x07\r\r\n",
+  "\x1b[2GPaste\x1b[8Gcode\x1b[13Ghere\x1b[18Gif\x1b[21Gprompted\x1b[30G>\r\r\n",
+].join("");
+
+test("ptyLines — 커서 이동은 공백이 된다(걷어내면 낱말이 붙는다)", () => {
+  const lines = ptyLines(REAL);
+  assert.strictEqual(lines[0], "Welcome to Claude Code v2.1.220");
+  assert.ok(lines.includes("✻ Opening browser to sign in…"));
+  assert.ok(lines.includes("Browser didn't open? Use the url below to sign in"));
+  assert.ok(lines.includes("Paste code here if prompted >"));
+  // 통째로 걷어냈을 때의 모양이 하나도 없어야 한다
+  assert.ok(!lines.some((l) => /Openingbrowser|Welcometo/.test(l)), lines.join("|"));
 });
 
-test("profileEmail — account.email을 뽑고, 모양이 다르면 null이다(실측 응답 그대로)", () => {
-  assert.strictEqual(profileEmail({ account: { email: "a@b.com" } }), "a@b.com");
-  assert.strictEqual(profileEmail({ account: { email: "" } }), null);
-  assert.strictEqual(profileEmail({ account: {} }), null);
-  assert.strictEqual(profileEmail({ account: null }), null);
-  assert.strictEqual(profileEmail({}), null);
-  assert.strictEqual(profileEmail(null), null);
-  assert.strictEqual(profileEmail("문자열"), null);
+test("ptyLines — 배너 아스키아트·스피너 프레임·OSC는 남지 않는다", () => {
+  const lines = ptyLines(REAL);
+  assert.ok(!lines.some((l) => /[█▓░✽✢]|^\.+$/.test(l)), lines.join("|"));
+  // OSC 8의 링크 타깃(`\x1b]8;id=...;<URL>\x07`)은 사라지고 본문 URL만 한 번 남는다
+  assert.strictEqual(lines.filter((l) => l.includes("oauth/authorize")).length, 1);
+  assert.ok(!lines.some((l) => l.includes("id=105chpj")), lines.join("|"));
+  assert.ok(!lines.some((l) => l.includes("\x1b")), "escape가 남았다");
+});
+
+test("ptyLines — Ink가 다시 그린 같은 줄을 반복하지 않는다", () => {
+  assert.deepStrictEqual(ptyLines("a\r\nb\r\nb\r\nb\r\na\r\n"), ["a", "b", "a"]);
 });
 
 /** `claude`를 PATH 스텁으로 갈아 끼운다 — `lib/workers.test.ts`의 crontab 스텁과 같은 수법이다.
- *  층 ⓪(준비물 표시)·다른 엔진 판정이 이 스텁을 여전히 쓴다(층 ②는 더 이상 claude를 안 문다). */
+ *  진짜 CLI를 몰면 사람의 자격증명이 회전한다(§0-4: 세션이 이 흐름을 끝까지 밟지 않는다). */
 const BIN = mkdtempSync(path.join(tmpdir(), "fst-bin-"));
 process.env.PATH = `${BIN}:${process.env.PATH}`;
 process.on("exit", () => rmSync(BIN, { recursive: true, force: true }));
 
-// 실제 브라우저가 뜨면 안 된다(§0-4와 같은 태도 — 테스트가 부작용을 밟지 않는다). BIN이 PATH
-// 맨 앞이라 macOS `open`을 무해한 스텁으로 가린다.
-writeFileSync(path.join(BIN, "open"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
-
+const PIDFILE = path.join(BIN, "pid");
 function stubClaude(body: string) {
-  writeFileSync(path.join(BIN, "claude"), `#!/bin/sh\n${body}\n`, { mode: 0o755 });
+  writeFileSync(path.join(BIN, "claude"), `#!/bin/sh\necho $$ > ${PIDFILE}\n${body}\n`, {
+    mode: 0o755,
+  });
 }
+
+/** 스텁이 자기 pid를 여기 적는다. **startSetup 전에 지운다** — 앞 테스트가 남긴 값을 읽으면
+ *  이미 죽은 pid를 살아 있는지 묻게 된다(실측: 그래서 세 번째 테스트가 헛돌았다). */
+function armPidfile() {
+  rmSync(PIDFILE, { force: true });
+}
+
+const alive = (pid: number) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+};
 
 async function until(p: () => boolean, ms = 8_000) {
   for (let i = 0; i < ms / 50 && !p(); i++) await new Promise((r) => setTimeout(r, 50));
   assert.ok(p(), "기다리던 상태가 오지 않았다");
 }
 
-/** 층 ②가 여는 로컬 콜백 서버를 직접 두드린다 — 브라우저 흉내다. 전역 `fetch`는 토큰
- *  교환·profile GET 두 외부 호출을 가로채므로, 우리 자신의 로컬 요청은 node:http로 보낸다
- *  (아니면 스텁이 이 요청도 가로채 "예상 밖 URL"로 던진다). */
-function hitLocalCallback(port: number, params: Record<string, string>): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const qs = new URLSearchParams(params).toString();
-    httpGet(`http://127.0.0.1:${port}/callback?${qs}`, (res) => {
-      res.resume();
-      res.on("end", () => resolve(res.statusCode ?? 0));
-    }).on("error", reject);
-  });
-}
-
-/** 폴링용 — 아직 안 왔으면 `undefined`(던지지 않는다, `until`이 재시도할 수 있게). */
-function findAuthorizeUrl(lines: string[]): URL | undefined {
-  const line = lines.find((l) => l.startsWith("http"));
-  return line ? new URL(line) : undefined;
-}
-
-function authorizeUrlFrom(lines: string[]): URL {
-  const u = findAuthorizeUrl(lines);
-  assert.ok(u, `authorize URL이 진행 로그에 없다: ${lines.join("|")}`);
-  return u!;
-}
-
-function portFrom(u: URL): number {
-  return Number(u.searchParams.get("redirect_uri")!.match(/:(\d+)\/callback$/)![1]);
-}
-
-/** 토큰 교환·profile GET 두 외부 호출만 가로챈다 — 우리 로컬 서버로 가는 요청은 이 스텁을
- *  안 거친다(`hitLocalCallback`이 node:http를 직접 쓴다). */
-function stubOAuthFetch(opts: {
-  token?: () => Response;
-  profile?: () => Response;
-}): () => void {
-  const real = globalThis.fetch;
-  globalThis.fetch = (async (url: string) => {
-    if (String(url).includes("/v1/oauth/token")) {
-      return opts.token ? opts.token() : new Response(JSON.stringify({ access_token: "sk-ant-oat01-stub" }), { status: 200 });
-    }
-    if (String(url).includes("/api/oauth/profile")) {
-      return opts.profile ? opts.profile() : new Response(JSON.stringify({ account: { email: "stub@example.com" } }), { status: 200 });
-    }
-    throw new Error(`예상 밖 fetch: ${url}`);
-  }) as typeof fetch;
-  return () => {
-    globalThis.fetch = real;
-  };
-}
-
-test("startSetup — 로컬 콜백으로 코드를 받으면 토큰을 교환하고 profile GET으로 라벨을 채운다", async () => {
-  process.env.TICKET_LOCAL = mkdtempSync(path.join(tmpdir(), "fst-auth-oauth-"));
-  const restore = stubOAuthFetch({});
-  try {
-    startSetup();
-    await until(() => findAuthorizeUrl(pollSetup().lines) !== undefined);
-    const authUrl = authorizeUrlFrom(pollSetup().lines);
-    const port = portFrom(authUrl);
-    const state = authUrl.searchParams.get("state")!;
-
-    const status = await hitLocalCallback(port, { code: "test-code", state });
-    assert.strictEqual(status, 302); // 성공 페이지로 리다이렉트한다
-
-    await until(() => !!pollSetup().savedAt);
-    const s = pollSetup();
-    assert.strictEqual(s.running, false);
-    assert.strictEqual(s.error, undefined);
-
-    const saved = await import("node:fs/promises").then((fs) => fs.readFile(tokenPath(), "utf8"));
-    assert.strictEqual(saved, "sk-ant-oat01-stub");
-    assert.strictEqual((await readTokenRows())[0].label, "stub@example.com");
-  } finally {
-    restore();
-  }
-});
-
-test("startSetup — state가 안 맞으면 거부하고 토큰 교환을 시도하지 않는다(CSRF)", async () => {
-  process.env.TICKET_LOCAL = mkdtempSync(path.join(tmpdir(), "fst-auth-oauth-badstate-"));
-  let tokenCalls = 0;
-  const restore = stubOAuthFetch({
-    token: () => {
-      tokenCalls++;
-      return new Response(JSON.stringify({ access_token: "sk-ant-oat01-should-not-happen" }), { status: 200 });
-    },
-  });
-  try {
-    startSetup();
-    await until(() => findAuthorizeUrl(pollSetup().lines) !== undefined);
-    const port = portFrom(authorizeUrlFrom(pollSetup().lines));
-
-    const status = await hitLocalCallback(port, { code: "test-code", state: "wrong" });
-    assert.strictEqual(status, 400);
-
-    await until(() => !pollSetup().running);
-    assert.strictEqual(pollSetup().savedAt, undefined);
-    assert.strictEqual(tokenCalls, 0, "잘못된 state인데 토큰 교환을 시도했다");
-  } finally {
-    restore();
-  }
-});
-
-test("startSetup — profile GET이 실패해도 토큰은 저장되고 라벨은 계정 N 폴백이다", async () => {
-  process.env.TICKET_LOCAL = mkdtempSync(path.join(tmpdir(), "fst-auth-oauth-noprofile-"));
-  const restore = stubOAuthFetch({
-    token: () => new Response(JSON.stringify({ access_token: "sk-ant-oat01-noprofile" }), { status: 200 }),
-    profile: () => new Response(null, { status: 403 }),
-  });
-  try {
-    startSetup();
-    await until(() => findAuthorizeUrl(pollSetup().lines) !== undefined);
-    const authUrl = authorizeUrlFrom(pollSetup().lines);
-    const port = portFrom(authUrl);
-    const state = authUrl.searchParams.get("state")!;
-
-    await hitLocalCallback(port, { code: "c", state });
-    await until(() => !!pollSetup().savedAt);
-
-    const s = pollSetup();
-    assert.strictEqual(s.error, undefined, "profile 실패가 발급 자체를 깨뜨렸다");
-    assert.ok(s.lines.some((l) => l.includes("403")), s.lines.join("|")); // 사유가 진행 로그에 남는다
-    assert.strictEqual((await readTokenRows())[0].label, "계정 1"); // 행 편집이 폴백이다(P180-1)
-  } finally {
-    restore();
-  }
-});
-
-test("stopSetup — 다이얼로그를 닫으면 로컬 서버가 닫힌다", async () => {
-  process.env.TICKET_LOCAL = mkdtempSync(path.join(tmpdir(), "fst-auth-oauth-stop-"));
+test("startSetup — pty로 몰고, 토큰을 집어 저장하고, 프로세스를 남기지 않는다", async () => {
+  // 앞선 `saveToken` 테스트들이 이 LOCAL의 oauth-token에 이미 값을 남겨 놨다 — 그 값이
+  // 마이그레이션으로 eligible한 활성이 되면 addToken이 새 값을 대기로 넣는다(P179).
+  // 이 테스트는 "pty가 잡은 값이 저장된다"만 재므로 빈 TICKET_LOCAL로 격리한다.
+  process.env.TICKET_LOCAL = mkdtempSync(path.join(tmpdir(), "fst-auth-setup-"));
+  // pty 폭이 200이어야 토큰이 줄바꿈으로 안 쪼개진다 — 스텁이 그 값을 직접 찍는다
+  stubClaude(`stty size\nprintf 'Opening\\033[12Gbrowser\\r\\n'\nprintf 'sk-ant-oat01-${"x".repeat(40)}\\r\\n'\nsleep 60`);
+  armPidfile();
   startSetup();
-  await until(() => findAuthorizeUrl(pollSetup().lines) !== undefined);
-  const port = portFrom(authorizeUrlFrom(pollSetup().lines));
+  await until(() => !!pollSetup().savedAt);
 
+  const s = pollSetup();
+  assert.strictEqual(s.running, false);
+  assert.strictEqual(s.error, undefined);
+  assert.ok(s.lines.includes("50 200"), `pty 폭: ${s.lines.join("|")}`); // stty rows cols
+  assert.ok(s.lines.includes("Opening browser"));
+  // 파일엔 원문이 가지만 **화면엔 안 간다** — CLI가 토큰을 그대로 찍는다
+  assert.ok(!s.lines.some((l) => l.includes("xxxx")), s.lines.join("|"));
+  assert.ok(s.lines.includes("sk-ant-…"), s.lines.join("|"));
+  const saved = await import("node:fs/promises").then((fs) => fs.readFile(tokenPath(), "utf8"));
+  assert.strictEqual(saved, `sk-ant-oat01-${"x".repeat(40)}`);
+
+  // `sleep 60`이 남아 있으면 다음 시도가 pty를 못 문다 — 그룹째 죽었는지 확인한다
+  const pid = Number(readFileSync(PIDFILE, "utf8").trim());
+  await until(() => !alive(pid));
+});
+
+test("startSetup — 토큰 없이 끝나면 조용히 실패하지 않는다", async () => {
+  stubClaude("echo 'command not found: whatever'\nexit 7");
+  armPidfile();
+  startSetup();
+  await until(() => !pollSetup().running);
+
+  const s = pollSetup();
+  assert.strictEqual(s.savedAt, undefined);
+  assert.match(s.error!, /토큰을 받지 못한 채 끝났습니다 \(종료 코드 7\)/);
+  assert.ok(!s.lines.some((l) => l.includes("__dira_setup_exit")), s.lines.join("|"));
+  assert.ok(s.lines.includes("command not found: whatever"), s.lines.join("|"));
   stopSetup();
-  assert.strictEqual(pollSetup().running, false);
-  await assert.rejects(() => hitLocalCallback(port, { code: "x", state: "y" }));
+});
+
+/** `.app`은 PATH가 launchd 기본값이라 `~/.local/bin/claude`가 안 보인다(`bcf66f01`).
+ *  그 환경을 PATH로 그대로 재현한다 — 사람이 읽을 사유가 나와야 하고, `종료 코드 127`은 실패다. */
+test("startSetup — claude가 PATH에 없으면 사유가 사람 말이다 (127이 아니다)", () => {
+  stubClaude("exit 0"); // 스텁은 있지만 PATH에서 그 디렉터리를 뺀다
+  const real = process.env.PATH;
+  process.env.PATH = "/usr/bin:/bin:/usr/sbin:/sbin"; // launchd 기본값
+  try {
+    assert.strictEqual(findClaude(), null);
+    const s = startSetup();
+    assert.strictEqual(s.running, false);
+    assert.match(s.error!, /PATH에서 claude를 찾지 못했습니다/);
+    assert.ok(!/종료 코드/.test(s.error!), s.error);
+  } finally {
+    process.env.PATH = real;
+  }
+  // 스텁이 다시 보이면 그 절대경로를 집는다 — 셸의 PATH 해석에 기대지 않는다
+  assert.strictEqual(findClaude(), path.join(BIN, "claude"));
 });
 
 /** 층 ⓪ — 화면이 그리는 값은 `readAuth().cli`고 그 판정은 층 ②가 모는 `findClaude()` 그대로다.
@@ -289,6 +238,19 @@ test("findClaude — 실행 권한이 없거나 디렉터리면 건너뛴다", (
   } finally {
     process.env.PATH = real;
   }
+});
+
+test("stopSetup — 다이얼로그를 닫으면 돌던 자식이 죽는다", async () => {
+  stubClaude("sleep 60");
+  armPidfile();
+  startSetup();
+  await until(() => existsSync(PIDFILE));
+  const pid = Number(readFileSync(PIDFILE, "utf8").trim());
+  await until(() => alive(pid));
+
+  stopSetup();
+  assert.strictEqual(pollSetup().running, false);
+  await until(() => !alive(pid));
 });
 
 // ── 여러 계정 — `tokens.json` 그릇 (DESIGN.md §0-13) ─────────────────────────
