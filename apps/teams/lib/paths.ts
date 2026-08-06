@@ -4,7 +4,7 @@ import { realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 
-/** 워커·페르소나 이름. tickets.py의 PERSONA_RE와 같은 규칙 — 엔진이 이 값으로 경로를 만든다. */
+/** 워커/페르소나 이름. tickets.py의 PERSONA_RE와 같은 규칙. */
 export const NAME_RE = /^[A-Za-z0-9_-]+$/;
 /** 티켓 해시로 **쓸 수 없는** 것: 경로 구분자와 제어문자. 아래 `isHash` 참고. */
 const HASH_DENY = /[/\\\p{Cc}]/u;
