@@ -17,9 +17,12 @@
  *  폼을 달고 있다 — 끌어오면 그 안에 티켓 없는 경로가 하나 더 생긴다. 재사용하는 것은 화면이
  *  아니라 **읽기 코어**(`lib/transcript.ts`)이고, 그건 `lib/home-agent.ts`의 `pollHome`이 부른다.
  *
- *  **낙관적 에코를 그리지 않는다.** 방금 보낸 질문도 폴링이 트랜스크립트에서 읽어 온다 —
- *  화면의 출처가 그 파일 하나여야 새로고침 전후가 같다(§24 "도는 동안만 그렸다 지우는 절충도
- *  안 된다"와 같은 근거). 그래서 이 파일에는 turn을 만드는 코드가 없다.
+ *  **사람 질문 말풍선만 낙관적으로 그린다**(§7 §천장이 없다 ③ — 요구 `8db4d0f6`). 보내는
+ *  순간 그 문장을 스레드 끝에 세운다(`echo`) — 전송이 안 된 것처럼 보이는 문제였다. `askHome`이
+ *  실패를 돌려주면 그 말풍선을 걷고 글이 입력칸으로 돌아온다(§21 실패 규칙 무수정). 정본은
+ *  여전히 트랜스크립트다 — 첫 폴링이 그 질문 줄을 데려오면 `echo`를 내려 **같은 질문이 두 벌
+ *  안 선다.** **답에는 여전히 낙관적 에코가 없다** — 도는 동안 보이는 글자는 `partial`(자식의
+ *  stdout)이라 지어낼 것이 없다.
  *
  *  **역할이 그릇으로 갈린다 — 사람은 §13 말풍선(`align="end"`), 답은 전폭 산문**(§24 개정).
  *  오른쪽에 서는 것이 언제나 이 앱을 쓰는 사람이라는 §13의 판정은 그대로고, 갈린 것은 상대 쪽
@@ -84,7 +87,7 @@ import {
   SidebarMenuItem,
   SidebarProvider,
 } from "@/components/ui/sidebar";
-import type { Answer, AnswerReason, Home, HomeChunk, Turn, WorkerSession } from "@/lib/home-agent";
+import type { Activity, Answer, AnswerReason, Home, HomeChunk, Turn, WorkerSession } from "@/lib/home-agent";
 import { formatCombo, matchCombo } from "@/lib/keymap";
 import { chatRows } from "@/lib/urls";
 import { cn } from "@/lib/utils";
@@ -114,12 +117,12 @@ const NO_TURNS = "지금 대화가 이미 비어 있습니다 — 여기에 물�
  *  둘을 통틀어 가리키고, 그래서 **체크가 패널 전체에 하나다**(§24). */
 type Panel = Home & { workers: WorkerSession[] };
 
-/** 폴링 주기 둘과 천장(§7 §답은 흐른다 · §폴링은 서버가 잊어도 안 끊긴다). 자세한 근거는
- *  아래 `useEffect` 머리 주석. 셋 다 이 파일 안에서만 쓴다 — 서버의 `TIMEOUT_MS`는 같은 수지만
- *  같은 값이 될 수 없다(저 모듈은 `node:child_process`를 물고 있어 클라이언트로 못 건너온다). */
+/** 폴링 주기 둘(§7 §답은 흐른다 · §폴링은 서버가 잊어도 안 끊긴다). 자세한 근거는 아래
+ *  `useEffect` 머리 주석. **천장은 없다**(§7 §천장이 없다 — 요구 `8db4d0f6`이 서버의
+ *  `TIMEOUT_MS`와 여기 있던 `CEILING_MS`를 둘 다 걷었다). 끝의 근거는 결과 객체 · 프로세스의
+ *  죽음 · `중지` 셋뿐이다. */
 const FAST_MS = 500;
 const SLOW_MS = 2_000;
-const CEILING_MS = 5 * 60_000;
 
 /** §비주얼 §24 실패 5종. **`reason` 코드로 갈린다** — `output` 문장을 되짚으면 문구를 한 자
  *  고치는 날 화면이 조용히 뭉친다(§21 `FAIL` 표와 같은 규약). `other`는 §24에 항이 없는
@@ -135,8 +138,10 @@ const FAIL: Record<AnswerReason, { title: string; next?: string; cmd?: string }>
     next: "헤더 오른쪽 설정에서 장기 토큰을 넣고 다시 물어보세요.",
   },
   timeout: {
-    title: "답을 받지 못했습니다 — 5분을 넘겼습니다",
-    next: "질문을 좁혀 다시 물어보세요. 쓴 글은 그대로 남아 있습니다.",
+    // 이름은 낡았다 — 값의 뜻이 §7 §천장이 없다(`8db4d0f6`)로 죽음 기반이 됐다(`lib/home-agent.ts`의
+    // `AnswerReason` 주석 참조). `output`은 `exit <코드>`/`signal <신호>` + stderr 꼬리다.
+    title: "답을 받지 못했습니다 — 세션이 답 없이 끝났습니다",
+    next: "다시 보내 보세요. 쓴 글은 그대로 남아 있습니다.",
   },
   busy: {
     title: "보내지 못했습니다 — 답이 아직 도는 중입니다",
@@ -171,6 +176,13 @@ export function HomeUI({
   const [starting, setStarting] = useState(false); // `askHome` 왕복 한 번. 도는 것과 다른 값이다
   const [fail, setFail] = useState<Answer | null>(initial.failed);
   const [text, setText] = useState("");
+  // **지금 하는 일 하나**(§7 §천장이 없다 §안심 장치 · §비주얼 §24 §활동 3종). 출처는 `partial`과
+  // 같다(자식의 stdout) — running이 아니면 서버가 언제나 `null`을 준다(같은 근거: 끝나면 볼
+  // 활동이 없다). 값이 없는 동안(`null`)의 기본 문구는 §24가 "답하는 중"으로 못박았다.
+  const [activity, setActivity] = useState<Activity | null>(initial.activity);
+  // **보낸 질문의 낙관적 말풍선**(§7 §천장이 없다 ③). 정본은 트랜스크립트다 — 첫 폴링이 그 줄을
+  // 데려오면(`turns`가 늘어나면) 내린다. 실패하면 즉시 내리고 글이 입력칸으로 돌아온다.
+  const [echo, setEcho] = useState<string | null>(null);
   // **도는 동안 받은 글**(§7 §답은 흐른다). 출처가 `turns`와 다르다 — 이건 자식의 stdout이고
   // 저건 트랜스크립트다. 끝나는 순간 서버가 빈 문자열을 주고 같은 응답의 `turns`가 그 답을
   // 진짜 줄로 데려온다. **한 답이 두 벌로 안 그려지는 자리가 그 교대다** — 여기서 다시 안 막는다.
@@ -211,17 +223,17 @@ export function HomeUI({
   // 그건 끝이 아니라 **맵이 휘발한 것**이라(dev recompile) 안 끊고 트랜스크립트를 더 본다.
   // 종전에는 그 한 번에 끊어서 화면이 질문만 든 채 얼었고, 새로고침만이 살렸다.
   // **그 뒤 `answered`가 첫째 증거가 된 것이 QA `0a284011`이다** — 답 줄을 도는 중의 폴링이
-  // 먼저 집어 가므로 마지막 응답의 `turns`는 비어 있고, 그것만 보던 판정은 여기 아래 천장
-  // 5분까지 안 끊겼다(실측 295~300초 잠금).
+  // 먼저 집어 가므로 마지막 응답의 `turns`는 비어 있고, 그것만 보던 판정은 종전 천장(5분)까지
+  // 안 끊겼다(실측 295~300초 잠금 — 그 천장은 `8db4d0f6`이 걷었다. §7 §천장이 없다).
   //
   // **주기가 둘이다.** 도는 동안은 500ms(§7 §답은 흐른다 — SSE를 만들지 않는 대가로 정한 수.
   // 델타 하나가 평균 250ms 늦게 붙고 실측 델타 간격이 480ms라 안 보인다). 서버가 잊은 뒤에는
   // **2초**다(§2-1과 같은 수) — 흐르는 글은 이미 맵과 함께 사라졌고 여기서 기다리는 것은
   // 완성된 답 한 덩어리라 500ms를 유지할 이유가 없다.
   //
-  // **천장 5분**(§7 — `ask`의 `TIMEOUT_MS`와 같은 수. 저 값은 서버 모듈에 있어 여기로 못
-  // 건너온다 — 클라이언트 번들이 `node:child_process`를 못 문다). 그 뒤로도 답이 없으면 끊고
-  // 잠금을 푼다. 무한히 묻는 화면을 만들지 않는다.
+  // **천장이 없다**(§7 §천장이 없다 — 요구 `8db4d0f6`). 끊는 근거는 `pollDone`(= `answered`
+  // 이거나 `!running && turns.length > 0`) 하나뿐이다 — 시계로 포기하지 않는다. 사람이 포기하고
+  // 싶으면 `중지`를 누른다.
   //
   // **앞 왕복이 끝난 뒤에 다음을 예약한다 — `setInterval`이 아니다**(`bcfcdda4`). 저건 왕복
   // 시간을 안 보고 500ms마다 쏘므로, 왕복이 그보다 길어지는 순간 두 `poll`이 동시에 살아
@@ -243,11 +255,6 @@ export function HomeUI({
     if (!running && !anyRunning) return;
     let stop = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    // **천장은 답 하나에 5분이다**(무수정). 사슬이 여러 대화를 이어 물게 됐으므로 **처음 보는
-    // 세션이 뜰 때마다 그 5분을 다시 센다** — 안 그러면 A가 4분째일 때 시작한 B가 1분 만에
-    // 잘린다(그 답은 파일에 서고 새로고침이 데려오지만, 화면은 그동안 얼어 있다).
-    const seen = new Set<string>();
-    let deadline = Date.now() + CEILING_MS;
     const poll = async () => {
       // 왕복이 통째로 실패하면(catch) 서버가 삐끗한 것이다 — 느린 쪽으로 물러난다.
       let wait = SLOW_MS;
@@ -257,14 +264,9 @@ export function HomeUI({
         session.current = r.sessionId;
         offset.current = r.offset;
         setPartial(r.partial);
+        setActivity(r.activity);
         setHome({ conversations: r.conversations, workers: r.workers, current: r.sessionId });
         setRunningIds(r.runningSessions);
-        for (const id of r.runningSessions) {
-          if (!seen.has(id)) {
-            seen.add(id);
-            deadline = Date.now() + CEILING_MS; // 처음 보는 답 — 이 사슬의 천장을 다시 센다
-          }
-        }
         // `reset` = 세션이 갈렸다(서버가 0부터 다시 읽었다). 이어붙이면 옛 대화가 두 벌이 된다.
         setTurns((prev) => {
           const next = r.reset ? r.turns : r.turns.length ? [...prev, ...r.turns] : prev;
@@ -273,6 +275,11 @@ export function HomeUI({
           // 쓰이는 창이 있다 — 그때 화면이 `중지됨`을 통째로 놓친다. 두 근거가 같은 칸을 채운다.
           return r.stopped ? markStopped(next) : next;
         });
+        // **낙관적 에코를 트랜스크립트 줄로 갈아 끼운다**(§7 §천장이 없다 ③) — 새 턴이 도착했다는
+        // 것이 곧 그 질문(과 어쩌면 답까지)이 정본에 섰다는 뜻이다. 갈아 끼우는 대상은 **이
+        // 왕복 전에 보낸 질문뿐**이다: 잠금의 단위가 대화 하나라 같은 대화에 두 번째 질문이
+        // 겹쳐 뜰 일이 없다(§24 실패 ④).
+        if (r.turns.length > 0) setEcho(null);
         if (r.failed) setFail(r.failed);
         if (r.done) {
           setRunning(false);
@@ -286,12 +293,6 @@ export function HomeUI({
         // 여기서 멈추면 서버가 잠깐 삐끗한 대가로 도는 답이 화면에서 영구히 얼어붙는다.
       }
       if (stop) return;
-      if (Date.now() >= deadline) {
-        // 천장. 답은 못 받았지만 잠금은 푼다 — 5분 뒤에도 잠긴 입력칸은 고장이고, 답이
-        // 늦게라도 파일에 서면 새로고침이 데려온다(그 경로는 종전부터 살아 있다).
-        setRunning(false);
-        return;
-      }
       timer = setTimeout(poll, wait);
     };
     void poll();
@@ -308,6 +309,10 @@ export function HomeUI({
   // `보내기`가 잠기는지. 큐에서 사라진 세션이면 서버가 이미 `sessionId: null`로 물러나므로
   // (`pollHome`) 여기서도 `undefined`고 화면은 **대화 0건과 같다**(온보딩) — 실패가 아니다.
   const worker = home.workers.find((w) => w.id === home.current);
+  // **지금 보는 대화의 모델**(§7 §천장이 없다 ④ · §비주얼 §24 §세션 정보 한 줄) — 첫 성공한
+  // 턴이 적고 그 뒤로는 안 바뀐다(`saveModel`). 아직 없으면 `undefined`고 `<SessionInfo>`가
+  // 그 칸을 뺀다.
+  const conv = home.conversations.find((c) => c.id === home.current);
   // **도는 세션에는 말을 걸 수 없다**(§24 §잠금 두 자리 ② — 근거는 자리가 아니라 파일이다:
   // 홈이 `--resume`으로 붙으면 한 트랜스크립트에 두 프로세스가 쓴다). 잠기는 것은 `보내기`
   // 하나이고 **입력칸은 아니다** — 쓰던 글이 다른 세션으로 갈아탄 뒤에도 남는 것이 값이다.
@@ -320,12 +325,18 @@ export function HomeUI({
     setFail(null);
     setStopping(false); // 앞 답을 중지한 뒤라도 이번 답의 `중지`는 눌린 적이 없다
     setPartial("");
+    setActivity(null);
+    // **보내는 순간 사람 말풍선을 세운다**(§7 §천장이 없다 ③) — 정본은 여전히 트랜스크립트다,
+    // 첫 폴링이 그 줄을 데려오면 위 poll 효과가 이 값을 내린다.
+    setEcho(question);
     // `다시 답하기`는 첨부 없이 부른다(§24 — 그 버튼이 다시 보내는 것은 **옛 질문 한 줄**이고,
     // 그 글에 첨부 경로가 필요했으면 이미 그 안에 적혀 있다).
     const r = await askHome(project, question, paths);
     setStarting(false);
-    if (r) setFail(r);
-    else setRunning(true); // 폴링 효과가 붙는다. 질문 말풍선도 그 첫 응답이 데려온다
+    if (r) {
+      setFail(r);
+      setEcho(null); // 실패 — 말풍선을 걷는다. 글은 아래 `send()`가 입력칸으로 돌려준다
+    } else setRunning(true); // 폴링 효과가 붙는다
     input.current?.focus();
     return r;
   };
@@ -375,12 +386,14 @@ export function HomeUI({
     setRunning(c.running);
     setRunningIds(c.runningSessions);
     setPartial(c.partial);
+    setActivity(c.activity);
     setStopping(false);
     setFail(c.failed);
+    setEcho(null); // 갈아탄 대화의 것이 아니다 — 앞 대화에서 보낸 에코를 여기로 안 옮긴다
   };
 
-  // 대화 0건 = 온보딩이다. `busy`가 참이면 스레드가 선다 — 그 안에 진행 표식이 있어야 하고,
-  // 질문 말풍선도 첫 폴링 응답이 데려온다(낙관적 에코가 없다).
+  // 대화 0건 = 온보딩이다. `busy`가 참이면 스레드가 선다 — 그 안에 진행 표식(과 방금 보낸
+  // 질문의 에코)이 있어야 한다.
   const onboarding = turns.length === 0 && !busy;
 
   return (
@@ -525,11 +538,28 @@ export function HomeUI({
                         )}
                       </MessageScrollerItem>
                     ))}
+                    {/* 방금 보낸 질문의 낙관적 말풍선(§7 §천장이 없다 ③) — 사람 질문 항목과
+                        **같은 그릇**이다. `turns`에 아직 없는 동안만 선다 — 첫 폴링이 그 줄을
+                        데려오면 위 poll 효과가 `echo`를 내리고 `turns.map`의 진짜 항목이 같은
+                        자리를 대신한다(같은 질문이 두 벌 안 선다). */}
+                    {echo !== null && (
+                      <MessageScrollerItem key="echo" messageId="echo">
+                        <Message align="end">
+                          <MessageContent>
+                            <MessageHeader className="sr-only m-0">질문</MessageHeader>
+                            <Bubble variant="outline" align="end">
+                              <BubbleContent>
+                                <Markdown text={echo} breaks="all" />
+                              </BubbleContent>
+                            </Bubble>
+                          </MessageContent>
+                        </Message>
+                      </MessageScrollerItem>
+                    )}
                     {/* 도는 답 — **트랜스크립트에 아직 없는 한 항목**이다. 안은 끝난 답과 같은
                         모양이고(산문 + 띠) 띠 안만 진행 표식(§18 ④) + `중지`로 갈린다. 항목이
                         하나라 도착한 조각이 **같은 산문 블록**에 이어 붙는다 — 문단마다 항목을
-                        쪼개면 스크롤 위치가 매 폴링마다 튄다(§24).
-                        **상한 5분을 적는 유일한 자리다** — 초를 세는 시계를 두지 않는다. */}
+                        쪼개면 스크롤 위치가 매 폴링마다 튄다(§24). */}
                     {busy && (
                       <MessageScrollerItem key="running" messageId="running">
                         {/* 첫 글자 전에는 산문을 **안 그린다**(§24 흐름 항). 빈 `partial`을 넘기면
@@ -542,7 +572,22 @@ export function HomeUI({
                             aria-hidden
                             className="mx-1 size-2 shrink-0 animate-wip-pulse rounded-full bg-muted-foreground motion-reduce:animate-none"
                           />
-                          답하는 중 · 최대 5분
+                          {/* 활동 3종(§7 §천장이 없다 §안심 장치 · §비주얼 §24 §활동 3종) —
+                              문구 칸 하나가 세 값 중 하나만 든다. 액션 한 줄은 도구명뿐이다
+                              (요약 계산에 필요한 도구 인자가 `Activity`에 없다 — `lib/home-agent.ts`
+                              `## 블록` 참조: §9 판정의 "요약이 비면 도구명 하나다" 갈래 그대로다). */}
+                          {activity?.kind === "thinking" ? (
+                            "생각 중"
+                          ) : activity?.kind === "tool" ? (
+                            <span
+                              className="shrink-0 max-w-[7rem] truncate font-mono"
+                              title={activity.tool}
+                            >
+                              {activity.tool}
+                            </span>
+                          ) : (
+                            "답하는 중"
+                          )}
                           {/* `ml-auto`가 없다 — 이 화면의 띠는 1440에서 ≈1392px이라 오른쪽 끝으로
                               밀면 버튼이 자기가 멈추는 글자에서 1200px 떨어져 홀로 뜬다
                               (§4-3 예외 2번 — 조작 대상 옆에 있는 것이 위치의 뜻이다). */}
@@ -612,8 +657,13 @@ export function HomeUI({
                     판단이다(§24: 다음 질문을 미리 쓸 수 있다). */}
                 <AttachmentButton att={att} />
                 {/* 보조 문구 — `첨부` 다음 · `ml-auto` 앞이 2차 자리다(§27 손잡이 줄 순서).
-                    **대화에서는 없다**(§21 표의 `없다`가 거기서는 그대로 참이다). */}
-                {worker && <WorkerNote project={project} worker={worker} />}
+                    **셋 다 배타적이라 한 자리를 다투지 않는다**(§비주얼 §24 §손잡이 줄 왼쪽
+                    문구): 워커 세션 · 대화(턴 1건 이상) · 대화(턴 0건 = 없다). */}
+                {worker ? (
+                  <WorkerNote project={project} worker={worker} />
+                ) : home.current && turns.length > 0 ? (
+                  <SessionInfo sessionId={home.current} model={conv?.model} />
+                ) : null}
                 {/* `bg-muted`를 깔지 않는다 — `--muted-foreground`가 라이트 4.34로 AA 미달이다(§21).
                     `ml-auto`가 여기 걸려서 1차 버튼이 줄의 가장 오른쪽이다(§4-3). */}
                 <kbd className="ml-auto border px-1 font-mono text-xs text-muted-foreground">
@@ -760,8 +810,9 @@ function markStopped(turns: Turn[]): Turn[] {
 /** 실패 한 장 (§비주얼 §24 실패 5종 · §6 3요소). */
 function Failure({ fail }: { fail: Answer }) {
   const f = FAIL[fail.reason ?? "other"];
-  // §24 실패 표의 `원인 원문` 열. ③은 `상한 300초 초과 · session <id>`가 그 값이라 세션을
-  // 붙인다 — ④는 실행층이 이미 `session <id>` 한 줄로 만들어 보내고, 나머지는 CLI 원문이다.
+  // §24 실패 표의 `원인 원문` 열. ③은 `exit <코드>`/`signal <신호>` + stderr 꼬리(`lib/home-agent.ts`의
+  // `judge`가 이미 그 모양으로 낸다)에 세션을 붙인다 — ④는 실행층이 이미 `session <id>` 한 줄로
+  // 만들어 보내고, 나머지는 CLI 원문이다.
   const detail =
     fail.reason === "timeout" && fail.sessionId
       ? `${fail.output} · session ${fail.sessionId}`
@@ -771,7 +822,9 @@ function Failure({ fail }: { fail: Answer }) {
       <TriangleAlert aria-hidden />
       <AlertTitle>{f.title}</AlertTitle>
       <AlertDescription>
-        <span className="block font-mono text-xs break-all">{detail}</span>
+        {/* `whitespace-pre-wrap` — ③의 stderr 꼬리는 여러 줄이다(§24 "같은 mono 블록 ·
+            whitespace-pre-wrap"). 안 붙이면 그 개행이 공백으로 뭉친다. */}
+        <span className="block font-mono text-xs break-all whitespace-pre-wrap">{detail}</span>
         {f.next && <span className="block text-xs">{f.next}</span>}
         {f.cmd && <CopyCommand cmd={f.cmd} />}
       </AlertDescription>
@@ -810,6 +863,19 @@ function WorkerNote({ project, worker }: { project: string; worker: WorkerSessio
   );
 }
 
+/** 세션 정보 한 줄(§비주얼 §24 §세션 정보 한 줄 — 요구 `8db4d0f6` ④). 손잡이 줄 왼쪽 슬롯의
+ *  셋째 값 — 위 `<WorkerNote>`와 한 자리를 다투지 않는다(대화 · 워커 세션이 배타적이다).
+ *  라벨 없이 가운뎃점으로 잇는다(`엔진:` · `모델:`을 안 쓴다 — §0-9). **모델을 모르면 그 칸이
+ *  빠진다**(`claude · <세션 id>` 둘로) — `filter(Boolean)`이 그 판정이다. 세션 id는 안 자른다
+ *  (식별자다 — `break-words`가 좁은 창에서 하이픈으로 접는다, `truncate`가 아니다). */
+function SessionInfo({ sessionId, model }: { sessionId: string; model?: string }) {
+  return (
+    <span className="min-w-0 break-words font-mono text-xs text-muted-foreground">
+      {["claude", model, sessionId].filter(Boolean).join(" · ")}
+    </span>
+  );
+}
+
 /** 패널 줄 한 벌의 클래스. **두 그룹이 이 문자열을 같이 쓰고 갈리는 것은 정렬 하나다**(§24
  *  한 줄의 모양 표 — `대화`는 `items-center`(1행), `워커 세션`은 `items-start`(2행)).
  *  나머지(폭 · 패딩 · hover · 잠금)가 두 줄에서 같아야 제목이 한 x에서 시작한다.
@@ -827,7 +893,8 @@ const ROW = "h-auto cursor-pointer";
  *  §도는 대화의 표식: 그릇 새 요소 0 · 클래스 무수정). 두 그룹이 이 문자열을 같이 써서
  *  표식의 x가 같다. 색도 아이콘도 0이고(`<StatusBadge status="wip">`는 이 패널에서 이미
  *  *티켓이 `.wip`*을 말한다) **모션도 0이다** — 도는 줄이 여럿 설 수 있어 움직임이 아무것도
- *  안 가리킨다. `· 최대 5분`은 안 붙인다: 상한을 적는 자리는 스레드의 띠 하나다.
+ *  안 가리킨다. 활동 3종(생각 중 · 액션 한 줄 · 답하는 중)도 안 붙인다: 216px에 액션 한 줄이
+ *  안 들어가고, 패널은 *어느 것이 도나*만 말한다(위 띠가 *지금 무슨 일을 하나*를 말한다).
  *
  *  **`group-hover:` → `group-hover/menu-button:`**(§34 §값 여덟). `SidebarMenuButton`의 첫
  *  클래스가 `peer/menu-button group/menu-button`이라 **이름 없는 `group-hover:`가 안 맞는다** —
