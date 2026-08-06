@@ -174,6 +174,31 @@ test("startSetup — pty로 몰고, 토큰을 집어 저장하고, 프로세스�
   await until(() => !alive(pid));
 });
 
+test("startSetup — 토큰을 잡고 저장이 기록되기 전에 폴링이 끼어도 running:false+savedAt 없음+error 없음인 순간이 없다 (§0-13 §저장이 끝나면)", async () => {
+  process.env.TICKET_LOCAL = mkdtempSync(path.join(tmpdir(), "fst-auth-window-"));
+  stubClaude(`printf 'sk-ant-oat01-${"y".repeat(40)}\\r\\n'\nsleep 60`);
+  armPidfile();
+  startSetup();
+
+  // `addToken()`의 저장이 끝날 때까지, 매 틱마다 촘촘히 읽는다 — settled 잠금과 savedAt 기록
+  // 사이의 창을 한 번이라도 잡으면 실패다.
+  const deadline = Date.now() + 8_000;
+  let sawEmptyWindow = false;
+  let s = pollSetup();
+  while (Date.now() < deadline && s.savedAt === undefined && s.error === undefined) {
+    if (!s.running) {
+      sawEmptyWindow = true;
+      break;
+    }
+    await new Promise((r) => setImmediate(r));
+    s = pollSetup();
+  }
+  assert.ok(!sawEmptyWindow, "running:false + savedAt 없음 + error 없음인 창을 관측했다");
+  assert.ok(s.savedAt, "저장이 기록되지 않고 창이 끝났다");
+
+  stopSetup();
+});
+
 test("startSetup — 토큰 없이 끝나면 조용히 실패하지 않는다", async () => {
   stubClaude("echo 'command not found: whatever'\nexit 7");
   armPidfile();

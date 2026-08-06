@@ -637,6 +637,13 @@ export function SettingsDialog({
     return () => clearInterval(id);
   }, [setup?.running]);
 
+  // 층 ②가 코드 입력 없이 끝나는 길 — `savedAt`이 폴링으로 늦게 도착한다. 층 ③·코드 보내기는
+  // 자기 onSubmit에서 이미 닫지만 이 길엔 닫는 손이 없었다(§0-13 §저장이 끝나면). 방아쇠는 같은
+  // `savedAt` 하나다.
+  useEffect(() => {
+    if (setup?.savedAt) setAddOpen(false);
+  }, [setup?.savedAt]);
+
   return (
     <Dialog
       open={open}

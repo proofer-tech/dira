@@ -423,7 +423,11 @@ let setup: {
 function view(s: NonNullable<typeof setup> | null): SetupState {
   if (!s) return { running: false, lines: [] };
   return {
-    running: !s.settled,
+    // 토큰을 잡은 직후 `settled`는 잠기지만 저장은 비동기다 — 그 사이 창은 `savedAt`도
+    // `error`도 없다. 그 창에서 running을 꺼 버리면 폴링 effect가 정리되고 뒤늦게 채워진
+    // `savedAt`을 화면이 다시 못 묻는다(§0-13 §저장이 끝나면). 정착은 저장(또는 저장 실패)이
+    // 기록된 뒤에만 보인다 — 판정을 여기 한 자리에 둔다.
+    running: !s.settled || (s.savedAt === undefined && s.error === undefined),
     lines: ptyLines(s.raw)
       // 종료 표식은 우리가 심은 것이지 CLI가 사람에게 한 말이 아니다 — 로그에서 뺀다
       .filter((l) => !l.startsWith(EXIT_MARK))
