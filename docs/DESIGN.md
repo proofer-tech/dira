@@ -22865,8 +22865,44 @@ text-status-X  bg-status-X/10  border-status-X/30
 |---|---|
 | 좌측 표식 | 현재 프로젝트만 `Check size-4`. 나머지는 **같은 폭 빈 칸**(정렬이 흔들리면 스캔이 깨진다) |
 | 1줄 좌 | 이름 `text-sm truncate` |
-| 1줄 우 | `열림 <n> · running <n>` — `text-xs text-muted-foreground tabular-nums`. **숫자만 두지 않는다**(무슨 수인지 모른다). `running`이 0이면 그 절만 뺀다 |
-| 2줄 | 경로 `text-xs font-mono text-muted-foreground truncate` |
+| 1줄 우 | `열림 <n> · running <n>` — `text-xs text-muted-foreground tabular-nums` **+ `group-data-selected/command-item:text-foreground`**(선택 줄 밑면이 등록 `data-selected:bg-muted`라 안 붙이면 라이트 **4.34** · 아래). **숫자만 두지 않는다**(무슨 수인지 모른다). `running`이 0이면 그 절만 뺀다 |
+| 2줄 | 경로 `text-xs font-mono text-muted-foreground truncate` **+ `group-data-selected/command-item:text-foreground`**(같은 이유 — 밑면이 `bg-muted`라 **4.34**) |
+
+**두 칸의 마지막 클래스는 새 값이 아니다.** `CommandItem`은 선택(마우스 hover · 키보드 커서)에서
+`data-selected:bg-muted`가 되고 그 위의 `--muted-foreground`는 라이트 **4.34**다 — 둘 다
+`text-xs`라 AA 하한이 4.5고 **미달이다**(§1 함정 ① · §33 함정 ①이 이미 박아 둔 그 수.
+oklch 0.556 on 0.97). 항목 자신은 이미 `data-selected:text-foreground`를 갖고 있는데
+**자식에 명시된 `text-muted-foreground`가 그것을 덮으므로** 자식이 같은 변종을 한 번 더 든다.
+잉크가 `--foreground`로 올라가 **18.15 / 14.48**이 된다(§33 §실측).
+
+- **`components/ui/`를 안 고친다.** `group/command-item`은 `command.tsx`가 이미 선언한 이름이고,
+  같은 파일의 `CommandShortcut`이 `text-muted-foreground
+  group-data-selected/command-item:text-foreground`를 **등록값으로** 달고 있다 — 호출부에서
+  빌리기만 한다(§25 · §45 ⑤가 같은 자리에서 낸 판정 그대로).
+- **발견은 §45 ⑤다** — 설정 검색 결과 줄의 대비를 재다 같은 조합이 이 절에 살아 있는 것을 찾았고,
+  *§4-1 표의 두 칸이 정본*이라고 그 절이 적어 뒀다. 이 표가 그 정본이다.
+- **다크는 원래도 통과다**(5.83). 그래도 같은 클래스가 걸린다 — 라이트만 골라 올리는 변종을
+  만들면 두 테마에서 선택 줄의 글자 층이 갈린다.
+
+**전수 — 이 앱의 `CommandItem` 자리 일곱**
+
+| 자리 | 판정 |
+|---|---|
+| **§4-1 항목 `1줄 우`·`2줄`**(이 절 · `project-switcher.tsx`) | **걸린다 — 위 표에 처방을 박았다.** 코드는 developer 티켓으로 넘겼다 |
+| §4-1 하단 `프로젝트 관리`의 `⌘K` 힌트 | 안 걸린다 — 그릇이 `CommandShortcut`이고 그 관용구가 **등록값**이다 |
+| §45 ⑤ 설정 검색 결과 줄의 경로 | 안 걸린다 — 그 절이 스펙에 이미 박았다(같은 클래스) |
+| §25 스킬 추가 다이얼로그 항목의 설명 줄 | 안 걸린다 — §25 §대비 검증이 같은 처방을 박았고 코드도 그렇다. **호출부에서 이 관용구가 처음 선 자리다** |
+| §3 발행·편집 폼 deps 팝오버 항목(제목 · `완료`) | 안 걸린다 — §25가 지적으로 넘긴 뒤 `a899a9e5`가 두 span에 같은 클래스를 달았다(`ticket-ui.tsx`). §31이 **해시**를 `--foreground`로 못박은 판정과도 안 부딪친다(그 칸은 muted가 아니다) |
+| §1 보드 상태·페르소나 필터 팝오버 항목 | 안 걸린다 — 항목 안에 `text-muted-foreground` **글자가 없다**. 이름은 색 지정이 없어 등록 `data-selected:text-foreground`가 그대로 받고, 앞의 `ListFilter`는 등록 `data-selected:*:[svg]:text-foreground`가 받는다(아이콘이라 하한도 3:1이다) |
+| §12 발행·편집 폼 persona `SelectItem` | `CommandItem`이 **아니다** — 밑면이 `bg-accent`이고 `select.tsx`가 `focus:**:text-accent-foreground`로 자손 전부를 같이 올린다. 덮이는 자식이 없다 |
+
+**보드 검색창도 `Command`가 아니다**(`InputGroup` — §5). 밑면이 `bg-muted`가 되는 상태가 없다.
+
+**같은 4.34가 이 절에 하나 더 있다 — 트리거. 이 티켓이 안 고친다.** 닫힌 상태 표의 컨테이너가
+`data-[popup-open]:bg-muted`이고 그 안 경로가 `text-xs font-mono text-muted-foreground`라
+**팔레트가 열려 있는 동안 같은 조합이다**(`ChevronsUpDown`은 아이콘이라 3:1로 통과한다).
+`CommandItem`이 아니라 전수 범위 밖이고 손잡이도 `group/command-item`이 아니라 트리거 자신의
+`data-[popup-open]`이라 **처방이 다르다** — 별도 designer 티켓으로 냈다.
 
 - 카운트는 **팔레트를 열 때 세지 않는다.** 셸이 서버에서 렌더할 때 레지스트리 전체를 한 번 훑어
   같이 넘긴다(프로젝트는 한 자릿수다). 못 읽은 프로젝트는 카운트 자리를 연결 배지가 대신한다 —
