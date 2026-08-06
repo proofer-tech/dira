@@ -21421,7 +21421,7 @@ P168처럼 앞의 실측값이 뒤의 입력이 되는 회차가 아니다).
 | P180-1 | 라벨 입력(층 ③ 폼) + 행 라벨 편집 `6ca24538` | developer | — | 완료 |
 | P180-2 | 층 ② 자체 OAuth 발급 교체 + profile GET 1회 → 라벨 자동 기입 `2a8f8589` | developer | — | 완료 |
 | P180-3 | authorize 호스트 교정 — 콘솔 → 구독(`claude.com/cai`) `576e8431` (요구 `b8950201`) | developer | — | 완료 — `be5530d` |
-| P180-4 | **롤백** — 자체 OAuth(P180-2·3)를 걷고 층 ② setup-token pty 복귀 (요구 `ec99feff` · §0-13 §라벨 §롤백) | developer | — | 대기 |
+| P180-4 | **롤백** — 자체 OAuth(P180-2·3)를 걷고 층 ② setup-token pty 복귀 (요구 `ec99feff` · §0-13 §라벨 §롤백) | developer | — | 완료 — `c973c2cd` `e3b08e2` |
 
 P180-2는 P180-1(`6ca24538`, 완료)이 세운 `addToken(raw, label?)` 배관을 그대로 쓴다 —
 이미 master에 있어 `deps`가 아니다. 서버가 `user:profile` 포함 장기 토큰을 거절하면 구현하지
