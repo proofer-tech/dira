@@ -6,6 +6,7 @@ import { mkdir, readFile, readdir, realpath, rm, stat, writeFile } from "node:fs
 import { homedir } from "node:os";
 import path from "node:path";
 import { DEFAULT_KEYMAP, defaultBindings, type Bindings, type Keymap } from "./keymap.ts";
+import { machineState, type MachineState } from "./machine-state.ts";
 import {
   NAME_RE,
   PROJECT_ID_RE,
@@ -433,6 +434,9 @@ export type ProjectSummary = {
    *  못 읽은 프로젝트는 빈 배열이다(`assigned`의 그 규칙 그대로 — 판정 자체가 불가능하면
    *  항목이 없는 게 답이고 그 자리에는 `연결 안 됨`이 이미 서 있다). */
   awaiting: { hash: string; stem: string; mtime: number }[];
+  /** 머신 상태(§0-14 — 셸 알림 종 ⑤·⑥). 프로젝트를 못 읽어도 값이 있다 — 머신이 큐보다 넓다.
+   *  `machineState()`는 모듈 스코프 값을 읽기만 하므로 여기서 새 I/O가 0이다. */
+  machine: MachineState;
 };
 
 /** 프로젝트 하나를 훑는다. 경로가 없으면 읽기를 시도하지 않고 사유만 담는다.
@@ -440,6 +444,8 @@ export type ProjectSummary = {
  *  ponytail: 티켓 파일을 전부 읽어 개수만 센다(listTickets 재사용). 프로젝트가 한 자릿수고
  *  큐가 수십 건이라 이게 제일 싸다 — 수천 건 되면 파일명만 세는 경로를 따로 만든다. */
 export async function readSummary(project: Pick<Project, "root">): Promise<ProjectSummary> {
+  // §0-14 — 프로젝트 읽기와 무관한 머신 스코프 값이라 try 밖이다. 못 읽는 프로젝트에서도 있다.
+  const machine = machineState();
   try {
     const st = await stat(project.root);
     if (!st.isDirectory()) throw new Error(`디렉터리가 아니다: ${project.root}`);
@@ -462,6 +468,7 @@ export async function readSummary(project: Pick<Project, "root">): Promise<Proje
       awaiting: tickets
         .filter(isAwaiting)
         .map((t) => ({ hash: t.hash, stem: t.stem, mtime: t.mtime })),
+      machine,
     };
   } catch (e) {
     return {
@@ -474,6 +481,7 @@ export async function readSummary(project: Pick<Project, "root">): Promise<Proje
       workers: [],
       assigned: [],
       awaiting: [],
+      machine,
     };
   }
 }

@@ -546,3 +546,44 @@ test("readSummary — 연결됨은 카운트, 연결 안 됨은 사유 원문 + 
   assert.deepStrictEqual(gone.awaiting, []); // ④도 같은 규칙이다(§0-10 — 그 자리엔 `연결 안 됨`)
   assert.match(gone.error!, /ENOENT/);
 });
+
+/** §0-14 — `readSummary`가 머신 상태 모듈의 값을 그대로 실어 나르는지. 판정 로직(연속 2회 규칙 ·
+ *  병합 · 신선도)은 `machine-state.test.ts`가 이미 잰다 — 여기서 재는 것은 **배선**뿐이다: 모듈
+ *  스코프에 주입한 값이 `ok.machine`에 그대로 나오면 셸 알림 종 ⑤·⑥이 그 값으로 켜진다는
+ *  뜻이다(같은 주입 패턴을 `machine-state.test.ts` 핫리로드 가드 테스트가 쓴다). */
+test("readSummary — machine(§0-14)이 모듈 상태를 그대로 실어 나른다 (⑤·⑥ 각 1회)", async () => {
+  const root = newQueue({ "w1.sh": "" });
+  const g = globalThis as unknown as {
+    __diraMachineState?: {
+      offline: { offline: boolean; misses: number };
+      resume: { from: number; to: number; kind: "slept" | "poweredOff" } | null;
+      lastHeartbeatAt: number;
+    };
+    __diraMachineTimer?: NodeJS.Timeout;
+  };
+  const savedState = g.__diraMachineState;
+  const savedTimer = g.__diraMachineTimer;
+  try {
+    const now = Date.now();
+    // ⑤ 오프라인 켜짐 + ⑥ 복귀 켜짐(신선도 10분 안)을 한 번에 주입한다 — §0-14가 적은 대로
+    // 복귀 직후 몇 초는 둘이 동시에 참일 수 있다.
+    g.__diraMachineState = {
+      offline: { offline: true, misses: 2 },
+      resume: { from: now - 60_000, to: now - 1_000, kind: "slept" },
+      lastHeartbeatAt: now,
+    };
+    delete g.__diraMachineTimer; // ensureStarted가 다시 만들게 둔다(하트비트 실제 실행은 없다 — unref)
+
+    const ok = await readSummary({ root });
+    assert.equal(ok.machine.offline, true); // ⑤
+    assert.deepEqual(ok.machine.resume, { from: now - 60_000, to: now - 1_000, kind: "slept" }); // ⑥
+
+    // 못 읽는 프로젝트에서도 machine은 있다 — 머신이 큐보다 넓다(§0-14)
+    const gone = await readSummary({ root: path.join(root, "없는디렉터리") });
+    assert.equal(gone.machine.offline, true);
+  } finally {
+    if (g.__diraMachineTimer) clearInterval(g.__diraMachineTimer);
+    g.__diraMachineState = savedState;
+    g.__diraMachineTimer = savedTimer;
+  }
+});

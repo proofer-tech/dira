@@ -12,6 +12,7 @@ import {
   Clock,
   CloudOff,
   MessageSquareReply,
+  RotateCcw,
   TriangleAlert,
   Unplug,
 } from "lucide-react";
@@ -32,10 +33,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { readAuth, readOtherEngineAuth } from "@/lib/auth";
+import type { ResumeEvent } from "@/lib/machine-state";
 import { readSummary, readProjects } from "@/lib/projects";
 import { engineLimits, formatTokens, listUsage, usageRates, type EngineLimit } from "@/lib/usage";
 import { engineName, workerGroups } from "@/lib/workers";
-import { tildePath, timeLabel } from "@/lib/urls";
+import { dateTimeLabel, tildePath, timeLabel } from "@/lib/urls";
 import { cn } from "@/lib/utils";
 
 export default async function ProjectLayout({
@@ -66,6 +68,8 @@ export default async function ProjectLayout({
         assigned: s.assigned, // §0-2 알림용. 전환기는 이 필드를 쓰지 않는다
         // §0-10 ④ 알림용. 판정은 `readSummary`가 `isAwaiting`으로 이미 했다 — 새 fs 읽기 0
         awaiting: s.awaiting,
+        // §0-10 ⑤⑥ 알림용(§0-14). 프로젝트마다 값이 같다(머신 스코프) — 전환기는 이 필드를 쓰지 않는다
+        machine: s.machine,
         // §0-10 ③의 `할당 해제`가 부를 워커. 티켓 상세와 **같은 규칙**이다(`workers[0]`) —
         // 어느 워커 스크립트든 같은 큐를 되돌리므로 첫 번째면 된다. 0개면 컴포넌트가 비활성 + 사유다
         worker: s.workers[0]?.name ?? null,
@@ -129,19 +133,24 @@ export default async function ProjectLayout({
     otherEngines,
   };
 
-  // 셸 알림 종이 세는 넷 (§0-10). **판정식은 §0-4 · §0-5 · §0-2 · 결정 5가 그대로 갖는다** —
-  // 아래 넷은 그 절들이 쓰던 조건 그대로이고 바뀐 것은 그리는 자리와 문구뿐이다. 순서도 그대로다:
-  // 인증이 없으면 아무것도 안 돌고, 다음이 워커 전원, 마지막이 티켓 몇 건이다(위로 갈수록 넓다).
-  // ③과 ④는 둘 다 티켓이라 범위가 같고, 그때는 **사고가 설계보다 위**다(③은 엔진이 만들지 않는
-  // 조합이고 ④는 왕복의 정상 단계다 — ④가 종에 드는 것은 이상 상태라서가 아니라 사람이 답을
-  // 써야 그 큐가 다시 돌기 때문이다. §0-10 *④는 왜 여기 드나* · 결정 4는 무수정이다).
+  // 셸 알림 종이 세는 여섯 (§0-10). **판정식은 §0-14 · §0-4 · §0-5 · §0-2 · 결정 5가 그대로
+  // 갖는다** — 아래 여섯은 그 절들이 쓰던 조건 그대로이고 바뀐 것은 그리는 자리와 문구뿐이다.
+  // 순서는 ⑤→⑥→①→②→③→④다(§0-14 — 머신이 큐보다 넓다. 네트워크가 없으면 인증이 있어도
+  // 아무것도 안 된다). ①~④ 안에서는 종전 순서 그대로다: 인증이 없으면 아무것도 안 돌고, 다음이
+  // 워커 전원, 마지막이 티켓 몇 건이다. ③과 ④는 둘 다 티켓이라 범위가 같고, 그때는 **사고가
+  // 설계보다 위**다(③은 엔진이 만들지 않는 조합이고 ④는 왕복의 정상 단계다 — ④가 종에 드는
+  // 것은 이상 상태라서가 아니라 사람이 답을 써야 그 큐가 다시 돌기 때문이다. §0-10 *④는 왜 여기
+  // 드나* · 결정 4는 무수정이다). ⑤⑥은 `current.connected`를 안 건다 — 머신 상태는 큐를 못
+  // 읽어도 참이다(§0-14).
   const alerts = {
+    offline: current.machine.offline,
+    resume: current.machine.resume !== null,
     auth: !auth.savedAt && current.claude,
     failures: current.connected && current.failures.length > 0,
     assigned: current.connected && current.assigned.length > 0,
     awaiting: current.connected && current.awaiting.length > 0,
   };
-  // 배지는 **켜진 알림의 개수 0~4**이다 — 건수를 합치지 않는다(§0-10: 단위가 넷 다 다르다).
+  // 배지는 **켜진 알림의 개수 0~6**이다 — 건수를 합치지 않는다(⑤⑥이 들어와 4에서 6이 됐다 — §0-14).
   const alertCount = Object.values(alerts).filter(Boolean).length;
   const alertLabel = alertCount > 0 ? `알림 ${alertCount}건` : "알림 없음";
 
@@ -202,6 +211,7 @@ export default async function ProjectLayout({
                 id={id}
                 auth={auth}
                 alerts={alerts}
+                resume={current.machine.resume}
                 failures={current.failures}
                 assigned={current.assigned}
                 awaiting={current.awaiting}
@@ -308,12 +318,13 @@ export default async function ProjectLayout({
  *
  *  항목 하나가 배너 하나를 대신한다 — 해부(아이콘 열 16px + `gap-x-2`)는 `Alert`의 것 그대로고
  *  그릇만 `div`다. `Alert`로 감싸지 않는 이유: `--popover`가 `--card`와 같은 값이라 같은 색
- *  상자 안에 같은 색 상자가 넷 서고, 사람이 치우라고 한 사각형 더미가 팝오버 안으로 이사한다.
+ *  상자 안에 같은 색 상자가 여섯 서고, 사람이 치우라고 한 사각형 더미가 팝오버 안으로 이사한다.
  *  **꺼진 알림은 항목이 아예 없다** — 회색으로 눕히지 않는다. */
 function NotificationItems({
   id,
   auth,
   alerts,
+  resume,
   failures,
   assigned,
   awaiting,
@@ -321,13 +332,45 @@ function NotificationItems({
 }: {
   id: string;
   auth: AuthView;
-  alerts: { auth: boolean; failures: boolean; assigned: boolean; awaiting: boolean };
+  alerts: { offline: boolean; resume: boolean; auth: boolean; failures: boolean; assigned: boolean; awaiting: boolean };
+  resume: ResumeEvent | null;
   failures: { name: string; reason: string; log: string; at: string }[];
   assigned: { hash: string; stem: string }[];
   awaiting: { hash: string; stem: string; mtime: number }[];
   worker: string | null;
 }) {
   const rows = [
+    // ⑤ 오프라인(§0-14). 살아 있는 판정이다 — 재접속되면 다음 박에 저절로 꺼진다. 버튼도
+    // 나열도 없다(§0-10 문구 표 ⑤) — 행이 셋(제목·본문·문장)뿐이라 ①~④와 달리 `grid gap-2`
+    // 나열 블록이 없다.
+    alerts.offline && (
+      <>
+        <Unplug aria-hidden className="mt-0.5 size-4 text-status-stale" />
+        <p className="col-start-2 text-sm font-medium">네트워크가 끊겨 있습니다</p>
+        <p className="col-start-2 text-sm text-foreground">
+          세션이 열리지 못하고 티켓은 그때마다 대기로 돌아갑니다. 연결이 돌아오면 저절로
+          재개됩니다.
+        </p>
+        <p className="col-start-2 text-sm text-foreground">Wi-Fi 또는 유선 연결을 확인하세요.</p>
+      </>
+    ),
+    // ⑥ 복귀(§0-14). 유일하게 과거를 말하는 항목이고 신선도 10분이 그것을 이력이 아니게 한다.
+    // 제목은 kind로 갈린다 — `Moon` 같은 한 획으로 둘을 덮지 않는 것과 같은 이유로 문구도 하나가
+    // 아니다. 시각 표기는 `timeLabel`이 아니라 `dateTimeLabel`이다(§비주얼 §28 ⑤ — 다른 날에도
+    // 시각을 안 버린다).
+    resume && (
+      <>
+        <RotateCcw aria-hidden className="mt-0.5 size-4 text-status-blocked" />
+        <p className="col-start-2 text-sm font-medium">
+          {resume.kind === "slept" ? "잠자기에서 복귀했습니다" : "꺼져 있다가 켜졌습니다"}
+        </p>
+        <p className="col-start-2 text-sm text-foreground">
+          {dateTimeLabel(resume.from)}부터 {dateTimeLabel(resume.to)}까지 큐가 멈춰 있었습니다.
+          잃은 것은 없습니다 — 이미 다시 돌고 있습니다.
+        </p>
+        <p className="col-start-2 text-sm text-foreground">고칠 일은 없습니다.</p>
+      </>
+    ),
     // ① 인증 (§0-4). 토큰 파일이 없으면 `tick.sh:61`이 매 tick마다 조용히 `exit 0`한다 —
     // 화면에는 "티켓이 `대기`인데 아무 일도 안 일어난다"만 보인다. 그 침묵을 여기서 깬다.
     alerts.auth && (

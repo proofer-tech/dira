@@ -145,6 +145,21 @@ export function timeLabel(at: number, now = Date.now()): string {
   return sameDay ? `${p(d.getHours())}:${p(d.getMinutes())}` : `${d.getMonth() + 1}/${d.getDate()}`;
 }
 
+/** 셸 알림 종 ⑥(머신 복귀, §0-14 · §비주얼 §28)의 `<from>`·`<to>` 표기 — **같은 날이면
+ *  `HH:MM`, 아니면 `M/D HH:MM`**. `timeLabel`을 그대로 못 쓰는 이유: 그 함수는 다른 날이면
+ *  시각을 버려서(`M/D`만) 밤샘 복귀가 `8/5부터 09:12까지`가 된다 — 이쪽은 시각을 버리지 않는다.
+ *  `from`·`to`는 **각각** 지금(렌더 시각) 기준으로 "같은 날"을 따로 재므로 한 이벤트 안에서도
+ *  둘의 표기가 갈릴 수 있다(§비주얼 §28 ⑤). */
+export function dateTimeLabel(at: number, now = Date.now()): string {
+  const d = new Date(at);
+  const n = new Date(now);
+  const sameDay =
+    d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate();
+  const p = (v: number) => String(v).padStart(2, "0");
+  const time = `${p(d.getHours())}:${p(d.getMinutes())}`;
+  return sameDay ? time : `${d.getMonth() + 1}/${d.getDate()} ${time}`;
+}
+
 /** 홈 대화 목록의 한 줄들 (§비주얼 §24 대화 목록) — **정렬 · 제목 · 시각이 여기서 끝난다.**
  *
  *  - **만든 시각 내림차순**(최근이 위). ISO 문자열이라 사전순이 곧 시간순이고, 옛 형식에서

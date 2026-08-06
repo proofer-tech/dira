@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert";
 import {
   chatRows,
+  dateTimeLabel,
   doneLimit,
   DONE_LANE_LIMIT,
   engineCan,
@@ -354,6 +355,17 @@ test("timeLabel — 오늘은 HH:MM · 다른 날은 M/D (24시간제)", () => {
   assert.equal(timeLabel(new Date(2026, 7, 29, 15, 29).getTime(), now), "8/29");
   // 자정 경계: 5분 뒤여도 날짜가 다르면 `M/D`다 — 시각만 쓰면 "오늘 그 시각"으로 읽힌다
   assert.equal(timeLabel(new Date(2026, 7, 2, 0, 5).getTime(), new Date(2026, 7, 1, 23, 55).getTime()), "8/2");
+});
+
+/** §0-14 · §비주얼 §28 ⑤ — ⑥의 `<from>~<to>` 표기. `timeLabel`과 갈리는 자리는 다른 날일 때뿐이다:
+ *  그쪽은 시각을 버리는데(`M/D`만) 여기는 날짜를 시각 앞에 붙인다(`M/D HH:MM`) — 밤샘 복귀의
+ *  두 끝이 같은 단위(시각)를 유지해야 한다. */
+test("dateTimeLabel — 같은 날은 HH:MM · 다른 날은 M/D HH:MM", () => {
+  const now = new Date(2026, 7, 6, 9, 12).getTime(); // 2026-08-06 09:12 로컬(복귀 직후)
+  assert.equal(dateTimeLabel(new Date(2026, 7, 6, 8, 40).getTime(), now), "08:40"); // 같은 날
+  // 밤샘: from은 어제 23:40 → 날짜가 붙는다. to는 오늘 09:12 → 안 붙는다(§0-14 실측 예시 그대로)
+  assert.equal(dateTimeLabel(new Date(2026, 7, 5, 23, 40).getTime(), now), "8/5 23:40");
+  assert.equal(dateTimeLabel(now, now), "09:12");
 });
 
 /** 홈 대화 목록의 한 줄 (§비주얼 §24 대화 목록). 파일이 주는 순서와 화면이 그리는 순서가 다르고
