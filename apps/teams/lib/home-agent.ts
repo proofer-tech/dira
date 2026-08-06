@@ -825,9 +825,11 @@ function judge(
       // 그때 `stream_event`는 0건이라 `live.partial`이 비어 있다(흐르다 만 글과 구분된다).
       reason: result.api_error_status === 401 || result.api_error_status === 403 ? "auth" : "other",
       ok: false,
+      // `subtype:"success"`는 위 주석대로 오탐이다 — 화면에 새는 걸 여기서 거른다.
       output:
-        [text, String(result.subtype ?? ""), stderr.trim()].filter(Boolean).join("\n") ||
-        "엔진이 빈 답을 냈습니다.",
+        [text, result.subtype === "success" ? "" : String(result.subtype ?? ""), stderr.trim()]
+          .filter(Boolean)
+          .join("\n") || "엔진이 빈 답을 냈습니다.",
     };
   }
   return { ok: true, output: text };

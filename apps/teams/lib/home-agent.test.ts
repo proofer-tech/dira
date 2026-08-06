@@ -710,6 +710,9 @@ case "$FAKE_MODE" in
   auth)   # 실패 ② — stream_event 0건이라 누적분이 비어 있다
     say '{"type":"result","is_error":true,"subtype":"success","api_error_status":401,"result":"Failed to authenticate. API Error: 401 OAuth access token is invalid."}'
     exit 1 ;;
+  ratelimit)  # 티켓 87a80b94 실측 — 레이트리밋도 API 에러라 subtype이 success로 온다(401/403은 아니다)
+    say '{"type":"result","is_error":true,"subtype":"success","api_error_status":null,"result":"weekly limit hit, resets later"}'
+    exit 1 ;;
   hang)   # 중지 대상. SIGTERM을 받아 **스스로** 143으로 나가면서 받은 데까지를 남긴다
     trap 'keep "받은 데까지"; exit 143' TERM
     say '{"type":"stream_event","event":{"type":"message_start"},"parent_tool_use_id":null}'
@@ -935,6 +938,17 @@ test("실패 ② 인증 — 새 형식에서도 판정은 `api_error_status` 401
   // 세션을 못 연 채로 끝났으므로 그 줄은 **여전히 `fresh`다** — 다음 질문은 `--session-id`로
   // 다시 연다(안 열린 세션에 `--resume`을 걸면 그 화면은 영영 안 산다)
   assert.strictEqual((await readHome(project.id)).conversations.at(-1)?.fresh, true);
+});
+
+test("실패 ⑤ 기타(레이트리밋 등) — subtype이 항상 success라 그 원문이 배너에 새면 안 된다(87a80b94)", async () => {
+  const project = { id: "ratelimit-test", name: "큐", root: CWD };
+  await withFake("ratelimit", async () => {
+    assert.strictEqual(await startAsk(project, "질문"), null);
+    const end = await poller(project.id).until((c) => !c.running);
+    assert.strictEqual(end.failed?.reason, "other");
+    assert.match(end.failed?.output ?? "", /weekly limit hit/);
+    assert.doesNotMatch(end.failed?.output ?? "", /success/);
+  });
 });
 
 test("한 대화에 한 질문 — 둘째는 기다리지 않고 거절되고, 폴링 한 번이 답을 집어 간다", async () => {
