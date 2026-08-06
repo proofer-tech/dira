@@ -313,6 +313,49 @@ export function mergeProgress<E extends { ts?: string }, T extends { role: strin
   return out;
 }
 
+/** `mergeProgress`가 짠 한 줄기를 **말풍선과 그 사이 묶음**으로 (§2-6 ②, designer `f0202829`).
+ *  경계는 말풍선이다 — 스레드 항목과 `isBubble`이 참인 사건. 그 사이(상자 시작·끝 포함)의 연속
+ *  사건이 접힌 한 버킷이 된다. **0건이면 버킷을 안 만든다**(빈 묶음 줄은 소음이다) — `n`이
+ *  1이어도 만드는 것과 짝을 이루는 규칙이다. */
+export type GroupedItem<E, T> =
+  | { kind: "event"; event: E }
+  | { kind: "thread"; thread: T }
+  | { kind: "bundle"; events: E[] };
+
+export function groupProgress<E, T>(
+  items: ProgressItem<E, T>[],
+  isBubble: (e: E) => boolean,
+): GroupedItem<E, T>[] {
+  const out: GroupedItem<E, T>[] = [];
+  let bucket: E[] = [];
+  const flush = () => {
+    if (bucket.length) {
+      out.push({ kind: "bundle", events: bucket });
+      bucket = [];
+    }
+  };
+  for (const it of items) {
+    if (it.event !== undefined) {
+      if (isBubble(it.event)) {
+        flush();
+        out.push({ kind: "event", event: it.event });
+      } else {
+        bucket.push(it.event);
+      }
+    } else {
+      flush();
+      out.push({ kind: "thread", thread: it.thread as T });
+    }
+  }
+  flush();
+  return out;
+}
+
+/** 진행 표식 문구(§2-6 ③) — 파싱된 **마지막 스트림 레코드**의 종류 하나로 갈린다.
+ *  `thinking` 뒤에 아무 레코드가 붙는 순간 종전 문구로 돌아간다. */
+export const progressMarkerText = (lastKind?: string): string =>
+  lastKind === "thinking" ? "생각하는 중 · 2초마다" : "따라가는 중 · 2초마다";
+
 /** 페르소나 색 팔레트 키 (DESIGN.md §비주얼 §12). 레지스트리에 이 문자열 그대로 저장된다.
  *  **자유 hex가 아니라 고정 8색인 이유**는 §5에 있다 — 라이트/다크 두 벌과 대비를 사람이
  *  즉석에서 못 맞춘다. 서버(레지스트리 쓰기 검증)와 클라이언트(스와치 목록)가 같은 목록을

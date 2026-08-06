@@ -1,11 +1,15 @@
 "use client";
 
-/** 진행 기록 (DESIGN.md §2-3 · §비주얼 §29) — 종전 세션 스트림(§2-1 · §9)이 **한 상자**로 넓어졌다.
+/** 진행 기록 (DESIGN.md §2-3 · §비주얼 §29 · §2-6) — 종전 세션 스트림(§2-1 · §9)이 **한 상자**로 넓어졌다.
  *
- *  상자 안에 문법이 둘이다. 세션이 흘린 **스트림 줄**(§9 — 접힌 `<Marker>` 한 줄 / 전면 전문 줄.
- *  색 토큰은 하나도 안 쓴다. 갈리는 건 밝기·폭·서체 셋이다)과 사람 둘이 주고받은 **말풍선**
- *  (§13 — 테두리 네 변 + 좌우 정렬이 역할을 가른다). 넷째 축은 **그릇**이다(§29 ①): 줄에는
- *  테두리가 없고 말풍선에는 있다. 순서는 `mergeProgress`(`lib/urls.ts`)가 정한다 — 시간순 한 줄기다.
+ *  상자 안에 문법이 둘이다. 세션이 흘린 **스트림 줄**(§9 — 접힌 `<Marker>` 한 줄. 색 토큰은 하나도
+ *  안 쓴다)과 대화 넷이 서는 **말풍선**(§13 · §2-6 — 테두리 네 변 + 좌우 정렬이 역할을 가른다).
+ *  **§2-6이 그 둘의 경계를 다시 그었다** — assistant `text`와 사람이 친 말(참견 · 첫 아닌 사용자
+ *  프롬프트)만 말풍선이고, 나머지 사건(`tool_use`·`thinking`·`tool_result`·세션 프롬프트, `서브`
+ *  포함)은 말풍선 사이에서 접힌 묶음 한 항목(`기록 n건`)이 된다 — 펼치면 그 안의 사건 줄들이
+ *  §9 그대로 나온다. 넷째 축은 **그릇**이다(§29 ①): 줄·묶음 줄에는 테두리가 없고 말풍선에는 있다.
+ *  순서는 `mergeProgress`가 정하고(시간순 한 줄기), `groupProgress`(둘 다 `lib/urls.ts`)가 그 줄기를
+ *  말풍선·묶음으로 가른다.
  *
  *  읽기·파싱은 전부 `lib/transcript.ts`고 여기는 그리기만 한다. 접기는 네이티브 `<details>`,
  *  툴팁은 네이티브 `title`, 스크롤도 네이티브 — `message-scroller`는 이 상자에 안 들어간다
@@ -49,7 +53,15 @@ import type { InterjectReason } from "@/lib/interject";
 // 스레드를 엮는 쪽은 서버(`lib/queue.ts threadOf`)다 — 여기 오는 건 타입뿐이라 `node:*`를 안 끈다
 import type { ThreadItem } from "@/lib/queue";
 import type { StreamEvent } from "@/lib/transcript";
-import { engineCan, expandable, interjectMode, mergeProgress, type InterjectMode } from "@/lib/urls";
+import {
+  engineCan,
+  expandable,
+  groupProgress,
+  interjectMode,
+  mergeProgress,
+  progressMarkerText,
+  type InterjectMode,
+} from "@/lib/urls";
 import { cn } from "@/lib/utils";
 
 /** 레코드의 `timestamp`는 UTC다 — **로컬 시간으로 렌더한다**(§2-1: `13:55:10Z` = KST `22:55:10`).
@@ -166,10 +178,14 @@ export function SessionStream({
   };
 
   // 시간순 한 줄기(§2-3 ②) — 순서 규칙은 `lib/urls.ts`의 순수 함수가 들고 있고 테스트가 못박는다.
-  const items = mergeProgress(events, thread);
+  // `groupProgress`가 그 줄기를 말풍선(경계)과 그 사이 묶음으로 가른다(§2-6 ②) — 말풍선인가는
+  // `label === ""` 하나로 판정한다(assistant `text` · 참견 · 첫 아닌 사용자 프롬프트가 전부 빈 label).
+  const grouped = groupProgress(mergeProgress(events, thread), (e) => e.label === "");
   // 말풍선의 key는 **스레드 안의 자리**다. 병합 배열의 index로 잡으면 사건이 붙을 때마다 맨 끝
   // 질문(답 없는 꼬리 · §2-3 ②)의 key가 밀려 매 폴링에 `<Markdown>`이 다시 마운트된다.
   const threadKey = new Map(thread.map((t, i) => [t, `t${i}`]));
+  // 진행 표식 문구(§2-6 ③) — **파싱된 마지막 스트림 레코드** 하나가 판정한다(병합·묶음과 무관).
+  const markerText = progressMarkerText(events.at(-1)?.kind);
 
   return (
     // `min-w-0`은 워커 다이얼로그가 가로로 새는 것을 막는다(§비주얼 §21 · 요구 `fff27e81`).
@@ -216,7 +232,7 @@ export function SessionStream({
       )}
       {/* 상자는 **그릴 것이 있을 때만** 선다. codex이고 스레드도 없으면 위 `<EmptyState>` 하나가
           이 자리의 전부다(종전 그대로) — 빈 상자를 하나 더 그리는 것은 소음이다(§29 ④). */}
-      {(stream || items.length > 0) && (
+      {(stream || grouped.length > 0) && (
         /* 배경에 틴트를 깔지 않는다 — `--muted`를 깔면 접힌 줄의 `--muted-foreground`가 4.34로
             AA 미달이고(§9 함정 1) 말풍선 실측표 7종도 이 면 위에서 잰 값이다(§29 ①).
             512px인 이유는 머리와 바닥이 한 화면에 같이 들어와서다 — 참견 최악 840에 852까지
@@ -230,17 +246,11 @@ export function SessionStream({
             stream ? "h-[32rem]" : "max-h-[32rem]",
           )}
         >
-          {items.map((it) =>
-            it.event ? (
-              it.event.label ? (
-                <Row key={it.event.key} e={it.event} onToggle={onToggle} />
-              ) : (
-                <FullText key={it.event.key} e={it.event} />
-              )
-            ) : (
-              <ThreadRow key={threadKey.get(it.thread)} item={it.thread} />
-            ),
-          )}
+          {grouped.map((g) => {
+            if (g.kind === "event") return <StreamBubble key={g.event.key} e={g.event} />;
+            if (g.kind === "thread") return <ThreadRow key={threadKey.get(g.thread)} item={g.thread} />;
+            return <Bundle key={g.events[0].key} events={g.events} onToggle={onToggle} />;
+          })}
           {/* 진행 표식(§18 ④) — 마지막 사건 다음 줄이 올 자리를 지킨다. **말풍선 아래로 안
               내려간다**: `.wip`인 동안 상자의 맨 끝은 항상 스트림 사건이고(답 없는 질문은
               열린 티켓에만 있다 — §29 ③) 옛 답변은 `birth`가 지금 세션 첫 사건보다 앞이다.
@@ -249,14 +259,15 @@ export function SessionStream({
               것이 없으니 hover도 없다. `mx-1`이 8px 점을 16px 칸(= MarkerIcon 폭) 가운데 세워
               문구를 다른 두 줄과 같은 x=36px에 맞춘다. // ponytail: 정렬용 래퍼 대신 마진 4px.
               점이 커지면 그때 래퍼. 문구를 같이 드는 이유는 `prefers-reduced-motion`이다 —
-              모션만으로 말하지 않는다. */}
+              모션만으로 말하지 않는다. **문구는 마지막 레코드가 `thinking`이면 갈린다**(§2-6 ③,
+              요구 `cbdc2cb4`) — 판정은 `progressMarkerText`(`lib/urls.ts`) 하나다. */}
           {live && (
             <div className="flex items-center gap-2 px-3 text-xs leading-6 text-muted-foreground">
               <span
                 aria-hidden
                 className="mx-1 size-2 shrink-0 animate-wip-pulse rounded-full bg-muted-foreground motion-reduce:animate-none"
               />
-              따라가는 중 · 2초마다
+              {markerText}
             </div>
           )}
         </div>
@@ -636,6 +647,9 @@ function ProgressForm({
   );
 }
 
+/** 접힌 줄·묶음 줄이 같이 쓰는 거터(§9 · §2-6 ②) — `Row`·`Bundle` 공용. */
+const LINE = "px-3 leading-6";
+
 /** 접힌 줄 — `<Marker>` 한 줄. `tool_use`·`thinking`·`tool_result`·세션 프롬프트가 전부 이 모양이다.
  *  고정폭 4열은 (a)가 버렸다(요구 `e3020347`) — 시각(mono 8자)만 세로로 맞고 도구명부터 줄마다
  *  어긋난다. 도구명에 `max-w-[7rem]`만 남은 것이 종전 고정폭이 묶던 흔들림 범위를 대신한다.
@@ -666,14 +680,12 @@ function Row({
       </MarkerContent>
     </>
   );
-  const line = "px-3 leading-6";
-
   // 펼칠 것이 없으면 어포던스도 없다(`expandable` — 판정은 `lib/urls.ts` 하나다).
   // 여기 오는 건 본문이 암호화된 `thinking`이다(실측 75/75). 줄 자체는 그대로 흘리고
   // — 빼면 생각하는 동안 화면이 조용해진다 — `MarkerIcon` 칸만 §9대로 **비워서 유지**한다.
   if (!expandable(e)) {
     return (
-      <Marker className={line}>
+      <Marker className={LINE}>
         <MarkerIcon />
         {cells}
       </Marker>
@@ -688,7 +700,7 @@ function Row({
       <Marker
         render={<summary />}
         className={cn(
-          line,
+          LINE,
           "cursor-pointer list-none hover:bg-muted/50 hover:text-foreground [&::-webkit-details-marker]:hidden",
         )}
       >
@@ -731,27 +743,64 @@ function Row({
   );
 }
 
-/** 전문 줄 — assistant `text`, 첫 번째 이후의 사용자 프롬프트, 그리고 **참견**(§2-2).
- *  **`<Marker>`가 아니다.** 다른 모양이라는 것 자체가 구분이고(§9), 시각도 어포던스도 없다 —
- *  전문이 이미 줄이라 펼칠 것이 없다(§2-1 표의 `펼치면 —`).
- *  사용자 쪽만 왼쪽 선을 받는다: 밖에서 들어온 말이라는 표시에 색을 쓰면 §0이 깨진다(정상 흐름이다).
- *  **참견도 밖에서 들어온 말이라 같은 선을 받고**, 갈리는 것은 §9가 `서브`에 쓴 것과 같은
- *  텍스트 마커 하나다 — §비주얼 §21이 그 값을 확정했다(`셋째 모양을 만들지 않는다`).
- *  새 색 토큰도 새 모양도 없다. */
-function FullText({ e }: { e: StreamEvent }) {
-  const outside = e.kind === "prompt" || e.kind === "interject";
+/** 묶음 접힌 줄 — 말풍선 사이 연속 사건은 한 항목이다(§2-6 ② · §비주얼 §9 §묶음 접힌 줄).
+ *  접힌 줄과 **같은 그릇**(`<details>` + `<Marker render={<summary />}>`)이라 이 겹은 그릇을 안
+ *  늘린다. 시각·도구명 슬롯은 없다 — 묶음 안에 도구가 여럿이라 하나를 골라 세우면 거짓말이다.
+ *  `기록 n건`이 그 자리에 선다(sans + `tabular-nums`, `truncate`도 `title`도 없다 — 고정 문구라
+ *  안 잘린다). 펼치면 이 절의 사건 줄들이 **그대로** 나온다 — 들여쓰기를 안 늘린다. */
+function Bundle({
+  events,
+  onToggle,
+}: {
+  events: StreamEvent[];
+  onToggle: (ev: React.SyntheticEvent<HTMLDetailsElement>) => void;
+}) {
   return (
-    <div className="px-3">
-      <p
+    <details className="group" onToggle={onToggle}>
+      <Marker
+        render={<summary />}
         className={cn(
-          "my-1 ml-6 text-sm break-words whitespace-pre-wrap text-foreground",
-          outside && "border-l-2 border-border pl-3",
+          LINE,
+          "cursor-pointer list-none hover:bg-muted/50 hover:text-foreground [&::-webkit-details-marker]:hidden",
         )}
       >
-        {e.sidechain && <span className="text-muted-foreground">서브 · </span>}
-        {e.kind === "interject" && <span className="text-muted-foreground">참견 · </span>}
-        {e.body}
-      </p>
+        <MarkerIcon>
+          <ChevronRight className="group-open:rotate-90" />
+        </MarkerIcon>
+        <MarkerContent className="tabular-nums">기록 {events.length}건</MarkerContent>
+      </Marker>
+      {events.map((e) => (
+        <Row key={e.key} e={e} onToggle={onToggle} />
+      ))}
+    </details>
+  );
+}
+
+/** 스트림 말풍선 — assistant `text`와 사람이 친 말(§2-6 ① · §비주얼 §9 §스트림 말풍선).
+ *  §13 말풍선 계약을 그대로 입는다(`outline` · `p-3` · `rounded-xl` · `max-w-[80%]` · 헤더는
+ *  말풍선 밖 · 위 · 본문은 `<Markdown>`). 이 컴포넌트가 정하는 것은 셋뿐이다: 좌우 · 헤더 낱말 ·
+ *  줄바꿈. **시각을 안 붙인다** — 스레드 질문(§2-3 ②)과 같은 판정이고, 근거만 다르다(저쪽은
+ *  시각이 없어서, 여기는 있는데도 안 붙인다 — §29 ①). hover도 펼침도 없다.
+ *
+ *  좌 = `세션`(assistant `text`) · 우 = `사람`(첫 아닌 사용자 프롬프트 · 참견) — 파싱이 아는 것이
+ *  그것뿐이다. 줄바꿈은 §10 면제와 같은 판정이다: 세션은 파일에 쓰듯 쓴 글이라 `breaks` 없이,
+ *  사람은 입력칸에 친 글이라 `breaks="all"`로 친 줄바꿈이 정본이다. */
+function StreamBubble({ e }: { e: StreamEvent }) {
+  const session = e.kind === "text";
+  const align = session ? "start" : "end";
+  const who = session ? "세션" : "사람";
+  return (
+    <div className="px-3 py-2">
+      <Message align={align}>
+        <MessageContent>
+          <MessageHeader>{e.sidechain ? `서브 · ${who}` : who}</MessageHeader>
+          <Bubble variant="outline" align={align}>
+            <BubbleContent>
+              <Markdown text={e.body} breaks={session ? undefined : "all"} />
+            </BubbleContent>
+          </Bubble>
+        </MessageContent>
+      </Message>
     </div>
   );
 }

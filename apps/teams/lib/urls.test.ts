@@ -8,10 +8,12 @@ import {
   engineCan,
   engineMissing,
   findMatches,
+  groupProgress,
   hasFindBar,
   interjectMode,
   mergeProgress,
   parentPath,
+  progressMarkerText,
   projectPath,
   relationPath,
   rowLimit,
@@ -19,6 +21,8 @@ import {
   screenOf,
   timeLabel,
   type Anchor,
+  type GroupedItem,
+  type ProgressItem,
 } from "./urls.ts";
 
 /** 전환기는 **같은 화면 종류를 유지한다**(DESIGN.md §0-1). 홈이 그 규칙의 다섯 번째 줄이다 —
@@ -340,6 +344,50 @@ test("mergeProgress — 원본을 통째로 들고 있다(뭉개지 않는다 �
   const rows = mergeProgress([e], [t]);
   assert.deepEqual(rows, [{ thread: t }, { event: e }]);
   assert.equal(rows[1].event, e); // 사본이 아니라 같은 객체다
+});
+
+/** 말풍선 사이 묶음 (DESIGN.md §2-6 ②, designer `f0202829`). `label`이 빈 사건이 말풍선이고
+ *  (assistant `text` · 참견 · 첫 아닌 사용자 프롬프트), 나머지가 묶이는 사건이다. */
+type EvL = { key: string; ts: string; label: string };
+type Th = { heading: string };
+const isBubble = (e: EvL) => e.label === "";
+const evL = (key: string, label: string): EvL => ({ key, ts: key, label });
+const group = (items: ProgressItem<EvL, Th>[]) => groupProgress<EvL, Th>(items, isBubble);
+/** 그룹 하나를 납작한 표기로 — `event`는 key, `thread`는 heading, `bundle`은 `묶음(n)`. */
+const gorder = (rows: GroupedItem<EvL, Th>[]) =>
+  rows.map((r) =>
+    r.kind === "event" ? r.event.key : r.kind === "thread" ? r.thread.heading : `묶음(${r.events.length})`,
+  );
+
+test("groupProgress ① — 말풍선 사이 연속 사건은 한 묶음이다", () => {
+  const items: ProgressItem<EvL, Th>[] = [
+    { event: evL("e1", "세션 프롬프트") }, // 묶임
+    { event: evL("e2", "Bash") }, // 묶임
+    { event: evL("e3", "") }, // 말풍선(assistant text)
+    { event: evL("e4", "결과") }, // 다음 묶음 시작
+    { thread: { heading: "질문 1" } },
+  ];
+  assert.deepEqual(gorder(group(items)), ["묶음(2)", "e3", "묶음(1)", "질문 1"]);
+});
+
+test("groupProgress ② — 0건이면 묶음 줄 자체가 없다(상자 시작·끝 포함)", () => {
+  // 말풍선이 연달아 서면 그 사이엔 아무것도 안 그린다 — 빈 `기록 0건`을 세우지 않는다.
+  const items: ProgressItem<EvL, Th>[] = [{ event: evL("e1", "") }, { event: evL("e2", "") }];
+  assert.deepEqual(gorder(group(items)), ["e1", "e2"]);
+});
+
+test("groupProgress ③ — 꼬리 묶음도 만든다(마지막 말풍선 뒤)", () => {
+  const items: ProgressItem<EvL, Th>[] = [{ event: evL("e1", "") }, { event: evL("e2", "Bash") }];
+  const groups = group(items);
+  assert.deepEqual(gorder(groups), ["e1", "묶음(1)"]);
+  // 묶음의 key는 그 묶음 첫 사건의 key다(§2-6 ② — 폴링이 뒤에 사건을 더해도 첫 사건은 안 바뀐다).
+  assert.equal(groups[1].kind === "bundle" && groups[1].events[0].key, "e2");
+});
+
+test("progressMarkerText — 마지막 레코드가 thinking이면 '생각하는 중', 그 외엔 종전 문구", () => {
+  assert.equal(progressMarkerText("thinking"), "생각하는 중 · 2초마다");
+  assert.equal(progressMarkerText("tool_use"), "따라가는 중 · 2초마다");
+  assert.equal(progressMarkerText(undefined), "따라가는 중 · 2초마다");
 });
 
 /** §비주얼 §26 ④. `lib/usage.ts`에 있던 `resetLabel`이 이 파일로 온 검증이다 — 홈 대화 목록(§24)이
