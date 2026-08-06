@@ -1,6 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { resolveConfig } from "./projects.ts";
@@ -10,6 +18,7 @@ import {
   deleteFile,
   isCoreLayerName,
   listTree,
+  mirrorCore,
   readCore,
   readTextFile,
   renameFile,
@@ -295,4 +304,58 @@ test("최상위 CORE*.md는 listTree에 안 뜬다 — 저장·삭제·이름변
   // 저장·삭제·이름변경 경로 자체는 열려 있다(트리에서 뺀 것과 서버 방어를 혼동하지 않는다) —
   // 이 티켓이 막는 것은 "화면이 편집기를 보여주는 것"이고 fs 방어는 §신뢰 경계 별개다.
   // 여기서는 "안 보인다"만 못박는다.
+});
+
+// ── 미러링 (§프롬프트 층 결정 8-c) ───────────────────────────────────────────
+
+test("CORE.md가 없는 큐(폴백)는 미러링이 아무것도 안 쓴다", async (t) => {
+  t.after(() => void delete process.env.DIRA_ENGINE);
+  const engine = path.join(tmp, "engine-fallback");
+  mkdirSync(path.join(engine, "protocols"), { recursive: true });
+  writeFileSync(path.join(engine, "tick.sh"), "");
+  writeFileSync(path.join(engine, "protocols", "CORE.md"), "엔진 코어\n");
+  process.env.DIRA_ENGINE = engine;
+
+  const queue = path.join(tmp, "mirror-fallback-queue", "protocols");
+  mkdirSync(queue, { recursive: true });
+  writeFileSync(path.join(queue, "AGENTS.md"), "프로젝트 문서\n");
+
+  await mirrorCore(queue);
+  assert.deepStrictEqual(readdirSync(queue).sort(), ["AGENTS.md"]); // CORE.md가 새로 생기지 않는다
+});
+
+test("vendored 큐(CORE.md 있음) — 덮고, 새 형제를 만들고, 없어진 CORE-*.md를 지운다", async (t) => {
+  t.after(() => void delete process.env.DIRA_ENGINE);
+  const engine = path.join(tmp, "engine-mirror");
+  const coreDir = path.join(engine, "protocols");
+  mkdirSync(coreDir, { recursive: true });
+  writeFileSync(path.join(engine, "tick.sh"), "");
+  writeFileSync(path.join(coreDir, "CORE.md"), "엔진 코어 v2\n");
+  writeFileSync(path.join(coreDir, "CORE-NEW.md"), "새 형제\n");
+  process.env.DIRA_ENGINE = engine;
+
+  const queue = path.join(tmp, "mirror-vendored-queue", "protocols");
+  mkdirSync(queue, { recursive: true });
+  writeFileSync(path.join(queue, "CORE.md"), "사람이 지우려 했던 옛 코어\n"); // 사람 편집 흔적
+  writeFileSync(path.join(queue, "CORE-OLD.md"), "엔진에서 없어진 형제\n"); // 지워져야 한다
+  writeFileSync(path.join(queue, "AGENTS.md"), "프로젝트 문서\n"); // 편집 가능한 층 — 안 건드린다
+
+  await mirrorCore(queue);
+
+  assert.strictEqual(readFileSync(path.join(queue, "CORE.md"), "utf8"), "엔진 코어 v2\n");
+  assert.strictEqual(readFileSync(path.join(queue, "CORE-NEW.md"), "utf8"), "새 형제\n");
+  assert.strictEqual(readFileSync(path.join(queue, "AGENTS.md"), "utf8"), "프로젝트 문서\n");
+  assert.deepStrictEqual(readdirSync(queue).sort(), ["AGENTS.md", "CORE-NEW.md", "CORE.md"]);
+});
+
+test("엔진을 못 찾으면 vendored 큐도 손대지 않는다", async (t) => {
+  t.after(() => void delete process.env.DIRA_ENGINE);
+  process.env.DIRA_ENGINE = path.join(tmp, "없는엔진");
+
+  const queue = path.join(tmp, "mirror-orphan-queue", "protocols");
+  mkdirSync(queue, { recursive: true });
+  writeFileSync(path.join(queue, "CORE.md"), "그대로여야 한다\n");
+
+  await mirrorCore(queue);
+  assert.strictEqual(readFileSync(path.join(queue, "CORE.md"), "utf8"), "그대로여야 한다\n");
 });

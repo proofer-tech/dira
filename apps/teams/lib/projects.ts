@@ -16,6 +16,7 @@ import {
   shellPath,
   shellValue,
 } from "./paths.ts";
+import { mirrorCore } from "./protocols.ts";
 import { isAwaiting, listTickets, statusOf, type Ticket } from "./queue.ts";
 import { listWorkers, type Worker } from "./workers.ts";
 import { PERSONA_COLORS, slugify, tildePath } from "./urls.ts";
@@ -240,6 +241,8 @@ export async function addProject(name: string, rootInput: string, id?: string): 
 
   const project: Project = { id: tid, name: name.trim(), root };
   await writeProjects([...projects, project]);
+  // 등록 시 미러링(§프롬프트 층 결정 8-c) — 실패해도 등록 자체는 막지 않는다(다음 기동이 다시 돈다).
+  await mirrorCore((await resolveConfig(project)).protocols).catch(() => {});
   return project;
 }
 

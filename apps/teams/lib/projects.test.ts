@@ -244,6 +244,23 @@ test("레지스트리 — 등록 검증 4종", async () => {
   await assert.rejects(() => addProject("  ", root), { code: "name" });
 });
 
+test("addProject — vendored 큐(CORE.md 있음)는 등록 시 엔진 코어로 미러링된다", async (t) => {
+  t.after(() => void delete process.env.DIRA_ENGINE);
+  const engine = mkdtempSync(path.join(tmpdir(), "fst-engine-"));
+  roots.push(engine);
+  writeFileSync(path.join(engine, "tick.sh"), "");
+  mkdirSync(path.join(engine, "protocols"));
+  writeFileSync(path.join(engine, "protocols", "CORE.md"), "엔진 코어\n");
+  process.env.DIRA_ENGINE = engine;
+
+  const root = newQueue({ "w1.sh": "" });
+  mkdirSync(path.join(root, "protocols"));
+  writeFileSync(path.join(root, "protocols", "CORE.md"), "낡은 사본\n");
+
+  await addProject("미러", root, "mirror-test");
+  assert.strictEqual(readFileSync(path.join(root, "protocols", "CORE.md"), "utf8"), "엔진 코어\n");
+});
+
 test("projectPath — 전환은 같은 화면 종류를 유지한다", () => {
   assert.strictEqual(projectPath("/p/a/workers", "b"), "/p/b/workers");
   assert.strictEqual(projectPath("/p/a", "b"), "/p/b");

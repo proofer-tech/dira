@@ -139,6 +139,40 @@ export async function readCore(
   return { files, vendored };
 }
 
+/** vendored 큐 판정 + 미러링(§프롬프트 층 결정 8-c). 큐 `protocols/`에 `CORE.md`가 **있으면**
+ *  (= vendored 큐) 엔진 `protocols/`의 `CORE*.md` 집합에 내용을 그대로 맞춘다 — 다른 내용은
+ *  덮고, 새 형제는 만들고, 엔진에 없어진 `CORE-*.md`는 지운다. **없으면 아무것도 안 쓴다** —
+ *  그게 폴백 큐(이 큐 포함)를 손대지 않는 것의 구현이다. 서버 기동 시 전 등록 프로젝트에,
+ *  프로젝트 등록 시 그 프로젝트에 돈다(기동 훅은 `instrumentation.ts`, 등록은 `addProject`).
+ *
+ *  **엔진 쪽은 `readCore()`가 아니라 여기서 직접 읽는다** — vendored 큐에서 `readCore()`는
+ *  일부러 큐 사본을 되돌려주므로(§프롬프트 층 결정 8-d, `readCore` 머리 주석) 그걸로 목표
+ *  집합을 구하면 큐가 자기 자신을 베끼는 순환이 된다. 목표는 항상 엔진 원본이다. */
+export async function mirrorCore(queueProtocols: string): Promise<void> {
+  const local = expandHome(queueProtocols);
+  const existing = await readdir(local).catch(() => [] as string[]);
+  if (!existing.includes(CORE_INLINED)) return;
+
+  const repo = engineRepo();
+  if ("error" in repo) return; // 엔진을 못 찾는 배치는 정상 운용이다(결정 3과 같은 완화) — 손대지 않는다
+  const dir = path.join(repo.path, "protocols");
+  const names = (await readdir(dir, { withFileTypes: true }).catch(() => []))
+    .filter((d) => d.isFile() && isCoreLayerName(d.name))
+    .map((d) => d.name);
+  if (names.length === 0) return;
+
+  const engineNames = new Set(names);
+  for (const name of names) {
+    const text = await readFile(path.join(dir, name), "utf8");
+    await writeFile(path.join(local, name), text, "utf8");
+  }
+  for (const name of existing) {
+    if (isCoreLayerName(name) && !engineNames.has(name)) {
+      await unlink(path.join(local, name));
+    }
+  }
+}
+
 /** 편집기가 열 수 있는 것과 못 여는 것. `text`가 null이면 `reason`이 이유다. */
 export type ProtocolFile = { rel: string; text: string | null; reason?: string };
 
