@@ -44,6 +44,10 @@ TICKET_MAXRUN="${TICKET_MAXRUN:-5400}"
 TICKET_FEED_TIMEOUT="${TICKET_FEED_TIMEOUT:-120}"
 # 프롬프트 포맷의 %s = 티켓 해시 하나뿐이다(역할 호칭은 페르소나 프로필이 대신한다).
 TICKET_PROMPT_FMT="${TICKET_PROMPT_FMT:-%s 티켓을 확인해 주세요. (해당 티켓은 이미 진행중으로 잡아두었습니다. 수행을 마치면 완료 상태로 rename하고, 막히면 티켓 본문에 블록 이력을 남겨주세요.)}"
+# 세션 재활용(§4-11, §제약 1 §결정 기록 §열셋째). 0이면 기능 전체를 끈다(기본 켜짐).
+# CTX는 마지막 assistant 턴 컨텍스트(input+cache_creation+cache_read)의 재활용 상한이다.
+TICKET_REUSE="${TICKET_REUSE:-1}"
+TICKET_REUSE_CTX="${TICKET_REUSE_CTX:-100000}"
 # 실행 엔진. 워커가 TICKET_ENGINE 배열로 덮어쓴다. {prompt}/{sid}는 실행 직전 치환된다.
 # ${arr[@]+"..."}는 set -u에서 미정의 배열을 안전하게 전개하는 관용구(bash 3.2 포함).
 # 기본 엔진은 스트리밍 입력이다: 최초 프롬프트도 argv가 아니라 stdin(FIFO)으로 간다.
@@ -78,6 +82,61 @@ print(hashlib.sha1(tok).hexdigest()[:12])' \
     "$LOCAL/oauth-token"
 }
 arm_cdown() { printf '%s\n%s\n' "$1" "$(engine_fp)" > "$CDOWN"; }
+
+# claude 인증 + 엔진 쿨다운 게이트. ENGINE_NAME·CDOWN이 이미 정해진 상태에서 부른다.
+# 통과 못하면 SKIP을 로그하고 1을 반환한다 - 이 엔진을 쓰는 후보 전체를 건너뛰라는 뜻이라
+# 선정 루프가 이 반환값으로 ENGOVER에 등록한다(§4-11 재활용 경로는 후보가 하나뿐이라 등록 없이
+# 반환값만 쓴다 - 같은 게이트를 다시 지나는 것이 §4-11 §규칙 ⑤다).
+engine_gate_ok() {
+  if [ "$ENGINE_NAME" = "claude" ]; then
+    # claude setup-token 으로 발급 후: printf %s '<토큰>' > ~/.config/dira/oauth-token
+    [ -r "$LOCAL/oauth-token" ] && export CLAUDE_CODE_OAUTH_TOKEN="$(tr -d '\r\n' < "$LOCAL/oauth-token")"
+    # 비대화형 claude만 장기 토큰이 없으면 이 엔진으로 못 뜬다. `.authwarn`으로 "최초 1회만
+    # 남긴다"는 종전 계약 그대로 둔다.
+    if [ ! -r "$LOCAL/oauth-token" ] && [ ! -t 1 ]; then
+      if [ ! -f "$LOCAL/.authwarn" ]; then
+        log "SKIP AUTH 대기 $ENGINE_NAME (claude setup-token 발급 후 $LOCAL/oauth-token 에 저장 필요)"
+        touch "$LOCAL/.authwarn"
+      fi
+      return 1
+    fi
+  fi
+  if [ -f "$CDOWN" ]; then
+    local UNTIL WAS_FP NOW
+    UNTIL=""; WAS_FP=""
+    { read -r UNTIL; read -r WAS_FP; } < "$CDOWN"
+    case "$UNTIL" in ''|*[!0-9]*) UNTIL=0 ;; esac
+    NOW=$(date +%s)
+    if [ "$WAS_FP" != "$(engine_fp)" ]; then
+      rm -f "$CDOWN"
+      log "NOTE 엔진 쿨다운 해제 - 토큰·모델이 바뀌었다(남은 창 $((UNTIL - NOW))초를 안 기다린다)"
+    elif [ "$NOW" -lt "$UNTIL" ]; then
+      log "SKIP 엔진 쿨다운 · $((UNTIL - NOW))초 남음"
+      return 1
+    fi
+  fi
+  return 0
+}
+
+# 선정 잠금 획득(§5-4 SLOCK). 실패하면 SLOCK=""로 남기고 1을 반환한다 - 트랩이 남의 잠금을
+# 안 지우게 하는 값이자, §4-11 재활용 판정 ⑤가 실패로 떨어지는 신호로 두 호출부가 나눠 쓴다.
+acquire_slock() {
+  SLOCK="$LOCAL/run/select.lock"
+  if ! mkdir "$SLOCK" 2>/dev/null; then
+    local SOWNER
+    SOWNER=$(cat "$SLOCK/pid" 2>/dev/null)
+    if [ -n "$SOWNER" ] && kill -0 "$SOWNER" 2>/dev/null; then
+      # 남의 잠금이다. 비워야 트랩이 주인의 잠금을 지우지 않는다.
+      SLOCK=""
+      log "SKIP 다른 워커가 선정 중이다 pid=$SOWNER"
+      return 1
+    fi
+    log "WARN 스테일 선정 잠금 회수 pid=${SOWNER:-?}"
+    rm -rf "$SLOCK"
+    mkdir "$SLOCK" 2>/dev/null || { SLOCK=""; log "SKIP 선정 잠금 재획득 실패"; return 1; }
+  fi
+  printf %s "$$" > "$SLOCK/pid"
+}
 
 CMD="${1:-tick}"
 
@@ -246,20 +305,7 @@ for lf in "${TICKET_PERSONAS:-$TICKET_ROOT/personas}"/*/limit; do
   [ -f "$lf" ] && { LIMITED=1; break; }
 done
 if [ "$CMD" = "tick" ] && [ -n "$LIMITED" ]; then
-  SLOCK="$LOCAL/run/select.lock"
-  if ! mkdir "$SLOCK" 2>/dev/null; then
-    SOWNER=$(cat "$SLOCK/pid" 2>/dev/null)
-    if [ -n "$SOWNER" ] && kill -0 "$SOWNER" 2>/dev/null; then
-      # 남의 잠금이다. 비워야 트랩이 주인의 잠금을 지우지 않는다.
-      SLOCK=""
-      log "SKIP 다른 워커가 선정 중이다 pid=$SOWNER"
-      exit 0
-    fi
-    log "WARN 스테일 선정 잠금 회수 pid=${SOWNER:-?}"
-    rm -rf "$SLOCK"
-    mkdir "$SLOCK" 2>/dev/null || { SLOCK=""; log "SKIP 선정 잠금 재획득 실패"; exit 0; }
-  fi
-  printf %s "$$" > "$SLOCK/pid"
+  acquire_slock || exit 0
 fi
 
 # `personas/<이름>/limit` -> 정수 하나, 또는 "" = 상한 없음. 파서를 만들지 않는다.
@@ -337,33 +383,9 @@ while IFS='|' read -r c_path c_hash c_kind c_persona; do
   # 아무것도 안 고르고 끝난다(TPATH가 빈 채로 루프가 끝난다).
   if [ "$CMD" = "tick" ]; then
     case " $ENGOVER " in *" $ENGINE_NAME "*) continue ;; esac
-    if [ "$ENGINE_NAME" = "claude" ]; then
-      # claude setup-token 으로 발급 후: printf %s '<토큰>' > ~/.config/dira/oauth-token
-      [ -r "$LOCAL/oauth-token" ] && export CLAUDE_CODE_OAUTH_TOKEN="$(tr -d '\r\n' < "$LOCAL/oauth-token")"
-      # 비대화형 claude만 장기 토큰이 없으면 이 엔진으로 못 뜬다. `.authwarn`으로 "최초 1회만
-      # 남긴다"는 종전 계약 그대로 두고, 스크립트 종료 대신 이 후보만 건너뛴다.
-      if [ ! -r "$LOCAL/oauth-token" ] && [ ! -t 1 ]; then
-        if [ ! -f "$LOCAL/.authwarn" ]; then
-          log "SKIP AUTH 대기 $ENGINE_NAME (claude setup-token 발급 후 $LOCAL/oauth-token 에 저장 필요)"
-          touch "$LOCAL/.authwarn"
-        fi
-        ENGOVER="$ENGOVER $ENGINE_NAME"
-        continue
-      fi
-    fi
-    if [ -f "$CDOWN" ]; then
-      UNTIL=""; WAS_FP=""
-      { read -r UNTIL; read -r WAS_FP; } < "$CDOWN"
-      case "$UNTIL" in ''|*[!0-9]*) UNTIL=0 ;; esac
-      NOW=$(date +%s)
-      if [ "$WAS_FP" != "$(engine_fp)" ]; then
-        rm -f "$CDOWN"
-        log "NOTE 엔진 쿨다운 해제 - 토큰·모델이 바뀌었다(남은 창 $((UNTIL - NOW))초를 안 기다린다)"
-      elif [ "$NOW" -lt "$UNTIL" ]; then
-        ENGOVER="$ENGOVER $ENGINE_NAME"
-        log "SKIP 엔진 쿨다운 · $((UNTIL - NOW))초 남음"
-        continue
-      fi
+    if ! engine_gate_ok; then
+      ENGOVER="$ENGOVER $ENGINE_NAME"
+      continue
     fi
   fi
 
@@ -615,38 +637,200 @@ fi
 # 스트리밍 입력에서는 stdin이 열려 있는 한 세션이 스스로 안 끝난다(닫아도 60초는 안 죽는다).
 # `result` 줄이 곧 끝이고, 끝내는 건 우리다. MAXRUN은 그 줄이 영영 안 오는 경우로 남는다.
 POLL=5; [ -n "$INBOX" ] && POLL=1
-# 마지막 줄이 `result`인가. 접두사로는 못 본다 - 실측된 키 순서는 `is_error`가 먼저다.
-# 문자열 매치만으로 죽이는 것도 안 된다: 세션이 뱉는 본문에 이 프로토콜이 그대로 인용될 수 있고
-# (이 레포가 그 문서를 갖고 있다) 그러면 남의 티켓을 중간에 잘라낸다. grep은 문지기고 판정은 파싱이다.
+# 마지막 줄이 아니라 offset(줄 수) 이후의 마지막 줄이 `result`인가. §4-11 재활용은 세션 하나에
+# 티켓이 여러 장 쌓이므로 "파일 마지막 줄"로는 둘째 주입 직후 첫 티켓의 result를 다시 보고
+# 즉시 죽인다(구현 함정 1호, §검증 ⑥) - offset이 그 경계다.
+# 접두사로는 못 본다 - 실측된 키 순서는 `is_error`가 먼저다. 문자열 매치만으로 죽이는 것도
+# 안 된다: 세션이 뱉는 본문에 이 프로토콜이 그대로 인용될 수 있고(이 레포가 그 문서를 갖고
+# 있다) 그러면 남의 티켓을 중간에 잘라낸다. grep은 문지기고 판정은 파싱이다.
 is_result() {
-  tail -n 1 "$1" 2>/dev/null | grep -q '"type":"result"' || return 1
-  tail -n 1 "$1" | python3 -c \
+  local line
+  line=$(tail -n +"$(( $2 + 1 ))" "$1" 2>/dev/null | tail -n 1)
+  [ -n "$line" ] || return 1
+  printf '%s' "$line" | grep -q '"type":"result"' || return 1
+  printf '%s' "$line" | python3 -c \
     'import json,sys
 try: o = json.loads(sys.stdin.readline())
 except Exception: sys.exit(1)
 sys.exit(0 if isinstance(o, dict) and o.get("type") == "result" else 1)'
 }
-# TIMEOUT과 KILLED를 가르는 값은 경과다(§2-5 §로그). 사람이 죽이든 감시자가 죽이든 신호는 같은
-# 143이라, 경과를 안 보면 21초 만에 죽은 세션이 "상한 초과"로 기록된다. 감시자의 시계와 같은
-# 자리에서 잡는다 - 그 앞의 주입 대기(TICKET_FEED_TIMEOUT)는 세션이 돈 시간이 아니다.
-T0=$SECONDS
-( SECONDS=0
-  while [ "$SECONDS" -lt "$TICKET_MAXRUN" ]; do
-    kill -0 "$CPID" 2>/dev/null || exit 0
-    if [ -n "$INBOX" ] && is_result "$OUTF"; then
-      kill -TERM "$CPID" 2>/dev/null; sleep 5; kill -KILL "$CPID" 2>/dev/null; exit 0
+
+# §4-11 조건 ②④: 이번 구간(offset 이후)만의 판정 + 마지막 assistant 턴 컨텍스트.
+# "sid|ok|reason|reset|ctx" 한 줄 - 아래 최종 VERDICT 파서와 같은 필드 + ctx 하나뿐이다.
+# 최종 파서는 안 건드린다 - 그건 전체 $OUT을 훑어 마지막 result로 자연히 떨어지므로(누적
+# 스캔이 마지막 값으로 덮어써진다) 체인 전체가 끝난 뒤의 판정은 종전 그대로 맞는다.
+segment_result() {
+  tail -n +"$(( $2 + 1 ))" "$1" 2>/dev/null | python3 -c \
+    'import json,sys
+LIMIT_WORDS = ("usage limit", "rate limit", "quota")
+sid = ""; ok = ""; reason = ""; reset = ""; ctx = ""
+for ln in sys.stdin:
+    ln = ln.strip()
+    if not ln:
+        continue
+    try: o = json.loads(ln)
+    except Exception: continue
+    if not isinstance(o, dict): continue
+    if o.get("type") == "assistant":
+        u = ((o.get("message") or {}).get("usage")) or {}
+        try:
+            ctx = str(int(u.get("input_tokens", 0)) + int(u.get("cache_creation_input_tokens", 0))
+                      + int(u.get("cache_read_input_tokens", 0)))
+        except Exception:
+            pass
+    elif o.get("type") == "result":
+        sid = o.get("session_id", "") or sid
+        ok = "err" if o.get("is_error") else "ok"
+        if "terminal_reason" in o:
+            reason = o.get("terminal_reason", "") or ""
+        elif o.get("is_error"):
+            errs = " ".join(str(e) for e in (o.get("errors") or [])).lower()
+            if any(k in errs for k in LIMIT_WORDS):
+                reason = "api_error"
+    elif o.get("type") == "rate_limit_event":
+        info = o.get("rate_limit_info") or {}
+        if info.get("status") == "rejected" and isinstance(info.get("resetsAt"), int):
+            reset = str(info["resetsAt"])
+    elif o.get("type") == "error":
+        msg = str(o.get("message", "")).lower()
+        if any(k in msg for k in LIMIT_WORDS):
+            reason = "api_error"
+print("|".join((sid, ok, reason, reset, ctx)))'
+}
+
+# §4-11 조건 ⑤: 같은 페르소나 후보를 종전 선정과 같은 임계구역·게이트에서 다시 claim한다.
+# ENGINE_NAME·CDOWN은 이미 이 세션의 페르소나로 정해져 있다(위 선정 루프에서 세워졌고 그 뒤로
+# 아무도 안 건드린다) - 재활용은 페르소나를 안 바꾸므로 다시 세우지 않고 같은 값으로 게이트를 본다.
+select_reuse_candidate() {
+  local persona="$1"
+  RTPATH=""; RTHASH=""; RTKIND=""
+  local RCANDS
+  RCANDS=$(python3 "$PY" select "$TICKET_ROOT") || return 1
+  [ -z "$RCANDS" ] && return 1
+
+  if [ -n "$LIMITED" ]; then
+    local PLIM PWIP
+    PLIM=$(persona_limit "$persona")
+    if [ -n "$PLIM" ]; then
+      PWIP=$(persona_wip "$persona")
+      if [ "$PWIP" -ge "$PLIM" ]; then
+        log "SKIP 페르소나 상한 $persona $PWIP/$PLIM"
+        return 1
+      fi
     fi
-    sleep "$POLL"
-  done
-  kill -TERM "$CPID" 2>/dev/null; sleep 20; kill -KILL "$CPID" 2>/dev/null ) &
-WPID=$!
+  fi
+
+  engine_gate_ok || return 1
+
+  if [ -n "$LIMITED" ]; then
+    acquire_slock || return 1
+  fi
+
+  local rc_path rc_hash rc_kind rc_persona RCPATH
+  while IFS='|' read -r rc_path rc_hash rc_kind rc_persona; do
+    [ -z "$rc_path" ] && continue
+    [ "$rc_persona" = "$persona" ] || continue
+    if RCPATH=$(python3 "$PY" claim "$rc_path" 2>/dev/null); then
+      RTPATH="$RCPATH"; RTHASH="$rc_hash"; RTKIND="$rc_kind"
+      break
+    fi
+  done <<EOF
+$RCANDS
+EOF
+
+  [ -n "$SLOCK" ] && { rm -rf "$SLOCK"; SLOCK=""; }
+  [ -n "$RTPATH" ]
+}
+
+# MAXRUN 감시. 매달린 세션을 죽이는 것이 이 감시의 뜻이지 체인 길이를 재는 게 아니라서
+# §4-11 재활용마다 죽이고 다시 세운다("티켓마다 새로 잰다"). is_result에 의한 종료는 이제
+# 여기 없다 - main 루프가 먼저 봐야 재활용 여부를 결정할 수 있어서 그 판정을 main으로 옮겼다.
+# TIMEOUT과 KILLED를 가르는 값은 경과다(§2-5 §로그) - T0가 그 시계다.
+start_watchdog() {
+  T0=$SECONDS
+  ( SECONDS=0
+    while [ "$SECONDS" -lt "$TICKET_MAXRUN" ]; do
+      kill -0 "$CPID" 2>/dev/null || exit 0
+      sleep "$POLL"
+    done
+    kill -TERM "$CPID" 2>/dev/null; sleep 20; kill -KILL "$CPID" 2>/dev/null ) &
+  WPID=$!
+}
+
+OUTOFFSET=0
+start_watchdog
 # bash의 `wait PID`는 그 PID가 속한 **파이프라인 전체**를 기다린다. 프롬프트를 파일로 옮기면서
 # 엔진 앞에 `{ cat "$PRIMEF"; cat <&8; }`가 붙었고, 그 cat은 우리가 fd 9를 닫아야 EOF를 본다.
 # 먼저 wait하면 서로를 기다려 교착한다 - 세션이 result를 내고 죽어도 워커가 티켓을 안 놓는다
 # (2026-08-04 실측: 6/6이 init까지 갔는데 DONE 0, 죽은 엔진 옆에 cat만 남아 MAXRUN까지 잡혔다).
 # 그래서 엔진만 따로 지켜보고, fd 9를 닫아 cat을 빼낸 다음에 job을 회수한다.
 if [ -n "$INBOX" ]; then
-  while kill -0 "$CPID" 2>/dev/null; do sleep 1; done
+  while :; do
+    while kill -0 "$CPID" 2>/dev/null && ! is_result "$OUTF" "$OUTOFFSET"; do
+      sleep "$POLL"
+    done
+    kill -0 "$CPID" 2>/dev/null || break     # 스스로 끝났다(MAXRUN 강제종료 포함) - 재활용 없이 종료 경로
+
+    # 새 구간의 result다. §4-11 재활용 판정 5개 - ①은 여기 도달한 것 자체가(스트리밍+INBOX)
+    # 참이므로 TICKET_REUSE만 본다. 하나라도 거짓이면 종전 그대로 죽인다.
+    REUSE=""
+    if [ "$TICKET_REUSE" != "0" ]; then
+      SEG=$(segment_result "$OUTF" "$OUTOFFSET")
+      IFS='|' read -r _SEGSID SEGOK _SEGREASON _SEGRESET SEGCTX <<< "$SEG"
+      if [ "$SEGOK" = "ok" ] && [ ! -f "$TPATH" ]; then          # ②③
+        case "$SEGCTX" in
+          [0-9]*) [ "$SEGCTX" -lt "$TICKET_REUSE_CTX" ] && REUSE=1 ;;   # ④(파싱 실패면 예산 초과로 본다)
+        esac
+        if [ -n "$REUSE" ] && ! select_reuse_candidate "$TPERSONA"; then  # ⑤
+          REUSE=""
+        fi
+      fi
+    fi
+
+    if [ -n "$REUSE" ]; then
+      # 이어 받는 절차는 최초 디스패치의 축소판이다: assign(같은 sid) -> setpid(같은 CPID) ->
+      # 짧은 프롬프트 한 줄을 FIFO에 -> setinbox(주입 뒤에 광고 - tick.sh 최초 주입과 같은 이유).
+      log "DONE $THASH sid=$SID"
+      python3 "$PY" assign "$RTPATH" "$SID" "${TPERSONA:-agent} / ${TICKET_NAME}-${SID:0:8}"
+      python3 "$PY" setpid "$RTPATH" "$CPID"
+      RPROMPT=$(printf "$TICKET_PROMPT_FMT" "$RTHASH")
+      python3 -c 'import json,sys
+sys.stdout.write(json.dumps({"type":"user","message":{"role":"user","content":sys.argv[1]}},
+                            ensure_ascii=False, separators=(",", ":")) + "\n")' "$RPROMPT" >&9
+      INJOFFSET=$(wc -l < "$OUTF")
+      python3 "$PY" setinbox "$RTPATH" "$INBOX"
+      log "DISPATCH $RTHASH kind=${RTKIND:--} persona=${TPERSONA:-none} sid=$SID log=$(basename "$LOGF")"
+
+      # 주입 뒤 TICKET_FEED_TIMEOUT 안에 출력이 안 자라면 STALL과 같은 경로다(§4-11 §규칙) -
+      # 최초 디스패치의 started() 자리와 같다. 여긴 init 판정이 없으니 "줄이 자랐나"가 그 신호고,
+      # 죽었는데도 안 자란 경우까지 STALL로 뭉친다(started()도 kill -0가 죽어서 빠져나온
+      # 경우를 갈라 보지 않는다 - 같은 관용구).
+      FED=0
+      while [ "$FED" -lt "$TICKET_FEED_TIMEOUT" ] && kill -0 "$CPID" 2>/dev/null; do
+        [ "$(wc -l < "$OUTF")" -gt "$INJOFFSET" ] && break
+        sleep 1; FED=$((FED+1))
+      done
+      if [ "$(wc -l < "$OUTF")" -le "$INJOFFSET" ]; then
+        kill -KILL "$CPID" 2>/dev/null
+        log "STALL $RTHASH ${TICKET_FEED_TIMEOUT}s 안에 이어받기 주입 뒤 출력이 안 자랐다 - 기동 실패"
+        python3 "$PY" clear "$RTPATH"; python3 "$PY" release "$RTPATH" >/dev/null 2>&1
+        kill "$WPID" 2>/dev/null; wait "$WPID" 2>/dev/null
+        exec 9>&-; wait "$CPID" 2>/dev/null
+        OUT=$(cat "$OUTF" 2>/dev/null); rm -f "$OUTF"
+        printf '%s\n' "$OUT" >> "$LOGF"
+        exit 1
+      fi
+
+      OUTOFFSET="$INJOFFSET"
+      TPATH="$RTPATH"; THASH="$RTHASH"; TKIND="$RTKIND"
+      kill "$WPID" 2>/dev/null; wait "$WPID" 2>/dev/null
+      start_watchdog
+      continue
+    fi
+
+    kill -TERM "$CPID" 2>/dev/null; sleep 5; kill -KILL "$CPID" 2>/dev/null
+    break
+  done
   exec 9>&-
 fi
 wait "$CPID"; RC=$?

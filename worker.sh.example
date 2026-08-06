@@ -52,6 +52,8 @@
 #   안 하면 `<hash>-진행중.md`가 '접미사 없는 이름'으로 보여서 잡힌 티켓이 큐에 다시 뜬다.
 # TICKET_MAXRUN=5400                     # 세션 1건 실행 상한(초). 초과 시 TERM->KILL 후 백로그 복귀
 # TICKET_PROMPT_FMT="%s 티켓을 확인해 주세요. ..."   # printf 포맷: %s = 티켓 해시 하나뿐
+# TICKET_REUSE=1                          # 세션 재활용(§4-11). 0이면 끈다 - 티켓마다 새 세션이 뜬다
+# TICKET_REUSE_CTX=100000                 # 재활용 컨텍스트 상한(마지막 턴 input+cache_creation+cache_read)
 #
 # 상태 3종(없음/진행중/완료)·해시 파일명·claim 락은 프로토콜 자체이므로 워커로 열지 않는다.
 # 분류(kind)·수행자(persona)는 디렉터리가 아니라 티켓 frontmatter에 있다.
