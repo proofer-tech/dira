@@ -322,12 +322,31 @@ TICKET_ENGINE=(codex exec --json "{prompt}")
 | `TICKET_CWD` | 티켓 루트의 부모 | 디스패치된 세션의 작업 디렉터리 |
 | `TICKET_PERSONAS` | `<루트>/personas` | 페르소나 프로필 디렉터리 |
 | `TICKET_PROTOCOLS` | `<루트>/protocols` | 협업 프로토콜 디렉터리. 그 안의 `AGENTS.md`가 전원 프롬프트에 실린다 |
-| `TICKET_CONTEXT` | (없음) | `("<경로>\|<설명>" ...)` 배열. 프롬프트 꼬리에 참조 자료로 붙는다. 없는 경로는 건너뛰고 `WARN`만 |
-| `TICKET_ENGINE` | `(claude -p "{prompt}" --session-id "{sid}" --dangerously-skip-permissions --output-format json)` | 실행 엔진 argv. `{prompt}`·`{sid}` 치환 |
-| `TICKET_PROMPT_FMT` | `%s 티켓을 확인해 주세요. ...` | printf 포맷. `%s` = 티켓 해시 하나뿐 |
+| `TICKET_CONTEXT` | (없음) | `("<경로>\|<설명>" ...)` 배열. 프롬프트 꼬리에 참조 자료로 붙는다. 없는 경로는 건너뛰고 `WARN`만. `$TICKET_CWD`를 쓰면 아래 치환자 표 |
+| `TICKET_ENGINE` | `(claude -p "{prompt}" --session-id "{sid}" --dangerously-skip-permissions --output-format json)` | 실행 엔진 argv. `{prompt}`·`{sid}` 치환 — 아래 치환자 표 |
+| `TICKET_PROMPT_FMT` | `%s 티켓을 확인해 주세요. ...` | printf 포맷. `%s` = 티켓 해시 하나뿐 — 아래 치환자 표 |
 | `TICKET_INPROGRESS` | `.wip` | 진행중 접미사 |
 | `TICKET_DONE` | `.done` | 완료 접미사 |
 | `TICKET_MAXRUN` | `5400` | 세션 1건 실행 상한(초). 초과 시 TERM→KILL 후 백로그 복귀 |
+
+**치환자.** 워커 파일은 그냥 bash라 어떤 셸 변수든 값에 넣을 수 있다. 걸리는 쪽은 GUI다.
+화면은 셸을 실행하지 않고 정규식으로 할당문만 뽑는다 — 등록된 경로의 임의 코드가 GUI 권한으로
+도는 걸 막으려고 그렇게 만들었다. 그 대가로 알아보는 변수가 `$HOME`과 `$TICKET_CWD` 둘뿐이다.
+그 외 변수가 남으면 해석 실패로 보고 기본값에 경고를 붙인다. `{prompt}`·`{sid}`·`%s`는 셸 변수가
+아니라 엔진이 실행 직전에 스스로 갈아 끼우는 자리표시자다.
+
+| 치환자 | 쓰는 자리 | 값 | 누가 편다 | 언제 |
+|---|---|---|---|---|
+| `$HOME` `${HOME}` | 워커 파일의 어느 값이든 | 홈 디렉터리 | bash · GUI 둘 다 | bash는 source 시점, GUI는 값을 읽을 때 (`lib/paths.ts:65`) |
+| `$TICKET_CWD` `${TICKET_CWD}` | `TICKET_CONTEXT` 항목 (GUI가 아는 건 여기뿐) | 그 워커의 작업 디렉터리 | bash · GUI 둘 다 | bash는 배열 대입 순간, GUI는 항목을 그리고 존재를 확인할 때만 (`lib/workers.ts:335`) |
+| `{prompt}` `{sid}` | `TICKET_ENGINE` argv | 프롬프트 전문 · 세션 UUID | 엔진 | 엔진을 띄우기 직전 (`tick.sh:537`). GUI는 글자 그대로 둔다 |
+| `%s` | `TICKET_PROMPT_FMT` | 티켓 해시. 인자는 이것 하나다 | 엔진의 `printf` | 프롬프트를 조립할 때 (`tick.sh:417`) |
+
+**`$TICKET_CWD`는 대입 순서에 걸린다.** 배열 리터럴은 대입하는 순간 펴지므로, 컨텍스트 항목에서
+쓰려면 `TICKET_CWD=` 줄이 그 블록보다 — `context.sh`를 source하는 줄보다도 — **위**에 있어야 한다.
+엔진의 기본값 대입(`tick.sh:40`)은 워커 마지막 줄에서 `tick.sh`를 source할 때 도니까 너무 늦다.
+순서를 어기면 빈 문자열로 펴진다. `"$TICKET_CWD/docs/DESIGN.md"`가 `/docs/DESIGN.md`가 되고,
+엔진은 없는 경로로 보고 `WARN` 한 줄만 남긴 채 그 항목을 버린다. 에러가 아니라서 조용하다.
 
 티켓 루트는 워커의 위치가 정하므로 설정값이 없다. 응답 JSON에서 실제 `session_id`를 읽어
 frontmatter를 정정하는 단계는 `claude` 전용이고 다른 엔진이면 그냥 건너뛴다.
