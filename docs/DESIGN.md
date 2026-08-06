@@ -1093,9 +1093,11 @@ grep -c '^## 티켓 수명\|^## 막혔을 때\|^## 티켓 분류' \
 #                      아무것도 안 재게 된다 — 되붙인 절을 못 본다
 
 # 4. (결정 6) 티켓 문법 계약이 큐에 없다 — 코어에만 있다
-grep -c '^## frontmatter\|^## 함정' \
+grep -c '^## frontmatter\|^## 함정\|^## Pitfalls' \
   .dira/protocols/tickets.md templates/protocols/tickets.md   # 둘 다 0
-grep -c '^## frontmatter\|^## 함정' protocols/CORE-TICKETS.md  # 2
+grep -c '^## frontmatter\|^## Pitfalls' protocols/CORE-TICKETS.md  # 2
+#                             ^ 결정 7 영문화(P188-1)로 `함정` → `Pitfalls`. 옛 문자열로 두면
+#                               위 3번 주석과 같은 이유로 이 검사가 아무것도 안 재게 된다
 
 # 5. (결정 6) 코어가 큐 안 파일을 경로로 가리키지 않는다
 grep -c 'protocols/tickets\.md' protocols/CORE.md              # 0
@@ -3684,7 +3686,7 @@ git diff --stat -- components/board-ui.tsx                                    # 
 
 ```bash
 grep -c 'label="분류"' 'apps/teams/app/p/[project]/(board)/page.tsx'   # 1
-grep -c '^## 티켓 분류' protocols/CORE.md                              # 1
+grep -c '^## Ticket kinds' protocols/CORE.md                           # 1  ← P188-1 영문화 뒤
 grep -rn '성격' protocols/ README.md apps/site/docs/                   # 빈 출력 (면제 자리가 없다)
 git diff --stat -- tick.sh tickets.py                                  # 빈 출력
 grep -c '성격' worker.sh.example                                       # 0  ← 09755d5c 뒤
@@ -21554,7 +21556,7 @@ P185-1(대기)이 갖고 있다(tick.sh 메모리·온톨로지 블록 슬림).
 
 | ID | 무엇 | 담당 | deps | 상태 |
 |---|---|---|---|---|
-| P188-1 | 코어 `CORE.md`·`CORE-TICKETS.md` 영문화+압축, 세부는 `CORE-*.md` 형제로 (결정 7 상한 3,500 B) `5474b1be` | pm | — | 대기 |
+| P188-1 | 코어 `CORE.md`·`CORE-TICKETS.md` 영문화+압축, 세부는 `CORE-*.md` 형제로 (결정 7 상한 3,500 B) `5474b1be` | pm | — | 완료 — CORE.md 6,550→3,496 B · CORE-TICKETS.md 4,223→3,646 B · 회고 형식은 `CORE-MEMORY.md` 신설. 엔진 리터럴(`## 결과`·`## 블록`·`## 질문 n`)은 한글 유지 |
 | P188-2 | 큐 `protocols/AGENTS.md` 압축+상황부 세부를 형제 문서로 (한국어 유지, 상한 6,500 B) `80e7e421` | pm | — | 완료 — 16,686 → 5,882 B. 형제 4장(`push-거부`·`재디스패치-복구`·`cdp`·`회고-예산`) + 인라인 포인터. 큐 사본은 gitignore라 커밋에 안 실린다(P187-1 선례) |
 | P188-3 | 페르소나 6종 PROFILE+skills 압축 (한국어 유지, 페르소나당 합 5,000 B) `792bf085` | pm | — | 완료 — 6종 전부 ≤5,000 B (pm 6,485→4,962 · writer 7,415→4,997 · developer 6,145→4,044, 나머지 3종 무수정). 큐 파일이라 push 밖 산출물 |
 | P188-4 | 세션 재활용 스펙 확정 — 같은 페르소나 대기 티켓이 있으면 세션을 이어 쓰고, 없으면 워커 반환. 구현 티켓 발행까지 `e7e685bf` | pm | — | 대기 |

@@ -1,82 +1,86 @@
-# 티켓 파일 작성법 — 코어
+# Writing ticket files — core
 
-새 티켓을 만들기 전에 읽는다. **문법이 틀리면 조용히 큐에서 안 보이고 영구 대기한다.**
+Read this before creating any ticket. **Wrong syntax = the ticket silently never
+appears in the queue and waits forever.**
 
-이 문서는 `CORE.md`와 같은 층이다(엔진 레포의 `protocols/`). 프롬프트에 인라인되지 않고
-**티켓을 만드는 세션이 필요할 때 읽는다.** 아래 경로는 전부 **큐 루트 기준**이다 —
-이 프로젝트에서 큐 루트가 어디인지는 프로젝트 문서가 적는다.
+Same layer as `CORE.md` (the engine repo's `protocols/`). Not inlined into prompts —
+**read it when you create a ticket.** Paths below are relative to the queue root;
+where that root lives is the project docs' business.
 
-## 만드는 절차
+## Creating
 
 ```bash
 H=$(python3 -c 'import uuid;print(uuid.uuid4().hex[:8])')
-cat > "<큐>/tickets/$H.md" <<EOF
+cat > "<queue>/tickets/$H.md" <<EOF
 ---
 ticket: $H
-title: 한 줄 제목 — 무엇을 하는지
+title: one line — what this does
 kind: work
 persona: developer
 deps: [a1b2c3d4]
 ---
 
 ## Goal
-왜 필요한지 + 무엇을 만드는지. 2~4줄.
+Why + what to build. 2–4 lines.
 
 ## Done when
-- [ ] 검증 가능한 문장
-- [ ] 검증 가능한 문장
+- [ ] a verifiable sentence
+- [ ] a verifiable sentence
 
 ## 참고
-- 관련 문서·티켓 경로
+- related doc / ticket paths
 EOF
 echo "$H"
 ```
 
-해시를 만들 때 `$RANDOM`이나 직접 타이핑을 쓰지 않는다 — 충돌하면 `find`가 엉뚱한 티켓을 준다.
+Never mint the hash with `$RANDOM` or by typing one — on collision `find` returns the
+wrong ticket.
 
 ## frontmatter
 
-| 키 | 필수 | 값 |
+| key | req | value |
 |---|---|---|
-| `ticket:` | ✓ | 8자 hex. **파일명과 같아야 한다** |
-| `title:` | ✓ | 사람이 읽는 한 줄. 따옴표 없이. `:` 뒤에 값이 있어야 한다 |
+| `ticket:` | ✓ | 8-char hex. **Must equal the filename** |
+| `title:` | ✓ | One human-readable line, no quotes. `:` must be followed by a value |
 | `kind:` | | `work` \| `request` \| `feedback` \| `answer` |
-| `persona:` | | 프로젝트가 정의한 페르소나 이름(`<큐>/personas/` 아래). 없으면 페르소나 없이 디스패치(정상) |
-| `deps:` | | `[a1b2c3d4, e5f6a7b8]`. 전부 `.done`이어야 큐에 뜬다 |
-| `awaiting:` | | 지금 기다리는 **답변 stem 1개**. **같은 값을 `deps`에도 넣는다** — 잠금은 `deps`고 이건 GUI가 `답변 대기`로 읽는 표시다. 요구를 쪼개는 세션이 `kind: request`에 쓰고, `reap`이 자동 회수 상한을 넘긴 티켓에 쓴다(분류 무관). 답이 달려도 **지우지 않는다**(이력) — 아직 기다리는 중인지는 `tickets/<awaiting>.done.md`의 존재로 판정한다 |
-| `req:` | | 출처 요구사항 stem. 요구사항에서 쪼갠 작업 티켓에 붙인다. `deps`가 아니다 — 선후가 아니라 출처다 |
+| `persona:` | | A persona the project defines (under `<queue>/personas/`). Absent → dispatched persona-less (normal) |
+| `deps:` | | `[a1b2c3d4, e5f6a7b8]`. Appears in the queue only when all are `.done` |
+| `awaiting:` | | The **one answer stem** currently waited on. **Put the same value in `deps` too** — `deps` is the lock; this is what the GUI reads as "awaiting answer". Written by request-splitting sessions on `kind: request`, and by `reap` on tickets past the auto-reclaim cap (any kind). **Not deleted after the answer lands** (history) — whether still waiting is judged by the existence of `tickets/<awaiting>.done.md` |
+| `req:` | | Source requirement stem, on tickets split from a requirement. Not `deps` — provenance, not ordering |
 
-`awaiting:`·`req:`를 쓰는 절차와 근거는 프로젝트 문서(페르소나 프로필·설계 문서)에 있다.
-엔진이 이 키를 쓰는 자리는 `reap`의 답변 요청 하나뿐이고([CORE.md](CORE.md) §막혔을 때),
-잠금은 언제나 `deps`가 한다.
+Procedures for `awaiting:`/`req:` live in project docs (persona profiles, design doc).
+The engine writes these keys in exactly one place — `reap`'s answer escalation
+([CORE.md](CORE.md) §When blocked); the lock is always `deps`.
 
-**`kind: answer`는 사람/GUI가 만들고 처음부터 `.done`이다.** 요구사항의 `awaiting:` stem으로
-`tickets/<A>.done.md`를 새로 생성한다(`title: 답변 — <R> #n`). 열린 상태로 만들면 페르소나 없는
-티켓이 되어 아무 워커에게나 디스패치된다 — 아무도 그것을 수행하지 않기 때문에 `feedback`이
-아니라 `answer`다. 세션이 이 파일을 만들 일은 없다. "`kind: request`의 답은 원본에 덧붙이지 않고
-새 파일로 만든다"([CORE.md](CORE.md) §티켓 분류)의 요구사항 왕복 버전이 이것이다.
+**`kind: answer` is created by a human/GUI and is born `.done`** — created as
+`tickets/<A>.done.md` at the requirement's `awaiting:` stem (`title: 답변 — <R> #n`).
+Born open, it would dispatch to any worker as a persona-less ticket; nobody performs
+it, hence `answer`, not `feedback`. Sessions never create this file. It is the
+request-roundtrip form of "answers go in a new file, never appended to the original"
+([CORE.md](CORE.md) §Ticket kinds).
 
-`session_id:`·`assigned_at:`·`owner:`·`attempts:`·`pid:`·`claimed_at:`·`transcript:`·`inbox:`는
-**디스패처가 쓴다. 사람이 넣지 않는다.** 새 티켓에 `session_id:`를 넣으면 할당된 것으로 보여
-영원히 디스패치되지 않는다.
+`session_id:` `assigned_at:` `owner:` `attempts:` `pid:` `claimed_at:` `transcript:`
+`inbox:` are **written by the dispatcher — never set them yourself.** A new ticket
+carrying `session_id:` looks assigned and is never dispatched.
 
-## 함정
+## Pitfalls
 
-- **첫 줄이 `---`가 아니면** frontmatter가 없는 것으로 보고 큐에서 제외된다. 앞에 빈 줄도 안 된다.
-- **닫는 `---`가 없으면** 같다. 파싱 실패 = 조용한 유실.
-- **`deps`에 오타 해시**를 쓰면 그 티켓을 못 찾고 → 보수적으로 "미완료"로 판정 → 영구 대기.
-  적기 전에 `python3 tickets.py find <큐> <해시>`로 존재를 확인한다.
-- **파일명에 상태 접미사를 넣지 않는다.** `<해시>.md`로 만든다. `.wip`·`.done`은 디스패처와
-  당신의 완료 신고만 쓴다.
-- **하위 디렉터리에 만들지 않는다.** `tickets/` 바로 아래다. 평면 큐다.
+- **First line not `---`** → read as having no frontmatter, excluded from the queue.
+  A leading blank line fails the same way.
+- **No closing `---`** → same. Parse failure = silent loss.
+- **A typo hash in `deps`** → the dep is never found → conservatively judged
+  "incomplete" → waits forever. Check first: `python3 tickets.py find <queue> <hash>`.
+- **No state suffix in the filename.** Create `<hash>.md`. `.wip`/`.done` belong to
+  the dispatcher and to your own completion rename only.
+- **No subdirectories.** Directly under `tickets/`. The queue is flat.
 
-## 확인
+## Verify
 
-만든 뒤 반드시 큐에 뜨는지 본다:
+After creating, confirm it shows up:
 
 ```bash
-<큐>/workers/<워커>.sh list
+<queue>/workers/<worker>.sh list
 ```
 
-`대기`로 보이면 성공. 안 보이면 frontmatter가 깨졌거나 접미사가 붙었다.
-`deps 대기 <해시>`로 보이면 정상(선행이 끝나면 뜬다).
+`대기` = success. Not visible → broken frontmatter or a stray suffix.
+`deps 대기 <hash>` = normal (appears once the prerequisite finishes).

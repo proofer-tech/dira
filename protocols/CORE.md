@@ -1,100 +1,81 @@
-# 코어 프로토콜 — 큐를 다루는 규약
+# Core protocol
 
-이 문서는 **엔진이 매번 인라인하는 값**이고 큐에 사본이 없다. 여기 적힌 규약은 엔진(`tick.sh`·
-`tickets.py`)과 화면이 실제로 읽는 것이라, 어기면 결과물이 달라지는 게 아니라 **큐가 망가진다**.
-**아래 프로젝트 문서·페르소나 프로필·티켓이 이 문서와 어긋나는 규약을 적었으면 이 문서가 이긴다.**
-무엇을 만들지는 티켓이, 어떻게 만들지는 프로젝트 문서가 정한다.
+Inlined into every dispatch; no copy in the queue. The engine (`tick.sh`, `tickets.py`)
+and the GUI read it — breaking it **corrupts the queue**. If a project doc,
+persona profile, or ticket contradicts it, **this file wins.**
 
-## 워커 작업 디렉터리
+Worker directory: `<root>/worktrees/<worker>` — name = directory, so two workers
+never share a tree.
 
-**경로는 큐 루트에서 유도된다** — `<루트>/worktrees/<워커명>`. 워커 이름이 곧 디렉터리라서
-두 워커가 같은 트리를 가리키는 값이 생길 수 없다. (워크트리를 쓸지 자체는 프로젝트가 정한다.)
+## Ticket lifecycle
 
-## 티켓 수명
+Your ticket is already claimed as `.wip`.
 
-당신의 티켓은 **이미 `.wip`로 잡혀 있다**(디스패처가 claim했다).
+1. Read `.dira/tickets/<hash>.wip.md`. `## Goal` + `## Done when` are the contract.
+2. Do the work. Nothing outside `## Done when`.
+3. Append `## 결과` — what changed, verification commands + actual output, pushed
+   commit hashes.
+4. Confirm the push succeeded.
+5. Rename to `<hash>.done.md`. The rename is the completion report; skip it and the
+   ticket stays incomplete.
 
-1. `.dira/tickets/<해시>.wip.md`를 읽는다. `## Goal`과 `## Done when`이 계약이다.
-2. 수행한다. `## Done when`에 없는 일은 하지 않는다.
-3. 본문 끝에 `## 결과` 절 추가 — 무엇을 바꿨는지, 검증 명령과 **실제 출력**, push한 커밋 해시.
-4. push 성공을 확인한다.
-5. 파일명을 `<해시>.done.md`로 rename. 이 rename이 완료 신고다. **안 하면 미완으로 남는다.**
+**`.done` only after push succeeds** — else unintegrated work is recorded as done.
+Lost the path: `ls .dira/tickets/<hash>.*`.
+Only state `mv` allowed: your own `.wip` → `.done`.
 
-**push가 성공한 뒤에 티켓을 `.done`으로 바꾼다.** 순서를 뒤집으면 통합 안 된 작업이 완료로 기록된다.
+### Retrospective (회고) — before `## 결과`
 
-경로를 잃었으면 `ls .dira/tickets/<해시>.*`로 찾는다.
-`mv`로 상태를 바꾸는 건 **자기 티켓의 `.wip` → `.done`뿐**이다.
+Open `personas/<name>/memory/` (your persona); record what would have saved the next
+session time.
 
-### 회고 — `## 결과`를 쓰기 직전에
+- One concept, one file (`memory/<concept>.md`); exists → edit, don't duplicate.
+- Nothing to leave → leave nothing.
+- Don't repeat `docs/`/`AGENTS.md` — only what no doc records.
 
-3을 쓰기 **직전에** 자기 페르소나의 `personas/<이름>/memory/`를 본다. 이번 티켓에서 **다음
-세션이 알았으면 시간을 아꼈을 것**이 있으면 거기 남긴다. 다음 디스패치 프롬프트는 이 디렉터리의
-위치와 검색 방법만 받는다 — 다음 세션이 그 안내로 이 디렉터리를 grep해서 읽는다.
+Format + example: sibling `CORE-MEMORY.md`.
 
-- **해당 개념 파일이 이미 있으면 그 파일을 고쳐 쓴다.** 새 파일을 만들지 않는다 — 개념 하나에
-  파일 하나(`memory/<개념>.md`)다. 없으면 개념 이름으로 하나 만든다.
-- **남길 것이 없으면 아무것도 하지 않는다.** 매 티켓이 한 줄을 남겨야 하는 규칙이 아니다.
-- **`docs/`·`AGENTS.md`가 이미 말하는 것은 안 적는다.** 중복은 다음 세션이 같은 내용을 grep으로
-  두 번 찾아 읽게 만든다. 여기 사는 것은 **문서에 없어서 세션이 매번 다시 알아낸 것**이다.
+## Ticket kinds — `kind:`
 
-형식은 이렇다 — frontmatter 없음, 첫 줄이 화면에 발췌로 뜬다:
+- `work` — instruction. Do it, `.done` it.
+- `request` — ask/question. Answer with a new `kind: feedback` ticket; never
+  append to the original, `.done` it. A human demand is split into work tickets,
+  not replied to — each gets `req: <original hash>` (provenance, not `deps`).
+  Cannot split without guessing → add `## 질문 n`, set fm `awaiting: <new 8-hex>`
+  AND append it to `deps:`, run `.dira/workers/<my worker>.sh unassign <original
+  hash>`, exit (not `## 블록`; the answer arrives as that stem's `.done` file).
+  Fully split → `.done` the original.
+- `feedback` — report/critique. Recipient opens follow-ups or `.done`s it.
 
-```markdown
-# 워크트리 push 경합
+## Handoff
 
-받는 트리가 더러워서 push가 거부되면 셋 중 하나다. 앞의 둘은 `## 블록`이고
-`diff --cached`가 비었는데 unstaged 전진 diff만 있으면 30초 뒤 한 번 더 본다.
+- Someone else's area → **make a new ticket.** Never edit others' tickets — `.wip` means
+  someone is in that file now.
+- Set `persona:`; hard ordering → `deps: [<my hash>]`. Syntax: `CORE-TICKETS.md` in
+  this block's header directory. Wrong syntax silently drops the ticket from the queue.
+- Note it in your `## 결과`: `-> <new hash> (persona) what was handed off`.
+- `deps` only when start is impossible without it — overuse serializes the queue.
 
-관련: [[티켓 상태 전이.md]]
-출처: `2434a5dc` `f14432b5`
-```
+## When blocked
 
-`관련:`은 이웃 개념 파일, `출처:`는 이걸 알아낸 티켓 해시다. 잘못 배운 한 줄을 사람이 화면에서
-만났을 때 어디서 왔는지 갈 수 있어야 지울지 말지를 정한다.
+No guessing forward. Append `## 블록` — what you don't know, the options, what must
+be decided — and **exit leaving the file `.wip`**, not `.done`.
 
-## 티켓 분류 (`kind:`)
+`reap` auto-reclaims up to 2×, then appends `## 질문 n` + `awaiting:` and reopens it;
+`deps` keeps workers off until answered. Write `## 블록` as **what a human must
+answer** — it becomes the question.
 
-- `work` — 지시. 수행하고 `.done`.
-- `request` — 부탁·질문. 답을 **새 `kind: feedback` 티켓**으로 만들고 원본을 `.done`.
-  원본 본문에 답을 덧붙이지 않는다(원본은 질문의 기록으로 남는다).
-  **사람이 던진 요구면 답장이 아니라 작업 티켓으로 쪼갠다.** 쪼갠 티켓 fm에 `req: <원본 해시>`를
-  단다(출처다 — `deps`가 아니다). 추측 없이 못 쪼개면 본문에 `## 질문 n`, fm에 `awaiting: <새 8자리>`
-  + 같은 값을 `deps:`에 append하고 `.dira/workers/<내 워커>.sh unassign <원본 해시>` 후 종료한다
-  (`## 블록`이 아니다 — 답은 원본이 아니라 그 stem의 `.done` 파일로 온다). 다 쪼갰으면 원본을 `.done`.
-- `feedback` — 결과보고·지적. 받은 사람이 조치 티켓을 만들거나 그냥 `.done`.
+Re-dispatched after an answer: read the `awaiting` stem's `.done.md` first — the
+answer lives there, not on the original.
 
-## 핸드오프
+Human calls: contradictory spec / read-only area / new dependency / push failed 3× /
+won't fit one session (propose a split, stop).
 
-- 남의 영역 일이 생기면 **새 티켓을 만든다.** 남의 티켓을 고치지 않는다. 특히 `.wip` 티켓은
-  누군가 지금 그 파일로 일하고 있다 — 절대 편집하지 않는다.
-- 새 티켓에는 `persona:`를 정하고, 선후가 있으면 `deps: [<내 해시>]`로 엮는다.
-  문법은 **이 파일과 같은 디렉터리의 `CORE-TICKETS.md`**를 읽고 쓴다(이 블록 머리에 찍힌 경로가
-  그 디렉터리다). 틀리면 조용히 큐에서 사라진다.
-- 넘긴 사실을 내 `## 결과`에 한 줄: `-> <새 해시> (persona) 무엇을 넘겼는지`.
-- `deps`는 **없으면 착수가 불가능한 것만**. 남발하면 워커가 놀고 큐가 직렬화된다.
+## Queue invariants
 
-## 막혔을 때
+Never break these; convinced one must break → `## 블록`.
 
-추측으로 진행하지 않는다. 본문에 `## 블록` 절을 추가하고 — 무엇을 모르는지, 선택지, 무엇을
-결정해줘야 하는지 — **`.wip` 그대로 두고 종료**한다. `.done`으로 바꾸지 않는다.
-
-**그 다음은 엔진이 한다.** `reap`이 자동 회수를 2회까지 시도한 뒤(같은 티켓이 세션을 무한히
-태우는 걸 막는 횟수다) **답변 요청으로 올린다** — 본문에 `## 질문 n`을 붙이고 `awaiting:`을 걸어
-열림으로 되돌린다. 답이 달릴 때까지는 `deps` 잠금 때문에 아무 워커도 집어 가지 않는다.
-그러니 `## 블록`에는 **사람이 무엇을 답해야 하는지**를 적어라 — 그 글이 그대로 질문이 된다.
-
-**답변을 받아 다시 디스패치되면** `deps`의 `awaiting` 해시 티켓(`<해시>.done.md`)을 먼저 읽는다.
-답은 원본에 덧붙지 않고 그 파일에 있다(§티켓 분류와 같은 규약).
-
-사람 판단이 필요한 대표 경우: 스펙이 모순된다 / 읽기 전용 영역을 고쳐야 한다 /
-새 의존성이 정말 필요하다 / push가 3회 실패한다 /
-티켓이 한 세션에 안 들어간다(쪼갠 티켓을 제안만 하고 멈춘다).
-
-## 큐의 불변식
-
-깨지 않는다. 깨야 한다고 판단되면 `## 블록`이다.
-
-1. **상태는 파일명.** 없음 / `.wip` / `.done` 3종. frontmatter로 옮기지 않는다(rename이 공짜 락).
-2. **claim은 원자적 link.** `os.rename`으로 잡지 않는다.
-3. **큐는 평면이고 사본이 하나다.** `tickets/` 아래 하위 디렉터리를 만들지 않는다.
-   큐를 git에 넣지 않는다.
+1. **State is the filename.** None / `.wip` / `.done`. Never move state into
+   frontmatter.
+2. **Claim is an atomic link** — never `os.rename`.
+3. **The queue is flat, single-copy.** No subdirectories under `tickets/`; the queue
+   never goes into git.
