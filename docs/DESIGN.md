@@ -21452,7 +21452,7 @@ P180-2는 P180-1(`6ca24538`, 완료)이 세운 `addToken(raw, label?)` 배관을
 
 | ID | 무엇 | 담당 | deps | 상태 |
 |---|---|---|---|---|
-| P182-1 | `landing.tsx` §플랜 h2 텍스트 노드 교체 + `check-landing-prose.py` 지운 노드 명단 (§랜딩 §플랜 h2) `df9d9703` | developer | — | 대기 |
+| P182-1 | `landing.tsx` §플랜 h2 텍스트 노드 교체 + `check-landing-prose.py` 지운 노드 명단 (§랜딩 §플랜 h2) `df9d9703` | developer | — | 완료 |
 
 ### P183 — 머신 상태: 잠자기·꺼짐·오프라인 (요구 `ea247317`)
 
