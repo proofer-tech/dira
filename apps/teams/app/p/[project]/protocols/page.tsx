@@ -49,10 +49,13 @@ export default async function Protocols({
   const config = await resolveConfig(project);
   const tree = await listTree(config.protocols);
 
-  // 코어는 큐가 아니라 엔진 레포에 있고 읽기 전용이라 `?file=`(기준 디렉터리 상대경로)에 실을 수
-  // 없다 — 별도 `?core=<파일명>`이다. 못 읽으면 트리에서 항목만 빠진다(§프롬프트 층 결정 5·6).
-  const core = await readCore();
+  // 코어는 읽기 전용이라 `?file=`(기준 디렉터리 상대경로)에 실을 수 없다 — 별도 `?core=<파일명>`
+  // 이다. 못 읽으면 트리에서 항목만 빠진다(§프롬프트 층 결정 5·6). vendored 큐(큐
+  // `protocols/CORE.md`가 있는 큐)에서는 세션이 실제로 받는 큐 사본을 읽는다(결정 8-d) —
+  // `listTree`가 그 이름들을 편집 가능 목록에서 빼는 것과 같은 판정을 쓴다.
+  const core = await readCore(config.protocols);
   const coreFiles = "files" in core ? core.files : [];
+  const coreVendored = "vendored" in core && core.vendored;
   // `core`도 사용자 입력이지만 **경로로 조립하지 않는다** — 실제로 나열해 나온 이름과 맞춰만 본다.
   const openedCore = wantCore === undefined ? null : coreFiles.find((f) => f.name === wantCore);
 
@@ -217,7 +220,7 @@ export default async function Protocols({
                 </AlertDescription>
               </Alert>
             ) : openedCore ? (
-              <CoreView file={openedCore} />
+              <CoreView file={openedCore} vendored={coreVendored} />
             ) : !selected ? (
               <p className="text-sm text-muted-foreground">왼쪽에서 파일을 고르세요.</p>
             ) : selected.text === null ? (
@@ -265,8 +268,11 @@ const ROW =
 
 /** 코어는 **읽기 전용**이다(§프롬프트 층 결정 5). `ProtocolEditor`에 플래그를 다는 대신 서버
  *  컴포넌트로 따로 그린다 — 저장·이름변경·삭제 버튼이 코드에 아예 없고 클라이언트 액션도 안 실린다.
- *  잠금이 조건문 하나가 아니라 배치다(서버 액션은 어차피 큐 안 경로만 받는다). */
-function CoreView({ file }: { file: CoreFile }) {
+ *  잠금이 조건문 하나가 아니라 배치다(서버 액션은 어차피 큐 안 경로만 받는다).
+ *
+ *  `vendored`가 서있으면(결정 8-d) 세션이 실제로 받는 파일이 큐 사본이라 산문도 그걸 말한다 —
+ *  `file.path`는 두 경우 다 `readCore`가 실제로 읽은 절대경로라 이미 맞다(위 배지 옆). */
+function CoreView({ file, vendored }: { file: CoreFile; vendored: boolean }) {
   const inlined = file.name === CORE_INLINED;
   return (
     <div className="space-y-3">
@@ -280,7 +286,11 @@ function CoreView({ file }: { file: CoreFile }) {
       </div>
 
       <p className="text-sm text-muted-foreground">
-        이 파일은 큐가 아니라 엔진 레포에 있습니다 —{" "}
+        {vendored ? (
+          <>이 파일은 이 큐에 vendored된 코어 사본입니다 — </>
+        ) : (
+          <>이 파일은 큐가 아니라 엔진 레포에 있습니다 — </>
+        )}
         {inlined ? (
           <>
             <span className="font-mono text-xs">tick.sh</span>가 전문을{" "}

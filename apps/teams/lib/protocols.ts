@@ -37,10 +37,16 @@ export async function listTree(baseDir: string): Promise<ProtocolEntry[]> {
     throw e;
   }
 
-  const entries: ProtocolEntry[] = dirents.map((d) => {
-    const rel = path.relative(base, path.join(d.parentPath, d.name));
-    return { rel, name: d.name, depth: rel.split(path.sep).length - 1, isDir: d.isDirectory() };
-  });
+  const entries: ProtocolEntry[] = dirents
+    // vendored 큐(결정 8)의 `CORE*.md`는 §6 코어 항목(readCore)이 이미 보여준다 — 편집 가능
+    // 목록에 또 넣으면 다음 미러링(결정 8-c)이 소리 없이 되돌리는 편집기가 된다(결정 8-d).
+    // 최상위(depth 0)만 거른다 — 이 이름은 층 표시로 예약이라(결정 6) 하위 디렉터리에서까지
+    // 뺄 근거는 없다.
+    .filter((d) => !(d.parentPath === base && d.isFile() && isCoreLayerName(d.name)))
+    .map((d) => {
+      const rel = path.relative(base, path.join(d.parentPath, d.name));
+      return { rel, name: d.name, depth: rel.split(path.sep).length - 1, isDir: d.isDirectory() };
+    });
   entries.sort(byTreeOrder);
 
   // 중첩된 AGENTS.md는 인라인되지 않는다 — tick.sh가 읽는 건 `<protocols>/AGENTS.md` 하나뿐이고,
@@ -70,24 +76,51 @@ export type CoreFile = { name: string; path: string; text: string };
 /** 인라인되는 유일한 코어. 나머지 `CORE-*.md`는 세션이 필요할 때 읽는다(§프롬프트 층 결정 6). */
 export const CORE_INLINED = "CORE.md";
 
-/** 코어 프로토콜 — **큐에 없다.** `<엔진 레포>/protocols/`에 살고 엔진이 그중 `CORE.md`를 매 세션
- *  프롬프트 맨 앞에 인라인한다(`tick.sh:266`, DESIGN.md §프롬프트 층 결정 5·6). 나머지 `CORE-*.md`는
- *  거기서 가리키면 세션이 직접 읽는다 — 화면에 안 보이면 사람이 세션 행동을 추적할 자리가 없어진다.
- *  그래서 이 모듈이 코어에 주는 것은 이 읽기 하나뿐이다 — 저장·생성·삭제·이름변경은 전부 기준
- *  디렉터리(= 큐 안)에서만 도는 함수라, 화면을 잠그는 것과 별개로 **쓰는 경로 자체가 서버에 없다.**
+/** `CORE` 접두는 층 표시로 예약이다(§프롬프트 층 결정 6·8-d) — vendored 큐의 프로젝트 파일
+ *  (`AGENTS.md` 등)과 코어 사본을 같은 디렉터리에서 걸러낼 때, §6 편집 가능 트리에서 코어를
+ *  뺄 때 둘 다 이 판정 하나를 쓴다. */
+export function isCoreLayerName(name: string): boolean {
+  return name === CORE_INLINED || (name.startsWith("CORE-") && name.endsWith(".md"));
+}
+
+/** 코어 프로토콜. 정본은 `<엔진 레포>/protocols/`고 엔진이 그중 `CORE.md`를 매 세션 프롬프트 맨
+ *  앞에 인라인한다(`tick.sh:266`, DESIGN.md §프롬프트 층 결정 5·6). **vendored 큐**(= 큐
+ *  `protocols/CORE.md`가 있는 큐, 결정 8)에서는 세션이 실제로 받는 사본이 큐 쪽이라 그걸 읽는다
+ *  (결정 8-d) — 엔진의 `$TICKET_ROOT` 우선·폴백(결정 8-b)과 같은 판정을 화면에서도 낸다.
+ *  나머지 `CORE-*.md`는 거기서 가리키면 세션이 직접 읽는다 — 화면에 안 보이면 사람이 세션
+ *  행동을 추적할 자리가 없어진다. 그래서 이 모듈이 코어에 주는 것은 이 읽기 하나뿐이다 —
+ *  저장·생성·삭제·이름변경은 전부 기준 디렉터리(= 큐 안)에서만 도는 함수라, 화면을 잠그는 것과
+ *  별개로 **쓰는 경로 자체가 서버에 없다.**
  *
  *  글롭은 **한 단계만**이다(`tick.sh:235`의 메모리 글롭과 같은 깊이) — 하위 디렉터리는 안 따라간다.
+ *  vendored 큐의 디렉터리는 `AGENTS.md`·`tickets.md`도 같이 담으므로 `isCoreLayerName`으로
+ *  걸러 코어만 집는다(엔진 레포 쪽은 `CORE*.md`뿐이라 밑져도 본전이다).
  *  못 읽으면 던지지 않고 사유를 준다: 엔진 레포를 못 찾는 배치가 정상이고(엔진도 `[ -r ]`로
- *  넘어간다) 화면은 그 항목들만 빼고 종전대로 돌아야 한다. */
-export async function readCore(): Promise<{ files: CoreFile[] } | { error: string }> {
-  const repo = engineRepo();
-  if ("error" in repo) return { error: repo.error };
-  const dir = path.join(repo.path, "protocols");
+ *  넘어간다) 화면은 그 항목들만 빼고 종전대로 돌아야 한다.
+ *
+ *  @param queueProtocolsDir 이 큐의 해석된 `protocols` 디렉터리(§6 화면이 넘기는 기준 디렉터리) */
+export async function readCore(
+  queueProtocolsDir: string,
+): Promise<{ files: CoreFile[]; vendored: boolean } | { error: string }> {
+  const vendoredDir = expandHome(queueProtocolsDir);
+  const vendored = await lstat(path.join(vendoredDir, CORE_INLINED))
+    .then((st) => st.isFile())
+    .catch(() => false);
+
+  let dir: string;
+  if (vendored) {
+    dir = vendoredDir;
+  } else {
+    const repo = engineRepo();
+    if ("error" in repo) return { error: repo.error };
+    dir = path.join(repo.path, "protocols");
+  }
+
   let names: string[];
   try {
     // 디렉터리 엔트리로 거른다 — `foo.md`라는 이름의 디렉터리가 있으면 readFile이 EISDIR로 터진다
     names = (await readdir(dir, { withFileTypes: true }))
-      .filter((d) => d.isFile() && d.name.endsWith(".md"))
+      .filter((d) => d.isFile() && isCoreLayerName(d.name))
       .map((d) => d.name);
   } catch (e) {
     const err = e as NodeJS.ErrnoException;
@@ -103,7 +136,7 @@ export async function readCore(): Promise<{ files: CoreFile[] } | { error: strin
     const full = path.join(dir, name);
     files.push({ name, path: full, text: await readFile(full, "utf8") });
   }
-  return { files };
+  return { files, vendored };
 }
 
 /** 편집기가 열 수 있는 것과 못 여는 것. `text`가 null이면 `reason`이 이유다. */
