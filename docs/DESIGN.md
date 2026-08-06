@@ -21990,6 +21990,7 @@ Max 5시간 리밋이 1시간에 소진된다는 사람 보고. 스펙은 §프�
 | P192-2 | 구현 — 스트림 렌더 말풍선/묶음 + 표식 `생각하는 중` (`session-stream.tsx`) `6bbe4f1d` | developer | `f0202829` | 대기 |
 | P193 | 편집 가능 층 재감사 — 진행 표시 규약 코어 승격 스펙 §프롬프트 층 결정 9 (요구 `b9371e55`) | pm | — | 완료 — 걸린 것 하나(§2-4 규약: 큐 AGENTS.md에만 살고 템플릿엔 없다). `archives:`는 보류(읽는 자리 0), git 흐름·회고 예산·CDP는 결정 2 판정 유지 |
 | P193-1 | 구현 — `CORE.md` §Ticket lifecycle 2 승격(≤3,500 B) + 큐 AGENTS.md §진행 표시 삭제 + 검증 7 `2c6e5806` | developer | — | 대기 |
+| P194 | README §워커 레퍼런스 치환자 가이드 — `$HOME` · `$TICKET_CWD` · `{prompt}`/`{sid}` · `%s`의 값·치환 주체·시점, `$TICKET_CWD` 대입 순서 함정 (요구 `61fe519b`) `add7fb4f` | writer | — | 대기 — 되묻지 않았다: 치환자의 종류·값은 전부 코드의 사실이고(`tick.sh:537` · `tick.sh:417` · `lib/paths.ts:65` · `lib/workers.ts:335`), 자리는 요구의 "(나머지 워커 설정같은것)"이 가리키는 기존 워커 설정 표 곁이다 |
 
 ### P189 — 코어 vendoring: 프로젝트 자립 + 업데이트 미러링 (요구 `d4ffee3f`)
 
