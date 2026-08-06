@@ -149,6 +149,14 @@ export async function scaffold(
     await put(rel, fillPlaceholders(text, { project, branch: opts.branch, specDoc: opts.specDoc }));
   }
 
+  // 코어(§프롬프트 층 결정 8-a) — 원본은 `<엔진>/protocols/`다. `templates/`에 사본을 두지 않는다
+  // (정본 1벌). 자리표시자 치환 없음, `TEMPLATE_FILES`는 손대지 않는다(그 1:1 매핑은 templates/ 전용).
+  const coreNames = (await readdir(path.join(repo.path, "protocols"))).filter((n) => n.startsWith("CORE"));
+  for (const name of coreNames) {
+    const text = await readFile(path.join(repo.path, "protocols", name), "utf8");
+    await put(path.join("protocols", name), text);
+  }
+
   // 첫 워커. 필수는 마지막 source 한 줄뿐이고, 그 줄이 없으면 워커는 아무것도 아니다.
   // **`TICKET_CWD`는 넣지 않는다**(§0-3): 엔진 기본값(= 큐 루트의 부모 = `<프로젝트>`)이 새
   // 프로젝트에서 유일하게 실제로 도는 값이다. `<루트>/worktrees/<이름>`은 워커를 **추가할** 때의

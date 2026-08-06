@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { mkdtemp, mkdir, readFile, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readdir, readFile, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
@@ -12,6 +12,9 @@ const SET = [
   ".dira/tickets/",
   ".dira/protocols/AGENTS.md",
   ".dira/protocols/tickets.md",
+  ".dira/protocols/CORE.md",
+  ".dira/protocols/CORE-TICKETS.md",
+  ".dira/protocols/CORE-MEMORY.md",
   ".dira/personas/pm/PROFILE.md",
   ".dira/personas/developer/PROFILE.md",
   ".dira/personas/qa/PROFILE.md",
@@ -103,6 +106,29 @@ test("scaffold — §0-3 집합 그대로, 두 번째는 전부 skipped", async 
   assert.deepEqual(second.skipped.sort(), [...SET].sort());
   assert.deepEqual(second.written, []);
   assert.equal(await readFile(agents, "utf8"), before);
+});
+
+/** §프롬프트 층 결정 8-a — 원본은 `<엔진>/protocols/`, `templates/`에 사본을 두지 않는다. */
+test("scaffold — CORE*.md는 엔진 protocols/에서 그대로 복사, templates/에는 사본이 없다", async (t) => {
+  const repo = engineRepo();
+  assert.ok("path" in repo, `엔진 레포를 못 찾았다: ${JSON.stringify(repo)}`);
+
+  const dir = await tmp();
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const project = path.join(dir, "myproject");
+
+  await scaffold(project, { branch: "main" });
+
+  const names = (await readdir(path.join(repo.path, "protocols"))).filter((n) => n.startsWith("CORE"));
+  assert.ok(names.length > 0);
+  for (const name of names) {
+    const orig = await readFile(path.join(repo.path, "protocols", name), "utf8");
+    const copy = await readFile(path.join(project, ".dira/protocols", name), "utf8");
+    assert.equal(copy, orig, `${name}이 원본과 달라야 안 된다`); // 자리표시자 치환 없음
+  }
+
+  // templates/에는 사본이 없다 — 정본은 엔진 protocols/ 하나
+  await assert.rejects(() => readFile(path.join(repo.path, "templates/protocols", names[0]), "utf8"));
 });
 
 test("scaffold — specDoc을 주면 세 번째 자리표시자도 사라진다", async (t) => {
