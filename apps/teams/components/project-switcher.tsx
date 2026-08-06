@@ -278,7 +278,7 @@ export function ProjectSwitcher({
                   <span className="flex items-center justify-between gap-2">
                     <span className="truncate text-sm">{t.name}</span>
                     {t.connected ? (
-                      <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                      <span className="shrink-0 text-xs tabular-nums text-muted-foreground group-data-selected/command-item:text-foreground">
                         열림 {t.open}
                         {t.running > 0 && ` · running ${t.running}`}
                       </span>
@@ -286,7 +286,7 @@ export function ProjectSwitcher({
                       <StatusBadge status="disconnected" className="shrink-0" />
                     )}
                   </span>
-                  <span className="truncate font-mono text-xs text-muted-foreground">
+                  <span className="truncate font-mono text-xs text-muted-foreground group-data-selected/command-item:text-foreground">
                     {t.shortRoot}
                   </span>
                 </span>
