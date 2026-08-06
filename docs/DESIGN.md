@@ -21274,7 +21274,7 @@ P180-2는 P180-1(`6ca24538`, 완료)이 세운 `addToken(raw, label?)` 배관을
 
 | ID | 무엇 | 담당 | deps | 상태 |
 |---|---|---|---|---|
-| P184-1 | `ontology/SCHEMA.md` — dira의 객체·관계·액션 타입 표 `caa795ac` | archive-manager | — | 대기 |
+| P184-1 | `ontology/SCHEMA.md` — dira의 객체·관계·액션 타입 표 `caa795ac` | archive-manager | — | 완료 |
 | P184-2 | 마이그레이션 — `objects/**` 인스턴스(교훈 층·큐·레포에서 사실 추출) `e04fed11` | archive-manager | P184-1 | 대기 |
 | P184-3 | 사실 질문 20문항 + 정답·출처(온톨로지 안 읽고 만든다) `2b074ddf` | qa | — | 대기 |
 | P184-4 | 블라인드 신뢰도 측정 + 판정 보고 `d3077e19` | qa | P184-2 · P184-3 | 대기 |
