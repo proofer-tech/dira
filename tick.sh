@@ -424,27 +424,22 @@ $(cat "$PROTOCOL")
 $PROMPT"
 fi
 
-# --- 온톨로지 목차: <루트>/ontology/**/*.md 의 `## ` 줄만 인라인한다 ---
+# --- 온톨로지 블록: 위치 + 검색 방법만 싣는다(나열 없음, 9d7ba932) ---
 # 메모리는 페르소나의 것이고 온톨로지는 큐 전체의 것이라 블록을 가른다 - 그래서 페르소나 if 밖이고
-# `persona:`가 없는 티켓에도 실린다. 본문은 안 싣는다(목차가 후보를 좁히고, 본문에 닿는 길은
-# 세션의 grep이다 - 그래서 블록 크기가 파일 수 + 절 수에만 선형이고 본문 크기와 무관하다).
-# 재귀지만 globstar는 안 켠다(이 파일에 shopt가 0곳이고 켜면 그 아래 모든 글롭의 뜻이 갈린다).
-# 파일명에 공백이 있어서 find 출력은 `while IFS= read -r`로 받는다 - `for`로 돌리면 파일 하나가
-# 조각으로 갈려 에러 없이 틀린 목록이 선다. 없거나 비면 안 붙고 WARN도 없다(없는 것이 정상이다).
+# `persona:`가 없는 티켓에도 실린다. 목차 나열(파일명+`## ` 절)을 걷었다 - 블록이 상수라 파일 수·
+# 절 수와 무관하게 크기가 고정된다. SCHEMA.md가 타입 지도(객체·관계·액션)라 그게 진입점이고,
+# 나머지 개념에 닿는 길은 세션의 grep이다. 없거나 비면 안 붙고 WARN도 없다(없는 것이 정상이다).
 ONTDIR="$TICKET_ROOT/ontology"
-ONTBLOCK=""
-while IFS= read -r o; do
-  ONTBLOCK="$ONTBLOCK
---- ${o#"$ONTDIR"/}
-$(grep '^## ' "$o")"
-done < <(find "$ONTDIR" -type f -name '*.md' 2>/dev/null | LC_ALL=C sort)
-[ -n "$ONTBLOCK" ] && PROMPT="아래는 이 큐의 온톨로지 목차입니다(파일 경로와 각 파일의 '## ' 절 제목).
-본문은 안 실려 있으니 필요한 개념은 $ONTDIR 를 grep해서 여세요.
+if find "$ONTDIR" -type f -name '*.md' 2>/dev/null | grep -q .; then
+  PROMPT="아래는 이 큐의 온톨로지가 사는 곳입니다.
 
-===== 온톨로지 목차 ($ONTDIR) =====$ONTBLOCK
+===== 온톨로지 ($ONTDIR) =====
+$ONTDIR 안의 SCHEMA.md가 지도입니다(객체·관계·액션 타입의 진입점). 본문은 안 실립니다 -
+필요한 개념은 티켓의 어휘로 $ONTDIR 를 grep해서 여세요.
 ===== 온톨로지 끝 =====
 
 $PROMPT"
+fi
 
 # --- 페르소나: 티켓 frontmatter `persona:` -> <personas>/<이름>/PROFILE.md ---
 # 프로필 본문을 프롬프트 머리에 인라인한다(경로만 주면 세션이 안 읽고 시작할 수 있다).
@@ -467,24 +462,20 @@ $(cat "$SKILLS")
   fi
   # 메모리 사이드카(같은 디렉터리 memory/*.md)는 스킬 블록 뒤에 붙는다. 여기는 엔진을 안 가린다 -
   # 메모리는 이 큐에서 알아낸 사실이라 codex에도 참이다. 없는 것이 정상이라 WARN 없다.
-  # 글롭은 한 단계다(memory/<하위>/x.md는 안 읽는다). 순서는 bash 글롭이 이미 오름차순으로 준다.
-  # 싣는 것은 본문이 아니라 파일별 `## ` 목차다 - 본문에 닿는 길은 세션의 grep이고 엔진이 만드는
-  # 색인은 0이다. 목차는 전량 실리므로 "있는 줄 몰라서 못 여는" 상태가 없다.
-  # 절이 없는 파일도 `--- <파일명>` 줄은 남는다(그게 전량의 뜻이다). 되돌리려면 MEMTOC 대신 $(cat "$m").
+  # 글롭은 한 단계다(memory/<하위>/x.md는 안 읽는다). 목차 나열(파일명+`## ` 절)을 걷었다(9d7ba932) -
+  # 블록이 상수라 파일 수·절 수와 무관하게 크기가 고정된다. 본문·목차에 닿는 길은 세션의
+  # grep이다(엔진이 만드는 색인은 0). 되돌리려면 이 if를 종전 for 루프로 바꾼다.
   MEMDIR="${TICKET_PERSONAS:-$TICKET_ROOT/personas}/$TPERSONA/memory"
   MEMBLOCK=""
-  for m in "$MEMDIR"/*.md; do
-    [ -f "$m" ] || continue
-    MEMTOC="$(grep '^## ' "$m")"   # 매치 0건이면 빈 문자열(set -e가 없어 rc 1은 무해하다)
-    MEMBLOCK="$MEMBLOCK
---- $(basename "$m")${MEMTOC:+
-$MEMTOC}"
-  done
-  [ -n "$MEMBLOCK" ] && MEMBLOCK="
+  if find "$MEMDIR" -maxdepth 1 -type f -name '*.md' 2>/dev/null | grep -q .; then
+    MEMBLOCK="
 ===== $TPERSONA 메모리 ($MEMDIR) =====
-본문은 안 실렸다 - 아래는 파일별 '## ' 목차다. 필요한 개념은 위 경로를 grep해서 그 파일을 읽는다.$MEMBLOCK
+이 큐에서 알아낸 교훈이 파일별로 쌓인 곳입니다(CORE.md §회고가 쓰는 자리). 본문은 안 실립니다 -
+필요한 개념은 티켓의 어휘로 $MEMDIR 를 grep해서 그 파일을 여세요. [[링크]]는
+grep -rl '\[\[<이름>\]\]' $MEMDIR 로 1홉 따라갑니다.
 ===== 메모리 끝 =====
 "
+  fi
   PROMPT="당신은 이 프로젝트의 '$TPERSONA'입니다. 아래 프로필이 당신의 역할·권한·판단 기준이고,
 티켓을 수행하는 동안 이 페르소나로 일관되게 행동하세요. 프로필과 티켓 지시가 충돌하면 티켓을 따르되
 충돌 사실을 티켓 본문에 남기세요.
