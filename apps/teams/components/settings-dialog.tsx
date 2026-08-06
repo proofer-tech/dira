@@ -14,7 +14,8 @@
  *  URL 파라미터도 만들지 않는다 — 동시에 열릴 수 없고, 상태는 어느 쪽이든 서버가 준 같은
  *  props에서 온다(§0-4). 트리거를 JSX로 받지 않고 두 값 중 하나로 받는 이유는 부르는 쪽이
  *  **서버 컴포넌트**라서다: 넘길 수 있는 것은 값이고, 모양은 두 가지뿐이다. */
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
+import { flushSync } from "react-dom";
 import { useRouter } from "next/navigation";
 import {
   CirclePlay,
@@ -50,6 +51,7 @@ import { cn } from "@/lib/utils";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import {
   Dialog,
   DialogContent,
@@ -75,6 +77,11 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 
 /** §0-15 트리 4노드 — 순서가 §45 ③ 트리 그림·검색 인덱스의 순서다. */
 type SettingsNode = "claude" | "other" | "keymap" | "stats";
+
+/** §0-15 §검색 레지스트리 한 줄 — `{트리 경로, 항목 이름, 이동 대상}`. `crumbs`가 빈 문자열이면
+ *  결과 줄은 `name` 하나만 그린다(트리 노드 이름 자신 — §45 ⑤ 예시의 `키설정`). `anchor`는
+ *  `data-setting="<anchor>"`를 짚는 문자열 하나다(§45 ⑥ §자리). */
+type SearchEntry = { node: SettingsNode; crumbs: string; name: string; anchor: string };
 
 /** 머신당 하나뿐인 Claude 장기 토큰의 자리와 저장 시각. 프로젝트마다 있지 않다(§0-4). */
 export type AuthView = {
@@ -117,7 +124,9 @@ function KeymapSection({ className }: { className?: string }) {
 
   return (
     <section className={cn("space-y-2 border-t pt-4 md:border-t-0 md:pt-0", className)}>
-      <h3 className="text-sm font-medium">키설정</h3>
+      <h3 data-setting="keymap" className="text-sm font-medium">
+        키설정
+      </h3>
       <p className="text-xs text-muted-foreground">
         단축키입니다. 이 컴퓨터에 하나뿐이고 등록된 프로젝트 전부에 적용됩니다.
       </p>
@@ -145,6 +154,7 @@ function KeymapSection({ className }: { className?: string }) {
           return (
             <li
               key={a.id}
+              data-setting={a.id}
               className={cn("col-span-4 grid grid-cols-subgrid items-center", !active && "h-9")}
             >
               <span className="min-w-0 truncate text-sm">{a.name}</span>
@@ -245,7 +255,7 @@ function KeymapSection({ className }: { className?: string }) {
       {/* 바꾼 것이 하나라도 있을 때만 뜬다 — 늘 떠 있는 되돌리기는 누를 일이 없는 동안
           층 하나를 차지한다(§비주얼 §22 ③층) */}
       {changed.length > 0 && (
-        <div className="flex justify-end">
+        <div data-setting="keymap.resetAll" className="flex justify-end">
           <Button variant="ghost" size="sm" disabled={busy} onClick={() => reset()}>
             전부 기본값으로
           </Button>
@@ -272,7 +282,9 @@ function AnalyticsSection({ className }: { className?: string }) {
 
   return (
     <section className={cn("space-y-2 border-t pt-4 md:border-t-0 md:pt-0", className)}>
-      <h3 className="text-sm font-medium">사용 통계</h3>
+      <h3 data-setting="stats" className="text-sm font-medium">
+        사용 통계
+      </h3>
       <p className="text-xs text-muted-foreground">
         몇 벌이 도는지와 어떤 화면 동작이 있었는지만 익명으로 보냅니다. 경로·프로젝트 이름·티켓
         내용은 보내지 않습니다.
@@ -283,7 +295,7 @@ function AnalyticsSection({ className }: { className?: string }) {
       {view && (
         <div className="flex items-center justify-between gap-4">
           {/* ① 자격값이 없으면 켜짐/꺼짐과 무관하게 아무것도 안 나간다 — 그렇게 말한다 */}
-          <p className="text-sm">
+          <p data-setting="stats.status" className="text-sm">
             {!view.configured
               ? "보내지 않습니다 — 이 빌드에 설정이 없습니다"
               : view.enabled
@@ -296,10 +308,9 @@ function AnalyticsSection({ className }: { className?: string }) {
             <Button
               variant="outline"
               size="sm"
+              data-setting="stats.toggle"
               disabled={pending}
-              onClick={() =>
-                start(async () => setView(await setAnalyticsAction(!view.enabled)))
-              }
+              onClick={() => start(async () => setView(await setAnalyticsAction(!view.enabled)))}
             >
               {pending ? "저장 중…" : view.enabled ? "끄기" : "켜기"}
             </Button>
@@ -495,7 +506,7 @@ function OtherEngineRow({ engine }: { engine: OtherEngineAuth }) {
       "발견 못 함 — 터미널에서 grok 로그인이 필요합니다"
     );
   return (
-    <div className="space-y-1 border-t pt-2">
+    <div data-setting={`other.${engine.engine}`} className="space-y-1 border-t pt-2">
       <h4 className="text-xs font-medium text-muted-foreground">{engine.engine}</h4>
       <p className="text-sm">
         {engine.cli ? (
@@ -545,6 +556,69 @@ export function SettingsDialog({
   // 토큰이 없어도 **claude 워커가 하나도 없으면** 이 컴퓨터는 이 토큰을 안 쓴다 — 안 말한다(§0-4)
   const needsAuth = !savedAt && auth.claudeUsed;
 
+  // §0-15 §검색 — 항목 열 전부 + 트리 노드 이름 자신(§45 ④). 키설정 8줄은 `DEFAULT_KEYMAP`에서
+  // 유도한다(레지스트리에 문자열 복사 0) — 이름을 옮기면 검색도 저절로 따라온다(§0-6).
+  const searchIndex: SearchEntry[] = [
+    { node: "claude", crumbs: "인증", name: "Claude 계정", anchor: "claude" },
+    { node: "claude", crumbs: "인증 › Claude 계정", name: "CLI 경로", anchor: "claude.cli" },
+    { node: "claude", crumbs: "인증 › Claude 계정", name: "계정 목록", anchor: "claude.accounts" },
+    { node: "claude", crumbs: "인증 › Claude 계정", name: "계정 추가", anchor: "claude.add" },
+    { node: "other", crumbs: "인증", name: "기타 엔진", anchor: "other" },
+    ...auth.otherEngines.map(
+      (e): SearchEntry => ({
+        node: "other",
+        crumbs: "인증 › 기타 엔진",
+        name: e.engine,
+        anchor: `other.${e.engine}`,
+      }),
+    ),
+    { node: "keymap", crumbs: "", name: "키설정", anchor: "keymap" },
+    ...DEFAULT_KEYMAP.map(
+      (a): SearchEntry => ({ node: "keymap", crumbs: "키설정", name: a.name, anchor: a.id }),
+    ),
+    { node: "keymap", crumbs: "키설정", name: "전부 기본값으로", anchor: "keymap.resetAll" },
+    { node: "stats", crumbs: "", name: "사용 통계", anchor: "stats" },
+    { node: "stats", crumbs: "사용 통계", name: "보내는 상태", anchor: "stats.status" },
+    { node: "stats", crumbs: "사용 통계", name: "끄기/켜기", anchor: "stats.toggle" },
+  ];
+
+  const [query, setQuery] = useState("");
+  const panelRef = useRef<HTMLDivElement>(null);
+  const highlightedRef = useRef<HTMLElement | null>(null);
+
+  const clearHighlight = () => {
+    highlightedRef.current?.classList.remove("rounded-md", "ring-2", "ring-primary");
+    highlightedRef.current = null;
+  };
+
+  // §45 ⑥ 하이라이트 — 링 하나(밑면 무수정) + 포커스(AT 채널) + 즉시 스크롤. `tabIndex`는
+  // 이미 포커스 가능한 요소(버튼 등)를 실수로 짚었을 때 탭 순서를 깨지 않도록 음수일 때만 준다.
+  const applyHighlight = (anchor: string) => {
+    clearHighlight();
+    const el = panelRef.current?.querySelector<HTMLElement>(`[data-setting="${anchor}"]`);
+    if (!el) return;
+    el.classList.add("rounded-md", "ring-2", "ring-primary");
+    if (el.tabIndex < 0) el.tabIndex = -1;
+    el.focus({ preventScroll: true });
+    el.scrollIntoView({ block: "center" });
+    highlightedRef.current = el;
+  };
+
+  // 트리에서 직접 고르는 것 — 검색이 아니라 사람이 다른 노드를 눌렀다(§45 ⑥ 수명 ③)
+  const selectNode = (node: SettingsNode) => {
+    setActiveNode(node);
+    clearHighlight();
+  };
+
+  // 결과 선택 — 그 노드로 이동 + 질의를 비워 목록을 닫고(패널이 다시 보인다) + 하이라이트를 건다.
+  // `flushSync`로 노드 전환을 먼저 커밋시킨다 — 안 그러면 `md:hidden`이 아직 안 걷힌 섹션을
+  // `querySelector`가 짚는다(md+에서 숨은 섹션은 앵커가 있어도 스크롤·포커스가 안 먹는다).
+  const selectSearchResult = (entry: SearchEntry) => {
+    setQuery("");
+    flushSync(() => setActiveNode(entry.node));
+    applyHighlight(entry.anchor);
+  };
+
   // `⌘;`(§0-6 `settings.open`) — 두 셸 어디서나 이 다이얼로그를 연다. **`icon` 트리거만 듣는다**:
   // 프로젝트 셸에는 이 컴포넌트가 둘(헤더 버튼 · 알림 종 ① 항목의 CTA)이고 둘 다 들으면 키 한 번에
   // 다이얼로그가 둘 열린다. 헤더 버튼은 두 셸에 항상 하나씩 있고 종 안은 조건부라 이쪽이 기준이다 —
@@ -579,6 +653,8 @@ export function SettingsDialog({
           setCode("");
           setSetup(null);
           setAddOpen(false);
+          setQuery("");
+          clearHighlight(); // §45 ⑥ 수명 ④ — 다이얼로그가 닫히면 하이라이트도 죽는다
           // 닫으면 죽인다 — 살아남은 `setup-token`은 pty를 물고 다음 시도를 막는다(§0-4)
           void stopSetupAction();
         }
@@ -621,11 +697,35 @@ export function SettingsDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {/* 2단 행 자신이다(§45 ① · §34 ①) — `Sidebar`가 `collapsible="none"`에서도
-            `useSidebar()`를 무조건 부르므로 Provider가 있어야 한다. `min-h-0`이 Provider 기본
-            `min-h-svh`를 덮는다 — 안 덮으면 다이얼로그가 뷰포트 높이만큼 자란다. `min-w-0`은
-            그리드 아이템(`DialogContent`가 `grid`)의 `min-width: auto` 함정을 막는다(§3). */}
-        <SidebarProvider className="min-h-0 min-w-0 flex-col gap-4 md:h-[32rem] md:max-h-[calc(100dvh-11rem)] md:flex-row">
+        {/* 검색 줄 + 2단 행이 한 `Command`다(§45 ① · §0-15 §검색) — 그릇 후보는 이미 설치된
+            `command`(§4-1 전환기 선례), 고르는 이유는 키보드(↑↓·Enter·활성 항목 표식이 전부
+            등록 항목이다). 덮는 것은 `p-1` 하나 — 나머지 등록 클래스는 이 자리에서 하는 일이
+            없다(배경·모서리가 다이얼로그 면과 같은 값이라 안 보인다, §45 ①). `filter`를 안
+            준다 — cmdk 기본 필터(대소문자 무시 부분수열)가 §0-15의 하한(부분 일치)을 덮는다. */}
+        <Command className="min-h-0 min-w-0 gap-4 p-0">
+          <CommandInput
+            autoFocus
+            placeholder="설정 검색"
+            aria-label="설정 검색"
+            value={query}
+            onValueChange={(v) => {
+              setQuery(v);
+              clearHighlight(); // §45 ⑥ 수명 ② — 질의가 갈리거나 비워지면 하이라이트가 죽는다
+            }}
+            onKeyDown={(e) => {
+              // `Esc` 두 번 — 질의가 있으면 질의만 비운다(같은 자리의 캡처 상자 `stopPropagation`과
+              // 같은 전제: 안 막으면 Radix가 다이얼로그까지 닫는다, §45 ④).
+              if (e.key === "Escape" && query !== "") {
+                e.stopPropagation();
+                setQuery("");
+              }
+            }}
+          />
+          {/* 2단 행 자신이다(§45 ① · §34 ①) — `Sidebar`가 `collapsible="none"`에서도
+              `useSidebar()`를 무조건 부르므로 Provider가 있어야 한다. `min-h-0`이 Provider 기본
+              `min-h-svh`를 덮는다 — 안 덮으면 다이얼로그가 뷰포트 높이만큼 자란다. `min-w-0`은
+              그리드 아이템(`DialogContent`가 `grid`)의 `min-width: auto` 함정을 막는다(§3). */}
+          <SidebarProvider className="min-h-0 min-w-0 flex-col gap-4 md:h-[32rem] md:max-h-[calc(100dvh-11rem)] md:flex-row">
           {/* md 미만(767 이하)은 트리가 없다 — 종전 모양(섹션 넷 세로 나열 + 단일 스크롤)이
               그대로 서고 검색 줄만 산다(§45 ③). */}
           <Sidebar collapsible="none" className="hidden w-44 shrink-0 rounded-lg border bg-surface md:flex">
@@ -637,7 +737,7 @@ export function SettingsDialog({
                     <SidebarMenuButton
                       isActive={activeNode === "claude"}
                       aria-current={activeNode === "claude" ? "true" : undefined}
-                      onClick={() => setActiveNode("claude")}
+                      onClick={() => selectNode("claude")}
                     >
                       <span>Claude 계정</span>
                     </SidebarMenuButton>
@@ -646,7 +746,7 @@ export function SettingsDialog({
                     <SidebarMenuButton
                       isActive={activeNode === "other"}
                       aria-current={activeNode === "other" ? "true" : undefined}
-                      onClick={() => setActiveNode("other")}
+                      onClick={() => selectNode("other")}
                     >
                       <span>기타 엔진</span>
                     </SidebarMenuButton>
@@ -661,7 +761,7 @@ export function SettingsDialog({
                     <SidebarMenuButton
                       isActive={activeNode === "keymap"}
                       aria-current={activeNode === "keymap" ? "true" : undefined}
-                      onClick={() => setActiveNode("keymap")}
+                      onClick={() => selectNode("keymap")}
                     >
                       <span>키설정</span>
                     </SidebarMenuButton>
@@ -670,7 +770,7 @@ export function SettingsDialog({
                     <SidebarMenuButton
                       isActive={activeNode === "stats"}
                       aria-current={activeNode === "stats" ? "true" : undefined}
-                      onClick={() => setActiveNode("stats")}
+                      onClick={() => selectNode("stats")}
                     >
                       <span>사용 통계</span>
                     </SidebarMenuButton>
@@ -684,11 +784,37 @@ export function SettingsDialog({
               가린다 — 조건부 마운트는 트리 선택마다 언마운트된 섹션의 데이터를 다시 읽고
               (`TokensSection`·`AnalyticsSection`의 마운트 시 fetch), 입력 중이던 캡처 상자·
               편집 칸의 상태를 날린다. 패딩 0 — 오른쪽 여백은 `DialogContent p-4`가 이미 낸다. */}
-          <div className="relative min-w-0 flex-1 md:overflow-y-auto">
+          <div ref={panelRef} className="relative min-w-0 flex-1 md:overflow-y-auto">
+            {/* §45 ④ 목록 자리 — 패널을 덮는다(md+, 트리는 그대로 보인다) · md 미만은 흐름에 서서
+                섹션들을 밀어낸다. 서는 조건은 질의가 비어 있지 않을 때뿐이다. */}
+            {query && (
+              <CommandList className="max-h-72 bg-popover md:absolute md:inset-0 md:z-10 md:max-h-none">
+                <CommandEmpty>{`"${query}"와 일치하는 설정 0건`}</CommandEmpty>
+                {searchIndex.map((entry) => (
+                  <CommandItem
+                    key={entry.anchor}
+                    value={[entry.crumbs, entry.name].filter(Boolean).join(" ")}
+                    onSelect={() => selectSearchResult(entry)}
+                  >
+                    <span className="truncate">
+                      {entry.crumbs && (
+                        <span className="text-muted-foreground group-data-selected/command-item:text-foreground">
+                          {entry.crumbs} ›{" "}
+                        </span>
+                      )}
+                      {entry.name}
+                    </span>
+                  </CommandItem>
+                ))}
+              </CommandList>
+            )}
+
             <section className={cn("space-y-2", activeNode !== "claude" && "md:hidden")}>
               {/* 제목이 엔진 이름을 말한다 — 이 토큰을 읽는 것은 `TICKET_ENGINE[0]`이 claude인
                   워커뿐이다(`tick.sh:52`). 다른 엔진(Codex 등)은 자체 인증을 쓴다(§0-4) */}
-              <h3 className="text-sm font-medium">Claude 인증</h3>
+              <h3 data-setting="claude" className="text-sm font-medium">
+                Claude 인증
+              </h3>
               <p className="text-xs text-muted-foreground">
                 워커가 Claude에 붙을 때 쓰는 장기 토큰 목록입니다. 이 컴퓨터에 하나뿐이고, 계정
                 여러 개를 두면 리밋을 만난 쪽 대신 다음 계정으로 돌아갑니다.
@@ -696,24 +822,28 @@ export function SettingsDialog({
 
               {/* ⓪ 준비물 — 한 줄. 없으면 설치를 대신하지도 바깥으로 링크하지도 않는다(§0-4 ⓪) */}
               {auth.cli ? (
-                <p className="text-sm">
+                <p data-setting="claude.cli" className="text-sm">
                   claude CLI —{" "}
                   <span className="font-mono text-xs break-all text-muted-foreground">{auth.cli}</span>
                 </p>
               ) : (
-                <p className="flex items-center gap-2 text-sm">
+                <p data-setting="claude.cli" className="flex items-center gap-2 text-sm">
                   <TriangleAlert aria-hidden className="size-4 shrink-0 text-status-stale" />
                   claude CLI를 찾지 못했습니다 — 워커가 세션을 띄우지 못합니다
                 </p>
               )}
 
               {/* ① 목록 — 토큰 하나가 아니라 여러 계정을 확인·사용·활성화/비활성화·삭제한다(§0-13 §화면) */}
-              <TokensSection refreshKey={savedAt} />
+              <div data-setting="claude.accounts">
+                <TokensSection refreshKey={savedAt} />
+              </div>
 
               {/* ②·③(발급·직접 넣기)은 상시 렌더되는 블록이 아니라 이 트리거 하나로 접힌다
                   (§0-13 §화면 — 목록 통합). 로직·문구·에러 처리는 무수정, 렌더 위치만 옮겼다. */}
               <Popover open={addOpen} onOpenChange={setAddOpen}>
-                <PopoverTrigger render={<Button variant="outline" size="sm" />}>추가</PopoverTrigger>
+                <PopoverTrigger render={<Button variant="outline" size="sm" data-setting="claude.add" />}>
+                  추가
+                </PopoverTrigger>
                 <PopoverContent align="start" className="w-96 max-h-[70vh] space-y-4 overflow-y-auto">
                   {/* ② 발급 — CLI에게 터미널을 대신 내어 준다 */}
                   <div className="space-y-2">
@@ -854,6 +984,7 @@ export function SettingsDialog({
             {/* claude 아닌 나머지 §4-3 카탈로그 엔진 — 자기 트리 노드를 갖는다(§0-15 §트리).
                 조작·문구는 한 줄도 안 바뀐다 — 섹션 껍데기만 갈린다. */}
             <section
+              data-setting="other"
               className={cn(
                 "space-y-2 border-t pt-4 md:border-t-0 md:pt-0",
                 activeNode !== "other" && "md:hidden",
@@ -867,7 +998,8 @@ export function SettingsDialog({
             <KeymapSection className={cn(activeNode !== "keymap" && "md:hidden")} />
             <AnalyticsSection className={cn(activeNode !== "stats" && "md:hidden")} />
           </div>
-        </SidebarProvider>
+          </SidebarProvider>
+        </Command>
       </DialogContent>
     </Dialog>
   );
