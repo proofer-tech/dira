@@ -14,6 +14,7 @@
 import { access, open, readdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
+import { lineDiff, type DiffLine } from "./edit-diff.ts";
 
 /** 사건 한 줄. `label`이 비면 접지 않고 `body`를 그대로 보여준다(assistant text · 사용자 프롬프트).
  *  비지 않으면 접힌 줄이 `HH:MM:SS <label> <summary>`이고 펼치면 `body`다(§2-1 표). */
@@ -28,6 +29,11 @@ export type StreamEvent = {
   summaryMono: boolean;
   body: string;
   sidechain: boolean; // isSidechain — 화면이 `서브` 표시를 붙인다
+  // Edit 모양(`old_string`·`new_string` 둘 다 문자열)인 `tool_use`에서만 선다(§2-1 §펼친 Edit).
+  // 있으면 화면이 `body`(JSON 전문) 대신 이 줄 단위 diff를 그린다 — 없으면(대부분의 tool_use)
+  // 키 자체가 없다. `undefined`로 채우면 골든 테스트의 `deepEqual`이 키 유무로 갈린다.
+  diff?: DiffLine[];
+  replaceAll?: boolean; // `diff`가 있을 때만 뜻이 있다 — `replace_all: true`
 };
 
 /** §경로 방어. `session_id`는 사람 입력이 아니라 티켓 fm에서만 오고, 경로가 되기 전에 이걸 통과한다.
@@ -467,12 +473,14 @@ export function recordToEvents(rec: unknown, collapseFirstPrompt = false): Strea
       case "tool_use": {
         const name = typeof b.name === "string" ? b.name : "도구";
         const s = toolSummary(name, b.input, cwd);
+        const edit = editShape(b.input);
         push(i, {
           kind: "tool_use",
           label: name,
           summary: s.text,
           summaryMono: s.mono,
           body: b.input === undefined ? "" : JSON.stringify(b.input, null, 2),
+          ...(edit ? { diff: lineDiff(edit.old, edit.new), replaceAll: edit.replaceAll } : {}),
         });
         break;
       }
@@ -507,6 +515,16 @@ function toolSummary(name: string, input: unknown, cwd?: string): { text: string
     return { text: rel && !rel.startsWith("..") ? rel : inp.file_path, mono: true };
   }
   return none;
+}
+
+/** `input`이 Edit 모양인가(§2-1 §펼친 Edit) — `old_string`·`new_string`이 **둘 다 문자열**일 때만.
+ *  도구 이름을 안 보는 이유는 판정이 모양 하나여서다 — codex의 Edit형 `tool_call`이 같은 모양으로
+ *  오면 이 판정이 공짜로 덮는다(§2-1). */
+function editShape(input: unknown): { old: string; new: string; replaceAll: boolean } | null {
+  if (!input || typeof input !== "object") return null;
+  const i = input as { old_string?: unknown; new_string?: unknown; replace_all?: unknown };
+  if (typeof i.old_string !== "string" || typeof i.new_string !== "string") return null;
+  return { old: i.old_string, new: i.new_string, replaceAll: i.replace_all === true };
 }
 
 /** tool_result의 `content`는 문자열이거나 블록 배열이다(실측: text · image · tool_reference). */

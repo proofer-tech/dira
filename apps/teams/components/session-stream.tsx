@@ -700,10 +700,31 @@ function Row({
         {cells}
       </Marker>
       {/* 펼친 원문. `text-foreground`가 아니면 `--muted` 위에서 4.34로 미달한다(§9에서 가장
-          밟기 쉬운 함정). `max-h-96`은 `tool_result` 실측 38173바이트가 컨테이너를 삼키는 걸 막는다. */}
+          밟기 쉬운 함정). `max-h-96`은 `tool_result` 실측 38173바이트가 컨테이너를 삼키는 걸 막는다.
+          그릇(`<pre>` 클래스)은 Edit diff에서도 한 줄도 안 바뀐다(§9) — 폴백이 같은 상자에
+          착지해야 사고로 안 보인다. */}
       <div className="px-3">
+        {/* `replace_all` 한 줄 — `<pre>` **밖**, 그릇 바로 위(§9). 안에 넣으면 `--muted` 위에서
+            `text-muted-foreground`가 4.34로 미달해 `text-foreground`가 돼야 하고, 그러면 diff
+            줄과 같은 잉크라 내용으로 읽힌다. */}
+        {e.replaceAll && (
+          <p className="ml-6 text-xs text-muted-foreground">
+            <span className="font-mono">replace_all</span> · 일치하는 곳 전부
+          </p>
+        )}
         <pre className="mt-1 mb-2 ml-6 max-h-96 overflow-auto rounded-md bg-muted p-3 font-mono text-xs break-words whitespace-pre-wrap text-foreground">
-          {e.body}
+          {e.diff ? (
+            /* 색 0(§9) — 갈리는 것은 머리 2칸 `- `/`+ `/`  ` 하나다. 셋이 색·크기·서체·배경까지
+               같다. 줄당 `<div>` + 걸이 들여쓰기(`pl-[2ch] -indent-[2ch]`)라 줄바꿈된 이음줄이
+               부호 열을 안 밟는다 — 색이 없어서 그 열의 무결성이 이 블록의 전부다. */
+            e.diff.map((l, i) => (
+              <div key={i} className="pl-[2ch] -indent-[2ch]">
+                {l.kind + " " + l.text}
+              </div>
+            ))
+          ) : (
+            e.body
+          )}
         </pre>
       </div>
     </details>
