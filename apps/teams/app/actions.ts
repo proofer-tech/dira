@@ -319,7 +319,7 @@ export async function unregisterProjectAction(id: string): Promise<ActionResult>
  *  **덮어쓰기가 아니라 목록 append다 — 활성은 안 움직인다**(§0-13 §화면, P179). eligible한 활성이
  *  이미 있으면 그 자리에 머물고 이 토큰은 `대기`로 들어간다; eligible이 하나도 없을 때만(첫 토큰 등)
  *  이 토큰이 활성이 된다 — `addToken`이 `reconcileActive`로 그 계약을 지킨다. 지금 쓸 토큰을
- *  직접 고르는 손은 `useTokenAction`(대기 행의 `사용` 버튼)이다.
+ *  직접 고르는 손은 `setActiveTokenAction`(대기 행의 `사용` 버튼)이다.
  *  `label`은 선택이다(P180-1, §0-13 §라벨) — 형식은 검증하지 않는다. */
 export async function saveTokenAction(
   raw: string,
@@ -351,8 +351,9 @@ export async function setTokenEnabledAction(id: string, enabled: boolean): Promi
 }
 
 /** `대기` 행의 `사용` 버튼 — 지금 쓸 토큰을 사람이 직접 고른다(§0-13 §화면 · P179). `oauth-token`
- *  쓰기는 `setActiveToken`(→`writeTokens`) 안에서만 일어난다. */
-export async function useTokenAction(id: string): Promise<TokenRow[]> {
+ *  쓰기는 `setActiveToken`(→`writeTokens`) 안에서만 일어난다.
+ *  이름은 `use`로 시작하지 않는다 — React 훅으로 오인돼 `rules-of-hooks`가 걸린다(`f8327b9` 이후). */
+export async function setActiveTokenAction(id: string): Promise<TokenRow[]> {
   await setActiveToken(id);
   revalidatePath("/", "layout"); // 활성 토큰이 이 자리에서 바뀐다 — 배너·트리거 배지도 같이 본다
   return readTokenRows();

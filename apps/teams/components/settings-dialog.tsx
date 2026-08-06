@@ -42,7 +42,7 @@ import {
   startSetupAction,
   pollSetupAction,
   stopSetupAction,
-  useTokenAction,
+  setActiveTokenAction,
 } from "@/app/actions";
 import type { OtherEngineAuth, SetupState, TokenRow, TokenStatus } from "@/lib/auth";
 import { useHotkey, useKeymap } from "@/components/keymap-provider";
@@ -371,7 +371,7 @@ function TokenStatusBadge({ status }: { status: TokenStatus }) {
  *  덮어쓰기가 아니라 append고, **활성은 안 움직인다**(§0-13 §화면, P179) — 새/중복 토큰은 `대기`로
  *  들어간다(eligible한 활성이 없을 때만 예외로 활성이 된다). 지금 쓸 토큰은 `대기` 행의 `사용`
  *  버튼으로 사람이 직접 고른다. 활성화·사용 어느 쪽도 `oauth-token` 쓰기는 이 컴포넌트가 직접
- *  하지 않는다 — `setTokenEnabledAction`·`useTokenAction`이 `lib/auth.ts`의 `writeTokens` 안에서만 한다. */
+ *  하지 않는다 — `setTokenEnabledAction`·`setActiveTokenAction`이 `lib/auth.ts`의 `writeTokens` 안에서만 한다. */
 function TokensSection({ refreshKey }: { refreshKey: string | null }) {
   const [rows, setRows] = useState<TokenRow[] | null>(null);
   const [pending, start] = useTransition();
@@ -390,7 +390,7 @@ function TokensSection({ refreshKey }: { refreshKey: string | null }) {
   const setEnabled = (row: TokenRow, enabled: boolean) =>
     start(async () => setRows(await setTokenEnabledAction(row.id, enabled)));
   const remove = (row: TokenRow) => start(async () => setRows(await deleteTokenAction(row.id)));
-  const use = (row: TokenRow) => start(async () => setRows(await useTokenAction(row.id)));
+  const use = (row: TokenRow) => start(async () => setRows(await setActiveTokenAction(row.id)));
   const saveLabel = (row: TokenRow) =>
     start(async () => {
       setRows(await setTokenLabelAction(row.id, editValue));
@@ -547,7 +547,7 @@ export function SettingsDialog({
   const [setup, setSetup] = useState<SetupState | null>(null);
   const [code, setCode] = useState("");
   // §0-13 §화면 — 층 ②·③(발급·직접 넣기)을 토큰 목록 자리에 딸린 하나의 자리로 접는다.
-  // 닫혀 있다가도 인증이 필요하면 자동으로 펼친다(아래 `onOpenChange` · `setup?.savedAt` effect).
+  // 닫혀 있다가도 인증이 필요하면 자동으로 펼친다(아래 `onOpenChange` · 폴링 effect의 `savedAt` 판정).
   const [addOpen, setAddOpen] = useState(false);
   // §0-15 트리 선택 — 첫 선택은 항상 `claude`다(§45 ③), 종 CTA로 열려도 같다
   const [activeNode, setActiveNode] = useState<SettingsNode>("claude");
@@ -630,19 +630,19 @@ export function SettingsDialog({
   });
 
   // 진행 로그는 폴링으로 받는다 — 이 앱에 소켓은 없다(세션 스트림과 같은 방식).
-  // 돌고 있을 때만 돈다: `running`이 꺼지면 effect가 정리되고 폴링이 멈춘다
+  // 돌고 있을 때만 돈다: `running`이 꺼지면 effect가 정리되고 폴링이 멈춘다.
+  // 층 ②가 코드 입력 없이 끝나는 길도 여기서 닫는다 — `savedAt`이 폴링으로 늦게 도착하고, 층
+  // ③·코드 보내기의 onSubmit(위 `setSetup(s); if (s.savedAt) setAddOpen(false);`)과 같은
+  // 자리에서 같은 값 하나로 판정한다(§0-13 §저장이 끝나면).
   useEffect(() => {
     if (!setup?.running) return;
-    const id = setInterval(async () => setSetup(await pollSetupAction()), 1000);
+    const id = setInterval(async () => {
+      const s = await pollSetupAction();
+      setSetup(s);
+      if (s.savedAt) setAddOpen(false);
+    }, 1000);
     return () => clearInterval(id);
   }, [setup?.running]);
-
-  // 층 ②가 코드 입력 없이 끝나는 길 — `savedAt`이 폴링으로 늦게 도착한다. 층 ③·코드 보내기는
-  // 자기 onSubmit에서 이미 닫지만 이 길엔 닫는 손이 없었다(§0-13 §저장이 끝나면). 방아쇠는 같은
-  // `savedAt` 하나다.
-  useEffect(() => {
-    if (setup?.savedAt) setAddOpen(false);
-  }, [setup?.savedAt]);
 
   return (
     <Dialog
