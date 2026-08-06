@@ -22909,11 +22909,53 @@ text-status-X  bg-status-X/10  border-status-X/30
 
 | 부분 | 값 |
 |---|---|
-| 컨테이너 | `Button variant="ghost" size="sm"`, `h-8 gap-2 max-w-md`, `data-[state=open]:bg-muted` |
-| 이름 | `text-sm text-foreground`, `truncate`, 최소 폭 확보(`shrink-0`까지는 아님) |
-| 경로 | `text-xs font-mono text-muted-foreground truncate` — 좁아지면 이쪽이 먼저 줄어든다 |
-| 어포던스 | `ChevronsUpDown size-3.5 text-muted-foreground`, `shrink-0` |
+| 컨테이너 | `Button variant="ghost" size="sm"`, `h-8 gap-2 max-w-md`. **열린 동안의 밑면은 호출부가 안 적는다** — `ghost` 변종이 `aria-expanded:bg-muted aria-expanded:text-foreground`를 **등록값으로** 이미 든다(`button.tsx`, 아래) |
+| 이름 | `text-sm text-foreground`, `truncate`, 최소 폭 확보(`shrink-0`까지는 아님) — 명시값이 등록 `aria-expanded:text-foreground`와 같은 잉크라 열림에서 안 갈린다(18.15 / 14.48) |
+| 경로 | `text-xs font-mono text-muted-foreground truncate` **+ `group-aria-expanded/button:text-foreground`**(열린 동안 밑면이 `bg-muted`라 안 붙이면 라이트 **4.34** · 아래) — 좁아지면 이쪽이 먼저 줄어든다 |
+| 어포던스 | `ChevronsUpDown size-3.5 text-muted-foreground`, `shrink-0` — **무수정.** 아이콘이라 하한이 3:1이고 열린 밑면에서 4.34 / 5.83으로 통과한다 |
+| 연결 배지 | 현재 프로젝트가 연결 안 됨일 때만, 이름 뒤에 `<StatusBadge status="disconnected">`(§연결 안 됨 2가 정본) — **무수정.** 자기 틴트를 깔고 서므로 밑면이 열림에서 갈려도 5.17 → **4.75**로 통과한다(아래) |
 | ARIA | `role="combobox"` + `aria-expanded` + `aria-label="프로젝트 전환"` |
+
+**경로 칸의 둘째 클래스는 새 값이 아니다 — 손잡이 둘이 다 등록값이다.** 열린 트리거의 밑면이
+`bg-muted`가 되고 그 위의 `--muted-foreground`는 라이트 **4.34**다. `text-xs`라 AA 하한이 4.5고
+**미달이다**(§1 함정 ① · §33 함정 ①이 박아 둔 그 수. oklch 0.556 on 0.97). 버튼 자신은 이미
+`aria-expanded:text-foreground`를 갖고 있는데 **자식에 명시된 `text-muted-foreground`가 그것을
+덮으므로** 자식이 같은 조건을 한 번 더 든다 — 항목 표의 두 칸과 **같은 모양의 처방이고 손잡이만
+다르다**(거기는 `CommandItem`의 `group/command-item` + `data-selected`, 여기는 트리거 자신).
+
+- **`components/ui/`를 안 고친다.** `group/button`은 `button.tsx`의 `buttonVariants` 첫 클래스이고,
+  `aria-expanded:bg-muted aria-expanded:text-foreground`는 같은 파일 `ghost` 변종의 등록값이다 —
+  호출부는 **빌리기만 한다**(§25 · §45 ⑤ · 위 항목 표가 낸 판정 그대로). 새 색 토큰 0 · 새 클래스
+  값 0 · `globals.css` 0줄.
+- **손잡이는 `data-[popup-open]`이 아니라 `aria-expanded`다.** 밑면을 `bg-muted`로 만드는 조건이
+  `aria-expanded`이므로 **잉크도 같은 조건을 든다** — 밑면과 잉크가 다른 조건에 걸리면 한쪽만
+  움직이는 상태가 생긴다. 그래서 코드가 지금 들고 있는 `data-[popup-open]:bg-muted`는
+  **지운다**(등록값이 이미 같은 것을 말하고, 같은 사실을 두 조건으로 적어 두면 갈린다).
+  `aria-expanded`는 이 표가 ARIA 칸으로 **이미 요구하는 값**이라 없어질 수 없다.
+  **같은 중복이 보드 필터 트리거에도 하나 있다**(`board-ui.tsx`, `outline` 변종 — 그 변종도
+  `aria-expanded:bg-muted`를 등록값으로 든다). 그쪽은 **대비가 안 걸린다**(라벨이 색 지정 없이
+  등록 잉크를 받고 `ChevronsUpDown`은 3:1로 통과) — 지우는 것은 화면이 안 바뀌는 중복 한 줄이고,
+  남겨 두면 다음 사람이 밑면이 호출부에 산다고 읽는다. 같은 developer 티켓으로 넘겼다.
+- **다크는 원래도 통과다**(5.83). 그래도 같은 클래스가 걸린다 — 라이트만 골라 올리는 변종을 만들면
+  두 테마에서 열린 트리거의 글자 층이 갈린다(항목 표와 같은 근거).
+
+**실측 — 새로 잰 조합 다섯**(oklch → sRGB → 상대휘도. 알파는 감마 공간에서 합성한다):
+
+| 조합 | 라이트 | 다크 |
+|---|---|---|
+| **경로 `--muted-foreground` on 열린 밑면 `bg-muted`**(처방 전) | **4.34** ✗ | 5.83 ✓ |
+| **경로 `--foreground` on 같은 밑면**(처방 후) | **18.15** ✓ | **14.48** ✓ |
+| 경로 `--muted-foreground` on `--background`(**닫힌 동안** — 이 함정이 상태에만 서는 이유) | 4.73 ✓ | 7.63 ✓ |
+| 어포던스 `--muted-foreground` on 열린 밑면 (비텍스트 — 1.4.11의 3:1) | **4.34** ✓ | 5.83 ✓ |
+| 연결 배지 `--status-stale` on `--status-stale/10` on 열린 밑면 | **4.75** ✓ | 5.38 ✓ |
+
+- **연결 배지가 이 표에서 가장 얇다.** 밑면이 흰색일 때 5.17이던 것이 열린 동안 **4.75**로 내려온다
+  (틴트가 `/10`이라 밑면이 거의 그대로 비친다). 통과이므로 **한 자도 안 고친다** — 대신 `--muted`나
+  `--status-stale`의 라이트 값을 건드리는 개정은 **이 칸을 다시 재야 한다.** 여기가 하한에 가장 가깝다.
+- **다크에서 열린 트리거에 마우스가 얹히면 밑면이 `bg-muted/50`이다** — `ghost`의 등록
+  `dark:hover:bg-muted/50`이 변종 순서에서 `aria-expanded:`보다 **뒤라서** 이긴다. 그 자리 값은
+  처방 전 **6.84** ✓ / 처방 후 **17.00**이라 판정이 안 갈린다. **라이트에서는 `hover:`가
+  `aria-expanded:` 앞이라** 열려 있는 동안 밑면이 계속 `bg-muted`다 — 4.34가 호버로 흐려지지 않는다.
 
 - **툴팁을 달지 않는다.** §4의 "경로 툴팁 전문"은 이 자리가 표시 전용이던 때의 규칙이다 —
   클릭하면 팔레트가 뜨는 자리에 hover 툴팁을 겹치면 둘이 싸운다. 경로 전문은 팔레트 안 현재 항목과
@@ -22981,11 +23023,11 @@ oklch 0.556 on 0.97). 항목 자신은 이미 `data-selected:text-foreground`를
 
 **보드 검색창도 `Command`가 아니다**(`InputGroup` — §5). 밑면이 `bg-muted`가 되는 상태가 없다.
 
-**같은 4.34가 이 절에 하나 더 있다 — 트리거. 이 티켓이 안 고친다.** 닫힌 상태 표의 컨테이너가
-`data-[popup-open]:bg-muted`이고 그 안 경로가 `text-xs font-mono text-muted-foreground`라
-**팔레트가 열려 있는 동안 같은 조합이다**(`ChevronsUpDown`은 아이콘이라 3:1로 통과한다).
-`CommandItem`이 아니라 전수 범위 밖이고 손잡이도 `group/command-item`이 아니라 트리거 자신의
-`data-[popup-open]`이라 **처방이 다르다** — 별도 designer 티켓으로 냈다.
+**같은 4.34가 이 절에 하나 더 있었다 — 트리거. 위 닫힌 상태 표가 닫았다**(`0030b178`). 팔레트가
+열려 있는 동안 트리거 밑면이 `bg-muted`가 되어 그 안 경로가 같은 조합이 된다. `CommandItem`이
+아니라 이 전수의 범위 밖이었고 손잡이도 `group/command-item`이 아니라 **트리거 자신의
+`group/button` + `aria-expanded`**라 처방이 갈렸다 — **정본은 닫힌 상태 표의 `경로` 칸**이고,
+같은 표가 `이름`·`어포던스`·`연결 배지` 셋을 무수정으로 판정하고 실측 다섯을 적어 뒀다.
 
 - 카운트는 **팔레트를 열 때 세지 않는다.** 셸이 서버에서 렌더할 때 레지스트리 전체를 한 번 훑어
   같이 넘긴다(프로젝트는 한 자릿수다). 못 읽은 프로젝트는 카운트 자리를 연결 배지가 대신한다 —
