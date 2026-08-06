@@ -724,8 +724,26 @@ case "$FAKE_MODE" in
     keep "답"
     sleep 1
     say '{"type":"result","is_error":false,"subtype":"success","api_error_status":null,"result":"답"}' ;;
+  crash)  # 실패 ③ 재정의 실측(§7 §천장이 없다) — 결과 객체 없이 죽는다. 이 pid에 밖에서 보내는
+          # SIGKILL을 재현한다(중지의 SIGTERM이 아니다 — 그건 못 잡는 신호라 트랩도 없다).
+    echo "$$" > "$CRASH_PID"
+    say '{"type":"stream_event","event":{"type":"message_start"},"parent_tool_use_id":null}'
+    delta "쓰다 만 답"
+    echo "boom: something broke" >&2
+    sleep 60 >/dev/null 2>&1 & wait ;;
+  activity)  # §7 §안심 장치 실측 — 생각 · 도구 · 글자 사이에 잠을 둬 폴링이 셋을 따로 잡을 창을 연다
+    say '{"type":"system","subtype":"init","model":"claude-test-model"}'
+    say '{"type":"stream_event","event":{"type":"message_start"},"parent_tool_use_id":null}'
+    say '{"type":"stream_event","event":{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":""}},"parent_tool_use_id":null}'
+    sleep 1
+    say '{"type":"stream_event","event":{"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"toolu_1","name":"Read"}},"parent_tool_use_id":null}'
+    sleep 1
+    delta "답"
+    sleep 1
+    keep "답"
+    say '{"type":"result","is_error":false,"subtype":"success","api_error_status":null,"result":"답"}' ;;
   *)
-    say '{"type":"system","subtype":"init"}'   # --verbose가 섞는 줄. 결과가 아니다
+    say '{"type":"system","subtype":"init","model":"claude-test-model"}'   # --verbose가 섞는 줄. 결과가 아니다
     say '{"type":"stream_event","event":{"type":"message_start"},"parent_tool_use_id":null}'
     say '{"type":"stream_event","event":{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":""}},"parent_tool_use_id":null}'
     delta "앞부분"
@@ -837,6 +855,71 @@ test("`중지` — SIGTERM 하나로 끝나고, 받은 글은 남고, 다음 질
     argv.at(-1) ?? "",
     /--tools Read,Glob,Grep,Write,Edit .*--output-format stream-json --include-partial-messages --verbose/,
   );
+});
+
+test("실패 ③ 재정의 — 자식이 결과 객체 없이 죽으면 종료 코드(신호) · stderr 꼬리가 선다 (kill -9 실측)", async () => {
+  const project = { id: "crash-test", name: "큐", root: CWD };
+  const pidFile = path.join(mkdtempSync(path.join(tmpdir(), "ha-pid-")), "pid");
+  tmps.push(path.dirname(pidFile));
+  process.env.CRASH_PID = pidFile;
+  try {
+    await withFake("crash", async () => {
+      const p = poller(project.id);
+      assert.strictEqual(await startAsk(project, "죽을 질문"), null);
+      // 이 시점엔 스크립트가 이미 pid 파일을 쓰고 지났다(같은 프로세스의 순차 실행 — 델타가
+      // pid 기록보다 뒤 줄이다) — 그래서 폴링으로 기다린 뒤 곧장 읽어도 된다.
+      await p.until((c) => c.partial !== "");
+
+      // **밖에서 오는 `SIGKILL`**이다 — `stopAsk`의 `SIGTERM`이 아니다. 못 잡는 신호라 트랩이 없다.
+      const pid = Number(readFileSync(pidFile, "utf8").trim());
+      process.kill(pid, "SIGKILL");
+
+      const end = await p.until((c) => !c.running);
+      assert.strictEqual(end.failed?.ok, false);
+      // 이름은 낡았다 — 시계가 걷힌 뒤로 이 사유는 "죽음"이다(§7 §천장이 없다, `AnswerReason` 주석)
+      assert.strictEqual(end.failed?.reason, "timeout");
+      assert.match(end.failed?.output ?? "", /^signal SIGKILL/);
+      assert.match(end.failed?.output ?? "", /boom: something broke/);
+      // 부분 텍스트는 원인 원문이 아니다(§24 표 — exit/신호 · stderr 꼬리뿐) — 새다 나온 글자는
+      // `output`이 아니라 이미 `partial`로 화면에 붙어 있었다
+      assert.ok(!end.failed?.output.includes("쓰다 만 답"));
+    });
+  } finally {
+    delete process.env.CRASH_PID;
+  }
+});
+
+test("§7 §안심 장치 — 생각 · 도구 · 글자가 흐르는 동안 활동 값이 각각 다르게 잡힌다", async () => {
+  const project = { id: "activity-test", name: "큐", root: CWD };
+  await withFake("activity", async () => {
+    const p = poller(project.id);
+    assert.strictEqual(await startAsk(project, "질문"), null);
+
+    const thinking = await p.until((c) => c.activity !== null);
+    assert.deepStrictEqual(thinking.activity, { kind: "thinking" });
+
+    // **후보 구현이다 — 실측 대기**(위 픽스처 주석·머리 주석 `## 블록`). 틀렸으면 이 단계가
+    // 그냥 안 걸리고 다음 상태로 못 넘어가 아래 `answering` 대기가 타임아웃으로 죽는다.
+    const tool = await p.until((c) => c.activity?.kind === "tool");
+    assert.deepStrictEqual(tool.activity, { kind: "tool", tool: "Read" });
+
+    const answering = await p.until((c) => c.activity?.kind === "answering");
+    assert.deepStrictEqual(answering.activity, { kind: "answering" });
+
+    const end = await p.until((c) => !c.running);
+    // 끝나면 볼 활동이 없다 — `partial`과 같은 근거(§7)
+    assert.strictEqual(end.activity, null);
+  });
+});
+
+test("§7 §세션 정보 한 줄 — 모델은 `system`/`init` 레코드에서 와 대화 줄에 한 번 적힌다", async () => {
+  const project = { id: "model-test", name: "큐", root: CWD };
+  await withFake("", async () => {
+    assert.strictEqual(await startAsk(project, "질문"), null);
+    await poller(project.id).until((c) => !c.running);
+  });
+  const home = await readHome(project.id);
+  assert.strictEqual(home.conversations[0]?.model, "claude-test-model");
 });
 
 test("실패 ② 인증 — 새 형식에서도 판정은 `api_error_status` 401이다", async () => {

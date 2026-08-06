@@ -75,6 +75,7 @@ export async function pollHomeAnswer(
       running: false,
       runningSessions: [], // 못 찾은 프로젝트에서 도는 것은 없다(§7 §대화마다 따로 돈다)
       partial: "",
+      activity: null, // 못 찾은 프로젝트에는 볼 활동도 없다
       stopped: false,
       failed: null,
       answered: false, // 집어 갈 실행층이 없다 — 여기는 프로젝트 자체를 못 찾은 자리다

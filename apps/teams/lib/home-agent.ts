@@ -68,8 +68,9 @@
  *  답의 원본이 콜백까지 안 나오고, `promisify`를 씌우면 자식 핸들조차 안 준다(`중지`가 죽일
  *  대상이 그 핸들이다). `stdio` 옵션도 `execFile`이 통째로 버린다(넘겨도 경고가 그대로 난다 —
  *  실측). tick.sh 비스트리밍 경로가 `</dev/null`을 붙인 것과 같은 사건이다(`7d9fbe9`).
- *  `execFile`이 대신 해 주던 것 둘은 여기서 직접 든다: **상한 5분 타이머**(`setTimeout` →
- *  `SIGTERM`)와 stdout 버퍼 — 후자는 이제 상한이 없다(줄 단위로 먹고 버린다). */
+ *  `execFile`이 대신 해 주던 것 하나는 여기서 직접 든다: stdout 버퍼 — 상한이 없다(줄 단위로
+ *  먹고 버린다). **시계 타이머는 없다**(요구 `8db4d0f6` — §7 §천장이 없다). 끝의 근거는 결과
+ *  객체 · 프로세스의 죽음(`close`에 결과 줄이 없으면 실패 ③) · `stopAsk`의 `SIGTERM` 셋뿐이다. */
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdir, readdir, readFile, rename, writeFile } from "node:fs/promises";
@@ -80,9 +81,6 @@ import { getProject, registryPath, resolveConfig, type Project, type ProjectConf
 import { isAwaiting, listTickets, reqTitle, statusOf, type Ticket } from "./queue.ts";
 import { findTranscript, sessionIdOf, tailEvents, type StreamEvent } from "./transcript.ts";
 import { engineCell, listWorkers, workerOf, type Worker } from "./workers.ts";
-
-/** §7: **상한 5분.** `runWorker`의 60초와 다른 값이다 — 저건 python 스캔이고 이건 세션이다. */
-const TIMEOUT_MS = 5 * 60_000;
 
 /** 세션에 존재하는 도구 전부(§7 표 `세션의 도구는 Read·Glob·Grep·Write·Edit 다섯뿐이다`).
  *  **쉼표 한 토큰**이다(머리 주석의 variadic 함정). `Bash`가 없는 것이 경로 스코프의 전제다 —
@@ -148,6 +146,9 @@ export type Conversation = {
   created: string;
   /** **아직 세션이 안 떴다.** 다음 질문이 `--resume`이 아니라 `--session-id`로 연다 */
   fresh?: true;
+  /** 세션이 스스로 말한 모델(§7 §세션 정보 한 줄 — 요구 `8db4d0f6`). 첫 성공한 턴이 적고
+   *  그 뒤로는 안 바뀐다(모델 지정이 없어 세션 내내 고정이다). 아직 성공한 턴이 없으면 없다 */
+  model?: string;
 };
 
 /** 한 프로젝트가 이 파일에 갖는 것 전부. **`current`는 대화 목록 밖을 가리킬 수 있다** —
@@ -202,6 +203,7 @@ function parseHome(v: unknown): Home {
         title: typeof c.title === "string" ? c.title : "",
         created: typeof c.created === "string" ? c.created : "",
         ...(c.fresh === true ? { fresh: true as const } : {}),
+        ...(typeof c.model === "string" ? { model: c.model } : {}),
       },
     ];
   });
@@ -543,7 +545,13 @@ export function questionOf(prompt: string): string {
 
 /** §비주얼 §24 실패 5종의 **코드**. 화면이 제목·다음 행동을 이걸로 가른다 —
  *  `output` 문장을 되짚어 갈리면 문구 한 자를 고치는 날 화면이 조용히 뭉친다
- *  (`InterjectReason`과 같은 규약). `other`는 §24 표에 항이 없는 나머지다. */
+ *  (`InterjectReason`과 같은 규약). `other`는 §24 표에 항이 없는 나머지다.
+ *
+ *  **`timeout`은 이름이 낡았다 — 값은 안 바꾼다.** 시계가 걷힌 뒤(요구 `8db4d0f6` — §7
+ *  §천장이 없다) 이 사유는 **③이 재정의된 자리**로 옮겨 산다: "5분을 넘겼다"가 아니라
+ *  "자식이 결과 객체 없이 죽었다"다(아래 `judge`의 `!result` 분기). 화면 쪽(`home-ui.tsx`
+ *  `FAIL.timeout`)이 이 문자열 키로 걸려 있어(§24 문구 갈이는 4c8e82d8) 여기서 이름을 갈면
+ *  그 파일까지 손대야 한다 — 값의 뜻만 바꾸고 키는 그대로 둔다. */
 export type AnswerReason = "spawn" | "auth" | "timeout" | "busy" | "no-transcript" | "other";
 
 /** `Run`(`lib/engine.ts`)과 **같은 모양**에 세션 두 값을 더한 것. rc와 사유를 삼키지 않는다. */
@@ -560,18 +568,37 @@ export type Answer = Run & {
   stopped?: boolean;
 };
 
-/** 도는 질문 하나가 서버에 남기는 것 전부 — **부분 텍스트 · 자식 핸들 · 중지 요청**.
- *  셋이 한 객체인 이유는 셋 다 `runs` 맵의 수명과 같아서다(§7: 도는 동안만 있는 것). */
+/** §7 §천장이 없다 §안심 장치 — 표식이 지금 하는 일을 말하는 값 하나. **이력이 아니다**
+ *  (마지막 활동 하나만 든다 — 트랜스크립트가 이미 정본이다). `eatLine`이 종전에 버리던
+ *  `thinking_delta`·도구 이벤트가 여기로 접힌다. 문구·그릇은 화면 결선(4c8e82d8)의 것이다 —
+ *  이 칸은 **구분값 + 도구 이름**까지만 낸다.
+ *
+ *  **`tool`의 `tool` 필드는 이름뿐이다 — "대상"(예: `docs/DESIGN.md`)은 아직 없다.** 설계는
+ *  `input_json_delta`가 도구 인자를 나르는 것을 안다(`88ff08f8`이 `{"file_path": "…`를 이미
+ *  봤다 — 머리 주석 §답은 흐른다 인용) 그런데 그 파편을 모아 JSON으로 완성하는 시점
+ *  (`content_block_stop`)과 키 이름(`file_path`·`pattern`·…)이 도구마다 갈리는 것은 **이
+ *  티켓의 계정이 주간 한도로 막혀 실측하지 못했다**(`## 블록` 참조) — 잘못 짚으면 조용히
+ *  아무 값도 안 잡힐 뿐이라 대상 없이 이름만 먼저 낸다. */
+export type Activity = { kind: "thinking" } | { kind: "tool"; tool: string } | { kind: "answering" };
+
+/** 도는 질문 하나가 서버에 남기는 것 전부 — **부분 텍스트 · 활동 · 모델 · 자식 핸들 · 중지 요청**.
+ *  다섯이 한 객체인 이유는 다 `runs` 맵의 수명과 같아서다(§7: 도는 동안만 있는 것). */
 type Live = {
   /** 지금까지 받은 글(`text_delta` 누적). 도는 동안만 화면이 받는다 — 끝나면 정본은 트랜스크립트다 */
   partial: string;
+  /** 지금 하는 일 하나(§7 §안심 장치). 아무 신호도 안 왔으면 `null` */
+  activity: Activity | null;
+  /** 세션이 스스로 말한 모델(§7 §세션 정보 한 줄) — `system`/`init` 레코드의 `model` 필드
+   *  (아래 `eatLine` 주석이 출처를 실측했다). 첫 신호 뒤로는 안 바뀐다 — 세션 내내 모델
+   *  지정이 고정이라 두 번째 값을 볼 일이 없다 */
+  model: string | null;
   /** `중지`가 `SIGTERM`을 보낼 대상. spawn 전과 종료 후에는 null이다 */
   child: ChildProcess | null;
   /** 사람이 멈췄다. spawn보다 먼저 눌렸을 수도 있어서 **핸들이 아니라 이 플래그**가 근거다 */
   stopping: boolean;
 };
 
-const newLive = (): Live => ({ partial: "", child: null, stopping: false });
+const newLive = (): Live => ({ partial: "", activity: null, model: null, child: null, stopping: false });
 
 /** 질문 하나 = 프로세스 하나(§7). 첫 질문이 세션을 열고 다음 질문이 그것을 잇는다.
  *
@@ -621,6 +648,9 @@ export async function ask(
   // **중지는 여기서 실패가 아니다**(`ok: true`): 중지한 턴도 트랜스크립트에 남고 같은 sid로
   // `--resume`이 그대로 돈다(실측 ⑵⑶) — id를 갈면 다음 질문이 그 대화를 잃는다.
   if (!resumed) await settleFirstTurn(project.id, sessionId, run.ok);
+  // **성공한 턴에서만 적는다**(§7 §세션 정보 한 줄). 실패한 첫 턴은 방금 `settleFirstTurn`이
+  // id를 새것으로 갈아서, 그 id 아래 적어도 다음 질문이 여는 새 세션과 무관한 값이 된다.
+  if (run.ok && live.model) await saveModel(project.id, sessionId, live.model);
 
   return { ...run, sessionId, resumed };
 }
@@ -671,10 +701,11 @@ async function settleFirstTurn(projectId: string, sessionId: string, ok: boolean
   // **옛 키를 여기서 떼지 않는다**(플레이크 `083fb571`). 폴링은 **파일을 읽고 맵을 읽으므로**
   // 둘이 어긋나는 순간이 있으면 그 틈의 폴링이 `entry === undefined`를 보고 `running: false`를
   // **실패 없이** 돌려준다 — 화면이 `pollDone`(= `!running && turns.length > 0`)으로 폴링을 끊는
-  // 자리라, 트랜스크립트가 이미 있는 첫 턴 실패(상한 초과)면 그 실패가 영영 안 뜨고 다음 질문이
-  // 실패 ④로 막힌다. 떼는 쪽을 뒤로 미뤄도 창은 반대편에 그대로 생긴다(파일이 새 id인데 맵은
-  // 옛 id다). 그래서 **두 키가 동시에 같은 객체를 가리키게 두고**, 결과를 집어 가는 폴링이
-  // 그 객체를 가진 키를 전부 지운다(`dropRun`). 옛 키는 그 줄이 파일에서 이미 갈려 다시 안 잡힌다.
+  // 자리라, 트랜스크립트가 이미 있는 첫 턴 실패(가령 답 없이 죽은 세션 — §7 §천장이 없다 실패 ③)면
+  // 그 실패가 영영 안 뜨고 다음 질문이 실패 ④로 막힌다. 떼는 쪽을 뒤로 미뤄도 창은 반대편에 그대로
+  // 생긴다(파일이 새 id인데 맵은 옛 id다). 그래서 **두 키가 동시에 같은 객체를 가리키게 두고**,
+  // 결과를 집어 가는 폴링이 그 객체를 가진 키를 전부 지운다(`dropRun`). 옛 키는 그 줄이 파일에서
+  // 이미 갈려 다시 안 잡힌다.
   const entry = runs.get(sessionId);
   if (entry && next.id !== sessionId) runs.set(next.id, entry);
   await writeHome(projectId, {
@@ -683,23 +714,53 @@ async function settleFirstTurn(projectId: string, sessionId: string, ok: boolean
   });
 }
 
+/** 세션이 스스로 말한 모델을 그 대화 줄에 한 번 적는다(§7 §세션 정보 한 줄). 이미 같은 값이
+ *  적혀 있으면 다시 안 쓴다 — 모델은 세션 내내 고정이라 매 턴 갈아 끼울 이유가 없다. */
+async function saveModel(projectId: string, sessionId: string, model: string): Promise<void> {
+  const home = await readHome(projectId);
+  const row = home.conversations.find((c) => c.id === sessionId);
+  if (!row || row.model === model) return;
+  await writeHome(projectId, {
+    ...home,
+    conversations: home.conversations.map((c) => (c.id === sessionId ? { ...c, model } : c)),
+  });
+}
+
 /** 스트림 끝의 결과 객체(`{"type":"result"}`). 성패·사유가 **이 한 줄에 다 있다**(실측). */
 type ResultLine = { is_error?: unknown; result?: unknown; subtype?: unknown; api_error_status?: unknown };
 
 /** stdout 한 줄을 먹는다 — 부분 텍스트면 `live.partial`에 붙이고, 결과 객체면 그걸 돌려준다.
+ *  그 사이에 활동(§7 §안심 장치)과 모델(§7 §세션 정보 한 줄)도 `live`에 얹는다 — 종전에
+ *  버리기만 하던 두 종류를 이제는 값으로 쓴다.
  *
  *  **결과를 "마지막 줄"로 집지 않는 이유**(§7 §답은 흐른다 — 실측): `--verbose`가
  *  `system`(`init`·`status`·`hook_started`·`hook_response`·`api_retry`)과 `rate_limit_event`를
  *  같은 stdout에 섞는다. 그래서 줄마다 파싱해 `type`으로 가른다.
  *
  *  붙이는 것은 **`text_delta` 한 종류뿐**이다. `thinking_delta`는 본문이 빈 문자열로 오고
- *  (`{"thinking":"","estimated_tokens":50}`), `input_json_delta`는 도구 인자다 — §비주얼 §24가
- *  도구 호출 줄을 안 그린다. 둘 다 이 조건 하나에서 같이 떨어진다. */
+ *  (`{"thinking":"","estimated_tokens":50}`) — 본문은 안 붙이되 **활동은 "생각 중"이 된다**.
+ *  `input_json_delta`는 도구 인자다 — §비주얼 §24가 도구 호출 줄을 안 그린다(대상 추출은 아직
+ *  없다 — `Activity` 타입 주석과 `## 블록` 참조). 도구 시작(`content_block_start`의
+ *  `content_block.type === "tool_use"`)은 **미확정 후보다** — 이 티켓의 계정이 주간 한도에
+ *  막혀 실측 원본 줄을 못 붙였다. 틀렸으면 이 가지는 그냥 안 걸린다(조용히 무해하다).
+ *
+ *  **모델의 출처는 `system`/`init` 레코드의 최상위 `model` 필드다.** 실측(이 머신, 2026-08-06,
+ *  `--tools Read,Glob,Grep --strict-mcp-config --permission-mode manual --output-format
+ *  stream-json --include-partial-messages --verbose`): 계정 주간 한도로 그 왕복은 `result`까지
+ *  못 갔지만 `init` 줄은 한도 검사보다 먼저 찍힌다 —
+ *  `{"type":"system","subtype":"init",…,"model":"claude-opus-5",…}`. `assistant.message.model`도
+ *  후보였으나(§7 §천장이 없다 ④) `init`이 항상 먼저이고 매 턴 있어서 그거 하나로 충분하다. */
 function eatLine(line: string, live: Live): ResultLine | null {
   type Stream = ResultLine & {
     type?: unknown;
+    subtype?: unknown;
+    model?: unknown;
     parent_tool_use_id?: unknown;
-    event?: { type?: unknown; delta?: { type?: unknown; text?: unknown } };
+    event?: {
+      type?: unknown;
+      delta?: { type?: unknown; text?: unknown };
+      content_block?: { type?: unknown; name?: unknown };
+    };
   };
   let o: Stream;
   try {
@@ -708,6 +769,9 @@ function eatLine(line: string, live: Live): ResultLine | null {
     return null; // JSON이 아닌 줄(경고 등). 결과가 아니다
   }
   if (!o || typeof o !== "object") return null;
+  if (o.type === "system" && o.subtype === "init" && typeof o.model === "string" && !live.model) {
+    live.model = o.model;
+  }
   if (o.type === "result") return o;
   // 서브에이전트 줄은 대화가 아니라 로그다 — `parent_tool_use_id`가 §2-1 `sidechain`의 자리다
   if (o.type !== "stream_event" || o.parent_tool_use_id) return null;
@@ -717,28 +781,37 @@ function eatLine(line: string, live: Live): ResultLine | null {
     // 세션에서 `index: 0`이 두 번 났다). 앞 메시지의 완결된 답은 이미 트랜스크립트에 있어서
     // 폴링이 **진짜 줄**로 데려온다 — 여기 남겨 두면 그 답이 화면에 두 벌이 된다.
     live.partial = "";
+  } else if (ev?.type === "content_block_start" && ev.content_block?.type === "tool_use") {
+    if (typeof ev.content_block.name === "string") live.activity = { kind: "tool", tool: ev.content_block.name };
+  } else if (ev?.type === "content_block_delta" && ev.delta?.type === "thinking_delta") {
+    live.activity = { kind: "thinking" };
   } else if (
     ev?.type === "content_block_delta" &&
     ev.delta?.type === "text_delta" &&
     typeof ev.delta.text === "string"
   ) {
     live.partial += ev.delta.text;
+    live.activity = { kind: "answering" };
   }
   return null;
 }
 
 /** 결과 객체 → 성패·사유(§비주얼 §24 실패 5종). **판정이 `--output-format json` 시절과 같다** —
- *  실측에서 세 키가 stream-json의 `{"type":"result"}` 한 줄에 **글자로 같이** 있었다. */
-function judge(result: ResultLine | null, live: Live, stderr: string): Run & { reason?: AnswerReason } {
+ *  실측에서 세 키가 stream-json의 `{"type":"result"}` 한 줄에 **글자로 같이** 있었다.
+ *
+ *  **`!result`는 이제 시계가 아니라 죽음이다**(요구 `8db4d0f6` — §7 §천장이 없다 실패 ③ 재정의).
+ *  결과 줄 없이 `close`가 왔다 = 자식이 답 없이 끝났다. 원인 원문은 종료 코드(또는 신호) ·
+ *  stderr 꼬리다 — `session <id>`는 화면이 `Answer.sessionId`로 붙인다(§24 표와 같은 자리). */
+function judge(
+  result: ResultLine | null,
+  live: Live,
+  stderr: string,
+  exit: { code: number | null; signal: NodeJS.Signals | null },
+): Run & { reason?: AnswerReason } {
   if (!result) {
-    // 결과 줄이 없다 = 엔진이 결과를 못 낸 것이다. 원문을 그대로 올린다 — 여기서 문구를 지어내면
-    // 사람이 손으로 같은 커맨드를 돌려 볼 단서가 사라진다(§6 에러 3요소).
-    // spawn 자체가 실패한 것(`ENOENT`·권한)도 여기로 떨어진다 — 그래서 §24 ①이다.
-    return {
-      ok: false,
-      reason: "spawn",
-      output: [live.partial, stderr].join("\n").trim() || "엔진이 아무것도 출력하지 않았습니다.",
-    };
+    const where = exit.code !== null ? `exit ${exit.code}` : `signal ${exit.signal}`;
+    const tail = stderr.trim().split("\n").slice(-10).join("\n");
+    return { ok: false, reason: "timeout", output: [where, tail].filter(Boolean).join(" · ") };
   }
   const text = typeof result.result === "string" ? result.result : "";
   if (result.is_error === true || !text) {
@@ -793,14 +866,6 @@ async function runClaude(
     // 그래서 중지의 근거가 핸들이 아니라 `stopping` 플래그다.
     if (live.stopping) child.kill("SIGTERM");
 
-    let timedOut = false;
-    // `execFile`의 `timeout` 옵션 자리다(머리 주석 — 스트림을 직접 읽느라 그 래퍼를 못 쓴다).
-    // 값도 신호도 `중지`와 같지만 **사건이 다르다**: 이건 실패 ③이고 저건 사람이 한 일이다.
-    const timer = setTimeout(() => {
-      timedOut = true;
-      child.kill("SIGTERM");
-    }, TIMEOUT_MS);
-
     let rest = ""; // 아직 개행을 못 만난 꼬리
     let stderr = "";
     let result: ResultLine | null = null;
@@ -819,7 +884,6 @@ async function runClaude(
     const settle = (r: Run & { reason?: AnswerReason; stopped?: boolean }) => {
       if (settled) return; // `error` 뒤에 `close`가 따라온다 — 먼저 온 것 하나만 답이다
       settled = true;
-      clearTimeout(timer);
       live.child = null;
       resolve(r);
     };
@@ -828,21 +892,14 @@ async function runClaude(
     // ponytail: 손자 프로세스가 stdout을 물고 있으면 자식이 죽어도 이게 안 온다(화면은 영영
     //           `도는 중`이다). `--strict-mcp-config`라 지금 손자가 없다 — 생기는 날 `exit` +
     //           유예 타이머로 내린다.
-    child.on("close", () => {
+    child.on("close", (code, signal) => {
       if (rest.trim()) result = eatLine(rest, live) ?? result; // 개행 없이 끝난 마지막 줄
       // **사람이 멈춘 것이 먼저다.** `SIGTERM`을 받은 `claude`는 스스로 rc 143으로 나가면서
       // 받은 데까지를 트랜스크립트에 남긴다(실측 ⑴⑵) — 그래서 여기서 실패로 만들 것이 없다.
+      // **시계는 여기 없다**(§7 §천장이 없다) — 나머지 경우는 결과 객체가 있나 없나 하나로
+      // 갈린다. 결과 객체가 없으면 `judge`가 종료 코드·신호·stderr 꼬리로 실패 ③을 짓는다.
       if (live.stopping) settle({ ok: true, stopped: true, output: live.partial });
-      else if (timedOut) {
-        settle({
-          ok: false,
-          reason: "timeout",
-          // §비주얼 §24 실패 ③의 **원인 원문 열**이다(`상한 300초 초과 · session <id>` — session은
-          // 화면이 `Answer.sessionId`로 붙인다). 한국어 문장을 여기 두지 않는 이유: 제목이 이미
-          // `5분을 넘겼습니다`라 같은 말이 두 줄로 겹치고, 원문 줄은 사람이 손으로 재현할 값의 자리다.
-          output: `상한 ${TIMEOUT_MS / 1000}초 초과`,
-        });
-      } else settle(judge(result, live, stderr));
+      else settle(judge(result, live, stderr, { code, signal }));
     });
   });
 }
@@ -917,7 +974,8 @@ export function toTurns(events: StreamEvent[]): Turn[] {
  *  동시 상한은 안 박는다(§7 §상한을 안 두는 근거 — 세는 값은 이 맵에 이미 있다).
  *  // ponytail: 프로세스 메모리다. dev의 HMR·재시작에 날아가면 폴링이 멈추고 답은 다음
  *  //           새로고침에 트랜스크립트에서 그대로 뜬다 — 잃는 것은 실패 Alert 한 장과
- *  //           **자식 핸들**(그때 `중지`는 죽일 것을 못 찾는다. 상한 5분이 뒤에 있다). */
+ *  //           **자식 핸들**(그때 `중지`는 죽일 것을 못 찾는다 — 시계 등받이도 없다,
+ *  //           §7 §천장이 없다. 그 자식은 사람이 손으로 찾아 죽여야 한다). */
 const runs = new Map<string, { projectId: string; result: Answer | null; live: Live }>();
 
 /** 결과를 집어 간 폴링이 그 줄을 뗀다. **키가 아니라 객체로 지운다** — 첫 턴이 실패하면
@@ -940,7 +998,8 @@ export const isAsking = (projectId: string): boolean => runningIn(projectId).len
  *
  *  `SIGKILL` 재시도 사다리를 만들지 않는다. 근거는 실측 ⑴이다: `claude`는 이 신호를 받아
  *  **스스로** rc 143으로 나가고(신호사면 rc가 음수로 온다) 나가면서 받은 데까지를 트랜스크립트에
- *  남긴다. 그래도 안 죽는 날이 오면 상한 5분이 여전히 뒤에 서 있다.
+ *  남긴다. **시계 등받이는 없다**(§7 §천장이 없다) — 안 죽는 날이 오면 그게 `SIGKILL` 한 칸을
+ *  여는 신호다(같은 절이 그 조건을 적어 뒀다).
  *
  *  **죽이는 것은 그 대화의 자식 하나다**(§7 §서버가 갈리는 자리 넷 ③) — 인자가 project id가
  *  아니라 session id인 것이 그 전부다. 남의 대화를 멈추는 경로를 안 만든다(가서 누른다).
@@ -956,7 +1015,8 @@ export function stopAsk(sessionId: string): boolean {
   return true;
 }
 
-/** 질문을 **띄우고 바로 돌아온다**(§24). 5분을 응답 하나로 붙들고 있지 않는 이유 셋:
+/** 질문을 **띄우고 바로 돌아온다**(§24). 답 하나가 얼마나 오래 돌든 그 응답을 붙들고 있지 않는
+ *  이유 셋(천장이 없어진 뒤로는 "오래"의 상한도 없다 — §7 §천장이 없다):
  *  ① 도는 동안 폴링이 답의 조각을 그려야 하고 ② 새로고침해도 따라가야 하고
  *  ③ 실패 ④를 판정할 곳이 서버여야 한다. 셋 다 "누가 도는지"를 서버가 알아야 한다는 한 사실이다.
  *
@@ -1038,6 +1098,10 @@ export type HomeChunk = {
   /** **도는 동안 받은 글**(§7 §답은 흐른다). 출처가 `turns`와 다르다 — 이건 자식 프로세스의
    *  stdout이고 저건 트랜스크립트다. `running`이 false면 **언제나 빈 문자열**이다(아래 주석) */
   partial: string;
+  /** **지금 하는 일**(§7 §천장이 없다 §안심 장치). 출처는 `partial`과 같다(자식의 stdout) —
+   *  `running`이 false면 **언제나 `null`**이다(같은 근거: 끝나는 순간 `Live`가 볼일이 없다).
+   *  문구·그릇은 화면 결선(`4c8e82d8`)이 정한다 — 여기는 구분값 + 도구 이름까지만 낸다 */
+  activity: Activity | null;
   /** 사람이 `중지`로 끝냈다. 실패가 아니다 — 화면은 `중지됨`이라고 말하고 입력칸을 연다(§7) */
   stopped: boolean;
   /** 끝난 **실패**. 성공은 말풍선이 이미 말했으므로 여기 안 담는다 */
@@ -1067,7 +1131,9 @@ export type HomeChunk = {
  *
  *  **그래도 `turns`가 둘째 증거로 남는다** — 맵이 휘발한 뒤의 복구 경로가 그것 하나다: 그때는
  *  `answered`가 영영 false이므로, 늦게 끝낸 자식이 쓴 답 줄을 화면이 집어 가는 폴링이 끊는 자리다.
- *  아무 증거도 없는 `running: false`는 여전히 안 끊는다(천장은 화면 쪽 5분 — `TIMEOUT_MS`와 같은 수). */
+ *  아무 증거도 없는 `running: false`는 여전히 안 끊는다. **`CEILING_MS`는 그 QA 실측 때 서버의
+ *  상한 5분(이 파일에 있던 타이머 상수 — 이 티켓이 걷었다)과 같은 수였다. 둘 다 걷기로 했다
+ *  (요구 `8db4d0f6` — §7 §천장이 없다) — 화면 쪽은 화면 결선 티켓(`4c8e82d8`)이 걷는다.** */
 export const pollDone = (c: Pick<HomeChunk, "running" | "turns" | "answered">): boolean =>
   c.answered || (!c.running && c.turns.length > 0);
 
@@ -1117,9 +1183,11 @@ export async function pollHome(
   // 받은 데까지가 트랜스크립트에 남으므로(실측 ⑵) 화면이 지울 것도 붙일 것도 없다.
   // 순서가 근거다 — `done`을 파일보다 먼저 읽으므로 `partial`이 비는 응답은 이미 그 줄을 담고 있다.
   const partial = running ? (entry?.live.partial ?? "") : "";
+  // **같은 근거로 같은 값이다**(§7 §안심 장치) — 끝나면 볼 활동이 없다.
+  const activity = running ? (entry?.live.activity ?? null) : null;
 
   if (!sid) {
-    return chunk({ sessionId: null, conversations, workers, turns: [], offset: 0, reset, running, runningSessions, partial, stopped, failed, answered });
+    return chunk({ sessionId: null, conversations, workers, turns: [], offset: 0, reset, running, runningSessions, partial, activity, stopped, failed, answered });
   }
 
   const file = await findTranscript(sid);
@@ -1134,6 +1202,7 @@ export async function pollHome(
       running,
       runningSessions,
       partial,
+      activity,
       stopped,
       answered,
       // 답은 끝났다는데 읽을 파일이 없다 = §24 실패 ⑤. §9에서 같은 사실은 **빈 상태**였다 —
@@ -1146,5 +1215,19 @@ export async function pollHome(
     });
   }
   const r = await tailEvents(file, at);
-  return chunk({ sessionId: sid, conversations, workers, turns: toTurns(r.events), offset: r.offset, reset, running, runningSessions, partial, stopped, failed, answered });
+  return chunk({
+    sessionId: sid,
+    conversations,
+    workers,
+    turns: toTurns(r.events),
+    offset: r.offset,
+    reset,
+    running,
+    runningSessions,
+    partial,
+    activity,
+    stopped,
+    failed,
+    answered,
+  });
 }
