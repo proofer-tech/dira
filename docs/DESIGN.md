@@ -4101,6 +4101,32 @@ inference-only라 영영 자동이 안 된다).
 - **발급 판정 경계는 §0-4 판정 표 그대로다** — 버튼 클릭 = 사람 계정에 자격증명을 만드는
   행위. 에이전트 세션은 누르지 않고(판정불가라고 적는다), 화면·순수 층만 테스트로 닫는다.
 
+#### 확정 — authorize 호스트는 구독 계정 것이다 (요구 `b8950201` · 2026-08-06)
+
+> 사람 문장: *"claude 토큰 추가를 자체 oauth 방식으로 바꿨더니 승인 페이지로 안가고 자꾸
+> Join your team 페이지로 갑니다."*
+
+P180-2(`2a8f8589`)가 고른 `platform.claude.com/oauth/authorize`는 **콘솔(조직) 계정용**이다.
+CLI 바이너리(2.1.222) 실측 — authorize 호스트는 상수 하나가 아니라 불리언으로 갈리고,
+**기본값이 구독 쪽**이다(`loginWithClaudeAi: er ?? !0`). 장기 inference 토큰 호출부
+(`loginWithClaudeAi:!0, inferenceOnly:!0`)도 구독 쪽을 쓴다. platform 쪽에 조직이 없는
+구독 계정은 그 호스트에서 승인 페이지 대신 조직 온보딩(`Join your team`)으로 떨어진다 —
+요구의 증상 그대로다.
+
+| 자리 | CLI 상수 | 값 | dira |
+|---|---|---|---|
+| authorize (구독) | `CLAUDE_AI_AUTHORIZE_URL` | `https://claude.com/cai/oauth/authorize` | **이것으로 간다** |
+| authorize (콘솔) | `CONSOLE_AUTHORIZE_URL` | `https://platform.claude.com/oauth/authorize` | P180-2가 잘못 고른 값. 안 쓴다 |
+| 토큰 교환 | `TOKEN_URL` | `https://platform.claude.com/v1/oauth/token` | 두 갈래 공용 — 그대로 |
+| 성공 페이지 | `CLAUDEAI_SUCCESS_URL` | `https://platform.claude.com/oauth/code/success?app=claude-code` | 콘솔 것(`/buy_credits?…`)과 다르지만 **지금 코드 값과 같다** — 그대로 |
+
+- **계정 유형 선택 UI는 안 만든다.** 이 목록의 존재 이유가 구독 계정 리밋 회전이고(§0-13 첫
+  문단), CLI 기본값도 구독이다. 콘솔 계정 토큰이 필요한 사람에게는 층 ③(직접 넣기)이 있다 —
+  갈래가 실제로 필요해지면 그때 요구로 온다.
+- 바뀌는 것은 `lib/auth.ts`의 `AUTHORIZE_URL` 상수 하나와 그 모양을 재는 테스트다.
+  `client_id`·PKCE·redirect·스코프·저장 경로는 그대로다(같은 builder에 호스트만 갈리는 것을
+  바이너리에서 확인했다).
+
 #### 이 절이 정하지 않는 것 (천장)
 
 - **§0-8 잔여 게이지는 회전을 안 따라간다.** 그 게이지는 `~/.claude/.credentials.json`(CLI 로그인
@@ -21326,7 +21352,8 @@ P168처럼 앞의 실측값이 뒤의 입력이 되는 회차가 아니다).
 |---|---|---|---|---|
 | P180-0 | 스펙 확정 + 자동 취득 승인 왕복 `d6bb954c` | pm | — | 완료 — 답 (a) `1864a6eb` |
 | P180-1 | 라벨 입력(층 ③ 폼) + 행 라벨 편집 `6ca24538` | developer | — | 완료 |
-| P180-2 | 층 ② 자체 OAuth 발급 교체 + profile GET 1회 → 라벨 자동 기입 `2a8f8589` | developer | — | 대기 |
+| P180-2 | 층 ② 자체 OAuth 발급 교체 + profile GET 1회 → 라벨 자동 기입 `2a8f8589` | developer | — | 완료 |
+| P180-3 | authorize 호스트 교정 — 콘솔 → 구독(`claude.com/cai`) `576e8431` (요구 `b8950201`) | developer | — | 대기 |
 
 P180-2는 P180-1(`6ca24538`, 완료)이 세운 `addToken(raw, label?)` 배관을 그대로 쓴다 —
 이미 master에 있어 `deps`가 아니다. 서버가 `user:profile` 포함 장기 토큰을 거절하면 구현하지
