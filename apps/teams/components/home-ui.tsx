@@ -255,6 +255,11 @@ export function HomeUI({
     if (!running && !anyRunning) return;
     let stop = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    // **이 왕복이 시작될 때 매달린 질문**(§21 실패 규칙 · 요구 `4ddfed03`). `echo` state는 이
+    // 이펙트의 deps가 아니라 여기서 값을 한 번 떠 두는 것이 값이다 — 아래 `r.failed` 갈래가
+    // §7 §천장이 없다 ③(죽음 기반 실패, 즉시 실패가 아니라 폴링으로만 온다)에서 이 값을 입력칸에
+    // 돌려준다. 즉시 실패(`spawn`·`auth`)는 `run()`이 이미 처리해서 여기 안 온다.
+    let pendingEcho = echo;
     const poll = async () => {
       // 왕복이 통째로 실패하면(catch) 서버가 삐끗한 것이다 — 느린 쪽으로 물러난다.
       let wait = SLOW_MS;
@@ -279,8 +284,18 @@ export function HomeUI({
         // 것이 곧 그 질문(과 어쩌면 답까지)이 정본에 섰다는 뜻이다. 갈아 끼우는 대상은 **이
         // 왕복 전에 보낸 질문뿐**이다: 잠금의 단위가 대화 하나라 같은 대화에 두 번째 질문이
         // 겹쳐 뜰 일이 없다(§24 실패 ④).
-        if (r.turns.length > 0) setEcho(null);
-        if (r.failed) setFail(r.failed);
+        if (r.turns.length > 0) {
+          setEcho(null);
+          pendingEcho = null;
+        }
+        if (r.failed) {
+          setFail(r.failed);
+          // §21 실패 규칙: 쓴 글은 입력칸에 남는다. 이 왕복 전에 그 질문이 트랜스크립트에
+          // 이미 섰으면(위에서 `pendingEcho`를 걷었다) 되돌릴 것이 없다. 그 사이 사람이 다음
+          // 질문을 쓰기 시작했으면 그쪽이 이긴다(`send()`의 즉시 실패 갈래와 같은 판정).
+          const question = pendingEcho;
+          if (question !== null) setText((now) => now || question);
+        }
         if (r.done) {
           setRunning(false);
           // **보던 대화가 끝났다고 사슬을 안 끊는다** — 남이 돌면 패널의 표식이 이 왕복에
@@ -300,6 +315,10 @@ export function HomeUI({
       stop = true;
       clearTimeout(timer);
     };
+    // `echo`가 deps에 없는 것도 위 `anyRunning`과 같은 이유다 — 첫 턴 도착으로 `echo`가 `null`이
+    // 되는 매 왕복마다 사슬을 다시 걸면 그 자리에서 폴링이 처음부터 선다. `pendingEcho`가 그 값을
+    // 사슬 안에서 대신 든다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project, running, anyRunning]);
 
   const empty = !text.trim();
