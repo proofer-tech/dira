@@ -5,6 +5,7 @@ import {
   GAP_THRESHOLD_MS,
   INITIAL_OFFLINE,
   MERGE_WINDOW_MS,
+  filterRead,
   isFresh,
   isReachable,
   mergeResume,
@@ -65,6 +66,15 @@ test("신선도 — to에서 10분 안이면 살아 있고 지나면 죽는다",
   const ev: ResumeEvent = { from: 0, to: 1_000_000, kind: "poweredOff" };
   assert.ok(isFresh(ev, 1_000_000 + FRESHNESS_MS));
   assert.ok(!isFresh(ev, 1_000_000 + FRESHNESS_MS + 1));
+});
+
+test("읽음 필터 — 읽은 to와 같으면 지워지고, 병합으로 to가 자라거나 빗나가면 그대로 남는다", () => {
+  const ev: ResumeEvent = { from: 0, to: 100_000, kind: "slept" };
+  assert.equal(filterRead(ev, ev.to), null); // 읽음 → resume null
+  const grown: ResumeEvent = { ...ev, to: 200_000 };
+  assert.deepEqual(filterRead(grown, ev.to), grown); // 병합으로 to가 자란 뒤 → 다시 나온다
+  assert.deepEqual(filterRead(ev, 999), ev); // 빗나간 to(이미 자란 이벤트) → 무시되고 남는다
+  assert.equal(filterRead(null, ev.to), null);
 });
 
 test("핫리로드 가드 — 두 번째 startHeartbeat는 새 타이머를 안 만든다", () => {

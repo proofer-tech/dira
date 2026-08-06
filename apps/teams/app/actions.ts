@@ -34,6 +34,7 @@ import {
 } from "@/lib/analytics";
 import type { FeedbackMeta } from "@/lib/feedback";
 import { DEFAULT_KEYMAP, comboOf, validateBinding, type KeyLike } from "@/lib/keymap";
+import { markResumeRead } from "@/lib/machine-state";
 import {
   ProjectError,
   addProject,
@@ -444,6 +445,14 @@ export async function markFailuresReadAction(
   const root = (await readProjects()).find((t) => t.id === id)?.root;
   if (!root) return;
   await markAlertsRead(root, failures);
+  revalidatePath("/", "layout");
+}
+
+/** 알림 ⑥의 `읽음으로 표시` (DESIGN.md §0-14 §읽음 처리). 화면이 그 순간 보인 이벤트의 `to`를
+ *  모듈 메모리에 적는다 — 단위는 이벤트 하나(②처럼 프로젝트 루트를 넘기지 않는다. ⑥은 머신
+ *  하나의 상태라 프로젝트 스코프가 아니다). `alerts.json` 무수정, 파일 0개. */
+export async function markResumeReadAction(toMs: number): Promise<void> {
+  markResumeRead(toMs);
   revalidatePath("/", "layout");
 }
 

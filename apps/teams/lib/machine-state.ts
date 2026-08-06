@@ -74,6 +74,13 @@ export function isFresh(event: ResumeEvent, nowMs: number): boolean {
   return nowMs - event.to <= FRESHNESS_MS;
 }
 
+/** 읽음 필터 — 화면이 본 `to`와 지금 판정의 `to`가 같으면 지운다. 병합으로 `to`가 자라면
+ *  달라지므로 다시 뜬다(§0-14 §읽음 처리 — 새 사실은 다시 봐야 한다). 단위는 이벤트 하나라
+ *  값 하나(`readTo`)면 충분하다 — 나열이 아니다. */
+export function filterRead(resume: ResumeEvent | null, readTo: number | null): ResumeEvent | null {
+  return resume && resume.to === readTo ? null : resume;
+}
+
 // ---- 모듈 스코프 — 여기부터 side effect(파일 I/O · 서브프로세스 · 타이머) ----
 
 function heartbeatPath(): string {
@@ -113,7 +120,12 @@ async function boottimeMs(): Promise<number | null> {
   }
 }
 
-type LiveState = { offline: OfflineTally; resume: ResumeEvent | null; lastHeartbeatAt: number };
+type LiveState = {
+  offline: OfflineTally;
+  resume: ResumeEvent | null;
+  lastHeartbeatAt: number;
+  readTo: number | null;
+};
 type Globals = { __diraMachineState?: LiveState; __diraMachineTimer?: NodeJS.Timeout };
 const g = globalThis as unknown as Globals;
 
@@ -133,7 +145,7 @@ async function initState(): Promise<LiveState> {
   const [heartbeatAt, boottime] = await Promise.all([readHeartbeatAt(), boottimeMs()]);
   const resume = boottime !== null ? powerOffGap(heartbeatAt, boottime, now) : null;
   await writeHeartbeatAt(now);
-  return { offline: INITIAL_OFFLINE, resume, lastHeartbeatAt: now };
+  return { offline: INITIAL_OFFLINE, resume, lastHeartbeatAt: now, readTo: null };
 }
 
 /** 핫리로드 가드 — `globalThis`에 이미 타이머가 있으면 새로 안 만든다(Next dev가 이 모듈을
@@ -167,5 +179,12 @@ export function machineState(nowMs: number = Date.now()): MachineState {
   ensureStarted();
   const s = g.__diraMachineState;
   if (!s) return { offline: false, resume: null };
-  return { offline: s.offline.offline, resume: s.resume && isFresh(s.resume, nowMs) ? s.resume : null };
+  const fresh = s.resume && isFresh(s.resume, nowMs) ? s.resume : null;
+  return { offline: s.offline.offline, resume: filterRead(fresh, s.readTo) };
+}
+
+/** Server Action이 부르는 쓰기 — 화면이 그 순간 보인 이벤트의 `to`를 모듈 메모리에 적는다
+ *  (§0-14 §읽음 처리). 파일 0개 — 초기화 전(사실상 없는 창)이면 아직 이벤트가 없으므로 무시한다. */
+export function markResumeRead(toMs: number): void {
+  if (g.__diraMachineState) g.__diraMachineState.readTo = toMs;
 }

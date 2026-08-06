@@ -20,6 +20,7 @@ import { EmptyState } from "@/components/empty-state";
 import {
   BrandMark,
   MarkFailuresReadButton,
+  MarkResumeReadButton,
   NotificationPopover,
   RefreshButton,
   ProjectNav,
@@ -369,6 +370,11 @@ function NotificationItems({
           잃은 것은 없습니다 — 이미 다시 돌고 있습니다.
         </p>
         <p className="col-start-2 text-sm text-foreground">고칠 일은 없습니다.</p>
+        {/* ②와 같은 벌 — 행의 오른쪽 끝(§비주얼 §4-3). ⑤는 무수정이다(§0-14 §읽음 처리 — 살아
+            있는 판정이라 붙이지 않는다). */}
+        <span className="col-start-2 flex justify-end">
+          <MarkResumeReadButton toMs={resume.to} />
+        </span>
       </>
     ),
     // ① 인증 (§0-4). 토큰 파일이 없으면 `tick.sh:61`이 매 tick마다 조용히 `exit 0`한다 —

@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { parentPath, projectPath, screenOf } from "@/lib/urls";
-import { markFailuresReadAction, trackEvent } from "@/app/actions";
+import { markFailuresReadAction, markResumeReadAction, trackEvent } from "@/app/actions";
 import { formatCombo } from "@/lib/keymap";
 import { isTyping, useHotkey, useKeymap } from "@/components/keymap-provider";
 
@@ -143,6 +143,30 @@ export function MarkFailuresReadButton({
             project,
             failures.map((f) => ({ log: f.log, at: f.at })),
           );
+        });
+      }}
+    >
+      읽음으로 표시
+    </Button>
+  );
+}
+
+/** ⑥ `잠자기·꺼짐에서 복귀`의 `읽음으로 표시` (§0-14 §읽음 처리 · §비주얼 §4-3).
+ *  ②의 그 벌 — 행 오른쪽 끝, 초점을 먼저 그릇으로 옮기고, 결과 표시 없이 항목이 사라진다.
+ *
+ *  **넘기는 것은 `to` 하나다.** 누르는 사이 병합으로 `to`가 자랐으면 표시가 빗나가 항목이
+ *  남는다 — 그것이 맞다(새 사실은 다시 봐야 한다, §0-14). */
+export function MarkResumeReadButton({ toMs }: { toMs: number }) {
+  const [pending, start] = useTransition();
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      disabled={pending}
+      onClick={(e) => {
+        e.currentTarget.closest<HTMLElement>('[data-slot="popover-content"]')?.focus();
+        start(async () => {
+          await markResumeReadAction(toMs);
         });
       }}
     >
