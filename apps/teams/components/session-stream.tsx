@@ -295,34 +295,47 @@ export function SessionStream({
   );
 }
 
-/** 말풍선 한 항목(§비주얼 §29 ①) — 질문은 왼쪽, 답변은 오른쪽. 역할을 가르는 것은 **정렬**이고
- *  스트림 줄과 가르는 것은 **그릇**(테두리 네 변 + `rounded-xl`)이다. 색은 하나도 안 쓴다.
+/** 질문은 산문, 답변은 말풍선(§비주얼 §9 §산문과 말풍선 · §13 §질문 쪽은 산문이다 — §2-7 ①).
+ *  질문(PM)은 그릇이 없다 — `Message`·`MessageContent`·`Bubble` 셋 다 안 쓰고 헤더 + `<Markdown>`
+ *  뿐이다. 답변(사람)은 §13 말풍선 계약 그대로 무수정이다.
  *
- *  `px-3`은 스트림 줄과 **같은 거터다**(새 좌우 여백을 만들지 않는다 — `Message`가 `w-full`이라
- *  그 안쪽 폭이 곧 줄 내용 폭이고 `max-w-[80%]`가 그 위에서 문다: 1440에서 696px).
- *  `py-2`가 §13 `gap-4`를 그대로 낸다(말풍선끼리 8+8=16 · 줄과는 8 — 패딩이라 합쳐지지 않는다).
+ *  `px-3`은 스트림 줄과 **같은 거터다**(§29 ① x=12 — 산문 헤더 `px-0`이 그 위에 얹혀 항목 첫
+ *  글자와 나란히 선다). `py-2`가 §13 `gap-4`를 그대로 낸다(말풍선끼리 8+8=16 · 줄과는 8).
  *  **시각을 안 붙인다**: 질문은 자기 파일이 없어 시각이 없고, 지어내지 않기로 한 것이 §2-3 ②다 —
  *  답변에만 붙이면 한 쌍의 헤더가 서로 다른 모양이 된다. 순서는 자리가 말한다.
- *  hover도 없다 — 펼칠 것이 없다(스트림 줄의 `hover:bg-muted/50`은 어포던스다). */
+ *  hover도 펼침도 없다 — 산문·말풍선 둘 다 펼칠 것이 없다(스트림 줄의 `hover:bg-muted/50`은
+ *  어포던스다). */
 function ThreadRow({ item }: { item: ThreadItem }) {
-  const align = item.role === "question" ? "start" : "end";
+  if (item.role === "question") {
+    return (
+      <div className="px-3 py-2">
+        {/* 헤더가 자기 본문 첫 글자와 같은 x(12)에 선다(§9) — `px-0`은 항목 껍데기의 `px-3`과
+            겹치지 않게 하는 한 클래스다. */}
+        <MessageHeader className="px-0">
+          {item.heading || "질문"}
+          {item.hash && <span className="ml-2 font-mono">{item.hash}</span>}
+        </MessageHeader>
+        {/* 질문은 PM이 감은 절이라 줄바꿈을 안 그린다(§10 면제 — §9와 같은 판정) */}
+        <Markdown text={item.text} />
+      </div>
+    );
+  }
   return (
     <div className="px-3 py-2">
-      <Message align={align}>
+      <Message align="end">
         <MessageContent>
           {/* 헤더는 말풍선 **밖 · 위**다(§13) — 안에 넣으면 본문의 소유자가 `<Markdown>` 하나가
               아니게 되고 §10 루트의 `[&>:first-child]:mt-0`이 거짓이 된다. 앉는 면이 `--card`가
               아니라 `--background`라 `--muted-foreground`가 4.73 / 7.63이다(§29 ① — 병합으로
               한 칸 좋아지는 유일한 자리고, 새로 잰 것이 아니라 §9 표의 1행이다) */}
           <MessageHeader>
-            {item.heading || (item.role === "question" ? "질문" : "답변")}
+            {item.heading || "답변"}
             {item.hash && <span className="ml-2 font-mono">{item.hash}</span>}
           </MessageHeader>
-          <Bubble variant="outline" align={align}>
+          <Bubble variant="outline" align="end">
             <BubbleContent>
-              {/* 상세의 왕복과 같은 판정이다(§10 면제) — 답변은 사람이 친 글이라 줄바꿈을 그리고
-                  질문은 PM이 감은 절이라 안 그린다. 두 자리가 갈리면 같은 글이 화면마다 다르다 */}
-              <Markdown text={item.text} breaks={item.role === "answer" ? "all" : undefined} />
+              {/* 답변은 사람이 친 글이라 줄바꿈을 그린다(§10 면제) */}
+              <Markdown text={item.text} breaks="all" />
             </BubbleContent>
           </Bubble>
         </MessageContent>
@@ -776,27 +789,39 @@ function Bundle({
   );
 }
 
-/** 스트림 말풍선 — assistant `text`와 사람이 친 말(§2-6 ① · §비주얼 §9 §스트림 말풍선).
- *  §13 말풍선 계약을 그대로 입는다(`outline` · `p-3` · `rounded-xl` · `max-w-[80%]` · 헤더는
- *  말풍선 밖 · 위 · 본문은 `<Markdown>`). 이 컴포넌트가 정하는 것은 셋뿐이다: 좌우 · 헤더 낱말 ·
- *  줄바꿈. **시각을 안 붙인다** — 스레드 질문(§2-3 ②)과 같은 판정이고, 근거만 다르다(저쪽은
- *  시각이 없어서, 여기는 있는데도 안 붙인다 — §29 ①). hover도 펼침도 없다.
+/** 세션은 산문, 사람은 말풍선 — assistant `text`와 사람이 친 말(§2-6 ① · §비주얼 §9
+ *  §산문과 말풍선 — §2-7 ①). 세션 쪽은 그릇이 없다: `Message`·`MessageContent`·`Bubble` 셋
+ *  다 안 쓰고 헤더 + `<Markdown>` 하나뿐이다. 사람 쪽은 §13 말풍선 계약 그대로 무수정이다
+ *  (`outline` · `p-3` · `rounded-xl` · `max-w-[80%]` · 헤더는 말풍선 밖 · 위 · 본문은
+ *  `<Markdown>`). **시각을 안 붙인다** — 스레드 질문(§2-3 ②)과 같은 판정이고, 근거만 다르다
+ *  (저쪽은 시각이 없어서, 여기는 있는데도 안 붙인다 — §29 ①). hover도 펼침도 없다.
  *
  *  좌 = `세션`(assistant `text`) · 우 = `사람`(첫 아닌 사용자 프롬프트 · 참견) — 파싱이 아는 것이
  *  그것뿐이다. 줄바꿈은 §10 면제와 같은 판정이다: 세션은 파일에 쓰듯 쓴 글이라 `breaks` 없이,
  *  사람은 입력칸에 친 글이라 `breaks="all"`로 친 줄바꿈이 정본이다. */
 function StreamBubble({ e }: { e: StreamEvent }) {
   const session = e.kind === "text";
-  const align = session ? "start" : "end";
   const who = session ? "세션" : "사람";
+  const header = e.sidechain ? `서브 · ${who}` : who;
+
+  if (session) {
+    return (
+      <div className="px-3 py-2">
+        {/* `px-0` — 항목 껍데기의 `px-3`과 겹치지 않게, 헤더가 산문 첫 글자와 같은 x(12)에
+            선다(§9) */}
+        <MessageHeader className="px-0">{header}</MessageHeader>
+        <Markdown text={e.body} />
+      </div>
+    );
+  }
   return (
     <div className="px-3 py-2">
-      <Message align={align}>
+      <Message align="end">
         <MessageContent>
-          <MessageHeader>{e.sidechain ? `서브 · ${who}` : who}</MessageHeader>
-          <Bubble variant="outline" align={align}>
+          <MessageHeader>{header}</MessageHeader>
+          <Bubble variant="outline" align="end">
             <BubbleContent>
-              <Markdown text={e.body} breaks={session ? undefined : "all"} />
+              <Markdown text={e.body} breaks="all" />
             </BubbleContent>
           </Bubble>
         </MessageContent>

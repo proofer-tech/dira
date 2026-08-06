@@ -470,15 +470,30 @@ export function AnswerThread({ thread }: { thread: ThreadItem[] }) {
             <MessageScrollerViewport aria-label="답변 스레드" className="max-h-96">
               <MessageScrollerContent>
                 {thread.map((item, i) => {
-                  // 역할은 **정렬**이 가른다 — 질문(PM)은 왼쪽, 답변(사람)은 오른쪽(§비주얼 §13 ·
-                  // 사람 요청 `c01a9a11` Q2=(b)). 변종은 좌우가 같은 `outline` 하나다: §13의
-                  // 실측표에서 §10을 안 깎는 말풍선 배경이 `--background` 하나뿐이었다
-                  // (채워진 배경 6종은 코드 펜스가 녹거나 표 선·인용이 미달한다).
-                  // 아바타는 없다 — 참여자가 둘이고 정렬이 이미 가른다.
-                  const align = item.role === "question" ? "start" : "end";
+                  // 질문(PM)은 산문, 답변(사람)은 말풍선(§비주얼 §9 §산문과 말풍선 · §13
+                  // §질문 쪽은 산문이다 — §2-7 ①). 종전엔 **정렬**이 역할을 갈랐지만 질문 쪽이
+                  // 그릇을 잃은 뒤로는 **그릇**이 앞에 서고 정렬은 그 결과다(§13 §값).
+                  // 아바타는 없다 — 참여자가 둘이고 그릇·정렬이 이미 가른다.
+                  if (item.role === "question") {
+                    return (
+                      <MessageScrollerItem key={i} messageId={String(i)}>
+                        {/* 말풍선이 아니다 — 전폭 산문. `Message`·`MessageContent`·`Bubble` 셋
+                            다 안 쓴다(§13 §값). `px-0`은 헤더가 산문 첫 글자와 같은 x에 서게
+                            하는 한 클래스다(§9) */}
+                        <div>
+                          <MessageHeader className="px-0">
+                            {item.heading || "질문"}
+                            {item.hash && <span className="ml-2 font-mono">{item.hash}</span>}
+                          </MessageHeader>
+                          {/* PM이 손으로 감은 절이라 줄바꿈을 안 그린다(§10 면제) */}
+                          <Markdown text={item.text} />
+                        </div>
+                      </MessageScrollerItem>
+                    );
+                  }
                   return (
                     <MessageScrollerItem key={i} messageId={String(i)}>
-                      <Message align={align}>
+                      <Message align="end">
                         <MessageContent>
                           {/* 헤더는 말풍선 **밖 · 위**다(§13) — 안에 넣으면 본문의 소유자가
                               `<Markdown>` 하나가 아니게 되고 §10 루트의 `[&>:first-child]:mt-0`이
@@ -486,7 +501,7 @@ export function AnswerThread({ thread }: { thread: ThreadItem[] }) {
                               4.73 / 6.91이다. 오른쪽 정렬은 `MessageContent`가 `data-align=end`에서
                               자식을 `self-end`로 밀어 같이 준다 */}
                           <MessageHeader>
-                            {item.heading || (item.role === "question" ? "질문" : "답변")}
+                            {item.heading || "답변"}
                             {item.hash && <span className="ml-2 font-mono">{item.hash}</span>}
                           </MessageHeader>
                           {/* 읽기만 하는 자리라 렌더된 마크다운이다(§비주얼 §10) — 말풍선 안에서도
@@ -494,11 +509,10 @@ export function AnswerThread({ thread }: { thread: ThreadItem[] }) {
                               `bg-muted` 블록 안에서 4.34가 되고 그건 §1이 실측으로 금지한 조합이다.
                               종전의 `border-l-2 border-border pl-3`은 지웠다 — 말풍선과 겹치면
                               답변 쪽만 세로선 + 상자 두 겹이 된다(§13) */}
-                          <Bubble variant="outline" align={align}>
+                          <Bubble variant="outline" align="end">
                             <BubbleContent>
-                              {/* 답변 본문은 **사람이 입력칸에 친 글**이라 줄바꿈을 그린다
-                                  (§10 면제). 질문 쪽은 PM이 손으로 감은 절이라 켜면 톱니가 된다 */}
-                              <Markdown text={item.text} breaks={item.role === "answer" ? "all" : undefined} />
+                              {/* 답변 본문은 **사람이 입력칸에 친 글**이라 줄바꿈을 그린다(§10 면제) */}
+                              <Markdown text={item.text} breaks="all" />
                             </BubbleContent>
                           </Bubble>
                         </MessageContent>
