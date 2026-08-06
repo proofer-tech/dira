@@ -365,7 +365,10 @@ export type SetupState = {
  *  자리가 아니라 CLI가 이미 등록된 자리에 얹는다 — §0-13 §라벨 §확정이 치르기로 한
  *  "엔드포인트에 묶이는 대가"가 이 값이다. */
 const CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
-const AUTHORIZE_URL = "https://platform.claude.com/oauth/authorize";
+/** CLI 상수 `CLAUDE_AI_AUTHORIZE_URL`(구독 계정, CLI 기본값)이다. `CONSOLE_AUTHORIZE_URL`
+ *  (콘솔/조직 계정 — P180-2가 잘못 골랐던 값)이 아니다 — 조직이 없는 구독 계정이 그 호스트에서는
+ *  승인 페이지 대신 조직 온보딩(`Join your team`)으로 떨어졌다(실측, 요구 `b8950201`). */
+const AUTHORIZE_URL = "https://claude.com/cai/oauth/authorize";
 const TOKEN_URL = "https://platform.claude.com/v1/oauth/token";
 /** CLI가 `setup-token` 뒤에도 이메일을 확인할 때 부르는 그 GET(§0-13 §라벨 실측과 같은 값). */
 const PROFILE_URL = "https://api.anthropic.com/api/oauth/profile";

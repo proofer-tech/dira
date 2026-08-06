@@ -81,7 +81,7 @@ test("normalizeToken — 비었거나 안에 공백이 있으면 거부, 접두�
 
 test("buildAuthorizeUrl — client_id·PKCE·스코프·redirect_uri가 로컬 포트를 문다", () => {
   const url = new URL(buildAuthorizeUrl({ challenge: "chal123", state: "st1", port: 54321 }));
-  assert.strictEqual(url.origin + url.pathname, "https://platform.claude.com/oauth/authorize");
+  assert.strictEqual(url.origin + url.pathname, "https://claude.com/cai/oauth/authorize");
   assert.strictEqual(url.searchParams.get("client_id"), "9d1c250a-e61b-44d9-88ed-5944d1962f5e");
   assert.strictEqual(url.searchParams.get("response_type"), "code");
   assert.strictEqual(url.searchParams.get("redirect_uri"), "http://127.0.0.1:54321/callback");
