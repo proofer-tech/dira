@@ -95,6 +95,21 @@ try:
     for ph in ("<프로젝트>", "<통합 브랜치>"):
         assert ph not in real, "코어에 프로젝트 층 자리표시자가 남아 있다: {}".format(ph)
 
-    print("PASS 코어 인라인·큐 AGENTS.md 앞·부재시 디스패치 성립(WARN 1줄)·자리표시자 0건")
+    # 4) 큐 vendored 사본(§프롬프트 층 결정 8-b) - 있으면 그것이 우선이고 머리가 큐 절대경로를
+    #    찍는다. 엔진 사본(2번의 마커)은 실리지 않는다. WARN도 안 늘어난다.
+    vendored = write(os.path.join(root, "protocols", "CORE.md"), "# 큐 코어\n큐-코어-마커\n")
+    got2 = dryrun(worker, local)
+    block2 = "===== CORE.md ({}) =====\n# 큐 코어\n큐-코어-마커\n===== 코어 프로토콜 끝 =====\n\n".format(vendored)
+    assert "프롬프트: " + block2 in got2, "큐 vendored 코어가 프롬프트 맨 앞이 아니다\n" + got2
+    assert "코어-본문-마커" not in got2, "엔진 사본이 큐 사본보다 우선했다\n" + got2
+    assert warns(root) == w, "큐 vendored 코어가 있는데 WARN이 늘었다: {}".format(warns(root))
+
+    # 5) 큐 사본을 치우면 엔진 사본으로 폴백한다(이상 상태가 아니다 - 결정 8-b).
+    os.remove(vendored)
+    back = dryrun(worker, local)
+    assert back == got, "큐 사본 제거 후 엔진 폴백이 2번과 달라졌다\n" + back
+
+    print("PASS 코어 인라인·큐 AGENTS.md 앞·부재시 디스패치 성립(WARN 1줄)·자리표시자 0건"
+          "·큐 vendored 우선·엔진 폴백")
 finally:
     shutil.rmtree(tmp, ignore_errors=True)
