@@ -21501,7 +21501,7 @@ P180-2는 P180-1(`6ca24538`, 완료)이 세운 `addToken(raw, label?)` 배관을
 | ID | 무엇 | 담당 | deps | 상태 |
 |---|---|---|---|---|
 | P186-1 | §비주얼 §28 ⑥ 행 개정 — `읽음으로 표시` 버튼 행(②의 벌 그대로) + 높이 재유도 `3ea52799` | designer | — | 완료 — ⑥이 **행 넷 · 120px**(88 + `gap-y-1` 4 + `h-7` 28), ⑤는 **88px 무수정**. 팝오버 총높이 `⑤⑥ +218 → +250` · `여섯 다 981 → 1013`(820을 193px 넘긴다) · `⑤⑥만 217 → 249`. **②의 버튼 표에서 고친 칸이 0개다** — ⑥이 그 표를 정본으로 쓴다. 덤으로 **근거의 역할이 갈리는 것을 적었다**: ②는 문장+버튼이 488.7 > 404라 자기 행이 *강제*였는데 ⑥은 107.3 + ≈100이라 한 행에 들어간다 — 그래도 자기 행을 주는 근거는 §0-10의 `②와 같은 벌`이고 2줄 산술은 **이유에서 대가(+24px)로** 자리를 옮겼다. **새 shadcn 0 · 새 색 토큰 0 · 새 lucide 0 · 새 커스텀 0 · 새로 잰 대비 0** |
-| P186-2 | `machine-state.ts` 읽음 판정 + Server Action + 종 ⑥ 버튼 배선 + `node --test` `f234d808` | developer | — | 대기 |
+| P186-2 | `machine-state.ts` 읽음 판정 + Server Action + 종 ⑥ 버튼 배선 + `node --test` `f234d808` | developer | — | 완료 — `LiveState`에 `readTo: number \| null` 추가, 순수 함수 `filterRead(resume, readTo)`(`resume.to === readTo`면 `null`, 병합으로 `to`가 자라면 자동으로 다시 뜬다). `markResumeRead(toMs)`가 모듈 전역에 쓰는 유일한 자리(파일 0). `markResumeReadAction`(②의 `markFailuresReadAction`과 같은 벌, 프로젝트 루트 안 받음) + `MarkResumeReadButton`(마크업·초점 이동 동일) + 종 ⑥ 배선. `node --test machine-state.test.ts` 7/7, 전체 스위트 374/374, tsc·eslint 0건. 커밋 `7694857` |
 
 **둘 사이 deps가 없다.** 버튼의 모양은 ②의 그 벌 그대로라(§비주얼 §4-3 — 행의 오른쪽 끝)
 구현이 §28 개정을 기다릴 것이 없고, §28 개정은 코드가 아니라 표의 수(행 구성·높이)다.
