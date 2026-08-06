@@ -263,9 +263,19 @@ export function HomeUI({
     const poll = async () => {
       // 왕복이 통째로 실패하면(catch) 서버가 삐끗한 것이다 — 느린 쪽으로 물러난다.
       let wait = SLOW_MS;
+      // **띄우기 전에 스냅샷** — 서버의 `current`는 프로젝트당 하나라 왕복 중에 (이 탭의)
+      // `apply()`나 (다른 탭의) 전환이 그 값을 옮기면 이 응답은 **내가 물은 대화의 것이 아니다**
+      // (유령 진행 표식, QA `c5547ed8`). `pollHome`이 항상 서버의 지금 `current`를 돌려주므로
+      // (넘긴 sessionId는 offset 리셋 판단에만 쓰인다) `r.sessionId`로 확인해야 한다 — ref
+      // 비교는 이 탭 자신이 안 옮겼는데 서버 쪽 `current`만 옮은 경우(다른 탭)를 놓친다.
+      const target = session.current;
       try {
-        const r = await pollHomeAnswer(project, session.current, offset.current);
+        const r = await pollHomeAnswer(project, target, offset.current);
         if (stop) return;
+        if (r.sessionId !== target) {
+          timer = setTimeout(poll, FAST_MS);
+          return;
+        }
         session.current = r.sessionId;
         offset.current = r.offset;
         setPartial(r.partial);

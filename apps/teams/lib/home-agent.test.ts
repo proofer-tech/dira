@@ -1205,3 +1205,33 @@ test("답 줄을 도는 중에 집어 가도 프로세스가 죽는 폴링에서
     assert.deepStrictEqual(p.turns, ["물음", "답"]); // 답은 이미 화면에 있다
   });
 });
+
+/** `pollHome`의 계약 — 넘긴 `sessionId`는 offset 리셋 판단에만 쓰이고, 실제로 도는 대화는
+ *  항상 서버의 지금 `current`다(§1159~1163). **화면의 유령 진행 표식 가드(`18bce04e`)가
+ *  딛는 전제가 이것이다**: 대화 A를 향해 쐈던 왕복이 그 사이 `current`가 B로 넘어간 뒤에
+ *  도착하면, 응답은 A가 아니라 B의 것으로 온다 — 화면은 `r.sessionId !== target`으로 그
+ *  응답을 버려야 한다(`components/home-ui.tsx`의 `poll()`). 이 계약이 조용히 바뀌면(예:
+ *  넘긴 sessionId로 데이터를 고르게 바뀌면) 그 가드는 죽은 코드가 되고 아무도 모른다 —
+ *  여기서 못박는다. */
+test("pollHome — 왕복 사이 current가 다른 대화로 넘어가면 옛 target으로 물어도 새 대화가 온다", async () => {
+  const project = { id: "stale-poll-test", name: "큐", root: CWD };
+  await withFake("hang", async () => {
+    assert.strictEqual(await startAsk(project, "A"), null);
+    const p = poller(project.id);
+    await p.until((c) => c.partial !== ""); // A가 도는 중
+    const sidA = await readSessionId(project.id);
+    assert.ok(sidA);
+
+    // A는 그대로 두고(안 죽인다) 새 대화 B를 연다 — `current`가 B로 넘어간다(§7 §대화가 여럿이다)
+    const sidB = await newConversation(project.id);
+    assert.notStrictEqual(sidB, sidA);
+
+    // 화면이 A를 향해 이미 쐈던 왕복(target=sidA)이 지금 도착한다고 가정 — 서버는 넘긴 값을
+    // 데이터 선택에 안 쓴다. 응답은 B고, `reset`이 서서 옛 offset을 못 이어붙인다.
+    const stale = await pollHome(project.id, sidA, 999);
+    assert.strictEqual(stale.sessionId, sidB);
+    assert.strictEqual(stale.reset, true);
+
+    assert.strictEqual(stopAsk(sidA), true); // 정리 — 도는 A를 죽인다
+  });
+});
