@@ -243,7 +243,7 @@ export function TicketEditForm({
   duedate: string;
   /** §1-4 기준값(`ticket.baseline`) — `priority`와 다르면 파생이 명시값을 덮은 것이라 파생 한 줄을 그린다 */
   duedateBaseline: number;
-  /** "마감까지 <남은>"의 <남은> — 서버가 `ticket.effectiveDuedate`로 이미 잰 문구다. `duedateBaseline`이
+  /** "마감까지 <남은>"의 <남은> — 서버가 `ticket.effectiveDue`로 이미 잰 문구다. `duedateBaseline`이
    *  `priority`와 같으면(파생 없음) null이다 */
   remainingText: string | null;
   /** 직계 선행(deps)의 own duedate — 역전 판정 재료(§1-4 §역전, direct만). `hit`이 없는 deps는 빠진다 */
