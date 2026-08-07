@@ -4445,18 +4445,45 @@ CLI 바이너리(2.1.222) 실측 — authorize 호스트는 상수 하나가 아
 - **자리는 `next.config.ts`의 `env`다.** 이 키에 실린 값은 **빌드 시각에 상수로 인라인**되고,
   `process.env.DIRA_MULTI_TOKEN`을 읽는 분기가 `false`로 접혀 minifier가 걷는다.
   `lib/flags.ts` 한 함수만 그 값을 읽는 것은 `isLandingOnly()`와 같다.
-- **규칙은 한 줄이고 예외가 없다** — 빌드·기동 앞에 `DIRA_MULTI_TOKEN=1`을 준다. `pnpm dev`도
-  같다(잠김이 기본이다). 패키징된 앱만 그 값이 굳어 있어 나중에 못 연다.
+- **규칙은 한 줄이다** — 빌드·기동 앞에 `DIRA_MULTI_TOKEN=1`을 준다. 패키징된 앱만 그 값이
+  굳어 있어 나중에 못 연다. **예외는 `dev` 하나고**, 그 스크립트가 기본값을 자기가 준다(아래 §dev).
 
 | 커맨드 | 무엇 | 잠금 |
 |---|---|---|
-| `pnpm --dir apps/teams build` · `dev` · `start` | 지금 그대로 | **잠김** |
+| `pnpm --dir apps/teams build` · `start` | 지금 그대로 | **잠김** |
 | `pnpm --dir apps/desktop dist` | **릴리스 dmg** — 사람이 배포에 쓰는 그 커맨드다 | **잠김** |
 | `pnpm --dir apps/desktop dist:internal` | 내부 dmg. `dist`에 `DIRA_MULTI_TOKEN=1`을 준 것뿐이다 | 해금 |
-| `DIRA_MULTI_TOKEN=1 pnpm --dir apps/teams dev` | 내부 개발 | 해금 |
+| `pnpm --dir apps/teams dev` · `pnpm --dir apps/desktop dev` | 로컬 개발 서버 | **해금**(기본 — 아래 §dev) |
+| `DIRA_MULTI_TOKEN=0 pnpm --dir apps/teams dev` | 로컬에서 잠금 화면을 보는 길 | 잠김 |
 
 **`pnpm release`(`release.sh`)가 부르는 경로를 같이 본다.** 릴리스가 `dist`를 안 지나가면 위
 표가 배포물에 안 닿는다 — 구현 티켓의 첫 확인이 그것이다.
+
+##### dev — 로컬 개발 서버는 해금이 기본이다 (요구 `21b01833` · 2026-08-07)
+
+> *"로컬 서버 실행(run dev)일때는 multi token 모드가 기본이게 해주세요"*
+
+위 표의 `dev` 행 하나가 뒤집힌다. **뒤집히지 않는 것을 먼저 적는다** — `lib/flags.ts`의
+폴라리티와 `next.config.ts`의 `env` 한 줄은 **무수정**이다. 값이 없으면 여전히 잠김이고(누락이
+안전한 쪽), 바뀌는 것은 **`dev` 스크립트가 그 값을 스스로 준다**는 것뿐이다. 기본값을
+`isMultiToken()`에서 뒤집으면 플래그를 빠뜨린 릴리스 빌드가 열린다 — §폴라리티가 막으려는 그
+상태고, 이 요구는 그걸 요구하지 않는다.
+
+**되묻지 않았다.** 갈릴 뻔한 축 셋이 이미 선 규칙으로 닫혔다:
+
+| 갈릴 뻔한 축 | 무엇이 닫았나 |
+|---|---|
+| `run dev`가 어느 커맨드인가 | **이름이 `dev`인 스크립트 둘이다** — `apps/teams`의 `dev`, 그리고 그걸 부르는 `apps/desktop`의 `dev`. 둘 다 배포 아티팩트를 안 만든다(만드는 것은 `dist`뿐이다) |
+| `start`도 해금인가 | **구조가 답했다.** `start`의 잠금은 그 앞의 `build`가 굳힌 값이고, `build`는 릴리스 경로(`dist`)가 지나가는 그 스크립트다 — `start`를 열려면 릴리스를 열어야 한다. **`start`는 잠김으로 남는다** |
+| 로컬에서 잠금 화면을 못 보게 되나 | **기본값이지 못박기가 아니다.** `DIRA_MULTI_TOKEN=0 pnpm dev`가 잠김으로 선다 — QA가 §잠금 계약 ①②③을 로컬에서 판정하는 길이 그대로다 |
+
+- **자리는 `package.json`의 `dev` 스크립트다** — 앞에 `DIRA_MULTI_TOKEN=${DIRA_MULTI_TOKEN:-1}`
+  한 줄. 사람이 준 값이 있으면 그것을 존중한다(위 표의 마지막 행이 그래서 성립한다).
+- **`build` · `start` · `dist` · `release.sh`에는 이 기본값을 심지 않는다.** 심으면 릴리스 dmg가
+  열린다. `dist:internal`이 이미 그 자리의 유일한 해금 통로다.
+- **`pnpm test`는 안 갈린다** — 이미 `DIRA_MULTI_TOKEN=1`을 스스로 준다.
+- **`해금 빌드를 배포하지 않는다`는 안 갈린다**(아래 §이 절이 정하지 않는 것). `dev`는 아티팩트를
+  만들지 않으므로 그 문장에 닿지 않는다.
 
 ##### 이 절이 정하지 않는 것
 
@@ -22825,12 +22852,18 @@ Max 5시간 리밋이 1시간에 소진된다는 사람 보고. 스펙은 §프�
 규칙으로 닫혔다. 가장 큰 것은 **마이그레이션이 없다**는 실측이다: §0-13 구현이 마지막 릴리스
 `v0.1.6`보다 뒤라 목록을 가진 `tokens.json`이 이 팀 머신 밖에 존재한 적이 없다.
 
+**추가 2026-08-07 (요구 `21b01833`) — `dev`만 해금이 기본이 된다.** 스펙은 §0-13 §잠금 §dev.
+왕복 0회 — `lib/flags.ts`·`next.config.ts`의 폴라리티는 **무수정**이고 갈리는 것은 `dev`
+스크립트가 그 값을 자기가 준다는 것 하나다. `build`·`start`·`dist`는 잠김으로 남는다.
+
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
 | P201 | 스펙 — §0-13 §잠금 신설(폴라리티 표 · 계약 셋 · 빌드 표) + §한 코드베이스 §플래그에 반대 폴라리티 경고 | pm | — | 완료 |
-| P201-1 | 플래그 기계 — `isMultiToken()` + `next.config.ts` `env`로 빌드 시각 인라인 + `dist:internal` · `release.sh`가 `dist`를 지나는지 확인 `045da2f6` | developer | — | 대기 |
-| P201-2 | 잠금이 좁히는 두 자리 — `추가`가 append 대신 `active` 교체 · 목록이 행 하나 + 회전 조작 버튼 제거 `1b7c785f` | developer | `045da2f6` | 대기 |
-| P201-3 | QA — 두 빌드 실측. 잠금 빌드는 항목이 안 늘고 **런타임 env를 줘도 안 열린다** `d86d1692` | qa | `1b7c785f` | 대기 |
+| P201-1 | 플래그 기계 — `isMultiToken()` + `next.config.ts` `env`로 빌드 시각 인라인 + `dist:internal` · `release.sh`가 `dist`를 지나는지 확인 `045da2f6` | developer | — | 완료 |
+| P201-2 | 잠금이 좁히는 두 자리 — `추가`가 append 대신 `active` 교체 · 목록이 행 하나 + 회전 조작 버튼 제거 `1b7c785f` | developer | `045da2f6` | 완료 |
+| P201-3 | QA — 두 빌드 실측. 잠금 빌드는 항목이 안 늘고 **런타임 env를 줘도 안 열린다** `d86d1692` | qa | `1b7c785f` | 완료 |
+| P201-4 | 스펙 — §0-13 §잠금 §dev 신설(`dev` 두 스크립트만 해금 기본 · `start`가 잠김으로 남는 이유 · `=0` 탈출구) (요구 `21b01833`) | pm | — | 완료 |
+| P201-5 | `dev` 기본값 — `apps/teams`·`apps/desktop`의 `dev` 스크립트에 `DIRA_MULTI_TOKEN=${DIRA_MULTI_TOKEN:-1}`. `build`·`start`·`dist`엔 안 심는다 + 그걸 잡는 테스트 `580343a7` | developer | — | 대기 |
 | P202 | 스펙 — §0-16 신설(장치 못 5 · 설정 노드 · 안 물은 축 · 미결) + §0-15 트리 표 개정 인용 (요구 `b529d083`, 답 `5c85bfb4` = `(b)`) | pm | — | 완료 — 화면 문구까지 두 언어. **주입 자리는 엔진이라 라운드 2로 물었다**(→ P203) |
 | P202-1 | i18n 장치 — `lib/i18n.ts` 사전 두 벌 + `t()` + **`ko` 폴백** + 머신 설정 `read/set`(`analytics.ts` 모양) + 루트 레이아웃 주입. 화면 이행 0 `ec7cd2c1` | developer | — | 대기 |
 | P202-2 | 설정 트리 다섯째 노드 `언어` — 항목 둘(`한국어`·`English`) + 검색 인덱스 + 고르면 즉시 반영. 그릇·폭 무수정 `6e2bf9f1` | developer | `ec7cd2c1` | 대기 |
