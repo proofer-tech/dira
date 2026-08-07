@@ -24,6 +24,21 @@ test("ko에도 없는 키는 개발 실수로 던진다", () => {
   assert.throws(() => t("ko", "이런_키는_없다"));
 });
 
+// 30a8f5c3 첫 묶음 — `settings-dialog.tsx`가 변수와 조합해 그리는 문구는 원문과 한 글자도
+// 안 갈려야 한다(§0-16 Done when). 단일 키 치환은 자명해 검증하지 않고, 조합만 못박는다.
+test("settings-dialog.tsx의 조합 문구 — 원문 그대로 재조립된다", () => {
+  assert.strictEqual(
+    `${t("ko", "settings.keymap.resetTooltipPrefix")} ⌘K${t("ko", "settings.keymap.resetTooltipSuffix")}`,
+    "기본값 ⌘K(으)로 되돌립니다",
+  );
+  assert.strictEqual(`"foo"${t("ko", "settings.search.emptySuffix")}`, `"foo"와 일치하는 설정 0건`);
+  assert.strictEqual(`2026-01-01 ${t("ko", "common.add")}`, "2026-01-01 추가");
+  assert.strictEqual(
+    `${t("ko", "settings.tree.authGroup")} › ${t("ko", "settings.tree.claude")}`,
+    "인증 › Claude 계정",
+  );
+});
+
 test("readLanguage — 파일 없으면 기본값 ko, set 뒤에는 그 값을 읽는다", async () => {
   rmSync(languagePath(), { force: true });
   assert.strictEqual(await readLanguage(), "ko");

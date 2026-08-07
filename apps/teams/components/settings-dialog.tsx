@@ -109,6 +109,7 @@ function KeymapSection({ className }: { className?: string }) {
   // 루트 레이아웃이 읽어 내린 값이다(§0-6 배선) — 다이얼로그가 열릴 때 이미 손에 있다
   const keymap = useKeymap();
   const router = useRouter();
+  const t = useT();
   // 캡처 중인 줄. `null`이면 목록이다 — 한 번에 하나만 잡는다(§비주얼 §22)
   const [capturing, setCapturing] = useState<string | null>(null);
   const [rejected, setRejected] = useState<string | null>(null);
@@ -129,22 +130,20 @@ function KeymapSection({ className }: { className?: string }) {
   return (
     <section className={cn("space-y-2 border-t pt-4 md:border-t-0 md:pt-0", className)}>
       <h3 data-setting="keymap" className="text-sm font-medium">
-        키설정
+        {t("settings.tree.keymap")}
       </h3>
-      <p className="text-xs text-muted-foreground">
-        단축키입니다. 이 컴퓨터에 하나뿐이고 등록된 프로젝트 전부에 적용됩니다.
-      </p>
+      <p className="text-xs text-muted-foreground">{t("settings.keymap.description")}</p>
 
       {/* 깨진 파일만 `Alert`다 — 원문 블록이 있는 쪽이 여기고, 줄 단위 거절은 보조 줄이다
           (§비주얼 §22 ③). 조용히 기본값으로 돌아가면 사람은 자기 키가 왜 안 듣는지 모른다 */}
       {keymap.broken && (
         <Alert variant="destructive">
           <TriangleAlert aria-hidden />
-          <AlertTitle>keymap.json을 읽지 못해 전부 기본값으로 떴습니다</AlertTitle>
+          <AlertTitle>{t("settings.keymap.brokenTitle")}</AlertTitle>
           <AlertDescription className="grid gap-1">
             <span className="font-mono text-xs break-all">{keymap.error}</span>
             <span className="font-mono text-xs break-all">{keymap.path}</span>
-            <span>여기서 키를 바꾸면 파일을 다시 씁니다.</span>
+            <span>{t("settings.keymap.brokenHint")}</span>
           </AlertDescription>
         </Alert>
       )}
@@ -200,7 +199,7 @@ function KeymapSection({ className }: { className?: string }) {
                       });
                     }}
                   >
-                    {pending ? "저장 중…" : "키를 누르세요"}
+                    {pending ? t("common.saving") : t("settings.keymap.capturePrompt")}
                   </button>
                   {/* 거절은 **보조 줄 그 자리**에 뜬다 — 줄이 하나 더 생기지 않으므로 아래
                       일곱 줄이 안 밀린다. 아이콘이 붙는 이유는 색만으로 뜻을 전하지 않기 위해서다 */}
@@ -210,12 +209,13 @@ function KeymapSection({ className }: { className?: string }) {
                       className="col-span-4 flex items-center gap-1 pb-1 text-xs text-destructive"
                     >
                       <TriangleAlert aria-hidden className="size-3.5 shrink-0" />
-                      {rejected} 다른 키를 누르세요 · <Kbd>Esc</Kbd> 취소
+                      {rejected} {t("settings.keymap.captureRejectedSuffix")} <Kbd>Esc</Kbd>{" "}
+                      {t("settings.keymap.captureCancelSuffix")}
                     </p>
                   ) : (
                     <p className="col-span-4 pb-1 text-xs text-muted-foreground">
-                      누른 조합이 그대로 지정됩니다 · 다른 단축키는 그동안 듣지 않습니다 ·{" "}
-                      <Kbd>Esc</Kbd> 취소
+                      {t("settings.keymap.captureHint")}{" "}
+                      <Kbd>Esc</Kbd> {t("settings.keymap.captureCancelSuffix")}
                     </p>
                   )}
                 </>
@@ -239,7 +239,10 @@ function KeymapSection({ className }: { className?: string }) {
                         </Button>
                       }
                     />
-                    <TooltipContent>기본값 {formatCombo(a.combo)}(으)로 되돌립니다</TooltipContent>
+                    <TooltipContent>
+                      {t("settings.keymap.resetTooltipPrefix")} {formatCombo(a.combo)}
+                      {t("settings.keymap.resetTooltipSuffix")}
+                    </TooltipContent>
                   </Tooltip>
                   <Button
                     variant="outline"
@@ -247,7 +250,7 @@ function KeymapSection({ className }: { className?: string }) {
                     disabled={busy}
                     onClick={() => setCapturing(a.id)}
                   >
-                    바꾸기
+                    {t("settings.keymap.change")}
                   </Button>
                 </>
               )}
@@ -261,7 +264,7 @@ function KeymapSection({ className }: { className?: string }) {
       {changed.length > 0 && (
         <div data-setting="keymap.resetAll" className="flex justify-end">
           <Button variant="ghost" size="sm" disabled={busy} onClick={() => reset()}>
-            전부 기본값으로
+            {t("settings.keymap.resetAll")}
           </Button>
         </div>
       )}
@@ -279,6 +282,7 @@ function KeymapSection({ className }: { className?: string }) {
 function AnalyticsSection({ className }: { className?: string }) {
   const [view, setView] = useState<{ configured: boolean; enabled: boolean } | null>(null);
   const [pending, start] = useTransition();
+  const t = useT();
 
   useEffect(() => {
     void readAnalyticsAction().then(setView);
@@ -287,12 +291,9 @@ function AnalyticsSection({ className }: { className?: string }) {
   return (
     <section className={cn("space-y-2 border-t pt-4 md:border-t-0 md:pt-0", className)}>
       <h3 data-setting="stats" className="text-sm font-medium">
-        사용 통계
+        {t("settings.tree.stats")}
       </h3>
-      <p className="text-xs text-muted-foreground">
-        몇 벌이 도는지와 어떤 화면 동작이 있었는지만 익명으로 보냅니다. 경로·프로젝트 이름·티켓
-        내용은 보내지 않습니다.
-      </p>
+      <p className="text-xs text-muted-foreground">{t("settings.stats.description")}</p>
 
       {/* 파일을 읽어 오기 전에는 층 둘 다 안 그린다 — 기본값을 먼저 그리면 껐던 사람에게
           `보내는 중입니다`가 한 번 번쩍인다(그 한 줄이 이 섹션의 유일한 사실이다) */}
@@ -301,10 +302,10 @@ function AnalyticsSection({ className }: { className?: string }) {
           {/* ① 자격값이 없으면 켜짐/꺼짐과 무관하게 아무것도 안 나간다 — 그렇게 말한다 */}
           <p data-setting="stats.status" className="text-sm">
             {!view.configured
-              ? "보내지 않습니다 — 이 빌드에 설정이 없습니다"
+              ? t("settings.stats.notConfigured")
               : view.enabled
-                ? "보내는 중입니다"
-                : "보내지 않습니다 — 껐습니다"}
+                ? t("settings.stats.sending")
+                : t("settings.stats.disabled")}
           </p>
           {/* ② 안 보내는 빌드에는 버튼이 없다 — 거기 선 `끄기`는 켜져 있다는 거짓말이다.
               끌 것이 없는 자리에 끄는 버튼을 두지 않는다(위 한 줄이 이미 전부를 말했다) */}
@@ -316,7 +317,7 @@ function AnalyticsSection({ className }: { className?: string }) {
               disabled={pending}
               onClick={() => start(async () => setView(await setAnalyticsAction(!view.enabled)))}
             >
-              {pending ? "저장 중…" : view.enabled ? "끄기" : "켜기"}
+              {pending ? t("common.saving") : view.enabled ? t("settings.stats.turnOff") : t("settings.stats.turnOn")}
             </Button>
           )}
         </div>
@@ -361,7 +362,7 @@ function LanguageSection({ className }: { className?: string }) {
           data-setting="language.ko"
           onClick={() => choose("ko")}
         >
-          한국어
+          {t("settings.language.ko")}
         </Button>
         <Button
           type="button"
@@ -373,7 +374,7 @@ function LanguageSection({ className }: { className?: string }) {
           data-setting="language.en"
           onClick={() => choose("en")}
         >
-          English
+          {t("settings.language.en")}
         </Button>
       </div>
     </section>
@@ -384,6 +385,7 @@ function LanguageSection({ className }: { className?: string }) {
  *  토큰(`text-status-active`·`text-status-stale`)을 그대로 쓴다(`projects-ui.tsx`도 같은 문자열을
  *  그대로 반복한다 — Tailwind가 클래스명을 정적으로 봐야 해서 이 프로젝트는 상수로 묶지 않는다). */
 function TokenStatusBadge({ status }: { status: TokenStatus }) {
+  const t = useT();
   switch (status.kind) {
     case "active":
       return (
@@ -392,21 +394,21 @@ function TokenStatusBadge({ status }: { status: TokenStatus }) {
           className="text-status-active bg-status-active/10 border-status-active/30"
         >
           <CirclePlay aria-hidden />
-          활성
+          {t("settings.tokens.active")}
         </Badge>
       );
     case "pending":
       return (
         <Badge variant="secondary">
           <CircleIcon aria-hidden />
-          대기
+          {t("settings.tokens.pending")}
         </Badge>
       );
     case "disabled":
       return (
         <Badge variant="outline">
           <Power aria-hidden />
-          비활성
+          {t("settings.tokens.disabledBadge")}
         </Badge>
       );
     case "exhausted":
@@ -416,7 +418,7 @@ function TokenStatusBadge({ status }: { status: TokenStatus }) {
           className="text-status-stale bg-status-stale/10 border-status-stale/30"
         >
           <Clock aria-hidden />
-          소진 · {status.resumesAt}
+          {t("settings.tokens.exhausted")} · {status.resumesAt}
         </Badge>
       );
   }
@@ -432,6 +434,7 @@ function TokenStatusBadge({ status }: { status: TokenStatus }) {
  *  버튼으로 사람이 직접 고른다. 활성화·사용 어느 쪽도 `oauth-token` 쓰기는 이 컴포넌트가 직접
  *  하지 않는다 — `setTokenEnabledAction`·`setActiveTokenAction`이 `lib/auth.ts`의 `writeTokens` 안에서만 한다. */
 function TokensSection({ refreshKey }: { refreshKey: string | null }) {
+  const t = useT();
   const [rows, setRows] = useState<TokenRow[] | null>(null);
   const [pending, start] = useTransition();
   // 행 라벨 편집(P180-1, §0-13 §라벨) — 한 번에 한 행만 연다. `editValue`는 `rawLabel`에서
@@ -458,7 +461,7 @@ function TokensSection({ refreshKey }: { refreshKey: string | null }) {
 
   if (rows === null) return null; // 아직 안 읽었다 — 빈 목록과 헷갈리지 않는다
   if (rows.length === 0) {
-    return <p className="text-sm text-muted-foreground">등록된 토큰이 없습니다.</p>;
+    return <p className="text-sm text-muted-foreground">{t("settings.tokens.empty")}</p>;
   }
 
   return (
@@ -481,7 +484,7 @@ function TokensSection({ refreshKey }: { refreshKey: string | null }) {
                   <Input
                     autoFocus
                     className="h-7 w-40 text-sm"
-                    placeholder="이메일 등 알아볼 이름"
+                    placeholder={t("settings.tokens.labelPlaceholder")}
                     value={editValue}
                     onChange={(e) => setEditValue(e.target.value)}
                     onKeyDown={(e) => {
@@ -489,7 +492,7 @@ function TokensSection({ refreshKey }: { refreshKey: string | null }) {
                     }}
                   />
                   <Button type="submit" size="sm" variant="outline" disabled={pending}>
-                    저장
+                    {t("common.save")}
                   </Button>
                 </form>
               ) : (
@@ -513,7 +516,10 @@ function TokensSection({ refreshKey }: { refreshKey: string | null }) {
             </div>
             {/* 가린 값 — 값 전체를 그리지 않는다. `복사` 버튼도 없다(§0-13 §화면) */}
             <p className="font-mono text-xs break-all text-muted-foreground">
-              {row.masked} <span className="font-sans">· {row.addedAt} 추가</span>
+              {row.masked}{" "}
+              <span className="font-sans">
+                · {row.addedAt} {t("common.add")}
+              </span>
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-1">
@@ -523,7 +529,7 @@ function TokensSection({ refreshKey }: { refreshKey: string | null }) {
                 안 그려진다. 고를 대상이 목록에 하나뿐이라 도달 불가한 상태다. */}
             {isMultiToken() && row.status.kind === "pending" && (
               <Button variant="outline" size="sm" disabled={pending} onClick={() => use(row)}>
-                사용
+                {t("settings.tokens.use")}
               </Button>
             )}
             {isMultiToken() && (
@@ -533,7 +539,7 @@ function TokensSection({ refreshKey }: { refreshKey: string | null }) {
                 disabled={pending}
                 onClick={() => setEnabled(row, row.status.kind === "disabled")}
               >
-                {row.status.kind === "disabled" ? "활성화" : "비활성화"}
+                {row.status.kind === "disabled" ? t("settings.tokens.enable") : t("settings.tokens.disable")}
               </Button>
             )}
             <Button
@@ -556,17 +562,18 @@ function TokensSection({ refreshKey }: { refreshKey: string | null }) {
  *  `TriangleAlert`도 색도 안 쓴다 — claude ⓪처럼 "이게 없으면 워커가 못 뜬다"를 아는 것이
  *  아니라 "찾았다/못 찾았다"만 아는 층이다(§0-4 §개정 `b0966e66`). */
 function OtherEngineRow({ engine }: { engine: OtherEngineAuth }) {
+  const t = useT();
   const cred =
     engine.engine === "agy" ? (
-      "인증은 macOS 로그인 키체인에 있습니다 — 이 화면이 읽지 않습니다"
+      t("settings.other.agyCred")
     ) : engine.credPath ? (
       <>
         <span className="font-mono text-xs break-all">{engine.credPath}</span> · {engine.credMtime}
       </>
     ) : engine.engine === "codex" ? (
-      "발견 못 함 — OPENAI_API_KEY로 도는 워커는 이 판정 밖입니다"
+      t("settings.other.codexMissing")
     ) : (
-      "발견 못 함 — 터미널에서 grok 로그인이 필요합니다"
+      t("settings.other.grokMissing")
     );
   return (
     <div data-setting={`other.${engine.engine}`} className="space-y-1 border-t pt-2">
@@ -575,7 +582,7 @@ function OtherEngineRow({ engine }: { engine: OtherEngineAuth }) {
         {engine.cli ? (
           <span className="font-mono text-xs break-all">{engine.cli}</span>
         ) : (
-          "설치되지 않았습니다"
+          t("settings.other.notInstalled")
         )}
       </p>
       <p className="text-sm text-muted-foreground">{cred}</p>
@@ -625,31 +632,75 @@ export function SettingsDialog({
 
   // §0-15 §검색 — 항목 열 전부 + 트리 노드 이름 자신(§45 ④). 키설정 8줄은 `DEFAULT_KEYMAP`에서
   // 유도한다(레지스트리에 문자열 복사 0) — 이름을 옮기면 검색도 저절로 따라온다(§0-6).
+  const authCrumb = t("settings.tree.authGroup");
+  const claudeCrumb = t("settings.tree.claude");
+  const keymapCrumb = t("settings.tree.keymap");
+  const statsCrumb = t("settings.tree.stats");
   const searchIndex: SearchEntry[] = [
-    { node: "claude", crumbs: "인증", name: "Claude 계정", anchor: "claude" },
-    { node: "claude", crumbs: "인증 › Claude 계정", name: "CLI 경로", anchor: "claude.cli" },
-    { node: "claude", crumbs: "인증 › Claude 계정", name: "계정 목록", anchor: "claude.accounts" },
-    { node: "claude", crumbs: "인증 › Claude 계정", name: "계정 추가", anchor: "claude.add" },
-    { node: "other", crumbs: "인증", name: "기타 엔진", anchor: "other" },
+    { node: "claude", crumbs: authCrumb, name: claudeCrumb, anchor: "claude" },
+    {
+      node: "claude",
+      crumbs: `${authCrumb} › ${claudeCrumb}`,
+      name: t("settings.search.claudeCli"),
+      anchor: "claude.cli",
+    },
+    {
+      node: "claude",
+      crumbs: `${authCrumb} › ${claudeCrumb}`,
+      name: t("settings.search.claudeAccounts"),
+      anchor: "claude.accounts",
+    },
+    {
+      node: "claude",
+      crumbs: `${authCrumb} › ${claudeCrumb}`,
+      name: t("settings.search.claudeAdd"),
+      anchor: "claude.add",
+    },
+    { node: "other", crumbs: authCrumb, name: t("settings.tree.other"), anchor: "other" },
     ...auth.otherEngines.map(
       (e): SearchEntry => ({
         node: "other",
-        crumbs: "인증 › 기타 엔진",
+        crumbs: `${authCrumb} › ${t("settings.tree.other")}`,
         name: e.engine,
         anchor: `other.${e.engine}`,
       }),
     ),
-    { node: "keymap", crumbs: "", name: "키설정", anchor: "keymap" },
+    { node: "keymap", crumbs: "", name: keymapCrumb, anchor: "keymap" },
     ...DEFAULT_KEYMAP.map(
-      (a): SearchEntry => ({ node: "keymap", crumbs: "키설정", name: a.name, anchor: a.id }),
+      (a): SearchEntry => ({ node: "keymap", crumbs: keymapCrumb, name: a.name, anchor: a.id }),
     ),
-    { node: "keymap", crumbs: "키설정", name: "전부 기본값으로", anchor: "keymap.resetAll" },
-    { node: "stats", crumbs: "", name: "사용 통계", anchor: "stats" },
-    { node: "stats", crumbs: "사용 통계", name: "보내는 상태", anchor: "stats.status" },
-    { node: "stats", crumbs: "사용 통계", name: "끄기/켜기", anchor: "stats.toggle" },
+    {
+      node: "keymap",
+      crumbs: keymapCrumb,
+      name: t("settings.keymap.resetAll"),
+      anchor: "keymap.resetAll",
+    },
+    { node: "stats", crumbs: "", name: statsCrumb, anchor: "stats" },
+    {
+      node: "stats",
+      crumbs: statsCrumb,
+      name: t("settings.search.statsStatus"),
+      anchor: "stats.status",
+    },
+    {
+      node: "stats",
+      crumbs: statsCrumb,
+      name: t("settings.search.statsToggle"),
+      anchor: "stats.toggle",
+    },
     { node: "language", crumbs: "", name: languageLabel, anchor: "language" },
-    { node: "language", crumbs: languageLabel, name: "한국어", anchor: "language.ko" },
-    { node: "language", crumbs: languageLabel, name: "English", anchor: "language.en" },
+    {
+      node: "language",
+      crumbs: languageLabel,
+      name: t("settings.language.ko"),
+      anchor: "language.ko",
+    },
+    {
+      node: "language",
+      crumbs: languageLabel,
+      name: t("settings.language.en"),
+      anchor: "language.en",
+    },
   ];
 
   const [query, setQuery] = useState("");
@@ -752,17 +803,17 @@ export function SettingsDialog({
               {needsAuth && (
                 <>
                   <TriangleAlert aria-hidden className="text-status-stale" />
-                  <span className="text-sm">인증 필요</span>
+                  <span className="text-sm">{t("settings.dialog.needsAuth")}</span>
                 </>
               )}
             </Button>
           ) : trigger === "text" ? (
             <button type="button" className="btn">
-              설정
+              {t("settings.dialog.title")}
             </button>
           ) : (
             <button type="button" className="text-sm underline">
-              토큰 저장
+              {t("settings.dialog.triggerLink")}
             </button>
           )
         }
@@ -772,10 +823,8 @@ export function SettingsDialog({
           스크롤한다(아래 SidebarProvider). md 미만은 종전처럼 다이얼로그 하나가 스크롤한다. */}
       <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto md:overflow-hidden sm:max-w-[44rem]">
         <DialogHeader>
-          <DialogTitle>설정</DialogTitle>
-          <DialogDescription>
-            이 컴퓨터의 dira 설정입니다. 등록된 프로젝트 전부에 적용됩니다.
-          </DialogDescription>
+          <DialogTitle>{t("settings.dialog.title")}</DialogTitle>
+          <DialogDescription>{t("settings.dialog.description")}</DialogDescription>
         </DialogHeader>
 
         {/* 검색 줄 + 2단 행이 한 `Command`다(§45 ① · §0-15 §검색) — 그릇 후보는 이미 설치된
@@ -786,8 +835,8 @@ export function SettingsDialog({
         <Command className="min-h-0 min-w-0 gap-4 p-0">
           <CommandInput
             autoFocus
-            placeholder="설정 검색"
-            aria-label="설정 검색"
+            placeholder={t("settings.search.placeholder")}
+            aria-label={t("settings.search.placeholder")}
             value={query}
             onValueChange={(v) => {
               setQuery(v);
@@ -812,15 +861,15 @@ export function SettingsDialog({
           <Sidebar collapsible="none" className="hidden w-44 shrink-0 rounded-lg border bg-surface md:flex">
             <SidebarContent className="gap-4 px-2 py-2">
               <SidebarGroup className="p-0">
-                <SidebarGroupLabel className="text-muted-foreground">인증</SidebarGroupLabel>
-                <SidebarMenu aria-label="인증">
+                <SidebarGroupLabel className="text-muted-foreground">{authCrumb}</SidebarGroupLabel>
+                <SidebarMenu aria-label={authCrumb}>
                   <SidebarMenuItem>
                     <SidebarMenuButton
                       isActive={activeNode === "claude"}
                       aria-current={activeNode === "claude" ? "true" : undefined}
                       onClick={() => selectNode("claude")}
                     >
-                      <span>Claude 계정</span>
+                      <span>{claudeCrumb}</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                   <SidebarMenuItem>
@@ -829,7 +878,7 @@ export function SettingsDialog({
                       aria-current={activeNode === "other" ? "true" : undefined}
                       onClick={() => selectNode("other")}
                     >
-                      <span>기타 엔진</span>
+                      <span>{t("settings.tree.other")}</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 </SidebarMenu>
@@ -844,7 +893,7 @@ export function SettingsDialog({
                       aria-current={activeNode === "keymap" ? "true" : undefined}
                       onClick={() => selectNode("keymap")}
                     >
-                      <span>키설정</span>
+                      <span>{keymapCrumb}</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                   <SidebarMenuItem>
@@ -853,7 +902,7 @@ export function SettingsDialog({
                       aria-current={activeNode === "stats" ? "true" : undefined}
                       onClick={() => selectNode("stats")}
                     >
-                      <span>사용 통계</span>
+                      <span>{statsCrumb}</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                   {/* §0-16 다섯째 노드 — 넷과 같은 그릇, 같은 헤더 없는 그룹(§45 ③ 판정 그대로) */}
@@ -880,7 +929,7 @@ export function SettingsDialog({
                 섹션들을 밀어낸다. 서는 조건은 질의가 비어 있지 않을 때뿐이다. */}
             {query && (
               <CommandList className="max-h-72 bg-popover md:absolute md:inset-0 md:z-10 md:max-h-none">
-                <CommandEmpty>{`"${query}"와 일치하는 설정 0건`}</CommandEmpty>
+                <CommandEmpty>{`"${query}"${t("settings.search.emptySuffix")}`}</CommandEmpty>
                 {searchIndex.map((entry) => (
                   <CommandItem
                     key={entry.anchor}
@@ -904,12 +953,12 @@ export function SettingsDialog({
               {/* 제목이 엔진 이름을 말한다 — 이 토큰을 읽는 것은 `TICKET_ENGINE[0]`이 claude인
                   워커뿐이다(`tick.sh:52`). 다른 엔진(Codex 등)은 자체 인증을 쓴다(§0-4) */}
               <h3 data-setting="claude" className="text-sm font-medium">
-                Claude 인증
+                {t("settings.claude.heading")}
               </h3>
               <p className="text-xs text-muted-foreground">
                 {isMultiToken()
-                  ? "워커가 Claude에 붙을 때 쓰는 장기 토큰 목록입니다. 이 컴퓨터에 하나뿐이고, 계정 여러 개를 두면 리밋을 만난 쪽 대신 다음 계정으로 돌아갑니다."
-                  : "워커가 Claude에 붙을 때 쓰는 장기 토큰입니다. 이 컴퓨터에 하나뿐입니다."}
+                  ? t("settings.claude.descriptionMulti")
+                  : t("settings.claude.descriptionSingle")}
               </p>
 
               {/* ⓪ 준비물 — 한 줄. 없으면 설치를 대신하지도 바깥으로 링크하지도 않는다(§0-4 ⓪) */}
@@ -921,7 +970,7 @@ export function SettingsDialog({
               ) : (
                 <p data-setting="claude.cli" className="flex items-center gap-2 text-sm">
                   <TriangleAlert aria-hidden className="size-4 shrink-0 text-status-stale" />
-                  claude CLI를 찾지 못했습니다 — 워커가 세션을 띄우지 못합니다
+                  {t("settings.claude.cliMissing")}
                 </p>
               )}
 
@@ -934,26 +983,27 @@ export function SettingsDialog({
                   (§0-13 §화면 — 목록 통합). 로직·문구·에러 처리는 무수정, 렌더 위치만 옮겼다. */}
               <Popover open={addOpen} onOpenChange={setAddOpen}>
                 <PopoverTrigger render={<Button variant="outline" size="sm" data-setting="claude.add" />}>
-                  추가
+                  {t("common.add")}
                 </PopoverTrigger>
                 <PopoverContent align="start" className="w-96 max-h-[70vh] space-y-4 overflow-y-auto">
                   {/* ② 발급 — CLI에게 터미널을 대신 내어 준다 */}
                   <div className="space-y-2">
                     <div className="flex items-center justify-between gap-4">
-                      <Label>브라우저로 인증</Label>
+                      <Label>{t("settings.claude.authBrowserLabel")}</Label>
                       <Button
                         variant="outline"
                         size="sm"
                         disabled={setup?.running}
                         onClick={() => start(async () => setSetup(await startSetupAction()))}
                       >
-                        {setup?.running ? "진행 중…" : setup ? "다시 시도" : "브라우저로 인증하기"}
+                        {setup?.running
+                          ? t("settings.claude.authBrowserRunning")
+                          : setup
+                            ? t("settings.claude.authBrowserRetry")
+                            : t("settings.claude.authBrowserStart")}
                       </Button>
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      claude setup-token을 대신 실행합니다. 새 탭에서 승인한 뒤 받은 코드를 여기에
-                      붙여 넣으면 토큰이 제자리에 저장됩니다.
-                    </p>
+                    <p className="text-xs text-muted-foreground">{t("settings.claude.authBrowserDesc")}</p>
 
                     {setup && setup.lines.length > 0 && (
                       // 원문 그대로 흘리면 `Opening[12Gbrowser[20Gto`가 뜬다 — 서버가 escape를 걷어낸
@@ -985,14 +1035,14 @@ export function SettingsDialog({
                       >
                         <Input
                           className="font-mono"
-                          placeholder="브라우저에서 받은 코드"
+                          placeholder={t("settings.claude.codePlaceholder")}
                           autoComplete="off"
                           spellCheck={false}
                           value={code}
                           onChange={(e) => setCode(e.target.value)}
                         />
                         <Button type="submit" variant="outline" disabled={!code.trim()}>
-                          코드 보내기
+                          {t("settings.claude.codeSubmit")}
                         </Button>
                       </form>
                     )}
@@ -1002,17 +1052,17 @@ export function SettingsDialog({
                     {setup?.error && (
                       <Alert variant="destructive">
                         <TriangleAlert aria-hidden />
-                        <AlertTitle>토큰을 받지 못했습니다</AlertTitle>
+                        <AlertTitle>{t("settings.claude.authErrorTitle")}</AlertTitle>
                         <AlertDescription className="grid gap-1">
                           <span>{setup.error}</span>
                           {/* 원인 원문은 위 진행 로그가 이미 그대로 담고 있다 — 여기 문장을
                               `font-mono`로 쓰지 않는다(§비주얼 §3). 다음 행동은 `다시 시도`와 아래
                               층 ③ 둘이다 */}
-                          <span>&quot;직접 넣기&quot;에 이미 발급받은 토큰을 붙여 넣어도 됩니다.</span>
+                          <span>{t("settings.claude.authErrorFallback")}</span>
                         </AlertDescription>
                       </Alert>
                     )}
-                    {setup?.savedAt && <p className="text-xs">토큰을 받아 저장했습니다.</p>}
+                    {setup?.savedAt && <p className="text-xs">{t("settings.claude.authSaved")}</p>}
                   </div>
 
                   {/* ③ 직접 넣기 */}
@@ -1031,7 +1081,7 @@ export function SettingsDialog({
                       });
                     }}
                   >
-                    <Label htmlFor="auth-token">토큰</Label>
+                    <Label htmlFor="auth-token">{t("settings.claude.tokenLabel")}</Label>
                     <div className="flex items-center gap-2">
                       <Input
                         id="auth-token"
@@ -1046,34 +1096,27 @@ export function SettingsDialog({
                         }}
                       />
                       <Button type="submit" disabled={pending}>
-                        {pending ? "저장 중…" : "저장"}
+                        {pending ? t("common.saving") : t("common.save")}
                       </Button>
                     </div>
                     {/* 선택 칸 — 형식을 검증하지 않는다(§0-13 §라벨). 비우면 종전대로 `계정 N` */}
-                    <Label htmlFor="auth-token-label">라벨(선택)</Label>
+                    <Label htmlFor="auth-token-label">{t("settings.claude.tokenLabelOptional")}</Label>
                     <Input
                       id="auth-token-label"
-                      placeholder="이메일 등 알아볼 이름"
+                      placeholder={t("settings.tokens.labelPlaceholder")}
                       autoComplete="off"
                       value={label}
                       onChange={(e) => setLabel(e.target.value)}
                     />
                     <p className="text-xs text-muted-foreground">
-                      {isMultiToken() ? (
-                        <>
-                          이미 발급받은 토큰이 있으면 여기에 붙여 넣습니다. 목록에 대기로
-                          추가됩니다 — 지금 쓸 토큰은 목록에서 &quot;사용&quot;으로 고릅니다.
-                        </>
-                      ) : (
-                        "이미 발급받은 토큰이 있으면 여기에 붙여 넣습니다. 지금 쓰는 토큰이 이 토큰으로 바뀝니다."
-                      )}
+                      {isMultiToken()
+                        ? t("settings.claude.tokenHintMulti")
+                        : t("settings.claude.tokenHintSingle")}
                     </p>
                     {result.error && <p className="text-xs text-destructive">{result.error}</p>}
                     {/* 삼키지 않는 것이 요건이지 미리 아는 것이 요건이 아니다 — 형식으로 거르지
                         않으므로 "저장했다"까지만 말한다(§0-4) */}
-                    {result.savedAt && (
-                      <p className="text-xs">저장했습니다. 유효한지는 다음 디스패치에서 드러납니다.</p>
-                    )}
+                    {result.savedAt && <p className="text-xs">{t("settings.claude.tokenSaved")}</p>}
                   </form>
                 </PopoverContent>
               </Popover>
