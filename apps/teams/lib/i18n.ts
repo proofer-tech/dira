@@ -38,14 +38,11 @@ export const ko: Record<string, string> = {
   "settings.search.statsToggle": "끄기/켜기",
 
   "settings.tree.authGroup": "인증",
-  "settings.tree.claude": "Claude 계정",
-  "settings.tree.other": "기타 엔진",
   "settings.tree.keymap": "키설정",
   "settings.tree.stats": "사용 통계",
   // 둘째 사이드바 그룹의 aria-label — 그룹 자신은 머리글이 없다(§45 ③), 접근가능 이름만 필요하다
   "settings.tree.categoryGroup": "설정 분류",
 
-  "settings.claude.heading": "Claude 인증",
   "settings.claude.descriptionMulti":
     "워커가 Claude에 붙을 때 쓰는 장기 토큰 목록입니다. 이 컴퓨터에 하나뿐이고, 계정 여러 개를 두면 리밋을 만난 쪽 대신 다음 계정으로 돌아갑니다.",
   "settings.claude.descriptionSingle": "워커가 Claude에 붙을 때 쓰는 장기 토큰입니다. 이 컴퓨터에 하나뿐입니다.",
@@ -260,13 +257,10 @@ export const en: Record<string, string> = {
   "settings.search.statsToggle": "Turn on / off",
 
   "settings.tree.authGroup": "Authentication",
-  "settings.tree.claude": "Claude account",
-  "settings.tree.other": "Other engines",
   "settings.tree.keymap": "Keyboard shortcuts",
   "settings.tree.stats": "Usage stats",
   "settings.tree.categoryGroup": "Setting categories",
 
-  "settings.claude.heading": "Claude authentication",
   "settings.claude.descriptionMulti":
     "Long-lived tokens that workers use to reach Claude. One list per machine. Keep several accounts and a worker that hits a limit rolls over to the next one.",
   "settings.claude.descriptionSingle":

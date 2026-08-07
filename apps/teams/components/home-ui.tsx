@@ -134,7 +134,7 @@ const FAIL: Record<AnswerReason, { title: string; next?: string; cmd?: string }>
     cmd: "which claude",
   },
   auth: {
-    title: "답을 받지 못했습니다 — Claude 인증이 없습니다",
+    title: "답을 받지 못했습니다 — claude 인증이 없습니다",
     next: "헤더 오른쪽 설정에서 장기 토큰을 넣고 다시 물어보세요.",
   },
   timeout: {

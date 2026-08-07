@@ -45,7 +45,7 @@ import {
   stopSetupAction,
   setActiveTokenAction,
 } from "@/app/actions";
-import type { OtherEngineAuth, SetupState, TokenRow, TokenStatus } from "@/lib/auth";
+import type { OtherEngine, OtherEngineAuth, SetupState, TokenRow, TokenStatus } from "@/lib/auth";
 import { isMultiToken } from "@/lib/flags";
 import { useHotkey, useKeymap } from "@/components/keymap-provider";
 import { useLocale, useT } from "@/components/language-provider";
@@ -80,8 +80,10 @@ import {
 } from "@/components/ui/sidebar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
-/** §0-15 트리 4노드 + §0-16 다섯째 `language` — 순서가 §45 ③ 트리 그림·검색 인덱스의 순서다. */
-type SettingsNode = "claude" | "other" | "keymap" | "stats" | "language";
+/** §0-17 트리 — `claude` + §4-3 카탈로그의 나머지 엔진(`OtherEngine`) + §0-16 다섯째 `language`.
+ *  순서가 §45 ③ 트리 그림·검색 인덱스의 순서다. 노드 목록을 여기서 다시 적지 않는다 —
+ *  카탈로그(`OtherEngine`)가 늘면 이 유니온도 트리도 저절로 는다. */
+type SettingsNode = "claude" | OtherEngine | "keymap" | "stats" | "language";
 
 /** §0-15 §검색 레지스트리 한 줄 — `{트리 경로, 항목 이름, 이동 대상}`. `crumbs`가 빈 문자열이면
  *  결과 줄은 `name` 하나만 그린다(트리 노드 이름 자신 — §45 ⑤ 예시의 `키설정`). `anchor`는
@@ -588,10 +590,11 @@ function TokensSection({
   );
 }
 
-/** claude 아닌 엔진 한 줄 — 사실 둘(CLI 경로 · 자격증명 파일)만 말한다. 판정을 안 내리므로
+/** claude 아닌 엔진 노드 하나 — 사실 둘(CLI 경로 · 자격증명 파일)만 말한다. 판정을 안 내리므로
  *  `TriangleAlert`도 색도 안 쓴다 — claude ⓪처럼 "이게 없으면 워커가 못 뜬다"를 아는 것이
- *  아니라 "찾았다/못 찾았다"만 아는 층이다(§0-4 §개정 `b0966e66`). */
-function OtherEngineRow({ engine }: { engine: OtherEngineAuth }) {
+ *  아니라 "찾았다/못 찾았다"만 아는 층이다(§0-4 §개정 `b0966e66`). §0-17로 자기 트리 노드가
+ *  됐으므로 머리도 claude와 같은 벌(패널 `h3` · `font-mono`, §비주얼 §45 ③ §벌)이다. */
+function OtherEngineSection({ engine, className }: { engine: OtherEngineAuth; className?: string }) {
   const t = useT();
   const cred =
     engine.engine === "agy" ? (
@@ -606,8 +609,10 @@ function OtherEngineRow({ engine }: { engine: OtherEngineAuth }) {
       t("settings.other.grokMissing")
     );
   return (
-    <div data-setting={`other.${engine.engine}`} className="space-y-1 border-t pt-2">
-      <h4 className="text-xs font-medium text-muted-foreground">{engine.engine}</h4>
+    <section className={cn("space-y-2 border-t pt-4 md:border-t-0 md:pt-0", className)}>
+      <h3 data-setting={engine.engine} className="font-mono text-sm font-medium">
+        {engine.engine}
+      </h3>
       <p className="text-sm">
         {engine.cli ? (
           <span className="font-mono text-xs break-all">{engine.cli}</span>
@@ -616,7 +621,7 @@ function OtherEngineRow({ engine }: { engine: OtherEngineAuth }) {
         )}
       </p>
       <p className="text-sm text-muted-foreground">{cred}</p>
-    </div>
+    </section>
   );
 }
 
@@ -668,7 +673,8 @@ export function SettingsDialog({
   // §0-15 §검색 — 항목 열 전부 + 트리 노드 이름 자신(§45 ④). 키설정 8줄은 `DEFAULT_KEYMAP`에서
   // 유도한다(레지스트리에 문자열 복사 0) — 이름을 옮기면 검색도 저절로 따라온다(§0-6).
   const authCrumb = t("settings.tree.authGroup");
-  const claudeCrumb = t("settings.tree.claude");
+  // §0-17 — 이름은 §4-3 카탈로그의 엔진 id 그대로다. 사전 키가 아니다(id는 번역이 없다).
+  const claudeCrumb = "claude";
   const keymapCrumb = t("settings.tree.keymap");
   const statsCrumb = t("settings.tree.stats");
   const searchIndex: SearchEntry[] = [
@@ -691,14 +697,10 @@ export function SettingsDialog({
       name: t("settings.search.claudeAdd"),
       anchor: "claude.add",
     },
-    { node: "other", crumbs: authCrumb, name: t("settings.tree.other"), anchor: "other" },
+    // §0-17 — codex·grok·agy는 노드 이름 하나만 인덱스에 싣는다. 엔진별 CLI·자격증명 항목은
+    // 인덱스에 안 더한다(§0-17 §검증 6).
     ...auth.otherEngines.map(
-      (e): SearchEntry => ({
-        node: "other",
-        crumbs: `${authCrumb} › ${t("settings.tree.other")}`,
-        name: e.engine,
-        anchor: `other.${e.engine}`,
-      }),
+      (e): SearchEntry => ({ node: e.engine, crumbs: authCrumb, name: e.engine, anchor: e.engine }),
     ),
     { node: "keymap", crumbs: "", name: keymapCrumb, anchor: "keymap" },
     ...DEFAULT_KEYMAP.map(
@@ -918,18 +920,23 @@ export function SettingsDialog({
                       aria-current={activeNode === "claude" ? "true" : undefined}
                       onClick={() => selectNode("claude")}
                     >
-                      <span>{claudeCrumb}</span>
+                      <span className="font-mono">{claudeCrumb}</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
-                  <SidebarMenuItem>
-                    <SidebarMenuButton
-                      isActive={activeNode === "other"}
-                      aria-current={activeNode === "other" ? "true" : undefined}
-                      onClick={() => selectNode("other")}
-                    >
-                      <span>{t("settings.tree.other")}</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
+                  {/* §0-17 — 나머지 §4-3 카탈로그 엔진. 목록을 여기서 다시 적지 않는다
+                      (`auth.otherEngines`가 이미 그 카탈로그의 유도값이다 — 카탈로그가 늘면
+                      이 트리도 는다). */}
+                  {auth.otherEngines.map((e) => (
+                    <SidebarMenuItem key={e.engine}>
+                      <SidebarMenuButton
+                        isActive={activeNode === e.engine}
+                        aria-current={activeNode === e.engine ? "true" : undefined}
+                        onClick={() => selectNode(e.engine)}
+                      >
+                        <span className="font-mono">{e.engine}</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
                 </SidebarMenu>
               </SidebarGroup>
               {/* 둘째 그룹은 머리가 없다 — `키설정`·`사용 통계`는 최상위 노드 자신이 항목인
@@ -1001,9 +1008,10 @@ export function SettingsDialog({
 
             <section className={cn("space-y-2", activeNode !== "claude" && "md:hidden")}>
               {/* 제목이 엔진 이름을 말한다 — 이 토큰을 읽는 것은 `TICKET_ENGINE[0]`이 claude인
-                  워커뿐이다(`tick.sh:52`). 다른 엔진(Codex 등)은 자체 인증을 쓴다(§0-4) */}
-              <h3 data-setting="claude" className="text-sm font-medium">
-                {t("settings.claude.heading")}
+                  워커뿐이다(`tick.sh:52`). 다른 엔진(Codex 등)은 자체 인증을 쓴다(§0-4).
+                  §0-17 — 이름은 카탈로그 id 그대로, 넷 다 같은 벌(`font-mono`)이다. */}
+              <h3 data-setting="claude" className="font-mono text-sm font-medium">
+                {claudeCrumb}
               </h3>
               <p className="text-xs text-muted-foreground">
                 {isMultiToken()
@@ -1176,19 +1184,16 @@ export function SettingsDialog({
               </Popover>
             </section>
 
-            {/* claude 아닌 나머지 §4-3 카탈로그 엔진 — 자기 트리 노드를 갖는다(§0-15 §트리).
-                조작·문구는 한 줄도 안 바뀐다 — 섹션 껍데기만 갈린다. */}
-            <section
-              data-setting="other"
-              className={cn(
-                "space-y-2 border-t pt-4 md:border-t-0 md:pt-0",
-                activeNode !== "other" && "md:hidden",
-              )}
-            >
-              {auth.otherEngines.map((e) => (
-                <OtherEngineRow key={e.engine} engine={e} />
-              ))}
-            </section>
+            {/* claude 아닌 나머지 §4-3 카탈로그 엔진 — 각자 자기 트리 노드다(§0-17). 조작·문구는
+                한 줄도 안 바뀐다 — 종전에 한 섹션으로 접혀 있던 껍데기가 노드마다 하나씩으로
+                갈릴 뿐이다. */}
+            {auth.otherEngines.map((e) => (
+              <OtherEngineSection
+                key={e.engine}
+                engine={e}
+                className={cn(activeNode !== e.engine && "md:hidden")}
+              />
+            ))}
 
             <KeymapSection className={cn(activeNode !== "keymap" && "md:hidden")} />
             <AnalyticsSection className={cn(activeNode !== "stats" && "md:hidden")} />

@@ -40,10 +40,6 @@ test("settings-dialog.tsx의 조합 문구 — 원문 그대로 재조립된다"
   );
   assert.strictEqual(`"foo"${t("ko", "settings.search.emptySuffix")}`, `"foo"와 일치하는 설정 0건`);
   assert.strictEqual(`2026-01-01 ${t("ko", "settings.tokens.addedSuffix")}`, "2026-01-01 추가");
-  assert.strictEqual(
-    `${t("ko", "settings.tree.authGroup")} › ${t("ko", "settings.tree.claude")}`,
-    "인증 › Claude 계정",
-  );
 });
 
 // 621c7a97 — 같은 자리들이 영어로도 읽히는 문장이 되어야 한다(한국어 어순이 남으면 여기서 걸린다).
@@ -57,10 +53,6 @@ test("settings-dialog.tsx의 조합 문구 — 영어도 문장이 된다", () =
   assert.strictEqual(
     `${t("en", "settings.keymap.captureHint")} Esc ${t("en", "settings.keymap.captureCancelSuffix")}`,
     "Whatever you press is assigned as-is · other shortcuts stop listening while this is open · Esc to cancel",
-  );
-  assert.strictEqual(
-    `${t("en", "settings.tree.authGroup")} › ${t("en", "settings.tree.claude")}`,
-    "Authentication › Claude account",
   );
 });
 
