@@ -160,6 +160,17 @@ export function dateTimeLabel(at: number, now = Date.now()): string {
   return sameDay ? time : `${d.getMonth() + 1}/${d.getDate()} ${time}`;
 }
 
+/** 셸 알림 종 ⑦(마감 경고, §1-4 · §비주얼 §28)의 `<남은>` — 그 알림이 켜지는 창(≤5시간)
+ *  안에서만 쓰이므로 시·분까지만 있으면 된다(일 단위는 이 알림에 안 온다).
+ *  0분이면 `0분`을 그린다 — 경계에 걸린 티켓도 값을 지어내지 않는다. */
+export function remainingLabel(ms: number): string {
+  const totalMin = Math.max(0, Math.round(ms / 60_000));
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  if (h === 0) return `${m}분`;
+  return m === 0 ? `${h}시간` : `${h}시간 ${m}분`;
+}
+
 /** 홈 대화 목록의 한 줄들 (§비주얼 §24 대화 목록) — **정렬 · 제목 · 시각이 여기서 끝난다.**
  *
  *  - **만든 시각 내림차순**(최근이 위). ISO 문자열이라 사전순이 곧 시간순이고, 옛 형식에서

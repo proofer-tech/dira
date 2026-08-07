@@ -34,11 +34,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { readAuth, readOtherEngineAuth } from "@/lib/auth";
+import { t, type Locale } from "@/lib/i18n";
 import type { ResumeEvent } from "@/lib/machine-state";
-import { readSummary, readProjects } from "@/lib/projects";
+import { readSummary, readProjects, readLanguage } from "@/lib/projects";
+import type { DueAlert } from "@/lib/queue";
 import { engineLimits, formatTokens, listUsage, usageRates, type EngineLimit } from "@/lib/usage";
 import { engineName, workerGroups } from "@/lib/workers";
-import { dateTimeLabel, tildePath, timeLabel } from "@/lib/urls";
+import { dateTimeLabel, remainingLabel, tildePath, timeLabel } from "@/lib/urls";
 import { cn } from "@/lib/utils";
 
 export default async function ProjectLayout({
@@ -69,6 +71,8 @@ export default async function ProjectLayout({
         assigned: s.assigned, // §0-2 알림용. 전환기는 이 필드를 쓰지 않는다
         // §0-10 ④ 알림용. 판정은 `readSummary`가 `isAwaiting`으로 이미 했다 — 새 fs 읽기 0
         awaiting: s.awaiting,
+        // §0-10 ⑦ 알림용(§1-4). 판정은 `readSummary`가 `dueAlertOf`로 이미 했다 — 새 fs 읽기 0
+        due: s.due,
         // §0-10 ⑤⑥ 알림용(§0-14). 프로젝트마다 값이 같다(머신 스코프) — 전환기는 이 필드를 쓰지 않는다
         machine: s.machine,
         // §0-10 ③의 `할당 해제`가 부를 워커. 티켓 상세와 **같은 규칙**이다(`workers[0]`) —
@@ -123,6 +127,8 @@ export default async function ProjectLayout({
   const rawAuth = await readAuth();
   // §4-3 카탈로그 나머지 엔진의 상태 층 — 판정 없이 사실만(§0-4 §개정 `b0966e66`).
   const otherEngines = await readOtherEngineAuth();
+  // ⑦의 문구만 이 사전을 쓴다(§1-4) — ①~⑥은 아직 안 옮겨졌다, 이 티켓 몫이 아니다.
+  const locale = await readLanguage();
   const auth = {
     path: tildePath(rawAuth.path, home),
     savedAt: rawAuth.savedAt,
@@ -134,15 +140,16 @@ export default async function ProjectLayout({
     otherEngines,
   };
 
-  // 셸 알림 종이 세는 여섯 (§0-10). **판정식은 §0-14 · §0-4 · §0-5 · §0-2 · 결정 5가 그대로
-  // 갖는다** — 아래 여섯은 그 절들이 쓰던 조건 그대로이고 바뀐 것은 그리는 자리와 문구뿐이다.
-  // 순서는 ⑤→⑥→①→②→③→④다(§0-14 — 머신이 큐보다 넓다. 네트워크가 없으면 인증이 있어도
+  // 셸 알림 종이 세는 일곱 (§0-10). **판정식은 §0-14 · §0-4 · §0-5 · §0-2 · 결정 5 · §1-4가
+  // 그대로 갖는다** — 아래 일곱은 그 절들이 쓰던 조건 그대로이고 바뀐 것은 그리는 자리와 문구뿐이다.
+  // 순서는 ⑤→⑥→①→②→③→④→⑦다(§0-14 — 머신이 큐보다 넓다. 네트워크가 없으면 인증이 있어도
   // 아무것도 안 된다). ①~④ 안에서는 종전 순서 그대로다: 인증이 없으면 아무것도 안 돌고, 다음이
   // 워커 전원, 마지막이 티켓 몇 건이다. ③과 ④는 둘 다 티켓이라 범위가 같고, 그때는 **사고가
   // 설계보다 위**다(③은 엔진이 만들지 않는 조합이고 ④는 왕복의 정상 단계다 — ④가 종에 드는
   // 것은 이상 상태라서가 아니라 사람이 답을 써야 그 큐가 다시 돌기 때문이다. §0-10 *④는 왜 여기
   // 드나* · 결정 4는 무수정이다). ⑤⑥은 `current.connected`를 안 건다 — 머신 상태는 큐를 못
-  // 읽어도 참이다(§0-14).
+  // 읽어도 참이다(§0-14). **⑦이 맨 아래인 이유도 순서 항과 같은 자다** — 마감은 큐가 막힌
+  // 상태가 아니라 사람이 스스로 건 약속이고, 위 여섯이 뜬 판에서는 그것들이 먼저 풀려야 마감도 산다.
   const alerts = {
     offline: current.machine.offline,
     resume: current.machine.resume !== null,
@@ -150,8 +157,10 @@ export default async function ProjectLayout({
     failures: current.connected && current.failures.length > 0,
     assigned: current.connected && current.assigned.length > 0,
     awaiting: current.connected && current.awaiting.length > 0,
+    due: current.connected && current.due.length > 0,
   };
-  // 배지는 **켜진 알림의 개수 0~6**이다 — 건수를 합치지 않는다(⑤⑥이 들어와 4에서 6이 됐다 — §0-14).
+  // 배지는 **켜진 알림의 개수 0~7**이다 — 건수를 합치지 않는다(⑤⑥이 들어와 4에서 6이 됐고,
+  // ⑦이 들어와 7이 됐다 — §0-14 · §1-4).
   const alertCount = Object.values(alerts).filter(Boolean).length;
   const alertLabel = alertCount > 0 ? `알림 ${alertCount}건` : "알림 없음";
 
@@ -223,6 +232,8 @@ export default async function ProjectLayout({
                 assigned={current.assigned}
                 awaiting={current.awaiting}
                 worker={current.worker}
+                due={current.due}
+                locale={locale}
               />
             </PopoverContent>
           </NotificationPopover>
@@ -336,15 +347,27 @@ function NotificationItems({
   assigned,
   awaiting,
   worker,
+  due,
+  locale,
 }: {
   id: string;
   auth: AuthView;
-  alerts: { offline: boolean; resume: boolean; auth: boolean; failures: boolean; assigned: boolean; awaiting: boolean };
+  alerts: {
+    offline: boolean;
+    resume: boolean;
+    auth: boolean;
+    failures: boolean;
+    assigned: boolean;
+    awaiting: boolean;
+    due: boolean;
+  };
   resume: ResumeEvent | null;
   failures: { name: string; reason: string; log: string; at: string }[];
   assigned: { hash: string; stem: string }[];
   awaiting: { hash: string; stem: string; mtime: number }[];
   worker: string | null;
+  due: { hash: string; stem: string; alert: DueAlert }[];
+  locale: Locale;
 }) {
   const rows = [
     // ⑤ 오프라인(§0-14). 살아 있는 판정이다 — 재접속되면 다음 박에 저절로 꺼진다. 버튼도
@@ -529,6 +552,46 @@ function NotificationItems({
                 className="ml-auto rounded-sm text-sm underline"
               >
                 답변 쓰기
+              </Link>
+            </span>
+          ))}
+        </div>
+      </>
+    ),
+    // ⑦ 마감을 못 지킬 티켓 (§1-4 §종 항목 ⑦ · §0-10 ⑦). 판정 둘(지난 마감 · 5시간 안에 dep
+    // 막힘)은 `dueAlertOf`(큐 파일만 읽는다, 예측 0) — `readSummary`가 이미 걸러 `due`로 왔다.
+    // 아이콘·색은 새 마크 0개 규칙(§1-4 §발행)이라 ①과 같은 `TriangleAlert` + stale을 그대로
+    // 쓴다 — ③처럼 사고이지 ④처럼 왕복의 정상 단계가 아니다.
+    alerts.due && (
+      <>
+        <TriangleAlert aria-hidden className="mt-0.5 size-4 text-status-stale" />
+        <p className="col-start-2 text-sm font-medium">
+          {t(locale, "bell.due.titlePrefix")} {due.length}
+          {t(locale, "bell.due.titleSuffix")}
+        </p>
+        <p className="col-start-2 text-sm text-foreground">{t(locale, "bell.due.body")}</p>
+        {/* ⑦은 남은 시간을 나열에만 적는다(§0-10) — 가장 급한 것을 제목으로 끌어올리지 않는다.
+            다음 행동이 링크인 이유는 ④와 같다: 고칠 것이 판단(마감을 미루거나 deps를 걷거나
+            우선순위를 올린다)이라 팝오버의 버튼 하나가 그중 하나를 대신 고르면 안 된다. */}
+        <div className="col-start-2 grid gap-2">
+          {due.map((d) => (
+            <span key={d.stem} className="flex items-center gap-1">
+              <Link
+                href={`/p/${id}/tickets/${encodeURIComponent(d.stem)}`}
+                className="rounded-sm font-mono text-xs text-muted-foreground underline"
+              >
+                {d.hash}
+              </Link>
+              <span className="text-sm text-foreground">
+                {d.alert.overdue
+                  ? t(locale, "bell.due.overdue")
+                  : `${remainingLabel(d.alert.remainingMs)} ${t(locale, "bell.due.blockedMiddle")} ${d.alert.unmetCount}${t(locale, "bell.due.blockedSuffix")}`}
+              </span>
+              <Link
+                href={`/p/${id}/tickets/${encodeURIComponent(d.stem)}`}
+                className="ml-auto rounded-sm text-sm underline"
+              >
+                {t(locale, "bell.due.openTicket")}
               </Link>
             </span>
           ))}

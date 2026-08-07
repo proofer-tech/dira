@@ -16,6 +16,7 @@ import {
   progressMarkerText,
   projectPath,
   relationPath,
+  remainingLabel,
   rowLimit,
   ROW_PAGE,
   screenOf,
@@ -414,6 +415,15 @@ test("dateTimeLabel — 같은 날은 HH:MM · 다른 날은 M/D HH:MM", () => {
   // 밤샘: from은 어제 23:40 → 날짜가 붙는다. to는 오늘 09:12 → 안 붙는다(§0-14 실측 예시 그대로)
   assert.equal(dateTimeLabel(new Date(2026, 7, 5, 23, 40).getTime(), now), "8/5 23:40");
   assert.equal(dateTimeLabel(now, now), "09:12");
+});
+
+/** §1-4 §종 항목 ⑦ — 나열의 `<남은>`. 이 알림이 켜지는 창(≤5시간)만 대상이라 일 단위는 없다. */
+test("remainingLabel — 시·분, 0분도 그대로 그린다", () => {
+  assert.equal(remainingLabel(3 * 3600_000), "3시간");
+  assert.equal(remainingLabel(3 * 3600_000 + 30 * 60_000), "3시간 30분");
+  assert.equal(remainingLabel(42 * 60_000), "42분");
+  assert.equal(remainingLabel(0), "0분");
+  assert.equal(remainingLabel(-1000), "0분"); // 경계를 지나도 음수를 안 그린다
 });
 
 /** 홈 대화 목록의 한 줄 (§비주얼 §24 대화 목록). 파일이 주는 순서와 화면이 그리는 순서가 다르고

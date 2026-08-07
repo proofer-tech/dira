@@ -29,6 +29,9 @@ export type Ticket = {
   priority: number; // 원값(frontmatter priority:). 없거나 잘못되면 3(§1-3 §값)
   baseline: number; // §1-4 기준값 — 파생(마감)이 있으면 파생, 없으면 priority. effective 이전값
   effective: number; // 유효 우선순위 — deps 역방향 상속(§1-3 §유효 우선순위). 파일에 안 씀
+  // §1-4 유효마감 — min({자기 duedate} ∪ {후행의 유효마감}). `.done`은 그래프 밖이라 null(그
+  // 값을 보는 유일한 소비자 종 항목 ⑦이 `.done`을 이미 걸러서 안 쓰는 값이다). 파일에 안 씀
+  effectiveDue: Date | null;
   fm: Record<string, string>;
   body: string; // frontmatter 이후 본문
   birth: number; // ms. st_birthtime ?? mtime. 큐 순서
@@ -188,7 +191,7 @@ function effectiveFromGraph(
   deps: Map<string, string[]>,
   duedate: Map<string, Date | null>,
   now: Date,
-): { eff: Map<string, number>; baseline: Map<string, number> } {
+): { eff: Map<string, number>; baseline: Map<string, number>; effDue: Map<string, Date | null> } {
   const waiters = new Map<string, string[]>();
   for (const [h, ds] of deps) {
     for (const d of ds) {
@@ -229,7 +232,21 @@ function effectiveFromGraph(
   }
 
   for (const h of prio.keys()) calc(h, new Set());
-  return { eff, baseline };
+  return { eff, baseline, effDue };
+}
+
+/** §1-4 §종 항목 ⑦ 판정 둘. 큐 파일만 읽는다(유효마감·unmet) — 예측 0. 한 티켓이 둘 다
+ *  맞아도 행은 하나다: 지난 마감이 우선이다(문구 표 ⑦ "지났습니다" 또는 "남았는데…"). */
+export type DueAlert = { overdue: boolean; remainingMs: number; unmetCount: number };
+
+export function dueAlertOf(t: Ticket, now: Date): DueAlert | null {
+  if (t.state === "done" || t.effectiveDue === null) return null;
+  const remainingMs = t.effectiveDue.getTime() - now.getTime();
+  if (remainingMs < 0) return { overdue: true, remainingMs, unmetCount: t.unmet.length };
+  if (remainingMs <= DUE_ESCALATE_MS && t.unmet.length > 0) {
+    return { overdue: false, remainingMs, unmetCount: t.unmet.length };
+  }
+  return null;
 }
 
 /** tickets.py is_open_name / in_progress. NFC 정규화 후 접미사 판정. */
@@ -358,7 +375,7 @@ export async function listTickets(root: string, config: Suffixes, now: Date = ne
     return [{ p, st, hash, state: stateOf(path.basename(p), config), fm: q.fm, deps: q.deps, body: q.body }];
   });
   const { prio, deps: depsGraph, duedate } = priorityGraph(entries);
-  const { eff, baseline } = effectiveFromGraph(prio, depsGraph, duedate, now);
+  const { eff, baseline, effDue } = effectiveFromGraph(prio, depsGraph, duedate, now);
 
   const out: Ticket[] = [];
   for (const { p, st, hash, state, fm, deps, body } of entries) {
@@ -386,6 +403,7 @@ export async function listTickets(root: string, config: Suffixes, now: Date = ne
       priority: prio.get(hash) ?? priorityOf(fm, hash),
       baseline: baseline.get(hash) ?? PRIORITY_DEFAULT,
       effective: eff.get(hash) ?? PRIORITY_DEFAULT,
+      effectiveDue: effDue.get(hash) ?? null,
       fm,
       body,
       birth,

@@ -165,6 +165,18 @@ export const ko: Record<string, string> = {
   "ticket.priority.level.3": "기본",
   "ticket.priority.level.4": "먼저",
   "ticket.priority.level.5": "당장 — 도는 세션을 끊는다",
+
+  // 셸 알림 종 ⑦(마감 경고, §1-4 · §0-10 문구 표 ⑦). ①~⑥은 아직 이 사전으로 안 옮겨졌다 —
+  // 이 티켓(`a50c8304`)의 몫은 ⑦뿐이다. en은 `5debff0e`가 채운다.
+  "bell.due.titlePrefix": "마감을 못 지킬 티켓",
+  "bell.due.titleSuffix": "건",
+  "bell.due.body": "마감이 지났거나, 선행 티켓이 안 풀린 채로 마감이 가까워졌습니다.",
+  "bell.due.overdue": "마감이 지났습니다",
+  // 남은 시간(`remainingLabel`) 뒤에 붙는 조각 둘 — "<남은> 남았는데 선행 <n>건이 안 끝났습니다".
+  // count는 숫자에 바로 붙어야(`2건`) 하므로 이 둘 사이엔 공백을 안 넣는다.
+  "bell.due.blockedMiddle": "남았는데 선행",
+  "bell.due.blockedSuffix": "건이 안 끝났습니다",
+  "bell.due.openTicket": "티켓 열기",
 };
 
 /** 제품 낱말의 영어 대응 — **여기가 한자리다**(621c7a97). 다음 묶음이 같은 것을 다르게 부르지

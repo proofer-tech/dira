@@ -18,7 +18,7 @@ import {
   shellValue,
 } from "./paths.ts";
 import { mirrorCore } from "./protocols.ts";
-import { isAwaiting, listTickets, statusOf, type Ticket } from "./queue.ts";
+import { dueAlertOf, isAwaiting, listTickets, statusOf, type DueAlert, type Ticket } from "./queue.ts";
 import { listWorkers, type Worker } from "./workers.ts";
 import { PERSONA_COLORS, slugify, tildePath } from "./urls.ts";
 
@@ -467,6 +467,10 @@ export type ProjectSummary = {
    *  못 읽은 프로젝트는 빈 배열이다(`assigned`의 그 규칙 그대로 — 판정 자체가 불가능하면
    *  항목이 없는 게 답이고 그 자리에는 `연결 안 됨`이 이미 서 있다). */
   awaiting: { hash: string; stem: string; mtime: number }[];
+  /** 마감을 못 지킬 티켓(§1-4 §종 항목 ⑦ — 지난 마감 또는 5시간 안에 남았는데 선행이 안 끝남).
+   *  판정은 `dueAlertOf` 하나뿐이고 그 값이 이미 보는 `effectiveDue`·`unmet`도 이 `listTickets`
+   *  호출이 준 것이라 **새 fs 읽기 0**이다. 못 읽은 프로젝트는 빈 배열이다(`assigned`의 그 규칙). */
+  due: { hash: string; stem: string; alert: DueAlert }[];
   /** 머신 상태(§0-14 — 셸 알림 종 ⑤·⑥). 프로젝트를 못 읽어도 값이 있다 — 머신이 큐보다 넓다.
    *  `machineState()`는 모듈 스코프 값을 읽기만 하므로 여기서 새 I/O가 0이다. */
   machine: MachineState;
@@ -483,8 +487,10 @@ export async function readSummary(project: Pick<Project, "root">): Promise<Proje
     const st = await stat(project.root);
     if (!st.isDirectory()) throw new Error(`디렉터리가 아니다: ${project.root}`);
     const config = await resolveConfig(project);
+    // §1-4 §계산 시점 — `listTickets`의 유효마감과 `dueAlertOf`의 "남은"이 같은 순간을 봐야 한다.
+    const now = new Date();
     const [tickets, workers] = await Promise.all([
-      listTickets(project.root, config),
+      listTickets(project.root, config, now),
       listWorkers(project.root),
     ]);
     return {
@@ -501,6 +507,10 @@ export async function readSummary(project: Pick<Project, "root">): Promise<Proje
       awaiting: tickets
         .filter(isAwaiting)
         .map((t) => ({ hash: t.hash, stem: t.stem, mtime: t.mtime })),
+      due: tickets.flatMap((t) => {
+        const alert = dueAlertOf(t, now);
+        return alert ? [{ hash: t.hash, stem: t.stem, alert }] : [];
+      }),
       machine,
     };
   } catch (e) {
@@ -514,6 +524,7 @@ export async function readSummary(project: Pick<Project, "root">): Promise<Proje
       workers: [],
       assigned: [],
       awaiting: [],
+      due: [],
       machine,
     };
   }

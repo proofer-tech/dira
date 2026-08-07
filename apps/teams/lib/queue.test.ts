@@ -18,6 +18,7 @@ import {
   awaitingOf,
   awaitingUnlocked,
   derivedFrom,
+  dueAlertOf,
   filterTickets,
   findPath,
   inDefaultList,
@@ -523,6 +524,55 @@ test("마감 — now가 인자다: 같은 큐에 다른 now 둘을 주면 값이
   const far = await listTickets(root, DEFAULT, new Date(DUE_NOW.getTime() - 2 * DAY));
   assert.strictEqual(near.find((t) => t.hash === "due00017")!.effective, 5);
   assert.strictEqual(far.find((t) => t.hash === "due00017")!.effective, 3);
+});
+
+test("마감 — effectiveDue는 노출된 값이고, 전이 체인에서도 자기 duedate와 같다(§1-4 §읽기 미러)", async () => {
+  const root = newRoot();
+  await write(
+    root,
+    "due00018.md",
+    fm({ ticket: "due00018", title: "A", kind: "work", duedate: due(3 * HOUR), deps: "[due00019]" }),
+  );
+  await write(root, "due00019.md", fm({ ticket: "due00019", title: "B(전이만 있다)", kind: "work" }));
+  await write(root, "due00020.md", fm({ ticket: "due00020", title: "마감 없음", kind: "work" }));
+
+  const tickets = await listTickets(root, DEFAULT, DUE_NOW);
+  const by = (h: string) => tickets.find((t) => t.hash === h)!;
+  const ownDue = new Date(DUE_NOW.getTime() + 3 * HOUR).getTime();
+  assert.strictEqual(by("due00018").effectiveDue?.getTime(), ownDue);
+  assert.strictEqual(by("due00019").effectiveDue?.getTime(), ownDue); // 유효 우선순위와 같은 전이
+  assert.strictEqual(by("due00020").effectiveDue, null);
+});
+
+test("마감 — 종 항목 ⑦ 판정 둘: 지난 마감 · 5시간 안 dep 막힘, 그 밖은 null(§1-4 §종 항목 ⑦)", async () => {
+  const root = newRoot();
+  await write(root, "due00021.md", fm({ ticket: "due00021", title: "지남", kind: "work", duedate: due(-HOUR) }));
+  await write(
+    root,
+    "due00022.md",
+    fm({ ticket: "due00022", title: "막힘", kind: "work", duedate: due(2 * HOUR), deps: "[due00099]" }),
+  );
+  await write(root, "due00023.md", fm({ ticket: "due00023", title: "안 막힘", kind: "work", duedate: due(2 * HOUR) }));
+  await write(
+    root,
+    "due00024.md",
+    fm({ ticket: "due00024", title: "멀고 막힘", kind: "work", duedate: due(2 * DAY), deps: "[due00099]" }),
+  );
+  // `.done`은 판정 대상이 아니다 — 지난 마감이어도 null(§0-10 "`.done`은 안 뜬다").
+  await write(root, "due00025.done.md", fm({ ticket: "due00025", title: "완료", kind: "work", duedate: due(-HOUR) }));
+
+  const tickets = await listTickets(root, DEFAULT, DUE_NOW);
+  const by = (h: string) => tickets.find((t) => t.hash === h)!;
+
+  const overdue = dueAlertOf(by("due00021"), DUE_NOW);
+  assert.strictEqual(overdue?.overdue, true);
+
+  const blocked = dueAlertOf(by("due00022"), DUE_NOW);
+  assert.deepStrictEqual(blocked, { overdue: false, remainingMs: 2 * HOUR, unmetCount: 1 });
+
+  assert.strictEqual(dueAlertOf(by("due00023"), DUE_NOW), null); // 5시간 안이지만 unmet 0
+  assert.strictEqual(dueAlertOf(by("due00024"), DUE_NOW), null); // unmet은 있지만 5시간 밖
+  assert.strictEqual(dueAlertOf(by("due00025"), DUE_NOW), null); // `.done`
 });
 
 // ── 관계 (티켓 상세) ────────────────────────────────────────────────────────
