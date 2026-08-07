@@ -316,7 +316,14 @@ apps/teams/
                         `border-chart-2`로 바꿨다(`54c3c594`). `25fc02e6`이 `--ring`을 포커스 링
                         전용 값으로 개정하면서 장식 테두리가 라이트 17.93 · 다크 15.72로 거의
                         검정 액자가 됐다 — §비주얼 §9가 재선택한 `--chart-2`(라이트 4.74 · 다크
-                        4.18)로 되돌린다. `[button,a]:focus-visible:border-ring`은 그대로다
+                        4.18)로 되돌린다. `[button,a]:focus-visible:border-ring`은 그대로다.
+                        **그 4.74/4.18은 다시 볼륨을 냈다** — `border-chart-2`를
+                        `border-chart-2/65`(라이트 2.49 · 다크 2.38)로 낮추고
+                        `data-[align=end]:*:data-[slot=bubble-content]:rounded-br-none`으로
+                        화자 쪽 아래 한 귀를 각으로 냈다(요구 `8e6f6903`, `8ab664e3`). 상자(`Card`
+                        `rounded-md` 네 귀)와 갈리는 일을 대비가 아니라 꼴이 하게 하고, 알파라
+                        흰 밑면·검은 밑면에서 같은 세기다 — §비주얼 §13 §유저측 말풍선을 다시
+                        그렸다가 정본이다
                         ⑤ `dialog.tsx`의 닫기 버튼 `sr-only` 문구를 리터럴 `Close`에서
                         `useT()("common.close")`로 바꿨다(`c011dc37`). 이 프리미티브를 모든
                         다이얼로그가 공유해서 한국어 화면(기본 로케일)에서도 스크린리더가 영어를
