@@ -536,8 +536,9 @@ export function SettingsDialog({
 }: {
   auth: AuthView;
   /** `icon` = 두 셸 헤더 우측 끝. `link` = 셸 알림 종 ① 항목의 `토큰 저장`(§0-10 문구 표 ①).
-   *  라벨이 `인증하기`에서 갈린 것은 자리가 배너에서 종으로 옮겨 가면서다(§0-4 개정). */
-  trigger?: "icon" | "link";
+   *  라벨이 `인증하기`에서 갈린 것은 자리가 배너에서 종으로 옮겨 가면서다(§0-4 개정).
+   *  `text` = 홈 헤더(랜딩 `.btn`, §비주얼 §46 ③ — 아이콘 0개·글자만·`인증 필요` 확장 없음). */
+  trigger?: "icon" | "link" | "text";
 }) {
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
@@ -686,6 +687,10 @@ export function SettingsDialog({
                 </>
               )}
             </Button>
+          ) : trigger === "text" ? (
+            <button type="button" className="btn">
+              설정
+            </button>
           ) : (
             <button type="button" className="text-sm underline">
               토큰 저장

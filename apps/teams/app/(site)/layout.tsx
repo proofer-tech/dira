@@ -2,9 +2,10 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
 // 셸이 지는 것은 `lang`뿐이고 그것도 `config.ts`의 `lang: "ko-KR"`를 그대로 옮긴 값이다.
-// 리셋·킬 스위치·랜딩 전역 CSS는 `app/landing.css` 한 벌이고 `landing.tsx`가 문다 —
-// 여기서 물면 매뉴얼 셸(§순서 ⑤)까지 그 리셋을 받는다. 랜딩은 라이트 전용이고 매뉴얼은
-// 두 모드라(§사이트 기반 §그대로 서는 못) 두 셸이 각자 자기 전역 CSS를 갖는다.
+// 킬 스위치는 `app/landing.css`가 지고, 그 파일은 `(list)/page.tsx`만 무는 `globals.css`가
+// `landing` 레이어로 싣는다(§비주얼 §46 ①) — 매뉴얼 셸(§순서 ⑤)은 이 파일을 안 물어 그
+// 리셋을 안 받는다. 랜딩은 라이트 전용이고 매뉴얼은 두 모드라(§사이트 기반 §그대로 서는 못)
+// 두 셸이 각자 자기 전역 CSS를 갖는다.
 
 // `config.ts:33`의 `head` 한 줄이 여기로 온다 — 그 배열이 26장 전부에
 // `<link rel="icon" href="/icon.svg" type="image/svg+xml">`를 굽고 있었다. 자리가 루트

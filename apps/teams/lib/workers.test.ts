@@ -870,7 +870,7 @@ test("화면이 말하는 폴링 간격 = `cronLine`이 진짜 넣는 간격 (�
   const sleep = cronLine({ path: "/tmp/w1.sh" }).match(/\bsleep (\d+);/);
   assert.ok(sleep, "cronLine에 `sleep N` 줄이 없다 — 등록 단위가 2줄이 아니다");
   const src = ["components/projects-ui.tsx", "components/workers-ui.tsx", "app/actions.ts"]
-    .concat("app/(app)/p/[project]/workers/actions.ts")
+    .concat("app/(app)/p/[project]/workers/actions.ts", "app/(site)/landing.tsx")
     .map((f) => readFileSync(path.join(import.meta.dirname, "..", f), "utf8"))
     .join("\n");
   const said = [...src.matchAll(/(\S+)\s*뒤부터 티켓을 물어갑니다/g)].map((m) => m[1]);

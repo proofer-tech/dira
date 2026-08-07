@@ -202,6 +202,16 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
   color: var(--faint); font-variant-numeric: tabular-nums;
 }
 
+/* 풀 모드 헤더 다섯이 서는 최소 폭은 603이다(실측) — 그 아래는 `프로젝트 관리`·`매뉴얼`을
+   같이 걷는다(§비주얼 §46 ③). 둘 다 이 페이지에서 회수된다: `프로젝트 관리`는 그 앵커의
+   목적지가 히어로 바로 아래에 이미 있고, `매뉴얼`은 footer §문서 열에 같은 링크가 서 있다.
+   `새로 만들기`·`설정`은 회수할 곳이 0이라 안 걷는다. 두 클래스는 풀 모드에서만 붙는다
+   (`landing.tsx`) — 랜딩-only 헤더(넷 이하)는 이 규칙 밖이다. */
+@media (max-width: 640px) {
+  .dira-landing header nav .btn-manage,
+  .dira-landing header nav .btn-manual { display: none; }
+}
+
 /* ── shared type ────────────────────────────────── */
 .dira-landing .eyebrow {
   margin: 0 0 16px; font-family: var(--mono);
@@ -230,6 +240,16 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
 .dira-landing .hero { padding-top: 96px; }
 .dira-landing .hero .body { max-width: 34em; margin: 0 0 32px; }
 .dira-landing .cta { display: flex; flex-wrap: wrap; gap: 12px; }
+/* 풀 모드 히어로 CTA 자리(목록·온보딩·오류 슬롯, §비주얼 §46 ②). 위 32·아래 64는 걷힌
+   `.cta`/`.cta-note`가 쓰던 값을 새 선언 없이 그대로 물려받는다 — 위는 `.hero .body`의
+   `margin-bottom: 32`, 아래는 `.hero figure`의 `margin-top: 64`가 이미 준다.
+   `scroll-margin-top` = sticky `header` 60 + `.travel` 밴드 46(실측) — `프로젝트 관리`
+   (`/#projects`)가 그 자리로 올 때 헤더 밑에서 멈춘다. 390에서 `.tk`가 두 줄이 되어 밴드가
+   54라 114다(§11 `top-18`과 같은 유도). */
+#projects { scroll-margin-top: 106px; }
+@media (max-width: 480px) {
+  #projects { scroll-margin-top: 114px; }
+}
 .dira-landing .cta-note { margin: 16px 0 0; font-size: 12.5px; color: var(--faint); font-family: var(--mono); }
 
 /* ⑤ 페이지가 열리는 순간(§모션 §판정표 ⑤). 총 770ms에 끝나고 다시 안 돈다 —

@@ -1,4 +1,12 @@
-@import "tailwindcss";
+/* 랜딩 CSS가 tailwind 리셋을 이기는 문제의 처방(§비주얼 §46 ①) — `landing` 레이어를
+   `base`와 `utilities` 사이에 끼운다. `@layer theme, base, landing, components, utilities;`
+   한 줄로는 안 된다(Lightning CSS가 `landing`을 최하위로 보낸다) — 분할 `@import`만 레이어
+   순서를 손으로 잡는다. `(list)/page.tsx`(두 모드 다 문다)만 이 파일을 물어서 `landing.css`가
+   홈에서만 실린다. `landing.tsx`의 `import "./landing.css"`는 이 줄로 대체돼 빠졌다. */
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/preflight.css" layer(base);
+@import "./(site)/landing.css" layer(landing);
+@import "tailwindcss/utilities.css" layer(utilities);
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
@@ -41,7 +49,10 @@
   /* 등폭은 이 개정에서 한 자도 안 갈린다(P149 못 ⑧) — 워드마크·앱 캡처가 랜딩과 같은
      얼굴이어야 한다. sans만 원티드산스로 간다. */
   --font-sans: "Wanted Sans Variable";
-  --font-mono: var(--font-geist-mono);
+  /* `--font-geist-mono`는 `(app)/layout.tsx`의 `next/font`만 세운다 — `(site)` 트리(홈 포함)에서
+     빈 값이라 폴백이 없으면 `font-mono`가 sans로 그려진다(§비주얼 §46 ① 결함 셋째). 폴백 한 칸,
+     자산 0바이트(홈은 `landing.css`의 `@font-face`로 Geist Mono를 이미 받아 둔다). */
+  --font-mono: var(--font-geist-mono, "Geist Mono"), ui-monospace, SFMono-Regular, Menlo, monospace;
   --font-heading: "Wanted Sans Variable";
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
@@ -188,8 +199,11 @@
    있거나 OS가 다크" 두 조건에 동시에 걸 수 없어서 값이 두 벌이다 — 짝을 붙여 둔 이유가
    표류를 한 화면에서 보는 것이다. **값의 정본은 §비주얼 §1·§12 표이고 여기서 손으로 고치지
    않는다.** 위를 고치면 아래도 같이 고친다. */
+/* `:not(:has(.dira-landing))`이 랜딩이 선 문서 전체를 이 블록 밖으로 뺀다(§비주얼 §46 ①
+   결함 ⓐ). 랜딩은 라이트 전용인데(§한 코드베이스 §그대로 서는 못) 이 블록이 홈에서도 걸려
+   흰 밑면 위에 다크 토큰이 얹히던 문제 — 아래 `:root:has(.dira-landing)` 짝과 한 쌍이다. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not(:has(.dira-landing)) {
     --background: oklch(0.145 0 0);
     --foreground: oklch(0.985 0 0);
     --card: oklch(0.205 0 0);
@@ -231,6 +245,12 @@
   }
 }
 
+/* `.dira-landing`이 이 문서에 있으면 이 문서는 라이트다 — `<body>` 직계 포털(다이얼로그·
+   툴팁)까지 걸리려면 `.dira-landing` 자신이 아니라 `:root`에 걸어야 한다(§비주얼 §46 ①). */
+:root:has(.dira-landing) {
+  color-scheme: light;
+}
+
 /* 페르소나 색 — 상태 색과 **다른 토큰 그룹**이다(DESIGN.md §비주얼 §12). 상태 4개는 뜻이
    박혀 있고 이 8개는 사람이 임의로 고르는 신원 표식이라 뜻이 없다. 빨강 계열(hue 0~40)은
    `--status-stale`이 독점하므로 팔레트에서 뺐다. 명도는 모드마다 하나로 고정(라이트 0.58 ·
@@ -259,7 +279,7 @@
 
 /* 위 `.dark` 블록과 같은 값 한 벌(§비주얼 §0-1 표 ②). 정본은 §비주얼 §12 표다 */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not(:has(.dira-landing)) {
     --persona-orange: oklch(0.76 0.15 45);
     --persona-yellow: oklch(0.76 0.155 90);
     --persona-green: oklch(0.76 0.17 140);
@@ -372,6 +392,15 @@
       color-mix(in oklab, var(--muted) 50%, transparent) 0 100%
     );
   }
+}
+
+/* `outline-ring/50`이 랜딩 정거장(버튼·본문 링크·목록 이름 링크)의 UA 포커스 링을
+   rgb(208,208,208)(대비 1.54)로 덮는다 — `revert`가 표준 키워드로 UA 원점 값을 되돌려
+   rgb(0,95,204)(대비 5.98)로 되살린다. `auto`는 크롬이 파서에서 버려 안 통한다(§비주얼 §46 ⑥).
+   shadcn 컨트롤은 `outline-style`을 스스로 끄고 `box-shadow` 링을 그려 이 줄이 안 닿는다 —
+   `--ring/50`(§1이 유지로 판정한 값)은 이 줄이 안 뒤집는다. */
+.dira-landing * {
+  outline-color: revert;
 }
 
 @layer base {

@@ -1,34 +1,32 @@
 "use client";
 
-/** 프로젝트 목록·등록 화면(`/`)의 클라이언트 조각 — 화면 헤더 · 등록 폼 · 해석 결과 표 ·
- *  행 액션(설정 다이얼로그).
+/** 프로젝트 목록·생성의 클라이언트 조각 — 생성 폼·다이얼로그(`CreateForm`·`CreateDialog`) ·
+ *  해석 결과 표(`ConfigTable`) · 목록 표(`ProjectRows`) · 행 액션(설정 다이얼로그).
  *
- *  한 파일에 있는 이유: 해석 결과 표를 등록 직후와 설정 다이얼로그가 **같은 표**로 쓴다
- *  (DESIGN.md §7). 파일을 쪼개면 두 자리가 갈린다. fs 접근은 전부 서버 액션 뒤에 있다. */
+ *  헤더·등록 폼·레지스트리 오류 배너는 여기 없다 — 홈(`app/(site)/landing.tsx`)이 랜딩 헤더의
+ *  그 자리에 직접 조립한다(§한 코드베이스 §홈 · §비주얼 §46). `CreateForm`·`CreateDialog`·
+ *  `CREATE_BLURB`를 export하는 이유가 그 재사용이다.
+ *
+ *  한 파일에 있는 이유: 해석 결과 표를 생성 직후와 행 액션의 설정 다이얼로그가 **같은 표**로
+ *  쓴다(DESIGN.md §7). 파일을 쪼개면 두 자리가 갈린다. fs 접근은 전부 서버 액션 뒤에 있다. */
 import { Fragment, useState, useTransition } from "react";
 import Link from "next/link";
 import { ChevronDown, ChevronUp, Settings2, TriangleAlert, Unlink } from "lucide-react";
 import {
   createProject,
   moveProjectAction,
-  registerProject,
   renameProjectAction,
   resolveProjectAction,
   unregisterProjectAction,
   type CreateState,
-  type RegisterState,
   type ResolvedView,
 } from "@/app/actions";
-import { CopyCommand } from "@/components/copy-command";
 import { PickPath } from "@/components/path-picker";
 import { PersonaBadge } from "@/components/persona-badge";
-import { BrandMark } from "@/components/project-switcher";
-import { SettingsDialog, type AuthView } from "@/components/settings-dialog";
 import { StatusBadge, type Status } from "@/components/status-badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import {
   Dialog,
   DialogClose,
@@ -168,8 +166,9 @@ export function ConfigTable({ view }: { view: ResolvedView }) {
 // ── 생성 폼 (DESIGN.md §0-3) ────────────────────────────────────────────────
 
 /** 생성이 무엇을 하는지 한 줄. 다이얼로그에서는 `DialogDescription`, 0건 인라인 카드에서는
- *  `h2` 아래 `text-xs text-muted-foreground`다 — 같은 문장이 두 그릇에서 같아야 한다(§비주얼 §7). */
-const CREATE_BLURB =
+ *  `h2` 아래 `text-xs text-muted-foreground`다 — 같은 문장이 두 그릇에서 같아야 한다(§비주얼 §7).
+ *  홈(`landing.tsx`)의 0건 온보딩도 같은 자리에 같은 문장을 쓴다 — export해 재타이핑하지 않는다. */
+export const CREATE_BLURB =
   ".dira를 만들고 워커 하나를 crontab에 올립니다 — 30초 뒤부터 티켓을 물어갑니다.";
 
 /** 없는 큐를 만든다. **새 컴포넌트·새 색 토큰 0개** — 필드 사양은 §0-3 표 그대로고
@@ -184,7 +183,7 @@ const CREATE_BLURB =
  *
  *  성공하면 결과는 **목록 아래 결과 슬롯**으로 올라간다(`onCreated`) — 서는 자리가 둘이라
  *  결과를 여기 두면 어느 그릇으로 만들었느냐에 따라 결과가 다른 자리에 뜬다(§0 마지막 항). */
-function CreateForm({
+export function CreateForm({
   dialog,
   onCreated,
   onRegister,
@@ -359,9 +358,9 @@ function CreateForm({
   );
 }
 
-/** 생성 폼의 다이얼로그 그릇. 트리거는 여기 없다 — `h1` 우측 하나뿐이고 부모가 연다
- *  (0건에서는 폼 자신이 인라인으로 서므로 트리거가 없다. §비주얼 §7). */
-function CreateDialog({
+/** 생성 폼의 다이얼로그 그릇. 트리거는 여기 없다 — 부모가 연다(0건에서는 폼 자신이 인라인으로
+ *  서므로 트리거가 없다. §비주얼 §7). 홈 헤더의 `새로 만들기`도 이 그릇을 그대로 쓴다. */
+export function CreateDialog({
   open,
   onOpenChange,
   onCreated,
@@ -395,354 +394,6 @@ function CreateDialog({
         />
       </DialogContent>
     </Dialog>
-  );
-}
-
-// ── 루트 셸(헤더 + main) + 등록 · 생성 · 결과 슬롯 ──────────────────────────
-
-/** `/`의 클라이언트 조각. **`h1`·트리거·결과 슬롯이 한 컴포넌트인 이유**는 트리거가 `h1`
- *  우측인데 결과 카드는 목록 아래 슬롯에 떠야 하기 때문이다(§비주얼 §7). 목록(`children`)은
- *  서버가 그린 것을 그대로 통과시킨다.
- *
- *  그 `h1` 행이 헤더 바로 올라가면서(§비주얼 §4 루트 셸 항) **셸까지 이 조각이 그린다** —
- *  `<header>`를 서버에 남기고 버튼만 여기로 내리면 헤더 행과 결과 슬롯이 두 트리로 갈린다.
- *
- *  **0건에서 성공해도 이 컴포넌트는 자리를 안 옮긴다** — 같은 응답에서 화면이 온보딩→목록으로
- *  바뀌는데, 결과 카드가 그때 다른 자리로 옮겨 앉으면 remount로 사라진다(§0 마지막 항).
- *  그래서 그릇을 바꾸는 시점은 결과가 아니라 `닫기`다. **성공 경로가 둘이고 슬롯은 하나다** —
- *  인라인 생성 폼이든 등록 다이얼로그든 결과 카드는 폼이 있던 그 자리에 뜬다(§비주얼 §7). */
-export function ProjectsSection({
-  empty,
-  auth,
-  home,
-  registryError,
-  children,
-}: {
-  empty: boolean;
-  /** 인증 상태 — 머신 스코프라 프로젝트 요약에 들어 있지 않다. 헤더 우측 끝
-   *  `설정` 다이얼로그가 쓴다(§0-4). */
-  auth: AuthView;
-  /** 홈 디렉터리. 경로 피커가 `~`로 친 값을 펴는 데만 쓴다(§데스크톱 앱 N3) —
-   *  클라이언트는 `node:os`를 못 부르므로 서버가 넘긴다(`tildePath`와 같은 규약) */
-  home: string;
-  /** 레지스트리를 못 읽었을 때. GUI가 고쳐 쓰려 들지 않는다 — 원문 + 여는 명령이다. */
-  registryError?: { message: string; openCmd: string } | null;
-  children?: React.ReactNode;
-}) {
-  const [pending, start] = useTransition();
-  const [state, setState] = useState<RegisterState>({});
-  const [name, setName] = useState("");
-  const [root, setRoot] = useState("");
-  const [made, setMade] = useState<CreateState | null>(null);
-  const [creating, setCreating] = useState(false);
-  const [registering, setRegistering] = useState(false);
-  const [dismissed, setDismissed] = useState(false);
-  const slug = slugify(name);
-  // 슬러그가 비면(한글 이름) 그때만 `URL 조각`을 받는다. 서버가 중복·형식으로 거부한 경우도 같다.
-  const showId = (name.trim() !== "" && slug === "") || !!state.needId;
-  const err = state.error;
-
-  // 생성 결과 = 등록과 **같은 표** + 그 위 세 줄(만든 파일 수 · 유도한 엔진 레포 · crontab 등록).
-  const view = made?.done ?? state.done;
-  const c = made?.created;
-  // 결과가 떠 있는 동안 0건 온보딩은 통째로 사라진다 — 목록이 생긴 뒤의 화면에 온보딩이
-  // 남아 있을 이유가 없다(§비주얼 §7 온보딩 항 마지막).
-  const showResult = !!view && !dismissed;
-
-  // `useActionState` 대신 직접 부른다 — 성공 시 다이얼로그를 닫고 결과 슬롯을 되살리는 일이
-  // 렌더 결과가 아니라 이벤트라서다(생성 폼과 같은 방식).
-  // ponytail: `<form action={서버액션}>`이 주던 JS-없이 제출이 사라진다. 등록 폼은 이제
-  // 0건에서도 다이얼로그(=JS)라 값이 남는 자리가 없다 — 되살리려면 `useActionState` +
-  // `useEffect(닫기)`다.
-  const registerForm = (
-    <form
-      className="space-y-4"
-      onSubmit={(e) => {
-        e.preventDefault();
-        const f = new FormData(e.currentTarget);
-        start(async () => {
-          const r = await registerProject({}, f);
-          setState(r);
-          setDismissed(false); // 닫아 둔 뒤 다시 등록하면 새 결과가 다시 뜬다
-          if (r.done) {
-            setMade(null); // 앞선 생성 결과가 새 등록 결과를 가리지 않는다
-            setRegistering(false);
-            setName("");
-            setRoot("");
-          }
-        });
-      }}
-    >
-      <div className="space-y-2">
-        <Label htmlFor="project-name">이름</Label>
-        <Input
-          id="project-name"
-          name="name"
-          placeholder="dira 자체"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
-        {slug && <p className="font-mono text-xs text-muted-foreground">URL: /p/{slug}</p>}
-        {err?.code === "name" && <p className="text-xs text-destructive">{err.message}</p>}
-      </div>
-
-      {showId && (
-        <div className="space-y-2">
-          <Label htmlFor="project-id">URL 조각</Label>
-          <Input id="project-id" name="id" className="font-mono" placeholder="dira" />
-          <p className="text-xs text-muted-foreground">
-            {err && (err.code === "needId" || err.code === "badId" || err.code === "dupId")
-              ? err.message
-              : "이름에서 URL 조각을 만들 수 없습니다. 직접 정해 주세요 (영문 소문자·숫자·하이픈)."}
-          </p>
-        </div>
-      )}
-
-      <div className="space-y-2">
-        <Label htmlFor="project-root">경로</Label>
-        <div className="flex items-center gap-2">
-          <Input
-            id="project-root"
-            name="root"
-            className="font-mono"
-            placeholder="~/Projects/myproject/.dira"
-            value={root}
-            onChange={(e) => setRoot(e.target.value)}
-          />
-          {/* 고르는 것은 `.dira` 자신이다(디렉터리) — dotfile이라 main이 `showHiddenFiles`를 켠다 */}
-          <PickPath mode="directory" label=".dira 경로" onPick={setRoot} />
-        </div>
-        <p className="text-xs text-muted-foreground">절대경로. ~는 확장됩니다</p>
-        {/* 온보딩에서 내려온 도움말 산문 세 덩이 — 전부 **등록할 큐의 경로를 어떻게 찾는가**라
-            자기가 채우는 칸 밑이 자리다(§0 · §비주얼 §7 산문 항). 위 한 줄은 입력 **형식**이고
-            여기는 **찾는 법**이라 지우지 않는다. 본문이 아니라 필드 도움말 층이므로
-            `text-sm`이 아니라 `text-xs text-muted-foreground`다 — 새 크기 단계 0개.
-            접지도 자르지도 않는다: 처음 등록하는 사람에게 이 세 덩이가 이 다이얼로그의
-            존재 이유다. 목록이 있는 상태에서 열어도 보인다(0건 전용이 아니다) */}
-        <div className="space-y-2">
-          <p className="text-xs text-muted-foreground">
-            .dira는 프로젝트 루트 아래 폴더입니다. 안에 tickets/ 와 workers/ 가 있습니다.
-          </p>
-          <p className="font-mono text-xs text-muted-foreground">~/Projects/myproject/.dira</p>
-          <p className="font-mono text-xs text-muted-foreground">~/Projects/dira/.dira</p>
-        </div>
-        <div className="space-y-2">
-          <p className="text-xs text-muted-foreground">어디 있는지 모르겠다면:</p>
-          {/* 스캔하는 건 GUI 프로세스가 아니라 사용자의 셸이다 — 경계는 여전히 명시적이다 */}
-          <CopyCommand cmd="ls -d ~/Projects/*/.dira" />
-        </div>
-      </div>
-
-      {err && (err.code === "root" || err.code === "dupRoot" || err.code === "unknown") && (
-        <Alert variant="destructive">
-          <TriangleAlert aria-hidden />
-          <AlertTitle>등록하지 못했습니다</AlertTitle>
-          <AlertDescription>
-            <span className="break-all">{err.message}</span>
-            {err.dup && <Link href={`/p/${err.dup.id}`}>{err.dup.name} 열기</Link>}
-          </AlertDescription>
-        </Alert>
-      )}
-
-      <div className="flex justify-end">
-        <Button type="submit" disabled={pending}>
-          {pending ? "등록 확인 중…" : "프로젝트 등록"}
-        </Button>
-      </div>
-    </form>
-  );
-
-  return (
-    <>
-      {/* 루트 셸 — 마크만 있던 바에 이 화면의 `h1` 행이 **통째로** 올라온다(§비주얼 §4 루트 셸 항).
-          내비·전환기는 넣지 않는다: 목적지가 아직 정해지지 않았다. href는 `/` = 자기 자신이다(§14).
-          헤딩은 `프로젝트` 고정이다 — 0건이라고 `dira`로 바꾸면 마크 옆에 같은 말이 두 번 선다.
-          0건이면 우측이 `설정` 하나다: 생성 폼이 이미 펼쳐져 있는데 그 폼을 여는 버튼을 같은
-          화면에 세우지 않는다(§비주얼 §7). `설정`은 **우측 맨 끝**이고 0건에서도 선다 —
-          두 셸이 같은 자리에 같은 것을 갖는다(§0-4 자리 표 · §비주얼 §4) */}
-      <header className="sticky top-0 z-50 flex h-12 items-center gap-6 border-b bg-background px-6">
-        <BrandMark href="/" />
-        <h1 className="text-lg font-semibold">프로젝트</h1>
-        <div className="ml-auto flex items-center gap-2">
-          {/* **만드는 것이 정문이고 등록이 우회로다**(§0 위계 항 · 요구 `7ee8168e`).
-              자리·라벨은 그대로고 바뀐 것은 변종 둘뿐이다 — primary가 행의 오른쪽 끝(§4-3) */}
-          {!empty && (
-            <>
-              <Button variant="outline" size="sm" onClick={() => setRegistering(true)}>
-                프로젝트 등록
-              </Button>
-              <Button size="sm" onClick={() => setCreating(true)}>
-                새로 만들기
-              </Button>
-            </>
-          )}
-          <SettingsDialog auth={auth} />
-        </div>
-      </header>
-
-      {/* 스크롤하는 것은 이 `main`이다(§비주얼 §4). **본문에 폭 상한이 없다** — 목록이 화면
-          전폭을 쓴다(요청 `27a7a13b`, 티켓 `9b288700`). 등록 폼이 다이얼로그로 내려가면서 이
-          화면은 테이블 화면이 됐고, 폼 폭 규칙(3xl)은 폼이 서는 자리·읽는 산문만 문다
-          (§비주얼 §7 폭 항). 상한이 다시 필요해지면 여기가 아니라 안쪽 상자에 건다 —
-          `main`에 걸면 스크롤바가 화면 오른쪽이 아니라 상한 자리에 선다 */}
-      <main className="min-h-0 w-full flex-1 overflow-y-auto">
-        <div className="w-full space-y-6 px-6 py-6">
-          {/* 읽는 산문이라 폭 상한을 스스로 든다 — 본문 상한이 풀리면서(§비주얼 §7 폭 항)
-              페이지 폭이 대신 물어 주던 것이 없어졌다. 값은 셸 배너 넷과 같다(§4-4) */}
-          {registryError && (
-            <Alert variant="destructive" className="max-w-3xl">
-              <TriangleAlert aria-hidden />
-              <AlertTitle>프로젝트 레지스트리를 읽지 못했습니다</AlertTitle>
-              <AlertDescription className="grid gap-2">
-                <span className="font-mono text-xs break-all">{registryError.message}</span>
-                <CopyCommand cmd={registryError.openCmd} />
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {/* 0건 본문의 첫 줄. 두 글자 규칙(0건이면 `dira`)은 본문에 남지만 태그는 `h2`다 —
-              헤더가 `h1`을 가져갔고 페이지의 `h1`은 하나다(§비주얼 §4 · §7) */}
-          {empty && !showResult && (
-            <div className="max-w-3xl space-y-2">
-              <h2 className="text-lg font-semibold">dira</h2>
-              <p className="text-sm text-muted-foreground">
-                등록된 프로젝트가 없습니다. 하나 만들면 시작합니다.
-              </p>
-            </div>
-          )}
-
-          {children}
-
-          {/* 결과 슬롯 — 등록·생성 어느 쪽으로 성공해도 같은 자리다. 0건에서는 그 자리가
-              "목록 아래"가 아니라 "인라인 생성 폼이 있던 자리"일 뿐 슬롯은 하나다(§비주얼 §7).
-              평소엔 아무것도 없다 */}
-          {showResult ? (
-            <Card className="max-w-3xl gap-3 p-4">
-              <div className="flex items-center justify-between gap-4">
-                <h2 className="text-sm font-medium">
-                  {c ? "만들었습니다" : "등록됨"} — {view.project.name}{" "}
-                  <span className="font-mono text-xs text-muted-foreground">
-                    {view.project.shortRoot}
-                  </span>
-                </h2>
-                <div className="flex items-center gap-2">
-                  <Button
-                    size="sm"
-                    nativeButton={false}
-                    render={<Link href={`/p/${view.project.id}`} />}
-                  >
-                    보드 열기
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={() => setDismissed(true)}>
-                    닫기
-                  </Button>
-                </div>
-              </div>
-              {c && (
-                <div className="space-y-1 text-sm">
-                  <p>
-                    파일 {c.written}개를 만들었습니다.
-                    {c.skipped.length > 0 && (
-                      <span className="text-muted-foreground">
-                        {" "}
-                        이미 있어 건너뜀:{" "}
-                        <span className="font-mono text-xs">{c.skipped.join(" ")}</span>
-                      </span>
-                    )}
-                  </p>
-                  <p className="text-muted-foreground">
-                    엔진 레포 <span className="font-mono text-xs">{c.repo}</span>
-                  </p>
-                  {c.cron ? (
-                    <p>crontab에 등록됨 — 30초 뒤부터 티켓을 물어갑니다</p>
-                  ) : (
-                    // 등록 실패는 성공 보고를 막지 않는다(§0-3). 파일은 그대로 두고 명령을 준다.
-                    <Alert variant="destructive">
-                      <TriangleAlert aria-hidden />
-                      <AlertTitle>crontab에 등록하지 못했습니다</AlertTitle>
-                      <AlertDescription className="grid gap-2">
-                        <span className="break-all">{c.cronError}</span>
-                        <CopyCommand cmd={c.registerCmd} />
-                      </AlertDescription>
-                    </Alert>
-                  )}
-                </div>
-              )}
-              <ConfigTable view={view} />
-            </Card>
-          ) : (
-            empty && (
-              // 0건 온보딩 — **생성 폼이 1차 콘텐츠다**(§0 · §비주얼 §7. 종전에는 등록 폼이었다).
-              // 등록은 한 줄 + `outline` 버튼으로 내려가 다이얼로그를 연다 — 두 줄이 통째로 맞바뀌었다.
-              // 그 줄이 **폼 위**에 서는 이유: 아래로 내리면 `프로젝트 만들기`(제출) 바로 밑에
-              // `프로젝트 등록` 버튼이 붙어 같은 폼의 두 번째 제출로 읽힌다. 위계를 지는 것은
-              // 세로 순서가 아니라 크기다(한 줄 + outline 대 카드 한 장).
-              <>
-                <div className="flex max-w-3xl items-center justify-between gap-4">
-                  <p className="text-sm text-muted-foreground">
-                    이미 만들어 둔 .dira가 있다면 등록합니다.
-                  </p>
-                  <Button variant="outline" size="sm" onClick={() => setRegistering(true)}>
-                    프로젝트 등록
-                  </Button>
-                </div>
-                {/* 그릇만 `Dialog` → `Card p-4`다. `DialogTitle`이 들던 `새 프로젝트`가 `h2`가
-                    되고 `DialogDescription` 한 줄은 그 아래 그대로 남는다 — 이 화면에서
-                    처음 만드는 사람에게 그 문장이 가장 필요하다(§비주얼 §7 온보딩 항) */}
-                <Card className="max-w-3xl gap-4 p-4">
-                  <div className="space-y-1">
-                    <h2 className="text-sm font-medium">새 프로젝트</h2>
-                    <p className="text-xs text-muted-foreground">{CREATE_BLURB}</p>
-                  </div>
-                  <CreateForm
-                    home={home}
-                    onCreated={(s) => {
-                      setMade(s);
-                      setDismissed(false);
-                    }}
-                    onRegister={(r) => {
-                      setRoot(r);
-                      setRegistering(true);
-                    }}
-                  />
-                </Card>
-              </>
-            )
-          )}
-        </div>
-      </main>
-
-      {/* **등록 폼이 서는 그릇은 이제 다이얼로그 하나뿐이다 — 0건에서도 그렇다**(§비주얼 §7).
-          인라인 자리는 생성 폼이 가져갔다. `max-h`+`overflow`는 내려온 산문 때문에 필요하다:
-          `DialogContent`에는 둘 다 없고 `<html>`이 `overflow-hidden`이라, 세로로 좁은 창에서는
-          스크롤도 없이 잘린다 — 잘리는 것이 하필 복사 명령이다(§21이 쓰는 그 값 그대로) */}
-      <Dialog open={registering} onOpenChange={setRegistering}>
-        <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>프로젝트 등록</DialogTitle>
-            <DialogDescription>
-              이미 있는 .dira를 목록에 올립니다. 파일은 만들지 않습니다.
-            </DialogDescription>
-          </DialogHeader>
-          {registerForm}
-        </DialogContent>
-      </Dialog>
-
-      {/* 0건에서는 이 다이얼로그가 열리지 않는다 — 생성 폼이 인라인으로 서 있어 트리거가 없다 */}
-      <CreateDialog
-        open={creating}
-        onOpenChange={setCreating}
-        home={home}
-        onCreated={(s) => {
-          setMade(s);
-          setDismissed(false);
-        }}
-        onRegister={(r) => {
-          setRoot(r);
-          setRegistering(true);
-        }}
-      />
-    </>
   );
 }
 

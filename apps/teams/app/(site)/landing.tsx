@@ -1,9 +1,29 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useTransition } from "react";
+import Link from "next/link";
+import { TriangleAlert } from "lucide-react";
+import { registerProject, type CreateState, type RegisterState } from "@/app/actions";
+import { CREATE_BLURB, ConfigTable, CreateDialog, CreateForm } from "@/components/projects-ui";
+import { CopyCommand } from "@/components/copy-command";
+import { SettingsDialog, type AuthView } from "@/components/settings-dialog";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { slugify } from "@/lib/urls";
 
 import "./fonts.css";
-import "./landing.css";
+// `landing.css`는 `globals.css` 머리의 분할 `@import`가 `landing` 레이어로 싣는다
+// (§비주얼 §46 ①) — 여기서 또 물면 레이어 밖에 중복으로 실려 그 처방이 무효가 된다.
 
 // `.vitepress/theme/Landing.vue`를 옮긴 것이다(§사이트 기반 §갈아 끼우는 것). 텍스트 노드는
 // 0자 갈렸다 — 판정이 `check-landing-prose.py`다. 갈린 것은 그릇뿐이다:
@@ -19,9 +39,25 @@ declare global {
 
 export default function Landing({
   version: initialVersion,
+  fullMode,
+  empty,
+  registryError,
+  auth,
+  home,
   children,
 }: {
   version: string;
+  /** 풀 모드(= 랜딩-only가 아님) — 헤더 버튼 셋 갈림·절 셋 걷힘의 유일한 판정 지점이다
+   *  (§한 코드베이스 §홈 표 · `lib/flags.ts`의 `isLandingOnly` 반대값. `page.tsx`가 계산해 내린다). */
+  fullMode: boolean;
+  /** 프로젝트 0건인가 — 풀 모드에서만 쓰인다(§0 규칙이 자리만 옮겨 그대로 · §비주얼 §46 ⑤). */
+  empty: boolean;
+  /** 레지스트리를 못 읽었을 때. GUI가 고쳐 쓰려 들지 않는다 — 원문 + 여는 명령이다(§7 그대로). */
+  registryError?: { message: string; openCmd: string } | null;
+  /** 헤더 `설정`이 쓴다(§0-4). 랜딩-only에서는 안 읽으므로 `null`이다. */
+  auth?: AuthView | null;
+  /** 경로 피커·생성 폼이 `~`로 친 값을 펴는 데만 쓴다. */
+  home?: string;
   /** 프로젝트 목록 표(§한 코드베이스 §홈). 히어로 CTA 자리에 선다 — 자리만 이 티켓이 정하고
    *  폭·간격·버튼 재배치는 P199-3(designer)·P199-4(조립)의 몫이다. */
   children?: React.ReactNode;
@@ -32,6 +68,163 @@ export default function Landing({
   const [dmg, setDmg] = useState("https://github.com/proofer-tech/dira/releases/latest");
   // 빈 문자열 = 개수를 못 읽은 상태. SSR HTML에도 클라이언트 첫 렌더에도 개수 칸이 없다.
   const [stars, setStars] = useState("");
+
+  // ── 목록 자리(`#projects`)의 상태 — 헤더 `새로 만들기`와 히어로 온보딩이 결과 슬롯을
+  //    공유한다(§7 CreateForm 계약: "성공하면 결과는 목록 아래 결과 슬롯으로 올라간다" —
+  //    어느 그릇으로 만들었느냐와 무관하게 자리가 하나다). 걷힌 `<ProjectsSection>`의 그
+  //    조각을 자리만 옮겨 그대로 잇는다(§비주얼 §46 ⑤).
+  const [creating, setCreating] = useState(false);
+  const [registering, setRegistering] = useState(false);
+  const [registerRoot, setRegisterRoot] = useState("");
+  const [made, setMade] = useState<CreateState | null>(null);
+  const [dismissed, setDismissed] = useState(false);
+  const showResult = !!made?.done && !dismissed;
+
+  const openRegister = (root: string) => {
+    setRegisterRoot(root);
+    setRegistering(true);
+  };
+  const handleCreated = (s: CreateState) => {
+    setMade(s);
+    setDismissed(false);
+  };
+
+  // 등록 다이얼로그 — 헤더에 자기 버튼이 없다(§홈 — `프로젝트 등록`은 안 올린다). 열리는 길은
+  // 둘뿐이다: 0건 온보딩의 "이미 만들어 둔 .dira가 있다면 등록합니다." 줄 · `CreateForm`이
+  // `.dira`가 이미 큐로 있음을 만났을 때의 "등록으로" 되돌림(`openRegister`). 폼 자체는
+  // 걷힌 `<ProjectsSection>`의 그 폼을 자리만 옮긴 것이다(§7).
+  const [registerPending, startRegister] = useTransition();
+  const [registerState, setRegisterState] = useState<RegisterState>({});
+  const [registerName, setRegisterName] = useState("");
+  const registerSlug = slugify(registerName);
+  const registerShowId =
+    (registerName.trim() !== "" && registerSlug === "") || !!registerState.needId;
+  const registerErr = registerState.error;
+  const registerForm = (
+    <form
+      className="space-y-4"
+      onSubmit={(e) => {
+        e.preventDefault();
+        const f = new FormData(e.currentTarget);
+        startRegister(async () => {
+          const r = await registerProject({}, f);
+          setRegisterState(r);
+          if (r.done) {
+            handleCreated({ done: r.done });
+            setRegistering(false);
+            setRegisterName("");
+            setRegisterRoot("");
+          }
+        });
+      }}
+    >
+      <div className="space-y-2">
+        <Label htmlFor="home-register-name">이름</Label>
+        <Input
+          id="home-register-name"
+          name="name"
+          placeholder="dira 자체"
+          value={registerName}
+          onChange={(e) => setRegisterName(e.target.value)}
+        />
+        {registerErr?.code === "name" && (
+          <p className="text-xs text-destructive">{registerErr.message}</p>
+        )}
+      </div>
+      {registerShowId && (
+        <div className="space-y-2">
+          <Label htmlFor="home-register-id">URL 조각</Label>
+          <Input id="home-register-id" name="id" className="font-mono" placeholder="dira" />
+          <p className="text-xs text-muted-foreground">
+            {registerErr &&
+            (registerErr.code === "needId" || registerErr.code === "badId" || registerErr.code === "dupId")
+              ? registerErr.message
+              : "이름에서 URL 조각을 만들 수 없습니다. 직접 정해 주세요 (영문 소문자·숫자·하이픈)."}
+          </p>
+        </div>
+      )}
+      <div className="space-y-2">
+        <Label htmlFor="home-register-root">경로</Label>
+        <Input
+          id="home-register-root"
+          name="root"
+          className="font-mono"
+          placeholder="~/Projects/myproject/.dira"
+          value={registerRoot}
+          onChange={(e) => setRegisterRoot(e.target.value)}
+        />
+        <p className="text-xs text-muted-foreground">절대경로. ~는 확장됩니다</p>
+      </div>
+      {registerErr &&
+        (registerErr.code === "root" || registerErr.code === "dupRoot" || registerErr.code === "unknown") && (
+          <Alert variant="destructive">
+            <TriangleAlert aria-hidden />
+            <AlertTitle>등록하지 못했습니다</AlertTitle>
+            <AlertDescription className="grid gap-2">
+              <span className="break-all">{registerErr.message}</span>
+              {registerErr.dup && <Link href={`/p/${registerErr.dup.id}`}>{registerErr.dup.name} 열기</Link>}
+            </AlertDescription>
+          </Alert>
+        )}
+      <div className="flex justify-end">
+        <Button type="submit" disabled={registerPending}>
+          {registerPending ? "등록 확인 중…" : "프로젝트 등록"}
+        </Button>
+      </div>
+    </form>
+  );
+
+  // 생성·등록 성공 결과 — 걷힌 `<ProjectsSection>`과 같은 표(§7). `created`가 있으면 만든
+  // 파일 수·엔진 레포·crontab 등록 여부 세 줄이 표 위에 더 붙는다(생성만의 정보).
+  const view = made?.done;
+  const createdInfo = made?.created;
+  const resultCard = view && (
+    <Card className="max-w-3xl gap-3 p-4">
+      <div className="flex items-center justify-between gap-4">
+        <h2 className="text-sm font-medium">
+          {createdInfo ? "만들었습니다" : "등록됨"} — {view.project.name}{" "}
+          <span className="font-mono text-xs text-muted-foreground">{view.project.shortRoot}</span>
+        </h2>
+        <div className="flex items-center gap-2">
+          <Button size="sm" nativeButton={false} render={<Link href={`/p/${view.project.id}`} />}>
+            보드 열기
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setDismissed(true)}>
+            닫기
+          </Button>
+        </div>
+      </div>
+      {createdInfo && (
+        <div className="space-y-1 text-sm">
+          <p>
+            파일 {createdInfo.written}개를 만들었습니다.
+            {createdInfo.skipped.length > 0 && (
+              <span className="text-muted-foreground">
+                {" "}
+                이미 있어 건너뜀: <span className="font-mono text-xs">{createdInfo.skipped.join(" ")}</span>
+              </span>
+            )}
+          </p>
+          <p className="text-muted-foreground">
+            엔진 레포 <span className="font-mono text-xs">{createdInfo.repo}</span>
+          </p>
+          {createdInfo.cron ? (
+            <p>crontab에 등록됨 — 30초 뒤부터 티켓을 물어갑니다</p>
+          ) : (
+            <Alert variant="destructive">
+              <TriangleAlert aria-hidden />
+              <AlertTitle>crontab에 등록하지 못했습니다</AlertTitle>
+              <AlertDescription className="grid gap-2">
+                <span className="break-all">{createdInfo.cronError}</span>
+                <CopyCommand cmd={createdInfo.registerCmd} />
+              </AlertDescription>
+            </Alert>
+          )}
+        </div>
+      )}
+      <ConfigTable view={view} />
+    </Card>
+  );
 
   useEffect(() => {
     // 스크롤 진입 등장(DESIGN §랜딩 §모션 §판정표 ⑥). JS로 움직이므로 전역
@@ -127,12 +320,15 @@ export default function Landing({
   return (
     <div className="dira-landing">
 
+{/* ① 릴리스 배너 — 풀 모드에서 안 선다(§한 코드베이스 §홈 표). 파는 절이라서다. */}
+{!fullMode && (
 <div className="ann">
   <div className="wrap">
     <span>자동 업데이트를 켜고 최신 버전(v{version})의 dira를 써보세요!</span>
     <a href="https://github.com/proofer-tech/dira/releases">릴리스 보기</a>
   </div>
 </div>
+)}
 
 <header>
   <div className="wrap">
@@ -141,7 +337,10 @@ export default function Landing({
       dira
     </a>
     <nav>
-      <a className="btn" href="/docs/">매뉴얼</a>
+      {/* ② 640 이하에서 `매뉴얼`·`프로젝트 관리`를 같이 걷는다 — 둘 다 이 페이지에서 회수된다
+          (매뉴얼은 footer §문서 열, 프로젝트 관리는 그 앵커의 목적지가 바로 아래. §비주얼 §46 ③).
+          `btn-manual`은 풀 모드에서만 붙는다 — 랜딩-only 헤더(넷 이하)는 이 접힘 규칙 밖이다. */}
+      <a className={fullMode ? "btn btn-manual" : "btn"} href="/docs/">매뉴얼</a>
       <a className="btn star"
          href="https://github.com/proofer-tech/dira" target="_blank" rel="noopener"
          aria-label="Star proofer-tech/dira on GitHub">
@@ -149,7 +348,23 @@ export default function Landing({
         Star
         {stars && <span className="star-count" aria-hidden="true">{stars}</span>}
       </a>
-      <a className="btn btn-primary" href={dmg}>앱 다운로드</a>
+      {/* ② 헤더 `앱 다운로드` → `프로젝트 관리`·`새로 만들기`·`설정` 셋으로 갈린다(§한 코드베이스
+          §홈 표 · §비주얼 §46 ③). `프로젝트 관리`는 홈 목록 절로 가는 앵커다(`/#projects`) — 새
+          라우트를 안 만든다. `새로 만들기`·`설정`은 지금 `/` 헤더의 그 버튼 그대로다 — `프로젝트
+          등록`은 이름이 온 셋에 없어 안 올린다. 0건이면 `새로 만들기`가 빠져 primary가 0개다. */}
+      {fullMode ? (
+        <>
+          <a className="btn btn-manage" href="/#projects">프로젝트 관리</a>
+          {!empty && (
+            <button type="button" className="btn btn-primary" onClick={() => setCreating(true)}>
+              새로 만들기
+            </button>
+          )}
+          {auth && <SettingsDialog auth={auth} trigger="text" />}
+        </>
+      ) : (
+        <a className="btn btn-primary" href={dmg}>앱 다운로드</a>
+      )}
     </nav>
   </div>
 </header>
@@ -175,15 +390,66 @@ export default function Landing({
     완수하며 그 과정을 마치 jira처럼 실시간으로 볼 수 있습니다. PC에 나만의 멀티 에이전트
     시스템을 아주 쉽게 구축해보세요.
   </p>
-  <div className="cta">
-    <a className="btn btn-primary btn-lg" href={dmg}>macOS 앱 다운로드</a>
-    <a className="btn btn-lg" href="/docs/install">설치 가이드</a>
-  </div>
-  <p className="cta-note">with Claude Code · Codex</p>
-
-  {/* 프로젝트 목록(§한 코드베이스 §홈) — 히어로 CTA 자리에 선다. 목록이 shadcn(tailwind)이라
-      `overflow-x-auto`만 얹는다. 폭·간격은 P199-3(designer)이 정한다 — 이 티켓은 자리만 낸다. */}
-  {children && <div className="overflow-x-auto">{children}</div>}
+  {/* ③ 히어로 `.cta` 둘 + `.cta-note` → 풀 모드에서 그 자리에 프로젝트 목록이 선다(§한
+      코드베이스 §홈 표). `id="projects"`가 그 슬롯이다 — 표가 아니라 **자리**를 가리킨다
+      (0건에서는 목록이 아니라 온보딩 폼이, 오류에서는 배너가 그 자리에 선다. §비주얼 §46 ②). */}
+  {fullMode ? (
+    <div id="projects">
+      {registryError ? (
+        <Alert variant="destructive" className="max-w-3xl">
+          <TriangleAlert aria-hidden />
+          <AlertTitle>프로젝트 레지스트리를 읽지 못했습니다</AlertTitle>
+          <AlertDescription className="grid gap-2">
+            <span className="font-mono text-xs break-all">{registryError.message}</span>
+            <CopyCommand cmd={registryError.openCmd} />
+          </AlertDescription>
+        </Alert>
+      ) : (
+        <>
+          {empty && !showResult && (
+            <div className="max-w-3xl space-y-2">
+              <h2 className="text-lg font-semibold">dira</h2>
+              <p className="text-sm text-muted-foreground">
+                등록된 프로젝트가 없습니다. 하나 만들면 시작합니다.
+              </p>
+            </div>
+          )}
+          {children}
+          {showResult ? (
+            resultCard
+          ) : (
+            empty && (
+              <>
+                <div className="mt-6 flex max-w-3xl items-center justify-between gap-4">
+                  <p className="text-sm text-muted-foreground">
+                    이미 만들어 둔 .dira가 있다면 등록합니다.
+                  </p>
+                  <Button variant="outline" size="sm" onClick={() => setRegistering(true)}>
+                    프로젝트 등록
+                  </Button>
+                </div>
+                <Card className="mt-4 max-w-3xl gap-4 p-4">
+                  <div className="space-y-1">
+                    <h2 className="text-sm font-medium">새 프로젝트</h2>
+                    <p className="text-xs text-muted-foreground">{CREATE_BLURB}</p>
+                  </div>
+                  <CreateForm home={home ?? ""} onCreated={handleCreated} onRegister={openRegister} />
+                </Card>
+              </>
+            )
+          )}
+        </>
+      )}
+    </div>
+  ) : (
+    <>
+      <div className="cta">
+        <a className="btn btn-primary btn-lg" href={dmg}>macOS 앱 다운로드</a>
+        <a className="btn btn-lg" href="/docs/install">설치 가이드</a>
+      </div>
+      <p className="cta-note">with Claude Code · Codex</p>
+    </>
+  )}
 
   <figure>
     <img className="shot" src="/shots/board.gif" alt="dira 보드 화면. 대기·진행중·완료 세 레인에 티켓 카드가 놓여 있고, 그중 한 장이 다음 레인으로 건너갑니다." width="1600" height="1000"/>
@@ -250,6 +516,8 @@ export default function Landing({
   </div>
 </section>
 
+{/* ⑥ 설치 3단계 — 풀 모드에서 안 선다(§한 코드베이스 §홈 표). 파는 절이라서다. */}
+{!fullMode && (
 <section className="wrap reveal">
   <p className="eyebrow">설치</p>
   <h2>다운로드하여 설치하면 끝</h2>
@@ -287,6 +555,7 @@ export default function Landing({
     </div>
   </div>
 </section>
+)}
 
 <section className="wrap plan-sec reveal">
   <p className="eyebrow">플랜</p>
@@ -341,6 +610,8 @@ export default function Landing({
 
 </main>
 
+{/* ⑧ 마지막 CTA(`.closing`) — 풀 모드에서 절째 안 선다(§한 코드베이스 §홈 표). */}
+{!fullMode && (
 <div className="closing reveal">
   <div className="wrap">
     <h2>나만의 AI 팀을 만들어보세요</h2>
@@ -353,6 +624,7 @@ export default function Landing({
     </div>
   </div>
 </div>
+)}
 
 <footer>
   <div className="wrap">
@@ -367,7 +639,9 @@ export default function Landing({
       <div className="fcol">
         <h4>제품</h4>
         <ul>
-          <li><a href={dmg}>다운로드</a></li>
+          {/* ⑨ footer `제품 › 다운로드` — 풀 모드에서 그 한 줄만 걷는다(§한 코드베이스 §홈 표).
+              `릴리스`·`엔진`과 나머지 세 열은 그대로다. */}
+          {!fullMode && <li><a href={dmg}>다운로드</a></li>}
           <li><a href="https://github.com/proofer-tech/dira/releases">릴리스</a></li>
           <li><a href="/docs/what-is-dira">엔진</a></li>
         </ul>
@@ -397,6 +671,31 @@ export default function Landing({
     </div>
   </div>
 </footer>
+
+{fullMode && (
+  <>
+    {/* 헤더 `새로 만들기`의 그릇 — 걷힌 `<ProjectsSection>`과 같은 `CreateDialog`다(§0-3).
+        `.dira`가 이미 큐로 있으면 `onRegister`로 아래 등록 다이얼로그를 연다. */}
+    <CreateDialog
+      open={creating}
+      onOpenChange={setCreating}
+      home={home ?? ""}
+      onCreated={handleCreated}
+      onRegister={openRegister}
+    />
+    {/* 등록 다이얼로그 — 헤더에 자기 버튼이 없다(§홈 — `프로젝트 등록`은 안 올린다). 여는 길은
+        0건 온보딩의 "등록합니다" 줄과 `CreateForm`의 "등록으로" 되돌림 둘뿐이다. */}
+    <Dialog open={registering} onOpenChange={setRegistering}>
+      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>프로젝트 등록</DialogTitle>
+          <DialogDescription>이미 있는 .dira를 목록에 올립니다. 파일은 만들지 않습니다.</DialogDescription>
+        </DialogHeader>
+        {registerForm}
+      </DialogContent>
+    </Dialog>
+  </>
+)}
 
     </div>
   );
