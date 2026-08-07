@@ -339,9 +339,9 @@ export default function Landing({
       dira
     </a>
     <nav>
-      {/* ② 640 이하에서 `매뉴얼`·`프로젝트 관리`를 같이 걷는다 — 둘 다 이 페이지에서 회수된다
-          (매뉴얼은 footer §문서 열, 프로젝트 관리는 그 앵커의 목적지가 바로 아래. §비주얼 §46 ③).
-          `btn-manual`은 풀 모드에서만 붙는다 — 랜딩-only 헤더(넷 이하)는 이 접힘 규칙 밖이다. */}
+      {/* ② 640 이하에서 `매뉴얼`을 걷는다 — 이 페이지에서 회수된다(footer §문서 열.
+          §비주얼 §46 ③). `btn-manual`은 풀 모드에서만 붙는다 — 랜딩-only 헤더(넷 이하)는
+          이 접힘 규칙 밖이다. */}
       <a className={fullMode ? "btn btn-manual" : "btn"} href="/docs/">매뉴얼</a>
       <a className="btn star"
          href="https://github.com/proofer-tech/dira" target="_blank" rel="noopener"
@@ -350,13 +350,12 @@ export default function Landing({
         Star
         {stars && <span className="star-count" aria-hidden="true">{stars}</span>}
       </a>
-      {/* ② 헤더 `앱 다운로드` → `프로젝트 관리`·`새로 만들기`·`설정` 셋으로 갈린다(§한 코드베이스
-          §홈 표 · §비주얼 §46 ③). `프로젝트 관리`는 홈 목록 절로 가는 앵커다(`/#projects`) — 새
-          라우트를 안 만든다. `새로 만들기`·`설정`은 지금 `/` 헤더의 그 버튼 그대로다 — `프로젝트
-          등록`은 이름이 온 셋에 없어 안 올린다. 0건이면 `새로 만들기`가 빠져 primary가 0개다. */}
+      {/* ② 헤더 `앱 다운로드` → `새로 만들기`·`설정` 둘로 갈린다(§한 코드베이스 §홈 표 ·
+          §비주얼 §46 ③). `프로젝트 관리`는 목적지가 자기가 서 있는 페이지의 꼭대기라 안
+          올린다(`/#projects`는 이미 이 페이지에 열려 있다) — §홈 §자기 자신을 가리키던 버튼.
+          0건이면 `새로 만들기`가 빠져 primary가 0개다. */}
       {fullMode ? (
         <>
-          <a className="btn btn-manage" href="/#projects">프로젝트 관리</a>
           {!empty && (
             <button type="button" className="btn btn-primary" onClick={() => setCreating(true)}>
               새로 만들기
