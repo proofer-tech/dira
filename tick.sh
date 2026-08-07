@@ -138,6 +138,96 @@ acquire_slock() {
   printf %s "$$" > "$SLOCK/pid"
 }
 
+# `personas/<이름>/limit` -> 정수 하나, 또는 "" = 상한 없음. 파서를 만들지 않는다.
+# 양끝 공백·후행 개행은 값이 아니다 - 화면이 쓰는 사이드카는 전부 끝에 `\n`이 붙어서
+# `2\n`·` 2 `·`2\n\n`이 전부 정수 2여야 한다(`read`가 첫 줄만 읽고 양끝 공백을 떼는 것이
+# 그 규약 그대로다). 정수가 아니면 **상한 없음 + WARN**이고 0으로 읽지 않는다 - 오타 하나가
+# 페르소나를 영구히 굶기는 쪽으로 떨어지면 안 된다.
+# (아래 §선점 판정이 이 함수를 워커 락 exit 경로에서 부르므로 CMD 분기보다 앞에 선다.)
+persona_limit() {
+  LIMF="${TICKET_PERSONAS:-$TICKET_ROOT/personas}/$1/limit"
+  [ -f "$LIMF" ] || return 0
+  PL=""; read -r PL < "$LIMF" 2>/dev/null
+  case "$PL" in
+    '') ;;                                             # 빈 파일 = 상한 없음(기본값)
+    *[!0-9]*) log "WARN 페르소나 상한이 정수가 아니다: $LIMF ($PL) - 상한 없이 돈다" ;;
+    *) printf %s "$PL" ;;
+  esac
+}
+
+# 그 페르소나가 지금 물고 있는 수. 단위는 `.wip` 하나고 사본이 없다 - 보드가 세는 수와 같은
+# 수이고, 손 claim(session_id 없이 진행중인 티켓)도 그래서 공짜로 같이 센다. 락 디렉터리 같은
+# 두 번째 표현을 만들면 스테일이 그 페르소나를 영구히 0으로 굶긴다.
+# 판정은 tickets.py를 그대로 불러 쓴다(NFC·상태 접미사·persona 문자 규칙이 한 벌이어야 한다).
+persona_wip() {
+  python3 -c 'import sys
+sys.path.insert(0, sys.argv[1])
+import tickets as T
+n = 0
+for p in T.in_progress(sys.argv[2]):
+    try: fm, _, end = T.read_fm(p)
+    except (OSError, UnicodeDecodeError): continue
+    if end >= 0 and T.persona_of(fm) == sys.argv[3]: n += 1
+print(n)' "$CODE" "$TICKET_ROOT" "$1"
+}
+
+# --- §1-3 §5 — 선점: 바쁜 워커의 즉시 exit 경로가 유일하게 도는 자리다 ---
+# 중앙 스케줄러가 없다. 전원이 바쁘면 아무도 큐를 안 보므로, 워커 락에 막혀 나가는 이 순간이
+# 유일하게 남은 "바쁜 워커가 도는 자리"다(새 프로세스·새 데몬 0개). 새 잠금도 0개다 - claim처럼
+# 자원을 다투는 게 아니라 파일을 읽기만 하고, 각 워커는 **자기 자신이 물고 있는 티켓일 때만**
+# 죽인다. 전원이 같은 파일을 보고 같은 계산을 해도 "내 티켓이 전역 최저다"는 결정적으로 한
+# 워커에서만 참이라 정확히 하나만 죽는다 - 조율이 필요 없다.
+maybe_preempt() {
+  local WROWS VPATH VHASH VEFF VASSIGN VPID VOWNER
+  local PUSH5 q_path q_hash q_kind q_persona q_prio q_base q_eff PLIM PWIP
+  local WT COMMIT
+  WROWS=$(python3 "$PY" wips "$TICKET_ROOT" 2>/dev/null) || return 0
+  [ -z "$WROWS" ] && return 0
+
+  # 조건 2·3 — 도는 `.wip` 전부 중 유효 우선순위가 최저인 것(동률이면 assigned_at이 가장
+  # 늦은 것 = 가장 나중에 시작한 것). 정렬 키 하나로 둘 다 접는다.
+  IFS='|' read -r VPATH VHASH VEFF VASSIGN VPID VOWNER <<< \
+    "$(printf '%s\n' "$WROWS" | sort -t'|' -k3,3n -k4,4r | head -1)"
+  [ -z "$VPATH" ] && return 0
+  [ "$VEFF" -lt 5 ] || return 0                     # 5끼리는 안 끊는다
+  case "$VOWNER" in *" / $TICKET_NAME-"*) ;; *) return 0 ;; esac   # 내 티켓이 아니면 손대지 않는다
+  [ -f "$VPATH" ] || return 0
+  case "$VPID" in ''|*[!0-9]*) return 0 ;; esac
+
+  # 조건 1 — 유효 5 후보가 있고 자기 게이트(deps·페르소나 상한)를 다 지난다. `select`가 이미
+  # deps 미충족·할당됨을 걸렀으니 여기서는 페르소나 상한만 본다(선정 루프와 같은 판정).
+  PUSH5=""
+  while IFS='|' read -r q_path q_hash q_kind q_persona q_prio q_base q_eff; do
+    [ "$q_eff" = "5" ] || continue
+    if [ -n "$q_persona" ]; then
+      PLIM=$(persona_limit "$q_persona")
+      if [ -n "$PLIM" ]; then
+        PWIP=$(persona_wip "$q_persona")
+        [ "$PWIP" -ge "$PLIM" ] && continue
+      fi
+    fi
+    PUSH5="$q_hash"; break
+  done < <(python3 "$PY" select "$TICKET_ROOT")
+  [ -z "$PUSH5" ] && return 0
+
+  # 끊긴 티켓 본문에 무슨 일이 있었는지 남긴다(§1-3 §5 §표) - git은 있으면 쓰고 없으면 그
+  # 항목만 빈다(2>/dev/null, 의존성 0을 안 깬다).
+  WT="$TICKET_ROOT/worktrees/$TICKET_NAME"
+  COMMIT=$(git -C "$WT" rev-parse --short HEAD 2>/dev/null)
+  {
+    printf '\n## 선점\n\n'
+    printf '| | |\n|---|---|\n'
+    printf '| 시각 | %s |\n' "$(date '+%F %T')"
+    printf '| 밀어낸 5 | %s |\n' "$PUSH5"
+    printf '| 워커 · 브랜치 | %s · wt/%s |\n' "$TICKET_NAME" "$TICKET_NAME"
+    printf '| 워크트리 | %s |\n' "$WT"
+    printf '| 커밋 | %s |\n' "$COMMIT"
+    printf '| 회수 | `.dira/protocols/재디스패치-복구.md`를 읽고 그대로 하세요. |\n'
+  } >> "$VPATH"
+  log "PREEMPT $VHASH -> $PUSH5 pid=$VPID"
+  kill -TERM "$VPID" 2>/dev/null
+}
+
 CMD="${1:-tick}"
 
 case "$CMD" in
@@ -257,6 +347,7 @@ if [ "$CMD" = "tick" ]; then
   if ! mkdir "$LOCK" 2>/dev/null; then
     OWNER=$(cat "$LOCK/pid" 2>/dev/null)
     if [ -n "$OWNER" ] && kill -0 "$OWNER" 2>/dev/null; then
+      maybe_preempt
       log "SKIP 이 워커가 아직 티켓을 물고 있다 pid=$OWNER"
       exit 0
     fi
@@ -318,38 +409,6 @@ printf '%s\n' "$CANDS" | grep -q '|1$' && HASPRIO1=1
 if [ "$CMD" = "tick" ] && { [ -n "$LIMITED" ] || [ -n "$HASPRIO1" ]; }; then
   acquire_slock || exit 0
 fi
-
-# `personas/<이름>/limit` -> 정수 하나, 또는 "" = 상한 없음. 파서를 만들지 않는다.
-# 양끝 공백·후행 개행은 값이 아니다 - 화면이 쓰는 사이드카는 전부 끝에 `\n`이 붙어서
-# `2\n`·` 2 `·`2\n\n`이 전부 정수 2여야 한다(`read`가 첫 줄만 읽고 양끝 공백을 떼는 것이
-# 그 규약 그대로다). 정수가 아니면 **상한 없음 + WARN**이고 0으로 읽지 않는다 - 오타 하나가
-# 페르소나를 영구히 굶기는 쪽으로 떨어지면 안 된다.
-persona_limit() {
-  LIMF="${TICKET_PERSONAS:-$TICKET_ROOT/personas}/$1/limit"
-  [ -f "$LIMF" ] || return 0
-  PL=""; read -r PL < "$LIMF" 2>/dev/null
-  case "$PL" in
-    '') ;;                                             # 빈 파일 = 상한 없음(기본값)
-    *[!0-9]*) log "WARN 페르소나 상한이 정수가 아니다: $LIMF ($PL) - 상한 없이 돈다" ;;
-    *) printf %s "$PL" ;;
-  esac
-}
-
-# 그 페르소나가 지금 물고 있는 수. 단위는 `.wip` 하나고 사본이 없다 - 보드가 세는 수와 같은
-# 수이고, 손 claim(session_id 없이 진행중인 티켓)도 그래서 공짜로 같이 센다. 락 디렉터리 같은
-# 두 번째 표현을 만들면 스테일이 그 페르소나를 영구히 0으로 굶긴다.
-# 판정은 tickets.py를 그대로 불러 쓴다(NFC·상태 접미사·persona 문자 규칙이 한 벌이어야 한다).
-persona_wip() {
-  python3 -c 'import sys
-sys.path.insert(0, sys.argv[1])
-import tickets as T
-n = 0
-for p in T.in_progress(sys.argv[2]):
-    try: fm, _, end = T.read_fm(p)
-    except (OSError, UnicodeDecodeError): continue
-    if end >= 0 and T.persona_of(fm) == sys.argv[3]: n += 1
-print(n)' "$CODE" "$TICKET_ROOT" "$1"
-}
 
 # 전체 큐의 진행중 수(페르소나 무관) - 1 게이트(§1-3)가 "모든 워커가 idle"을 판정하는 값.
 # 워커 락을 세지 않는 이유는 위 persona_wip과 같다(락에서 프로젝트를 역추적할 수 없다).

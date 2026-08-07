@@ -2,12 +2,13 @@
 """§1-3 우선순위 자체검증(docs/DESIGN.md §1-3): frontmatter `priority:`가 dot과 디스패치
 순서를 같이 정하는가.
 
-판정은 임시 큐에서만 낸다(§제약 1 — 도그푸딩 큐를 안 쓴다). §1-3 §검증의 ①~⑥·⑪을 잰다 -
-⑦~⑩(선점)은 다음 티켓(`40ce8b2a`)의 몫이라 여기서 안 잰다.
+판정은 임시 큐에서만 낸다(§제약 1 — 도그푸딩 큐를 안 쓴다). §1-3 §검증의 ①~⑪을 전부 잰다.
 
 ①~③·⑤·⑥은 `tickets.py`(scan·select) 순수 로직이라 서브프로세스로 잰다. ④(1 게이트)는
 `tick.sh` 선정 루프의 일이라 워커 + `dryrun`으로 잰다 - dryrun은 읽기만 해서 claim이 없고
-그래서 ⑪(큐 무수정) 감사와 같은 판에 넣을 수 있다.
+그래서 ⑪(큐 무수정) 감사와 같은 판에 넣을 수 있다. ⑦~⑩(선점, §1-3 §5)은 가짜 스트리밍
+엔진(init 한 줄 + `cat`으로 산다, test_unassign_force.py와 같은 관용구)으로 실제 디스패치
+한 바퀴를 돌려 잰다 - 죽이는 경로가 §2-5 강제 종료와 글자 그대로 같아서 흉내로는 못 잰다.
 
 실패하면 assert로 죽는다.
 """
@@ -17,6 +18,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PY = os.path.join(HERE, "tickets.py")
@@ -190,5 +192,160 @@ try:
     shutil.rmtree(workers, ignore_errors=True)
 
     print("OK - test_priority §1-3 §검증 ①~⑥·⑪")
+
+    # --- ⑦~⑨ 선점(§1-3 §5) — 실제 디스패치 한 바퀴, §2-5 강제 종료와 같은 경로 ---
+    FAKE_ENGINE = """\
+#!/bin/bash
+printf '{"type":"system","subtype":"init"}\\n'
+exec cat > /dev/null
+"""
+    WORKER_TMPL = """\
+#!/bin/bash
+TICKET_NAME="{name}"
+TICKET_CWD="{tmp}"
+TICKET_INPROGRESS=".wip"
+TICKET_DONE=".done"
+TICKET_FEED_TIMEOUT=30
+TICKET_MAXRUN=120
+TICKET_ENGINE=("{tmp}/fake-engine.sh" --input-format stream-json)
+. "{tick}"
+"""
+
+    def mkfile(path, body, mode=0o644):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(body)
+        os.chmod(path, mode)
+        return path
+
+    def wait_for(cond, limit=40, step=0.5):
+        for _ in range(int(limit / step)):
+            if cond():
+                return True
+            time.sleep(step)
+        return False
+
+    workers = os.path.join(root, "workers")
+    local2 = os.path.join(tmp, "local2")
+    os.makedirs(local2, exist_ok=True)
+    penv = dict(os.environ, TICKET_LOCAL=local2)
+    mkfile(os.path.join(tmp, "fake-engine.sh"), FAKE_ENGINE, 0o755)
+    w1 = mkfile(os.path.join(workers, "w1.sh"),
+                WORKER_TMPL.format(name="w1", tmp=tmp, tick=TICK), 0o755)
+    w2 = mkfile(os.path.join(workers, "w2.sh"),
+                WORKER_TMPL.format(name="w2", tmp=tmp, tick=TICK), 0o755)
+    w3 = mkfile(os.path.join(workers, "w3.sh"),
+                WORKER_TMPL.format(name="w3", tmp=tmp, tick=TICK), 0o755)
+    runlog_path = os.path.join(workers, "runner.log")
+
+    def runlog():
+        try:
+            with open(runlog_path, encoding="utf-8") as f:
+                return f.read()
+        except OSError:
+            return ""
+
+    def dispatch_busy(w, h, prio_line=""):
+        """워커 w를 티켓 h에 실제로 디스패치해 살려 둔다(가짜 엔진이 init+cat으로 버틴다)."""
+        mkfile(os.path.join(root, "tickets", h + ".md"),
+               "---\nticket: {}\ntitle: t\n{}---\n\n## Goal\ntest\n".format(h, prio_line))
+        p = subprocess.Popen([w, "tick"], env=penv,
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        procs.append(p)
+        wip = os.path.join(root, "tickets", h + ".wip.md")
+        assert wait_for(lambda: os.path.exists(wip) and "inbox:" in
+                        open(wip, encoding="utf-8").read()), \
+            "{} 디스패치가 안 섰다\n{}".format(h, runlog())
+        return wip
+
+    procs = []
+    try:
+        # --- ⑧ 5끼리는 안 끊는다 — 도는 것 전부가 유효 5면 아무도 안 죽는다 ---
+        wip_a = dispatch_busy(w3, "aaaa1001", "priority: 5\n")
+        mkfile(os.path.join(root, "tickets", "bbbb1002.md"),
+               "---\nticket: bbbb1002\ntitle: t\npriority: 5\n---\n\n## Goal\ntest\n")
+        before = len(runlog())
+        subprocess.run([w3, "tick"], capture_output=True, text=True, env=penv, timeout=30)
+        added = runlog()[before:]
+        assert "PREEMPT" not in added, "도는 것이 전부 유효 5인데 죽였다:\n" + added
+        assert os.path.exists(wip_a), "5인데 죽어서 열림으로 돌아갔다"
+        os.remove(os.path.join(root, "tickets", "bbbb1002.md"))   # 다음 시나리오를 오염시키지 않는다
+
+        # --- ⑦ 선점 — 워커 전원이 바쁜 판에서 5를 넣으면 유효 최저 하나만 죽는다 ---
+        # w1은 eff 3, w2는 eff 2(전역 최저) - 1은 안 쓴다(1 게이트가 걸려 디스패치 자체가
+        # 안 선다 - 이미 진행중 티켓이 있는 판이라서다, §1-3 §1 게이트). attempts를 미리
+        # 심어 ⑨(무변)도 같이 잰다.
+        wip_w1 = dispatch_busy(w1, "cccc1003", "priority: 3\n")
+        wip_w2 = dispatch_busy(w2, "dddd1004", "priority: 2\nattempts: 2\n")
+        mkfile(os.path.join(root, "tickets", "eeee1005.md"),
+               "---\nticket: eeee1005\ntitle: t\npriority: 5\n---\n\n## Goal\ntest\n")
+
+        # w1의 것은 전역 최저가 아니므로 w1은 아무것도 안 죽인다
+        before = len(runlog())
+        subprocess.run([w1, "tick"], capture_output=True, text=True, env=penv, timeout=30)
+        added = runlog()[before:]
+        assert "PREEMPT" not in added, "내 티켓이 최저가 아닌데 죽였다:\n" + added
+        assert os.path.exists(wip_w1) and os.path.exists(wip_w2), \
+            "죽으면 안 되는 세션이 죽었다"
+
+        # w2의 것이 전역 최저라 w2가 자기를 끊는다 - 정확히 하나만.
+        # KILLED는 부모가 release() 한 *뒤에* 찍는다(§2-5 §로그) - 파일이 먼저 사라지고 로그가
+        # 뒤따르는 창이 있으므로 로그로 기다린다(파일 부재만 보면 이 창에서 드물게 떤다).
+        before = len(runlog())
+        subprocess.run([w2, "tick"], capture_output=True, text=True, env=penv, timeout=30)
+        assert wait_for(lambda: "KILLED dddd1004" in runlog(), 20), \
+            "선점이 최저 티켓을 안 죽였다:\n" + runlog()[before:]
+        added = runlog()[before:]
+        assert re.search(r"PREEMPT dddd1004 -> eeee1005 pid=\d+", added), \
+            "PREEMPT 로그가 없다:\n" + added
+        assert not os.path.exists(wip_w2), "KILLED가 찍혔는데 .wip이 안 풀렸다"
+        assert os.path.exists(wip_w1), "정확히 하나만 죽어야 하는데 w1도 죽었다"
+
+        backlog = os.path.join(root, "tickets", "dddd1004.md")
+        assert wait_for(lambda: os.path.exists(backlog), 10), \
+            "끊긴 티켓이 열림으로 안 돌아왔다: " + str(os.listdir(os.path.join(root, "tickets")))
+        body = open(backlog, encoding="utf-8").read()
+        assert not re.search(r"^(session_id|pid|inbox):[ \t]*\S", body, re.M), \
+            "할당 값이 안 비었다\n" + body
+
+        # ⑨ attempts 무변 — 선점은 그 세션의 실패가 아니다
+        assert "attempts: 2" in body, "선점이 attempts를 건드렸다\n" + body
+
+        # `## 선점` 절 — §1-3 §5 §표대로 시각·민 해시·워커·브랜치·워크트리·회수 안내
+        assert "## 선점" in body, body
+        assert "밀어낸 5 | eeee1005" in body, body
+        assert "w2 · wt/w2" in body, "워커·브랜치가 없다\n" + body
+        assert os.path.join(root, "worktrees", "w2") in body, "워크트리 절대경로가 없다\n" + body
+        assert "재디스패치-복구.md" in body, "회수 안내가 없다\n" + body
+
+        print("OK - test_priority §1-3 §검증 ⑦~⑨")
+    finally:
+        for p in procs:
+            try:
+                p.kill()
+                p.wait(timeout=5)
+            except Exception:
+                pass
+
+    # --- ⑩ git 없이도 돈다 ---
+    # tick.sh는 자기 PATH를 표준 시스템 디렉터리로 재설정한다(§선점 이전부터 있던 값이고
+    # 이 샌드박스엔 git이 /usr/bin·/opt/homebrew/bin 양쪽에 다 있다) - 그래서 디스패치
+    # 전체를 git 없는 PATH로 강제할 방법이 없다. 대신 §선점이 실제로 실행하는 것과 글자
+    # 그대로 같은 명령 모양을 git이 전혀 없는 PATH에서 직접 돌려, "명령 없음"도 2>/dev/null이
+    # 삼키고 스크립트가 죽지 않는지를 잰다 - 워크트리가 git 저장소가 아닐 때(위 검증에서 이미
+    # 실측)와 git이 아예 없을 때가 이 코드 경로에서는 같은 실패로 접힌다.
+    r = subprocess.run(
+        ["/bin/bash", "-c",
+         'set -uo pipefail; WT=/no/such/repo; '
+         'COMMIT=$(git -C "$WT" rev-parse --short HEAD 2>/dev/null); '
+         'printf "[%s]" "$COMMIT"'],
+        env=dict(os.environ, PATH="/no/such/bin-dir"),
+        capture_output=True, text=True, timeout=10)
+    assert r.returncode == 0, "git 없을 때 스크립트가 죽었다: " + r.stderr
+    assert r.stdout == "[]", "git 없을 때 커밋 항목이 안 비었다: " + r.stdout
+    assert "밀어낸 5 | eeee1005" in body and "| 커밋 |  |" in body, \
+        "실제 선점에서도 워크트리가 저장소가 아니면 커밋 항목이 빈다는 사실이 안 보인다\n" + body
+
+    print("OK - test_priority §1-3 §검증 ⑩")
 finally:
     shutil.rmtree(tmp, ignore_errors=True)

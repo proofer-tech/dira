@@ -2,6 +2,7 @@
 """티켓 큐 헬퍼(프로젝트 무관). <루트> = `tickets/`(큐)와 `personas/`를 담은 티켓 루트.
 
 select <루트>          미할당 열린 티켓들을 오래된 순으로 -> "path|hash|kind|persona|priority|baseline|effective"
+wips   <루트>          진행중(`.wip`) 티켓 전부 -> "path|hash|effective|assigned_at|pid|owner"
 assign <path> <sid>    frontmatter에 session_id/assigned_at 기록
 clear  <path>          frontmatter의 session_id/assigned_at 비우기 (할당 취소)
 list   <루트>          열린 티켓 전체 상태 표
@@ -820,6 +821,30 @@ def main():
                 print("{}|{}|{}|{}|{}|{}|{}".format(
                     r["path"], r["hash"], r["kind"], r["persona"],
                     r["priority"], r["baseline"], r["effective"]))
+        return
+
+    if cmd == "wips":
+        # §1-3 §5 — 선점의 피해자 후보. "누가 지금 도는가"를 유효 우선순위·시작 시각·pid·owner와
+        # 함께 낸다(select의 반대쪽 - 그건 "누가 열려 있는가"). 정렬·피해자 고르기는 호출자
+        # (tick.sh)의 몫이다 - 같은 판정 로직을 두 언어에 안 둔다.
+        troot = sys.argv[2]
+        now = datetime.now()
+        prio, deps_by_h, duedate = _priority_graph(troot)
+        _warn_duedate_reversals(duedate, deps_by_h)
+        eff, _baseline, _eff_due = _effective_from_graph(prio, deps_by_h, duedate, now)
+        for p in in_progress(troot):
+            try:
+                fm, _, end = read_fm(p)
+            except (OSError, UnicodeDecodeError):
+                continue
+            if end < 0:
+                continue
+            h = ticket_hash(p, fm)
+            print("{}|{}|{}|{}|{}|{}".format(
+                p, h, eff.get(h, PRIORITY_DEFAULT),
+                (fm.get("assigned_at") or "").strip(),
+                (fm.get("pid") or "").strip().strip("\"'"),
+                (fm.get("owner") or "").strip()))
         return
 
     if cmd == "list":
