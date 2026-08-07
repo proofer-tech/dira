@@ -6,10 +6,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 function eventNames(): string[] {
-  const src = readFileSync(
-    new URL("../teams/lib/analytics.ts", import.meta.url),
-    "utf8",
-  );
+  const src = readFileSync(new URL("./lib/analytics.ts", import.meta.url), "utf8");
   const block = src.match(/export type Events = \{([\s\S]*?)\n\};/);
   assert.ok(block, "analytics.ts에서 `export type Events` 블록을 못 찾았다");
   return [...block[1].matchAll(/^ {2}(\w+):/gm)].map((m) => m[1]);

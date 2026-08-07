@@ -7,7 +7,7 @@
     "build": "NODE_ENV=production next build",
     "start": "next start -p ${PORT:-7331}",
     "lint": "eslint",
-    "test": "node --test \"lib/**/*.test.ts\""
+    "test": "node --test \"*.test.ts\" \"lib/**/*.test.ts\""
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",
@@ -22,6 +22,7 @@
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
     "shadcn": "^4.16.0",
+    "shiki": "^3.13.0",
     "tailwind-merge": "^3.6.0",
     "tw-animate-css": "^1.4.0"
   },

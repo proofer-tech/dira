@@ -8,7 +8,7 @@ import test from "node:test";
 // `docs/*.md` 22장이다(21장 + 목차 `index.md`). 사이드바가 유일한 전역 이동 수단이라
 // 링크 집합이 문서 집합과 어긋나면 어느 장은 영영 못 닿거나 404가 된다.
 // 소스를 못 import한다(`page.tsx`가 next/CSS를 끌고 온다). 그래서 대는 것은 **소스 글자**다.
-const s = readFileSync("app/docs/[[...slug]]/page.tsx", "utf8");
+const s = readFileSync("app/(site)/docs/[[...slug]]/page.tsx", "utf8");
 const a = s.indexOf("const SIDEBAR = [");
 const b = s.indexOf("\nconst FLAT", a);
 assert.ok(a >= 0 && b > a, "page.tsx: 사이드바 구간을 못 찾았다");

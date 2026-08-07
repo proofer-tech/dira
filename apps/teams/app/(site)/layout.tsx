@@ -11,6 +11,8 @@ import type { ReactNode } from "react";
 // 레이아웃인 것은 페이지 `metadata`가 `title`·`description`만 덮고 `icons`는 물려받기 때문이다.
 // 파일을 `app/icon.svg`로 옮기면 Next가 자동으로 잡지만 그러면 URL에 해시가 붙어서
 // **주소가 갈린다** — `public/icon.svg`가 정본이라는 것이 §갈아 끼우는 것의 그 행이다.
+// `apps/teams`로 합친 뒤로는 `(app)/layout.tsx`도 같은 값을 못박는다 — 루트 레이아웃이
+// 둘로 갈려서(§한 코드베이스 §부딪히는 것 ①) 한쪽만 적으면 나머지 트리에 파비콘이 없다.
 export const metadata: Metadata = {
   icons: { icon: { url: "/icon.svg", type: "image/svg+xml" } },
 };

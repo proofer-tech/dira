@@ -20,7 +20,7 @@
  *  갈리는 것은 래퍼뿐이고 칩 하나(`AttachmentChip`)·상태(`useAttachments`)·문구는 한 벌이다. */
 import { useRef, useState, type ReactNode } from "react";
 import { Paperclip, TriangleAlert, X } from "lucide-react";
-import { uploadAttachment } from "@/app/p/[project]/actions";
+import { uploadAttachment } from "@/app/(app)/p/[project]/actions";
 import { oversizeError } from "@/lib/attachment-limit";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

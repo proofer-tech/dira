@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """랜딩의 한글 산문이 통째로 보존됐는지 본다. 태그·클래스·줄바꿈·절 순서는 안 본다.
-    python3 apps/site/check-landing-prose.py [<비교대상 git ref>]
+    python3 apps/teams/check-landing-prose.py [<비교대상 git ref>]
 단위는 텍스트 노드 하나다 — 산문이 재배치돼도 통과하고, 한 조각이라도 지워지면 잡는다.
 
 랜딩이 `Landing.vue`(vitepress)에서 `app/landing.tsx`(Next)로 옮겨 갔다(§사이트 기반 §순서 ⑥).
@@ -13,8 +13,8 @@
 확인하고 `## 결과`에 그 사실을 적는다 — 검사를 느슨하게 고치지 않는다."""
 import re, subprocess, sys
 
-OLD = "apps/site/.vitepress/theme/Landing.vue"   # 비교대상 ref에서 읽는다
-NEW = "apps/site/app/landing.tsx"                # 지금 트리에서 읽는다
+OLD = "apps/site/.vitepress/theme/Landing.vue"        # 비교대상 ref에서 읽는다 — history의 옛 자리
+NEW = "apps/teams/app/(site)/landing.tsx"             # 지금 트리에서 읽는다 — 이사한 새 자리(6a24257d)
 
 # `OLD`는 §순서 ⑧(`1ff5f751`)이 `.vitepress/`를 지운 뒤로 **history에만 산다.** 그래서 기본값이
 # `master`면 이 도구가 자기 대조 표본을 못 찾아 죽는다 — 이 해시가 그 삭제 직전 커밋이고,

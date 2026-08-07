@@ -1,23 +1,27 @@
-/** 404. 이 앱에서 404가 나는 경우는 사실상 하나다 — 등록 안 된 프로젝트 조각(`/p/<없는id>`).
- *  그래서 문구가 레지스트리를 가리키고 목록으로 가는 링크를 둔다(DESIGN.md §스펙 도입부).
- *
- *  **세그먼트가 아니라 여기 있는 이유**: `notFound()`를 부른 게 `p/[project]/layout.tsx`이고,
- *  레이아웃이 던진 것은 자기 세그먼트의 not-found로 못 잡는다(경계가 위에 있어야 한다).
- *  `app/p/[project]/not-found.tsx`를 두면 Next 기본 404가 뜬다 — 실제로 확인했다. */
+import type { Metadata } from "next";
 import Link from "next/link";
+
+/** 루트 레이아웃이 둘이라(`(app)` · `(site)`, §한 코드베이스 §부딪히는 것 ①) 이 파일이
+ *  **셋째 자리**다 — 어느 그룹의 라우트에도 안 걸리는 진짜 미확인 URL(예: `/asdf`)만 여기로
+ *  온다. Next 문서 그대로: 이 파일은 물려받을 레이아웃이 없어 `<html>`·`<body>`를 직접 낸다.
+ *
+ *  `/p/<없는id>` 같은 **그룹 안에서 난 `notFound()`**는 이 파일이 안 받는다 — 그건 부른
+ *  세그먼트 위, 그 그룹의 `not-found.tsx`가 받는다(`(app)/not-found.tsx`). 이 파일은
+ *  세그먼트 매칭 자체가 실패한 경로 전용이라, 매뉴얼·랜딩과 같은 문구를 쓴다
+ *  (`(site)/not-found.tsx`와 같은 값 — §자리 표 "없는 주소"). 그 파일과 한 파일로 못 합친 건
+ *  그쪽은 `(site)` 레이아웃 아래서 렌더돼 `<html>`을 또 낼 수 없어서다. */
+export const metadata: Metadata = { title: "404 | dira" };
 
 export default function NotFound() {
   return (
-    // 스크롤러는 `main`이다(§비주얼 §4 · app/layout.tsx) — 문서는 스크롤하지 않는다
-    <main className="min-h-0 w-full max-w-3xl flex-1 space-y-2 overflow-y-auto px-6 py-6">
-      <h1 className="text-lg font-semibold">찾을 수 없습니다</h1>
-      <p className="text-sm text-muted-foreground">
-        이 URL에 해당하는 화면이 없습니다. <span className="font-mono text-xs">/p/&lt;프로젝트&gt;</span>
-        였다면 그 URL 조각이 레지스트리에 없습니다.
-      </p>
-      <Link href="/" className="text-sm underline">
-        프로젝트 목록
-      </Link>
-    </main>
+    <html lang="ko-KR">
+      <body>
+        <main>
+          <h1>404</h1>
+          <p>이 주소에는 페이지가 없습니다.</p>
+          <Link href="/">홈으로</Link>
+        </main>
+      </body>
+    </html>
   );
 }

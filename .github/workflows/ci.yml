@@ -50,11 +50,3 @@ jobs:
         working-directory: apps/desktop
       - run: pnpm test
         working-directory: apps/desktop
-
-      # 랜딩·매뉴얼·약관. build가 죽은 내부 링크에서 깨지므로 링크 검사가 여기 붙어 있다.
-      - run: pnpm install
-        working-directory: apps/site
-      - run: pnpm test
-        working-directory: apps/site
-      - run: pnpm build
-        working-directory: apps/site

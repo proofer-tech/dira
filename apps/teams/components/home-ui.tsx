@@ -47,7 +47,7 @@ import {
   pollHomeAnswer,
   stopHome,
   switchHome,
-} from "@/app/p/[project]/home/actions";
+} from "@/app/(app)/p/[project]/home/actions";
 import {
   AttachmentButton,
   AttachmentChips,

@@ -17,7 +17,15 @@ declare global {
   }
 }
 
-export default function Landing({ version: initialVersion }: { version: string }) {
+export default function Landing({
+  version: initialVersion,
+  children,
+}: {
+  version: string;
+  /** 프로젝트 목록 표(§한 코드베이스 §홈). 히어로 CTA 자리에 선다 — 자리만 이 티켓이 정하고
+   *  폭·간격·버튼 재배치는 P199-3(designer)·P199-4(조립)의 몫이다. */
+  children?: React.ReactNode;
+}) {
   // 초기값은 빌드 시점의 `apps/desktop/package.json`. 비우면 hydration이 어긋난다.
   const [version, setVersion] = useState(initialVersion);
   // 초기값 = 실패값. SSR·fetch 실패·`.dmg` 없음 셋 다 지금 동작(릴리스 페이지)으로 떨어진다.
@@ -172,6 +180,10 @@ export default function Landing({ version: initialVersion }: { version: string }
     <a className="btn btn-lg" href="/docs/install">설치 가이드</a>
   </div>
   <p className="cta-note">with Claude Code · Codex</p>
+
+  {/* 프로젝트 목록(§한 코드베이스 §홈) — 히어로 CTA 자리에 선다. 목록이 shadcn(tailwind)이라
+      `overflow-x-auto`만 얹는다. 폭·간격은 P199-3(designer)이 정한다 — 이 티켓은 자리만 낸다. */}
+  {children && <div className="overflow-x-auto">{children}</div>}
 
   <figure>
     <img className="shot" src="/shots/board.gif" alt="dira 보드 화면. 대기·진행중·완료 세 레인에 티켓 카드가 놓여 있고, 그중 한 장이 다음 레인으로 건너갑니다." width="1600" height="1000"/>

@@ -8,7 +8,14 @@ dira 큐를 보는 로컬 웹 UI. **스펙은 `../docs/DESIGN.md`가 단일 출�
 ```
 apps/teams/
   app/                  App Router. fs 접근은 전부 여기(서버) 아니면 lib/
-    layout.tsx          html·폰트·TooltipProvider + **키맵을 읽는 유일한 곳**(§0-6 배선 —
+                        **루트 레이아웃이 둘이다**(Next "Multiple Root Layouts") — `(app)`과
+                        `(site)`가 각자 `<html>`을 그린다(§한 코드베이스 §부딪히는 것 ① — `/p/**`는
+                        `h-full overflow-hidden`, 랜딩·매뉴얼은 문서가 스크롤한다). `globals.css`는
+                        `app/`에 그대로 두고 두 그룹이 각자 상대경로로 문다 — 공유 리셋이라서다.
+    globals.css         Tailwind v4 + shadcn 토큰. 색은 여기서만 정의한다
+    (app)/              기존 GUI 전부(§구조 나머지가 이 아래고 경로만 한 단 밀렸다 — `@/app/actions`
+                        같은 alias import는 `app/` 기준이라 안 갈린다)
+      layout.tsx        html·폰트·TooltipProvider + **키맵을 읽는 유일한 곳**(§0-6 배선 —
                         두 셸이 다 이 아래고 파일 하나짜리 읽기다. 셸마다 읽지 않는다)
                         + `<ScreenView/>` — `screen_view`를 보내는 유일한 자리(§0-11)
                         + `<FeedbackDialog/>` — 의견 폼(§0-12). 화면 이동 없이 **지금 화면 위에**
@@ -16,23 +23,15 @@ apps/teams/
                         + `<DesktopFindBar/>` — N5 찾기 바(§데스크톱 앱). 붙는 화면이 다섯이고
                         레이아웃이 둘로 갈려서 자리가 여기다. **`KeymapProvider` 안**이어야
                         한다(`⌘F`가 그 컨텍스트를 읽는다) — 위 둘과 갈리는 유일한 조건이다
-    (list)/page.tsx     프로젝트 목록·등록 (`/`). 라우트 그룹이라 URL은 `/`다
-    (list)/loading.tsx  이 그룹만 덮는다 — app/ 최상단에 두면 모든 라우트가 즉시 스트리밍돼
-                        레이아웃의 notFound()가 404 상태를 못 세운다(실측)
-    not-found.tsx       404. `p/[project]/layout.tsx`의 notFound()를 받는 경계가 여기다
-    api/awaiting/       **화면이 쓰지 않는다** — Electron main이 답변 대기를 물어보는 창구다
+      not-found.tsx     404. `p/[project]/layout.tsx`의 notFound()를 받는 경계가 여기다
+      api/awaiting/     **화면이 쓰지 않는다** — Electron main이 답변 대기를 물어보는 창구다
                         (DESIGN.md §데스크톱 앱 N2 · 못박는 것 5). 판정은 `lib/queue.ts`의
                         `isAwaiting` 하나고 여기서 다시 쓰지 않는다.
                         화면이 필요한 데이터는 종전대로 서버 컴포넌트가 `lib/`를 직접 부른다
-    api/work/           같은 성격의 둘째 창구 — `{busy}` 하나다(N6 `일이 남았으면 안 잔다`).
+      api/work/         같은 성격의 둘째 창구 — `{busy}` 하나다(N6 `일이 남았으면 안 잔다`).
                         판정은 `statusOf`가 `open`|`wip`인 티켓의 유무 하나다
-    actions.ts          Server Action (프로젝트 등록·이름·순서·해제·재해석). 큐 파일은 안 건드린다
-                        + **사용 통계 액션 셋**(§0-11): `trackEvent`(화면에서 GA로 나가는
-                        **유일한 길** — 새 API 라우트를 안 만든다. `app/api/`는 Electron main
-                        창구뿐이다) · `readAnalyticsAction`·`setAnalyticsAction`(끄는 자리).
-                        서버 쪽 트리거는 이걸 안 거치고 `lib/analytics.ts`의 `track()`을 직접 부른다
-    p/[project]/         프로젝트 스코프. layout.tsx가 셸(헤더·내비·전환기)
-    p/[project]/(board)/ 보드(`/p/<project>`). 라우트 그룹이라 URL은 그대로다.
+      p/[project]/         프로젝트 스코프. layout.tsx가 셸(헤더·내비·전환기)
+      p/[project]/(board)/ 보드(`/p/<project>`). 라우트 그룹이라 URL은 그대로다.
                         loading.tsx(테이블 스켈레톤)를 **보드에만** 걸려고 감쌌다 —
                         `p/[project]/loading.tsx`면 워커·페르소나·프로토콜에도 표가 뜬다.
                         **이 그룹의 loading.tsx는 notFound() 경로에 영향이 없다**(A/B 실측 —
@@ -42,11 +41,24 @@ apps/teams/
                         `protocols/actions.ts`). 발행·요구 접수는 **라우트가 아니라 보드의
                         다이얼로그**라 `createTicket`이 `(board)/`에 산다(DESIGN.md §3).
                         클라이언트에서 `@/app/p/[project]/…/actions`로 그냥 import된다
-    p/[project]/home/   프로젝트 홈 — 질의 에이전트(§7). `actions.ts`가 넷(묻기·폴링·중지·새 대화)이고
+      p/[project]/home/   프로젝트 홈 — 질의 에이전트(§7). `actions.ts`가 넷(묻기·폴링·중지·새 대화)이고
                         **큐 파일을 하나도 안 건드리는 유일한 화면 액션**이다 — 질문이 티켓으로
                         들어가지 않고 답이 티켓으로 나오지 않는다. 나가는 쓰기는
                         `$TICKET_LOCAL/home-sessions.json`의 대화 목록뿐이다
-    globals.css         Tailwind v4 + shadcn 토큰. 색은 여기서만 정의한다
+    actions.ts          Server Action (프로젝트 등록·이름·순서·해제·재해석). 큐 파일은 안 건드린다
+                        + **사용 통계 액션 셋**(§0-11): `trackEvent`(화면에서 GA로 나가는
+                        **유일한 길** — 새 API 라우트를 안 만든다. `app/api/`는 Electron main
+                        창구뿐이다) · `readAnalyticsAction`·`setAnalyticsAction`(끄는 자리).
+                        서버 쪽 트리거는 이걸 안 거치고 `lib/analytics.ts`의 `track()`을 직접 부른다.
+                        `(app)/` 밖(그룹 바깥 `app/`)에 있다 — `@/app/actions` alias import가
+                        그룹 이름을 안 타서, 옮기면 그 import 전부를 고쳐야 한다
+    (site)/             공개 사이트 — 랜딩·매뉴얼 22장·`/privacy`·`/terms`(§한 코드베이스, 이사
+                        `6a24257d`). `apps/site/`가 여기로 통째로 흡수됐다 — 내부 구조·CSS
+                        스코프(`landing.css`·`manual.css`·`fonts.css`)·정본은 옛 절 그대로다
+                        (DESIGN.md §사이트 기반 · §랜딩 · §매뉴얼, §한 코드베이스 §옛 절의 경로
+                        인용 — 그 절들의 `apps/site/**` 경로 인용은 이사 전 자리이니 안 고친다).
+                        `(list)/page.tsx`가 **랜딩과 프로젝트 목록이 만나는 자리**다 — 홈 조립
+                        (버튼 재배치 · 랜딩-only 분기)은 P199-2~4가 잇는다
   lib/
     projects.ts          프로젝트 레지스트리 읽기·쓰기, 검증, 설정 해석, 목록 요약,
                         페르소나 CRUD (기준 디렉터리가 `resolveConfig().personas`라 여기 있다)
@@ -444,3 +456,4 @@ import { listTickets } from "./queue.ts";   // lib 안에서는 확장자 `.ts`�
 | `react-markdown` | 읽기 전용 마크다운 렌더(`components/markdown.tsx` · DESIGN.md §비주얼 §10). 파서 + AST + React 매핑을 직접 쓰면 수백 줄이다. **기본값이 raw HTML 무시**라 새니타이저를 따로 안 들인다(`rehype-raw`를 켜지 않는 근거) — 티켓 본문은 세션이 쓰는 파일이라 HTML이 섞일 수 있다. `marked` + `dangerouslySetInnerHTML`은 그 이유로 거절했다 |
 | `remark-gfm` | 이 큐의 본문이 표와 체크리스트(`- [ ]`)로 가득한데 CommonMark에 둘 다 없다. `react-markdown`이 GFM을 기본으로 안 켠다 |
 | `cmdk` | shadcn `command`가 직접 import. DESIGN.md §5가 전환기·deps 멀티셀렉트·필터를 `command`로 정한 것의 대가다(검색·키보드 이동·필터링을 직접 쓰면 수백 줄). `add command`가 끌고 왔다 |
+| `shiki` | `app/(site)/doc.tsx`(매뉴얼 22장 코드펜스 하이라이팅). `apps/site` 이사(`6a24257d`, §한 코드베이스)로 들어왔다 — 렉서·문법·테마 매핑을 직접 쓰면 수백 줄이고, 다크 대응까지 필요하다(`--shiki-light`/`--shiki-dark` 두 변수) |

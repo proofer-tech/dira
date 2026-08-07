@@ -12,7 +12,7 @@ import {
   pageUrls,
   rootNames,
   titleOf,
-} from "./app/meta.ts";
+} from "./app/(site)/meta.ts";
 
 test("사이트맵이 앞 산출물과 같은 URL 집합이다", () => {
   const urls = pageUrls;

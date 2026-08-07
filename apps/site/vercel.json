@@ -1,7 +1,0 @@
-{
-  "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "pnpm build",
-  "outputDirectory": "out",
-  "framework": null,
-  "ignoreCommand": "case \"$VERCEL_GIT_COMMIT_REF\" in master|main) exit 1;; *) exit 0;; esac"
-}

@@ -25,7 +25,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowDown, ChevronRight, FilePlus2, Send, TriangleAlert } from "lucide-react";
-import { sendFollowup, sendInterject, tailSession } from "@/app/p/[project]/tickets/[hash]/actions";
+import { sendFollowup, sendInterject, tailSession } from "@/app/(app)/p/[project]/tickets/[hash]/actions";
 import {
   AttachmentButton,
   AttachmentChips,

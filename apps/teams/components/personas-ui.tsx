@@ -17,7 +17,7 @@ import {
   savePersonaSkillsAction,
   setPersonaColorAction,
   type PersonaResult,
-} from "@/app/p/[project]/personas/actions";
+} from "@/app/(app)/p/[project]/personas/actions";
 import { Markdown } from "@/components/markdown";
 // 왼쪽 목록 줄의 점도 보드·칸반·필터와 **같은 컴포넌트**다(§5) — 색 조회의 출처는 하나다
 import { PersonaDot } from "@/components/persona-badge";

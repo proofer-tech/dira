@@ -31,7 +31,7 @@ import {
   stopWorkerAction,
   type ContextResult,
   type WorkerActionResult,
-} from "@/app/p/[project]/workers/actions";
+} from "@/app/(app)/p/[project]/workers/actions";
 import { CopyCommand } from "@/components/copy-command";
 import { PickPath } from "@/components/path-picker";
 import { SessionStream } from "@/components/session-stream";

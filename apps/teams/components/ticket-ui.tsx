@@ -28,8 +28,8 @@ import {
   ticketMtime,
   unassignTicket,
   type SaveState,
-} from "@/app/p/[project]/tickets/[hash]/actions";
-import { createTicket, type NewTicketState } from "@/app/p/[project]/(board)/actions";
+} from "@/app/(app)/p/[project]/tickets/[hash]/actions";
+import { createTicket, type NewTicketState } from "@/app/(app)/p/[project]/(board)/actions";
 import type { UnassignRun } from "@/lib/engine";
 import { matchCombo } from "@/lib/keymap";
 // 스레드를 엮는 쪽은 서버(`lib/queue.ts threadOf`)다 — 여기 오는 건 타입뿐이라 `node:*`를 안 끈다

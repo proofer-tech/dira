@@ -189,8 +189,8 @@ type Item = { text: string; link: string };
  *  메뉴 · 소셜 · 스킵링크 · 다크 토글 · 산문 타이포 · 편집 링크 · 아웃라인)은 사이트 전역이거나
  *  그 장 본문에서 나오므로 세 라우트가 다 받는다.
  *
- *  `editPath`는 `apps/site/` 아래 상대경로다 — vitepress `editLink.pattern`의 `:path`가
- *  그 값이었다(`config.ts:132`). */
+ *  `editPath`는 `apps/teams/` 아래 상대경로다(이사 `6a24257d` 전에는 그 옛 site 패키지
+ *  아래였다) — vitepress `editLink.pattern`의 `:path`가 그 값이었다(`config.ts:132`). */
 export function Shell({
   source,
   path,
@@ -271,7 +271,7 @@ export function Shell({
 
           <footer className="docfooter">
             <div className="edit">
-              <a href={`${REPO}/edit/master/apps/site/${editPath}`}>이 페이지 고치기</a>
+              <a href={`${REPO}/edit/master/apps/teams/${editPath}`}>이 페이지 고치기</a>
             </div>
             {(prev || next) && (
               <nav className="prevnext" aria-label="이전 다음 문서">

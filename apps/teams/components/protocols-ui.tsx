@@ -15,7 +15,7 @@ import {
   renameProtocolAction,
   saveProtocolAction,
   type ProtocolResult,
-} from "@/app/p/[project]/protocols/actions";
+} from "@/app/(app)/p/[project]/protocols/actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
