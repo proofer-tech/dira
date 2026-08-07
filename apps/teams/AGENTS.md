@@ -298,7 +298,7 @@ apps/teams/
                         그 파일을 import한다(`keymap-provider.tsx`와 같은 축)
     copy-command.tsx    실행 대신 복사시키는 명령 블록
   components/ui/        shadcn CLI 산출물. 손으로 만들지 않는다.
-                        **예외 셋. `add`를 다시 돌리면 전부 되살아난다 — 돌린 뒤 그 조각만
+                        **예외 넷. `add`를 다시 돌리면 전부 되살아난다 — 돌린 뒤 그 조각만
                         다시 뺀다**(그래서 여기 적혀 있다):
                         ① `alert.tsx` 기본 변종의 `*:[svg]:text-current`를 뺐다(`b532bf8b`).
                         그게 아이콘의 `text-status-*`를 21곳 전부에서 덮어 §비주얼 §2의 색 겹이
@@ -312,6 +312,11 @@ apps/teams/
                         ③ `hooks/use-mobile.ts`를 `useSyncExternalStore`로 다시 적었다
                         (`bac53a2e`). 원본의 `useEffect` 안 `setState`를 이 앱 lint
                         (`react-hooks/set-state-in-effect`)가 **에러**로 잡는다. 값·타이밍은 같다
+                        ④ `bubble.tsx`의 `outline` 변종에서 `*:data-[slot=bubble-content]:border-ring`을
+                        `border-chart-2`로 바꿨다(`54c3c594`). `25fc02e6`이 `--ring`을 포커스 링
+                        전용 값으로 개정하면서 장식 테두리가 라이트 17.93 · 다크 15.72로 거의
+                        검정 액자가 됐다 — §비주얼 §9가 재선택한 `--chart-2`(라이트 4.74 · 다크
+                        4.18)로 되돌린다. `[button,a]:focus-visible:border-ring`은 그대로다
     sidebar.tsx         `sidebar` 부품 24개. 쓰는 것은 여덟이고(§비주얼 §34 §안 쓰는 export)
                         세 화면 **안**의 좌측 패널이 그릇으로 쓴다 — 앱 내비는 상단 바 그대로다(§4)
   hooks/                shadcn CLI가 만든 첫 훅 디렉터리(`components.json`의 `aliases.hooks`).
