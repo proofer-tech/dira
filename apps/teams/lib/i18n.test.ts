@@ -87,12 +87,12 @@ test("932ae344 — 새로 뽑은 조합 문구들이 원문 그대로 재조립�
 // 아직 이 목록에 없다(§0-16 §발행 "다음 티켓들이 여기 키를 늘린다"). 묶음의 en을 채우는
 // 티켓이 자기 접두를 여기 더한다: `settings.`·`common.`(6914f1d1) · `ticket.priority.`(62e0b85e).
 //
-// **접두는 묶음 단위로 좁게 적는다.** `ticket.`으로 넓히면 아직 ko만 있는 다음 화면
-// (`ticket.duedate.*`, §1-4)까지 걸려 그 묶음의 첫 티켓이 이 테스트를 깬다 — 폴백이 있는
-// 이유가 그 상태를 허용하는 것이다.
-const FILLED = ["settings.", "common.", "ticket.priority."];
+// **접두는 묶음 단위로 좁게 적는다.** `ticket.`으로 넓히면 아직 ko만 있는 다음 화면까지 걸려
+// 그 묶음의 첫 티켓이 이 테스트를 깬다 — 폴백이 있는 이유가 그 상태를 허용하는 것이다.
+// (`ticket.duedate.`·`bell.due.`는 5debff0e가 en을 채우고 여기 더했다.)
+const FILLED = ["settings.", "common.", "ticket.priority.", "ticket.duedate.", "bell.due."];
 
-test("이미 찬 묶음(settings·common·ticket.priority)의 ko 키는 en에 하나도 안 빠졌다", () => {
+test("이미 찬 묶음(settings·common·ticket.priority·ticket.duedate·bell.due)의 ko 키는 en에 하나도 안 빠졌다", () => {
   assert.deepStrictEqual(
     Object.keys(ko).filter((k) => FILLED.some((p) => k.startsWith(p)) && !(k in en)),
     [],
@@ -118,6 +118,45 @@ test("우선순위 다섯 단계에 꼬리 문구가 전부 있다", () => {
     assert.ok(t("en", key).length > 0, `en ${key}`);
     assert.notStrictEqual(t("en", key), t("ko", key));
   }
+});
+
+// 5debff0e — 마감 묶음. 값이 끼는 문장이 셋이라(파생 한 줄 · 종 ⑦ 제목 · 종 ⑦ 나열) 조립 결과를
+// 두 언어 다 못박는다. 조립식은 `ticket-ui.tsx`·`layout.tsx`의 JSX 그대로다 — 줄바꿈 공백이
+// 지워지는 자리(해시 뒤 · 숫자 뒤)에만 조각이 공백 없이 붙는다.
+test("마감 파생 한 줄 — 두 언어에서 다 문장이 된다", () => {
+  const line = (l: "ko" | "en", remaining: string, baseline: number) =>
+    `${t(l, "ticket.duedate.derivedPrefix")} ${remaining} ${t(l, "ticket.duedate.derivedMiddle")} ${baseline}${t(l, "ticket.duedate.derivedAfter")}`;
+  assert.strictEqual(line("ko", "3일", 1), "마감까지 3일 — 우선순위 1로 뜹니다");
+  assert.strictEqual(line("en", "3 days", 1), "Due in 3 days — comes up as priority 1");
+});
+
+test("마감 역전 한 줄 — 해시가 공백 없이 앞에 붙어도 두 언어에서 다 선다", () => {
+  const line = (l: "ko" | "en", hash: string) => `${hash}${t(l, "ticket.duedate.reversalSuffix")}`;
+  assert.strictEqual(
+    line("ko", "high0002"),
+    "high0002와 마감 순서가 어긋납니다 — 선행이 후행보다 늦게 끝날 수 없습니다",
+  );
+  assert.strictEqual(
+    line("en", "high0002"),
+    "high0002 and this due date are out of order — a prerequisite can't be due after the ticket waiting on it",
+  );
+});
+
+test("종 ⑦ 제목·나열 — 두 언어에서 다 문장이 된다", () => {
+  const title = (l: "ko" | "en", n: number) =>
+    `${t(l, "bell.due.titlePrefix")} ${n}${t(l, "bell.due.titleSuffix")}`;
+  assert.strictEqual(title("ko", 3), "마감을 못 지킬 티켓 3건");
+  assert.strictEqual(title("en", 3), "Tickets that won't make their due date: 3");
+
+  const blocked = (l: "ko" | "en", remaining: string, unmet: number) =>
+    `${remaining} ${t(l, "bell.due.blockedMiddle")} ${unmet}${t(l, "bell.due.blockedSuffix")}`;
+  assert.strictEqual(blocked("ko", "3시간 30분", 2), "3시간 30분 남았는데 선행 2건이 안 끝났습니다");
+  assert.strictEqual(
+    blocked("en", "3h 30m", 2),
+    "3h 30m left, but blocked by 2 of its prerequisites",
+  );
+  // 1건이어도 문장이 선다 — 이 앱에 복수형 장치가 없어 숫자 뒤 명사를 그대로 두면 깨지는 자리다
+  assert.strictEqual(blocked("en", "1h", 1), "1h left, but blocked by 1 of its prerequisites");
 });
 
 // 화면에 남은 한국어를 여기서 잡는다 — 사전 값 자체에 한글이 섞이면 폴백이 아니라 오타다.

@@ -217,6 +217,9 @@ export const ko: Record<string, string> = {
  *  | 설정 분류 | Setting categories | 화면에 안 뜨는 접근가능 이름 |
  *  | 우선순위 · 유효 우선순위 | priority · effective priority | 62e0b85e가 더한 줄부터 아래 |
  *  | 선점 | preempt | §1-3의 그 동작. 화면 문구에서는 `stops a running session`으로 풀어 쓴다 — 큐를 처음 여는 사람에게 `preempt`는 아직 낱말이 아니다 |
+ *  | 마감 · 유효마감 | due date · effective due date | 5debff0e가 더한 줄부터 아래. 입력 라벨은 `Due date`, 문장 안에서는 `due` |
+ *  | 선행 · 후행 | prerequisite · the ticket waiting on it | `dep`은 frontmatter 키 이름이지 사람 말이 아니다(§0-10 §문구가 `reap`을 몰아낸 그 자) |
+ *  | 마감이 지났다 | past due | 종 ⑦ 나열의 한 조각. `overdue`도 같은 뜻이지만 두 낱말을 섞지 않는다 |
  *
  *  **어순이 뒤집히는 자리는 접두·접미 두 키로 쪼갠다.** 한국어는 이름 뒤에 다 붙지만(`<이름>
  *  삭제`) 영어는 동사가 앞에 선다(`Delete <name>`) — 한쪽이 비는 것이 정상이고, 조립은
@@ -372,6 +375,35 @@ export const en: Record<string, string> = {
   "ticket.priority.level.4": "Sooner",
   "ticket.priority.level.5": "Now — stops a running session",
   "ticket.priority.srOnly": "Priority",
+
+  // 종 ⑦(§0-10 문구 표 ⑦). 제목은 `<접두> <n><접미>`라 숫자가 가운데 끼는데, 영어에서 자연스러운
+  // `3 tickets …`는 접두를 비워 문장을 공백으로 시작시킨다 — 그래서 **숫자를 뒤로 보내고 콜론으로
+  // 받는다**(`settings.search.emptySuffix`가 콜론으로 연 것과 같은 수). 꼬리는 빈다.
+  "bell.due.titlePrefix": "Tickets that won't make their due date:",
+  "bell.due.titleSuffix": "",
+  "bell.due.body":
+    "The due date has passed, or it's close and a ticket they depend on is still unfinished.",
+  "bell.due.overdue": "Past due",
+  // 나열의 다른 갈래 — `<남은> <중간> <n><접미>`. **접미가 공백으로 시작하는 것은 의도다**(숫자에
+  // 바로 붙는 자리다). `2 of its prerequisites`로 적어 **1건일 때도 문장이 선다** — 이 앱에 복수형
+  // 장치가 없어서(`next-intl` 0개) 숫자 뒤에 복수 명사를 바로 두면 `1 prerequisites`가 뜬다.
+  "bell.due.blockedMiddle": "left, but blocked by",
+  "bell.due.blockedSuffix": " of its prerequisites",
+  "bell.due.openTicket": "Open ticket",
+
+  "ticket.duedate.label": "Due date",
+  "ticket.duedate.clear": "Clear",
+  // 파생 한 줄. 우선순위 상속 한 줄과 한 줄에 이어 붙으므로 **같은 동사**로 끝낸다
+  // (`comes up as`) — 두 조각이 나란히 설 때 서로 다른 말로 같은 것을 말하지 않는다.
+  // 꼬리가 빈 이유도 그 줄과 같다: 영어는 숫자가 문장 끝이다.
+  "ticket.duedate.derivedPrefix": "Due in",
+  "ticket.duedate.derivedMiddle": "— comes up as priority",
+  "ticket.duedate.derivedAfter": "",
+  // 역전 거부. 앞에 해시가 공백 없이 바로 붙는다(`ticket.priority.inheritedMiddle`과 같은 사정) —
+  // **공백으로 시작하는 것이 의도다.** 마침표는 없다: 한국어 쪽도 없고, 이 줄은 입력 바로 아래
+  // 붙는 한 조각이다.
+  "ticket.duedate.reversalSuffix":
+    " and this due date are out of order — a prerequisite can't be due after the ticket waiting on it",
 };
 
 const DICTS: Record<Locale, Record<string, string>> = { ko, en };
