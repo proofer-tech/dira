@@ -828,7 +828,7 @@ test("writeTicket — undefined는 그 키의 줄을 통째로 지운다(§1-4 �
   assert.strictEqual(after.baseline, after.priority); // 파생이 없다 = 마감 없음
 });
 
-test("effectiveDuedate — §1-4 유효마감이 Ticket에 실린다(파생 한 줄의 재료)", async () => {
+test("effectiveDue — §1-4 유효마감이 Ticket에 실린다(파생 한 줄의 재료)", async () => {
   const root = newRoot();
   await write(
     root,
@@ -839,9 +839,9 @@ test("effectiveDuedate — §1-4 유효마감이 Ticket에 실린다(파생 한 
 
   const tickets = await listTickets(root, DEFAULT, DUE_NOW);
   const by = (h: string) => tickets.find((t) => t.hash === h)!;
-  assert.strictEqual(by("due00012").effectiveDuedate?.getTime(), DUE_NOW.getTime() + 8 * DAY);
+  assert.strictEqual(by("due00012").effectiveDue?.getTime(), DUE_NOW.getTime() + 8 * DAY);
   assert.strictEqual(by("due00012").baseline, 1); // 8일 ≥ 7일 = 파생 1
-  assert.strictEqual(by("due00013").effectiveDuedate, null);
+  assert.strictEqual(by("due00013").effectiveDue, null);
 });
 
 // ── 보드 필터·검색·정렬 ──────────────────────────────────────────────────────

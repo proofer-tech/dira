@@ -132,11 +132,11 @@ export default async function TicketDetail({
       ? blocked.find((r) => r.state !== "done" && r.effective === ticket.effective)?.hash
       : undefined;
   // 마감 파생 한 줄(§1-4 §화면) — 파생이 명시값을 덮고 있으면(baseline !== priority) "남은"을
-  // 잰다. `effectiveDuedate`는 baseline이 파생일 때 반드시 값이 있다(derivePriority가 null이면
+  // 잰다. `effectiveDue`는 baseline이 파생일 때 반드시 값이 있다(derivePriority가 null이면
   // 파생도 null이라 baseline은 원값 priority로 남는다).
   const remainingText =
-    ticket.baseline !== ticket.priority && ticket.effectiveDuedate
-      ? formatRemaining(ticket.effectiveDuedate.getTime() - now.getTime())
+    ticket.baseline !== ticket.priority && ticket.effectiveDue
+      ? formatRemaining(ticket.effectiveDue.getTime() - now.getTime())
       : null;
   // 역전 판정 재료(§1-4 §역전) — direct 선행·후행의 own duedate. `deps`(위 badges)의 `hit`은
   // 큐에 없는 해시·미충족이어도 값이 있으면 채워진다(선행 실체가 있으면 마감도 있을 수 있다).
