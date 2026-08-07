@@ -46,6 +46,7 @@ import { WipWorker } from "@/components/worker-mark";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 import {
   Table,
   TableBody,
@@ -227,6 +228,36 @@ function archiveLine(a: Ticket | undefined, href: (t: Ticket) => string) {
         </Link>
       </div>
     </div>
+  );
+}
+
+/** §비주얼 §49 값 그대로 — 새 색 토큰 0. `--status-*` 재사용 근거는 그 절에 있다
+ *  (뜻이 있는 서열이라 뜻이 있는 색을 빌린다. 페르소나 점의 §12 재사용 금지와 축이 반대). */
+const PRIORITY_DOT_CLASS: Record<number, string> = {
+  1: "bg-card border border-muted-foreground",
+  2: "bg-muted-foreground",
+  3: "bg-status-done",
+  4: "bg-status-blocked",
+  5: "bg-status-stale",
+};
+
+/** 우선순위 dot(§비주얼 §49) — 자기 `priority`를 그린다, 유효 우선순위가 아니다(§1-3이 닫은 값).
+ *  조작이 아니라 `aria-hidden`이고, 색만으로 말하지 않으므로 옆에 `sr-only` 문구가 따라온다.
+ *  칸반 카드에서는 `className="absolute left-0 top-0"`로 모서리에 걸치고, 테이블·상세에서는
+ *  자리를 그대로 흐름에 둔다(§49 자리 표). */
+function PriorityDot({ priority, className }: { priority: number; className?: string }) {
+  return (
+    <>
+      <span
+        aria-hidden
+        className={cn(
+          "size-2 shrink-0 rounded-full",
+          PRIORITY_DOT_CLASS[priority] ?? PRIORITY_DOT_CLASS[3],
+          className,
+        )}
+      />
+      <span className="sr-only">{`우선순위 ${priority}`}</span>
+    </>
   );
 }
 
@@ -625,8 +656,12 @@ export default async function Board({
                       // 관계선이 상대를 찾는 이름이다(§1: 못 찾으면 안 그린다). 링크·엔진과
                       // 같은 `stem`이라 `relationEdges`가 준 간선과 그냥 맞는다
                       data-stem={t.stem}
-                      className="card-tint relative gap-2 px-4"
+                      className="card-tint relative gap-2 overflow-visible px-4"
                     >
+                      {/* 우선순위 dot(§비주얼 §49) — 오프셋 0으로 모서리 호 위에 걸친다. `<Card>`의
+                          `overflow-hidden`을 이 호출부에서만 `overflow-visible`로 덮어써 절반이
+                          카드 밖으로 나가도 안 잘리게 한다(components/ui/ 수정 0줄). */}
+                      <PriorityDot priority={t.priority} className="absolute left-0 top-0" />
                       {/* 칸반 카드는 레인이 상태를 말하므로 배지를 달지 않는다 — 예외가
                           `답변 대기`다. 자기 레인 없이 `대기`에 앉고, 답변 stem은 큐에
                           없는 해시라 deps 태그가 `?`로만 떠서 "사람이 답할 차례"라는
@@ -839,13 +874,18 @@ export default async function Board({
                             )}
                           </TableCell>
                           <TableCell className="px-3 py-0">
-                            {/* §비주얼 §31 ② 갈래 A — ①과 같다. 밑줄 없음 */}
-                            <Link
-                              href={href(t)}
-                              className="rounded-sm font-mono text-xs text-muted-foreground after:absolute after:inset-0"
-                            >
-                              {t.hash}
-                            </Link>
+                            {/* §비주얼 §49 — dot은 해시 셀 **안**, 링크 **앞**이라 새 열이 안 는다.
+                                장식이라 `<Link>` 밖에 둔다(행 전체가 이미 링크다) */}
+                            <span className="inline-flex items-center gap-1">
+                              <PriorityDot priority={t.priority} />
+                              {/* §비주얼 §31 ② 갈래 A — ①과 같다. 밑줄 없음 */}
+                              <Link
+                                href={href(t)}
+                                className="rounded-sm font-mono text-xs text-muted-foreground after:absolute after:inset-0"
+                              >
+                                {t.hash}
+                              </Link>
+                            </span>
                           </TableCell>
                           {/* title은 자르고 전문은 `title` 속성으로 본다(§6). tooltip은 클라이언트
                               컴포넌트라 행마다 하나씩 두면 테이블이 통째로 클라이언트가 된다 */}
