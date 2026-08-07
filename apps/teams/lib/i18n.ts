@@ -7,8 +7,9 @@
  *  `lib/keymap.ts`와 같은 이유다. 파일 읽기/쓰기(`languagePath`·`readLanguage`·`setLanguage`)는
  *  `lib/projects.ts`에 있다.
  *
- *  화면 이행은 이 티켓의 범위 밖이다(§0-16 — "장치만 세운다"). 사전은 지금 §0-16 자신이 쓰는
- *  설정 노드 라벨 하나만 담는다. 다음 티켓들이 여기 키를 늘린다. */
+ *  화면 이행은 묶음으로 나간다(§0-16 §발행). 지금 든 것은 **설정 다이얼로그 한 벌**이다
+ *  (`ko`는 30a8f5c3, `en`은 621c7a97). 다음 티켓들이 여기 키를 늘린다 — `ko`를 먼저 넣고 `en`이
+ *  비어 있어도 화면은 안 깨진다(맨 아래 `t`의 폴백). */
 
 export type Locale = "ko" | "en";
 
@@ -17,8 +18,10 @@ export const DEFAULT_LOCALE: Locale = "ko";
 
 /** 키 이름 규약(30a8f5c3 첫 묶음) — `<화면>.<노드나 영역>.<요소>`. 트리 노드 5개와 같은 이름을
  *  공유하는 문구는 `settings.tree.<node>`로 한 번만 두고 여러 자리가 재사용한다(중복 값 0).
- *  화면·노드를 안 가리는 낱말(저장·저장 중…·추가 등)은 `common.*`. */
-const ko: Record<string, string> = {
+ *  화면·노드를 안 가리는 낱말(저장·저장 중…·추가 등)은 `common.*`.
+ *
+ *  `export`는 테스트가 폴백을 검증하려고 쓴다(`i18n.test.ts`) — 화면은 `t()`로만 읽는다. */
+export const ko: Record<string, string> = {
   "settings.language.label": "언어",
 
   "settings.dialog.title": "설정",
@@ -72,6 +75,9 @@ const ko: Record<string, string> = {
   "settings.tokens.pending": "대기",
   "settings.tokens.disabledBadge": "비활성",
   "settings.tokens.exhausted": "소진",
+  // 행의 시각 뒤에 붙는 꼬리(`· 2026-08-07 14:23 추가`). 한국어는 `common.add`와 같은 낱말이지만
+  // 영어는 버튼(`Add`)과 갈린다 — 그래서 키가 둘이다.
+  "settings.tokens.addedSuffix": "추가",
 
   "settings.other.agyCred": "인증은 macOS 로그인 키체인에 있습니다 — 이 화면이 읽지 않습니다",
   "settings.other.codexMissing": "발견 못 함 — OPENAI_API_KEY로 도는 워커는 이 판정 밖입니다",
@@ -106,8 +112,123 @@ const ko: Record<string, string> = {
   "common.add": "추가",
 };
 
-/** 아직 옮긴 문구가 없다 — 없는 키는 전부 `ko`로 떨어진다(아래 `t`). */
-const en: Record<string, string> = {};
+/** 제품 낱말의 영어 대응 — **여기가 한자리다**(621c7a97). 다음 묶음이 같은 것을 다르게 부르지
+ *  않게 하는 표다. 여기 없는 낱말을 처음 영어로 옮기는 사람이 한 줄을 더한다.
+ *
+ *  | 한국어 | English | 비고 |
+ *  |---|---|---|
+ *  | 티켓 · 워커 · 페르소나 · 큐 · 보드 | ticket · worker · persona · queue · board | 소문자. 화면 제목 자리에서만 첫 글자를 올린다 |
+ *  | 프로젝트 · 세션 · 엔진 · 토큰 | project · session · engine · token | |
+ *  | 디스패치(하다) | dispatch | 명사·동사 같은 낱말 |
+ *  | 참견 | interject | §2-1의 그 동작. `interrupt`가 아니다 — 세션은 안 끊긴다 |
+ *  | 설정(화면) · 설정(항목 하나) | Settings · setting | |
+ *  | 인증 | authentication | 배지·버튼처럼 좁은 자리에서만 `auth` |
+ *  | 키설정 | Keyboard shortcuts | `keymap`은 파일 이름이지 사람 말이 아니다 |
+ *  | 사용 통계 | Usage stats | |
+ *  | 티켓 상태 대기 · 진행중 · 완료 | Open · In progress · Done | |
+ *  | 토큰 상태 대기 · 활성 · 비활성 · 소진 | Pending · Active · Disabled · Exhausted | **티켓의 `대기`와 다른 낱말이다** |
+ *
+ *  문장의 결: 개발자 도구다. 짧게 쓰고, 동사로 쓰고, 문장부호 하나로 끝낼 수 있으면 거기서
+ *  끝낸다. 버튼·라벨은 문장부호 없음(`Save`), 설명문은 마침표 있음.
+ *
+ *  **없는 키는 `ko`로 떨어진다**(아래 `t`) — 이 사전이 완성 전이어도 화면은 안 깨진다. */
+const en: Record<string, string> = {
+  "settings.language.label": "Language",
+
+  "settings.dialog.title": "Settings",
+  "settings.dialog.description": "dira settings for this machine. They apply to every registered project.",
+  "settings.dialog.triggerLink": "Save a token",
+  "settings.dialog.needsAuth": "Needs auth",
+
+  "settings.search.placeholder": "Search settings",
+  // 앞에 `"질의"`가 그대로 붙는다(`CommandEmpty`) — 쌍따옴표에 콜론이 바로 붙으므로 값이
+  // 공백으로 시작하지 않는다. 조립 결과는 `i18n.test.ts`가 못박는다.
+  "settings.search.emptySuffix": ": no matching settings",
+  "settings.search.claudeCli": "CLI path",
+  "settings.search.claudeAccounts": "Accounts",
+  "settings.search.claudeAdd": "Add account",
+  "settings.search.statsStatus": "Sending status",
+  "settings.search.statsToggle": "Turn on / off",
+
+  "settings.tree.authGroup": "Authentication",
+  "settings.tree.claude": "Claude account",
+  "settings.tree.other": "Other engines",
+  "settings.tree.keymap": "Keyboard shortcuts",
+  "settings.tree.stats": "Usage stats",
+
+  "settings.claude.heading": "Claude authentication",
+  "settings.claude.descriptionMulti":
+    "Long-lived tokens that workers use to reach Claude. One list per machine. Keep several accounts and a worker that hits a limit rolls over to the next one.",
+  "settings.claude.descriptionSingle":
+    "The long-lived token workers use to reach Claude. One per machine.",
+  "settings.claude.cliMissing": "No claude CLI here — workers can't start a session",
+  "settings.claude.authBrowserLabel": "Browser sign-in",
+  "settings.claude.authBrowserRunning": "Working…",
+  "settings.claude.authBrowserRetry": "Try again",
+  "settings.claude.authBrowserStart": "Start sign-in",
+  "settings.claude.authBrowserDesc":
+    "This runs claude setup-token for you. Approve it in the new tab, paste the code you get back, and the token lands in place.",
+  "settings.claude.codePlaceholder": "Code from the browser",
+  "settings.claude.codeSubmit": "Send code",
+  "settings.claude.authErrorTitle": "No token came back",
+  "settings.claude.authErrorFallback": "If you already have a token, paste it in the field below.",
+  "settings.claude.authSaved": "Got the token and saved it.",
+  "settings.claude.tokenLabel": "Token",
+  "settings.claude.tokenLabelOptional": "Label (optional)",
+  "settings.claude.tokenHintMulti":
+    'Paste a token you already have. It joins the list as Pending — the "Use" button picks which one runs now.',
+  "settings.claude.tokenHintSingle":
+    "Paste a token you already have. It replaces the one in use.",
+  "settings.claude.tokenSaved": "Saved. Whether it works shows up on the next dispatch.",
+
+  "settings.tokens.empty": "No tokens yet.",
+  "settings.tokens.labelPlaceholder": "An email, or any name you'll recognize",
+  "settings.tokens.use": "Use",
+  "settings.tokens.enable": "Enable",
+  "settings.tokens.disable": "Disable",
+  "settings.tokens.active": "Active",
+  "settings.tokens.pending": "Pending",
+  "settings.tokens.disabledBadge": "Disabled",
+  "settings.tokens.exhausted": "Exhausted",
+  "settings.tokens.addedSuffix": "added",
+
+  "settings.other.agyCred": "Credentials sit in the macOS login keychain — this screen doesn't read them",
+  "settings.other.codexMissing": "Not found — workers running on OPENAI_API_KEY are outside this check",
+  "settings.other.grokMissing": "Not found — run grok login in a terminal",
+  "settings.other.notInstalled": "Not installed",
+
+  "settings.keymap.description":
+    "Keyboard shortcuts. One set per machine, applied to every registered project.",
+  "settings.keymap.brokenTitle": "Couldn't read keymap.json — everything came up on defaults",
+  "settings.keymap.brokenHint": "Change a key here and dira rewrites the file.",
+  "settings.keymap.capturePrompt": "Press a key",
+  "settings.keymap.captureRejectedSuffix": "Press another key ·",
+  "settings.keymap.captureCancelSuffix": "to cancel",
+  "settings.keymap.captureHint":
+    "Whatever you press is assigned as-is · other shortcuts stop listening while this is open ·",
+  // 뒤에 조합 표기가 바로 붙어 문장이 끝난다(`Reset to the default ⌘K`) — 영어는 꼬리가 없다.
+  // 빈 값은 실수가 아니다: `t`는 `""`를 그대로 돌려주고 `ko` 폴백으로 새지 않는다.
+  "settings.keymap.resetTooltipPrefix": "Reset to the default",
+  "settings.keymap.resetTooltipSuffix": "",
+  "settings.keymap.change": "Change",
+  "settings.keymap.resetAll": "Reset all to defaults",
+
+  "settings.stats.description":
+    "Sends two things, anonymously: how many copies of dira are running, and which screen actions happened. Paths, project names, and ticket contents stay on this machine.",
+  "settings.stats.notConfigured": "Not sending — this build isn't set up for it",
+  "settings.stats.sending": "Sending",
+  "settings.stats.disabled": "Not sending — you turned it off",
+  "settings.stats.turnOff": "Turn off",
+  "settings.stats.turnOn": "Turn on",
+
+  // 언어 이름은 그 언어로 적는다 — 영어 화면에서도 `한국어`가 `Korean`이 되지 않는다.
+  "settings.language.ko": "한국어",
+  "settings.language.en": "English",
+
+  "common.save": "Save",
+  "common.saving": "Saving…",
+  "common.add": "Add",
+};
 
 const DICTS: Record<Locale, Record<string, string>> = { ko, en };
 

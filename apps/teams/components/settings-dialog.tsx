@@ -518,7 +518,7 @@ function TokensSection({ refreshKey }: { refreshKey: string | null }) {
             <p className="font-mono text-xs break-all text-muted-foreground">
               {row.masked}{" "}
               <span className="font-sans">
-                · {row.addedAt} {t("common.add")}
+                · {row.addedAt} {t("settings.tokens.addedSuffix")}
               </span>
             </p>
           </div>
