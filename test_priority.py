@@ -74,7 +74,7 @@ def select_rows(root):
     for line in r.stdout.strip().split("\n"):
         if not line:
             continue
-        _path, h, _kind, _persona, prio, eff = line.split("|")
+        _path, h, _kind, _persona, prio, _base, eff = line.split("|")
         order.append(h)
         vals[h] = (int(prio), int(eff))
     return order, vals, r.stderr

@@ -360,11 +360,28 @@ import tickets as T
 print(len(T.in_progress(sys.argv[2])))' "$CODE" "$TICKET_ROOT"
 }
 
+# §1-4 §로그: DISPATCH 줄의 prio= 괄호 출처. raw(원값) != baseline(기준값)이면 duedate가
+# 기준값을 덮었다는 뜻이라 `마감` - baseline != effective(유효)면 §1-3의 상속이 그 위에
+# 얹혔다는 뜻이라 `상속 <baseline>`(보여주는 값은 상속이 얹히기 전 값, 종전 표기와 같은 자리).
+# 둘 다면 이어붙인다. 새 게이트가 아니다 - 이미 있는 세 수를 비교만 한다.
+prio_log() {
+  local raw="$1" base="$2" eff="$3"
+  local out="prio=$eff"
+  if [ "$raw" != "$base" ] && [ "$base" != "$eff" ]; then
+    out="prio=$eff(마감·상속 $base)"
+  elif [ "$raw" != "$base" ]; then
+    out="prio=$eff(마감)"
+  elif [ "$base" != "$eff" ]; then
+    out="prio=$eff(상속 $base)"
+  fi
+  printf '%s' "$out"
+}
+
 SID=$(python3 -c 'import uuid;print(uuid.uuid4())')
-TPATH=""; THASH=""; TKIND=""; TPERSONA=""; TPRIO=""; TEFF=""
+TPATH=""; THASH=""; TKIND=""; TPERSONA=""; TPRIO=""; TBASE=""; TEFF=""
 OVER=""    # 이 판에서 이미 상한이던 페르소나들. 후보가 여럿이어도 SKIP은 페르소나당 한 줄이다
 ENGOVER="" # 이 판에서 이미 디스패치 불가이던 엔진들. 후보가 여럿이어도 SKIP은 엔진당 한 줄이다
-while IFS='|' read -r c_path c_hash c_kind c_persona c_prio c_eff; do
+while IFS='|' read -r c_path c_hash c_kind c_persona c_prio c_base c_eff; do
   [ -z "$c_path" ] && continue
 
   # 1 게이트(§1-3) — 유효 1은 진행중 티켓이 0건일 때만 후보다. "모든 워커가 idle"의 큐 쪽
@@ -418,11 +435,11 @@ while IFS='|' read -r c_path c_hash c_kind c_persona c_prio c_eff; do
   fi
 
   if [ "$CMD" = "dryrun" ]; then
-    TPATH="$c_path"; THASH="$c_hash"; TKIND="$c_kind"; TPERSONA="$c_persona"; TPRIO="$c_prio"; TEFF="$c_eff"; break
+    TPATH="$c_path"; THASH="$c_hash"; TKIND="$c_kind"; TPERSONA="$c_persona"; TPRIO="$c_prio"; TBASE="$c_base"; TEFF="$c_eff"; break
   fi
   # 잡기 = 원자적 rename. 이게 진짜 락 - 다른 세션·다른 tick도 이걸 보고 피한다.
   if CPATH=$(python3 "$PY" claim "$c_path" 2>/dev/null); then
-    TPATH="$CPATH"; THASH="$c_hash"; TKIND="$c_kind"; TPERSONA="$c_persona"; TPRIO="$c_prio"; TEFF="$c_eff"
+    TPATH="$CPATH"; THASH="$c_hash"; TKIND="$c_kind"; TPERSONA="$c_persona"; TPRIO="$c_prio"; TBASE="$c_base"; TEFF="$c_eff"
     break
   fi
 done <<EOF
@@ -598,8 +615,7 @@ fi
 python3 "$PY" assign "$TPATH" "$SID" "${TPERSONA:-agent} / ${TICKET_NAME}-${SID:0:8}" || {
   log "ERROR assign 실패 $THASH"; python3 "$PY" release "$TPATH" >/dev/null; exit 1; }
 LOGF="$LOGDIR/$(date '+%Y%m%d-%H%M%S')-${TICKET_NAME}-${THASH}.log"
-PRIOLOG="prio=$TEFF"
-[ "$TPRIO" != "$TEFF" ] && PRIOLOG="prio=$TEFF(상속 $TPRIO)"
+PRIOLOG=$(prio_log "$TPRIO" "$TBASE" "$TEFF")
 log "DISPATCH $THASH kind=${TKIND:--} persona=${TPERSONA:-none} sid=$SID log=$(basename "$LOGF") $PRIOLOG"
 
 cd "$TICKET_CWD" || { log "ERROR cwd 없음 $TICKET_CWD"; python3 "$PY" clear "$TPATH"; python3 "$PY" release "$TPATH" >/dev/null 2>&1; exit 1; }
@@ -755,7 +771,7 @@ print("|".join((sid, ok, reason, reset, ctx)))'
 # 아무도 안 건드린다) - 재활용은 페르소나를 안 바꾸므로 다시 세우지 않고 같은 값으로 게이트를 본다.
 select_reuse_candidate() {
   local persona="$1"
-  RTPATH=""; RTHASH=""; RTKIND=""; RTPRIO=""; RTEFF=""
+  RTPATH=""; RTHASH=""; RTKIND=""; RTPRIO=""; RTBASE=""; RTEFF=""
   local RCANDS
   RCANDS=$(python3 "$PY" select "$TICKET_ROOT") || return 1
   [ -z "$RCANDS" ] && return 1
@@ -778,12 +794,12 @@ select_reuse_candidate() {
     acquire_slock || return 1
   fi
 
-  local rc_path rc_hash rc_kind rc_persona rc_prio rc_eff RCPATH
-  while IFS='|' read -r rc_path rc_hash rc_kind rc_persona rc_prio rc_eff; do
+  local rc_path rc_hash rc_kind rc_persona rc_prio rc_base rc_eff RCPATH
+  while IFS='|' read -r rc_path rc_hash rc_kind rc_persona rc_prio rc_base rc_eff; do
     [ -z "$rc_path" ] && continue
     [ "$rc_persona" = "$persona" ] || continue
     if RCPATH=$(python3 "$PY" claim "$rc_path" 2>/dev/null); then
-      RTPATH="$RCPATH"; RTHASH="$rc_hash"; RTKIND="$rc_kind"; RTPRIO="$rc_prio"; RTEFF="$rc_eff"
+      RTPATH="$RCPATH"; RTHASH="$rc_hash"; RTKIND="$rc_kind"; RTPRIO="$rc_prio"; RTBASE="$rc_base"; RTEFF="$rc_eff"
       break
     fi
   done <<EOF
@@ -851,8 +867,7 @@ sys.stdout.write(json.dumps({"type":"user","message":{"role":"user","content":sy
                             ensure_ascii=False, separators=(",", ":")) + "\n")' "$RPROMPT" >&9
       INJOFFSET=$(wc -l < "$OUTF")
       python3 "$PY" setinbox "$RTPATH" "$INBOX"
-      RPRIOLOG="prio=$RTEFF"
-      [ "$RTPRIO" != "$RTEFF" ] && RPRIOLOG="prio=$RTEFF(상속 $RTPRIO)"
+      RPRIOLOG=$(prio_log "$RTPRIO" "$RTBASE" "$RTEFF")
       log "DISPATCH $RTHASH kind=${RTKIND:--} persona=${TPERSONA:-none} sid=$SID log=$(basename "$LOGF") $RPRIOLOG"
 
       # 주입 뒤 TICKET_FEED_TIMEOUT 안에 출력이 안 자라면 STALL과 같은 경로다(§4-11 §규칙) -

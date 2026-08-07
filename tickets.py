@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """티켓 큐 헬퍼(프로젝트 무관). <루트> = `tickets/`(큐)와 `personas/`를 담은 티켓 루트.
 
-select <루트>          미할당 열린 티켓들을 오래된 순으로 -> "path|hash|kind|persona"
+select <루트>          미할당 열린 티켓들을 오래된 순으로 -> "path|hash|kind|persona|priority|baseline|effective"
 assign <path> <sid>    frontmatter에 session_id/assigned_at 기록
 clear  <path>          frontmatter의 session_id/assigned_at 비우기 (할당 취소)
 list   <루트>          열린 티켓 전체 상태 표
@@ -27,7 +27,7 @@ import uuid
 import errno
 import subprocess
 import unicodedata
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 
 # 기본 접미사는 ASCII + 마침표 구분이다: <hash>.md / <hash>.wip.md / <hash>.done.md.
@@ -162,10 +162,48 @@ def priority_of(fm, h=""):
     return n
 
 
+DUE_ESCALATE = timedelta(hours=5)     # 남은 <= 이 값이면 파생 5 (지난 마감 포함)
+DUE_DEMOTE = timedelta(days=7)        # 남은 >= 이 값이고 자기 duedate가 있으면 파생 1
+
+
+def duedate_of(fm, h=""):
+    """frontmatter `duedate:`. 키가 없으면 마감 없음(None, 무경고) - 큐 마이그레이션 0건이
+    이 무경고에 걸려 있다. 키가 있는데 못 읽으면(빈 값 포함) 마감 없음 + WARN 한 줄
+    (§1-4 §값 — `datetime.fromisoformat` 하나, 새 파서를 만들지 않는다). 오프셋 있는 값은
+    로컬로 변환해 버린다 - `now`(로컬, naive)와 늘 같은 형이어야 뺄 수 있다."""
+    if "duedate" not in fm:
+        return None
+    raw = (fm.get("duedate") or "").strip().strip("\"'")
+    try:
+        if not raw:
+            raise ValueError("empty")
+        dt = datetime.fromisoformat(raw)
+    except ValueError:
+        print("WARN duedate 못 읽음 {} 값={!r} - 마감 없음으로 읽음".format(h, raw),
+              file=sys.stderr)
+        return None
+    if dt.tzinfo is not None:
+        dt = dt.astimezone().replace(tzinfo=None)
+    return dt
+
+
+def derive_priority(remaining, has_own_duedate):
+    """§1-4 §파생: 남은 <= 5시간이면 5(지난 마감 포함) · 자기 duedate가 있고 남은 >= 7일이면
+    1 · 그 사이는 없음(None). 강등(1)만 `has_own_duedate`로 막는다 - 급한 쪽(5)은 전이하지만
+    느긋한 쪽(1)은 전이하지 않는다(§1-4 §전이)."""
+    if remaining is None:
+        return None
+    if remaining <= DUE_ESCALATE:
+        return 5
+    if has_own_duedate and remaining >= DUE_DEMOTE:
+        return 1
+    return None
+
+
 def _priority_graph(troot):
-    """열린 티켓 + `.wip`의 (해시 -> priority, 해시 -> deps 원본). `.done`은 안 본다 -
-    끝난 티켓은 더는 아무것도 기다리지 않는다(§1-3 §유효 우선순위)."""
-    prio, deps = {}, {}
+    """열린 티켓 + `.wip`의 (해시 -> priority, 해시 -> deps 원본, 해시 -> duedate). `.done`은
+    안 본다 - 끝난 티켓은 더는 아무것도 기다리지 않는다(§1-3 §유효 우선순위)."""
+    prio, deps, duedate = {}, {}, {}
     for p in tickets_in(troot):
         base = nfc(os.path.basename(p))
         stem = base[:-3] if base.endswith(".md") else base
@@ -180,40 +218,76 @@ def _priority_graph(troot):
         h = ticket_hash(p, fm)
         prio[h] = priority_of(fm, h)
         deps[h] = deps_of(lines, end)
-    return prio, deps
+        duedate[h] = duedate_of(fm, h)
+    return prio, deps, duedate
 
 
-def _effective_from_graph(prio, deps):
-    """§1-3 유효 우선순위: `유효(t) = max(t.priority, {유효(w) | w의 deps에 t가 있다})`.
+def _warn_duedate_reversals(duedate, deps):
+    """§1-4 §역전: t가 기다리는 선행 d의 duedate가 t 자신의 duedate보다 늦으면 모순이다
+    (선행이 후행보다 늦게 끝나도 된다는 뜻이 되어 버린다). 거부할 자리가 없다 - 파일은 이미
+    있고, 지우는 것은 사람이 적은 일을 엔진이 지우는 것이다. WARN 한 줄만 찍고 판정은 그대로
+    진행한다. 둘 다 자기 duedate가 있을 때만 본다 - 없는 쪽은 애초에 모순을 못 적는다."""
+    for h, ds in deps.items():
+        due_h = duedate.get(h)
+        if due_h is None:
+            continue
+        for d in ds:
+            due_d = duedate.get(d)
+            if due_d is not None and due_d > due_h:
+                print("WARN 마감 역전 {} > {}".format(d, h), file=sys.stderr)
 
-    방향은 역방향이다 - t를 기다리는 w의 값을 t가 물려받는다. 체인 전체를 타고, 순환은
-    방문 집합으로 자른다(사이클 위에서 재방문하면 그 노드의 원값만 반환하고 더 안 판다 -
-    무한재귀 없이, 다른 비순환 경로의 최댓값은 그대로 잡는다). 파일에는 안 쓴다.
+
+def _effective_from_graph(prio, deps, duedate, now):
+    """§1-3 유효 우선순위 + §1-4 유효마감을 **같은 순회에서** 함께 접는다(추가 순회 0).
+
+    유효마감(t) = min({t.duedate} ∪ {유효마감(w) | w의 deps에 t가 있다}) - 아무 것도 없으면
+    마감 없음(None). 기준(t) = 파생(남은(t) = 유효마감(t)-now, 자기 duedate 유무)이 있으면
+    파생, 없으면 t.priority. 유효(t) = max(기준(t), {유효(w) | w의 deps에 t가 있다}).
+
+    방향은 §1-3과 같은 역방향이다 - t를 기다리는 w의 값을 t가 물려받는다. 순환은 방문
+    집합으로 자른다(재방문하면 그 노드를 더 안 접고 자기 값만 반환한다 - 무한재귀 없이,
+    다른 비순환 경로의 값은 그대로 접힌다). 파일에는 아무것도 안 쓴다.
+
+    반환은 (유효 우선순위, 기준값, 유효마감) 세 dict - 기준값은 DISPATCH 로그의 출처
+    표기(`(마감)` · `(상속 N)` · `(마감·상속 N)`)가 원값과 갈라 보는 데 쓴다.
     """
     waiters = {}
     for h, ds in deps.items():
         for d in ds:
             waiters.setdefault(d, []).append(h)
 
-    eff = {}
+    eff, base, eff_due = {}, {}, {}
 
     def calc(h, visiting):
         if h in eff:
-            return eff[h]
-        base = prio.get(h, PRIORITY_DEFAULT)
+            return eff[h], eff_due[h]
+        own_prio = prio.get(h, PRIORITY_DEFAULT)
+        own_due = duedate.get(h)
         if h in visiting:
-            return base
+            return own_prio, own_due
         visiting.add(h)
-        best = base
+        best_due = own_due
+        best_eff = None
         for w in waiters.get(h, []):
-            best = max(best, calc(w, visiting))
+            w_eff, w_due = calc(w, visiting)
+            if w_due is not None and (best_due is None or w_due < best_due):
+                best_due = w_due
+            best_eff = w_eff if best_eff is None else max(best_eff, w_eff)
         visiting.discard(h)
+
+        remaining = (best_due - now) if best_due is not None else None
+        derived = derive_priority(remaining, own_due is not None)
+        h_base = derived if derived is not None else own_prio
+        best = h_base if best_eff is None else max(h_base, best_eff)
+
         eff[h] = best
-        return best
+        base[h] = h_base
+        eff_due[h] = best_due
+        return best, best_due
 
     for h in prio:
         calc(h, set())
-    return eff
+    return eff, base, eff_due
 
 
 def deps_unmet(troot, deps):
@@ -226,11 +300,15 @@ def deps_unmet(troot, deps):
     return unmet
 
 
-def scan(troot):
+def scan(troot, now=None):
     """열린 티켓(상태 접미사 없음)을 유효 우선순위 높은 순, 같은 값 안에서는 생성일 오름차순으로
-    (§1-3 §순서 — `(-effective, birth, path)`)."""
-    prio, deps_by_h = _priority_graph(troot)
-    eff = _effective_from_graph(prio, deps_by_h)
+    (§1-3 §순서 — `(-effective, birth, path)`). `now`는 §1-4 §계산 시점 - 안 주면 한 번 읽어
+    그 호출의 행 전부에 같은 값을 쓴다(시계를 기다려야 검증되는 코드를 만들지 않는다)."""
+    if now is None:
+        now = datetime.now()
+    prio, deps_by_h, duedate = _priority_graph(troot)
+    _warn_duedate_reversals(duedate, deps_by_h)
+    eff, baseline, eff_due = _effective_from_graph(prio, deps_by_h, duedate, now)
     rows = []
     for p in tickets_in(troot):
         if not is_open_name(os.path.basename(p)):
@@ -254,6 +332,7 @@ def scan(troot):
             # 없으면 세션이 착수를 거부하고 종료해 티켓이 진행중으로 유실된다(2026-07-28 05990d8e 실사고).
             "unmet": deps_unmet(troot, deps_of(flines, end)),
             "priority": prio.get(h, PRIORITY_DEFAULT),
+            "baseline": baseline.get(h, PRIORITY_DEFAULT),
             "effective": eff.get(h, PRIORITY_DEFAULT),
         })
     rows.sort(key=lambda r: (-r["effective"], r["birth"], r["path"]))
@@ -738,8 +817,9 @@ def main():
         # 미할당 열린 티켓을 유효 우선순위 높은 순(§1-3)으로 전부. 호출자가 위에서부터 claim 시도.
         for r in scan(sys.argv[2]):
             if not r["assigned"] and not r["unmet"]:
-                print("{}|{}|{}|{}|{}|{}".format(
-                    r["path"], r["hash"], r["kind"], r["persona"], r["priority"], r["effective"]))
+                print("{}|{}|{}|{}|{}|{}|{}".format(
+                    r["path"], r["hash"], r["kind"], r["persona"],
+                    r["priority"], r["baseline"], r["effective"]))
         return
 
     if cmd == "list":
