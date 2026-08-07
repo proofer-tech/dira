@@ -433,7 +433,14 @@ function TokenStatusBadge({ status }: { status: TokenStatus }) {
  *  들어간다(eligible한 활성이 없을 때만 예외로 활성이 된다). 지금 쓸 토큰은 `대기` 행의 `사용`
  *  버튼으로 사람이 직접 고른다. 활성화·사용 어느 쪽도 `oauth-token` 쓰기는 이 컴포넌트가 직접
  *  하지 않는다 — `setTokenEnabledAction`·`setActiveTokenAction`이 `lib/auth.ts`의 `writeTokens` 안에서만 한다. */
-function TokensSection({ refreshKey }: { refreshKey: string | null }) {
+function TokensSection({
+  refreshKey,
+  onCount,
+}: {
+  refreshKey: string | null;
+  /** §0-13 §트리거 문구 — 트리거가 행 수를 알아야 `추가`/`변경`을 가른다. 새 서버 왕복을 안 낸다. */
+  onCount?: (n: number) => void;
+}) {
   const t = useT();
   const [rows, setRows] = useState<TokenRow[] | null>(null);
   const [pending, start] = useTransition();
@@ -442,20 +449,26 @@ function TokensSection({ refreshKey }: { refreshKey: string | null }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
 
+  const apply = (r: TokenRow[]) => {
+    setRows(r);
+    onCount?.(r.length);
+  };
+
   // `refreshKey`는 부르는 쪽의 `savedAt`이다 — 층 ②·③이 토큰을 저장하면 그 값이 바뀌어 목록을
   // 다시 읽는다("인증하기/토큰추가 시 토큰 목록에 추가됩니다", §0-13 §화면). 새 폴링 루프를
   // 따로 만들지 않는다 — 이미 있는 신호를 의존성으로 빌린다.
   useEffect(() => {
-    void readTokenRowsAction().then(setRows);
+    void readTokenRowsAction().then(apply);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshKey]);
 
   const setEnabled = (row: TokenRow, enabled: boolean) =>
-    start(async () => setRows(await setTokenEnabledAction(row.id, enabled)));
-  const remove = (row: TokenRow) => start(async () => setRows(await deleteTokenAction(row.id)));
-  const use = (row: TokenRow) => start(async () => setRows(await setActiveTokenAction(row.id)));
+    start(async () => apply(await setTokenEnabledAction(row.id, enabled)));
+  const remove = (row: TokenRow) => start(async () => apply(await deleteTokenAction(row.id)));
+  const use = (row: TokenRow) => start(async () => apply(await setActiveTokenAction(row.id)));
   const saveLabel = (row: TokenRow) =>
     start(async () => {
-      setRows(await setTokenLabelAction(row.id, editValue));
+      apply(await setTokenLabelAction(row.id, editValue));
       setEditingId(null);
     });
 
@@ -620,6 +633,10 @@ export function SettingsDialog({
   // §0-13 §화면 — 층 ②·③(발급·직접 넣기)을 토큰 목록 자리에 딸린 하나의 자리로 접는다.
   // 닫혀 있다가도 인증이 필요하면 자동으로 펼친다(아래 `onOpenChange` · 폴링 effect의 `savedAt` 판정).
   const [addOpen, setAddOpen] = useState(false);
+  // §0-13 §트리거 문구 — 잠김에서 행이 있으면 트리거가 `추가`가 아니라 `변경`이다. 행 수는
+  // `TokensSection`만 안다 — `readTokenRowsAction`을 여기서 또 부르지 않고 그 컴포넌트가 이미
+  // 읽은 값을 콜백으로 올려 받는다.
+  const [accountCount, setAccountCount] = useState<number | null>(null);
   // §0-15 트리 선택 — 첫 선택은 항상 `claude`다(§45 ③), 종 CTA로 열려도 같다
   const [activeNode, setActiveNode] = useState<SettingsNode>("claude");
   // 저장 직후엔 서버 프롭이 아직 옛 값이다 — 방금 쓴 것이 이긴다(층 ②·③ 어느 쪽이든)
@@ -977,14 +994,18 @@ export function SettingsDialog({
 
               {/* ① 목록 — 토큰 하나가 아니라 여러 계정을 확인·사용·활성화/비활성화·삭제한다(§0-13 §화면) */}
               <div data-setting="claude.accounts">
-                <TokensSection refreshKey={savedAt} />
+                <TokensSection refreshKey={savedAt} onCount={setAccountCount} />
               </div>
 
               {/* ②·③(발급·직접 넣기)은 상시 렌더되는 블록이 아니라 이 트리거 하나로 접힌다
-                  (§0-13 §화면 — 목록 통합). 로직·문구·에러 처리는 무수정, 렌더 위치만 옮겼다. */}
+                  (§0-13 §화면 — 목록 통합). 로직·문구·에러 처리는 무수정, 렌더 위치만 옮겼다.
+                  §0-13 §트리거 문구 — 잠김(!isMultiToken())에서 행이 있으면 `추가`가 아니라
+                  `변경`이다. 해금은 행 수와 무관하게 늘 `추가`(요구 `1681a5d9`). */}
               <Popover open={addOpen} onOpenChange={setAddOpen}>
                 <PopoverTrigger render={<Button variant="outline" size="sm" data-setting="claude.add" />}>
-                  {t("common.add")}
+                  {!isMultiToken() && accountCount !== null && accountCount > 0
+                    ? t("settings.claude.changeTrigger")
+                    : t("common.add")}
                 </PopoverTrigger>
                 <PopoverContent align="start" className="w-96 max-h-[70vh] space-y-4 overflow-y-auto">
                   {/* ② 발급 — CLI에게 터미널을 대신 내어 준다 */}

@@ -67,6 +67,9 @@ export const ko: Record<string, string> = {
     '이미 발급받은 토큰이 있으면 여기에 붙여 넣습니다. 목록에 대기로 추가됩니다 — 지금 쓸 토큰은 목록에서 "사용"으로 고릅니다.',
   "settings.claude.tokenHintSingle": "이미 발급받은 토큰이 있으면 여기에 붙여 넣습니다. 지금 쓰는 토큰이 이 토큰으로 바뀝니다.",
   "settings.claude.tokenSaved": "저장했습니다. 유효한지는 다음 디스패치에서 드러납니다.",
+  // 잠김에서 계정이 이미 있으면 트리거는 `추가`가 아니라 이 낱말이다(§0-13 §트리거 문구,
+  // 요구 `1681a5d9`) — `추가`는 도달 불가한 결과를 가리킨다. 팝오버 안·행 꼬리는 무수정.
+  "settings.claude.changeTrigger": "변경",
 
   "settings.tokens.empty": "등록된 토큰이 없습니다.",
   "settings.tokens.labelPlaceholder": "이메일 등 알아볼 이름",
@@ -208,6 +211,7 @@ const en: Record<string, string> = {
   "settings.claude.tokenHintSingle":
     "Paste a token you already have. It replaces the one in use.",
   "settings.claude.tokenSaved": "Saved. Whether it works shows up on the next dispatch.",
+  "settings.claude.changeTrigger": "Change",
 
   "settings.tokens.empty": "No tokens yet.",
   "settings.tokens.labelPlaceholder": "An email, or any name you'll recognize",
