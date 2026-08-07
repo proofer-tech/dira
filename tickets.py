@@ -140,6 +140,82 @@ def deps_of(lines, end):
     return [h for h in out if h]
 
 
+PRIORITY_DEFAULT = 3
+PRIORITY_MIN, PRIORITY_MAX = 1, 5
+
+
+def priority_of(fm, h=""):
+    """frontmatter `priority:`. 없으면 3(무경고). 정수가 아니거나 1~5 밖이면 3 + WARN 한 줄
+    (§1-3 §값 — 파서를 만들지 않는다, `read_fm`이 준 문자열에 `int()` 한 번이다)."""
+    raw = (fm.get("priority") or "").strip().strip("\"'")
+    if not raw:
+        return PRIORITY_DEFAULT
+    try:
+        n = int(raw)
+    except ValueError:
+        print("WARN priority가 정수가 아니다 {} 값={!r} - 3으로 읽음".format(h, raw),
+              file=sys.stderr)
+        return PRIORITY_DEFAULT
+    if n < PRIORITY_MIN or n > PRIORITY_MAX:
+        print("WARN priority가 1~5 밖이다 {} 값={} - 3으로 읽음".format(h, n), file=sys.stderr)
+        return PRIORITY_DEFAULT
+    return n
+
+
+def _priority_graph(troot):
+    """열린 티켓 + `.wip`의 (해시 -> priority, 해시 -> deps 원본). `.done`은 안 본다 -
+    끝난 티켓은 더는 아무것도 기다리지 않는다(§1-3 §유효 우선순위)."""
+    prio, deps = {}, {}
+    for p in tickets_in(troot):
+        base = nfc(os.path.basename(p))
+        stem = base[:-3] if base.endswith(".md") else base
+        if stem.endswith(nfc(DONE)):
+            continue
+        try:
+            fm, lines, end = read_fm(p)
+        except (OSError, UnicodeDecodeError):
+            continue
+        if end < 0:
+            continue
+        h = ticket_hash(p, fm)
+        prio[h] = priority_of(fm, h)
+        deps[h] = deps_of(lines, end)
+    return prio, deps
+
+
+def _effective_from_graph(prio, deps):
+    """§1-3 유효 우선순위: `유효(t) = max(t.priority, {유효(w) | w의 deps에 t가 있다})`.
+
+    방향은 역방향이다 - t를 기다리는 w의 값을 t가 물려받는다. 체인 전체를 타고, 순환은
+    방문 집합으로 자른다(사이클 위에서 재방문하면 그 노드의 원값만 반환하고 더 안 판다 -
+    무한재귀 없이, 다른 비순환 경로의 최댓값은 그대로 잡는다). 파일에는 안 쓴다.
+    """
+    waiters = {}
+    for h, ds in deps.items():
+        for d in ds:
+            waiters.setdefault(d, []).append(h)
+
+    eff = {}
+
+    def calc(h, visiting):
+        if h in eff:
+            return eff[h]
+        base = prio.get(h, PRIORITY_DEFAULT)
+        if h in visiting:
+            return base
+        visiting.add(h)
+        best = base
+        for w in waiters.get(h, []):
+            best = max(best, calc(w, visiting))
+        visiting.discard(h)
+        eff[h] = best
+        return best
+
+    for h in prio:
+        calc(h, set())
+    return eff
+
+
 def deps_unmet(troot, deps):
     """미완료 선행 해시. 티켓을 못 찾으면 미완료로 본다(보수적 - 오탈자 해시로 착수되는 편보다 안전)."""
     unmet = []
@@ -151,7 +227,10 @@ def deps_unmet(troot, deps):
 
 
 def scan(troot):
-    """열린 티켓(상태 접미사 없음)을 생성일 오름차순으로."""
+    """열린 티켓(상태 접미사 없음)을 유효 우선순위 높은 순, 같은 값 안에서는 생성일 오름차순으로
+    (§1-3 §순서 — `(-effective, birth, path)`)."""
+    prio, deps_by_h = _priority_graph(troot)
+    eff = _effective_from_graph(prio, deps_by_h)
     rows = []
     for p in tickets_in(troot):
         if not is_open_name(os.path.basename(p)):
@@ -162,9 +241,10 @@ def scan(troot):
             continue
         if end < 0:
             continue
+        h = ticket_hash(p, fm)
         rows.append({
             "path": p,
-            "hash": ticket_hash(p, fm),
+            "hash": h,
             "kind": (fm.get("kind") or "").strip().strip("\"'"),
             "persona": persona_of(fm),
             "birth": birth(p),
@@ -173,8 +253,10 @@ def scan(troot):
             # deps 미충족이면 큐에서 제외한다(pull 규약을 디스패처 층에서 강제).
             # 없으면 세션이 착수를 거부하고 종료해 티켓이 진행중으로 유실된다(2026-07-28 05990d8e 실사고).
             "unmet": deps_unmet(troot, deps_of(flines, end)),
+            "priority": prio.get(h, PRIORITY_DEFAULT),
+            "effective": eff.get(h, PRIORITY_DEFAULT),
         })
-    rows.sort(key=lambda r: (r["birth"], r["path"]))
+    rows.sort(key=lambda r: (-r["effective"], r["birth"], r["path"]))
     return rows
 
 
@@ -653,10 +735,11 @@ def main():
         warn_legacy(sys.argv[2])
 
     if cmd == "select":
-        # 미할당 열린 티켓을 생성일 오름차순으로 전부. 호출자가 위에서부터 claim 시도.
+        # 미할당 열린 티켓을 유효 우선순위 높은 순(§1-3)으로 전부. 호출자가 위에서부터 claim 시도.
         for r in scan(sys.argv[2]):
             if not r["assigned"] and not r["unmet"]:
-                print("{}|{}|{}|{}".format(r["path"], r["hash"], r["kind"], r["persona"]))
+                print("{}|{}|{}|{}|{}|{}".format(
+                    r["path"], r["hash"], r["kind"], r["persona"], r["priority"], r["effective"]))
         return
 
     if cmd == "list":

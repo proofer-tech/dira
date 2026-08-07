@@ -45,12 +45,16 @@ wrong ticket.
 | `kind:` | | `work` \| `request` \| `feedback` \| `answer` |
 | `persona:` | | A persona the project defines (under `<queue>/personas/`). Absent → dispatched persona-less (normal) |
 | `deps:` | | `[a1b2c3d4, e5f6a7b8]`. Appears in the queue only when all are `.done` |
+| `priority:` | | `1`-`5`. Missing/unreadable/out-of-range → read as `3`, no queue migration needed. A ticket a higher-priority ticket depends on inherits that ticket's value (see project docs for the exact rule) |
 | `awaiting:` | | The **one answer stem** currently waited on. **Put the same value in `deps` too** — `deps` is the lock; this is what the GUI reads as "awaiting answer". Written by request-splitting sessions on `kind: request`, and by `reap` on tickets past the auto-reclaim cap (any kind). **Not deleted after the answer lands** (history) — whether still waiting is judged by the existence of `tickets/<awaiting>.done.md` |
 | `req:` | | Source requirement stem, on tickets split from a requirement. Not `deps` — provenance, not ordering |
 
 Procedures for `awaiting:`/`req:` live in project docs (persona profiles, design doc).
 The engine writes these keys in exactly one place — `reap`'s answer escalation
 ([CORE.md](CORE.md) §When blocked); the lock is always `deps`.
+
+**Sessions write `priority:` only as `1`-`4`.** `5` preempts another worker's
+in-progress ticket — that's a human-only call, not one a session makes on its own.
 
 **`kind: answer` is created by a human/GUI and is born `.done`** — created as
 `tickets/<A>.done.md` at the requirement's `awaiting:` stem (`title: 답변 — <R> #n`).

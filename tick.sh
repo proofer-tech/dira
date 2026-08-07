@@ -282,12 +282,20 @@ fi
 # 루프 안, 후보의 persona가 확정된 뒤로 옮겼다 - reap만 이 앞에 그대로 둔다(스테일 수거는
 # 엔진 가용성과 무관하다).
 
-# --- 선정·claim 임계구역: 페르소나 상한은 여기 없으면 상한이 아니다 ---
+# --- 티켓 선정: 상태접미사 없고 session_id 비어있는 것, 유효 우선순위 높은 순(§1-3) ---
+# select가 이미 `(-effective, birth, path)`로 정렬해 준다(tickets.py scan()) - 여기는
+# 그 순서를 그대로 훑을 뿐이다.
+CANDS=$(python3 "$PY" select "$TICKET_ROOT") || { log "ERROR select 실패"; exit 1; }
+[ -z "$CANDS" ] && exit 0
+
+# --- 선정·claim 임계구역: 페르소나 상한·1 게이트는 여기 없으면 게이트가 아니다 ---
 # 상한(§5-4)은 `personas/<이름>/limit` 한 줄이고 **세는 것과 잡는 것이 한 임계구역**이어야 한다.
 # 지금 구조는 select가 후보를 전부 주고 각 워커가 위에서부터 claim하니 카운트가 claim보다 앞이다.
 # 워커 8개는 cron 같은 분에 뜨고 같은 1초에 최대 5개가 DISPATCH된다(실측) - 상한 1의 티켓이
 # 다섯 장 열려 있으면 다섯 워커가 모두 `0 < 1`을 읽고 각자 다른 티켓을 잡는다. 로그에는 아무
 # 이상이 안 남아서 아무도 못 잡는다.
+# 1 게이트(§1-3)도 같은 이유다 - "유효 1은 .wip 0건일 때만 후보"를 세고 나서 잡으면 게이트가
+# 아니다. 그래서 같은 그릇(같은 SLOCK)을 쓴다 - 새 잠금은 0개다.
 # 그릇은 위 워커 락과 같은 관용구다(mkdir + pid + kill -0 스테일 회수). 다른 점 하나 - 워커 락은
 # 워커 이름별이고 이것은 **머신에 하나**다. reap은 이 앞에 그대로 둔다.
 # **못 얻으면 기다리지 않고 종료한다**: 다음 cron이 60초 뒤에 오고, 죽은 워커가 물고 있어도
@@ -297,14 +305,17 @@ fi
 # 즉 상한을 한 번 쓰면 그 큐의 디스패치가 분당 1건으로 눌린다. 세션이 5~25분이라 정상 상태는
 # 견디지만 냉시동이 워커 수만큼 느려진다 - 뒤집으려면 짧은 재시도가 필요하고 그건 스펙의 일이다.
 #
-# **상한 파일이 하나도 없으면 잠금을 안 잡는다.** `상한 없음`이 기본값이고(스캐폴딩이 이 파일을
-# 안 만든다) 그 판은 §5-4 표대로 **종전 그대로**여야 한다 - 지킬 상한이 0개인데 직렬화하면
-# 같은 분에 깬 워커 여덟 중 하나만 뜬다. 파일이 하나라도 생기면 그때부터 전원이 줄을 선다.
+# **상한 파일도 유효 1 후보도 없으면 잠금을 안 잡는다.** `상한 없음`이 기본값이고(스캐폴딩이
+# 이 파일을 안 만든다) 그 판은 §5-4 표대로 **종전 그대로**여야 한다 - 지킬 게이트가 0개인데
+# 직렬화하면 같은 분에 깬 워커 여덟 중 하나만 뜬다. 파일이 하나라도 생기거나 유효 1이 뜨면
+# 그때부터 전원이 줄을 선다.
 LIMITED=""
 for lf in "${TICKET_PERSONAS:-$TICKET_ROOT/personas}"/*/limit; do
   [ -f "$lf" ] && { LIMITED=1; break; }
 done
-if [ "$CMD" = "tick" ] && [ -n "$LIMITED" ]; then
+HASPRIO1=""
+printf '%s\n' "$CANDS" | grep -q '|1$' && HASPRIO1=1
+if [ "$CMD" = "tick" ] && { [ -n "$LIMITED" ] || [ -n "$HASPRIO1" ]; }; then
   acquire_slock || exit 0
 fi
 
@@ -340,16 +351,33 @@ for p in T.in_progress(sys.argv[2]):
 print(n)' "$CODE" "$TICKET_ROOT" "$1"
 }
 
-# --- 티켓 선정: 상태접미사 없고 session_id 비어있는 것 중 생성일 최고참 1건 ---
-CANDS=$(python3 "$PY" select "$TICKET_ROOT") || { log "ERROR select 실패"; exit 1; }
-[ -z "$CANDS" ] && exit 0
+# 전체 큐의 진행중 수(페르소나 무관) - 1 게이트(§1-3)가 "모든 워커가 idle"을 판정하는 값.
+# 워커 락을 세지 않는 이유는 위 persona_wip과 같다(락에서 프로젝트를 역추적할 수 없다).
+total_wip() {
+  python3 -c 'import sys
+sys.path.insert(0, sys.argv[1])
+import tickets as T
+print(len(T.in_progress(sys.argv[2])))' "$CODE" "$TICKET_ROOT"
+}
 
 SID=$(python3 -c 'import uuid;print(uuid.uuid4())')
-TPATH=""; THASH=""; TKIND=""; TPERSONA=""
+TPATH=""; THASH=""; TKIND=""; TPERSONA=""; TPRIO=""; TEFF=""
 OVER=""    # 이 판에서 이미 상한이던 페르소나들. 후보가 여럿이어도 SKIP은 페르소나당 한 줄이다
 ENGOVER="" # 이 판에서 이미 디스패치 불가이던 엔진들. 후보가 여럿이어도 SKIP은 엔진당 한 줄이다
-while IFS='|' read -r c_path c_hash c_kind c_persona; do
+while IFS='|' read -r c_path c_hash c_kind c_persona c_prio c_eff; do
   [ -z "$c_path" ] && continue
+
+  # 1 게이트(§1-3) — 유효 1은 진행중 티켓이 0건일 때만 후보다. "모든 워커가 idle"의 큐 쪽
+  # 값이 그것이다. 걸려도 큐에서 안 빠진다 - 이번 tick의 후보가 아닐 뿐이고 다음 후보로
+  # 넘어간다(페르소나 상한의 continue와 같은 모양 - 다른 우선순위 티켓을 안 굶긴다).
+  if [ "$c_eff" = "1" ]; then
+    WIPN=$(total_wip)
+    if [ "$WIPN" -gt 0 ]; then
+      log "SKIP 우선순위 1 $c_hash — 진행중 ${WIPN}건"
+      continue
+    fi
+  fi
+
   # 상한에 걸려 안 뜨는 것은 SKIP이다(새 로그 낱말 0). 다른 페르소나 후보는 계속 본다 -
   # 한 페르소나가 상한이어도 나머지를 굶기지 않는 것이 이 요구의 절반이다.
   if [ -n "$c_persona" ]; then
@@ -390,11 +418,11 @@ while IFS='|' read -r c_path c_hash c_kind c_persona; do
   fi
 
   if [ "$CMD" = "dryrun" ]; then
-    TPATH="$c_path"; THASH="$c_hash"; TKIND="$c_kind"; TPERSONA="$c_persona"; break
+    TPATH="$c_path"; THASH="$c_hash"; TKIND="$c_kind"; TPERSONA="$c_persona"; TPRIO="$c_prio"; TEFF="$c_eff"; break
   fi
   # 잡기 = 원자적 rename. 이게 진짜 락 - 다른 세션·다른 tick도 이걸 보고 피한다.
   if CPATH=$(python3 "$PY" claim "$c_path" 2>/dev/null); then
-    TPATH="$CPATH"; THASH="$c_hash"; TKIND="$c_kind"; TPERSONA="$c_persona"
+    TPATH="$CPATH"; THASH="$c_hash"; TKIND="$c_kind"; TPERSONA="$c_persona"; TPRIO="$c_prio"; TEFF="$c_eff"
     break
   fi
 done <<EOF
@@ -570,7 +598,9 @@ fi
 python3 "$PY" assign "$TPATH" "$SID" "${TPERSONA:-agent} / ${TICKET_NAME}-${SID:0:8}" || {
   log "ERROR assign 실패 $THASH"; python3 "$PY" release "$TPATH" >/dev/null; exit 1; }
 LOGF="$LOGDIR/$(date '+%Y%m%d-%H%M%S')-${TICKET_NAME}-${THASH}.log"
-log "DISPATCH $THASH kind=${TKIND:--} persona=${TPERSONA:-none} sid=$SID log=$(basename "$LOGF")"
+PRIOLOG="prio=$TEFF"
+[ "$TPRIO" != "$TEFF" ] && PRIOLOG="prio=$TEFF(상속 $TPRIO)"
+log "DISPATCH $THASH kind=${TKIND:--} persona=${TPERSONA:-none} sid=$SID log=$(basename "$LOGF") $PRIOLOG"
 
 cd "$TICKET_CWD" || { log "ERROR cwd 없음 $TICKET_CWD"; python3 "$PY" clear "$TPATH"; python3 "$PY" release "$TPATH" >/dev/null 2>&1; exit 1; }
 
@@ -725,7 +755,7 @@ print("|".join((sid, ok, reason, reset, ctx)))'
 # 아무도 안 건드린다) - 재활용은 페르소나를 안 바꾸므로 다시 세우지 않고 같은 값으로 게이트를 본다.
 select_reuse_candidate() {
   local persona="$1"
-  RTPATH=""; RTHASH=""; RTKIND=""
+  RTPATH=""; RTHASH=""; RTKIND=""; RTPRIO=""; RTEFF=""
   local RCANDS
   RCANDS=$(python3 "$PY" select "$TICKET_ROOT") || return 1
   [ -z "$RCANDS" ] && return 1
@@ -748,12 +778,12 @@ select_reuse_candidate() {
     acquire_slock || return 1
   fi
 
-  local rc_path rc_hash rc_kind rc_persona RCPATH
-  while IFS='|' read -r rc_path rc_hash rc_kind rc_persona; do
+  local rc_path rc_hash rc_kind rc_persona rc_prio rc_eff RCPATH
+  while IFS='|' read -r rc_path rc_hash rc_kind rc_persona rc_prio rc_eff; do
     [ -z "$rc_path" ] && continue
     [ "$rc_persona" = "$persona" ] || continue
     if RCPATH=$(python3 "$PY" claim "$rc_path" 2>/dev/null); then
-      RTPATH="$RCPATH"; RTHASH="$rc_hash"; RTKIND="$rc_kind"
+      RTPATH="$RCPATH"; RTHASH="$rc_hash"; RTKIND="$rc_kind"; RTPRIO="$rc_prio"; RTEFF="$rc_eff"
       break
     fi
   done <<EOF
@@ -821,7 +851,9 @@ sys.stdout.write(json.dumps({"type":"user","message":{"role":"user","content":sy
                             ensure_ascii=False, separators=(",", ":")) + "\n")' "$RPROMPT" >&9
       INJOFFSET=$(wc -l < "$OUTF")
       python3 "$PY" setinbox "$RTPATH" "$INBOX"
-      log "DISPATCH $RTHASH kind=${RTKIND:--} persona=${TPERSONA:-none} sid=$SID log=$(basename "$LOGF")"
+      RPRIOLOG="prio=$RTEFF"
+      [ "$RTPRIO" != "$RTEFF" ] && RPRIOLOG="prio=$RTEFF(상속 $RTPRIO)"
+      log "DISPATCH $RTHASH kind=${RTKIND:--} persona=${TPERSONA:-none} sid=$SID log=$(basename "$LOGF") $RPRIOLOG"
 
       # 주입 뒤 TICKET_FEED_TIMEOUT 안에 출력이 안 자라면 STALL과 같은 경로다(§4-11 §규칙) -
       # 최초 디스패치의 started() 자리와 같다. 여긴 init 판정이 없으니 "줄이 자랐나"가 그 신호고,
