@@ -27,6 +27,7 @@ export type Ticket = {
   unmet: string[]; // .done이 아닌 deps. 못 찾은 해시도 미충족(보수적)
   assigned: boolean;
   priority: number; // 원값(frontmatter priority:). 없거나 잘못되면 3(§1-3 §값)
+  baseline: number; // §1-4 기준값 — 파생(마감)이 있으면 파생, 없으면 priority. effective 이전값
   effective: number; // 유효 우선순위 — deps 역방향 상속(§1-3 §유효 우선순위). 파일에 안 씀
   fm: Record<string, string>;
   body: string; // frontmatter 이후 본문
@@ -107,28 +108,87 @@ export function priorityOf(fm: Record<string, string>, h = ""): number {
   return n;
 }
 
-/** tickets.py _priority_graph. 열린 티켓 + `.wip`의 (hash -> priority, hash -> deps). `.done`은
- *  제외한다 — 끝난 티켓은 더는 아무것도 기다리지 않는다(§1-3 §유효 우선순위). */
+export const DUE_ESCALATE_MS = 5 * 60 * 60 * 1000; // 남은 <= 이 값이면 파생 5(지난 마감 포함)
+export const DUE_DEMOTE_MS = 7 * 24 * 60 * 60 * 1000; // 남은 >= 이 값 + 자기 duedate 있으면 파생 1
+
+/** ISO 8601 날짜시간, 오프셋은 선택(`+09:00`·`Z`). `<input type="datetime-local">`이 내는
+ *  오프셋 없는 값이 기본 입력이다. */
+const ISO_DATETIME_RE =
+  /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}(?:\.\d+)?))?(Z|[+-]\d{2}:?\d{2})?$/;
+
+function isoOffsetMs(off: string): number {
+  if (off === "Z") return 0;
+  const m = /^([+-])(\d{2}):?(\d{2})$/.exec(off)!;
+  return (m[1] === "-" ? -1 : 1) * (Number(m[2]) * 60 + Number(m[3])) * 60 * 1000;
+}
+
+/** tickets.py duedate_of. frontmatter `duedate:`. 키가 없으면 마감 없음(무경고 — 큐 마이그레이션
+ *  0건이 이 무경고에 걸려 있다). 못 읽으면(빈 값·자연어 포함) 마감 없음 + WARN 한 줄(§1-4 §값 —
+ *  새 파서를 안 만든다, 정규식 하나가 `fromisoformat` 대신이다). 오프셋 있는 값은 그 오프셋의
+ *  절대 시각으로, 없는 값은 로컬 시각으로 읽는다 — 둘 다 `Date`(절대 시각)라 이후 `now`와의
+ *  차는 오프셋 유무와 무관하게 맞다(tickets.py가 로컬로 변환해 버리는 것과 같은 결과다). */
+export function duedateOf(fm: Record<string, string>, h = ""): Date | null {
+  if (!("duedate" in fm)) return null;
+  const raw = unquote(fm.duedate ?? "");
+  const m = raw ? ISO_DATETIME_RE.exec(raw) : null;
+  if (!m) {
+    console.warn(`WARN duedate 못 읽음 ${h} 값=${JSON.stringify(raw)} - 마감 없음으로 읽음`);
+    return null;
+  }
+  const [, y, mo, d, hh, mi, ss, off] = m;
+  const sec = ss ? Math.trunc(Number(ss)) : 0;
+  if (!off) return new Date(Number(y), Number(mo) - 1, Number(d), Number(hh), Number(mi), sec);
+  const utcMs = Date.UTC(Number(y), Number(mo) - 1, Number(d), Number(hh), Number(mi), sec);
+  return new Date(utcMs - isoOffsetMs(off));
+}
+
+/** tickets.py derive_priority. §1-4 §파생: 남은 <= 5시간이면 5(지난 마감 포함) · 자기 duedate가
+ *  있고 남은 >= 7일이면 1 · 그 사이는 없음(null). 강등(1)만 `hasOwnDuedate`로 막는다 — 급한
+ *  쪽(5)은 전이하지만 느긋한 쪽(1)은 전이하지 않는다(§1-4 §전이). */
+export function derivePriority(remainingMs: number | null, hasOwnDuedate: boolean): number | null {
+  if (remainingMs === null) return null;
+  if (remainingMs <= DUE_ESCALATE_MS) return 5;
+  if (hasOwnDuedate && remainingMs >= DUE_DEMOTE_MS) return 1;
+  return null;
+}
+
+/** tickets.py _priority_graph. 열린 티켓 + `.wip`의 (hash -> priority, hash -> deps,
+ *  hash -> duedate). `.done`은 제외한다 — 끝난 티켓은 더는 아무것도 기다리지 않는다
+ *  (§1-3 §유효 우선순위). */
 function priorityGraph(
   entries: { hash: string; state: TicketState; fm: Record<string, string>; deps: string[] }[],
-): { prio: Map<string, number>; deps: Map<string, string[]> } {
+): { prio: Map<string, number>; deps: Map<string, string[]>; duedate: Map<string, Date | null> } {
   const prio = new Map<string, number>();
   const deps = new Map<string, string[]>();
+  const duedate = new Map<string, Date | null>();
   for (const e of entries) {
     if (e.state === "done") continue;
     prio.set(e.hash, priorityOf(e.fm, e.hash));
     deps.set(e.hash, e.deps);
+    duedate.set(e.hash, duedateOf(e.fm, e.hash));
   }
-  return { prio, deps };
+  return { prio, deps, duedate };
 }
 
-/** tickets.py _effective_from_graph. §1-3 유효 우선순위:
- *  `유효(t) = max(t.priority, {유효(w) | w의 deps에 t가 있다})`.
+/** tickets.py _effective_from_graph. §1-3 유효 우선순위 + §1-4 유효마감을 **같은 순회에서**
+ *  함께 접는다(추가 순회 0):
+ *
+ *  유효마감(t) = min({t.duedate} ∪ {유효마감(w) | w의 deps에 t가 있다}) — 아무것도 없으면 null.
+ *  기준(t) = 파생(남은(t) = 유효마감(t)-now, 자기 duedate 유무)이 있으면 파생, 없으면 t.priority.
+ *  유효(t) = max(기준(t), {유효(w) | w의 deps에 t가 있다}).
  *
  *  방향은 역방향이다 — t를 기다리는 w의 값을 t가 물려받는다. 체인 전체를 타고, 순환은 방문
  *  집합으로 자른다(사이클 위에서 재방문하면 그 노드의 원값만 반환하고 더 안 판다 — 무한재귀
- *  없이, 다른 비순환 경로의 최댓값은 그대로 잡는다). 파일에는 안 쓴다. */
-function effectiveFromGraph(prio: Map<string, number>, deps: Map<string, string[]>): Map<string, number> {
+ *  없이, 다른 비순환 경로의 최댓값은 그대로 잡는다). 파일에는 안 쓴다.
+ *
+ *  반환하는 `baseline`은 §1-4가 접는 두 번째 값이다(기준값 — 파생이 명시값을 덮었는지 구별하는
+ *  자리, DISPATCH 로그의 `(마감)`·`(상속 N)` 출처 표기와 같은 값). */
+function effectiveFromGraph(
+  prio: Map<string, number>,
+  deps: Map<string, string[]>,
+  duedate: Map<string, Date | null>,
+  now: Date,
+): { eff: Map<string, number>; baseline: Map<string, number> } {
   const waiters = new Map<string, string[]>();
   for (const [h, ds] of deps) {
     for (const d of ds) {
@@ -139,22 +199,37 @@ function effectiveFromGraph(prio: Map<string, number>, deps: Map<string, string[
   }
 
   const eff = new Map<string, number>();
+  const baseline = new Map<string, number>();
+  const effDue = new Map<string, Date | null>();
 
-  function calc(h: string, visiting: Set<string>): number {
-    const hit = eff.get(h);
-    if (hit !== undefined) return hit;
-    const base = prio.get(h) ?? PRIORITY_DEFAULT;
-    if (visiting.has(h)) return base;
+  function calc(h: string, visiting: Set<string>): [number, Date | null] {
+    if (eff.has(h)) return [eff.get(h)!, effDue.get(h) ?? null];
+    const ownPrio = prio.get(h) ?? PRIORITY_DEFAULT;
+    const ownDue = duedate.get(h) ?? null;
+    if (visiting.has(h)) return [ownPrio, ownDue];
     visiting.add(h);
-    let best = base;
-    for (const w of waiters.get(h) ?? []) best = Math.max(best, calc(w, visiting));
+    let bestDue = ownDue;
+    let bestEff: number | null = null;
+    for (const w of waiters.get(h) ?? []) {
+      const [wEff, wDue] = calc(w, visiting);
+      if (wDue !== null && (bestDue === null || wDue < bestDue)) bestDue = wDue;
+      bestEff = bestEff === null ? wEff : Math.max(bestEff, wEff);
+    }
     visiting.delete(h);
+
+    const remaining = bestDue !== null ? bestDue.getTime() - now.getTime() : null;
+    const derived = derivePriority(remaining, ownDue !== null);
+    const hBase = derived ?? ownPrio;
+    const best = bestEff === null ? hBase : Math.max(hBase, bestEff);
+
     eff.set(h, best);
-    return best;
+    baseline.set(h, hBase);
+    effDue.set(h, bestDue);
+    return [best, bestDue];
   }
 
   for (const h of prio.keys()) calc(h, new Set());
-  return eff;
+  return { eff, baseline };
 }
 
 /** tickets.py is_open_name / in_progress. NFC 정규화 후 접미사 판정. */
@@ -237,8 +312,12 @@ const parseCache = new Map<string, Parsed>();
 /** 프로젝트 큐의 티켓 전부(open·wip·done). 순서는 birth 오름차순, 동률이면 path — CLI `list`와 같다.
  *
  *  frontmatter가 없거나 닫는 `---`이 없는 파일은 **제외한다**: tickets.py scan()이 그렇게 하므로
- *  엔진에게 안 보이는 파일이고, GUI에 띄우면 있지도 않은 티켓을 있다고 하는 셈이다. */
-export async function listTickets(root: string, config: Suffixes): Promise<Ticket[]> {
+ *  엔진에게 안 보이는 파일이고, GUI에 띄우면 있지도 않은 티켓을 있다고 하는 셈이다.
+ *
+ *  `now`는 §1-4 §계산 시점 — 안 주면 호출 시점을 한 번 읽어 이 호출의 값 전부에 같은 시각을
+ *  쓴다(엔진의 `scan(troot, now=None)`과 같은 자리). GUI는 렌더마다 새로 부르므로 그때마다
+ *  다시 잰다 — tickets.py와 같은 계약, 새 폴링 규칙 0개. */
+export async function listTickets(root: string, config: Suffixes, now: Date = new Date()): Promise<Ticket[]> {
   const files = await ticketFiles(root);
   const ix = stemIndex(files);
   // 파일별 I/O는 서로 독립이다 — 순차로 기다리면 큐 크기에 그대로 비례한다(158건 200ms).
@@ -278,8 +357,8 @@ export async function listTickets(root: string, config: Suffixes): Promise<Ticke
     const hash = unquote(q.fm.ticket ?? "") || base.slice(0, -3);
     return [{ p, st, hash, state: stateOf(path.basename(p), config), fm: q.fm, deps: q.deps, body: q.body }];
   });
-  const { prio, deps: depsGraph } = priorityGraph(entries);
-  const eff = effectiveFromGraph(prio, depsGraph);
+  const { prio, deps: depsGraph, duedate } = priorityGraph(entries);
+  const { eff, baseline } = effectiveFromGraph(prio, depsGraph, duedate, now);
 
   const out: Ticket[] = [];
   for (const { p, st, hash, state, fm, deps, body } of entries) {
@@ -302,9 +381,10 @@ export async function listTickets(root: string, config: Suffixes): Promise<Ticke
       }),
       assigned: !!unquote(fm.session_id ?? ""),
       // `.done`은 그래프에서 빠지므로(priorityGraph) 자기 값을 직접 읽는다 — dot이 모든 카드에
-      // 자기 priority를 그리기 때문이다(§1-3 §보드). effective는 엔진이 안 계산하는 값이라
-      // 원본과 같은 기본값(3)으로 둔다 — scan()도 열린 티켓 밖은 이 값을 안 쓴다.
+      // 자기 priority를 그리기 때문이다(§1-3 §보드). baseline·effective는 엔진이 안 계산하는
+      // 값이라 원본과 같은 기본값(3)으로 둔다 — scan()도 열린 티켓 밖은 이 값을 안 쓴다.
       priority: prio.get(hash) ?? priorityOf(fm, hash),
+      baseline: baseline.get(hash) ?? PRIORITY_DEFAULT,
       effective: eff.get(hash) ?? PRIORITY_DEFAULT,
       fm,
       body,

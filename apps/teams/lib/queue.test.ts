@@ -10,6 +10,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  DUE_DEMOTE_MS,
+  DUE_ESCALATE_MS,
   HIDE_DONE_STATUSES,
   archivedBy,
   archivesOf,
@@ -56,7 +58,11 @@ function pyList(root: string, env: Record<string, string> = {}): string {
  *  이미 있다(모듈 최상위 함수 선언은 끌어올려지므로 여기서 먼저 불러도 된다). */
 function tsSelect(tickets: Ticket[]): string {
   const rows = queueOrder(tickets).filter(isDispatchable);
-  return rows.map((t) => `${t.path}|${t.hash}|${t.kind}|${t.persona}|${t.priority}|${t.effective}`).join("\n") + (rows.length ? "\n" : "");
+  return (
+    rows
+      .map((t) => `${t.path}|${t.hash}|${t.kind}|${t.persona}|${t.priority}|${t.baseline}|${t.effective}`)
+      .join("\n") + (rows.length ? "\n" : "")
+  );
 }
 
 const p2 = (n: number) => String(n).padStart(2, "0");
@@ -352,6 +358,171 @@ test("우선순위 — 정렬: (-effective, birth, path) 교차 + 같은 값 안
     ["cccc0005", "cccc0001", "cccc0002", "cccc0003", "cccc0004"],
   );
   assert.strictEqual(tsSelect(tickets), pySelect(root));
+});
+
+// ── 마감 (§1-4 §값 · §파생 · §전이 · §계산 시점) ────────────────────────────────
+
+// 고정 시각 — 경계(5시간·7일)를 실시계 흔들림 없이 잰다. CLI `select`/`list`는 실시계만 쓰므로
+// (tickets.py main()이 `now`를 안 받는다) 이 절의 검증은 pyScanAt로 tickets.py의 `scan()`을
+// 같은 now로 직접 불러 대조한다 — 눈으로 안 맞춘다.
+const DUE_NOW = new Date(2026, 7, 7, 12, 0, 0); // 로컬, 월은 0-index(8월)
+const HOUR = 3600_000;
+const DAY = 24 * HOUR;
+
+function isoLocal(d: Date): string {
+  return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}T${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}`;
+}
+const due = (deltaMs: number) => isoLocal(new Date(DUE_NOW.getTime() + deltaMs));
+
+/** tickets.py의 `scan(root, now=...)`을 직접 불러 (hash, priority, baseline, effective)를 받는다. */
+function pyScanAt(root: string, now: Date): [string, number, number, number][] {
+  const script =
+    "import sys, json\n" +
+    `sys.path.insert(0, ${JSON.stringify(path.dirname(PY))})\n` +
+    "import tickets as T\n" +
+    "from datetime import datetime\n" +
+    "rows = T.scan(sys.argv[1], now=datetime.fromisoformat(sys.argv[2]))\n" +
+    'print(json.dumps([[r["hash"], r["priority"], r["baseline"], r["effective"]] for r in rows]))\n';
+  const out = execFileSync("python3", ["-c", script, root, isoLocal(now)], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "ignore"],
+  });
+  return JSON.parse(out);
+}
+
+/** listTickets와 pyScanAt의 baseline·effective가 해시별로 같은지. */
+function assertDueParity(tickets: Ticket[], root: string, now: Date, hashes: string[]) {
+  const py = new Map(pyScanAt(root, now).map(([h, , baseline, effective]) => [h, { baseline, effective }]));
+  for (const h of hashes) {
+    const t = tickets.find((x) => x.hash === h)!;
+    assert.deepStrictEqual({ baseline: t.baseline, effective: t.effective }, py.get(h), h);
+  }
+}
+
+test("마감 — 파생 5: ≤5시간(경계 포함)·지난 마감도 5, priority를 덮는다(§1-4 §파생·§값)", async () => {
+  const root = newRoot();
+  await write(root, "due00001.md", fm({ ticket: "due00001", title: "3", kind: "work", priority: "3" }));
+  await write(
+    root,
+    "due00002.md",
+    fm({ ticket: "due00002", title: "1인데 4시간", kind: "work", priority: "1", duedate: due(4 * HOUR) }),
+  );
+  await write(
+    root,
+    "due00003.md",
+    fm({ ticket: "due00003", title: "경계 정확히 5시간", kind: "work", priority: "2", duedate: due(DUE_ESCALATE_MS) }),
+  );
+  await write(
+    root,
+    "due00004.md",
+    fm({ ticket: "due00004", title: "지난 마감", kind: "work", priority: "2", duedate: due(-HOUR) }),
+  );
+
+  const tickets = await listTickets(root, DEFAULT, DUE_NOW);
+  const by = (h: string) => tickets.find((t) => t.hash === h)!;
+  assert.strictEqual(by("due00001").effective, 3);
+  assert.strictEqual(by("due00002").baseline, 5);
+  assert.strictEqual(by("due00002").effective, 5); // 파생 5가 명시값 1을 덮는다
+  assert.strictEqual(by("due00003").effective, 5); // 경계(정확히 5시간)도 포함
+  assert.strictEqual(by("due00004").effective, 5); // 지난 마감도 5
+  assertDueParity(tickets, root, DUE_NOW, ["due00001", "due00002", "due00003", "due00004"]);
+});
+
+test("마감 — 파생 1: ≥7일(경계 포함, 자기 duedate 있을 때만)이 priority를 덮고, 가운데는 안 갈린다(§1-4 §파생)", async () => {
+  const root = newRoot();
+  await write(
+    root,
+    "due00005.md",
+    fm({ ticket: "due00005", title: "5인데 8일", kind: "work", priority: "5", duedate: due(8 * DAY) }),
+  );
+  await write(
+    root,
+    "due00006.md",
+    fm({ ticket: "due00006", title: "경계 정확히 7일", kind: "work", priority: "4", duedate: due(DUE_DEMOTE_MS) }),
+  );
+  await write(
+    root,
+    "due00007.md",
+    fm({ ticket: "due00007", title: "가운데(2일)", kind: "work", priority: "3", duedate: due(2 * DAY) }),
+  );
+  await write(root, "due00008.md", fm({ ticket: "due00008", title: "마감 없음", kind: "work", priority: "3" }));
+
+  const tickets = await listTickets(root, DEFAULT, DUE_NOW);
+  const by = (h: string) => tickets.find((t) => t.hash === h)!;
+  assert.strictEqual(by("due00005").baseline, 1);
+  assert.strictEqual(by("due00005").effective, 1); // 파생 1이 명시값 5를 덮는다
+  assert.strictEqual(by("due00006").effective, 1); // 경계(정확히 7일)도 포함
+  assert.strictEqual(by("due00007").baseline, 3); // 5시간 초과~7일 미만은 파생 없음 — 명시값 그대로
+  assert.strictEqual(by("due00007").effective, 3);
+  assert.strictEqual(by("due00008").effective, 3); // 마감 없는 자리와 안 갈린다
+  assertDueParity(tickets, root, DUE_NOW, ["due00005", "due00006", "due00007", "due00008"]);
+});
+
+test("마감 — 못 읽는 값(자연어·빈 값)은 마감 없음(§1-4 §값)", async () => {
+  const root = newRoot();
+  await write(
+    root,
+    "due00009.md",
+    fm({ ticket: "due00009", title: "자연어", kind: "work", priority: "3", duedate: "내일" }),
+  );
+  await write(
+    root,
+    "due00010.md",
+    fm({ ticket: "due00010", title: "빈 값", kind: "work", priority: "3", duedate: "" }),
+  );
+
+  const tickets = await listTickets(root, DEFAULT, DUE_NOW);
+  const by = (h: string) => tickets.find((t) => t.hash === h)!;
+  assert.strictEqual(by("due00009").effective, 3);
+  assert.strictEqual(by("due00010").effective, 3);
+  assertDueParity(tickets, root, DUE_NOW, ["due00009", "due00010"]);
+});
+
+test("마감 — 전이는 급한 쪽(5)으로만 deps 역방향을 탄다 · 체인 3단(§1-4 §전이)", async () => {
+  const root = newRoot();
+  await write(
+    root,
+    "due00011.md",
+    fm({ ticket: "due00011", title: "A", kind: "work", duedate: due(3 * HOUR), deps: "[due00012]" }),
+  );
+  await write(root, "due00012.md", fm({ ticket: "due00012", title: "B", kind: "work", deps: "[due00013]" }));
+  await write(root, "due00013.md", fm({ ticket: "due00013", title: "C", kind: "work", deps: "[due00014]" }));
+  await write(root, "due00014.md", fm({ ticket: "due00014", title: "D", kind: "work" }));
+
+  const tickets = await listTickets(root, DEFAULT, DUE_NOW);
+  const by = (h: string) => tickets.find((t) => t.hash === h)!;
+  for (const h of ["due00011", "due00012", "due00013", "due00014"]) assert.strictEqual(by(h).effective, 5, h);
+  assertDueParity(tickets, root, DUE_NOW, ["due00011", "due00012", "due00013", "due00014"]);
+});
+
+test("마감 — 강등(1)은 전이하지 않는다(§1-4 §전이)", async () => {
+  const root = newRoot();
+  await write(
+    root,
+    "due00015.md",
+    fm({ ticket: "due00015", title: "A(느긋)", kind: "work", duedate: due(10 * DAY), deps: "[due00016]" }),
+  );
+  await write(root, "due00016.md", fm({ ticket: "due00016", title: "B(급함)", kind: "work", priority: "5" }));
+
+  const tickets = await listTickets(root, DEFAULT, DUE_NOW);
+  const by = (h: string) => tickets.find((t) => t.hash === h)!;
+  assert.strictEqual(by("due00015").effective, 1); // 자기 자신은 강등된다
+  assert.strictEqual(by("due00016").effective, 5); // 강등이 전이됐으면 5 밑으로 떨어졌을 값
+  assertDueParity(tickets, root, DUE_NOW, ["due00015", "due00016"]);
+});
+
+test("마감 — now가 인자다: 같은 큐에 다른 now 둘을 주면 값이 갈린다(§1-4 §계산 시점)", async () => {
+  const root = newRoot();
+  await write(
+    root,
+    "due00017.md",
+    fm({ ticket: "due00017", title: "근접이면 5, 멀면 3", kind: "work", priority: "3", duedate: due(4 * HOUR) }),
+  );
+
+  const near = await listTickets(root, DEFAULT, DUE_NOW);
+  const far = await listTickets(root, DEFAULT, new Date(DUE_NOW.getTime() - 2 * DAY));
+  assert.strictEqual(near.find((t) => t.hash === "due00017")!.effective, 5);
+  assert.strictEqual(far.find((t) => t.hash === "due00017")!.effective, 3);
 });
 
 // ── 관계 (티켓 상세) ────────────────────────────────────────────────────────
