@@ -238,7 +238,7 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
    아무것도 안 물게 됐고, `auto` 마진이 빠지면 규칙 자체가 빈다 — 그래서 규칙을 놓는다.
    격자 트랙 안에서 `margin-inline: auto`는 stretch를 이겨 자식을 max-content로 줄인다
    (실측: 1024에서 h1이 710px). 정렬을 걷는 것이 그 축소를 같이 되돌린다. */
-.dira-landing .hero { padding-top: 96px; }
+.dira-landing .hero { padding-top: 96px; padding-bottom: 96px; }
 .dira-landing .hero .body { max-width: 34em; margin: 0 0 32px; }
 .dira-landing .cta { display: flex; flex-wrap: wrap; gap: 12px; }
 /* 목록·온보딩·오류 슬롯 — `.hero` 밖으로 나가 `<main>`의 첫 블록이다(§비주얼 §47, §46 ②는
@@ -503,7 +503,7 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
   .dira-landing .stats li:nth-child(n+3) { border-top: 1px solid var(--border); }
   .dira-landing .fgrid { grid-template-columns: 1fr 1fr; }
   .dira-landing section, .dira-landing .closing { padding: 64px 0; }
-  .dira-landing .hero { padding-top: 48px; }
+  .dira-landing .hero { padding-top: 48px; padding-bottom: 64px; }
   #projects { padding-block: 48px; }
 }
 
