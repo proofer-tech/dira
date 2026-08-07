@@ -277,8 +277,8 @@ export async function saveTicket(_prev: SaveState, form: FormData): Promise<Save
     const duedateRaw = String(form.get("duedate") ?? "").trim();
 
     // textarea는 CRLF로 온다(HTML 폼 규격). 그대로 쓰면 파일 전체 줄끝이 갈린다.
-    let body = String(form.get("body") ?? "").replace(/\r\n/g, "\n");
-    if (body && !body.endsWith("\n")) body += "\n";
+    // 구분 빈 줄·끝 개행은 붙이지 않는다 — `writeTicket`이 되씌운다(§2 §원문의 양끝).
+    const body = String(form.get("body") ?? "").replace(/\r\n/g, "\n");
 
     await writeTicket(
       t.path,

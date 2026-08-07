@@ -67,6 +67,15 @@ export function readFm(text: string): { fm: Record<string, string>; lines: strin
   return { fm, lines, end };
 }
 
+/** §2 §원문의 양끝: 닫는 `---` 다음 구분 빈 줄 한 줄과 파일 끝 개행 하나를 뗀다(trim이 아니다 —
+ *  본문 자체의 빈 줄·개행은 안 건드린다, 한 줄씩만 있으면 뗀다). `writeTicket`이 짝으로 되씌운다. */
+export function stripBodyEnds(lines: string[]): string[] {
+  let out = lines;
+  if (out[0] === "") out = out.slice(1);
+  if (out.length && out[out.length - 1] === "") out = out.slice(0, -1);
+  return out;
+}
+
 /** tickets.py deps_of. 인라인 `[a, b]`와 블록 리스트 둘 다, 첫 `deps:` 키만. */
 export function depsOf(lines: string[], end: number): string[] {
   const out: string[] = [];
@@ -359,7 +368,7 @@ export async function listTickets(root: string, config: Suffixes, now: Date = ne
         fm,
         end,
         deps: end < 0 ? [] : depsOf(lines, end),
-        body: end < 0 ? "" : lines.slice(end + 1).join("\n"),
+        body: end < 0 ? "" : stripBodyEnds(lines.slice(end + 1)).join("\n"),
       };
       parseCache.set(p, q);
       return { p, st, q };
@@ -848,7 +857,10 @@ export function relationEdges(
  *  키는 닫는 `---` 직전에 넣는다. 나머지 줄(session_id·owner·attempts·pid…)은 순서까지 그대로
  *  둔다 — 엔진이 쓰는 값이라 GUI가 다시 조립하면 잃는다.
  *
- *  `.wip` 여부는 **호출자가 막는다**(그 파일로 지금 세션이 일하고 있다 — 제약 5). */
+ *  `.wip` 여부는 **호출자가 막는다**(그 파일로 지금 세션이 일하고 있다 — 제약 5).
+ *
+ *  `body`는 `stripBodyEnds`가 뗀 모양(구분 빈 줄·끝 개행 없음)으로 받는다 — 그 둘은 여기서
+ *  되씌운다(§2 §원문의 양끝, 짝 자리). */
 export async function writeTicket(
   p: string,
   // `undefined` = 그 키의 줄을 통째로 지운다(§1-4 §값 — `duedate:`는 빈 값이 아니라 **줄
@@ -873,5 +885,6 @@ export async function writeTicket(
     if (i < 0) fmLines.splice(fmLines.length - 1, 0, line);
     else fmLines[i] = line;
   }
-  await writeFile(p, [...fmLines, ...body.split("\n")].join("\n"), "utf8");
+  const bodyLines = body === "" ? [] : body.split("\n");
+  await writeFile(p, [...fmLines, "", ...bodyLines, ""].join("\n"), "utf8");
 }

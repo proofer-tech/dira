@@ -202,7 +202,8 @@ test("파생 판정 — 상태·해시·deps·본문·평면 큐", async () => {
   assert.strictEqual(by("eeee5555").state, "done");
   assert.strictEqual(by("aaaa1111").persona, "developer");
   assert.strictEqual(by("aaaa1111").title, "정상 티켓");
-  assert.strictEqual(by("aaaa1111").body, "\n## Goal\n본문이다\n");
+  // §2 §원문의 양끝 — 구분 빈 줄(닫는 `---` 다음 한 줄)과 파일 끝 개행은 본문 글자가 아니다.
+  assert.strictEqual(by("aaaa1111").body, "## Goal\n본문이다");
 
   // 한글 해시는 NFC로 정규화된다(파일명이 NFD여도)
   assert.ok(tickets.some((t) => t.hash === "테스트".normalize("NFC")));
@@ -773,7 +774,7 @@ test("캐시 무효화 — 같은 크기로 제자리 수정해도 새 내용이
 
   const after = (await listTickets(root, DEFAULT))[0];
   assert.strictEqual(after.title, "BBB");
-  assert.strictEqual(after.body, "본문 BBB\n");
+  assert.strictEqual(after.body, "본문 BBB");
 });
 
 // ── 쓰기 ────────────────────────────────────────────────────────────────────
@@ -787,24 +788,51 @@ test("writeTicket — 남의 frontmatter 키는 그대로, 파싱은 엔진과 �
   );
 
   const before = (await listTickets(root, DEFAULT))[0];
-  await writeTicket(before.path, { title: "고친 제목", kind: "feedback", persona: "qa" }, "새 본문\n");
+  // §2 §원문의 양끝 — `body`는 구분 빈 줄·끝 개행이 없는 모양으로 준다. `writeTicket`이 되씌운다.
+  await writeTicket(before.path, { title: "고친 제목", kind: "feedback", persona: "qa" }, "새 본문");
 
   const raw = readFileSync(before.path, "utf8");
   // 없던 키는 닫는 `---` 직전에 들어간다(tickets.py set_fm_keys와 같은 자리)
   assert.strictEqual(
     raw,
-    "---\nticket: ffff6666\ntitle: 고친 제목\nkind: feedback\nsession_id: sess-x\nowner: developer / w1\nattempts: 2\npersona: qa\n---\n새 본문\n",
+    "---\nticket: ffff6666\ntitle: 고친 제목\nkind: feedback\nsession_id: sess-x\nowner: developer / w1\nattempts: 2\npersona: qa\n---\n\n새 본문\n",
   );
 
   const after = (await listTickets(root, DEFAULT))[0];
   assert.strictEqual(after.title, "고친 제목");
   assert.strictEqual(after.kind, "feedback");
   assert.strictEqual(after.persona, "qa");
-  assert.strictEqual(after.body, "새 본문\n");
+  assert.strictEqual(after.body, "새 본문");
   assert.strictEqual(after.fm.session_id, "sess-x"); // 엔진이 쓰는 값은 건드리지 않는다
   assert.strictEqual(after.fm.attempts, "2");
   // 쓴 뒤에도 엔진이 같은 판정을 하는가 — 이게 깨지면 GUI 저장이 티켓을 큐에서 지운다
   assert.strictEqual(tsList([after]), pyList(root));
+});
+
+test("§2 §원문의 양끝 — body 왕복 무손실: 읽은 값을 그대로 되써도 파일 바이트가 같다", async () => {
+  const root = newRoot();
+  // 정상 모양 — 닫는 `---` 다음 구분 빈 줄 한 줄 + 본문 + 끝 개행 하나
+  const original =
+    "---\nticket: rtrp0001\ntitle: 왕복\nkind: work\n---\n\n## Goal\n본문 첫 줄\n본문 둘째 줄\n";
+  await write(root, "rtrp0001.md", original);
+
+  const before = (await listTickets(root, DEFAULT))[0];
+  // 구분 빈 줄 없이 나온다 — 앞뒤에 `\n`이 안 남는다
+  assert.strictEqual(before.body, "## Goal\n본문 첫 줄\n본문 둘째 줄");
+
+  await writeTicket(before.path, { title: before.title }, before.body);
+  assert.strictEqual(readFileSync(before.path, "utf8"), original);
+
+  // 본문 첫 줄이 빈 줄인 티켓 — 구분 빈 줄(뗀다) 뒤에 오는 본문 자체의 빈 줄(남는다)
+  const withBlankFirstLine =
+    "---\nticket: rtrp0002\ntitle: 첫 줄 공백\nkind: work\n---\n\n\n## Goal\n본문이다\n";
+  await write(root, "rtrp0002.md", withBlankFirstLine);
+
+  const before2 = (await listTickets(root, DEFAULT)).find((t) => t.hash === "rtrp0002")!;
+  assert.strictEqual(before2.body, "\n## Goal\n본문이다"); // 본문 자체의 빈 줄은 살아 있다
+
+  await writeTicket(before2.path, { title: before2.title }, before2.body);
+  assert.strictEqual(readFileSync(before2.path, "utf8"), withBlankFirstLine);
 });
 
 test("writeTicket — undefined는 그 키의 줄을 통째로 지운다(§1-4 §화면 지우기)", async () => {
