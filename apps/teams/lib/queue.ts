@@ -26,6 +26,8 @@ export type Ticket = {
   deps: string[];
   unmet: string[]; // .done이 아닌 deps. 못 찾은 해시도 미충족(보수적)
   assigned: boolean;
+  priority: number; // 원값(frontmatter priority:). 없거나 잘못되면 3(§1-3 §값)
+  effective: number; // 유효 우선순위 — deps 역방향 상속(§1-3 §유효 우선순위). 파일에 안 씀
   fm: Record<string, string>;
   body: string; // frontmatter 이후 본문
   birth: number; // ms. st_birthtime ?? mtime. 큐 순서
@@ -77,6 +79,82 @@ export function depsOf(lines: string[], end: number): string[] {
     break;
   }
   return out.filter(Boolean);
+}
+
+export const PRIORITY_DEFAULT = 3;
+export const PRIORITY_MIN = 1;
+export const PRIORITY_MAX = 5;
+
+/** python `int()`가 받는 문자열 모양(부호 + 숫자만). `"3.0"`·`""`은 거부한다. */
+function pyInt(s: string): number | null {
+  return /^[+-]?\d+$/.test(s) ? parseInt(s, 10) : null;
+}
+
+/** tickets.py priority_of. frontmatter `priority:`. 없으면 3(무경고). 정수가 아니거나 1~5 밖이면
+ *  3 + WARN 한 줄(§1-3 §값 — 파서를 안 만든다, `readFm`이 준 문자열에 정수 판정 한 번이다). */
+export function priorityOf(fm: Record<string, string>, h = ""): number {
+  const raw = unquote(fm.priority ?? "");
+  if (!raw) return PRIORITY_DEFAULT;
+  const n = pyInt(raw);
+  if (n === null) {
+    console.warn(`WARN priority가 정수가 아니다 ${h} 값=${JSON.stringify(raw)} - 3으로 읽음`);
+    return PRIORITY_DEFAULT;
+  }
+  if (n < PRIORITY_MIN || n > PRIORITY_MAX) {
+    console.warn(`WARN priority가 1~5 밖이다 ${h} 값=${n} - 3으로 읽음`);
+    return PRIORITY_DEFAULT;
+  }
+  return n;
+}
+
+/** tickets.py _priority_graph. 열린 티켓 + `.wip`의 (hash -> priority, hash -> deps). `.done`은
+ *  제외한다 — 끝난 티켓은 더는 아무것도 기다리지 않는다(§1-3 §유효 우선순위). */
+function priorityGraph(
+  entries: { hash: string; state: TicketState; fm: Record<string, string>; deps: string[] }[],
+): { prio: Map<string, number>; deps: Map<string, string[]> } {
+  const prio = new Map<string, number>();
+  const deps = new Map<string, string[]>();
+  for (const e of entries) {
+    if (e.state === "done") continue;
+    prio.set(e.hash, priorityOf(e.fm, e.hash));
+    deps.set(e.hash, e.deps);
+  }
+  return { prio, deps };
+}
+
+/** tickets.py _effective_from_graph. §1-3 유효 우선순위:
+ *  `유효(t) = max(t.priority, {유효(w) | w의 deps에 t가 있다})`.
+ *
+ *  방향은 역방향이다 — t를 기다리는 w의 값을 t가 물려받는다. 체인 전체를 타고, 순환은 방문
+ *  집합으로 자른다(사이클 위에서 재방문하면 그 노드의 원값만 반환하고 더 안 판다 — 무한재귀
+ *  없이, 다른 비순환 경로의 최댓값은 그대로 잡는다). 파일에는 안 쓴다. */
+function effectiveFromGraph(prio: Map<string, number>, deps: Map<string, string[]>): Map<string, number> {
+  const waiters = new Map<string, string[]>();
+  for (const [h, ds] of deps) {
+    for (const d of ds) {
+      const list = waiters.get(d);
+      if (list) list.push(h);
+      else waiters.set(d, [h]);
+    }
+  }
+
+  const eff = new Map<string, number>();
+
+  function calc(h: string, visiting: Set<string>): number {
+    const hit = eff.get(h);
+    if (hit !== undefined) return hit;
+    const base = prio.get(h) ?? PRIORITY_DEFAULT;
+    if (visiting.has(h)) return base;
+    visiting.add(h);
+    let best = base;
+    for (const w of waiters.get(h) ?? []) best = Math.max(best, calc(w, visiting));
+    visiting.delete(h);
+    eff.set(h, best);
+    return best;
+  }
+
+  for (const h of prio.keys()) calc(h, new Set());
+  return eff;
 }
 
 /** tickets.py is_open_name / in_progress. NFC 정규화 후 접미사 판정. */
@@ -191,25 +269,29 @@ export async function listTickets(root: string, config: Suffixes): Promise<Ticke
       return { p, st, q };
     }),
   );
-  const out: Ticket[] = [];
-  for (const r of read) {
-    if (!r) continue;
+  // hash·state는 그래프(priority 상속)의 재료라 값 조립 전에 먼저 뽑는다 — tickets.py의
+  // scan()이 _priority_graph를 한 번 만들고서야 행을 채우는 것과 같은 순서다.
+  const entries = read.flatMap((r) => {
+    if (!r || r.q.end < 0) return [];
     const { p, st, q } = r;
-    const { fm, deps, body, end } = q;
-    if (end < 0) continue;
+    const base = nfc(path.basename(p));
+    const hash = unquote(q.fm.ticket ?? "") || base.slice(0, -3);
+    return [{ p, st, hash, state: stateOf(path.basename(p), config), fm: q.fm, deps: q.deps, body: q.body }];
+  });
+  const { prio, deps: depsGraph } = priorityGraph(entries);
+  const eff = effectiveFromGraph(prio, depsGraph);
+
+  const out: Ticket[] = [];
+  for (const { p, st, hash, state, fm, deps, body } of entries) {
     // ponytail: birthtime이 없는 파일시스템은 0으로 온다 → mtime (tickets.py와 같은 폴백).
     const birth = st.birthtimeMs || st.mtimeMs;
-
-    const base = nfc(path.basename(p));
     const persona = unquote(fm.persona ?? "");
-    // 접미사 판정은 여기서 한 번만 한다 — 호출부마다 basename을 쪼개면 판정이 갈린다(§식별자).
-    const hash = unquote(fm.ticket ?? "") || base.slice(0, -3);
     out.push({
       hash,
       stem: stemOf(p, config),
       hashResolves: findAny(ix, hash, config) === p,
       path: p,
-      state: stateOf(path.basename(p), config),
+      state,
       title: unquote(fm.title ?? ""),
       kind: unquote(fm.kind ?? ""),
       persona: PERSONA_RE.test(persona) ? persona : "",
@@ -219,6 +301,11 @@ export async function listTickets(root: string, config: Suffixes): Promise<Ticke
         return !hit || !nfc(path.basename(hit)).endsWith(nfc(config.done + ".md"));
       }),
       assigned: !!unquote(fm.session_id ?? ""),
+      // `.done`은 그래프에서 빠지므로(priorityGraph) 자기 값을 직접 읽는다 — dot이 모든 카드에
+      // 자기 priority를 그리기 때문이다(§1-3 §보드). effective는 엔진이 안 계산하는 값이라
+      // 원본과 같은 기본값(3)으로 둔다 — scan()도 열린 티켓 밖은 이 값을 안 쓴다.
+      priority: prio.get(hash) ?? priorityOf(fm, hash),
+      effective: eff.get(hash) ?? PRIORITY_DEFAULT,
       fm,
       body,
       birth,
@@ -227,6 +314,20 @@ export async function listTickets(root: string, config: Suffixes): Promise<Ticke
   }
   out.sort((a, b) => a.birth - b.birth || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
   return out;
+}
+
+/** tickets.py scan() 정렬 — 열린 티켓만, `(-effective, birth, path)`(§1-3 §순서 ①②).
+ *  `listTickets`의 기본 순서(birth 오름차순, 전체 상태)와는 다른 자리다: 그건 보드가 보여주는
+ *  큐 순서고, 이건 CLI `select`/`list`가 실제로 디스패치하는 순서다 — 표현과 판정을 안 섞는다. */
+export function queueOrder(tickets: Ticket[]): Ticket[] {
+  return tickets
+    .filter((t) => t.state === "open")
+    .sort(
+      (a, b) =>
+        b.effective - a.effective ||
+        a.birth - b.birth ||
+        (a.path < b.path ? -1 : a.path > b.path ? 1 : 0),
+    );
 }
 
 /** 디스패치 가능 = open + 미할당 + unmet 없음 (tickets.py select). */

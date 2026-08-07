@@ -20,7 +20,9 @@ import {
   findPath,
   inDefaultList,
   isAwaiting,
+  isDispatchable,
   listTickets,
+  queueOrder,
   bodyWithoutQuestions,
   questionsOf,
   depBadges,
@@ -48,6 +50,13 @@ function pyList(root: string, env: Record<string, string> = {}): string {
     stdio: ["ignore", "pipe", "ignore"], // 하위 디렉터리 픽스처가 legacy WARN을 내므로 stderr는 버린다
     env: { ...process.env, ...env },
   });
+}
+
+/** tickets.py main()의 `select` 출력 형식(§1-3 §순서). `pySelect`는 §요구사항 왕복 절 근처에
+ *  이미 있다(모듈 최상위 함수 선언은 끌어올려지므로 여기서 먼저 불러도 된다). */
+function tsSelect(tickets: Ticket[]): string {
+  const rows = queueOrder(tickets).filter(isDispatchable);
+  return rows.map((t) => `${t.path}|${t.hash}|${t.kind}|${t.persona}|${t.priority}|${t.effective}`).join("\n") + (rows.length ? "\n" : "");
 }
 
 const p2 = (n: number) => String(n).padStart(2, "0");
@@ -235,6 +244,114 @@ test("패리티 — 한글 접미사(-진행중/-완료) 프로젝트", async ()
 test("패리티 — 빈 큐", async () => {
   const root = newRoot();
   assert.strictEqual(tsList(await listTickets(root, DEFAULT)), pyList(root));
+});
+
+// ── 우선순위 (§1-3 §값 · §유효 우선순위 · §순서) ───────────────────────────────
+
+test("우선순위 — 값 파싱: 없음·범위 밖·정수 아님은 3, 정상값은 그대로(§1-3 §값)", async () => {
+  const root = newRoot();
+  await write(root, "aaaa0001.md", fm({ ticket: "aaaa0001", title: "없음", kind: "work" }));
+  await write(
+    root,
+    "aaaa0002.md",
+    fm({ ticket: "aaaa0002", title: "범위 밖", kind: "work", priority: "9" }),
+  );
+  await write(
+    root,
+    "aaaa0003.md",
+    fm({ ticket: "aaaa0003", title: "정수 아님", kind: "work", priority: "abc" }),
+  );
+  await write(
+    root,
+    "aaaa0004.md",
+    fm({ ticket: "aaaa0004", title: "정상", kind: "work", priority: "5" }),
+  );
+
+  const tickets = await listTickets(root, DEFAULT);
+  const by = (h: string) => tickets.find((t) => t.hash === h)!;
+  assert.strictEqual(by("aaaa0001").priority, 3);
+  assert.strictEqual(by("aaaa0002").priority, 3);
+  assert.strictEqual(by("aaaa0003").priority, 3);
+  assert.strictEqual(by("aaaa0004").priority, 5);
+  assert.strictEqual(tsSelect(tickets), pySelect(root));
+});
+
+test("우선순위 — 상속: deps 역방향 · 체인 전체 · 순환은 안 멈춘다(§1-3 §유효 우선순위)", async () => {
+  const root = newRoot();
+  // A(5) deps [B] · B(기본 3) deps [C] · C(기본 3) — 체인을 타고 B·C가 유효 5로 뜬다
+  await write(
+    root,
+    "bbbb0001.md",
+    fm({ ticket: "bbbb0001", title: "A", kind: "work", priority: "5", deps: "[bbbb0002]" }),
+  );
+  await write(
+    root,
+    "bbbb0002.md",
+    fm({ ticket: "bbbb0002", title: "B", kind: "work", deps: "[bbbb0003]" }),
+  );
+  await write(root, "bbbb0003.md", fm({ ticket: "bbbb0003", title: "C", kind: "work" }));
+  // 순환: X deps [Y] · Y deps [X] — 둘 다 기본 3, 무한 재귀 없이 끝난다
+  await write(
+    root,
+    "bbbb0004.md",
+    fm({ ticket: "bbbb0004", title: "X", kind: "work", deps: "[bbbb0005]" }),
+  );
+  await write(
+    root,
+    "bbbb0005.md",
+    fm({ ticket: "bbbb0005", title: "Y", kind: "work", deps: "[bbbb0004]" }),
+  );
+
+  // `.wip`도 물려받는다(상태를 안 가린다) — G(5) deps [H]에서 H가 `.wip`이어도 5로 뜬다
+  await write(
+    root,
+    "bbbb0006.md",
+    fm({ ticket: "bbbb0006", title: "G", kind: "work", priority: "5", deps: "[bbbb0007]" }),
+  );
+  await write(
+    root,
+    "bbbb0007.wip.md",
+    fm({ ticket: "bbbb0007", title: "H(.wip)", kind: "work", session_id: "sess-h" }),
+  );
+
+  const tickets = await listTickets(root, DEFAULT);
+  const by = (h: string) => tickets.find((t) => t.hash === h)!;
+  assert.strictEqual(by("bbbb0001").effective, 5);
+  assert.strictEqual(by("bbbb0002").effective, 5); // 체인 1단
+  assert.strictEqual(by("bbbb0003").effective, 5); // 체인 2단
+  assert.strictEqual(by("bbbb0004").effective, 3); // 순환, 안 멈추고 3으로 끝난다
+  assert.strictEqual(by("bbbb0005").effective, 3);
+  assert.strictEqual(by("bbbb0007").state, "wip");
+  assert.strictEqual(by("bbbb0007").effective, 5); // .wip도 상속을 받는다
+  // 파일에 안 쓴다 — B·C의 원값은 여전히 3이다
+  assert.strictEqual(by("bbbb0002").priority, 3);
+  assert.strictEqual(by("bbbb0003").priority, 3);
+  assert.strictEqual(tsSelect(tickets), pySelect(root));
+});
+
+test("우선순위 — 정렬: (-effective, birth, path) 교차 + 같은 값 안 FIFO(§1-3 §순서)", async () => {
+  const root = newRoot();
+  // birth 순서: 3,3,3(FIFO 확인) · 1 · 5(가장 늦게 태어남) — 그래도 5가 맨 위에 선다
+  await write(root, "cccc0001.md", fm({ ticket: "cccc0001", title: "3-첫", kind: "work" }));
+  await write(root, "cccc0002.md", fm({ ticket: "cccc0002", title: "3-둘", kind: "work" }));
+  await write(root, "cccc0003.md", fm({ ticket: "cccc0003", title: "3-셋", kind: "work" }));
+  await write(
+    root,
+    "cccc0004.md",
+    fm({ ticket: "cccc0004", title: "1", kind: "work", priority: "1" }),
+  );
+  await write(
+    root,
+    "cccc0005.md",
+    fm({ ticket: "cccc0005", title: "5", kind: "work", priority: "5" }),
+  );
+
+  const tickets = await listTickets(root, DEFAULT);
+  assert.deepStrictEqual(
+    queueOrder(tickets).map((t) => t.hash),
+    ["cccc0005", "cccc0001", "cccc0002", "cccc0003", "cccc0004"],
+  );
+  assert.strictEqual(tsSelect(tickets), pySelect(root));
 });
 
 // ── 관계 (티켓 상세) ────────────────────────────────────────────────────────
