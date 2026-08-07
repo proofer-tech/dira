@@ -29,8 +29,8 @@ export type Ticket = {
   priority: number; // 원값(frontmatter priority:). 없거나 잘못되면 3(§1-3 §값)
   baseline: number; // §1-4 기준값 — 파생(마감)이 있으면 파생, 없으면 priority. effective 이전값
   effective: number; // 유효 우선순위 — deps 역방향 상속(§1-3 §유효 우선순위). 파일에 안 씀
-  // §1-4 유효마감 — min({자기 duedate} ∪ {후행의 유효마감}). `.done`은 그래프 밖이라 null(그
-  // 값을 보는 유일한 소비자 종 항목 ⑦이 `.done`을 이미 걸러서 안 쓰는 값이다). 파일에 안 씀
+  // §1-4 유효마감 — min({자기 duedate} ∪ {후행의 유효마감}). `.done`은 그래프 밖이라 null.
+  // §종 항목 ⑦(`dueAlertOf`)과 §값을 넣는 자리(상세 파생 한 줄의 "남은")가 같이 쓴다. 파일에 안 씀
   effectiveDue: Date | null;
   fm: Record<string, string>;
   body: string; // frontmatter 이후 본문
@@ -851,7 +851,10 @@ export function relationEdges(
  *  `.wip` 여부는 **호출자가 막는다**(그 파일로 지금 세션이 일하고 있다 — 제약 5). */
 export async function writeTicket(
   p: string,
-  updates: Record<string, string>,
+  // `undefined` = 그 키의 줄을 통째로 지운다(§1-4 §값 — `duedate:`는 빈 값이 아니라 **줄
+  // 자체가 없어야** "마감 없음"이다. 빈 값으로 두면 duedateOf가 WARN을 낸다). 없는 키를
+  // undefined로 주면 아무 일도 안 한다(splice 대상이 없다).
+  updates: Record<string, string | undefined>,
   body: string,
 ): Promise<void> {
   const text = await readFile(p, "utf8");
@@ -860,9 +863,13 @@ export async function writeTicket(
 
   const fmLines = lines.slice(0, end + 1);
   for (const [key, raw] of Object.entries(updates)) {
+    const i = fmLines.findIndex((l, n) => n > 0 && l.startsWith(key + ":"));
+    if (raw === undefined) {
+      if (i >= 0) fmLines.splice(i, 1);
+      continue;
+    }
     const val = raw.trim();
     const line = val ? `${key}: ${val}` : `${key}:`;
-    const i = fmLines.findIndex((l, n) => n > 0 && l.startsWith(key + ":"));
     if (i < 0) fmLines.splice(fmLines.length - 1, 0, line);
     else fmLines[i] = line;
   }

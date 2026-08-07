@@ -344,7 +344,7 @@ export default async function Board({
   //    큐 순서를 뒤집는다 — 방금 만든 티켓에 엮는 경우가 대부분이고, 뒤집으면 그게 목록 맨 위다.
   const personaChoices = profiles.filter((p) => p.body !== null).map((p) => p.name);
   const depOptions = tickets
-    .map((t) => ({ hash: t.stem, title: t.title, met: t.state === "done" }))
+    .map((t) => ({ hash: t.stem, title: t.title, met: t.state === "done", duedate: t.fm.duedate ?? "" }))
     .reverse();
 
   // 링크는 **stem**이다 — 엔진이 찾는 이름이고, 상태가 바뀌어도(접미사) URL이 안 변한다(§식별자).

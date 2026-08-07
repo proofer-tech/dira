@@ -240,8 +240,8 @@ function fmValue(name: string, raw: string): string {
   return v;
 }
 
-/** 저장 — 읽고-고치고-쓰기. 건드리는 frontmatter 키는 title·kind·persona·priority 넷뿐이고
- *  나머지(session_id·owner·attempts·pid…)는 엔진 것이라 그대로 둔다.
+/** 저장 — 읽고-고치고-쓰기. 건드리는 frontmatter 키는 title·kind·persona·priority·duedate
+ *  다섯뿐이고 나머지(session_id·owner·attempts·pid…)는 엔진 것이라 그대로 둔다.
  *
  *  ponytail: deps는 편집하지 않는다 — 자유 입력은 오타 해시로 영구 대기를 만들어 스펙이 금지한다
  *  (DESIGN.md §3). 검색 가능한 멀티셀렉트가 필요하고 그건 티켓 발행(fb4f2723)이 만든다. */
@@ -271,11 +271,20 @@ export async function saveTicket(_prev: SaveState, form: FormData): Promise<Save
         : PRIORITY_DEFAULT,
     );
 
+    // `datetime-local`이 오프셋 없는 ISO 8601을 낸다 — 그대로 한 줄이다(§1-4 §값. 새 파서를
+    // 안 만든다, 못 읽는 값은 엔진이 WARN + 마감 없음으로 관대하게 받는다). 비우면 **줄 자체를
+    // 지운다**(writeTicket의 undefined) — 빈 값으로 두면 duedateOf가 WARN을 낸다.
+    const duedateRaw = String(form.get("duedate") ?? "").trim();
+
     // textarea는 CRLF로 온다(HTML 폼 규격). 그대로 쓰면 파일 전체 줄끝이 갈린다.
     let body = String(form.get("body") ?? "").replace(/\r\n/g, "\n");
     if (body && !body.endsWith("\n")) body += "\n";
 
-    await writeTicket(t.path, { title, kind, persona, priority }, body);
+    await writeTicket(
+      t.path,
+      { title, kind, persona, priority, duedate: duedateRaw || undefined },
+      body,
+    );
     revalidatePath(`/p/${projectId}/tickets/${encodeURIComponent(t.stem)}`);
     revalidatePath(`/p/${projectId}`); // 보드의 title·kind·persona 컬럼
     // §4-5 — 편집으로 persona가 붙거나 deps 한 줄이 빠지면 그 순간 디스패치 가능해진다.

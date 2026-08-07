@@ -172,6 +172,38 @@ const KINDS = ["work", "request", "feedback"];
  *  GUI 앞에 앉은 것이 사람이다. */
 const PRIORITIES = [1, 2, 3, 4, 5];
 
+/** `duedate:` 문자열 → ms, 못 읽으면 null(§1-4 §값과 같은 관용 — 새 파서를 안 만든다).
+ *  `duedateOf`(`lib/queue.ts`)를 값으로 못 무는 이유는 위 `PRIORITIES`와 같다. 여기서는 엄밀한
+ *  ISO 검증이 필요 없다 — 틀린 값은 어차피 저장 시점에 엔진이 WARN + 마감 없음으로 받는다(§1-4
+ *  §역전 "실효 피해가 없다"). 이 판정은 그 전에 사람을 돕는 안내일 뿐이다. */
+function parseDue(raw: string): number | null {
+  if (!raw.trim()) return null;
+  const ms = new Date(raw).getTime();
+  return Number.isNaN(ms) ? null : ms;
+}
+
+/** §1-4 §역전 — 선행 own duedate가 후행 own duedate보다 늦으면 모순이다. direct 관계만 본다
+ *  (엔진 `_warn_duedate_reversals`와 같은 범위 — 전이는 안 탄다). 어긋난 쪽의 해시를 돌려주고,
+ *  없으면 null. **엔진은 이 판정을 안 한다**(WARN 한 줄만 찍고 그대로 돈다) — 여기 클라이언트
+ *  판정만 저장을 막는다, 새 서버 검증을 안 만드는 이유가 그것이다. */
+function duedateConflict(
+  own: string,
+  precedents: { hash: string; duedate: string }[],
+  followers: { hash: string; duedate: string }[],
+): string | null {
+  const ownMs = parseDue(own);
+  if (ownMs === null) return null;
+  for (const p of precedents) {
+    const dueMs = parseDue(p.duedate);
+    if (dueMs !== null && dueMs > ownMs) return p.hash;
+  }
+  for (const f of followers) {
+    const dueMs = parseDue(f.duedate);
+    if (dueMs !== null && ownMs > dueMs) return f.hash;
+  }
+  return null;
+}
+
 /** frontmatter의 title·kind·persona + 본문 원문. `.wip`이면 이 폼은 렌더되지 않고
  *  서버 액션도 다시 거부한다(렌더 시점 판정은 저장 시점엔 이미 낡았다).
  *
@@ -186,6 +218,11 @@ export function TicketEditForm({
   priority,
   effective,
   inheritedFrom,
+  duedate,
+  duedateBaseline,
+  remainingText,
+  precedentDuedates,
+  followerDuedates,
   personas,
   colors,
   body,
@@ -201,6 +238,17 @@ export function TicketEditForm({
   effective: number;
   /** 유효값을 물려준 후행 티켓의 해시 — `effective !== priority`일 때만 온다(§1-3 §값을 넣는 자리 셋) */
   inheritedFrom?: string;
+  /** 원값(`ticket.fm.duedate`) — 없으면 빈 문자열(§1-4 §값) */
+  duedate: string;
+  /** §1-4 기준값(`ticket.baseline`) — `priority`와 다르면 파생이 명시값을 덮은 것이라 파생 한 줄을 그린다 */
+  duedateBaseline: number;
+  /** "마감까지 <남은>"의 <남은> — 서버가 `ticket.effectiveDuedate`로 이미 잰 문구다. `duedateBaseline`이
+   *  `priority`와 같으면(파생 없음) null이다 */
+  remainingText: string | null;
+  /** 직계 선행(deps)의 own duedate — 역전 판정 재료(§1-4 §역전, direct만). `hit`이 없는 deps는 빠진다 */
+  precedentDuedates: { hash: string; duedate: string }[];
+  /** 직계 후행(referrers)의 own duedate — 역전 판정 재료 */
+  followerDuedates: { hash: string; duedate: string }[];
   /** 발행 다이얼로그와 같은 목록 — `listPersonas` 결과 중 `PROFILE.md`가 있는 이름. 상세 페이지가
    *  이미 읽은 것을 넘긴다(§3 "선택지 데이터는 이미 읽은 것을 넘긴다") */
   personas: string[];
@@ -210,6 +258,10 @@ export function TicketEditForm({
 }) {
   const [state, action, pending] = useActionState<SaveState, FormData>(saveTicket, {});
   const t = useT();
+  // 역전 판정은 입력이 바뀔 때마다 다시 잰다(§1-4 §역전 "다이얼로그를 새로 안 띄운다" —
+  // 저장을 누르기 전에 여기서 막는다). uncontrolled로 두면 리렌더 없이 값이 바뀌어 못 잰다.
+  const [duedateInput, setDuedateInput] = useState(duedate);
+  const conflict = duedateConflict(duedateInput, precedentDuedates, followerDuedates);
   return (
     // 폭은 페이지 루트가 문다(§비주얼 §11) — 2단의 왼쪽 단 안에서 다시 걸면 이중 제한이다
     <form action={action} className="space-y-4">
@@ -291,13 +343,51 @@ export function TicketEditForm({
               ))}
             </SelectContent>
           </Select>
-          {/* 유효 ≠ 원값일 때만 — 파일이 안 바뀌었는데 dot 색이 갈리지 않는 이유를 여기서 말한다
-              (§1-3 §값을 넣는 자리 셋. dot은 자기 priority만 그린다). */}
-          {inheritedFrom && (
+          {/* 유효 ≠ 원값 또는 마감 파생이 명시값을 덮었을 때 — 같은 자리·같은 모양이고 둘 다면
+              한 줄에 이어 붙는다(§1-4 §화면. dot은 자기 priority만 그린다, §1-3 §값을 넣는 자리 셋). */}
+          {(inheritedFrom || remainingText) && (
             <p className="text-xs text-muted-foreground">
-              <span className="font-mono">{inheritedFrom}</span>
-              {t("ticket.priority.inheritedMiddle")} {effective}
-              {t("ticket.priority.inheritedAfter")}
+              {inheritedFrom && (
+                <>
+                  <span className="font-mono">{inheritedFrom}</span>
+                  {t("ticket.priority.inheritedMiddle")} {effective}
+                  {t("ticket.priority.inheritedAfter")}
+                </>
+              )}
+              {inheritedFrom && remainingText && " "}
+              {remainingText && (
+                <>
+                  {t("ticket.duedate.derivedPrefix")} {remainingText}{" "}
+                  {t("ticket.duedate.derivedMiddle")} {duedateBaseline}
+                  {t("ticket.duedate.derivedAfter")}
+                </>
+              )}
+            </p>
+          )}
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="t-duedate">{t("ticket.duedate.label")}</Label>
+          <div className="flex items-center gap-2">
+            <Input
+              id="t-duedate"
+              name="duedate"
+              type="datetime-local"
+              className="w-56"
+              value={duedateInput}
+              onChange={(e) => setDuedateInput(e.target.value)}
+            />
+            {duedateInput && (
+              <Button type="button" variant="ghost" size="sm" onClick={() => setDuedateInput("")}>
+                {t("ticket.duedate.clear")}
+              </Button>
+            )}
+          </div>
+          {/* 역전 — 다이얼로그를 새로 안 띄운다. 입력 아래 문구 한 줄 + 저장 버튼 비활성뿐이다
+              (§1-4 §역전, 엔진은 WARN만 찍고 그대로 돈다 — "실효 피해가 없다"가 이 비대칭의 근거). */}
+          {conflict && (
+            <p className="text-xs text-destructive">
+              <span className="font-mono">{conflict}</span>
+              {t("ticket.duedate.reversalSuffix")}
             </p>
           )}
         </div>
@@ -312,7 +402,7 @@ export function TicketEditForm({
           **왼쪽**이다 — 오른쪽에 두면 문구가 떴다 사라질 때마다 `저장`이 옆으로 움직인다 */}
       <div className="flex flex-wrap items-center justify-end gap-4">
         {state.ok && <span className="text-sm text-muted-foreground">저장됐습니다.</span>}
-        <Button type="submit" disabled={pending}>
+        <Button type="submit" disabled={pending || !!conflict}>
           {pending ? "저장 중…" : "저장"}
         </Button>
       </div>
@@ -846,8 +936,9 @@ const BODY_SKELETON = `## Goal
 - [ ]
 `;
 
-/** deps 후보 한 건. `hash`는 상태 접미사를 뗀 **파일명 stem**이다 — deps가 가리키는 이름이 그것이다. */
-export type DepOption = { hash: string; title: string; met: boolean };
+/** deps 후보 한 건. `hash`는 상태 접미사를 뗀 **파일명 stem**이다 — deps가 가리키는 이름이 그것이다.
+ *  `duedate`는 그 티켓의 own duedate 원문(§1-4 §역전 판정 재료) — 없으면 빈 문자열. */
+export type DepOption = { hash: string; title: string; met: boolean; duedate: string };
 
 /** 닫기 확인 + 리셋 (§3). 발행·접수가 같은 규칙을 쓴다 — 훅 하나로 묶는다(새 파일 0개).
  *
@@ -1175,6 +1266,9 @@ export function NewTicketDialog({
   // kind·persona·priority는 base-ui Select가 자기 상태로 들고 있다(리셋에 안 밟힌다. 실측).
   const [title, setTitle] = useState(blankTitle);
   const [body, setBody] = useState(blankBody);
+  // 발행은 항상 비어서 연다(§1-4 §화면 "기본은 비어 있다" — priority와 같은 이유로 복제도 안
+  // 물려받는다). title·body와 같은 이유로 controlled다(React 19 액션 후 폼 리셋).
+  const [duedateInput, setDuedateInput] = useState("");
   // 마지막으로 닫은 결과. `RequestDialog`와 같은 이유 — 실패 사유가 본문 없이 살아남지 않게 한다(§3)
   const [dismissed, setDismissed] = useState<NewTicketState>({});
   const att = useAttachments(project);
@@ -1184,15 +1278,22 @@ export function NewTicketDialog({
   // 있으면 묻는다). 성공에는 확인이 끼지 않는다 — 그 경로는 서버 액션의 `redirect`가
   // 컴포넌트째 언마운트한다.
   const guard = useCloseGuard(
-    title !== blankTitle || body !== blankBody || picked.length > 0 || att.dirty,
+    title !== blankTitle || body !== blankBody || picked.length > 0 || duedateInput !== "" || att.dirty,
     () => {
       setTitle(blankTitle);
       setBody(blankBody);
       setPicked([]);
+      setDuedateInput("");
       att.reset();
       setDismissed(state);
     },
   );
+
+  // 역전(§1-4 §역전) — 새 티켓은 아직 없어 후행이 있을 수 없다. 직접 고른 선행(`picked`)만 본다.
+  const precedentDuedates = deps
+    .filter((d) => picked.includes(d.hash))
+    .map((d) => ({ hash: d.hash, duedate: d.duedate }));
+  const duedateConflictHash = duedateConflict(duedateInput, precedentDuedates, []);
 
   // `⌘I`(§0-6 `board.new`). **이 컴포넌트만 보드 밖에도 산다**(티켓 상세의 복제) — 그래서
   // 범위가 저절로 맞지 않고 부르는 쪽이 켠다. 여는 자리는 `RequestDialog`와 같은 `guard.close`다.
@@ -1329,6 +1430,39 @@ export function NewTicketDialog({
                 </SelectContent>
               </Select>
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="n-duedate">{t("ticket.duedate.label")}</Label>
+              {/* 요구 접수 모드에는 안 붙는다(§1-4 §화면) — priority와 같은 이유다. 기본은 비어
+                  있다(복제도 안 물려받는다). */}
+              <div className="flex items-center gap-2">
+                <Input
+                  id="n-duedate"
+                  name="duedate"
+                  type="datetime-local"
+                  className="w-56"
+                  value={duedateInput}
+                  onChange={(e) => setDuedateInput(e.target.value)}
+                />
+                {duedateInput && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setDuedateInput("")}
+                  >
+                    {t("ticket.duedate.clear")}
+                  </Button>
+                )}
+              </div>
+              {/* 역전 — 새 티켓은 후행이 없으니 고른 선행(deps)만 본다. 다이얼로그를 새로 안
+                  띄운다: 입력 아래 문구 한 줄 + 발행 버튼 비활성뿐이다(§1-4 §역전). */}
+              {duedateConflictHash && (
+                <p className="text-xs text-destructive">
+                  <span className="font-mono">{duedateConflictHash}</span>
+                  {t("ticket.duedate.reversalSuffix")}
+                </p>
+              )}
+            </div>
             {personas.length === 0 && (
               <p className="self-end pb-2 text-xs text-muted-foreground">
                 <span className="font-mono break-all">{personaDir}</span>에 페르소나 디렉터리가
@@ -1359,7 +1493,7 @@ export function NewTicketDialog({
           )}
           {/* 칩 줄 · 실패 사유 줄 · 액션 행(§27). 1차 액션은 여전히 가장 오른쪽이다 */}
           <AttachmentField att={att}>
-            <Button type="submit" disabled={pending}>
+            <Button type="submit" disabled={pending || !!duedateConflictHash}>
               {pending ? "발행 중…" : "발행"}
             </Button>
           </AttachmentField>

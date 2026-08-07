@@ -89,6 +89,10 @@ export async function createTicket(
         ? priorityNum
         : PRIORITY_DEFAULT;
 
+    // 마감(§1-4 §값). 요구 접수에는 이 입력이 안 붙지만(§3) 폼이 보내도 버린다 — priority와
+    // 같은 이유(서버가 고정한 것과 다른 값이 섞이지 않는다). 빈 값은 마감 없음(줄 자체를 안 쓴다).
+    const duedate = req ? "" : String(form.get("duedate") ?? "").trim();
+
     // 큐 디렉터리의 **파일명**을 직접 본다. `listTickets`가 아닌 이유 둘: 해시 충돌 검사는
     // frontmatter가 깨져 엔진에 안 보이는 파일까지 포함해야 하고(그 파일도 이름을 점유한다),
     // deps가 가리키는 이름이 `ticket:` 값이 아니라 **상태 접미사를 뗀 파일명**이기 때문이다
@@ -126,6 +130,7 @@ export async function createTicket(
         ...(persona ? [`persona: ${persona}`] : []),
         // 요구 접수는 안 쓴다 — 키가 없으면 엔진이 3으로 읽어 서버가 고정한 것과 같은 결과다.
         ...(req ? [] : [`priority: ${priority}`]),
+        ...(duedate ? [`duedate: ${duedate}`] : []),
         ...(deps.length ? [`deps: [${deps.join(", ")}]`] : []),
         "---",
         "",

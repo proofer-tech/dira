@@ -177,6 +177,19 @@ export const ko: Record<string, string> = {
   "bell.due.blockedMiddle": "남았는데 선행",
   "bell.due.blockedSuffix": "건이 안 끝났습니다",
   "bell.due.openTicket": "티켓 열기",
+
+  // 마감(§1-4 §화면). 상세(§2)·발행 다이얼로그(§3)가 같은 입력 라벨·지우기 버튼을 쓴다
+  // (en은 `5debff0e`가 채운다).
+  "ticket.duedate.label": "마감",
+  "ticket.duedate.clear": "지우기",
+  // 파생 한 줄 `마감까지 <남은> — 우선순위 <파생>으로 뜹니다`. 변수 둘(남은·파생)이라
+  // `ticket.priority.inherited*`와 같은 앞·중간·뒤 세 조각 조립이다. 우선순위의 상속 한 줄과
+  // 같은 자리이고 둘 다 서면 한 줄에 이어 붙는다(§1-3의 그 자리 그대로).
+  "ticket.duedate.derivedPrefix": "마감까지",
+  "ticket.duedate.derivedMiddle": "— 우선순위",
+  "ticket.duedate.derivedAfter": "로 뜹니다",
+  // 역전 거부 — 입력 아래 한 줄 + 저장 버튼 비활성(§1-4 §화면). 해시 하나만 변수라 접미 하나.
+  "ticket.duedate.reversalSuffix": "와 마감 순서가 어긋납니다 — 선행이 후행보다 늦게 끝날 수 없습니다",
 };
 
 /** 제품 낱말의 영어 대응 — **여기가 한자리다**(621c7a97). 다음 묶음이 같은 것을 다르게 부르지

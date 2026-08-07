@@ -807,6 +807,43 @@ test("writeTicket — 남의 frontmatter 키는 그대로, 파싱은 엔진과 �
   assert.strictEqual(tsList([after]), pyList(root));
 });
 
+test("writeTicket — undefined는 그 키의 줄을 통째로 지운다(§1-4 §화면 지우기)", async () => {
+  const root = newRoot();
+  await write(
+    root,
+    "due00011.md",
+    fm({ ticket: "due00011", title: "마감 있음", kind: "work", duedate: due(8 * DAY) }),
+  );
+  const before = (await listTickets(root, DEFAULT))[0];
+  assert.strictEqual(before.fm.duedate, due(8 * DAY));
+
+  // 빈 값(`duedate:`만 남기기)이 아니라 **줄 자체가 없어야** duedateOf가 무경고로 "마감 없음"을
+  // 읽는다 — 빈 값으로 두면 WARN을 낸다(§1-4 §값).
+  await writeTicket(before.path, { title: before.title, duedate: undefined }, before.body);
+  const raw = readFileSync(before.path, "utf8");
+  assert.ok(!raw.includes("duedate"), `duedate 줄이 남아 있다: ${raw}`);
+
+  const after = (await listTickets(root, DEFAULT))[0];
+  assert.strictEqual(after.fm.duedate, undefined);
+  assert.strictEqual(after.baseline, after.priority); // 파생이 없다 = 마감 없음
+});
+
+test("effectiveDuedate — §1-4 유효마감이 Ticket에 실린다(파생 한 줄의 재료)", async () => {
+  const root = newRoot();
+  await write(
+    root,
+    "due00012.md",
+    fm({ ticket: "due00012", title: "8일 뒤 마감", kind: "work", duedate: due(8 * DAY) }),
+  );
+  await write(root, "due00013.md", fm({ ticket: "due00013", title: "마감 없음", kind: "work" }));
+
+  const tickets = await listTickets(root, DEFAULT, DUE_NOW);
+  const by = (h: string) => tickets.find((t) => t.hash === h)!;
+  assert.strictEqual(by("due00012").effectiveDuedate?.getTime(), DUE_NOW.getTime() + 8 * DAY);
+  assert.strictEqual(by("due00012").baseline, 1); // 8일 ≥ 7일 = 파생 1
+  assert.strictEqual(by("due00013").effectiveDuedate, null);
+});
+
 // ── 보드 필터·검색·정렬 ──────────────────────────────────────────────────────
 
 test("보드 — 5상태 판정 · 필터 AND/OR · 검색 대상 · 정렬", async () => {
