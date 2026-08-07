@@ -36,6 +36,7 @@ import { matchCombo } from "@/lib/keymap";
 import type { ThreadItem } from "@/lib/queue";
 import { AttachmentField, useAttachments } from "@/components/attachment-field";
 import { useHotkey, useKeymap } from "@/components/keymap-provider";
+import { useT } from "@/components/language-provider";
 import { Markdown } from "@/components/markdown";
 import { PersonaDot } from "@/components/persona-badge";
 import { DepBadge } from "@/components/status-badge";
@@ -165,6 +166,12 @@ export function FrontmatterTable({ fm, file }: { fm: Record<string, string>; fil
  *  다른 값인 게 맞다 — 저기는 있는 값을 거르는 자리고 여기는 값을 정하는 자리다. */
 const KINDS = ["work", "request", "feedback"];
 
+/** 우선순위 select의 선택지 — `lib/queue.ts PRIORITY_MIN/MAX`와 같은 값이다(§1-3 §값).
+ *  값으로 import하지 않는다 — 이 파일은 클라이언트 컴포넌트라 `node:fs/promises`를 끄는
+ *  `lib/queue.ts`를 값으로 물면 번들이 깨진다(`ThreadItem`처럼 타입만 문다). 5도 빼지 않는다:
+ *  GUI 앞에 앉은 것이 사람이다. */
+const PRIORITIES = [1, 2, 3, 4, 5];
+
 /** frontmatter의 title·kind·persona + 본문 원문. `.wip`이면 이 폼은 렌더되지 않고
  *  서버 액션도 다시 거부한다(렌더 시점 판정은 저장 시점엔 이미 낡았다).
  *
@@ -176,6 +183,9 @@ export function TicketEditForm({
   title,
   kind,
   persona,
+  priority,
+  effective,
+  inheritedFrom,
   personas,
   colors,
   body,
@@ -185,6 +195,12 @@ export function TicketEditForm({
   title: string;
   kind: string;
   persona: string;
+  /** 원값(`ticket.priority`) — 없거나 잘못되면 3이다(`lib/queue.ts priorityOf`) */
+  priority: number;
+  /** 유효 우선순위(`ticket.effective`) — 파일에 안 쓴다. `priority`와 다르면 상속 한 줄을 그린다 */
+  effective: number;
+  /** 유효값을 물려준 후행 티켓의 해시 — `effective !== priority`일 때만 온다(§1-3 §값을 넣는 자리 셋) */
+  inheritedFrom?: string;
   /** 발행 다이얼로그와 같은 목록 — `listPersonas` 결과 중 `PROFILE.md`가 있는 이름. 상세 페이지가
    *  이미 읽은 것을 넘긴다(§3 "선택지 데이터는 이미 읽은 것을 넘긴다") */
   personas: string[];
@@ -193,6 +209,7 @@ export function TicketEditForm({
   body: string;
 }) {
   const [state, action, pending] = useActionState<SaveState, FormData>(saveTicket, {});
+  const t = useT();
   return (
     // 폭은 페이지 루트가 문다(§비주얼 §11) — 2단의 왼쪽 단 안에서 다시 걸면 이중 제한이다
     <form action={action} className="space-y-4">
@@ -254,6 +271,30 @@ export function TicketEditForm({
               )}
             </SelectContent>
           </Select>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="t-priority">{t("ticket.priority.label")}</Label>
+          <Select name="priority" defaultValue={String(priority)}>
+            <SelectTrigger id="t-priority" className="w-20">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {PRIORITIES.map((n) => (
+                <SelectItem key={n} value={String(n)}>
+                  {n}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {/* 유효 ≠ 원값일 때만 — 파일이 안 바뀌었는데 dot 색이 갈리지 않는 이유를 여기서 말한다
+              (§1-3 §값을 넣는 자리 셋. dot은 자기 priority만 그린다). */}
+          {inheritedFrom && (
+            <p className="text-xs text-muted-foreground">
+              <span className="font-mono">{inheritedFrom}</span>
+              {t("ticket.priority.inheritedMiddle")} {effective}
+              {t("ticket.priority.inheritedAfter")}
+            </p>
+          )}
         </div>
       </div>
       <div className="space-y-2">
@@ -1120,19 +1161,20 @@ export function NewTicketDialog({
 }) {
   const [state, action, pending] = useActionState<NewTicketState, FormData>(createTicket, {});
   const [picked, setPicked] = useState<string[]>([]);
+  const t = useT();
   // 열었을 때의 값 — dirty 판정과 리셋이 둘 다 이걸 기준으로 한다(§3)
   const blankTitle = copy?.title ?? "";
   const blankBody = copy?.body ?? BODY_SKELETON;
   // title·본문이 **controlled**인 이유는 `RequestDialog`와 같다 — React 19가 action 후 폼을
   // 리셋해서 uncontrolled면 발행 실패가 곧 입력 유실이다. deps는 이미 `picked`가 들고 있고,
-  // kind·persona는 base-ui Select가 자기 상태로 들고 있다(리셋에 안 밟힌다. 실측).
+  // kind·persona·priority는 base-ui Select가 자기 상태로 들고 있다(리셋에 안 밟힌다. 실측).
   const [title, setTitle] = useState(blankTitle);
   const [body, setBody] = useState(blankBody);
   // 마지막으로 닫은 결과. `RequestDialog`와 같은 이유 — 실패 사유가 본문 없이 살아남지 않게 한다(§3)
   const [dismissed, setDismissed] = useState<NewTicketState>({});
   const att = useAttachments(project);
 
-  // **kind·persona select는 세지 않는다**: base-ui가 자기 상태로 들고 있어 읽을 수 없고,
+  // **kind·persona·priority select는 세지 않는다**: base-ui가 자기 상태로 들고 있어 읽을 수 없고,
   // 사람이 "쓰던 내용"이라 부르는 것도 아니다(§3). **첨부는 센다**(§8 §거동 — 칩이 하나라도
   // 있으면 묻는다). 성공에는 확인이 끼지 않는다 — 그 경로는 서버 액션의 `redirect`가
   // 컴포넌트째 언마운트한다.
@@ -1258,6 +1300,23 @@ export function NewTicketDialog({
                       <span className="text-xs text-muted-foreground">원본 값</span>
                     </SelectItem>
                   )}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="n-priority">{t("ticket.priority.label")}</Label>
+              {/* 요구 접수 모드에는 안 붙는다(§3 §값을 넣는 자리 셋) — 그 폼은 `RequestDialog`로
+                  따로 있고 이 select를 안 쓴다. 서버가 `priority: 3`으로 고정한다. */}
+              <Select name="priority" defaultValue="3">
+                <SelectTrigger id="n-priority" className="w-20">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PRIORITIES.map((n) => (
+                    <SelectItem key={n} value={String(n)}>
+                      {n}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

@@ -20,7 +20,7 @@ import { track } from "@/lib/analytics";
 import { verifyAttachments, withAttachments } from "@/lib/attachments";
 import { kickIdleWorker } from "@/lib/kick";
 import { NAME_RE, isHash } from "@/lib/paths";
-import { reqTitle, stemOf } from "@/lib/queue";
+import { PRIORITY_DEFAULT, PRIORITY_MAX, PRIORITY_MIN, reqTitle, stemOf } from "@/lib/queue";
 import { getProject, resolveConfig } from "@/lib/projects";
 
 /** `ok`·`hash`는 **요구 접수 경로에서만** 온다 — 발행은 종전대로 `redirect`라 값을 돌려주지 않는다. */
@@ -76,6 +76,19 @@ export async function createTicket(
       throw new Error(`persona는 영문·숫자·_·- 만 됩니다(엔진이 경로로 씁니다): ${persona}`);
     }
 
+    // 우선순위(§1-3 §값을 넣는 자리 셋). 요구 접수는 select가 없으므로 **키 자체를 안 쓴다** —
+    // 엔진이 없는 키를 3으로 읽어 같은 결과다. 발행은 select라 항상 1~5가 오지만, 요청은 손으로도
+    // 만들 수 있으므로(§3) 범위 밖·정수 아님은 조용히 기본값으로 내린다 — 그래도 엔진이 같은
+    // 값(3)으로 읽을 뿐이라 신뢰 경계 위반이 아니다(`priority_of`가 이미 하는 일).
+    const priorityNum = Number(form.get("priority"));
+    const priority =
+      !req &&
+      Number.isInteger(priorityNum) &&
+      priorityNum >= PRIORITY_MIN &&
+      priorityNum <= PRIORITY_MAX
+        ? priorityNum
+        : PRIORITY_DEFAULT;
+
     // 큐 디렉터리의 **파일명**을 직접 본다. `listTickets`가 아닌 이유 둘: 해시 충돌 검사는
     // frontmatter가 깨져 엔진에 안 보이는 파일까지 포함해야 하고(그 파일도 이름을 점유한다),
     // deps가 가리키는 이름이 `ticket:` 값이 아니라 **상태 접미사를 뗀 파일명**이기 때문이다
@@ -111,6 +124,8 @@ export async function createTicket(
         `title: ${title}`,
         ...(kind ? [`kind: ${kind}`] : []),
         ...(persona ? [`persona: ${persona}`] : []),
+        // 요구 접수는 안 쓴다 — 키가 없으면 엔진이 3으로 읽어 서버가 고정한 것과 같은 결과다.
+        ...(req ? [] : [`priority: ${priority}`]),
         ...(deps.length ? [`deps: [${deps.join(", ")}]`] : []),
         "---",
         "",

@@ -148,6 +148,14 @@ export const ko: Record<string, string> = {
   "common.saving": "저장 중…",
   "common.add": "추가",
   "common.close": "닫기",
+
+  // 발행 다이얼로그(§3)·티켓 상세 편집 폼(§2) select 라벨 — 같은 자리 같은 낱말이라 한 키를
+  // 공유한다(§1-3 §값을 넣는 자리 셋. `62e0b85e`가 en을 채운다).
+  "ticket.priority.label": "우선순위",
+  // 상세의 상속 한 줄 `<해시>가 기다려 <유효>로 뜹니다` — 해시·유효값 두 변수라 `wrap`(변수 하나
+  // 전용)이 아니라 앞뒤 두 조각으로 쪼갠다. 조립: `<해시>` + middle + ` ` + `<유효>` + after.
+  "ticket.priority.inheritedMiddle": "가 기다려",
+  "ticket.priority.inheritedAfter": "로 뜹니다",
 };
 
 /** 제품 낱말의 영어 대응 — **여기가 한자리다**(621c7a97). 다음 묶음이 같은 것을 다르게 부르지

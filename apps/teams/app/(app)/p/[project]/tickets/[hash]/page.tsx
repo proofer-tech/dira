@@ -112,6 +112,13 @@ export default async function TicketDetail({
   // 선행 = deps **전부**(미충족으로 걸러내지 않는다). 종류·순서 판정은 보드와 같은 헬퍼가 한다.
   const deps = depBadges(tickets, ticket, config);
   const blocked = referrers(tickets, ticket, config); // 후행 = 이 티켓을 deps로 둔 것 = 역참조
+  // 유효 우선순위 상속(§1-3 §값을 넣는 자리 셋). 유효가 원값보다 크면 그 값을 물려준 후행이
+  // **직접** referrer 중에 반드시 있다(`effectiveFromGraph`가 직계 waiter의 유효값을 그대로
+  // 물려받는 재귀라서다) — `.done` 후행은 그래프 밖이라 자기 값(기본 3)을 들고 있어 후보에서 뺀다.
+  const priorityInheritedFrom =
+    ticket.effective !== ticket.priority
+      ? blocked.find((r) => r.state !== "done" && r.effective === ticket.effective)?.hash
+      : undefined;
   // 관계 링크도 **stem**이다 (보드와 같은 규칙 — §식별자)
   const href = (t: Ticket) => `/p/${id}/tickets/${encodeURIComponent(t.stem)}`;
 
@@ -413,6 +420,9 @@ export default async function TicketDetail({
                 title={ticket.fm.title ?? ""}
                 kind={ticket.fm.kind ?? ""}
                 persona={ticket.fm.persona ?? ""}
+                priority={ticket.priority}
+                effective={ticket.effective}
+                inheritedFrom={priorityInheritedFrom}
                 personas={personas}
                 colors={project.personaColors}
                 body={ticket.body}

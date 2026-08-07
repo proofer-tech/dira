@@ -82,8 +82,15 @@ test("932ae344 — 새로 뽑은 조합 문구들이 원문 그대로 재조립�
 
 // 6914f1d1 — 설정 다이얼로그 묶음은 여기서 끝난다. 폴백은 **다음 묶음이 ko를 먼저 넣는 동안**을
 // 위한 장치지, 지금 든 묶음이 영어로 덜 서도 된다는 뜻이 아니다(§0-16 §발행).
-test("지금 묶음의 ko 키는 en에 하나도 안 빠졌다", () => {
-  assert.deepStrictEqual(Object.keys(ko).filter((k) => !(k in en)), []);
+//
+// 이 판정은 **이미 다 찬 묶음**(설정 다이얼로그 `settings.*` · 여러 화면이 같이 쓰는 `common.*`)
+// 으로 좁힌다 — 우선순위 화면(`ticket.priority.*`, `c39e95f3`)부터는 ko를 먼저 넣고 en은 뒤따르는
+// 티켓(`62e0b85e`)이 채운다는 것이 설계이기 때문이다(§0-16 §발행 "다음 티켓들이 여기 키를 늘린다").
+test("이미 찬 묶음(settings·common)의 ko 키는 en에 하나도 안 빠졌다", () => {
+  assert.deepStrictEqual(
+    Object.keys(ko).filter((k) => (k.startsWith("settings.") || k.startsWith("common.")) && !(k in en)),
+    [],
+  );
 });
 
 // 화면에 남은 한국어를 여기서 잡는다 — 사전 값 자체에 한글이 섞이면 폴백이 아니라 오타다.

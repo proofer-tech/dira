@@ -26,6 +26,9 @@ import {
   awaitingOf,
   isAwaiting,
   listTickets,
+  PRIORITY_DEFAULT,
+  PRIORITY_MAX,
+  PRIORITY_MIN,
   readFm,
   resolveDep,
   stateOf,
@@ -237,7 +240,7 @@ function fmValue(name: string, raw: string): string {
   return v;
 }
 
-/** 저장 — 읽고-고치고-쓰기. 건드리는 frontmatter 키는 title·kind·persona 셋뿐이고
+/** 저장 — 읽고-고치고-쓰기. 건드리는 frontmatter 키는 title·kind·persona·priority 넷뿐이고
  *  나머지(session_id·owner·attempts·pid…)는 엔진 것이라 그대로 둔다.
  *
  *  ponytail: deps는 편집하지 않는다 — 자유 입력은 오타 해시로 영구 대기를 만들어 스펙이 금지한다
@@ -258,11 +261,21 @@ export async function saveTicket(_prev: SaveState, form: FormData): Promise<Save
       return { error: `persona는 영문·숫자·_·- 만 됩니다(엔진이 경로로 씁니다): ${persona}` };
     }
 
+    // select라 항상 1~5가 오지만, 요청은 손으로도 만들 수 있다 — 범위 밖·정수 아님은 조용히
+    // 기본값으로 내린다(§1-3 §값을 넣는 자리 셋. `priority_of`가 어차피 3으로 읽는 값이라
+    // 신뢰 경계 위반이 아니다).
+    const priorityNum = Number(form.get("priority"));
+    const priority = String(
+      Number.isInteger(priorityNum) && priorityNum >= PRIORITY_MIN && priorityNum <= PRIORITY_MAX
+        ? priorityNum
+        : PRIORITY_DEFAULT,
+    );
+
     // textarea는 CRLF로 온다(HTML 폼 규격). 그대로 쓰면 파일 전체 줄끝이 갈린다.
     let body = String(form.get("body") ?? "").replace(/\r\n/g, "\n");
     if (body && !body.endsWith("\n")) body += "\n";
 
-    await writeTicket(t.path, { title, kind, persona }, body);
+    await writeTicket(t.path, { title, kind, persona, priority }, body);
     revalidatePath(`/p/${projectId}/tickets/${encodeURIComponent(t.stem)}`);
     revalidatePath(`/p/${projectId}`); // 보드의 title·kind·persona 컬럼
     // §4-5 — 편집으로 persona가 붙거나 deps 한 줄이 빠지면 그 순간 디스패치 가능해진다.
