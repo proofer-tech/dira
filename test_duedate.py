@@ -2,14 +2,13 @@
 """§1-4 마감 자체검증(docs/DESIGN.md §1-4): frontmatter `duedate:` 한 줄이 시계로 §1-3의
 우선순위 기준값을 덮는가.
 
-판정은 임시 큐에서만 낸다(§제약 1 — 도그푸딩 큐를 안 쓴다). §1-4 §검증의 ①~⑨·⑫~⑭를 잰다 -
-⑩·⑪(선점)은 그 메커니즘을 세우는 티켓(`40ce8b2a`)이 아직 `.wip`라 여기서 못 잰다(§1-3
-§선점이 없으면 잴 대상이 없다 - test_priority.py가 같은 이유로 §1-3 자기 ⑦~⑩을 미룬 것과
-같은 자리. 40ce8b2a가 push되면 그 티켓 쪽에서 이 절의 ⑩·⑪도 같이 잰다).
+판정은 임시 큐에서만 낸다(§제약 1 — 도그푸딩 큐를 안 쓴다). §1-4 §검증의 ①~⑬을 전부 잰다.
 
 ①~⑨·⑬은 `tickets.py`(scan) 순수 로직이라 `now`를 인자로 박아 직접 잰다(시계를 안 기다린다).
 ⑫(1 게이트)와 DISPATCH 로그 출처 표기는 `tick.sh` 선정 루프의 일이라 워커 + dryrun/실제
-tick(가짜 엔진)으로 잰다.
+tick(가짜 엔진)으로 잰다. ⑩·⑪(선점, §1-3 §5가 파생 5로도 발동하는가)은 §1-3 자기 ⑦~⑨와
+같은 관용구 — 가짜 스트리밍 엔진(init+cat)으로 실제 디스패치 한 바퀴를 돌려 잰다(`40ce8b2a`가
+그 메커니즘을 세운 뒤에야 잴 수 있어서 여기 있다 - test_priority.py가 스스로 정한 값 그대로다).
 
 실패하면 assert로 죽는다.
 """
@@ -21,6 +20,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from datetime import datetime, timedelta
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -198,7 +198,7 @@ try:
     assert v_far == 3, v_far
     reset(root)
 
-    print("OK - test_duedate §1-4 §검증 ①~⑨·⑬ (⑩·⑪ 선점은 40ce8b2a 대기 - 그 메커니즘이 없다)")
+    print("OK - test_duedate §1-4 §검증 ①~⑨·⑬ (⑩·⑪ 선점은 파일 맨 끝에서 잰다)")
 
     # =====================================================================
     # ⑫ 1 게이트 + DISPATCH 로그 출처 표기 — tick.sh를 실제로 태운다(실시계, dryrun/tick)
@@ -301,5 +301,115 @@ try:
     shutil.rmtree(workers, ignore_errors=True)
 
     print("OK - test_duedate §1-4 §로그 (마감)·(상속 N)·(마감·상속 N)")
+
+    # =====================================================================
+    # ⑩·⑪ 선점(§1-3 §5) — 파생 5도 시계만으로 발동한다. 새 메커니즘 0개, 죽이는 경로가
+    # §2-5 강제 종료와 글자 그대로 같아서 흉내로는 못 잰다 - 실제 디스패치 한 바퀴로 잰다
+    # (test_priority.py §검증 ⑦~⑨와 같은 관용구).
+    # =====================================================================
+    FAKE_ENGINE = """\
+#!/bin/bash
+printf '{"type":"system","subtype":"init"}\\n'
+exec cat > /dev/null
+"""
+    WORKER_TMPL = """\
+#!/bin/bash
+TICKET_NAME="{name}"
+TICKET_CWD="{tmp}"
+TICKET_INPROGRESS=".wip"
+TICKET_DONE=".done"
+TICKET_FEED_TIMEOUT=30
+TICKET_MAXRUN=120
+TICKET_ENGINE=("{tmp}/fake-stream-engine.sh" --input-format stream-json)
+. "{tick}"
+"""
+
+    def mkfile(path, body, mode=0o644):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(body)
+        os.chmod(path, mode)
+        return path
+
+    def wait_for(cond, limit=40, step=0.5):
+        for _ in range(int(limit / step)):
+            if cond():
+                return True
+            time.sleep(step)
+        return False
+
+    workers = os.path.join(root, "workers")
+    local3 = os.path.join(tmp, "local3")
+    os.makedirs(local3, exist_ok=True)
+    penv = dict(os.environ, TICKET_LOCAL=local3)
+    mkfile(os.path.join(tmp, "fake-stream-engine.sh"), FAKE_ENGINE, 0o755)
+    w1 = mkfile(os.path.join(workers, "w1.sh"),
+                WORKER_TMPL.format(name="w1", tmp=tmp, tick=TICK), 0o755)
+    runlog_path = os.path.join(workers, "runner.log")
+
+    def preemptlog():
+        try:
+            with open(runlog_path, encoding="utf-8") as f:
+                return f.read()
+        except OSError:
+            return ""
+
+    def dispatch_busy(w, h, extra=""):
+        mkfile(os.path.join(root, "tickets", h + ".md"),
+               "---\nticket: {}\ntitle: t\n{}---\n\n## Goal\ntest\n".format(h, extra))
+        p = subprocess.Popen([w, "tick"], env=penv,
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        procs.append(p)
+        wip = os.path.join(root, "tickets", h + ".wip.md")
+        assert wait_for(lambda: os.path.exists(wip) and "inbox:" in
+                        open(wip, encoding="utf-8").read()), \
+            "{} 디스패치가 안 섰다\n{}".format(h, preemptlog())
+        return wip
+
+    procs = []
+    try:
+        # --- ⑩ 선점 — 파생 5(마감 now+1h)가 뜨면 도는 세션(파생 없음, eff 3)이 끊긴다 ---
+        wip_a = dispatch_busy(w1, "aaaa1101")
+        due5 = (datetime.now() + timedelta(hours=1)).isoformat()
+        mkfile(os.path.join(root, "tickets", "bbbb1102.md"),
+               "---\nticket: bbbb1102\ntitle: t\nduedate: {}\n---\n\n## Goal\ntest\n".format(due5))
+        before = len(preemptlog())
+        subprocess.run([w1, "tick"], capture_output=True, text=True, env=penv, timeout=30)
+        assert wait_for(lambda: "KILLED aaaa1101" in preemptlog(), 20), \
+            "파생 5가 도는 세션을 안 죽였다:\n" + preemptlog()[before:]
+        added = preemptlog()[before:]
+        assert re.search(r"PREEMPT aaaa1101 -> bbbb1102 pid=\d+", added), \
+            "PREEMPT 로그가 없다:\n" + added
+        backlog = os.path.join(root, "tickets", "aaaa1101.md")
+        assert wait_for(lambda: os.path.exists(backlog), 10), \
+            "끊긴 티켓이 열림으로 안 돌아왔다"
+        body = open(backlog, encoding="utf-8").read()
+        assert "밀어낸 5 | bbbb1102" in body, \
+            "`## 선점`의 «누가 밀었나»에 마감 티켓 해시가 없다\n" + body
+        os.remove(os.path.join(root, "tickets", "bbbb1102.md"))
+        reset(root)
+
+        # --- ⑪ 마감으로 뜬 유효 5끼리는 안 끊는다 ---
+        wip_b = dispatch_busy(w1, "cccc1103",
+                              "duedate: {}\n".format((datetime.now()
+                                                       + timedelta(hours=4)).isoformat()))
+        mkfile(os.path.join(root, "tickets", "dddd1104.md"),
+               "---\nticket: dddd1104\ntitle: t\nduedate: {}\n---\n\n## Goal\ntest\n".format(
+                   (datetime.now() + timedelta(hours=1)).isoformat()))
+        before = len(preemptlog())
+        subprocess.run([w1, "tick"], capture_output=True, text=True, env=penv, timeout=30)
+        added = preemptlog()[before:]
+        assert "PREEMPT" not in added, "유효 5끼리인데 죽였다:\n" + added
+        assert os.path.exists(wip_b), "마감 5인데 죽어서 열림으로 돌아갔다"
+
+        print("OK - test_duedate §1-4 §검증 ⑩~⑪ (선점 — 파생 5도 §1-3 §선점을 그대로 탄다)")
+    finally:
+        for p in procs:
+            try:
+                p.kill()
+                p.wait(timeout=5)
+            except Exception:
+                pass
+        shutil.rmtree(workers, ignore_errors=True)
 finally:
     shutil.rmtree(tmp, ignore_errors=True)
