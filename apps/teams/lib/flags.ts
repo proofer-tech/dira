@@ -4,3 +4,11 @@
 export function isLandingOnly(): boolean {
   return process.env.DIRA_LANDING_ONLY === "1";
 }
+
+/** 다중 토큰 잠금 스위치 — 폴라리티가 위 함수와 반대다: 없으면(`undefined`) **잠김**이다
+ *  (DESIGN.md §0-13 §잠금). 빠뜨린 빌드가 배포물이 되므로 누락이 안전한 쪽(잠김)으로
+ *  떨어져야 한다. `next.config.ts`의 `env`가 빌드 시각에 이 값을 상수로 굳힌다 — 런타임
+ *  env로는 릴리스 dmg를 나중에 못 연다. 이 값을 읽는 자리는 이 함수 하나다. */
+export function isMultiToken(): boolean {
+  return process.env.DIRA_MULTI_TOKEN === "1";
+}

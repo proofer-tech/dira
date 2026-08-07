@@ -25,6 +25,9 @@ const nextConfig: NextConfig = {
   // 안 얹으면 §8이 정한 20MB 상한이 `saveAttachment`에 닿기도 전에 Next가 거절한다.
   // 수를 여기 적지 않는다: §8 상한에서 유도된 값이다(`MAX_BYTES` + 여유. 같게 뒀던 것이 `6dab7cc8`).
   experimental: { serverActions: { bodySizeLimit: BODY_SIZE_LIMIT } },
+  // 다중 토큰 잠금(DESIGN.md §0-13 §잠금) — `isMultiToken()`이 읽는 값을 빌드 시각에 상수로
+  // 인라인한다. 런타임 env로 두면 배포한 dmg가 잠금 분기를 품은 채 나가 env 하나로 열린다.
+  env: { DIRA_MULTI_TOKEN: process.env.DIRA_MULTI_TOKEN },
 };
 
 export default nextConfig;
