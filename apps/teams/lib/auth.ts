@@ -11,6 +11,7 @@ import { chmod, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import { isMultiToken } from "./flags.ts";
+import { t as translate } from "./i18n.ts";
 import { registryPath } from "./projects.ts";
 
 /** 레지스트리와 **같은 디렉터리**다(엔진의 `$LOCAL`). 규칙을 두 벌로 적지 않으려고
@@ -293,7 +294,11 @@ export type TokenRow = {
  *
  *  **잠금(§0-13 §잠금 계약 ②)에서는 행이 최대 하나다** — `active`가 가리키는 항목만 낸다.
  *  `tokens.json`이 이미 여러 개를 담고 있어도(계약 ③) 나머지는 파일에 그대로 남을 뿐 화면에
- *  안 나온다. */
+ *  안 나온다.
+ *
+ *  ponytail: 라벨 없는 행의 표시 이름(`계정 N`)은 `t("ko", ...)`로 고정한다 — 이 함수는 호출자가
+ *  로케일을 안 넘긴다(§0-16). `en` 사전에 이 키가 없는 지금은 어차피 결과가 같다. 로케일을
+ *  반영해야 하면 이 함수가 `locale`을 받게 하고 호출부(`readTokenRowsAction` 등)를 고친다. */
 export async function readTokenRows(): Promise<TokenRow[]> {
   const file = await readTokens();
   const engine = file.claude;
@@ -302,7 +307,7 @@ export async function readTokenRows(): Promise<TokenRow[]> {
   const source = isMultiToken() ? engine.tokens : engine.tokens.filter((t) => t.id === engine.active);
   return source.map((t, i) => ({
     id: t.id,
-    label: t.label ?? `계정 ${i + 1}`,
+    label: t.label ?? `${translate("ko", "settings.tokens.accountFallbackPrefix")} ${i + 1}`,
     rawLabel: t.label ?? "",
     masked: maskToken(t.token),
     addedAt: when(new Date(t.addedAt)),

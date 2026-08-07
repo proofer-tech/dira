@@ -42,6 +42,8 @@ export const ko: Record<string, string> = {
   "settings.tree.other": "기타 엔진",
   "settings.tree.keymap": "키설정",
   "settings.tree.stats": "사용 통계",
+  // 둘째 사이드바 그룹의 aria-label — 그룹 자신은 머리글이 없다(§45 ③), 접근가능 이름만 필요하다
+  "settings.tree.categoryGroup": "설정 분류",
 
   "settings.claude.heading": "Claude 인증",
   "settings.claude.descriptionMulti":
@@ -78,6 +80,11 @@ export const ko: Record<string, string> = {
   // 행의 시각 뒤에 붙는 꼬리(`· 2026-08-07 14:23 추가`). 한국어는 `common.add`와 같은 낱말이지만
   // 영어는 버튼(`Add`)과 갈린다 — 그래서 키가 둘이다.
   "settings.tokens.addedSuffix": "추가",
+  // 라벨 없는 토큰의 표시 이름 접두(`lib/auth.ts`의 `readTokenRows` — "계정 " + 순번).
+  // 서버가 만드는 값이라 로케일을 못 받는다(§0-16 §장치 — 아래 `keymap.ts`와 같은 사정).
+  "settings.tokens.accountFallbackPrefix": "계정",
+  "settings.tokens.editLabelSuffix": "라벨 편집",
+  "settings.tokens.deleteSuffix": "삭제",
 
   "settings.other.agyCred": "인증은 macOS 로그인 키체인에 있습니다 — 이 화면이 읽지 않습니다",
   "settings.other.codexMissing": "발견 못 함 — OPENAI_API_KEY로 도는 워커는 이 판정 밖입니다",
@@ -93,8 +100,29 @@ export const ko: Record<string, string> = {
   "settings.keymap.captureHint": "누른 조합이 그대로 지정됩니다 · 다른 단축키는 그동안 듣지 않습니다 ·",
   "settings.keymap.resetTooltipPrefix": "기본값",
   "settings.keymap.resetTooltipSuffix": "(으)로 되돌립니다",
+  // 되돌리기 버튼의 aria-label 꼬리(`<이름> 기본값으로 되돌리기`) — 위 툴팁 문구와는 다른 문장이다
+  "settings.keymap.resetActionSuffix": "기본값으로 되돌리기",
   "settings.keymap.change": "바꾸기",
   "settings.keymap.resetAll": "전부 기본값으로",
+
+  // §0-6 액션 표 8줄의 이름(`lib/keymap.ts`의 `DEFAULT_KEYMAP`). 목록 · 검색 인덱스 · 충돌 사유가
+  // 전부 이 여덟 키를 통해 그 이름을 얻는다 — `keymap.ts`가 리터럴을 안 들고 여기서 가져온다.
+  "settings.keymap.action.project.search": "프로젝트 검색",
+  "settings.keymap.action.settings.open": "설정 열기",
+  "settings.keymap.action.board.search": "검색",
+  "settings.keymap.action.board.new": "티켓 발행",
+  "settings.keymap.action.board.request": "요구 접수",
+  "settings.keymap.action.nav.board": "보드로 이동",
+  "settings.keymap.action.nav.workers": "워커로 이동",
+  "settings.keymap.action.interject.send": "보내기",
+
+  // 키 캡처 거절 사유(`validateBinding`) — 서버 액션이 그대로 돌려주는 문자열이다
+  "settings.keymap.reject.modifierOnly": "조합키만으로는 지정할 수 없습니다.",
+  "settings.keymap.reject.escape": "`Esc`는 닫기·취소에 쓰입니다.",
+  "settings.keymap.reject.tab": "`Tab`은 초점 이동에 쓰입니다.",
+  "settings.keymap.reject.needsMod": "`↵`·`Space`는 `⌘`과 같이 눌러야 합니다. 버튼을 누르는 키입니다.",
+  "settings.keymap.reject.conflictSuffix": "겹칩니다.",
+  "settings.keymap.reject.unknownAction": "모르는 액션입니다:",
 
   "settings.stats.description":
     "몇 벌이 도는지와 어떤 화면 동작이 있었는지만 익명으로 보냅니다. 경로·프로젝트 이름·티켓 내용은 보내지 않습니다.",

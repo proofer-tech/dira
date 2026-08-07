@@ -51,7 +51,7 @@ import {
   type Project,
   type ProjectConfig,
 } from "@/lib/projects";
-import type { Locale } from "@/lib/i18n";
+import { t, type Locale } from "@/lib/i18n";
 import { preflight, scaffold } from "@/lib/scaffold";
 import { cronRegisterCmd, listWorkers, markAlertsRead, registerCron } from "@/lib/workers";
 import { tildePath } from "@/lib/urls";
@@ -421,7 +421,7 @@ export async function setBindingAction(
   e: KeyLike,
 ): Promise<{ combo?: string; error?: string }> {
   const action = DEFAULT_KEYMAP.find((a) => a.id === id);
-  if (!action) return { error: `모르는 액션입니다: ${id}` };
+  if (!action) return { error: `${t("ko", "settings.keymap.reject.unknownAction")} ${id}` };
   const combo = comboOf(e);
   const { bindings } = await readKeymap();
   const bad = validateBinding(bindings, action.id, combo);
@@ -434,7 +434,7 @@ export async function setBindingAction(
  *  기본값으로 쓰면 `writeKeymap`이 그 키를 파일에서 뺀다 — 전부 되돌리면 `{}`가 남는다(§0-6). */
 export async function resetKeymapAction(id?: string): Promise<{ error?: string }> {
   const targets = id ? DEFAULT_KEYMAP.filter((a) => a.id === id) : DEFAULT_KEYMAP;
-  if (targets.length === 0) return { error: `모르는 액션입니다: ${id}` };
+  if (targets.length === 0) return { error: `${t("ko", "settings.keymap.reject.unknownAction")} ${id}` };
   await writeKeymap(Object.fromEntries(targets.map((a) => [a.id, a.combo])));
   return {};
 }

@@ -64,6 +64,22 @@ test("settings-dialog.tsx의 조합 문구 — 영어도 문장이 된다", () =
   );
 });
 
+// 932ae344 — 사전 밖에 있던 서버 문자열(키맵 액션 이름 · 거절 사유 · aria-label 조합 · 토큰
+// 표시명 접두)을 ko 키로 뽑았다. 조합 결과가 원문과 한 글자도 안 갈리는지 여기서 못박는다.
+test("932ae344 — 새로 뽑은 조합 문구들이 원문 그대로 재조립된다", () => {
+  assert.strictEqual(
+    `${t("ko", "settings.keymap.action.project.search")} ${t("ko", "settings.keymap.resetActionSuffix")}`,
+    "프로젝트 검색 기본값으로 되돌리기",
+  );
+  assert.strictEqual(`A계정 ${t("ko", "settings.tokens.editLabelSuffix")}`, "A계정 라벨 편집");
+  assert.strictEqual(`A계정 ${t("ko", "settings.tokens.deleteSuffix")}`, "A계정 삭제");
+  assert.strictEqual(`${t("ko", "settings.tokens.accountFallbackPrefix")} 1`, "계정 1");
+  assert.strictEqual(
+    `${t("ko", "settings.keymap.reject.unknownAction")} nope.gone`,
+    "모르는 액션입니다: nope.gone",
+  );
+});
+
 test("readLanguage — 파일 없으면 기본값 ko, set 뒤에는 그 값을 읽는다", async () => {
   rmSync(languagePath(), { force: true });
   assert.strictEqual(await readLanguage(), "ko");

@@ -230,7 +230,7 @@ function KeymapSection({ className }: { className?: string }) {
                         <Button
                           variant="ghost"
                           size="icon-sm"
-                          aria-label={`${a.name} 기본값으로 되돌리기`}
+                          aria-label={`${a.name} ${t("settings.keymap.resetActionSuffix")}`}
                           className={combo === a.combo ? "invisible" : undefined}
                           disabled={busy}
                           onClick={() => reset(a.id)}
@@ -501,7 +501,7 @@ function TokensSection({ refreshKey }: { refreshKey: string | null }) {
                   <Button
                     variant="ghost"
                     size="icon-sm"
-                    aria-label={`${row.label} 라벨 편집`}
+                    aria-label={`${row.label} ${t("settings.tokens.editLabelSuffix")}`}
                     disabled={pending}
                     onClick={() => {
                       setEditingId(row.id);
@@ -545,7 +545,7 @@ function TokensSection({ refreshKey }: { refreshKey: string | null }) {
             <Button
               variant="ghost"
               size="icon-sm"
-              aria-label={`${row.label} 삭제`}
+              aria-label={`${row.label} ${t("settings.tokens.deleteSuffix")}`}
               disabled={pending}
               onClick={() => remove(row)}
             >
@@ -887,7 +887,7 @@ export function SettingsDialog({
               {/* 둘째 그룹은 머리가 없다 — `키설정`·`사용 통계`는 최상위 노드 자신이 항목인
                   분류다(§45 ③). 묶는 낱말을 새로 만들지 않는다. */}
               <SidebarGroup className="p-0">
-                <SidebarMenu aria-label="설정 분류">
+                <SidebarMenu aria-label={t("settings.tree.categoryGroup")}>
                   <SidebarMenuItem>
                     <SidebarMenuButton
                       isActive={activeNode === "keymap"}
