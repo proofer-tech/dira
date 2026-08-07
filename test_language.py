@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""언어 주입 자체검증: $LOCAL/language.json의 locale이 프롬프트 맨 꼬리에 닿는가(§0-16 §주입).
+"""언어 주입 자체검증: $LOCAL/language.json의 locale이 프롬프트 맨 꼬리에 닿는가
+(§0-16 §주입 §개정).
 
-ko(기본값)면 프롬프트가 바이트 단위로 종전과 같아야 한다 -- 파일 없음·JSON 깨짐·객체 아님·
-모르는 값 넷 다 무주입으로 흡수한다(GUI의 readLanguage와 같은 판정). en이면 참조 컨텍스트
-**뒤**(프롬프트 맨 꼬리)에 문장 두 짝(대화 언어 · 산출물은 한국어 고정)이 실린다.
+로케일이 무엇이든 프롬프트 맨 꼬리에 문장 두 짝이 실린다 -- ko면 한국어 문장, en이면
+영어 문장. 파일 없음·JSON 깨짐·객체 아님·모르는 값 넷 다 ko로 흡수한다(GUI의 readLanguage와
+같은 판정) -- 즉 이 넷의 출력이 명시적 ko와 바이트 단위로 같다.
 
 임시 큐에서만 판정한다(도그푸딩 큐에서 엔진을 실험하지 않는다). 엔진을 실제로 부르지 않고
 `tick.sh dryrun`이 찍는 프롬프트로 본다. 실패하면 assert로 죽는다.
@@ -77,16 +78,17 @@ try:
     w = mkworker(root, "w", tmp)
     mk(root, "5c112003", fm="kind: work\n")
 
-    # 0) language.json 자체가 없다 -> 무주입, WARN 0줄. 이 출력이 기준선이다.
+    # 0) language.json 자체가 없다 -> ko로 흡수, 꼬리에 한국어 문장 두 짝. 이 출력이 기준선이다.
     base = dryrun(w, local)
-    assert "Language note" not in base, "language.json이 없는데 주입됐다\n" + base
+    assert "언어 안내" in base, "language.json이 없는데 ko 주입이 안 됐다\n" + base
+    assert "## 결과" in base and "docs/" in base, "산출물 한국어 고정 짝이 안 실렸다\n" + base
     assert warns(root) == [], "language.json이 없는데 WARN이 났다: {}".format(warns(root))
 
     # 1) 명시적으로 ko -> 기준선과 바이트 단위로 같다
     write(langfile, json.dumps({"locale": "ko"}))
     assert dryrun(w, local) == base, "locale=ko인데 프롬프트가 기준선과 달라졌다"
 
-    # 2) JSON 깨짐 -> ko로 흡수(무주입), 기준선과 같다
+    # 2) JSON 깨짐 -> ko로 흡수, 기준선과 같다
     write(langfile, "{ 이건 json이 아니다")
     assert dryrun(w, local) == base, "JSON이 깨졌는데 프롬프트가 기준선과 달라졌다"
 
@@ -98,14 +100,15 @@ try:
     write(langfile, json.dumps({"locale": "fr"}))
     assert dryrun(w, local) == base, "모르는 locale인데 프롬프트가 기준선과 달라졌다"
 
-    # 5) en -> 참조 컨텍스트(티켓 줄) 뒤, 프롬프트 맨 꼬리에 문장 두 짝이 실린다
+    # 5) en -> 참조 컨텍스트(티켓 줄) 뒤, 프롬프트 맨 꼬리에 영어 문장 두 짝이 실린다
     write(langfile, json.dumps({"locale": "en"}))
     got = dryrun(w, local)
-    assert got != base, "locale=en인데 프롬프트가 안 바뀌었다"
-    assert got.startswith(base), "en 블록이 맨 꼬리가 아니라 기존 내용 앞/중간에 붙었다\n" + got
-    tail = got[len(base):]
-    assert "english" in tail.lower(), "대화 언어(en)를 말하는 짝이 안 실렸다\n" + tail
-    assert "korean" in tail.lower() or "한국어" in tail, "산출물은 한국어 고정 짝이 안 실렸다\n" + tail
+    assert got != base, "locale=en인데 프롬프트가 ko와 같다"
+    ctxend = got.index("Language note")
+    assert "언어 안내" not in got, "en인데 ko 문장이 같이 실렸다\n" + got
+    tail = got[ctxend:]
+    assert "english" in tail.lower(), "사용자에게 하는 말은 영어 짝이 안 실렸다\n" + tail
+    assert "korean" in tail.lower(), "산출물은 한국어 고정 짝이 안 실렸다\n" + tail
     assert "## 결과" in tail and "docs/" in tail, "산출물 대상(## 결과 · docs/)이 안 실렸다\n" + tail
     assert warns(root) == [], "en 주입에서 WARN이 났다: {}".format(warns(root))
 
@@ -118,7 +121,7 @@ try:
     assert "persona" not in open(os.path.join(root, "tickets", "5c112003.md"),
                                   encoding="utf-8").read()
 
-    print("PASS ko/파일없음/JSON깨짐/객체아님/모르는값 5종 무주입(바이트 동일) · "
-          "en 주입은 꼬리에 문장 두 짝 · 블록 상수 · persona 무관 · WARN 0줄")
+    print("PASS ko/파일없음/JSON깨짐/객체아님/모르는값 5종 ko 주입(바이트 동일) · "
+          "en 주입은 꼬리에 영어 문장 두 짝 · 블록 상수 · persona 무관 · WARN 0줄")
 finally:
     shutil.rmtree(tmp, ignore_errors=True)

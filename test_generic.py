@@ -186,9 +186,11 @@ try:
     runs = os.path.join(tmp, "slow-runs.txt")
     slow_eng = os.path.join(tmp, "slow-engine.sh")
     with open(slow_eng, "w", encoding="utf-8") as f:
-        # 프롬프트 마지막 줄만 적는다 - 앞에 붙는 인라인 블록(코어·프로토콜·페르소나)은
-        # 이 케이스의 관심사가 아니고, 티켓 프롬프트는 조립에서 항상 맨 뒤다.
-        f.write('#!/bin/bash\nprintf "%s\\n" "${{1##*$\'\\n\'}}" >> {}\nsleep 4\n'.format(runs))
+        # 티켓 프롬프트 줄("slow beef000N")만 뽑는다 - 앞에 붙는 인라인 블록(코어·프로토콜·
+        # 페르소나)도 관심사가 아니고, §0-16 §개정 뒤로는 꼬리도 관심사가 아니다(언어 블록이
+        # 로케일 무관 항상 붙어 이제 그게 진짜 마지막 줄이다). 이 케이스가 보는 것은 어느
+        # 워커가 어느 티켓을 잡았냐이지 프롬프트 조립 순서가 아니다.
+        f.write('#!/bin/bash\nprintf "%s" "$1" | grep -o "slow beef[0-9]*" >> {}\nsleep 4\n'.format(runs))
     os.chmod(slow_eng, 0o755)
     root3 = os.path.join(tmp, "pair", ".dira")
     slow = ('#!/bin/bash\nTICKET_NAME="{name}"\nTICKET_PROMPT_FMT="slow %s"\n'

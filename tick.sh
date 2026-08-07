@@ -535,24 +535,40 @@ done
 
 참조 컨텍스트(필요하면 읽어보세요):$CTX"
 
-# --- 언어 주입: $LOCAL/language.json의 locale이 en이면 프롬프트 맨 꼬리에 한 줄(§0-16 §주입) ---
-# ko(기본값)면 무주입 -- 파일 없음·JSON 깨짐·객체 아님·모르는 값 넷 다 여기로 흡수한다(GUI의
-# readLanguage와 같은 판정, apps/teams/lib/projects.ts). 자리는 참조 컨텍스트 바로 뒤다 --
-# 조립이 prepend라 아래로 내려갈수록 프롬프트 앞쪽에 붙고, 여기가 append로 남는 마지막 자리다.
-# persona if 밖이라 `persona:` 없는 티켓에도 붙는다. 블록은 상수 -- 언어가 늘면 문장 하나만 는다.
+# --- 언어 주입: $LOCAL/language.json의 locale이 무엇이든 프롬프트 맨 꼬리에 문장 두 짝
+# (§0-16 §주입 §개정) -- ko면 한국어 문장, en이면 영어 문장. 무주입은 없다(안 고른 사람이
+# 정확히 그 기본값이라 회귀가 그 사람에게 난다). 흡수 판정은 그대로다 -- 파일 없음·JSON
+# 깨짐·객체 아님·모르는 값 넷 다 ko로 흡수한다(GUI의 readLanguage와 같은 판정,
+# apps/teams/lib/projects.ts). 자리는 참조 컨텍스트 바로 뒤다 -- 조립이 prepend라 아래로
+# 내려갈수록 프롬프트 앞쪽에 붙고, 여기가 append로 남는 마지막 자리다. persona if 밖이라
+# `persona:` 없는 티켓에도 붙는다. 블록은 상수 -- 로케일이 늘면 case에 문장 한 줄만 는다.
+# 문장 ①은 "사용자에게 하는 모든 말"로 긍정 좁힘이라 thinking·도구명·요약은 예외로 나열하지
+# 않아도 애초에 안 걸린다.
 LOCALE=$(python3 -c 'import json, sys
 try:
     o = json.load(open(sys.argv[1], encoding="utf-8"))
     print("en" if isinstance(o, dict) and o.get("locale") == "en" else "ko")
 except Exception:
     print("ko")' "$LOCAL/language.json" 2>/dev/null)
-if [ "$LOCALE" = "en" ]; then
+case "$LOCALE" in
+en)
   PROMPT="$PROMPT
 
-Language note: converse with the user in English for the rest of this session.
-Keep every written deliverable in Korean regardless -- the ticket body, \`## 결과\`,
-commit messages, and anything under \`docs/\`."
-fi
+Language note: say everything you say to the user in English for the rest of
+this session -- not only replies when someone writes in, but also any prose
+you leave in the progress stream even when no one does. Keep every written
+deliverable in Korean regardless -- the ticket body, \`## 결과\`, commit
+messages, and anything under \`docs/\`."
+  ;;
+*)
+  PROMPT="$PROMPT
+
+언어 안내: 이번 세션 동안 사용자에게 하는 모든 말을 한국어로 하세요 -- 참견에
+답할 때만이 아니라 아무도 말을 안 걸어도 진행 기록 스트림에 남기는 산문까지입니다.
+산출물은 그대로 한국어로 고정합니다 -- 티켓 본문, \`## 결과\`, 커밋 메시지,
+\`docs/\` 아래 전부입니다."
+  ;;
+esac
 
 # --- 협업 프로토콜: <protocols>/AGENTS.md 를 프롬프트에 인라인한다 ---
 # 페르소나가 '누구'라면 이건 '어떻게 같이 일하는가'다 - 티켓 성격별 처리, 핸드오프, 보고 규약.
