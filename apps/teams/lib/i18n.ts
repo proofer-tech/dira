@@ -191,8 +191,17 @@ export const ko: Record<string, string> = {
   "ticket.duedate.derivedPrefix": "마감까지",
   "ticket.duedate.derivedMiddle": "— 우선순위",
   "ticket.duedate.derivedAfter": "로 뜹니다",
+  // 1시간 미만 남은 파생 한 줄의 <남은> 자리(§1-4 §화면). 지난 마감은 이 자리에 안 온다 —
+  // 호출부가 `bell.due.overdue`로 따로 그린다(`마감까지 지남`류 비문을 막는다, `4f7def31`).
+  "ticket.duedate.underHour": "1시간 미만",
   // 역전 거부 — 입력 아래 한 줄 + 저장 버튼 비활성(§1-4 §화면). 해시 하나만 변수라 접미 하나.
   "ticket.duedate.reversalSuffix": "와 마감 순서가 어긋납니다 — 선행이 후행보다 늦게 끝날 수 없습니다",
+
+  // 남은 시간 표기(종 ⑦ 나열 · 상세 파생 한 줄)의 낱말 — 숫자에 공백 없이 바로 붙는다
+  // (`3시간 30분`·`3h 30m`). en은 복수형 장치가 없는 이 앱 사정(§0-16) 그대로 약어로 피한다.
+  "common.unit.hour": "시간",
+  "common.unit.minute": "분",
+  "common.unit.day": "일",
 };
 
 /** 제품 낱말의 영어 대응 — **여기가 한자리다**(621c7a97). 다음 묶음이 같은 것을 다르게 부르지
@@ -220,6 +229,7 @@ export const ko: Record<string, string> = {
  *  | 마감 · 유효마감 | due date · effective due date | 5debff0e가 더한 줄부터 아래. 입력 라벨은 `Due date`, 문장 안에서는 `due` |
  *  | 선행 · 후행 | prerequisite · the ticket waiting on it | `dep`은 frontmatter 키 이름이지 사람 말이 아니다(§0-10 §문구가 `reap`을 몰아낸 그 자) |
  *  | 마감이 지났다 | past due | 종 ⑦ 나열의 한 조각. `overdue`도 같은 뜻이지만 두 낱말을 섞지 않는다 |
+ *  | 시간 · 분 · 일 | h · m · d | `4f7def31`이 더한 줄. 남은 시간 표기의 낱말 — 복수형 장치가 없어 약어로 자릿수 문제를 피한다 |
  *
  *  **어순이 뒤집히는 자리는 접두·접미 두 키로 쪼갠다.** 한국어는 이름 뒤에 다 붙지만(`<이름>
  *  삭제`) 영어는 동사가 앞에 선다(`Delete <name>`) — 한쪽이 비는 것이 정상이고, 조립은
@@ -399,11 +409,17 @@ export const en: Record<string, string> = {
   "ticket.duedate.derivedPrefix": "Due in",
   "ticket.duedate.derivedMiddle": "— comes up as priority",
   "ticket.duedate.derivedAfter": "",
+  "ticket.duedate.underHour": "Under 1h",
   // 역전 거부. 앞에 해시가 공백 없이 바로 붙는다(`ticket.priority.inheritedMiddle`과 같은 사정) —
   // **공백으로 시작하는 것이 의도다.** 마침표는 없다: 한국어 쪽도 없고, 이 줄은 입력 바로 아래
   // 붙는 한 조각이다.
   "ticket.duedate.reversalSuffix":
     " and this due date are out of order — a prerequisite can't be due after the ticket waiting on it",
+
+  // 약어로 복수형 문제를 피한다(`bell.due.blockedSuffix`와 같은 사정) — `3h 30m`·`7d`.
+  "common.unit.hour": "h",
+  "common.unit.minute": "m",
+  "common.unit.day": "d",
 };
 
 const DICTS: Record<Locale, Record<string, string>> = { ko, en };

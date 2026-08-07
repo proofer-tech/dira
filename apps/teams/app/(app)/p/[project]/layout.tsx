@@ -585,7 +585,7 @@ function NotificationItems({
               <span className="text-sm text-foreground">
                 {d.alert.overdue
                   ? t(locale, "bell.due.overdue")
-                  : `${remainingLabel(d.alert.remainingMs)} ${t(locale, "bell.due.blockedMiddle")} ${d.alert.unmetCount}${t(locale, "bell.due.blockedSuffix")}`}
+                  : `${remainingLabel(d.alert.remainingMs, locale)} ${t(locale, "bell.due.blockedMiddle")} ${d.alert.unmetCount}${t(locale, "bell.due.blockedSuffix")}`}
               </span>
               <Link
                 href={`/p/${id}/tickets/${encodeURIComponent(d.stem)}`}

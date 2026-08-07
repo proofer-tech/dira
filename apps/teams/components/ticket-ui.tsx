@@ -32,6 +32,7 @@ import {
 import { createTicket, type NewTicketState } from "@/app/(app)/p/[project]/(board)/actions";
 import type { UnassignRun } from "@/lib/engine";
 import { matchCombo } from "@/lib/keymap";
+import { formatRemaining } from "@/lib/urls";
 // 스레드를 엮는 쪽은 서버(`lib/queue.ts threadOf`)다 — 여기 오는 건 타입뿐이라 `node:*`를 안 끈다
 import type { ThreadItem } from "@/lib/queue";
 import { AttachmentField, useAttachments } from "@/components/attachment-field";
@@ -221,7 +222,7 @@ export function TicketEditForm({
   inheritedFrom,
   duedate,
   duedateBaseline,
-  remainingText,
+  remainingMs,
   precedentDuedates,
   followerDuedates,
   personas,
@@ -243,9 +244,10 @@ export function TicketEditForm({
   duedate: string;
   /** §1-4 기준값(`ticket.baseline`) — `priority`와 다르면 파생이 명시값을 덮은 것이라 파생 한 줄을 그린다 */
   duedateBaseline: number;
-  /** "마감까지 <남은>"의 <남은> — 서버가 `ticket.effectiveDue`로 이미 잰 문구다. `duedateBaseline`이
-   *  `priority`와 같으면(파생 없음) null이다 */
-  remainingText: string | null;
+  /** "마감까지 <남은>"의 재료 — 서버가 `ticket.effectiveDue`로 이미 잰 ms다. `duedateBaseline`이
+   *  `priority`와 같으면(파생 없음) null이다. 문구 조립(로케일 포함)은 이 컴포넌트가 한다 —
+   *  서버 컴포넌트는 로케일을 안 읽는다(§0-16, `4f7def31`) */
+  remainingMs: number | null;
   /** 직계 선행(deps)의 own duedate — 역전 판정 재료(§1-4 §역전, direct만). `hit`이 없는 deps는 빠진다 */
   precedentDuedates: { hash: string; duedate: string }[];
   /** 직계 후행(referrers)의 own duedate — 역전 판정 재료 */
@@ -260,6 +262,11 @@ export function TicketEditForm({
   const [state, action, pending] = useActionState<SaveState, FormData>(saveTicket, {});
   const t = useT();
   const locale = useLocale();
+  // 지난 마감은 `formatRemaining`에 안 보낸다 — "마감까지" 접두와 이어 붙이면 비문이 된다
+  // (`마감까지 지남`·`Due in Past due`). 이 갈래는 `bell.due.overdue` 한 문장으로 따로 그린다
+  // (§1-4 §화면, `4f7def31`).
+  const overdue = remainingMs !== null && remainingMs <= 0;
+  const remainingText = remainingMs !== null && !overdue ? formatRemaining(remainingMs, locale) : null;
   // 역전 판정은 입력이 바뀔 때마다 다시 잰다(§1-4 §역전 "다이얼로그를 새로 안 띄운다" —
   // 저장을 누르기 전에 여기서 막는다). uncontrolled로 두면 리렌더 없이 값이 바뀌어 못 잰다.
   const [duedateInput, setDuedateInput] = useState(duedate);
@@ -352,7 +359,7 @@ export function TicketEditForm({
           </Select>
           {/* 유효 ≠ 원값 또는 마감 파생이 명시값을 덮었을 때 — 같은 자리·같은 모양이고 둘 다면
               한 줄에 이어 붙는다(§1-4 §화면. 미터는 자기 priority만 그린다, §1-3 §값을 넣는 자리 셋). */}
-          {(inheritedFrom || remainingText) && (
+          {(inheritedFrom || overdue || remainingText) && (
             <p className="text-xs text-muted-foreground">
               {inheritedFrom && (
                 <>
@@ -361,7 +368,13 @@ export function TicketEditForm({
                   {t("ticket.priority.inheritedAfter")}
                 </>
               )}
-              {inheritedFrom && remainingText && " "}
+              {inheritedFrom && (overdue || remainingText) && " "}
+              {overdue && (
+                <>
+                  {t("bell.due.overdue")} {t("ticket.duedate.derivedMiddle")} {duedateBaseline}
+                  {t("ticket.duedate.derivedAfter")}
+                </>
+              )}
               {remainingText && (
                 <>
                   {t("ticket.duedate.derivedPrefix")} {remainingText}{" "}

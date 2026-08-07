@@ -4,6 +4,7 @@
  *  번들에 들어갈 수 없다. 등록 폼은 입력하는 동안 슬러그 미리보기를 보여주고(서버 왕복 없이),
  *  전환기는 브라우저에서 `usePathname()`으로 목적지를 만든다. 규칙이 갈리면 미리보기가
  *  거짓말을 하므로 함수는 한 곳에 둔다. **여기에 `node:*` import를 추가하지 않는다.** */
+import { t, type Locale } from "./i18n.ts";
 
 /** 이름 → URL 조각 (DESIGN.md §프로젝트 > `id` 슬러그 규칙).
  *  한글 이름이면 빈 문자열이 되는 게 정상이다 — 그때는 등록 폼이 id를 직접 받는다. */
@@ -162,13 +163,31 @@ export function dateTimeLabel(at: number, now = Date.now()): string {
 
 /** 셸 알림 종 ⑦(마감 경고, §1-4 · §비주얼 §28)의 `<남은>` — 그 알림이 켜지는 창(≤5시간)
  *  안에서만 쓰이므로 시·분까지만 있으면 된다(일 단위는 이 알림에 안 온다).
- *  0분이면 `0분`을 그린다 — 경계에 걸린 티켓도 값을 지어내지 않는다. */
-export function remainingLabel(ms: number): string {
+ *  0분이면 `0분`을 그린다 — 경계에 걸린 티켓도 값을 지어내지 않는다.
+ *  낱말은 로케일을 탄다(§0-16, `4f7def31`) — en 화면에 한글이 새면 안 된다. */
+export function remainingLabel(ms: number, locale: Locale): string {
   const totalMin = Math.max(0, Math.round(ms / 60_000));
   const h = Math.floor(totalMin / 60);
   const m = totalMin % 60;
-  if (h === 0) return `${m}분`;
-  return m === 0 ? `${h}시간` : `${h}시간 ${m}분`;
+  const hUnit = t(locale, "common.unit.hour");
+  const mUnit = t(locale, "common.unit.minute");
+  if (h === 0) return `${m}${mUnit}`;
+  return m === 0 ? `${h}${hUnit}` : `${h}${hUnit} ${m}${mUnit}`;
+}
+
+/** "마감까지 <남은>"의 <남은>(§1-4 §화면) — 임계값이 5시간·7일뿐이라(§1-4 §값) 분 단위 정밀도가
+ *  필요 없다: 1시간 미만은 뭉뚱그리고, 하루가 넘으면 일 단위로 접는다.
+ *
+ *  **지난 마감은 여기 안 온다.** `ms <= 0`을 이 함수가 "지남"으로 돌리면 호출부가
+ *  "마감까지" 접두와 그대로 이어 붙여 `마감까지 지남`·`Due in Past due` 같은 비문이 된다 —
+ *  호출부가 그 갈래를 먼저 걷어내고 `bell.due.overdue`로 따로 그린다(`4f7def31`).
+ *  낱말이 로케일을 타는 이유는 `remainingLabel`과 같다 — 서버 컴포넌트가 아니라 로케일을
+ *  이미 아는 클라이언트(`ticket-ui.tsx`)에서 부른다. */
+export function formatRemaining(ms: number, locale: Locale): string {
+  const hours = Math.floor(ms / 3_600_000);
+  if (hours < 1) return t(locale, "ticket.duedate.underHour");
+  const days = Math.floor(hours / 24);
+  return days >= 1 ? `${days}${t(locale, "common.unit.day")}` : `${hours}${t(locale, "common.unit.hour")}`;
 }
 
 /** 홈 대화 목록의 한 줄들 (§비주얼 §24 대화 목록) — **정렬 · 제목 · 시각이 여기서 끝난다.**

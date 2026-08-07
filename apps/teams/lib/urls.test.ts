@@ -8,6 +8,7 @@ import {
   engineCan,
   engineMissing,
   findMatches,
+  formatRemaining,
   groupProgress,
   hasFindBar,
   interjectMode,
@@ -419,11 +420,29 @@ test("dateTimeLabel — 같은 날은 HH:MM · 다른 날은 M/D HH:MM", () => {
 
 /** §1-4 §종 항목 ⑦ — 나열의 `<남은>`. 이 알림이 켜지는 창(≤5시간)만 대상이라 일 단위는 없다. */
 test("remainingLabel — 시·분, 0분도 그대로 그린다", () => {
-  assert.equal(remainingLabel(3 * 3600_000), "3시간");
-  assert.equal(remainingLabel(3 * 3600_000 + 30 * 60_000), "3시간 30분");
-  assert.equal(remainingLabel(42 * 60_000), "42분");
-  assert.equal(remainingLabel(0), "0분");
-  assert.equal(remainingLabel(-1000), "0분"); // 경계를 지나도 음수를 안 그린다
+  assert.equal(remainingLabel(3 * 3600_000, "ko"), "3시간");
+  assert.equal(remainingLabel(3 * 3600_000 + 30 * 60_000, "ko"), "3시간 30분");
+  assert.equal(remainingLabel(42 * 60_000, "ko"), "42분");
+  assert.equal(remainingLabel(0, "ko"), "0분");
+  assert.equal(remainingLabel(-1000, "ko"), "0분"); // 경계를 지나도 음수를 안 그린다
+});
+
+// en 화면에 한글이 새는 회귀(`4f7def31`)를 못박는다 — `i18n.test.ts`의 조립 문구
+// 테스트(`blocked("en", "3h 30m", 2)`)가 미리 못박은 그 낱말과 같다.
+test("remainingLabel — en은 약어로 그린다", () => {
+  assert.equal(remainingLabel(3 * 3600_000 + 30 * 60_000, "en"), "3h 30m");
+  assert.equal(remainingLabel(42 * 60_000, "en"), "42m");
+});
+
+/** §1-4 §화면 — 상세 파생 한 줄의 `<남은>`. 지난 마감(`ms <= 0`)은 이 함수에 안 온다 —
+ *  호출부(`ticket-ui.tsx`)가 그 갈래를 먼저 걷어낸다(`4f7def31`). */
+test("formatRemaining — 1시간 미만·시간·일 경계, 두 언어", () => {
+  assert.equal(formatRemaining(30 * 60_000, "ko"), "1시간 미만");
+  assert.equal(formatRemaining(30 * 60_000, "en"), "Under 1h");
+  assert.equal(formatRemaining(5 * 3600_000, "ko"), "5시간");
+  assert.equal(formatRemaining(5 * 3600_000, "en"), "5h");
+  assert.equal(formatRemaining(3 * 24 * 3600_000, "ko"), "3일");
+  assert.equal(formatRemaining(3 * 24 * 3600_000, "en"), "3d");
 });
 
 /** 홈 대화 목록의 한 줄 (§비주얼 §24 대화 목록). 파일이 주는 순서와 화면이 그리는 순서가 다르고

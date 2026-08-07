@@ -49,16 +49,6 @@ import { holderEngine, listWorkers } from "@/lib/workers";
 // 큐는 GUI 밖에서(cron·세션이) 바뀐다. 프리렌더하면 빌드 시점 내용이 굳는다.
 export const dynamic = "force-dynamic";
 
-/** "마감까지 <남은>"의 <남은>(§1-4 §화면). 임계값이 5시간·7일뿐이라(§1-4 §값) 분 단위 정밀도가
- *  필요 없다 — 지난 마감은 "지남", 1시간 미만은 뭉뚱그린다. 새 날짜 라이브러리를 안 쓴다. */
-function formatRemaining(ms: number): string {
-  if (ms <= 0) return "지남";
-  const hours = Math.floor(ms / 3_600_000);
-  if (hours < 1) return "1시간 미만";
-  const days = Math.floor(hours / 24);
-  return days >= 1 ? `${days}일` : `${hours}시간`;
-}
-
 /** 관계 절의 티켓 한 줄 — 상태 배지 + stem 링크. 세 목록(막는 것 · 요구사항 · 나온 티켓)이 같은 모양이다. */
 function TicketLine({ t, href }: { t: Ticket; href: string }) {
   return (
@@ -134,9 +124,11 @@ export default async function TicketDetail({
   // 마감 파생 한 줄(§1-4 §화면) — 파생이 명시값을 덮고 있으면(baseline !== priority) "남은"을
   // 잰다. `effectiveDue`는 baseline이 파생일 때 반드시 값이 있다(derivePriority가 null이면
   // 파생도 null이라 baseline은 원값 priority로 남는다).
-  const remainingText =
+  // ms만 넘긴다 — 문구 조립(로케일 포함)은 `ticket-ui.tsx`가 한다(§0-16, 이 컴포넌트는
+  // 서버라 로케일을 안 읽는다, `4f7def31`).
+  const remainingMs =
     ticket.baseline !== ticket.priority && ticket.effectiveDue
-      ? formatRemaining(ticket.effectiveDue.getTime() - now.getTime())
+      ? ticket.effectiveDue.getTime() - now.getTime()
       : null;
   // 역전 판정 재료(§1-4 §역전) — direct 선행·후행의 own duedate. `deps`(위 badges)의 `hit`은
   // 큐에 없는 해시·미충족이어도 값이 있으면 채워진다(선행 실체가 있으면 마감도 있을 수 있다).
@@ -450,7 +442,7 @@ export default async function TicketDetail({
                 inheritedFrom={priorityInheritedFrom}
                 duedate={ticket.fm.duedate ?? ""}
                 duedateBaseline={ticket.baseline}
-                remainingText={remainingText}
+                remainingMs={remainingMs}
                 precedentDuedates={precedentDuedates}
                 followerDuedates={followerDuedates}
                 personas={personas}
