@@ -6,6 +6,7 @@ import { createHighlighter } from "shiki";
 
 import "./fonts.css";
 import "./manual.css";
+import { isLandingOnly } from "@/lib/flags";
 import { Behaviors, DarkToggle, MenuToggle, NavToggle, NO_FLASH } from "./shell";
 
 // 마크다운 한 장을 셸에 담아 굽는다. 소비자는 셋이고(매뉴얼 22장 `app/docs/[[...slug]]` ·
@@ -228,6 +229,10 @@ export function Shell({
           <a className={path.startsWith("/docs") ? "on" : undefined} href="/docs/">
             매뉴얼
           </a>
+          {/* 매뉴얼 → 기능(§상호 링크). 22장 + privacy + terms가 같은 셸이라 여기 한 곳에
+              넣으면 25장에 선다. 랜딩-only에는 이 자리가 없다 — §홈의 히어로 목록 절과
+              같은 버튼이라 href도 그 앵커와 같다. */}
+          {!isLandingOnly() && <a href="/#projects">프로젝트 관리</a>}
           <a href={`${REPO}/releases/latest`}>다운로드</a>
         </nav>
         <a className="social" href={REPO} aria-label="github" target="_blank" rel="noopener">

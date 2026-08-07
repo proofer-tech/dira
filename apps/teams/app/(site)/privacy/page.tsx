@@ -13,6 +13,10 @@ const source = readFileSync(join(process.cwd(), "privacy.md"), "utf8");
 // 열한 줄은 매뉴얼 22장과 같은 자리에서 온다(§SEO ② 태그 · `app/meta.ts`).
 export const metadata = pageMetadata("/privacy", titleOf(source));
 
+// `Shell`의 `isLandingOnly()`가 요청마다 다시 봐야 한다(§상호 링크 — 자세한 이유는
+// `docs/[[...slug]]/page.tsx`의 같은 줄).
+export const dynamic = "force-dynamic";
+
 export default function Page() {
   return <Shell source={source} path="/privacy" editPath="privacy.md" />;
 }

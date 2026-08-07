@@ -72,9 +72,10 @@ const SIDEBAR = [
 ];
 const FLAT = SIDEBAR.flatMap((g) => g.items);
 
-export function generateStaticParams() {
-  return docNames.map((n) => ({ slug: n === "index" ? [] : [n] }));
-}
+// `Shell`이 요청마다 `isLandingOnly()`를 다시 봐야 한다(§상호 링크) — 정적 굽기(SSG)는 그 값을
+// 빌드 시점에 굳혀서, 빌드 뒤 플래그만 바꿔 띄우는 두 서버(§검증) 중 하나가 거짓말을 하게 된다.
+// `generateStaticParams`는 그래서 걷는다: 22장 정적 HTML보다 이 한 자리의 정확성이 우선이다.
+export const dynamic = "force-dynamic";
 
 /** `slug`는 URL에서 온다. 목록에 없는 이름으로 파일을 읽지 않는다 — 정적 산출에는 안 서는
  *  경로지만 `dev`에서는 임의 세그먼트가 그대로 들어온다. */
