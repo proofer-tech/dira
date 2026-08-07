@@ -521,6 +521,111 @@ test("setTokenLabel — label만 갈고, 지우면(빈 값) 계정 N 순번으�
   assert.strictEqual("label" in file.claude!.tokens.find((t) => t.id === a.id)!, false);
 });
 
+// ── 잠금 — 배포물은 계정 하나다 (DESIGN.md §0-13 §잠금, 티켓 1b7c785f) ──────────────
+//
+// 이 파일의 나머지 테스트는 전부 해금(package.json의 `test` 스크립트가 `DIRA_MULTI_TOKEN=1`을
+// 준다)을 가정한다. 아래만 그 값을 지역적으로 지워 잠금 빌드를 흉내낸다 — `flags.test.ts`와
+// 같은 save/restore 관용구다.
+
+test("addToken — 잠김에서는 append가 아니라 active 자리 교체다(항목이 안 는다) (§0-13 §잠금 계약 ①)", async () => {
+  const local = mkdtempSync(path.join(tmpdir(), "fst-auth-lock-add-"));
+  process.env.TICKET_LOCAL = local;
+  const saved = process.env.DIRA_MULTI_TOKEN;
+  try {
+    delete process.env.DIRA_MULTI_TOKEN; // 잠금 빌드
+
+    const a = await addToken("sk-ant-oat01-lock-a"); // 빈 목록 — 항목 하나로 시작
+    assert.strictEqual((await readTokens()).claude!.tokens.length, 1);
+
+    const b = await addToken("sk-ant-oat01-lock-b"); // 잠김 — a의 자리를 갈아 끼운다
+    const file = await readTokens();
+    assert.strictEqual(file.claude!.tokens.length, 1); // 항목이 안 늘었다
+    assert.strictEqual(file.claude!.active, b.id);
+    assert.strictEqual(readFileSync(tokenPath(), "utf8"), "sk-ant-oat01-lock-b");
+    void a;
+  } finally {
+    if (saved === undefined) delete process.env.DIRA_MULTI_TOKEN;
+    else process.env.DIRA_MULTI_TOKEN = saved;
+  }
+});
+
+test("readTokenRows — 잠김에서는 행이 active 하나뿐이다 (§0-13 §잠금 계약 ②)", async () => {
+  const local = mkdtempSync(path.join(tmpdir(), "fst-auth-lock-rows-"));
+  process.env.TICKET_LOCAL = local;
+  const a = await addToken("sk-ant-oat01-lockrows-a"); // 해금 상태로 심는다 — 활성
+  await addToken("sk-ant-oat01-lockrows-b"); // 대기
+
+  assert.strictEqual((await readTokenRows()).length, 2); // 지금은 해금이다
+
+  const saved = process.env.DIRA_MULTI_TOKEN;
+  try {
+    delete process.env.DIRA_MULTI_TOKEN; // 잠금 빌드로 같은 파일을 연다
+    const rows = await readTokenRows();
+    assert.strictEqual(rows.length, 1);
+    assert.strictEqual(rows[0].id, a.id);
+  } finally {
+    if (saved === undefined) delete process.env.DIRA_MULTI_TOKEN;
+    else process.env.DIRA_MULTI_TOKEN = saved;
+  }
+});
+
+test("잠금 — 항목 3개짜리 tokens.json을 잠금 빌드로 열고 추가·삭제해도 나머지 항목이 그대로다 (§0-13 §잠금 계약 ③)", async () => {
+  const local = mkdtempSync(path.join(tmpdir(), "fst-auth-lock-fixture-"));
+  process.env.TICKET_LOCAL = local;
+
+  // 픽스처를 writeTokens로 직접 심는다 — "이미 여러 개인 tokens.json을 잠금 빌드가 만난다"를
+  // 그대로 흉내낸다(§0-13 §잠금 계약 ③이 막으려는 그 상황).
+  const activeA = {
+    id: "a".repeat(12),
+    token: "sk-ant-oat01-fixture-a",
+    addedAt: "2026-08-01T00:00:00.000Z",
+    enabled: true,
+    exhaustedUntil: null,
+  };
+  const untouchedB = {
+    id: "b".repeat(12),
+    label: "B계정",
+    token: "sk-ant-oat01-fixture-b",
+    addedAt: "2026-08-02T00:00:00.000Z",
+    enabled: true,
+    exhaustedUntil: null,
+  };
+  const untouchedC = {
+    id: "c".repeat(12),
+    label: "C계정",
+    token: "sk-ant-oat01-fixture-c",
+    addedAt: "2026-08-03T00:00:00.000Z",
+    enabled: false,
+    exhaustedUntil: null,
+  };
+  await writeTokens({ claude: { active: activeA.id, tokens: [activeA, untouchedB, untouchedC] } });
+
+  const saved = process.env.DIRA_MULTI_TOKEN;
+  try {
+    delete process.env.DIRA_MULTI_TOKEN; // 잠금 빌드
+
+    const rows = await readTokenRows();
+    assert.strictEqual(rows.length, 1); // 계약 ②
+    assert.strictEqual(rows[0].id, activeA.id);
+
+    const x = await addToken("sk-ant-oat01-fixture-x"); // 추가 — active 자리(a) 교체
+    let file = await readTokens();
+    assert.strictEqual(file.claude!.tokens.length, 3); // 계약 ① — 3개 그대로
+    assert.strictEqual(file.claude!.active, x.id);
+    assert.deepStrictEqual(file.claude!.tokens[1], untouchedB); // b는 손 안 댔다
+    assert.deepStrictEqual(file.claude!.tokens[2], untouchedC); // c도 손 안 댔다
+
+    await deleteToken(x.id); // 지금 보이는 유일한 행(방금 활성이 된 x)을 지운다
+    file = await readTokens();
+    assert.strictEqual(file.claude!.tokens.length, 2);
+    assert.deepStrictEqual(file.claude!.tokens[0], untouchedB); // 계약 ③ — 나머지가 그대로다
+    assert.deepStrictEqual(file.claude!.tokens[1], untouchedC);
+  } finally {
+    if (saved === undefined) delete process.env.DIRA_MULTI_TOKEN;
+    else process.env.DIRA_MULTI_TOKEN = saved;
+  }
+});
+
 // ── 다른 엔진의 상태 층 — 판정 없이 사실만 (DESIGN.md §0-4 §개정 `b0966e66`) ─────────
 
 test("findExecutable — 일반화한 탐색이 findClaude와 같은 경로를 낸다", () => {

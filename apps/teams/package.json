@@ -7,7 +7,7 @@
     "build": "NODE_ENV=production next build",
     "start": "next start -p ${PORT:-7331}",
     "lint": "eslint",
-    "test": "node --test \"*.test.ts\" \"lib/**/*.test.ts\""
+    "test": "DIRA_MULTI_TOKEN=1 node --test \"*.test.ts\" \"lib/**/*.test.ts\""
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",

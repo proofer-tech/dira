@@ -45,6 +45,7 @@ import {
   setActiveTokenAction,
 } from "@/app/actions";
 import type { OtherEngineAuth, SetupState, TokenRow, TokenStatus } from "@/lib/auth";
+import { isMultiToken } from "@/lib/flags";
 import { useHotkey, useKeymap } from "@/components/keymap-provider";
 import { DEFAULT_KEYMAP, MODIFIER_KEYS, formatCombo } from "@/lib/keymap";
 import { cn } from "@/lib/utils";
@@ -460,19 +461,23 @@ function TokensSection({ refreshKey }: { refreshKey: string | null }) {
           <div className="flex shrink-0 items-center gap-1">
             {/* `대기` 행에만 붙는다 — `비활성`·`소진`은 각각 `활성화` 버튼(사람 축)과
                 §4-9 "지우는 손잡이는 안 만든다"가 이미 막은 자리다(§0-13 §화면 · P179) */}
-            {row.status.kind === "pending" && (
+            {/* §0-13 §잠금 계약 ② — 회전을 전제한 조작(`사용`·`활성화/비활성화`)은 잠김에서
+                안 그려진다. 고를 대상이 목록에 하나뿐이라 도달 불가한 상태다. */}
+            {isMultiToken() && row.status.kind === "pending" && (
               <Button variant="outline" size="sm" disabled={pending} onClick={() => use(row)}>
                 사용
               </Button>
             )}
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={pending}
-              onClick={() => setEnabled(row, row.status.kind === "disabled")}
-            >
-              {row.status.kind === "disabled" ? "활성화" : "비활성화"}
-            </Button>
+            {isMultiToken() && (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={pending}
+                onClick={() => setEnabled(row, row.status.kind === "disabled")}
+              >
+                {row.status.kind === "disabled" ? "활성화" : "비활성화"}
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="icon-sm"
@@ -828,8 +833,9 @@ export function SettingsDialog({
                 Claude 인증
               </h3>
               <p className="text-xs text-muted-foreground">
-                워커가 Claude에 붙을 때 쓰는 장기 토큰 목록입니다. 이 컴퓨터에 하나뿐이고, 계정
-                여러 개를 두면 리밋을 만난 쪽 대신 다음 계정으로 돌아갑니다.
+                {isMultiToken()
+                  ? "워커가 Claude에 붙을 때 쓰는 장기 토큰 목록입니다. 이 컴퓨터에 하나뿐이고, 계정 여러 개를 두면 리밋을 만난 쪽 대신 다음 계정으로 돌아갑니다."
+                  : "워커가 Claude에 붙을 때 쓰는 장기 토큰입니다. 이 컴퓨터에 하나뿐입니다."}
               </p>
 
               {/* ⓪ 준비물 — 한 줄. 없으면 설치를 대신하지도 바깥으로 링크하지도 않는다(§0-4 ⓪) */}
@@ -979,8 +985,14 @@ export function SettingsDialog({
                       onChange={(e) => setLabel(e.target.value)}
                     />
                     <p className="text-xs text-muted-foreground">
-                      이미 발급받은 토큰이 있으면 여기에 붙여 넣습니다. 목록에 대기로 추가됩니다 —
-                      지금 쓸 토큰은 목록에서 &quot;사용&quot;으로 고릅니다.
+                      {isMultiToken() ? (
+                        <>
+                          이미 발급받은 토큰이 있으면 여기에 붙여 넣습니다. 목록에 대기로
+                          추가됩니다 — 지금 쓸 토큰은 목록에서 &quot;사용&quot;으로 고릅니다.
+                        </>
+                      ) : (
+                        "이미 발급받은 토큰이 있으면 여기에 붙여 넣습니다. 지금 쓰는 토큰이 이 토큰으로 바뀝니다."
+                      )}
                     </p>
                     {result.error && <p className="text-xs text-destructive">{result.error}</p>}
                     {/* 삼키지 않는 것이 요건이지 미리 아는 것이 요건이 아니다 — 형식으로 거르지

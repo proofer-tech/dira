@@ -10,6 +10,7 @@ import { accessSync, constants, statSync } from "node:fs";
 import { chmod, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
+import { isMultiToken } from "./flags.ts";
 import { registryPath } from "./projects.ts";
 
 /** 레지스트리와 **같은 디렉터리**다(엔진의 `$LOCAL`). 규칙을 두 벌로 적지 않으려고
@@ -229,13 +230,32 @@ export async function readTokens(): Promise<TokensFile> {
  *  **`active`는 안 건드린다** — `reconcileActive`에 맡긴다(§0-13 §화면, P179 뒤집힘). eligible한
  *  활성이 이미 있으면(중복 추가 포함) 그 자리에 머물고 새 항목은 `대기`로 들어간다. eligible이
  *  하나도 없을 때만(첫 토큰 · 전부 소진/비활성) 방금 넣은 항목이 그 판정으로 활성이 된다 —
- *  판정을 두 벌로 적지 않는다. 지금 쓸 토큰을 사람이 직접 고르는 손은 `setActiveToken`이다. */
+ *  판정을 두 벌로 적지 않는다. 지금 쓸 토큰을 사람이 직접 고르는 손은 `setActiveToken`이다.
+ *
+ *  **잠금(§0-13 §잠금 계약 ①)에서는 append가 아니라 `active` 자리 교체다.** 이미 아는 토큰이면
+ *  그 자리를 그대로 활성으로 삼고(항목 0개 변화), 새 토큰이면 지금 `active`가 앉은 인덱스를
+ *  새 항목으로 갈아 끼운다 — 배열 길이가 안 늘어난다. 다른 인덱스의 항목(계약 ③이 지키는
+ *  대상)은 안 건드린다. */
 export async function addToken(raw: string, label?: string): Promise<TokenEntry> {
   const token = normalizeToken(raw);
   const id = tokenId(token);
   const file = await readTokens();
   const tokens = file.claude?.tokens ?? [];
   const existing = tokens.find((t) => t.id === id);
+
+  if (!isMultiToken()) {
+    if (existing) {
+      await writeTokens({ claude: { active: existing.id, tokens } });
+      return existing;
+    }
+    const entry = newEntry(token, label);
+    const activeIdx = tokens.findIndex((t) => t.id === (file.claude?.active ?? ""));
+    const replaceIdx = activeIdx >= 0 ? activeIdx : 0;
+    const nextTokens = tokens.length === 0 ? [entry] : tokens.map((t, i) => (i === replaceIdx ? entry : t));
+    await writeTokens({ claude: { active: entry.id, tokens: nextTokens } });
+    return entry;
+  }
+
   const entry = existing ?? newEntry(token, label);
   const nextTokens = existing ? tokens : [...tokens, entry];
   const active = reconcileActive(file.claude?.active ?? "", nextTokens);
@@ -269,13 +289,18 @@ export type TokenRow = {
   status: TokenStatus;
 };
 
-/** 화면이 그리는 목록 그대로 — 원문 토큰은 여기서 나가지 않는다(가린 문자열만). */
+/** 화면이 그리는 목록 그대로 — 원문 토큰은 여기서 나가지 않는다(가린 문자열만).
+ *
+ *  **잠금(§0-13 §잠금 계약 ②)에서는 행이 최대 하나다** — `active`가 가리키는 항목만 낸다.
+ *  `tokens.json`이 이미 여러 개를 담고 있어도(계약 ③) 나머지는 파일에 그대로 남을 뿐 화면에
+ *  안 나온다. */
 export async function readTokenRows(): Promise<TokenRow[]> {
   const file = await readTokens();
   const engine = file.claude;
   if (!engine) return [];
   const now = Math.floor(Date.now() / 1000);
-  return engine.tokens.map((t, i) => ({
+  const source = isMultiToken() ? engine.tokens : engine.tokens.filter((t) => t.id === engine.active);
+  return source.map((t, i) => ({
     id: t.id,
     label: t.label ?? `계정 ${i + 1}`,
     rawLabel: t.label ?? "",
