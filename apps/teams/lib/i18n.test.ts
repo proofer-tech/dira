@@ -83,14 +83,41 @@ test("932ae344 — 새로 뽑은 조합 문구들이 원문 그대로 재조립�
 // 6914f1d1 — 설정 다이얼로그 묶음은 여기서 끝난다. 폴백은 **다음 묶음이 ko를 먼저 넣는 동안**을
 // 위한 장치지, 지금 든 묶음이 영어로 덜 서도 된다는 뜻이 아니다(§0-16 §발행).
 //
-// 이 판정은 **이미 다 찬 묶음**(설정 다이얼로그 `settings.*` · 여러 화면이 같이 쓰는 `common.*`)
-// 으로 좁힌다 — 우선순위 화면(`ticket.priority.*`, `c39e95f3`)부터는 ko를 먼저 넣고 en은 뒤따르는
-// 티켓(`62e0b85e`)이 채운다는 것이 설계이기 때문이다(§0-16 §발행 "다음 티켓들이 여기 키를 늘린다").
-test("이미 찬 묶음(settings·common)의 ko 키는 en에 하나도 안 빠졌다", () => {
+// 이 판정은 **이미 다 찬 묶음**으로 좁힌다 — 다음 묶음이 ko를 먼저 넣는 동안에는 그 접두가
+// 아직 이 목록에 없다(§0-16 §발행 "다음 티켓들이 여기 키를 늘린다"). 묶음의 en을 채우는
+// 티켓이 자기 접두를 여기 더한다: `settings.`·`common.`(6914f1d1) · `ticket.priority.`(62e0b85e).
+//
+// **접두는 묶음 단위로 좁게 적는다.** `ticket.`으로 넓히면 아직 ko만 있는 다음 화면
+// (`ticket.duedate.*`, §1-4)까지 걸려 그 묶음의 첫 티켓이 이 테스트를 깬다 — 폴백이 있는
+// 이유가 그 상태를 허용하는 것이다.
+const FILLED = ["settings.", "common.", "ticket.priority."];
+
+test("이미 찬 묶음(settings·common·ticket.priority)의 ko 키는 en에 하나도 안 빠졌다", () => {
   assert.deepStrictEqual(
-    Object.keys(ko).filter((k) => (k.startsWith("settings.") || k.startsWith("common.")) && !(k in en)),
+    Object.keys(ko).filter((k) => FILLED.some((p) => k.startsWith(p)) && !(k in en)),
     [],
   );
+});
+
+// 62e0b85e — 우선순위 묶음. 상속 한 줄은 해시·유효값 두 변수 사이에 사전 조각이 끼는 자리라
+// 조립 결과를 두 언어 다 못박는다(`ticket-ui.tsx`의 JSX는 줄바꿈 공백을 지우므로, 조각과
+// 해시 사이에 공백이 없고 조각과 유효값 사이에만 공백 하나가 있다).
+test("우선순위 상속 한 줄 — 두 언어에서 다 문장이 된다", () => {
+  const line = (l: "ko" | "en", hash: string, effective: number) =>
+    `${hash}${t(l, "ticket.priority.inheritedMiddle")} ${effective}${t(l, "ticket.priority.inheritedAfter")}`;
+  assert.strictEqual(line("ko", "high0002", 5), "high0002가 기다려 5로 뜹니다");
+  assert.strictEqual(line("en", "high0002", 5), "high0002 is waiting on this, so it comes up as 5");
+});
+
+// select 다섯 항목은 숫자만 있으면 뜻이 없다 — 다섯 값 전부에 꼬리 문구가 있고, 영어에서
+// 폴백(한국어)으로 안 떨어지는지 본다. 한글 판정은 아래 `en 사전에 한글이 없다`가 같이 잡는다.
+test("우선순위 다섯 단계에 꼬리 문구가 전부 있다", () => {
+  for (const n of [1, 2, 3, 4, 5]) {
+    const key = `ticket.priority.level.${n}`;
+    assert.ok(t("ko", key).length > 0, `ko ${key}`);
+    assert.ok(t("en", key).length > 0, `en ${key}`);
+    assert.notStrictEqual(t("en", key), t("ko", key));
+  }
 });
 
 // 화면에 남은 한국어를 여기서 잡는다 — 사전 값 자체에 한글이 섞이면 폴백이 아니라 오타다.

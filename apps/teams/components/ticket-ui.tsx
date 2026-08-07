@@ -278,10 +278,15 @@ export function TicketEditForm({
             <SelectTrigger id="t-priority" className="w-20">
               <SelectValue />
             </SelectTrigger>
-            <SelectContent>
+            {/* 팝업만 넓힌다 — 트리거(`w-20`)와 폼의 줄 배치는 안 갈린다. `SelectValue`는
+                `items`를 안 준 Root에서 **값 문자열만** 그리므로 꼬리 문구가 트리거에 안 온다 */}
+            <SelectContent className="min-w-64">
               {PRIORITIES.map((n) => (
                 <SelectItem key={n} value={String(n)}>
                   {n}
+                  <span className="text-xs text-muted-foreground">
+                    {t(`ticket.priority.level.${n}`)}
+                  </span>
                 </SelectItem>
               ))}
             </SelectContent>
@@ -1311,10 +1316,14 @@ export function NewTicketDialog({
                 <SelectTrigger id="n-priority" className="w-20">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                {/* 편집 폼과 같다 — 팝업만 넓히고 트리거는 숫자 하나다 */}
+                <SelectContent className="min-w-64">
                   {PRIORITIES.map((n) => (
                     <SelectItem key={n} value={String(n)}>
                       {n}
+                      <span className="text-xs text-muted-foreground">
+                        {t(`ticket.priority.level.${n}`)}
+                      </span>
                     </SelectItem>
                   ))}
                 </SelectContent>

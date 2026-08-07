@@ -156,6 +156,15 @@ export const ko: Record<string, string> = {
   // 전용)이 아니라 앞뒤 두 조각으로 쪼갠다. 조립: `<해시>` + middle + ` ` + `<유효>` + after.
   "ticket.priority.inheritedMiddle": "가 기다려",
   "ticket.priority.inheritedAfter": "로 뜹니다",
+  // select 다섯 항목의 꼬리 문구(`62e0b85e`). 숫자만 있으면 큐를 처음 여는 사람은 1과 5 중
+  // 어느 쪽이 급한 건지도 모른다 — 각 값이 **엔진에서 무슨 일을 하는지**를 적는다.
+  // 1은 §1-3 §1 게이트(진행중 0건일 때만 후보), 5는 §1-3 §선점(도는 세션 하나를 끊는다).
+  // 2·4는 순서만 바꾼다 — 없는 동작을 지어내지 않고 그 사실 그대로 적는다.
+  "ticket.priority.level.1": "아무것도 안 돌 때만",
+  "ticket.priority.level.2": "나중에",
+  "ticket.priority.level.3": "기본",
+  "ticket.priority.level.4": "먼저",
+  "ticket.priority.level.5": "당장 — 도는 세션을 끊는다",
 };
 
 /** 제품 낱말의 영어 대응 — **여기가 한자리다**(621c7a97). 다음 묶음이 같은 것을 다르게 부르지
@@ -178,6 +187,8 @@ export const ko: Record<string, string> = {
  *  | 티켓 발행 · 요구 접수 | New ticket · New request | 다이얼로그를 여는 줄이라 동사가 아니라 여는 것의 이름이다 |
  *  | 기본값으로 되돌리기 | Reset to default | 툴팁은 관사가 붙는다(`Reset to the default ⌘K`) |
  *  | 설정 분류 | Setting categories | 화면에 안 뜨는 접근가능 이름 |
+ *  | 우선순위 · 유효 우선순위 | priority · effective priority | 62e0b85e가 더한 줄부터 아래 |
+ *  | 선점 | preempt | §1-3의 그 동작. 화면 문구에서는 `stops a running session`으로 풀어 쓴다 — 큐를 처음 여는 사람에게 `preempt`는 아직 낱말이 아니다 |
  *
  *  **어순이 뒤집히는 자리는 접두·접미 두 키로 쪼갠다.** 한국어는 이름 뒤에 다 붙지만(`<이름>
  *  삭제`) 영어는 동사가 앞에 선다(`Delete <name>`) — 한쪽이 비는 것이 정상이고, 조립은
@@ -318,6 +329,20 @@ export const en: Record<string, string> = {
   "common.saving": "Saving…",
   "common.add": "Add",
   "common.close": "Close",
+
+  "ticket.priority.label": "Priority",
+  // 상속 한 줄. **`inheritedMiddle`이 공백으로 시작하는 것은 의도다** — 앞에 해시가 공백 없이
+  // 바로 붙는다(한국어는 `<해시>가`로 조사가 붙어 공백이 없어야 하고, 영어는 낱말이 갈린다).
+  // 꼬리는 비었다: 영어는 숫자가 문장 끝이라 뒤에 붙을 것이 없다. `t`는 `""`를 그대로 돌려주고
+  // `ko` 폴백으로 안 샌다. 조립 결과는 `i18n.test.ts`가 두 언어 다 못박는다.
+  "ticket.priority.inheritedMiddle": " is waiting on this, so it comes up as",
+  "ticket.priority.inheritedAfter": "",
+  // 다섯 항목의 꼬리. `Later`·`Sooner`는 짝으로 읽힌다 — 목록을 열면 다섯이 한 화면에 선다.
+  "ticket.priority.level.1": "Only when nothing is running",
+  "ticket.priority.level.2": "Later",
+  "ticket.priority.level.3": "Default",
+  "ticket.priority.level.4": "Sooner",
+  "ticket.priority.level.5": "Now — stops a running session",
 };
 
 const DICTS: Record<Locale, Record<string, string>> = { ko, en };
