@@ -492,7 +492,7 @@ function TokensSection({
           className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-md border p-2"
         >
           <div className="min-w-0 space-y-0.5">
-            <div className="flex items-center gap-2">
+            <div className="flex min-w-0 items-center gap-2">
               {editingId === row.id ? (
                 <form
                   className="flex items-center gap-1"
@@ -517,7 +517,9 @@ function TokensSection({
                 </form>
               ) : (
                 <>
-                  <span className="text-sm font-medium">{row.label}</span>
+                  <span className="truncate text-sm font-medium" title={row.label}>
+                    {row.label}
+                  </span>
                   <Button
                     variant="ghost"
                     size="icon-sm"
