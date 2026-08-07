@@ -639,7 +639,10 @@ async function EngineCells({
   // 값 있는 엔진만 골라 그 순서 그대로 구간을 만든다. 두 목록을 따로 만들지 않는다.
   const segments = engines
     .map((e) => limits[e])
-    .filter((limit): limit is { usedPercent: number; resetsAt: number | null } => !("error" in limit));
+    .filter(
+      (limit): limit is { usedPercent: number; resetsAt: number | null; window: string } =>
+        !("error" in limit),
+    );
   return (
     <>
       {/* 바 전체의 스택 바 하나 — 엔진 칸을 떠나 트랙의 첫 자식이 됐다(§26 ③). 값을 못 구한
@@ -730,9 +733,11 @@ function EngineCell({
               이 칸이 얻는 것은 그 트랙 안의 구간 하나이고, `%`를 가진 몇 번째 칸인지가 매핑이다
               (`EngineCells`가 같은 `engines` 순회로 만든다 — 두 목록을 안 따로 만든다).
               `사용` 두 글자가 이 `%`의 단위다 — 없으면 쓴 쪽인지 남은 쪽인지 화면만 봐서 못 가른다.
-              `tabular-nums`가 없으면 폴링마다 자릿수 폭이 흔들려 옆 칸이 밀린다 */}
+              `tabular-nums`가 없으면 폴링마다 자릿수 폭이 흔들려 옆 칸이 밀린다.
+              창 이름(`5시간`·`7일`)은 새 슬롯이 아니라 이 `%`와 같은 span이다(§0-8 §묶는 창) —
+              `· 토큰/분`처럼 자기 `lg:inline`을 갖지 않고 `%`와 함께 서고 함께 빠진다. */}
           <span className={cn("text-xs whitespace-nowrap tabular-nums", over && "text-status-stale")}>
-            {Math.round(value.usedPercent)}% 사용
+            {Math.round(value.usedPercent)}% 사용{value.window && ` · ${value.window}`}
           </span>
           {/* 자리는 `% 사용` **바로 다음 · 리셋 시각 앞**이다(§26 ②) — 요구가 말한 `한도 옆`에
               리셋 시각이 끼어 앉지 않는다. 구분자는 이 칸의 절 구분자 `·` 그대로다 */}

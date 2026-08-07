@@ -315,10 +315,77 @@ function windowTokens(buf: Buffer, since: number): number {
  *  (§0-8 판정 2: 화면이 거짓말하지 않는다). `error`는 화면이 `한도를 읽을 수 없습니다` 옆
  *  네이티브 `title`에 싣는 원문이고 **토큰 문자열은 여기 담기지 않는다**. */
 export type EngineLimit =
-  /** `usedPercent`는 **쓴 %**다(claude `utilization` · codex `used_percent`). 게이지가 차는
+  /** `usedPercent`·`resetsAt`은 그 엔진의 **묶는 창**(§0-8 §묶는 창) — 여러 창 중
+   *  `utilization`이 가장 높은 창에서 **함께** 집는다(두 창에서 하나씩 안 집는다).
+   *  `usedPercent`는 **쓴 %**다(claude `utilization` · codex `used_percent`). 게이지가 차는
    *  쪽이 이 수다 — 뒤집으면 화면이 정확히 반대로 거짓말한다(§비주얼 §26 ②).
-   *  `resetsAt`은 ms 에폭이거나 `null`(그때는 남은 시간 항목만 빠진다 — §26 ④). */
-  { usedPercent: number; resetsAt: number | null } | { error: string };
+   *  `resetsAt`은 ms 에폭이거나 `null`(그때는 남은 시간 항목만 빠진다 — §26 ④).
+   *  `window`는 그 창의 이름(`5시간`·`7일`)이다 — `%`와 같은 층의 단위라 새 슬롯이 아니다. */
+  { usedPercent: number; resetsAt: number | null; window: string } | { error: string };
+
+/** 창 하나. `utilization`(claude)과 `used_percent`(codex)가 이름만 다르고 같은 뜻이라
+ *  호출부에서 그 필드명으로 통일해 넘긴다. */
+type Window = { usedPercent: number; resetsAt: number | null; window: string };
+
+/** 후보 창들 중 **`utilization`이 가장 높은 것**을 고른다(§0-8 §묶는 창). `%`와 `resetsAt`은
+ *  같은 창에서 함께 온다. 후보가 하나도 못 읽히면 `null` — 그때만 호출부가 `{ error }`를 낸다
+ *  (폴백을 안 넓힌다). `limits[].is_active`는 안 쓴다 — 비공개 API의 스키마 밖 필드다. */
+function maxWindow(candidates: Window[]): Window | null {
+  let best: Window | null = null;
+  for (const w of candidates) if (!best || w.usedPercent > best.usedPercent) best = w;
+  return best;
+}
+
+const CLAUDE_WINDOW_LABEL = { five_hour: "5시간", seven_day: "7일" } as const;
+
+/** claude 응답의 `five_hour`·`seven_day` 중 묶는 창을 고른다. **순수 함수다** — `fetch` 없이
+ *  픽스처로 잰다(`lastRateLimits`가 이미 그 모양이다). `extra_usage`는 후보에 안 든다(달러
+ *  크레딧 계량이라 축이 다르다 — §0-8 §묶는 창). */
+export function pickClaudeWindow(
+  body: Record<string, { utilization?: unknown; resets_at?: unknown } | undefined> | null,
+): Window | null {
+  const candidates: Window[] = [];
+  for (const name of Object.keys(CLAUDE_WINDOW_LABEL) as (keyof typeof CLAUDE_WINDOW_LABEL)[]) {
+    const w = body?.[name];
+    if (typeof w?.utilization !== "number" || !Number.isFinite(w.utilization)) continue;
+    // ISO 8601 문자열이다(codex의 유닉스 초와 다르다). 못 읽으면 이 항목만 빠진다(§26 ④).
+    const at = typeof w.resets_at === "string" ? Date.parse(w.resets_at) : NaN;
+    candidates.push({
+      usedPercent: w.utilization,
+      resetsAt: Number.isFinite(at) ? at : null,
+      window: CLAUDE_WINDOW_LABEL[name],
+    });
+  }
+  return maxWindow(candidates);
+}
+
+/** 분 → 사람이 읽는 창 이름(`5시간`·`7일`). codex의 `window_minutes`가 실측 없이 아무 값이나
+ *  올 수 있어 claude처럼 키 이름에 못 박지 않는다.
+ *
+ *  ponytail: 일·시간·분 셋만 안다. 더 잘게(주 단위 등) 필요해지면 그때 분기 하나 더 붙인다. */
+function windowLabel(minutes: number): string {
+  if (minutes % 1440 === 0) return `${minutes / 1440}일`;
+  if (minutes % 60 === 0) return `${minutes / 60}시간`;
+  return `${minutes}분`;
+}
+
+/** codex rollout의 `primary`·`secondary` 중 묶는 창을 고른다. **필드 존재만 확인됐다** — 오늘
+ *  최신 rollout은 둘 다 `null`이라 값 실측이 없다(§0-8 §묶는 창). 규칙은 claude와 같다. */
+export function pickCodexWindow(rl: CodexRateLimits | null): Window | null {
+  const candidates: Window[] = [];
+  for (const name of ["primary", "secondary"] as const) {
+    const w = rl?.[name];
+    if (typeof w?.used_percent !== "number" || !Number.isFinite(w.used_percent)) continue;
+    const at = typeof w.resets_at === "number" ? w.resets_at * 1000 : NaN; // 유닉스 **초**다
+    const mins = w.window_minutes;
+    candidates.push({
+      usedPercent: w.used_percent,
+      resetsAt: Number.isFinite(at) ? at : null,
+      window: typeof mins === "number" && Number.isFinite(mins) ? windowLabel(mins) : "",
+    });
+  }
+  return maxWindow(candidates);
+}
 
 /** **5초 폴링에 매달지 않는다**(§0-8 남는 규칙). 셸은 라우트마다 다시 렌더되고 보드는 5초마다
  *  `router.refresh()`를 부르므로, TTL이 없으면 claude 엔드포인트를 초당 여러 번 두드린다.
@@ -367,7 +434,7 @@ function readLimit(engine: string): Promise<EngineLimit> {
 /** 설치된 CLI 번들이 부르는 그 경로다(§0-8 판정 2 실측). 타임아웃도 번들의 5000ms 그대로. */
 const CLAUDE_USAGE_URL = "https://api.anthropic.com/api/oauth/usage";
 
-/** claude — `GET /api/oauth/usage`의 `five_hour`.
+/** claude — `GET /api/oauth/usage`의 `five_hour`·`seven_day` 중 묶는 창(§0-8 §묶는 창).
  *
  *  토큰은 **CLI 로그인 토큰**(`~/.claude/.credentials.json`)이다. §0-4의 장기 토큰
  *  (`~/.config/dira/oauth-token`)에는 `user:profile`이 없어 같은 URL이 429다(실측 2026-08-01).
@@ -375,8 +442,8 @@ const CLAUDE_USAGE_URL = "https://api.anthropic.com/api/oauth/usage";
  *  만료되면 401이고 그 칸은 폴백이다(우리는 `refreshToken`으로 갱신하지 않는다 —
  *  사람 계정에 토큰을 발급하는 행위다).
  *
- *  **비공개 API라 계약이 없다** — 키마다 `null` 가드를 걸고, 하나라도 어긋나면 게이지를
- *  안 그린다(§0-8 판정 2). */
+ *  **비공개 API라 계약이 없다** — 키마다 `null` 가드를 걸고, **두 창 다** 어긋나야 게이지를
+ *  안 그린다(§0-8 §묶는 창: 한쪽만 못 읽어도 나머지로 값이 선다). */
 async function claudeLimit(): Promise<EngineLimit> {
   const file = path.join(homedir(), ".claude", ".credentials.json");
   let token: unknown;
@@ -403,22 +470,21 @@ async function claudeLimit(): Promise<EngineLimit> {
   }
   if (!res.ok) return { error: `GET ${CLAUDE_USAGE_URL}: HTTP ${res.status}` };
   const body: unknown = await res.json().catch(() => null);
-  const five = (body as { five_hour?: { utilization?: unknown; resets_at?: unknown } } | null)
-    ?.five_hour;
-  if (typeof five?.utilization !== "number" || !Number.isFinite(five.utilization)) {
-    return { error: `GET ${CLAUDE_USAGE_URL}: 응답에 five_hour.utilization이 없습니다` };
+  const picked = pickClaudeWindow(
+    body as Record<string, { utilization?: unknown; resets_at?: unknown } | undefined> | null,
+  );
+  if (!picked) {
+    return { error: `GET ${CLAUDE_USAGE_URL}: 응답에 five_hour·seven_day의 utilization이 없습니다` };
   }
-  // ISO 8601 문자열이다(codex의 유닉스 초와 다르다). 못 읽으면 이 항목만 빠진다(§26 ④).
-  const at = typeof five.resets_at === "string" ? Date.parse(five.resets_at) : NaN;
-  return { usedPercent: five.utilization, resetsAt: Number.isFinite(at) ? at : null };
+  return picked;
 }
 
 /** codex — rollout 파일의 마지막 `token_count` 이벤트. **새 네트워크 호출이 0이다.**
  *
  *  `~/.codex/sessions/<YYYY>/<MM>/<DD>/rollout-<시각>-<uuid>.jsonl`이고 디렉터리·파일 이름이
  *  전부 0 패딩이라 **사전순 = 시각순**이다. 가장 최근 날짜 디렉터리에서 새 파일부터 훑고,
- *  `rate_limits`를 실은 **첫 파일이 판정**이다 — 그게 지금 계정 상태다. 그 파일의
- *  `primary`가 `null`이면 한도에 닿은 것이고, 더 오래된 파일의 살아 있던 수로 덮지 않는다.
+ *  `rate_limits`를 실은 **첫 파일이 판정**이다 — 그게 지금 계정 상태다. 그 파일의 `primary`·
+ *  `secondary`가 둘 다 `null`이면 한도에 닿은 것이고, 더 오래된 파일의 살아 있던 수로 덮지 않는다.
  *
  *  ponytail: 최근 날짜 디렉터리의 파일 5개까지만 본다. 자정 직후 첫 세션이 아직 `token_count`를
  *  안 실었으면 그 몇 분은 폴백이다 — 넓히려면 이전 날짜 디렉터리로 한 단계 더 내려간다. */
@@ -436,13 +502,12 @@ async function codexLimit(): Promise<EngineLimit> {
     const full = path.join(dir, f);
     const rl = lastRateLimits(await readFile(full, "utf8").catch(() => ""));
     if (!rl) continue; // 이 세션은 턴이 없었다 — 한 칸 더 오래된 파일을 본다
-    const p = rl.primary;
-    if (!p || typeof p.used_percent !== "number" || !Number.isFinite(p.used_percent)) {
+    const picked = pickCodexWindow(rl);
+    if (!picked) {
       // 한도에 닿으면 codex가 이 수를 아예 안 싣는다(실측 `primary: null`). 게이지를 안 그린다.
-      return { error: `${full}: rate_limits.primary가 null입니다` };
+      return { error: `${full}: rate_limits.primary·secondary가 모두 null입니다` };
     }
-    const at = typeof p.resets_at === "number" ? p.resets_at * 1000 : NaN; // 유닉스 **초**다
-    return { usedPercent: p.used_percent, resetsAt: Number.isFinite(at) ? at : null };
+    return picked;
   }
   return { error: `${dir}: 최근 rollout에 rate_limits가 없습니다` };
 }
@@ -454,7 +519,10 @@ async function newestNumericChild(dir: string): Promise<string | null> {
   return pick ? path.join(dir, pick) : null;
 }
 
-type CodexRateLimits = { primary?: { used_percent?: unknown; resets_at?: unknown } | null };
+type CodexRateLimits = {
+  primary?: { used_percent?: unknown; resets_at?: unknown; window_minutes?: unknown } | null;
+  secondary?: { used_percent?: unknown; resets_at?: unknown; window_minutes?: unknown } | null;
+};
 
 /** rollout 한 파일의 **마지막** `rate_limits`. 줄을 뒤에서부터 훑는다 — 한 세션에 여러 번
  *  실리고 마지막 것이 최신이다. 파일 전체를 읽는 이유는 `token_count`가 파일 앞쪽에만 있는
