@@ -868,39 +868,47 @@ export function SettingsDialog({
           <DialogDescription>{t("settings.dialog.description")}</DialogDescription>
         </DialogHeader>
 
-        {/* 검색 줄 + 2단 행이 한 `Command`다(§45 ① · §0-15 §검색) — 그릇 후보는 이미 설치된
+        {/* 2단 행 하나가 `Command`다(§45 ① §개정 · §0-15 §검색) — 그릇 후보는 이미 설치된
             `command`(§4-1 전환기 선례), 고르는 이유는 키보드(↑↓·Enter·활성 항목 표식이 전부
             등록 항목이다). 덮는 것은 `p-1` 하나 — 나머지 등록 클래스는 이 자리에서 하는 일이
             없다(배경·모서리가 다이얼로그 면과 같은 값이라 안 보인다, §45 ①). `filter`를 안
-            준다 — cmdk 기본 필터(대소문자 무시 부분수열)가 §0-15의 하한(부분 일치)을 덮는다. */}
-        <Command className="min-h-0 min-w-0 gap-4 p-0">
-          <CommandInput
-            autoFocus
-            placeholder={t("settings.search.placeholder")}
-            aria-label={t("settings.search.placeholder")}
-            value={query}
-            onValueChange={(v) => {
-              setQuery(v);
-              clearHighlight(); // §45 ⑥ 수명 ② — 질의가 갈리거나 비워지면 하이라이트가 죽는다
-            }}
-            onKeyDown={(e) => {
-              // `Esc` 두 번 — 질의가 있으면 질의만 비운다(같은 자리의 캡처 상자 `stopPropagation`과
-              // 같은 전제: 안 막으면 Radix가 다이얼로그까지 닫는다, §45 ④).
-              if (e.key === "Escape" && query !== "") {
-                e.stopPropagation();
-                setQuery("");
-              }
-            }}
-          />
+            준다 — cmdk 기본 필터(대소문자 무시 부분수열)가 §0-15의 하한(부분 일치)을 덮는다.
+            `gap-4`가 없다 — 자식이 SidebarProvider 하나다(검색칸이 트리 안으로 옮겨서). */}
+        <Command className="min-h-0 min-w-0 p-0">
           {/* 2단 행 자신이다(§45 ① · §34 ①) — `Sidebar`가 `collapsible="none"`에서도
               `useSidebar()`를 무조건 부르므로 Provider가 있어야 한다. `min-h-0`이 Provider 기본
               `min-h-svh`를 덮는다 — 안 덮으면 다이얼로그가 뷰포트 높이만큼 자란다. `min-w-0`은
-              그리드 아이템(`DialogContent`가 `grid`)의 `min-width: auto` 함정을 막는다(§3). */}
-          <SidebarProvider className="min-h-0 min-w-0 flex-col gap-4 md:h-[32rem] md:max-h-[calc(100dvh-11rem)] md:flex-row">
-          {/* md 미만(767 이하)은 트리가 없다 — 종전 모양(섹션 넷 세로 나열 + 단일 스크롤)이
-              그대로 서고 검색 줄만 산다(§45 ③). */}
-          <Sidebar collapsible="none" className="hidden w-44 shrink-0 rounded-lg border bg-surface md:flex">
-            <SidebarContent className="gap-4 px-2 py-2">
+              그리드 아이템(`DialogContent`가 `grid`)의 `min-width: auto` 함정을 막는다(§3).
+              행 상한이 `7.75rem`이다 — 검색칸이 트리로 들어가 행 밖 세로가 144에서 92로 줄었다
+              (§45 ②). */}
+          <SidebarProvider className="min-h-0 min-w-0 flex-col gap-4 md:h-[32rem] md:max-h-[calc(100dvh-7.75rem)] md:flex-row">
+          {/* 왼쪽 열 — 요구 `530f8e2c`가 더하는 요소 하나(§45 ①). 검색칸과 트리가 md+에서 한
+              상자(테두리·면·폭)를 나누고 md 미만에서는 그 상자가 안 걸려 검색칸만 남는다(종전
+              검색 줄과 같은 모양). `Sidebar`가 지던 상자 클래스가 여기로 옮겨 왔다. */}
+          <div className="flex flex-col gap-2 md:w-44 md:shrink-0 md:rounded-lg md:border md:bg-surface md:p-1">
+            <CommandInput
+              autoFocus
+              placeholder={t("settings.search.placeholder")}
+              aria-label={t("settings.search.placeholder")}
+              value={query}
+              onValueChange={(v) => {
+                setQuery(v);
+                clearHighlight(); // §45 ⑥ 수명 ② — 질의가 갈리거나 비워지면 하이라이트가 죽는다
+              }}
+              onKeyDown={(e) => {
+                // `Esc` 두 번 — 질의가 있으면 질의만 비운다(같은 자리의 캡처 상자 `stopPropagation`과
+                // 같은 전제: 안 막으면 Radix가 다이얼로그까지 닫는다, §45 ④).
+                if (e.key === "Escape" && query !== "") {
+                  e.stopPropagation();
+                  setQuery("");
+                }
+              }}
+            />
+            {/* md 미만(767 이하)은 트리가 없다 — 종전 모양(섹션 넷 세로 나열 + 단일 스크롤)이
+                그대로 서고 검색칸만 산다(§45 ③). `w-full`이 등록 `w-(--sidebar-width)`를 덮고
+                `bg-transparent`는 다크에서 필요하다(`--sidebar` 0.205 ≠ `--surface` 0.18, ③). */}
+            <Sidebar collapsible="none" className="hidden min-h-0 w-full flex-1 bg-transparent md:flex">
+              <SidebarContent className="gap-4 px-1 pb-1">
               <SidebarGroup className="p-0">
                 <SidebarGroupLabel className="text-muted-foreground">{authCrumb}</SidebarGroupLabel>
                 <SidebarMenu aria-label={authCrumb}>
@@ -959,7 +967,8 @@ export function SettingsDialog({
                 </SidebarMenu>
               </SidebarGroup>
             </SidebarContent>
-          </Sidebar>
+            </Sidebar>
+          </div>
 
           {/* 패널 — 선택된 노드 하나만 렌더한다(md+). 넷 다 항상 마운트해 두고 `md:hidden`으로
               가린다 — 조건부 마운트는 트리 선택마다 언마운트된 섹션의 데이터를 다시 읽고
