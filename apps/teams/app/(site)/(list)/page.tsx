@@ -10,9 +10,11 @@
 import { homedir } from "node:os";
 import { readAuth, readOtherEngineAuth } from "@/lib/auth";
 import { type AuthView } from "@/components/settings-dialog";
+import { LanguageProvider } from "@/components/language-provider";
 import { ProjectRows, type ProjectRow } from "@/components/projects-ui";
 import { isLandingOnly } from "@/lib/flags";
-import { readProjects, readSummary, registryPath } from "@/lib/projects";
+import { DEFAULT_LOCALE } from "@/lib/i18n";
+import { readLanguage, readProjects, readSummary, registryPath } from "@/lib/projects";
 import { tildePath } from "@/lib/urls";
 import { engineName, workerGroups } from "@/lib/workers";
 import { diraVersion } from "../../../version";
@@ -38,12 +40,16 @@ export default async function Page() {
   let rows: ProjectRow[] = [];
   let registryError: { message: string; openCmd: string } | null = null;
   let auth: AuthView | null = null;
+  // §0-16 §설정 노드 — 헤더 `설정`(트리거 `text`)이 여기서만 뜬다(fullMode). 랜딩-only는
+  // 그 다이얼로그 자체가 없으니 읽을 이유가 없다 — 위 §플래그 fs 요건과 같은 선이다.
+  let locale = DEFAULT_LOCALE;
 
   if (fullMode) {
     // 인증은 머신당 하나다(§0-4 자리 표) — 레지스트리 성패와 무관하게 읽는다. 헤더 `설정`이
     // 등록된 프로젝트가 0건이거나 레지스트리가 깨져도 그대로 동작해야 해서다.
     const rawAuth = await readAuth();
     const otherEngines = await readOtherEngineAuth();
+    locale = await readLanguage();
 
     // 레지스트리가 깨졌으면 GUI가 고쳐 쓰려 들지 않는다 — 원문 + 여는 명령을 보여주고
     // 사람이 연다. 랜딩 절 전부는 그대로 선다(§비주얼 §46 ⑤ 레지스트리 오류 상태).
@@ -88,15 +94,17 @@ export default async function Page() {
   }
 
   return (
-    <Landing
-      version={diraVersion}
-      fullMode={fullMode}
-      empty={rows.length === 0}
-      registryError={registryError}
-      auth={auth}
-      home={home}
-    >
-      {rows.length > 0 && <ProjectRows rows={rows} />}
-    </Landing>
+    <LanguageProvider locale={locale}>
+      <Landing
+        version={diraVersion}
+        fullMode={fullMode}
+        empty={rows.length === 0}
+        registryError={registryError}
+        auth={auth}
+        home={home}
+      >
+        {rows.length > 0 && <ProjectRows rows={rows} />}
+      </Landing>
+    </LanguageProvider>
   );
 }

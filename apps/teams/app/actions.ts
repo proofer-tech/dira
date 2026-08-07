@@ -47,9 +47,11 @@ import {
   readKeymap,
   readProjects,
   writeKeymap,
+  setLanguage,
   type Project,
   type ProjectConfig,
 } from "@/lib/projects";
+import type { Locale } from "@/lib/i18n";
 import { preflight, scaffold } from "@/lib/scaffold";
 import { cronRegisterCmd, listWorkers, markAlertsRead, registerCron } from "@/lib/workers";
 import { tildePath } from "@/lib/urls";
@@ -463,6 +465,14 @@ export async function markFailuresReadAction(
 export async function markResumeReadAction(toMs: number): Promise<void> {
   markResumeRead(toMs);
   revalidatePath("/", "layout");
+}
+
+/** 설정 트리 다섯째 노드 `언어` (DESIGN.md §0-16 §설정 노드) — 고르는 즉시 반영된다.
+ *  파일 하나에 머신 스코프로 쓴다(`setLanguage`, `readAnalytics`/`setAnalyticsEnabled`와 같은
+ *  벌). 화면은 루트 레이아웃이 `readLanguage()`를 다시 읽도록 `router.refresh()`로 받는다 —
+ *  재시작·새로고침을 요구하지 않는다. */
+export async function setLanguageAction(locale: Locale): Promise<void> {
+  await setLanguage(locale);
 }
 
 /** 사용 통계 섹션 층 ① (DESIGN.md §0-11 §끄는 자리) — 다이얼로그가 열릴 때 한 줄이 읽는다.

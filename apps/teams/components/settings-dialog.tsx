@@ -37,6 +37,7 @@ import {
   sendSetupCodeAction,
   setAnalyticsAction,
   setBindingAction,
+  setLanguageAction,
   setTokenEnabledAction,
   setTokenLabelAction,
   startSetupAction,
@@ -47,6 +48,8 @@ import {
 import type { OtherEngineAuth, SetupState, TokenRow, TokenStatus } from "@/lib/auth";
 import { isMultiToken } from "@/lib/flags";
 import { useHotkey, useKeymap } from "@/components/keymap-provider";
+import { useLocale, useT } from "@/components/language-provider";
+import type { Locale } from "@/lib/i18n";
 import { DEFAULT_KEYMAP, MODIFIER_KEYS, formatCombo } from "@/lib/keymap";
 import { cn } from "@/lib/utils";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -76,8 +79,8 @@ import {
 } from "@/components/ui/sidebar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
-/** §0-15 트리 4노드 — 순서가 §45 ③ 트리 그림·검색 인덱스의 순서다. */
-type SettingsNode = "claude" | "other" | "keymap" | "stats";
+/** §0-15 트리 4노드 + §0-16 다섯째 `language` — 순서가 §45 ③ 트리 그림·검색 인덱스의 순서다. */
+type SettingsNode = "claude" | "other" | "keymap" | "stats" | "language";
 
 /** §0-15 §검색 레지스트리 한 줄 — `{트리 경로, 항목 이름, 이동 대상}`. `crumbs`가 빈 문자열이면
  *  결과 줄은 `name` 하나만 그린다(트리 노드 이름 자신 — §45 ⑤ 예시의 `키설정`). `anchor`는
@@ -322,6 +325,61 @@ function AnalyticsSection({ className }: { className?: string }) {
   );
 }
 
+/** §0-16 §설정 노드 — 다섯째 트리 노드. 항목은 `한국어`/`English` 둘, 하나만 고른다.
+ *
+ *  **`switch`도 `radio-group`도 설치하지 않는다** — `AnalyticsSection`과 같은 판정이다. 고르는
+ *  즉시 반영되는 이유는 값이 머신 설정(파일 하나)이고 루트 레이아웃이 그 값을 읽어
+ *  `LanguageProvider`로 내리기 때문이다: `router.refresh()`가 레이아웃을 다시 그리면
+ *  `useLocale()`을 쓰는 화면 전부가 새 값을 받는다(§0-6 키설정 저장과 같은 배선). */
+function LanguageSection({ className }: { className?: string }) {
+  const locale = useLocale();
+  const t = useT();
+  const router = useRouter();
+  const [pending, start] = useTransition();
+
+  const choose = (next: Locale) => {
+    if (next === locale) return;
+    start(async () => {
+      await setLanguageAction(next);
+      router.refresh();
+    });
+  };
+
+  return (
+    <section className={cn("space-y-2 border-t pt-4 md:border-t-0 md:pt-0", className)}>
+      <h3 data-setting="language" className="text-sm font-medium">
+        {t("settings.language.label")}
+      </h3>
+      <div role="radiogroup" aria-label={t("settings.language.label")} className="flex gap-2">
+        <Button
+          type="button"
+          role="radio"
+          aria-checked={locale === "ko"}
+          variant={locale === "ko" ? "default" : "outline"}
+          size="sm"
+          disabled={pending}
+          data-setting="language.ko"
+          onClick={() => choose("ko")}
+        >
+          한국어
+        </Button>
+        <Button
+          type="button"
+          role="radio"
+          aria-checked={locale === "en"}
+          variant={locale === "en" ? "default" : "outline"}
+          size="sm"
+          disabled={pending}
+          data-setting="language.en"
+          onClick={() => choose("en")}
+        >
+          English
+        </Button>
+      </div>
+    </section>
+  );
+}
+
 /** 행 하나의 상태 배지 — §0-13 §화면의 네 상태. 색·아이콘 레시피는 `status-badge.tsx`와 같은
  *  토큰(`text-status-active`·`text-status-stale`)을 그대로 쓴다(`projects-ui.tsx`도 같은 문자열을
  *  그대로 반복한다 — Tailwind가 클래스명을 정적으로 봐야 해서 이 프로젝트는 상수로 묶지 않는다). */
@@ -561,6 +619,9 @@ export function SettingsDialog({
   const savedAt = setup?.savedAt ?? result.savedAt ?? auth.savedAt;
   // 토큰이 없어도 **claude 워커가 하나도 없으면** 이 컴퓨터는 이 토큰을 안 쓴다 — 안 말한다(§0-4)
   const needsAuth = !savedAt && auth.claudeUsed;
+  // §0-16 §설정 노드 — 트리 라벨·검색 인덱스 이름에 쓰는 그 하나의 키
+  const t = useT();
+  const languageLabel = t("settings.language.label");
 
   // §0-15 §검색 — 항목 열 전부 + 트리 노드 이름 자신(§45 ④). 키설정 8줄은 `DEFAULT_KEYMAP`에서
   // 유도한다(레지스트리에 문자열 복사 0) — 이름을 옮기면 검색도 저절로 따라온다(§0-6).
@@ -586,6 +647,9 @@ export function SettingsDialog({
     { node: "stats", crumbs: "", name: "사용 통계", anchor: "stats" },
     { node: "stats", crumbs: "사용 통계", name: "보내는 상태", anchor: "stats.status" },
     { node: "stats", crumbs: "사용 통계", name: "끄기/켜기", anchor: "stats.toggle" },
+    { node: "language", crumbs: "", name: languageLabel, anchor: "language" },
+    { node: "language", crumbs: languageLabel, name: "한국어", anchor: "language.ko" },
+    { node: "language", crumbs: languageLabel, name: "English", anchor: "language.en" },
   ];
 
   const [query, setQuery] = useState("");
@@ -790,6 +854,16 @@ export function SettingsDialog({
                       onClick={() => selectNode("stats")}
                     >
                       <span>사용 통계</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  {/* §0-16 다섯째 노드 — 넷과 같은 그릇, 같은 헤더 없는 그룹(§45 ③ 판정 그대로) */}
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      isActive={activeNode === "language"}
+                      aria-current={activeNode === "language" ? "true" : undefined}
+                      onClick={() => selectNode("language")}
+                    >
+                      <span>{languageLabel}</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 </SidebarMenu>
@@ -1021,6 +1095,7 @@ export function SettingsDialog({
 
             <KeymapSection className={cn(activeNode !== "keymap" && "md:hidden")} />
             <AnalyticsSection className={cn(activeNode !== "stats" && "md:hidden")} />
+            <LanguageSection className={cn(activeNode !== "language" && "md:hidden")} />
           </div>
           </SidebarProvider>
         </Command>
