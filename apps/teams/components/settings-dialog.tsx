@@ -789,14 +789,15 @@ export function SettingsDialog({
       }}
     >
       {/* 인증이 필요하면 **이 버튼이** 말한다 — 배지를 따로 세우지 않는다(§0-4 · §비주얼 §4).
-          그때만 아이콘 칸(size-9 정사각)을 풀어 글자를 들인다. 접근가능 이름은 두 경우 다 `설정`이다 */}
+          그때만 아이콘 칸(size-9 정사각)을 풀어 글자를 들인다. 접근가능 이름은 두 경우 다
+          `t("settings.dialog.title")`로 같다 */}
       <DialogTrigger
         render={
           trigger === "icon" ? (
             <Button
               variant="ghost"
               size="icon"
-              aria-label="설정"
+              aria-label={t("settings.dialog.title")}
               className={needsAuth ? "w-auto gap-1 px-2" : undefined}
             >
               <Settings aria-hidden />
