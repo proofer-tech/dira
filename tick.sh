@@ -431,6 +431,25 @@ done
 
 참조 컨텍스트(필요하면 읽어보세요):$CTX"
 
+# --- 언어 주입: $LOCAL/language.json의 locale이 en이면 프롬프트 맨 꼬리에 한 줄(§0-16 §주입) ---
+# ko(기본값)면 무주입 -- 파일 없음·JSON 깨짐·객체 아님·모르는 값 넷 다 여기로 흡수한다(GUI의
+# readLanguage와 같은 판정, apps/teams/lib/projects.ts). 자리는 참조 컨텍스트 바로 뒤다 --
+# 조립이 prepend라 아래로 내려갈수록 프롬프트 앞쪽에 붙고, 여기가 append로 남는 마지막 자리다.
+# persona if 밖이라 `persona:` 없는 티켓에도 붙는다. 블록은 상수 -- 언어가 늘면 문장 하나만 는다.
+LOCALE=$(python3 -c 'import json, sys
+try:
+    o = json.load(open(sys.argv[1], encoding="utf-8"))
+    print("en" if isinstance(o, dict) and o.get("locale") == "en" else "ko")
+except Exception:
+    print("ko")' "$LOCAL/language.json" 2>/dev/null)
+if [ "$LOCALE" = "en" ]; then
+  PROMPT="$PROMPT
+
+Language note: converse with the user in English for the rest of this session.
+Keep every written deliverable in Korean regardless -- the ticket body, \`## 결과\`,
+commit messages, and anything under \`docs/\`."
+fi
+
 # --- 협업 프로토콜: <protocols>/AGENTS.md 를 프롬프트에 인라인한다 ---
 # 페르소나가 '누구'라면 이건 '어떻게 같이 일하는가'다 - 티켓 성격별 처리, 핸드오프, 보고 규약.
 # 모든 세션이 같은 문서를 받는다(페르소나와 달리 티켓이 고르지 않는다). 없으면 그냥 넘어간다.
