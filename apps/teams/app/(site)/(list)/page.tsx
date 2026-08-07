@@ -14,6 +14,7 @@
  *  필요해지면 P199-4가 그 조각째 다시 잇는다. */
 import { homedir } from "node:os";
 import { ProjectRows, type ProjectRow } from "@/components/projects-ui";
+import { isLandingOnly } from "@/lib/flags";
 import { readProjects, readSummary } from "@/lib/projects";
 import { tildePath } from "@/lib/urls";
 import { workerGroups } from "@/lib/workers";
@@ -37,26 +38,29 @@ export default async function Page() {
   const home = homedir();
 
   let rows: ProjectRow[] = [];
-  try {
-    const projects = await readProjects();
-    const summaries = await Promise.all(
-      projects.map(async (t) => ({ project: t, summary: await readSummary(t) })),
-    );
-    rows = summaries.map(({ project: t, summary: s }) => ({
-      id: t.id,
-      name: t.name,
-      root: t.root,
-      shortRoot: tildePath(t.root, home),
-      connected: s.connected,
-      open: s.open,
-      wip: s.wip,
-      done: s.done,
-      assigned: s.assigned.length,
-      personas: s.personas.map((p) => ({ name: p, color: t.personaColors?.[p] })),
-      workers: workerGroups(s.workers),
-    }));
-  } catch {
-    // 레지스트리를 못 읽어도 랜딩은 선다 — 목록 자리가 그냥 빈다.
+  // 랜딩-only는 이 절을 통째로 건너뛴다 — 레지스트리 읽기 0회가 §플래그의 fs 요건이다.
+  if (!isLandingOnly()) {
+    try {
+      const projects = await readProjects();
+      const summaries = await Promise.all(
+        projects.map(async (t) => ({ project: t, summary: await readSummary(t) })),
+      );
+      rows = summaries.map(({ project: t, summary: s }) => ({
+        id: t.id,
+        name: t.name,
+        root: t.root,
+        shortRoot: tildePath(t.root, home),
+        connected: s.connected,
+        open: s.open,
+        wip: s.wip,
+        done: s.done,
+        assigned: s.assigned.length,
+        personas: s.personas.map((p) => ({ name: p, color: t.personaColors?.[p] })),
+        workers: workerGroups(s.workers),
+      }));
+    } catch {
+      // 레지스트리를 못 읽어도 랜딩은 선다 — 목록 자리가 그냥 빈다.
+    }
   }
 
   return (
