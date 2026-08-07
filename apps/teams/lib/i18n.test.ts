@@ -9,7 +9,7 @@ const LOCAL = mkdtempSync(path.join(tmpdir(), "fst-i18n-"));
 process.env.TICKET_LOCAL = LOCAL;
 process.on("exit", () => rmSync(LOCAL, { recursive: true, force: true }));
 
-const { t, ko } = await import("./i18n.ts");
+const { t, ko, en, wrap } = await import("./i18n.ts");
 // 파일 읽기/쓰기는 `registryPath()` 옆에 산다 — `i18n.ts`가 클라이언트 번들로 가기 때문이다
 // (그 파일 머리 주석, `keymap.test.ts`와 같은 이유로 같이 검증한다).
 const { languagePath, readLanguage, setLanguage } = await import("./projects.ts");
@@ -78,6 +78,58 @@ test("932ae344 — 새로 뽑은 조합 문구들이 원문 그대로 재조립�
     `${t("ko", "settings.keymap.reject.unknownAction")} nope.gone`,
     "모르는 액션입니다: nope.gone",
   );
+});
+
+// 6914f1d1 — 설정 다이얼로그 묶음은 여기서 끝난다. 폴백은 **다음 묶음이 ko를 먼저 넣는 동안**을
+// 위한 장치지, 지금 든 묶음이 영어로 덜 서도 된다는 뜻이 아니다(§0-16 §발행).
+test("지금 묶음의 ko 키는 en에 하나도 안 빠졌다", () => {
+  assert.deepStrictEqual(Object.keys(ko).filter((k) => !(k in en)), []);
+});
+
+// 화면에 남은 한국어를 여기서 잡는다 — 사전 값 자체에 한글이 섞이면 폴백이 아니라 오타다.
+// 언어 이름 둘만 예외다(영어 화면에서도 `한국어`는 `한국어`로 적는다).
+test("en 사전에 한글이 없다 — 언어 이름 둘만 예외다", () => {
+  const hangul = Object.entries(en)
+    .filter(([k, v]) => /[가-힣]/.test(v) && !k.startsWith("settings.language."))
+    .map(([k]) => k);
+  assert.deepStrictEqual(hangul, []);
+});
+
+// 932ae344가 뽑은 자리들이 영어에서도 문장이 되는가. 한국어는 이름 뒤에 다 붙지만 영어는
+// 동사가 앞에 서므로, 접두·접미 두 조각을 `wrap`이 붙이고 빈 쪽을 지운다.
+test("6914f1d1 — 어순이 뒤집히는 조합 문구가 두 언어에서 다 선다", () => {
+  const reset = (l: "ko" | "en", n: string) =>
+    wrap(t(l, "settings.keymap.resetActionPrefix"), n, t(l, "settings.keymap.resetActionSuffix"));
+  assert.strictEqual(reset("ko", "프로젝트 검색"), "프로젝트 검색 기본값으로 되돌리기");
+  assert.strictEqual(reset("en", "Search projects"), "Reset Search projects to default");
+
+  const edit = (l: "ko" | "en", n: string) =>
+    wrap(t(l, "settings.tokens.editLabelPrefix"), n, t(l, "settings.tokens.editLabelSuffix"));
+  assert.strictEqual(edit("ko", "A계정"), "A계정 라벨 편집");
+  assert.strictEqual(edit("en", "Account 1"), "Edit label for Account 1");
+
+  const del = (l: "ko" | "en", n: string) =>
+    wrap(t(l, "settings.tokens.deletePrefix"), n, t(l, "settings.tokens.deleteSuffix"));
+  assert.strictEqual(del("ko", "A계정"), "A계정 삭제");
+  assert.strictEqual(del("en", "Account 1"), "Delete Account 1");
+
+  // 라벨 없는 토큰의 표시 이름 · 모르는 액션 — 어순이 같아 접두 하나로 끝난다
+  assert.strictEqual(`${t("en", "settings.tokens.accountFallbackPrefix")} 1`, "Account 1");
+  assert.strictEqual(
+    `${t("en", "settings.keymap.reject.unknownAction")} nope.gone`,
+    "Unknown action: nope.gone",
+  );
+  // 캡처 거절 줄 전체(사유 + 안내 + Esc) — 사유가 마침표로 끝나야 두 조각이 안 붙는다
+  assert.strictEqual(
+    `${t("en", "settings.keymap.reject.tab")} ${t("en", "settings.keymap.captureRejectedSuffix")} Esc ${t("en", "settings.keymap.captureCancelSuffix")}`,
+    "`Tab` moves focus. Press another key · Esc to cancel",
+  );
+});
+
+test("wrap — 빈 조각은 빠지고 공백이 겹치지 않는다", () => {
+  assert.strictEqual(wrap("", "가운데", "뒤"), "가운데 뒤");
+  assert.strictEqual(wrap("앞", "가운데", ""), "앞 가운데");
+  assert.strictEqual(wrap("", "혼자", ""), "혼자");
 });
 
 test("readLanguage — 파일 없으면 기본값 ko, set 뒤에는 그 값을 읽는다", async () => {

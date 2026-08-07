@@ -86,7 +86,11 @@ export const ko: Record<string, string> = {
   // 라벨 없는 토큰의 표시 이름 접두(`lib/auth.ts`의 `readTokenRows` — "계정 " + 순번).
   // 서버가 만드는 값이라 로케일을 못 받는다(§0-16 §장치 — 아래 `keymap.ts`와 같은 사정).
   "settings.tokens.accountFallbackPrefix": "계정",
+  // 행 버튼 둘의 aria-label(`<라벨> 라벨 편집` · `<라벨> 삭제`). 위 되돌리기와 같은 사정으로
+  // 접두가 비어 있다 — 영어에서 채운다.
+  "settings.tokens.editLabelPrefix": "",
   "settings.tokens.editLabelSuffix": "라벨 편집",
+  "settings.tokens.deletePrefix": "",
   "settings.tokens.deleteSuffix": "삭제",
 
   "settings.other.agyCred": "인증은 macOS 로그인 키체인에 있습니다 — 이 화면이 읽지 않습니다",
@@ -103,7 +107,9 @@ export const ko: Record<string, string> = {
   "settings.keymap.captureHint": "누른 조합이 그대로 지정됩니다 · 다른 단축키는 그동안 듣지 않습니다 ·",
   "settings.keymap.resetTooltipPrefix": "기본값",
   "settings.keymap.resetTooltipSuffix": "(으)로 되돌립니다",
-  // 되돌리기 버튼의 aria-label 꼬리(`<이름> 기본값으로 되돌리기`) — 위 툴팁 문구와는 다른 문장이다
+  // 되돌리기 버튼의 aria-label(`<이름> 기본값으로 되돌리기`) — 위 툴팁 문구와는 다른 문장이다.
+  // 한국어는 이름 뒤가 전부라 접두가 빈다. 영어는 동사가 앞에 서서 둘로 갈린다(`wrap` 참고).
+  "settings.keymap.resetActionPrefix": "",
   "settings.keymap.resetActionSuffix": "기본값으로 되돌리기",
   "settings.keymap.change": "바꾸기",
   "settings.keymap.resetAll": "전부 기본값으로",
@@ -158,12 +164,23 @@ export const ko: Record<string, string> = {
  *  | 사용 통계 | Usage stats | |
  *  | 티켓 상태 대기 · 진행중 · 완료 | Open · In progress · Done | |
  *  | 토큰 상태 대기 · 활성 · 비활성 · 소진 | Pending · Active · Disabled · Exhausted | **티켓의 `대기`와 다른 낱말이다** |
+ *  | 액션(키설정 한 줄) · 조합키 | action · modifier | 6914f1d1이 더한 줄부터 아래 |
+ *  | 라벨 · 계정 | label · account | 라벨 없는 토큰의 표시 이름이 `Account 1`이다 |
+ *  | 티켓 발행 · 요구 접수 | New ticket · New request | 다이얼로그를 여는 줄이라 동사가 아니라 여는 것의 이름이다 |
+ *  | 기본값으로 되돌리기 | Reset to default | 툴팁은 관사가 붙는다(`Reset to the default ⌘K`) |
+ *  | 설정 분류 | Setting categories | 화면에 안 뜨는 접근가능 이름 |
+ *
+ *  **어순이 뒤집히는 자리는 접두·접미 두 키로 쪼갠다.** 한국어는 이름 뒤에 다 붙지만(`<이름>
+ *  삭제`) 영어는 동사가 앞에 선다(`Delete <name>`) — 한쪽이 비는 것이 정상이고, 조립은
+ *  `wrap`이 한다.
  *
  *  문장의 결: 개발자 도구다. 짧게 쓰고, 동사로 쓰고, 문장부호 하나로 끝낼 수 있으면 거기서
  *  끝낸다. 버튼·라벨은 문장부호 없음(`Save`), 설명문은 마침표 있음.
  *
- *  **없는 키는 `ko`로 떨어진다**(아래 `t`) — 이 사전이 완성 전이어도 화면은 안 깨진다. */
-const en: Record<string, string> = {
+ *  **없는 키는 `ko`로 떨어진다**(아래 `t`) — 이 사전이 완성 전이어도 화면은 안 깨진다.
+ *
+ *  `export`는 `ko`와 같은 이유다 — 테스트가 두 사전의 키를 맞대 본다(`i18n.test.ts`). */
+export const en: Record<string, string> = {
   "settings.language.label": "Language",
 
   "settings.dialog.title": "Settings",
@@ -186,6 +203,7 @@ const en: Record<string, string> = {
   "settings.tree.other": "Other engines",
   "settings.tree.keymap": "Keyboard shortcuts",
   "settings.tree.stats": "Usage stats",
+  "settings.tree.categoryGroup": "Setting categories",
 
   "settings.claude.heading": "Claude authentication",
   "settings.claude.descriptionMulti":
@@ -223,6 +241,12 @@ const en: Record<string, string> = {
   "settings.tokens.disabledBadge": "Disabled",
   "settings.tokens.exhausted": "Exhausted",
   "settings.tokens.addedSuffix": "added",
+  "settings.tokens.accountFallbackPrefix": "Account",
+  // 영어는 동사가 앞이다 — 접미가 비고 접두가 문장을 연다(`Delete Account 1`).
+  "settings.tokens.editLabelPrefix": "Edit label for",
+  "settings.tokens.editLabelSuffix": "",
+  "settings.tokens.deletePrefix": "Delete",
+  "settings.tokens.deleteSuffix": "",
 
   "settings.other.agyCred": "Credentials sit in the macOS login keychain — this screen doesn't read them",
   "settings.other.codexMissing": "Not found — workers running on OPENAI_API_KEY are outside this check",
@@ -242,8 +266,32 @@ const en: Record<string, string> = {
   // 빈 값은 실수가 아니다: `t`는 `""`를 그대로 돌려주고 `ko` 폴백으로 새지 않는다.
   "settings.keymap.resetTooltipPrefix": "Reset to the default",
   "settings.keymap.resetTooltipSuffix": "",
+  "settings.keymap.resetActionPrefix": "Reset",
+  "settings.keymap.resetActionSuffix": "to default",
   "settings.keymap.change": "Change",
   "settings.keymap.resetAll": "Reset all to defaults",
+
+  // §0-6 액션 표 8줄. 목록 한 줄이 곧 이름이라 짧게 쓴다 — 여는 것은 그 이름으로,
+  // 가는 것은 `Go to`로. `board.search`가 `Search projects`와 갈리는 것은 의도다:
+  // 이 키는 화면마다 찾는 대상이 달라 목적어를 못 적는다(ko도 같은 이유로 `검색`이다).
+  "settings.keymap.action.project.search": "Search projects",
+  "settings.keymap.action.settings.open": "Open settings",
+  "settings.keymap.action.board.search": "Search",
+  "settings.keymap.action.board.new": "New ticket",
+  "settings.keymap.action.board.request": "New request",
+  "settings.keymap.action.nav.board": "Go to board",
+  "settings.keymap.action.nav.workers": "Go to workers",
+  "settings.keymap.action.interject.send": "Send",
+
+  // 거절 사유. 뒤에 `Press another key · Esc to cancel`이 이어 붙으므로 마침표로 끝낸다.
+  "settings.keymap.reject.modifierOnly": "A modifier on its own isn't a shortcut.",
+  "settings.keymap.reject.escape": "`Esc` closes and cancels.",
+  "settings.keymap.reject.tab": "`Tab` moves focus.",
+  "settings.keymap.reject.needsMod": "`↵` and `Space` need `⌘` with them. On their own they press buttons.",
+  // 앞에 상대 액션 이름이 붙어 문장이 된다(`Send already uses this key.`) — 한국어의
+  // `<이름>과 겹칩니다.`와 같은 어순이라 접두 조각이 없다.
+  "settings.keymap.reject.conflictSuffix": "already uses this key.",
+  "settings.keymap.reject.unknownAction": "Unknown action:",
 
   "settings.stats.description":
     "Sends two things, anonymously: how many copies of dira are running, and which screen actions happened. Paths, project names, and ticket contents stay on this machine.",
@@ -270,4 +318,14 @@ export function t(locale: Locale, key: string): string {
   const value = DICTS[locale][key] ?? ko[key];
   if (value === undefined) throw new Error(`i18n: 사전에 없는 키 "${key}" (ko에도 없음)`);
   return value;
+}
+
+/** 변수를 앞뒤 조각으로 감싼 조합 문구. **빈 조각은 빠지고 공백은 하나만 남는다** —
+ *  한국어는 접두가 비고(`<이름> 삭제`) 영어는 접미가 빈다(`Delete <name>`), 같은 자리를
+ *  두 어순으로 그리는 것이 이 함수가 있는 이유다(6914f1d1).
+ *
+ *  ponytail: 자리표시자(`{name}`) 치환기를 만들지 않는다 — 이 앱의 조합 문구는 전부
+ *  `앞·변수·뒤` 셋이고, 그 이상이 나오면 그때 만든다. */
+export function wrap(prefix: string, mid: string, suffix: string): string {
+  return [prefix, mid, suffix].filter(Boolean).join(" ");
 }

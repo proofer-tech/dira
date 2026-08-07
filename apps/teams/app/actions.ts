@@ -47,6 +47,7 @@ import {
   readKeymap,
   readProjects,
   writeKeymap,
+  readLanguage,
   setLanguage,
   type Project,
   type ProjectConfig,
@@ -341,7 +342,7 @@ export async function saveTokenAction(
  *  열릴 때 읽는다(`readAnalyticsAction`의 그 주석과 같다 — 다이얼로그를 그리는 자리가 셋이라
  *  값 하나 때문에 레이아웃 둘·컴포넌트 둘의 프롭이 같이 늘어난다). */
 export async function readTokenRowsAction(): Promise<TokenRow[]> {
-  return readTokenRows();
+  return readTokenRows(await readLanguage());
 }
 
 /** 행의 `활성화`/`비활성화` 버튼. `oauth-token` 쓰기는 이 액션이 하지 않는다 —
@@ -349,7 +350,7 @@ export async function readTokenRowsAction(): Promise<TokenRow[]> {
 export async function setTokenEnabledAction(id: string, enabled: boolean): Promise<TokenRow[]> {
   await setTokenEnabled(id, enabled);
   revalidatePath("/", "layout"); // 활성 토큰이 이 자리에서 바뀔 수 있다 — 배너·트리거 배지도 같이 본다
-  return readTokenRows();
+  return readTokenRows(await readLanguage());
 }
 
 /** `대기` 행의 `사용` 버튼 — 지금 쓸 토큰을 사람이 직접 고른다(§0-13 §화면 · P179). `oauth-token`
@@ -358,14 +359,14 @@ export async function setTokenEnabledAction(id: string, enabled: boolean): Promi
 export async function setActiveTokenAction(id: string): Promise<TokenRow[]> {
   await setActiveToken(id);
   revalidatePath("/", "layout"); // 활성 토큰이 이 자리에서 바뀐다 — 배너·트리거 배지도 같이 본다
-  return readTokenRows();
+  return readTokenRows(await readLanguage());
 }
 
 /** 행의 라벨 편집(P180-1, §0-13 §라벨). `oauth-token`은 안 건드린다 — `setTokenLabel`이
  *  `label`만 간다. */
 export async function setTokenLabelAction(id: string, label: string): Promise<TokenRow[]> {
   await setTokenLabel(id, label);
-  return readTokenRows();
+  return readTokenRows(await readLanguage());
 }
 
 /** 행의 `삭제` 버튼. 마지막 하나를 지워도 막지 않는다(§0-13 §상태) — 화면은 그 결과(§0-10 ①)를
@@ -373,7 +374,7 @@ export async function setTokenLabelAction(id: string, label: string): Promise<To
 export async function deleteTokenAction(id: string): Promise<TokenRow[]> {
   await deleteToken(id);
   revalidatePath("/", "layout");
-  return readTokenRows();
+  return readTokenRows(await readLanguage());
 }
 
 /** 인증 다이얼로그 층 ② — `claude setup-token`을 GUI가 pty로 몬다(DESIGN.md §0-4).
@@ -420,11 +421,14 @@ export async function setBindingAction(
   id: string,
   e: KeyLike,
 ): Promise<{ combo?: string; error?: string }> {
+  // 거절 문구는 사람이 읽는다 — 고른 언어로 나간다(§0-16 §장치). 파일은 여기서 읽고
+  // `validateBinding`은 값만 받는다(그 파일은 클라이언트 번들로 가서 `node:*`를 못 쓴다).
+  const locale = await readLanguage();
   const action = DEFAULT_KEYMAP.find((a) => a.id === id);
-  if (!action) return { error: `${t("ko", "settings.keymap.reject.unknownAction")} ${id}` };
+  if (!action) return { error: `${t(locale, "settings.keymap.reject.unknownAction")} ${id}` };
   const combo = comboOf(e);
   const { bindings } = await readKeymap();
-  const bad = validateBinding(bindings, action.id, combo);
+  const bad = validateBinding(bindings, action.id, combo, locale);
   if (bad) return { error: bad.reason };
   await writeKeymap({ [action.id]: combo });
   return { combo };
@@ -434,7 +438,9 @@ export async function setBindingAction(
  *  기본값으로 쓰면 `writeKeymap`이 그 키를 파일에서 뺀다 — 전부 되돌리면 `{}`가 남는다(§0-6). */
 export async function resetKeymapAction(id?: string): Promise<{ error?: string }> {
   const targets = id ? DEFAULT_KEYMAP.filter((a) => a.id === id) : DEFAULT_KEYMAP;
-  if (targets.length === 0) return { error: `${t("ko", "settings.keymap.reject.unknownAction")} ${id}` };
+  if (targets.length === 0) {
+    return { error: `${t(await readLanguage(), "settings.keymap.reject.unknownAction")} ${id}` };
+  }
   await writeKeymap(Object.fromEntries(targets.map((a) => [a.id, a.combo])));
   return {};
 }

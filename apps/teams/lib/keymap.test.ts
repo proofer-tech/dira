@@ -9,7 +9,7 @@ const LOCAL = mkdtempSync(path.join(tmpdir(), "fst-keymap-"));
 process.env.TICKET_LOCAL = LOCAL;
 process.on("exit", () => rmSync(LOCAL, { recursive: true, force: true }));
 
-const { DEFAULT_KEYMAP, comboOf, formatCombo, matchCombo, shouldFire, validateBinding } =
+const { DEFAULT_KEYMAP, actionName, comboOf, formatCombo, matchCombo, shouldFire, validateBinding } =
   await import("./keymap.ts");
 // 파일 세 함수는 `registryPath()` 옆에 산다 — `keymap.ts`가 클라이언트 번들로 가기 때문이다
 // (그 파일 머리 주석). 여기서 같이 검증한다: 계약이 하나고 픽스처도 하나다.
@@ -35,9 +35,10 @@ test("DEFAULT_KEYMAP — §0-6 액션 표 8줄과 id·기본키가 같다", () =
       ["interject.send", "Mod+Enter"],
     ],
   );
-  // 목록 화면이 그리는 이름도 비어 있지 않다
-  assert.ok(DEFAULT_KEYMAP.every((a) => a.name));
-  assert.strictEqual(DEFAULT_KEYMAP.find((a) => a.id === "project.search")!.name, "프로젝트 검색");
+  // 이름은 상수가 아니라 사전에 있다(6914f1d1) — 여덟 줄 전부 두 로케일에서 값이 나온다
+  assert.ok(DEFAULT_KEYMAP.every((a) => actionName("ko", a.id) && actionName("en", a.id)));
+  assert.strictEqual(actionName("ko", "project.search"), "프로젝트 검색");
+  assert.strictEqual(actionName("en", "project.search"), "Search projects");
   // 기본값끼리 겹치면 첫 화면부터 거짓말이다
   assert.strictEqual(new Set(DEFAULT_KEYMAP.map((a) => a.combo)).size, DEFAULT_KEYMAP.length);
   // 기본값 전부가 자기 검증을 통과한다(못 쓰는 키를 기본값으로 박지 않았다)
@@ -219,6 +220,20 @@ test("validateBinding — 겹치면 상대 액션 id를 담아 거절한다", ()
   assert.strictEqual(validateBinding(BOUND, "board.new", "j"), null);
   // 받침 없는 이름은 `와`다
   assert.match(validateBinding(BOUND, "board.new", "Mod+Enter")!.reason, /보내기와 겹칩니다/);
+});
+
+// 6914f1d1 — 사유는 사람이 읽는 문장이다. 영어에서 조사가 새거나 어순이 뒤집히면 여기서 걸린다.
+test("validateBinding — 영어 사유는 조사 없이 문장이 된다", () => {
+  assert.strictEqual(
+    validateBinding(BOUND, "board.new", "Mod+Enter", "en")!.reason,
+    "Send already uses this key.",
+  );
+  assert.strictEqual(
+    validateBinding(BOUND, "board.new", "Escape", "en")!.reason,
+    "`Esc` closes and cancels.",
+  );
+  // 로케일을 안 넘기면 종전 그대로 한국어다 — 테스트·스크립트가 그렇게 부른다
+  assert.match(validateBinding(BOUND, "board.new", "Mod+Enter")!.reason, /보내기와/);
 });
 
 test("validateBinding — 못 쓰는 키는 사유와 함께 거절한다", () => {

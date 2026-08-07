@@ -11,7 +11,7 @@ import { chmod, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import { isMultiToken } from "./flags.ts";
-import { t as translate } from "./i18n.ts";
+import { DEFAULT_LOCALE, t as translate, type Locale } from "./i18n.ts";
 import { registryPath } from "./projects.ts";
 
 /** 레지스트리와 **같은 디렉터리**다(엔진의 `$LOCAL`). 규칙을 두 벌로 적지 않으려고
@@ -296,10 +296,10 @@ export type TokenRow = {
  *  `tokens.json`이 이미 여러 개를 담고 있어도(계약 ③) 나머지는 파일에 그대로 남을 뿐 화면에
  *  안 나온다.
  *
- *  ponytail: 라벨 없는 행의 표시 이름(`계정 N`)은 `t("ko", ...)`로 고정한다 — 이 함수는 호출자가
- *  로케일을 안 넘긴다(§0-16). `en` 사전에 이 키가 없는 지금은 어차피 결과가 같다. 로케일을
- *  반영해야 하면 이 함수가 `locale`을 받게 하고 호출부(`readTokenRowsAction` 등)를 고친다. */
-export async function readTokenRows(): Promise<TokenRow[]> {
+ *  라벨 없는 행의 표시 이름(`계정 N` · `Account N`)이 로케일을 타므로 `locale`을 받는다 —
+ *  파일을 읽는 것은 서버 액션 쪽(`readLanguage()`)이고 이 함수는 값만 받는다. 기본값이 있는 것은
+ *  테스트·스크립트가 한국어 기준으로 부르기 때문이다(§0-16 §설정 노드). */
+export async function readTokenRows(locale: Locale = DEFAULT_LOCALE): Promise<TokenRow[]> {
   const file = await readTokens();
   const engine = file.claude;
   if (!engine) return [];
@@ -307,7 +307,7 @@ export async function readTokenRows(): Promise<TokenRow[]> {
   const source = isMultiToken() ? engine.tokens : engine.tokens.filter((t) => t.id === engine.active);
   return source.map((t, i) => ({
     id: t.id,
-    label: t.label ?? `${translate("ko", "settings.tokens.accountFallbackPrefix")} ${i + 1}`,
+    label: t.label ?? `${translate(locale, "settings.tokens.accountFallbackPrefix")} ${i + 1}`,
     rawLabel: t.label ?? "",
     masked: maskToken(t.token),
     addedAt: when(new Date(t.addedAt)),

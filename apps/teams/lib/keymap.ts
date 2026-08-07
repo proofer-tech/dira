@@ -11,7 +11,7 @@
  *  `chunking context does not support external modules (request: node:fs/promises)`로 깨진다.
  *
  *  `lib/i18n.ts`는 import한다 — 그 파일도 `node:*` 0이라 같이 번들로 가도 안 깨진다(§0-16). */
-import { t } from "./i18n.ts";
+import { DEFAULT_LOCALE, t, type Locale } from "./i18n.ts";
 
 export type ActionId =
   | "project.search"
@@ -25,35 +25,34 @@ export type ActionId =
 
 export type KeyAction = {
   id: ActionId;
-  /** 목록 화면이 그리는 이름. 액션 id는 사람에게 보이지 않는다.
-   *  값은 `lib/i18n.ts`의 `settings.keymap.action.<id>`에서 온다(§0-16 §장치) — 리터럴을
-   *  여기 또 안 두는 이유는 그 사전 키 옆 주석에 있다. */
-  name: string;
   combo: string;
 };
 
-/** §0-6 액션 표. **순서가 목록의 순서다**(전역 → 보드 → 이동 → 입력칸).
+/** 목록 화면이 그리는 이름(§0-6 액션 표의 `이름` 열). 액션 id는 사람에게 보이지 않는다.
  *
- *  ponytail: `name`은 `t("ko", ...)`로 고정한다 — 이 파일은 모듈 로드 시 한 번 평가되는 상수라
- *  로케일을 매번 새로 받을 수 없다. `en` 사전에 같은 키가 아직 없는 지금은 로케일과 무관하게
- *  결과가 같아서 차이가 없다 — `en`이 채워지고서도 이 목록이 영어로 안 서면 그때 이 파일의
- *  `name`을 지우고 화면 쪽이 `t(key)`로 직접 그리게 옮긴다. */
+ *  **상수에 안 굳힌다.** 이 배열은 모듈 로드 시 한 번 평가되므로 `name` 필드에 넣으면 그때의
+ *  로케일에 영원히 묶인다 — `en` 사전이 차자마자 목록만 한국어로 남았다(6914f1d1 실측).
+ *  값은 `lib/i18n.ts`의 `settings.keymap.action.<id>`에 있고, 부르는 자리가 로케일과 함께 묻는다. */
+export const actionName = (locale: Locale, id: ActionId): string =>
+  t(locale, `settings.keymap.action.${id}`);
+
+/** §0-6 액션 표. **순서가 목록의 순서다**(전역 → 보드 → 이동 → 입력칸). */
 export const DEFAULT_KEYMAP: KeyAction[] = [
-  { id: "project.search", name: t("ko", "settings.keymap.action.project.search"), combo: "Mod+k" },
+  { id: "project.search", combo: "Mod+k" },
   // `Mod+,`(맥의 설정 관례)는 크롬이 페이지에 안 넘긴다 — 그 바로 오른쪽 물리 키다(§0-6 인벤토리).
-  { id: "settings.open", name: t("ko", "settings.keymap.action.settings.open"), combo: "Mod+;" },
+  { id: "settings.open", combo: "Mod+;" },
   // 이름이 `보드 검색`이 아니다 — 이 키는 화면에 따라 하는 일이 갈린다(보드는 검색 칸 · 홈은
   // 대화 안에서 찾기 · 나머지는 페이지 내 찾기). 목록에 `보드`라고 적으면 화면이 거짓말을 한다(§0-6).
-  { id: "board.search", name: t("ko", "settings.keymap.action.board.search"), combo: "Mod+f" },
+  { id: "board.search", combo: "Mod+f" },
   // 니모닉 글자가 막히면 그 낱말의 다음 자유 글자다(§0-6 인벤토리) — `ticket` → `t`✗ → `i`,
   // `worker` → `w`✗ `o`✗ `r`✗ `k`(이미 씀) → `e`. `Mod+/`는 사람이 이름으로 지목했다(`7fa34329`).
-  { id: "board.new", name: t("ko", "settings.keymap.action.board.new"), combo: "Mod+i" },
-  { id: "board.request", name: t("ko", "settings.keymap.action.board.request"), combo: "Mod+/" },
-  { id: "nav.board", name: t("ko", "settings.keymap.action.nav.board"), combo: "Mod+b" },
-  { id: "nav.workers", name: t("ko", "settings.keymap.action.nav.workers"), combo: "Mod+e" },
+  { id: "board.new", combo: "Mod+i" },
+  { id: "board.request", combo: "Mod+/" },
+  { id: "nav.board", combo: "Mod+b" },
+  { id: "nav.workers", combo: "Mod+e" },
   // 듣는 칸이 넷이다(참견 form · 홈 질의 칸 · 요구 접수 다이얼로그 · 답변 폼) — 이름에 `참견`을
   // 적으면 목록이 거짓말을 한다(§0-6). id는 `keymap.json`의 키라 안 바꾼다.
-  { id: "interject.send", name: t("ko", "settings.keymap.action.interject.send"), combo: "Mod+Enter" },
+  { id: "interject.send", combo: "Mod+Enter" },
 ];
 
 export type Bindings = Record<ActionId, string>;
@@ -204,8 +203,12 @@ export type BindingError = {
   conflict?: ActionId;
 };
 
-/** 받침이 있으면 `과`. 이름은 우리가 정한 한글이라(§0-6 액션 표) 이 판정으로 충분하다. */
-const wa = (s: string) => ((s.charCodeAt(s.length - 1) - 0xac00) % 28 ? "과" : "와");
+/** 받침이 있으면 `과`. **한글 음절로 안 끝나면 조사를 안 붙인다** — 영어 이름(`Send`)에
+ *  받침 계산을 돌리면 아무 글자에나 `과`가 붙는다(음수 나머지가 0이 아니다). */
+const wa = (s: string) => {
+  const i = s.charCodeAt(s.length - 1) - 0xac00;
+  return i < 0 || i > 11171 ? "" : i % 28 ? "과" : "와";
+};
 
 /** 못 쓰는 키를 거르고 겹치는 액션을 찾는다. `null`이면 지정해도 된다.
  *
@@ -215,19 +218,26 @@ export function validateBinding(
   bindings: Bindings,
   actionId: ActionId,
   combo: string,
+  locale: Locale = DEFAULT_LOCALE,
 ): BindingError | null {
   const c = parseCombo(combo);
   if (!c.key || MODIFIER_KEYS.has(c.key)) {
-    return { reason: t("ko", "settings.keymap.reject.modifierOnly") };
+    return { reason: t(locale, "settings.keymap.reject.modifierOnly") };
   }
-  if (c.key === "Escape") return { reason: t("ko", "settings.keymap.reject.escape") };
-  if (c.key === "Tab") return { reason: t("ko", "settings.keymap.reject.tab") };
+  if (c.key === "Escape") return { reason: t(locale, "settings.keymap.reject.escape") };
+  if (c.key === "Tab") return { reason: t(locale, "settings.keymap.reject.tab") };
   if (!c.mod && (c.key === "Enter" || c.key === "Space")) {
-    return { reason: t("ko", "settings.keymap.reject.needsMod") };
+    return { reason: t(locale, "settings.keymap.reject.needsMod") };
   }
   for (const a of DEFAULT_KEYMAP) {
     if (a.id !== actionId && bindings[a.id] === combo) {
-      return { conflict: a.id, reason: `${a.name}${wa(a.name)} ${t("ko", "settings.keymap.reject.conflictSuffix")}` };
+      // 두 로케일이 같은 어순이다 — 이름이 앞에 서고 술어가 뒤다(`보내기와 겹칩니다.` ·
+      // `Send already uses this key.`). 그래서 접두 조각이 없다.
+      const name = actionName(locale, a.id);
+      return {
+        conflict: a.id,
+        reason: `${name}${wa(name)} ${t(locale, "settings.keymap.reject.conflictSuffix")}`,
+      };
     }
   }
   return null;

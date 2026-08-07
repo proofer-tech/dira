@@ -50,7 +50,8 @@ import { isMultiToken } from "@/lib/flags";
 import { useHotkey, useKeymap } from "@/components/keymap-provider";
 import { useLocale, useT } from "@/components/language-provider";
 import type { Locale } from "@/lib/i18n";
-import { DEFAULT_KEYMAP, MODIFIER_KEYS, formatCombo } from "@/lib/keymap";
+import { DEFAULT_KEYMAP, MODIFIER_KEYS, actionName, formatCombo, type ActionId } from "@/lib/keymap";
+import { wrap } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -110,6 +111,8 @@ function KeymapSection({ className }: { className?: string }) {
   const keymap = useKeymap();
   const router = useRouter();
   const t = useT();
+  const locale = useLocale();
+  const name = (id: ActionId) => actionName(locale, id);
   // 캡처 중인 줄. `null`이면 목록이다 — 한 번에 하나만 잡는다(§비주얼 §22)
   const [capturing, setCapturing] = useState<string | null>(null);
   const [rejected, setRejected] = useState<string | null>(null);
@@ -160,7 +163,7 @@ function KeymapSection({ className }: { className?: string }) {
               data-setting={a.id}
               className={cn("col-span-4 grid grid-cols-subgrid items-center", !active && "h-9")}
             >
-              <span className="min-w-0 truncate text-sm">{a.name}</span>
+              <span className="min-w-0 truncate text-sm">{name(a.id)}</span>
               {active ? (
                 <>
                   {/* `<input>`이 아닌 이유: 캐럿·IME·자동완성이 전부 딸려 오고 그중 무엇도
@@ -230,7 +233,11 @@ function KeymapSection({ className }: { className?: string }) {
                         <Button
                           variant="ghost"
                           size="icon-sm"
-                          aria-label={`${a.name} ${t("settings.keymap.resetActionSuffix")}`}
+                          aria-label={wrap(
+                            t("settings.keymap.resetActionPrefix"),
+                            name(a.id),
+                            t("settings.keymap.resetActionSuffix"),
+                          )}
                           className={combo === a.combo ? "invisible" : undefined}
                           disabled={busy}
                           onClick={() => reset(a.id)}
@@ -514,7 +521,11 @@ function TokensSection({
                   <Button
                     variant="ghost"
                     size="icon-sm"
-                    aria-label={`${row.label} ${t("settings.tokens.editLabelSuffix")}`}
+                    aria-label={wrap(
+                      t("settings.tokens.editLabelPrefix"),
+                      row.label,
+                      t("settings.tokens.editLabelSuffix"),
+                    )}
                     disabled={pending}
                     onClick={() => {
                       setEditingId(row.id);
@@ -558,7 +569,11 @@ function TokensSection({
             <Button
               variant="ghost"
               size="icon-sm"
-              aria-label={`${row.label} ${t("settings.tokens.deleteSuffix")}`}
+              aria-label={wrap(
+                t("settings.tokens.deletePrefix"),
+                row.label,
+                t("settings.tokens.deleteSuffix"),
+              )}
               disabled={pending}
               onClick={() => remove(row)}
             >
@@ -645,6 +660,7 @@ export function SettingsDialog({
   const needsAuth = !savedAt && auth.claudeUsed;
   // §0-16 §설정 노드 — 트리 라벨·검색 인덱스 이름에 쓰는 그 하나의 키
   const t = useT();
+  const locale = useLocale();
   const languageLabel = t("settings.language.label");
 
   // §0-15 §검색 — 항목 열 전부 + 트리 노드 이름 자신(§45 ④). 키설정 8줄은 `DEFAULT_KEYMAP`에서
@@ -684,7 +700,12 @@ export function SettingsDialog({
     ),
     { node: "keymap", crumbs: "", name: keymapCrumb, anchor: "keymap" },
     ...DEFAULT_KEYMAP.map(
-      (a): SearchEntry => ({ node: "keymap", crumbs: keymapCrumb, name: a.name, anchor: a.id }),
+      (a): SearchEntry => ({
+        node: "keymap",
+        crumbs: keymapCrumb,
+        name: actionName(locale, a.id),
+        anchor: a.id,
+      }),
     ),
     {
       node: "keymap",
