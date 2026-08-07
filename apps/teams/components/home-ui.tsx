@@ -668,10 +668,23 @@ export function HomeUI({
                 // 첫 줄이고, 서버가 한 번 더 판정한다(§24 실패 ④).
                 onChange={(e) => setText(e.target.value)}
                 onPaste={att.onPaste}
-                // `⌘↵`로 보낸다. `Enter`는 줄바꿈이다(§21). `matchCombo`가 `isComposing`을 막아
-                // 받침을 확정하는 `Enter`에 글이 날아가지 않는다.
+                // `Enter`가 보낸다(§7-1) — `⇧`·`⌥`·`⌃` 중 하나라도 눌리면 줄바꿈이 그대로
+                // 들어간다. `⌘↵`(`Ctrl+Enter` 포함)는 `matchCombo`로 그대로 산다. 둘 다
+                // `isComposing`이면 안 보내 받침을 확정하는 `Enter`에 글이 날아가지 않는다.
                 onKeyDown={(e) => {
                   if (matchCombo(e.nativeEvent, sendCombo)) {
+                    e.preventDefault();
+                    void send();
+                    return;
+                  }
+                  if (
+                    e.key === "Enter" &&
+                    !e.shiftKey &&
+                    !e.altKey &&
+                    !e.ctrlKey &&
+                    !e.metaKey &&
+                    !e.nativeEvent.isComposing
+                  ) {
                     e.preventDefault();
                     void send();
                   }
