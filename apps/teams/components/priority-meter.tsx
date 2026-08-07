@@ -13,8 +13,8 @@ import { cn } from "@/lib/utils";
 const BAR_H = ["h-0.5", "h-1", "h-1.5", "h-2", "h-2.5"]; // 2·4·6·8·10px
 
 export function PriorityMeter({ priority, locale }: { priority: number; locale: Locale }) {
-  // 3은 안 그린다 — 자리만 잡아 해시의 x를 카드·행마다 같게 둔다(§49 §3을 안 그린다)
-  if (priority === 3) return <span aria-hidden className="inline-block h-2.5 w-3.5" />;
+  // 3은 안 그린다. 자리도 안 잡는다 — 아무것도 렌더하지 않는다(§재판정 `c34954a4`)
+  if (priority === 3) return null;
   return (
     <>
       <span aria-hidden className="inline-flex h-2.5 w-3.5 items-end gap-px">
