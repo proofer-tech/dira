@@ -42,7 +42,11 @@ html {
   scroll-behavior: smooth;
 }
 
-body {
+/* 이 파일의 다른 선택자는 전부 `.dira-landing` 아래로 스코프됐는데(위 100~104줄) `body`
+   자신은 그 조상이 없어 같은 방식으로 못 좁혔다 — `globals.css`의 `:root:has(.dira-landing)`과
+   같은 손잡이로 `:has()`를 쓴다(결함 `2b963cf6`). 이게 없으면 이 규칙이 `layer(landing)`이라
+   `@layer base { body { @apply bg-background } }`를 이겨 앱 화면 다크 밑면까지 흰색으로 새운다. */
+body:has(.dira-landing) {
   margin: 0;
   width: 100%;
   min-width: 320px;
