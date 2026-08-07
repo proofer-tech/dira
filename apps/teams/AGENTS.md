@@ -317,6 +317,11 @@ apps/teams/
                         전용 값으로 개정하면서 장식 테두리가 라이트 17.93 · 다크 15.72로 거의
                         검정 액자가 됐다 — §비주얼 §9가 재선택한 `--chart-2`(라이트 4.74 · 다크
                         4.18)로 되돌린다. `[button,a]:focus-visible:border-ring`은 그대로다
+                        ⑤ `dialog.tsx`의 닫기 버튼 `sr-only` 문구를 리터럴 `Close`에서
+                        `useT()("common.close")`로 바꿨다(`c011dc37`). 이 프리미티브를 모든
+                        다이얼로그가 공유해서 한국어 화면(기본 로케일)에서도 스크린리더가 영어를
+                        읽고 있었다. `common.close`는 `lib/i18n.ts`에 있고 `LanguageProvider`는
+                        루트 레이아웃 둘 다에서 이미 전역이라 새 배선은 0줄이다
     sidebar.tsx         `sidebar` 부품 24개. 쓰는 것은 여덟이고(§비주얼 §34 §안 쓰는 export)
                         세 화면 **안**의 좌측 패널이 그릇으로 쓴다 — 앱 내비는 상단 바 그대로다(§4)
   hooks/                shadcn CLI가 만든 첫 훅 디렉터리(`components.json`의 `aliases.hooks`).

@@ -147,6 +147,7 @@ export const ko: Record<string, string> = {
   "common.save": "저장",
   "common.saving": "저장 중…",
   "common.add": "추가",
+  "common.close": "닫기",
 };
 
 /** 제품 낱말의 영어 대응 — **여기가 한자리다**(621c7a97). 다음 묶음이 같은 것을 다르게 부르지
@@ -308,6 +309,7 @@ export const en: Record<string, string> = {
   "common.save": "Save",
   "common.saving": "Saving…",
   "common.add": "Add",
+  "common.close": "Close",
 };
 
 const DICTS: Record<Locale, Record<string, string>> = { ko, en };
