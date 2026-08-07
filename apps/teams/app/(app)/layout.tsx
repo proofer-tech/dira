@@ -2,10 +2,11 @@ import type { Metadata } from "next";
 import { Geist_Mono } from "next/font/google";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { KeymapProvider } from "@/components/keymap-provider";
+import { LanguageProvider } from "@/components/language-provider";
 import { FeedbackDialog } from "@/components/feedback-dialog";
 import { DesktopFindBar } from "@/components/find-bar";
 import { ScreenView } from "@/components/project-switcher";
-import { readKeymap } from "@/lib/projects";
+import { readKeymap, readLanguage } from "@/lib/projects";
 import "../globals.css";
 
 // sans는 `globals.css`의 `@font-face`(원티드산스 · `public/fonts/`)가 든다 — 그래서 Geist
@@ -34,6 +35,8 @@ export default async function RootLayout({
   // 셸마다 중복해서 읽을 이유가 없다. `readKeymap()`은 던지지 않는다 — 키맵 파일 하나가
   // 앱 전체를 못 열게 하면 안 된다(깨졌다는 사실은 `broken`으로 화면이 말한다).
   const keymap = await readKeymap();
+  // §0-16 §장치. 머신 하나짜리 설정이라 키맵과 같은 자리에서 같이 읽는다.
+  const locale = await readLanguage();
   return (
     <html
       lang="ko"
@@ -54,14 +57,16 @@ export default async function RootLayout({
             **화면 이동 없이 지금 화면 위에** 떠야 해서 자리가 여기다. 닫혀 있으면 안 그린다 */}
         <FeedbackDialog />
         <TooltipProvider>
-          <KeymapProvider keymap={keymap}>
-            {children}
-            {/* §데스크톱 앱 N5 찾기 바. **`KeymapProvider` 안**이어야 한다 — `⌘F`는 키맵의
-                값이고 `useHotkey`가 그 컨텍스트를 읽는다(§0-6). 자리가 여기인 이유는
-                `<FeedbackDialog/>`와 같다: 붙는 화면이 다섯이고 레이아웃이 둘로 갈린다.
-                뜨지 않는 화면(보드·홈)과 셸(브라우저)은 저 컴포넌트가 판정해 `null`이다 */}
-            <DesktopFindBar />
-          </KeymapProvider>
+          <LanguageProvider locale={locale}>
+            <KeymapProvider keymap={keymap}>
+              {children}
+              {/* §데스크톱 앱 N5 찾기 바. **`KeymapProvider` 안**이어야 한다 — `⌘F`는 키맵의
+                  값이고 `useHotkey`가 그 컨텍스트를 읽는다(§0-6). 자리가 여기인 이유는
+                  `<FeedbackDialog/>`와 같다: 붙는 화면이 다섯이고 레이아웃이 둘로 갈린다.
+                  뜨지 않는 화면(보드·홈)과 셸(브라우저)은 저 컴포넌트가 판정해 `null`이다 */}
+              <DesktopFindBar />
+            </KeymapProvider>
+          </LanguageProvider>
         </TooltipProvider>
       </body>
     </html>

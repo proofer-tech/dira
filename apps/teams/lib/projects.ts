@@ -5,6 +5,7 @@
 import { mkdir, readFile, readdir, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
+import { DEFAULT_LOCALE, type Locale } from "./i18n.ts";
 import { DEFAULT_KEYMAP, defaultBindings, type Bindings, type Keymap } from "./keymap.ts";
 import { machineState, type MachineState } from "./machine-state.ts";
 import {
@@ -129,6 +130,35 @@ export async function writeKeymap(changes: Partial<Bindings>): Promise<void> {
   const p = keymapPath();
   await mkdir(path.dirname(p), { recursive: true });
   await writeFile(p, JSON.stringify(next, null, 2) + "\n");
+}
+
+// ── 언어 설정 파일 (DESIGN.md §0-16) ────────────────────────────────────────
+//
+// `lib/analytics.ts`의 `readAnalytics`/`setAnalyticsEnabled`와 같은 벌이다. 파일 읽기/쓰기가
+// `lib/i18n.ts`가 아니라 여기 있는 이유는 키맵과 같다 — 그 파일은 화면(클라이언트 컴포넌트)이
+// import해서 번들로 가므로 `node:*`를 못 들인다.
+
+/** 레지스트리·키맵과 **같은 디렉터리**다(엔진의 `$LOCAL`). */
+export function languagePath(): string {
+  return path.join(path.dirname(registryPath()), "language.json");
+}
+
+/** 던지지 않는다. 없음·깨짐·객체 아님 셋 다 기본값(`ko`)으로 흡수한다 — 언어 설정 파일
+ *  하나가 화면을 못 열게 하면 안 된다(`readAnalytics`와 같은 판정). */
+export async function readLanguage(): Promise<Locale> {
+  try {
+    const o: unknown = JSON.parse(await readFile(languagePath(), "utf8"));
+    const locale = o && typeof o === "object" && !Array.isArray(o) ? (o as { locale?: unknown }).locale : undefined;
+    return locale === "en" ? "en" : DEFAULT_LOCALE;
+  } catch {
+    return DEFAULT_LOCALE;
+  }
+}
+
+export async function setLanguage(locale: Locale): Promise<void> {
+  const p = languagePath();
+  await mkdir(path.dirname(p), { recursive: true });
+  await writeFile(p, JSON.stringify({ locale }, null, 2) + "\n", "utf8");
 }
 
 export async function readProjects(): Promise<Project[]> {
