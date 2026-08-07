@@ -165,6 +165,9 @@ export const ko: Record<string, string> = {
   "ticket.priority.level.3": "기본",
   "ticket.priority.level.4": "먼저",
   "ticket.priority.level.5": "당장 — 도는 세션을 끊는다",
+  // 미터 옆 `sr-only` 문구(§비주얼 §49)의 앞조각 — `wrap(prefix, String(priority), "")`로 붙인다.
+  // 문구는 종전 그대로다(§49 값 표 "새 문구 0") — 하드코딩이던 것을 사전으로 옮긴 것뿐이다.
+  "ticket.priority.srOnly": "우선순위",
 
   // 셸 알림 종 ⑦(마감 경고, §1-4 · §0-10 문구 표 ⑦). ①~⑥은 아직 이 사전으로 안 옮겨졌다 —
   // 이 티켓(`a50c8304`)의 몫은 ⑦뿐이다. en은 `5debff0e`가 채운다.
@@ -368,6 +371,7 @@ export const en: Record<string, string> = {
   "ticket.priority.level.3": "Default",
   "ticket.priority.level.4": "Sooner",
   "ticket.priority.level.5": "Now — stops a running session",
+  "ticket.priority.srOnly": "Priority",
 };
 
 const DICTS: Record<Locale, Record<string, string>> = { ko, en };

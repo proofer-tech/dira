@@ -36,9 +36,10 @@ import { matchCombo } from "@/lib/keymap";
 import type { ThreadItem } from "@/lib/queue";
 import { AttachmentField, useAttachments } from "@/components/attachment-field";
 import { useHotkey, useKeymap } from "@/components/keymap-provider";
-import { useT } from "@/components/language-provider";
+import { useLocale, useT } from "@/components/language-provider";
 import { Markdown } from "@/components/markdown";
 import { PersonaDot } from "@/components/persona-badge";
+import { PriorityMeter } from "@/components/priority-meter";
 import { DepBadge } from "@/components/status-badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
@@ -258,6 +259,7 @@ export function TicketEditForm({
 }) {
   const [state, action, pending] = useActionState<SaveState, FormData>(saveTicket, {});
   const t = useT();
+  const locale = useLocale();
   // 역전 판정은 입력이 바뀔 때마다 다시 잰다(§1-4 §역전 "다이얼로그를 새로 안 띄운다" —
   // 저장을 누르기 전에 여기서 막는다). uncontrolled로 두면 리렌더 없이 값이 바뀌어 못 잰다.
   const [duedateInput, setDuedateInput] = useState(duedate);
@@ -325,7 +327,12 @@ export function TicketEditForm({
           </Select>
         </div>
         <div className="space-y-2">
-          <Label htmlFor="t-priority">{t("ticket.priority.label")}</Label>
+          {/* 미터는 select 라벨 왼쪽, 같은 gap-1(§비주얼 §49 §자리) — 자기 `priority`를 그린다,
+              유효 우선순위가 아니다(상속은 아래 한 줄이 말한다) */}
+          <span className="inline-flex items-center gap-1">
+            <PriorityMeter priority={priority} locale={locale} />
+            <Label htmlFor="t-priority">{t("ticket.priority.label")}</Label>
+          </span>
           <Select name="priority" defaultValue={String(priority)}>
             <SelectTrigger id="t-priority" className="w-20">
               <SelectValue />
@@ -344,7 +351,7 @@ export function TicketEditForm({
             </SelectContent>
           </Select>
           {/* 유효 ≠ 원값 또는 마감 파생이 명시값을 덮었을 때 — 같은 자리·같은 모양이고 둘 다면
-              한 줄에 이어 붙는다(§1-4 §화면. dot은 자기 priority만 그린다, §1-3 §값을 넣는 자리 셋). */}
+              한 줄에 이어 붙는다(§1-4 §화면. 미터는 자기 priority만 그린다, §1-3 §값을 넣는 자리 셋). */}
           {(inheritedFrom || remainingText) && (
             <p className="text-xs text-muted-foreground">
               {inheritedFrom && (
