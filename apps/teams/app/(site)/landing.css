@@ -240,13 +240,15 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
 .dira-landing .hero { padding-top: 96px; }
 .dira-landing .hero .body { max-width: 34em; margin: 0 0 32px; }
 .dira-landing .cta { display: flex; flex-wrap: wrap; gap: 12px; }
-/* 풀 모드 히어로 CTA 자리(목록·온보딩·오류 슬롯, §비주얼 §46 ②). 위 32·아래 64는 걷힌
-   `.cta`/`.cta-note`가 쓰던 값을 새 선언 없이 그대로 물려받는다 — 위는 `.hero .body`의
-   `margin-bottom: 32`, 아래는 `.hero figure`의 `margin-top: 64`가 이미 준다.
+/* 목록·온보딩·오류 슬롯 — `.hero` 밖으로 나가 `<main>`의 첫 블록이다(§비주얼 §47, §46 ②는
+   이제 포인터). 위·아래 96/48은 새 수가 아니라 걷힌 `.hero { padding-top }`(240줄) 값을
+   슬롯이 위·아래로 그대로 든 것이다 — 헤더 밑 간격과 옛 히어로 위 간격이 같은 리듬이라
+   갈리지 않는다. 경계는 하이라인 한 줄, 다음 블록(`.hero`)이 갖는다.
    `scroll-margin-top` = sticky `header` 60 + `.travel` 밴드 46(실측) — `프로젝트 관리`
    (`/#projects`)가 그 자리로 올 때 헤더 밑에서 멈춘다. 390에서 `.tk`가 두 줄이 되어 밴드가
    54라 114다(§11 `top-18`과 같은 유도). */
-#projects { scroll-margin-top: 106px; }
+#projects { scroll-margin-top: 106px; padding-block: 96px; }
+#projects + .hero { border-top: 1px solid var(--border); }
 @media (max-width: 480px) {
   #projects { scroll-margin-top: 114px; }
 }
@@ -501,6 +503,7 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
   .dira-landing .fgrid { grid-template-columns: 1fr 1fr; }
   .dira-landing section, .dira-landing .closing { padding: 64px 0; }
   .dira-landing .hero { padding-top: 48px; }
+  #projects { padding-block: 48px; }
 }
 
 /* 헤더가 접히는 폭은 브레이크포인트가 아니라 내용이 정한다 — 개수가 도착하면 헤더가 427px을

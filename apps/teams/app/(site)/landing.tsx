@@ -58,8 +58,8 @@ export default function Landing({
   auth?: AuthView | null;
   /** 경로 피커·생성 폼이 `~`로 친 값을 펴는 데만 쓴다. */
   home?: string;
-  /** 프로젝트 목록 표(§한 코드베이스 §홈). 히어로 CTA 자리에 선다 — 자리만 이 티켓이 정하고
-   *  폭·간격·버튼 재배치는 P199-3(designer)·P199-4(조립)의 몫이다. */
+  /** 프로젝트 목록 표(§한 코드베이스 §홈). 풀 모드에서 `<main>`의 첫 블록 `#projects`
+   *  슬롯에 선다(§비주얼 §47, P199-10). */
   children?: React.ReactNode;
 }) {
   // 초기값은 빌드 시점의 `apps/desktop/package.json`. 비우면 hydration이 어긋난다.
@@ -246,14 +246,16 @@ export default function Landing({
       }
     }
     // 여행하는 티켓의 레인(DESIGN §랜딩 §개편 §움직이는 티켓). 절 마크업에 표식을 안 심는다 —
-    // 관측 대상은 <main> 직계 블록 여섯(`.wrap`)이고, 첫 블록이 레인 0 · 마지막 둘이 레인 2 ·
-    // 그 사이가 레인 1이다. 블록이 늘거나 순서가 바뀌어도 이 셋의 뜻이 안 갈린다.
-    // `.armed`와 같은 배치다 — JS가 죽으면 data-lane이 없고 카드는 레인 0에 그냥 서 있다.
-    // reduce에서도 레인은 그대로 간다: 이름이 갈리는 것은 모션이 아니라 내용이고,
-    // 미끄러지는 420ms만 킬 스위치의 `transition-duration: 0s !important`가 지운다.
+    // 관측 대상은 <main> 직계 블록 중 `.travel`·`#projects`를 뺀 나머지(`.wrap`)이고, 첫
+    // 블록(`.hero`)이 레인 0 · 마지막 둘이 레인 2 · 그 사이가 레인 1이다. `#projects`는
+    // 슬롯이라 셈에서 뺀다 — 안 빼면 프로젝트 수에 따라 `.hero` 상단이 관측 띠(뷰포트
+    // 중앙 10%) 위로 올라가 `scrollY=0`에서 레인 0이 조용히 안 서는 경우가 생긴다(§비주얼
+    // §47 실측). `.armed`와 같은 배치다 — JS가 죽으면 data-lane이 없고 카드는 레인 0에
+    // 그냥 서 있다. reduce에서도 레인은 그대로 간다: 이름이 갈리는 것은 모션이 아니라
+    // 내용이고, 미끄러지는 420ms만 킬 스위치의 `transition-duration: 0s !important`가 지운다.
     const travel = document.querySelector<HTMLElement>(".travel");
     if (travel) {
-      const blocks = [...document.querySelectorAll("main > .wrap:not(.travel)")];
+      const blocks = [...document.querySelectorAll("main > .wrap:not(.travel):not(#projects)")];
       const inband = new Set<Element>();
       const io2 = new IntersectionObserver(
         (entries) => {
@@ -382,6 +384,60 @@ export default function Landing({
   </div>
 </div>
 
+{/* 목록·온보딩·오류 슬롯 — 풀 모드에서 `<main>`의 첫 블록이다(§한 코드베이스 §홈 ⓪,
+    §비주얼 §47). `id="projects"`가 그 슬롯이다 — 표가 아니라 **자리**를 가리킨다
+    (0건에서는 목록이 아니라 온보딩 폼이, 오류에서는 배너가 그 자리에 선다). 랜딩-only에는
+    이 블록 자체가 없다. */}
+{fullMode && (
+  <div id="projects" className="wrap">
+    {registryError ? (
+      <Alert variant="destructive" className="max-w-3xl">
+        <TriangleAlert aria-hidden />
+        <AlertTitle>프로젝트 레지스트리를 읽지 못했습니다</AlertTitle>
+        <AlertDescription className="grid gap-2">
+          <span className="font-mono text-xs break-all">{registryError.message}</span>
+          <CopyCommand cmd={registryError.openCmd} />
+        </AlertDescription>
+      </Alert>
+    ) : (
+      <>
+        {empty && !showResult && (
+          <div className="max-w-3xl space-y-2">
+            <h2 className="text-lg font-semibold">dira</h2>
+            <p className="text-sm text-muted-foreground">
+              등록된 프로젝트가 없습니다. 하나 만들면 시작합니다.
+            </p>
+          </div>
+        )}
+        {children}
+        {showResult ? (
+          resultCard
+        ) : (
+          empty && (
+            <>
+              <div className="mt-6 flex max-w-3xl items-center justify-between gap-4">
+                <p className="text-sm text-muted-foreground">
+                  이미 만들어 둔 .dira가 있다면 등록합니다.
+                </p>
+                <Button variant="outline" size="sm" onClick={() => setRegistering(true)}>
+                  프로젝트 등록
+                </Button>
+              </div>
+              <Card className="mt-4 max-w-3xl gap-4 p-4">
+                <div className="space-y-1">
+                  <h2 className="text-sm font-medium">새 프로젝트</h2>
+                  <p className="text-xs text-muted-foreground">{CREATE_BLURB}</p>
+                </div>
+                <CreateForm home={home ?? ""} onCreated={handleCreated} onRegister={openRegister} />
+              </Card>
+            </>
+          )
+        )}
+      </>
+    )}
+  </div>
+)}
+
 <div className="hero wrap">
   <p className="eyebrow">로컬 멀티 에이전트 매니지먼트 시스템</p>
   <h1>나만의 AI 팀을 만들어보세요</h1>
@@ -390,58 +446,9 @@ export default function Landing({
     완수하며 그 과정을 마치 jira처럼 실시간으로 볼 수 있습니다. PC에 나만의 멀티 에이전트
     시스템을 아주 쉽게 구축해보세요.
   </p>
-  {/* ③ 히어로 `.cta` 둘 + `.cta-note` → 풀 모드에서 그 자리에 프로젝트 목록이 선다(§한
-      코드베이스 §홈 표). `id="projects"`가 그 슬롯이다 — 표가 아니라 **자리**를 가리킨다
-      (0건에서는 목록이 아니라 온보딩 폼이, 오류에서는 배너가 그 자리에 선다. §비주얼 §46 ②). */}
-  {fullMode ? (
-    <div id="projects">
-      {registryError ? (
-        <Alert variant="destructive" className="max-w-3xl">
-          <TriangleAlert aria-hidden />
-          <AlertTitle>프로젝트 레지스트리를 읽지 못했습니다</AlertTitle>
-          <AlertDescription className="grid gap-2">
-            <span className="font-mono text-xs break-all">{registryError.message}</span>
-            <CopyCommand cmd={registryError.openCmd} />
-          </AlertDescription>
-        </Alert>
-      ) : (
-        <>
-          {empty && !showResult && (
-            <div className="max-w-3xl space-y-2">
-              <h2 className="text-lg font-semibold">dira</h2>
-              <p className="text-sm text-muted-foreground">
-                등록된 프로젝트가 없습니다. 하나 만들면 시작합니다.
-              </p>
-            </div>
-          )}
-          {children}
-          {showResult ? (
-            resultCard
-          ) : (
-            empty && (
-              <>
-                <div className="mt-6 flex max-w-3xl items-center justify-between gap-4">
-                  <p className="text-sm text-muted-foreground">
-                    이미 만들어 둔 .dira가 있다면 등록합니다.
-                  </p>
-                  <Button variant="outline" size="sm" onClick={() => setRegistering(true)}>
-                    프로젝트 등록
-                  </Button>
-                </div>
-                <Card className="mt-4 max-w-3xl gap-4 p-4">
-                  <div className="space-y-1">
-                    <h2 className="text-sm font-medium">새 프로젝트</h2>
-                    <p className="text-xs text-muted-foreground">{CREATE_BLURB}</p>
-                  </div>
-                  <CreateForm home={home ?? ""} onCreated={handleCreated} onRegister={openRegister} />
-                </Card>
-              </>
-            )
-          )}
-        </>
-      )}
-    </div>
-  ) : (
+  {/* 랜딩-only에서만 선다 — 풀 모드는 이 자리가 걷혀 아무것도 안 들어온다(§한 코드베이스
+      §홈 표 ③, 걷힌 근거는 목록이 이제 위 `#projects`로 나가서다). */}
+  {!fullMode && (
     <>
       <div className="cta">
         <a className="btn btn-primary btn-lg" href={dmg}>macOS 앱 다운로드</a>
