@@ -9,7 +9,7 @@
   "scripts": {
     "build": "cd ../teams && pnpm build && rm -rf .next/standalone/.next/static .next/standalone/public && cp -R .next/static .next/standalone/.next/static && { [ -d public ] && cp -R public .next/standalone/public || true; } && find .next/standalone -type l ! -exec test -e {} \\; -print -delete",
     "start": "electron .",
-    "dev": "pnpm build && pnpm start",
+    "dev": "DIRA_MULTI_TOKEN=${DIRA_MULTI_TOKEN:-1} pnpm build && pnpm start",
     "test": "node --test \"*.test.ts\"",
     "icns": "./make-icns.sh",
     "signcheck": "./sign-preflight.sh",
