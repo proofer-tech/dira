@@ -100,16 +100,71 @@ type ParsedObject = { prose: string[]; rels: [string, string][]; props: string[]
 
 const ATTR_LINE = /^-\s*([^:]+):\s*(.*)$/;
 const WIKILINK_ONLY = /^\[\[([^\]]+)\]\]$/;
+const WIKILINK_ANY = /\[\[([^\]|]+)/;
 
-/** 객체 파일 한 장 → (서술줄들, 관계 줄, 속성 줄, `##` 절 존재). 값이 통째로 `[[wikilink]]`
- *  하나인 줄만 관계로 인정한다 — 나머지 `- 키: 값` 줄은 속성이다(ont-check.py `parse_object`). */
+/** frontmatter가 모든 타입에 공통으로 두는 다섯 키(`protocols/ontology.md` §4) — 형식
+ *  보일러플레이트라 속성 카운트(껍데기·필수 속성 판정)에서 뺀다. 안 빼면 모든 객체가 항상
+ *  ≥5속성이라 «속성 2개 미만 = 껍데기» 판정이 죽는다. */
+const COMMON_FM_KEYS = new Set(["type", "name", "aliases", "tags", "description"]);
+
+/** frontmatter YAML 블록(속성 평평하게 · `links:` 아래 `<관계타입>: - <라벨>: "[[대상]]"`)만 읽는
+ *  좁은 파서다 — 일반 YAML이 아니라 `protocols/ontology.md` §4 템플릿 한 모양만 안다(YAML 라이브러리
+ *  금지, `apps/teams/AGENTS.md` §의존성 근거 — `tickets.py`가 정규식이라 파서를 쓰면 판정이 갈린다).
+ *  들여쓰기 2칸 = `links:` 아래 관계타입 키, 4칸 = 그 관계의 대상 목록 줄. */
+function parseFrontmatter(fmLines: string[], props: string[], rels: [string, string][]): void {
+  let topIsLinks = false;
+  let relType: string | null = null;
+
+  for (const raw of fmLines) {
+    if (!raw.trim()) continue;
+    const indent = raw.length - raw.trimStart().length;
+    const line = raw.trim();
+
+    if (indent === 0) {
+      const m = line.match(/^([^:]+):\s*(.*)$/);
+      if (!m) continue;
+      const key = m[1].trim();
+      topIsLinks = key === "links";
+      relType = null;
+      if (!topIsLinks && !COMMON_FM_KEYS.has(key)) props.push(key);
+      continue;
+    }
+
+    if (!topIsLinks) continue; // 링크가 아닌 키의 목록 연속 줄 — 이미 위에서 속성 하나로 셌다
+
+    if (!line.startsWith("-")) {
+      const m = line.match(/^([^:]+):\s*(.*)$/);
+      if (m) relType = m[1].trim();
+      continue;
+    }
+    if (relType) {
+      const link = line.match(WIKILINK_ANY);
+      if (link) rels.push([relType, link[1].trim()]);
+    }
+  }
+}
+
+/** 객체 파일 한 장 → (서술줄들, 관계 줄, 속성 줄, `##` 절 존재). frontmatter가 있으면(첫 줄이
+ *  `---`) 속성·관계는 거기서 읽는다(P219-6 이행 후 형식 — `parseFrontmatter`). 나머지 본문은
+ *  종전대로 훑는다 — 값이 통째로 `[[wikilink]]` 하나인 `- 키: 값` 줄만 관계, 나머지는 속성이다
+ *  (구 3층 형식 잔존 대비, ont-check.py `parse_object`와 같은 판정). */
 function parseObject(text: string): ParsedObject {
   const prose: string[] = [];
   const rels: [string, string][] = [];
   const props: string[] = [];
   let hasSection = false;
 
-  for (const raw of text.split("\n")) {
+  const lines = text.split("\n");
+  let bodyStart = 0;
+  if (lines[0]?.trim() === "---") {
+    const end = lines.findIndex((l, i) => i > 0 && l.trim() === "---");
+    if (end !== -1) {
+      parseFrontmatter(lines.slice(1, end), props, rels);
+      bodyStart = end + 1;
+    }
+  }
+
+  for (const raw of lines.slice(bodyStart)) {
     const s = raw.trim();
     if (!s) continue;
     if (s.startsWith("## ")) {
