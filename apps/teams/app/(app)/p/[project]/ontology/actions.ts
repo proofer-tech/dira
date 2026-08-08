@@ -5,6 +5,7 @@
  *  `protocols/actions.ts`와 같은 분담: fs는 `lib/protocols.ts`가, 여기는 프로젝트 id → 기준
  *  디렉터리 해석과 Error 직렬화만 한다. 기준은 `ontologyDir()` 하나뿐이다(재정의를 안 연다). */
 import { revalidatePath } from "next/cache";
+import { buildOntologySeed, type OntologySurveyAnswers } from "@/lib/ontology-seed";
 import { createFile, deleteFile, renameFile, saveFile } from "@/lib/protocols";
 import { getProject, ontologyDir } from "@/lib/projects";
 
@@ -71,4 +72,29 @@ export async function renameOntologyAction(
   } catch (e) {
     return fail(e);
   }
+}
+
+/** 생성 — 설문 4문항 응답 → `SCHEMA.md` 시드(§5-3 §생성 — 설문 4문항). **폼은 여기서 바로
+ *  끝난다.** 실제 쓰기(`writeSeed`)를 기다리지 않고 반환한다 — 지금은 결정적 빌더
+ *  (`buildOntologySeed`)라 사실상 즉시 끝나지만, 응답 수집과 시드 생성을 구조적으로 가르는
+ *  것 자체가 계약이다("폼이 LLM을 안 기다린다"). `home-agent.ts`의 `startAsk`가 같은 결로
+ *  "띄우고 바로 돌아온다"를 쓴다. */
+export async function submitOntologySurveyAction(
+  projectId: string,
+  answers: OntologySurveyAnswers,
+): Promise<OntologyResult> {
+  try {
+    const base = await baseOf(projectId);
+    void writeSeed(base, answers).catch((e: unknown) => {
+      console.error("온톨로지 시드 생성 실패:", e);
+    });
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+async function writeSeed(base: string, answers: OntologySurveyAnswers): Promise<void> {
+  const rel = await createFile(base, "SCHEMA.md");
+  await saveFile(base, rel, buildOntologySeed(answers));
 }

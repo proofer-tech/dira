@@ -11,8 +11,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { FileText, Folder, TriangleAlert } from "lucide-react";
-import { EmptyState } from "@/components/empty-state";
-import { NewOntologyFileButton, OntologyEditor } from "@/components/ontology-ui";
+import { NewOntologyFileButton, OntologyEditor, OntologySurveyForm } from "@/components/ontology-ui";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Sidebar,
@@ -68,16 +67,20 @@ export default async function Ontology({
 
       {tree.length === 0 && (
         // §5-3 §생성 — 온톨로지 없이 도는 프로젝트가 정상이다: 여기서 디렉터리를 만들지 않는다.
-        <div className="max-w-3xl space-y-3">
-          <EmptyState
-            text="온톨로지가 아직 없습니다"
-            action={<NewOntologyFileButton projectId={id} variant="outline" />}
-          />
-          <p className="text-sm text-muted-foreground">
-            온톨로지가 없어도 이 프로젝트는 돕니다 — <span className="font-mono text-xs">tick.sh</span>는{" "}
-            <span className="font-mono text-xs">ontology/</span>가 비어 있으면 그냥 넘어갑니다. 세션이
-            이 프로젝트의 축적된 지식(객체·관계)을 모른 채 시작할 뿐입니다.
-          </p>
+        // 설문은 **선택**이다 — 건너뛰고 `직접 만들기`로 빈 파일을 열 수도 있다.
+        <div className="max-w-2xl space-y-6">
+          <div className="space-y-1">
+            <h2 className="text-sm font-medium">몇 가지만 답하면 시작할 자료를 만들어 드립니다</h2>
+            <p className="text-sm text-muted-foreground">
+              건너뛰어도 이 프로젝트는 그대로 돕니다 — <span className="font-mono text-xs">tick.sh</span>는{" "}
+              <span className="font-mono text-xs">ontology/</span>가 비어 있으면 그냥 넘어갑니다.
+            </p>
+          </div>
+          <OntologySurveyForm projectId={id} />
+          <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+            <span>답할 게 마땅치 않다면 건너뛰고 빈 파일부터 시작해도 됩니다.</span>
+            <NewOntologyFileButton projectId={id} variant="outline" />
+          </div>
         </div>
       )}
 

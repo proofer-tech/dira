@@ -5,7 +5,7 @@
  *  `protocols-ui.tsx`의 판박이다(트리는 서버가 `<Link href="?file=…">`으로 그리고 선택 상태는
  *  URL이 담는다는 규약도 같다). 온톨로지에는 인라인 프롬프트 배지·`AGENTS.md` 특수 케이스가
  *  없다 — 세션 프롬프트에는 목차만 실리고(§5-2) 이 화면이 여는 것은 그 목차가 가리키는 본문이다. */
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { FilePlus2, PencilLine, Trash2, TriangleAlert } from "lucide-react";
 import {
@@ -13,6 +13,7 @@ import {
   deleteOntologyAction,
   renameOntologyAction,
   saveOntologyAction,
+  submitOntologySurveyAction,
   type OntologyResult,
 } from "@/app/(app)/p/[project]/ontology/actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -30,6 +31,14 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Q1_OPTIONS,
+  Q2_CHIPS,
+  Q3_OPTIONS,
+  Q4_OPTIONS,
+  QUESTIONS,
+  type OntologySurveyAnswers,
+} from "@/lib/ontology-seed";
 
 /** §6 에러 3요소 중 1·2번. 사유는 원문 그대로 — 서버가 거부한 이유가 여기 적혀 온다. */
 function Failure({ title, message }: { title: string; message: string }) {
@@ -310,5 +319,139 @@ function DeleteOntologyButton({ projectId, rel }: { projectId: string; rel: stri
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ── 생성 — 설문 4문항 (§5-3 §생성) ───────────────────────────────────────────
+
+/** 체크박스 한 줄 — 네 문항 다 같은 모양이라 여기 하나로 묶는다. */
+function CheckRow({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: () => void;
+}) {
+  return (
+    <label className="flex items-center gap-2 text-sm">
+      <input type="checkbox" className="size-4" checked={checked} onChange={onChange} />
+      {label}
+    </label>
+  );
+}
+
+/** 생성 직후 온보딩 화면의 본문(§5-3 §생성 — 설문 4문항). **폼은 LLM을 안 기다린다** —
+ *  제출은 `submitOntologySurveyAction`을 한 번 부르고 끝나고(그 액션 자체가 응답을 즉시
+ *  돌려준다), 실제 `SCHEMA.md`가 서는 것은 그 뒤다. 제출 후에는 파일이 나타날 때까지 잠깐
+ *  새로고침한다 — 파일이 생기면 부모(`page.tsx`)가 이 컴포넌트 대신 파일트리를 그려서
+ *  폴링이 스스로 끝난다(언마운트). **문항 4개에 «객체»·«타입»·«관계»·«온톨로지»가 없다** —
+ *  값은 `lib/ontology-seed.ts`의 상수 그대로다. */
+export function OntologySurveyForm({ projectId }: { projectId: string }) {
+  const router = useRouter();
+  const [q1, setQ1] = useState("");
+  const [q2Checked, setQ2Checked] = useState<string[]>([]);
+  const [q2Custom, setQ2Custom] = useState("");
+  const [q3, setQ3] = useState<string[]>([]);
+  const [q4, setQ4] = useState<string[]>([Q4_OPTIONS[0]]);
+  const [pending, start] = useTransition();
+  const [submitted, setSubmitted] = useState(false);
+  const [result, setResult] = useState<OntologyResult | null>(null);
+
+  useEffect(() => {
+    if (!submitted) return;
+    const id = setInterval(() => router.refresh(), 600);
+    const stop = setTimeout(() => clearInterval(id), 8000);
+    return () => {
+      clearInterval(id);
+      clearTimeout(stop);
+    };
+  }, [submitted, router]);
+
+  if (submitted) {
+    return <p className="text-sm text-muted-foreground">답을 바탕으로 만드는 중입니다…</p>;
+  }
+
+  const toggle = (list: string[], set: (v: string[]) => void, value: string) =>
+    set(list.includes(value) ? list.filter((v) => v !== value) : [...list, value]);
+
+  return (
+    <div className="space-y-6">
+      <fieldset className="space-y-2">
+        <Label>{QUESTIONS.q1}</Label>
+        <div className="space-y-1">
+          {Q1_OPTIONS.map((opt) => (
+            <label key={opt} className="flex items-center gap-2 text-sm">
+              <input type="radio" name="q1" className="size-4" checked={q1 === opt} onChange={() => setQ1(opt)} />
+              {opt}
+            </label>
+          ))}
+        </div>
+      </fieldset>
+
+      <fieldset className="space-y-2">
+        <Label>{QUESTIONS.q2}</Label>
+        <div className="flex flex-wrap gap-x-4 gap-y-1">
+          {Q2_CHIPS.map((chip) => (
+            <CheckRow
+              key={chip}
+              label={chip}
+              checked={q2Checked.includes(chip)}
+              onChange={() => toggle(q2Checked, setQ2Checked, chip)}
+            />
+          ))}
+        </div>
+        <Input
+          placeholder="직접 입력 (쉼표로 여러 개)"
+          value={q2Custom}
+          onChange={(e) => setQ2Custom(e.target.value)}
+        />
+      </fieldset>
+
+      <fieldset className="space-y-2">
+        <Label>{QUESTIONS.q3}</Label>
+        <div className="space-y-1">
+          {Q3_OPTIONS.map((opt) => (
+            <CheckRow
+              key={opt.relation}
+              label={opt.label}
+              checked={q3.includes(opt.relation)}
+              onChange={() => toggle(q3, setQ3, opt.relation)}
+            />
+          ))}
+        </div>
+      </fieldset>
+
+      <fieldset className="space-y-2">
+        <Label>{QUESTIONS.q4}</Label>
+        <div className="space-y-1">
+          {Q4_OPTIONS.map((opt) => (
+            <CheckRow key={opt} label={opt} checked={q4.includes(opt)} onChange={() => toggle(q4, setQ4, opt)} />
+          ))}
+        </div>
+      </fieldset>
+
+      {result && !result.ok && <Failure title="만들지 못했습니다" message={result.message ?? ""} />}
+
+      <Button
+        disabled={pending || !q1}
+        onClick={() => {
+          const answers: OntologySurveyAnswers = {
+            q1,
+            q2: [...q2Custom.split(",").map((s) => s.trim()).filter(Boolean), ...q2Checked],
+            q3,
+            q4,
+          };
+          start(async () => {
+            const r = await submitOntologySurveyAction(projectId, answers);
+            setResult(r);
+            if (r.ok) setSubmitted(true);
+          });
+        }}
+      >
+        {pending ? "만드는 중…" : "만들기"}
+      </Button>
+    </div>
   );
 }
