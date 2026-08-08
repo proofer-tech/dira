@@ -64,13 +64,21 @@ export function projectPath(pathname: string, id: string): string {
 export function parentPath(pathname: string): string | null {
   const [, id, rest = ""] = /^\/p\/([^/]+)(\/.*)?$/.exec(pathname) ?? [];
   if (!id) return null; // `/` · 모르는 경로
-  return /^\/(tickets|workers|personas|protocols)(\/|$)/.test(rest) ? `/p/${id}` : null;
+  return /^\/(tickets|workers|personas|protocols|ontology)(\/|$)/.test(rest) ? `/p/${id}` : null;
 }
 
 /** 사용 통계의 화면 enum (DESIGN.md §0-11 이벤트 표 `screen_view`). **`lib/analytics.ts`가
  *  이 타입을 가져다 쓴다** — 정의가 여기 있는 이유는 매핑(`screenOf`)이 `usePathname()`을 받는
  *  클라이언트 코드라서다(저 파일은 `node:fs`를 탄다). */
-export type Screen = "root" | "board" | "ticket" | "workers" | "personas" | "protocols" | "home";
+export type Screen =
+  | "root"
+  | "board"
+  | "ticket"
+  | "workers"
+  | "personas"
+  | "protocols"
+  | "ontology"
+  | "home";
 
 /** 경로 → 화면 enum. **`screen_view`가 보내는 값을 만드는 유일한 곳이다**(§0-11 익명 규칙):
  *  `/p/<project>/tickets/<hash>`는 프로젝트 이름과 티켓 해시를 둘 다 담으므로 URL은 안 나가고
@@ -89,7 +97,9 @@ export function screenOf(pathname: string): Screen | null {
   // 화면이다. **이름은 통계로 안 나간다**(§0-11 익명 규칙): 접힌 enum 하나가 그대로 나간다.
   if (/^\/personas(\/|$)/.test(rest)) return "personas";
   const seg = rest.slice(1);
-  return seg === "workers" || seg === "protocols" || seg === "home" ? seg : null;
+  return seg === "workers" || seg === "protocols" || seg === "ontology" || seg === "home"
+    ? seg
+    : null;
 }
 
 /** **N5의 찾기 바가 이 경로에 서나** (DESIGN.md §데스크톱 앱 N5). 보드·홈은 `⌘F`가 자기 일을

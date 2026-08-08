@@ -51,7 +51,7 @@ export default async function RootLayout({
           **그래서 모든 화면의 `main`이 스크롤러여야 한다** — 안 그러면 넘친 내용이 못 닿는다 */}
       <body className="flex h-full flex-col">
         {/* 툴팁은 잘린 경로 전문·배지 설명에 쓴다. shadcn tooltip이 Provider를 요구한다 */}
-        {/* `screen_view`를 보내는 유일한 자리(§0-11). 화면 7종이 전부 이 아래고 그리는 것이 없다 */}
+        {/* `screen_view`를 보내는 유일한 자리(§0-11). 화면 8종이 전부 이 아래고 그리는 것이 없다 */}
         <ScreenView />
         {/* §0-12 의견 폼. 여는 신호(`dira:feedback`)는 데스크톱 셸의 `Help` 메뉴에서 오고
             **화면 이동 없이 지금 화면 위에** 떠야 해서 자리가 여기다. 닫혀 있으면 안 그린다 */}

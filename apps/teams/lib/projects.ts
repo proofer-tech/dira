@@ -430,6 +430,12 @@ export function usingDefault(config: ProjectConfig, key: string): boolean {
   return config.assumed.includes(key) || config.unresolved.some((u) => u.key === key);
 }
 
+/** 온톨로지 기준 디렉터리 — `protocols`와 달리 워커 재정의를 안 연다. 엔진이 `ONTDIR`을
+ *  `$TICKET_ROOT/ontology`로 하드코딩하므로(`tick.sh:601`) 화면도 그 값 하나만 본다. */
+export function ontologyDir(project: Pick<Project, "root">): string {
+  return path.join(project.root, "ontology");
+}
+
 // ── 목록·전환기용 요약 ──────────────────────────────────────────────────────
 
 /** 프로젝트 목록 행과 전환기 항목이 쓰는 한 줄 요약. 못 읽으면 `connected: false` + 사유 원문이고

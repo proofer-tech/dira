@@ -45,10 +45,11 @@ test("parentPath — 부모가 없는 화면은 `null`이다(§0-7 표 1·2행)"
   assert.equal(parentPath("/p/a/home"), null); // 홈도 부모가 없다 — `Esc`는 무동작이다(§7)
 });
 
-test("parentPath — 프로젝트 화면 넷의 부모는 보드다(§0-7 표 3~6행)", () => {
+test("parentPath — 프로젝트 화면 다섯의 부모는 보드다(§0-7 표 3~6행)", () => {
   assert.equal(parentPath("/p/a/workers"), "/p/a");
   assert.equal(parentPath("/p/a/personas"), "/p/a");
   assert.equal(parentPath("/p/a/protocols"), "/p/a");
+  assert.equal(parentPath("/p/a/ontology"), "/p/a");
   assert.equal(parentPath("/p/a/tickets/fff28e90"), "/p/a");
   assert.equal(parentPath("/p/a/tickets/new"), "/p/a"); // 발행도 보드에서 들어간다(§비주얼 §4)
 });
@@ -68,7 +69,7 @@ test("parentPath — 표에 없는 경로에 부모를 지어내지 않는다", 
 
 /** 사용 통계 화면 enum (DESIGN.md §0-11 이벤트 표 · 익명 규칙). 이 매핑이 틀리면 GA에 **경로가
  *  아니라 잘못된 화면 이름**이 쌓이고, 표 밖 경로에 이름을 지어내면 없는 화면이 뜬다. */
-test("screenOf — 화면 7종이 표 그대로 나온다(§0-11 `screen_view`)", () => {
+test("screenOf — 화면 8종이 표 그대로 나온다(§0-11 `screen_view`)", () => {
   assert.equal(screenOf("/"), "root");
   assert.equal(screenOf("/p/dira"), "board");
   assert.equal(screenOf("/p/dira/"), "board"); // 보드의 정본 URL과 같은 화면이다
@@ -76,6 +77,7 @@ test("screenOf — 화면 7종이 표 그대로 나온다(§0-11 `screen_view`)"
   assert.equal(screenOf("/p/dira/workers"), "workers");
   assert.equal(screenOf("/p/dira/personas"), "personas");
   assert.equal(screenOf("/p/dira/protocols"), "protocols");
+  assert.equal(screenOf("/p/dira/ontology"), "ontology");
   assert.equal(screenOf("/p/dira/home"), "home");
 });
 
@@ -113,11 +115,18 @@ test("projectPath — 페르소나 이름은 옮겨 붙이지 않는다(§5 ④)
 /** N5의 찾기 바가 서는 자리 (DESIGN.md §데스크톱 앱 N5 표 1행). **보드·홈에서 서면 `⌘F`가
  *  두 벌이 된다** — 그 두 화면은 §0-6의 자기 갈래가 같은 키를 먹고 있어서 `preventDefault`가
  *  둘 다 걸리고 사람이 누른 키가 검색창 포커스와 이 바 열기를 동시에 한다. */
-test("hasFindBar — 보드·홈만 빼고 다섯 화면에 선다(§데스크톱 앱 N5)", () => {
+test("hasFindBar — 보드·홈만 빼고 여섯 화면에 선다(§데스크톱 앱 N5)", () => {
   assert.equal(hasFindBar("/p/dira"), false); // 보드 — `board-ui.tsx`가 먹는다
   assert.equal(hasFindBar("/p/dira/"), false); // 보드의 정본 URL과 같은 화면이다
   assert.equal(hasFindBar("/p/dira/home"), false); // 홈 — 자기 `<FindBar>`가 이미 있다(§7)
-  for (const p of ["/", "/p/dira/workers", "/p/dira/personas", "/p/dira/protocols", "/p/dira/tickets/fff28e90"])
+  for (const p of [
+    "/",
+    "/p/dira/workers",
+    "/p/dira/personas",
+    "/p/dira/protocols",
+    "/p/dira/ontology",
+    "/p/dira/tickets/fff28e90",
+  ])
     assert.equal(hasFindBar(p), true, p);
   assert.equal(hasFindBar("/nosuchpage"), false); // 표 밖에는 안 선다(404)
 });

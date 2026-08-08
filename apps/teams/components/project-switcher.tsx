@@ -41,7 +41,7 @@ import { isTyping, useHotkey, useKeymap } from "@/components/keymap-provider";
  *
  *  ponytail: 훅이 없는 정적 마크업인데 이 파일의 `"use client"`에 얹혀 클라이언트 번들로 간다.
  *  새 파일을 늘리지 않는 쪽을 택했다(AGENTS.md §구조). 마크업 몇 백 바이트라 재는 값이 아니다. */
-/** `screen_view` 하나 (DESIGN.md §0-11 이벤트 표). 루트 레이아웃에 한 번 서서 **화면 7종 전부**를
+/** `screen_view` 하나 (DESIGN.md §0-11 이벤트 표). 루트 레이아웃에 한 번 서서 **화면 8종 전부**를
  *  덮는다 — 페이지마다 심으면 enum이 7곳에 흩어지고 한 곳이 조용히 빠진다.
  *
  *  **URL이 아니라 enum 하나가 나간다**(익명 규칙). 접는 것은 `screenOf` 하나고 표 밖의 경로
@@ -313,7 +313,7 @@ export function ProjectSwitcher({
   );
 }
 
-/** 내비 — 목적지 4개(§4 화면 진입 구조). 티켓 발행·상세는 보드에서 들어간다.
+/** 내비 — 목적지 5개(§4 화면 진입 구조). 티켓 발행·상세는 보드에서 들어간다.
  *  연결 안 됨 프로젝트에서도 링크를 죽이지 않는다: 어느 링크를 눌러도 같은 사유 화면이 나오므로
  *  거짓말이 아니고, `aria-disabled`로 죽은 척하는 것보다 정직하다(§4-1).
  *
@@ -324,6 +324,7 @@ const NAV = [
   { seg: "", labelKey: "shell.nav.board" },
   { seg: "/personas", labelKey: "shell.nav.personas" },
   { seg: "/protocols", labelKey: "shell.nav.protocols" },
+  { seg: "/ontology", labelKey: "shell.nav.ontology" },
   { seg: "/workers", labelKey: "shell.nav.workers" },
 ];
 
