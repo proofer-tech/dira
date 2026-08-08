@@ -5,7 +5,7 @@
  *  `protocols/actions.ts`와 같은 분담: fs는 `lib/protocols.ts`가, 여기는 프로젝트 id → 기준
  *  디렉터리 해석과 Error 직렬화만 한다. 기준은 `ontologyDir()` 하나뿐이다(재정의를 안 연다). */
 import { revalidatePath } from "next/cache";
-import { buildOntologySeed, type OntologySurveyAnswers } from "@/lib/ontology-seed";
+import { buildOntologySeedFiles, type OntologySurveyAnswers } from "@/lib/ontology-seed";
 import { createFile, deleteFile, renameFile, saveFile } from "@/lib/protocols";
 import { getProject, ontologyDir } from "@/lib/projects";
 
@@ -94,7 +94,12 @@ export async function submitOntologySurveyAction(
   }
 }
 
+/** `_ontology/SCHEMA.md`(지도) + 타입·관계마다 정의 파일 + `templates/<타입>.md`까지 한 번에
+ *  쓴다(§5-3 §생성·§형식이 vault 레퍼런스로 간다 §①②). 파일마다 `createFile`(O_EXCL) 다음
+ *  `saveFile`이다 — 순서를 지키는 이유는 `createFile`이 중간 디렉터리를 만들어 주기 때문이다. */
 async function writeSeed(base: string, answers: OntologySurveyAnswers): Promise<void> {
-  const rel = await createFile(base, "SCHEMA.md");
-  await saveFile(base, rel, buildOntologySeed(answers));
+  for (const file of buildOntologySeedFiles(answers)) {
+    const rel = await createFile(base, file.rel);
+    await saveFile(base, rel, file.text);
+  }
 }
