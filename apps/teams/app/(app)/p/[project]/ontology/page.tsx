@@ -33,7 +33,7 @@ async function loadMetrics(base: string, tree: ProtocolEntry[]): Promise<Ontolog
   const basename = (rel: string) => rel.split("/").at(-1) ?? rel;
   const text = async (rel: string) => (await readTextFile(base, rel)).text ?? "";
 
-  const schemaEntry = tree.find((e) => !e.isDir && e.rel === "SCHEMA.md");
+  const schemaEntry = tree.find((e) => !e.isDir && e.rel === "_ontology/SCHEMA.md");
   const objectEntries = tree.filter((e) => !e.isDir && e.rel.startsWith("objects/") && e.rel.endsWith(".md"));
   const viewEntries = tree.filter((e) => !e.isDir && e.rel.startsWith("object-views/") && e.rel.endsWith(".md"));
   const logEntries = tree.filter((e) => !e.isDir && e.rel.startsWith("action-log/") && e.rel.endsWith(".md"));

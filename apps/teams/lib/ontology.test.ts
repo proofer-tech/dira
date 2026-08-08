@@ -1,6 +1,18 @@
 import { test } from "node:test";
 import assert from "node:assert";
+import { mkdtemp, mkdir, writeFile, rm, readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { computeOntologyMetrics } from "./ontology.ts";
+import { listTree, readTextFile } from "./protocols.ts";
+
+// JSX가 있는 page.tsx는 node --test로 통째로 import할 수 없다 — 여기선 실제 소스에서
+// loadMetrics의 스키마 셀렉터 줄만 떼어 검사한다. page.tsx가 다시 "SCHEMA.md"로 되돌아가면
+// (P219-10 이전으로 회귀) 이 테스트가 문자열 불일치로 먼저 잡는다.
+const ONTOLOGY_PAGE_TSX = fileURLToPath(
+  new URL("../app/(app)/p/[project]/ontology/page.tsx", import.meta.url),
+);
 
 const SCHEMA = `## 객체 타입
 
@@ -159,4 +171,39 @@ test("객체 뷰 — [[링크]]가 객체·다른 뷰로 닿으면 통과, 안 �
   assert.doesNotMatch(joined, /철수/);
   assert.doesNotMatch(joined, /짝 뷰/);
   assert.doesNotMatch(joined, /## 절 사용.*모음/);
+});
+
+test("스키마 파일 경로 — page.tsx의 loadMetrics가 찾는 rel은 _ontology/SCHEMA.md다(P219-10 이후)", async () => {
+  const pageSource = await readFile(ONTOLOGY_PAGE_TSX, "utf8");
+  const m = pageSource.match(/schemaEntry = tree\.find\(\(e\) => !e\.isDir && e\.rel === "([^"]+)"\)/);
+  assert.ok(m, "loadMetrics의 schemaEntry 셀렉터 줄을 못 찾았다 — page.tsx가 바뀌었나?");
+  assert.equal(m[1], "_ontology/SCHEMA.md");
+
+  const base = await mkdtemp(path.join(tmpdir(), "ontology-schema-path-"));
+  try {
+    await mkdir(path.join(base, "_ontology"), { recursive: true });
+    await writeFile(path.join(base, "_ontology", "SCHEMA.md"), SCHEMA, "utf8");
+    await mkdir(path.join(base, "objects", "미정의타입"), { recursive: true });
+    await writeFile(path.join(base, "objects", "미정의타입", "유령.md"), "유령이다.\n", "utf8");
+
+    const tree = await listTree(base);
+
+    // 옛 경로("SCHEMA.md")로는 못 찾는다 — 고치기 전 증상 재현.
+    assert.equal(tree.find((e) => !e.isDir && e.rel === "SCHEMA.md"), undefined);
+
+    // 지금 page.tsx의 loadMetrics가 쓰는 경로.
+    const schemaEntry = tree.find((e) => !e.isDir && e.rel === "_ontology/SCHEMA.md");
+    assert.ok(schemaEntry, "_ontology/SCHEMA.md를 트리에서 찾아야 한다");
+    const schemaText = (await readTextFile(base, schemaEntry.rel)).text ?? "";
+    assert.notEqual(schemaText, "");
+
+    const objectEntries = tree.filter((e) => !e.isDir && e.rel.startsWith("objects/"));
+    const objects = await Promise.all(
+      objectEntries.map(async (e) => ({ rel: e.rel, text: (await readTextFile(base, e.rel)).text ?? "" })),
+    );
+    const m = computeOntologyMetrics({ schemaText, objects, actionLogs: [] });
+    assert.match(m.schemaViolations.join("\n"), /미정의 타입.*유령/);
+  } finally {
+    await rm(base, { recursive: true, force: true });
+  }
 });
