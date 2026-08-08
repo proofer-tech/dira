@@ -9,6 +9,15 @@
 
 const NORMATIVE = /(해야 한다|하는 게 낫다|하지 않는다|하지 말|권장한다|바람직하다|해야만|짚고 넘어가)/;
 
+/** 문장 경계를 `.!?` 뒤 공백·문자열 끝으로 어림한다 — 규범 문장 검출과 같은 정밀도(§5-3 §형식
+ *  §④). 파일 경로·버전 번호 안의 마침표(`tick.sh`·`4.3.0`)는 뒤에 공백이 안 붙어 안 걸린다. */
+const SENTENCE_END = /[.!?](?=\s|$)/g;
+
+function sentenceCount(prose: string[]): number {
+  const text = prose.join(" ").trim();
+  return text ? (text.match(SENTENCE_END) ?? []).length : 0;
+}
+
 function splitOnce(s: string, sep: string): [string, string] {
   const i = s.indexOf(sep);
   return i < 0 ? [s, ""] : [s.slice(0, i), s.slice(i + sep.length)];
@@ -217,6 +226,9 @@ export type OntologyMetrics = {
   hiddenEdges: Counted;
   /** 서술의 판단·교훈 어미 검출 — 건강 0건 */
   normativeSentences: Pick<Counted, "count" | "items">;
+  /** 서술이 한 문장뿐인 객체 — 판정이 아니라 표본 검토 대상을 좁히는 용도(§5-3 §형식 §④,
+   *  규범 문장 검출과 같은 성격). 문장 경계는 `.!?` 뒤 공백·끝을 어림한다 — 정밀하지 않다 */
+  singleSentenceProse: Counted;
   /** 속성 2개 미만 객체 — 낮을수록 건강 */
   shells: Counted;
   /** 관계 0개(들고나는 것 다 포함) 객체 — 낮을수록 건강 */
@@ -271,6 +283,7 @@ export function computeOntologyMetrics(input: OntologyInput): OntologyMetrics {
   const violations: string[] = [];
   const hiddenItems: string[] = [];
   const normativeItems: string[] = [];
+  const singleSentenceItems: string[] = [];
   const shellItems: string[] = [];
   const isolatedItems: string[] = [];
   let relationCount = 0;
@@ -321,6 +334,8 @@ export function computeOntologyMetrics(input: OntologyInput): OntologyMetrics {
       }
     }
 
+    if (sentenceCount(p.prose) <= 1) singleSentenceItems.push(`한 문장: ${p.rel}`);
+
     const have = [...p.props, ...p.rels.map(([r]) => r)];
     const miss = (required.get(p.type) ?? []).filter((r) => !have.some((h) => h === r || h.startsWith(r)));
     if (miss.length > 0) violations.push(`필수 속성 누락: ${p.rel} (${p.type}) -> ${miss.join(", ")}`);
@@ -346,6 +361,7 @@ export function computeOntologyMetrics(input: OntologyInput): OntologyMetrics {
     proseLinkCount,
     hiddenEdges: { count: hiddenItems.length, ratio: hiddenItems.length / pl, items: hiddenItems },
     normativeSentences: { count: normativeItems.length, items: normativeItems },
+    singleSentenceProse: { count: singleSentenceItems.length, ratio: singleSentenceItems.length / n, items: singleSentenceItems },
     shells: { count: shellItems.length, ratio: shellItems.length / n, items: shellItems },
     isolated: { count: isolatedItems.length, ratio: isolatedItems.length / n, items: isolatedItems },
     schemaViolations: violations,

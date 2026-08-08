@@ -28,12 +28,33 @@ const SCHEMA = `## 객체 타입
 | 안다 | 사람 → 사람 |
 `;
 
+// 프런트매터 객체 한 장을 조립한다 — `props`는 `- 키: 값` 평평한 줄, `rels`는 `links:` 아래
+// `<관계타입>: [<대상>, ...]`. 테스트마다 같은 모양을 손으로 반복하지 않으려는 헬퍼일 뿐,
+// 판정 자체는 `lib/ontology.ts`의 `parseObject`가 한다.
+function obj(
+  type: string,
+  name: string,
+  prose: string,
+  props: Record<string, string> = {},
+  rels: Record<string, string[]> = {},
+) {
+  const lines = [`type: ${type}`, `name: ${name}`, ...Object.entries(props).map(([k, v]) => `${k}: ${v}`)];
+  if (Object.keys(rels).length > 0) {
+    lines.push("links:");
+    for (const [rel, targets] of Object.entries(rels)) {
+      lines.push(`  ${rel}:`);
+      for (const t of targets) lines.push(`    - ${t}: "[[${t}]]"`);
+    }
+  }
+  return `---\n${lines.join("\n")}\n---\n\n# ${name}\n\n${prose}\n`;
+}
+
 test("숨은 간선 — 서술 링크가 관계 줄에 대응 없으면 잡힌다", () => {
   const m = computeOntologyMetrics({
     schemaText: SCHEMA,
     objects: [
-      { rel: "objects/사람/철수.md", text: "철수는 [[영희]]를 언급한다.\n- 이름: 철수\n- 나이: 20\n" },
-      { rel: "objects/사람/영희.md", text: "영희다.\n- 이름: 영희\n- 나이: 22\n" },
+      { rel: "objects/사람/철수.md", text: obj("사람", "철수", "철수는 [[영희]]를 언급한다.", { 이름: "철수", 나이: "20" }) },
+      { rel: "objects/사람/영희.md", text: obj("사람", "영희", "영희다.", { 이름: "영희", 나이: "22" }) },
     ],
     actionLogs: [],
   });
@@ -45,8 +66,11 @@ test("숨은 간선 — 상대가 나를 관계로 가리키면 역방향으로 
   const m = computeOntologyMetrics({
     schemaText: SCHEMA,
     objects: [
-      { rel: "objects/사람/철수.md", text: "철수는 [[영희]]를 언급한다.\n- 이름: 철수\n- 나이: 20\n" },
-      { rel: "objects/사람/영희.md", text: "영희다.\n- 이름: 영희\n- 나이: 22\n- 안다: [[철수]]\n" },
+      { rel: "objects/사람/철수.md", text: obj("사람", "철수", "철수는 [[영희]]를 언급한다.", { 이름: "철수", 나이: "20" }) },
+      {
+        rel: "objects/사람/영희.md",
+        text: obj("사람", "영희", "영희다.", { 이름: "영희", 나이: "22" }, { 안다: ["철수"] }),
+      },
     ],
     actionLogs: [],
   });
@@ -58,12 +82,15 @@ test("스키마 위반 — 미정의 타입 · 미정의 관계 · 댕글링 · 
     schemaText: SCHEMA,
     objects: [
       // 미정의 타입 + 미정의 관계 + 댕글링(허깨비 없음)
-      { rel: "objects/미정의타입/유령.md", text: "유령이다.\n- 미정의관계: [[허깨비]]\n" },
+      { rel: "objects/미정의타입/유령.md", text: obj("미정의타입", "유령", "유령이다.", {}, { 미정의관계: ["허깨비"] }) },
       // 정의역/치역 위반: 안다는 사람→사람인데 대상이 동물
-      { rel: "objects/사람/철수.md", text: "철수다.\n- 이름: 철수\n- 나이: 20\n- 안다: [[멍멍이]]\n" },
-      { rel: "objects/동물/멍멍이.md", text: "멍멍이다.\n" },
+      {
+        rel: "objects/사람/철수.md",
+        text: obj("사람", "철수", "철수다.", { 이름: "철수", 나이: "20" }, { 안다: ["멍멍이"] }),
+      },
+      { rel: "objects/동물/멍멍이.md", text: obj("동물", "멍멍이", "멍멍이다.") },
       // 필수 속성 누락(이름·나이 둘 다 없음)
-      { rel: "objects/사람/짱구.md", text: "짱구다.\n" },
+      { rel: "objects/사람/짱구.md", text: obj("사람", "짱구", "짱구다.") },
     ],
     actionLogs: [],
   });
@@ -95,11 +122,11 @@ test("정의역·치역 판정 — 관계 표 셀 끝의 ' — 설명' 꼬리를
     schemaText: SCHEMA_TAIL,
     objects: [
       // 돌린다: 치역이 단일 항목 + 꼬리 — 꼬리를 안 떼면 "엔진 파일" != "엔진 파일 — ..."로 오탐
-      { rel: "objects/워커/w1.md", text: "워커다.\n- 돌린다: [[e1]]\n" },
+      { rel: "objects/워커/w1.md", text: obj("워커", "w1", "워커다.", {}, { 돌린다: ["e1"] }) },
       // 불러온다: 치역이 'A · B — 꼬리' — 안 떼면 마지막 항목 "엔진 파일"만 꼬리를 물어 오탐
-      { rel: "objects/GUI 모듈/g1.md", text: "GUI 모듈이다.\n- 불러온다: [[e2]]\n" },
-      { rel: "objects/엔진 파일/e1.md", text: "엔진 파일이다.\n" },
-      { rel: "objects/엔진 파일/e2.md", text: "엔진 파일이다.\n" },
+      { rel: "objects/GUI 모듈/g1.md", text: obj("GUI 모듈", "g1", "GUI 모듈이다.", {}, { 불러온다: ["e2"] }) },
+      { rel: "objects/엔진 파일/e1.md", text: obj("엔진 파일", "e1", "엔진 파일이다.") },
+      { rel: "objects/엔진 파일/e2.md", text: obj("엔진 파일", "e2", "엔진 파일이다.") },
     ],
     actionLogs: [],
   });
@@ -110,8 +137,12 @@ test("껍데기 · 고립", () => {
   const m = computeOntologyMetrics({
     schemaText: SCHEMA,
     objects: [
-      { rel: "objects/사람/철수.md", text: "철수다.\n- 이름: 철수\n" }, // 속성 1개 = 껍데기, 관계 0 + 들어오는 관계 0 = 고립
-      { rel: "objects/사람/영희.md", text: "영희다.\n- 이름: 영희\n- 나이: 22\n- 안다: [[철수]]\n" },
+      // 속성 1개 = 껍데기, 관계 0 + 들어오는 관계 0 = 고립
+      { rel: "objects/사람/철수.md", text: obj("사람", "철수", "철수다.", { 이름: "철수" }) },
+      {
+        rel: "objects/사람/영희.md",
+        text: obj("사람", "영희", "영희다.", { 이름: "영희", 나이: "22" }, { 안다: ["철수"] }),
+      },
     ],
     actionLogs: [],
   });
@@ -123,13 +154,32 @@ test("역링크(backlinks)", () => {
   const m = computeOntologyMetrics({
     schemaText: SCHEMA,
     objects: [
-      { rel: "objects/사람/철수.md", text: "철수다.\n- 이름: 철수\n- 나이: 20\n" },
-      { rel: "objects/사람/영희.md", text: "영희다.\n- 이름: 영희\n- 나이: 22\n- 안다: [[철수]]\n" },
+      { rel: "objects/사람/철수.md", text: obj("사람", "철수", "철수다.", { 이름: "철수", 나이: "20" }) },
+      {
+        rel: "objects/사람/영희.md",
+        text: obj("사람", "영희", "영희다.", { 이름: "영희", 나이: "22" }, { 안다: ["철수"] }),
+      },
     ],
     actionLogs: [],
   });
   assert.deepEqual(m.backlinks["철수"], ["영희"]);
   assert.deepEqual(m.backlinks["영희"], []);
+});
+
+test("서술 한 문장 비율 — 문장 하나뿐인 객체를 표본 검토 대상으로 좁힌다(§5-3 §형식 §④)", () => {
+  const m = computeOntologyMetrics({
+    schemaText: SCHEMA,
+    objects: [
+      { rel: "objects/사람/철수.md", text: obj("사람", "철수", "철수다.", { 이름: "철수", 나이: "20" }) },
+      {
+        rel: "objects/사람/영희.md",
+        text: obj("사람", "영희", "영희는 철수와 안다. 최근에 같이 일했다.", { 이름: "영희", 나이: "22" }),
+      },
+    ],
+    actionLogs: [],
+  });
+  assert.equal(m.singleSentenceProse.count, 1);
+  assert.match(m.singleSentenceProse.items[0], /철수/);
 });
 
 test("action-log — 빈손 비율 · 새객체/스키마개정 추이 · 마지막 반영 시각", () => {
@@ -155,7 +205,7 @@ test("action-log — 빈손 비율 · 새객체/스키마개정 추이 · 마지
 test("객체 뷰 — [[링크]]가 객체·다른 뷰로 닿으면 통과, 안 닿으면 댕글링(기존 표시 재사용)하고 `##` 절은 안 걸린다", () => {
   const m = computeOntologyMetrics({
     schemaText: SCHEMA,
-    objects: [{ rel: "objects/사람/철수.md", text: "철수다.\n- 이름: 철수\n- 나이: 20\n" }],
+    objects: [{ rel: "objects/사람/철수.md", text: obj("사람", "철수", "철수다.", { 이름: "철수", 나이: "20" }) }],
     views: [
       // 철수(객체)·짝 뷰(다른 뷰) 둘 다 닿아야 하고, 허깨비는 댕글링, `##` 절이 있어도 위반 없음
       {

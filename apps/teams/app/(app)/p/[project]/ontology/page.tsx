@@ -213,6 +213,10 @@ function OntologyMetricsPanel({ metrics: m }: { metrics: OntologyMetrics }) {
           value={`${m.normativeSentences.count}건`}
           alert={m.normativeSentences.count > 0}
         />
+        <MetricStat
+          label="서술 한 문장"
+          value={`${m.singleSentenceProse.count}건 (${pct(m.singleSentenceProse.ratio)})`}
+        />
         <MetricStat label="껍데기" value={`${m.shells.count}건 (${pct(m.shells.ratio)})`} />
         <MetricStat label="고립" value={`${m.isolated.count}건 (${pct(m.isolated.ratio)})`} />
         <MetricStat
