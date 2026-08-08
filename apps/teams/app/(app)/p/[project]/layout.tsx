@@ -490,7 +490,7 @@ function NotificationItems({
                 >
                   {t.hash}
                 </Link>
-                <StatusBadge status="assigned" />
+                <StatusBadge status="assigned" locale={locale} />
               </span>
               {/* 새 서버 액션이 아니다 — 티켓 상세가 쓰는 그 컴포넌트다(제약 2: claim/release를
                   TS로 다시 구현하지 않는다). 성공 `Alert`·실패 `<Failure>`도 그 안에 이미 있고
@@ -542,7 +542,7 @@ function NotificationItems({
               </Link>
               {/* 경과일은 `<StatusBadge>`가 이미 그린다(`daysSince(mtime)`) — 여기서 새로
                   계산하지 않는다. 0일이면 라벨이 `답변 대기` 하나고 그 판단도 배지 안에 있다 */}
-              <StatusBadge status="awaiting" days={daysSince(a.mtime)} />
+              <StatusBadge status="awaiting" days={daysSince(a.mtime)} locale={locale} />
               {/* **링크지 버튼이 아니다** — 답변 폼은 `textarea` 하나가 아니라 `O_EXCL`로
                   파일을 만드는 폼이고, 448px 팝오버에 두 벌째를 그리면 같은 서버 액션의
                   진입점이 둘이 된다(§0-10 ④). 그래서 그 폼이 이미 사는 자리로 보낸다.

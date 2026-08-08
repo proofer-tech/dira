@@ -12,7 +12,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Check, ChevronsUpDown, Settings2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { StatusBadge } from "@/components/status-badge";
-import { useT } from "@/components/language-provider";
+import { useLocale, useT } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -197,6 +197,7 @@ export function ProjectSwitcher({
 }) {
   const router = useRouter();
   const t = useT();
+  const locale = useLocale();
   const pathname = usePathname(); // searchParams가 안 실린다 = 필터·검색을 공짜로 버린다
   const [open, setOpen] = useState(false);
   // 0건 문구가 검색어를 되읽어야 해서(§6) 입력을 여기서 잡는다 — cmdk 내부 상태는 읽을 길이 없다.
@@ -242,7 +243,7 @@ export function ProjectSwitcher({
             className="ml-auto h-8 max-w-md gap-2"
           >
             <span className="truncate text-sm text-foreground">{current.name}</span>
-            {!current.connected && <StatusBadge status="disconnected" />}
+            {!current.connected && <StatusBadge status="disconnected" locale={locale} />}
             <span className="truncate font-mono text-xs text-muted-foreground group-aria-expanded/button:text-foreground">
               {current.shortRoot}
             </span>
@@ -289,7 +290,7 @@ export function ProjectSwitcher({
                         {p.running > 0 && ` · running ${p.running}`}
                       </span>
                     ) : (
-                      <StatusBadge status="disconnected" className="shrink-0" />
+                      <StatusBadge status="disconnected" className="shrink-0" locale={locale} />
                     )}
                   </span>
                   <span className="truncate font-mono text-xs text-muted-foreground group-data-selected/command-item:text-foreground">

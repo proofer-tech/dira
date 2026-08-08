@@ -1,5 +1,3 @@
-"use client";
-
 /** 상태 표현의 **유일한 출처** (DESIGN.md §비주얼 디렉션 §2 · §4-1 · §5 커스텀 5개).
  *
  *  shadcn Badge 변종 4개로는 상태 11개(티켓 5 · 워커 4 · 연결 2)를 담지 못한다. 색·아이콘·라벨을
@@ -8,11 +6,11 @@
  *
  *  색만으로 의미를 전달하지 않는다: 셋(색·아이콘·텍스트)이 항상 같이 나온다.
  *
- *  **`"use client"`인 이유**(§0-16 §발행 §묶음 표 2, `dd97c69c`): 라벨·사유가 로케일을 타서
- *  `useLocale()`을 부른다. 이미 클라이언트 컴포넌트(`project-switcher.tsx`)가 이 배지를 import해
- *  번들에 들어가 있던 것을 이 파일 자신에 못박는 것뿐이다 — 서버 컴포넌트(셸·보드·상세)는
- *  종전대로 이 컴포넌트를 그냥 JSX에 놓으면 된다(클라이언트 컴포넌트를 서버 컴포넌트가 렌더하는
- *  것은 표준 배선이다). */
+ *  **`locale`을 프롭으로 받는다**(§0-16 §발행 §묶음 표 2, `dd97c69c`) — `"use client"`를 안
+ *  붙인다. 이 컴포넌트는 서버(셸·보드·상세·워커)와 클라이언트(`project-switcher.tsx`) 양쪽에서
+ *  쓰이므로 `useLocale()`로 고정하지 않는다(developer memory "i18n 서버 문자열은 로케일이
+ *  없다" — 한쪽은 `readLanguage()`, 한쪽은 `useLocale()`로 호출부가 채운다). 아직 이 프롭을 안
+ *  넘기는 자리(다음 묶음 몫인 화면들)는 `ko` 기본값으로 떨어져 종전과 같은 화면이 선다. */
 import Link from "next/link";
 import {
   Check,
@@ -32,7 +30,6 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { useLocale } from "@/components/language-provider";
 import type { DepKind } from "@/lib/queue";
 import { DEFAULT_LOCALE, t, type Locale } from "@/lib/i18n";
 import { elapsedSuffix } from "@/lib/urls";
@@ -131,12 +128,13 @@ export function StatusBadge({
   status,
   days,
   className,
+  locale = DEFAULT_LOCALE,
 }: {
   status: Status;
   days?: number;
   className?: string;
+  locale?: Locale;
 }) {
-  const locale = useLocale();
   const { icon: Icon, variant, tint, hintKey } = STATUS[status];
   return (
     <Badge
@@ -161,14 +159,15 @@ export function DepBadge({
   kind,
   href,
   hint,
+  locale = DEFAULT_LOCALE,
 }: {
   hash: string;
   kind: DepKind;
   href?: string;
   /** 사유 문구 덮어쓰기. `req:`(출처)는 잠금이 아니라서 "영구 대기"가 거짓말이다 — 그 자리용. */
   hint?: string;
+  locale?: Locale;
 }) {
-  const locale = useLocale();
   const spec = {
     met: { icon: Check, tint: undefined, hintKey: "dep.hint.met" },
     unmet: { icon: Lock, tint: BLOCKED, hintKey: "dep.hint.unmet" },
