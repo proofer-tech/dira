@@ -315,6 +315,9 @@ case "$CMD" in
       echo "강제 할당 해제: $H — 답변 대기로 잠갔다(답을 쓸 때까지 아무 워커도 안 가져간다)"
       exit 0
     fi
+    # 결정 9 -- 세션이 `## 블록`을 남기고 스스로 unassign한 경로. clear+release **앞에서** 조건부로
+    # 잠근다(신선한 블록 + 미충족 dep 0). 열리자마자 잠긴 채로 서야 하므로 순서가 계약이다.
+    if ASK=$(python3 "$PY" askhuman "$P" --if-blocked); then [ -n "$ASK" ] && log "$ASK"; fi
     python3 "$PY" clear "$P" || exit 1
     RP=$(python3 "$PY" release "$P") || exit 1
     [ "$RP" != "$P" ] && echo "백로그 복귀: $(basename "$RP")"

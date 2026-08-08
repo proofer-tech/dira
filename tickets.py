@@ -9,7 +9,8 @@ list   <루트>          열린 티켓 전체 상태 표
 find   <루트> <hash>   해시로 티켓 경로 찾기
 reap   <루트>          세션이 죽은 진행중 티켓을 백로그로 회수 (스테일 수거)
 handclaim <path> [owner]  대화형 세션이 손으로 잡기. claim + pid/claimed_at/transcript 기록
-askhuman <path>        사람이 강제 중단한 티켓을 답변 대기로 잠그기 (deps + awaiting + `## 질문 n`)
+askhuman <path> [--if-blocked]  답변 대기로 잠그기 (deps + awaiting + `## 질문 n`).
+                       --if-blocked면 신선한 블록 + 미충족 dep 0일 때만 잠그고, 아니면 조용히 끝남
 
 큐는 루트 한 곳이고 하위 디렉터리는 없다. 디렉터리가 뜻하던 것은 전부 frontmatter로 갔다 --
 누가 수행하는지는 `persona:`(없으면 페르소나 없는 평범한 에이전트), 성격은 `kind:`.
@@ -688,6 +689,15 @@ def ask_human(path, h, attempts, why, blocked=False, killed=False):
     return "ASK {} awaiting={} - {}, 답변 요청으로 전환".format(h, a, cause)
 
 
+def fresh_block(path):
+    """본문의 마지막 `##` 절이 `블록`인지 -- 세션이 벽을 보고 "이건 사람이 푼다"고 판정했다는
+    신선 판정(DESIGN.md 결정 7). 묵은 블록 뒤에는 ask_human이 붙인 `## 질문 n`이 반드시 오므로
+    마지막 절 하나로 갈린다. 빗나가면 호출자의 현행 동작으로 떨어질 뿐이라 티켓을 잃지 않는다."""
+    lines, end = read_fm(path)[1:]
+    heads = [l for l in lines[end:] if re.match(r"^##\s", nfc(l))]
+    return bool(heads) and bool(re.match(r"^##\s*블록", nfc(heads[-1])))
+
+
 def reclaim(path, fm, why):
     """attempts 상한까지 백로그로 복귀. 상한을 넘거나 신선한 블록이 있으면 답변 요청으로 올린다."""
     h = ticket_hash(path, fm)
@@ -700,13 +710,7 @@ def reclaim(path, fm, why):
         path = release(path)
     except (SystemExit, OSError) as e:
         return "REAP-FAIL {} {}".format(h, e)
-    # 본문의 마지막 `##` 절이 `블록`이면 세션이 벽을 보고 "이건 사람이 푼다"고 판정한 것이라
-    # 재실행이 얻는 게 없다 -- attempts와 무관하게 사람에게 올린다(DESIGN.md 결정 7).
-    # 묵은 블록 뒤에는 ask_human이 붙인 `## 질문 n`이 반드시 오므로 마지막 절 하나로 갈린다.
-    # 빗나가면 현행 동작(자동 회수 2회)으로 떨어질 뿐이라 티켓을 잃지 않는다.
-    lines, end = read_fm(path)[1:]
-    heads = [l for l in lines[end:] if re.match(r"^##\s", nfc(l))]
-    blocked = bool(heads) and bool(re.match(r"^##\s*블록", nfc(heads[-1])))
+    blocked = fresh_block(path)
     if attempts > REAP_MAX_ATTEMPTS or blocked:
         return ask_human(path, h, attempts, why, blocked)
     upd = {"attempts": attempts}
@@ -925,10 +929,20 @@ def main():
         return
 
     if cmd == "askhuman":
+        path = sys.argv[2]
+        if len(sys.argv) > 3 and sys.argv[3] == "--if-blocked":
+            # 결정 9 -- `unassign`의 플래그 없는 종료 경로에서만 부른다. 마지막 `##` 절이
+            # 신선한 블록이고 deps가 전부 충족일 때만 잠근다(왕복 절차의 `## 질문 n` 종료나
+            # 진짜 선행 dep가 남은 정상 열림을 죽이지 않는다). 조건이 거짓이면 조용히 끝낸다.
+            fm, lines, end = read_fm(path)
+            troot = os.path.dirname(os.path.dirname(path))
+            if fresh_block(path) and not deps_unmet(troot, deps_of(lines, end)):
+                print(ask_human(path, ticket_hash(path, fm), 0,
+                                "세션이 스스로 블록 후 unassign", blocked=True))
+            return
         # 사람이 강제 중단한 티켓을 답변 대기로 잠근다(DESIGN.md §2-5 §개정). tick.sh가
         # `kill -TERM` **직전에** 부른다 - 잠금(deps·awaiting)은 부모의 clear+release를
         # 지나서 살아남으므로, 티켓은 열리자마자 잠긴 채로 선다(창이 0이다).
-        path = sys.argv[2]
         print(ask_human(path, ticket_hash(path, read_fm(path)[0]), 0,
                         "사람이 강제 중단", killed=True))
         return

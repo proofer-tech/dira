@@ -5,6 +5,7 @@ import sys
 import time
 import shutil
 import tempfile
+import subprocess
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import tickets as T
@@ -132,7 +133,49 @@ try:
     assert "REAP-FAIL hhhh8888" in T.reclaim(ph, hfm, "진 쪽"), "H: 진 쪽이 조용히 성공했다"
     assert not os.path.exists(ph), "H: 진 쪽이 .wip을 되살렸다 - 주인 없는 유령이 남는다"
 
-    print("PASS 10/10")
+    # K) 결정 9 - `askhuman <path> --if-blocked`: 신선한 블록 ∧ deps_unmet==[]일 때만 잠근다.
+    #    `unassign`의 플래그 없는 종료 경로가 clear+release **앞에서** 부르는 바로 그 CLI다.
+    py = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tickets.py")
+
+    def if_blocked(path):
+        r = subprocess.run([sys.executable, py, "askhuman", path, "--if-blocked"],
+                            capture_output=True, text=True, timeout=30)
+        assert r.returncode == 0, "askhuman --if-blocked 실패: " + r.stderr
+        return r.stdout.strip()
+
+    kdep = os.path.join(ws, "tickets", "kdep0000.done.md")
+    with open(kdep, "w", encoding="utf-8") as f:
+        f.write("---\nticket: kdep0000\nkind: answer\n---\n\n## 답변 1\n\n됐다.\n")
+
+    # K1) 마지막 절이 `## 블록` + deps 전부 `.done` -> 잠긴다, 그리고 열린 뒤에도 디스패치 후보가 아니다
+    pk1 = mk(ws, "kkkk0001", ["deps: [kdep0000]"],
+             body="## 목표\n테스트\n\n## 블록\n결정해주세요.\n")
+    out = if_blocked(pk1)
+    assert out.startswith("ASK kkkk0001 awaiting="), "K1: 블록+충족 deps인데 안 잠겼다: " + out
+    k1fm, k1lines, k1end = T.read_fm(pk1)
+    assert len(k1fm["awaiting"].strip()) == 8, "K1: awaiting 미기록 " + repr(k1fm.get("awaiting"))
+    assert "kdep0000" in T.deps_of(k1lines, k1end), "K1: 기존 dep 유실"
+    k1open = T.release(pk1)          # tick.sh는 이 잠금 뒤에 clear+release로 연다(순서 계약)
+    assert k1open.endswith("kkkk0001.md") and not k1open.endswith(".wip.md"), \
+        "K1: 열리지 않았다: " + k1open
+    k1row = [r for r in T.scan(ws) if r["hash"] == "kkkk0001"][0]
+    assert k1row["unmet"] and not k1row["assigned"], "K1: 잠겼는데 디스패치 후보로 남았다"
+
+    # K2) 마지막 절이 `## 질문 n`(PM 왕복 모양) -> 안 잠긴다
+    pk2 = mk(ws, "kkkk0002", [],
+             body="## 목표\n테스트\n\n## 블록\n결정해주세요.\n\n## 질문 1\n\n답해주세요.\n")
+    out = if_blocked(pk2)
+    assert out == "", "K2: 묵은 블록(질문 뒤)인데 잠갔다: " + out
+    assert not T.read_fm(pk2)[0].get("awaiting", "").strip(), "K2: awaiting이 생겼다"
+
+    # K3) 마지막 절이 `## 블록`인데 미충족 dep -> 안 잠긴다(그 dep가 .done되면 저절로 뜬다)
+    pk3 = mk(ws, "kkkk0003", ["deps: [no-such-dep]"],
+             body="## 목표\n테스트\n\n## 블록\n결정해주세요.\n")
+    out = if_blocked(pk3)
+    assert out == "", "K3: 미충족 dep인데 잠갔다: " + out
+    assert not T.read_fm(pk3)[0].get("awaiting", "").strip(), "K3: awaiting이 생겼다"
+
+    print("PASS 13/13")
     for m in msgs:
         print("  " + m)
 finally:
