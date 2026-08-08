@@ -223,6 +223,81 @@ test("객체 뷰 — [[링크]]가 객체·다른 뷰로 닿으면 통과, 안 �
   assert.doesNotMatch(joined, /## 절 사용.*모음/);
 });
 
+test("계층 순환(OOPS!) — 관계 줄이 만드는 방향 그래프에 사이클이 있으면 잡힌다", () => {
+  const m = computeOntologyMetrics({
+    schemaText: SCHEMA,
+    objects: [
+      { rel: "objects/사람/철수.md", text: obj("사람", "철수", "철수다.", { 이름: "철수", 나이: "20" }, { 안다: ["영희"] }) },
+      { rel: "objects/사람/영희.md", text: obj("사람", "영희", "영희다.", { 이름: "영희", 나이: "22" }, { 안다: ["철수"] }) },
+    ],
+    actionLogs: [],
+  });
+  assert.equal(m.hierarchyCycles.count, 1);
+  assert.match(m.hierarchyCycles.items[0], /철수/);
+  assert.match(m.hierarchyCycles.items[0], /영희/);
+});
+
+test("계층 순환(OOPS!) — 사이클 없는 일직선 그래프는 안 잡힌다", () => {
+  const m = computeOntologyMetrics({
+    schemaText: SCHEMA,
+    objects: [
+      { rel: "objects/사람/철수.md", text: obj("사람", "철수", "철수다.", { 이름: "철수", 나이: "20" }, { 안다: ["영희"] }) },
+      { rel: "objects/사람/영희.md", text: obj("사람", "영희", "영희다.", { 이름: "영희", 나이: "22" }) },
+    ],
+    actionLogs: [],
+  });
+  assert.equal(m.hierarchyCycles.count, 0);
+});
+
+test("다의적 요소(OOPS!) — 같은 식별자가 속성과 관계 두 역할로 쪼개 쓰이면 잡힌다", () => {
+  const m = computeOntologyMetrics({
+    schemaText: SCHEMA,
+    objects: [
+      // '대상'을 속성(값)으로 쓴 자리
+      { rel: "objects/사람/철수.md", text: obj("사람", "철수", "철수다.", { 이름: "철수", 나이: "20", 대상: "공지" }) },
+      // '대상'을 관계(링크)로 쓴 자리 — 같은 이름이 값과 링크 두 개념을 가리킨다
+      { rel: "objects/사람/영희.md", text: obj("사람", "영희", "영희다.", { 이름: "영희", 나이: "22" }, { 대상: ["철수"] }) },
+    ],
+    actionLogs: [],
+  });
+  assert.equal(m.polysemousElements.count, 1);
+  assert.match(m.polysemousElements.items[0], /'대상'/);
+});
+
+test("다의적 요소(OOPS!) — 이름이 속성으로만(또는 관계로만) 쓰이면 안 잡힌다", () => {
+  const m = computeOntologyMetrics({
+    schemaText: SCHEMA,
+    objects: [
+      { rel: "objects/사람/철수.md", text: obj("사람", "철수", "철수다.", { 이름: "철수", 나이: "20" }, { 안다: ["영희"] }) },
+      { rel: "objects/사람/영희.md", text: obj("사람", "영희", "영희다.", { 이름: "영희", 나이: "22" }) },
+    ],
+    actionLogs: [],
+  });
+  assert.equal(m.polysemousElements.count, 0);
+});
+
+test("잉여 클래스(OOPS!) — 스키마에 있는 타입인데 인스턴스가 0개면 잡힌다", () => {
+  const m = computeOntologyMetrics({
+    schemaText: SCHEMA, // 객체 타입: 사람 · 동물
+    objects: [{ rel: "objects/사람/철수.md", text: obj("사람", "철수", "철수다.", { 이름: "철수", 나이: "20" }) }],
+    actionLogs: [],
+  });
+  assert.equal(m.redundantClasses.count, 1);
+  assert.match(m.redundantClasses.items[0], /'동물'/);
+});
+
+test("잉여 클래스(OOPS!) — 스키마의 모든 타입에 인스턴스가 있으면 안 잡힌다", () => {
+  const m = computeOntologyMetrics({
+    schemaText: SCHEMA,
+    objects: [
+      { rel: "objects/사람/철수.md", text: obj("사람", "철수", "철수다.", { 이름: "철수", 나이: "20" }) },
+      { rel: "objects/동물/멍멍이.md", text: obj("동물", "멍멍이", "멍멍이다.") },
+    ],
+    actionLogs: [],
+  });
+  assert.equal(m.redundantClasses.count, 0);
+});
+
 test("스키마 파일 경로 — page.tsx의 loadMetrics가 찾는 rel은 _ontology/SCHEMA.md다(P219-10 이후)", async () => {
   const pageSource = await readFile(ONTOLOGY_PAGE_TSX, "utf8");
   const m = pageSource.match(/schemaEntry = tree\.find\(\(e\) => !e\.isDir && e\.rel === "([^"]+)"\)/);

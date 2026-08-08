@@ -220,6 +220,21 @@ function OntologyMetricsPanel({ metrics: m }: { metrics: OntologyMetrics }) {
         <MetricStat label="껍데기" value={`${m.shells.count}건 (${pct(m.shells.ratio)})`} />
         <MetricStat label="고립" value={`${m.isolated.count}건 (${pct(m.isolated.ratio)})`} />
         <MetricStat
+          label="계층 순환"
+          value={`${m.hierarchyCycles.count}건`}
+          alert={m.hierarchyCycles.count > 0}
+        />
+        <MetricStat
+          label="다의적 요소"
+          value={`${m.polysemousElements.count}건`}
+          alert={m.polysemousElements.count > 0}
+        />
+        <MetricStat
+          label="잉여 클래스"
+          value={`${m.redundantClasses.count}건`}
+          alert={m.redundantClasses.count > 0}
+        />
+        <MetricStat
           label="빈손 비율"
           value={m.emptyHanded.total > 0 ? pct(m.emptyHanded.ratio) : "기록 없음"}
           alert={m.emptyHanded.total > 0 && m.emptyHanded.ratio < 0.1}

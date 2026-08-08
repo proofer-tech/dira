@@ -235,6 +235,12 @@ export type OntologyMetrics = {
   isolated: Counted;
   /** `SCHEMA.md` 표 ↔ `objects/<타입>/` 대조 위반. 미정의 타입·관계·댕글링·`##`절·정의역치역·필수속성 */
   schemaViolations: string[];
+  /** OOPS! 이식 — 관계 줄이 만드는 방향 그래프의 사이클. 건강 0건 */
+  hierarchyCycles: Pick<Counted, "count" | "items">;
+  /** OOPS! 이식 — 한 식별자가 속성과 관계 두 역할로 쪼개 쓰인 자리. 건강 0건 */
+  polysemousElements: Pick<Counted, "count" | "items">;
+  /** OOPS! 이식 — 인스턴스 0개인 스키마 타입. 건강 0건 */
+  redundantClasses: Pick<Counted, "count" | "items">;
   /** 이름 → 나를 가리키는 이름들(역링크) */
   backlinks: Record<string, string[]>;
   /** `action-log`의 `빈손` 줄 비율 — 건강 30~70%, 10% 미만이면 경보 */
@@ -251,6 +257,98 @@ const LINK = /\[\[([^\]]+)\]\]/g;
 
 /** 뷰 본문의 `[[이름]]`이 실재하는 객체·뷰를 가리키는지 확인한다. 대상이 없으면 기존 객체
  *  댕글링과 같은 형식(`댕글링: <파일> -> [[대상]]`)으로 `schemaViolations`에 실어 표시를 재사용한다. */
+type Parsed = { rel: string; type: string; name: string; props: string[]; rels: [string, string][] };
+
+/** 계층 순환(OOPS!) — 관계 줄(관계 이름을 안 가리고 전부) 이 만드는 방향 그래프에 사이클이
+ *  있는지를 DFS로 본다. 우리 스키마엔 «하위/상위» 전용 관계가 따로 없다 — 그래서 어느 관계든
+ *  A → B 를 세우면 그 자체가 "상하위"고, 사이클은 어느 쪽이 위인지 정의되지 않는다는 뜻이다
+ *  (§5-3 §지표). 사이클 하나를 여러 시작점에서 다시 찾는 중복은 노드 집합으로 정규화해 뺀다. */
+function findHierarchyCycles(parsed: Pick<Parsed, "name" | "rels">[]): string[] {
+  const adj = new Map<string, string[]>();
+  for (const p of parsed) {
+    for (const [, target] of p.rels) {
+      if (!adj.has(p.name)) adj.set(p.name, []);
+      adj.get(p.name)!.push(target);
+    }
+  }
+
+  const color = new Map<string, 0 | 1 | 2>(); // 0 white · 1 gray(스택 위) · 2 black(끝)
+  const stack: string[] = [];
+  const seenCycles = new Set<string>();
+  const cycles: string[] = [];
+
+  function dfs(node: string) {
+    color.set(node, 1);
+    stack.push(node);
+    for (const next of adj.get(node) ?? []) {
+      const c = color.get(next) ?? 0;
+      if (c === 0) {
+        dfs(next);
+      } else if (c === 1) {
+        const idx = stack.indexOf(next);
+        const path = [...stack.slice(idx), next];
+        const key = [...new Set(path)].sort().join(">");
+        if (!seenCycles.has(key)) {
+          seenCycles.add(key);
+          cycles.push(`계층 순환: ${path.join(" → ")}`);
+        }
+      }
+    }
+    stack.pop();
+    color.set(node, 2);
+  }
+
+  for (const name of adj.keys()) {
+    if ((color.get(name) ?? 0) === 0) dfs(name);
+  }
+  return cycles;
+}
+
+/** 다의적 요소(OOPS!) — 판정이 기계로 딱 떨어지지 않아 표본 검토 대상만 좁힌다(티켓 참고).
+ *  고른 휴리스틱: **같은 식별자가 한 객체에서는 속성 키로, 다른 객체에서는 관계 이름으로
+ *  쓰인 자리** — 그 식별자가 "값"과 "링크"라는 서로 다른 개념을 동시에 가리키는 것이라
+ *  OOPS! 원문의 "식별자 하나가 여러 개념을 가리킨다"와 가장 가깝다. 정의역·치역 위반과는
+ *  다르다 — 그건 이름 하나의 대상 타입이 스키마를 벗어난 경우고, 이건 이름 자체가
+ *  속성/관계 두 역할로 쪼개진 경우다. */
+function findPolysemousElements(parsed: Pick<Parsed, "rel" | "props" | "rels">[]): string[] {
+  const asProp = new Map<string, string[]>();
+  const asRel = new Map<string, string[]>();
+  for (const p of parsed) {
+    for (const key of p.props) {
+      if (!asProp.has(key)) asProp.set(key, []);
+      asProp.get(key)!.push(p.rel);
+    }
+    for (const [key] of p.rels) {
+      if (!asRel.has(key)) asRel.set(key, []);
+      asRel.get(key)!.push(p.rel);
+    }
+  }
+
+  const items: string[] = [];
+  for (const [key, propLocs] of [...asProp].sort(([a], [b]) => a.localeCompare(b))) {
+    const relLocs = asRel.get(key);
+    if (relLocs) {
+      items.push(
+        `다의적 요소: '${key}' — 속성으로 쓴 곳 ${propLocs.join(", ")} / 관계로 쓴 곳 ${relLocs.join(", ")}`,
+      );
+    }
+  }
+  return items;
+}
+
+/** 잉여 클래스(OOPS!) — 인스턴스도 하위 타입도 0인 타입. 우리 스키마엔 타입 간 상하위(서브클래스)
+ *  개념이 없다(§5-3 §온톨로지 프레임워크 §객체 타입) — 그래서 "하위 타입 수"는 모든 타입에서
+ *  정의상 항상 0이고, 판정은 인스턴스 0개 여부로 좁혀진다. `types.size === 0`(스키마 미확보)이면
+ *  판정하지 않는다 — 다른 스키마 판정과 같은 게이트(위 `parseSchema` 주석). */
+function findRedundantClasses(types: Set<string>, parsed: Pick<Parsed, "type">[]): string[] {
+  if (types.size === 0) return [];
+  const withInstances = new Set(parsed.map((p) => p.type));
+  return [...types]
+    .filter((t) => !withInstances.has(t))
+    .sort()
+    .map((t) => `잉여 클래스: '${t}' (인스턴스 0건)`);
+}
+
 function checkViewLinks(views: ObjectInput[], knownNames: Set<string>): string[] {
   const violations: string[] = [];
   for (const v of views) {
@@ -348,6 +446,10 @@ export function computeOntologyMetrics(input: OntologyInput): OntologyMetrics {
   const viewNames = new Set(views.map((v) => typeAndName(v.rel).name));
   violations.push(...checkViewLinks(views, new Set([...names, ...viewNames])));
 
+  const hierarchyCycleItems = findHierarchyCycles(parsed);
+  const polysemousItems = findPolysemousElements(parsed);
+  const redundantClassItems = findRedundantClasses(types, parsed);
+
   const objectCount = parsed.length;
   const n = objectCount || 1;
   const pl = proseLinkCount || 1;
@@ -365,6 +467,9 @@ export function computeOntologyMetrics(input: OntologyInput): OntologyMetrics {
     shells: { count: shellItems.length, ratio: shellItems.length / n, items: shellItems },
     isolated: { count: isolatedItems.length, ratio: isolatedItems.length / n, items: isolatedItems },
     schemaViolations: violations,
+    hierarchyCycles: { count: hierarchyCycleItems.length, items: hierarchyCycleItems },
+    polysemousElements: { count: polysemousItems.length, items: polysemousItems },
+    redundantClasses: { count: redundantClassItems.length, items: redundantClassItems },
     backlinks,
     ...parseActionLogs(input.actionLogs),
   };
