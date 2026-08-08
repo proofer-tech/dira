@@ -33,7 +33,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { readAuth, readOtherEngineAuth } from "@/lib/auth";
+import { readAuth, readOtherEngineAuth, readTokenRows } from "@/lib/auth";
 import { t, type Locale } from "@/lib/i18n";
 import type { ResumeEvent } from "@/lib/machine-state";
 import { readSummary, readProjects, readLanguage } from "@/lib/projects";
@@ -301,7 +301,7 @@ export default async function ProjectLayout({
               <EngineCell key={e} engine={e} />
             ))}
           >
-            <EngineCells root={root} workers={current.engines} engines={engines} />
+            <EngineCells root={root} workers={current.engines} engines={engines} locale={locale} />
           </Suspense>
           {/* idle 워커 풀 — 바의 마지막 자식 · `ml-auto`로 오른쪽 끝(§비주얼 §38 §자리).
               **그릇을 안 갖는다**: 이 바에 그릇이 하나도 없어서 얹으면 유일하게 누를 것처럼
@@ -625,14 +625,23 @@ async function EngineCells({
   root,
   workers,
   engines,
+  locale,
 }: {
   root: string;
   workers: { worker: string; engine: string }[];
   engines: string[];
+  locale: Locale;
 }) {
   // 소모 속도는 트랜스크립트 스캔(30초 TTL)이고 한도는 외부 GET이라 **따로 도착한다**(§26 ⑧).
   // 직렬로 `await`하면 스캔이 GET 뒤에 줄을 서므로 같이 띄운다 — 둘 다 자기 캐시 뒤에 있다.
-  const [limits, rates] = await Promise.all([engineLimits(engines), usageRates(root, workers)]);
+  // `tokens.json`은 claude 전용이다(§0-13 §범위) — claude가 없는 프로젝트에서는 안 읽는다.
+  const [limits, rates, tokenRows] = await Promise.all([
+    engineLimits(engines),
+    usageRates(root, workers),
+    engines.includes("claude") ? readTokenRows(locale) : Promise.resolve([]),
+  ]);
+  // §0-8 §개정 ③ — 활성 항목의 표시 이름. 없으면(0개) 이 슬롯만 빠진다(`undefined`).
+  const activeAccount = tokenRows.find((r) => r.status.kind === "active")?.label;
   // 소비량은 **게이지가 못 선 칸에서만** 쓴다(§26 ⑤). 전부 정상이면 로그를 아예 안 읽는다.
   const usage = engines.some((e) => "error" in limits[e]) ? await listUsage(root) : null;
   // 트랙의 k번째 구간은 `%`를 가진 k번째 칸의 것이다(§26 ② §매핑) — 칸과 같은 `engines` 순회에서
@@ -684,6 +693,9 @@ async function EngineCells({
                   .reduce((n, w) => n + (usage.byWorker[w.worker.normalize("NFC")] ?? 0), 0)
               : 0
           }
+          // `tokens.json`이 claude 전용이라(§0-13 §범위) 다른 엔진 칸은 이 슬롯을 안 얻는다
+          accountLabel={e === "claude" ? activeAccount : undefined}
+          activeLabel={t(locale, "settings.tokens.active")}
         />
       ))}
     </>
@@ -699,13 +711,23 @@ function EngineCell({
   limit,
   tokens = 0,
   rate,
+  accountLabel,
+  activeLabel,
 }: {
   engine: string;
   limit?: EngineLimit;
   tokens?: number;
   rate?: number;
+  /** §0-8 §개정 ③ — `tokens.json` 활성 항목의 표시 이름. `engine === "claude"`일 때만 뜻이 있다 */
+  accountLabel?: string;
+  /** `sr-only` 접두어(`settings.tokens.active` — 낭독에만 쓴다, §26 §활성 계정 슬롯). `accountLabel`이
+   *  없으면 안 쓴다 — 두 프롭을 하나로 접으면 로딩 중(둘 다 없음)과 값 없음을 못 가른다 */
+  activeLabel?: string;
 }) {
   const value = limit && !("error" in limit) ? limit : null;
+  // claude는 항구적 부재다(§0-8 §개정 ①) — 이 칸에만 `한도를 읽을 수 없습니다`를 안 세운다.
+  // 그 문구는 고쳐질 실패(codex)에만 선다(§26 ⑤ 모양 A·B).
+  const permanentlyAbsent = engine === "claude";
   // 임계는 **사용률 90% 하나**다(§26 ③). 단계를 둘로 나누지 않는다 — 색은 예외 하나만 표시한다.
   const over = !!value && value.usedPercent >= 90;
   // 소모 속도(§26 ② 다섯째 슬롯). 정상 칸과 폴백 칸(⑤)에 **한 글자도 같은 것**이 서므로
@@ -727,6 +749,18 @@ function EngineCell({
       <code className="max-w-32 shrink-0 truncate font-mono text-xs" title={engine}>
         {engine}
       </code>
+      {/* 자리는 엔진 이름 바로 다음 · `·` 사슬 밖(§26 §활성 계정 슬롯) — 머리에 들고 절이 아니다.
+          잉크가 `--muted-foreground`인 것은 이 라벨이 소비량의 주어가 아니기 때문이다
+          (§0-8 §개정 ③ — "이 라벨은 소비량의 주어가 아니다"). 활성 항목이 0개면 이 슬롯만 빠진다 */}
+      {accountLabel && (
+        <span
+          className="max-w-32 shrink-0 truncate text-xs text-muted-foreground"
+          title={accountLabel}
+        >
+          {activeLabel && <span className="sr-only">{activeLabel} </span>}
+          {accountLabel}
+        </span>
+      )}
       {value && (
         <>
           {/* 게이지는 이 칸을 떠나 바 전체의 스택 바 하나가 됐다(§26 ③ — `56dae0e6` 개정).
@@ -762,13 +796,14 @@ function EngineCell({
               "120만 중 250만" 같은 없는 관계로 읽힌다. 좁아져도 사유는 안 뺀다 */}
           {rateSlot}
           {/* 색도 아이콘도 안 쓴다 — 에러가 아니라 **부재**다. 원인 원문은 삼키지 않고
-              네이티브 `title`에 남긴다(얇은 한 줄에 블록을 세울 자리가 없다 — §26 ⑤) */}
-          <span
-            className="text-xs whitespace-nowrap text-muted-foreground"
-            title={limit.error}
-          >
-            · 한도를 읽을 수 없습니다
-          </span>
+              네이티브 `title`에 남긴다(얇은 한 줄에 블록을 세울 자리가 없다 — §26 ⑤).
+              **claude에서는 이 사유 자체를 안 그린다** — 항구적 부재는 실패가 아니다
+              (§0-8 §개정 ①. 상시로 세우면 고쳐질 실패로 읽힌다) */}
+          {!permanentlyAbsent && (
+            <span className="text-xs whitespace-nowrap text-muted-foreground" title={limit.error}>
+              · 한도를 읽을 수 없습니다
+            </span>
+          )}
         </>
       )}
     </div>

@@ -4,8 +4,9 @@
  *  - 판정 1(소비): 입력은 **이미 쌓이고 있는 `<루트>/workers/logs/`**다 — 새 엔진 규약도 새
  *    저장소도 없다. 파일명이 워커·시각을 주고, 마지막 줄 JSON의 `usage` 넷을 더한 수가 그
  *    세션의 토큰이다. `$` 환산도 모델별 분해도 없다(Q3=(a): `total_cost_usd`는 읽지도 않는다).
- *  - 판정 2(잔여): 엔진마다 원본이 다르다 — claude는 GET 1회, codex는 rollout 파일이다.
- *    **부르는 주체는 서버뿐이고 토큰은 응답에 담기지 않는다**(아래 `engineLimits`).
+ *  - 판정 2(잔여): 엔진마다 원본이 다르다 — codex는 rollout 파일이다. **claude는 원본이 없다**
+ *    (§0-8 §개정 — `claude setup-token`의 토큰이 자기 잔여를 영영 못 읽는다). 부르는 주체는
+ *    서버뿐이고 토큰은 응답에 담기지 않는다(아래 `engineLimits`).
  *
  *  **읽기 전용이다.** 이 모듈은 아무 파일도 쓰지 않는다. */
 import { access, readdir, readFile, stat } from "node:fs/promises";
@@ -308,8 +309,8 @@ function windowTokens(buf: Buffer, since: number): number {
 // ── 엔진별 잔여 한도 (§0-8 판정 2 · 하단 status bar) ─────────────────────────
 //
 // 한도는 **계정 스코프**라 워커별로 갈리지 않는다 — 키가 엔진 이름 하나다(`engineName`).
-// 읽는 주체는 서버뿐이다: claude는 `~/.claude/.credentials.json`(0600)을 읽고 codex는
-// `~/.codex/`를 읽는다. 둘 다 브라우저가 못 보는 자리고, **나가는 것은 `%`와 리셋 시각뿐**이다.
+// 읽는 주체는 서버뿐이다: codex는 `~/.codex/`를 읽는다(브라우저가 못 보는 자리이고,
+// **나가는 것은 `%`와 리셋 시각뿐**이다). claude는 원본이 없다 — §0-8 §개정.
 
 /** 한 엔진 칸이 그릴 것. **값이 없으면 사유뿐이다** — 빈 트랙도 `0%`도 추정치도 만들지 않는다
  *  (§0-8 판정 2: 화면이 거짓말하지 않는다). `error`는 화면이 `한도를 읽을 수 없습니다` 옆
@@ -334,29 +335,6 @@ function maxWindow(candidates: Window[]): Window | null {
   let best: Window | null = null;
   for (const w of candidates) if (!best || w.usedPercent > best.usedPercent) best = w;
   return best;
-}
-
-const CLAUDE_WINDOW_LABEL = { five_hour: "5시간", seven_day: "7일" } as const;
-
-/** claude 응답의 `five_hour`·`seven_day` 중 묶는 창을 고른다. **순수 함수다** — `fetch` 없이
- *  픽스처로 잰다(`lastRateLimits`가 이미 그 모양이다). `extra_usage`는 후보에 안 든다(달러
- *  크레딧 계량이라 축이 다르다 — §0-8 §묶는 창). */
-export function pickClaudeWindow(
-  body: Record<string, { utilization?: unknown; resets_at?: unknown } | undefined> | null,
-): Window | null {
-  const candidates: Window[] = [];
-  for (const name of Object.keys(CLAUDE_WINDOW_LABEL) as (keyof typeof CLAUDE_WINDOW_LABEL)[]) {
-    const w = body?.[name];
-    if (typeof w?.utilization !== "number" || !Number.isFinite(w.utilization)) continue;
-    // ISO 8601 문자열이다(codex의 유닉스 초와 다르다). 못 읽으면 이 항목만 빠진다(§26 ④).
-    const at = typeof w.resets_at === "string" ? Date.parse(w.resets_at) : NaN;
-    candidates.push({
-      usedPercent: w.utilization,
-      resetsAt: Number.isFinite(at) ? at : null,
-      window: CLAUDE_WINDOW_LABEL[name],
-    });
-  }
-  return maxWindow(candidates);
 }
 
 /** 분 → 사람이 읽는 창 이름(`5시간`·`7일`). codex의 `window_minutes`가 실측 없이 아무 값이나
@@ -418,9 +396,15 @@ export async function engineLimits(engines: string[]): Promise<Record<string, En
 /** 잔여 한도의 **원본이 있는 엔진 집합**이고 값이 그 원본이다(§0-8 판정 2 · §4-3 개정
  *  2026-08-05). `=== "codex"`로 갈래를 적으면 셋째 엔진이 어느 한쪽으로 조용히 떨어진다 —
  *  `codexLimit()`은 codex의 rollout 파일을 읽고 **grok에는 그런 파일이 없다.**
- *  키에 없는 엔진(오늘 grok)은 아래 폴백이다. */
+ *  키에 없는 엔진(오늘 grok · claude)은 아래 폴백이다.
+ *
+ *  **claude가 여기 없는 것이 §0-8 §개정이다.** `claude setup-token`이 내는 토큰은
+ *  `user:inference` 전용이라 자기 잔여를 영영 못 읽는다 — 그 GET을 부르는 함수 자체가
+ *  없어졌다(항구적 부재, 다음 폴링에 고쳐질 실패가 아니다). 화면(`EngineCell`)이 `engine ===
+ *  "claude"`일 때 이 폴백의 사유 문구를 안 그리는 것으로 그 차이를 표현한다 — 사유 문자열
+ *  자체(`한도를 주는 원본을 모릅니다`)는 grok처럼 실제로 원본을 모를 때의 것이라 claude에는
+ *  안 맞지만, 화면이 그 문구를 절대 안 읊으므로 여기서 갈라 적지 않는다. */
 const LIMIT_SOURCE: Record<string, () => Promise<EngineLimit>> = {
-  claude: claudeLimit,
   codex: codexLimit,
 };
 
@@ -429,54 +413,6 @@ function readLimit(engine: string): Promise<EngineLimit> {
   if (read) return read();
   // 원본을 모르는 엔진은 폴백이다. **추정치를 지어내지 않는다**(§0-8).
   return Promise.resolve({ error: `${engine}: 한도를 주는 원본을 모릅니다` });
-}
-
-/** 설치된 CLI 번들이 부르는 그 경로다(§0-8 판정 2 실측). 타임아웃도 번들의 5000ms 그대로. */
-const CLAUDE_USAGE_URL = "https://api.anthropic.com/api/oauth/usage";
-
-/** claude — `GET /api/oauth/usage`의 `five_hour`·`seven_day` 중 묶는 창(§0-8 §묶는 창).
- *
- *  토큰은 **CLI 로그인 토큰**(`~/.claude/.credentials.json`)이다. §0-4의 장기 토큰
- *  (`~/.config/dira/oauth-token`)에는 `user:profile`이 없어 같은 URL이 429다(실측 2026-08-01).
- *  **매 호출마다 파일을 다시 읽는다** — access token이 8시간짜리고 CLI가 제자리 갱신한다.
- *  만료되면 401이고 그 칸은 폴백이다(우리는 `refreshToken`으로 갱신하지 않는다 —
- *  사람 계정에 토큰을 발급하는 행위다).
- *
- *  **비공개 API라 계약이 없다** — 키마다 `null` 가드를 걸고, **두 창 다** 어긋나야 게이지를
- *  안 그린다(§0-8 §묶는 창: 한쪽만 못 읽어도 나머지로 값이 선다). */
-async function claudeLimit(): Promise<EngineLimit> {
-  const file = path.join(homedir(), ".claude", ".credentials.json");
-  let token: unknown;
-  try {
-    const raw: unknown = JSON.parse(await readFile(file, "utf8"));
-    token = (raw as { claudeAiOauth?: { accessToken?: unknown } })?.claudeAiOauth?.accessToken;
-  } catch (e) {
-    return { error: `${file}: ${(e as Error).message}` };
-  }
-  if (typeof token !== "string" || !token) {
-    return { error: `${file}: claudeAiOauth.accessToken이 없습니다` };
-  }
-  let res: Response;
-  try {
-    res = await fetch(CLAUDE_USAGE_URL, {
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      // TTL 캐시가 우리 것이므로 Next의 fetch 캐시는 끈다(같은 값을 두 겹으로 들지 않는다).
-      cache: "no-store",
-      signal: AbortSignal.timeout(5_000),
-    });
-  } catch (e) {
-    // 타임아웃·네트워크 단절. **사유를 지어내지 않는다** — 원문 그대로 title에 싣는다.
-    return { error: `GET ${CLAUDE_USAGE_URL}: ${(e as Error).message}` };
-  }
-  if (!res.ok) return { error: `GET ${CLAUDE_USAGE_URL}: HTTP ${res.status}` };
-  const body: unknown = await res.json().catch(() => null);
-  const picked = pickClaudeWindow(
-    body as Record<string, { utilization?: unknown; resets_at?: unknown } | undefined> | null,
-  );
-  if (!picked) {
-    return { error: `GET ${CLAUDE_USAGE_URL}: 응답에 five_hour·seven_day의 utilization이 없습니다` };
-  }
-  return picked;
 }
 
 /** codex — rollout 파일의 마지막 `token_count` 이벤트. **새 네트워크 호출이 0이다.**

@@ -10,7 +10,6 @@ import {
   lastRateLimits,
   listUsage,
   parseLogName,
-  pickClaudeWindow,
   pickCodexWindow,
   RATE_WINDOW_MS,
   usageRates,
@@ -152,38 +151,6 @@ test("lastRateLimits — 마지막 것이 이긴다 · 잘린 줄을 건너뛴�
   assert.equal(lastRateLimits(""), null);
 });
 
-test("pickClaudeWindow — 묶는 창은 utilization이 큰 쪽 · %와 resetsAt은 한 창에서 함께 온다", () => {
-  // ① 오늘 실측(2026-08-08) — five_hour는 비어 있고 seven_day가 막고 있다
-  const blocked = pickClaudeWindow({
-    five_hour: { utilization: 0.0, resets_at: null },
-    seven_day: { utilization: 100.0, resets_at: "2026-08-09T10:00:00.474113+00:00" },
-  });
-  assert.equal(blocked?.usedPercent, 100);
-  assert.equal(blocked?.window, "7일");
-  assert.equal(blocked?.resetsAt, Date.parse("2026-08-09T10:00:00.474113+00:00")); // seven_day의 것
-
-  // ② 실측(2026-08-01) — five_hour가 더 크다
-  const five = pickClaudeWindow({
-    five_hour: { utilization: 38, resets_at: "2026-08-01T12:00:00Z" },
-    seven_day: { utilization: 53, resets_at: "2026-08-05T00:00:00Z" },
-  });
-  assert.equal(five?.usedPercent, 53);
-  assert.equal(five?.window, "7일");
-  assert.equal(five?.resetsAt, Date.parse("2026-08-05T00:00:00Z"));
-
-  // ③ 둘 다 못 읽으면 null — 호출부가 그때만 `{ error }`다(폴백을 안 넓힌다)
-  assert.equal(pickClaudeWindow({ five_hour: { utilization: null }, seven_day: { utilization: null } }), null);
-  assert.equal(pickClaudeWindow(null), null);
-
-  // 한쪽만 못 읽어도 나머지로 값이 선다
-  const partial = pickClaudeWindow({
-    five_hour: { utilization: 12, resets_at: "2026-08-01T12:00:00Z" },
-    seven_day: { utilization: null, resets_at: null },
-  });
-  assert.equal(partial?.usedPercent, 12);
-  assert.equal(partial?.window, "5시간");
-});
-
 test("pickCodexWindow — primary·secondary 중 큰 쪽 · 둘 다 null이면 null", () => {
   assert.equal(pickCodexWindow(null), null);
   assert.equal(pickCodexWindow({ primary: null, secondary: null }), null);
@@ -208,6 +175,11 @@ test("engineLimits — 원본 모르는 엔진은 사유뿐 · TTL 안에서는 
   // 이게 "5초 폴링마다 외부 호출을 하지 않는다"의 실체다.
   const second = await engineLimits(["mystery-engine"]);
   assert.strictEqual(second["mystery-engine"], first["mystery-engine"]);
+});
+
+test("engineLimits — claude는 원본이 없다(§0-8 §개정: GET을 안 부른다)", async () => {
+  const limits = await engineLimits(["claude"]);
+  assert.ok("error" in limits.claude); // `%`를 영영 못 얻는다 — 화면이 이 사유를 안 읊는다(EngineCell)
 });
 
 // ── 소모 속도 (§0-8 판정 4) ─────────────────────────────────────────────────
