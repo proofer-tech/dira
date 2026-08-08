@@ -105,7 +105,7 @@ try:
     assert block_end in got, "온톨로지 블록이 안 닫혔다\n" + got
     block = got[got.index(block_start):got.index(block_end) + len(block_end)]
     assert ontdir in block, "온톨로지 디렉터리 절대경로가 블록 안에 안 실렸다(grep할 자리다)\n" + got
-    assert "SCHEMA.md" in block, "SCHEMA.md가 지도라는 안내가 안 실렸다\n" + got
+    assert "_ontology/SCHEMA.md" in block, "SCHEMA.md가 지도라는 안내가 안 실렸다\n" + got
     assert "grep" in block, "검색 방법(grep) 안내가 안 실렸다\n" + got
     for marker in ("온톨로지-본문-마커-A", "온톨로지-본문-마커-B", "온톨로지-본문-마커-C",
                    "본문 B1", "본문 C1", "GUI/보드.md", "개념 하나.md", "티켓 상태 전이.md",
