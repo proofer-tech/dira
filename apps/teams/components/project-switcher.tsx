@@ -12,6 +12,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Check, ChevronsUpDown, Settings2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { StatusBadge } from "@/components/status-badge";
+import { useT } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -131,6 +132,7 @@ export function MarkFailuresReadButton({
   failures: { log: string; at: string }[];
 }) {
   const [pending, start] = useTransition();
+  const t = useT();
   return (
     <Button
       variant="outline"
@@ -146,7 +148,7 @@ export function MarkFailuresReadButton({
         });
       }}
     >
-      읽음으로 표시
+      {t("bell.markRead")}
     </Button>
   );
 }
@@ -158,6 +160,7 @@ export function MarkFailuresReadButton({
  *  남는다 — 그것이 맞다(새 사실은 다시 봐야 한다, §0-14). */
 export function MarkResumeReadButton({ toMs }: { toMs: number }) {
   const [pending, start] = useTransition();
+  const t = useT();
   return (
     <Button
       variant="outline"
@@ -170,7 +173,7 @@ export function MarkResumeReadButton({ toMs }: { toMs: number }) {
         });
       }}
     >
-      읽음으로 표시
+      {t("bell.markRead")}
     </Button>
   );
 }
@@ -193,6 +196,7 @@ export function ProjectSwitcher({
   currentId: string;
 }) {
   const router = useRouter();
+  const t = useT();
   const pathname = usePathname(); // searchParams가 안 실린다 = 필터·검색을 공짜로 버린다
   const [open, setOpen] = useState(false);
   // 0건 문구가 검색어를 되읽어야 해서(§6) 입력을 여기서 잡는다 — cmdk 내부 상태는 읽을 길이 없다.
@@ -215,7 +219,7 @@ export function ProjectSwitcher({
     setOpen((v) => !v);
   });
 
-  const current = going ?? projects.find((t) => t.id === currentId);
+  const current = going ?? projects.find((p) => p.id === currentId);
   if (!current) return null;
 
   // 닫을 때 검색어를 버린다 — 입력이 팝오버와 함께 언마운트되므로, 안 버리면 다시 열었을 때
@@ -234,7 +238,7 @@ export function ProjectSwitcher({
             size="sm"
             role="combobox"
             aria-expanded={open}
-            aria-label="프로젝트 전환"
+            aria-label={t("shell.switcher.ariaLabel")}
             className="ml-auto h-8 max-w-md gap-2"
           >
             <span className="truncate text-sm text-foreground">{current.name}</span>
@@ -249,54 +253,56 @@ export function ProjectSwitcher({
       <PopoverContent align="end" className="w-[28rem] p-0">
         <Command>
           <CommandInput
-            placeholder="프로젝트 검색 — 이름 또는 경로"
+            placeholder={t("shell.switcher.searchPlaceholder")}
             value={q}
             onValueChange={setQ}
           />
           <CommandList className="max-h-80">
             <CommandEmpty>
-              {q ? `"${q}"와 일치하는 프로젝트 0건` : "일치하는 프로젝트 0건"}
+              {q
+                ? `"${q}"${t("shell.switcher.emptyQueriedGlue")} ${t("shell.switcher.emptySuffix")}`
+                : t("shell.switcher.emptySuffix")}
             </CommandEmpty>
-            {projects.map((t) => (
+            {projects.map((p) => (
               <CommandItem
-                key={t.id}
-                value={`${t.name} ${t.shortRoot}`}
+                key={p.id}
+                value={`${p.name} ${p.shortRoot}`}
                 className="items-start gap-2 px-2 py-2"
                 onSelect={() => {
                   close();
-                  if (t.id !== currentId) {
-                    setGoing(t);
-                    router.push(projectPath(pathname, t.id));
+                  if (p.id !== currentId) {
+                    setGoing(p);
+                    router.push(projectPath(pathname, p.id));
                   }
                 }}
               >
                 {/* 현재 표식이 없는 항목도 같은 폭을 차지한다 — 정렬이 흔들리면 스캔이 깨진다 */}
                 <span className="w-4 shrink-0 pt-0.5">
-                  {t.id === currentId && <Check aria-hidden className="size-4" />}
+                  {p.id === currentId && <Check aria-hidden className="size-4" />}
                 </span>
                 <span className="grid min-w-0 grow gap-1">
                   <span className="flex items-center justify-between gap-2">
-                    <span className="truncate text-sm">{t.name}</span>
-                    {t.connected ? (
+                    <span className="truncate text-sm">{p.name}</span>
+                    {p.connected ? (
                       <span className="shrink-0 text-xs tabular-nums text-muted-foreground group-data-selected/command-item:text-foreground">
-                        열림 {t.open}
-                        {t.running > 0 && ` · running ${t.running}`}
+                        {t("shell.switcher.openLabel")} {p.open}
+                        {p.running > 0 && ` · running ${p.running}`}
                       </span>
                     ) : (
                       <StatusBadge status="disconnected" className="shrink-0" />
                     )}
                   </span>
                   <span className="truncate font-mono text-xs text-muted-foreground group-data-selected/command-item:text-foreground">
-                    {t.shortRoot}
+                    {p.shortRoot}
                   </span>
                 </span>
               </CommandItem>
             ))}
             <CommandSeparator className="my-1" />
             {/* 찾는 큐가 없으면 다음 행동은 등록이다 — 검색으로 걸러지지 않는다 */}
-            <CommandItem forceMount value="프로젝트 관리" onSelect={() => router.push("/")}>
+            <CommandItem forceMount value={t("shell.nav.projects")} onSelect={() => router.push("/")}>
               <Settings2 aria-hidden />
-              프로젝트 관리
+              {t("shell.nav.projects")}
               <CommandShortcut>{formatCombo(bindings["project.search"])}</CommandShortcut>
             </CommandItem>
           </CommandList>
@@ -314,13 +320,14 @@ export function ProjectSwitcher({
  *  되살리기 전에 §7 뒤집기 항을 읽는다: 종전 근거는 거기 보존돼 있고 요구가 그것을 알고도
  *  로고 하나만 남기라고 했다. 툴팁·라벨로 대신하지도 않는다("그냥 로고 클릭"이 요구다). */
 const NAV = [
-  { seg: "", label: "보드" },
-  { seg: "/personas", label: "페르소나" },
-  { seg: "/protocols", label: "프로토콜" },
-  { seg: "/workers", label: "워커" },
+  { seg: "", labelKey: "shell.nav.board" },
+  { seg: "/personas", labelKey: "shell.nav.personas" },
+  { seg: "/protocols", labelKey: "shell.nav.protocols" },
+  { seg: "/workers", labelKey: "shell.nav.workers" },
 ];
 
 export function ProjectNav({ id }: { id: string }) {
+  const t = useT();
   const pathname = usePathname();
   const router = useRouter();
   const base = `/p/${id}`;
@@ -356,7 +363,7 @@ export function ProjectNav({ id }: { id: string }) {
 
   return (
     <nav className="flex items-center gap-4">
-      {NAV.map(({ seg, label }) => {
+      {NAV.map(({ seg, labelKey }) => {
         // 보드는 티켓 화면(발행·상세)까지 자기 구역으로 본다 — 그쪽에서 들어가는 화면이다.
         const active = seg === "" ? rest === "" || rest.startsWith("/tickets") : rest.startsWith(seg);
         return (
@@ -370,7 +377,7 @@ export function ProjectNav({ id }: { id: string }) {
                 : "border-transparent text-muted-foreground hover:text-foreground",
             )}
           >
-            {label}
+            {t(labelKey)}
           </Link>
         );
       })}
@@ -382,9 +389,10 @@ export function ProjectNav({ id }: { id: string }) {
  *  없는 경로를 계속 stat하면 클라우드 마운트를 깨운다(§4-1). */
 export function RefreshButton() {
   const router = useRouter();
+  const t = useT();
   return (
     <Button variant="outline" size="sm" onClick={() => router.refresh()}>
-      다시 확인
+      {t("shell.error.refresh")}
     </Button>
   );
 }

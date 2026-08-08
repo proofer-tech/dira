@@ -199,6 +199,102 @@ export const ko: Record<string, string> = {
   "common.unit.hour": "시간",
   "common.unit.minute": "분",
   "common.unit.day": "일",
+
+  // 셸 둘째 묶음(§0-16 §발행 §묶음 표 2, `dd97c69c`) — 헤더 · 알림 종 일곱 · status bar ·
+  // 배너 · 전환기 · `status-badge.tsx`(상태 배지 · deps 배지 — 보드·상세도 이 벌을 공유한다).
+
+  "shell.header.manual": "매뉴얼",
+  // 연결 안 됨 배너 제목 `프로젝트 "<이름>"의 .dira를 읽을 수 없습니다` — 이름은 변수라 앞뒤로 쪼갠다.
+  "shell.error.titlePrefix": "프로젝트",
+  "shell.error.titleSuffix": "의 .dira를 읽을 수 없습니다",
+  // 연결 안 됨 화면의 재확인 버튼(`project-switcher.tsx`).
+  "shell.error.refresh": "다시 확인",
+  // `/`로 가는 링크 — 배너 CTA와 전환기 하단 항목(값·문구 둘 다)이 같은 낱말을 쓴다.
+  "shell.nav.projects": "프로젝트 관리",
+  "shell.nav.board": "보드",
+  "shell.nav.personas": "페르소나",
+  "shell.nav.protocols": "프로토콜",
+  "shell.nav.workers": "워커",
+  "shell.switcher.ariaLabel": "프로젝트 전환",
+  "shell.switcher.searchPlaceholder": "프로젝트 검색 — 이름 또는 경로",
+  // 0건 문구 — 검색어가 있으면 `"<q>"와 일치하는 프로젝트 0건`, 없으면 접두 없이 꼬리만.
+  "shell.switcher.emptyQueriedGlue": "와",
+  "shell.switcher.emptySuffix": "일치하는 프로젝트 0건",
+  "shell.switcher.openLabel": "열림",
+
+  // 알림 종(§0-10 문구 표 · §비주얼 §28). `bell.due.*`(⑦)는 `a50c8304`가 먼저 옮겼다 — 아래는
+  // 나머지 여섯(⑤①②③④⑥, §0-14 순서) + 트리거 자신의 배지 라벨.
+  "bell.trigger.countPrefix": "알림",
+  "bell.trigger.countSuffix": "건",
+  "bell.trigger.empty": "알림 없음",
+  // ②⑥ 둘 다 쓰는 `읽음으로 표시`(`project-switcher.tsx`의 두 버튼) — 한 낱말이라 키 하나.
+  "bell.markRead": "읽음으로 표시",
+  "bell.offline.title": "네트워크가 끊겨 있습니다",
+  "bell.offline.body":
+    "세션이 열리지 못하고 티켓은 그때마다 대기로 돌아갑니다. 연결이 돌아오면 저절로 재개됩니다.",
+  "bell.offline.hint": "Wi-Fi 또는 유선 연결을 확인하세요.",
+  "bell.resume.titleSlept": "잠자기에서 복귀했습니다",
+  "bell.resume.titleWake": "꺼져 있다가 켜졌습니다",
+  // `<from>부터 <to>까지 …` — 변수 둘이라 가운데·꼬리로 쪼갠다(`ticket.priority.inherited*`와 같은 조립).
+  "bell.resume.middle": "부터",
+  "bell.resume.after": "까지 큐가 멈춰 있었습니다. 잃은 것은 없습니다 — 이미 다시 돌고 있습니다.",
+  "bell.resume.noAction": "고칠 일은 없습니다.",
+  "bell.auth.title": "Claude 토큰이 없습니다",
+  "bell.auth.body": "워커가 티켓을 집어도 세션을 못 열고 그대로 끝냅니다.",
+  "bell.failures.titlePrefix": "세션이 열리자마자 죽는 워커",
+  "bell.failures.titleSuffix": "개",
+  "bell.failures.body": "티켓은 그때마다 대기로 정확히 돌아옵니다. 잃는 것은 없습니다.",
+  "bell.failures.footer": "사유에 적힌 시각이 지나면 저절로 다시 집습니다 — 고칠 일은 없습니다.",
+  "bell.assigned.titlePrefix": "아무도 집지 않는 티켓",
+  "bell.assigned.titleSuffix": "건",
+  "bell.assigned.body": "워커가 잡아 둔 채 놓지 않아서, 이 티켓들은 순서가 와도 넘어갑니다.",
+  "bell.awaiting.titlePrefix": "답변을 기다리는 티켓",
+  "bell.awaiting.titleSuffix": "건",
+  "bell.awaiting.body": "사람이 답을 써야 이 티켓들이 다시 큐에 뜹니다. 고장난 것은 없습니다.",
+  "bell.awaiting.answerLink": "답변 쓰기",
+
+  // status bar (§0-8 · §비주얼 §26 §38).
+  "statusbar.idle.allRunning": "없음 — 전원 running",
+  "statusbar.idle.none": "없음",
+  // idle 워커 풀의 `sr-only` 접두어 — 앞에 공백 없이 라벨이 바로 붙으므로 **값 자체에 공백을 넣는다**
+  // (원문 `<span className="sr-only"> 워커</span>`와 같은 바이트).
+  "statusbar.idleSrOnlySuffix": " 워커",
+  "statusbar.rate.title": "최근 10분 · 이 프로젝트의 워커 세션",
+  "statusbar.rate.suffix": "토큰/분",
+  "statusbar.usage.suffix": "사용",
+  "statusbar.reset.suffix": "리셋",
+  "statusbar.tokens.suffix": "토큰",
+  "statusbar.limit.unreadable": "한도를 읽을 수 없습니다",
+  // 아래 넷은 `lib/usage.ts`가 만드는 `EngineLimit.error`의 꼬리(엔진 이름·경로가 접두로 붙는다) —
+  // 화면(`EngineCell`)이 `title`에 싣는다. claude에는 이 사유 자체가 안 그려진다(§0-8 §개정).
+  "statusbar.limit.unknownOriginSuffix": "한도를 주는 원본을 모릅니다",
+  "statusbar.limit.noRolloutSuffix": "rollout 파일이 없습니다",
+  "statusbar.limit.rateLimitsNullSuffix": "rate_limits.primary·secondary가 모두 null입니다",
+  "statusbar.limit.noRateLimitsSuffix": "최근 rollout에 rate_limits가 없습니다",
+
+  // 상태 배지(§비주얼 §2 · §4-1) — 보드·상세·워커 화면이 `status-badge.tsx` 하나를 공유하므로
+  // 여기 한 벌만 옮기면 그 화면들도 같이 선다(그 화면들 자신의 이행은 각자의 묶음 몫이다).
+  // `running`·`idle`·`stopped`·`stale`은 한글이 없어 그대로 두되, 조회를 한 벌로 맞추려고 키를 준다.
+  "status.label.open": "대기",
+  "status.label.blocked": "deps 대기",
+  "status.label.awaiting": "답변 대기",
+  "status.label.assigned": "할당됨",
+  "status.label.wip": "진행중",
+  "status.label.done": "완료",
+  "status.label.running": "running",
+  "status.label.idle": "idle",
+  "status.label.stopped": "stopped",
+  "status.label.stale": "stale",
+  "status.label.connected": "연결됨",
+  "status.label.disconnected": "연결 안 됨",
+  "status.hint.awaiting": "PM이 되물었다 — 요구사항 상세에서 답을 쓰면 다시 큐에 뜬다. 자동 만료는 없다",
+  "status.hint.assigned": "session_id가 박힌 열린 티켓 — 큐에서 영구 제외된다. 할당 해제로 되돌린다",
+
+  // deps 배지(§2 deps 배지) — `DepBadge`가 쓴다.
+  "dep.hint.met": "충족 — 완료된 티켓",
+  "dep.hint.unmet": "미충족 — 아직 완료되지 않았다",
+  "dep.hint.missing": "큐에 없는 해시 — 영구 대기",
+  "dep.hint.answer": "답변 기록 — 이 요구사항의 답변",
 };
 
 /** 제품 낱말의 영어 대응 — **여기가 한자리다**(621c7a97). 다음 묶음이 같은 것을 다르게 부르지

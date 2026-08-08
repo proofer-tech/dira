@@ -34,7 +34,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { readAuth, readOtherEngineAuth, readTokenRows } from "@/lib/auth";
-import { t, type Locale } from "@/lib/i18n";
+import { DEFAULT_LOCALE, t, type Locale } from "@/lib/i18n";
 import type { ResumeEvent } from "@/lib/machine-state";
 import { readSummary, readProjects, readLanguage } from "@/lib/projects";
 import type { DueAlert } from "@/lib/queue";
@@ -111,6 +111,10 @@ export default async function ProjectLayout({
   );
   const current = items.find((t) => t.id === id)!;
   const root = projects.find((t) => t.id === id)!.root;
+  // 셸 전체(헤더 · 알림 종 일곱 · status bar · 배너)가 이 사전을 쓴다(§0-16 §발행 §묶음 표 2,
+  // `dd97c69c`) — ⑦만 옮겼던 첫 자리(`a50c8304`)에서 나머지 여섯이 여기서 이어졌다. idle 풀
+  // 문구(바로 아래)가 먼저 이 값을 써서 `auth` 조립보다 앞으로 올라왔다.
+  const locale = await readLanguage();
   // 칸의 순서 = 워커가 선 순서. 중복은 접는다 — 같은 엔진을 무는 워커가 둘이어도 한도는 하나다.
   const engines = [...new Set(current.engines.map((w) => w.engine))].filter(Boolean);
   // idle 워커 풀의 값(§1-2 · §비주얼 §38). 필터도 검색도 이 값을 안 좁힌다 — 셸이 그리므로
@@ -120,15 +124,15 @@ export default async function ProjectLayout({
   const idle = current.groups.find((g) => g.status === "idle");
   const idlePool =
     idle?.names.join(" ") ??
-    (current.groups.some((g) => g.status === "running") ? "없음 — 전원 running" : "없음");
+    (current.groups.some((g) => g.status === "running")
+      ? t(locale, "statusbar.idle.allRunning")
+      : t(locale, "statusbar.idle.none"));
   // 토큰은 머신당 하나라 프로젝트 요약에 들어 있지 않다(§0-4). 증상("내 큐가 안 돈다")이
   // 나타나는 화면이 여기라 판정도 여기서 한다. 값은 헤더 `설정` 버튼과 배너 CTA가 같이 쓴다 —
   // 진입점 둘이 같은 컴포넌트를 두 번 쓰고 전역 상태는 만들지 않는다(§0-4).
   const rawAuth = await readAuth();
   // §4-3 카탈로그 나머지 엔진의 상태 층 — 판정 없이 사실만(§0-4 §개정 `b0966e66`).
   const otherEngines = await readOtherEngineAuth();
-  // ⑦의 문구만 이 사전을 쓴다(§1-4) — ①~⑥은 아직 안 옮겨졌다, 이 티켓 몫이 아니다.
-  const locale = await readLanguage();
   const auth = {
     path: tildePath(rawAuth.path, home),
     savedAt: rawAuth.savedAt,
@@ -162,7 +166,10 @@ export default async function ProjectLayout({
   // 배지는 **켜진 알림의 개수 0~7**이다 — 건수를 합치지 않는다(⑤⑥이 들어와 4에서 6이 됐고,
   // ⑦이 들어와 7이 됐다 — §0-14 · §1-4).
   const alertCount = Object.values(alerts).filter(Boolean).length;
-  const alertLabel = alertCount > 0 ? `알림 ${alertCount}건` : "알림 없음";
+  const alertLabel =
+    alertCount > 0
+      ? `${t(locale, "bell.trigger.countPrefix")} ${alertCount}${t(locale, "bell.trigger.countSuffix")}`
+      : t(locale, "bell.trigger.empty");
 
   return (
     <>
@@ -179,7 +186,7 @@ export default async function ProjectLayout({
               그 셋의 순서·`설정`이 우측 맨 끝이라는 못은 안 건드린다. 랜딩-only는 `/p/**` 자체가
               404라 이 자리를 따로 안 가린다. */}
           <Button variant="ghost" size="sm" nativeButton={false} render={<Link href="/docs/" />}>
-            매뉴얼
+            {t(locale, "shell.header.manual")}
           </Button>
           {/* 순서는 `[종] [전환기] [설정]`이다(§0-10 자리 · §비주얼 §28 ①). `설정`이 우측 맨 끝이라는
               §비주얼 §4의 못은 안 뽑는다 — 루트 셸(`/`)에는 종이 없고 거기도 `설정`이 끝이다.
@@ -262,13 +269,16 @@ export default async function ProjectLayout({
           // 경로가 없는 건 파괴가 아니라 부재다 — destructive를 쓰지 않는다(§8).
           <Alert className="max-w-3xl">
             <Unplug aria-hidden className="text-status-stale" />
-            <AlertTitle>프로젝트 &quot;{current.name}&quot;의 .dira를 읽을 수 없습니다</AlertTitle>
+            <AlertTitle>
+              {t(locale, "shell.error.titlePrefix")} &quot;{current.name}&quot;
+              {t(locale, "shell.error.titleSuffix")}
+            </AlertTitle>
             <AlertDescription className="grid gap-3">
               <span className="font-mono text-xs break-all">{current.error}</span>
               <span className="flex items-center gap-4">
                 <RefreshButton />
                 <Link href="/" className="text-sm underline">
-                  프로젝트 관리
+                  {t(locale, "shell.nav.projects")}
                 </Link>
               </span>
             </AlertDescription>
@@ -298,7 +308,7 @@ export default async function ProjectLayout({
               폴링 갱신은 transition이라 fallback이 다시 뜨지 않는다. */}
           <Suspense
             fallback={engines.map((e) => (
-              <EngineCell key={e} engine={e} />
+              <EngineCell key={e} engine={e} locale={locale} />
             ))}
           >
             <EngineCells root={root} workers={current.engines} engines={engines} locale={locale} />
@@ -315,8 +325,8 @@ export default async function ProjectLayout({
                 `sr-only` 접두어로 낭독이 `idle 워커 w3 w9`가 된다: 앞에 읽히는 것이 엔진 한도라
                 낱말 하나로 주어를 안 바꾸면 `idle`이 엔진의 상태로 들린다(§38 §접근성) */}
             <span className="shrink-0">
-              {statusLabel("idle")}
-              <span className="sr-only"> 워커</span>
+              {statusLabel("idle", locale)}
+              <span className="sr-only">{t(locale, "statusbar.idleSrOnlySuffix")}</span>
             </span>
             {/* 자른다 — 이 바는 `h-7` + `overflow-hidden`이라 감기면 **세로로** 잘려 라벨까지
                 사라진다(§1-2 §자르기 개정). `truncate`는 값 `<span>`에만 걸고(풀에 걸면 `…`가
@@ -376,12 +386,9 @@ function NotificationItems({
     alerts.offline && (
       <>
         <Unplug aria-hidden className="mt-0.5 size-4 text-status-stale" />
-        <p className="col-start-2 text-sm font-medium">네트워크가 끊겨 있습니다</p>
-        <p className="col-start-2 text-sm text-foreground">
-          세션이 열리지 못하고 티켓은 그때마다 대기로 돌아갑니다. 연결이 돌아오면 저절로
-          재개됩니다.
-        </p>
-        <p className="col-start-2 text-sm text-foreground">Wi-Fi 또는 유선 연결을 확인하세요.</p>
+        <p className="col-start-2 text-sm font-medium">{t(locale, "bell.offline.title")}</p>
+        <p className="col-start-2 text-sm text-foreground">{t(locale, "bell.offline.body")}</p>
+        <p className="col-start-2 text-sm text-foreground">{t(locale, "bell.offline.hint")}</p>
       </>
     ),
     // ⑥ 복귀(§0-14). 유일하게 과거를 말하는 항목이고 신선도 10분이 그것을 이력이 아니게 한다.
@@ -392,13 +399,16 @@ function NotificationItems({
       <>
         <RotateCcw aria-hidden className="mt-0.5 size-4 text-status-blocked" />
         <p className="col-start-2 text-sm font-medium">
-          {resume.kind === "slept" ? "잠자기에서 복귀했습니다" : "꺼져 있다가 켜졌습니다"}
+          {resume.kind === "slept"
+            ? t(locale, "bell.resume.titleSlept")
+            : t(locale, "bell.resume.titleWake")}
         </p>
         <p className="col-start-2 text-sm text-foreground">
-          {dateTimeLabel(resume.from)}부터 {dateTimeLabel(resume.to)}까지 큐가 멈춰 있었습니다.
-          잃은 것은 없습니다 — 이미 다시 돌고 있습니다.
+          {dateTimeLabel(resume.from)}
+          {t(locale, "bell.resume.middle")} {dateTimeLabel(resume.to)}
+          {t(locale, "bell.resume.after")}
         </p>
-        <p className="col-start-2 text-sm text-foreground">고칠 일은 없습니다.</p>
+        <p className="col-start-2 text-sm text-foreground">{t(locale, "bell.resume.noAction")}</p>
         {/* ②와 같은 벌 — 행의 오른쪽 끝(§비주얼 §4-3). ⑤는 무수정이다(§0-14 §읽음 처리 — 살아
             있는 판정이라 붙이지 않는다). */}
         <span className="col-start-2 flex justify-end">
@@ -411,12 +421,10 @@ function NotificationItems({
     alerts.auth && (
       <>
         <TriangleAlert aria-hidden className="mt-0.5 size-4 text-status-stale" />
-        <p className="col-start-2 text-sm font-medium">Claude 토큰이 없습니다</p>
+        <p className="col-start-2 text-sm font-medium">{t(locale, "bell.auth.title")}</p>
         {/* `text-muted-foreground`를 안 쓴다 — 배경에 따라 통과·미달이 갈리는 색을 읽어야 하는
             유일한 문장에 두지 않는다(§1 함정 1 · §비주얼 §4-2가 배너에서 덮은 그 오버라이드) */}
-        <p className="col-start-2 text-sm text-foreground">
-          워커가 티켓을 집어도 세션을 못 열고 그대로 끝냅니다.
-        </p>
+        <p className="col-start-2 text-sm text-foreground">{t(locale, "bell.auth.body")}</p>
         {/* CTA는 행의 오른쪽 끝이다(§비주얼 §4-3). **`/`로 보내지 않는다** — 그 자리에서
             헤더 버튼과 같은 다이얼로그를 연다. 이동이 0회가 된다(§0-4) */}
         <span className="col-start-2 flex justify-end">
@@ -431,11 +439,10 @@ function NotificationItems({
       <>
         <CloudOff aria-hidden className="mt-0.5 size-4 text-status-blocked" />
         <p className="col-start-2 text-sm font-medium">
-          세션이 열리자마자 죽는 워커 {failures.length}개
+          {t(locale, "bell.failures.titlePrefix")} {failures.length}
+          {t(locale, "bell.failures.titleSuffix")}
         </p>
-        <p className="col-start-2 text-sm text-foreground">
-          티켓은 그때마다 대기로 정확히 돌아옵니다. 잃는 것은 없습니다.
-        </p>
+        <p className="col-start-2 text-sm text-foreground">{t(locale, "bell.failures.body")}</p>
         {/* `grid gap-2` — 한 워커가 한 줄에서 시작한다. flex-wrap이면 두 워커가 한 줄에 섞여
             어느 사유가 누구 것인지가 무너진다(§4-4). 상위 N개로 자르지 않는다 */}
         <div className="col-start-2 grid gap-2">
@@ -451,9 +458,7 @@ function NotificationItems({
         </div>
         {/* 큐를 움직이는 조작은 여전히 0개다(§0-5 답 `Q2=(a)`) — 아래 버튼은 큐를 안 건드리고
             보는 것만 바꾼다(§0-5 §읽음 처리). 문구는 §0-10 문구 표 ②가 정본이다 */}
-        <p className="col-start-2 text-sm text-foreground">
-          사유에 적힌 시각이 지나면 저절로 다시 집습니다 — 고칠 일은 없습니다.
-        </p>
+        <p className="col-start-2 text-sm text-foreground">{t(locale, "bell.failures.footer")}</p>
         {/* 항목 하나에 **하나**다 — 나열의 워커마다 붙지 않는다(§0-10). 자리는 문장 아래 자기
             행의 오른쪽 끝이다(§비주얼 §28 ⑤: 문장이 이미 2줄이라 옆에 붙이면 3줄이 된다).
             그릇은 ①의 CTA 행과 같은 마크업이고 버튼 벌은 ③의 `할당 해제`에서 물려받는다 */}
@@ -468,11 +473,10 @@ function NotificationItems({
       <>
         <CircleDot aria-hidden className="mt-0.5 size-4 text-status-stale" />
         <p className="col-start-2 text-sm font-medium">
-          아무도 집지 않는 티켓 {assigned.length}건
+          {t(locale, "bell.assigned.titlePrefix")} {assigned.length}
+          {t(locale, "bell.assigned.titleSuffix")}
         </p>
-        <p className="col-start-2 text-sm text-foreground">
-          워커가 잡아 둔 채 놓지 않아서, 이 티켓들은 순서가 와도 넘어갑니다.
-        </p>
+        <p className="col-start-2 text-sm text-foreground">{t(locale, "bell.assigned.body")}</p>
         <div className="col-start-2 grid gap-2">
           {assigned.map((t) => (
             // 한 행이 두 줄이고 그 사이는 `gap-1`이다 — 붙은 두 줄이 한 티켓임을 간격이 말한다.
@@ -517,29 +521,28 @@ function NotificationItems({
       <>
         <MessageSquareReply aria-hidden className="mt-0.5 size-4 text-status-blocked" />
         <p className="col-start-2 text-sm font-medium">
-          답변을 기다리는 티켓 {awaiting.length}건
+          {t(locale, "bell.awaiting.titlePrefix")} {awaiting.length}
+          {t(locale, "bell.awaiting.titleSuffix")}
         </p>
         {/* `요구사항`이라고 안 적는다 — `awaiting`은 `kind: request`만의 것이 아니다.
             `reap`이 자동 회수 상한을 넘길 때 아무 티켓에나 건다(§0-10) */}
-        <p className="col-start-2 text-sm text-foreground">
-          사람이 답을 써야 이 티켓들이 다시 큐에 뜹니다. 고장난 것은 없습니다.
-        </p>
+        <p className="col-start-2 text-sm text-foreground">{t(locale, "bell.awaiting.body")}</p>
         <div className="col-start-2 grid gap-2">
           {/* 나열 순서는 큐 순서 그대로다 — 오래된 것을 위로 올리지 않는다(§0-10: 순서를
               판정하기 시작하면 그 판정이 두 번째 진실이 된다). 상위 N건으로도 안 자른다 */}
-          {awaiting.map((t) => (
+          {awaiting.map((a) => (
             // 한 행이 **한 줄**이다(③과 갈리는 지점 — 둘째 줄이 없다).
-            <span key={t.stem} className="flex items-center gap-1">
+            <span key={a.stem} className="flex items-center gap-1">
               {/* §비주얼 §31 ⑤ — ④와 같다 */}
               <Link
-                href={`/p/${id}/tickets/${encodeURIComponent(t.stem)}`}
+                href={`/p/${id}/tickets/${encodeURIComponent(a.stem)}`}
                 className="rounded-sm font-mono text-xs text-muted-foreground underline"
               >
-                {t.hash}
+                {a.hash}
               </Link>
               {/* 경과일은 `<StatusBadge>`가 이미 그린다(`daysSince(mtime)`) — 여기서 새로
                   계산하지 않는다. 0일이면 라벨이 `답변 대기` 하나고 그 판단도 배지 안에 있다 */}
-              <StatusBadge status="awaiting" days={daysSince(t.mtime)} />
+              <StatusBadge status="awaiting" days={daysSince(a.mtime)} />
               {/* **링크지 버튼이 아니다** — 답변 폼은 `textarea` 하나가 아니라 `O_EXCL`로
                   파일을 만드는 폼이고, 448px 팝오버에 두 벌째를 그리면 같은 서버 액션의
                   진입점이 둘이 된다(§0-10 ④). 그래서 그 폼이 이미 사는 자리로 보낸다.
@@ -548,10 +551,10 @@ function NotificationItems({
                   자릿수로 갈려서 이어 붙이면 링크가 행마다 다른 x에 선다(§비주얼 §28 ④).
                   모양은 ①의 CTA와 같은 벌이다(`text-sm underline`) */}
               <Link
-                href={`/p/${id}/tickets/${encodeURIComponent(t.stem)}`}
+                href={`/p/${id}/tickets/${encodeURIComponent(a.stem)}`}
                 className="ml-auto rounded-sm text-sm underline"
               >
-                답변 쓰기
+                {t(locale, "bell.awaiting.answerLink")}
               </Link>
             </span>
           ))}
@@ -603,7 +606,7 @@ function NotificationItems({
   // 0건이어도 팝오버는 열린다 — 사라진 것은 경고고 남은 것은 그릇이다(§0-10 답 `Q2=(나)`).
   // `<EmptyState>`를 그대로 쓴다: 팝오버라고 예외를 만들면 그 컴포넌트가 강제하려던 것이
   // 여기서 처음 샌다(§비주얼 §6 · §28 ⑥). 버튼도 아이콘도 없다.
-  if (rows.length === 0) return <EmptyState text="알림 없음" />;
+  if (rows.length === 0) return <EmptyState text={t(locale, "bell.trigger.empty")} />;
   return rows.map((row, i) => (
     // 구분선은 두 번째 항목부터다 — `gap-2.5`만으로는 다섯 줄짜리 항목 셋이 어디서 끊기는지
     // 안 읽힌다. 배너 시절 `Alert` 테두리가 하던 일이고 `pt-2.5`가 그 간격 한가운데다(§28 ④).
@@ -636,7 +639,7 @@ async function EngineCells({
   // 직렬로 `await`하면 스캔이 GET 뒤에 줄을 서므로 같이 띄운다 — 둘 다 자기 캐시 뒤에 있다.
   // `tokens.json`은 claude 전용이다(§0-13 §범위) — claude가 없는 프로젝트에서는 안 읽는다.
   const [limits, rates, tokenRows] = await Promise.all([
-    engineLimits(engines),
+    engineLimits(engines, locale),
     usageRates(root, workers),
     engines.includes("claude") ? readTokenRows(locale) : Promise.resolve([]),
   ]);
@@ -696,6 +699,7 @@ async function EngineCells({
           // `tokens.json`이 claude 전용이라(§0-13 §범위) 다른 엔진 칸은 이 슬롯을 안 얻는다
           accountLabel={e === "claude" ? activeAccount : undefined}
           activeLabel={t(locale, "settings.tokens.active")}
+          locale={locale}
         />
       ))}
     </>
@@ -713,6 +717,7 @@ function EngineCell({
   rate,
   accountLabel,
   activeLabel,
+  locale = DEFAULT_LOCALE,
 }: {
   engine: string;
   limit?: EngineLimit;
@@ -723,6 +728,9 @@ function EngineCell({
   /** `sr-only` 접두어(`settings.tokens.active` — 낭독에만 쓴다, §26 §활성 계정 슬롯). `accountLabel`이
    *  없으면 안 쓴다 — 두 프롭을 하나로 접으면 로딩 중(둘 다 없음)과 값 없음을 못 가른다 */
   activeLabel?: string;
+  /** 도착 전 스켈레톤(`Suspense` fallback)은 이 값을 안 넘긴다 — `ko`로 떨어져도 화면이 안
+   *  깨진다(§0-16 §장치 폴백). 실제 칸은 `EngineCells`가 셸의 `locale`을 그대로 내려준다. */
+  locale?: Locale;
 }) {
   const value = limit && !("error" in limit) ? limit : null;
   // claude는 항구적 부재다(§0-8 §개정 ①) — 이 칸에만 `한도를 읽을 수 없습니다`를 안 세운다.
@@ -738,9 +746,9 @@ function EngineCell({
   const rateSlot = rate === undefined ? null : (
     <span
       className="hidden text-xs whitespace-nowrap text-muted-foreground tabular-nums lg:inline"
-      title="최근 10분 · 이 프로젝트의 워커 세션"
+      title={t(locale, "statusbar.rate.title")}
     >
-      · {formatTokens(rate)} 토큰/분
+      · {formatTokens(rate)} {t(locale, "statusbar.rate.suffix")}
     </span>
   );
   return (
@@ -771,7 +779,8 @@ function EngineCell({
               창 이름(`5시간`·`7일`)은 새 슬롯이 아니라 이 `%`와 같은 span이다(§0-8 §묶는 창) —
               `· 토큰/분`처럼 자기 `lg:inline`을 갖지 않고 `%`와 함께 서고 함께 빠진다. */}
           <span className={cn("text-xs whitespace-nowrap tabular-nums", over && "text-status-stale")}>
-            {Math.round(value.usedPercent)}% 사용{value.window && ` · ${value.window}`}
+            {Math.round(value.usedPercent)}% {t(locale, "statusbar.usage.suffix")}
+            {value.window && ` · ${value.window}`}
           </span>
           {/* 자리는 `% 사용` **바로 다음 · 리셋 시각 앞**이다(§26 ②) — 요구가 말한 `한도 옆`에
               리셋 시각이 끼어 앉지 않는다. 구분자는 이 칸의 절 구분자 `·` 그대로다 */}
@@ -779,7 +788,7 @@ function EngineCell({
           {/* `resets_at`이 없으면 **이 항목만** 빠진다. 칸이 통째로 폴백으로 넘어가지 않는다(§26 ④) */}
           {value.resetsAt !== null && (
             <span className="hidden text-xs whitespace-nowrap text-muted-foreground tabular-nums md:inline">
-              · {timeLabel(value.resetsAt)} 리셋
+              · {timeLabel(value.resetsAt)} {t(locale, "statusbar.reset.suffix")}
             </span>
           )}
         </>
@@ -789,7 +798,7 @@ function EngineCell({
           {/* 게이지를 안 그린다 — 빈 트랙도 `0%`도 회색 막대도 없다(§0-8 판정 2). 그 자리에
               판정 1의 소비량이 선다. `1.2M`으로 줄이지 않는다: 여기가 이 바의 유일한 절대 수다 */}
           <span className="text-xs whitespace-nowrap tabular-nums">
-            {tokens.toLocaleString()} 토큰
+            {tokens.toLocaleString()} {t(locale, "statusbar.tokens.suffix")}
           </span>
           {/* 이 칸에만 절대 수 둘이 나란히 선다(창 5시간 누적 · 창 10분 속도). 같은 사실이
               아니라는 것을 **단위 · 잉크 · `title`** 셋이 말한다(§26 ⑤) — 안 갈라 두면
@@ -801,7 +810,7 @@ function EngineCell({
               (§0-8 §개정 ①. 상시로 세우면 고쳐질 실패로 읽힌다) */}
           {!permanentlyAbsent && (
             <span className="text-xs whitespace-nowrap text-muted-foreground" title={limit.error}>
-              · 한도를 읽을 수 없습니다
+              · {t(locale, "statusbar.limit.unreadable")}
             </span>
           )}
         </>

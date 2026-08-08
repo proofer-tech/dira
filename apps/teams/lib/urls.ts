@@ -4,7 +4,7 @@
  *  번들에 들어갈 수 없다. 등록 폼은 입력하는 동안 슬러그 미리보기를 보여주고(서버 왕복 없이),
  *  전환기는 브라우저에서 `usePathname()`으로 목적지를 만든다. 규칙이 갈리면 미리보기가
  *  거짓말을 하므로 함수는 한 곳에 둔다. **여기에 `node:*` import를 추가하지 않는다.** */
-import { t, type Locale } from "./i18n.ts";
+import { DEFAULT_LOCALE, t, type Locale } from "./i18n.ts";
 
 /** 이름 → URL 조각 (DESIGN.md §프로젝트 > `id` 슬러그 규칙).
  *  한글 이름이면 빈 문자열이 되는 게 정상이다 — 그때는 등록 폼이 id를 직접 받는다. */
@@ -105,7 +105,8 @@ export function hasFindBar(pathname: string): boolean {
  *  **`0`이면 붙이지 않는다**: `· 0일`은 고장으로 읽힌다. `undefined`(경과를 안 주는 상태)와 같은 처리다.
  *  판정만 여기 있는 이유는 `pnpm test`가 JSX를 못 읽어서다 — `status-badge.tsx`에 두면 검증이 없다.
  *  이 파일이어야 하는 이유는 배지가 클라이언트 컴포넌트에도 들어가서다(`node:fs`를 못 끌고 온다). */
-export const elapsedSuffix = (days?: number) => (days ? ` · ${days}일` : "");
+export const elapsedSuffix = (days?: number, locale: Locale = DEFAULT_LOCALE) =>
+  days ? ` · ${days}${t(locale, "common.unit.day")}` : "";
 
 /** 테이블 바디가 한 번에 그리는 행 수(§1 보드 §테이블 바디는 30행씩 그린다. 요구 `1208e64a`). */
 export const ROW_PAGE = 30;

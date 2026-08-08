@@ -13,6 +13,7 @@ import { access, readdir, readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import { lastJsonLine } from "./workers.ts";
+import { DEFAULT_LOCALE, t, type Locale } from "./i18n.ts";
 
 /** 창 기본값. §0-8: 창은 엔진의 한도 창을 따르는데 그 길이는 판정 2의 실측이 준다 —
  *  **실측 전 기본값이 5시간 롤링**이고 화면이 `최근 5시간`이라고 그렇게 말한다. */
@@ -340,16 +341,17 @@ function maxWindow(candidates: Window[]): Window | null {
 /** 분 → 사람이 읽는 창 이름(`5시간`·`7일`). codex의 `window_minutes`가 실측 없이 아무 값이나
  *  올 수 있어 claude처럼 키 이름에 못 박지 않는다.
  *
- *  ponytail: 일·시간·분 셋만 안다. 더 잘게(주 단위 등) 필요해지면 그때 분기 하나 더 붙인다. */
-function windowLabel(minutes: number): string {
-  if (minutes % 1440 === 0) return `${minutes / 1440}일`;
-  if (minutes % 60 === 0) return `${minutes / 60}시간`;
-  return `${minutes}분`;
+ *  ponytail: 일·시간·분 셋만 안다. 더 잘게(주 단위 등) 필요해지면 그때 분기 하나 더 붙인다.
+ *  낱말은 로케일을 탄다(§0-16, `dd97c69c`) — `common.unit.*`을 그대로 쓴다(새 단위 사전이 아니다). */
+function windowLabel(minutes: number, locale: Locale): string {
+  if (minutes % 1440 === 0) return `${minutes / 1440}${t(locale, "common.unit.day")}`;
+  if (minutes % 60 === 0) return `${minutes / 60}${t(locale, "common.unit.hour")}`;
+  return `${minutes}${t(locale, "common.unit.minute")}`;
 }
 
 /** codex rollout의 `primary`·`secondary` 중 묶는 창을 고른다. **필드 존재만 확인됐다** — 오늘
  *  최신 rollout은 둘 다 `null`이라 값 실측이 없다(§0-8 §묶는 창). 규칙은 claude와 같다. */
-export function pickCodexWindow(rl: CodexRateLimits | null): Window | null {
+export function pickCodexWindow(rl: CodexRateLimits | null, locale: Locale = DEFAULT_LOCALE): Window | null {
   const candidates: Window[] = [];
   for (const name of ["primary", "secondary"] as const) {
     const w = rl?.[name];
@@ -359,7 +361,7 @@ export function pickCodexWindow(rl: CodexRateLimits | null): Window | null {
     candidates.push({
       usedPercent: w.used_percent,
       resetsAt: Number.isFinite(at) ? at : null,
-      window: typeof mins === "number" && Number.isFinite(mins) ? windowLabel(mins) : "",
+      window: typeof mins === "number" && Number.isFinite(mins) ? windowLabel(mins, locale) : "",
     });
   }
   return maxWindow(candidates);
@@ -373,19 +375,26 @@ const LIMIT_TTL_MS = 60_000;
 /** 값이 아니라 **Promise를 캐시한다** — 동시에 들어온 요청 여럿이 호출 하나를 나눠 갖는다.
  *  실패도 TTL 동안 캐시된다(그게 "실패해도 더 두드리지 않는다"다).
  *
+ *  **키에 로케일이 들어간다**(`엔진\0로케일`) — 사유 문구가 로케일을 타므로(§0-16), 안 그러면
+ *  언어를 바꾼 직후 TTL 안에서 옛 언어의 캐시된 문구가 그대로 나온다.
+ *
  *  ponytail: 엔진 이름 몇 개짜리 Map이라 비우지 않는다. */
 const limitCache = new Map<string, { at: number; value: Promise<EngineLimit> }>();
 
 /** 엔진 이름들 → 칸마다의 잔여. **호출은 TTL당 엔진 하나에 1회**다.
  *  던지지 않는다 — 실패는 전부 `{ error }`로 돌아온다(바가 사라지면 안 된다). */
-export async function engineLimits(engines: string[]): Promise<Record<string, EngineLimit>> {
+export async function engineLimits(
+  engines: string[],
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<Record<string, EngineLimit>> {
   const now = Date.now();
   const out: Record<string, EngineLimit> = {};
   await Promise.all(
     [...new Set(engines)].map(async (engine) => {
-      let hit = limitCache.get(engine);
+      const key = `${engine}\0${locale}`;
+      let hit = limitCache.get(key);
       if (!hit || now - hit.at >= LIMIT_TTL_MS) {
-        limitCache.set(engine, (hit = { at: now, value: readLimit(engine) }));
+        limitCache.set(key, (hit = { at: now, value: readLimit(engine, locale) }));
       }
       out[engine] = await hit.value;
     }),
@@ -404,15 +413,15 @@ export async function engineLimits(engines: string[]): Promise<Record<string, En
  *  "claude"`일 때 이 폴백의 사유 문구를 안 그리는 것으로 그 차이를 표현한다 — 사유 문자열
  *  자체(`한도를 주는 원본을 모릅니다`)는 grok처럼 실제로 원본을 모를 때의 것이라 claude에는
  *  안 맞지만, 화면이 그 문구를 절대 안 읊으므로 여기서 갈라 적지 않는다. */
-const LIMIT_SOURCE: Record<string, () => Promise<EngineLimit>> = {
+const LIMIT_SOURCE: Record<string, (locale: Locale) => Promise<EngineLimit>> = {
   codex: codexLimit,
 };
 
-function readLimit(engine: string): Promise<EngineLimit> {
+function readLimit(engine: string, locale: Locale): Promise<EngineLimit> {
   const read = LIMIT_SOURCE[engine];
-  if (read) return read();
+  if (read) return read(locale);
   // 원본을 모르는 엔진은 폴백이다. **추정치를 지어내지 않는다**(§0-8).
-  return Promise.resolve({ error: `${engine}: 한도를 주는 원본을 모릅니다` });
+  return Promise.resolve({ error: `${engine}: ${t(locale, "statusbar.limit.unknownOriginSuffix")}` });
 }
 
 /** codex — rollout 파일의 마지막 `token_count` 이벤트. **새 네트워크 호출이 0이다.**
@@ -424,11 +433,11 @@ function readLimit(engine: string): Promise<EngineLimit> {
  *
  *  ponytail: 최근 날짜 디렉터리의 파일 5개까지만 본다. 자정 직후 첫 세션이 아직 `token_count`를
  *  안 실었으면 그 몇 분은 폴백이다 — 넓히려면 이전 날짜 디렉터리로 한 단계 더 내려간다. */
-async function codexLimit(): Promise<EngineLimit> {
+async function codexLimit(locale: Locale): Promise<EngineLimit> {
   const sessions = path.join(homedir(), ".codex", "sessions");
   let dir: string | null = sessions;
   for (let i = 0; i < 3 && dir; i++) dir = await newestNumericChild(dir);
-  if (!dir) return { error: `${sessions}: rollout 파일이 없습니다` };
+  if (!dir) return { error: `${sessions}: ${t(locale, "statusbar.limit.noRolloutSuffix")}` };
   const files = (await readdir(dir).catch(() => [] as string[]))
     .filter((n) => n.startsWith("rollout-") && n.endsWith(".jsonl"))
     .sort()
@@ -438,14 +447,14 @@ async function codexLimit(): Promise<EngineLimit> {
     const full = path.join(dir, f);
     const rl = lastRateLimits(await readFile(full, "utf8").catch(() => ""));
     if (!rl) continue; // 이 세션은 턴이 없었다 — 한 칸 더 오래된 파일을 본다
-    const picked = pickCodexWindow(rl);
+    const picked = pickCodexWindow(rl, locale);
     if (!picked) {
       // 한도에 닿으면 codex가 이 수를 아예 안 싣는다(실측 `primary: null`). 게이지를 안 그린다.
-      return { error: `${full}: rate_limits.primary·secondary가 모두 null입니다` };
+      return { error: `${full}: ${t(locale, "statusbar.limit.rateLimitsNullSuffix")}` };
     }
     return picked;
   }
-  return { error: `${dir}: 최근 rollout에 rate_limits가 없습니다` };
+  return { error: `${dir}: ${t(locale, "statusbar.limit.noRateLimitsSuffix")}` };
 }
 
 /** `<YYYY>`·`<MM>`·`<DD>` 중 가장 최근 것. 0 패딩 숫자만 받으므로 사전순으로 고른다. */

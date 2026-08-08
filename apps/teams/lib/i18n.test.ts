@@ -151,6 +151,56 @@ test("종 ⑦ 제목·나열 — 두 언어에서 다 문장이 된다", () => {
   assert.strictEqual(blocked("en", "1h", 1), "1h left, but blocked by 1 of its prerequisites");
 });
 
+// 셸 둘째 묶음(§0-16 §발행 §묶음 표 2, `dd97c69c`) — 변수를 낀 조립 문구들이 원문과 한 글자도
+// 안 갈리는지 못박는다. 조립식은 `layout.tsx`·`project-switcher.tsx`의 JSX 그대로다(줄바꿈만
+// 있는 공백은 지워지고, 같은 줄의 공백 하나는 남는다).
+test("dd97c69c — 알림 트리거·종 넷(②③④의 개수 제목)·전환기 0건 조립이 원문 그대로다", () => {
+  const trigger = (n: number) =>
+    `${t("ko", "bell.trigger.countPrefix")} ${n}${t("ko", "bell.trigger.countSuffix")}`;
+  assert.strictEqual(trigger(3), "알림 3건");
+
+  const failuresTitle = (n: number) =>
+    `${t("ko", "bell.failures.titlePrefix")} ${n}${t("ko", "bell.failures.titleSuffix")}`;
+  assert.strictEqual(failuresTitle(2), "세션이 열리자마자 죽는 워커 2개");
+
+  const assignedTitle = (n: number) =>
+    `${t("ko", "bell.assigned.titlePrefix")} ${n}${t("ko", "bell.assigned.titleSuffix")}`;
+  assert.strictEqual(assignedTitle(2), "아무도 집지 않는 티켓 2건");
+
+  const awaitingTitle = (n: number) =>
+    `${t("ko", "bell.awaiting.titlePrefix")} ${n}${t("ko", "bell.awaiting.titleSuffix")}`;
+  assert.strictEqual(awaitingTitle(2), "답변을 기다리는 티켓 2건");
+
+  const empty = (q: string) =>
+    q
+      ? `"${q}"${t("ko", "shell.switcher.emptyQueriedGlue")} ${t("ko", "shell.switcher.emptySuffix")}`
+      : t("ko", "shell.switcher.emptySuffix");
+  assert.strictEqual(empty("foo"), `"foo"와 일치하는 프로젝트 0건`);
+  assert.strictEqual(empty(""), "일치하는 프로젝트 0건");
+});
+
+test("dd97c69c — 연결 안 됨 배너 제목(변수 프로젝트 이름)이 원문 그대로다", () => {
+  const title = (name: string) =>
+    `${t("ko", "shell.error.titlePrefix")} "${name}"${t("ko", "shell.error.titleSuffix")}`;
+  assert.strictEqual(title("myproj"), `프로젝트 "myproj"의 .dira를 읽을 수 없습니다`);
+});
+
+test("dd97c69c — 복귀(⑥) from·to 두 변수 조립이 원문 그대로다", () => {
+  const body = (from: string, to: string) =>
+    `${from}${t("ko", "bell.resume.middle")} ${to}${t("ko", "bell.resume.after")}`;
+  assert.strictEqual(
+    body("14:00", "15:30"),
+    "14:00부터 15:30까지 큐가 멈춰 있었습니다. 잃은 것은 없습니다 — 이미 다시 돌고 있습니다.",
+  );
+});
+
+test("dd97c69c — status bar `% 사용` 뒤에 창 이름이 붙어도 안 붙어도 원문 그대로다", () => {
+  const usage = (pct: number, window: string) =>
+    `${pct}% ${t("ko", "statusbar.usage.suffix")}${window && ` · ${window}`}`;
+  assert.strictEqual(usage(42, ""), "42% 사용");
+  assert.strictEqual(usage(42, "5시간"), "42% 사용 · 5시간");
+});
+
 // 화면에 남은 한국어를 여기서 잡는다 — 사전 값 자체에 한글이 섞이면 폴백이 아니라 오타다.
 // 언어 이름 둘만 예외다(영어 화면에서도 `한국어`는 `한국어`로 적는다).
 test("en 사전에 한글이 없다 — 언어 이름 둘만 예외다", () => {
