@@ -66,6 +66,37 @@ test("스키마 위반 — 미정의 타입 · 미정의 관계 · 댕글링 · 
   assert.match(joined, /필수 속성 누락.*짱구/);
 });
 
+test("정의역·치역 판정 — 관계 표 셀 끝의 ' — 설명' 꼬리를 떼고 판정한다(실 SCHEMA.md 모양, 4657d628)", () => {
+  const SCHEMA_TAIL = `## 객체 타입
+
+| 이름 | 필수 속성 | 뜻 |
+|---|---|---|
+| 워커 | - | 워커 객체 |
+| 엔진 파일 | - | 엔진 파일 객체 |
+| GUI 모듈 | - | GUI 모듈 객체 |
+
+## 관계 타입
+
+| 이름 | 정의역 → 치역 |
+|---|---|
+| 돌린다 | 워커 → 엔진 파일 — cron이 띄운 워커가 실제로 부르는 스크립트 |
+| 불러온다 | GUI 모듈 · 워커 → GUI 모듈 · 엔진 파일 — import로 닿는 자리 · 위 §속성 |
+`;
+  const m = computeOntologyMetrics({
+    schemaText: SCHEMA_TAIL,
+    objects: [
+      // 돌린다: 치역이 단일 항목 + 꼬리 — 꼬리를 안 떼면 "엔진 파일" != "엔진 파일 — ..."로 오탐
+      { rel: "objects/워커/w1.md", text: "워커다.\n- 돌린다: [[e1]]\n" },
+      // 불러온다: 치역이 'A · B — 꼬리' — 안 떼면 마지막 항목 "엔진 파일"만 꼬리를 물어 오탐
+      { rel: "objects/GUI 모듈/g1.md", text: "GUI 모듈이다.\n- 불러온다: [[e2]]\n" },
+      { rel: "objects/엔진 파일/e1.md", text: "엔진 파일이다.\n" },
+      { rel: "objects/엔진 파일/e2.md", text: "엔진 파일이다.\n" },
+    ],
+    actionLogs: [],
+  });
+  assert.doesNotMatch(m.schemaViolations.join("\n"), /정의역·치역 위반/);
+});
+
 test("껍데기 · 고립", () => {
   const m = computeOntologyMetrics({
     schemaText: SCHEMA,
