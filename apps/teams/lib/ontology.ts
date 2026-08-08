@@ -142,7 +142,14 @@ function typeAndName(rel: string): { type: string; name: string } {
 
 export type ObjectInput = { rel: string; text: string };
 export type ActionLogInput = { date: string; text: string };
-export type OntologyInput = { schemaText: string; objects: ObjectInput[]; actionLogs: ActionLogInput[] };
+export type OntologyInput = {
+  schemaText: string;
+  objects: ObjectInput[];
+  actionLogs: ActionLogInput[];
+  /** `object-views/<이름>.md` — 값을 안 드는 뷰라 parseObject 판정(타입·속성·`##` 절)은 안 걸고
+   *  링크 해석만 한다(§메타모델). 없는 호출자는 생략해도 된다 */
+  views?: ObjectInput[];
+};
 
 export type Counted = { count: number; ratio: number; items: string[] };
 
@@ -171,6 +178,21 @@ export type OntologyMetrics = {
   /** action-log 전체에서 가장 최근 줄의 `YYYY-MM-DD HH:MM` */
   lastUpdated: string | null;
 };
+
+const LINK = /\[\[([^\]]+)\]\]/g;
+
+/** 뷰 본문의 `[[이름]]`이 실재하는 객체·뷰를 가리키는지 확인한다. 대상이 없으면 기존 객체
+ *  댕글링과 같은 형식(`댕글링: <파일> -> [[대상]]`)으로 `schemaViolations`에 실어 표시를 재사용한다. */
+function checkViewLinks(views: ObjectInput[], knownNames: Set<string>): string[] {
+  const violations: string[] = [];
+  for (const v of views) {
+    const targets = new Set([...v.text.matchAll(LINK)].map((m) => m[1].split("|")[0].trim()));
+    for (const target of [...targets].sort()) {
+      if (!knownNames.has(target)) violations.push(`댕글링: ${v.rel} -> [[${target}]]`);
+    }
+  }
+  return violations;
+}
 
 export function computeOntologyMetrics(input: OntologyInput): OntologyMetrics {
   const { types, relTypes, required } = parseSchema(input.schemaText);
@@ -250,6 +272,10 @@ export function computeOntologyMetrics(input: OntologyInput): OntologyMetrics {
     if (p.props.length < 2) shellItems.push(`껍데기(속성 ${p.props.length}개): ${p.rel}`);
     if (p.rels.length === 0 && myIncoming.size === 0) isolatedItems.push(`고립(들고나는 관계 0개): ${p.rel}`);
   }
+
+  const views = input.views ?? [];
+  const viewNames = new Set(views.map((v) => typeAndName(v.rel).name));
+  violations.push(...checkViewLinks(views, new Set([...names, ...viewNames])));
 
   const objectCount = parsed.length;
   const n = objectCount || 1;

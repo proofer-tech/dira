@@ -112,6 +112,27 @@ test("action-log — 빈손 비율 · 새객체/스키마개정 추이 · 마지
   assert.equal(m.lastUpdated, "2026-08-08 14:00");
 });
 
+test("객체 뷰 — [[링크]]가 객체·다른 뷰로 닿으면 통과, 안 닿으면 댕글링(기존 표시 재사용)하고 `##` 절은 안 걸린다", () => {
+  const m = computeOntologyMetrics({
+    schemaText: SCHEMA,
+    objects: [{ rel: "objects/사람/철수.md", text: "철수다.\n- 이름: 철수\n- 나이: 20\n" }],
+    views: [
+      // 철수(객체)·짝 뷰(다른 뷰) 둘 다 닿아야 하고, 허깨비는 댕글링, `##` 절이 있어도 위반 없음
+      {
+        rel: "object-views/모음.md",
+        text: "## 절\n[[철수]]와 [[짝 뷰]]를 묶는 기록. [[허깨비]]는 없다.\n",
+      },
+      { rel: "object-views/짝 뷰.md", text: "모음과 짝인 뷰.\n" },
+    ],
+    actionLogs: [],
+  });
+  const joined = m.schemaViolations.join("\n");
+  assert.match(joined, /댕글링: object-views\/모음\.md -> \[\[허깨비\]\]/);
+  assert.doesNotMatch(joined, /철수/);
+  assert.doesNotMatch(joined, /짝 뷰/);
+  assert.doesNotMatch(joined, /## 절 사용.*모음/);
+});
+
 // 패리티 — dira 큐 자신의 온톨로지를 두 검사기(이 파일이 옮겨온 것과 원본 ont-check.py)에
 // 같이 돌려 숫자가 갈리지 않는지 못박는다(§Goal "새로 만들면 숫자가 갈린다"). 원본은 이 레포
 // 밖(hsol.info 블롭)에 있어 다른 환경엔 없을 수 있다 — 없으면 건너뛴다.
