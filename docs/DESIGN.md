@@ -11963,6 +11963,205 @@ WARN 없이 블록을 안 붙인다). 온톨로지를 원하지 않는 사용자
 | `f26f8631` | archive-manager PROFILE 두 벌 §산출물 넷 → §기록하는 자리 하나 + `protocols/ontology.md` 두 벌 §3에 스키마 추가 기준 둘 | developer |
 | `b0fb6b9c` | 객체 타입 전수 재판정 — 매체 타입이 「문서」 말고 또 있나 (「문서」는 P218-10이 든다) | archive-manager |
 
+#### 형식이 vault 레퍼런스로 간다 — `_ontology/` · `templates/` · frontmatter (요구 `6b08db99` · 답 `760c7c07`)
+
+요구가 참조 구현을 지목했다 — `~/Projects/hsol.info/hsol-info-blob/vault`. 전수 대조했다
+(`_ontology/` 33장 · `Templates/` 10장 · `objects/**` · `datasources/README.md` ·
+`functions/README.md` · 실제 객체 `objects/people/김예진.md`). **갈리는 자리가 아홉이고, 여섯은
+요구 본문이 답을 이미 줬다. 남은 셋만 되물었다**(`760c7c07`).
+
+##### 대조표 — vault ↔ dira 현행
+
+| 자리 | vault | dira 현행 | 어디로 |
+|---|---|---|---|
+| 타입 정의 | `_ontology/` 6갈래 33장 | `SCHEMA.md` 한 장(표 셋) | ① |
+| 템플릿 | `Templates/<타입>.md` 10장 | 없다 | ② |
+| 객체 자리 | `objects/<타입>/<이름>.md` | 같다(60장) | 안 갈린다 |
+| 객체 속성 | frontmatter | 본문 `- <속성>: <값>` | ③ |
+| 객체 관계 | frontmatter `links:` — 링크마다 속성 | 본문 `- <관계타입>: [[대상]]` | ③ |
+| 객체 본문 | `# 제목` + `##` 절 | `##` 절 금지 · 첫 줄이 발췌 | ④ |
+| 원천 | `datasources/` — 출처 표 + 변환 md 트리 | 없다 | ⑤ |
+| 반복 작업 | `functions/` — Dataview 쿼리 4개 | 없다 | ⑥ |
+| 묶음 | `object-views/` + `object-sets/` | `object-views/` 16장 | `object-sets`는 안 만든다 |
+
+##### ① 타입 정의 — `SCHEMA.md` 한 장에서 `_ontology/` 갈래로
+
+`<큐 루트>/ontology/_ontology/` 아래 산다. **타입 하나 = 파일 하나**이고, 그 파일이 vault처럼
+속성 표 · 허용 링크 · 액션 영향 · 예시를 든다.
+
+- **지도 한 장은 남는다 — `ontology/_ontology/SCHEMA.md`.** 진입점이 없으면 `tick.sh` 블록이
+  가리킬 자리가 사라지고(엔진이 *"SCHEMA.md가 지도"*라고 말한다) `lib/ontology.ts`의 표 파싱이
+  설 자리도 없어진다. vault도 갈래마다 `_index.md`를 두는 같은 관용구다. 지도가 드는 것은
+  **타입 이름 · 한 줄 뜻 · 정의 파일 링크** 셋이고, 세부는 타입 파일로 내려간다.
+- **세부 갈래를 스펙이 안 박는다.** `object-types`·`link-types`·`action-types` 셋은 지금
+  SCHEMA.md 표 셋과 1:1이라 따라오지만, `interfaces`·`value-types`·`shared-properties`까지
+  둘지는 온톨로지의 **내용**이라 archive-manager가 정한다(§스키마 «dira의 스키마 내용은 여기
+  안 적는다»와 같은 선).
+- 이름 앞의 `_`는 요구의 낱말 그대로 받는다 — 정렬로 `objects/`·`object-views/`와 갈린다.
+
+##### ② 템플릿 — `ontology/templates/<타입>.md`
+
+타입마다 한 장. 새 객체는 이 파일에서 시작한다 — frontmatter 키가 빈 채로 서 있고 세션이 값을
+채운다. C1(형식 제약이 없어 기본 출력이 산문이었다)에 처방을 하나 더 대는 자리다.
+
+- **`<큐 루트>/templates/`가 아니다.** 그 자리는 새 프로젝트 스캐폴딩이 이미 쓴다(§형식의 정본
+  «셋 다 큐 사본과 `templates/` 양쪽이다»). 온톨로지의 템플릿은 온톨로지 안에 산다.
+- **빈손이 정상 종료라는 못은 안 갈린다** — 템플릿이 있다고 채울 의무가 생기지 않는다.
+
+##### ③ 객체 — 속성과 관계가 frontmatter로 간다
+
+요구가 예시를 직접 줬으므로 되묻지 않는다. 지금 3층(서술 / `- 속성: 값` / `- 관계: [[대상]]`)의
+아래 두 층이 frontmatter로 올라간다.
+
+```markdown
+---
+type: <타입>
+name: <이름>
+aliases: []
+tags: []
+description: <한 줄. 발췌 자리다>
+<타입별 속성>: <값>
+links:
+  <관계타입>:
+    - <대상키>: "[[대상 이름]]"
+      <링크속성>: <값>
+---
+
+# <이름>
+
+<서술>
+```
+
+- **공통 키 다섯**(`type`·`name`·`aliases`·`tags`·`description`)은 모든 타입이 든다. 타입별
+  속성은 그 아래 평평하게 붙고, 무엇이 필수인지는 타입 정의 파일이 정한다.
+- **관계에 속성이 붙는다.** vault `worksAt`의 `role`·`startDate`가 그 자리고, 지금 표기
+  (`- 불러온다: [[paths.ts]]`)로는 적을 데가 없던 값이다. 링크 속성 표는 관계 타입 정의가 든다.
+- **발췌 자리가 갈린다.** OKF의 «첫 비어 있지 않은 줄이 발췌»는 frontmatter가 서면 `---`를
+  가리킨다 — `description:`이 그 역할을 받는다.
+- **숨은 간선 판정은 안 갈린다**(§형식 S2). 서술 안 `[[링크]]`는 여전히 `links:`에 대응이
+  있어야 한다. 읽는 자리가 목록 줄에서 frontmatter로 옮겨갈 뿐이다.
+- **속성 값이 다른 객체의 이름이면 관계다**도 그대로다 — `links:`로 간다.
+- **객체 뷰도 frontmatter를 든다**(vault `type: ObjectView` · `viewOf:` · `relatedViews:`).
+  키 벌은 객체와 다르다 — 뷰는 사실을 안 드니 `links:`가 아니라 «무엇을 묶은 뷰인가»가 든다.
+  **`##` 절 허용은 뷰에서 그대로 산다**(§메타모델 — 뷰는 정의가 아니라 묶음이다).
+
+##### ④ 본문 — `##` 절은 안 연다. 서술이 는다 (답 Q3 = (b))
+
+절 금지는 산다 — 근거(객체 하나는 정의 하나이고, 절이 생기면 그 파일에 개념이 둘 섞인 것)가
+그대로다. **대신 답이 지금 서술을 반려했다**: *"지금 서술은 너무 단순하고 독립적입니다.
+좀 더 상세한 개념설명이 필요합니다."*
+
+실측이 그 말과 같다 — 객체 60장의 서술 중앙값이 **107 B**(한 문장)이고 **41장이 200 B 미만**,
+최소는 47 B(`test_feed_stall.py.md`)다.
+
+- **무엇이 상세한가 — 판정 둘.** ⓐ 이 객체를 처음 보는 세션이 서술만 읽고 «이것이 무엇인가»에
+  답할 수 있나 ⓑ 이 객체가 주변 객체와 **왜** 그렇게 닿는지가 서술에 있나. ⓑ가 «독립적»의
+  처방이다 — 관계 줄은 간선이 **있다**는 것만 들고, 그 간선이 **왜** 서는지는 서술의 몫이다.
+- **바이트 하한을 안 박는다.** 분량을 계약으로 걸면 채우기 압박이 되고 그것이 C3(산출 압박 →
+  교훈 산문) 재발 경로다. 대신 지표에 **«서술이 한 문장뿐인 객체 비율»**을 더한다 — 판정이
+  아니라 표본 검토 대상을 좁히는 용도다(규범 문장 검출과 같은 성격).
+- **서술은 여전히 사실만 든다**(§형식 S1). 상세해지는 것은 *무엇인가*이지 *무엇을 해야
+  하는가*가 아니다. 이 한 줄이 없으면 «상세히»가 교훈 산문으로 되돌아가는 문이 된다.
+
+##### ⑤ `datasources/` — 큐 밖에서 들어온 것만 (답 Q1)
+
+답이 자리를 지목했다 — *"뭐든 외부의것이 되겠죠? … 티켓이나 채팅에 첨부한 파일같은것들이
+될겁니다."* 그 실물이 이미 있다: **`<큐 루트>/attachments/`**(§8 첨부).
+
+| 자리 | 무엇 |
+|---|---|
+| `ontology/datasources/README.md` | 어느 출처가 어느 객체 타입을 공급하는지 표 한 장. vault의 그 파일과 같은 모양 |
+| `ontology/datasources/<출처>/` | 원본이 md가 **아닌** 것(그림 · 로그 · 붙여넣은 텍스트)을 md로 떠 오는 자리 |
+
+- **큐·레포 안에 원본이 있는 것은 datasource가 아니다.** `docs/DESIGN.md`·`protocols/*`·
+  `tickets/<해시>.md`·`runner.log`·`apps/teams/**`는 이미 md이거나 정본이 살아 있고, 떠 오면
+  사본이 둘이라 즉시 낡는다(액션 인스턴스를 안 쌓는 근거이자 티켓을 `[[ ]]` 대신 해시로 적는
+  근거다). 객체는 그것을 **경로로** 가리킨다.
+- 그래서 dira의 `datasources/`는 vault보다 얇게 시작한다 — 표 한 장이고, 변환 사본은 첨부가
+  실제로 객체를 낳을 때만 는다.
+
+##### ⑥ `functions/` — 레시피와 스크립트 둘 다 (답 Q2 = (a)+(b))
+
+dira에는 Dataview가 없고 온톨로지를 읽는 손이 둘이다 — 세션(`grep`)과 GUI(`lib/ontology.ts`).
+
+| 자리 | 무엇 |
+|---|---|
+| `ontology/functions/README.md` | 반복 조회를 `grep`/`find` 한 줄로. 세션이 그대로 붙여 넣고 돌린다 |
+| `ontology/functions/<이름>.py` | 한 줄로 안 되는 조회. **python3 표준 라이브러리만** |
+
+- **형식 판정의 정본은 `apps/teams/lib/ontology.ts` 하나다.** 검사기를 여기 또 두면 숫자가
+  갈린다 — `ont-check.py` 판정을 옮길 때 이미 박은 못이다(§지표 «새로 만들면 숫자가 갈린다»).
+  여기 사는 것은 **질의**이지 판정이 아니다.
+- 엔진 불변에 안 걸린다 — `tick.sh`·`tickets.py`가 아니고, 엔진이 이 스크립트를 부르지도 않는다.
+
+##### 안 만드는 것
+
+| vault | 왜 안 받나 |
+|---|---|
+| `object-sets/` | 요구가 안 들었다. `object-views/`가 이미 «묶음»을 든다(§메타모델) |
+| `Attachments/` | dira는 `<큐 루트>/attachments/`가 그 자리다(§8). 온톨로지 안에 두면 자리가 둘이다 |
+| `.base`(Obsidian Bases) | 도구 종속. dira의 뷰어는 `/p/<project>/ontology`다 |
+
+##### 읽는 손이 전부 따라간다
+
+메타모델이 갈리므로 다섯이 같이 간다. **엔진 수정은 제약 1 경계 안**(의존성 0 · 임시 큐 판정 ·
+`test_*.py` 통과 + 새 테스트)이라 새 승인을 안 묻는다 — 갈리는 것이 프롬프트 문자열 한 낱말이다.
+
+| 자리 | 무엇이 갈리나 |
+|---|---|
+| `tick.sh` 온톨로지 블록(`:599`·`:606`) | 지도 이름이 `SCHEMA.md` → `_ontology/SCHEMA.md`. 블록은 여전히 **상수**다(§P5 — 위치+검색 방법만) |
+| `test_ontology.py:108` | 같은 문자열 단언 |
+| `apps/teams/lib/ontology.ts` | 파서가 목록 줄 → frontmatter. 지표 하나 신설(서술 한 문장 비율). 정의역·치역 판정 자체는 안 갈린다 |
+| `/p/<project>/ontology` | 지도 파일 경로 · `_ontology/`·`templates/`·`datasources/`·`functions/` 트리 |
+| 온톨로지 빌더 — 설문 시드 · 마이그레이션 | 시드가 `SCHEMA.md` 한 장 → 지도 + 타입 파일. 마이그레이션은 «재실행이 정상 사용»이라 이 개정을 그대로 받는다 — 옛 형식 산출물을 새 형식으로 올리는 것이 그 기능의 정의다 |
+
+**`ont-check.py` 패리티 테스트는 죽는다**(`lib/ontology.test.ts` «패리티 — ont-check.py와 dira
+큐에서 같은 숫자가 나온다»). 그 스크립트는 **이 레포 밖**(`hsol.info` 블롭)이라 이 큐가 못
+고치고, 형식이 갈리면 대조 상대가 옛 형식만 읽는다. 이식 시점의 «숫자가 갈리면 안 된다»는 못은
+**이식을 검증하는 못**이었고 형식 개정이 그 전제를 무르게 한다 — 판정의 정본은 `lib/ontology.ts`
+하나로 남는다. 지우는 것이지 `t.skip`으로 덮지 않는다(늘 건너뛰는 테스트는 통과로 읽힌다).
+
+##### 순서 — 큐 온톨로지 먼저, 도는 `.wip` 둘은 그대로 끝낸다
+
+지금 `.wip` 둘이 현행 형식을 전제로 돈다 — `b33a509e`(효용 4회차) · `4657d628`(ont-check
+정의역·치역 오탐). **둘은 그대로 끝낸다.**
+
+- **효용 4회차는 이 개정 앞에 잰다.** 도달 비용 축의 기준선이 필요하고, 형식이 갈리는 중에
+  재면 그 회차가 무엇을 잰 것인지 아무도 못 말한다(P218-10↔11이 선 그 못과 같다).
+- 형식 이행은 **규약 → 타입 정의 → 객체 → 읽는 손** 순서다. 규약이 안 갈린 채 archive-manager가
+  뜨면 옛 3층으로 쓴다.
+
+##### 검증
+
+```bash
+# 자리
+test -f .dira/ontology/_ontology/SCHEMA.md && echo ok
+ls .dira/ontology/templates/*.md | wc -l                              # 객체 타입 수와 같다
+test -f .dira/ontology/datasources/README.md && \
+  test -f .dira/ontology/functions/README.md && echo ok
+
+# 형식 — 객체 전량이 frontmatter를 든다
+find .dira/ontology/objects -name '*.md' | wc -l                      # 60
+grep -L '^---$' $(find .dira/ontology/objects -name '*.md') | wc -l   # 0
+grep -L '^---$' .dira/ontology/object-views/*.md | wc -l              # 0 — 뷰도 든다
+
+# 옛 형식이 안 남았다 — 속성·관계가 본문 목록 줄로 서 있지 않다
+grep -rn '^- .*: ' .dira/ontology/objects/ | wc -l                    # 0
+
+# 절 금지는 그대로다
+grep -rc '^## ' .dira/ontology/objects/ | grep -v ':0$' | wc -l       # 0
+
+# 엔진 — 임시 큐에서 판정한다(제약 1)
+python3 test_ontology.py && python3 test_tick.py && python3 test_tickets.py
+```
+
+큐 안 실물이라 커밋에 안 실린다 — 해당 티켓이 `## 결과`에 출력을 적는다.
+
+##### 발행
+
+로드맵 P219. 형식은 스펙이 박고 **내용은 archive-manager**라는 선(§스키마 둘째 불릿)이 여기서도
+그대로 선다 — 타입 파일에 무슨 속성이 드는지, 서술에 무엇을 더 쓰는지는 온톨로지의 내용이다.
+
 ### 5-4. 페르소나별 동시 워커 상한 — `personas/<이름>/limit` (요구 `69f1904d`)
 
 요구 그대로다: *"PM은 워커 하나뿐이다! 라고 하려면 워커 1로 제한하는거고 … 아카이브 매니저
@@ -25226,6 +25425,50 @@ dmg 단일 배포 결정(답변 `89afaa08` — 질문의 (c))이 §프롬프트 
 P218-10과 P218-15가 둘 다 `SCHEMA.md` 객체 타입 표를 고친다 — 큐 실물이라 git 병합이 못 받는다.
 P218-14는 `templates/`와 큐 프로토콜 사본이라 안 겹치고, 재판정 기준의 정본은 이 스펙이라
 규약 파일을 안 기다린다.
+
+### P219 — 온톨로지 형식이 vault 레퍼런스로 간다 (요구 `6b08db99` · 답 `760c7c07`)
+
+요구가 참조 구현을 지목했고(`hsol.info` 블롭의 vault) 대조에서 갈리는 자리가 아홉이다. 여섯은
+요구 본문이 답을 줬고 셋은 되물어 받았다. 스펙은 §5-3 §형식이 vault 레퍼런스로 간다.
+
+| | 무엇 | 왜 |
+|---|---|---|
+| 갈리는 것 | 타입 정의 자리 · 템플릿 · 객체 형식(frontmatter) · 서술 분량 · `datasources/` · `functions/` | 메타모델의 «파일 표현» 열이 통째로 갈린다 |
+| 안 갈리는 것 | 객체 자리 `objects/<타입>/<이름>.md` · `##` 절 금지 · 이름 유일 · 숨은 간선 판정 · 액션 인스턴스 0 | 형식이 갈리는 것이지 메타모델이 갈리는 게 아니다 |
+| 없는 것 | 새 의존성 · 새 엔진 승인 · `object-sets/` | 엔진은 프롬프트 문자열 한 낱말이라 제약 1 경계 안이다 |
+
+**순서가 이 묶음의 판단이다.** 규약(P219-1)이 안 갈린 채 archive-manager가 뜨면 옛 3층으로
+쓴다 — 그래서 실물 회차 전부가 규약 뒤다. 그리고 **읽는 손(P219-11)은 실물 전량이 갈린 뒤다**:
+파서가 frontmatter만 읽게 되는 순간 남은 옛 형식 객체가 전부 위반으로 뜬다.
+
+| # | 무엇 | persona | deps | 상태 |
+|---|---|---|---|---|
+| P219 | 스펙 — §5-3 §형식이 vault 레퍼런스로 간다 신설 | pm | — | 완료 |
+| P219-1 | 규약 두 벌 — `protocols/ontology.md` §형식을 3층 → frontmatter로, archive-manager PROFILE 예시 한 줄 `5cbe8660` | developer | — | 발행 |
+| P219-2 | `_ontology/object-types/` 6장 + 지도 `_ontology/SCHEMA.md` `b48f318c` | archive-manager | `5cbe8660` | 발행 |
+| P219-3 | `_ontology/link-types/` 5장 + `_ontology/action-types/` 8장 `b6961f9f` | archive-manager | `b48f318c` | 발행 |
+| P219-4 | `ontology/templates/<타입>.md` 6장 `4b0a2b30` | archive-manager | `b48f318c` | 발행 |
+| P219-5 | 객체 이행 — `GUI 모듈` 23장 `8f1e7262` | archive-manager | `b48f318c` | 발행 |
+| P219-6 | 객체 이행 — `엔진 파일` 16장 `5f2d10b9` | archive-manager | `b48f318c` | 발행 |
+| P219-7 | 객체 이행 — `워커` 8장 + `화면` 7장 `ae3f2162` | archive-manager | `b48f318c` | 발행 |
+| P219-8 | 객체 이행 — `페르소나` 6장 + `object-views/` 16장 `9ecf6b2c` | archive-manager | `b48f318c` | 발행 |
+| P219-9 | `datasources/` + `functions/` 신설 `951a5428` | archive-manager | `5cbe8660` | 발행 |
+| P219-10 | 엔진 — `tick.sh` 온톨로지 블록 지도 이름 + `test_ontology.py` 단언 `bbeae301` | developer | `b48f318c` | 발행 |
+| P219-11 | GUI — `lib/ontology.ts` 파서 frontmatter · 지표 신설 · 패리티 테스트 제거 · 뷰어 트리 `37631489` | developer | `8f1e7262` · `5f2d10b9` · `ae3f2162` · `9ecf6b2c` | 발행 |
+| P219-12 | 빌더 — 설문 시드가 지도+타입 파일을 낸다 · 마이그레이션이 옛 형식을 올린다 `44d24109` | developer | `37631489` | 발행 |
+
+**P219-3~9는 서로 `deps`가 0이다.** 갈래가 갈려 파일이 안 겹친다(`link-types/` · `templates/` ·
+`objects/<타입>/` 넷 · `datasources/`+`functions/`). archive-manager에 `limit`이 없어 동시에
+여러 세션이 뜨는데, **`_ontology/SCHEMA.md` 지도를 만지는 것은 P219-2·3 둘뿐이라** 그 둘만
+직렬이다 — 큐 실물이라 git 병합이 못 받는다.
+
+**P219-11의 `deps` 넷이 하드다.** 객체 60장 + 뷰 16장이 전부 새 형식이어야 파서를 갈 수 있다 —
+`lib/ontology.test.ts`가 실제 큐를 읽으므로 중간 상태에서 갈면 그 테스트가 무엇을 재는지 알 수
+없어진다. P219-10(엔진)은 문자열 한 낱말이라 지도가 서면 바로 간다.
+
+**도는 `.wip` 둘은 이 묶음 밖이다.** `b33a509e`(효용 4회차)는 이 개정 **앞**에 재야 도달 비용
+축의 기준선이 서고, `4657d628`(ont-check 정의역·치역 오탐)은 P219-11이 만질 파일을 지금 만지고
+있다 — 끝난 뒤에 P219-11이 뜬다(`deps`가 아니라 시차로 갈린다. 저 넷이 먼저 끝날 수 없다).
 
 ## 수용조건 (전체)
 
