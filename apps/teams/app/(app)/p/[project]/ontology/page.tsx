@@ -22,8 +22,31 @@ import {
   SidebarMenuItem,
   SidebarProvider,
 } from "@/components/ui/sidebar";
-import { listTree, readTextFile, type ProtocolFile } from "@/lib/protocols";
+import { computeOntologyMetrics, type OntologyMetrics } from "@/lib/ontology";
+import { listTree, readTextFile, type ProtocolEntry, type ProtocolFile } from "@/lib/protocols";
 import { getProject, ontologyDir } from "@/lib/projects";
+import { cn } from "@/lib/utils";
+
+/** `tree`에서 지표 계산에 필요한 텍스트를 모아 순수 함수(`computeOntologyMetrics`)에 넘긴다.
+ *  fs는 여기(Server Component)까지만 — `lib/ontology.ts`는 이 결과물만 받는다. */
+async function loadMetrics(base: string, tree: ProtocolEntry[]): Promise<OntologyMetrics> {
+  const basename = (rel: string) => rel.split("/").at(-1) ?? rel;
+  const text = async (rel: string) => (await readTextFile(base, rel)).text ?? "";
+
+  const schemaEntry = tree.find((e) => !e.isDir && e.rel === "SCHEMA.md");
+  const objectEntries = tree.filter((e) => !e.isDir && e.rel.startsWith("objects/") && e.rel.endsWith(".md"));
+  const logEntries = tree.filter((e) => !e.isDir && e.rel.startsWith("action-log/") && e.rel.endsWith(".md"));
+
+  const [schemaText, objects, actionLogs] = await Promise.all([
+    schemaEntry ? text(schemaEntry.rel) : Promise.resolve(""),
+    Promise.all(objectEntries.map(async (e) => ({ rel: e.rel, text: await text(e.rel) }))),
+    Promise.all(
+      logEntries.map(async (e) => ({ date: basename(e.rel).replace(/\.md$/, ""), text: await text(e.rel) })),
+    ),
+  ]);
+
+  return computeOntologyMetrics({ schemaText, objects, actionLogs });
+}
 
 // 온톨로지도 세션이 GUI 밖에서 고친다 — 프리렌더하면 빌드 시점 내용이 굳는다.
 export const dynamic = "force-dynamic";
@@ -42,6 +65,7 @@ export default async function Ontology({
 
   const base = ontologyDir(project);
   const tree = await listTree(base);
+  const metrics = tree.length > 0 ? await loadMetrics(base, tree) : null;
 
   // `file`은 사용자 입력이다 — 서버에서 기준 디렉터리 안인지 확인한다. 밖이면 404가 아니라
   // 거부 사유를 그대로 보여준다(§6 에러 3요소).
@@ -64,6 +88,8 @@ export default async function Ontology({
         </div>
         {tree.length > 0 && <NewOntologyFileButton projectId={id} />}
       </div>
+
+      {metrics && <OntologyMetricsPanel metrics={metrics} />}
 
       {tree.length === 0 && (
         // §5-3 §생성 — 온톨로지 없이 도는 프로젝트가 정상이다: 여기서 디렉터리를 만들지 않는다.
@@ -167,3 +193,65 @@ export default async function Ontology({
  *  (§34 판정표의 `안 바꾸는 값`들: `h-auto min-h-8` · `py-1` · `gap-1.5` · 아이콘 `size-3.5` ·
  *  파일명 줄바꿈). 두 화면이 같은 트리 관용구를 쓰므로 값도 같다. */
 const ROW = "h-auto min-h-8 gap-1.5 py-1 [&_svg]:size-3.5 [&>span:last-child]:whitespace-normal";
+
+/** DESIGN.md §5-3 §지표. 판정은 `lib/ontology.ts`가 다 하고 여기는 표시만 한다. */
+function OntologyMetricsPanel({ metrics: m }: { metrics: OntologyMetrics }) {
+  const pct = (r: number) => `${Math.round(r * 100)}%`;
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-4 rounded-lg border bg-surface p-4 sm:grid-cols-4">
+        <MetricStat label="객체 · 관계" value={`${m.objectCount} · ${m.relationCount}`} />
+        <MetricStat
+          label="숨은 간선"
+          value={`${m.hiddenEdges.count}건 (${pct(m.hiddenEdges.ratio)})`}
+          alert={m.hiddenEdges.count > 0}
+        />
+        <MetricStat
+          label="규범 문장"
+          value={`${m.normativeSentences.count}건`}
+          alert={m.normativeSentences.count > 0}
+        />
+        <MetricStat label="껍데기" value={`${m.shells.count}건 (${pct(m.shells.ratio)})`} />
+        <MetricStat label="고립" value={`${m.isolated.count}건 (${pct(m.isolated.ratio)})`} />
+        <MetricStat
+          label="빈손 비율"
+          value={m.emptyHanded.total > 0 ? pct(m.emptyHanded.ratio) : "기록 없음"}
+          alert={m.emptyHanded.total > 0 && m.emptyHanded.ratio < 0.1}
+        />
+        <MetricStat
+          label="스키마 개정(누적)"
+          value={`${m.schemaStability.reduce((n, d) => n + d.count, 0)}건`}
+        />
+        <MetricStat label="마지막 반영" value={m.lastUpdated ?? "기록 없음"} />
+      </div>
+
+      {m.schemaViolations.length > 0 && (
+        <Alert variant="destructive">
+          <TriangleAlert aria-hidden />
+          <AlertTitle>스키마 위반 {m.schemaViolations.length}건</AlertTitle>
+          <AlertDescription>
+            <ul className="mt-1 space-y-1 font-mono text-xs">
+              {m.schemaViolations.slice(0, 10).map((v, i) => (
+                <li key={i} className="break-all">
+                  {v}
+                </li>
+              ))}
+            </ul>
+            {m.schemaViolations.length > 10 && (
+              <p className="mt-1 text-xs">외 {m.schemaViolations.length - 10}건</p>
+            )}
+          </AlertDescription>
+        </Alert>
+      )}
+    </div>
+  );
+}
+
+function MetricStat({ label, value, alert }: { label: string; value: string; alert?: boolean }) {
+  return (
+    <div className="space-y-0.5">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className={cn("font-mono text-sm tabular-nums", alert && "text-status-stale")}>{value}</p>
+    </div>
+  );
+}
