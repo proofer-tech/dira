@@ -116,6 +116,35 @@ export async function clearHome(projectId: string): Promise<HomeChunk> {
   return pollHomeAnswer(projectId, null, 0);
 }
 
+/** 설정 다이얼로그의 `마이그레이션 시작`(DESIGN.md §5-3 §마이그레이션)이 보내는 고정 질문.
+ *  **규칙은 여기 없다** — `protocols/ontology.md` §마이그레이션 절차·§판정 5단계·§기록이 정본이고,
+ *  이 문장은 그 문서를 펴서 그 절차로 돌라고 시키는 것뿐이다(사본을 만들면 규칙이 둘이 된다). */
+const MIGRATION_QUESTION = `온톨로지 마이그레이션을 시작하세요. \`protocols/ontology.md\` §마이그레이션 절차를 그대로
+따르고, 그 문서의 판정 5단계로 사실과 교훈을 가르세요 — 여기서 규칙을 다시 적지 않습니다.
+
+- \`ontology/\`가 없으면 새로 세우고, 있으면 지금 규약으로 다시 올리세요. 재실행은 정상 사용입니다.
+- 사람이 손으로 고친 객체는 덮어쓰지 않고, 이미 규약에 맞는 파일은 건드리지 않습니다.
+- \`ontology/\` 밖에 쌓인 옛 방식 산출물이 있으면 판정 5단계로 걸러 사실만 객체로 옮기고,
+  판단·교훈은 해당 페르소나의 \`memory/\`로 이관하세요. 원본은 지우지 않습니다.
+- 끝나면 이번 회차에 한 일을 §기록의 액션 종류(새객체·값갱신·관계추가·관계삭제·스키마개정·빈손)로
+  나눠 답 마지막에 요약하세요. 해당 없는 종류는 적지 않아도 됩니다.`;
+
+/** 마이그레이션을 새 대화로 띄운다 — 실행층은 `askHome`과 같다(`startAsk`), 짓는 것은 질문뿐이다
+ *  (§5-3: "실행층 신설 0줄 — `home-agent.ts`의 `ask()`를 탄다").
+ *
+ *  **`newConversation`으로 먼저 빈 줄을 연다.** `current`가 사람이 이미 열어 둔 대화를 가리키면
+ *  `startAsk`가 그 스레드 끝에 이 질문을 잇는다 — 마이그레이션 문답이 사람의 대화에 끼어드는
+ *  것을 막는 것이 이 한 줄이다. */
+export async function startMigration(projectId: string): Promise<Answer | null> {
+  try {
+    const project = await required(projectId);
+    await newConversation(project.id);
+    return await startAsk(project, MIGRATION_QUESTION);
+  } catch (e) {
+    return { ok: false, reason: "other", output: (e as Error).message, sessionId: "", resumed: false };
+  }
+}
+
 /** 대화 전환(§비주얼 §24 대화 목록) — **`current`를 갈고 그 대화를 읽어 돌려준다.**
  *
  *  **`sessionId`는 신뢰 경계 밖이다**(클라이언트가 고른 줄). 관문은 `switchConversation`이고
