@@ -323,6 +323,13 @@ export const ko: Record<string, string> = {
  *  | 선행 · 후행 | prerequisite · the ticket waiting on it | `dep`은 frontmatter 키 이름이지 사람 말이 아니다(§0-10 §문구가 `reap`을 몰아낸 그 자) |
  *  | 마감이 지났다 | past due | 종 ⑦ 나열의 한 조각. `overdue`도 같은 뜻이지만 두 낱말을 섞지 않는다 |
  *  | 시간 · 분 · 일 | h · m · d | `4f7def31`이 더한 줄. 남은 시간 표기의 낱말 — 복수형 장치가 없어 약어로 자릿수 문제를 피한다 |
+ *  | 알림 · 매뉴얼 · 사유 | notification · Manual · reason | `90be3eeb`(셸 묶음)이 더한 줄부터 아래 |
+ *  | 프로젝트 관리(루트 화면 `/`) | Manage projects | 전환기 하단 항목과 배너 CTA가 같은 낱말을 쓴다 |
+ *  | 티켓을 집다 · 할당 해제 | claim · Unassign | 엔진의 낱말이다(README §claim 락). `take`로 풀지 않는다 |
+ *  | 답변 · 답변 기록 | answer · answer on record | `답변 대기` 배지도 이 낱말이다(`Awaiting answer`) |
+ *  | deps 대기(배지) | Blocked | `dep`을 안 쓰는 근거는 위 `선행` 줄과 같다 |
+ *  | 한도 · 사용률 · 리셋 · 소모 속도 | limit · used · reset · tokens/min | status bar의 넷. 피드백 `fe25d40e`가 *사전 밖에서 지어낸 낱말*로 잡은 그 자리라, 여기가 정본이다 |
+ *  | 열림(전환기의 티켓 수) | open | 파일이 열려 있는 티켓 전부라 배지 `Open`보다 넓지만, 엔진이 그 파일 상태를 부르는 이름이 `open` 하나다 — 셋째 낱말을 만들지 않는다 |
  *
  *  **어순이 뒤집히는 자리는 접두·접미 두 키로 쪼갠다.** 한국어는 이름 뒤에 다 붙지만(`<이름>
  *  삭제`) 영어는 동사가 앞에 선다(`Delete <name>`) — 한쪽이 비는 것이 정상이고, 조립은
@@ -510,6 +517,111 @@ export const en: Record<string, string> = {
   "common.unit.hour": "h",
   "common.unit.minute": "m",
   "common.unit.day": "d",
+
+  // 셸 둘째 묶음(§0-16 §발행 §묶음 표 2) — `ko`는 `dd97c69c`, 이 영어가 `90be3eeb`다.
+  // 셸은 모든 화면 위에 서므로 **여기서 고른 낱말이 다음 묶음 일곱의 어휘가 된다** — 새 낱말은
+  // 위 표에 한 줄씩 올려 뒀다.
+
+  "shell.header.manual": "Manual",
+  // 배너 제목 — `<접두> "<이름>"<접미>`. 영어는 이름이 문장 끝이라 **꼬리가 빈다**
+  // (`bell.due.titleSuffix`와 같은 사정. `t`는 `""`를 그대로 돌려주고 `ko` 폴백으로 안 샌다).
+  "shell.error.titlePrefix": "Can't read .dira in project",
+  "shell.error.titleSuffix": "",
+  "shell.error.refresh": "Check again",
+  "shell.nav.projects": "Manage projects",
+  "shell.nav.board": "Board",
+  "shell.nav.personas": "Personas",
+  "shell.nav.protocols": "Protocols",
+  "shell.nav.workers": "Workers",
+  "shell.switcher.ariaLabel": "Switch project",
+  "shell.switcher.searchPlaceholder": "Search projects — name or path",
+  // 0건 문구. 접착제가 쌍따옴표에 바로 붙어 콜론으로 받는다(`settings.search.emptySuffix`가 연
+  // 그 수). **꼬리가 대문자로 여는 것은 그 키와 갈리는 지점이다** — 검색어가 없으면 이 조각이
+  // 혼자 서서 문장 전체가 된다.
+  "shell.switcher.emptyQueriedGlue": ":",
+  "shell.switcher.emptySuffix": "No matching projects",
+  "shell.switcher.openLabel": "open",
+
+  // 알림 종(§0-10 문구 표 · §비주얼 §28). 개수 제목 넷은 전부 `bell.due.titlePrefix`가 연 수를
+  // 따른다 — **숫자를 뒤로 보내고 콜론으로 받는다.** 영어에서 `3 tickets …` 어순을 살리려면
+  // 접두가 비어야 하고, 그러면 문장이 공백으로 시작한다.
+  "bell.trigger.countPrefix": "Notifications:",
+  "bell.trigger.countSuffix": "",
+  "bell.trigger.empty": "No notifications",
+  "bell.markRead": "Mark as read",
+  "bell.offline.title": "The network is down",
+  "bell.offline.body":
+    "Sessions can't open, and every ticket goes back to Open as it happens. It all picks up again on its own once the connection returns.",
+  "bell.offline.hint": "Check Wi-Fi or the wired connection.",
+  "bell.resume.titleSlept": "Back from sleep",
+  "bell.resume.titleWake": "The machine was off and came back",
+  // `<from><중간> <to><꼬리>`. **중간이 공백으로 여는 것은 의도다** — 앞에 시각이 공백 없이
+  // 바로 붙는다(`ticket.priority.inheritedMiddle`과 같은 사정).
+  "bell.resume.middle": " to",
+  "bell.resume.after": ": the queue sat stopped. Nothing was lost — it's already running again.",
+  "bell.resume.noAction": "Nothing to fix.",
+  "bell.auth.title": "No Claude token",
+  "bell.auth.body": "Workers still claim tickets, but they can't open a session and end right there.",
+  "bell.failures.titlePrefix": "Workers that die the moment a session opens:",
+  "bell.failures.titleSuffix": "",
+  "bell.failures.body": "Each ticket goes back to Open exactly as it was. Nothing is lost.",
+  "bell.failures.footer":
+    "Once the time in the reason passes they claim again on their own — nothing to fix.",
+  "bell.assigned.titlePrefix": "Tickets no one will claim:",
+  "bell.assigned.titleSuffix": "",
+  "bell.assigned.body":
+    "A worker took them and never let go, so the queue skips these when their turn comes.",
+  "bell.awaiting.titlePrefix": "Tickets waiting on an answer:",
+  "bell.awaiting.titleSuffix": "",
+  "bell.awaiting.body":
+    "These come back to the queue once a person writes an answer. Nothing is broken.",
+  "bell.awaiting.answerLink": "Write an answer",
+
+  // status bar (§0-8 · §비주얼 §26 §38).
+  "statusbar.idle.allRunning": "None — all running",
+  "statusbar.idle.none": "None",
+  // `idle` 라벨 뒤에 공백 없이 바로 붙는다 — **값 자체가 공백으로 연다**(`idle workers w3 w9`).
+  "statusbar.idleSrOnlySuffix": " workers",
+  "statusbar.rate.title": "Last 10 minutes · worker sessions in this project",
+  "statusbar.rate.suffix": "tokens/min",
+  "statusbar.usage.suffix": "used",
+  // 시각 **뒤에** 붙는 꼬리다(`· 14:00 reset`) — `settings.tokens.addedSuffix`가 선 그 어순이고,
+  // 이 바에 어순을 뒤집을 자리가 없다(칸 마크업은 이 묶음이 안 건드린다).
+  "statusbar.reset.suffix": "reset",
+  "statusbar.tokens.suffix": "tokens",
+  "statusbar.limit.unreadable": "Can't read the limit",
+  // 넷 다 `<엔진 이름이나 경로>: ` 뒤에 붙는다 — 콜론 뒤라 소문자로 연다.
+  "statusbar.limit.unknownOriginSuffix": "no known source for its limit",
+  "statusbar.limit.noRolloutSuffix": "no rollout file here",
+  "statusbar.limit.rateLimitsNullSuffix": "rate_limits.primary and secondary are both null",
+  "statusbar.limit.noRateLimitsSuffix": "the latest rollout has no rate_limits",
+
+  // 상태 배지(§비주얼 §2 · §4-1). 티켓 셋은 위 표가 이미 정했다(`Open`·`In progress`·`Done`) —
+  // 토큰의 `Pending`과 갈리는 그 자리다. 넉 자(`running`·`idle`·`stopped`·`stale`)는 두 언어가
+  // 같은 글자라 값도 같다.
+  "status.label.open": "Open",
+  "status.label.blocked": "Blocked",
+  "status.label.awaiting": "Awaiting answer",
+  "status.label.assigned": "Assigned",
+  "status.label.wip": "In progress",
+  "status.label.done": "Done",
+  "status.label.running": "running",
+  "status.label.idle": "idle",
+  "status.label.stopped": "stopped",
+  "status.label.stale": "stale",
+  "status.label.connected": "Connected",
+  "status.label.disconnected": "Disconnected",
+  // 배지의 `title`이라 마침표로 안 닫는다(`ko`도 같다).
+  "status.hint.awaiting":
+    "The PM asked something back — write an answer on the request page and it returns to the queue. It never expires on its own",
+  "status.hint.assigned":
+    "An open ticket with a session_id in it — the queue skips it for good. Unassign puts it back",
+
+  // deps 배지(§2 deps 배지).
+  "dep.hint.met": "Met — that ticket is done",
+  "dep.hint.unmet": "Unmet — not done yet",
+  "dep.hint.missing": "No such hash in the queue — waits forever",
+  "dep.hint.answer": "Answer on record — the answer to this request",
 };
 
 const DICTS: Record<Locale, Record<string, string>> = { ko, en };

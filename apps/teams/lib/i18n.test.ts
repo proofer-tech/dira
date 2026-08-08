@@ -81,10 +81,22 @@ test("932ae344 — 새로 뽑은 조합 문구들이 원문 그대로 재조립�
 //
 // **접두는 묶음 단위로 좁게 적는다.** `ticket.`으로 넓히면 아직 ko만 있는 다음 화면까지 걸려
 // 그 묶음의 첫 티켓이 이 테스트를 깬다 — 폴백이 있는 이유가 그 상태를 허용하는 것이다.
-// (`ticket.duedate.`·`bell.due.`는 5debff0e가 en을 채우고 여기 더했다.)
-const FILLED = ["settings.", "common.", "ticket.priority.", "ticket.duedate.", "bell.due."];
+// (`ticket.duedate.`·`bell.due.`는 5debff0e가 en을 채우고 여기 더했다. 셸 묶음의 넷
+// `shell.`·`statusbar.`·`status.`·`dep.`은 90be3eeb가 더했고, 같은 티켓이 `bell.due.`를
+// `bell.`로 넓혔다 — 종 일곱이 다 찼다.)
+const FILLED = [
+  "settings.",
+  "common.",
+  "ticket.priority.",
+  "ticket.duedate.",
+  "bell.",
+  "shell.",
+  "statusbar.",
+  "status.",
+  "dep.",
+];
 
-test("이미 찬 묶음(settings·common·ticket.priority·ticket.duedate·bell.due)의 ko 키는 en에 하나도 안 빠졌다", () => {
+test("이미 찬 묶음(설정·마감·셸)의 ko 키는 en에 하나도 안 빠졌다", () => {
   assert.deepStrictEqual(
     Object.keys(ko).filter((k) => FILLED.some((p) => k.startsWith(p)) && !(k in en)),
     [],
@@ -199,6 +211,57 @@ test("dd97c69c — status bar `% 사용` 뒤에 창 이름이 붙어도 안 붙�
     `${pct}% ${t("ko", "statusbar.usage.suffix")}${window && ` · ${window}`}`;
   assert.strictEqual(usage(42, ""), "42% 사용");
   assert.strictEqual(usage(42, "5시간"), "42% 사용 · 5시간");
+});
+
+// 90be3eeb — 그 조립들의 영어. 어순이 갈리는 자리(숫자를 콜론 뒤로 보낸 제목 · 꼬리가 빈
+// 배너 제목 · 공백으로 여는 조각 둘)만 못박는다. 단일 키 치환은 위 전수 대조가 이미 잡는다.
+test("90be3eeb — 셸 조립 문구가 영어에서도 문장이 된다", () => {
+  const trigger = (n: number) =>
+    `${t("en", "bell.trigger.countPrefix")} ${n}${t("en", "bell.trigger.countSuffix")}`;
+  assert.strictEqual(trigger(3), "Notifications: 3");
+
+  const failuresTitle = (n: number) =>
+    `${t("en", "bell.failures.titlePrefix")} ${n}${t("en", "bell.failures.titleSuffix")}`;
+  assert.strictEqual(failuresTitle(2), "Workers that die the moment a session opens: 2");
+
+  const awaitingTitle = (n: number) =>
+    `${t("en", "bell.awaiting.titlePrefix")} ${n}${t("en", "bell.awaiting.titleSuffix")}`;
+  assert.strictEqual(awaitingTitle(2), "Tickets waiting on an answer: 2");
+
+  // 검색어가 없으면 꼬리가 혼자 선다 — 그래서 이 조각만 대문자로 연다(설정 검색과 갈리는 지점)
+  const empty = (q: string) =>
+    q
+      ? `"${q}"${t("en", "shell.switcher.emptyQueriedGlue")} ${t("en", "shell.switcher.emptySuffix")}`
+      : t("en", "shell.switcher.emptySuffix");
+  assert.strictEqual(empty("foo"), `"foo": No matching projects`);
+  assert.strictEqual(empty(""), "No matching projects");
+
+  const bannerTitle = (name: string) =>
+    `${t("en", "shell.error.titlePrefix")} "${name}"${t("en", "shell.error.titleSuffix")}`;
+  assert.strictEqual(bannerTitle("myproj"), `Can't read .dira in project "myproj"`);
+
+  const resume = (from: string, to: string) =>
+    `${from}${t("en", "bell.resume.middle")} ${to}${t("en", "bell.resume.after")}`;
+  assert.strictEqual(
+    resume("14:00", "15:30"),
+    "14:00 to 15:30: the queue sat stopped. Nothing was lost — it's already running again.",
+  );
+
+  // idle 풀의 `sr-only` 꼬리는 라벨에 공백 없이 붙는다 — 값이 공백으로 열어야 낭독이 선다
+  assert.strictEqual(
+    `${t("en", "status.label.idle")}${t("en", "statusbar.idleSrOnlySuffix")}`,
+    "idle workers",
+  );
+  // status bar 사유 넷은 `<엔진이나 경로>: ` 뒤에 붙는다(`lib/usage.ts`)
+  assert.strictEqual(
+    `codex: ${t("en", "statusbar.limit.unknownOriginSuffix")}`,
+    "codex: no known source for its limit",
+  );
+  // `% 사용` 자리 — 창 이름이 붙어도 안 붙어도 선다(`windowLabel`이 `common.unit.*`를 탄다)
+  const usage = (pct: number, window: string) =>
+    `${pct}% ${t("en", "statusbar.usage.suffix")}${window && ` · ${window}`}`;
+  assert.strictEqual(usage(42, ""), "42% used");
+  assert.strictEqual(usage(42, "5h"), "42% used · 5h");
 });
 
 // 화면에 남은 한국어를 여기서 잡는다 — 사전 값 자체에 한글이 섞이면 폴백이 아니라 오타다.
