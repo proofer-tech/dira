@@ -546,7 +546,10 @@ done
 # 내려갈수록 프롬프트 앞쪽에 붙고, 여기가 append로 남는 마지막 자리다. persona if 밖이라
 # `persona:` 없는 티켓에도 붙는다. 블록은 상수 -- 로케일이 늘면 case에 문장 한 줄만 는다.
 # 문장 ①은 "사용자에게 하는 모든 말"로 긍정 좁힘이라 thinking·도구명·요약은 예외로 나열하지
-# 않아도 애초에 안 걸린다.
+# 않아도 애초에 안 걸린다 -- 였는데, 세션이 꼬리의 한국어/영어 문장을 보고 사고까지 그 언어로
+# 돌리는 게 실전에서 관측됐다(§0-16 §주입 §개정 2, 요구 ef37b15e). 그래서 문장 ①에 예외 절을
+# 하나 더한다 -- 생각·내부 추론은 이 지시의 대상이 아니라는 자유 허가(금지 아님). 이유는 안
+# 적는다 -- 이유를 적으면 세션이 그 이유를 산출물·검증까지 넓혀 읽는다.
 LOCALE=$(python3 -c 'import json, sys
 try:
     o = json.load(open(sys.argv[1], encoding="utf-8"))
@@ -559,17 +562,19 @@ en)
 
 Language note: say everything you say to the user in English for the rest of
 this session -- not only replies when someone writes in, but also any prose
-you leave in the progress stream even when no one does. Keep every written
-deliverable in Korean regardless -- the ticket body, \`## 결과\`, commit
-messages, and anything under \`docs/\`."
+you leave in the progress stream even when no one does. Thinking or internal
+reasoning is not covered by this instruction -- you may think in any language.
+Keep every written deliverable in Korean regardless -- the ticket body,
+\`## 결과\`, commit messages, and anything under \`docs/\`."
   ;;
 *)
   PROMPT="$PROMPT
 
 언어 안내: 이번 세션 동안 사용자에게 하는 모든 말을 한국어로 하세요 -- 참견에
 답할 때만이 아니라 아무도 말을 안 걸어도 진행 기록 스트림에 남기는 산문까지입니다.
-산출물은 그대로 한국어로 고정합니다 -- 티켓 본문, \`## 결과\`, 커밋 메시지,
-\`docs/\` 아래 전부입니다."
+생각하거나 내부적으로 추론하는 구간은 이 지시의 대상이 아닙니다 -- 어느 언어로
+생각해도 됩니다. 산출물은 그대로 한국어로 고정합니다 -- 티켓 본문, \`## 결과\`,
+커밋 메시지, \`docs/\` 아래 전부입니다."
   ;;
 esac
 

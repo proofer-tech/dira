@@ -112,6 +112,12 @@ try:
     assert "## 결과" in tail and "docs/" in tail, "산출물 대상(## 결과 · docs/)이 안 실렸다\n" + tail
     assert warns(root) == [], "en 주입에서 WARN이 났다: {}".format(warns(root))
 
+    # 5c) §개정 2 -- 생각 예외 절이 ko·en 두 짝에 각각 실린다(허가지 금지가 아니다)
+    # 줄바꿈이 낱말 사이에 낄 수 있어(예: "internal\nreasoning") 공백으로 정규화한 뒤 본다.
+    assert "이 지시의 대상이 아닙니다" in " ".join(base.split()) \
+        and "thinking or internal reasoning" in " ".join(tail.lower().split()), \
+        "생각 예외 절이 두 짝에 안 실렸다\n" + base + "\n---\n" + tail
+
     # 5b) 블록 크기는 상수다 -- 두 번 재도 같은 문자열
     again = dryrun(w, local)
     assert again == got, "같은 locale=en인데 블록이 매번 달라졌다(상수여야 한다)"
