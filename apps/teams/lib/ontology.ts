@@ -54,18 +54,16 @@ function parseSignature(cellInput: string): Signature[] {
 type Schema = {
   types: Set<string>;
   relTypes: Map<string, Signature[]>;
-  required: Map<string, string[]>;
 };
 
 const TABLE_RULE = /^[-:]+$/;
 
-/** `SCHEMA.md` 파싱. 파일이 비었거나 없으면(호출자가 빈 문자열을 준다) 셋 다 빈 채로 반환한다
+/** `SCHEMA.md` 파싱. 파일이 비었거나 없으면(호출자가 빈 문자열을 준다) 둘 다 빈 채로 반환한다
  *  — ont-check.py는 이 경우 FATAL로 종료하지만, 뷰어는 계속 그려야 하므로 이후 판정에서
  *  `types.size > 0` 게이트로 "스키마 미확보"와 "실제 위반"을 가른다. */
 function parseSchema(text: string): Schema {
   const types = new Set<string>();
   const relTypes = new Map<string, Signature[]>();
-  const required = new Map<string, string[]>();
   let section: string | null = null;
 
   for (const raw of text.split("\n")) {
@@ -81,28 +79,41 @@ function parseSchema(text: string): Schema {
 
     if (section?.startsWith("객체 타입")) {
       types.add(name);
-      let req = "";
-      for (const c of cells.slice(1)) {
-        if (c.includes("·") && !c.includes("[[") && c.length < 120 && !c.endsWith("다")) {
-          req = c;
-          break;
-        }
-      }
-      required.set(
-        name,
-        req
-          ? req
-              .split("·")
-              .map((x) => x.trim().replace(/^`+|`+$/g, ""))
-              .filter(Boolean)
-          : [],
-      );
     } else if (section?.startsWith("관계 타입")) {
       const sig = cells.slice(1).find((c) => c.includes("→") || c.includes("->")) ?? "";
       relTypes.set(name, sig ? parseSignature(sig) : []);
     }
   }
-  return { types, relTypes, required };
+  return { types, relTypes };
+}
+
+/** `_ontology/object-types/<타입>.md`의 §Properties 표(`필수` 열 ✅ 행의 `이름`)에서 타입별
+ *  필수 속성을 읽는다(P224 — 지도 `SCHEMA.md`가 아니라 타입 파일이 정본. §속성은 값을 든다와
+ *  같은 근거로 지도엔 이 열을 안 되살린다). 타입 파일이 없거나 §Properties 절이 없으면 그
+ *  타입은 목록에 없다 — 호출자가 `required.get(type) ?? []`로 무판정을 받는다. */
+function parseRequiredProps(typeFiles: ObjectInput[]): Map<string, string[]> {
+  const required = new Map<string, string[]>();
+  for (const file of typeFiles) {
+    const type = file.rel.split("/").pop()?.replace(/\.md$/, "") ?? "";
+    if (!type) continue;
+    const names: string[] = [];
+    let inProperties = false;
+    for (const raw of file.text.split("\n")) {
+      const s = raw.trim();
+      if (s.startsWith("## ")) {
+        inProperties = s.slice(3).trim() === "Properties";
+        continue;
+      }
+      if (!inProperties) continue;
+      const cells = s.startsWith("|") ? s.split("|").slice(1, -1).map((c) => c.trim()) : [];
+      if (cells.length < 3) continue;
+      const name = cells[0];
+      if (name === "이름" || TABLE_RULE.test(name)) continue;
+      if (cells[2] === "✅") names.push(name.replace(/^`+|`+$/g, ""));
+    }
+    required.set(type, names);
+  }
+  return required;
 }
 
 type ParsedObject = { prose: string[]; rels: [string, string][]; props: string[]; hasSection: boolean };
@@ -214,6 +225,9 @@ export type OntologyInput = {
   /** `object-views/<이름>.md` — 값을 안 드는 뷰라 parseObject 판정(타입·속성·`##` 절)은 안 걸고
    *  링크 해석만 한다(§메타모델). 없는 호출자는 생략해도 된다 */
   views?: ObjectInput[];
+  /** `_ontology/object-types/<타입>.md` — 필수 속성의 정본(§Properties `필수` 열). 없는
+   *  호출자는 생략해도 된다(모든 타입이 무판정) */
+  typeFiles?: ObjectInput[];
 };
 
 export type Counted = { count: number; ratio: number; items: string[] };
@@ -361,7 +375,8 @@ function checkViewLinks(views: ObjectInput[], knownNames: Set<string>): string[]
 }
 
 export function computeOntologyMetrics(input: OntologyInput): OntologyMetrics {
-  const { types, relTypes, required } = parseSchema(input.schemaText);
+  const { types, relTypes } = parseSchema(input.schemaText);
+  const required = parseRequiredProps(input.typeFiles ?? []);
 
   const parsed = input.objects
     .map((o) => ({ rel: o.rel, ...typeAndName(o.rel), ...parseObject(o.text) }))

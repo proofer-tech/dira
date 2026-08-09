@@ -37,17 +37,21 @@ async function loadMetrics(base: string, tree: ProtocolEntry[]): Promise<Ontolog
   const objectEntries = tree.filter((e) => !e.isDir && e.rel.startsWith("objects/") && e.rel.endsWith(".md"));
   const viewEntries = tree.filter((e) => !e.isDir && e.rel.startsWith("object-views/") && e.rel.endsWith(".md"));
   const logEntries = tree.filter((e) => !e.isDir && e.rel.startsWith("action-log/") && e.rel.endsWith(".md"));
+  const typeFileEntries = tree.filter(
+    (e) => !e.isDir && e.rel.startsWith("_ontology/object-types/") && e.rel.endsWith(".md"),
+  );
 
-  const [schemaText, objects, views, actionLogs] = await Promise.all([
+  const [schemaText, objects, views, actionLogs, typeFiles] = await Promise.all([
     schemaEntry ? text(schemaEntry.rel) : Promise.resolve(""),
     Promise.all(objectEntries.map(async (e) => ({ rel: e.rel, text: await text(e.rel) }))),
     Promise.all(viewEntries.map(async (e) => ({ rel: e.rel, text: await text(e.rel) }))),
     Promise.all(
       logEntries.map(async (e) => ({ date: basename(e.rel).replace(/\.md$/, ""), text: await text(e.rel) })),
     ),
+    Promise.all(typeFileEntries.map(async (e) => ({ rel: e.rel, text: await text(e.rel) }))),
   ]);
 
-  return computeOntologyMetrics({ schemaText, objects, views, actionLogs });
+  return computeOntologyMetrics({ schemaText, objects, views, actionLogs, typeFiles });
 }
 
 // 온톨로지도 세션이 GUI 밖에서 고친다 — 프리렌더하면 빌드 시점 내용이 굳는다.

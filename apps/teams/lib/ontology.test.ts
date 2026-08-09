@@ -16,10 +16,10 @@ const ONTOLOGY_PAGE_TSX = fileURLToPath(
 
 const SCHEMA = `## 객체 타입
 
-| 이름 | 필수 속성 | 뜻 |
+| 이름 | 한 줄 뜻 | 정의 |
 |---|---|---|
-| 사람 | 이름 · 나이 | 사람 객체 |
-| 동물 | - | 동물 객체 |
+| 사람 | 사람 객체다 | [[사람]] |
+| 동물 | 동물 객체다 | [[동물]] |
 
 ## 관계 타입
 
@@ -47,6 +47,17 @@ function obj(
     }
   }
   return `---\n${lines.join("\n")}\n---\n\n# ${name}\n\n${prose}\n`;
+}
+
+// `_ontology/object-types/<타입>.md` §Properties 표 한 장 — `required`가 true인 행만 `필수` 열에 ✅
+// (필수 속성의 정본 자리, P224). `computeOntologyMetrics`는 이 표에서만 필수 속성을 읽는다 —
+// `SCHEMA.md` 객체 타입 표는 더는 안 본다.
+function typeFile(type: string, props: { name: string; required: boolean }[]) {
+  const rows = props.map((p) => `| \`${p.name}\` | string | ${p.required ? "✅" : ""} | - |`).join("\n");
+  return {
+    rel: `_ontology/object-types/${type}.md`,
+    text: `# Object Type: ${type}\n\n## Properties\n\n| 이름 | 타입 | 필수 | 설명 |\n|---|---|---|---|\n${rows}\n`,
+  };
 }
 
 test("숨은 간선 — 서술 링크가 관계 줄에 대응 없으면 잡힌다", () => {
@@ -80,6 +91,7 @@ test("숨은 간선 — 상대가 나를 관계로 가리키면 역방향으로 
 test("스키마 위반 — 미정의 타입 · 미정의 관계 · 댕글링 · 정의역/치역 · 필수 속성 누락을 모두 잡는다", () => {
   const m = computeOntologyMetrics({
     schemaText: SCHEMA,
+    typeFiles: [typeFile("사람", [{ name: "이름", required: true }, { name: "나이", required: true }])],
     objects: [
       // 미정의 타입 + 미정의 관계 + 댕글링(허깨비 없음)
       { rel: "objects/미정의타입/유령.md", text: obj("미정의타입", "유령", "유령이다.", {}, { 미정의관계: ["허깨비"] }) },
@@ -102,14 +114,49 @@ test("스키마 위반 — 미정의 타입 · 미정의 관계 · 댕글링 · 
   assert.match(joined, /필수 속성 누락.*짱구/);
 });
 
+test("필수 속성 — 타입 파일 §Properties의 `필수` ✅ 행에서 읽는다(P224, 지도 표가 아니다)", () => {
+  const typeFiles = [
+    typeFile("사람", [
+      { name: "이름", required: true },
+      { name: "나이", required: true },
+      { name: "취미", required: false },
+    ]),
+  ];
+  const m = computeOntologyMetrics({
+    schemaText: SCHEMA,
+    typeFiles,
+    objects: [
+      // 필수(이름·나이) 중 나이가 빠졌다 — 위반 1건. 필수 아닌 취미가 없어도 안 걸린다.
+      { rel: "objects/사람/철수.md", text: obj("사람", "철수", "철수다.", { 이름: "철수" }) },
+      // 필수 둘 다 있다 — 위반 0건
+      { rel: "objects/사람/영희.md", text: obj("사람", "영희", "영희다.", { 이름: "영희", 나이: "22" }) },
+    ],
+    actionLogs: [],
+  });
+  const joined = m.schemaViolations.join("\n");
+  const missing = m.schemaViolations.filter((v) => v.startsWith("필수 속성 누락"));
+  assert.equal(missing.length, 1);
+  assert.match(joined, /필수 속성 누락: objects\/사람\/철수\.md \(사람\) -> 나이/);
+  assert.doesNotMatch(joined, /영희/);
+});
+
+test("필수 속성 — 타입 파일도 §Properties도 없으면 무판정(예외 없이 통과)", () => {
+  const m = computeOntologyMetrics({
+    schemaText: SCHEMA,
+    objects: [{ rel: "objects/사람/철수.md", text: obj("사람", "철수", "철수다.") }],
+    actionLogs: [],
+  });
+  assert.doesNotMatch(m.schemaViolations.join("\n"), /필수 속성 누락/);
+});
+
 test("정의역·치역 판정 — 관계 표 셀 끝의 ' — 설명' 꼬리를 떼고 판정한다(실 SCHEMA.md 모양, 4657d628)", () => {
   const SCHEMA_TAIL = `## 객체 타입
 
-| 이름 | 필수 속성 | 뜻 |
+| 이름 | 한 줄 뜻 | 정의 |
 |---|---|---|
-| 워커 | - | 워커 객체 |
-| 엔진 파일 | - | 엔진 파일 객체 |
-| GUI 모듈 | - | GUI 모듈 객체 |
+| 워커 | 워커 객체다 | [[워커]] |
+| 엔진 파일 | 엔진 파일 객체다 | [[엔진 파일]] |
+| GUI 모듈 | GUI 모듈 객체다 | [[GUI 모듈]] |
 
 ## 관계 타입
 
