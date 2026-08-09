@@ -49,6 +49,7 @@ wrong ticket.
 | `duedate:` | | ISO 8601 datetime, e.g. `2026-08-14T18:00:00+09:00` (offset optional — read as local time if omitted). Absent/unreadable → no deadline, no queue migration needed. Feeds the same priority machine as a clock: **≤5 hours remaining (including already past) → treated as priority 5**, **≥7 days remaining (only on a ticket that has its own `duedate:`) → treated as priority 1**. Between those two, the explicit `priority:` (or `3`) stands. Never rewrites `priority:` — the override is judgment-time only (see project docs for the exact rule) |
 | `awaiting:` | | The **one answer stem** currently waited on. **Put the same value in `deps` too** — `deps` is the lock; this is what the GUI reads as "awaiting answer". Written by request-splitting sessions on `kind: request`, and by `reap` on tickets past the auto-reclaim cap (any kind). **Not deleted after the answer lands** (history) — whether still waiting is judged by the existence of `tickets/<awaiting>.done.md` |
 | `req:` | | Source requirement stem, on tickets split from a requirement. Not `deps` — provenance, not ordering |
+| `archives:` | | 대상 티켓의 스칼라 stem 하나. `deps:`처럼 목록(`[...]`)으로 쓰지 않는다. `resolveDep`가 `deps:`·`req:`와 같은 판정으로 푼다. 있으면 보드에서 독립 카드로 서지 않고 대상 티켓에 겹쳐 붙는다 |
 
 Procedures for `awaiting:`/`req:` live in project docs (persona profiles, design doc).
 The engine writes these keys in exactly one place — `reap`'s answer escalation
