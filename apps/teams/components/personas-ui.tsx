@@ -1394,18 +1394,26 @@ function AddSkillsDialog({
       formData.append("file", it.file);
       formData.append("path", it.path);
     }
-    const r = await installSkillAction(formData);
-    setInstalling(null);
-    if (r.ok) {
-      onInstalled(r.installed ?? []);
-      // §비주얼 §25 ⑤ §성공 — 토스트가 없다. 검색칸에 방금 깐 이름을 채워 목록을 그 한 줄로 좁힌다.
-      if (r.name) {
-        const name = r.name;
-        setPicked((prev) => (prev.includes(name) ? prev : [...prev, name]));
-        setQuery(name);
+    // `installSkillAction`이 던질 수 있다(예: 본문 상한 관문이 먼저 자른 네트워크/파싱 예외) —
+    // `try` 없이 두면 throw가 `setInstalling(null)`을 건너뛰어 다이얼로그가 사유 없이
+    // "설치 중…"에 영구 고정된다(§비주얼 §25 ⑤ 위반, 실측 `ec687d52`).
+    try {
+      const r = await installSkillAction(formData);
+      if (r.ok) {
+        onInstalled(r.installed ?? []);
+        // §비주얼 §25 ⑤ §성공 — 토스트가 없다. 검색칸에 방금 깐 이름을 채워 목록을 그 한 줄로 좁힌다.
+        if (r.name) {
+          const name = r.name;
+          setPicked((prev) => (prev.includes(name) ? prev : [...prev, name]));
+          setQuery(name);
+        }
+      } else {
+        setFailure({ title: r.title ?? "스킬을 설치하지 못했습니다", message: r.message ?? "" });
       }
-    } else {
-      setFailure({ title: r.title ?? "스킬을 설치하지 못했습니다", message: r.message ?? "" });
+    } catch {
+      setFailure({ title: "스킬을 설치하지 못했습니다", message: "" });
+    } finally {
+      setInstalling(null);
     }
   };
 

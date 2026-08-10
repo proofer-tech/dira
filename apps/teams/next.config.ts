@@ -41,7 +41,14 @@ const nextConfig: NextConfig = {
   // 첨부의 통로가 Server Action(`FormData`)인데(DESIGN.md §8) Next의 기본 한도가 **1MB**다 —
   // 안 얹으면 §8이 정한 20MB 상한이 `saveAttachment`에 닿기도 전에 Next가 거절한다.
   // 수를 여기 적지 않는다: §8 상한에서 유도된 값이다(`MAX_BYTES` + 여유. 같게 뒀던 것이 `6dab7cc8`).
-  experimental: { serverActions: { bodySizeLimit: BODY_SIZE_LIMIT } },
+  //
+  // `proxyClientMaxBodySize`(구 `middlewareClientMaxBodySize`)는 별개 관문이다 — `proxy.ts`가
+  // 매칭하는 요청(`/`, `/p/:path*`, `/api/:path*`)의 본문을 Next가 라우팅 계층에서 먼저
+  // `getCloneableBody`로 감싸는데, 그 한도가 기본 10MB다. `serverActions.bodySizeLimit`을
+  // 아무리 키워도 이 관문이 먼저 자른다(10MB 초과 시 "Request body exceeded 10MB ... Only the
+  // first 10MB will be available" 경고 후 `installSkillAction`이 `Unexpected end of form`으로
+  // 죽는다 — 실측 `ec687d52`). 두 한도를 같은 값으로 묶는다.
+  experimental: { serverActions: { bodySizeLimit: BODY_SIZE_LIMIT }, proxyClientMaxBodySize: BODY_SIZE_LIMIT },
   // 다중 토큰 잠금(DESIGN.md §0-13 §잠금) — `isMultiToken()`이 읽는 값을 빌드 시각에 상수로
   // 인라인한다. 런타임 env로 두면 배포한 dmg가 잠금 분기를 품은 채 나가 env 하나로 열린다.
   // 값을 항상 "0"/"1" 중 하나로 못박는다 — `next/dist/lib/static-env.js`의 `getNextConfigEnv`가
