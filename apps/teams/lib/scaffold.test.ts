@@ -12,6 +12,7 @@ const SET = [
   ".dira/tickets/",
   ".dira/protocols/AGENTS.md",
   ".dira/protocols/tickets.md",
+  ".dira/protocols/ontology.md",
   ".dira/protocols/CORE.md",
   ".dira/protocols/CORE-TICKETS.md",
   ".dira/protocols/CORE-MEMORY.md",
@@ -74,6 +75,12 @@ test("scaffold — §0-3 집합 그대로, 두 번째는 전부 skipped", async 
   assert.ok(before.includes("git push . HEAD:main"), "브랜치가 치환돼야 한다");
   // ③ specDoc이 비면 그 자리표시자는 남는다
   assert.match(before, /<프로젝트 스펙 문서>/);
+
+  // ③-1 ontology.md — 자리표시자 없는 파일이라 템플릿과 바이트가 같아야 한다(경로 존재만으론
+  // 빈 파일도 통과한다).
+  const ontology = await readFile(path.join(project, ".dira/protocols/ontology.md"), "utf8");
+  const ontologyTemplate = await readFile(path.join(repo.path, "templates/protocols/ontology.md"), "utf8");
+  assert.equal(ontology, ontologyTemplate);
 
   // ⑤ w1.sh — 활성 TICKET_CWD 없음, tick.sh 절대경로, 755
   const w1 = path.join(project, ".dira/workers/w1.sh");

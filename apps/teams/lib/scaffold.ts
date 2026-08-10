@@ -22,6 +22,7 @@ import {
 const TEMPLATE_FILES = [
   "protocols/AGENTS.md",
   "protocols/tickets.md",
+  "protocols/ontology.md",
   "personas/pm/PROFILE.md",
   "personas/developer/PROFILE.md",
   "personas/qa/PROFILE.md",
