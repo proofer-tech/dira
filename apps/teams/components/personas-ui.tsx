@@ -19,6 +19,7 @@ import {
   type PersonaResult,
 } from "@/app/(app)/p/[project]/personas/actions";
 import { Markdown } from "@/components/markdown";
+import { MarkdownEditor } from "@/components/markdown-editor";
 // 왼쪽 목록 줄의 점도 보드·칸반·필터와 **같은 컴포넌트**다(§5) — 색 조회의 출처는 하나다
 import { PersonaDot } from "@/components/persona-badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -73,7 +74,6 @@ import {
   SidebarMenuItem,
   SidebarProvider,
 } from "@/components/ui/sidebar";
-import { Textarea } from "@/components/ui/textarea";
 import type { Memory, Skill } from "@/lib/skills";
 import { decodeHash, engineMissing, PERSONA_COLORS, personaDotClass } from "@/lib/urls";
 import { cn } from "@/lib/utils";
@@ -609,13 +609,12 @@ function PersonaDetail({
         onEngineSaved={(engine) => onEdit({ ...edit, engine })}
       />
 
-      {/* 원문 편집이다 — 마크다운 렌더는 넣지 않는다(§6 프로토콜 에디터와 같은 결정) */}
-      <Textarea
-        aria-label={`${row.name} PROFILE.md`}
-        className="font-mono"
+      <MarkdownEditor
+        name="body"
+        defaultValue={edit.body}
         rows={16}
-        value={edit.body}
-        onChange={(e) => onEdit({ ...edit, body: e.target.value })}
+        className="font-mono"
+        onChange={(body) => onEdit({ ...edit, body })}
       />
       {result && !result.ok && <Failure title="저장하지 못했습니다" message={result.message ?? ""} />}
       {/* 오른쪽 정렬, 1차 액션이 가장 오른쪽 — 결과 문구는 버튼 왼쪽이다(§비주얼 §4-3) */}

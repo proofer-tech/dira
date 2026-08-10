@@ -186,6 +186,7 @@ export function MarkdownEditor({
   breaks,
   rows = 12,
   className,
+  onChange,
 }: {
   name: string;
   defaultValue: string;
@@ -197,9 +198,18 @@ export function MarkdownEditor({
   breaks?: "all" | "untilHeading";
   rows?: number;
   className?: string;
+  /** 폼 제출(hidden input)이 아니라 부모가 글자 수·되돌리기·저장 버튼을 직접 드는 자리(⑤⑥⑦)를
+   *  위한 거울 콜백이다 — 이 컴포넌트는 여전히 자기 `text`를 스스로 든다(uncontrolled), 매 갱신을
+   *  부모에도 알린다. 되돌리기는 부모가 `key`를 바꿔 이 컴포넌트를 다시 마운트하는 방식으로 앞선다. */
+  onChange?: (text: string) => void;
 }) {
   const [mode, setMode] = useState<Mode>("wysiwyg"); // 서버·첫 페인트는 항상 위지윅(기본값, 못 ②)
   const [text, setText] = useState(defaultValue);
+
+  function updateText(next: string) {
+    setText(next);
+    onChange?.(next);
+  }
 
   // 첫 페인트 뒤에만 이 컴퓨터의 값을 읽는다(hydration 불일치를 피한다 — §0-11과 달리 깜빡임
   // 방지 스크립트를 새로 안 둔다. 손잡이 하나 다시 그리는 값이라 §0-11만큼 비싸지 않다).
@@ -217,7 +227,7 @@ export function MarkdownEditor({
     const leading = original.match(/^\n*/)?.[0] ?? "";
     const newBlockText = leading + domToMarkdown(el, original);
     if (newBlockText === original) return;
-    setText((prev) => replaceBlock(splitBlocks(prev), i, newBlockText));
+    updateText(replaceBlock(split, i, newBlockText));
   }
 
   const toggle = (
@@ -244,7 +254,7 @@ export function MarkdownEditor({
         <Textarea
           name={name}
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => updateText(e.target.value)}
           rows={rows}
           placeholder={placeholder}
           className={className}
@@ -259,7 +269,7 @@ export function MarkdownEditor({
               className="min-h-7 text-base leading-7 outline-none empty:before:text-muted-foreground empty:before:content-[attr(data-placeholder)]"
               onBlur={(e) => {
                 const newText = domToMarkdown(e.currentTarget, "");
-                setText(newText ? `${newText}\n${split.tail}` : split.tail);
+                updateText(newText ? `${newText}\n${split.tail}` : split.tail);
               }}
             />
           ) : (

@@ -18,6 +18,7 @@ import {
   submitOntologySurveyAction,
   type OntologyResult,
 } from "@/app/(app)/p/[project]/ontology/actions";
+import { MarkdownEditor } from "@/components/markdown-editor";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -32,7 +33,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Q1_OPTIONS,
   Q2_CHIPS,
@@ -184,6 +184,9 @@ export function OntologyEditor({
   const [text, setText] = useState(initial);
   const [result, setResult] = useState<OntologyResult | null>(null);
   const [pending, start] = useTransition();
+  // 아래 버튼은 값을 안 밀어 넣는다(`<MarkdownEditor>`는 uncontrolled다) — `key`를 바꿔 다시
+  // 마운트시켜 `defaultValue`(=initial)로 돌아가게 한다.
+  const [resetNonce, setResetNonce] = useState(0);
   const dirty = text !== initial;
 
   return (
@@ -196,12 +199,13 @@ export function OntologyEditor({
         </div>
       </div>
 
-      <Textarea
-        aria-label={`${rel} 원문`}
-        className="font-mono"
+      <MarkdownEditor
+        key={resetNonce}
+        name="body"
+        defaultValue={initial}
         rows={28}
-        value={text}
-        onChange={(e) => setText(e.target.value)}
+        className="font-mono"
+        onChange={setText}
       />
 
       {result && !result.ok && <Failure title="저장하지 못했습니다" message={result.message ?? ""} />}
@@ -212,7 +216,15 @@ export function OntologyEditor({
           {[...text].length.toLocaleString()}자
         </span>
         {dirty ? (
-          <Button variant="ghost" size="sm" disabled={pending} onClick={() => setText(initial)}>
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={pending}
+            onClick={() => {
+              setText(initial);
+              setResetNonce((n) => n + 1);
+            }}
+          >
             되돌리기
           </Button>
         ) : (
