@@ -72,6 +72,14 @@ export default function Landing({
   // 안 붙는 한(아래 useEffect, JS 죽음·reduce) 순환 자체가 안 생기니 안전하다.
   const [planStopped, setPlanStopped] = useState(false);
 
+  // 인트로 오버레이(DESIGN §P237 §자리 ① · §판정표 ①). 초기값 "idle" = 그릇이 아예 안 그려진다
+  // — SSR·JS off·hydration 직후 첫 렌더가 전부 이 상태라 스크립트가 안 돌면 오버레이가 없다.
+  // 카드 문구는 새 문장을 안 쓴다 — `.steps` 첫 항목의 DOM을 읽어 채운다(check-landing-prose.py
+  // 노드 수 불변).
+  const [introPhase, setIntroPhase] =
+    useState<"idle" | "open" | "closing" | "fading" | "bail" | "gone">("idle");
+  const [introTitle, setIntroTitle] = useState("");
+
   // ── 목록 자리(`#projects`)의 상태 — 헤더 `새로 만들기`와 히어로 온보딩이 결과 슬롯을
   //    공유한다(§7 CreateForm 계약: "성공하면 결과는 목록 아래 결과 슬롯으로 올라간다" —
   //    어느 그릇으로 만들었느냐와 무관하게 자리가 하나다). 걷힌 `<ProjectsSection>`의 그
@@ -230,6 +238,42 @@ export default function Landing({
   );
 
   useEffect(() => {
+    // 인트로 오버레이(DESIGN §P237-1 판정표 ①). `reduce`면 아예 안 뜬다 — 상태가 "idle"에
+    // 머문다. 총 800ms: 0‥320 카드 정지 · 320‥800 카드가 올라가며 소멸(480ms) ·
+    // 480‥800 오버레이가 걷힘(320ms). 카드 글은 `.steps` 첫 항목 `<b>`를 DOM에서 읽는다 —
+    // JSX에 문장을 두 번 안 적어 산문 노드 수가 안 는다.
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    setIntroTitle(document.querySelector<HTMLElement>(".steps li:first-child b")?.textContent ?? "");
+    setIntroPhase("open");
+    const timers = [
+      setTimeout(() => setIntroPhase("closing"), 320),
+      setTimeout(() => setIntroPhase("fading"), 480),
+      setTimeout(() => setIntroPhase("gone"), 800),
+    ];
+    // 스크롤·클릭·Esc면 즉시 걷힌다 — 남은 타이머를 지우고 "bail"로 넘겨 전이를 200ms로 줄인다.
+    const bail = () => {
+      for (const t of timers) clearTimeout(t);
+      setIntroPhase((p) => (p === "gone" ? p : "bail"));
+    };
+    window.addEventListener("scroll", bail, { passive: true, once: true });
+    window.addEventListener("click", bail, { once: true });
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") bail(); };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      for (const t of timers) clearTimeout(t);
+      window.removeEventListener("scroll", bail);
+      window.removeEventListener("click", bail);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (introPhase !== "bail") return;
+    const t = setTimeout(() => setIntroPhase("gone"), 200);
+    return () => clearTimeout(t);
+  }, [introPhase]);
+
+  useEffect(() => {
     // 스크롤 진입 등장(DESIGN §랜딩 §모션 §판정표 ⑥). JS로 움직이므로 전역
     // 킬 스위치 밖이다 — matchMedia를 직접 보고 reduce면 무장을 아예 안 한다.
     if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
@@ -336,6 +380,28 @@ export default function Landing({
   <div className="wrap">
     <span>자동 업데이트를 켜고 최신 버전(v{version})의 dira를 써보세요!</span>
     <a href="https://github.com/proofer-tech/dira/releases">릴리스 보기</a>
+  </div>
+</div>
+)}
+
+{/* 인트로 오버레이(DESIGN §P237-1 판정표 ①). idle·gone에서는 그릇 자체가 없다 — JS가
+    안 돌면 이 조건이 늘 참이라 오버레이가 아예 없다. 카드 글은 위 useEffect가 DOM에서 읽어
+    채운다(산문 노드를 새로 안 만든다). `.travel`처럼 장식이라 aria-hidden이다. ann 배너와
+    z-index가 같은 20이라 — DOM에서 뒤에 서서 동률 페인트 순서로 위를 이긴다. */}
+{introPhase !== "idle" && introPhase !== "gone" && (
+<div
+  className={
+    "intro" +
+    (introPhase === "fading" || introPhase === "bail" ? " out" : "") +
+    (introPhase === "bail" ? " bail" : "")
+  }
+  aria-hidden="true"
+>
+  <div className="wrap">
+    <div className={"card" + (introPhase !== "open" ? " up" : "")}>
+      <span className="hash">a1b2c3d4</span>
+      <p className="title">{introTitle}</p>
+    </div>
   </div>
 </div>
 )}
