@@ -360,6 +360,11 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
        그대로 두고 `content` 트랙만 반으로 갈라 글(왼쪽)·`<figure>`(오른쪽)를 나눈다. */
     .dira-landing .stage > .wrap {
       position: sticky; top: 60px; height: calc(100vh - 60px);
+      /* 자리 ④ 회귀(`3774014a` · `bb65e25b`) — 행이 전부 암시 `auto`라 `align-content: normal`
+         (=`stretch`)이면 남는 세로 공간이 행 사이 사이에 갈려 타이틀·본문 여백이 벌어진다.
+         `center`는 행을 늘리지 않고 남는 공간을 블록 위·아래로만 보낸다 — `<figure>`의
+         `align-self: center`(아래)와 같은 축에 선다. */
+      align-content: center;
       grid-template-columns:
         [full-start] minmax(24px, 1fr)
         [content-start] minmax(0, calc((var(--maxw) - 48px) / 2)) [mid-start]
