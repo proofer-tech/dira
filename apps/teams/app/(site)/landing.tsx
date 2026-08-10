@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
+import Typed from "typed.js";
 import { Pause, Play, TriangleAlert } from "lucide-react";
 import { registerProject, type CreateState, type RegisterState } from "@/app/actions";
 import { CREATE_BLURB, ConfigTable, CreateDialog, CreateForm } from "@/components/projects-ui";
@@ -272,6 +273,31 @@ export default function Landing({
     const t = setTimeout(() => setIntroPhase("gone"), 200);
     return () => clearTimeout(t);
   }, [introPhase]);
+
+  useEffect(() => {
+    // 히어로 h1 타이핑(DESIGN §P237 §판정표 ②). `<h1>`의 정지 상태 텍스트는 그대로 두고
+    // typed.js가 그 textContent를 읽어 지웠다가 다시 친다 — 그릇을 비워 두고 스크립트가
+    // 채우는 배치를 안 쓴다(reduce·JS off에서 문장이 그냥 서 있다). reduce면 아예 안 켠다.
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const h1 = document.querySelector<HTMLHeadingElement>(".hero h1");
+    if (!h1) return;
+    // 완성 문장이 390에서만 두 줄이라 타이핑 중 짧은 문자열이 한 줄로 접혀 아래 전부가
+    // 튄다 — 최종 높이(지금 정지 텍스트 기준)로 고정하고 끝나면 지운다.
+    const text = h1.textContent ?? "";
+    h1.style.minHeight = `${h1.offsetHeight}px`;
+    // typed.js는 그릇에 이미 있는 글자를 "이미 친 문자열"로 재활용해 smartBackspace로
+    // 한 글자만 건드리고 끝낸다(같은 문자열끼리는 그 최적화가 통째로 스킵돼 버린다) —
+    // 16자를 한 자씩 치는 모션이 서려면 여기서 비우고 넘겨야 한다.
+    h1.textContent = "";
+    const typed = new Typed(h1, {
+      strings: [text],
+      typeSpeed: 52,
+      startDelay: 640,
+      showCursor: false,
+      onComplete: () => { h1.style.minHeight = ""; },
+    });
+    return () => typed.destroy();
+  }, []);
 
   useEffect(() => {
     // 스크롤 진입 등장(DESIGN §랜딩 §모션 §판정표 ⑥). JS로 움직이므로 전역

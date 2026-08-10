@@ -474,3 +474,4 @@ import { listTickets } from "./queue.ts";   // lib 안에서는 확장자 `.ts`�
 | `remark-gfm` | 이 큐의 본문이 표와 체크리스트(`- [ ]`)로 가득한데 CommonMark에 둘 다 없다. `react-markdown`이 GFM을 기본으로 안 켠다 |
 | `cmdk` | shadcn `command`가 직접 import. DESIGN.md §5가 전환기·deps 멀티셀렉트·필터를 `command`로 정한 것의 대가다(검색·키보드 이동·필터링을 직접 쓰면 수백 줄). `add command`가 끌고 왔다 |
 | `shiki` | `app/(site)/doc.tsx`(매뉴얼 22장 코드펜스 하이라이팅). `apps/site` 이사(`6a24257d`, §한 코드베이스)로 들어왔다 — 렉서·문법·테마 매핑을 직접 쓰면 수백 줄이고, 다크 대응까지 필요하다(`--shiki-light`/`--shiki-dark` 두 변수) |
+| `typed.js` | 히어로 `<h1>` 타이핑(`landing.tsx:442`, DESIGN §P237 §뽑는 못 ①). **사람이 이름으로 지목했다** — 무의존 대안이 있었고 거절당했다(로드맵 §P237-2 `4655e36c`). 몇 줄을 대체했나로 정당화하지 않는다. 버전 고정(`3.0.0`, `^` 없이) — 랜딩이 유일한 공개 화면이라 자동 마이너 업데이트가 히어로 첫 줄을 조용히 바꾸는 자리를 안 만든다 |
