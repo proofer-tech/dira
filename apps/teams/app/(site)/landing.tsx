@@ -570,8 +570,9 @@ export default function Landing({
     {/* 넷째는 12열을 통째로 쓴다. `.gallery`가 3열이라 넷이 한 줄에 못 서는데, 열을 넷으로
         줄이는 쪽은 §랜딩 §갤러리가 이미 버린 안이다(1열 1032px에서도 캡처가 0.65로 줄어
         안 읽힌다 — `landing.css` 갤러리 주석 ③). 그래서 셋은 두고 넷째만 한 줄을 쓴다.
-        인라인 한 값이라 `landing.css`에 새 규칙 0이고, 900 이하 1열에서도 `1 / -1`이 그
-        한 칸이라 접힘이 안 갈린다. 레일은 무채색 — ①과 같이 상태가 아닌 것이다. */}
+        900 이하 1열에서도 `1 / -1`이 그 한 칸이라 접힘이 안 갈린다. 레일은 무채색 —
+        ①과 같이 상태가 아닌 것이다. 앞 셋과의 간격 24는 `landing.css` 갤러리 주석 ⑤
+        (`.gallery figure:last-child`의 margin-top)가 준다. */}
     <figure style={{ gridColumn: "1 / -1" }}>
       <a className="zoom" href="/shots/09-ontology.png" target="_blank" rel="noopener" title="원본 크기로 열기"><img className="shot" src="/shots/09-ontology.png" loading="lazy" alt="온톨로지 화면. 제목 아래에 카드가 사는 폴더 경로가 있고, 그 밑 지표 판에 객체 · 관계 72 · 133을 비롯한 칸이 열두 개 있습니다. 아래는 왼쪽이 카드 파일트리, 오른쪽이 고른 파일 _ontology/SCHEMA.md의 원문입니다." width="1600" height="760"/></a>
       <figcaption>티켓이 끝날 때마다 그 일에서 추린 사실이 한 장씩 여기 쌓입니다. 프로젝트 폴더 안에 마크다운으로 남아서, 다음 세션도 사람도 같은 자리를 열어 봅니다.</figcaption>

@@ -343,6 +343,10 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
   .dira-landing .gallery .zoom { grid-row: 1; align-self: start; }
   .dira-landing .gallery figcaption { grid-row: 2; }
   .dira-landing .gallery .arrows { grid-row: 3; }
+  /* ⑤ 넷째(`1 / -1`)는 자동배치로 암시 행에 떨어져 앞 셋의 `.arrows` 밑변에 레일이 바로
+     붙는다(row-gap:0이 그 새 행에도 걸린다). 캡처·캡션 사이가 margin-top으로 메워지는 것과
+     같은 수로, 넷째 figure 자체에 margin-top을 줘 그 경계만 24로 연다(§로드맵 §P234). */
+  .dira-landing .gallery figure:last-child { margin-top: 24px; }
 }
 
 /* ── content rows ───────────────────────────────── */
