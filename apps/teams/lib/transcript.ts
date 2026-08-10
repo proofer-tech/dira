@@ -11,10 +11,12 @@
  *
  *  **여기가 틀리면 사건이 조용히 사라진다.** 그래서 이 파일의 계약은 두 줄이다:
  *  모르는 것은 던지지 말고 건너뛴다, 그리고 **불완전한 마지막 줄은 버리고 offset을 되돌린다**. */
+import { readFileSync } from "node:fs";
 import { access, open, readdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import { lineDiff, type DiffLine } from "./edit-diff.ts";
+import { engineRepo } from "./scaffold.ts";
 
 /** 사건 한 줄. `label`이 비면 접지 않고 `body`를 그대로 보여준다(assistant text · 사용자 프롬프트).
  *  비지 않으면 접힌 줄이 `HH:MM:SS <label> <summary>`이고 펼치면 `body`다(§2-1 표). */
@@ -261,6 +263,36 @@ export async function lastActivity(file: string, grok = false): Promise<StreamEv
  *  하나 더 만들면 그때마다 여기가 늘기 때문이고, 사람이 참견 첫 줄에 태그만 달랑 쓰는 일은 없다. */
 const HARNESS_ENVELOPE = /^<[a-z][a-z0-9_-]*>\s*\n/;
 
+/** `tick.sh`의 `TICKET_PROMPT_FMT` 값으로 만든 정규식 — 엔진이 찍는 티켓 배정 문구인지 판정한다
+ *  (§2-9 ②). **문구를 이 파일에 베끼지 않는다** — `scaffold.test.ts:145`가 `package.json`을
+ *  직접 읽는 그 수법 그대로다. `TICKET_PROMPT_FMT`을 바꾸면 이 판정도 같이 갈린다.
+ *  `%s`(티켓 해시) 자리만 와일드카드고 나머지는 리터럴 — 매칭은 **머리만**(`^`, `$` 없음):
+ *  `tick.sh`가 참조 컨텍스트·언어 문장을 배정 문구 뒤에 더 붙이기 때문이다(524행 이후).
+ *  엔진 레포를 못 찾으면(배치 밖) `null` — 그 배치에서는 배정 문구를 그냥 참견으로 둔다. */
+let assignmentPattern: RegExp | null | undefined;
+
+function ticketAssignmentPattern(): RegExp | null {
+  if (assignmentPattern !== undefined) return assignmentPattern;
+  assignmentPattern = null;
+  try {
+    const repo = engineRepo();
+    if ("path" in repo) {
+      const sh = readFileSync(path.join(repo.path, "tick.sh"), "utf8");
+      const m = sh.match(/^TICKET_PROMPT_FMT="\$\{TICKET_PROMPT_FMT:-(.*)\}"\s*$/m);
+      if (m) {
+        const escaped = m[1].replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/%s/g, ".*");
+        assignmentPattern = new RegExp(`^${escaped}`);
+      }
+    }
+  } catch {
+    // 읽기 실패 — null 그대로, 판정을 건너뛴다
+  }
+  return assignmentPattern;
+}
+
+/** 참견 문구가 **엔진의 티켓 배정**인가(§2-9 ②) — 참인 것은 말풍선이 아니라 기록으로 간다. */
+const isTicketAssignment = (text: string): boolean => ticketAssignmentPattern()?.test(text) ?? false;
+
 /** 참견을 나르는 레코드인가(§2-2). **`content`가 있느냐와 무관하다** — 첫 `enqueue`를 안 흘리는
  *  판정이 레코드 단위라서(§2-1) `content` 없는 `enqueue`(실측 있다)도 그 한 장을 쓴다.
  *  안 그러면 그 뒤에 온 **진짜 참견**이 대신 사라진다. */
@@ -403,13 +435,15 @@ export function recordToEvents(rec: unknown, collapseFirstPrompt = false): Strea
     if (!isEnqueue(r) || !text.trim() || HARNESS_ENVELOPE.test(text)) return [];
     // §9의 **전문 줄**이다(§2-1 표: 펼칠 것이 없다 — 한 줄이 이미 전문이다). 사용자 프롬프트와
     // 같은 모양을 받는 이유는 같은 것이라서다: 밖에서 들어온 사람의 말.
+    // **엔진 배정 문구는 예외다**(§2-9 ②) — 세션 프롬프트와 같은 성질이라 기록(접힌 줄)으로 간다.
+    const assigned = isTicketAssignment(text);
     return [
       {
         key: `${uid}:q`, // 이 레코드에는 `uuid`가 없다(실측 키 5개) — `ts`가 키가 된다
         ts,
         kind: "interject",
-        label: "", // 비면 화면이 전문 줄로 그린다
-        summary: "",
+        label: assigned ? "배정" : "", // 비면 화면이 전문 줄(말풍선)로, 있으면 접힌 줄로 그린다
+        summary: assigned ? `${chars(text)}자` : "",
         summaryMono: false,
         body: text,
         sidechain: false,
@@ -437,13 +471,16 @@ export function recordToEvents(rec: unknown, collapseFirstPrompt = false): Strea
       summaryMono: e.summaryMono ?? false,
     });
   const prompt = (i: number, text: string) => {
-    const collapse = !promptDone;
+    const first = !promptDone;
     promptDone = true;
-    // 첫 프롬프트는 페르소나 + 프로토콜 전문이고 세션마다 같다(실측 8.6KB)
+    // 첫 프롬프트는 페르소나 + 프로토콜 전문이고 세션마다 같다(실측 8.6KB). **첫 아닌 프롬프트도
+    // 전부 접힌다**(§2-9 ②) — 하니스가 새 턴으로 집어 간 참견의 재등장 · 이미지 자리표시자 ·
+    // 엔진 배정의 재등장을 종류별로 나열해 거르지 않는다(§2-9 §버린 안: 문구 목록은 하니스가 문구를
+    // 하나 더 만들 때마다 조용히 다시 샌다). 판정은 **자리**(첫이 아니다) 하나다.
     push(i, {
       kind: "prompt",
-      label: collapse ? "세션 프롬프트" : "",
-      summary: collapse ? `${chars(text)}자` : "",
+      label: first ? "세션 프롬프트" : "프롬프트",
+      summary: `${chars(text)}자`,
       body: text,
     });
   };

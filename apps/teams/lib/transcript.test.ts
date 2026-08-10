@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { appendFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
@@ -329,6 +329,36 @@ test("참견 — 이어 읽기(offset>0)에서는 첫 enqueue 규칙이 다시 �
   assert.deepEqual(r.events.map((e) => [e.kind, e.body]), [["interject", INTERJECT]]);
 });
 
+// ---------- 엔진 배정 문구는 말풍선이 아니다 (§2-9 ②) ----------
+
+/** `tick.sh`의 `TICKET_PROMPT_FMT` 값을 **여기서도 베끼지 않는다** — `transcript.ts`와 같은
+ *  파일을 직접 읽는다(`scaffold.test.ts:145`의 수법). `TICKET_PROMPT_FMT`을 바꾸면 이 값도
+ *  같이 갈리므로, 이 테스트가 문구를 하드코딩했을 때는 못 잡는 회귀(문구 변경)를 잡는다. */
+const TICK_SH = readFileSync(path.join(CWD, "tick.sh"), "utf8");
+const PROMPT_FMT_MATCH = TICK_SH.match(/^TICKET_PROMPT_FMT="\$\{TICKET_PROMPT_FMT:-(.*)\}"\s*$/m);
+if (!PROMPT_FMT_MATCH) throw new Error("tick.sh에서 TICKET_PROMPT_FMT을 못 읽었다 — 판정 회귀 테스트가 무의미해진다");
+const assignedText = (hash: string) => PROMPT_FMT_MATCH[1].replace("%s", hash);
+
+const enqueueOf = (content: string) =>
+  recordToEvents(
+    JSON.parse(rec({ type: "queue-operation", operation: "enqueue", timestamp: "2026-08-10T00:00:00.000Z", content }).trim()),
+  )[0];
+
+test("참견 — tick.sh의 TICKET_PROMPT_FMT으로 만든 배정 문구는 접힌다. 사람 참견은 그대로 말풍선이다", () => {
+  const assigned = enqueueOf(assignedText("8a6a9a98"));
+  assert.notEqual(assigned.label, ""); // 기록(접힌 줄) — 말풍선이 아니다
+  assert.equal(assigned.kind, "interject"); // 종류는 그대로다. 갈리는 것은 문법(label)뿐이다
+  assert.equal(assigned.body, assignedText("8a6a9a98")); // 글자는 안 잃는다
+
+  const human = enqueueOf(INTERJECT);
+  assert.equal(human.label, ""); // 사람이 쓴 참견은 여전히 말풍선이다
+});
+
+test("참견 — 배정 문구 뒤에 참조 컨텍스트·언어 문장이 더 붙어도 배정으로 판정한다(tick.sh가 꼬리를 붙인다)", () => {
+  const withTail = `${assignedText("deadbeef")}\n\n참조 컨텍스트(필요하면 읽어보세요):\n- /x — 설명\n\n언어 안내: 한국어로.`;
+  assert.notEqual(enqueueOf(withTail).label, "");
+});
+
 test("tailEvents — 트랜스크립트가 없으면 빈 상태다", async () => {
   assert.deepEqual(await tailEvents(path.join(tmp, "없는파일.jsonl"), 12), { events: [], offset: 12 });
 });
@@ -481,7 +511,7 @@ test("사건 매핑 — assistant text는 접히지 않는다(label이 비어 �
   assert.deepEqual([e.kind, e.label, e.summary, e.body], ["text", "", "", "I'll start."]);
 });
 
-test("사건 매핑 — 첫 사용자 프롬프트만 접힌다", async () => {
+test("사건 매핑 — 사용자 프롬프트는 전부 접힌다. 첫째만 라벨이 다르다(§2-9 ②)", async () => {
   const f = path.join(tmp, "prompt.jsonl");
   const prompt = (uuid: string, text: string) =>
     rec({ type: "user", uuid, timestamp: "2026-07-30T13:55:00.000Z", message: { role: "user", content: text } });
@@ -495,12 +525,36 @@ test("사건 매핑 — 첫 사용자 프롬프트만 접힌다", async () => {
     "3자",
     "가나다",
   ]);
-  assert.deepEqual([second.kind, second.label, second.body], ["prompt", "", "그 다음"]);
+  // 첫 아닌 프롬프트도 접힌다 — 말풍선이 아니다. 문구를 목록으로 걸러 골라내지 않는다(§2-9 §버린 안)
+  assert.deepEqual([second.kind, second.label, second.summary, second.body], [
+    "prompt",
+    "프롬프트",
+    "4자",
+    "그 다음",
+  ]);
 
-  // offset > 0으로 이어 읽으면 세션 프롬프트는 이미 지나갔으므로 접지 않는다
+  // offset > 0으로 이어 읽으면 세션 프롬프트는 이미 지나갔으므로 "세션 프롬프트" 라벨은 안 붙지만,
+  // 여전히 접힌다 — 말풍선으로 돌아가지 않는다
   const mid = Buffer.byteLength(prompt("p1", "가나다") + assistant([{ type: "text", text: "네" }]));
   const cont = await tailEvents(f, mid);
-  assert.deepEqual([cont.events[0].label, cont.events[0].body], ["", "그 다음"]);
+  assert.deepEqual([cont.events[0].label, cont.events[0].body], ["프롬프트", "그 다음"]);
+});
+
+test("사건 매핑 — 하니스 문구도 목록 없이 접힌다(자리 하나가 판정, 내용 목록이 아니다)", async () => {
+  const f = path.join(tmp, "prompt-harness.jsonl");
+  const prompt = (uuid: string, text: string) =>
+    rec({ type: "user", uuid, timestamp: "2026-07-30T13:55:00.000Z", message: { role: "user", content: text } });
+  const harnessLines = [
+    "[Image: original image (deduplicated)]",
+    "Base directory for this skill: /some/path",
+    "[Request interrupted by user]",
+  ];
+  writeFileSync(f, prompt("p0", "첫 프롬프트") + harnessLines.map((t, i) => prompt(`p${i + 1}`, t)).join(""));
+
+  const r = await tailEvents(f, 0);
+  const rest = r.events.slice(1);
+  assert.deepEqual(rest.map((e) => e.label), harnessLines.map(() => "프롬프트")); // 전부 접힌다
+  assert.deepEqual(rest.map((e) => e.body), harnessLines); // 글자는 안 잃는다 — 펼치면 전문
 });
 
 test("사건 매핑 — isSidechain에 표시가 붙는다", () => {
