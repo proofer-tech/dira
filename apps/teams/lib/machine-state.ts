@@ -166,8 +166,10 @@ function ensureStarted(): void {
   // ponytail: 초기화가 끝나기 전 machineState() 호출은 기본값(정상)을 낸다. 실측상 초기화는
   //           scutil 8ms + sysctl 8ms 남짓이라 그 창은 서버 기동 순간뿐이다.
   if (!starting) {
+    // 이 initState()가 도는 동안 누가 g.__diraMachineState를 먼저 채웠으면(테스트 주입 등)
+    // 그 값을 지키지 덮어쓰지 않는다 — resolve 시점은 subprocess 타이밍이라 불확정이다.
     starting = initState().then((s) => {
-      g.__diraMachineState = s;
+      if (!g.__diraMachineState) g.__diraMachineState = s;
       startHeartbeat();
     });
   }
