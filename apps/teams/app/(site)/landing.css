@@ -271,15 +271,35 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
 .dira-landing .hero > *:nth-child(5) { animation-delay: 200ms; }
 .dira-landing .hero > *:nth-child(6) { animation-delay: 250ms; }
 
-/* ⑥ 스크롤 진입(§모션 §판정표 ⑥). 규칙이 둘뿐인 것이 §서는 못 ②를 지키는 방법이다 —
-   `.armed`는 onMounted의 IntersectionObserver만 붙이므로 JS가 죽으면 둘 다 안 걸리고
-   여섯이 그냥 서 있다. 쉬는 상태를 opacity: 0으로 두지 않는다. */
-.dira-landing .reveal.armed {
+/* ⑥→① 스크롤 진입(§P235 §모션 §판정표 ①). 움직이는 주체가 블록이 아니라 블록 안 27칸이다 —
+   격자 그릇(`.steps`·`.plans`·`.stats-list`·`.gallery`)과 캡처(`figure`, ②③이 대신 받는다)를
+   빼고 그 그릇의 자식 `li`를 대신 센다. `.armed`는 onMounted의 IntersectionObserver만 붙이므로
+   JS가 죽으면 안 걸리고 27칸이 그냥 서 있다. 쉬는 상태를 opacity: 0으로 두지 않는다.
+   지연은 딴 규칙이다(아래) — 여기 `transition` 단축을 쓰면 지연이 0으로 리셋되고, 여기
+   `:not()`이 특정도를 올리면 지연 규칙(낮은 특정도)을 이겨서 지연이 통째로 죽는다
+   (실측 27칸 중 22칸이 `0s`로 붙었다). */
+.dira-landing .reveal.armed > :not(figure):not(.steps):not(.plans):not(.gallery):not(.stats-list),
+.dira-landing .reveal.armed > .steps > li,
+.dira-landing .reveal.armed > .plans > li,
+.dira-landing .reveal.armed > .stats-list > li {
   opacity: 0; transform: translateY(16px);
-  transition: opacity 520ms cubic-bezier(0.22, 1, 0.36, 1),
-              transform 520ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition-property: opacity, transform;
+  transition-duration: 520ms;
+  transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
 }
-.dira-landing .reveal.armed.in { opacity: 1; transform: none; }
+.dira-landing .reveal.armed.in > :not(figure):not(.steps):not(.plans):not(.gallery):not(.stats-list),
+.dira-landing .reveal.armed.in > .steps > li,
+.dira-landing .reveal.armed.in > .plans > li,
+.dira-landing .reveal.armed.in > .stats-list > li {
+  opacity: 1; transform: none;
+}
+/* 지연 사다리 `0 · 60 · 120 · 180 · 240ms` — 대상 선택자에 안 얹는다(위 함정). 계단 칸이
+   아닌 자리(그릇 자체 등)에도 걸리지만 그 자리는 opacity: 0을 안 받으므로 화면에 아무 일도
+   안 일어난다. */
+.dira-landing .reveal.armed :nth-child(2) { transition-delay: 60ms; }
+.dira-landing .reveal.armed :nth-child(3) { transition-delay: 120ms; }
+.dira-landing .reveal.armed :nth-child(4) { transition-delay: 180ms; }
+.dira-landing .reveal.armed :nth-child(n+5) { transition-delay: 240ms; }
 
 /* ── figures ────────────────────────────────────── */
 /* 캡처 액자의 `border-radius: 12px`이 여기서 놓인다(§방향·토큰 «모서리» — 한 종 `0`).
@@ -290,6 +310,29 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
 .dira-landing figcaption { margin-top: 16px; font-size: 13.5px; line-height: 1.68; color: var(--muted-fg); }
 .dira-landing .hero figure { margin-top: 64px; }
 
+/* ②③ 스크롤 위치에 연속으로 묶인 겹(§P235 §모션 §판정표 ②③). `animation-timeline: view()`가
+   없는 브라우저에서는 이 블록 전체가 안 걸려 캡처가 그냥 서 있다 — 그 상태가 정본이다
+   (못 ⑦ · ②). 전역 킬 스위치(위 12행)는 `animation-duration`을 보는데 이 애니메이션은
+   진행이 시간이 아니라 스크롤 위치라 그 블록이 안 먹는다 — `reduce`는 여기서 따로 죽인다. */
+@supports (animation-timeline: view()) {
+  @keyframes dira-shot-in { from { opacity: 0; transform: translateY(28px); } }
+  .dira-landing .reveal figure {
+    animation: dira-shot-in linear both;
+    animation-timeline: view();
+    animation-range: entry 10% cover 30%;
+  }
+  @keyframes dira-hero-out { to { opacity: .7; transform: translateY(-32px) scale(.98); } }
+  .dira-landing .hero figure {
+    animation: dira-hero-out linear both;
+    animation-timeline: view();
+    animation-range: exit 0% exit 100%;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .dira-landing .reveal figure,
+    .dira-landing .hero figure { animation: none; }
+  }
+}
+
 /* ── stats ──────────────────────────────────────── */
 /* 위·아래 룰이 화면 끝까지 간다 — `.stats`가 `.wrap`이고 그 격자가 `max-width`를 놓은
    뒤로 이 요소 자체가 뷰포트 폭이다(§방향·토큰 «하이라인» — 1080에서 끊기던 둘이
@@ -297,7 +340,7 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
    `repeat(4, 1fr)`을 12열 `span 3`으로 다시 적지 않는다 — 이 격자의 거터는 0이고
    (칸을 가르는 것이 gap이 아니라 `border-left`다) 거터 0에서 둘은 같은 트랙이다.
    §지금 값의 거터 세 값 20·40·48은 `.plans`·`.gallery`·`.two`이고 여기는 그 셋이 아니다. */
-.dira-landing .stats { border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.dira-landing .stats { position: relative; border-top: 1px solid transparent; border-bottom: 1px solid var(--border); }
 .dira-landing .stats ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, 1fr); }
 .dira-landing .stats li { padding: 24px; border-left: 1px solid var(--border); }
 .dira-landing .stats li:first-child { border-left: 0; padding-left: 0; }
@@ -359,9 +402,25 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
    `section + section { padding-top: 0 }`이 여기 자리를 내줬다: 룰 위아래가 같은 96이어야
    경계가 리듬으로 읽힌다. 이 두 줄이 하이라인을 5 → 8로 닫는다(나머지 다섯은 header 아래 ·
    `.stats` 위아래 · `.closing` 위 · footer 위). */
-.dira-landing section { padding: 96px 0; border-top: 1px solid var(--border); }
+.dira-landing section { position: relative; padding: 96px 0; border-top: 1px solid transparent; }
 /* `.stats`가 자기 아래 변으로 이미 그은 경계다 — 두 줄이 겹치면 2px이 된다. */
 .dira-landing .stats + section { border-top: 0; }
+
+/* ④ 하이라인 — 절이 «시작한다»고 말한다(§P235 §모션 §판정표 ④). border-top 색을 옮기고
+   `::before`가 같은 자리에 실제 선을 그린다 — border-top을 0으로 하면 박스가 줄어 문서가
+   밀린다(§모션 ④ `.arrows a::before`와 같은 어휘). `.armed`가 없으면 scaleX(1)이 기본이라
+   JS가 죽어도 선이 그어져 있다. `no-hi`(갤러리 절)는 원래 `border-top: 0`이라 선을 안 긋는다. */
+.dira-landing .reveal:not(.no-hi)::before {
+  content: ""; position: absolute; top: -1px; left: 0; right: 0; height: 1px;
+  background: var(--border); transform-origin: left; transform: scaleX(1);
+}
+/* 특정도를 위 `:not()` 기본 규칙(세 클래스)과 맞춘다 — `.armed::before`(두 클래스)만 쓰면
+   특정도가 낮아 기본값 scaleX(1)에 진다(실측: 무장은 됐는데 선이 이미 그어진 채로 나왔다). */
+.dira-landing .reveal.armed::before {
+  transform: scaleX(0);
+  transition: transform 640ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.dira-landing .reveal.armed.in::before { transform: scaleX(1); }
 .dira-landing .marks { list-style: none; margin: 24px 0 0; padding: 0; }
 .dira-landing .marks li { position: relative; padding: 4px 0 4px 24px; font-size: 14px; color: var(--muted-fg); line-height: 1.6; }
 .dira-landing .marks li::before { content: "—"; position: absolute; left: 0; color: var(--faint); }
@@ -481,7 +540,7 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
 /* 시작선은 페이지에 하나다 — `text-align: center`와 `margin-inline: auto`를 걷는다
    (§방향·토큰 «정렬»). `.cta`의 가운데 정렬은 히어로가 쥔 공용 선언이라 여기서
    덮는다 — `.plans .cta`가 이미 쓰는 것과 같은 자리다. 산문은 한 글자도 안 지운다. */
-.dira-landing .closing { background: var(--panel); border-top: 1px solid var(--border); padding: 96px 0; }
+.dira-landing .closing { position: relative; background: var(--panel); border-top: 1px solid transparent; padding: 96px 0; }
 .dira-landing .closing .body { max-width: 34em; margin: 0 0 32px; }
 .dira-landing .closing .cta { justify-content: flex-start; }
 

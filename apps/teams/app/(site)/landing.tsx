@@ -555,7 +555,8 @@ export default function Landing({
 </section>
 
 <div className="wrap stats reveal">
-  <ul>
+  {/* `stats-list`는 §모션 §판정표 ①이 격자 그릇을 대상에서 빼는 자리다 — 텍스트는 0자 안 갈렸다. */}
+  <ul className="stats-list">
     <li><b>0</b><span>엔진 의존성<br/>bash + python3 표준 라이브러리</span></li>
     <li><b>6</b><span>이 레포에서 동시에 도는 워커</span></li>
     <li><b>631</b><span>자기 큐가 받은 티켓<br/>완료 622</span></li>
@@ -564,7 +565,9 @@ export default function Landing({
   <p className="stats-note">2026-08-03 기준</p>
 </div>
 
-<section className="wrap reveal">
+{/* `no-hi`는 §모션 §판정표 ④가 하이라인을 안 긋는 예외다(`.stats + section`이 이미
+    border-top을 0으로 죽인 절과 같다) — 텍스트는 0자 안 갈렸다. */}
+<section className="wrap reveal no-hi">
   <div className="gallery">
     <figure>
       <a className="zoom" href="/shots/barge.gif" target="_blank" rel="noopener" title="원본 크기로 열기"><img className="shot" src="/shots/barge.gif" loading="lazy" alt="세션 스트림이 도구 호출을 한 줄씩 늘려 가는 동안, 아래 입력창에 문장을 넣고 보내기를 누르자 그 문장이 참견 줄로 스트림에 나타나고 세션이 이어서 방향을 바꿉니다." width="1760" height="1408"/></a>
