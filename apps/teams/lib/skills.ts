@@ -20,7 +20,8 @@
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
-import { expandHome } from "./paths.ts";
+import { MAX_BYTES } from "./attachment-limit.ts";
+import { expandHome, resolveWithin } from "./paths.ts";
 import { personaFilePath } from "./projects.ts";
 import { type EngineId, NO_MODEL, parseEngineValue, renderEngineBlock } from "./workers.ts";
 
@@ -117,6 +118,80 @@ const unquote = (v: string) =>
   (v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))
     ? v.slice(1, -1)
     : v;
+
+// ── import — 첨부한 스킬을 이 머신에 설치한다 (§5-1 §import) ──────────────────
+
+/** import 한 장. `path`는 스킬 루트 기준 상대경로(`"SKILL.md"`·`"references/x.md"`) — 폴더를
+ *  고른 경우 사람이 고른 폴더 이름은 호출부(`af84d919`, `FormData` 해석)가 이미 뗀 값이다.
+ *  `bytes`는 그 파일 내용 그대로다. */
+export type SkillUpload = { path: string; bytes: Buffer };
+
+/** §5-1 §검증 — `/`·공백·`..`·`.` 시작을 한 판정으로 막는다. `:`도 막는다(플러그인 호출
+ *  문법과 겹치면 `listInstalledSkills`의 첫 승 규칙이 한쪽을 가린다). */
+const SKILL_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+
+/** 실측 최대(§5-1 §상한 둘)의 위 여유. 벽이지 여유가 아니다 — 넘으면 거절하고 사유에 수를 적는다. */
+const MAX_SKILL_FILES = 200;
+
+/** 상대경로 성분 하나가 빈 값·`.`·`..`이거나 `\`·NUL을 담으면 참이다(§5-1 §검증). 실제 방어는
+ *  아래 `installSkill`의 `resolveWithin` 하나다 — 이건 사유를 갈라 보여주기 위한 사전 판정이다. */
+function hasBadPathComponent(p: string): boolean {
+  return p.split("/").some((part) => part === "" || part === "." || part === ".." || /[\\\0]/.test(part));
+}
+
+/** 첨부한 파일들을 `<config>/skills/<name:>/`에 설치한다(§5-1 §import). `files`는 **(상대경로,
+ *  바이트) 짝의 목록**이다 — `FormData` 해석·폴더 이름 떼기는 호출부 몫이다.
+ *
+ *  **다 검증한 뒤에 쓴다**(§검증 마지막 줄) — 상한·이름·경로 전부를 통과해야 디렉터리 하나라도
+ *  생긴다. 이름 충돌 판정은 `mkdir`(재귀 없음)의 `EEXIST`다 — 검사와 생성 사이가 안 벌어진다
+ *  (`saveAttachment`의 `wx`와 같은 규약). 쓰다가 실패하면(디스크 꽉 참 등) 방금 만든 디렉터리를
+ *  지운다 — 반쪽 설치를 안 남긴다. */
+export async function installSkill(
+  files: SkillUpload[],
+  configDir: string = claudeConfigDir(),
+): Promise<Skill> {
+  const skillMd = files.find((f) => f.path === "SKILL.md");
+  if (!skillMd) throw new Error("SKILL.md가 없습니다 — 스킬 폴더 바로 아래에 있어야 합니다.");
+  const badPath = files.find((f) => hasBadPathComponent(f.path));
+  if (badPath) throw new Error(`올바르지 않은 경로입니다: ${badPath.path}`);
+  if (files.length > MAX_SKILL_FILES) {
+    throw new Error(`파일이 ${files.length}개입니다 — 최대 ${MAX_SKILL_FILES}개까지 설치할 수 있습니다.`);
+  }
+  const totalBytes = files.reduce((n, f) => n + f.bytes.length, 0);
+  if (totalBytes > MAX_BYTES) {
+    throw new Error(
+      `총 ${(totalBytes / 1024 / 1024).toFixed(1)}MB — 20MB를 넘습니다. 필요한 파일만 골라 다시 시도하세요.`,
+    );
+  }
+  const skill = parseSkillFm(skillMd.bytes.toString("utf8"));
+  if (!skill || !SKILL_NAME_RE.test(skill.name)) {
+    throw new Error(`SKILL.md의 name이 올바르지 않습니다: ${JSON.stringify(skill?.name ?? null)}`);
+  }
+
+  const skillsDir = path.join(expandHome(configDir), "skills");
+  await mkdir(skillsDir, { recursive: true }); // 없는 머신도 있다(§5-1) — resolveWithin이 realpath하기 전에 먼저 만든다
+  const dest = path.join(skillsDir, skill.name);
+  try {
+    await mkdir(dest);
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "EEXIST") {
+      throw new Error(`이미 있습니다 — 한 바이트도 쓰지 않았습니다: ${dest}`);
+    }
+    throw e;
+  }
+
+  try {
+    for (const f of files) {
+      const full = await resolveWithin(skillsDir, path.join(skill.name, f.path));
+      await mkdir(path.dirname(full), { recursive: true });
+      await writeFile(full, f.bytes, { flag: "wx" });
+    }
+  } catch (e) {
+    await rm(dest, { recursive: true, force: true });
+    throw e;
+  }
+  return skill;
+}
 
 // ── 페르소나가 고른 스킬 (`<personas>/<이름>/skills.md`) ─────────────────────
 

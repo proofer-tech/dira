@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import {
   deletePersonaMemory,
+  installSkill,
   listInstalledSkills,
   memoryExcerpt,
   pickedSkills,
@@ -18,6 +19,7 @@ import {
   writePersonaSkills,
 } from "./skills.ts";
 import { renderEngineBlock } from "./workers.ts";
+import { MAX_BYTES } from "./attachment-limit.ts";
 
 /** 설치된 스킬 픽스처 — **이 머신의 `~/.claude`를 읽지 않는다.** 머신마다 결과가 달라
  *  회귀 판정이 안 된다(티켓 d608feb3). `<config>`를 인자로 주입한다.
@@ -67,6 +69,117 @@ test("설치된 스킬 — 세 자리를 훑고, 접힌 description은 한 줄�
   // 자르지 않는다(§5-1) — 원문 길이가 그대로 남는다.
   assert.equal(found.find((s) => s.name === "alpha")!.description, "한 줄짜리 설명이다.");
   assert.equal(found.find((s) => s.name === "gamma")!.description, "따옴표는 벗긴다");
+});
+
+test("installSkill — 한 장, 설치 뒤 listInstalledSkills()가 그 이름을 돌려준다", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "fst-install-"));
+  const skill = await installSkill(
+    [{ path: "SKILL.md", bytes: Buffer.from("---\nname: imported-one\ndescription: 한 장짜리.\n---\n") }],
+    dir,
+  );
+  assert.deepEqual(skill, { name: "imported-one", description: "한 장짜리." });
+  assert.equal(
+    readFileSync(path.join(dir, "skills", "imported-one", "SKILL.md"), "utf8"),
+    "---\nname: imported-one\ndescription: 한 장짜리.\n---\n",
+  );
+  assert.deepEqual(
+    (await listInstalledSkills(dir)).map((s) => s.name),
+    ["imported-one"],
+  );
+});
+
+test("installSkill — 폴더 통째, 하위 파일까지 같은 상대경로로 깔린다", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "fst-install-"));
+  await installSkill(
+    [
+      { path: "SKILL.md", bytes: Buffer.from("---\nname: with-refs\n---\n") },
+      { path: "references/a.md", bytes: Buffer.from("참고 자료") },
+    ],
+    dir,
+  );
+  assert.equal(
+    readFileSync(path.join(dir, "skills", "with-refs", "references", "a.md"), "utf8"),
+    "참고 자료",
+  );
+});
+
+test("installSkill — 거절 1: SKILL.md가 목록에 없다", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "fst-install-"));
+  await assert.rejects(
+    () => installSkill([{ path: "readme.md", bytes: Buffer.from("x") }], dir),
+    /SKILL\.md가 없습니다/,
+  );
+  assert.equal(existsSync(path.join(dir, "skills")), false);
+});
+
+test("installSkill — 거절 2: name이 규칙 밖이다(콜론 · 빈 값)", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "fst-install-"));
+  await assert.rejects(
+    () =>
+      installSkill(
+        [{ path: "SKILL.md", bytes: Buffer.from("---\nname: plugin:skill\n---\n") }],
+        dir,
+      ),
+    /name이 올바르지 않습니다/,
+  );
+  await assert.rejects(
+    () => installSkill([{ path: "SKILL.md", bytes: Buffer.from("---\ndescription: 이름 없음\n---\n") }], dir),
+    /name이 올바르지 않습니다/,
+  );
+});
+
+test("installSkill — 거절 3: 상대경로 성분이 `..`다", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "fst-install-"));
+  await assert.rejects(
+    () =>
+      installSkill(
+        [
+          { path: "SKILL.md", bytes: Buffer.from("---\nname: escape\n---\n") },
+          { path: "../../etc/passwd", bytes: Buffer.from("x") },
+        ],
+        dir,
+      ),
+    /올바르지 않은 경로/,
+  );
+  assert.equal(existsSync(path.join(dir, "skills", "escape")), false);
+});
+
+test("installSkill — 거절 4: 파일 수 · 총 바이트 상한(사유에 수가 있다)", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "fst-install-"));
+  const many = [
+    { path: "SKILL.md", bytes: Buffer.from("---\nname: too-many\n---\n") },
+    ...Array.from({ length: 200 }, (_, i) => ({
+      path: `f${i}.txt`,
+      bytes: Buffer.from("x"),
+    })),
+  ];
+  await assert.rejects(() => installSkill(many, dir), /파일이 201개입니다/);
+
+  await assert.rejects(
+    () =>
+      installSkill(
+        [
+          { path: "SKILL.md", bytes: Buffer.from("---\nname: too-big\n---\n") },
+          { path: "big.bin", bytes: Buffer.alloc(MAX_BYTES + 1) },
+        ],
+        dir,
+      ),
+    /20MB를 넘습니다/,
+  );
+  assert.equal(existsSync(path.join(dir, "skills")), false); // 둘 다 쓰기 전에 거절됐다
+});
+
+test("installSkill — 거절 5: 이미 있으면 한 바이트도 안 쓰고 거절한다", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "fst-install-"));
+  await installSkill([{ path: "SKILL.md", bytes: Buffer.from("---\nname: dup\n---\n원본") }], dir);
+  await assert.rejects(
+    () => installSkill([{ path: "SKILL.md", bytes: Buffer.from("---\nname: dup\n---\n새 내용") }], dir),
+    /이미 있습니다/,
+  );
+  assert.equal(
+    readFileSync(path.join(dir, "skills", "dup", "SKILL.md"), "utf8"),
+    "---\nname: dup\n---\n원본", // 첫 번째는 한 바이트도 안 갈렸다
+  );
 });
 
 test("없는 디렉터리 — 빈 배열이 정상이다(throw 아님)", async () => {
