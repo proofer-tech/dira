@@ -11,7 +11,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { FileText, Folder, TriangleAlert } from "lucide-react";
-import { NewOntologyFileButton, OntologyEditor, OntologySurveyForm } from "@/components/ontology-ui";
+import { FixSchemaViolationsButton, NewOntologyFileButton, OntologyEditor, OntologySurveyForm } from "@/components/ontology-ui";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Sidebar,
@@ -22,14 +22,19 @@ import {
   SidebarMenuItem,
   SidebarProvider,
 } from "@/components/ui/sidebar";
+import { statusLabel } from "@/components/status-badge";
 import { computeOntologyMetrics, type OntologyMetrics } from "@/lib/ontology";
+import { ONTOLOGY_FIX_MARKER, listTickets, openFixTicket, statusOf, type Ticket } from "@/lib/queue";
 import { listTree, readTextFile, type ProtocolEntry, type ProtocolFile } from "@/lib/protocols";
-import { getProject, ontologyDir } from "@/lib/projects";
+import { getProject, ontologyDir, resolveConfig } from "@/lib/projects";
 import { cn } from "@/lib/utils";
 
 /** `tree`에서 지표 계산에 필요한 텍스트를 모아 순수 함수(`computeOntologyMetrics`)에 넘긴다.
- *  fs는 여기(Server Component)까지만 — `lib/ontology.ts`는 이 결과물만 받는다. */
-async function loadMetrics(base: string, tree: ProtocolEntry[]): Promise<OntologyMetrics> {
+ *  fs는 여기(Server Component)까지만 — `lib/ontology.ts`는 이 결과물만 받는다.
+ *
+ *  `ontology/actions.ts`의 `문제해결` 액션도 같은 위반 목록이 필요해 이 함수를 그대로 가져다
+ *  쓴다(§P230) — 새 실행층 없이 export만 늘렸다. */
+export async function loadMetrics(base: string, tree: ProtocolEntry[]): Promise<OntologyMetrics> {
   const basename = (rel: string) => rel.split("/").at(-1) ?? rel;
   const text = async (rel: string) => (await readTextFile(base, rel)).text ?? "";
 
@@ -73,6 +78,15 @@ export default async function Ontology({
   const tree = await listTree(base);
   const metrics = tree.length > 0 ? await loadMetrics(base, tree) : null;
 
+  // 위반이 있을 때만 큐를 훑는다 — 카드가 안 서는 흔한 경우에 listTickets 비용을 안 낸다.
+  // 판정(openFixTicket)은 `문제해결` 액션과 같은 함수다 — 갈리면 화면이 거짓말을 한다(§P230).
+  let fixTicket: Ticket | null = null;
+  if (metrics && metrics.schemaViolations.length > 0) {
+    const config = await resolveConfig(project);
+    const tickets = await listTickets(project.root, config);
+    fixTicket = openFixTicket(tickets, ONTOLOGY_FIX_MARKER);
+  }
+
   // `file`은 사용자 입력이다 — 서버에서 기준 디렉터리 안인지 확인한다. 밖이면 404가 아니라
   // 거부 사유를 그대로 보여준다(§6 에러 3요소).
   let selected: ProtocolFile | null = null;
@@ -95,7 +109,7 @@ export default async function Ontology({
         {tree.length > 0 && <NewOntologyFileButton projectId={id} />}
       </div>
 
-      {metrics && <OntologyMetricsPanel metrics={metrics} />}
+      {metrics && <OntologyMetricsPanel metrics={metrics} projectId={id} fixTicket={fixTicket} />}
 
       {tree.length === 0 && (
         // §5-3 §생성 — 온톨로지 없이 도는 프로젝트가 정상이다: 여기서 디렉터리를 만들지 않는다.
@@ -201,7 +215,15 @@ export default async function Ontology({
 const ROW = "h-auto min-h-8 gap-1.5 py-1 [&_svg]:size-3.5 [&>span:last-child]:whitespace-normal";
 
 /** DESIGN.md §5-3 §지표. 판정은 `lib/ontology.ts`가 다 하고 여기는 표시만 한다. */
-function OntologyMetricsPanel({ metrics: m }: { metrics: OntologyMetrics }) {
+function OntologyMetricsPanel({
+  metrics: m,
+  projectId,
+  fixTicket,
+}: {
+  metrics: OntologyMetrics;
+  projectId: string;
+  fixTicket: Ticket | null;
+}) {
   const pct = (r: number) => `${Math.round(r * 100)}%`;
   return (
     <div className="space-y-3">
@@ -264,6 +286,18 @@ function OntologyMetricsPanel({ metrics: m }: { metrics: OntologyMetrics }) {
             </ul>
             {m.schemaViolations.length > 10 && (
               <p className="mt-1 text-xs">외 {m.schemaViolations.length - 10}건</p>
+            )}
+            {fixTicket ? (
+              <p className="mt-2 text-xs">
+                <Link
+                  href={`/p/${projectId}/tickets/${fixTicket.stem}`}
+                  className="underline underline-offset-2"
+                >
+                  정리 티켓 {fixTicket.stem} {statusLabel(statusOf(fixTicket))}
+                </Link>
+              </p>
+            ) : (
+              <FixSchemaViolationsButton projectId={projectId} />
             )}
           </AlertDescription>
         </Alert>

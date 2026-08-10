@@ -4,11 +4,18 @@
  *
  *  `protocols/actions.ts`와 같은 분담: fs는 `lib/protocols.ts`가, 여기는 프로젝트 id → 기준
  *  디렉터리 해석과 Error 직렬화만 한다. 기준은 `ontologyDir()` 하나뿐이다(재정의를 안 연다). */
+import { randomUUID } from "node:crypto";
+import { open, readdir } from "node:fs/promises";
+import path from "node:path";
 import { revalidatePath } from "next/cache";
+import { loadMetrics } from "@/app/(app)/p/[project]/ontology/page";
 import { startMigration } from "@/app/(app)/p/[project]/home/actions";
+import { track } from "@/lib/analytics";
+import { kickIdleWorker } from "@/lib/kick";
 import { buildOntologySeedFiles, type OntologySurveyAnswers } from "@/lib/ontology-seed";
-import { createFile, deleteFile, renameFile, saveFile } from "@/lib/protocols";
-import { getProject, ontologyDir } from "@/lib/projects";
+import { createFile, deleteFile, listTree, renameFile, saveFile } from "@/lib/protocols";
+import { getProject, ontologyDir, resolveConfig } from "@/lib/projects";
+import { ONTOLOGY_FIX_MARKER, openFixTicket, listTickets, stemOf, type Suffixes } from "@/lib/queue";
 
 export type OntologyResult = {
   ok: boolean;
@@ -109,5 +116,105 @@ async function writeSeed(base: string, answers: OntologySurveyAnswers): Promise<
   for (const file of buildOntologySeedFiles(answers)) {
     const rel = await createFile(base, file.rel);
     await saveFile(base, rel, file.text);
+  }
+}
+
+// ── 위반 카드 `문제해결` (§P230) ─────────────────────────────────────────────
+
+export type FixTicketResult = { ok: true; stem: string } | { ok: false; message: string };
+
+const VIOLATION_LINES_MAX = 50;
+
+/** `## 위반 목록` 절 본문 — 측정 시각 + 위반 줄. 상한 50줄, 넘치면 `외 N건`(§P230 — 위반이
+ *  수백 건인 프로젝트에서 큐 파일을 안 터뜨린다. 남은 것은 다음 회차가 받는다). */
+function violationSection(now: string, violations: string[]): string {
+  const shown = violations.slice(0, VIOLATION_LINES_MAX);
+  const rest = violations.length - shown.length;
+  const lines = shown.map((v) => `- ${v}`);
+  if (rest > 0) lines.push(`- 외 ${rest}건`);
+  return [`측정 시각: ${now}`, "", ...lines].join("\n");
+}
+
+/** 큐 디렉터리에 정리 티켓 한 장을 쓴다 — `(board)/actions.ts` `createTicket`과 같은 해시 뽑기
+ *  (`wx`로 여는 것 자체가 검사)다. 그 파일에서 가져오지 못한다(`"use server"`는 헬퍼를 못
+ *  내보낸다, 그 파일 머리 주석의 `fmValue`와 같은 대가) — 이 헬퍼는 이 액션 하나만 쓴다. */
+async function writeFixTicket(root: string, sfx: Suffixes, violations: string[]): Promise<string> {
+  const dir = path.join(root, "tickets");
+  const names = (await readdir(dir)).filter((n) => n.endsWith(".md") && !n.startsWith("."));
+  const stems = new Set(names.map((n) => stemOf(n, sfx)));
+
+  const n = violations.length;
+  const body = [
+    "## Goal",
+    "",
+    `온톨로지 스키마 위반 ${n}건을 정리한다.`,
+    "",
+    "## 위반 목록",
+    "",
+    violationSection(new Date().toISOString(), violations),
+    "",
+    "## Done when",
+    "",
+    "- [ ] 위 목록의 줄마다 무엇을 고쳤는지(또는 왜 위반이 아닌지) `## 결과`에 적는다",
+    "- [ ] 반영을 `ontology/action-log/`에 한 줄 남긴다",
+  ].join("\n");
+
+  const text = (h: string) =>
+    [
+      "---",
+      `ticket: ${h}`,
+      `title: 온톨로지 스키마 위반 ${n}건 정리`,
+      "kind: work",
+      "persona: archive-manager",
+      `fixes: ${ONTOLOGY_FIX_MARKER}`,
+      "---",
+      "",
+      body,
+      "",
+    ].join("\n");
+
+  for (let i = 0; i < 10; i++) {
+    const h = randomUUID().slice(0, 8);
+    if (stems.has(h)) continue;
+    const fh = await open(path.join(dir, `${h}.md`), "wx").catch((e) => {
+      if ((e as NodeJS.ErrnoException).code === "EEXIST") return null; // 졌다 — 다시 뽑는다
+      throw e;
+    });
+    if (!fh) continue;
+    try {
+      await fh.writeFile(text(h), "utf8");
+    } finally {
+      await fh.close();
+    }
+    return h;
+  }
+  throw new Error("해시를 10번 뽑았는데 전부 이미 쓰이고 있습니다 — 큐 디렉터리를 확인하세요.");
+}
+
+/** 위반 카드의 `문제해결`(§P230). 판정(`openFixTicket`)은 카드가 버튼/링크를 고를 때 부르는
+ *  것과 같은 함수다 — 발행 직전에 큐를 다시 훑어 이미 열려있거나 도는 정리 티켓이 있으면
+ *  새로 만들지 않고 그 stem을 돌려준다(실패가 아니다 — 사람이 원한 상태가 이미 서 있다).
+ *  탭이 둘이거나 요청을 손으로 만들어도 이 재확인을 지날 수 없다. */
+export async function fixOntologySchemaAction(projectId: string): Promise<FixTicketResult> {
+  try {
+    const project = await getProject(projectId);
+    if (!project) throw new Error(`등록되지 않은 프로젝트입니다: ${projectId}`);
+    const config = await resolveConfig(project);
+
+    const tickets = await listTickets(project.root, config);
+    const existing = openFixTicket(tickets, ONTOLOGY_FIX_MARKER);
+    if (existing) return { ok: true, stem: existing.stem };
+
+    const base = ontologyDir(project);
+    const tree = await listTree(base);
+    const metrics = tree.length > 0 ? await loadMetrics(base, tree) : null;
+
+    const stem = await writeFixTicket(project.root, config, metrics?.schemaViolations ?? []);
+    void track("ticket_create", { kind: "work" });
+    await kickIdleWorker(project.root);
+    revalidatePath(`/p/${projectId}/ontology`);
+    return { ok: true, stem };
+  } catch (e) {
+    return { ok: false, message: (e as Error).message };
   }
 }

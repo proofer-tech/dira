@@ -12,6 +12,7 @@ import { FilePlus2, PencilLine, Trash2, TriangleAlert } from "lucide-react";
 import {
   createOntologyAction,
   deleteOntologyAction,
+  fixOntologySchemaAction,
   renameOntologyAction,
   saveOntologyAction,
   submitOntologySurveyAction,
@@ -132,6 +133,37 @@ export function NewOntologyFileButton({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ── 위반 카드 `문제해결` (§P230) ─────────────────────────────────────────────
+
+/** 위반 카드가 버튼 상태일 때만 선다 — 링크 상태는 `page.tsx`가 직접 그린다(정리 티켓이 이미
+ *  있으면 클라이언트 상태가 필요 없다). 발행되면 그 티켓 상세로 이동한다 — `NewOntologyFileButton`이
+ *  새 파일 만들고 그 파일로 이동하는 것과 같은 결이다. */
+export function FixSchemaViolationsButton({ projectId }: { projectId: string }) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  return (
+    <div className="mt-2 space-y-1">
+      {error && <Failure title="정리 티켓을 만들지 못했습니다" message={error} />}
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={pending}
+        onClick={() =>
+          start(async () => {
+            const r = await fixOntologySchemaAction(projectId);
+            if (r.ok) router.push(`/p/${projectId}/tickets/${r.stem}`);
+            else setError(r.message);
+          })
+        }
+      >
+        {pending ? "발행하는 중…" : "문제해결"}
+      </Button>
+    </div>
   );
 }
 

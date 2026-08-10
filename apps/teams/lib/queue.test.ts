@@ -21,10 +21,12 @@ import {
   dueAlertOf,
   filterTickets,
   findPath,
+  fixesOf,
   inDefaultList,
   isAwaiting,
   isDispatchable,
   listTickets,
+  openFixTicket,
   queueOrder,
   bodyWithoutQuestions,
   questionsOf,
@@ -1304,6 +1306,31 @@ test("아카이브 티켓은 기본 목록에서 빠지고 persona 필터가 꺼
   // 양방향 해석은 `resolveDep` 그대로다 — `.done` 접미사가 붙은 대상도 stem으로 찾는다
   assert.strictEqual(resolveDep(tickets, archivesOf(by("arch0001")), DEFAULT), by("aaaa1111"));
   assert.deepStrictEqual(hashes(archivedBy(tickets, by("aaaa1111"), DEFAULT)), ["arch0001"]);
+});
+
+test("openFixTicket — 0장 · 열림/진행중 1장 · 완료만 세 경우 (§P230 두 번 눌러도 한 장)", async () => {
+  const root = newRoot();
+  await write(root, "aaaa1111.md", fm({ ticket: "aaaa1111", title: "정리 1", kind: "work",
+    persona: "archive-manager", fixes: "ontology-schema" }));
+  await write(root, "bbbb2222.done.md", fm({ ticket: "bbbb2222", title: "정리 2(완료)", kind: "work",
+    persona: "archive-manager", fixes: "ontology-schema" }));
+  await write(root, "cccc3333.md", fm({ ticket: "cccc3333", title: "다른 마커", kind: "work",
+    persona: "archive-manager", fixes: "other-marker" }));
+
+  const tickets = await listTickets(root, DEFAULT);
+  const by = (h: string) => tickets.find((t) => t.hash === h)!;
+  assert.strictEqual(fixesOf(by("aaaa1111")), "ontology-schema");
+  assert.strictEqual(fixesOf(by("cccc3333")), "other-marker");
+
+  // ① 열림/진행중 1장 있으면 그것 — 다른 마커는 안 걸린다
+  assert.strictEqual(openFixTicket(tickets, "ontology-schema")?.hash, "aaaa1111");
+
+  // ② `.done`만 있으면 null — 버튼이 다시 선다
+  const doneOnly = tickets.filter((t) => t.hash !== "aaaa1111");
+  assert.strictEqual(openFixTicket(doneOnly, "ontology-schema"), null);
+
+  // ③ 마커 티켓이 0장이면 null
+  assert.strictEqual(openFixTicket([], "ontology-schema"), null);
 });
 
 test("reqTitle — 첫 비어있지 않은 줄, 80자에서 자르고 …", () => {

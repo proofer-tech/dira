@@ -802,6 +802,19 @@ export function archivedBy(tickets: Ticket[], target: Ticket, sfx: Suffixes): Ti
   });
 }
 
+/** 이 티켓이 정리하는 마커(§P230 §두 번 눌러도 한 장). `archivesOf`와 같은 선례 — GUI만 읽는
+ *  커스텀 frontmatter 키라 엔진은 모르는 채 무해하다. */
+export const fixesOf = (t: Ticket): string => unquote(t.fm.fixes ?? "");
+
+/** `fixes: <marker>`이고 아직 `.done`이 아닌 티켓 — 마커당 하나만 도는지 판정한다.
+ *  화면(카드 상태)과 액션(발행 직전 재확인)이 같은 걸 불러야 한다 — 갈리면 화면이 거짓말을 한다. */
+export function openFixTicket(tickets: Ticket[], marker: string): Ticket | null {
+  return tickets.find((t) => fixesOf(t) === marker && t.state !== "done") ?? null;
+}
+
+/** 온톨로지 스키마 위반 정리 티켓의 마커 값(§P230). 화면·액션이 같은 리터럴을 쓰게 하는 자리. */
+export const ONTOLOGY_FIX_MARKER = "ontology-schema";
+
 /** 칸반 호버 관계선의 간선 (DESIGN.md §1 보드 · §비주얼 §17). 상세 §2 관계 절이 그리는 것과
  *  **같은 간선**이다: `deps`(선행 · 후행 역참조) + `req:`(요구사항 ↔ 나온 티켓).
  *  met/unmet으로 거르지 않는다 — 상세가 안 거르는 것과 같은 이유고 개별 상태는 배지가 말한다.
