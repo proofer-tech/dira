@@ -348,14 +348,20 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
   }
 }
 
-/* ── SECTION A 한 무대 (로드맵 §P237-5, 값은 §P237-1 판정표 자리 ④) ─────────────── */
-/* `@supports`가 거짓이거나 901px 미만이면 `.stage`에 규칙이 0건 걸려 두 절이 그냥
+/* ── SECTION A 한 무대 (로드맵 §P237-5·확장 §P237-13, 값은 §판정표 자리 ④ 재판정
+   `e0701973`) ─────────────── */
+/* `@supports`가 거짓이거나 901px 미만이면 `.stage`에 규칙이 0건 걸려 세 절이 그냥
    지금처럼(각자 `.wrap`으로) 세로로 쌓인다 — 그 상태가 정본이다(못 ⑦의 예외 한 조각,
-   §뽑는 못 ③). `.stage`가 view-timeline의 주체이고 두 절은 이름 `--stage`로 그 구간을
-   읽는다 — JS는 0줄이다. */
+   §뽑는 못 ③). `.stage`가 view-timeline의 주체이고 세 절은 이름 `--stage`로 그 구간을
+   읽는다 — JS는 0줄이다. `reduce`는 `no-preference`로 이 블록 전체를 안 걸어 막는다(아래
+   §reduce 참고) — 겹만 죽이면 `sticky` + 음수 `margin-top`이 남아 절들이 포개진다. */
 @supports (animation-timeline: view()) {
-  @media (min-width: 901px) {
-    .dira-landing .stage { height: 200vh; view-timeline-name: --stage; }
+  @media (min-width: 901px) and (prefers-reduced-motion: no-preference) {
+    /* 장면이 둘 → 셋이라 `200vh`를 그대로 못 쓴다 — 고정 구간이 `(N-1)·100vh + 60px`라
+       `300vh`면 `2.07 뷰포트`로 상한(«뷰포트 둘»)을 넘는다. `250vh`는 장면당 거리를
+       지금(`480px`)과 같은 자리(`468px`)에 두면서 실측 `1405px` = `1.56 뷰포트`로 상한 안에
+       든다. */
+    .dira-landing .stage { height: 250vh; view-timeline-name: --stage; }
     /* `.wrap`의 3트랙 full-bleed 격자(위 94행)는 안 덮는다 — 바깥 여백 `minmax(24px,1fr)`은
        그대로 두고 `content` 트랙만 반으로 갈라 글(왼쪽)·`<figure>`(오른쪽)를 나눈다. */
     .dira-landing .stage > .wrap {
@@ -372,8 +378,13 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
         [mid-end] minmax(0, calc((var(--maxw) - 48px) / 2)) [content-end]
         minmax(24px, 1fr) [full-end];
     }
-    .dira-landing .stage > .wrap:nth-child(2) { margin-top: calc(-1 * (100vh - 60px)); }
+    .dira-landing .stage > .wrap:nth-child(n+2) { margin-top: calc(-1 * (100vh - 60px)); }
     .dira-landing .stage > .wrap > *:not(figure) { grid-column: content-start / mid-start; }
+    /* 그림 없는 첫 패널의 오른쪽 칸(§자리 ④ 확장 판정 ③, `e0701973`) — 그 패널만 `content`
+       열을 통째로 쓴다. 특이도 `(0,4,0)`이 바로 위 `*:not(figure)`(`(0,3,1)`)를 이긴다.
+       왼쪽 절반에 `.steps` 12열 격자를 그대로 두면 카드 셋이 `516 → 140px`로 좁아져 세로로
+       자라 아래 ④(패널이 화면에 드는지)를 깬다. */
+    .dira-landing .stage > .wrap:nth-child(1) > * { grid-column: content-start / content-end; }
     /* 자리 ④ 회귀 2차(`a9436dc7`) — `.wrap`은 `grid-template-rows`를 안 선언해 명시 격자에
        행이 0개다. `-1`은 «명시 격자의 마지막 줄»만 가리키므로 그때 첫 줄로 풀려 `1 / 1`(끝이
        버려져 `span 1`)이 됐다 — `<figure>`가 왼쪽 글이 실제로 쓰는 행 수(절마다 다르다)와
@@ -383,25 +394,32 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
     .dira-landing .stage > .wrap > figure { grid-column: mid-end / content-end; grid-row: 1 / span 100; align-self: center; }
 
     /* 크로스페이드 — 절 하나가 통째로 겹으로 오간다(`figure` 자신의 `dira-shot-in`은
-       위 블록에서 그대로 살아 층이 다르다). 구간은 안 겹친다 — A-1이 먼저 나가고
-       그 자리에서 A-2가 들어온다(§자리 ④ 실측 «opacity>0.02인 구간이 0px»). */
+       위 블록에서 그대로 살아 층이 다르다). 구간은 안 겹친다 — 앞 절이 먼저 나가고
+       그 자리에서 다음 절이 들어온다(§자리 ④ 확장 실측 «opacity>0.02인 구간이 0px»).
+       가운데 패널에 `dira-stage-in`과 `dira-stage-out`을 같이 달지 않는다 — 둘 다 `both`로
+       채우면 뒤에 선언한 쪽의 역방향 채움이 앞쪽의 fade-in을 통째로 덮어 패널2가 처음부터
+       보인다(실측으로 밟았다). `dira-stage-thru` 하나가 들어오고·서 있고·나가는 것을 다 진다. */
     @keyframes dira-stage-out { to { opacity: 0; transform: translateY(-16px); } }
     @keyframes dira-stage-in { from { opacity: 0; transform: translateY(16px); } }
+    @keyframes dira-stage-thru {
+      0% { opacity: 0; transform: translateY(16px); }
+      25%, 75% { opacity: 1; transform: none; }
+      100% { opacity: 0; transform: translateY(-16px); }
+    }
     .dira-landing .stage > .wrap:nth-child(1) {
       animation: dira-stage-out linear both;
       animation-timeline: --stage;
-      animation-range: cover 40% 46%;
+      animation-range: cover 33% 38%;
     }
     .dira-landing .stage > .wrap:nth-child(2) {
+      animation: dira-stage-thru linear both;
+      animation-timeline: --stage;
+      animation-range: cover 38% 58%;
+    }
+    .dira-landing .stage > .wrap:nth-child(3) {
       animation: dira-stage-in linear both;
       animation-timeline: --stage;
-      animation-range: cover 46% 52%;
-    }
-    /* 전역 킬 스위치(12행)는 `animation-duration`만 보는데 이 겹은 스크롤 위치로 진행돼
-       그 블록이 안 먹는다 — 위 ②③ 블록과 같은 이유로 여기서 따로 죽인다. */
-    @media (prefers-reduced-motion: reduce) {
-      .dira-landing .stage > .wrap:nth-child(1),
-      .dira-landing .stage > .wrap:nth-child(2) { animation: none; }
+      animation-range: cover 58% 63%;
     }
   }
 }

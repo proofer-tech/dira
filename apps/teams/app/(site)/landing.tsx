@@ -630,6 +630,13 @@ export default function Landing({
   </figure>
 </div>
 
+{/* SECTION A 한 무대(로드맵 §P237-5, 값은 §P237-1 판정표 자리 ④). 세 절을 그릇 하나가
+    감싸 901px 이상 + `animation-timeline: view()` 지원 브라우저에서만 sticky 크로스페이드가
+    선다 — `landing.css`의 `@supports`가 거짓이면 이 그릇은 그냥 빈 껍데기라 세 절이
+    지금처럼 세로로 쌓인다. 노드는 하나도 안 늘거나 줄지 않았다. 첫 패널(§자리 ④ 확장,
+    `e0701973`)이 무대에 합류해 지나는 장면이 둘 → 셋이 됐다 — 절은 안 합쳐지고 `<h2>`
+    셋이 그대로 선다. */}
+<div className="stage">
 <section className="wrap reveal">
   <h2>말하면 이루어집니다</h2>
   <ol className="steps">
@@ -655,12 +662,6 @@ export default function Landing({
     </li>
   </ol>
 </section>
-
-{/* SECTION A 한 무대(로드맵 §P237-5, 값은 §P237-1 판정표 자리 ④). 두 절을 그릇 하나가
-    감싸 901px 이상 + `animation-timeline: view()` 지원 브라우저에서만 sticky 크로스페이드가
-    선다 — `landing.css`의 `@supports`가 거짓이면 이 그릇은 그냥 빈 껍데기라 두 절이
-    지금처럼 세로로 쌓인다. 노드는 하나도 안 늘거나 줄지 않았다. */}
-<div className="stage">
 {/* 아카이빙·온톨로지 — `.done` 다음 이야기라 30초 설명 바로 뒤에 선다(로드맵 §P228 §랜딩).
     번호가 없는 것은 §한 코드베이스 §홈 표에 안 실려서다 — 두 모드 다 선다. 새 CSS 0. */}
 <section className="wrap reveal">
