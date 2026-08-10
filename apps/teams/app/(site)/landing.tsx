@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import Typed from "typed.js";
 import { Pause, Play, TriangleAlert } from "lucide-react";
@@ -80,6 +80,9 @@ export default function Landing({
   const [introPhase, setIntroPhase] =
     useState<"idle" | "open" | "closing" | "fading" | "bail" | "gone">("idle");
   const [introTitle, setIntroTitle] = useState("");
+  // 히어로 h1 정지 텍스트(§P237-11) — 마운트 effect가 비우기 전에 저장해 두고, 타이핑을
+  // 시작하는 introPhase effect가 나중에 읽는다.
+  const heroText = useRef("");
 
   // ── 목록 자리(`#projects`)의 상태 — 헤더 `새로 만들기`와 히어로 온보딩이 결과 슬롯을
   //    공유한다(§7 CreateForm 계약: "성공하면 결과는 목록 아래 결과 슬롯으로 올라간다" —
@@ -275,29 +278,40 @@ export default function Landing({
   }, [introPhase]);
 
   useEffect(() => {
-    // 히어로 h1 타이핑(DESIGN §P237 §판정표 ②). `<h1>`의 정지 상태 텍스트는 그대로 두고
-    // typed.js가 그 textContent를 읽어 지웠다가 다시 친다 — 그릇을 비워 두고 스크립트가
-    // 채우는 배치를 안 쓴다(reduce·JS off에서 문장이 그냥 서 있다). reduce면 아예 안 켠다.
+    // 히어로 h1 마운트 준비(DESIGN §P237 §판정표 ② · §자리 ② 재판정 P237-9 `5fc94f12`).
+    // `<h1>`의 정지 상태 텍스트를 저장해 두고 비운다 — 그릇을 비워 두고 스크립트가 채우는
+    // 배치를 안 쓴다(reduce·JS off에서 문장이 그냥 서 있다). reduce면 아예 안 켠다. 타이핑을
+    // 시작하는 것은 아래 introPhase effect다(가려던 고정 지연 대신 자리 ①의 `gone` 사건).
     if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const h1 = document.querySelector<HTMLHeadingElement>(".hero h1");
     if (!h1) return;
     // 완성 문장이 390에서만 두 줄이라 타이핑 중 짧은 문자열이 한 줄로 접혀 아래 전부가
     // 튄다 — 최종 높이(지금 정지 텍스트 기준)로 고정하고 끝나면 지운다.
-    const text = h1.textContent ?? "";
+    heroText.current = h1.textContent ?? "";
     h1.style.minHeight = `${h1.offsetHeight}px`;
     // typed.js는 그릇에 이미 있는 글자를 "이미 친 문자열"로 재활용해 smartBackspace로
     // 한 글자만 건드리고 끝낸다(같은 문자열끼리는 그 최적화가 통째로 스킵돼 버린다) —
     // 16자를 한 자씩 치는 모션이 서려면 여기서 비우고 넘겨야 한다.
     h1.textContent = "";
+  }, []);
+
+  useEffect(() => {
+    // 타이핑 시작(§자리 ② 재판정 P237-9 `5fc94f12`). 고정 지연 대신 자리 ①이 걷힌
+    // 사건(`gone`)이 트리거다 — 고정 숫자를 박으면 스크롤·클릭·Esc 탈출구에서 인트로가
+    // 일찍 걷혀도 `<h1>`이 그 차이만큼 빈 채로 남는다. reduce면 `gone`이 안 오므로 이
+    // 갈래도 안 켠다(위 마운트 effect와 같은 matchMedia 갈래).
+    if (introPhase !== "gone") return;
+    const h1 = document.querySelector<HTMLHeadingElement>(".hero h1");
+    if (!h1) return;
     const typed = new Typed(h1, {
-      strings: [text],
-      typeSpeed: 52,
-      startDelay: 640,
+      strings: [heroText.current],
+      typeSpeed: 26,
+      startDelay: 0,
       showCursor: false,
       onComplete: () => { h1.style.minHeight = ""; },
     });
     return () => typed.destroy();
-  }, []);
+  }, [introPhase]);
 
   useEffect(() => {
     // 스크롤 진입 등장(DESIGN §랜딩 §모션 §판정표 ⑥). JS로 움직이므로 전역
