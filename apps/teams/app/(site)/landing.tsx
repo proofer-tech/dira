@@ -489,6 +489,25 @@ export default function Landing({
   </ol>
 </section>
 
+{/* 아카이빙·온톨로지 — `.done` 다음 이야기라 30초 설명 바로 뒤에 선다(로드맵 §P228 §랜딩).
+    번호가 없는 것은 §한 코드베이스 §홈 표에 안 실려서다 — 두 모드 다 선다. 새 CSS 0. */}
+<section className="wrap reveal">
+  <h2>끝난 일은 기록으로 남습니다</h2>
+  <ul className="marks">
+    <li><b>티켓이 <code>.done</code>이 되면 아카이빙 티켓이 한 장 따라 붙습니다.</b> 완료 카드
+    아래에 <code>아카이빙중</code> 한 줄이 서고, 이것도 워커가 받아서 하는 일이라 어디까지
+    갔는지 그대로 보입니다</li>
+    <li><b>남는 것은 마크다운 한 장과 티켓 맨 아래 한 절입니다.</b> 아카이빙을 맡은 워커가 방금
+    끝난 일에서 사실을 추려 프로젝트 폴더의 <code>ontology/</code>에 적고, 그 티켓 본문에는{" "}
+    <code>## 아카이브</code> 절을 붙입니다</li>
+    <li><b>다음 세션은 그 자리를 알고 시작합니다.</b> 온톨로지가 어디에 있고 어떻게 찾는지가
+    워커에게 나가는 프롬프트마다 실립니다</li>
+    <li><b>파일은 그냥 마크다운입니다.</b> <code>[[링크]]</code>로 서로 이어져 있어 Obsidian 같은
+    도구로 폴더째 열립니다. 프로젝트를 옮기면 기록도 같이 따라갑니다</li>
+  </ul>
+  <p className="arrows"><a href="/docs/ontology">아카이빙과 온톨로지</a></p>
+</section>
+
 <div className="wrap stats reveal">
   <ul>
     <li><b>0</b><span>엔진 의존성<br/>bash + python3 표준 라이브러리</span></li>

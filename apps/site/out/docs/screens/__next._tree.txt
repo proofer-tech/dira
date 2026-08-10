@@ -1,0 +1,7 @@
+:HL["/_next/static/chunks/1nk5qn8hk7a2l.css","style"]
+:HL["/_next/static/chunks/2zedgqapld59v.css","style"]
+:HL["/shots/02-board.png","image"]
+:HL["/shots/04-ticket-running.png","image"]
+:HL["/shots/07-qa-thread.png","image"]
+:HL["/shots/03-workers.png","image"]
+0:{"tree":{"name":"","param":null,"prefetchHints":16,"slots":{"children":{"name":"docs","param":null,"prefetchHints":0,"slots":{"children":{"name":"slug","param":{"type":"oc","key":"screens","siblings":null},"prefetchHints":0,"slots":{"children":{"name":"__PAGE__","param":null,"prefetchHints":0,"slots":null}}}}}}},"staleTime":300,"buildId":"z6GLpjWmcVYdiUy1huU8G"}
