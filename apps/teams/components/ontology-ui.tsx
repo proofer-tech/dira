@@ -6,6 +6,7 @@
  *  URL이 담는다는 규약도 같다). 온톨로지에는 인라인 프롬프트 배지·`AGENTS.md` 특수 케이스가
  *  없다 — 세션 프롬프트에는 목차만 실리고(§5-2) 이 화면이 여는 것은 그 목차가 가리키는 본문이다. */
 import { useEffect, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FilePlus2, PencilLine, Trash2, TriangleAlert } from "lucide-react";
 import {
@@ -347,7 +348,10 @@ function CheckRow({
  *  돌려준다), 실제 `_ontology/SCHEMA.md` 등 시드 파일 전부가 서는 것은 그 뒤다. 제출 후에는 파일이 나타날 때까지 잠깐
  *  새로고침한다 — 파일이 생기면 부모(`page.tsx`)가 이 컴포넌트 대신 파일트리를 그려서
  *  폴링이 스스로 끝난다(언마운트). **문항 4개에 «객체»·«타입»·«관계»·«온톨로지»가 없다** —
- *  값은 `lib/ontology-seed.ts`의 상수 그대로다. */
+ *  값은 `lib/ontology-seed.ts`의 상수 그대로다.
+ *
+ *  시드 다음 첫 채움(§5-3 §첫 채움)이 홈 대화에서 돈다 — 이 화면은 그 자체를 그리지 않고
+ *  홈으로 가리키는 줄 하나만 보여준다(폴링이 지켜보는 것은 여전히 시드 파일뿐이다). */
 export function OntologySurveyForm({ projectId }: { projectId: string }) {
   const router = useRouter();
   const [q1, setQ1] = useState("");
@@ -370,7 +374,15 @@ export function OntologySurveyForm({ projectId }: { projectId: string }) {
   }, [submitted, router]);
 
   if (submitted) {
-    return <p className="text-sm text-muted-foreground">답을 바탕으로 만드는 중입니다…</p>;
+    return (
+      <p className="text-sm text-muted-foreground">
+        답을 바탕으로 만드는 중입니다… 이어지는 첫 채움은{" "}
+        <Link href={`/p/${projectId}/home`} className="underline">
+          홈 대화
+        </Link>
+        에서 돕니다.
+      </p>
+    );
   }
 
   const toggle = (list: string[], set: (v: string[]) => void, value: string) =>

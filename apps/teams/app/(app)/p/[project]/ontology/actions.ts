@@ -5,6 +5,7 @@
  *  `protocols/actions.ts`와 같은 분담: fs는 `lib/protocols.ts`가, 여기는 프로젝트 id → 기준
  *  디렉터리 해석과 Error 직렬화만 한다. 기준은 `ontologyDir()` 하나뿐이다(재정의를 안 연다). */
 import { revalidatePath } from "next/cache";
+import { startMigration } from "@/app/(app)/p/[project]/home/actions";
 import { buildOntologySeedFiles, type OntologySurveyAnswers } from "@/lib/ontology-seed";
 import { createFile, deleteFile, renameFile, saveFile } from "@/lib/protocols";
 import { getProject, ontologyDir } from "@/lib/projects";
@@ -78,16 +79,23 @@ export async function renameOntologyAction(
  *  끝난다.** 실제 쓰기(`writeSeed`)를 기다리지 않고 반환한다 — 지금은 결정적 빌더
  *  (`buildOntologySeed`)라 사실상 즉시 끝나지만, 응답 수집과 시드 생성을 구조적으로 가르는
  *  것 자체가 계약이다("폼이 LLM을 안 기다린다"). `home-agent.ts`의 `startAsk`가 같은 결로
- *  "띄우고 바로 돌아온다"를 쓴다. */
+ *  "띄우고 바로 돌아온다"를 쓴다.
+ *
+ *  시드가 서면 첫 채움(§5-3 §첫 채움)을 잇는다 — `startMigration`이 홈 대화에 마이그레이션
+ *  세션을 띄운다. 시드 쓰기와 같은 자리에서 `void`로 띄우므로 이 액션도 첫 채움을 안 기다린다.
+ *  `startMigration`은 실패해도 던지지 않고 `Answer`로 물러난다(자기 안의 try/catch) — 시드는
+ *  이미 남은 뒤이므로 이 제출 액션은 그 결과와 상관없이 끝나 있다. */
 export async function submitOntologySurveyAction(
   projectId: string,
   answers: OntologySurveyAnswers,
 ): Promise<OntologyResult> {
   try {
     const base = await baseOf(projectId);
-    void writeSeed(base, answers).catch((e: unknown) => {
-      console.error("온톨로지 시드 생성 실패:", e);
-    });
+    void writeSeed(base, answers)
+      .then(() => startMigration(projectId))
+      .catch((e: unknown) => {
+        console.error("온톨로지 시드 생성 실패:", e);
+      });
     return { ok: true };
   } catch (e) {
     return fail(e);
