@@ -27015,7 +27015,7 @@ P199-1이 `apps/site/**`를 `apps/teams/**`로 옮기고 `git rm`했다. **지�
 | # | 티켓 | persona | deps | 상태 |
 |---|---|---|---|---|
 | P233 | 스펙 — 로드맵 §P233 신설 `6ddc6d5f` | pm | — | 완료 |
-| P233-1 | `apps/site` 추적 353개 해제 + 루트 `.gitignore`가 재추가를 막는다 | developer | — | 발행 |
+| P233-1 | `apps/site` 추적 353개 해제 + 루트 `.gitignore`가 재추가를 막는다 `3bca55bf` | developer | — | 발행 |
 
 #### 검증
 
