@@ -374,7 +374,13 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
     }
     .dira-landing .stage > .wrap:nth-child(2) { margin-top: calc(-1 * (100vh - 60px)); }
     .dira-landing .stage > .wrap > *:not(figure) { grid-column: content-start / mid-start; }
-    .dira-landing .stage > .wrap > figure { grid-column: mid-end / content-end; grid-row: 1 / -1; align-self: center; }
+    /* 자리 ④ 회귀 2차(`a9436dc7`) — `.wrap`은 `grid-template-rows`를 안 선언해 명시 격자에
+       행이 0개다. `-1`은 «명시 격자의 마지막 줄»만 가리키므로 그때 첫 줄로 풀려 `1 / 1`(끝이
+       버려져 `span 1`)이 됐다 — `<figure>`가 왼쪽 글이 실제로 쓰는 행 수(절마다 다르다)와
+       무관하게 1행 한 칸에 앉고 그 칸이 그림 높이로 자랐다. `span 100`은 왼쪽 글이 몇 행을
+       쓰든(지금 3~4행) 항상 넘치게 잡아 실제로 안 쓰는 뒤쪽 행은 빈 채(0px)로 남고,
+       `<figure>`는 왼쪽 글이 실제로 걸치는 높이 안에서 `align-self: center`로 선다. */
+    .dira-landing .stage > .wrap > figure { grid-column: mid-end / content-end; grid-row: 1 / span 100; align-self: center; }
 
     /* 크로스페이드 — 절 하나가 통째로 겹으로 오간다(`figure` 자신의 `dira-shot-in`은
        위 블록에서 그대로 살아 층이 다르다). 구간은 안 겹친다 — A-1이 먼저 나가고
