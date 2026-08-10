@@ -7,6 +7,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { releaseNotes } from "./release-notes.ts";
 
+// **여기서 삼키는 이유는 이 파일의 본체가 실패 경로라서다.** `releaseNotes()`는 세 경로를
+// 밟을 때마다 `[dira] 릴리즈 노트: …`를 찍는데, 초록으로 끝난 릴리스 로그에 그 아홉 줄이
+// 그대로 남으면 읽는 사람이 진짜 사고로 읽는다(실측 2026-08-10 — 두 번 물어봤다).
+// 판정은 어차피 아래 assert들이 한다.
+console.error = () => {};
+
 const SLUG = { owner: "hsol", repo: "dira" };
 const R6 = "0.2.0을 받아뒀습니다. 앱을 종료하면 몇 초 뒤 적용됩니다.";
 const compare = (...msgs: string[]) => JSON.stringify({ commits: msgs.map((message) => ({ commit: { message } })) });

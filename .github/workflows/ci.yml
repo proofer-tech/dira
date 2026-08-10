@@ -17,7 +17,7 @@ jobs:
     # pty). release.yml과 러너가 같아지는 것도 값이다 — 여기 초록이 나갈 것에 대한 초록이다.
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # 엔진 — 의존성 0. ubuntu-latest의 python3를 그대로 쓴다.
       - run: python3 test_generic.py
@@ -28,10 +28,10 @@ jobs:
 
       # 루트에 package.json도 워크스페이스도 없다. apps/teams·apps/desktop은
       # 각자 pnpm-lock.yaml을 가진 독립 프로젝트라 설치도 각각이다.
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: 11
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 25
 

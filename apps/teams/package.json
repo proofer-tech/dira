@@ -2,6 +2,7 @@
   "name": "teams",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "DIRA_MULTI_TOKEN=${DIRA_MULTI_TOKEN:-1} next dev -p ${PORT:-7331}",
     "build": "NODE_ENV=production next build",
