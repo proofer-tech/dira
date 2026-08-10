@@ -68,6 +68,11 @@ jobs:
         env:
           MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
           MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+          # preflight는 이 셋도 본다. 안 주면 여기서만 「공증 건너뜀」을 찍어서, 아래 릴리스
+          # 스텝이 멀쩡히 공증하는데도 로그를 읽는 사람은 공증이 빠진 줄 안다(실측 2026-08-10).
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           [ -n "$MACOS_CERT_P12" ] || { echo "MACOS_CERT_P12이 비어 있다 — 시크릿 5개를 채워야 한다(이 파일 머리말)." >&2; exit 1; }
           kc="$RUNNER_TEMP/build.keychain-db"
