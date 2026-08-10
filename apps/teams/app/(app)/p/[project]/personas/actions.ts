@@ -19,17 +19,25 @@ import {
 } from "@/lib/projects";
 import {
   deletePersonaMemory,
+  installSkill,
   listInstalledSkills,
   pickedSkills,
   readPersonaSkillsFile,
+  SkillInstallError,
   writePersonaEngine,
   writePersonaLimit,
   writePersonaSkills,
   type Skill,
+  type SkillUpload,
 } from "@/lib/skills";
 import type { EngineId } from "@/lib/workers";
 
 export type PersonaResult = { ok: boolean; message?: string };
+
+/** import 실패 — 갈래별 두 조각(§비주얼 §25 ⑤). `title`은 `<Failure>`의 `AlertTitle`,
+ *  `message`는 `AlertDescription`(mono)이다 — 다른 액션의 `PersonaResult.message` 한 칸과
+ *  달리 여기만 둘로 갈리는 이유가 그 절이 §6 에러 3요소를 두 슬롯에 나눠 담기 때문이다. */
+export type InstallSkillResult = { ok: boolean; title?: string; message?: string };
 
 /** 등록된 프로젝트의 해석된 페르소나 디렉터리만 만진다. URL 조각으로 임의 경로를 열지 않는다. */
 async function personasDir(projectId: string): Promise<string> {
@@ -108,6 +116,44 @@ export async function savePersonaSkillsAction(
     return { ok: true, ...(await readPersonaSkillsFile(dir, name)) };
   } catch (e) {
     return fail(e);
+  }
+}
+
+/** import — 첨부한 스킬을 이 머신에 설치한다(DESIGN.md §5-1 §import · §비주얼 §25 ⑤).
+ *
+ *  **페르소나도 프로젝트도 안 받는다** — 설치는 머신의 사실이지 페르소나의 사실이 아니다(§5-1).
+ *  큐를 안 열고 `skills.md`도 안 건드린다: 그 파일은 여전히 `저장`이 쓴다. `revalidatePath`가
+ *  없는 것도 같은 이유다 — 서버 컴포넌트가 다시 읽을 파일이 없다.
+ *
+ *  받는 것은 `file` 여러 개 + **같은 순서의 `path` 여러 개**다(화면이 한 장 모드는 `path`를
+ *  `SKILL.md` 하나로, 폴더 모드는 `webkitRelativePath`의 첫 성분을 뗀 값으로 채운다). `File.name`을
+ *  `originalName`으로 같이 넘긴다 — 한 장 모드에서 고른 파일명이 `SKILL.md`가 아닐 수 있고,
+ *  §비주얼 §25 ⑤ 표의 갈래 1(name 없음)이 그 이름을 사유에 적는다.
+ *
+ *  설치 뒤 `listInstalledSkills()`를 **다시 읽어 후보 목록 전체를 돌려준다** — 화면은 서버가 본
+ *  것을 그린다(`savePersonaSkillsAction`과 같은 규약). 실패는 `SkillInstallError`의 두 조각
+ *  (`message`·`detail`)을 `title`·`message`로 그대로 옮긴다 — 갈래마다 사유가 다르다. */
+export async function installSkillAction(
+  formData: FormData,
+): Promise<InstallSkillResult & { installed?: Skill[]; name?: string }> {
+  try {
+    const files = formData.getAll("file").filter((f): f is File => f instanceof File);
+    const paths = formData.getAll("path").map(String);
+    if (files.length === 0 || files.length !== paths.length) {
+      throw new Error(`파일과 경로의 수가 안 맞습니다: ${files.length} / ${paths.length}`);
+    }
+    const uploads: SkillUpload[] = await Promise.all(
+      files.map(async (file, i) => ({
+        path: paths[i],
+        bytes: Buffer.from(await file.arrayBuffer()),
+        originalName: file.name,
+      })),
+    );
+    const skill = await installSkill(uploads);
+    return { ok: true, installed: await listInstalledSkills(), name: skill.name };
+  } catch (e) {
+    if (e instanceof SkillInstallError) return { ok: false, title: e.message, message: e.detail };
+    return { ok: false, title: "스킬을 설치하지 못했습니다", message: (e as Error).message };
   }
 }
 

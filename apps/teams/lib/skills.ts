@@ -20,7 +20,7 @@
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
-import { MAX_BYTES } from "./attachment-limit.ts";
+import { skillUploadError } from "./skill-upload-limit.ts";
 import { expandHome, resolveWithin } from "./paths.ts";
 import { personaFilePath } from "./projects.ts";
 import { type EngineId, NO_MODEL, parseEngineValue, renderEngineBlock } from "./workers.ts";
@@ -123,15 +123,26 @@ const unquote = (v: string) =>
 
 /** import 한 장. `path`는 스킬 루트 기준 상대경로(`"SKILL.md"`·`"references/x.md"`) — 폴더를
  *  고른 경우 사람이 고른 폴더 이름은 호출부(`af84d919`, `FormData` 해석)가 이미 뗀 값이다.
- *  `bytes`는 그 파일 내용 그대로다. */
-export type SkillUpload = { path: string; bytes: Buffer };
+ *  `bytes`는 그 파일 내용 그대로다. `originalName`은 **`SKILL.md`로 다시 쓰기 전의 원래 파일명**
+ *  (§비주얼 §25 ⑤ 갈래 1의 사유가 요구하는 값 — 한 장 모드에서 고른 이름이 `SKILL.md`가 아닐 수
+ *  있다). 없으면 `path`로 대신한다(폴더 모드는 애초에 `SKILL.md`다). */
+export type SkillUpload = { path: string; bytes: Buffer; originalName?: string };
+
+/** import 실패 사유를 두 조각으로 낸다(§비주얼 §25 ⑤) — 사람이 읽는 문장(`message` =
+ *  `Error.message`)과 기계값(`detail`, mono). 서버 액션이 이 둘을 `AlertTitle`·
+ *  `AlertDescription`에 그대로 나눠 얹는다 — 갈래마다 문장이 다르다는 계약이 타입에 선다. */
+export class SkillInstallError extends Error {
+  readonly detail: string;
+  constructor(message: string, detail: string) {
+    super(message);
+    this.name = "SkillInstallError";
+    this.detail = detail;
+  }
+}
 
 /** §5-1 §검증 — `/`·공백·`..`·`.` 시작을 한 판정으로 막는다. `:`도 막는다(플러그인 호출
  *  문법과 겹치면 `listInstalledSkills`의 첫 승 규칙이 한쪽을 가린다). */
 const SKILL_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
-
-/** 실측 최대(§5-1 §상한 둘)의 위 여유. 벽이지 여유가 아니다 — 넘으면 거절하고 사유에 수를 적는다. */
-const MAX_SKILL_FILES = 200;
 
 /** 상대경로 성분 하나가 빈 값·`.`·`..`이거나 `\`·NUL을 담으면 참이다(§5-1 §검증). 실제 방어는
  *  아래 `installSkill`의 `resolveWithin` 하나다 — 이건 사유를 갈라 보여주기 위한 사전 판정이다. */
@@ -151,21 +162,31 @@ export async function installSkill(
   configDir: string = claudeConfigDir(),
 ): Promise<Skill> {
   const skillMd = files.find((f) => f.path === "SKILL.md");
-  if (!skillMd) throw new Error("SKILL.md가 없습니다 — 스킬 폴더 바로 아래에 있어야 합니다.");
+  // §비주얼 §25 ⑤ 표 «+» — 폴더 바로 아래에 SKILL.md가 없다. 화면이 폴더 모드에서 먼저 거절하므로
+  // (원래 폴더 이름은 화면만 안다) 여기 닿는 것은 직접 호출뿐이다 — detail은 아는 값(파일명)으로 채운다.
+  if (!skillMd) {
+    throw new SkillInstallError("고른 폴더 바로 아래에 SKILL.md가 없습니다", "SKILL.md");
+  }
   const badPath = files.find((f) => hasBadPathComponent(f.path));
   if (badPath) throw new Error(`올바르지 않은 경로입니다: ${badPath.path}`);
-  if (files.length > MAX_SKILL_FILES) {
-    throw new Error(`파일이 ${files.length}개입니다 — 최대 ${MAX_SKILL_FILES}개까지 설치할 수 있습니다.`);
-  }
-  const totalBytes = files.reduce((n, f) => n + f.bytes.length, 0);
-  if (totalBytes > MAX_BYTES) {
-    throw new Error(
-      `총 ${(totalBytes / 1024 / 1024).toFixed(1)}MB — 20MB를 넘습니다. 필요한 파일만 골라 다시 시도하세요.`,
+  const limitError = skillUploadError(
+    files.length,
+    files.reduce((n, f) => n + f.bytes.length, 0),
+  );
+  if (limitError) throw new SkillInstallError(limitError.title, limitError.message);
+
+  const skill = parseSkillFm(skillMd.bytes.toString("utf8"));
+  if (!skill) {
+    throw new SkillInstallError(
+      "고른 파일의 frontmatter에 name이 없습니다 — 설치될 디렉터리 이름이 name입니다",
+      skillMd.originalName ?? skillMd.path,
     );
   }
-  const skill = parseSkillFm(skillMd.bytes.toString("utf8"));
-  if (!skill || !SKILL_NAME_RE.test(skill.name)) {
-    throw new Error(`SKILL.md의 name이 올바르지 않습니다: ${JSON.stringify(skill?.name ?? null)}`);
+  if (!SKILL_NAME_RE.test(skill.name)) {
+    throw new SkillInstallError(
+      "name을 디렉터리 이름으로 쓸 수 없습니다 — 영숫자로 시작하고 영숫자 · . _ - 만, 64자까지입니다",
+      `name: ${skill.name}`,
+    );
   }
 
   const skillsDir = path.join(expandHome(configDir), "skills");
@@ -175,7 +196,10 @@ export async function installSkill(
     await mkdir(dest);
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code === "EEXIST") {
-      throw new Error(`이미 있습니다 — 한 바이트도 쓰지 않았습니다: ${dest}`);
+      throw new SkillInstallError(
+        "이 이름의 스킬이 이 머신에 이미 있습니다 — 덮지 않습니다. 지우거나 name을 바꾼 뒤 다시 고릅니다",
+        dest,
+      );
     }
     throw e;
   }

@@ -5,12 +5,13 @@
  *  fs를 만지는 건 서버 액션뿐이다(`app/p/[project]/personas/actions.ts`). 파일 하나에 모은 이유는
  *  `workers-ui.tsx`와 같다 — 같은 화면의 세 액션이 같은 문구(엔진이 WARN만 남긴다 · 이름 규칙)를
  *  쓰므로 쪼개면 자리가 갈린다. */
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { Check, ChevronDown, ChevronRight, Trash2, TriangleAlert } from "lucide-react";
 import {
   createPersonaAction,
   deletePersonaAction,
   deletePersonaMemoryAction,
+  installSkillAction,
   savePersonaAction,
   savePersonaEngineAction,
   savePersonaLimitAction,
@@ -74,6 +75,7 @@ import {
   SidebarMenuItem,
   SidebarProvider,
 } from "@/components/ui/sidebar";
+import { skillUploadError } from "@/lib/skill-upload-limit";
 import type { Memory, Skill } from "@/lib/skills";
 import { decodeHash, engineMissing, PERSONA_COLORS, personaDotClass } from "@/lib/urls";
 import { cn } from "@/lib/utils";
@@ -335,7 +337,7 @@ export function PersonasPane({
   initial,
   rows,
   colors,
-  installed,
+  installed: initialInstalled,
   configDir,
   engines,
   modelPattern,
@@ -365,6 +367,10 @@ export function PersonasPane({
 }) {
   const [selected, setSelected] = useState<string | null>(initial);
   const [edits, setEdits] = useState<Record<string, PersonaEdit>>({});
+  // import(§5-1 §import)가 이 머신에 스킬을 하나 깔면 후보 목록이 는다 — 서버가 준 초기값이
+  // 아니라 이 상태를 그린다. 위 `edits`와 같은 이유로 여기(페인 전체)에 산다: 다른 줄을 고르는
+  // 순간 오른쪽 칸이 바뀌어도 방금 깐 스킬은 모든 페르소나의 다이얼로그에서 보여야 한다.
+  const [installed, setInstalled] = useState<Skill[]>(initialInstalled);
 
   // **뒤로가기가 왼쪽 선택과 오른쪽 칸을 같이 되돌린다**(§5 표 ③ — 지금은 URL만 되돌아가고
   // 화면이 안 따라온다). `pushState`는 이 이벤트를 안 쏘므로 여기 오는 것은 사람의 뒤로/앞으로뿐이다.
@@ -521,6 +527,7 @@ export function PersonasPane({
             onDeleted={() => select(null)}
             color={colors[current.name]}
             installed={installed}
+            onInstalled={setInstalled}
             configDir={configDir}
             engines={engines}
             modelPattern={modelPattern}
@@ -542,6 +549,7 @@ function PersonaDetail({
   onDeleted,
   color,
   installed,
+  onInstalled,
   configDir,
   engines,
   modelPattern,
@@ -554,6 +562,10 @@ function PersonaDetail({
   onDeleted: () => void;
   color?: string;
   installed: Skill[];
+  /** 방금 이 머신에 스킬을 깐 뒤 서버가 돌려준 후보 목록 전체(§5-1 §import) — `PersonasPane`의
+   *  상태를 갈아끼운다. 현재 페르소나뿐 아니라 모든 다이얼로그가 같은 값을 봐야 해서 여기서
+   *  끝내지 않고 그대로 위로 흘려보낸다. */
+  onInstalled: (installed: Skill[]) => void;
   configDir: string;
   engines: EngineCatalog;
   modelPattern: string;
@@ -643,6 +655,7 @@ function PersonaDetail({
         skills={edit.skills}
         chars={edit.skillsChars}
         installed={installed}
+        onInstalled={onInstalled}
         configDir={configDir}
         onSaved={(skills, skillsChars) => onEdit({ ...edit, skills, skillsChars })}
       />
@@ -1080,6 +1093,7 @@ function SkillsSection({
   skills,
   chars,
   installed,
+  onInstalled,
   configDir,
   onSaved,
 }: {
@@ -1088,6 +1102,7 @@ function SkillsSection({
   skills: Skill[];
   chars: number;
   installed: Skill[];
+  onInstalled: (installed: Skill[]) => void;
   configDir: string;
   onSaved: (skills: Skill[], chars: number) => void;
 }) {
@@ -1109,7 +1124,13 @@ function SkillsSection({
         <h3 className="text-sm font-medium">스킬</h3>
         {/* 0개일 때 `0자`는 참이지만 아무것도 안 말한다 — 바로 아래 한 줄이 이미 말했다 */}
         {skills.length > 0 && <span className="text-xs text-muted-foreground">{chars}자</span>}
-        <AddSkillsDialog current={skills} installed={installed} configDir={configDir} save={save} />
+        <AddSkillsDialog
+          current={skills}
+          installed={installed}
+          onInstalled={onInstalled}
+          configDir={configDir}
+          save={save}
+        />
       </div>
 
       {skills.length === 0 ? (
@@ -1329,19 +1350,64 @@ function DeleteMemoryButton({
 function AddSkillsDialog({
   current,
   installed,
+  onInstalled,
   configDir,
   save,
 }: {
   current: Skill[];
   installed: Skill[];
+  /** 방금 이 머신에 깐 스킬을 반영한 **후보 목록 전체**(§5-1 §import — 서버가 되읽어 돌려준 값
+   *  그대로). `PersonasPane`까지 올라가 모든 다이얼로그가 같은 값을 본다. */
+  onInstalled: (installed: Skill[]) => void;
   configDir: string;
   save: (picked: string[]) => Promise<PersonaResult>;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [picked, setPicked] = useState<string[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  // `저장` 실패와 import 실패가 그릇 하나를 나눠 쓴다(§비주얼 §25 ⑤ — 마지막에 누른 것 하나만
+  // 선다). title·message가 각각 `AlertTitle`(sans)·`AlertDescription`(mono)이다.
+  const [failure, setFailure] = useState<{ title: string; message: string } | null>(null);
   const [pending, start] = useTransition();
+  // 두 입구 중 **누른 것 하나만** `설치 중…`이 된다(§비주얼 §25 ⑤ §진행 중) — `pending`(저장)과
+  // 갈리는 상태라 따로 든다.
+  const [installing, setInstalling] = useState<"file" | "folder" | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
+
+  /** 입구 둘의 공통 통로 — 서버가 받는 것은 `file` 여러 개 + 같은 순서의 `path` 여러 개다
+   *  (§5-1 §import "입구 둘, 통로 하나"). 상한 둘은 **바이트를 읽기 전에** 화면이 먼저 거절한다 —
+   *  `installSkill`과 같은 함수(`skillUploadError`)를 불러 같은 문장을 쓴다. */
+  const runInstall = async (mode: "file" | "folder", items: { file: File; path: string }[]) => {
+    const limitError = skillUploadError(
+      items.length,
+      items.reduce((n, it) => n + it.file.size, 0),
+    );
+    if (limitError) {
+      setFailure(limitError);
+      return;
+    }
+    setFailure(null);
+    setInstalling(mode);
+    const formData = new FormData();
+    for (const it of items) {
+      formData.append("file", it.file);
+      formData.append("path", it.path);
+    }
+    const r = await installSkillAction(formData);
+    setInstalling(null);
+    if (r.ok) {
+      onInstalled(r.installed ?? []);
+      // §비주얼 §25 ⑤ §성공 — 토스트가 없다. 검색칸에 방금 깐 이름을 채워 목록을 그 한 줄로 좁힌다.
+      if (r.name) {
+        const name = r.name;
+        setPicked((prev) => (prev.includes(name) ? prev : [...prev, name]));
+        setQuery(name);
+      }
+    } else {
+      setFailure({ title: r.title ?? "스킬을 설치하지 못했습니다", message: r.message ?? "" });
+    }
+  };
 
   // 후보에 없는데 이미 든 스킬. 안 그리면 `저장` 한 번에 조용히 사라진다(§25 ③)
   const orphans = current.filter((c) => !installed.some((i) => i.name === c.name));
@@ -1380,7 +1446,7 @@ function AddSkillsDialog({
         if (o) {
           setPicked(current.map((s) => s.name));
           setQuery("");
-          setError(null);
+          setFailure(null);
         }
       }}
     >
@@ -1434,23 +1500,102 @@ function AddSkillsDialog({
                 <p className="text-xs text-muted-foreground">
                   CLAUDE_CONFIG_DIR이 없으면 &lt;config&gt;는 ~/.claude입니다
                 </p>
+                {/* §비주얼 §25 ⑤ — 후보 0개가 이 기능의 첫 독자다. 다음 행동은 바로 아래 44px의
+                    입구 둘이다(경로를 다시 안 적는다 — 위 두 글롭이 이미 그 자리다) */}
+                <p className="text-xs text-muted-foreground">
+                  아래에서 파일을 골라 지금 설치할 수 있습니다
+                </p>
               </div>
             )}
           </CommandList>
         </Command>
 
-        {/* 실패하면 다이얼로그가 열린 채로 남고 체크도 남는다 — 사유를 읽고 다시 누른다 */}
-        {error && <Failure title="스킬을 저장하지 못했습니다" message={error} />}
+        {/* import 입구 둘 — `Command`와 실패·`DialogFooter` 사이의 한 행(§비주얼 §25 ⑤).
+            숨긴 `<input type="file">` 둘 + 버튼 둘, `AttachmentButton`과 같은 조립
+            (`display:none`은 focus가 안 먹지만 `.click()`은 먹는다 — `attachment-field.tsx`). */}
+        <div className="flex items-center gap-2">
+          <span className="min-w-0 text-xs text-muted-foreground">
+            목록에 없으면 파일에서 설치합니다
+          </span>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".md"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0] ?? null;
+              // 같은 파일을 두 번 고르면 change가 안 뜬다 — 비워서 다음 선택이 항상 뜨게 한다.
+              e.target.value = "";
+              if (file) void runInstall("file", [{ file, path: "SKILL.md" }]);
+            }}
+          />
+          {/* `webkitdirectory`는 React JSX 타입에 없다 — DOM 프로퍼티로 직접 건다(ref 콜백) */}
+          <input
+            ref={(el) => {
+              folderInputRef.current = el;
+              if (el) el.webkitdirectory = true;
+            }}
+            type="file"
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              const files = Array.from(e.target.files ?? []);
+              e.target.value = "";
+              if (files.length === 0) return;
+              // 폴더 모드는 상대경로의 첫 성분을 뗀다(§5-1 §import) — 사람이 고른 폴더 이름이고
+              // 디렉터리 이름을 정하는 것은 `name:`이다.
+              const folderName = files[0].webkitRelativePath.split("/")[0] ?? "";
+              const withPaths = files.map((file) => {
+                const rel = file.webkitRelativePath;
+                const slash = rel.indexOf("/");
+                return { file, path: slash === -1 ? rel : rel.slice(slash + 1) };
+              });
+              // 떼고 나서 SKILL.md가 없으면 거절한다(폴더 바로 아래여야 한다) — 원래 폴더 이름은
+              // 화면만 알아서 서버에 못 보낸다(§비주얼 §25 ⑤ 표 «+»).
+              if (!withPaths.some((w) => w.path === "SKILL.md")) {
+                setFailure({
+                  title: "고른 폴더 바로 아래에 SKILL.md가 없습니다",
+                  message: `${folderName}/`,
+                });
+                return;
+              }
+              void runInstall("folder", withPaths);
+            }}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="ml-auto"
+            disabled={installing !== null}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            {installing === "file" ? "설치 중…" : "SKILL.md 한 장"}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={installing !== null}
+            onClick={() => folderInputRef.current?.click()}
+          >
+            {installing === "folder" ? "설치 중…" : "스킬 폴더"}
+          </Button>
+        </div>
+
+        {/* 실패하면 다이얼로그가 열린 채로 남고 체크도 남는다 — 사유를 읽고 다시 누른다.
+            `저장` 실패와 import 실패가 이 그릇 하나를 나눠 쓴다(마지막에 누른 것 하나만 선다) */}
+        {failure && <Failure title={failure.title} message={failure.message} />}
         <DialogFooter>
           <DialogClose render={<Button variant="outline" />}>취소</DialogClose>
           <Button
-            disabled={pending}
+            disabled={pending || installing !== null}
             onClick={() =>
               start(async () => {
-                setError(null);
+                setFailure(null);
                 const r = await save(picked);
                 if (r.ok) setOpen(false);
-                else setError(r.message ?? "스킬을 저장하지 못했습니다.");
+                else setFailure({ title: "스킬을 저장하지 못했습니다", message: r.message ?? "" });
               })
             }
           >

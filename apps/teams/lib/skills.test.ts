@@ -14,10 +14,12 @@ import {
   readPersonaMemory,
   readPersonaSkills,
   readPersonaSkillsFile,
+  SkillInstallError,
   writePersonaEngine,
   writePersonaLimit,
   writePersonaSkills,
 } from "./skills.ts";
+import { skillUploadError } from "./skill-upload-limit.ts";
 import { renderEngineBlock } from "./workers.ts";
 import { MAX_BYTES } from "./attachment-limit.ts";
 
@@ -103,28 +105,49 @@ test("installSkill — 폴더 통째, 하위 파일까지 같은 상대경로로
   );
 });
 
-test("installSkill — 거절 1: SKILL.md가 목록에 없다", async () => {
+test("installSkill — 거절 1: SKILL.md가 목록에 없다(§비주얼 §25 ⑤ 표 «+»)", async () => {
   const dir = mkdtempSync(path.join(tmpdir(), "fst-install-"));
   await assert.rejects(
     () => installSkill([{ path: "readme.md", bytes: Buffer.from("x") }], dir),
-    /SKILL\.md가 없습니다/,
+    (e: unknown) =>
+      e instanceof SkillInstallError &&
+      /SKILL\.md가 없습니다/.test(e.message) &&
+      e.detail === "SKILL.md",
   );
   assert.equal(existsSync(path.join(dir, "skills")), false);
 });
 
-test("installSkill — 거절 2: name이 규칙 밖이다(콜론 · 빈 값)", async () => {
+test("installSkill — 거절 2: name이 없다 · name이 규칙 밖이다(§비주얼 §25 ⑤ 표 1·2, detail 포함)", async () => {
   const dir = mkdtempSync(path.join(tmpdir(), "fst-install-"));
+  // 표 2 — name이 규칙 밖(콜론)
   await assert.rejects(
     () =>
       installSkill(
         [{ path: "SKILL.md", bytes: Buffer.from("---\nname: plugin:skill\n---\n") }],
         dir,
       ),
-    /name이 올바르지 않습니다/,
+    (e: unknown) =>
+      e instanceof SkillInstallError &&
+      /디렉터리 이름으로 쓸 수 없습니다/.test(e.message) &&
+      e.detail === "name: plugin:skill",
   );
+  // 표 1 — name이 아예 없다. detail은 고른 파일 이름(`originalName`, 없으면 `path`)이다
   await assert.rejects(
-    () => installSkill([{ path: "SKILL.md", bytes: Buffer.from("---\ndescription: 이름 없음\n---\n") }], dir),
-    /name이 올바르지 않습니다/,
+    () =>
+      installSkill(
+        [
+          {
+            path: "SKILL.md",
+            bytes: Buffer.from("---\ndescription: 이름 없음\n---\n"),
+            originalName: "my-skill.md",
+          },
+        ],
+        dir,
+      ),
+    (e: unknown) =>
+      e instanceof SkillInstallError &&
+      /frontmatter에 name이 없습니다/.test(e.message) &&
+      e.detail === "my-skill.md",
   );
 });
 
@@ -153,7 +176,11 @@ test("installSkill — 거절 4: 파일 수 · 총 바이트 상한(사유에 �
       bytes: Buffer.from("x"),
     })),
   ];
-  await assert.rejects(() => installSkill(many, dir), /파일이 201개입니다/);
+  await assert.rejects(
+    () => installSkill(many, dir),
+    (e: unknown) =>
+      e instanceof SkillInstallError && /상한 200개를 넘습니다/.test(e.message) && e.detail === "201개",
+  );
 
   await assert.rejects(
     () =>
@@ -164,7 +191,8 @@ test("installSkill — 거절 4: 파일 수 · 총 바이트 상한(사유에 �
         ],
         dir,
       ),
-    /20MB를 넘습니다/,
+    (e: unknown) =>
+      e instanceof SkillInstallError && /상한 20MB를 넘습니다/.test(e.message) && e.detail === "20.0MB",
   );
   assert.equal(existsSync(path.join(dir, "skills")), false); // 둘 다 쓰기 전에 거절됐다
 });
@@ -174,12 +202,27 @@ test("installSkill — 거절 5: 이미 있으면 한 바이트도 안 쓰고 �
   await installSkill([{ path: "SKILL.md", bytes: Buffer.from("---\nname: dup\n---\n원본") }], dir);
   await assert.rejects(
     () => installSkill([{ path: "SKILL.md", bytes: Buffer.from("---\nname: dup\n---\n새 내용") }], dir),
-    /이미 있습니다/,
+    (e: unknown) =>
+      e instanceof SkillInstallError &&
+      /이미 있습니다/.test(e.message) &&
+      e.detail === path.join(dir, "skills", "dup"),
   );
   assert.equal(
     readFileSync(path.join(dir, "skills", "dup", "SKILL.md"), "utf8"),
     "---\nname: dup\n---\n원본", // 첫 번째는 한 바이트도 안 갈렸다
   );
+});
+
+test("skillUploadError — installSkill과 화면이 같은 문구를 쓴다(§비주얼 §25 ⑤)", () => {
+  assert.equal(skillUploadError(200, 1024), null); // 상한 자체는 통과
+  assert.deepEqual(skillUploadError(201, 1024), {
+    title: "스킬 폴더의 파일이 상한 200개를 넘습니다",
+    message: "201개",
+  });
+  assert.deepEqual(skillUploadError(1, MAX_BYTES + 1), {
+    title: "스킬 폴더의 합계가 상한 20MB를 넘습니다",
+    message: "20.0MB",
+  });
 });
 
 test("없는 디렉터리 — 빈 배열이 정상이다(throw 아님)", async () => {
