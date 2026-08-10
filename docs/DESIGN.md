@@ -14262,8 +14262,9 @@ apps/
 osascript -e 'tell application "System Events" to get name of every process whose background only is false'
 ```
 
-8. **엔진은 번들에 들어가고, 쓰이기 전에 번들 밖으로 나온다.** §0-3 스캐폴딩이 실제로 읽는 넷
-   (`tick.sh` · `tickets.py` · `templates/` · `worker.sh.example`)을 `Resources/engine/`에 담고,
+8. **엔진은 번들에 들어가고, 쓰이기 전에 번들 밖으로 나온다.** §0-3 스캐폴딩이 실제로 읽는 다섯
+   (`tick.sh` · `tickets.py` · `templates/` · `worker.sh.example` · **`protocols/`**)을
+   `Resources/engine/`에 담고,
    앱은 켜질 때 그것을 `app.getPath("userData")/engine`(= `~/Library/Application Support/dira/engine`)
    으로 복사한 뒤 서버에 `DIRA_ENGINE=<그 경로>`로 넘긴다. `engineRepo()`는 그 값을 먼저 보고
    없으면 지금처럼 cwd 상위 2단계를 유도한다 — **어느 쪽이든 `tick.sh` 존재 확인은 그대로다.**
@@ -14282,6 +14283,30 @@ osascript -e 'tell application "System Events" to get name of every process whos
 클론을 시키고 (c)(`.app`에서 `새로 만들기`를 감춘다)는 아무것도 못 만들게 한다 — 둘 다 `.dmg`
 하나를 건네는 §배포와 맞지 않는다. 엔진은 제약 1 덕에 bash + python3 파일 몇 개뿐이라 담는 값이
 거의 0이고, 담으면 받는 맥이 레포 없이도 도는 큐를 세운다.
+
+**`protocols/`가 다섯 번째다 — 뒤늦게 늘었고, 목록이 안 따라와서 새 맥이 터졌다.**
+요구 `dfda6f57`의 실측:
+
+```
+ENOENT: no such file or directory, scandir
+  '/Users/hsol/Library/Application Support/dira/engine/protocols'
+```
+
+`extraResources`에 `protocols/`가 없어 userData의 엔진 사본에 그 디렉터리가 아예 없다. 새로
+설치한 맥에서 `새로 만들기`를 누르면 코어 층을 읽는 `readdir`이 그 자리에서 터진다 —
+`.catch`가 없는 유일한 엔진 읽기라서 다른 넷과 달리 문구가 아니라 예외로 나온다. 같은 구멍에
+걸리는 자리가 둘 더 있다: 프로토콜 화면의 코어 층(문구로 실패한다)과 vendored 큐 미러링
+(조용히 아무것도 안 한다). **세 자리 다 원인이 하나라 고칠 것도 목록 한 줄이다.**
+
+**그래서 목록은 손으로 세지 않고 검사가 센다.** 이 사고는 스캐폴딩이 읽는 집합이 넷에서 다섯으로
+늘어난 순간 생겼고, 그때 번들 목록을 고쳐야 한다는 것을 아무것도 강제하지 않았다. 판정은
+**`extraResources`가 `engine/`으로 나르는 것만으로 만든 가짜 엔진 레포에 대고 `createQueue`가
+성공하는가**다 — 여섯 번째가 생기면 그 검사가 먼저 빨개진다. 목록을 베낀 상수를 두는 것은
+판정이 아니다(같은 손이 두 벌을 세는 것이라 같이 낡는다).
+
+**옛 설치는 앱 버전이 바뀌는 순간 저절로 낫는다.** 꺼내기 판정이 마커 파일의 앱 버전 한 줄이라
+릴리스가 사본을 통째로 덮는다 — 사람이 `~/Library/Application Support/dira/engine`을 지우는
+안내를 낼 것이 없다.
 
 ### 네이티브 기능 6종
 
@@ -26095,6 +26120,16 @@ R4 4번). 고를 것은 bump 하나다 — `git -C ~/Projects/dira push origin m
 `gh workflow run release.yml -f bump=minor`(또는 `major`)가 나머지 둘이다. **734커밋 · 272파일이
 쌓인 구간이라 `patch`가 맞는지는 사람이 정한다.** 답이 셋 중 무엇이어도 세션 몫은 안 갈리므로
 이 요구는 답을 기다리며 멈추지 않는다(R4-2 · P159의 그 모양).
+
+### P226 — 새 맥에서 `새로 만들기`가 ENOENT로 터진다
+
+요구 `dfda6f57`. 원인·판정은 §데스크톱 앱 §못박는 것 8의 「`protocols/`가 다섯 번째다」 문단이
+정본이다. **릴리스 블로커다** — 나눠준 `.dmg`를 처음 켠 맥이 프로젝트를 하나도 못 만든다.
+
+| # | 무엇 | persona | deps | 상태 |
+|---|---|---|---|---|
+| P226 | 스펙 §못박는 것 8 — 번들 목록의 다섯 번째 + 목록을 세는 검사 `dfda6f57` | pm | — | 완료 |
+| P226-1 | 번들에 `protocols/`를 담는다 + 목록을 세는 회귀 검사 `4c9ef1b8` | developer | — | 발행 |
 
 ## 수용조건 (전체)
 
