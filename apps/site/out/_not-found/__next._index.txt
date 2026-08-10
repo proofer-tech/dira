@@ -1,4 +1,0 @@
-1:"$Sreact.fragment"
-2:I[47131,["/_next/static/chunks/2m7b0rnc3hsuy.js"],"default"]
-3:I[12936,["/_next/static/chunks/2m7b0rnc3hsuy.js"],"default"]
-0:{"rsc":["$","$1","c",{"children":[[["$","script","script-0",{"src":"/_next/static/chunks/2m7b0rnc3hsuy.js","async":true}]],["$","html",null,{"lang":"ko-KR","children":["$","body",null,{"children":["$","$L2",null,{"parallelRouterKey":"children","template":["$","$L3",null,{}],"notFound":[["$","main",null,{"children":[["$","h1",null,{"children":"404"}],["$","p",null,{"children":"이 주소에는 페이지가 없습니다."}],["$","a",null,{"href":"/","children":"홈으로"}]]}],[]]}]}]}]]}],"isPartial":false,"staleTime":300,"varyParams":null,"buildId":"z6GLpjWmcVYdiUy1huU8G"}

@@ -31,6 +31,11 @@ apps/desktop/ga.json
 # Claude Code 워크트리. 리포지터리 안에 살지만 내용은 레포의 것이 아니다.
 .claude/worktrees/
 
+# 죽은 경로(§P233). apps/teams/로 옮긴 뒤 git rm은 인덱스만 지워 워크트리 10개 전부에
+# untracked로 남았고, 뒤이은 add -A가 apps/site/out/의 빌드 산출물을 다시 담았다(`7bceefd`).
+# 통째로 무시해 재발을 막는다.
+apps/site/
+
 # vercel
 .vercel
 .env*
