@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
-import { TriangleAlert } from "lucide-react";
+import { Pause, Play, TriangleAlert } from "lucide-react";
 import { registerProject, type CreateState, type RegisterState } from "@/app/actions";
 import { CREATE_BLURB, ConfigTable, CreateDialog, CreateForm } from "@/components/projects-ui";
 import { CopyCommand } from "@/components/copy-command";
@@ -68,6 +68,9 @@ export default function Landing({
   const [dmg, setDmg] = useState("https://github.com/proofer-tech/dira/releases/latest");
   // 빈 문자열 = 개수를 못 읽은 상태. SSR HTML에도 클라이언트 첫 렌더에도 개수 칸이 없다.
   const [stars, setStars] = useState("");
+  // 플랜 카드 순환의 정지 손잡이(§P237 자리 ⑥). SSR·초기값은 "돈다" — `.cycling`이
+  // 안 붙는 한(아래 useEffect, JS 죽음·reduce) 순환 자체가 안 생기니 안전하다.
+  const [planStopped, setPlanStopped] = useState(false);
 
   // ── 목록 자리(`#projects`)의 상태 — 헤더 `새로 만들기`와 히어로 온보딩이 결과 슬롯을
   //    공유한다(§7 CreateForm 계약: "성공하면 결과는 목록 아래 결과 슬롯으로 올라간다" —
@@ -244,6 +247,9 @@ export default function Landing({
           io.observe(el);
         }
       }
+      // 플랜 카드 순환(§P237 자리 ⑥). `.cycling`이 없으면 `::before`의 content가 아예
+      // 없다 — 이 줄이 안 도는 것(JS 죽음·reduce)이 곧 정지 수단이 필요없는 상태다.
+      document.querySelector(".plan-sec")?.classList.add("cycling");
     }
     // 여행하는 티켓의 레인(DESIGN §랜딩 §개편 §움직이는 티켓). 절 마크업에 표식을 안 심는다 —
     // 관측 대상은 <main> 직계 블록 중 `.travel`·`#projects`를 뺀 나머지(`.wrap`)이고, 첫
@@ -650,8 +656,22 @@ export default function Landing({
 </section>
 )}
 
-<section className="wrap plan-sec reveal">
-  <p className="eyebrow">플랜</p>
+<section className={`wrap plan-sec reveal${planStopped ? " stopped" : ""}`}>
+  <p className="eyebrow">
+    플랜
+    {/* 정지 손잡이(§P237-1 §정지 손잡이) — 보이는 글자 0자, 상태·다음 동작을
+        `aria-label`이 진다. `:hover`/`:focus-within`(§랜딩 §고름·`.plans`)과 겹치지
+        않는다 — 이 버튼은 `.plans` 밖(`.eyebrow` 안)이라 누르러 오는 포커스가
+        `:focus-within`을 안 켠다. */}
+    <button
+      type="button"
+      className="plan-cycle-toggle"
+      aria-label={planStopped ? "플랜 카드 순환 다시 돌리기" : "플랜 카드 순환 멈추기"}
+      onClick={() => setPlanStopped((s) => !s)}
+    >
+      {planStopped ? <Play aria-hidden size={14} /> : <Pause aria-hidden size={14} />}
+    </button>
+  </p>
   <h2>내 PC에서 무료로 시작해보세요</h2>
   {/* 카드는 순서가 없어 <ul>이다(.plans는 .steps에서 분리했다 — 30초 설명과 규칙이 갈린다). */}
   <ul className="plans">

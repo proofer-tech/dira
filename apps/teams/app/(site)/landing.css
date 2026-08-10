@@ -327,9 +327,24 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
     animation-timeline: view();
     animation-range: exit 0% exit 100%;
   }
+  /* 갤러리 넷의 두 어휘(§P237 자리 ⑤, `8cbb65e0` 판정표) — 앞 셋 «다다닥»은 위 기본
+     `dira-shot-in`을 그대로 쓰고 구간만 짧게 잘라 열마다 어긋낸다. 넷째(`.wide`) «스르륵»은
+     이름부터 갈아 끼운다 — 거리 2배 · 구간 4배로 화면에서 수로 구별된다. */
+  @keyframes dira-shot-slow { from { opacity: 0; transform: translateY(56px); } }
+  .dira-landing .gallery figure:nth-child(1) { animation-range: entry 10% 45%; }
+  .dira-landing .gallery figure:nth-child(2) { animation-range: entry 16% 51%; }
+  .dira-landing .gallery figure:nth-child(3) { animation-range: entry 22% 57%; }
+  .dira-landing .gallery figure:nth-child(4) {
+    animation-name: dira-shot-slow;
+    animation-range: entry 0% cover 45%;
+  }
   @media (prefers-reduced-motion: reduce) {
     .dira-landing .reveal figure,
-    .dira-landing .hero figure { animation: none; }
+    .dira-landing .hero figure,
+    /* §P237-1 §함정 ① — `.gallery figure:nth-child(4)`(0,3,1)이 위 무력화 줄(0,2,1)보다
+       특정도가 높아 순서와 무관하게 이겨 `animation-name`을 되살린다. 이 줄에 명시로
+       더해야 `reduce`에서 실제로 꺼진다(실측). */
+    .dira-landing .gallery figure:nth-child(4) { animation: none; }
   }
 }
 
@@ -520,6 +535,19 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
 .dira-landing .steps > li:nth-child(3) { border-top-color: var(--done); }
 .dira-landing .steps > li:nth-child(2) .sig { color: var(--active); }
 .dira-landing .steps > li:nth-child(3) .sig { color: var(--done); }
+/* 확장자 자신의 겹(§P237 자리 ③, `8cbb65e0` 판정표). `.armed`(무장 · 아직 `.in` 없음)에는
+   지연을 안 얹는다 — 얹으면 무장하는 순간 `.sig`가 지연을 달고 사라지는 전이가 생긴다
+   (§P237-1 §함정 ②, 실측으로 밟은 자리). 지연은 `.armed.in`에서만 붙는다. */
+.dira-landing .reveal.armed > .steps > li > .sig {
+  opacity: 0; transform: translateY(6px);
+  transition-property: opacity, transform;
+  transition-duration: 320ms;
+  transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+.dira-landing .reveal.armed.in > .steps > li > .sig { opacity: 1; transform: none; }
+.dira-landing .reveal.armed.in > .steps > li:nth-child(1) > .sig { transition-delay: 280ms; }
+.dira-landing .reveal.armed.in > .steps > li:nth-child(2) > .sig { transition-delay: 460ms; }
+.dira-landing .reveal.armed.in > .steps > li:nth-child(3) > .sig { transition-delay: 640ms; }
 /* `> li >` 로 카드 제목만 잡는다 — 그냥 `.steps b`면 본문 <p> 안의 강조까지 block이
    되어 한 문단이 세 토막으로 끊긴다(§랜딩 ①). */
 .dira-landing .steps > li > b { display: block; margin-bottom: 8px; font-size: 15px; letter-spacing: -0.02em; }
@@ -563,6 +591,47 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
 /* 페르소나 마켓은 전 열을 잡는 자기 행이다. :last-child로 잡지 않는다 — 뒤에 카드가
    하나 더 붙는 날 조용히 옮겨 간다. */
 .dira-landing .plans > li.wide { grid-column: 1 / -1; }
+
+/* ── plan cycle + stop handle (§P237 자리 ⑥, `8cbb65e0` 판정표) ─── */
+/* 강조는 카드 위 변의 3px 레일이다 — §모션 ④(`.arrows a::before`)와 같은 어휘라
+   새 관용구가 0이고 `::before`라 카드 박스가 0px 갈린다. `.wide`는 고리 밖(§못 ①·②).
+   `content`는 `.cycling`이 있을 때만 생긴다 — JS가 죽거나 `reduce`면 순환이 필요한
+   상태 자체가 안 생긴다(전역 킬 스위치에 안 기댄다). */
+.dira-landing .plans > li:not(.wide) { position: relative; }
+.dira-landing .plan-sec.cycling .plans > li:not(.wide)::before {
+  content: ""; position: absolute; left: -1px; right: -1px; top: -1px; height: 3px;
+  background: var(--fg); transform: scaleX(0); opacity: 0;
+  animation: dira-plan-cycle 7200ms infinite cubic-bezier(0.22, 1, 0.36, 1);
+}
+/* 카드당 2400ms(그어짐 480 · 유지 1420 · 걷힘 500) — 전체 7200ms 위의 비율이다. */
+@keyframes dira-plan-cycle {
+  0% { transform: scaleX(0); opacity: 0; }
+  6.667% { transform: scaleX(1); opacity: 1; }
+  26.389% { transform: scaleX(1); opacity: 1; }
+  33.333%, 100% { transform: scaleX(1); opacity: 0; }
+}
+.dira-landing .plan-sec.cycling .plans > li:nth-child(2)::before { animation-delay: 2400ms; }
+.dira-landing .plan-sec.cycling .plans > li:nth-child(3)::before { animation-delay: 4800ms; }
+/* 마우스를 얹었다 떼는 것은 «잠깐 본다»다 — 놓으면 다시 돈다. `.cycling` 규칙(위, 특정도
+   (0,5,2))의 `animation` 단축이 `play-state`까지 지므로, 이 규칙이 특정도로 이겨야
+   `:hover`가 실제로 멈춘다 — 그래서 `.plan-sec.cycling`을 같이 문다((0,6,2)). */
+.dira-landing .plan-sec.cycling .plans:hover > li:not(.wide)::before,
+.dira-landing .plan-sec.cycling .plans:focus-within > li:not(.wide)::before { animation-play-state: paused; }
+/* 손잡이는 «그만 돌아라»다 — `animation: none`이 `play-state`를 무조건 이기므로 위 규칙과
+   다툴 자리가 없다(멈춘 상태에서는 `content: none`이 상자 자체를 지워 `:hover`가 잡을
+   대상도 없다). `.cycling` 규칙과 동률(둘 다 (0,5,2))이라 뒤에 와서 이긴다. */
+.dira-landing .plan-sec.stopped .plans > li:not(.wide)::before { animation: none; content: none; }
+/* 손잡이 — WCAG 2.2.2가 요구하는 정지 수단(§P237-1 §정지 손잡이). `.plans` 밖에 둔다 —
+   안에 두면 누르러 오는 포커스가 `:focus-within`을 먼저 켜서 누르기 전에 이미 멈춘다. */
+.dira-landing .plan-sec > .eyebrow { position: relative; }
+.dira-landing .plan-cycle-toggle {
+  position: absolute; right: 0; top: 50%; margin-top: -14px;
+  width: 28px; height: 28px; display: grid; place-items: center;
+  border: 1px solid var(--border); background: var(--bg); color: var(--faint);
+  cursor: pointer;
+}
+.dira-landing .plan-cycle-toggle:hover,
+.dira-landing .plan-cycle-toggle:focus-visible { color: var(--fg); }
 
 /* ── engine ─────────────────────────────────────── */
 /* 12열에서 비대칭이 서는 유일한 자리 — `span 7` / `span 5`(§방향·토큰 «격자»).
