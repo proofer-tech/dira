@@ -32,6 +32,7 @@
 - [동시에 몇 개 돌릴까](/docs/concurrency)
 - [페르소나](/docs/personas)
 - [프로토콜](/docs/protocols)
+- [아카이빙과 온톨로지](/docs/ontology)
 - [인증](/docs/auth)
 
 ## 운영
