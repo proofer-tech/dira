@@ -322,14 +322,18 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
    열을 줄이는 쪽은 안 된다: 1열 1032px에서도 캡처가 0.65배라 여전히 안 읽히고,
    3열이 아니면 세 캡션을 한 줄에 맞추는 ④가 성립하지 않는다. */
 /* ③ 커서를 못 보는 자리(터치 · 키보드)에 눌러진다는 것을 준다(§모션 §판정표 ③).
-   1.02에서 1.00으로 눌린다 — 정지 상태는 scale(1)이라 열 박스가 안 갈린다. */
-.dira-landing .gallery .zoom {
+   1.02에서 1.00으로 눌린다 — 정지 상태는 scale(1)이라 열 박스가 안 갈린다.
+   **`.gallery`를 셀렉터에서 뺐다**(§로드맵 §P235-1): 확대 링크가 갤러리 밖 두 절에도
+   서면서 같은 부품이 두 자리에 산다 — 규칙을 새로 쓰면 같은 값이 두 벌이 된다.
+   규칙 수는 그대로다. `display: block`이 여기 있어야 갤러리 밖에서도 인라인 앵커의
+   줄 상자가 캡처 아래에 빈 띠를 안 남긴다. */
+.dira-landing .zoom {
   display: block; cursor: zoom-in;
   transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
 }
-.dira-landing .gallery .zoom:hover,
-.dira-landing .gallery .zoom:focus-visible { transform: scale(1.02); }
-.dira-landing .gallery .zoom:active { transform: scale(1); transition-duration: 90ms; }
+.dira-landing .zoom:hover,
+.dira-landing .zoom:focus-visible { transform: scale(1.02); }
+.dira-landing .zoom:active { transform: scale(1); transition-duration: 90ms; }
 @media (min-width: 901px) {
   /* ④ 세 캡처의 종횡비가 1.25 · 3.2 · 1.6이라 그냥 두면 캡션 시작 높이가 셋 다 다르다.
      figure를 subgrid로 만들어 이미지 · 캡션 · 링크가 세 열에서 같은 행을 쓰게 한다.

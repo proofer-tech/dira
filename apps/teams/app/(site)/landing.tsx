@@ -512,6 +512,15 @@ export default function Landing({
   <p className="body" style={{ marginTop: 24 }}>일을 시킬수록 워커는 이 프로젝트에
   능숙해집니다. 어제 누가 무엇을 정했는지 읽고 시작하니, 같은 이야기를 두 번 하지 않아도
   됩니다.</p>
+  {/* 그림 — 목록 첫 항목이 말하는 그 한 줄이 실제로 선 자리(로드맵 §P235-1). 자리가 `.arrows`
+      바로 앞인 것은 아래 절과 같은 규칙이다: 절은 언제나 나가는 링크로 끝난다.
+      `.gallery` 밖이라 `figure`는 margin 0이다 — 위 `.body`와 **같은 인라인 24**를 준다
+      (새 CSS 규칙 0). `.zoom`은 갤러리 셋과 같은 부품이다(§랜딩 §갤러리 ③ — 라이트박스 0). */}
+  <figure style={{ marginTop: 24 }}>
+    <a className="zoom" href="/shots/10-archiving.png" target="_blank" rel="noopener" title="원본 크기로 열기"><img className="shot" src="/shots/10-archiving.png" loading="lazy" alt="dira 보드의 진행중·완료 두 레인. 완료 레인 둘째 카드 a732ce19의 아래 칸에 서류함 아이콘과 «아카이빙중» 한 줄이 붙어 있고, 그 위 카드에는 그 줄이 없습니다." width="1664" height="664"/></a>
+    <figcaption>이 한 줄은 링크입니다. 누르면 아카이빙을 맡은 티켓으로 건너가, 그 워커가 지금
+    어디까지 갔는지가 보입니다.</figcaption>
+  </figure>
   <p className="arrows"><a href="/docs/ontology">아카이빙과 온톨로지</a></p>
 </section>
 
@@ -534,6 +543,14 @@ export default function Landing({
     않고, 남은 것까지 지우시려면 <code>~/.config/dira/analytics.json</code> 한 개를 지우면
     됩니다</li>
   </ul>
+  {/* 그림 — 새로 찍지 않는다. `08-onboarding`이 §매뉴얼 §스크린샷이 박아 둔 «프로젝트 0건일
+      때의 `/`»고 그것이 설치 후 첫 화면이다(로드맵 §P235-1). alt는 `docs/first-ticket.md:14`가
+      이미 쓰던 문장에서 이 절이 가리키는 것만 남겼다. 자리·간격은 위 절과 같다. */}
+  <figure style={{ marginTop: 24 }}>
+    <a className="zoom" href="/shots/08-onboarding.png" target="_blank" rel="noopener" title="원본 크기로 열기"><img className="shot" src="/shots/08-onboarding.png" loading="lazy" alt="프로젝트가 0건일 때의 첫 화면. 등록된 프로젝트가 없다는 한 줄 아래에 새 프로젝트 카드가 펼쳐져 있고, 이름·프로젝트 폴더·통합 브랜치·스펙 문서 칸과 프로젝트 만들기 버튼이 있습니다." width="1600" height="700"/></a>
+    <figcaption>설치하고 처음 열면 이 화면입니다. 적는 것은 프로젝트 폴더 하나이고, 계정을
+    넣는 칸이 없습니다.</figcaption>
+  </figure>
   <p className="arrows"><a href="/docs/analytics">사용 통계와 끄는 법</a></p>
 </section>
 
