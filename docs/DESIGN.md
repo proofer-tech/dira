@@ -26129,7 +26129,31 @@ R4 4번). 고를 것은 bump 하나다 — `git -C ~/Projects/dira push origin m
 | # | 무엇 | persona | deps | 상태 |
 |---|---|---|---|---|
 | P226 | 스펙 §못박는 것 8 — 번들 목록의 다섯 번째 + 목록을 세는 검사 `dfda6f57` | pm | — | 완료 |
-| P226-1 | 번들에 `protocols/`를 담는다 + 목록을 세는 회귀 검사 `4c9ef1b8` | developer | — | 발행 |
+| P226-1 | 번들에 `protocols/`를 담는다 + 목록을 세는 회귀 검사 `4c9ef1b8` | developer | — | 완료 |
+| P226-2 | 릴리스 준비 — origin을 들여 갈래를 0으로 만든다 `0ce71668` | developer | — | 발행 |
+
+**세 번째 릴리스 요구 `3ce23f2a` — 「저절로 나으면 릴리즈 한번 해주세요」.** P226-1이 초록으로
+끝났고(`5a1a146`, 로컬 `master`), 옛 설치는 앱 버전이 바뀌는 순간 사본이 통째로 덮여 저절로
+낫는다(§못박는 것 8). **그래서 이 요구가 남긴 몫은 릴리스 한 번이고, 그것을 막는 것은 R4-2의
+갈래 하나뿐이다.**
+
+| 잰 것 | 값 (실측 2026-08-10, `~/Projects/dira`) |
+|---|---|
+| `git rev-list --left-right --count master...origin/master` | **`3	1`** — 오른쪽 1. R4-2가 막는 갈래가 섰다 |
+| 오른쪽 그 1 | `8f3e60e release v1.0.1` — 러너가 origin에만 민 bump 커밋 |
+| 왼쪽 3 | `5a1a146`(P226-1) · `42cd92f`(P226 스펙) · `bf02916`(`docs/index.html` 삭제) |
+| `git merge-tree --write-tree master origin/master` | 충돌 **0** — 릴리스 커밋이 만지는 `apps/desktop/package.json`을 로컬이 버전 줄에서 안 만졌다 |
+| 로컬 `apps/desktop/package.json` | `1.0.0` — 원격이 `1.0.1`이라 이 상태로 `pnpm release patch`를 치면 이미 있는 태그에 걸려 죽는다(R4-2) |
+
+**P225와 갈리는 것은 갈래 수 하나다.** 그때는 오른쪽이 0이라 남는 몫이 `pnpm build` 검증
+하나였고(P225-1), 지금은 그 위에 병합이 얹힌다. 순서는 R4-2 그대로 — `git merge origin/master`
+→ `git push . HEAD:master`, **rebase는 안 된다**(로컬 `master`를 워커 워크트리 전부가 조상으로
+쥐고 있다).
+
+**사람이 칠 한 줄은 P226-2가 초록으로 끝난 다음이다.** 세션은 origin을 안 만진다(프로토콜 §git ·
+R4 4번). `git -C ~/Projects/dira push origin master`가 `patch`(→ `v1.0.2`),
+`gh workflow run release.yml -f bump=minor`(또는 `major`)가 나머지 둘이다. **고르는 것은 사람이고,
+답이 셋 중 무엇이어도 세션 몫은 안 갈린다.**
 
 ## 수용조건 (전체)
 
