@@ -92,7 +92,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
-import { Textarea } from "@/components/ui/textarea";
 
 /** 실패 사유는 원문 그대로. 삼키지 않는다(§6 에러 3요소). */
 function Failure({ title, message }: { title: string; message: string }) {
@@ -724,7 +723,11 @@ export function AnswerForm({
   answerFile: string;
 }) {
   const [state, action, pending] = useActionState<SaveState, FormData>(answerRequirement, {});
+  // 제어값 — `⌘↵`·제출 버튼이 빈 본문에서 required를 대신 막으려면 지금 글을 봐야 한다
+  // (위지윅 면의 제출값은 hidden input이라 네이티브 `required`가 안 걷힌다, §P236-4).
+  const [body, setBody] = useState("");
   const sendCombo = useKeymap().bindings["interject.send"];
+  const empty = body.trim() === "";
   return (
     /* 입력칸과 `답변 달기`는 상자 **밖 · 밑**이다 — 다이얼로그를 화면 높이로 늘리는 안은 버렸다(§2) */
     <form action={action} className="space-y-3">
@@ -733,19 +736,24 @@ export function AnswerForm({
       {/* 보이는 `<Label>`도 `a-body` id도 없다(§29 ②) — 이름을 이미 말하는 것이 두 자리 다 있다:
           상세는 절 제목 `진행 기록`, 다이얼로그는 `DialogTitle`(`답변 — <제목>`). placeholder는
           라벨이 아니라서 `aria-label`이 접근 가능한 이름을 받는다. 문구는 참견·이어받기와 같은
-          문법(`[대상]에 [행위]기`)이다 — 한 칸이 모드를 말하는 방식이 셋 다 같아진다 */}
-      <Textarea
-        aria-label="답변"
-        placeholder="질문에 답 쓰기"
+          문법(`[대상]에 [행위]기`)이다 — 한 칸이 모드를 말하는 방식이 셋 다 같아진다.
+          답변은 사람이 입력칸에 친 글이라 줄바꿈을 그대로 그린다(§10 면제 · `AnswerThread`의
+          `breaks="all"`과 같은 값). */}
+      <MarkdownEditor
         name="body"
+        value={body}
+        onValueChange={setBody}
+        ariaLabel="답변"
+        placeholder="질문에 답 쓰기"
         rows={8}
         className="font-mono"
         required
+        breaks="all"
         // `⌘↵`로도 단다(§2 답변 항, 요구 `54f40caa`) — §3 요구 접수 칸과 같은 규칙 그대로다.
         onKeyDown={(e) => {
           if (!matchCombo(e.nativeEvent, sendCombo)) return;
           e.preventDefault();
-          if (!pending) e.currentTarget.form?.requestSubmit();
+          if (!pending && !empty) e.currentTarget.closest("form")?.requestSubmit();
         }}
       />
       {state.error && <Failure title="답변을 달지 못했습니다" message={state.error} />}
@@ -756,7 +764,7 @@ export function AnswerForm({
         </span>
         {/* 아이콘이 `답변 대기` 배지와 이 CTA를 잇는다 — 색은 안 쓴다(§비주얼 §15).
             보드 카드의 트리거와 같은 글자꼴이다 */}
-        <Button type="submit" disabled={pending}>
+        <Button type="submit" disabled={pending || empty}>
           <MessageSquareReply aria-hidden />
           {pending ? "답변 다는 중…" : "답변 달기"}
         </Button>
@@ -1210,26 +1218,31 @@ export function RequestDialog({
           <form action={action} className="min-w-0 space-y-4">
             <input type="hidden" name="project" value={project} />
             <input type="hidden" name="mode" value="req" />
-            <Textarea
+            {/* 요구 본문은 상세에서 `<Markdown breaks="untilHeading">`로 렌더된다(§10 표 — 이
+                다이얼로그가 만드는 티켓은 항상 `kind: request`다). 위지윅 면의 `Enter`가 그
+                렌더와 같아지려면 값이 여기서도 `untilHeading`이어야 한다(못 ⑤). */}
+            <MarkdownEditor
               name="body"
+              value={body}
+              onValueChange={setBody}
               rows={12}
               required
-              aria-label="요구 내용"
+              ariaLabel="요구 내용"
               placeholder={"무엇이 필요한지 그냥 쓰세요.\n첫 줄이 제목이 됩니다."}
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
+              breaks="untilHeading"
               onPaste={att.onPaste}
               // `⌘↵`로 접수한다. `Enter`는 줄바꿈 그대로고, 한글 조합 중의 `Enter`는
               // `matchCombo`의 `isComposing` 가드가 막는다(§3 · §21과 같은 규칙, 세 번째 칸이다).
               //
-              // **폼을 제출한다 — 서버 액션을 직접 부르지 않는다**(§3). `requestSubmit()`이라야
-              // `required`(빈 본문) 검사도 `<form action>` 경로도 버튼과 같은 길로 돈다
-              // (`submit()`은 검증을 건너뛰고 React의 action도 안 탄다). `pending`은 버튼의
-              // `disabled`가 하는 일을 여기서 한 번 더 한다 — 키에는 `disabled`가 없다.
+              // **폼을 제출한다 — 서버 액션을 직접 부르지 않는다**(§3). `requestSubmit()`을
+              // `<form action>` 경로로 돌린다 — 위지윅 면의 제출값은 hidden input이라 네이티브
+              // `required` 검사가 안 걷혀서(barred) 빈 본문은 여기서 직접 막는다(`body.trim()`).
+              // `pending`은 버튼의 `disabled`가 하는 일을 여기서 한 번 더 한다 — 키에는
+              // `disabled`가 없다.
               onKeyDown={(e) => {
                 if (!matchCombo(e.nativeEvent, sendCombo)) return;
                 e.preventDefault();
-                if (!pending) e.currentTarget.form?.requestSubmit();
+                if (!pending && body.trim()) e.currentTarget.closest("form")?.requestSubmit();
               }}
             />
             {/* 실패는 이 자리에 남는다 — 닫으면 본문과 함께 사라진다(§3) */}
@@ -1237,7 +1250,7 @@ export function RequestDialog({
             {/* 칩 줄 · 실패 사유 줄 · 액션 행(§27). 제출 버튼은 사람이 지목한 자리 그대로
                 행의 오른쪽 끝이고(요구 `027d8e96` · §비주얼 §4-3) 손잡이가 그 왼쪽에 앉는다 */}
             <AttachmentField att={att}>
-              <Button type="submit" disabled={pending}>
+              <Button type="submit" disabled={pending || !body.trim()}>
                 {pending ? "접수 중…" : "요구 접수"}
               </Button>
             </AttachmentField>
@@ -1296,9 +1309,13 @@ export function NewTicketDialog({
   const blankBody = copy?.body ?? BODY_SKELETON;
   // title·본문이 **controlled**인 이유는 `RequestDialog`와 같다 — React 19가 action 후 폼을
   // 리셋해서 uncontrolled면 발행 실패가 곧 입력 유실이다. deps는 이미 `picked`가 들고 있고,
-  // kind·persona·priority는 base-ui Select가 자기 상태로 들고 있다(리셋에 안 밟힌다. 실측).
+  // persona·priority는 base-ui Select가 자기 상태로 들고 있다(리셋에 안 밟힌다. 실측).
   const [title, setTitle] = useState(blankTitle);
   const [body, setBody] = useState(blankBody);
+  // kind만 예외로 든다 — 저장 자체는 여전히 select의 폼 제출(name="kind")이 하지만, 본문
+  // 편집기의 `breaks`(못 ⑤)가 "폼에서 고른 kind"를 따라가야 한다(`TicketEditForm`의 `kindValue`와
+  // 같은 판정, §P236-4).
+  const [kindValue, setKindValue] = useState(copy ? copy.kind || "" : "work");
   // 발행은 항상 비어서 연다(§1-4 §화면 "기본은 비어 있다" — priority와 같은 이유로 복제도 안
   // 물려받는다). title·body와 같은 이유로 controlled다(React 19 액션 후 폼 리셋).
   const [duedateInput, setDuedateInput] = useState("");
@@ -1387,7 +1404,7 @@ export function NewTicketDialog({
               {/* 복제는 원본 값에서 시작한다. 원본에 `kind`가 없거나 목록 밖 값(`answer` 등)이면
                   그 사실을 select가 그려야 한다 — 편집 폼과 같은 이유고 같은 모양이다(§2 편집 항).
                   목록 밖 값은 서버가 발행 시점에 사유를 붙여 거부한다(`createTicket`의 KINDS). */}
-              <Select name="kind" defaultValue={copy ? copy.kind || null : "work"}>
+              <Select name="kind" value={kindValue || null} onValueChange={(v) => setKindValue(v ?? "")}>
                 <SelectTrigger id="n-kind" className="w-40">
                   <SelectValue placeholder="없음" />
                 </SelectTrigger>
@@ -1506,19 +1523,19 @@ export function NewTicketDialog({
 
           <DepsPicker options={deps} picked={picked} setPicked={setPicked} />
 
-          <div className="space-y-2">
-            <Label htmlFor="n-body">본문</Label>
-            {/* 페이지였을 때는 16줄이었다 — 다이얼로그는 세로 예산이 창이라 12줄이다(§3 크기) */}
-            <Textarea
-              id="n-body"
-              name="body"
-              rows={12}
-              className="font-mono"
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-              onPaste={att.onPaste}
-            />
-          </div>
+          {/* 페이지였을 때는 16줄이었다 — 다이얼로그는 세로 예산이 창이라 12줄이다(§3 크기).
+              `breaks`는 위 kind select가 지금 고른 값을 따라간다(못 ⑤ — `TicketEditForm`과
+              같은 판정) — 저장 안 한 kind 변경도 이 미리보기에 바로 걸린다. */}
+          <MarkdownEditor
+            name="body"
+            value={body}
+            onValueChange={setBody}
+            label={<Label>본문</Label>}
+            rows={12}
+            className="font-mono"
+            breaks={kindValue === "request" ? "untilHeading" : undefined}
+            onPaste={att.onPaste}
+          />
 
           {/* 실패는 이 자리에 남는다 — 닫으면 본문과 함께 사라진다(§3) */}
           {state !== dismissed && state.error && (

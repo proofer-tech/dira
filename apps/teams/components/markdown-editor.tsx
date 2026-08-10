@@ -176,20 +176,66 @@ function domToMarkdown(root: Element, originalBlockText: string): string {
     .join("\n\n");
 }
 
+/** 블록이 아직 하나도 없는 빈 칸(③④가 시작하는 자리 — `split.blocks.length === 0`)에서 처음
+ *  치는 글을 되읽는다. 위 변환기들은 `<Markdown>`이 그린 알려진 태그 열(h1~6·p·ul…)만 다루면
+ *  되지만, 여긴 그 렌더가 아직 없다 — 브라우저가 `Enter`마다 만드는 `<div>`(빈 줄이면 안의
+ *  `<br>`)를 줄바꿈 하나로 되읽어야 한다(못 ⑤. 안 그러면 `Array.from(root.children)`이 첫
+ *  줄의 맨 텍스트 노드를 세지 않아 그 줄이 통째로 사라진다). */
+function looseTextOf(root: Element): string {
+  const lines: string[] = [];
+  let current = "";
+  const flush = () => {
+    lines.push(current);
+    current = "";
+  };
+  const walk = (node: Node) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      current += node.textContent ?? "";
+      return;
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
+    const el = node as Element;
+    if (el.tagName === "BR") {
+      flush();
+      return;
+    }
+    if (el.tagName === "DIV" || el.tagName === "P") {
+      flush();
+      el.childNodes.forEach(walk);
+      return;
+    }
+    el.childNodes.forEach(walk);
+  };
+  root.childNodes.forEach(walk);
+  flush();
+  return lines.join("\n");
+}
+
 // ── 컴포넌트 ──────────────────────────────────────────────────────────────
 
 export function MarkdownEditor({
   name,
   defaultValue,
+  value: controlledValue,
+  onValueChange,
   label,
   placeholder,
   breaks,
   rows = 12,
   className,
   onChange,
+  required,
+  ariaLabel,
+  onPaste,
+  onKeyDown,
 }: {
   name: string;
-  defaultValue: string;
+  /** 비제어 초기값 — 부모가 dirty 판정·리셋을 안 하는 자리(①)만 쓴다 */
+  defaultValue?: string;
+  /** 제어값 — 부모가 값을 들고 있어야 하는 자리(②③④, 닫기 확인·`⌘↵` 제출이 현재 글을 봐야 한다)가
+   *  쓴다. 주면 `onValueChange` 없이는 못 고친다 */
+  value?: string;
+  onValueChange?: (text: string) => void;
   /** 칸 위 라벨 — 있으면 손잡이와 같은 줄에 나란히 선다(§50 §자리, ①②). 없으면 손잡이만
    *  그 줄 오른쪽 끝에 선다(③④⑤⑥⑦) */
   label?: ReactNode;
@@ -199,16 +245,30 @@ export function MarkdownEditor({
   rows?: number;
   className?: string;
   /** 폼 제출(hidden input)이 아니라 부모가 글자 수·되돌리기·저장 버튼을 직접 드는 자리(⑤⑥⑦)를
-   *  위한 거울 콜백이다 — 이 컴포넌트는 여전히 자기 `text`를 스스로 든다(uncontrolled), 매 갱신을
-   *  부모에도 알린다. 되돌리기는 부모가 `key`를 바꿔 이 컴포넌트를 다시 마운트하는 방식으로 앞선다. */
+   *  위한 거울 콜백이다 — `value`를 안 주면 이 컴포넌트가 여전히 자기 `text`를 스스로 들고
+   *  (uncontrolled), 매 갱신을 부모에도 알린다. 되돌리기는 부모가 `key`를 바꿔 이 컴포넌트를
+   *  다시 마운트하는 방식으로 앞선다. */
   onChange?: (text: string) => void;
+  /** 원문 면(`Textarea`)에는 네이티브 `required`로 걸린다. 위지윅 면은 제출값이 hidden input이라
+   *  브라우저 제약 검증에서 제외되므로(barred) 실제 차단은 호출부가 제어값을 보고 제출을 막는다 —
+   *  여기서는 편집 표면에 `aria-required` 힌트만 얹는다. */
+  required?: boolean;
+  ariaLabel?: string;
+  onPaste?: (e: React.ClipboardEvent<HTMLElement>) => void;
+  onKeyDown?: (e: React.KeyboardEvent<HTMLElement>) => void;
 }) {
   const [mode, setMode] = useState<Mode>("wysiwyg"); // 서버·첫 페인트는 항상 위지윅(기본값, 못 ②)
-  const [text, setText] = useState(defaultValue);
-
-  function updateText(next: string) {
-    setText(next);
-    onChange?.(next);
+  const [innerText, setInnerText] = useState(defaultValue ?? "");
+  const text = controlledValue ?? innerText;
+  // 제어(`value` 있음)면 부모(`onValueChange`)가 유일한 값의 주인이다. 아니면 이 컴포넌트가
+  // `text`를 스스로 들고, 갱신마다 `onChange` 거울만 부모에 알린다(⑤⑥⑦ — 글자 수·되돌리기용).
+  function setText(next: string | ((prev: string) => string)) {
+    const resolved = typeof next === "function" ? (next as (prev: string) => string)(text) : next;
+    if (controlledValue !== undefined) onValueChange?.(resolved);
+    else {
+      setInnerText(resolved);
+      onChange?.(resolved);
+    }
   }
 
   // 첫 페인트 뒤에만 이 컴퓨터의 값을 읽는다(hydration 불일치를 피한다 — §0-11과 달리 깜빡임
@@ -227,7 +287,7 @@ export function MarkdownEditor({
     const leading = original.match(/^\n*/)?.[0] ?? "";
     const newBlockText = leading + domToMarkdown(el, original);
     if (newBlockText === original) return;
-    updateText(replaceBlock(split, i, newBlockText));
+    setText(replaceBlock(split, i, newBlockText));
   }
 
   const toggle = (
@@ -254,10 +314,14 @@ export function MarkdownEditor({
         <Textarea
           name={name}
           value={text}
-          onChange={(e) => updateText(e.target.value)}
+          onChange={(e) => setText(e.target.value)}
+          onPaste={onPaste}
+          onKeyDown={onKeyDown}
           rows={rows}
           placeholder={placeholder}
           className={className}
+          required={required}
+          aria-label={ariaLabel}
         />
       ) : (
         <div className="rounded-lg border border-input bg-transparent px-2.5 py-2 dark:bg-input/30">
@@ -266,11 +330,15 @@ export function MarkdownEditor({
               contentEditable
               suppressContentEditableWarning
               data-placeholder={placeholder ?? ""}
-              className="min-h-7 text-base leading-7 outline-none empty:before:text-muted-foreground empty:before:content-[attr(data-placeholder)]"
+              aria-label={ariaLabel}
+              aria-required={required || undefined}
+              className="min-h-7 text-base leading-7 outline-none empty:before:whitespace-pre-line empty:before:text-muted-foreground empty:before:content-[attr(data-placeholder)]"
               onBlur={(e) => {
-                const newText = domToMarkdown(e.currentTarget, "");
-                updateText(newText ? `${newText}\n${split.tail}` : split.tail);
+                const newText = looseTextOf(e.currentTarget);
+                setText(newText ? `${newText}\n${split.tail}` : split.tail);
               }}
+              onPaste={onPaste}
+              onKeyDown={onKeyDown}
             />
           ) : (
             split.blocks.map((block, i) => (
@@ -280,8 +348,12 @@ export function MarkdownEditor({
                 key={i}
                 contentEditable
                 suppressContentEditableWarning
+                aria-label={ariaLabel}
+                aria-required={required || undefined}
                 className="outline-none [&_p:empty]:min-h-7"
                 onBlur={(e) => commitBlock(i, e.currentTarget)}
+                onPaste={onPaste}
+                onKeyDown={onKeyDown}
               >
                 <Markdown text={block} breaks={blockBreaks(i, breaks, split.firstHeadingIndex)} />
               </div>
