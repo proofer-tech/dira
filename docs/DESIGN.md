@@ -26983,6 +26983,63 @@ git diff master -- components/session-stream.tsx | grep -c '^[-+].*Bubble'   # 0
 pnpm build
 ```
 
+### P233 — `apps/site`가 세션의 `add -A`마다 되살아난다 (요구 `6ddc6d5f`)
+
+> 요구 원문: *"배포한번해주세요"* + 같은 회차의 추가 *"배포 이전에 apps/site 가 다시 생기지
+> 않게 해주세요"*
+
+P199-1이 `apps/site/**`를 `apps/teams/**`로 옮기고 `git rm`했다. **지운 것은 인덱스뿐이고
+디스크는 안 지웠다** — §46 ⑦이 기록한 자리다(`git ls-files apps/site` 0건인데 `git status`에
+`?? apps/site/`). 그 잔여가 지금 되살아났다.
+
+실측(2026-08-10, 로컬 `master` `455b10e`):
+
+| 무엇 | 값 |
+|---|---|
+| 다시 추적된 파일 | **353개 · 합 7,412,591 B** — 전부 `apps/site/out/**`(폐기한 정적 export 산출물) |
+| 되살린 커밋 | `7bceefd`(티켓 `53c976fb`) — 랜딩 절 하나를 고치며 `add -A`가 같이 담았다 |
+| 무시 규칙 | **없다.** `git check-ignore -v apps/site/out/404.html` 빈 출력 — 루트 `.gitignore`의 `.next/`·`node_modules/`가 이 경로를 안 잡고, `/out/`은 `apps/teams/.gitignore` 안에만 있어 그 디렉터리에서만 걸린다 |
+| 디스크 잔여 | 워크트리 **10개 전부**(`agy` · `w1`~`w9`)에 `apps/site/out/`가 untracked로 있다 |
+
+**한 번 지우는 것으로 안 끝난다.** 인덱스에서 빼도 파일이 10개 트리에 그대로 남아 다음
+`add -A`가 다시 담는다. 그래서 수용조건이 «추적 0건» 하나가 아니라 **«추적 0건 + 무시 규칙이
+잡는다» 둘**이다. 잡는 자리는 루트 `.gitignore`다 — `apps/site/`는 통째로 죽은 경로이고,
+워크트리마다 있는 파일을 손으로 지우는 것은 다음 트리에서 다시 새로 난다.
+
+**히스토리는 안 건드린다.** 7.4 MB가 `7bceefd`에 이미 박혀 있고 빼려면 로컬 `master` 23커밋을
+다시 쓰는 것인데 워커 브랜치 10개가 그 위에 서 있다(§git `## 금지`의 `reset --hard` 자리).
+비밀이 아니라 산출물이므로 무게로 안고 간다. 뒤집는 것은 사람 결정이다.
+
+#### 티켓
+
+| # | 티켓 | persona | deps | 상태 |
+|---|---|---|---|---|
+| P233 | 스펙 — 로드맵 §P233 신설 `6ddc6d5f` | pm | — | 완료 |
+| P233-1 | `apps/site` 추적 353개 해제 + 루트 `.gitignore`가 재추가를 막는다 | developer | — | 발행 |
+
+#### 검증
+
+```bash
+git ls-files apps/site | wc -l                          # 0
+git check-ignore -v apps/site/out/404.html              # 루트 .gitignore의 규칙을 찍는다
+
+# 재발 회귀 — 잔여를 다시 만들어도 인덱스에 안 들어온다
+mkdir -p apps/site/out && : > apps/site/out/404.html
+git add -A && git status --porcelain | grep -c 'apps/site'   # 0
+```
+
+#### 배포는 사람 몫이다
+
+세션은 `origin` push를 못 한다(§git `## 금지` · 선례 `1fa0a64b`·`577455da`). 그리고 **첫 줄이
+`rebase`가 아니라 `merge`인 것이 값이다** — 로컬 `master`는 `origin/master`의 `beff84e
+release v1.0.3`을 안 담고 있어 그냥 밀면 non-fast-forward로 거절되고, 다시 써서 담으면 워커
+브랜치 10개가 전부 어긋난다. 선례가 같은 날 12:29의 `3ae25cb`(사람이 merge로 담았다)다.
+
+```bash
+cd ~/Projects/dira && git fetch origin && git merge origin/master   # v1.0.3을 담는다 (rebase 아님)
+git push origin master                                              # Vercel prod + release.yml patch
+```
+
 ## 수용조건 (전체)
 
 개별 티켓의 `## Done when`이 계약이고, 아래는 제품 전체의 종료 조건이다.
