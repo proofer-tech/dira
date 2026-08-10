@@ -18,7 +18,7 @@
  *  blockquote·hr·strong/em/code/a) 새 의존성 없이 그 역방향만 손으로 짜는 쪽이 더 작다.
  *  // ponytail: 중첩 표·표 열 변경(행·열 추가)·각주는 다루지 않는다 — §50 §도구 모음이 그 편집을
  *  // 원문 면으로 넘긴 것과 같은 경계다. 필요해지면 표는 열 수를 셀 DOM에서 다시 세는 코드를 더한다. */
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useMemo, useState, useSyncExternalStore } from "react";
 import { Code, Pilcrow } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -37,12 +37,25 @@ function readMode(): Mode {
   }
 }
 
+/** `useEffect` 안에서 곧바로 `setMode(...)`를 부르면 이 앱의 lint(`react-hooks/set-state-in-effect`)가
+ *  에러로 잡는다(`use-mobile.ts`와 같은 사유). 값이 앱 하나짜리라(못 ②) 모든 칸이 같은 값을 보게
+ *  `useSyncExternalStore`로 옮긴다 — `writeMode`가 이 리스너들을 불러 다른 칸도 같이 갈아 낀다. */
+const modeListeners = new Set<() => void>();
+function subscribeMode(onChange: () => void) {
+  modeListeners.add(onChange);
+  return () => {
+    modeListeners.delete(onChange);
+  };
+}
+const SERVER_MODE: Mode = "wysiwyg"; // 서버·첫 페인트는 항상 위지윅(하이드레이션 불일치를 피한다)
+
 function writeMode(mode: Mode) {
   try {
     localStorage.setItem(MODE_KEY, mode);
   } catch {
     /* 이번 세션만 안 남을 뿐이라 삼킨다 */
   }
+  modeListeners.forEach((onChange) => onChange());
 }
 
 // ── 편집된 DOM → 마크다운 (고친 블록만 탄다) ──────────────────────────────────
@@ -257,7 +270,7 @@ export function MarkdownEditor({
   onPaste?: (e: React.ClipboardEvent<HTMLElement>) => void;
   onKeyDown?: (e: React.KeyboardEvent<HTMLElement>) => void;
 }) {
-  const [mode, setMode] = useState<Mode>("wysiwyg"); // 서버·첫 페인트는 항상 위지윅(기본값, 못 ②)
+  const mode = useSyncExternalStore(subscribeMode, readMode, () => SERVER_MODE);
   const [innerText, setInnerText] = useState(defaultValue ?? "");
   const text = controlledValue ?? innerText;
   // 제어(`value` 있음)면 부모(`onValueChange`)가 유일한 값의 주인이다. 아니면 이 컴포넌트가
@@ -271,16 +284,7 @@ export function MarkdownEditor({
     }
   }
 
-  // 첫 페인트 뒤에만 이 컴퓨터의 값을 읽는다(hydration 불일치를 피한다 — §0-11과 달리 깜빡임
-  // 방지 스크립트를 새로 안 둔다. 손잡이 하나 다시 그리는 값이라 §0-11만큼 비싸지 않다).
-  useEffect(() => setMode(readMode()), []);
-
   const split = useMemo(() => splitBlocks(text), [text]);
-
-  function switchMode(next: Mode) {
-    setMode(next);
-    writeMode(next);
-  }
 
   function commitBlock(i: number, el: HTMLElement) {
     const original = split.blocks[i];
@@ -291,7 +295,7 @@ export function MarkdownEditor({
   }
 
   const toggle = (
-    <Button type="button" variant="ghost" size="sm" onClick={() => switchMode(mode === "wysiwyg" ? "raw" : "wysiwyg")}>
+    <Button type="button" variant="ghost" size="sm" onClick={() => writeMode(mode === "wysiwyg" ? "raw" : "wysiwyg")}>
       {mode === "wysiwyg" ? (
         <>
           <Code aria-hidden /> 원문으로
