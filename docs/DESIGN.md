@@ -27184,13 +27184,123 @@ pnpm build
   `속성 / 길이 / 이징 / 트리거`). `속성`은 `transform`·`opacity`가 원칙이고 아니면 그 칸에
   이유를 적는다. **표에 없는 모션은 구현이 만들지 않는다.**
 
+#### 레퍼런스 — 108장에서 여섯 (`b7aa7660`)
+
+`motionsites.ai`를 헤드리스 CDP로 열어 목록 **둘**을 걸었다 — `/sections`(절·부품 프롬프트)
+**84장** · `/`(랜딩 전문 프롬프트) **24장**, 합 **108장**. 그 페이지도 `<a href>`가 0건인
+SPA라 카드를 클릭해야 상세가 열린다(§개편이 `superdesign.dev`에서 만난 것과 같은 구조).
+프롬프트 본문은 상세의 `Copy full prompt`가 폴백으로 심는 `<textarea>`에서 읽었다 — 헤드리스
+크롬에서 클립보드는 `Document is not focused`로 막힌다.
+
+**전문을 끝까지 읽은 것이 37장이다.** 나머지 71장은 이름·분류·미리보기까지 봤다. 카드의
+slug가 라벨과 안 맞는 자리가 있어 상세가 안 열렸다 — `Dashboard UI` → `dashboard` ·
+`Capabilities Overview` → `features` · `Dark Portfolio Hero` → `15`. **다음 세션은 카드를
+하나 연 뒤 상세 패널의 관련 목록에서 `data-card-id`를 먼저 걷는다** — 거기 진짜 slug가 있다.
+
+**어떻게 걸렀나 — 세 조건.** ① **의존성 0으로 서는가**(못 ⑥. `framer-motion`·`gsap`·`three`·
+`react-player`가 전제인 것이 37장 중 **22장**이다) ② **라이트 밑면에서 뜻이 남는가**(§개편
+§서는 못 ③. 근-검정이 전제인 것이 **23장**) ③ **스크롤이 내려가는 동안 겹을 만드는가** —
+사람이 쓴 말이 `단면적`이라 커서 스포트라이트·마우스 트레일·호버는 그 축이 아니다.
+37장 중 여섯이 남았다.
+
+| # | 이름 | 그 프롬프트가 적어 둔 것 | 우리 표 어느 행으로 가나 |
+|---|---|---|---|
+| ⓐ | **Daisy Wild** (Product) | `IntersectionObserver` 원샷(15% 진입) 뒤 **요소마다 지연·길이·속성·거리를 따로 적은 표**. 이징이 `cubic-bezier(0.22, 1, 0.36, 1)`로 우리가 이미 쓰는 값이고, 라벨은 `0ms · 12px` · 그림 블록은 `300ms · 40px` | ①② — **한 블록 안에서 종류마다 다른 겹.** 글과 캡처가 같은 값으로 오면 안 된다는 것이 여기 적혀 있다 |
+| ⓑ | **Cognitra Feature** (Feature) | `whileInView`(`once` · `amount: 0.2`) 스태거. 첫 항목 `delay: 0.15`, 이후 항목마다 `+0.08s`, `y: 32px` | ① — 계단의 단위. 우리 `60ms`는 이 값과 ⓒ 사이다 |
+| ⓒ | **Beauty Categories** (Categories) | 격자 카드가 `IntersectionObserver`(threshold `0.1`)로 `opacity 0 · translateY 48px` → `0`, 카드마다 `index * 150ms` | ① — **단위가 블록이 아니라 격자 칸**이라는 것 |
+| ⓓ | **Portfolio About** (About) | `useScroll` + `useTransform`으로 값을 **스크롤 진행에 연속으로 사상**한다(글자마다 `opacity 0.2 → 1`). 타임라인이 시간이 아니라 위치다 | ② — 표에서 «스크롤에 반응»을 문자 그대로 하는 행. JS 대신 `animation-timeline: view()`로 같은 것을 한다 |
+| ⓔ | **HAUL!** (Footer Section) | `useScroll`의 `scrollYProgress`를 `[-50, 150]`으로 사상해 **앞 레이어만 다른 속도로** 움직인다 | ③ — 히어로 캡처가 떠나는 겹 |
+| ⓕ | **Pixel Grid Hover** (Case Studies) | 떠 있는 레이어마다 `-(80 + index * 30)`으로 **겹마다 속도가 다르다**(`useSpring` `stiffness 40 / damping 20`으로 다듬는다) | ②③ — 캡처(`28px`)와 글(`16px`)에 다른 거리를 주는 근거 |
+
+**버린 것 여섯을 이름으로 적는다.** 다음 세션이 같은 카드를 다시 열지 않게 한다.
+
+- `Nike Hover`(커서 스포트라이트 SVG 마스크 + `gsap`·`react-player`) · `Animated Cards`(마우스
+  관성 3D 틸트) — 조건 ①③. **둘 다 축이 커서지 스크롤이 아니다.**
+- `Max Reed Portfolio` · `Stark Minimal Footer` — `animation: … 22s linear infinite` 마퀴가
+  장치의 중심이다. **못 ③이 막는다**(자동 시작 · 5초 초과 · 무한).
+- `NexaCore Results` · `Orbis Hello` — 프롬프트가 스스로 *"No animations. No hover states. No
+  scroll effects. Static render only."*라고 적어 뒀다. 가져올 것이 0이고, **이 목록에서 정적인
+  것이 37장 중 5장이라는 사실 자체가 근거 하나다** — 모션을 얹는 것이 이 목록의 기본값이 아니다.
+
+#### 판정표 (`b7aa7660`)
+
+designer 판정(`ui-animation` 스킬). **`master` `192d017`을 내 워크트리에서 `pnpm build &&
+DIRA_LANDING_ONLY=1 PORT=7399 pnpm start`로 띄우고** 헤드리스 CDP로 `1440 · 1024 · 768 · 390`
+네 폭에서 쟀다. **랜딩-only로 잰 이유가 있다** — 풀 모드에서는 설치 절과 `.closing`이 안 서서
+`.reveal`이 8이 아니라 6이고, 사람이 보는 공개 랜딩은 랜딩-only 쪽이다(`DIRA_LANDING_ONLY=1`).
+**`지금 값`도 `바꾸는 값`도 전부 브라우저에서 받아 적은 수다** — 후보 CSS를 `<style>`로 세우고
+같은 창에서 다시 쟀다. 예측치는 한 칸도 없다.
+
+**행이 넷이다**(상한 여섯). 자리를 채우려고 둘을 더 만들지 않았고, 그 둘이 갈 뻔한 자리는
+아래 §안 넣은 것에 이유와 함께 적어 뒀다. **개수는 네 폭에서 하나도 안 갈린다**(`.reveal` 8 ·
+계단 27칸 · 하이라인 7 · 캡처 6). 폭마다 갈리는 것은 문서 높이뿐이다 — `1440` `7661` ·
+`1024` `7404` · `768` `8849` · `390` `8483`.
+
+> **폭 넷이 아래 §검증의 넷과 다르다.** 이 표는 §모션 판정표가 쓴 `1440 · 1024 · 768 · 390`이고
+> §검증은 §P234가 쓴 `1440 · 1280 · 900 · 390`이다. **둘 다 그대로 산다** — 이 표가 물려받는
+> 계보가 §모션이고, 구현이 통과해야 하는 것은 §검증이다. 랜딩 브레이크포인트가 `900 · 640 ·
+> 480`이라 두 벌 다 «1열 접힘 앞뒤»를 덮고, 위 개수는 폭에 안 갈리므로 어느 넷으로 재도 같다.
+
+| # | 자리 | 무엇 | 지금 값 | 바꾸는 값 | 속성 | 길이 | 이징 | 트리거 |
+|---|---|---|---|---|---|---|---|---|
+| ① | `landing.css:277-282` — `.reveal.armed` 규칙 둘 | **블록 8개가 전부 같은 한 값으로 온다.** 스크롤로 지나가는 단위가 8개인데 8번이 똑같은 `translateY(16px)`이라 서로 구별되지 않고, 블록 **안**에서 따로 도착하는 것이 0이다. 사람이 `단면적`이라고 쓴 자리가 여기다 | `.reveal` **8개**, 직계 자식 `2 · 5 · 4 · 2 · 1 · 4 · 3 · 1`. 규칙은 둘뿐이고 `transition-delay` 선언 **0건**. 계단이 걸릴 칸을 세면 **27개**(블록 직계에서 그릇·캡처를 뺀 것 + `.steps > li` 3 + `.stats li` 4 + `.plans > li` 4)인데 **27칸 전부 자기 도착이 없다.** 네 폭 같은 수 | 움직이는 주체가 블록 → **블록 안 27칸**. `.reveal.armed`의 두 규칙이 자식으로 내려가고 지연은 `nth-child`가 준다 — 실측 사다리 `0 · 60 · 120 · 180 · 240ms`에 `9 · 7 · 6 · 4 · 1`칸(블록별 `4 · 3 · 2 · 5 · 0 · 4 · 6 · 3`, 다섯째가 갤러리 절이라 0이고 그 넷은 ②가 받는다). **격자 그릇(`ol.steps` · `ul.plans` · `.stats > ul` · `div.gallery`)을 대상에서 뺀다** — 안 빼면 그릇과 칸이 겹쳐 움직여 시작점이 `32px`이 된다. **정지 상태는 한 자리도 안 갈린다**(네 폭 블록 박스 · `docH` · `scrollWidth` 앞뒤 동일) | `transform` · `opacity` | `520ms` (지금 값과 같다 — 갈리는 것은 지연이다) | `cubic-bezier(0.22, 1, 0.36, 1)` (지금 값과 같고 레퍼런스 ⓐ가 같은 값을 쓴다) | **스크롤 진입.** 지금 있는 `IntersectionObserver` 그대로라 **JS가 0줄 는다**. **쉬는 상태가 보인다** — `.armed`가 없으면 규칙이 하나도 안 걸린다(실측 `setScriptExecutionDisabled(true)`에서 `.reveal` 8개와 그 직계 자식 전부 `opacity 1` · `armed` 0건) |
+| ② | `landing.css` 새 `@supports` 블록 — `.reveal figure` **6개**(두 절 2 + 갤러리 4) | **스크롤 위치에 연속으로 묶인 모션이 0개다.** 지금 모션은 전부 «켜지면 520ms 동안 도는 것»이라 스크롤을 멈춰도 계속 돌고 되감으면 아무 일도 안 일어난다. 사람이 «스크롤에 반응하는»이라고 쓴 것이 이 축이고, 캡처는 글과 같은 `16px`에 얹혀 온다 | `document.getAnimations()` 중 `timeline !== document.timeline`인 것이 **네 폭 전부 0개**. `CSS.supports('animation-timeline: view()')`는 `true`(Chrome 151). 첫 캡처 `top` 1440 `2362.7` · 390 `2416.2` | `@supports (animation-timeline: view())` 안에서 `animation-timeline: view()` · `animation-range: entry 10% cover 30%` · `@keyframes dira-shot-in { from { opacity: 0; transform: translateY(28px) } }`. **캡처가 글보다 멀리서 온다**(`28` vs `16` — 레퍼런스 ⓐⓕ). 실측 1440 `scrollY 1600` `28px / 0.066` → `1800` `10.23 / 0.635` → `2000` `0 / 1`. 390 `1600` `26.56 / 0.051` → `1800` `8.85 / 0.684` → `2000` `0 / 1`. **`cover 30%`을 지나면 `translateY(0) · opacity 1`로 멈춰 서서 그 뒤 스크롤에 박스가 안 움직인다** | `transform` · `opacity` | **없다 — 길이가 아니라 구간이다**(`entry 10%` → `cover 30%`). 스크롤이 그 구간을 지나는 만큼만 진행한다 | `linear`. **스크롤이 이징이라 곡선을 한 번 더 얹으면 손이 미는 만큼 화면이 안 따라온다** | **스크롤 위치.** **JS 0줄이다.** 쉬는 상태가 보인다 — `@supports`가 거짓이면 규칙이 통째로 안 걸려 캡처가 그냥 서 있고 ①이 정본이다(못 ⑦). ⚠ 전역 킬 스위치가 이 행을 **안** 죽인다 — 아래 §reduce |
+| ③ | 같은 `@supports` 블록 — `.hero figure` **1개**(`board.gif`) | **페이지에서 처음 하는 스크롤이 아무 일도 안 일으킨다.** 히어로가 그냥 위로 밀려 나가고 다음 절이 그 자리를 대신한다 — 첫 인상에서 «이 페이지가 스크롤에 반응한다»가 안 선다 | `.hero figure` `top` 1440 `635.6` · 390 `596`. 스크롤에 묶인 값 **0개**(②와 같은 실측). 히어로 직계 6개가 가진 것은 **마운트** 애니메이션(`dira-rise` — §모션 ⑤)이고 스크롤을 안 본다 | `animation-range: exit 0% exit 100%` · `@keyframes dira-hero-out { to { opacity: .7; transform: translateY(-32px) scale(.98) } }`. 실측 1440 `scrollY 0‥600` `scale 1 · y 0 · o 1` → `800` `0.9979 / −3.43 / 0.968` → `1200` `0.9867 / −21.21 / 0.801` → `1600` 이후 `0.98 / −32 / 0.7`. 390은 `800` `0.9905 / −15.23 / 0.857` → `1000` 이후 끝값. **`scrollY 0`에서 값이 항등이라 첫 화면이 한 픽셀도 안 갈린다** | `transform` · `opacity` | 없다 — 구간(`exit 0%` → `exit 100%`)이다 | `linear` (②와 같은 근거) | **스크롤 위치**(나가는 구간). 쉬는 상태 = 첫 화면 = 지금 값. `@supports` 밖에서는 규칙이 안 걸린다. JS 0줄 |
+| ④ | `landing.css:362` `.dira-landing section { border-top }` 계열 — `.reveal` 8개 중 **7개** | 이 페이지의 시각 정체성이 **하이라인 여덟**인데(§개편 §방향·토큰 «하이라인») 그 선이 페이지가 그려지는 순간 이미 다 그어져 있다. **절이 «시작한다»고 말하는 것이 화면에 없다** | `.reveal` 8개 중 **7개**가 `border-top: 1px solid rgb(228,228,231)`(`--border`)이고, 갤러리 절 하나만 0이다(`.stats + section { border-top: 0 }` — 두 줄이 겹쳐 2px이 되는 것을 막는 기존 규칙). 선 폭이 곧 페이지 폭이다(실측 `1440 · 1024 · 768 · 390`). 그 일곱에 `transform` **0건** | 그 일곱에 `border-top-color: transparent`를 주고 같은 자리에 `::before`(`top: -1px` · `height: 1px` · `background: var(--border)` · `transform-origin: left`)를 깔아 `scaleX(0) → scaleX(1)`로 **왼쪽에서 그어진다**. **선을 지우지 않고 색만 옮기는 이유가 박스다** — `border-top`을 `0`으로 하면 블록마다 1px씩 줄어 문서가 통째로 밀린다. 실측: 이 행까지 얹은 뒤 네 폭 박스 · `docH`(`7661 · 7404 · 8849 · 8483`) · `scrollWidth`가 앞뒤로 같고, `::before` 계산값이 `1px` · `--border` · `scaleX(1)`이다. `.armed`가 아니면 `scaleX(1)`이 기본이라 **JS가 죽어도 선이 그어져 있다**(실측). §모션 ④(`.arrows a::before`)와 같은 어휘라 새 관용구가 아니다 | `transform`(`scaleX`) | `640ms` — 1440px을 가로지르는 선이라 ①의 `520`보다 길다. 짧으면 «선이 켜졌다»로 읽히고 길어야 «그어진다»가 된다 | `cubic-bezier(0.22, 1, 0.36, 1)` | **스크롤 진입**(①과 같은 `.armed`/`.in`). 쉬는 상태가 보인다 |
+
+**①에 함정 둘이 있다 — 계약으로 적는다.** 둘 다 실측으로 밟은 것이고, 밟으면 «계단이 통째로
+안 걸린다»가 «내 선택자가 틀렸나»로 읽힌다.
+
+- **`transition` 단축을 쓰면 안 된다.** 단축이 `transition-delay`를 `0`으로 리셋한다.
+  `transition-property` · `transition-duration` · `transition-timing-function` 세 줄로 적는다.
+- **`:not()`이 특정도를 올린다.** 대상 선택자가 `:not(figure):not(.gallery):not(.wrap)…`로
+  `(0,6,0)`이 되면 지연을 주는 `….armed.in > *:nth-child(2)`(`(0,4,1)`)를 **이겨서** 지연이
+  통째로 죽는다 — 실측에서 27칸 중 **22칸이 `0s`로** 붙었다. 지연 규칙은 대상 선택자에 얹지
+  말고 `.dira-landing .reveal.armed :nth-child(n)` 꼴로 따로 적는다.
+
+**`prefers-reduced-motion` — ②③은 전역 킬 스위치가 안 죽인다. 실측이다.**
+`landing.css:12-24`의 킬 스위치는 `animation-duration: 1ms !important`로 애니메이션을 끝으로
+보낸다. **스크롤 타임라인에는 `animation-duration`이 아예 안 쓰인다** — 진행이 시간이 아니라
+위치라서다. 그 블록만 믿고 아무것도 안 적으면 `reduce`에서 히어로 캡처가 `scale(0.98)
+translateY(-32px) · opacity 0.7`로 서 있고 `.reveal figure` 여섯이 `opacity 0`이다(실측).
+**②③은 자기 `@media (prefers-reduced-motion: reduce) { animation: none }`을 `@supports`
+안에 갖는다** — 넣으면 `reduce`에서 히어로 `transform: none · opacity 1` · 캡처 `opacity 1`이다
+(네 폭 실측). §모션 §이미 덮여 있다의 *"`@media`를 다시 쓰지 않는다"*는 **전역 블록을 두 벌
+만들지 말라는 말**이고 이것은 그 블록이 못 덮는 두 자리에 대한 규칙이라 두 벌이 아니다.
+**①④는 `transition`이라 전역 블록이 그대로 죽인다 — 그 둘에는 아무것도 안 적는다.**
+
+**서는 못 일곱에 걸리는 행이 0이다.**
+
+| 못 | 이 표에서 |
+|---|---|
+| ① 사실을 안 나른다 | 네 행 다 끝 상태가 지금 화면이다. 모션을 못 본 사람이 잃는 정보가 0 |
+| ② JS가 죽어도 글이 보인다 | 실측(네 폭 `setScriptExecutionDisabled(true)`) — `.reveal` 8개와 직계 자식 전부 `opacity 1` · `armed` 0건 · 하이라인 `scaleX(1)`. ②③은 JS를 아예 안 쓴다 |
+| ③ 자동 시작 · 5초 초과 · 무한이 0 | ①④는 한 번 도는 전이. ②③은 `infinite`가 아니라 **스크롤이 멈추면 같이 선다.** `@keyframes`가 둘 는다(`dira-shot-in` · `dira-hero-out`), 둘 다 반복 1회 |
+| ④ 포커스 링 | `outline` 선언 0건. 네 행 중 `:focus-visible`을 건드리는 것이 0 |
+| ⑤ 대비 | 끝 상태 `opacity`가 전부 `1`이다. ③의 `0.7`은 **캡처 하나가 화면을 떠나는 동안**이고 글자가 아니다(§모션 ⑤가 허용한 «지나가는 중») |
+| ⑥ 새 의존성 0 | `package.json`이 안 갈린다. 네 행 다 CSS이고 새 JS가 **0줄**이다 |
+| ⑦ 스크롤을 안 가로챈다 | `scroll-behavior`를 재정의 안 하고, `position: sticky`를 새로 안 만들고(지금 있는 `header` · `.travel` 둘 그대로), 스크롤을 먹는 구간이 0이다. `#projects` 앵커와 뒤로가기가 그대로 선다. 실측 `scrollWidth`가 네 폭에서 뷰포트와 같아 가로로도 안 샌다 |
+
+**안 넣은 것 — 상한 여섯 중 둘을 비운다.**
+
+- **`.stats` 숫자 넷의 count-up.** 레퍼런스에 있다(*"animates from 0 to a target value on scroll
+  into view"*). **못 ①의 반대**다 — 모션이 사실을 안 나르는 정도가 아니라 **도는 동안 틀린 수를
+  화면에 쓴다.** `631`이 `212`로 보이는 순간을 이 페이지가 살 이유가 0이다.
+- **산문의 글자별 스크롤 밝기**(레퍼런스 ⓓ의 원형). 글자를 `<span>`으로 쪼개야 하는데
+  `check-landing-prose.py`가 세는 **83노드**가 그 순간 갈린다 — 산문이 0자 안 바뀌어도 판정이
+  깨진다.
+- **`.marks > li` 23줄을 한 줄씩.** ①의 대상에 넣으면 한 절이 300ms를 더 먹는데, 그 절들은
+  이미 ①(목록 덩이)과 ②(캡처)로 두 겹을 갖는다. **겹을 늘리는 것과 느리게 만드는 것은 다르다.**
+- **`.travel` 여행 카드를 연속으로.** 지금 3단으로 뚝뚝 끊기는 것이 §개편 §움직이는 티켓의
+  판정이다(`rename`이 원자적이라 보간할 중간 상태가 없다). 이 요구가 그 판정을 안 뒤집는다.
+
 #### 티켓
 
 | # | 티켓 | persona | deps | 상태 |
 |---|---|---|---|---|
 | P235 | 스펙 — 로드맵 §P235 신설 `85fb2ea1` | pm | — | 완료 |
 | P235-1 | `아카이빙중` 캡처 + 두 절에 그림 둘 `d3709d43` | designer | — | 발행 |
-| P235-2 | 스크롤 모션 판정표 — `motionsites.ai` 리서치 `b7aa7660` | designer | — | 발행 |
+| P235-2 | 스크롤 모션 판정표 — `motionsites.ai` 리서치 `b7aa7660` | designer | — | 완료 — 위 §레퍼런스(108장에서 여섯) · §판정표(행 넷) |
 | P235-3 | 판정표 구현 `d12d25d7` | developer | `b7aa7660` | 발행 |
 
 **P235-1과 P235-2를 `deps`로 안 엮는다.** 같은 `landing.tsx`를 만지지만 그림을 거는 것과 모션을
