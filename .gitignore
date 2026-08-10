@@ -30,3 +30,7 @@ apps/desktop/ga.json
 
 # Claude Code 워크트리. 리포지터리 안에 살지만 내용은 레포의 것이 아니다.
 .claude/worktrees/
+
+# vercel
+.vercel
+.env*
