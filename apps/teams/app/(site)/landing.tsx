@@ -39,20 +39,24 @@ declare global {
   }
 }
 
-// 레인 힌트 문장 셋(DESIGN §랜딩 §레인 힌트 §힌트 문장, writer 판정 `faf87f8b`) — 문장만
-// 그 절의 정본이고 글자 그대로 인용한다. `check-landing-prose.py`가 `return (` 뒤부터만
-// 읽으므로 마크업 밖 상수로 둬야 산문 노드 수(83개)가 안 갈린다(§산문 노드 83개가 안 갈린다).
-const LANE_HINTS = [
-  "a1b2c3d4.md. 아무도 안 잡은 티켓입니다.",
-  "잡으면 .wip.md. 옮기지 않고 이름만 바꿉니다.",
-  "끝나면 .done.md. 큐의 상태는 셋이 전부입니다.",
-];
-
-// `sonner`의 `:focus-visible` 규칙(레이어 밖, 특정도 0,2,0)을 이기는 한 줄(§비주얼 §51 ⑦).
-// `landing.css`(= `layer(landing)`)에 두면 안 먹는다 — 그래서 `find-bar.tsx`와 같은
-// `<style href precedence>`로 레이어 밖에 세운다.
+// `sonner`의 `:focus-visible` 규칙(레이어 밖, 특정도 0,2,0)을 이기는 한 줄(§비주얼 §51 ⑦) +
+// 윗꼭지 ⑧(§랜딩 §레인 힌트 개정 §윗꼭지, §비주얼 §51 ⑧) — 인라인 props로 못 쓰는 둘(가상클래스·
+// 가상요소)이라 여기 한 블록에 같이 산다. `landing.css`(= `layer(landing)`)에 두면 안 먹는다
+// — 그래서 `find-bar.tsx`와 같은 `<style href precedence>`로 레이어 밖에 세운다.
 const TOAST_FOCUS_CSS = `
 .dira-landing [data-sonner-toaster] [data-sonner-toast]:focus-visible { outline: revert; }
+.dira-landing [data-sonner-toaster] [data-sonner-toast] [data-title]::before {
+  content: "";
+  position: absolute;
+  left: 10px;
+  top: -6.5px;
+  width: 12px;
+  height: 12px;
+  background: var(--panel);
+  border-top: 1px solid var(--fg);
+  border-left: 1px solid var(--fg);
+  transform: rotate(45deg);
+}
 `;
 
 export default function Landing({
@@ -366,6 +370,10 @@ export default function Landing({
         ...document.querySelectorAll("main > .wrap:not(.travel):not(#projects), main > .stage"),
       ];
       const inband = new Set<Element>();
+      // 토스트 문장 셋(DESIGN §랜딩 §레인 힌트 개정 §문장 셋) — 새로 안 쓰고 `.steps li > b`를
+      // DOM에서 그대로 읽는다. 레인 0·1·2 ↔ `.steps` ①②③이 일대일(`.sig`가 그 레인의 파일명).
+      const laneHints = [...document.querySelectorAll<HTMLElement>(".steps li > b")]
+        .map((b) => b.textContent ?? "");
       // 힌트 토스트의 "이전 레인"(DESIGN §랜딩 §레인 힌트 §정하는 것 여섯 ①). `null`은
       // "아직 안 붙었다"라 처음 붙는 판정에는 안 띄운다 — 되돌아 올라가는 갈림(2→1·1→0)도
       // 값이 갈리므로 그대로 잡힌다. 클로저 지역 변수인 이유는 이 effect가 `[]`(마운트 1회)라
@@ -383,7 +391,7 @@ export default function Landing({
           travel.dataset.lane = next;
           // 랜딩-only에서만(§정하는 것 여섯 ⑤) · 갈리는 순간에만(⑥는 트리거가 아니라
           // reduce에서도 뜨는 것 — 여기는 죽이지 않는다). 고정 id로 앞 토스트를 갈아 끼운다(②).
-          if (!fullMode && lane !== null && lane !== next) toast(LANE_HINTS[Number(next)], { id: "lane-hint" });
+          if (!fullMode && lane !== null && lane !== next) toast(laneHints[Number(next)], { id: "lane-hint" });
           lane = next;
         },
         { rootMargin: "-45% 0px -45% 0px" },
