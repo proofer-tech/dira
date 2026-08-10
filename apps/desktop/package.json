@@ -63,6 +63,10 @@
       {
         "from": "../../worker.sh.example",
         "to": "engine/worker.sh.example"
+      },
+      {
+        "from": "../../protocols",
+        "to": "engine/protocols"
       }
     ],
     "mac": {

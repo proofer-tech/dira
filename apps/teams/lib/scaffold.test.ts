@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { mkdtemp, mkdir, readdir, readFile, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, mkdir, readdir, readFile, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
@@ -129,6 +129,39 @@ test("scaffold — CORE*.md는 엔진 protocols/에서 그대로 복사, templat
 
   // templates/에는 사본이 없다 — 정본은 엔진 protocols/ 하나
   await assert.rejects(() => readFile(path.join(repo.path, "templates/protocols", names[0]), "utf8"));
+});
+
+/** DESIGN.md §데스크톱 앱 §못박는 것 8 — 판정은 "`extraResources`가 `engine/`으로 나르는 것만으로
+ *  만든 가짜 엔진 레포에 대고 스캐폴딩이 성공하는가"다. 목록을 여기 베끼면 같은 손이 두 벌을
+ *  세는 것이라 `apps/desktop/package.json`을 직접 읽는다 — 여섯 번째 읽기가 늘면 이 검사가
+ *  먼저 빨개진다. */
+test("scaffold — 데스크톱 extraResources만으로 만든 가짜 엔진에서도 성공한다", async (t) => {
+  const desktopDir = new URL("../../desktop/", import.meta.url);
+  const pkg = JSON.parse(await readFile(new URL("package.json", desktopDir), "utf8"));
+  const engineEntries = pkg.build.extraResources.filter((e) => e.to.startsWith("engine/"));
+  assert.ok(engineEntries.length > 0, "engine/으로 나르는 항목이 없다");
+
+  const dir = await tmp();
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  for (const { from, to } of engineEntries) {
+    await cp(new URL(from, desktopDir), path.join(dir, to), { recursive: true });
+  }
+  const fakeEngine = path.join(dir, "engine");
+
+  const prevEngine = process.env.DIRA_ENGINE;
+  process.env.DIRA_ENGINE = fakeEngine;
+  t.after(() => {
+    if (prevEngine === undefined) delete process.env.DIRA_ENGINE;
+    else process.env.DIRA_ENGINE = prevEngine;
+  });
+  assert.deepEqual(engineRepo(), { path: fakeEngine });
+
+  const project = path.join(dir, "myproject");
+  const result = await scaffold(project, { branch: "main" });
+  for (const name of ["CORE.md", "CORE-TICKETS.md", "CORE-MEMORY.md"]) {
+    assert.ok(result.written.includes(path.join(".dira/protocols", name)), `${name}이 안 만들어졌다`);
+    await stat(path.join(project, ".dira/protocols", name));
+  }
 });
 
 test("scaffold — specDoc을 주면 세 번째 자리표시자도 사라진다", async (t) => {
