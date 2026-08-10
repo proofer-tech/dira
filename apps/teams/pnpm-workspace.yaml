@@ -1,3 +1,17 @@
 allowBuilds:
   sharp: true
   unrs-resolver: true
+
+# pnpm 기본 레이아웃은 `node_modules/<pkg>` → `node_modules/.pnpm/<pkg>@<ver>/…`로 가는 심링크다.
+# Vercel의 산출물 배포 단계가 그걸 못 삼킨다 — 빌드는 끝까지 통과하고 마지막에
+# "The framework produced an invalid deployment package for a Serverless Function.
+#  Typically this means that the framework produces files in symlinked directories."로 죽는다
+# (실측 `dpl_6X7zij…`. 추적 뿌리를 맞춘 뒤에도 남았던 마지막 결함이다 — next.config.ts 머리 참고).
+# hoisted는 심링크 없이 평평하게 깐다.
+#
+# 로컬·CI도 같이 갈린다. 그게 값이다: 배포에서만 다른 레이아웃을 쓰면 여기서 통과한 것이
+# 저기서 깨지고, 그때 로그는 이 파일을 안 가리킨다.
+#
+# `.npmrc`가 아니라 여기다 — pnpm 10.16부터 설정의 집이 이 파일로 옮겼고, pnpm 11은
+# `.npmrc`의 `node-linker=hoisted`를 **말없이 무시한다**(실측: 넣고 깔아도 심링크 그대로였다).
+nodeLinker: hoisted
