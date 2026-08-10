@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import Typed from "typed.js";
+import { toast, Toaster } from "sonner";
 import { Pause, Play, TriangleAlert } from "lucide-react";
 import { registerProject, type CreateState, type RegisterState } from "@/app/actions";
 import { CREATE_BLURB, ConfigTable, CreateDialog, CreateForm } from "@/components/projects-ui";
@@ -37,6 +38,22 @@ declare global {
     ChannelIO?: ((...args: unknown[]) => void) & { q?: unknown[][]; c?: (a: unknown[]) => void };
   }
 }
+
+// 레인 힌트 문장 셋(DESIGN §랜딩 §레인 힌트 §힌트 문장, writer 판정 `faf87f8b`) — 문장만
+// 그 절의 정본이고 글자 그대로 인용한다. `check-landing-prose.py`가 `return (` 뒤부터만
+// 읽으므로 마크업 밖 상수로 둬야 산문 노드 수(83개)가 안 갈린다(§산문 노드 83개가 안 갈린다).
+const LANE_HINTS = [
+  "a1b2c3d4.md. 방금 들어와 아직 아무도 안 잡은 티켓입니다.",
+  "워커가 잡았습니다. 옮긴 게 아니라 .wip.md로 이름만 바꾼 겁니다.",
+  "끝나면 .done.md. 큐가 아는 상태는 이 셋이 전부입니다.",
+];
+
+// `sonner`의 `:focus-visible` 규칙(레이어 밖, 특정도 0,2,0)을 이기는 한 줄(§비주얼 §51 ⑦).
+// `landing.css`(= `layer(landing)`)에 두면 안 먹는다 — 그래서 `find-bar.tsx`와 같은
+// `<style href precedence>`로 레이어 밖에 세운다.
+const TOAST_FOCUS_CSS = `
+.dira-landing [data-sonner-toaster] [data-sonner-toast]:focus-visible { outline: revert; }
+`;
 
 export default function Landing({
   version: initialVersion,
@@ -349,6 +366,11 @@ export default function Landing({
         ...document.querySelectorAll("main > .wrap:not(.travel):not(#projects), main > .stage"),
       ];
       const inband = new Set<Element>();
+      // 힌트 토스트의 "이전 레인"(DESIGN §랜딩 §레인 힌트 §정하는 것 여섯 ①). `null`은
+      // "아직 안 붙었다"라 처음 붙는 판정에는 안 띄운다 — 되돌아 올라가는 갈림(2→1·1→0)도
+      // 값이 갈리므로 그대로 잡힌다. 클로저 지역 변수인 이유는 이 effect가 `[]`(마운트 1회)라
+      // `io2` 콜백 호출 사이에 그대로 산다 — ref가 필요 없다.
+      let lane: string | null = null;
       const io2 = new IntersectionObserver(
         (entries) => {
           for (const e of entries)
@@ -357,7 +379,12 @@ export default function Landing({
           if (!inband.size) return;
           // 띠 안에 둘 이상이면 아래쪽이 이긴다 — 스크롤이 빨라도 레인이 뒤로 안 샌다.
           const i = Math.max(...[...inband].map((b) => blocks.indexOf(b)));
-          travel.dataset.lane = i === 0 ? "0" : i < blocks.length - 2 ? "1" : "2";
+          const next = i === 0 ? "0" : i < blocks.length - 2 ? "1" : "2";
+          travel.dataset.lane = next;
+          // 랜딩-only에서만(§정하는 것 여섯 ⑤) · 갈리는 순간에만(⑥는 트리거가 아니라
+          // reduce에서도 뜨는 것 — 여기는 죽이지 않는다). 고정 id로 앞 토스트를 갈아 끼운다(②).
+          if (!fullMode && lane !== null && lane !== next) toast(LANE_HINTS[Number(next)], { id: "lane-hint" });
+          lane = next;
         },
         { rootMargin: "-45% 0px -45% 0px" },
       );
@@ -409,10 +436,36 @@ export default function Landing({
     // 랜딩을 떠나도 문서가 다시 안 뜬다 — 걷지 않으면 요구가 지목하지 않은 매뉴얼 26장 위에
     // 런처가 남는다(§자리·값). 그래서 `랜딩페이지에`를 참으로 만드는 것이 이 줄이다.
     return () => window.ChannelIO?.("shutdown");
-  }, []);
+    // fullMode는 레인 힌트 트리거(§정하는 것 여섯 ⑤)가 읽는다 — 마운트 중에 갈릴 값이 아니라
+    // 재실행은 사실상 없지만, exhaustive-deps가 요구하는 그대로 적어 둔다.
+  }, [fullMode]);
 
   return (
     <div className="dira-landing">
+
+{/* ⑦ 한 줄만 CSS 규칙이 필요하다(§비주얼 §51 §배선) — 나머지(①②③⑤⑥)는 아래 <Toaster> props다. */}
+<style href="dira-toast-focus" precedence="default">{TOAST_FOCUS_CSS}</style>
+{/* 레인 힌트 토스트(DESIGN §랜딩 §레인 힌트 한 줄 · §비주얼 §51). 자리·모양·지속은 그 절의
+    자리 일곱 표 그대로다 — `landing.css`에 넣으면 안 먹는다(§배선). 문장은 위 io2가 부른다. */}
+<Toaster
+  position="bottom-left"
+  offset={{ left: "max(24px, calc((100% - var(--maxw)) / 2))" }}
+  mobileOffset="24px"
+  style={{
+    "--normal-bg": "var(--panel)",
+    "--normal-border": "var(--fg)",
+    "--normal-text": "var(--fg)",
+    "--border-radius": "0",
+  } as React.CSSProperties}
+  toastOptions={{
+    style: {
+      fontFamily: "var(--sans)",
+      boxShadow: "none",
+      transition:
+        "transform 200ms cubic-bezier(0.22, 1, 0.36, 1), opacity 200ms cubic-bezier(0.22, 1, 0.36, 1), height 0s",
+    },
+  }}
+/>
 
 {/* ① 릴리스 배너 — 풀 모드에서 안 선다(§한 코드베이스 §홈 표). 파는 절이라서다. */}
 {!fullMode && (
