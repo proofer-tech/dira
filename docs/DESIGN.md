@@ -26293,7 +26293,7 @@ R4 4번). `git -C ~/Projects/dira push origin master`가 `patch`(→ `v1.0.2`),
 | P227-3 | 수용조건 실측 — 설문을 넣은 새 프로젝트에 객체가 서나 `13d9053a` | qa | `0c80608c` · `2452908f` | **불합격** · 보고 `918c1be7` |
 | P227-4 | 스캐폴딩 집합에 `protocols/ontology.md` — §0-3 표 + `TEMPLATE_FILES` + 테스트 | developer | — | 발행 |
 | P227-5 | 재측정 — P227-4 뒤의 새 프로젝트에서 §첫 채움 수용조건을 다시 잰다 `6cdcbdbe` | qa | P227-4 | **합격** · 보고 `1432ae12` |
-| P227-6 | 규약 두 벌 — `protocols/ontology.md` §3의 「판정 근거를 남긴다」를 경량·중량 공통으로 | developer | — | 발행 |
+| P227-6 | 규약 두 벌 — `protocols/ontology.md` §3의 「판정 근거를 남긴다」를 경량·중량 공통으로 `322d5ec4` | developer | — | 발행 |
 
 **P227-1과 P227-2는 `deps`가 0이다.** 고치는 파일이 `protocols/` 두 벌 대 `apps/teams/`로 안
 겹친다 — 엮으면 큐만 직렬화된다. 절차 문서가 늦게 서면 첫 채움 세션이 스캔을 안 하는 것이지
