@@ -39,6 +39,7 @@ import { AttachmentField, useAttachments } from "@/components/attachment-field";
 import { useHotkey, useKeymap } from "@/components/keymap-provider";
 import { useLocale, useT } from "@/components/language-provider";
 import { Markdown } from "@/components/markdown";
+import { MarkdownEditor } from "@/components/markdown-editor";
 import { PersonaDot } from "@/components/persona-badge";
 import { PriorityMeter } from "@/components/priority-meter";
 import { DepBadge } from "@/components/status-badge";
@@ -271,6 +272,9 @@ export function TicketEditForm({
   // 저장을 누르기 전에 여기서 막는다). uncontrolled로 두면 리렌더 없이 값이 바뀌어 못 잰다.
   const [duedateInput, setDuedateInput] = useState(duedate);
   const conflict = duedateConflict(duedateInput, precedentDuedates, followerDuedates);
+  // 본문 편집기의 `breaks`(못 ⑤)가 이 값을 따라간다 — 발행 다이얼로그(§P236-4)와 같은 판정,
+  // "폼에서 고른 kind"이지 저장된 kind가 아니다.
+  const [kindValue, setKindValue] = useState(kind || "");
   return (
     // 폭은 페이지 루트가 문다(§비주얼 §11) — 2단의 왼쪽 단 안에서 다시 걸면 이중 제한이다
     <form action={action} className="space-y-4">
@@ -287,7 +291,9 @@ export function TicketEditForm({
             그대로 저장하면 사람이 적어둔 값이 조용히 사라진다(§2 편집 항). */}
         <div className="space-y-2">
           <Label htmlFor="t-kind">kind</Label>
-          <Select name="kind" defaultValue={kind || null}>
+          {/* 값을 들고 있는 이유는 하나 — 아래 본문 편집기의 `breaks`가 이 값을 따라간다
+              (request면 §10 표 셋째 줄 `untilHeading`). 저장 자체는 여전히 폼 제출(name="kind")이 한다 */}
+          <Select name="kind" value={kindValue || null} onValueChange={(v) => setKindValue(v ?? "")}>
             <SelectTrigger id="t-kind" className="w-40">
               <SelectValue placeholder="없음" />
             </SelectTrigger>
@@ -412,11 +418,18 @@ export function TicketEditForm({
           )}
         </div>
       </div>
-      <div className="space-y-2">
-        <Label htmlFor="t-body">본문</Label>
-        {/* 원문 편집이다 — 마크다운 렌더는 넣지 않는다(§6 프로토콜 에디터와 같은 결정) */}
-        <Textarea id="t-body" name="body" defaultValue={body} rows={24} className="font-mono" />
-      </div>
+      {/* 위지윅·원문 두 면(DESIGN.md §비주얼 §50 · 로드맵 §P236-3). breaks는 이 본문이 렌더되는
+          자리(상세 §10)의 값 그대로다 — kind가 request면 첫 heading 앞까지만 켜진다. 폼에서 고른
+          값을 쓴다(위 `kindValue` — 발행 다이얼로그 §P236-4와 같은 판정), 저장 안 한 kind 변경도
+          미리보기에 바로 걸린다. */}
+      <MarkdownEditor
+        name="body"
+        defaultValue={body}
+        label={<Label>본문</Label>}
+        rows={24}
+        className="font-mono"
+        breaks={kindValue === "request" ? "untilHeading" : undefined}
+      />
       {state.error && <Failure title="저장하지 못했습니다" message={state.error} />}
       {/* 액션 행은 오른쪽 정렬이고 1차 액션이 가장 오른쪽이다(§비주얼 §4-3). 결과 문구는 버튼
           **왼쪽**이다 — 오른쪽에 두면 문구가 떴다 사라질 때마다 `저장`이 옆으로 움직인다 */}
