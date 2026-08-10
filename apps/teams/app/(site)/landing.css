@@ -765,11 +765,12 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
 }
 
 /* ── 인트로 오버레이 ────────────────────────────── */
-/* DESIGN §P237 §자리 여섯 ① · §판정표 ①. 첫 진입에 `.travel` 칩이 온전한 티켓 카드로
-   커졌다가 본래 자리로 돌아간다. header(10) 위 · `.travel`(5) 위인 20에 선다. 배경은
-   새 색 토큰 0 — `--bg`에서 파생한다. 총 800ms: 카드가 320ms 정지했다가 480ms에 걸쳐
-   올라가며 소멸하고, 320ms짜리 오버레이 페이드가 그 중간(480ms)부터 겹쳐 800ms에 함께
-   끝난다. `.bail`은 스크롤·클릭·Esc가 준 즉시 종료 — 두 전이 다 200ms로 준다. */
+/* DESIGN §P237 §자리 여섯 ① · §판정표 ① · §자리 ① 재판정(P237-7 `0b229797`). 첫 진입에
+   `.travel` 칩이 온전한 티켓 카드로 커졌다가 본래 자리로 돌아간다. header(10) 위 ·
+   `.travel`(5) 위인 20에 선다. 배경은 새 색 토큰 0 — `--bg`에서 파생한다. 총 1680ms:
+   카드가 1200ms 정지했다가(재판정 — 하한 800ms 위) 480ms에 걸쳐 올라가며 소멸하고,
+   320ms짜리 오버레이 페이드가 1360ms부터 겹쳐 1680ms에 함께 끝난다. `.bail`은
+   스크롤·클릭·Esc가 준 즉시 종료 — 두 전이 다 200ms로 준다. */
 .dira-landing .intro {
   position: fixed; inset: 0; z-index: 20;
   background: color-mix(in srgb, var(--bg) 72%, transparent);
@@ -781,8 +782,8 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
 .dira-landing .intro.bail { transition-duration: 200ms; }
 .dira-landing .intro .wrap { padding-top: 152px; }
 .dira-landing .intro .card {
-  width: min(344px, 100%);
-  padding: 16px;
+  width: min(440px, 100%);
+  padding: 24px;
   background: var(--panel);
   border: 1px solid var(--border);
   border-left: 3px solid var(--faint);
@@ -791,8 +792,8 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
   opacity: 1;
   transition: transform 480ms cubic-bezier(0.22, 1, 0.36, 1), opacity 480ms cubic-bezier(0.22, 1, 0.36, 1);
 }
-/* 칩 자리까지 올라가며 사라진다 — dy는 카드 padding-top(152) - 칩 y(107) = -45(실측). */
+/* 칩 자리까지 올라가며 사라진다 — dy는 카드 padding-top(152) - 칩 y(107) = -45(재판정에서도 무변). */
 .dira-landing .intro .card.up { transform: translateY(-45px); opacity: 0; }
 .dira-landing .intro.bail .card { transition-duration: 200ms; }
-.dira-landing .intro .hash { display: block; font-family: var(--mono); font-size: 12px; color: var(--faint); }
-.dira-landing .intro .title { margin: 8px 0 0; font-size: 14px; line-height: 1.5; color: var(--fg); }
+.dira-landing .intro .hash { display: block; font-family: var(--mono); font-size: 13px; color: var(--faint); }
+.dira-landing .intro .title { margin: 12px 0 0; font-size: 16px; line-height: 1.5; color: var(--fg); }

@@ -239,17 +239,17 @@ export default function Landing({
   );
 
   useEffect(() => {
-    // 인트로 오버레이(DESIGN §P237-1 판정표 ①). `reduce`면 아예 안 뜬다 — 상태가 "idle"에
-    // 머문다. 총 800ms: 0‥320 카드 정지 · 320‥800 카드가 올라가며 소멸(480ms) ·
-    // 480‥800 오버레이가 걷힘(320ms). 카드 글은 `.steps` 첫 항목 `<b>`를 DOM에서 읽는다 —
-    // JSX에 문장을 두 번 안 적어 산문 노드 수가 안 는다.
+    // 인트로 오버레이(DESIGN §P237-1 판정표 ① · §자리 ① 재판정 P237-7 `0b229797`). `reduce`면
+    // 아예 안 뜬다 — 상태가 "idle"에 머문다. 총 1680ms: 0‥1200 카드 정지 ·
+    // 1200‥1680 카드가 올라가며 소멸(480ms) · 1360‥1680 오버레이가 걷힘(320ms). 카드 글은
+    // `.steps` 첫 항목 `<b>`를 DOM에서 읽는다 — JSX에 문장을 두 번 안 적어 산문 노드 수가 안 는다.
     if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     setIntroTitle(document.querySelector<HTMLElement>(".steps li:first-child b")?.textContent ?? "");
     setIntroPhase("open");
     const timers = [
-      setTimeout(() => setIntroPhase("closing"), 320),
-      setTimeout(() => setIntroPhase("fading"), 480),
-      setTimeout(() => setIntroPhase("gone"), 800),
+      setTimeout(() => setIntroPhase("closing"), 1200),
+      setTimeout(() => setIntroPhase("fading"), 1360),
+      setTimeout(() => setIntroPhase("gone"), 1680),
     ];
     // 스크롤·클릭·Esc면 즉시 걷힌다 — 남은 타이머를 지우고 "bail"로 넘겨 전이를 200ms로 줄인다.
     const bail = () => {
