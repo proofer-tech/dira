@@ -511,9 +511,14 @@ export function HomeUI({
             <MessageScrollerProvider autoScroll>
               <MessageScroller className="flex-1">
                 <MessageScrollerViewport ref={thread} aria-label="대화" className="flex-1">
-                  <MessageScrollerContent>
+                  {/* `pb-4` — 마지막 답의 자리(§24 §마지막 답의 자리, 개정 `bfadd068`). 항목이
+                      아니라 스크롤 컨텐츠 바닥에 건다: 도는 답도 언제나 마지막 항목이라 상태에
+                      안 걸려야 답이 끝나는 순간 높이 점프가 0이다. */}
+                  <MessageScrollerContent className="pb-4">
                     {turns.map((t, i) => (
-                      <MessageScrollerItem key={t.key} messageId={t.key}>
+                      // `group/answer`는 답·질문 항목 둘 다 받는다(§24 §드러나는 조건) — 질문
+                      // 안에는 이 이름을 읽는 것이 없어 조건부 클래스를 만들 이유가 없다.
+                      <MessageScrollerItem key={t.key} messageId={t.key} className="group/answer">
                         {t.role === "question" ? (
                           /* 사람 질문 — §13 말풍선 그대로(`outline` · `align="end"`). 헤더는 말풍선
                              **밖 · 위**이고(§13) 라벨만 `sr-only`로 내려간다: 클래스 하나로 끝나서
@@ -558,6 +563,7 @@ export function HomeUI({
                               <Button
                                 variant="ghost"
                                 size="xs"
+                                className="opacity-0 group-hover/answer:opacity-100 group-focus-within/answer:opacity-100"
                                 onClick={() => void run(questionFor(turns, i))}
                               >
                                 다시 답하기
@@ -797,10 +803,14 @@ function Prose({ text }: { text: string }) {
  *  것이 간격만으로 참**이 된다. 여백을 `<Markdown>`의 `[&>:last-child]:mb-0` 쪽으로 내지 않는
  *  이유는 주인이 달라서다 — 문단 margin으로 내면 띠가 없는 자리(사람 말풍선)까지 같이 움직인다.
  *  띠 **안**의 세로 여백 0은 무수정이다: 그 0이 답이 끝날 때 높이가 안 튀게 하는 수다.
- *  `mt-2`가 띠 자신의 클래스라 도는 답과 끝난 답이 **같이** 받는다. */
+ *  `mt-2`가 띠 자신의 클래스라 도는 답과 끝난 답이 **같이** 받는다.
+ *
+ *  **`-mb-4`가 아래 16px을 흐름 밖으로 낸다**(§24 §띠가 흐름 밖에 선다, 개정 `bfadd068`). 항목이
+ *  예약하는 높이는 산문 + 16px(24 - 16)이고, 겹쳐 쓰는 것은 항목 사이 `gap-4` 16px 하나다 —
+ *  `absolute`가 아니라 이 한 클래스라 `mt-2` 8px 못이 산술 유도값이 되지 않는다. */
 function Band({ children }: { children: React.ReactNode }) {
   return (
-    <div className="mt-2 flex items-center gap-2 px-3 text-xs leading-6 text-muted-foreground">
+    <div className="mt-2 -mb-4 flex items-center gap-2 px-3 text-xs leading-6 text-muted-foreground">
       {children}
     </div>
   );
@@ -816,13 +826,18 @@ function Band({ children }: { children: React.ReactNode }) {
  *  **`ghost`다**(§24 개정 ③ — 종전 `outline`). `중지`가 `outline`인 근거는 *테두리가 구두점
  *  노릇을 한다*였는데 이 띠에는 잇댈 글자가 없다 — 무테 전폭 산문 아래에서 답 컬럼의 유일한
  *  사각형이 이 버튼 둘이었다. 걷히는 것은 `border` 1px과 `bg-background` 한 겹뿐이고 글자·
- *  아이콘·`h-6` 히트 영역은 그대로다(호버 전용과 갈리는 자리가 정확히 여기다). */
+ *  아이콘·`h-6` 히트 영역은 그대로다(호버 전용과 갈리는 자리가 정확히 여기다).
+ *
+ *  **정지 상태는 `opacity-0`이다**(§24 §드러나는 조건, 개정 `bfadd068`). `display:none`이
+ *  아니다 — `Tab`이 못 닿으면 키보드로 못 닿는다는 옛 못이 안 갚아진다. 드러나는 조건은
+ *  `group-hover/answer` OR `group-focus-within/answer`(어느 쪽도 대체가 아니다). */
 function CopyAnswer({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <Button
       variant="ghost"
       size="xs"
+      className="opacity-0 group-hover/answer:opacity-100 group-focus-within/answer:opacity-100"
       onClick={async () => {
         await navigator.clipboard.writeText(text);
         setCopied(true);
