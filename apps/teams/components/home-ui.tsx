@@ -98,7 +98,7 @@ import {
 } from "@/components/ui/sidebar";
 import type { Activity, Answer, AnswerReason, Home, HomeChunk, Turn, WorkerSession } from "@/lib/home-agent";
 import { formatCombo, matchCombo } from "@/lib/keymap";
-import { chatRows, groupProgress } from "@/lib/urls";
+import { chatRows, groupProgress, visibleChatRows } from "@/lib/urls";
 import { cn } from "@/lib/utils";
 
 /** 화면이 답할 수 있다고 약속하는 범위가 곧 온보딩 예시 넷이다(§24 — 요구 원문의 예시 +
@@ -1052,7 +1052,10 @@ function SidePanel({
   onNew: () => void;
   onPick: (id: string) => void;
 }) {
-  const rows = chatRows(home.conversations);
+  // 연 줄 수(§7 §`대화` 목록은 3줄부터) — 저장 안 한다. `SidePanel`이 대화 0건에서만
+  // 언마운트되므로(위 §0건) 폴링·전환·새 대화로는 이 값이 안 되돌아간다.
+  const [openCount, setOpenCount] = useState(3);
+  const { rows, showMore } = visibleChatRows(chatRows(home.conversations), openCount, home.current);
   return (
     // 표면 층(§비주얼 §33) — **가르는 쌍에서 드는 것은 목록 쪽 하나다.** 대화 스레드는
     // 무수정이고(산문은 페이지 폭을 그대로 쓴다), 둘 다 얹으면 남는 경계가 `gap-8`뿐이라
@@ -1173,6 +1176,16 @@ function SidePanel({
                 </SidebarMenuButton>
               </SidebarMenuItem>
             ))}
+            {/* `더보기` (§7 §`대화` 목록은 3줄부터) — 새 그릇 0. 줄과 같은 `SidebarMenuButton` +
+                `ROW`를 그대로 쓰고 표식 자리(오른쪽 `span`)를 비워 둔다 — 이 줄은 대화가 아니라
+                패널 자신의 컨트롤이라 시각도 도는 표식도 없다. 한 번에 3줄씩 연다. */}
+            {showMore && (
+              <SidebarMenuItem>
+                <SidebarMenuButton className={ROW} onClick={() => setOpenCount((c) => c + 3)}>
+                  <span className="min-w-0 grow truncate text-sm text-muted-foreground">더보기</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            )}
           </SidebarMenu>
         </SidebarGroup>
 

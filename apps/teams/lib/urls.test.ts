@@ -22,6 +22,7 @@ import {
   ROW_PAGE,
   screenOf,
   timeLabel,
+  visibleChatRows,
   type Anchor,
   type GroupedItem,
   type ProgressItem,
@@ -484,6 +485,33 @@ test("chatRows — 최근이 위 · 제목 없는 대화는 `새 대화` · 시�
   );
 
   assert.deepEqual(chatRows([]), []); // 0건 — 트리거를 안 그리는 화면의 근거다
+});
+
+/** `대화` 목록 자르기 (§7 §`대화` 목록은 3줄부터 — 요구 `bf3f247a`). `chatRows`가 정렬을
+ *  끝낸 뒤 여기서 화면에 세울 줄 수 · `더보기` 표시를 정한다. */
+test("visibleChatRows — 0줄 · 3줄 · 4줄 · 20줄 · current가 창 밖", () => {
+  const rowsOf = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `c${i}` }));
+
+  // 0줄 — 버튼이 안 선다
+  assert.deepEqual(visibleChatRows(rowsOf(0), 3, undefined), { rows: [], showMore: false });
+
+  // 3줄 — 처음부터 다 보이고 버튼이 안 선다(안 보이는 줄이 0)
+  assert.deepEqual(visibleChatRows(rowsOf(3), 3, undefined), { rows: rowsOf(3), showMore: false });
+
+  // 4줄 — 처음 3줄만 서고 버튼이 선다(안 보이는 줄이 1)
+  assert.deepEqual(visibleChatRows(rowsOf(4), 3, undefined), { rows: rowsOf(3), showMore: true });
+
+  // 20줄 — 더보기 한 번(openCount 6)에 3줄이 늘고, 남은 것이 3줄보다 적으면(openCount 18일 때
+  // 남은 2줄) 그만큼만 늘고 버튼이 없어진다
+  assert.deepEqual(visibleChatRows(rowsOf(20), 6, undefined), { rows: rowsOf(6), showMore: true });
+  assert.deepEqual(visibleChatRows(rowsOf(20), 18, undefined), { rows: rowsOf(18), showMore: true });
+  assert.deepEqual(visibleChatRows(rowsOf(20), 21, undefined), { rows: rowsOf(20), showMore: false });
+
+  // current가 처음 3줄 밖(넷째 줄, index 3) — 그 줄이 들 때까지 처음부터 열려 있다
+  assert.deepEqual(visibleChatRows(rowsOf(20), 3, "c3"), { rows: rowsOf(4), showMore: true });
+
+  // current가 null(워커 세션을 보는 중) — openCount 그대로, 창 밖 취급을 안 한다
+  assert.deepEqual(visibleChatRows(rowsOf(20), 3, null), { rows: rowsOf(3), showMore: true });
 });
 
 /** 찾기 바가 훑는 자 (DESIGN.md §7 §대화 안에서 찾기 · §비주얼 §30) — **대소문자 무시

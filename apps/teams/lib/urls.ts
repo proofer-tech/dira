@@ -222,6 +222,23 @@ export function chatRows(
     });
 }
 
+/** `chatRows`가 정렬한 줄 중 화면에 세울 것 (§7 §`대화` 목록은 3줄부터 — 요구 `bf3f247a`).
+ *
+ *  - `openCount`는 화면이 들고 있는 "몇 줄 열었나" — 처음 3, `더보기` 한 번에 +3.
+ *  - **`current`가 그 창 밖이면 뚫는다**: 실제로 세우는 줄 수는 `openCount`와
+ *    `current`의 위치(있으면 그 줄까지) 중 큰 쪽이다 — 넷째 줄을 보는 채로 새로고침해도
+ *    체크가 처음부터 보인다(§7 §지금 보는 대화가 창 밖이면).
+ *  - `showMore`는 안 보이는 줄이 남아 있을 때만 참이다 — 3줄 이하는 처음부터 `false`. */
+export function visibleChatRows<T extends { id: string }>(
+  rows: T[],
+  openCount: number,
+  current: string | null | undefined,
+): { rows: T[]; showMore: boolean } {
+  const currentIndex = current == null ? -1 : rows.findIndex((r) => r.id === current);
+  const count = Math.min(rows.length, Math.max(openCount, currentIndex + 1));
+  return { rows: rows.slice(0, count), showMore: count < rows.length };
+}
+
 /** 세션 스트림(§2-1)의 사건 줄을 **펼칠 수 있나** — 셰브런·`<details>`를 거는 유일한 판정.
  *  본문이 없으면 펼쳐도 빈 상자라 어포던스를 주지 않는다: `thinking` 본문은 암호화돼
  *  빈 문자열로 오는 게 전부다(실측 75/75). §2-1의 계약은 "펼치면 원문"이고, 원문이 없는 줄에서
