@@ -8,6 +8,7 @@ import { Pause, Play, TriangleAlert } from "lucide-react";
 import { registerProject, type CreateState, type RegisterState } from "@/app/actions";
 import { CREATE_BLURB, ConfigTable, CreateDialog, CreateForm } from "@/components/projects-ui";
 import { CopyCommand } from "@/components/copy-command";
+import { PickPath } from "@/components/path-picker";
 import { SettingsDialog, type AuthView } from "@/components/settings-dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -181,14 +182,18 @@ export default function Landing({
       )}
       <div className="space-y-2">
         <Label htmlFor="home-register-root">경로</Label>
-        <Input
-          id="home-register-root"
-          name="root"
-          className="font-mono"
-          placeholder="~/Projects/myproject/.dira"
-          value={registerRoot}
-          onChange={(e) => setRegisterRoot(e.target.value)}
-        />
+        <div className="flex items-center gap-2">
+          <Input
+            id="home-register-root"
+            name="root"
+            className="font-mono"
+            placeholder="~/Projects/myproject/.dira"
+            value={registerRoot}
+            onChange={(e) => setRegisterRoot(e.target.value)}
+          />
+          {/* 고르는 것은 `.dira` 자신이다(디렉터리) — dotfile이라 main이 `showHiddenFiles`를 켠다 */}
+          <PickPath mode="directory" label="큐 경로" onPick={setRegisterRoot} />
+        </div>
         <p className="text-xs text-muted-foreground">절대경로. ~는 확장됩니다</p>
       </div>
       {registerErr &&
