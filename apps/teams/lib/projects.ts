@@ -161,6 +161,34 @@ export async function setLanguage(locale: Locale): Promise<void> {
   await writeFile(p, JSON.stringify({ locale }, null, 2) + "\n", "utf8");
 }
 
+// ── 멀티플레잉 스위치 파일 (DESIGN.md §0-18 §스위치) ────────────────────────
+//
+// 담는 값이 참/거짓 하나뿐이라 JSON을 안 만든다 — **파일이 있으면 허용, 없으면 비허용**이고
+// 내용은 안 읽는다(`.authwarn`과 같은 자리·같은 모양). 읽는 주체는 화면이 아니라 훅
+// (`multiplay.sh`)이라 이 함수 둘은 존재 여부만 오간다.
+
+/** 레지스트리·언어 설정과 같은 디렉터리다(엔진의 `$LOCAL`). */
+export function multiplayPath(): string {
+  return path.join(path.dirname(registryPath()), "multiplay");
+}
+
+export async function readMultiplay(): Promise<boolean> {
+  return stat(multiplayPath()).then(
+    () => true,
+    () => false,
+  );
+}
+
+export async function setMultiplayEnabled(enabled: boolean): Promise<void> {
+  const p = multiplayPath();
+  if (enabled) {
+    await mkdir(path.dirname(p), { recursive: true });
+    await writeFile(p, "");
+  } else {
+    await rm(p, { force: true });
+  }
+}
+
 export async function readProjects(): Promise<Project[]> {
   let raw: string;
   try {

@@ -31,6 +31,7 @@ import {
 import {
   deleteTokenAction,
   readAnalyticsAction,
+  readMultiplayAction,
   readTokenRowsAction,
   resetKeymapAction,
   saveTokenAction,
@@ -38,6 +39,7 @@ import {
   setAnalyticsAction,
   setBindingAction,
   setLanguageAction,
+  setMultiplayAction,
   setTokenEnabledAction,
   setTokenLabelAction,
   startSetupAction,
@@ -83,7 +85,9 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 /** §0-17 트리 — `claude` + §4-3 카탈로그의 나머지 엔진(`OtherEngine`) + §0-16 다섯째 `language`.
  *  순서가 §45 ③ 트리 그림·검색 인덱스의 순서다. 노드 목록을 여기서 다시 적지 않는다 —
  *  카탈로그(`OtherEngine`)가 늘면 이 유니온도 트리도 저절로 는다. */
-type SettingsNode = "claude" | OtherEngine | "keymap" | "stats" | "language";
+/** `multiplay` — §0-18 §자리의 숨은 여섯째 노드. 트리에는 안 선다(사이드바에 항목이 없다),
+ *  검색으로만 닿는다. `isMultiToken()`이 거짓이면 이 값에 절대 안 닿는다 — 색인 줄이 없다. */
+type SettingsNode = "claude" | OtherEngine | "keymap" | "stats" | "language" | "multiplay";
 
 /** §0-15 §검색 레지스트리 한 줄 — `{트리 경로, 항목 이름, 이동 대상}`. `crumbs`가 빈 문자열이면
  *  결과 줄은 `name` 하나만 그린다(트리 노드 이름 자신 — §45 ⑤ 예시의 `키설정`). `anchor`는
@@ -390,6 +394,51 @@ function LanguageSection({ className }: { className?: string }) {
   );
 }
 
+/** §0-18 §자리 — 숨은 여섯째 노드. 사이드바에 항목이 없다(§0-18 §자리 표) — 이 컴포넌트를
+ *  거는 유일한 길은 검색이다. `isMultiToken()`이 거짓이면 부르는 쪽이 아예 렌더하지 않는다
+ *  (§0-18 §잠금이 먼저다 — 노드가 존재하지 않는다).
+ *
+ *  `switch`를 새로 설치하지 않는다 — `AnalyticsSection`과 같은 판정(버튼 하나가 라벨로 상태를
+ *  말한다). 값은 다이얼로그가 열릴 때 읽는다 — 같은 이유(다이얼로그를 그리는 자리가 셋). */
+function MultiplaySection({ className }: { className?: string }) {
+  const [enabled, setEnabledState] = useState<boolean | null>(null);
+  const [pending, start] = useTransition();
+  const t = useT();
+
+  useEffect(() => {
+    void readMultiplayAction().then(setEnabledState);
+  }, []);
+
+  return (
+    <section className={cn("space-y-2 border-t pt-4 md:border-t-0 md:pt-0", className)}>
+      <h3 data-setting="multiplay" className="text-sm font-medium">
+        {t("settings.tree.multiplay")}
+      </h3>
+      <p className="text-xs text-muted-foreground">{t("settings.multiplay.description")}</p>
+
+      {enabled !== null && (
+        <div data-setting="multiplay.toggle" className="flex items-center justify-between gap-4">
+          <p className="text-sm">
+            {enabled ? t("settings.multiplay.enabled") : t("settings.multiplay.disabled")}
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={pending}
+            onClick={() => start(async () => setEnabledState(await setMultiplayAction(!enabled)))}
+          >
+            {pending
+              ? t("common.saving")
+              : enabled
+                ? t("settings.multiplay.turnOff")
+                : t("settings.multiplay.turnOn")}
+          </Button>
+        </div>
+      )}
+    </section>
+  );
+}
+
 /** 행 하나의 상태 배지 — §0-13 §화면의 네 상태. 색·아이콘 레시피는 `status-badge.tsx`와 같은
  *  토큰(`text-status-active`·`text-status-stale`)을 그대로 쓴다(`projects-ui.tsx`도 같은 문자열을
  *  그대로 반복한다 — Tailwind가 클래스명을 정적으로 봐야 해서 이 프로젝트는 상수로 묶지 않는다). */
@@ -677,6 +726,7 @@ export function SettingsDialog({
   const claudeCrumb = "claude";
   const keymapCrumb = t("settings.tree.keymap");
   const statsCrumb = t("settings.tree.stats");
+  const multiplayCrumb = t("settings.tree.multiplay");
   const searchIndex: SearchEntry[] = [
     { node: "claude", crumbs: authCrumb, name: claudeCrumb, anchor: "claude" },
     {
@@ -743,6 +793,19 @@ export function SettingsDialog({
       name: t("settings.language.en"),
       anchor: "language.en",
     },
+    // §0-18 §잠금이 먼저다 — 잠금 빌드는 이 두 줄이 색인에 없다. 검색창에 `멀티플레잉`을 쳐도
+    // "해당하는 항목이 없습니다"가 뜨는 이유가 여기다(§검증 10).
+    ...(isMultiToken()
+      ? [
+          { node: "multiplay" as const, crumbs: "", name: multiplayCrumb, anchor: "multiplay" },
+          {
+            node: "multiplay" as const,
+            crumbs: multiplayCrumb,
+            name: t("settings.search.multiplayToggle"),
+            anchor: "multiplay.toggle",
+          },
+        ]
+      : []),
   ];
 
   const [query, setQuery] = useState("");
@@ -1198,6 +1261,12 @@ export function SettingsDialog({
             <KeymapSection className={cn(activeNode !== "keymap" && "md:hidden")} />
             <AnalyticsSection className={cn(activeNode !== "stats" && "md:hidden")} />
             <LanguageSection className={cn(activeNode !== "language" && "md:hidden")} />
+            {/* §0-18 §자리 — 가리는 클래스가 다섯과 다르다: `hidden`이라 폭과 무관하게 검색으로
+                고른 뒤에만 선다(§검증 11 — 767 이하에서도 세로로 쌓이는 섹션에 안 낀다).
+                §0-18 §잠금이 먼저다 — 잠금 빌드는 이 노드 자체를 렌더하지 않는다. */}
+            {isMultiToken() && (
+              <MultiplaySection className={cn(activeNode !== "multiplay" && "hidden")} />
+            )}
           </div>
           </SidebarProvider>
         </Command>

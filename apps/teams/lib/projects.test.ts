@@ -14,11 +14,14 @@ const {
   deletePersona,
   getProject,
   listPersonas,
+  multiplayPath,
+  readMultiplay,
   readSummary,
   readProjects,
   registryPath,
   removeProject,
   savePersona,
+  setMultiplayEnabled,
   setPersonaColor,
   slugify,
   renameProject,
@@ -603,4 +606,19 @@ test("readSummary — machine(§0-14)이 모듈 상태를 그대로 실어 나�
     g.__diraMachineState = savedState;
     g.__diraMachineTimer = savedTimer;
   }
+});
+
+test("멀티플레잉 스위치 — 파일 존재 여부가 값이다, 내용은 안 읽는다 (DESIGN.md §0-18 §스위치)", async () => {
+  assert.equal(await readMultiplay(), false); // 새 머신 — 파일 없음이 기본값
+
+  await setMultiplayEnabled(true);
+  assert.ok(existsSync(multiplayPath()));
+  assert.equal(await readMultiplay(), true);
+
+  await setMultiplayEnabled(false);
+  assert.equal(existsSync(multiplayPath()), false);
+  assert.equal(await readMultiplay(), false);
+
+  // 두 번째 끄기는 파일이 이미 없어도 에러가 아니다(§0-18 — 계정 삭제와 같은 관용)
+  await setMultiplayEnabled(false);
 });

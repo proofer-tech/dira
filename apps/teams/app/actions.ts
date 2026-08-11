@@ -49,6 +49,8 @@ import {
   writeKeymap,
   readLanguage,
   setLanguage,
+  readMultiplay,
+  setMultiplayEnabled,
   type Project,
   type ProjectConfig,
 } from "@/lib/projects";
@@ -479,6 +481,18 @@ export async function markResumeReadAction(toMs: number): Promise<void> {
  *  재시작·새로고침을 요구하지 않는다. */
 export async function setLanguageAction(locale: Locale): Promise<void> {
   await setLanguage(locale);
+}
+
+/** 설정 다이얼로그의 숨은 여섯째 노드 `멀티플레잉` (DESIGN.md §0-18 §스위치) — 다이얼로그가
+ *  열릴 때 한 줄이 읽는다. `readAnalyticsAction`과 같은 이유로 프롭이 아니라 여기서 읽는다. */
+export async function readMultiplayAction(): Promise<boolean> {
+  return readMultiplay();
+}
+
+/** 스위치 버튼 하나 — 켜면 파일이 생기고 끄면 지워진다. 내용은 안 쓴다. */
+export async function setMultiplayAction(enabled: boolean): Promise<boolean> {
+  await setMultiplayEnabled(enabled);
+  return readMultiplay();
 }
 
 /** 사용 통계 섹션 층 ① (DESIGN.md §0-11 §끄는 자리) — 다이얼로그가 열릴 때 한 줄이 읽는다.

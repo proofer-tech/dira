@@ -36,10 +36,14 @@ export const ko: Record<string, string> = {
   "settings.search.claudeAdd": "계정 추가",
   "settings.search.statsStatus": "보내는 상태",
   "settings.search.statsToggle": "끄기/켜기",
+  "settings.search.multiplayToggle": "멀티플레이 허용",
 
   "settings.tree.authGroup": "인증",
   "settings.tree.keymap": "키설정",
   "settings.tree.stats": "사용 통계",
+  // 사이드바 트리에는 안 선다(§0-18) — 검색으로만 닿는다. 그래도 이름은 다른 노드와 같은
+  // 키 규약(`settings.tree.<node>`)을 쓴다 — 화면 자리가 하나 늘 뿐 이름 짓는 법은 안 갈린다.
+  "settings.tree.multiplay": "멀티플레잉",
   // 둘째 사이드바 그룹의 aria-label — 그룹 자신은 머리글이 없다(§45 ③), 접근가능 이름만 필요하다
   "settings.tree.categoryGroup": "설정 분류",
 
@@ -137,6 +141,13 @@ export const ko: Record<string, string> = {
   "settings.stats.disabled": "보내지 않습니다 — 껐습니다",
   "settings.stats.turnOff": "끄기",
   "settings.stats.turnOn": "켜기",
+
+  "settings.multiplay.description":
+    "워커마다 다른 계정으로 동시에 돌립니다. 기본은 비허용이고, 계정이 여러 장 있을 때만 뜻이 있습니다.",
+  "settings.multiplay.enabled": "허용되어 있습니다",
+  "settings.multiplay.disabled": "허용되지 않았습니다",
+  "settings.multiplay.turnOff": "끄기",
+  "settings.multiplay.turnOn": "켜기",
 
   "settings.language.ko": "한국어",
   "settings.language.en": "English",
@@ -359,11 +370,13 @@ export const en: Record<string, string> = {
   "settings.search.claudeAdd": "Add account",
   "settings.search.statsStatus": "Sending status",
   "settings.search.statsToggle": "Turn on / off",
+  "settings.search.multiplayToggle": "Allow multiplaying",
 
   "settings.tree.authGroup": "Authentication",
   "settings.tree.keymap": "Keyboard shortcuts",
   "settings.tree.stats": "Usage stats",
   "settings.tree.categoryGroup": "Setting categories",
+  "settings.tree.multiplay": "Multiplaying",
 
   "settings.claude.descriptionMulti":
     "Long-lived tokens that workers use to reach Claude. One list per machine. Keep several accounts and a worker that hits a limit rolls over to the next one.",
@@ -459,6 +472,13 @@ export const en: Record<string, string> = {
   "settings.stats.disabled": "Not sending — you turned it off",
   "settings.stats.turnOff": "Turn off",
   "settings.stats.turnOn": "Turn on",
+
+  "settings.multiplay.description":
+    "Runs workers on different accounts at the same time. Off by default, and only matters once you have several accounts.",
+  "settings.multiplay.enabled": "Allowed",
+  "settings.multiplay.disabled": "Not allowed",
+  "settings.multiplay.turnOff": "Turn off",
+  "settings.multiplay.turnOn": "Turn on",
 
   // 언어 이름은 그 언어로 적는다 — 영어 화면에서도 `한국어`가 `Korean`이 되지 않는다.
   "settings.language.ko": "한국어",
