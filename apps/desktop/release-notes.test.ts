@@ -39,6 +39,22 @@ test("① 요약 성공 — R6 문장 다음에 요약문", async () => {
   assert.ok(!asked.includes("Ticket: 4f418619"), asked);
 });
 
+test("프롬프트 — 분류 순서와 내부 커밋 제외 규칙을 지시한다", async () => {
+  let asked = "";
+  await releaseNotes("0.1.0", "0.2.0", SLUG, {
+    async fetchText() {
+      return compare("feat(트레이): 자동 업데이트 토글");
+    },
+    async summarize(p) {
+      asked = p;
+      return "• 요약";
+    },
+  });
+  assert.match(asked, /기능 추가, 개선, 버그 고침, 깨지는 변경\/보안 순으로/);
+  assert.match(asked, /리팩터링.*테스트.*문서.*큐 작업.*불릿에서 뺀다/);
+  assert.match(asked, /카테고리 헤딩이나 이모지는 쓰지 마라/);
+});
+
 test("② claude 부재·비정상 종료·타임아웃 — 커밋 제목 목록 그대로", async () => {
   for (const why of ["PATH에서 claude를 찾지 못했습니다", "Command failed: exit 1", "timeout"]) {
     const body = await releaseNotes("0.1.0", "0.2.0", SLUG, {
