@@ -13,7 +13,10 @@ import { blockBreaks, commitEditable, joinBlocks, replaceBlock, splitBlocks } fr
 
 class FakeText {
   readonly nodeType = 3;
-  constructor(public textContent: string) {}
+  readonly textContent: string;
+  constructor(textContent: string) {
+    this.textContent = textContent;
+  }
 }
 
 class FakeElement {
