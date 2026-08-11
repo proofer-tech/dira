@@ -17,6 +17,14 @@
  *  폼을 달고 있다 — 끌어오면 그 안에 티켓 없는 경로가 하나 더 생긴다. 재사용하는 것은 화면이
  *  아니라 **읽기 코어**(`lib/transcript.ts`)이고, 그건 `lib/home-agent.ts`의 `pollHome`이 부른다.
  *
+ *  **접힌 줄(§9 · §2-6 ②)은 렌더러 한 벌을 그대로 부른다**(§7 §스레드가 트랜스크립트 전부를
+ *  그린다, 티켓 `08345f02`). `toTurns`가 도구·생각·`tool_result`·서브 줄을 전부 `role: "line"`
+ *  으로 낸 뒤(그 판정은 `lib/home-agent.ts`가 든다 — 이 파일은 종을 고르지 않는다), 아래
+ *  `grouped`가 말풍선 사이 연속 `line`을 한 묶음으로 접고 `session-stream.tsx`의 `<Bundle>`이
+ *  그 묶음을 그린다 — 그 파일이 export하는 유일한 이유가 이 재사용이다. 두 화면이 같은
+ *  사건을 다른 모양으로 그리면 어느 쪽이 정본인지 화면이 말을 못 하므로, 컴포넌트 통째(폼까지
+ *  딸린 `<SessionStream>`)를 가져오는 대신 **줄 렌더러만** 좁혀서 가져온다.
+ *
  *  **사람 질문 말풍선만 낙관적으로 그린다**(§7 §천장이 없다 ③ — 요구 `8db4d0f6`). 보내는
  *  순간 그 문장을 스레드 끝에 세운다(`echo`) — 전송이 안 된 것처럼 보이는 문제였다. `askHome`이
  *  실패를 돌려주면 그 말풍선을 걷고 글이 입력칸으로 돌아온다(§21 실패 규칙 무수정). 정본은
@@ -58,6 +66,7 @@ import { CopyCommand } from "@/components/copy-command";
 import { FindBar } from "@/components/find-bar";
 import { useKeymap } from "@/components/keymap-provider";
 import { Markdown } from "@/components/markdown";
+import { Bundle } from "@/components/session-stream";
 import { StatusBadge } from "@/components/status-badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
@@ -89,7 +98,7 @@ import {
 } from "@/components/ui/sidebar";
 import type { Activity, Answer, AnswerReason, Home, HomeChunk, Turn, WorkerSession } from "@/lib/home-agent";
 import { formatCombo, matchCombo } from "@/lib/keymap";
-import { chatRows } from "@/lib/urls";
+import { chatRows, groupProgress } from "@/lib/urls";
 import { cn } from "@/lib/utils";
 
 /** 화면이 답할 수 있다고 약속하는 범위가 곧 온보딩 예시 넷이다(§24 — 요구 원문의 예시 +
@@ -421,9 +430,28 @@ export function HomeUI({
     setEcho(null); // 갈아탄 대화의 것이 아니다 — 앞 대화에서 보낸 에코를 여기로 안 옮긴다
   };
 
+  /** 접힌 줄을 열고 닫는다(§비주얼 §24 ⑦ §자동 스크롤). `<Bundle>`이 요구하는 자리지만
+   *  §13 스크롤러(`message-scroller.tsx`)는 그 `stuck` 판정을 Provider 안 `useRef`로 감춰서
+   *  뗄 손잡이가 없다 — 그 절이 "배선은 developer의 값"이라 넘긴 자리다.
+   *  // ponytail: 지금은 안 뗀다. 열어도 다음 조각이 도착하면 바닥으로 다시 밀린다(도는 답
+   *  //           구간뿐이다 — 끝난 답 뒤로는 밀 것이 없다). 불편이 크면 message-scroller.tsx에
+   *  //           `stuck`을 밖에서 끄는 손잡이 하나. */
+  const onLineToggle = () => {};
+
   // 대화 0건 = 온보딩이다. `busy`가 참이면 스레드가 선다 — 그 안에 진행 표식(과 방금 보낸
   // 질문의 에코)이 있어야 한다.
   const onboarding = turns.length === 0 && !busy;
+
+  // **접힌 줄을 §9 그대로 묶는다**(§7 §스레드가 트랜스크립트 전부를 그린다). `groupProgress`
+  // (`lib/urls.ts`)는 티켓 상세(§2-3 ②)가 스트림 사건 · 스레드를 말풍선 경계로 묶는 그 함수다 —
+  // 여기서는 `turns`가 이미 한 줄기라 두 번째 배열이 없다. `line`이 아닌 턴(질문 · 답)이
+  // 경계이고 그 사이 연속 `line` 턴이 한 묶음이 된다(`n`이 1이어도 묶는다 — §9).
+  const grouped = groupProgress(
+    turns.map((t) => ({ event: t })),
+    (t) => t.role !== "line",
+  );
+  // `questionFor`가 원래 `turns`의 위치로 훑으므로, 묶기로 잃은 인덱스를 참조로 되찾는다.
+  const turnIndex = new Map(turns.map((t, i) => [t, i]));
 
   return (
     // 폭 제한 없음 — §4 폼 규칙의 **셋째 예외**(§24 폭 항, 사람 요청 `bcf8299d`).
@@ -515,64 +543,79 @@ export function HomeUI({
                       아니라 스크롤 컨텐츠 바닥에 건다: 도는 답도 언제나 마지막 항목이라 상태에
                       안 걸려야 답이 끝나는 순간 높이 점프가 0이다. */}
                   <MessageScrollerContent className="pb-4">
-                    {turns.map((t, i) => (
-                      // `group/answer`는 답·질문 항목 둘 다 받는다(§24 §드러나는 조건) — 질문
-                      // 안에는 이 이름을 읽는 것이 없어 조건부 클래스를 만들 이유가 없다.
-                      <MessageScrollerItem key={t.key} messageId={t.key} className="group/answer">
-                        {t.role === "question" ? (
-                          /* 사람 질문 — §13 말풍선 그대로(`outline` · `align="end"`). 헤더는 말풍선
-                             **밖 · 위**이고(§13) 라벨만 `sr-only`로 내려간다: 클래스 하나로 끝나서
-                             새 요소가 아니다. 아바타는 없다(§24가 한 줄로 거절했다 — 페르소나 색과
-                             나란히 서면 이 에이전트가 페르소나로 읽힌다). */
-                          <Message align="end">
-                            <MessageContent>
-                              {/* `m-0`이 `sr-only`의 `margin:-1px`을 지운다(`462d90be`). 그 유틸은
-                                  절대배치 1×1px 상자를 만드는데, 여기선 `align="end"` 탓에 그 상자가
-                                  **오른쪽 끝에** 서서 음수 margin만큼 1px 넘쳤다. 안 보이는 라벨
-                                  하나가 스레드 전체에 가로 스크롤바를 세웠다(1440×900 실측) */}
-                              <MessageHeader className="sr-only m-0">질문</MessageHeader>
-                              <Bubble variant="outline" align="end">
-                                <BubbleContent>
-                                  {/* 이 자리에 오는 문자열은 **전부 입력칸에서 왔다** — 사람이
-                                      친 줄바꿈을 그대로 그린다(§10 면제). 아래 에이전트 답의
-                                      `Prose`는 안 켠다: 그건 감아서 쓰는 쪽의 글이다 */}
-                                  <Markdown text={t.text} breaks="all" />
-                                </BubbleContent>
-                              </Bubble>
-                            </MessageContent>
-                          </Message>
-                        ) : (
-                          /* 에이전트 답 — **전폭 산문 + 그 아래 띠 하나**(§24). `Bubble`도
-                             `Message`도 안 쓴다: 저 한 벌이 주는 것은 좌우 배치 기계장치고 전폭에는
-                             쓸 데가 없다. 띠가 이 항목 **안**에 있는 이유는 §24 그대로다 — 도는
-                             답이 언제나 마지막이라 보이는 자리가 같고, 답이 끝날 때 높이가 안 튄다. */
-                          <>
-                            <Prose text={t.text} />
-                            <Band>
-                              {/* 중지된 답 — **실패가 아니다**(§7). `<StatusBadge>`도 색도 없다:
-                                  이건 큐의 상태가 아니라 답 하나가 끝난 방식이라 13번째 상태를
-                                  만들지 않는다(§24). 자리는 진행 표식 문구가 앉던 그 자리다. */}
-                              {t.stopped && <span className="text-xs text-muted-foreground">중지됨</span>}
-                              <CopyAnswer text={t.text} />
-                              {/* **답을 갈아 끼우지 않는다**(§7) — 질문·답이 스레드 끝에 한 벌 더
-                                  붙는다. 트랜스크립트가 정본이라 거기서 줄을 지울 수 없다.
-                                  도는 중에 눌러도 여기서 막지 않는다: 서버가 §24 실패 ④로
-                                  판정하고 그 Alert가 왜 안 갔는지를 말한다(화면의 잠금 셋에
-                                  네 번째를 더하면 끝난 답 20개의 버튼이 같이 흐려진다).
-                                  **`ghost`다**(§24 개정 ③ — `복사`와 같은 근거. 그 함수 주석). */}
-                              <Button
-                                variant="ghost"
-                                size="xs"
-                                className="opacity-0 group-hover/answer:opacity-100 group-focus-within/answer:opacity-100"
-                                onClick={() => void run(questionFor(turns, i))}
-                              >
-                                다시 답하기
-                              </Button>
-                            </Band>
-                          </>
-                        )}
-                      </MessageScrollerItem>
-                    ))}
+                    {grouped.map((g) => {
+                      // 접힌 줄 묶음(§9 · §2-6 ②) — 렌더러는 `session-stream.tsx`의 `<Bundle>`
+                      // 한 벌이다(§7이 화면 통째 재사용은 거절했지 줄 렌더러는 아니다). `n`이
+                      // 1이어도 이 자리다 — 낱개 접힌 줄은 없다. `group/answer`가 안 필요하다 —
+                      // 안에서 그 이름을 읽는 버튼이 없다(§24 §드러나는 조건은 답·질문뿐이다).
+                      if (g.kind === "bundle") {
+                        return (
+                          <MessageScrollerItem key={g.events[0].key} messageId={g.events[0].key}>
+                            <Bundle events={g.events.map((t) => t.event!)} onToggle={onLineToggle} />
+                          </MessageScrollerItem>
+                        );
+                      }
+                      if (g.kind !== "event") return null; // "thread" — 이 화면엔 없는 종이다
+                      const t = g.event;
+                      return (
+                        // `group/answer`는 답·질문 항목 둘 다 받는다(§24 §드러나는 조건) — 질문
+                        // 안에는 이 이름을 읽는 것이 없어 조건부 클래스를 만들 이유가 없다.
+                        <MessageScrollerItem key={t.key} messageId={t.key} className="group/answer">
+                          {t.role === "question" ? (
+                            /* 사람 질문 — §13 말풍선 그대로(`outline` · `align="end"`). 헤더는 말풍선
+                               **밖 · 위**이고(§13) 라벨만 `sr-only`로 내려간다: 클래스 하나로 끝나서
+                               새 요소가 아니다. 아바타는 없다(§24가 한 줄로 거절했다 — 페르소나 색과
+                               나란히 서면 이 에이전트가 페르소나로 읽힌다). */
+                            <Message align="end">
+                              <MessageContent>
+                                {/* `m-0`이 `sr-only`의 `margin:-1px`을 지운다(`462d90be`). 그 유틸은
+                                    절대배치 1×1px 상자를 만드는데, 여기선 `align="end"` 탓에 그 상자가
+                                    **오른쪽 끝에** 서서 음수 margin만큼 1px 넘쳤다. 안 보이는 라벨
+                                    하나가 스레드 전체에 가로 스크롤바를 세웠다(1440×900 실측) */}
+                                <MessageHeader className="sr-only m-0">질문</MessageHeader>
+                                <Bubble variant="outline" align="end">
+                                  <BubbleContent>
+                                    {/* 이 자리에 오는 문자열은 **전부 입력칸에서 왔다** — 사람이
+                                        친 줄바꿈을 그대로 그린다(§10 면제). 아래 에이전트 답의
+                                        `Prose`는 안 켠다: 그건 감아서 쓰는 쪽의 글이다 */}
+                                    <Markdown text={t.text} breaks="all" />
+                                  </BubbleContent>
+                                </Bubble>
+                              </MessageContent>
+                            </Message>
+                          ) : (
+                            /* 에이전트 답 — **전폭 산문 + 그 아래 띠 하나**(§24). `Bubble`도
+                               `Message`도 안 쓴다: 저 한 벌이 주는 것은 좌우 배치 기계장치고 전폭에는
+                               쓸 데가 없다. 띠가 이 항목 **안**에 있는 이유는 §24 그대로다 — 도는
+                               답이 언제나 마지막이라 보이는 자리가 같고, 답이 끝날 때 높이가 안 튄다. */
+                            <>
+                              <Prose text={t.text} />
+                              <Band>
+                                {/* 중지된 답 — **실패가 아니다**(§7). `<StatusBadge>`도 색도 없다:
+                                    이건 큐의 상태가 아니라 답 하나가 끝난 방식이라 13번째 상태를
+                                    만들지 않는다(§24). 자리는 진행 표식 문구가 앉던 그 자리다. */}
+                                {t.stopped && <span className="text-xs text-muted-foreground">중지됨</span>}
+                                <CopyAnswer text={t.text} />
+                                {/* **답을 갈아 끼우지 않는다**(§7) — 질문·답이 스레드 끝에 한 벌 더
+                                    붙는다. 트랜스크립트가 정본이라 거기서 줄을 지울 수 없다.
+                                    도는 중에 눌러도 여기서 막지 않는다: 서버가 §24 실패 ④로
+                                    판정하고 그 Alert가 왜 안 갔는지를 말한다(화면의 잠금 셋에
+                                    네 번째를 더하면 끝난 답 20개의 버튼이 같이 흐려진다).
+                                    **`ghost`다**(§24 개정 ③ — `복사`와 같은 근거. 그 함수 주석). */}
+                                <Button
+                                  variant="ghost"
+                                  size="xs"
+                                  className="opacity-0 group-hover/answer:opacity-100 group-focus-within/answer:opacity-100"
+                                  onClick={() => void run(questionFor(turns, turnIndex.get(t)!))}
+                                >
+                                  다시 답하기
+                                </Button>
+                              </Band>
+                            </>
+                          )}
+                        </MessageScrollerItem>
+                      );
+                    })}
                     {/* 방금 보낸 질문의 낙관적 말풍선(§7 §천장이 없다 ③) — 사람 질문 항목과
                         **같은 그릇**이다. `turns`에 아직 없는 동안만 선다 — 첫 폴링이 그 줄을
                         데려오면 위 poll 효과가 `echo`를 내리고 `turns.map`의 진짜 항목이 같은

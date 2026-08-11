@@ -71,12 +71,20 @@ function supported(): boolean {
 /** 훑을 자리의 텍스트 노드를 걸어 일치한 곳의 `Range`를 모은다.
  *  ponytail: 일치는 **텍스트 노드 안**에서만 찾는다 — `**보**드`처럼 마크다운이 요소로 쪼갠
  *  글자 사이는 안 걸린다. 노드를 이어 붙인 가상 문자열을 만들면 오프셋 되돌리기가 붙는데,
- *  이 화면에서 찾는 말은 해시 · 워커 이름 · 짧은 구절이라(§30 ②) 그 값이 아직 없다. */
+ *  이 화면에서 찾는 말은 해시 · 워커 이름 · 짧은 구절이라(§30 ②) 그 값이 아직 없다.
+ *
+ *  **닫힌 `<details>`(§9 접힌 줄) 안의 본문은 안 걷는다**(§7 §스레드가 트랜스크립트 전부를
+ *  그린다 §`⌘F`가 세는 것). `checkVisibility()`가 그 판정이다 — 닫힌 `<details>`가 `summary`
+ *  아닌 자식에 UA가 거는 `display:none`을 이 메서드가 그대로 읽는다(플랫폼이 이미 아는 사실을
+ *  `details`·`summary` 트리를 손으로 되짚어 다시 판정하지 않는다). `CSS.highlights`와 같은 해에
+ *  실렸으니(Chrome 105) `supported()` 관문을 통과한 브라우저는 이 메서드도 있다. 스크롤로 화면
+ *  밖에 난 글은 걸린다 — 그건 `display:none`이 아니라 `다음`이 스크롤해 가야 할 자리다. */
 function collect(root: HTMLElement, query: string): Range[] {
   const out: Range[] = [];
   const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   for (let n = walk.nextNode(); n; n = walk.nextNode()) {
-    if (n.parentElement?.closest(SKIP)) continue;
+    const parent = n.parentElement;
+    if (!parent || parent.closest(SKIP) || !parent.checkVisibility()) continue;
     for (const i of findMatches(n.nodeValue ?? "", query)) {
       const r = new Range();
       r.setStart(n, i);
@@ -156,6 +164,9 @@ export function FindBar({
   // **훑기.** 질의가 바뀌면 다시 걷고, **스레드가 다시 그려질 때마다도 다시 걷는다**(§7 §답은
   // 흐른다): 토큰이 붙으면 React가 텍스트 노드를 갈아 끼우고 우리가 들고 있던 `Range`는 그
   // 순간 아무 데도 안 가리킨다. 이 옵저버 하나가 "토큰이 붙을 때마다 지워지지 않는다"의 전부다.
+  // **`attributes: ["open"]`도 듣는다**(§7 §`⌘F`가 세는 것) — 접힌 줄을 펼치고 접는 것은
+  // childList도 characterData도 안 바꾸고 `<details>`의 `open`만 바꾼다. 안 들으면 편 뒤에도
+  // 건수가 접힌 채의 것으로 멈춰 있다가 다른 토큰이 붙어야 뒤늦게 맞는다.
   // ponytail: 붙을 때마다 전체 재스캔이다. 옵저버 콜백이 마이크로태스크당 한 번이라 폴링
   //           주기(500ms)에 한 번꼴이고 스레드는 턴 수십 개다 — 느려지면 바뀐 노드만 다시 걷는다.
   useEffect(() => {
@@ -166,7 +177,13 @@ export function FindBar({
     scan();
     if (!root || !query) return;
     const ob = new MutationObserver(scan);
-    ob.observe(root, { childList: true, characterData: true, subtree: true });
+    ob.observe(root, {
+      childList: true,
+      characterData: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["open"],
+    });
     return () => ob.disconnect();
   }, [open, query, scope]);
 
