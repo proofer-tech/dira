@@ -1,6 +1,6 @@
 "use client";
 
-/** 네이티브 경로 피커의 `찾기` 버튼 (DESIGN.md §데스크톱 앱 N3).
+/** 네이티브 경로 피커의 `찾아보기` 버튼 (DESIGN.md §데스크톱 앱 N3).
  *
  *  **데스크톱이 아니면 아무것도 그리지 않는다** — 브라우저(`pnpm dev`)로 연 화면은 지금 그대로
  *  타이핑이다. 판정이 하이드레이션 뒤인 이유는 SSR에 `window.dira`가 없어서다: 서버 렌더에서
@@ -39,7 +39,7 @@ export function PickPath({
   onPick,
 }: {
   mode: "file" | "directory";
-  /** 어느 칸인지 — 한 화면에 이 버튼이 여럿이라 `찾기`만으로는 구분되지 않는다 */
+  /** 어느 칸인지 — 한 화면에 이 버튼이 여럿이라 `찾아보기`만으로는 구분되지 않는다 */
   label: string;
   onPick: (abs: string) => void;
 }) {
@@ -50,13 +50,13 @@ export function PickPath({
     <Button
       type="button"
       variant="outline"
-      aria-label={`${label} 찾기`}
+      aria-label={`${label} 찾아보기`}
       onClick={async () => {
         const picked = await window.dira?.pickPath(mode);
         if (picked) onPick(picked);
       }}
     >
-      찾기
+      찾아보기
     </Button>
   );
 }
