@@ -1342,6 +1342,38 @@ function DeleteMemoryButton({
   );
 }
 
+/** 드롭한 폴더를 재귀해 파일을 모은다(§비주얼 §25 ⑤ - §5-1 §입구 하나). `readEntries()`는 한
+ *  번에 최대 100개만 주므로 빈 배열이 나올 때까지 반복한다. 반환하는 `path`는 **폴더 안** 기준
+ *  이다(폴더 이름 자신은 없다) — 첫 성분을 애초에 안 붙이면 폴더 모드의 "첫 성분을 뗀다"가
+ *  그대로 만족된다. */
+async function collectDirectoryFiles(
+  dir: FileSystemDirectoryEntry,
+  prefix: string,
+): Promise<{ file: File; path: string }[]> {
+  const reader = dir.createReader();
+  const entries: FileSystemEntry[] = [];
+  for (;;) {
+    const batch = await new Promise<FileSystemEntry[]>((resolve, reject) =>
+      reader.readEntries(resolve, reject),
+    );
+    if (batch.length === 0) break;
+    entries.push(...batch);
+  }
+  const items: { file: File; path: string }[] = [];
+  for (const entry of entries) {
+    const path = `${prefix}${entry.name}`;
+    if (entry.isFile) {
+      const file = await new Promise<File>((resolve, reject) =>
+        (entry as FileSystemFileEntry).file(resolve, reject),
+      );
+      items.push({ file, path });
+    } else if (entry.isDirectory) {
+      items.push(...(await collectDirectoryFiles(entry as FileSystemDirectoryEntry, `${path}/`)));
+    }
+  }
+  return items;
+}
+
 /** `스킬 추가` — `Dialog` + `Command`(§비주얼 §25 ③). `CommandDialog`가 아니다: 그 껍데기는
  *  제목이 `sr-only`이고 액션 행이 없는 명령 팔레트다.
  *
@@ -1369,23 +1401,34 @@ function AddSkillsDialog({
   // 선다). title·message가 각각 `AlertTitle`(sans)·`AlertDescription`(mono)이다.
   const [failure, setFailure] = useState<{ title: string; message: string } | null>(null);
   const [pending, start] = useTransition();
-  // 입구 셋 중 **누른 것 하나만** `설치 중…`이 된다(§비주얼 §25 ⑤ §진행 중) — `pending`(저장)과
-  // 갈리는 상태라 따로 든다.
-  const [installing, setInstalling] = useState<"file" | "folder" | "skill" | null>(null);
+  // import 손잡이는 이제 하나라 "무엇이 도나"를 더 갈릴 값이 없다(§비주얼 §25 ⑤ §진행 중 개정
+  // `7acf0448`) — `installing`이 `"file" | "folder" | "skill" | null` 셋에서 boolean으로 줄었다.
+  const [installing, setInstalling] = useState(false);
+  // 드래그가 이 다이얼로그 위에 있는 동안만 참이다(§비주얼 §25 ⑤ §드래그 중 표시) — 새 상태 하나.
+  const [dragging, setDragging] = useState(false);
+  // `dragleave`가 자식 경계마다 뜨는 함정(⑤ §함정 셋 - 3번)의 처방 — 진입 카운터.
+  const dragDepthRef = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const folderInputRef = useRef<HTMLInputElement>(null);
-  const skillInputRef = useRef<HTMLInputElement>(null);
 
-  /** 입구 셋의 공통 통로 — 서버가 받는 것은 `file` 여러 개 + 같은 순서의 `path` 여러 개다
-   *  (§5-1 §import "입구 둘, 통로 하나" - §셋째 입구). `.skill` 모드는 파일이 늘 한 장이라
-   *  (`items.length === 1`) 상한의 파일 수 갈래는 걸리지 않는다 — **화면이 먼저 거절하는 것은
-   *  바이트 하나뿐**이다(브라우저가 zip을 안 열어 안의 파일 수를 모른다 — §5-1 §상한).
-   *  상한 둘은 `installSkill` · `extractSkillArchive`와 같은 함수(`skillUploadError`)를
-   *  불러 같은 문장을 쓴다. */
-  const runInstall = async (
-    mode: "file" | "folder" | "skill",
-    items: { file: File; path: string }[],
-  ) => {
+  // **함정 둘째**: 다이얼로그를 놓치면 브라우저가 그 파일로 이동해 화면과 체크 상태를 통째로
+  // 잃는다(§비주얼 §25 ⑤). 열려 있는 동안 `window`의 기본 동작을 삼킨다 — 표시는 0이다.
+  useEffect(() => {
+    if (!open) return;
+    const swallow = (e: DragEvent) => e.preventDefault();
+    window.addEventListener("dragover", swallow);
+    window.addEventListener("drop", swallow);
+    return () => {
+      window.removeEventListener("dragover", swallow);
+      window.removeEventListener("drop", swallow);
+    };
+  }, [open]);
+
+  /** 통로 하나 — 서버가 받는 것은 `file` 여러 개 + 같은 순서의 `path` 여러 개다
+   *  (§5-1 §import "입구 둘, 통로 하나" - §셋째 입구 - §입구 하나). `.skill`과 파일 한 장은
+   *  화면이 보내는 모양이 같아(`path: "SKILL.md"`) 갈래가 필요 없다 — 판정은 서버가 파일 이름의
+   *  끝을 보고 한다(`installSkillAction`). 상한 둘은 `installSkill` · `extractSkillArchive`와
+   *  같은 함수(`skillUploadError`)를 불러 같은 문장을 쓴다. */
+  const runInstall = async (items: { file: File; path: string }[]) => {
     const limitError = skillUploadError(
       items.length,
       items.reduce((n, it) => n + it.file.size, 0),
@@ -1395,7 +1438,7 @@ function AddSkillsDialog({
       return;
     }
     setFailure(null);
-    setInstalling(mode);
+    setInstalling(true);
     const formData = new FormData();
     for (const it of items) {
       formData.append("file", it.file);
@@ -1420,7 +1463,48 @@ function AddSkillsDialog({
     } catch {
       setFailure({ title: "스킬을 설치하지 못했습니다", message: "" });
     } finally {
-      setInstalling(null);
+      setInstalling(false);
+    }
+  };
+
+  /** 드롭한 트리를 판정한다 — 그 다음은 폴더 모드와 한 글자도 안 갈린다(§5-1 §입구 하나).
+   *  **함정 넷째(순서)**: `DataTransferItemList`는 이 핸들러가 도는 동안만 살아 있다 -
+   *  `webkitGetAsEntry()`를 이 함수가 `await`을 만나기 **전에** 동기로 다 꺼내 둔다. */
+  const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
+    const entries = Array.from(e.dataTransfer.items)
+      .filter((it) => it.kind === "file")
+      .map((it) => it.webkitGetAsEntry())
+      .filter((entry): entry is FileSystemEntry => entry !== null);
+    if (entries.length === 0) return;
+    // 한 번에 하나만 받는다(§비주얼 §25 ⑤ 표 9 - §5-1) — 서버에 아무것도 안 보낸다.
+    if (entries.length > 1) {
+      setFailure({
+        title:
+          "한 번에 스킬 하나만 설치합니다 — 놓은 최상위 항목이 둘 이상입니다. 하나만 다시 놓습니다",
+        message: `${entries.length}개`,
+      });
+      return;
+    }
+    const entry = entries[0];
+    if (entry.isFile) {
+      const file = await new Promise<File>((resolve, reject) =>
+        (entry as FileSystemFileEntry).file(resolve, reject),
+      );
+      void runInstall([{ file, path: "SKILL.md" }]);
+      return;
+    }
+    if (entry.isDirectory) {
+      const items = await collectDirectoryFiles(entry as FileSystemDirectoryEntry, "");
+      // 떼고 나서 SKILL.md가 없으면 거절한다(폴더 바로 아래여야 한다) — 원래 폴더 이름은
+      // 화면만 알아서 서버에 못 보낸다(§비주얼 §25 ⑤ 표 «+»).
+      if (!items.some((it) => it.path === "SKILL.md")) {
+        setFailure({
+          title: "고른 폴더 바로 아래에 SKILL.md가 없습니다",
+          message: `${entry.name}/`,
+        });
+        return;
+      }
+      void runInstall(items);
     }
   };
 
@@ -1462,13 +1546,43 @@ function AddSkillsDialog({
           setPicked(current.map((s) => s.name));
           setQuery("");
           setFailure(null);
+        } else {
+          dragDepthRef.current = 0;
+          setDragging(false);
         }
       }}
     >
       <DialogTrigger render={<Button variant="outline" size="sm" className="ml-auto self-center" />}>
         스킬 추가
       </DialogTrigger>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent
+        className={cn("sm:max-w-lg", dragging && "ring-2 ring-primary")}
+        // 드롭을 받는 것은 이 상자 전체다(§비주얼 §25 ⑤ §드롭이 받는 영역) — 새 층·새 과녁이 없다.
+        onDragEnter={(e) => {
+          if (installing) return;
+          e.preventDefault();
+          dragDepthRef.current += 1;
+          setDragging(true);
+        }}
+        onDragOver={(e) => {
+          // `dragover`도 삼켜야 `drop`이 뜬다 — 없으면 브라우저가 기본 동작(거절)을 한다.
+          if (installing) return;
+          e.preventDefault();
+        }}
+        onDragLeave={() => {
+          // 함정 셋째: 자식 경계마다 뜬다 — 진입 카운터가 0으로 떨어져야 실제로 나간 것이다.
+          if (installing) return;
+          dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+          if (dragDepthRef.current === 0) setDragging(false);
+        }}
+        onDrop={(e) => {
+          if (installing) return;
+          e.preventDefault();
+          dragDepthRef.current = 0;
+          setDragging(false);
+          void handleDrop(e);
+        }}
+      >
         <DialogHeader>
           <DialogTitle>스킬 추가</DialogTitle>
           <DialogDescription>
@@ -1516,7 +1630,7 @@ function AddSkillsDialog({
                   CLAUDE_CONFIG_DIR이 없으면 &lt;config&gt;는 ~/.claude입니다
                 </p>
                 {/* §비주얼 §25 ⑤ — 후보 0개가 이 기능의 첫 독자다. 다음 행동은 바로 아래 44px의
-                    입구 둘이다(경로를 다시 안 적는다 — 위 두 글롭이 이미 그 자리다) */}
+                    `찾아보기` 하나와 드롭이다(경로를 다시 안 적는다 — 위 두 글롭이 이미 그 자리다) */}
                 <p className="text-xs text-muted-foreground">
                   아래에서 파일을 골라 지금 설치할 수 있습니다
                 </p>
@@ -1525,69 +1639,26 @@ function AddSkillsDialog({
           </CommandList>
         </Command>
 
-        {/* import 입구 셋 — `Command`와 실패·`DialogFooter` 사이의 한 행(§비주얼 §25 ⑤).
-            숨긴 `<input type="file">` 셋 + 버튼 셋, `AttachmentButton`과 같은 조립
-            (`display:none`은 focus가 안 먹지만 `.click()`은 먹는다 — `attachment-field.tsx`). */}
+        {/* import 입구 하나 — `Command`와 실패·`DialogFooter` 사이의 한 행(§비주얼 §25 ⑤ 개정
+            `7acf0448`). 숨긴 `<input type="file">` 하나 + 버튼 하나, `AttachmentButton`과 같은
+            조립(`display:none`은 focus가 안 먹지만 `.click()`은 먹는다 — `attachment-field.tsx`).
+            폴더는 이 행이 안 받는다 — `DialogContent` 전체가 드롭으로 받는다(위). */}
         <div className="flex items-center gap-2">
           <span className="min-w-0 text-xs text-muted-foreground">
-            목록에 없으면 파일에서 설치합니다
+            {dragging
+              ? "놓으면 설치합니다"
+              : "목록에 없으면 폴더를 이 창에 끌어다 놓거나 파일을 골라 설치합니다"}
           </span>
           <input
             ref={fileInputRef}
             type="file"
-            accept=".md"
+            accept=".md,.skill"
             className="hidden"
             onChange={(e) => {
               const file = e.target.files?.[0] ?? null;
               // 같은 파일을 두 번 고르면 change가 안 뜬다 — 비워서 다음 선택이 항상 뜨게 한다.
               e.target.value = "";
-              if (file) void runInstall("file", [{ file, path: "SKILL.md" }]);
-            }}
-          />
-          {/* `webkitdirectory`는 React JSX 타입에 없다 — DOM 프로퍼티로 직접 건다(ref 콜백) */}
-          <input
-            ref={(el) => {
-              folderInputRef.current = el;
-              if (el) el.webkitdirectory = true;
-            }}
-            type="file"
-            multiple
-            className="hidden"
-            onChange={(e) => {
-              const files = Array.from(e.target.files ?? []);
-              e.target.value = "";
-              if (files.length === 0) return;
-              // 폴더 모드는 상대경로의 첫 성분을 뗀다(§5-1 §import) — 사람이 고른 폴더 이름이고
-              // 디렉터리 이름을 정하는 것은 `name:`이다.
-              const folderName = files[0].webkitRelativePath.split("/")[0] ?? "";
-              const withPaths = files.map((file) => {
-                const rel = file.webkitRelativePath;
-                const slash = rel.indexOf("/");
-                return { file, path: slash === -1 ? rel : rel.slice(slash + 1) };
-              });
-              // 떼고 나서 SKILL.md가 없으면 거절한다(폴더 바로 아래여야 한다) — 원래 폴더 이름은
-              // 화면만 알아서 서버에 못 보낸다(§비주얼 §25 ⑤ 표 «+»).
-              if (!withPaths.some((w) => w.path === "SKILL.md")) {
-                setFailure({
-                  title: "고른 폴더 바로 아래에 SKILL.md가 없습니다",
-                  message: `${folderName}/`,
-                });
-                return;
-              }
-              void runInstall("folder", withPaths);
-            }}
-          />
-          {/* 셋째 입구 — `.skill`(zip) 한 장. 화면이 보내는 모양은 첫째 입구와 같다(파일 한 장 +
-              `path` `SKILL.md`) — 푸는 것은 서버다(`installSkillAction` → `extractSkillArchive`). */}
-          <input
-            ref={skillInputRef}
-            type="file"
-            accept=".skill"
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0] ?? null;
-              e.target.value = "";
-              if (file) void runInstall("skill", [{ file, path: "SKILL.md" }]);
+              if (file) void runInstall([{ file, path: "SKILL.md" }]);
             }}
           />
           <Button
@@ -1595,28 +1666,10 @@ function AddSkillsDialog({
             variant="outline"
             size="sm"
             className="ml-auto"
-            disabled={installing !== null}
+            disabled={installing}
             onClick={() => fileInputRef.current?.click()}
           >
-            {installing === "file" ? "설치 중…" : "SKILL.md 한 장"}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={installing !== null}
-            onClick={() => folderInputRef.current?.click()}
-          >
-            {installing === "folder" ? "설치 중…" : "스킬 폴더"}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={installing !== null}
-            onClick={() => skillInputRef.current?.click()}
-          >
-            {installing === "skill" ? "설치 중…" : ".skill 한 장"}
+            {installing ? "설치 중…" : "찾아보기"}
           </Button>
         </div>
 
@@ -1626,7 +1679,7 @@ function AddSkillsDialog({
         <DialogFooter>
           <DialogClose render={<Button variant="outline" />}>취소</DialogClose>
           <Button
-            disabled={pending || installing !== null}
+            disabled={pending || installing}
             onClick={() =>
               start(async () => {
                 setFailure(null);
