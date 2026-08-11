@@ -62,3 +62,199 @@ export function blockBreaks(
   }
   return undefined;
 }
+
+// ── 편집된 DOM → 마크다운 (고친 블록만 탄다) ──────────────────────────────────
+// `components/markdown-editor.tsx`에서 옮겨왔다(요구 `33b7cb27`) — `blur` 없이 제출되는 경로
+// (`⌘↵`)도 이 되읽기를 불러야 해서 컴포넌트 밖 순수 함수라야 두 자리(blur·제출 가로채기)가
+// 하나를 같이 부른다. "use client" 파일은 node --test가 못 import한다(`sidebar.test.ts`와 같은
+// 사유 — next/CSS를 끈다)는 이 레포의 규약을 따라 여기 둔다.
+
+/** `components/markdown.tsx`의 인라인 요소만 안다 — strong·em·code·a·br. 그 밖은 지나서 안을 편다
+ *  (체크박스의 숨은 `<input>`·아이콘 `<svg>`는 상위인 `listItemToMarkdown`이 처리하므로 여기선
+ *  버린다). */
+function inline(node: Node): string {
+  let out = "";
+  node.childNodes.forEach((child) => {
+    if (child.nodeType === Node.TEXT_NODE) {
+      out += child.textContent ?? "";
+      return;
+    }
+    if (child.nodeType !== Node.ELEMENT_NODE) return;
+    const el = child as Element;
+    switch (el.tagName) {
+      case "STRONG":
+      case "B":
+        out += `**${inline(el)}**`;
+        break;
+      case "EM":
+      case "I":
+        out += `*${inline(el)}*`;
+        break;
+      case "CODE":
+        out += `\`${el.textContent ?? ""}\``;
+        break;
+      case "A":
+        out += `[${inline(el)}](${el.getAttribute("href") ?? ""})`;
+        break;
+      case "BR":
+        out += "\n";
+        break;
+      case "UL":
+      case "OL":
+      case "INPUT":
+      case "SVG":
+        break; // 목록·체크박스는 블록 레벨(listToMarkdown)이 처리한다
+      default:
+        out += inline(el);
+    }
+  });
+  return out;
+}
+
+function listToMarkdown(el: Element, depth: number): string {
+  const ordered = el.tagName === "OL";
+  const indent = "  ".repeat(depth);
+  let n = 1;
+  const items: string[] = [];
+  for (const li of Array.from(el.children)) {
+    if (li.tagName !== "LI") continue;
+    const checkbox = li.querySelector(":scope > input[type=checkbox]") as HTMLInputElement | null;
+    let prefix = ordered ? `${n++}. ` : "- ";
+    if (checkbox) prefix += checkbox.checked ? "[x] " : "[ ] ";
+    items.push(`${indent}${prefix}${inline(li).trim()}`);
+    for (const nested of Array.from(li.children)) {
+      if (nested.tagName === "UL" || nested.tagName === "OL") items.push(listToMarkdown(nested, depth + 1));
+    }
+  }
+  return items.join("\n");
+}
+
+/** 표 셀만 다시 찍는다 — 정렬 구분행(`|---|:---:|`)은 원문 그대로 둔다(둘째 줄). 열 수를 바꾸는
+ *  편집은 이 절이 지원하지 않는다(`components/markdown-editor.tsx` 맨 위 ponytail 노트 ·
+ *  §50 §도구 모음 "행·열은 원문 면"). */
+function tableToMarkdown(table: Element, originalLines: string[]): string {
+  const rowMarkdown = (tr: Element) => `| ${Array.from(tr.children).map((c) => inline(c).trim()).join(" | ")} |`;
+  const headerRow = table.querySelector(":scope > thead > tr");
+  const bodyRows = Array.from(table.querySelectorAll(":scope > tbody > tr"));
+  const separator = originalLines[1] ?? "|---|";
+  const lines = [headerRow ? rowMarkdown(headerRow) : originalLines[0], separator, ...bodyRows.map(rowMarkdown)];
+  return lines.join("\n");
+}
+
+function blockElementToMarkdown(el: Element, originalLines: string[]): string {
+  switch (el.tagName) {
+    case "H1":
+    case "H2":
+    case "H3":
+    case "H4":
+    case "H5":
+    case "H6":
+      return `${"#".repeat(Number(el.tagName[1]))} ${inline(el)}`;
+    case "P":
+      return inline(el);
+    case "HR":
+      return "---";
+    case "PRE": {
+      const code = el.querySelector("code");
+      const lang = code?.className.match(/language-(\S+)/)?.[1] ?? "";
+      return `\`\`\`${lang}\n${code?.textContent ?? ""}\n\`\`\``;
+    }
+    case "UL":
+    case "OL":
+      return listToMarkdown(el, 0);
+    case "BLOCKQUOTE": {
+      const inner = Array.from(el.children)
+        .map((c) => blockElementToMarkdown(c, originalLines))
+        .filter(Boolean)
+        .join("\n\n");
+      return inner
+        .split("\n")
+        .map((l) => (l ? `> ${l}` : ">"))
+        .join("\n");
+    }
+    case "TABLE":
+      return tableToMarkdown(el, originalLines);
+    case "DIV": {
+      // `<Markdown>` 자신의 래퍼 div, 그리고 `table` 커스텀 컴포넌트의 스크롤 래퍼 div — 값을
+      // 두 벌로 베끼지 않는 이유가 여기서 그대로 걷힌다: 태그를 안 늘려도 여기가 편다.
+      const table = el.querySelector(":scope > table");
+      if (table) return tableToMarkdown(table, originalLines);
+      return Array.from(el.children)
+        .map((c) => blockElementToMarkdown(c, originalLines))
+        .filter(Boolean)
+        .join("\n\n");
+    }
+    default:
+      return inline(el);
+  }
+}
+
+/** 블록 하나(=contentEditable 하나)의 편집된 DOM을 마크다운으로 되읽는다. `originalBlockText`는
+ *  표의 정렬 구분행을 그대로 두려고만 쓴다(위 `tableToMarkdown`). */
+export function domToMarkdown(root: Element, originalBlockText: string): string {
+  const originalLines = originalBlockText.replace(/^\n+/, "").split("\n");
+  return Array.from(root.children)
+    .map((c) => blockElementToMarkdown(c, originalLines))
+    .filter((s) => s.length > 0)
+    .join("\n\n");
+}
+
+/** 블록이 아직 하나도 없는 빈 칸(③④가 시작하는 자리 — `split.blocks.length === 0`)에서 처음
+ *  치는 글을 되읽는다. 위 변환기들은 `<Markdown>`이 그린 알려진 태그 열(h1~6·p·ul…)만 다루면
+ *  되지만, 여긴 그 렌더가 아직 없다 — 브라우저가 `Enter`마다 만드는 `<div>`(빈 줄이면 안의
+ *  `<br>`)를 줄바꿈 하나로 되읽어야 한다(못 ⑤. 안 그러면 `Array.from(root.children)`이 첫
+ *  줄의 맨 텍스트 노드를 세지 않아 그 줄이 통째로 사라진다). */
+export function looseTextOf(root: Element): string {
+  const lines: string[] = [];
+  let current = "";
+  const flush = () => {
+    lines.push(current);
+    current = "";
+  };
+  const walk = (node: Node) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      current += node.textContent ?? "";
+      return;
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
+    const el = node as Element;
+    if (el.tagName === "BR") {
+      flush();
+      return;
+    }
+    if (el.tagName === "DIV" || el.tagName === "P") {
+      flush();
+      el.childNodes.forEach(walk);
+      return;
+    }
+    el.childNodes.forEach(walk);
+  };
+  root.childNodes.forEach(walk);
+  flush();
+  return lines.join("\n");
+}
+
+/** 포커스가 있던(=아직 `blur` 커밋을 안 지난) 편집 표면 하나를 지금 이 순간 되읽어 전체 텍스트에
+ *  반영한다. `blur`가 하던 일과 완전히 같은 되읽기지만, `blur`가 안 지나는 제출 경로(`⌘↵` ·
+ *  `requestSubmit()`)가 제출 직전에 같이 불러야 해서 부르는 자리를 안 가리는 순수 함수로 뗐다
+ *  (요구 `33b7cb27` — 위지윅 면이 마지막 글자를 버리던 사고. `components/markdown-editor.tsx`
+ *  §컴포넌트 §제출 가로채기가 이 함수를 두 자리에서 부른다).
+ *
+ *  블록 칸(`data-block-index`가 있는 원소)과 첫 편집 전 빈 칸(`split.blocks.length === 0`)
+ *  둘 다 받는다 — `active`가 이 컴포넌트의 편집 표면이 아니면(자리를 못 찾거나 안 바뀌었으면)
+ *  `null`이라 호출부가 `setText`를 건너뛴다(안 바뀐 값으로 리렌더를 안 만든다). */
+export function commitEditable(active: Element, split: SplitResult): string | null {
+  if (split.blocks.length === 0) {
+    const newText = looseTextOf(active);
+    return newText ? `${newText}\n${split.tail}` : split.tail;
+  }
+  const indexAttr = active.getAttribute("data-block-index");
+  if (indexAttr === null) return null;
+  const i = Number(indexAttr);
+  const original = split.blocks[i];
+  if (original === undefined) return null;
+  const leading = original.match(/^\n*/)?.[0] ?? "";
+  const newBlockText = leading + domToMarkdown(active, original);
+  if (newBlockText === original) return null;
+  return replaceBlock(split, i, newBlockText);
+}
