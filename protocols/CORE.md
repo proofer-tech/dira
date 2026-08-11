@@ -67,6 +67,44 @@ lives there, not on the original.
 Human calls: contradictory spec / read-only area / new dependency / push failed 3× /
 won't fit one session (propose a split, stop).
 
+## Characters (특수문자)
+
+Ticket bodies and anything written for a human (`## 결과`, `## 블록`, commit messages,
+docs) use ASCII punctuation only. The allowed set:
+
+`` ` ~ ! @ # $ % ^ & * ( ) - _ = + [ ] { } \ | ; : ' " , . < > / ? ``
+
+`\` `,` `.` are IN. They were absent from the list as handed over, but the list was
+typed in keyboard order and those three sit where the separators fall; every other
+key in that row is present, so the gap is a typo, not a ban.
+
+Substitutions. The left column never appears in new writing:
+
+| out | in |
+|---|---|
+| `—` | `-` |
+| `«` | `<` |
+| `»` | `>` |
+| `→` | `->` |
+| `·` | `-` |
+| `…` | `...` |
+| `×` | `x` |
+| `–` | `-` |
+| `※` | banned, no replacement |
+
+Scope is ticket bodies + prose written for a human. Code under `apps/**` is outside
+it: 5,106 lines there carry the em dash and some of it is a delimiter, not typography.
+
+A symbol that is in neither the allowed set nor the table (`§`, `✓`, `≤`, `≥`) is
+undecided here. Do not invent a substitution for it; ask.
+
+Files already written are not rewritten under this rule when you happen to touch
+them. Conversion is its own ticket: `b8e04f56` sweeps the repo and the queue,
+`7c2a9de1` the ontology vault. That includes the three core files themselves, which
+still hold 28 / 5 / 21 offending lines (`CORE.md` / `CORE-MEMORY.md` /
+`CORE-TICKETS.md`) - `b8e04f56` walks them, **skipping the table above**, the one
+place these characters have to survive.
+
 ## Queue invariants
 
 Never break these; convinced one must break → `## 블록`.
