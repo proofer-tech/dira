@@ -17,13 +17,17 @@
  *  (엔진이 디스패치 앞에서 읽는다 — §5-4). 티켓 `e94030b4`.
  *
  *  경로 방어는 `projects.ts`의 `personaFilePath` 하나다(이름이 신뢰 경계 — §경로 방어). */
-import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
+import { execFile } from "node:child_process";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { homedir, tmpdir } from "node:os";
 import path from "node:path";
+import { promisify } from "node:util";
 import { skillUploadError } from "./skill-upload-limit.ts";
 import { expandHome, resolveWithin } from "./paths.ts";
 import { personaFilePath } from "./projects.ts";
 import { type EngineId, NO_MODEL, parseEngineValue, renderEngineBlock } from "./workers.ts";
+
+const execFileP = promisify(execFile);
 
 /** 목록 한 항목. `description`은 `SKILL.md` frontmatter 원문 그대로다 — **자르지 않는다**(§5-1:
  *  "언제 이걸 쓰는가"가 유도의 본체다. 길이는 비용이고 비용은 화면의 자수가 정직하게 보인다). */
@@ -215,6 +219,74 @@ export async function installSkill(
     throw e;
   }
   return skill;
+}
+
+// ── .skill 한 장(zip) → SkillUpload[] (§5-1 §셋째 입구) ───────────────────────
+
+/** `unzip -l`의 데이터 줄 하나만 잡는다 — 날짜 칸(`00-00-1980`도 온다)이 있는 줄이 그거다.
+ *  헤더 · 구분선 · 합계 줄은 그 칸이 없어 자동으로 빠진다. */
+const UNZIP_LIST_LINE_RE = /^\s*(\d+)\s+\d{2}-\d{2}-\d{4}\s+\d{2}:\d{2}\s+(.+)$/;
+
+/** zip 안의 파일 목록 + **압축을 풀었을 때의 바이트**(`unzip -l`의 `Length` 칸). 상한이 재는
+ *  값이 이거다 — 압축 전(zip 파일) 바이트로 재면 압축률 큰 zip 하나가 상한을 우회한다(§5-1
+ *  §상한). 디렉터리 항목(이름이 `/`로 끝난다)은 여기서 뺀다 — 상한이 재는 수는 "푼 결과의
+ *  파일"이다. */
+async function listZipFiles(zipFile: string): Promise<{ path: string; bytes: number }[]> {
+  const { stdout } = await execFileP("/usr/bin/unzip", ["-l", zipFile]);
+  return stdout
+    .split("\n")
+    .map((line) => UNZIP_LIST_LINE_RE.exec(line))
+    .filter((m): m is RegExpExecArray => m !== null && !m[2].endsWith("/"))
+    .map((m) => ({ path: m[2], bytes: Number(m[1]) }));
+}
+
+/** `.skill`(zip) 한 장을 `SkillUpload[]`로 바꾼다(§5-1 §셋째 입구). 통로는 그대로다 — 이 함수가
+ *  낸 값을 그대로 `installSkill`에 넣는다(검증 · 상한 · 충돌 · 설치 자리는 한 줄도 안 갈린다).
+ *
+ *  **푸는 도구는 `/usr/bin/unzip`이다** — 손으로 쓴 zip 파서가 없다(신뢰 경계 바이트를 우리가
+ *  파싱할 자리가 아니다. Node 표준 라이브러리에 zip 컨테이너 파서가 없다). 경로 탈출은 이
+ *  바이너리가 이미 막는다(실측 — `../`가 든 항목은 그 성분을 스킵하고 대상 디렉터리 안에 쓴다).
+ *  풀린 자리를 읽어 돌려주는 이 함수는 그 위에 한 번 더 `resolveWithin`을 건다.
+ *
+ *  **상한은 <푼 뒤>를 잰다** — 실제로 풀기 전에 `unzip -l`로 파일 수 · 바이트를 읽어
+ *  `skillUploadError`로 먼저 거절한다(통과한 것만 디스크에 푼다).
+ *
+ *  **첫 성분 규칙**(§5-1): 최상위에 `SKILL.md`가 있으면 안 뗀다 - 없고 최상위 항목이 디렉터리
+ *  하나뿐이면 그것을 뗀다 - 둘 다 아니면 그대로 돌려준다. `installSkill`이 그 결과에서
+ *  "SKILL.md가 없습니다"로 거절한다 — 폴더 모드와 같은 갈래고, 새 문장을 안 만든다.
+ *
+ *  **자리는 임시 디렉터리이고 끝나면 지운다**(성공하든 거절하든) — `<config>/skills` 밖이다. */
+export async function extractSkillArchive(bytes: Buffer): Promise<SkillUpload[]> {
+  const dir = await mkdtemp(path.join(tmpdir(), "skill-import-"));
+  try {
+    const zipFile = path.join(dir, "archive.zip");
+    await writeFile(zipFile, bytes);
+    const entries = await listZipFiles(zipFile);
+
+    const limitError = skillUploadError(
+      entries.length,
+      entries.reduce((n, e) => n + e.bytes, 0),
+    );
+    if (limitError) throw new SkillInstallError(limitError.title, limitError.message);
+
+    const extractDir = path.join(dir, "extracted");
+    await mkdir(extractDir);
+    await execFileP("/usr/bin/unzip", ["-q", zipFile, "-d", extractDir]);
+
+    const topSegments = new Set(entries.map((e) => e.path.split("/")[0]));
+    const only = topSegments.size === 1 ? [...topSegments][0] : null;
+    const isSingleTopDir = only !== null && entries.every((e) => e.path !== only);
+    const strip = !entries.some((e) => e.path === "SKILL.md") && isSingleTopDir ? `${only}/` : "";
+
+    return await Promise.all(
+      entries.map(async (e) => ({
+        path: strip ? e.path.slice(strip.length) : e.path,
+        bytes: await readFile(await resolveWithin(extractDir, e.path)),
+      })),
+    );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 }
 
 // ── 페르소나가 고른 스킬 (`<personas>/<이름>/skills.md`) ─────────────────────

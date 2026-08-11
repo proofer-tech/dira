@@ -3,8 +3,10 @@ import assert from "node:assert";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import zlib from "node:zlib";
 import {
   deletePersonaMemory,
+  extractSkillArchive,
   installSkill,
   listInstalledSkills,
   memoryExcerpt,
@@ -210,6 +212,103 @@ test("installSkill — 거절 5: 이미 있으면 한 바이트도 안 쓰고 �
   assert.equal(
     readFileSync(path.join(dir, "skills", "dup", "SKILL.md"), "utf8"),
     "---\nname: dup\n---\n원본", // 첫 번째는 한 바이트도 안 갈렸다
+  );
+});
+
+// ── .skill 한 장(zip) → SkillUpload[] (§5-1 §셋째 입구) ───────────────────────
+
+/** 최소 zip 컨테이너를 손으로 만든다. 읽는 쪽(`extractSkillArchive`)이 안 쓰는 파서를 테스트
+ *  씨앗 쪽에 쓰는 것이라 §푸는 도구의 <손으로 쓴 zip 파서 0> 밖이다. 압축은 deflate
+ *  (`zlib.deflateRawSync`) — `unzip`이 읽는 것과 같은 방식이다. */
+function buildZip(entries: { path: string; data: Buffer }[]): Buffer {
+  const local: Buffer[] = [];
+  const central: Buffer[] = [];
+  let offset = 0;
+  for (const { path: name, data } of entries) {
+    const compressed = zlib.deflateRawSync(data);
+    const crc = zlib.crc32(data);
+    const nameBuf = Buffer.from(name, "utf8");
+
+    const lh = Buffer.alloc(30);
+    lh.writeUInt32LE(0x04034b50, 0);
+    lh.writeUInt16LE(20, 4);
+    lh.writeUInt16LE(8, 8); // method = deflate
+    lh.writeUInt32LE(crc, 14);
+    lh.writeUInt32LE(compressed.length, 18);
+    lh.writeUInt32LE(data.length, 22);
+    lh.writeUInt16LE(nameBuf.length, 26);
+    local.push(lh, nameBuf, compressed);
+
+    const ch = Buffer.alloc(46);
+    ch.writeUInt32LE(0x02014b50, 0);
+    ch.writeUInt16LE(20, 4);
+    ch.writeUInt16LE(20, 6);
+    ch.writeUInt16LE(8, 10);
+    ch.writeUInt32LE(crc, 16);
+    ch.writeUInt32LE(compressed.length, 20);
+    ch.writeUInt32LE(data.length, 24);
+    ch.writeUInt16LE(nameBuf.length, 28);
+    ch.writeUInt32LE(offset, 42);
+    central.push(ch, nameBuf);
+
+    offset += lh.length + nameBuf.length + compressed.length;
+  }
+  const localBuf = Buffer.concat(local);
+  const centralBuf = Buffer.concat(central);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(entries.length, 8);
+  end.writeUInt16LE(entries.length, 10);
+  end.writeUInt32LE(centralBuf.length, 12);
+  end.writeUInt32LE(localBuf.length, 16);
+  return Buffer.concat([localBuf, centralBuf, end]);
+}
+
+test("extractSkillArchive — 정상 .skill: 트리 그대로, 첫 성분(폴더 하나)이 떨어진다", async () => {
+  const zip = buildZip([
+    { path: "im-korean/SKILL.md", data: Buffer.from("---\nname: im-korean\n---\n") },
+    { path: "im-korean/references/a.md", data: Buffer.from("참고 자료") },
+  ]);
+  const files = await extractSkillArchive(zip);
+  assert.deepEqual(
+    files.map((f) => f.path).sort(),
+    ["SKILL.md", "references/a.md"],
+  );
+  assert.equal(
+    files.find((f) => f.path === "SKILL.md")!.bytes.toString("utf8"),
+    "---\nname: im-korean\n---\n",
+  );
+  assert.equal(files.find((f) => f.path === "references/a.md")!.bytes.toString("utf8"), "참고 자료");
+});
+
+test("extractSkillArchive — 최상위에 SKILL.md가 바로 있으면 첫 성분을 안 뗀다", async () => {
+  const zip = buildZip([{ path: "SKILL.md", data: Buffer.from("---\nname: direct\n---\n") }]);
+  const files = await extractSkillArchive(zip);
+  assert.deepEqual(files.map((f) => f.path), ["SKILL.md"]);
+});
+
+test("extractSkillArchive — 둘 다 아니면 그대로 돌려주고, installSkill이 SKILL.md 없음으로 거절한다", async () => {
+  const zip = buildZip([
+    { path: "a/one.md", data: Buffer.from("x") },
+    { path: "b/two.md", data: Buffer.from("y") },
+  ]);
+  const files = await extractSkillArchive(zip);
+  const dir = mkdtempSync(path.join(tmpdir(), "fst-install-"));
+  await assert.rejects(
+    () => installSkill(files, dir),
+    (e: unknown) => e instanceof SkillInstallError && /SKILL\.md가 없습니다/.test(e.message),
+  );
+});
+
+test("extractSkillArchive — 상한은 <푼 뒤>를 잰다: 압축률 큰 zip은 실제로 안 풀고 거절한다", async () => {
+  const zip = buildZip([
+    { path: "big/SKILL.md", data: Buffer.from("---\nname: big\n---\n") },
+    { path: "big/huge.bin", data: Buffer.alloc(MAX_BYTES + 1024) }, // 전부 0 — deflate가 거의 다 접는다
+  ]);
+  assert.ok(zip.length < 1024 * 1024); // 압축된 zip 자체는 작다 — 그런데도 <푼 뒤> 기준으로 거절된다
+  await assert.rejects(
+    () => extractSkillArchive(zip),
+    (e: unknown) => e instanceof SkillInstallError && /상한 20MB를 넘습니다/.test(e.message),
   );
 });
 
