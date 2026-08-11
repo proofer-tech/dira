@@ -287,16 +287,27 @@ test("extractSkillArchive — 최상위에 SKILL.md가 바로 있으면 첫 성�
   assert.deepEqual(files.map((f) => f.path), ["SKILL.md"]);
 });
 
-test("extractSkillArchive — 둘 다 아니면 그대로 돌려주고, installSkill이 SKILL.md 없음으로 거절한다", async () => {
+test("extractSkillArchive — 둘 다 아니면 갈래 7(SKILL.md 없음)로 직접 거절한다", async () => {
   const zip = buildZip([
     { path: "a/one.md", data: Buffer.from("x") },
     { path: "b/two.md", data: Buffer.from("y") },
   ]);
-  const files = await extractSkillArchive(zip);
-  const dir = mkdtempSync(path.join(tmpdir(), "fst-install-"));
   await assert.rejects(
-    () => installSkill(files, dir),
-    (e: unknown) => e instanceof SkillInstallError && /SKILL\.md가 없습니다/.test(e.message),
+    () => extractSkillArchive(zip, "im-korean.skill"),
+    (e: unknown) =>
+      e instanceof SkillInstallError &&
+      /SKILL\.md를 찾지 못했습니다/.test(e.message) &&
+      e.detail === "im-korean.skill",
+  );
+});
+
+test("extractSkillArchive — zip이 아닌 파일은 갈래 8(unzip 실패)로 거절한다", async () => {
+  await assert.rejects(
+    () => extractSkillArchive(Buffer.from("이건 zip이 아니다")),
+    (e: unknown) =>
+      e instanceof SkillInstallError &&
+      /풀지 못했습니다/.test(e.message) &&
+      /^unzip \d+:/.test(e.detail),
   );
 });
 
@@ -315,11 +326,11 @@ test("extractSkillArchive — 상한은 <푼 뒤>를 잰다: 압축률 큰 zip�
 test("skillUploadError — installSkill과 화면이 같은 문구를 쓴다(§비주얼 §25 ⑤)", () => {
   assert.equal(skillUploadError(200, 1024), null); // 상한 자체는 통과
   assert.deepEqual(skillUploadError(201, 1024), {
-    title: "스킬 폴더의 파일이 상한 200개를 넘습니다",
+    title: "설치할 파일이 상한 200개를 넘습니다",
     message: "201개",
   });
   assert.deepEqual(skillUploadError(1, MAX_BYTES + 1), {
-    title: "스킬 폴더의 합계가 상한 20MB를 넘습니다",
+    title: "설치할 파일의 합계가 상한 20MB를 넘습니다",
     message: "20.0MB",
   });
 });

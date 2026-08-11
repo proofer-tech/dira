@@ -19,6 +19,7 @@ import {
 } from "@/lib/projects";
 import {
   deletePersonaMemory,
+  extractSkillArchive,
   installSkill,
   listInstalledSkills,
   pickedSkills,
@@ -130,6 +131,11 @@ export async function savePersonaSkillsAction(
  *  `originalName`으로 같이 넘긴다 — 한 장 모드에서 고른 파일명이 `SKILL.md`가 아닐 수 있고,
  *  §비주얼 §25 ⑤ 표의 갈래 1(name 없음)이 그 이름을 사유에 적는다.
  *
+ *  **셋째 입구(`.skill`)는 화면이 보내는 모양이 한 장 모드와 같다** — 파일 한 장 + `path`
+ *  `SKILL.md`다(§비주얼 §25 ⑤). 통로가 하나뿐이라는 §5-1의 계약대로, 파일 이름이 `.skill`로
+ *  끝나면 그 zip을 `installSkill`에 넣기 **전에** `extractSkillArchive`로 먼저 푼다. zip이
+ *  아니거나 안에 `SKILL.md`가 없으면 `extractSkillArchive` 자신이 갈래 7 - 8로 거절한다.
+ *
  *  설치 뒤 `listInstalledSkills()`를 **다시 읽어 후보 목록 전체를 돌려준다** — 화면은 서버가 본
  *  것을 그린다(`savePersonaSkillsAction`과 같은 규약). 실패는 `SkillInstallError`의 두 조각
  *  (`message`·`detail`)을 `title`·`message`로 그대로 옮긴다 — 갈래마다 사유가 다르다. */
@@ -142,13 +148,16 @@ export async function installSkillAction(
     if (files.length === 0 || files.length !== paths.length) {
       throw new Error(`파일과 경로의 수가 안 맞습니다: ${files.length} / ${paths.length}`);
     }
-    const uploads: SkillUpload[] = await Promise.all(
-      files.map(async (file, i) => ({
-        path: paths[i],
-        bytes: Buffer.from(await file.arrayBuffer()),
-        originalName: file.name,
-      })),
-    );
+    const uploads: SkillUpload[] =
+      files.length === 1 && files[0].name.endsWith(".skill")
+        ? await extractSkillArchive(Buffer.from(await files[0].arrayBuffer()), files[0].name)
+        : await Promise.all(
+            files.map(async (file, i) => ({
+              path: paths[i],
+              bytes: Buffer.from(await file.arrayBuffer()),
+              originalName: file.name,
+            })),
+          );
     const skill = await installSkill(uploads);
     return { ok: true, installed: await listInstalledSkills(), name: skill.name };
   } catch (e) {

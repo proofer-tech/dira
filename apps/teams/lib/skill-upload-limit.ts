@@ -14,13 +14,13 @@ export function skillUploadError(
 ): { title: string; message: string } | null {
   if (fileCount > MAX_SKILL_FILES) {
     return {
-      title: `스킬 폴더의 파일이 상한 ${MAX_SKILL_FILES}개를 넘습니다`,
+      title: `설치할 파일이 상한 ${MAX_SKILL_FILES}개를 넘습니다`,
       message: `${fileCount}개`,
     };
   }
   if (totalBytes > MAX_BYTES) {
     return {
-      title: `스킬 폴더의 합계가 상한 ${MAX_BYTES / 1024 / 1024}MB를 넘습니다`,
+      title: `설치할 파일의 합계가 상한 ${MAX_BYTES / 1024 / 1024}MB를 넘습니다`,
       message: `${(totalBytes / 1024 / 1024).toFixed(1)}MB`,
     };
   }

@@ -1369,16 +1369,23 @@ function AddSkillsDialog({
   // 선다). title·message가 각각 `AlertTitle`(sans)·`AlertDescription`(mono)이다.
   const [failure, setFailure] = useState<{ title: string; message: string } | null>(null);
   const [pending, start] = useTransition();
-  // 두 입구 중 **누른 것 하나만** `설치 중…`이 된다(§비주얼 §25 ⑤ §진행 중) — `pending`(저장)과
+  // 입구 셋 중 **누른 것 하나만** `설치 중…`이 된다(§비주얼 §25 ⑤ §진행 중) — `pending`(저장)과
   // 갈리는 상태라 따로 든다.
-  const [installing, setInstalling] = useState<"file" | "folder" | null>(null);
+  const [installing, setInstalling] = useState<"file" | "folder" | "skill" | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
+  const skillInputRef = useRef<HTMLInputElement>(null);
 
-  /** 입구 둘의 공통 통로 — 서버가 받는 것은 `file` 여러 개 + 같은 순서의 `path` 여러 개다
-   *  (§5-1 §import "입구 둘, 통로 하나"). 상한 둘은 **바이트를 읽기 전에** 화면이 먼저 거절한다 —
-   *  `installSkill`과 같은 함수(`skillUploadError`)를 불러 같은 문장을 쓴다. */
-  const runInstall = async (mode: "file" | "folder", items: { file: File; path: string }[]) => {
+  /** 입구 셋의 공통 통로 — 서버가 받는 것은 `file` 여러 개 + 같은 순서의 `path` 여러 개다
+   *  (§5-1 §import "입구 둘, 통로 하나" - §셋째 입구). `.skill` 모드는 파일이 늘 한 장이라
+   *  (`items.length === 1`) 상한의 파일 수 갈래는 걸리지 않는다 — **화면이 먼저 거절하는 것은
+   *  바이트 하나뿐**이다(브라우저가 zip을 안 열어 안의 파일 수를 모른다 — §5-1 §상한).
+   *  상한 둘은 `installSkill` · `extractSkillArchive`와 같은 함수(`skillUploadError`)를
+   *  불러 같은 문장을 쓴다. */
+  const runInstall = async (
+    mode: "file" | "folder" | "skill",
+    items: { file: File; path: string }[],
+  ) => {
     const limitError = skillUploadError(
       items.length,
       items.reduce((n, it) => n + it.file.size, 0),
@@ -1518,8 +1525,8 @@ function AddSkillsDialog({
           </CommandList>
         </Command>
 
-        {/* import 입구 둘 — `Command`와 실패·`DialogFooter` 사이의 한 행(§비주얼 §25 ⑤).
-            숨긴 `<input type="file">` 둘 + 버튼 둘, `AttachmentButton`과 같은 조립
+        {/* import 입구 셋 — `Command`와 실패·`DialogFooter` 사이의 한 행(§비주얼 §25 ⑤).
+            숨긴 `<input type="file">` 셋 + 버튼 셋, `AttachmentButton`과 같은 조립
             (`display:none`은 focus가 안 먹지만 `.click()`은 먹는다 — `attachment-field.tsx`). */}
         <div className="flex items-center gap-2">
           <span className="min-w-0 text-xs text-muted-foreground">
@@ -1570,6 +1577,19 @@ function AddSkillsDialog({
               void runInstall("folder", withPaths);
             }}
           />
+          {/* 셋째 입구 — `.skill`(zip) 한 장. 화면이 보내는 모양은 첫째 입구와 같다(파일 한 장 +
+              `path` `SKILL.md`) — 푸는 것은 서버다(`installSkillAction` → `extractSkillArchive`). */}
+          <input
+            ref={skillInputRef}
+            type="file"
+            accept=".skill"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0] ?? null;
+              e.target.value = "";
+              if (file) void runInstall("skill", [{ file, path: "SKILL.md" }]);
+            }}
+          />
           <Button
             type="button"
             variant="outline"
@@ -1588,6 +1608,15 @@ function AddSkillsDialog({
             onClick={() => folderInputRef.current?.click()}
           >
             {installing === "folder" ? "설치 중…" : "스킬 폴더"}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={installing !== null}
+            onClick={() => skillInputRef.current?.click()}
+          >
+            {installing === "skill" ? "설치 중…" : ".skill 한 장"}
           </Button>
         </div>
 

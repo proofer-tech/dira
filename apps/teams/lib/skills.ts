@@ -227,12 +227,27 @@ export async function installSkill(
  *  헤더 · 구분선 · 합계 줄은 그 칸이 없어 자동으로 빠진다. */
 const UNZIP_LIST_LINE_RE = /^\s*(\d+)\s+\d{2}-\d{2}-\d{4}\s+\d{2}:\d{2}\s+(.+)$/;
 
+/** `unzip`을 부르고, 실패하면 §비주얼 §25 ⑤ 갈래 8의 두 조각으로 다시 던진다(zip이 아니거나
+ *  깨진 아카이브 — 화면은 그 둘을 정직하게 못 가르므로 `unzip`이 낸 한 줄을 mono가 그대로 든다). */
+async function runUnzip(args: string[]): Promise<{ stdout: string }> {
+  try {
+    return await execFileP("/usr/bin/unzip", args);
+  } catch (e) {
+    const err = e as NodeJS.ErrnoException & { code?: number | string; stderr?: string; stdout?: string };
+    const firstLine = (err.stderr?.trim() || err.stdout?.trim() || err.message).split("\n")[0];
+    throw new SkillInstallError(
+      "이 파일을 풀지 못했습니다 — .skill은 zip이어야 합니다",
+      `unzip ${err.code ?? "?"}: ${firstLine}`,
+    );
+  }
+}
+
 /** zip 안의 파일 목록 + **압축을 풀었을 때의 바이트**(`unzip -l`의 `Length` 칸). 상한이 재는
  *  값이 이거다 — 압축 전(zip 파일) 바이트로 재면 압축률 큰 zip 하나가 상한을 우회한다(§5-1
  *  §상한). 디렉터리 항목(이름이 `/`로 끝난다)은 여기서 뺀다 — 상한이 재는 수는 "푼 결과의
  *  파일"이다. */
 async function listZipFiles(zipFile: string): Promise<{ path: string; bytes: number }[]> {
-  const { stdout } = await execFileP("/usr/bin/unzip", ["-l", zipFile]);
+  const { stdout } = await runUnzip(["-l", zipFile]);
   return stdout
     .split("\n")
     .map((line) => UNZIP_LIST_LINE_RE.exec(line))
@@ -252,11 +267,20 @@ async function listZipFiles(zipFile: string): Promise<{ path: string; bytes: num
  *  `skillUploadError`로 먼저 거절한다(통과한 것만 디스크에 푼다).
  *
  *  **첫 성분 규칙**(§5-1): 최상위에 `SKILL.md`가 있으면 안 뗀다 - 없고 최상위 항목이 디렉터리
- *  하나뿐이면 그것을 뗀다 - 둘 다 아니면 그대로 돌려준다. `installSkill`이 그 결과에서
- *  "SKILL.md가 없습니다"로 거절한다 — 폴더 모드와 같은 갈래고, 새 문장을 안 만든다.
+ *  하나뿐이면 그것을 뗀다 - 둘 다 아니면 **이 함수가 직접** 갈래 7로 거절한다(§비주얼 §25 ⑤ —
+ *  `installSkill`의 폴더 문장을 되쓰면 `.skill`을 고른 사람에게 고르지도 않은 폴더를 탓하게 된다).
+ *
+ *  **`originalName`은 사람이 고른 `.skill` 파일명이다** — 갈래 7의 mono가 그 값을 든다.
+ *  호출부(`installSkillAction`)가 안 넘기면 내부 임시 파일명으로 대신한다(테스트 편의).
+ *
+ *  **`unzip`이 실패하면**(헤더가 zip이 아니거나 깨진 아카이브) 갈래 8로 거절한다 — 그 실패가
+ *  헤더 탓인지 손상 탓인지는 `unzip`이 낸 한 줄에만 있어 화면이 그 둘을 가르지 않는다.
  *
  *  **자리는 임시 디렉터리이고 끝나면 지운다**(성공하든 거절하든) — `<config>/skills` 밖이다. */
-export async function extractSkillArchive(bytes: Buffer): Promise<SkillUpload[]> {
+export async function extractSkillArchive(
+  bytes: Buffer,
+  originalName = "archive.skill",
+): Promise<SkillUpload[]> {
   const dir = await mkdtemp(path.join(tmpdir(), "skill-import-"));
   try {
     const zipFile = path.join(dir, "archive.zip");
@@ -271,12 +295,19 @@ export async function extractSkillArchive(bytes: Buffer): Promise<SkillUpload[]>
 
     const extractDir = path.join(dir, "extracted");
     await mkdir(extractDir);
-    await execFileP("/usr/bin/unzip", ["-q", zipFile, "-d", extractDir]);
+    await runUnzip(["-q", zipFile, "-d", extractDir]);
 
     const topSegments = new Set(entries.map((e) => e.path.split("/")[0]));
     const only = topSegments.size === 1 ? [...topSegments][0] : null;
     const isSingleTopDir = only !== null && entries.every((e) => e.path !== only);
-    const strip = !entries.some((e) => e.path === "SKILL.md") && isSingleTopDir ? `${only}/` : "";
+    const hasTopSkillMd = entries.some((e) => e.path === "SKILL.md");
+    if (!hasTopSkillMd && !isSingleTopDir) {
+      throw new SkillInstallError(
+        ".skill 안에서 SKILL.md를 찾지 못했습니다 — 최상위에 있거나 폴더 하나 바로 아래에 있어야 합니다",
+        originalName,
+      );
+    }
+    const strip = !hasTopSkillMd && isSingleTopDir ? `${only}/` : "";
 
     return await Promise.all(
       entries.map(async (e) => ({
