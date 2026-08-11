@@ -33,6 +33,7 @@ const {
   workerSessions,
   toolFlags,
   personaBlock,
+  snapshotOf,
 } = await import("./home-agent.ts");
 type HomeChunk = Awaited<ReturnType<typeof pollHome>>;
 const { tailEvents } = await import("./transcript.ts");
@@ -92,7 +93,7 @@ test("renderSnapshot — 임시 큐 픽스처의 워커 이름·상태·엔진·
   const tickets = await listTickets(root, config);
   const workers = await listWorkers(root, tickets);
 
-  const s = renderSnapshot({ project, config, tickets, workers });
+  const s = renderSnapshot({ project, config, tickets, workers, newTicketHash: "deadbeef" });
 
   // ① 워커 이름 둘
   assert.match(s, /\| w1 \|/);
@@ -111,6 +112,9 @@ test("renderSnapshot — 임시 큐 픽스처의 워커 이름·상태·엔진·
   // ⑥ 어디를 보라고 짚는다 — 내용을 복사하지 않는다(§7)
   assert.match(s, /docs\/DESIGN\.md/);
   assert.ok(s.includes(path.join(root, "tickets")));
+  // ⑦ 새 티켓 해시가 인자 그대로 실린다(§7 §해시는 사람이 손으로 안 민다) — `renderSnapshot`은
+  // `crypto`를 안 탄다, 미는 것은 밖(`snapshotOf`)이다
+  assert.match(s, /deadbeef/);
 
   // `idle`은 crontab 등록이 조건이라 픽스처로 못 만든다(남의 crontab을 안 건드린다).
   // 라벨 매핑 자체는 순수 함수의 일이므로 상태만 갈아 끼워 확인한다.
@@ -119,6 +123,7 @@ test("renderSnapshot — 임시 큐 픽스처의 워커 이름·상태·엔진·
     config,
     tickets,
     workers: workers.map((w) => (w.name === "w2" ? { ...w, status: "idle" as const, cron: true } : w)),
+    newTicketHash: "deadbeef",
   });
   assert.match(idle, /\| w2 \| idle \| 등록 \|/);
 });
@@ -139,10 +144,28 @@ test("renderSnapshot — 워커 0개도 사실이다 (빈 표 대신 한 줄)", 
     },
     tickets: [],
     workers: [],
+    newTicketHash: "deadbeef",
   });
   assert.match(s, /## 워커 0개/);
   assert.match(s, /워커가 없다/);
   assert.match(s, /열림 0 · 진행중 0 · 완료 0/);
+});
+
+test("snapshotOf — 새 티켓 해시를 8-hex로 밀고 그 stem은 큐에 없는 값이다. 못 읽으면 그 줄이 없다", async () => {
+  const root = fixture(); // 워커 2개 · 티켓 4건짜리 픽스처(위와 같은 것)
+  const project = { name: "테스트큐", root };
+  const s = await snapshotOf(project);
+  const m = s.match(/새 요구사항 티켓 해시[^`]*`([0-9a-f]{8})`/);
+  assert.ok(m, `해시 줄을 못 찾았다 — 실제 스냅샷:\n${s}`);
+  const stems = new Set((await listTickets(root, await resolveConfig(project))).map((t) => t.stem));
+  assert.ok(!stems.has(m![1]), "새로 민 해시가 이미 있는 stem과 겹쳤다 — 충돌 검사가 안 돈다");
+
+  // 큐를 못 읽으면 해시를 안 민다(§7: 못 쓸 값을 실어 주면 에이전트가 그걸 믿는다).
+  // `readdir`류는 다 `.catch(() => [])`로 방어돼 있어 "없는 경로"만으로는 안 던진다 —
+  // 실제로 던지는 자리(`resolveConfig`의 `path.join(root, …)`)를 강제로 때린다.
+  const broken = await snapshotOf({ name: "깨진 큐", root: undefined as unknown as string });
+  assert.match(broken, /큐를 읽지 못했다/);
+  assert.ok(!/새 요구사항 티켓 해시/.test(broken));
 });
 
 test("workerSessions — `.wip` 전부가 먼저, `.done`은 최근 10개. session id 없는·깨진 줄은 없는 것과 같다", async () => {
@@ -199,7 +222,7 @@ test("workerSessions — `.wip` 전부가 먼저, `.done`은 최근 10개. sessi
 test("buildPrompt — 스냅샷이 질문 앞에 오고 경계가 글로 들어간다", () => {
   const p = buildPrompt("SNAP", "w1이 지금 무슨 일을 하고 있나?");
   assert.ok(p.indexOf("SNAP") < p.indexOf("w1이 지금"));
-  // 종전 `(쓰기 도구는 애초에 막혀 있다)`가 거짓이 된 자리 — 새 경계가 다섯 다 글로 서고
+  // 종전 `(쓰기 도구는 애초에 막혀 있다)`가 거짓이 된 자리 — 새 경계가 다 글로 서고
   // 막힌 쪽도 이름으로 선다(막힌 것을 두드리다 끝나는 턴이 사람에게는 고장으로 보인다)
   for (const s of ["personas/**", "protocols/**", "workers/*.sh", "AGENTS.md", "ontology/**", "worktrees/**", "tickets/**"]) {
     assert.ok(p.includes(s), `프롬프트에 ${s}가 없다 — §7 §쓰기가 닿는 곳이 다섯이 된다`);
@@ -209,9 +232,16 @@ test("buildPrompt — 스냅샷이 질문 앞에 오고 경계가 글로 들어�
   // 고치지 않는다*는 이 페르소나가 하는 일(본문에 링크를 단다)과 정면으로 부딪쳤다.
   assert.ok(!p.includes("질의응답 에이전트"));
   assert.ok(!p.includes("고치지도 않는다"));
-  // 살린 것 둘: 티켓을 **만드는** 경로가 없다는 것과, 거부를 그대로 말하라는 줄
-  assert.match(p, /새 티켓을 만들지 않는다/);
-  assert.match(p, /거부되면 우회하지 말고 무엇이 왜 막혔는지 그대로 말한다/);
+  assert.match(p, /거부되면 우회하지 말고 무엇이 왜 막혔는지 그대로\s*\n?\s*말한다/);
+  // **`새 티켓을 만들지 않는다`는 §7 §홈 대화에서 요구사항이 접수된다가 뒤집은 문장이다** —
+  // 이제 프롬프트에 없어야 한다. 대신 여섯 가지가 선다(§7 §`kind`를 지는 것이 글이다 · §본문은 두 층이다).
+  assert.ok(!p.includes("새 티켓을 만들지 않는다"));
+  assert.match(p, /kind: request/); // ① 만드는 것은 kind: request 하나
+  assert.match(p, /사람이 그 턴에 요구사항으로 올려 달라고 했을\s*\n?\s*때만/); // ② 그 턴에만
+  assert.match(p, /위 스냅샷이 준 새 티켓 해시를 그대로 쓴다/); // ③ 해시는 스냅샷 값을 쓴다
+  assert.match(p, /Glob.*아직 큐에 없는지 한 번 더 본다/); // ④ 쓰기 전에 Glob으로 비었는지 확인
+  assert.match(p, /있는 티켓 파일은 `Write`로 덮지\s*\n?\s*않는다/); // ⑤ Write로 안 덮는다(Edit이 본문 고치기)
+  assert.match(p, /## 맥락/); // ⑥ 본문 두 층 — 사람의 문장 그대로 + `## 맥락`
   // 페르소나를 안 주면 **한 글자도 안 붙는다** — 스캐폴딩 전 큐에서 홈이 그대로 돈다
   assert.ok(p.startsWith("SNAP"));
 });
@@ -264,7 +294,7 @@ test("personaBlock — 세 조각이 tick.sh:265와 같은 순서로 · 없으�
   assert.strictEqual(await personaBlock(personas, "pm"), "");
 });
 
-test("toolFlags — 네 조각과 경로 스코프 다섯 + `Edit`만 (89962e56 · 7e35d300 · bd3cd201)", () => {
+test("toolFlags — 네 조각과 경로 스코프 여섯 (89962e56 · 7e35d300 · bd3cd201 · 64b45d3c)", () => {
   const flags = toolFlags("/Users/x/proj/.dira");
 
   // ① 네 조각이 다 있다. `--allowed-tools`는 **도구를 빼지 않고**(권한 목록이다) 나머지 셋 중
@@ -277,30 +307,24 @@ test("toolFlags — 네 조각과 경로 스코프 다섯 + `Edit`만 (89962e56 
   assert.strictEqual(flags[flags.indexOf("--tools") + 1], "Read,Glob,Grep,Write,Edit");
 
   const scope = flags.slice(flags.indexOf("--allowed-tools") + 1);
-  // ③ 쓰기가 닿는 곳 **다섯**이 다 있다. `Write`·`Edit` 양쪽에 붙어야 한다 — 한쪽만 스코프면
-  // 다른 쪽이 큐 전체를 연다(절대경로는 `//` 접두다 — 실측 문법). **다섯이 다 큐 루트 아래다**
-  // — 종전 뒤 둘이 repo(`dirname(root)`) 기준이던 것이 개정 `22a803de`로 큐 안으로 왔다
+  // ③ 쓰기가 닿는 곳 **여섯**이 다 있다. `Write`·`Edit` 양쪽에 붙어야 한다 — 한쪽만 스코프면
+  // 다른 쪽이 큐 전체를 연다(절대경로는 `//` 접두다 — 실측 문법). **여섯이 다 큐 루트 아래다**
+  // — 종전 뒤 둘이 repo(`dirname(root)`) 기준이던 것이 개정 `22a803de`로 큐 안으로 왔고,
+  // `tickets/**`는 요구 `64b45d3c`가 `Edit`만이던 자리에 `Write`를 더했다(§7 §홈 대화에서
+  // 요구사항이 접수된다) — 종전 `EDIT_ONLY` 상수는 이제 없다.
   for (const p of [
     "/Users/x/proj/.dira/personas/**",
     "/Users/x/proj/.dira/protocols/**",
     "/Users/x/proj/.dira/workers/*.sh",
     "/Users/x/proj/.dira/ontology/**",
     "/Users/x/proj/.dira/AGENTS.md",
+    "/Users/x/proj/.dira/tickets/**",
   ]) {
     for (const tool of ["Write", "Edit"]) {
-      assert.ok(scope.includes(`${tool}(//${p})`), `${tool}(//${p})가 없다 — §7 §쓰기가 닿는 곳이 다섯이 된다`);
+      assert.ok(scope.includes(`${tool}(//${p})`), `${tool}(//${p})가 없다 — §7 §쓰기가 닿는 곳이 여섯이 된다`);
     }
   }
-  // ④ **`tickets/**`는 `Edit`만이다.** 시킨 것은 본문에 링크를 추가지 티켓 발행이 아니라
-  // (§5-3 산출물 ③) `Write`를 안 준다 — 이게 §7 §안 만드는 것의 `에이전트가 티켓을 만드는
-  // 경로`가 안 뒤집힌 자리다. **`Write(…/tickets/**)`가 붙는 날이 그 줄이 뒤집히는 날이다.**
-  assert.ok(scope.includes("Edit(///Users/x/proj/.dira/tickets/**)"));
-  assert.strictEqual(
-    scope.filter((s) => s.startsWith("Write(") && s.includes("tickets")).length,
-    0,
-    "Write(…/tickets/**)가 붙었다 — 티켓 발행 경로가 열린다(§7 §안 만드는 것)",
-  );
-  // ⑤ 밖이어야 하는 것들이 **어느 스코프에도 안 나온다**. `worktrees/` 아래는 실제 프로젝트
+  // ④ 밖이어야 하는 것들이 **어느 스코프에도 안 나온다**. `worktrees/` 아래는 실제 프로젝트
   // 코드고, repo 쪽 예외가 **0**이라 소스·`docs/`·엔진은 그대로 막혀 있다
   for (const out of ["worktrees", "docs", "apps", "tick.sh"]) {
     assert.ok(!scope.some((s) => s.includes(out)), `${out}가 스코프에 들었다 — 요구가 막으라고 한 것이다`);
@@ -310,9 +334,9 @@ test("toolFlags — 네 조각과 경로 스코프 다섯 + `Edit`만 (89962e56 
   for (const s of scope.filter((s) => s.includes("("))) {
     assert.match(s, /^(Write|Edit)\(\/\/\/Users\/x\/proj\/\.dira\//, `${s}가 큐 루트 밖이다`);
   }
-  // ⑥ 스코프 없는 맨 `Write`·`Edit`는 큐 전체를 연다 — 그것도 없어야 한다
+  // ⑤ 스코프 없는 맨 `Write`·`Edit`는 큐 전체를 연다 — 그것도 없어야 한다
   assert.ok(!scope.includes("Write") && !scope.includes("Edit"));
-  // ⑦ `--dangerously-skip-permissions`(스코프를 통째로 끈다) · `Bash`(셸은 경로로 못 막는다)는 §7이 뺀 것이다
+  // ⑥ `--dangerously-skip-permissions`(스코프를 통째로 끈다) · `Bash`(셸은 경로로 못 막는다)는 §7이 뺀 것이다
   assert.ok(!flags.some((f) => f.includes("dangerously")));
   assert.ok(!flags.some((f) => f.includes("Bash")));
 });
@@ -412,6 +436,7 @@ function renderSnapshot0(): string {
     },
     tickets: [],
     workers: [],
+    newTicketHash: "deadbeef",
   });
 }
 
@@ -1166,8 +1191,9 @@ test("워커 세션 — 사라진 `current`는 대화 0건과 같고, 고르면 
   // 아카이빙 산출물 둘도 **큐 루트 아래**다 — repo 기준 항이 0이다(개정 `22a803de`)
   assert.ok((argv.at(-1) ?? "").includes(`Write(//${root}/AGENTS.md)`));
   assert.ok(!(argv.at(-1) ?? "").includes(`//${path.dirname(root)}/DIRA.md`));
+  // `tickets/**`는 이제 `Write`도 받는다(요구 `64b45d3c` — §7 §홈 대화에서 요구사항이 접수된다)
   assert.ok((argv.at(-1) ?? "").includes(`Edit(//${root}/tickets/**)`));
-  assert.ok(!(argv.at(-1) ?? "").includes(`Write(//${root}/tickets/**)`));
+  assert.ok((argv.at(-1) ?? "").includes(`Write(//${root}/tickets/**)`));
   // **이 큐엔 `personas/`가 없다** — 프롬프트 첫 줄이 스냅샷이다(argv 로그는 첫 줄만 남는다).
   // 페르소나가 없는 큐에서 홈이 그대로 도는 것이 계약이다(§7 — WARN도 없다)
   assert.match(argv.at(-1) ?? "", / --verbose # 지금 이 프로젝트의 상태$/);

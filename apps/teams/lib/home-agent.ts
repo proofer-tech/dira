@@ -87,24 +87,23 @@ import { engineCell, listWorkers, workerOf, type Worker } from "./workers.ts";
  *  셸은 리다이렉트·`sh -c`로 어느 경로든 쓰므로 그게 있으면 아래 스코프가 아무것도 안 막는다. */
 const TOOLS = "Read,Glob,Grep,Write,Edit";
 
-/** 쓰기가 닿는 곳(§7 §쓰기가 닿는 곳이 **다섯**이 된다 — 요구 `bd3cd201`). **상대 글롭**이라 값이
- *  프로젝트마다 다르다 — 아래가 상수 배열(`TOOL_FLAGS`)이 아니라 함수인 이유가 이 한 줄이다.
- *  여기 없는 것은 밖이다: `worktrees/**`(아래에 실제 프로젝트 코드가 있다) · repo의 나머지
- *  전부(소스 · `docs/**` · 엔진) · 큐 밖 전부.
+/** 쓰기가 닿는 곳(§7 §쓰기가 닿는 곳이 **다섯**이 된다 — 요구 `bd3cd201`) + `tickets/**`.
+ *  **상대 글롭**이라 값이 프로젝트마다 다르다 — 아래가 상수 배열(`TOOL_FLAGS`)이 아니라 함수인
+ *  이유가 이 한 줄이다. 여기 없는 것은 밖이다: `worktrees/**`(아래에 실제 프로젝트 코드가 있다) ·
+ *  repo의 나머지 전부(소스 · `docs/**` · 엔진) · 큐 밖 전부.
  *
- *  뒤 둘이 아카이빙 산출물의 자리다(§5-3 산출물 ①②). **종전에 그 둘만 repo(`dirname(root)`)
- *  기준이었다** — 큐는 git에 안 들어가는 것이 불변식이라(CORE §큐의 불변식 3) 온톨로지를 큐 안에
- *  두면 clone한 사람에게 0장이라는 근거였다. 그 값은 뒤집힌 것이 아니라 **대가로 지불됐다**
- *  (§5-3 §아카이빙 산출물은 큐 안에 산다 §파는 것). 대신 repo 쪽 예외가 **0**이 되어
- *  요구 `20e4a6f4`(실제 프로젝트는 못 고친다)가 예외 없이 선다 — 개정 `22a803de`.
- *  `AGENTS.md`는 아직 그 자리에 파일이 없을 수 있어 `Write`가 필요하다. */
-const WRITABLE = ["personas/**", "protocols/**", "workers/*.sh", "ontology/**", "AGENTS.md"];
-
-/** **`Write`를 안 주는 자리.** 시킨 것은 *티켓 본문에 링크를 추가*(산출물 ③)이지 티켓 발행이
- *  아니다 — `Edit`만 주면 §7 §안 만드는 것의 `에이전트가 티켓을 만드는 경로`가 안 뒤집힌다.
- *  두 도구가 `--allowed-tools`에서 따로 걸리므로 가르는 비용이 0이다. **`Write(…/tickets/**)`가
- *  붙는 날이 그 줄이 뒤집히는 날이다** — 그때까지 이 상수는 `WRITABLE`과 갈려 있어야 한다. */
-const EDIT_ONLY = ["tickets/**"];
+ *  ontology·AGENTS.md 둘이 아카이빙 산출물의 자리다(§5-3 산출물 ①②). **종전에 그 둘만
+ *  repo(`dirname(root)`) 기준이었다** — 큐는 git에 안 들어가는 것이 불변식이라(CORE §큐의
+ *  불변식 3) 온톨로지를 큐 안에 두면 clone한 사람에게 0장이라는 근거였다. 그 값은 뒤집힌 것이
+ *  아니라 **대가로 지불됐다**(§5-3 §아카이빙 산출물은 큐 안에 산다 §파는 것). 대신 repo 쪽
+ *  예외가 **0**이 되어 요구 `20e4a6f4`(실제 프로젝트는 못 고친다)가 예외 없이 선다 —
+ *  개정 `22a803de`. `AGENTS.md`는 아직 그 자리에 파일이 없을 수 있어 `Write`가 필요하다.
+ *
+ *  **`tickets/**`는 종전에 `Write`가 안 붙는 자리였다**(별도 상수 `EDIT_ONLY` — 시킨 일이
+ *  *티켓 본문에 링크를 추가*(산출물 ③)이지 티켓 발행이 아니었다). 요구 `64b45d3c`가 그 결정을
+ *  뒤집었다(§7 §홈 대화에서 요구사항이 접수된다) — 열린 것은 `kind: request` 하나뿐이고,
+ *  플래그는 파일 내용을 못 봐서 그 제약은 여기서 안 지고 `buildPrompt`의 경계 문단이 진다. */
+const WRITABLE = ["personas/**", "protocols/**", "workers/*.sh", "ontology/**", "AGENTS.md", "tickets/**"];
 
 /** 도구 표면을 정하는 플래그 **전부**. **네 조각이 각자 다른 층을 막으므로** 하나라도 빠지면
  *  표면이 넓어진다(머리 주석의 A/B): `--tools`가 built-in 목록을 다섯으로 만들고,
@@ -122,10 +121,9 @@ const EDIT_ONLY = ["tickets/**"];
 export function toolFlags(root: string): string[] {
   // 절대경로는 **슬래시 둘로 시작한다**(`Write(//<절대경로>/**)` — 실측 `7e35d300`. `**`는 깊이 무제한).
   const abs = (base: string, glob: string) => `//${path.join(base, glob)}`;
-  // 다섯 다 큐 루트 아래다 — repo(`dirname(root)`) 기준 항이 **0**이다(개정 `22a803de`).
+  // 여섯 다 큐 루트 아래다 — repo(`dirname(root)`) 기준 항이 **0**이다(개정 `22a803de`).
+  // `tickets/**`가 `Write`까지 받는 것은 요구 `64b45d3c`가 뒤집은 자리다(위 `WRITABLE` 주석).
   const scope = WRITABLE.map((g) => abs(root, g)).flatMap((p) => [`Write(${p})`, `Edit(${p})`]);
-  // `Write`가 **안 붙는** 자리. 이 줄에 `Write`를 더하는 것이 §7 §안 만드는 것을 뒤집는 변경이다.
-  scope.push(...EDIT_ONLY.map((g) => `Edit(${abs(root, g)})`));
   // `--allowed-tools`의 값은 여기서 **토큰 여러 개**다 — 뒤에 `--output-format`이 와야 한다(머리 주석).
   return ["--tools", TOOLS, "--strict-mcp-config", "--permission-mode", "manual", "--allowed-tools", "Read", "Glob", "Grep", ...scope];
 }
@@ -375,6 +373,9 @@ export type SnapshotInput = {
   config: ProjectConfig;
   tickets: Ticket[];
   workers: Worker[];
+  /** 이번 턴에 새 요구사항 티켓을 쓸 때 쓰는 8-hex(§7 §해시는 사람이 손으로 안 민다). 서버
+   *  (`snapshotOf`)가 밀고 충돌 검사까지 마친 값을 인자로 받는다 — 여기서 `crypto`를 안 탄다. */
+  newTicketHash: string;
 };
 
 /** 스냅샷 문자열. **순수 함수다**(fs를 안 탄다) — `home-agent.test.ts`가 이걸 검증한다.
@@ -382,7 +383,7 @@ export type SnapshotInput = {
  *  `readSummary`를 부르지 않고 같은 판정 함수를 직접 부른다: 저건 `listWorkers`를 **티켓 없이**
  *  불러서 `holding`이 항상 null이고(§7 표가 요구하는 "물고 있는 티켓"이 통째로 빈다), 여기서
  *  다시 부르면 큐를 두 번 읽는다. 세는 식(`state === "open"` …)은 그 파일과 글자로 같다. */
-export function renderSnapshot({ project, config, tickets, workers }: SnapshotInput): string {
+export function renderSnapshot({ project, config, tickets, workers, newTicketHash }: SnapshotInput): string {
   const count = (s: Ticket["state"]) => tickets.filter((t) => t.state === s).length;
   const title = (stem: string) => tickets.find((t) => t.stem === stem)?.title ?? "";
 
@@ -429,6 +430,7 @@ export function renderSnapshot({ project, config, tickets, workers }: SnapshotIn
     "## 여기 없는 것은 이 파일들을 읽어라",
     "",
     `- 티켓 전부: \`${path.join(project.root, "tickets")}/\` — 파일명이 곧 상태다`,
+    `- 새 요구사항 티켓 해시(이번 턴 한 번 · 8-hex · 큐에 없는 값): \`${newTicketHash}\``,
     `- 프로토콜: \`${config.protocols}/\``,
     `- 페르소나: \`${config.personas}/\``,
     `- 제품 스펙(단일 출처): \`${path.join(path.dirname(project.root), "docs/DESIGN.md")}\``,
@@ -437,13 +439,21 @@ export function renderSnapshot({ project, config, tickets, workers }: SnapshotIn
 }
 
 /** 큐를 한 번 읽어 스냅샷을 만든다. 못 읽으면 **사유를 그대로 담은 스냅샷**이다 — 던지면
- *  질문 자체가 사라지고, 삼키면 에이전트가 "워커가 없다"고 거짓말한다(§6 에러 3요소). */
+ *  질문 자체가 사라지고, 삼키면 에이전트가 "워커가 없다"고 거짓말한다(§6 에러 3요소).
+ *
+ *  **새 티켓 해시도 여기서 민다**(§7 §해시는 사람이 손으로 안 민다) — 큐를 못 읽으면 안 민다:
+ *  쓰기도 못 하는 자리에서 못 쓸 값을 실어 주면 에이전트가 그걸 믿는다. 그래서 실패 갈래의
+ *  스냅샷 문자열에는 그 줄이 없다. */
 export async function snapshotOf(project: Pick<Project, "name" | "root">): Promise<string> {
   try {
     const config = await resolveConfig(project);
     const tickets = await listTickets(project.root, config);
     const workers = await listWorkers(project.root, tickets);
-    return renderSnapshot({ project, config, tickets, workers });
+    // 충돌 검사가 공짜다 — `tickets`를 이미 손에 들고 있다(§7 §해시는 사람이 손으로 안 민다).
+    const stems = new Set(tickets.map((t) => t.stem));
+    let newTicketHash = randomUUID().slice(0, 8);
+    while (stems.has(newTicketHash)) newTicketHash = randomUUID().slice(0, 8);
+    return renderSnapshot({ project, config, tickets, workers, newTicketHash });
   } catch (e) {
     return [
       "# 지금 이 프로젝트의 상태",
@@ -516,20 +526,45 @@ export async function personaBlock(personasDir: string, name: string = HOME_PERS
  *  실린다). PROFILE과 정면으로 부딪쳐서다 — 저 문단은 *티켓을 고치지 않는다*고 적었고 이 페르소나가
  *  하는 일이 **티켓 본문에 링크를 다는 것**이다(§5-3 산출물 ③). 누구인지는 이제 PROFILE이 말한다.
  *
- *  **경계 문장만 살렸다.** 플래그가 막는 것과 별개로 글이 필요한 이유는 종전과 같다: **막힌 것을
- *  두드리다 답을 못 하고 끝나는 턴**은 사람에게 그냥 고장으로 보인다. 그 자리가 이제
- *  `worktrees/**`와 repo 전부다(개정 `22a803de`로 repo 쪽 예외가 0이 됐다). `티켓을 만들지 않는다`는 남고 *고치지 않는다*는 죽었다 —
- *  `tickets/**`가 `Edit`으로만 열린 것이 정확히 그 갈림이다(§7 §안 만드는 것 무수정).
- *  경로를 절대경로로 안 쓰는 것은 스냅샷이 이미 큐 루트를 적어 주기 때문이다. */
+ *  **경계 문장은 살아 있다.** 플래그가 막는 것과 별개로 글이 필요한 이유는 종전과 같다: **막힌 것을
+ *  두드리다 답을 못 하고 끝나는 턴**은 사람에게 그냥 고장으로 보인다. 그 자리가 `worktrees/**`와
+ *  repo 전부다(개정 `22a803de`로 repo 쪽 예외가 0이 됐다).
+ *
+ *  **`tickets/**`에 `Write`가 붙은 자리는 종전과 다르게 진다**(요구 `64b45d3c` — §7 §홈 대화에서
+ *  요구사항이 접수된다). 플래그의 경로 스코프는 파일 내용을 못 보므로 *`kind: request`만 만든다*는
+ *  제약을 여기 프롬프트 글이 진다 — §7 §`kind`를 지는 것이 글이다가 박은 그 자리다. 경로를
+ *  절대경로로 안 쓰는 것은 스냅샷이 이미 큐 루트를 적어 주기 때문이다. */
 export function buildPrompt(snapshot: string, question: string, persona = ""): string {
   return `${persona ? `${persona}\n\n` : ""}${snapshot}
 
 ---
 
 **고칠 수 있는 것은 이것뿐이다** — 큐 루트 아래 \`personas/**\` · \`protocols/**\` ·
-\`workers/*.sh\` · \`ontology/**\` · \`AGENTS.md\`, 그리고 \`tickets/**\`는 **본문 편집만**
-(새 티켓을 만들지 않는다). 그 밖(\`worktrees/**\` 아래 프로젝트 코드 · repo 전부 · 큐 밖
-전부)은 도구가 거부한다. 거부되면 우회하지 말고 무엇이 왜 막혔는지 그대로 말한다.
+\`workers/*.sh\` · \`ontology/**\` · \`AGENTS.md\`. 그 밖(\`worktrees/**\` 아래 프로젝트 코드 ·
+repo 전부 · 큐 밖 전부)은 도구가 거부한다. 거부되면 우회하지 말고 무엇이 왜 막혔는지 그대로
+말한다.
+
+**\`tickets/**\`에는 새 파일도 쓸 수 있다 — 사람이 그 턴에 요구사항으로 올려 달라고 했을
+때만.** 그때 만드는 것은 \`kind: request\` 티켓 하나뿐이다(\`work\`·\`feedback\`·\`answer\`는
+안 만든다). 해시는 위 스냅샷이 준 새 티켓 해시를 그대로 쓴다(직접 짓지 않는다) — 쓰기 전에
+\`Glob\`으로 그 이름이 아직 큐에 없는지 한 번 더 본다. **있는 티켓 파일은 \`Write\`로 덮지
+않는다** — 본문을 고치는 것은 여전히 \`Edit\`이다. 본문은 두 층이다: 사람이 말한 문장 그대로
+(고쳐 쓰지 않는다) 다음에 \`## 맥락\` 절(이 요구가 나온 대화의 맥락, 사람의 말은 인용으로
+표시). 형식:
+
+\`\`\`
+---
+ticket: <위 스냅샷이 준 새 티켓 해시>
+title: <사람의 요구 한 줄, 80자에서 자른다>
+kind: request
+persona: pm
+---
+
+<사람이 말한 문장 그대로>
+
+## 맥락 - 홈 대화에서 옮겼다
+<이 요구가 나온 대화의 맥락. 사람의 말은 인용으로 표시한다>
+\`\`\`
 ${QUESTION_MARK}${question}`;
 }
 
