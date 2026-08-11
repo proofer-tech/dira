@@ -734,6 +734,16 @@ case "$FAKE_MODE" in
     delta "쓰다 만 답"
     echo "boom: something broke" >&2
     sleep 60 >/dev/null 2>&1 & wait ;;
+  gap)    # 요구 \`c5d287ac\` 재현 - 델타 -> 트랜스크립트에 기록 -> 도구 블록 시작 -> 몇 초 대기.
+          # 산문을 쓰고 도구를 부르는 그 갈래다: 텍스트 블록이 끝나 \`keep\`이 정본을 남긴 뒤에도
+          # \`message_start\`가 없어 \`live.partial\`은 그대로다 - 도구가 도는 2초 동안 같은 답이
+          # \`turns\`와 \`partial\` 양쪽에 있다(§7 §누적기를 비우는 자리 - 고치기 전엔 두 벌로 뜬다)
+    say '{"type":"stream_event","event":{"type":"message_start"},"parent_tool_use_id":null}'
+    delta "답"
+    keep "답"
+    say '{"type":"stream_event","event":{"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"toolu_1","name":"Read"}},"parent_tool_use_id":null}'
+    sleep 2
+    say '{"type":"result","is_error":false,"subtype":"success","api_error_status":null,"result":"답"}' ;;
   activity)  # §7 §안심 장치 실측 — 생각 · 도구 · 글자 사이에 잠을 둬 폴링이 셋을 따로 잡을 창을 연다
     say '{"type":"system","subtype":"init","model":"claude-test-model"}'
     say '{"type":"stream_event","event":{"type":"message_start"},"parent_tool_use_id":null}'
@@ -817,6 +827,22 @@ test("흐르는 답 — 도는 동안은 stdout 누적분, 끝나면 정본이 �
     assert.deepStrictEqual(p.turns, ["물음", "앞부분 뒷부분"]);
     assert.strictEqual(end.failed, null);
     assert.strictEqual(end.stopped, false);
+  });
+});
+
+test("겹침 판정 — 도구가 도는 동안 트랜스크립트가 같은 답을 이미 들여도 partial은 빈 문자열이다 (요구 `c5d287ac`)", async () => {
+  const project = { id: "gap-test", name: "큐", root: CWD };
+  await withFake("gap", async () => {
+    assert.strictEqual(await startAsk(project, "질문"), null);
+
+    // 트랜스크립트가 답을 들인 바로 그 응답 — 도구는 아직 돈다(픽스처의 `sleep 2` 안).
+    // 고치기 전 코드(`live.partial`을 `message_start`에서만 비움 + 겹침 판정 없음)에서는
+    // 이 응답의 `partial`이 "답"이라 이 단언이 실패했다 — 실측은 `## 결과`에 있다.
+    const p = poller(project.id);
+    const mid = await p.until((c) => c.turns.length > 0);
+    assert.strictEqual(mid.running, true); // 도구가 아직 돈다 — 답은 끝난 게 아니다
+    assert.deepStrictEqual(p.turns, ["물음", "답"]); // 같은 답이 turns에 한 벌
+    assert.strictEqual(mid.partial, ""); // 겹침 판정 — 같은 답을 두 벌로 안 그린다
   });
 });
 

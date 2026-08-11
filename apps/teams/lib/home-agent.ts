@@ -1217,16 +1217,26 @@ export async function pollHome(
     });
   }
   const r = await tailEvents(file, at);
+  const turns = toTurns(r.events);
+  // **겹침 판정**(§7 §누적기를 비우는 자리 — 요구 `3dc948ac` · 실측 `c5d287ac`, 이 머신).
+  // 누적기는 `message_start`에서만 비므로(`eatLine` 무수정) 도구가 도는 동안은 그대로 있다.
+  // 비우는 자리를 `content_block_start`로 당기는 갈래는 버렸다 — 실측(3회 재현)에서 텍스트
+  // 블록의 트랜스크립트 레코드가 다음 `content_block_start`보다 늘 105~587ms **뒤**에 섰다.
+  // 그 자리로 당기면 그 지연만큼 화면에 빈 구간이 생긴다(§7이 "두 벌보다 나쁘다"고 적은 그것).
+  // 대신 여기서 **마지막 답 줄과 누적분이 같으면 누적분을 뺀다** — 트랜스크립트가 그 답을
+  // 이미 `turns`로 들인 바로 이 응답에서 뺀다(순서와 무관하게 통하는 이유는 `## 결과` 참조).
+  const lastAnswer = turns.filter((t) => t.role === "answer").at(-1)?.text;
+  const dedupedPartial = partial !== "" && partial === lastAnswer ? "" : partial;
   return chunk({
     sessionId: sid,
     conversations,
     workers,
-    turns: toTurns(r.events),
+    turns,
     offset: r.offset,
     reset,
     running,
     runningSessions,
-    partial,
+    partial: dedupedPartial,
     activity,
     stopped,
     failed,
