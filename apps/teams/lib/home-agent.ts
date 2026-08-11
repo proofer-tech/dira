@@ -911,14 +911,23 @@ async function runClaude(
 // 화면이 그리는 것은 **트랜스크립트 파일**이다(§7). 그래서 새로고침이 언제나 같은 것을 그리고,
 // 낙관적 에코가 없고, 이 앱에 대화 이력 저장소가 없다.
 
-/** 대화 줄 **두 종**(§24: 도구 호출 줄을 안 그린다 — 그건 §2-1 스트림의 일이다). */
+/** 대화 줄 **세 종**(§7 §스레드가 트랜스크립트 전부를 그린다 — 요구 `10714c38`). 종전은
+ *  `question`·`answer` 둘뿐이고 도구·생각·결과·서브에이전트 줄을 통째로 버렸다 — 이제 그 전부가
+ *  `line`이다. **화면이 종을 고르지 않는다**: 이 파일이 셋으로 가른 뒤에는 무엇을 어떻게 그리는지가
+ *  §2-1과 같은 문법을 쓰는 화면(다음 티켓 `08345f02`)의 일이다. */
 export type Turn = {
   key: string; // `StreamEvent.key` 그대로 — `<레코드 uuid>:<블록 index>`
-  role: "question" | "answer";
+  role: "question" | "answer" | "line";
+  /** `question`·`answer`는 사람이 읽는 산문이다. `line`은 접힌 줄의 **한 줄 요약**(펼치기 전에
+   *  보이는 값) — 아래 `event`가 있으면 펼친 모양은 그걸로 그린다(§2-1과 같은 그릇). */
   text: string;
   /** 이 답은 사람이 `중지`로 끊었다(답에만 붙는다). **새로고침해도 `중지됨`이 남는 근거**가
    *  이 한 칸이다 — 근거는 파일에 있다(아래 `INTERRUPTED`) */
   stopped?: true;
+  /** `role === "line"`일 때만 있다. **원본 사건 그대로다** — `label`·`summary`·`summaryMono`·
+   *  `body`·`diff`를 이 화면이 다시 뽑지 않는다(§2-1 렌더러 재사용, `lib/transcript.ts`가 이미
+   *  낸 값이다). */
+  event?: StreamEvent;
 };
 
 /** **사람도 에이전트도 쓰지 않은 줄 셋**(§7 §도는 답을 멈춘다 — 실측 ⑷). `중지`가 첫째를 남기고,
@@ -941,23 +950,44 @@ const GHOST_LINES = new Set([
  *  그래서 말풍선으로는 안 그리되 **앞 답에 표식으로 옮겨 적는다**. */
 const INTERRUPTED = "[Request interrupted by user]";
 
-/** 사건 → 대화 줄. 남는 것은 사용자 프롬프트와 assistant `text` 둘뿐이고 나머지(생각·도구·결과)는
- *  이 화면에 없다. 서브에이전트 줄(`sidechain`)도 뺀다 — 이 세션의 도구는 읽기 셋뿐이라 날 일이
- *  없지만, 나면 그건 대화가 아니라 로그다. */
+/** 사건 → 대화 줄. **셋 중 하나로 판정하고, 넷째는 없다**(§7 — 화면이 종을 고르지 않는다).
+ *  최상위(`sidechain` 아님) `prompt`·`text`만 사람 질문·에이전트 답이고, 나머지 전부(생각·도구·
+ *  결과·`interject` 그리고 **서브에이전트 줄까지**)가 `line`이다 — 종전엔 sidechain을 통째로
+ *  버렸다(이 세션의 도구는 읽기 셋뿐이라 날 일이 없었지만, 좌측 패널에서 여는 워커 세션은 Task를
+ *  쓸 수 있다). `line`의 `text`는 `label`·`summary`가 둘 다 비는 드문 경우(sidechain의 `text`
+ *  블록 — `recordToEvents`가 그 kind에 label·summary를 안 채운다)를 위한 안전망으로 `body` 앞
+ *  40자를 쓴다 — 빈 접힌 줄을 세우지 않는다. */
 export function toTurns(events: StreamEvent[]): Turn[] {
   const turns: Turn[] = [];
+  // 중지 표식은 **가장 가까운 답**의 것이다(`line`을 건너뛴다 — 도구가 도는 중에도 표식이 그
+  // 답을 찾는다). `question`에 닿으면 글자가 한 자도 안 왔다는 뜻이라 옮겨 적을 자리가 없다
+  // (§비주얼 §24는 띠를 답의 산문 블록에 붙인다 — 그 블록 자체가 없다).
+  const markInterrupted = () => {
+    for (let i = turns.length - 1; i >= 0; i--) {
+      if (turns[i].role === "answer") {
+        turns[i] = { ...turns[i], stopped: true };
+        return;
+      }
+      if (turns[i].role === "question") return;
+    }
+  };
   for (const e of events) {
-    if (e.sidechain) continue;
-    const text = e.kind === "prompt" ? questionOf(e.body) : e.kind === "text" ? e.body.trim() : "";
-    if (!text) continue;
-    if (GHOST_LINES.has(text)) {
-      // 중지 표식은 **바로 앞 답의 것**이다. 앞이 답이 아니면(글자가 한 자도 안 왔다) 옮겨 적을
-      // 자리가 없다 — 그때는 띠가 설 산문 블록 자체가 없다(§비주얼 §24는 띠를 답에 붙인다).
-      const last = turns.at(-1);
-      if (text === INTERRUPTED && last?.role === "answer") last.stopped = true;
+    if (!e.sidechain && (e.kind === "prompt" || e.kind === "text")) {
+      const text = e.kind === "prompt" ? questionOf(e.body) : e.body.trim();
+      if (!text) continue;
+      if (GHOST_LINES.has(text)) {
+        if (text === INTERRUPTED) markInterrupted();
+        continue;
+      }
+      turns.push({ key: e.key, role: e.kind === "prompt" ? "question" : "answer", text });
       continue;
     }
-    turns.push({ key: e.key, role: e.kind === "prompt" ? "question" : "answer", text });
+    turns.push({
+      key: e.key,
+      role: "line",
+      text: e.summary || e.label || e.body.trim().slice(0, 40),
+      event: e,
+    });
   }
   return turns;
 }
@@ -1135,7 +1165,11 @@ export type HomeChunk = {
  *  `answered`가 영영 false이므로, 늦게 끝낸 자식이 쓴 답 줄을 화면이 집어 가는 폴링이 끊는 자리다.
  *  아무 증거도 없는 `running: false`는 여전히 안 끊는다. **`CEILING_MS`는 그 QA 실측 때 서버의
  *  상한 5분(이 파일에 있던 타이머 상수 — 이 티켓이 걷었다)과 같은 수였다. 둘 다 걷기로 했다
- *  (요구 `8db4d0f6` — §7 §천장이 없다) — 화면 쪽은 화면 결선 티켓(`4c8e82d8`)이 걷는다.** */
+ *  (요구 `8db4d0f6` — §7 §천장이 없다) — 화면 쪽은 화면 결선 티켓(`4c8e82d8`)이 걷는다.**
+ *
+ *  **`turns.length`는 종을 안 가린다** — `line`이 늘어도 이 판정은 그대로다. 첫 증거(`answered`)는
+ *  이미 종과 무관하고, 둘째 증거는 원래도 "질문이 파일에 먼저 서는" 것만으로 채워지는 수였다
+ *  (`toTurns`가 항상 첫 프롬프트를 맨 먼저 넣는다) — `line`이 그 사실을 안 바꾼다. */
 export const pollDone = (c: Pick<HomeChunk, "running" | "turns" | "answered">): boolean =>
   c.answered || (!c.running && c.turns.length > 0);
 

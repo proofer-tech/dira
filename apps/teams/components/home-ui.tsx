@@ -837,14 +837,18 @@ function CopyAnswer({ text }: { text: string }) {
 
 /** `다시 답하기`가 다시 보낼 글 — **그 답 바로 위의 사람 질문**이다. 가짜 줄 셋은 `toTurns`가
  *  이미 걸렀으므로(§7 실측 ⑷) 뒤로 훑어 처음 만나는 `question`이 곧 그 답을 부른 질문이다.
- *  못 찾으면(우리가 안 만든 세션의 첫 줄이 답인 경우) 빈 문자열이고, `startAsk`가 거절한다. */
+ *  못 찾으면(우리가 안 만든 세션의 첫 줄이 답인 경우) 빈 문자열이고, `startAsk`가 거절한다.
+ *  **접힌 줄(`role: "line"`)은 이 판정에 안 든다** — `=== "question"`이 정확히 그 값만 고르므로
+ *  둘 사이에 도구·생각 줄이 몇 개 끼어도 그냥 지나친다(§7 §스레드가 트랜스크립트 전부를 그린다). */
 function questionFor(turns: Turn[], i: number): string {
   for (let j = i - 1; j >= 0; j--) if (turns[j]?.role === "question") return turns[j].text;
   return "";
 }
 
 /** 서버가 `stopped`를 알린 순간의 **마지막 답**에 표식을 옮겨 적는다. 트랜스크립트 쪽 근거
- *  (`toTurns`)와 같은 칸을 채우고, 둘 중 먼저 오는 것이 이긴다. */
+ *  (`toTurns`)와 같은 칸을 채우고, 둘 중 먼저 오는 것이 이긴다.
+ *  **접힌 줄은 `!== "answer"`에 걸려 그냥 건너뛴다** — 답 뒤에 도구 줄이 더 붙어도 표식은 여전히
+ *  가장 가까운 진짜 답을 찾는다(§7). */
 function markStopped(turns: Turn[]): Turn[] {
   for (let i = turns.length - 1; i >= 0; i--) {
     if (turns[i]?.role !== "answer") continue;

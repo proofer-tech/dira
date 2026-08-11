@@ -327,7 +327,10 @@ test("questionOf — 스냅샷·지시문을 떼고 사람이 쓴 질문만 남�
   assert.strictEqual(questionOf(buildPrompt("SNAP", "## 질문\n\n중첩된 글")), "## 질문\n\n중첩된 글");
 });
 
-test("toTurns — 트랜스크립트 한 벌에서 대화 줄 두 종만 나온다 (도구·생각 줄 없음)", async () => {
+// 계약이 갈렸다(§7 §스레드가 트랜스크립트 전부를 그린다 — 요구 `10714c38`) — 종전 이름
+// "toTurns — 트랜스크립트 한 벌에서 대화 줄 두 종만 나온다 (도구·생각 줄 없음)"이 말하던 그
+// 판정(도구·생각·서브 줄을 버린다)이 지금은 정반대다: 그 셋이 `line`으로 같이 나온다.
+test("toTurns — 도구·생각·서브 줄이 `line`으로 같이 나온다, 종은 사람 질문·에이전트 답 밖에서만 갈린다", async () => {
   const dir = mkdtempSync(path.join(tmpdir(), "ha-tr-"));
   tmps.push(dir);
   const file = path.join(dir, "session.jsonl");
@@ -356,7 +359,7 @@ test("toTurns — 트랜스크립트 한 벌에서 대화 줄 두 종만 나온�
           ],
         },
       }),
-      // ③ 서브에이전트 줄은 대화가 아니라 로그다(§24)
+      // ③ 서브에이전트 줄 — 종전엔 버렸다. 지금은 `line`이다(§7 — 화면이 종을 고르지 않는다)
       rec({
         type: "assistant",
         uuid: "a2",
@@ -374,11 +377,22 @@ test("toTurns — 트랜스크립트 한 벌에서 대화 줄 두 종만 나온�
     turns.map((t) => [t.role, t.text]),
     [
       ["question", "w2는 뭘 하나"],
+      ["line", "생각"], // thinking, 본문 암호화(빈 문자열) — summary도 비어 label로 떨어진다
+      ["line", "/x/y.md"], // tool_use Read — cwd가 없어 `file_path` 원문이 summary다
       ["answer", "w2는 `aaaa0001`을 물고 있습니다."],
+      ["line", "서브가 한 말"], // sidechain text — label·summary가 둘 다 비어 `body` 앞머리로 떨어진다
     ],
   );
+  // `line`은 원본 사건을 그대로 든다 — §2-1과 같은 그릇으로 펼치는 것은 다음 티켓의 일이지만
+  // 데이터는 여기서 이미 온전하다.
+  const lines = turns.filter((t) => t.role === "line");
+  assert.deepStrictEqual(
+    lines.map((t) => t.event?.kind),
+    ["thinking", "tool_use", "text"],
+  );
+  assert.strictEqual(lines[2]?.event?.sidechain, true);
   // 키는 사건 키 그대로 — 두 줄이 같은 키를 받으면 폴링이 붙일 때 React가 한 줄을 덮는다
-  assert.strictEqual(new Set(turns.map((t) => t.key)).size, 2);
+  assert.strictEqual(new Set(turns.map((t) => t.key)).size, turns.length);
 });
 
 /** 위 테스트가 실제 스냅샷 모양으로 돌게 하는 최소 픽스처(내용은 상관없다 — 떼어내는 대상이다) */
