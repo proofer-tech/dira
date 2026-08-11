@@ -439,6 +439,22 @@ prio_log() {
   printf '%s' "$out"
 }
 
+# §4-12 §개정 2026-08-11 — 술어 둘. unassign(위 249-270)의 관용구를 그대로 쓴다(새 도구 0).
+# 조상 사슬은 안 가져온다 - 부모는 자기 $SID를 알아서 「내 것」을 한 번에 가른다.
+sid_of() { sed -n 's/^session_id:[[:space:]]*//p' "$1" | head -1 | tr -d "\"' "; }
+owns()   { [ -f "$1" ] && [ "$(sid_of "$1")" = "$SID" ]; }         # ③이 쓴다
+live_other() {                     # 파일이 있고 · 내 것이 아니고 · 그 주인이 살아 있다
+  local OSID OPID PSOUT
+  [ -f "$1" ] || return 1
+  OSID=$(sid_of "$1"); [ "$OSID" = "$SID" ] && return 1
+  OPID=$(sed -n 's/^pid:[[:space:]]*//p' "$1" | head -1 | tr -d "\"' ")
+  case "$OPID" in ''|*[!0-9]*) ;; *) ps -p "$OPID" -o pid= >/dev/null 2>&1 && return 0 ;; esac
+  [ -n "$OSID" ] || return 1
+  PSOUT=$(ps -eo command= 2>/dev/null)   # 파이프 금지 — grep이 자기 명령줄을 문다(tick.sh:253)
+  case "$PSOUT" in *"--session-id $OSID"*) return 0 ;; esac
+  return 1
+}
+
 SID=$(python3 -c 'import uuid;print(uuid.uuid4())')
 TPATH=""; THASH=""; TKIND=""; TPERSONA=""; TPRIO=""; TBASE=""; TEFF=""
 OVER=""    # 이 판에서 이미 상한이던 페르소나들. 후보가 여럿이어도 SKIP은 페르소나당 한 줄이다
@@ -966,7 +982,9 @@ sys.stdout.write(json.dumps({"type":"user","message":{"role":"user","content":sy
       if [ "$(wc -l < "$OUTF")" -le "$INJOFFSET" ]; then
         kill -KILL "$CPID" 2>/dev/null
         log "STALL $RTHASH ${TICKET_FEED_TIMEOUT}s 안에 이어받기 주입 뒤 출력이 안 자랐다 - 기동 실패"
-        python3 "$PY" clear "$RTPATH"; python3 "$PY" release "$RTPATH" >/dev/null 2>&1
+        # §4-12 §개정 — ①과 같은 조건. 이 창(자기 assign 뒤 TICKET_FEED_TIMEOUT) 안에 reap이
+        # 먼저 풀고 다른 세션이 재할당했으면 그 산 claim은 안 건드린다.
+        live_other "$RTPATH" || { python3 "$PY" clear "$RTPATH"; python3 "$PY" release "$RTPATH" >/dev/null 2>&1; }
         kill "$WPID" 2>/dev/null; wait "$WPID" 2>/dev/null
         exec 9>&-; wait "$CPID" 2>/dev/null
         OUT=$(cat "$OUTF" 2>/dev/null); rm -f "$OUTF"
@@ -1045,9 +1063,15 @@ if [ -n "${FAILED:-}" ]; then
   # (§4-10 §자리 표 ①, 승인 04bd819d=(b)). 안 부르면 clear의 FileNotFoundError traceback도 안 난다.
   # 존재 여부는 release() 호출 **전에** 한 번만 잰다 - release가 성공하면 그 자체가 파일을
   # 열림 이름으로 rename해 지워버려서, 나중에 다시 재면 정상 케이스도 항상 "없다"로 읽힌다.
-  if [ -f "$TPATH" ]; then
+  # §4-12 §개정 — 남의 「산」 세션이 물고 있으면 손대지 않는다(그 부모나 TICKET_MAXRUN 감시가
+  # 푼다). 죽었으면 종전대로 회수한다. 파일이 없으면 종전 CLOSED=1(§4-10 ③, 무수정).
+  if [ -f "$TPATH" ] && live_other "$TPATH"; then
+    OSID=$(sid_of "$TPATH")
+    TAIL="할당 회수 안 함 · 지금 claim은 남의 산 세션 것이다(sid=${OSID:0:8})"
+  elif [ -f "$TPATH" ]; then
     python3 "$PY" clear "$TPATH"
     python3 "$PY" release "$TPATH" >/dev/null 2>&1
+    TAIL="할당 회수 + 백로그 복귀"
   else
     CLOSED=1
   fi
@@ -1068,17 +1092,17 @@ if [ -n "${FAILED:-}" ]; then
     exit 0
   fi
   if [ "$VERDICT" = "err" ]; then
-    log "FAIL $THASH 세션이 result is_error로 끝났다 -> 할당 회수 + 백로그 복귀. 로그 $(basename "$LOGF")"
+    log "FAIL $THASH 세션이 result is_error로 끝났다 -> $TAIL. 로그 $(basename "$LOGF")"
   else
     case $RC in
       143|137)
         EL=$((SECONDS - T0))
         if [ "$EL" -lt "$TICKET_MAXRUN" ]; then
-          log "KILLED $THASH ${EL}s 만에 밖에서 종료(rc=$RC) -> 할당 회수 + 백로그 복귀. 로그 $(basename "$LOGF")"
+          log "KILLED $THASH ${EL}s 만에 밖에서 종료(rc=$RC) -> $TAIL. 로그 $(basename "$LOGF")"
         else
-          log "TIMEOUT $THASH ${TICKET_MAXRUN}s 초과 강제종료 -> 할당 회수 + 백로그 복귀. 로그 $(basename "$LOGF")"
+          log "TIMEOUT $THASH ${TICKET_MAXRUN}s 초과 강제종료 -> $TAIL. 로그 $(basename "$LOGF")"
         fi ;;
-      *)       log "FAIL $THASH rc=$RC -> 할당 회수 + 백로그 복귀. 로그 $(basename "$LOGF")" ;;
+      *)       log "FAIL $THASH rc=$RC -> $TAIL. 로그 $(basename "$LOGF")" ;;
     esac
   fi
   [ $RC -eq 0 ] && RC=1
@@ -1086,7 +1110,9 @@ if [ -n "${FAILED:-}" ]; then
 fi
 
 # 같은 가정이다 - 정상 종료한 세션도 이미 티켓을 .done으로 닫았을 수 있다(§자리 표 ④).
-if [ -n "$REAL" ] && [ "$REAL" != "$SID" ] && [ -f "$TPATH" ]; then
+# 여기는 회수가 아니라 남의 .wip에 내 세션키를 덮어쓰는 자리다 - owns로 「내 것」만 정정한다
+# (§4-12 §개정, live_other가 아니라 owns를 쓰는 유일한 칸).
+if [ -n "$REAL" ] && [ "$REAL" != "$SID" ] && owns "$TPATH"; then
   python3 "$PY" assign "$TPATH" "$REAL"
   log "NOTE $THASH 세션키 정정 $SID -> $REAL"
 fi
