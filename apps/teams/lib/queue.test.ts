@@ -29,6 +29,8 @@ import {
   openFixTicket,
   queueOrder,
   bodyWithoutQuestions,
+  composeAnswer,
+  optionsOf,
   questionsOf,
   depBadges,
   referrers,
@@ -1117,6 +1119,141 @@ test("답변 대기 판정 + 답변 파일 생성으로 재큐 (엔진과 대조
   assert.match(pySelect(r), /r0000001\.md\|r0000001\|request\|pm/);
   // 답변 파일 자체는 열린 티켓이 아니라 `list`를 어지럽히지 않는다
   assert.doesNotMatch(pyList(r), /a1111111/);
+});
+
+// ── 결정 10 §요구사항 레이어 — optionsOf / composeAnswer (DESIGN.md §결정 10) ───────
+
+/** `optionsOf` — 큐 실측 픽스처 넷(그룹 크기·제목 분포는 §결정 10 §실측 그대로,
+ *  본문은 지면상 요약이다). 마지막 질문 절 텍스트 하나만 받는다 — 라운드를 고르는 건 호출부의 일. */
+test("optionsOf — 큐 실측 픽스처 넷 (b6fa738b·4301cfd6·2100d54a·089035b0)", () => {
+  // b6fa738b: 그룹 4개(3-3-3-2), 제목 `1.`~`4.` — 산문 줄("**내 기본값...**")과 화살표 줄("->")은
+  // 목록머리가 아니라서 옵션으로 안 잡힌다(결정 10 ②)
+  const b6fa738b = [
+    "### 1. 엔진을 고쳐도 되나",
+    "",
+    "- **(a) 승인.** 순서-게이트-선점 전부 엔진에서.",
+    "- **(b) 표시만.** frontmatter + 보드 dot까지.",
+    "- **(c) 순서까지만.** 선점은 뺀다.",
+    "",
+    "**내 기본값: (a).** 이 줄은 목록이 아니다.",
+    "",
+    "### 2. 5가 선점할 때",
+    "",
+    "- **(a) 자동으로 끊는다.** 우선순위가 가장 낮은 것을 끊는다.",
+    "  -> 이어지는 산문은 화살표라 안 걸린다.",
+    "- **(b) 사람이 고른다.** 자동 살해는 없다.",
+    "- **(c) 안 끊는다.** 다음에 비는 워커가 무조건 먼저 집는다.",
+    "",
+    "### 3. deps와 어떻게 상호작용하나",
+    "",
+    "- **(a) 물려받는다.** 미충족 dep이 기다리는 우선순위를 물려받는다.",
+    "- **(b) 잠금만.** deps는 잠그기만 한다.",
+    "- **(c) 구분해 보여준다.** 상속된 것을 테두리로 구분한다.",
+    "",
+    "### 4. 페르소나가 5를 붙일 수 있나",
+    "",
+    "- **(a) 페르소나는 1~4만.** 5는 사람만.",
+    "- **(b) 페르소나도 5까지.** 요구를 글자대로.",
+  ].join("\n");
+  const groups1 = optionsOf(b6fa738b);
+  assert.deepStrictEqual(
+    groups1.map((g) => [g.number, g.options.length]),
+    [
+      ["1.", 3],
+      ["2.", 3],
+      ["3.", 3],
+      ["4.", 2],
+    ],
+  );
+  assert.strictEqual(groups1[0].heading, "1. 엔진을 고쳐도 되나");
+  assert.deepStrictEqual(groups1[0].options[0], { letter: "a", label: "승인." });
+
+  // 4301cfd6: 그룹 3개(3-3-2), 제목 `Q1.`~`Q3.`
+  const q4301cfd6 = [
+    "### Q1. 그릇과 수명",
+    "",
+    "- **(a) 프로젝트 셸 Alert 네 번째 변종 하나.** 판정 기준 설명.",
+    "- **(b) (a) + 워커 화면 행에 실패 배지.** 표시를 더한다.",
+    "- **(c) 워커 화면에만 둔다.** 배너를 안 만든다.",
+    "",
+    "### Q2. 대응",
+    "",
+    "- **(a) 사유와 복구 시각만 보여준다.** 조작 없음.",
+    "- **(b) 일시중지 CTA를 더한다.** 워커 전부를 멈춘다.",
+    "- **(c) 복구 시각이 지나면 자동 재개한다.** GUI가 시각을 든다.",
+    "",
+    "### Q3. 앱을 안 보고 있을 때도 알리나",
+    "",
+    "- **(a) 안 한다.** 화면 안에서만 보여준다.",
+    "- **(b) 알림을 하나 더 붙인다.** 새로 생기면 한 번 알린다.",
+  ].join("\n");
+  const groups2 = optionsOf(q4301cfd6);
+  assert.deepStrictEqual(
+    groups2.map((g) => [g.number, g.options.length]),
+    [
+      ["Q1.", 3],
+      ["Q2.", 3],
+      ["Q3.", 2],
+    ],
+  );
+
+  // 2100d54a: 그룹 1개(4), 제목 없음 — 직전 `###`가 없으니 `그룹 1` + 번호 `Q1`
+  const q2100d54a = [
+    "- **(a) 지금 도는 세션에 실시간으로 말을 건다.** 엔진 수정이 필요하다.",
+    "- **(b) 세션은 그대로 두고 티켓에 메모를 붙인다.** 엔진 무수정이다.",
+    "- **(c) 세션을 멈추고 메모를 붙여 백로그로 되돌린다.** 즉시 되는 유일한 안이다.",
+    "- **(d) 조합.** 예: (c)만 만들고 (b)는 안 만든다.",
+  ].join("\n");
+  const groups3 = optionsOf(q2100d54a);
+  assert.strictEqual(groups3.length, 1);
+  assert.strictEqual(groups3[0].heading, "그룹 1");
+  assert.strictEqual(groups3[0].number, "Q1");
+  assert.strictEqual(groups3[0].options.length, 4);
+
+  // 089035b0: `## 질문` 절 자체가 없는 티켓(`kind: work`) — questionsOf가 빈 배열을 주므로
+  // 마지막 라운드 텍스트도 없다. 그 갈래에서 optionsOf는 그룹 0개다(결정 10 ⑨)
+  assert.deepStrictEqual(questionsOf("## Goal\n\n하나.\n"), []);
+  assert.deepStrictEqual(optionsOf(""), []);
+
+  // 산문 중간의 `(b)`는 목록머리가 아니라서 안 잡힌다(결정 10 ②, `083e3c1c` 실측)
+  assert.deepStrictEqual(
+    optionsOf("다른 요구의 답을 인용하며 (b) 표시 전용을 문장 안에 쓴다.\n"),
+    [],
+  );
+
+  // 라벨 60자 자르기(결정 10 ④)
+  const long = optionsOf(
+    "- **(a) 매우 긴 라벨을 가진 선택지로 육십자보다 더 길게 자르기 동작을 확인하기 위해 일부러 아주 길게 늘려 쓴 문장입니다.** 뒤 설명.",
+  );
+  assert.strictEqual(long[0].options[0].label.length, 63); // 60자 + "..."
+  assert.ok(long[0].options[0].label.endsWith("..."));
+});
+
+/** `composeAnswer` — 조립 결과 모양은 §결정 10에 실린 실측 형식과 같다:
+ *  `1.(a)` / `2.(a)(b) 덧붙임` / `3. 덧붙임만`. */
+test("composeAnswer — 줄머리 번호 + 다중 선택 + 덧붙임 조립 (결정 10 ⑦⑧)", () => {
+  assert.strictEqual(
+    composeAnswer([
+      { number: "1.", letters: ["a"], note: "" },
+      { number: "2.", letters: ["a", "b"], note: "알아서 있으면 좋을 곳들에 잘 배정해달라" },
+      { number: "3.", letters: [], note: "이건 엔진마다 다를 것 같은데" },
+    ]),
+    "1.(a)\n2.(a)(b) 알아서 있으면 좋을 곳들에 잘 배정해달라\n3. 이건 엔진마다 다를 것 같은데",
+  );
+  // 번호가 없는 그룹은 `Q<n>` — optionsOf가 낸 번호를 그대로 받는다
+  assert.strictEqual(composeAnswer([{ number: "Q1", letters: ["b"], note: "" }]), "Q1(b)");
+  // 다중 선택은 고른 순서와 무관하게 `(a)(b)`로 정렬해 조립한다
+  assert.strictEqual(composeAnswer([{ number: "1.", letters: ["b", "a"], note: "" }]), "1.(a)(b)");
+  // 고른 것 0 + 덧붙임 0인 그룹은 줄이 안 선다
+  assert.strictEqual(
+    composeAnswer([
+      { number: "1.", letters: [], note: "" },
+      { number: "2.", letters: ["a"], note: "" },
+    ]),
+    "2.(a)",
+  );
+  // 전부 비면 빈 문자열(호출부가 `답변 달기` 비활성을 판정한다)
+  assert.strictEqual(composeAnswer([{ number: "1.", letters: [], note: "  " }]), "");
 });
 
 /** `req:` 왕복 — 작업 티켓 → 출처 요구사항, 요구사항 → 나온 티켓. 한글 접미사 프로젝트로 돌린다:
