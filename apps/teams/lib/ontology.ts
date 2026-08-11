@@ -35,10 +35,12 @@ function toSet(cell: string): Set<string> {
 type Signature = { from: Set<string>; to: Set<string> };
 
 /** `'A · B → C'` 또는 `'A → B · C → D'`를 페어 목록으로. 화살표 개수로 두 표기를 가른다
- *  (ont-check.py `parse_signature`와 동일 — 단, 셀 끝의 ` — <설명>` 꼬리는 여기서 먼저 뗀다.
- *  ont-check.py는 이 꼬리를 안 떼 정의역·치역 판정이 전건 오탐이었다, `4657d628`). */
+ *  (ont-check.py `parse_signature`와 동일 — 단, 셀 끝의 ` — <설명>`(또는 ` - <설명>`) 꼬리는
+ *  여기서 먼저 뗀다. ont-check.py는 이 꼬리를 안 떼 정의역·치역 판정이 전건 오탐이었다,
+ *  `4657d628`. 하이픈 표기는 `b8e04f56` — 특수문자 표기 통일 후 실 문서가 이 모양을 쓴다). */
+const SIGNATURE_TAIL = / — | - /;
 function parseSignature(cellInput: string): Signature[] {
-  const cell = cellInput.split(" — ")[0].replaceAll("->", "→");
+  const cell = cellInput.split(SIGNATURE_TAIL)[0].replaceAll("->", "→");
   const arrowCount = (cell.match(/→/g) ?? []).length;
   const chunks = arrowCount > 1 ? cell.split("·").filter((c) => c.includes("→")) : [cell];
   if (chunks.length > 1) {
