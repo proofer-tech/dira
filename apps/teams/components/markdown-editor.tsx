@@ -22,7 +22,9 @@ import { type ReactNode, useMemo, useState, useSyncExternalStore } from "react";
 import { Code, Pilcrow } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Markdown } from "@/components/markdown";
+import { cn } from "@/lib/utils";
 import { blockBreaks, replaceBlock, splitBlocks } from "@/lib/markdown-editor-blocks";
 
 /** 앱 하나짜리 값(못 ② — 칸마다 안 갈린다). §0-11 `dira-manual-theme`와 같은 자리의 키다. */
@@ -249,8 +251,8 @@ export function MarkdownEditor({
    *  쓴다. 주면 `onValueChange` 없이는 못 고친다 */
   value?: string;
   onValueChange?: (text: string) => void;
-  /** 칸 위 라벨 — 있으면 손잡이와 같은 줄에 나란히 선다(§50 §자리, ①②). 없으면 손잡이만
-   *  그 줄 오른쪽 끝에 선다(③④⑤⑥⑦) */
+  /** 칸 위 라벨(①②만 준다) — 손잡이가 칸 안으로 들어가(§50 개정) 이 줄에 라벨만 남는다.
+   *  없으면 그 줄 자체가 없다(③④⑤⑥⑦) */
   label?: ReactNode;
   placeholder?: string;
   /** 그 글이 렌더되는 자리의 값(§10 표) — 이 컴포넌트가 스스로 정하지 않는다(못 ⑤) */
@@ -294,78 +296,93 @@ export function MarkdownEditor({
     setText(replaceBlock(split, i, newBlockText));
   }
 
+  // 사라진 라벨 문장을 그대로 접근명 + 툴팁으로 옮긴다(§50 §접근명) — 화면 글자는 아이콘 하나뿐이다.
+  const toggleLabel = mode === "wysiwyg" ? "원문으로" : "위지윅으로";
   const toggle = (
-    <Button type="button" variant="ghost" size="sm" onClick={() => writeMode(mode === "wysiwyg" ? "raw" : "wysiwyg")}>
-      {mode === "wysiwyg" ? (
-        <>
-          <Code aria-hidden /> 원문으로
-        </>
-      ) : (
-        <>
-          <Pilcrow aria-hidden /> 위지윅으로
-        </>
-      )}
-    </Button>
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label={toggleLabel}
+            onClick={() => writeMode(mode === "wysiwyg" ? "raw" : "wysiwyg")}
+            className="absolute top-2 right-2 opacity-60 hover:opacity-100 focus-visible:opacity-100"
+          >
+            {mode === "wysiwyg" ? <Code aria-hidden /> : <Pilcrow aria-hidden />}
+          </Button>
+        }
+      />
+      <TooltipContent>{toggleLabel}</TooltipContent>
+    </Tooltip>
   );
 
   return (
     <div className="space-y-2">
-      <div className={label ? "flex items-center justify-between gap-2" : "flex justify-end"}>
-        {label}
+      {label}
+      {/* 칸만 감싸는 래퍼(§50 §어디에 서나) — 손잡이는 이 안의 `absolute`고, 테두리·반경·포커스
+          링은 옮기지 않고 `Textarea`/위지윅 그릇에 그대로 둔다. 손잡이가 칸보다 DOM에서
+          앞이어야 하므로(§50 §탭 순서, 무수정) 이 블록 안에서 toggle을 먼저 그린다. */}
+      <div className="relative">
         {toggle}
+        {mode === "raw" ? (
+          <Textarea
+            name={name}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onPaste={onPaste}
+            onKeyDown={onKeyDown}
+            rows={rows}
+            placeholder={placeholder}
+            className={cn("pr-11", className)}
+            required={required}
+            aria-label={ariaLabel}
+          />
+        ) : (
+          <div className="rounded-lg border border-input bg-transparent py-2 pl-2.5 pr-11 dark:bg-input/30">
+            {/* 칸 바닥(§50 §갈리는 칸) — 84px(세 줄)의 최소 높이는 이 그릇 하나에 걸고 블록마다
+                안 건다. 안의 `min-h-7`(빈 문단·placeholder)은 무수정이다. */}
+            <div className="min-h-[84px]">
+              {split.blocks.length === 0 ? (
+                <div
+                  contentEditable
+                  suppressContentEditableWarning
+                  data-placeholder={placeholder ?? ""}
+                  aria-label={ariaLabel}
+                  aria-required={required || undefined}
+                  className="min-h-7 text-base leading-7 outline-none empty:before:whitespace-pre-line empty:before:text-muted-foreground empty:before:content-[attr(data-placeholder)]"
+                  onBlur={(e) => {
+                    const newText = looseTextOf(e.currentTarget);
+                    setText(newText ? `${newText}\n${split.tail}` : split.tail);
+                  }}
+                  onPaste={onPaste}
+                  onKeyDown={onKeyDown}
+                />
+              ) : (
+                split.blocks.map((block, i) => (
+                  <div
+                    // 인덱스 키 — 블록 배열은 `text`가 바뀔 때만 다시 잘리고, 그때 전 블록이 새
+                    // `<Markdown>` 콘텐츠로 다시 그려지는 게 맞다(고친 블록만 재파싱된 결과를 본다).
+                    key={i}
+                    contentEditable
+                    suppressContentEditableWarning
+                    aria-label={ariaLabel}
+                    aria-required={required || undefined}
+                    className="outline-none [&_p:empty]:min-h-7"
+                    onBlur={(e) => commitBlock(i, e.currentTarget)}
+                    onPaste={onPaste}
+                    onKeyDown={onKeyDown}
+                  >
+                    <Markdown text={block} breaks={blockBreaks(i, breaks, split.firstHeadingIndex)} />
+                  </div>
+                ))
+              )}
+            </div>
+            <input type="hidden" name={name} value={text} />
+          </div>
+        )}
       </div>
-      {mode === "raw" ? (
-        <Textarea
-          name={name}
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onPaste={onPaste}
-          onKeyDown={onKeyDown}
-          rows={rows}
-          placeholder={placeholder}
-          className={className}
-          required={required}
-          aria-label={ariaLabel}
-        />
-      ) : (
-        <div className="rounded-lg border border-input bg-transparent px-2.5 py-2 dark:bg-input/30">
-          {split.blocks.length === 0 ? (
-            <div
-              contentEditable
-              suppressContentEditableWarning
-              data-placeholder={placeholder ?? ""}
-              aria-label={ariaLabel}
-              aria-required={required || undefined}
-              className="min-h-7 text-base leading-7 outline-none empty:before:whitespace-pre-line empty:before:text-muted-foreground empty:before:content-[attr(data-placeholder)]"
-              onBlur={(e) => {
-                const newText = looseTextOf(e.currentTarget);
-                setText(newText ? `${newText}\n${split.tail}` : split.tail);
-              }}
-              onPaste={onPaste}
-              onKeyDown={onKeyDown}
-            />
-          ) : (
-            split.blocks.map((block, i) => (
-              <div
-                // 인덱스 키 — 블록 배열은 `text`가 바뀔 때만 다시 잘리고, 그때 전 블록이 새
-                // `<Markdown>` 콘텐츠로 다시 그려지는 게 맞다(고친 블록만 재파싱된 결과를 본다).
-                key={i}
-                contentEditable
-                suppressContentEditableWarning
-                aria-label={ariaLabel}
-                aria-required={required || undefined}
-                className="outline-none [&_p:empty]:min-h-7"
-                onBlur={(e) => commitBlock(i, e.currentTarget)}
-                onPaste={onPaste}
-                onKeyDown={onKeyDown}
-              >
-                <Markdown text={block} breaks={blockBreaks(i, breaks, split.firstHeadingIndex)} />
-              </div>
-            ))
-          )}
-          <input type="hidden" name={name} value={text} />
-        </div>
-      )}
     </div>
   );
 }
