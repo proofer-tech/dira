@@ -64,6 +64,7 @@ import {
   filterTickets,
   inDefaultList,
   isAwaiting,
+  lastQuestionOptions,
   listTickets,
   depBadges,
   relationEdges,
@@ -702,6 +703,7 @@ export default async function Board({
                           title={t.title}
                           answerFile={`${awaitingOf(t)}${config.done}.md`}
                           thread={threadOf(tickets, t, config)}
+                          options={lastQuestionOptions(threadOf(tickets, t, config))}
                         />
                       )}
                       {/* **카드의 마지막 자식** — 이 세션이 방금 한 일 한 줄(§1-1 ·

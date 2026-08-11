@@ -563,23 +563,10 @@ export function optionsOf(question: string): OptionGroup[] {
   return groups;
 }
 
-/** `optionsOf`의 그룹 하나에 대한 고른 것 + 덧붙임. */
-export type AnswerPick = { number: string; letters: string[]; note: string };
-
-/** 그룹별 선택 + 덧붙임을 답변 본문으로 조립한다(결정 10 ⑦⑧) — 줄머리는 그룹 번호 그대로,
- *  다중 선택은 `(a)(b)`, 덧붙임은 한 칸 띄워 붙인다. 고른 것도 덧붙임도 없는 그룹은 줄이 안 선다
- *  (선택 0 + 쓴 글 0이면 폼 전체가 비활성이라 이 자리까지 안 온다 — 그래도 다른 그룹만 채워진
- *  경우를 위해 그룹 단위로도 건너뛴다). */
-export function composeAnswer(picks: AnswerPick[]): string {
-  const lines: string[] = [];
-  for (const p of picks) {
-    const marks = [...p.letters].sort().map((l) => `(${l})`).join("");
-    const note = p.note.trim();
-    if (!marks && !note) continue;
-    lines.push(marks && note ? `${p.number}${marks} ${note}` : marks ? `${p.number}${marks}` : `${p.number} ${note}`);
-  }
-  return lines.join("\n");
-}
+// `composeAnswer`는 `lib/urls.ts`에 산다 — 그 파일이 이미 "클라이언트·서버가 같은 규칙을
+// 써야 하는 순수 함수" 자리다(AGENTS.md — node:*가 없는 파일). `AnswerForm`(클라이언트)이
+// 체크박스마다 이 함수를 직접 부른다. 재수출로 자리는 여기 하나로 보인다.
+export { composeAnswer, type AnswerPick } from "./urls.ts";
 
 /** `questionsOf`가 데려간 절을 뺀 본문 — **읽기 전용 렌더(`<Markdown>`)만** 이걸 쓴다(§2 왕복).
  *  같은 질문이 스레드와 본문에 두 벌 뜨지 않게 하는 자리고, 스레드가 질문의 유일한 출처다.
@@ -644,6 +631,14 @@ export function threadOf(tickets: Ticket[], t: Ticket, sfx: Suffixes): ThreadIte
     }
   }
   return thread;
+}
+
+/** `AnswerForm`이 그릴 선택 카드 — 스레드의 **마지막 질문 라운드**에서만 `optionsOf`를 돈다
+ *  (결정 10 ①). 클라이언트 컴포넌트는 `node:fs`를 타는 이 파일을 값으로 못 부르므로
+ *  (§`ThreadItem`과 같은 이유) 서버가 `threadOf` 옆에서 미리 계산해 내려보낸다. */
+export function lastQuestionOptions(thread: ThreadItem[]): OptionGroup[] {
+  const lastQuestion = [...thread].reverse().find((item) => item.role === "question");
+  return lastQuestion ? optionsOf(lastQuestion.text) : [];
 }
 
 /** 요구 접수 모드의 `title` — 자연어 입력의 첫 비어있지 않은 줄(80자에서 자르고 `…`).

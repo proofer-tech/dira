@@ -503,3 +503,22 @@ export function findMatches(text: string, query: string): number[] {
   for (let i = hay.indexOf(needle); i !== -1; i = hay.indexOf(needle, i + needle.length)) out.push(i);
   return out;
 }
+
+/** `optionsOf`(`lib/queue.ts`)의 그룹 하나에 대한 고른 것 + 덧붙임(결정 10). */
+export type AnswerPick = { number: string; letters: string[]; note: string };
+
+/** 그룹별 선택 + 덧붙임을 답변 본문으로 조립한다(결정 10 ⑦⑧) — 줄머리는 그룹 번호 그대로,
+ *  다중 선택은 `(a)(b)`, 덧붙임은 한 칸 뒤에 붙인다. 고른 것도 덧붙임도 없는 그룹은 줄이 안 선다.
+ *  **`lib/queue.ts`가 아니라 여기 사는 이유는 이 파일 머리와 같다** — `AnswerForm`(클라이언트)이
+ *  체크박스마다 이 함수를 직접 불러 입력칸을 다시 쓴다(§비주얼 §29 방향). `queue.ts`는 `node:fs`를
+ *  타서 그 값을 못 부른다. */
+export function composeAnswer(picks: AnswerPick[]): string {
+  const lines: string[] = [];
+  for (const p of picks) {
+    const marks = [...p.letters].sort().map((l) => `(${l})`).join("");
+    const note = p.note.trim();
+    if (!marks && !note) continue;
+    lines.push(marks && note ? `${p.number}${marks} ${note}` : marks ? `${p.number}${marks}` : `${p.number} ${note}`);
+  }
+  return lines.join("\n");
+}

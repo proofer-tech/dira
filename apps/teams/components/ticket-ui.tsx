@@ -32,9 +32,11 @@ import {
 import { createTicket, type NewTicketState } from "@/app/(app)/p/[project]/(board)/actions";
 import type { UnassignRun } from "@/lib/engine";
 import { matchCombo } from "@/lib/keymap";
-import { formatRemaining } from "@/lib/urls";
+// `composeAnswer`(§비주얼 §29 방향 — 체크박스마다 다시 돈다)는 여기 산다: node:*가 없는
+// 클라이언트·서버 공용 순수 함수 자리다(AGENTS.md). `lib/queue.ts`는 `node:fs`를 타서 못 부른다.
+import { composeAnswer, formatRemaining, type AnswerPick } from "@/lib/urls";
 // 스레드를 엮는 쪽은 서버(`lib/queue.ts threadOf`)다 — 여기 오는 건 타입뿐이라 `node:*`를 안 끈다
-import type { ThreadItem } from "@/lib/queue";
+import type { OptionGroup, ThreadItem } from "@/lib/queue";
 import { AttachmentField, useAttachments } from "@/components/attachment-field";
 import { useHotkey, useKeymap } from "@/components/keymap-provider";
 import { useLocale, useT } from "@/components/language-provider";
@@ -717,15 +719,29 @@ export function AnswerForm({
   project,
   hash,
   answerFile,
+  options,
 }: {
   project: string;
   hash: string;
   answerFile: string;
+  /** 마지막 질문 라운드의 선택 카드(§결정 10 §자리② · §비주얼 §29 ⑤) — 서버가
+   *  `lastQuestionOptions(thread)`로 미리 재 내려보낸다. 0개면 그 라운드에 선택지가 없다
+   *  (58/100, 결정 10 ⑨) — 카드를 안 그리고 종전 화면 그대로다. */
+  options: OptionGroup[];
 }) {
   const [state, action, pending] = useActionState<SaveState, FormData>(answerRequirement, {});
   // 제어값 — `⌘↵`·제출 버튼이 빈 본문에서 required를 대신 막으려면 지금 글을 봐야 한다
   // (위지윅 면의 제출값은 hidden input이라 네이티브 `required`가 안 걷힌다, §P236-4).
   const [body, setBody] = useState("");
+  // 카드별 고른 것 + 덧붙임(§비주얼 §29 ⑤ 조립된 글이 보이는 자리) — 방향은 카드 -> 칸 한
+  // 쪽뿐이다. 카드를 만질 때마다 `composeAnswer`가 입력칸을 통째로 다시 쓴다.
+  const [picks, setPicks] = useState<AnswerPick[]>(() =>
+    options.map((g) => ({ number: g.number, letters: [], note: "" })),
+  );
+  const applyPicks = (next: AnswerPick[]) => {
+    setPicks(next);
+    setBody(composeAnswer(next));
+  };
   const sendCombo = useKeymap().bindings["interject.send"];
   const empty = body.trim() === "";
   return (
@@ -733,6 +749,57 @@ export function AnswerForm({
     <form action={action} className="space-y-3">
       <input type="hidden" name="project" value={project} />
       <input type="hidden" name="hash" value={hash} />
+      {/* 그룹마다 카드 한 장(§비주얼 §29 ⑤) — 폼의 첫 시각 자식이다. 카드 0개(58/100)면 블록
+          자체를 안 그린다 — 종전 화면과 한 픽셀도 안 갈린다(⑨). */}
+      {options.length > 0 && (
+        <div className="space-y-2">
+          {options.map((g, i) => (
+            <div
+              key={i}
+              role="group"
+              aria-label={g.heading}
+              className="space-y-2 rounded-lg border p-3"
+            >
+              <p className="text-sm font-medium">{g.heading}</p>
+              {g.options.map((opt) => (
+                <label key={opt.letter} className="flex min-h-6 items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="size-4 shrink-0"
+                    checked={picks[i].letters.includes(opt.letter)}
+                    onChange={(e) =>
+                      applyPicks(
+                        picks.map((p, idx) =>
+                          idx !== i
+                            ? p
+                            : {
+                                ...p,
+                                letters: e.target.checked
+                                  ? [...p.letters, opt.letter]
+                                  : p.letters.filter((l) => l !== opt.letter),
+                              },
+                        ),
+                      )
+                    }
+                  />
+                  {/* `truncate` + `title` — 전문은 카드 바로 위 질문 산문에 이미 있다(§2 스레드가
+                      질문의 유일한 출처) */}
+                  <span className="truncate" title={opt.label}>
+                    {opt.label}
+                  </span>
+                </label>
+              ))}
+              <Input
+                placeholder="덧붙일 말"
+                value={picks[i].note}
+                onChange={(e) =>
+                  applyPicks(picks.map((p, idx) => (idx === i ? { ...p, note: e.target.value } : p)))
+                }
+              />
+            </div>
+          ))}
+        </div>
+      )}
       {/* 보이는 `<Label>`도 `a-body` id도 없다(§29 ②) — 이름을 이미 말하는 것이 두 자리 다 있다:
           상세는 절 제목 `진행 기록`, 다이얼로그는 `DialogTitle`(`답변 — <제목>`). placeholder는
           라벨이 아니라서 `aria-label`이 접근 가능한 이름을 받는다. 문구는 참견·이어받기와 같은
@@ -776,7 +843,16 @@ export function AnswerForm({
 /** 스레드 + 답변 폼 — **보드의 답변 다이얼로그가 그리는 것**이다(§1 보드 요구사항 항).
  *  엮는 쪽은 `lib/queue.ts threadOf`고 폼은 `AnswerForm` 한 벌이다. 상세는 이 조합을 안 쓴다:
  *  거기서는 스레드가 `진행 기록` 상자 안으로 들어가고 폼만 그 아래에 선다(§2-3 ①). */
-function AnswerFields({ thread, ...props }: { project: string; hash: string; answerFile: string; thread: ThreadItem[] }) {
+function AnswerFields({
+  thread,
+  ...props
+}: {
+  project: string;
+  hash: string;
+  answerFile: string;
+  thread: ThreadItem[];
+  options: OptionGroup[];
+}) {
   return (
     <>
       <AnswerThread thread={thread} />
@@ -802,6 +878,7 @@ export function AnswerDialog({
   hash: string;
   answerFile: string;
   thread: ThreadItem[];
+  options: OptionGroup[];
   /** 다이얼로그 머리에 요구사항 제목을 적는다 — 보드에서는 어느 카드를 열었는지가 안 보인다 */
   title: string;
 }) {

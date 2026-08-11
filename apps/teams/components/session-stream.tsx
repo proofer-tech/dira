@@ -51,7 +51,7 @@ import { formatCombo, matchCombo } from "@/lib/keymap";
 import type { FollowupReason } from "@/lib/followup";
 import type { InterjectReason } from "@/lib/interject";
 // 스레드를 엮는 쪽은 서버(`lib/queue.ts threadOf`)다 — 여기 오는 건 타입뿐이라 `node:*`를 안 끈다
-import type { ThreadItem } from "@/lib/queue";
+import type { OptionGroup, ThreadItem } from "@/lib/queue";
 import type { StreamEvent } from "@/lib/transcript";
 import {
   engineCan,
@@ -82,6 +82,7 @@ export function SessionStream({
   live: initialLive,
   engine,
   thread = [],
+  answerOptions = [],
   stream = true,
   awaiting = false,
   answerFile,
@@ -96,6 +97,9 @@ export function SessionStream({
   /** 요구사항 왕복 스레드(§2-3 ②) — 서버가 `threadOf`로 엮어 넘긴다. 보드 답변 다이얼로그와
    *  **같은 함수**의 출력이다(§2-3 ⑤). 비면 상자에 스트림 줄만 있다 = 종전 §9 그대로다. */
   thread?: ThreadItem[];
+  /** 마지막 질문 라운드의 선택 카드(결정 10) — 서버가 `lastQuestionOptions(thread)`로 미리 재
+   *  `AnswerForm`에 그대로 내린다. 0개면 그 라운드에 선택지가 없다(58/100) — 카드 0장, 종전 화면. */
+  answerOptions?: OptionGroup[];
   /** 이 상자에 **스트림 줄이 흐르는가**(§29 ② 갈림길). 서버가 트랜스크립트 파일 하나로 판정한다.
    *  참이면 `h-[32rem]` 고정 + 머리 줄(버튼이 떴다 사라질 때 안 튄다), 거짓이면 `max-h-[32rem]` +
    *  머리 줄 없음 — 흐르는 것이 없으면 고정 높이의 근거도 머리 줄의 근거도 없다.
@@ -290,6 +294,7 @@ export function SessionStream({
         engine={engine}
         awaiting={awaiting}
         answerFile={answerFile}
+        answerOptions={answerOptions}
       />
     </div>
   );
@@ -412,6 +417,7 @@ function ProgressForm({
   engine,
   awaiting,
   answerFile,
+  answerOptions,
 }: {
   project: string;
   stem: string;
@@ -426,6 +432,8 @@ function ProgressForm({
   /** 비활성 사유가 부르는 엔진 이름. `noInterject`가 참일 때만 쓴다 */
   engine?: string | null;
   awaiting: boolean;
+  /** 마지막 질문 라운드의 선택 카드(결정 10) — `answerFile`처럼 답변 모드에서만 쓰인다 */
+  answerOptions: OptionGroup[];
   answerFile?: string;
 }) {
   const router = useRouter();
@@ -474,7 +482,7 @@ function ProgressForm({
         <p className="text-xs text-muted-foreground">
           답변을 달면 이 티켓이 다시 큐에 뜨고 담당 세션이 이어서 봅니다.
         </p>
-        <AnswerForm project={project} hash={stem} answerFile={answerFile} />
+        <AnswerForm project={project} hash={stem} answerFile={answerFile} options={answerOptions} />
       </div>
     ) : null;
   }

@@ -33,6 +33,7 @@ import {
   depBadges,
   derivedFrom,
   isAwaiting,
+  lastQuestionOptions,
   listTickets,
   referrers,
   reqOf,
@@ -163,6 +164,7 @@ export default async function TicketDetail({
 
   // 요구사항 왕복 스레드 — 보드 카드의 답변 다이얼로그와 **같은 함수**가 엮는다(§1 · §2).
   const thread = threadOf(tickets, ticket, config);
+  const answerOptions = lastQuestionOptions(thread);
 
   // 읽기 전용 본문 — 스레드가 데려간 `## 질문 n` 절을 뺀 것. 편집 폼은 아래에서 원문을 쓴다.
   const bodyRead = bodyWithoutQuestions(ticket.body);
@@ -202,6 +204,7 @@ export default async function TicketDetail({
             live={ticket.state === "wip"}
             engine={engine}
             thread={thread}
+            answerOptions={answerOptions}
             // 스트림 지분이 있는가 = 트랜스크립트 파일 하나다(§29 ② — 고정 높이와 머리 줄의 근거)
             stream={!!transcript}
             awaiting={awaiting}

@@ -30,6 +30,7 @@ import {
   queueOrder,
   bodyWithoutQuestions,
   composeAnswer,
+  lastQuestionOptions,
   optionsOf,
   questionsOf,
   depBadges,
@@ -1254,6 +1255,31 @@ test("composeAnswer — 줄머리 번호 + 다중 선택 + 덧붙임 조립 (결
   );
   // 전부 비면 빈 문자열(호출부가 `답변 달기` 비활성을 판정한다)
   assert.strictEqual(composeAnswer([{ number: "1.", letters: [], note: "  " }]), "");
+});
+
+/** `lastQuestionOptions` — `AnswerForm`(클라이언트)이 받는 카드 데이터의 서버 쪽 조립.
+ *  `optionsOf`가 이미 못박은 파싱을 **어느 라운드에** 돌리는지만 재확인한다(결정 10 ①). */
+test("lastQuestionOptions — 마지막 질문 라운드에서만 돈다, 질문 0개는 빈 배열", () => {
+  const answered = "### 1.\n- (a) 첫째\n- (b) 둘째\n";
+  const openWithOptions = "### Q1.\n- (a) 셋째\n";
+  const openNoOptions = "그냥 산문 질문입니다.";
+  // 여러 라운드 중 마지막(가장 최근) 것만 본다 — 앞 라운드는 이미 답이 달렸다
+  assert.deepStrictEqual(
+    lastQuestionOptions([
+      { role: "question", heading: "질문 1", text: answered },
+      { role: "answer", heading: "답변", text: "1.(a)" },
+      { role: "question", heading: "질문 2", text: openWithOptions },
+    ]),
+    [{ heading: "Q1.", number: "Q1.", options: [{ letter: "a", label: "셋째" }] }],
+  );
+  // 마지막 라운드에 선택지가 없으면 빈 배열(58/100 — 카드 0장, 결정 10 ⑨)
+  assert.deepStrictEqual(
+    lastQuestionOptions([{ role: "question", heading: "질문 1", text: openNoOptions }]),
+    [],
+  );
+  // 질문이 하나도 없는 스레드(답변만 있거나 완전히 빈 스레드)도 빈 배열
+  assert.deepStrictEqual(lastQuestionOptions([{ role: "answer", heading: "답변", text: "글" }]), []);
+  assert.deepStrictEqual(lastQuestionOptions([]), []);
 });
 
 /** `req:` 왕복 — 작업 티켓 → 출처 요구사항, 요구사항 → 나온 티켓. 한글 접미사 프로젝트로 돌린다:
