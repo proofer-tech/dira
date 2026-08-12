@@ -488,8 +488,10 @@ export function PersonasPane({
                             <span className="whitespace-nowrap">상한 {e.limit}</span>
                           )}
                           {/* 프로필 본문은 **모든 디스패치 프롬프트에 인라인된다** — 길이가 곧 비용이다(§5).
-                              목록에 둬야 "누가 프롬프트를 얼마나 먹는가"를 비교할 수 있다. `skills.md` ·
-                              `memory/*.md`도 매 디스패치에 인라인되므로 **셋의 합**이다(§비주얼 §32 ①) */}
+                              목록에 둬야 "누가 프롬프트를 얼마나 먹는가"를 비교할 수 있다. `skills.md`도
+                              디스패치마다 인라인되지만 `memory/*.md`는 `9d7ba932` 뒤로 프롬프트에 안
+                              실린다 — 그래도 자수가 셋의 합인 근거는 메모리가 **셋 중 유일하게 사람
+                              손 없이 자라는 몫**이라는 것이다(§5-2 §자수가 재는 것) */}
                           <span className="ml-auto font-mono whitespace-nowrap">{editChars(e)}자</span>
                         </span>
                       </div>
@@ -1318,8 +1320,8 @@ function DeleteMemoryButton({
           <AlertDialogTitle>메모리 삭제 — {memory.file.replace(/\.md$/, "")}</AlertDialogTitle>
           <AlertDialogDescription>
             <span className="font-mono text-xs break-all">{`${dir}/memory/${memory.file}`}</span>{" "}
-            파일을 지웁니다. 되돌릴 수 없습니다 — 이 화면에 편집도 추가도 없습니다. 다음
-            디스패치부터 이 개념은 프롬프트에서 빠집니다.
+            파일을 지웁니다. 되돌릴 수 없습니다 — 이 화면에 편집도 추가도 없습니다.
+            다음 디스패치부터 세션이 이 개념을 못 찾습니다.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
