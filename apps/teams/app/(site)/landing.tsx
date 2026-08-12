@@ -760,7 +760,7 @@ export default function Landing({
       이유 — 앱을 연 사람에게 <받아서 깔아보세요>는 이미 참이 아니다). */}
   {!fullMode && (
     <>
-      <p className="body" />
+      <p className="body">가입도 결제도 없습니다. 안 맞으면 지우면 그만이니 일단 깔아보세요.</p>
       <div className="cta">
         <a className="btn btn-primary btn-lg" href={dmg}>macOS 앱 다운로드</a>
       </div>
