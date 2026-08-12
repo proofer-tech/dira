@@ -366,7 +366,7 @@ export default function Landing({
 {!fullMode && (
 <div className="ann">
   <div className="wrap">
-    <span>자동 업데이트를 켜고 최신 버전(v{version})의 dira를 써보세요!</span>
+    <span>최신 버전(v{version})이 나와 있습니다. 한 번 설치하면 자동 업데이트가 따라갑니다!</span>
     <a href="https://github.com/proofer-tech/dira/releases">릴리스 보기</a>
   </div>
 </div>
@@ -481,9 +481,9 @@ export default function Landing({
   <p className="eyebrow">로컬 멀티 에이전트 매니지먼트 시스템</p>
   <h1>나만의 AI 팀을 만들어보세요</h1>
   <p className="body">
-    요구사항을 정말 아무렇게나 던져도 찰떡같이 알아들어 티켓을 나누고 에이전트간 협업을 통해
-    완수하며 그 과정을 마치 jira처럼 실시간으로 볼 수 있습니다. PC에 나만의 멀티 에이전트
-    시스템을 아주 쉽게 구축해보세요.
+    요구사항을 정말 아무렇게나 던져도 찰떡같이 알아듣습니다. 티켓을 나누고 에이전트끼리
+    협업해 끝내는 과정은 jira처럼 실시간으로 지켜볼 수 있습니다. PC에 나만의 멀티 에이전트
+    시스템을 아주 쉽게 만들어보세요.
   </p>
   {/* 랜딩-only에서만 선다 — 풀 모드는 이 자리가 걷혀 아무것도 안 들어온다(§한 코드베이스
       §홈 표 ③, 걷힌 근거는 목록이 이제 위 `#projects`로 나가서다). */}
@@ -516,21 +516,21 @@ export default function Landing({
     <li>
       <span className="sig">.md</span>
       <b>① 요구사항을 접수하세요</b>
-      <p>자연스럽게 대화하듯이 무엇을 원하는지를 적어주시면 끝입니다. 나머지 귀찮고 복잡한
-      일들은 에이전트가 알아서 합니다.</p>
+      <p>대화하듯 자연스럽게 무엇을 원하는지 적어주시면 끝입니다. 귀찮고 복잡한 나머지
+      일은 에이전트가 알아서 합니다.</p>
     </li>
     <li>
       <span className="sig">.wip</span>
       <b>② 일사불란하게 움직입니다</b>
-      <p>최초 요구사항을 받은 에이전트가 요구사항을 구체화하여 작업 단위 티켓으로 분리하고,
-      적절한 페르소나를 가진 워커를 알아서 할당하여 에이전트간 협업을 통해 주신 요구사항을
-      완료합니다.</p>
+      <p>요구사항을 받은 에이전트가 그걸 구체화해 작업 단위 티켓으로 나눕니다. 티켓마다
+      맞는 페르소나의 워커가 알아서 붙고 서로 협업해 주신 요구사항을
+      끝냅니다.</p>
     </li>
     <li>
       <span className="sig">.done</span>
       <b>③ 끝이에요. 쉽죠?</b>
-      <p>워커들이 뭘 읽고 어떻게 고치는지 실시간으로 확인할 수 있습니다. 진행중에 막히면
-      사용자에게 물어도 봅니다. 그저 사람과 일하듯이 자연스럽게 요구하고 대답하다 보면,
+      <p>워커들이 뭘 읽고 어떻게 고치는지 실시간으로 보입니다. 진행 중에 막히면
+      사용자에게 물어도 봅니다. 그저 사람과 일하듯 자연스럽게 요구하고 대답하다 보면
       원하던 기능이 완성됩니다!</p>
     </li>
   </ol>
@@ -541,10 +541,10 @@ export default function Landing({
   <h2>끝난 일은 기록으로 남습니다</h2>
   <ul className="marks">
     <li><b>티켓이 <code>.done</code>이 되면 아카이빙 티켓이 한 장 따라 붙습니다.</b> 완료 카드
-    아래에 <code>아카이빙중</code> 한 줄이 서고, 이것도 워커가 받아서 하는 일이라 어디까지
+    아래에 <code>아카이빙중</code> 한 줄이 서고 이것도 워커가 받아서 하는 일이라 어디까지
     갔는지 그대로 보입니다</li>
     <li><b>남는 것은 마크다운 한 장과 티켓 맨 아래 한 절입니다.</b> 아카이빙을 맡은 워커가 방금
-    끝난 일에서 사실을 추려 프로젝트 폴더의 <code>ontology/</code>에 적고, 그 티켓 본문에는{" "}
+    끝난 일에서 사실을 추려 프로젝트 폴더의 <code>ontology/</code>에 적고 그 티켓 본문에는{" "}
     <code>## 아카이브</code> 절을 붙입니다</li>
     <li><b>다음 세션은 그 자리를 알고 시작합니다.</b> 온톨로지가 어디에 있고 어떻게 찾는지가
     워커에게 나가는 프롬프트마다 실립니다</li>
@@ -576,17 +576,17 @@ export default function Landing({
 <section className="wrap reveal">
   <h2>계정을 만들 필요가 없습니다</h2>
   <ul className="marks">
-    <li><b>dira에는 서버가 없습니다.</b> 가입도 로그인도 없습니다. 내려받아 열면 그게 전부이고,
+    <li><b>dira에는 서버가 없습니다.</b> 가입도 로그인도 없습니다. 내려받아 열면 그게 전부이고
     만든 프로젝트가 어딘가로 올라가지 않습니다</li>
     <li><b>티켓도 기록도 프로젝트 폴더 안에 있습니다.</b> 큐는{" "}
-    <code>&lt;프로젝트&gt;/.dira</code> 디렉터리 하나이고, 담긴 것은 마크다운 파일입니다. 따로
-    권한을 설정하는 자리가 없어서, 그 폴더를 열 수 있으면 그것이 곧 권한입니다</li>
+    <code>&lt;프로젝트&gt;/.dira</code> 디렉터리 하나이고 담긴 것은 마크다운 파일입니다. 따로
+    권한을 설정하는 자리가 없어서 그 폴더를 열 수 있으면 그것이 곧 권한입니다</li>
     <li><b>모델에는 일감이 나갑니다.</b> 워커가 세션을 띄울 때 티켓 본문과 필요한 코드가
-    고르신 엔진(Claude Code · Codex)을 거쳐 모델로 갑니다. 그 통로 밖으로 작업한 내용을 dira가
+    고르신 엔진을 거쳐 모델로 갑니다. 그 통로 밖으로 작업한 내용을 dira가
     따로 가져가지는 않습니다</li>
     <li><b>사용 통계는 끄면 그만입니다.</b> 화면에서 무엇을 눌렀는지 여덟 가지만 셉니다. 티켓
     제목·본문·파일 경로·프롬프트는 실리지 않습니다. 설정에서 끄면 그때부터 아무것도 나가지
-    않고, 남은 것까지 지우시려면 <code>~/.config/dira/analytics.json</code> 한 개를 지우면
+    않고 남은 것까지 지우시려면 <code>~/.config/dira/analytics.json</code> 한 개를 지우면
     됩니다</li>
   </ul>
   {/* 그림 — 새로 찍지 않는다. `08-onboarding`이 §매뉴얼 §스크린샷이 박아 둔 «프로젝트 0건일
@@ -594,7 +594,7 @@ export default function Landing({
       이미 쓰던 문장에서 이 절이 가리키는 것만 남겼다. 자리·간격은 위 절과 같다. */}
   <figure style={{ marginTop: 24 }}>
     <a className="zoom" href="/shots/08-onboarding.png" target="_blank" rel="noopener" title="원본 크기로 열기"><img className="shot" src="/shots/08-onboarding.png" loading="lazy" alt="프로젝트가 0건일 때의 첫 화면. 등록된 프로젝트가 없다는 한 줄 아래에 새 프로젝트 카드가 펼쳐져 있고, 이름·프로젝트 폴더·통합 브랜치·스펙 문서 칸과 프로젝트 만들기 버튼이 있습니다." width="1600" height="700"/></a>
-    <figcaption>설치하고 처음 열면 이 화면입니다. 적는 것은 프로젝트 폴더 하나이고, 계정을
+    <figcaption>설치하고 처음 열면 이 화면입니다. 적는 것은 이름과 프로젝트 폴더뿐이고 계정을
     넣는 칸이 없습니다.</figcaption>
   </figure>
   <p className="arrows"><a href="/docs/analytics">사용 통계와 끄는 법</a></p>
@@ -605,11 +605,11 @@ export default function Landing({
   {/* `stats-list`는 §모션 §판정표 ①이 격자 그릇을 대상에서 빼는 자리다 — 텍스트는 0자 안 갈렸다. */}
   <ul className="stats-list">
     <li><b>0</b><span>엔진 의존성<br/>bash + python3 표준 라이브러리</span></li>
-    <li><b>6</b><span>이 레포에서 동시에 도는 워커</span></li>
-    <li><b>631</b><span>자기 큐가 받은 티켓<br/>완료 622</span></li>
+    <li><b>8</b><span>이 레포에서 동시에 도는 워커</span></li>
+    <li><b>1775</b><span>자기 큐가 받은 티켓<br/>완료 1762</span></li>
     <li><b>62시간</b><span>첫 커밋에서 첫 릴리스까지<br/>커밋 351</span></li>
   </ul>
-  <p className="stats-note">2026-08-03 기준</p>
+  <p className="stats-note">2026-08-12 기준</p>
 </div>
 
 {/* `no-hi`는 §모션 §판정표 ④가 하이라인을 안 긋는 예외다(`.stats + section`이 이미
@@ -620,18 +620,18 @@ export default function Landing({
       <a className="zoom" href="/shots/barge.gif" target="_blank" rel="noopener" title="원본 크기로 열기"><img className="shot" src="/shots/barge.gif" loading="lazy" alt="세션 스트림이 도구 호출을 한 줄씩 늘려 가는 동안, 아래 입력창에 문장을 넣고 보내기를 누르자 그 문장이 참견 줄로 스트림에 나타나고 세션이 이어서 방향을 바꿉니다." width="1760" height="1408"/></a>
       <figcaption>
         "그럴 수 있죠 이해해요, 어떻게 사람이 완벽할까요?" 반드시 완벽한 요구사항을 줄
-        필요가 없습니다. 가볍게 요구하고 작업중에도 참견할 수 있습니다.
+        필요가 없습니다. 가볍게 요구하고 작업 중에도 참견할 수 있습니다.
       </figcaption>
       <p className="arrows"><a href="/docs/barge-in">도는 세션에 말 걸기</a></p>
     </figure>
     <figure>
       <a className="zoom" href="/shots/07-qa-thread.png" target="_blank" rel="noopener" title="원본 크기로 열기"><img className="shot" src="/shots/07-qa-thread.png" loading="lazy" alt="요구 티켓의 질문·답변 스레드. 질문 아래에 답변 말풍선이 오른쪽으로 붙어 있고, frontmatter에 awaiting 해시가 있습니다." width="1440" height="450"/></a>
-      <figcaption>어련히 모르면 물어보지 않겠어요? 에이전트들이 업무를 수행하다 모르는 게 생기면 물어봅니다. 질문에 대답해주세요. 그럼 또 알아서 하러 갑니다.</figcaption>
+      <figcaption>어련히 모르면 물어보지 않겠어요? 에이전트들도 일하다 모르는 게 생기면 물어봅니다. 질문에 대답해주세요. 그럼 또 알아서 하러 갑니다.</figcaption>
       <p className="arrows"><a href="/docs/requirements#되묻기와-답변-대기">문의 · 답변</a></p>
     </figure>
     <figure>
       <a className="zoom" href="/shots/04-ticket-running.png" target="_blank" rel="noopener" title="원본 크기로 열기"><img className="shot" src="/shots/04-ticket-running.png" loading="lazy" alt="진행중 티켓 상세. 왼쪽에 본문과 Done when 체크리스트, 오른쪽에 frontmatter 표와 관계." width="1600" height="1000"/></a>
-      <figcaption>일이 어떻게 진행되고 있는지 티켓 단위로 확인해볼 수 있습니다. 만약 내가 생각했던 것과 다른 방향으로 진행되고 있다면, 티켓을 할당 해제하여 중단시킬 수도 있고, 아직 시작하지 않은 티켓은 본문을 수정하여 내가 원하는 방향대로 자세히 수정할 수도 있습니다.</figcaption>
+      <figcaption>일이 어떻게 흘러가는지 티켓 단위로 들여다볼 수 있습니다. 생각과 다른 방향으로 가고 있으면 티켓을 할당 해제해 중단시킵니다. 아직 시작하지 않은 티켓은 본문을 고쳐 원하는 방향을 자세히 적어 둘 수도 있습니다.</figcaption>
       <p className="arrows"><a href="/docs/screens#티켓-상세">업무 투명성</a></p>
     </figure>
     {/* 넷째는 12열을 통째로 쓴다. `.gallery`가 3열이라 넷이 한 줄에 못 서는데, 열을 넷으로
@@ -642,7 +642,7 @@ export default function Landing({
         (`.gallery figure:last-child`의 margin-top)가 준다. */}
     <figure style={{ gridColumn: "1 / -1" }}>
       <a className="zoom" href="/shots/09-ontology.png" target="_blank" rel="noopener" title="원본 크기로 열기"><img className="shot" src="/shots/09-ontology.png" loading="lazy" alt="온톨로지 화면. 제목 아래에 카드가 사는 폴더 경로가 있고, 그 밑 지표 판에 객체 · 관계 72 · 133을 비롯한 칸이 열두 개 있습니다. 아래는 왼쪽이 카드 파일트리, 오른쪽이 고른 파일 _ontology/SCHEMA.md의 원문입니다." width="1600" height="760"/></a>
-      <figcaption>티켓이 끝날 때마다 그 일에서 추린 사실이 한 장씩 여기 쌓입니다. 프로젝트 폴더 안에 마크다운으로 남아서, 다음 세션도 사람도 같은 자리를 열어 봅니다.</figcaption>
+      <figcaption>티켓이 끝날 때마다 그 일에서 추린 사실이 한 장씩 여기 쌓입니다. 프로젝트 폴더 안에 마크다운으로 남아서 다음 세션도 사람도 같은 자리를 열어 봅니다.</figcaption>
       <p className="arrows"><a href="/docs/ontology">아카이빙과 온톨로지</a></p>
     </figure>
   </div>
@@ -652,9 +652,9 @@ export default function Landing({
 {!fullMode && (
 <section className="wrap reveal">
   <p className="eyebrow">설치</p>
-  <h2>다운로드하여 설치하면 끝</h2>
+  <h2>다운로드해서 설치하면 끝</h2>
   <p className="body" style={{ maxWidth: "44em" }}>
-    받아서 열기만 하면 되고, 터미널을 켤 일이 없습니다.
+    받아서 열기만 하면 되고 터미널을 켤 일이 없습니다.
   </p>
   <div className="two">
     <div>
@@ -672,10 +672,10 @@ export default function Landing({
     </div>
     <div>
       <ul className="marks">
-        <li><b>엔진은 <code>claude</code>와 <code>codex</code> 중에 고릅니다.</b> 워커를 만들
-        때 모델까지 같이 정하고, 목록에 없는 이름은 직접 적어 넣습니다. 만든 뒤에도 워커 화면의{" "}
-        <code>엔진</code> 열을 눌러 바꿉니다. 세션 스트림과 참견은 <code>claude</code> 쪽에만
-        있습니다. 앱은 Apple Silicon 맥에서만 돕니다</li>
+        <li><b>엔진은 <code>claude</code>와 <code>codex</code>, grok과 agy 넷 중에 고릅니다.</b> 워커를 만들
+        때 모델까지 같이 정하고 목록에 없는 이름은 직접 적어 넣습니다. 만든 뒤에도 워커 화면의{" "}
+        <code>엔진</code> 열을 눌러 바꿉니다. 참견은 <code>claude</code>에만 있고
+        세션 스트림은 claude와 grok에 있습니다. 앱은 Apple Silicon 맥에서만 돕니다</li>
         <li><b>화면 없이 엔진만 돌릴 수도 있습니다.</b> Linux에서 굴리거나 화면이 필요 없으면
         레포를 직접 받는 <a href="/docs/install#앱-없이-엔진만-쓰기">그 갈래</a>로 가세요</li>
       </ul>
@@ -762,7 +762,7 @@ export default function Landing({
   <div className="wrap">
     <h2>나만의 AI 팀을 만들어보세요</h2>
     <p className="body">
-      dira와 함께 PC에 나만의 멀티 에이전트 시스템을 아주 쉽게 구축해보세요.
+      dira와 함께 PC에 나만의 멀티 에이전트 시스템을 아주 쉽게 만들어보세요.
     </p>
     <div className="cta">
       <a className="btn btn-primary btn-lg" href={dmg}>macOS 앱 다운로드</a>
