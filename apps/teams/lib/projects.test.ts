@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 
@@ -248,6 +248,33 @@ test("레지스트리 — 등록 검증 4종", async () => {
     message: /절대경로/,
   });
   await assert.rejects(() => addProject("  ", root), { code: "name" });
+});
+
+/** §0-19 — 등록도 생성과 같은 줄을 단다. `scaffold`는 별도 테스트(scaffold.test.ts)가 있으니
+ *  여기서는 등록 경로(`addProject`)만 검증한다. */
+test("addProject — .dira의 형제 .gitignore에 .dira 한 줄을 단다, 두 번째는 안 갈린다", async () => {
+  const root = newQueue({ "w1.sh": "" });
+  const project = path.dirname(root);
+
+  await addProject("gi", root, "gi");
+  const gitignore = path.join(project, ".gitignore");
+  assert.strictEqual(readFileSync(gitignore, "utf8"), ".dira\n");
+
+  // 같은 프로젝트를 다시 등록하면 dupRoot로 거부되지만, .gitignore는 이미 멱등이라 안 갈린다.
+  await assert.rejects(() => addProject("gi2", root), { code: "dupRoot" });
+  assert.strictEqual(readFileSync(gitignore, "utf8"), ".dira\n");
+});
+
+/** 쓰기가 막힌 디렉터리 — §0-19 네 갈래 넷째. 이 한 줄이 등록을 막는 사유가 되면 안 된다. */
+test("addProject — 프로젝트 디렉터리 쓰기 금지(chmod 500)여도 등록은 성공한다", async (t) => {
+  const root = newQueue({ "w1.sh": "" });
+  const project = path.dirname(root);
+  chmodSync(project, 0o500);
+  t.after(() => chmodSync(project, 0o700)); // roots[] 정리(rmSync)가 쓰기 권한을 필요로 한다
+
+  await addProject("막힌 곳", root, "blocked");
+  assert.strictEqual((await getProject("blocked"))!.name, "막힌 곳");
+  assert.ok(!existsSync(path.join(project, ".gitignore"))); // 쓰기가 실패했으니 파일도 없다
 });
 
 test("addProject — vendored 큐(CORE.md 있음)는 등록 시 엔진 코어로 미러링된다", async (t) => {

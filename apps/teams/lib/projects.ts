@@ -20,6 +20,7 @@ import {
 } from "./paths.ts";
 import { mirrorCore } from "./protocols.ts";
 import { dueAlertOf, isAwaiting, listTickets, statusOf, type DueAlert, type Ticket } from "./queue.ts";
+import { ensureGitignoreLine } from "./scaffold.ts";
 import { listWorkers, type Worker } from "./workers.ts";
 import { PERSONA_COLORS, slugify, tildePath } from "./urls.ts";
 
@@ -301,6 +302,9 @@ export async function addProject(name: string, rootInput: string, id?: string): 
       "이 디렉터리에 tickets/도 workers/도 없습니다 — dira 프로젝트가 아닙니다. 안에 tickets/ 와 workers/ 를 만들거나, 지우고 [새로 만들기]로 다시 만드세요.",
     );
   }
+  // §0-19 — `.dira`의 형제 `<프로젝트>/.gitignore`에 `.dira` 한 줄. 등록이 받는 경로는 `.dira`
+  // 자신이므로 그 부모다. 생성 경로(`scaffold`)도 같은 함수를 부르므로 여기서는 대개 skipped다.
+  await ensureGitignoreLine(path.dirname(root));
 
   const projects = await readProjects();
   const dup = projects.find((t) => t.root === root);

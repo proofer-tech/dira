@@ -73,6 +73,24 @@ function queueRoot(projectDir: string): { project: string; root: string } {
   return { project, root: path.join(project, ".dira") };
 }
 
+/** 줄 단위 완전일치 넷 중 하나면 "있다"다(§0-19). 파서를 쓰지 않는다 — 못 읽어서 생기는 최악은
+ *  중복 한 줄이고, 파서를 지어 틀리는 최악은 커밋된 큐다. */
+const DIRA_LINE_RE = /^\/?\.dira\/?$/;
+
+/** `<프로젝트>/.gitignore`에 `.dira` 한 줄을 단다(DESIGN.md §0-19) — 큐 불변식 3(단일 사본)이
+ *  깨지는 사고(`git add -A`로 큐가 레포에 들어감)를 막는다. 등록(`addProject`)·생성(`scaffold`)
+ *  두 경로가 부른다 — 어느 쪽이 먼저 불러도 나중 호출은 skipped로 끝난다(멱등).
+ *  **쓰기가 실패해도 던지지 않는다** — 이 한 줄이 등록·생성을 막는 사유가 되지 않는다(네 갈래 넷째). */
+export async function ensureGitignoreLine(project: string): Promise<"written" | "skipped" | "failed"> {
+  const file = path.join(project, ".gitignore");
+  const text = await readFile(file, "utf8").catch(() => null);
+  if (text !== null && text.split("\n").some((line) => DIRA_LINE_RE.test(line.trim()))) {
+    return "skipped";
+  }
+  const prefix = text ? (text.endsWith("\n") ? text : text + "\n") : "";
+  return writeFile(file, prefix + ".dira\n").then(() => "written" as const, () => "failed" as const);
+}
+
 export type Preflight =
   | { ok: true }
   | { ok: false; queue: boolean; root: string; message: string };
@@ -185,6 +203,10 @@ export async function scaffold(
       `${selfHealSourceLine(root, repo.path)}\n${tickSourceLine(repo.path)}`,
   );
   await put("workers/w1.sh", w1, 0o755);
+
+  // §0-19 — `.dira`의 형제 `.gitignore`에 `.dira` 한 줄. 실패해도 스캐폴딩 성공을 막지 않는다.
+  const gitignore = await ensureGitignoreLine(project);
+  if (gitignore !== "failed") (gitignore === "written" ? written : skipped).push(".gitignore");
 
   return { root, repo: repo.path, written, skipped };
 }

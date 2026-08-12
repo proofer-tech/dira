@@ -1,10 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { cp, mkdtemp, mkdir, readdir, readFile, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { chmod, cp, mkdtemp, mkdir, readdir, readFile, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
-import { engineRepo, fillPlaceholders, preflight, scaffold } from "./scaffold.ts";
+import { engineRepo, ensureGitignoreLine, fillPlaceholders, preflight, scaffold } from "./scaffold.ts";
 import { cronLine, parseContextBlock } from "./workers.ts";
 
 /** §0-3 스캐폴딩 집합. **이 목록이 계약이다** — 여기 없는 파일을 쓰면 실패한다. */
@@ -58,10 +58,11 @@ test("scaffold — §0-3 집합 그대로, 두 번째는 전부 skipped", async 
   t.after(() => rm(dir, { recursive: true, force: true }));
   const project = path.join(dir, "myproject");
 
-  // ① 만들어진 파일 목록 = §0-3 집합 (specDoc 없이 — ③을 같은 트리에서 본다)
+  // ① 만들어진 파일 목록 = §0-3 집합 + §0-19의 `.gitignore`(specDoc 없이 — ③을 같은 트리에서 본다)
   const first = await scaffold(project, { branch: "main" });
-  assert.deepEqual(first.written.sort(), [...SET].sort());
+  assert.deepEqual(first.written.sort(), [...SET, ".gitignore"].sort());
   assert.deepEqual(first.skipped, []);
+  assert.equal(await readFile(path.join(project, ".gitignore"), "utf8"), ".dira\n");
   // 다음 단계(registerCron·addProject)가 쓰는 값 — 부르는 쪽이 경로를 다시 조립하지 않는다.
   // realpath된 경로다(751e3004) — mkdtemp는 맥에서 `/var`(→ `/private/var`) 아래다.
   assert.equal(first.root, await realpath(path.join(project, ".dira")));
@@ -110,9 +111,57 @@ test("scaffold — §0-3 집합 그대로, 두 번째는 전부 skipped", async 
 
   // ④ 두 번 돌리면 전부 skipped이고 내용이 안 바뀐다
   const second = await scaffold(project, { branch: "other", specDoc: "docs/S.md" });
-  assert.deepEqual(second.skipped.sort(), [...SET].sort());
+  assert.deepEqual(second.skipped.sort(), [...SET, ".gitignore"].sort());
   assert.deepEqual(second.written, []);
   assert.equal(await readFile(agents, "utf8"), before);
+  assert.equal(await readFile(path.join(project, ".gitignore"), "utf8"), ".dira\n");
+});
+
+/** §0-19 네 갈래 — 파서 없이 트림-완전일치로만 판정한다. */
+test("ensureGitignoreLine — 네 갈래 + 개행 없는 파일 + 실패해도 안 던진다", async (t) => {
+  const dir = await tmp();
+  t.after(() => rm(dir, { recursive: true, force: true }));
+
+  // 갈래 1 — 없다 → 만들고 한 줄
+  assert.equal(await ensureGitignoreLine(dir), "written");
+  assert.equal(await readFile(path.join(dir, ".gitignore"), "utf8"), ".dira\n");
+
+  // 갈래 3 — 있고 `.dira`가 있다 → 아무것도 안 한다(멱등)
+  assert.equal(await ensureGitignoreLine(dir), "skipped");
+  assert.equal(await readFile(path.join(dir, ".gitignore"), "utf8"), ".dira\n");
+
+  // 갈래 2 — 있고 `.dira`가 없다 → 기존 바이트는 그대로, 맨 끝에 append
+  const dir2 = await tmp();
+  t.after(() => rm(dir2, { recursive: true, force: true }));
+  await writeFile(path.join(dir2, ".gitignore"), "node_modules/\n");
+  assert.equal(await ensureGitignoreLine(dir2), "written");
+  assert.equal(await readFile(path.join(dir2, ".gitignore"), "utf8"), "node_modules/\n.dira\n");
+
+  // 개행 없이 끝나는 파일 — 개행부터 넣는다(안 그러면 `.vercel.dira` 같은 줄이 생긴다)
+  const dir3 = await tmp();
+  t.after(() => rm(dir3, { recursive: true, force: true }));
+  await writeFile(path.join(dir3, ".gitignore"), "node_modules/");
+  assert.equal(await ensureGitignoreLine(dir3), "written");
+  assert.equal(await readFile(path.join(dir3, ".gitignore"), "utf8"), "node_modules/\n.dira\n");
+
+  // 갈래 3 변형 — `.dira/`·`/.dira`·`/.dira/` 전부 "있다"다. 한 바이트도 안 갈린다(파서 없이 트림 완전일치)
+  for (const line of [".dira/", "/.dira", "/.dira/"]) {
+    const d = await tmp();
+    t.after(() => rm(d, { recursive: true, force: true }));
+    const body = `${line}\n`;
+    await writeFile(path.join(d, ".gitignore"), body);
+    assert.equal(await ensureGitignoreLine(d), "skipped");
+    assert.equal(await readFile(path.join(d, ".gitignore"), "utf8"), body);
+  }
+
+  // 갈래 4 — 쓰기가 실패해도 던지지 않는다(권한 없는 디렉터리)
+  const dir4 = await tmp();
+  t.after(async () => {
+    await chmod(dir4, 0o700);
+    await rm(dir4, { recursive: true, force: true });
+  });
+  await chmod(dir4, 0o500);
+  assert.equal(await ensureGitignoreLine(dir4), "failed");
 });
 
 /** §프롬프트 층 결정 8-a — 원본은 `<엔진>/protocols/`, `templates/`에 사본을 두지 않는다. */
