@@ -224,12 +224,15 @@ export function SessionStream({
            이미 `부재이지 고장이 아니다`로 판정했고, codex 워커에겐 이게 상시 상태라 정상
            상태에 켜진 경고가 된다(§0-2). 폴링도 안 돈다 — 빈 스트림을 돌리지 않는다.
            **문구가 엔진 이름을 말한다**: 이 자리에 서는 엔진이 codex 하나가 아니게 됐다
-           (집합 밖 = 손으로 쓴 `TICKET_ENGINE`도 여기로 온다 — §4-3 개정). */
+           (집합 밖 = 손으로 쓴 `TICKET_ENGINE`도 여기로 온다 — §4-3 개정). **"claude 엔진에서만
+           됩니다"라고 세지 않는다** — `FEATURE_ENGINES.stream.engines`가 이미 claude·grok
+           둘이라 그 문장이 틀렸다(신고 `3d0a5585`). 이 자리가 답할 것은 "왜 비었나"뿐이라
+           집합을 세지 않는 문장으로 족하다. */
         <EmptyState
           text={`이 워커의 엔진은 ${engine}입니다`}
           action={
             <span className="text-xs text-muted-foreground">
-              세션 스트림은 claude 엔진에서만 됩니다 — {engine}는 트랜스크립트를 남기지 않습니다
+              {engine}는 트랜스크립트를 남기지 않습니다
             </span>
           }
         />
