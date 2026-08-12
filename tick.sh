@@ -31,6 +31,8 @@ LOGDIR="$WORKERS/logs"
 RUNLOG="$WORKERS/runner.log"
 # 머신 로컬 상태(토큰·실행 락). 티켓 루트가 공유 드라이브여도 비밀과 pid는 여기 남는다.
 LOCAL="${TICKET_LOCAL:-$HOME/.config/dira}"
+# 멀티플레잉(§0-18): TICKET_SLOT이 비어 있으면 이 값은 오늘과 글자 그대로 같다.
+TOKENF="$LOCAL/oauth-token${TICKET_SLOT:+-$TICKET_SLOT}"
 mkdir -p "$LOGDIR" "$LOCAL/run" "$TICKET_ROOT/tickets"
 
 log() { printf '%s [%s] %s\n' "$(date '+%F %T')" "${TICKET_NAME:-?}" "$*" >> "$RUNLOG"; }
@@ -79,7 +81,7 @@ engine_fp() {
 try: tok = open(sys.argv[1], "rb").read()
 except OSError: tok = b""
 print(hashlib.sha1(tok).hexdigest()[:12])' \
-    "$LOCAL/oauth-token"
+    "$TOKENF"
 }
 arm_cdown() { printf '%s\n%s\n' "$1" "$(engine_fp)" > "$CDOWN"; }
 
@@ -90,12 +92,12 @@ arm_cdown() { printf '%s\n%s\n' "$1" "$(engine_fp)" > "$CDOWN"; }
 engine_gate_ok() {
   if [ "$ENGINE_NAME" = "claude" ]; then
     # claude setup-token 으로 발급 후: printf %s '<토큰>' > ~/.config/dira/oauth-token
-    [ -r "$LOCAL/oauth-token" ] && export CLAUDE_CODE_OAUTH_TOKEN="$(tr -d '\r\n' < "$LOCAL/oauth-token")"
+    [ -r "$TOKENF" ] && export CLAUDE_CODE_OAUTH_TOKEN="$(tr -d '\r\n' < "$TOKENF")"
     # 비대화형 claude만 장기 토큰이 없으면 이 엔진으로 못 뜬다. `.authwarn`으로 "최초 1회만
     # 남긴다"는 종전 계약 그대로 둔다.
-    if [ ! -r "$LOCAL/oauth-token" ] && [ ! -t 1 ]; then
+    if [ ! -r "$TOKENF" ] && [ ! -t 1 ]; then
       if [ ! -f "$LOCAL/.authwarn" ]; then
-        log "SKIP AUTH 대기 $ENGINE_NAME (claude setup-token 발급 후 $LOCAL/oauth-token 에 저장 필요)"
+        log "SKIP AUTH 대기 $ENGINE_NAME (claude setup-token 발급 후 $TOKENF 에 저장 필요)"
         touch "$LOCAL/.authwarn"
       fi
       return 1
@@ -497,7 +499,7 @@ while IFS='|' read -r c_path c_hash c_kind c_persona c_prio c_base c_eff; do
     [ -r "$PENGINE" ] && . "$PENGINE"
   fi
   ENGINE_NAME="$(basename "${TICKET_ENGINE[0]}")"
-  CDOWN="$LOCAL/run/cooldown-$ENGINE_NAME"
+  CDOWN="$LOCAL/run/cooldown-$ENGINE_NAME${TICKET_SLOT:+-$TICKET_SLOT}"
 
   # 어느 엔진인지가 후보에 달렸으므로 ENGINE_NAME·claude 인증·쿨다운도 후보 확정 뒤에 판정한다
   # (dryrun은 미리보기라 건너뛴다 - 종전에도 이 게이트는 CMD=tick 전용이었다). 디스패치 불가면

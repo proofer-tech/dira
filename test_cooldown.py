@@ -44,6 +44,17 @@ TICKET_ENGINE=("{tmp}/codex-engine.sh" "{{sid}}")
 . "{tick}"
 """
 
+# 이름이 "claude"인 가짜 엔진(내용은 fake-engine.sh와 같다) - engine_gate_ok()의 claude 전용
+# 분기(TOKENF/AUTH 대기)는 ENGINE_NAME이 정확히 "claude"일 때만 돈다(§0-18 §엔진).
+WORKER3 = """\
+#!/bin/bash
+TICKET_NAME="w3"
+TICKET_CWD="{tmp}"
+TICKET_PROMPT_FMT="please pick up %s"
+TICKET_ENGINE=("{tmp}/claude" "{{sid}}" "--input-format" "stream-json")
+. "{tick}"
+"""
+
 # 비스트리밍 가짜 엔진: 최상위 `error` 줄 한 개만 내고 죽는다(codex `exec`의 실측 모양).
 CODEX_ENGINE = """\
 #!/bin/bash
@@ -121,6 +132,9 @@ try:
     w2 = mkfile(os.path.join(root, "workers", "w2.sh"),
                 WORKER2.format(tmp=tmp, tick=TICK), 0o755)
     cool2 = os.path.join(local, "run", "cooldown-codex-engine.sh")
+    mkfile(os.path.join(tmp, "claude"), ENGINE.format(tmp=tmp), 0o755)
+    w3 = mkfile(os.path.join(root, "workers", "w3.sh"),
+                WORKER3.format(tmp=tmp, tick=TICK), 0o755)
     for h in ("aaaa0001", "bbbb0002", "cccc0003", "dddd0004"):
         mkfile(os.path.join(tickets, h + ".md"),
                "---\nticket: {}\ntitle: t\nkind: work\n---\n\n## Goal\ntest\n".format(h))
@@ -135,6 +149,10 @@ try:
 
     def tick2(**over):
         return subprocess.run([w2, "tick"], capture_output=True, text=True,
+                              env=dict(env, **over), timeout=180)
+
+    def tick3(**over):
+        return subprocess.run([w3, "tick"], capture_output=True, text=True,
                               env=dict(env, **over), timeout=180)
 
     def epoch_of(path):
@@ -304,9 +322,53 @@ try:
     assert t0 + W <= int(epoch_of(cool2)) <= t1 + W, \
         "codex 쿨다운 창이 now+{}가 아니다: {}".format(W, epoch_of(cool2))
 
+    # --- ⑪ 멀티플레잉(§0-18): TICKET_SLOT 없으면 claude 엔진 경로가 오늘과 글자 그대로 같다 ---
+    # ⑩이 FAIL로 되돌린 ffff0006이 아직 열려 있다 - 안 지우면 birth 순서상 그게 먼저 집힌다.
+    os.remove(os.path.join(tickets, "ffff0006.md"))
+    claude_cool = os.path.join(local, "run", "cooldown-claude")
+    mode("ok")
+    mkfile(os.path.join(tickets, "1111a001.md"),
+           "---\nticket: 1111a001\ntitle: t\nkind: work\n---\n\n## Goal\ntest\n")
+    before = len(log())
+    tick3()
+    added = log()[before:]
+    assert "DONE 1111a001" in added, "슬롯 없는 claude 경로가 안 돈다:\n" + added
+    assert "SKIP AUTH 대기" not in added, "슬롯 없는데 종전 토큰 파일을 못 읽었다:\n" + added
+
+    # --- ⑫ TICKET_SLOT=9f2c1a: 토큰·쿨다운 파일이 그 슬롯 하나로 갈린다(§검증 2) ---
+    slot = "9f2c1a"
+    slot_token = os.path.join(local, "oauth-token-" + slot)
+    slot_cool = os.path.join(local, "run", "cooldown-claude-" + slot)
+    mkfile(slot_token, "tok-slot")
+    mode("api_error")
+    mkfile(os.path.join(tickets, "2222b002.md"),
+           "---\nticket: 2222b002\ntitle: t\nkind: work\n---\n\n## Goal\ntest\n")
+    before = len(log())
+    tick3(TICKET_SLOT=slot)
+    added = log()[before:]
+    assert "FAIL 2222b002" in added, "슬롯 있는 claude 경로가 안 돌았다:\n" + added
+    assert os.path.exists(slot_cool), "슬롯 쿨다운 파일이 슬롯 경로(" + slot_cool + ")에 안 생겼다"
+    assert not os.path.exists(claude_cool) or epoch_of(claude_cool) != epoch_of(slot_cool), \
+        "슬롯 쿨다운이 종전 경로(cooldown-claude)와 같은 창을 걸었다"
+
+    # --- ⑬ 슬롯이 다른 워커 둘 중 하나가 쿨다운에 걸려도 다른 하나는 안 막힌다(§검증 3) ---
+    # ⑫가 FAIL로 되돌린 2222b002가 아직 열려 있다 - 안 지우면 그게 먼저 집힌다.
+    os.remove(os.path.join(tickets, "2222b002.md"))
+    slot2 = "aa11bb22"
+    mkfile(os.path.join(local, "oauth-token-" + slot2), "tok-slot2")
+    mode("ok")
+    mkfile(os.path.join(tickets, "3333c003.md"),
+           "---\nticket: 3333c003\ntitle: t\nkind: work\n---\n\n## Goal\ntest\n")
+    before = len(log())
+    tick3(TICKET_SLOT=slot2)
+    added = log()[before:]
+    assert "SKIP 엔진 쿨다운" not in added, "슬롯이 다른데 남의 쿨다운에 막혔다:\n" + added
+    assert "DONE 3333c003" in added, "슬롯2가 디스패치되지 않았다:\n" + added
+
     print("OK - 엔진 쿨다운 (복귀 시각 · 게이트 · 재무장 · 토큰 교체 해제 · 모델 교체는 안 푼다 · "
-          ".done 뒤 죽은 세션 · codex/grok 한도 판정)")
+          ".done 뒤 죽은 세션 · codex/grok 한도 판정 · TICKET_SLOT이 토큰·쿨다운을 같이 가른다)")
 finally:
     subprocess.run(["pkill", "-f", os.path.join(tmp, "fake-engine.sh")], capture_output=True)
     subprocess.run(["pkill", "-f", os.path.join(tmp, "codex-engine.sh")], capture_output=True)
+    subprocess.run(["pkill", "-f", os.path.join(tmp, "claude")], capture_output=True)
     shutil.rmtree(tmp, ignore_errors=True)
