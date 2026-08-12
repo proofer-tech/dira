@@ -752,25 +752,23 @@ export default function Landing({
       </ul>
     </li>
   </ul>
+  {/* 옛 ⑧ 마지막 CTA 절이 여기로 합쳐졌다(§랜딩 §플랜 절과 마지막 CTA가 한 절이
+      된다, 요구 `79011562`) — 카드 넷을 든 쪽이 안 움직이고 옮기는 것은 언제나 작은 쪽이다.
+      `.body`는 아직 빈 노드다 — 넛지 문장은 사용자가 읽는 산문이라 developer가 안 쓰고
+      후속 writer 티켓(`1466dd10`)이 채운다. 레포로 가는 버튼은 안 옮긴다 — 같은 절 Free
+      카드의 `Star`와 목적지가 이미 같다. 풀 모드는 이 두 줄만 걷힌다(③ 히어로 CTA와 같은
+      이유 — 앱을 연 사람에게 <받아서 깔아보세요>는 이미 참이 아니다). */}
+  {!fullMode && (
+    <>
+      <p className="body" />
+      <div className="cta">
+        <a className="btn btn-primary btn-lg" href={dmg}>macOS 앱 다운로드</a>
+      </div>
+    </>
+  )}
 </section>
 
 </main>
-
-{/* ⑧ 마지막 CTA(`.closing`) — 풀 모드에서 절째 안 선다(§한 코드베이스 §홈 표). */}
-{!fullMode && (
-<div className="closing reveal">
-  <div className="wrap">
-    <h2>나만의 AI 팀을 만들어보세요</h2>
-    <p className="body">
-      dira와 함께 PC에 나만의 멀티 에이전트 시스템을 아주 쉽게 만들어보세요.
-    </p>
-    <div className="cta">
-      <a className="btn btn-primary btn-lg" href={dmg}>macOS 앱 다운로드</a>
-      <a className="btn btn-lg" href="https://github.com/proofer-tech/dira">GitHub에서 보기</a>
-    </div>
-  </div>
-</div>
-)}
 
 <footer>
   <div className="wrap">

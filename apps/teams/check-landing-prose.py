@@ -25,7 +25,15 @@ DEFAULT_REF = "aa36aba"
 
 # 사람이 카피를 직접 바꾸며 지운 노드 — `old`가 아니라 `missing`에서만 거른다(§old에서 거르면
 # 노드 수가 82로 줄어 스펙의 `83노드` 인용이 낡는다). 출처: .dira/tickets/be8f8074.done.md
-REMOVED_NODES = {"쓸 수 있는 것은 전부 무료입니다"}
+#
+# 옛 마지막 CTA 절이 플랜 절에 합쳐지며 지운 노드 둘 — developer는 사용자가 읽는 산문을
+# 새로 안 쓴다(넛지 문장은 후속 writer 티켓 `1466dd10`이 쓴다), 레포 링크는 같은 절 Free
+# 카드의 `Star`와 목적지가 이미 같아서 안 옮겼다. 출처: .dira/tickets/79011562.wip.md
+REMOVED_NODES = {
+    "쓸 수 있는 것은 전부 무료입니다",
+    "dira와 함께 PC에 나만의 멀티 에이전트 시스템을 아주 쉽게 만들어보세요.",
+    "GitHub에서 보기",
+}
 
 
 def nodes(src):

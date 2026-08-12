@@ -491,8 +491,9 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
 /* 최상위 블록 경계마다 화면 끝까지 가는 1px 룰 한 줄(§방향·토큰 «하이라인»). `.wrap`이
    3트랙 격자 컨테이너 그 자체라 이 테두리가 곧 페이지 폭이다 — 요소도 새 색도 안 만든다.
    `section + section { padding-top: 0 }`이 여기 자리를 내줬다: 룰 위아래가 같은 96이어야
-   경계가 리듬으로 읽힌다. 이 두 줄이 하이라인을 5 → 8로 닫는다(나머지 다섯은 header 아래 ·
-   `.stats` 위아래 · `.closing` 위 · footer 위). */
+   경계가 리듬으로 읽힌다. 이 두 줄이 하이라인을 4 → 7로 닫는다(나머지 넷은 header 아래 ·
+   `.stats` 위아래 · footer 위 — 옛 마지막 CTA 절이 플랜 절에 합쳐지며 그 위 한 줄이 줄었다,
+   §랜딩 §플랜 절과 마지막 CTA가 한 절이 된다). */
 .dira-landing section { position: relative; padding: 96px 0; border-top: 1px solid transparent; }
 /* `.stats`가 자기 아래 변으로 이미 그은 경계다 — 두 줄이 겹치면 2px이 된다. */
 .dira-landing .stats + section { border-top: 0; }
@@ -681,13 +682,12 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
    줘야 트랙의 minmax(0, …)가 실제로 먹는다. 한쪽만이면 390에서 페이지가 가로로 샌다. */
 .dira-landing .two > * { min-width: 0; }
 
-/* ── closing ────────────────────────────────────── */
-/* 시작선은 페이지에 하나다 — `text-align: center`와 `margin-inline: auto`를 걷는다
-   (§방향·토큰 «정렬»). `.cta`의 가운데 정렬은 히어로가 쥔 공용 선언이라 여기서
-   덮는다 — `.plans .cta`가 이미 쓰는 것과 같은 자리다. 산문은 한 글자도 안 지운다. */
-.dira-landing .closing { position: relative; background: var(--panel); border-top: 1px solid transparent; padding: 96px 0; }
-.dira-landing .closing .body { max-width: 34em; margin: 0 0 32px; }
-.dira-landing .closing .cta { justify-content: flex-start; }
+/* 옛 마지막 CTA 절이 여기로 합쳐졌다(§랜딩 §플랜 절과 마지막 CTA가 한 절이 된다, 요구
+   `79011562`) — 시작선은 페이지에 하나라 `text-align: center`·`margin-inline: auto`를
+   걷는 값 둘만 그대로 옮긴다(`.plans .cta`가 이미 쓰는 왼쪽 정렬과 같은 자리). `>`로 좁혀
+   `.plans .cta`(Free 카드 Star 버튼)를 안 문다. 새 값은 안 만든다 — designer 0. */
+.dira-landing .plan-sec > .body { max-width: 34em; margin: 0 0 32px; }
+.dira-landing .plan-sec > .cta { justify-content: flex-start; }
 
 /* ── footer ─────────────────────────────────────── */
 .dira-landing footer { border-top: 1px solid var(--border); padding: 48px 0; }
@@ -718,7 +718,7 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
   .dira-landing .stats li:nth-child(3) { border-left: 0; padding-left: 0; }
   .dira-landing .stats li:nth-child(n+3) { border-top: 1px solid var(--border); }
   .dira-landing .fgrid { grid-template-columns: 1fr 1fr; }
-  .dira-landing section, .dira-landing .closing { padding: 64px 0; }
+  .dira-landing section { padding: 64px 0; }
   .dira-landing .hero { padding-top: 48px; padding-bottom: 64px; }
   #projects { padding-block: 48px; }
 }
