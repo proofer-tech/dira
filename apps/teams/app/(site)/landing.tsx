@@ -366,7 +366,7 @@ export default function Landing({
 {!fullMode && (
 <div className="ann">
   <div className="wrap">
-    <span>최신 버전(v{version})이 나와 있습니다. 한 번 설치하면 자동 업데이트가 따라갑니다!</span>
+    <span>자동 업데이트를 켜고 최신 버전(v{version})의 dira를 써보세요!</span>
     <a href="https://github.com/proofer-tech/dira/releases">릴리스 보기</a>
   </div>
 </div>
@@ -544,7 +544,7 @@ export default function Landing({
     아래에 <code>아카이빙중</code> 한 줄이 서고 이것도 워커가 받아서 하는 일이라 어디까지
     갔는지 그대로 보입니다</li>
     <li><b>남는 것은 마크다운 한 장과 티켓 맨 아래 한 절입니다.</b> 아카이빙을 맡은 워커가 방금
-    끝난 일에서 사실을 추려 프로젝트 폴더의 <code>ontology/</code>에 적고 그 티켓 본문에는{" "}
+    끝난 일에서 사실을 추려 프로젝트 폴더의 <code>.dira/ontology/</code>에 적고 그 티켓 본문에는{" "}
     <code>## 아카이브</code> 절을 붙입니다</li>
     <li><b>다음 세션은 그 자리를 알고 시작합니다.</b> 온톨로지가 어디에 있고 어떻게 찾는지가
     워커에게 나가는 프롬프트마다 실립니다</li>
