@@ -30938,7 +30938,7 @@ designer 세션(`f722cce5`)에는 `inbox`로 알렸다 - 스펙이 다음 rebase
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
 | P260-1 | 스펙 - §0-13에 이 절 신설(실측 표 + 파생값이 안 돌아오는 경위 + 못 여섯 + 안 정하는 것 + 검증 6줄) | pm | - | 완료 - 왕복 0회, 발행 1장 |
-| P260-2 | `token-rotate.sh`에 복구 경로 - `oauth-token`이 없고 `eligible`이 있으면 다시 쓴다 | developer | - | 발행 |
+| P260-2 | `token-rotate.sh`에 복구 경로 - `oauth-token`이 없고 `eligible`이 있으면 다시 쓴다 | developer | - | 발행 `40e6e9ce` |
 
 **한 장이다.** 고치는 파일이 `.dira/token-rotate.sh` 하나이고 판정 여섯 줄이 한 세션에
 들어간다. 화면도 엔진도 `auth.ts`도 안 갈리므로 designer 0 - QA 0 - writer 0이다.
