@@ -686,7 +686,7 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
    `79011562`) — 시작선은 페이지에 하나라 `text-align: center`·`margin-inline: auto`를
    걷는 값 둘만 그대로 옮긴다(`.plans .cta`가 이미 쓰는 왼쪽 정렬과 같은 자리). `>`로 좁혀
    `.plans .cta`(Free 카드 Star 버튼)를 안 문다. 새 값은 안 만든다 — designer 0. */
-.dira-landing .plan-sec > .body { max-width: 34em; margin: 0 0 32px; }
+.dira-landing .plan-sec > .body { max-width: 34em; margin: 32px 0 32px; }
 .dira-landing .plan-sec > .cta { justify-content: flex-start; }
 
 /* ── footer ─────────────────────────────────────── */
