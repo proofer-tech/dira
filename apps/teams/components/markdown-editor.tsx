@@ -190,6 +190,7 @@ export function MarkdownEditor({
             variant="ghost"
             size="icon-sm"
             aria-label={toggleLabel}
+            tabIndex={-1}
             onClick={() => writeMode(mode === "wysiwyg" ? "raw" : "wysiwyg")}
             className="absolute top-2 right-2 opacity-60 hover:opacity-100 focus-visible:opacity-100"
           >
