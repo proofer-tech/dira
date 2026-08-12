@@ -86,6 +86,7 @@ export function MarkdownEditor({
   ariaLabel,
   onPaste,
   onKeyDown,
+  autoFocus,
 }: {
   name: string;
   /** 비제어 초기값 — 부모가 dirty 판정·리셋을 안 하는 자리(①)만 쓴다 */
@@ -114,6 +115,11 @@ export function MarkdownEditor({
   ariaLabel?: string;
   onPaste?: (e: React.ClipboardEvent<HTMLElement>) => void;
   onKeyDown?: (e: React.KeyboardEvent<HTMLElement>) => void;
+  /** 열릴 때 캐럿을 이 편집 표면에 둔다(§3 §열리면 첫 포커스) — 원문 면은 `Textarea`가 네이티브
+   *  `autoFocus`를 그대로 받고(React가 form 요소에 폴리필한다), 위지윅 면은 `div`라 그 폴리필이
+   *  안 먹어 아래 마운트 effect가 직접 `.focus()`한다. 호출부가 안 주면 종전대로다(못 ⑤ 같은 원칙 —
+   *  이 컴포넌트가 스스로 켜지 않는다). */
+  autoFocus?: boolean;
 }) {
   const mode = useSyncExternalStore(subscribeMode, readMode, () => SERVER_MODE);
   const [innerText, setInnerText] = useState(defaultValue ?? "");
@@ -145,6 +151,15 @@ export function MarkdownEditor({
   const rootRef = useRef<HTMLDivElement>(null);
   const hiddenInputRef = useRef<HTMLInputElement>(null);
   const commitOnSubmitRef = useRef<() => void>(() => {});
+  // 위지윅 면의 첫 편집 표면 — 마운트 때 한 번 초점을 준다(원문 면은 `Textarea`의 네이티브
+  // `autoFocus`가 대신한다). 다이얼로그가 열릴 때마다 이 컴포넌트가 새로 마운트되므로 재열 때도
+  // 다시 잡힌다.
+  const firstEditableRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (autoFocus && mode === "wysiwyg") firstEditableRef.current?.focus();
+    // 마운트 한 번만 — 이후 면 전환은 사람이 손잡이를 눌러 하는 것이라 재초점 대상이 아니다
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // render 중 ref 대입은 react-hooks/refs가 막는다 — 매 렌더 뒤 effect에서 최신 클로저로 갈아 낀다.
   useEffect(() => {
     commitOnSubmitRef.current = () => {
@@ -206,6 +221,7 @@ export function MarkdownEditor({
             className={cn("pr-11", className)}
             required={required}
             aria-label={ariaLabel}
+            autoFocus={autoFocus}
           />
         ) : (
           <div className="rounded-lg border border-input bg-transparent py-2 pl-2.5 pr-11 dark:bg-input/30">
@@ -214,6 +230,7 @@ export function MarkdownEditor({
             <div className="min-h-[84px]">
               {split.blocks.length === 0 ? (
                 <div
+                  ref={firstEditableRef}
                   contentEditable
                   suppressContentEditableWarning
                   data-placeholder={placeholder ?? ""}
@@ -232,6 +249,7 @@ export function MarkdownEditor({
                     // `data-block-index`는 제출 가로채기가 `document.activeElement`에서 이 `i`를
                     // 되찾는 자리다(`lib/markdown-editor-blocks.ts`의 `commitEditable`).
                     key={i}
+                    ref={i === 0 ? firstEditableRef : undefined}
                     data-block-index={i}
                     contentEditable
                     suppressContentEditableWarning

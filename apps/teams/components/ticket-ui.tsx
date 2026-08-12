@@ -1304,6 +1304,7 @@ export function RequestDialog({
               onValueChange={setBody}
               rows={12}
               required
+              autoFocus
               ariaLabel="요구 내용"
               placeholder={"무엇이 필요한지 그냥 쓰세요.\n첫 줄이 제목이 됩니다."}
               breaks="untilHeading"
