@@ -32,6 +32,7 @@ import {
   deleteTokenAction,
   readAnalyticsAction,
   readMultiplayAction,
+  readMultitokenAction,
   readTokenRowsAction,
   resetKeymapAction,
   saveTokenAction,
@@ -40,6 +41,7 @@ import {
   setBindingAction,
   setLanguageAction,
   setMultiplayAction,
+  setMultitokenAction,
   setTokenEnabledAction,
   setTokenLabelAction,
   startSetupAction,
@@ -48,7 +50,6 @@ import {
   setActiveTokenAction,
 } from "@/app/actions";
 import type { OtherEngine, OtherEngineAuth, SetupState, TokenRow, TokenStatus } from "@/lib/auth";
-import { isMultiToken } from "@/lib/flags";
 import { useHotkey, useKeymap } from "@/components/keymap-provider";
 import { useLocale, useT } from "@/components/language-provider";
 import type { Locale } from "@/lib/i18n";
@@ -86,7 +87,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
  *  순서가 §45 ③ 트리 그림·검색 인덱스의 순서다. 노드 목록을 여기서 다시 적지 않는다 —
  *  카탈로그(`OtherEngine`)가 늘면 이 유니온도 트리도 저절로 는다. */
 /** `multiplay` — §0-18 §자리의 숨은 여섯째 노드. 트리에는 안 선다(사이드바에 항목이 없다),
- *  검색으로만 닿는다. `isMultiToken()`이 거짓이면 이 값에 절대 안 닿는다 — 색인 줄이 없다. */
+ *  검색으로만 닿는다. 잠금 밖으로 나온 뒤로는 조건 없이 존재한다(§0-18 §기본값이 된다). */
 type SettingsNode = "claude" | OtherEngine | "keymap" | "stats" | "language" | "multiplay";
 
 /** §0-15 §검색 레지스트리 한 줄 — `{트리 경로, 항목 이름, 이동 대상}`. `crumbs`가 빈 문자열이면
@@ -395,14 +396,33 @@ function LanguageSection({ className }: { className?: string }) {
 }
 
 /** §0-18 §자리 — 숨은 여섯째 노드. 사이드바에 항목이 없다(§0-18 §자리 표) — 이 컴포넌트를
- *  거는 유일한 길은 검색이다. `isMultiToken()`이 거짓이면 부르는 쪽이 아예 렌더하지 않는다
- *  (§0-18 §잠금이 먼저다 — 노드가 존재하지 않는다).
+ *  거는 유일한 길은 검색이다. 이제 잠금 밖이라 부르는 쪽이 조건 없이 렌더한다
+ *  (§0-18 §기본값이 된다 — 패널은 잠금 밖으로 나온다).
  *
  *  `switch`를 새로 설치하지 않는다 — `AnalyticsSection`과 같은 판정(버튼 하나가 라벨로 상태를
- *  말한다). 값은 다이얼로그가 열릴 때 읽는다 — 같은 이유(다이얼로그를 그리는 자리가 셋). */
-function MultiplaySection({ className }: { className?: string }) {
+ *  말한다). 값은 다이얼로그가 열릴 때 읽는다 — 같은 이유(다이얼로그를 그리는 자리가 셋).
+ *
+ *  토글이 둘이다 — `다중계정 허용`(신설, `multitoken` 파일)과 `다중계정 동시사용`(기존
+ *  `multiplay`, 무수정). 서로 다른 파일-다른 서버 액션이라 한쪽이 다른 쪽을 막지 않는다. 두
+ *  줄이 같은 문구 `허용되어 있습니다`류를 쓰면 어느 쪽인지 이름으로 안 갈리므로 각 줄에
+ *  검색 색인과 같은 이름을 그대로 접두로 단다(중복 값 0 — `lib/i18n.ts` §키 규약).
+ *
+ *  `다중계정 허용`은 부르는 쪽(`SettingsDialog`)의 상태를 받는다 — `claude` 절의 설명·트리거
+ *  문구·힌트도 같은 값을 읽어서다(`accountCount`/`onCount`와 같은 벌 — 콜백으로 올려 바로
+ *  갱신해야 재시작 없이 같은 화면에서 목록이 갈린다, §0-18 §검증 2). `다중계정 동시사용`은
+ *  이 값이 다른 자리에 안 쓰이므로 종전대로 자기 상태를 스스로 든다. */
+function MultiplaySection({
+  className,
+  multiToken,
+  onMultiTokenChange,
+}: {
+  className?: string;
+  multiToken: boolean | null;
+  onMultiTokenChange: (v: boolean) => void;
+}) {
   const [enabled, setEnabledState] = useState<boolean | null>(null);
-  const [pending, start] = useTransition();
+  const [pendingAllow, startAllow] = useTransition();
+  const [pendingEnabled, startEnabled] = useTransition();
   const t = useT();
 
   useEffect(() => {
@@ -416,18 +436,44 @@ function MultiplaySection({ className }: { className?: string }) {
       </h3>
       <p className="text-xs text-muted-foreground">{t("settings.multiplay.description")}</p>
 
+      {multiToken !== null && (
+        <div data-setting="multiplay.allow" className="flex items-center justify-between gap-4">
+          <p className="text-sm">
+            <span className="font-medium">{t("settings.search.multitokenToggle")}</span>{" "}
+            {multiToken ? t("settings.multitoken.enabled") : t("settings.multitoken.disabled")}
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={pendingAllow}
+            onClick={() =>
+              startAllow(async () => onMultiTokenChange(await setMultitokenAction(!multiToken)))
+            }
+          >
+            {pendingAllow
+              ? t("common.saving")
+              : multiToken
+                ? t("settings.multitoken.turnOff")
+                : t("settings.multitoken.turnOn")}
+          </Button>
+        </div>
+      )}
+
       {enabled !== null && (
         <div data-setting="multiplay.toggle" className="flex items-center justify-between gap-4">
           <p className="text-sm">
+            <span className="font-medium">{t("settings.search.multiplayToggle")}</span>{" "}
             {enabled ? t("settings.multiplay.enabled") : t("settings.multiplay.disabled")}
           </p>
           <Button
             variant="outline"
             size="sm"
-            disabled={pending}
-            onClick={() => start(async () => setEnabledState(await setMultiplayAction(!enabled)))}
+            disabled={pendingEnabled}
+            onClick={() =>
+              startEnabled(async () => setEnabledState(await setMultiplayAction(!enabled)))
+            }
           >
-            {pending
+            {pendingEnabled
               ? t("common.saving")
               : enabled
                 ? t("settings.multiplay.turnOff")
@@ -494,10 +540,16 @@ function TokenStatusBadge({ status }: { status: TokenStatus }) {
 function TokensSection({
   refreshKey,
   onCount,
+  multiToken,
 }: {
   refreshKey: string | null;
   /** §0-13 §트리거 문구 — 트리거가 행 수를 알아야 `추가`/`변경`을 가른다. 새 서버 왕복을 안 낸다. */
   onCount?: (n: number) => void;
+  /** §0-18 §읽는 쪽 — 부르는 쪽(`SettingsDialog`)이 다이얼로그가 열릴 때 읽어 내린 상태다.
+   *  이 컴포넌트가 또 읽지 않는 이유는 §0-18 §패널이 그 값을 바꾸는 자리라서다 — 여기서 따로
+   *  읽으면 토글 직후 이 목록만 옛 값에 머문다(§0-18 §검증 2, 재시작 없이 같은 화면에서 갈린다).
+   *  `null`(로딩 중)은 잠김 쪽으로 그린다(§0-18 §읽는 쪽 — 누락이 안전한 쪽). */
+  multiToken: boolean | null;
 }) {
   const t = useT();
   const [rows, setRows] = useState<TokenRow[] | null>(null);
@@ -515,10 +567,13 @@ function TokensSection({
   // `refreshKey`는 부르는 쪽의 `savedAt`이다 — 층 ②·③이 토큰을 저장하면 그 값이 바뀌어 목록을
   // 다시 읽는다("인증하기/토큰추가 시 토큰 목록에 추가됩니다", §0-13 §화면). 새 폴링 루프를
   // 따로 만들지 않는다 — 이미 있는 신호를 의존성으로 빌린다.
+  // `multiToken`도 의존성이다 — 서버의 `readTokenRows`가 잠금 여부로 행 자체를 거른다
+  // (§0-13 §잠금 계약 ②). 이 값이 없으면 `다중계정 허용`을 켜도 목록이 옛 필터(행 하나)에
+  // 머문다(§0-18 §검증 2 — 재시작 없이 같은 화면에서 갈린다).
   useEffect(() => {
     void readTokenRowsAction().then(apply);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refreshKey]);
+  }, [refreshKey, multiToken]);
 
   const setEnabled = (row: TokenRow, enabled: boolean) =>
     start(async () => apply(await setTokenEnabledAction(row.id, enabled)));
@@ -604,12 +659,12 @@ function TokensSection({
                 §4-9 "지우는 손잡이는 안 만든다"가 이미 막은 자리다(§0-13 §화면 · P179) */}
             {/* §0-13 §잠금 계약 ② — 회전을 전제한 조작(`사용`·`활성화/비활성화`)은 잠김에서
                 안 그려진다. 고를 대상이 목록에 하나뿐이라 도달 불가한 상태다. */}
-            {isMultiToken() && row.status.kind === "pending" && (
+            {multiToken && row.status.kind === "pending" && (
               <Button variant="outline" size="sm" disabled={pending} onClick={() => use(row)}>
                 {t("settings.tokens.use")}
               </Button>
             )}
-            {isMultiToken() && (
+            {multiToken && (
               <Button
                 variant="outline"
                 size="sm"
@@ -708,6 +763,13 @@ export function SettingsDialog({
   // `TokensSection`만 안다 — `readTokenRowsAction`을 여기서 또 부르지 않고 그 컴포넌트가 이미
   // 읽은 값을 콜백으로 올려 받는다.
   const [accountCount, setAccountCount] = useState<number | null>(null);
+  // §0-18 §읽는 쪽 — 동기 `isMultiToken()` 다섯 자리가 갈린 상태. `auth`(서버 `AuthView`) 프롭에
+  // 안 얹는 이유는 `readTokenRowsAction` 주석과 같다 — 이 컴포넌트를 그리는 자리가 셋이라 값
+  // 하나 때문에 레이아웃 둘·컴포넌트 둘의 프롭이 같이 는다. 다이얼로그가 열릴 때 서버 액션
+  // 하나로 여기서 읽고, `TokensSection`·`MultiplaySection`에는 보통 프롭으로 내린다(`accountCount`
+  // 콜백과 같은 벌) — 그래야 `다중계정 허용`을 켠 순간 셋 다 재시작 없이 같은 값을 본다
+  // (§0-18 §검증 2). `null`(로딩 중)은 잠김 쪽으로 그린다.
+  const [multiToken, setMultiToken] = useState<boolean | null>(null);
   // §0-15 트리 선택 — 첫 선택은 항상 `claude`다(§45 ③), 종 CTA로 열려도 같다
   const [activeNode, setActiveNode] = useState<SettingsNode>("claude");
   // 저장 직후엔 서버 프롭이 아직 옛 값이다 — 방금 쓴 것이 이긴다(층 ②·③ 어느 쪽이든)
@@ -793,19 +855,21 @@ export function SettingsDialog({
       name: t("settings.language.en"),
       anchor: "language.en",
     },
-    // §0-18 §잠금이 먼저다 — 잠금 빌드는 이 두 줄이 색인에 없다. 검색창에 `멀티플레잉`을 쳐도
-    // "해당하는 항목이 없습니다"가 뜨는 이유가 여기다(§검증 10).
-    ...(isMultiToken()
-      ? [
-          { node: "multiplay" as const, crumbs: "", name: multiplayCrumb, anchor: "multiplay" },
-          {
-            node: "multiplay" as const,
-            crumbs: multiplayCrumb,
-            name: t("settings.search.multiplayToggle"),
-            anchor: "multiplay.toggle",
-          },
-        ]
-      : []),
+    // §0-18 §기본값이 된다 — 패널이 잠금 밖으로 나온 뒤로 이 세 줄은 조건 없이 선다(§검증 5).
+    // 노드 자신 + 토글 둘(§0-18 §패널).
+    { node: "multiplay" as const, crumbs: "", name: multiplayCrumb, anchor: "multiplay" },
+    {
+      node: "multiplay" as const,
+      crumbs: multiplayCrumb,
+      name: t("settings.search.multitokenToggle"),
+      anchor: "multiplay.allow",
+    },
+    {
+      node: "multiplay" as const,
+      crumbs: multiplayCrumb,
+      name: t("settings.search.multiplayToggle"),
+      anchor: "multiplay.toggle",
+    },
   ];
 
   const [query, setQuery] = useState("");
@@ -879,6 +943,9 @@ export function SettingsDialog({
           // 토큰이 없어 인증이 필요하면 열자마자 그 경로가 보인다 — 클릭을 더 요구하지 않는다.
           setAddOpen(needsAuth);
           setActiveNode("claude");
+          // §0-18 §읽는 쪽 — 이 함수 몸통이 직접 쓰는 세 자리(설명·트리거 문구·힌트)의 상태.
+          // `TokensSection`은 자기 몫을 자기가 읽는다(위 그 컴포넌트의 effect).
+          void readMultitokenAction().then(setMultiToken);
         } else {
           setToken("");
           setLabel("");
@@ -887,6 +954,7 @@ export function SettingsDialog({
           setSetup(null);
           setAddOpen(false);
           setQuery("");
+          setMultiToken(null);
           clearHighlight(); // §45 ⑥ 수명 ④ — 다이얼로그가 닫히면 하이라이트도 죽는다
           // 닫으면 죽인다 — 살아남은 `setup-token`은 pty를 물고 다음 시도를 막는다(§0-4)
           void stopSetupAction();
@@ -1077,7 +1145,7 @@ export function SettingsDialog({
                 {claudeCrumb}
               </h3>
               <p className="text-xs text-muted-foreground">
-                {isMultiToken()
+                {multiToken
                   ? t("settings.claude.descriptionMulti")
                   : t("settings.claude.descriptionSingle")}
               </p>
@@ -1097,16 +1165,16 @@ export function SettingsDialog({
 
               {/* ① 목록 — 토큰 하나가 아니라 여러 계정을 확인·사용·활성화/비활성화·삭제한다(§0-13 §화면) */}
               <div data-setting="claude.accounts">
-                <TokensSection refreshKey={savedAt} onCount={setAccountCount} />
+                <TokensSection refreshKey={savedAt} onCount={setAccountCount} multiToken={multiToken} />
               </div>
 
               {/* ②·③(발급·직접 넣기)은 상시 렌더되는 블록이 아니라 이 트리거 하나로 접힌다
                   (§0-13 §화면 — 목록 통합). 로직·문구·에러 처리는 무수정, 렌더 위치만 옮겼다.
-                  §0-13 §트리거 문구 — 잠김(!isMultiToken())에서 행이 있으면 `추가`가 아니라
+                  §0-13 §트리거 문구 — 잠김(!multiToken)에서 행이 있으면 `추가`가 아니라
                   `변경`이다. 해금은 행 수와 무관하게 늘 `추가`(요구 `1681a5d9`). */}
               <Popover open={addOpen} onOpenChange={setAddOpen}>
                 <PopoverTrigger render={<Button variant="outline" size="sm" data-setting="claude.add" />}>
-                  {!isMultiToken() && accountCount !== null && accountCount > 0
+                  {!multiToken && accountCount !== null && accountCount > 0
                     ? t("settings.claude.changeTrigger")
                     : t("common.add")}
                 </PopoverTrigger>
@@ -1234,7 +1302,7 @@ export function SettingsDialog({
                       onChange={(e) => setLabel(e.target.value)}
                     />
                     <p className="text-xs text-muted-foreground">
-                      {isMultiToken()
+                      {multiToken
                         ? t("settings.claude.tokenHintMulti")
                         : t("settings.claude.tokenHintSingle")}
                     </p>
@@ -1263,10 +1331,12 @@ export function SettingsDialog({
             <LanguageSection className={cn(activeNode !== "language" && "md:hidden")} />
             {/* §0-18 §자리 — 가리는 클래스가 다섯과 다르다: `hidden`이라 폭과 무관하게 검색으로
                 고른 뒤에만 선다(§검증 11 — 767 이하에서도 세로로 쌓이는 섹션에 안 낀다).
-                §0-18 §잠금이 먼저다 — 잠금 빌드는 이 노드 자체를 렌더하지 않는다. */}
-            {isMultiToken() && (
-              <MultiplaySection className={cn(activeNode !== "multiplay" && "hidden")} />
-            )}
+                §0-18 §기본값이 된다 — 패널이 잠금 밖으로 나와 조건 없이 렌더한다. */}
+            <MultiplaySection
+              className={cn(activeNode !== "multiplay" && "hidden")}
+              multiToken={multiToken}
+              onMultiTokenChange={setMultiToken}
+            />
           </div>
           </SidebarProvider>
         </Command>

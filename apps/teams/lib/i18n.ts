@@ -36,7 +36,8 @@ export const ko: Record<string, string> = {
   "settings.search.claudeAdd": "계정 추가",
   "settings.search.statsStatus": "보내는 상태",
   "settings.search.statsToggle": "끄기/켜기",
-  "settings.search.multiplayToggle": "멀티플레이 허용",
+  "settings.search.multitokenToggle": "다중계정 허용",
+  "settings.search.multiplayToggle": "다중계정 동시사용",
 
   "settings.tree.authGroup": "인증",
   "settings.tree.keymap": "키설정",
@@ -143,7 +144,11 @@ export const ko: Record<string, string> = {
   "settings.stats.turnOn": "켜기",
 
   "settings.multiplay.description":
-    "워커마다 다른 계정으로 동시에 돌립니다. 기본은 비허용이고, 계정이 여러 장 있을 때만 뜻이 있습니다.",
+    "다중계정 허용은 계정을 여러 장 등록할 수 있게 하고, 다중계정 동시사용은 그 계정들을 워커마다 나눠 동시에 씁니다.",
+  "settings.multitoken.enabled": "허용되어 있습니다",
+  "settings.multitoken.disabled": "허용되지 않았습니다",
+  "settings.multitoken.turnOff": "끄기",
+  "settings.multitoken.turnOn": "켜기",
   "settings.multiplay.enabled": "허용되어 있습니다",
   "settings.multiplay.disabled": "허용되지 않았습니다",
   "settings.multiplay.turnOff": "끄기",
@@ -370,7 +375,8 @@ export const en: Record<string, string> = {
   "settings.search.claudeAdd": "Add account",
   "settings.search.statsStatus": "Sending status",
   "settings.search.statsToggle": "Turn on / off",
-  "settings.search.multiplayToggle": "Allow multiplaying",
+  "settings.search.multitokenToggle": "Allow multi-account",
+  "settings.search.multiplayToggle": "Simultaneous multi-account use",
 
   "settings.tree.authGroup": "Authentication",
   "settings.tree.keymap": "Keyboard shortcuts",
@@ -474,7 +480,11 @@ export const en: Record<string, string> = {
   "settings.stats.turnOn": "Turn on",
 
   "settings.multiplay.description":
-    "Runs workers on different accounts at the same time. Off by default, and only matters once you have several accounts.",
+    "Allow multi-account lets you register more than one account; simultaneous multi-account use splits them across workers to run at the same time.",
+  "settings.multitoken.enabled": "Allowed",
+  "settings.multitoken.disabled": "Not allowed",
+  "settings.multitoken.turnOff": "Turn off",
+  "settings.multitoken.turnOn": "Turn on",
   "settings.multiplay.enabled": "Allowed",
   "settings.multiplay.disabled": "Not allowed",
   "settings.multiplay.turnOff": "Turn off",
