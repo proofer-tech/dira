@@ -42,7 +42,9 @@
 # --- 실행 엔진 (기본값 = 아래 그대로) ---
 # {prompt}·{sid}는 실행 직전 치환된다. 배열이라 프롬프트에 공백·개행이 있어도 인자 1개로 간다.
 # 세션키 정정(응답 JSON의 session_id 확인)은 claude 전용 - 다른 엔진이면 그냥 건너뛴다.
-# TICKET_ENGINE=(claude -p "{prompt}" --session-id "{sid}" --dangerously-skip-permissions --output-format json)
+# 기본 엔진은 스트리밍 입력이다 - 최초 프롬프트도 argv가 아니라 stdin(FIFO)으로 간다.
+# 그래서 기본값에 {prompt}가 없다(도는 세션에 같은 입구로 말을 거는 참견 자리).
+# TICKET_ENGINE=(claude -p --session-id "{sid}" --dangerously-skip-permissions --input-format stream-json --output-format stream-json --verbose)
 # TICKET_ENGINE=(codex exec --json "{prompt}")
 
 # --- 나머지 (아래 값이 기본값) ---
