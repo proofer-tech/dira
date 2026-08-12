@@ -39,3 +39,6 @@ apps/site/
 # vercel
 .vercel
 .env*
+
+# Spotlight 인덱싱 제외 마커 (로컬)
+.metadata_never_index
