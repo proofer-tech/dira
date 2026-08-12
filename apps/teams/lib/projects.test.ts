@@ -13,8 +13,10 @@ const {
   createPersona,
   deletePersona,
   getProject,
+  isMultiTokenAllowed,
   listPersonas,
   multiplayPath,
+  multitokenPath,
   readMultiplay,
   readSummary,
   readProjects,
@@ -22,6 +24,7 @@ const {
   removeProject,
   savePersona,
   setMultiplayEnabled,
+  setMultitoken,
   setPersonaColor,
   slugify,
   renameProject,
@@ -621,4 +624,32 @@ test("멀티플레잉 스위치 — 파일 존재 여부가 값이다, 내용은
 
   // 두 번째 끄기는 파일이 이미 없어도 에러가 아니다(§0-18 — 계정 삭제와 같은 관용)
   await setMultiplayEnabled(false);
+});
+
+test("다중계정 허용 — 세 상태(파일 없음=플래그 / 1 / 0), 판독 불가 내용은 없음과 같다 (DESIGN.md §0-18 §기본값이 된다)", async () => {
+  const saved = process.env.DIRA_MULTI_TOKEN;
+  try {
+    delete process.env.DIRA_MULTI_TOKEN; // 잠금 빌드 — 파일 없으면 비허용이 초기값
+    assert.equal(await isMultiTokenAllowed(), false);
+
+    await setMultitoken(true);
+    assert.equal(readFileSync(multitokenPath(), "utf8"), "1");
+    assert.equal(await isMultiTokenAllowed(), true); // 잠금 빌드인데도 파일이 이겼다
+
+    await setMultitoken(false);
+    assert.equal(readFileSync(multitokenPath(), "utf8"), "0");
+    assert.equal(await isMultiTokenAllowed(), false);
+
+    writeFileSync(multitokenPath(), "garbage"); // 1도 0도 아니면 파일 없음과 같다
+    assert.equal(await isMultiTokenAllowed(), false); // 잠금 빌드의 초기값으로 떨어진다
+
+    process.env.DIRA_MULTI_TOKEN = "1"; // 해금 빌드에서도 같은 규칙 — 파일 내용이 이긴다
+    assert.equal(await isMultiTokenAllowed(), true); // garbage -> 없음 취급 -> 플래그
+    await setMultitoken(false);
+    assert.equal(await isMultiTokenAllowed(), false); // 해금 빌드인데도 파일이 껐다
+  } finally {
+    if (saved === undefined) delete process.env.DIRA_MULTI_TOKEN;
+    else process.env.DIRA_MULTI_TOKEN = saved;
+    rmSync(multitokenPath(), { force: true });
+  }
 });

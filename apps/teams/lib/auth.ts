@@ -10,9 +10,8 @@ import { accessSync, constants, statSync } from "node:fs";
 import { chmod, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
-import { isMultiToken } from "./flags.ts";
 import { DEFAULT_LOCALE, t as translate, type Locale } from "./i18n.ts";
-import { registryPath } from "./projects.ts";
+import { isMultiTokenAllowed, registryPath } from "./projects.ts";
 
 /** 레지스트리와 **같은 디렉터리**다(엔진의 `$LOCAL`). 규칙을 두 벌로 적지 않으려고
  *  `registryPath()`에서 파생시킨다 — `TICKET_LOCAL` 존중도 거기 한 곳에만 있다. */
@@ -244,7 +243,7 @@ export async function addToken(raw: string, label?: string): Promise<TokenEntry>
   const tokens = file.claude?.tokens ?? [];
   const existing = tokens.find((t) => t.id === id);
 
-  if (!isMultiToken()) {
+  if (!(await isMultiTokenAllowed())) {
     if (existing) {
       await writeTokens({ claude: { active: existing.id, tokens } });
       return existing;
@@ -304,7 +303,9 @@ export async function readTokenRows(locale: Locale = DEFAULT_LOCALE): Promise<To
   const engine = file.claude;
   if (!engine) return [];
   const now = Math.floor(Date.now() / 1000);
-  const source = isMultiToken() ? engine.tokens : engine.tokens.filter((t) => t.id === engine.active);
+  const source = (await isMultiTokenAllowed())
+    ? engine.tokens
+    : engine.tokens.filter((t) => t.id === engine.active);
   return source.map((t, i) => ({
     id: t.id,
     label: t.label ?? `${translate(locale, "settings.tokens.accountFallbackPrefix")} ${i + 1}`,

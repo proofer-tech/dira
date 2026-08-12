@@ -5,6 +5,7 @@
 import { mkdir, readFile, readdir, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
+import { isMultiToken } from "./flags.ts";
 import { DEFAULT_LOCALE, type Locale } from "./i18n.ts";
 import { DEFAULT_KEYMAP, defaultBindings, type Bindings, type Keymap } from "./keymap.ts";
 import { machineState, type MachineState } from "./machine-state.ts";
@@ -187,6 +188,36 @@ export async function setMultiplayEnabled(enabled: boolean): Promise<void> {
   } else {
     await rm(p, { force: true });
   }
+}
+
+// ── 다중계정 허용 설정 파일 (DESIGN.md §0-18 §기본값이 된다) ──────────────────
+//
+// 위 스위치와 달리 **세 상태**다 — 존재 여부로 못 담는다. 해금 빌드(`DIRA_MULTI_TOKEN=1`)의
+// 초기값이 허용이라, 사람이 그걸 끈 것을 적을 자리가 파일 없음과 따로 있어야 한다.
+
+/** 레지스트리·멀티플레잉 스위치와 같은 디렉터리다(엔진의 `$LOCAL`). */
+export function multitokenPath(): string {
+  return path.join(path.dirname(registryPath()), "multitoken");
+}
+
+/** `1`이 아니면서 `0`도 아닌 내용(포함: 파일 없음)은 파일이 없는 것으로 본다 — 손으로 만질
+ *  수 있는 자리라 판정이 두 갈래로 갈리면 안 된다. */
+async function readMultitokenFile(): Promise<boolean | null> {
+  const raw = await readFile(multitokenPath(), "utf8").catch(() => null);
+  const v = raw?.trim();
+  return v === "1" ? true : v === "0" ? false : null;
+}
+
+/** 합친 판정 한 자리 — 파일이 없으면(또는 판독 불가하면) `isMultiToken()`이 초기값이다.
+ *  `lib/auth.ts`와 서버 액션이 부르는 유일한 자리다. */
+export async function isMultiTokenAllowed(): Promise<boolean> {
+  return (await readMultitokenFile()) ?? isMultiToken();
+}
+
+export async function setMultitoken(enabled: boolean): Promise<void> {
+  const p = multitokenPath();
+  await mkdir(path.dirname(p), { recursive: true });
+  await writeFile(p, enabled ? "1" : "0");
 }
 
 export async function readProjects(): Promise<Project[]> {

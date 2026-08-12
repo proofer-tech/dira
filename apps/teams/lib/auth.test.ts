@@ -41,6 +41,7 @@ const {
   tokensPath,
   writeTokens,
 } = await import("./auth.ts");
+const { multitokenPath, setMultitoken } = await import("./projects.ts");
 
 test("tokenPath — TICKET_LOCAL을 존중하고 레지스트리와 같은 디렉터리다", () => {
   assert.strictEqual(tokenPath(), path.join(LOCAL, "oauth-token"));
@@ -527,12 +528,13 @@ test("setTokenLabel — label만 갈고, 지우면(빈 값) 계정 N 순번으�
 // 준다)을 가정한다. 아래만 그 값을 지역적으로 지워 잠금 빌드를 흉내낸다 — `flags.test.ts`와
 // 같은 save/restore 관용구다.
 
-test("addToken — 잠김에서는 append가 아니라 active 자리 교체다(항목이 안 는다) (§0-13 §잠금 계약 ①)", async () => {
+test("addToken — 잠김에서는 append가 아니라 active 자리 교체다(항목이 안 는다) (§0-13 §잠금 계약 ①, 판정은 multitoken 파일로도 갈린다 §0-18)", async () => {
   const local = mkdtempSync(path.join(tmpdir(), "fst-auth-lock-add-"));
   process.env.TICKET_LOCAL = local;
-  const saved = process.env.DIRA_MULTI_TOKEN;
   try {
-    delete process.env.DIRA_MULTI_TOKEN; // 잠금 빌드
+    // 플래그 대신 파일로 잠근다 — `DIRA_MULTI_TOKEN=1`(package.json test 스크립트)이 켜져
+    // 있어도 파일이 이긴다(§0-18 §판정 한 자리)
+    await setMultitoken(false);
 
     const a = await addToken("sk-ant-oat01-lock-a"); // 빈 목록 — 항목 하나로 시작
     assert.strictEqual((await readTokens()).claude!.tokens.length, 1);
@@ -544,8 +546,7 @@ test("addToken — 잠김에서는 append가 아니라 active 자리 교체다(�
     assert.strictEqual(readFileSync(tokenPath(), "utf8"), "sk-ant-oat01-lock-b");
     void a;
   } finally {
-    if (saved === undefined) delete process.env.DIRA_MULTI_TOKEN;
-    else process.env.DIRA_MULTI_TOKEN = saved;
+    rmSync(multitokenPath(), { force: true });
   }
 });
 

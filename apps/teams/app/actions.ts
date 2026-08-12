@@ -51,6 +51,8 @@ import {
   setLanguage,
   readMultiplay,
   setMultiplayEnabled,
+  isMultiTokenAllowed,
+  setMultitoken,
   type Project,
   type ProjectConfig,
 } from "@/lib/projects";
@@ -493,6 +495,19 @@ export async function readMultiplayAction(): Promise<boolean> {
 export async function setMultiplayAction(enabled: boolean): Promise<boolean> {
   await setMultiplayEnabled(enabled);
   return readMultiplay();
+}
+
+/** 설정 다이얼로그의 숨은 여섯째 노드 `다중계정 허용` (DESIGN.md §0-18 §기본값이 된다) —
+ *  다이얼로그가 열릴 때 한 줄이 읽는다. 파일 없음까지 `isMultiToken()`으로 흡수한 값이라
+ *  화면은 항상 지금 배포물이 실제로 허용하는지만 본다. */
+export async function readMultitokenAction(): Promise<boolean> {
+  return isMultiTokenAllowed();
+}
+
+/** 스위치 버튼 하나 — 켜면 `1`, 끄면 `0`을 쓴다(§0-18 §판정 한 자리). */
+export async function setMultitokenAction(enabled: boolean): Promise<boolean> {
+  await setMultitoken(enabled);
+  return isMultiTokenAllowed();
 }
 
 /** 사용 통계 섹션 층 ① (DESIGN.md §0-11 §끄는 자리) — 다이얼로그가 열릴 때 한 줄이 읽는다.
