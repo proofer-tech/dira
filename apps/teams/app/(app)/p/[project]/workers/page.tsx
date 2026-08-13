@@ -346,6 +346,7 @@ export default async function Workers({ params }: { params: Promise<{ project: s
             projectId={id}
             filePath={`${project.root}/context.sh`}
             context={common}
+            cwds={rows.map((w) => w.cwd).filter((c): c is string => !!c)}
           />
         </section>
       )}

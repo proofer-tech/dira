@@ -17,6 +17,7 @@ import {
   progressMarkerText,
   projectPath,
   relationPath,
+  relativeUnderAny,
   remainingLabel,
   rowLimit,
   ROW_PAGE,
@@ -532,4 +533,23 @@ test("findMatches — 대소문자 무시 · 0건 · 빈 검색어", () => {
   // 한글 부분일치 · 겹치는 일치는 안 센다(§30 ④ 겹침 없음)
   assert.deepEqual(findMatches("답변 대기 티켓이 왜 안 도나", "티켓"), [6]);
   assert.deepEqual(findMatches("aaaa", "aa"), [0, 2]);
+});
+
+/** 공통 컨텍스트 카드의 기준(DESIGN.md §데스크톱 앱 N3 §공통 컨텍스트의 기준) — 워커 전부의
+ *  `TICKET_CWD` 중 가장 깊은 것으로 되돌린다. */
+test("relativeUnderAny — 겹치는 기준 · 어디에도 안 걸림 · 기준 0개", () => {
+  // 겹치는 기준 둘 — 워크트리 하나가 다른 워크트리 아래인 큐. 더 깊은(더 긴) 쪽을 쓴다
+  assert.equal(relativeUnderAny("/root/worktrees/w1/README.md", ["/root", "/root/worktrees/w1"]), "README.md");
+
+  // 순서와 무관하다 — 짧은 기준이 배열 앞에 와도 깊은 쪽이 이긴다
+  assert.equal(relativeUnderAny("/root/worktrees/w1/README.md", ["/root/worktrees/w1", "/root"]), "README.md");
+
+  // 어디에도 안 걸림 — 절대경로를 그대로 돌려준다(피커는 채울 뿐, 판정은 서버가 한다)
+  assert.equal(
+    relativeUnderAny("/elsewhere/README.md", ["/root/worktrees/w1", "/root/worktrees/w2"]),
+    "/elsewhere/README.md",
+  );
+
+  // 기준 0개 — 마찬가지로 절대경로 그대로
+  assert.equal(relativeUnderAny("/elsewhere/README.md", []), "/elsewhere/README.md");
 });

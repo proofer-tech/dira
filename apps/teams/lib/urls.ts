@@ -502,6 +502,15 @@ export function relativeUnder(picked: string, baseAbs: string): string {
   return base !== "/" && picked.startsWith(base) ? picked.slice(base.length) : picked;
 }
 
+/** `relativeUnder`를 기준 **여러 개**에 대해 판정한다 — 공통 컨텍스트 카드는 워커 하나가 아니라
+ *  워커 전부의 `TICKET_CWD`가 기준이다(DESIGN.md §데스크톱 앱 N3 §공통 컨텍스트의 기준).
+ *  둘 이상에 걸리면 **가장 깊은(가장 긴) 기준**을 쓴다 — 워크트리가 형제 밑이면 얕은 쪽을 고를 때
+ *  남의 워커 경로가 섞여 들어간다. 어디에도 안 걸리면 `picked`를 그대로 돌려준다. */
+export function relativeUnderAny(picked: string, bases: string[]): string {
+  const base = [...bases].sort((a, b) => b.length - a.length).find((b) => relativeUnder(picked, b) !== picked);
+  return base ? relativeUnder(picked, base) : picked;
+}
+
 /** 한 문자열에서 **일치한 곳의 시작 오프셋 전부** (DESIGN.md §7 §대화 안에서 찾기 · §비주얼 §30).
  *  `<FindBar>`가 텍스트 노드마다 이걸 불러 `Range`를 만든다 — **JSX는 `node --test`가 못 읽으므로
  *  컴포넌트의 순수 판정이 여기 산다**(AGENTS.md). 훑는 자는 §1 보드 검색과 같은 것 하나다:

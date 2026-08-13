@@ -51,7 +51,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { TableCell, TableRow } from "@/components/ui/table";
-import { relativeUnder } from "@/lib/urls";
+import { relativeUnderAny } from "@/lib/urls";
 import { cn } from "@/lib/utils";
 
 /** 서버가 읽어 넘긴 컨텍스트 한 항목. `path`는 워커 파일에 든 셸 문자열이라 `$TICKET_CWD`가
@@ -646,7 +646,7 @@ function ContextEditor({
   filePath,
   context,
   common,
-  cwd,
+  cwds,
   emptyText,
   addLabel,
   save,
@@ -661,11 +661,11 @@ function ContextEditor({
   /** 목록 **최상단**에 `공통` 배지 + 읽기 전용으로 붙는 항목(워커 카드에서만).
    *  **저장에 들어가지 않는다** — 이 항목은 워커 파일에 실제로 없다(§4-1) */
   common?: ContextRow[];
-  /** 이 워커의 `TICKET_CWD`. 경로 피커가 고른 파일이 이 아래면 `$TICKET_CWD/` 접두를 되살린다
-   *  (§데스크톱 앱 N3 — 접두 보존). **없으면 피커 버튼이 안 뜬다.** 공통 카드가 그렇다:
-   *  이 값은 워커마다 갈려서 한 기준으로 줄이면 남의 워커에게 거짓이 된다(존재 표시를
-   *  공통에서만 하는 것과 같은 이유). N3이 정한 자리는 워커 컨텍스트 하나다. */
-  cwd?: string;
+  /** 접두를 되살릴 기준 목록(§데스크톱 앱 N3 §공통 컨텍스트의 기준) — 경로 피커가 고른 파일이
+   *  이 중 하나 아래면 `$TICKET_CWD/` 접두를 되살린다. 워커 카드는 자기 `TICKET_CWD` 하나짜리
+   *  배열을 넘기고, 공통 카드는 프로젝트 워커 전부의 값을 넘긴다 — 둘 이상에 걸리면 가장 깊은
+   *  기준을 쓴다(`relativeUnderAny`). **비어 있으면 피커 버튼이 안 뜬다.** */
+  cwds?: string[];
   emptyText: string;
   addLabel: string;
   save: (items: { path: string; desc: string }[]) => Promise<ContextResult>;
@@ -732,16 +732,17 @@ function ContextEditor({
                 value={r.desc}
                 onChange={(e) => edit(i, { desc: e.target.value })}
               />
-              {/* 고른 파일이 `cwd` 아래면 `$TICKET_CWD/`로 되돌린다 — 절대경로로 굳히면 그
-                  항목이 이 컴퓨터 것이 되고 워커 간 복사도 뜻을 잃는다(§4-1 복사 다이얼로그).
-                  **기준이 없으면 버튼 자체가 없다**: 공통 카드와 `TICKET_CWD` 줄이 없는 워커가
-                  그렇고, 거기서 고르면 남는 건 이 컴퓨터의 절대경로뿐이다 */}
-              {cwd && (
+              {/* 고른 파일이 `cwds` 중 하나 아래면 `$TICKET_CWD/`로 되돌린다(가장 깊은 기준을
+                  쓴다 — `relativeUnderAny`) — 절대경로로 굳히면 그 항목이 이 컴퓨터 것이 되고
+                  워커 간 복사도 뜻을 잃는다(§4-1 복사 다이얼로그).
+                  **기준이 0개면 버튼 자체가 없다**: `TICKET_CWD` 줄이 없는 워커가 그렇고,
+                  거기서 고르면 남는 건 이 컴퓨터의 절대경로뿐이다 */}
+              {cwds && cwds.length > 0 && (
                 <PickPath
                   mode="file"
                   label={`${i + 1}번째 경로`}
                   onPick={(p) => {
-                    const rel = relativeUnder(p, cwd);
+                    const rel = relativeUnderAny(p, cwds);
                     edit(i, { path: rel === p ? p : `$TICKET_CWD/${rel}` });
                   }}
                 />
@@ -924,11 +925,16 @@ export function CommonContextCard({
   projectId,
   filePath,
   context,
+  cwds,
 }: {
   projectId: string;
   /** `<루트>/context.sh` */
   filePath: string;
   context: { ok: true; items: ContextRow[] } | { ok: false; reason: string };
+  /** 이 프로젝트 워커들의 `TICKET_CWD` 전부(값이 있는 것만) — 워커 하나가 아니라 전부가 기준이다
+   *  (§데스크톱 앱 N3 §공통 컨텍스트의 기준). 화면이 이미 워커 행마다 들고 있는 값이라 새 서버
+   *  액션·새 필드가 0개다. */
+  cwds: string[];
 }) {
   return (
     <div className="space-y-3 rounded-md border p-3">
@@ -944,6 +950,7 @@ export function CommonContextCard({
         arr="TICKET_CONTEXT_COMMON"
         filePath={filePath}
         context={context}
+        cwds={cwds}
         emptyText="공통 항목이 없습니다 — 워커는 각자 자기 항목만 읽습니다."
         addLabel="공통 항목 추가"
         save={(items) => saveCommonContextAction(projectId, items)}
@@ -1111,8 +1118,8 @@ export function WorkerContextRow({
                 context={row.context}
                 common={gets}
                 // ponytail: `TICKET_CWD` 줄이 없는 워커(엔진 기본값 = 루트의 부모)는 기준이 없어 피커가
-                // 안 뜬다 — 타이핑은 종전대로다. 필요해지면 페이지가 root를 같이 넘긴다
-                cwd={row.cwd ?? undefined}
+                // 안 뜬다 — 타이핑은 종전대로다.
+                cwds={row.cwd ? [row.cwd] : []}
                 emptyText={
                   gets.length > 0
                     ? "이 워커의 자기 항목은 없습니다 — 위 공통 항목만 받습니다."
