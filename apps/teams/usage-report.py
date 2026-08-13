@@ -60,6 +60,18 @@ def iso_epoch(ts: str) -> float:
         return 0.0
 
 
+def parse_since(s: str):
+    """--since 값 - 티켓 frontmatter의 assigned_at 값(오프셋 포함 ISO 8601). 못 읽으면 None."""
+    try:
+        s2 = s[:-1] + "+00:00" if s.endswith("Z") else s
+        dt = datetime.fromisoformat(s2)
+        if dt.tzinfo is None:
+            dt = dt.astimezone()  # 오프셋 없으면 이 머신 로컬 시각으로 본다
+        return dt.timestamp()
+    except (ValueError, TypeError):
+        return None
+
+
 def load_dispatch_index(runner_log: Path):
     """sid -> [(epoch, 티켓해시, 페르소나), ...] 시간순. DISPATCH 줄이 곧 귀속 색인이다."""
     idx = defaultdict(list)
@@ -100,8 +112,11 @@ def find_project_dirs(root: Path, claude_projects: Path):
     return sorted(claude_projects / n for n in os.listdir(claude_projects) if n.startswith(prefix))
 
 
-def pick_sessions(dirs, limit):
-    """mtime 최신순 N개 - 고르기 전에는 열지 않는다(lib/usage.ts 판정 4와 같은 규칙)."""
+def pick_sessions(dirs, limit, since_epoch=None):
+    """mtime 최신순 N개 - 고르기 전에는 열지 않는다(lib/usage.ts 판정 4와 같은 규칙).
+
+    --since가 있으면 상한 N을 지키는 게 아니라 그 시각 이후 손댄 세션 전부를 돈다 - N에 안
+    들어가는 오래된-그러나-since 이후에도 갱신된 세션을 놓치면 안 된다."""
     found = []
     for d in dirs:
         try:
@@ -118,6 +133,8 @@ def pick_sessions(dirs, limit):
                 continue
             found.append((mt, p))
     found.sort(key=lambda t: t[0], reverse=True)
+    if since_epoch is not None:
+        return [p for mt, p in found if mt >= since_epoch]
     return [p for _, p in found[:limit]]
 
 
@@ -125,7 +142,8 @@ def zero_row():
     return {"sids": set(), "turns": 0, "input": 0, "output": 0, "cache_creation": 0, "cache_read": 0, "unpriced": set()}
 
 
-def scan_session(path: Path, dispatch_idx, by_ticket, by_persona, by_model, by_ticket_model, by_persona_model):
+def scan_session(path: Path, dispatch_idx, by_ticket, by_persona, by_model, by_ticket_model, by_persona_model,
+                  since_epoch=None):
     """세션 하나를 훑어 네 축 누적 그릇에 더한다. 티켓·페르소나는 (버킷, 모델) 조합으로도
     같이 쌓는다 - 한 버킷이 모델을 섞어 썼을 때 축별 단가를 모델별로 정확히 곱하려면
     그 분해가 있어야 한다(§실측 두 표가 모델별 표를 따로 두는 것과 같은 이유)."""
@@ -155,6 +173,8 @@ def scan_session(path: Path, dispatch_idx, by_ticket, by_persona, by_model, by_t
             usage = msg.get("usage") or {}
             model = msg.get("model") or "(모름)"
             epoch = iso_epoch(rec.get("timestamp") or "")
+            if since_epoch is not None and epoch < since_epoch:
+                continue
             hit = ticket_of(dispatch_idx, sid, epoch)
             ticket_hash, persona = hit if hit else ("(미상)", "(미상)")
 
@@ -253,8 +273,112 @@ def print_bucket_table(title, key_label, buckets, usd_by_key):
               f"{fmt(row['output'])} | {fmt(row['cache_creation'])} | {fmt(row['cache_read'])} | {usd_str} |")
 
 
+# ---- --quality (§토큰 비용 §판정 6 - 같이 봐야 하는 것 셋) ----
+
+HANDOFF_RE = re.compile(r"->\s*`?([0-9a-fA-F]{8})`?\s*\(([A-Za-z0-9_-]+)\)")
+
+
+def split_frontmatter(text: str):
+    """`---\\nkey: val\\n---\\n본문` -> (fm dict, 본문). tickets.py read_fm의 최소 재구현 -
+    engine 파일(읽기 전용)을 import하지 않고 이 리포트가 필요한 키(ticket-kind-persona-
+    assigned_at)만 뽑는다."""
+    lines = text.split("\n")
+    if not lines or lines[0].strip() != "---":
+        return {}, text
+    end = -1
+    for i in range(1, len(lines)):
+        if lines[i].strip() == "---":
+            end = i
+            break
+    if end < 0:
+        return {}, text
+    fm = {}
+    for line in lines[1:end]:
+        m = re.match(r"^([A-Za-z_][A-Za-z0-9_]*):\s*(.*)$", line)
+        if m:
+            fm[m.group(1)] = m.group(2).strip()
+    return fm, "\n".join(lines[end + 1:])
+
+
+def load_ticket_records(tickets_dir: Path):
+    """tickets/*.md 전부(상태 접미사 무관) - (fm, 본문) 튜플."""
+    out = []
+    try:
+        names = os.listdir(tickets_dir)
+    except OSError:
+        return out
+    for n in names:
+        if not n.endswith(".md") or n.startswith("."):
+            continue
+        try:
+            text = (tickets_dir / n).read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        fm, body = split_frontmatter(text)
+        out.append((fm, body))
+    return out
+
+
+def quality_report(tickets_dir: Path, dispatch_idx, since_epoch: float):
+    """페르소나별 - 재디스패치 횟수 - `## 블록` 비율 - QA 반송 비율.
+
+    QA 반송은 CORE.md §Handoff의 관용구를 근거로 센다(`## 결과`에 `-> <해시> (페르소나)
+    무엇을 handed off`) - qa 티켓의 본문에서 그 화살표를 찾아, 가리키는 티켓이 실제
+    kind: work이면 그 대상 페르소나의 반송 1건으로 센다."""
+    records = load_ticket_records(tickets_dir)
+    kind_of = {fm["ticket"].strip(): (fm.get("kind") or "").strip()
+               for fm, _ in records if (fm.get("ticket") or "").strip()}
+
+    by_persona = defaultdict(lambda: {"total": 0, "blocked": 0, "qa_return": 0})
+    for fm, body in records:
+        assigned = (fm.get("assigned_at") or "").strip()
+        if not assigned:
+            continue  # 아직 디스패치 전 - 이 창에서 "나온" 활동이 아니다
+        epoch = parse_since(assigned)
+        if epoch is None or epoch < since_epoch:
+            continue
+        persona = (fm.get("persona") or "").strip() or "(미상)"
+        row = by_persona[persona]
+        row["total"] += 1
+        if re.search(r"(?m)^## 블록", body):
+            row["blocked"] += 1
+        if persona == "qa":
+            for target_hash, target_persona in HANDOFF_RE.findall(body):
+                if kind_of.get(target_hash) == "work":
+                    by_persona[target_persona]["qa_return"] += 1
+
+    ticket_events = defaultdict(list)
+    for entries in dispatch_idx.values():
+        for epoch, ticket_hash, persona in entries:
+            if epoch >= since_epoch:
+                ticket_events[ticket_hash].append((epoch, persona))
+    redispatch = defaultdict(int)
+    for events in ticket_events.values():
+        if len(events) >= 2:
+            events.sort(key=lambda t: t[0])
+            redispatch[events[-1][1]] += len(events) - 1
+
+    return by_persona, redispatch
+
+
+def print_quality_table(by_persona, redispatch):
+    print("| 페르소나 | 티켓수(창) | 재디스패치 | 블록 비율 | QA 반송 비율 |")
+    print("|---|---|---|---|---|")
+    personas = sorted(set(by_persona) | set(redispatch),
+                       key=lambda p: -by_persona.get(p, {"total": 0})["total"])
+    for persona in personas:
+        row = by_persona.get(persona, {"total": 0, "blocked": 0, "qa_return": 0})
+        total = row["total"]
+        block_pct = (row["blocked"] / total * 100) if total else 0.0
+        qa_pct = (row["qa_return"] / total * 100) if total else 0.0
+        print(f"| `{persona}` | {total} | {redispatch.get(persona, 0)} | "
+              f"{block_pct:.1f}% ({row['blocked']}/{total}) | "
+              f"{qa_pct:.1f}% ({row['qa_return']}/{total}) |")
+
+
 def selftest():
-    """비자명한 로직 넷 - enc, 시각 변환, ticket_of 구간 판정, dedup. 깨지면 여기서 먼저 죽는다."""
+    """비자명한 로직 - enc, 시각 변환, ticket_of 구간 판정, dedup, since 필터, quality 집계.
+    깨지면 여기서 먼저 죽는다."""
     assert enc("/a/b c!.d") == "-a-b-c--d"
 
     epoch = local_epoch("2026-08-13 21:59:32")
@@ -283,6 +407,42 @@ def selftest():
         assert by_m["claude-sonnet-5"]["turns"] == 1, "message.id 중복 라인이 두 번 세였다"
         assert by_m["claude-sonnet-5"]["output"] == 2
 
+        # --since: 창 이전 사건은 아예 안 잡힌다
+        since_epoch = iso_epoch("2026-08-13T00:00:01.000Z")
+        by_t2, by_p2, by_m2 = defaultdict(zero_row), defaultdict(zero_row), defaultdict(zero_row)
+        by_tm2, by_pm2 = defaultdict(lambda: defaultdict(zero_row)), defaultdict(lambda: defaultdict(zero_row))
+        scan_session(p, defaultdict(list), by_t2, by_p2, by_m2, by_tm2, by_pm2, since_epoch=since_epoch)
+        assert by_m2["claude-sonnet-5"]["turns"] == 0, "since 이전 사건이 잡혔다"
+
+    assert parse_since("2026-08-13T22:19:37+09:00") is not None
+    assert parse_since("아무거나") is None
+
+    # quality_report: 재디스패치(같은 티켓 stem 2회) - 블록 비율 - QA 반송(handoff 화살표)
+    with tempfile.TemporaryDirectory() as td:
+        tdir = Path(td)
+        (tdir / "aaaaaaaa.done.md").write_text(
+            "---\nticket: aaaaaaaa\nkind: work\npersona: developer\n"
+            "assigned_at: 2026-08-13T10:00:00+09:00\n---\n\n## 결과\n됐다.\n", encoding="utf-8")
+        (tdir / "bbbbbbbb.done.md").write_text(
+            "---\nticket: bbbbbbbb\nkind: work\npersona: developer\n"
+            "assigned_at: 2026-08-13T11:00:00+09:00\n---\n\n## 블록\n막혔다.\n", encoding="utf-8")
+        (tdir / "cccccccc.done.md").write_text(
+            "---\nticket: cccccccc\nkind: work\npersona: developer\n"
+            "assigned_at: 2026-08-13T12:00:00+09:00\n---\n\n## 결과\n됐다.\n", encoding="utf-8")
+        (tdir / "dddddddd.done.md").write_text(
+            "---\nticket: dddddddd\nkind: feedback\npersona: qa\n"
+            "assigned_at: 2026-08-13T13:00:00+09:00\n---\n\n## 결과\n-> `cccccccc` (developer) 재작업\n",
+            encoding="utf-8")
+        since_epoch = iso_epoch("2026-08-13T00:00:00.000Z")
+        idx = defaultdict(list)
+        idx["sidA"] = [(local_epoch("2026-08-13 09:00:00"), "aaaaaaaa", "developer")]
+        idx["sidB"] = [(local_epoch("2026-08-13 09:30:00"), "aaaaaaaa", "developer")]  # 재디스패치
+        by_persona, redispatch = quality_report(tdir, idx, since_epoch)
+        assert by_persona["developer"]["total"] == 3
+        assert by_persona["developer"]["blocked"] == 1
+        assert by_persona["developer"]["qa_return"] == 1, "qa handoff 화살표가 안 잡혔다"
+        assert redispatch["developer"] == 1, "같은 티켓 2회 DISPATCH가 재디스패치로 안 잡혔다"
+
     print("selftest OK")
 
 
@@ -290,6 +450,9 @@ def main():
     ap = argparse.ArgumentParser(description="dira 비용계 - 트랜스크립트 네 축 리포트")
     ap.add_argument("--sessions", type=int, default=60, help="최신 N개 세션 표본 (기본 60)")
     ap.add_argument("--root", type=Path, default=None, help="큐 루트 (기본: 이 파일 위치에서 유도)")
+    ap.add_argument("--since", default=None, help="이 ISO 8601 시각 이후 사건만 집계 (예: 2026-08-13T22:00:00+09:00)")
+    ap.add_argument("--quality", action="store_true",
+                    help="네 축 대신 페르소나별 재디스패치-블록비율-QA반송비율을 낸다 (--since와 같이 쓴다)")
     ap.add_argument("--selftest", action="store_true", help="로직 자체 점검만 하고 끝낸다")
     args = ap.parse_args()
 
@@ -301,18 +464,37 @@ def main():
     runner_log = root / "workers" / "runner.log"
     claude_projects = Path.home() / ".claude" / "projects"
 
+    since_epoch = None
+    if args.since is not None:
+        since_epoch = parse_since(args.since)
+        if since_epoch is None:
+            print(f"'--since {args.since}' 파싱 실패 - ISO 8601로 쓴다 (예: 2026-08-13T22:00:00+09:00)")
+            return
+
     dispatch_idx = load_dispatch_index(runner_log)
+
+    if args.quality:
+        by_persona, redispatch = quality_report(root / "tickets", dispatch_idx, since_epoch or 0.0)
+        print(f"# 품질 지표 - {args.since or '(전체 기간)'} 이후")
+        print()
+        print(f"루트: `{root}`")
+        print()
+        print_quality_table(by_persona, redispatch)
+        return
+
     dirs = find_project_dirs(root, claude_projects)
-    sessions = pick_sessions(dirs, args.sessions)
+    sessions = pick_sessions(dirs, args.sessions, since_epoch=since_epoch)
 
     by_ticket, by_persona, by_model = defaultdict(zero_row), defaultdict(zero_row), defaultdict(zero_row)
     by_ticket_model = defaultdict(lambda: defaultdict(zero_row))
     by_persona_model = defaultdict(lambda: defaultdict(zero_row))
 
     for path in sessions:
-        scan_session(path, dispatch_idx, by_ticket, by_persona, by_model, by_ticket_model, by_persona_model)
+        scan_session(path, dispatch_idx, by_ticket, by_persona, by_model, by_ticket_model, by_persona_model,
+                     since_epoch=since_epoch)
 
-    print(f"# 비용계 - 표본 {len(sessions)}세션 (요청 {args.sessions})")
+    since_label = f" - {args.since} 이후" if args.since else ""
+    print(f"# 비용계 - 표본 {len(sessions)}세션 (요청 {args.sessions}){since_label}")
     print()
     print(f"루트: `{root}`")
     print(f"트랜스크립트 디렉터리 {len(dirs)}개, runner.log DISPATCH sid {len(dispatch_idx)}개")
