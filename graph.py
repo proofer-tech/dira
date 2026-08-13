@@ -3,16 +3,25 @@
 <큐>/graph.json 인덱스를 만든다. graphify(설치본 0.9.41)의 nodes/links 형식이 원형이나
 파서는 없다 - 우리 간선은 전부 마크다운에 이미 텍스트로 적혀 있어 정규식으로 충분하다.
 
-query/path/explain은 다음 티켓(70fbff1c)이다. 여기는 build 하나뿐이다.
+호출:
+  python3 graph.py build   <큐> [--force]
+  python3 graph.py query   <큐> "<질문>" [--dfs] [--budget N]
+  python3 graph.py path    <큐> "<A>" "<B>"
+  python3 graph.py explain <큐> "<이름>"
 
-호출: python3 graph.py build <큐> [--force]
   <큐>는 tickets/ personas/ ontology/ protocols/를 담은 루트(예: .dira).
   레포(스펙) 쪽은 <큐>/../docs/DESIGN.md 하나만 읽는다 - 큐의 부모 체크아웃이 master라
   워크트리마다 갈리는 사본이 인덱스에 안 섞인다(DESIGN.md §그래프 탐색 §자리).
 
+  query/path/explain이 내는 것은 답이 아니라 좁혀진 코퍼스다 - 노드 목록 + 간선 + 각 노드의
+  원본 경로와 발췌 한 줄. 기본 예산은 6,000 B - 넘으면 시드에서 먼 노드부터 자른다. 시드가
+  0개면 빈 결과와 그 사실 한 줄을 낸다(못 찾으면 근처 낱말로 옮겨 타지 않는다).
+
 docs/DESIGN.md §그래프 탐색 (계약).
 """
+import collections
 import json
+import math
 import os
 import re
 import sys
@@ -411,10 +420,344 @@ def build(troot, force=False):
         len(out["nodes"]), len(links), changed, reused, removed, time.time() - t0))
 
 
+# ---------- 질의 - 시드 매칭 + 예산 순회 (docs/DESIGN.md §그래프 탐색 §질의) ----------
+
+DEFAULT_BUDGET = 6000
+# ponytail: 시드 top-K와 순회 깊이는 스펙이 숫자를 안 준다 - 실측 없이 고른 값이다.
+# 도달(검증⑤)이 안 되면 여기부터 올린다.
+SEED_TOP_K = 8
+QUERY_DEPTH = 2
+EXPLAIN_DEPTH = 1
+
+TOKEN_RE = re.compile(r"[가-힣A-Za-z0-9]+")
+
+
+def tokenize(s):
+    """1글자 토큰(조사-어미 파편)은 버린다 - 안 버리면 `qt in nt or nt in qt` 부분문자열
+    판정이 그 1글자가 아무 질의어에나 걸려 검증⑥(없는 낱말은 빈 결과)이 깨진다."""
+    return [t for t in TOKEN_RE.findall((s or "").lower()) if len(t) >= 2]
+
+
+def load_graph(troot):
+    try:
+        return json.load(open(os.path.join(troot, "graph.json"), encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def design_section_bodies(design_path):
+    """DESIGN#<제목> id -> 그 절 본문. build()의 extract_spec과 같은 파싱을 질의 시점에
+    다시 돌린다 - 절 본문 전체를 graph.json에 안 실어도(그러면 인덱스가 커진다) 매칭 때만
+    디스크에서 읽는다. 디스크 I/O만 쓰고 LLM 토큰은 안 쓰니 이 재파싱은 비용이 0이다."""
+    try:
+        text = open(design_path, encoding="utf-8").read()
+    except OSError:
+        return {}
+    heads, lines = parse_headings(text)
+    ids = spec_ids(heads)
+    return {sid: "\n".join(lines[s + 1:e]) for (_level, _title, s, e), sid in zip(heads, ids)}
+
+
+def node_search_texts(nodes, troot):
+    """노드 id -> 매칭용 원문. 발췌 한 줄이 아니라 파일 전체를 읽는다 - §한도처럼 파일
+    중간에 있는 절도 찾아야 한다. 같은 경로(티켓-온톨로지-메모리-프로토콜 파일, DESIGN.md)는
+    한 번만 읽는다."""
+    design_path = os.path.join(troot, "..", "docs", "DESIGN.md")
+    design_bodies = None
+    file_cache = {}
+    out = {}
+    for n in nodes:
+        nid, typ = n["id"], n["type"]
+        if typ == "스펙 절":
+            if design_bodies is None:
+                design_bodies = design_section_bodies(design_path)
+            out[nid] = nid + " " + design_bodies.get(nid, n.get("excerpt", ""))
+        elif typ == "소스 파일":
+            out[nid] = nid + " " + n.get("excerpt", "")
+        else:
+            path = n.get("path")
+            text = file_cache.get(path)
+            if text is None:
+                try:
+                    text = open(path, encoding="utf-8").read()
+                except OSError:
+                    text = n.get("excerpt", "")
+                file_cache[path] = text
+            out[nid] = nid + " " + text
+    return out
+
+
+def build_idf(node_token_sets):
+    df = {}
+    for toks in node_token_sets.values():
+        for t in toks:
+            df[t] = df.get(t, 0) + 1
+    n = len(node_token_sets)
+    return {t: math.log((n + 1) / (c + 1)) + 1.0 for t, c in df.items()}
+
+
+def build_adj(links):
+    adj = {}
+    for e in links:
+        adj.setdefault(e["source"], set()).add(e["target"])
+        adj.setdefault(e["target"], set()).add(e["source"])
+    return {k: sorted(v) for k, v in adj.items()}
+
+
+def build_degree(links):
+    deg = {}
+    for e in links:
+        deg[e["source"]] = deg.get(e["source"], 0) + 1
+        deg[e["target"]] = deg.get(e["target"], 0) + 1
+    return deg
+
+
+MAX_SUFFIX_LEN = 2
+# ponytail: 조사-어미로 보아 줄 길이차 상한이다. 실측(2026-08-13, .dira 4천 노드)에서 방향
+# 안 가린 substring까지 열었더니 "트리케라톱스"가 흔한 낱말 "트리"(나무-트리구조)에, "타로카드"가
+# "카드"에, "히말라야"가 "말라"에 걸려 없는 낱말인데 시드가 잡혔다(검증⑥ 회귀). 한국어 조사-어미는
+# 어근 뒤에만 붙으므로 prefix(어근이 앞) 방향만 남기고 substring(어근이 중간-끝)은 없앤다 - 그만큼
+# "토큰소진"처럼 어근이 낱말 뒤쪽에 오는 복합어는 못 찾는다. 오매칭이 남으면 길이차를 더 줄인다.
+
+
+def token_tier(qt, node_token_set):
+    """질의 낱말 하나 대 노드 낱말 집합 - 3 exact / 2 prefix(길이차 <= MAX_SUFFIX_LEN) / 0 없음."""
+    if qt in node_token_set:
+        return 3
+    for nt in node_token_set:
+        long_, short_ = (nt, qt) if len(nt) >= len(qt) else (qt, nt)
+        if len(long_) - len(short_) <= MAX_SUFFIX_LEN and long_.startswith(short_):
+            return 2
+    return 0
+
+
+def score_nodes(query_text, node_ids, node_token_sets, idf, degree):
+    """(점수, node_id) 내림차순 - 동점은 degree 내림차순, id 오름차순. 겹치는 낱말이 하나도
+    없는 노드는 아예 안 낀다(없으면 지어내지 않는다 - 못 4)."""
+    qtokens = list(dict.fromkeys(tokenize(query_text)))
+    if not qtokens:
+        return []
+    scored = []
+    for nid in node_ids:
+        toks = node_token_sets[nid]
+        weight, matched = 0.0, 0
+        for qt in qtokens:
+            tier = token_tier(qt, toks)
+            if tier:
+                weight += tier * idf.get(qt, 1.0)
+                matched += 1
+        if matched:
+            coverage = matched / len(qtokens)
+            scored.append((weight * coverage * coverage, nid))
+    scored.sort(key=lambda x: (-x[0], -degree.get(x[1], 0), x[1]))
+    return scored
+
+
+def traverse(seed_ids, adj, depth_limit, dfs=False):
+    """시드에서 depth_limit 홉까지 - dist[id] = 시드까지 거리. BFS는 최단거리, DFS는 그
+    갈래를 따라간 거리다(예산 절단은 둘 다 depth_limit로 잘리므로 이 근사로 충분하다)."""
+    dist = {s: 0 for s in seed_ids}
+    if dfs:
+        stack = list(reversed(seed_ids))
+        while stack:
+            u = stack.pop()
+            if dist[u] >= depth_limit:
+                continue
+            for v in adj.get(u, ()):
+                if v not in dist:
+                    dist[v] = dist[u] + 1
+                    stack.append(v)
+    else:
+        q = collections.deque(seed_ids)
+        while q:
+            u = q.popleft()
+            if dist[u] >= depth_limit:
+                continue
+            for v in adj.get(u, ()):
+                if v not in dist:
+                    dist[v] = dist[u] + 1
+                    q.append(v)
+    return dist
+
+
+def format_node_line(node, dist=None):
+    head = "[{}] {}".format(node["id"], node["type"])
+    if dist is not None:
+        head += " (거리 {})".format(dist)
+    return "{} 경로: {}\n  발췌: {}\n".format(head, node.get("path", ""), node.get("excerpt", ""))
+
+
+def format_edge_line(e):
+    return "{} -{}-> {}\n".format(e["source"], e["rel"], e["target"])
+
+
+def render_budget(header, ordered_ids, nodes_by_id, links, seed_score, budget):
+    """거리 순(동점은 ordered_ids가 이미 정한 순서) 노드를 예산 안에서 채운다. 노드를 하나
+    더할 때마다 이미 포함된 노드로 이어진 간선도 같이 셈해 - 넘치면 그 노드부터(그리고 남은,
+    더 먼 노드 전부를) 자른다(§검증④ - 시드에서 먼 노드부터 자른다)."""
+    included, included_set = [], set()
+    edge_seen = set()
+    text = header
+    for nid, dist in ordered_ids:
+        node = nodes_by_id.get(nid)
+        if node is None:
+            continue
+        new_edges = [e for e in links if (e["source"], e["target"], e["rel"]) not in edge_seen
+                     and ((e["source"] == nid and e["target"] in included_set)
+                          or (e["target"] == nid and e["source"] in included_set))]
+        add = format_node_line(node, dist) + "".join(format_edge_line(e) for e in new_edges)
+        candidate = text + add
+        if len(candidate.encode("utf-8")) > budget:
+            break
+        text = candidate
+        included.append(nid)
+        included_set.add(nid)
+        edge_seen.update((e["source"], e["target"], e["rel"]) for e in new_edges)
+    return text, included
+
+
+def _prep(troot):
+    g = load_graph(troot)
+    if g is None:
+        return None
+    nodes, links = g["nodes"], g["links"]
+    nodes_by_id = {n["id"]: n for n in nodes}
+    node_ids = list(nodes_by_id)
+    search_texts = node_search_texts(nodes, troot)
+    node_token_sets = {nid: set(tokenize(search_texts[nid])) for nid in node_ids}
+    idf = build_idf(node_token_sets)
+    degree = build_degree(links)
+    return nodes_by_id, node_ids, node_token_sets, idf, degree, links
+
+
+NO_INDEX = "그래프 인덱스 없음 - 먼저 'python3 graph.py build <큐>'\n"
+
+
+def query(troot, question, dfs=False, budget=DEFAULT_BUDGET):
+    header = "질의: {}\n".format(question)
+    prep = _prep(troot)
+    if prep is None:
+        return header + NO_INDEX
+    nodes_by_id, node_ids, node_token_sets, idf, degree, links = prep
+    scored = score_nodes(question, node_ids, node_token_sets, idf, degree)
+    if not scored:
+        return header + "시드 없음 - 코퍼스에 이 질문과 겹치는 낱말이 없다\n"
+    top = scored[:SEED_TOP_K]
+    seeds = [nid for _s, nid in top]
+    relevance = {nid: s for s, nid in scored}
+    adj = build_adj(links)
+    dist = traverse(seeds, adj, QUERY_DEPTH, dfs=dfs)
+    # 같은 거리 층 안에서는 질의와의 관련도(전체 코퍼스 채점, 시드 것만이 아니다)로 다시 세운다 -
+    # 안 그러면 텍스트와 무관한, 그냥 자주 인용된 이웃이 예산을 먼저 먹어 2홉 거리의 진짜
+    # 관련 문서를 밀어낸다(실측 - AGENTS.md가 관련도 6위인데 2홉이라 5000B 예산에서 잘렸다).
+    # 거리가 먼저이므로 "시드에서 먼 노드부터 자른다"(검증④)는 그대로다.
+    ordered = sorted(dist.items(), key=lambda kv: (kv[1], -relevance.get(kv[0], 0), kv[0]))
+    sub_ids = set(dist)
+    sub_links = [e for e in links if e["source"] in sub_ids and e["target"] in sub_ids]
+    header += "시드: {}\n".format(", ".join(seeds))
+    text, _included = render_budget(header, ordered, nodes_by_id, sub_links, relevance, budget)
+    return text
+
+
+def path(troot, a, b):
+    prep = _prep(troot)
+    if prep is None:
+        return NO_INDEX
+    nodes_by_id, node_ids, node_token_sets, idf, degree, links = prep
+
+    def resolve(q):
+        scored = score_nodes(q, node_ids, node_token_sets, idf, degree)
+        return scored[0][1] if scored else None
+
+    ida, idb = resolve(a), resolve(b)
+    if ida is None or idb is None:
+        return "시드 없음: '{}' - 코퍼스에 없다\n".format(a if ida is None else b)
+
+    adj = build_adj(links)
+    prev = {ida: None}
+    q = collections.deque([ida])
+    while q:
+        u = q.popleft()
+        if u == idb:
+            break
+        for v in adj.get(u, ()):
+            if v not in prev:
+                prev[v] = u
+                q.append(v)
+    if idb not in prev:
+        return "경로 없음: {} <-> {} (연결 안 됨)\n".format(ida, idb)
+
+    chain = []
+    cur = idb
+    while cur is not None:
+        chain.append(cur)
+        cur = prev[cur]
+    chain.reverse()
+
+    def edge_label(u, v):
+        for e in links:
+            if e["source"] == u and e["target"] == v:
+                return "-{}->".format(e["rel"])
+        for e in links:
+            if e["source"] == v and e["target"] == u:
+                return "<-{}-".format(e["rel"])
+        return "--"
+
+    parts = [chain[0]]
+    for u, v in zip(chain, chain[1:]):
+        parts.append(edge_label(u, v))
+        parts.append(v)
+    out = "질의: '{}' -> '{}'\n시드: {} -> {}\n경로({}홉): {}\n".format(
+        a, b, ida, idb, len(chain) - 1, " ".join(parts))
+    for nid in chain:
+        out += format_node_line(nodes_by_id[nid])
+    return out
+
+
+def explain(troot, name):
+    header = "설명: {}\n".format(name)
+    prep = _prep(troot)
+    if prep is None:
+        return header + NO_INDEX
+    nodes_by_id, node_ids, node_token_sets, idf, degree, links = prep
+    scored = score_nodes(name, node_ids, node_token_sets, idf, degree)
+    if not scored:
+        return header + "시드 없음 - 코퍼스에 이 이름과 겹치는 낱말이 없다\n"
+    seed = scored[0][1]
+    adj = build_adj(links)
+    dist = traverse([seed], adj, EXPLAIN_DEPTH)
+    ordered = sorted(dist.items(), key=lambda kv: (kv[1], kv[0]))
+    sub_ids = set(dist)
+    sub_links = [e for e in links if e["source"] in sub_ids and e["target"] in sub_ids]
+    header += "시드: {}\n".format(seed)
+    text, _included = render_budget(header, ordered, nodes_by_id, sub_links, {}, DEFAULT_BUDGET)
+    return text
+
+
 def main():
-    if len(sys.argv) < 3 or sys.argv[1] != "build":
+    if len(sys.argv) < 2:
         raise SystemExit(__doc__)
-    build(sys.argv[2], force="--force" in sys.argv[3:])
+    cmd = sys.argv[1]
+    if cmd == "build":
+        if len(sys.argv) < 3:
+            raise SystemExit(__doc__)
+        build(sys.argv[2], force="--force" in sys.argv[3:])
+    elif cmd == "query":
+        if len(sys.argv) < 4:
+            raise SystemExit(__doc__)
+        rest = sys.argv[4:]
+        budget = int(rest[rest.index("--budget") + 1]) if "--budget" in rest else DEFAULT_BUDGET
+        print(query(sys.argv[2], sys.argv[3], dfs="--dfs" in rest, budget=budget), end="")
+    elif cmd == "path":
+        if len(sys.argv) < 5:
+            raise SystemExit(__doc__)
+        print(path(sys.argv[2], sys.argv[3], sys.argv[4]), end="")
+    elif cmd == "explain":
+        if len(sys.argv) < 4:
+            raise SystemExit(__doc__)
+        print(explain(sys.argv[2], sys.argv[3]), end="")
+    else:
+        raise SystemExit(__doc__)
 
 
 if __name__ == "__main__":

@@ -2,7 +2,9 @@
 """graph.py build 자체검증: 노드 6종-간선(deps/req/archives/awaiting/인용/위키링크/절참조/
 근거/구현/links:) 이 §그래프 탐색 §노드와 간선 표대로 서는가, 증분 빌드가 안 바뀐 파일을
 다시 안 읽는가, 큐(티켓 frontmatter)를 안 건드리는가, 인덱스가 없어도 tick.sh가 WARN 없이
-도는가(검증 ⑧). 실패하면 assert로 죽는다.
+도는가(검증 ⑧). 뒤쪽은 query/path/explain의 시드 매칭(exact/prefix/substring 우선순위 -
+무관어 배제 - 빈 낱말 빈 결과)과 예산 절단(안 넘김 - 먼 노드부터 자름)을 함수 단위로 잰다.
+실패하면 assert로 죽는다.
 
 docs/DESIGN.md §그래프 탐색 §검증.
 """
@@ -10,11 +12,14 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 GRAPH = os.path.join(HERE, "graph.py")
 TICK = os.path.join(HERE, "tick.sh")
+sys.path.insert(0, HERE)
+import graph  # noqa: E402
 
 WORKER = """\
 #!/bin/bash
@@ -151,8 +156,79 @@ try:
         warns = [l for l in open(runner_log, encoding="utf-8") if "WARN" in l]
     assert warns == [], "graph.json 없을 때 WARN이 났다: {}".format(warns)
 
+    # ---- 7) 시드 매칭 - exact > prefix > substring, 무관 노드는 안 낀다, 빈 낱말은 빈 결과 ----
+    qroot = os.path.join(tmp, "qdira")
+    write(os.path.join(qroot, "tickets", "11111111.md"),
+          "---\nticket: 11111111\ntitle: 소진 처리\nkind: work\n---\n\n"
+          "## Goal\n토큰이 소진되면 unassign한다. [[대상개념]]을 참고.\n")
+    write(os.path.join(qroot, "tickets", "22222222.md"),
+          "---\nticket: 22222222\ntitle: 무관\nkind: work\n---\n\n## Goal\n전혀 다른 내용.\n")
+    write(os.path.join(qroot, "ontology", "objects", "기능", "대상개념.md"),
+          "---\ntype: 기능\nname: 대상개념\n---\n\n# 대상개념\n소진과 무관한 개념 설명.\n")
+    write(os.path.join(qroot, "..", "docs", "DESIGN.md"),
+          "# 스펙\n\n## 한도\n소진되면 세션이 unassign한다.\n")
+    build(qroot, force=True)
+    qg = load(qroot)
+    qnodes, qlinks = qg["nodes"], qg["links"]
+    search = graph.node_search_texts(qnodes, qroot)
+    token_sets = {n["id"]: set(graph.tokenize(search[n["id"]])) for n in qnodes}
+    ids = [n["id"] for n in qnodes]
+    idf = graph.build_idf(token_sets)
+    degree = graph.build_degree(qlinks)
+
+    scored = graph.score_nodes("토큰이 소진되면 세션은 무엇을 하나", ids, token_sets, idf, degree)
+    assert scored, "시드 매칭 실패 - 빈 결과"
+    top_ids = [nid for _s, nid in scored]
+    assert top_ids[0] == "11111111", "가장 관련 있는 노드가 1위가 아니다: {}".format(top_ids[:3])
+    assert "22222222" not in top_ids, "겹치는 낱말이 0개인 노드가 시드에 낀다: {}".format(top_ids)
+
+    no_match = graph.score_nodes("쿠버네티스 헬름 차트", ids, token_sets, idf, degree)
+    assert no_match == [], "코퍼스에 없는 낱말인데 시드가 잡혔다: {}".format(no_match)
+
+    # ---- 8) 예산 절단 - render_budget이 예산을 절대 안 넘고, 좁은 예산에서 먼 노드부터 빠진다 ----
+    nodes_by_id = {n["id"]: n for n in qnodes}
+    adj = graph.build_adj(qlinks)
+    seed_id = "11111111"
+    dist = graph.traverse([seed_id], adj, 2)
+    ordered = sorted(dist.items(), key=lambda kv: (kv[1], kv[0]))
+    assert len(ordered) > 1, "픽스처가 1홉도 안 이어져 있다 - 절단 판정을 못 세운다: {}".format(ordered)
+    sub_ids = set(dist)
+    sub_links = [e for e in qlinks if e["source"] in sub_ids and e["target"] in sub_ids]
+
+    wide_text, wide_included = graph.render_budget("헤더\n", ordered, nodes_by_id, sub_links, {}, 6000)
+    assert len(wide_text.encode("utf-8")) <= 6000, "기본 예산 6000B를 넘었다"
+    assert seed_id in wide_included
+
+    farthest = ordered[-1][0]
+    tiny_budget = len(("헤더\n" + graph.format_node_line(nodes_by_id[seed_id], 0)).encode("utf-8"))
+    tiny_text, tiny_included = graph.render_budget("헤더\n", ordered, nodes_by_id, sub_links, {}, tiny_budget)
+    assert len(tiny_text.encode("utf-8")) <= tiny_budget, "좁은 예산을 넘었다"
+    assert seed_id in tiny_included, "시드 자신도 못 들어갔다"
+    assert farthest not in tiny_included, "좁은 예산에서 먼 노드가 안 잘렸다: {}".format(tiny_included)
+    assert len(tiny_included) < len(wide_included), "좁은 예산이 넓은 예산과 같은 수를 담았다"
+
+    # ---- 9) query/path/explain CLI가 §질의의 사용법 그대로 돈다 ----
+    r = subprocess.run(["python3", GRAPH, "query", qroot, "토큰이 소진되면 세션은 무엇을 하나"],
+                        capture_output=True, text=True, timeout=30)
+    assert r.returncode == 0 and "11111111" in r.stdout, "query CLI 실패\n" + r.stdout + r.stderr
+    assert len(r.stdout.encode("utf-8")) <= 6000, "query 기본 산출이 예산을 넘었다"
+
+    r = subprocess.run(["python3", GRAPH, "query", qroot, "쿠버네티스 헬름 차트"],
+                        capture_output=True, text=True, timeout=30)
+    assert r.returncode == 0 and "시드 없음" in r.stdout, "없는 낱말인데 시드 없음이 안 찍혔다\n" + r.stdout
+
+    r = subprocess.run(["python3", GRAPH, "explain", qroot, "대상개념"],
+                        capture_output=True, text=True, timeout=30)
+    assert r.returncode == 0 and "대상개념" in r.stdout, "explain CLI 실패\n" + r.stdout + r.stderr
+
+    r = subprocess.run(["python3", GRAPH, "path", qroot, "소진 처리", "대상개념"],
+                        capture_output=True, text=True, timeout=30)
+    assert r.returncode == 0 and "11111111" in r.stdout and "대상개념" in r.stdout, \
+        "path CLI 실패\n" + r.stdout + r.stderr
+
     print("PASS 노드6종-간선(deps-req-archives-awaiting-인용-위키링크-절참조-근거-구현-links)-"
           "중복제목#N-검증①(표준라이브러리)-검증⑦(큐 무수정)-증분(무변경 0-1장 수정 1-삭제 반영)-"
-          "검증⑧(graph.json 없어도 tick.sh 무WARN)")
+          "검증⑧(graph.json 없어도 tick.sh 무WARN)-시드매칭(exact우선-무관어배제-빈결과)-"
+          "예산절단(안넘김-먼노드부터자름)-query/path/explain CLI")
 finally:
     shutil.rmtree(tmp, ignore_errors=True)
