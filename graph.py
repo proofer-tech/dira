@@ -202,7 +202,8 @@ def extract_spec(path, text, title_index):
     nodes, links = [], []
     for (_level, title, s, e), sid in zip(heads, ids):
         body = "\n".join(lines[s + 1:e])
-        nodes.append({"id": sid, "type": "스펙 절", "path": path, "excerpt": excerpt_of(body.split("\n", 1)[0] if body else title)})
+        first = next((bl.strip() for bl in body.split("\n") if bl.strip()), title)
+        nodes.append({"id": sid, "type": "스펙 절", "path": path, "excerpt": excerpt_of(first)})
         links += [{"source": src, "target": tgt, "rel": rel} for src, tgt, rel in generic_edges(sid, body, title_index)]
     return nodes, links
 
@@ -459,10 +460,11 @@ def design_section_bodies(design_path):
 
 
 def protocol_section_excerpt(path, qtokens):
-    """프로토콜 문서는 파일 전체가 한 노드라(§노드와 간선 표 - 파일명) 발췌가 늘 문서 첫 줄로
-    고정돼 있었다 - AGENTS.md처럼 여러 절을 담은 파일에서는 시드로 잡혀도 어느 절이 맞는지
-    안 보였다(실측 - Q1 '한도를 만났을 때'). 노드는 안 쪼개고, 질의 토큰과 가장 많이 겹치는
-    절만 찾아 그 절의 첫 줄로 발췌를 바꿔치기한다."""
+    """프로토콜 문서-티켓-메모리는 파일 전체가 한 노드라(§노드와 간선 표 - 파일명/ticket/id)
+    발췌가 늘 문서 첫 줄(또는 `first_body_line`이 `#`-`-`를 벗긴 `## Goal`의 `Goal`)로
+    고정돼 있었다 - 여러 절을 담은 파일에서는 시드로 잡혀도 어느 절이 맞는지 안 보였다
+    (실측 - Q1 '한도를 만났을 때', `2f9dbeb4` 티켓-메모리 발췌). 노드는 안 쪼개고, 질의
+    토큰과 가장 많이 겹치는 절(`##`~`#####`)만 찾아 그 절의 첫 줄로 발췌를 바꿔치기한다."""
     try:
         text = open(path, encoding="utf-8").read()
     except OSError:
@@ -481,16 +483,23 @@ def protocol_section_excerpt(path, qtokens):
     return excerpt_of(short_title(title) + " - " + first)
 
 
+SECTIONED_EXCERPT_TYPES = ("프로토콜 문서", "티켓", "메모리")
+# ponytail: 이 셋만 - 파일 전체가 한 노드라 first_body_line이 "## Goal"의 "Goal"이나 메모리
+# H1 제목(=id 그 자체)을 발췌로 내는 유형이다(2f9dbeb4). "스펙 절"-"온톨로지 객체"-"소스 파일"은
+# 이미 절 단위로 쪼개지거나 별도 excerpt_of를 쓰므로 대상이 아니다.
+
+
 def with_protocol_excerpts(nodes_by_id, ids, query_text):
-    """render 직전에 한 번 - 후보 노드 중 프로토콜 문서만 발췌를 질의에 맞게 바꾼다.
-    graph.json은 그대로 두고(빌드 결과 불변), 조회 시점에만 사본에 덮어쓴다."""
+    """render 직전에 한 번 - 후보 노드 중 파일 전체가 한 노드인 유형(SECTIONED_EXCERPT_TYPES)만
+    발췌를 질의에 맞게 바꾼다. graph.json은 그대로 두고(빌드 결과 불변), 조회 시점에만 사본에
+    덮어쓴다."""
     qtokens = set(tokenize(query_text))
     if not qtokens:
         return nodes_by_id
     out = dict(nodes_by_id)
     for nid in ids:
         node = out.get(nid)
-        if node and node.get("type") == "프로토콜 문서":
+        if node and node.get("type") in SECTIONED_EXCERPT_TYPES:
             alt = protocol_section_excerpt(node["path"], qtokens)
             if alt:
                 out[nid] = dict(node, excerpt=alt)

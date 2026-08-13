@@ -247,7 +247,7 @@ try:
     # 다르게 표현된(paraphrase) 정답 문서보다 늘 이긴다 - 어휘 일치만 보고 "정답"과 "질문을
     # 논하는 글"을 못 가른다. 상수(SEED_TOP_K, 예산)를 만지면 검증②(프롬프트 예산 불변)를
     # 깨므로 이 티켓 범위에서는 못 고친다 - 4a14fbea에 kind:feedback으로 넘긴 근거를 여기
-    # 고정한다. 채점식을 재설계해 이 assert가 깨지면 그 feedback 판정도 같이 갱신할 것 ----
+    # 고정한다. 채점식을 재설계해 이 assert가 깨지면 823f7d56 판정도 같이 갱신할 것 ----
     lroot = os.path.join(tmp, "lroot")
     q1 = "토큰이 소진되면 세션은 무엇을 해야 하나"
     write(os.path.join(lroot, "protocols", "AGENTS.md"),
