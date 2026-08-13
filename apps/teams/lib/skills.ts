@@ -473,13 +473,14 @@ export async function writePersonaLimit(dir: string, name: string, limit: number
  *  (`renderEngineBlock` 그대로, §23 카탈로그 무수정 · 요구 `3917dbda` 답 `7563d133`).
  *  `tick.sh`가 이 파일을 그대로 `source`하므로 새 파서를 만들지 않는다 — 배열 블록 한 줄만 읽는다.
  *
- *  파일 없음 · 못 읽음 · 모양이 다름 · 카탈로그와 안 맞는 값은 전부 `null`(= 지정 없음 — 그
- *  페르소나는 워커 자신의 엔진을 그대로 쓴다). `limit`과 같은 원칙: 파서를 안 만들고, 오타 하나가
- *  조용히 다른 뜻으로 읽히지 않는다. */
+ *  파일 없음 · 못 읽음 · 모양이 다름(`TICKET_ENGINE=(...)` 한 줄이 아님)은 `null`(= 지정 없음 —
+ *  그 페르소나는 워커 자신의 엔진을 그대로 쓴다). **그 대입 자체는 있는데 카탈로그와 안 맞으면**
+ *  (사람이 손으로 얹은 `--autocompact`류 꼬리) `{ raw }`로 원문을 그대로 낸다 — `null`로 뭉개면
+ *  화면이 "지정 없음"으로 그리고, `writePersonaEngine`이 그 값을 못 본 채 지운다(`77ca2128`). */
 export async function readPersonaEngine(
   dir: string,
   name: string,
-): Promise<{ engineId: EngineId; model: string } | null> {
+): Promise<{ engineId: EngineId; model: string } | { raw: string } | null> {
   let file: string;
   try {
     file = await personaFilePath(dir, name, "engine");
@@ -489,10 +490,27 @@ export async function readPersonaEngine(
   }
   const text = (await readFile(file, "utf8").catch(() => "")).trim();
   const m = /^TICKET_ENGINE=\((.*)\)$/.exec(text);
-  return m ? parseEngineValue(m[1]) : null;
+  if (!m) return null;
+  return parseEngineValue(m[1]) ?? { raw: m[1] };
+}
+
+/** 커스텀 인자(`{ raw }`)가 있는 engine 파일을 `force` 없이 덮어쓰려 할 때 던진다 — PROFILE.md
+ *  §파일 쓰기("덮어쓰기 전에 읽는다") 그대로다. `raw`는 지금 파일의 원문 인자다 — 화면이 그대로
+ *  보여주고 사람이 확인하면 `force: true`로 다시 부른다. */
+export class PersonaEngineCustomError extends Error {
+  readonly raw: string;
+  constructor(raw: string) {
+    super(`커스텀 인자가 있는 engine 파일입니다: ${raw}`);
+    this.name = "PersonaEngineCustomError";
+    this.raw = raw;
+  }
 }
 
 /** 저장. `id === null`이면 파일을 지운다(= 지정 없음, `writePersonaLimit`과 같은 규약).
+ *
+ *  **덮어쓰기 전에 읽는다**(PROFILE.md §파일 쓰기): 지금 파일이 카탈로그와 안 맞는 커스텀 값
+ *  (`{ raw }`)이면 `force`가 없는 한 `PersonaEngineCustomError`로 멈춘다 — 팝오버가 모델만 고르고
+ *  저장해도 그 커스텀 꼬리가 조용히 사라지지 않는다(`77ca2128`).
  *
  *  자기검증은 **쓴 뒤 읽기 경로로 다시 읽는다**(`readPersonaEngine` — 워커 파일 대상이던
  *  `writeEngine`과 같은 패턴). 값이 다르면 **안 쓴 것으로 실패한다** — 쓴 파일을 지운다. */
@@ -501,16 +519,21 @@ export async function writePersonaEngine(
   name: string,
   id: EngineId | null,
   model: string = NO_MODEL,
+  force = false,
 ): Promise<{ engineId: EngineId; model: string } | null> {
   const file = await personaFilePath(dir, name, "engine");
   if (id === null) {
     await rm(file, { force: true });
     return null;
   }
+  if (!force) {
+    const current = await readPersonaEngine(dir, name);
+    if (current && "raw" in current) throw new PersonaEngineCustomError(current.raw);
+  }
   await mkdir(path.dirname(file), { recursive: true });
   await writeFile(file, `${renderEngineBlock(id, model)}\n`, "utf8");
   const back = await readPersonaEngine(dir, name);
-  if (!back || back.engineId !== id || back.model !== model) {
+  if (!back || !("engineId" in back) || back.engineId !== id || back.model !== model) {
     await rm(file, { force: true });
     throw new Error(`쓴 블록을 다시 읽으면 값이 달라집니다. 쓰지 않았습니다.`);
   }

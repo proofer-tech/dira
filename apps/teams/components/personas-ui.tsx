@@ -80,6 +80,10 @@ import type { Memory, Skill } from "@/lib/skills";
 import { decodeHash, engineMissing, PERSONA_COLORS, personaDotClass } from "@/lib/urls";
 import { cn } from "@/lib/utils";
 
+/** `engine` 사이드카가 읽어 낸 값 3종(`readPersonaEngine`과 같은 모양). `{ raw }`는 카탈로그와
+ *  안 맞는 커스텀 인자다 — 사람이 손으로 얹은 꼬리를 "지정 없음"으로 뭉개지 않는다(`77ca2128`). */
+export type PersonaEngineValue = { engineId: string; model: string } | { raw: string } | null;
+
 /** 서버가 읽어 넘긴 한 항목. `body: null` = PROFILE.md가 없다(엔진의 WARN 케이스). */
 export type PersonaRow = {
   name: string;
@@ -98,7 +102,7 @@ export type PersonaRow = {
   limit: number | null;
   /** `engine` 사이드카의 값(§제약 1 §결정 기록 §열한 번째). `null` = 파일 없음·모양이 다름 =
    *  **지정 없음**(그 페르소나는 워커 자신의 엔진을 쓴다). `limit`과 같은 이유로 자수에 안 더한다 */
-  engine: { engineId: string; model: string } | null;
+  engine: PersonaEngineValue;
 };
 
 /** §6 에러 3요소 중 1·2번. 사유는 원문 그대로 — 삼키지 않는다. */
@@ -290,7 +294,7 @@ type PersonaEdit = {
    *  `상한 n`이 이걸 그리므로 저장 직후에 여기까지 올라와야 목록이 파일과 같아진다 */
   limit: number | null;
   /** **저장된 값이다** — 팝오버의 초안은 `EngineField`가 지역 상태로 든다(상한과 같은 벌) */
-  engine: { engineId: string; model: string } | null;
+  engine: PersonaEngineValue;
 };
 
 /** 서버가 방금 준 값 그대로. 아직 손대지 않은 페르소나는 이걸 읽으므로 **다른 세션이 파일을
@@ -697,7 +701,7 @@ function DispatchPolicySection({
   projectId: string;
   name: string;
   limit: number | null;
-  engine: { engineId: string; model: string } | null;
+  engine: PersonaEngineValue;
   engines: EngineCatalog;
   modelPattern: string;
   /** §23 §개정 · §44 ④. 엔진이 지정 없음이고 워커가 1개 이상일 때만 그린다 — `engine`이 있으면
@@ -988,29 +992,41 @@ function EngineField({
 }: {
   projectId: string;
   name: string;
-  /** 파일의 값. `null` = 지정 없음 */
-  engine: { engineId: string; model: string } | null;
+  /** 파일의 값. `null` = 지정 없음, `{ raw }` = 카탈로그와 안 맞는 커스텀 인자(`77ca2128`) */
+  engine: PersonaEngineValue;
   engines: EngineCatalog;
   modelPattern: string;
   onSaved: (engine: { engineId: string; model: string } | null) => void;
 }) {
-  const initial = (): EnginePick => ({ engine: engine?.engineId ?? "", model: engine?.model ?? "" });
+  const catalog = engine && "engineId" in engine ? engine : null;
+  const custom = engine && "raw" in engine ? engine.raw : null;
+  const initial = (): EnginePick => ({ engine: catalog?.engineId ?? "", model: catalog?.model ?? "" });
   const [open, setOpen] = useState(false);
   const [pick, setPick] = useState<EnginePick>(initial);
   const [error, setError] = useState<string | null>(null);
+  // `null` = 안 뜸. 커스텀 값을 `force` 없이 저장하려다 거절당하면 그 원문을 여기 담아 확인
+  // 다이얼로그를 띄운다 — 팝오버 저장이 조용히 그 값을 지우지 않는다(`77ca2128`).
+  const [confirmRaw, setConfirmRaw] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const ready = pick.engine !== "" && enginePickOk(pick, modelPattern) && !pending;
   const labelId = `persona-engine-${name}-label`;
   const triggerId = `persona-engine-${name}-value`;
-  const display = engine ? (engine.model ? `${engine.engineId} · ${engine.model}` : engine.engineId) : "지정 없음";
+  const display = catalog
+    ? catalog.model
+      ? `${catalog.engineId} · ${catalog.model}`
+      : catalog.engineId
+    : custom ?? "지정 없음";
 
-  const save = (id: string | null, model: string) =>
+  const save = (id: string | null, model: string, force = false) =>
     start(async () => {
-      const r = await savePersonaEngineAction(projectId, name, id, model);
+      const r = await savePersonaEngineAction(projectId, name, id, model, force);
       if (r.ok) {
         onSaved(r.engine ?? null);
         setError(null);
+        setConfirmRaw(null);
         setOpen(false);
+      } else if (r.custom) {
+        setConfirmRaw(r.custom);
       } else {
         setError(r.message ?? "엔진을 저장하지 못했습니다.");
       }
@@ -1042,6 +1058,13 @@ function EngineField({
           <span className={cn("max-w-[14rem] truncate", engine && "font-mono text-xs")} title={display}>
             {display}
           </span>
+          {/* 카탈로그 밖 인자가 있다는 사실 자체가 신호다(§4-3 워커 행의 `custom` 배지와 같은 뜻) —
+              팝오버를 열지 않아도 "지정 없음"이 아니라는 것이 보인다. */}
+          {custom !== null && (
+            <Badge variant="outline" className="self-center">
+              custom
+            </Badge>
+          )}
           <ChevronDown aria-hidden className="size-3" />
         </PopoverTrigger>
         <PopoverContent align="start">
@@ -1078,6 +1101,24 @@ function EngineField({
           </div>
         </PopoverContent>
       </Popover>
+      <AlertDialog open={confirmRaw !== null} onOpenChange={(o) => !o && setConfirmRaw(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>커스텀 엔진 값을 덮어씁니다 — {name}</AlertDialogTitle>
+            <AlertDialogDescription>
+              지금 engine 파일에 카탈로그 밖 인자가 있습니다:{" "}
+              <span className="font-mono text-xs break-all">{confirmRaw}</span> 여기서 저장하면
+              이 인자는 사라지고 고른 값으로 바뀝니다.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel autoFocus>취소</AlertDialogCancel>
+            <AlertDialogAction disabled={pending} onClick={() => save(pick.engine, pick.model, true)}>
+              그래도 저장
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </span>
   );
 }

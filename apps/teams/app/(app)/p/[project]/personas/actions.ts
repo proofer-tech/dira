@@ -22,6 +22,7 @@ import {
   extractSkillArchive,
   installSkill,
   listInstalledSkills,
+  PersonaEngineCustomError,
   pickedSkills,
   readPersonaSkillsFile,
   SkillInstallError,
@@ -194,23 +195,30 @@ export async function savePersonaLimitAction(
  *  **`engine`이 `null`이면 파일을 지운다**(= 지정 없음 — 그 페르소나는 워커 자신의 엔진을 쓴다).
  *
  *  카탈로그 검증(모르는 엔진·셸 메타문자가 든 모델)은 `writePersonaEngine`(→`renderEngineBlock`→
- *  `engineArgv`) 안에서 던진다 — 이 액션은 그 문 하나를 통과시킬 뿐이다(§23 ④와 같은 신뢰 경계). */
+ *  `engineArgv`) 안에서 던진다 — 이 액션은 그 문 하나를 통과시킬 뿐이다(§23 ④와 같은 신뢰 경계).
+ *
+ *  **지금 파일이 커스텀 값(`PersonaEngineCustomError`)이면 `force` 없이는 거절한다** — 화면이
+ *  그 원문(`custom`)을 받아 확인 다이얼로그를 띄우고, 사람이 확인하면 `force: true`로 다시
+ *  부른다(`77ca2128`, PROFILE.md §파일 쓰기). */
 export async function savePersonaEngineAction(
   projectId: string,
   name: string,
   engine: string | null,
   model: string,
-): Promise<PersonaResult & { engine?: { engineId: EngineId; model: string } | null }> {
+  force = false,
+): Promise<PersonaResult & { engine?: { engineId: EngineId; model: string } | null; custom?: string }> {
   try {
     const result = await writePersonaEngine(
       await personasDir(projectId),
       name,
       engine as EngineId | null,
       model,
+      force,
     );
     revalidatePath(`/p/${projectId}/personas`);
     return { ok: true, engine: result };
   } catch (e) {
+    if (e instanceof PersonaEngineCustomError) return { ok: false, message: e.message, custom: e.raw };
     return fail(e);
   }
 }

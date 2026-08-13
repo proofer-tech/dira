@@ -10,6 +10,7 @@ import {
   installSkill,
   listInstalledSkills,
   memoryExcerpt,
+  PersonaEngineCustomError,
   pickedSkills,
   readPersonaEngine,
   readPersonaLimit,
@@ -623,15 +624,44 @@ test("엔진 — null이면 파일을 지운다(= 지정 없음)", async () => {
   await writePersonaEngine(personas, "eng", null); // 없는 파일을 또 지워도 조용하다
 });
 
-test("엔진 — 파일 없음 · 모양이 다름은 지정 없음이다(파서를 안 만든다)", async () => {
+test("엔진 — 파일 없음 · 모양이 다름(대입 줄 자체가 아님)은 지정 없음이다(파서를 안 만든다)", async () => {
   const dir = path.join(personas, "loose-eng");
   mkdirSync(dir, { recursive: true });
   const file = path.join(dir, "engine");
-  for (const text of ["", "claude", "TICKET_ENGINE=(mock-engine --flag)", "TICKET_ENGINE=(claude"]) {
+  for (const text of ["", "claude", "TICKET_ENGINE=(claude"]) {
     writeFileSync(file, text);
     assert.equal(await readPersonaEngine(personas, "loose-eng"), null, JSON.stringify(text));
   }
   assert.equal(await readPersonaEngine(personas, "no-such-persona"), null);
+});
+
+test("엔진 — 대입은 있는데 카탈로그와 안 맞으면 raw로 낸다(null로 뭉개지 않는다, 77ca2128)", async () => {
+  const dir = path.join(personas, "custom-eng");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(path.join(dir, "engine"), "TICKET_ENGINE=(mock-engine --flag)");
+  assert.deepEqual(await readPersonaEngine(personas, "custom-eng"), { raw: "mock-engine --flag" });
+});
+
+test("엔진 — 커스텀 값을 force 없이 저장하면 PersonaEngineCustomError로 멈추고 파일이 그대로다(77ca2128)", async () => {
+  const dir = path.join(personas, "custom-save");
+  mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, "engine");
+  writeFileSync(file, "TICKET_ENGINE=(mock-engine --flag --autocompact 150000)");
+
+  await assert.rejects(
+    () => writePersonaEngine(personas, "custom-save", "claude", "opus"),
+    (e: unknown) =>
+      e instanceof PersonaEngineCustomError && e.raw === "mock-engine --flag --autocompact 150000",
+  );
+  // 커스텀 꼬리가 살아 있다 — 팝오버가 모델만 고르고 저장해도 조용히 안 지워진다.
+  assert.equal(readFileSync(file, "utf8"), "TICKET_ENGINE=(mock-engine --flag --autocompact 150000)");
+
+  // 사람이 확인하고 다시 부르면(force) 종전대로 덮어쓴다.
+  assert.deepEqual(await writePersonaEngine(personas, "custom-save", "claude", "opus", true), {
+    engineId: "claude",
+    model: "opus",
+  });
+  assert.equal(readFileSync(file, "utf8"), `${renderEngineBlock("claude", "opus")}\n`);
 });
 
 test("엔진 — 모르는 엔진·위험한 모델은 거부하고 파일을 안 남긴다(신뢰 경계)", async () => {
