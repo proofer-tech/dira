@@ -229,6 +229,20 @@ export function MarkdownEditor({
             {/* 칸 바닥(§50 §갈리는 칸) — 84px(세 줄)의 최소 높이는 이 그릇 하나에 걸고 블록마다
                 안 건다. 안의 `min-h-7`(빈 문단·placeholder)은 무수정이다. */}
             <div className="min-h-[84px]">
+              {split.head && (
+                <div
+                  data-head=""
+                  contentEditable
+                  suppressContentEditableWarning
+                  aria-label="frontmatter"
+                  className="rounded-md bg-muted p-3 overflow-x-auto font-mono text-sm whitespace-pre-wrap mb-3"
+                  onBlur={(e) => commitActiveEditable(e.currentTarget)}
+                  onPaste={onPaste}
+                  onKeyDown={onKeyDown}
+                >
+                  {split.head}
+                </div>
+              )}
               {split.blocks.length === 0 ? (
                 <div
                   ref={firstEditableRef}

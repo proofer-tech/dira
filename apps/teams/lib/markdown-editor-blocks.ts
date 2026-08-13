@@ -11,6 +11,10 @@ import remarkGfm from "remark-gfm";
 import type { Root } from "mdast";
 
 export interface SplitResult {
+  /** 프론트매터(`tail`의 짝) — 첫 줄이 `---`(trim)이고 뒤에 닫는 `---`(trim) 줄이 있으면 그 줄의
+   *  개행까지. 하나라도 어긋나면 빈 문자열이다(DESIGN.md §비주얼 §50 §프론트매터는 블록이 아니다).
+   *  블록 분할·`firstHeadingIndex`는 이 뒤 문자열만 본다 — YAML 파서 0, 정규식뿐이다. */
+  head: string;
   blocks: string[];
   /** 마지막 블록 뒤 나머지(대개 파일 끝 개행 하나) — 편집 대상이 아니라 그대로 보존한다 */
   tail: string;
@@ -21,8 +25,21 @@ export interface SplitResult {
   firstHeadingIndex: number | null;
 }
 
+/** 첫 줄이 `---`(trim)이고 뒤에 닫는 `---`(trim) 줄이 있으면 그 줄의 개행까지를 돌려준다.
+ *  엔진(`tickets.py` `read_fm`)과 같은 경계 — 정규식이고 YAML 파서를 안 쓴다. */
+function extractHead(source: string): string {
+  const lines = source.split(/(?<=\n)/);
+  if (lines.length === 0 || lines[0].trim() !== "---") return "";
+  for (let i = 1; i < lines.length; i++) {
+    if (lines[i].trim() === "---") return lines.slice(0, i + 1).join("");
+  }
+  return "";
+}
+
 export function splitBlocks(source: string): SplitResult {
-  const tree = unified().use(remarkParse).use(remarkGfm).parse(source) as Root;
+  const head = extractHead(source);
+  const rest = source.slice(head.length);
+  const tree = unified().use(remarkParse).use(remarkGfm).parse(rest) as Root;
   const blocks: string[] = [];
   let cursor = 0;
   let firstHeadingIndex: number | null = null;
@@ -30,15 +47,15 @@ export function splitBlocks(source: string): SplitResult {
     const end = child.position?.end.offset;
     if (end == null || end < cursor) continue;
     if (firstHeadingIndex === null && child.type === "heading") firstHeadingIndex = blocks.length;
-    blocks.push(source.slice(cursor, end));
+    blocks.push(rest.slice(cursor, end));
     cursor = end;
   }
-  return { blocks, tail: source.slice(cursor), firstHeadingIndex };
+  return { head, blocks, tail: rest.slice(cursor), firstHeadingIndex };
 }
 
-/** 블록 배열 + 꼬리를 원문으로 되돌린다. */
-export function joinBlocks({ blocks, tail }: Pick<SplitResult, "blocks" | "tail">): string {
-  return blocks.join("") + tail;
+/** 프론트매터 + 블록 배열 + 꼬리를 원문으로 되돌린다. */
+export function joinBlocks({ head, blocks, tail }: Pick<SplitResult, "head" | "blocks" | "tail">): string {
+  return head + blocks.join("") + tail;
 }
 
 /** 인덱스 하나만 갈아 끼운 전체 문자열. 나머지 블록은 손 안 댄 슬라이스라 그 밖 바이트가 안 갈린다
@@ -46,7 +63,7 @@ export function joinBlocks({ blocks, tail }: Pick<SplitResult, "blocks" | "tail"
 export function replaceBlock(split: SplitResult, index: number, newBlockText: string): string {
   const blocks = split.blocks.slice();
   blocks[index] = newBlockText;
-  return joinBlocks({ blocks, tail: split.tail });
+  return joinBlocks({ head: split.head, blocks, tail: split.tail });
 }
 
 /** 편집기 블록 `i`에 실을 `breaks` 값. `all`/`undefined`는 전 블록에 그대로 걸리고,
@@ -240,13 +257,22 @@ export function looseTextOf(root: Element): string {
  *  (요구 `33b7cb27` — 위지윅 면이 마지막 글자를 버리던 사고. `components/markdown-editor.tsx`
  *  §컴포넌트 §제출 가로채기가 이 함수를 두 자리에서 부른다).
  *
- *  블록 칸(`data-block-index`가 있는 원소)과 첫 편집 전 빈 칸(`split.blocks.length === 0`)
- *  둘 다 받는다 — `active`가 이 컴포넌트의 편집 표면이 아니면(자리를 못 찾거나 안 바뀌었으면)
- *  `null`이라 호출부가 `setText`를 건너뛴다(안 바뀐 값으로 리렌더를 안 만든다). */
+ *  블록 칸(`data-block-index`가 있는 원소) - 프론트매터 칸(`data-head`) - 첫 편집 전 빈 칸
+ *  (`split.blocks.length === 0`) 셋 다 받는다 — `active`가 이 컴포넌트의 편집 표면이 아니면
+ *  (자리를 못 찾거나 안 바뀌었으면) `null`이라 호출부가 `setText`를 건너뛴다(안 바뀐 값으로
+ *  리렌더를 안 만든다). */
 export function commitEditable(active: Element, split: SplitResult): string | null {
+  if (active.getAttribute("data-head") !== null) {
+    // `head`는 (빈 칸과 달리) 개행까지 포함해 그대로 렌더된 문자열이라 되읽은 값에 "\n"을
+    // 따로 안 붙인다 — 붙이면 안 고쳐도 매번 dirty가 된다.
+    const newHead = looseTextOf(active);
+    if (newHead === split.head) return null;
+    return joinBlocks({ head: newHead, blocks: split.blocks, tail: split.tail });
+  }
   if (split.blocks.length === 0) {
     const newText = looseTextOf(active);
-    return newText ? `${newText}\n${split.tail}` : split.tail;
+    const body = newText ? `${newText}\n${split.tail}` : split.tail;
+    return split.head + body;
   }
   const indexAttr = active.getAttribute("data-block-index");
   if (indexAttr === null) return null;

@@ -86,6 +86,59 @@ test("블록 하나만 갈아 끼우면 그 밖은 안 갈린다 (못 ① 둘째
   assert.equal(out, "첫 블록.\n\n둘째 블록 고침.\n\n셋째 블록.\n");
 });
 
+// `head` — DESIGN.md §비주얼 §50 §프론트매터는 블록이 아니다. 픽스처는 `objects/워커/w8.md`
+// 모양(중첩 YAML — `links:` 아래 두 층)이다.
+const FM_FIXTURE = `---
+type: 워커
+name: w8
+aliases: []
+tags: []
+description: cron이 분마다 띄우는 실행 단위
+links:
+  돌린다:
+    - 디스패치 루프: "[[디스패치 루프]]"
+---
+
+# w8
+
+본문 한 줄.
+`;
+
+test("head 분리 — 중첩 fm 픽스처에서 head가 닫는 --- + 개행까지, blocks[0]이 그 뒤", () => {
+  const split = splitBlocks(FM_FIXTURE);
+  assert.equal(split.head, FM_FIXTURE.slice(0, FM_FIXTURE.indexOf("\n\n# w8") + 1));
+  assert.ok(split.head.startsWith("---\n"));
+  assert.ok(split.head.trimEnd().endsWith("---"));
+  assert.ok(!split.blocks[0].includes("type:"));
+});
+
+test("항등 — head + blocks.join('') + tail === 원문 (fm 있는 픽스처 · 없는 픽스처)", () => {
+  assert.equal(joinBlocks(splitBlocks(FM_FIXTURE)), FM_FIXTURE);
+  assert.equal(joinBlocks(splitBlocks("# 제목\n\n본문.\n")), "# 제목\n\n본문.\n");
+});
+
+test("firstHeadingIndex가 head를 안 센다 — fm 뒤 첫 heading의 인덱스", () => {
+  const split = splitBlocks(FM_FIXTURE);
+  assert.equal(split.firstHeadingIndex, 0);
+});
+
+test("commitEditable — data-head 표면을 고치면 head만 갈리고 블록 열 바이트가 안 갈린다", () => {
+  const split = splitBlocks(FM_FIXTURE);
+  // 위지윅 면은 `split.head`를 문자열 그대로(트레일링 개행 포함) 텍스트 노드 하나에 그린다
+  // (components/markdown-editor.tsx `{split.head}`) — 픽스처도 그 렌더를 그대로 흉낸다.
+  const newHead = split.head.replace("name: w8", "name: w8-바뀜");
+  const changedHead = new FakeElement("div", [new FakeText(newHead)], { "data-head": "" });
+  const out = commitEditable(el(changedHead), split);
+  assert.equal(out, joinBlocks({ ...split, head: newHead }));
+  assert.equal(out?.includes("본문 한 줄."), true); // 블록 열은 무변경
+});
+
+test("commitEditable — data-head 표면이 안 바뀌면 null", () => {
+  const split = splitBlocks(FM_FIXTURE);
+  const unchanged = new FakeElement("div", [new FakeText(split.head)], { "data-head": "" });
+  assert.equal(commitEditable(el(unchanged), split), null);
+});
+
 test("firstHeadingIndex — untilHeading 경계(lib/markdown-breaks.ts와 같은 판정)", () => {
   const withHeading = splitBlocks("첫 줄.\n둘째 줄.\n\n## 결과\n\n뒤 문단.\n");
   assert.equal(withHeading.firstHeadingIndex, 1);
