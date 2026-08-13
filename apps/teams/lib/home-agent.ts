@@ -79,7 +79,7 @@ import { findClaude, tokenPath } from "./auth.ts";
 import type { Run } from "./engine.ts";
 import { getProject, registryPath, resolveConfig, type Project, type ProjectConfig } from "./projects.ts";
 import { isAwaiting, listTickets, reqTitle, statusOf, type Ticket } from "./queue.ts";
-import { findTranscript, sessionIdOf, tailEvents, type StreamEvent } from "./transcript.ts";
+import { findTranscript, lastEvent, sessionIdOf, tailEvents, type StreamEvent } from "./transcript.ts";
 import { engineCell, listWorkers, workerOf, type Worker } from "./workers.ts";
 
 /** 세션에 존재하는 도구 전부(§7 표 `세션의 도구는 Read·Glob·Grep·Write·Edit 다섯뿐이다`).
@@ -615,6 +615,22 @@ export type Answer = Run & {
  *  티켓의 계정이 주간 한도로 막혀 실측하지 못했다**(`## 블록` 참조) — 잘못 짚으면 조용히
  *  아무 값도 안 잡힐 뿐이라 대상 없이 이름만 먼저 낸다. */
 export type Activity = { kind: "thinking" } | { kind: "tool"; tool: string } | { kind: "answering" };
+
+/** 트랜스크립트의 **마지막 사건 하나**를 위 활동 3종으로 옮긴다(§7 §도는 워커 세션은 스레드에서도
+ *  돈다 — 요구 `161a881e`). 남의 프로세스(워커 세션)에는 `Live` 핸들이 없어서 이 값이 유일한
+ *  출처다 — 우리 자식이 스트림 델타로 채우는 `live.activity`와 자리는 같고 재료만 다르다.
+ *
+ *  `thinking` 말고 나머지 전부(`text`·`tool_result`·`prompt`·`interject`)가 `answering`으로
+ *  뭉치는 것이 값이다 — §2-6 ③의 두 문구(`생각하는 중`·`따라가는 중`)를 안 가져오는 것과 같은
+ *  근거로, 이 요구가 지목한 낱말이 홈 §24의 셋(`생각 중`·도구 이름·`답하는 중`)이다. */
+export const activityFromEvent = (event: StreamEvent | null): Activity | null =>
+  event === null
+    ? null
+    : event.kind === "thinking"
+      ? { kind: "thinking" }
+      : event.kind === "tool_use"
+        ? { kind: "tool", tool: event.label }
+        : { kind: "answering" };
 
 /** 도는 질문 하나가 서버에 남기는 것 전부 — **부분 텍스트 · 활동 · 모델 · 자식 핸들 · 중지 요청**.
  *  다섯이 한 객체인 이유는 다 `runs` 맵의 수명과 같아서다(§7: 도는 동안만 있는 것). */
@@ -1165,9 +1181,11 @@ export type HomeChunk = {
   /** **도는 동안 받은 글**(§7 §답은 흐른다). 출처가 `turns`와 다르다 — 이건 자식 프로세스의
    *  stdout이고 저건 트랜스크립트다. `running`이 false면 **언제나 빈 문자열**이다(아래 주석) */
   partial: string;
-  /** **지금 하는 일**(§7 §천장이 없다 §안심 장치). 출처는 `partial`과 같다(자식의 stdout) —
-   *  `running`이 false면 **언제나 `null`**이다(같은 근거: 끝나는 순간 `Live`가 볼일이 없다).
-   *  문구·그릇은 화면 결선(`4c8e82d8`)이 정한다 — 여기는 구분값 + 도구 이름까지만 낸다 */
+  /** **지금 하는 일**(§7 §천장이 없다 §안심 장치 · §도는 워커 세션은 스레드에서도 돈다). 출처는
+   *  둘이다 — 우리 자식이면 `partial`과 같은 자리(자식의 stdout) `running`이 false면 `null`.
+   *  **워커 세션이 `.wip`인 동안은 예외다** — 남의 프로세스라 그 자식의 stdout이 없어서
+   *  트랜스크립트의 마지막 사건에서 뽑는다(`activityFromEvent`). 문구·그릇은 화면
+   *  결선(`4c8e82d8`)이 정한다 — 여기는 구분값 + 도구 이름까지만 낸다 */
   activity: Activity | null;
   /** 사람이 `중지`로 끝냈다. 실패가 아니다 — 화면은 `중지됨`이라고 말하고 입력칸을 연다(§7) */
   stopped: boolean;
@@ -1204,9 +1222,25 @@ export type HomeChunk = {
  *
  *  **`turns.length`는 종을 안 가린다** — `line`이 늘어도 이 판정은 그대로다. 첫 증거(`answered`)는
  *  이미 종과 무관하고, 둘째 증거는 원래도 "질문이 파일에 먼저 서는" 것만으로 채워지는 수였다
- *  (`toTurns`가 항상 첫 프롬프트를 맨 먼저 넣는다) — `line`이 그 사실을 안 바꾼다. */
-export const pollDone = (c: Pick<HomeChunk, "running" | "turns" | "answered">): boolean =>
-  c.answered || (!c.running && c.turns.length > 0);
+ *  (`toTurns`가 항상 첫 프롬프트를 맨 먼저 넣는다) — `line`이 그 사실을 안 바꾼다.
+ *
+ *  **워커 세션은 셋째 증거를 쓴다**(§7 §도는 워커 세션은 스레드에서도 돈다 — 요구 `161a881e`).
+ *  `sessionId`가 `workers` 목록의 한 줄을 가리키면(남의 프로세스) `turns.length`를 아예 안 본다 —
+ *  그 대신 **그 줄의 `running`이 전부다**(`.wip`이면 안 끊고 `.done`이면 끊는다). 이유 둘:
+ *  ① 남의 워커 세션은 이미 턴이 있는 채로 시작하므로(티켓 배정 지시 한 줄이 최소한 있다)
+ *  `!running && turns.length > 0`이 첫 폴링부터 참이라, `turns`로 재면 활동이 뜨는 바로 그
+ *  순간 폴링이 끊긴다. ② 반대쪽 끝 — 티켓이 방금 `.done`으로 갈렸는데 그 사이 트랜스크립트에
+ *  새 줄이 안 붙었으면(흔하다: 상태 변화는 큐 파일 쪽이지 트랜스크립트 쪽이 아니다) `turns`가
+ *  이 폴링에서 여전히 0건이라 둘째 증거로도 못 끊는다. `workers` 목록은 **매 폴링 큐를 다시
+ *  읽으므로**(`workerSessionsById`) 트랜스크립트에 새 줄이 있든 없든 그 전환을 그 폴링에서
+ *  바로 안다 — 첫째 증거(`answered`)는 그대로 산다(그건 우리 자식의 것이라 워커 세션에는
+ *  애초에 안 선다). */
+export const pollDone = (
+  c: Pick<HomeChunk, "running" | "turns" | "answered" | "sessionId" | "workers">,
+): boolean => {
+  const worker = c.sessionId ? c.workers.find((w) => w.id === c.sessionId) : undefined;
+  return c.answered || (!c.running && (worker ? !worker.running : c.turns.length > 0));
+};
 
 /** 트랜스크립트를 `offset` 뒤부터 읽어 대화 줄 + 새 offset(§2-1 읽기 코어 재사용).
  *
@@ -1254,14 +1288,38 @@ export async function pollHome(
   // 받은 데까지가 트랜스크립트에 남으므로(실측 ⑵) 화면이 지울 것도 붙일 것도 없다.
   // 순서가 근거다 — `done`을 파일보다 먼저 읽으므로 `partial`이 비는 응답은 이미 그 줄을 담고 있다.
   const partial = running ? (entry?.live.partial ?? "") : "";
-  // **같은 근거로 같은 값이다**(§7 §안심 장치) — 끝나면 볼 활동이 없다.
-  const activity = running ? (entry?.live.activity ?? null) : null;
+  // **워커 세션이 `.wip`인 동안**(§7 §도는 워커 세션은 스레드에서도 돈다 — 요구 `161a881e`).
+  // 우리 자식(`running`)과 배타적이다 — 남의 프로세스라 `Live`가 없다. 활동을 트랜스크립트에서
+  // 뽑을지 정하는 값이다 — `pollDone`은 이 값이 아니라 `workers` 목록 자체를 본다(그 함수 주석).
+  const workerLive = sid !== null && workers.some((w) => w.id === sid && w.running);
 
   if (!sid) {
-    return chunk({ sessionId: null, conversations, workers, turns: [], offset: 0, reset, running, runningSessions, partial, activity, stopped, failed, answered });
+    // 같은 근거로 같은 값이다(§7 §안심 장치) — 끝나면·볼 곳이 없으면 활동도 없다.
+    return chunk({
+      sessionId: null,
+      conversations,
+      workers,
+      turns: [],
+      offset: 0,
+      reset,
+      running,
+      runningSessions,
+      partial,
+      activity: null,
+      stopped,
+      failed,
+      answered,
+    });
   }
 
   const file = await findTranscript(sid);
+  // **우리 자식이면 자식의 stdout**(`live.activity`) — **남의 `.wip` 워커 세션이면 트랜스크립트의
+  // 마지막 사건**(`activityFromEvent`) — 그 외(끝났거나 파일이 없다)는 `null`이다.
+  const activity = running
+    ? (entry?.live.activity ?? null)
+    : workerLive && file
+      ? activityFromEvent(await lastEvent(file))
+      : null;
   if (!file) {
     return chunk({
       sessionId: sid,

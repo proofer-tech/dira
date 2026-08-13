@@ -24,6 +24,7 @@ const {
   stopAsk,
   pollHome,
   pollDone,
+  activityFromEvent,
   isAsking,
   sessionsPath,
   readSessionId,
@@ -37,6 +38,7 @@ const {
 } = await import("./home-agent.ts");
 type HomeChunk = Awaited<ReturnType<typeof pollHome>>;
 const { tailEvents } = await import("./transcript.ts");
+type StreamEvent = Awaited<ReturnType<typeof tailEvents>>["events"][number];
 const { registryPath, resolveConfig } = await import("./projects.ts");
 const { listTickets } = await import("./queue.ts");
 const { listWorkers, lockPath } = await import("./workers.ts");
@@ -980,6 +982,26 @@ test("§7 §안심 장치 — 생각 · 도구 · 글자가 흐르는 동안 활
   });
 });
 
+test("activityFromEvent — 마지막 사건 하나를 활동 3종으로 옮긴다 (§7 §도는 워커 세션은 스레드에서도 돈다)", () => {
+  const ev = (kind: StreamEvent["kind"], label = ""): StreamEvent => ({
+    key: "k",
+    ts: "2026-08-01T00:00:00.000Z",
+    kind,
+    label,
+    summary: "",
+    summaryMono: false,
+    body: "",
+    sidechain: false,
+  });
+  assert.deepStrictEqual(activityFromEvent(ev("thinking")), { kind: "thinking" });
+  assert.deepStrictEqual(activityFromEvent(ev("tool_use", "Read")), { kind: "tool", tool: "Read" });
+  // 나머지 전부(text · tool_result · prompt · interject)가 한 값으로 뭉친다
+  for (const kind of ["text", "tool_result", "prompt", "interject"] as const) {
+    assert.deepStrictEqual(activityFromEvent(ev(kind)), { kind: "answering" });
+  }
+  assert.strictEqual(activityFromEvent(null), null);
+});
+
 test("§7 §세션 정보 한 줄 — 모델은 `system`/`init` 레코드에서 와 대화 줄에 한 번 적힌다", async () => {
   const project = { id: "model-test", name: "큐", root: CWD };
   await withFake("", async () => {
@@ -1224,10 +1246,69 @@ test("워커 세션 — 사라진 `current`는 대화 0건과 같고, 고르면 
   assert.strictEqual(isAsking(id), false); // 세션을 아예 안 띄웠다
 });
 
+test("도는 워커 세션은 스레드에서도 돈다 — 활동은 트랜스크립트의 마지막 사건에서, 그 판정이 폴링을 안 끊는다 (§7 · 요구 `161a881e`)", async () => {
+  const id = "worker-live-activity";
+  const root = path.join(mkdtempSync(path.join(tmpdir(), "ha-wla-")), ".dira");
+  tmps.push(path.dirname(root));
+  mkdirSync(path.join(root, "tickets"), { recursive: true });
+  writeFileSync(registryPath(), JSON.stringify({ version: 1, projects: [{ id, name: "큐", root }] }));
+
+  const run = uuid(61);
+  const ticketPath = path.join(root, "tickets", "wla00001.wip.md");
+  writeFileSync(
+    ticketPath,
+    `---\nticket: wla00001\ntitle: 도는 티켓\nsession_id: ${run}\nowner: developer / w1-deadbeef\n---\n\n본문\n`,
+  );
+  writeFileSync(
+    path.join(TRANSCRIPTS, `${run}.jsonl`),
+    JSON.stringify({
+      type: "user",
+      uuid: "u1",
+      timestamp: "2026-08-01T05:00:00.000Z",
+      message: { role: "user", content: "티켓 배정" },
+    }) +
+      "\n" +
+      JSON.stringify({
+        type: "assistant",
+        uuid: "a1",
+        timestamp: "2026-08-01T05:00:05.000Z",
+        message: { role: "assistant", content: [{ type: "tool_use", name: "Read", input: { file_path: "x" } }] },
+      }) +
+      "\n",
+  );
+  writeFileSync(sessionsPath(), JSON.stringify({ [id]: { conversations: [], current: run } }));
+
+  // ① `.wip`인 동안 — 활동이 마지막 사건(`tool_use` · Read)에서 온다. `running`(우리 자식)은
+  //    이 세션에 대해 영영 false다 — 남의 프로세스라 `runs` 맵에 없다.
+  const wip = await pollHome(id, null, 0);
+  assert.strictEqual(wip.sessionId, run);
+  assert.strictEqual(wip.running, false);
+  assert.deepStrictEqual(wip.activity, { kind: "tool", tool: "Read" });
+  // **`turns.length > 0`인데도 안 끊긴다** — `pollDone`이 `turns`가 아니라 `workers` 목록의
+  // `.wip`을 보기 때문이다(안 그러면 활동이 뜨는 바로 그 폴링이 마지막 폴링이 된다).
+  assert.ok(wip.turns.length > 0);
+  assert.strictEqual(wip.done, false);
+
+  // ② 티켓이 끝난다(`.wip` → `.done`) — **트랜스크립트에는 새 줄이 안 붙는다**(이 전환은 큐
+  //    파일 쪽 사실이지 트랜스크립트 쪽 사실이 아니다 — `offset`을 그대로 넘겨 그것을 재현한다).
+  //    그런데도 다음 폴링에서 활동이 사라지고 끊어도 되는 근거가 선다: `workers` 목록 자체가
+  //    매 폴링 큐를 다시 읽어 그 전환을 안다(`turns`가 0건이어도 편지 온다).
+  const donePath = path.join(root, "tickets", "wla00001.done.md");
+  writeFileSync(donePath, readFileSync(ticketPath, "utf8"));
+  rmSync(ticketPath);
+  const after = await pollHome(id, run, wip.offset);
+  assert.deepStrictEqual(after.turns, []); // 새로 읽을 줄이 없다는 것이 이 재현의 핵심이다
+  assert.strictEqual(after.activity, null);
+  assert.strictEqual(after.done, true);
+});
+
 test("폴링을 끊는 근거는 `running`이 아니라 **답이 왔다**다 (§7 §폴링은 서버가 잊어도 안 끊긴다)", () => {
   const answer = { key: "1", role: "answer" as const, text: "답" };
+  const workerRow = (running: boolean) => [
+    { id: "w", worker: "w1", title: "제목", stem: "s", hash: "h", running },
+  ];
   const chunk = (c: Partial<Parameters<typeof pollDone>[0]>) =>
-    pollDone({ running: false, turns: [], answered: false, ...c });
+    pollDone({ running: false, turns: [], answered: false, sessionId: null, workers: [], ...c });
 
   // ① **정상 종료 — `turns`가 비어도 끝이다.** 이 한 줄이 QA `0a284011`이 잡은 자리다:
   //    답 줄은 프로세스가 죽기 한참 전에 트랜스크립트에 서고 도는 중의 폴링이 그것을 이미
@@ -1244,6 +1325,13 @@ test("폴링을 끊는 근거는 `running`이 아니라 **답이 왔다**다 (§
   // ⑤ 실패·`중지됨`은 따로 안 본다 — 둘 다 결과 객체가 있어야 채워지므로 ①에 이미 든다.
   //    글자 한 자 오기 전에 누른 `중지`(새 줄도 실패도 없다)가 그 경계다.
   assert.strictEqual(chunk({ answered: true, turns: [] }), true);
+  // ⑥ **워커 세션이 `.wip`인 동안은 `turns`를 아예 안 본다**(§7 §도는 워커 세션은 스레드에서도
+  //    돈다 — 요구 `161a881e`). `workers`가 없으면 이 한 줄이 `turns.length > 0` 하나로
+  //    참이 되어, 활동이 뜨는 바로 그 첫 폴링이 마지막 폴링이 된다.
+  assert.strictEqual(chunk({ turns: [answer], sessionId: "w", workers: workerRow(true) }), false);
+  // ⑦ **`.done`으로 갈리면 `turns`가 0건이어도 끊는다** — 그 전환은 큐 파일 쪽 사실이라
+  //    트랜스크립트에 새 줄이 없어도(`turns: []`) `workers` 목록만으로 이미 안다.
+  assert.strictEqual(chunk({ turns: [], sessionId: "w", workers: workerRow(false) }), true);
 });
 
 /** **답이 뜬 그 폴링에서 잠금을 푼다**(`ef6cfc76` — QA `0a284011` 실측 재현).

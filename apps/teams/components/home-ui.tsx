@@ -260,8 +260,19 @@ export function HomeUI({
   // **불리언 하나로 좁혀서 deps에 넣는다** — 목록 자체를 넣으면 폴링이 새 배열을 줄 때마다
   // 사슬이 다시 걸려 500ms 주기가 매번 처음부터 선다(같은 값이 든 다른 배열이다).
   const anyRunning = runningIds.length > 0;
+  // **지금 보는 것이 워커 세션인가**(§7 좌측 패널 — `current`가 대화 목록 밖을 가리킬 수 있다).
+  // 폴링 효과보다 앞으로 옮긴 이유는 그 효과의 deps·gate가 이 값(`readOnly`)을 본다 — 아래
+  // §도는 워커 세션은 스레드에서도 돈다.
+  const worker = home.workers.find((w) => w.id === home.current);
+  // **도는 세션에는 말을 걸 수 없다**(§24 §잠금 두 자리 ② — 근거는 자리가 아니라 파일이다:
+  // 홈이 `--resume`으로 붙으면 한 트랜스크립트에 두 프로세스가 쓴다). 잠기는 것은 `보내기`
+  // 하나이고 **입력칸은 아니다** — 쓰던 글이 다른 세션으로 갈아탄 뒤에도 남는 것이 값이다.
+  const readOnly = worker?.running === true;
   useEffect(() => {
-    if (!running && !anyRunning) return;
+    // **`readOnly`가 세 번째 문이다**(§7 §도는 워커 세션은 스레드에서도 돈다 — 요구 `161a881e`).
+    // 남의 `.wip` 워커 세션은 `running`(우리 자식)도 `anyRunning`(우리가 띄운 것들)도 안 잡는다 —
+    // 이 문이 없으면 그 세션을 골라도 폴링 효과가 아예 안 붙는다(첫 렌더가 그대로 굳는다).
+    if (!running && !anyRunning && !readOnly) return;
     let stop = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     // **이 왕복이 시작될 때 매달린 질문**(§21 실패 규칙 · 요구 `4ddfed03`). `echo` state는 이
@@ -338,23 +349,18 @@ export function HomeUI({
     // 되는 매 왕복마다 사슬을 다시 걸면 그 자리에서 폴링이 처음부터 선다. `pendingEcho`가 그 값을
     // 사슬 안에서 대신 든다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [project, running, anyRunning]);
+  }, [project, running, anyRunning, readOnly]);
 
   const empty = !text.trim();
   const busy = running || starting;
-  // **지금 보는 것이 워커 세션인가**(§7 좌측 패널 — `current`가 대화 목록 밖을 가리킬 수 있다).
-  // 이 한 값이 화면에서 셋을 정한다: 패널의 체크가 어느 그룹에 서는지 · 손잡이 줄 왼쪽 문구 ·
+  // `worker`·`readOnly`는 위 폴링 효과 앞으로 옮겼다(그 효과의 gate·deps가 본다) — 이 한 값이
+  // 화면에서 셋을 더 정한다: 패널의 체크가 어느 그룹에 서는지 · 손잡이 줄 왼쪽 문구 ·
   // `보내기`가 잠기는지. 큐에서 사라진 세션이면 서버가 이미 `sessionId: null`로 물러나므로
   // (`pollHome`) 여기서도 `undefined`고 화면은 **대화 0건과 같다**(온보딩) — 실패가 아니다.
-  const worker = home.workers.find((w) => w.id === home.current);
   // **지금 보는 대화의 모델**(§7 §천장이 없다 ④ · §비주얼 §24 §세션 정보 한 줄) — 첫 성공한
   // 턴이 적고 그 뒤로는 안 바뀐다(`saveModel`). 아직 없으면 `undefined`고 `<SessionInfo>`가
   // 그 칸을 뺀다.
   const conv = home.conversations.find((c) => c.id === home.current);
-  // **도는 세션에는 말을 걸 수 없다**(§24 §잠금 두 자리 ② — 근거는 자리가 아니라 파일이다:
-  // 홈이 `--resume`으로 붙으면 한 트랜스크립트에 두 프로세스가 쓴다). 잠기는 것은 `보내기`
-  // 하나이고 **입력칸은 아니다** — 쓰던 글이 다른 세션으로 갈아탄 뒤에도 남는 것이 값이다.
-  const readOnly = worker?.running === true;
 
   /** 질문 하나를 띄운다. **입력칸과 `다시 답하기`가 같은 경로다**(§24 — 후자가 하는 일이
    *  "옛 질문을 입력칸에 넣고 보내는 것"과 같다). 갈리는 것은 칸을 비우느냐뿐이라 그쪽은 밖에 둔다. */
@@ -637,8 +643,13 @@ export function HomeUI({
                     {/* 도는 답 — **트랜스크립트에 아직 없는 한 항목**이다. 안은 끝난 답과 같은
                         모양이고(산문 + 띠) 띠 안만 진행 표식(§18 ④) + `중지`로 갈린다. 항목이
                         하나라 도착한 조각이 **같은 산문 블록**에 이어 붙는다 — 문단마다 항목을
-                        쪼개면 스크롤 위치가 매 폴링마다 튄다(§24). */}
-                    {busy && (
+                        쪼개면 스크롤 위치가 매 폴링마다 튄다(§24).
+
+                        **`readOnly`도 이 자리를 연다**(§7 §도는 워커 세션은 스레드에서도 돈다 —
+                        요구 `161a881e`). 남의 `.wip` 워커 세션을 보는 동안은 `busy`(우리 자식)가
+                        영영 거짓이라 이 값이 없으면 그릇 자체가 안 선다 — 활동은 아래에서 잡히는데
+                        보일 자리가 없는 모순이 생긴다. */}
+                    {(busy || readOnly) && (
                       <MessageScrollerItem key="running" messageId="running">
                         {/* 첫 글자 전에는 산문을 **안 그린다**(§24 흐름 항). 빈 `partial`을 넘기면
                             §10이 `(내용 없음)`을 내는데, 여기만 *끝난 빈 것*이 아니라 *아직 안 온 것*
@@ -647,7 +658,8 @@ export function HomeUI({
                             **겹침 판정은 여기서 다시 안 한다**(§7 §누적기를 비우는 자리 — 요구
                             `3dc948ac`). `pollHome`이 마지막 답 줄과 누적분이 같으면 이미 `partial`을
                             빈 문자열로 내린다(요구 `c5d287ac`) — 화면은 여전히 `partial !== ""`
-                            하나만 본다. */}
+                            하나만 본다. 워커 세션은 서버가 `partial`을 언제나 빈 문자열로 주므로
+                            (`running`이 아니다) 이 산문 자체가 안 선다. */}
                         {partial !== "" && <Prose text={partial} />}
                         <Band>
                           <span
@@ -672,16 +684,20 @@ export function HomeUI({
                           )}
                           {/* `ml-auto`가 없다 — 이 화면의 띠는 1440에서 ≈1392px이라 오른쪽 끝으로
                               밀면 버튼이 자기가 멈추는 글자에서 1200px 떨어져 홀로 뜬다
-                              (§4-3 예외 2번 — 조작 대상 옆에 있는 것이 위치의 뜻이다). */}
-                          <Button
-                            variant="outline"
-                            size="xs"
-                            aria-disabled={stopping}
-                            className="aria-disabled:opacity-50"
-                            onClick={() => void stop()}
-                          >
-                            중지
-                          </Button>
+                              (§4-3 예외 2번 — 조작 대상 옆에 있는 것이 위치의 뜻이다).
+                              **워커 세션에는 이 버튼이 없다**(§7 — 그 버튼이 부르는 `stopHome`은
+                              홈 자기 자식을 죽인다. 남의 세션에 손대는 자리가 아니다). */}
+                          {busy && (
+                            <Button
+                              variant="outline"
+                              size="xs"
+                              aria-disabled={stopping}
+                              className="aria-disabled:opacity-50"
+                              onClick={() => void stop()}
+                            >
+                              중지
+                            </Button>
+                          )}
                         </Band>
                       </MessageScrollerItem>
                     )}

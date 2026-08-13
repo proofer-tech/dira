@@ -206,13 +206,53 @@ export async function tailEvents(
  *  MB가 되거나 진행중이 두 자릿수가 되면 그때 꼬리 창 + 미스 시 직전 값 유지(세션별 오프셋 캐시)
  *
  *  **`grok`이면 줄마다 `grokRecord`를 한 번 지난다** — `tailEvents`와 같은 규칙(§4-3 §grok · §1-1
- *  §grok 확장). claude 경로는 `grok`을 안 주면(기본 `false`) 이 줄 전에 아무것도 안 바뀐다. */
+ *  §grok 확장). claude 경로는 `grok`을 안 주면(기본 `false`) 이 줄 전에 아무것도 안 바뀐다.
+ *
+ *  스캔 자체(파일 전문을 뒤에서부터 레코드 단위로 훑는 것)는 `recordsBackward`가 하고, 여기는
+ *  레코드마다 "세울 글자가 있는 tool_use·text"만 고르는 판정만 얹는다. `lastEvent`(홈 §7 활동
+ *  3종)가 같은 스캔에 다른 판정(필터 없음)을 얹는 둘째 소비자다. */
 export async function lastActivity(file: string, grok = false): Promise<StreamEvent | null> {
+  for await (const rec of recordsBackward(file, grok)) {
+    // 같은 레코드 안에서는 뒤 블록이 더 나중이다(assistant 한 장이 thinking+text+tool_use를 담는다)
+    const hit = recordToEvents(rec)
+      .filter(
+        (e) =>
+          (e.kind === "tool_use" || e.kind === "text") &&
+          // **세울 글자가 없으면 안 고른다**(§1-1 §개정). 화면(§36 `wipLine`)이 세우는 것과 같은
+          // 식이다 — `label`이 있으면 `summary`, 없으면 `body` 첫 줄. 도구 이름을 나열하지
+          // 않는 이유는 지목된 `Bash`(87.6%) 말고 나머지 12.4%도 성질이 같아서다.
+          (e.label ? e.summary : e.body.split("\n")[0]).trim() !== "",
+      )
+      .pop();
+    if (hit) return hit;
+  }
+  return null;
+}
+
+/** 이 세션의 **마지막 사건 하나** — 필터가 없다(§7 §도는 워커 세션은 스레드에서도 돈다).
+ *  `lastActivity`와 달리 `tool_result`·`thinking`·`prompt`도 히트다: 홈의 활동 3종 매핑
+ *  (`activityFromEvent`, `lib/home-agent.ts`)이 그 갈래까지 셋으로 접으므로 여기서 먼저 걸러내면
+ *  안 된다. 같은 이유로 "요약이 빈 tool_use"도 그대로 돌려준다 — 도구 이름 자체가 활동 문구다. */
+export async function lastEvent(file: string, grok = false): Promise<StreamEvent | null> {
+  for await (const rec of recordsBackward(file, grok)) {
+    const events = recordToEvents(rec);
+    if (events.length) return events.at(-1) ?? null;
+  }
+  return null;
+}
+
+/** `lastActivity`·`lastEvent`가 공유하는 스캔. 파일 **전문**을 읽고 **뒤에서부터** 레코드 단위로
+ *  훑어 넘긴다(grok이면 `grokRecord`로 접은 뒤). 멈추는 것은 부르는 쪽이 정한다(첫 히트에서
+ *  `return`) — 그래서 제너레이터다.
+ *
+ *  ponytail: 트랜스크립트 전문을 읽고 뒤에서 훑는다(실측 p90 1.5MB · 5건 3.6ms). 파일이 수십
+ *  MB가 되거나 진행중이 두 자릿수가 되면 그때 꼬리 창 + 미스 시 직전 값 유지(세션별 오프셋 캐시) */
+async function* recordsBackward(file: string, grok: boolean): AsyncGenerator<unknown> {
   let buf: Buffer;
   try {
     buf = await readFile(file);
   } catch {
-    return null; // 삭제·권한·아직 없는 파일 — 사람에게는 `히트 0`과 같은 뜻이다(*지금 말할 게 없다*)
+    return; // 삭제·권한·아직 없는 파일 — 사람에게는 `히트 0`과 같은 뜻이다(*지금 말할 게 없다*)
   }
   // grok 레코드에는 `cwd`가 없다 — `tailEvents`와 같은 자리에서 디렉터리 이름을 되돌린다
   const cwd = grok ? grokCwd(path.basename(path.dirname(path.dirname(file)))) : undefined;
@@ -235,20 +275,8 @@ export async function lastActivity(file: string, grok = false): Promise<StreamEv
       rec = grokRecord(rec, cwd);
       if (rec === null) continue; // 대응물 없는 종류는 건너뛴다(`tailEvents`와 같은 규칙)
     }
-    // 같은 레코드 안에서는 뒤 블록이 더 나중이다(assistant 한 장이 thinking+text+tool_use를 담는다)
-    const hit = recordToEvents(rec)
-      .filter(
-        (e) =>
-          (e.kind === "tool_use" || e.kind === "text") &&
-          // **세울 글자가 없으면 안 고른다**(§1-1 §개정). 화면(§36 `wipLine`)이 세우는 것과 같은
-          // 식이다 — `label`이 있으면 `summary`, 없으면 `body` 첫 줄. 도구 이름을 나열하지
-          // 않는 이유는 지목된 `Bash`(87.6%) 말고 나머지 12.4%도 성질이 같아서다.
-          (e.label ? e.summary : e.body.split("\n")[0]).trim() !== "",
-      )
-      .pop();
-    if (hit) return hit;
+    yield rec;
   }
-  return null;
 }
 
 /** **사람이 쓴 참견이 아니라 하니스가 스스로 밀어 넣은 봉투**를 거른다.
