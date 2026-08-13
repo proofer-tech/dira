@@ -458,6 +458,45 @@ def design_section_bodies(design_path):
     return {sid: "\n".join(lines[s + 1:e]) for (_level, _title, s, e), sid in zip(heads, ids)}
 
 
+def protocol_section_excerpt(path, qtokens):
+    """프로토콜 문서는 파일 전체가 한 노드라(§노드와 간선 표 - 파일명) 발췌가 늘 문서 첫 줄로
+    고정돼 있었다 - AGENTS.md처럼 여러 절을 담은 파일에서는 시드로 잡혀도 어느 절이 맞는지
+    안 보였다(실측 - Q1 '한도를 만났을 때'). 노드는 안 쪼개고, 질의 토큰과 가장 많이 겹치는
+    절만 찾아 그 절의 첫 줄로 발췌를 바꿔치기한다."""
+    try:
+        text = open(path, encoding="utf-8").read()
+    except OSError:
+        return None
+    heads, lines = parse_headings(text)
+    best, best_hits = None, 0
+    for _level, title, s, e in heads:
+        body = "\n".join(lines[s + 1:e])
+        hits = len(set(tokenize(title + " " + body)) & qtokens)
+        if hits > best_hits:
+            best_hits, best = hits, (title, body)
+    if best is None:
+        return None
+    title, body = best
+    first = next((l.strip() for l in body.split("\n") if l.strip()), title)
+    return excerpt_of(short_title(title) + " - " + first)
+
+
+def with_protocol_excerpts(nodes_by_id, ids, query_text):
+    """render 직전에 한 번 - 후보 노드 중 프로토콜 문서만 발췌를 질의에 맞게 바꾼다.
+    graph.json은 그대로 두고(빌드 결과 불변), 조회 시점에만 사본에 덮어쓴다."""
+    qtokens = set(tokenize(query_text))
+    if not qtokens:
+        return nodes_by_id
+    out = dict(nodes_by_id)
+    for nid in ids:
+        node = out.get(nid)
+        if node and node.get("type") == "프로토콜 문서":
+            alt = protocol_section_excerpt(node["path"], qtokens)
+            if alt:
+                out[nid] = dict(node, excerpt=alt)
+    return out
+
+
 def node_search_texts(nodes, troot):
     """노드 id -> 매칭용 원문. 발췌 한 줄이 아니라 파일 전체를 읽는다 - §한도처럼 파일
     중간에 있는 절도 찾아야 한다. 같은 경로(티켓-온톨로지-메모리-프로토콜 파일, DESIGN.md)는
@@ -655,6 +694,7 @@ def query(troot, question, dfs=False, budget=DEFAULT_BUDGET):
     sub_ids = set(dist)
     sub_links = [e for e in links if e["source"] in sub_ids and e["target"] in sub_ids]
     header += "시드: {}\n".format(", ".join(seeds))
+    nodes_by_id = with_protocol_excerpts(nodes_by_id, sub_ids, question)
     text, _included = render_budget(header, ordered, nodes_by_id, sub_links, relevance, budget)
     return text
 
@@ -730,6 +770,7 @@ def explain(troot, name):
     sub_ids = set(dist)
     sub_links = [e for e in links if e["source"] in sub_ids and e["target"] in sub_ids]
     header += "시드: {}\n".format(seed)
+    nodes_by_id = with_protocol_excerpts(nodes_by_id, sub_ids, name)
     text, _included = render_budget(header, ordered, nodes_by_id, sub_links, {}, DEFAULT_BUDGET)
     return text
 

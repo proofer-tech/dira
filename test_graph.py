@@ -226,9 +226,50 @@ try:
     assert r.returncode == 0 and "11111111" in r.stdout and "대상개념" in r.stdout, \
         "path CLI 실패\n" + r.stdout + r.stderr
 
+    # ---- 10) 회귀(3332cdb9 Q3) - 프로토콜 문서는 파일 전체가 한 노드라 발췌가 늘 문서
+    # 첫 줄로 고정돼 있었다. 여러 절을 담은 프로토콜 문서에서도 질의와 맞는 절의 발췌로
+    # 바뀌는지 확인한다(with_protocol_excerpts) ----
+    eroot = os.path.join(tmp, "eroot")
+    write(os.path.join(eroot, "protocols", "AGENTS.md"),
+          "# 프로토콜\n\n## 다른 절\n관련 없는 내용.\n\n"
+          "## 완료 트리거\n티켓을 끝낼 때 아카이브 티켓 frontmatter에 deps: 와 archives: 를 "
+          "반드시 채운다.\n")
+    build(eroot, force=True)
+    q3 = ("완료한 티켓을 archive-manager에게 넘길 때 아카이브 티켓 frontmatter에 "
+          "반드시 들어가는 키 둘은?")
+    r = subprocess.run(["python3", GRAPH, "query", eroot, q3],
+                        capture_output=True, text=True, timeout=30)
+    assert r.returncode == 0, "query CLI 실패\n" + r.stdout + r.stderr
+    assert "완료 트리거" in r.stdout, \
+        "AGENTS.md가 시드에 잡혀도 발췌가 문서 첫 줄에 고정돼 있다\n" + r.stdout
+
+    # ---- 11) 회귀(3332cdb9 Q1) - 채점식의 근본 한계: 질의를 그대로 인용/논의하는 문서가
+    # 다르게 표현된(paraphrase) 정답 문서보다 늘 이긴다 - 어휘 일치만 보고 "정답"과 "질문을
+    # 논하는 글"을 못 가른다. 상수(SEED_TOP_K, 예산)를 만지면 검증②(프롬프트 예산 불변)를
+    # 깨므로 이 티켓 범위에서는 못 고친다 - 4a14fbea에 kind:feedback으로 넘긴 근거를 여기
+    # 고정한다. 채점식을 재설계해 이 assert가 깨지면 그 feedback 판정도 같이 갱신할 것 ----
+    lroot = os.path.join(tmp, "lroot")
+    q1 = "토큰이 소진되면 세션은 무엇을 해야 하나"
+    write(os.path.join(lroot, "protocols", "AGENTS.md"),
+          "# 프로토콜\n\n## 한도를 만났을 때\n토큰이 다 떨어지면 session-rotate 뒤 접는다.\n")
+    write(os.path.join(lroot, "tickets", "qqqqqqqq.md"),
+          "---\nticket: qqqqqqqq\ntitle: 질문 기록\nkind: work\n---\n\n## Goal\n{}\n".format(q1))
+    build(lroot, force=True)
+    lg = load(lroot)
+    lsearch = graph.node_search_texts(lg["nodes"], lroot)
+    ltoken_sets = {n["id"]: set(graph.tokenize(lsearch[n["id"]])) for n in lg["nodes"]}
+    lids = [n["id"] for n in lg["nodes"]]
+    lidf = graph.build_idf(ltoken_sets)
+    ldegree = graph.build_degree(lg["links"])
+    lscored = {nid: s for s, nid in graph.score_nodes(q1, lids, ltoken_sets, lidf, ldegree)}
+    assert lscored["qqqqqqqq"] > lscored["AGENTS.md"], \
+        "회귀: 질의를 그대로 인용한 문서가 더는 정답 문서를 안 이긴다 - 고쳐졌으면 이 assert를 " \
+        "고치고 4a14fbea kind:feedback 판정도 갱신할 것: {}".format(lscored)
+
     print("PASS 노드6종-간선(deps-req-archives-awaiting-인용-위키링크-절참조-근거-구현-links)-"
           "중복제목#N-검증①(표준라이브러리)-검증⑦(큐 무수정)-증분(무변경 0-1장 수정 1-삭제 반영)-"
           "검증⑧(graph.json 없어도 tick.sh 무WARN)-시드매칭(exact우선-무관어배제-빈결과)-"
-          "예산절단(안넘김-먼노드부터자름)-query/path/explain CLI")
+          "예산절단(안넘김-먼노드부터자름)-query/path/explain CLI-"
+          "3332cdb9 회귀(Q3 프로토콜 절 발췌 고침-Q1 채점식 근본한계 문서화)")
 finally:
     shutil.rmtree(tmp, ignore_errors=True)
