@@ -211,6 +211,67 @@ test("정의역·치역 판정 — 꼬리 구분자가 하이픈(' - ')이어도
   assert.doesNotMatch(m.schemaViolations.join("\n"), /정의역·치역 위반/);
 });
 
+// 실 vault(stocky) 모양 그대로 — 관계 표는 다중값을 쉼표로 적고, 링크 항목은 `대상` 아래
+// 링크 속성(`경유`)을 한 단 더 들여쓴다. cc5bb157이 신고한 두 오탐의 재현 케이스다.
+const SCHEMA_MULTI = `## 객체 타입
+
+| 이름 | 한 줄 뜻 | 정의 |
+|---|---|---|
+| 에이전트 | 에이전트다 | [[에이전트]] |
+| 엔진 | 엔진이다 | [[엔진]] |
+
+## 관계 타입
+
+| 관계 | 정의역 → 치역 | 링크 속성 |
+|---|---|---|
+| 호출한다 | 에이전트, 엔진 → 엔진 | \`경유\` |
+`;
+
+test("정의역·치역 판정 — 다중값 셀은 집합이라 원소 하나만 써도 통과한다(쉼표 구분, cc5bb157)", () => {
+  const m = computeOntologyMetrics({
+    schemaText: SCHEMA_MULTI,
+    objects: [
+      // 정의역이 [에이전트, 엔진] 중 '엔진' 하나 — 집합이 아니라 문자열로 비교하면 오탐
+      { rel: "objects/엔진/e1.md", text: obj("엔진", "e1", "엔진이다.", {}, { 호출한다: ["e2"] }) },
+      { rel: "objects/엔진/e2.md", text: obj("엔진", "e2", "엔진이다.") },
+    ],
+    actionLogs: [],
+  });
+  assert.doesNotMatch(m.schemaViolations.join("\n"), /정의역·치역 위반/);
+});
+
+test("링크 속성 — 항목이 둘 이상이어도 속성 키를 관계 이름으로 읽지 않는다(cc5bb157)", () => {
+  const withAttrs = `---
+type: 엔진
+name: e1
+links:
+  호출한다:
+    - 대상: "[[e2]]"
+      경유: 첫 항목
+    - 대상: "[[e3]]"
+      경유: 둘째 항목
+    - 대상: "[[e4]]"
+      경유: 셋째 항목
+---
+
+# e1
+
+엔진이다.
+`;
+  const m = computeOntologyMetrics({
+    schemaText: SCHEMA_MULTI,
+    objects: [
+      { rel: "objects/엔진/e1.md", text: withAttrs },
+      { rel: "objects/엔진/e2.md", text: obj("엔진", "e2", "엔진이다.") },
+      { rel: "objects/엔진/e3.md", text: obj("엔진", "e3", "엔진이다.") },
+      { rel: "objects/엔진/e4.md", text: obj("엔진", "e4", "엔진이다.") },
+    ],
+    actionLogs: [],
+  });
+  assert.deepStrictEqual(m.schemaViolations, []);
+  assert.strictEqual(m.relationCount, 3); // 항목 셋 전부 '호출한다' 하나로 읽힌다
+});
+
 test("껍데기 · 고립", () => {
   const m = computeOntologyMetrics({
     schemaText: SCHEMA,

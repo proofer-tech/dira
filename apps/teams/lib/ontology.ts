@@ -23,10 +23,13 @@ function splitOnce(s: string, sep: string): [string, string] {
   return i < 0 ? [s, ""] : [s.slice(0, i), s.slice(i + sep.length)];
 }
 
+/** 다중값 셀의 구분자는 `·`와 `,` 둘 다다 — 실 SCHEMA.md 관계 표가 `에이전트, 엔진 → 엔진`
+ *  처럼 쉼표로 적는다. `·`만 갈랐을 때는 정의역이 `"에이전트, 엔진"` 한 덩어리가 돼 멤버십
+ *  검사가 전건 실패했다(`cc5bb157` — 원소 하나만 쓴 링크가 전부 위반으로 나왔다). */
 function toSet(cell: string): Set<string> {
   return new Set(
     cell
-      .split("·")
+      .split(/[·,]/)
       .map((x) => x.trim())
       .filter(Boolean),
   );
@@ -136,6 +139,7 @@ const COMMON_FM_KEYS = new Set(["type", "name", "aliases", "tags", "description"
 function parseFrontmatter(fmLines: string[], props: string[], rels: [string, string][]): void {
   let topIsLinks = false;
   let relType: string | null = null;
+  let relIndent = Infinity;
 
   for (const raw of fmLines) {
     if (!raw.trim()) continue;
@@ -148,6 +152,7 @@ function parseFrontmatter(fmLines: string[], props: string[], rels: [string, str
       const key = m[1].trim();
       topIsLinks = key === "links";
       relType = null;
+      relIndent = Infinity;
       if (!topIsLinks && !COMMON_FM_KEYS.has(key)) props.push(key);
       continue;
     }
@@ -155,8 +160,15 @@ function parseFrontmatter(fmLines: string[], props: string[], rels: [string, str
     if (!topIsLinks) continue; // 링크가 아닌 키의 목록 연속 줄 — 이미 위에서 속성 하나로 셌다
 
     if (!line.startsWith("-")) {
+      // 목록 항목보다 깊게 들어간 키는 관계 이름이 아니라 그 항목의 «링크 속성»이다
+      // (`경유`·`무엇`·`방향` — SCHEMA.md 관계 표의 세 번째 열). 이걸 관계 이름으로 잡으면
+      // 항목이 둘 이상인 관계에서 둘째 항목부터 «미정의 관계»가 났다(`cc5bb157`).
+      if (indent > relIndent) continue;
       const m = line.match(/^([^:]+):\s*(.*)$/);
-      if (m) relType = m[1].trim();
+      if (m) {
+        relType = m[1].trim();
+        relIndent = indent;
+      }
       continue;
     }
     if (relType) {
