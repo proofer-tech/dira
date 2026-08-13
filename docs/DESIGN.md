@@ -167,6 +167,14 @@
      `responsible_path=/Applications/dira.app/Contents/MacOS/dira`로 찍혔다(2026-08-13,
      `594db81d`. 같은 접근이 cron 세션에서는 claude 버전 경로로 찍힌다).
 
+     **이 로그를 읽는 법 두 줄.** 위 실측 그대로를 다른 세션이 반대로 읽은 적이 있어 적는다
+     (`e8ec68fe` - 같은 건을 경로 피커가 낸 것으로 짚었다). `accessing`은 실제로 파일을 건드린
+     **말단** 프로세스이고(여기서는 세션이 부른 `/bin/ls`), `responsible`이 거기서 위로 걸어
+     올라가 멈춘 자리다 - `accessing={com.apple.ls}`는 dira.app이 직접 냈다는 뜻이 아니라
+     세션이 `ls`를 쳤다는 뜻이다. 그리고 `msgID`의 앞 숫자는 세션 식별자가 아니라 요청을
+     중계한 `sandboxd`의 pid(위 건은 13971), 뒤 숫자는 그 sandboxd가 낸 요청의 일련번호다 -
+     앞 숫자가 같다고 같은 세션이 아니다.
+
      **전가는 claude에서 멈추지 않는다.** cron 세션에서 claude가 책임으로 찍히는 것은 그 위
      (cron)가 책임을 안 지기 때문이지 claude가 책임 경계이기 때문이 아니다 - 위 실측이 그 추론을
      뒤집는다. cron 세션이 띄운 Chrome의 책임이 그 claude로 찍힌 것도 같은 이유다. **그런데 cron
