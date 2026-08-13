@@ -41,7 +41,7 @@ const {
   tokensPath,
   writeTokens,
 } = await import("./auth.ts");
-const { multitokenPath, setMultitoken } = await import("./projects.ts");
+const { multitokenPath, setMultiplayEnabled, setMultitoken } = await import("./projects.ts");
 
 test("tokenPath — TICKET_LOCAL을 존중하고 레지스트리와 같은 디렉터리다", () => {
   assert.strictEqual(tokenPath(), path.join(LOCAL, "oauth-token"));
@@ -443,6 +443,100 @@ test("readTokenRows — eligible이 0이 되면 active가 가리키던 그 항�
   assert.strictEqual(rows.length, 1);
   assert.notStrictEqual(rows[0].status.kind, "active", "지워진 oauth-token을 여전히 활성으로 그린다");
   assert.strictEqual(rows[0].status.kind, "disabled"); // enabled:false가 이겼다(§0-13 §상태 표시 순서)
+});
+
+// ── §0-18 §동시사용 — eligible 전부가 활성이다 (요구 8eaa1a74) ──────────────────
+
+test("readTokenRows — 동시사용을 켜면 eligible 전부가 active고 pending은 0개다", async () => {
+  const local = mkdtempSync(path.join(tmpdir(), "fst-auth-simul-on-"));
+  process.env.TICKET_LOCAL = local;
+  try {
+    const a = await addToken("sk-ant-oat01-simul-aaaa"); // 활성
+    const b = await addToken("sk-ant-oat01-simul-bbbb"); // 켜기 전이면 대기
+    const c = await addToken("sk-ant-oat01-simul-cccc"); // 켜기 전이면 대기
+    await setTokenEnabled(c.id, false); // eligible에서 뺀다 — 켜져도 이건 그대로 disabled다
+
+    await setMultiplayEnabled(true);
+    const rows = await readTokenRows();
+    assert.strictEqual(rows.length, 3);
+    assert.deepStrictEqual(rows.find((r) => r.id === a.id)!.status, { kind: "active" });
+    assert.deepStrictEqual(rows.find((r) => r.id === b.id)!.status, { kind: "active" });
+    assert.deepStrictEqual(rows.find((r) => r.id === c.id)!.status, { kind: "disabled" });
+    assert.ok(!rows.some((r) => r.status.kind === "pending"), "동시사용에서 pending이 남았다");
+
+    // `tokens.json`이 실제로 가리키는 것은 a 하나뿐이다 — 배지는 셋 다 active지만 shared는 하나뿐
+    assert.strictEqual(rows.find((r) => r.id === a.id)!.shared, true);
+    assert.strictEqual(rows.find((r) => r.id === b.id)!.shared, false);
+    assert.strictEqual(rows.find((r) => r.id === c.id)!.shared, false);
+  } finally {
+    await setMultiplayEnabled(false);
+  }
+});
+
+test("readTokenRows — 동시사용 중 한 행을 비활성화하면 그 행만 갈린다(재시작 없이 같은 읽기)", async () => {
+  const local = mkdtempSync(path.join(tmpdir(), "fst-auth-simul-toggle-"));
+  process.env.TICKET_LOCAL = local;
+  try {
+    const a = await addToken("sk-ant-oat01-simul2-aaaa");
+    const b = await addToken("sk-ant-oat01-simul2-bbbb");
+    await setMultiplayEnabled(true);
+
+    assert.deepStrictEqual((await readTokenRows()).find((r) => r.id === b.id)!.status, { kind: "active" });
+
+    await setTokenEnabled(b.id, false);
+    const rows = await readTokenRows();
+    assert.deepStrictEqual(rows.find((r) => r.id === b.id)!.status, { kind: "disabled" });
+    assert.deepStrictEqual(rows.find((r) => r.id === a.id)!.status, { kind: "active" }); // 나머지는 그대로다
+  } finally {
+    await setMultiplayEnabled(false);
+  }
+});
+
+test("readTokenRows — 동시사용을 끄면 같은 읽기에서 대기가 돌아온다(재시작 불필요)", async () => {
+  const local = mkdtempSync(path.join(tmpdir(), "fst-auth-simul-off-"));
+  process.env.TICKET_LOCAL = local;
+  const a = await addToken("sk-ant-oat01-simul3-aaaa");
+  const b = await addToken("sk-ant-oat01-simul3-bbbb");
+
+  await setMultiplayEnabled(true);
+  assert.deepStrictEqual((await readTokenRows()).find((r) => r.id === b.id)!.status, { kind: "active" });
+
+  await setMultiplayEnabled(false);
+  const rows = await readTokenRows();
+  assert.deepStrictEqual(rows.find((r) => r.id === a.id)!.status, { kind: "active" });
+  assert.deepStrictEqual(rows.find((r) => r.id === b.id)!.status, { kind: "pending" });
+});
+
+test("readTokenRows — `사용` 버튼 조건(eligible && !shared)이 동시사용 켬/끔에서 만드는 집합이 종전과 같다", async () => {
+  // 종전 조건은 `status.kind === "pending"`이었다. 새 조건은
+  // `(kind === "active" || kind === "pending") && !shared`다 — 꺼진 상태에서는 `active`
+  // 행이 항상 `shared`이므로(오직 `active`가 가리키는 항목만 그 kind를 받는다) 두 조건이
+  // 만드는 집합이 글자 그대로 같다(§검증 5).
+  const local = mkdtempSync(path.join(tmpdir(), "fst-auth-button-parity-"));
+  process.env.TICKET_LOCAL = local;
+  const a = await addToken("sk-ant-oat01-parity-aaaa");
+  const b = await addToken("sk-ant-oat01-parity-bbbb");
+  await addToken("sk-ant-oat01-parity-cccc");
+
+  const oldButtonSet = (rows: { id: string; status: { kind: string } }[]) =>
+    rows.filter((r) => r.status.kind === "pending").map((r) => r.id);
+  const newButtonSet = (rows: { id: string; status: { kind: string }; shared: boolean }[]) =>
+    rows
+      .filter((r) => (r.status.kind === "active" || r.status.kind === "pending") && !r.shared)
+      .map((r) => r.id);
+
+  const offRows = await readTokenRows();
+  assert.deepStrictEqual(new Set(newButtonSet(offRows)), new Set(oldButtonSet(offRows)));
+  assert.deepStrictEqual(new Set(newButtonSet(offRows)), new Set([b.id, offRows.find((r) => r.id !== a.id && r.id !== b.id)!.id]));
+
+  await setMultiplayEnabled(true);
+  try {
+    const onRows = await readTokenRows();
+    // 동시사용에서는 shared가 아닌 eligible 전부가 여전히 버튼을 받는다 — 배지만 바뀌었다
+    assert.deepStrictEqual(new Set(newButtonSet(onRows)), new Set(oldButtonSet(offRows)));
+  } finally {
+    await setMultiplayEnabled(false);
+  }
 });
 
 test("setTokenEnabled — 활성 토큰을 비활성화하면 그 자리에서 다음 eligible로 넘어간다", async () => {

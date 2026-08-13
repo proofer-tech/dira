@@ -11,7 +11,7 @@ import { chmod, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import { DEFAULT_LOCALE, t as translate, type Locale } from "./i18n.ts";
-import { isMultiTokenAllowed, registryPath } from "./projects.ts";
+import { isMultiTokenAllowed, readMultiplay, registryPath } from "./projects.ts";
 
 /** 레지스트리와 **같은 디렉터리**다(엔진의 `$LOCAL`). 규칙을 두 벌로 적지 않으려고
  *  `registryPath()`에서 파생시킨다 — `TICKET_LOCAL` 존중도 거기 한 곳에만 있다. */
@@ -286,6 +286,10 @@ export type TokenRow = {
   rawLabel: string;
   masked: string;
   addedAt: string;
+  /** `t.id === engine.active` — `tokens.json`이 가리키는 그 한 항목(§0-13 §상태의 "공유").
+   *  동시사용(§0-18)이 켜지면 eligible 전부가 `status.kind === "active"`로 보이므로, 배지만으로는
+   *  이 행이 실제로 `active`가 가리키는 항목인지 구별할 수 없다 — `사용` 버튼이 이 값을 읽는다. */
+  shared: boolean;
   status: TokenStatus;
 };
 
@@ -303,28 +307,36 @@ export async function readTokenRows(locale: Locale = DEFAULT_LOCALE): Promise<To
   const engine = file.claude;
   if (!engine) return [];
   const now = Math.floor(Date.now() / 1000);
-  const source = (await isMultiTokenAllowed())
-    ? engine.tokens
-    : engine.tokens.filter((t) => t.id === engine.active);
-  return source.map((t, i) => ({
-    id: t.id,
-    label: t.label ?? `${translate(locale, "settings.tokens.accountFallbackPrefix")} ${i + 1}`,
-    rawLabel: t.label ?? "",
-    masked: maskToken(t.token),
-    addedAt: when(new Date(t.addedAt)),
-    // `active`가 가리키는 항목이어도 **eligible이 아니면 활성이 아니다** — eligible이 하나도
-    // 없을 때 `active`는 되돌릴 값이 없어 그 자리에 머물지만(reconcileActive), 그때 `oauth-token`은
-    // `writeTokens`가 이미 지웠다(§0-13 §상태). 가리키는 값과 실제로 쓰이는 값이 갈리는 그 한
-    // 경우를 여기서 놓치면 방금 끈 토큰이 화면에 계속 `활성`으로 남는다.
-    status:
-      t.id === engine.active && isEligible(t, now)
-        ? { kind: "active" }
-        : !t.enabled
-          ? { kind: "disabled" }
-          : t.exhaustedUntil != null && t.exhaustedUntil > now
-            ? { kind: "exhausted", resumesAt: when(new Date(t.exhaustedUntil * 1000)) }
-            : { kind: "pending" },
-  }));
+  const multiToken = await isMultiTokenAllowed();
+  const source = multiToken ? engine.tokens : engine.tokens.filter((t) => t.id === engine.active);
+  // §0-18 §동시사용 — 켜져 있으면 워커가 eligible 계정 전부를 이미 쓰고 있다(`multiplay.sh`의
+  // 나머지 연산). 그때 `active`가 가리키는 한 항목만 `활성`으로 부르고 나머지를 `대기`로 부르면
+  // 화면이 동작과 어긋난다 — eligible 전부를 `활성`으로 낸다. `다중계정 허용`이 꺼져 있으면
+  // 행이 하나뿐이라 이 값은 결과를 안 바꾼다(§검증 6).
+  const simultaneous = multiToken && (await readMultiplay());
+  return source.map((t, i) => {
+    const shared = t.id === engine.active;
+    return {
+      id: t.id,
+      label: t.label ?? `${translate(locale, "settings.tokens.accountFallbackPrefix")} ${i + 1}`,
+      rawLabel: t.label ?? "",
+      masked: maskToken(t.token),
+      addedAt: when(new Date(t.addedAt)),
+      shared,
+      // `active`가 가리키는 항목이어도 **eligible이 아니면 활성이 아니다** — eligible이 하나도
+      // 없을 때 `active`는 되돌릴 값이 없어 그 자리에 머물지만(reconcileActive), 그때 `oauth-token`은
+      // `writeTokens`가 이미 지웠다(§0-13 §상태). 가리키는 값과 실제로 쓰이는 값이 갈리는 그 한
+      // 경우를 여기서 놓치면 방금 끈 토큰이 화면에 계속 `활성`으로 남는다.
+      status:
+        (simultaneous || shared) && isEligible(t, now)
+          ? { kind: "active" }
+          : !t.enabled
+            ? { kind: "disabled" }
+            : t.exhaustedUntil != null && t.exhaustedUntil > now
+              ? { kind: "exhausted", resumesAt: when(new Date(t.exhaustedUntil * 1000)) }
+              : { kind: "pending" },
+    };
+  });
 }
 
 /** `active`가 여전히 eligible이면 그대로 두고, 아니면 다음 eligible로 넘긴다(§0-13 §상태 —
@@ -346,9 +358,10 @@ export async function setTokenEnabled(id: string, enabled: boolean): Promise<voi
   await writeTokens({ claude: { active: reconcileActive(engine.active, tokens), tokens } });
 }
 
-/** 행의 `사용` 버튼 — 지금 쓸 토큰을 사람이 직접 고른다(§0-13 §화면 · P179). `대기` 행에만
- *  붙는 버튼이라 대상은 이미 eligible이지만, 목록에 없는 id가 오면 조용히 무시한다(방어).
- *  `비활성`·`소진`을 이걸로 활성화하지 않는다 — 화면이 애초에 그 행엔 버튼을 안 그린다. */
+/** 행의 `사용` 버튼 — 지금 쓸 토큰을 사람이 직접 고른다(§0-13 §화면 · P179). eligible이면서
+ *  공유(`shared`)가 아닌 행에만 붙는 버튼이라(§0-18 §동시사용) 대상은 이미 eligible이지만,
+ *  목록에 없는 id가 오면 조용히 무시한다(방어). `비활성`·`소진`을 이걸로 활성화하지 않는다 —
+ *  화면이 애초에 그 행엔 버튼을 안 그린다. */
 export async function setActiveToken(id: string): Promise<void> {
   const file = await readTokens();
   const engine = file.claude;

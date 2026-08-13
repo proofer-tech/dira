@@ -655,15 +655,20 @@ function TokensSection({
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-1">
-            {/* `대기` 행에만 붙는다 — `비활성`·`소진`은 각각 `활성화` 버튼(사람 축)과
-                §4-9 "지우는 손잡이는 안 만든다"가 이미 막은 자리다(§0-13 §화면 · P179) */}
+            {/* eligible이면서 공유(`active`)가 아닌 행에 붙는다 — `비활성`·`소진`은 각각
+                `활성화` 버튼(사람 축)과 §4-9 "지우는 손잡이는 안 만든다"가 이미 막은 자리다
+                (§0-13 §화면 · P179). 동시사용(§0-18)이 켜지면 eligible 전부가 `활성` 배지를
+                달지만 실제로 `tokens.json`이 가리키는 것은 하나뿐이다 — 배지(`kind`)가 아니라
+                `row.shared`로 그 하나를 가른다. */}
             {/* §0-13 §잠금 계약 ② — 회전을 전제한 조작(`사용`·`활성화/비활성화`)은 잠김에서
                 안 그려진다. 고를 대상이 목록에 하나뿐이라 도달 불가한 상태다. */}
-            {multiToken && row.status.kind === "pending" && (
-              <Button variant="outline" size="sm" disabled={pending} onClick={() => use(row)}>
-                {t("settings.tokens.use")}
-              </Button>
-            )}
+            {multiToken &&
+              (row.status.kind === "active" || row.status.kind === "pending") &&
+              !row.shared && (
+                <Button variant="outline" size="sm" disabled={pending} onClick={() => use(row)}>
+                  {t("settings.tokens.use")}
+                </Button>
+              )}
             {multiToken && (
               <Button
                 variant="outline"

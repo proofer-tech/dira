@@ -66,7 +66,7 @@ export const ko: Record<string, string> = {
   "settings.claude.tokenLabel": "토큰",
   "settings.claude.tokenLabelOptional": "라벨(선택)",
   "settings.claude.tokenHintMulti":
-    '이미 발급받은 토큰이 있으면 여기에 붙여 넣습니다. 목록에 대기로 추가됩니다 — 지금 쓸 토큰은 목록에서 "사용"으로 고릅니다.',
+    '이미 발급받은 토큰이 있으면 여기에 붙여 넣습니다. 목록에 추가만 되고 지금 쓰는 토큰은 그대로입니다 — 바꾸려면 목록에서 "사용"으로 고릅니다.',
   "settings.claude.tokenHintSingle": "이미 발급받은 토큰이 있으면 여기에 붙여 넣습니다. 지금 쓰는 토큰이 이 토큰으로 바뀝니다.",
   "settings.claude.tokenSaved": "저장했습니다. 유효한지는 다음 디스패치에서 드러납니다.",
   // 잠김에서 계정이 이미 있으면 트리거는 `추가`가 아니라 이 낱말이다(§0-13 §트리거 문구,
@@ -403,7 +403,7 @@ export const en: Record<string, string> = {
   "settings.claude.tokenLabel": "Token",
   "settings.claude.tokenLabelOptional": "Label (optional)",
   "settings.claude.tokenHintMulti":
-    'Paste a token you already have. It joins the list as Pending — the "Use" button picks which one runs now.',
+    'Paste a token you already have. It joins the list, but the one in use stays the same — pick "Use" in the list to switch.',
   "settings.claude.tokenHintSingle":
     "Paste a token you already have. It replaces the one in use.",
   "settings.claude.tokenSaved": "Saved. Whether it works shows up on the next dispatch.",
