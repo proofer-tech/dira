@@ -289,4 +289,4 @@ EOF
 | `.dira/protocols/tickets.md` | 티켓 쪼개는 기준. 문법은 코어 `CORE-TICKETS.md`에 있다 |
 | `.dira/personas/<이름>/PROFILE.md` | 각 역할의 권한·판단 기준 |
 | `<프로젝트 스펙 문서>` | (프로젝트마다 채운다) |
-| `.dira/protocols/ontology.md` | 티켓이 다루는 실체가 온톨로지에 있는지 먼저 grep한다 — 있으면 근거로 쓰고, 없거나 틀렸으면 완료 시 남긴다 |
+| `.dira/protocols/ontology.md` | 티켓이 다루는 실체가 온톨로지에 있는지 먼저 query한다(`python3 graph.py query .dira "<개념>"` - 인덱스 없으면 grep) - 있으면 근거로 쓰고, 없거나 틀렸으면 완료 시 남긴다 |
