@@ -1805,6 +1805,7 @@ test("엔진 템플릿 — 바꿔 쓸 수 없는 자리 일곱을 못박는다 (
     "opus",
     "sonnet",
     "fable",
+    "haiku",
   ]);
   // grok은 `grok models`가 오늘 내는 이름 하나뿐이다 — 확인 못 한 이름을 올리지 않는다(§4-3)
   const g = ENGINES.find((e) => e.id === "grok")!;

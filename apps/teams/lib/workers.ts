@@ -621,7 +621,7 @@ export const ENGINES: readonly {
     id: "claude",
     flag: "--model",
     // 별칭은 정의상 최신을 가리키는 고정 포인터라 풀네임과 달리 안 낡는다(§4-3 근거 2).
-    models: [NO_MODEL, "opus", "sonnet", "fable"],
+    models: [NO_MODEL, "opus", "sonnet", "fable", "haiku"],
     argv: [
       "claude",
       "-p",
