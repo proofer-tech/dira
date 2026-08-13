@@ -27,12 +27,23 @@
  *  같은 `submit` 이벤트의 뒤쪽(버블) 단계에서 폼 값을 읽으므로, state가 실제로 리렌더에 반영되는
  *  시점을 기다리면 늦는다. 호출부는 아무것도 안 해도 된다: 자리가 이 컴포넌트 안이라 칸 일곱이
  *  같이 닫힌다. */
-import { type ReactNode, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import {
+  type ReactNode,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
+import { flushSync } from "react-dom";
 import { Code, Pilcrow } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Markdown } from "@/components/markdown";
+import { useKeymap } from "@/components/keymap-provider";
+import { matchCombo } from "@/lib/keymap";
 import { cn } from "@/lib/utils";
 import { blockBreaks, commitEditable, splitBlocks } from "@/lib/markdown-editor-blocks";
 
@@ -142,15 +153,40 @@ export function MarkdownEditor({
     if (next !== null) setText(next);
   }
 
-  // 사라진 라벨 문장을 그대로 접근명 + 툴팁으로 옮긴다(§50 §접근명) — 화면 글자는 아이콘 하나뿐이다.
-  const toggleLabel = mode === "wysiwyg" ? "원문으로" : "위지윅으로";
-
   // 폼의 `submit`을 캡처 단계에서 가로챈다(위 파일 top 주석 §제출은 blur를 안 지날 수 있다).
   // `split`·`mode`·`setText`가 리렌더마다 새로 잡히므로, 리스너는 마운트에 한 번만 달고(붙였다
   // 뗐다를 매 렌더 반복 안 하려고) 실제 로직은 이 ref로 최신 값을 받는다.
   const rootRef = useRef<HTMLDivElement>(null);
   const hiddenInputRef = useRef<HTMLInputElement>(null);
   const commitOnSubmitRef = useRef<() => void>(() => {});
+
+  // §50 §`⌘↵`는 커밋을 지나서 전파된다. `onKeyDown`을 그냥 부르면 지금 렌더가 쥔 옛 함수라
+  // 그 안의 `body`가 여전히 커밋 전 값이다(호출부는 안 고친다는 계약이라 그 함수 자체를
+  // 새로 못 만든다) — `commitOnSubmitRef`와 같은 이유로 매 렌더 최신 함수를 ref에 갈아 끼우고,
+  // `flushSync`로 커밋을 동기 반영해 그 갈아 끼움이 우리가 부르기 전에 끝나게 한다.
+  const sendCombo = useKeymap().bindings["interject.send"];
+  const onKeyDownRef = useRef(onKeyDown);
+  useLayoutEffect(() => {
+    onKeyDownRef.current = onKeyDown;
+  });
+  function handleEditableKeyDown(e: React.KeyboardEvent<HTMLElement>) {
+    // 다른 `Mod+*`(붙여넣기·되돌리기 등)에는 커밋을 안 건다(§50 판정 4) — 타이핑 중 캐럿이
+    // 죽는 것과 같은 문제라 이 키 하나로 좁힌다.
+    if (matchCombo(e.nativeEvent, sendCombo)) {
+      flushSync(() => commitActiveEditable(e.currentTarget));
+      // 빈 칸(블록 0개)에서 처음 커밋하면 splitBlocks가 그 텍스트를 블록으로 다시 쪼개
+      // placeholder 표면이 blocks.map 표면으로 갈아 끼워진다(§P236-1 영역) — 그 remount로
+      // e.currentTarget이 트리에서 빠진 옛 노드가 되면 호출부의 `e.currentTarget.closest("form")`이
+      // null을 짚는다. 폼 탐색은 그릇 안 어느 후손에서 시작해도 같은 값이라, 절대 안 갈리는
+      // 루트로 옮겨 둔다(React가 이 이벤트 처리 끝에 null로 되돌리므로 우리 호출 안에서만 산다).
+      e.currentTarget = rootRef.current ?? e.currentTarget;
+    }
+    onKeyDownRef.current?.(e); // 면이 키를 먹지 않는다 — 커밋 뒤 그대로 호출부로 넘긴다(못 ③)
+  }
+
+  // 사라진 라벨 문장을 그대로 접근명 + 툴팁으로 옮긴다(§50 §접근명) — 화면 글자는 아이콘 하나뿐이다.
+  const toggleLabel = mode === "wysiwyg" ? "원문으로" : "위지윅으로";
+
   // 위지윅 면의 첫 편집 표면 — 마운트 때 한 번 초점을 준다(원문 면은 `Textarea`의 네이티브
   // `autoFocus`가 대신한다). 다이얼로그가 열릴 때마다 이 컴포넌트가 새로 마운트되므로 재열 때도
   // 다시 잡힌다.
@@ -238,7 +274,7 @@ export function MarkdownEditor({
                   className="rounded-md bg-muted p-3 overflow-x-auto font-mono text-sm whitespace-pre-wrap mb-3"
                   onBlur={(e) => commitActiveEditable(e.currentTarget)}
                   onPaste={onPaste}
-                  onKeyDown={onKeyDown}
+                  onKeyDown={handleEditableKeyDown}
                 >
                   {split.head}
                 </div>
@@ -254,7 +290,7 @@ export function MarkdownEditor({
                   className="min-h-7 text-base leading-7 outline-none empty:before:whitespace-pre-line empty:before:text-muted-foreground empty:before:content-[attr(data-placeholder)]"
                   onBlur={(e) => commitActiveEditable(e.currentTarget)}
                   onPaste={onPaste}
-                  onKeyDown={onKeyDown}
+                  onKeyDown={handleEditableKeyDown}
                 />
               ) : (
                 split.blocks.map((block, i) => (
@@ -273,7 +309,7 @@ export function MarkdownEditor({
                     className="outline-none [&_p:empty]:min-h-7"
                     onBlur={(e) => commitActiveEditable(e.currentTarget)}
                     onPaste={onPaste}
-                    onKeyDown={onKeyDown}
+                    onKeyDown={handleEditableKeyDown}
                   >
                     <Markdown text={block} breaks={blockBreaks(i, breaks, split.firstHeadingIndex)} />
                   </div>
