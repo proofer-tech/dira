@@ -21,6 +21,10 @@ import {
 } from "@/components/ui/sidebar";
 import { NO_EPIC, type Epic } from "@/lib/epics";
 import { t, type Locale } from "@/lib/i18n";
+import { WorkerChips } from "@/components/worker-mark";
+
+/** 사이드바 슬롯 예산(§비주얼 §52 ⑥) — 214px 자리에 셋이 18%를 남긴다. 넷째부터 `+n` */
+const WORKER_CHIP_CAP = 3;
 
 export function EpicSidebar({
   epics,
@@ -123,8 +127,12 @@ export function EpicSidebar({
                         <span className="flex items-baseline gap-2 text-xs text-muted-foreground">
                           <span>{total}건</span>
                           {row.counts.wip > 0 && (
-                            <span className="ml-auto">
-                              {t(locale, "status.label.wip")} {row.counts.wip}
+                            // `진행중 n`과 워커 칩 묶음이 같이 오른쪽 끝에 붙는다(§비주얼 §52 ⑥-1)
+                            <span className="ml-auto flex items-baseline gap-1">
+                              <span>
+                                {t(locale, "status.label.wip")} {row.counts.wip}
+                              </span>
+                              <WorkerChips names={row.workers} cap={WORKER_CHIP_CAP} />
                             </span>
                           )}
                         </span>

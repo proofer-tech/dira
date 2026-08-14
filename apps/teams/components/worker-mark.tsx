@@ -1,8 +1,10 @@
-/** `.wip` 워커 마크 — **자리 셋의 유일한 출처** (DESIGN.md §비주얼 §19 · §1 보드 · §2).
+/** `.wip` 워커 마크 — **자리 여섯의 유일한 출처** (DESIGN.md §비주얼 §19 · §52 ⑥ · §1 보드 · §2).
  *
- *  말하는 사실은 한 문장이다: **이 티켓을 지금 `<워커>`가 물고 있다.** 자리는 셋이고
- *  ① 칸반 카드 메타 줄 끝 · ② 보드 테이블 `owner` 셀 · ③ 티켓 상세 `.wip` 잠금 `Alert` 꼬리다.
- *  **클래스 문자열은 셋에서 같다**(§19) — 한 사실을 세 모양으로 그리면 사람이 셋을 다른 뜻으로 읽는다.
+ *  말하는 사실은 한 문장이다: **이 티켓을 지금 `<워커>`가 물고 있다.** 자리는 여섯이고
+ *  ① 칸반 카드 메타 줄 끝 · ② 보드 테이블 `owner` 셀 · ③ 티켓 상세 `.wip` 잠금 `Alert` 꼬리
+ *  (`WipWorker`, 주어는 티켓 하나) · ④ 에픽 사이드바 항목 2행 · ⑤ 스윔레인 띠 머리 · ⑥ 에픽 화면
+ *  요약 줄(`WorkerChips`, 주어는 그 에픽의 `.wip` 워커 묶음 — §에픽 결정 9). **클래스 문자열은
+ *  여섯에서 같다**(§19) — 한 사실을 여러 모양으로 그리면 사람이 그것들을 다른 뜻으로 읽는다.
  *
  *  파싱은 `workerOf` 하나다(워커 화면과 **같은 규칙**). `null`이면 **아무것도 안 그린다** —
  *  `?`도 아니다. 원문은 ②의 셀 텍스트와 상세 frontmatter 표에 그대로 남는다.
@@ -48,6 +50,36 @@ export function WipWorker({ t, full }: { t: Ticket; full?: boolean }) {
         {owner.slice(at + name.length)}
       </span>
       <span className="sr-only">{owner}</span>
+    </>
+  );
+}
+
+/**
+ * ④⑤⑥ — 에픽 줄이 집계한 워커 칩 묶음(§에픽 결정 9 · §52 ⑥). 주어가 티켓 하나가 아니라
+ * 묶음이라 `WipWorker`와 입구가 갈린다 — `names`는 `lib/epics.ts`의 `Epic.workers`(distinct·
+ * 오름차순, 이미 정렬돼 온다. 여기서 다시 안 정렬한다).
+ *
+ * @param cap 슬롯 상한(§52 ⑥) — **사이드바(④)에만 건다.** 넘는 이름은 칩 하나(`+n`)로 접히고
+ *   접힌 이름은 그 칩 안에 `sr-only`로 전부 남는다. ⑤⑥은 `cap`을 안 준다 — 그 자리는 안 자른다.
+ */
+export function WorkerChips({ names, cap }: { names: string[]; cap?: number }) {
+  if (names.length === 0) return null; // 0명이면 새 글자 0(§에픽 결정 9 — `없음`도 `-`도 아니다)
+  const shown = cap && names.length > cap ? names.slice(0, cap) : names;
+  const rest = names.slice(shown.length);
+  return (
+    <>
+      {/* 묶음에 접두어 한 번 — 칩 안에 넣으면 `워커 w3 워커 w4`가 된다(§52 ⑥ 접근성) */}
+      <span className="sr-only">워커 </span>
+      {shown.map((name) => (
+        <span key={name} className={CHIP}>
+          {name}
+        </span>
+      ))}
+      {rest.length > 0 && (
+        <span className={CHIP}>
+          <span className="sr-only">{rest.join(", ")}</span>+{rest.length}
+        </span>
+      )}
     </>
   );
 }

@@ -19,6 +19,7 @@ import { Markdown } from "@/components/markdown";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { WorkerChips } from "@/components/worker-mark";
 import { epicMemory, epicReadmeBody, epicTitle, listEpics, NO_EPIC, type EpicMemory } from "@/lib/epics";
 import { t } from "@/lib/i18n";
 import { listTickets } from "@/lib/queue";
@@ -121,8 +122,12 @@ export default async function Epics({
               </Button>
             </div>
 
-            <p className="text-xs text-muted-foreground">
-              대기 {current.counts.open} · 진행중 {current.counts.wip} · 완료 {current.counts.done}
+            {/* 완료 N 뒤 워커 칩 — 안 자른다, 넘치면 줄이 는다(§비주얼 §52 ⑥-3) */}
+            <p className="flex flex-wrap items-baseline gap-2 text-xs text-muted-foreground">
+              <span>
+                대기 {current.counts.open} · 진행중 {current.counts.wip} · 완료 {current.counts.done}
+              </span>
+              <WorkerChips names={current.workers} />
             </p>
 
             {/* README 첫 줄 뒤 본문 — 이 에픽이 무슨 작업인지 사람이 적어 두는 자리(§결정 6).

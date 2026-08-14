@@ -8,26 +8,44 @@ import { resolveWithin } from "./paths.ts";
 import { epicOf, type Ticket, type TicketState } from "./queue.ts";
 // 발췌 규칙(첫 줄, 선두 `# ` 제거)이 페르소나 메모리와 같은 값이다 — 두 벌을 안 둔다(§32 ③).
 import { memoryExcerpt } from "./skills.ts";
+// 워커 이름 파싱은 여기서 다시 안 짓는다 — 워커 화면·칸반 카드와 같은 규칙 하나(§에픽 결정 9).
+import { workerOf } from "./workers.ts";
 
 /** `epic:` 없는 티켓이 모이는 자리(결정 1·5). 값이 아니라 GUI가 붙이는 라벨이다. */
 export const NO_EPIC = "(에픽 없음)";
 
 export type EpicCounts = Record<TicketState, number>;
-export type Epic = { epic: string; counts: EpicCounts };
+/** `workers` — 이 에픽의 `.wip`을 지금 물고 있는 워커 이름 집합(distinct·오름차순, §에픽 결정 9).
+ *  `.done`의 `owner:`는 안 세고, `workerOf`가 `null`이면(형식 아님) 그 티켓도 안 센다. */
+export type Epic = { epic: string; counts: EpicCounts; workers: string[] };
 
 /** 큐 티켓을 `epic:` 값으로 묶는다. 정렬은 P번호 문자열, `(에픽 없음)`이 맨 뒤(결정 5).
- *  건수는 `queue.ts`의 기존 `state` 판정을 그대로 쓴다 — 새 상태 판정을 안 만든다. */
+ *  건수는 `queue.ts`의 기존 `state` 판정을 그대로 쓴다 — 새 상태 판정을 안 만든다.
+ *  워커 집합도 **같은 루프**에서 같이 낸다 — 새 읽기·새 폴링·새 상태 0(§에픽 결정 9). */
 export function listEpics(tickets: Ticket[]): Epic[] {
   const byEpic = new Map<string, EpicCounts>();
+  const workersByEpic = new Map<string, Set<string>>();
   for (const t of tickets) {
     const key = epicOf(t) || NO_EPIC;
     const counts = byEpic.get(key) ?? { open: 0, wip: 0, done: 0 };
     counts[t.state]++;
     byEpic.set(key, counts);
+    if (t.state === "wip") {
+      const worker = workerOf(t.fm.owner ?? "");
+      if (worker) {
+        const set = workersByEpic.get(key) ?? new Set<string>();
+        set.add(worker);
+        workersByEpic.set(key, set);
+      }
+    }
   }
   return [...byEpic.entries()]
     .sort(([a], [b]) => (a === NO_EPIC ? 1 : b === NO_EPIC ? -1 : a.localeCompare(b)))
-    .map(([epic, counts]) => ({ epic, counts }));
+    .map(([epic, counts]) => ({
+      epic,
+      counts,
+      workers: [...(workersByEpic.get(epic) ?? [])].sort((a, b) => a.localeCompare(b)),
+    }));
 }
 
 /** `epic` 값은 URL에서 온다 — `../`가 큐(`root`) 밖으로 못 나간다(§경로 방어).

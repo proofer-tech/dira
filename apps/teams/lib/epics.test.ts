@@ -34,14 +34,24 @@ function write(name: string, body: string) {
 
 // P273: 대기 1 · 진행중 1 · 완료 1. P273-2는 접두사가 같아도 다른 에픽(결정 1).
 write("a1.md", fm({ ticket: "a1", title: "A1", epic: "P273" }));
-write("a2.wip.md", fm({ ticket: "a2", title: "A2", epic: "P273", session_id: "s" }));
-write("a3.done.md", fm({ ticket: "a3", title: "A3", epic: "P273" }));
+write(
+  "a2.wip.md",
+  fm({ ticket: "a2", title: "A2", epic: "P273", session_id: "s", owner: "developer / w1-83533def" }),
+);
+write("a3.done.md", fm({ ticket: "a3", title: "A3", epic: "P273", owner: "developer / w9-83533def" }));
 write("a4.md", fm({ ticket: "a4", title: "A4", epic: "P273-2" }));
 // P10 — 디렉터리 없음(제목·메모리 없음이 정상인지 보는 픽스처)
 write("b1.md", fm({ ticket: "b1", title: "B1", epic: "P10" }));
 // epic: 없음 -> (에픽 없음)
 write("c1.md", fm({ ticket: "c1", title: "C1" }));
 write("c2.done.md", fm({ ticket: "c2", title: "C2" }));
+
+// 워커 집합(§에픽 결정 9) — P273에 워커 둘, 하나는 owner: 형식이 아니라 안 세야 한다.
+write(
+  "a5.wip.md",
+  fm({ ticket: "a5", title: "A5", epic: "P273", session_id: "s2", owner: "developer / w2-77646def" }),
+);
+write("a6.wip.md", fm({ ticket: "a6", title: "A6", epic: "P273", session_id: "s3", owner: "손으로 씀" }));
 
 // P273의 README + 메모리(한 단계 글롭)
 mkdirSync(path.join(root, "epics", "P273", "memory"), { recursive: true });
@@ -64,9 +74,22 @@ test("에픽 건수 — 상태 3종은 queue.ts의 기존 판정 그대로다", 
   const tickets = await listTickets(root, DEFAULT);
   const epics = listEpics(tickets);
   const p273 = epics.find((e) => e.epic === "P273")!;
-  assert.deepStrictEqual(p273.counts, { open: 1, wip: 1, done: 1 });
+  // wip 3 = a2·a5·a6 (§워커 집합 픽스처 — a6은 owner: 형식이 아니라 건수엔 들되 워커는 안 든다)
+  assert.deepStrictEqual(p273.counts, { open: 1, wip: 3, done: 1 });
   const noEpic = epics.find((e) => e.epic === NO_EPIC)!;
   assert.deepStrictEqual(noEpic.counts, { open: 1, wip: 0, done: 1 });
+});
+
+test("에픽 워커 집합 — 같은 에픽 .wip 워커 둘이 distinct·오름차순으로 든다, .done owner·형식 아닌 owner는 안 든다, .wip 0이면 빈 목록", async () => {
+  const tickets = await listTickets(root, DEFAULT);
+  const epics = listEpics(tickets);
+  const p273 = epics.find((e) => e.epic === "P273")!;
+  // a2(w1) · a5(w2)는 든다. a3(w9)는 .done이라 안 들고, a6("손으로 씀")은 workerOf 형식이 아니라 안 든다
+  assert.deepStrictEqual(p273.workers, ["w1", "w2"]);
+  const p10 = epics.find((e) => e.epic === "P10")!;
+  assert.deepStrictEqual(p10.workers, []); // .wip 0건
+  const noEpic = epics.find((e) => e.epic === NO_EPIC)!;
+  assert.deepStrictEqual(noEpic.workers, []); // .wip 0건 — 특례 없이 같은 규칙(§에픽 결정 9)
 });
 
 test("에픽 제목 — README.md 첫 줄, 없으면 null(P번호만)", async () => {

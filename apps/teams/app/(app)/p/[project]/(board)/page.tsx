@@ -44,7 +44,7 @@ import { PersonaBadge } from "@/components/persona-badge";
 import { PriorityMeter } from "@/components/priority-meter";
 import { DepBadge, StatusBadge, daysSince, statusLabel } from "@/components/status-badge";
 import { AnswerDialog, NewTicketDialog, RequestDialog } from "@/components/ticket-ui";
-import { WipWorker } from "@/components/worker-mark";
+import { WipWorker, WorkerChips } from "@/components/worker-mark";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -635,8 +635,9 @@ export default async function Board({
   const laneMode = sp.get("lane") === "epic";
   const epicLanes = laneMode
     ? await Promise.all(
-        listEpics(rows).map(async ({ epic }) => ({
+        listEpics(rows).map(async ({ epic, workers }) => ({
           epic,
+          workers,
           title: epic === NO_EPIC ? null : await epicTitle(project.root, epic),
         })),
       )
@@ -801,7 +802,7 @@ export default async function Board({
                     {/* `-m-1 p-1`은 <Card>의 `ring-1`이 이 세로 스크롤러 끝에서 안 잘리게 하는
                         여백이다(위 가로 스트립의 `-mx-1 px-1`과 같은 이유) */}
                     <div className="-m-1 min-h-0 flex-1 space-y-6 overflow-y-auto p-1">
-                      {epicLanes.map(({ epic, title }) => {
+                      {epicLanes.map(({ epic, title, workers }) => {
                         // 라벨은 사이드바 항목과 **같은 값**으로 조립한다(§에픽 결정 7 · §1 - 한
                         // 사실을 두 모양으로 그리지 않는다). `(에픽 없음)`은 P번호가 없는 값이라
                         // 제목 조회도 표식도 없다(그 항목은 갈 디렉터리가 없다) — `board.epic.none`.
@@ -811,8 +812,9 @@ export default async function Board({
                         return (
                           <div key={epic}>
                             {/* P번호 등급(§에픽 결정 11 · §비주얼 §52 ③) — 라벨과 다른 요소,
-                                한 등급 아래. 순서 [라벨] [P번호] [빠짐 표식] [n건] */}
-                            <div className="sticky top-0 z-10 flex items-baseline gap-2 bg-background pb-2 text-sm font-medium">
+                                한 등급 아래. 순서 [라벨] [P번호] [빠짐 표식] [n건] [워커 칩].
+                                `flex-nowrap`(§52 ⑥-2) — 자르지 않고 라벨이 먼저 양보하는 자리다 */}
+                            <div className="sticky top-0 z-10 flex flex-nowrap items-baseline gap-2 bg-background pb-2 text-sm font-medium">
                               <span className="min-w-0 truncate">{label}</span>
                               {epic !== NO_EPIC && (
                                 <span className="shrink-0 text-xs font-normal text-muted-foreground">
@@ -822,9 +824,10 @@ export default async function Board({
                               {epic !== NO_EPIC && !title && (
                                 <TriangleAlert aria-hidden className="size-3.5 shrink-0 text-status-stale" />
                               )}
-                              <span className="text-xs font-normal text-muted-foreground">
+                              <span className="shrink-0 text-xs font-normal text-muted-foreground">
                                 {laneRows.length}건
                               </span>
+                              <WorkerChips names={workers} />
                             </div>
                             <div className="flex gap-4">
                               {STATUSES.map((s) => {
