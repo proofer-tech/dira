@@ -16,6 +16,7 @@ import path from "node:path";
 import { revalidatePath } from "next/cache";
 import { track } from "@/lib/analytics";
 import { verifyAttachments, withAttachments } from "@/lib/attachments";
+import { writeEpic } from "@/lib/epic";
 import { findTicket, unassign, type UnassignRun } from "@/lib/engine";
 import { followup, type FollowupResult } from "@/lib/followup";
 import { interject, type InterjectResult } from "@/lib/interject";
@@ -26,6 +27,7 @@ import {
   awaitingOf,
   isAwaiting,
   listTickets,
+  LOCKED,
   PRIORITY_DEFAULT,
   PRIORITY_MAX,
   PRIORITY_MIN,
@@ -213,15 +215,6 @@ export async function sendFollowup(
   }
 }
 
-/** 쓰기가 막히는 두 상태의 사유. **열린 티켓만 쓸 수 있다** — `.wip`은 세션이 그 파일로 일하고
- *  있고(제약 5), `.done`은 이 큐의 불변 기록이다(`deps` 해소·`kind: answer`·`req:` 역참조가 전부
- *  그 파일의 존재에 달렸다 — 지우면 그 해시를 `deps`로 둔 후행이 영구 대기다). 두 사유가 다르므로
- *  문장도 다르다: 진행중은 기다리면 풀리고, 완료는 영영 안 풀린다. */
-const LOCKED: Record<"wip" | "done", string> = {
-  wip: "진행중 티켓은 편집할 수 없습니다 — 세션이 그 파일로 일하고 있습니다.",
-  done: "완료 티켓은 편집할 수 없습니다 — 완료는 이 큐의 불변 기록입니다.",
-};
-
 /** 할당 해제가 막히는 상태는 `.done` **하나**라 Record가 아니다 — `.wip`의 해제는 이 액션의
  *  본래 용도고(죽은 세션 복구), 열린 티켓의 ghost 해제도 살아 있다. 화면의 잠금 `Alert`와 같은
  *  사실을 말한다: 막는 것이 아니라 남기는 것이 목적이다. */
@@ -290,6 +283,34 @@ export async function saveTicket(_prev: SaveState, form: FormData): Promise<Save
     // §4-5 — 편집으로 persona가 붙거나 deps 한 줄이 빠지면 그 순간 디스패치 가능해진다.
     // "정말 가능해졌나"는 판정하지 않는다(그러면 §큐 판정이 두 벌이다) — 그냥 tick 한 번이다.
     await kickIdleWorker(t.root);
+    return { ok: true };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+/** 카드를 에픽에 끌어다 놓는다 (DESIGN.md §에픽 §결정 8) — `saveTicket`이 이미 여는 같은 쓰기에
+ *  손잡이가 하나 더 붙는 것이다. **판정·쓰기는 전부 `lib/epic.ts`가 한다**(`sendInterject`와
+ *  같은 이유 — 두 곳에서 판정하면 화면이 거짓말을 한다).
+ *
+ *  `epic`이 빈 문자열이면 `(에픽 없음)`에 놓은 것이고, 이미 그 값이면 `writeEpic`이 파일을
+ *  안 건드린다(mtime 불변 — 5초 폴링이 안 갈린 파일을 다시 그리게 하지 않는다).
+ *
+ *  드래그로 끌리는 것은 `open` 카드뿐이라(§결정 8) 상태 갱신·persona 변화가 없다 —
+ *  `saveTicket`과 달리 `kickIdleWorker`를 안 부른다. */
+export async function setTicketEpic(
+  projectId: string,
+  hash: string,
+  epic: string,
+): Promise<SaveState> {
+  try {
+    const project = await getProject(projectId);
+    if (!project) throw new Error(`등록되지 않은 프로젝트입니다: ${projectId}`);
+    const config = await resolveConfig(project);
+    const r = await writeEpic(project.root, config, hash, epic);
+    if (!r.ok) return { error: r.error };
+    revalidatePath(`/p/${projectId}/tickets/${encodeURIComponent(r.stem)}`);
+    revalidatePath(`/p/${projectId}`);
     return { ok: true };
   } catch (e) {
     return { error: (e as Error).message };
