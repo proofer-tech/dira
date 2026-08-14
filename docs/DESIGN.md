@@ -53432,7 +53432,7 @@ grep -n 'board.epic.memory' apps/teams/components/epic-sidebar.tsx   # `title=`�
 | 새 i18n 키 - 새 문구 | **0** - 쓰는 낱말이 전부 이미 사는 키다(`status.label.open` `status.label.wip` `status.label.done` `board.epic.memory` `board.epic.none` `board.epic.noTitle`) |
 | 새 모션 | **0** - §18의 자리는 다섯 그대로다 |
 | 새로 잰 대비 조합 | **0** - 밑면이 `--popover`인데 **라이트는 `--background`와 값이 같고**(`oklch(1 0 0)`) **다크는 `--card`와 값이 같다**(`oklch(0.205 0 0)`). 그래서 이 패널의 잉크는 이미 잰 수를 그대로 쓴다: 칩 글자 vs 채움 **16.46 / 13.43**(§19 카드 행의 그 수) - `--muted-foreground` **4.73 / 6.91**(§21 §대비 검증의 `--background`-`--popover` 행) - 본문은 부품이 짝지어 둔 `--popover-foreground`이고, **문(`variant="outline"`)의 글자는 §21 §대비 검증의 그 행 그대로 19.79 / 15.33이다**(다크에서 그 변종이 까는 `bg-input/30`이 `--popover` 위에 얹힌 조합을 그 표의 *다크(다이얼로그)* 열이 이미 쟀다) |
-| 새 파일 | **1** - 클라이언트 잎 하나. `epic-sidebar.tsx`는 **서버 컴포넌트로 남고**(새 폴링 0 - 새 스켈레톤 0) 패널 내용은 서버가 그려 `children`으로 넘긴다. 잎이 드는 것은 `Popover` 셋과 **취소 두 줄**(누름 - ⑧의 hover)뿐이다 |
+| 새 파일 | **1** - 클라이언트 잎 하나. `epic-sidebar.tsx`는 **서버 컴포넌트로 남고**(새 폴링 0 - 새 스켈레톤 0) 패널 내용은 서버가 그려 `children`으로 넘긴다. 잎이 드는 것은 `Popover` 셋과 ~~**취소 두 줄**(누름 - ⑧의 hover)~~ -> **취소 한 줄**(누름)뿐이다 - 결정 16이 ⑧의 hover를 취소하던 줄을 그 과녁과 같이 걷었다 |
 | 갈리는 부품 파일 | **0** - `components/ui/popover.tsx` - `tooltip.tsx` - `sidebar.tsx` 전부 무수정 |
 | §19 자리 | **여섯 -> 일곱**(⑦ - 그 절의 표에 행이 하나 는다). §52 ⑥의 표에는 **⑥-4**가 는다 |
 
