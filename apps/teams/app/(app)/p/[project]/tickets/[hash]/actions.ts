@@ -289,6 +289,10 @@ export async function saveTicket(_prev: SaveState, form: FormData): Promise<Save
   }
 }
 
+/** 드래그가 부르는 결과 — `reason`이 §비주얼 §52 ⑤ 실패 한 줄의 세 갈래를 그대로 나른다.
+ *  화면은 에러 문자열을 다시 패턴 매칭하지 않는다(판정은 `lib/epic.ts` 하나뿐). */
+export type EpicDropResult = { ok: true } | { ok: false; reason: "locked" | "missing" | "other"; error: string };
+
 /** 카드를 에픽에 끌어다 놓는다 (DESIGN.md §에픽 §결정 8) — `saveTicket`이 이미 여는 같은 쓰기에
  *  손잡이가 하나 더 붙는 것이다. **판정·쓰기는 전부 `lib/epic.ts`가 한다**(`sendInterject`와
  *  같은 이유 — 두 곳에서 판정하면 화면이 거짓말을 한다).
@@ -302,18 +306,18 @@ export async function setTicketEpic(
   projectId: string,
   hash: string,
   epic: string,
-): Promise<SaveState> {
+): Promise<EpicDropResult> {
   try {
     const project = await getProject(projectId);
     if (!project) throw new Error(`등록되지 않은 프로젝트입니다: ${projectId}`);
     const config = await resolveConfig(project);
     const r = await writeEpic(project.root, config, hash, epic);
-    if (!r.ok) return { error: r.error };
+    if (!r.ok) return r;
     revalidatePath(`/p/${projectId}/tickets/${encodeURIComponent(r.stem)}`);
     revalidatePath(`/p/${projectId}`);
     return { ok: true };
   } catch (e) {
-    return { error: (e as Error).message };
+    return { ok: false, reason: "other", error: (e as Error).message };
   }
 }
 

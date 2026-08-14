@@ -59,10 +59,12 @@ test("`.wip`·`.done`은 거절한다 — saveTicket과 같은 LOCKED 문장", a
 
   const rWip = await writeEpic(root, SFX, wip, "P273");
   assert.equal(rWip.ok, false);
+  assert.equal((rWip as { reason: string }).reason, "locked");
   assert.match((rWip as { error: string }).error, /진행중 티켓은 편집할 수 없습니다/);
 
   const rDone = await writeEpic(root, SFX, done, "P273");
   assert.equal(rDone.ok, false);
+  assert.equal((rDone as { reason: string }).reason, "locked");
   assert.match((rDone as { error: string }).error, /완료 티켓은 편집할 수 없습니다/);
 
   // 거절이면 파일은 한 글자도 안 갈린다.
@@ -84,5 +86,6 @@ test("다른 키도 본문도 안 갈린다 — epic: 한 줄만 바뀐다", asy
 test("큐에 없는 티켓", async () => {
   const r = await writeEpic(root, SFX, "없는해시", "P273");
   assert.equal(r.ok, false);
+  assert.equal((r as { reason: string }).reason, "missing");
   assert.match((r as { error: string }).error, /큐에 없는 티켓/);
 });

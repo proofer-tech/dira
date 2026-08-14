@@ -19,7 +19,11 @@ import {
   type Suffixes,
 } from "./queue.ts";
 
-export type EpicWriteResult = { ok: true; stem: string } | { ok: false; error: string };
+/** `reason`은 화면(§비주얼 §52 ⑤ 실패 한 줄)이 세 갈래 문구 중 어느 것을 그릴지 고르는 값이다 -
+ *  판정을 클라이언트가 다시 하지 않는다(에러 문자열을 패턴 매칭하지 않는다). */
+export type EpicWriteResult =
+  | { ok: true; stem: string }
+  | { ok: false; reason: "locked" | "missing" | "other"; error: string };
 
 /** frontmatter 값으로 들어갈 한 줄. `[hash]/actions.ts`의 `fmValue`와 같은 검사(개행 거부)다 —
  *  `"use server"` 파일에서 못 끌어온 헬퍼라 한 줄 다시 둔다(`(board)/actions.ts`도 같은 대가를
@@ -41,21 +45,21 @@ export async function writeEpic(
   epic: string,
 ): Promise<EpicWriteResult> {
   const file = await findTicket(root, hash, sfx);
-  if (!file) return { ok: false, error: `큐에 없는 티켓입니다: ${hash}` };
+  if (!file) return { ok: false, reason: "missing", error: `큐에 없는 티켓입니다: ${hash}` };
 
   const state = stateOf(path.basename(file), sfx);
-  if (state !== "open") return { ok: false, error: LOCKED[state] };
+  if (state !== "open") return { ok: false, reason: "locked", error: LOCKED[state] };
 
   let value: string;
   try {
     value = fmValue(epic);
   } catch (e) {
-    return { ok: false, error: (e as Error).message };
+    return { ok: false, reason: "other", error: (e as Error).message };
   }
 
   const stem = stemOf(file, sfx);
   const { fm, lines, end } = readFm(await readFile(file, "utf8"));
-  if (end < 0) return { ok: false, error: `frontmatter 없음: ${file}` };
+  if (end < 0) return { ok: false, reason: "other", error: `frontmatter 없음: ${file}` };
 
   // 이미 그 값이면 아무것도 안 쓴다 — mtime 불변(§결정 8 "5초 폴링이 안 갈린 파일을 다시 그리게
   // 하지 않는다").

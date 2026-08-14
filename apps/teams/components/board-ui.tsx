@@ -10,9 +10,12 @@
  *  수백 줄이고, 전환기가 이미 같은 컴포넌트를 쓴다). */
 import { Children, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Check, ChevronsUpDown, ListFilter, Search } from "lucide-react";
+import { Check, ChevronsUpDown, ListFilter, Search, TriangleAlert } from "lucide-react";
+import { setTicketEpic } from "@/app/(app)/p/[project]/tickets/[hash]/actions";
 import { useHotkey } from "@/components/keymap-provider";
+import { useT } from "@/components/language-provider";
 import { PersonaDot } from "@/components/persona-badge";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -559,4 +562,141 @@ export function BoardLaneMotion() {
   // §17 오버레이와 **같은 층 값**이다 — 새 z도 새 포털도 0. 자기 크기를 안 갖고,
   // 밖으로 나간 고스트는 스트립이 잘라 준다.
   return <div ref={ref} aria-hidden="true" className="pointer-events-none absolute inset-0 z-10" />;
+}
+
+/** 실패 사유는 원문 그대로(§6 에러 3요소) — `ticket-ui.tsx`의 `Failure`와 같은 값이다.
+ *  공유 부품으로 뽑을 만큼 무겁지 않다(그 파일 주석과 같은 판단). */
+function Failure({ title, message }: { title: string; message: string }) {
+  return (
+    <Alert variant="destructive">
+      <TriangleAlert aria-hidden />
+      <AlertTitle>{title}</AlertTitle>
+      <AlertDescription>
+        <span className="font-mono text-xs break-all">{message}</span>
+      </AlertDescription>
+    </Alert>
+  );
+}
+
+/** 카드를 에픽에 끌어다 놓는다 (DESIGN.md §에픽 결정 8 · §비주얼 §52 ⑤). 사이드바(`epic-sidebar.tsx`)
+ *  도 스윔레인 띠(`page.tsx`)도 서버 컴포넌트다 — 새 client 컴포넌트로 뒤집지 않고 **이미 client인
+ *  이 파일**이 `window` 레벨 델리게이션으로 두 자리를 같이 받는다(결정 8 "이벤트 위임 자리가
+ *  거기 있다"). 과녁은 `[data-epic-drop]`(사이드바 `SidebarMenuItem` · 스윔레인 띠 블록)이고
+ *  링은 `[data-epic-ring]`(없으면 과녁 자신)에, 문장은 `[data-epic-line]`에 얹는다.
+ *
+ *  **`dragenter`/`dragleave` 카운터가 없다.** `dragover`마다 `closest()`로 지금 과녁을 다시
+ *  찾고 이전 과녁과 다르면만 갈아 끼운다 — §함정 2(자식 경계마다 뜨는 `dragleave`가 표식을
+ *  떨게 하는 것)를 애초에 만들지 않는 길이다. */
+export function EpicDrag({ project }: { project: string }) {
+  const t = useT();
+  const [failure, setFailure] = useState<{ title: string; message: string } | null>(null);
+
+  useEffect(() => {
+    let stem: string | null = null;
+    let target: HTMLElement | null = null;
+    // 원래 마크업을 되돌릴 값을 들고 있는다(innerHTML — 겨눈 줄의 2행에는 `진행중 n` 배지가
+    // 중첩 `<span>`으로 들어 있어 textContent로 되돌리면 그 구조가 납작해진다).
+    const saved = new Map<Element, string>();
+
+    const groupLabels = () =>
+      document.querySelectorAll<HTMLElement>("[data-epic-group-label]");
+
+    const clearTarget = () => {
+      if (!target) return;
+      const ring = target.querySelector<HTMLElement>("[data-epic-ring]") ?? target;
+      ring.classList.remove("inset-ring-2", "inset-ring-primary");
+      const line = target.querySelector<HTMLElement>("[data-epic-line]");
+      if (line && saved.has(line)) {
+        line.innerHTML = saved.get(line)!;
+        saved.delete(line);
+      }
+      target = null;
+    };
+
+    // §함정 3 — `drop`과 `dragend` 둘 다 이걸 부른다. 이미 꺼진 상태에서 다시 불러도 안전하다.
+    const finish = () => {
+      clearTarget();
+      groupLabels().forEach((el) => {
+        if (saved.has(el)) {
+          el.innerHTML = saved.get(el)!;
+          saved.delete(el);
+        }
+      });
+      stem = null;
+    };
+
+    const onDragStart = (e: DragEvent) => {
+      // `open` 카드만 `draggable="true"`를 든다(결정 8 · page.tsx `renderCard`) — 잠긴 카드는
+      // 손을 대도 이 셀렉터에 안 걸려 고스트가 안 뜬다.
+      const card = (e.target as Element)?.closest?.('[data-stem][draggable="true"]');
+      if (!card) return;
+      stem = card.getAttribute("data-stem");
+      setFailure(null);
+      e.dataTransfer!.effectAllowed = "move"; // §함정 4 — 소스가 링크라 브라우저가 안 정해준다
+      groupLabels().forEach((el) => {
+        saved.set(el, el.innerHTML);
+        el.textContent = t("board.epic.dropPrompt");
+      });
+    };
+
+    const onDragOver = (e: DragEvent) => {
+      if (!stem) return;
+      e.preventDefault(); // §함정 1 — 없으면 브라우저가 놓은 것을 열어 화면이 떠난다
+      const hit = (e.target as Element)?.closest?.("[data-epic-drop]") as HTMLElement | null;
+      if (hit !== target) {
+        clearTarget();
+        if (hit) {
+          const ring = hit.querySelector<HTMLElement>("[data-epic-ring]") ?? hit;
+          ring.classList.add("inset-ring-2", "inset-ring-primary");
+          const line = hit.querySelector<HTMLElement>("[data-epic-line]");
+          if (line) {
+            saved.set(line, line.innerHTML);
+            line.textContent =
+              hit.dataset.epicDrop === "" ? t("board.epic.dropRemove") : t("board.epic.dropOnEpic");
+          }
+          target = hit;
+        }
+      }
+      e.dataTransfer!.dropEffect = hit ? "move" : "none";
+    };
+
+    const onDrop = async (e: DragEvent) => {
+      if (!stem) return;
+      e.preventDefault();
+      const hit = (e.target as Element)?.closest?.("[data-epic-drop]") as HTMLElement | null;
+      const dragged = stem;
+      finish();
+      if (!hit) return;
+      const epic = hit.dataset.epicDrop ?? "";
+      const r = await setTicketEpic(project, dragged, epic);
+      // 실패 갈래 셋(§비주얼 §52 ⑤) — 문구는 화면 어휘, `locked`만 서버의 `LOCKED[state]` 그대로다.
+      setFailure(
+        r.ok
+          ? null
+          : r.reason === "locked"
+            ? { title: r.error, message: dragged }
+            : r.reason === "missing"
+              ? {
+                  title: "티켓 파일을 찾지 못했습니다 — 큐에서 사라졌거나 상태가 갈렸습니다",
+                  message: dragged,
+                }
+              : { title: "에픽을 옮기지 못했습니다", message: r.error },
+      );
+    };
+
+    const onDragEnd = () => finish();
+
+    window.addEventListener("dragstart", onDragStart);
+    window.addEventListener("dragover", onDragOver);
+    window.addEventListener("drop", onDrop);
+    window.addEventListener("dragend", onDragEnd);
+    return () => {
+      window.removeEventListener("dragstart", onDragStart);
+      window.removeEventListener("dragover", onDragOver);
+      window.removeEventListener("drop", onDrop);
+      window.removeEventListener("dragend", onDragEnd);
+    };
+  }, [project, t]);
+
+  return failure ? <Failure title={failure.title} message={failure.message} /> : null;
 }

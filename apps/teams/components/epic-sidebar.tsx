@@ -67,7 +67,9 @@ export function EpicSidebar({
       <Sidebar collapsible="none" className="w-64 shrink-0 border-r bg-background">
         <SidebarContent className="py-2">
           <SidebarGroup className="p-0">
-            <SidebarGroupLabel className="h-6 text-muted-foreground">
+            {/* 드래그 중 "놓을 에픽을 고릅니다"로 갈리는 자리(§비주얼 §52 ⑤ (2)) —
+                `board-ui.tsx`의 `EpicDrag`가 이 속성으로 찾는다. */}
+            <SidebarGroupLabel data-epic-group-label className="h-6 text-muted-foreground">
               {t(locale, "board.epic.label")}
             </SidebarGroupLabel>
             <SidebarMenu aria-label={t(locale, "board.epic.label")} className="gap-0.5">
@@ -102,8 +104,11 @@ export function EpicSidebar({
                 const isActive = active === value;
                 const total = row.counts.open + row.counts.wip + row.counts.done;
                 return (
-                  <SidebarMenuItem key={row.epic}>
+                  // 드롭이 받는 상자는 이 줄 전체다(§비주얼 §52 ⑤ — 둘째 문 위도 같은 줄이다).
+                  // `value`가 빈 문자열이어도 속성 자체는 선다 — `(에픽 없음)`도 후보다(§결정 8).
+                  <SidebarMenuItem key={row.epic} data-epic-drop={value}>
                     <SidebarMenuButton
+                      data-epic-ring
                       className="h-auto items-start"
                       isActive={isActive}
                       aria-current={isActive ? "page" : undefined}
@@ -124,7 +129,11 @@ export function EpicSidebar({
                             </span>
                           )}
                         </span>
-                        <span className="flex items-baseline gap-2 text-xs text-muted-foreground">
+                        {/* 드래그 중 "놓으면 이 에픽으로" 문장이 이 슬롯에 대신 든다(§52 ⑤ (3)) */}
+                        <span
+                          data-epic-line
+                          className="flex items-baseline gap-2 text-xs text-muted-foreground"
+                        >
                           <span>{total}건</span>
                           {row.counts.wip > 0 && (
                             // `진행중 n`과 워커 칩 묶음이 같이 오른쪽 끝에 붙는다(§비주얼 §52 ⑥-1)

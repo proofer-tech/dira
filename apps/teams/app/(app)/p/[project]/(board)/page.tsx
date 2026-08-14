@@ -10,7 +10,9 @@
  *  덕분에 정렬 헤더·필터 해제·뷰 전환은 그냥 `<Link>`고, 클라이언트 코드는 board-ui.tsx의
  *  입력·폴링뿐이다. 두 뷰는 **같은 `rows`**를 그린다 — 읽기·필터 코어를 다시 쓰지 않는다.
  *
- *  칸반에 드래그는 없다: 상태 전이의 주체는 엔진과 티켓 수행 세션이다(DESIGN.md §결정 기록).
+ *  칸반 카드의 **상태**는 드래그로 안 갈린다: 그 전이의 주체는 엔진과 티켓 수행 세션이다
+ *  (DESIGN.md §결정 기록). `open` 카드를 에픽 사이드바·스윔레인 띠에 끌어다 놓는 것은
+ *  갈린다(§에픽 결정 8) — 옮기는 축이 상태가 아니라 `epic:` frontmatter 한 줄이다.
  *
  *  **이 화면에는 로딩 스켈레톤이 없다. 다시 만들지 않는다**(`c2888886` 실측 · `404f08c7` 결정).
  *  보드는 5초 폴링으로 큐를 따라가는 화면인데(§아키텍처 상태 갱신 · §0-2 배너가 이 폴링에 기댄다)
@@ -37,6 +39,7 @@ import {
   BoardRelations,
   BoardRows,
   BoardSearch,
+  EpicDrag,
 } from "@/components/board-ui";
 import { EmptyState } from "@/components/empty-state";
 import { EpicSidebar } from "@/components/epic-sidebar";
@@ -546,6 +549,11 @@ export default async function Board({
       // 관계선이 상대를 찾는 이름이다(§1: 못 찾으면 안 그린다). 링크·엔진과
       // 같은 `stem`이라 `relationEdges`가 준 간선과 그냥 맞는다
       data-stem={t.stem}
+      // 에픽으로 끄는 소스는 `open` 카드뿐이다(§에픽 결정 8). 명시적 `false`가
+      // 필요하다 — 카드 안 해시가 `<a>`라 안 두면 브라우저 기본 드래그(링크 고스트)가
+      // 산다(§비주얼 §52 ⑤ (4)). `cursor-grab`은 안 붙인다 — 카드 전체가 링크라
+      // 커서가 이미 그 사실을 말한다(같은 절).
+      draggable={t.state === "open"}
       className="card-tint relative gap-2 px-4"
     >
       {/* 칸반 카드는 레인이 상태를 말하므로 배지를 달지 않는다 — 예외가
@@ -756,6 +764,11 @@ export default async function Board({
             </div>
           </div>
 
+          {/* 드롭 실패 한 줄(§비주얼 §52 ⑤ (5)) — 툴바 아래·2단 행 위, 폭 전체 하나. 위 줄이
+              이미 보드 전체에 대한 사실(티켓 N/M건)을 드는 자리라 같은 높이에 선다. 쉼에는
+              아무것도 안 그린다 — `EpicDrag`가 실패했을 때만 `<Alert>`를 낸다. */}
+          <EpicDrag project={id} />
+
           {/* 왼쪽 에픽 사이드바 + 오른쪽 뷰(칸반 또는 표) — 툴바 **아래**에서만 갈린다
               (§비주얼 §52 ① — `h1`·툴바는 위에서 이미 폭 전체다). `gap-6`은 레인 사이
               `gap-4`보다 한 눈금 커서 넷째 열로 안 읽힌다. */}
@@ -810,7 +823,11 @@ export default async function Board({
                           epic === NO_EPIC ? t(locale, "board.epic.none") : (title ?? t(locale, "board.epic.noTitle"));
                         const laneRows = rows.filter((r) => (epicOf(r) || NO_EPIC) === epic);
                         return (
-                          <div key={epic}>
+                          // 드롭이 받는 상자는 띠 전체다(머리 + 열 셋) — 카드 위에 놓아도 이
+                          // 블록이 받는다(§비주얼 §52 ⑤ (3), 과녁을 넓게). 링도 같은 상자에 얹는다
+                          // (사이드바처럼 별도 `data-epic-ring`이 없으면 `EpicDrag`가 이 상자
+                          // 자신을 쓴다). `(에픽 없음)`도 값이 빈 문자열인 채로 후보다(§결정 8).
+                          <div key={epic} data-epic-drop={epic === NO_EPIC ? "" : epic}>
                             {/* P번호 등급(§에픽 결정 11 · §비주얼 §52 ③) — 라벨과 다른 요소,
                                 한 등급 아래. 순서 [라벨] [P번호] [빠짐 표식] [n건] [워커 칩].
                                 `flex-nowrap`(§52 ⑥-2) — 자르지 않고 라벨이 먼저 양보하는 자리다 */}
@@ -824,7 +841,8 @@ export default async function Board({
                               {epic !== NO_EPIC && !title && (
                                 <TriangleAlert aria-hidden className="size-3.5 shrink-0 text-status-stale" />
                               )}
-                              <span className="shrink-0 text-xs font-normal text-muted-foreground">
+                              {/* 드래그 중 "놓으면 이 에픽으로" 문장이 이 슬롯에 대신 든다(§52 ⑤ (3)) */}
+                              <span data-epic-line className="shrink-0 text-xs font-normal text-muted-foreground">
                                 {laneRows.length}건
                               </span>
                               <WorkerChips names={workers} />
