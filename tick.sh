@@ -50,12 +50,48 @@ TICKET_PROMPT_FMT="${TICKET_PROMPT_FMT:-%s 티켓을 확인해 주세요. (해�
 # CTX는 마지막 assistant 턴 컨텍스트(input+cache_creation+cache_read)의 재활용 상한이다.
 TICKET_REUSE="${TICKET_REUSE:-1}"
 TICKET_REUSE_CTX="${TICKET_REUSE_CTX:-100000}"
+
+# 엔진 수정 스물네 번째 계약 1-2-3: 워커가 부르는 실행 파일의 자리를 고정 경로 하나로 모은다.
+# claude 실행 파일은 심링크고 실체가 업데이트마다 새 버전 디렉터리로 옮겨간다(이 머신 버전
+# 디렉터리 32개) - macOS TCC는 허용을 절대경로로 적어서 매 업데이트가 새 TCC 항목이 된다.
+# $LOCAL/bin/dira를 그 실체로 매 tick 다시 겨눠, 경로 문자열은 고정한 채(TCC 항목 1개) 가리키는
+# 실체만 갈리게 한다. 심링크는 답이 아니다 - exec가 심링크를 풀어서 TCC가 여전히 버전 경로를 본다.
+FIXED_ENGINE="$LOCAL/bin/dira"
+refresh_fixed_engine() {
+  local src same tmp
+  src="$(command -v claude 2>/dev/null)" || return 1
+  src="$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$src" 2>/dev/null)"
+  [ -x "$src" ] || return 1
+  if [ -e "$FIXED_ENGINE" ]; then
+    # 이미 그 실체를 가리키면 매 tick 파일을 다시 굽지 않는다 - st_dev+st_ino 비교
+    same="$(python3 -c '
+import os, sys
+a, b = os.stat(sys.argv[1]), os.stat(sys.argv[2])
+print(1 if (a.st_dev, a.st_ino) == (b.st_dev, b.st_ino) else 0)
+' "$FIXED_ENGINE" "$src" 2>/dev/null)"
+    [ "$same" = "1" ] && return 0
+  fi
+  mkdir -p "$(dirname "$FIXED_ENGINE")" 2>/dev/null || return 1
+  tmp="$FIXED_ENGINE.tmp.$$"
+  # 하드링크 우선(볼륨을 안 넘으면 즉시고 바이너리 크기를 매 업데이트마다 안 문다 - 실측:
+  # 이 머신 claude 바이너리 306MB, ~/.local/bin과 $LOCAL이 같은 st_dev라 하드링크가 선다).
+  # 볼륨이 갈리면(다른 머신 구성) ln이 실패하고 복사로 떨어진다. 임시 이름에 만든 뒤 mv로
+  # 원자 교체 - 여러 워커가 동시에 tick을 돌아도 실행 파일이 반쪽으로 보이는 창이 없다.
+  if ln "$src" "$tmp" 2>/dev/null || cp "$src" "$tmp" 2>/dev/null; then
+    mv -f "$tmp" "$FIXED_ENGINE"
+  else
+    rm -f "$tmp"
+    return 1
+  fi
+}
+refresh_fixed_engine
+
 # 실행 엔진. 워커가 TICKET_ENGINE 배열로 덮어쓴다. {prompt}/{sid}는 실행 직전 치환된다.
 # ${arr[@]+"..."}는 set -u에서 미정의 배열을 안전하게 전개하는 관용구(bash 3.2 포함).
 # 기본 엔진은 스트리밍 입력이다: 최초 프롬프트도 argv가 아니라 stdin(FIFO)으로 간다.
 # 그래야 세션이 도는 동안 사람이 같은 입구로 말을 걸 수 있다(참견).
 TICKET_ENGINE=(${TICKET_ENGINE[@]+"${TICKET_ENGINE[@]}"})
-[ ${#TICKET_ENGINE[@]} -eq 0 ] && TICKET_ENGINE=(claude -p --session-id "{sid}" \
+[ ${#TICKET_ENGINE[@]} -eq 0 ] && TICKET_ENGINE=("$FIXED_ENGINE" -p --session-id "{sid}" \
   --dangerously-skip-permissions \
   --input-format stream-json --output-format stream-json --verbose)
 # 상태 접미사는 tickets.py가 환경변수로 읽는다(미설정이면 .wip/.done).
@@ -497,6 +533,11 @@ while IFS='|' read -r c_path c_hash c_kind c_persona c_prio c_base c_eff; do
   if [ -n "$c_persona" ]; then
     PENGINE="${TICKET_PERSONAS:-$TICKET_ROOT/personas}/$c_persona/engine"
     [ -r "$PENGINE" ] && . "$PENGINE"
+  fi
+  # 엔진 수정 24번째 계약 5: 고정 경로를 못 만들었거나(권한-볼륨-원본 없음) 그 경로가 실행
+  # 가능하지 않으면 종전대로 이름 "claude"로 돌아가 PATH에서 찾는다 - 디스패치를 막지 않는다.
+  if [ "$(basename "${TICKET_ENGINE[0]}")" = "dira" ] && [ ! -x "${TICKET_ENGINE[0]}" ]; then
+    TICKET_ENGINE[0]="claude"
   fi
   ENGINE_NAME="$(basename "${TICKET_ENGINE[0]}")"
   [ "$ENGINE_NAME" = "dira" ] && ENGINE_NAME="claude"  # 엔진 수정 24번째: 고정 경로 이름은 claude로 판정한다
