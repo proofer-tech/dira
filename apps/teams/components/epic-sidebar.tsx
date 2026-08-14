@@ -14,7 +14,6 @@ import {
   SidebarGroup,
   SidebarGroupLabel,
   SidebarMenu,
-  SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarProvider,
@@ -188,28 +187,6 @@ export function EpicSidebar({
                               </span>
                             </div>
                           </SidebarMenuButton>
-                        }
-                        memoryTrigger={
-                          // `(에픽 없음)`은 둘째 문이 없다 — 갈 메모리 디렉터리가 없다(결정 2).
-                          // 24x24 과녁 + 포인터 확장 32x32은 §비주얼 §52 ⑧(§에픽 결정 14)
-                          !isNone && memoryHrefFor ? (
-                            <SidebarMenuAction
-                              className="size-6 after:-inset-1 md:after:block"
-                              render={<Link href={memoryHrefFor(row.epic)} />}
-                            >
-                              <NotebookText aria-hidden className="size-4" />
-                              <span className="sr-only">
-                                {row.epic} {t(locale, "board.epic.memory")}
-                              </span>
-                            </SidebarMenuAction>
-                          ) : undefined
-                        }
-                        memoryLabel={
-                          !isNone ? (
-                            <>
-                              {row.epic} {t(locale, "board.epic.memory")}
-                            </>
-                          ) : undefined
                         }
                       >
                         {/* 패널 1행 — 제목 전문 + P번호(§52 ⑨ §내용 넷의 배치) */}
