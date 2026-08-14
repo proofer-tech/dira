@@ -7,7 +7,7 @@
  *  액션 뒤에 있다(fs 접근은 여기 없다). 결과를 **토스트에 담지 않는다** — 워커 스크립트 출력과
  *  검증 사유는 읽어야 하는 정보고, 3초 뒤 사라지는 자리에 두면 못 본다(DESIGN.md §8이 해석 결과
  *  표에 쓴 같은 근거다). */
-import { useActionState, useEffect, useState, useTransition, type ReactNode } from "react";
+import { useActionState, useEffect, useRef, useState, useTransition, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -34,7 +34,7 @@ import type { UnassignRun } from "@/lib/engine";
 import { matchCombo } from "@/lib/keymap";
 // `composeAnswer`(§비주얼 §29 방향 — 체크박스마다 다시 돈다)는 여기 산다: node:*가 없는
 // 클라이언트·서버 공용 순수 함수 자리다(AGENTS.md). `lib/queue.ts`는 `node:fs`를 타서 못 부른다.
-import { composeAnswer, formatRemaining, type AnswerPick } from "@/lib/urls";
+import { activeEpicFrom, composeAnswer, formatRemaining, type AnswerPick } from "@/lib/urls";
 // 스레드를 엮는 쪽은 서버(`lib/queue.ts threadOf`)다 — 여기 오는 건 타입뿐이라 `node:*`를 안 끈다
 import type { OptionGroup, ThreadItem } from "@/lib/queue";
 import { AttachmentField, useAttachments } from "@/components/attachment-field";
@@ -1231,6 +1231,11 @@ export function RequestDialog({
   // `⌘↵`(§3 · §0-6). 참견·홈 질의 칸과 **같은 바인딩**이다 — 액션을 새로 만들면 §0-6 충돌
   // 검증이 기본 키맵을 거절한다. 조합 문자열은 여기 안 적는다: 사람이 키를 바꾸면 이 칸도 따라간다.
   const sendCombo = useKeymap().bindings["interject.send"];
+  // 활성 에픽(§에픽 §결정 10) — 값은 제출 순간에만 필요하다. `useSearchParams()`는 이 컴포넌트가
+  // 셸(레이아웃)에도 마운트되어(`trigger="hotkey"`) `pnpm build`가 그 자리에 Suspense 경계를
+  // 요구할 수 있어 제출 시점에 `location`을 직접 읽는 쪽이 더 싸다 — hidden input을 uncontrolled로
+  // 두고 `onSubmit`에서 그 값을 채운다.
+  const epicRef = useRef<HTMLInputElement>(null);
 
   // 닫히면 빈 칸으로 돌아간다 — 접수한 본문이 남아 있으면 같은 요구가 두 번 접수된다(§3).
   // 접수 확인 화면(`done`)은 **묻지 않는다**: 이미 접수돼서 잃을 것이 없다.
@@ -1274,7 +1279,9 @@ export function RequestDialog({
           // 일은 큐가 요구를 접수했다는 것뿐이다(사람 지적 `fb0d309c`). 해시·kind·persona는
           // 말하지 않는다: 사람이 고르지 않은 값이고 여기서 할 일도 없다. 상세는 링크로 남는다.
           <div className="space-y-4">
-            <p className="text-sm">요구사항이 접수되었습니다. 곧 PM이 검토할 예정입니다.</p>
+            {/* 문장은 서버가 만든다(§에픽 §결정 10) — `epicTitle()`·`제목 없음` 갈래를 여기서
+                두 번째로 짜지 않는다. */}
+            <p className="text-sm">{state.message}</p>
             {/* 오른쪽 정렬 · 1차 액션(`닫기`)이 가장 오른쪽이다(§비주얼 §4-3) */}
             <div className="flex flex-wrap items-center justify-end gap-4">
               <Link
@@ -1292,9 +1299,18 @@ export function RequestDialog({
           // `min-w-0` — 위 답변 다이얼로그와 **같은 결함 · 같은 처방**이다(§비주얼 §3 간격 관용구).
           // 이 폼의 `<Textarea>`는 `field-sizing-content`라 안 쪼개지는 긴 토큰 한 줄이 그대로
           // min-content가 된다(실측: 100자 토큰에서 그릇 544 → 707.2 · 팝업 576에 가로 스크롤바)
-          <form action={action} className="min-w-0 space-y-4">
+          <form
+            action={action}
+            className="min-w-0 space-y-4"
+            // 화면이 이미 아는 활성 에픽을 제출 순간에 채운다(§에픽 §결정 10) — 값이 없으면
+            // 빈 문자열이고, 서버는 빈 값을 `epic:` 줄을 안 쓰는 것과 같게 본다.
+            onSubmit={() => {
+              if (epicRef.current) epicRef.current.value = activeEpicFrom(location.pathname, location.search);
+            }}
+          >
             <input type="hidden" name="project" value={project} />
             <input type="hidden" name="mode" value="req" />
+            <input type="hidden" name="epic" ref={epicRef} />
             {/* 요구 본문은 상세에서 `<Markdown breaks="untilHeading">`로 렌더된다(§10 표 — 이
                 다이얼로그가 만드는 티켓은 항상 `kind: request`다). 위지윅 면의 `Enter`가 그
                 렌더와 같아지려면 값이 여기서도 `untilHeading`이어야 한다(못 ⑤). */}

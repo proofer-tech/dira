@@ -33,6 +33,19 @@ export function decodeHash(raw: string): string {
   }
 }
 
+/** 요구 접수가 물려받는 활성 에픽(DESIGN.md §에픽 §결정 10) — 값은 **URL이 말하는 것 하나다**:
+ *  보드-표뷰의 `?epic=<값>`, 에픽 화면의 경로 세그먼트. 둘 다 없으면 빈 문자열 — 활성이 없는
+ *  것과 `epic:` 줄을 안 쓰는 것이 서버에서 같은 판정이라 여기서 `null`과 안 갈린다.
+ *
+ *  워커-설정-티켓 상세처럼 `epic` 파라미터도 `/epics/` 세그먼트도 없는 화면은 저절로 빈 문자열이다
+ *  — 화면마다 따로 가려낼 목록을 안 둔다. */
+export function activeEpicFrom(pathname: string, search: string): string {
+  const fromQuery = new URLSearchParams(search).get("epic");
+  if (fromQuery !== null) return fromQuery;
+  const segs = /^\/p\/[^/]+\/epics\/(.+)$/.exec(pathname)?.[1];
+  return segs ? segs.split("/").map(decodeHash).join("/") : "";
+}
+
 /** 프로젝트 전환 목적지 — **같은 화면 종류를 유지한다**(DESIGN.md §0-1).
  *  `/p/a/workers` → `/p/b/workers`. 필터·검색 searchParams는 애초에 안 받는다
  *  (호출자가 `usePathname()`을 넘기므로 공짜로 버려진다 — 프로젝트마다 persona·kind 값이 다르다).

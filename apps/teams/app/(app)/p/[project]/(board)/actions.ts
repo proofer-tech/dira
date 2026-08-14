@@ -21,10 +21,12 @@ import { verifyAttachments, withAttachments } from "@/lib/attachments";
 import { kickIdleWorker } from "@/lib/kick";
 import { NAME_RE, isHash } from "@/lib/paths";
 import { PRIORITY_DEFAULT, PRIORITY_MAX, PRIORITY_MIN, reqTitle, stemOf } from "@/lib/queue";
+import { epicTitle } from "@/lib/epics";
 import { getProject, resolveConfig } from "@/lib/projects";
 
-/** `ok`·`hash`는 **요구 접수 경로에서만** 온다 — 발행은 종전대로 `redirect`라 값을 돌려주지 않는다. */
-export type NewTicketState = { error?: string; ok?: true; hash?: string };
+/** `ok`·`hash`·`message`는 **요구 접수 경로에서만** 온다 — 발행은 종전대로 `redirect`라 값을
+ *  돌려주지 않는다. */
+export type NewTicketState = { error?: string; ok?: true; hash?: string; message?: string };
 
 /** `protocols/CORE-TICKETS.md` §frontmatter 표의 `kind`. 폼의 select와 서버 판정이 같은 목록을 쓴다. */
 const KINDS = ["work", "request", "feedback"];
@@ -49,6 +51,8 @@ export async function createTicket(
   const projectId = String(form.get("project") ?? "");
   let hash = "";
   let req = false; // 끝의 `redirect` 여부가 이 값으로 갈린다 — try 밖에서 봐야 한다
+  // 접수 확인 문장(§에픽 §결정 10) — 활성 에픽이 없으면 종전 문장 그대로다.
+  let message = "요구사항이 접수되었습니다. 곧 PM이 검토할 예정입니다.";
   try {
     const project = await getProject(projectId);
     if (!project) throw new Error(`등록되지 않은 프로젝트입니다: ${projectId}`);
@@ -75,6 +79,11 @@ export async function createTicket(
     if (persona && !NAME_RE.test(persona)) {
       throw new Error(`persona는 영문·숫자·_·- 만 됩니다(엔진이 경로로 씁니다): ${persona}`);
     }
+
+    // 요구 접수가 화면의 활성 에픽을 물려받는다(DESIGN.md §에픽 §결정 10) — 발행 다이얼로그는
+    // 이 필드를 안 보내므로 항상 빈 값이라 저절로 안 걸린다. 값 검증-정규화는 안 한다(§안 하는
+    // 것) — 문자열 그대로가 키다. `fmValue`가 막는 것은 개행 하나뿐이다.
+    const epic = fmValue("epic", String(form.get("epic") ?? ""));
 
     // 우선순위(§1-3 §값을 넣는 자리 셋). 요구 접수는 select가 없으므로 **키 자체를 안 쓴다** —
     // 엔진이 없는 키를 3으로 읽어 같은 결과다. 발행은 select라 항상 1~5가 오지만, 요청은 손으로도
@@ -128,6 +137,7 @@ export async function createTicket(
         `title: ${title}`,
         ...(kind ? [`kind: ${kind}`] : []),
         ...(persona ? [`persona: ${persona}`] : []),
+        ...(epic ? [`epic: ${epic}`] : []),
         // 요구 접수는 안 쓴다 — 키가 없으면 엔진이 3으로 읽어 서버가 고정한 것과 같은 결과다.
         ...(req ? [] : [`priority: ${priority}`]),
         ...(duedate ? [`duedate: ${duedate}`] : []),
@@ -158,6 +168,13 @@ export async function createTicket(
       throw new Error("해시를 10번 뽑았는데 전부 이미 쓰이고 있습니다 — 큐 디렉터리를 확인하세요.");
     }
 
+    // 라벨은 서버가 만든다 — `epicTitle()`과 결정 5의 `제목 없음 (P273)` 갈래가 여기 한 자리에만
+    // 있고, 화면은 이 문장을 그대로 띄운다(P번호가 라벨 옆에서 단독으로 안 선다).
+    if (req && epic) {
+      const label = (await epicTitle(project.root, epic)) ?? "제목 없음";
+      message = `요구사항이 ${label} (${epic}) 에픽으로 접수되었습니다.`;
+    }
+
     // §0-11 — 파일이 실제로 태어난 뒤다. `kind`가 비어 있으면(선택 항목이다) 엔진에서 일반
     // 작업으로 도는 티켓이라 표의 `work`로 센다. 제목·본문·해시는 안 간다(익명 규칙).
     void track("ticket_create", { kind: (kind || "work") as "work" | "request" | "feedback" });
@@ -174,6 +191,6 @@ export async function createTicket(
   // "당신이 티켓을 만들었다"고 말한다. 실제로 일어난 일은 큐가 요구를 접수했고 해석은 PM이
   // 한다는 것이다 — 접수 확인은 다이얼로그 안에 남고 상세는 링크가 된다(사람 지적 `fb0d309c`).
   // 발행은 종전대로 상세로 간다: 그쪽은 kind·persona·deps를 직접 고른 운영자의 동작이다.
-  if (req) return { ok: true, hash };
+  if (req) return { ok: true, hash, message };
   redirect(`/p/${projectId}/tickets/${hash}`);
 }

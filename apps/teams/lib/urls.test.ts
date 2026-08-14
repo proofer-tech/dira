@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import {
+  activeEpicFrom,
   chatRows,
   dateTimeLabel,
   doneLimit,
@@ -69,6 +70,22 @@ test("parentPath — 표에 없는 경로에 부모를 지어내지 않는다", 
   assert.equal(parentPath("/settings"), null);
   assert.equal(parentPath("/p/a/bogus"), null);
   assert.equal(parentPath("/p/a/ticketsss"), null); // 접두만 같은 것에 안 걸린다
+});
+
+test("activeEpicFrom — 보드의 `?epic=`이 우선이고, 값 그대로 돌려준다(§에픽 §결정 10)", () => {
+  assert.equal(activeEpicFrom("/p/a", "?epic=P273"), "P273");
+  assert.equal(activeEpicFrom("/p/a", "?epic="), ""); // `(에픽 없음)` — 필터는 있으나 값이 없다
+});
+
+test("activeEpicFrom — 에픽 화면은 경로 세그먼트에서 읽는다", () => {
+  assert.equal(activeEpicFrom("/p/a/epics/P273", ""), "P273");
+  assert.equal(activeEpicFrom("/p/a/epics/한글", ""), "한글"); // decodeHash로 푼다
+});
+
+test("activeEpicFrom — 필터도 세그먼트도 없으면 빈 문자열이다(워커·설정·티켓 상세 등)", () => {
+  assert.equal(activeEpicFrom("/p/a/workers", ""), "");
+  assert.equal(activeEpicFrom("/p/a/tickets/fff28e90", ""), "");
+  assert.equal(activeEpicFrom("/p/a/epics", ""), ""); // 목록 화면은 세그먼트가 없다
 });
 
 /** 사용 통계 화면 enum (DESIGN.md §0-11 이벤트 표 · 익명 규칙). 이 매핑이 틀리면 GA에 **경로가
