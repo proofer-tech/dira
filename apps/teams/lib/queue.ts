@@ -486,6 +486,10 @@ export const reqOf = (t: Ticket): string => unquote(t.fm.req ?? "");
  *  요구사항이 아카이빙되면 그 grep이 아카이브 티켓을 물어 "이미 쪼갰다"로 읽힌다. */
 export const archivesOf = (t: Ticket): string => unquote(t.fm.archives ?? "");
 
+/** 이 티켓이 속한 에픽의 P번호(DESIGN.md §에픽 결정 1). 값은 문자열 그대로가 키다 —
+ *  접두사를 벗기거나 정규화하지 않는다: `epic: P273`과 `epic: P273-2`는 다른 에픽으로 선다. */
+export const epicOf = (t: Ticket): string => unquote(t.fm.epic ?? "");
+
 /** 본문의 `## 질문 n` 절. 다음 `#`/`##` 제목 전까지가 그 질문의 몸통이다(h3 이하는 안에 남는다). */
 export function questionsOf(body: string): { heading: string; text: string }[] {
   const out: { heading: string; text: string }[] = [];
