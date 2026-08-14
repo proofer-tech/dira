@@ -366,8 +366,12 @@ export function ProjectNav({ id }: { id: string }) {
   return (
     <nav className="flex items-center gap-4">
       {NAV.map(({ seg, labelKey }) => {
-        // 보드는 티켓 화면(발행·상세)까지 자기 구역으로 본다 — 그쪽에서 들어가는 화면이다.
-        const active = seg === "" ? rest === "" || rest.startsWith("/tickets") : rest.startsWith(seg);
+        // 보드는 티켓 화면(발행·상세)·에픽 화면까지 자기 구역으로 본다 — 둘 다 이 화면에서
+        // 들어가는 화면이고 상단탭을 안 늘린다(§에픽 §결정 5·6).
+        const active =
+          seg === ""
+            ? rest === "" || rest.startsWith("/tickets") || rest.startsWith("/epics")
+            : rest.startsWith(seg);
         return (
           <Link
             key={seg}

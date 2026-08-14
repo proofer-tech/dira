@@ -6,7 +6,14 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import type { Suffixes } from "./queue.ts";
 import { listTickets } from "./queue.ts";
-import { NO_EPIC, epicMemory, epicTitle, listEpics } from "./epics.ts";
+import {
+  NO_EPIC,
+  deleteEpicMemory,
+  epicMemory,
+  epicReadmeBody,
+  epicTitle,
+  listEpics,
+} from "./epics.ts";
 
 const DEFAULT: Suffixes = { inProgress: ".wip", done: ".done" };
 
@@ -74,6 +81,29 @@ test("에픽 메모리 — 한 단계 글롭, 하위 디렉터리 안 읽는다"
     ["x.md", "y.md"],
   );
   assert.strictEqual(mem.find((m) => m.file === "x.md")!.text, "x 내용\n");
+});
+
+test("README 본문 — 첫 줄(제목) 뒤부터, 없으면 null", async () => {
+  assert.strictEqual(await epicReadmeBody(root, "P273"), "본문");
+  assert.strictEqual(await epicReadmeBody(root, "P10"), null);
+});
+
+test("에픽 메모리 — 발췌는 첫 줄, 선두 `# `를 뗀다(페르소나 메모리와 같은 규칙)", async () => {
+  const mem = await epicMemory(root, "P273");
+  assert.strictEqual(mem.find((m) => m.file === "x.md")!.excerpt, "x 내용");
+});
+
+test("에픽 메모리 삭제 — 목록에 있는 파일만 지운다, 없는 이름은 던진다", async () => {
+  const memDir = path.join(root, "epics", "P273", "memory");
+  writeFileSync(path.join(memDir, "del.md"), "# 지울 것\n본문\n");
+  const before = await epicMemory(root, "P273");
+  assert.strictEqual(before.find((m) => m.file === "del.md")?.excerpt, "지울 것");
+
+  await deleteEpicMemory(root, "P273", "del.md");
+  const after = await epicMemory(root, "P273");
+  assert.ok(!after.some((m) => m.file === "del.md"));
+
+  await assert.rejects(() => deleteEpicMemory(root, "P273", "없는파일.md"));
 });
 
 test("에픽 메모리 — 디렉터리 없으면 빈 목록(경고 없음)", async () => {

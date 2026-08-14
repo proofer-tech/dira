@@ -37,8 +37,9 @@ export function EpicSidebar({
   active: string | null;
   /** 이 값으로 필터를 건 URL(§결정 5 — 기존 필터 그릇에 드는 `?epic=`) */
   hrefFor: (value: string) => string;
-  /** 둘째 문의 목적지 — `/p/<project>/epics/<P번호>`(§결정 6) */
-  memoryHrefFor: (epic: string) => string;
+  /** 둘째 문의 목적지 — `/p/<project>/epics/<P번호>`(§결정 6). 없으면 안 그린다 — 에픽
+   *  화면 자신이 쓸 때는 줄 자체가 이미 그 화면이라 둘째 문이 없다(§비주얼 §52 ④) */
+  memoryHrefFor?: (epic: string) => string;
   locale: Locale;
 }) {
   return (
@@ -88,7 +89,7 @@ export function EpicSidebar({
                       </div>
                     </SidebarMenuButton>
                     {/* `(에픽 없음)`은 둘째 문이 없다 — 갈 메모리 디렉터리가 없다(결정 2) */}
-                    {!isNone && (
+                    {!isNone && memoryHrefFor && (
                       <SidebarMenuAction
                         render={
                           <Link href={memoryHrefFor(row.epic)} title={`${row.epic} ${t(locale, "board.epic.memory")}`} />

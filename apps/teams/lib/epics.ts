@@ -2,10 +2,12 @@
  *
  *  에픽 목록의 정본은 큐(티켓 `epic:` 값)다 — 이 파일은 스펙 문서를 읽지 않는다(§검증 (4)).
  *  dira는 아무 프로젝트에나 붙는 GUI라 스펙 문서를 파싱하면 dira 전용 기능이 된다. */
-import { readFile, readdir } from "node:fs/promises";
+import { readFile, readdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { resolveWithin } from "./paths.ts";
 import { epicOf, type Ticket, type TicketState } from "./queue.ts";
+// 발췌 규칙(첫 줄, 선두 `# ` 제거)이 페르소나 메모리와 같은 값이다 — 두 벌을 안 둔다(§32 ③).
+import { memoryExcerpt } from "./skills.ts";
 
 /** `epic:` 없는 티켓이 모이는 자리(결정 1·5). 값이 아니라 GUI가 붙이는 라벨이다. */
 export const NO_EPIC = "(에픽 없음)";
@@ -49,20 +51,55 @@ export async function epicTitle(root: string, epic: string): Promise<string | nu
   return text.split("\n").find((l) => l.trim() !== "")?.trim() ?? null;
 }
 
-export type EpicMemory = { file: string; text: string };
+/** `README.md` 첫 줄 **뒤** 본문(§결정 6 §README) — 이 에픽이 무슨 작업인지 사람이 적어 두는
+ *  자리. 제목 줄 자신은 안 실린다. 파일이 없으면 `epicTitle`과 같은 판정으로 null이다. */
+export async function epicReadmeBody(root: string, epic: string): Promise<string | null> {
+  const dir = await epicDir(root, epic);
+  if (!dir) return null;
+  const text = await readFile(path.join(dir, "README.md"), "utf8").catch(() => null);
+  if (text === null) return null;
+  const lines = text.split("\n");
+  const titleIdx = lines.findIndex((l) => l.trim() !== "");
+  if (titleIdx === -1) return "";
+  return lines
+    .slice(titleIdx + 1)
+    .join("\n")
+    .trim();
+}
 
-/** `<root>/epics/<epic>/memory/*.md` 한 단계 글롭(결정 2) — 파일만, 이름 오름차순. 하위
- *  디렉터리는 안 읽는다. 디렉터리가 없으면 빈 목록이고 경고 없다(정상 — 결정 2). */
-export async function epicMemory(root: string, epic: string): Promise<EpicMemory[]> {
+export type EpicMemory = { file: string; excerpt: string; text: string };
+
+/** 메모리 디렉터리 글롭 하나 — 읽기(`epicMemory`)와 삭제(`deleteEpicMemory`)가 같이 쓴다
+ *  (`lib/skills.ts`의 `memoryFiles`와 같은 자리). 디렉터리가 없으면 빈 목록(정상 — 결정 2). */
+async function memoryFiles(root: string, epic: string): Promise<{ dir: string; name: string }[]> {
   const epicRoot = await epicDir(root, epic);
   if (!epicRoot) return [];
   const dir = path.join(epicRoot, "memory");
   const ents = await readdir(dir, { withFileTypes: true }).catch(() => []);
-  const names = ents
+  return ents
     .filter((e) => e.isFile() && e.name.endsWith(".md"))
-    .map((e) => e.name)
-    .sort((a, b) => a.localeCompare(b));
+    .map((e) => ({ dir, name: e.name }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** `<root>/epics/<epic>/memory/*.md` 한 단계 글롭(결정 2) — 파일만, 이름 오름차순. 하위
+ *  디렉터리는 안 읽는다. 디렉터리가 없으면 빈 목록이고 경고 없다(정상 — 결정 2). */
+export async function epicMemory(root: string, epic: string): Promise<EpicMemory[]> {
+  const files = await memoryFiles(root, epic);
   return Promise.all(
-    names.map(async (file) => ({ file, text: await readFile(path.join(dir, file), "utf8") })),
+    files.map(async (f) => {
+      const text = await readFile(path.join(f.dir, f.name), "utf8");
+      return { file: f.name, excerpt: memoryExcerpt(text), text };
+    }),
   );
+}
+
+/** 삭제. 클라이언트가 준 파일명은 이 디렉터리를 실제로 나열해 나온 목록 안에 있을 때만 지운다
+ *  (§경로 방어 — `lib/skills.ts`의 `deletePersonaMemory`와 같은 규칙). NFC로 대조한다(같은 이유:
+ *  macOS HFS+가 파일명을 NFD로 돌려주는 자리가 있다). */
+export async function deleteEpicMemory(root: string, epic: string, file: string): Promise<void> {
+  const files = await memoryFiles(root, epic);
+  const target = files.find((f) => f.name.normalize("NFC") === file.normalize("NFC"));
+  if (!target) throw new Error(`메모리 파일이 목록에 없습니다: ${file}`);
+  await rm(path.join(target.dir, target.name));
 }

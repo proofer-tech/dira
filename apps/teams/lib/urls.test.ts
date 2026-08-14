@@ -47,13 +47,15 @@ test("parentPath — 부모가 없는 화면은 `null`이다(§0-7 표 1·2행)"
   assert.equal(parentPath("/p/a/home"), null); // 홈도 부모가 없다 — `Esc`는 무동작이다(§7)
 });
 
-test("parentPath — 프로젝트 화면 다섯의 부모는 보드다(§0-7 표 3~6행)", () => {
+test("parentPath — 프로젝트 화면 여섯의 부모는 보드다(§0-7 표 3~7행)", () => {
   assert.equal(parentPath("/p/a/workers"), "/p/a");
   assert.equal(parentPath("/p/a/personas"), "/p/a");
   assert.equal(parentPath("/p/a/protocols"), "/p/a");
   assert.equal(parentPath("/p/a/ontology"), "/p/a");
   assert.equal(parentPath("/p/a/tickets/fff28e90"), "/p/a");
   assert.equal(parentPath("/p/a/tickets/new"), "/p/a"); // 발행도 보드에서 들어간다(§비주얼 §4)
+  assert.equal(parentPath("/p/a/epics"), "/p/a");
+  assert.equal(parentPath("/p/a/epics/P273"), "/p/a"); // 에픽 화면(§에픽 §결정 6)
 });
 
 test("parentPath — 한글 stem은 인코딩돼도 같은 부모다", () => {

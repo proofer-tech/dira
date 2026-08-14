@@ -64,7 +64,7 @@ export function projectPath(pathname: string, id: string): string {
 export function parentPath(pathname: string): string | null {
   const [, id, rest = ""] = /^\/p\/([^/]+)(\/.*)?$/.exec(pathname) ?? [];
   if (!id) return null; // `/` · 모르는 경로
-  return /^\/(tickets|workers|personas|protocols|ontology)(\/|$)/.test(rest) ? `/p/${id}` : null;
+  return /^\/(tickets|workers|personas|protocols|ontology|epics)(\/|$)/.test(rest) ? `/p/${id}` : null;
 }
 
 /** 사용 통계의 화면 enum (DESIGN.md §0-11 이벤트 표 `screen_view`). **`lib/analytics.ts`가

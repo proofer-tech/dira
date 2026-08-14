@@ -2652,6 +2652,7 @@ role 표를 그대로 읽는다(`node_modules/electron`이 비어 있어도 `app
 | 워커 | `/p/<project>/workers` | 보드 |
 | 페르소나 | `/p/<project>/personas` - **`/p/<project>/personas/<이름>`**(§5 - 요구 `8429c041`) | 보드 |
 | 프로토콜 | `/p/<project>/protocols` | 보드 |
+| 에픽 | `/p/<project>/epics` - **`/p/<project>/epics/<P번호>`**(§에픽 §결정 6 - 요구 `e73ed083`) | 보드 |
 
 - **보드의 부모는 `/`가 아니다.** §비주얼 §4가 `프로젝트 관리`로 가는 길을 **전환기 하단 한 곳**으로
   줄였다(요청 `a4c5814c`). `Esc`가 두 번째 문을 내면 그 결정이 뒤집힌다. 그리고 프로젝트 밖으로
