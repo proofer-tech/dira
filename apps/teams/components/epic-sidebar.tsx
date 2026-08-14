@@ -1,4 +1,4 @@
-/** 보드 왼쪽 에픽 사이드바 (DESIGN.md §에픽 결정 5 · §비주얼 §52 ①②).
+/** 보드 왼쪽 에픽 사이드바 (DESIGN.md §에픽 결정 5 · §비주얼 §52 ①② · 접힘은 결정 13 · §52 ⑦).
  *
  *  **에픽 화면(§결정 6, `36e431d9`)이 같은 컴포넌트를 쓴다** — 갈리는 것은 링크 목적지 하나다
  *  (§52 ④ "같은 컴포넌트 … 갈리는 것은 prop 하나"). 지금 이 티켓은 보드 쪽 `hrefFor`
@@ -7,7 +7,7 @@
  *  서버 컴포넌트다 — 목록도 제목도 페이지가 이미 읽은 값을 그대로 받는다(새 클라이언트 상태 ·
  *  새 폴링 · 새 스켈레톤 0개, §52 §로딩). */
 import Link from "next/link";
-import { NotebookText } from "lucide-react";
+import { NotebookText, PanelLeft } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -19,8 +19,10 @@ import {
   SidebarMenuItem,
   SidebarProvider,
 } from "@/components/ui/sidebar";
+import { Button } from "@/components/ui/button";
 import { NO_EPIC, type Epic } from "@/lib/epics";
 import { t, type Locale } from "@/lib/i18n";
+import { cn } from "@/lib/utils";
 import { WorkerChips } from "@/components/worker-mark";
 
 /** 사이드바 슬롯 예산(§비주얼 §52 ⑥) — 214px 자리에 셋이 18%를 남긴다. 넷째부터 `+n` */
@@ -34,6 +36,8 @@ export function EpicSidebar({
   allHref,
   allActive,
   memoryHrefFor,
+  collapsed = false,
+  toggleHref,
   locale,
 }: {
   epics: Epic[];
@@ -52,119 +56,151 @@ export function EpicSidebar({
   /** 둘째 문의 목적지 — `/p/<project>/epics/<P번호>`(§결정 6). 없으면 안 그린다 — 에픽
    *  화면 자신이 쓸 때는 줄 자체가 이미 그 화면이라 둘째 문이 없다(§비주얼 §52 ④) */
   memoryHrefFor?: (epic: string) => string;
+  /** `?sidebar=off`(§에픽 결정 13 · §비주얼 §52 ⑦). 없거나 모르는 값이면 펼침 — 판정은
+   *  호출하는 페이지가 이미 했다(`sp.get("sidebar") === "off"`) */
+  collapsed?: boolean;
+  /** 지금 상태를 뒤집는 링크 — 펼침이면 `?sidebar=off`를 더한 URL, 접힘이면 그 파라미터를
+   *  뺀 URL. 글리프 하나가 두 방향을 다 내므로(§52 ⑦) 링크도 하나다 */
+  toggleHref: string;
   locale: Locale;
 }) {
   // `전체`(§결정 12) 건수 — 에픽 축 필터가 걸리기 전 큐 전체다. `listEpics`에 항목을 안 더하므로
   // 아래 줄들(NO_EPIC 포함)의 합으로 낸다 — 그래서 수용조건 2가 저절로 참이다.
   const allTotal = epics.reduce((n, e) => n + e.counts.open + e.counts.wip + e.counts.done, 0);
   const allWip = epics.reduce((n, e) => n + e.counts.wip, 0);
+  // 접힌 컨트롤(펴기)과 펼친 컨트롤(접기)은 글리프 하나가 두 방향을 다 낸다(§52 ⑦) — 자리도
+  // 같다: `SidebarGroupLabel`이 서는 그 행(`h-6`·`px-2`·`ml-auto`), 낱말만 접히면 빠진다.
+  const toggle = (
+    <Button
+      variant="ghost"
+      size="icon-xs"
+      nativeButton={false}
+      className="ml-auto text-muted-foreground"
+      title={t(locale, collapsed ? "board.epic.expand" : "board.epic.collapse")}
+      render={<Link href={toggleHref} />}
+    >
+      <PanelLeft aria-hidden className="size-4" />
+      <span className="sr-only">{t(locale, collapsed ? "board.epic.expand" : "board.epic.collapse")}</span>
+    </Button>
+  );
   return (
     // `w-full`·`min-h-svh` 기본값을 덮는다(personas-ui.tsx와 같은 처방) — 여기는 형제 열
     // 하나(칸반 또는 표)와 나란한 **한 칸**이지 2단 전체가 아니다.
     <SidebarProvider className="min-h-0 w-auto shrink-0">
       {/* 폭 `w-64`(256)는 레인 하한 288보다 좁다(§52 §폭). 카드도 레일도 아니다 — 층을
-          페이지로 내려 필터 입구(툴바)와 한 덩이로 잇는다(§52 §가르는 축) */}
-      <Sidebar collapsible="none" className="w-64 shrink-0 border-r bg-background">
+          페이지로 내려 필터 입구(툴바)와 한 덩이로 잇는다(§52 §가르는 축). 접히면 갈리는
+          클래스는 `w-64` -> `w-10` 하나뿐이다 — 층-변-그릇은 이 한 자리에서 그대로 나온다(§52 ⑦). */}
+      <Sidebar
+        collapsible="none"
+        className={cn(collapsed ? "w-10" : "w-64", "shrink-0 border-r bg-background")}
+      >
         <SidebarContent className="py-2">
-          <SidebarGroup className="p-0">
-            {/* 드래그 중 "놓을 에픽을 고릅니다"로 갈리는 자리(§비주얼 §52 ⑤ (2)) —
-                `board-ui.tsx`의 `EpicDrag`가 이 속성으로 찾는다. */}
-            <SidebarGroupLabel data-epic-group-label className="h-6 text-muted-foreground">
-              {t(locale, "board.epic.label")}
-            </SidebarGroupLabel>
-            <SidebarMenu aria-label={t(locale, "board.epic.label")} className="gap-0.5">
-              {/* `전체`(§결정 12) — 목록 맨 위, `(에픽 없음)`과 한 클래스도 안 다르다. 새 모양을
-                  안 고른다: 구분선-여백 0, P번호 없음, 둘째 문 없음. `listEpics`가 안 낳는 값이라
-                  `epics.map` 밖에서 따로 그린다. */}
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  className="h-auto items-start"
-                  isActive={allActive}
-                  aria-current={allActive ? "page" : undefined}
-                  render={<Link href={allHref} />}
-                >
-                  <div className="flex min-w-0 grow flex-col gap-0.5">
-                    <span className="flex items-baseline gap-2">
-                      <span className="min-w-0 truncate text-sm">{t(locale, "board.epic.all")}</span>
-                    </span>
-                    <span className="flex items-baseline gap-2 text-xs text-muted-foreground">
-                      <span>{allTotal}건</span>
-                      {allWip > 0 && (
-                        <span className="ml-auto">
-                          {t(locale, "status.label.wip")} {allWip}
-                        </span>
-                      )}
-                    </span>
-                  </div>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              {epics.map((row) => {
-                const isNone = row.epic === NO_EPIC;
-                const value = isNone ? "" : row.epic;
-                const isActive = active === value;
-                const total = row.counts.open + row.counts.wip + row.counts.done;
-                return (
-                  // 드롭이 받는 상자는 이 줄 전체다(§비주얼 §52 ⑤ — 둘째 문 위도 같은 줄이다).
-                  // `value`가 빈 문자열이어도 속성 자체는 선다 — `(에픽 없음)`도 후보다(§결정 8).
-                  <SidebarMenuItem key={row.epic} data-epic-drop={value}>
-                    <SidebarMenuButton
-                      data-epic-ring
-                      className="h-auto items-start"
-                      isActive={isActive}
-                      aria-current={isActive ? "page" : undefined}
-                      render={<Link href={hrefFor(value)} />}
-                    >
-                      <div className="flex min-w-0 grow flex-col gap-0.5">
-                        <span className="flex items-baseline gap-2">
-                          <span className="min-w-0 truncate text-sm">
-                            {isNone
-                              ? t(locale, "board.epic.none")
-                              : (titles[row.epic] ?? t(locale, "board.epic.noTitle"))}
+          {collapsed ? (
+            // 접힌 띠(§비주얼 §52 ⑦) — `SidebarGroup` 이하가 통째로 안 그려진다. 남는 것은
+            // 펴는 링크 하나뿐이다.
+            <div className="flex h-6 items-center px-2">{toggle}</div>
+          ) : (
+            <SidebarGroup className="p-0">
+              {/* 드래그 중 "놓을 에픽을 고릅니다"로 갈리는 자리(§비주얼 §52 ⑤ (2)) —
+                  `board-ui.tsx`의 `EpicDrag`가 이 속성으로 찾는다. */}
+              <SidebarGroupLabel data-epic-group-label className="h-6 text-muted-foreground">
+                {t(locale, "board.epic.label")}
+                {toggle}
+              </SidebarGroupLabel>
+              <SidebarMenu aria-label={t(locale, "board.epic.label")} className="gap-0.5">
+                {/* `전체`(§결정 12) — 목록 맨 위, `(에픽 없음)`과 한 클래스도 안 다르다. 새 모양을
+                    안 고른다: 구분선-여백 0, P번호 없음, 둘째 문 없음. `listEpics`가 안 낳는 값이라
+                    `epics.map` 밖에서 따로 그린다. */}
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    className="h-auto items-start"
+                    isActive={allActive}
+                    aria-current={allActive ? "page" : undefined}
+                    render={<Link href={allHref} />}
+                  >
+                    <div className="flex min-w-0 grow flex-col gap-0.5">
+                      <span className="flex items-baseline gap-2">
+                        <span className="min-w-0 truncate text-sm">{t(locale, "board.epic.all")}</span>
+                      </span>
+                      <span className="flex items-baseline gap-2 text-xs text-muted-foreground">
+                        <span>{allTotal}건</span>
+                        {allWip > 0 && (
+                          <span className="ml-auto">
+                            {t(locale, "status.label.wip")} {allWip}
                           </span>
-                          {/* P번호 등급(§에픽 결정 11 · §비주얼 §52 ②) — 라벨보다 크지도 두껍지도
-                              않다. `font-normal`을 여기서 박아야 선택 줄의 `font-medium` 상속을 끊는다. */}
-                          {!isNone && (
-                            <span className="shrink-0 text-xs font-normal text-muted-foreground">
-                              ({row.epic})
-                            </span>
-                          )}
-                        </span>
-                        {/* 드래그 중 "놓으면 이 에픽으로" 문장이 이 슬롯에 대신 든다(§52 ⑤ (3)) */}
-                        <span
-                          data-epic-line
-                          className="flex items-baseline gap-2 text-xs text-muted-foreground"
-                        >
-                          <span>{total}건</span>
-                          {row.counts.wip > 0 && (
-                            // `진행중 n`과 워커 칩 묶음이 같이 오른쪽 끝에 붙는다(§비주얼 §52 ⑥-1)
-                            <span className="ml-auto flex items-baseline gap-1">
-                              <span>
-                                {t(locale, "status.label.wip")} {row.counts.wip}
-                              </span>
-                              <WorkerChips names={row.workers} cap={WORKER_CHIP_CAP} />
-                            </span>
-                          )}
-                        </span>
-                      </div>
-                    </SidebarMenuButton>
-                    {/* `(에픽 없음)`은 둘째 문이 없다 — 갈 메모리 디렉터리가 없다(결정 2) */}
-                    {!isNone && memoryHrefFor && (
-                      <SidebarMenuAction
-                        render={
-                          <Link href={memoryHrefFor(row.epic)} title={`${row.epic} ${t(locale, "board.epic.memory")}`} />
-                        }
+                        )}
+                      </span>
+                    </div>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                {epics.map((row) => {
+                  const isNone = row.epic === NO_EPIC;
+                  const value = isNone ? "" : row.epic;
+                  const isActive = active === value;
+                  const total = row.counts.open + row.counts.wip + row.counts.done;
+                  return (
+                    // 드롭이 받는 상자는 이 줄 전체다(§비주얼 §52 ⑤ — 둘째 문 위도 같은 줄이다).
+                    // `value`가 빈 문자열이어도 속성 자체는 선다 — `(에픽 없음)`도 후보다(§결정 8).
+                    <SidebarMenuItem key={row.epic} data-epic-drop={value}>
+                      <SidebarMenuButton
+                        data-epic-ring
+                        className="h-auto items-start"
+                        isActive={isActive}
+                        aria-current={isActive ? "page" : undefined}
+                        render={<Link href={hrefFor(value)} />}
                       >
-                        <NotebookText aria-hidden className="size-4" />
-                        <span className="sr-only">
-                          {row.epic} {t(locale, "board.epic.memory")}
-                        </span>
-                      </SidebarMenuAction>
-                    )}
-                  </SidebarMenuItem>
-                );
-              })}
-            </SidebarMenu>
-          </SidebarGroup>
+                        <div className="flex min-w-0 grow flex-col gap-0.5">
+                          <span className="flex items-baseline gap-2">
+                            <span className="min-w-0 truncate text-sm">
+                              {isNone
+                                ? t(locale, "board.epic.none")
+                                : (titles[row.epic] ?? t(locale, "board.epic.noTitle"))}
+                            </span>
+                            {/* P번호 등급(§에픽 결정 11 · §비주얼 §52 ②) — 라벨보다 크지도 두껍지도
+                                않다. `font-normal`을 여기서 박아야 선택 줄의 `font-medium` 상속을 끊는다. */}
+                            {!isNone && (
+                              <span className="shrink-0 text-xs font-normal text-muted-foreground">
+                                ({row.epic})
+                              </span>
+                            )}
+                          </span>
+                          {/* 드래그 중 "놓으면 이 에픽으로" 문장이 이 슬롯에 대신 든다(§52 ⑤ (3)) */}
+                          <span
+                            data-epic-line
+                            className="flex items-baseline gap-2 text-xs text-muted-foreground"
+                          >
+                            <span>{total}건</span>
+                            {row.counts.wip > 0 && (
+                              // `진행중 n`과 워커 칩 묶음이 같이 오른쪽 끝에 붙는다(§비주얼 §52 ⑥-1)
+                              <span className="ml-auto flex items-baseline gap-1">
+                                <span>
+                                  {t(locale, "status.label.wip")} {row.counts.wip}
+                                </span>
+                                <WorkerChips names={row.workers} cap={WORKER_CHIP_CAP} />
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                      </SidebarMenuButton>
+                      {/* `(에픽 없음)`은 둘째 문이 없다 — 갈 메모리 디렉터리가 없다(결정 2) */}
+                      {!isNone && memoryHrefFor && (
+                        <SidebarMenuAction
+                          render={
+                            <Link href={memoryHrefFor(row.epic)} title={`${row.epic} ${t(locale, "board.epic.memory")}`} />
+                          }
+                        >
+                          <NotebookText aria-hidden className="size-4" />
+                          <span className="sr-only">
+                            {row.epic} {t(locale, "board.epic.memory")}
+                          </span>
+                        </SidebarMenuAction>
+                      )}
+                    </SidebarMenuItem>
+                  );
+                })}
+              </SidebarMenu>
+            </SidebarGroup>
+          )}
         </SidebarContent>
       </Sidebar>
     </SidebarProvider>

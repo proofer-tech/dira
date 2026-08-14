@@ -496,6 +496,17 @@ export default async function Board({
     return qs(next);
   })();
 
+  /** 에픽 사이드바 접힘(§에픽 결정 13 · §비주얼 §52 ⑦) — 없거나 모르는 값이면 펼침
+   *  (`?lane=epic`이 쓰는 그 규약). 토글 링크는 **목록을 안 바꾸므로** `qs()`를 안 쓴다 —
+   *  `rows`·`done`을 지우면 접고 펼 때마다 표·칸반이 처음 몫으로 되감긴다. */
+  const sidebarOff = sp.get("sidebar") === "off";
+  const sidebarToggleHref = (() => {
+    const next = new URLSearchParams(sp);
+    if (sidebarOff) next.delete("sidebar");
+    else next.set("sidebar", "off");
+    return next.toString() ? `?${next}` : `/p/${id}`;
+  })();
+
   /** 필터 0건 — 두 뷰가 **같은 문구·같은 해제 배지**를 쓴다. 빈 큐와 문구가 다른 이유는 §6이다
    *  (원인이 다르면 다음 행동도 다르다). */
   const noMatch = (
@@ -781,6 +792,8 @@ export default async function Board({
               allHref={allEpicHref}
               allActive={query.epic === null}
               memoryHrefFor={epicMemoryHref}
+              collapsed={sidebarOff}
+              toggleHref={sidebarToggleHref}
               locale={locale}
             />
             {view === "kanban" ? (

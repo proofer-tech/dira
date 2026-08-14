@@ -31,10 +31,18 @@ export const dynamic = "force-dynamic";
 
 export default async function Epics({
   params,
+  searchParams,
 }: {
   params: Promise<{ project: string; epic?: string[] }>;
+  searchParams: Promise<{ sidebar?: string }>;
 }) {
   const { project: id, epic: epicSegs } = await params;
+  const { sidebar } = await searchParams;
+  // `?sidebar=off`(§에픽 결정 13 · §비주얼 §52 ⑦) — 없거나 모르는 값이면 펼침. 이 화면은
+  // 세그먼트마다 **다른 경로**라(catch-all) 각 링크가 이 값을 직접 실어야 접힌 채로 남는다
+  // (보드는 `sp` 통째 복사로 저절로지만 여기는 그 그릇이 없다).
+  const sidebarOff = sidebar === "off";
+  const sidebarSuffix = sidebarOff ? "?sidebar=off" : "";
   const project = await getProject(id);
   if (!project) notFound();
 
@@ -60,11 +68,16 @@ export default async function Epics({
   // `EpicSidebar`의 값 규약과 같다 — `""`는 `(에픽 없음)`(board.ts `epicHref`와 같은 값).
   // board는 `?epic=`, 이 화면은 경로 — 줄의 목적지가 갈리는 그 prop 하나(§결정 6).
   // `(에픽 없음)`은 이 화면에서도 보드로 나간다 — 갈 화면이 없다(§결정 6).
+  // 셋 다 `sidebarSuffix`를 싣는다 — 접힌 채로 줄을 눌러도 접힌 채로 남는다(§비주얼 §52 ⑦).
   const hrefFor = (value: string) =>
     value === ""
-      ? `/p/${id}/?epic=${encodeURIComponent(value)}`
-      : `/p/${id}/epics/${encodeURIComponent(value)}`;
-  const boardHrefFor = (epic: string) => `/p/${id}/?epic=${encodeURIComponent(epic)}`;
+      ? `/p/${id}/?epic=${encodeURIComponent(value)}${sidebarOff ? "&sidebar=off" : ""}`
+      : `/p/${id}/epics/${encodeURIComponent(value)}${sidebarSuffix}`;
+  const boardHrefFor = (epic: string) =>
+    `/p/${id}/?epic=${encodeURIComponent(epic)}${sidebarOff ? "&sidebar=off" : ""}`;
+  // 지금 경로(세그먼트 그대로) — 토글 링크가 목록 선택은 안 건드리고 `sidebar` 하나만 뒤집는다.
+  const epicPath = `/p/${id}/epics${epicSegs?.length ? `/${epicSegs.map(encodeURIComponent).join("/")}` : ""}`;
+  const sidebarToggleHref = sidebarOff ? epicPath : `${epicPath}?sidebar=off`;
 
   let memories: EpicMemory[] = [];
   let readme: string | null = null;
@@ -84,8 +97,10 @@ export default async function Epics({
         titles={titles}
         active={current?.epic ?? null}
         hrefFor={hrefFor}
-        allHref={`/p/${id}`}
+        allHref={`/p/${id}${sidebarSuffix}`}
         allActive={false}
+        collapsed={sidebarOff}
+        toggleHref={sidebarToggleHref}
         locale={locale}
       />
 
