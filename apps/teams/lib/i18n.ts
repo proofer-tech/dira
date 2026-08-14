@@ -320,6 +320,11 @@ export const ko: Record<string, string> = {
   "dep.hint.unmet": "미충족 — 아직 완료되지 않았다",
   "dep.hint.missing": "큐에 없는 해시 — 영구 대기",
   "dep.hint.answer": "답변 기록 — 이 요구사항의 답변",
+
+  // 에픽(DESIGN.md §에픽 결정 5·7) — 사이드바·스윔레인·에픽 화면 셋이 같은 라벨을 쓴다.
+  // 화면·노드를 안 가리는 개념이라 `board.*`가 아니라 `epic.*`다(§키 규약 §공유).
+  "epic.label.untitled": "제목 없음",
+  "board.column.epic": "에픽",
 };
 
 /** 제품 낱말의 영어 대응 — **여기가 한자리다**(621c7a97). 다음 묶음이 같은 것을 다르게 부르지
@@ -670,6 +675,10 @@ export const en: Record<string, string> = {
   "dep.hint.unmet": "Unmet — not done yet",
   "dep.hint.missing": "No such hash in the queue — waits forever",
   "dep.hint.answer": "Answer on record — the answer to this request",
+
+  // 에픽(DESIGN.md §에픽 결정 5·7).
+  "epic.label.untitled": "Untitled",
+  "board.column.epic": "Epic",
 };
 
 const DICTS: Record<Locale, Record<string, string>> = { ko, en };

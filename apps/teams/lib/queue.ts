@@ -717,7 +717,8 @@ export function filterTickets(tickets: Ticket[], query: BoardQuery): Ticket[] {
  *  보여주는 고장 신호다(§0-2). */
 export const HIDE_DONE_STATUSES = ["open", "blocked", "awaiting", "assigned", "wip"];
 
-/** 정렬 가능한 컬럼 = 테이블 컬럼 8개. URL의 `sort` 값은 이 목록으로 검증한다. */
+/** 정렬 가능한 컬럼 = 테이블 컬럼 9개(§에픽 결정 7 — `epic` 컬럼이 스윔레인을 대신한다).
+ *  URL의 `sort` 값은 이 목록으로 검증한다. */
 export const SORT_KEYS = [
   "status",
   "hash",
@@ -727,6 +728,7 @@ export const SORT_KEYS = [
   "deps",
   "created",
   "owner",
+  "epic",
 ] as const;
 export type SortKey = (typeof SORT_KEYS)[number];
 
@@ -747,6 +749,10 @@ export function sortTickets(tickets: Ticket[], key: SortKey | null, desc: boolea
       deps: t.deps.length,
       created: t.birth,
       owner: norm(t.fm.owner ?? ""),
+      // 정규화 없음 — epicOf 그대로가 정렬 값이다(§에픽 결정 1). 값 없는 티켓은 빈 문자열이라
+      // 오름차순에서 맨 앞이다 — 사이드바·스윔레인의 "(에픽 없음) 맨 아래"는 그 화면들만의
+      // 표시 규칙이고 이 범용 컬럼 정렬은 나머지 컬럼과 같은 식이다.
+      epic: epicOf(t),
     })[key];
   return [...tickets].sort((a, b) => {
     const x = val(a);

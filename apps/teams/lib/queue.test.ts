@@ -19,6 +19,7 @@ import {
   awaitingUnlocked,
   derivedFrom,
   dueAlertOf,
+  epicOf,
   filterTickets,
   findPath,
   fixesOf,
@@ -1531,6 +1532,22 @@ test("reqTitle — 첫 비어있지 않은 줄, 80자에서 자르고 …", () =
   assert.strictEqual(reqTitle("가".repeat(81)), "가".repeat(80) + "…");
   // 빈 입력·공백만 → ""(액션이 "요구 내용을 입력하세요."로 거부한다)
   assert.strictEqual(reqTitle("   \n\t\n"), "");
+});
+
+test("에픽 — epicOf 값 그대로(정규화 없음) · 정렬 컬럼 하나로 통합(§에픽 결정 1 · §1 §테이블 컬럼)", async () => {
+  const root = newRoot();
+  await write(root, "aaaa1111.md", fm({ ticket: "aaaa1111", title: "A", epic: "P273" }));
+  await write(root, "bbbb2222.md", fm({ ticket: "bbbb2222", title: "B", epic: "P100" }));
+  await write(root, "cccc3333.md", fm({ ticket: "cccc3333", title: "C" })); // epic 없음
+  const tickets = await listTickets(root, DEFAULT);
+  const by = (h: string) => tickets.find((t) => t.hash === h)!;
+  assert.strictEqual(epicOf(by("aaaa1111")), "P273");
+  assert.strictEqual(epicOf(by("cccc3333")), ""); // 없으면 빈 문자열 — "(에픽 없음)" 라벨은 화면(epics.ts) 몫이다
+  // "" < "P100" < "P273" — 접두사 정규화 없이 문자열 그대로 오름차순
+  assert.deepStrictEqual(
+    sortTickets(tickets, "epic", false).map((t) => t.hash),
+    ["cccc3333", "bbbb2222", "aaaa1111"],
+  );
 });
 
 test("관계선 간선 — deps 양방향 + req · 화면 밖은 안 싣는다 (§1 보드 · §비주얼 §17)", async () => {

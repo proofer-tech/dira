@@ -94,7 +94,8 @@ const FILLED = [
   "statusbar.",
   "status.",
   "dep.",
-  "board.",
+  "board.", // board.column.epic(806e483a)도 이 접두사로 덮인다
+  "epic.",
 ];
 
 test("이미 찬 묶음(설정·마감·셸)의 ko 키는 en에 하나도 안 빠졌다", () => {

@@ -28,7 +28,7 @@
 import { stat } from "node:fs/promises";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Archive, ArrowDown, ArrowUp, ChevronsUpDown, X } from "lucide-react";
+import { Archive, ArrowDown, ArrowUp, ChevronsUpDown, TriangleAlert, X } from "lucide-react";
 import {
   BoardDoneLane,
   BoardFilter,
@@ -56,12 +56,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { NO_EPIC, epicTitle, listEpics } from "@/lib/epics";
+import { t } from "@/lib/i18n";
 import {
   HIDE_DONE_STATUSES,
   SORT_KEYS,
   TABLE_DEFAULT_SORT,
   archivesOf,
   awaitingOf,
+  epicOf,
   filterTickets,
   inDefaultList,
   isAwaiting,
@@ -77,8 +80,6 @@ import {
   type SortKey,
   type Ticket,
 } from "@/lib/queue";
-import { epicTitle, listEpics, NO_EPIC } from "@/lib/epics";
-import { t } from "@/lib/i18n";
 import { getProject, listPersonas, readLanguage, resolveConfig } from "@/lib/projects";
 import { findStream, lastActivity, sessionIdOf, type StreamEvent } from "@/lib/transcript";
 import { doneLimit, rowLimit } from "@/lib/urls";
@@ -255,7 +256,9 @@ export default async function Board({
 
   const config = await resolveConfig(project);
   const tickets = await listTickets(project.root, config);
-  const locale = await readLanguage(); // 우선순위 미터의 sr-only 문구뿐(§비주얼 §49) — 화면 나머지는 아직 미이행
+  // 우선순위 미터의 sr-only 문구(§비주얼 §49) + 에픽 스윔레인·표 컬럼의 새 문구뿐(§0-16) —
+  // 화면 나머지는 아직 미이행이다.
+  const locale = await readLanguage();
 
   // 상태만 **기본값이 있다**(§1 보드 · 사람 요청 `38108932`): `status`가 URL에 하나도 없을 때
   // 상태 6개가 전부 들어간다 — 완료는 기본으로 보인다. 방금 끝난 티켓까지 지우지 않으려고
@@ -348,10 +351,14 @@ export default async function Board({
     return next.toString() ? `?${next}` : `/p/${id}`;
   };
 
+  // 표 컬럼 9번째(§에픽 결정 7 §표뷰) — `COLUMNS`는 나머지 8개와 같이 정적이라 로케일이 없다.
+  // 여기서만 새 문구를 붙인다(§0-16, `board.column.epic`).
+  const columns = [...COLUMNS, { key: "epic" as const, label: t(locale, "board.column.epic") }];
+
   /** 헤더 클릭 3단계: 오름차순 → 내림차순 → 기본 복귀. 정렬을 끌 방법이 없으면 기본 순서를
    *  다시 못 본다. 돌아가는 곳은 파라미터가 없는 화면이고 그 테이블은 생성일 내림차순이다
    *  (§테이블 기본 순서). `생성일`은 마지막 두 칸이 같은 순서를 그리지만(파라미터 유무만
-   *  다르다) **특례를 만들지 않는다** — 규칙이 8컬럼에 하나여야 한다. */
+   *  다르다) **특례를 만들지 않는다** — 규칙이 9컬럼에 하나여야 한다. */
   const sortHref = (key: SortKey) => {
     const next = new URLSearchParams(sp);
     if (sortKey === key && desc) {
@@ -511,6 +518,122 @@ export default async function Board({
     </div>
   );
 
+  // 완료 레인 자르기(§1 §완료 항) — 스윔레인에서는 **에픽마다** 다시 건다(§에픽 결정 7):
+  // 자르는 값(`?done=`)은 하나를 공유하고, 자르는 동작만 그룹마다 따로 돈다(안 그러면 첫 띠가
+  // 20건을 다 먹고 아래 띠가 빈다).
+  const doneN = doneLimit(sp.get("done"));
+  const laneCards = (group: Ticket[], s: (typeof STATUSES)[number]) => {
+    if (s !== "done") return { cards: group, trimmed: 0 };
+    const cards = [...group].sort((a, b) => b.birth - a.birth).slice(0, doneN);
+    return { cards, trimmed: group.length - cards.length };
+  };
+
+  /** 칸반 카드 하나 — 기본 3레인·스윔레인 둘 다 같은 카드를 그린다(§에픽 결정 1: 카드 내용은
+   *  무수정 — 에픽은 띠 머리·사이드바가 이미 말하므로 카드에 배지를 더 안 단다). */
+  const renderCard = (t: Ticket) => (
+    // 카드 전체가 상세로 가는 링크다(테이블 행과 같은 규칙 — 행 액션 버튼이
+    // 없어서 안전하다). deps 배지는 늘어난 링크 위에 뜬다.
+    <Card
+      key={t.path}
+      // 관계선이 상대를 찾는 이름이다(§1: 못 찾으면 안 그린다). 링크·엔진과
+      // 같은 `stem`이라 `relationEdges`가 준 간선과 그냥 맞는다
+      data-stem={t.stem}
+      className="card-tint relative gap-2 px-4"
+    >
+      {/* 칸반 카드는 레인이 상태를 말하므로 배지를 달지 않는다 — 예외가
+          `답변 대기`다. 자기 레인 없이 `대기`에 앉고, 답변 stem은 큐에
+          없는 해시라 deps 태그가 `?`로만 떠서 "사람이 답할 차례"라는
+          말을 못 한다. 그래서 이 배지 하나만 남는다(§1 보드 요구사항 항).
+          `deps 대기`는 배지를 얹지 않는다 — 아래 deps 줄의 주황색
+          <DepBadge>가 그 표시다(사람 요청 `bd2062cb`) */}
+      <div className="flex items-start justify-between gap-2">
+        {/* 우선순위 미터(§비주얼 §49) — 해시 줄, `<Link>` 앞. 흐름 안이라
+            `<Card>`의 `overflow-hidden` 기본값에 안 닿는다(테이블 해시 셀과
+            같은 자리·같은 그릇, §49 §자리). */}
+        <span className="inline-flex items-center gap-1">
+          <PriorityMeter priority={t.priority} locale={locale} />
+          {/* §비주얼 §31 ① 갈래 A — 밑줄 없음. 링크임은 카드의
+              `card-tint` 호버 + 커서 + 이 앵커에 걸리는 포커스 링이 말한다 */}
+          <Link
+            href={href(t)}
+            className="rounded-sm font-mono text-xs text-muted-foreground after:absolute after:inset-0"
+          >
+            {t.hash}
+          </Link>
+        </span>
+        {isAwaiting(t) && <StatusBadge status="awaiting" days={daysSince(t.mtime)} />}
+      </div>
+      {/* 카드 title은 2줄까지(§6). 전문은 `title` 속성으로 본다 */}
+      <span className="line-clamp-2 text-sm" title={t.title}>
+        {t.title || "(제목 없음)"}
+      </span>
+      {/* 배지가 줄 안에 섞이므로 flex다 — 텍스트 baseline 정렬에 맡기면
+          20px 배지가 줄을 밀어 카드마다 높이가 갈린다.
+          `flex-wrap`은 워커 마크 몫이다(§비주얼 §19 잘림): 워커 이름은
+          식별자라 안 자르고, 길면 카드가 한 줄 자라며 배지를 안 민다 */}
+      <span className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
+        {t.kind ? (KIND_LABELS[t.kind] ?? t.kind) : "—"} ·
+        {t.persona ? (
+          <PersonaBadge name={t.persona} color={colors[t.persona]} state={t.state} />
+        ) : (
+          "—"
+        )}
+        <WipWorker t={t} />
+      </span>
+      {t.deps.length > 0 && (
+        // 라벨은 세어주지 않는다 — 어느 해시가 무엇인지는 <DepBadge>가
+        // 색·아이콘으로, 스크린리더에는 배지 안 `sr-only` 문구로 말한다.
+        <span className="relative z-10 flex flex-wrap items-center gap-1">
+          <span className="text-xs text-muted-foreground">deps</span>
+          {depBadges(tickets, t, config).map((d) => (
+            <DepBadge key={d.hash} hash={d.hash} kind={d.kind} href={d.hit ? href(d.hit) : undefined} />
+          ))}
+        </span>
+      )}
+      {/* 답변은 여기서 바로 단다(§1 요구사항 항, 사람 요청 `14c88df4`) —
+          상세와 같은 스레드(`threadOf`) · 같은 폼 · 같은 액션이다. 판정은
+          위 배지와 **같은 식**이고, 테이블 행에는 붙이지 않는다(§1 행 액션 없음).
+          자리는 카드 맨 아래다: 위는 티켓이 무엇인가고 여기부터가 할 수 있는
+          일이다(deps 배지도 같은 `z-10` 층에 있다) */}
+      {isAwaiting(t) && (
+        <AnswerDialog
+          project={id}
+          hash={t.stem}
+          title={t.title}
+          answerFile={`${awaitingOf(t)}${config.done}.md`}
+          thread={threadOf(tickets, t, config)}
+          options={lastQuestionOptions(threadOf(tickets, t, config))}
+        />
+      )}
+      {/* **카드의 마지막 자식** — 이 세션이 방금 한 일 한 줄(§1-1 ·
+          §비주얼 §36). `.wip`에만 있다: 진행중 레인 카드만 위에서 읽었고
+          나머지는 `wipLines`에 키가 아예 없다(완료 카드에 세우면
+          갱신이 멈춘 자리에서 `방금`이 거짓말이다). 위 `AnswerDialog`와
+          자리를 다투지 않는다 — `isAwaiting`은 `state === "open"`만
+          참이라 한 카드에 둘이 같이 서지 않는다.
+          **완료 카드에는 아카이브 한 줄이 같은 슬롯에 선다**(§5-3
+          §표시 규약 ③): 두 Map의 조건이 `.wip`↔`.done`으로 배타라
+          한 카드가 둘을 같이 들 수 없다.
+          간격은 8 / 선 / 8 / 줄 / 8이다: 위 8px은 `<Card>`의 `gap-2`,
+          선 아래 8px은 `pt-2`, 카드 바닥까지 8px은 `py-4`(16)에서
+          `-mb-2`(8)를 뺀 값이다(§36 §자리와 간격 — 새 간격 값 0) */}
+      {wipLines?.get(t.path) ?? archiveLine(archives.get(t.path), href)}
+    </Card>
+  );
+
+  // `?lane=epic`(§에픽 결정 7) — 모르는 값·없으면 지금 모양 그대로다. 순서·존재는 `rows`
+  // (이미 필터를 지난 목록)에서 나온다 — `?epic=`과 직교하는 것도 그래서 저절로다: 그 필터가
+  // `rows`를 이미 한 에픽으로 좁혔다면 여기 남는 것도 하나뿐이다(따로 처리할 것이 없다).
+  const laneMode = sp.get("lane") === "epic";
+  const epicLanes = laneMode
+    ? await Promise.all(
+        listEpics(rows).map(async ({ epic }) => ({
+          epic,
+          title: epic === NO_EPIC ? null : await epicTitle(project.root, epic),
+        })),
+      )
+    : [];
+
   return (
     // 보드만 자기 높이를 뷰포트에 맞춘다(§1 · §비주얼 §4). 셸 → `main` → 여기 → 스트립 → 레인이
     // 한 사슬이고 **한 칸이라도 `min-h-0`이 빠지면** 그 칸이 내용만큼 늘어나 문서가 도로 길어진다.
@@ -643,191 +766,162 @@ export default async function Board({
                 {rows.length === 0 && (
                   <div className="rounded-md border border-dashed px-6 py-6">{noMatch}</div>
                 )}
-                {/* 레인은 이 스트립의 가로를 균등하게 나눠 갖는다(`flex-1`) — 남는 폭이 없다(§1 보드).
-                    `min-w-72`(288)가 하한이라 스트립이 896px보다 좁아지면 거기서 멈추고 그때만
-                    가로 스크롤로 넘긴다(§4 사이드바를 안 쓰는 이유).
-                    `-mx-1 px-1`은 스크롤 컨테이너의 클리핑 여백이다: <Card>의 테두리는 `ring-1`(=
-                    border box **밖에** 그리는 box-shadow)이라 카드가 컨테이너 끝에 딱 붙으면
-                    양끝 카드의 왼/오른쪽 테두리가 잘려 카드가 열려 보인다. 음수 마진으로 되돌려
-                    컬럼은 페이지 거터(main px-6)에 그대로 정렬시킨다.
-                    세로는 여기서 멈춘다 — 스트립이 남은 높이를 전부 먹고(`min-h-0 flex-1`)
-                    세로 스크롤은 레인 안에서 일어난다(§1). 두 축이 공존한다: 여기가 가로다 */}
-                {/* `relative`는 호버 관계선의 좌표 원점이다(§비주얼 §17) — 오버레이가 이 스크롤
-                    컨테이너의 `absolute` 자식이라 콘텐츠와 함께 스크롤한다(가로 추종이 공짜다).
-                    이 줄에 더한 것은 그 한 클래스뿐이다 */}
-                <div className="relative -mx-1 flex min-h-0 flex-1 gap-4 overflow-x-auto px-1 pb-2">
-                  {STATUSES.map((s) => {
-                    // 컬럼 배정은 테이블 상태 컬럼과 **같은 판정**이다(queue.ts statusOf 하나뿐) —
-                    // 렌더 직전에 `blocked → 대기`만 한 번 접는다. 레인 배정은 표현이지 상태가
-                    // 아니므로 이 접기는 여기 있고 `queue.ts`에 `laneOf`를 만들지 않는다(§1 보드).
-                    const group = rows.filter(
-                      (t) => (statusOf(t) === "blocked" ? "open" : statusOf(t)) === s,
-                    );
-                    // `완료` 레인은 **최근 것부터**다. `rows`의 순서를 믿지 않고 `birth`로 다시
-                    // 정렬한다 — `?sort=`는 칸반에도 살아 있어서 정렬을 걸면 "최근 20건"이
-                    // "제목순 20건"이 된다(URL 정렬은 이 레인에 끼어들지 않는다).
-                    // 자르는 것은 카드뿐이다: 아래 머리 건수는 `group.length`(자르기 전) 그대로다.
-                    // 어느 화면에서든(기본 보드 · `?status=done` 포함) `doneLimit(?done=)`장만
-                    // 그린다 — `trimDone` 갈래는 없다(§1 §완료 항, 요구 `79cad792`).
-                    let cards = group;
-                    if (s === "done") {
-                      cards = [...group].sort((a, b) => b.birth - a.birth).slice(0, doneLimit(sp.get("done")));
-                    }
-                    const trimmed = group.length - cards.length;
-                    const cardEls = cards.map((t) => (
-                      // 카드 전체가 상세로 가는 링크다(테이블 행과 같은 규칙 — 행 액션 버튼이
-                      // 없어서 안전하다). deps 배지는 늘어난 링크 위에 뜬다.
-                      <Card
-                        key={t.path}
-                        // 관계선이 상대를 찾는 이름이다(§1: 못 찾으면 안 그린다). 링크·엔진과
-                        // 같은 `stem`이라 `relationEdges`가 준 간선과 그냥 맞는다
-                        data-stem={t.stem}
-                        className="card-tint relative gap-2 px-4"
-                      >
-                        {/* 칸반 카드는 레인이 상태를 말하므로 배지를 달지 않는다 — 예외가
-                            `답변 대기`다. 자기 레인 없이 `대기`에 앉고, 답변 stem은 큐에
-                            없는 해시라 deps 태그가 `?`로만 떠서 "사람이 답할 차례"라는
-                            말을 못 한다. 그래서 이 배지 하나만 남는다(§1 보드 요구사항 항).
-                            `deps 대기`는 배지를 얹지 않는다 — 아래 deps 줄의 주황색
-                            <DepBadge>가 그 표시다(사람 요청 `bd2062cb`) */}
-                        <div className="flex items-start justify-between gap-2">
-                          {/* 우선순위 미터(§비주얼 §49) — 해시 줄, `<Link>` 앞. 흐름 안이라
-                              `<Card>`의 `overflow-hidden` 기본값에 안 닿는다(테이블 해시 셀과
-                              같은 자리·같은 그릇, §49 §자리). */}
-                          <span className="inline-flex items-center gap-1">
-                            <PriorityMeter priority={t.priority} locale={locale} />
-                            {/* §비주얼 §31 ① 갈래 A — 밑줄 없음. 링크임은 카드의
-                                `card-tint` 호버 + 커서 + 이 앵커에 걸리는 포커스 링이 말한다 */}
-                            <Link
-                              href={href(t)}
-                              className="rounded-sm font-mono text-xs text-muted-foreground after:absolute after:inset-0"
-                            >
-                              {t.hash}
-                            </Link>
-                          </span>
-                          {isAwaiting(t) && (
-                            <StatusBadge status="awaiting" days={daysSince(t.mtime)} />
-                          )}
-                        </div>
-                        {/* 카드 title은 2줄까지(§6). 전문은 `title` 속성으로 본다 */}
-                        <span className="line-clamp-2 text-sm" title={t.title}>
-                          {t.title || "(제목 없음)"}
-                        </span>
-                        {/* 배지가 줄 안에 섞이므로 flex다 — 텍스트 baseline 정렬에 맡기면
-                            20px 배지가 줄을 밀어 카드마다 높이가 갈린다.
-                            `flex-wrap`은 워커 마크 몫이다(§비주얼 §19 잘림): 워커 이름은
-                            식별자라 안 자르고, 길면 카드가 한 줄 자라며 배지를 안 민다 */}
-                        <span className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
-                          {t.kind ? (KIND_LABELS[t.kind] ?? t.kind) : "—"} ·
-                          {t.persona ? (
-                            <PersonaBadge
-                              name={t.persona}
-                              color={colors[t.persona]}
-                              state={t.state}
-                            />
-                          ) : (
-                            "—"
-                          )}
-                          <WipWorker t={t} />
-                        </span>
-                        {t.deps.length > 0 && (
-                          // 라벨은 세어주지 않는다 — 어느 해시가 무엇인지는 <DepBadge>가
-                          // 색·아이콘으로, 스크린리더에는 배지 안 `sr-only` 문구로 말한다.
-                          <span className="relative z-10 flex flex-wrap items-center gap-1">
-                            <span className="text-xs text-muted-foreground">deps</span>
-                            {depBadges(tickets, t, config).map((d) => (
-                              <DepBadge
-                                key={d.hash}
-                                hash={d.hash}
-                                kind={d.kind}
-                                href={d.hit ? href(d.hit) : undefined}
-                              />
-                            ))}
-                          </span>
-                        )}
-                        {/* 답변은 여기서 바로 단다(§1 요구사항 항, 사람 요청 `14c88df4`) —
-                            상세와 같은 스레드(`threadOf`) · 같은 폼 · 같은 액션이다. 판정은
-                            위 배지와 **같은 식**이고, 테이블 행에는 붙이지 않는다(§1 행 액션 없음).
-                            자리는 카드 맨 아래다: 위는 티켓이 무엇인가고 여기부터가 할 수 있는
-                            일이다(deps 배지도 같은 `z-10` 층에 있다) */}
-                        {isAwaiting(t) && (
-                          <AnswerDialog
-                            project={id}
-                            hash={t.stem}
-                            title={t.title}
-                            answerFile={`${awaitingOf(t)}${config.done}.md`}
-                            thread={threadOf(tickets, t, config)}
-                            options={lastQuestionOptions(threadOf(tickets, t, config))}
-                          />
-                        )}
-                        {/* **카드의 마지막 자식** — 이 세션이 방금 한 일 한 줄(§1-1 ·
-                            §비주얼 §36). `.wip`에만 있다: 진행중 레인 카드만 위에서 읽었고
-                            나머지는 `wipLines`에 키가 아예 없다(완료 카드에 세우면
-                            갱신이 멈춘 자리에서 `방금`이 거짓말이다). 위 `AnswerDialog`와
-                            자리를 다투지 않는다 — `isAwaiting`은 `state === "open"`만
-                            참이라 한 카드에 둘이 같이 서지 않는다.
-                            **완료 카드에는 아카이브 한 줄이 같은 슬롯에 선다**(§5-3
-                            §표시 규약 ③): 두 Map의 조건이 `.wip`↔`.done`으로 배타라
-                            한 카드가 둘을 같이 들 수 없다.
-                            간격은 8 / 선 / 8 / 줄 / 8이다: 위 8px은 `<Card>`의 `gap-2`,
-                            선 아래 8px은 `pt-2`, 카드 바닥까지 8px은 `py-4`(16)에서
-                            `-mb-2`(8)를 뺀 값이다(§36 §자리와 간격 — 새 간격 값 0) */}
-                        {wipLines?.get(t.path) ?? archiveLine(archives.get(t.path), href)}
-                      </Card>
-                    ));
-                    return (
-                      // 레인 높이는 스트립이 준다(flex 기본 stretch) — 머리는 그 위에 고정으로 남고
-                      // 카드 스택만 스크롤한다. 머리를 스크롤러 안에 넣고 sticky를 걸지 않는 이유는
-                      // §1에 있다: 건수는 레인 전체에 대한 진술이라 흔들릴 이유가 없다.
-                      // `bg-surface rounded-lg border p-2`는 표면 층이다(§비주얼 §33) — 레인 셋이
-                      // 같은 종류의 반복이라 셋 다 면을 든다. 가르는 것은 면 대 페이지(1.04)가 아니라
-                      // **면 사이의 거터**다. `ring-1`이 아니라 `border`인 이유: 이 컬럼은
-                      // `overflow-x-auto` 스트립 안이고 ring은 border box 밖이라 양끝에서 잘린다.
-                      // 패딩이 상자 안이라 `flex-1 min-w-72` 폭 배분·레인 피치(304)는 안 바뀌고,
-                      // 카드만 18px(테두리 2 + 패딩 16) 좁아진다. 그 8px을 여기서 내는 이유는
-                      // 카드에 가로 여백이 없어서다(홈 패널은 줄이 이미 내므로 안 준다).
-                      <div key={s} className="flex min-w-72 flex-1 flex-col gap-2 rounded-lg border bg-surface p-2">
-                        <div className="flex items-center justify-between gap-2">
+                {laneMode ? (
+                  // 스윔레인(§에픽 결정 7 · §비주얼 §52 ③) — 열은 그대로 3개, 에픽마다 가로 띠로
+                  // 갈린다. 기본 레인과 달리 세로 스크롤은 스트립 전체에서 **하나**다 — 열 머리가
+                  // 그 스크롤러 **밖**으로 올라가 늘 보인다(§52 ③ §열 머리). 호버 관계선·레인 이동
+                  // 모션은 여기서 안 그린다 — 둘 다 `[data-lane]`의 **자기 스크롤**을 전제로 보이는
+                  // 판정을 재는데(`laneVisible`) 여기는 그 전제가 깨진다. 스윔레인은 기본 꺼짐이고
+                  // (§에픽 결정 7) 이 둘은 진행 표시용 오버레이라 없어도 카드·deps·상태는 그대로다.
+                  <div className="relative -mx-1 flex min-h-0 flex-1 flex-col gap-2 overflow-x-auto px-1 pb-2">
+                    <div className="flex gap-4">
+                      {STATUSES.map((s) => (
+                        <div key={s} className="flex flex-1 min-w-72 items-center justify-between gap-2">
                           <StatusBadge status={s} />
                           <span className="text-xs tabular-nums text-muted-foreground">
-                            {group.length}건
+                            {
+                              rows.filter((t) => (statusOf(t) === "blocked" ? "open" : statusOf(t)) === s)
+                                .length
+                            }
+                            건
                           </span>
                         </div>
-                        {/* `-m-1 p-1`은 위 스트립의 `-mx-1 px-1`과 **같은 이유**다 — 세로 overflow가
-                            새 클리핑 상자를 만들어 <Card>의 `ring-1`(border box 밖 box-shadow)이
-                            네 변에서 잘린다. 음수 마진이 그 여백을 되돌려 간격은 종전 그대로다 */}
-                        {/* `data-lane`은 관계선의 **보이는 판정**이 재는 상자다(§1) — 카드가
-                            이 스크롤러의 보이는 상자와 안 겹치면 그 획을 안 그린다 */}
-                        <div
-                          data-lane
-                          className="-m-1 min-h-0 flex-1 space-y-2 overflow-y-auto p-1"
-                        >
-                          {group.length === 0 && rows.length > 0 ? (
-                            // <EmptyState>는 화면 하나의 빈 상태용이다(py-10 + 1차 액션 버튼). 레인
-                            // 3개에 그걸 깔면 같은 버튼이 3개 생긴다 — 여기선 건수 0만 말한다.
-                            // 전체 0건일 땐 위 블록이 이미 말했으므로 이 자리표시자는 안 그린다(§6).
-                            <p className="rounded-md border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">
-                              0건
-                            </p>
-                          ) : s === "done" ? (
-                            // 완료 레인만 무한스크롤이다(§1 §완료 항, 요구 `79cad792`) — 감시행이
-                            // 보이면 `?done=`을 20 올려 나머지를 이어 그린다. 잘린 나머지로 가는
-                            // 옛 출구 링크는 죽었다: 스크롤이 그 자리에서 같은 일(신호 + 이동)을 한다.
-                            <BoardDoneLane more={trimmed > 0}>{cardEls}</BoardDoneLane>
-                          ) : (
-                            cardEls
-                          )}
+                      ))}
+                    </div>
+                    {/* `-m-1 p-1`은 <Card>의 `ring-1`이 이 세로 스크롤러 끝에서 안 잘리게 하는
+                        여백이다(위 가로 스트립의 `-mx-1 px-1`과 같은 이유) */}
+                    <div className="-m-1 min-h-0 flex-1 space-y-6 overflow-y-auto p-1">
+                      {epicLanes.map(({ epic, title }) => {
+                        // 라벨은 사이드바 항목과 같은 글자다(§에픽 결정 7): `<제목> (P273)`,
+                        // 없으면 `제목 없음 (P273)` + 표식. `(에픽 없음)`은 P번호가 없는 값이라
+                        // 제목 조회도 표식도 없다(그 항목은 갈 디렉터리가 없다).
+                        const label =
+                          epic === NO_EPIC ? epic : `${title ?? t(locale, "epic.label.untitled")} (${epic})`;
+                        const laneRows = rows.filter((r) => (epicOf(r) || NO_EPIC) === epic);
+                        return (
+                          <div key={epic}>
+                            <div className="sticky top-0 z-10 bg-background pb-2 text-sm font-medium">
+                              {label}
+                              {epic !== NO_EPIC && !title && (
+                                <TriangleAlert
+                                  aria-hidden
+                                  className="ml-1 inline size-3.5 text-status-stale"
+                                />
+                              )}
+                              <span className="ml-2 text-xs font-normal text-muted-foreground">
+                                {laneRows.length}건
+                              </span>
+                            </div>
+                            <div className="flex gap-4">
+                              {STATUSES.map((s) => {
+                                const group = laneRows.filter(
+                                  (r) => (statusOf(r) === "blocked" ? "open" : statusOf(r)) === s,
+                                );
+                                const { cards, trimmed } = laneCards(group, s);
+                                const cardEls = cards.map(renderCard);
+                                return (
+                                  <div
+                                    key={s}
+                                    data-lane
+                                    className="flex flex-1 min-w-72 flex-col gap-2 rounded-lg border bg-surface p-2"
+                                  >
+                                    {group.length === 0 ? (
+                                      <p className="rounded-md border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">
+                                        0건
+                                      </p>
+                                    ) : s === "done" ? (
+                                      <BoardDoneLane more={trimmed > 0}>{cardEls}</BoardDoneLane>
+                                    ) : (
+                                      cardEls
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  /* 레인은 이 스트립의 가로를 균등하게 나눠 갖는다(`flex-1`) — 남는 폭이 없다(§1 보드).
+                     `min-w-72`(288)가 하한이라 스트립이 896px보다 좁아지면 거기서 멈추고 그때만
+                     가로 스크롤로 넘긴다(§4 사이드바를 안 쓰는 이유).
+                     `-mx-1 px-1`은 스크롤 컨테이너의 클리핑 여백이다: <Card>의 테두리는 `ring-1`(=
+                     border box **밖에** 그리는 box-shadow)이라 카드가 컨테이너 끝에 딱 붙으면
+                     양끝 카드의 왼/오른쪽 테두리가 잘려 카드가 열려 보인다. 음수 마진으로 되돌려
+                     컬럼은 페이지 거터(main px-6)에 그대로 정렬시킨다.
+                     세로는 여기서 멈춘다 — 스트립이 남은 높이를 전부 먹고(`min-h-0 flex-1`)
+                     세로 스크롤은 레인 안에서 일어난다(§1). 두 축이 공존한다: 여기가 가로다.
+                     `relative`는 호버 관계선의 좌표 원점이다(§비주얼 §17) — 오버레이가 이 스크롤
+                     컨테이너의 `absolute` 자식이라 콘텐츠와 함께 스크롤한다(가로 추종이 공짜다). */
+                  <div className="relative -mx-1 flex min-h-0 flex-1 gap-4 overflow-x-auto px-1 pb-2">
+                    {STATUSES.map((s) => {
+                      // 컬럼 배정은 테이블 상태 컬럼과 **같은 판정**이다(queue.ts statusOf 하나뿐) —
+                      // 렌더 직전에 `blocked → 대기`만 한 번 접는다. 레인 배정은 표현이지 상태가
+                      // 아니므로 이 접기는 여기 있고 `queue.ts`에 `laneOf`를 만들지 않는다(§1 보드).
+                      const group = rows.filter(
+                        (t) => (statusOf(t) === "blocked" ? "open" : statusOf(t)) === s,
+                      );
+                      // `완료` 레인은 **최근 것부터**다. `rows`의 순서를 믿지 않고 `birth`로 다시
+                      // 정렬한다 — `?sort=`는 칸반에도 살아 있어서 정렬을 걸면 "최근 20건"이
+                      // "제목순 20건"이 된다(URL 정렬은 이 레인에 끼어들지 않는다).
+                      // 자르는 것은 카드뿐이다: 아래 머리 건수는 `group.length`(자르기 전) 그대로다.
+                      // 어느 화면에서든(기본 보드 · `?status=done` 포함) `doneLimit(?done=)`장만
+                      // 그린다 — `trimDone` 갈래는 없다(§1 §완료 항, 요구 `79cad792`).
+                      const { cards, trimmed } = laneCards(group, s);
+                      const cardEls = cards.map(renderCard);
+                      return (
+                        // 레인 높이는 스트립이 준다(flex 기본 stretch) — 머리는 그 위에 고정으로 남고
+                        // 카드 스택만 스크롤한다. 머리를 스크롤러 안에 넣고 sticky를 걸지 않는 이유는
+                        // §1에 있다: 건수는 레인 전체에 대한 진술이라 흔들릴 이유가 없다.
+                        // `bg-surface rounded-lg border p-2`는 표면 층이다(§비주얼 §33) — 레인 셋이
+                        // 같은 종류의 반복이라 셋 다 면을 든다. 가르는 것은 면 대 페이지(1.04)가 아니라
+                        // **면 사이의 거터**다. `ring-1`이 아니라 `border`인 이유: 이 컬럼은
+                        // `overflow-x-auto` 스트립 안이고 ring은 border box 밖이라 양끝에서 잘린다.
+                        // 패딩이 상자 안이라 `flex-1 min-w-72` 폭 배분·레인 피치(304)는 안 바뀌고,
+                        // 카드만 18px(테두리 2 + 패딩 16) 좁아진다. 그 8px을 여기서 내는 이유는
+                        // 카드에 가로 여백이 없어서다(홈 패널은 줄이 이미 내므로 안 준다).
+                        <div key={s} className="flex min-w-72 flex-1 flex-col gap-2 rounded-lg border bg-surface p-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <StatusBadge status={s} />
+                            <span className="text-xs tabular-nums text-muted-foreground">
+                              {group.length}건
+                            </span>
+                          </div>
+                          {/* `-m-1 p-1`은 위 스트립의 `-mx-1 px-1`과 **같은 이유**다 — 세로 overflow가
+                              새 클리핑 상자를 만들어 <Card>의 `ring-1`(border box 밖 box-shadow)이
+                              네 변에서 잘린다. 음수 마진이 그 여백을 되돌려 간격은 종전 그대로다 */}
+                          {/* `data-lane`은 관계선의 **보이는 판정**이 재는 상자다(§1) — 카드가
+                              이 스크롤러의 보이는 상자와 안 겹치면 그 획을 안 그린다 */}
+                          <div data-lane className="-m-1 min-h-0 flex-1 space-y-2 overflow-y-auto p-1">
+                            {group.length === 0 && rows.length > 0 ? (
+                              // <EmptyState>는 화면 하나의 빈 상태용이다(py-10 + 1차 액션 버튼). 레인
+                              // 3개에 그걸 깔면 같은 버튼이 3개 생긴다 — 여기선 건수 0만 말한다.
+                              // 전체 0건일 땐 위 블록이 이미 말했으므로 이 자리표시자는 안 그린다(§6).
+                              <p className="rounded-md border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">
+                                0건
+                              </p>
+                            ) : s === "done" ? (
+                              // 완료 레인만 무한스크롤이다(§1 §완료 항, 요구 `79cad792`) — 감시행이
+                              // 보이면 `?done=`을 20 올려 나머지를 이어 그린다. 잘린 나머지로 가는
+                              // 옛 출구 링크는 죽었다: 스크롤이 그 자리에서 같은 일(신호 + 이동)을 한다.
+                              <BoardDoneLane more={trimmed > 0}>{cardEls}</BoardDoneLane>
+                            ) : (
+                              cardEls
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
-                  {/* 레인 뒤에 온다 — 카드 위(§17 z 층)에 뜨고 자기 크기를 갖지 않는다.
-                      호버·포커스 위임과 좌표 측정은 전부 여기 안이다(§1 상태는 URL에 없다) */}
-                  {relations && <BoardRelations relations={relations} />}
-                  {/* 두 번째 `absolute` 자식 — 폴링으로 레인이 갈린 카드의 고스트가 나는 층
-                      (§비주얼 §20). 관계선과 같은 스트립·같은 좌표계·같은 z를 쓴다 */}
-                  <BoardLaneMotion />
-                </div>
+                      );
+                    })}
+                    {/* 레인 뒤에 온다 — 카드 위(§17 z 층)에 뜨고 자기 크기를 갖지 않는다.
+                        호버·포커스 위임과 좌표 측정은 전부 여기 안이다(§1 상태는 URL에 없다) */}
+                    {relations && <BoardRelations relations={relations} />}
+                    {/* 두 번째 `absolute` 자식 — 폴링으로 레인이 갈린 카드의 고스트가 나는 층
+                        (§비주얼 §20). 관계선과 같은 스트립·같은 좌표계·같은 z를 쓴다 */}
+                    <BoardLaneMotion />
+                  </div>
+                )}
               </div>
             ) : (
               /* 바디가 스크롤러고 헤더 행은 그 안에서 고정이다(§1) — 뷰를 토글해도 페이지 높이가
@@ -842,7 +936,7 @@ export default async function Board({
                       `thead`만으로는 collapse된 표에서 셀 배경이 없어 행이 비쳐 보인다 */}
                   <TableHeader className="sticky top-0 z-20">
                     <TableRow className="h-9 hover:bg-transparent">
-                      {COLUMNS.map(({ key, label }) => {
+                      {columns.map(({ key, label }) => {
                         // 파라미터가 없으면 화면이 `생성일` 내림차순으로 서 있다 — 그 자리에서
                         // 헤더도 활성 + `ArrowDown`이다(§1 보드. 아니면 헤더가 거짓말을 한다).
                         // 클릭 3단계는 이 표시와 무관하게 `sortHref`가 실제 `sortKey`로 정한다 —
@@ -882,7 +976,7 @@ export default async function Board({
                       // 구분이 안 된다). 문구·액션이 빈 큐와 다른 이유도 같다(§6).
                       <TableRow className="hover:bg-transparent">
                         {/* 검색어가 길면 그 한 줄이 표를 넓힌다 — `colSpan` 셀은 `whitespace-normal`(§6). */}
-                        <TableCell colSpan={COLUMNS.length} className="px-3 py-6 whitespace-normal">
+                        <TableCell colSpan={columns.length} className="px-3 py-6 whitespace-normal">
                           {noMatch}
                         </TableCell>
                       </TableRow>
@@ -970,6 +1064,11 @@ export default async function Board({
                               >
                                 <WipWorker t={t} full />
                               </span>
+                            </TableCell>
+                            {/* 스윔레인 대신 표를 잡는 컬럼(§에픽 결정 7 §표뷰) — 값 그대로,
+                                친절한 제목 조회는 안 한다(행마다 fs 읽기가 늘어난다) */}
+                            <TableCell className="px-3 py-0 text-sm text-muted-foreground">
+                              {epicOf(t) || "—"}
                             </TableCell>
                           </TableRow>
                         ))}
