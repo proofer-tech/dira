@@ -107,14 +107,18 @@ export function EpicSidebar({
                     >
                       <div className="flex min-w-0 grow flex-col gap-0.5">
                         <span className="flex items-baseline gap-2">
-                          {!isNone && (
-                            <span className="shrink-0 font-mono text-sm">{row.epic}</span>
-                          )}
                           <span className="min-w-0 truncate text-sm">
                             {isNone
                               ? t(locale, "board.epic.none")
-                              : `${titles[row.epic] ?? t(locale, "board.epic.noTitle")} (${row.epic})`}
+                              : (titles[row.epic] ?? t(locale, "board.epic.noTitle"))}
                           </span>
+                          {/* P번호 등급(§에픽 결정 11 · §비주얼 §52 ②) — 라벨보다 크지도 두껍지도
+                              않다. `font-normal`을 여기서 박아야 선택 줄의 `font-medium` 상속을 끊는다. */}
+                          {!isNone && (
+                            <span className="shrink-0 text-xs font-normal text-muted-foreground">
+                              ({row.epic})
+                            </span>
+                          )}
                         </span>
                         <span className="flex items-baseline gap-2 text-xs text-muted-foreground">
                           <span>{total}건</span>

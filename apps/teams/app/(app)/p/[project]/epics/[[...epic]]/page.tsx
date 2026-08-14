@@ -104,8 +104,13 @@ export default async function Epics({
           <div className="space-y-4">
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-baseline gap-2">
-                <h1 className="text-lg font-semibold">
-                  {titles[current.epic] ?? t(locale, "board.epic.noTitle")} ({current.epic})
+                {/* P번호 등급(§에픽 결정 11 · §비주얼 §52 ④) — `h1` 안의 별 요소, 라벨보다
+                    한 등급 아래. 빠짐 표식은 종전대로 `h1` 밖(제목이 아니다) */}
+                <h1 className="flex items-baseline gap-2 text-lg font-semibold">
+                  <span>{titles[current.epic] ?? t(locale, "board.epic.noTitle")}</span>
+                  <span className="shrink-0 text-xs font-normal text-muted-foreground">
+                    ({current.epic})
+                  </span>
                 </h1>
                 {titles[current.epic] == null && (
                   <Badge variant="outline">{t(locale, "epics.readme.missingBadge")}</Badge>
