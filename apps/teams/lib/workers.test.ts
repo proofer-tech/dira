@@ -1820,11 +1820,26 @@ test("엔진 카탈로그의 claude = tick.sh의 실제 기본값이다 (눈으�
   // 손으로 적은 사본은 반드시 갈린다 — `DEFAULT_ENGINE`이 이미 한 번 갈려 있었다(§결과).
   // 엔진 파일에서 그 대입만 떼어 **진짜 bash로 펴서** 토큰을 대조한다.
   const tick = readFileSync(path.join(import.meta.dirname, "..", "..", "..", "tick.sh"), "utf8");
+  const fixed = tick.match(/^FIXED_ENGINE=.*$/m);
+  assert.ok(fixed, "tick.sh에서 FIXED_ENGINE 대입을 못 찾았다");
   const m = tick.match(/^\[ \$\{#TICKET_ENGINE\[@\]\} -eq 0 \] && (TICKET_ENGINE=\([\s\S]*?\))$/m);
   assert.ok(m, "tick.sh에서 기본 TICKET_ENGINE 대입을 못 찾았다");
-  const got = execFileSync("bash", ["-c", `${m[1]}\nprintf '%s\\n' "\${TICKET_ENGINE[@]}"`], {
-    encoding: "utf8",
-  })
+  // 첫 토큰은 실제로 `$FIXED_ENGINE`(TCC 고정 경로, 엔진 수정 24번째 계약 1)이다 — 그런데 그
+  // 경로를 못 만들었거나 실행 불가면 tick.sh가 그 자리에서 이름 "claude"로 되돌린다(계약 5).
+  // 이 테스트 환경(과 갓 세팅한 실제 머신)은 `$LOCAL/bin/dira`가 없으니 매번 그 되돌림이
+  // 걸린다 — 그 되돌림 코드도 손으로 안 베끼고 tick.sh에서 그대로 떼어와 같이 편다.
+  const fallback = tick.match(
+    /^  if \[ "\$\(basename "\$\{TICKET_ENGINE\[0\]\}"\)" = "dira" \][\s\S]*?\n  fi$/m,
+  );
+  assert.ok(fallback, "tick.sh에서 dira->claude 되돌림 분기를 못 찾았다");
+  const got = execFileSync(
+    "bash",
+    [
+      "-c",
+      `LOCAL="/tmp/dira-parity-test-$$-nonexistent"\n${fixed[0]}\n${m[1]}\n${fallback[0]}\nprintf '%s\\n' "\${TICKET_ENGINE[@]}"`,
+    ],
+    { encoding: "utf8" },
+  )
     .trim()
     .split("\n");
   // 카탈로그 토큰은 **파일에 적히는 모양**이라 `"{sid}"`처럼 따옴표가 살아 있다. bash가 벗긴 쪽에 맞춘다.
