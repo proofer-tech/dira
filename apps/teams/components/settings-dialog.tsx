@@ -939,6 +939,19 @@ export function SettingsDialog({
     return () => clearInterval(id);
   }, [setup?.running]);
 
+  // §0-13 §`추가`를 다시 열면 지난 시도가 안 보인다 — 다이얼로그 닫힘·팝오버 열림 두 자리가
+  // 나눠 쓰는 초기화 손 하나(층 ②-③ 상태 다섯). 발급이 도는 중(`setup.running`)이면 아무것도
+  // 안 비운다 — 살아 있는 pty로 가는 진행 로그·코드 칸을 지우면 폴링 effect가 정리돼 결과를
+  // 영영 못 받는다.
+  const resetAddAttempt = () => {
+    if (setup?.running) return;
+    setToken("");
+    setLabel("");
+    setResult({});
+    setCode("");
+    setSetup(null);
+  };
+
   return (
     <Dialog
       open={open}
@@ -952,11 +965,7 @@ export function SettingsDialog({
           // `TokensSection`은 자기 몫을 자기가 읽는다(위 그 컴포넌트의 effect).
           void readMultitokenAction().then(setMultiToken);
         } else {
-          setToken("");
-          setLabel("");
-          setResult({});
-          setCode("");
-          setSetup(null);
+          resetAddAttempt();
           setAddOpen(false);
           setQuery("");
           setMultiToken(null);
@@ -1177,7 +1186,16 @@ export function SettingsDialog({
                   (§0-13 §화면 — 목록 통합). 로직·문구·에러 처리는 무수정, 렌더 위치만 옮겼다.
                   §0-13 §트리거 문구 — 잠김(!multiToken)에서 행이 있으면 `추가`가 아니라
                   `변경`이다. 해금은 행 수와 무관하게 늘 `추가`(요구 `1681a5d9`). */}
-              <Popover open={addOpen} onOpenChange={setAddOpen}>
+              <Popover
+                open={addOpen}
+                onOpenChange={(o) => {
+                  // §0-13 §`추가`를 다시 열면 지난 시도가 안 보인다 — 방아쇠는 열리는 것,
+                  // 성공-실패를 안 가른다. `stopSetupAction()`은 안 부른다(`startSetup()`
+                  // 첫 줄이 이미 `stopSetup()`을 부른다 — `lib/auth.ts:531`).
+                  if (o) resetAddAttempt();
+                  setAddOpen(o);
+                }}
+              >
                 <PopoverTrigger render={<Button variant="outline" size="sm" data-setting="claude.add" />}>
                   {!multiToken && accountCount !== null && accountCount > 0
                     ? t("settings.claude.changeTrigger")
