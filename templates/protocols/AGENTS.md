@@ -290,3 +290,4 @@ EOF
 | `.dira/personas/<이름>/PROFILE.md` | 각 역할의 권한·판단 기준 |
 | `<프로젝트 스펙 문서>` | (프로젝트마다 채운다) |
 | `.dira/protocols/ontology.md` | 티켓이 다루는 실체가 온톨로지에 있는지 먼저 query한다(`python3 graph.py query .dira "<개념>"` - 인덱스 없으면 grep) - 있으면 근거로 쓰고, 없거나 틀렸으면 완료 시 남긴다 |
+| `.dira/protocols/epics.md` | 티켓 fm에 `epic:`이 있으면 착수 전에 `.dira/epics/<값>/memory/`를 grep한다 - 완료 시 이 에픽 안에서만 참인 것을 거기 남긴다 |
