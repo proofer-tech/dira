@@ -83,6 +83,8 @@ export default async function Epics({
         titles={titles}
         active={current?.epic ?? null}
         hrefFor={hrefFor}
+        allHref={`/p/${id}`}
+        allActive={false}
         locale={locale}
       />
 

@@ -27,6 +27,8 @@ export function EpicSidebar({
   titles,
   active,
   hrefFor,
+  allHref,
+  allActive,
   memoryHrefFor,
   locale,
 }: {
@@ -37,11 +39,21 @@ export function EpicSidebar({
   active: string | null;
   /** 이 값으로 필터를 건 URL(§결정 5 — 기존 필터 그릇에 드는 `?epic=`) */
   hrefFor: (value: string) => string;
+  /** 맨 위 `전체` 줄의 목적지(§결정 12) — 보드는 `?epic=`을 뺀 URL, 에픽 화면은 보드 루트다.
+   *  값이 아니라 화면마다 다른 상수라 `hrefFor`처럼 함수로 안 받는다 */
+  allHref: string;
+  /** `전체` 줄의 선택 표식 — 보드는 `active === null`, 에픽 화면은 늘 `false`다(§결정 12
+   *  "그 화면은 늘 에픽 하나를 골라 두므로 이 줄은 선택 표식을 안 든다") */
+  allActive: boolean;
   /** 둘째 문의 목적지 — `/p/<project>/epics/<P번호>`(§결정 6). 없으면 안 그린다 — 에픽
    *  화면 자신이 쓸 때는 줄 자체가 이미 그 화면이라 둘째 문이 없다(§비주얼 §52 ④) */
   memoryHrefFor?: (epic: string) => string;
   locale: Locale;
 }) {
+  // `전체`(§결정 12) 건수 — 에픽 축 필터가 걸리기 전 큐 전체다. `listEpics`에 항목을 안 더하므로
+  // 아래 줄들(NO_EPIC 포함)의 합으로 낸다 — 그래서 수용조건 2가 저절로 참이다.
+  const allTotal = epics.reduce((n, e) => n + e.counts.open + e.counts.wip + e.counts.done, 0);
+  const allWip = epics.reduce((n, e) => n + e.counts.wip, 0);
   return (
     // `w-full`·`min-h-svh` 기본값을 덮는다(personas-ui.tsx와 같은 처방) — 여기는 형제 열
     // 하나(칸반 또는 표)와 나란한 **한 칸**이지 2단 전체가 아니다.
@@ -54,6 +66,31 @@ export function EpicSidebar({
               {t(locale, "board.epic.label")}
             </SidebarGroupLabel>
             <SidebarMenu aria-label={t(locale, "board.epic.label")} className="gap-0.5">
+              {/* `전체`(§결정 12) — 목록 맨 위, `(에픽 없음)`과 한 클래스도 안 다르다. 새 모양을
+                  안 고른다: 구분선-여백 0, P번호 없음, 둘째 문 없음. `listEpics`가 안 낳는 값이라
+                  `epics.map` 밖에서 따로 그린다. */}
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  className="h-auto items-start"
+                  isActive={allActive}
+                  aria-current={allActive ? "page" : undefined}
+                  render={<Link href={allHref} />}
+                >
+                  <div className="flex min-w-0 grow flex-col gap-0.5">
+                    <span className="flex items-baseline gap-2">
+                      <span className="min-w-0 truncate text-sm">{t(locale, "board.epic.all")}</span>
+                    </span>
+                    <span className="flex items-baseline gap-2 text-xs text-muted-foreground">
+                      <span>{allTotal}건</span>
+                      {allWip > 0 && (
+                        <span className="ml-auto">
+                          {t(locale, "status.label.wip")} {allWip}
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
               {epics.map((row) => {
                 const isNone = row.epic === NO_EPIC;
                 const value = isNone ? "" : row.epic;

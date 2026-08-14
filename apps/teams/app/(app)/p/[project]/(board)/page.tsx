@@ -485,6 +485,14 @@ export default async function Board({
   };
   const epicMemoryHref = (epic: string) => `/p/${id}/epics/${encodeURIComponent(epic)}`;
 
+  /** `전체`(§에픽 결정 12) — `epicHref`와 갈리는 점은 `epic`을 **빼는** 것이다(`set("", ...)`이면
+   *  `(에픽 없음)`과 같은 값이 된다). 나머지 필터는 `sp` 그대로 남는다. */
+  const allEpicHref = (() => {
+    const next = new URLSearchParams(sp);
+    next.delete("epic");
+    return qs(next);
+  })();
+
   /** 필터 0건 — 두 뷰가 **같은 문구·같은 해제 배지**를 쓴다. 빈 큐와 문구가 다른 이유는 §6이다
    *  (원인이 다르면 다음 행동도 다르다). */
   const noMatch = (
@@ -756,6 +764,8 @@ export default async function Board({
               titles={titles}
               active={query.epic}
               hrefFor={epicHref}
+              allHref={allEpicHref}
+              allActive={query.epic === null}
               memoryHrefFor={epicMemoryHref}
               locale={locale}
             />
