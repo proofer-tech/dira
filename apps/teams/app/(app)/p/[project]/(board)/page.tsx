@@ -39,6 +39,7 @@ import {
   BoardSearch,
 } from "@/components/board-ui";
 import { EmptyState } from "@/components/empty-state";
+import { EpicSidebar } from "@/components/epic-sidebar";
 import { PersonaBadge } from "@/components/persona-badge";
 import { PriorityMeter } from "@/components/priority-meter";
 import { DepBadge, StatusBadge, daysSince, statusLabel } from "@/components/status-badge";
@@ -76,6 +77,8 @@ import {
   type SortKey,
   type Ticket,
 } from "@/lib/queue";
+import { epicTitle, listEpics, NO_EPIC } from "@/lib/epics";
+import { t } from "@/lib/i18n";
 import { getProject, listPersonas, readLanguage, resolveConfig } from "@/lib/projects";
 import { findStream, lastActivity, sessionIdOf, type StreamEvent } from "@/lib/transcript";
 import { doneLimit, rowLimit } from "@/lib/urls";
@@ -264,6 +267,9 @@ export default async function Board({
     persona: sp.getAll("persona"),
     status: sp.has("status") ? sp.getAll("status") : [...STATUS_OPTIONS],
     q: sp.get("q") ?? "",
+    // 단일값이다(§에픽 결정 5) — `null`은 파라미터 없음(필터 없음), `""`은 `?epic=`
+    // (`epic:` 없는 티켓의 값과 같다). `filterTickets`가 그대로 받는다(판정은 무수정이다).
+    epic: sp.get("epic"),
   };
   const sortParam = sp.get("sort");
   const sortKey = SORT_KEYS.find((k) => k === sortParam) ?? null; // 모르는 값은 큐 순서로 떨어진다
@@ -307,6 +313,18 @@ export default async function Board({
   // 스켈레톤이 없는 이유다. `?? {}`가 여기 한 번뿐인 이유: 아래로 넘길 때마다 붙이면 한 자리를
   // 빼먹은 화면이 점을 통째로 잃는다(색 없음이 아니라 배지가 안 그려진다).
   const colors = project.personaColors ?? {};
+
+  // 에픽 사이드바(§에픽 결정 5 · §비주얼 §52 ①②) — 건수는 **전체 `tickets`** 기준이다(kind·
+  // persona 필터가 걸려도 안 줄어든다). `total`이 `kind`-`persona`만 반영하고 `status`는 안 보는
+  // 것과 같은 이유: 사이드바는 구조적 분류지 그때그때의 필터 결과가 아니다.
+  const epics = listEpics(tickets);
+  const titles = Object.fromEntries(
+    await Promise.all(
+      epics
+        .filter((e) => e.epic !== NO_EPIC)
+        .map(async (e) => [e.epic, await epicTitle(project.root, e.epic)] as const),
+    ),
+  );
 
   // 발행 다이얼로그의 선택지 둘. **보드가 이미 읽은 것을 넘긴다** — `readdir`도 큐 스캔도 다시
   // 하지 않는다(§3).
@@ -375,6 +393,20 @@ export default async function Board({
       const known = STATUS_OPTIONS.find((s) => s === v);
       return { param: "status", value: v, text: `상태: ${known ? statusLabel(known) : v}` };
     }),
+    // 에픽도 같은 필터 그릇이라 0건 화면에서 같은 방식으로 풀린다(§에픽 결정 5).
+    ...(query.epic !== null
+      ? [
+          {
+            param: "epic",
+            value: query.epic,
+            text: `${t(locale, "board.epic.label")}: ${
+              query.epic === ""
+                ? t(locale, "board.epic.none")
+                : `${titles[query.epic] ?? t(locale, "board.epic.noTitle")} (${query.epic})`
+            }`,
+          },
+        ]
+      : []),
   ];
 
   /** 뷰 전환 링크 — `sp`를 통째로 복사하므로 필터·검색·정렬이 두 뷰에서 그대로 유지된다.
@@ -435,6 +467,16 @@ export default async function Board({
     else next.delete("view");
     return qs(next);
   };
+
+  /** 에픽 사이드바 줄의 목적지 — **이미 있는 필터 그릇**에 `epic`을 얹는다(§에픽 결정 5).
+   *  다른 파라미터(검색·정렬·뷰)는 `sp` 그대로 남는다. `qs()`가 `rows`-`done`을 지운다 —
+   *  에픽이 바뀌면 다른 목록이라 처음 몫부터가 맞다(위 `sortHref`·`viewHref`와 같은 이유). */
+  const epicHref = (value: string) => {
+    const next = new URLSearchParams(sp);
+    next.set("epic", value);
+    return qs(next);
+  };
+  const epicMemoryHref = (epic: string) => `/p/${id}/epics/${encodeURIComponent(epic)}`;
 
   /** 필터 0건 — 두 뷰가 **같은 문구·같은 해제 배지**를 쓴다. 빈 큐와 문구가 다른 이유는 §6이다
    *  (원인이 다르면 다음 행동도 다르다). */
@@ -582,349 +624,362 @@ export default async function Board({
             </div>
           </div>
 
-          {view === "kanban" ? (
-            <div className="flex min-h-0 flex-1 flex-col gap-4">
-              {/* 필터 0건이라도 **컬럼은 남긴다** — 컬럼이 사라지면 필터를 지운 건지 데이터가
-                  없는 건지 구분이 안 된다(테이블 헤더를 남기는 것과 같은 이유, §6) */}
-              {rows.length === 0 && (
-                <div className="rounded-md border border-dashed px-6 py-6">{noMatch}</div>
-              )}
-              {/* 레인은 이 스트립의 가로를 균등하게 나눠 갖는다(`flex-1`) — 남는 폭이 없다(§1 보드).
-                  `min-w-72`(288)가 하한이라 스트립이 896px보다 좁아지면 거기서 멈추고 그때만
-                  가로 스크롤로 넘긴다(§4 사이드바를 안 쓰는 이유).
-                  `-mx-1 px-1`은 스크롤 컨테이너의 클리핑 여백이다: <Card>의 테두리는 `ring-1`(=
-                  border box **밖에** 그리는 box-shadow)이라 카드가 컨테이너 끝에 딱 붙으면
-                  양끝 카드의 왼/오른쪽 테두리가 잘려 카드가 열려 보인다. 음수 마진으로 되돌려
-                  컬럼은 페이지 거터(main px-6)에 그대로 정렬시킨다.
-                  세로는 여기서 멈춘다 — 스트립이 남은 높이를 전부 먹고(`min-h-0 flex-1`)
-                  세로 스크롤은 레인 안에서 일어난다(§1). 두 축이 공존한다: 여기가 가로다 */}
-              {/* `relative`는 호버 관계선의 좌표 원점이다(§비주얼 §17) — 오버레이가 이 스크롤
-                  컨테이너의 `absolute` 자식이라 콘텐츠와 함께 스크롤한다(가로 추종이 공짜다).
-                  이 줄에 더한 것은 그 한 클래스뿐이다 */}
-              <div className="relative -mx-1 flex min-h-0 flex-1 gap-4 overflow-x-auto px-1 pb-2">
-                {STATUSES.map((s) => {
-                  // 컬럼 배정은 테이블 상태 컬럼과 **같은 판정**이다(queue.ts statusOf 하나뿐) —
-                  // 렌더 직전에 `blocked → 대기`만 한 번 접는다. 레인 배정은 표현이지 상태가
-                  // 아니므로 이 접기는 여기 있고 `queue.ts`에 `laneOf`를 만들지 않는다(§1 보드).
-                  const group = rows.filter(
-                    (t) => (statusOf(t) === "blocked" ? "open" : statusOf(t)) === s,
-                  );
-                  // `완료` 레인은 **최근 것부터**다. `rows`의 순서를 믿지 않고 `birth`로 다시
-                  // 정렬한다 — `?sort=`는 칸반에도 살아 있어서 정렬을 걸면 "최근 20건"이
-                  // "제목순 20건"이 된다(URL 정렬은 이 레인에 끼어들지 않는다).
-                  // 자르는 것은 카드뿐이다: 아래 머리 건수는 `group.length`(자르기 전) 그대로다.
-                  // 어느 화면에서든(기본 보드 · `?status=done` 포함) `doneLimit(?done=)`장만
-                  // 그린다 — `trimDone` 갈래는 없다(§1 §완료 항, 요구 `79cad792`).
-                  let cards = group;
-                  if (s === "done") {
-                    cards = [...group].sort((a, b) => b.birth - a.birth).slice(0, doneLimit(sp.get("done")));
-                  }
-                  const trimmed = group.length - cards.length;
-                  const cardEls = cards.map((t) => (
-                    // 카드 전체가 상세로 가는 링크다(테이블 행과 같은 규칙 — 행 액션 버튼이
-                    // 없어서 안전하다). deps 배지는 늘어난 링크 위에 뜬다.
-                    <Card
-                      key={t.path}
-                      // 관계선이 상대를 찾는 이름이다(§1: 못 찾으면 안 그린다). 링크·엔진과
-                      // 같은 `stem`이라 `relationEdges`가 준 간선과 그냥 맞는다
-                      data-stem={t.stem}
-                      className="card-tint relative gap-2 px-4"
-                    >
-                      {/* 칸반 카드는 레인이 상태를 말하므로 배지를 달지 않는다 — 예외가
-                          `답변 대기`다. 자기 레인 없이 `대기`에 앉고, 답변 stem은 큐에
-                          없는 해시라 deps 태그가 `?`로만 떠서 "사람이 답할 차례"라는
-                          말을 못 한다. 그래서 이 배지 하나만 남는다(§1 보드 요구사항 항).
-                          `deps 대기`는 배지를 얹지 않는다 — 아래 deps 줄의 주황색
-                          <DepBadge>가 그 표시다(사람 요청 `bd2062cb`) */}
-                      <div className="flex items-start justify-between gap-2">
-                        {/* 우선순위 미터(§비주얼 §49) — 해시 줄, `<Link>` 앞. 흐름 안이라
-                            `<Card>`의 `overflow-hidden` 기본값에 안 닿는다(테이블 해시 셀과
-                            같은 자리·같은 그릇, §49 §자리). */}
-                        <span className="inline-flex items-center gap-1">
-                          <PriorityMeter priority={t.priority} locale={locale} />
-                          {/* §비주얼 §31 ① 갈래 A — 밑줄 없음. 링크임은 카드의
-                              `card-tint` 호버 + 커서 + 이 앵커에 걸리는 포커스 링이 말한다 */}
-                          <Link
-                            href={href(t)}
-                            className="rounded-sm font-mono text-xs text-muted-foreground after:absolute after:inset-0"
-                          >
-                            {t.hash}
-                          </Link>
-                        </span>
-                        {isAwaiting(t) && (
-                          <StatusBadge status="awaiting" days={daysSince(t.mtime)} />
-                        )}
-                      </div>
-                      {/* 카드 title은 2줄까지(§6). 전문은 `title` 속성으로 본다 */}
-                      <span className="line-clamp-2 text-sm" title={t.title}>
-                        {t.title || "(제목 없음)"}
-                      </span>
-                      {/* 배지가 줄 안에 섞이므로 flex다 — 텍스트 baseline 정렬에 맡기면
-                          20px 배지가 줄을 밀어 카드마다 높이가 갈린다.
-                          `flex-wrap`은 워커 마크 몫이다(§비주얼 §19 잘림): 워커 이름은
-                          식별자라 안 자르고, 길면 카드가 한 줄 자라며 배지를 안 민다 */}
-                      <span className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
-                        {t.kind ? (KIND_LABELS[t.kind] ?? t.kind) : "—"} ·
-                        {t.persona ? (
-                          <PersonaBadge
-                            name={t.persona}
-                            color={colors[t.persona]}
-                            state={t.state}
-                          />
-                        ) : (
-                          "—"
-                        )}
-                        <WipWorker t={t} />
-                      </span>
-                      {t.deps.length > 0 && (
-                        // 라벨은 세어주지 않는다 — 어느 해시가 무엇인지는 <DepBadge>가
-                        // 색·아이콘으로, 스크린리더에는 배지 안 `sr-only` 문구로 말한다.
-                        <span className="relative z-10 flex flex-wrap items-center gap-1">
-                          <span className="text-xs text-muted-foreground">deps</span>
-                          {depBadges(tickets, t, config).map((d) => (
-                            <DepBadge
-                              key={d.hash}
-                              hash={d.hash}
-                              kind={d.kind}
-                              href={d.hit ? href(d.hit) : undefined}
-                            />
-                          ))}
-                        </span>
-                      )}
-                      {/* 답변은 여기서 바로 단다(§1 요구사항 항, 사람 요청 `14c88df4`) —
-                          상세와 같은 스레드(`threadOf`) · 같은 폼 · 같은 액션이다. 판정은
-                          위 배지와 **같은 식**이고, 테이블 행에는 붙이지 않는다(§1 행 액션 없음).
-                          자리는 카드 맨 아래다: 위는 티켓이 무엇인가고 여기부터가 할 수 있는
-                          일이다(deps 배지도 같은 `z-10` 층에 있다) */}
-                      {isAwaiting(t) && (
-                        <AnswerDialog
-                          project={id}
-                          hash={t.stem}
-                          title={t.title}
-                          answerFile={`${awaitingOf(t)}${config.done}.md`}
-                          thread={threadOf(tickets, t, config)}
-                          options={lastQuestionOptions(threadOf(tickets, t, config))}
-                        />
-                      )}
-                      {/* **카드의 마지막 자식** — 이 세션이 방금 한 일 한 줄(§1-1 ·
-                          §비주얼 §36). `.wip`에만 있다: 진행중 레인 카드만 위에서 읽었고
-                          나머지는 `wipLines`에 키가 아예 없다(완료 카드에 세우면
-                          갱신이 멈춘 자리에서 `방금`이 거짓말이다). 위 `AnswerDialog`와
-                          자리를 다투지 않는다 — `isAwaiting`은 `state === "open"`만
-                          참이라 한 카드에 둘이 같이 서지 않는다.
-                          **완료 카드에는 아카이브 한 줄이 같은 슬롯에 선다**(§5-3
-                          §표시 규약 ③): 두 Map의 조건이 `.wip`↔`.done`으로 배타라
-                          한 카드가 둘을 같이 들 수 없다.
-                          간격은 8 / 선 / 8 / 줄 / 8이다: 위 8px은 `<Card>`의 `gap-2`,
-                          선 아래 8px은 `pt-2`, 카드 바닥까지 8px은 `py-4`(16)에서
-                          `-mb-2`(8)를 뺀 값이다(§36 §자리와 간격 — 새 간격 값 0) */}
-                      {wipLines?.get(t.path) ?? archiveLine(archives.get(t.path), href)}
-                    </Card>
-                  ));
-                  return (
-                    // 레인 높이는 스트립이 준다(flex 기본 stretch) — 머리는 그 위에 고정으로 남고
-                    // 카드 스택만 스크롤한다. 머리를 스크롤러 안에 넣고 sticky를 걸지 않는 이유는
-                    // §1에 있다: 건수는 레인 전체에 대한 진술이라 흔들릴 이유가 없다.
-                    // `bg-surface rounded-lg border p-2`는 표면 층이다(§비주얼 §33) — 레인 셋이
-                    // 같은 종류의 반복이라 셋 다 면을 든다. 가르는 것은 면 대 페이지(1.04)가 아니라
-                    // **면 사이의 거터**다. `ring-1`이 아니라 `border`인 이유: 이 컬럼은
-                    // `overflow-x-auto` 스트립 안이고 ring은 border box 밖이라 양끝에서 잘린다.
-                    // 패딩이 상자 안이라 `flex-1 min-w-72` 폭 배분·레인 피치(304)는 안 바뀌고,
-                    // 카드만 18px(테두리 2 + 패딩 16) 좁아진다. 그 8px을 여기서 내는 이유는
-                    // 카드에 가로 여백이 없어서다(홈 패널은 줄이 이미 내므로 안 준다).
-                    <div key={s} className="flex min-w-72 flex-1 flex-col gap-2 rounded-lg border bg-surface p-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <StatusBadge status={s} />
-                        <span className="text-xs tabular-nums text-muted-foreground">
-                          {group.length}건
-                        </span>
-                      </div>
-                      {/* `-m-1 p-1`은 위 스트립의 `-mx-1 px-1`과 **같은 이유**다 — 세로 overflow가
-                          새 클리핑 상자를 만들어 <Card>의 `ring-1`(border box 밖 box-shadow)이
-                          네 변에서 잘린다. 음수 마진이 그 여백을 되돌려 간격은 종전 그대로다 */}
-                      {/* `data-lane`은 관계선의 **보이는 판정**이 재는 상자다(§1) — 카드가
-                          이 스크롤러의 보이는 상자와 안 겹치면 그 획을 안 그린다 */}
-                      <div
-                        data-lane
-                        className="-m-1 min-h-0 flex-1 space-y-2 overflow-y-auto p-1"
+          {/* 왼쪽 에픽 사이드바 + 오른쪽 뷰(칸반 또는 표) — 툴바 **아래**에서만 갈린다
+              (§비주얼 §52 ① — `h1`·툴바는 위에서 이미 폭 전체다). `gap-6`은 레인 사이
+              `gap-4`보다 한 눈금 커서 넷째 열로 안 읽힌다. */}
+          <div className="flex min-h-0 flex-1 gap-6">
+            <EpicSidebar
+              epics={epics}
+              titles={titles}
+              active={query.epic}
+              hrefFor={epicHref}
+              memoryHrefFor={epicMemoryHref}
+              locale={locale}
+            />
+            {view === "kanban" ? (
+              <div className="flex min-h-0 flex-1 flex-col gap-4">
+                {/* 필터 0건이라도 **컬럼은 남긴다** — 컬럼이 사라지면 필터를 지운 건지 데이터가
+                    없는 건지 구분이 안 된다(테이블 헤더를 남기는 것과 같은 이유, §6) */}
+                {rows.length === 0 && (
+                  <div className="rounded-md border border-dashed px-6 py-6">{noMatch}</div>
+                )}
+                {/* 레인은 이 스트립의 가로를 균등하게 나눠 갖는다(`flex-1`) — 남는 폭이 없다(§1 보드).
+                    `min-w-72`(288)가 하한이라 스트립이 896px보다 좁아지면 거기서 멈추고 그때만
+                    가로 스크롤로 넘긴다(§4 사이드바를 안 쓰는 이유).
+                    `-mx-1 px-1`은 스크롤 컨테이너의 클리핑 여백이다: <Card>의 테두리는 `ring-1`(=
+                    border box **밖에** 그리는 box-shadow)이라 카드가 컨테이너 끝에 딱 붙으면
+                    양끝 카드의 왼/오른쪽 테두리가 잘려 카드가 열려 보인다. 음수 마진으로 되돌려
+                    컬럼은 페이지 거터(main px-6)에 그대로 정렬시킨다.
+                    세로는 여기서 멈춘다 — 스트립이 남은 높이를 전부 먹고(`min-h-0 flex-1`)
+                    세로 스크롤은 레인 안에서 일어난다(§1). 두 축이 공존한다: 여기가 가로다 */}
+                {/* `relative`는 호버 관계선의 좌표 원점이다(§비주얼 §17) — 오버레이가 이 스크롤
+                    컨테이너의 `absolute` 자식이라 콘텐츠와 함께 스크롤한다(가로 추종이 공짜다).
+                    이 줄에 더한 것은 그 한 클래스뿐이다 */}
+                <div className="relative -mx-1 flex min-h-0 flex-1 gap-4 overflow-x-auto px-1 pb-2">
+                  {STATUSES.map((s) => {
+                    // 컬럼 배정은 테이블 상태 컬럼과 **같은 판정**이다(queue.ts statusOf 하나뿐) —
+                    // 렌더 직전에 `blocked → 대기`만 한 번 접는다. 레인 배정은 표현이지 상태가
+                    // 아니므로 이 접기는 여기 있고 `queue.ts`에 `laneOf`를 만들지 않는다(§1 보드).
+                    const group = rows.filter(
+                      (t) => (statusOf(t) === "blocked" ? "open" : statusOf(t)) === s,
+                    );
+                    // `완료` 레인은 **최근 것부터**다. `rows`의 순서를 믿지 않고 `birth`로 다시
+                    // 정렬한다 — `?sort=`는 칸반에도 살아 있어서 정렬을 걸면 "최근 20건"이
+                    // "제목순 20건"이 된다(URL 정렬은 이 레인에 끼어들지 않는다).
+                    // 자르는 것은 카드뿐이다: 아래 머리 건수는 `group.length`(자르기 전) 그대로다.
+                    // 어느 화면에서든(기본 보드 · `?status=done` 포함) `doneLimit(?done=)`장만
+                    // 그린다 — `trimDone` 갈래는 없다(§1 §완료 항, 요구 `79cad792`).
+                    let cards = group;
+                    if (s === "done") {
+                      cards = [...group].sort((a, b) => b.birth - a.birth).slice(0, doneLimit(sp.get("done")));
+                    }
+                    const trimmed = group.length - cards.length;
+                    const cardEls = cards.map((t) => (
+                      // 카드 전체가 상세로 가는 링크다(테이블 행과 같은 규칙 — 행 액션 버튼이
+                      // 없어서 안전하다). deps 배지는 늘어난 링크 위에 뜬다.
+                      <Card
+                        key={t.path}
+                        // 관계선이 상대를 찾는 이름이다(§1: 못 찾으면 안 그린다). 링크·엔진과
+                        // 같은 `stem`이라 `relationEdges`가 준 간선과 그냥 맞는다
+                        data-stem={t.stem}
+                        className="card-tint relative gap-2 px-4"
                       >
-                        {group.length === 0 && rows.length > 0 ? (
-                          // <EmptyState>는 화면 하나의 빈 상태용이다(py-10 + 1차 액션 버튼). 레인
-                          // 3개에 그걸 깔면 같은 버튼이 3개 생긴다 — 여기선 건수 0만 말한다.
-                          // 전체 0건일 땐 위 블록이 이미 말했으므로 이 자리표시자는 안 그린다(§6).
-                          <p className="rounded-md border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">
-                            0건
-                          </p>
-                        ) : s === "done" ? (
-                          // 완료 레인만 무한스크롤이다(§1 §완료 항, 요구 `79cad792`) — 감시행이
-                          // 보이면 `?done=`을 20 올려 나머지를 이어 그린다. 잘린 나머지로 가는
-                          // 옛 출구 링크는 죽었다: 스크롤이 그 자리에서 같은 일(신호 + 이동)을 한다.
-                          <BoardDoneLane more={trimmed > 0}>{cardEls}</BoardDoneLane>
-                        ) : (
-                          cardEls
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-                {/* 레인 뒤에 온다 — 카드 위(§17 z 층)에 뜨고 자기 크기를 갖지 않는다.
-                    호버·포커스 위임과 좌표 측정은 전부 여기 안이다(§1 상태는 URL에 없다) */}
-                {relations && <BoardRelations relations={relations} />}
-                {/* 두 번째 `absolute` 자식 — 폴링으로 레인이 갈린 카드의 고스트가 나는 층
-                    (§비주얼 §20). 관계선과 같은 스트립·같은 좌표계·같은 z를 쓴다 */}
-                <BoardLaneMotion />
-              </div>
-            </div>
-          ) : (
-            /* 바디가 스크롤러고 헤더 행은 그 안에서 고정이다(§1) — 뷰를 토글해도 페이지 높이가
-               안 변한다. 세로 스크롤을 **shadcn Table의 컨테이너**(이미 `overflow-x-auto`인 그
-               div)에 걸어야 한다: `sticky`의 기준은 가장 가까운 스크롤 상자라, 바깥에 새
-               스크롤러를 두면 헤더가 그 스크롤을 못 따라간다(컨테이너가 그 사이에 낀다).
-               컨테이너는 className을 안 받으므로(shadcn CLI 산출물 — 손대지 않는다) 부모에서
-               자식 선택자로 준다. */
-            <div className="min-h-0 flex-1 [&>[data-slot=table-container]]:h-full [&>[data-slot=table-container]]:overflow-y-auto">
-              <Table>
-                {/* 헤더 행은 스크롤러 안에서 고정이다(§1). `thead`에 걸고 셀에도 배경을 준다 —
-                    `thead`만으로는 collapse된 표에서 셀 배경이 없어 행이 비쳐 보인다 */}
-                <TableHeader className="sticky top-0 z-20">
-                  <TableRow className="h-9 hover:bg-transparent">
-                    {COLUMNS.map(({ key, label }) => {
-                      // 파라미터가 없으면 화면이 `생성일` 내림차순으로 서 있다 — 그 자리에서
-                      // 헤더도 활성 + `ArrowDown`이다(§1 보드. 아니면 헤더가 거짓말을 한다).
-                      // 클릭 3단계는 이 표시와 무관하게 `sortHref`가 실제 `sortKey`로 정한다 —
-                      // `생성일`에 특례가 없다.
-                      const active = key === (sortKey ?? TABLE_DEFAULT_SORT);
-                      const Icon = !active
-                        ? ChevronsUpDown
-                        : desc || !sortKey
-                          ? ArrowDown
-                          : ArrowUp;
-                      return (
-                        // 배경은 셀이 든다(위 `thead` 주석). 행의 `border-b`는 collapse된 표에서
-                        // 고정된 헤더를 안 따라오므로 밑줄을 `inset` 그림자로 셀에 직접 그린다
-                        // (색은 같은 `--border` 토큰).
-                        <TableHead
-                          key={key}
-                          className="h-9 bg-background px-3 text-xs font-medium shadow-[inset_0_-1px_0_var(--border)]"
-                        >
-                          <Link
-                            href={sortHref(key)}
-                            aria-label={`${label} 정렬`}
-                            className={`inline-flex items-center gap-1 rounded-sm ${
-                              active ? "text-foreground" : "text-muted-foreground"
-                            }`}
-                          >
-                            {label}
-                            <Icon aria-hidden className="size-3.5 opacity-60" />
-                          </Link>
-                        </TableHead>
-                      );
-                    })}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {tableRows.length === 0 ? (
-                    // 필터 0건 — 헤더는 남긴다(컬럼이 사라지면 필터를 지운 건지 데이터가 없는 건지
-                    // 구분이 안 된다). 문구·액션이 빈 큐와 다른 이유도 같다(§6).
-                    <TableRow className="hover:bg-transparent">
-                      {/* 검색어가 길면 그 한 줄이 표를 넓힌다 — `colSpan` 셀은 `whitespace-normal`(§6). */}
-                      <TableCell colSpan={COLUMNS.length} className="px-3 py-6 whitespace-normal">
-                        {noMatch}
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    // 행은 여기서 **앞 `shownRows`개만** 그린다 — 바닥에 닿으면 `BoardRows`가
-                    // `?rows=`를 30 올려 다음 몫을 받아 온다(§1 보드 §테이블 바디는 30행씩 ·
-                    // §성능 예산 §초과분 ②). 건수 줄은 이 값과 무관하다.
-                    <BoardRows more={tableRows.length > shownRows}>
-                      {tableRows.slice(0, shownRows).map((t) => (
-                        // 행 전체가 상세로 가는 링크다 — 해시 셀의 링크를 행 크기로 늘린다(§7 대비:
-                        // 여기는 행 액션 버튼이 없어서 행 링크가 안전하다). deps 배지는 그 위에 뜬다.
-                        <TableRow key={t.path} className="relative h-9 focus-within:bg-muted/50">
-                          <TableCell className="px-3 py-0">
-                            {isAwaiting(t) ? (
-                              <StatusBadge status="awaiting" days={daysSince(t.mtime)} />
-                            ) : (
-                              <StatusBadge status={statusOf(t)} />
-                            )}
-                          </TableCell>
-                          <TableCell className="px-3 py-0">
-                            {/* §비주얼 §49 — 미터는 해시 셀 **안**, 링크 **앞**이라 새 열이 안 는다.
-                                장식이라 `<Link>` 밖에 둔다(행 전체가 이미 링크다) */}
-                            <span className="inline-flex items-center gap-1">
-                              <PriorityMeter priority={t.priority} locale={locale} />
-                              {/* §비주얼 §31 ② 갈래 A — ①과 같다. 밑줄 없음 */}
-                              <Link
-                                href={href(t)}
-                                className="rounded-sm font-mono text-xs text-muted-foreground after:absolute after:inset-0"
-                              >
-                                {t.hash}
-                              </Link>
-                            </span>
-                          </TableCell>
-                          {/* title은 자르고 전문은 `title` 속성으로 본다(§6). tooltip은 클라이언트
-                              컴포넌트라 행마다 하나씩 두면 테이블이 통째로 클라이언트가 된다 */}
-                          <TableCell className="px-3 py-0">
-                            {/* 폭 상한은 1440에서 컬럼 8개가 다 들어가도록 잡은 값이다(§4 사이드바를
-                                쓰지 않는 이유). deps가 4개 넘게 달린 행은 가로 스크롤로 넘긴다 */}
-                            <span className="block max-w-[34ch] truncate text-sm" title={t.title}>
-                              {t.title || "(제목 없음)"}
-                            </span>
-                          </TableCell>
-                          <TableCell className="px-3 py-0 text-sm">
-                            {t.kind ? (KIND_LABELS[t.kind] ?? t.kind) : "—"}
-                          </TableCell>
-                          {/* 배지가 셀의 `text-sm`을 대체한다(§비주얼 §12) — 셀에 남은 `text-sm`은
-                              배지가 없는 `—`(담당 없음) 한 글자용이다. Badge는 제 `text-xs`를 갖는다 */}
-                          <TableCell className="px-3 py-0 text-sm">
-                            {t.persona ? (
-                              <PersonaBadge
-                                name={t.persona}
-                                color={colors[t.persona]}
-                                state={t.state}
-                              />
-                            ) : (
-                              "—"
-                            )}
-                          </TableCell>
-                          <TableCell className="px-3 py-0">
-                            {t.deps.length === 0 ? (
-                              <span className="text-sm text-muted-foreground">—</span>
-                            ) : (
-                              // 배지는 늘어난 행 링크 위에 뜨게 둔다 — 안 그러면 deps 클릭이 행에 먹힌다
-                              <span className="relative z-10 flex items-center gap-1">
-                                {depBadges(tickets, t, config).map((d) => (
-                                  <DepBadge
-                                    key={d.hash}
-                                    hash={d.hash}
-                                    kind={d.kind}
-                                    href={d.hit ? href(d.hit) : undefined}
-                                  />
-                                ))}
-                              </span>
-                            )}
-                          </TableCell>
-                          <TableCell className="px-3 py-0 text-xs tabular-nums text-muted-foreground">
-                            {when(t.birth)}
-                          </TableCell>
-                          <TableCell className="px-3 py-0">
-                            {/* 값·컬럼 무수정 — 전문이 그대로 남고 그 안의 워커 이름만 마크로 선다
-                                (§비주얼 §19 ②). 폭 제약·`title` 툴팁도 종전 그대로다 */}
-                            <span
-                              className="block max-w-[24ch] truncate font-mono text-xs text-muted-foreground"
-                              title={t.fm.owner ?? ""}
+                        {/* 칸반 카드는 레인이 상태를 말하므로 배지를 달지 않는다 — 예외가
+                            `답변 대기`다. 자기 레인 없이 `대기`에 앉고, 답변 stem은 큐에
+                            없는 해시라 deps 태그가 `?`로만 떠서 "사람이 답할 차례"라는
+                            말을 못 한다. 그래서 이 배지 하나만 남는다(§1 보드 요구사항 항).
+                            `deps 대기`는 배지를 얹지 않는다 — 아래 deps 줄의 주황색
+                            <DepBadge>가 그 표시다(사람 요청 `bd2062cb`) */}
+                        <div className="flex items-start justify-between gap-2">
+                          {/* 우선순위 미터(§비주얼 §49) — 해시 줄, `<Link>` 앞. 흐름 안이라
+                              `<Card>`의 `overflow-hidden` 기본값에 안 닿는다(테이블 해시 셀과
+                              같은 자리·같은 그릇, §49 §자리). */}
+                          <span className="inline-flex items-center gap-1">
+                            <PriorityMeter priority={t.priority} locale={locale} />
+                            {/* §비주얼 §31 ① 갈래 A — 밑줄 없음. 링크임은 카드의
+                                `card-tint` 호버 + 커서 + 이 앵커에 걸리는 포커스 링이 말한다 */}
+                            <Link
+                              href={href(t)}
+                              className="rounded-sm font-mono text-xs text-muted-foreground after:absolute after:inset-0"
                             >
-                              <WipWorker t={t} full />
-                            </span>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </BoardRows>
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          )}
+                              {t.hash}
+                            </Link>
+                          </span>
+                          {isAwaiting(t) && (
+                            <StatusBadge status="awaiting" days={daysSince(t.mtime)} />
+                          )}
+                        </div>
+                        {/* 카드 title은 2줄까지(§6). 전문은 `title` 속성으로 본다 */}
+                        <span className="line-clamp-2 text-sm" title={t.title}>
+                          {t.title || "(제목 없음)"}
+                        </span>
+                        {/* 배지가 줄 안에 섞이므로 flex다 — 텍스트 baseline 정렬에 맡기면
+                            20px 배지가 줄을 밀어 카드마다 높이가 갈린다.
+                            `flex-wrap`은 워커 마크 몫이다(§비주얼 §19 잘림): 워커 이름은
+                            식별자라 안 자르고, 길면 카드가 한 줄 자라며 배지를 안 민다 */}
+                        <span className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
+                          {t.kind ? (KIND_LABELS[t.kind] ?? t.kind) : "—"} ·
+                          {t.persona ? (
+                            <PersonaBadge
+                              name={t.persona}
+                              color={colors[t.persona]}
+                              state={t.state}
+                            />
+                          ) : (
+                            "—"
+                          )}
+                          <WipWorker t={t} />
+                        </span>
+                        {t.deps.length > 0 && (
+                          // 라벨은 세어주지 않는다 — 어느 해시가 무엇인지는 <DepBadge>가
+                          // 색·아이콘으로, 스크린리더에는 배지 안 `sr-only` 문구로 말한다.
+                          <span className="relative z-10 flex flex-wrap items-center gap-1">
+                            <span className="text-xs text-muted-foreground">deps</span>
+                            {depBadges(tickets, t, config).map((d) => (
+                              <DepBadge
+                                key={d.hash}
+                                hash={d.hash}
+                                kind={d.kind}
+                                href={d.hit ? href(d.hit) : undefined}
+                              />
+                            ))}
+                          </span>
+                        )}
+                        {/* 답변은 여기서 바로 단다(§1 요구사항 항, 사람 요청 `14c88df4`) —
+                            상세와 같은 스레드(`threadOf`) · 같은 폼 · 같은 액션이다. 판정은
+                            위 배지와 **같은 식**이고, 테이블 행에는 붙이지 않는다(§1 행 액션 없음).
+                            자리는 카드 맨 아래다: 위는 티켓이 무엇인가고 여기부터가 할 수 있는
+                            일이다(deps 배지도 같은 `z-10` 층에 있다) */}
+                        {isAwaiting(t) && (
+                          <AnswerDialog
+                            project={id}
+                            hash={t.stem}
+                            title={t.title}
+                            answerFile={`${awaitingOf(t)}${config.done}.md`}
+                            thread={threadOf(tickets, t, config)}
+                            options={lastQuestionOptions(threadOf(tickets, t, config))}
+                          />
+                        )}
+                        {/* **카드의 마지막 자식** — 이 세션이 방금 한 일 한 줄(§1-1 ·
+                            §비주얼 §36). `.wip`에만 있다: 진행중 레인 카드만 위에서 읽었고
+                            나머지는 `wipLines`에 키가 아예 없다(완료 카드에 세우면
+                            갱신이 멈춘 자리에서 `방금`이 거짓말이다). 위 `AnswerDialog`와
+                            자리를 다투지 않는다 — `isAwaiting`은 `state === "open"`만
+                            참이라 한 카드에 둘이 같이 서지 않는다.
+                            **완료 카드에는 아카이브 한 줄이 같은 슬롯에 선다**(§5-3
+                            §표시 규약 ③): 두 Map의 조건이 `.wip`↔`.done`으로 배타라
+                            한 카드가 둘을 같이 들 수 없다.
+                            간격은 8 / 선 / 8 / 줄 / 8이다: 위 8px은 `<Card>`의 `gap-2`,
+                            선 아래 8px은 `pt-2`, 카드 바닥까지 8px은 `py-4`(16)에서
+                            `-mb-2`(8)를 뺀 값이다(§36 §자리와 간격 — 새 간격 값 0) */}
+                        {wipLines?.get(t.path) ?? archiveLine(archives.get(t.path), href)}
+                      </Card>
+                    ));
+                    return (
+                      // 레인 높이는 스트립이 준다(flex 기본 stretch) — 머리는 그 위에 고정으로 남고
+                      // 카드 스택만 스크롤한다. 머리를 스크롤러 안에 넣고 sticky를 걸지 않는 이유는
+                      // §1에 있다: 건수는 레인 전체에 대한 진술이라 흔들릴 이유가 없다.
+                      // `bg-surface rounded-lg border p-2`는 표면 층이다(§비주얼 §33) — 레인 셋이
+                      // 같은 종류의 반복이라 셋 다 면을 든다. 가르는 것은 면 대 페이지(1.04)가 아니라
+                      // **면 사이의 거터**다. `ring-1`이 아니라 `border`인 이유: 이 컬럼은
+                      // `overflow-x-auto` 스트립 안이고 ring은 border box 밖이라 양끝에서 잘린다.
+                      // 패딩이 상자 안이라 `flex-1 min-w-72` 폭 배분·레인 피치(304)는 안 바뀌고,
+                      // 카드만 18px(테두리 2 + 패딩 16) 좁아진다. 그 8px을 여기서 내는 이유는
+                      // 카드에 가로 여백이 없어서다(홈 패널은 줄이 이미 내므로 안 준다).
+                      <div key={s} className="flex min-w-72 flex-1 flex-col gap-2 rounded-lg border bg-surface p-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <StatusBadge status={s} />
+                          <span className="text-xs tabular-nums text-muted-foreground">
+                            {group.length}건
+                          </span>
+                        </div>
+                        {/* `-m-1 p-1`은 위 스트립의 `-mx-1 px-1`과 **같은 이유**다 — 세로 overflow가
+                            새 클리핑 상자를 만들어 <Card>의 `ring-1`(border box 밖 box-shadow)이
+                            네 변에서 잘린다. 음수 마진이 그 여백을 되돌려 간격은 종전 그대로다 */}
+                        {/* `data-lane`은 관계선의 **보이는 판정**이 재는 상자다(§1) — 카드가
+                            이 스크롤러의 보이는 상자와 안 겹치면 그 획을 안 그린다 */}
+                        <div
+                          data-lane
+                          className="-m-1 min-h-0 flex-1 space-y-2 overflow-y-auto p-1"
+                        >
+                          {group.length === 0 && rows.length > 0 ? (
+                            // <EmptyState>는 화면 하나의 빈 상태용이다(py-10 + 1차 액션 버튼). 레인
+                            // 3개에 그걸 깔면 같은 버튼이 3개 생긴다 — 여기선 건수 0만 말한다.
+                            // 전체 0건일 땐 위 블록이 이미 말했으므로 이 자리표시자는 안 그린다(§6).
+                            <p className="rounded-md border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">
+                              0건
+                            </p>
+                          ) : s === "done" ? (
+                            // 완료 레인만 무한스크롤이다(§1 §완료 항, 요구 `79cad792`) — 감시행이
+                            // 보이면 `?done=`을 20 올려 나머지를 이어 그린다. 잘린 나머지로 가는
+                            // 옛 출구 링크는 죽었다: 스크롤이 그 자리에서 같은 일(신호 + 이동)을 한다.
+                            <BoardDoneLane more={trimmed > 0}>{cardEls}</BoardDoneLane>
+                          ) : (
+                            cardEls
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {/* 레인 뒤에 온다 — 카드 위(§17 z 층)에 뜨고 자기 크기를 갖지 않는다.
+                      호버·포커스 위임과 좌표 측정은 전부 여기 안이다(§1 상태는 URL에 없다) */}
+                  {relations && <BoardRelations relations={relations} />}
+                  {/* 두 번째 `absolute` 자식 — 폴링으로 레인이 갈린 카드의 고스트가 나는 층
+                      (§비주얼 §20). 관계선과 같은 스트립·같은 좌표계·같은 z를 쓴다 */}
+                  <BoardLaneMotion />
+                </div>
+              </div>
+            ) : (
+              /* 바디가 스크롤러고 헤더 행은 그 안에서 고정이다(§1) — 뷰를 토글해도 페이지 높이가
+                 안 변한다. 세로 스크롤을 **shadcn Table의 컨테이너**(이미 `overflow-x-auto`인 그
+                 div)에 걸어야 한다: `sticky`의 기준은 가장 가까운 스크롤 상자라, 바깥에 새
+                 스크롤러를 두면 헤더가 그 스크롤을 못 따라간다(컨테이너가 그 사이에 낀다).
+                 컨테이너는 className을 안 받으므로(shadcn CLI 산출물 — 손대지 않는다) 부모에서
+                 자식 선택자로 준다. */
+              <div className="min-h-0 flex-1 [&>[data-slot=table-container]]:h-full [&>[data-slot=table-container]]:overflow-y-auto">
+                <Table>
+                  {/* 헤더 행은 스크롤러 안에서 고정이다(§1). `thead`에 걸고 셀에도 배경을 준다 —
+                      `thead`만으로는 collapse된 표에서 셀 배경이 없어 행이 비쳐 보인다 */}
+                  <TableHeader className="sticky top-0 z-20">
+                    <TableRow className="h-9 hover:bg-transparent">
+                      {COLUMNS.map(({ key, label }) => {
+                        // 파라미터가 없으면 화면이 `생성일` 내림차순으로 서 있다 — 그 자리에서
+                        // 헤더도 활성 + `ArrowDown`이다(§1 보드. 아니면 헤더가 거짓말을 한다).
+                        // 클릭 3단계는 이 표시와 무관하게 `sortHref`가 실제 `sortKey`로 정한다 —
+                        // `생성일`에 특례가 없다.
+                        const active = key === (sortKey ?? TABLE_DEFAULT_SORT);
+                        const Icon = !active
+                          ? ChevronsUpDown
+                          : desc || !sortKey
+                            ? ArrowDown
+                            : ArrowUp;
+                        return (
+                          // 배경은 셀이 든다(위 `thead` 주석). 행의 `border-b`는 collapse된 표에서
+                          // 고정된 헤더를 안 따라오므로 밑줄을 `inset` 그림자로 셀에 직접 그린다
+                          // (색은 같은 `--border` 토큰).
+                          <TableHead
+                            key={key}
+                            className="h-9 bg-background px-3 text-xs font-medium shadow-[inset_0_-1px_0_var(--border)]"
+                          >
+                            <Link
+                              href={sortHref(key)}
+                              aria-label={`${label} 정렬`}
+                              className={`inline-flex items-center gap-1 rounded-sm ${
+                                active ? "text-foreground" : "text-muted-foreground"
+                              }`}
+                            >
+                              {label}
+                              <Icon aria-hidden className="size-3.5 opacity-60" />
+                            </Link>
+                          </TableHead>
+                        );
+                      })}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {tableRows.length === 0 ? (
+                      // 필터 0건 — 헤더는 남긴다(컬럼이 사라지면 필터를 지운 건지 데이터가 없는 건지
+                      // 구분이 안 된다). 문구·액션이 빈 큐와 다른 이유도 같다(§6).
+                      <TableRow className="hover:bg-transparent">
+                        {/* 검색어가 길면 그 한 줄이 표를 넓힌다 — `colSpan` 셀은 `whitespace-normal`(§6). */}
+                        <TableCell colSpan={COLUMNS.length} className="px-3 py-6 whitespace-normal">
+                          {noMatch}
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      // 행은 여기서 **앞 `shownRows`개만** 그린다 — 바닥에 닿으면 `BoardRows`가
+                      // `?rows=`를 30 올려 다음 몫을 받아 온다(§1 보드 §테이블 바디는 30행씩 ·
+                      // §성능 예산 §초과분 ②). 건수 줄은 이 값과 무관하다.
+                      <BoardRows more={tableRows.length > shownRows}>
+                        {tableRows.slice(0, shownRows).map((t) => (
+                          // 행 전체가 상세로 가는 링크다 — 해시 셀의 링크를 행 크기로 늘린다(§7 대비:
+                          // 여기는 행 액션 버튼이 없어서 행 링크가 안전하다). deps 배지는 그 위에 뜬다.
+                          <TableRow key={t.path} className="relative h-9 focus-within:bg-muted/50">
+                            <TableCell className="px-3 py-0">
+                              {isAwaiting(t) ? (
+                                <StatusBadge status="awaiting" days={daysSince(t.mtime)} />
+                              ) : (
+                                <StatusBadge status={statusOf(t)} />
+                              )}
+                            </TableCell>
+                            <TableCell className="px-3 py-0">
+                              {/* §비주얼 §49 — 미터는 해시 셀 **안**, 링크 **앞**이라 새 열이 안 는다.
+                                  장식이라 `<Link>` 밖에 둔다(행 전체가 이미 링크다) */}
+                              <span className="inline-flex items-center gap-1">
+                                <PriorityMeter priority={t.priority} locale={locale} />
+                                {/* §비주얼 §31 ② 갈래 A — ①과 같다. 밑줄 없음 */}
+                                <Link
+                                  href={href(t)}
+                                  className="rounded-sm font-mono text-xs text-muted-foreground after:absolute after:inset-0"
+                                >
+                                  {t.hash}
+                                </Link>
+                              </span>
+                            </TableCell>
+                            {/* title은 자르고 전문은 `title` 속성으로 본다(§6). tooltip은 클라이언트
+                                컴포넌트라 행마다 하나씩 두면 테이블이 통째로 클라이언트가 된다 */}
+                            <TableCell className="px-3 py-0">
+                              {/* 폭 상한은 1440에서 컬럼 8개가 다 들어가도록 잡은 값이다(§4 사이드바를
+                                  쓰지 않는 이유). deps가 4개 넘게 달린 행은 가로 스크롤로 넘긴다 */}
+                              <span className="block max-w-[34ch] truncate text-sm" title={t.title}>
+                                {t.title || "(제목 없음)"}
+                              </span>
+                            </TableCell>
+                            <TableCell className="px-3 py-0 text-sm">
+                              {t.kind ? (KIND_LABELS[t.kind] ?? t.kind) : "—"}
+                            </TableCell>
+                            {/* 배지가 셀의 `text-sm`을 대체한다(§비주얼 §12) — 셀에 남은 `text-sm`은
+                                배지가 없는 `—`(담당 없음) 한 글자용이다. Badge는 제 `text-xs`를 갖는다 */}
+                            <TableCell className="px-3 py-0 text-sm">
+                              {t.persona ? (
+                                <PersonaBadge
+                                  name={t.persona}
+                                  color={colors[t.persona]}
+                                  state={t.state}
+                                />
+                              ) : (
+                                "—"
+                              )}
+                            </TableCell>
+                            <TableCell className="px-3 py-0">
+                              {t.deps.length === 0 ? (
+                                <span className="text-sm text-muted-foreground">—</span>
+                              ) : (
+                                // 배지는 늘어난 행 링크 위에 뜨게 둔다 — 안 그러면 deps 클릭이 행에 먹힌다
+                                <span className="relative z-10 flex items-center gap-1">
+                                  {depBadges(tickets, t, config).map((d) => (
+                                    <DepBadge
+                                      key={d.hash}
+                                      hash={d.hash}
+                                      kind={d.kind}
+                                      href={d.hit ? href(d.hit) : undefined}
+                                    />
+                                  ))}
+                                </span>
+                              )}
+                            </TableCell>
+                            <TableCell className="px-3 py-0 text-xs tabular-nums text-muted-foreground">
+                              {when(t.birth)}
+                            </TableCell>
+                            <TableCell className="px-3 py-0">
+                              {/* 값·컬럼 무수정 — 전문이 그대로 남고 그 안의 워커 이름만 마크로 선다
+                                  (§비주얼 §19 ②). 폭 제약·`title` 툴팁도 종전 그대로다 */}
+                              <span
+                                className="block max-w-[24ch] truncate font-mono text-xs text-muted-foreground"
+                                title={t.fm.owner ?? ""}
+                              >
+                                <WipWorker t={t} full />
+                              </span>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </BoardRows>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </div>
         </>
       )}
     </div>

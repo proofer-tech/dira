@@ -94,6 +94,7 @@ const FILLED = [
   "statusbar.",
   "status.",
   "dep.",
+  "board.",
 ];
 
 test("이미 찬 묶음(설정·마감·셸)의 ko 키는 en에 하나도 안 빠졌다", () => {

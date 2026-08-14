@@ -1,0 +1,112 @@
+/** 보드 왼쪽 에픽 사이드바 (DESIGN.md §에픽 결정 5 · §비주얼 §52 ①②).
+ *
+ *  **에픽 화면(§결정 6, `36e431d9`)이 같은 컴포넌트를 쓴다** — 갈리는 것은 링크 목적지 하나다
+ *  (§52 ④ "같은 컴포넌트 … 갈리는 것은 prop 하나"). 지금 이 티켓은 보드 쪽 `hrefFor`
+ *  (`?epic=<값>`)만 채운다.
+ *
+ *  서버 컴포넌트다 — 목록도 제목도 페이지가 이미 읽은 값을 그대로 받는다(새 클라이언트 상태 ·
+ *  새 폴링 · 새 스켈레톤 0개, §52 §로딩). */
+import Link from "next/link";
+import { NotebookText } from "lucide-react";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarMenu,
+  SidebarMenuAction,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+} from "@/components/ui/sidebar";
+import { NO_EPIC, type Epic } from "@/lib/epics";
+import { t, type Locale } from "@/lib/i18n";
+
+export function EpicSidebar({
+  epics,
+  titles,
+  active,
+  hrefFor,
+  memoryHrefFor,
+  locale,
+}: {
+  epics: Epic[];
+  /** P번호 → `README.md` 첫 줄. 없거나 못 읽으면 `null`(§결정 5 §제목 없음). `NO_EPIC`은 키에 없다 */
+  titles: Record<string, string | null>;
+  /** 지금 걸린 `?epic=` 값. `null`이면 필터 없음(어느 줄도 선택되지 않는다) */
+  active: string | null;
+  /** 이 값으로 필터를 건 URL(§결정 5 — 기존 필터 그릇에 드는 `?epic=`) */
+  hrefFor: (value: string) => string;
+  /** 둘째 문의 목적지 — `/p/<project>/epics/<P번호>`(§결정 6) */
+  memoryHrefFor: (epic: string) => string;
+  locale: Locale;
+}) {
+  return (
+    // `w-full`·`min-h-svh` 기본값을 덮는다(personas-ui.tsx와 같은 처방) — 여기는 형제 열
+    // 하나(칸반 또는 표)와 나란한 **한 칸**이지 2단 전체가 아니다.
+    <SidebarProvider className="min-h-0 w-auto shrink-0">
+      {/* 폭 `w-64`(256)는 레인 하한 288보다 좁다(§52 §폭). 레일이 아니라 카드라 위 변까지 닫는다 */}
+      <Sidebar collapsible="none" className="w-64 shrink-0 rounded-lg border bg-surface">
+        <SidebarContent className="py-2">
+          <SidebarGroup className="p-0">
+            <SidebarGroupLabel className="h-6 text-muted-foreground">
+              {t(locale, "board.epic.label")}
+            </SidebarGroupLabel>
+            <SidebarMenu aria-label={t(locale, "board.epic.label")} className="gap-0.5">
+              {epics.map((row) => {
+                const isNone = row.epic === NO_EPIC;
+                const value = isNone ? "" : row.epic;
+                const isActive = active === value;
+                const total = row.counts.open + row.counts.wip + row.counts.done;
+                return (
+                  <SidebarMenuItem key={row.epic}>
+                    <SidebarMenuButton
+                      className="h-auto items-start"
+                      isActive={isActive}
+                      aria-current={isActive ? "page" : undefined}
+                      render={<Link href={hrefFor(value)} />}
+                    >
+                      <div className="flex min-w-0 grow flex-col gap-0.5">
+                        <span className="flex items-baseline gap-2">
+                          {!isNone && (
+                            <span className="shrink-0 font-mono text-sm">{row.epic}</span>
+                          )}
+                          <span className="min-w-0 truncate text-sm">
+                            {isNone
+                              ? t(locale, "board.epic.none")
+                              : `${titles[row.epic] ?? t(locale, "board.epic.noTitle")} (${row.epic})`}
+                          </span>
+                        </span>
+                        <span className="flex items-baseline gap-2 text-xs text-muted-foreground">
+                          <span>{total}건</span>
+                          {row.counts.wip > 0 && (
+                            <span className="ml-auto">
+                              {t(locale, "status.label.wip")} {row.counts.wip}
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                    </SidebarMenuButton>
+                    {/* `(에픽 없음)`은 둘째 문이 없다 — 갈 메모리 디렉터리가 없다(결정 2) */}
+                    {!isNone && (
+                      <SidebarMenuAction
+                        render={
+                          <Link href={memoryHrefFor(row.epic)} title={`${row.epic} ${t(locale, "board.epic.memory")}`} />
+                        }
+                      >
+                        <NotebookText aria-hidden className="size-4" />
+                        <span className="sr-only">
+                          {row.epic} {t(locale, "board.epic.memory")}
+                        </span>
+                      </SidebarMenuAction>
+                    )}
+                  </SidebarMenuItem>
+                );
+              })}
+            </SidebarMenu>
+          </SidebarGroup>
+        </SidebarContent>
+      </Sidebar>
+    </SidebarProvider>
+  );
+}

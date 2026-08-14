@@ -665,6 +665,11 @@ export type BoardQuery = {
   persona: string[];
   status: string[];
   q: string; // title + 본문 + frontmatter 값 전체 부분일치
+  /** 에픽 필터(DESIGN.md §에픽 결정 5) — **단일값**이다(다른 셋과 달리 배지가 아니라 사이드바
+   *  한 줄 선택이라 OR로 쌓을 자리가 없다). `null`이면 파라미터가 아예 없는 것(필터 없음),
+   *  `""`이면 `?epic=`(값이 빈 것 — `epicOf`가 없는 티켓에 주는 그 값과 같다. §결정 1
+   *  `(에픽 없음)`은 GUI가 붙이는 라벨이지 값이 아니다)이다. */
+  epic: string | null;
 };
 
 /** `kind: answer`는 **기본 목록에서 뺀다**(§1 보드). 답변은 수행할 티켓이 아니라 요구사항 상세에서
@@ -685,6 +690,7 @@ export function filterTickets(tickets: Ticket[], query: BoardQuery): Ticket[] {
     if (!inDefaultList(t, query.kind, query.persona)) return false;
     if (query.kind.length && !query.kind.includes(t.kind)) return false;
     if (query.persona.length && !query.persona.includes(t.persona)) return false;
+    if (query.epic !== null && epicOf(t) !== query.epic) return false;
     // `답변 대기`는 `deps 대기`의 하위 종류다 — `blocked`를 고르면 답변 대기도 들어오고,
     // `awaiting`을 고르면 그것만 남는다(statusOf는 여전히 `blocked`를 준다).
     if (

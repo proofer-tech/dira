@@ -470,7 +470,7 @@ test("페르소나 — 재정의된 TICKET_PERSONAS 기준으로 목록·생성�
   // 보드 필터도 **이 목록**을 쓴다(자기 `readdir` 없다). 그래서 선택지에 남는 이름은
   // 프로필이 없어도 고르면 실제로 걸러지고, 이름규칙밖은 애초에 선택지가 아니다.
   assert.deepStrictEqual(
-    filterTickets(tickets, { kind: [], persona: ["designer"], status: [], q: "" }).map(
+    filterTickets(tickets, { kind: [], persona: ["designer"], status: [], q: "", epic: null }).map(
       (t) => t.hash,
     ),
     ["cccc3333"],

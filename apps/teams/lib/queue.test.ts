@@ -883,7 +883,7 @@ test("보드 — 5상태 판정 · 필터 AND/OR · 검색 대상 · 정렬", as
   const root = await buildDefaultFixture();
   const tickets = await listTickets(root, DEFAULT);
   const hashes = (ts: Ticket[]) => ts.map((t) => t.hash);
-  const none = { kind: [], persona: [], status: [], q: "" };
+  const none = { kind: [], persona: [], status: [], q: "", epic: null };
 
   // 5상태 — 우선순위가 tickets.py list와 같다(할당됨이 deps 대기보다 먼저)
   const by = (h: string) => tickets.find((t) => t.hash === h)!;
@@ -1001,6 +1001,34 @@ test("보드 — 5상태 판정 · 필터 AND/OR · 검색 대상 · 정렬", as
       hashes(sortTableRows(tickets, key, desc)),
       hashes(sortTickets(tickets, key, desc)),
     );
+});
+
+test("보드 — 에픽 필터(§에픽 결정 5) - 단일값 - `epic:` 없는 티켓은 빈 문자열로 걸린다", async () => {
+  const root = newRoot();
+  await write(root, "epi00001.md", fm({ ticket: "epi00001", title: "P273 하나", kind: "work", epic: "P273" }));
+  await write(root, "epi00002.md", fm({ ticket: "epi00002", title: "P273 둘", kind: "work", epic: "P273" }));
+  await write(root, "epi00003.md", fm({ ticket: "epi00003", title: "P271", kind: "work", epic: "P271" }));
+  await write(root, "epi00004.md", fm({ ticket: "epi00004", title: "에픽 없음", kind: "work" }));
+
+  const tickets = await listTickets(root, DEFAULT);
+  const hashes = (ts: Ticket[]) => ts.map((t) => t.hash);
+  const none = { kind: [], persona: [], status: [], q: "", epic: null };
+
+  // null(파라미터 없음) = 필터 없음. 큐 전체가 그대로 나온다
+  assert.deepStrictEqual(hashes(filterTickets(tickets, none)), hashes(tickets));
+
+  // 값 하나 = 그 에픽만. P273-2 같은 접두사 확장을 안 한다(문자열 그대로가 키다)
+  assert.deepStrictEqual(hashes(filterTickets(tickets, { ...none, epic: "P273" })), [
+    "epi00001",
+    "epi00002",
+  ]);
+  assert.deepStrictEqual(hashes(filterTickets(tickets, { ...none, epic: "P271" })), ["epi00003"]);
+
+  // `""`(`?epic=`) = `epic:` 없는 티켓만. epicOf가 그 티켓들에 주는 값과 같다(NO_EPIC 라벨과 무관)
+  assert.deepStrictEqual(hashes(filterTickets(tickets, { ...none, epic: "" })), ["epi00004"]);
+
+  // 쓰레기 값 = 0건(필터가 안 걸린 것이 아니라 그 값과 일치하는 티켓이 없는 것)
+  assert.deepStrictEqual(hashes(filterTickets(tickets, { ...none, epic: "P999" })), []);
 });
 
 // ── 요구사항 왕복 (DESIGN.md §요구사항 레이어) ───────────────────────────────
@@ -1393,7 +1421,7 @@ test("보드 — 답변 대기는 deps 대기의 하위 종류 · kind: answer �
   const tickets = await listTickets(root, DEFAULT);
   const by = (h: string) => tickets.find((t) => t.hash === h)!;
   const hashes = (ts: Ticket[]) => ts.map((t) => t.hash);
-  const none = { kind: [], persona: [], status: [], q: "" };
+  const none = { kind: [], persona: [], status: [], q: "", epic: null };
 
   // 엔진과 판정이 같은가 — awaiting은 엔진이 읽는 문법이고 무시하는 키다
   assert.strictEqual(tsList(tickets), pyList(root));
@@ -1458,7 +1486,7 @@ test("아카이브 티켓은 기본 목록에서 빠지고 persona 필터가 꺼
   const tickets = await listTickets(root, DEFAULT);
   const by = (h: string) => tickets.find((t) => t.hash === h)!;
   const hashes = (ts: Ticket[]) => ts.map((t) => t.hash);
-  const none = { kind: [], persona: [], status: [], q: "" };
+  const none = { kind: [], persona: [], status: [], q: "", epic: null };
 
   // ① 기본 제외 — 카드도 행도 건수도 없다(대상 카드 하단 한 줄로만 선다)
   assert.strictEqual(inDefaultList(by("arch0001"), [], []), false);

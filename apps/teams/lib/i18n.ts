@@ -304,6 +304,10 @@ export const ko: Record<string, string> = {
   "status.label.stale": "stale",
   "status.label.connected": "연결됨",
   "status.label.disconnected": "연결 안 됨",
+  "board.epic.label": "에픽",
+  "board.epic.none": "(에픽 없음)",
+  "board.epic.noTitle": "제목 없음",
+  "board.epic.memory": "메모리",
   "status.hint.awaiting": "PM이 되물었다 — 요구사항 상세에서 답을 쓰면 다시 큐에 뜬다. 자동 만료는 없다",
   "status.hint.assigned": "session_id가 박힌 열린 티켓 — 큐에서 영구 제외된다. 할당 해제로 되돌린다",
 
@@ -643,6 +647,10 @@ export const en: Record<string, string> = {
   "status.label.stale": "stale",
   "status.label.connected": "Connected",
   "status.label.disconnected": "Disconnected",
+  "board.epic.label": "Epics",
+  "board.epic.none": "(No epic)",
+  "board.epic.noTitle": "No title",
+  "board.epic.memory": "memory",
   // 배지의 `title`이라 마침표로 안 닫는다(`ko`도 같다).
   "status.hint.awaiting":
     "The PM asked something back — write an answer on the request page and it returns to the queue. It never expires on its own",
