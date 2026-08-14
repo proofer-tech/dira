@@ -19,11 +19,11 @@ import { Markdown } from "@/components/markdown";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { SidebarProvider } from "@/components/ui/sidebar";
 import { epicMemory, epicReadmeBody, epicTitle, listEpics, NO_EPIC, type EpicMemory } from "@/lib/epics";
+import { t } from "@/lib/i18n";
 import { listTickets } from "@/lib/queue";
 import { decodeHash } from "@/lib/urls";
-import { getProject, resolveConfig } from "@/lib/projects";
+import { getProject, readLanguage, resolveConfig } from "@/lib/projects";
 
 // 큐는 GUI 밖에서도 바뀐다(디스패처 · 세션의 회고) — 굳히지 않는다(personas 화면과 같은 이유).
 export const dynamic = "force-dynamic";
@@ -38,6 +38,7 @@ export default async function Epics({
   if (!project) notFound();
 
   const config = await resolveConfig(project);
+  const locale = await readLanguage();
   const tickets = await listTickets(project.root, config);
   const epics = listEpics(tickets);
   // `(에픽 없음)`은 고를 대상이 아니다 — 메모리 사이드카가 없는 값이다(§결정 6).
@@ -55,12 +56,13 @@ export default async function Epics({
   const selected = requested ?? realEpics[0]?.epic ?? null;
   const current = selected === null ? undefined : realEpics.find((e) => e.epic === selected);
 
+  // `EpicSidebar`의 값 규약과 같다 — `""`는 `(에픽 없음)`(board.ts `epicHref`와 같은 값).
   // board는 `?epic=`, 이 화면은 경로 — 줄의 목적지가 갈리는 그 prop 하나(§결정 6).
   // `(에픽 없음)`은 이 화면에서도 보드로 나간다 — 갈 화면이 없다(§결정 6).
-  const hrefFor = (epic: string) =>
-    epic === NO_EPIC
-      ? `/p/${id}/?epic=${encodeURIComponent(epic)}`
-      : `/p/${id}/epics/${encodeURIComponent(epic)}`;
+  const hrefFor = (value: string) =>
+    value === ""
+      ? `/p/${id}/?epic=${encodeURIComponent(value)}`
+      : `/p/${id}/epics/${encodeURIComponent(value)}`;
   const boardHrefFor = (epic: string) => `/p/${id}/?epic=${encodeURIComponent(epic)}`;
 
   let memories: EpicMemory[] = [];
@@ -73,12 +75,20 @@ export default async function Epics({
   }
 
   return (
-    <SidebarProvider className="min-h-0 flex-row gap-6">
-      <EpicSidebar epics={epics} titles={titles} active={selected} hrefFor={hrefFor} />
+    // `EpicSidebar`가 자기 `SidebarProvider`를 이미 든다(§52 ①) — 여기는 형제 열 하나와
+    // 나란한 플렉스 행이면 된다(보드의 `flex min-h-0 flex-1 gap-6`와 같은 값).
+    <div className="flex min-h-0 gap-6">
+      <EpicSidebar
+        epics={epics}
+        titles={titles}
+        active={current?.epic ?? null}
+        hrefFor={hrefFor}
+        locale={locale}
+      />
 
       <div className="min-w-0 grow">
         {realEpics.length === 0 ? (
-          <EmptyState text="에픽 없음" />
+          <EmptyState text={t(locale, "epics.empty")} />
         ) : requested !== null && current === undefined ? (
           // 404가 아니다 — 왼쪽 목록은 계속 선다(페르소나 화면과 같은 그릇, §비주얼④)
           <Alert variant="destructive">
@@ -93,16 +103,14 @@ export default async function Epics({
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-baseline gap-2">
                 <h1 className="text-lg font-semibold">
-                  {titles[current.epic] ?? "제목 없음"} ({current.epic})
+                  {titles[current.epic] ?? t(locale, "board.epic.noTitle")} ({current.epic})
                 </h1>
                 {titles[current.epic] == null && (
-                  <Badge variant="outline" title={`epics/${current.epic}/README.md 파일이 없습니다`}>
-                    README 없음
-                  </Badge>
+                  <Badge variant="outline">{t(locale, "epics.readme.missingBadge")}</Badge>
                 )}
               </div>
               <Button variant="outline" nativeButton={false} render={<Link href={boardHrefFor(current.epic)} />}>
-                보드에서 보기
+                {t(locale, "epics.viewInBoard")}
               </Button>
             </div>
 
@@ -118,8 +126,8 @@ export default async function Epics({
               </div>
             ) : (
               <p className="text-xs text-muted-foreground">
-                <span className="font-mono">epics/{current.epic}/README.md</span> 첫 줄 뒤에 적으면
-                여기 뜹니다.
+                <span className="font-mono">epics/{current.epic}/README.md</span>{" "}
+                {t(locale, "epics.readme.hint")}
               </p>
             )}
 
@@ -127,6 +135,6 @@ export default async function Epics({
           </div>
         ) : null}
       </div>
-    </SidebarProvider>
+    </div>
   );
 }

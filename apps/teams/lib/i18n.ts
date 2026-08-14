@@ -308,6 +308,10 @@ export const ko: Record<string, string> = {
   "board.epic.none": "(에픽 없음)",
   "board.epic.noTitle": "제목 없음",
   "board.epic.memory": "메모리",
+  "epics.empty": "에픽 없음",
+  "epics.viewInBoard": "보드에서 보기",
+  "epics.readme.missingBadge": "README 없음",
+  "epics.readme.hint": "첫 줄 뒤에 적으면 여기 뜹니다.",
   "status.hint.awaiting": "PM이 되물었다 — 요구사항 상세에서 답을 쓰면 다시 큐에 뜬다. 자동 만료는 없다",
   "status.hint.assigned": "session_id가 박힌 열린 티켓 — 큐에서 영구 제외된다. 할당 해제로 되돌린다",
 
@@ -651,6 +655,10 @@ export const en: Record<string, string> = {
   "board.epic.none": "(No epic)",
   "board.epic.noTitle": "No title",
   "board.epic.memory": "memory",
+  "epics.empty": "No epics",
+  "epics.viewInBoard": "View in board",
+  "epics.readme.missingBadge": "No README",
+  "epics.readme.hint": "Add text after the first line to show it here.",
   // 배지의 `title`이라 마침표로 안 닫는다(`ko`도 같다).
   "status.hint.awaiting":
     "The PM asked something back — write an answer on the request page and it returns to the queue. It never expires on its own",
