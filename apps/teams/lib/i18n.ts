@@ -258,6 +258,11 @@ export const ko: Record<string, string> = {
   "bell.resume.noAction": "고칠 일은 없습니다.",
   "bell.auth.title": "Claude 토큰이 없습니다",
   "bell.auth.body": "워커가 티켓을 집어도 세션을 못 열고 그대로 끝냅니다.",
+  // §0-10 ①의 두 번째 갈래(요구 `6455b43a`) — 등록은 있는데 eligible이 0일 때다.
+  // `없습니다`가 아니다 — 지운 것은 파생 파일 하나뿐이고 등록 항목은 그대로다.
+  "bell.auth.titleExhausted": "지금 쓸 수 있는 Claude 계정이 없습니다",
+  "bell.auth.bodyExhausted":
+    "등록한 계정은 그대로 있습니다 - 다시 인증하지 않아도 됩니다. 전부 소진이거나 비활성입니다.",
   "bell.failures.titlePrefix": "세션이 열리자마자 죽는 워커",
   "bell.failures.titleSuffix": "개",
   "bell.failures.body": "티켓은 그때마다 대기로 정확히 돌아옵니다. 잃는 것은 없습니다.",
@@ -613,6 +618,9 @@ export const en: Record<string, string> = {
   "bell.resume.noAction": "Nothing to fix.",
   "bell.auth.title": "No Claude token",
   "bell.auth.body": "Workers still claim tickets, but they can't open a session and end right there.",
+  "bell.auth.titleExhausted": "No Claude account is available right now",
+  "bell.auth.bodyExhausted":
+    "Your saved accounts are still there. You don't need to re-authenticate — they're all exhausted or disabled.",
   "bell.failures.titlePrefix": "Workers that die the moment a session opens:",
   "bell.failures.titleSuffix": "",
   "bell.failures.body": "Each ticket goes back to Open exactly as it was. Nothing is lost.",

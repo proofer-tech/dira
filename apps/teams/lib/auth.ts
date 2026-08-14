@@ -148,6 +148,12 @@ export function isEligible(
   return t.enabled && (t.exhaustedUntil == null || t.exhaustedUntil <= nowSec);
 }
 
+/** §0-10 ①의 제목이 상태로 갈리는 그 판정(요구 `6455b43a`) — 등록 0개(a)와 등록은 있는데
+ *  `isEligible`이 0개(b)는 다른 문장이다. eligible을 안 본다 — 등록 여부만 본다. */
+export function hasRegisteredToken(file: Pick<TokensFile, "claude">): boolean {
+  return (file.claude?.tokens.length ?? 0) > 0;
+}
+
 /** 없음·깨짐·객체 아님 셋 다 `{}`다 — `analytics.ts`의 `readSettings`와 같은 관용구. */
 async function readTokensFile(): Promise<TokensFile> {
   try {

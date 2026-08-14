@@ -23,6 +23,7 @@ const {
   deleteToken,
   findClaude,
   findExecutable,
+  hasRegisteredToken,
   isEligible,
   normalizeToken,
   ptyLines,
@@ -295,6 +296,16 @@ test("isEligible — enabled && (exhaustedUntil이 없거나 지났다), 그 한
   const now = Math.floor(Date.now() / 1000);
   assert.strictEqual(isEligible({ enabled: true, exhaustedUntil: now + 60 }, now), false); // 아직 산다
   assert.strictEqual(isEligible({ enabled: true, exhaustedUntil: now - 1 }, now), true); // 창이 지났다
+});
+
+test("hasRegisteredToken — §0-10 ① 문구가 갈리는 그 판정. eligible을 안 본다", () => {
+  assert.strictEqual(hasRegisteredToken({}), false); // (a) 등록 0개 — 종전 문구
+  assert.strictEqual(hasRegisteredToken({ claude: { active: "", tokens: [] } }), false);
+  const exhausted = { id: "x", token: "t", addedAt: "", enabled: false, exhaustedUntil: 0 };
+  assert.strictEqual(
+    hasRegisteredToken({ claude: { active: "x", tokens: [exhausted] } }),
+    true, // (b) 등록은 있고 전부 비활성/소진 — 새 문구. eligible 판정은 안 쓴다
+  );
 });
 
 test("마이그레이션 — tokens.json이 없고 oauth-token만 있으면 항목 하나로 들여온다", async () => {

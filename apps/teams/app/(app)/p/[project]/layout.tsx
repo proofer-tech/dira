@@ -33,7 +33,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { readAuth, readOtherEngineAuth, readTokenRows } from "@/lib/auth";
+import { hasRegisteredToken, readAuth, readOtherEngineAuth, readTokenRows, readTokens } from "@/lib/auth";
 import { DEFAULT_LOCALE, t, type Locale } from "@/lib/i18n";
 import type { ResumeEvent } from "@/lib/machine-state";
 import { readSummary, readProjects, readLanguage } from "@/lib/projects";
@@ -163,6 +163,10 @@ export default async function ProjectLayout({
     awaiting: current.connected && current.awaiting.length > 0,
     due: current.connected && current.due.length > 0,
   };
+  // §0-10 ①의 제목-본문 갈래(요구 `6455b43a`) — 등록 0개(a)와 등록은 있는데 eligible 0(b)은
+  // 다른 문장이다. `alerts.auth`가 참일 때만 읽는다 — 정상 상태에서 `tokens.json`을 여는
+  // 횟수는 0이다.
+  const authRegistered = alerts.auth ? hasRegisteredToken(await readTokens()) : false;
   // 배지는 **켜진 알림의 개수 0~7**이다 — 건수를 합치지 않는다(⑤⑥이 들어와 4에서 6이 됐고,
   // ⑦이 들어와 7이 됐다 — §0-14 · §1-4).
   const alertCount = Object.values(alerts).filter(Boolean).length;
@@ -234,6 +238,7 @@ export default async function ProjectLayout({
                 id={id}
                 auth={auth}
                 alerts={alerts}
+                authRegistered={authRegistered}
                 resume={current.machine.resume}
                 failures={current.failures}
                 assigned={current.assigned}
@@ -352,6 +357,7 @@ function NotificationItems({
   id,
   auth,
   alerts,
+  authRegistered,
   resume,
   failures,
   assigned,
@@ -371,6 +377,7 @@ function NotificationItems({
     awaiting: boolean;
     due: boolean;
   };
+  authRegistered: boolean;
   resume: ResumeEvent | null;
   failures: { name: string; reason: string; log: string; at: string }[];
   assigned: { hash: string; stem: string }[];
@@ -421,10 +428,16 @@ function NotificationItems({
     alerts.auth && (
       <>
         <TriangleAlert aria-hidden className="mt-0.5 size-4 text-status-stale" />
-        <p className="col-start-2 text-sm font-medium">{t(locale, "bell.auth.title")}</p>
+        {/* 제목이 상태로 갈린다(§0-10 ①, 요구 `6455b43a`) — 등록 0개(a)와 등록은 있는데
+            eligible 0(b)은 다른 문장이다. `resume.kind`가 제목을 고르는 것과 같은 자리다. */}
+        <p className="col-start-2 text-sm font-medium">
+          {t(locale, authRegistered ? "bell.auth.titleExhausted" : "bell.auth.title")}
+        </p>
         {/* `text-muted-foreground`를 안 쓴다 — 배경에 따라 통과·미달이 갈리는 색을 읽어야 하는
             유일한 문장에 두지 않는다(§1 함정 1 · §비주얼 §4-2가 배너에서 덮은 그 오버라이드) */}
-        <p className="col-start-2 text-sm text-foreground">{t(locale, "bell.auth.body")}</p>
+        <p className="col-start-2 text-sm text-foreground">
+          {t(locale, authRegistered ? "bell.auth.bodyExhausted" : "bell.auth.body")}
+        </p>
         {/* CTA는 행의 오른쪽 끝이다(§비주얼 §4-3). **`/`로 보내지 않는다** — 그 자리에서
             헤더 버튼과 같은 다이얼로그를 연다. 이동이 0회가 된다(§0-4) */}
         <span className="col-start-2 flex justify-end">
