@@ -100,7 +100,9 @@ export type Worker = {
 export function engineName(engine: string | null): string {
   // `null` = 대입이 없다 = tick.sh 기본값이 실제로 돈다. 인증 배너(§0-4)가 그 워커에도 서야 한다.
   const first = (engine ?? DEFAULT_ENGINE).trim().split(/\s+/)[0] ?? "";
-  return path.basename(first.replace(/^(['"])(.*)\1$/, "$2"));
+  const name = path.basename(first.replace(/^(['"])(.*)\1$/, "$2"));
+  // 엔진 수정 24번째: 고정 경로 이름 `dira`는 claude로 정규화한다(tick.sh의 같은 판정과 짝).
+  return name === "dira" ? "claude" : name;
 }
 
 /** tick.sh와 **같이** 조립한다:

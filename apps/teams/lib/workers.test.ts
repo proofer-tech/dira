@@ -117,6 +117,9 @@ test("engineName — tick.sh:52의 basename \"${TICKET_ENGINE[0]}\"과 판정이
   assert.strictEqual(engineName(cases[3]), "codex"); // 이 워커에는 배너가 안 선다
   assert.strictEqual(engineName(cases[4]), "grok"); // 여기도 안 선다 — 같은 함수가 판정한다
   assert.strictEqual(engineName(""), ""); // 값이 깨져 못 읽었으면 claude가 아니다 = 이름도 없다
+  // 엔진 수정 24번째(§제약 1 §결정 기록): 고정 경로 이름 `dira`는 claude로 정규화한다.
+  // bash의 순정 basename과는 여기서 갈리므로(값이 "dira") 위 for 루프 밖에서 따로 못박는다.
+  assert.strictEqual(engineName('dira -p --session-id "x"'), "claude");
 });
 
 test("listWorkers — running · stale · stopped 판정", async () => {

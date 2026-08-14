@@ -499,6 +499,7 @@ while IFS='|' read -r c_path c_hash c_kind c_persona c_prio c_base c_eff; do
     [ -r "$PENGINE" ] && . "$PENGINE"
   fi
   ENGINE_NAME="$(basename "${TICKET_ENGINE[0]}")"
+  [ "$ENGINE_NAME" = "dira" ] && ENGINE_NAME="claude"  # 엔진 수정 24번째: 고정 경로 이름은 claude로 판정한다
   CDOWN="$LOCAL/run/cooldown-$ENGINE_NAME${TICKET_SLOT:+-$TICKET_SLOT}"
 
   # 어느 엔진인지가 후보에 달렸으므로 ENGINE_NAME·claude 인증·쿨다운도 후보 확정 뒤에 판정한다
@@ -641,7 +642,7 @@ elif [ -r "$PROFILE" ]; then
   # Claude 엔진일 때만이다 - codex엔 스킬 개념이 없어서 "없는 도구를 쓰라"는 문장이 된다.
   SKILLS="${TICKET_PERSONAS:-$TICKET_ROOT/personas}/$TPERSONA/skills.md"
   SKILLBLOCK=""
-  if [ -r "$SKILLS" ] && [ "$(basename "${TICKET_ENGINE[0]}")" = "claude" ]; then
+  if [ -r "$SKILLS" ] && [[ "$(basename "${TICKET_ENGINE[0]}")" =~ ^(claude|dira)$ ]]; then
     SKILLBLOCK="
 ===== $TPERSONA 스킬 ($SKILLS) =====
 $(cat "$SKILLS")
