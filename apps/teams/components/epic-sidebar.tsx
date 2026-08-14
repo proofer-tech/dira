@@ -20,6 +20,7 @@ import {
   SidebarProvider,
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { NO_EPIC, type Epic } from "@/lib/epics";
 import { t, type Locale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -171,29 +172,41 @@ export function EpicSidebar({
                           >
                             <span>{total}건</span>
                             {row.counts.wip > 0 && (
-                              // `진행중 n`과 워커 칩 묶음이 같이 오른쪽 끝에 붙는다(§비주얼 §52 ⑥-1)
+                              // 칩이 서면 `진행중 n`을 걷는다(§에픽 결정 14 - §52 ②) - 워커 칩과
+                              // 폴백 글자는 같은 사실의 두 모양이라 한 줄에 하나만 선다.
                               <span className="ml-auto flex items-baseline gap-1">
-                                <span>
-                                  {t(locale, "status.label.wip")} {row.counts.wip}
-                                </span>
+                                {row.workers.length === 0 && (
+                                  <span>
+                                    {t(locale, "status.label.wip")} {row.counts.wip}
+                                  </span>
+                                )}
                                 <WorkerChips names={row.workers} cap={WORKER_CHIP_CAP} />
                               </span>
                             )}
                           </span>
                         </div>
                       </SidebarMenuButton>
-                      {/* `(에픽 없음)`은 둘째 문이 없다 — 갈 메모리 디렉터리가 없다(결정 2) */}
+                      {/* `(에픽 없음)`은 둘째 문이 없다 — 갈 메모리 디렉터리가 없다(결정 2).
+                          24x24 과녁 + 포인터 확장 32x32 + 툴팁 뜻은 §비주얼 §52 ⑧(§에픽 결정 14) */}
                       {!isNone && memoryHrefFor && (
-                        <SidebarMenuAction
-                          render={
-                            <Link href={memoryHrefFor(row.epic)} title={`${row.epic} ${t(locale, "board.epic.memory")}`} />
-                          }
-                        >
-                          <NotebookText aria-hidden className="size-4" />
-                          <span className="sr-only">
+                        <Tooltip>
+                          <TooltipTrigger
+                            render={
+                              <SidebarMenuAction
+                                className="size-6 after:-inset-1 md:after:block"
+                                render={<Link href={memoryHrefFor(row.epic)} />}
+                              >
+                                <NotebookText aria-hidden className="size-4" />
+                                <span className="sr-only">
+                                  {row.epic} {t(locale, "board.epic.memory")}
+                                </span>
+                              </SidebarMenuAction>
+                            }
+                          />
+                          <TooltipContent side="right">
                             {row.epic} {t(locale, "board.epic.memory")}
-                          </span>
-                        </SidebarMenuAction>
+                          </TooltipContent>
+                        </Tooltip>
                       )}
                     </SidebarMenuItem>
                   );
