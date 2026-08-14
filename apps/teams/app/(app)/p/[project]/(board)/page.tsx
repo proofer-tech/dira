@@ -792,11 +792,14 @@ export default async function Board({
                         여백이다(위 가로 스트립의 `-mx-1 px-1`과 같은 이유) */}
                     <div className="-m-1 min-h-0 flex-1 space-y-6 overflow-y-auto p-1">
                       {epicLanes.map(({ epic, title }) => {
-                        // 라벨은 사이드바 항목과 같은 글자다(§에픽 결정 7): `<제목> (P273)`,
-                        // 없으면 `제목 없음 (P273)` + 표식. `(에픽 없음)`은 P번호가 없는 값이라
-                        // 제목 조회도 표식도 없다(그 항목은 갈 디렉터리가 없다).
+                        // 라벨은 사이드바 항목과 **같은 키**로 조립한다(§에픽 결정 7 · §1 - 한
+                        // 사실을 두 모양으로 그리지 않는다): `<제목> (P273)`, 없으면
+                        // `board.epic.noTitle (P273)` + 표식. `(에픽 없음)`은 P번호가 없는 값이라
+                        // 제목 조회도 표식도 없다(그 항목은 갈 디렉터리가 없다) — `board.epic.none`.
                         const label =
-                          epic === NO_EPIC ? epic : `${title ?? t(locale, "epic.label.untitled")} (${epic})`;
+                          epic === NO_EPIC
+                            ? t(locale, "board.epic.none")
+                            : `${title ?? t(locale, "board.epic.noTitle")} (${epic})`;
                         const laneRows = rows.filter((r) => (epicOf(r) || NO_EPIC) === epic);
                         return (
                           <div key={epic}>

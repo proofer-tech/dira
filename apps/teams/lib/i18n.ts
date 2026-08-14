@@ -321,9 +321,8 @@ export const ko: Record<string, string> = {
   "dep.hint.missing": "큐에 없는 해시 — 영구 대기",
   "dep.hint.answer": "답변 기록 — 이 요구사항의 답변",
 
-  // 에픽(DESIGN.md §에픽 결정 5·7) — 사이드바·스윔레인·에픽 화면 셋이 같은 라벨을 쓴다.
-  // 화면·노드를 안 가리는 개념이라 `board.*`가 아니라 `epic.*`다(§키 규약 §공유).
-  "epic.label.untitled": "제목 없음",
+  // 표 컬럼(§에픽 결정 7 §표뷰) — 띠 머리 라벨은 `board.epic.noTitle`을 그대로 재사용한다
+  // (사이드바와 같은 글자여야 한다, §1 - 한 사실을 두 모양으로 그리지 않는다).
   "board.column.epic": "에픽",
 };
 
@@ -676,8 +675,6 @@ export const en: Record<string, string> = {
   "dep.hint.missing": "No such hash in the queue — waits forever",
   "dep.hint.answer": "Answer on record — the answer to this request",
 
-  // 에픽(DESIGN.md §에픽 결정 5·7).
-  "epic.label.untitled": "Untitled",
   "board.column.epic": "Epic",
 };
 
