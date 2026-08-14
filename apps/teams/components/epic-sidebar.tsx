@@ -20,7 +20,7 @@ import {
   SidebarProvider,
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { EpicRowPanel } from "@/components/epic-sidebar-panel";
 import { NO_EPIC, type Epic } from "@/lib/epics";
 import { t, type Locale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -143,71 +143,113 @@ export function EpicSidebar({
                     // 드롭이 받는 상자는 이 줄 전체다(§비주얼 §52 ⑤ — 둘째 문 위도 같은 줄이다).
                     // `value`가 빈 문자열이어도 속성 자체는 선다 — `(에픽 없음)`도 후보다(§결정 8).
                     <SidebarMenuItem key={row.epic} data-epic-drop={value}>
-                      <SidebarMenuButton
-                        data-epic-ring
-                        className="h-auto items-start"
-                        isActive={isActive}
-                        aria-current={isActive ? "page" : undefined}
-                        render={<Link href={hrefFor(value)} />}
-                      >
-                        <div className="flex min-w-0 grow flex-col gap-0.5">
-                          <span className="flex items-baseline gap-2">
-                            <span className="min-w-0 truncate text-sm">
-                              {isNone
-                                ? t(locale, "board.epic.none")
-                                : (titles[row.epic] ?? t(locale, "board.epic.noTitle"))}
-                            </span>
-                            {/* P번호 등급(§에픽 결정 11 · §비주얼 §52 ②) — 라벨보다 크지도 두껍지도
-                                않다. `font-normal`을 여기서 박아야 선택 줄의 `font-medium` 상속을 끊는다. */}
-                            {!isNone && (
-                              <span className="shrink-0 text-xs font-normal text-muted-foreground">
-                                ({row.epic})
-                              </span>
-                            )}
-                          </span>
-                          {/* 드래그 중 "놓으면 이 에픽으로" 문장이 이 슬롯에 대신 든다(§52 ⑤ (3)) */}
-                          <span
-                            data-epic-line
-                            className="flex items-baseline gap-2 text-xs text-muted-foreground"
+                      <EpicRowPanel
+                        trigger={
+                          <SidebarMenuButton
+                            data-epic-ring
+                            className="h-auto items-start"
+                            isActive={isActive}
+                            aria-current={isActive ? "page" : undefined}
+                            render={<Link href={hrefFor(value)} />}
                           >
-                            <span>{total}건</span>
-                            {row.counts.wip > 0 && (
-                              // 칩이 서면 `진행중 n`을 걷는다(§에픽 결정 14 - §52 ②) - 워커 칩과
-                              // 폴백 글자는 같은 사실의 두 모양이라 한 줄에 하나만 선다.
-                              <span className="ml-auto flex items-baseline gap-1">
-                                {row.workers.length === 0 && (
-                                  <span>
-                                    {t(locale, "status.label.wip")} {row.counts.wip}
+                            <div className="flex min-w-0 grow flex-col gap-0.5">
+                              <span className="flex items-baseline gap-2">
+                                <span className="min-w-0 truncate text-sm">
+                                  {isNone
+                                    ? t(locale, "board.epic.none")
+                                    : (titles[row.epic] ?? t(locale, "board.epic.noTitle"))}
+                                </span>
+                                {/* P번호 등급(§에픽 결정 11 · §비주얼 §52 ②) — 라벨보다 크지도 두껍지도
+                                    않다. `font-normal`을 여기서 박아야 선택 줄의 `font-medium` 상속을 끊는다. */}
+                                {!isNone && (
+                                  <span className="shrink-0 text-xs font-normal text-muted-foreground">
+                                    ({row.epic})
                                   </span>
                                 )}
-                                <WorkerChips names={row.workers} cap={WORKER_CHIP_CAP} />
                               </span>
-                            )}
-                          </span>
-                        </div>
-                      </SidebarMenuButton>
-                      {/* `(에픽 없음)`은 둘째 문이 없다 — 갈 메모리 디렉터리가 없다(결정 2).
-                          24x24 과녁 + 포인터 확장 32x32 + 툴팁 뜻은 §비주얼 §52 ⑧(§에픽 결정 14) */}
-                      {!isNone && memoryHrefFor && (
-                        <Tooltip>
-                          <TooltipTrigger
-                            render={
-                              <SidebarMenuAction
-                                className="size-6 after:-inset-1 md:after:block"
-                                render={<Link href={memoryHrefFor(row.epic)} />}
+                              {/* 드래그 중 "놓으면 이 에픽으로" 문장이 이 슬롯에 대신 든다(§52 ⑤ (3)) */}
+                              <span
+                                data-epic-line
+                                className="flex items-baseline gap-2 text-xs text-muted-foreground"
                               >
-                                <NotebookText aria-hidden className="size-4" />
-                                <span className="sr-only">
-                                  {row.epic} {t(locale, "board.epic.memory")}
-                                </span>
-                              </SidebarMenuAction>
-                            }
-                          />
-                          <TooltipContent side="right">
+                                <span>{total}건</span>
+                                {row.counts.wip > 0 && (
+                                  // 칩이 서면 `진행중 n`을 걷는다(§에픽 결정 14 - §52 ②) - 워커 칩과
+                                  // 폴백 글자는 같은 사실의 두 모양이라 한 줄에 하나만 선다.
+                                  <span className="ml-auto flex items-baseline gap-1">
+                                    {row.workers.length === 0 && (
+                                      <span>
+                                        {t(locale, "status.label.wip")} {row.counts.wip}
+                                      </span>
+                                    )}
+                                    <WorkerChips names={row.workers} cap={WORKER_CHIP_CAP} />
+                                  </span>
+                                )}
+                              </span>
+                            </div>
+                          </SidebarMenuButton>
+                        }
+                        memoryTrigger={
+                          // `(에픽 없음)`은 둘째 문이 없다 — 갈 메모리 디렉터리가 없다(결정 2).
+                          // 24x24 과녁 + 포인터 확장 32x32은 §비주얼 §52 ⑧(§에픽 결정 14)
+                          !isNone && memoryHrefFor ? (
+                            <SidebarMenuAction
+                              className="size-6 after:-inset-1 md:after:block"
+                              render={<Link href={memoryHrefFor(row.epic)} />}
+                            >
+                              <NotebookText aria-hidden className="size-4" />
+                              <span className="sr-only">
+                                {row.epic} {t(locale, "board.epic.memory")}
+                              </span>
+                            </SidebarMenuAction>
+                          ) : undefined
+                        }
+                        memoryLabel={
+                          !isNone ? (
+                            <>
+                              {row.epic} {t(locale, "board.epic.memory")}
+                            </>
+                          ) : undefined
+                        }
+                      >
+                        {/* 패널 1행 — 제목 전문 + P번호(§52 ⑨ §내용 넷의 배치) */}
+                        <p className="flex flex-wrap items-baseline gap-2 text-sm">
+                          <span>
+                            {isNone
+                              ? t(locale, "board.epic.none")
+                              : (titles[row.epic] ?? t(locale, "board.epic.noTitle"))}
+                          </span>
+                          {!isNone && (
+                            <span className="shrink-0 text-xs font-normal text-muted-foreground">
+                              ({row.epic})
+                            </span>
+                          )}
+                        </p>
+                        {/* 패널 2행 — 건수 셋. 0도 적는다(접힌 2행과 갈리는 규칙) */}
+                        <p className="text-xs text-muted-foreground">
+                          {t(locale, "status.label.open")} {row.counts.open} ·{" "}
+                          {t(locale, "status.label.wip")} {row.counts.wip} ·{" "}
+                          {t(locale, "status.label.done")} {row.counts.done}
+                        </p>
+                        {/* 패널 3행 — 워커 전부. cap 없음, 0명이면 줄이 통째로 안 선다 */}
+                        {row.workers.length > 0 && (
+                          <div className="flex flex-wrap items-baseline gap-2">
+                            <WorkerChips names={row.workers} />
+                          </div>
+                        )}
+                        {/* 패널 4행 — 상세 문(넓은 문). `(에픽 없음)`은 없다(갈 디렉터리가 없다) */}
+                        {!isNone && memoryHrefFor && (
+                          <Button
+                            variant="outline"
+                            nativeButton={false}
+                            className="w-full justify-start"
+                            render={<Link href={memoryHrefFor(row.epic)} />}
+                          >
+                            <NotebookText aria-hidden className="size-4" />
                             {row.epic} {t(locale, "board.epic.memory")}
-                          </TooltipContent>
-                        </Tooltip>
-                      )}
+                          </Button>
+                        )}
+                      </EpicRowPanel>
                     </SidebarMenuItem>
                   );
                 })}
