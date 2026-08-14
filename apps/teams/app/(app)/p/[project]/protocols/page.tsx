@@ -7,10 +7,11 @@
  *  선택 파일은 URL `?file=`이 담는다 — 새로고침·공유가 공짜고 클라이언트 상태가 필요 없다. */
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { FileText, Folder, Lock, TriangleAlert } from "lucide-react";
+import { FileText, Folder, Lock, PanelLeft, TriangleAlert } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { InlineBadge, NewFileButton, ProtocolEditor } from "@/components/protocols-ui";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import {
   Sidebar,
   SidebarContent,
@@ -21,6 +22,7 @@ import {
   SidebarProvider,
 } from "@/components/ui/sidebar";
 import { Textarea } from "@/components/ui/textarea";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   CORE_INLINED,
   listTree,
@@ -39,12 +41,47 @@ export default async function Protocols({
   searchParams,
 }: {
   params: Promise<{ project: string }>;
-  searchParams: Promise<{ file?: string; core?: string }>;
+  searchParams: Promise<{ file?: string; core?: string; sidebar?: string }>;
 }) {
   const { project: id } = await params;
-  const { file, core: wantCore } = await searchParams;
+  const { file, core: wantCore, sidebar } = await searchParams;
   const project = await getProject(id);
   if (!project) notFound();
+
+  // `?sidebar=on`(§6 §파일트리 사이드바 둘이 접힌다) — 없거나 모르는 값이면 접힘(기본값).
+  const expanded = sidebar === "on";
+  // 트리 링크가 나르는 값 — 편 상태가 파일 고르기를 지나 유지된다(계약).
+  const sidebarQuery = expanded ? "&sidebar=on" : "";
+  const toggleLabel = expanded ? "파일 목록 접기" : "파일 목록 펴기";
+  // 지금 URL에서 `sidebar`만 뒤집는다 — `?file=`/`?core=`는 한 개도 안 잃는다(계약).
+  const toggleHref = (() => {
+    const usp = new URLSearchParams();
+    if (wantCore !== undefined) usp.set("core", wantCore);
+    if (file) usp.set("file", file);
+    if (!expanded) usp.set("sidebar", "on");
+    const qs = usp.toString();
+    return `/p/${id}/protocols${qs ? `?${qs}` : ""}`;
+  })();
+  // §비주얼 §53 — §52 ⑦(`epic-sidebar.tsx:74-85`)과 같은 그릇, `title` 대신 툴팁(⑧).
+  const toggle = (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            nativeButton={false}
+            className="ml-auto text-muted-foreground"
+            render={<Link href={toggleHref} />}
+          >
+            <PanelLeft aria-hidden className="size-4" />
+            <span className="sr-only">{toggleLabel}</span>
+          </Button>
+        }
+      />
+      <TooltipContent side="right">{toggleLabel}</TooltipContent>
+    </Tooltip>
+  );
 
   const config = await resolveConfig(project);
   const tree = await listTree(config.protocols);
@@ -138,74 +175,82 @@ export default async function Protocols({
             collapsible="none"
             role="navigation"
             aria-label="프로토콜 파일"
-            className="w-full shrink-0 rounded-lg border bg-surface lg:w-80"
+            className={`w-full shrink-0 rounded-lg border bg-surface ${expanded ? "lg:w-80" : "lg:w-10"}`}
           >
             {/* `py-2`가 면의 세로 패딩. 그룹이 하나뿐이라 그룹 사이 `gap`은 덮을 것이 없다.
                 가로 패딩은 0이다(`SidebarGroup p-0`) — 줄이 자기 `px-2`로 그 8px을 이미 든다. */}
             <SidebarContent className="py-2">
               <SidebarGroup className="p-0">
-                {/* `SidebarGroupLabel`이 없다 — 이 패널은 머리 낱말이 원래 0개다(§34 판정표).
-                    줄 사이 `space-y-0.5` → 부품의 `gap-0.5`. */}
-                <SidebarMenu className="gap-0.5">
-                  {/* 맨 위 · 자물쇠 · 편집 없음. 큐 밖 파일이라 `?file=`이 아니다.
-                      배지는 인라인되는 `CORE.md`에만 — 나머지는 프로젝트 층의 비인라인 파일과
-                      같이 트리에서 배지가 없다(§프롬프트 층 결정 6 배지 표). */}
-                  {coreFiles.map((f) => (
-                    <SidebarMenuItem key={f.name}>
-                      <SidebarMenuButton
-                        size="sm"
-                        className={ROW}
-                        isActive={f.name === openedCore?.name}
-                        aria-current={f.name === openedCore?.name ? "page" : undefined}
-                        render={
-                          <Link href={`/p/${id}/protocols?core=${encodeURIComponent(f.name)}`} />
-                        }
-                      >
-                        <Lock aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
-                        <span className="font-mono break-all">{f.name}</span>
-                        {f.name === CORE_INLINED && <InlineBadge chars={[...f.text].length} />}
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  ))}
-                  {tree.map((e) =>
-                    e.isDir ? (
-                      // 디렉터리 줄은 `SidebarMenuItem` 안의 `div` 그대로다(§34 판정표) —
-                      // 누를 수 없는 줄에 `<button>`을 세우면 탭 정거장이 는다.
-                      <SidebarMenuItem key={e.rel}>
-                        <div
-                          className="flex h-8 items-center gap-1.5 px-2 text-xs text-muted-foreground"
-                          style={{ paddingLeft: `${e.depth * 0.75 + 0.5}rem` }}
-                        >
-                          <Folder aria-hidden className="size-3.5 shrink-0" />
-                          <span className="font-mono break-all">{e.name}</span>
-                        </div>
-                      </SidebarMenuItem>
-                    ) : (
-                      <SidebarMenuItem key={e.rel}>
+                {/* 머리 행 — 접힘·펼침 공통(§비주얼 §53). 낱말은 원래 0개라 접혀도 잃을 게 없다. */}
+                <div className="flex h-6 items-center pr-2">{toggle}</div>
+                {expanded && (
+                  // `SidebarGroupLabel`이 없다 — 이 패널은 머리 낱말이 원래 0개다(§34 판정표).
+                  // 줄 사이 `space-y-0.5` → 부품의 `gap-0.5`.
+                  <SidebarMenu className="gap-0.5">
+                    {/* 맨 위 · 자물쇠 · 편집 없음. 큐 밖 파일이라 `?file=`이 아니다.
+                        배지는 인라인되는 `CORE.md`에만 — 나머지는 프로젝트 층의 비인라인 파일과
+                        같이 트리에서 배지가 없다(§프롬프트 층 결정 6 배지 표). */}
+                    {coreFiles.map((f) => (
+                      <SidebarMenuItem key={f.name}>
                         <SidebarMenuButton
                           size="sm"
                           className={ROW}
-                          isActive={e.rel === selected?.rel}
-                          aria-current={e.rel === selected?.rel ? "page" : undefined}
+                          isActive={f.name === openedCore?.name}
+                          aria-current={f.name === openedCore?.name ? "page" : undefined}
                           render={
-                            <Link href={`/p/${id}/protocols?file=${encodeURIComponent(e.rel)}`} />
+                            <Link
+                              href={`/p/${id}/protocols?core=${encodeURIComponent(f.name)}${sidebarQuery}`}
+                            />
                           }
-                          // 중첩은 평면 목록 + 인라인 `paddingLeft`다(§34 §안 쓰는 export —
-                          // `SidebarMenuSub`는 마크업이 실제로 중첩돼야 하고 겹을 하나만 그려
-                          // 깊이 3 이상을 못 낸다). `p-2`의 왼쪽 8px을 이 값이 덮는다.
-                          style={{ paddingLeft: `${e.depth * 0.75 + 0.5}rem` }}
                         >
-                          <FileText
-                            aria-hidden
-                            className="size-3.5 shrink-0 text-muted-foreground"
-                          />
-                          <span className="font-mono break-all">{e.name}</span>
-                          {e.inlineChars !== undefined && <InlineBadge chars={e.inlineChars} />}
+                          <Lock aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
+                          <span className="font-mono break-all">{f.name}</span>
+                          {f.name === CORE_INLINED && <InlineBadge chars={[...f.text].length} />}
                         </SidebarMenuButton>
                       </SidebarMenuItem>
-                    ),
-                  )}
-                </SidebarMenu>
+                    ))}
+                    {tree.map((e) =>
+                      e.isDir ? (
+                        // 디렉터리 줄은 `SidebarMenuItem` 안의 `div` 그대로다(§34 판정표) —
+                        // 누를 수 없는 줄에 `<button>`을 세우면 탭 정거장이 는다.
+                        <SidebarMenuItem key={e.rel}>
+                          <div
+                            className="flex h-8 items-center gap-1.5 px-2 text-xs text-muted-foreground"
+                            style={{ paddingLeft: `${e.depth * 0.75 + 0.5}rem` }}
+                          >
+                            <Folder aria-hidden className="size-3.5 shrink-0" />
+                            <span className="font-mono break-all">{e.name}</span>
+                          </div>
+                        </SidebarMenuItem>
+                      ) : (
+                        <SidebarMenuItem key={e.rel}>
+                          <SidebarMenuButton
+                            size="sm"
+                            className={ROW}
+                            isActive={e.rel === selected?.rel}
+                            aria-current={e.rel === selected?.rel ? "page" : undefined}
+                            render={
+                              <Link
+                                href={`/p/${id}/protocols?file=${encodeURIComponent(e.rel)}${sidebarQuery}`}
+                              />
+                            }
+                            // 중첩은 평면 목록 + 인라인 `paddingLeft`다(§34 §안 쓰는 export —
+                            // `SidebarMenuSub`는 마크업이 실제로 중첩돼야 하고 겹을 하나만 그려
+                            // 깊이 3 이상을 못 낸다). `p-2`의 왼쪽 8px을 이 값이 덮는다.
+                            style={{ paddingLeft: `${e.depth * 0.75 + 0.5}rem` }}
+                          >
+                            <FileText
+                              aria-hidden
+                              className="size-3.5 shrink-0 text-muted-foreground"
+                            />
+                            <span className="font-mono break-all">{e.name}</span>
+                            {e.inlineChars !== undefined && <InlineBadge chars={e.inlineChars} />}
+                          </SidebarMenuButton>
+                        </SidebarMenuItem>
+                      ),
+                    )}
+                  </SidebarMenu>
+                )}
               </SidebarGroup>
             </SidebarContent>
           </Sidebar>
@@ -222,7 +267,9 @@ export default async function Protocols({
             ) : openedCore ? (
               <CoreView file={openedCore} vendored={coreVendored} />
             ) : !selected ? (
-              <p className="text-sm text-muted-foreground">왼쪽에서 파일을 고르세요.</p>
+              <p className="text-sm text-muted-foreground">
+                {expanded ? "파일을 고르세요." : "파일 목록을 펴서 고르세요."}
+              </p>
             ) : selected.text === null ? (
               // 트리에는 보이지만 편집기로는 안 여는 것들(§6 `.md` 아닌 파일)
               <Alert>

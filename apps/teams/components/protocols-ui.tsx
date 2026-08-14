@@ -7,7 +7,7 @@
  *  **타이핑하는 동안 살아 있어야 하는 문자 수**뿐이다 — AGENTS.md는 길이가 곧 세션 비용이라
  *  저장 후에 알려주면 늦다. */
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { FilePlus2, PencilLine, Trash2, TriangleAlert } from "lucide-react";
 import {
   createProtocolAction,
@@ -56,8 +56,10 @@ export function InlineBadge({ chars }: { chars: number }) {
   );
 }
 
-const fileHref = (projectId: string, rel: string) =>
-  `/p/${projectId}/protocols?file=${encodeURIComponent(rel)}`;
+// 편 상태가 파일 고르기를 지나 유지된다(§6 계약) — 저장·생성·삭제·이름변경 뒤 리다이렉트도
+// 지금 `?sidebar=on`을 그대로 나른다.
+const fileHref = (projectId: string, rel: string, sidebarOn: boolean) =>
+  `/p/${projectId}/protocols?file=${encodeURIComponent(rel)}${sidebarOn ? "&sidebar=on" : ""}`;
 
 // ── 새 파일 ─────────────────────────────────────────────────────────────────
 
@@ -69,6 +71,7 @@ export function NewFileButton({
   variant?: "default" | "outline";
 }) {
   const router = useRouter();
+  const sidebarOn = useSearchParams().get("sidebar") === "on";
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [result, setResult] = useState<ProtocolResult | null>(null);
@@ -124,7 +127,7 @@ export function NewFileButton({
                 setResult(r);
                 if (r.ok && r.rel) {
                   setOpen(false);
-                  router.replace(fileHref(projectId, r.rel));
+                  router.replace(fileHref(projectId, r.rel, sidebarOn));
                 }
               })
             }
@@ -240,6 +243,7 @@ export function ProtocolEditor({
 
 function RenameButton({ projectId, rel }: { projectId: string; rel: string }) {
   const router = useRouter();
+  const sidebarOn = useSearchParams().get("sidebar") === "on";
   const [open, setOpen] = useState(false);
   const [to, setTo] = useState(rel);
   const [result, setResult] = useState<ProtocolResult | null>(null);
@@ -300,7 +304,7 @@ function RenameButton({ projectId, rel }: { projectId: string; rel: string }) {
                 setResult(r);
                 if (r.ok && r.rel) {
                   setOpen(false);
-                  router.replace(fileHref(projectId, r.rel));
+                  router.replace(fileHref(projectId, r.rel, sidebarOn));
                 }
               })
             }
@@ -317,6 +321,7 @@ function RenameButton({ projectId, rel }: { projectId: string; rel: string }) {
 
 function DeleteButton({ projectId, rel }: { projectId: string; rel: string }) {
   const router = useRouter();
+  const sidebarOn = useSearchParams().get("sidebar") === "on";
   const [open, setOpen] = useState(false);
   const [result, setResult] = useState<ProtocolResult | null>(null);
   const [pending, start] = useTransition();
@@ -362,7 +367,7 @@ function DeleteButton({ projectId, rel }: { projectId: string; rel: string }) {
                 setResult(r);
                 if (r.ok) {
                   setOpen(false);
-                  router.replace(`/p/${projectId}/protocols`);
+                  router.replace(`/p/${projectId}/protocols${sidebarOn ? "?sidebar=on" : ""}`);
                 }
               })
             }

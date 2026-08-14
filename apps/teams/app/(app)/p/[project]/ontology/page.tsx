@@ -10,9 +10,10 @@
  *  때 직접 읽는다. */
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { FileText, Folder, TriangleAlert } from "lucide-react";
+import { FileText, Folder, PanelLeft, TriangleAlert } from "lucide-react";
 import { FixSchemaViolationsButton, NewOntologyFileButton, OntologyEditor, OntologySurveyForm } from "@/components/ontology-ui";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import {
   Sidebar,
   SidebarContent,
@@ -22,6 +23,7 @@ import {
   SidebarMenuItem,
   SidebarProvider,
 } from "@/components/ui/sidebar";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { statusLabel } from "@/components/status-badge";
 import { computeOntologyMetrics, type OntologyMetrics } from "@/lib/ontology";
 import { ONTOLOGY_FIX_MARKER, listTickets, openFixTicket, statusOf, type Ticket } from "@/lib/queue";
@@ -67,12 +69,46 @@ export default async function Ontology({
   searchParams,
 }: {
   params: Promise<{ project: string }>;
-  searchParams: Promise<{ file?: string }>;
+  searchParams: Promise<{ file?: string; sidebar?: string }>;
 }) {
   const { project: id } = await params;
-  const { file } = await searchParams;
+  const { file, sidebar } = await searchParams;
   const project = await getProject(id);
   if (!project) notFound();
+
+  // `?sidebar=on`(§6 §파일트리 사이드바 둘이 접힌다) — 없거나 모르는 값이면 접힘(기본값).
+  const expanded = sidebar === "on";
+  // 트리 링크가 나르는 값 — 편 상태가 파일 고르기를 지나 유지된다(계약).
+  const sidebarQuery = expanded ? "&sidebar=on" : "";
+  const toggleLabel = expanded ? "파일 목록 접기" : "파일 목록 펴기";
+  // 지금 URL에서 `sidebar`만 뒤집는다 — `?file=`은 한 개도 안 잃는다(계약).
+  const toggleHref = (() => {
+    const usp = new URLSearchParams();
+    if (file) usp.set("file", file);
+    if (!expanded) usp.set("sidebar", "on");
+    const qs = usp.toString();
+    return `/p/${id}/ontology${qs ? `?${qs}` : ""}`;
+  })();
+  // §비주얼 §53 — §52 ⑦(`epic-sidebar.tsx:74-85`)과 같은 그릇, `title` 대신 툴팁(⑧).
+  const toggle = (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            nativeButton={false}
+            className="ml-auto text-muted-foreground"
+            render={<Link href={toggleHref} />}
+          >
+            <PanelLeft aria-hidden className="size-4" />
+            <span className="sr-only">{toggleLabel}</span>
+          </Button>
+        }
+      />
+      <TooltipContent side="right">{toggleLabel}</TooltipContent>
+    </Tooltip>
+  );
 
   const base = ontologyDir(project);
   const tree = await listTree(base);
@@ -138,44 +174,50 @@ export default async function Ontology({
             collapsible="none"
             role="navigation"
             aria-label="온톨로지 파일"
-            className="w-full shrink-0 rounded-lg border bg-surface lg:w-80"
+            className={`w-full shrink-0 rounded-lg border bg-surface ${expanded ? "lg:w-80" : "lg:w-10"}`}
           >
             <SidebarContent className="py-2">
               <SidebarGroup className="p-0">
-                <SidebarMenu className="gap-0.5">
-                  {tree.map((e) =>
-                    e.isDir ? (
-                      <SidebarMenuItem key={e.rel}>
-                        <div
-                          className="flex h-8 items-center gap-1.5 px-2 text-xs text-muted-foreground"
-                          style={{ paddingLeft: `${e.depth * 0.75 + 0.5}rem` }}
-                        >
-                          <Folder aria-hidden className="size-3.5 shrink-0" />
-                          <span className="font-mono break-all">{e.name}</span>
-                        </div>
-                      </SidebarMenuItem>
-                    ) : (
-                      <SidebarMenuItem key={e.rel}>
-                        <SidebarMenuButton
-                          size="sm"
-                          className={ROW}
-                          isActive={e.rel === selected?.rel}
-                          aria-current={e.rel === selected?.rel ? "page" : undefined}
-                          render={
-                            <Link href={`/p/${id}/ontology?file=${encodeURIComponent(e.rel)}`} />
-                          }
-                          style={{ paddingLeft: `${e.depth * 0.75 + 0.5}rem` }}
-                        >
-                          <FileText
-                            aria-hidden
-                            className="size-3.5 shrink-0 text-muted-foreground"
-                          />
-                          <span className="font-mono break-all">{e.name}</span>
-                        </SidebarMenuButton>
-                      </SidebarMenuItem>
-                    ),
-                  )}
-                </SidebarMenu>
+                {/* 머리 행 — 접힘·펼침 공통(§비주얼 §53). 낱말은 원래 0개라 접혀도 잃을 게 없다. */}
+                <div className="flex h-6 items-center pr-2">{toggle}</div>
+                {expanded && (
+                  <SidebarMenu className="gap-0.5">
+                    {tree.map((e) =>
+                      e.isDir ? (
+                        <SidebarMenuItem key={e.rel}>
+                          <div
+                            className="flex h-8 items-center gap-1.5 px-2 text-xs text-muted-foreground"
+                            style={{ paddingLeft: `${e.depth * 0.75 + 0.5}rem` }}
+                          >
+                            <Folder aria-hidden className="size-3.5 shrink-0" />
+                            <span className="font-mono break-all">{e.name}</span>
+                          </div>
+                        </SidebarMenuItem>
+                      ) : (
+                        <SidebarMenuItem key={e.rel}>
+                          <SidebarMenuButton
+                            size="sm"
+                            className={ROW}
+                            isActive={e.rel === selected?.rel}
+                            aria-current={e.rel === selected?.rel ? "page" : undefined}
+                            render={
+                              <Link
+                                href={`/p/${id}/ontology?file=${encodeURIComponent(e.rel)}${sidebarQuery}`}
+                              />
+                            }
+                            style={{ paddingLeft: `${e.depth * 0.75 + 0.5}rem` }}
+                          >
+                            <FileText
+                              aria-hidden
+                              className="size-3.5 shrink-0 text-muted-foreground"
+                            />
+                            <span className="font-mono break-all">{e.name}</span>
+                          </SidebarMenuButton>
+                        </SidebarMenuItem>
+                      ),
+                    )}
+                  </SidebarMenu>
+                )}
               </SidebarGroup>
             </SidebarContent>
           </Sidebar>
@@ -190,7 +232,9 @@ export default async function Ontology({
                 </AlertDescription>
               </Alert>
             ) : !selected ? (
-              <p className="text-sm text-muted-foreground">왼쪽에서 파일을 고르세요.</p>
+              <p className="text-sm text-muted-foreground">
+                {expanded ? "파일을 고르세요." : "파일 목록을 펴서 고르세요."}
+              </p>
             ) : selected.text === null ? (
               <Alert>
                 <TriangleAlert aria-hidden className="text-status-stale" />
