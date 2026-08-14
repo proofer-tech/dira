@@ -58,8 +58,9 @@ export function EpicSidebar({
     // `w-full`·`min-h-svh` 기본값을 덮는다(personas-ui.tsx와 같은 처방) — 여기는 형제 열
     // 하나(칸반 또는 표)와 나란한 **한 칸**이지 2단 전체가 아니다.
     <SidebarProvider className="min-h-0 w-auto shrink-0">
-      {/* 폭 `w-64`(256)는 레인 하한 288보다 좁다(§52 §폭). 레일이 아니라 카드라 위 변까지 닫는다 */}
-      <Sidebar collapsible="none" className="w-64 shrink-0 rounded-lg border bg-surface">
+      {/* 폭 `w-64`(256)는 레인 하한 288보다 좁다(§52 §폭). 카드도 레일도 아니다 — 층을
+          페이지로 내려 필터 입구(툴바)와 한 덩이로 잇는다(§52 §가르는 축) */}
+      <Sidebar collapsible="none" className="w-64 shrink-0 border-r bg-background">
         <SidebarContent className="py-2">
           <SidebarGroup className="p-0">
             <SidebarGroupLabel className="h-6 text-muted-foreground">
