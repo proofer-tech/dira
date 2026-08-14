@@ -1352,8 +1352,16 @@ export async function pollHome(
   // 그 자리로 당기면 그 지연만큼 화면에 빈 구간이 생긴다(§7이 "두 벌보다 나쁘다"고 적은 그것).
   // 대신 여기서 **마지막 답 줄과 누적분이 같으면 누적분을 뺀다** — 트랜스크립트가 그 답을
   // 이미 `turns`로 들인 바로 이 응답에서 뺀다(순서와 무관하게 통하는 이유는 `## 결과` 참조).
+  // **가리는 것으로 끝내지 않고 누적기를 비운다**(신고: 답이 두 벌로 겹쳐 보인다). 종전에는 이
+  // 응답의 `partial`만 빈 문자열로 내렸는데, `turns`는 **이 왕복에 새로 붙은 줄**뿐이다 —
+  // 그 답 줄을 집어 간 폴링은 한 번뿐이라 다음 폴링부터는 `lastAnswer`가 `undefined`고 판정이
+  // 다시 안 걸린다. 도구가 도는 동안(`message_start` 전) 그 창이 통째로 두 벌이었다.
+  // 누적기를 비워도 잃을 글이 없다: 한 메시지에서 텍스트 블록 뒤에 오는 델타는 도구 인자
+  // (`input_json_delta`)뿐이고 그건 애초에 안 붙는다(`eatLine`).
   const lastAnswer = turns.filter((t) => t.role === "answer").at(-1)?.text;
-  const dedupedPartial = partial !== "" && partial === lastAnswer ? "" : partial;
+  const overlap = partial !== "" && partial === lastAnswer;
+  if (overlap && entry) entry.live.partial = "";
+  const dedupedPartial = overlap ? "" : partial;
   return chunk({
     sessionId: sid,
     conversations,

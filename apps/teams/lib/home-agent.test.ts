@@ -884,6 +884,13 @@ test("겹침 판정 — 도구가 도는 동안 트랜스크립트가 같은 답
     assert.strictEqual(mid.running, true); // 도구가 아직 돈다 — 답은 끝난 게 아니다
     assert.deepStrictEqual(p.turns, ["물음", "답"]); // 같은 답이 turns에 한 벌
     assert.strictEqual(mid.partial, ""); // 겹침 판정 — 같은 답을 두 벌로 안 그린다
+
+    // **다음 폴링도 비어 있다.** 답 줄은 앞 응답이 이미 집어 가 `turns`가 비므로, 겹침 판정이
+    // 이 응답을 가리는 것으로 끝났다면 누적분이 다시 올라온다 — 신고된 겹침 화면이 그 창이다.
+    const after = await p.next();
+    assert.strictEqual(after.running, true); // 아직 도구가 돈다(픽스처의 `sleep 2` 안)
+    assert.deepStrictEqual(after.turns, []); // 새 줄은 없다 = 겹침 판정이 다시 안 걸리는 자리
+    assert.strictEqual(after.partial, "");
   });
 });
 
