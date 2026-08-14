@@ -12,7 +12,7 @@ const SITE_TITLE = "dira";
 const SITE_DESCRIPTION =
   "티켓을 큐에 넣으면 cron에 물린 워커가 claude 세션에 넘깁니다. 파일시스템이 곧 큐인 티켓 디스패처.";
 
-/** 매뉴얼 22장(`docs/*.md` — 21장 + 목차). `docs/[[...slug]]`가 이 목록으로 굽는다. */
+/** 매뉴얼 24장(`docs/*.md` — 23장 + 목차). `docs/[[...slug]]`가 이 목록으로 굽는다. */
 export const docNames = readdirSync(join(process.cwd(), "docs"))
   .filter((f) => f.endsWith(".md"))
   .map((f) => f.slice(0, -3));

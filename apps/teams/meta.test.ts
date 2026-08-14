@@ -16,9 +16,9 @@ import {
 
 test("사이트맵이 앞 산출물과 같은 URL 집합이다", () => {
   const urls = pageUrls;
-  // 랜딩 1 + `privacy`·`terms` 2 + 매뉴얼 23 = 26. `404`는 안 든다.
-  assert.equal(urls.length, 26);
-  assert.equal(new Set(urls).size, 26, "중복 URL이 있다");
+  // 랜딩 1 + `privacy`·`terms` 2 + 매뉴얼 24 = 27. `404`는 안 든다.
+  assert.equal(urls.length, 27);
+  assert.equal(new Set(urls).size, 27, "중복 URL이 있다");
   for (const u of urls) {
     assert.ok(u.startsWith(`${ORIGIN}/`), `절대 URL이 아니다: ${u}`);
     // `cleanUrls: true`가 내던 모양이다 — `.html`도 `index` 조각도 안 붙는다.
@@ -58,9 +58,9 @@ test("description은 `||`다 — 빈 문자열이면 사이트 기본값이 나�
   assert.equal(og.description, fallback);
 });
 
-test("제목은 첫 h1이다 — 25장 전부 1행이 그 헤딩이다", () => {
+test("제목은 첫 h1이다 — 26장 전부 1행이 그 헤딩이다", () => {
   const files = [...docNames.map((n) => `docs/${n}.md`), ...rootNames.map((n) => `${n}.md`)];
-  assert.equal(files.length, 25);
+  assert.equal(files.length, 26);
   for (const f of files) {
     const src = readFileSync(f, "utf8");
     const first = src.split("\n")[0];
