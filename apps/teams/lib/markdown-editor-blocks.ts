@@ -86,6 +86,16 @@ export function blockBreaks(
 // 하나를 같이 부른다. "use client" 파일은 node --test가 못 import한다(`sidebar.test.ts`와 같은
 // 사유 — next/CSS를 끈다)는 이 레포의 규약을 따라 여기 둔다.
 
+/** `data-wikilink` 표식을 `[[이름]]`/`[[이름|별칭]]`으로 되돌린다(DESIGN.md §비주얼 §50 §되읽기,
+ *  요구 `9f2f41ed`). `name`은 `lib/markdown-wikilinks.ts`가 새긴 값(별칭 앞쪽, 끝 `.md` 뗀 것)이고
+ *  `display`는 화면 글자(별칭 있으면 별칭, 없으면 raw 그대로 — `.md`가 실려 있을 수 있다). 별칭이
+ *  없던 경우만 `display === name`이거나 `display === name + ".md"`다 — 그 둘만 원문 그대로 돌려주고
+ *  그 밖은 별칭이 있었던 것으로 본다. */
+function wikilinkMarkdown(name: string, display: string): string {
+  if (display === name || display === `${name}.md`) return `[[${display}]]`;
+  return `[[${name}|${display}]]`;
+}
+
 /** `components/markdown.tsx`의 인라인 요소만 안다 — strong·em·code·a·br. 그 밖은 지나서 안을 편다
  *  (체크박스의 숨은 `<input>`·아이콘 `<svg>`는 상위인 `listItemToMarkdown`이 처리하므로 여기선
  *  버린다). */
@@ -110,9 +120,21 @@ function inline(node: Node): string {
       case "CODE":
         out += `\`${el.textContent ?? ""}\``;
         break;
-      case "A":
-        out += `[${inline(el)}](${el.getAttribute("href") ?? ""})`;
+      case "A": {
+        const wikiName = el.getAttribute("data-wikilink");
+        out +=
+          wikiName !== null
+            ? wikilinkMarkdown(wikiName, inline(el))
+            : `[${inline(el)}](${el.getAttribute("href") ?? ""})`;
         break;
+      }
+      case "SPAN": {
+        // 댕글링 위키링크(§10 §위키링크)만 여기 걸린다 — 그 밖의 span은 종전대로 default가
+        // 벗겨서 안을 편다.
+        const wikiName = el.getAttribute("data-wikilink");
+        out += wikiName !== null ? wikilinkMarkdown(wikiName, inline(el)) : inline(el);
+        break;
+      }
       case "BR":
         out += "\n";
         break;

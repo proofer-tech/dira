@@ -1,6 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { blockBreaks, commitEditable, joinBlocks, replaceBlock, splitBlocks } from "./markdown-editor-blocks.ts";
+import {
+  blockBreaks,
+  commitEditable,
+  domToMarkdown,
+  joinBlocks,
+  replaceBlock,
+  splitBlocks,
+} from "./markdown-editor-blocks.ts";
 
 // `commitEditable`은 `Node.TEXT_NODE`/`Node.ELEMENT_NODE`(브라우저 전역)를 참조한다. node --test에는
 // `Node`가 없으니 최소 상수만 채운다 — jsdom을 끌어오지 않는다(새 의존성, `commitEditable`이 쓰는
@@ -187,4 +194,58 @@ test("commitEditable — data-block-index가 없는 원소는 이 컴포넌트 �
   const split = splitBlocks("본문.\n");
   const foreign = new FakeElement("div", [new FakeText("본문.")]); // 인덱스 속성 없음
   assert.equal(commitEditable(el(foreign), split), null);
+});
+
+// 위키링크 되읽기 — DESIGN.md §비주얼 §50 §되읽기, 요구 `9f2f41ed`(티켓 `40eef885`). `lib/markdown-wikilinks.ts`의
+// `wikilinks()`가 새기는 표식(산 링크는 `a`+`data-wikilink`, 댕글링은 `span`+`data-wikilink`+`title`)을
+// 손으로 흉낸다 — 그 플러그인 자체의 변환은 `markdown-wikilinks.test.ts`가 잰다. 여기서 재는 것은
+// `domToMarkdown`이 그 표식을 원문으로 되돌리는 새 갈래 하나다.
+function fakeWikilinkAnchor(raw: string, href: string | undefined): FakeElement {
+  const bar = raw.indexOf("|");
+  const namePart = (bar === -1 ? raw : raw.slice(0, bar)).trim();
+  const display = (bar === -1 ? raw : raw.slice(bar + 1)).trim();
+  const name = namePart.replace(/\.md$/, "");
+  return href
+    ? new FakeElement("a", [new FakeText(display)], { href, "data-wikilink": name })
+    : new FakeElement("span", [new FakeText(display)], { "data-wikilink": name, title: "대상 없음" });
+}
+
+for (const [label, raw, href] of [
+  ["단일 이름", "보드", "/p/dira/ontology?file=objects/화면/보드.md"],
+  ["상대경로", "화면/보드", "/p/dira/ontology?file=objects/화면/보드.md"],
+  ["끝 .md", "티켓 상태 전이.md", "/p/dira/ontology?file=objects/티켓 상태 전이.md"],
+  ["별칭", "대상|별칭", "/p/dira/ontology?file=objects/대상.md"],
+  ["댕글링", "없는 이름", undefined],
+] as const) {
+  test(`domToMarkdown — [[${raw}]] 왕복 항등 (${label})`, () => {
+    const source = `[[${raw}]]\n`;
+    const split = splitBlocks(source);
+    const original = split.blocks[0];
+    const root = new FakeElement("div", [new FakeElement("p", [fakeWikilinkAnchor(raw, href)])], {
+      "data-block-index": "0",
+    });
+    assert.equal(domToMarkdown(el(root), original), original);
+  });
+}
+
+test("domToMarkdown — 코드 스팬 [[...epic]]은 위키링크 변환 밖이라 한 픽셀도 안 바뀐다", () => {
+  const source = "`[[...epic]]`\n";
+  const split = splitBlocks(source);
+  const root = new FakeElement(
+    "div",
+    [new FakeElement("p", [new FakeElement("code", [new FakeText("[[...epic]]")])])],
+    { "data-block-index": "0" },
+  );
+  assert.equal(domToMarkdown(el(root), split.blocks[0]), split.blocks[0]);
+});
+
+test("domToMarkdown — data-wikilink 없는 보통 링크는 종전대로 [텍스트](href)다 (회귀 0)", () => {
+  const source = "[텍스트](https://example.com)\n";
+  const split = splitBlocks(source);
+  const root = new FakeElement(
+    "div",
+    [new FakeElement("p", [new FakeElement("a", [new FakeText("텍스트")], { href: "https://example.com" })])],
+    { "data-block-index": "0" },
+  );
+  assert.equal(domToMarkdown(el(root), split.blocks[0]), split.blocks[0]);
 });
