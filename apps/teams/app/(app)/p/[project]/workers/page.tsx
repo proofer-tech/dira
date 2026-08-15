@@ -145,7 +145,7 @@ export default async function Workers({ params }: { params: Promise<{ project: s
       {rows.length === 0 ? (
         <div className="max-w-3xl space-y-4">
           <EmptyState
-            text="워커 없음 — 이 프로젝트는 돌지 않는다"
+            text="워커 없음"
             action={
               <CreateWorkerButton
                 projectId={id}
