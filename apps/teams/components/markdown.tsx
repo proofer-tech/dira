@@ -9,6 +9,7 @@ import { Square, SquareCheck } from "lucide-react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { softBreaks } from "@/lib/markdown-breaks";
+import { wikilinks, type Vault } from "@/lib/markdown-wikilinks";
 
 /** `h4~h6`도 `h3`과 같은 값이다 — 단계를 더 만들지 않는다(이 큐의 본문에 4단계 중첩이 없다). */
 const H3 = "mt-4 mb-1 text-base font-medium";
@@ -118,6 +119,14 @@ const components: Components = {
   blockquote: (p) => (
     <blockquote {...drop(p)} className="my-3 border-l-2 border-border pl-3 text-muted-foreground" />
   ),
+  // 댕글링 위키링크(`lib/markdown-wikilinks.ts`)만 만드는 태그다 — `rehype-raw`를 안 켜서
+  // 다른 경로로 `<span>`이 안 들어온다. 모양이되 못 누른다(§10 위키링크 표) — 색을 안 쓴다(§0).
+  span: (p) => (
+    <span
+      {...drop(p)}
+      className="text-muted-foreground underline decoration-dotted decoration-muted-foreground underline-offset-2"
+    />
+  ),
   hr: (p) => <hr {...drop(p)} className="my-6 border-border" />,
   // 이미지는 그리지 않는다 — 로컬 큐의 본문에 이미지가 없고, 원격 URL을 로컬 도구가 요청하게
   // 만들 값이 없다. 원문 글자로 문단에 남는다.
@@ -134,14 +143,28 @@ const components: Components = {
  *  요구 티켓 본문의 첫 `##` 앞). 변환은 `lib/markdown-breaks.ts`에 있다.
  *
  *  로딩·에러 상태는 없다 — 서버가 이미 읽은 문자열을 동기로 그린다. 본문은 자르지 않는다. */
-export function Markdown({ text, breaks }: { text: string; breaks?: "all" | "untilHeading" }) {
+export function Markdown({
+  text,
+  breaks,
+  vault,
+}: {
+  text: string;
+  breaks?: "all" | "untilHeading";
+  /** 이름 -> href 벌 (§10 §위키링크). 안 주면 `[[이름]]`은 종전 그대로 글자다 — 이 값을 안
+   *  주는 자리(홈 대화 · 프로토콜 편집기 등 오늘 화면 전부)의 렌더는 한 글자도 안 바뀐다. */
+  vault?: Vault;
+}) {
   if (!text.trim()) return <p className="text-sm text-muted-foreground">(내용 없음)</p>;
   return (
     // `min-w-0`이 없으면 다이얼로그(grid)에서 아래 표·펜스의 `overflow-x-auto`가 무력화된다.
     // 리듬은 요소가 각자 들고 있다 — `space-y-*`를 걸지 않는다(제목 위 여백 > 문단 사이 간격).
     <div className="min-w-0 text-base leading-7 break-words [&>:first-child]:mt-0 [&>:last-child]:mb-0 [&_li>ol]:my-1 [&_li>ul]:my-1">
       <ReactMarkdown
-        remarkPlugins={breaks ? [remarkGfm, softBreaks(breaks)] : [remarkGfm]}
+        remarkPlugins={[
+          remarkGfm,
+          ...(breaks ? [softBreaks(breaks)] : []),
+          ...(vault ? [wikilinks(vault)] : []),
+        ]}
         components={components}
       >
         {text}
