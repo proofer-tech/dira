@@ -21,6 +21,7 @@ import {
 } from "@/app/(app)/p/[project]/personas/actions";
 import { Markdown } from "@/components/markdown";
 import { MarkdownEditor } from "@/components/markdown-editor";
+import type { Vault } from "@/lib/markdown-wikilinks";
 // 왼쪽 목록 줄의 점도 보드·칸반·필터와 **같은 컴포넌트**다(§5) — 색 조회의 출처는 하나다
 import { PersonaDot } from "@/components/persona-badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -1255,6 +1256,32 @@ function MemorySection({
   onDeleted: (file: string) => void;
 }) {
   const [error, setError] = useState<string | null>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+
+  // §10 §위키링크 §자리 표 — vault는 이 페르소나의 memory/뿐이다(다른 페르소나 이름은 안 섞인다).
+  const vault: Vault = {};
+  for (const m of memories) {
+    const name = m.file.replace(/\.md$/, "");
+    vault[name] = `#${encodeURIComponent(name)}`;
+  }
+
+  // 누르면 URL이 안 바뀐다(§10 §자리 표) — 그래서 실제 `#` 이동(브라우저가 스스로 details를
+  // 여는 갈래)을 안 쓰고 클릭을 잡아 `open`을 손으로 민다. `data-wikilink`는 댕글링 `<span>`에도
+  // 붙어 있지만 그 이름은 이 목록에 없으니 querySelector가 못 찾고 조용히 끝난다(요구한 값).
+  function openWikilink(e: React.MouseEvent<HTMLUListElement>) {
+    const a = (e.target as HTMLElement).closest<HTMLElement>("[data-wikilink]");
+    if (!a) return;
+    e.preventDefault();
+    const name = a.dataset.wikilink ?? "";
+    const target = listRef.current?.querySelector<HTMLDetailsElement>(
+      `[data-mem-name="${CSS.escape(name)}"]`,
+    );
+    if (!target) return;
+    target.open = true;
+    // `start`다 — 전문이 길면(§32 실측 최장 2,348px) `center`는 방금 편 요약줄을 화면 밖
+    // 위로 밀어낸다. `start`는 그 줄을 맨 위에 두고 전문을 위에서부터 읽게 한다.
+    target.scrollIntoView({ block: "start" });
+  }
 
   return (
     <section className="space-y-2 border-t pt-3">
@@ -1271,14 +1298,15 @@ function MemorySection({
           메모리가 없습니다 — 세션이 회고에서 남기면 여기에 쌓입니다.
         </p>
       ) : (
-        <ul className="space-y-1">
+        <ul ref={listRef} onClick={openWikilink} className="space-y-1">
           {memories.map((m) => (
             <li key={m.file}>
               {/* 이 화면에 남은 유일한 `<details>`다 — 2단이 되면서 바깥 카드의 `<details>`는
                   없어졌다. **그래도 그룹 이름은 그대로 둔다**: 이름 없는 `group-open:`은 조상의
                   `group`을 물어서 바깥에 `group`이 다시 생기는 날 chevron이 조용히 틀린다.
-                  `accordion`·`collapsible`은 안 깐다 — 이 자리도 같은 값이다(§32 ③) */}
-              <details className="group/mem">
+                  `accordion`·`collapsible`은 안 깐다 — 이 자리도 같은 값이다(§32 ③).
+                  `data-mem-name`은 위키링크 클릭이 펼칠 대상을 찾는 자리다(§10 §자리 표) */}
+              <details className="group/mem" data-mem-name={m.file.replace(/\.md$/, "")}>
                 <summary className="flex cursor-pointer list-none items-baseline gap-2 [&::-webkit-details-marker]:hidden">
                   <ChevronRight
                     aria-hidden
@@ -1311,7 +1339,7 @@ function MemorySection({
                 {/* 상한이 없으면 한 줄이 116자다(§32 §폭 실측). `pl-6` = chevron 16 + gap 8이라
                     전문이 파일명 왼쪽 끝에 맞는다. `<Markdown>` 값은 한 클래스도 안 덮는다(§10) */}
                 <div className="max-w-3xl pt-1 pb-3 pl-6">
-                  <Markdown text={m.text} />
+                  <Markdown text={m.text} vault={vault} />
                 </div>
               </details>
             </li>

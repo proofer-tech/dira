@@ -4,7 +4,7 @@
  *  §32 ②③④와 같은 규칙: 쓰는 쪽은 세션이다). `personas-ui.tsx`의 `MemorySection`과 같은
  *  골격이지만 그 파일은 페르소나 편집 상태(`edits`)에 깊이 얽혀 있어 그대로 재사용할 수 없다 —
  *  여기는 훨씬 얇다(추가·편집이 아예 없다). */
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { ChevronRight, Trash2, TriangleAlert } from "lucide-react";
 import { deleteEpicMemoryAction } from "@/app/(app)/p/[project]/epics/actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -22,6 +22,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Markdown } from "@/components/markdown";
 import type { EpicMemory } from "@/lib/epics";
+import type { Vault } from "@/lib/markdown-wikilinks";
 
 /** §6 에러 3요소 중 1·2번 — `personas-ui.tsx`의 `Failure`와 같은 값이다. 화면마다 각자 든다
  *  (공유 부품으로 뽑을 만큼 무겁지 않다). */
@@ -48,6 +49,30 @@ export function EpicMemorySection({
 }) {
   const [items, setItems] = useState(memories);
   const [error, setError] = useState<string | null>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+
+  // §10 §위키링크 §자리 표 — vault는 이 에픽의 memory/뿐이다. 클릭 처리는
+  // `personas-ui.tsx`의 `MemorySection`과 같은 판정(URL 안 바꾸는 수동 `open`) — 근거는 그 주석 참고.
+  const vault: Vault = {};
+  for (const m of items) {
+    const name = m.file.replace(/\.md$/, "");
+    vault[name] = `#${encodeURIComponent(name)}`;
+  }
+
+  function openWikilink(e: React.MouseEvent<HTMLUListElement>) {
+    const a = (e.target as HTMLElement).closest<HTMLElement>("[data-wikilink]");
+    if (!a) return;
+    e.preventDefault();
+    const name = a.dataset.wikilink ?? "";
+    const target = listRef.current?.querySelector<HTMLDetailsElement>(
+      `[data-mem-name="${CSS.escape(name)}"]`,
+    );
+    if (!target) return;
+    target.open = true;
+    // `start`다 — 전문이 길면 `center`는 방금 편 요약줄을 화면 밖 위로 밀어낸다(`personas-ui.tsx`
+    // `MemorySection`과 같은 실측 근거).
+    target.scrollIntoView({ block: "start" });
+  }
 
   return (
     <section className="space-y-2 border-t pt-3">
@@ -58,10 +83,10 @@ export function EpicMemorySection({
           메모리가 없습니다 — 세션이 회고에서 남기면 여기에 쌓입니다.
         </p>
       ) : (
-        <ul className="space-y-1">
+        <ul ref={listRef} onClick={openWikilink} className="space-y-1">
           {items.map((m) => (
             <li key={m.file}>
-              <details className="group/mem">
+              <details className="group/mem" data-mem-name={m.file.replace(/\.md$/, "")}>
                 <summary className="flex cursor-pointer list-none items-baseline gap-2 [&::-webkit-details-marker]:hidden">
                   <ChevronRight
                     aria-hidden
@@ -84,7 +109,7 @@ export function EpicMemorySection({
                   </span>
                 </summary>
                 <div className="max-w-3xl pt-1 pb-3 pl-6">
-                  <Markdown text={m.text} />
+                  <Markdown text={m.text} vault={vault} />
                 </div>
               </details>
             </li>
