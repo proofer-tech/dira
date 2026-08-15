@@ -894,7 +894,7 @@ test("보드 — 5상태 판정 · 필터 AND/OR · 검색 대상 · 정렬", as
   assert.strictEqual(statusOf(by("dddd4444")), "wip");
   assert.strictEqual(statusOf(by("eeee5555")), "done");
 
-  // N6 `일이 남았으면 안 잔다`가 세는 것 — `대기`·`진행중` 둘뿐이다(§데스크톱 앱 N6).
+  // N6 `남은 일이 있으면 잠자기 방지`가 세는 것 — `대기`·`진행중` 둘뿐이다(§데스크톱 앱 N6).
   // `/api/work`가 이 식 하나다. 넓히면(= 나머지 셋이 섞이면) 저 셋만 남은 큐에서도 맥이 안 잔다.
   const busy = (ts: Ticket[]) => ts.some((t) => statusOf(t) === "open" || statusOf(t) === "wip");
   assert.ok(busy(tickets));

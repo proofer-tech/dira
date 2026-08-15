@@ -28,7 +28,7 @@ apps/teams/
                         (DESIGN.md §데스크톱 앱 N2 · 못박는 것 5). 판정은 `lib/queue.ts`의
                         `isAwaiting` 하나고 여기서 다시 쓰지 않는다.
                         화면이 필요한 데이터는 종전대로 서버 컴포넌트가 `lib/`를 직접 부른다
-      api/work/         같은 성격의 둘째 창구 — `{busy}` 하나다(N6 `일이 남았으면 안 잔다`).
+      api/work/         같은 성격의 둘째 창구 — `{busy}` 하나다(N6 `남은 일이 있으면 잠자기 방지`).
                         판정은 `statusOf`가 `open`|`wip`인 티켓의 유무 하나다
       p/[project]/         프로젝트 스코프. layout.tsx가 셸(헤더·내비·전환기)
       p/[project]/(board)/ 보드(`/p/<project>`). 라우트 그룹이라 URL은 그대로다.

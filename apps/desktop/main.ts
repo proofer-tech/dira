@@ -309,7 +309,7 @@ async function pollAwaiting(origin: string) {
   }
 }
 
-// ── N6 일이 남았으면 안 잔다 ────────────────────────────────────────────────
+// ── N6 남은 일이 있으면 잠자기 방지 ────────────────────────────────────────
 //
 // 막는 것은 워커가 아니라 **cron**이다 — 맥이 자면 매분 워커를 띄우는 그것이 안 뜬다.
 // 그래서 세는 것이 `진행중`만이 아니라 `대기`이고, 판정은 서버(`GET /api/work`)가 한다.
@@ -369,7 +369,7 @@ function setNoSleep(on: boolean, origin: string) {
   const flag = noSleepFlag();
   if (on) writeFileSync(flag, "");
   else rmSync(flag, { force: true });
-  console.log(`[dira] 일이 남았으면 안 잔다 ${on ? "켬" : "끔"} — ${flag} ${on ? "만듦" : "지움"}`);
+  console.log(`[dira] 남은 일이 있으면 잠자기 방지 ${on ? "켬" : "끔"} — ${flag} ${on ? "만듦" : "지움"}`);
   pollWork(origin);
 }
 
@@ -557,7 +557,7 @@ function trayMenu(origin: string): Menu {
     },
     {
       // N6. N4 아래·U2 위다. 상태의 원본은 마커 파일이고 **있으면 켬**이다(기본은 꺼짐).
-      label: "일이 남았으면 안 잔다",
+      label: "남은 일이 있으면 잠자기 방지",
       type: "checkbox",
       checked: existsSync(noSleepFlag()),
       click: (item) => setNoSleep(item.checked, origin),
