@@ -49,7 +49,7 @@ export default async function Epics({
   const config = await resolveConfig(project);
   const locale = await readLanguage();
   const tickets = await listTickets(project.root, config);
-  const epics = listEpics(tickets);
+  const epics = await listEpics(project.root, tickets);
   // `(에픽 없음)`은 고를 대상이 아니다 — 메모리 사이드카가 없는 값이다(§결정 6).
   const realEpics = epics.filter((e) => e.epic !== NO_EPIC);
 

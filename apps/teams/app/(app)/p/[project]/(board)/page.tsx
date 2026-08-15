@@ -59,7 +59,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { NO_EPIC, epicTitle, listEpics } from "@/lib/epics";
+import { NO_EPIC, epicTitle, epicsFromTickets, listEpics } from "@/lib/epics";
 import { t } from "@/lib/i18n";
 import {
   HIDE_DONE_STATUSES,
@@ -323,7 +323,7 @@ export default async function Board({
   // 에픽 사이드바(§에픽 결정 5 · §비주얼 §52 ①②) — 건수는 **전체 `tickets`** 기준이다(kind·
   // persona 필터가 걸려도 안 줄어든다). `total`이 `kind`-`persona`만 반영하고 `status`는 안 보는
   // 것과 같은 이유: 사이드바는 구조적 분류지 그때그때의 필터 결과가 아니다.
-  const epics = listEpics(tickets);
+  const epics = await listEpics(project.root, tickets);
   const titles = Object.fromEntries(
     await Promise.all(
       epics
@@ -654,7 +654,7 @@ export default async function Board({
   const laneMode = sp.get("lane") === "epic";
   const epicLanes = laneMode
     ? await Promise.all(
-        listEpics(rows).map(async ({ epic, workers }) => ({
+        epicsFromTickets(rows).map(async ({ epic, workers }) => ({
           epic,
           workers,
           title: epic === NO_EPIC ? null : await epicTitle(project.root, epic),

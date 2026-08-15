@@ -12,7 +12,9 @@
  *
  *  얇다 — 저장·정규화·경로 방어는 전부 `lib/attachments.ts`가 한다. 여기가 하는 일은
  *  프로젝트 id를 실물로 바꾸고 `File`이 실제로 왔는지 보는 것뿐이다. */
+import { revalidatePath } from "next/cache";
 import { saveAttachment } from "@/lib/attachments";
+import { createEpic as writeEpic, type CreateEpicResult } from "@/lib/epics";
 import { getProject } from "@/lib/projects";
 import type { SaveResult } from "@/lib/attachments";
 
@@ -28,4 +30,22 @@ export async function uploadAttachment(
     return { ok: false, error: "파일이 오지 않았습니다 — 다시 고르세요." };
   }
   return saveAttachment(project, file);
+}
+
+/** 사이드바 그룹 머리의 새 에픽 입구 (DESIGN.md §에픽 결정 17) — 판정·쓰기는 전부
+ *  `lib/epics.ts`의 `createEpic`이 한다(`setTicketEpic`이 `lib/epic.ts`에 위임하는 것과 같은 짝).
+ *  여기가 하는 일은 프로젝트 id를 실물로 바꾸고 성공 시 보드·에픽 화면을 다시 그리는 것뿐이다. */
+export async function createEpic(
+  projectId: string,
+  key: string,
+  title: string,
+): Promise<CreateEpicResult> {
+  const project = await getProject(projectId);
+  if (!project) return { ok: false, reason: "other", error: `등록되지 않은 프로젝트입니다: ${projectId}` };
+  const r = await writeEpic(project.root, key, title);
+  if (r.ok) {
+    revalidatePath(`/p/${projectId}`);
+    revalidatePath(`/p/${projectId}/epics`);
+  }
+  return r;
 }

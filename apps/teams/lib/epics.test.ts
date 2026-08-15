@@ -1,13 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { Suffixes } from "./queue.ts";
 import { listTickets } from "./queue.ts";
 import {
   NO_EPIC,
+  createEpic,
   deleteEpicMemory,
   epicMemory,
   epicReadmeBody,
@@ -61,18 +62,31 @@ writeFileSync(path.join(root, "epics", "P273", "memory", "y.md"), "y 내용\n");
 mkdirSync(path.join(root, "epics", "P273", "memory", "하위"), { recursive: true });
 writeFileSync(path.join(root, "epics", "P273", "memory", "하위", "z.md"), "안 읽혀야 한다\n");
 
+// P900 — 티켓 0건, 디렉터리만 있다(README도 없다). listEpics가 합쳐야 하는 그 자리다.
+mkdirSync(path.join(root, "epics", "P900"), { recursive: true });
+
 test("에픽 목록 — epic: 값 집합(distinct), 접두사 정규화 안 한다", async () => {
   const tickets = await listTickets(root, DEFAULT);
-  const epics = listEpics(tickets);
+  const epics = await listEpics(root, tickets);
   assert.deepStrictEqual(
     epics.map((e) => e.epic),
-    ["P10", "P273", "P273-2", NO_EPIC], // 문자열 정렬, (에픽 없음) 맨 뒤
+    ["P10", "P273", "P273-2", "P900", NO_EPIC], // 문자열 정렬, (에픽 없음) 맨 뒤
   );
+});
+
+test("에픽 목록 — 티켓 0건인 디렉터리 키도 든다, counts 다 0·workers 빈 목록", async () => {
+  const tickets = await listTickets(root, DEFAULT);
+  const epics = await listEpics(root, tickets);
+  const p900 = epics.find((e) => e.epic === "P900")!;
+  assert.deepStrictEqual(p900.counts, { open: 0, wip: 0, done: 0 });
+  assert.deepStrictEqual(p900.workers, []);
+  // 티켓만 있고 디렉터리가 없는 키(P10)도 그대로 든다(결정 17 수용조건 4)
+  assert.ok(epics.some((e) => e.epic === "P10"));
 });
 
 test("에픽 건수 — 상태 3종은 queue.ts의 기존 판정 그대로다", async () => {
   const tickets = await listTickets(root, DEFAULT);
-  const epics = listEpics(tickets);
+  const epics = await listEpics(root, tickets);
   const p273 = epics.find((e) => e.epic === "P273")!;
   // wip 3 = a2·a5·a6 (§워커 집합 픽스처 — a6은 owner: 형식이 아니라 건수엔 들되 워커는 안 든다)
   assert.deepStrictEqual(p273.counts, { open: 1, wip: 3, done: 1 });
@@ -82,7 +96,7 @@ test("에픽 건수 — 상태 3종은 queue.ts의 기존 판정 그대로다", 
 
 test("에픽 워커 집합 — 같은 에픽 .wip 워커 둘이 distinct·오름차순으로 든다, .done owner·형식 아닌 owner는 안 든다, .wip 0이면 빈 목록", async () => {
   const tickets = await listTickets(root, DEFAULT);
-  const epics = listEpics(tickets);
+  const epics = await listEpics(root, tickets);
   const p273 = epics.find((e) => e.epic === "P273")!;
   // a2(w1) · a5(w2)는 든다. a3(w9)는 .done이라 안 들고, a6("손으로 씀")은 workerOf 형식이 아니라 안 든다
   assert.deepStrictEqual(p273.workers, ["w1", "w2"]);
@@ -137,6 +151,35 @@ test("에픽 메모리 — 디렉터리 없으면 빈 목록(경고 없음)", as
 test("경로 방어 — epic 값의 ../ 가 큐 밖으로 못 나간다", async () => {
   assert.strictEqual(await epicTitle(root, "../../../etc"), null);
   assert.deepStrictEqual(await epicMemory(root, "../../../etc"), []);
+});
+
+test("에픽 만들기 — README.md 한 장, 첫 줄이 제목, memory/는 안 만든다", async () => {
+  const r = await createEpic(root, "P999", "사이드바 실험");
+  assert.deepStrictEqual(r, { ok: true });
+  assert.strictEqual(readFileSync(path.join(root, "epics", "P999", "README.md"), "utf8"), "사이드바 실험\n");
+  assert.throws(() => readFileSync(path.join(root, "epics", "P999", "memory"), "utf8"));
+});
+
+test("에픽 만들기 — 이미 있는 키는 거절하고 한 바이트도 안 덮는다", async () => {
+  const before = readFileSync(path.join(root, "epics", "P273", "README.md"), "utf8");
+  const r = await createEpic(root, "P273", "덮어써지면 안 된다");
+  assert.strictEqual(r.ok, false);
+  if (!r.ok) assert.strictEqual(r.reason, "exists");
+  assert.strictEqual(readFileSync(path.join(root, "epics", "P273", "README.md"), "utf8"), before);
+});
+
+test("에픽 만들기 — 빈 키·줄바꿈·큐 밖 경로를 막는다", async () => {
+  const empty = await createEpic(root, "  ", "제목");
+  assert.strictEqual(empty.ok, false);
+  if (!empty.ok) assert.strictEqual(empty.reason, "empty");
+
+  const newline = await createEpic(root, "P9\n9", "제목");
+  assert.strictEqual(newline.ok, false);
+  if (!newline.ok) assert.strictEqual(newline.reason, "invalid");
+
+  const escape = await createEpic(root, "../../../etc", "제목");
+  assert.strictEqual(escape.ok, false);
+  if (!escape.ok) assert.strictEqual(escape.reason, "invalid");
 });
 
 test("앱은 DESIGN.md를 안 판다(§검증 (4))", () => {

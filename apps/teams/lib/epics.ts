@@ -2,7 +2,7 @@
  *
  *  에픽 목록의 정본은 큐(티켓 `epic:` 값)다 — 이 파일은 스펙 문서를 읽지 않는다(§검증 (4)).
  *  dira는 아무 프로젝트에나 붙는 GUI라 스펙 문서를 파싱하면 dira 전용 기능이 된다. */
-import { readFile, readdir, rm } from "node:fs/promises";
+import { mkdir, open, readFile, readdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { resolveWithin } from "./paths.ts";
 import { epicOf, type Ticket, type TicketState } from "./queue.ts";
@@ -19,10 +19,17 @@ export type EpicCounts = Record<TicketState, number>;
  *  `.done`의 `owner:`는 안 세고, `workerOf`가 `null`이면(형식 아님) 그 티켓도 안 센다. */
 export type Epic = { epic: string; counts: EpicCounts; workers: string[] };
 
+const sortEpics = (epics: Epic[]): Epic[] =>
+  epics.sort((a, b) => (a.epic === NO_EPIC ? 1 : b.epic === NO_EPIC ? -1 : a.epic.localeCompare(b.epic)));
+
 /** 큐 티켓을 `epic:` 값으로 묶는다. 정렬은 P번호 문자열, `(에픽 없음)`이 맨 뒤(결정 5).
  *  건수는 `queue.ts`의 기존 `state` 판정을 그대로 쓴다 — 새 상태 판정을 안 만든다.
- *  워커 집합도 **같은 루프**에서 같이 낸다 — 새 읽기·새 폴링·새 상태 0(§에픽 결정 9). */
-export function listEpics(tickets: Ticket[]): Epic[] {
+ *  워커 집합도 **같은 루프**에서 같이 낸다 — 새 읽기·새 폴링·새 상태 0(§에픽 결정 9).
+ *
+ *  디렉터리는 안 본다 — 스윔레인(`?lane=epic`)이 이 함수를 쓴다. 티켓 0건 에픽에 빈 띠를 세우지
+ *  않는 것이 결정 7·17의 계약이라, 여기서 `epics/`를 합치면 그 계약이 깨진다. 사이드바가 원하는
+ *  "빈 에픽도 뜬다"는 아래 `listEpics`가 이 함수 위에 얹는다. */
+export function epicsFromTickets(tickets: Ticket[]): Epic[] {
   const byEpic = new Map<string, EpicCounts>();
   const workersByEpic = new Map<string, Set<string>>();
   for (const t of tickets) {
@@ -39,13 +46,29 @@ export function listEpics(tickets: Ticket[]): Epic[] {
       }
     }
   }
-  return [...byEpic.entries()]
-    .sort(([a], [b]) => (a === NO_EPIC ? 1 : b === NO_EPIC ? -1 : a.localeCompare(b)))
-    .map(([epic, counts]) => ({
+  return sortEpics(
+    [...byEpic.entries()].map(([epic, counts]) => ({
       epic,
       counts,
       workers: [...(workersByEpic.get(epic) ?? [])].sort((a, b) => a.localeCompare(b)),
-    }));
+    })),
+  );
+}
+
+/** 사이드바·에픽 화면이 쓰는 목록(§에픽 결정 17) — `epicsFromTickets` 위에 큐 `epics/` 한 단계를
+ *  합집합으로 얹는다. 티켓 0건이라 `epicsFromTickets`에 안 잡히는 키(방금 만든 에픽)도 `counts`
+ *  전부 0·`workers` 빈 목록으로 목록에 선다. 디렉터리가 아예 없으면(`epics/`) 빈 목록 — 정상,
+ *  경고 없다(결정 2). */
+export async function listEpics(root: string, tickets: Ticket[]): Promise<Epic[]> {
+  const epics = epicsFromTickets(tickets);
+  const known = new Set(epics.map((e) => e.epic));
+  const ents = await readdir(path.join(root, "epics"), { withFileTypes: true }).catch(() => []);
+  for (const e of ents) {
+    if (e.isDirectory() && !known.has(e.name)) {
+      epics.push({ epic: e.name, counts: { open: 0, wip: 0, done: 0 }, workers: [] });
+    }
+  }
+  return sortEpics(epics);
 }
 
 /** `epic` 값은 URL에서 온다 — `../`가 큐(`root`) 밖으로 못 나간다(§경로 방어).
@@ -83,6 +106,42 @@ export async function epicReadmeBody(root: string, epic: string): Promise<string
     .slice(titleIdx + 1)
     .join("\n")
     .trim();
+}
+
+/** 사이드바 입구가 부르는 쓰기(§에픽 결정 17) — `epics/<키>/README.md` 한 장, 첫 줄이 제목이고
+ *  그 뒤는 비어 있다. `memory/`는 안 만든다. 판정은 여기 하나뿐이다(`lib/epic.ts`의
+ *  `writeEpic`/`EpicWriteResult`와 같은 짝 — 화면은 `reason`으로 실패 문구만 고른다).
+ *
+ *  경로 방어는 `epicDir`을 그대로 쓴다 — 새 판정을 안 짓는다. 그 밖의 값(제목·키의 글자 자체)은
+ *  검증·정규화하지 않는다 — 문자열 그대로가 키다(결정 1). */
+export type CreateEpicResult =
+  | { ok: true }
+  | { ok: false; reason: "empty" | "invalid" | "exists" | "other"; error: string };
+
+export async function createEpic(root: string, key: string, title: string): Promise<CreateEpicResult> {
+  const k = key.trim();
+  if (!k) return { ok: false, reason: "empty", error: "키를 입력하세요." };
+  if (/[\r\n]/.test(k)) return { ok: false, reason: "invalid", error: "키에 줄바꿈을 넣을 수 없습니다." };
+  const dir = await epicDir(root, k);
+  if (!dir) return { ok: false, reason: "invalid", error: `키가 큐 밖을 가리킵니다: ${k}` };
+  try {
+    await mkdir(dir, { recursive: true });
+    // O_EXCL — 검사와 생성 사이가 항상 벌어진다(`lib/attachments.ts`의 `saveAttachment`와 같은
+    // 이유). 이미 있으면 한 바이트도 안 건드리고 거절한다(수용조건 3).
+    const fh = await open(path.join(dir, "README.md"), "wx").catch((e) => {
+      if ((e as NodeJS.ErrnoException).code === "EEXIST") return null;
+      throw e;
+    });
+    if (!fh) return { ok: false, reason: "exists", error: `이미 있는 키입니다: ${k}` };
+    try {
+      await fh.writeFile(`${title.trim()}\n`);
+    } finally {
+      await fh.close();
+    }
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, reason: "other", error: `만들지 못했습니다: ${(e as Error).message}` };
+  }
 }
 
 export type EpicMemory = { file: string; excerpt: string; text: string };
