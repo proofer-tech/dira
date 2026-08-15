@@ -119,11 +119,15 @@ export function EpicSidebar({
                 {toggle}
               </SidebarGroupLabel>
               <SidebarMenu aria-label={t(locale, "board.epic.label")} className="gap-0.5">
-                {/* `전체`(§결정 12) — 목록 맨 위, `(에픽 없음)`과 한 클래스도 안 다르다. 새 모양을
+                {/* `전체`(§결정 12) — 목록 맨 위, 에픽 값 줄과 한 클래스도 안 다르다. 새 모양을
                     안 고른다: 구분선-여백 0, P번호 없음, 둘째 문 없음. `listEpics`가 안 낳는 값이라
-                    `epics.map` 밖에서 따로 그린다. */}
-                <SidebarMenuItem>
+                    `epics.map` 밖에서 따로 그린다.
+                    걷힌 `(에픽 없음)` 줄이 물던 드롭 과녁을 물려받는다(§에픽 결정 18 · §비주얼
+                    §52 ⑤ (2)-(3)) — `data-epic-drop=""`가 <에픽에서 뺀다>는 그 빈 값이고,
+                    `data-epic-ring` · `data-epic-line`은 에픽 줄이 쓰는 그 표식 그대로다. */}
+                <SidebarMenuItem data-epic-drop="">
                   <SidebarMenuButton
+                    data-epic-ring
                     className="h-auto items-start"
                     isActive={allActive}
                     aria-current={allActive ? "page" : undefined}
@@ -133,7 +137,10 @@ export function EpicSidebar({
                       <span className="flex items-baseline gap-2">
                         <span className="min-w-0 truncate text-sm">{t(locale, "board.epic.all")}</span>
                       </span>
-                      <span className="flex items-baseline gap-2 text-xs text-muted-foreground">
+                      <span
+                        data-epic-line
+                        className="flex items-baseline gap-2 text-xs text-muted-foreground"
+                      >
                         <span>{allTotal}건</span>
                         {allWip > 0 && (
                           <span className="ml-auto">
@@ -146,12 +153,12 @@ export function EpicSidebar({
                 </SidebarMenuItem>
                 {epics.map((row) => {
                   const isNone = row.epic === NO_EPIC;
-                  const value = isNone ? "" : row.epic;
+                  if (isNone) return null; // §에픽 결정 18 — 이 목록에서 걷힌다. `전체`가 과녁을 물려받는다
+                  const value = row.epic;
                   const isActive = active === value;
                   const total = row.counts.open + row.counts.wip + row.counts.done;
                   return (
                     // 드롭이 받는 상자는 이 줄 전체다(§비주얼 §52 ⑤ — 둘째 문 위도 같은 줄이다).
-                    // `value`가 빈 문자열이어도 속성 자체는 선다 — `(에픽 없음)`도 후보다(§결정 8).
                     <SidebarMenuItem key={row.epic} data-epic-drop={value}>
                       <EpicRowPanel
                         trigger={
@@ -165,17 +172,13 @@ export function EpicSidebar({
                             <div className="flex min-w-0 grow flex-col gap-0.5">
                               <span className="flex items-baseline gap-2">
                                 <span className="min-w-0 truncate text-sm">
-                                  {isNone
-                                    ? t(locale, "board.epic.none")
-                                    : (titles[row.epic] ?? t(locale, "board.epic.noTitle"))}
+                                  {titles[row.epic] ?? t(locale, "board.epic.noTitle")}
                                 </span>
                                 {/* P번호 등급(§에픽 결정 11 · §비주얼 §52 ②) — 라벨보다 크지도 두껍지도
                                     않다. `font-normal`을 여기서 박아야 선택 줄의 `font-medium` 상속을 끊는다. */}
-                                {!isNone && (
-                                  <span className="shrink-0 text-xs font-normal text-muted-foreground">
-                                    ({row.epic})
-                                  </span>
-                                )}
+                                <span className="shrink-0 text-xs font-normal text-muted-foreground">
+                                  ({row.epic})
+                                </span>
                               </span>
                               {/* 드래그 중 "놓으면 이 에픽으로" 문장이 이 슬롯에 대신 든다(§52 ⑤ (3)) */}
                               <span
@@ -202,16 +205,10 @@ export function EpicSidebar({
                       >
                         {/* 패널 1행 — 제목 전문 + P번호(§52 ⑨ §내용 넷의 배치) */}
                         <p className="flex flex-wrap items-baseline gap-2 text-sm">
-                          <span>
-                            {isNone
-                              ? t(locale, "board.epic.none")
-                              : (titles[row.epic] ?? t(locale, "board.epic.noTitle"))}
+                          <span>{titles[row.epic] ?? t(locale, "board.epic.noTitle")}</span>
+                          <span className="shrink-0 text-xs font-normal text-muted-foreground">
+                            ({row.epic})
                           </span>
-                          {!isNone && (
-                            <span className="shrink-0 text-xs font-normal text-muted-foreground">
-                              ({row.epic})
-                            </span>
-                          )}
                         </p>
                         {/* 패널 2행 — 건수 셋. 0도 적는다(접힌 2행과 갈리는 규칙) */}
                         <p className="text-xs text-muted-foreground">
@@ -225,8 +222,8 @@ export function EpicSidebar({
                             <WorkerChips names={row.workers} />
                           </div>
                         )}
-                        {/* 패널 4행 — 상세 문(넓은 문). `(에픽 없음)`은 없다(갈 디렉터리가 없다) */}
-                        {!isNone && memoryHrefFor && (
+                        {/* 패널 4행 — 상세 문(넓은 문) */}
+                        {memoryHrefFor && (
                           <Button
                             variant="outline"
                             nativeButton={false}
