@@ -53995,11 +53995,14 @@ grep -cE '"(board\.epic\.(create|createDesc|fieldTitle|fieldKey|createFailed)|co
   apps/teams/lib/i18n.ts                                        # 16
 
 # (4) 접힌 띠 산술이 안 갈렸다 - 그 40이 문턱 1008을 떠받친다(⑦)
-grep -c 'w-10' apps/teams/components/epic-sidebar.tsx           # 1
+grep -c '"w-10"' apps/teams/components/epic-sidebar.tsx         # 1 (따옴표를 넣는다 - 같은 파일
+#                                                                  주석이 그 낱말을 한 번 더 든다)
 #   $('[data-slot=sidebar]').getBoundingClientRect().width      # 40 (?sidebar=off)
 
 # (5) 함정 - 표식이 행이 아니라 낱말에 붙어 있다
-grep -c 'data-epic-group-label' apps/teams/components/epic-sidebar.tsx   # 1 (그 span)
+grep -c '<span data-epic-group-label' apps/teams/components/epic-sidebar.tsx   # 1
+#   세는 것이 수가 아니라 **어느 요소에 붙었나**다 - 옮기기 전에도 뒤에도 그 속성은 파일에
+#   하나뿐이라 `grep -c 'data-epic-group-label'`은 이 회차를 못 가른다.
 #   그리고 화면에서: 카드를 잡고 머리 행 위를 지나 아무 데나 놓은 뒤 입구를 누르면 다이얼로그가
 #   열린다. 안 열리면 표식이 아직 행에 있다
 
