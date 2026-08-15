@@ -34,6 +34,7 @@ import {
 } from "@/components/attachment-field";
 import { EmptyState } from "@/components/empty-state";
 import { Markdown } from "@/components/markdown";
+import type { Vault } from "@/lib/markdown-wikilinks";
 import { AnswerForm } from "@/components/ticket-ui";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
@@ -86,6 +87,7 @@ export function SessionStream({
   stream = true,
   awaiting = false,
   answerFile,
+  vault,
 }: {
   project: string;
   stem: string;
@@ -110,6 +112,9 @@ export function SessionStream({
   awaiting?: boolean;
   /** 답변 모드가 만들 파일 이름 — `tickets/<awaiting>.done.md`. 사람이 무엇이 생기는지 보고 누른다 */
   answerFile?: string;
+  /** 이름 -> href 벌(§비주얼 §10 §위키링크) — 서버가 한 번 읽어 내려준다. 이 컴포넌트는 폴링
+   *  중에도 이 값을 다시 안 읽는다(못 — 렌더러가 이름 집합을 안 읽는다). */
+  vault?: Vault;
 }) {
   const [events, setEvents] = useState<StreamEvent[]>([]);
   const [live, setLive] = useState(initialLive);
@@ -255,7 +260,8 @@ export function SessionStream({
         >
           {grouped.map((g) => {
             if (g.kind === "event") return <StreamBubble key={g.event.key} e={g.event} />;
-            if (g.kind === "thread") return <ThreadRow key={threadKey.get(g.thread)} item={g.thread} />;
+            if (g.kind === "thread")
+              return <ThreadRow key={threadKey.get(g.thread)} item={g.thread} vault={vault} />;
             return <Bundle key={g.events[0].key} events={g.events} onToggle={onToggle} />;
           })}
           {/* 진행 표식(§18 ④) — 마지막 사건 다음 줄이 올 자리를 지킨다. **말풍선 아래로 안
@@ -298,6 +304,7 @@ export function SessionStream({
         awaiting={awaiting}
         answerFile={answerFile}
         answerOptions={answerOptions}
+        vault={vault}
       />
     </div>
   );
@@ -313,7 +320,7 @@ export function SessionStream({
  *  답변에만 붙이면 한 쌍의 헤더가 서로 다른 모양이 된다. 순서는 자리가 말한다.
  *  hover도 펼침도 없다 — 산문·말풍선 둘 다 펼칠 것이 없다(스트림 줄의 `hover:bg-muted/50`은
  *  어포던스다). */
-function ThreadRow({ item }: { item: ThreadItem }) {
+function ThreadRow({ item, vault }: { item: ThreadItem; vault?: Vault }) {
   if (item.role === "question") {
     return (
       <div className="px-3 py-2">
@@ -324,7 +331,7 @@ function ThreadRow({ item }: { item: ThreadItem }) {
           {item.hash && <span className="ml-2 font-mono">{item.hash}</span>}
         </MessageHeader>
         {/* 질문은 PM이 감은 절이라 줄바꿈을 안 그린다(§10 면제 — §9와 같은 판정) */}
-        <Markdown text={item.text} />
+        <Markdown text={item.text} vault={vault} />
       </div>
     );
   }
@@ -343,7 +350,7 @@ function ThreadRow({ item }: { item: ThreadItem }) {
           <Bubble variant="outline" align="end">
             <BubbleContent>
               {/* 답변은 사람이 친 글이라 줄바꿈을 그린다(§10 면제) */}
-              <Markdown text={item.text} breaks="all" />
+              <Markdown text={item.text} breaks="all" vault={vault} />
             </BubbleContent>
           </Bubble>
         </MessageContent>
@@ -421,6 +428,7 @@ function ProgressForm({
   awaiting,
   answerFile,
   answerOptions,
+  vault,
 }: {
   project: string;
   stem: string;
@@ -438,6 +446,8 @@ function ProgressForm({
   /** 마지막 질문 라운드의 선택 카드(결정 10) — `answerFile`처럼 답변 모드에서만 쓰인다 */
   answerOptions: OptionGroup[];
   answerFile?: string;
+  /** 이름 -> href 벌(§비주얼 §10 §위키링크) — 답변 모드의 `AnswerForm`에 그대로 흘려보낸다 */
+  vault?: Vault;
 }) {
   const router = useRouter();
   const [text, setText] = useState("");
@@ -485,7 +495,13 @@ function ProgressForm({
         <p className="text-xs text-muted-foreground">
           답변을 달면 이 티켓이 다시 큐에 뜨고 담당 세션이 이어서 봅니다.
         </p>
-        <AnswerForm project={project} hash={stem} answerFile={answerFile} options={answerOptions} />
+        <AnswerForm
+          project={project}
+          hash={stem}
+          answerFile={answerFile}
+          options={answerOptions}
+          vault={vault}
+        />
       </div>
     ) : null;
   }

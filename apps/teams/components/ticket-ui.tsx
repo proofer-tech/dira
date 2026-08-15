@@ -42,6 +42,7 @@ import { useHotkey, useKeymap } from "@/components/keymap-provider";
 import { useLocale, useT } from "@/components/language-provider";
 import { Markdown } from "@/components/markdown";
 import { MarkdownEditor } from "@/components/markdown-editor";
+import type { Vault } from "@/lib/markdown-wikilinks";
 import { PersonaDot } from "@/components/persona-badge";
 import { PriorityMeter } from "@/components/priority-meter";
 import { DepBadge } from "@/components/status-badge";
@@ -230,6 +231,7 @@ export function TicketEditForm({
   personas,
   colors,
   body,
+  vault,
 }: {
   project: string;
   hash: string;
@@ -260,6 +262,8 @@ export function TicketEditForm({
   /** 이름 → 팔레트 키(레지스트리 `personaColors`). 없는 이름은 빈 점이다(§비주얼 §12) */
   colors?: Record<string, string>;
   body: string;
+  /** 이름 -> href 벌(§비주얼 §10 §위키링크) — 위지윅 면에 그대로 흘려보낸다 */
+  vault?: Vault;
 }) {
   const [state, action, pending] = useActionState<SaveState, FormData>(saveTicket, {});
   const t = useT();
@@ -430,6 +434,7 @@ export function TicketEditForm({
         rows={24}
         className="font-mono"
         breaks={kindValue === "request" ? "untilHeading" : undefined}
+        vault={vault}
       />
       {state.error && <Failure title="저장하지 못했습니다" message={state.error} />}
       {/* 액션 행은 오른쪽 정렬이고 1차 액션이 가장 오른쪽이다(§비주얼 §4-3). 결과 문구는 버튼
@@ -623,7 +628,14 @@ export function UnassignButton({
  *  시간순으로 섞인다(§2-3 · §비주얼 §29 — 그 상자는 `message-scroller`를 안 쓴다).
  *  여기 값은 §13 그대로다. **바뀐 것은 버튼 글자 하나뿐이다**(§29 ③ — 같은 아이콘·같은 동작인
  *  버튼이 두 화면에서 다른 이름이면 §0-9가 깨진다). */
-export function AnswerThread({ thread }: { thread: ThreadItem[] }) {
+export function AnswerThread({
+  thread,
+  vault,
+}: {
+  thread: ThreadItem[];
+  /** 이름 -> href 벌(§비주얼 §10 §위키링크) — 질문·답변 둘 다 티켓 본문에서 왔다 */
+  vault?: Vault;
+}) {
   return (
     <>
       {/* 스레드는 고정 높이 상자 안에서 스크롤된다(§2 · 사람 요청 `c01a9a11` Q1=(a) · §비주얼 §13).
@@ -656,7 +668,7 @@ export function AnswerThread({ thread }: { thread: ThreadItem[] }) {
                             {item.hash && <span className="ml-2 font-mono">{item.hash}</span>}
                           </MessageHeader>
                           {/* PM이 손으로 감은 절이라 줄바꿈을 안 그린다(§10 면제) */}
-                          <Markdown text={item.text} />
+                          <Markdown text={item.text} vault={vault} />
                         </div>
                       </MessageScrollerItem>
                     );
@@ -682,7 +694,7 @@ export function AnswerThread({ thread }: { thread: ThreadItem[] }) {
                           <Bubble variant="outline" align="end">
                             <BubbleContent>
                               {/* 답변 본문은 **사람이 입력칸에 친 글**이라 줄바꿈을 그린다(§10 면제) */}
-                              <Markdown text={item.text} breaks="all" />
+                              <Markdown text={item.text} breaks="all" vault={vault} />
                             </BubbleContent>
                           </Bubble>
                         </MessageContent>
@@ -720,6 +732,7 @@ export function AnswerForm({
   hash,
   answerFile,
   options,
+  vault,
 }: {
   project: string;
   hash: string;
@@ -728,6 +741,8 @@ export function AnswerForm({
    *  `lastQuestionOptions(thread)`로 미리 재 내려보낸다. 0개면 그 라운드에 선택지가 없다
    *  (58/100, 결정 10 ⑨) — 카드를 안 그리고 종전 화면 그대로다. */
   options: OptionGroup[];
+  /** 이름 -> href 벌(§비주얼 §10 §위키링크) — 위지윅 면에 그대로 흘려보낸다 */
+  vault?: Vault;
 }) {
   const [state, action, pending] = useActionState<SaveState, FormData>(answerRequirement, {});
   // 제어값 — `⌘↵`·제출 버튼이 빈 본문에서 required를 대신 막으려면 지금 글을 봐야 한다
@@ -816,6 +831,7 @@ export function AnswerForm({
         className="font-mono"
         required
         breaks="all"
+        vault={vault}
         // `⌘↵`로도 단다(§2 답변 항, 요구 `54f40caa`) — §3 요구 접수 칸과 같은 규칙 그대로다.
         onKeyDown={(e) => {
           if (!matchCombo(e.nativeEvent, sendCombo)) return;
@@ -845,6 +861,7 @@ export function AnswerForm({
  *  거기서는 스레드가 `진행 기록` 상자 안으로 들어가고 폼만 그 아래에 선다(§2-3 ①). */
 function AnswerFields({
   thread,
+  vault,
   ...props
 }: {
   project: string;
@@ -852,11 +869,12 @@ function AnswerFields({
   answerFile: string;
   thread: ThreadItem[];
   options: OptionGroup[];
+  vault?: Vault;
 }) {
   return (
     <>
-      <AnswerThread thread={thread} />
-      <AnswerForm {...props} />
+      <AnswerThread thread={thread} vault={vault} />
+      <AnswerForm {...props} vault={vault} />
     </>
   );
 }
@@ -881,6 +899,8 @@ export function AnswerDialog({
   options: OptionGroup[];
   /** 다이얼로그 머리에 요구사항 제목을 적는다 — 보드에서는 어느 카드를 열었는지가 안 보인다 */
   title: string;
+  /** 이름 -> href 벌(§비주얼 §10 §위키링크) — `AnswerFields`에 그대로 흘려보낸다 */
+  vault?: Vault;
 }) {
   return (
     <Dialog>
@@ -1211,11 +1231,14 @@ function DepsPicker({
 export function RequestDialog({
   project,
   trigger = "button",
+  vault,
 }: {
   project: string;
   /** `button` = 보드 우상단. `hotkey` = 프로젝트 셸에 한 번 마운트되는 **트리거 없는** 것 —
    *  버튼을 안 그리고 `r`을 듣는 유일한 인스턴스다(§3). */
   trigger?: "button" | "hotkey";
+  /** 이름 -> href 벌(§비주얼 §10 §위키링크) — 위지윅 면에 그대로 흘려보낸다 */
+  vault?: Vault;
 }) {
   const [state, action, pending] = useActionState<NewTicketState, FormData>(createTicket, {});
   // 본문은 **controlled**여야 한다: React 19는 form action이 끝나면 폼을 리셋하므로, uncontrolled면
@@ -1324,6 +1347,7 @@ export function RequestDialog({
               ariaLabel="요구 내용"
               placeholder={"무엇이 필요한지 그냥 쓰세요.\n첫 줄이 제목이 됩니다."}
               breaks="untilHeading"
+              vault={vault}
               onPaste={att.onPaste}
               // `⌘↵`로 접수한다. `Enter`는 줄바꿈 그대로고, 한글 조합 중의 `Enter`는
               // `matchCombo`의 `isComposing` 가드가 막는다(§3 · §21과 같은 규칙, 세 번째 칸이다).
@@ -1374,6 +1398,7 @@ export function NewTicketDialog({
   variant,
   copy,
   hotkey,
+  vault,
 }: {
   project: string;
   /** 프로필(`PROFILE.md`)이 있는 이름만. 보드의 **필터 목록을 넘기면 안 된다** — 그쪽은
@@ -1394,6 +1419,8 @@ export function NewTicketDialog({
   /** `board.new`(`n`)를 듣는다. **보드의 두 자리만 켠다** — 티켓 상세의 복제 버튼도 이 컴포넌트라
    *  켜면 상세에서 `n`이 복제 다이얼로그를 연다(§0-6 `어디서 듣나`는 보드다) */
   hotkey?: boolean;
+  /** 이름 -> href 벌(§비주얼 §10 §위키링크) — 위지윅 면에 그대로 흘려보낸다 */
+  vault?: Vault;
 }) {
   const [state, action, pending] = useActionState<NewTicketState, FormData>(createTicket, {});
   const [picked, setPicked] = useState<string[]>([]);
@@ -1628,6 +1655,7 @@ export function NewTicketDialog({
             rows={12}
             className="font-mono"
             breaks={kindValue === "request" ? "untilHeading" : undefined}
+            vault={vault}
             onPaste={att.onPaste}
           />
 

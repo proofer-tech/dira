@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { statusLabel } from "@/components/status-badge";
+import { buildVault } from "@/lib/markdown-wikilinks";
 import { computeOntologyMetrics, type OntologyMetrics } from "@/lib/ontology";
 import { ONTOLOGY_FIX_MARKER, listTickets, openFixTicket, statusOf, type Ticket } from "@/lib/queue";
 import { listTree, readTextFile, type ProtocolEntry, type ProtocolFile } from "@/lib/protocols";
@@ -113,6 +114,8 @@ export default async function Ontology({
   const base = ontologyDir(project);
   const tree = await listTree(base);
   const metrics = tree.length > 0 ? await loadMetrics(base, tree) : null;
+  // 위지윅 면의 `[[이름]]` -> 링크(§비주얼 §10 §위키링크) — 이름 집합은 여기서 한 번 읽는다.
+  const vault = buildVault(tree, (rel) => `/p/${id}/ontology?file=${encodeURIComponent(rel)}`);
 
   // 위반이 있을 때만 큐를 훑는다 — 카드가 안 서는 흔한 경우에 listTickets 비용을 안 낸다.
   // 판정(openFixTicket)은 `문제해결` 액션과 같은 함수다 — 갈리면 화면이 거짓말을 한다(§P230).
@@ -244,7 +247,13 @@ export default async function Ontology({
                 <AlertDescription>{selected.reason}</AlertDescription>
               </Alert>
             ) : (
-              <OntologyEditor key={selected.rel} projectId={id} rel={selected.rel} initial={selected.text} />
+              <OntologyEditor
+                key={selected.rel}
+                projectId={id}
+                rel={selected.rel}
+                initial={selected.text}
+                vault={vault}
+              />
             )}
           </div>
         </SidebarProvider>

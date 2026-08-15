@@ -36,7 +36,9 @@ import { PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { hasRegisteredToken, readAuth, readOtherEngineAuth, readTokenRows, readTokens } from "@/lib/auth";
 import { DEFAULT_LOCALE, t, type Locale } from "@/lib/i18n";
 import type { ResumeEvent } from "@/lib/machine-state";
-import { readSummary, readProjects, readLanguage } from "@/lib/projects";
+import { buildVault } from "@/lib/markdown-wikilinks";
+import { listTree } from "@/lib/protocols";
+import { ontologyDir, readSummary, readProjects, readLanguage } from "@/lib/projects";
 import type { DueAlert } from "@/lib/queue";
 import { engineLimits, formatTokens, listUsage, usageRates, type EngineLimit } from "@/lib/usage";
 import { engineName, workerGroups } from "@/lib/workers";
@@ -111,6 +113,9 @@ export default async function ProjectLayout({
   );
   const current = items.find((t) => t.id === id)!;
   const root = projects.find((t) => t.id === id)!.root;
+  // 위키링크 vault(§비주얼 §10 §위키링크) — 셸에 한 번만 마운트되는 요구 접수 단축키가 받는다.
+  const ontologyTree = await listTree(ontologyDir({ root }));
+  const vault = buildVault(ontologyTree, (rel) => `/p/${id}/ontology?file=${encodeURIComponent(rel)}`);
   // 셸 전체(헤더 · 알림 종 일곱 · status bar · 배너)가 이 사전을 쓴다(§0-16 §발행 §묶음 표 2,
   // `dd97c69c`) — ⑦만 옮겼던 첫 자리(`a50c8304`)에서 나머지 여섯이 여기서 이어졌다. idle 풀
   // 문구(바로 아래)가 먼저 이 값을 써서 `auth` 조립보다 앞으로 올라왔다.
@@ -267,7 +272,7 @@ export default async function ProjectLayout({
                 있지만 그쪽은 버튼이고 키를 안 듣는다(§0-4 `SettingsDialog`과 같은 모양).
                 **`connected`일 때만 선다**: 못 읽는 큐에는 접수해도 파일을 못 쓰는데,
                 열리고 나서 실패 사유를 보여 주면 사람이 글을 다 쓴 뒤에 잃는다(§3). */}
-            <RequestDialog project={id} trigger="hotkey" />
+            <RequestDialog project={id} trigger="hotkey" vault={vault} />
             {children}
           </>
         ) : (

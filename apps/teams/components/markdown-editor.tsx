@@ -44,6 +44,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { Markdown } from "@/components/markdown";
 import { useKeymap } from "@/components/keymap-provider";
 import { matchCombo } from "@/lib/keymap";
+import type { Vault } from "@/lib/markdown-wikilinks";
 import { cn } from "@/lib/utils";
 import { blockBreaks, commitEditable, splitBlocks } from "@/lib/markdown-editor-blocks";
 
@@ -98,6 +99,7 @@ export function MarkdownEditor({
   onPaste,
   onKeyDown,
   autoFocus,
+  vault,
 }: {
   name: string;
   /** 비제어 초기값 — 부모가 dirty 판정·리셋을 안 하는 자리(①)만 쓴다 */
@@ -131,6 +133,10 @@ export function MarkdownEditor({
    *  안 먹어 아래 마운트 effect가 직접 `.focus()`한다. 호출부가 안 주면 종전대로다(못 ⑤ 같은 원칙 —
    *  이 컴포넌트가 스스로 켜지 않는다). */
   autoFocus?: boolean;
+  /** 이름 -> href 벌(§비주얼 §10 §위키링크) — 위지윅 면이 읽기 전용 렌더를 그대로 재사용하므로
+   *  (위 top 주석) 호출부가 이 표를 안 주면 종전대로 `[[이름]]`이 글자다. 이 컴포넌트가 스스로
+   *  읽지 않는다 — 못 ⑤와 같은 원칙, 서버가 한 번 읽어 내려준 값을 그대로 흘린다. */
+  vault?: Vault;
 }) {
   const mode = useSyncExternalStore(subscribeMode, readMode, () => SERVER_MODE);
   const [innerText, setInnerText] = useState(defaultValue ?? "");
@@ -311,7 +317,11 @@ export function MarkdownEditor({
                     onPaste={onPaste}
                     onKeyDown={handleEditableKeyDown}
                   >
-                    <Markdown text={block} breaks={blockBreaks(i, breaks, split.firstHeadingIndex)} />
+                    <Markdown
+                      text={block}
+                      breaks={blockBreaks(i, breaks, split.firstHeadingIndex)}
+                      vault={vault}
+                    />
                   </div>
                 ))
               )}

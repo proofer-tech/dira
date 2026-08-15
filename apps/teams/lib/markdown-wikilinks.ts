@@ -55,3 +55,30 @@ export function wikilinks(vault?: Vault) {
     for (const child of (tree as Node).children ?? []) transform(child, vault);
   };
 }
+
+/** vault 트리 → `Vault`(§10 §위키링크 §이름 -> 파일). `.md`를 뗀 상대경로가 이름과 같거나
+ *  `/이름`으로 끝나는 파일이 그 이름을 가리킨다 — `보드`도 `화면/보드`도 `objects/화면/보드.md`
+ *  하나를 집는다. 후보가 둘 이상이면 상대경로 사전순 첫째. 접미사마다 후보를 모았다가
+ *  한 번에 정렬해 판정한다(스펙 표의 "둘 이상이면 …" 그대로). */
+export function buildVault(
+  files: { rel: string; isDir: boolean }[],
+  toHref: (rel: string) => string,
+): Vault {
+  const bySuffix = new Map<string, string[]>();
+  for (const f of files) {
+    if (f.isDir || !f.rel.endsWith(".md")) continue;
+    const rel = f.rel.slice(0, -3);
+    const segments = rel.split("/");
+    for (let i = 0; i < segments.length; i++) {
+      const suffix = segments.slice(i).join("/");
+      const list = bySuffix.get(suffix);
+      if (list) list.push(rel);
+      else bySuffix.set(suffix, [rel]);
+    }
+  }
+  const vault: Vault = {};
+  for (const [suffix, candidates] of bySuffix) {
+    vault[suffix] = toHref(`${candidates.sort()[0]}.md`);
+  }
+  return vault;
+}

@@ -19,6 +19,7 @@ import {
   type OntologyResult,
 } from "@/app/(app)/p/[project]/ontology/actions";
 import { MarkdownEditor } from "@/components/markdown-editor";
+import type { Vault } from "@/lib/markdown-wikilinks";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -178,10 +179,13 @@ export function OntologyEditor({
   projectId,
   rel,
   initial,
+  vault,
 }: {
   projectId: string;
   rel: string;
   initial: string;
+  /** 이름 -> href 벌(§비주얼 §10 §위키링크) — 서버가 이 온톨로지 트리에서 한 번 빌드해 내려준다 */
+  vault?: Vault;
 }) {
   const router = useRouter();
   const [text, setText] = useState(initial);
@@ -209,6 +213,7 @@ export function OntologyEditor({
         rows={28}
         className="font-mono"
         onChange={setText}
+        vault={vault}
       />
 
       {result && !result.ok && <Failure title="저장하지 못했습니다" message={result.message ?? ""} />}

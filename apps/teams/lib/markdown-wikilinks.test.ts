@@ -5,7 +5,7 @@ import assert from "node:assert";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import Markdown from "react-markdown";
-import { wikilinks, type Vault } from "./markdown-wikilinks.ts";
+import { buildVault, wikilinks, type Vault } from "./markdown-wikilinks.ts";
 
 function html(text: string, vault?: Vault) {
   return renderToStaticMarkup(
@@ -49,4 +49,37 @@ test("코드 스팬·펜스 안은 안 건드린다", () => {
   const vault: Vault = { 철수: "/x" };
   assert.match(html("`[[철수]]`", vault), /<code>\[\[철수\]\]<\/code>/);
   assert.match(html("```\n[[철수]]\n```", vault), /<pre><code>\[\[철수\]\]\n<\/code><\/pre>/);
+});
+
+const toHref = (rel: string) => `/p/1/ontology?file=${rel}`;
+
+test("buildVault - 전체 상대경로와 마지막 세그먼트 둘 다로 찾는다", () => {
+  const vault = buildVault([{ rel: "objects/화면/보드.md", isDir: false }], toHref);
+  assert.deepEqual(vault, {
+    보드: "/p/1/ontology?file=objects/화면/보드.md",
+    "화면/보드": "/p/1/ontology?file=objects/화면/보드.md",
+    "objects/화면/보드": "/p/1/ontology?file=objects/화면/보드.md",
+  });
+});
+
+test("buildVault - 후보가 둘이면 상대경로 사전순 첫째", () => {
+  const vault = buildVault(
+    [
+      { rel: "objects/화면/보드.md", isDir: false },
+      { rel: "objects/에픽/보드.md", isDir: false },
+    ],
+    toHref,
+  );
+  assert.equal(vault["보드"], "/p/1/ontology?file=objects/에픽/보드.md");
+});
+
+test("buildVault - 디렉터리와 .md 아닌 파일은 뺀다", () => {
+  const vault = buildVault(
+    [
+      { rel: "objects/화면", isDir: true },
+      { rel: "objects/화면/보드.png", isDir: false },
+    ],
+    toHref,
+  );
+  assert.deepEqual(vault, {});
 });

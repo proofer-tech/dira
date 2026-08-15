@@ -83,7 +83,9 @@ import {
   type SortKey,
   type Ticket,
 } from "@/lib/queue";
-import { getProject, listPersonas, readLanguage, resolveConfig } from "@/lib/projects";
+import { buildVault } from "@/lib/markdown-wikilinks";
+import { listTree } from "@/lib/protocols";
+import { getProject, listPersonas, ontologyDir, readLanguage, resolveConfig } from "@/lib/projects";
 import { findStream, lastActivity, sessionIdOf, type StreamEvent } from "@/lib/transcript";
 import { doneLimit, rowLimit } from "@/lib/urls";
 
@@ -259,6 +261,9 @@ export default async function Board({
 
   const config = await resolveConfig(project);
   const tickets = await listTickets(project.root, config);
+  // 위키링크 vault(§비주얼 §10 §위키링크) — 답변 다이얼로그·요구 접수·발행 다이얼로그가 그대로 받는다.
+  const ontologyTree = await listTree(ontologyDir(project));
+  const vault = buildVault(ontologyTree, (rel) => `/p/${id}/ontology?file=${encodeURIComponent(rel)}`);
   // 우선순위 미터의 sr-only 문구(§비주얼 §49) + 에픽 스윔레인·표 컬럼의 새 문구뿐(§0-16) —
   // 화면 나머지는 아직 미이행이다.
   const locale = await readLanguage();
@@ -630,6 +635,7 @@ export default async function Board({
           answerFile={`${awaitingOf(t)}${config.done}.md`}
           thread={threadOf(tickets, t, config)}
           options={lastQuestionOptions(threadOf(tickets, t, config))}
+          vault={vault}
         />
       )}
       {/* **카드의 마지막 자식** — 이 세션이 방금 한 일 한 줄(§1-1 ·
@@ -683,8 +689,9 @@ export default async function Board({
             personaDir={config.personas}
             variant="outline"
             hotkey
+            vault={vault}
           />
-          <RequestDialog project={id} />
+          <RequestDialog project={id} vault={vault} />
         </div>
       </div>
 
@@ -702,6 +709,7 @@ export default async function Board({
               deps={depOptions}
               personaDir={config.personas}
               hotkey
+              vault={vault}
             />
           }
         />

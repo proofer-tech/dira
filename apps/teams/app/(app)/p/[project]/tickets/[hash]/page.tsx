@@ -24,6 +24,8 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { findTicket } from "@/lib/engine";
+import { buildVault } from "@/lib/markdown-wikilinks";
+import { listTree } from "@/lib/protocols";
 import {
   archivedBy,
   archivesOf,
@@ -42,7 +44,7 @@ import {
   threadOf,
   type Ticket,
 } from "@/lib/queue";
-import { getProject, listPersonas, resolveConfig } from "@/lib/projects";
+import { getProject, listPersonas, ontologyDir, resolveConfig } from "@/lib/projects";
 import { findStream, sessionIdOf } from "@/lib/transcript";
 import { decodeHash, engineCan } from "@/lib/urls";
 import { holderEngine, listWorkers } from "@/lib/workers";
@@ -83,6 +85,11 @@ export default async function TicketDetail({
   const config = await resolveConfig(project);
   const file = await findTicket(project.root, hash, config);
   if (!file) notFound();
+
+  // 위키링크 vault(§비주얼 §10 §위키링크) — 이 프로젝트의 온톨로지. 이름 집합은 여기서 한 번
+  // 읽고 아래 모든 렌더·편집 자리(본문 · 스레드 · 세션 스트림 · 복제 다이얼로그)에 그대로 흘린다.
+  const ontologyTree = await listTree(ontologyDir(project));
+  const vault = buildVault(ontologyTree, (rel) => `/p/${id}/ontology?file=${encodeURIComponent(rel)}`);
 
   // §1-4 §계산 시점 — 한 번 읽어 이 렌더 전부(스캔·아래 "남은" 계산)에 같은 시각을 쓴다.
   const now = new Date();
@@ -209,6 +216,7 @@ export default async function TicketDetail({
             stream={!!transcript}
             awaiting={awaiting}
             answerFile={awaiting ? `${awaitingOf(ticket)}${config.done}.md` : undefined}
+            vault={vault}
           />
         ) : (
           <>
@@ -284,6 +292,7 @@ export default async function TicketDetail({
               persona: ticket.fm.persona ?? "",
               body: ticket.body,
             }}
+            vault={vault}
           />
           {/* 열린 티켓만 지운다. 사유가 둘이라 문장을 넘긴다 — 툴팁이 그대로 쓴다 */}
           <DeleteTicketButton
@@ -427,6 +436,7 @@ export default async function TicketDetail({
                 <Markdown
                   text={bodyRead}
                   breaks={ticket.fm.kind === "request" ? "untilHeading" : undefined}
+                  vault={vault}
                 />
               ) : (
                 <EmptyState text="본문 없음" />
@@ -451,6 +461,7 @@ export default async function TicketDetail({
                 personas={personas}
                 colors={project.personaColors}
                 body={ticket.body}
+                vault={vault}
               />
             )}
           </section>
