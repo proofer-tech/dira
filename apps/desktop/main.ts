@@ -390,11 +390,12 @@ ipcMain.handle("dira:pick-path", async (e, mode: unknown) => {
 // ── 릴리스 · 자동 업데이트 (R5·R6·R8) ──────────────────────────────────────
 //
 // 새 화면은 0개다 — `dialog.showMessageBox` 하나씩이고 `apps/teams`는 한 줄도 안 얹는다.
-// **받아두기만 하고 몰래 재시작하지 않는다**(R6): `autoInstallOnAppQuit`만 쓴다. 지금 당장
-// 설치하고 재시작시키는 API는 이 파일에 한 번도 나오지 않는다(판정이 `grep -c`라 이름도 안
-// 적는다 — R6이 부르지 말라고 한 그것이다). 이 앱 뒤에는 도는 세션과 cron 워커가 붙어 있어서
-// 임의 재시작이 못박는 것 3(자식 서버는 앱보다 오래 살지 않는다)을 사람이 모르는 시점에
-// 발동시킨다. 사람이 ⌘Q를 누르는 시점이 이미 "지금 재시작" 버튼이다.
+// **받아두고 종료할 때 적용한다. 몰래 재시작하지 않는다**(R6): 기본 경로는 `autoInstallOnAppQuit`
+// 뿐이다. 지금 당장 설치하고 재시작시키는 호출은 U3의 `지금 재시작` 버튼을 눌렀을 때 딱 한 자리에서만
+// 난다(요구 `9a04dabc` — 판정은 `grep -c`라 이름을 여기 안 적는다). 이 앱 뒤에는 도는 세션과
+// cron 워커가 붙어 있어서 임의 재시작이 못박는 것 3(자식 서버는 앱보다 오래 살지 않는다)을 사람이
+// 모르는 시점에 발동시키는데, 사람이 손으로 누른 시점은 이미 아는 시점이고 남는 구멍(무엇이
+// 도는지)은 `busy` 확인이 막는다(§재재판정).
 
 const { autoUpdater } = updater;
 autoUpdater.autoInstallOnAppQuit = true;
@@ -473,11 +474,46 @@ const releaseIo = {
   },
 };
 
-// R6 — 다 받으면 사실만 말한다. "지금 재시작" 버튼을 만들지 않는다.
+/** "지금 재시작"의 busy 확인 — `pollWork`와 같은 신뢰 경계 처리: 응답 실패이거나 `busy`가
+ *  boolean이 아니면 `true`로 친다(모르는 값으로 도는 세션의 서버를 끊지 않는다). */
+async function isBusy(origin: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${origin}/api/work`, { signal: AbortSignal.timeout(10_000) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const body: unknown = await res.json();
+    const busy = (body as { busy?: unknown })?.busy;
+    return typeof busy === "boolean" ? busy : true;
+  } catch {
+    return true;
+  }
+}
+
+// R6 — 다 받으면 사실만 말한다. `확인`(기본)은 종전처럼 아무 일도 안 하고, `지금 재시작`은
+// `busy`를 확인한 뒤에만 재시작한다(요구 `9a04dabc` — §재재판정).
 // **본문 첫 줄이 R6의 사실이고 노트는 그 아래 붙는다**(R7) — 요약이 죽어도 그 줄은 남는다.
 autoUpdater.on("update-downloaded", async (info) => {
   const detail = await releaseNotes(app.getVersion(), info.version, publishSlug(), releaseIo);
-  await dialog.showMessageBox({ type: "info", message: `${app.name} ${info.version}`, detail, buttons: ["확인"] });
+  const { response } = await dialog.showMessageBox({
+    type: "info",
+    message: `${app.name} ${info.version}`,
+    detail,
+    buttons: ["확인", "지금 재시작"],
+    defaultId: 0,
+    cancelId: 0,
+  });
+  if (response !== 1) return;
+  if (readyOrigin && (await isBusy(readyOrigin))) {
+    const { response: confirmed } = await dialog.showMessageBox({
+      type: "warning",
+      message: "지금 도는 일이 있습니다",
+      detail: "재시작하면 그 세션의 서버가 끊깁니다. 그냥 두면 다음 종료 때 적용됩니다.",
+      buttons: ["취소", "재시작"],
+      defaultId: 0,
+      cancelId: 0,
+    });
+    if (confirmed !== 1) return;
+  }
+  autoUpdater.quitAndInstall();
 });
 
 /** U1(`manual`) · 켤 때와 U2를 켠 직후의 배경 검사(`!manual`).
