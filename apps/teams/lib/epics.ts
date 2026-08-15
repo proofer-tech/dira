@@ -108,6 +108,16 @@ export async function epicReadmeBody(root: string, epic: string): Promise<string
     .trim();
 }
 
+/** 사이드바 입구의 키 칸 제안값(§에픽 결정 17 §키 제안) — 목록의 키 중 `P<숫자>` 꼴의 최댓값 + 1.
+ *  그 꼴이 하나도 없으면 빈 문자열 — 규칙이 아니라 제안값 하나다(값 검증-정규화는 안 한다). */
+export function suggestEpicKey(epics: Epic[]): string {
+  const nums = epics
+    .map((e) => /^P(\d+)$/.exec(e.epic)?.[1])
+    .filter((n): n is string => n !== undefined)
+    .map(Number);
+  return nums.length === 0 ? "" : `P${Math.max(...nums) + 1}`;
+}
+
 /** 사이드바 입구가 부르는 쓰기(§에픽 결정 17) — `epics/<키>/README.md` 한 장, 첫 줄이 제목이고
  *  그 뒤는 비어 있다. `memory/`는 안 만든다. 판정은 여기 하나뿐이다(`lib/epic.ts`의
  *  `writeEpic`/`EpicWriteResult`와 같은 짝 — 화면은 `reason`으로 실패 문구만 고른다).

@@ -19,8 +19,9 @@ import {
   SidebarProvider,
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
+import { EpicCreateButton } from "@/components/epic-sidebar-create";
 import { EpicRowPanel } from "@/components/epic-sidebar-panel";
-import { NO_EPIC, type Epic } from "@/lib/epics";
+import { NO_EPIC, suggestEpicKey, type Epic } from "@/lib/epics";
 import { t, type Locale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { WorkerChips } from "@/components/worker-mark";
@@ -29,6 +30,7 @@ import { WorkerChips } from "@/components/worker-mark";
 const WORKER_CHIP_CAP = 3;
 
 export function EpicSidebar({
+  projectId,
   epics,
   titles,
   active,
@@ -40,6 +42,8 @@ export function EpicSidebar({
   toggleHref,
   locale,
 }: {
+  /** 만들기 입구가 부르는 서버 액션에 넘긴다(§에픽 결정 17) — 사이드바에 새로 느는 프롭 하나 */
+  projectId: string;
   epics: Epic[];
   /** P번호 → `README.md` 첫 줄. 없거나 못 읽으면 `null`(§결정 5 §제목 없음). `NO_EPIC`은 키에 없다 */
   titles: Record<string, string | null>;
@@ -69,13 +73,14 @@ export function EpicSidebar({
   const allTotal = epics.reduce((n, e) => n + e.counts.open + e.counts.wip + e.counts.done, 0);
   const allWip = epics.reduce((n, e) => n + e.counts.wip, 0);
   // 접힌 컨트롤(펴기)과 펼친 컨트롤(접기)은 글리프 하나가 두 방향을 다 낸다(§52 ⑦) — 자리도
-  // 같다: `SidebarGroupLabel`이 서는 그 행(`h-6`·`px-2`·`ml-auto`), 낱말만 접히면 빠진다.
+  // 같다: `SidebarGroupLabel`이 서는 그 행(`h-6`·`px-2`). `ml-auto`는 결정 17이 만들기로
+  // 옮긴다(§52 ⑩) — 둘째 컨트롤이 서면서 그 자리가 만들기·접기 **쌍**의 앞쪽으로 간다.
   const toggle = (
     <Button
       variant="ghost"
       size="icon-xs"
       nativeButton={false}
-      className="ml-auto text-muted-foreground"
+      className="text-muted-foreground"
       title={t(locale, collapsed ? "board.epic.expand" : "board.epic.collapse")}
       render={<Link href={toggleHref} />}
     >
@@ -83,6 +88,8 @@ export function EpicSidebar({
       <span className="sr-only">{t(locale, collapsed ? "board.epic.expand" : "board.epic.collapse")}</span>
     </Button>
   );
+  // 만들기 입구의 키 제안(§에픽 결정 17 §키 제안) — 목록의 `P<숫자>` 최댓값 + 1.
+  const suggestedKey = suggestEpicKey(epics);
   return (
     // `w-full`·`min-h-svh` 기본값을 덮는다(personas-ui.tsx와 같은 처방) — 여기는 형제 열
     // 하나(칸반 또는 표)와 나란한 **한 칸**이지 2단 전체가 아니다.
@@ -102,9 +109,13 @@ export function EpicSidebar({
           ) : (
             <SidebarGroup className="p-0">
               {/* 드래그 중 "놓을 에픽을 고릅니다"로 갈리는 자리(§비주얼 §52 ⑤ (2)) —
-                  `board-ui.tsx`의 `EpicDrag`가 이 속성으로 찾는다. */}
-              <SidebarGroupLabel data-epic-group-label className="h-6 text-muted-foreground">
-                {t(locale, "board.epic.label")}
+                  `board-ui.tsx`의 `EpicDrag`가 이 속성으로 찾는다. 표식은 **행이 아니라 낱말을
+                  감싸는 span**에 붙는다(§52 ⑩ §함정) — 만들기의 `DialogTrigger`가 이 행에 서면서
+                  `innerHTML` 왕복(드래그 시작/끝)에 그 컨트롤이 갈리지 않아야 한다. 왕복이 행
+                  전체를 갈아 끼우면 React 핸들러를 든 버튼이 되돌아온 뒤 죽는다. */}
+              <SidebarGroupLabel className="h-6 gap-1 text-muted-foreground">
+                <span data-epic-group-label>{t(locale, "board.epic.label")}</span>
+                <EpicCreateButton projectId={projectId} locale={locale} suggestedKey={suggestedKey} />
                 {toggle}
               </SidebarGroupLabel>
               <SidebarMenu aria-label={t(locale, "board.epic.label")} className="gap-0.5">

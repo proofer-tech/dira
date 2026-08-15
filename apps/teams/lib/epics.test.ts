@@ -14,6 +14,7 @@ import {
   epicReadmeBody,
   epicTitle,
   listEpics,
+  suggestEpicKey,
 } from "./epics.ts";
 
 const DEFAULT: Suffixes = { inProgress: ".wip", done: ".done" };
@@ -180,6 +181,13 @@ test("에픽 만들기 — 빈 키·줄바꿈·큐 밖 경로를 막는다", asy
   const escape = await createEpic(root, "../../../etc", "제목");
   assert.strictEqual(escape.ok, false);
   if (!escape.ok) assert.strictEqual(escape.reason, "invalid");
+});
+
+test("키 제안 — P<숫자> 꼴의 최댓값 + 1, P273-2처럼 접미가 붙은 값은 안 센다", () => {
+  const mk = (epic: string) => ({ epic, counts: { open: 0, wip: 0, done: 0 }, workers: [] });
+  assert.strictEqual(suggestEpicKey([mk("P10"), mk("P273"), mk("P273-2"), mk(NO_EPIC)]), "P274");
+  assert.strictEqual(suggestEpicKey([mk(NO_EPIC)]), ""); // P<숫자> 꼴이 하나도 없다
+  assert.strictEqual(suggestEpicKey([]), "");
 });
 
 test("앱은 DESIGN.md를 안 판다(§검증 (4))", () => {

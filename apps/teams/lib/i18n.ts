@@ -161,6 +161,9 @@ export const ko: Record<string, string> = {
   "common.saving": "저장 중…",
   "common.add": "추가",
   "common.close": "닫기",
+  "common.cancel": "취소",
+  "common.create": "만들기",
+  "common.creating": "만드는 중…",
 
   // 발행 다이얼로그(§3)·티켓 상세 편집 폼(§2) select 라벨 — 같은 자리 같은 낱말이라 한 키를
   // 공유한다(§1-3 §값을 넣는 자리 셋. `62e0b85e`가 en을 채운다).
@@ -320,6 +323,13 @@ export const ko: Record<string, string> = {
   "board.epic.dropRemove": "놓으면 에픽에서 뺍니다",
   "board.epic.collapse": "에픽 목록 접기",
   "board.epic.expand": "에픽 목록 펴기",
+  // 사이드바 그룹 머리의 만들기 입구(§에픽 결정 17 · §비주얼 §52 ⑩) — 입구의 `sr-only` 낱말과
+  // 다이얼로그 제목이 같은 키다(트리거와 그릇이 같은 낱말인 것이 참조 구현의 관용구).
+  "board.epic.create": "에픽 만들기",
+  "board.epic.createDesc": "제목은 README.md 첫 줄, 키는 티켓 epic: 값입니다.",
+  "board.epic.createTitleLabel": "제목",
+  "board.epic.createKeyLabel": "키",
+  "board.epic.createFailed": "에픽을 만들지 못했습니다",
   "epics.empty": "에픽 없음",
   "epics.viewInBoard": "보드에서 보기",
   "epics.readme.missingBadge": "README 없음",
@@ -522,6 +532,9 @@ export const en: Record<string, string> = {
   "common.saving": "Saving…",
   "common.add": "Add",
   "common.close": "Close",
+  "common.cancel": "Cancel",
+  "common.create": "Create",
+  "common.creating": "Creating…",
 
   "ticket.priority.label": "Priority",
   // 상속 한 줄. **`inheritedMiddle`이 공백으로 시작하는 것은 의도다** — 앞에 해시가 공백 없이
@@ -680,6 +693,11 @@ export const en: Record<string, string> = {
   "board.epic.dropRemove": "Remove from epic",
   "board.epic.collapse": "Collapse epic list",
   "board.epic.expand": "Expand epic list",
+  "board.epic.create": "Create epic",
+  "board.epic.createDesc": "Title is the first line of README.md, key is the ticket's epic: value.",
+  "board.epic.createTitleLabel": "Title",
+  "board.epic.createKeyLabel": "Key",
+  "board.epic.createFailed": "Couldn't create the epic",
   "epics.empty": "No epics",
   "epics.viewInBoard": "View in board",
   "epics.readme.missingBadge": "No README",

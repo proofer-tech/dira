@@ -93,6 +93,7 @@ export default async function Epics({
     // 나란한 플렉스 행이면 된다(보드의 `flex min-h-0 flex-1 gap-6`와 같은 값).
     <div className="flex min-h-0 gap-6">
       <EpicSidebar
+        projectId={id}
         epics={epics}
         titles={titles}
         active={current?.epic ?? null}

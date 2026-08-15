@@ -785,6 +785,7 @@ export default async function Board({
               `gap-4`보다 한 눈금 커서 넷째 열로 안 읽힌다. */}
           <div className="flex min-h-0 flex-1 gap-6">
             <EpicSidebar
+              projectId={id}
               epics={epics}
               titles={titles}
               active={query.epic}
