@@ -7,7 +7,15 @@
  *  액션 뒤에 있다(fs 접근은 여기 없다). 결과를 **토스트에 담지 않는다** — 워커 스크립트 출력과
  *  검증 사유는 읽어야 하는 정보고, 3초 뒤 사라지는 자리에 두면 못 본다(DESIGN.md §8이 해석 결과
  *  표에 쓴 같은 근거다). */
-import { useActionState, useEffect, useRef, useState, useTransition, type ReactNode } from "react";
+import {
+  Fragment,
+  useActionState,
+  useEffect,
+  useRef,
+  useState,
+  useTransition,
+  type ReactNode,
+} from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -42,7 +50,7 @@ import {
   type AnswerPick,
 } from "@/lib/urls";
 // 스레드를 엮는 쪽은 서버(`lib/queue.ts threadOf`)다 — 여기 오는 건 타입뿐이라 `node:*`를 안 끈다
-import type { OptionGroup, ThreadItem } from "@/lib/queue";
+import type { Option, OptionGroup, ThreadItem } from "@/lib/queue";
 import { AttachmentField, useAttachments } from "@/components/attachment-field";
 import { useHotkey, useKeymap } from "@/components/keymap-provider";
 import { useLocale, useT } from "@/components/language-provider";
@@ -731,6 +739,20 @@ export function AnswerThread({
   );
 }
 
+/** 카드 세로 순서 = 조립된 글의 줄 순서(§비주얼 §29 §두 단 ①) — 문항을 앞줄 먼저 도는 순서로
+ *  편다. `picks[i]`가 이 순서와 1:1이라 `optionsOf`가 준 트리 모양을 벗어나지 않는다. */
+function flattenGroups(groups: OptionGroup[]): OptionGroup[] {
+  const out: OptionGroup[] = [];
+  const walk = (gs: OptionGroup[]) => {
+    for (const g of gs) {
+      out.push(g);
+      walk(g.sub);
+    }
+  };
+  walk(groups);
+  return out;
+}
+
 /** 답변 폼 **한 벌** — 두 자리가 쓴다(§2-3 ③ · ⑤): 보드의 답변 다이얼로그(`AnswerFields` 안)와
  *  티켓 상세 `진행 기록` 절의 답변 모드 입력칸(`session-stream.tsx`).
  *
@@ -759,14 +781,92 @@ export function AnswerForm({
   // 제어값 — `⌘↵`·제출 버튼이 빈 본문에서 required를 대신 막으려면 지금 글을 봐야 한다
   // (위지윅 면의 제출값은 hidden input이라 네이티브 `required`가 안 걷힌다, §P236-4).
   const [body, setBody] = useState("");
+  // 문항마다 하나(§결정 11 ⑨) — 하위 문항(`1-1.`)도 자기 칸을 가지므로 picks는 그룹 트리를
+  // 평평하게 편 순서와 1:1이다(§비주얼 §29 §두 단 ①). 트리 모양은 렌더 중 안 변하므로 이 순서는
+  // 세션 동안 고정이다.
+  const flatGroups = flattenGroups(options);
+  const groupIndex = new Map(flatGroups.map((g, i) => [g, i] as const));
   // 카드별 고른 것 + 덧붙임(§비주얼 §29 ⑤ 조립된 글이 보이는 자리) — 방향은 카드 -> 칸 한
   // 쪽뿐이다. 카드를 만질 때마다 `composeAnswer`가 입력칸을 통째로 다시 쓴다.
   const [picks, setPicks] = useState<AnswerPick[]>(() =>
-    options.map((g) => ({ number: g.number, letters: [], note: "" })),
+    flatGroups.map((g) => ({ number: g.number, letters: [], note: "" })),
   );
   const applyPicks = (next: AnswerPick[]) => {
     setPicks(next);
     setBody(composeAnswer(next));
+  };
+  // 상위를 끄면 하위 선택지도 같이 꺼지고 그 고른 것도 버려진다(§결정 11 ⑥ · §비주얼 §29 §두 단
+  // ⑨) — 글자가 `a` `a-1` `a-1-1`로 하이픈이 계층을 그대로 나르므로 접두사 하나로 하위 전부가
+  // 걸린다. 트리를 따로 안 걸어도 된다.
+  const toggleLetter = (groupIdx: number, letter: string, checked: boolean) => {
+    applyPicks(
+      picks.map((p, idx) =>
+        idx !== groupIdx
+          ? p
+          : {
+              ...p,
+              letters: checked
+                ? [...p.letters, letter]
+                : p.letters.filter((l) => l !== letter && !l.startsWith(`${letter}-`)),
+            },
+      ),
+    );
+  };
+  // 들여쓰기 상한 3단(§비주얼 §29 §두 단 ⑫) — 문항·선택지 두 축이 각자 `min(depth,2)`에서 멈춘다.
+  // 정규식은 4단도 통과시키므로(§결정 11 ③) 화면이 스스로 멈춰야 한다.
+  const subWrapClass = (depth: number) => (depth < 2 ? "ml-6 space-y-2" : "space-y-2");
+  const renderOptions = (opts: Option[], groupIdx: number, depth: number): ReactNode =>
+    opts.map((opt) => {
+      const checked = picks[groupIdx].letters.includes(opt.letter);
+      return (
+        <Fragment key={opt.letter}>
+          <label className="flex min-h-6 items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="size-4 shrink-0"
+              checked={checked}
+              aria-expanded={opt.options.length > 0 ? checked : undefined}
+              onChange={(e) => toggleLetter(groupIdx, opt.letter, e.target.checked)}
+            />
+            {/* `truncate` + `title` — 전문은 카드 바로 위 질문 산문에 이미 있다(§2 스레드가
+                질문의 유일한 출처) */}
+            <span className="truncate" title={opt.label}>
+              {opt.label}
+            </span>
+          </label>
+          {/* `(a-1)`은 `(a)`를 고르면 열리는 하위 선택지다(§결정 11 ⑤) — 전환 0, 조건부 렌더 하나 */}
+          {checked && opt.options.length > 0 && (
+            <div role="group" aria-label={opt.label} className={subWrapClass(depth)}>
+              {renderOptions(opt.options, groupIdx, depth + 1)}
+            </div>
+          )}
+        </Fragment>
+      );
+    });
+  // 문항 블록 하나(제목 · 선택지 · 덧붙임 칸) + 그 문항의 하위 문항들(§결정 11 ④). 카드는 여전히
+  // 문항 하나에 한 장이라 하위 문항은 새 카드가 아니라 이 안에서 겹친다(§비주얼 §29 §두 단 ①).
+  const renderGroupBody = (g: OptionGroup, depth: number): ReactNode => {
+    const idx = groupIndex.get(g)!;
+    return (
+      <>
+        <p className="text-sm font-medium">{g.heading}</p>
+        {renderOptions(g.options, idx, 0)}
+        <Input
+          placeholder="덧붙일 말"
+          value={picks[idx].note}
+          onChange={(e) =>
+            applyPicks(picks.map((p, i) => (i === idx ? { ...p, note: e.target.value } : p)))
+          }
+        />
+        {g.sub.length > 0 && (
+          <div role="group" aria-label={g.heading} className={subWrapClass(depth)}>
+            {g.sub.map((sg) => (
+              <Fragment key={sg.number}>{renderGroupBody(sg, depth + 1)}</Fragment>
+            ))}
+          </div>
+        )}
+      </>
+    );
   };
   const sendCombo = useKeymap().bindings["interject.send"];
   const empty = body.trim() === "";
@@ -779,49 +879,14 @@ export function AnswerForm({
           자체를 안 그린다 — 종전 화면과 한 픽셀도 안 갈린다(⑨). */}
       {options.length > 0 && (
         <div className="space-y-2">
-          {options.map((g, i) => (
+          {options.map((g) => (
             <div
-              key={i}
+              key={g.number}
               role="group"
               aria-label={g.heading}
               className="space-y-2 rounded-lg border p-3"
             >
-              <p className="text-sm font-medium">{g.heading}</p>
-              {g.options.map((opt) => (
-                <label key={opt.letter} className="flex min-h-6 items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    className="size-4 shrink-0"
-                    checked={picks[i].letters.includes(opt.letter)}
-                    onChange={(e) =>
-                      applyPicks(
-                        picks.map((p, idx) =>
-                          idx !== i
-                            ? p
-                            : {
-                                ...p,
-                                letters: e.target.checked
-                                  ? [...p.letters, opt.letter]
-                                  : p.letters.filter((l) => l !== opt.letter),
-                              },
-                        ),
-                      )
-                    }
-                  />
-                  {/* `truncate` + `title` — 전문은 카드 바로 위 질문 산문에 이미 있다(§2 스레드가
-                      질문의 유일한 출처) */}
-                  <span className="truncate" title={opt.label}>
-                    {opt.label}
-                  </span>
-                </label>
-              ))}
-              <Input
-                placeholder="덧붙일 말"
-                value={picks[i].note}
-                onChange={(e) =>
-                  applyPicks(picks.map((p, idx) => (idx === i ? { ...p, note: e.target.value } : p)))
-                }
-              />
+              {renderGroupBody(g, 0)}
             </div>
           ))}
         </div>
