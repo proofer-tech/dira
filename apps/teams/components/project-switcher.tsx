@@ -9,7 +9,8 @@
 import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Check, ChevronsUpDown, Settings2 } from "lucide-react";
+import { useCommandState } from "cmdk";
+import { Check, ChevronDown, ChevronsUpDown, ChevronUp, Settings2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { StatusBadge } from "@/components/status-badge";
 import { useLocale, useT } from "@/components/language-provider";
@@ -24,8 +25,14 @@ import {
   CommandShortcut,
 } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { ProjectSettingsDialog } from "@/components/projects-ui";
 import { parentPath, projectPath, screenOf } from "@/lib/urls";
-import { markFailuresReadAction, markResumeReadAction, trackEvent } from "@/app/actions";
+import {
+  markFailuresReadAction,
+  markResumeReadAction,
+  moveProjectAction,
+  trackEvent,
+} from "@/app/actions";
 import { formatCombo } from "@/lib/keymap";
 import { isTyping, useHotkey, useKeymap } from "@/components/keymap-provider";
 
@@ -188,6 +195,77 @@ export type SwitcherProject = {
   connected: boolean;
 };
 
+/** 항목의 액션 레일 — `/`의 `ProjectRowActions`와 같은 벌(같은 버튼 셋 · 같은 아이콘 · 같은
+ *  순서), 자리만 다르다: 그리드 밖 셋째 열, `self-center`(DESIGN.md §비주얼 §4-1 §액션 레일).
+ *
+ *  **클릭과 `↑` `↓` `Enter` 키다운을 항목으로 안 올린다.** `cmdk`의 선택·키 핸들러가 전부
+ *  `Command` 루트 하나의 리스너라(`cmdk`가 `CommandItem`엔 `onClick`, 루트엔 `onKeyDown` 하나만
+ *  둔다) 이 그릇 하나에서 막으면 위로 안 올라간다 — `Esc`·`Tab`은 안 막아 그대로 통과한다.
+ *
+ *  **탭 순서**는 `useCommandState`(cmdk 공개 API)로 지금 선택된 줄의 `value`를 읽어 그 줄만
+ *  `tabIndex=0`, 나머지는 `-1`로 둔다 — `Command`를 controlled로 바꾸지 않는다(검색·화살표
+ *  이동은 그대로 uncontrolled로 둬 이 개정이 건드리는 표면을 레일 하나로 좁힌다). */
+function SwitcherActionRail({
+  project,
+  value,
+  searching,
+  first,
+  last,
+  onOpenSettings,
+}: {
+  project: SwitcherProject;
+  value: string;
+  searching: boolean;
+  first: boolean;
+  last: boolean;
+  onOpenSettings: (p: SwitcherProject) => void;
+}) {
+  const selectedValue = useCommandState((s) => s.value);
+  const tabIndex = selectedValue === value ? 0 : -1;
+  const [pending, start] = useTransition();
+  const move = (dir: -1 | 1) => start(async () => void (await moveProjectAction(project.id, dir)));
+
+  return (
+    <div
+      className="flex shrink-0 items-center gap-1 self-center"
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => {
+        if (e.key === "ArrowUp" || e.key === "ArrowDown" || e.key === "Enter") e.stopPropagation();
+      }}
+    >
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        tabIndex={tabIndex}
+        aria-label={`${project.name} 위로`}
+        disabled={first || pending || searching}
+        onClick={() => move(-1)}
+      >
+        <ChevronUp aria-hidden className="text-muted-foreground" />
+      </Button>
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        tabIndex={tabIndex}
+        aria-label={`${project.name} 아래로`}
+        disabled={last || pending || searching}
+        onClick={() => move(1)}
+      >
+        <ChevronDown aria-hidden className="text-muted-foreground" />
+      </Button>
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        tabIndex={tabIndex}
+        aria-label={`${project.name} 설정`}
+        onClick={() => onOpenSettings(project)}
+      >
+        <Settings2 aria-hidden className="text-muted-foreground" />
+      </Button>
+    </div>
+  );
+}
+
 export function ProjectSwitcher({
   projects,
   currentId,
@@ -210,6 +288,11 @@ export function ProjectSwitcher({
     setShown(currentId);
     setGoing(null);
   }
+  // 레일의 `설정` — 팔레트를 먼저 닫고(§4-1) 그 뒤에 이 다이얼로그를 띄운다. `key={id}`가
+  // 대상이 바뀔 때만 상태를 새로 시작시키고(해석 결과 · 이름 입력 · 확인 화면), 같은
+  // 대상을 다시 여닫을 때는 인스턴스를 유지해 닫힘 애니메이션이 산다.
+  const [settingsProject, setSettingsProject] = useState<SwitcherProject | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   // 키도 하단 힌트도 **키맵에서 나온다**(§0-6 · §4-1 마지막 줄) — 하드코딩하면 사람이 키를
   // 바꾼 뒤에 화면이 옛 키를 말한다. 기본값 `Mod+k`는 브라우저 기본(검색창 포커스)을 뺏는다.
@@ -230,86 +313,119 @@ export function ProjectSwitcher({
     setQ("");
   };
 
+  const openSettings = (p: SwitcherProject) => {
+    close();
+    setSettingsProject(p);
+    setSettingsOpen(true);
+  };
+
   return (
-    <Popover open={open} onOpenChange={(v) => (v ? setOpen(true) : close())}>
-      <PopoverTrigger
-        render={
-          <Button
-            variant="ghost"
-            size="sm"
-            role="combobox"
-            aria-expanded={open}
-            aria-label={t("shell.switcher.ariaLabel")}
-            className="ml-auto h-8 max-w-md gap-2"
-          >
-            <span className="truncate text-sm text-foreground">{current.name}</span>
-            {!current.connected && <StatusBadge status="disconnected" locale={locale} />}
-            <span className="truncate font-mono text-xs text-muted-foreground group-aria-expanded/button:text-foreground">
-              {current.shortRoot}
-            </span>
-            <ChevronsUpDown aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
-          </Button>
-        }
-      />
-      <PopoverContent align="end" className="w-[28rem] p-0">
-        <Command>
-          <CommandInput
-            placeholder={t("shell.switcher.searchPlaceholder")}
-            value={q}
-            onValueChange={setQ}
-          />
-          <CommandList className="max-h-80">
-            <CommandEmpty>
-              {q
-                ? `"${q}"${t("shell.switcher.emptyQueriedGlue")} ${t("shell.switcher.emptySuffix")}`
-                : t("shell.switcher.emptySuffix")}
-            </CommandEmpty>
-            {projects.map((p) => (
-              <CommandItem
-                key={p.id}
-                value={`${p.name} ${p.shortRoot}`}
-                className="items-start gap-2 px-2 py-2"
-                onSelect={() => {
-                  close();
-                  if (p.id !== currentId) {
-                    setGoing(p);
-                    router.push(projectPath(pathname, p.id));
-                  }
-                }}
-              >
-                {/* 현재 표식이 없는 항목도 같은 폭을 차지한다 — 정렬이 흔들리면 스캔이 깨진다 */}
-                <span className="w-4 shrink-0 pt-0.5">
-                  {p.id === currentId && <Check aria-hidden className="size-4" />}
-                </span>
-                <span className="grid min-w-0 grow gap-1">
-                  <span className="flex items-center justify-between gap-2">
-                    <span className="truncate text-sm">{p.name}</span>
-                    {p.connected ? (
-                      <span className="shrink-0 text-xs tabular-nums text-muted-foreground group-data-selected/command-item:text-foreground">
-                        {t("shell.switcher.openLabel")} {p.open}
-                        {p.running > 0 && ` · running ${p.running}`}
+    <>
+      <Popover open={open} onOpenChange={(v) => (v ? setOpen(true) : close())}>
+        <PopoverTrigger
+          render={
+            <Button
+              variant="ghost"
+              size="sm"
+              role="combobox"
+              aria-expanded={open}
+              aria-label={t("shell.switcher.ariaLabel")}
+              className="ml-auto h-8 max-w-md gap-2"
+            >
+              <span className="truncate text-sm text-foreground">{current.name}</span>
+              {!current.connected && <StatusBadge status="disconnected" locale={locale} />}
+              <span className="truncate font-mono text-xs text-muted-foreground group-aria-expanded/button:text-foreground">
+                {current.shortRoot}
+              </span>
+              <ChevronsUpDown aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
+            </Button>
+          }
+        />
+        <PopoverContent align="end" className="w-[28rem] p-0">
+          <Command>
+            <CommandInput
+              placeholder={t("shell.switcher.searchPlaceholder")}
+              value={q}
+              onValueChange={setQ}
+            />
+            <CommandList className="max-h-80">
+              <CommandEmpty>
+                {q
+                  ? `"${q}"${t("shell.switcher.emptyQueriedGlue")} ${t("shell.switcher.emptySuffix")}`
+                  : t("shell.switcher.emptySuffix")}
+              </CommandEmpty>
+              {projects.map((p, i) => {
+                const value = `${p.name} ${p.shortRoot}`;
+                return (
+                  <CommandItem
+                    key={p.id}
+                    value={value}
+                    className="items-start gap-2 px-2 py-2"
+                    onSelect={() => {
+                      close();
+                      if (p.id !== currentId) {
+                        setGoing(p);
+                        router.push(projectPath(pathname, p.id));
+                      }
+                    }}
+                  >
+                    {/* 현재 표식이 없는 항목도 같은 폭을 차지한다 — 정렬이 흔들리면 스캔이 깨진다 */}
+                    <span className="w-4 shrink-0 pt-0.5">
+                      {p.id === currentId && <Check aria-hidden className="size-4" />}
+                    </span>
+                    <span className="grid min-w-0 grow gap-1">
+                      <span className="flex items-center justify-between gap-2">
+                        <span className="truncate text-sm">{p.name}</span>
+                        {p.connected ? (
+                          <span className="shrink-0 text-xs tabular-nums text-muted-foreground group-data-selected/command-item:text-foreground">
+                            {t("shell.switcher.openLabel")} {p.open}
+                            {p.running > 0 && ` · running ${p.running}`}
+                          </span>
+                        ) : (
+                          <StatusBadge status="disconnected" className="shrink-0" locale={locale} />
+                        )}
                       </span>
-                    ) : (
-                      <StatusBadge status="disconnected" className="shrink-0" locale={locale} />
-                    )}
-                  </span>
-                  <span className="truncate font-mono text-xs text-muted-foreground group-data-selected/command-item:text-foreground">
-                    {p.shortRoot}
-                  </span>
-                </span>
+                      <span className="truncate font-mono text-xs text-muted-foreground group-data-selected/command-item:text-foreground">
+                        {p.shortRoot}
+                      </span>
+                    </span>
+                    <SwitcherActionRail
+                      project={p}
+                      value={value}
+                      searching={q.length > 0}
+                      first={i === 0}
+                      last={i === projects.length - 1}
+                      onOpenSettings={openSettings}
+                    />
+                  </CommandItem>
+                );
+              })}
+              <CommandSeparator className="my-1" />
+              {/* 찾는 큐가 없으면 다음 행동은 등록이다 — 검색으로 걸러지지 않는다 */}
+              <CommandItem forceMount value={t("shell.nav.projects")} onSelect={() => router.push("/")}>
+                <Settings2 aria-hidden />
+                {t("shell.nav.projects")}
+                <CommandShortcut>{formatCombo(bindings["project.search"])}</CommandShortcut>
               </CommandItem>
-            ))}
-            <CommandSeparator className="my-1" />
-            {/* 찾는 큐가 없으면 다음 행동은 등록이다 — 검색으로 걸러지지 않는다 */}
-            <CommandItem forceMount value={t("shell.nav.projects")} onSelect={() => router.push("/")}>
-              <Settings2 aria-hidden />
-              {t("shell.nav.projects")}
-              <CommandShortcut>{formatCombo(bindings["project.search"])}</CommandShortcut>
-            </CommandItem>
-          </CommandList>
-        </Command>
-      </PopoverContent>
-    </Popover>
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
+      {/* 팔레트(Popover) 밖이다 — 안에 두면 닫히는 팔레트가 다이얼로그를 같이 걷어 간다(§4-1) */}
+      {settingsProject && (
+        <ProjectSettingsDialog
+          key={settingsProject.id}
+          id={settingsProject.id}
+          name={settingsProject.name}
+          shortRoot={settingsProject.shortRoot}
+          open={settingsOpen}
+          onOpenChange={setSettingsOpen}
+          onUnregistered={() => {
+            if (settingsProject.id === currentId) router.push("/");
+          }}
+        />
+      )}
+    </>
   );
 }
 

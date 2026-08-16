@@ -37,7 +37,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -586,24 +585,8 @@ export function ProjectRowActions({
 }) {
   const [pending, start] = useTransition();
   const [open, setOpen] = useState(false);
-  const [view, setView] = useState<ResolvedView | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [confirming, setConfirming] = useState(false);
-  const [newName, setNewName] = useState(name);
 
-  const load = () =>
-    start(async () => {
-      setError(null);
-      const r = await resolveProjectAction(id);
-      if ("rows" in r) setView(r);
-      else setError(r.message);
-    });
-
-  const move = (dir: -1 | 1) =>
-    start(async () => {
-      const r = await moveProjectAction(id, dir);
-      if (!r.ok) setError(r.message ?? "순서를 바꾸지 못했습니다.");
-    });
+  const move = (dir: -1 | 1) => start(async () => void (await moveProjectAction(id, dir)));
 
   return (
     <div className="flex items-center justify-end gap-1">
@@ -629,125 +612,177 @@ export function ProjectRowActions({
           <ChevronDown aria-hidden />
         </Button>
       </Hint>
-
-      <Dialog
-        open={open}
-        onOpenChange={(o) => {
-          setOpen(o);
-          setConfirming(false);
-          if (o) load();
-        }}
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-label={`${name} 설정`}
+        onClick={() => setOpen(true)}
       >
-        <DialogTrigger
-          render={
-            <Button variant="ghost" size="icon-sm" aria-label={`${name} 설정`}>
-              <Settings2 aria-hidden />
-            </Button>
-          }
-        />
-        <DialogContent className="sm:max-w-2xl">
-          {confirming ? (
-            <>
-              <DialogHeader>
-                <DialogTitle>프로젝트 등록 해제</DialogTitle>
-                <DialogDescription>
-                  &quot;{name}&quot;을 목록에서 제거합니다. 이 프로젝트의 티켓은 삭제되지 않습니다 —
-                  레지스트리에서만 빠집니다.
-                </DialogDescription>
-              </DialogHeader>
-              <p className="font-mono text-xs break-all">{shortRoot}</p>
-              <p className="text-sm text-muted-foreground">
-                같은 경로로 다시 등록하면 그대로 돌아옵니다.
-              </p>
-              <DialogFooter>
-                <DialogClose render={<Button variant="outline" autoFocus />}>취소</DialogClose>
+        <Settings2 aria-hidden />
+      </Button>
+      <ProjectSettingsDialog
+        id={id}
+        name={name}
+        shortRoot={shortRoot}
+        open={open}
+        onOpenChange={setOpen}
+      />
+    </div>
+  );
+}
+
+// ── 설정 다이얼로그 (한 벌 — `/`의 행 액션과 전환기 항목의 레일이 같이 연다) ──────────
+
+/** 이름 변경 · 온톨로지 마이그레이션 · 레지스트리에서 빼기. **여는 손잡이를 안 든다** — `open`·
+ *  `onOpenChange`는 호출부가 쥔다. 전환기 레일은 팔레트(Popover)를 먼저 닫고 이 다이얼로그를
+ *  띄워야 해서(DESIGN.md §비주얼 §4-1 §액션 레일 — 닫히는 Popover가 안의 다이얼로그를 같이
+ *  걷어 간다) `DialogTrigger`로 여는 벌을 못 쓴다 — `/`도 같은 벌을 쓰려고 여기서 맞춘다. */
+export function ProjectSettingsDialog({
+  id,
+  name,
+  shortRoot,
+  open,
+  onOpenChange,
+  onUnregistered,
+}: {
+  id: string;
+  name: string;
+  shortRoot: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  /** 레지스트리에서 뺀 뒤 호출된다 — 지금 보던 화면이 그 프로젝트였으면 어디로 보낼지는
+   *  호출부(전환기)가 안다. 이 컴포넌트는 "지금 어디 있나"를 모른다. */
+  onUnregistered?: () => void;
+}) {
+  const [pending, start] = useTransition();
+  const [view, setView] = useState<ResolvedView | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const [newName, setNewName] = useState(name);
+
+  const load = () =>
+    start(async () => {
+      setError(null);
+      const r = await resolveProjectAction(id);
+      if ("rows" in r) setView(r);
+      else setError(r.message);
+    });
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        onOpenChange(o);
+        setConfirming(false);
+        if (o) load();
+      }}
+    >
+      <DialogContent className="sm:max-w-2xl">
+        {confirming ? (
+          <>
+            <DialogHeader>
+              <DialogTitle>프로젝트 등록 해제</DialogTitle>
+              <DialogDescription>
+                &quot;{name}&quot;을 목록에서 제거합니다. 이 프로젝트의 티켓은 삭제되지 않습니다 —
+                레지스트리에서만 빠집니다.
+              </DialogDescription>
+            </DialogHeader>
+            <p className="font-mono text-xs break-all">{shortRoot}</p>
+            <p className="text-sm text-muted-foreground">
+              같은 경로로 다시 등록하면 그대로 돌아옵니다.
+            </p>
+            <DialogFooter>
+              <DialogClose render={<Button variant="outline" autoFocus />}>취소</DialogClose>
+              <Button
+                disabled={pending}
+                onClick={() =>
+                  start(async () => {
+                    const r = await unregisterProjectAction(id);
+                    if (r.ok) {
+                      onOpenChange(false);
+                      onUnregistered?.();
+                    } else setError(r.message ?? "등록 해제에 실패했습니다.");
+                  })
+                }
+              >
+                등록 해제
+              </Button>
+            </DialogFooter>
+          </>
+        ) : (
+          <>
+            <DialogHeader>
+              <DialogTitle>{name}</DialogTitle>
+              <DialogDescription className="font-mono text-xs break-all">
+                {shortRoot}
+              </DialogDescription>
+            </DialogHeader>
+
+            {error && (
+              <Alert variant="destructive">
+                <TriangleAlert aria-hidden />
+                <AlertTitle>설정을 읽지 못했습니다</AlertTitle>
+                <AlertDescription>
+                  <span className="font-mono text-xs break-all">{error}</span>
+                </AlertDescription>
+              </Alert>
+            )}
+
+            <div className="flex items-center justify-between gap-4">
+              <h3 className="text-sm font-medium">해석 결과</h3>
+              <Button variant="outline" size="sm" disabled={pending} onClick={load}>
+                {pending ? "읽는 중…" : "다시 읽기"}
+              </Button>
+            </div>
+            {view ? (
+              <ConfigTable view={view} />
+            ) : (
+              <p className="text-sm text-muted-foreground">읽는 중…</p>
+            )}
+
+            <OntologyMigration projectId={id} />
+
+            <div className="space-y-2 border-t pt-4">
+              <Label htmlFor={`rename-${id}`}>이름</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  id={`rename-${id}`}
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                />
                 <Button
+                  variant="outline"
                   disabled={pending}
                   onClick={() =>
                     start(async () => {
-                      const r = await unregisterProjectAction(id);
-                      if (r.ok) setOpen(false);
-                      else setError(r.message ?? "등록 해제에 실패했습니다.");
+                      const r = await renameProjectAction(id, newName);
+                      if (r.ok) onOpenChange(false);
+                      else setError(r.message ?? "이름을 바꾸지 못했습니다.");
                     })
                   }
                 >
-                  등록 해제
-                </Button>
-              </DialogFooter>
-            </>
-          ) : (
-            <>
-              <DialogHeader>
-                <DialogTitle>{name}</DialogTitle>
-                <DialogDescription className="font-mono text-xs break-all">
-                  {shortRoot}
-                </DialogDescription>
-              </DialogHeader>
-
-              {error && (
-                <Alert variant="destructive">
-                  <TriangleAlert aria-hidden />
-                  <AlertTitle>설정을 읽지 못했습니다</AlertTitle>
-                  <AlertDescription>
-                    <span className="font-mono text-xs break-all">{error}</span>
-                  </AlertDescription>
-                </Alert>
-              )}
-
-              <div className="flex items-center justify-between gap-4">
-                <h3 className="text-sm font-medium">해석 결과</h3>
-                <Button variant="outline" size="sm" disabled={pending} onClick={load}>
-                  {pending ? "읽는 중…" : "다시 읽기"}
+                  저장
                 </Button>
               </div>
-              {view ? (
-                <ConfigTable view={view} />
-              ) : (
-                <p className="text-sm text-muted-foreground">읽는 중…</p>
-              )}
+              <p className="text-xs text-muted-foreground">
+                URL 조각 <span className="font-mono">{id}</span>는 바뀌지 않습니다 — 열어 둔 링크와
+                북마크가 깨집니다.
+              </p>
+            </div>
 
-              <OntologyMigration projectId={id} />
-
-              <div className="space-y-2 border-t pt-4">
-                <Label htmlFor={`rename-${id}`}>이름</Label>
-                <div className="flex items-center gap-2">
-                  <Input
-                    id={`rename-${id}`}
-                    value={newName}
-                    onChange={(e) => setNewName(e.target.value)}
-                  />
-                  <Button
-                    variant="outline"
-                    disabled={pending}
-                    onClick={() =>
-                      start(async () => {
-                        const r = await renameProjectAction(id, newName);
-                        if (r.ok) setOpen(false);
-                        else setError(r.message ?? "이름을 바꾸지 못했습니다.");
-                      })
-                    }
-                  >
-                    저장
-                  </Button>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  URL 조각 <span className="font-mono">{id}</span>는 바뀌지 않습니다 — 열어 둔 링크와
-                  북마크가 깨집니다.
-                </p>
-              </div>
-
-              <div className="border-t pt-4">
-                {/* 빨강을 쓰지 않는다: 파일을 지우지 않고 다시 등록하면 돌아온다(§8). */}
-                <Button variant="outline" onClick={() => setConfirming(true)}>
-                  <Unlink aria-hidden />
-                  등록 해제
-                </Button>
-              </div>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
-    </div>
+            <div className="border-t pt-4">
+              {/* 빨강을 쓰지 않는다: 파일을 지우지 않고 다시 등록하면 돌아온다(§8). */}
+              <Button variant="outline" onClick={() => setConfirming(true)}>
+                <Unlink aria-hidden />
+                등록 해제
+              </Button>
+            </div>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 
