@@ -10,7 +10,7 @@ import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCommandState } from "cmdk";
-import { Check, ChevronDown, ChevronsUpDown, ChevronUp, Settings2 } from "lucide-react";
+import { Check, ChevronDown, ChevronsUpDown, ChevronUp, List, Settings2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { StatusBadge } from "@/components/status-badge";
 import { useLocale, useT } from "@/components/language-provider";
@@ -403,7 +403,7 @@ export function ProjectSwitcher({
               <CommandSeparator className="my-1" />
               {/* 찾는 큐가 없으면 다음 행동은 등록이다 — 검색으로 걸러지지 않는다 */}
               <CommandItem forceMount value={t("shell.nav.projects")} onSelect={() => router.push("/")}>
-                <Settings2 aria-hidden />
+                <List aria-hidden className="size-4" />
                 {t("shell.nav.projects")}
                 <CommandShortcut>{formatCombo(bindings["project.search"])}</CommandShortcut>
               </CommandItem>
