@@ -796,6 +796,13 @@ app.on("before-quit", () => {
   quitting = true;
   killServer();
 });
+// 네 번째 경로 — 내장 autoUpdater의 quitAndInstall()은 macOS에서 창을 먼저 닫고 이 이벤트를
+// 내며 app.quit()을 안 거친다. 위 before-quit이 안 떠서 따로 걸지 않으면 창만 내려가고
+// quitting도 거짓인 채라 close 가로채기(N1)가 창을 숨겨 앱이 안 죽는다.
+app.on("before-quit-for-update", () => {
+  quitting = true;
+  killServer();
+});
 // 트레이가 있으면 창이 없어도 앱이 아니다 (N1). 실패 화면은 트레이가 없어서 그대로 끝난다.
 app.on("window-all-closed", () => {
   if (!tray) app.quit();
