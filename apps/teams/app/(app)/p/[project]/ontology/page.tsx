@@ -10,7 +10,7 @@
  *  때 직접 읽는다. */
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { FileText, Folder, PanelLeft, TriangleAlert } from "lucide-react";
+import { ChevronRight, FileText, PanelLeft, TriangleAlert } from "lucide-react";
 import { FixSchemaViolationsButton, NewOntologyFileButton, OntologyEditor, OntologySurveyForm } from "@/components/ontology-ui";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -28,7 +28,14 @@ import { statusLabel } from "@/components/status-badge";
 import { buildVault } from "@/lib/markdown-wikilinks";
 import { computeOntologyMetrics, type OntologyMetrics } from "@/lib/ontology";
 import { ONTOLOGY_FIX_MARKER, listTickets, openFixTicket, statusOf, type Ticket } from "@/lib/queue";
-import { listTree, readTextFile, type ProtocolEntry, type ProtocolFile } from "@/lib/protocols";
+import {
+  listTree,
+  nestTree,
+  readTextFile,
+  type NestedEntry,
+  type ProtocolEntry,
+  type ProtocolFile,
+} from "@/lib/protocols";
 import { getProject, ontologyDir, resolveConfig } from "@/lib/projects";
 import { cn } from "@/lib/utils";
 
@@ -185,40 +192,9 @@ export default async function Ontology({
                 <div className="flex h-6 items-center pr-2">{toggle}</div>
                 {expanded && (
                   <SidebarMenu className="gap-0.5">
-                    {tree.map((e) =>
-                      e.isDir ? (
-                        <SidebarMenuItem key={e.rel}>
-                          <div
-                            className="flex h-8 items-center gap-1.5 px-2 text-xs text-muted-foreground"
-                            style={{ paddingLeft: `${e.depth * 0.75 + 0.5}rem` }}
-                          >
-                            <Folder aria-hidden className="size-3.5 shrink-0" />
-                            <span className="font-mono break-all">{e.name}</span>
-                          </div>
-                        </SidebarMenuItem>
-                      ) : (
-                        <SidebarMenuItem key={e.rel}>
-                          <SidebarMenuButton
-                            size="sm"
-                            className={ROW}
-                            isActive={e.rel === selected?.rel}
-                            aria-current={e.rel === selected?.rel ? "page" : undefined}
-                            render={
-                              <Link
-                                href={`/p/${id}/ontology?file=${encodeURIComponent(e.rel)}${sidebarQuery}`}
-                              />
-                            }
-                            style={{ paddingLeft: `${e.depth * 0.75 + 0.5}rem` }}
-                          >
-                            <FileText
-                              aria-hidden
-                              className="size-3.5 shrink-0 text-muted-foreground"
-                            />
-                            <span className="font-mono break-all">{e.name}</span>
-                          </SidebarMenuButton>
-                        </SidebarMenuItem>
-                      ),
-                    )}
+                    {nestTree(tree, selected?.rel).map((e) => (
+                      <TreeRow key={e.rel} entry={e} projectId={id} selectedRel={selected?.rel} sidebarQuery={sidebarQuery} />
+                    ))}
                   </SidebarMenu>
                 )}
               </SidebarGroup>
@@ -266,6 +242,61 @@ export default async function Ontology({
  *  (§34 판정표의 `안 바꾸는 값`들: `h-auto min-h-8` · `py-1` · `gap-1.5` · 아이콘 `size-3.5` ·
  *  파일명 줄바꿈). 두 화면이 같은 트리 관용구를 쓰므로 값도 같다. */
 const ROW = "h-auto min-h-8 gap-1.5 py-1 [&_svg]:size-3.5 [&>span:last-child]:whitespace-normal";
+
+/** 트리 줄 하나(디렉터리는 자기 아래를 재귀 - §비주얼 §54 §조립). 상태는 `<details>` 자신이
+ *  든다 - 새 클라이언트 상태 0. `nestTree`가 `open`을 이미 정해 놨으니 여기는 그리기만 한다. */
+function TreeRow({
+  entry: e,
+  projectId,
+  selectedRel,
+  sidebarQuery,
+}: {
+  entry: NestedEntry;
+  projectId: string;
+  selectedRel: string | undefined;
+  sidebarQuery: string;
+}) {
+  const style = { paddingLeft: `${e.depth * 0.75 + 0.5}rem` };
+
+  if (!e.isDir) {
+    return (
+      <SidebarMenuItem key={e.rel}>
+        <SidebarMenuButton
+          size="sm"
+          className={ROW}
+          isActive={e.rel === selectedRel}
+          aria-current={e.rel === selectedRel ? "page" : undefined}
+          render={<Link href={`/p/${projectId}/ontology?file=${encodeURIComponent(e.rel)}${sidebarQuery}`} />}
+          style={style}
+        >
+          <FileText aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
+          <span className="font-mono break-all">{e.name}</span>
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+    );
+  }
+
+  return (
+    <SidebarMenuItem key={e.rel}>
+      <details open={e.open} className="open:[&>summary>svg:first-child]:rotate-90">
+        <SidebarMenuButton
+          size="sm"
+          className={`${ROW} cursor-pointer list-none [&::-webkit-details-marker]:hidden text-muted-foreground`}
+          style={style}
+          render={<summary />}
+        >
+          <ChevronRight aria-hidden className="size-3.5 shrink-0" />
+          <span className="font-mono break-all">{e.name}</span>
+        </SidebarMenuButton>
+        <SidebarMenu className="gap-0.5">
+          {e.children.map((c) => (
+            <TreeRow key={c.rel} entry={c} projectId={projectId} selectedRel={selectedRel} sidebarQuery={sidebarQuery} />
+          ))}
+        </SidebarMenu>
+      </details>
+    </SidebarMenuItem>
+  );
+}
 
 /** DESIGN.md §5-3 §지표. 판정은 `lib/ontology.ts`가 다 하고 여기는 표시만 한다. */
 function OntologyMetricsPanel({

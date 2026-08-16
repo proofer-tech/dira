@@ -19,10 +19,12 @@ import {
   isCoreLayerName,
   listTree,
   mirrorCore,
+  nestTree,
   readCore,
   readTextFile,
   renameFile,
   saveFile,
+  type ProtocolEntry,
 } from "./protocols.ts";
 
 /** 재정의 큐 픽스처 — `TICKET_PROTOCOLS`가 **루트 밖**을 가리킨다.
@@ -358,4 +360,55 @@ test("엔진을 못 찾으면 vendored 큐도 손대지 않는다", async (t) =>
 
   await mirrorCore(queue);
   assert.strictEqual(readFileSync(path.join(queue, "CORE.md"), "utf8"), "그대로여야 한다\n");
+});
+
+test("nestTree — 빈 트리는 빈 배열이다", () => {
+  assert.deepStrictEqual(nestTree([]), []);
+});
+
+test("nestTree — 깊이 2 이상을 부모-자식으로 중첩한다", () => {
+  const entries: ProtocolEntry[] = [
+    { rel: "a", name: "a", depth: 0, isDir: true },
+    { rel: "a/b", name: "b", depth: 1, isDir: true },
+    { rel: "a/b/c.md", name: "c.md", depth: 2, isDir: false },
+    { rel: "a/sib", name: "sib", depth: 1, isDir: true },
+  ];
+
+  const nested = nestTree(entries);
+  assert.strictEqual(nested.length, 1);
+  assert.strictEqual(nested[0].rel, "a");
+  assert.strictEqual(nested[0].children.length, 2);
+  assert.strictEqual(nested[0].children[0].rel, "a/b");
+  assert.strictEqual(nested[0].children[0].children[0].rel, "a/b/c.md");
+  assert.deepStrictEqual(nested[0].children[0].children[0].children, []);
+  assert.strictEqual(nested[0].children[1].rel, "a/sib");
+});
+
+test("nestTree — 선택된 파일의 조상 디렉터리가 전부 열린다", () => {
+  const entries: ProtocolEntry[] = [
+    { rel: "a", name: "a", depth: 0, isDir: true },
+    { rel: "a/b", name: "b", depth: 1, isDir: true },
+    { rel: "a/b/c.md", name: "c.md", depth: 2, isDir: false },
+  ];
+
+  const nested = nestTree(entries, "a/b/c.md");
+  assert.strictEqual(nested[0].open, true); // a
+  assert.strictEqual(nested[0].children[0].open, true); // a/b
+});
+
+test("nestTree — 조상이 아닌 가지는 안 열린다(기본값 전부 접힘)", () => {
+  const entries: ProtocolEntry[] = [
+    { rel: "a", name: "a", depth: 0, isDir: true },
+    { rel: "a/b", name: "b", depth: 1, isDir: true },
+    { rel: "a/b/c.md", name: "c.md", depth: 2, isDir: false },
+    { rel: "a/sib", name: "sib", depth: 1, isDir: true },
+    { rel: "a/sib/d.md", name: "d.md", depth: 2, isDir: false },
+  ];
+
+  const nested = nestTree(entries, "a/b/c.md");
+  const sib = nested[0].children.find((c) => c.rel === "a/sib")!;
+  assert.strictEqual(sib.open, false);
+
+  const noSelection = nestTree(entries);
+  assert.ok(noSelection.every((n) => n.open === false));
 });

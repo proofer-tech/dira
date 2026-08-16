@@ -70,6 +70,31 @@ function byTreeOrder(a: ProtocolEntry, b: ProtocolEntry): number {
   return A.length - B.length;
 }
 
+export type NestedEntry = ProtocolEntry & { children: NestedEntry[]; open: boolean };
+
+/** 평면 `ProtocolEntry[]` → 중첩 + 조상 열림 판정 (DESIGN.md §6 §트리 안의 디렉터리 줄이
+ *  접힌다). `entries`는 `listTree`가 낸 순서(부모 바로 뒤에 자식) 그대로 들어와야 한다 — 깊이만
+ *  보고 스택을 쌓으므로 정렬이 깨지면 트리도 깨진다. 기본값은 전부 접힘(`open: false`)이고,
+ *  `selectedRel`의 조상 디렉터리만 `open: true`다. fs도 JSX도 안 타는 순수 함수라 `node --test`가
+ *  직접 받는다. */
+export function nestTree(entries: ProtocolEntry[], selectedRel?: string): NestedEntry[] {
+  const openAncestors = new Set<string>();
+  if (selectedRel) {
+    const parts = selectedRel.split("/");
+    for (let i = 1; i < parts.length; i++) openAncestors.add(parts.slice(0, i).join("/"));
+  }
+
+  const roots: NestedEntry[] = [];
+  const dirStack: NestedEntry[] = []; // 깊이별 마지막으로 연 디렉터리 노드
+  for (const e of entries) {
+    const node: NestedEntry = { ...e, children: [], open: e.isDir && openAncestors.has(e.rel) };
+    while (dirStack.length > e.depth) dirStack.pop();
+    (dirStack.length > 0 ? dirStack[dirStack.length - 1].children : roots).push(node);
+    if (e.isDir) dirStack.push(node);
+  }
+  return roots;
+}
+
 /** 코어 프로토콜 한 장. `name`이 화면의 선택 키다(`?core=`) — 경로를 URL에 싣지 않는다. */
 export type CoreFile = { name: string; path: string; text: string };
 
