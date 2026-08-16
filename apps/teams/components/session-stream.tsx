@@ -60,6 +60,7 @@ import {
   groupProgress,
   interjectMode,
   mergeProgress,
+  NO_QUESTION_SECTION_NOTICE,
   progressMarkerText,
   type InterjectMode,
 } from "@/lib/urls";
@@ -284,6 +285,15 @@ export function SessionStream({
             </div>
           )}
         </div>
+      )}
+
+      {/* 결정 11 ⑩ — `awaiting`인데 본문에 `## 질문 n` 절이 없으면(실측 8건) 스레드 자리가
+          통째로 비고 화면이 "답변 대기"라고만 말해 무엇을 묻는지가 안 보였다. 폼은 안 감춘다 —
+          아래 `ProgressForm`이 그대로 서고 사람은 산문으로 답을 쓸 수 있다. `<EmptyState>`를
+          안 쓴다 — 1차 콘텐츠가 아니고(§9), 그 자리는 `AnswerThread`(보드 다이얼로그)와 값 하나를
+          공유한다(`lib/urls.ts`). 새 색 0 — 에러가 아니라 §9 관용구 그대로 `muted-foreground`. */}
+      {awaiting && thread.length === 0 && (
+        <p className="px-3 text-xs text-muted-foreground">{NO_QUESTION_SECTION_NOTICE}</p>
       )}
 
       {/* 입력칸 — 상자 **밖 · 밑**이다(§2-2 · §비주얼 §21). 여기 한 곳에 다니까 티켓 상세와

@@ -34,7 +34,13 @@ import type { UnassignRun } from "@/lib/engine";
 import { matchCombo } from "@/lib/keymap";
 // `composeAnswer`(§비주얼 §29 방향 — 체크박스마다 다시 돈다)는 여기 산다: node:*가 없는
 // 클라이언트·서버 공용 순수 함수 자리다(AGENTS.md). `lib/queue.ts`는 `node:fs`를 타서 못 부른다.
-import { activeEpicFrom, composeAnswer, formatRemaining, type AnswerPick } from "@/lib/urls";
+import {
+  activeEpicFrom,
+  composeAnswer,
+  formatRemaining,
+  NO_QUESTION_SECTION_NOTICE,
+  type AnswerPick,
+} from "@/lib/urls";
 // 스레드를 엮는 쪽은 서버(`lib/queue.ts threadOf`)다 — 여기 오는 건 타입뿐이라 `node:*`를 안 끈다
 import type { OptionGroup, ThreadItem } from "@/lib/queue";
 import { AttachmentField, useAttachments } from "@/components/attachment-field";
@@ -716,6 +722,11 @@ export function AnswerThread({
           </MessageScroller>
         </MessageScrollerProvider>
       )}
+      {/* 결정 11 ⑩ — 이 컴포넌트는 `isAwaiting(t)`일 때만 열린다(호출부 `AnswerDialog`), 그래서
+          `thread.length === 0`은 곧 "답변 대기인데 `## 질문 n` 절이 없다"이다(실측 8건). 스크롤러
+          없이 이 줄 하나만 서고 폼은 안 감춘다 — 산문으로 답할 길은 아래에 그대로 있다. 상세
+          (`session-stream.tsx`)와 문구를 `lib/urls.ts` 값 하나로 공유한다. */}
+      {thread.length === 0 && <p className="text-xs text-muted-foreground">{NO_QUESTION_SECTION_NOTICE}</p>}
     </>
   );
 }

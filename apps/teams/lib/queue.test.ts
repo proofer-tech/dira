@@ -1076,6 +1076,18 @@ test("답변 대기 판정 + 답변 파일 생성으로 재큐 (엔진과 대조
       awaiting: "c3333333",
     }),
   );
+  // 결정 11 ⑩ 실측(8건, `db6d5e0b`형) — 답변 대기인데 `## 질문 n` 절이 없다. 산문만 있다
+  await write(
+    r,
+    "r0000004.md",
+    fm({
+      ticket: "r0000004",
+      title: "질문 절 없는 요구사항",
+      kind: "request",
+      deps: "[d4444444]",
+      awaiting: "d4444444",
+    }) + "질문 절 없이 쓴 산문 요구다.\n",
+  );
 
   const before = await listTickets(r, DEFAULT);
   const at = (h: string) => before.find((t) => t.hash === h)!;
@@ -1088,6 +1100,11 @@ test("답변 대기 판정 + 답변 파일 생성으로 재큐 (엔진과 대조
   // `.wip`은 state로 걸러진다 — 답변칸도 경고도 없다
   assert.strictEqual(isAwaiting(at("r0000003")), false);
   assert.strictEqual(awaitingUnlocked(at("r0000003")), false);
+  // 결정 11 ⑩ — 답변 대기(true)인데 `## 질문 n`이 없어 스레드가 0건이다. 화면(`session-stream.tsx` ·
+  // `AnswerThread`)은 이 조합(`isAwaiting && threadOf(...).length === 0`) 하나로 빈 상태 문구를 켠다.
+  assert.strictEqual(isAwaiting(at("r0000004")), true);
+  assert.deepStrictEqual(questionsOf(at("r0000004").body), []);
+  assert.deepStrictEqual(threadOf(before, at("r0000004"), DEFAULT), []);
 
   // 본문 스레드: `## 질문 n`만 집고, h3 이하는 그 질문 안에 남는다
   assert.deepStrictEqual(questionsOf(at("r0000001").body), [

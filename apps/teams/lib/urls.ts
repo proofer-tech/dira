@@ -561,3 +561,10 @@ export function composeAnswer(picks: AnswerPick[]): string {
   }
   return lines.join("\n");
 }
+
+/** `awaiting`인데 본문에 `## 질문 n` 절이 없는 요구사항(DESIGN.md §요구사항 레이어 결정 11 ⑩)의
+ *  스레드 자리 문구 — 상세(`session-stream.tsx`)와 보드 답변 다이얼로그(`ticket-ui.tsx`
+ *  `AnswerThread`) 둘 다 이 값 하나를 그린다. **`lib/queue.ts`가 아니라 여기 사는 이유는 이 파일
+ *  머리와 같다** — 둘 다 클라이언트 컴포넌트라 `node:fs`를 타는 `queue.ts`에서 값을 못 부른다.
+ *  폼은 안 감춘다 — 사람이 산문으로 답할 길은 그대로 남는다. */
+export const NO_QUESTION_SECTION_NOTICE = "질문 절 없음 — 산문으로 아래에 답을 남길 수 있습니다";
