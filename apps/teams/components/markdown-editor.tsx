@@ -301,11 +301,15 @@ export function MarkdownEditor({
               ) : (
                 split.blocks.map((block, i) => (
                   <div
-                    // 인덱스 키 — 블록 배열은 `text`가 바뀔 때만 다시 잘리고, 그때 전 블록이 새
-                    // `<Markdown>` 콘텐츠로 다시 그려지는 게 맞다(고친 블록만 재파싱된 결과를 본다).
+                    // 인덱스+내용 키(DESIGN.md §비주얼 §50 §커밋 뒤의 블록은 원문의 렌더 그대로다) —
+                    // `key={i}`만 쓰면 커밋으로 그 블록의 `text`가 갈려도 React는 같은 DOM 노드에
+                    // 새 `<Markdown>` 트리를 겹쳐 그린다(diff 기준이 사람이 `contentEditable`로
+                    // 직접 고친 DOM이 아니라 앞 커밋의 렌더라서). 내용을 키에 실으면 그 블록만
+                    // 키가 바뀌어 React가 노드를 통째로 새로 만든다 — 사람이 만든 노드가 하나도
+                    // 안 남는다. 안 갈린 블록은 키가 그대로라 재마운트가 없다.
                     // `data-block-index`는 제출 가로채기가 `document.activeElement`에서 이 `i`를
                     // 되찾는 자리다(`lib/markdown-editor-blocks.ts`의 `commitEditable`).
-                    key={i}
+                    key={`${i}:${block}`}
                     ref={i === 0 ? firstEditableRef : undefined}
                     data-block-index={i}
                     contentEditable
