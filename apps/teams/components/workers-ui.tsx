@@ -139,6 +139,7 @@ export function CreateWorkerButton({
   canTemplate,
   firstCmd,
   variant,
+  defaultName = "",
 }: {
   projectId: string;
   /** 템플릿으로 쓸 기존 워커가 있는가. 없으면 GUI가 만들 수 없다(엔진 코드 위치를 모른다) */
@@ -146,9 +147,12 @@ export function CreateWorkerButton({
   /** 워커 0개일 때 손으로 첫 워커를 만드는 명령 */
   firstCmd: string;
   variant?: "default" | "outline";
+  /** `이름` 칸의 기본값 — `nextWorkerName`이 계산한 값(DESIGN.md §4-13). 제안이지 예약이 아니라
+   *  읽기 전용이 아니다 — 지우고 다시 쓸 수 있고, 닫으면 이 값으로 돌아간다. */
+  defaultName?: string;
 }) {
   const [open, setOpen] = useState(false);
-  const [name, setName] = useState("");
+  const [name, setName] = useState(defaultName);
   const [result, setResult] = useState<WorkerActionResult | null>(null);
   const [pending, start] = useTransition();
   const created = result?.created;
@@ -159,7 +163,7 @@ export function CreateWorkerButton({
       onOpenChange={(o) => {
         setOpen(o);
         if (!o) {
-          setName("");
+          setName(defaultName);
           setResult(null);
         }
       }}
@@ -250,7 +254,7 @@ export function CreateWorkerButton({
               <Input
                 id="worker-name"
                 className="font-mono"
-                placeholder="w4"
+                placeholder={defaultName}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
               />

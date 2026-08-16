@@ -55,6 +55,7 @@ const {
   holderEngine,
   lockPath,
   listWorkers,
+  nextWorkerName,
   parseContextBlock,
   readCommonContext,
   renderContextBlock,
@@ -161,6 +162,17 @@ test("exampleWorkers — 온보딩 예시 앞의 둘 (§비주얼 §24)", () => 
   assert.deepStrictEqual(exampleWorkers([w("w1", "stopped"), w("w2", "idle")]), ["w1", "w2"]);
   // running이 있으면 그게 <활성>이고, <다른>은 이름이 다른 첫 워커다(목록의 첫째가 아니다)
   assert.deepStrictEqual(exampleWorkers([w("w1", "idle"), w("w2", "running")]), ["w2", "w1"]);
+});
+
+test("nextWorkerName — 생성 다이얼로그 이름 칸 기본값 (§4-13)", () => {
+  // 워커 0개면 w1
+  assert.strictEqual(nextWorkerName([]), "w1");
+  // 연속된 번호면 다음 번호
+  assert.strictEqual(nextWorkerName(["w1", "w2", "w3"]), "w4");
+  // 빈 번호(w3)를 메우지 않는다 — 방금 지운 워커의 자리다
+  assert.strictEqual(nextWorkerName(["w1", "w2", "w4"]), "w5");
+  // w<숫자> 꼴이 아닌 이름은 세는 데서 빠진다
+  assert.strictEqual(nextWorkerName(["qa", "builder"]), "w1");
 });
 
 /** `crontab -l`을 가로챈다. 진짜 crontab을 읽으면 이 머신의 등록 상태에 따라 결과가 흔들린다.

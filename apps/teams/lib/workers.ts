@@ -1230,6 +1230,19 @@ export function exampleWorkers(workers: Pick<Worker, "name" | "status">[]): stri
   return [active.name, (workers.find((w) => w.name !== active.name) ?? active).name];
 }
 
+const W_NUM_RE = /^w(\d+)$/;
+
+/** 워커 생성 다이얼로그 `이름` 칸의 기본값 (DESIGN.md §4-13, 요구 `a5046a44`) — `w<N>`,
+ *  `N`은 목록의 `w<숫자>` 이름 중 가장 큰 수 + 1. 그런 이름이 없으면 `w1`. 빈 번호는 안
+ *  메운다(`w1 w2 w4` → `w5`) — 방금 지운 워커의 자리라 되쓰면 남의 워크트리를 물려받는다. */
+export function nextWorkerName(names: string[]): string {
+  const max = names.reduce((m, name) => {
+    const hit = W_NUM_RE.exec(name);
+    return hit ? Math.max(m, Number(hit[1])) : m;
+  }, 0);
+  return `w${max + 1}`;
+}
+
 /** 목록 행의 워커 줄 — 상태별 묶음(DESIGN.md §비주얼 §7). `running 1 / idle 1` 요약을 대체한다:
  *  같은 모양에 이름을 채워 넣은 것이다.
  *

@@ -38,6 +38,7 @@ import {
   engineName,
   firstWorkerCmd,
   listWorkers,
+  nextWorkerName,
   readCommonContext,
 } from "@/lib/workers";
 
@@ -138,7 +139,12 @@ export default async function Workers({ params }: { params: Promise<{ project: s
           )}
         </div>
         {rows.length > 0 && (
-          <CreateWorkerButton projectId={id} canTemplate firstCmd={firstWorkerCmd(project.root)} />
+          <CreateWorkerButton
+            projectId={id}
+            canTemplate
+            firstCmd={firstWorkerCmd(project.root)}
+            defaultName={nextWorkerName(workers.map((w) => w.name))}
+          />
         )}
       </div>
 
