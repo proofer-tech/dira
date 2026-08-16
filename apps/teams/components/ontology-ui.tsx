@@ -56,10 +56,10 @@ function Failure({ title, message }: { title: string; message: string }) {
   );
 }
 
-// 편 상태가 파일 고르기를 지나 유지된다(§6 계약) — 저장·생성·삭제·이름변경 뒤 리다이렉트도
-// 지금 `?sidebar=on`을 그대로 나른다.
-const fileHref = (projectId: string, rel: string, sidebarOn: boolean) =>
-  `/p/${projectId}/ontology?file=${encodeURIComponent(rel)}${sidebarOn ? "&sidebar=on" : ""}`;
+// 접힌 상태가 파일 고르기를 지나 유지된다(§6 계약) — 저장·생성·삭제·이름변경 뒤 리다이렉트도
+// 지금 `?sidebar=off`를 그대로 나른다.
+const fileHref = (projectId: string, rel: string, sidebarOff: boolean) =>
+  `/p/${projectId}/ontology?file=${encodeURIComponent(rel)}${sidebarOff ? "&sidebar=off" : ""}`;
 
 // ── 새 파일 ─────────────────────────────────────────────────────────────────
 
@@ -71,7 +71,7 @@ export function NewOntologyFileButton({
   variant?: "default" | "outline";
 }) {
   const router = useRouter();
-  const sidebarOn = useSearchParams().get("sidebar") === "on";
+  const sidebarOff = useSearchParams().get("sidebar") === "off";
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [result, setResult] = useState<OntologyResult | null>(null);
@@ -127,7 +127,7 @@ export function NewOntologyFileButton({
                 setResult(r);
                 if (r.ok && r.rel) {
                   setOpen(false);
-                  router.replace(fileHref(projectId, r.rel, sidebarOn));
+                  router.replace(fileHref(projectId, r.rel, sidebarOff));
                 }
               })
             }
@@ -260,7 +260,7 @@ export function OntologyEditor({
 
 function RenameOntologyButton({ projectId, rel }: { projectId: string; rel: string }) {
   const router = useRouter();
-  const sidebarOn = useSearchParams().get("sidebar") === "on";
+  const sidebarOff = useSearchParams().get("sidebar") === "off";
   const [open, setOpen] = useState(false);
   const [to, setTo] = useState(rel);
   const [result, setResult] = useState<OntologyResult | null>(null);
@@ -311,7 +311,7 @@ function RenameOntologyButton({ projectId, rel }: { projectId: string; rel: stri
                 setResult(r);
                 if (r.ok && r.rel) {
                   setOpen(false);
-                  router.replace(fileHref(projectId, r.rel, sidebarOn));
+                  router.replace(fileHref(projectId, r.rel, sidebarOff));
                 }
               })
             }
@@ -328,7 +328,7 @@ function RenameOntologyButton({ projectId, rel }: { projectId: string; rel: stri
 
 function DeleteOntologyButton({ projectId, rel }: { projectId: string; rel: string }) {
   const router = useRouter();
-  const sidebarOn = useSearchParams().get("sidebar") === "on";
+  const sidebarOff = useSearchParams().get("sidebar") === "off";
   const [open, setOpen] = useState(false);
   const [result, setResult] = useState<OntologyResult | null>(null);
   const [pending, start] = useTransition();
@@ -364,7 +364,7 @@ function DeleteOntologyButton({ projectId, rel }: { projectId: string; rel: stri
                 setResult(r);
                 if (r.ok) {
                   setOpen(false);
-                  router.replace(`/p/${projectId}/ontology${sidebarOn ? "?sidebar=on" : ""}`);
+                  router.replace(`/p/${projectId}/ontology${sidebarOff ? "?sidebar=off" : ""}`);
                 }
               })
             }

@@ -77,16 +77,16 @@ export default async function Ontology({
   const project = await getProject(id);
   if (!project) notFound();
 
-  // `?sidebar=on`(§6 §파일트리 사이드바 둘이 접힌다) — 없거나 모르는 값이면 접힘(기본값).
-  const expanded = sidebar === "on";
-  // 트리 링크가 나르는 값 — 편 상태가 파일 고르기를 지나 유지된다(계약).
-  const sidebarQuery = expanded ? "&sidebar=on" : "";
+  // `?sidebar=off`(§6 §파일트리 사이드바 둘이 접힌다) — 없거나 모르는 값이면 펼침(기본값).
+  const expanded = sidebar !== "off";
+  // 트리 링크가 나르는 값 — 접힌 상태가 파일 고르기를 지나 유지된다(계약).
+  const sidebarQuery = expanded ? "" : "&sidebar=off";
   const toggleLabel = expanded ? "파일 목록 접기" : "파일 목록 펴기";
   // 지금 URL에서 `sidebar`만 뒤집는다 — `?file=`은 한 개도 안 잃는다(계약).
   const toggleHref = (() => {
     const usp = new URLSearchParams();
     if (file) usp.set("file", file);
-    if (!expanded) usp.set("sidebar", "on");
+    if (expanded) usp.set("sidebar", "off");
     const qs = usp.toString();
     return `/p/${id}/ontology${qs ? `?${qs}` : ""}`;
   })();
