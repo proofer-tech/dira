@@ -1168,13 +1168,13 @@ test("답변 대기 판정 + 답변 파일 생성으로 재큐 (엔진과 대조
   assert.doesNotMatch(pyList(r), /a1111111/);
 });
 
-// ── 결정 10 §요구사항 레이어 — optionsOf / composeAnswer (DESIGN.md §결정 10) ───────
+// ── 결정 11 §요구사항 레이어 — optionsOf / composeAnswer (DESIGN.md §결정 11) ───────
 
-/** `optionsOf` — 큐 실측 픽스처 넷(그룹 크기·제목 분포는 §결정 10 §실측 그대로,
- *  본문은 지면상 요약이다). 마지막 질문 절 텍스트 하나만 받는다 — 라운드를 고르는 건 호출부의 일. */
-test("optionsOf — 큐 실측 픽스처 넷 (b6fa738b·4301cfd6·2100d54a·089035b0)", () => {
+/** `optionsOf` — 큐 실측 픽스처(b6fa738b, 그룹 크기·제목 분포는 §결정 10 §실측 그대로) — 새
+ *  형식 헤딩(`### 1.`~`### 4.`)은 옛 그대로 통과하고, 라벨만 안 잘린다(결정 11 ⑧)로 갱신됐다. */
+test("optionsOf — 큐 실측 픽스처 (b6fa738b), 089035b0은 그룹 0개", () => {
   // b6fa738b: 그룹 4개(3-3-3-2), 제목 `1.`~`4.` — 산문 줄("**내 기본값...**")과 화살표 줄("->")은
-  // 목록머리가 아니라서 옵션으로 안 잡힌다(결정 10 ②)
+  // 목록머리가 아니라서 옵션으로 안 잡힌다(결정 11 ②)
   const b6fa738b = [
     "### 1. 엔진을 고쳐도 되나",
     "",
@@ -1213,72 +1213,123 @@ test("optionsOf — 큐 실측 픽스처 넷 (b6fa738b·4301cfd6·2100d54a·0890
     ],
   );
   assert.strictEqual(groups1[0].heading, "1. 엔진을 고쳐도 되나");
-  assert.deepStrictEqual(groups1[0].options[0], { letter: "a", label: "승인." });
-
-  // 4301cfd6: 그룹 3개(3-3-2), 제목 `Q1.`~`Q3.`
-  const q4301cfd6 = [
-    "### Q1. 그릇과 수명",
-    "",
-    "- **(a) 프로젝트 셸 Alert 네 번째 변종 하나.** 판정 기준 설명.",
-    "- **(b) (a) + 워커 화면 행에 실패 배지.** 표시를 더한다.",
-    "- **(c) 워커 화면에만 둔다.** 배너를 안 만든다.",
-    "",
-    "### Q2. 대응",
-    "",
-    "- **(a) 사유와 복구 시각만 보여준다.** 조작 없음.",
-    "- **(b) 일시중지 CTA를 더한다.** 워커 전부를 멈춘다.",
-    "- **(c) 복구 시각이 지나면 자동 재개한다.** GUI가 시각을 든다.",
-    "",
-    "### Q3. 앱을 안 보고 있을 때도 알리나",
-    "",
-    "- **(a) 안 한다.** 화면 안에서만 보여준다.",
-    "- **(b) 알림을 하나 더 붙인다.** 새로 생기면 한 번 알린다.",
-  ].join("\n");
-  const groups2 = optionsOf(q4301cfd6);
-  assert.deepStrictEqual(
-    groups2.map((g) => [g.number, g.options.length]),
-    [
-      ["Q1.", 3],
-      ["Q2.", 3],
-      ["Q3.", 2],
-    ],
-  );
-
-  // 2100d54a: 그룹 1개(4), 제목 없음 — 직전 `###`가 없으니 `그룹 1` + 번호 `Q1`
-  const q2100d54a = [
-    "- **(a) 지금 도는 세션에 실시간으로 말을 건다.** 엔진 수정이 필요하다.",
-    "- **(b) 세션은 그대로 두고 티켓에 메모를 붙인다.** 엔진 무수정이다.",
-    "- **(c) 세션을 멈추고 메모를 붙여 백로그로 되돌린다.** 즉시 되는 유일한 안이다.",
-    "- **(d) 조합.** 예: (c)만 만들고 (b)는 안 만든다.",
-  ].join("\n");
-  const groups3 = optionsOf(q2100d54a);
-  assert.strictEqual(groups3.length, 1);
-  assert.strictEqual(groups3[0].heading, "그룹 1");
-  assert.strictEqual(groups3[0].number, "Q1");
-  assert.strictEqual(groups3[0].options.length, 4);
+  // 라벨이 안 잘린다(결정 11 ⑧) — 첫 문장 뒤 설명까지 그대로, 볼드 마커만 걷혔다
+  assert.deepStrictEqual(groups1[0].options[0], {
+    letter: "a",
+    label: "승인. 순서-게이트-선점 전부 엔진에서.",
+    options: [],
+  });
 
   // 089035b0: `## 질문` 절 자체가 없는 티켓(`kind: work`) — questionsOf가 빈 배열을 주므로
-  // 마지막 라운드 텍스트도 없다. 그 갈래에서 optionsOf는 그룹 0개다(결정 10 ⑨)
+  // 마지막 라운드 텍스트도 없다. 그 갈래에서 optionsOf는 그룹 0개다(결정 10 ⑨, 결정 11 무수정)
   assert.deepStrictEqual(questionsOf("## Goal\n\n하나.\n"), []);
   assert.deepStrictEqual(optionsOf(""), []);
-
-  // 산문 중간의 `(b)`는 목록머리가 아니라서 안 잡힌다(결정 10 ②, `083e3c1c` 실측)
-  assert.deepStrictEqual(
-    optionsOf("다른 요구의 답을 인용하며 (b) 표시 전용을 문장 안에 쓴다.\n"),
-    [],
-  );
-
-  // 라벨 60자 자르기(결정 10 ④)
-  const long = optionsOf(
-    "- **(a) 매우 긴 라벨을 가진 선택지로 육십자보다 더 길게 자르기 동작을 확인하기 위해 일부러 아주 길게 늘려 쓴 문장입니다.** 뒤 설명.",
-  );
-  assert.strictEqual(long[0].options[0].label.length, 63); // 60자 + "..."
-  assert.ok(long[0].options[0].label.endsWith("..."));
 });
 
-/** `composeAnswer` — 조립 결과 모양은 §결정 10에 실린 실측 형식과 같다:
- *  `1.(a)` / `2.(a)(b) 덧붙임` / `3. 덧붙임만`. */
-test("composeAnswer — 줄머리 번호 + 다중 선택 + 덧붙임 조립 (결정 10 ⑦⑧)", () => {
+/** `optionsOf` — 옛 형식은 하나도 안 잡힌다(결정 11 ⑦). 한글·대문자 선택지, `Q1.` 헤딩,
+ *  헤딩 없는 그룹의 `Q<n>` 폴백까지 셋 다 죽는다 — 헤딩이 없거나 번호가 없으면 그룹도 없다. */
+test("optionsOf — 옛 형식 거부: (가)(A), ### Q1., 헤딩 없는 그룹 (결정 11 ⑦)", () => {
+  // 한글 선택지 — letter 문자 클래스가 [a-z]뿐이라 헤딩은 서고 선택지만 0개
+  assert.deepStrictEqual(optionsOf("### 1.\n- (가) 첫째\n- (나) 둘째"), [
+    { heading: "1.", number: "1.", options: [], sub: [] },
+  ]);
+  // 대문자 선택지도 같다
+  assert.deepStrictEqual(optionsOf("### 1.\n- (A) 첫째\n- (B) 둘째"), [
+    { heading: "1.", number: "1.", options: [], sub: [] },
+  ]);
+  // `### Q1.`은 문항이 아니다 — 뒤따르는 선택지도 어디에도 못 붙어 그룹째 사라진다
+  assert.deepStrictEqual(optionsOf("### Q1. 그릇과 수명\n- (a) 첫째\n- (b) 둘째"), []);
+  // 번호 없는 그룹의 `Q<n>` 폴백도 죽는다 — `###` 헤딩 자체가 없으면 그룹이 없다
+  assert.deepStrictEqual(optionsOf("- (a) 첫째\n- (b) 둘째\n- (c) 셋째"), []);
+  // 목록 마커 없는 줄은 산문이다(결정 10 ②가 이미 못박았고 11도 그대로, `083e3c1c` 실측)
+  assert.deepStrictEqual(
+    optionsOf("### 1.\n다른 요구의 답을 인용하며 (b) 표시 전용을 문장 안에 쓴다."),
+    [{ heading: "1.", number: "1.", options: [], sub: [] }],
+  );
+});
+
+/** `optionsOf` — 계층: `1-1.`은 `1.` 카드 안의 하위 문항, `(a-1)`은 `(a)`의 하위 선택지다
+ *  (결정 11 ④⑤). 나란한 별개 카드로 안 선다. */
+test("optionsOf — 계층 문항·선택지를 읽는다 (결정 11 ④⑤)", () => {
+  const hier = [
+    "### 1. 무엇부터 세우나",
+    "",
+    "- (a) 엔진만",
+    "  - (a-1) 목록은 한 벌",
+    "  - (a-2) 목록은 두 벌",
+    "- (b) 화면까지",
+    "",
+    "### 1-1. 커맨드는 고정인가",
+    "",
+    "- (a) 고정 2벌",
+    "- (b) 프로젝트마다",
+  ].join("\n");
+  const groups = optionsOf(hier);
+  assert.strictEqual(groups.length, 1); // 1-1.은 나란한 별개 카드가 아니다(④)
+  assert.strictEqual(groups[0].number, "1.");
+  assert.strictEqual(groups[0].heading, "1. 무엇부터 세우나");
+  assert.deepStrictEqual(
+    groups[0].options.map((o) => o.letter),
+    ["a", "b"],
+  );
+  // (a-1)(a-2)는 (a)의 하위 선택지 자리에 들어간다 — 평평하게 안 나온다(⑤)
+  assert.deepStrictEqual(
+    groups[0].options[0].options.map((o) => o.letter),
+    ["a-1", "a-2"],
+  );
+  assert.deepStrictEqual(groups[0].options[1].options, []);
+  assert.strictEqual(groups[0].sub.length, 1);
+  assert.strictEqual(groups[0].sub[0].number, "1-1.");
+  assert.deepStrictEqual(
+    groups[0].sub[0].options.map((o) => o.letter),
+    ["a", "b"],
+  );
+
+  // 3단 깊이(1-1-1. / a-1-1)도 하이픈 깊이 그대로 겹친다
+  const deep = optionsOf(
+    [
+      "### 1. 첫째 단",
+      "- (a) 첫째 단 선택지",
+      "  - (a-1) 둘째 단 선택지",
+      "    - (a-1-1) 셋째 단 선택지",
+      "### 1-1. 둘째 단 문항",
+      "### 1-1-1. 셋째 단 문항",
+    ].join("\n"),
+  );
+  assert.strictEqual(deep.length, 1);
+  assert.strictEqual(deep[0].sub[0].number, "1-1.");
+  assert.strictEqual(deep[0].sub[0].sub[0].number, "1-1-1.");
+  const a = deep[0].options[0];
+  assert.strictEqual(a.options[0].letter, "a-1");
+  assert.strictEqual(a.options[0].options[0].letter, "a-1-1");
+
+  // 부모 문항 없는 하위 문항은 형식 위반이라 버려진다(안전망) — 그룹째 없다
+  assert.deepStrictEqual(optionsOf("### 1-1. 부모 없음\n- (a) x"), []);
+  // 부모 선택지 없는 하위 선택지도 버려진다 — 문항 자체는 그대로 선다
+  assert.deepStrictEqual(optionsOf("### 1. 문항\n- (a-1) 부모 없음"), [
+    { heading: "1. 문항", number: "1.", options: [], sub: [] },
+  ]);
+});
+
+/** `optionsOf` — `optionLabel`이 안 자른다(결정 11 ⑧) — 볼드 마커만 걷고 줄 전문을 낸다. */
+test("optionsOf — optionLabel이 안 자른다, 볼드 마커만 걷는다 (결정 11 ⑧, 실측 42ed33bc)", () => {
+  const g = optionsOf("### 1.\n- (a) `.wip`만. 지금 돌고 있는 것만 본문 위로 온다.");
+  assert.strictEqual(g[0].options[0].label, "`.wip`만. 지금 돌고 있는 것만 본문 위로 온다.");
+
+  // 볼드 마커는 걷되 첫 문장 뒤 설명까지 남는다 — 60자 넘겨도 안 잘린다
+  const long = optionsOf(
+    "### 1.\n- **(a) 매우 긴 라벨을 가진 선택지로 육십자보다 더 길게 자르기 동작을 확인하기 위해 일부러 아주 길게 늘려 쓴 문장입니다.** 뒤 설명.",
+  );
+  assert.strictEqual(
+    long[0].options[0].label,
+    "매우 긴 라벨을 가진 선택지로 육십자보다 더 길게 자르기 동작을 확인하기 위해 일부러 아주 길게 늘려 쓴 문장입니다. 뒤 설명.",
+  );
+  assert.ok(!long[0].options[0].label.endsWith("...")); // 말줄임이 안 붙는다
+});
+
+/** `composeAnswer` — 조립 결과 모양은 §결정 11에 실린 실측 형식과 같다:
+ *  `1.(a)` / `2.(a)(b) 덧붙임` / `3.(a)(a-1)` / `3-1.(b) 덧붙임`. */
+test("composeAnswer — 줄머리 번호 + 다중 선택 + 덧붙임 조립 (결정 11 ⑥)", () => {
   assert.strictEqual(
     composeAnswer([
       { number: "1.", letters: ["a"], note: "" },
@@ -1287,10 +1338,21 @@ test("composeAnswer — 줄머리 번호 + 다중 선택 + 덧붙임 조립 (결
     ]),
     "1.(a)\n2.(a)(b) 알아서 있으면 좋을 곳들에 잘 배정해달라\n3. 이건 엔진마다 다를 것 같은데",
   );
-  // 번호가 없는 그룹은 `Q<n>` — optionsOf가 낸 번호를 그대로 받는다
-  assert.strictEqual(composeAnswer([{ number: "Q1", letters: ["b"], note: "" }]), "Q1(b)");
-  // 다중 선택은 고른 순서와 무관하게 `(a)(b)`로 정렬해 조립한다
+  // 다중 선택은 고른 순서와 무관하게 정렬해 조립한다
   assert.strictEqual(composeAnswer([{ number: "1.", letters: ["b", "a"], note: "" }]), "1.(a)(b)");
+  // 하위 선택지를 골랐으면 상위도 이미 켜져 있다(⑤) — 한 줄에 `(a)(a-1)`로 같이 실린다
+  assert.strictEqual(
+    composeAnswer([{ number: "3.", letters: ["a", "a-1"], note: "" }]),
+    "3.(a)(a-1)",
+  );
+  // 하위 문항(`1-1.`)은 자기 번호로 자기 줄을 낸다 — 상위 문항 줄과 안 섞인다
+  assert.strictEqual(
+    composeAnswer([
+      { number: "3.", letters: ["a", "a-1"], note: "" },
+      { number: "3-1.", letters: ["b"], note: "이건 엔진마다 다를 것 같은데" },
+    ]),
+    "3.(a)(a-1)\n3-1.(b) 이건 엔진마다 다를 것 같은데",
+  );
   // 고른 것 0 + 덧붙임 0인 그룹은 줄이 안 선다
   assert.strictEqual(
     composeAnswer([
@@ -1304,10 +1366,10 @@ test("composeAnswer — 줄머리 번호 + 다중 선택 + 덧붙임 조립 (결
 });
 
 /** `lastQuestionOptions` — `AnswerForm`(클라이언트)이 받는 카드 데이터의 서버 쪽 조립.
- *  `optionsOf`가 이미 못박은 파싱을 **어느 라운드에** 돌리는지만 재확인한다(결정 10 ①). */
+ *  `optionsOf`가 이미 못박은 파싱을 **어느 라운드에** 돌리는지만 재확인한다(결정 11 ①). */
 test("lastQuestionOptions — 마지막 질문 라운드에서만 돈다, 질문 0개는 빈 배열", () => {
   const answered = "### 1.\n- (a) 첫째\n- (b) 둘째\n";
-  const openWithOptions = "### Q1.\n- (a) 셋째\n";
+  const openWithOptions = "### 1.\n- (a) 셋째\n";
   const openNoOptions = "그냥 산문 질문입니다.";
   // 여러 라운드 중 마지막(가장 최근) 것만 본다 — 앞 라운드는 이미 답이 달렸다
   assert.deepStrictEqual(
@@ -1316,7 +1378,7 @@ test("lastQuestionOptions — 마지막 질문 라운드에서만 돈다, 질문
       { role: "answer", heading: "답변", text: "1.(a)" },
       { role: "question", heading: "질문 2", text: openWithOptions },
     ]),
-    [{ heading: "Q1.", number: "Q1.", options: [{ letter: "a", label: "셋째" }] }],
+    [{ heading: "1.", number: "1.", options: [{ letter: "a", label: "셋째", options: [] }], sub: [] }],
   );
   // 마지막 라운드에 선택지가 없으면 빈 배열(58/100 — 카드 0장, 결정 10 ⑨)
   assert.deepStrictEqual(

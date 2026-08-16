@@ -510,59 +510,86 @@ export function questionsOf(body: string): { heading: string; text: string }[] {
   return out;
 }
 
-/** 결정 10 §자리①의 선택 카드 하나. */
-export type OptionGroup = {
-  /** 카드 제목 — 그룹의 직전 `###`(마커 없이). 없으면 `그룹 <n>`(결정 10 ③) */
-  heading: string;
-  /** `composeAnswer`가 줄머리로 쓰는 번호 — 제목이 `1.`/`Q1.`이면 그대로, 없으면 `Q<n>`(결정 10 ⑧) */
-  number: string;
-  options: { letter: string; label: string }[];
+/** 결정 11 §자리①의 선택지 하나 — `(a-1)`은 `(a)`를 고르면 열리는 하위 선택지다(⑤). */
+export type Option = {
+  letter: string; // "a" | "a-1" | "a-1-1"
+  label: string;
+  options: Option[];
 };
 
-/** 목록 항목 머리의 `(x)` 하나 — 산문 중간의 `(b)`는 안 잡는다(결정 10 ②, 정규식은 스펙 그대로). */
-const OPTION_LINE = /^\s*(?:[-*]|\d+\.)\s+\**\(([a-z])\)/;
+/** 결정 11 §자리①의 문항 카드 하나 — `1-1.`은 `1.` 카드 안의 하위 문항이다(④). */
+export type OptionGroup = {
+  /** 카드 제목 — `###` 뒤 전문(번호 포함, 마커 없이) */
+  heading: string;
+  /** `composeAnswer`가 줄머리로 쓰는 번호 — `1.` `1-1.` `1-1-1.` */
+  number: string;
+  options: Option[];
+  sub: OptionGroup[];
+};
 
-/** 선택지 줄의 라벨 — 볼드 마커를 걷고 첫 문장까지, 60자에서 자르고 `...`(결정 10 ④).
- *  전문은 스레드의 질문 산문에 이미 있어서 카드는 짧은 라벨만 든다. */
+/** 문항 머리 — `### 1.` `### 1-1.` `### 1-1-1.`. 번호 없는 `###`(`### Q1.` 등)은 문항이
+ *  아니다(결정 11 ①⑦) — 계층은 번호의 하이픈 깊이가 정하고 제목 레벨은 안 본다. */
+const HEADING_RE = /^###\s+(\d+(?:-\d+)*)\.(?:\s|$)/;
+
+/** 목록 항목 머리의 `(x)` 하나 — 목록 마커 필수, 산문 중간의 `(b)`는 안 잡는다(결정 11 ②).
+ *  글자는 `(a)` `(a-1)` `(a-1-1)`(결정 11 ③). */
+const OPTION_LINE = /^\s*(?:[-*]|\d+\.)\s+\**\(([a-z](?:-\d+)*)\)/;
+
+/** 선택지 줄의 라벨 — 볼드 마커만 걷는다. 첫 문장 자르기와 60자 상한 둘 다 없다(결정 11 ⑧) —
+ *  한 줄 고정은 이미 CSS `truncate` + `title`이 하므로 JS가 또 자르면 두 번 자르는 것이고
+ *  `title`의 전문까지 잘린다. */
 function optionLabel(rest: string): string {
-  const plain = rest.replace(/\*\*/g, "").trim();
-  const sentence = (plain.match(/^[^.!?]*[.!?]/)?.[0] ?? plain).trim();
-  return sentence.length > 60 ? sentence.slice(0, 60) + "..." : sentence;
+  return rest.replace(/\*\*/g, "").trim();
 }
 
-/** 그룹 제목이 쓴 번호 — `1.`이면 `1.`, `Q1.`이면 `Q1.`, 없으면 `Q<n>`(결정 10 ⑧). */
-function groupNumber(heading: string, index: number): string {
-  const m = heading.match(/^(Q?\d+)\./);
-  return m ? `${m[1]}.` : `Q${index}`;
-}
+/** "1" → 1, "1-1" → 2, "a-1-1" → 3 — 하이픈 개수 + 1이 계층 깊이다(번호·글자 공용). */
+const depthOf = (token: string) => token.split("-").length;
 
-/** 마지막 질문 절의 선택지 그룹(결정 10 ①~④) — 출처는 `questionsOf`가 데려간 절 중 마지막
- *  라운드고, 그중에서도 이 함수는 넘겨받은 텍스트 하나만 본다(라운드를 고르는 건 호출부의 일).
+/** 마지막 질문 절의 문항 계층(결정 11 ①③④⑤) — 출처는 `questionsOf`가 데려간 절 중 마지막
+ *  라운드고, 이 함수는 넘겨받은 텍스트 하나만 본다(라운드를 고르는 건 호출부의 일).
  *
- *  글자가 `(a)`로 되돌 때 새 그룹을 끊는다(③) — 제목 유무에 안 기댄다. 선택지가 없는 절은
- *  빈 배열이다(58/100 — 결정 10 ⑨, 그 갈래는 화면이 안 바뀐다). */
+ *  문항은 `###`+번호로만 열린다 — 옛 그룹 폴백이 없어서(⑦), 번호 없는 `###`나 헤딩이 아예
+ *  없는 구간의 선택지 줄은 어디에도 못 붙어 버려진다. 선택지가 없는 절은 빈 배열이다
+ *  (58/100 — 결정 10 ⑨ 그대로, 그 갈래는 화면이 안 바뀐다). */
 export function optionsOf(question: string): OptionGroup[] {
   const groups: OptionGroup[] = [];
-  let heading = "";
+  const groupPath: OptionGroup[] = []; // path[depth-1] = 그 깊이의 지금 문항
   let cur: OptionGroup | null = null;
+  const optPath: Option[] = []; // cur 안에서 선택지 깊이별 지금 노드
+
   for (const line of question.split("\n")) {
-    const h = line.match(/^###\s+(.+)$/);
+    const h = line.match(HEADING_RE);
     if (h) {
-      heading = h[1].trim();
+      const number = h[1];
+      const depth = depthOf(number);
+      if (depth > 1 && !groupPath[depth - 2]) {
+        cur = null; // 부모 문항이 없는 하위 문항 — 형식 위반이라 버린다
+        continue;
+      }
+      const group: OptionGroup = {
+        heading: line.replace(/^###\s+/, "").trim(),
+        number: `${number}.`,
+        options: [],
+        sub: [],
+      };
+      if (depth === 1) groups.push(group);
+      else groupPath[depth - 2].sub.push(group);
+      groupPath[depth - 1] = group;
+      groupPath.length = depth;
+      cur = group;
+      optPath.length = 0;
       continue;
     }
     const m = line.match(OPTION_LINE);
-    if (!m) continue;
+    if (!m || !cur) continue;
     const letter = m[1];
-    if (!cur || letter === "a") {
-      cur = {
-        heading: heading || `그룹 ${groups.length + 1}`,
-        number: groupNumber(heading, groups.length + 1),
-        options: [],
-      };
-      groups.push(cur);
-    }
-    cur.options.push({ letter, label: optionLabel(line.slice(m[0].length)) });
+    const depth = depthOf(letter);
+    if (depth > 1 && !optPath[depth - 2]) continue; // 부모 선택지가 없는 하위 선택지 — 버린다
+    const option: Option = { letter, label: optionLabel(line.slice(m[0].length)), options: [] };
+    if (depth === 1) cur.options.push(option);
+    else optPath[depth - 2].options.push(option);
+    optPath[depth - 1] = option;
+    optPath.length = depth;
   }
   return groups;
 }
