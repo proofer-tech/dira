@@ -1777,6 +1777,23 @@ export type WorktreePrep = {
   skipped?: true;
 };
 
+/** `git worktree list --porcelain`을 파싱한다 — 트리·등록 선존재 판정(§4 생성 4항 갈래표)의
+ *  입력. 블록은 빈 줄로 갈린다. `worktree` 줄이 없는 블록(트레일링 개행)은 버린다. */
+async function listWorktreeEntries(
+  repo: string,
+): Promise<{ worktree: string; branch: string | null; prunable: boolean }[]> {
+  const { stdout } = await promisify(execFile)("git", ["-C", repo, "worktree", "list", "--porcelain"]);
+  return stdout
+    .split("\n\n")
+    .map((block) => block.split("\n").filter(Boolean))
+    .filter((lines) => lines.some((l) => l.startsWith("worktree ")))
+    .map((lines) => ({
+      worktree: lines.find((l) => l.startsWith("worktree "))!.slice("worktree ".length),
+      branch: lines.find((l) => l.startsWith("branch "))?.slice("branch ".length) ?? null,
+      prunable: lines.some((l) => l.startsWith("prunable")),
+    }));
+}
+
 /** 워크트리 3단계를 **서버가 실행한다**(§4 생성 4항 — 사람 요청 `5f55577a`가 §4-2를 뒤집었다).
  *
  *  자동화의 근거는 셸 3줄이 못 잡는 함정 둘이다:
@@ -1812,33 +1829,68 @@ export async function prepareWorktree(root: string, name: string): Promise<Workt
       skipped: true,
     };
   }
-  // 브랜치가 이미 있으면 `-b`가 실패한다(같은 이름의 워커를 지웠다 다시 만드는 경우가 유일한
-  // 발생 경로다). 실패 후 재시도가 아니라 **먼저 본다** — git의 에러 문구는 로케일을 타서
-  // 판정에 못 쓴다. `add <경로> <브랜치>`로 붙인다: 브랜치를 빼면 git이 디렉터리 이름
-  // (`<name>`)에서 dwim해서 `wt/<name>`이 아닌 다른 브랜치를 만든다.
   const branch = `wt/${name}`;
-  const has = await git("show-ref", "--verify", "--quiet", `refs/heads/${branch}`).then(
-    () => true,
-    () => false,
-  );
-  try {
-    await git("worktree", "add", dir, ...(has ? [branch] : ["-b", branch]));
-  } catch (e) {
-    return stop(0, `git worktree add 실패: ${why(e)}`);
+  // 큐 루트(`root`)는 항상 있다 — 워크트리가 없어도(재생성 전, 폴더만 지운 상태) 이 realpath는
+  // 산다. git이 등록에 저장하는 경로도 `add` 성공 직후의 realpath라 이렇게 다시 지어야
+  // 트리가 없어졌을 때도 같은 문자열이 된다(맥 `/private` 별칭 — `dir` 자체를 realpath하면
+  // 없는 트리에서 실패해 이 별칭이 안 풀리고 아래 매칭이 늘 헛돈다).
+  const queue = nfc(await realpath(root).catch(() => root));
+  // 같은 이름의 워커를 지웠다 다시 만드는 경로 — `삭제`가 트리는 남기고 파일·crontab만
+  // 지운다(§4 삭제). 브랜치와 같은 자리에서 같은 식으로 트리·등록을 **먼저 본다**: 치고 나서
+  // 에러 문구를 읽지 않는다(로케일을 탄다). 입력은 `git worktree list --porcelain` 하나고
+  // 갈래는 셋이다(§4 생성 4항 갈래표) — 경로 비교는 이 파일이 이미 쓰는 realpath+nfc다.
+  const entries = await listWorktreeEntries(repo).catch(() => []);
+  const dirKey = nfc(path.join(queue, "worktrees", name));
+  let entry: (typeof entries)[number] | null = null;
+  for (const e of entries) {
+    if ((await realpath(e.worktree).then(nfc, () => nfc(e.worktree))) === dirKey) {
+      entry = e;
+      break;
+    }
+  }
+  if (entry?.prunable) {
+    // 등록은 있는데 디렉터리가 없다 — 그대로 두면 `add`가 `missing but already registered`로
+    // 멈춘다. `prune` 한 번 뒤 통상 경로(브랜치 선존재 → add)로 이어간다.
+    await git("worktree", "prune").catch(() => {});
+    entry = null;
+  }
+  if (entry?.branch === `refs/heads/${branch}`) {
+    // 그 트리가 이미 등록돼 있고 브랜치가 wt/<이름>이다 — 1단계를 건너뛴다. 이미 있는 것이
+    // 만들려던 바로 그 트리다. **`add -f`는 쓰지 않는다** — 강제는 이 판정 자체를 건너뛰는
+    // 것이라 셋째 갈래(디렉터리는 있는데 등록이 없다 / 등록이 다른 브랜치를 물었다)까지
+    // 같이 삼킨다.
+  } else {
+    // 그 밖(위 둘이 아니다) — 종전대로 `git worktree add`를 치고 실패하면 그대로 실패한다.
+    // 브랜치가 이미 있으면 `-b`가 실패하니 먼저 본다. `add <경로> <브랜치>`로 붙인다:
+    // 브랜치를 빼면 git이 디렉터리 이름에서 dwim해서 `wt/<name>`이 아닌 다른 브랜치를 만든다.
+    const has = await git("show-ref", "--verify", "--quiet", `refs/heads/${branch}`).then(
+      () => true,
+      () => false,
+    );
+    try {
+      await git("worktree", "add", dir, ...(has ? [branch] : ["-b", branch]));
+    } catch (e) {
+      return stop(0, `git worktree add 실패: ${why(e)}`);
+    }
   }
   try {
     await symlink("../..", link);
   } catch (e) {
     const eexist = (e as NodeJS.ErrnoException).code === "EEXIST";
-    return stop(
-      1,
-      eexist
-        ? `${link} 가 이미 있습니다. 지우지 않았습니다 — 그 안에 사람의 작업이 있을 수 있습니다.`
-        : `심링크를 만들지 못했습니다: ${why(e)}`,
-    );
+    // `.dira`가 이미 이 큐로 풀리면 트리 선존재(위)와 같은 재생성 경로다 — 2단계도 끝난
+    // 것으로 보고 검증(아래)으로 넘어간다. 안 풀리면 종전 문구 그대로 멈춘다 — 미끼 `.dira`
+    // (실사고 `bf4d8878`)는 그대로 잡힌다.
+    const already = eexist && (await realpath(link).then(nfc, () => null)) === queue;
+    if (!already) {
+      return stop(
+        1,
+        eexist
+          ? `${link} 가 이미 있습니다. 지우지 않았습니다 — 그 안에 사람의 작업이 있을 수 있습니다.`
+          : `심링크를 만들지 못했습니다: ${why(e)}`,
+      );
+    }
   }
   const to = await realpath(link).then(nfc, () => null);
-  const queue = nfc(await realpath(root).catch(() => root));
   if (to !== queue) {
     return stop(2, `${link} 가 큐 루트(${queue})가 아니라 ${to ?? "(못 풀림)"} 로 풀립니다.`);
   }

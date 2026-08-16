@@ -1189,6 +1189,36 @@ test("prepareWorktree — 브랜치 wt/<이름>이 이미 있으면 -b 없이 �
   assert.strictEqual(headOf(path.join(root, "worktrees", "w2")), "wt/w2");
 });
 
+test("prepareWorktree — 트리·등록이 남은 채 다시 만들면 add를 건너뛰고 통과한다 (재생성, 요구 221ce38a)", async () => {
+  const { root } = makeRepo();
+  const tree = path.join(root, "worktrees", "w2");
+  assert.deepStrictEqual(await prepareWorktree(root, "w2"), { dir: tree, done: 3, rest: [] });
+  // `삭제`는 파일·crontab만 지우고 트리는 남긴다(§4 삭제) — 같은 이름을 다시 만드는 것이
+  // 이 요구의 유일한 발생 경로다. `add -f` 없이 통과해야 한다.
+  assert.deepStrictEqual(await prepareWorktree(root, "w2"), { dir: tree, done: 3, rest: [] });
+  assert.strictEqual(realpathSync(path.join(tree, ".dira")), realpathSync(root));
+});
+
+test("prepareWorktree — 디렉터리만 지운 뒤 다시 만들어도 통과한다 (prunable → prune → add, 요구 221ce38a)", async () => {
+  const { root } = makeRepo();
+  const tree = path.join(root, "worktrees", "w2");
+  await prepareWorktree(root, "w2");
+  rmSync(tree, { recursive: true, force: true }); // 등록은 남고 디렉터리만 사라진다 → prunable
+  assert.deepStrictEqual(await prepareWorktree(root, "w2"), { dir: tree, done: 3, rest: [] });
+  assert.strictEqual(realpathSync(path.join(tree, ".dira")), realpathSync(root));
+});
+
+test("prepareWorktree — 등록 없는 남의 디렉터리가 그 자리에 있으면 여전히 done: 0으로 실패한다", async () => {
+  const { root } = makeRepo();
+  const tree = path.join(root, "worktrees", "w2");
+  mkdirSync(tree, { recursive: true });
+  writeFileSync(path.join(tree, "stray.txt"), "남의 파일\n"); // git worktree 등록이 없다
+  const r = await prepareWorktree(root, "w2");
+  assert.strictEqual(r.done, 0);
+  assert.deepStrictEqual(r.rest, worktreeCmds(root, "w2")); // 남은 명령 = 3줄 전부
+  assert.strictEqual(readFileSync(path.join(tree, "stray.txt"), "utf8"), "남의 파일\n"); // 안 건드렸다
+});
+
 test("prepareWorktree — .dira가 이미 있으면 EEXIST로 멈추고 되돌리지 않는다 (ln -s 함정 bf4d8878)", async () => {
   // 체크아웃이 `.dira`를 만드는 배치. `ln -s`였다면 여기서 `.dira/.dira`가 생겨 세션이
   // 미끼 큐를 보고 자기 티켓을 못 찾았다 — `fs.symlink`는 대신 EEXIST로 멈춘다.
