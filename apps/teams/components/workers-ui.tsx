@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import {
   applyCommonSourceAction,
+  applyDispatchGateAction,
   applySelfHealAction,
   copyContextAction,
   createWorkerAction,
@@ -86,6 +87,9 @@ export type WorkerRow = {
   commonSource: boolean;
   /** 자가 정리 `source` 줄이 있는가. false면 dira를 지워도 이 워커의 cron 줄이 남는다 (§4-4) */
   selfHealSource: boolean;
+  /** 통합 게이트 `source` 줄이 있는가. false면 받는 트리가 더러워도 그냥 디스패치돼 push에서만
+   *  막힌다 (§4-14) */
+  dispatchGateSource: boolean;
   /** `TICKET_CWD`. null = 줄이 없다(엔진 기본값 = 루트의 부모) */
   cwd: string | null;
   /** 작업 디렉터리 결함 (§4). **0개가 정상**이고 그때 행은 아무것도 늘지 않는다.
@@ -963,13 +967,13 @@ export function CommonContextCard({
   );
 }
 
-/** 워커 하나의 **둘째 행**(§비주얼 §35 #2·#4) — 경고 다섯과 펼친 컨텍스트 편집이 여기 산다.
+/** 워커 하나의 **둘째 행**(§비주얼 §35 #2·#4) — 경고 여섯과 펼친 컨텍스트 편집이 여기 산다.
  *  종전 `WorkerContextCard`가 표 아래에 N장 서던 것을 그 워커의 행 안으로 접은 것이고, 카드가
  *  들고 있던 것은 그대로다(편집기 · `→ <워커>` 복사 · 다이얼로그. 항목 수는 `컨텍스트` 열로 올라갔다).
  *
  *  **경고는 접힘과 무관하게 항상 보인다** — 펼쳐야 보이는 경고를 만들지 않는다(§35 #4).
- *  순서는 `결함 → 실패 → 공통 미수신 → 자가 정리 미적용 → 컨텍스트 거부 사유`이고 앞의 둘은
- *  서버가 그려 `warnings`로 넘긴다(그 마크업은 페이지에 그대로 있다).
+ *  순서는 `결함 → 실패 → 공통 미수신 → 자가 정리 미적용 → 통합 게이트 미적용 → 컨텍스트 거부
+ *  사유`이고 앞의 둘은 서버가 그려 `warnings`로 넘긴다(그 마크업은 페이지에 그대로 있다).
  *
  *  저장은 `TICKET_CONTEXT=( … )` **블록 전체 치환**이고, 블록 모양이 예상과 다르면 서버가
  *  거부한다 — 그때는 편집 UI를 아예 열지 않고 손으로 고치라고 알린다. */
@@ -997,13 +1001,17 @@ export function WorkerContextRow({
   const [copyError, setCopyError] = useState<string | null>(null);
   const [applyError, setApplyError] = useState<string | null>(null);
   const [healError, setHealError] = useState<string | null>(null);
+  const [gateError, setGateError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   // 자가 정리는 **다른 파일에 다른 줄을 쓴다**(§4-4) — 전이를 나눠야 한쪽이 도는 동안
   // 나머지 버튼이 남의 라벨(`적용 중…`)로 서지 않는다.
   const [healing, startHeal] = useTransition();
+  // 통합 게이트도 마찬가지로 다른 파일이라 전이를 또 나눈다(§4-14 §소급).
+  const [gating, startGate] = useTransition();
   const gets = row.commonSource ? common : [];
-  // 접혀 있어도 이 행이 서는 조건 — 경고 다섯 중 하나라도 있으면이다(§35 #4).
-  const warned = !!warnings || !row.commonSource || !row.selfHealSource || !row.context.ok;
+  // 접혀 있어도 이 행이 서는 조건 — 경고 여섯 중 하나라도 있으면이다(§35 #4).
+  const warned =
+    !!warnings || !row.commonSource || !row.selfHealSource || !row.dispatchGateSource || !row.context.ok;
   // 활동 펼침도 이 행이 받는다(§4-7) — 조건을 안 넓히면 셀을 눌러도 받을 행이 없다.
   if (!warned && !expanded && !activity) return null;
 
@@ -1076,6 +1084,40 @@ export function WorkerContextRow({
                     {healing ? "적용 중…" : "자가 정리 적용"}
                   </Button>
                   {healError && <Failure title="자가 정리를 적용하지 못했습니다" message={healError} />}
+                </div>
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* 이 줄이 없으면 받는 트리가 더러워도 이 워커는 그냥 디스패치되고, 세션이 일을 다 끝낸
+              뒤 push에서만 막힌다(§4-14 §소급). 모양은 위 둘과 같다. */}
+          {!row.dispatchGateSource && (
+            <Alert>
+              <TriangleAlert aria-hidden className="text-status-stale" />
+              <AlertTitle>이 워커는 받는 트리가 더러워도 그냥 디스패치됩니다</AlertTitle>
+              <AlertDescription>
+                <div className="space-y-2">
+                  <p>
+                    {row.name}.sh에 <span className="font-mono text-xs">dispatch-gate.sh</span>를{" "}
+                    <span className="font-mono text-xs">.</span> 하는 줄이 없습니다 — 받는 트리가
+                    더러운 채로 디스패치되면 세션이 일을 다 끝낸 뒤 push에서만 거부됩니다. 적용하면{" "}
+                    <span className="font-mono text-xs">. tick.sh</span> 바로 위에 한 줄이
+                    들어갑니다(통합 브랜치는 protocols/AGENTS.md에서 읽습니다).
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={gating}
+                    onClick={() =>
+                      startGate(async () => {
+                        const r = await applyDispatchGateAction(projectId, row.name);
+                        setGateError(r.ok ? null : (r.message ?? "줄을 넣지 못했습니다."));
+                      })
+                    }
+                  >
+                    {gating ? "적용 중…" : "통합 게이트 적용"}
+                  </Button>
+                  {gateError && <Failure title="통합 게이트를 적용하지 못했습니다" message={gateError} />}
                 </div>
               </AlertDescription>
             </Alert>

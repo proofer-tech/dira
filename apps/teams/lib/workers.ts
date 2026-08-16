@@ -85,6 +85,9 @@ export type Worker = {
   commonSource: boolean;
   /** 자가 정리 `source` 줄이 있는가. false면 dira를 지워도 이 워커의 cron 줄이 남는다 (§4-4) */
   selfHealSource: boolean;
+  /** 통합 게이트 `source` 줄이 있는가. false면 받는 트리가 더러워도 그냥 디스패치돼 push에서만
+   *  막힌다 (§4-14) */
+  dispatchGateSource: boolean;
   /** `TICKET_CWD` (셸 없이 읽은 절대경로). null = 줄이 없다 → 엔진 기본값은 루트의 부모다 */
   cwd: string | null;
   /** 작업 디렉터리 결함 (§4). **0개가 정상이고 그때 화면은 아무것도 늘지 않는다** */
@@ -1191,6 +1194,9 @@ export async function listWorkers(root: string, tickets: Ticket[] = []): Promise
       commonSource: commonSourceRe.test(text),
       // 이 줄이 없는 워커는 자기 cron 줄을 못 뺀다 — 화면이 경고 + `자가 정리 적용`(§4-4 §소급).
       selfHealSource: selfHealSourceRe.test(text),
+      // 이 줄이 없는 워커는 받는 트리가 더러워도 디스패치된다 — 화면이 경고 + `통합 게이트 적용`
+      // (§4-14 §소급).
+      dispatchGateSource: dispatchGateSourceRe.test(text),
       cwd: parsed.cwd,
       defects: [], // 공유 판정이 목록 전체를 봐야 하므로 행을 다 만든 뒤에 채운다
     });
@@ -1588,6 +1594,146 @@ export async function applySelfHeal(root: string, name: string): Promise<boolean
     !back ||
     back.index !== m.index + line.length + 1 ||
     !selfHealSourceRe.test(next)
+  ) {
+    throw new Error("줄을 넣은 뒤 파일이 예상과 달라집니다. 쓰지 않았습니다.");
+  }
+  await atomicWrite(file, next, (await stat(file)).mode & 0o777); // 755를 잃지 않는다
+  return true;
+}
+
+// ── 통합 게이트 (DESIGN.md §4-14, 요구 21d172fa) ──────────────────────────────
+//
+// 이 큐(도그푸딩) 하나에만 손으로 있던 `.dira/dispatch-gate.sh`(§4-1 훅 자리)를 다른 프로젝트도
+// 갖게 한다. 옮기는 것은 그 파일의 선행조건 둘 중 **받는 트리가 깨끗한가** 하나뿐이다 — 전용
+// 워크트리 확인(선행조건 1)은 새 프로젝트의 첫 워커가 TICKET_CWD를 안 받아 그대로 옮기면 첫
+// tick부터 영구 정지한다. 자리는 §4-4 자기치유와 같은 짝(파일 상수 · 전문 · source 줄 함수).
+
+export const DISPATCH_GATE_FILE = "dispatch-gate.sh";
+
+/** `<루트>/dispatch-gate.sh`의 전문. `<통합 브랜치>`는 `dispatchGateSh`가 채운다 — scaffold(새
+ *  프로젝트)와 `applyDispatchGate`(소급) 둘 다 그 함수를 거쳐야 두 경로가 같은 문자열을 만든다.
+ *
+ *  이 큐의 손으로 깐 판(`.dira/dispatch-gate.sh`)과 갈리는 것 둘 — ① 선행조건 1(전용 워크트리)이
+ *  없다 ② 받는 트리가 **통합 브랜치를 체크아웃 중일 때만** 잰다. 그 조건이 없으면 다른 브랜치가
+ *  체크아웃된 받는 트리를 더럽다는 이유로 막는다 — 그 push는 원래 통과한다(§4-14 §검증 실측:
+ *  통합 브랜치 main · 받는 트리는 dev 체크아웃 + 미커밋 17건). */
+export const DISPATCH_GATE_SH = `#!/bin/bash
+# 통합 게이트 (DESIGN.md §4-14, 요구 21d172fa) — 이 프로젝트의 워커가 . tick.sh 앞에서 source한다.
+# 엔진이 아니다. GUI가 만들고 관리한다 — 손으로 고치지 않는다.
+#
+# 세션은 워크트리에서 일하고 git push . HEAD:<통합 브랜치>로 통합한다. 받는 트리가 <통합
+# 브랜치>를 체크아웃 중이면 그 작업 트리가 깨끗할 때만 push가 들어간다
+# (receive.denyCurrentBranch=updateInstead). 사람이 거기서 편집하다 커밋을 안 하면 모든 세션이
+# 일을 다 끝낸 뒤 push에서만 막히고 .wip → reap → 재디스패치를 반복한다(이 큐의 실사고 —
+# e903b86b 4회 · f14432b5 11회).
+#
+# 그래서 막힐 것을 알면서 디스패치하지 않는다. 5~25분짜리 세션을 태우지 않고 한 줄 남긴다.
+#
+# 이 파일은 워커가 source한다. 중단이 return이 아니라 exit인 이유다 — return은 source한 자리로
+# 돌아가고, 워커는 그대로 디스패치로 넘어간다.
+#
+# ponytail: 받는 트리가 <통합 브랜치>를 체크아웃 중일 때만 잰다. updateInstead가 거부하는 것은
+# 체크아웃된 브랜치로 push할 때뿐이라, 다른 브랜치·detached HEAD면 더러워도 막지 않는다. 전용
+# 워크트리 확인(도그푸딩 큐의 선행조건 1)은 여기 없다 — 이 프로젝트의 첫 워커는 TICKET_CWD를 안
+# 받아서, 그 조건을 그대로 옮기면 갓 만든 프로젝트가 첫 tick부터 영구 정지한다.
+
+# list·unassign·reap은 GUI가 부른다. 통합과 무관하므로 막지 않는다
+if [ "\${1:-tick}" = tick ] || [ "\${1:-tick}" = dryrun ]; then
+  _gate_branch="<통합 브랜치>"
+  _gate_main=$(git -C "\${TICKET_CWD:-$PWD}" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) &&
+    _gate_main=$(dirname "$_gate_main")
+
+  if [ -n "$_gate_main" ] && [ -d "$_gate_main" ]; then
+    # detached HEAD면 빈 문자열이라 아래 비교가 항상 거짓이다 — rebase 중인 받는 트리를 막지 않는다
+    _gate_current=$(git -C "$_gate_main" symbolic-ref --short -q HEAD 2>/dev/null)
+
+    if [ "$_gate_current" = "$_gate_branch" ]; then
+      _gate_flag="$_gate_main/.git/dira-dirty-warned"
+      # -uno: 추적 안 되는 파일은 push를 막지 않는다. 스크래치 파일로 큐를 세우지 않는다
+      _gate_dirty=$(git -C "$_gate_main" status --porcelain -uno 2>/dev/null | wc -l | tr -d ' ')
+
+      if [ "$_gate_dirty" != 0 ]; then
+        if [ ! -f "$_gate_flag" ]; then
+          echo "$(date '+%Y-%m-%d %H:%M:%S') GATE 디스패치 보류 — $_gate_main 에 커밋 안 된 변경 \${_gate_dirty}건."
+          echo "  받는 트리가 $_gate_branch를 체크아웃 중이고 더러우면 push가 전부 거부된다(updateInstead)."
+          echo "  당신 것이면 커밋하거나 워크트리로 옮긴다. 다음 tick부터 저절로 풀린다. 이 줄은 상태가 바뀔 때만 뜬다."
+          touch "$_gate_flag" 2>/dev/null
+        fi
+        exit 0
+      fi
+
+      if [ -f "$_gate_flag" ]; then
+        rm -f "$_gate_flag"
+        echo "$(date '+%Y-%m-%d %H:%M:%S') GATE 해제 — $_gate_main 깨끗함. 디스패치 재개."
+      fi
+    fi
+  fi
+fi
+unset _gate_branch _gate_main _gate_current _gate_flag _gate_dirty
+`;
+
+/** `<통합 브랜치>` 하나만 채운다 — `fillPlaceholders`(scaffold.ts)와 같은 치환 방식이지만 이
+ *  파일엔 그 자리표시자 하나뿐이라 함수도 하나만 받는다. scaffold와 `applyDispatchGate` 둘 다 이
+ *  함수를 거쳐야 두 경로가 같은 문자열을 만든다. */
+export function dispatchGateSh(branch: string): string {
+  return DISPATCH_GATE_SH.replaceAll("<통합 브랜치>", () => branch);
+}
+
+/** 워커 파일이 통합 게이트를 부르는 한 줄 (§4-14). `. tick.sh` **바로 위**에 들어간다. */
+export function dispatchGateSourceLine(root: string): string {
+  return `. ${dq(path.join(root, DISPATCH_GATE_FILE))}   # 통합 게이트(§4-14)`;
+}
+
+/** ponytail: `dispatch-gate.sh`를 `.` 하는 줄이면 무엇이든 있는 것으로 본다(경로 비교를 안
+ *  한다) — `selfHealSourceRe`와 같은 천장이고 같은 이유다. */
+const dispatchGateSourceRe = /^[ \t]*(?:\.|source)[ \t]+[^\n]*dispatch-gate\.sh/m;
+
+/** 이미 스캐폴딩된 프로젝트의 통합 브랜치를 `protocols/AGENTS.md`에서 읽는다 — scaffold가 이미
+ *  `<통합 브랜치>`를 치환해 둔 그 파일 하나가, 소급 적용이 새 입력 없이 값을 구하는 유일한 자리다
+ *  (§4-14 — "통합 브랜치 값은 이미 손에 있다"). 못 찾으면 null이다. */
+async function integrationBranchOf(root: string): Promise<string | null> {
+  const text = await readFile(path.join(root, "protocols/AGENTS.md"), "utf8").catch(() => null);
+  if (text === null) return null;
+  const m = text.match(/git push \. HEAD:([^\s`]+)/);
+  return m ? m[1] : null;
+}
+
+/** 소급 (§4-14 §소급): `<루트>/dispatch-gate.sh`를 **없으면 만들고**, 워커 파일의 `. tick.sh`
+ *  **바로 위**에 `source` 줄을 끼운다. 줄이 이미 있으면 `false`(no-op) — 자가 정리와 같은 계약. */
+export async function applyDispatchGate(root: string, name: string): Promise<boolean> {
+  const file = await workerFile(root, name);
+  const text = await readFile(file, "utf8");
+
+  const branch = await integrationBranchOf(root);
+  if (branch === null) {
+    throw new Error(
+      "이 프로젝트의 통합 브랜치를 protocols/AGENTS.md에서 읽을 수 없습니다 — 파일을 손으로 편집하세요.",
+    );
+  }
+
+  const gate = path.join(root, DISPATCH_GATE_FILE);
+  const exists = await stat(gate).then(
+    () => true,
+    () => false,
+  );
+  if (!exists) await atomicWrite(gate, dispatchGateSh(branch), 0o644);
+  if (dispatchGateSourceRe.test(text)) return false;
+
+  const m = text.match(sourceTick); // `/m` 앵커라 index가 그 줄 처음이다
+  if (!m || m.index === undefined) {
+    throw new Error(
+      `${name}.sh에 \`. <레포>/tick.sh\` 줄이 없습니다 — 통합 게이트를 넣을 자리를 GUI가 짚을 수 없습니다. 파일을 손으로 편집하세요.`,
+    );
+  }
+  const line = dispatchGateSourceLine(root);
+  const next = text.slice(0, m.index) + line + "\n" + text.slice(m.index);
+  // 자기 검증 둘: ① 그 줄만 늘었다(다른 바이트를 안 밟았다) ② `. tick.sh`가 **바로 다음 줄**이다.
+  const back = next.match(sourceTick);
+  if (
+    next.replace(line + "\n", "") !== text ||
+    !back ||
+    back.index !== m.index + line.length + 1 ||
+    !dispatchGateSourceRe.test(next)
   ) {
     throw new Error("줄을 넣은 뒤 파일이 예상과 달라집니다. 쓰지 않았습니다.");
   }

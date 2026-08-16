@@ -23,6 +23,7 @@ const SET = [
   ".dira/personas/archive-manager/PROFILE.md",
   ".dira/workers/w1.sh",
   ".dira/self-heal.sh",
+  ".dira/dispatch-gate.sh",
 ];
 
 /** 활성 `TICKET_CWD` 대입. `# TICKET_CWD=...`(worker.sh.example의 주석)은 안 걸린다 —
@@ -108,6 +109,22 @@ test("scaffold — §0-3 집합 그대로, 두 번째는 전부 skipped", async 
   const at = lines.findIndex((l) => l.startsWith(healLine));
   assert.ok(at >= 0, `자가 정리 줄이 없다: ${sh.slice(-300)}`);
   assert.equal(lines[at + 1], `. "${path.join(repo.path, "tick.sh")}"`);
+
+  // ⑧ 통합 게이트(§4-14) — 파일이 같이 생기고, 브랜치가 치환되고, 선행조건 1은 없고,
+  // `source` 줄이 `. tick.sh` **바로 위**다(자가 정리보다도 위 — 자가 정리 줄이 그 증거다).
+  const gate = path.join(first.root, "dispatch-gate.sh");
+  execFileSync("bash", ["-n", gate]);
+  const gateText = await readFile(gate, "utf8");
+  assert.doesNotMatch(gateText, /<통합 브랜치>/);
+  assert.doesNotMatch(gateText, /TICKET_CWD가 비어 있다/);
+  const gateLine = `. "${gate}"`;
+  const gateAt = lines.findIndex((l) => l.startsWith(gateLine));
+  assert.ok(gateAt >= 0, `통합 게이트 줄이 없다: ${sh.slice(-300)}`);
+  assert.ok(
+    lines[gateAt + 1].startsWith(healLine),
+    `통합 게이트 줄은 자가 정리 줄 바로 위여야 한다: ${sh.slice(-300)}`,
+  );
+  assert.equal(sh.split("dispatch-gate").length - 1, 1);
 
   // ④ 두 번 돌리면 전부 skipped이고 내용이 안 바뀐다
   const second = await scaffold(project, { branch: "other", specDoc: "docs/S.md" });

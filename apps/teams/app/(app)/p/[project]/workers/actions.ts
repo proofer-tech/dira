@@ -13,6 +13,7 @@ import { runWorker } from "@/lib/engine";
 import { getProject } from "@/lib/projects";
 import {
   applyCommonSource,
+  applyDispatchGate,
   applySelfHeal,
   copyContext,
   createWorker,
@@ -229,6 +230,21 @@ export async function applySelfHealAction(
 ): Promise<WorkerActionResult> {
   try {
     await applySelfHeal(await rootOf(projectId), name);
+    revalidatePath(`/p/${projectId}`, "layout");
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** `<루트>/dispatch-gate.sh`를 없으면 만들고 `source` 줄을 `. tick.sh` 위에 끼운다 (§4-14 §소급).
+ *  이 줄이 없으면 받는 트리가 더러워도 그냥 디스패치되고 push에서만 막힌다. 이미 있으면 no-op이다. */
+export async function applyDispatchGateAction(
+  projectId: string,
+  name: string,
+): Promise<WorkerActionResult> {
+  try {
+    await applyDispatchGate(await rootOf(projectId), name);
     revalidatePath(`/p/${projectId}`, "layout");
     return { ok: true };
   } catch (e) {

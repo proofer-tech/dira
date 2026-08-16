@@ -28,6 +28,7 @@ const {
   alertsPath,
   markAlertsRead,
   applyCommonSource,
+  applyDispatchGate,
   applySelfHeal,
   commonSourceLine,
   copyContext,
@@ -39,6 +40,9 @@ const {
   cronUnregisterCmd,
   cronWriteError,
   deleteWorker,
+  DISPATCH_GATE_FILE,
+  dispatchGateSh,
+  dispatchGateSourceLine,
   SELF_HEAL_FILE,
   SELF_HEAL_SH,
   selfHealSourceLine,
@@ -1590,6 +1594,101 @@ test("applySelfHeal — 픽스처 큐 왕복 1회: 경고 뜸 → 적용 → 경
   await assert.rejects(applySelfHeal(root, "none"), /이 줄이 없습니다|줄이 없습니다/);
   await assert.rejects(applySelfHeal(root, "../evil"), /영문·숫자/);
   assert.strictEqual(readFileSync(path.join(root, "workers", "rel.sh"), "utf8"), "#!/bin/bash\n. tick.sh\n");
+});
+
+test("applyDispatchGate — 픽스처 큐 왕복 1회: 브랜치는 AGENTS.md에서 읽는다 (§4-14 §소급)", async () => {
+  const root = makeRoot({
+    "w1.sh": CTX_SH,
+    "none.sh": "#!/bin/bash\necho x\n", // `. tick.sh` 줄이 없다 = 워커가 아니다
+  });
+  const file = path.join(root, "workers", "w1.sh");
+  chmodSync(file, 0o755);
+  const gate = path.join(root, DISPATCH_GATE_FILE);
+
+  // 브랜치를 못 읽으면(스캐폴딩 이전 큐 등) 새 입력을 요구하지 않고 사유를 준다
+  await assert.rejects(applyDispatchGate(root, "w1"), /통합 브랜치를.*읽을 수 없습니다/);
+
+  // §4-14 — 값은 이미 손에 있다: scaffold가 이미 치환해 둔 AGENTS.md의 그 줄에서 읽는다
+  mkdirSync(path.join(root, "protocols"), { recursive: true });
+  writeFileSync(path.join(root, "protocols", "AGENTS.md"), "본문...\n**끝나면**: `git push . HEAD:main`\n");
+
+  // ① 경고가 뜬다 = 줄이 없다. 파일도 아직 없다
+  assert.strictEqual((await listWorkers(root)).find((w) => w.name === "w1")!.dispatchGateSource, false);
+  assert.strictEqual(existsSync(gate), false);
+
+  // ② 적용 — 브랜치가 main으로 치환된 그 문자열 그대로 + 644
+  assert.strictEqual(await applyDispatchGate(root, "w1"), true);
+  assert.strictEqual(readFileSync(gate, "utf8"), dispatchGateSh("main"));
+  assert.strictEqual(statSync(gate).mode & 0o777, 0o644);
+  const line = dispatchGateSourceLine(root);
+  const text = readFileSync(file, "utf8");
+  assert.strictEqual(
+    text,
+    CTX_SH.replace('. "$HOME/Projects/dira/tick.sh"', `${line}\n. "$HOME/Projects/dira/tick.sh"`),
+  );
+  assert.strictEqual(statSync(file).mode & 0o777, 0o755); // 755를 잃지 않는다
+
+  // ③ 두 파일 다 진짜 bash가 읽는다
+  execFileSync("bash", ["-n", file]);
+  execFileSync("bash", ["-n", gate]);
+
+  // ④ 경고가 사라진다
+  assert.strictEqual((await listWorkers(root)).find((w) => w.name === "w1")!.dispatchGateSource, true);
+
+  // ⑤ 두 번째는 no-op — 줄도 파일도 두 벌이 안 된다. 있는 파일은 안 덮는다
+  assert.strictEqual(await applyDispatchGate(root, "w1"), false);
+  assert.strictEqual(readFileSync(file, "utf8"), text);
+  assert.strictEqual(text.split("dispatch-gate.sh").length - 1, 1);
+  writeFileSync(gate, "손으로 고친 자국\n");
+  assert.strictEqual(await applyDispatchGate(root, "w1"), false);
+  assert.strictEqual(readFileSync(gate, "utf8"), "손으로 고친 자국\n");
+
+  // ⑥ 앵커 없음·이름 규칙은 쓰지 않고 사유를 준다
+  await assert.rejects(applyDispatchGate(root, "none"), /줄이 없습니다/);
+  await assert.rejects(applyDispatchGate(root, "../evil"), /영문·숫자/);
+});
+
+/** §4-14 §검증 2·3 — 받는 트리가 통합 브랜치를 체크아웃 중일 때만 잰다. **진짜 git + 진짜
+ *  bash로 돌린다** — 이 파일의 값어치가 그 판정이라 모킹하면 검증할 게 남지 않는다. */
+test("dispatchGateSh — 통합 브랜치 체크아웃 여부로 막고 안 막고가 갈린다 (§4-14 §검증)", () => {
+  const { base } = makeRepo(); // 브랜치 main, 클린
+  const gate = path.join(base, "dispatch-gate.sh");
+  writeFileSync(gate, dispatchGateSh("main"));
+
+  // env로 준다 — `.`은 특수 빌트인이라 셸 대입 접두사(`VAR=v . file`)의 스코프 규칙이 미묘하다.
+  // 진짜 워커 `.sh`가 그러듯 환경변수로 물려주면 그 미묘함을 안 탄다.
+  const run = () =>
+    execFileSync("bash", ["-c", `. ${JSON.stringify(gate)} tick; echo 끝`], {
+      encoding: "utf8",
+      env: { ...process.env, TICKET_CWD: base },
+    });
+
+  // README.md를 더럽힌다(추적 파일 — `-uno`가 못 보는 미추적 파일로는 안 잰다)
+  writeFileSync(path.join(base, "README.md"), "더럽힌다\n");
+
+  // 1) 통합 브랜치(main)가 아닌 브랜치가 체크아웃돼 있으면 더러워도 안 막는다
+  execFileSync("git", ["-C", base, "switch", "-q", "-c", "tmp-not-integration"]);
+  const notIntegration = run();
+  assert.doesNotMatch(notIntegration, /GATE/);
+  assert.match(notIntegration, /끝/); // exit 0으로 안 끊겼다 — 정상적으로 끝까지 돈다
+
+  // 2) main으로 돌아오면(여전히 더럽다) 막는다
+  execFileSync("git", ["-C", base, "switch", "-q", "main"]);
+  const blocked = run();
+  assert.match(blocked, /GATE 디스패치 보류/);
+  assert.doesNotMatch(blocked, /끝/); // 스크립트가 exit 0으로 끊겨 다음 echo가 안 돈다
+  assert.strictEqual(existsSync(path.join(base, ".git", "dira-dirty-warned")), true);
+
+  // 3) 같은 상태로 또 돌리면 막긴 막되, 상태가 안 바뀌었으니 메시지는 다시 안 찍는다
+  const blockedAgain = run();
+  assert.doesNotMatch(blockedAgain, /GATE 디스패치 보류/);
+  assert.doesNotMatch(blockedAgain, /끝/);
+
+  // 4) 더러움을 치우면 풀리고 해제 메시지가 뜬다
+  execFileSync("git", ["-C", base, "checkout", "--", "README.md"]);
+  const cleared = run();
+  assert.match(cleared, /GATE 해제/);
+  assert.match(cleared, /끝/);
 });
 
 /** `-l`과 `crontab -`이 **같은 파일**을 본다 — 쓴 뒤 다시 읽어 확인하는 `applyCrontab`의 경로다

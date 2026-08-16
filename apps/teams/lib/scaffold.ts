@@ -10,8 +10,11 @@ import { chmod, mkdir, readFile, readdir, realpath, stat, writeFile } from "node
 import path from "node:path";
 import { expandHome } from "./paths.ts";
 import {
+  DISPATCH_GATE_FILE,
   SELF_HEAL_FILE,
   SELF_HEAL_SH,
+  dispatchGateSh,
+  dispatchGateSourceLine,
   renderContextBlock,
   selfHealSourceLine,
   sourceTick,
@@ -187,9 +190,11 @@ export async function scaffold(
   // 워커 화면에서 컨텍스트 카드가 "블록이 없습니다"로 닫힌다. 문자열은 GUI가 0항목을 쓸 때 내는
   // 것과 **같다**(`renderContextBlock([])`) — 새 모양을 만들지 않는다. 주석 예시 블록은 그대로다.
   // **자가 정리도 여기서 태어난다**(§4-4): `<루트>/self-heal.sh` + 워커의 `source` 한 줄.
+  // **통합 게이트도 같이 태어난다**(§4-14): `<루트>/dispatch-gate.sh` + 워커의 `source` 한 줄.
   // 2번째 워커부터는 기존 워커 복사(`createWorker`)라 줄이 저절로 승계된다 — 첫 워커에만 쓴다.
   // 실행 파일이 아니라 source되는 파일이라 모드는 기본값이다(`context.sh`·`dispatch-gate.sh`와 같다).
   await put(SELF_HEAL_FILE, SELF_HEAL_SH);
+  await put(DISPATCH_GATE_FILE, dispatchGateSh(opts.branch));
   const example = await readFile(path.join(repo.path, "worker.sh.example"), "utf8");
   // 치환값은 함수로 준다 — 경로에 `$&`·`$1`이 들어 있으면 문자열 치환은 그걸 해석한다.
   const w1 = example.replace(
@@ -199,8 +204,8 @@ export async function scaffold(
     () =>
       `# 컨텍스트(선택). GUI 워커 화면이 이 블록을 고친다 — 항목 문법은 위 주석 예시.\n` +
       `${renderContextBlock([])}\n\n` +
-      // `. tick.sh` **바로 위**다. 아래면 엔진이 없을 때 이 줄에 닿기 전에 워커가 죽는다(§4-4).
-      `${selfHealSourceLine(root, repo.path)}\n${tickSourceLine(repo.path)}`,
+      // `. tick.sh` **바로 위**다. 아래면 엔진이 없을 때 이 줄에 닿기 전에 워커가 죽는다(§4-4·§4-14).
+      `${dispatchGateSourceLine(root)}\n${selfHealSourceLine(root, repo.path)}\n${tickSourceLine(repo.path)}`,
   );
   await put("workers/w1.sh", w1, 0o755);
 
