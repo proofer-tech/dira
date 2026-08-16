@@ -10,4 +10,6 @@ const { contextBridge, ipcRenderer } = require("electron");
 contextBridge.exposeInMainWorld("dira", {
   /** 네이티브 경로 다이얼로그. 고른 절대경로 하나, 취소면 null. */
   pickPath: (mode) => ipcRenderer.invoke("dira:pick-path", mode),
+  /** §릴리스 · 자동 업데이트 T7 — 인자는 미리 아는 이름 하나("state"·"notes"·"restart"·"later")다. */
+  updateAction: (action) => ipcRenderer.invoke("dira:update-action", action),
 });

@@ -2,9 +2,10 @@
 // 그 전에 userData로 꺼내 `DIRA_ENGINE`으로 넘긴다, 못박는 것 8), 창이 그것을 열고,
 // 창을 닫아도 메뉴바에 남고(N1), 답변 대기 티켓이 새로 생기면 알리고(N2), 화면이 부르면
 // 네이티브 경로 다이얼로그를 띄우고(N3), 로그인 시 자동 실행을 켜고 끄고(N4), 큐에 일이 남아
-// 있으면 잠자기를 막고(N6 — 유휴도 뚜껑도), 새 버전을 찾아 받아두고 받은 시점에 릴리즈 노트를
-// 만들어 보여준다(U1·U2·U3 — 설치는 다음 실행 때).
-// 스펙: ../../docs/DESIGN.md §데스크톱 앱 ("못박는 것" 1~8, N1~N6) · §릴리스 · 자동 업데이트 (R5~R8).
+// 있으면 잠자기를 막고(N6 — 유휴도 뚜껑도), 1시간마다 새 버전을 찾아 받아두고 창이 보이면
+// 토스트로, 아니면 OS 알림으로 알린다(U1·U2·U3 — 설치는 다음 실행 때).
+// 스펙: ../../docs/DESIGN.md §데스크톱 앱 ("못박는 것" 1~8, N1~N6) · §릴리스 · 자동 업데이트
+// (R5~R8) · §표면이 창 안으로 들어온다 (T1~T7).
 import { app, BrowserWindow, Menu, MenuItem, Notification, Tray, dialog, ipcMain, nativeImage, shell } from "electron";
 // 이름 가져오기(`import { autoUpdater }`)가 아닌 이유: electron-updater는 CJS이고 그 이름을
 // `Object.defineProperty(exports, ...)`의 getter로 단다 — cjs-module-lexer가 못 보는 형태라
@@ -387,9 +388,10 @@ ipcMain.handle("dira:pick-path", async (e, mode: unknown) => {
   return r.filePaths[0] ?? null;
 });
 
-// ── 릴리스 · 자동 업데이트 (R5·R6·R8) ──────────────────────────────────────
+// ── 릴리스 · 자동 업데이트 (R5·R6·R8·§표면이 창 안으로 들어온다 T1~T7) ──────
 //
-// 새 화면은 0개다 — `dialog.showMessageBox` 하나씩이고 `apps/teams`는 한 줄도 안 얹는다.
+// 새 화면은 0개다 — `dialog.showMessageBox` 호출이 이 경로에 0건이다(판정 1). 뜨는 자리는
+// 창이 보이면 토스트(`dira:update` 이벤트), 아니면 OS 알림 하나다(T1 `surfaceUpdate`).
 // **받아두고 종료할 때 적용한다. 몰래 재시작하지 않는다**(R6): 기본 경로는 `autoInstallOnAppQuit`
 // 뿐이다. 지금 당장 설치하고 재시작시키는 호출은 U3의 `지금 재시작` 버튼을 눌렀을 때 딱 한 자리에서만
 // 난다(요구 `9a04dabc` — 판정은 `grep -c`라 이름을 여기 안 적는다). 이 앱 뒤에는 도는 세션과
@@ -408,10 +410,72 @@ function autoUpdateFlag(): string {
   return join(app.getPath("userData"), "no-auto-update");
 }
 
+/** 받아둔 버전 — T1 이어붙임(`state`)과 T6(`notes`)의 원본. `null`이면 받아둔 것이 없다.
+ *  `notes`는 `releaseNotes()`가 돌려주는 promise를 그대로 들고 있다 — await하지 않는다(T6). */
+let pendingUpdate: { version: string; notes: Promise<string> } | null = null;
+/** T4 — 직전에 보낸 정수 퍼센트. 다운로드가 안 도는 동안은 `-1`이라 `error`가 그 시점의
+ *  실패인지(체크 단계) 다운로드 중 실패인지 이 값으로 가른다. */
+let lastPercent = -1;
+/** T5 — `지금 재시작`을 한 번 눌러 `busy`라 재확인 토스트를 보낸 상태다. 그 토스트의
+ *  `재시작`을 다시 누르면(같은 `restart` 액션) 이번엔 재확인 없이 그대로 `quitAndInstall()`한다.
+ *  `취소`는 `later`(T5의 다른 버튼과 같은 액션 — 사실도 같다: 지금 안 하면 다음 종료 때
+ *  적용된다)를 불러 이 값을 도로 내린다 — 안 내리면 다음 `지금 재시작` 클릭이 재확인 없이
+ *  바로 재시작해버린다(§표면이 창 안으로 들어온다가 금지한 "모르는 사이 재시작"). */
+let restartAsked = false;
+
+/** T3 — 1시간 폴링. `boot()`이 `app.isPackaged`일 때만 건다. 받아두면(=`update-downloaded`)
+ *  바로 멈춘다 — 다음 tick까지 기다리지 않는다. */
+const UPDATE_POLL_MS = 60 * 60 * 1000;
+let updateTimer: ReturnType<typeof setInterval> | null = null;
+
+function stopUpdatePolling() {
+  if (updateTimer) clearInterval(updateTimer);
+  updateTimer = null;
+}
+
+type UpdateDetail =
+  | { kind: "progress"; percent: number }
+  | { kind: "downloaded"; version: string }
+  | { kind: "message"; text: string }
+  | { kind: "confirm" };
+
+/** T1 표면 판정 — 창이 살아 있고 보이면 토스트, 아니면 OS 알림 하나. 알림을 누르면 창이
+ *  열린다(T1 — 이어붙임은 렌더러가 붙을 때 `state`를 물어보는 쪽이 만든다).
+ *  진행률(T4)과 재확인(T5, 토스트가 떠 있을 때만 나는 값이라 창이 없을 일이 실전에서 없다)은
+ *  창이 없으면 그냥 버린다 — 20%에서 30%로 갔다는 사실은 알림 센터에 남길 값이 아니다. */
+function surfaceUpdate(detail: UpdateDetail) {
+  if (win && !win.isDestroyed() && win.isVisible()) {
+    dispatchToWindow("dira:update", "업데이트 알림", { detail, showWindow: false });
+    return;
+  }
+  if (detail.kind !== "downloaded" && detail.kind !== "message") return;
+  const body = detail.kind === "downloaded" ? `${detail.version}을 받았습니다` : detail.text;
+  const n = new Notification({ title: "dira 업데이트", body });
+  n.on("click", () => readyOrigin && showWindow(readyOrigin));
+  n.show();
+}
+
 /** `checkForUpdates()`는 실패할 때 reject와 **`error` 이벤트를 같이** 낸다. `error`는
  *  EventEmitter가 리스너 없으면 던지는 이름이라, 이 한 줄이 없으면 네트워크가 끊긴 것만으로
- *  앱이 죽는다. 다운로드 중 실패도 여기로 온다(그쪽은 await할 자리가 없다). */
-autoUpdater.on("error", (e) => console.error(`[dira] 업데이트 실패: ${e.message}`));
+ *  앱이 죽는다. 다운로드 중 실패도 여기로 온다(그쪽은 await할 자리가 없다) — `lastPercent`가
+ *  `-1`보다 크면 다운로드가 돌던 중이었다는 뜻이라 그 진행률 상자를 실패 문구로 갈아 끼운다
+ *  (T4). 체크 단계의 실패(다운로드 시작 전)는 여기서 토스트를 안 띄운다 — `checkForUpdate`의
+ *  수동 경로가 그쪽을 이미 말한다. */
+autoUpdater.on("error", (e) => {
+  console.error(`[dira] 업데이트 실패: ${e.message}`);
+  if (lastPercent < 0) return;
+  lastPercent = -1;
+  surfaceUpdate({ kind: "message", text: "업데이트를 받지 못했습니다" });
+});
+
+/** T4 — `download-progress`는 초당 수십 번 난다. 정수 퍼센트가 갈릴 때만 보낸다
+ *  (한 번의 다운로드에 상한 100번). */
+autoUpdater.on("download-progress", (p) => {
+  const percent = Math.floor(p.percent);
+  if (percent === lastPercent) return;
+  lastPercent = percent;
+  surfaceUpdate({ kind: "progress", percent });
+});
 
 /** `claude`를 **우리가** PATH에서 찾는다 — 셸에게 맡기면 못 찾았을 때 손에 남는 것이 종료 코드
  *  `127`뿐이고 사람은 그 숫자에서 원인을 못 읽는다. `apps/teams/lib/auth.ts:161`이 §0-4에서
@@ -488,33 +552,36 @@ async function isBusy(origin: string): Promise<boolean> {
   }
 }
 
-// R6 — 다 받으면 사실만 말한다. `확인`(기본)은 종전처럼 아무 일도 안 하고, `지금 재시작`은
-// `busy`를 확인한 뒤에만 재시작한다(요구 `9a04dabc` — §재재판정).
-// **본문 첫 줄이 R6의 사실이고 노트는 그 아래 붙는다**(R7) — 요약이 죽어도 그 줄은 남는다.
-autoUpdater.on("update-downloaded", async (info) => {
-  const detail = await releaseNotes(app.getVersion(), info.version, publishSlug(), releaseIo);
-  const { response } = await dialog.showMessageBox({
-    type: "info",
-    message: `${app.name} ${info.version}`,
-    detail,
-    buttons: ["확인", "지금 재시작"],
-    defaultId: 0,
-    cancelId: 0,
-  });
-  if (response !== 1) return;
+// R6 — 다 받으면 사실만 말한다. `다음 시작에 적용`(기본)은 종전처럼 아무 일도 안 하고,
+// `지금 재시작`은 `busy`를 확인한 뒤에만 재시작한다(요구 `9a04dabc` — §재재판정).
+// **토스트 본문 한 줄이 R6의 사실이고 노트는 `notes` 액션으로 딴 곳에서 편다**(R7 — 요약이
+// 죽어도 그 한 줄은 이미 떠 있다). `releaseNotes()`를 **await하지 않는다**(T6) — 요약에 최대
+// 60초가 걸려 토스트가 그만큼 늦게 뜨면 안 된다. promise는 `pendingUpdate`가 들고 있다가
+// `notes` 액션을 누른 시점에 그대로 준다.
+autoUpdater.on("update-downloaded", (info) => {
+  stopUpdatePolling(); // T3 — 다 받으면 폴링을 멈춘다
+  lastPercent = -1;
+  restartAsked = false;
+  pendingUpdate = { version: info.version, notes: releaseNotes(app.getVersion(), info.version, publishSlug(), releaseIo) };
+  surfaceUpdate({ kind: "downloaded", version: info.version });
+});
+
+/** T5 — `지금 재시작`. 첫 클릭은 `busy`를 확인해 필요하면 재확인 토스트를 보내고, 그 토스트의
+ *  `재시작`(같은 `restart` 액션)은 재확인 없이 바로 `quitAndInstall()`한다. `isBusy()`의 신뢰
+ *  경계 처리(응답 실패·boolean 아닌 값 → `true`)는 무수정이다. */
+async function handleRestart() {
+  if (restartAsked) {
+    restartAsked = false;
+    autoUpdater.quitAndInstall();
+    return;
+  }
   if (readyOrigin && (await isBusy(readyOrigin))) {
-    const { response: confirmed } = await dialog.showMessageBox({
-      type: "warning",
-      message: "지금 도는 일이 있습니다",
-      detail: "재시작하면 그 세션의 서버가 끊깁니다. 그냥 두면 다음 종료 때 적용됩니다.",
-      buttons: ["취소", "재시작"],
-      defaultId: 0,
-      cancelId: 0,
-    });
-    if (confirmed !== 1) return;
+    restartAsked = true;
+    surfaceUpdate({ kind: "confirm" });
+    return;
   }
   autoUpdater.quitAndInstall();
-});
+}
 
 /** U1(`manual`) · 켤 때와 U2를 켠 직후의 배경 검사(`!manual`).
  *
@@ -528,41 +595,24 @@ async function checkForUpdate(manual: boolean) {
   if (!app.isPackaged) {
     const why = "개발 실행(`pnpm dev`)에서는 업데이트를 검사하지 않습니다";
     if (!manual) return console.log(`[dira] ${why}`);
-    await dialog.showMessageBox({
-      type: "info",
-      message: why,
-      detail: "패키징된 .app에서만 동작합니다 (pnpm dist).",
-      buttons: ["확인"],
-    });
+    surfaceUpdate({ kind: "message", text: `${why} — 패키징된 .app에서만 동작합니다 (pnpm dist).` });
     return;
   }
+  lastPercent = -1; // 새 체크 주기 — 지난 다운로드의 퍼센트를 들고 있지 않는다
   try {
     const r = await autoUpdater.checkForUpdates();
     if (!manual) return;
-    await dialog.showMessageBox(
-      r?.isUpdateAvailable
-        ? {
-            type: "info",
-            message: `${r.updateInfo.version}을 받고 있습니다.`,
-            detail: "다 받으면 알려드립니다. 앱을 종료하면 적용됩니다.",
-            buttons: ["확인"],
-          }
-        : {
-            type: "info",
-            message: `최신 버전입니다 — ${app.name} ${app.getVersion()}`,
-            buttons: ["확인"],
-          },
-    );
+    surfaceUpdate({
+      kind: "message",
+      text: r?.isUpdateAvailable
+        ? `${r.updateInfo.version}을 받고 있습니다. 다 받으면 알려드립니다.`
+        : `최신 버전입니다 — ${app.name} ${app.getVersion()}`,
+    });
   } catch (e) {
     if (!manual) return; // `error` 리스너가 이미 찍었다
-    await dialog.showMessageBox({
-      type: "warning",
-      message: "업데이트를 확인하지 못했습니다",
-      // 404면 electron-updater가 응답 헤더 전부를 message에 붙인다(실측 30줄). 사유는 첫 줄과
-      // URL에 다 있고, 나머지는 다이얼로그를 못 읽게 만든다 — 전문은 콘솔에 남는다.
-      detail: (e as Error).message.slice(0, 300),
-      buttons: ["확인"],
-    });
+    // 404면 electron-updater가 응답 헤더 전부를 message에 붙인다(실측 30줄). 사유는 첫 줄과
+    // URL에 다 있고, 나머지는 토스트 한 줄을 못 읽게 만든다 — 전문은 콘솔에 남는다.
+    surfaceUpdate({ kind: "message", text: `업데이트를 확인하지 못했습니다: ${(e as Error).message.slice(0, 300)}` });
   }
 }
 
@@ -574,6 +624,25 @@ function setAutoUpdate(on: boolean) {
   console.log(`[dira] 자동 업데이트 ${on ? "켬" : "끔"} — ${flag} ${on ? "지움" : "만듦"}`);
   if (on) checkForUpdate(false);
 }
+
+/** T7 — 오는 길은 채널 하나, 인자는 미리 아는 이름 하나다. 모르는 값은 버린다(못박는 것 4) —
+ *  렌더러가 보낸 값이 그대로 호출 인자가 되는 자리를 안 만든다. */
+ipcMain.handle("dira:update-action", async (_e, action: unknown) => {
+  switch (action) {
+    case "state":
+      return pendingUpdate ? { version: pendingUpdate.version } : null;
+    case "notes":
+      return pendingUpdate ? await pendingUpdate.notes : null;
+    case "restart":
+      await handleRestart();
+      return null;
+    case "later":
+      restartAsked = false; // T5 — 재확인 토스트의 `취소`도 이 액션이다
+      return null;
+    default:
+      return null;
+  }
+});
 
 // ── N1 트레이 ──────────────────────────────────────────────────────────────
 
@@ -662,13 +731,16 @@ async function showAbout() {
  *  다시 만들고, 그 문서는 아직 리스너를 안 걸었다). 한 번 더 누르면 열린다 — 그 경로를 위해
  *  로드 완료·하이드레이션까지 기다리는 배선을 만들 값이 없다.
  *
- *  **이 길이 둘이 되어 함수가 하나다**(N5 — `Edit > 찾기`). 갈리는 것은 이벤트 이름과 로그
- *  문구뿐이라 두 벌로 두면 위 네 문단의 근거가 한쪽에서만 지켜진다. */
-function dispatchToWindow(event: string, what: string) {
+ *  **이 길이 셋이 되어 함수가 하나다**(N5 — `Edit > 찾기`, §릴리스 — 자동 업데이트 T7). 갈리는
+ *  것은 이벤트 이름과 로그 문구뿐이라 세 벌로 두면 위 네 문단의 근거가 한쪽에서만 지켜진다.
+ *  **`showWindow()`를 부르는 줄이 인자로 갈린다** — 업데이트(T1)는 창을 안 꺼낸다. 값이 실려도
+ *  `Event`가 `CustomEvent`로 남는 것뿐이라 리스너 쪽 코드는 안 갈린다. */
+function dispatchToWindow(event: string, what: string, opts: { detail?: unknown; showWindow?: boolean } = {}) {
   if (!readyOrigin) return console.log(`[dira] ${what} — 서버가 아직 준비 중입니다`);
-  showWindow(readyOrigin);
+  if (opts.showWindow ?? true) showWindow(readyOrigin);
+  const detail = opts.detail !== undefined ? `, { detail: ${JSON.stringify(opts.detail)} }` : "";
   win?.webContents
-    .executeJavaScript(`window.dispatchEvent(new Event(${JSON.stringify(event)}))`)
+    .executeJavaScript(`window.dispatchEvent(new CustomEvent(${JSON.stringify(event)}${detail}))`)
     .catch((e: Error) => console.error(`[dira] ${what}를 열지 못했습니다: ${e.message}`));
 }
 
@@ -757,6 +829,14 @@ async function boot() {
   // U2가 켜져 있으면(기본) 켤 때 한 번 검사해 받아둔다. await하지 않는다 — 네트워크가
   // 기동 경로에 앉으면 안 된다. 실패는 `error` 리스너가 로그로만 남긴다 (R5·R6).
   if (!existsSync(autoUpdateFlag())) checkForUpdate(false);
+
+  // T3 — 새 타이머 하나. N6가 말리는 것은 "같은 주기로 같은 서버를 묻는 폴링 둘"이고
+  // 이쪽은 주기(1시간)도 대상(원격 릴리스 피드)도 다르다. 개발 실행은 아예 안 건다.
+  if (app.isPackaged) {
+    updateTimer = setInterval(() => {
+      if (existsSync(autoUpdateFlag())) checkForUpdate(false); // 매 tick U2를 다시 본다
+    }, UPDATE_POLL_MS);
+  }
 
   await pollAwaiting(origin); // 첫 응답 = 씨 뿌리기
   // 타이머는 하나다 (N6) — N2와 같은 30초를 나눠 쓴다.
