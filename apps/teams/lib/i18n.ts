@@ -241,6 +241,8 @@ export const ko: Record<string, string> = {
   "shell.switcher.emptyQueriedGlue": "와",
   "shell.switcher.emptySuffix": "일치하는 프로젝트 0건",
   "shell.switcher.openLabel": "열림",
+  // 업데이트 토스트 그릇의 낭독 이름(§비주얼 §55 (10)) — `<Toaster containerAriaLabel>`.
+  "shell.update.ariaLabel": "알림",
 
   // 알림 종(§0-10 문구 표 · §비주얼 §28). `bell.due.*`(⑦)는 `a50c8304`가 먼저 옮겼다 — 아래는
   // 나머지 여섯(⑤①②③④⑥, §0-14 순서) + 트리거 자신의 배지 라벨.
@@ -610,6 +612,7 @@ export const en: Record<string, string> = {
   "shell.switcher.emptyQueriedGlue": ":",
   "shell.switcher.emptySuffix": "No matching projects",
   "shell.switcher.openLabel": "open",
+  "shell.update.ariaLabel": "Notifications",
 
   // 알림 종(§0-10 문구 표 · §비주얼 §28). 개수 제목 넷은 전부 `bell.due.titlePrefix`가 연 수를
   // 따른다 — **숫자를 뒤로 보내고 콜론으로 받는다.** 영어에서 `3 tickets …` 어순을 살리려면

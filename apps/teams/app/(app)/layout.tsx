@@ -5,6 +5,7 @@ import { KeymapProvider } from "@/components/keymap-provider";
 import { LanguageProvider } from "@/components/language-provider";
 import { FeedbackDialog } from "@/components/feedback-dialog";
 import { DesktopFindBar } from "@/components/find-bar";
+import { UpdateToast } from "@/components/update-toast";
 import { ScreenView } from "@/components/project-switcher";
 import { readKeymap, readLanguage } from "@/lib/projects";
 import "../globals.css";
@@ -65,6 +66,11 @@ export default async function RootLayout({
                   `<FeedbackDialog/>`와 같다: 붙는 화면이 다섯이고 레이아웃이 둘로 갈린다.
                   뜨지 않는 화면(보드·홈)과 셸(브라우저)은 저 컴포넌트가 판정해 `null`이다 */}
               <DesktopFindBar />
+              {/* §릴리스 - 자동 업데이트 §표면이 창 안으로 들어온다(§비주얼 §55). `LanguageProvider`
+                  안인 이유는 `containerAriaLabel`이 이 셸의 다른 aria-label처럼 사전을 지나서다
+                  (§0-16). `<FeedbackDialog>`-`<DesktopFindBar>`와 같은 자리 - 화면 이동 없이
+                  지금 화면 위에 뜬다 */}
+              <UpdateToast />
             </KeymapProvider>
           </LanguageProvider>
         </TooltipProvider>
