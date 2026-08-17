@@ -979,6 +979,11 @@ export function openFixTicket(tickets: Ticket[], marker: string): Ticket | null 
 /** 온톨로지 스키마 위반 정리 티켓의 마커 값(§P230). 화면·액션이 같은 리터럴을 쓰게 하는 자리. */
 export const ONTOLOGY_FIX_MARKER = "ontology-schema";
 
+/** 이 티켓이 미완으로 끝나며 남긴 이어받기 티켓 stem(§P294 §미완으로 끝나는 세션 결정 3).
+ *  `archivesOf`와 같은 선례 — 값은 stem 하나이고 목록이 아니다, GUI만 읽는 커스텀 frontmatter
+ *  키라 엔진은 모르는 채 무해하다. 대상 티켓 조회는 호출부가 `resolveDep`으로 한다. */
+export const continuedOf = (t: Ticket): string => unquote(t.fm.continued ?? "");
+
 /** 칸반 호버 관계선의 간선 (DESIGN.md §1 보드 · §비주얼 §17). 상세 §2 관계 절이 그리는 것과
  *  **같은 간선**이다: `deps`(선행 · 후행 역참조) + `req:`(요구사항 ↔ 나온 티켓).
  *  met/unmet으로 거르지 않는다 — 상세가 안 거르는 것과 같은 이유고 개별 상태는 배지가 말한다.

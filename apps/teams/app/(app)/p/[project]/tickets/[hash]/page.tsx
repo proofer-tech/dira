@@ -32,6 +32,7 @@ import {
   awaitingOf,
   awaitingUnlocked,
   bodyWithoutQuestions,
+  continuedOf,
   depBadges,
   derivedFrom,
   isAwaiting,
@@ -157,6 +158,12 @@ export default async function TicketDetail({
   // `deps`와도 `req`와도 섞지 않는다: 선후도 출처도 아니라 **이 티켓을 기록으로 옮긴 티켓**이다.
   const archives = archivesOf(ticket);
   const archiveTarget = archives ? resolveDep(tickets, archives, config) : null;
+
+  // 이어받기 (§P294 §미완으로 끝나는 세션 결정 3). 같은 `resolveDep` — 새 컴포넌트 0.
+  // 큐에 없는 stem이면 `continuedTarget`이 `null`이라 배지에 링크를 안 넘긴다(끊긴 값에
+  // 화면이 안 깨진다).
+  const continued = continuedOf(ticket);
+  const continuedTarget = continued ? resolveDep(tickets, continued, config) : null;
   const archivers = archivedBy(tickets, ticket, config);
 
   // 세션 스트림 (§2-1). 갈림길은 **세션이 붙은 적이 있는가** 하나다(§9 빈 상태 표):
@@ -277,7 +284,11 @@ export default async function TicketDetail({
           {isAwaiting(ticket) ? (
             <StatusBadge status="awaiting" days={daysSince(ticket.mtime)} />
           ) : (
-            <StatusBadge status={statusOf(ticket)} />
+            <StatusBadge
+              status={statusOf(ticket)}
+              continued={!!continued}
+              href={continuedTarget ? href(continuedTarget) : undefined}
+            />
           )}
           <span className="font-mono text-xs text-muted-foreground">{ticket.hash}</span>
         </div>

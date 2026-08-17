@@ -67,6 +67,7 @@ import {
   TABLE_DEFAULT_SORT,
   archivesOf,
   awaitingOf,
+  continuedOf,
   epicOf,
   filterTickets,
   inDefaultList,
@@ -1042,7 +1043,12 @@ export default async function Board({
                       // `?rows=`를 30 올려 다음 몫을 받아 온다(§1 보드 §테이블 바디는 30행씩 ·
                       // §성능 예산 §초과분 ②). 건수 줄은 이 값과 무관하다.
                       <BoardRows more={tableRows.length > shownRows}>
-                        {tableRows.slice(0, shownRows).map((t) => (
+                        {tableRows.slice(0, shownRows).map((t) => {
+                          // 이어받기(§P294 §미완으로 끝나는 세션 결정 3) — 같은 `resolveDep`,
+                          // 큐에 없는 stem이면 `contTarget`이 `null`이라 배지에 링크가 안 붙는다.
+                          const cont = continuedOf(t);
+                          const contTarget = cont ? resolveDep(tickets, cont, config) : null;
+                          return (
                           // 행 전체가 상세로 가는 링크다 — 해시 셀의 링크를 행 크기로 늘린다(§7 대비:
                           // 여기는 행 액션 버튼이 없어서 행 링크가 안전하다). deps 배지는 그 위에 뜬다.
                           <TableRow key={t.path} className="relative h-9 focus-within:bg-muted/50">
@@ -1050,7 +1056,14 @@ export default async function Board({
                               {isAwaiting(t) ? (
                                 <StatusBadge status="awaiting" days={daysSince(t.mtime)} />
                               ) : (
-                                <StatusBadge status={statusOf(t)} />
+                                // 이어받기 링크는 늘어난 행 링크 위에 뜨게 둔다(위 deps 배지와 같은 이유)
+                                <span className="relative z-10">
+                                  <StatusBadge
+                                    status={statusOf(t)}
+                                    continued={!!cont}
+                                    href={contTarget ? href(contTarget) : undefined}
+                                  />
+                                </span>
                               )}
                             </TableCell>
                             <TableCell className="px-3 py-0">
@@ -1128,7 +1141,8 @@ export default async function Board({
                               {epicOf(t) || "—"}
                             </TableCell>
                           </TableRow>
-                        ))}
+                          );
+                        })}
                       </BoardRows>
                     )}
                   </TableBody>

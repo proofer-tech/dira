@@ -123,29 +123,40 @@ export const daysSince = (ms: number) => Math.floor((Date.now() - ms) / 86_400_0
  *  사람이 한다 — 자동 만료도 색 변화도 없다(§요구사항 레이어 결정 4).
  *
  *  경과는 라벨과 **같은 색·크기**다 — 별도 span도 `opacity`도 `--muted-foreground`도 쓰지 않는다
- *  (§비주얼 §1 대비 함정). `tabular-nums`만 붙어서 자릿수가 바뀔 때 배지가 흔들리지 않는다(§3). */
+ *  (§비주얼 §1 대비 함정). `tabular-nums`만 붙어서 자릿수가 바뀔 때 배지가 흔들리지 않는다(§3).
+ *
+ *  **`continued`·`href`는 `done` 전용이다**(§P294 §미완으로 끝나는 세션 결정 3) — `continued:`가
+ *  있는 완료 티켓만 `완료(이어짐)`으로 갈라 그린다. `href`는 호출부가 `continuedOf` stem을
+ *  `resolveDep`으로 이미 풀어서 주는 값이다 — 이 컴포넌트는 데이터를 조회하지 않는다(`DepBadge`의
+ *  `href`와 같은 자리). 큐에 없는 stem이면 호출부가 `href`를 안 줘서 링크 없이 배지만 선다. */
 export function StatusBadge({
   status,
   days,
   className,
   locale = DEFAULT_LOCALE,
+  continued = false,
+  href,
 }: {
   status: Status;
   days?: number;
   className?: string;
   locale?: Locale;
+  continued?: boolean;
+  href?: string;
 }) {
   const { icon: Icon, variant, tint, hintKey } = STATUS[status];
-  return (
+  const labelKey = status === "done" && continued ? "status.label.doneContinued" : STATUS[status].labelKey;
+  const badge = (
     <Badge
       variant={variant}
       className={cn("tabular-nums", tint, className)}
       title={hintKey ? t(locale, hintKey) : undefined}
     >
       <Icon aria-hidden className="size-3.5" />
-      {statusLabel(status, locale) + elapsedSuffix(days, locale)}
+      {t(locale, labelKey) + elapsedSuffix(days, locale)}
     </Badge>
   );
+  return href ? <Link href={href}>{badge}</Link> : badge;
 }
 
 /** deps 배지 (§2 deps 배지) — 보드 deps 컬럼과 티켓 상세 관계 절이 **같은 것**을 쓴다.

@@ -308,6 +308,8 @@ export const ko: Record<string, string> = {
   "status.label.assigned": "할당됨",
   "status.label.wip": "진행중",
   "status.label.done": "완료",
+  // §P294 §미완으로 끝나는 세션 결정 3 — `continued:`를 든 완료 티켓만 이 라벨로 갈린다.
+  "status.label.doneContinued": "완료(이어짐)",
   "status.label.running": "running",
   "status.label.idle": "idle",
   "status.label.stopped": "stopped",
@@ -692,6 +694,7 @@ export const en: Record<string, string> = {
   "status.label.assigned": "Assigned",
   "status.label.wip": "In progress",
   "status.label.done": "Done",
+  "status.label.doneContinued": "Done (continued)",
   "status.label.running": "running",
   "status.label.idle": "idle",
   "status.label.stopped": "stopped",

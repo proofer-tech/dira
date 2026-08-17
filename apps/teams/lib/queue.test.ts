@@ -17,6 +17,7 @@ import {
   archivesOf,
   awaitingOf,
   awaitingUnlocked,
+  continuedOf,
   derivedFrom,
   dueAlertOf,
   epicOf,
@@ -1630,6 +1631,30 @@ test("아카이브 티켓은 기본 목록에서 빠지고 persona 필터가 꺼
   // 양방향 해석은 `resolveDep` 그대로다 — `.done` 접미사가 붙은 대상도 stem으로 찾는다
   assert.strictEqual(resolveDep(tickets, archivesOf(by("arch0001")), DEFAULT), by("aaaa1111"));
   assert.deepStrictEqual(hashes(archivedBy(tickets, by("aaaa1111"), DEFAULT)), ["arch0001"]);
+});
+
+test("continuedOf — 값 있음 · 없음 · 큐에 없는 stem (§P294 §미완으로 끝나는 세션 결정 3)", async () => {
+  const root = newRoot();
+  await write(root, "aaaa1111.done.md", fm({ ticket: "aaaa1111", title: "이어받기를 남기고 닫힘",
+    kind: "work", persona: "developer", continued: "bbbb2222" }));
+  await write(root, "bbbb2222.md", fm({ ticket: "bbbb2222", title: "이어받기", kind: "work",
+    persona: "developer" }));
+  await write(root, "cccc3333.done.md", fm({ ticket: "cccc3333", title: "그냥 완료", kind: "work",
+    persona: "developer" }));
+  await write(root, "dddd4444.done.md", fm({ ticket: "dddd4444", title: "끊긴 이어받기",
+    kind: "work", persona: "developer", continued: "zzzz9999" }));
+
+  const tickets = await listTickets(root, DEFAULT);
+  const by = (h: string) => tickets.find((t) => t.hash === h)!;
+
+  // 값 있음 — `archivesOf`와 같은 모양(단일 stem), `resolveDep`으로 실제 티켓을 찾는다
+  assert.strictEqual(continuedOf(by("aaaa1111")), "bbbb2222");
+  assert.strictEqual(resolveDep(tickets, continuedOf(by("aaaa1111")), DEFAULT), by("bbbb2222"));
+  // 값 없음 — 회귀 자리(§수용조건 ⑤): `continued:` 없는 완료 티켓은 빈 문자열
+  assert.strictEqual(continuedOf(by("cccc3333")), "");
+  // 끊긴 stem — 값은 있는데 큐에 그 티켓이 없다. `resolveDep`이 `null`을 주고 화면이 안 깨진다
+  assert.strictEqual(continuedOf(by("dddd4444")), "zzzz9999");
+  assert.strictEqual(resolveDep(tickets, continuedOf(by("dddd4444")), DEFAULT), null);
 });
 
 test("openFixTicket — 0장 · 열림/진행중 1장 · 완료만 세 경우 (§P230 두 번 눌러도 한 장)", async () => {
