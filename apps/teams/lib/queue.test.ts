@@ -33,6 +33,7 @@ import {
   composeAnswer,
   lastQuestionOptions,
   optionsOf,
+  planOf,
   questionsOf,
   depBadges,
   referrers,
@@ -1166,6 +1167,58 @@ test("답변 대기 판정 + 답변 파일 생성으로 재큐 (엔진과 대조
   assert.match(pySelect(r), /r0000001\.md\|r0000001\|request\|pm/);
   // 답변 파일 자체는 열린 티켓이 아니라 `list`를 어지럽히지 않는다
   assert.doesNotMatch(pyList(r), /a1111111/);
+});
+
+// ── §2-11①§요구 86921371 — planOf (DESIGN.md §2-11①) ──────────────────────────
+
+test("planOf — 네 상태 판정(§2-11①)", () => {
+  const body =
+    "## Goal\n\n하나.\n\n## 진행 계획\n\n" +
+    "- [x] 완료 항목 (2026-08-18T09:12:03+09:00 -> 2026-08-18T09:40:11+09:00)\n" +
+    "- [ ] 진행중 항목 (2026-08-18T09:40:11+09:00)\n" +
+    "- [ ] 미착수 항목\n" +
+    "- [ ] ~~취소된 항목~~ (2026-08-18T10:02:14+09:00 -> 2026-08-18T10:05:40+09:00)\n";
+  assert.deepStrictEqual(planOf(body), [
+    {
+      text: "완료 항목",
+      state: "done",
+      start: "2026-08-18T09:12:03+09:00",
+      end: "2026-08-18T09:40:11+09:00",
+    },
+    { text: "진행중 항목", state: "doing", start: "2026-08-18T09:40:11+09:00", end: null },
+    { text: "미착수 항목", state: "todo", start: null, end: null },
+    {
+      text: "취소된 항목",
+      state: "cancelled",
+      start: "2026-08-18T10:02:14+09:00",
+      end: "2026-08-18T10:05:40+09:00",
+    },
+  ]);
+});
+
+test("planOf — 끝 시각 없는 완료: 상자가 켜지면 시작만 있어도 완료다(§2-11①)", () => {
+  const body = "## 진행 계획\n\n- [x] 끝을 안 채웠다 (2026-08-18T09:00:00+09:00)\n";
+  assert.deepStrictEqual(planOf(body), [
+    { text: "끝을 안 채웠다", state: "done", start: "2026-08-18T09:00:00+09:00", end: null },
+  ]);
+});
+
+test("planOf — 시작 없는 완료: 괄호가 아예 없어도 상자가 켜지면 완료다(§2-11①)", () => {
+  const body = "## 진행 계획\n\n- [x] 시각 없이 바로 완료\n";
+  assert.deepStrictEqual(planOf(body), [
+    { text: "시각 없이 바로 완료", state: "done", start: null, end: null },
+  ]);
+});
+
+test("planOf — 절이 없는 본문은 빈 배열이다(§2-11①)", () => {
+  assert.deepStrictEqual(planOf("## Goal\n\n하나.\n"), []);
+  assert.deepStrictEqual(planOf(""), []);
+});
+
+test("bodyWithoutQuestions — `## 진행 계획`도 `## 질문 n`과 같이 빠진다(§2-11⑤)", () => {
+  const body =
+    "## Goal\n\n하나.\n\n## 진행 계획\n\n- [x] 항목 (2026-08-18T09:00:00+09:00 -> 2026-08-18T09:10:00+09:00)\n\n## 참고\n\n계획 아니다.";
+  assert.strictEqual(bodyWithoutQuestions(body), "## Goal\n\n하나.\n\n## 참고\n\n계획 아니다.");
 });
 
 // ── 결정 11 §요구사항 레이어 — optionsOf / composeAnswer (DESIGN.md §결정 11) ───────

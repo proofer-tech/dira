@@ -599,10 +599,61 @@ export function optionsOf(question: string): OptionGroup[] {
 // 체크박스마다 이 함수를 직접 부른다. 재수출로 자리는 여기 하나로 보인다.
 export { composeAnswer, type AnswerPick } from "./urls.ts";
 
-/** `questionsOf`가 데려간 절을 뺀 본문 — **읽기 전용 렌더(`<Markdown>`)만** 이걸 쓴다(§2 왕복).
- *  같은 질문이 스레드와 본문에 두 벌 뜨지 않게 하는 자리고, 스레드가 질문의 유일한 출처다.
+/** §2-11①의 네 상태. `TicketState`(open/wip/done)와 같은 영문 관용구다. */
+export type PlanState = "todo" | "doing" | "done" | "cancelled";
+
+/** `## 진행 계획` 절의 체크박스 줄 하나(§2-11①). `start`·`end`는 줄에 적힌 대로의 ISO 8601 +
+ *  오프셋 문자열이다 — 안 적힌 시각은 화면이 지어내지 않고 `null`로 둔다. */
+export type PlanItem = {
+  text: string; // 문장. 취소면 `~~`를 걷어낸 값
+  state: PlanState;
+  start: string | null;
+  end: string | null;
+};
+
+const PLAN_LINE = /^-\s*\[([ x])\]\s*(.*)$/;
+// 줄 끝의 `(<시작>)` 또는 `(<시작> -> <끝>)` — frontmatter `assigned_at`과 같은 ISO 8601 + 오프셋(§2-11①)
+const PLAN_TIME =
+  /\s*\((\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:Z|[+-]\d{2}:\d{2}))(?:\s*->\s*(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:Z|[+-]\d{2}:\d{2})))?\)\s*$/;
+
+/** 티켓 본문의 `## 진행 계획` 절 → 계획 목록(§2-11①). 체크박스 줄이 아닌 줄은 건너뛴다 —
+ *  형식이 어긋난 줄에 상태를 지어내지 않는다.
  *
- *  편집 폼·검색·복사·이어받기는 **원문 전문**이다 — 폼에서 빼면 저장이 파일에서 질문을 지운다.
+ *  판정 순서 — **취소**(문장이 `~~`로 감싸였다) → **완료**(상자가 켜졌다) → **진행중**(시작이
+ *  있다) → **미착수**. `questionsOf`와 한 파일·같은 루프 모양이다. */
+export function planOf(body: string): PlanItem[] {
+  const items: PlanItem[] = [];
+  let inSection = false;
+  for (const line of body.split("\n")) {
+    if (/^#{1,2}\s/.test(line)) {
+      inSection = /^##\s*진행\s*계획/.test(line);
+      continue;
+    }
+    if (!inSection) continue;
+    const m = line.match(PLAN_LINE);
+    if (!m) continue;
+    const checked = m[1] === "x";
+    let rest = m[2];
+    let start: string | null = null;
+    let end: string | null = null;
+    const t = rest.match(PLAN_TIME);
+    if (t) {
+      start = t[1];
+      end = t[2] ?? null;
+      rest = rest.slice(0, t.index).trimEnd();
+    }
+    const strike = rest.match(/^~~(.*)~~$/);
+    const state: PlanState = strike ? "cancelled" : checked ? "done" : start ? "doing" : "todo";
+    items.push({ text: (strike ? strike[1] : rest).trim(), state, start, end });
+  }
+  return items;
+}
+
+/** `questionsOf`가 데려간 절과 `## 진행 계획`(§2-11⑤)을 뺀 본문 — **읽기 전용 렌더(`<Markdown>`)만**
+ *  이걸 쓴다(§2 왕복). 질문은 스레드가, 계획은 진행 기록이 유일한 출처가 되는 자리고, 같은 절이
+ *  본문에 두 벌 뜨지 않게 하는 자리다.
+ *
+ *  편집 폼·검색·복사·이어받기는 **원문 전문**이다 — 폼에서 빼면 저장이 파일에서 절을 지운다.
  *  판정을 `questionsOf`와 한 파일·같은 루프 모양으로 두는 이유: 정규식이 두 벌이 되면 스레드에
  *  뜬 질문이 본문에는 남는 티켓이 생긴다. */
 export function bodyWithoutQuestions(body: string): string {
@@ -610,7 +661,7 @@ export function bodyWithoutQuestions(body: string): string {
   let dropping = false;
   for (const line of body.split("\n")) {
     const heading = /^#{1,2}\s/.test(line);
-    if (heading) dropping = /^##\s*질문/.test(line);
+    if (heading) dropping = /^##\s*(질문|진행\s*계획)/.test(line);
     if (dropping) {
       // 절 제목 앞에 있던 빈 줄까지 걷어낸다 — 안 하면 지운 자리에 빈 줄이 겹쳐 남는다
       if (heading) while (out.length && out[out.length - 1].trim() === "") out.pop();

@@ -25,6 +25,7 @@ import {
   screenOf,
   timeLabel,
   visibleChatRows,
+  windowEvents,
   type Anchor,
   type GroupedItem,
   type ProgressItem,
@@ -414,6 +415,60 @@ test("groupProgress ③ — 꼬리 묶음도 만든다(마지막 말풍선 뒤)"
   assert.deepEqual(gorder(groups), ["e1", "묶음(1)"]);
   // 묶음의 key는 그 묶음 첫 사건의 key다(§2-6 ② — 폴링이 뒤에 사건을 더해도 첫 사건은 안 바뀐다).
   assert.equal(groups[1].kind === "bundle" && groups[1].events[0].key, "e2");
+});
+
+/** 창 배분 (DESIGN.md §2-11④). `plan()`이 `PlanItem` 모양을 그대로 만든다 — 배열 순서가 계획
+ *  줄 순서(파일 순서)다. */
+const plan = (
+  text: string,
+  state: "todo" | "doing" | "done" | "cancelled",
+  start: string | null,
+  end: string | null = null,
+) => ({ text, state, start, end });
+const we = (key: string, ts: string) => ({ key, ts });
+const wKeys = (bucket: { key: string }[]) => bucket.map((e) => e.key);
+
+test("windowEvents — 진행중 둘: 마지막만 진짜 진행중, 앞은 다음 계획의 시작으로 닫힌다(§2-11④)", () => {
+  const plans = [plan("a", "doing", "2026-08-01T01:00:00Z"), plan("b", "doing", "2026-08-01T03:00:00Z")];
+  const now = Date.parse("2026-08-01T05:00:00Z");
+  const events = [
+    we("e1", "2026-08-01T01:30:00Z"), // a의 창 [01:00, 03:00)
+    we("e2", "2026-08-01T03:30:00Z"), // b의 창 [03:00, now)
+    we("e3", "2026-08-01T04:30:00Z"),
+  ];
+  const { buckets, outside } = windowEvents(plans, events, now);
+  assert.deepEqual(wKeys(buckets[0]), ["e1"]);
+  assert.deepEqual(wKeys(buckets[1]), ["e2", "e3"]);
+  assert.deepEqual(outside, []);
+});
+
+test("windowEvents — 계획 밖 사건: 어느 창에도 안 들면 시간순 그대로 outside다(§2-11④)", () => {
+  const plans = [plan("a", "doing", "2026-08-01T02:00:00Z")];
+  const now = Date.parse("2026-08-01T05:00:00Z");
+  const events = [we("before", "2026-08-01T01:00:00Z"), we("during", "2026-08-01T03:00:00Z")];
+  const { buckets, outside } = windowEvents(plans, events, now);
+  assert.deepEqual(wKeys(buckets[0]), ["during"]);
+  assert.deepEqual(wKeys(outside), ["before"]);
+});
+
+test("windowEvents — `ts` 없는 사건은 앞 사건의 시각을 물려받는다(§2-3② · mergeProgress와 같은 규칙)", () => {
+  const plans = [plan("a", "done", "2026-08-01T01:00:00Z", "2026-08-01T02:00:00Z")];
+  const events = [we("e1", "2026-08-01T01:10:00Z"), { key: "e2", ts: "" }, we("e3", "2026-08-01T03:00:00Z")];
+  const { buckets, outside } = windowEvents(plans, events, 0);
+  assert.deepEqual(wKeys(buckets[0]), ["e1", "e2"]); // e2는 e1(01:10)의 시각을 물려받아 같은 창에 든다
+  assert.deepEqual(wKeys(outside), ["e3"]);
+});
+
+test("windowEvents — 겹치는 창: 앞 계획이 먼저 집는다, 한 사건은 한 계획에만(§2-11④)", () => {
+  const plans = [
+    plan("a", "done", "2026-08-01T01:00:00Z", "2026-08-01T03:00:00Z"),
+    plan("b", "done", "2026-08-01T02:00:00Z", "2026-08-01T04:00:00Z"),
+  ];
+  const events = [we("e1", "2026-08-01T02:30:00Z")]; // a·b 창 둘 다에 든다
+  const { buckets, outside } = windowEvents(plans, events, 0);
+  assert.deepEqual(wKeys(buckets[0]), ["e1"]); // 앞 계획(a)이 집는다
+  assert.deepEqual(wKeys(buckets[1]), []);
+  assert.deepEqual(outside, []);
 });
 
 test("progressMarkerText — 마지막 레코드가 thinking이면 '생각하는 중', 그 외엔 종전 문구", () => {

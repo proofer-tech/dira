@@ -5,6 +5,9 @@
  *  전환기는 브라우저에서 `usePathname()`으로 목적지를 만든다. 규칙이 갈리면 미리보기가
  *  거짓말을 하므로 함수는 한 곳에 둔다. **여기에 `node:*` import를 추가하지 않는다.** */
 import { DEFAULT_LOCALE, t, type Locale } from "./i18n.ts";
+// `queue.ts`는 `node:fs/promises`를 값으로 import하지만 타입은 지워진다(`isolatedModules`) —
+// `session-stream.tsx`가 이미 같은 파일에서 `ThreadItem`을 타입만 끌어오는 것과 같은 자리다.
+import type { PlanItem } from "./queue.ts";
 
 /** 이름 → URL 조각 (DESIGN.md §프로젝트 > `id` 슬러그 규칙).
  *  한글 이름이면 빈 문자열이 되는 게 정상이다 — 그때는 등록 폼이 id를 직접 받는다. */
@@ -420,6 +423,62 @@ export function groupProgress<E, T>(
   }
   flush();
   return out;
+}
+
+/** §2-11④ 창 배분 — 계획 하나가 스트림의 한 구간을 집는다. 순서는 **계획 줄 순서**(파일 순서 —
+ *  `plans` 배열 순서)가 정본이고 시각으로 재정렬하지 않는다. 창이 겹치면 **앞 계획이 먼저 집는다**
+ *  (한 사건은 한 계획에만 든다). 어느 창에도 안 드는 사건은 `outside`로 시간순 그대로 나온다.
+ *
+ *  **시작이 없는 계획은 창이 없다**(미착수 · 시작 없는 완료 — §2-11④ 표 그대로 한 판정으로 묶인다).
+ *
+ *  **진행중 모양이 둘 이상이면 파일 순서상 마지막 하나만 진짜 진행중이다**(§2-11④) — 끝 시각을
+ *  빼먹고 다음 계획으로 넘어간 실수이므로 앞의 것들은 "완료·끝 시각 없음"과 같은 규칙(다음 계획의
+ *  시작으로 닫힌다)을 탄다. 다음 계획이 없거나 시작이 없으면 창이 없다.
+ *
+ *  `ts` 없는 사건은 `mergeProgress`와 같은 규칙(§2-3②) — 앞 사건의 시각을 물려받는다.
+ *  `now`(ms)는 진짜 진행중 계획의 창 끝이다 — 순수 함수로 두려고 인자로 받는다(`Date.now()`를
+ *  안 부른다). */
+export function windowEvents<E extends { ts?: string }>(
+  plans: PlanItem[],
+  events: E[],
+  now: number,
+): { buckets: E[][]; outside: E[] } {
+  const lastDoing = plans.reduce((last, p, i) => (p.state === "doing" ? i : last), -1);
+  const windows = plans.map((p, i) => {
+    if (!p.start) return null;
+    const start = Date.parse(p.start);
+    if (Number.isNaN(start)) return null;
+    if (p.state === "doing" && i === lastDoing) return { start, end: now };
+    if (p.end) {
+      const end = Date.parse(p.end);
+      return Number.isNaN(end) ? null : { start, end };
+    }
+    const next = plans[i + 1];
+    if (!next?.start) return null;
+    const end = Date.parse(next.start);
+    return Number.isNaN(end) ? null : { start, end };
+  });
+
+  // 사건의 시각. 못 읽으면 앞 사건 값을 물려받는다(`mergeProgress`와 같은 판정).
+  let prev = -Infinity;
+  const at = events.map((e) => {
+    const parsed = Date.parse(e.ts ?? "");
+    return (prev = Number.isNaN(parsed) ? prev : parsed);
+  });
+
+  const claimed = new Array(events.length).fill(false);
+  const buckets = windows.map((w) => {
+    if (!w) return [];
+    const bucket: E[] = [];
+    events.forEach((e, i) => {
+      if (claimed[i] || at[i] < w.start || at[i] >= w.end) return;
+      claimed[i] = true;
+      bucket.push(e);
+    });
+    return bucket;
+  });
+  const outside = events.filter((_, i) => !claimed[i]);
+  return { buckets, outside };
 }
 
 /** 진행 표식 문구(§2-6 ③) — 파싱된 **마지막 스트림 레코드**의 종류 하나로 갈린다.
