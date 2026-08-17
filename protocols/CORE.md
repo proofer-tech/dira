@@ -1,8 +1,7 @@
 # Core protocol
 
-Inlined into every dispatch, not copied into the queue. Engine (`tick.sh`,
-`tickets.py`) and GUI read it - breaking it **corrupts the queue**. Beats a
-project doc, persona profile, or ticket on conflict.
+Inlined into every dispatch, not copied into the queue - engine and GUI read
+it. Beats a project doc, persona profile, or ticket on conflict.
 
 Worker dir: `<root>/worktrees/<worker>`.
 
@@ -28,6 +27,9 @@ Your ticket is already claimed as `.wip`.
    like `assigned_at`; add `(<start>)` on start, `-> <end>` on check.
    **Locked once written** - no edits, no new items; plan goes wrong -> `~~`
    the rest and hand off as a new ticket (`## 결과`: `-> <new hash>`).
+   **Lifecycle steps aren't plan items** - push, retrospective, `## 결과`,
+   `.done` rename repeat on every ticket; the list holds only this ticket's
+   own work.
 3. Do the work. Nothing outside `## Done when`. Flip each box `- [ ]` -> `- [x]`
    the moment that item is actually satisfied - never in a batch at the end,
    never before it's true. The GUI reads progress from these boxes.
@@ -85,8 +87,7 @@ Human calls: contradictory spec, read-only area, new dependency, push failed
 ## Characters (특수문자)
 
 Ticket bodies and anything written for a human (`## 결과`, `## 블록`, commit messages,
-docs) use ASCII punctuation only - not code under `apps/**`, where some existing
-em dashes are delimiters, not typography. The allowed set:
+docs) use ASCII punctuation only - not code under `apps/**`. The allowed set:
 
 `` ` ~ ! @ # $ % ^ & * ( ) - _ = + [ ] { } \ | ; : ' " , . < > / ? ``
 
@@ -97,9 +98,8 @@ no replacement.
 A symbol in neither the allowed set nor the list above (`§`, `✓`, `≤`, `≥`) is
 undecided - don't invent a substitution, ask.
 
-Files already written are not rewritten under this rule when you happen to touch
-them. Conversion is its own ticket, tracked separately, **skipping the
-substitutions above** - the one place these characters have to survive.
+Already-written files aren't rewritten under this rule. Conversion is its own
+ticket, tracked separately, **skipping the substitutions above**.
 
 ## Queue invariants
 
