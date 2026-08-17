@@ -316,7 +316,7 @@ export default async function TicketDetail({
           그래서 구분선을 넣지 않는다. `xl`(1280) 미만은 1단이고, 왼쪽이 DOM에서 먼저라
           `order-*` 없이 왼쪽이 위로 온다(탭 순서 = 시각 순서). */}
       <div className="grid gap-x-8 gap-y-6 xl:grid-cols-[minmax(0,1fr)_22rem]">
-        <div className="space-y-6">
+        <div className="min-w-0 space-y-6">
           {/* 표시값으로는 엔진이 이 티켓을 못 찾는다 — 그 사실을 아는 유일한 자리가 여기다.
               화면의 해시를 사람이 `deps:`에 옮겨 적으면 선행이 `.done`이 돼도 영구 대기다(§식별자).
               판정은 `listTickets`가 엔진과 같은 조회(`find_any`)로 한 것이다 — 문자열 비교가 아니다. */}
@@ -481,7 +481,7 @@ export default async function TicketDetail({
             **`top-18`이 아니다**: 스크롤 주체가 문서에서 `main`으로 내려가면서(§비주얼 §4)
             기준이 뷰포트 위가 아니게 됐다. 화면에 보이는 자리는 종전과 같은 72px다.
             후행이 20건이면 이 단이 뷰포트보다 길어지는데 그때 `overflow-y-auto`가 받는다. */}
-        <div className="space-y-6 xl:sticky xl:top-0 xl:max-h-[calc(100vh-4.5rem)] xl:self-start xl:overflow-y-auto">
+        <div className="min-w-0 space-y-6 xl:sticky xl:top-0 xl:max-h-[calc(100vh-4.5rem)] xl:self-start xl:overflow-y-auto">
           <section className="space-y-2">
             <h2 className="text-sm font-medium">frontmatter</h2>
             {/* `table-fixed`가 §비주얼 §11의 216px 값 열을 **실제로** 만든다. 기본 `auto`에서는
