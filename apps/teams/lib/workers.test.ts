@@ -708,8 +708,9 @@ test("읽음 처리 ② 같은 워커라도 로그 파일명이 다른 실패는
 test("읽음 처리 ③ 쓸 때 신선도 창(10분)이 지난 마크를 버린다 — 파일이 안 자란다", async () => {
   const root = failRoot([{ name: "w1", log: "fail-w1.log" }]);
   const old = "/다른/큐/.dira";
+  const lessStale = stamp(9); // 한 번만 만든다 — 픽스처와 단언에서 따로 부르면 초가 넘어갈 때 어긋난다
   putAlerts({
-    [root]: { "지난-사고.log": stamp(20), "덜-지난-사고.log": stamp(9) },
+    [root]: { "지난-사고.log": stamp(20), "덜-지난-사고.log": lessStale },
     [old]: { "남의-지난-사고.log": stamp(30) }, // 마크가 전부 죽은 루트는 키째 사라진다
   });
 
@@ -717,7 +718,7 @@ test("읽음 처리 ③ 쓸 때 신선도 창(10분)이 지난 마크를 버린�
   await markAlertsRead(root, [{ log: "fail-w1.log", at }]);
 
   assert.deepStrictEqual(JSON.parse(readFileSync(alertsPath(), "utf8")), {
-    [root]: { "덜-지난-사고.log": stamp(9), "fail-w1.log": at },
+    [root]: { "덜-지난-사고.log": lessStale, "fail-w1.log": at },
   });
   // 방금 쓴 마크가 실제로 판정을 걷는다(파일 모양만 맞고 판정이 안 붙는 길을 닫는다).
   assert.strictEqual((await listWorkers(root))[0].lastFailure, null);
