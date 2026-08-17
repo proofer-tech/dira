@@ -1,7 +1,6 @@
 #!/bin/bash
 # cold boot - 노는 워크트리의 빌드 산출물만 지운다.
-# 스펙: docs/DESIGN.md #워크트리 디스크 - cold boot (요구 28147821, 결정 1~4). 그 절이 계약이고
-# 이 파일은 거기서 검증 가능한 부분만 구현한다.
+# 계약은 이 파일이다(스펙 문서에 사본이 없다) - 지우는 조건은 아래 판정 1~3 전부다.
 #
 # 정본은 여기(templates/hooks/cold-boot.sh)다. .dira는 gitignore라 추적이 안 되므로 큐마다
 # .dira/cold-boot.sh로 복사해 쓴다(dispatch-gate.sh, self-heal.sh, token-rotate.sh와 같은 자리).
