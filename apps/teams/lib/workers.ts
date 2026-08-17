@@ -1807,6 +1807,15 @@ export function execBitCmd(file: string): string {
   return `chmod +x ${sq(file)}`;
 }
 
+/** `no-exec` 결함(§0-21 결정 3)의 복구 버튼이 부르는 액션 — `workerFile`이 그 워커 하나로
+ *  경로를 좁혀서 다른 워커 파일은 안 건드린다. 값은 `createWorker`(1995행)가 생성 때 주는
+ *  0o755로 고정한다 — 잃은 실행 비트 셋만 켜는 게 아니라 이 앱이 만드는 워커 파일의 정상
+ *  모드로 되돌린다. 권한·소유자가 다르면 `chmod`가 던지고 화면이 `execBitCmd`로 되돌아간다. */
+export async function applyExecBit(root: string, name: string): Promise<void> {
+  const file = await workerFile(root, name);
+  await chmod(file, 0o755);
+}
+
 /** `prepareWorktree`의 결과. 화면이 **이것만으로** 성공·정상종료·실패 패널을 그린다(§6 에러 3요소). */
 export type WorktreePrep = {
   /** 만든(또는 만들려던) 트리 경로. 성공 패널이 이 경로를 말한다 */

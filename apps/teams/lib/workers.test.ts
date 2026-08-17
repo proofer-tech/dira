@@ -29,6 +29,7 @@ const {
   markAlertsRead,
   applyCommonSource,
   applyDispatchGate,
+  applyExecBit,
   applySelfHeal,
   commonSourceLine,
   copyContext,
@@ -428,6 +429,32 @@ test("실행 비트 없음 — 판정·CopyCommand, status는 그대로다 (§0-
   } finally {
     c.restore();
   }
+});
+
+test("applyExecBit — 그 워커 .sh 하나만 755로 켜고 다른 워커 파일은 안 건드린다 (§0-21 결정 3, P290-4)", async () => {
+  const base = mkdtempSync(path.join(tmpdir(), "fst-base-"));
+  tmps.push(base);
+  const root = path.join(base, ".dira");
+  mkdirSync(path.join(root, "workers"), { recursive: true });
+  const tree = (n: string) => path.join(root, "worktrees", n);
+  const engine = path.join(base, "engine-repo");
+  const put = (name: string) => {
+    const file = path.join(root, "workers", `${name}.sh`);
+    writeFileSync(file, `#!/bin/bash\nTICKET_CWD="${tree(name)}"\nTICKET_CONTEXT=()\n. "${engine}/tick.sh"\n`);
+    chmodSync(file, 0o755);
+    mkdirSync(tree(name), { recursive: true });
+    symlinkSync("../..", path.join(tree(name), ".dira"));
+    return file;
+  };
+  const file1 = put("w1");
+  const file2 = put("w2");
+  chmodSync(file2, 0o644); // 실행 비트를 뺀다 — 버튼이 눌리기 전 상태
+
+  await applyExecBit(root, "w2");
+
+  assert.strictEqual(statSync(file2).mode & 0o777, 0o755); // 그 워커는 켜졌다
+  assert.strictEqual(statSync(file1).mode & 0o777, 0o755); // 다른 워커는 모드가 안 갈렸다
+  assert.deepStrictEqual((await listWorkers(root)).find((w) => w.name === "w2")!.defects, []); // 재판정하면 결함이 없다
 });
 
 test("holding — .wip 티켓의 owner에서 워커를 되짚는다 (tick.sh 207행 표기)", async () => {

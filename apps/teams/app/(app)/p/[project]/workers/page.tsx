@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   CommonContextCard,
   CreateWorkerButton,
+  ExecBitFix,
   ExpandScope,
   WorkerContextCell,
   WorkerActivityCell,
@@ -324,11 +325,14 @@ export default async function Workers({ params }: { params: Promise<{ project: s
                               {w.worktree?.map((cmd) => (
                                 <CopyCommand key={cmd} cmd={cmd} />
                               ))}
-                              {/* `no-exec`의 준비 명령(§0-21 결정 2) — 복구 버튼은 이 판정 티켓의
-                                  몫이 아니다(§0-21 결정 3은 버튼을 예외로 허락하지만, 그 버튼과
-                                  서버 액션은 로드맵 P290-4가 붙인다. 여기서는 §4 결함 셋과 같은
-                                  모양으로 CopyCommand만 둔다). */}
-                              {w.execFix && <CopyCommand cmd={w.execFix} />}
+                              {/* `no-exec` 복구 버튼(§0-21 결정 3, §비주얼 §57 §1) — 사실은 위
+                                  (defects map) · 조작은 아래(이 버튼)가 같은 순서다. 성공하면
+                                  결함이 0개가 돼 이 `Alert` 자체가 사라진다. 나머지 결함 셋은
+                                  버튼이 없다 — 판정 대상이 워커 파일 자신이라 추측이 0인 이
+                                  결함 하나만의 예외다(§0-21 결정 3). */}
+                              {w.execFix && (
+                                <ExecBitFix projectId={id} name={w.name} cmd={w.execFix} />
+                              )}
                             </div>
                           </AlertDescription>
                         </Alert>

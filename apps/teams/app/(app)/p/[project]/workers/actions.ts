@@ -14,6 +14,7 @@ import { getProject } from "@/lib/projects";
 import {
   applyCommonSource,
   applyDispatchGate,
+  applyExecBit,
   applySelfHeal,
   copyContext,
   createWorker,
@@ -245,6 +246,21 @@ export async function applyDispatchGateAction(
 ): Promise<WorkerActionResult> {
   try {
     await applyDispatchGate(await rootOf(projectId), name);
+    revalidatePath(`/p/${projectId}`, "layout");
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** `no-exec` 결함(§0-21 결정 3)의 복구 버튼. `applyExecBit`가 이 워커 파일 하나만 `chmod`한다 —
+ *  다른 워커 파일의 모드는 이 액션이 손대지 않는다. */
+export async function applyExecBitAction(
+  projectId: string,
+  name: string,
+): Promise<WorkerActionResult> {
+  try {
+    await applyExecBit(await rootOf(projectId), name);
     revalidatePath(`/p/${projectId}`, "layout");
     return { ok: true };
   } catch (e) {

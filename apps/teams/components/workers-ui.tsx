@@ -21,6 +21,7 @@ import {
 import {
   applyCommonSourceAction,
   applyDispatchGateAction,
+  applyExecBitAction,
   applySelfHealAction,
   copyContextAction,
   createWorkerAction,
@@ -116,6 +117,43 @@ function Failure({ title, message }: { title: string; message: string }) {
         <span className="font-mono text-xs break-all">{message}</span>
       </AlertDescription>
     </Alert>
+  );
+}
+
+/** `no-exec` 결함 `Alert` 안의 복구 버튼(§비주얼 §57 §1, §0-21 결정 3) — 형제 셋(`공통 적용` 등)과
+ *  같은 벌·같은 전이 분리(워커마다 독립 `useTransition`)다. 성공하면 `revalidatePath`가 결함을
+ *  0개로 만들어 이 `Alert` 자체가 사라진다 — 여기서 따로 세우는 성공 표시가 없다(§4-4 §빈 상태).
+ *  실패하면 버튼 바로 아래 `<Failure>`, 그 아래 `cmd`(`CopyCommand`)가 그대로 남는다 — 순서가
+ *  §6 에러 3요소(무엇을 하려다 실패했나 → 사유 → 다음 행동)다. */
+export function ExecBitFix({
+  projectId,
+  name,
+  cmd,
+}: {
+  projectId: string;
+  name: string;
+  cmd: string;
+}) {
+  const [error, setError] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+  return (
+    <>
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={pending}
+        onClick={() =>
+          start(async () => {
+            const r = await applyExecBitAction(projectId, name);
+            setError(r.ok ? null : (r.message ?? "실행 비트를 켜지 못했습니다."));
+          })
+        }
+      >
+        {pending ? "켜는 중…" : "실행 비트 켜기"}
+      </Button>
+      {error && <Failure title="실행 비트를 켜지 못했습니다" message={error} />}
+      <CopyCommand cmd={cmd} />
+    </>
   );
 }
 
