@@ -882,7 +882,7 @@ const stemMaps = new WeakMap<Ticket[], Map<string, Map<string, Ticket>>>();
 function stemMap(tickets: Ticket[], sfx: Suffixes): Map<string, Ticket> {
   let perSfx = stemMaps.get(tickets);
   if (!perSfx) stemMaps.set(tickets, (perSfx = new Map()));
-  const key = `${sfx.done} ${sfx.inProgress}`;
+  const key = `${sfx.done} ${sfx.inProgress}`;
   let m = perSfx.get(key);
   if (!m) {
     m = new Map();
