@@ -105,12 +105,14 @@ async function realpathOfDeepestExisting(p: string): Promise<string> {
 
 /** import(DESIGN.md §5-3 §import ①)가 받는 폴더 — `resolveWithin`과 반대 방향의 검증이다.
  *  고르는 폴더는 머신 어디든이라 기준 디렉터리가 없다 — 보는 것은 절대경로인가와 실재하는
- *  디렉터리인가 둘뿐이다. 읽기 권한은 이미 머신 전역이라(`--allowed-tools Read Glob Grep`)
- *  여기서 더 좁히지 않는다. */
+ *  디렉터리인가 둘뿐이다(`~`는 `expandHome`으로 편 뒤 본다 — `shellPath`의 `:76`과 같은 관용구,
+ *  이 앱의 다른 경로 칸이 다 받는 그 표기다). 읽기 권한은 이미 머신 전역이라
+ *  (`--allowed-tools Read Glob Grep`) 여기서 더 좁히지 않는다. */
 export async function isRealDirectory(p: string): Promise<boolean> {
-  if (!path.isAbsolute(p)) return false;
+  const expanded = expandHome(p);
+  if (!path.isAbsolute(expanded)) return false;
   try {
-    return (await stat(p)).isDirectory();
+    return (await stat(expanded)).isDirectory();
   } catch {
     return false;
   }

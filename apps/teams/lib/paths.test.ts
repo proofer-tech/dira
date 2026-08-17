@@ -69,6 +69,22 @@ test("isRealDirectory — import(§5-3 §import ①)의 폴더 검사", async ()
   assert.ok(!(await isRealDirectory(path.join(base, "developer", "PROFILE.md")))); // 파일은 거절
 });
 
+test("isRealDirectory — `~`도 편다(§7 다른 경로 칸과 같은 관용구, b7f7178f)", async () => {
+  // startImport가 이 함수 하나로 세션을 띄울지 거절할지 가른다 — 여기서 참이면 그 관문을 지나
+  // `newConversation` + `startAsk`로 간다(actions.ts:168).
+  const home0 = process.env.HOME;
+  process.env.HOME = tmp; // expandHome이 homedir()을 그대로 쓰므로 여기서 고정한다
+  try {
+    mkdirSync(path.join(tmp, "importable"));
+    assert.ok(await isRealDirectory("~")); // 홈 자체
+    assert.ok(await isRealDirectory("~/importable")); // 홈 아래 실재 디렉터리
+    assert.ok(!(await isRealDirectory("~/없는-폴더"))); // 홈 아래라도 없으면 거절
+    assert.ok(!(await isRealDirectory(""))); // 빈 문자열은 종전대로 거절
+  } finally {
+    process.env.HOME = home0;
+  }
+});
+
 async function realBase(): Promise<string> {
   return await import("node:fs/promises").then((fs) => fs.realpath(base));
 }
