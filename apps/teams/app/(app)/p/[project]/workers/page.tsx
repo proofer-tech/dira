@@ -19,6 +19,7 @@ import {
   WorkerContextCell,
   WorkerActivityCell,
   WorkerContextRow,
+  WorkerNameCell,
   WorkerRowActions,
   type WorkerRow,
 } from "@/components/workers-ui";
@@ -215,9 +216,9 @@ export default async function Workers({ params }: { params: Promise<{ project: s
             {rows.map((w) => (
               <Fragment key={w.name}>
               <TableRow className="h-9">
-                <TableCell className="px-3 py-0 font-mono text-xs" title={w.path}>
-                  {w.name}
-                </TableCell>
+                {/* §비주얼 §58 — 복구 버튼 넷의 성공이 이 셀로 초점을 옮기고 sr-only 문장 하나를
+                    낭독한다. `tabIndex={-1}`이라 Tab 순서에는 새 정거장이 없다. */}
+                <WorkerNameCell row={w} />
                 <TableCell className="px-3 py-0">
                   <div className="flex items-center gap-2">
                     <StatusBadge status={w.status} />

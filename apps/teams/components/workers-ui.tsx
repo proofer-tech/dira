@@ -7,7 +7,7 @@
  *  fs를 만지는 건 서버 액션뿐이다.
  *  파일 하나에 모은 이유는 projects-ui.tsx와 같다 — 세 다이얼로그가 같은 문구·같은 명령어를
  *  쓰므로 쪼개면 자리가 갈린다. */
-import { createContext, Fragment, useContext, useState, useTransition } from "react";
+import { createContext, Fragment, useContext, useEffect, useRef, useState, useTransition } from "react";
 import {
   ArrowDown,
   ArrowUp,
@@ -136,18 +136,27 @@ export function ExecBitFix({
 }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  // §비주얼 §58 — 성공하면 그 순간 초점을 든 버튼일 때만 `이름` 셀로 낭독을 넘긴다.
+  const [, , , announceSuccess] = useContext(ExpandCtx);
+  const btnRef = useRef<HTMLButtonElement>(null);
   return (
     <>
       <Button
+        ref={btnRef}
         size="sm"
         variant="outline"
-        disabled={pending}
-        onClick={() =>
+        aria-disabled={pending}
+        className="aria-disabled:opacity-50"
+        onClick={() => {
+          if (pending) return; // §58 §못 누르는 실효 — aria-disabled에는 pointer-events-none이 없다
           start(async () => {
             const r = await applyExecBitAction(projectId, name);
             setError(r.ok ? null : (r.message ?? "실행 비트를 켜지 못했습니다."));
-          })
-        }
+            if (r.ok && document.activeElement === btnRef.current) {
+              announceSuccess(name, "실행 비트를 켰습니다");
+            }
+          });
+        }}
       >
         {pending ? "켜는 중…" : "실행 비트 켜기"}
       </Button>
@@ -862,13 +871,64 @@ function ContextEditor({
  *  그리므로(§4-4) 담으면 매번 서버 렌더가 돌아 편집 중이던 항목 입력이 언마운트된다.
  *  `// ponytail: 딥링크가 생기면 그때`. */
 type Expanded = { name: string; panel: "context" | "activity" } | null;
-const ExpandCtx = createContext<[Expanded, (v: Expanded) => void]>([null, () => {}]);
+
+/** 복구 버튼 넷이 성공했을 때 든 문장 — 워커 하나 · 문장 하나(§비주얼 §58). 그 워커의 `이름`
+ *  셀의 `blur`가 지운다. */
+type Success = { name: string; sentence: string } | null;
+
+/** 같은 `ExpandScope`가 나눠 주는 상태 하나를 튜플로 넓힌 것 — **새 provider 0**(§58 §증감).
+ *  뒤 세 자리는 §58이 더한 것: 지금 문장 · 세우고 초점을 옮기는 함수 · 지우는 함수. */
+type ExpandApi = [
+  Expanded,
+  (v: Expanded) => void,
+  Success,
+  /** 성공한 버튼이 **그 순간 초점을 들고 있을 때만** 부른다(§58 §옮기는 조건) — 부르는 쪽이
+   *  `document.activeElement`를 확인한 뒤에만 이 함수를 부르고, 아니면 아무것도 안 한다. */
+  (name: string, sentence: string) => void,
+  /** `이름` 셀의 `blur`가 부른다 — 그 셀의 문장만 지운다(다른 워커가 그새 성공했으면 안 지운다). */
+  (name: string) => void,
+];
+const ExpandCtx = createContext<ExpandApi>([null, () => {}, null, () => {}, () => {}]);
 
 /** 표 본문이 드는 펼침 상태 하나. **DOM을 한 조각도 안 그리므로** `<TableBody>` 안에 그대로
  *  선다 — 서버가 그린 행들을 children으로 받는다(행 마크업은 페이지에 그대로 있다). */
 export function ExpandScope({ children }: { children: React.ReactNode }) {
-  const state = useState<Expanded>(null);
-  return <ExpandCtx.Provider value={state}>{children}</ExpandCtx.Provider>;
+  const [expanded, setExpanded] = useState<Expanded>(null);
+  const [success, setSuccess] = useState<Success>(null);
+  const announceSuccess = (name: string, sentence: string) => setSuccess({ name, sentence });
+  const clearSuccess = (name: string) =>
+    setSuccess((s) => (s?.name === name ? null : s));
+  return (
+    <ExpandCtx.Provider value={[expanded, setExpanded, success, announceSuccess, clearSuccess]}>
+      {children}
+    </ExpandCtx.Provider>
+  );
+}
+
+/** `이름` 셀(§비주얼 §58) — 표의 첫 열, 복구 버튼 넷이 성공하면 초점이 오는 자리(그 버튼이
+ *  성공 순간 초점을 들고 있었을 때만). `tabIndex={-1}`이라 **탭 순서에 새 정거장이 없다** —
+ *  프로그램 `focus()`만 받는다. 문장은 `sr-only`로 셀의 접근 이름에 붙어(§58 §문장은 이름에
+ *  둔다) 초점 이동 한 번이 그것을 읽는다 — **새 라이브 리전 0**. `blur`에 지운다 — 남겨 두면
+ *  5초 폴링 재렌더 뒤 다음 Tab에서 지난 성공이 다시 읽힌다. */
+export function WorkerNameCell({ row }: { row: WorkerRow }) {
+  const [, , success, , clearSuccess] = useContext(ExpandCtx);
+  const ref = useRef<HTMLTableCellElement>(null);
+  const sentence = success?.name === row.name ? success.sentence : null;
+  useEffect(() => {
+    if (success?.name === row.name) ref.current?.focus();
+  }, [success, row.name]);
+  return (
+    <TableCell
+      ref={ref}
+      tabIndex={-1}
+      title={row.path}
+      onBlur={() => clearSuccess(row.name)}
+      className="px-3 py-0 font-mono text-xs outline-none focus-visible:inset-ring-3 focus-visible:inset-ring-ring/50"
+    >
+      {row.name}
+      {sentence && <span className="sr-only">{sentence}</span>}
+    </TableCell>
+  );
 }
 
 /** `컨텍스트` 열 — **셀이 곧 토글이다**(§35 #3). 모양은 `엔진` 열 그대로다(§23 ②): `size="sm"`이
@@ -1035,7 +1095,7 @@ export function WorkerContextRow({
   /** 작업 디렉터리 결함(§4) · 외부 요인 실패(§0-5). 둘 다 없으면 `null`이다 */
   warnings?: React.ReactNode;
 }) {
-  const [open] = useContext(ExpandCtx);
+  const [open, , , announceSuccess] = useContext(ExpandCtx);
   const expanded = open?.name === row.name && open.panel === "context";
   const activity = open?.name === row.name && open.panel === "activity";
   const saved = row.context.ok ? row.context.items : [];
@@ -1050,6 +1110,10 @@ export function WorkerContextRow({
   const [healing, startHeal] = useTransition();
   // 통합 게이트도 마찬가지로 다른 파일이라 전이를 또 나눈다(§4-14 §소급).
   const [gating, startGate] = useTransition();
+  // §비주얼 §58 — 성공하면 그 순간 초점을 든 버튼일 때만 `이름` 셀로 낭독을 넘긴다(넷 중 셋, 넷째는 `ExecBitFix`).
+  const applyBtnRef = useRef<HTMLButtonElement>(null);
+  const healBtnRef = useRef<HTMLButtonElement>(null);
+  const gateBtnRef = useRef<HTMLButtonElement>(null);
   const gets = row.commonSource ? common : [];
   // 접혀 있어도 이 행이 서는 조건 — 경고 여섯 중 하나라도 있으면이다(§35 #4).
   const warned =
@@ -1079,15 +1143,21 @@ export function WorkerContextRow({
                     {common.length}개가 이 워커의 세션에는 붙지 않습니다.
                   </p>
                   <Button
+                    ref={applyBtnRef}
                     size="sm"
                     variant="outline"
-                    disabled={pending}
-                    onClick={() =>
+                    aria-disabled={pending}
+                    className="aria-disabled:opacity-50"
+                    onClick={() => {
+                      if (pending) return; // §58 §못 누르는 실효 — aria-disabled에는 pointer-events-none이 없다
                       start(async () => {
                         const r = await applyCommonSourceAction(projectId, row.name);
                         setApplyError(r.ok ? null : (r.message ?? "줄을 넣지 못했습니다."));
-                      })
-                    }
+                        if (r.ok && document.activeElement === applyBtnRef.current) {
+                          announceSuccess(row.name, "공통을 적용했습니다");
+                        }
+                      });
+                    }}
                   >
                     {pending ? "적용 중…" : "공통 적용"}
                   </Button>
@@ -1113,15 +1183,21 @@ export function WorkerContextRow({
                     들어갑니다(엔진 경로는 이 파일의 그 줄에서 읽습니다).
                   </p>
                   <Button
+                    ref={healBtnRef}
                     size="sm"
                     variant="outline"
-                    disabled={healing}
-                    onClick={() =>
+                    aria-disabled={healing}
+                    className="aria-disabled:opacity-50"
+                    onClick={() => {
+                      if (healing) return; // §58 §못 누르는 실효
                       startHeal(async () => {
                         const r = await applySelfHealAction(projectId, row.name);
                         setHealError(r.ok ? null : (r.message ?? "줄을 넣지 못했습니다."));
-                      })
-                    }
+                        if (r.ok && document.activeElement === healBtnRef.current) {
+                          announceSuccess(row.name, "자가 정리를 적용했습니다");
+                        }
+                      });
+                    }}
                   >
                     {healing ? "적용 중…" : "자가 정리 적용"}
                   </Button>
@@ -1147,15 +1223,21 @@ export function WorkerContextRow({
                     들어갑니다(통합 브랜치는 protocols/AGENTS.md에서 읽습니다).
                   </p>
                   <Button
+                    ref={gateBtnRef}
                     size="sm"
                     variant="outline"
-                    disabled={gating}
-                    onClick={() =>
+                    aria-disabled={gating}
+                    className="aria-disabled:opacity-50"
+                    onClick={() => {
+                      if (gating) return; // §58 §못 누르는 실효
                       startGate(async () => {
                         const r = await applyDispatchGateAction(projectId, row.name);
                         setGateError(r.ok ? null : (r.message ?? "줄을 넣지 못했습니다."));
-                      })
-                    }
+                        if (r.ok && document.activeElement === gateBtnRef.current) {
+                          announceSuccess(row.name, "통합 게이트를 적용했습니다");
+                        }
+                      });
+                    }}
                   >
                     {gating ? "적용 중…" : "통합 게이트 적용"}
                   </Button>
