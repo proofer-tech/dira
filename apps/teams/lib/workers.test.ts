@@ -40,6 +40,7 @@ const {
   cronUnregisterCmd,
   cronWriteError,
   deleteWorker,
+  execBitCmd,
   DISPATCH_GATE_FILE,
   dispatchGateSh,
   dispatchGateSourceLine,
@@ -239,7 +240,13 @@ function makeRoot(workers: Record<string, string>, tickets: Record<string, strin
   tmps.push(root);
   mkdirSync(path.join(root, "workers"));
   mkdirSync(path.join(root, "tickets"));
-  for (const [n, body] of Object.entries(workers)) writeFileSync(path.join(root, "workers", n), body);
+  for (const [n, body] of Object.entries(workers)) {
+    const file = path.join(root, "workers", n);
+    writeFileSync(file, body);
+    // 워커 `.sh`만 755다(§0-21) — `writeFileSync`의 기본 모드는 실행 비트가 없어서, 여기서 안
+    // 올리면 이 헬퍼를 쓰는 테스트 전부가 `no-exec` 결함을 하나씩 더 얻는다.
+    if (n.endsWith(".sh")) chmodSync(file, 0o755);
+  }
   for (const [n, body] of Object.entries(tickets)) writeFileSync(path.join(root, "tickets", n), body);
   return root;
 }
@@ -308,8 +315,13 @@ test("작업 디렉터리 결함 — 3종을 판정하고 정상 워커에는 �
    *  같았던 게 `git -C`에 엔진 레포를 넣는 버그를 가렸다(§4 생성 4항의 3번). */
   const engine = path.join(base, "engine-repo");
   const wk = (cwd: string) => `#!/bin/bash\nTICKET_CWD="${cwd}"\nTICKET_CONTEXT=()\n. "${engine}/tick.sh"\n`;
-  const put = (name: string, cwd: string) =>
-    writeFileSync(path.join(root, "workers", `${name}.sh`), wk(cwd));
+  // 755다 — 이 테스트는 디렉터리 결함 3종만 본다. 실행 비트가 없으면 전원이 `no-exec`를 하나씩
+  // 더 얻어 아래 deepStrictEqual이 깨진다(그 판정은 별도 테스트가 덮는다, §0-21).
+  const put = (name: string, cwd: string) => {
+    const file = path.join(root, "workers", `${name}.sh`);
+    writeFileSync(file, wk(cwd));
+    chmodSync(file, 0o755);
+  };
   /** 사람이 손으로 만드는 상태: 트리 + `.dira -> ../..` */
   const prepare = (n: string) => {
     mkdirSync(tree(n), { recursive: true });
@@ -361,10 +373,60 @@ test("작업 디렉터리 결함 — TICKET_CWD 줄이 없으면 엔진 기본�
   tmps.push(base);
   const root = path.join(base, ".dira");
   mkdirSync(path.join(root, "workers"), { recursive: true });
-  writeFileSync(path.join(root, "workers", "w1.sh"), "#!/bin/bash\nTICKET_CONTEXT=()\n");
+  const file = path.join(root, "workers", "w1.sh");
+  writeFileSync(file, "#!/bin/bash\nTICKET_CONTEXT=()\n");
+  chmodSync(file, 0o755); // 이 테스트는 cwd 판정만 본다 — no-exec는 별도 테스트가 덮는다
   const [w] = await listWorkers(root);
   assert.strictEqual(w.cwd, null);
   assert.deepStrictEqual(w.defects, []);
+});
+
+test("실행 비트 없음 — 판정·CopyCommand, status는 그대로다 (§0-21 결정 2 — 복구 버튼은 P290-4)", async () => {
+  // 디렉터리 결함 3종과 섞이지 않게 "정상 배치"를 그대로 만든다(위 §4 테스트와 같은 자리) —
+  // makeRoot의 기본 cwd(부모 디렉터리)는 tmp 루트를 공유해서 shared-cwd를 덧묻힌다.
+  const base = mkdtempSync(path.join(tmpdir(), "fst-base-"));
+  tmps.push(base);
+  const root = path.join(base, ".dira");
+  mkdirSync(path.join(root, "workers"), { recursive: true });
+  const tree = (n: string) => path.join(root, "worktrees", n);
+  const engine = path.join(base, "engine-repo");
+  const put = (name: string) => {
+    const file = path.join(root, "workers", `${name}.sh`);
+    writeFileSync(file, `#!/bin/bash\nTICKET_CWD="${tree(name)}"\nTICKET_CONTEXT=()\n. "${engine}/tick.sh"\n`);
+    chmodSync(file, 0o755);
+    mkdirSync(tree(name), { recursive: true });
+    symlinkSync("../..", path.join(tree(name), ".dira"));
+    return file;
+  };
+  const file1 = put("w1");
+  const file2 = put("w2");
+  const c = withLiveCrontab(`${cronLine({ path: file1 })}\n${cronLine({ path: file2 })}\n`);
+  try {
+    chmodSync(file2, 0o644); // 실행 비트를 뺀다 — cron이 Permission denied로 못 띄우는 그 상태
+
+    const ws = await listWorkers(root);
+    const by = (n: string) => ws.find((w) => w.name === n)!;
+
+    // w1은 정상 — 경고도 준비 명령도 안 붙는다
+    assert.deepStrictEqual(by("w1").defects, []);
+    assert.strictEqual(by("w1").execFix, undefined);
+    assert.strictEqual(by("w1").status, "idle");
+
+    // w2에만 경고가 뜬다. status 배지는 종전 idle 그대로다(§0-21 결정 2 — 5번째 값을 안 만든다)
+    assert.deepStrictEqual(by("w2").defects, [
+      { kind: "no-exec", detail: `${file2} 에 실행 비트가 없습니다.` },
+    ]);
+    assert.strictEqual(by("w2").status, "idle");
+    assert.strictEqual(by("w2").worktree, undefined); // 워크트리 준비 명령과는 무관하다(§0-21 결정 2·3)
+    assert.strictEqual(by("w2").execFix, execBitCmd(file2));
+    assert.strictEqual(by("w2").execFix, `chmod +x '${file2}'`);
+
+    // 판정만 이 티켓의 몫이다 — chmod로 직접 고쳐도 다음 판정에서 사라진다(복구 버튼은 P290-4).
+    chmodSync(file2, 0o755);
+    assert.deepStrictEqual((await listWorkers(root)).find((w) => w.name === "w2")!.defects, []);
+  } finally {
+    c.restore();
+  }
 });
 
 test("holding — .wip 티켓의 owner에서 워커를 되짚는다 (tick.sh 207행 표기)", async () => {

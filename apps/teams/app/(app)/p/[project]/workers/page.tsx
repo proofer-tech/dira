@@ -20,6 +20,7 @@ import {
   WorkerRowActions,
   type WorkerRow,
 } from "@/components/workers-ui";
+import { t } from "@/lib/i18n";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Table,
@@ -31,7 +32,7 @@ import {
 } from "@/components/ui/table";
 import { listTickets } from "@/lib/queue";
 import { formatTokens, listUsage } from "@/lib/usage";
-import { getProject, resolveConfig, usingDefault } from "@/lib/projects";
+import { getProject, readLanguage, resolveConfig, usingDefault } from "@/lib/projects";
 import {
   cronUnregisterCmd,
   cronRegisterCmd,
@@ -62,8 +63,11 @@ const NOTE: Record<WorkerRow["status"], string> = {
 };
 
 /** §4 표의 결함 이름 + "실제로 무슨 일이 일어나나". LABEL·NOTE와 같은 자리에 둔다 —
- *  판정은 `lib/workers.ts`가 하고 그 워커의 실제 경로는 `detail`로 온다. */
-const DEFECT: Record<WorkerRow["defects"][number]["kind"], { title: string; why: string }> = {
+ *  판정은 `lib/workers.ts`가 하고 그 워커의 실제 경로는 `detail`로 온다.
+ *
+ *  넷째(`no-exec`)만 `lib/i18n.ts`에서 온다(§0-21 결정 2, 티켓 b60520ea) — 앞의 셋은 아직 이
+ *  사전으로 안 옮겨졌다. 두 벌을 한 레코드에 섞어도 값은 둘 다 문자열이라 화면은 안 갈린다. */
+const DEFECT: Record<Exclude<WorkerRow["defects"][number]["kind"], "no-exec">, { title: string; why: string }> = {
   "missing-cwd": {
     title: "작업 디렉터리 없음",
     why: "tick.sh가 ERROR cwd 없음을 남기고 락을 풀어 티켓을 되돌립니다 — 물었다 놓기만 합니다.",
@@ -82,6 +86,15 @@ export default async function Workers({ params }: { params: Promise<{ project: s
   const { project: id } = await params;
   const project = await getProject(id);
   if (!project) notFound();
+
+  const locale = await readLanguage();
+  const defect: Record<WorkerRow["defects"][number]["kind"], { title: string; why: string }> = {
+    ...DEFECT,
+    "no-exec": {
+      title: t(locale, "worker.defect.noExec.title"),
+      why: t(locale, "worker.defect.noExec.why"),
+    },
+  };
 
   const config = await resolveConfig(project);
   // 물고 있는 티켓은 `.wip` 티켓의 `owner:`로 역추적한다 — 큐를 한 번만 읽고 넘긴다.
@@ -266,28 +279,38 @@ export default async function Workers({ params }: { params: Promise<{ project: s
                         <Alert role="status">
                           <TriangleAlert aria-hidden className="text-status-stale" />
                           <AlertTitle>
-                            {w.name} — {w.defects.map((d) => DEFECT[d.kind].title).join(" · ")}
+                            {w.name} — {w.defects.map((d) => defect[d.kind].title).join(" · ")}
                           </AlertTitle>
                           <AlertDescription>
                             <div className="space-y-2">
                               {w.defects.map((d) => (
                                 <p key={d.kind}>
                                   <span className="font-mono text-xs break-all">{d.detail}</span>{" "}
-                                  {DEFECT[d.kind].why}
+                                  {defect[d.kind].why}
                                 </p>
                               ))}
-                              <p>
-                                준비 명령은 이 프로젝트의 배치인{" "}
-                                <span className="font-mono text-xs break-all">
-                                  {project.root}/worktrees/{w.name}
-                                </span>
-                                를 만듭니다(§4-2) —{" "}
-                                <span className="font-mono text-xs">TICKET_CWD</span>가 그 경로가
-                                아니면 그 줄도 손으로 고치세요. 체크아웃은 GUI가 실행하지 않습니다.
-                              </p>
+                              {/* `w.worktree`는 `missing-cwd`·`missing-link`·`shared-cwd` 중 하나라도
+                                  있을 때만 온다 — `no-exec`뿐인 워커에는 워크트리와 무관한 이 문단이
+                                  안 뜬다(§0-21 결정 2·3, 두 축은 함께 있어도 서로 안 가린다). */}
+                              {w.worktree && (
+                                <p>
+                                  준비 명령은 이 프로젝트의 배치인{" "}
+                                  <span className="font-mono text-xs break-all">
+                                    {project.root}/worktrees/{w.name}
+                                  </span>
+                                  를 만듭니다(§4-2) —{" "}
+                                  <span className="font-mono text-xs">TICKET_CWD</span>가 그 경로가
+                                  아니면 그 줄도 손으로 고치세요. 체크아웃은 GUI가 실행하지 않습니다.
+                                </p>
+                              )}
                               {w.worktree?.map((cmd) => (
                                 <CopyCommand key={cmd} cmd={cmd} />
                               ))}
+                              {/* `no-exec`의 준비 명령(§0-21 결정 2) — 복구 버튼은 이 판정 티켓의
+                                  몫이 아니다(§0-21 결정 3은 버튼을 예외로 허락하지만, 그 버튼과
+                                  서버 액션은 로드맵 P290-4가 붙인다. 여기서는 §4 결함 셋과 같은
+                                  모양으로 CopyCommand만 둔다). */}
+                              {w.execFix && <CopyCommand cmd={w.execFix} />}
                             </div>
                           </AlertDescription>
                         </Alert>

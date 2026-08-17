@@ -348,6 +348,12 @@ export const ko: Record<string, string> = {
   // 표 컬럼(§에픽 결정 7 §표뷰) — 띠 머리 라벨은 `board.epic.noTitle`을 그대로 재사용한다
   // (사이드바와 같은 글자여야 한다, §1 - 한 사실을 두 모양으로 그리지 않는다).
   "board.column.epic": "에픽",
+
+  // 워커 결함 넷째(§0-21 결정 2, 티켓 b60520ea) — §4 표 넷째 줄과 같은 낱말. 앞의 셋은 아직
+  // 이 사전으로 안 옮겨졌다(`workers/page.tsx`의 `DEFECT` 그대로) — 이 티켓의 몫은 이 하나뿐이다.
+  "worker.defect.noExec.title": "실행 비트 없음",
+  "worker.defect.noExec.why":
+    "cron이 Permission denied로 워커를 못 띄웁니다 — tick.sh가 아예 안 돌아 runner.log가 한 줄도 늘지 않고, 열린 티켓이 그대로 섭니다.",
 };
 
 /** 제품 낱말의 영어 대응 — **여기가 한자리다**(621c7a97). 다음 묶음이 같은 것을 다르게 부르지
@@ -718,6 +724,11 @@ export const en: Record<string, string> = {
   "dep.hint.answer": "Answer on record — the answer to this request",
 
   "board.column.epic": "Epic",
+
+  // Worker defect #4 (§0-21 decision 2, ticket b60520ea).
+  "worker.defect.noExec.title": "No exec bit",
+  "worker.defect.noExec.why":
+    "cron can't start it — Permission denied. tick.sh never runs, so runner.log never gains a line and open tickets just sit there.",
 };
 
 const DICTS: Record<Locale, Record<string, string>> = { ko, en };

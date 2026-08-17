@@ -92,14 +92,18 @@ export type WorkerRow = {
   dispatchGateSource: boolean;
   /** `TICKET_CWD`. null = 줄이 없다(엔진 기본값 = 루트의 부모) */
   cwd: string | null;
-  /** 작업 디렉터리 결함 (§4). **0개가 정상**이고 그때 행은 아무것도 늘지 않는다.
+  /** 작업 디렉터리 결함 (§4, 넷째는 §0-21). **0개가 정상**이고 그때 행은 아무것도 늘지 않는다.
    *  `status`와 직교한다 — 결함이 있어도 락이 있으면 `running`이다 */
-  defects: { kind: "missing-cwd" | "missing-link" | "shared-cwd"; detail: string }[];
+  defects: { kind: "missing-cwd" | "missing-link" | "shared-cwd" | "no-exec"; detail: string }[];
   /** 외부 요인으로 죽은 마지막 세션 (§0-5). **정상 상태에서는 항상 `null`이고** 그때 행은
    *  아무것도 늘지 않는다. `defects`와 같은 축이다 — 실패 직후의 워커는 `idle`이다 */
   lastFailure: { at: string; hash: string; reason: string; log: string } | null;
-  /** 결함이 있을 때만 온다. §4 생성의 준비 3줄과 같은 문자열이다 */
+  /** `missing-cwd`·`missing-link`·`shared-cwd` 중 하나라도 있을 때만 온다. §4 생성의 준비
+   *  3줄과 같은 문자열이다 */
   worktree?: string[];
+  /** `no-exec`가 있을 때만 온다 — `chmod +x <절대경로>`. 복구 버튼은 이 판정의 몫이 아니다
+   *  (§0-21 결정 3, 로드맵 P290-4가 붙인다) */
+  execFix?: string;
 };
 
 /** §6 에러 3요소 중 1·2번. 3번(다음 행동)은 부르는 쪽이 다이얼로그 안에 붙인다. */
