@@ -11,7 +11,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronRight, FileText, PanelLeft, TriangleAlert } from "lucide-react";
-import { FixSchemaViolationsButton, NewOntologyFileButton, OntologyEditor, OntologySurveyForm } from "@/components/ontology-ui";
+import {
+  FixSchemaViolationsButton,
+  NewOntologyFileButton,
+  OntologyEditor,
+  OntologyImport,
+  OntologySurveyForm,
+} from "@/components/ontology-ui";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -173,6 +179,13 @@ export default async function Ontology({
             <span>답할 게 마땅치 않다면 건너뛰고 빈 파일부터 시작해도 됩니다.</span>
             <NewOntologyFileButton projectId={id} variant="outline" />
           </div>
+        </div>
+      )}
+
+      {tree.length > 0 && (
+        // §비주얼 §56 ③ — 지표 판 뒤, 2단 행 앞. 테두리도 면도 안 준다(행동 한 줄일 뿐이다).
+        <div className="max-w-2xl">
+          <OntologyImport projectId={id} />
         </div>
       )}
 

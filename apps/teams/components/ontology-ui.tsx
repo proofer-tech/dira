@@ -5,7 +5,7 @@
  *  `protocols-ui.tsx`의 판박이다(트리는 서버가 `<Link href="?file=…">`으로 그리고 선택 상태는
  *  URL이 담는다는 규약도 같다). 온톨로지에는 인라인 프롬프트 배지·`AGENTS.md` 특수 케이스가
  *  없다 — 세션 프롬프트에는 목차만 실리고(§5-2) 이 화면이 여는 것은 그 목차가 가리키는 본문이다. */
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FilePlus2, PencilLine, Trash2, TriangleAlert } from "lucide-react";
@@ -18,7 +18,10 @@ import {
   submitOntologySurveyAction,
   type OntologyResult,
 } from "@/app/(app)/p/[project]/ontology/actions";
+import { pollHomeAnswer, startImport } from "@/app/(app)/p/[project]/home/actions";
+import { Markdown } from "@/components/markdown";
 import { MarkdownEditor } from "@/components/markdown-editor";
+import { PickPath } from "@/components/path-picker";
 import type { Vault } from "@/lib/markdown-wikilinks";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -60,6 +63,119 @@ function Failure({ title, message }: { title: string; message: string }) {
 // 지금 `?sidebar=off`를 그대로 나른다.
 const fileHref = (projectId: string, rel: string, sidebarOff: boolean) =>
   `/p/${projectId}/ontology?file=${encodeURIComponent(rel)}${sidebarOff ? "&sidebar=off" : ""}`;
+
+// ── import (§5-3 §import · §비주얼 §56) ──────────────────────────────────────
+
+/** 폼 한 벌 — 설정 다이얼로그(`projects-ui.tsx`)와 이 화면(지표 판 아래) 두 자리가 함께 쓴다.
+ *  껍데기는 부르는 쪽이 준다(`className` prop을 안 받는다) — 두 자리의 여백 차이가 감싸는
+ *  `div` 하나로 줄어든다(§56 ①). 진행·결과·실패는 `OntologyMigration`(`projects-ui.tsx`)이
+ *  쓰는 `pollHomeAnswer` 한 벌 그대로다 — **새 폴링 0줄**.
+ *
+ *  **결과가 온 순간 `router.refresh()`한다**(§56 ⑤ 넷째) — 지표 판·파일트리는 Server
+ *  Component가 요청 시점에 읽은 값이라, 다시 읽지 않으면 "가져왔습니다"가 낡은 지표 바로
+ *  아래에 선다. 포커스는 안 튄다 — 다시 그려지는 것은 서버 컴포넌트뿐이고 이 폼은 클라이언트
+ *  상태를 든 채 그 자리에 남는다. */
+export function OntologyImport({ projectId }: { projectId: string }) {
+  const router = useRouter();
+  const [folder, setFolder] = useState("");
+  const [running, setRunning] = useState(false);
+  const [partial, setPartial] = useState("");
+  const [answer, setAnswer] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const session = useRef<string | null>(null);
+  const offset = useRef(0);
+
+  useEffect(() => {
+    if (!running) return;
+    let stop = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const poll = async () => {
+      try {
+        const r = await pollHomeAnswer(projectId, session.current, offset.current);
+        if (stop) return;
+        session.current = r.sessionId;
+        offset.current = r.offset;
+        setPartial(r.partial);
+        const last = r.turns.filter((t) => t.role === "answer").at(-1);
+        if (last) setAnswer(last.text);
+        if (r.failed) setError(r.failed.output);
+        if (r.done) {
+          setRunning(false);
+          router.refresh();
+          return;
+        }
+      } catch {
+        // 이 왕복 하나만 버린다 — `OntologyMigration`과 같은 자리.
+      }
+      if (!stop) timer = setTimeout(poll, 800);
+    };
+    void poll();
+    return () => {
+      stop = true;
+      clearTimeout(timer);
+    };
+  }, [running, projectId, router]);
+
+  const helpId = `import-help-${projectId}`;
+
+  return (
+    <form
+      className="space-y-2"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (!folder.trim() || running) return;
+        setError(null);
+        setAnswer(null);
+        setPartial("");
+        session.current = null;
+        offset.current = 0;
+        setRunning(true);
+        void startImport(projectId, folder).then((r) => {
+          // `null` = 시작했다(§7과 같은 계약) — 실패만 온다.
+          if (r && !r.ok) {
+            setError(r.output);
+            setRunning(false);
+          }
+        });
+      }}
+    >
+      <Label htmlFor={`import-dir-${projectId}`}>가져올 폴더</Label>
+      <div className="flex items-center gap-2">
+        <Input
+          id={`import-dir-${projectId}`}
+          className="min-w-0 grow font-mono"
+          placeholder="~/Notes"
+          value={folder}
+          onChange={(e) => setFolder(e.target.value)}
+          aria-describedby={helpId}
+        />
+        <PickPath mode="directory" label="가져올 폴더" onPick={setFolder} />
+        <Button
+          type="submit"
+          variant="outline"
+          aria-disabled={!folder.trim() || running}
+          aria-describedby={helpId}
+          className="aria-disabled:opacity-50"
+        >
+          {running ? "가져오는 중…" : "가져오기"}
+        </Button>
+      </div>
+      <p id={helpId} className="text-xs text-muted-foreground">
+        폴더를 골라야 누를 수 있습니다 — 폴더 이름이 출처가 됩니다
+      </p>
+
+      {running && (
+        <p className="text-sm whitespace-pre-wrap text-muted-foreground">
+          {partial || "돌고 있습니다…"}
+        </p>
+      )}
+
+      {error && <Failure title="가져오지 못했습니다" message={error} />}
+
+      {!running && answer && <Markdown text={answer} />}
+    </form>
+  );
+}
 
 // ── 새 파일 ─────────────────────────────────────────────────────────────────
 

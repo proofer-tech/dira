@@ -23,6 +23,7 @@ import {
 } from "@/app/actions";
 import { pollHomeAnswer, startMigration } from "@/app/(app)/p/[project]/home/actions";
 import { Markdown } from "@/components/markdown";
+import { OntologyImport } from "@/components/ontology-ui";
 import { PickPath } from "@/components/path-picker";
 import { PersonaBadge } from "@/components/persona-badge";
 import { StatusBadge, type Status } from "@/components/status-badge";
@@ -743,6 +744,10 @@ export function ProjectSettingsDialog({
             )}
 
             <OntologyMigration projectId={id} />
+
+            <div className="space-y-2 border-t pt-4">
+              <OntologyImport projectId={id} />
+            </div>
 
             <div className="space-y-2 border-t pt-4">
               <Label htmlFor={`rename-${id}`}>이름</Label>
