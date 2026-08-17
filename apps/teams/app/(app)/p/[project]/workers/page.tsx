@@ -6,10 +6,11 @@
 import { Fragment } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { CloudOff, TriangleAlert } from "lucide-react";
+import { CloudOff, Hourglass, TriangleAlert } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { StatusBadge } from "@/components/status-badge";
 import { CopyCommand } from "@/components/copy-command";
+import { Badge } from "@/components/ui/badge";
 import {
   CommonContextCard,
   CreateWorkerButton,
@@ -32,12 +33,14 @@ import {
 } from "@/components/ui/table";
 import { listTickets } from "@/lib/queue";
 import { formatTokens, listUsage } from "@/lib/usage";
+import { dateTimeLabel } from "@/lib/urls";
 import { getProject, readLanguage, resolveConfig, usingDefault } from "@/lib/projects";
 import {
   cronUnregisterCmd,
   cronRegisterCmd,
   engineName,
   firstWorkerCmd,
+  limitWaitUntil,
   listWorkers,
   nextWorkerName,
   readCommonContext,
@@ -105,6 +108,9 @@ export default async function Workers({ params }: { params: Promise<{ project: s
   const commonItems = common.ok ? common.items : [];
   // 창 안(기본 5시간)에 끝난 세션들의 워커별 토큰 (§0-8 판정 1). 창 밖 로그는 열지도 않는다.
   const usage = await listUsage(project.root);
+  // `tokens.json` 파일 읽기 1회, 워커 수와 무관하다(§비주얼 §57 §로딩). `null`이면 `리밋 대기`가
+  // 행 전체에 안 선다 — eligible이 1장이라도 있거나 tokens.json이 없다.
+  const limitUntil = await limitWaitUntil();
   // 소비의 키는 로그 파일명에서 온 **실효 `TICKET_NAME`**이고 표의 행은 파일 stem이다 — 그 둘이
   // 갈린 워커만 조용히 `0`으로 뜨지 않게 여기서 한 번 옮긴다. NFC로 맞추는 것은 `parseLogName`이
   // readdir이 준 NFD를 정규화하기 때문이다(같은 이유로 `queue.ts`도 정규화한다).
@@ -214,6 +220,18 @@ export default async function Workers({ params }: { params: Promise<{ project: s
                 <TableCell className="px-3 py-0">
                   <div className="flex items-center gap-2">
                     <StatusBadge status={w.status} />
+                    {/* `status` 배지를 대체하지 않고 나란히 선다(§비주얼 §57 §2) — claude가
+                        eligible 0장이고 이 워커가 실제로 `idle`(락 없음)일 때만 선다. */}
+                    {w.status === "idle" && w.engineName === "claude" && limitUntil != null && (
+                      <Badge
+                        variant="outline"
+                        className="text-status-blocked bg-status-blocked/10 border-status-blocked/30"
+                        title="지금 쓸 수 있는 Claude 계정이 0개입니다 — 이 시각이 지나면 다음 tick이 세션을 띄웁니다"
+                      >
+                        <Hourglass aria-hidden />
+                        리밋 대기 · {dateTimeLabel(limitUntil * 1000)}
+                      </Badge>
+                    )}
                     {NOTE[w.status] && (
                       <span className="text-xs text-muted-foreground">{NOTE[w.status]}</span>
                     )}

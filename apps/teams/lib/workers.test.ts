@@ -58,6 +58,7 @@ const {
   registerCron,
   engineName,
   holderEngine,
+  limitWaitUntil,
   lockPath,
   listWorkers,
   nextWorkerName,
@@ -813,6 +814,48 @@ test("lastFailure — 정상 상태(살아 있는 실패 0개)에서 `tokens.jso
   const loud = failRoot([{ name: "w1", log: "fail-w1.log" }]);
   const [, m] = await countFileOpens(tokensPath(), () => listWorkers(loud));
   assert.strictEqual(m, 1);
+
+  rmSync(tokensPath(), { force: true });
+});
+
+// ── §0-21 결정 4 — `limitWaitUntil` (로드맵 P290-5) ──────────────────────────
+
+test("limitWaitUntil — eligible이 0장이면 가장 이른 exhaustedUntil, 1장이라도 있으면 null", async () => {
+  // ⓐ 전부 소진 — 가장 이른 값을 고른다(뒤 항목이 더 이르다).
+  writeFileSync(
+    tokensPath(),
+    JSON.stringify({
+      claude: {
+        active: "a",
+        tokens: [tokenEntry("a", { exhaustedUntil: exhausted + 100 }), tokenEntry("b", { exhaustedUntil: exhausted })],
+      },
+    }),
+  );
+  assert.strictEqual(await limitWaitUntil(), exhausted);
+
+  // ⓑ 하나가 eligible로 돌아오면 null(§57 §빈 상태).
+  writeFileSync(
+    tokensPath(),
+    JSON.stringify({
+      claude: { active: "a", tokens: [tokenEntry("a", { exhaustedUntil: exhausted }), tokenEntry("b")] },
+    }),
+  );
+  assert.strictEqual(await limitWaitUntil(), null);
+
+  // ⓒ eligible 0인데 그릴 시각도 없다(비활성뿐) — §0-21 §다섯 상태의 에러 갈래, null이다.
+  writeFileSync(
+    tokensPath(),
+    JSON.stringify({ claude: { active: "a", tokens: [tokenEntry("a", { enabled: false })] } }),
+  );
+  assert.strictEqual(await limitWaitUntil(), null);
+
+  // ⓓ 없음·깨짐 — 종전 판정 그대로(null), tokens.json을 새로 쓰지 않는다.
+  rmSync(tokensPath(), { force: true });
+  assert.strictEqual(await limitWaitUntil(), null);
+  assert.strictEqual(existsSync(tokensPath()), false);
+
+  writeFileSync(tokensPath(), "{ 이건 JSON이 아니다");
+  assert.strictEqual(await limitWaitUntil(), null);
 
   rmSync(tokensPath(), { force: true });
 });

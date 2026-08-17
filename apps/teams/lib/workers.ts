@@ -26,7 +26,7 @@ import { promisify } from "node:util";
 import { cache } from "react";
 import { NAME_RE, expandHome, localDir, resolveWithin, shellPath, shellValue } from "./paths.ts";
 import type { Ticket } from "./queue.ts";
-import { isEligible, tokensPath, type TokensFile } from "./auth.ts";
+import { isEligible, tokensPath, type TokenEntry, type TokensFile } from "./auth.ts";
 
 export type WorkerStatus = "running" | "idle" | "stopped" | "stale";
 
@@ -929,18 +929,38 @@ export async function lastJsonLine(file: string): Promise<Record<string, unknown
  *  파일명은 **꼬리에서 집는다 — 조립하지 않는다**(엔진이 이미 적어 준다). */
 const failLine = /^(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d) \[[^\]]*\] FAIL (\S+) .* 로그 (\S+)$/;
 
-/** §0-13 §`모두 소진`은 새 알림이 아니다. `tokens.json`을 **마이그레이션 없이** 원본 그대로
- *  읽는다 — `readTokens()`(`lib/auth.ts`)를 부르면 파일이 없을 때 `oauth-token`을 항목 하나로
- *  들여와 **새로 쓴다**, 이 판정 경로가 그 부작용을 내면 "파일 없으면 종전 그대로"가 깨진다.
- *  없음·깨짐·모양 다름 = 목록을 안 쓰는 판(오늘 전부) = `false`, 종전 판정 그대로 간다. */
-async function anyTokenEligible(): Promise<boolean> {
+/** `tokens.json`을 **마이그레이션 없이** 원본 그대로 읽는다 — `readTokens()`(`lib/auth.ts`)를
+ *  부르면 파일이 없을 때 `oauth-token`을 항목 하나로 들여와 **새로 쓴다**, 이 판정 경로가 그
+ *  부작용을 내면 "파일 없으면 종전 그대로"가 깨진다. 없음·깨짐·모양 다름 = 빈 배열이다 —
+ *  `anyTokenEligible`·`limitWaitUntil` 둘 다 이 하나를 통해서만 `tokens.json`을 본다. */
+async function readTokenList(): Promise<TokenEntry[]> {
   try {
     const raw: unknown = JSON.parse(await readFile(tokensPath(), "utf8"));
     const tokens = (raw as TokensFile)?.claude?.tokens;
-    return Array.isArray(tokens) && tokens.some((t) => isEligible(t));
+    return Array.isArray(tokens) ? tokens : [];
   } catch {
-    return false;
+    return [];
   }
+}
+
+/** §0-13 §`모두 소진`은 새 알림이 아니다. 없음·깨짐·모양 다름 = 목록을 안 쓰는 판(오늘 전부) =
+ *  `false`, 종전 판정 그대로 간다. */
+async function anyTokenEligible(): Promise<boolean> {
+  return (await readTokenList()).some((t) => isEligible(t));
+}
+
+/** §0-21 결정 4 — 워커 행이 말하는 `리밋 대기`의 복귀 시각(epoch 초, `exhaustedUntil`과 같은
+ *  단위). 판정은 `isEligible`(`lib/auth.ts`) 그 함수 하나다(제약 3, 두 벌로 안 적는다) — 이
+ *  함수는 그 결과를 모아 가장 이른 값을 고르기만 한다.
+ *
+ *  eligible이 1장이라도 있으면 `null`이다(리밋 대기가 아니다). eligible이 0장인데
+ *  `exhaustedUntil`이 하나도 없으면(토큰 0개 · 전부 비활성) 그릴 시각이 없다 — 그때도 `null`이다
+ *  (§0-21 §다섯 상태의 에러 갈래, "그릴 값이 없으면 안 그린다"). */
+export async function limitWaitUntil(): Promise<number | null> {
+  const tokens = await readTokenList();
+  if (tokens.length === 0 || tokens.some((t) => isEligible(t))) return null;
+  const untils = tokens.map((t) => t.exhaustedUntil).filter((v): v is number => v != null);
+  return untils.length > 0 ? Math.min(...untils) : null;
 }
 
 /** §0-5 판정 2·3단계. 마지막 **결과** 줄 하나 → 외부 요인 실패이거나 `null`.
