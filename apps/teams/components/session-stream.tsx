@@ -743,7 +743,10 @@ function Row({
   }
 
   return (
-    <details className="group" onToggle={onToggle}>
+    <details
+      className="open:[&>summary>span>svg:first-child]:rotate-90"
+      onToggle={onToggle}
+    >
       {/* hover에서 글자를 같이 올리는 건 대비 때문이다 — `--muted-foreground`가 `bg-muted/50`
           위에서 라이트 4.54로 바닥에 붙는다(§9 함정 2). `text-foreground`면 18.97이다.
           색이 이제 Marker 루트의 기본 클래스라 hover도 같은 요소에 붙는다(변종이 이긴다). */}
@@ -755,9 +758,13 @@ function Row({
         )}
       >
         {/* `MarkerIcon`은 `aria-hidden`이라 의미를 나르는 그림을 넣지 않는다 — 순수 어포던스뿐이다.
-            `size-4`는 Marker 기본 규칙이 준다(§9: 덮지 않는다). */}
+            `size-4`는 Marker 기본 규칙이 준다(§9: 덮지 않는다). 회전은 `<details>`의
+            `open:[&>summary>span>svg:first-child]`가 든다 — `group`류 클래스를 후손 전체(`*`)에
+            물리면 이 줄을 묶은 `<Bundle>`을 열 때 닫힌 이 chevron까지 같이 돈다(자식 결합자
+            셋은 `summary`의 첫 `span`(`MarkerIcon`) 안 svg에만 닿는다). §54와 홉이 하나 더
+            도는 것은 여기 `MarkerIcon`이 svg를 span으로 한 겹 싸서다. */}
         <MarkerIcon>
-          <ChevronRight className="group-open:rotate-90" />
+          <ChevronRight />
         </MarkerIcon>
         {cells}
       </Marker>
@@ -811,7 +818,10 @@ export function Bundle({
   onToggle: (ev: React.SyntheticEvent<HTMLDetailsElement>) => void;
 }) {
   return (
-    <details className="group" onToggle={onToggle}>
+    <details
+      className="open:[&>summary>span>svg:first-child]:rotate-90"
+      onToggle={onToggle}
+    >
       <Marker
         render={<summary />}
         className={cn(
@@ -820,7 +830,7 @@ export function Bundle({
         )}
       >
         <MarkerIcon>
-          <ChevronRight className="group-open:rotate-90" />
+          <ChevronRight />
         </MarkerIcon>
         <MarkerContent className="tabular-nums">기록 {events.length}건</MarkerContent>
       </Marker>
