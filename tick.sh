@@ -638,6 +638,14 @@ Keep every written deliverable in Korean regardless -- the ticket body,
   ;;
 esac
 
+# --- 캐시 갈래(P295-10): 여기부터는 안 변하는 문서 층이다. 꼬리(위에서 쌓은 티켓 해시 문장 -
+# 참조 컨텍스트 - 언어 안내)를 TAIL로 떼어 두고 PROMPT를 비운다 - 아래 프로토콜-온톨로지-페르소나-
+# CORE 4개 블록이 이 빈 PROMPT 앞에 종전과 같은 순서로 쌓여 문서 층만 남긴다. 스트리밍 프라임
+# JSON은 이 문서 층(PROMPT)과 TAIL을 블록 둘로 나눠 쓰고, argv/dryrun은 아래에서 다시 합친
+# "$PROMPT$TAIL"을 쓰므로 최종 문자열은 한 글자도 안 갈린다.
+TAIL="$PROMPT"
+PROMPT=""
+
 # --- 협업 프로토콜: <protocols>/AGENTS.md 를 프롬프트에 인라인한다 ---
 # 페르소나가 '누구'라면 이건 '어떻게 같이 일하는가'다 - 티켓 성격별 처리, 핸드오프, 보고 규약.
 # 모든 세션이 같은 문서를 받는다(페르소나와 달리 티켓이 고르지 않는다). 없으면 그냥 넘어간다.
@@ -739,6 +747,11 @@ else
   log "WARN 코어 프로토콜 없음: $CORE (코어 없이 디스패치)"
 fi
 
+# 문서 층이 다 쌓였다. HEAD로 따로 쥐고(스트리밍 프라임 JSON의 앞 블록), PROMPT는 TAIL을 다시
+# 붙여 종전과 같은 통짜 문자열로 되돌린다(argv 치환·dryrun은 여기서부터 이 PROMPT를 쓴다).
+HEAD="$PROMPT"
+PROMPT="$PROMPT$TAIL"
+
 # 엔진 argv 조립: 토큰 치환은 여기서만 한다(프롬프트에 공백·개행이 있어도 인자 1개로 유지).
 ENGINE=()
 for arg in "${TICKET_ENGINE[@]}"; do
@@ -795,10 +808,20 @@ if [ -n "$INBOX" ]; then
   # cat 두 방으로 이어 붙여 참견 입구는 그대로 산다: 프롬프트 다음 줄부터 FIFO가 stdin이다.
   # 그룹에도 9>&-를 건다. cat이 fd 9(쓰기 끝)를 물려받으면 우리가 닫아도 자기가 writer라
   # EOF를 못 봐서 세션이 죽은 뒤에도 영영 남는다.
+  # content가 문자열 하나면 매 디스패치 안 변하는 문서 층(HEAD)까지 변하는 꼬리(TAIL)와 한
+  # 캐시 항목으로 묶여 회차마다 새로 쓰이고 한 번도 안 읽힌다(P295 실측 `30944c7b`/`ac56cdab`).
+  # 블록 둘로 갈라 앞(HEAD)에만 cache_control ttl 1h를 달면 다음 디스패치가 그 프리픽스를
+  # 읽는다 - ttl을 빼거나 5m으로 두면 기본값 5m이 CLI 자기 몫 1h 블록보다 앞에 설 수 없어 API
+  # 400이 난다(§프롬프트 층 결정 10 §엔진 수정 스물다섯 번째 승인).
   PRIMEF="$LOCAL/run/prime-$SID.json"
   python3 -c 'import json,sys
-sys.stdout.write(json.dumps({"type":"user","message":{"role":"user","content":sys.argv[1]}},
-                            ensure_ascii=False, separators=(",", ":")) + "\n")' "$PROMPT" > "$PRIMEF"
+head, tail = sys.argv[1], sys.argv[2]
+content = [
+    {"type": "text", "text": head, "cache_control": {"type": "ephemeral", "ttl": "1h"}},
+    {"type": "text", "text": tail},
+]
+sys.stdout.write(json.dumps({"type":"user","message":{"role":"user","content":content}},
+                            ensure_ascii=False, separators=(",", ":")) + "\n")' "$HEAD" "$TAIL" > "$PRIMEF"
   # 9>&-로 엔진의 fd 9 사본을 닫는다. 물려주면 엔진이 자기 쓰기 끝을 쥐고 있어, 아래에서
   # 우리가 fd 9를 닫아도 EOF를 영영 못 본다(FIFO의 writer가 0이 되어야 EOF다).
   # `.fed` 표식이 곧 "프롬프트가 엔진 stdin으로 다 들어갔다"이다. 파이프 버퍼보다 큰 프롬프트를
