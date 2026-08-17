@@ -1665,7 +1665,9 @@ grep -c 'protocols/tickets\.md' protocols/CORE.md              # 0
 grep -c '^## ' .dira/protocols/tickets.md                      # 1
 
 # 7. (결정 9) 진행 표시 규약이 코어에 있고, 편집 가능 층에 없다 - 상한도 지켰다
-grep -c 'Flip each `## Done when` box' protocols/CORE.md       # 1
+grep -c 'Flip each box' protocols/CORE.md                      # 1
+#              ^ 결정 10 재압축(`64ee8976`)이 이 문장을 줄였다. 옛 문자열
+#                (`Flip each ## Done when box`)은 그 전부터 이미 0을 재고 있었다
 grep -c '^## 진행 표시' \
   .dira/protocols/AGENTS.md templates/protocols/AGENTS.md      # 둘 다 0
 wc -c < protocols/CORE.md                                      # ≤ 3500
@@ -36487,7 +36489,7 @@ crontab 줄을 `bash <경로>`로 바꿀지였는데, **묻지 않고 §안 하�
 | P295-1 | 스펙 - §프롬프트 층 결정 10 신설(실측 표 - 왜 되돌아왔나 - 예산 절의 자리 - 미결 갈래) | pm | - | 완료 - 왕복 1회(캐시 갈래), 발행 3장 |
 | P295-2 | 문서 - 큐 `protocols/AGENTS.md` 재다이어트 19,439 -> ≤6,500 B + 같은 파일에 §인라인 예산 절 신설 `2a61a8f7` | pm | - | 발행 |
 | P295-3 | 문서 - 페르소나 5종 PROFILE+skills 재다이어트 (각 ≤5,000 B, qa는 예산 안) `467f186d` | pm | - | 발행 |
-| P295-4 | 문서 - 코어 `CORE.md` 4,888 -> ≤3,500 B 재압축 (영문 유지, 엔진 레포라 커밋 대상) `64ee8976` | pm | - | 발행 |
+| P295-4 | 문서 - 코어 `CORE.md` 4,888 -> ≤3,500 B 재압축 (영문 유지, 엔진 레포라 커밋 대상) `64ee8976` | pm | - | 완료 - 4,888 -> 3,496 B. 내린 것 셋(왕복 4단계 - 특수문자 치환표 - reap 상신)은 `CORE-TICKETS.md` |
 
 **pm 3장인 이유는 P188 선례다** - 같은 세 파일의 같은 작업(P188-1-2-3)이 전부 pm이었다. 압축은
 코드가 아니라 의미 보존 계약이 걸린 편집이고, 판정(무엇을 접고 무엇을 남기나)이 §5-2 §상한과

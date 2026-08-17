@@ -1,11 +1,12 @@
 # Writing ticket files - core
 
 Read this before creating any ticket. **Wrong syntax = the ticket silently never
-appears in the queue and waits forever.**
+appears in the queue and waits forever.** It also holds what `CORE.md` points here
+for: asking back on a requirement, and the character substitutions.
 
 Same layer as `CORE.md` (the engine repo's `protocols/`). Not inlined into prompts -
-**read it when you create a ticket.** Paths below are relative to the queue root;
-where that root lives is the project docs' business.
+**read it when you write into a ticket file.** Paths below are relative to the queue
+root; where that root lives is the project docs' business.
 
 ## Creating
 
@@ -51,9 +52,10 @@ wrong ticket.
 | `req:` | | Source requirement stem, on tickets split from a requirement. Not `deps` - provenance, not ordering |
 | `archives:` | | 대상 티켓의 스칼라 stem 하나. `deps:`처럼 목록(`[...]`)으로 쓰지 않는다. `resolveDep`가 `deps:`-`req:`와 같은 판정으로 푼다. 있으면 보드에서 독립 카드로 서지 않고 대상 티켓에 겹쳐 붙는다 |
 
-Procedures for `awaiting:`/`req:` live in project docs (persona profiles, design doc).
-The engine writes these keys in exactly one place - `reap`'s answer escalation
-([CORE.md](CORE.md) §When blocked); the lock is always `deps`.
+The engine writes these keys in exactly one place - `reap`'s answer escalation: after
+auto-reclaiming a ticket twice it reopens it carrying `## 질문 n` + `awaiting:`, and
+`deps` holds every worker off until the answer lands ([CORE.md](CORE.md) §When
+blocked). The lock is always `deps`.
 
 **Sessions write `priority:` only as `1`-`4`.** `5` preempts another worker's
 in-progress ticket - that's a human-only call, not one a session makes on its own.
@@ -68,6 +70,32 @@ request-roundtrip form of "answers go in a new file, never appended to the origi
 `session_id:` `assigned_at:` `owner:` `attempts:` `pid:` `claimed_at:` `transcript:`
 `inbox:` are **written by the dispatcher - never set them yourself.** A new ticket
 carrying `session_id:` looks assigned and is never dispatched.
+
+## Asking back on a `kind: request`
+
+Referenced from [CORE.md](CORE.md) §Ticket kinds - the four steps a session runs
+when a requirement can't be split without guessing. **Not `## 블록`**: the answer
+is the answer stem's `.done` file, and a fresh `## 블록` parks the ticket instead.
+Stopping halfway leaves the requirement stuck with nobody waiting on it.
+
+1. Append `## 질문 n` to the request body (`n` = the round) - what you don't know,
+   and what the answer decides. **Setting `awaiting:` without this section is
+   banned** - the screen then says "awaiting answer" without showing the question.
+   How options are written is the project's business (persona profiles, design
+   doc) and a screen may parse that shape.
+2. Mint the answer stem and edit the frontmatter twice: `awaiting: <new 8-hex>`
+   (overwrite if already there) and **append** that stem to `deps:`, keeping the
+   existing deps. Both - `deps` is the actual lock, `awaiting:` is what the GUI
+   reads as "awaiting answer".
+3. `<queue>/workers/<my worker>.sh unassign <request hash>` - the worker is in
+   your own `owner:` (`pm / w3-...` -> `w3`). Never rename the `.wip` yourself.
+4. Exit. Don't `.done` it. Once `tickets/<stem>.done.md` exists the dep is met and
+   the request comes back; read that file, not the original.
+
+Round 2 overwrites `awaiting:` with a new stem and appends that one to `deps:` as
+well. Never delete `awaiting:` after an answer lands - it is history.
+
+Procedures for `req:` live in project docs (persona profiles, design doc).
 
 ## Pitfalls
 
@@ -90,3 +118,25 @@ After creating, confirm it shows up:
 
 `대기` = success. Not visible -> broken frontmatter or a stray suffix.
 `deps 대기 <hash>` = normal (appears once the prerequisite finishes).
+
+## Characters (특수문자)
+
+Referenced from [CORE.md](CORE.md) §Characters, which carries the rule (ASCII
+punctuation only in anything written for a human) and the allowed set. This is the
+decided substitution list - **the left side never appears in new writing**:
+
+| don't write | write |
+|---|---|
+| `—` `–` `·` | `-` |
+| `→` | `->` |
+| `«` `»` | `<` `>` |
+| `…` | `...` |
+| `×` | `x` |
+| `※` | banned, no replacement |
+
+A symbol in neither the allowed set nor this table (`§`, `✓`, `≤`, `≥`) is
+undecided - don't invent a substitution, ask.
+
+Already-written files aren't rewritten under this rule. Conversion is its own ticket,
+tracked separately, **skipping the substitutions above** - a mass rewrite of prose
+that already reads fine is churn, and the diff hides the edits that matter.
