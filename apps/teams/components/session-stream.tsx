@@ -24,7 +24,17 @@
  *  **진입점을 지우지 않는다** — 조용히 사라지면 사람은 고장으로 읽는다. */
 import { useEffect, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowDown, ChevronRight, FilePlus2, Send, TriangleAlert } from "lucide-react";
+import {
+  ArrowDown,
+  ChevronRight,
+  FilePlus2,
+  Send,
+  Square,
+  SquareCheck,
+  SquareMinus,
+  SquareX,
+  TriangleAlert,
+} from "lucide-react";
 import { sendFollowup, sendInterject, tailSession } from "@/app/(app)/p/[project]/tickets/[hash]/actions";
 import {
   AttachmentButton,
@@ -416,8 +426,8 @@ function ProgressItems({
  *  꼬리 문구로 여섯 갈래로 갈린다(§59 ③). `<Marker>`가 아니다(§59 ②) — 그 기본값
  *  `text-sm text-muted-foreground`가 계획 제목의 밝기 · 크기를 둘 다 덮는다. `group`을
  *  안 붙인다(§59 ④ 컴파일 실측) — 붙이면 안쪽 두 겹(묶음 줄 · 펼친 원문)의 닫힌 chevron이
- *  이 계획을 여는 순간 같이 돈다. 대신 `open:[&>summary>svg:first-child]:rotate-90`을
- *  쓴다 — 레포에 이미 있는 문자열이다(`ontology/page.tsx:294`). */
+ *  이 계획을 여는 순간 같이 돈다. 손잡이가 오른쪽 끝으로 가서 회전 셀렉터는 자식 결합자의
+ *  마지막 자식(`svg:last-child`)을 짚는다 — 왼쪽 첫 자리는 상태 글리프가 쓴다(§59 ④). */
 function PlanBlock({
   plan,
   items,
@@ -445,29 +455,39 @@ function PlanBlock({
 }) {
   const t = useT();
   const cancelled = plan.state === "cancelled";
+  // 왼쪽 16px 칸이 상태를 든다(§59 ③) — 넷이 `rect 18x18 @3,3 rx=2`를 공유해 칸 전체가
+  // *상태 넷인 컨트롤 하나*로 읽힌다. 잉크 사다리는 양을 그린다: 지난 것(완료·취소)은
+  // `--muted-foreground`로 물러나고 남은 것(미착수)·지금 것(진행중)은 `--foreground`로 선다.
+  const Icon = plan.state === "todo" ? Square : plan.state === "doing" ? SquareMinus : cancelled ? SquareX : SquareCheck;
+  const ink = plan.state === "done" || cancelled ? "text-muted-foreground" : "text-foreground";
+  const stateLabel = t(`progress.plan.${plan.state === "todo" ? "pending" : plan.state}`);
+  const glyph = (
+    <Icon aria-hidden className={cn("size-4 shrink-0", plan.state === "doing" ? "text-status-active" : ink)} />
+  );
   const title = (
-    <span className={cn("truncate text-sm font-medium", cancelled && "line-through")} title={plan.text}>
+    <span
+      className={cn("truncate text-sm", ink, plan.state === "doing" && "font-medium", cancelled && "line-through")}
+      title={plan.text}
+    >
       {plan.text}
     </span>
   );
+  // 꼬리 문구는 `기록 n건` 하나로 준다 — 상태 낱말(미착수·취소)은 왼쪽 칸의 `sr-only`로
+  // 옮겨 앉았다(§59 ③). 0건이면 이 칸이 없다.
   const tail =
-    plan.state === "todo" ? (
-      <span className="ml-auto shrink-0 text-xs text-muted-foreground">{t("progress.plan.pending")}</span>
-    ) : cancelled ? (
-      // 취소 계획의 기록 수는 꼬리에 안 적는다(§59 ③) — 문구는 하나, 기록이 있는지는 손잡이가 말한다.
-      <span className="ml-auto shrink-0 text-xs text-muted-foreground">{t("progress.plan.cancelled")}</span>
-    ) : (
+    count > 0 ? (
       <span className="ml-auto shrink-0 text-xs text-muted-foreground tabular-nums">기록 {count}건</span>
-    );
+    ) : null;
 
   // 진행중은 늘 손잡이가 있다(기록 0건이어도 — §59 ③). 완료 · 취소는 기록이 있을 때만이다.
   const hasHandle = plan.state === "doing" || count > 0;
   if (!hasHandle) {
-    // 미착수 · 완료(0건) · 취소(0건) — 그릇이 `<div>`다. 손잡이 자리는 빈 칸으로 비워
+    // 미착수 · 완료(0건) · 취소(0건) — 그릇이 `<div>`다. 상태 글리프가 왼쪽 칸을 채워
     // 제목을 다른 갈래와 같은 x=36에 맞춘다(§9 접힌 줄이 펼칠 것 없을 때 쓰는 같은 수).
     return (
       <div className={cn(LINE, "flex items-center gap-2")}>
-        <span aria-hidden className="size-4 shrink-0" />
+        {glyph}
+        <span className="sr-only">{stateLabel}</span>
         {title}
         {tail}
       </div>
@@ -478,17 +498,23 @@ function PlanBlock({
     <details
       open={plan.state === "doing" || undefined}
       onToggle={onToggle}
-      className="open:[&>summary>svg:first-child]:rotate-90"
+      className="open:[&>summary>svg:last-child]:rotate-90"
     >
+      {/* 제목 줄이 상자 안에서 붙는다(§59 ⑥-1, 답 `2.(a)`) — `-top-2`가 상자 `py-2`의 틈을
+          지운다. hover 밑면은 `background-image`로 얹어 `bg-background` 위에 쌓이게 한다
+          (아래로 흐르는 기록 줄이 안 비친다). `group`은 안 붙인다 — 붙이면 안쪽 두 겹의 닫힌
+          chevron이 같이 돈다(§59 ④). */}
       <summary
         className={cn(
           LINE,
-          "flex items-center gap-2 cursor-pointer list-none hover:bg-muted/50 [&::-webkit-details-marker]:hidden",
+          "sticky -top-2 flex items-center gap-2 cursor-pointer list-none bg-background card-tint [&::-webkit-details-marker]:hidden",
         )}
       >
-        <ChevronRight aria-hidden className="size-4 shrink-0" />
+        {glyph}
+        <span className="sr-only">{stateLabel}</span>
         {title}
         {tail}
+        <ChevronRight aria-hidden className="size-4 shrink-0 text-muted-foreground" />
       </summary>
       <ProgressItems items={items} threadKey={threadKey} onToggle={onToggle} vault={vault} />
       {active && (
@@ -500,7 +526,9 @@ function PlanBlock({
           {markerText}
         </div>
       )}
-      {active && <div className="px-3 pt-2">{form}</div>}
+      {/* `relative bg-background` 둘이 붙는 제목 줄이 이 폼 위로 올라오는 좁은 갈래를 닫는다
+          (§59 ⑥-1 §치르는 값 — 문서 순서가 늦은 쪽이 이겨 폼이 위에 선다). */}
+      {active && <div className="relative bg-background px-3 pt-2">{form}</div>}
     </details>
   );
 }
@@ -883,7 +911,7 @@ function ProgressForm({
 }
 
 /** 접힌 줄·묶음 줄이 같이 쓰는 거터(§9 · §2-6 ②) — `Row`·`Bundle` 공용. */
-const LINE = "px-3 leading-6";
+const LINE = "px-3 leading-6 scroll-mt-6";
 
 /** 접힌 줄 — `<Marker>` 한 줄. `tool_use`·`thinking`·`tool_result`·세션 프롬프트가 전부 이 모양이다.
  *  고정폭 4열은 (a)가 버렸다(요구 `e3020347`) — 시각(mono 8자)만 세로로 맞고 도구명부터 줄마다
