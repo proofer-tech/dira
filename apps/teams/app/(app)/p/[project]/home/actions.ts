@@ -23,6 +23,7 @@ import {
   type HomeChunk,
 } from "@/lib/home-agent";
 import { getProject } from "@/lib/projects";
+import { isRealDirectory } from "@/lib/paths";
 
 /** 등록된 프로젝트인가. **클라이언트가 준 id는 신뢰 경계 밖이다** — 여기서 걸러야 등록 안 된
  *  값이 `home-sessions.json`의 키가 되지 않는다(경로가 되는 값은 그 파일의 **값**이고 그쪽
@@ -140,6 +141,41 @@ export async function startMigration(projectId: string): Promise<Answer | null> 
     const project = await required(projectId);
     await newConversation(project.id);
     return await startAsk(project, MIGRATION_QUESTION);
+  } catch (e) {
+    return { ok: false, reason: "other", output: (e as Error).message, sessionId: "", resumed: false };
+  }
+}
+
+/** 설정 다이얼로그·`/p/<project>/ontology`의 `가져오기`(DESIGN.md §5-3 §import)가 보내는 질문.
+ *  **규칙은 여기 없다** — `protocols/ontology.md` §import(그 절이 물려받는 §마이그레이션 절차
+ *  포함)가 정본이고, 이 문장은 그 문서를 펴서 대상 폴더로 그 절차를 돌라고 시키는 것뿐이다
+ *  (§실행층: "규칙을 그 문자열에 다시 적지 않는다" — `MIGRATION_QUESTION`과 같은 모양). */
+function importQuestion(folder: string): string {
+  return `\`${folder}\` 폴더를 import하세요. \`protocols/ontology.md\` §import 절을 펴서 그
+절차를 그대로 따르세요 — 판정 5단계, 재실행 안전, 사실 뽑은 원본만 datasources/로 떠 오기,
+\`<출처>\` 이름 규칙까지 그 절이 정한 그대로입니다. 여기서 규칙을 다시 적지 않습니다.`;
+}
+
+/** import(DESIGN.md §5-3 §import) — 지목한 폴더 하나를 훑어 온톨로지를 보완한다. 안은
+ *  `startMigration`과 같다(`newConversation`으로 빈 줄을 연 뒤 `startAsk`), 갈리는 것은 질문
+ *  문자열 하나다(§실행층: "실행층 - 질문 하나가 는다").
+ *
+ *  **`folder`는 신뢰 경계 밖이다**(클라이언트가 고른 값). 절대경로이고 실재하는 디렉터리인지
+ *  서버가 보고, 아니면 세션을 안 띄우고 실패를 돌려준다 — 문자열을 그대로 질문에 흘리지 않는다. */
+export async function startImport(projectId: string, folder: string): Promise<Answer | null> {
+  try {
+    const project = await required(projectId);
+    if (!(await isRealDirectory(folder))) {
+      return {
+        ok: false,
+        reason: "other",
+        output: `실재하는 디렉터리가 아닙니다: ${folder}`,
+        sessionId: "",
+        resumed: false,
+      };
+    }
+    await newConversation(project.id);
+    return await startAsk(project, importQuestion(folder));
   } catch (e) {
     return { ok: false, reason: "other", output: (e as Error).message, sessionId: "", resumed: false };
   }

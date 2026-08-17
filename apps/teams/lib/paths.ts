@@ -1,6 +1,6 @@
 /** 경로 탈출 방어 — 신뢰 경계. 사용자 입력이 파일 경로가 되는 지점은 전부 여기를 통과한다.
  *  클라이언트 검증은 검증이 아니다(DESIGN.md §경로 방어). */
-import { realpath } from "node:fs/promises";
+import { realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 
@@ -100,5 +100,18 @@ async function realpathOfDeepestExisting(p: string): Promise<string> {
     const parent = path.dirname(p);
     if (parent === p) throw e;
     return path.join(await realpathOfDeepestExisting(parent), path.basename(p));
+  }
+}
+
+/** import(DESIGN.md §5-3 §import ①)가 받는 폴더 — `resolveWithin`과 반대 방향의 검증이다.
+ *  고르는 폴더는 머신 어디든이라 기준 디렉터리가 없다 — 보는 것은 절대경로인가와 실재하는
+ *  디렉터리인가 둘뿐이다. 읽기 권한은 이미 머신 전역이라(`--allowed-tools Read Glob Grep`)
+ *  여기서 더 좁히지 않는다. */
+export async function isRealDirectory(p: string): Promise<boolean> {
+  if (!path.isAbsolute(p)) return false;
+  try {
+    return (await stat(p)).isDirectory();
+  } catch {
+    return false;
   }
 }

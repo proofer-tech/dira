@@ -3,7 +3,7 @@ import assert from "node:assert";
 import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
-import { expandHome, isHash, isName, isProjectId, resolveWithin } from "./paths.ts";
+import { expandHome, isHash, isName, isProjectId, isRealDirectory, resolveWithin } from "./paths.ts";
 
 const tmp = mkdtempSync(path.join(tmpdir(), "fst-paths-"));
 process.on("exit", () => rmSync(tmp, { recursive: true, force: true }));
@@ -60,6 +60,13 @@ test("탈출 거부 — ../ · 절대경로 · ~ · 심링크", async () => {
   // 접두 문자열만 같은 형제 디렉터리(personas-evil)도 밖이다
   mkdirSync(path.join(tmp, "personas-evil"), { recursive: true });
   await assert.rejects(() => resolveWithin(base, "../personas-evil/x"), /기준 디렉터리 밖/);
+});
+
+test("isRealDirectory — import(§5-3 §import ①)의 폴더 검사", async () => {
+  assert.ok(await isRealDirectory(base)); // 절대경로 + 실재하는 디렉터리
+  assert.ok(!(await isRealDirectory("developer"))); // 상대경로는 거절
+  assert.ok(!(await isRealDirectory(path.join(tmp, "없는-폴더")))); // 없는 경로는 거절
+  assert.ok(!(await isRealDirectory(path.join(base, "developer", "PROFILE.md")))); // 파일은 거절
 });
 
 async function realBase(): Promise<string> {
