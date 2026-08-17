@@ -314,6 +314,12 @@ export const ko: Record<string, string> = {
   "status.label.stale": "stale",
   "status.label.connected": "연결됨",
   "status.label.disconnected": "연결 안 됨",
+
+  // 진행 기록 안 계획 아코디언(§비주얼 §59 ⑩) 제목 줄 꼬리 — `기록 n건`은 §9 묶음 줄과 같은
+  // 문자열이라 여기 안 올린다(그 절의 범위 판정).
+  "progress.plan.pending": "미착수",
+  "progress.plan.cancelled": "취소",
+
   "board.epic.label": "에픽",
   "board.epic.all": "전체",
   "board.epic.none": "(에픽 없음)",
@@ -692,6 +698,9 @@ export const en: Record<string, string> = {
   "status.label.stale": "stale",
   "status.label.connected": "Connected",
   "status.label.disconnected": "Disconnected",
+
+  "progress.plan.pending": "Not started",
+  "progress.plan.cancelled": "Cancelled",
   "board.epic.label": "Epics",
   "board.epic.all": "All",
   "board.epic.none": "(No epic)",

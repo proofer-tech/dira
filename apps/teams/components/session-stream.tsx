@@ -48,19 +48,22 @@ import {
 import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/marker";
 import { Message, MessageContent, MessageHeader } from "@/components/ui/message";
 import { useKeymap } from "@/components/keymap-provider";
+import { useT } from "@/components/language-provider";
 import { formatCombo, matchCombo } from "@/lib/keymap";
 import type { FollowupReason } from "@/lib/followup";
 import type { InterjectReason } from "@/lib/interject";
 // 스레드를 엮는 쪽은 서버(`lib/queue.ts threadOf`)다 — 여기 오는 건 타입뿐이라 `node:*`를 안 끈다
-import type { OptionGroup, ThreadItem } from "@/lib/queue";
+import type { OptionGroup, PlanItem, ThreadItem } from "@/lib/queue";
 import type { StreamEvent } from "@/lib/transcript";
 import {
   engineCan,
   expandable,
+  type GroupedItem,
   groupProgress,
   interjectMode,
   mergeProgress,
   NO_QUESTION_SECTION_NOTICE,
+  planBlocks,
   progressMarkerText,
   type InterjectMode,
 } from "@/lib/urls";
@@ -84,6 +87,7 @@ export function SessionStream({
   live: initialLive,
   engine,
   thread = [],
+  plans = [],
   answerOptions = [],
   stream = true,
   awaiting = false,
@@ -100,6 +104,10 @@ export function SessionStream({
   /** 요구사항 왕복 스레드(§2-3 ②) — 서버가 `threadOf`로 엮어 넘긴다. 보드 답변 다이얼로그와
    *  **같은 함수**의 출력이다(§2-3 ⑤). 비면 상자에 스트림 줄만 있다 = 종전 §9 그대로다. */
   thread?: ThreadItem[];
+  /** 진행 계획(§2-11① · §비주얼 §59) — 서버가 `planOf(ticket.body)`로 파싱해 내려준다. 빈
+   *  배열(계획 절이 없는 티켓 · 워커 다이얼로그처럼 body를 안 읽는 자리)이면 이 상자는 개정
+   *  전과 한 클래스도 안 갈린다(§2-11④ 계약 그대로). */
+  plans?: PlanItem[];
   /** 마지막 질문 라운드의 선택 카드(결정 10) — 서버가 `lastQuestionOptions(thread)`로 미리 재
    *  `AnswerForm`에 그대로 내린다. 0개면 그 라운드에 선택지가 없다(58/100) — 카드 0장, 종전 화면. */
   answerOptions?: OptionGroup[];
@@ -188,14 +196,58 @@ export function SessionStream({
   };
 
   // 시간순 한 줄기(§2-3 ②) — 순서 규칙은 `lib/urls.ts`의 순수 함수가 들고 있고 테스트가 못박는다.
-  // `groupProgress`가 그 줄기를 말풍선(경계)과 그 사이 묶음으로 가른다(§2-6 ②) — 말풍선인가는
-  // `label === ""` 하나로 판정한다(assistant `text` · 참견 · 첫 아닌 사용자 프롬프트가 전부 빈 label).
-  const grouped = groupProgress(mergeProgress(events, thread), (e) => e.label === "");
+  const merged = mergeProgress(events, thread);
+  // 말풍선인가는 `label === ""` 하나로 판정한다(assistant `text` · 참견 · 첫 아닌 사용자 프롬프트가
+  // 전부 빈 label). `groupProgress`가 그 줄기를 말풍선(경계)과 그 사이 묶음으로 가른다(§2-6 ②).
+  const isBubble = (e: StreamEvent) => e.label === "";
   // 말풍선의 key는 **스레드 안의 자리**다. 병합 배열의 index로 잡으면 사건이 붙을 때마다 맨 끝
   // 질문(답 없는 꼬리 · §2-3 ②)의 key가 밀려 매 폴링에 `<Markdown>`이 다시 마운트된다.
   const threadKey = new Map(thread.map((t, i) => [t, `t${i}`]));
   // 진행 표식 문구(§2-6 ③) — **파싱된 마지막 스트림 레코드** 하나가 판정한다(병합·묶음과 무관).
   const markerText = progressMarkerText(events.at(-1)?.kind);
+
+  // `windowEvents`·`planBlocks`(`lib/urls.ts`)는 `{ ts? }`를 직접 든 배열을 받는다 —
+  // `mergeProgress`의 출력은 `{event}`/`{thread}` 래퍼라 그 자리에 `ts`를 얹어 통과시킨다.
+  // 스레드 항목은 `ts`가 없으므로 `windowEvents`가 **앞 사건의 시각을 물려받는** 그 규칙
+  // (§2-3 ②)을 그대로 타고 계획 창에 든다 — 여기서 새로 시각을 지어내지 않는다.
+  const timedMerged = merged.map((it) => ({ it, ts: it.event?.ts }));
+  // §비주얼 §59 ⑦ — 계획이 있으면 상자 안이 계획 블록 단위로 갈린다. 계획이 없으면(§2-11④
+  // "계획 절이 없는 티켓") 상자 하나가 곧 "계획 밖" 블록 하나다 — 그 갈래에서 아래가 그리는 것은
+  // `groupProgress(merged, isBubble)`을 그대로 도는 개정 전 화면과 클래스 0 차이다.
+  const blocks = plans.length
+    ? planBlocks(plans, timedMerged, Date.now())
+    : [{ kind: "outside" as const, events: timedMerged }];
+  // 진행중 모양이 둘 이상이면 파일 순서상 마지막 하나만 진짜다(§2-11④) — 앞의 것들은 완료처럼
+  // 그린다(닫힌 아코디언, `기록 n건`). 안 그러면 열린 아코디언이 둘 이상이 되어 "열린 것이
+  // 진행중 하나뿐"이라는 계약(§비주얼 §59 ⑧ 수용조건 6)이 깨진다. `windowEvents`(안에서
+  // `planBlocks`가 부른다)가 창을 배분할 때 쓰는 판정과 같은 한 줄이다.
+  const lastDoing = plans.reduce((last, p, i) => (p.state === "doing" ? i : last), -1);
+  const effectivePlans = plans.map((p, i) =>
+    p.state === "doing" && i !== lastDoing ? { ...p, state: "done" as const } : p,
+  );
+  // 참견 모드인가 — `interjectMode`(§21)의 앞 두 판정만 쓴다. `done`이면 이어받기(폼이 종전
+  // 자리 그대로 · §비주얼 §59 ⑥), 그 밖엔 `live`인 동안 항상 참견이다. 실패 잔해(`failed`)는
+  // 자리 결정에 안 쓴다 — 그 갈래는 이미 `!live`라 진행중 계획이 열려 있을 일이 없다.
+  const interjecting = !done && live;
+  // 참견 폼이 들어갈 계획 — 없으면(-1) 폼은 종전 자리(상자 밖)다(§2-11④ 폼 자리 표).
+  const activeDoing = interjecting && lastDoing !== -1 ? lastDoing : -1;
+
+  const form = (
+    <ProgressForm
+      project={project}
+      stem={stem}
+      live={live}
+      inbox={inbox}
+      done={done}
+      noStream={noStream}
+      noInterject={noInterject}
+      engine={engine}
+      awaiting={awaiting}
+      answerFile={answerFile}
+      answerOptions={answerOptions}
+      vault={vault}
+    />
+  );
 
   return (
     // `min-w-0`은 워커 다이얼로그가 가로로 새는 것을 막는다(§비주얼 §21 · 요구 `fff27e81`).
@@ -245,7 +297,7 @@ export function SessionStream({
       )}
       {/* 상자는 **그릴 것이 있을 때만** 선다. codex이고 스레드도 없으면 위 `<EmptyState>` 하나가
           이 자리의 전부다(종전 그대로) — 빈 상자를 하나 더 그리는 것은 소음이다(§29 ④). */}
-      {(stream || grouped.length > 0) && (
+      {(stream || merged.length > 0) && (
         /* 배경에 틴트를 깔지 않는다 — `--muted`를 깔면 접힌 줄의 `--muted-foreground`가 4.34로
             AA 미달이고(§9 함정 1) 말풍선 실측표 7종도 이 면 위에서 잰 값이다(§29 ①).
             512px인 이유는 머리와 바닥이 한 화면에 같이 들어와서다 — 참견 최악 840에 852까지
@@ -259,23 +311,49 @@ export function SessionStream({
             stream ? "h-[32rem]" : "max-h-[32rem]",
           )}
         >
-          {grouped.map((g) => {
-            if (g.kind === "event") return <StreamBubble key={g.event.key} e={g.event} />;
-            if (g.kind === "thread")
-              return <ThreadRow key={threadKey.get(g.thread)} item={g.thread} vault={vault} />;
-            return <Bundle key={g.events[0].key} events={g.events} onToggle={onToggle} />;
-          })}
-          {/* 진행 표식(§18 ④) — 마지막 사건 다음 줄이 올 자리를 지킨다. **말풍선 아래로 안
-              내려간다**: `.wip`인 동안 상자의 맨 끝은 항상 스트림 사건이고(답 없는 질문은
-              열린 티켓에만 있다 — §29 ③) 옛 답변은 `birth`가 지금 세션 첫 사건보다 앞이다.
-              `<Marker>`도 `<details>`도 아니다: §9가 Marker 기본값을 하나도 안 덮기로 했는데
-              여기는 `text-xs`여야 한다(폴링 상태 3종이 한 종류인 채로 자리만 옮겼다). 눌러 볼
-              것이 없으니 hover도 없다. `mx-1`이 8px 점을 16px 칸(= MarkerIcon 폭) 가운데 세워
-              문구를 다른 두 줄과 같은 x=36px에 맞춘다. // ponytail: 정렬용 래퍼 대신 마진 4px.
-              점이 커지면 그때 래퍼. 문구를 같이 드는 이유는 `prefers-reduced-motion`이다 —
-              모션만으로 말하지 않는다. **문구는 마지막 레코드가 `thinking`이면 갈린다**(§2-6 ③,
-              요구 `cbdc2cb4`) — 판정은 `progressMarkerText`(`lib/urls.ts`) 하나다. */}
-          {live && (
+          {blocks.map((block, bi) =>
+            block.kind === "outside" ? (
+              <ProgressItems
+                key={`o${bi}`}
+                items={groupProgress(
+                  block.events.map((w) => w.it),
+                  isBubble,
+                )}
+                threadKey={threadKey}
+                onToggle={onToggle}
+                vault={vault}
+              />
+            ) : (
+              <PlanBlock
+                key={`p${block.index}`}
+                plan={effectivePlans[block.index]}
+                items={groupProgress(
+                  block.events.map((w) => w.it),
+                  isBubble,
+                )}
+                count={block.events.length}
+                active={block.index === activeDoing}
+                markerText={markerText}
+                form={block.index === activeDoing ? form : null}
+                onToggle={onToggle}
+                threadKey={threadKey}
+                vault={vault}
+              />
+            ),
+          )}
+          {/* 진행 표식(§18 ④) — **진행중 계획이 없을 때만 여기다**(종전 자리). 있으면 그 계획
+              아코디언 안 맨 아래로 옮긴다(위 `<PlanBlock active>` — §비주얼 §59 ⑥). 마지막 사건
+              다음 줄이 올 자리를 지킨다. **말풍선 아래로 안 내려간다**: `.wip`인 동안 상자의 맨
+              끝은 항상 스트림 사건이고(답 없는 질문은 열린 티켓에만 있다 — §29 ③) 옛 답변은
+              `birth`가 지금 세션 첫 사건보다 앞이다. `<Marker>`도 `<details>`도 아니다: §9가
+              Marker 기본값을 하나도 안 덮기로 했는데 여기는 `text-xs`여야 한다(폴링 상태 3종이
+              한 종류인 채로 자리만 옮겼다). 눌러 볼 것이 없으니 hover도 없다. `mx-1`이 8px
+              점을 16px 칸(= MarkerIcon 폭) 가운데 세워 문구를 다른 두 줄과 같은 x=36px에
+              맞춘다. // ponytail: 정렬용 래퍼 대신 마진 4px. 점이 커지면 그때 래퍼. 문구를
+              같이 드는 이유는 `prefers-reduced-motion`이다 — 모션만으로 말하지 않는다.
+              **문구는 마지막 레코드가 `thinking`이면 갈린다**(§2-6 ③, 요구 `cbdc2cb4`) —
+              판정은 `progressMarkerText`(`lib/urls.ts`) 하나다. */}
+          {activeDoing === -1 && live && (
             <div className="flex items-center gap-2 px-3 text-xs leading-6 text-muted-foreground">
               <span
                 aria-hidden
@@ -296,27 +374,134 @@ export function SessionStream({
         <p className="px-3 text-xs text-muted-foreground">{NO_QUESTION_SECTION_NOTICE}</p>
       )}
 
-      {/* 입력칸 — 상자 **밖 · 밑**이다(§2-2 · §비주얼 §21). 여기 한 곳에 다니까 티켓 상세와
-          워커 다이얼로그가 같은 폼을 그린다(§2-1 Q2=(a)). 항상 마운트해 두고 그릴지 말지는
-          컴포넌트가 스스로 판정한다 — 조건을 바깥에 두면 `live`가 내려가는 순간(2초 폴링) 실패
-          사유와 사람이 쓴 글이 언마운트로 같이 증발한다(§21 예외 항).
-          **codex에서도 자리를 지운다는 뜻이 아니다**(§비주얼 §23 ⑤): 비활성 + 사유 한 줄로 뜬다 —
-          진입점을 지우면 화면은 "왜 없는지"를 말할 자리를 잃는다. */}
-      <ProgressForm
-        project={project}
-        stem={stem}
-        live={live}
-        inbox={inbox}
-        done={done}
-        noStream={noStream}
-        noInterject={noInterject}
-        engine={engine}
-        awaiting={awaiting}
-        answerFile={answerFile}
-        answerOptions={answerOptions}
-        vault={vault}
-      />
+      {/* 입력칸 — **진행중 계획이 있으면 그 안(위 `<PlanBlock active>`), 없으면 상자 밖 · 밑의
+          종전 자리다**(§2-11④ 폼 자리 표 · §비주얼 §59 ⑥). 여기 한 곳에 다니까 티켓 상세와
+          워커 다이얼로그가 같은 폼을 그린다(§2-1 Q2=(a)). 두 자리 다 **같은 `form` 엘리먼트**를
+          쓴다 — 어느 쪽이든 항상 마운트해 두고 그릴지 말지는 컴포넌트가 스스로 판정한다 — 조건을
+          바깥에 두면 `live`가 내려가는 순간(2초 폴링) 실패 사유와 사람이 쓴 글이 언마운트로 같이
+          증발한다(§21 예외 항). **codex에서도 자리를 지운다는 뜻이 아니다**(§비주얼 §23 ⑤):
+          비활성 + 사유 한 줄로 뜬다 — 진입점을 지우면 화면은 "왜 없는지"를 말할 자리를 잃는다. */}
+      {activeDoing === -1 && form}
     </div>
+  );
+}
+
+/** 진행 기록 한 줄기(§2-3 ②)를 그리는 자리 — 계획 밖이든(§비주얼 §59 ⑦) 계획 안이든 같은
+ *  세 문법(사건 · 스레드 항목 · 묶음)이다. `SessionStream`의 종전 인라인 `.map`을 그대로
+ *  옮긴 것뿐이라 클래스 0줄 차이다 — 계획 아코디언 안에서도 재사용하려고 뺐다. */
+function ProgressItems({
+  items,
+  threadKey,
+  onToggle,
+  vault,
+}: {
+  items: GroupedItem<StreamEvent, ThreadItem>[];
+  threadKey: Map<ThreadItem, string>;
+  onToggle: (e: React.SyntheticEvent<HTMLDetailsElement>) => void;
+  vault?: Vault;
+}) {
+  return (
+    <>
+      {items.map((g) => {
+        if (g.kind === "event") return <StreamBubble key={g.event.key} e={g.event} />;
+        if (g.kind === "thread")
+          return <ThreadRow key={threadKey.get(g.thread)} item={g.thread} vault={vault} />;
+        return <Bundle key={g.events[0].key} events={g.events} onToggle={onToggle} />;
+      })}
+    </>
+  );
+}
+
+/** 계획 아코디언 한 줄(DESIGN.md §비주얼 §59) — 네 상태(§2-11①)가 손잡이 유무 · 기본 열림 ·
+ *  꼬리 문구로 여섯 갈래로 갈린다(§59 ③). `<Marker>`가 아니다(§59 ②) — 그 기본값
+ *  `text-sm text-muted-foreground`가 계획 제목의 밝기 · 크기를 둘 다 덮는다. `group`을
+ *  안 붙인다(§59 ④ 컴파일 실측) — 붙이면 안쪽 두 겹(묶음 줄 · 펼친 원문)의 닫힌 chevron이
+ *  이 계획을 여는 순간 같이 돈다. 대신 `open:[&>summary>svg:first-child]:rotate-90`을
+ *  쓴다 — 레포에 이미 있는 문자열이다(`ontology/page.tsx:294`). */
+function PlanBlock({
+  plan,
+  items,
+  count,
+  active,
+  markerText,
+  form,
+  onToggle,
+  threadKey,
+  vault,
+}: {
+  plan: PlanItem;
+  items: GroupedItem<StreamEvent, ThreadItem>[];
+  /** 그 창의 사건 수 — 꼬리 `기록 n건`(§59 ③). §9 묶음 줄과 같은 문자열이라 새 i18n 키가
+   *  아니다(§59 ⑩ 범위 판정). */
+  count: number;
+  /** 지금 진행중이고 세션이 살아 있다 — 이 계획이 표식 · 폼을 문다(§59 ⑥). 진행중 모양이
+   *  둘 이상이면 파일 순서상 마지막 하나에만 참이다(`SessionStream`이 미리 판정해 넘긴다). */
+  active: boolean;
+  markerText: string;
+  form: React.ReactNode;
+  onToggle: (e: React.SyntheticEvent<HTMLDetailsElement>) => void;
+  threadKey: Map<ThreadItem, string>;
+  vault?: Vault;
+}) {
+  const t = useT();
+  const cancelled = plan.state === "cancelled";
+  const title = (
+    <span className={cn("truncate text-sm font-medium", cancelled && "line-through")} title={plan.text}>
+      {plan.text}
+    </span>
+  );
+  const tail =
+    plan.state === "todo" ? (
+      <span className="ml-auto shrink-0 text-xs text-muted-foreground">{t("progress.plan.pending")}</span>
+    ) : cancelled ? (
+      // 취소 계획의 기록 수는 꼬리에 안 적는다(§59 ③) — 문구는 하나, 기록이 있는지는 손잡이가 말한다.
+      <span className="ml-auto shrink-0 text-xs text-muted-foreground">{t("progress.plan.cancelled")}</span>
+    ) : (
+      <span className="ml-auto shrink-0 text-xs text-muted-foreground tabular-nums">기록 {count}건</span>
+    );
+
+  // 진행중은 늘 손잡이가 있다(기록 0건이어도 — §59 ③). 완료 · 취소는 기록이 있을 때만이다.
+  const hasHandle = plan.state === "doing" || count > 0;
+  if (!hasHandle) {
+    // 미착수 · 완료(0건) · 취소(0건) — 그릇이 `<div>`다. 손잡이 자리는 빈 칸으로 비워
+    // 제목을 다른 갈래와 같은 x=36에 맞춘다(§9 접힌 줄이 펼칠 것 없을 때 쓰는 같은 수).
+    return (
+      <div className={cn(LINE, "flex items-center gap-2")}>
+        <span aria-hidden className="size-4 shrink-0" />
+        {title}
+        {tail}
+      </div>
+    );
+  }
+
+  return (
+    <details
+      open={plan.state === "doing" || undefined}
+      onToggle={onToggle}
+      className="open:[&>summary>svg:first-child]:rotate-90"
+    >
+      <summary
+        className={cn(
+          LINE,
+          "flex items-center gap-2 cursor-pointer list-none hover:bg-muted/50 [&::-webkit-details-marker]:hidden",
+        )}
+      >
+        <ChevronRight aria-hidden className="size-4 shrink-0" />
+        {title}
+        {tail}
+      </summary>
+      <ProgressItems items={items} threadKey={threadKey} onToggle={onToggle} vault={vault} />
+      {active && (
+        <div className="flex items-center gap-2 px-3 text-xs leading-6 text-muted-foreground">
+          <span
+            aria-hidden
+            className="mx-1 size-2 shrink-0 animate-wip-pulse rounded-full bg-muted-foreground motion-reduce:animate-none"
+          />
+          {markerText}
+        </div>
+      )}
+      {active && <div className="px-3 pt-2">{form}</div>}
+    </details>
   );
 }
 

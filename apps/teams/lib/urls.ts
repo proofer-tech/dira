@@ -442,7 +442,7 @@ export function windowEvents<E extends { ts?: string }>(
   plans: PlanItem[],
   events: E[],
   now: number,
-): { buckets: E[][]; outside: E[] } {
+): { buckets: E[][]; outside: E[]; lastDoing: number } {
   const lastDoing = plans.reduce((last, p, i) => (p.state === "doing" ? i : last), -1);
   const windows = plans.map((p, i) => {
     if (!p.start) return null;
@@ -478,7 +478,52 @@ export function windowEvents<E extends { ts?: string }>(
     return bucket;
   });
   const outside = events.filter((_, i) => !claimed[i]);
-  return { buckets, outside };
+  return { buckets, outside, lastDoing };
+}
+
+/** 계획 아코디언 배치 순서(§비주얼 §59 ⑦) — `windowEvents`의 버킷·밖을 **화면이 그리는 순서
+ *  하나의 목록**으로 편다. 계획은 언제나 **파일 순서**로 서고(§59 ①: "목록이 목록으로 읽힌다"),
+ *  창이 없는 계획(미착수 · 기록 0건)은 시각이 없어 시간 축에 안 낀다 — 다음으로 사건을 문 계획
+ *  직전에, 남으면 맨 끝에 선다. 계획 밖 사건은 `events`가 이미 시간순이라 **원본 순서를 그대로
+ *  걷는 것**으로 자리를 얻는다 — 시각을 다시 비교하지 않는다(그 창 경계 값 자체가 `windowEvents`
+ *  안에만 있고 밖으로 안 나온다).
+ *
+ *  창이 겹쳐 한 계획의 사건이 시간상 두 토막으로 갈리는 사고(§2-11④가 이미 "받아들인다"로 둔
+ *  자리)는 그 계획의 **첫 등장 자리에서 버킷 전체를 한 번**만 그린다 — 이후 같은 계획 사건을
+ *  다시 만나도 building은 건너뛴다. */
+export type ProgressBlock<E> = { kind: "outside"; events: E[] } | { kind: "plan"; index: number; events: E[] };
+
+export function planBlocks<E extends { ts?: string }>(
+  plans: PlanItem[],
+  events: E[],
+  now: number,
+): ProgressBlock<E>[] {
+  const { buckets } = windowEvents(plans, events, now);
+  const owner = new Map<E, number>();
+  buckets.forEach((bucket, i) => bucket.forEach((e) => owner.set(e, i)));
+
+  const pending = new Set(plans.map((_, i) => i));
+  const blocks: ProgressBlock<E>[] = [];
+  const flushPendingBefore = (limit: number) => {
+    for (let p = 0; p < limit; p++) {
+      if (pending.delete(p)) blocks.push({ kind: "plan", index: p, events: buckets[p] });
+    }
+  };
+
+  let i = 0;
+  while (i < events.length) {
+    const o = owner.get(events[i]);
+    const start = i;
+    while (i < events.length && owner.get(events[i]) === o) i++;
+    if (o === undefined) {
+      blocks.push({ kind: "outside", events: events.slice(start, i) });
+    } else if (pending.delete(o)) {
+      flushPendingBefore(o);
+      blocks.push({ kind: "plan", index: o, events: buckets[o] });
+    }
+  }
+  flushPendingBefore(plans.length);
+  return blocks;
 }
 
 /** 진행 표식 문구(§2-6 ③) — 파싱된 **마지막 스트림 레코드**의 종류 하나로 갈린다.

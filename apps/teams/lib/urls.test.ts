@@ -15,6 +15,7 @@ import {
   interjectMode,
   mergeProgress,
   parentPath,
+  planBlocks,
   progressMarkerText,
   projectPath,
   relationPath,
@@ -469,6 +470,49 @@ test("windowEvents — 겹치는 창: 앞 계획이 먼저 집는다, 한 사건
   assert.deepEqual(wKeys(buckets[0]), ["e1"]); // 앞 계획(a)이 집는다
   assert.deepEqual(wKeys(buckets[1]), []);
   assert.deepEqual(outside, []);
+});
+
+/** 계획 아코디언 배치 순서 (DESIGN.md §비주얼 §59 ⑦). `plan()`·`we()`·`wKeys()`는 위
+ *  `windowEvents` 테스트가 이미 정의한 헬퍼를 그대로 쓴다. */
+const planKinds = (blocks: { kind: string; index?: number; events: { key: string }[] }[]) =>
+  blocks.map((b) => (b.kind === "plan" ? `plan${b.index}` : "outside"));
+
+test("planBlocks — 계획 세우기 전 구간은 첫 계획 앞에 선다(§비주얼 §59 ⑦)", () => {
+  const plans = [plan("a", "done", "2026-08-01T01:00:00Z", "2026-08-01T02:00:00Z")];
+  const events = [we("before", "2026-08-01T00:30:00Z"), we("during", "2026-08-01T01:30:00Z")];
+  const blocks = planBlocks(plans, events, 0);
+  assert.deepEqual(planKinds(blocks), ["outside", "plan0"]);
+  assert.deepEqual(wKeys(blocks[0].events), ["before"]);
+  assert.deepEqual(wKeys(blocks[1].events), ["during"]);
+});
+
+test("planBlocks — 창 없는 계획(미착수 · 기록 0건)도 파일 순서 자리를 지킨다(§비주얼 §59 ①)", () => {
+  const plans = [
+    plan("a", "done", "2026-08-01T00:00:00Z", "2026-08-01T01:00:00Z"),
+    plan("b", "todo", null),
+    plan("c", "doing", "2026-08-01T01:00:00Z"),
+  ];
+  const events = [we("e1", "2026-08-01T00:30:00Z"), we("e2", "2026-08-01T01:30:00Z")];
+  const blocks = planBlocks(plans, events, Date.parse("2026-08-01T02:00:00Z"));
+  assert.deepEqual(planKinds(blocks), ["plan0", "plan1", "plan2"]);
+  assert.deepEqual(wKeys(blocks[0].events), ["e1"]);
+  assert.deepEqual(wKeys(blocks[1].events), []); // 미착수 — 창이 없어 사건을 못 문다
+  assert.deepEqual(wKeys(blocks[2].events), ["e2"]);
+});
+
+test("planBlocks — 계획 사이의 시간 틈은 그 두 계획 블록 사이에 선다(§비주얼 §59 ⑦)", () => {
+  const plans = [
+    plan("a", "done", "2026-08-01T01:00:00Z", "2026-08-01T02:00:00Z"),
+    plan("b", "done", "2026-08-01T03:00:00Z", "2026-08-01T04:00:00Z"),
+  ];
+  const events = [
+    we("inA", "2026-08-01T01:30:00Z"),
+    we("gap", "2026-08-01T02:30:00Z"),
+    we("inB", "2026-08-01T03:30:00Z"),
+  ];
+  const blocks = planBlocks(plans, events, 0);
+  assert.deepEqual(planKinds(blocks), ["plan0", "outside", "plan1"]);
+  assert.deepEqual(wKeys(blocks[1].events), ["gap"]);
 });
 
 test("progressMarkerText — 마지막 레코드가 thinking이면 '생각하는 중', 그 외엔 종전 문구", () => {

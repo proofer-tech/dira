@@ -37,6 +37,7 @@ import {
   isAwaiting,
   lastQuestionOptions,
   listTickets,
+  planOf,
   referrers,
   reqOf,
   resolveDep,
@@ -176,6 +177,10 @@ export default async function TicketDetail({
   // 읽기 전용 본문 — 스레드가 데려간 `## 질문 n` 절을 뺀 것. 편집 폼은 아래에서 원문을 쓴다.
   const bodyRead = bodyWithoutQuestions(ticket.body);
 
+  // 진행 계획(§2-11① · §비주얼 §59) — `## 진행 계획` 절이 없으면 빈 배열이고 그때 진행 기록은
+  // 개정 전 화면 그대로다(`<SessionStream>` 기본값과 같은 판정).
+  const plans = planOf(ticket.body);
+
   // 편집 폼의 persona select 선택지. **보드의 발행 다이얼로그와 같은 규칙**이다(§2 편집 항):
   // `listPersonas` 결과 중 `body !== null`(= PROFILE.md가 있다). 여기서 `readdir`을 다시 하면
   // 이름 규칙 밖 디렉터리가 선택지에 들어온다 — 이미 읽은 `config`·`tickets`를 넘긴다.
@@ -192,25 +197,28 @@ export default async function TicketDetail({
   // (§2-3 ④ · §비주얼 §11 순서 줄) 조건을 두 자리에 흩뿌리면 둘이 어긋나 절이 사라지거나 두
   // 벌로 뜬다 — 여기서 만들고 아래는 `above` 하나로 꽂을 자리만 고른다.
   //
-  // **절이 서는 조건이 셋이다**(§2-3 ①): `session_id`가 있다 / 스레드가 비어 있지 않다 /
-  // 답변 대기다. 종전엔 `session_id` 하나였고, 그러면 **한 번도 디스패치된 적 없는 요구사항의
-  // 답변칸이 통째로 사라진다**(보드에서 접수한 요구가 정확히 그 모양이다).
+  // **절이 서는 조건이 넷이다**(§2-3 ①의 셋 + §2-11④ 넷째 — `## 진행 계획`이 있다). 종전엔
+  // `session_id` 하나였고, 그러면 **한 번도 디스패치된 적 없는 요구사항의 답변칸이 통째로
+  // 사라진다**(보드에서 접수한 요구가 정확히 그 모양이다). 넷째가 없으면 **회수된 열림 티켓**
+  // (reap이 `session_id`를 지운다 — `tickets.py` `REAP_CLEAR`)이 남긴 계획도 같이 사라진다 —
+  // 그 화면이 말하는 것이 정확히 "어디까지 갔나"다.
   const progressSection =
-    sessionId || thread.length > 0 || awaiting ? (
+    sessionId || thread.length > 0 || awaiting || plans.length > 0 ? (
       <section className="space-y-2">
         {/* 스트림이 없는 엔진(오늘 codex)이면 트랜스크립트가 **있을 수 없다**(§4-3 표) —
             그래도 컴포넌트를 세운다:
             왜 없는지와 참견 폼의 사유가 그 안에 있고, 두 진입점(여기 · 워커 행)이 같은
-            조각을 그린다(§비주얼 §23 ⑤). 스레드·답변 대기만 있는 경우(극단 A — 세션이 붙은
-            적 없는 요구사항)도 여기로 온다: 상자는 `max-h`가 되고 **스트림이 없다는 말을
-            하지 않는다**(§29 ④ — `대기` 배지가 이미 말한다). */}
-        {transcript || engineCan("stream", engine) === false || thread.length > 0 || awaiting ? (
+            조각을 그린다(§비주얼 §23 ⑤). 스레드·답변 대기·계획만 있는 경우(극단 A — 세션이
+            붙은 적 없는 요구사항 · 회수된 열림 티켓)도 여기로 온다: 상자는 `max-h`가 되고
+            **스트림이 없다는 말을 하지 않는다**(§29 ④ — `대기` 배지가 이미 말한다). */}
+        {transcript || engineCan("stream", engine) === false || thread.length > 0 || awaiting || plans.length > 0 ? (
           <SessionStream
             project={id}
             stem={ticket.stem}
             live={ticket.state === "wip"}
             engine={engine}
             thread={thread}
+            plans={plans}
             answerOptions={answerOptions}
             // 스트림 지분이 있는가 = 트랜스크립트 파일 하나다(§29 ② — 고정 높이와 머리 줄의 근거)
             stream={!!transcript}
