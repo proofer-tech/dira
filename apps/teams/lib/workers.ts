@@ -613,7 +613,7 @@ export type EngineId = "claude" | "codex" | "grok" | "agy";
 export const NO_MODEL = "";
 
 /** 고정 템플릿 안에서 `[flag, model]`로 펴지는 자리. `NO_MODEL`이면 통째로 사라진다. */
-const MODEL_SLOT = " model";
+const MODEL_SLOT = " model";
 
 export const ENGINE_ARR = "TICKET_ENGINE";
 
