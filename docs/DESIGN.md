@@ -18530,16 +18530,32 @@ message: The signature of the binary is invalid.
 를 파이프로 받아 `l.isascii()`가 거짓인 줄을 센다.
 
 **`Contents/Resources`는 `CodeResources`가 봉인하는 자리다.** 파일명이 봉인된 뒤에 바뀌면
-봉인이 깨지고, Apple은 그것을 "바이너리 서명이 무효"로 보고한다. 유력한 기전은 dmg를 만들 때
-파일명이 NFC에서 NFD로 정규화되는 것이다 - `.app`이 APFS에 있을 때는 NFC가 그대로 남으니
-`.app` 공증만 통과하는 위 비대칭이 그것으로 설명된다. **기전은 아직 직접 재지 않았다** -
-고치는 티켓이 재고 그 결과를 이 절에 적는다.
+봉인이 깨지고, Apple은 그것을 "바이너리 서명이 무효"로 보고한다. **기전을 쟀다**(`df57b986`,
+공증 자격값 없이) - `codesign -s -`로 서명한 최소 번들(`Contents/Resources/café.txt`, NFC 8
+codepoints)을 만들어 `hdiutil create -fs <값>`으로 dmg 둘에 각각 담고, `hdiutil attach`로 붙인
+뒤 `café.txt`의 정규화형과 `codesign --verify --deep --strict` 결과를 대조했다:
+
+| dmg 파일시스템 | 마운트 뒤 파일명 정규화형 | `codesign --verify --deep --strict` |
+| --- | --- | --- |
+| (원본, APFS `/tmp`) | NFC (8 codepoints) | 통과 |
+| `HFS+`(electron-builder 기본값) | NFD (9 codepoints) | `a sealed resource is missing or invalid` |
+| `APFS` | NFC (8 codepoints) | 통과 |
+
+기전이 확정됐다 - **HFS+ 볼륨은 쓰기 시점에 파일명을 NFC에서 NFD로 재정규화하고,
+`CodeResources`는 봉인 시점의 NFC 경로를 기억하니 마운트 뒤 이름이 갈려 봉인이 깨진다.**
+`.app`이 APFS 위에 있을 때는 정규화가 안 일어나 공증만 통과하는 비대칭이 그것으로 설명된다.
+`dmg-builder`(electron-builder의 dmg 굽는 부분)는 `dmg.filesystem`을 안 채우면 `"HFS+"`를
+기본값으로 쓴다(`dmgUtil.js` `customizeDmg`, `specification.filesystem || "HFS+"`) -
+`apps/desktop/package.json`이 그동안 이 키를 안 채워서 기본값을 그대로 받았다.
 
 **고치는 방향은 둘이고 대가가 다르다.** 하나는 번들에 실리는 파일명을 ASCII로 돌리는 것 -
 형제 문서 8장의 이름을 바꾸면 그것을 부르는 `AGENTS.md` `CORE.md`와 `templates/` 사본,
-`scaffold.ts`가 같이 따라가고 이미 깔린 큐의 파일명도 갈린다. 다른 하나는 이름을 두고
-dmg 쪽에서 봉인이 안 깨지게 하는 것이다. **어느 쪽이든 판정은 하나다** - `release` 워크플로가
-초록으로 끝나고 자산 셋이 릴리스에 붙는다.
+`scaffold.ts`가 같이 따라가고 이미 깔린 큐의 파일명도 갈린다. **고른 것은 다른 하나다** - 이름은
+두고 dmg 쪽에서 봉인이 안 깨지게 한다. `apps/desktop/package.json`의 `build.dmg.filesystem`을
+`"APFS"`로 지정한다(위 표 셋째 줄이 그 값의 실측이다) - 서명·공증·`.zip` 경로는 안 건드리고
+`dmgbuild`가 읽는 설정 한 줄만 늘어난다. 대가는 APFS dmg를 못 여는 macOS 10.13 미만인데,
+Electron 40의 최소 지원 macOS가 그보다 한참 위라 실효 대가가 없다. **판정은 하나다** -
+`release` 워크플로가 초록으로 끝나고 자산 셋이 릴리스에 붙는다.
 
 **R5. 앱이 하는 일은 셋이고 새 화면은 0개다.**
 

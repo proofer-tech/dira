@@ -80,6 +80,9 @@
       "entitlements": "entitlements.mac.plist",
       "entitlementsInherit": "entitlements.mac.plist",
       "notarize": true
+    },
+    "dmg": {
+      "filesystem": "APFS"
     }
   },
   "dependencies": {
