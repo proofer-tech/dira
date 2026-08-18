@@ -979,6 +979,16 @@ export function openFixTicket(tickets: Ticket[], marker: string): Ticket | null 
 /** 온톨로지 스키마 위반 정리 티켓의 마커 값(§P230). 화면·액션이 같은 리터럴을 쓰게 하는 자리. */
 export const ONTOLOGY_FIX_MARKER = "ontology-schema";
 
+/** 온톨로지 마이그레이션 발행 티켓의 마커(§5-3). 프로젝트당 한 장 — `마이그레이션 시작`과
+ *  첫 채움이 같은 값을 써서 같은 티켓을 가리킨다. */
+export const ONTOLOGY_MIGRATION_MARKER = "ontology-migration";
+
+/** 온톨로지 import 발행 티켓의 마커(§5-3). 폴더당 한 장 — 다른 폴더는 서로를 안 막는다.
+ *  화면(카드 판정)과 액션(발행 직전 재확인)이 같은 함수를 불러야 한다. */
+export function ontologyImportMarker(folder: string): string {
+  return `ontology-import:${folder}`;
+}
+
 /** 이 티켓이 미완으로 끝나며 남긴 이어받기 티켓 stem(§P294 §미완으로 끝나는 세션 결정 3).
  *  `archivesOf`와 같은 선례 — 값은 stem 하나이고 목록이 아니다, GUI만 읽는 커스텀 frontmatter
  *  키라 엔진은 모르는 채 무해하다. 대상 티켓 조회는 호출부가 `resolveDep`으로 한다. */

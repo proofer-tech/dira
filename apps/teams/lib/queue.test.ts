@@ -29,6 +29,7 @@ import {
   isDispatchable,
   listTickets,
   openFixTicket,
+  ontologyImportMarker,
   queueOrder,
   bodyWithoutQuestions,
   composeAnswer,
@@ -1680,6 +1681,15 @@ test("openFixTicket — 0장 · 열림/진행중 1장 · 완료만 세 경우 (�
 
   // ③ 마커 티켓이 0장이면 null
   assert.strictEqual(openFixTicket([], "ontology-schema"), null);
+});
+
+test("ontologyImportMarker — 폴더 절대경로마다 다른 마커, 같은 경로면 같은 마커(§5-3)", () => {
+  assert.strictEqual(ontologyImportMarker("/Users/a/Notes"), "ontology-import:/Users/a/Notes");
+  assert.notStrictEqual(ontologyImportMarker("/Users/a/Notes"), ontologyImportMarker("/Users/b/Notes"));
+  assert.strictEqual(
+    ontologyImportMarker("/Users/a/Notes"),
+    ontologyImportMarker("/Users/a/Notes"),
+  );
 });
 
 test("reqTitle — 첫 비어있지 않은 줄, 80자에서 자르고 …", () => {

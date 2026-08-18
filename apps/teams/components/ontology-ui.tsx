@@ -13,12 +13,13 @@ import {
   createOntologyAction,
   deleteOntologyAction,
   fixOntologySchemaAction,
+  publishOntologyImportAction,
   renameOntologyAction,
   saveOntologyAction,
   submitOntologySurveyAction,
   type OntologyResult,
 } from "@/app/(app)/p/[project]/ontology/actions";
-import { pollHomeAnswer, startImport } from "@/app/(app)/p/[project]/home/actions";
+import { pollHomeAnswer } from "@/app/(app)/p/[project]/home/actions";
 import { Markdown } from "@/components/markdown";
 import { MarkdownEditor } from "@/components/markdown-editor";
 import { PickPath } from "@/components/path-picker";
@@ -130,12 +131,11 @@ export function OntologyImport({ projectId }: { projectId: string }) {
         session.current = null;
         offset.current = 0;
         setRunning(true);
-        void startImport(projectId, folder).then((r) => {
-          // `null` = 시작했다(§7과 같은 계약) — 실패만 온다.
-          if (r && !r.ok) {
-            setError(r.output);
-            setRunning(false);
-          }
+        // ponytail: 발행은 큐 파일 한 장 쓰기라 여기서 끝난다 — 진행·결과를 티켓 상세에서 보는
+        // 배선(링크·폴링 제거)은 `30a8ba7a` 몫이다(§5-3).
+        void publishOntologyImportAction(projectId, folder).then((r) => {
+          setRunning(false);
+          if (!r.ok) setError(r.message);
         });
       }}
     >
