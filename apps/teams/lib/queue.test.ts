@@ -24,11 +24,13 @@ import {
   filterTickets,
   findPath,
   fixesOf,
+  importFolderOf,
   inDefaultList,
   isAwaiting,
   isDispatchable,
   listTickets,
   openFixTicket,
+  openImportTickets,
   ontologyImportMarker,
   queueOrder,
   bodyWithoutQuestions,
@@ -1690,6 +1692,26 @@ test("ontologyImportMarker — 폴더 절대경로마다 다른 마커, 같은 �
     ontologyImportMarker("/Users/a/Notes"),
     ontologyImportMarker("/Users/a/Notes"),
   );
+});
+
+test("openImportTickets — 폴더마다 한 줄, 완료는 빠지고 다른 마커는 안 걸린다(§비주얼 §56)", async () => {
+  const root = newRoot();
+  await write(root, "aaaa1111.md", fm({ ticket: "aaaa1111", title: "import a", kind: "work",
+    persona: "archive-manager", fixes: "ontology-import:/Users/a/Notes" }));
+  await write(root, "bbbb2222.md", fm({ ticket: "bbbb2222", title: "import b", kind: "work",
+    persona: "archive-manager", fixes: "ontology-import:/Users/b/2026" }));
+  await write(root, "cccc3333.done.md", fm({ ticket: "cccc3333", title: "import 완료", kind: "work",
+    persona: "archive-manager", fixes: "ontology-import:/Users/c/Done" }));
+  await write(root, "dddd4444.md", fm({ ticket: "dddd4444", title: "다른 마커", kind: "work",
+    persona: "archive-manager", fixes: "ontology-migration" }));
+
+  const tickets = await listTickets(root, DEFAULT);
+  const opened = openImportTickets(tickets);
+  assert.deepStrictEqual(opened.map((t) => t.hash).sort(), ["aaaa1111", "bbbb2222"]);
+
+  const byHash = (h: string) => opened.find((t) => t.hash === h)!;
+  assert.strictEqual(importFolderOf(byHash("aaaa1111")), "Notes");
+  assert.strictEqual(importFolderOf(byHash("bbbb2222")), "2026");
 });
 
 test("reqTitle — 첫 비어있지 않은 줄, 80자에서 자르고 …", () => {

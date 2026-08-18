@@ -5,7 +5,7 @@
  *  `protocols-ui.tsx`의 판박이다(트리는 서버가 `<Link href="?file=…">`으로 그리고 선택 상태는
  *  URL이 담는다는 규약도 같다). 온톨로지에는 인라인 프롬프트 배지·`AGENTS.md` 특수 케이스가
  *  없다 — 세션 프롬프트에는 목차만 실리고(§5-2) 이 화면이 여는 것은 그 목차가 가리키는 본문이다. */
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FilePlus2, PencilLine, Trash2, TriangleAlert } from "lucide-react";
@@ -19,8 +19,6 @@ import {
   submitOntologySurveyAction,
   type OntologyResult,
 } from "@/app/(app)/p/[project]/ontology/actions";
-import { pollHomeAnswer } from "@/app/(app)/p/[project]/home/actions";
-import { Markdown } from "@/components/markdown";
 import { MarkdownEditor } from "@/components/markdown-editor";
 import { PickPath } from "@/components/path-picker";
 import type { Vault } from "@/lib/markdown-wikilinks";
@@ -69,53 +67,25 @@ const fileHref = (projectId: string, rel: string, sidebarOff: boolean) =>
 
 /** 폼 한 벌 — 설정 다이얼로그(`projects-ui.tsx`)와 이 화면(지표 판 아래) 두 자리가 함께 쓴다.
  *  껍데기는 부르는 쪽이 준다(`className` prop을 안 받는다) — 두 자리의 여백 차이가 감싸는
- *  `div` 하나로 줄어든다(§56 ①). 진행·결과·실패는 `OntologyMigration`(`projects-ui.tsx`)이
- *  쓰는 `pollHomeAnswer` 한 벌 그대로다 — **새 폴링 0줄**.
+ *  `div` 하나로 줄어든다(§56 ①). 진행·결과·실패 그릇은 개정(`08d26cec`)으로 없어졌다 —
+ *  발행은 큐 파일 한 장 쓰는 왕복 하나고, 성공하면 그 티켓 상세로 이동한다(§56 ⑤).
  *
- *  **결과가 온 순간 `router.refresh()`한다**(§56 ⑤ 넷째) — 지표 판·파일트리는 Server
- *  Component가 요청 시점에 읽은 값이라, 다시 읽지 않으면 "가져왔습니다"가 낡은 지표 바로
- *  아래에 선다. 포커스는 안 튄다 — 다시 그려지는 것은 서버 컴포넌트뿐이고 이 폼은 클라이언트
- *  상태를 든 채 그 자리에 남는다. */
-export function OntologyImport({ projectId }: { projectId: string }) {
+ *  `tickets`는 이 마커(`ontology-import:<폴더>`)를 든 열린 티켓 전부다 — 폴더당 한 장이라
+ *  첫 그림에 판정할 폴더가 없어 부르는 쪽(서버)이 미리 훑어 내려준다(§56 §새 것). 버튼은
+ *  이 목록과 무관하게 항상 선다 — 다른 폴더를 막지 않는다(§5-3). `status`·`folder`는 서버가
+ *  이미 옮긴 문자열이다 — `statusOf`·`importFolderOf`는 `lib/queue.ts` runtime이라 클라이언트
+ *  번들에 못 들어간다(`node:fs/promises` 의존). */
+export function OntologyImport({
+  projectId,
+  tickets,
+}: {
+  projectId: string;
+  tickets: { stem: string; hash: string; status: string; folder: string }[];
+}) {
   const router = useRouter();
   const [folder, setFolder] = useState("");
-  const [running, setRunning] = useState(false);
-  const [partial, setPartial] = useState("");
-  const [answer, setAnswer] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const session = useRef<string | null>(null);
-  const offset = useRef(0);
-
-  useEffect(() => {
-    if (!running) return;
-    let stop = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const poll = async () => {
-      try {
-        const r = await pollHomeAnswer(projectId, session.current, offset.current);
-        if (stop) return;
-        session.current = r.sessionId;
-        offset.current = r.offset;
-        setPartial(r.partial);
-        const last = r.turns.filter((t) => t.role === "answer").at(-1);
-        if (last) setAnswer(last.text);
-        if (r.failed) setError(r.failed.output);
-        if (r.done) {
-          setRunning(false);
-          router.refresh();
-          return;
-        }
-      } catch {
-        // 이 왕복 하나만 버린다 — `OntologyMigration`과 같은 자리.
-      }
-      if (!stop) timer = setTimeout(poll, 800);
-    };
-    void poll();
-    return () => {
-      stop = true;
-      clearTimeout(timer);
-    };
-  }, [running, projectId, router]);
 
   const helpId = `import-help-${projectId}`;
 
@@ -124,18 +94,15 @@ export function OntologyImport({ projectId }: { projectId: string }) {
       className="space-y-2"
       onSubmit={(e) => {
         e.preventDefault();
-        if (!folder.trim() || running) return;
+        if (!folder.trim() || pending) return;
         setError(null);
-        setAnswer(null);
-        setPartial("");
-        session.current = null;
-        offset.current = 0;
-        setRunning(true);
-        // ponytail: 발행은 큐 파일 한 장 쓰기라 여기서 끝난다 — 진행·결과를 티켓 상세에서 보는
-        // 배선(링크·폴링 제거)은 `30a8ba7a` 몫이다(§5-3).
+        setPending(true);
         void publishOntologyImportAction(projectId, folder).then((r) => {
-          setRunning(false);
-          if (!r.ok) setError(r.message);
+          if (r.ok) router.push(`/p/${projectId}/tickets/${r.stem}`);
+          else {
+            setPending(false);
+            setError(r.message);
+          }
         });
       }}
     >
@@ -153,26 +120,29 @@ export function OntologyImport({ projectId }: { projectId: string }) {
         <Button
           type="submit"
           variant="outline"
-          aria-disabled={!folder.trim() || running}
+          aria-disabled={!folder.trim() || pending}
           aria-describedby={helpId}
           className="aria-disabled:opacity-50"
         >
-          {running ? "가져오는 중…" : "가져오기"}
+          {pending ? "발행하는 중…" : "가져오기"}
         </Button>
       </div>
       <p id={helpId} className="text-xs text-muted-foreground">
         폴더를 골라야 누를 수 있습니다 — 폴더 이름이 출처가 됩니다
       </p>
 
-      {running && (
-        <p className="text-sm whitespace-pre-wrap text-muted-foreground">
-          {partial || "돌고 있습니다…"}
+      {error && <Failure title="가져오기 티켓을 만들지 못했습니다" message={error} />}
+
+      {tickets.map((t) => (
+        <p key={t.stem} className="text-xs text-muted-foreground">
+          <Link
+            href={`/p/${projectId}/tickets/${encodeURIComponent(t.stem)}`}
+            className="rounded-sm underline hover:text-foreground"
+          >
+            가져오기 <span className="font-mono">{t.hash}</span> {t.folder} {t.status}
+          </Link>
         </p>
-      )}
-
-      {error && <Failure title="가져오지 못했습니다" message={error} />}
-
-      {!running && answer && <Markdown text={answer} />}
+      ))}
     </form>
   );
 }

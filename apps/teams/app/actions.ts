@@ -57,6 +57,16 @@ import {
   type ProjectConfig,
 } from "@/lib/projects";
 import { t, type Locale } from "@/lib/i18n";
+import { statusLabel } from "@/components/status-badge";
+import {
+  importFolderOf,
+  listTickets,
+  openFixTicket,
+  openImportTickets,
+  ONTOLOGY_MIGRATION_MARKER,
+  statusOf,
+  type Ticket,
+} from "@/lib/queue";
 import { preflight, scaffold } from "@/lib/scaffold";
 import { cronRegisterCmd, listWorkers, markAlertsRead, registerCron } from "@/lib/workers";
 import { tildePath } from "@/lib/urls";
@@ -77,11 +87,22 @@ export type ConfigRow = {
   unresolved?: { worker: string; raw: string }[];
 };
 
+/** 티켓으로 가는 줄 하나가 클라이언트 컴포넌트로 내려가는 모양(§비주얼 §56 ⑤ §티켓으로 가는
+ *  줄). `Ticket` 전체가 아니라 이미 판정된 문자열만 준다 — `statusOf`·`fixesOf`는 `lib/queue.ts`
+ *  runtime이라(`node:fs/promises` 의존) 클라이언트 번들에 못 들어간다(`ticket-ui.tsx` 등의
+ *  선례는 전부 `import type`뿐이다). */
+type MarkerTicketLine = { stem: string; hash: string; status: string };
+
 export type ResolvedView = {
   project: { id: string; name: string; root: string; shortRoot: string };
   rows: ConfigRow[];
   /** 하나라도 워커 간 값이 갈렸는가 — 표 아래 Alert 한 줄의 근거. */
   hasConflict: boolean;
+  /** 설정 다이얼로그의 `OntologyMigration` — 열려 있으면 버튼 대신 그 줄이 선다(§비주얼 §56
+   *  ⑤). 다이얼로그가 첫 그림부터 판정된 값으로 그리게 이 해석 결과와 같이 나른다. */
+  ontologyMigrationTicket: MarkerTicketLine | null;
+  /** 설정 다이얼로그의 `OntologyImport` — 폴더당 한 장이라 목록이다(§비주얼 §56 ⑤). */
+  ontologyImportTickets: (MarkerTicketLine & { folder: string })[];
 };
 
 export type RegisterState = {
@@ -92,7 +113,13 @@ export type RegisterState = {
 };
 
 /** 해석 결과를 표로 옮긴다 (DESIGN.md §7 등록 직후 — 해석 결과 표). */
-function toView(project: Project, config: ProjectConfig, workers: string[]): ResolvedView {
+function toView(
+  project: Project,
+  config: ProjectConfig,
+  workers: string[],
+  ontologyMigrationTicket: Ticket | null,
+  ontologyImportTickets: Ticket[],
+): ResolvedView {
   const home = homedir();
   const short = (p: string) => tildePath(p, home);
   const outside = (p: string) => (p === project.root || p.startsWith(project.root + path.sep) ? [] : (["루트 밖"] as const));
@@ -162,12 +189,32 @@ function toView(project: Project, config: ProjectConfig, workers: string[]): Res
     project: { ...project, shortRoot: short(project.root) },
     rows,
     hasConflict: rows.some((r) => r.byWorker),
+    ontologyMigrationTicket: ontologyMigrationTicket
+      ? {
+          stem: ontologyMigrationTicket.stem,
+          hash: ontologyMigrationTicket.hash,
+          status: statusLabel(statusOf(ontologyMigrationTicket)),
+        }
+      : null,
+    ontologyImportTickets: ontologyImportTickets.map((t) => ({
+      stem: t.stem,
+      hash: t.hash,
+      status: statusLabel(statusOf(t)),
+      folder: importFolderOf(t),
+    })),
   };
 }
 
 async function viewOf(project: Project): Promise<ResolvedView> {
   const [config, workers] = await Promise.all([resolveConfig(project), listWorkers(project.root)]);
-  return toView(project, config, workers.map((w) => w.name));
+  const tickets = await listTickets(project.root, config);
+  return toView(
+    project,
+    config,
+    workers.map((w) => w.name),
+    openFixTicket(tickets, ONTOLOGY_MIGRATION_MARKER),
+    openImportTickets(tickets),
+  );
 }
 
 function fail(e: unknown): RegisterState {

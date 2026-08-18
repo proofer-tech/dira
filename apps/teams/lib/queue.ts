@@ -989,6 +989,22 @@ export function ontologyImportMarker(folder: string): string {
   return `ontology-import:${folder}`;
 }
 
+const ONTOLOGY_IMPORT_PREFIX = "ontology-import:";
+
+/** `ontology-import:`로 시작하는 마커를 든 열린 티켓 전부(§비주얼 §56 ⑤ — import 마커는
+ *  폴더 인자를 들어 첫 그림에 판정할 폴더가 없다. `openFixTicket`과 같은 `fixesOf` 값을
+ *  읽는다 — 새 판정 규칙이 아니다). */
+export function openImportTickets(tickets: Ticket[]): Ticket[] {
+  return tickets.filter((t) => t.state !== "done" && fixesOf(t).startsWith(ONTOLOGY_IMPORT_PREFIX));
+}
+
+/** import 티켓 줄이 드는 `<출처>` 이름 — 마커 끝 조각의 마지막 경로 조각(§비주얼 §56
+ *  §티켓으로 가는 줄). */
+export function importFolderOf(t: Ticket): string {
+  const folder = fixesOf(t).slice(ONTOLOGY_IMPORT_PREFIX.length);
+  return folder.split("/").pop() || folder;
+}
+
 /** 이 티켓이 미완으로 끝나며 남긴 이어받기 티켓 stem(§P294 §미완으로 끝나는 세션 결정 3).
  *  `archivesOf`와 같은 선례 — 값은 stem 하나이고 목록이 아니다, GUI만 읽는 커스텀 frontmatter
  *  키라 엔진은 모르는 채 무해하다. 대상 티켓 조회는 호출부가 `resolveDep`으로 한다. */

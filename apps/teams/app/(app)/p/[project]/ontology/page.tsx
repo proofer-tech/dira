@@ -33,7 +33,15 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { statusLabel } from "@/components/status-badge";
 import { buildVault } from "@/lib/markdown-wikilinks";
 import { computeOntologyMetrics, type OntologyMetrics } from "@/lib/ontology";
-import { ONTOLOGY_FIX_MARKER, listTickets, openFixTicket, statusOf, type Ticket } from "@/lib/queue";
+import {
+  ONTOLOGY_FIX_MARKER,
+  importFolderOf,
+  listTickets,
+  openFixTicket,
+  openImportTickets,
+  statusOf,
+  type Ticket,
+} from "@/lib/queue";
 import {
   listTree,
   nestTree,
@@ -130,13 +138,28 @@ export default async function Ontology({
   // 위지윅 면의 `[[이름]]` -> 링크(§비주얼 §10 §위키링크) — 이름 집합은 여기서 한 번 읽는다.
   const vault = buildVault(tree, (rel) => `/p/${id}/ontology?file=${encodeURIComponent(rel)}`);
 
-  // 위반이 있을 때만 큐를 훑는다 — 카드가 안 서는 흔한 경우에 listTickets 비용을 안 낸다.
-  // 판정(openFixTicket)은 `문제해결` 액션과 같은 함수다 — 갈리면 화면이 거짓말을 한다(§P230).
+  // 위반이 있거나 import 폼이 설 때만 큐를 훑는다 — 둘 다 없는 흔한 경우에 listTickets
+  // 비용을 안 낸다. 판정(openFixTicket)은 `문제해결` 액션과 같은 함수다 — 갈리면 화면이
+  // 거짓말을 한다(§P230 — §비주얼 §56 ⑤가 import에 같은 판정을 요구한다).
   let fixTicket: Ticket | null = null;
-  if (metrics && metrics.schemaViolations.length > 0) {
+  // `Ticket` 전체가 아니라 이미 판정된 문자열만 클라이언트로 내려간다 — `statusOf`·
+  // `importFolderOf`는 `lib/queue.ts` runtime이라(`node:fs/promises` 의존) 클라이언트
+  // 컴포넌트(`OntologyImport`)의 번들에 못 들어간다.
+  let importTickets: { stem: string; hash: string; status: string; folder: string }[] = [];
+  if ((metrics && metrics.schemaViolations.length > 0) || tree.length > 0) {
     const config = await resolveConfig(project);
     const tickets = await listTickets(project.root, config);
-    fixTicket = openFixTicket(tickets, ONTOLOGY_FIX_MARKER);
+    if (metrics && metrics.schemaViolations.length > 0) {
+      fixTicket = openFixTicket(tickets, ONTOLOGY_FIX_MARKER);
+    }
+    if (tree.length > 0) {
+      importTickets = openImportTickets(tickets).map((t) => ({
+        stem: t.stem,
+        hash: t.hash,
+        status: statusLabel(statusOf(t)),
+        folder: importFolderOf(t),
+      }));
+    }
   }
 
   // `file`은 사용자 입력이다 — 서버에서 기준 디렉터리 안인지 확인한다. 밖이면 404가 아니라
@@ -185,7 +208,7 @@ export default async function Ontology({
       {tree.length > 0 && (
         // §비주얼 §56 ③ — 지표 판 뒤, 2단 행 앞. 테두리도 면도 안 준다(행동 한 줄일 뿐이다).
         <div className="max-w-2xl">
-          <OntologyImport projectId={id} />
+          <OntologyImport projectId={id} tickets={importTickets} />
         </div>
       )}
 

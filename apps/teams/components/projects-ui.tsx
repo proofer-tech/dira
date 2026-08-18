@@ -9,8 +9,9 @@
  *
  *  한 파일에 있는 이유: 해석 결과 표를 생성 직후와 행 액션의 설정 다이얼로그가 **같은 표**로
  *  쓴다(DESIGN.md §7). 파일을 쪼개면 두 자리가 갈린다. fs 접근은 전부 서버 액션 뒤에 있다. */
-import { Fragment, useEffect, useRef, useState, useTransition } from "react";
+import { Fragment, useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ChevronDown, ChevronUp, Settings2, TriangleAlert, Unlink } from "lucide-react";
 import {
   createProject,
@@ -21,9 +22,7 @@ import {
   type CreateState,
   type ResolvedView,
 } from "@/app/actions";
-import { pollHomeAnswer } from "@/app/(app)/p/[project]/home/actions";
 import { publishOntologyMigrationAction } from "@/app/(app)/p/[project]/ontology/actions";
-import { Markdown } from "@/components/markdown";
 import { OntologyImport } from "@/components/ontology-ui";
 import { PickPath } from "@/components/path-picker";
 import { PersonaBadge } from "@/components/persona-badge";
@@ -739,16 +738,16 @@ export function ProjectSettingsDialog({
               </Button>
             </div>
             {view ? (
-              <ConfigTable view={view} />
+              <>
+                <ConfigTable view={view} />
+                <OntologyMigration projectId={id} ticket={view.ontologyMigrationTicket} />
+                <div className="space-y-2 border-t pt-4">
+                  <OntologyImport projectId={id} tickets={view.ontologyImportTickets} />
+                </div>
+              </>
             ) : (
               <p className="text-sm text-muted-foreground">읽는 중…</p>
             )}
-
-            <OntologyMigration projectId={id} />
-
-            <div className="space-y-2 border-t pt-4">
-              <OntologyImport projectId={id} />
-            </div>
 
             <div className="space-y-2 border-t pt-4">
               <Label htmlFor={`rename-${id}`}>이름</Label>
@@ -794,65 +793,34 @@ export function ProjectSettingsDialog({
 
 // ── 설정 다이얼로그: 온톨로지 마이그레이션 (DESIGN.md §5-3 §마이그레이션) ──────────
 
-/** 설정 다이얼로그의 마이그레이션 섹션. 실행층은 `startMigration`(→ `home-agent.ts`의 `ask()`)
- *  하나이고, 진행·결과는 이미 있는 `pollHomeAnswer`로 읽는다 — **새 실행층·새 폴링 0줄**.
+/** 설정 다이얼로그의 마이그레이션 섹션. 실행층은 `publishOntologyMigrationAction` 하나고
+ *  발행은 큐 파일 한 장 쓰는 왕복이다 — 진행·결과 그릇은 개정(`08d26cec`)으로 없어졌다.
+ *  성공하면 그 티켓 상세로 이동한다(§56 ⑤ — 포커스가 손 밑에서 사라지는 창을 안 만든다).
  *
- *  **`home-ui.tsx`의 폴링만큼 정교하지 않다.** 여긴 대화 스레드가 아니라 질문 하나짜리 왕복이라
- *  낙관적 에코·중지·모델 표시가 없다 — 필요해지면 그때 그 파일의 패턴을 그대로 가져온다.
- *
- *  // ponytail: 다이얼로그를 닫으면(언마운트) 진행 상태를 잃는다 — 서버는 계속 돈다(대화 목록에
- *  //           남아 다음에 홈 화면에서 보인다). 다시 열었을 때 이어보기가 필요해지면 그때
- *  //           `pollHomeAnswer(id, null, 0)`으로 도는 대화가 있는지부터 본다. */
-function OntologyMigration({ projectId }: { projectId: string }) {
-  const [running, setRunning] = useState(false);
-  const [partial, setPartial] = useState("");
-  const [answer, setAnswer] = useState<string | null>(null);
+ *  `ticket`은 이 마커(`ontology-migration`)를 든 열린 티켓 — 프로젝트당 한 장이라 부르는
+ *  쪽(서버)이 첫 그림에서 판정해 내려준다. 있으면 버튼 대신 그 줄이 선다(§56 §세 상태 ③).
+ *  `status`는 서버가 이미 `statusLabel(statusOf(t))`로 옮긴 문자열이다 — `statusOf`는
+ *  `lib/queue.ts` runtime이라 클라이언트 번들에 못 들어간다(`node:fs/promises` 의존). */
+function OntologyMigration({
+  projectId,
+  ticket,
+}: {
+  projectId: string;
+  ticket: { stem: string; hash: string; status: string } | null;
+}) {
+  const router = useRouter();
+  const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const session = useRef<string | null>(null);
-  const offset = useRef(0);
-
-  useEffect(() => {
-    if (!running) return;
-    let stop = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const poll = async () => {
-      try {
-        const r = await pollHomeAnswer(projectId, session.current, offset.current);
-        if (stop) return;
-        session.current = r.sessionId;
-        offset.current = r.offset;
-        setPartial(r.partial);
-        const last = r.turns.filter((t) => t.role === "answer").at(-1);
-        if (last) setAnswer(last.text);
-        if (r.failed) setError(r.failed.output);
-        if (r.done) {
-          setRunning(false);
-          return;
-        }
-      } catch {
-        // 이 왕복 하나만 버린다 — `home-ui.tsx` 폴링과 같은 자리.
-      }
-      if (!stop) timer = setTimeout(poll, 800);
-    };
-    void poll();
-    return () => {
-      stop = true;
-      clearTimeout(timer);
-    };
-  }, [running, projectId]);
 
   const start = () => {
     setError(null);
-    setAnswer(null);
-    setPartial("");
-    session.current = null;
-    offset.current = 0;
-    setRunning(true);
-    // ponytail: 발행은 큐 파일 한 장 쓰기라 여기서 끝난다 — 진행·결과를 티켓 상세에서 보는
-    // 배선(링크·폴링 제거)은 `30a8ba7a` 몫이다(§5-3).
+    setPending(true);
     void publishOntologyMigrationAction(projectId).then((r) => {
-      setRunning(false);
-      if (!r.ok) setError(r.message);
+      if (r.ok) router.push(`/p/${projectId}/tickets/${r.stem}`);
+      else {
+        setPending(false);
+        setError(r.message);
+      }
     });
   };
 
@@ -865,28 +833,31 @@ function OntologyMigration({ projectId }: { projectId: string }) {
             없으면 새로 세우고, 있으면 최신 규약으로 다시 올립니다. 다시 돌려도 안전합니다.
           </p>
         </div>
-        <Button variant="outline" size="sm" disabled={running} onClick={start}>
-          {running ? "돌리는 중…" : "마이그레이션 시작"}
-        </Button>
+        {ticket ? (
+          <p className="text-xs text-muted-foreground">
+            <Link
+              href={`/p/${projectId}/tickets/${encodeURIComponent(ticket.stem)}`}
+              className="rounded-sm underline hover:text-foreground"
+            >
+              마이그레이션 <span className="font-mono">{ticket.hash}</span> {ticket.status}
+            </Link>
+          </p>
+        ) : (
+          <Button variant="outline" size="sm" disabled={pending} onClick={start}>
+            {pending ? "발행하는 중…" : "마이그레이션 시작"}
+          </Button>
+        )}
       </div>
-
-      {running && (
-        <p className="text-sm whitespace-pre-wrap text-muted-foreground">
-          {partial || "돌고 있습니다…"}
-        </p>
-      )}
 
       {error && (
         <Alert variant="destructive">
           <TriangleAlert aria-hidden />
-          <AlertTitle>마이그레이션에 실패했습니다</AlertTitle>
+          <AlertTitle>마이그레이션 티켓을 만들지 못했습니다</AlertTitle>
           <AlertDescription>
             <span className="font-mono text-xs break-all">{error}</span>
           </AlertDescription>
         </Alert>
       )}
-
-      {!running && answer && <Markdown text={answer} />}
     </div>
   );
 }
