@@ -140,6 +140,9 @@ export function SessionStream({
   const [inbox, setInbox] = useState<boolean | null>(null); // null = 첫 폴링이 아직 안 왔다
   const [done, setDone] = useState(false); // 티켓이 `.done`인가 — 폼의 모드다(§21)
   const [detached, setDetached] = useState(false); // 바닥에서 떨어졌다 = 자동 스크롤 안 한다
+  // 진행중 계획의 창 끝(`planBlocks`의 `now`) — 렌더 본문은 `Date.now()`를 직접 못 부른다
+  // (`react-hooks/purity`). 초기값은 마운트 시 한 번, 이후는 poll effect가 매 왕복마다 갱신한다.
+  const [now, setNow] = useState(() => Date.now());
   const offset = useRef(0);
   const box = useRef<HTMLDivElement>(null);
 
@@ -168,6 +171,7 @@ export function SessionStream({
         const r = await tailSession(project, stem, offset.current);
         if (stop) return;
         offset.current = r.offset;
+        setNow(Date.now()); // 진행중 계획 창 끝을 이 왕복 시각으로 갱신한다(§now 정의부)
         if (r.events.length) setEvents((prev) => [...prev, ...r.events]);
         setInbox(r.inbox); // 참견 폼의 활성 판정(§2-2) — 서버가 매 폴링마다 fm에서 다시 읽는다
         setDone(r.done); // 폼의 모드(§21) — `.wip`이 `.done`이 되는 그 폴링에서 칸이 이어받기가 된다
@@ -225,7 +229,7 @@ export function SessionStream({
   // "계획 절이 없는 티켓") 상자 하나가 곧 "계획 밖" 블록 하나다 — 그 갈래에서 아래가 그리는 것은
   // `groupProgress(merged, isBubble)`을 그대로 도는 개정 전 화면과 클래스 0 차이다.
   const blocks = plans.length
-    ? planBlocks(plans, timedMerged, Date.now())
+    ? planBlocks(plans, timedMerged, now)
     : [{ kind: "outside" as const, events: timedMerged }];
   // 진행중 모양이 둘 이상이면 파일 순서상 마지막 하나만 진짜다(§2-11④) — 앞의 것들은 완료처럼
   // 그린다(닫힌 아코디언, `기록 n건`). 안 그러면 열린 아코디언이 둘 이상이 되어 "열린 것이
