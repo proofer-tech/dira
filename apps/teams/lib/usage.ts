@@ -4,14 +4,17 @@
  *  - 판정 1(소비): 입력은 **이미 쌓이고 있는 `<루트>/workers/logs/`**다 — 새 엔진 규약도 새
  *    저장소도 없다. 파일명이 워커·시각을 주고, 마지막 줄 JSON의 `usage` 넷을 더한 수가 그
  *    세션의 토큰이다. `$` 환산도 모델별 분해도 없다(Q3=(a): `total_cost_usd`는 읽지도 않는다).
- *  - 판정 2(잔여): 엔진마다 원본이 다르다 — codex는 rollout 파일이다. **claude는 원본이 없다**
- *    (§0-8 §개정 — `claude setup-token`의 토큰이 자기 잔여를 영영 못 읽는다). 부르는 주체는
- *    서버뿐이고 토큰은 응답에 담기지 않는다(아래 `engineLimits`).
+ *  - 판정 2(잔여): 엔진마다 원본이 다르다 — codex는 rollout 파일이다. **claude는 추론 응답
+ *    헤더다**(§0-8 §재개정 — `claude setup-token`의 토큰으로 `POST /v1/messages`를 치면 그
+ *    응답이 `anthropic-ratelimit-unified-*` 헤더를 낸다. 부르는 주체는 서버뿐이고 토큰은
+ *    브라우저로 안 나간다(아래 `engineLimits`).
  *
- *  **읽기 전용이다.** 이 모듈은 아무 파일도 쓰지 않는다. */
+ *  **파일 쓰기는 여전히 0이다.** `claudeLimit`이 새로 여는 것은 파일이 아니라 네트워크
+ *  호출(`POST`) 하나다 — 읽기 전용이라는 계약은 그대로 산다. */
 import { access, readdir, readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
+import { isEligible, readTokens } from "./auth.ts";
 import { lastJsonLine } from "./workers.ts";
 import { DEFAULT_LOCALE, t, type Locale } from "./i18n.ts";
 
@@ -310,8 +313,9 @@ function windowTokens(buf: Buffer, since: number): number {
 // ── 엔진별 잔여 한도 (§0-8 판정 2 · 하단 status bar) ─────────────────────────
 //
 // 한도는 **계정 스코프**라 워커별로 갈리지 않는다 — 키가 엔진 이름 하나다(`engineName`).
-// 읽는 주체는 서버뿐이다: codex는 `~/.codex/`를 읽는다(브라우저가 못 보는 자리이고,
-// **나가는 것은 `%`와 리셋 시각뿐**이다). claude는 원본이 없다 — §0-8 §개정.
+// 읽는 주체는 서버뿐이다: codex는 `~/.codex/`를 읽는다. claude는 `tokens.json` 활성 항목의
+// 토큰으로 `POST /v1/messages`를 쳐서 그 응답 헤더를 읽는다(§0-8 §재개정). 둘 다
+// **브라우저로 나가는 것은 `%`와 리셋 시각뿐**이고 토큰 자체는 서버를 안 떠난다.
 
 /** 한 엔진 칸이 그릴 것. **값이 없으면 사유뿐이다** — 빈 트랙도 `0%`도 추정치도 만들지 않는다
  *  (§0-8 판정 2: 화면이 거짓말하지 않는다). `error`는 화면이 `한도를 읽을 수 없습니다` 옆
@@ -367,6 +371,35 @@ export function pickCodexWindow(rl: CodexRateLimits | null, locale: Locale = DEF
   return maxWindow(candidates);
 }
 
+/** 분 → 헤더 키(§0-8 §재개정 (1)). 키가 `5h`·`7d`로 못 박혀 있어 `windowLabel`이 분에서 만드는
+ *  이름을 그대로 재활용한다(300분 = `5시간`, 10080분 = `7일`) — 새 사전을 안 만든다. */
+const CLAUDE_WINDOW_MINUTES = { "5h": 5 * 60, "7d": 7 * 24 * 60 } as const;
+
+/** claude 응답 헤더 넷 중 묶는 창을 고른다(§0-8 §재개정 (1)(2)). **순수 함수다** — `fetch` 없이
+ *  `Headers` 픽스처로 잰다(`pickCodexWindow`와 같은 선). `representative-claim`은 안 읽는다 —
+ *  헤더가 실제로 그 규칙과 같은 창을 골랐다는 확인만 재개정 본문에 남기고, 필드는 하나 던다.
+ *
+ *  환산 둘은 실측(§0-8 §재개정 (1))으로 못 박혔다 — `utilization`은 0..1 분수라 `x 100`,
+ *  `reset`은 에폭 **초**라 `x 1000`(codex의 `resets_at`과 같은 단위, ISO 문자열이 아니다). */
+export function pickClaudeWindow(headers: Headers, locale: Locale = DEFAULT_LOCALE): Window | null {
+  const candidates: Window[] = [];
+  for (const [key, minutes] of Object.entries(CLAUDE_WINDOW_MINUTES)) {
+    const raw = headers.get(`anthropic-ratelimit-unified-${key}-utilization`);
+    // `Number(null)`은 `0`이다 — 헤더가 아예 없는 것과 진짜 `0%`를 갈라야 한다.
+    if (raw == null) continue;
+    const utilization = Number(raw);
+    if (!Number.isFinite(utilization)) continue;
+    const rawReset = headers.get(`anthropic-ratelimit-unified-${key}-reset`);
+    const resetSec = rawReset == null ? NaN : Number(rawReset);
+    candidates.push({
+      usedPercent: utilization * 100,
+      resetsAt: Number.isFinite(resetSec) ? resetSec * 1000 : null,
+      window: windowLabel(minutes, locale),
+    });
+  }
+  return maxWindow(candidates);
+}
+
 /** **5초 폴링에 매달지 않는다**(§0-8 남는 규칙). 셸은 라우트마다 다시 렌더되고 보드는 5초마다
  *  `router.refresh()`를 부르므로, TTL이 없으면 claude 엔드포인트를 초당 여러 번 두드린다.
  *  429의 `retry-after`가 ≈1시간이었다 — 여긴 자주 두드릴 곳이 아니다. */
@@ -379,10 +412,11 @@ const LIMIT_TTL_MS = 60_000;
  *  언어를 바꾼 직후 TTL 안에서 옛 언어의 캐시된 문구가 그대로 나온다.
  *
  *  ponytail: 엔진 이름 몇 개짜리 Map이라 비우지 않는다. */
-const limitCache = new Map<string, { at: number; value: Promise<EngineLimit> }>();
+const limitCache = new Map<string, { at: number; value: Promise<EngineLimit | null> }>();
 
-/** 엔진 이름들 → 칸마다의 잔여. **호출은 TTL당 엔진 하나에 1회**다.
- *  던지지 않는다 — 실패는 전부 `{ error }`로 돌아온다(바가 사라지면 안 된다). */
+/** 엔진 이름들 → 칸마다의 잔여. **호출은 TTL당 엔진 하나에 1회**다. 던지지 않는다 — 실패는
+ *  전부 `{ error }`로 돌아온다(바가 사라지면 안 된다). `null`인 엔진은 **키 자체가 안 뜬다**
+ *  (claude 활성 항목 0개 — §0-8 §재개정 (3): 부르지 않고 사유도 안 낸다). */
 export async function engineLimits(
   engines: string[],
   locale: Locale = DEFAULT_LOCALE,
@@ -396,32 +430,88 @@ export async function engineLimits(
       if (!hit || now - hit.at >= LIMIT_TTL_MS) {
         limitCache.set(key, (hit = { at: now, value: readLimit(engine, locale) }));
       }
-      out[engine] = await hit.value;
+      const value = await hit.value;
+      if (value) out[engine] = value;
     }),
   );
   return out;
 }
 
 /** 잔여 한도의 **원본이 있는 엔진 집합**이고 값이 그 원본이다(§0-8 판정 2 · §4-3 개정
- *  2026-08-05). `=== "codex"`로 갈래를 적으면 셋째 엔진이 어느 한쪽으로 조용히 떨어진다 —
- *  `codexLimit()`은 codex의 rollout 파일을 읽고 **grok에는 그런 파일이 없다.**
- *  키에 없는 엔진(오늘 grok · claude)은 아래 폴백이다.
- *
- *  **claude가 여기 없는 것이 §0-8 §개정이다.** `claude setup-token`이 내는 토큰은
- *  `user:inference` 전용이라 자기 잔여를 영영 못 읽는다 — 그 GET을 부르는 함수 자체가
- *  없어졌다(항구적 부재, 다음 폴링에 고쳐질 실패가 아니다). 화면(`EngineCell`)이 `engine ===
- *  "claude"`일 때 이 폴백의 사유 문구를 안 그리는 것으로 그 차이를 표현한다 — 사유 문자열
- *  자체(`한도를 주는 원본을 모릅니다`)는 grok처럼 실제로 원본을 모를 때의 것이라 claude에는
- *  안 맞지만, 화면이 그 문구를 절대 안 읊으므로 여기서 갈라 적지 않는다. */
-const LIMIT_SOURCE: Record<string, (locale: Locale) => Promise<EngineLimit>> = {
+ *  2026-08-05 · §0-8 §재개정). `=== "codex"`로 갈래를 적으면 셋째 엔진이 어느 한쪽으로 조용히
+ *  떨어진다 — `codexLimit()`은 codex의 rollout 파일을 읽고 `claudeLimit()`은 claude의 추론
+ *  응답 헤더를 읽는다. **grok에는 둘 다 없다** — 키에 없는 엔진은 아래 폴백이다. */
+const LIMIT_SOURCE: Record<string, (locale: Locale) => Promise<EngineLimit | null>> = {
+  claude: claudeLimit,
   codex: codexLimit,
 };
 
-function readLimit(engine: string, locale: Locale): Promise<EngineLimit> {
+function readLimit(engine: string, locale: Locale): Promise<EngineLimit | null> {
   const read = LIMIT_SOURCE[engine];
   if (read) return read(locale);
   // 원본을 모르는 엔진은 폴백이다. **추정치를 지어내지 않는다**(§0-8).
   return Promise.resolve({ error: `${engine}: ${t(locale, "statusbar.limit.unknownOriginSuffix")}` });
+}
+
+const CLAUDE_MESSAGES_URL = "https://api.anthropic.com/v1/messages";
+
+/** 설치된 CLI 번들이 이 호출에 붙이는 헤더 그대로다(§0-8 §재개정 실측, CLI 2.1.234) —
+ *  `anthropic-beta` 없이 치면 이 토큰(`user:inference` 전용)의 응답에 unified 헤더가 안 실린다. */
+const CLAUDE_PROBE_HEADERS = {
+  "anthropic-beta": "oauth-2025-04-20",
+  "anthropic-version": "2023-06-01",
+  "content-type": "application/json",
+  "user-agent": "claude-cli/2.1.234 (external, cli)",
+  "x-app": "cli",
+};
+
+/** `max_tokens: 1` + 가장 싼 모델(haiku) — 이 호출은 **공짜가 아니다**(§0-8 §재개정 (4)),
+ *  재는 값이 재는 대상을 먹으므로 입출력을 최소로 문다. */
+const CLAUDE_PROBE_BODY = JSON.stringify({
+  model: "claude-haiku-4-5-20251001",
+  max_tokens: 1,
+  system: [{ type: "text", text: "You are Claude Code, Anthropic's official CLI for Claude." }],
+  messages: [{ role: "user", content: "hi" }],
+});
+
+/** claude — `POST /v1/messages`의 응답 헤더(§0-8 §재개정). 걷힌 개정 ①의 GET·CLI 자격증명
+ *  파일은 안 돌아온다 — 읽는 것은 `tokens.json` 활성 항목 하나다(수용조건 1이 그 걷힘을 지킨다).
+ *
+ *  **활성 항목이 0개면 `null`이다** — 부르지 않는다(재개정 (3)). `engineLimits`가 이 `null`을
+ *  보고 이 엔진의 키 자체를 안 만든다 — 사유 문구도 안 세운다. 이건 `{ error }`가 아니다:
+ *  화면의 "실패"와 "부를 계정이 없다"는 다른 사실이다.
+ *
+ *  **토큰은 이 함수를 안 떠난다** — 실패해도 `error`에 담기는 것은 URL과 HTTP 상태뿐이다
+ *  (`EngineLimit` 계약). */
+async function claudeLimit(locale: Locale): Promise<EngineLimit | null> {
+  const engine = (await readTokens()).claude;
+  if (!engine) return null;
+  const active = engine.tokens.find((t) => t.id === engine.active && isEligible(t));
+  if (!active) return null;
+
+  let res: Response;
+  try {
+    res = await fetch(CLAUDE_MESSAGES_URL, {
+      method: "POST",
+      headers: { authorization: `Bearer ${active.token}`, ...CLAUDE_PROBE_HEADERS },
+      body: CLAUDE_PROBE_BODY,
+      // TTL 캐시가 우리 것이므로 Next의 fetch 캐시는 끈다(같은 값을 두 겹으로 들지 않는다).
+      cache: "no-store",
+      signal: AbortSignal.timeout(5_000),
+    });
+  } catch (e) {
+    // 타임아웃·네트워크 단절. **사유를 지어내지 않는다** — 원문 그대로 title에 싣는다.
+    return { error: `POST ${CLAUDE_MESSAGES_URL}: ${(e as Error).message}` };
+  }
+  await res.arrayBuffer().catch(() => {}); // 헤더만 쓴다 — 본문은 읽어 버린다(소켓을 안 붙든다)
+  if (!res.ok) return { error: `POST ${CLAUDE_MESSAGES_URL}: HTTP ${res.status}` };
+  const picked = pickClaudeWindow(res.headers, locale);
+  if (!picked) {
+    return {
+      error: `POST ${CLAUDE_MESSAGES_URL}: ${t(locale, "statusbar.limit.noUnifiedHeaderSuffix")}`,
+    };
+  }
+  return picked;
 }
 
 /** codex — rollout 파일의 마지막 `token_count` 이벤트. **새 네트워크 호출이 0이다.**

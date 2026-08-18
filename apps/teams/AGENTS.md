@@ -134,7 +134,8 @@ apps/teams/
     usage.ts            토큰의 **두 축**(§0-8). 판정 1(소비): `workers/logs/` 파일명 → 워커·시각,
                         마지막 줄 JSON → 그 세션의 토큰(`lastJsonLine`을 `workers.ts`와 **같이 쓴다**).
                         판정 2(잔여): `engineLimits`가 엔진 이름 → `%`·리셋 시각을 준다 —
-                        claude는 GET 1회(`~/.claude/.credentials.json`), codex는 rollout 파일이다.
+                        claude는 `tokens.json` 활성 토큰으로 친 `POST /v1/messages`의 응답 헤더고
+                        (§0-8 §재개정), codex는 rollout 파일이다.
                         **부르는 주체는 서버뿐이고 토큰은 응답에 안 담긴다.** TTL 60초 캐시가
                         Promise를 들어서 5초 폴링에 외부 호출이 매달리지 않는다.
                         **아무 파일도 쓰지 않는다.** 큰 수를 줄이는 `formatTokens`도 여기다 —

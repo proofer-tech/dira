@@ -3,6 +3,7 @@ import assert from "node:assert";
 import { mkdirSync, mkdtempSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { addToken } from "./auth.ts";
 import {
   DEFAULT_WINDOW_MS,
   engineLimits,
@@ -10,10 +11,21 @@ import {
   lastRateLimits,
   listUsage,
   parseLogName,
+  pickClaudeWindow,
   pickCodexWindow,
   RATE_WINDOW_MS,
   usageRates,
 } from "./usage.ts";
+
+// 진짜 `~/.config/dira/tokens.json`을 안 밟는다 — claude 관련 테스트 전용 LOCAL(`auth.test.ts`와
+// 같은 이유로 이 구획만 갈아 끼운다).
+process.env.TICKET_LOCAL = mkdtempSync(path.join(tmpdir(), "usage-tokens-"));
+const realFetch = globalThis.fetch;
+const realNow = Date.now;
+process.on("exit", () => {
+  globalThis.fetch = realFetch;
+  Date.now = realNow;
+});
 
 /** 픽스처 큐 하나. 로그 디렉터리까지 만들어 준다. */
 function makeRoot(): string {
@@ -177,9 +189,77 @@ test("engineLimits — 원본 모르는 엔진은 사유뿐 · TTL 안에서는 
   assert.strictEqual(second["mystery-engine"], first["mystery-engine"]);
 });
 
-test("engineLimits — claude는 원본이 없다(§0-8 §개정: GET을 안 부른다)", async () => {
-  const limits = await engineLimits(["claude"]);
-  assert.ok("error" in limits.claude); // `%`를 영영 못 얻는다 — 화면이 이 사유를 안 읊는다(EngineCell)
+test("pickClaudeWindow — 헤더 넷 중 utilization 큰 창 · 0..1을 x100 · 초를 x1000 · 후보 0개는 null", () => {
+  // 실측값 그대로다(§0-8 §재개정 (1) 표) — `it@ppbstudios.com`이 7d 쪽이 크다.
+  const headers = new Headers({
+    "anthropic-ratelimit-unified-5h-utilization": "0.03",
+    "anthropic-ratelimit-unified-5h-reset": "1787044200",
+    "anthropic-ratelimit-unified-7d-utilization": "0.77",
+    "anthropic-ratelimit-unified-7d-reset": "1787630400",
+  });
+  const picked = pickClaudeWindow(headers);
+  assert.equal(picked?.usedPercent, 77); // 0.77 → 77, `x 100`
+  assert.equal(picked?.window, "7일");
+  assert.equal(picked?.resetsAt, 1787630400 * 1000); // 에폭 초 → ms, `x 1000`
+
+  assert.equal(pickClaudeWindow(new Headers()), null); // unified 헤더가 0개면 null
+});
+
+test("engineLimits — claude 활성 항목이 0개면 부르지 않는다(키 자체가 안 뜬다)", async () => {
+  Date.now = () => 1_000_000; // 새 TTL 창 — 다른 claude 테스트와 캐시가 안 겹친다
+  let called = false;
+  globalThis.fetch = (async () => {
+    called = true;
+    return new Response(null, { status: 200 });
+  }) as typeof fetch;
+
+  const limits = await engineLimits(["claude"], "ko");
+  assert.strictEqual(called, false); // 부르지 않는다(§0-8 §재개정 (3))
+  assert.ok(!("claude" in limits)); // {error}도 아니다 — 키 자체가 없다(EngineCell의 "도착 전" 모양)
+});
+
+test("engineLimits — claude 활성 토큰으로 POST /v1/messages를 쳐 헤더를 창으로 옮긴다", async () => {
+  Date.now = () => 2_000_000;
+  const entry = await addToken("sk-ant-oat01-active-one", "acct-a");
+
+  let seenUrl = "";
+  let seenAuth = "";
+  globalThis.fetch = (async (url: string, init: { method: string; headers: Record<string, string> }) => {
+    seenUrl = String(url);
+    seenAuth = init.headers.authorization;
+    return new Response(null, {
+      status: 200,
+      headers: {
+        "anthropic-ratelimit-unified-5h-utilization": "0.78",
+        "anthropic-ratelimit-unified-5h-reset": "1787044200",
+        "anthropic-ratelimit-unified-7d-utilization": "0.23",
+        "anthropic-ratelimit-unified-7d-reset": "1787630400",
+      },
+    });
+  }) as typeof fetch;
+
+  const limits = await engineLimits(["claude"], "ko");
+  assert.equal(seenUrl, "https://api.anthropic.com/v1/messages");
+  assert.equal(seenAuth, `Bearer ${entry.token}`);
+  assert.ok(!("error" in limits.claude));
+  const picked = limits.claude as { usedPercent: number; resetsAt: number | null; window: string };
+  assert.equal(picked.usedPercent, 78);
+  assert.equal(picked.window, "5시간");
+  assert.equal(picked.resetsAt, 1787044200 * 1000);
+});
+
+test("engineLimits — 프로브가 실패하면 {error}이고 토큰 문자열은 안 실린다", async () => {
+  Date.now = () => 3_000_000;
+  globalThis.fetch = (async () => new Response(null, { status: 429 })) as typeof fetch;
+
+  const limits = await engineLimits(["claude"], "ko");
+  assert.ok("error" in limits.claude);
+  assert.match((limits.claude as { error: string }).error, /HTTP 429/);
+  assert.ok(!(limits.claude as { error: string }).error.includes("sk-ant-oat01-active-one"));
+
+  // 아래 §소모 속도 테스트들은 진짜 `Date.now()`로 트랜스크립트 mtime을 잰다 — 여기서 복원한다.
+  globalThis.fetch = realFetch;
+  Date.now = realNow;
 });
 
 // ── 소모 속도 (§0-8 판정 4) ─────────────────────────────────────────────────

@@ -664,14 +664,15 @@ async function EngineCells({
   // §0-8 §개정 ③ — 활성 항목의 표시 이름. 없으면(0개) 이 슬롯만 빠진다(`undefined`).
   const activeAccount = tokenRows.find((r) => r.status.kind === "active")?.label;
   // 소비량은 **게이지가 못 선 칸에서만** 쓴다(§26 ⑤). 전부 정상이면 로그를 아예 안 읽는다.
-  const usage = engines.some((e) => "error" in limits[e]) ? await listUsage(root) : null;
+  // `limits[e]`가 없는 것(claude 활성 항목 0개, §0-8 §재개정 (3))은 실패가 아니라 부재라 안 센다.
+  const usage = engines.some((e) => limits[e] && "error" in limits[e]) ? await listUsage(root) : null;
   // 트랙의 k번째 구간은 `%`를 가진 k번째 칸의 것이다(§26 ② §매핑) — 칸과 같은 `engines` 순회에서
   // 값 있는 엔진만 골라 그 순서 그대로 구간을 만든다. 두 목록을 따로 만들지 않는다.
   const segments = engines
     .map((e) => limits[e])
     .filter(
       (limit): limit is { usedPercent: number; resetsAt: number | null; window: string } =>
-        !("error" in limit),
+        !!limit && !("error" in limit),
     );
   return (
     <>
@@ -725,9 +726,10 @@ async function EngineCells({
 }
 
 /** 한 엔진 칸 (§비주얼 §26 ②·③·⑤). 셋 중 하나다 —
- *  **도착 전**(`limit`이 없다: 이름만) · **값**(`%` + 리셋 — 게이지는 `EngineCells`의 스택 바가
- *  대신 그린다) · **못 구함**(소비량 + 사유). 어느 쪽이든 높이는 같다: 바가 `h-7` 고정 +
- *  `items-center`이고 들어오는 것이 전부 `text-xs`(16px)다. */
+ *  **도착 전**(`limit`이 없다: 이름만. claude는 활성 계정 0개일 때도 이 모양이다 —
+ *  §0-8 §재개정 (3), 부재는 실패가 아니다) · **값**(`%` + 리셋 — 게이지는 `EngineCells`의
+ *  스택 바가 대신 그린다) · **못 구함**(소비량 + 사유). 어느 쪽이든 높이는 같다: 바가 `h-7`
+ *  고정 + `items-center`이고 들어오는 것이 전부 `text-xs`(16px)다. */
 function EngineCell({
   engine,
   limit,
@@ -751,9 +753,6 @@ function EngineCell({
   locale?: Locale;
 }) {
   const value = limit && !("error" in limit) ? limit : null;
-  // claude는 항구적 부재다(§0-8 §개정 ①) — 이 칸에만 `한도를 읽을 수 없습니다`를 안 세운다.
-  // 그 문구는 고쳐질 실패(codex)에만 선다(§26 ⑤ 모양 A·B).
-  const permanentlyAbsent = engine === "claude";
   // 임계는 **사용률 90% 하나**다(§26 ③). 단계를 둘로 나누지 않는다 — 색은 예외 하나만 표시한다.
   const over = !!value && value.usedPercent >= 90;
   // 소모 속도(§26 ② 다섯째 슬롯). 정상 칸과 폴백 칸(⑤)에 **한 글자도 같은 것**이 서므로
@@ -822,15 +821,12 @@ function EngineCell({
               아니라는 것을 **단위 · 잉크 · `title`** 셋이 말한다(§26 ⑤) — 안 갈라 두면
               "120만 중 250만" 같은 없는 관계로 읽힌다. 좁아져도 사유는 안 뺀다 */}
           {rateSlot}
-          {/* 색도 아이콘도 안 쓴다 — 에러가 아니라 **부재**다. 원인 원문은 삼키지 않고
-              네이티브 `title`에 남긴다(얇은 한 줄에 블록을 세울 자리가 없다 — §26 ⑤).
-              **claude에서는 이 사유 자체를 안 그린다** — 항구적 부재는 실패가 아니다
-              (§0-8 §개정 ①. 상시로 세우면 고쳐질 실패로 읽힌다) */}
-          {!permanentlyAbsent && (
-            <span className="text-xs whitespace-nowrap text-muted-foreground" title={limit.error}>
-              · {t(locale, "statusbar.limit.unreadable")}
-            </span>
-          )}
+          {/* 색도 아이콘도 안 쓴다 — 실패지 부재가 아니다(§0-8 §재개정 (5) — claude도 이제
+              codex와 같은 모양이다). 원인 원문은 삼키지 않고 네이티브 `title`에 남긴다
+              (얇은 한 줄에 블록을 세울 자리가 없다 — §26 ⑤). 토큰 문자열은 안 실린다. */}
+          <span className="text-xs whitespace-nowrap text-muted-foreground" title={limit.error}>
+            · {t(locale, "statusbar.limit.unreadable")}
+          </span>
         </>
       )}
     </div>

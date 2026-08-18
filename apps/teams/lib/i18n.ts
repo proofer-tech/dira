@@ -292,12 +292,13 @@ export const ko: Record<string, string> = {
   "statusbar.reset.suffix": "리셋",
   "statusbar.tokens.suffix": "토큰",
   "statusbar.limit.unreadable": "한도를 읽을 수 없습니다",
-  // 아래 넷은 `lib/usage.ts`가 만드는 `EngineLimit.error`의 꼬리(엔진 이름·경로가 접두로 붙는다) —
-  // 화면(`EngineCell`)이 `title`에 싣는다. claude에는 이 사유 자체가 안 그려진다(§0-8 §개정).
+  // 아래 다섯은 `lib/usage.ts`가 만드는 `EngineLimit.error`의 꼬리(엔진 이름·경로가 접두로 붙는다) —
+  // 화면(`EngineCell`)이 `title`에 싣는다. claude의 실패도 §0-8 §재개정으로 이제 이 사유가 선다.
   "statusbar.limit.unknownOriginSuffix": "한도를 주는 원본을 모릅니다",
   "statusbar.limit.noRolloutSuffix": "rollout 파일이 없습니다",
   "statusbar.limit.rateLimitsNullSuffix": "rate_limits.primary·secondary가 모두 null입니다",
   "statusbar.limit.noRateLimitsSuffix": "최근 rollout에 rate_limits가 없습니다",
+  "statusbar.limit.noUnifiedHeaderSuffix": "unified-5h·7d의 utilization이 없습니다",
 
   // 상태 배지(§비주얼 §2 · §4-1) — 보드·상세·워커 화면이 `status-badge.tsx` 하나를 공유하므로
   // 여기 한 벌만 옮기면 그 화면들도 같이 선다(그 화면들 자신의 이행은 각자의 묶음 몫이다).
@@ -681,11 +682,12 @@ export const en: Record<string, string> = {
   "statusbar.reset.suffix": "reset",
   "statusbar.tokens.suffix": "tokens",
   "statusbar.limit.unreadable": "Can't read the limit",
-  // 넷 다 `<엔진 이름이나 경로>: ` 뒤에 붙는다 — 콜론 뒤라 소문자로 연다.
+  // 다섯 다 `<엔진 이름이나 경로>: ` 뒤에 붙는다 — 콜론 뒤라 소문자로 연다.
   "statusbar.limit.unknownOriginSuffix": "no known source for its limit",
   "statusbar.limit.noRolloutSuffix": "no rollout file here",
   "statusbar.limit.rateLimitsNullSuffix": "rate_limits.primary and secondary are both null",
   "statusbar.limit.noRateLimitsSuffix": "the latest rollout has no rate_limits",
+  "statusbar.limit.noUnifiedHeaderSuffix": "no unified-5h/7d utilization in the response",
 
   // 상태 배지(§비주얼 §2 · §4-1). 티켓 셋은 위 표가 이미 정했다(`Open`·`In progress`·`Done`) —
   // 토큰의 `Pending`과 갈리는 그 자리다. 넉 자(`running`·`idle`·`stopped`·`stale`)는 두 언어가
