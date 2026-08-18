@@ -18498,6 +18498,49 @@ git fetch origin master && git rev-list --left-right --count master...origin/mas
 **그 뒤에 사람이 한 줄 친다.** `git push origin master`(-> `patch`) 또는
 `gh workflow run release.yml -f bump=minor`. 세션은 어느 쪽도 못 한다(프로토콜 §git - R4 5번).
 
+**R4-3. `.dmg` 공증이 `Invalid`인 원인은 서명 봉인 안쪽의 비ASCII 파일명이다.**
+
+> 요구 `221c9c3b`(2026-08-19). R4-2 바로 위 절이 "이유는 그 로그 안에만 있다"로 끝났고,
+> `1e0decd5`가 그 로그를 찍게 만든 다음 회차에서 이유가 나왔다. 이 절이 그 이유다.
+
+**notary log가 지목한 것은 앱 본체 바이너리 하나다.** 실측 2026-08-18 run `32152697905`,
+제출 `acf71577-57b5-46c5-b462-bf1ba2734032` - `status: Invalid`,
+`statusSummary: Archive contains critical validation errors`, issue 한 건:
+
+```
+path:    dira-1.0.26-arm64.dmg/dira.app/Contents/MacOS/dira
+message: The signature of the binary is invalid.
+```
+
+**같은 run에서 `.app`의 공증은 성공했다** - electron-builder가 `notarization successful`을
+찍은 뒤에 zip과 dmg를 굽는다. 그러니 서명 자체는 유효했고, **무효인 것은 dmg에 담긴 사본**이다.
+서명을 벗기는 두 번째 굽기(P57)와는 다른 자리다 - 저건 `.dmg` 파일의 서명이 없어지는 것이고,
+이건 `.dmg` 안쪽 `.app`의 봉인이 깨지는 것이다.
+
+**깨지기 시작한 경계가 정확히 한 곳이다.** 러너 이미지(`macos-26-arm64` `20260728.0273.1`),
+인증서 해시(`A7F8CA6C...`), `apps/desktop` 소스가 성공 회차와 전부 같다. 다른 것은
+`extraResources`가 `Contents/Resources/engine/templates`로 나르는 트리의 파일명뿐이다:
+
+| 태그 | 번들에 실리는 비ASCII 파일명 | 릴리스 |
+| --- | --- | --- |
+| `v1.0.20` ~ `v1.0.23` | 0개 | 전부 `Accepted` |
+| `v1.0.24` ~ `v1.0.26` | 8개(`templates/protocols/`의 형제 문서, NFC) | 3회 전부 `Invalid` |
+
+재는 한 줄 - `git -c core.quotepath=false ls-tree -r --name-only <태그> -- templates protocols`
+를 파이프로 받아 `l.isascii()`가 거짓인 줄을 센다.
+
+**`Contents/Resources`는 `CodeResources`가 봉인하는 자리다.** 파일명이 봉인된 뒤에 바뀌면
+봉인이 깨지고, Apple은 그것을 "바이너리 서명이 무효"로 보고한다. 유력한 기전은 dmg를 만들 때
+파일명이 NFC에서 NFD로 정규화되는 것이다 - `.app`이 APFS에 있을 때는 NFC가 그대로 남으니
+`.app` 공증만 통과하는 위 비대칭이 그것으로 설명된다. **기전은 아직 직접 재지 않았다** -
+고치는 티켓이 재고 그 결과를 이 절에 적는다.
+
+**고치는 방향은 둘이고 대가가 다르다.** 하나는 번들에 실리는 파일명을 ASCII로 돌리는 것 -
+형제 문서 8장의 이름을 바꾸면 그것을 부르는 `AGENTS.md` `CORE.md`와 `templates/` 사본,
+`scaffold.ts`가 같이 따라가고 이미 깔린 큐의 파일명도 갈린다. 다른 하나는 이름을 두고
+dmg 쪽에서 봉인이 안 깨지게 하는 것이다. **어느 쪽이든 판정은 하나다** - `release` 워크플로가
+초록으로 끝나고 자산 셋이 릴리스에 붙는다.
+
 **R5. 앱이 하는 일은 셋이고 새 화면은 0개다.**
 
 | # | 무엇 | 자리 | 계약 |
@@ -37111,7 +37154,7 @@ P297-2의 `## Done when`이 그것을 그대로 든다.
 사실이다 - `.app` 공증은 두 회차 다 `notarization successful`이고 `.dmg` 제출만 `Invalid`,
 `apps/desktop`은 마지막 성공(`v1.0.23`, 2026-08-17 08:35Z)과 실패 사이에 **한 줄도 안 바뀌었다**
 (`git log --since=2026-08-17T08:00 -- apps/desktop`이 빈 출력). 원인을 좁히는 티켓은 로그가
-들어온 뒤에 열린다.
+들어온 뒤에 열렸다 - 요구 `221c9c3b`, 에픽 **P300**, 이유는 **R4-3**이 갖는다.
 
 
 ### P299. 죽은 티켓 질문에 고를 자리가 생기고 인용이 접힌다 (요구 `8a3f99a2`, 답 `067af504`)
@@ -37130,6 +37173,22 @@ P297-2의 `## Done when`이 그것을 그대로 든다.
 **P299-3은 아무도 안 기다린다.** 접는 대상은 결정 6이 2026-08-01부터 이미 쓰고 있는 인용
 3종이라 지금 큐에 실물이 42건 있다. **P299-4만 P299-2를 기다린다** - 읽을 키가 그때 생긴다.
 
+### P300. `.dmg` 공증 `Invalid`의 원인 - 봉인 안쪽의 비ASCII 파일명 (요구 `221c9c3b`)
+
+계약은 **R4-3**이 정본이다(notary log가 지목한 것 - 깨지는 경계 - 고치는 방향 둘).
+사람 문장: *"릴리즈 계속실패하네요 github actions 확인해주세요"*
+
+| ID | 무엇 | 페르소나 | deps | 상태 |
+|---|---|---|---|---|
+| P300-1 | 스펙 - R4-3 신설(notary log의 이유 + `v1.0.23`/`v1.0.24` 경계 실측) | pm | - | 완료 |
+| P300-2 | 구현 - 봉인이 깨지는 원인을 없애고 `release` 워크플로가 초록으로 끝난다 `df57b986` | developer | - | 발행 |
+
+**P298이 남긴 몫을 이 회차가 받는다.** P298은 "원인을 좁히는 티켓은 로그가 들어온 뒤에
+열린다"로 끝났고, `1e0decd5`가 그 로그를 찍게 만든 회차(run `32152697905`)에서 이유가 나왔다.
+
+**자산 없는 원격 태그 둘은 티켓이 아니다.** `v1.0.24` `v1.0.25`가 릴리스 없이 origin에 남아
+있고(`gh release list`의 최신은 `v1.0.23`), 원격 태그를 지우는 것은 사람만 한다(R4 §5).
+`88ebde75`가 들어간 뒤로는 더 안 늘어난다 - 실패한 회차(`v1.0.26`)는 태그를 안 남겼다.
 
 ## 수용조건 (전체)
 
