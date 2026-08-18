@@ -809,7 +809,7 @@ export default async function Board({
               locale={locale}
             />
             {view === "kanban" ? (
-              <div className="flex min-h-0 flex-1 flex-col gap-4">
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
                 {/* 필터 0건이라도 **컬럼은 남긴다** — 컬럼이 사라지면 필터를 지운 건지 데이터가
                     없는 건지 구분이 안 된다(테이블 헤더를 남기는 것과 같은 이유, §6) */}
                 {rows.length === 0 && (
@@ -990,7 +990,7 @@ export default async function Board({
                  스크롤러를 두면 헤더가 그 스크롤을 못 따라간다(컨테이너가 그 사이에 낀다).
                  컨테이너는 className을 안 받으므로(shadcn CLI 산출물 — 손대지 않는다) 부모에서
                  자식 선택자로 준다. */
-              <div className="min-h-0 flex-1 [&>[data-slot=table-container]]:h-full [&>[data-slot=table-container]]:overflow-y-auto">
+              <div className="min-h-0 min-w-0 flex-1 [&>[data-slot=table-container]]:h-full [&>[data-slot=table-container]]:overflow-y-auto">
                 <Table>
                   {/* 헤더 행은 스크롤러 안에서 고정이다(§1). `thead`에 걸고 셀에도 배경을 준다 —
                       `thead`만으로는 collapse된 표에서 셀 배경이 없어 행이 비쳐 보인다 */}
