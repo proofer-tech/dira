@@ -15523,13 +15523,17 @@ find <프로젝트 루트>/ontology/objects -name '*.md' | wc -l   # 첫 채움 
   이름 칸은 ③ 때문에 안 선다.
 - **온보딩 상태(시드가 아직 없는 온톨로지 화면)에는 그 자리가 없다** - 지표 판이 안 서기 때문이고
   새 판정이 아니다. 설정 다이얼로그 자리는 마이그레이션과 같은 선이라 늘 있다.
-- 진행 - 결과 표시는 `OntologyMigration`이 이미 쓰는 `pollHomeAnswer` 한 벌 그대로다. **새 폴링
-  0줄.**
+- ~~진행 - 결과 표시는 `OntologyMigration`이 이미 쓰는 `pollHomeAnswer` 한 벌 그대로다. 새 폴링
+  0줄.~~ -> **§온톨로지 세션 셋이 큐 티켓으로 돈다 §진행을 보는 자리는 티켓 상세다**(P296). 그릇
+  셋과 폴링 둘이 통째로 없어지고, 폼에 남는 것은 발행한 티켓으로 가는 링크 한 줄이다.
 
 ##### 실행층 - 질문 하나가 는다
 
-`startMigration` 옆에 `startImport(projectId, folder)`가 선다. 안이 같다 - `newConversation`으로
-빈 줄을 연 뒤 `startAsk`이고, 갈리는 것은 질문 문자열 하나다.
+~~`startMigration` 옆에 `startImport(projectId, folder)`가 선다. 안이 같다 - `newConversation`으로
+빈 줄을 연 뒤 `startAsk`이고, 갈리는 것은 질문 문자열 하나다.~~ -> **§온톨로지 세션 셋이 큐
+티켓으로 돈다**(P296). 둘 다 없어진다 - 그 절 §수용조건 첫 줄이
+`grep -c 'startImport\|startMigration' ... # 0`이다. 아래 두 항(질문 문자열을 다시 안 적는다 -
+`folder`가 신뢰 경계 밖이다)은 발행하는 티켓 본문과 마커에 그대로 산다.
 
 - **규칙을 그 문자열에 다시 적지 않는다.** `protocols/ontology.md` §import를 펴서 그 절차로 돌라고
   시키고 고른 폴더의 절대경로를 대는 것이 전부다 - `MIGRATION_QUESTION`이 이미 그 모양이고,
