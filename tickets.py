@@ -640,6 +640,15 @@ def ask_context(fm, body):
         _quote(tail or "트랜스크립트를 찾지 못했습니다"))
 
 
+# 결정 12 (2) - 사유와 무관하게 한 벌 고정. 마커(**[기본]** 등)를 안 넣는다 -
+# 결정 11 (8)이 안 자르기로 한 라벨에 그대로 실려 파서 갈래가 는다(default_answer가 대신 고른다).
+ASK_OPTIONS = ("\n### 1. 이 티켓을 어떻게 할까요\n\n"
+               "- (a) 다시 시도한다 - 트리를 안 고치고 그대로 다시 보낸다\n"
+               "- (b) 내가 손보고 나서 다시 시도한다\n"
+               "- (c) 그만둔다 - 이 티켓을 닫는다\n"
+               "- (d) 아래 칸에 직접 쓴다\n")
+
+
 def ask_human(path, h, attempts, why, blocked=False, killed=False):
     """자동 회수 상한을 넘겼거나 신선한 `## 블록`이 붙은 티켓을 답변 요청으로 올린다.
 
@@ -671,8 +680,8 @@ def ask_human(path, h, attempts, why, blocked=False, killed=False):
            else "세션이 왜 계속 죽는지, 이 티켓을 계속 갈지 답해주세요.")
     # 지시어는 `아래`다 -- 인용(결정 6)은 정형문 다음에 붙고, 화면에선 답변칸이 본문 위에 있다.
     with open(path, "a", encoding="utf-8") as f:
-        f.write("\n## 질문 {}\n\n{}. 엔진은 더 시도하지 않습니다 — {}\n{}".format(
-            sum(1 for l in body if re.match(r"^##\s*질문", l)) + 1, cause, ask, ctx))
+        f.write("\n## 질문 {}\n\n{}. 엔진은 더 시도하지 않습니다 — {}\n{}{}".format(
+            sum(1 for l in body if re.match(r"^##\s*질문", l)) + 1, cause, ask, ASK_OPTIONS, ctx))
     # 잠금(deps)을 먼저 걸고 할당을 나중에 푼다. 순서를 바꾸면 그 사이에 티켓이
     # 잠금 없이 열려 다음 tick이 답변 없이 집어 간다.
     set_deps(path, deps_of(lines, end) + [a])
@@ -685,6 +694,8 @@ def ask_human(path, h, attempts, why, blocked=False, killed=False):
     if not killed:
         upd["attempts"] = "0"
         upd.update({k: "" for k in REAP_CLEAR})
+        # 결정 12 (4) - 기본 골라 둔 답. killed는 방금 사람이 낸 판단이라 엔진이 다음을 모른다.
+        upd["default_answer"] = "1.(a)"
     set_fm_keys(path, upd)
     return "ASK {} awaiting={} - {}, 답변 요청으로 전환".format(h, a, cause)
 

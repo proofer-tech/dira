@@ -71,12 +71,23 @@ try:
     assert "### 죽은 세션 마지막 기록" in a, "A: 로그 절 없음\n" + a
     assert "SSL_ERROR_SYSCALL" in a, "A: 로그 꼬리 인용 없음\n" + a
     assert "이거 해줘" not in a, "A: 마지막 레코드가 아니라 앞 레코드를 붙였다\n" + a
+    # 결정 12 (1)(2)(4) - 문항 한 벌이 인용 앞에 서고 default_answer가 fm에 실린다.
+    assert a.index("### 1. 이 티켓을 어떻게 할까요") < a.index("### 티켓 Goal"), \
+        "A: 문항이 인용보다 뒤에 섰다\n" + a
+    for opt in ("- (a) 다시 시도한다", "- (b) 내가 손보고 나서 다시 시도한다",
+                "- (c) 그만둔다", "- (d) 아래 칸에 직접 쓴다"):
+        assert opt in a, "A: 선택지 누락 - " + opt
+    fm_a = T.read_fm(os.path.join(ws, "tickets/aaaa1111.md"))[0]
+    assert fm_a.get("default_answer") == "1.(a)", "A: default_answer 없음\n" + str(fm_a)
 
     b = open(os.path.join(ws, "tickets/bbbb2222.md"), encoding="utf-8").read()
     assert "자동 회수 3회 실패" in b, "B: 상한 초과 정형문 첫 줄이 바뀌었다\n" + b
     assert "트랜스크립트를 찾지 못했습니다" in b, "B: 못 찾았다는 말이 없다\n" + b
     assert "### 티켓 블록" not in b, "B: 없는 절을 붙였다\n" + b
     assert "> " + "G" * 600 + "\n" in b, "B: Goal 600자 상한이 안 걸렸다"
+    assert "### 1. 이 티켓을 어떻게 할까요" in b, "B: 문항 없음\n" + b
+    fm_b = T.read_fm(os.path.join(ws, "tickets/bbbb2222.md"))[0]
+    assert fm_b.get("default_answer") == "1.(a)", "B: default_answer 없음\n" + str(fm_b)
 
     # C) 상한 나머지 둘 — 절 추출·인용은 A/B가 덮으므로 순수 함수로 확인한다
     assert T._section(["## 블록"] + ["x" * 2000], "블록", 1200) == "x" * 1200, "C: 블록 1200자"
@@ -91,7 +102,18 @@ try:
     assert T.transcript_of({"session_id": "../../*"}) == "", "D: glob 메타문자를 그대로 훑는다"
     assert T.transcript_tail("/tmp/없는파일-ask-context.jsonl") == "", "D: 없는 파일에 예외"
 
-    print("PASS 4/4")
+    # E) 강제 중단(killed, 결정 12 수용조건 2) — 같은 네 줄이 서되 default_answer가 없다
+    pe = mk(ws, "eeee5555", [], body="## Goal\n작업 중이다.\n")
+    T.ask_human(pe, "eeee5555", 0, "사람이 강제 중단", killed=True)
+    e = open(pe, encoding="utf-8").read()
+    assert "### 1. 이 티켓을 어떻게 할까요" in e, "E: 문항 없음\n" + e
+    for opt in ("- (a) 다시 시도한다", "- (b) 내가 손보고 나서 다시 시도한다",
+                "- (c) 그만둔다", "- (d) 아래 칸에 직접 쓴다"):
+        assert opt in e, "E: 선택지 누락 - " + opt
+    fm_e = T.read_fm(pe)[0]
+    assert "default_answer" not in fm_e, "E: killed인데 default_answer가 있다\n" + str(fm_e)
+
+    print("PASS 5/5")
     print(a[a.index("## 질문 1"):])
 finally:
     if old_home is None:
