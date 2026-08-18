@@ -464,11 +464,10 @@ function PlanBlock({
   const glyph = (
     <Icon aria-hidden className={cn("size-4 shrink-0", plan.state === "doing" ? "text-status-active" : ink)} />
   );
+  // 재개정(§59 ②·⑬) — 제목 잉크·무게가 네 상태에서 한 값이다. 사다리는 위 16px 글리프가
+  // 혼자 든다 — 완료·취소 제목이 기록 줄과 같은 잉크(4.73)로 처지던 것이 그 이유였다.
   const title = (
-    <span
-      className={cn("truncate text-sm", ink, plan.state === "doing" && "font-medium", cancelled && "line-through")}
-      title={plan.text}
-    >
+    <span className={cn("truncate text-sm font-medium text-foreground", cancelled && "line-through")} title={plan.text}>
       {plan.text}
     </span>
   );
@@ -485,7 +484,7 @@ function PlanBlock({
     // 미착수 · 완료(0건) · 취소(0건) — 그릇이 `<div>`다. 상태 글리프가 왼쪽 칸을 채워
     // 제목을 다른 갈래와 같은 x=36에 맞춘다(§9 접힌 줄이 펼칠 것 없을 때 쓰는 같은 수).
     return (
-      <div className={cn(LINE, "flex items-center gap-2")}>
+      <div className={cn(PLAN_BLOCK, LINE, "flex items-center gap-2")}>
         {glyph}
         <span className="sr-only">{stateLabel}</span>
         {title}
@@ -498,7 +497,7 @@ function PlanBlock({
     <details
       open={plan.state === "doing" || undefined}
       onToggle={onToggle}
-      className="open:[&>summary>svg:last-child]:rotate-90"
+      className={cn(PLAN_BLOCK, "open:[&>summary>svg:last-child]:rotate-90")}
     >
       {/* 제목 줄이 상자 안에서 붙는다(§59 ⑥-1, 답 `2.(a)`) — `-top-2`가 상자 `py-2`의 틈을
           지운다. hover 밑면은 `background-image`로 얹어 `bg-background` 위에 쌓이게 한다
@@ -912,6 +911,10 @@ function ProgressForm({
 
 /** 접힌 줄·묶음 줄이 같이 쓰는 거터(§9 · §2-6 ②) — `Row`·`Bundle` 공용. */
 const LINE = "px-3 leading-6 scroll-mt-6";
+
+/** 계획 묶음 그릇 — 8은 묶음 **밖**에만 선다(DESIGN.md §비주얼 §59 ⑤, 재개정). 형제끼리 병합돼
+ *  계획 <-> 계획도 8이고, `first`/`last`가 상자 `py-2`와 겹치는 것을 막는다. */
+const PLAN_BLOCK = "my-2 first:mt-0 last:mb-0";
 
 /** 접힌 줄 — `<Marker>` 한 줄. `tool_use`·`thinking`·`tool_result`·세션 프롬프트가 전부 이 모양이다.
  *  고정폭 4열은 (a)가 버렸다(요구 `e3020347`) — 시각(mono 8자)만 세로로 맞고 도구명부터 줄마다
