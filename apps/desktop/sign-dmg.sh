@@ -21,6 +21,18 @@ for v in APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; do
   [ -n "$val" ] || { echo "dmg 공증 건너뜀 — $v 가 비어 있다. 서명만 된 dmg가 나간다."; exit 0; }
 done
 
-xcrun notarytool submit "$dmg" --apple-id "$APPLE_ID" \
-  --password "$APPLE_APP_SPECIFIC_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait || exit 1
+# notarytool submit --wait는 status: Invalid로 끝난 제출에도 종료코드 0을 낸다 (R4 §공증
+# 판정, 실측 2026-08-18 제출 00131cb0-91f4-47b8-a732-1a2fbf61adbe) - 그래서 종료코드가 아니라
+# --output-format json이 돌려주는 status 필드를 읽어서 판정한다 (notarytool info는 추가
+# 왕복이 필요해서 --wait의 결과를 그대로 쓰는 이 쪽이 더 짧다).
+submit_out=$(xcrun notarytool submit "$dmg" --apple-id "$APPLE_ID" \
+  --password "$APPLE_APP_SPECIFIC_PASSWORD" --team-id "$APPLE_TEAM_ID" \
+  --wait --output-format json) || exit 1
+submit_id=$(printf '%s\n' "$submit_out" | sed -n 's/.*"id" *: *"\([^"]*\)".*/\1/p' | head -1)
+submit_status=$(printf '%s\n' "$submit_out" | sed -n 's/.*"status" *: *"\([^"]*\)".*/\1/p' | head -1)
+if [ "$submit_status" != "Accepted" ]; then
+  xcrun notarytool log "$submit_id" --apple-id "$APPLE_ID" \
+    --password "$APPLE_APP_SPECIFIC_PASSWORD" --team-id "$APPLE_TEAM_ID"
+  exit 1
+fi
 xcrun stapler staple "$dmg"
