@@ -490,6 +490,10 @@ export const archivesOf = (t: Ticket): string => unquote(t.fm.archives ?? "");
  *  접두사를 벗기거나 정규화하지 않는다: `epic: P273`과 `epic: P273-2`는 다른 에픽으로 선다. */
 export const epicOf = (t: Ticket): string => unquote(t.fm.epic ?? "");
 
+/** `ask_human`이 골라 둔 답(§요구사항 레이어 결정 12 (4)) — 조립 형식 그대로 `1.(a)`.
+ *  PM이 손으로 쓴 질문 절에는 이 키가 없다(빈 문자열 — `AnswerForm`이 체크 0개로 읽는다). */
+export const defaultAnswerOf = (t: Ticket): string => unquote(t.fm.default_answer ?? "");
+
 /** 본문의 `## 질문 n` 절. 다음 `#`/`##` 제목 전까지가 그 질문의 몸통이다(h3 이하는 안에 남는다). */
 export function questionsOf(body: string): { heading: string; text: string }[] {
   const out: { heading: string; text: string }[] = [];
@@ -633,7 +637,7 @@ export function withoutQuotes(question: string): string {
 // `composeAnswer`는 `lib/urls.ts`에 산다 — 그 파일이 이미 "클라이언트·서버가 같은 규칙을
 // 써야 하는 순수 함수" 자리다(AGENTS.md — node:*가 없는 파일). `AnswerForm`(클라이언트)이
 // 체크박스마다 이 함수를 직접 부른다. 재수출로 자리는 여기 하나로 보인다.
-export { composeAnswer, type AnswerPick } from "./urls.ts";
+export { composeAnswer, defaultPicks, type AnswerPick } from "./urls.ts";
 
 /** §2-11①의 네 상태. `TicketState`(open/wip/done)와 같은 영문 관용구다. */
 export type PlanState = "todo" | "doing" | "done" | "cancelled";

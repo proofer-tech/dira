@@ -46,6 +46,7 @@ import { matchCombo } from "@/lib/keymap";
 import {
   activeEpicFrom,
   composeAnswer,
+  defaultPicks,
   formatRemaining,
   NO_QUESTION_SECTION_NOTICE,
   type AnswerPick,
@@ -784,6 +785,7 @@ export function AnswerForm({
   hash,
   answerFile,
   options,
+  defaultAnswer = "",
   vault,
 }: {
   project: string;
@@ -793,23 +795,26 @@ export function AnswerForm({
    *  `lastQuestionOptions(thread)`로 미리 재 내려보낸다. 0개면 그 라운드에 선택지가 없다
    *  (58/100, 결정 10 ⑨) — 카드를 안 그리고 종전 화면 그대로다. */
   options: OptionGroup[];
+  /** frontmatter `default_answer:`(결정 12 (4)) — 미리 골라 둔 답. 서버가 `defaultAnswerOf(ticket)`로
+   *  내려보낸다. 없으면(PM이 손으로 쓴 질문) 체크 0개, 종전 화면 그대로다. */
+  defaultAnswer?: string;
   /** 이름 -> href 벌(§비주얼 §10 §위키링크) — 위지윅 면에 그대로 흘려보낸다 */
   vault?: Vault;
 }) {
   const [state, action, pending] = useActionState<SaveState, FormData>(answerRequirement, {});
-  // 제어값 — `⌘↵`·제출 버튼이 빈 본문에서 required를 대신 막으려면 지금 글을 봐야 한다
-  // (위지윅 면의 제출값은 hidden input이라 네이티브 `required`가 안 걷힌다, §P236-4).
-  const [body, setBody] = useState("");
   // 문항마다 하나(§결정 11 ⑨) — 하위 문항(`1-1.`)도 자기 칸을 가지므로 picks는 그룹 트리를
   // 평평하게 편 순서와 1:1이다(§비주얼 §29 §두 단 ①). 트리 모양은 렌더 중 안 변하므로 이 순서는
   // 세션 동안 고정이다.
   const flatGroups = flattenGroups(options);
   const groupIndex = new Map(flatGroups.map((g, i) => [g, i] as const));
   // 카드별 고른 것 + 덧붙임(§비주얼 §29 ⑤ 조립된 글이 보이는 자리) — 방향은 카드 -> 칸 한
-  // 쪽뿐이다. 카드를 만질 때마다 `composeAnswer`가 입력칸을 통째로 다시 쓴다.
-  const [picks, setPicks] = useState<AnswerPick[]>(() =>
-    flatGroups.map((g) => ({ number: g.number, letters: [], note: "" })),
-  );
+  // 쪽뿐이다. 카드를 만질 때마다 `composeAnswer`가 입력칸을 통째로 다시 쓴다. 초기값은
+  // `default_answer`(결정 12 §자리 (5)) — `defaultPicks`가 그 값을 못 알아들으면 빈 채다.
+  const [picks, setPicks] = useState<AnswerPick[]>(() => defaultPicks(flatGroups, defaultAnswer));
+  // 제어값 — `⌘↵`·제출 버튼이 빈 본문에서 required를 대신 막으려면 지금 글을 봐야 한다
+  // (위지윅 면의 제출값은 hidden input이라 네이티브 `required`가 안 걷힌다, §P236-4). 초기값은
+  // 위 `picks`의 조립 결과라 체크를 끄면(§Done when 2) `composeAnswer`가 그대로 비운다.
+  const [body, setBody] = useState(() => composeAnswer(picks));
   const applyPicks = (next: AnswerPick[]) => {
     setPicks(next);
     setBody(composeAnswer(next));
@@ -964,6 +969,7 @@ function AnswerFields({
   answerFile: string;
   thread: ThreadItem[];
   options: OptionGroup[];
+  defaultAnswer?: string;
   vault?: Vault;
 }) {
   return (
@@ -992,6 +998,7 @@ export function AnswerDialog({
   answerFile: string;
   thread: ThreadItem[];
   options: OptionGroup[];
+  defaultAnswer?: string;
   /** 다이얼로그 머리에 요구사항 제목을 적는다 — 보드에서는 어느 카드를 열었는지가 안 보인다 */
   title: string;
   /** 이름 -> href 벌(§비주얼 §10 §위키링크) — `AnswerFields`에 그대로 흘려보낸다 */

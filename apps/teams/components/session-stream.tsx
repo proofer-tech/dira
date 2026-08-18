@@ -99,6 +99,7 @@ export function SessionStream({
   thread = [],
   plans = [],
   answerOptions = [],
+  defaultAnswer = "",
   stream = true,
   awaiting = false,
   answerFile,
@@ -121,6 +122,9 @@ export function SessionStream({
   /** 마지막 질문 라운드의 선택 카드(결정 10) — 서버가 `lastQuestionOptions(thread)`로 미리 재
    *  `AnswerForm`에 그대로 내린다. 0개면 그 라운드에 선택지가 없다(58/100) — 카드 0장, 종전 화면. */
   answerOptions?: OptionGroup[];
+  /** frontmatter `default_answer:`(결정 12 (4)) — 서버가 `defaultAnswerOf(ticket)`로 내려보낸다.
+   *  `AnswerForm`의 초기 체크·입력칸으로만 쓰인다. 없으면(PM이 손으로 쓴 질문) 종전 화면 그대로다. */
+  defaultAnswer?: string;
   /** 이 상자에 **스트림 줄이 흐르는가**(§29 ② 갈림길). 서버가 트랜스크립트 파일 하나로 판정한다.
    *  참이면 `h-[32rem]` 고정 + 머리 줄(버튼이 떴다 사라질 때 안 튄다), 거짓이면 `max-h-[32rem]` +
    *  머리 줄 없음 — 흐르는 것이 없으면 고정 높이의 근거도 머리 줄의 근거도 없다.
@@ -259,6 +263,7 @@ export function SessionStream({
       awaiting={awaiting}
       answerFile={answerFile}
       answerOptions={answerOptions}
+      defaultAnswer={defaultAnswer}
       vault={vault}
     />
   );
@@ -654,6 +659,7 @@ function ProgressForm({
   awaiting,
   answerFile,
   answerOptions,
+  defaultAnswer,
   vault,
 }: {
   project: string;
@@ -671,6 +677,8 @@ function ProgressForm({
   awaiting: boolean;
   /** 마지막 질문 라운드의 선택 카드(결정 10) — `answerFile`처럼 답변 모드에서만 쓰인다 */
   answerOptions: OptionGroup[];
+  /** frontmatter `default_answer:`(결정 12 (4)) — `answerOptions`처럼 답변 모드에서만 쓰인다 */
+  defaultAnswer?: string;
   answerFile?: string;
   /** 이름 -> href 벌(§비주얼 §10 §위키링크) — 답변 모드의 `AnswerForm`에 그대로 흘려보낸다 */
   vault?: Vault;
@@ -726,6 +734,7 @@ function ProgressForm({
           hash={stem}
           answerFile={answerFile}
           options={answerOptions}
+          defaultAnswer={defaultAnswer}
           vault={vault}
         />
       </div>

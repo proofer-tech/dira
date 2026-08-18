@@ -35,6 +35,8 @@ import {
   queueOrder,
   bodyWithoutQuestions,
   composeAnswer,
+  defaultAnswerOf,
+  defaultPicks,
   lastQuestionOptions,
   optionsOf,
   planOf,
@@ -1478,6 +1480,34 @@ test("composeAnswer — 줄머리 번호 + 다중 선택 + 덧붙임 조립 (결
   assert.strictEqual(composeAnswer([{ number: "1.", letters: [], note: "  " }]), "");
 });
 
+/** `defaultPicks` — frontmatter `default_answer:`(§요구사항 레이어 결정 12 (4))를 `AnswerForm`의
+ *  초기 `picks`로 되돌린다. `composeAnswer`의 왕복 짝이라 같은 값을 되먹였을 때 같은 글자가
+ *  나와야 한다(수용조건 4). */
+test("defaultPicks — default_answer를 초기 picks로 (결정 12 (4)(5))", () => {
+  const groups = [
+    { heading: "1. 이 티켓을 어떻게 할까요", number: "1.", options: [], sub: [] },
+    { heading: "2. 둘째", number: "2.", options: [], sub: [] },
+  ];
+  // 정상 값 — 가리키는 그룹만 체크되고 나머지는 빈 채다. composeAnswer로 되돌리면 같은 글자.
+  const picks = defaultPicks(groups, "1.(a)");
+  assert.deepStrictEqual(picks, [
+    { number: "1.", letters: ["a"], note: "" },
+    { number: "2.", letters: [], note: "" },
+  ]);
+  assert.strictEqual(composeAnswer(picks), "1.(a)");
+  // 다중 선택도 되돌린다(형식은 결정 11과 같다)
+  assert.deepStrictEqual(defaultPicks(groups, "1.(a)(b)")[0].letters, ["a", "b"]);
+  // PM이 손으로 쓴 질문(키 없음 → 빈 문자열) — 체크 0개, 종전 화면 그대로다
+  assert.deepStrictEqual(defaultPicks(groups, ""), [
+    { number: "1.", letters: [], note: "" },
+    { number: "2.", letters: [], note: "" },
+  ]);
+  // 형식이 안 맞거나 가리키는 그룹이 지금 카드에 없으면 안 걸고 조용히 무시한다(틀린 값이
+  // 폼을 안 잠근다 — §자리 (5))
+  assert.deepStrictEqual(defaultPicks(groups, "쓸모없는 값").every((p) => p.letters.length === 0), true);
+  assert.deepStrictEqual(defaultPicks(groups, "9.(a)").every((p) => p.letters.length === 0), true);
+});
+
 /** `lastQuestionOptions` — `AnswerForm`(클라이언트)이 받는 카드 데이터의 서버 쪽 조립.
  *  `optionsOf`가 이미 못박은 파싱을 **어느 라운드에** 돌리는지만 재확인한다(결정 11 ①). */
 test("lastQuestionOptions — 마지막 질문 라운드에서만 돈다, 질문 0개는 빈 배열", () => {
@@ -1793,6 +1823,16 @@ test("에픽 — epicOf 값 그대로(정규화 없음) · 정렬 컬럼 하나�
     sortTickets(tickets, "epic", false).map((t) => t.hash),
     ["cccc3333", "bbbb2222", "aaaa1111"],
   );
+});
+
+test("defaultAnswerOf — 값 있음 · 없음(PM이 손으로 쓴 질문, §요구사항 레이어 결정 12 (4))", async () => {
+  const root = newRoot();
+  await write(root, "aaaa1111.md", fm({ ticket: "aaaa1111", title: "A", default_answer: "1.(a)" }));
+  await write(root, "bbbb2222.md", fm({ ticket: "bbbb2222", title: "B" })); // 키 없음
+  const tickets = await listTickets(root, DEFAULT);
+  const by = (h: string) => tickets.find((t) => t.hash === h)!;
+  assert.strictEqual(defaultAnswerOf(by("aaaa1111")), "1.(a)");
+  assert.strictEqual(defaultAnswerOf(by("bbbb2222")), "");
 });
 
 test("관계선 간선 — deps 양방향 + req · 화면 밖은 안 싣는다 (§1 보드 · §비주얼 §17)", async () => {

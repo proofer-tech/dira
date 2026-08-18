@@ -68,6 +68,7 @@ import {
   archivesOf,
   awaitingOf,
   continuedOf,
+  defaultAnswerOf,
   epicOf,
   filterTickets,
   inDefaultList,
@@ -636,6 +637,7 @@ export default async function Board({
           answerFile={`${awaitingOf(t)}${config.done}.md`}
           thread={threadOf(tickets, t, config, { foldQuotes: true })}
           options={lastQuestionOptions(threadOf(tickets, t, config))}
+          defaultAnswer={defaultAnswerOf(t)}
           vault={vault}
         />
       )}

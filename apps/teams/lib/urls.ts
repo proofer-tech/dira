@@ -7,7 +7,7 @@
 import { DEFAULT_LOCALE, t, type Locale } from "./i18n.ts";
 // `queue.ts`는 `node:fs/promises`를 값으로 import하지만 타입은 지워진다(`isolatedModules`) —
 // `session-stream.tsx`가 이미 같은 파일에서 `ThreadItem`을 타입만 끌어오는 것과 같은 자리다.
-import type { PlanItem } from "./queue.ts";
+import type { OptionGroup, PlanItem } from "./queue.ts";
 
 /** 이름 → URL 조각 (DESIGN.md §프로젝트 > `id` 슬러그 규칙).
  *  한글 이름이면 빈 문자열이 되는 게 정상이다 — 그때는 등록 폼이 id를 직접 받는다. */
@@ -664,6 +664,15 @@ export function composeAnswer(picks: AnswerPick[]): string {
     lines.push(marks && note ? `${p.number}${marks} ${note}` : marks ? `${p.number}${marks}` : `${p.number} ${note}`);
   }
   return lines.join("\n");
+}
+
+/** frontmatter `default_answer:`(결정 12 (4), 조립 형식 그대로 `1.(a)`)를 그 번호의 그룹에
+ *  체크된 `picks`로 되돌린다 — `composeAnswer`의 왕복 짝이다. 형식이 안 맞거나 가리키는 번호가
+ *  지금 카드에 없으면 그 그룹은 체크 0개다(틀린 값이 폼을 잠그지 않는다, §자리 (5)). */
+export function defaultPicks(groups: OptionGroup[], defaultAnswer: string): AnswerPick[] {
+  const m = defaultAnswer.match(/^(\d+(?:-\d+)*\.)((?:\([a-z](?:-\d+)*\))+)$/);
+  const letters = m ? [...m[2].matchAll(/\(([a-z](?:-\d+)*)\)/g)].map((x) => x[1]) : [];
+  return groups.map((g) => ({ number: g.number, letters: g.number === m?.[1] ? letters : [], note: "" }));
 }
 
 /** `awaiting`인데 본문에 `## 질문 n` 절이 없는 요구사항(DESIGN.md §요구사항 레이어 결정 11 ⑩)의

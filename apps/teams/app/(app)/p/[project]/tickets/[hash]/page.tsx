@@ -33,6 +33,7 @@ import {
   awaitingUnlocked,
   bodyWithoutQuestions,
   continuedOf,
+  defaultAnswerOf,
   depBadges,
   derivedFrom,
   isAwaiting,
@@ -227,6 +228,7 @@ export default async function TicketDetail({
             thread={thread}
             plans={plans}
             answerOptions={answerOptions}
+            defaultAnswer={defaultAnswerOf(ticket)}
             // 스트림 지분이 있는가 = 트랜스크립트 파일 하나다(§29 ② — 고정 높이와 머리 줄의 근거)
             stream={!!transcript}
             awaiting={awaiting}
