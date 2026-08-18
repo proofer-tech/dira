@@ -36937,8 +36937,8 @@ last:mb-0` 한 문자열). 열려 있는 축 둘(배경 - 테두리)은 판단�
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
 | P297-1 | 스펙 - §0-8 §재개정 신설(원본 - 환산 둘 - 부르는 계정 - 비용 - 개정 ② 폐기 - 수용조건 10) | pm | - | 완료 - 왕복 1회 |
-| P297-2 | 구현 - `claudeLimit()` + `LIMIT_SOURCE.claude` + `EngineCell`의 claude 예외 제거 | developer | - | 발행 |
-| P297-3 | 매뉴얼 - `apps/teams/docs/screens.md` §하단 토큰 status bar의 claude 줄 | writer | P297-2 | 발행 |
+| P297-2 | 구현 - `claudeLimit()` + `LIMIT_SOURCE.claude` + `EngineCell`의 claude 예외 제거 | developer | - | 발행 `d47bd010` |
+| P297-3 | 매뉴얼 - `apps/teams/docs/screens.md` §하단 토큰 status bar의 claude 줄 | writer | P297-2 | 발행 `4cf34ed4` |
 
 **요구는 프로그레스바를 만들라 했는데 바는 이미 있었다.** `EngineCells`가 `h-2` 트랙을 그리고
 엔진마다 구간 하나를 `%`로 채운다 - 이 큐에 그 구간이 안 보인 것은 구현 누락이 아니라 결정
