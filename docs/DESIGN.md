@@ -18279,26 +18279,26 @@ power_save_blocker_mac.cc`) - `kPreventAppSuspension -> kIOPMAssertionTypeNoIdle
 1. **선행 확인.** 워킹 트리 깨끗 - 브랜치가 master - `sign-preflight.sh` 통과 - `GH_TOKEN` 존재 -
    `gh` 실행 가능 - `publish.owner`/`repo` 채워짐. **하나라도 없으면 여기서 멈춘다.**
 2. `apps/desktop/package.json`의 `version` bump - **`npm version`에 커밋-태그를 맡기지 않는다**
-3. 커밋 + **annotated** 태그 `v<x.y.z>`
-4. `git push origin master --follow-tags`
-5. `pnpm dist` **한 번만**(서명-공증-`sign-dmg.sh`까지) -> 세 자산이 **있고 Gatekeeper를 지나는지**
-   본 뒤 `gh release create v<x.y.z>`로 올린다
+3. 커밋 + **annotated** 태그 `v<x.y.z>` - **로컬에만. 아직 안 민다**
+4. `pnpm dist` **한 번만**(서명-공증-`sign-dmg.sh`까지) -> 세 자산이 **있고 Gatekeeper를 지나는지**
+5. `git push origin master --follow-tags`
+6. `gh release create v<x.y.z>`로 자산 셋을 올린다
 
 **2와 3이 갈라져 있는 것에 이유가 있다.** `npm version`은 **패키지 디렉터리에 `.git`이 있을
 때만** 커밋-태그를 만든다. 여기 `.git`은 레포 루트에 있고 `apps/desktop`에는 없어서, npm은
-조용히 `package.json`만 고치고 0으로 끝난다 - 4의 push가 `Everything up-to-date`가 되고,
-5는 그대로 돌아 `gh release create`가 **버전 커밋이 없는 원격 HEAD에** 태그를 박는다.
+조용히 `package.json`만 고치고 0으로 끝난다 - 5의 push가 `Everything up-to-date`가 되고,
+6은 그대로 돌아 `gh release create`가 **버전 커밋이 없는 원격 HEAD에** 태그를 박는다.
 받는 사람 앱의 버전과 그 태그가 가리키는 소스가 갈린다(실측 2026-08-01). 그래서 bump만
 `--no-git-tag-version`으로 맡기고 커밋-태그는 스크립트가 만든다. **`-a`도 빠지면 안 된다** -
-lightweight 태그는 4의 `--follow-tags`가 안 민다(같은 날 실측).
+lightweight 태그는 5의 `--follow-tags`가 안 민다(같은 날 실측).
 
-**5의 "있는지"와 "열리는지"는 다른 확인이다.** `electron-builder`가 공증까지 마치고 그 뒤에
+**4의 "있는지"와 "열리는지"는 다른 확인이다.** `electron-builder`가 공증까지 마치고 그 뒤에
 죽으면 `pnpm dist`의 `&&` 사슬이 끊겨 `sign-dmg.sh`가 안 돈다 - 파일은 셋 다 나와 있고
 `.dmg`만 공증이 안 된 채다(실측 2026-08-01). 존재 확인 셋은 그걸 통과시킨다. 그래서
 `spctl`로 dmg를, `stapler validate`로 `.app`을 한 번 더 본다. 여기서 안 잡으면 잡는 것은
 받는 사람의 첫 더블클릭이고 올린 사람은 모른다.
 
-**5는 한 번 굽고 그것을 올린다.** 2026-08-01(`899b88d5`)까지 이 줄은 `pnpm dist` ->
+**4는 한 번만 굽고 6이 그것을 올린다.** 2026-08-01(`899b88d5`)까지 이 줄은 `pnpm dist` ->
 `electron-builder --publish always`였고, 그게 **`.dmg`의 서명을 벗겼다**: 두 번째
 `electron-builder`가 dist를 다시 구워서 `sign-dmg.sh`가 서명-스테이플한 dmg를 덮고, 올라가는 건
 그 새 파일이었다. `sign-dmg.sh`가 막으려던 바로 그 상태(받는 맥의 첫 더블클릭이 Gatekeeper에
@@ -18306,17 +18306,34 @@ lightweight 태그는 4의 `--follow-tags`가 안 민다(같은 날 실측).
 보이는 차단이라 올린 사람은 모른다.** `--publish always`를 안 쓸 뿐 `build.publish`는 그대로
 둔다 - `latest-mac.yml`을 굽는 것이 그 설정이다. 부수로 같은 `.app`을 두 번 공증하던 수 분도 없앤다.
 
-**1이 2보다 앞인 것이 이 순서의 전부다.** 뒤집으면 서명 없는 맥에서 버전만 올라간 커밋과 태그가
-남고, 그 태그는 자산이 없는데도 다음 릴리스의 경계 노릇을 한다 - 릴리즈 노트가 아무도 받지 못한
-구간을 가리킨다. 되돌리려면 사람이 원격 태그를 지워야 하고, 그건 이 스크립트가 만들면 안 되는
+**1이 2보다 앞이고 5가 4보다 뒤인 것이 이 순서의 전부다.** 어느 쪽을 뒤집어도 같은 상태가
+남는다 - 자산이 없는 버전 커밋과 태그가 origin에 서고, 그 태그가 자산이 없는데도 다음 릴리스의
+경계 노릇을 한다. 되돌리려면 사람이 원격 태그를 지워야 하고, 그건 이 스크립트가 만들면 안 되는
 상태다.
 
-**4가 이 레포에서 원격에 push하는 유일한 자리다.** 프로토콜 §git의 "원격(origin) push는 사람이
+**1을 통과한 것이 4가 성공한다는 뜻은 아니다 - 그래서 5가 4보다 뒤여야 한다.**
+2026-08-18까지 push는 굽기 앞(옛 4번)이었고, 근거는 "1이 2보다 앞이니 준비물이 없는 맥에서는
+bump까지 못 간다"였다. 준비물이 다 있어도 굽기는 실패한다: 실측 2026-08-18, `.dmg` 공증이
+Apple에서 `Invalid`로 떨어져 `pnpm dist`가 죽었고, **push는 이미 나가 있어서** `v1.0.24`
+`v1.0.25` 태그와 bump 커밋 둘이 자산 없이 origin에 남았다(릴리스는 `v1.0.23`이 마지막).
+연달아 두 번이다 - 트리거가 매 master 커밋이라(C3) 고쳐지기 전까지 push마다 하나씩 늘어난다.
+**로컬 커밋과 태그는 사람이 `git reset`-`git tag -d`로 지울 수 있고 원격 태그는 그렇지 않다** -
+그 비대칭이 순서를 정한다.
+
+**공증 성공은 `notarytool`의 종료코드가 아니다.** `xcrun notarytool submit --wait`는
+`status: Invalid`로 끝난 제출에도 **0으로 끝난다**(실측 2026-08-18, 제출
+`00131cb0-91f4-47b8-a732-1a2fbf61adbe`). 그래서 `sign-dmg.sh`의 `|| exit 1`이 안 걸리고 다음
+줄의 `stapler staple`로 넘어가, 빌드는 원인이 아니라 증상(`The staple and validate action
+failed! Error 65`)만 찍고 죽는다 - 로그를 읽는 사람은 스테이플이 고장난 줄 안다.
+**판정은 제출 상태를 읽어서 한다**: `Accepted`가 아니면 `xcrun notarytool log <제출 ID>`를
+찍고 0이 아닌 코드로 죽는다. 이유는 그 로그 안에만 있고, 그것 없이는 다음 회차도 증상만 남는다.
+
+**5가 이 레포에서 원격에 push하는 유일한 자리다.** 프로토콜 §git의 "원격(origin) push는 사람이
 한다"는 **세션에게 내린 금지**이고, 이 스크립트는 사람이 손으로 친다 - 답 Q2(b)가 확인해 준
 지점이 그것이다. **세션은 이 스크립트를 실행하지 않는다.** 만들고, 1에서 멈추는 경로까지만
 확인한다(그게 developer 티켓의 판정이다).
 
-**R4-1. 4의 push를 `release.yml`이 다시 굽지 않는다 - 안 막으면 릴리스가 두 개 난다.**
+**R4-1. 5의 push를 `release.yml`이 다시 굽지 않는다 - 안 막으면 릴리스가 두 개 난다.**
 
 > 요구 `793eb7e0` / 답 `a74323c5`(2026-08-02). 답이 "매번 원격 push가 막혀 배포를 못 하면
 > 차라리 `pnpm release`로 만들어서 `major`-`minor`도 옵션으로 넣자"였다. **그 명령은 이미
@@ -18376,7 +18393,7 @@ git fetch origin master && git rev-list --left-right --count master...origin/mas
 한 줄이고, 워크트리를 안 건드린다.
 
 **그 뒤에 사람이 한 줄 친다.** `git push origin master`(-> `patch`) 또는
-`gh workflow run release.yml -f bump=minor`. 세션은 어느 쪽도 못 한다(프로토콜 §git - R4 4번).
+`gh workflow run release.yml -f bump=minor`. 세션은 어느 쪽도 못 한다(프로토콜 §git - R4 5번).
 
 **R5. 앱이 하는 일은 셋이고 새 화면은 0개다.**
 
@@ -18824,7 +18841,7 @@ https://hsol.info
   내려간다. 줄이려면 `paths`를 넣으면 되고 그건 한 줄이다. 손으로 `minor`-`major`를 낼
   자리는 `workflow_dispatch`와 **사람 맥의 `pnpm release <bump>`** 둘이다(R4).
 - **예외는 하나 - 끝 커밋이 `release v...`면 굽지 않는다**(요구 `793eb7e0`, 2026-08-02).
-  사람이 맥에서 `pnpm release minor`를 치면 R4의 4번이 사람 자격으로 `master`를 밀어 이
+  사람이 맥에서 `pnpm release minor`를 치면 R4의 5번이 사람 자격으로 `master`를 밀어 이
   트리거를 깨우고, 러너가 그 위에 `patch`를 한 번 더 얹는다 - 릴리스가 둘이 된다.
   job 조건 한 줄로 막는다. 계약과 근거는 **R4-1**이 갖는다.
 - **`release`의 첫 8회는 전부 `인증서를 임시 키체인에 넣는다`에서 죽었다** - 시크릿이 아직
@@ -36970,6 +36987,29 @@ P297-2의 `## Done when`이 그것을 그대로 든다.
 `allowed_warning`이 붙은 것이 판정) `reset`은 에폭 **초**다 - 걷힌 구현이 파싱하던 ISO 문자열이
 아니다. 그 코드를 그대로 되살리면 게이지가 100배 낮게 서고 리셋 항목이 `NaN`으로 상시 빠진다.
 수용조건 3-4가 그 둘을 각각 문다.
+
+### P298. 릴리스가 자산 없는 태그를 안 남기고, 공증 실패는 이유를 찍는다 (요구 `f81b997a`)
+
+계약은 **R4**가 정본이다(순서 6단계 - 5가 4보다 뒤인 근거 - 공증 판정). 사람 문장:
+*"https://github.com/proofer-tech/dira/actions/runs/32118426444/job/95653114699 고쳐주세요"*
+
+| ID | 무엇 | 페르소나 | deps | 상태 |
+|---|---|---|---|---|
+| P298-1 | 스펙 - R4 재배열(굽기가 push보다 앞) + 공증 판정은 종료코드가 아니다 | pm | - | 완료 |
+| P298-2 | 구현 - `sign-dmg.sh`가 제출 상태를 읽고 `Accepted`가 아니면 `notarytool log`를 찍고 죽는다 | developer | - | 발행 |
+| P298-3 | 구현 - `release.sh`의 커밋-태그-push를 `pnpm dist` 성공 뒤로 옮긴다 | developer | - | 발행 |
+
+**두 장이 서로를 안 기다린다.** 다른 파일 다른 줄이고, 어느 쪽이 먼저 들어가도 다른 쪽의
+착수 조건이 아니다 - P298-2는 실패 이유를 로그에 남기는 일이고 P298-3은 실패했을 때 origin에
+남는 것을 없애는 일이다.
+
+**`Invalid`의 원인은 이 회차에 안 들어 있다.** 이유는 Apple의 notary log 안에만 있고 그 로그를
+뜨는 자격값은 사람과 CI 시크릿에만 있다(R4 §공증 판정). 실측으로 좁혀진 것까지가 이 회차의
+사실이다 - `.app` 공증은 두 회차 다 `notarization successful`이고 `.dmg` 제출만 `Invalid`,
+`apps/desktop`은 마지막 성공(`v1.0.23`, 2026-08-17 08:35Z)과 실패 사이에 **한 줄도 안 바뀌었다**
+(`git log --since=2026-08-17T08:00 -- apps/desktop`이 빈 출력). 원인을 좁히는 티켓은 로그가
+들어온 뒤에 열린다.
+
 
 ## 수용조건 (전체)
 
