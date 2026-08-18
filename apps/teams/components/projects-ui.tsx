@@ -9,7 +9,7 @@
  *
  *  한 파일에 있는 이유: 해석 결과 표를 생성 직후와 행 액션의 설정 다이얼로그가 **같은 표**로
  *  쓴다(DESIGN.md §7). 파일을 쪼개면 두 자리가 갈린다. fs 접근은 전부 서버 액션 뒤에 있다. */
-import { Fragment, useState, useTransition } from "react";
+import { Fragment, useCallback, useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronDown, ChevronUp, Settings2, TriangleAlert, Unlink } from "lucide-react";
@@ -663,13 +663,21 @@ export function ProjectSettingsDialog({
   const [confirming, setConfirming] = useState(false);
   const [newName, setNewName] = useState(name);
 
-  const load = () =>
+  const load = useCallback(() => {
     start(async () => {
       setError(null);
       const r = await resolveProjectAction(id);
       if ("rows" in r) setView(r);
       else setError(r.message);
     });
+  }, [id]);
+
+  // `open`은 부모가 쥔 controlled prop이다 — 톱니 클릭처럼 밖에서 바로 `true`로 바뀌면
+  // Dialog의 `onOpenChange`는 안 불린다(사용자 상호작용 전용 콜백이라 prop 변화 자체엔 안 걸린다).
+  // 그래서 열림은 `open` 자체를 보고 여기서 잡는다(`5e7d0faf`).
+  useEffect(() => {
+    if (open) load();
+  }, [open, load]);
 
   return (
     <Dialog
@@ -677,7 +685,6 @@ export function ProjectSettingsDialog({
       onOpenChange={(o) => {
         onOpenChange(o);
         setConfirming(false);
-        if (o) load();
       }}
     >
       <DialogContent className="sm:max-w-2xl">

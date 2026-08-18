@@ -490,8 +490,10 @@ function CheckRow({
  *  폴링이 스스로 끝난다(언마운트). **문항 4개에 «객체»·«타입»·«관계»·«온톨로지»가 없다** —
  *  값은 `lib/ontology-seed.ts`의 상수 그대로다.
  *
- *  시드 다음 첫 채움(§5-3 §첫 채움)이 홈 대화에서 돈다 — 이 화면은 그 자체를 그리지 않고
- *  홈으로 가리키는 줄 하나만 보여준다(폴링이 지켜보는 것은 여전히 시드 파일뿐이다). */
+ *  시드 다음 첫 채움(§5-3 §첫 채움)은 큐 티켓 한 장으로 돈다(`submitOntologySurveyAction`이
+ *  시드를 쓰고 `publishOntologyMigrationAction`을 부른다) — 그 티켓은 시드보다 늦게 생겨서
+ *  제출 시점엔 stem을 모른다. 그래서 이 화면은 보드로 가리키는 줄 하나만 보여준다(폴링이
+ *  지켜보는 것은 여전히 시드 파일뿐이다). */
 export function OntologySurveyForm({ projectId }: { projectId: string }) {
   const router = useRouter();
   const [q1, setQ1] = useState("");
@@ -517,10 +519,10 @@ export function OntologySurveyForm({ projectId }: { projectId: string }) {
     return (
       <p className="text-sm text-muted-foreground">
         답을 바탕으로 만드는 중입니다… 이어지는 첫 채움은{" "}
-        <Link href={`/p/${projectId}/home`} className="underline">
-          홈 대화
+        <Link href={`/p/${projectId}`} className="underline">
+          보드
         </Link>
-        에서 돕니다.
+        의 티켓 한 장으로 돕니다.
       </p>
     );
   }
