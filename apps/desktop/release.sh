@@ -8,7 +8,7 @@
 # **부르는 자리가 둘이고 스크립트는 하나다.** 사람이 자기 맥에서 손으로 치거나, `master`에
 # 앱이 들어왔을 때 `.github/workflows/release.yml`이 macOS 러너에서 부른다(§CI C3). 두 벌로
 # 갈라지면 사람 맥에서만 맞는 릴리스가 생긴다. 세션은 여전히 이걸 스스로 돌리지 않는다
-# (프로토콜 §git — 4번이 이 레포에서 원격에 push하는 유일한 자리다).
+# (프로토콜 §git — 5번이 이 레포에서 원격에 push하는 유일한 자리다).
 set -u
 
 case "${1:-}" in
@@ -38,7 +38,7 @@ esac
 
 [ -n "${GH_TOKEN:-}" ] || add "GH_TOKEN이 비어 있다 — GitHub Releases에 올릴 수 없다."
 
-command -v gh >/dev/null 2>&1 || add "gh가 없다 — 5번이 자산을 올리는 명령이다 (brew install gh)."
+command -v gh >/dev/null 2>&1 || add "gh가 없다 — 6번이 자산을 올리는 명령이다 (brew install gh)."
 
 for f in owner repo; do
   v=$(node -p "require('./package.json').build.publish.$f" 2>/dev/null)
@@ -56,21 +56,18 @@ fi
 #
 # **커밋·태그는 npm에 맡기지 않는다.** `npm version`은 패키지 디렉터리에 `.git`이 있을 때만
 # 커밋·태그를 만든다. 여기 `.git`은 레포 루트에 있고 `apps/desktop`에는 없어서, npm은 조용히
-# bump만 하고 0으로 끝난다 — 커밋 0 · 태그 0 · 4번의 push가 `Everything up-to-date`.
-# 그러면 5번은 돌아서 자산이 나오고 `gh release create`가 **버전 커밋이 없는 원격 HEAD에**
+# bump만 하고 0으로 끝난다 — 커밋 0 · 태그 0. 4번은 그대로 돌아서 자산이 나오고, 5번의
+# push가 `Everything up-to-date`인 채 `gh release create`가 **버전 커밋이 없는 원격 HEAD에**
 # `v<x.y.z>` 태그를 박는다: 받는 사람의 앱 버전과 태그가 가리키는 소스가 갈린다(실측 2026-08-01).
 npm version "$bump" --no-git-tag-version || exit 1
 ver=$(node -p "require('./package.json').version")
 git commit -q -m "release v$ver" package.json || exit 1
-# `-a`가 빠지면 lightweight 태그가 되고 **4번의 `--follow-tags`가 그걸 안 민다.** 커밋만
-# 올라가고 태그는 로컬에 남아서, 5번의 `gh release create`가 원격 기본 브랜치 HEAD에 같은
+# `-a`가 빠지면 lightweight 태그가 되고 **5번의 `--follow-tags`가 그걸 안 민다.** 커밋만
+# 올라가고 태그는 로컬에 남아서, 6번의 `gh release create`가 원격 기본 브랜치 HEAD에 같은
 # 이름의 태그를 새로 만든다 — 로컬 태그와 원격 태그가 다른 객체가 된다(실측 2026-08-01).
 git tag -a "v$ver" -m "release v$ver" || exit 1
 
-# 4. 원격에 나가는 유일한 자리.
-git push origin master --follow-tags || exit 1
-
-# 5. **한 번만 굽는다.** 두 번 구우면 두 번째 electron-builder가 `sign-dmg.sh`의 서명·스테이플을
+# 4. **한 번만 굽는다.** 두 번 구우면 두 번째 electron-builder가 `sign-dmg.sh`의 서명·스테이플을
 # 덮어서, 올라가는 `.dmg`는 sign-dmg가 막으려던 상태 그대로다 — 받는 맥의 첫 더블클릭이
 # Gatekeeper에 막히고 올린 사람은 모른다 (§릴리스 R4-5). 그래서 publish는 electron-builder가
 # 아니라 gh가 한다. `build.publish`는 그대로다 — latest-mac.yml을 굽는 것이 그 설정이다.
@@ -102,7 +99,11 @@ if [ -n "$missing" ]; then
   exit 1
 fi
 
-# --generate-notes가 없으면 사람 터미널에서 에디터가 열려 멈춘다. 본문은 무엇이든 상관없다 —
+# 5. 원격에 나가는 유일한 자리. 4가 성공해 자산이 실제로 있다고 확인된 뒤에만 온다 — 1을
+# 통과한 것이 4가 성공한다는 뜻은 아니다(공증이 Apple에서 죽을 수 있다, 실측 2026-08-18).
+git push origin master --follow-tags || exit 1
+
+# 6. --generate-notes가 없으면 사람 터미널에서 에디터가 열려 멈춘다. 본문은 무엇이든 상관없다 —
 # 사람이 읽는 릴리즈 노트는 앱이 받은 시점에 스스로 만든다(R7).
 gh release create "v$ver" "$dmg" "$zip" dist/latest-mac.yml --title "v$ver" --generate-notes || exit 1
 

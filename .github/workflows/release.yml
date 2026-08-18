@@ -36,7 +36,7 @@ concurrency:
 
 jobs:
   release:
-    # 사람이 자기 맥에서 `pnpm release minor`를 치면 release.sh 4번이 **사람 자격으로** master를
+    # 사람이 자기 맥에서 `pnpm release minor`를 치면 release.sh 5번이 **사람 자격으로** master를
     # 민다 — 아래 GITHUB_TOKEN 예외는 CI가 민 push에만 걸려서, 이게 없으면 러너가 그 위에
     # patch를 한 번 더 얹는다(v0.2.0 뒤에 v0.2.1이 서고 뒤엣것의 릴리즈 노트는 빈 구간이다).
     # 판정 문자열은 release.sh가 만드는 커밋 제목 `release v<x.y.z>` 하나뿐이다(§릴리스 R4-1).
