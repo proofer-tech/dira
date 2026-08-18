@@ -634,7 +634,7 @@ export default async function Board({
           hash={t.stem}
           title={t.title}
           answerFile={`${awaitingOf(t)}${config.done}.md`}
-          thread={threadOf(tickets, t, config)}
+          thread={threadOf(tickets, t, config, { foldQuotes: true })}
           options={lastQuestionOptions(threadOf(tickets, t, config))}
           vault={vault}
         />

@@ -594,6 +594,42 @@ export function optionsOf(question: string): OptionGroup[] {
   return groups;
 }
 
+/** 결정 12 §못박는 것 — 인용 판정은 제목 문자열이 아니다. `optionsOf`가 문항으로 안 잡는
+ *  `###`(`HEADING_RE`에 안 걸리는, 번호 없는 것)이 곧 인용이다. 제목 3개(`티켓 Goal` 등)를
+ *  화면에 박으면 엔진이 인용을 하나 늘릴 때 그 절만 안 접힌다. */
+const isQuoteHeading = (line: string) => /^###\s+/.test(line) && !HEADING_RE.test(line);
+
+/** 결정 12 (5)의 인용 한 장 — 제목과 몸통(헤더 줄 제외, trim). */
+export type QuoteSection = { heading: string; text: string };
+
+/** 질문 절에서 인용을 뗀다(§자리 (3)) — 번호 붙은 `### 1.` 문항은 안 온다. 뗀 순서 그대로다.
+ *  짝 함수는 `withoutQuotes` — 둘을 합치면 원문과 같다(상한을 안 내린다, 결정 12 (6)). */
+export function quotesOf(question: string): QuoteSection[] {
+  const quotes: QuoteSection[] = [];
+  let cur: QuoteSection | null = null;
+  for (const line of question.split("\n")) {
+    if (/^###\s+/.test(line)) {
+      if (cur) quotes.push({ heading: cur.heading, text: cur.text.trim() });
+      cur = isQuoteHeading(line) ? { heading: line.replace(/^###\s+/, "").trim(), text: "" } : null;
+      continue;
+    }
+    if (cur) cur.text += (cur.text ? "\n" : "") + line;
+  }
+  if (cur) quotes.push({ heading: cur.heading, text: cur.text.trim() });
+  return quotes;
+}
+
+/** `quotesOf`의 짝 — 인용을 뗀 나머지(정형문 한 줄 + 번호 붙은 `### 1.` 문항 그대로). */
+export function withoutQuotes(question: string): string {
+  const out: string[] = [];
+  let dropping = false;
+  for (const line of question.split("\n")) {
+    if (/^###\s+/.test(line)) dropping = isQuoteHeading(line);
+    if (!dropping) out.push(line);
+  }
+  return out.join("\n").trim();
+}
+
 // `composeAnswer`는 `lib/urls.ts`에 산다 — 그 파일이 이미 "클라이언트·서버가 같은 규칙을
 // 써야 하는 순수 함수" 자리다(AGENTS.md — node:*가 없는 파일). `AnswerForm`(클라이언트)이
 // 체크박스마다 이 함수를 직접 부른다. 재수출로 자리는 여기 하나로 보인다.
@@ -679,6 +715,9 @@ export type ThreadItem = {
   role: "question" | "answer";
   heading: string;
   text: string;
+  /** 결정 12 (5) — `opts.foldQuotes`로 뗀 인용. 뗄 것이 있을 때만 값이 있다(§`threadOf`).
+   *  답변에는 없다. */
+  quotes?: QuoteSection[];
   /** 답변 티켓의 stem. 질문은 없다(요구사항 본문의 일부다) */
   hash?: string;
   /** 답변 파일의 `birth`(ms) — **진행 기록의 시각이다**(§2-3 ②. `mergeProgress`가 쓴다).
@@ -692,8 +731,18 @@ export type ThreadItem = {
  *  **상세(§2 답변 카드)와 보드 카드의 답변 다이얼로그(§1)가 같은 함수를 쓴다** — 두 곳에서 따로
  *  엮으면 같은 요구사항이 화면마다 다른 스레드로 보인다. 그래서 **순서·짝 규칙은 안 바꾼다**:
  *  §2-3이 더한 것은 답변의 `birth`를 실어 보내는 것 하나고, 그 값으로 진행 기록이 스트림 사건과
- *  같은 줄기에 섞인다(`mergeProgress`). 다이얼로그는 그 필드를 안 본다. */
-export function threadOf(tickets: Ticket[], t: Ticket, sfx: Suffixes): ThreadItem[] {
+ *  같은 줄기에 섞인다(`mergeProgress`). 다이얼로그는 그 필드를 안 본다.
+ *
+ *  `opts.foldQuotes`(결정 12 (5))는 기본 꺼짐이다 — **보드 답변 다이얼로그(`AnswerThread`)만
+ *  켠다.** 상세의 `진행 기록`(`session-stream.tsx` `ThreadRow`)은 인용을 그대로 펼쳐 그리는
+ *  화면이라 켜면 그 화면에서 인용이 조용히 사라진다(그 화면은 `quotes`를 안 읽는다) — 자리는
+ *  결정 12 §자리 (4) `AnswerThread` 하나다. */
+export function threadOf(
+  tickets: Ticket[],
+  t: Ticket,
+  sfx: Suffixes,
+  opts?: { foldQuotes?: boolean },
+): ThreadItem[] {
   const questions = questionsOf(t.body);
   const answers = t.deps
     .map((d) => resolveDep(tickets, d, sfx))
@@ -701,7 +750,15 @@ export function threadOf(tickets: Ticket[], t: Ticket, sfx: Suffixes): ThreadIte
     .sort((a, b) => a.birth - b.birth);
   const thread: ThreadItem[] = [];
   for (let i = 0; i < Math.max(questions.length, answers.length); i++) {
-    if (questions[i]) thread.push({ role: "question", ...questions[i] });
+    if (questions[i]) {
+      const { heading, text } = questions[i];
+      const quotes = opts?.foldQuotes ? quotesOf(text) : [];
+      thread.push(
+        quotes.length
+          ? { role: "question", heading, text: withoutQuotes(text), quotes }
+          : { role: "question", heading, text },
+      );
+    }
     if (answers[i]) {
       thread.push({
         role: "answer",

@@ -39,6 +39,8 @@ import {
   optionsOf,
   planOf,
   questionsOf,
+  quotesOf,
+  withoutQuotes,
   depBadges,
   referrers,
   relationEdges,
@@ -1382,6 +1384,60 @@ test("optionsOf — optionLabel이 안 자른다, 볼드 마커만 걷는다 (�
     "매우 긴 라벨을 가진 선택지로 육십자보다 더 길게 자르기 동작을 확인하기 위해 일부러 아주 길게 늘려 쓴 문장입니다. 뒤 설명.",
   );
   assert.ok(!long[0].options[0].label.endsWith("...")); // 말줄임이 안 붙는다
+});
+
+/** `quotesOf`/`withoutQuotes` — 결정 12 (5). 실측 형태(`## 질문 n` 안에 문항 + 인용 3종)로
+ *  판정한다: 번호 붙은 `### 1.`은 문항이라 안 떼이고, 번호 없는 `###`(제목이 무엇이든)은 인용
+ *  이라 떼인다 — **제목 문자열로 안 고른다**(결정 12 못박는 것). 둘을 합치면 원문과 같다. */
+test("quotesOf/withoutQuotes — 문항은 안 떼고 번호 없는 ###만 인용으로 뗀다 (결정 12 (5))", () => {
+  const q =
+    "다시 시도할까요?\n\n### 1. 이 티켓을 어떻게 할까요\n\n- (a) 다시 시도한다\n- (b) 그만둔다\n\n" +
+    "### 티켓 Goal\n\n원래 하려던 일.\n\n### 티켓 블록\n\n막힌 이유.\n\n### 죽은 세션 마지막 기록\n\nlast log line.\n";
+
+  assert.deepStrictEqual(quotesOf(q), [
+    { heading: "티켓 Goal", text: "원래 하려던 일." },
+    { heading: "티켓 블록", text: "막힌 이유." },
+    { heading: "죽은 세션 마지막 기록", text: "last log line." },
+  ]);
+  assert.strictEqual(
+    withoutQuotes(q),
+    "다시 시도할까요?\n\n### 1. 이 티켓을 어떻게 할까요\n\n- (a) 다시 시도한다\n- (b) 그만둔다",
+  );
+
+  // 제목이 알려진 3종이 아니어도 번호가 없으면 인용이다 — 제목 문자열로 안 고른다는 판정
+  assert.deepStrictEqual(quotesOf("### 아무 제목\n\n본문."), [{ heading: "아무 제목", text: "본문." }]);
+  assert.strictEqual(withoutQuotes("### 아무 제목\n\n본문."), "");
+
+  // 인용이 없는 질문 — 뗄 것이 없다
+  assert.deepStrictEqual(quotesOf("정형문 한 줄뿐."), []);
+  assert.strictEqual(withoutQuotes("정형문 한 줄뿐."), "정형문 한 줄뿐.");
+});
+
+/** `threadOf`의 `foldQuotes` — 기본은 꺼짐(§`AnswerThread`만 켠다). 켜면 문항은 그대로 남고
+ *  인용만 `quotes`로 떨어져 나간다. 꺼져 있으면(기존 호출부 전부) 종전과 한 글자도 안 다르다 —
+ *  세션 스트림(`ThreadRow`)이 이 옵션을 안 켜는 이유다. */
+test("threadOf — foldQuotes: 기본 꺼짐은 무수정, 켜면 인용만 quotes로 떨어진다 (결정 12 (5))", async () => {
+  const r = newRoot();
+  await write(
+    r,
+    "r1000000.md",
+    fm({ ticket: "r1000000", title: "질문 인용", kind: "request" }) +
+      "## 질문 1\n\n" +
+      "### 1. 어떻게 할까요\n\n- (a) 다시 시도한다\n\n### 티켓 Goal\n\n원래 목표.\n",
+  );
+  const tickets = await listTickets(r, DEFAULT);
+  const t = tickets.find((x) => x.hash === "r1000000")!;
+
+  // 꺼짐(기본) — 문항·인용이 한 절 안에 그대로, quotes 필드가 없다
+  const plain = threadOf(tickets, t, DEFAULT);
+  assert.strictEqual(plain.length, 1);
+  assert.strictEqual(plain[0].quotes, undefined);
+  assert.match(plain[0].text, /### 티켓 Goal/);
+
+  // 켜짐 — 문항은 text에 남고 인용은 quotes로, 합치면 원문과 같다(상한을 안 내린다)
+  const folded = threadOf(tickets, t, DEFAULT, { foldQuotes: true });
+  assert.strictEqual(folded[0].text, "### 1. 어떻게 할까요\n\n- (a) 다시 시도한다");
+  assert.deepStrictEqual(folded[0].quotes, [{ heading: "티켓 Goal", text: "원래 목표." }]);
 });
 
 /** `composeAnswer` — 조립 결과 모양은 §결정 11에 실린 실측 형식과 같다:

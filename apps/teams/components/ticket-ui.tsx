@@ -21,6 +21,7 @@ import { useRouter } from "next/navigation";
 import {
   ArrowDown,
   Check,
+  ChevronRight,
   Copy,
   Lock,
   MessageSquareReply,
@@ -50,7 +51,7 @@ import {
   type AnswerPick,
 } from "@/lib/urls";
 // 스레드를 엮는 쪽은 서버(`lib/queue.ts threadOf`)다 — 여기 오는 건 타입뿐이라 `node:*`를 안 끈다
-import type { Option, OptionGroup, ThreadItem } from "@/lib/queue";
+import type { Option, OptionGroup, QuoteSection, ThreadItem } from "@/lib/queue";
 import { AttachmentField, useAttachments } from "@/components/attachment-field";
 import { useHotkey, useKeymap } from "@/components/keymap-provider";
 import { useLocale, useT } from "@/components/language-provider";
@@ -683,6 +684,24 @@ export function AnswerThread({
                           </MessageHeader>
                           {/* PM이 손으로 감은 절이라 줄바꿈을 안 그린다(§10 면제) */}
                           <Markdown text={item.text} vault={vault} />
+                          {/* 결정 12 (5) — 인용 3종을 접어서 낸다. 상한은 안 내린다: 펼치면
+                              `item.text`에서 뗀 그 전문이 그대로 나온다(`queue.ts` `threadOf`의
+                              `foldQuotes`). 네이티브 `<details>`다(session-stream.tsx와 같은
+                              값) — 아코디언 라이브러리를 안 쓴다. */}
+                          {item.quotes?.map((q: QuoteSection, qi: number) => (
+                            <details key={qi} className="group/quote mt-2">
+                              <summary className="flex cursor-pointer list-none items-center gap-1 text-xs text-muted-foreground [&::-webkit-details-marker]:hidden">
+                                <ChevronRight
+                                  aria-hidden
+                                  className="size-3.5 shrink-0 transition-transform group-open/quote:rotate-90"
+                                />
+                                {q.heading}
+                              </summary>
+                              <div className="ml-[1.125rem]">
+                                <Markdown text={q.text} vault={vault} />
+                              </div>
+                            </details>
+                          ))}
                         </div>
                       </MessageScrollerItem>
                     );
