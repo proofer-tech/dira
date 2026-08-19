@@ -95,6 +95,9 @@ export type PersonaRow = {
   skills: Skill[];
   /** `skills.md` **파일 전체** 자수 — 왼쪽 목록 줄의 자수가 이걸 더한다(§비주얼 §25 ①) */
   skillsChars: number;
+  /** `skills-off.md`의 목록 줄(§5-1 §n:m 배정과 비활성). 서버가 이미 활성과 겹치는 이름을 뺀
+   *  값이다(§5-1 §충돌 — 활성이 이긴다). 자수를 안 든다 — 이 파일은 인라인되지 않는다 */
+  offSkills: Skill[];
   /** `memory/*.md` 한 단계 글롭. 세션이 쓰고 사람이 지운다(§5-2). **`text`가 파일 전체라
    *  자수는 화면이 더한다** — `skillsChars`처럼 따로 받지 않는다(목록 밖 글자가 없다) */
   memories: Memory[];
@@ -290,6 +293,8 @@ type PersonaEdit = {
   /** **서버가 쓴 뒤 되읽어 준 값**이다 — 파일에는 사람이 덧붙인 산문도 있어서 목록만으로는
    *  계산이 안 된다(§비주얼 §25) */
   skillsChars: number;
+  /** `skills-off.md` — 서버가 되읽어 준 값(§비주얼 §25 ⑥) */
+  offSkills: Skill[];
   memories: Memory[];
   /** **저장된 값이다** — 입력칸의 초안이 아니다(초안은 오른쪽 머리가 든다). 왼쪽 줄의
    *  `상한 n`이 이걸 그리므로 저장 직후에 여기까지 올라와야 목록이 파일과 같아진다 */
@@ -305,6 +310,7 @@ const initialEdit = (row: PersonaRow): PersonaEdit => ({
   body: row.body ?? "",
   skills: row.skills,
   skillsChars: row.skillsChars,
+  offSkills: row.offSkills,
   memories: row.memories,
   limit: row.limit,
   engine: row.engine,
@@ -661,10 +667,13 @@ function PersonaDetail({
         name={row.name}
         skills={edit.skills}
         chars={edit.skillsChars}
+        offSkills={edit.offSkills}
         installed={installed}
         onInstalled={onInstalled}
         configDir={configDir}
-        onSaved={(skills, skillsChars) => onEdit({ ...edit, skills, skillsChars })}
+        onSaved={(skills, skillsChars, offSkills) =>
+          onEdit({ ...edit, skills, skillsChars, offSkills })
+        }
       />
 
       {/* 메모리 절(§비주얼 §32 ②) — 스킬 절 **바로 뒤**다. 화면이 주입 순서를 그대로 보인다
@@ -1126,16 +1135,18 @@ function EngineField({
 
 // ── 스킬 (DESIGN.md §5-1 · §비주얼 §25) ─────────────────────────────────────
 
-/** 오른쪽 칸 본문의 두 번째 블록. 저장은 **한 경로**다 — `제거`도 다이얼로그의 `저장`도
- *  `savePersonaSkillsAction`(=`writePersonaSkills`)에 목록 전체를 넘긴다. 0개가 되면 파일이 사라진다.
+/** 오른쪽 칸 본문의 두 번째 블록. 저장은 **한 경로**다 — `제거`·`끄기`·`켜기`도 다이얼로그의
+ *  `저장`도 `savePersonaSkillsAction`(=`writePersonaSkills` + `writePersonaOffSkills`)에 두
+ *  목록을 함께 넘긴다. 각 목록이 0개가 되면 그 파일이 사라진다(§비주얼 §25 ⑥).
  *
  *  실패 자리가 둘로 갈리는 이유는 §비주얼 §25 다섯 상태다 — **누른 곳**에 뜬다.
- *  `제거`는 여기 절 아래, 다이얼로그의 `저장`은 그 `DialogFooter` 위다. */
+ *  `제거`·`끄기`·`켜기`는 여기 절 아래, 다이얼로그의 `저장`은 그 `DialogFooter` 위다. */
 function SkillsSection({
   projectId,
   name,
   skills,
   chars,
+  offSkills,
   installed,
   onInstalled,
   configDir,
@@ -1145,22 +1156,77 @@ function SkillsSection({
   name: string;
   skills: Skill[];
   chars: number;
+  offSkills: Skill[];
   installed: Skill[];
   onInstalled: (installed: Skill[]) => void;
   configDir: string;
-  onSaved: (skills: Skill[], chars: number) => void;
+  onSaved: (skills: Skill[], chars: number, offSkills: Skill[]) => void;
 }) {
   const [removing, setRemoving] = useState<string | null>(null);
+  const [toggling, setToggling] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [, start] = useTransition();
+  const busy = removing !== null || toggling !== null;
 
   /** 쓰기의 유일한 창구. **고른 이름만** 보낸다(설명은 서버가 채운다) — 성공하면 서버가
-   *  되읽은 목록·자수로 화면을 맞춘다. */
-  const save = async (picked: string[]) => {
-    const r = await savePersonaSkillsAction(projectId, name, picked);
-    if (r.ok) onSaved(r.skills ?? [], r.chars ?? 0);
+   *  되읽은 두 목록·자수로 화면을 맞춘다. */
+  const save = async (picked: string[], offPicked: string[]) => {
+    const r = await savePersonaSkillsAction(projectId, name, picked, offPicked);
+    if (r.ok) onSaved(r.skills ?? [], r.chars ?? 0, r.offSkills ?? []);
     return r;
   };
+
+  const removeFrom = (skillName: string, fromOff: boolean) =>
+    start(async () => {
+      setRemoving(skillName);
+      setError(null);
+      const r = fromOff
+        ? await save(
+            skills.map((s) => s.name),
+            offSkills.filter((s) => s.name !== skillName).map((s) => s.name),
+          )
+        : await save(
+            skills.filter((s) => s.name !== skillName).map((s) => s.name),
+            offSkills.map((s) => s.name),
+          );
+      setRemoving(null);
+      if (!r.ok) setError(r.message ?? "스킬을 저장하지 못했습니다.");
+    });
+
+  /** `끄기`/`켜기` — 누른 그 순간 두 파일을 쓴다. `저장`을 기다리지 않는다(§비주얼 §25 ⑥). */
+  const toggle = (skillName: string, turnOn: boolean) =>
+    start(async () => {
+      setToggling(skillName);
+      setError(null);
+      const picked = turnOn
+        ? [...skills.map((s) => s.name), skillName]
+        : skills.filter((s) => s.name !== skillName).map((s) => s.name);
+      const offPicked = turnOn
+        ? offSkills.filter((s) => s.name !== skillName).map((s) => s.name)
+        : [...offSkills.map((s) => s.name), skillName];
+      const r = await save(picked, offPicked);
+      setToggling(null);
+      if (!r.ok) setError(r.message ?? "스킬을 저장하지 못했습니다.");
+    });
+
+  /** 활성·비활성 두 목록이 **같은 벌**이다(§비주얼 §25 ⑥ 껍데기) — 이름·설명·`제거`는 글자
+   *  하나까지 같고, 갈리는 것은 `handle`(끄기/켜기) 하나뿐이다. */
+  const row = (s: Skill, handle: React.ReactNode, onRemove: () => void) => (
+    <li key={s.name} className="flex items-baseline gap-2">
+      {/* 이름은 프롬프트에 그대로 실려 지목이 되는 토큰이다 — 안 자른다(§6 식별자) */}
+      <code className="shrink-0 font-mono text-xs">{s.name}</code>
+      <span className="min-w-0 grow truncate text-xs text-muted-foreground" title={s.description}>
+        {s.description}
+      </span>
+      {handle}
+      {/* 확인 다이얼로그를 안 붙인다 — 되돌리는 비용이 `스킬 추가`(활성 줄)나 `켜기`(비활성 줄)를
+          한 번 더 누르는 것이다. 어휘도 가른다: 디렉터리는 `삭제`, 목록 한 줄은 `제거`(§25 ②).
+          **`제거`는 여기서 안 바뀐다**(§비주얼 §25 ⑥ — `disabled` 그대로, `aria-disabled`가 아니다) */}
+      <Button variant="ghost" size="sm" className="self-center" disabled={busy} onClick={onRemove}>
+        {removing === s.name ? "제거 중…" : "제거"}
+      </Button>
+    </li>
+  );
 
   return (
     <section className="space-y-2 border-t pt-3">
@@ -1173,14 +1239,19 @@ function SkillsSection({
           installed={installed}
           onInstalled={onInstalled}
           configDir={configDir}
-          save={save}
+          save={(picked) => save(picked, offSkills.map((s) => s.name))}
         />
       </div>
 
-      {skills.length === 0 ? (
+      {skills.length === 0 && offSkills.length === 0 ? (
         // `<EmptyState>`가 아니다 — 화면의 1차 콘텐츠가 아니고 다음 행동은 절 머리에 있다(§25 ②)
         <p className="text-xs text-muted-foreground">
           고른 스킬이 없습니다 — 디스패치 프롬프트에 스킬 절이 실리지 않습니다.
+        </p>
+      ) : skills.length === 0 ? (
+        // 활성 0 - 비활성 m(§비주얼 §25 ⑥) — 주어만 갈린다. 다음 행동은 아래 `켜기`다
+        <p className="text-xs text-muted-foreground">
+          켜 둔 스킬이 없습니다 — 디스패치 프롬프트에 스킬 절이 실리지 않습니다.
         </p>
       ) : (
         <>
@@ -1190,39 +1261,52 @@ function SkillsSection({
             스킬은 claude 엔진에서만 실립니다 — codex 워커가 물면 이 절은 프롬프트에 안 갑니다.
           </p>
           <ul className="space-y-1">
-            {skills.map((s) => (
-              <li key={s.name} className="flex items-baseline gap-2">
-                {/* 이름은 프롬프트에 그대로 실려 지목이 되는 토큰이다 — 안 자른다(§6 식별자) */}
-                <code className="shrink-0 font-mono text-xs">{s.name}</code>
-                <span
-                  className="min-w-0 grow truncate text-xs text-muted-foreground"
-                  title={s.description}
-                >
-                  {s.description}
-                </span>
-                {/* 확인 다이얼로그를 안 붙인다 — 되돌리는 비용이 `스킬 추가`를 한 번 여는 것이다.
-                    어휘도 가른다: 디렉터리는 `삭제`, 목록 한 줄은 `제거`(§25 ②) */}
+            {skills.map((s) =>
+              row(
+                s,
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="self-center"
-                  disabled={removing !== null}
-                  onClick={() =>
-                    start(async () => {
-                      setRemoving(s.name);
-                      setError(null);
-                      const r = await save(
-                        skills.filter((x) => x.name !== s.name).map((x) => x.name),
-                      );
-                      setRemoving(null);
-                      if (!r.ok) setError(r.message ?? "스킬을 저장하지 못했습니다.");
-                    })
-                  }
+                  className="self-center aria-disabled:opacity-50"
+                  aria-disabled={busy}
+                  onClick={() => {
+                    if (busy) return; // §58 처방 — 핸들러 첫 줄 가드
+                    toggle(s.name, false);
+                  }}
                 >
-                  {removing === s.name ? "제거 중…" : "제거"}
-                </Button>
-              </li>
-            ))}
+                  {toggling === s.name ? "끄는 중…" : "끄기"}
+                </Button>,
+                () => removeFrom(s.name, false),
+              ),
+            )}
+          </ul>
+        </>
+      )}
+
+      {/* 비활성 목록 — 활성 1개 이상일 때만 서는 것이 아니라 **비활성이 1개 이상일 때만** 선다
+          (§비주얼 §25 ⑥). 0개면 머리도 목록도 안 그린다 */}
+      {offSkills.length > 0 && (
+        <>
+          <h4 className="text-xs font-medium text-muted-foreground">비활성</h4>
+          <ul className="space-y-1">
+            {offSkills.map((s) =>
+              row(
+                s,
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="self-center aria-disabled:opacity-50"
+                  aria-disabled={busy}
+                  onClick={() => {
+                    if (busy) return;
+                    toggle(s.name, true);
+                  }}
+                >
+                  {toggling === s.name ? "켜는 중…" : "켜기"}
+                </Button>,
+                () => removeFrom(s.name, true),
+              ),
+            )}
           </ul>
         </>
       )}

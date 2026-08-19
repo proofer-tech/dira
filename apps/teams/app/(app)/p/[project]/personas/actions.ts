@@ -24,10 +24,12 @@ import {
   listInstalledSkills,
   PersonaEngineCustomError,
   pickedSkills,
+  readPersonaOffSkillsFile,
   readPersonaSkillsFile,
   SkillInstallError,
   writePersonaEngine,
   writePersonaLimit,
+  writePersonaOffSkills,
   writePersonaSkills,
   type Skill,
   type SkillUpload,
@@ -93,29 +95,50 @@ export async function setPersonaColorAction(
   }
 }
 
-/** 스킬 목록 저장 — 0개면 `writePersonaSkills`가 파일을 지운다(DESIGN.md §5-1).
+/** 스킬 목록 저장 — 0개면 `writePersonaSkills`·`writePersonaOffSkills`가 그 파일을 지운다
+ *  (DESIGN.md §5-1 §n:m 배정과 비활성). **한 창구다** — 다이얼로그의 `저장`, 활성 줄의 `제거`,
+ *  비활성 줄의 `제거`·`끄기`·`켜기`가 전부 이 액션을 부른다. 매번 **두 목록을 함께** 보낸다.
  *
- *  **받는 것은 고른 이름뿐이다.** 설명은 서버가 파일과 `SKILL.md`에서 읽어 채운다(`pickedSkills`) —
- *  클라이언트가 준 문자열이 그대로 큐의 파일이 되지 않고, 다이얼로그의 `저장`과 목록의 `제거`가
- *  같은 한 경로를 쓴다.
+ *  **받는 것은 고른 이름뿐이다.** 설명은 서버가 두 파일과 `SKILL.md`에서 읽어 채운다
+ *  (`pickedSkills`) — 클라이언트가 준 문자열이 그대로 큐의 파일이 되지 않는다. 이름이 어느
+ *  파일에서 왔는지 안 가리므로 `pickedSkills`를 두 번 부를 때 서로의 현재 목록을 상대 쪽의
+ *  "설치본" 자리에 얹는다 — 활성<->비활성 사이를 옮겨도 설명을 잃지 않는다.
  *
- *  **쓴 뒤 그 파일을 다시 읽어 돌려준다.** 접힌 줄의 자수는 `skills.md` **파일 전체**를 세는데
+ *  **활성이 이긴다**(§5-1 §충돌) — 두 목록에 같은 이름이 남으면 비활성에서 뺀다. 손으로 두
+ *  파일에 같은 이름을 넣어 둔 경우도, 다이얼로그가 비활성 이름을 체크해 활성으로 올린 경우도
+ *  이 한 줄이 같이 처리한다.
+ *
+ *  **쓴 뒤 그 파일들을 다시 읽어 돌려준다.** 접힌 줄의 자수는 `skills.md` **파일 전체**를 세는데
  *  (§비주얼 §25) 사람이 손으로 덧붙인 산문까지 든 값이라 클라이언트가 계산할 수 없다. 화면이
  *  저장 직후에 참인 수를 그리는 길이 이 한 번의 되읽기다 — 두 번째 왕복을 만들지 않는다. */
 export async function savePersonaSkillsAction(
   projectId: string,
   name: string,
   picked: string[],
-): Promise<PersonaResult & { skills?: Skill[]; chars?: number }> {
+  offPicked: string[],
+): Promise<PersonaResult & { skills?: Skill[]; chars?: number; offSkills?: Skill[] }> {
   try {
     const dir = await personasDir(projectId);
-    const [{ skills: current }, installed] = await Promise.all([
+    const [{ skills: currentActive }, { skills: currentOff }, installed] = await Promise.all([
       readPersonaSkillsFile(dir, name),
+      readPersonaOffSkillsFile(dir, name),
       listInstalledSkills(),
     ]);
-    await writePersonaSkills(dir, name, pickedSkills(picked, current, installed));
+    const newActive = pickedSkills(picked, currentActive, [...currentOff, ...installed]);
+    const activeNames = new Set(newActive.map((s) => s.name));
+    const newOff = pickedSkills(offPicked, currentOff, [...currentActive, ...installed]).filter(
+      (s) => !activeNames.has(s.name),
+    );
+    await Promise.all([
+      writePersonaSkills(dir, name, newActive),
+      writePersonaOffSkills(dir, name, newOff),
+    ]);
     revalidatePath(`/p/${projectId}/personas`);
-    return { ok: true, ...(await readPersonaSkillsFile(dir, name)) };
+    const [active, off] = await Promise.all([
+      readPersonaSkillsFile(dir, name),
+      readPersonaOffSkillsFile(dir, name),
+    ]);
+    return { ok: true, skills: active.skills, chars: active.chars, offSkills: off.skills };
   } catch (e) {
     return fail(e);
   }

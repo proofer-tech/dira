@@ -337,19 +337,23 @@ const HEADER = `## 스킬
  *  한 번 읽어 둘로 나눠주는 이유가 그것이다 — 화면이 같은 파일을 두 번 열지 않는다.
  *
  *  파일이 없으면 `[]`·`0`. 기준 디렉터리(해석된 `TICKET_PERSONAS`)가 아직 없는 큐도 같다 —
- *  이름 위반·기준 밖 경로는 그대로 던진다(신뢰 경계는 조용히 넘어가지 않는다). */
-export async function readPersonaSkillsFile(
+ *  이름 위반·기준 밖 경로는 그대로 던진다(신뢰 경계는 조용히 넘어가지 않는다).
+ *
+ *  **`skills.md`·`skills-off.md`가 이 함수 하나를 같이 쓴다**(§5-1 §n:m 배정과 비활성 — 파서
+ *  두 벌을 안 만든다). `readPersonaSkillsFile`·`readPersonaOffSkillsFile`은 파일명만 갈라 부른다. */
+async function readSkillsSidecar(
   dir: string,
   name: string,
+  file: string,
 ): Promise<{ skills: Skill[]; chars: number }> {
-  let file: string;
+  let filePath: string;
   try {
-    file = await personaFilePath(dir, name, "skills.md");
+    filePath = await personaFilePath(dir, name, file);
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e; // realpath(기준 디렉터리) 실패만
     return { skills: [], chars: 0 };
   }
-  const text = await readFile(file, "utf8").catch(() => null);
+  const text = await readFile(filePath, "utf8").catch(() => null);
   if (text === null) return { skills: [], chars: 0 };
   return {
     skills: text
@@ -360,6 +364,14 @@ export async function readPersonaSkillsFile(
     chars: text.length,
   };
 }
+
+export const readPersonaSkillsFile = (dir: string, name: string) =>
+  readSkillsSidecar(dir, name, "skills.md");
+
+/** 비활성 스킬(§5-1 §n:m 배정과 비활성). 자수는 안 쓴다 — 이 파일은 인라인되지 않아 §비주얼
+ *  §25의 자수 합에 안 든다(호출부가 `skills`만 읽는다). */
+export const readPersonaOffSkillsFile = (dir: string, name: string) =>
+  readSkillsSidecar(dir, name, "skills-off.md");
 
 export const readPersonaSkills = async (dir: string, name: string): Promise<Skill[]> =>
   (await readPersonaSkillsFile(dir, name)).skills;
@@ -387,11 +399,21 @@ export function pickedSkills(picked: string[], current: Skill[], installed: Skil
  *  산문도 같이 사라지는데, 그게 "빈 파일을 남기지 않는다"의 대가고 스펙이 그렇게 정했다).
  *
  *  이미 있는 파일은 **목록 줄만 갈아끼운다** — 산문은 자리까지 그대로 둔다(§5-1). 새 목록은
- *  원래 첫 항목 줄 자리에 들어간다: 사람이 목록 위/아래에 쓴 글이 서로 자리를 바꾸지 않는다. */
-export async function writePersonaSkills(dir: string, name: string, skills: Skill[]): Promise<void> {
-  const file = await personaFilePath(dir, name, "skills.md");
+ *  원래 첫 항목 줄 자리에 들어간다: 사람이 목록 위/아래에 쓴 글이 서로 자리를 바꾸지 않는다.
+ *
+ *  **`skills.md`·`skills-off.md`가 이 함수 하나를 같이 쓴다**(§5-1 §n:m 배정과 비활성) —
+ *  `writePersonaSkills`·`writePersonaOffSkills`는 파일명 · 새 파일의 머리글만 갈라 부른다.
+ *  비활성 파일은 머리글이 없다: 어느 프롬프트에도 안 실려 산문을 안내할 독자가 없다. */
+async function writeSkillsSidecar(
+  dir: string,
+  name: string,
+  skills: Skill[],
+  file: string,
+  header: string,
+): Promise<void> {
+  const filePath = await personaFilePath(dir, name, file);
   if (skills.length === 0) {
-    await rm(file, { force: true });
+    await rm(filePath, { force: true });
     return;
   }
 
@@ -402,10 +424,10 @@ export async function writePersonaSkills(dir: string, name: string, skills: Skil
     return `- \`${n}\` — ${s.description.replace(/\s+/g, " ").trim()}`;
   });
 
-  const old = await readFile(file, "utf8").catch(() => null);
+  const old = await readFile(filePath, "utf8").catch(() => null);
   if (old === null) {
-    await mkdir(path.dirname(file), { recursive: true });
-    await writeFile(file, HEADER + items.join("\n") + "\n", "utf8");
+    await mkdir(path.dirname(filePath), { recursive: true });
+    await writeFile(filePath, header + items.join("\n") + "\n", "utf8");
     return;
   }
 
@@ -423,8 +445,14 @@ export async function writePersonaSkills(dir: string, name: string, skills: Skil
     if (out.at(-1)?.trim() !== "") out.push(""); // 산문 바로 밑에 목록을 붙이지 않는다
     out.push(...items);
   }
-  await writeFile(file, out.join("\n").replace(/\n*$/, "\n"), "utf8");
+  await writeFile(filePath, out.join("\n").replace(/\n*$/, "\n"), "utf8");
 }
+
+export const writePersonaSkills = (dir: string, name: string, skills: Skill[]) =>
+  writeSkillsSidecar(dir, name, skills, "skills.md", HEADER);
+
+export const writePersonaOffSkills = (dir: string, name: string, skills: Skill[]) =>
+  writeSkillsSidecar(dir, name, skills, "skills-off.md", "");
 
 // ── 페르소나 동시 워커 상한 (`<personas>/<이름>/limit` · §5-4) ───────────────
 

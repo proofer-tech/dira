@@ -27,6 +27,7 @@ import {
   readPersonaEngine,
   readPersonaLimit,
   readPersonaMemory,
+  readPersonaOffSkillsFile,
   readPersonaSkillsFile,
 } from "@/lib/skills";
 import { ENGINES, listWorkers, MODEL_RE, personaEngineHint } from "@/lib/workers";
@@ -61,13 +62,17 @@ export default async function Personas({
     personas.map(async (p) => {
       // 상한·엔진도 같은 렌더에 실린다(§5-4 §화면 · §제약 1 §결정 기록 §열한 번째) — 오른쪽 칸
       // 머리가 그리는 값이라 스킬·메모리와 같은 벌이다
-      const [{ skills, chars }, { memories }, limit, engine] = await Promise.all([
+      const [{ skills, chars }, { skills: rawOff }, { memories }, limit, engine] = await Promise.all([
         readPersonaSkillsFile(config.personas, p.name),
+        readPersonaOffSkillsFile(config.personas, p.name),
         readPersonaMemory(config.personas, p.name),
         readPersonaLimit(config.personas, p.name),
         readPersonaEngine(config.personas, p.name),
       ]);
-      return { ...p, skills, skillsChars: chars, memories, limit, engine };
+      // 손으로 두 파일에 같은 이름을 넣어 두면 활성이 이긴다(§5-1 §충돌) — 화면은 그 이름을
+      // 활성으로 한 번만 그린다. 파일 자체는 다음 저장이 고친다(savePersonaSkillsAction).
+      const offSkills = rawOff.filter((o) => !skills.some((a) => a.name === o.name));
+      return { ...p, skills, skillsChars: chars, offSkills, memories, limit, engine };
     }),
   );
   const missing = personas.filter((p) => p.body === null);

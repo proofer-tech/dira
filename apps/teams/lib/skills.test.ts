@@ -15,11 +15,13 @@ import {
   readPersonaEngine,
   readPersonaLimit,
   readPersonaMemory,
+  readPersonaOffSkillsFile,
   readPersonaSkills,
   readPersonaSkillsFile,
   SkillInstallError,
   writePersonaEngine,
   writePersonaLimit,
+  writePersonaOffSkills,
   writePersonaSkills,
 } from "./skills.ts";
 import { skillUploadError } from "./skill-upload-limit.ts";
@@ -435,6 +437,77 @@ test("고른 이름 → 저장할 목록 (pickedSkills)", () => {
   // 어느 쪽에도 없는 이름은 뺀다 — 설명을 지어낼 자리가 없다
   assert.deepEqual(pickedSkills(["없는스킬"], current, installed), []);
   assert.deepEqual(pickedSkills([], current, installed), []); // 0개 = 파일이 사라진다
+});
+
+// ── 비활성 스킬 (`skills-off.md` · DESIGN.md §5-1 §n:m 배정과 비활성 · §비주얼 §25 ⑥) ────────
+
+test("비활성 왕복 — 활성 -> 비활성 -> 활성, 설명을 잃지 않는다", async () => {
+  const a = { name: "a", description: "A" };
+  const b = { name: "b", description: "B" };
+  await writePersonaSkills(personas, "toggler", [a, b]);
+  assert.deepEqual(await readPersonaSkills(personas, "toggler"), [a, b]);
+  assert.deepEqual((await readPersonaOffSkillsFile(personas, "toggler")).skills, []);
+
+  // b를 끈다 — 활성에서 빠지고 비활성에 같은 설명으로 선다
+  await writePersonaSkills(personas, "toggler", [a]);
+  await writePersonaOffSkills(personas, "toggler", [b]);
+  assert.deepEqual(await readPersonaSkills(personas, "toggler"), [a]);
+  assert.deepEqual((await readPersonaOffSkillsFile(personas, "toggler")).skills, [b]);
+
+  // b를 다시 켠다 — 비활성에서 빠지고 활성으로 돌아온다. 파일이 사라진다(0개 규약)
+  await writePersonaSkills(personas, "toggler", [a, b]);
+  await writePersonaOffSkills(personas, "toggler", []);
+  assert.deepEqual(await readPersonaSkills(personas, "toggler"), [a, b]);
+  assert.equal(existsSync(path.join(personas, "toggler", "skills-off.md")), false);
+});
+
+test("비활성 — 0개면 skills-off.md가 사라진다(§5-1 §0개 규약 — skills.md와 같다)", async () => {
+  const file = path.join(personas, "offdel", "skills-off.md");
+  await writePersonaOffSkills(personas, "offdel", [{ name: "x", description: "y" }]);
+  assert.ok(existsSync(file));
+  await writePersonaOffSkills(personas, "offdel", []);
+  assert.equal(existsSync(file), false);
+  assert.deepEqual((await readPersonaOffSkillsFile(personas, "offdel")).skills, []);
+  await writePersonaOffSkills(personas, "offdel", []); // 없는 파일을 또 지워도 조용하다
+});
+
+test("충돌 — 같은 이름이 두 파일에 있으면 다음 저장이 비활성에서 그 이름을 지운다(§5-1 §충돌)", async () => {
+  const shared = { name: "dup", description: "설명" };
+  // 손으로 두 파일에 같은 이름을 넣어 둔 상태를 흉내낸다.
+  await writePersonaSkills(personas, "conflict", [shared]);
+  await writePersonaOffSkills(personas, "conflict", [shared]);
+
+  const { skills: active } = await readPersonaSkillsFile(personas, "conflict");
+  const { skills: off } = await readPersonaOffSkillsFile(personas, "conflict");
+  assert.deepEqual(active, [shared]);
+  assert.deepEqual(off, [shared]); // 저장 전 — 파일 자체는 아직 충돌 상태다
+
+  // 다음 저장 — 활성이 이긴다. 서버 액션(savePersonaSkillsAction)이 매 저장마다 적용하는 것과
+  // 같은 판정이다: 활성에 있는 이름은 비활성에서 뺀다.
+  const activeNames = new Set(active.map((s) => s.name));
+  await writePersonaOffSkills(personas, "conflict", off.filter((s) => !activeNames.has(s.name)));
+
+  assert.deepEqual(await readPersonaSkills(personas, "conflict"), [shared]);
+  assert.equal(existsSync(path.join(personas, "conflict", "skills-off.md")), false);
+});
+
+test("산문 보존 — 스킬이 비활성을 왕복해도 skills.md의 손글씨가 자리까지 그대로다(§5-1)", async () => {
+  const file = path.join(personas, "prose", "skills.md");
+  const keep = { name: "keep", description: "유지" };
+  const off = { name: "toggle", description: "토글" };
+  await writePersonaSkills(personas, "prose", [keep, off]);
+  writeFileSync(file, readFileSync(file, "utf8") + "\n손으로 적는다: 이건 안 지운다.\n");
+
+  // off를 끈다 — 활성엔 keep만 남고 파일은 안 지워진다(목록이 0개가 아니다)
+  await writePersonaSkills(personas, "prose", [keep]);
+  await writePersonaOffSkills(personas, "prose", [off]);
+  assert.match(readFileSync(file, "utf8"), /손으로 적는다: 이건 안 지운다\./);
+
+  // 다시 켠다 — 왕복 뒤에도 산문은 자리까지 그대로다
+  await writePersonaSkills(personas, "prose", [keep, off]);
+  await writePersonaOffSkills(personas, "prose", []);
+  assert.match(readFileSync(file, "utf8"), /손으로 적는다: 이건 안 지운다\./);
+  assert.equal(existsSync(path.join(personas, "prose", "skills-off.md")), false);
 });
 
 // ── 메모리 (DESIGN.md §5-2 · §비주얼 §32) ───────────────────────────────────
