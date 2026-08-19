@@ -70,6 +70,13 @@ import {
 import { preflight, scaffold } from "@/lib/scaffold";
 import { cronRegisterCmd, listWorkers, markAlertsRead, registerCron } from "@/lib/workers";
 import { tildePath } from "@/lib/urls";
+import {
+  maskWebhookUrl,
+  readWebhookUrl,
+  setWebhookUrl,
+  testSendWebhook,
+  type WebhookTestResult,
+} from "@/lib/webhook";
 
 /** 해석 결과 표 한 행. 서버가 배지까지 정해서 넘긴다 — 클라이언트는 그리기만 한다. */
 export type ConfigRow = {
@@ -532,6 +539,31 @@ export async function markResumeReadAction(toMs: number): Promise<void> {
  *  재시작·새로고침을 요구하지 않는다. */
 export async function setLanguageAction(locale: Locale): Promise<void> {
   await setLanguage(locale);
+}
+
+/** 설정 트리 여섯째 노드 `웹훅` (DESIGN.md §0-10 §화면 · §비주얼 §45 ⑪) — 다이얼로그가 열릴 때
+ *  한 줄이 읽는다. **원문 URL은 클라이언트로 안 넘어간다** — 여기서 이미 가린 요약으로 바꿔
+ *  내린다(§0-13 §화면과 같은 판단, 넣는 곳이지 꺼내는 곳이 아니다). */
+export async function readWebhookAction(): Promise<{ masked: string | null }> {
+  const url = await readWebhookUrl();
+  return { masked: url ? maskWebhookUrl(url) : null };
+}
+
+/** 주소 칸의 `저장`. 거절 사유는 화면이 고정 문구(`settings.webhook.rejectHttps`)로 말하므로
+ *  여기서는 거절 여부만 넘긴다 — `setWebhookUrl`의 원문 메시지를 그대로 안 보낸다. */
+export async function setWebhookAction(raw: string): Promise<{ error?: string }> {
+  try {
+    await setWebhookUrl(raw);
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+  return {};
+}
+
+/** `테스트 보내기` — `lib/webhook.ts`의 `testSendWebhook`을 그대로 노출한다. 델타 집합을 안
+ *  건드리는 것은 그 함수의 계약이지 이 액션의 몫이 아니다. */
+export async function testWebhookAction(): Promise<WebhookTestResult> {
+  return testSendWebhook();
 }
 
 /** 설정 다이얼로그의 숨은 여섯째 노드 `멀티플레잉` (DESIGN.md §0-18 §스위치) — 다이얼로그가

@@ -34,6 +34,7 @@ import {
   readMultiplayAction,
   readMultitokenAction,
   readTokenRowsAction,
+  readWebhookAction,
   resetKeymapAction,
   saveTokenAction,
   sendSetupCodeAction,
@@ -44,10 +45,12 @@ import {
   setMultitokenAction,
   setTokenEnabledAction,
   setTokenLabelAction,
+  setWebhookAction,
   startSetupAction,
   pollSetupAction,
   stopSetupAction,
   setActiveTokenAction,
+  testWebhookAction,
 } from "@/app/actions";
 import type { OtherEngine, OtherEngineAuth, SetupState, TokenRow, TokenStatus } from "@/lib/auth";
 import { useHotkey, useKeymap } from "@/components/keymap-provider";
@@ -88,7 +91,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
  *  카탈로그(`OtherEngine`)가 늘면 이 유니온도 트리도 저절로 는다. */
 /** `multiplay` — §0-18 §자리의 숨은 여섯째 노드. 트리에는 안 선다(사이드바에 항목이 없다),
  *  검색으로만 닿는다. 잠금 밖으로 나온 뒤로는 조건 없이 존재한다(§0-18 §기본값이 된다). */
-type SettingsNode = "claude" | OtherEngine | "keymap" | "stats" | "language" | "multiplay";
+type SettingsNode = "claude" | OtherEngine | "keymap" | "stats" | "language" | "webhook" | "multiplay";
 
 /** §0-15 §검색 레지스트리 한 줄 — `{트리 경로, 항목 이름, 이동 대상}`. `crumbs`가 빈 문자열이면
  *  결과 줄은 `name` 하나만 그린다(트리 노드 이름 자신 — §45 ⑤ 예시의 `키설정`). `anchor`는
@@ -391,6 +394,139 @@ function LanguageSection({ className }: { className?: string }) {
           {t("settings.language.en")}
         </Button>
       </div>
+    </section>
+  );
+}
+
+/** §0-10 §화면 · §비주얼 §45 ⑪ — 여섯째 노드 `웹훅`. 값-조작-요건은 §0-10이 정본이다(저장이
+ *  `webhook.json` 0600 - `https`만 받는다 - 나가는 것은 답변 대기 델타 하나) — 이 컴포넌트는
+ *  그 절이 넘긴 자리-옷-글자만 그린다(⑪). 원문 URL은 서버 밖으로 안 나간다 — `readWebhookAction`이
+ *  이미 가린 요약으로 바꿔 내린다(§0-13 §화면과 같은 판단).
+ *
+ *  행 1(주소 칸 + `저장`)은 값이 오기 전에도 그린다 — 빈 칸은 거짓말이 아니다. 행 2(상태 줄 +
+ *  `테스트 보내기`)와 결과 줄은 `view`가 온 뒤에만 그린다(⑪ (6) — `AnalyticsSection`과 같은
+ *  이유, 기본값을 먼저 그리면 번쩍인다). */
+function WebhookSection({ className }: { className?: string }) {
+  const t = useT();
+  const [view, setView] = useState<{ masked: string | null } | null>(null);
+  const [url, setUrl] = useState("");
+  const [pending, start] = useTransition();
+  const [testPending, startTest] = useTransition();
+  // ⑪ (4) — 결과 줄 하나를 셋(성공-실패-저장 거절)이 나눠 쓴다. 수명은 다음 사건까지(다시
+  // 누름 · 칸의 글자가 갈림 · 저장 성공 · 다이얼로그 닫힘 — 마지막은 이 컴포넌트가 다이얼로그
+  // 닫힘에 언마운트되므로 상태가 저절로 죽는다).
+  const [result, setResult] = useState<
+    { kind: "ok" } | { kind: "fail"; host: string; reason: string } | { kind: "reject" } | null
+  >(null);
+
+  useEffect(() => {
+    void readWebhookAction().then(setView);
+  }, []);
+
+  const save = () =>
+    start(async () => {
+      const r = await setWebhookAction(url);
+      if (r.error) {
+        // 거절 사유는 고정 문구다(⑪ §문구) — 서버가 돌려준 원문 메시지를 화면에 안 옮긴다
+        setResult({ kind: "reject" });
+        return;
+      }
+      setResult(null);
+      setUrl("");
+      setView(await readWebhookAction());
+    });
+
+  // 값은 그 순간의 답변 대기 첫 건 - 0건이면 자리표시(lib/webhook.ts §테스트 보내기). 델타
+  // 집합은 서버 쪽 함수가 안 건드린다 — 여기서 더 할 일이 없다.
+  const testSend = () =>
+    startTest(async () => {
+      const r = await testWebhookAction();
+      setResult(r.ok ? { kind: "ok" } : { kind: "fail", host: r.host, reason: r.reason });
+    });
+
+  return (
+    <section className={cn("space-y-2 border-t pt-4 md:border-t-0 md:pt-0", className)}>
+      <h3 data-setting="webhook" className="text-sm font-medium">
+        {t("settings.tree.webhook")}
+      </h3>
+
+      {/* 행 1 — §0-4 층 ③(claude 직접 넣기)과 같은 벌: Label + flex gap-2 안에 Input + 저장 */}
+      <form
+        className="space-y-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          save();
+        }}
+      >
+        <Label htmlFor="webhook-url" data-setting="webhook.url">
+          {t("settings.webhook.urlLabel")}
+        </Label>
+        <div className="flex items-center gap-2">
+          <Input
+            id="webhook-url"
+            className="font-mono"
+            placeholder={t("settings.webhook.urlPlaceholder")}
+            autoComplete="off"
+            spellCheck={false}
+            value={url}
+            onChange={(e) => {
+              setUrl(e.target.value);
+              setResult(null); // ⑪ 수명 ② — 칸의 글자가 갈리면 결과 줄이 죽는다
+            }}
+          />
+          <Button type="submit" disabled={pending}>
+            {pending ? t("common.saving") : t("common.save")}
+          </Button>
+        </div>
+      </form>
+
+      {view && (
+        <>
+          {/* 행 2 — §0-11 사용 통계 패널의 그 행과 같은 벌: 왼쪽 상태 줄(가린 요약 또는
+              `보내지 않습니다`), 오른쪽 `테스트 보내기`. 주소가 없으면 보낼 곳이 없어 끈다.
+              `font-mono`는 값(가린 요약)에만 붙는다 — 문장(`보내지 않습니다`)은 sans다
+              (⑪ (3) — ③ §벌과 같은 구분, 폭 산식 84.7 = 한글 7자 x 12.10이 sans를 전제한다). */}
+          <div className="flex items-center justify-between gap-4">
+            <p className={cn("text-sm break-all", view.masked && "font-mono")}>
+              {view.masked ?? t("settings.webhook.off")}
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              data-setting="webhook.test"
+              disabled={testPending || !view.masked}
+              onClick={testSend}
+            >
+              {testPending ? t("settings.webhook.testing") : t("settings.webhook.test")}
+            </Button>
+          </div>
+
+          {/* 결과 줄 — §22 ③의 그 벌(Alert가 아니라 문장 하나). 낭독은 polite 하나뿐이다(⑪ (4)) */}
+          {result && (
+            <p
+              role="status"
+              className={cn(
+                "text-xs",
+                result.kind !== "ok" && "flex items-center gap-2 text-destructive",
+              )}
+            >
+              {result.kind === "ok" && t("settings.webhook.testOk")}
+              {result.kind === "fail" && (
+                <>
+                  <TriangleAlert aria-hidden className="size-3.5 shrink-0" />
+                  {t("settings.webhook.testFailPrefix")} — {result.host} {result.reason}
+                </>
+              )}
+              {result.kind === "reject" && (
+                <>
+                  <TriangleAlert aria-hidden className="size-3.5 shrink-0" />
+                  {t("settings.webhook.rejectHttps")}
+                </>
+              )}
+            </p>
+          )}
+        </>
+      )}
     </section>
   );
 }
@@ -809,6 +945,7 @@ export function SettingsDialog({
   const claudeCrumb = "claude";
   const keymapCrumb = t("settings.tree.keymap");
   const statsCrumb = t("settings.tree.stats");
+  const webhookCrumb = t("settings.tree.webhook");
   const multiplayCrumb = t("settings.tree.multiplay");
   const searchIndex: SearchEntry[] = [
     { node: "claude", crumbs: authCrumb, name: claudeCrumb, anchor: "claude" },
@@ -875,6 +1012,21 @@ export function SettingsDialog({
       crumbs: languageLabel,
       name: t("settings.language.en"),
       anchor: "language.en",
+    },
+    // §0-10 §화면 · §비주얼 §45 ⑪ 검색 — 노드 이름 하나 + 항목 둘(§검색 층 규칙 그대로).
+    // 지금 상태 한 줄은 값이라 안 싣는다(정적 인덱스에 실을 이름이 없다).
+    { node: "webhook", crumbs: "", name: webhookCrumb, anchor: "webhook" },
+    {
+      node: "webhook",
+      crumbs: webhookCrumb,
+      name: t("settings.webhook.urlLabel"),
+      anchor: "webhook.url",
+    },
+    {
+      node: "webhook",
+      crumbs: webhookCrumb,
+      name: t("settings.webhook.test"),
+      anchor: "webhook.test",
     },
     // §0-18 §기본값이 된다 — 패널이 잠금 밖으로 나온 뒤로 이 세 줄은 조건 없이 선다(§검증 5).
     // 노드 자신 + 토글 둘(§0-18 §패널).
@@ -1134,6 +1286,18 @@ export function SettingsDialog({
                       <span>{languageLabel}</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
+                  {/* §0-10 §화면 · §비주얼 §45 §개정 `475d3385` — 여섯째 노드, `언어` 다음이자
+                      둘째 그룹의 마지막 줄. sans(엔진 넷의 `font-mono`가 아니다) - 표식이 설 수
+                      없는 줄이다(§45 §표식). */}
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      isActive={activeNode === "webhook"}
+                      aria-current={activeNode === "webhook" ? "true" : undefined}
+                      onClick={() => selectNode("webhook")}
+                    >
+                      <span>{webhookCrumb}</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
                 </SidebarMenu>
               </SidebarGroup>
             </SidebarContent>
@@ -1370,6 +1534,7 @@ export function SettingsDialog({
             <KeymapSection className={cn(activeNode !== "keymap" && "md:hidden")} />
             <AnalyticsSection className={cn(activeNode !== "stats" && "md:hidden")} />
             <LanguageSection className={cn(activeNode !== "language" && "md:hidden")} />
+            <WebhookSection className={cn(activeNode !== "webhook" && "md:hidden")} />
             {/* §0-18 §자리 — 가리는 클래스가 다섯과 다르다: `hidden`이라 폭과 무관하게 검색으로
                 고른 뒤에만 선다(§검증 11 — 767 이하에서도 세로로 쌓이는 섹션에 안 낀다).
                 §0-18 §기본값이 된다 — 패널이 잠금 밖으로 나와 조건 없이 렌더한다. */}

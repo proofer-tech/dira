@@ -47,6 +47,8 @@ export const ko: Record<string, string> = {
   "settings.tree.multiplay": "멀티플레잉",
   // 둘째 사이드바 그룹의 aria-label — 그룹 자신은 머리글이 없다(§45 ③), 접근가능 이름만 필요하다
   "settings.tree.categoryGroup": "설정 분류",
+  // 여섯째 노드 — §0-10이 정한 글자, `언어` 다음(§비주얼 §45 §개정 `475d3385`)
+  "settings.tree.webhook": "웹훅",
 
   "settings.claude.descriptionMulti":
     "워커가 Claude에 붙을 때 쓰는 장기 토큰 목록입니다. 이 컴퓨터에 하나뿐이고, 계정 여러 개를 두면 리밋을 만난 쪽 대신 다음 계정으로 돌아갑니다.",
@@ -156,6 +158,17 @@ export const ko: Record<string, string> = {
 
   "settings.language.ko": "한국어",
   "settings.language.en": "English",
+
+  // §비주얼 §45 ⑪ (5) — 노드 이름·`테스트 보내기`·성공/실패 문장은 §0-10이 정한 글자다(새 문구
+  // 아님). placeholder·`보내는 중...`·`보내지 않습니다`·거절 문장 넷은 이 절이 새로 고른 값이다.
+  "settings.webhook.urlLabel": "주소",
+  "settings.webhook.urlPlaceholder": "https://",
+  "settings.webhook.test": "테스트 보내기",
+  "settings.webhook.testing": "보내는 중...",
+  "settings.webhook.testOk": "보냈습니다",
+  "settings.webhook.testFailPrefix": "보내지 못했습니다",
+  "settings.webhook.off": "보내지 않습니다",
+  "settings.webhook.rejectHttps": "https 주소만 받습니다",
 
   "common.save": "저장",
   "common.saving": "저장 중…",
@@ -453,6 +466,7 @@ export const en: Record<string, string> = {
   "settings.tree.stats": "Usage stats",
   "settings.tree.categoryGroup": "Setting categories",
   "settings.tree.multiplay": "Multiplaying",
+  "settings.tree.webhook": "Webhook",
 
   "settings.claude.descriptionMulti":
     "Long-lived tokens that workers use to reach Claude. One list per machine. Keep several accounts and a worker that hits a limit rolls over to the next one.",
@@ -563,6 +577,15 @@ export const en: Record<string, string> = {
   // 언어 이름은 그 언어로 적는다 — 영어 화면에서도 `한국어`가 `Korean`이 되지 않는다.
   "settings.language.ko": "한국어",
   "settings.language.en": "English",
+
+  "settings.webhook.urlLabel": "Address",
+  "settings.webhook.urlPlaceholder": "https://",
+  "settings.webhook.test": "Send test",
+  "settings.webhook.testing": "Sending...",
+  "settings.webhook.testOk": "Sent",
+  "settings.webhook.testFailPrefix": "Couldn't send",
+  "settings.webhook.off": "Not sending",
+  "settings.webhook.rejectHttps": "Only https addresses are accepted",
 
   "common.save": "Save",
   "common.saving": "Saving…",

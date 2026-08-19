@@ -43,6 +43,18 @@ export async function readWebhookUrl(): Promise<string | null> {
   return typeof s.url === "string" && s.url ? s.url : null;
 }
 
+const MASK_ELLIPSIS = "…"; // `lib/auth.ts`의 `maskToken`과 같은 글리프 — 한 앱에 가림 표시가 하나다
+
+/** §비주얼 §45 ⑪ (3) — 원문을 다시 안 그린다. 자르는 자리는 **자릿수가 아니라 구조**다: 스킴+
+ *  호스트는 그대로, 경로-쿼리-프래그먼트는 한 조각으로 접고 **뒤 4자를 안 남긴다**(URL이
+ *  하나라 구별할 상대가 없고 그 4자가 비밀의 끝이다). 경로가 없으면 접힘 표시를 안 붙인다. */
+export function maskWebhookUrl(url: string): string {
+  const m = /^(https:\/\/[^/?#]+)([/?#].*)?$/.exec(url);
+  if (!m) return url; // `setWebhookUrl`이 `https://`만 통과시켜 방어적이다 — 실제로는 늘 매치한다
+  const [, origin, rest] = m;
+  return rest ? `${origin}/${MASK_ELLIPSIS}` : origin;
+}
+
 /** 빈 문자열은 끈다(키를 지운다) — 그 밖은 `https://`만 받는다. **거절되면 파일을 안 건드린다**
  *  (검증이 어떤 `fs` 호출보다 먼저다). 접두사 이후는 안 잰다(§주소와 형식 — SSRF 전제가 안 선다). */
 export async function setWebhookUrl(raw: string): Promise<void> {
@@ -79,7 +91,7 @@ export function webhookBody(locale: Locale, item: AwaitingItem, nowMs: number): 
   };
 }
 
-async function postWebhook(url: string, payload: WebhookPayload): Promise<void> {
+export async function postWebhook(url: string, payload: WebhookPayload): Promise<void> {
   const res = await fetch(url, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -135,5 +147,29 @@ export async function webhookTick(nowMs: number = Date.now()): Promise<void> {
       const host = new URL(url).host;
       console.error(`[dira] 웹훅 실패: ${host} ${e.message}`);
     });
+  }
+}
+
+// ── 테스트 보내기 — 델타 집합을 안 건드린다 (§0-10 §화면) ────────────────────
+
+/** 답변 대기가 0건인 큐에서도 눌리는 것이 요건이다 — 자리표시 한 벌. */
+const PLACEHOLDER_ITEM: AwaitingItem = { project: "-", stem: "-", hash: "-", title: "-" };
+
+export type WebhookTestResult = { ok: true } | { ok: false; host: string; reason: string };
+
+/** `테스트 보내기` — 값은 그 순간의 답변 대기 첫 건, 0건이면 자리표시(위)다. **델타 집합
+ *  (`g.__diraWebhookSeen`)을 안 건드린다** — 실제 사건을 봤다고 적으면 그 사건이 영영 안
+ *  나간다(§0-10 §화면). 주소가 없으면 부르지 않는 것이 화면의 계약이라 여기서는 방어만 한다. */
+export async function testSendWebhook(): Promise<WebhookTestResult> {
+  const url = await readWebhookUrl();
+  if (!url) return { ok: false, host: "", reason: "no address" };
+
+  const [items, locale] = await Promise.all([listAwaiting(), readLanguage()]);
+  const item = items[0] ?? PLACEHOLDER_ITEM;
+  try {
+    await postWebhook(url, webhookBody(locale, item, Date.now()));
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, host: new URL(url).host, reason: (e as Error).message };
   }
 }
