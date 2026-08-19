@@ -860,25 +860,46 @@ const RESULT_VERBS = new Set(["DONE", "FAIL", "TIMEOUT", "KILLED"]);
 const RECENT_LINES = 20;
 
 /** runner.log는 워커 전체가 한 파일에 섞여 쌓인다: `2026-07-30 13:19:01 [w3] SKIP …`.
- *  실효 `TICKET_NAME` → **최근 20줄**(최신이 앞) + **마지막 결과 줄**(§0-5 판정 1단계).
+ *  실효 `TICKET_NAME` → **최근 20줄**(최신이 앞) + **마지막 결과 줄**(§0-5 판정 1단계) +
+ *  **해시별 `DISPATCH` 집계**(§2-14 (2) — 티켓 상세 재시도 줄의 원본).
  *
  *  ponytail: 파일 전체를 읽고 뒤에서 훑는다(실측 1.5MB · 15,858줄 · 13.5ms). **꼬리만 읽으면
  *  오래 멈춘 워커의 마지막 줄을 잃는다** — 그 줄이 파일 앞쪽에 있어서 `stopped` 워커의 마지막
- *  활동이 `—`가 된다(§4-7). 상한이 문제면 로테이션이 먼저다(`tick.sh`의 일이다). */
-async function lastLogByWorker(
-  workersDir: string,
-): Promise<Record<string, { recent: string[]; result: string | null }>> {
-  const text = await readFile(path.join(workersDir, "runner.log"), "utf8").catch(() => "");
-  const out: Record<string, { recent: string[]; result: string | null }> = {};
-  const lines = text.split("\n");
-  for (let i = lines.length - 1; i >= 0; i--) {
-    const m = /^\S+ \S+ \[([^\]]+)\] (\S+)/.exec(lines[i]);
-    if (!m) continue;
-    const e = (out[m[1]] ??= { recent: [], result: null });
-    if (e.recent.length < RECENT_LINES) e.recent.push(lines[i]); // 뒤에서 왔으니 최신이 앞이다
-    if (e.result === null && RESULT_VERBS.has(m[2])) e.result = lines[i];
-  }
-  return out;
+ *  활동이 `—`가 된다(§4-7). 상한이 문제면 로테이션이 먼저다(`tick.sh`의 일이다).
+ *
+ *  **`cache()`로 요청당 1회다**(`crontabText`와 같은 이유) — `listWorkers`와 `reassignCount`가
+ *  같은 `workersDir`로 이 함수를 각자 부르는데, 캐시가 없으면 상세 화면 한 번에 이 5.7MB 파일을
+ *  두 번 연다(§2-14 (7) §성능 예산 "새 파일 읽기가 0회"). */
+const lastLogByWorker = cache(
+  async (
+    workersDir: string,
+  ): Promise<{
+    byWorker: Record<string, { recent: string[]; result: string | null }>;
+    dispatchByHash: Record<string, number>;
+  }> => {
+    const text = await readFile(path.join(workersDir, "runner.log"), "utf8").catch(() => "");
+    const byWorker: Record<string, { recent: string[]; result: string | null }> = {};
+    const dispatchByHash: Record<string, number> = {};
+    const lines = text.split("\n");
+    for (let i = lines.length - 1; i >= 0; i--) {
+      // 세 번째 캡처(해시)는 `DISPATCH` 줄에만 있다 — 다른 동사 줄은 `undefined`라 아래에서 안 센다.
+      const m = /^\S+ \S+ \[([^\]]+)\] (\S+)(?: (\S+))?/.exec(lines[i]);
+      if (!m) continue;
+      const e = (byWorker[m[1]] ??= { recent: [], result: null });
+      if (e.recent.length < RECENT_LINES) e.recent.push(lines[i]); // 뒤에서 왔으니 최신이 앞이다
+      if (e.result === null && RESULT_VERBS.has(m[2])) e.result = lines[i];
+      if (m[2] === "DISPATCH" && m[3]) dispatchByHash[m[3]] = (dispatchByHash[m[3]] ?? 0) + 1;
+    }
+    return { byWorker, dispatchByHash };
+  },
+);
+
+/** 이 티켓이 되돌아온 횟수 — `runner.log`의 `DISPATCH <해시>` 줄 수 빼기 1(DESIGN.md §2-14 (2)).
+ *  첫 디스패치는 재시도가 아니라서 뺀다. 줄이 0개(한 번도 안 디스패치)여도 음수로 안 내려간다.
+ *  `attempts` frontmatter는 안 읽는다 — 그 값이 세는 사건이 다르다(§2-14 (1)). */
+export async function reassignCount(root: string, hash: string): Promise<number> {
+  const { dispatchByHash } = await lastLogByWorker(path.join(root, "workers"));
+  return Math.max(0, (dispatchByHash[hash] ?? 0) - 1);
 }
 
 /** 실패 사유가 **아직 유효한가**의 창 (§0-5 신선도). cron이 1분 주기라 환경이 깨져 있고 물
@@ -1255,11 +1276,11 @@ export async function listWorkers(root: string, tickets: Ticket[] = []): Promise
       lockPid: pid,
       holding: holdingOf(tickets, eff),
       engine: parsed.engine, // null = 대입 없음. 여기서 기본값으로 덮으면 화면이 둘을 못 가른다
-      recentLog: logs[eff]?.recent ?? [],
+      recentLog: logs.byWorker[eff]?.recent ?? [],
       // 파일을 여는 것은 **마지막 결과가 `FAIL`인 워커뿐**이다 — 정상 상태에서는 0회다(§0-5 비용).
       lastFailure: await failureOf(
         path.join(dir, "logs"),
-        logs[eff]?.result ?? null,
+        logs.byWorker[eff]?.result ?? null,
         coolUntil(parsed.engine),
       ),
       context: await contextOf(root, text, parsed.cwd),

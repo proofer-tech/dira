@@ -89,6 +89,7 @@ const FILLED = [
   "common.",
   "ticket.priority.",
   "ticket.duedate.",
+  "ticket.retries.", // 1cd7648d가 en을 채우고 여기 더했다
   "bell.",
   "shell.",
   "statusbar.",
@@ -133,6 +134,15 @@ test("마감 파생 한 줄 — 두 언어에서 다 문장이 된다", () => {
     `${t(l, "ticket.duedate.derivedPrefix")} ${remaining} ${t(l, "ticket.duedate.derivedMiddle")} ${baseline}${t(l, "ticket.duedate.derivedAfter")}`;
   assert.strictEqual(line("ko", "3일", 1), "마감까지 3일 — 우선순위 1로 뜹니다");
   assert.strictEqual(line("en", "3 days", 1), "Due in 3 days — comes up as priority 1");
+});
+
+// §2-14 (2) · §비주얼 §11 §개정 — `{prefix} {n}{suffix}`. 한국어는 접미가 살고 영어는 빈다
+// (`bell.assigned.title*`와 같은 조립 — ticket-ui.tsx `ReassignLine`).
+test("되돌아온 횟수 한 줄 — 두 언어에서 다 문장이 된다", () => {
+  const line = (l: "ko" | "en", n: number) =>
+    `${t(l, "ticket.retries.linePrefix")} ${n}${t(l, "ticket.retries.lineSuffix")}`;
+  assert.strictEqual(line("ko", 273), "다시 할당 273회");
+  assert.strictEqual(line("en", 273), "Reassigned: 273");
 });
 
 test("마감 역전 한 줄 — 해시가 공백 없이 앞에 붙어도 두 언어에서 다 선다", () => {

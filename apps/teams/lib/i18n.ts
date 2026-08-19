@@ -213,6 +213,11 @@ export const ko: Record<string, string> = {
   // 역전 거부 — 입력 아래 한 줄 + 저장 버튼 비활성(§1-4 §화면). 해시 하나만 변수라 접미 하나.
   "ticket.duedate.reversalSuffix": "와 마감 순서가 어긋납니다 — 선행이 후행보다 늦게 끝날 수 없습니다",
 
+  // 되돌아온 횟수 한 줄(§2-14 (2) · §비주얼 §11 §개정). `{prefix} {n}{suffix}` —
+  // `bell.assigned.title*`와 같은 짝이다. 2회 이상일 때만 서고 1회 이하면 줄 자체가 없다.
+  "ticket.retries.linePrefix": "다시 할당",
+  "ticket.retries.lineSuffix": "회",
+
   // 남은 시간 표기(종 ⑦ 나열 · 상세 파생 한 줄)의 낱말 — 숫자에 공백 없이 바로 붙는다
   // (`3시간 30분`·`3h 30m`). en은 복수형 장치가 없는 이 앱 사정(§0-16) 그대로 약어로 피한다.
   "common.unit.hour": "시간",
@@ -606,6 +611,10 @@ export const en: Record<string, string> = {
   // 붙는 한 조각이다.
   "ticket.duedate.reversalSuffix":
     " and this due date are out of order — a prerequisite can't be due after the ticket waiting on it",
+
+  // 되돌아온 횟수 한 줄. 영어는 접미가 빈다(`Reassigned: 3`) — 복수형 장치가 없어 숫자로 끝낸다.
+  "ticket.retries.linePrefix": "Reassigned:",
+  "ticket.retries.lineSuffix": "",
 
   // 약어로 복수형 문제를 피한다(`bell.due.blockedSuffix`와 같은 사정) — `3h 30m`·`7d`.
   "common.unit.hour": "h",

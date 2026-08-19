@@ -65,6 +65,7 @@ const {
   nextWorkerName,
   parseContextBlock,
   readCommonContext,
+  reassignCount,
   renderContextBlock,
   startWorker,
   stopWorker,
@@ -291,6 +292,26 @@ test("recentLog — 이 워커의 최근 20줄, 최신이 앞 (§4-7)", async ()
     "2026-08-03 00:01:00 [w2] DISPATCH abcd1234 kind=work sid=zzz log=x.log",
   ]);
   assert.deepStrictEqual(ws.w3.recentLog, []); // 줄이 0개 — 셀은 `—`에 `disabled`다
+});
+
+test("reassignCount — DISPATCH 줄 수 빼기 1, 다른 해시는 안 세고 없으면 0 (§2-14 (2))", async () => {
+  const root = makeRoot({ "w1.sh": "#!/bin/bash\n" });
+  const dispatch = (n: number, hash: string) =>
+    `2026-08-03 00:00:${String(n).padStart(2, "0")} [w1] DISPATCH ${hash} kind=work persona=dev sid=x log=x.log`;
+  writeFileSync(
+    path.join(root, "workers", "runner.log"),
+    [
+      dispatch(1, "aaaa1111"), // aaaa1111: 1줄 — 값이 없다(첫 디스패치는 재시도가 아니다)
+      dispatch(2, "bbbb2222"), // bbbb2222: 3줄 — 값이 2다
+      dispatch(3, "bbbb2222"),
+      dispatch(4, "bbbb2222"),
+      "",
+    ].join("\n"),
+  );
+
+  assert.strictEqual(await reassignCount(root, "aaaa1111"), 0); // 1개면 값이 없다(호출부가 0을 "줄 없음"으로 받는다)
+  assert.strictEqual(await reassignCount(root, "bbbb2222"), 2); // 3개면 2다
+  assert.strictEqual(await reassignCount(root, "cccc3333"), 0); // 줄이 아예 없는 해시 — 남의 DISPATCH를 안 센다
 });
 
 test("주석 처리된 할당문은 설정이 아니다 (worker.sh.example이 통째로 주석이다)", async () => {

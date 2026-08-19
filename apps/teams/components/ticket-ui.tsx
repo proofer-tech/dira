@@ -127,6 +127,24 @@ function Failure({ title, message }: { title: string; message: string }) {
   );
 }
 
+// ── 되돌아온 횟수 줄 ─────────────────────────────────────────────────────────
+
+/** 오른쪽 단 맨 위, frontmatter 표 **위**의 사실 한 줄(§2-14 · §비주얼 §11 §개정). `count`는
+ *  서버가 `runner.log`에서 이미 센 값(`reassignCount`, `lib/workers.ts`)이고 여기는 문구 조립만
+ *  한다 — 로케일이 필요해서 클라이언트다(page.tsx 주석 "이 컴포넌트는 서버라 로케일을 안 읽는다").
+ *
+ *  **1회 이하면 호출하지 않는다** — `0회`도 `-`도 안 그린다(§2-14 (5)). heading이 아니라 `<p>`
+ *  하나다 — 절이 아니라 사실 한 줄이라 보조기술 heading 목록에 본문 없는 항을 안 늘린다. */
+export function ReassignLine({ count }: { count: number }) {
+  const t = useT();
+  return (
+    <p className="text-xs text-muted-foreground">
+      {t("ticket.retries.linePrefix")} {count}
+      {t("ticket.retries.lineSuffix")}
+    </p>
+  );
+}
+
 // ── frontmatter 표 ───────────────────────────────────────────────────────────
 
 /** 오른쪽 단의 frontmatter 표(§43 ①). 기본 노출은 `assigned_at` 키까지 + 항상 붙는 `파일` 행 —

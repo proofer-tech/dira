@@ -17,6 +17,7 @@ import {
   DeleteTicketButton,
   FrontmatterTable,
   NewTicketDialog,
+  ReassignLine,
   TicketEditForm,
   UnassignButton,
   WipBodyPolling,
@@ -58,7 +59,7 @@ import {
 import { findStream, sessionIdOf } from "@/lib/transcript";
 import { ticketCostChunk } from "@/lib/usage";
 import { decodeHash, engineCan } from "@/lib/urls";
-import { holderEngine, listWorkers } from "@/lib/workers";
+import { holderEngine, listWorkers, reassignCount } from "@/lib/workers";
 
 // 큐는 GUI 밖에서(cron·세션이) 바뀐다. 프리렌더하면 빌드 시점 내용이 굳는다.
 export const dynamic = "force-dynamic";
@@ -130,6 +131,10 @@ export default async function TicketDetail({
   // 티켓을 같이 넘긴다 — `holding`이 차야 이 티켓을 **물고 있는 워커**를 되짚을 수 있다
   // (아래 `holderEngine`, §4-3 판정). 큐는 이미 위에서 한 번 읽었고 여기서 다시 읽지 않는다.
   const workers = await listWorkers(project.root, tickets);
+  // 되돌아온 횟수(§2-14 (2)) — 엔진이 디스패치를 거는 식별자는 **stem**이다(`ticket:`
+  // 표시값이 아니다, tick.sh의 `c_hash`가 파일명에서 온다). `reassignCount`가 `listWorkers`와
+  // 같은 `runner.log` 읽기를 요청 캐시로 재사용해 새 파일 읽기가 0회다(`lib/workers.ts`).
+  const reassigns = await reassignCount(project.root, ticket.stem);
   // 선행 = deps **전부**(미충족으로 걸러내지 않는다). 종류·순서 판정은 보드와 같은 헬퍼가 한다.
   const deps = depBadges(tickets, ticket, config);
   const blocked = referrers(tickets, ticket, config); // 후행 = 이 티켓을 deps로 둔 것 = 역참조
@@ -531,6 +536,8 @@ export default async function TicketDetail({
             기준이 뷰포트 위가 아니게 됐다. 화면에 보이는 자리는 종전과 같은 72px다.
             후행이 20건이면 이 단이 뷰포트보다 길어지는데 그때 `overflow-y-auto`가 받는다. */}
         <div className="min-w-0 space-y-6 xl:sticky xl:top-0 xl:max-h-[calc(100vh-4.5rem)] xl:self-start xl:overflow-y-auto">
+          {/* 되돌아온 횟수 — frontmatter 표 **위**, 1회 이하면 요소가 아예 없다(§2-14 (4)-(5)) */}
+          {reassigns > 0 && <ReassignLine count={reassigns} />}
           <section className="space-y-2">
             <h2 className="text-sm font-medium">frontmatter</h2>
             {/* `table-fixed`가 §비주얼 §11의 216px 값 열을 **실제로** 만든다. 기본 `auto`에서는
