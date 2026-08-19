@@ -426,14 +426,39 @@ def set_deps(path, deps):
         f.write("\n".join(out + lines[end:]))
 
 
+HANDOFF_MAX = 3      # 이어받기 사슬 상한(DESIGN.md 결정 6). 원본 + 3장까지는 사람을 안 부른다.
+
+
+def _check_handoff_cap(dst):
+    """claim이 원자적 link에 **성공한 뒤**(결정 6 (3)) handoffs 상한을 판정한다.
+
+    넘겼으면 release로 백로그 이름을 되돌리고 ask_human으로 답변 대기를 건다 -
+    원자적 link 자체는 손대지 않는다. `awaiting`이 이미 걸려 있으면 건드리지 않는다
+    (결정 6 (4) - 없으면 사람이 답한 뒤 재claim 때 또 걸려 영구 루프가 된다).
+    """
+    fm, lines, end = read_fm(dst)
+    if end < 0:
+        return
+    handoffs = int((fm.get("handoffs") or "0").strip() or 0)
+    if handoffs <= HANDOFF_MAX or (fm.get("awaiting") or "").strip():
+        return
+    h = ticket_hash(dst, fm)
+    attempts = int((fm.get("attempts") or "0").strip() or 0)
+    p = release(dst)
+    ask_human(p, h, attempts, "", handoff=True)
+    raise SystemExit("이어받기가 3회를 넘었습니다: " + h)
+
+
 def claim(path):
-    """<hash>.md -> <hash><진행중>.md 원자적 잡기. 이미 잡혀 있으면 실패."""
+    """<hash>.md -> <hash><진행중>.md 원자적 잡기. 이미 잡혀 있으면 실패.
+    성공한 뒤 handoffs 상한을 판정한다(`_check_handoff_cap`)."""
     d, base = os.path.split(path)
     stem = nfc(base)[:-3]
     dst = os.path.join(d, stem + IN_PROGRESS + ".md")
     try:
         os.link(path, dst)          # dst가 이미 있으면 EEXIST -> 잡기 실패(락)
         os.unlink(path)
+        _check_handoff_cap(dst)
         return dst
     except OSError as e:
         if getattr(e, "errno", None) == errno.EEXIST:
@@ -456,6 +481,7 @@ def claim(path):
     with os.fdopen(fd, "wb") as out:
         out.write(data)
     os.unlink(path)
+    _check_handoff_cap(dst)
     return dst
 
 
@@ -721,7 +747,7 @@ def _block_question(blk):
     return ""
 
 
-def ask_human(path, h, attempts, why, blocked=False, killed=False):
+def ask_human(path, h, attempts, why, blocked=False, killed=False, handoff=False):
     """자동 회수 상한을 넘겼거나 신선한 `## 블록`이 붙은 티켓을 답변 요청으로 올린다.
 
     `.wip`에 굳혀 두면(구 `HOLD`) GUI가 `.wip`을 편집할 수 없어 **사람이 눈으로 발견할 때까지
@@ -748,6 +774,7 @@ def ask_human(path, h, attempts, why, blocked=False, killed=False):
         ctx = "\n### 죽은 세션 마지막 기록\n\n> 자료를 읽지 못했습니다: {}\n".format(e)
     # 사유는 경로마다 사실이 다르다. 블록은 세션이 실패한 게 아니라 벽을 보고 판정하고 멈춘 것이다.
     cause = ("사람이 강제 중단했습니다" if killed
+             else "이어받기가 3회를 넘었습니다" if handoff
              else "세션이 `## 블록`을 남기고 멈췄습니다" if blocked
              else "자동 회수 {}회 실패({})".format(attempts, why))
     q = _block_question(_section(body, "블록"))
