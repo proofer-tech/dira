@@ -42,6 +42,7 @@
 - [트러블슈팅](/docs/troubleshooting)
 - [로그 읽는 법](/docs/logs)
 - [사용 통계와 끄는 법](/docs/analytics)
+- [스케줄](/docs/schedules)
 - [답변 대기를 밖으로 보내기](/docs/webhook)
 
 ## 부록
