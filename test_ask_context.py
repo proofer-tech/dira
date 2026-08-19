@@ -80,24 +80,30 @@ try:
     fm_a = T.read_fm(os.path.join(ws, "tickets/aaaa1111.md"))[0]
     assert fm_a.get("default_answer") == "1.(a)", "A: default_answer 없음\n" + str(fm_a)
 
+    assert "(전문 " not in a, "A: 안 잘렸는데 잘림 표시가 붙었다\n" + a
+
     b = open(os.path.join(ws, "tickets/bbbb2222.md"), encoding="utf-8").read()
     assert "자동 회수 3회 실패" in b, "B: 상한 초과 정형문 첫 줄이 바뀌었다\n" + b
     assert "트랜스크립트를 찾지 못했습니다" in b, "B: 못 찾았다는 말이 없다\n" + b
     assert "### 티켓 블록" not in b, "B: 없는 절을 붙였다\n" + b
     assert "> " + "G" * 600 + "\n" in b, "B: Goal 600자 상한이 안 걸렸다"
+    # 결정 13 (2) - 남는 상한(Goal 600)에 잘렸으면 전문/잘린 길이를 밝히는 줄이 붙는다.
+    assert "(전문 700자 중 앞 600자)" in b, "B: Goal 잘림 표시가 없다\n" + b
     assert "### 1. 이 티켓을 어떻게 할까요" in b, "B: 문항 없음\n" + b
     fm_b = T.read_fm(os.path.join(ws, "tickets/bbbb2222.md"))[0]
     assert fm_b.get("default_answer") == "1.(a)", "B: default_answer 없음\n" + str(fm_b)
 
     # C) 상한 나머지 둘 — 절 추출·인용은 A/B가 덮으므로 순수 함수로 확인한다
-    assert T._section(["## 블록"] + ["x" * 2000], "블록", 1200) == "x" * 1200, "C: 블록 1200자"
+    assert T._section(["## 블록"] + ["x" * 2000], "블록") == "x" * 2000, "C: 블록은 전문(상한 없음)"
     import unicodedata
-    assert T._section([unicodedata.normalize("NFD", "## 블록"), "인증서 없음"], "블록", 99) \
+    assert T._section([unicodedata.normalize("NFD", "## 블록"), "인증서 없음"], "블록") \
         == "인증서 없음", "C: NFD 제목을 못 집는다"
+    assert T._capped("a" * 10, 5) == "a" * 5 + "\n\n(전문 10자 중 앞 5자)", "C: _capped 잘림 표시"
+    assert T._capped("a" * 5, 5) == "a" * 5, "C: _capped 안 넘으면 그대로"
     tp = os.path.join(home, "long.jsonl")
     with open(tp, "w", encoding="utf-8") as f:
         f.write(rec("assistant", "y" * 3000))
-    assert T.transcript_tail(tp, 1500) == "[assistant] " + "y" * 1500, "C: 로그 1500자"
+    assert T.transcript_tail(tp) == "[assistant] " + "y" * 3000, "C: 로그는 전문(상한은 _capped가 진다)"
     # D) 경로 주입 — session_id에 glob/경로가 섞이면 아예 찾지 않는다
     assert T.transcript_of({"session_id": "../../*"}) == "", "D: glob 메타문자를 그대로 훑는다"
     assert T.transcript_tail("/tmp/없는파일-ask-context.jsonl") == "", "D: 없는 파일에 예외"
@@ -113,7 +119,31 @@ try:
     fm_e = T.read_fm(pe)[0]
     assert "default_answer" not in fm_e, "E: killed인데 default_answer가 있다\n" + str(fm_e)
 
-    print("PASS 5/5")
+    # F) 결정 13 (1) — 블록 인용 상한 없음. 8,000자짜리 블록이 한 자도 안 잘려 인용된다
+    pf = mk(ws, "ffff6666", [], body="## Goal\n짧다.\n\n## 블록\n" + "x" * 8000 + "\n")
+    T.ask_human(pf, "ffff6666", 0, "", blocked=True)
+    f_ = open(pf, encoding="utf-8").read()
+    assert "x" * 8000 in f_, "F: 8,000자 블록이 잘렸다\n" + f_[:200]
+    assert "(전문 " not in f_.split("### 티켓 블록")[1].split("### 죽은")[0], \
+        "F: 상한이 없는 블록에 잘림 표시가 붙었다"
+
+    # G) 결정 13 (3)(4)(5)(6) — 블록의 결정 11 형식 물음이 인용 밖 문항으로 승격된다
+    pg = mk(ws, "gggg7777", [], body="## Goal\n작업.\n\n## 블록\n한 줄 요약.\n\n"
+            "### 1. 이걸 어떻게 할까요\n\n- (a) 이렇게 한다\n- (b) 저렇게 한다\n")
+    T.ask_human(pg, "gggg7777", 0, "", blocked=True)
+    g = open(pg, encoding="utf-8").read()
+    import re
+    assert re.search(r"(?m)^### 1\. 이걸 어떻게 할까요", g), "G: 물음이 인용 밖 문항으로 안 섰다\n" + g
+    assert g.index("### 1. 이걸 어떻게 할까요") < g.index("### 티켓 Goal"), \
+        "G: 물음이 인용보다 뒤에 섰다\n" + g
+    assert "> ### 1. 이걸 어떻게 할까요" in g, "G: 블록 인용에서 물음이 빠졌다(인용 3종은 그대로)\n" + g
+    assert "### 2. 이 티켓을 어떻게 할까요" in g, "G: 고정 벌이 2로 안 밀렸다\n" + g
+    assert "### 1. 이 티켓을 어떻게 할까요" not in g, "G: 고정 벌이 여전히 1이다\n" + g
+    assert "아래 인용한 `## 블록`에 적힌 결정을 답해주세요" not in g, "G: 옛 정형문이 남았다\n" + g
+    fm_g = T.read_fm(pg)[0]
+    assert "default_answer" not in fm_g, "G: 세션 물음이 있는데 default_answer가 있다\n" + str(fm_g)
+
+    print("PASS 7/7")
     print(a[a.index("## 질문 1"):])
 finally:
     if old_home is None:

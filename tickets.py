@@ -561,10 +561,11 @@ def _rec_text(rec):
     return " ".join(str(c or "").split())
 
 
-def transcript_tail(path, limit=1500):
-    """트랜스크립트 끝에서 마지막 텍스트/에러 레코드 한 건(`[역할] 본문`). 못 읽으면 빈 문자열.
+def transcript_tail(path):
+    """트랜스크립트 끝에서 마지막 텍스트/에러 레코드 한 건(`[역할] 본문`) 전문. 못 읽으면 빈 문자열.
 
     transcript_state와 같은 방식이다 -- 끝에서 64KB만 seek해 읽고 역순으로 json을 파싱한다.
+    상한은 이 함수의 일이 아니다(`ask_context`가 `_capped`로 자른다).
     """
     try:
         with open(path, "rb") as f:
@@ -584,8 +585,7 @@ def transcript_tail(path, limit=1500):
         txt = _rec_text(rec)
         if txt:
             return "[{}] {}".format(
-                str((rec.get("message") or {}).get("role") or rec.get("type") or "?"),
-                txt[:limit])
+                str((rec.get("message") or {}).get("role") or rec.get("type") or "?"), txt)
     return ""
 
 
@@ -599,10 +599,11 @@ def in_progress(troot):
 REAP_CLEAR = ("session_id", "assigned_at", "owner", "pid", "claimed_at", "transcript")
 
 
-def _section(body, pat, limit):
-    """본문에서 `## <pat>` 절(같은 이름이 여럿이면 마지막 것)의 내용을 limit자까지. 없으면 "".
+def _section(body, pat):
+    """본문에서 `## <pat>` 절(같은 이름이 여럿이면 마지막 것)의 전문. 없으면 "".
 
     h3 이하는 절 안에 남긴다(`^##\\s`는 `### `에 걸리지 않는다) -- 답변 화면도 같은 규칙이다.
+    상한은 이 함수의 일이 아니다(결정 13 - 블록은 무제한, Goal/로그는 `_capped`가 자른다).
     """
     # 제목 매칭은 NFC로 한다(맥에서 온 본문은 `블록`이 NFD로 적혀 있을 수 있다). 인용은 원문 그대로.
     starts = [i for i, l in enumerate(body) if re.match(r"^##\s*" + nfc(pat), nfc(l))]
@@ -613,7 +614,14 @@ def _section(body, pat, limit):
         if re.match(r"^##\s", l):
             break
         out.append(l)
-    return "\n".join(out).strip()[:limit]
+    return "\n".join(out).strip()
+
+
+def _capped(text, limit):
+    """text가 limit자를 넘으면 앞 limit자 + 잘림 표시 한 줄(결정 13 (2)). 안 넘으면 그대로."""
+    if len(text) <= limit:
+        return text
+    return "{}\n\n(전문 {}자 중 앞 {}자)".format(text[:limit], len(text), limit)
 
 
 def _quote(text):
@@ -624,29 +632,49 @@ def ask_context(fm, body):
     """자동 상신 질문에 붙일 판단 재료 -- 티켓 Goal · 블록 · 죽은 세션 로그 꼬리.
 
     정형문("3회 죽었다")만으로는 사람이 답할 자료가 화면에 없었다(요구 11990127: jaso에서
-    3라운드가 "다시 시도해보세요"로 소모됐다). 인용 상한은 답변 다이얼로그가 스크롤 없이
-    읽히는 길이다. 세션 로그는 티켓 파일 어디에도 없는 유일한 정보라 없으면 없다고 적는다.
+    3라운드가 "다시 시도해보세요"로 소모됐다). 인용이 화면에서 접혀 있으므로(결정 12 (5))
+    블록은 상한이 없다(결정 13 (1)) - Goal 600자 · 로그 1500자는 그대로고, 잘리면 `_capped`가
+    그 사실을 적는다(결정 13 (2)). 세션 로그는 티켓 파일 어디에도 없는 유일한 정보라 없으면
+    없다고 적는다.
     """
     out = ""
-    goal = _section(body, "Goal", 600)
+    goal = _section(body, "Goal")
     if goal:
-        out += "\n### 티켓 Goal\n\n{}\n".format(_quote(goal))
-    blk = _section(body, "블록", 1200)
+        out += "\n### 티켓 Goal\n\n{}\n".format(_quote(_capped(goal, 600)))
+    blk = _section(body, "블록")
     if blk:
         out += "\n### 티켓 블록\n\n{}\n".format(_quote(blk))
     tr = transcript_of(fm)
-    tail = transcript_tail(tr, 1500) if tr else ""
+    tail = transcript_tail(tr) if tr else ""
     return out + "\n### 죽은 세션 마지막 기록\n\n{}\n".format(
-        _quote(tail or "트랜스크립트를 찾지 못했습니다"))
+        _quote(_capped(tail, 1500) if tail else "트랜스크립트를 찾지 못했습니다"))
 
 
 # 결정 12 (2) - 사유와 무관하게 한 벌 고정. 마커(**[기본]** 등)를 안 넣는다 -
 # 결정 11 (8)이 안 자르기로 한 라벨에 그대로 실려 파서 갈래가 는다(default_answer가 대신 고른다).
-ASK_OPTIONS = ("\n### 1. 이 티켓을 어떻게 할까요\n\n"
-               "- (a) 다시 시도한다 - 트리를 안 고치고 그대로 다시 보낸다\n"
-               "- (b) 내가 손보고 나서 다시 시도한다\n"
-               "- (c) 그만둔다 - 이 티켓을 닫는다\n"
-               "- (d) 아래 칸에 직접 쓴다\n")
+_ASK_OPTIONS_BODY = ("이 티켓을 어떻게 할까요\n\n"
+                      "- (a) 다시 시도한다 - 트리를 안 고치고 그대로 다시 보낸다\n"
+                      "- (b) 내가 손보고 나서 다시 시도한다\n"
+                      "- (c) 그만둔다 - 이 티켓을 닫는다\n"
+                      "- (d) 아래 칸에 직접 쓴다\n")
+
+
+def _ask_options(n):
+    """고정 선택지 문항. 세션의 물음이 앞에 서면(결정 13 (3)) n이 2로 밀린다."""
+    return "\n### {}. {}".format(n, _ASK_OPTIONS_BODY)
+
+
+# 결정 11 (1)(3) 형식의 문항 머리 - `### <n[-n...]>. <물음>`.
+_Q_HEAD = re.compile(r"^###\s*\d+(?:-\d+)*\.\s")
+
+
+def _block_question(blk):
+    """블록 절에 결정 11 형식(문항 + 목록)이 있으면 그 지점부터 절 끝까지. 없으면 ""."""
+    lines = blk.split("\n")
+    for i, l in enumerate(lines):
+        if _Q_HEAD.match(l.strip()):
+            return "\n".join(lines[i:]).strip()
+    return ""
 
 
 def ask_human(path, h, attempts, why, blocked=False, killed=False):
@@ -662,6 +690,10 @@ def ask_human(path, h, attempts, why, blocked=False, killed=False):
     `killed`는 셋째 갈래다(DESIGN.md §2-5 §개정) -- 사람이 `--force`로 끊는 순간 `tick.sh`가
     죽이기 **직전에** 부른다. 사고가 아니라 사람이 낸 판단이라 사유 문구가 다르고,
     할당 필드(attempts·REAP_CLEAR)는 안 건드린다(아래).
+
+    `## 블록`이 결정 11 형식의 물음을 담고 있으면(결정 13 (3)) 그 물음이 인용 밖에서 첫
+    문항이 되고, 고정 선택지는 `### 2.`로 밀린다. 그 갈래에서는 `default_answer`를 안 쓴다
+    (결정 13 (6)) -- 엔진은 세션이 적은 선택지 중 무엇이 기본인지 모른다.
     """
     a = uuid.uuid4().hex[:8]
     fm, lines, end = read_fm(path)
@@ -674,14 +706,22 @@ def ask_human(path, h, attempts, why, blocked=False, killed=False):
     cause = ("사람이 강제 중단했습니다" if killed
              else "세션이 `## 블록`을 남기고 멈췄습니다" if blocked
              else "자동 회수 {}회 실패({})".format(attempts, why))
-    ask = ("이 티켓을 계속 갈지, 무엇을 바꿔서 갈지 답해주세요." if killed
-           else "아래 인용한 `## 블록`에 적힌 결정을 답해주세요."
-           if any(re.match(r"^##\s*블록", nfc(l)) for l in body)
-           else "세션이 왜 계속 죽는지, 이 티켓을 계속 갈지 답해주세요.")
-    # 지시어는 `아래`다 -- 인용(결정 6)은 정형문 다음에 붙고, 화면에선 답변칸이 본문 위에 있다.
+    q = _block_question(_section(body, "블록"))
+    if q:
+        # 결정 13 (5) - 물음이 곧 카드 제목이라 가리킬 곳이 없다. 남는 것은 사유 한 줄이다.
+        head = "{}. 엔진은 더 시도하지 않습니다.\n\n{}\n".format(cause, q)
+        options = _ask_options(2)
+    else:
+        ask = ("이 티켓을 계속 갈지, 무엇을 바꿔서 갈지 답해주세요." if killed
+               else "아래 인용한 `## 블록`에 적힌 결정을 답해주세요."
+               if any(re.match(r"^##\s*블록", nfc(l)) for l in body)
+               else "세션이 왜 계속 죽는지, 이 티켓을 계속 갈지 답해주세요.")
+        # 지시어는 `아래`다 -- 인용(결정 6)은 정형문 다음에 붙고, 화면에선 답변칸이 본문 위에 있다.
+        head = "{}. 엔진은 더 시도하지 않습니다 — {}\n".format(cause, ask)
+        options = _ask_options(1)
     with open(path, "a", encoding="utf-8") as f:
-        f.write("\n## 질문 {}\n\n{}. 엔진은 더 시도하지 않습니다 — {}\n{}{}".format(
-            sum(1 for l in body if re.match(r"^##\s*질문", l)) + 1, cause, ask, ASK_OPTIONS, ctx))
+        f.write("\n## 질문 {}\n\n{}{}{}".format(
+            sum(1 for l in body if re.match(r"^##\s*질문", l)) + 1, head, options, ctx))
     # 잠금(deps)을 먼저 걸고 할당을 나중에 푼다. 순서를 바꾸면 그 사이에 티켓이
     # 잠금 없이 열려 다음 tick이 답변 없이 집어 간다.
     set_deps(path, deps_of(lines, end) + [a])
@@ -694,8 +734,9 @@ def ask_human(path, h, attempts, why, blocked=False, killed=False):
     if not killed:
         upd["attempts"] = "0"
         upd.update({k: "" for k in REAP_CLEAR})
-        # 결정 12 (4) - 기본 골라 둔 답. killed는 방금 사람이 낸 판단이라 엔진이 다음을 모른다.
-        upd["default_answer"] = "1.(a)"
+        if not q:
+            # 결정 12 (4) - 기본 골라 둔 답. killed는 방금 사람이 낸 판단이라 엔진이 다음을 모른다.
+            upd["default_answer"] = "1.(a)"
     set_fm_keys(path, upd)
     return "ASK {} awaiting={} - {}, 답변 요청으로 전환".format(h, a, cause)
 
