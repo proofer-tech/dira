@@ -131,14 +131,14 @@ export type SquadRow = {
   missingProfile: boolean;
 };
 
-/** 스쿼드 블록(§5-5 §개정 "실리는 값" — 이름·멤버 전원의 이름·역할·리더)의 바이트 수. 프롬프트
- *  조립 자체는 엔진 몫이라(P304 갈래 A/B) 정확한 문구는 아직 없다 — 여기는 상한 배지가 재는
- *  근사치다. `ponytail:` 리더 세션이 실제로 받는 블록 포맷이 서면(엔진 승인 이후) 그 함수를
- *  가져다 쓴다 — 지금은 §5-5 §값이 나열한 네 값만 최소로 조립한다. */
+/** 스쿼드 블록(§5-5 §개정 §스쿼드 블록 - §블록의 틀)의 바이트 수. tick.sh:736-788이 실제로
+ *  조립하는 문구와 문자 그대로 맞춘다 - 머리/꼬리 `=====` 줄 + 멤버 줄 `<이름>[ (리더)] - <역할>`,
+ *  잰 범위는 머리 `=====`의 첫 글자부터 꼬리 `=====`의 마지막 글자까지(감싼 개행은 안 센다). */
 function squadBlockBytes(name: string, members: { name: string; role: string }[]): number {
   const lines = [
-    `스쿼드 ${name}`,
-    ...members.map((m, i) => `${m.name}${m.role ? ` ${m.role}` : ""}${i === 0 ? " (리더)" : ""}`),
+    `===== 스쿼드 ${name} =====`,
+    ...members.map((m, i) => `${m.name}${i === 0 ? " (리더)" : ""} - ${m.role}`),
+    "===== 스쿼드 끝 =====",
   ];
   return new TextEncoder().encode(lines.join("\n")).length;
 }
