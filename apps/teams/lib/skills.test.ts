@@ -7,9 +7,11 @@ import zlib from "node:zlib";
 import {
   deletePersonaMemory,
   extractSkillArchive,
+  fetchSkillFromAddress,
   installSkill,
   listInstalledSkills,
   memoryExcerpt,
+  parseSkillAddress,
   PersonaEngineCustomError,
   pickedSkills,
   readPersonaEngine,
@@ -323,6 +325,171 @@ test("extractSkillArchive — 상한은 <푼 뒤>를 잰다: 압축률 큰 zip�
   await assert.rejects(
     () => extractSkillArchive(zip),
     (e: unknown) => e instanceof SkillInstallError && /상한 20MB를 넘습니다/.test(e.message),
+  );
+});
+
+test("extractSkillArchive — subtree: 레포 하위 경로만 남기고, 상한도 그 하위 트리만 잰다", async () => {
+  const zip = buildZip([
+    { path: "myrepo-main/skills/foo/SKILL.md", data: Buffer.from("---\nname: foo\n---\n") },
+    { path: "myrepo-main/skills/foo/references/a.md", data: Buffer.from("참고") },
+    // subtree 밖의 파일이 상한을 넘겨도(§5-1 §상한 — 남긴 하위 트리만 잰다) 걸리지 않는다.
+    { path: "myrepo-main/other/huge.bin", data: Buffer.alloc(MAX_BYTES + 1024) },
+  ]);
+  const files = await extractSkillArchive(zip, "archive.skill", "skills/foo");
+  assert.deepEqual(
+    files.map((f) => f.path).sort(),
+    ["SKILL.md", "references/a.md"],
+  );
+  assert.equal(files.find((f) => f.path === "SKILL.md")!.bytes.toString("utf8"), "---\nname: foo\n---\n");
+});
+
+test("extractSkillArchive — subtree가 아카이브에 없으면 갈래 13(§비주얼 §25 ⑦)으로 거절한다", async () => {
+  const zip = buildZip([{ path: "myrepo-main/skills/foo/SKILL.md", data: Buffer.from("x") }]);
+  await assert.rejects(
+    () => extractSkillArchive(zip, "archive.skill", "skills/없는경로"),
+    (e: unknown) =>
+      e instanceof SkillInstallError &&
+      /그 레포에 없습니다/.test(e.message) &&
+      e.detail === "skills/없는경로",
+  );
+});
+
+// ── 주소 한 줄(URL) → SkillUpload[] (§5-1 §넷째 입구 · §비주얼 §25 ⑦) ─────────
+
+test("parseSkillAddress — 주소 갈래 표 여섯(§5-1). 네트워크를 안 탄다", () => {
+  assert.deepEqual(parseSkillAddress("https://github.com/o/r"), {
+    fetchUrl: "https://codeload.github.com/o/r/zip/HEAD",
+  });
+  assert.deepEqual(parseSkillAddress("https://github.com/o/r/tree/main"), {
+    fetchUrl: "https://codeload.github.com/o/r/zip/main",
+  });
+  assert.deepEqual(parseSkillAddress("https://github.com/o/r/tree/main/skills/foo"), {
+    fetchUrl: "https://codeload.github.com/o/r/zip/main",
+    subtree: "skills/foo",
+  });
+  assert.deepEqual(parseSkillAddress("https://github.com/o/r/blob/main/skills/foo/SKILL.md"), {
+    fetchUrl: "https://codeload.github.com/o/r/zip/main",
+    subtree: "skills/foo",
+  });
+  assert.deepEqual(
+    parseSkillAddress("https://raw.githubusercontent.com/o/r/main/skills/foo/SKILL.md"),
+    { fetchUrl: "https://codeload.github.com/o/r/zip/main", subtree: "skills/foo" },
+  );
+  assert.deepEqual(parseSkillAddress("https://skills.sh/s/x.skill"), {
+    fetchUrl: "https://skills.sh/s/x.skill",
+  });
+});
+
+test("parseSkillAddress — 호스트 목록 밖 · 모양이 표에 없다 → 갈래 10, 요청을 안 낸다", () => {
+  const rejects = (address: string) =>
+    assert.throws(
+      () => parseSkillAddress(address),
+      (e: unknown) =>
+        e instanceof SkillInstallError && /받을 수 없습니다/.test(e.message) && e.detail === address,
+    );
+  rejects("http://github.com/o/r"); // https가 아니다
+  rejects("https://example.com/x.skill"); // 호스트가 넷 밖이다
+  rejects("file:///etc/passwd");
+  rejects("이건 주소가 아니다");
+  rejects("https://github.com/o"); // 레포까지 안 온다
+  rejects("https://github.com/o/r/issues/5"); // tree·blob이 아니다
+  rejects("https://github.com/o/r/blob/main/SKILL.md"); // 파일이 레포 바로 아래다 — <path>가 없다
+  rejects("https://skills.sh/s/x.zip"); // .skill로 안 끝난다
+});
+
+/** `globalThis.fetch`를 잠깐 바꿔 낀다 — 진짜 네트워크를 안 탄다. */
+async function withMockFetch<T>(impl: typeof fetch, fn: () => Promise<T>): Promise<T> {
+  const orig = globalThis.fetch;
+  globalThis.fetch = impl;
+  try {
+    return await fn();
+  } finally {
+    globalThis.fetch = orig;
+  }
+}
+
+function mockResponse(body: BodyInit | null, init: ResponseInit & { url?: string } = {}): Response {
+  const res = new Response(body, init);
+  Object.defineProperty(res, "url", { value: init.url ?? "https://codeload.github.com/o/r/zip/HEAD" });
+  return res;
+}
+
+test("fetchSkillFromAddress — 정상 경로: 받은 zip이 extractSkillArchive를 그대로 거친다", async () => {
+  const zip = buildZip([{ path: "SKILL.md", data: Buffer.from("---\nname: from-url\n---\n") }]);
+  const files = await withMockFetch(
+    async () => mockResponse(zip, { status: 200 }),
+    () => fetchSkillFromAddress("https://github.com/o/r"),
+  );
+  assert.deepEqual(files, [{ path: "SKILL.md", bytes: files[0].bytes }]);
+  assert.equal(files[0].bytes.toString("utf8"), "---\nname: from-url\n---\n");
+});
+
+test("fetchSkillFromAddress — 갈래 10: 표에 없는 모양은 fetch를 아예 안 부른다", async () => {
+  let called = false;
+  await assert.rejects(
+    () =>
+      withMockFetch(async () => {
+        called = true;
+        throw new Error("호출되면 안 된다");
+      }, () => fetchSkillFromAddress("https://example.com/x")),
+    (e: unknown) => e instanceof SkillInstallError && /받을 수 없습니다/.test(e.message),
+  );
+  assert.equal(called, false);
+});
+
+test("fetchSkillFromAddress — 갈래 11: HTTP 상태와 네트워크 끊김을 가르지 않는다", async () => {
+  await assert.rejects(
+    () =>
+      withMockFetch(
+        async () => mockResponse(null, { status: 404 }),
+        () => fetchSkillFromAddress("https://github.com/o/r"),
+      ),
+    (e: unknown) =>
+      e instanceof SkillInstallError &&
+      /받지 못했습니다/.test(e.message) &&
+      e.detail === "GET https://codeload.github.com/o/r/zip/HEAD: HTTP 404",
+  );
+
+  await assert.rejects(
+    () =>
+      withMockFetch(
+        async () => {
+          throw new DOMException("The operation was aborted", "AbortError");
+        },
+        () => fetchSkillFromAddress("https://github.com/o/r"),
+      ),
+    (e: unknown) =>
+      e instanceof SkillInstallError &&
+      /받지 못했습니다/.test(e.message) &&
+      /^GET https:\/\/codeload\.github\.com\/o\/r\/zip\/HEAD: /.test(e.detail),
+  );
+});
+
+test("fetchSkillFromAddress — 갈래 10: 리디렉션 뒤 최종 호스트가 넷 밖이면 거절한다", async () => {
+  await assert.rejects(
+    () =>
+      withMockFetch(
+        async () => mockResponse(Buffer.from("x"), { status: 200, url: "https://evil.example/payload" }),
+        () => fetchSkillFromAddress("https://github.com/o/r"),
+      ),
+    (e: unknown) =>
+      e instanceof SkillInstallError &&
+      /받을 수 없습니다/.test(e.message) &&
+      e.detail === "https://evil.example/payload",
+  );
+});
+
+test("fetchSkillFromAddress — 갈래 12: 받는 도중 §8 MAX_BYTES를 넘으면 끊는다", async () => {
+  await assert.rejects(
+    () =>
+      withMockFetch(
+        async () => mockResponse(Buffer.alloc(MAX_BYTES + 1024), { status: 200 }),
+        () => fetchSkillFromAddress("https://github.com/o/r"),
+      ),
+    (e: unknown) =>
+      e instanceof SkillInstallError &&
+      /받는 크기가 상한을 넘어 끊었습니다/.test(e.message) &&
+      e.detail === "20MB",
   );
 });
 

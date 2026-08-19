@@ -22,6 +22,7 @@ import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promis
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
+import { MAX_BYTES } from "./attachment-limit.ts";
 import { skillUploadError } from "./skill-upload-limit.ts";
 import { expandHome, resolveWithin } from "./paths.ts";
 import { personaFilePath } from "./projects.ts";
@@ -276,16 +277,39 @@ async function listZipFiles(zipFile: string): Promise<{ path: string; bytes: num
  *  **`unzip`이 실패하면**(헤더가 zip이 아니거나 깨진 아카이브) 갈래 8로 거절한다 — 그 실패가
  *  헤더 탓인지 손상 탓인지는 `unzip`이 낸 한 줄에만 있어 화면이 그 둘을 가르지 않는다.
  *
- *  **자리는 임시 디렉터리이고 끝나면 지운다**(성공하든 거절하든) — `<config>/skills` 밖이다. */
+ *  **자리는 임시 디렉터리이고 끝나면 지운다**(성공하든 거절하든) — `<config>/skills` 밖이다.
+ *
+ *  **`subtree`는 §5-1 §넷째 입구가 쓰는 인자다** — 저장소 전체가 아니라 그 안의 한 경로만 남긴다
+ *  (`tree`/`blob`/raw 주소가 가리키는 `<path>`). `undefined`면 전체(`.skill` 한 장과 같은 갈래).
+ *  codeload zip은 언제나 저장소를 `<repo>-<ref>/` 한 겹으로 감싸는데, 그 이름을 몰라도 <유일한
+ *  최상위 항목>으로 찾아 뗀 뒤 `subtree`를 그 아래에서 다시 찾는다 — 못 찾으면 갈래 13(§비주얼
+ *  §25 ⑦)이다. **상한은 이 필터를 거친 뒤를 잰다**(§5-1 §상한 — 레포 전체가 아니라 남긴 하위
+ *  트리). 그 뒤(첫 성분 규칙 · 상한 · 임시 디렉터리 · `installSkill` 이후)는 `subtree` 없을 때와
+ *  한 줄도 안 갈린다 — `cut`이 그때 빈 문자열이라 아래 계산이 그대로 종전 값으로 접힌다. */
 export async function extractSkillArchive(
   bytes: Buffer,
   originalName = "archive.skill",
+  subtree?: string,
 ): Promise<SkillUpload[]> {
   const dir = await mkdtemp(path.join(tmpdir(), "skill-import-"));
   try {
     const zipFile = path.join(dir, "archive.zip");
     await writeFile(zipFile, bytes);
-    const entries = await listZipFiles(zipFile);
+    let entries = await listZipFiles(zipFile);
+
+    let cut = ""; // subtree가 없으면 빈 문자열 — 아래 전부가 종전 그대로다
+    if (subtree !== undefined) {
+      const repoTop = new Set(entries.map((e) => e.path.split("/")[0]));
+      const repoRoot = repoTop.size === 1 ? `${[...repoTop][0]}/` : "";
+      cut = `${repoRoot}${subtree}/`;
+      entries = entries.filter((e) => e.path.startsWith(cut));
+      if (entries.length === 0) {
+        throw new SkillInstallError(
+          "주소가 가리키는 폴더가 그 레포에 없습니다 — 브랜치나 경로가 맞는지 확인합니다",
+          subtree,
+        );
+      }
+    }
 
     const limitError = skillUploadError(
       entries.length,
@@ -297,27 +321,162 @@ export async function extractSkillArchive(
     await mkdir(extractDir);
     await runUnzip(["-q", zipFile, "-d", extractDir]);
 
-    const topSegments = new Set(entries.map((e) => e.path.split("/")[0]));
+    const relPaths = entries.map((e) => e.path.slice(cut.length));
+    const topSegments = new Set(relPaths.map((p) => p.split("/")[0]));
     const only = topSegments.size === 1 ? [...topSegments][0] : null;
-    const isSingleTopDir = only !== null && entries.every((e) => e.path !== only);
-    const hasTopSkillMd = entries.some((e) => e.path === "SKILL.md");
+    const isSingleTopDir = only !== null && relPaths.every((p) => p !== only);
+    const hasTopSkillMd = relPaths.some((p) => p === "SKILL.md");
     if (!hasTopSkillMd && !isSingleTopDir) {
       throw new SkillInstallError(
         ".skill 안에서 SKILL.md를 찾지 못했습니다 — 최상위에 있거나 폴더 하나 바로 아래에 있어야 합니다",
         originalName,
       );
     }
-    const strip = !hasTopSkillMd && isSingleTopDir ? `${only}/` : "";
+    const strip = !hasTopSkillMd && isSingleTopDir ? `${cut}${only}/` : cut;
 
     return await Promise.all(
       entries.map(async (e) => ({
-        path: strip ? e.path.slice(strip.length) : e.path,
+        path: e.path.slice(strip.length),
         bytes: await readFile(await resolveWithin(extractDir, e.path)),
       })),
     );
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+}
+
+// ── 주소 한 줄(URL) → SkillUpload[] (§5-1 §넷째 입구) ─────────────────────────
+
+/** 이 넷만 받는다(§5-1 §호스트 목록 넷). `https`가 아니거나 이 밖이면 요청을 안 낸다 — IP
+ *  리터럴 · 사설 대역 · `file:`을 따로 세는 코드를 안 만드는 이유다(목록 하나가 그 전부를 막는다).
+ *  리디렉션 뒤 최종 호스트(`res.url`)도 이 목록으로 판정한다. */
+const SKILL_ADDRESS_HOSTS = new Set([
+  "github.com",
+  "codeload.github.com",
+  "raw.githubusercontent.com",
+  "skills.sh",
+]);
+
+/** §5-1 §타임아웃 — 전체 30초. 헤더뿐 아니라 본문을 다 받는 시간까지 잰다(기존 `AbortSignal.timeout`
+ *  조립 그대로 — `lib/usage.ts`의 5초 프로브와 다른 수인 이유는 §5-1 §넷째 입구가 적었다). */
+const SKILL_FETCH_TIMEOUT_MS = 30_000;
+
+/** 갈래 10(§비주얼 §25 ⑦) — 표에 없는 모양이거나 호스트가 넷 밖이면 요청을 내기 전에 거절한다. */
+function badSkillAddress(address: string): never {
+  throw new SkillInstallError(
+    "이 주소로는 받을 수 없습니다 — GitHub 레포나 그 안의 폴더 주소, 또는 skills.sh의 .skill 주소를 붙입니다",
+    address,
+  );
+}
+
+/** 주소 한 줄 → codeload zip 주소 + 남길 하위 트리(§5-1 §주소 갈래 표 여섯). API를 안 부른다 —
+ *  기본 브랜치를 몰라도 `zip/HEAD`가 그것을 준다. 토큰도 안 붙인다(§5-1 §안 하는 것). */
+export function parseSkillAddress(address: string): { fetchUrl: string; subtree?: string } {
+  let url: URL;
+  try {
+    url = new URL(address);
+  } catch {
+    return badSkillAddress(address);
+  }
+  if (url.protocol !== "https:" || !SKILL_ADDRESS_HOSTS.has(url.hostname)) return badSkillAddress(address);
+  const seg = url.pathname.split("/").filter(Boolean);
+
+  if (url.hostname === "skills.sh") {
+    return url.pathname.endsWith(".skill") ? { fetchUrl: address } : badSkillAddress(address);
+  }
+  if (url.hostname === "github.com") {
+    if (seg.length === 2) return { fetchUrl: `https://codeload.github.com/${seg[0]}/${seg[1]}/zip/HEAD` };
+    if (seg[2] === "tree" && seg.length >= 4) {
+      const [owner, repo, , ref, ...rest] = seg;
+      const fetchUrl = `https://codeload.github.com/${owner}/${repo}/zip/${ref}`;
+      return rest.length === 0 ? { fetchUrl } : { fetchUrl, subtree: rest.join("/") };
+    }
+    // blob/<ref>/<path>/<파일> — <path>가 최소 한 성분이라야 한다(파일이 레포 바로 아래면 표 밖이다).
+    if (seg[2] === "blob" && seg.length >= 6) {
+      const [owner, repo, , ref, ...rest] = seg;
+      return {
+        fetchUrl: `https://codeload.github.com/${owner}/${repo}/zip/${ref}`,
+        subtree: rest.slice(0, -1).join("/"),
+      };
+    }
+    return badSkillAddress(address);
+  }
+  // raw.githubusercontent.com/<o>/<r>/<ref>/<path>/<파일> — 위 blob과 같은 최소 길이 조건이다.
+  if (url.hostname === "raw.githubusercontent.com" && seg.length >= 5) {
+    const [owner, repo, ref, ...rest] = seg;
+    return {
+      fetchUrl: `https://codeload.github.com/${owner}/${repo}/zip/${ref}`,
+      subtree: rest.slice(0, -1).join("/"),
+    };
+  }
+  return badSkillAddress(address);
+}
+
+/** 응답을 스트리밍으로 받으며 §8 `MAX_BYTES`를 잰다 — `Content-Length`를 안 믿는다(chunked면
+ *  안 온다). 넘는 순간 **받는 도중에 끊는다**(갈래 12). 그 밖의 끊김 · 소켓 에러 · 타임아웃은
+ *  갈래 11로 뭉뚱그린다 — HTTP 상태 · 타임아웃 · 끊김을 가르지 않고 사유를 지어내지 않는다. */
+async function readLimitedBody(res: Response, fetchUrl: string): Promise<Buffer> {
+  const reader = res.body?.getReader();
+  if (!reader) return Buffer.alloc(0);
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.length;
+      if (total > MAX_BYTES) {
+        await reader.cancel();
+        throw new SkillInstallError(
+          "받는 크기가 상한을 넘어 끊었습니다 — 레포 전체를 받으므로 큰 레포는 내려받아 파일로 깝니다",
+          `${MAX_BYTES / 1024 / 1024}MB`,
+        );
+      }
+      chunks.push(value);
+    }
+  } catch (e) {
+    if (e instanceof SkillInstallError) throw e;
+    throw new SkillInstallError(
+      "주소에서 받지 못했습니다 — 주소가 맞는지, 공개된 레포인지 확인합니다",
+      `GET ${fetchUrl}: ${(e as Error).message}`,
+    );
+  }
+  return Buffer.concat(chunks);
+}
+
+/** 주소 한 줄 → `SkillUpload[]`(§5-1 §넷째 입구 · §비주얼 §25 ⑦). 통로는 여전히
+ *  `extractSkillArchive` 하나다 — 이 함수는 그 앞에 붙는 것(주소 판정 · fetch · 상한을 지키며
+ *  받기)만 하고, 받은 뒤는 `.skill` 한 장과 한 줄도 안 갈린다. 새 npm은 0이다 — `fetch`와
+ *  `AbortSignal.timeout`은 Node 런타임 내장이다.
+ *
+ *  거절하면 `<config>/skills` 아래에도 임시 디렉터리에도 아무것도 안 남는다 — 요청 자체가
+ *  거절되면 `extractSkillArchive`를 아예 안 부르고, 부른 뒤의 거절은 그 함수의 `finally`가 건다. */
+export async function fetchSkillFromAddress(address: string): Promise<SkillUpload[]> {
+  const { fetchUrl, subtree } = parseSkillAddress(address);
+
+  let res: Response;
+  try {
+    res = await fetch(fetchUrl, { signal: AbortSignal.timeout(SKILL_FETCH_TIMEOUT_MS) });
+  } catch (e) {
+    throw new SkillInstallError(
+      "주소에서 받지 못했습니다 — 주소가 맞는지, 공개된 레포인지 확인합니다",
+      `GET ${fetchUrl}: ${(e as Error).message}`,
+    );
+  }
+  if (!SKILL_ADDRESS_HOSTS.has(new URL(res.url).hostname)) {
+    await res.body?.cancel();
+    return badSkillAddress(res.url);
+  }
+  if (!res.ok) {
+    await res.body?.cancel();
+    throw new SkillInstallError(
+      "주소에서 받지 못했습니다 — 주소가 맞는지, 공개된 레포인지 확인합니다",
+      `GET ${fetchUrl}: HTTP ${res.status}`,
+    );
+  }
+
+  const bytes = await readLimitedBody(res, fetchUrl);
+  return extractSkillArchive(bytes, address, subtree);
 }
 
 // ── 페르소나가 고른 스킬 (`<personas>/<이름>/skills.md`) ─────────────────────
