@@ -185,6 +185,47 @@ export function MarkResumeReadButton({ toMs }: { toMs: number }) {
   );
 }
 
+/** 팝오버 머리의 `보관함` 토글 + 그 아래 스크롤 상자 (§0-10 §받은 편지함 §보관한 것을 다시
+ *  본다 · §비주얼 §28 ⑨ §머리 · §스크롤).
+ *
+ *  **새 화면 0 · 새 주소 0** — 여는 것은 클라이언트 상태 하나뿐이다. `current`·`archive`는
+ *  셸(서버 컴포넌트)이 이미 다 그려서 넘긴 두 벌이고, 여기는 그중 하나를 보여줄 뿐이다
+ *  (§0-10: 이 토글은 아무것도 저장하지 않는다).
+ *
+ *  **면 하나로만 말하지 않는다**(§비주얼 §28 ⑨ §머리) — `aria-pressed`(낭독) + `bg-muted`(면) +
+ *  아래 목록이 통째로 갈리는 것, 셋이 같이 켜짐을 나른다. */
+export function ArchiveToggle({
+  label,
+  current,
+  archive,
+}: {
+  label: string;
+  current: React.ReactNode;
+  archive: React.ReactNode;
+}) {
+  const [showArchive, setShowArchive] = useState(false);
+  return (
+    <>
+      <div className="flex justify-end border-b pb-2.5">
+        <Button
+          variant="ghost"
+          size="sm"
+          aria-pressed={showArchive}
+          className={showArchive ? "bg-muted" : undefined}
+          onClick={() => setShowArchive((v) => !v)}
+        >
+          {label}
+        </Button>
+      </div>
+      {/* `min-h-0`이 없으면 `PopoverContent`(flex-col)의 `min-height: auto`가 min-content로
+          굳어서 이 안쪽 `overflow-y-auto`가 무력화된다(§비주얼 §28 ⑨ §스크롤). */}
+      <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto">
+        {showArchive ? archive : current}
+      </div>
+    </>
+  );
+}
+
 export type SwitcherProject = {
   id: string;
   name: string;

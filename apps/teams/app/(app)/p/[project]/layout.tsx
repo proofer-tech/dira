@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import {
+  ArchiveToggle,
   BrandMark,
   MarkFailuresReadButton,
   MarkResumeReadButton,
@@ -35,13 +36,21 @@ import { Button } from "@/components/ui/button";
 import { PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { hasRegisteredToken, readAuth, readOtherEngineAuth, readTokenRows, readTokens } from "@/lib/auth";
 import { DEFAULT_LOCALE, t, type Locale } from "@/lib/i18n";
-import type { ResumeEvent } from "@/lib/machine-state";
 import { buildVault } from "@/lib/markdown-wikilinks";
 import { listTree } from "@/lib/protocols";
 import { ontologyDir, readSummary, readProjects, readLanguage } from "@/lib/projects";
 import type { DueAlert } from "@/lib/queue";
-import { engineLimits, formatTokens, listUsage, usageRates, type EngineLimit } from "@/lib/usage";
-import { engineName, workerGroups } from "@/lib/workers";
+import { engineLimits, formatTokens, listUsage, parseLogName, usageRates, type EngineLimit } from "@/lib/usage";
+import {
+  archivedRows,
+  engineName,
+  readAlerts,
+  unarchivedFailures,
+  unarchivedResumes,
+  workerGroups,
+  type ArchivedRow,
+  type UnarchivedResume,
+} from "@/lib/workers";
 import { dateTimeLabel, remainingLabel, tildePath, timeLabel } from "@/lib/urls";
 import { cn } from "@/lib/utils";
 
@@ -80,22 +89,6 @@ export default async function ProjectLayout({
         // §0-10 ③의 `할당 해제`가 부를 워커. 티켓 상세와 **같은 규칙**이다(`workers[0]`) —
         // 어느 워커 스크립트든 같은 큐를 되돌리므로 첫 번째면 된다. 0개면 컴포넌트가 비활성 + 사유다
         worker: s.workers[0]?.name ?? null,
-        // §0-5 알림용. `readSummary`가 이미 `listWorkers`를 불렀으므로 워커를 다시 읽지 않는다.
-        // 정상 상태에서는 항상 빈 배열이고 그때 항목 노드가 아예 없다.
-        // `log`·`at`은 `읽음으로 표시`가 쓰는 키다(§0-5 §읽음 처리 — 단위가 워커가 아니라
-        // **실패 하나**고 그 키가 로그 파일명이다). 화면에 그리는 것은 여전히 이름과 사유뿐이다.
-        failures: s.workers.flatMap((w) =>
-          w.lastFailure
-            ? [
-                {
-                  name: w.name,
-                  reason: w.lastFailure.reason,
-                  log: w.lastFailure.log,
-                  at: w.lastFailure.at,
-                },
-              ]
-            : [],
-        ),
         // §0-4 인증 배너용. claude 엔진 워커가 있는가 — **못 읽었으면 판정 불가 = true**다
         // (판정 불가를 "괜찮다"로 바꾸면 §0-4가 닫으려던 침묵이 그대로 돌아온다).
         // 워커도 `readSummary`가 이미 읽어 둔 것이다 — 새 fs 읽기 0(§성능 예산).
@@ -149,6 +142,25 @@ export default async function ProjectLayout({
     otherEngines,
   };
 
+  // 받은 편지함(§0-10 §받은 편지함 §항목의 켜짐 조건이 갈린다). ②⑥은 신선도 창(10분)이 아니라
+  // **안 보관한 사건이 1건 이상인가**로 켜진다 — `failureOf`·`machine-state.ts`의 판정은
+  // 한 줄도 안 바뀌고 §4 워커 행은 여전히 그 판정만 본다(이 파일은 워커 행을 안 그린다).
+  const mailbox = await readAlerts();
+  const queueFailures = unarchivedFailures(mailbox, root);
+  // 화면에 그리는 이름은 로그 파일명에서 뽑는다 — `parseLogName`이 이미 §0-8이 쓰는 그 파서다.
+  const failures = queueFailures.map((f) => ({
+    name: parseLogName(f.log)?.worker ?? f.log,
+    reason: f.reason,
+    log: f.log,
+    at: f.at,
+  }));
+  const machineResumes = unarchivedResumes(mailbox);
+  // ⑥은 나열이 없는 항목 하나다(§비주얼 §28) — 안 보관한 것 중 가장 최근(`to` 최대) 하나를 보여준다.
+  const resume: UnarchivedResume | null =
+    machineResumes.length > 0
+      ? machineResumes.reduce((a, b) => (b.to > a.to ? b : a))
+      : null;
+
   // 셸 알림 종이 세는 일곱 (§0-10). **판정식은 §0-14 · §0-4 · §0-5 · §0-2 · 결정 5 · §1-4가
   // 그대로 갖는다** — 아래 일곱은 그 절들이 쓰던 조건 그대로이고 바뀐 것은 그리는 자리와 문구뿐이다.
   // 순서는 ⑤→⑥→①→②→③→④→⑦다(§0-14 — 머신이 큐보다 넓다. 네트워크가 없으면 인증이 있어도
@@ -161,9 +173,9 @@ export default async function ProjectLayout({
   // 상태가 아니라 사람이 스스로 건 약속이고, 위 여섯이 뜬 판에서는 그것들이 먼저 풀려야 마감도 산다.
   const alerts = {
     offline: current.machine.offline,
-    resume: current.machine.resume !== null,
+    resume: machineResumes.length > 0,
     auth: !auth.savedAt && current.claude,
-    failures: current.connected && current.failures.length > 0,
+    failures: current.connected && queueFailures.length > 0,
     assigned: current.connected && current.assigned.length > 0,
     awaiting: current.connected && current.awaiting.length > 0,
     due: current.connected && current.due.length > 0,
@@ -234,23 +246,28 @@ export default async function ProjectLayout({
             />
             {/* 폭은 전환기 팔레트와 같은 448px이다 — 헤더 우측에서 열리는 상자 둘의 왼쪽 끝이
                 어긋나지 않는다(§28 ④). 넘치면 스크롤한다: **상위 N건으로 자르지 않는다**
-                (§0-2 · §0-5 · §0-10). `5rem` = 헤더 48 + sideOffset 4 + status bar 28 */}
-            <PopoverContent
-              align="end"
-              className="max-h-[calc(100vh-5rem)] w-[28rem] overflow-y-auto"
-            >
-              <NotificationItems
-                id={id}
-                auth={auth}
-                alerts={alerts}
-                authRegistered={authRegistered}
-                resume={current.machine.resume}
-                failures={current.failures}
-                assigned={current.assigned}
-                awaiting={current.awaiting}
-                worker={current.worker}
-                due={current.due}
-                locale={locale}
+                (§0-2 · §0-5 · §0-10). `5rem` = 헤더 48 + sideOffset 4 + status bar 28.
+                `overflow-y-auto`는 머리가 선 뒤로 `ArchiveToggle`의 안쪽 상자로 내려갔다
+                (§비주얼 §28 ⑨ §스크롤) — `max-h`의 자리·수는 무수정이다 */}
+            <PopoverContent align="end" className="max-h-[calc(100vh-5rem)] w-[28rem]">
+              <ArchiveToggle
+                label={t(locale, "bell.archive.toggle")}
+                current={
+                  <NotificationItems
+                    id={id}
+                    auth={auth}
+                    alerts={alerts}
+                    authRegistered={authRegistered}
+                    resume={resume}
+                    failures={failures}
+                    assigned={current.assigned}
+                    awaiting={current.awaiting}
+                    worker={current.worker}
+                    due={current.due}
+                    locale={locale}
+                  />
+                }
+                archive={<ArchiveList rows={archivedRows(mailbox, root)} locale={locale} />}
               />
             </PopoverContent>
           </NotificationPopover>
@@ -383,7 +400,7 @@ function NotificationItems({
     due: boolean;
   };
   authRegistered: boolean;
-  resume: ResumeEvent | null;
+  resume: UnarchivedResume | null;
   failures: { name: string; reason: string; log: string; at: string }[];
   assigned: { hash: string; stem: string }[];
   awaiting: { hash: string; stem: string; mtime: number }[];
@@ -638,6 +655,40 @@ function NotificationItems({
       {row}
     </div>
   ));
+}
+
+/** 보관함 목록 (§0-10 §받은 편지함 §보관한 것을 다시 본다 · §비주얼 §28 ⑨ §보관함 목록의 행).
+ *
+ *  **판정을 다시 안 돌린다** — `archivedRows`가 편지함이 든 값 그대로 넘긴 것을 그릴 뿐이다
+ *  (원본이 이미 죽은 사건이라 물어볼 데가 없다). ②의 나열 행 그대로에 시각 칸 하나가 앞에
+ *  붙는 한 벌이고, ⑥은 셋째 칸(원문)이 없다.
+ *
+ *  ⑥ 행의 `잠자기`·`꺼짐`은 이 티켓의 두 언어 수용조건(§0-10 ⑨ — `보관`·`보관함`·
+ *  `보관한 알림 없음` 셋뿐이다) 밖이라 i18n 키를 새로 안 늘린다. */
+function ArchiveList({ rows, locale }: { rows: ArchivedRow[]; locale: Locale }) {
+  if (rows.length === 0) return <EmptyState text={t(locale, "bell.archive.empty")} />;
+  return (
+    <ul className="grid gap-2">
+      {rows.map((r) =>
+        r.type === "failure" ? (
+          <li key={`f-${r.log}`} className="flex items-baseline gap-2">
+            <span className="shrink-0 font-mono text-xs text-muted-foreground tabular-nums">
+              {dateTimeLabel(r.at)}
+            </span>
+            <span className="shrink-0 font-mono text-xs">{parseLogName(r.log)?.worker ?? r.log}</span>
+            <span className="min-w-0 break-words font-mono text-xs">{r.reason}</span>
+          </li>
+        ) : (
+          <li key={`r-${r.to}`} className="flex items-baseline gap-2">
+            <span className="shrink-0 font-mono text-xs text-muted-foreground tabular-nums">
+              {dateTimeLabel(r.from)} - {dateTimeLabel(r.to)}
+            </span>
+            <span className="shrink-0 text-xs">{r.kind === "slept" ? "잠자기" : "꺼짐"}</span>
+          </li>
+        ),
+      )}
+    </ul>
+  );
 }
 
 /** 잔여를 읽어 칸을 채운다. **읽는 주체는 서버다**(§0-8) — 토큰은 여기서 나가지 않고

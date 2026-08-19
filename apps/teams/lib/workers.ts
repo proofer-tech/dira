@@ -1129,6 +1129,52 @@ export async function markAlertsRead(
   await writeAlerts({ ...alerts, queues: { ...alerts.queues, [root]: events } });
 }
 
+// ── 받은 편지함 §화면 배선 (§0-10 §항목의 켜짐 조건이 갈린다 · §비주얼 §28 ⑨) ────────────
+//
+// 판정은 여기서 다시 안 돈다 — 편지함이 이미 든 값을 세고 거르고 정렬할 뿐이다. `failureOf`도
+// `machine-state.ts`도 한 줄도 안 건드린다(§4 워커 행은 여전히 그 함수들만 본다).
+
+/** ②의 켜짐 조건 + 나열 — 신선도 창(10분)이 아니라 **안 보관한 사건**이 기준이다. 워커 이름은
+ *  로그 파일명에서 뽑는데 그 파서(`parseLogName`)가 `lib/usage.ts`에 있어 여기서 안 부른다 —
+ *  부르면 `usage.ts → workers.ts`의 기존 임포트 방향과 겹친 순환이 하나 는다. 화면이 이름을 뽑는다. */
+export type UnarchivedFailure = { log: string; at: string; reason: string };
+export function unarchivedFailures(mailbox: Mailbox, root: string): UnarchivedFailure[] {
+  return Object.entries(mailbox.queues[root] ?? {})
+    .filter(([, e]) => !e.archived)
+    .map(([log, e]) => ({ log, at: e.at, reason: e.reason }));
+}
+
+/** ⑥의 켜짐 조건 + 안 보관한 사건 — `machineState()`의 신선도 창에 낀 "지금" 하나가 아니라
+ *  편지함이 든 전부를 본다. 화면은 그중 가장 최근(`to` 최대) 하나를 항목의 내용으로 쓴다
+ *  (§비주얼 §28 — ⑥은 나열이 없는 항목 하나다). */
+export type UnarchivedResume = { to: number; from: number; kind: string };
+export function unarchivedResumes(mailbox: Mailbox): UnarchivedResume[] {
+  return Object.entries(mailbox.machine)
+    .filter(([, e]) => !e.archived)
+    .map(([to, e]) => ({ to: Number(to), from: e.from, kind: e.kind }));
+}
+
+/** 보관함 목록(§비주얼 §28 ⑨) — ②⑥의 보관된 사건을 시각 내림차순 한 벌로 섞는다. **판정을
+ *  다시 안 돌린다** — 원본이 이미 죽은 사건이라 편지함이 든 값 그대로 그린다. */
+export type ArchivedRow =
+  | { type: "failure"; log: string; at: number; reason: string }
+  | { type: "resume"; to: number; from: number; kind: string };
+export function archivedRows(mailbox: Mailbox, root: string): ArchivedRow[] {
+  const failures: ArchivedRow[] = Object.entries(mailbox.queues[root] ?? {})
+    .filter(([, e]) => e.archived)
+    .map(([log, e]) => ({
+      type: "failure",
+      log,
+      at: Date.parse(e.at.replace(" ", "T")),
+      reason: e.reason,
+    }));
+  const resumes: ArchivedRow[] = Object.entries(mailbox.machine)
+    .filter(([, e]) => e.archived)
+    .map(([to, e]) => ({ type: "resume", to: Number(to), from: e.from, kind: e.kind }));
+  const sortKey = (r: ArchivedRow) => (r.type === "failure" ? r.at : r.to);
+  return [...failures, ...resumes].sort((a, b) => sortKey(b) - sortKey(a));
+}
+
 /** `owner:` → 워커 이름. tick.sh 207행이 `<페르소나> / <TICKET_NAME>-<sid[:8]>`를 쓰므로
  *  그 형식일 때만 뒤쪽 이름을 돌려주고, 아니면 `null`이다 — **모르는 것을 `?`로 그리지 않는다**
  *  (DESIGN.md §1 보드). 판정 방향이 둘(워커→티켓 `holdingOf` · 티켓→워커 칸반 카드)이라

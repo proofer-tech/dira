@@ -75,6 +75,10 @@ const {
   worktreeCmds,
   writeCommonContext,
   writeContext,
+  readAlerts,
+  unarchivedFailures,
+  unarchivedResumes,
+  archivedRows,
 } = await import("./workers.ts");
 
 const SFX = { inProgress: ".wip", done: ".done" };
@@ -778,6 +782,64 @@ test("읽음 처리 ⑤ 상한 — 큐 루트당 200건, 넘치면 `at`이 이�
     kept.sort(),
     Array.from({ length: 200 }, (_, i) => `old-${i + 50}.log`).sort(),
   );
+});
+
+test("unarchivedFailures — 신선도 창을 안 본다. 보관 안 된 것만, 루트가 갈리면 안 섞인다 (§0-10 §항목의 켜짐 조건이 갈린다)", async () => {
+  const root = "/q/a";
+  const other = "/q/b";
+  putAlerts({
+    queues: {
+      [root]: {
+        // 20분 전 — 신선도 창(10분) 밖이어도 안 걸린다.
+        "fail-old.log": mailboxFailure(stamp(20)),
+        "fail-archived.log": mailboxFailure(stamp(1), stamp(0)),
+      },
+      [other]: { "fail-other.log": mailboxFailure(stamp(1)) },
+    },
+  });
+  const alerts = await readAlerts();
+  const rows = unarchivedFailures(alerts, root);
+  assert.deepStrictEqual(
+    rows.map((r) => r.log).sort(),
+    ["fail-old.log"],
+  );
+  assert.strictEqual(rows[0].reason, LIMIT);
+});
+
+test("unarchivedResumes — 보관 안 된 머신 사건만, `to`가 숫자로 돌아온다", async () => {
+  putAlerts({
+    queues: {},
+    machine: {
+      "1000": { from: 500, kind: "slept", archived: null },
+      "2000": { from: 1500, kind: "poweredOff", archived: "2026-08-01T00:00:00.000Z" },
+    },
+  });
+  const alerts = await readAlerts();
+  const rows = unarchivedResumes(alerts);
+  assert.deepStrictEqual(rows, [{ to: 1000, from: 500, kind: "slept" }]);
+});
+
+test("archivedRows — ②⑥의 보관된 사건만 시각 내림차순 한 벌로 섞는다. 판정을 다시 안 돌린다", async () => {
+  const root = "/q/a";
+  const to = Date.now();
+  putAlerts({
+    queues: {
+      [root]: {
+        "fail-mid.log": { at: stamp(60), hash: "aaa", reason: "mid", archived: stamp(0) },
+        "fail-unarchived.log": mailboxFailure(stamp(1)), // 안 보관 — 안 섞인다
+      },
+    },
+    machine: {
+      [String(to)]: { from: to - 300_000, kind: "slept", archived: stamp(0) },
+    },
+  });
+  const alerts = await readAlerts();
+  const rows = archivedRows(alerts, root);
+  assert.deepStrictEqual(
+    rows.map((r) => r.type),
+    ["resume", "failure"], // 머신 사건(방금)이 실패(1시간 전)보다 최근이라 앞에 온다
+  );
+  assert.strictEqual((rows[1] as { reason: string }).reason, "mid");
 });
 
 /** 주어진 경로를 **실제로 여는 횟수**를 센다. "정상 상태의 새 I/O가 0"은 눈으로 못 맞춘다.
