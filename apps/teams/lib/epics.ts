@@ -155,6 +155,39 @@ export async function createEpic(root: string, key: string, title: string): Prom
   }
 }
 
+/** 에픽 화면의 편집 다이얼로그가 부르는 쓰기(§에픽 결정 19-2) — `createEpic`과 갈리는 자리는
+ *  `wx`가 아니라 `writeFile`이다: 사람이 그 파일을 고치러 연 것이라 덮어쓴다. 디렉터리가 없으면
+ *  만든다(P300 갈래) — `memory/`는 안 만든다. 판정은 `createEpic`과 같은 식이다(제목·내용이
+ *  비면 거절, `reason: "empty"`) — 그 밖의 검증·정규화는 0.
+ *
+ *  꼴은 `epicTitle`/`epicReadmeBody`가 다시 읽어 같은 값이 나와야 한다(§함정 §왕복) — 제목 한 줄,
+ *  빈 줄 하나, 내용, 끝 줄바꿈. */
+export async function saveEpicReadme(
+  root: string,
+  epic: string,
+  title: string,
+  body: string,
+): Promise<CreateEpicResult> {
+  const t = title.trim();
+  const b = body.trim();
+  if (!t) return { ok: false, reason: "empty", error: "제목을 입력하세요." };
+  if (!b) return { ok: false, reason: "empty", error: "내용을 입력하세요." };
+  const dir = await epicDir(root, epic);
+  if (!dir) return { ok: false, reason: "invalid", error: `키가 큐 밖을 가리킵니다: ${epic}` };
+  try {
+    await mkdir(dir, { recursive: true });
+    const fh = await open(path.join(dir, "README.md"), "w");
+    try {
+      await fh.writeFile(`${t}\n\n${b}\n`);
+    } finally {
+      await fh.close();
+    }
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, reason: "other", error: `저장하지 못했습니다: ${(e as Error).message}` };
+  }
+}
+
 export type EpicMemory = { file: string; excerpt: string; text: string };
 
 /** 메모리 디렉터리 글롭 하나 — 읽기(`epicMemory`)와 삭제(`deleteEpicMemory`)가 같이 쓴다

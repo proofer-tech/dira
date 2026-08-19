@@ -6,7 +6,7 @@
  *  여기는 훨씬 얇다(추가·편집이 아예 없다). */
 import { useRef, useState, useTransition } from "react";
 import { ChevronRight, Trash2, TriangleAlert } from "lucide-react";
-import { deleteEpicMemoryAction } from "@/app/(app)/p/[project]/epics/actions";
+import { deleteEpicMemoryAction, saveEpicReadmeAction } from "@/app/(app)/p/[project]/epics/actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   AlertDialog,
@@ -20,8 +20,22 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { MarkdownEditor } from "@/components/markdown-editor";
 import { Markdown } from "@/components/markdown";
 import type { EpicMemory } from "@/lib/epics";
+import { t, type Locale } from "@/lib/i18n";
 import type { Vault } from "@/lib/markdown-wikilinks";
 
 /** §6 에러 3요소 중 1·2번 — `personas-ui.tsx`의 `Failure`와 같은 값이다. 화면마다 각자 든다
@@ -35,6 +49,85 @@ function Failure({ title, message }: { title: string; message: string }) {
         <span className="font-mono text-xs break-all">{message}</span>
       </AlertDescription>
     </Alert>
+  );
+}
+
+/** 에픽 화면 오른쪽 머리의 편집 입구 + 다이얼로그 (§에픽 결정 19-2 · §비주얼 §52 ⑪) — 그릇은
+ *  발행 다이얼로그(§3), 칸 둘은 사이드바 만들기 입구(`epic-sidebar-create.tsx`)와 같은 라벨을
+ *  다시 쓴다. **닫아도 초안을 안 버린다** — `onOpenChange`에서 값을 되돌리지 않는다(§닫기 확인). */
+export function EpicReadmeEditButton({
+  projectId,
+  epic,
+  locale,
+  initialTitle,
+  initialBody,
+}: {
+  projectId: string;
+  epic: string;
+  locale: Locale;
+  initialTitle: string;
+  initialBody: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [title, setTitle] = useState(initialTitle);
+  const [body, setBody] = useState(initialBody);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+  const dirty = title !== initialTitle || body !== initialBody;
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger render={<Button variant="outline" />}>{t(locale, "epics.readme.edit")}</DialogTrigger>
+      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>
+            {t(locale, "epics.readme.edit")} — epics/{epic}/README.md
+          </DialogTitle>
+          <DialogDescription>{t(locale, "epics.readme.editDesc")}</DialogDescription>
+        </DialogHeader>
+        {/* `min-w-0` — `DialogContent`가 `grid`라 안쪽 아이템의 min-width가 min-content로 굳는다
+            (같은 함정·같은 처방이 `ticket-ui.tsx`의 답변·발행 다이얼로그에 이미 있다). */}
+        <div className="min-w-0 space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="epic-readme-title">{t(locale, "board.epic.createTitleLabel")}</Label>
+            <Input
+              id="epic-readme-title"
+              autoFocus
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+            />
+          </div>
+          <MarkdownEditor
+            name="body"
+            value={body}
+            onValueChange={setBody}
+            label={<Label>{t(locale, "epics.readme.bodyLabel")}</Label>}
+            rows={12}
+            className="font-mono"
+          />
+          {error && <Failure title={t(locale, "epics.readme.saveFailed")} message={error} />}
+        </div>
+        <DialogFooter>
+          <DialogClose render={<Button variant="outline" />}>{t(locale, "common.cancel")}</DialogClose>
+          <Button
+            disabled={pending || !title.trim() || !body.trim() || !dirty}
+            onClick={() =>
+              start(async () => {
+                const r = await saveEpicReadmeAction(projectId, epic, title, body);
+                if (r.ok) {
+                  setOpen(false);
+                  setError(null);
+                } else {
+                  setError(r.error);
+                }
+              })
+            }
+          >
+            {pending ? t(locale, "common.saving") : t(locale, "common.save")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

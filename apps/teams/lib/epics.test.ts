@@ -14,6 +14,7 @@ import {
   epicReadmeBody,
   epicTitle,
   listEpics,
+  saveEpicReadme,
   suggestEpicKey,
 } from "./epics.ts";
 
@@ -193,6 +194,35 @@ test("에픽 만들기 — 빈 제목·공백만 있는 제목을 막고, 디렉
   assert.strictEqual(blank.ok, false);
   if (!blank.ok) assert.strictEqual(blank.reason, "empty");
   assert.strictEqual(existsSync(path.join(root, "epics", "P998")), false);
+});
+
+test("README 저장 — 있는 파일을 덮어쓴다, 왕복하면 같은 제목·내용이 나온다", async () => {
+  const r = await saveEpicReadme(root, "P273", "새 제목", "새 본문\n두 번째 줄");
+  assert.deepStrictEqual(r, { ok: true });
+  assert.strictEqual(await epicTitle(root, "P273"), "새 제목");
+  assert.strictEqual(await epicReadmeBody(root, "P273"), "새 본문\n두 번째 줄");
+});
+
+test("README 저장 — 디렉터리·파일이 없는 키에서도 저장되고 memory/는 안 생긴다(P300 갈래)", async () => {
+  const r = await saveEpicReadme(root, "P300", "P300 제목", "P300 본문");
+  assert.deepStrictEqual(r, { ok: true });
+  assert.strictEqual(await epicTitle(root, "P300"), "P300 제목");
+  assert.strictEqual(await epicReadmeBody(root, "P300"), "P300 본문");
+  assert.strictEqual(existsSync(path.join(root, "epics", "P300", "memory")), false);
+});
+
+test("README 저장 — 빈 제목·빈 내용을 막는다, 있는 파일은 안 바뀐다", async () => {
+  const before = readFileSync(path.join(root, "epics", "P273", "README.md"), "utf8");
+
+  const emptyTitle = await saveEpicReadme(root, "P273", "", "본문");
+  assert.strictEqual(emptyTitle.ok, false);
+  if (!emptyTitle.ok) assert.strictEqual(emptyTitle.reason, "empty");
+
+  const emptyBody = await saveEpicReadme(root, "P273", "제목", "   ");
+  assert.strictEqual(emptyBody.ok, false);
+  if (!emptyBody.ok) assert.strictEqual(emptyBody.reason, "empty");
+
+  assert.strictEqual(readFileSync(path.join(root, "epics", "P273", "README.md"), "utf8"), before);
 });
 
 test("키 제안 — P<숫자> 꼴의 최댓값 + 1, P273-2처럼 접미가 붙은 값은 안 센다", () => {

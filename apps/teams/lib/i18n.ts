@@ -347,6 +347,10 @@ export const ko: Record<string, string> = {
   "epics.viewInBoard": "보드에서 보기",
   "epics.readme.missingBadge": "README 없음",
   "epics.readme.hint": "첫 줄 뒤에 적으면 여기 뜹니다.",
+  "epics.readme.edit": "편집",
+  "epics.readme.editDesc": "제목은 README.md 첫 줄, 내용은 그 뒤 본문입니다. 저장하면 파일을 덮어씁니다.",
+  "epics.readme.bodyLabel": "내용",
+  "epics.readme.saveFailed": "저장하지 못했습니다",
   "status.hint.awaiting": "PM이 되물었다 — 요구사항 상세에서 답을 쓰면 다시 큐에 뜬다. 자동 만료는 없다",
   "status.hint.assigned": "session_id가 박힌 열린 티켓 — 큐에서 영구 제외된다. 할당 해제로 되돌린다",
 
@@ -729,6 +733,10 @@ export const en: Record<string, string> = {
   "epics.viewInBoard": "View in board",
   "epics.readme.missingBadge": "No README",
   "epics.readme.hint": "Add text after the first line to show it here.",
+  "epics.readme.edit": "Edit",
+  "epics.readme.editDesc": "The title is the first line of README.md and the body is what follows; saving overwrites the file.",
+  "epics.readme.bodyLabel": "Body",
+  "epics.readme.saveFailed": "Could not save",
   // 배지의 `title`이라 마침표로 안 닫는다(`ko`도 같다).
   "status.hint.awaiting":
     "The PM asked something back — write an answer on the request page and it returns to the queue. It never expires on its own",

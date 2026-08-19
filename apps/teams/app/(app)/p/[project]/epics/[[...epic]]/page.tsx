@@ -14,7 +14,7 @@ import { notFound } from "next/navigation";
 import { TriangleAlert } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { EpicSidebar } from "@/components/epic-sidebar";
-import { EpicMemorySection } from "@/components/epics-ui";
+import { EpicMemorySection, EpicReadmeEditButton } from "@/components/epics-ui";
 import { Markdown } from "@/components/markdown";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -133,9 +133,18 @@ export default async function Epics({
                   <Badge variant="outline">{t(locale, "epics.readme.missingBadge")}</Badge>
                 )}
               </div>
-              <Button variant="outline" nativeButton={false} render={<Link href={boardHrefFor(current.epic)} />}>
-                {t(locale, "epics.viewInBoard")}
-              </Button>
+              <div className="flex shrink-0 items-center gap-2">
+                <EpicReadmeEditButton
+                  projectId={id}
+                  epic={current.epic}
+                  locale={locale}
+                  initialTitle={titles[current.epic] ?? ""}
+                  initialBody={readme ?? ""}
+                />
+                <Button variant="outline" nativeButton={false} render={<Link href={boardHrefFor(current.epic)} />}>
+                  {t(locale, "epics.viewInBoard")}
+                </Button>
+              </div>
             </div>
 
             {/* 완료 N 뒤 워커 칩 — 안 자른다, 넘치면 줄이 는다(§비주얼 §52 ⑥-3) */}
