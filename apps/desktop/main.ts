@@ -259,13 +259,15 @@ function openWindow(origin: string): BrowserWindow {
   return win;
 }
 
-// ── N2 답변 대기 알림 ───────────────────────────────────────────────────────
+// ── N2 답변 대기 알림 + 디스패치 보류 알림 ──────────────────────────────────
 //
-// 판정은 서버가 한다(못박는 것 5) — main은 `GET /api/awaiting`를 물어보고 **직전 집합과의
-// 차집합만** 알린다. 켠 직후 첫 응답은 조용히 씨를 뿌린다: 앱을 켤 때마다 밀린 알림이 쏟아지면
-// 그 알림은 다음 주에 꺼진다.
+// 판정은 서버가 한다(못박는 것 5) — main은 `GET /api/awaiting`·`GET /api/gate`를 물어보고
+// **직전 집합과의 차집합만** 알린다. 켠 직후 첫 응답은 조용히 씨를 뿌린다: 앱을 켤 때마다 밀린
+// 알림이 쏟아지면 그 알림은 다음 주에 꺼진다. 둘 다 같은 30초 타이머를 나눠 쓴다(`boot()`) —
+// `setInterval`을 하나 더 만들지 않는다.
 
 type Awaiting = { project: string; stem: string; hash: string; title: string };
+type GateItem = { project: string; tree: string; count: number; at: string };
 
 /** `null` = 아직 씨를 안 뿌렸다. 빈 집합(`답변 대기 0건`)과 다른 상태다 — 섞으면 첫 응답이
  *  0건인 큐에서 두 번째 응답의 새 티켓을 놓치거나, 반대로 첫 응답을 통째로 알린다. */
@@ -307,6 +309,46 @@ async function pollAwaiting(origin: string) {
     if (first) console.log(`[dira] 답변 대기 ${now.size}건으로 씨를 뿌렸습니다 (알리지 않음)`);
   } catch (e) {
     console.error(`[dira] 답변 대기 폴링 실패: ${(e as Error).message}`);
+  }
+}
+
+/** N2 둘째 사건. `seen`과 같은 `null` = 씨 안 뿌림 관용구다. 프로젝트당 표식 파일 하나뿐이라
+ *  (§4-14 §표식 파일) 키가 `project` 하나다. */
+let seenGate: Set<string> | null = null;
+
+function notifyGate(item: GateItem, origin: string) {
+  const n = new Notification({
+    title: "디스패치 보류",
+    body: `${item.project} — 커밋 안 된 변경 ${item.count}건`,
+  });
+  n.on("click", () => {
+    const url = `${origin}/p/${encodeURIComponent(item.project)}`;
+    if (!win || win.isDestroyed()) win = openWindow(origin);
+    win.loadURL(url);
+    win.show();
+    win.focus();
+  });
+  n.on("show", () => console.log(`[dira] 알림 → ${item.project} 게이트 보류`));
+  n.show();
+}
+
+/** `pollAwaiting`과 같은 신뢰 경계·차집합·씨뿌리기 규칙이다. */
+async function pollGate(origin: string) {
+  try {
+    const res = await fetch(`${origin}/api/gate`, { signal: AbortSignal.timeout(10_000) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const items: unknown = await res.json();
+    if (!Array.isArray(items)) throw new Error(`배열이 아닌 응답: ${JSON.stringify(items).slice(0, 200)}`);
+    const now = new Map<string, GateItem>();
+    for (const i of items as GateItem[]) {
+      if (i && typeof i.project === "string") now.set(i.project, i);
+    }
+    const first = seenGate === null;
+    if (!first) for (const [key, item] of now) if (!seenGate!.has(key)) notifyGate(item, origin);
+    seenGate = new Set(now.keys());
+    if (first) console.log(`[dira] 디스패치 보류 ${now.size}건으로 씨를 뿌렸습니다 (알리지 않음)`);
+  } catch (e) {
+    console.error(`[dira] 디스패치 보류 폴링 실패: ${(e as Error).message}`);
   }
 }
 
@@ -839,9 +881,11 @@ async function boot() {
   }
 
   await pollAwaiting(origin); // 첫 응답 = 씨 뿌리기
-  // 타이머는 하나다 (N6) — N2와 같은 30초를 나눠 쓴다.
+  await pollGate(origin); // 마찬가지로 첫 응답은 씨 뿌리기
+  // 타이머는 하나다 (N6 · N2 둘째 사건) — 같은 30초를 나눠 쓴다.
   setInterval(() => {
     pollAwaiting(origin);
+    pollGate(origin);
     pollWork(origin);
   }, POLL_MS);
 }
