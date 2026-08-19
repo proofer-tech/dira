@@ -16,6 +16,7 @@ import {
   saveProtocolAction,
   type ProtocolResult,
 } from "@/app/(app)/p/[project]/protocols/actions";
+import { useLocale, useT } from "@/components/language-provider";
 import { MarkdownEditor } from "@/components/markdown-editor";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -54,9 +55,10 @@ function Failure({ title, message }: { title: string; message: string }) {
  *  `max`가 있으면 서식이 `{n} / {max} B`(넘으면 뒤에 ` 초과`), 없으면 `{n} B` 하나뿐이다
  *  (§비주얼 §61 (13) 그대로 — 새 서식 0, 새 색 0). */
 export function InlineBadge({ bytes, max }: { bytes: number; max?: number }) {
+  const t = useT();
   return (
-    <Badge variant="secondary" title="tick.sh가 이 파일 전문을 모든 세션 프롬프트 머리에 붙입니다">
-      전원 프롬프트에 인라인 · {budgetLabel(bytes, max)}
+    <Badge variant="secondary" title={t("protocols.inline.tooltip")}>
+      {t("protocols.inline.badge")} {budgetLabel(bytes, max)}
     </Badge>
   );
 }
@@ -76,6 +78,8 @@ export function NewFileButton({
   variant?: "default" | "outline";
 }) {
   const router = useRouter();
+  const t = useT();
+  const locale = useLocale();
   const sidebarOff = useSearchParams().get("sidebar") === "off";
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
@@ -95,18 +99,18 @@ export function NewFileButton({
     >
       <DialogTrigger render={<Button size="sm" variant={variant} />}>
         <FilePlus2 aria-hidden />
-        새 파일
+        {t("protocols.new.title")}
       </DialogTrigger>
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle>새 파일</DialogTitle>
+          <DialogTitle>{t("protocols.new.title")}</DialogTitle>
           <DialogDescription>
-            프로토콜 디렉터리 기준 상대경로입니다. <span className="font-mono text-xs">/</span>를
-            넣으면 하위 디렉터리도 같이 만듭니다. 빈 파일로 만들고 바로 편집기가 열립니다.
+            {t("protocols.new.descPrefix")} <span className="font-mono text-xs">/</span>
+            {t("protocols.new.descSuffix")}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-2">
-          <Label htmlFor="new-protocol">경로</Label>
+          <Label htmlFor="new-protocol">{t("protocols.new.pathLabel")}</Label>
           <Input
             id="new-protocol"
             className="font-mono"
@@ -115,20 +119,20 @@ export function NewFileButton({
             onChange={(e) => setName(e.target.value)}
           />
           <p className="text-xs text-muted-foreground">
-            디렉터리 밖으로 나가는 경로(<span className="font-mono">../</span> · 절대경로)는 서버가
-            거부합니다.
+            {t("protocols.new.pathHintPrefix")}
+            <span className="font-mono">../</span> {t("protocols.new.pathHintSuffix")}
           </p>
           {result && !result.ok && (
-            <Failure title="파일을 만들지 못했습니다" message={result.message ?? ""} />
+            <Failure title={t("protocols.new.failTitle")} message={result.message ?? ""} />
           )}
         </div>
         <DialogFooter>
-          <DialogClose render={<Button variant="outline" />}>취소</DialogClose>
+          <DialogClose render={<Button variant="outline" />}>{t("common.cancel")}</DialogClose>
           <Button
             disabled={pending || !name.trim()}
             onClick={() =>
               start(async () => {
-                const r = await createProtocolAction(projectId, name);
+                const r = await createProtocolAction(projectId, name, locale);
                 setResult(r);
                 if (r.ok && r.rel) {
                   setOpen(false);
@@ -137,7 +141,7 @@ export function NewFileButton({
               })
             }
           >
-            {pending ? "만드는 중…" : "만들기"}
+            {pending ? t("common.creating") : t("common.create")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -162,6 +166,8 @@ export function ProtocolEditor({
   inlined: boolean;
 }) {
   const router = useRouter();
+  const t = useT();
+  const locale = useLocale();
   const [text, setText] = useState(initial);
   const [result, setResult] = useState<ProtocolResult | null>(null);
   const [pending, start] = useTransition();
@@ -178,7 +184,7 @@ export function ProtocolEditor({
           {inlined ? (
             <InlineBadge bytes={byteLength(text)} max={QUEUE_AGENTS_MAX_BYTES} />
           ) : (
-            <span className="text-xs text-muted-foreground">세션이 필요할 때 읽음</span>
+            <span className="text-xs text-muted-foreground">{t("protocols.readWhenNeeded")}</span>
           )}
         </div>
         <div className="flex items-center gap-1">
@@ -189,9 +195,8 @@ export function ProtocolEditor({
 
       {inlined && (
         <p className="text-sm text-muted-foreground">
-          이 파일은 <span className="font-mono text-xs">tick.sh</span>가 전문을 모든 세션 프롬프트
-          머리에 붙입니다 — 길이가 곧 매 세션의 비용입니다. 세부 규약은 같은 디렉터리의 다른
-          문서로 빼고 여기서 가리키면, 세션이 필요할 때만 읽습니다.
+          {t("protocols.editor.inlinedHintPrefix")} <span className="font-mono text-xs">tick.sh</span>
+          {t("protocols.editor.inlinedHintSuffix")}
         </p>
       )}
 
@@ -204,12 +209,15 @@ export function ProtocolEditor({
         onChange={setText}
       />
 
-      {result && !result.ok && <Failure title="저장하지 못했습니다" message={result.message ?? ""} />}
+      {result && !result.ok && (
+        <Failure title={t("protocols.editor.saveFailTitle")} message={result.message ?? ""} />
+      )}
 
       {/* 부가 정보 → 보조 → 1차 순으로 오른쪽 정렬(§비주얼 §4-3) */}
       <div className="flex items-center justify-end gap-3">
         <span className="text-xs text-muted-foreground tabular-nums">
-          {[...text].length.toLocaleString()}자
+          {[...text].length.toLocaleString()}
+          {t("protocols.charSuffix")}
         </span>
         {dirty ? (
           <Button
@@ -221,23 +229,25 @@ export function ProtocolEditor({
               setResetNonce((n) => n + 1);
             }}
           >
-            되돌리기
+            {t("protocols.editor.revert")}
           </Button>
         ) : (
-          result?.ok && <span className="text-sm text-muted-foreground">저장됐습니다.</span>
+          result?.ok && (
+            <span className="text-sm text-muted-foreground">{t("protocols.editor.saved")}</span>
+          )
         )}
         <Button
           size="sm"
           disabled={pending || !dirty}
           onClick={() =>
             start(async () => {
-              const r = await saveProtocolAction(projectId, rel, text);
+              const r = await saveProtocolAction(projectId, rel, text, locale);
               setResult(r);
               if (r.ok) router.refresh(); // 트리의 AGENTS.md 문자 수도 다시 읽는다
             })
           }
         >
-          {pending ? "저장 중…" : "저장"}
+          {pending ? t("common.saving") : t("common.save")}
         </Button>
       </div>
     </div>
@@ -248,6 +258,8 @@ export function ProtocolEditor({
 
 function RenameButton({ projectId, rel }: { projectId: string; rel: string }) {
   const router = useRouter();
+  const t = useT();
+  const locale = useLocale();
   const sidebarOff = useSearchParams().get("sidebar") === "off";
   const [open, setOpen] = useState(false);
   const [to, setTo] = useState(rel);
@@ -267,18 +279,17 @@ function RenameButton({ projectId, rel }: { projectId: string; rel: string }) {
     >
       <DialogTrigger render={<Button variant="ghost" size="sm" />}>
         <PencilLine aria-hidden />
-        이름변경
+        {t("protocols.rename.trigger")}
       </DialogTrigger>
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle>이름변경 — {rel}</DialogTitle>
-          <DialogDescription>
-            상대경로를 바꾸면 하위 디렉터리로 옮기는 것도 됩니다. 같은 이름의 파일이 이미 있으면
-            거부합니다 — 조용히 덮어쓰지 않습니다.
-          </DialogDescription>
+          <DialogTitle>
+            {t("protocols.rename.dialogTitlePrefix")} {rel}
+          </DialogTitle>
+          <DialogDescription>{t("protocols.rename.desc")}</DialogDescription>
         </DialogHeader>
         <div className="space-y-2">
-          <Label htmlFor="rename-protocol">새 경로</Label>
+          <Label htmlFor="rename-protocol">{t("protocols.rename.pathLabel")}</Label>
           <Input
             id="rename-protocol"
             className="font-mono"
@@ -288,24 +299,25 @@ function RenameButton({ projectId, rel }: { projectId: string; rel: string }) {
           {rel === "AGENTS.md" && (
             <Alert>
               <TriangleAlert aria-hidden className="text-status-stale" />
-              <AlertTitle>이름을 바꾸면 프롬프트에서 빠집니다</AlertTitle>
+              <AlertTitle>{t("protocols.rename.agentsWarnTitle")}</AlertTitle>
               <AlertDescription>
-                tick.sh는 <span className="font-mono text-xs">AGENTS.md</span>라는 이름만 읽습니다.
-                다른 이름이 되면 세션은 협업 프로토콜 없이 시작합니다(에러 없이 조용히).
+                {t("protocols.rename.agentsWarnPrefix")}{" "}
+                <span className="font-mono text-xs">AGENTS.md</span>
+                {t("protocols.rename.agentsWarnSuffix")}
               </AlertDescription>
             </Alert>
           )}
           {result && !result.ok && (
-            <Failure title="이름을 바꾸지 못했습니다" message={result.message ?? ""} />
+            <Failure title={t("protocols.rename.failTitle")} message={result.message ?? ""} />
           )}
         </div>
         <DialogFooter>
-          <DialogClose render={<Button variant="outline" />}>취소</DialogClose>
+          <DialogClose render={<Button variant="outline" />}>{t("common.cancel")}</DialogClose>
           <Button
             disabled={pending || !to.trim() || to.trim() === rel}
             onClick={() =>
               start(async () => {
-                const r = await renameProtocolAction(projectId, rel, to);
+                const r = await renameProtocolAction(projectId, rel, to, locale);
                 setResult(r);
                 if (r.ok && r.rel) {
                   setOpen(false);
@@ -314,7 +326,7 @@ function RenameButton({ projectId, rel }: { projectId: string; rel: string }) {
               })
             }
           >
-            {pending ? "바꾸는 중…" : "이름변경"}
+            {pending ? t("protocols.rename.working") : t("protocols.rename.trigger")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -326,6 +338,8 @@ function RenameButton({ projectId, rel }: { projectId: string; rel: string }) {
 
 function DeleteButton({ projectId, rel }: { projectId: string; rel: string }) {
   const router = useRouter();
+  const t = useT();
+  const locale = useLocale();
   const sidebarOff = useSearchParams().get("sidebar") === "off";
   const [open, setOpen] = useState(false);
   const [result, setResult] = useState<ProtocolResult | null>(null);
@@ -341,34 +355,34 @@ function DeleteButton({ projectId, rel }: { projectId: string; rel: string }) {
     >
       <DialogTrigger render={<Button variant="ghost" size="sm" />}>
         <Trash2 aria-hidden />
-        삭제
+        {t("protocols.delete.trigger")}
       </DialogTrigger>
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle>파일 삭제</DialogTitle>
+          <DialogTitle>{t("protocols.delete.dialogTitle")}</DialogTitle>
           <DialogDescription>
-            <span className="font-mono break-all">{rel}</span>를 지웁니다. 되돌릴 수 없습니다.
+            <span className="font-mono break-all">{rel}</span>
+            {t("protocols.delete.descSuffix")}
           </DialogDescription>
         </DialogHeader>
         {rel === "AGENTS.md" && (
           <Alert>
             <TriangleAlert aria-hidden className="text-status-stale" />
-            <AlertTitle>모든 세션이 협업 프로토콜 없이 시작합니다</AlertTitle>
-            <AlertDescription>
-              tick.sh는 이 파일이 없으면 그냥 넘어갑니다 — 에러도 경고도 없습니다. 이 프로젝트는 계속 돌고,
-              세션만 규약을 모릅니다.
-            </AlertDescription>
+            <AlertTitle>{t("protocols.delete.agentsWarnTitle")}</AlertTitle>
+            <AlertDescription>{t("protocols.delete.agentsWarnBody")}</AlertDescription>
           </Alert>
         )}
-        {result && !result.ok && <Failure title="지우지 못했습니다" message={result.message ?? ""} />}
+        {result && !result.ok && (
+          <Failure title={t("protocols.delete.failTitle")} message={result.message ?? ""} />
+        )}
         <DialogFooter>
-          <DialogClose render={<Button variant="outline" autoFocus />}>취소</DialogClose>
+          <DialogClose render={<Button variant="outline" autoFocus />}>{t("common.cancel")}</DialogClose>
           <Button
             variant="destructive"
             disabled={pending}
             onClick={() =>
               start(async () => {
-                const r = await deleteProtocolAction(projectId, rel);
+                const r = await deleteProtocolAction(projectId, rel, locale);
                 setResult(r);
                 if (r.ok) {
                   setOpen(false);
@@ -377,7 +391,7 @@ function DeleteButton({ projectId, rel }: { projectId: string; rel: string }) {
               })
             }
           >
-            {pending ? "삭제 중…" : "삭제"}
+            {pending ? t("protocols.delete.working") : t("protocols.delete.trigger")}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -321,6 +321,92 @@ test("wrap — 빈 조각은 빠지고 공백이 겹치지 않는다", () => {
   assert.strictEqual(wrap("", "혼자", ""), "혼자");
 });
 
+// 93c106b3 — 프로토콜 화면(묶음 7). 변수가 낀 조각 조립이 이행 전 원문과 바이트 단위로
+// 같은지 못박는다(en은 아직 없으므로 ko만 — 7a86fd5c가 en을 채운 뒤 그쪽에서 두 언어를 본다).
+// 조립식은 각 JSX의 실제 형태 그대로다(줄바꿈만 있는 자리는 공백 0, 명시 공백은 그대로 하나).
+test("93c106b3 — 프로토콜 화면의 조립 문구가 원문과 바이트 단위로 같다(ko)", () => {
+  const l = "ko" as const;
+
+  assert.strictEqual(
+    `${t(l, "protocols.new.descPrefix")} /${t(l, "protocols.new.descSuffix")}`,
+    "프로토콜 디렉터리 기준 상대경로입니다. /를 넣으면 하위 디렉터리도 같이 만듭니다. 빈 파일로 만들고 바로 편집기가 열립니다.",
+  );
+  assert.strictEqual(
+    `${t(l, "protocols.new.pathHintPrefix")}../ ${t(l, "protocols.new.pathHintSuffix")}`,
+    "디렉터리 밖으로 나가는 경로(../ · 절대경로)는 서버가 거부합니다.",
+  );
+  assert.strictEqual(
+    `${t(l, "protocols.editor.inlinedHintPrefix")} tick.sh${t(l, "protocols.editor.inlinedHintSuffix")}`,
+    "이 파일은 tick.sh가 전문을 모든 세션 프롬프트 머리에 붙입니다 — 길이가 곧 매 세션의 비용입니다. 세부 규약은 같은 디렉터리의 다른 문서로 빼고 여기서 가리키면, 세션이 필요할 때만 읽습니다.",
+  );
+  assert.strictEqual(
+    `${t(l, "protocols.rename.dialogTitlePrefix")} handoff.md`,
+    "이름변경 — handoff.md",
+  );
+  assert.strictEqual(
+    `${t(l, "protocols.rename.agentsWarnPrefix")} AGENTS.md${t(l, "protocols.rename.agentsWarnSuffix")}`,
+    "tick.sh는 AGENTS.md라는 이름만 읽습니다. 다른 이름이 되면 세션은 협업 프로토콜 없이 시작합니다(에러 없이 조용히).",
+  );
+  assert.strictEqual(
+    `handoff.md${t(l, "protocols.delete.descSuffix")}`,
+    "handoff.md를 지웁니다. 되돌릴 수 없습니다.",
+  );
+  assert.strictEqual(
+    `${t(l, "protocols.default.hintPrefix")} TICKET_PROTOCOLS${t(l, "protocols.default.hintMiddle")}${t(l, "protocols.default.rootPath")}${t(l, "protocols.default.hintSuffix")}`,
+    "워커 파일에서 TICKET_PROTOCOLS를 읽지 못해 엔진 기본값 (<루트>/protocols)으로 봅니다. 워커에서 다른 경로로 재정의하면 이 화면도 그 경로를 따라갑니다.",
+  );
+  assert.strictEqual(
+    `${t(l, "protocols.empty.bodyPrefix")} tick.sh${t(l, "protocols.empty.bodyMiddle")} AGENTS.md${t(l, "protocols.empty.bodySuffix")}`,
+    "프로토콜이 없어도 이 프로젝트는 돕니다 — tick.sh는 AGENTS.md가 없으면 그냥 넘어갑니다. 세션이 협업 규약(티켓 분류별 처리·핸드오프·보고)을 모른 채 시작할 뿐입니다.",
+  );
+  assert.strictEqual(
+    `${t(l, "protocols.core.vendoredPrefix")} tick.sh${t(l, "protocols.core.inlinedMiddle")} ${t(l, "protocols.core.inlinedAllProjects")}${t(l, "protocols.core.inlinedSuffix")} ${t(l, "protocols.core.readOnlyNote")}`,
+    "이 파일은 이 큐에 vendored된 코어 사본입니다 — tick.sh가 전문을 모든 프로젝트의 모든 세션 프롬프트 맨 앞에 붙입니다. 여기서는 읽기만 합니다(이 화면이 고치는 것은 프로젝트 층입니다).",
+  );
+  assert.strictEqual(
+    `${t(l, "protocols.core.notVendoredPrefix")} CORE-FOO.md${t(l, "protocols.core.notInlinedSuffix")} ${t(l, "protocols.core.readOnlyNote")}`,
+    "이 파일은 큐가 아니라 엔진 레포에 있습니다 — CORE-FOO.md가 가리키면 세션이 필요할 때 직접 읽습니다(프롬프트에 인라인되지는 않습니다). 여기서는 읽기만 합니다(이 화면이 고치는 것은 프로젝트 층입니다).",
+  );
+  assert.strictEqual(
+    wrap("CORE.md", t(l, "protocols.core.rawLabelSuffix"), ""),
+    "CORE.md 원문",
+  );
+  assert.strictEqual(
+    `${t(l, "protocols.core.notFoundPrefix")} missing.md`,
+    "코어 프로토콜에 없는 파일입니다: missing.md",
+  );
+
+  // lib/protocols.ts가 짓는 fs 검증 사유(값 부분은 안 건드리는 원문 그대로).
+  assert.strictEqual(
+    `${t(l, "protocols.lib.coreReadFailPrefix")} /q/protocols (ENOENT)`,
+    "코어 프로토콜을 읽지 못했습니다 — /q/protocols (ENOENT)",
+  );
+  assert.strictEqual(
+    `${t(l, "protocols.lib.coreEmptyPrefix")} /q/protocols`,
+    "코어 프로토콜이 없습니다 — /q/protocols",
+  );
+  assert.strictEqual(
+    `${2000000}${t(l, "protocols.lib.tooLargeSuffix")}`,
+    "2000000바이트 — 1MB가 넘어 편집기로 열지 않습니다.",
+  );
+  assert.strictEqual(
+    `${t(l, "protocols.lib.missingPrefix")} handoff.md`,
+    "파일이 없습니다(지워졌을 수 있습니다): handoff.md",
+  );
+  assert.strictEqual(
+    `${t(l, "protocols.lib.notRegularPrefix")} handoff.md`,
+    "일반 파일이 아닙니다: handoff.md",
+  );
+  assert.strictEqual(
+    `${t(l, "protocols.lib.dirNoDeletePrefix")} sub`,
+    "디렉터리는 이 화면에서 지우지 않습니다: sub",
+  );
+  assert.strictEqual(
+    `${t(l, "protocols.lib.dirNoMovePrefix")} sub`,
+    "디렉터리는 이 화면에서 옮기지 않습니다: sub",
+  );
+});
+
 test("readLanguage — 파일 없으면 기본값 ko, set 뒤에는 그 값을 읽는다", async () => {
   rmSync(languagePath(), { force: true });
   assert.strictEqual(await readLanguage(), "ko");

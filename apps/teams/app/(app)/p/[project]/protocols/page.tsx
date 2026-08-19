@@ -24,6 +24,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { byteLength, CORE_MAX_BYTES, QUEUE_AGENTS_MAX_BYTES } from "@/lib/budgets";
+import { t, wrap, type Locale } from "@/lib/i18n";
 import {
   CORE_INLINED,
   listTree,
@@ -32,7 +33,7 @@ import {
   type CoreFile,
   type ProtocolFile,
 } from "@/lib/protocols";
-import { getProject, resolveConfig, usingDefault } from "@/lib/projects";
+import { getProject, readLanguage, resolveConfig, usingDefault } from "@/lib/projects";
 
 // 프로토콜 파일은 세션이 GUI 밖에서 고친다 — 프리렌더하면 빌드 시점 내용이 굳는다.
 export const dynamic = "force-dynamic";
@@ -48,12 +49,15 @@ export default async function Protocols({
   const { file, core: wantCore, sidebar } = await searchParams;
   const project = await getProject(id);
   if (!project) notFound();
+  const locale = await readLanguage();
 
   // `?sidebar=off`(§6 §파일트리 사이드바 둘이 접힌다) — 없거나 모르는 값이면 펼침(기본값).
   const expanded = sidebar !== "off";
   // 트리 링크가 나르는 값 — 접힌 상태가 파일 고르기를 지나 유지된다(계약).
   const sidebarQuery = expanded ? "" : "&sidebar=off";
-  const toggleLabel = expanded ? "파일 목록 접기" : "파일 목록 펴기";
+  const toggleLabel = expanded
+    ? t(locale, "protocols.sidebar.collapse")
+    : t(locale, "protocols.sidebar.expand");
   // 지금 URL에서 `sidebar`만 뒤집는다 — `?file=`/`?core=`는 한 개도 안 잃는다(계약).
   const toggleHref = (() => {
     const usp = new URLSearchParams();
@@ -91,7 +95,7 @@ export default async function Protocols({
   // 이다. 못 읽으면 트리에서 항목만 빠진다(§프롬프트 층 결정 5·6). vendored 큐(큐
   // `protocols/CORE.md`가 있는 큐)에서는 세션이 실제로 받는 큐 사본을 읽는다(결정 8-d) —
   // `listTree`가 그 이름들을 편집 가능 목록에서 빼는 것과 같은 판정을 쓴다.
-  const core = await readCore(config.protocols);
+  const core = await readCore(config.protocols, locale);
   const coreFiles = "files" in core ? core.files : [];
   const coreVendored = "vendored" in core && core.vendored;
   // `core`도 사용자 입력이지만 **경로로 조립하지 않는다** — 실제로 나열해 나온 이름과 맞춰만 본다.
@@ -104,11 +108,14 @@ export default async function Protocols({
   if (wantCore !== undefined) {
     // 항목이 안 보이는데 URL로 들어온 경우다 — 사유를 삼키지 않는다.
     if (!openedCore) {
-      rejected = "error" in core ? core.error : `코어 프로토콜에 없는 파일입니다: ${wantCore}`;
+      rejected =
+        "error" in core
+          ? core.error
+          : `${t(locale, "protocols.core.notFoundPrefix")} ${wantCore}`;
     }
   } else if (file) {
     try {
-      selected = await readTextFile(config.protocols, file);
+      selected = await readTextFile(config.protocols, file, locale);
     } catch (e) {
       rejected = (e as Error).message;
     }
@@ -116,18 +123,18 @@ export default async function Protocols({
     // 기본 선택 = 루트 `AGENTS.md`(§6). 인라인되는 유일한 파일이라 여기서 제일 많이 열고,
     // 리다이렉트 대신 서버가 고른다 — `?file=`은 명시 선택만 담는다. 없으면 안내 문구로
     // 떨어진다(트리 첫 파일 같은 임의 대체를 넣지 않는다). 거부 사유가 없으니 Alert도 없다.
-    selected = await readTextFile(config.protocols, "AGENTS.md").catch(() => null);
+    selected = await readTextFile(config.protocols, "AGENTS.md", locale).catch(() => null);
   }
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-lg font-semibold">프로토콜</h1>
+          <h1 className="text-lg font-semibold">{t(locale, "shell.nav.protocols")}</h1>
           <p className="font-mono text-xs break-all text-muted-foreground">
             {config.protocols}
             {usingDefault(config, "protocols") && (
-              <span className="ml-2 font-sans">기본값 가정</span>
+              <span className="ml-2 font-sans">{t(locale, "protocols.usingDefault")}</span>
             )}
           </p>
         </div>
@@ -139,19 +146,27 @@ export default async function Protocols({
         // `${TICKET_PROTOCOLS:-$TICKET_ROOT/protocols}` 기본값을 쓴다는 뜻이다.
         // 둘을 가르는 화면은 §7 해석 결과 표 하나다 — 여기는 "기본값을 본다"는 사실만 필요하다.
         <p className="max-w-3xl text-sm text-muted-foreground">
-          워커 파일에서 <span className="font-mono text-xs">TICKET_PROTOCOLS</span>를 읽지 못해 엔진 기본값
-          (<span className="font-mono text-xs">&lt;루트&gt;/protocols</span>)으로 봅니다. 워커에서
-          다른 경로로 재정의하면 이 화면도 그 경로를 따라갑니다.
+          {t(locale, "protocols.default.hintPrefix")}{" "}
+          <span className="font-mono text-xs">TICKET_PROTOCOLS</span>
+          {t(locale, "protocols.default.hintMiddle")}
+          <span className="font-mono text-xs">{t(locale, "protocols.default.rootPath")}</span>
+          {t(locale, "protocols.default.hintSuffix")}
         </p>
       )}
 
       {tree.length === 0 && (
         <div className="max-w-3xl space-y-3">
-          <EmptyState text="파일 없음" action={<NewFileButton projectId={id} variant="outline" />} />
+          <EmptyState
+            text={t(locale, "protocols.empty.title")}
+            action={<NewFileButton projectId={id} variant="outline" />}
+          />
           <p className="text-sm text-muted-foreground">
-            프로토콜이 없어도 이 프로젝트는 돕니다 — <span className="font-mono text-xs">tick.sh</span>는{" "}
-            <span className="font-mono text-xs">AGENTS.md</span>가 없으면 그냥 넘어갑니다. 세션이
-            협업 규약(티켓 분류별 처리·핸드오프·보고)을 모른 채 시작할 뿐입니다.
+            {t(locale, "protocols.empty.bodyPrefix")}{" "}
+            <span className="font-mono text-xs">tick.sh</span>
+            {t(locale, "protocols.empty.bodyMiddle")}
+            {" "}
+            <span className="font-mono text-xs">AGENTS.md</span>
+            {t(locale, "protocols.empty.bodySuffix")}
           </p>
         </div>
       )}
@@ -175,7 +190,7 @@ export default async function Protocols({
           <Sidebar
             collapsible="none"
             role="navigation"
-            aria-label="프로토콜 파일"
+            aria-label={t(locale, "protocols.sidebar.ariaLabel")}
             className={`w-full shrink-0 rounded-lg border bg-surface ${expanded ? "lg:w-80" : "lg:w-10"}`}
           >
             {/* `py-2`가 면의 세로 패딩. 그룹이 하나뿐이라 그룹 사이 `gap`은 덮을 것이 없다.
@@ -264,16 +279,18 @@ export default async function Protocols({
             {rejected ? (
               <Alert variant="destructive">
                 <TriangleAlert aria-hidden />
-                <AlertTitle>이 경로는 열 수 없습니다</AlertTitle>
+                <AlertTitle>{t(locale, "protocols.rejected.title")}</AlertTitle>
                 <AlertDescription>
                   <span className="font-mono text-xs break-all">{rejected}</span>
                 </AlertDescription>
               </Alert>
             ) : openedCore ? (
-              <CoreView file={openedCore} vendored={coreVendored} />
+              <CoreView file={openedCore} vendored={coreVendored} locale={locale} />
             ) : !selected ? (
               <p className="text-sm text-muted-foreground">
-                {expanded ? "파일을 고르세요." : "파일 목록을 펴서 고르세요."}
+                {expanded
+                  ? t(locale, "protocols.picker.expanded")
+                  : t(locale, "protocols.picker.collapsed")}
               </p>
             ) : selected.text === null ? (
               // 트리에는 보이지만 편집기로는 안 여는 것들(§6 `.md` 아닌 파일)
@@ -324,7 +341,7 @@ const ROW =
  *
  *  `vendored`가 서있으면(결정 8-d) 세션이 실제로 받는 파일이 큐 사본이라 산문도 그걸 말한다 —
  *  `file.path`는 두 경우 다 `readCore`가 실제로 읽은 절대경로라 이미 맞다(위 배지 옆). */
-function CoreView({ file, vendored }: { file: CoreFile; vendored: boolean }) {
+function CoreView({ file, vendored, locale }: { file: CoreFile; vendored: boolean; locale: Locale }) {
   const inlined = file.name === CORE_INLINED;
   return (
     <div className="space-y-3">
@@ -333,32 +350,34 @@ function CoreView({ file, vendored }: { file: CoreFile; vendored: boolean }) {
         {inlined ? (
           <InlineBadge bytes={byteLength(file.text)} max={CORE_MAX_BYTES} />
         ) : (
-          <span className="text-xs text-muted-foreground">세션이 필요할 때 읽음</span>
+          <span className="text-xs text-muted-foreground">{t(locale, "protocols.readWhenNeeded")}</span>
         )}
       </div>
 
       <p className="text-sm text-muted-foreground">
         {vendored ? (
-          <>이 파일은 이 큐에 vendored된 코어 사본입니다 — </>
+          <>{t(locale, "protocols.core.vendoredPrefix")} </>
         ) : (
-          <>이 파일은 큐가 아니라 엔진 레포에 있습니다 — </>
+          <>{t(locale, "protocols.core.notVendoredPrefix")} </>
         )}
         {inlined ? (
           <>
-            <span className="font-mono text-xs">tick.sh</span>가 전문을{" "}
-            <b className="font-medium">모든 프로젝트</b>의 모든 세션 프롬프트 맨 앞에 붙입니다.
+            <span className="font-mono text-xs">tick.sh</span>
+            {t(locale, "protocols.core.inlinedMiddle")}{" "}
+            <b className="font-medium">{t(locale, "protocols.core.inlinedAllProjects")}</b>
+            {t(locale, "protocols.core.inlinedSuffix")}
           </>
         ) : (
           <>
-            <span className="font-mono text-xs">{CORE_INLINED}</span>가 가리키면 세션이 필요할 때
-            직접 읽습니다(프롬프트에 인라인되지는 않습니다).
+            <span className="font-mono text-xs">{CORE_INLINED}</span>
+            {t(locale, "protocols.core.notInlinedSuffix")}
           </>
         )}{" "}
-        여기서는 읽기만 합니다(이 화면이 고치는 것은 프로젝트 층입니다).
+        {t(locale, "protocols.core.readOnlyNote")}
       </p>
 
       <Textarea
-        aria-label={`${file.name} 원문`}
+        aria-label={wrap(file.name, t(locale, "protocols.core.rawLabelSuffix"), "")}
         className="font-mono"
         rows={28}
         readOnly
@@ -367,7 +386,8 @@ function CoreView({ file, vendored }: { file: CoreFile; vendored: boolean }) {
 
       <div className="flex items-center justify-end">
         <span className="text-xs text-muted-foreground tabular-nums">
-          {[...file.text].length.toLocaleString()}자
+          {[...file.text].length.toLocaleString()}
+          {t(locale, "protocols.charSuffix")}
         </span>
       </div>
     </div>

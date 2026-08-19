@@ -11,6 +11,7 @@
 import { link, lstat, mkdir, readFile, readdir, realpath, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { byteLength } from "./budgets.ts";
+import { DEFAULT_LOCALE, t, type Locale } from "./i18n.ts";
 import { expandHome, resolveWithin } from "./paths.ts";
 import { engineRepo } from "./scaffold.ts";
 
@@ -128,6 +129,7 @@ export function isCoreLayerName(name: string): boolean {
  *  @param queueProtocolsDir 이 큐의 해석된 `protocols` 디렉터리(§6 화면이 넘기는 기준 디렉터리) */
 export async function readCore(
   queueProtocolsDir: string,
+  locale: Locale = DEFAULT_LOCALE,
 ): Promise<{ files: CoreFile[]; vendored: boolean } | { error: string }> {
   const vendoredDir = expandHome(queueProtocolsDir);
   const vendored = await lstat(path.join(vendoredDir, CORE_INLINED))
@@ -151,9 +153,13 @@ export async function readCore(
       .map((d) => d.name);
   } catch (e) {
     const err = e as NodeJS.ErrnoException;
-    return { error: `코어 프로토콜을 읽지 못했습니다 — ${dir} (${err.code ?? err.message})` };
+    return {
+      error: `${t(locale, "protocols.lib.coreReadFailPrefix")} ${dir} (${err.code ?? err.message})`,
+    };
   }
-  if (names.length === 0) return { error: `코어 프로토콜이 없습니다 — ${dir}` };
+  if (names.length === 0) {
+    return { error: `${t(locale, "protocols.lib.coreEmptyPrefix")} ${dir}` };
+  }
 
   names.sort((a, b) =>
     a === CORE_INLINED ? -1 : b === CORE_INLINED ? 1 : a.localeCompare(b),
@@ -208,33 +214,52 @@ export type ProtocolFile = { rel: string; text: string | null; reason?: string }
 const MAX_EDIT_BYTES = 1024 * 1024;
 
 /** `.md`가 아닌 파일도 연다 — 트리에 보이는데 못 열면 그게 더 이상하다. 텍스트가 아닌 것만 막는다. */
-export async function readTextFile(baseDir: string, rel: string): Promise<ProtocolFile> {
+export async function readTextFile(
+  baseDir: string,
+  rel: string,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<ProtocolFile> {
   const full = await resolveWithin(baseDir, rel);
-  if ((await lstat(full)).isDirectory()) return { rel, text: null, reason: "디렉터리입니다." };
+  if ((await lstat(full)).isDirectory()) {
+    return { rel, text: null, reason: t(locale, "protocols.lib.isDirectory") };
+  }
   const buf = await readFile(full);
   if (buf.length > MAX_EDIT_BYTES) {
-    return { rel, text: null, reason: `${buf.length}바이트 — 1MB가 넘어 편집기로 열지 않습니다.` };
+    return {
+      rel,
+      text: null,
+      reason: `${buf.length}${t(locale, "protocols.lib.tooLargeSuffix")}`,
+    };
   }
   if (buf.includes(0)) {
-    return { rel, text: null, reason: "텍스트 파일이 아닙니다(NUL 바이트) — 편집할 수 없습니다." };
+    return { rel, text: null, reason: t(locale, "protocols.lib.notText") };
   }
   return { rel, text: buf.toString("utf8") };
 }
 
-export async function saveFile(baseDir: string, rel: string, text: string): Promise<void> {
+export async function saveFile(
+  baseDir: string,
+  rel: string,
+  text: string,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<void> {
   const full = await resolveWithin(baseDir, rel);
   // 덮어쓰기 전에 대상을 확인한다. 없는 파일에 쓰는 건 저장이 아니라 생성이고(누가 지운
   // 파일에 편집기 내용을 되살리는 것), 디렉터리에 쓰면 EISDIR로 터진다.
   const st = await lstat(full).catch(() => null);
-  if (!st) throw new Error(`파일이 없습니다(지워졌을 수 있습니다): ${rel}`);
-  if (!st.isFile()) throw new Error(`일반 파일이 아닙니다: ${rel}`);
+  if (!st) throw new Error(`${t(locale, "protocols.lib.missingPrefix")} ${rel}`);
+  if (!st.isFile()) throw new Error(`${t(locale, "protocols.lib.notRegularPrefix")} ${rel}`);
   await writeFile(full, text, "utf8");
 }
 
 /** 새 파일. 중간 디렉터리는 만든다(`sub/GUIDE.md`) — 기준 디렉터리 자체가 없는 큐도 있다. */
-export async function createFile(baseDir: string, rel: string): Promise<string> {
+export async function createFile(
+  baseDir: string,
+  rel: string,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<string> {
   const want = rel.trim();
-  if (!want) throw new Error("파일 이름을 입력하세요.");
+  if (!want) throw new Error(t(locale, "protocols.lib.nameRequired"));
   await mkdir(expandHome(baseDir), { recursive: true }); // 없으면 resolveWithin이 realpath에서 튕긴다
   const full = await resolveWithin(baseDir, want);
   await mkdir(path.dirname(full), { recursive: true });
@@ -242,23 +267,32 @@ export async function createFile(baseDir: string, rel: string): Promise<string> 
   return path.relative(await realpath(expandHome(baseDir)), full);
 }
 
-export async function deleteFile(baseDir: string, rel: string): Promise<void> {
+export async function deleteFile(
+  baseDir: string,
+  rel: string,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<void> {
   const full = await resolveWithin(baseDir, rel);
   if ((await lstat(full)).isDirectory()) {
-    throw new Error(`디렉터리는 이 화면에서 지우지 않습니다: ${rel}`);
+    throw new Error(`${t(locale, "protocols.lib.dirNoDeletePrefix")} ${rel}`);
   }
   await unlink(full);
 }
 
 /** 이름변경 겸 이동. `rename`은 대상이 있으면 **조용히 덮어쓴다** — link(EEXIST로 튕긴다) 후
  *  unlink로 원자적 배타 생성을 얻는다. 같은 디렉터리 안이라 하드링크가 항상 된다. */
-export async function renameFile(baseDir: string, from: string, to: string): Promise<string> {
+export async function renameFile(
+  baseDir: string,
+  from: string,
+  to: string,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<string> {
   const want = to.trim();
-  if (!want) throw new Error("새 이름을 입력하세요.");
+  if (!want) throw new Error(t(locale, "protocols.lib.newNameRequired"));
   const src = await resolveWithin(baseDir, from);
   const dst = await resolveWithin(baseDir, want);
   if ((await lstat(src)).isDirectory()) {
-    throw new Error(`디렉터리는 이 화면에서 옮기지 않습니다: ${from}`);
+    throw new Error(`${t(locale, "protocols.lib.dirNoMovePrefix")} ${from}`);
   }
   if (src === dst) return path.relative(await realpath(expandHome(baseDir)), src);
   await mkdir(path.dirname(dst), { recursive: true });

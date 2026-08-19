@@ -410,6 +410,103 @@ export const ko: Record<string, string> = {
   "worker.defect.noExec.title": "실행 비트 없음",
   "worker.defect.noExec.why":
     "cron이 Permission denied로 워커를 못 띄웁니다 — tick.sh가 아예 안 돌아 runner.log가 한 줄도 늘지 않고, 열린 티켓이 그대로 섭니다.",
+
+  // 프로토콜 화면(§0-16 §발행 §묶음 표 7, `93c106b3`) — protocols-ui.tsx · protocols/page.tsx ·
+  // protocols/actions.ts · lib/protocols.ts. en은 `7a86fd5c`가 채운다.
+  "protocols.inline.tooltip": "tick.sh가 이 파일 전문을 모든 세션 프롬프트 머리에 붙입니다",
+  // 배지 글자 — 뒤에 `{budgetLabel(...)}`가 공백 하나를 사이에 두고 붙는다. 표현식과 섞여
+  // 실측 스크립트가 못 센다(`## Done when` 여섯째 줄, 아래 같은 사정 셋도 마찬가지).
+  "protocols.inline.badge": "전원 프롬프트에 인라인 ·",
+
+  "protocols.new.title": "새 파일",
+  "protocols.new.descPrefix": "프로토콜 디렉터리 기준 상대경로입니다.",
+  "protocols.new.descSuffix":
+    "를 넣으면 하위 디렉터리도 같이 만듭니다. 빈 파일로 만들고 바로 편집기가 열립니다.",
+  "protocols.new.pathLabel": "경로",
+  "protocols.new.pathHintPrefix": "디렉터리 밖으로 나가는 경로(",
+  "protocols.new.pathHintSuffix": "· 절대경로)는 서버가 거부합니다.",
+  "protocols.new.failTitle": "파일을 만들지 못했습니다",
+
+  // 편집기 · 코어 보기(page.tsx `CoreView`)가 공유하는 문구.
+  "protocols.readWhenNeeded": "세션이 필요할 때 읽음",
+  // 글자 수 뒤에 공백 없이 붙는 단위(`123자`).
+  "protocols.charSuffix": "자",
+  "protocols.editor.inlinedHintPrefix": "이 파일은",
+  "protocols.editor.inlinedHintSuffix":
+    "가 전문을 모든 세션 프롬프트 머리에 붙입니다 — 길이가 곧 매 세션의 비용입니다. 세부 규약은 같은 디렉터리의 다른 문서로 빼고 여기서 가리키면, 세션이 필요할 때만 읽습니다.",
+  "protocols.editor.saveFailTitle": "저장하지 못했습니다",
+  "protocols.editor.revert": "되돌리기",
+  "protocols.editor.saved": "저장됐습니다.",
+
+  "protocols.rename.trigger": "이름변경",
+  "protocols.rename.dialogTitlePrefix": "이름변경 —",
+  "protocols.rename.desc":
+    "상대경로를 바꾸면 하위 디렉터리로 옮기는 것도 됩니다. 같은 이름의 파일이 이미 있으면 거부합니다 — 조용히 덮어쓰지 않습니다.",
+  "protocols.rename.pathLabel": "새 경로",
+  "protocols.rename.agentsWarnTitle": "이름을 바꾸면 프롬프트에서 빠집니다",
+  "protocols.rename.agentsWarnPrefix": "tick.sh는",
+  "protocols.rename.agentsWarnSuffix":
+    "라는 이름만 읽습니다. 다른 이름이 되면 세션은 협업 프로토콜 없이 시작합니다(에러 없이 조용히).",
+  "protocols.rename.failTitle": "이름을 바꾸지 못했습니다",
+  "protocols.rename.working": "바꾸는 중…",
+
+  "protocols.delete.trigger": "삭제",
+  "protocols.delete.dialogTitle": "파일 삭제",
+  "protocols.delete.descSuffix": "를 지웁니다. 되돌릴 수 없습니다.",
+  "protocols.delete.agentsWarnTitle": "모든 세션이 협업 프로토콜 없이 시작합니다",
+  "protocols.delete.agentsWarnBody":
+    "tick.sh는 이 파일이 없으면 그냥 넘어갑니다 — 에러도 경고도 없습니다. 이 프로젝트는 계속 돌고, 세션만 규약을 모릅니다.",
+  "protocols.delete.failTitle": "지우지 못했습니다",
+  "protocols.delete.working": "삭제 중…",
+
+  "protocols.sidebar.collapse": "파일 목록 접기",
+  "protocols.sidebar.expand": "파일 목록 펴기",
+  "protocols.sidebar.ariaLabel": "프로토콜 파일",
+  "protocols.usingDefault": "기본값 가정",
+  "protocols.default.hintPrefix": "워커 파일에서",
+  "protocols.default.hintMiddle": "를 읽지 못해 엔진 기본값 (",
+  "protocols.default.rootPath": "<루트>/protocols",
+  "protocols.default.hintSuffix":
+    ")으로 봅니다. 워커에서 다른 경로로 재정의하면 이 화면도 그 경로를 따라갑니다.",
+  "protocols.empty.title": "파일 없음",
+  "protocols.empty.bodyPrefix": "프로토콜이 없어도 이 프로젝트는 돕니다 —",
+  // "tick.sh는" 사이 조사 한 글자 — `{" "}` 다음에 `AGENTS.md` span이 이어져 실측 스크립트가 못 센다.
+  "protocols.empty.bodyMiddle": "는",
+  "protocols.empty.bodySuffix":
+    "가 없으면 그냥 넘어갑니다. 세션이 협업 규약(티켓 분류별 처리·핸드오프·보고)을 모른 채 시작할 뿐입니다.",
+  "protocols.rejected.title": "이 경로는 열 수 없습니다",
+  "protocols.core.notFoundPrefix": "코어 프로토콜에 없는 파일입니다:",
+  "protocols.picker.expanded": "파일을 고르세요.",
+  "protocols.picker.collapsed": "파일 목록을 펴서 고르세요.",
+  "protocols.core.vendoredPrefix": "이 파일은 이 큐에 vendored된 코어 사본입니다 —",
+  "protocols.core.notVendoredPrefix": "이 파일은 큐가 아니라 엔진 레포에 있습니다 —",
+  // `{" "}` 앞뒤로 갈려 실측 스크립트가 못 센다.
+  "protocols.core.inlinedMiddle": "가 전문을",
+  "protocols.core.inlinedAllProjects": "모든 프로젝트",
+  "protocols.core.inlinedSuffix": "의 모든 세션 프롬프트 맨 앞에 붙입니다.",
+  "protocols.core.notInlinedSuffix":
+    "가 가리키면 세션이 필요할 때 직접 읽습니다(프롬프트에 인라인되지는 않습니다).",
+  // 표현식(`{" "}`) 바로 뒤라 실측 스크립트가 못 센다.
+  "protocols.core.readOnlyNote": "여기서는 읽기만 합니다(이 화면이 고치는 것은 프로젝트 층입니다).",
+  // textarea aria-label — `wrap(file.name, ..., "")`로 붙인다(`${file.name} 원문`과 같은 바이트).
+  "protocols.core.rawLabelSuffix": "원문",
+
+  "protocols.action.unknownProjectPrefix": "등록되지 않은 프로젝트입니다:",
+
+  // lib/protocols.ts — fs 검증 사유. 서버 액션 결과(`message`)·읽기 실패(`reason`)로 화면에
+  // 뜬다. 파일 이름·경로·바이트 수 등 값 자체는 그대로 두고 문장만 옮긴다(엔진이 준 값이 아니라
+  // 이 파일이 직접 짓는 문장이지만, 값 부분은 번역·가공하지 않는다).
+  "protocols.lib.coreReadFailPrefix": "코어 프로토콜을 읽지 못했습니다 —",
+  "protocols.lib.coreEmptyPrefix": "코어 프로토콜이 없습니다 —",
+  "protocols.lib.isDirectory": "디렉터리입니다.",
+  "protocols.lib.tooLargeSuffix": "바이트 — 1MB가 넘어 편집기로 열지 않습니다.",
+  "protocols.lib.notText": "텍스트 파일이 아닙니다(NUL 바이트) — 편집할 수 없습니다.",
+  "protocols.lib.missingPrefix": "파일이 없습니다(지워졌을 수 있습니다):",
+  "protocols.lib.notRegularPrefix": "일반 파일이 아닙니다:",
+  "protocols.lib.nameRequired": "파일 이름을 입력하세요.",
+  "protocols.lib.dirNoDeletePrefix": "디렉터리는 이 화면에서 지우지 않습니다:",
+  "protocols.lib.newNameRequired": "새 이름을 입력하세요.",
+  "protocols.lib.dirNoMovePrefix": "디렉터리는 이 화면에서 옮기지 않습니다:",
 };
 
 /** 제품 낱말의 영어 대응 — **여기가 한자리다**(621c7a97). 다음 묶음이 같은 것을 다르게 부르지

@@ -6,6 +6,7 @@
  *  `TICKET_PROTOCOLS`** 해석과 Error를 직렬화 가능한 결과로 바꾸는 것뿐이다(`workers/actions.ts`와
  *  같은 분담). 기준 디렉터리를 여기서 조립하지 않는다 — `resolveConfig`가 유일한 출처다. */
 import { revalidatePath } from "next/cache";
+import { DEFAULT_LOCALE, t, type Locale } from "@/lib/i18n";
 import { createFile, deleteFile, renameFile, saveFile } from "@/lib/protocols";
 import { getProject, resolveConfig } from "@/lib/projects";
 
@@ -17,9 +18,9 @@ export type ProtocolResult = {
 };
 
 /** 등록된 프로젝트의 해석된 프로토콜 디렉터리만 만진다. URL 조각으로 임의 경로를 열지 않는다. */
-async function baseOf(projectId: string): Promise<string> {
+async function baseOf(projectId: string, locale: Locale): Promise<string> {
   const project = await getProject(projectId);
-  if (!project) throw new Error(`등록되지 않은 프로젝트입니다: ${projectId}`);
+  if (!project) throw new Error(`${t(locale, "protocols.action.unknownProjectPrefix")} ${projectId}`);
   return (await resolveConfig(project)).protocols;
 }
 
@@ -31,9 +32,10 @@ export async function saveProtocolAction(
   projectId: string,
   rel: string,
   text: string,
+  locale: Locale = DEFAULT_LOCALE,
 ): Promise<ProtocolResult> {
   try {
-    await saveFile(await baseOf(projectId), rel, text);
+    await saveFile(await baseOf(projectId, locale), rel, text, locale);
     revalidatePath(`/p/${projectId}/protocols`);
     return { ok: true, rel };
   } catch (e) {
@@ -41,9 +43,13 @@ export async function saveProtocolAction(
   }
 }
 
-export async function createProtocolAction(projectId: string, rel: string): Promise<ProtocolResult> {
+export async function createProtocolAction(
+  projectId: string,
+  rel: string,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<ProtocolResult> {
   try {
-    const created = await createFile(await baseOf(projectId), rel);
+    const created = await createFile(await baseOf(projectId, locale), rel, locale);
     revalidatePath(`/p/${projectId}/protocols`);
     return { ok: true, rel: created };
   } catch (e) {
@@ -51,9 +57,13 @@ export async function createProtocolAction(projectId: string, rel: string): Prom
   }
 }
 
-export async function deleteProtocolAction(projectId: string, rel: string): Promise<ProtocolResult> {
+export async function deleteProtocolAction(
+  projectId: string,
+  rel: string,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<ProtocolResult> {
   try {
-    await deleteFile(await baseOf(projectId), rel);
+    await deleteFile(await baseOf(projectId, locale), rel, locale);
     revalidatePath(`/p/${projectId}/protocols`);
     return { ok: true };
   } catch (e) {
@@ -65,9 +75,10 @@ export async function renameProtocolAction(
   projectId: string,
   from: string,
   to: string,
+  locale: Locale = DEFAULT_LOCALE,
 ): Promise<ProtocolResult> {
   try {
-    const moved = await renameFile(await baseOf(projectId), from, to);
+    const moved = await renameFile(await baseOf(projectId, locale), from, to, locale);
     revalidatePath(`/p/${projectId}/protocols`);
     return { ok: true, rel: moved };
   } catch (e) {
