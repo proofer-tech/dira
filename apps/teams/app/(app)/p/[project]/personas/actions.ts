@@ -26,6 +26,7 @@ import {
 import {
   deletePersonaMemory,
   extractSkillArchive,
+  fetchSkillFromAddress,
   installSkill,
   listInstalledSkills,
   PersonaEngineCustomError,
@@ -217,6 +218,11 @@ export async function savePersonaSkillsAction(
  *  끝나면 그 zip을 `installSkill`에 넣기 **전에** `extractSkillArchive`로 먼저 푼다. zip이
  *  아니거나 안에 `SKILL.md`가 없으면 `extractSkillArchive` 자신이 갈래 7 - 8로 거절한다.
  *
+ *  **넷째 입구(주소 한 줄)는 `file`/`path` 대신 `address` 하나를 받는다**(§5-1 §넷째 입구 -
+ *  §비주얼 §25 ⑦). `fetchSkillFromAddress`(`b4b3a8c0`)가 정규화 - 받기 - 상한을 다 지고
+ *  `SkillUpload[]`를 낸 뒤, 그 아래는 파일 갈래와 **같은 `installSkill`**로 들어간다 — 통로가
+ *  하나라는 것의 내용이다.
+ *
  *  설치 뒤 `listInstalledSkills()`를 **다시 읽어 후보 목록 전체를 돌려준다** — 화면은 서버가 본
  *  것을 그린다(`savePersonaSkillsAction`과 같은 규약). 실패는 `SkillInstallError`의 두 조각
  *  (`message`·`detail`)을 `title`·`message`로 그대로 옮긴다 — 갈래마다 사유가 다르다. */
@@ -224,21 +230,27 @@ export async function installSkillAction(
   formData: FormData,
 ): Promise<InstallSkillResult & { installed?: Skill[]; name?: string }> {
   try {
-    const files = formData.getAll("file").filter((f): f is File => f instanceof File);
-    const paths = formData.getAll("path").map(String);
-    if (files.length === 0 || files.length !== paths.length) {
-      throw new Error(`파일과 경로의 수가 안 맞습니다: ${files.length} / ${paths.length}`);
+    const address = formData.get("address");
+    let uploads: SkillUpload[];
+    if (typeof address === "string" && address !== "") {
+      uploads = await fetchSkillFromAddress(address);
+    } else {
+      const files = formData.getAll("file").filter((f): f is File => f instanceof File);
+      const paths = formData.getAll("path").map(String);
+      if (files.length === 0 || files.length !== paths.length) {
+        throw new Error(`파일과 경로의 수가 안 맞습니다: ${files.length} / ${paths.length}`);
+      }
+      uploads =
+        files.length === 1 && files[0].name.endsWith(".skill")
+          ? await extractSkillArchive(Buffer.from(await files[0].arrayBuffer()), files[0].name)
+          : await Promise.all(
+              files.map(async (file, i) => ({
+                path: paths[i],
+                bytes: Buffer.from(await file.arrayBuffer()),
+                originalName: file.name,
+              })),
+            );
     }
-    const uploads: SkillUpload[] =
-      files.length === 1 && files[0].name.endsWith(".skill")
-        ? await extractSkillArchive(Buffer.from(await files[0].arrayBuffer()), files[0].name)
-        : await Promise.all(
-            files.map(async (file, i) => ({
-              path: paths[i],
-              bytes: Buffer.from(await file.arrayBuffer()),
-              originalName: file.name,
-            })),
-          );
     const skill = await installSkill(uploads);
     return { ok: true, installed: await listInstalledSkills(), name: skill.name };
   } catch (e) {

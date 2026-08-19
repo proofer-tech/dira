@@ -1875,9 +1875,12 @@ function AddSkillsDialog({
   // 선다). title·message가 각각 `AlertTitle`(sans)·`AlertDescription`(mono)이다.
   const [failure, setFailure] = useState<{ title: string; message: string } | null>(null);
   const [pending, start] = useTransition();
-  // import 손잡이는 이제 하나라 "무엇이 도나"를 더 갈릴 값이 없다(§비주얼 §25 ⑤ §진행 중 개정
-  // `7acf0448`) — `installing`이 `"file" | "folder" | "skill" | null` 셋에서 boolean으로 줄었다.
-  const [installing, setInstalling] = useState(false);
+  // 입구가 파일 하나 - 주소 하나로 갈리면서 "무엇이 도나"가 다시 값을 갖는다(§비주얼 §25 ⑦) —
+  // 갈래(파일-폴더-.skill)가 아니라 **입구 둘의 이름**이다. `찾아보기`는 `"file"`일 때만 자기
+  // 글자를 "설치 중…"으로 갈고, 둘 다 서로를 잠근다(통로가 하나라 두 벌이 동시에 안 간다).
+  const [installing, setInstalling] = useState<"file" | "url" | null>(null);
+  // 주소 칸의 값(§비주얼 §25 ⑦) — 실패하면 안 비우고(고칠 글이 거기 있다), 성공하면 비운다.
+  const [address, setAddress] = useState("");
   // 드래그가 이 다이얼로그 위에 있는 동안만 참이다(§비주얼 §25 ⑤ §드래그 중 표시) — 새 상태 하나.
   const [dragging, setDragging] = useState(false);
   // `dragleave`가 자식 경계마다 뜨는 함정(⑤ §함정 셋 - 3번)의 처방 — 진입 카운터.
@@ -1897,7 +1900,39 @@ function AddSkillsDialog({
     };
   }, [open]);
 
-  /** 통로 하나 — 서버가 받는 것은 `file` 여러 개 + 같은 순서의 `path` 여러 개다
+  /** 파일 갈래·주소 갈래가 여기서 합류한다 — 서버가 보는 것은 `installSkillAction`의 결과
+   *  하나뿐이다(§비주얼 §25 ⑦ - "그 뒤는 파일 갈래와 같은 `installSkill`로 들어간다"). `source`는
+   *  화면이 잠글 손잡이를 가리키는 이름이고 갈래가 아니다(§25 ⑦ §읽는 법).
+   *
+   *  `installSkillAction`이 던질 수 있다(예: 본문 상한 관문이 먼저 자른 네트워크/파싱 예외) —
+   *  `try` 없이 두면 throw가 `setInstalling(null)`을 건너뛰어 다이얼로그가 사유 없이
+   *  "설치 중…"에 영구 고정된다(§비주얼 §25 ⑤ 위반, 실측 `ec687d52`). */
+  const submitInstall = async (formData: FormData, source: "file" | "url") => {
+    setFailure(null);
+    setInstalling(source);
+    try {
+      const r = await installSkillAction(formData);
+      if (r.ok) {
+        onInstalled(r.installed ?? []);
+        // §비주얼 §25 ⑦ §성공 — 주소 칸을 비운다(같은 주소를 두 번 깔 일이 없다).
+        if (source === "url") setAddress("");
+        // §비주얼 §25 ⑤ §성공 — 토스트가 없다. 검색칸에 방금 깐 이름을 채워 목록을 그 한 줄로 좁힌다.
+        if (r.name) {
+          const name = r.name;
+          setPicked((prev) => (prev.includes(name) ? prev : [...prev, name]));
+          setQuery(name);
+        }
+      } else {
+        setFailure({ title: r.title ?? "스킬을 설치하지 못했습니다", message: r.message ?? "" });
+      }
+    } catch {
+      setFailure({ title: "스킬을 설치하지 못했습니다", message: "" });
+    } finally {
+      setInstalling(null);
+    }
+  };
+
+  /** 파일 갈래 — 서버가 받는 것은 `file` 여러 개 + 같은 순서의 `path` 여러 개다
    *  (§5-1 §import "입구 둘, 통로 하나" - §셋째 입구 - §입구 하나). `.skill`과 파일 한 장은
    *  화면이 보내는 모양이 같아(`path: "SKILL.md"`) 갈래가 필요 없다 — 판정은 서버가 파일 이름의
    *  끝을 보고 한다(`installSkillAction`). 상한 둘은 `installSkill` · `extractSkillArchive`와
@@ -1911,34 +1946,20 @@ function AddSkillsDialog({
       setFailure(limitError);
       return;
     }
-    setFailure(null);
-    setInstalling(true);
     const formData = new FormData();
     for (const it of items) {
       formData.append("file", it.file);
       formData.append("path", it.path);
     }
-    // `installSkillAction`이 던질 수 있다(예: 본문 상한 관문이 먼저 자른 네트워크/파싱 예외) —
-    // `try` 없이 두면 throw가 `setInstalling(null)`을 건너뛰어 다이얼로그가 사유 없이
-    // "설치 중…"에 영구 고정된다(§비주얼 §25 ⑤ 위반, 실측 `ec687d52`).
-    try {
-      const r = await installSkillAction(formData);
-      if (r.ok) {
-        onInstalled(r.installed ?? []);
-        // §비주얼 §25 ⑤ §성공 — 토스트가 없다. 검색칸에 방금 깐 이름을 채워 목록을 그 한 줄로 좁힌다.
-        if (r.name) {
-          const name = r.name;
-          setPicked((prev) => (prev.includes(name) ? prev : [...prev, name]));
-          setQuery(name);
-        }
-      } else {
-        setFailure({ title: r.title ?? "스킬을 설치하지 못했습니다", message: r.message ?? "" });
-      }
-    } catch {
-      setFailure({ title: "스킬을 설치하지 못했습니다", message: "" });
-    } finally {
-      setInstalling(false);
-    }
+    await submitInstall(formData, "file");
+  };
+
+  /** 주소 갈래(§5-1 §넷째 입구 - §비주얼 §25 ⑦) — 클라이언트 상한 검사가 없다. 크기를 받기
+   *  전에는 잴 수 없어서 §8 `MAX_BYTES` 판정은 받는 도중 서버가 한다(`fetchSkillFromAddress`). */
+  const runInstallAddress = async (value: string) => {
+    const formData = new FormData();
+    formData.append("address", value);
+    await submitInstall(formData, "url");
   };
 
   /** 드롭한 트리를 판정한다 — 그 다음은 폴더 모드와 한 글자도 안 갈린다(§5-1 §입구 하나).
@@ -2019,6 +2040,7 @@ function AddSkillsDialog({
         if (o) {
           setPicked(current.map((s) => s.name));
           setQuery("");
+          setAddress("");
           setFailure(null);
         } else {
           dragDepthRef.current = 0;
@@ -2121,7 +2143,9 @@ function AddSkillsDialog({
           <span className="min-w-0 text-xs text-muted-foreground">
             {dragging
               ? "놓으면 설치합니다"
-              : "목록에 없으면 폴더를 이 창에 끌어다 놓거나 파일을 골라 설치합니다"}
+              : installing === "url"
+                ? "주소에서 받는 중입니다 — 최대 30초"
+                : "목록에 없으면 폴더를 이 창에 끌어다 놓거나 파일을 골라 설치합니다"}
           </span>
           <input
             ref={fileInputRef}
@@ -2140,12 +2164,42 @@ function AddSkillsDialog({
             variant="outline"
             size="sm"
             className="ml-auto"
-            disabled={installing}
+            disabled={installing !== null}
             onClick={() => fileInputRef.current?.click()}
           >
-            {installing ? "설치 중…" : "찾아보기"}
+            {installing === "file" ? "설치 중…" : "찾아보기"}
           </Button>
         </div>
+
+        {/* 넷째 입구 — 주소 한 줄(§5-1 §넷째 입구 - §비주얼 §25 ⑦). 위 행의 형제이고 그 행이
+            담는 것은 안 늘린다. `<form>`이 `Enter`를 0줄로 준다(그릇 안에 `type="submit"`이
+            이 버튼 하나뿐이고 `찾아보기`-`취소`-`저장`은 이 폼 밖이다). */}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!address.trim() || installing !== null) return;
+            void runInstallAddress(address.trim());
+          }}
+        >
+          <div className="flex items-center gap-2">
+            <Input
+              aria-label="스킬 주소"
+              className="min-w-0 grow font-mono"
+              placeholder="https://github.com/owner/repo"
+              spellCheck={false}
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+            />
+            <Button
+              type="submit"
+              variant="outline"
+              aria-disabled={!address.trim() || installing !== null}
+              className="aria-disabled:opacity-50"
+            >
+              설치
+            </Button>
+          </div>
+        </form>
 
         {/* 실패하면 다이얼로그가 열린 채로 남고 체크도 남는다 — 사유를 읽고 다시 누른다.
             `저장` 실패와 import 실패가 이 그릇 하나를 나눠 쓴다(마지막에 누른 것 하나만 선다) */}
