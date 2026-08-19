@@ -188,7 +188,7 @@ test("ticketCostChunk — 원가 · 세션 수 · 합계 밖 세션 수, `모름
 
   putLog(root, logName(5, "w1", "ffffffff"), null); // 로그는 있는데 종료 기록이 없다
   const wip = await ticketCostChunk(root, "ffffffff");
-  assert.equal(wip.text, "모름");
+  assert.equal(wip.text, "모름 · 이 합계에 없는 세션 1개"); // §2-13 §천장 ① — 0-8과 같은 문구
   assert.match(wip.title!, /로그 1개에 종료 기록이 없습니다/);
 });
 
