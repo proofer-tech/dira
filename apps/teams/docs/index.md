@@ -31,6 +31,7 @@
 - [워커](/docs/worker)
 - [동시에 몇 개 돌릴까](/docs/concurrency)
 - [페르소나](/docs/personas)
+- [스쿼드](/docs/squads)
 - [프로토콜](/docs/protocols)
 - [아카이빙과 온톨로지](/docs/ontology)
 - [에픽](/docs/epics)

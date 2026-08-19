@@ -19,7 +19,7 @@
 |---|---|
 | `title` | 필수. 한 줄 제목 |
 | `kind` | select — `work` · `request` · `feedback` |
-| `persona` | select — `personas/` 아래 프로필이 실제로 있는 이름만 뜹니다 |
+| `persona` | select. 선택지가 두 묶음입니다. 프로필이 실제로 있는 페르소나 이름과, 이 프로젝트의 [스쿼드](/docs/squads) 이름 |
 | `우선순위` | select 1~5. 기본값 3 |
 | `마감` | 날짜와 시간. 비워두면 마감 없음입니다 |
 | `deps` | 기존 티켓 멀티셀렉트. 자유 입력 없음 |
