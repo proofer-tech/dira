@@ -663,8 +663,9 @@ function NotificationItems({
  *  (원본이 이미 죽은 사건이라 물어볼 데가 없다). ②의 나열 행 그대로에 시각 칸 하나가 앞에
  *  붙는 한 벌이고, ⑥은 셋째 칸(원문)이 없다.
  *
- *  ⑥ 행의 `잠자기`·`꺼짐`은 이 티켓의 두 언어 수용조건(§0-10 ⑨ — `보관`·`보관함`·
- *  `보관한 알림 없음` 셋뿐이다) 밖이라 i18n 키를 새로 안 늘린다. */
+ *  ⑥ 행의 `잠자기`·`꺼짐`은 `bell.archive.kindSlept`/`kindWake` 키다 — 팝오버 ⑥ 항목의
+ *  문장형 제목(`bell.resume.title*`)과 톤이 갈리고 이 칸(§비주얼 §28 ⑨ 칸 2)은 짧은
+ *  낱말 자리라 별도 키로 뗐다(`f2f80429` 판정). */
 function ArchiveList({ rows, locale }: { rows: ArchivedRow[]; locale: Locale }) {
   if (rows.length === 0) return <EmptyState text={t(locale, "bell.archive.empty")} />;
   return (
@@ -683,7 +684,9 @@ function ArchiveList({ rows, locale }: { rows: ArchivedRow[]; locale: Locale }) 
             <span className="shrink-0 font-mono text-xs text-muted-foreground tabular-nums">
               {dateTimeLabel(r.from)} - {dateTimeLabel(r.to)}
             </span>
-            <span className="shrink-0 text-xs">{r.kind === "slept" ? "잠자기" : "꺼짐"}</span>
+            <span className="shrink-0 text-xs">
+              {r.kind === "slept" ? t(locale, "bell.archive.kindSlept") : t(locale, "bell.archive.kindWake")}
+            </span>
           </li>
         ),
       )}

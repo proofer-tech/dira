@@ -271,10 +271,13 @@ export const ko: Record<string, string> = {
   // (§0-10 §받은 편지함 §보관 = 읽음이다 — 개정 `38337fa2`로 `읽음으로 표시`에서 갈렸다).
   "bell.markRead": "보관",
   // 팝오버 머리의 `보관함` 토글 + 빈 보관함(§0-10 §받은 편지함 §보관한 것을 다시 본다 —
-  // 개정 `38337fa2`). 보관함 안 ⑥ 행의 `잠자기`·`꺼짐`은 이 티켓의 두 언어 수용조건(§0-10 ⑨) 밖이라
-  // 새 키를 안 늘린다 — 행 안에 그대로 적는다.
+  // 개정 `38337fa2`).
   "bell.archive.toggle": "보관함",
   "bell.archive.empty": "보관한 알림 없음",
+  // 보관함 행(⑥) 종류 낱말 — 팝오버 ⑥ 항목의 문장형 제목(`bell.resume.title*`)과 달리
+  // §비주얼 §28 ⑨ 칸 2는 짧은 낱말 자리라 별도 키다(`f2f80429` 판정).
+  "bell.archive.kindSlept": "잠자기",
+  "bell.archive.kindWake": "꺼짐",
   "bell.offline.title": "네트워크가 끊겨 있습니다",
   "bell.offline.body":
     "세션이 열리지 못하고 티켓은 그때마다 대기로 돌아갑니다. 연결이 돌아오면 저절로 재개됩니다.",
@@ -690,6 +693,8 @@ export const en: Record<string, string> = {
   "bell.markRead": "Archive",
   "bell.archive.toggle": "Archived",
   "bell.archive.empty": "No archived notifications",
+  "bell.archive.kindSlept": "Sleep",
+  "bell.archive.kindWake": "Off",
   "bell.offline.title": "The network is down",
   "bell.offline.body":
     "Sessions can't open, and every ticket goes back to Open as it happens. It all picks up again on its own once the connection returns.",
