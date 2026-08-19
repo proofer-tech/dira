@@ -82,6 +82,7 @@ import {
   SidebarMenuItem,
   SidebarProvider,
 } from "@/components/ui/sidebar";
+import { Textarea } from "@/components/ui/textarea";
 import { skillUploadError } from "@/lib/skill-upload-limit";
 import type { Memory, Skill } from "@/lib/skills";
 import { decodeHash, engineMissing, PERSONA_COLORS, personaDotClass } from "@/lib/urls";
@@ -907,10 +908,11 @@ function SquadDetail({
   onEdit: (next: SquadEdit) => void;
   onDeleted: () => void;
 }) {
-  const [result, setResult] = useState<PersonaResult | null>(null);
+  const [membersResult, setMembersResult] = useState<PersonaResult | null>(null);
+  const [rulesResult, setRulesResult] = useState<PersonaResult | null>(null);
   const [headError, setHeadError] = useState<string | null>(null);
-  const [pending, start] = useTransition();
-  const dirty = squadDirty(edit);
+  const [membersPending, startMembers] = useTransition();
+  const [rulesPending, startRules] = useTransition();
 
   const eligible = personas.filter((p) => p.body !== null).map((p) => p.name);
   const profileOf = (name: string) => personas.find((p) => p.name === name)?.body ?? null;
@@ -928,6 +930,14 @@ function SquadDetail({
     orderedMembers.map((m) => ({ name: m.name, role: m.role || profileTitle(profileOf(m.name)) })),
   );
   const overBudget = blockBytes > SQUAD_BLOCK_MAX_BYTES;
+  const rulesBytes = new TextEncoder().encode(edit.rules).length;
+  // 절이 둘(멤버 - 규칙)이라 저장도 둘이다(§비주얼 §61 (15) 4행) — 왼쪽 줄의 `저장 안 됨`은
+  // 여전히 `squadDirty` 하나로 합쳐 본다(그 배지는 절이 아니라 줄의 값이다).
+  const membersDirty = !sameSquadMembers(
+    edit.picked.map((name) => ({ name, role: (edit.roles[name] ?? "").trim() })),
+    edit.saved.members,
+  );
+  const rulesDirty = edit.rules !== edit.saved.rules;
 
   const toggle = (name: string) =>
     onEdit({
@@ -957,30 +967,66 @@ function SquadDetail({
       {headError && <Failure title="삭제하지 못했습니다" message={headError} />}
 
       {/* `rules` — 사이드카 둘째(§5-5 §개정). 리더 세션 프롬프트에만 실린다, 없어도 된다.
-          부품은 PROFILE 본문과 같은 `MarkdownEditor`다 — designer 사양(`55eba77f`)이 아직 안
-          서서 이 화면 안의 기존 조립을 그대로 쓴다. */}
+          모양은 §비주얼 §61 (12)가 정한다 — `Textarea` 한 면이다: `rules`는 md가 아니고
+          (파서 없음), 렌더되는 자리가 앱에 0개다(유일한 독자가 리더 세션의 프롬프트다). */}
       <section className="space-y-2 border-t pt-3">
-        <h3 className="text-sm font-medium">규칙</h3>
-        <p className="text-xs text-muted-foreground">
-          리더가 멤버를 고르고 티켓을 낼 때만 보는 자유 서술 — 없어도 됩니다.
-        </p>
-        <MarkdownEditor
-          name="rules"
-          defaultValue={edit.rules}
-          rows={6}
+        <h3 className="flex items-center gap-2 text-sm font-medium">
+          규칙
+          {/* 규칙 배지 — §61 (13). 상한이 없다: §5-5 §개정이 안 줬고 이 절이 발명하지 않는다 */}
+          <Badge
+            variant="secondary"
+            className="ml-auto font-mono font-normal"
+            title="리더로 뜬 세션의 프롬프트에만 이 파일 전문이 붙습니다"
+          >
+            리더 프롬프트에 인라인 · {rulesBytes.toLocaleString()} B
+          </Badge>
+        </h3>
+        <Textarea
+          aria-label="규칙"
           className="font-mono"
-          onChange={(rules) => onEdit({ ...edit, rules })}
+          value={edit.rules}
+          onChange={(e) => onEdit({ ...edit, rules: e.target.value })}
         />
+        <p className="text-xs text-muted-foreground">
+          리더 세션의 프롬프트에만 실립니다. 비우면 리더는 멤버 이름과 각자의 역할만 봅니다.
+        </p>
+        {rulesResult && !rulesResult.ok && (
+          <Failure title="저장하지 못했습니다" message={rulesResult.message ?? ""} />
+        )}
+        <div className="flex items-center justify-end gap-4">
+          {rulesResult?.ok && !rulesDirty && (
+            <span className="text-sm text-muted-foreground">저장됐습니다.</span>
+          )}
+          <Button
+            size="sm"
+            disabled={rulesPending || !rulesDirty}
+            onClick={() =>
+              startRules(async () => {
+                const r = await saveSquadRulesAction(projectId, row.name, edit.rules);
+                setRulesResult(r);
+                if (r.ok) onEdit({ ...edit, saved: { ...edit.saved, rules: edit.rules } });
+              })
+            }
+          >
+            {rulesPending ? "저장 중…" : "저장"}
+          </Button>
+        </div>
       </section>
 
       {/* 본문은 `멤버` 절이다(§5-5 §화면) — textarea·디스패치 정책·스킬·메모리 절이 없다 */}
       <section className="space-y-2 border-t pt-3">
         <h3 className="flex items-center gap-2 text-sm font-medium">
           멤버
-          {/* 스쿼드 블록 상한(§5-5 §개정 · §6 결정 7 넷째 자리) — 집행 자리는 이 화면이다 */}
-          <Badge variant={overBudget ? "destructive" : "secondary"} className="ml-auto font-mono font-normal">
-            스쿼드 블록 {blockBytes.toLocaleString()} / {SQUAD_BLOCK_MAX_BYTES.toLocaleString()} B
-            {overBudget && " · 상한 초과"}
+          {/* 스쿼드 블록 상한(§5-5 §개정 · §6 결정 7 넷째 자리) — 집행 자리는 이 화면이다.
+              넘어도 색은 안 갈아 끼운다(§61 (13)) — 넘은 것 자체는 위반이 아니고, 저장 자체를
+              막지도 않는다. 낱말 `초과`만 는다 */}
+          <Badge
+            variant="secondary"
+            className="ml-auto font-mono font-normal"
+            title="이 스쿼드의 멤버는 티켓이 스쿼드를 안 들어도 이 블록을 프롬프트로 받습니다"
+          >
+            멤버 전원 프롬프트에 인라인 · {blockBytes.toLocaleString()} / {SQUAD_BLOCK_MAX_BYTES.toLocaleString()} B
+            {overBudget && " 초과"}
           </Badge>
         </h3>
         {eligible.length === 0 ? (
@@ -992,11 +1038,11 @@ function SquadDetail({
             {eligible.map((name) => {
               const picked = edit.picked.includes(name);
               return (
-                <li key={name} className="flex items-center gap-2 px-2 py-1">
+                <li key={name} className="flex h-8 items-center gap-2">
                   {/* §비주얼 §61 (3) — 네이티브 체크박스. `<button>`+`Check` 아이콘은 체크
                       상태가 낭독에 안 실린다. `리더` 배지는 `label` 밖이라 접근명이 `<이름>`
                       하나로 남는다((14) §리더 §낭독). */}
-                  <label className="flex min-w-0 grow cursor-pointer items-center gap-2 rounded hover:bg-accent">
+                  <label className="flex h-8 shrink-0 cursor-pointer items-center gap-2 rounded px-2 hover:bg-accent">
                     <input
                       type="checkbox"
                       className="size-4 shrink-0"
@@ -1005,19 +1051,21 @@ function SquadDetail({
                     />
                     <span className="font-mono text-xs">{name}</span>
                   </label>
+                  {/* 리더 표식 — §61 (14) §리더. 체크 묶음 밖: 색 0 · 아이콘 0, 낱말 하나뿐이다 */}
                   {picked && name === leaderName && (
-                    <Badge variant="outline" className="text-2xs">
+                    <Badge variant="outline" className="h-5 shrink-0 px-2 text-xs">
                       리더
                     </Badge>
                   )}
-                  {/* 역할 칸(§5-5 §개정) — 체크된 줄만 편집한다. 빈 값은 프로필 첫 줄이
-                      placeholder로 보일 뿐 저장되는 값이 아니다("역할이 없는 줄") */}
+                  {/* 역할 칸(§5-5 §개정 · §61 (14)) — 체크된 줄만 편집한다. 빈 값은 프로필 첫 줄이
+                      placeholder로 보일 뿐 저장되는 값이 아니다("역할이 없는 줄"). 이름은 식별자라
+                      mono, 역할은 문장이라 sans */}
                   {picked && (
                     <Input
                       value={edit.roles[name] ?? ""}
                       onChange={(e) => setRole(name, e.target.value)}
                       placeholder={profileTitle(profileOf(name))}
-                      className="h-7 max-w-56 font-mono text-xs"
+                      className="min-w-0 grow text-xs md:text-xs"
                       aria-label={`${name}의 역할`}
                     />
                   )}
@@ -1026,6 +1074,9 @@ function SquadDetail({
             })}
           </ul>
         )}
+        <p className="text-xs text-muted-foreground">
+          역할을 비우면 그 페르소나의 프로필 첫 줄이 역할이 됩니다.
+        </p>
 
         {orphans.length > 0 && (
           <div className="space-y-1">
@@ -1050,27 +1101,25 @@ function SquadDetail({
           </div>
         )}
 
-        {result && !result.ok && <Failure title="저장하지 못했습니다" message={result.message ?? ""} />}
+        {membersResult && !membersResult.ok && (
+          <Failure title="저장하지 못했습니다" message={membersResult.message ?? ""} />
+        )}
         <div className="flex items-center justify-end gap-4">
-          {result?.ok && !dirty && <span className="text-sm text-muted-foreground">저장됐습니다.</span>}
+          {membersResult?.ok && !membersDirty && (
+            <span className="text-sm text-muted-foreground">저장됐습니다.</span>
+          )}
           <Button
             size="sm"
-            disabled={pending || !dirty}
+            disabled={membersPending || !membersDirty}
             onClick={() =>
-              start(async () => {
-                const [membersResult, rulesResult] = await Promise.all([
-                  saveSquadMembersAction(projectId, row.name, orderedMembers),
-                  edit.rules !== edit.saved.rules
-                    ? saveSquadRulesAction(projectId, row.name, edit.rules)
-                    : Promise.resolve<PersonaResult>({ ok: true }),
-                ]);
-                const r = !membersResult.ok ? membersResult : rulesResult;
-                setResult(r);
-                if (r.ok) onEdit({ ...edit, saved: { members: orderedMembers, rules: edit.rules } });
+              startMembers(async () => {
+                const r = await saveSquadMembersAction(projectId, row.name, orderedMembers);
+                setMembersResult(r);
+                if (r.ok) onEdit({ ...edit, saved: { ...edit.saved, members: orderedMembers } });
               })
             }
           >
-            {pending ? "저장 중…" : "저장"}
+            {membersPending ? "저장 중…" : "저장"}
           </Button>
         </div>
       </section>
