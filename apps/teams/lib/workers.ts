@@ -1805,16 +1805,25 @@ if [ "\${1:-tick}" = tick ] || [ "\${1:-tick}" = dryrun ]; then
     _gate_current=$(git -C "$_gate_main" symbolic-ref --short -q HEAD 2>/dev/null)
 
     if [ "$_gate_current" = "$_gate_branch" ]; then
-      _gate_flag="$_gate_main/.git/dira-dirty-warned"
+      # 화면이 읽는 표식 자리(§4-14 §표식 파일, 요구 90b7d019) — <루트>/workers/. 이 파일은 늘
+      # <루트>/workers/<워커>.sh가 source하므로 $0이 그 워커 파일이다. 옛 자리(<받는
+      # 트리>/.git/dira-dirty-warned)는 안 지운다 — 아무도 안 읽는다
+      _gate_dir=$(dirname "$0")
+      _gate_flag="$_gate_dir/.gate-dirty"
       # -uno: 추적 안 되는 파일은 push를 막지 않는다. 스크래치 파일로 큐를 세우지 않는다
-      _gate_dirty=$(git -C "$_gate_main" status --porcelain -uno 2>/dev/null | wc -l | tr -d ' ')
+      _gate_status=$(git -C "$_gate_main" status --porcelain -uno 2>/dev/null)
 
-      if [ "$_gate_dirty" != 0 ]; then
+      if [ -n "$_gate_status" ]; then
         if [ ! -f "$_gate_flag" ]; then
+          _gate_dirty=$(wc -l <<< "$_gate_status" | tr -d ' ')
           echo "$(date '+%Y-%m-%d %H:%M:%S') GATE 디스패치 보류 — $_gate_main 에 커밋 안 된 변경 \${_gate_dirty}건."
           echo "  받는 트리가 $_gate_branch를 체크아웃 중이고 더러우면 push가 전부 거부된다(updateInstead)."
           echo "  당신 것이면 커밋하거나 워크트리로 옮긴다. 다음 tick부터 저절로 풀린다. 이 줄은 상태가 바뀔 때만 뜬다."
-          touch "$_gate_flag" 2>/dev/null
+
+          # 화면이 읽을 사실 한 덩이 — 첫 줄 머리(ISO 8601 + 오프셋 공백 받는 트리 절대경로),
+          # 둘째 줄부터 git status --porcelain -uno의 그 줄 그대로(상한 없음)
+          _gate_ts=$(date +%Y-%m-%dT%H:%M:%S%z); _gate_ts="\${_gate_ts:0:22}:\${_gate_ts:22}"
+          { printf '%s %s\\n' "$_gate_ts" "$_gate_main"; printf '%s\\n' "$_gate_status"; } > "$_gate_flag" 2>/dev/null
         fi
         exit 0
       fi
@@ -1826,7 +1835,7 @@ if [ "\${1:-tick}" = tick ] || [ "\${1:-tick}" = dryrun ]; then
     fi
   fi
 fi
-unset _gate_branch _gate_main _gate_current _gate_flag _gate_dirty
+unset _gate_branch _gate_main _gate_current _gate_dir _gate_flag _gate_status _gate_dirty _gate_ts
 `;
 
 /** `<통합 브랜치>` 하나만 채운다 — `fillPlaceholders`(scaffold.ts)와 같은 치환 방식이지만 이

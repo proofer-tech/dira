@@ -1922,10 +1922,17 @@ test("dispatchGateSh — 통합 브랜치 체크아웃 여부로 막고 안 막�
   const gate = path.join(base, "dispatch-gate.sh");
   writeFileSync(gate, dispatchGateSh("main"));
 
+  // 표식 자리(§4-14 §표식 파일)는 <루트>/workers/.gate-dirty — <루트>/workers/를 실제로 만들고,
+  // 그 안의 워커 파일 자리를 bash -c의 arg0으로 준다($0이 곧 그 자리다. 파일 자체는 없어도 된다)
+  const workersDir = path.join(base, "workers");
+  mkdirSync(workersDir, { recursive: true });
+  const worker = path.join(workersDir, "w1.sh");
+  const flag = path.join(workersDir, ".gate-dirty");
+
   // env로 준다 — `.`은 특수 빌트인이라 셸 대입 접두사(`VAR=v . file`)의 스코프 규칙이 미묘하다.
   // 진짜 워커 `.sh`가 그러듯 환경변수로 물려주면 그 미묘함을 안 탄다.
   const run = () =>
-    execFileSync("bash", ["-c", `. ${JSON.stringify(gate)} tick; echo 끝`], {
+    execFileSync("bash", ["-c", `. ${JSON.stringify(gate)} tick; echo 끝`, worker], {
       encoding: "utf8",
       env: { ...process.env, TICKET_CWD: base },
     });
@@ -1944,18 +1951,31 @@ test("dispatchGateSh — 통합 브랜치 체크아웃 여부로 막고 안 막�
   const blocked = run();
   assert.match(blocked, /GATE 디스패치 보류/);
   assert.doesNotMatch(blocked, /끝/); // 스크립트가 exit 0으로 끊겨 다음 echo가 안 돈다
-  assert.strictEqual(existsSync(path.join(base, ".git", "dira-dirty-warned")), true);
 
-  // 3) 같은 상태로 또 돌리면 막긴 막되, 상태가 안 바뀌었으니 메시지는 다시 안 찍는다
+  // §4-14 §표식 파일 — 머리는 `<ISO 8601 + 오프셋> <받는 트리 절대경로>`, 나머지는
+  // `git status --porcelain -uno`의 그 줄 그대로(상한 없음)
+  assert.strictEqual(existsSync(flag), true);
+  const porcelain = execFileSync("git", ["-C", base, "status", "--porcelain", "-uno"], { encoding: "utf8" })
+    .replace(/\n$/, "")
+    .split("\n");
+  const written = readFileSync(flag, "utf8").replace(/\n$/, "").split("\n");
+  assert.match(written[0], /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2} /);
+  assert.strictEqual(written[0].slice(written[0].indexOf(" ") + 1), realpathSync(base));
+  assert.deepStrictEqual(written.slice(1), porcelain);
+
+  // 3) 같은 상태로 또 돌리면 막긴 막되, 상태가 안 바뀌었으니 메시지는 다시 안 찍는다(파일도 다시 안 쓴다)
+  const beforeAgain = readFileSync(flag, "utf8");
   const blockedAgain = run();
   assert.doesNotMatch(blockedAgain, /GATE 디스패치 보류/);
   assert.doesNotMatch(blockedAgain, /끝/);
+  assert.strictEqual(readFileSync(flag, "utf8"), beforeAgain);
 
-  // 4) 더러움을 치우면 풀리고 해제 메시지가 뜬다
+  // 4) 더러움을 치우면 풀리고 해제 메시지가 뜨며 표식 파일이 사라진다
   execFileSync("git", ["-C", base, "checkout", "--", "README.md"]);
   const cleared = run();
   assert.match(cleared, /GATE 해제/);
   assert.match(cleared, /끝/);
+  assert.strictEqual(existsSync(flag), false);
 });
 
 /** `-l`과 `crontab -`이 **같은 파일**을 본다 — 쓴 뒤 다시 읽어 확인하는 `applyCrontab`의 경로다
