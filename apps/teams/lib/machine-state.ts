@@ -7,6 +7,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { runSchedules } from "./home-agent.ts";
 import { localDir } from "./paths.ts";
+import { webhookTick } from "./webhook.ts";
 import { readAlerts, writeAlerts } from "./workers.ts";
 
 const execFileP = promisify(execFile);
@@ -158,6 +159,9 @@ async function tickOnce(): Promise<void> {
   // §7-2 §깨우는 자리 — 새 타이머를 안 만든다. 판정은 `runSchedules`(순수 함수 `judgeSchedule` 위의
   // 그 절반)가 지고, 여기는 그 함수에 <지금>을 넣고 부르는 것뿐이다.
   await runSchedules(now);
+  // §0-10 §답변 대기가 앱 밖으로 나간다 — 같은 이유로 새 타이머 0. 주소가 없으면 `webhookTick`이
+  // 그 자리에서 돌아온다(큐를 안 훑는다).
+  await webhookTick(now);
 }
 
 async function initState(): Promise<LiveState> {

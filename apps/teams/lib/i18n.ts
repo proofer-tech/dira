@@ -285,6 +285,11 @@ export const ko: Record<string, string> = {
   "bell.awaiting.body": "사람이 답을 써야 이 티켓들이 다시 큐에 뜹니다. 고장난 것은 없습니다.",
   "bell.awaiting.answerLink": "답변 쓰기",
 
+  // 웹훅(§0-10 §답변 대기가 앱 밖으로 나간다) — 본문 `text` 칸 하나. 담는 값은 세 자리뿐이라
+  // `wrap`(하나짜리 자리표시자)로 안 맞고, 여기서만 쓰는 일회성 조립이라 범용 치환기를 새로
+  // 안 만든다(`webhook.ts`의 `webhookText`가 이 셋을 갈아 끼운다).
+  "webhook.text": "답변 대기: {title} - {project} ({hash})",
+
   // status bar (§0-8 · §비주얼 §26 §38).
   "statusbar.idle.allRunning": "없음 — 전원 running",
   "statusbar.idle.none": "없음",
@@ -684,6 +689,8 @@ export const en: Record<string, string> = {
   "bell.awaiting.body":
     "These come back to the queue once a person writes an answer. Nothing is broken.",
   "bell.awaiting.answerLink": "Write an answer",
+
+  "webhook.text": "Awaiting answer: {title} - {project} ({hash})",
 
   // status bar (§0-8 · §비주얼 §26 §38).
   "statusbar.idle.allRunning": "None — all running",
