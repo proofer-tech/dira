@@ -11,6 +11,7 @@ import {
   CircleDot,
   Clock,
   CloudOff,
+  FileDiff,
   MessageSquareReply,
   RotateCcw,
   TriangleAlert,
@@ -38,7 +39,7 @@ import { hasRegisteredToken, readAuth, readOtherEngineAuth, readTokenRows, readT
 import { DEFAULT_LOCALE, t, type Locale } from "@/lib/i18n";
 import { buildVault } from "@/lib/markdown-wikilinks";
 import { listTree } from "@/lib/protocols";
-import { ontologyDir, readSummary, readProjects, readLanguage } from "@/lib/projects";
+import { ontologyDir, readGateDirty, readSummary, readProjects, readLanguage, type GateDirty } from "@/lib/projects";
 import type { DueAlert } from "@/lib/queue";
 import { engineLimits, formatTokens, listUsage, parseLogName, usageRates, type EngineLimit } from "@/lib/usage";
 import {
@@ -160,20 +161,28 @@ export default async function ProjectLayout({
     machineResumes.length > 0
       ? machineResumes.reduce((a, b) => (b.to > a.to ? b : a))
       : null;
+  // ⑧ 알림용(§4-14 §표식 파일). 판정은 게이트가 이미 했다 — 표식 파일 하나만 읽는다(§판정을
+  // 두 벌로 만들지 않는다). 새 fs 읽기 1(다른 여섯은 `readSummary`가 이미 읽어 둔 것을 접는데,
+  // 이 값은 그 함수가 안 읽는 자리다).
+  const gate: GateDirty | null = await readGateDirty(root);
 
-  // 셸 알림 종이 세는 일곱 (§0-10). **판정식은 §0-14 · §0-4 · §0-5 · §0-2 · 결정 5 · §1-4가
-  // 그대로 갖는다** — 아래 일곱은 그 절들이 쓰던 조건 그대로이고 바뀐 것은 그리는 자리와 문구뿐이다.
-  // 순서는 ⑤→⑥→①→②→③→④→⑦다(§0-14 — 머신이 큐보다 넓다. 네트워크가 없으면 인증이 있어도
-  // 아무것도 안 된다). ①~④ 안에서는 종전 순서 그대로다: 인증이 없으면 아무것도 안 돌고, 다음이
-  // 워커 전원, 마지막이 티켓 몇 건이다. ③과 ④는 둘 다 티켓이라 범위가 같고, 그때는 **사고가
-  // 설계보다 위**다(③은 엔진이 만들지 않는 조합이고 ④는 왕복의 정상 단계다 — ④가 종에 드는
-  // 것은 이상 상태라서가 아니라 사람이 답을 써야 그 큐가 다시 돌기 때문이다. §0-10 *④는 왜 여기
-  // 드나* · 결정 4는 무수정이다). ⑤⑥은 `current.connected`를 안 건다 — 머신 상태는 큐를 못
+  // 셸 알림 종이 세는 여덟 (§0-10). **판정식은 §0-14 · §0-4 · §0-5 · §0-2 · 결정 5 · §1-4 · §4-14가
+  // 그대로 갖는다** — 아래 여덟은 그 절들이 쓰던 조건 그대로이고 바뀐 것은 그리는 자리와 문구뿐이다.
+  // 순서는 ⑤→⑥→⑧→①→②→③→④→⑦다(§0-14 — 머신이 큐보다 넓다. 네트워크가 없으면 인증이 있어도
+  // 아무것도 안 된다. ⑧이 ① 위인 것은 막는 자리가 앞서서다 — 게이트는 워커가 `tick.sh`를
+  // source하기 전에 그 tick을 끝낸다). ①~④ 안에서는 종전 순서 그대로다: 인증이 없으면 아무것도
+  // 안 돌고, 다음이 워커 전원, 마지막이 티켓 몇 건이다. ③과 ④는 둘 다 티켓이라 범위가 같고, 그때는
+  // **사고가 설계보다 위**다(③은 엔진이 만들지 않는 조합이고 ④는 왕복의 정상 단계다 — ④가 종에
+  // 드는 것은 이상 상태라서가 아니라 사람이 답을 써야 그 큐가 다시 돌기 때문이다. §0-10 *④는 왜
+  // 여기 드나* · 결정 4는 무수정이다). ⑤⑥은 `current.connected`를 안 건다 — 머신 상태는 큐를 못
   // 읽어도 참이다(§0-14). **⑦이 맨 아래인 이유도 순서 항과 같은 자다** — 마감은 큐가 막힌
-  // 상태가 아니라 사람이 스스로 건 약속이고, 위 여섯이 뜬 판에서는 그것들이 먼저 풀려야 마감도 산다.
+  // 상태가 아니라 사람이 스스로 건 약속이고, 위 일곱이 뜬 판에서는 그것들이 먼저 풀려야 마감도 산다.
   const alerts = {
     offline: current.machine.offline,
     resume: machineResumes.length > 0,
+    // ⑧도 큐를 못 읽으면 꺼진다(§0-10 §켜짐 - 꺼짐) — 판정의 원본이 `<루트>/workers/` 아래
+    // 파일 하나라 ②와 같은 자리에서 같이 막힌다.
+    gate: current.connected && gate !== null,
     auth: !auth.savedAt && current.claude,
     failures: current.connected && queueFailures.length > 0,
     assigned: current.connected && current.assigned.length > 0,
@@ -184,8 +193,8 @@ export default async function ProjectLayout({
   // 다른 문장이다. `alerts.auth`가 참일 때만 읽는다 — 정상 상태에서 `tokens.json`을 여는
   // 횟수는 0이다.
   const authRegistered = alerts.auth ? hasRegisteredToken(await readTokens()) : false;
-  // 배지는 **켜진 알림의 개수 0~7**이다 — 건수를 합치지 않는다(⑤⑥이 들어와 4에서 6이 됐고,
-  // ⑦이 들어와 7이 됐다 — §0-14 · §1-4).
+  // 배지는 **켜진 알림의 개수 0~8**이다 — 건수를 합치지 않는다(⑤⑥이 들어와 4에서 6이 됐고,
+  // ⑦이 들어와 7이, ⑧이 들어와 8이 됐다 — §0-14 · §1-4 · §4-14).
   const alertCount = Object.values(alerts).filter(Boolean).length;
   const alertLabel =
     alertCount > 0
@@ -259,6 +268,7 @@ export default async function ProjectLayout({
                     alerts={alerts}
                     authRegistered={authRegistered}
                     resume={resume}
+                    gate={gate}
                     failures={failures}
                     assigned={current.assigned}
                     awaiting={current.awaiting}
@@ -381,6 +391,7 @@ function NotificationItems({
   alerts,
   authRegistered,
   resume,
+  gate,
   failures,
   assigned,
   awaiting,
@@ -393,6 +404,7 @@ function NotificationItems({
   alerts: {
     offline: boolean;
     resume: boolean;
+    gate: boolean;
     auth: boolean;
     failures: boolean;
     assigned: boolean;
@@ -401,6 +413,7 @@ function NotificationItems({
   };
   authRegistered: boolean;
   resume: UnarchivedResume | null;
+  gate: GateDirty | null;
   failures: { name: string; reason: string; log: string; at: string }[];
   assigned: { hash: string; stem: string }[];
   awaiting: { hash: string; stem: string; mtime: number }[];
@@ -443,6 +456,31 @@ function NotificationItems({
         <span className="col-start-2 flex justify-end">
           <MarkResumeReadButton toMs={resume.to} />
         </span>
+      </>
+    ),
+    // ⑧ 커밋 안 된 변경 (§4-14 §표식 파일 · §0-10 ⑧). 판정은 게이트가 이미 했다 — 화면은
+    // 표식 파일 하나만 읽어 옮긴다(§판정을 두 벌로 만들지 않는다). 나열은 `git status
+    // --porcelain -uno` 줄 그대로다 — 앞 두 글자가 상태 코드, 셋째 글자부터 경로다(코드는
+    // 항상 두 글자라 첫 공백이 아니라 고정 폭 3에서 가른다 — 경로 자체가 공백을 가질 수 있다).
+    // 버튼도 링크도 0개다(⑤와 같은 모양) — 남의 작업 트리를 앱이 대신 커밋하거나 지우지 않는다
+    // (§0-10 §⑧에 버튼이 없는 이유).
+    alerts.gate && gate && (
+      <>
+        <FileDiff aria-hidden className="mt-0.5 size-4 text-status-stale" />
+        <p className="col-start-2 text-sm font-medium">{t(locale, "bell.gate.title")}</p>
+        <p className="col-start-2 text-sm text-foreground">
+          {gate.tree}
+          {t(locale, "bell.gate.bodySuffix")}
+        </p>
+        <div className="col-start-2 grid gap-2">
+          {gate.paths.map((line, i) => (
+            <span key={i} className="flex items-baseline gap-2">
+              <span className="shrink-0 font-mono text-xs whitespace-pre">{line.slice(0, 2)}</span>
+              <span className="min-w-0 break-words font-mono text-xs">{line.slice(3)}</span>
+            </span>
+          ))}
+        </div>
+        <p className="col-start-2 text-sm text-foreground">{t(locale, "bell.gate.action")}</p>
       </>
     ),
     // ① 인증 (§0-4). 토큰 파일이 없으면 `tick.sh:61`이 매 tick마다 조용히 `exit 0`한다 —

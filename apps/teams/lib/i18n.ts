@@ -288,6 +288,12 @@ export const ko: Record<string, string> = {
   "bell.resume.middle": "부터",
   "bell.resume.after": "까지 큐가 멈춰 있었습니다. 잃은 것은 없습니다 — 이미 다시 돌고 있습니다.",
   "bell.resume.noAction": "고칠 일은 없습니다.",
+  // 종 ⑧(§4-14 §표식 파일 · §0-10 ⑧). 본문은 게이트가 표식 첫 줄에 적은 받는 트리 절대경로
+  // 앞에 붙는 꼬리다(`<tree>가 …` — `bell.resume.middle`과 같은 조립 방식, 요구 `90b7d019`).
+  "bell.gate.title": "커밋 안 된 변경이 디스패치를 막고 있습니다",
+  "bell.gate.bodySuffix":
+    "가 깨끗해질 때까지 워커가 티켓을 아예 안 집습니다. 고장난 것은 없습니다 - 커밋하거나 되돌리면 다음 tick부터 저절로 재개됩니다.",
+  "bell.gate.action": "그 트리에서 커밋하거나, 지울 것이면 지우세요.",
   "bell.auth.title": "Claude 토큰이 없습니다",
   "bell.auth.body": "워커가 티켓을 집어도 세션을 못 열고 그대로 끝냅니다.",
   // §0-10 ①의 두 번째 갈래(요구 `6455b43a`) — 등록은 있는데 eligible이 0일 때다.
@@ -706,6 +712,10 @@ export const en: Record<string, string> = {
   "bell.resume.middle": " to",
   "bell.resume.after": ": the queue sat stopped. Nothing was lost — it's already running again.",
   "bell.resume.noAction": "Nothing to fix.",
+  "bell.gate.title": "Uncommitted changes are blocking dispatch",
+  "bell.gate.bodySuffix":
+    " must be clean before workers pick up any ticket. Nothing is broken - commit or discard the changes and it resumes automatically on the next tick.",
+  "bell.gate.action": "Commit in that tree, or delete the changes if you meant to discard them.",
   "bell.auth.title": "No Claude token",
   "bell.auth.body": "Workers still claim tickets, but they can't open a session and end right there.",
   "bell.auth.titleExhausted": "No Claude account is available right now",
