@@ -217,7 +217,7 @@ print(n)' "$CODE" "$TICKET_ROOT" "$1"
 # 워커에서만 참이라 정확히 하나만 죽는다 - 조율이 필요 없다.
 maybe_preempt() {
   local WROWS VPATH VHASH VEFF VASSIGN VPID VOWNER
-  local PUSH5 q_path q_hash q_kind q_persona q_prio q_base q_eff PLIM PWIP
+  local PUSH5 q_path q_hash q_kind q_persona q_prio q_base q_eff q_squadp PLIM PWIP
   local WT COMMIT
   WROWS=$(python3 "$PY" wips "$TICKET_ROOT" 2>/dev/null) || return 0
   [ -z "$WROWS" ] && return 0
@@ -235,8 +235,9 @@ maybe_preempt() {
   # 조건 1 — 유효 5 후보가 있고 자기 게이트(deps·페르소나 상한)를 다 지난다. `select`가 이미
   # deps 미충족·할당됨을 걸렀으니 여기서는 페르소나 상한만 본다(선정 루프와 같은 판정).
   PUSH5=""
-  while IFS='|' read -r q_path q_hash q_kind q_persona q_prio q_base q_eff; do
+  while IFS='|' read -r q_path q_hash q_kind q_persona q_prio q_base q_eff q_squadp; do
     [ "$q_eff" = "5" ] || continue
+    [ -n "$q_squadp" ] && q_persona="$q_squadp"   # 스쿼드 리더가 게이트를 대신 받는다(§5-5)
     if [ -n "$q_persona" ]; then
       PLIM=$(persona_limit "$q_persona")
       if [ -n "$PLIM" ]; then
@@ -446,7 +447,9 @@ for lf in "${TICKET_PERSONAS:-$TICKET_ROOT/personas}"/*/limit; do
   [ -f "$lf" ] && { LIMITED=1; break; }
 done
 HASPRIO1=""
-printf '%s\n' "$CANDS" | grep -q '|1$' && HASPRIO1=1
+# select 출력은 이제 8필드다(끝에 squad_persona가 붙는다, §5-5) - `|1$`는 그 필드가 비어 있을
+# 때만 우연히 맞는다. 7번째 필드(effective) 위치로 고정해서 본다.
+printf '%s\n' "$CANDS" | grep -qE '^([^|]*\|){6}1\|' && HASPRIO1=1
 if [ "$CMD" = "tick" ] && { [ -n "$LIMITED" ] || [ -n "$HASPRIO1" ]; }; then
   acquire_slock || exit 0
 fi
@@ -494,11 +497,14 @@ live_other() {                     # 파일이 있고 · 내 것이 아니고 ·
 }
 
 SID=$(python3 -c 'import uuid;print(uuid.uuid4())')
-TPATH=""; THASH=""; TKIND=""; TPERSONA=""; TPRIO=""; TBASE=""; TEFF=""
+TPATH=""; THASH=""; TKIND=""; TPERSONA=""; TPRIO=""; TBASE=""; TEFF=""; TSQUAD=""
 OVER=""    # 이 판에서 이미 상한이던 페르소나들. 후보가 여럿이어도 SKIP은 페르소나당 한 줄이다
 ENGOVER="" # 이 판에서 이미 디스패치 불가이던 엔진들. 후보가 여럿이어도 SKIP은 엔진당 한 줄이다
-while IFS='|' read -r c_path c_hash c_kind c_persona c_prio c_base c_eff; do
+while IFS='|' read -r c_path c_hash c_kind c_persona c_prio c_base c_eff c_squadp; do
   [ -z "$c_path" ] && continue
+  # `squad:`가 풀렸으면 리더가 이 후보의 수행자다 - 아래 상한 게이트-엔진 선택-claim이
+  # 전부 c_persona를 보므로 여기서 한 번만 덮으면 나머지는 종전 코드 그대로다(§5-5 §개정).
+  [ -n "$c_squadp" ] && c_persona="$c_squadp"
 
   # 1 게이트(§1-3) — 유효 1은 진행중 티켓이 0건일 때만 후보다. "모든 워커가 idle"의 큐 쪽
   # 값이 그것이다. 걸려도 큐에서 안 빠진다 - 이번 tick의 후보가 아닐 뿐이고 다음 후보로
@@ -561,7 +567,7 @@ while IFS='|' read -r c_path c_hash c_kind c_persona c_prio c_base c_eff; do
   fi
   # 잡기 = 원자적 rename. 이게 진짜 락 - 다른 세션·다른 tick도 이걸 보고 피한다.
   if CPATH=$(python3 "$PY" claim "$c_path" 2>/dev/null); then
-    TPATH="$CPATH"; THASH="$c_hash"; TKIND="$c_kind"; TPERSONA="$c_persona"; TPRIO="$c_prio"; TBASE="$c_base"; TEFF="$c_eff"
+    TPATH="$CPATH"; THASH="$c_hash"; TKIND="$c_kind"; TPERSONA="$c_persona"; TPRIO="$c_prio"; TBASE="$c_base"; TEFF="$c_eff"; TSQUAD="$c_squadp"
     break
   fi
 done <<EOF
@@ -727,6 +733,60 @@ else
   log "WARN 페르소나 프로필 없음: $PROFILE (페르소나 없이 디스패치)"
 fi
 
+# --- 스쿼드 블록: TPERSONA가 속한 스쿼드 전부(§5-5 §개정 §스쿼드 블록 - §블록의 틀) ---
+# 상시 성질이다 - 이 티켓이 squad:를 들었는지와 무관하게, TPERSONA가 어느 squads/*/members에
+# 있으면 실린다. claim 임계구역 밖이다(위 선정 루프는 이미 끝났다). 새 환경변수 0
+# (TICKET_SQUADS를 안 만든다 - §5-5 §값) - 자리는 언제나 $TICKET_ROOT/squads다. 멤버 이름을
+# 엔진이 검증하지 않는다(고발은 화면의 몫) - 여기서 하는 것은 프롬프트에 실을 문장 조립뿐이다.
+# 1,500B 상한의 집행 자리는 화면이다(§5-5 §스쿼드 블록 §상한) - 여기서는 안 잰다.
+# 틀은 §블록의 틀이 값으로 못박았다 - 엔진과 화면이 같은 바이트를 세는 유일한 접점이라 글자
+# 하나도 안 지어낸다: 머리 `===== 스쿼드 <이름> =====`, 멤버 줄마다 `<이름>[ (리더)] - <역할>`,
+# 꼬리는 이름 없이 `===== 스쿼드 끝 =====` 그대로다. rules는 이 블록 밖의 별도 사이드카 틀이다.
+SQUADBLOCK=""
+RULESBLOCK=""
+if [ -n "$TPERSONA" ] && [ -d "$TICKET_ROOT/squads" ]; then
+  while IFS= read -r sqdir; do
+    [ -n "$sqdir" ] || continue
+    sqname="$(basename "$sqdir")"
+    mfile="$sqdir/members"
+    [ -f "$mfile" ] || continue
+    ROWS=""; LEADER=""; FOUND=""; FIRST=1
+    # 한 줄에 `<이름>` 또는 `<이름> <역할>` - 첫 공백에서 한 번만 가른다(§5-5 §값, split(None,1)과 같다).
+    # `read`가 그대로 그 문법이다: 변수 둘로 받으면 나머지 전부가 둘째 변수로 몰린다.
+    while IFS= read -r rawline || [ -n "$rawline" ]; do
+      name=""; role=""
+      read -r name role <<< "$rawline"
+      [ -n "$name" ] || continue
+      if [ -z "$role" ]; then
+        pfile="${TICKET_PERSONAS:-$TICKET_ROOT/personas}/$name/PROFILE.md"
+        [ -r "$pfile" ] && role="$(head -1 "$pfile")"
+      fi
+      TAG=""
+      if [ "$FIRST" = 1 ]; then LEADER="$name"; TAG=" (리더)"; fi
+      FIRST=0
+      [ "$name" = "$TPERSONA" ] && FOUND=1
+      ROWS="$ROWS
+$name$TAG - $role"
+    done < "$mfile"
+    [ -n "$FOUND" ] || continue
+    SQUADBLOCK="$SQUADBLOCK
+===== 스쿼드 $sqname =====$ROWS
+===== 스쿼드 끝 =====
+"
+    if [ "$LEADER" = "$TPERSONA" ] && [ -r "$sqdir/rules" ]; then
+      RULESBLOCK="$RULESBLOCK
+===== 스쿼드 $sqname 규칙 ($sqdir/rules) =====
+$(cat "$sqdir/rules")
+===== 규칙 끝 =====
+"
+    fi
+  done < <(find "$TICKET_ROOT/squads" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort)
+fi
+[ -n "$RULESBLOCK" ] && PROMPT="$RULESBLOCK
+$PROMPT"
+[ -n "$SQUADBLOCK" ] && PROMPT="$SQUADBLOCK
+$PROMPT"
+
 # --- 코어 프로토콜: <엔진 레포>/protocols/CORE.md 를 프롬프트 맨 앞에 인라인한다 ---
 # 엔진이 읽는 계약(파일명 상태·claim·frontmatter 키·`## 블록`)이라 큐 밖에 살고 사본이 없다 -
 # 큐에 없으니 사람이 지울 수 없다(§프롬프트 층 결정 1). 큐 AGENTS.md **앞**에 서므로 프로젝트
@@ -771,6 +831,9 @@ fi
 # 세션키 선발급 -> 즉시 frontmatter 기록(디스패치 순간부터 '할당됨'으로 큐에서 제외)
 python3 "$PY" assign "$TPATH" "$SID" "${TPERSONA:-agent} / ${TICKET_NAME}-${SID:0:8}" || {
   log "ERROR assign 실패 $THASH"; python3 "$PY" release "$TPATH" >/dev/null; exit 1; }
+# 스쿼드 티켓이면 풀린 리더 이름을 persona:로 남긴다(§5-5 §상한) - claim이 이미 정한 값이고
+# 여기는 그 기록 자리다. 해제-회수 뒤에도 이 값은 안 지운다(`clear`-`release` 무수정 그대로).
+[ -n "$TSQUAD" ] && python3 "$PY" setpersona "$TPATH" "$TSQUAD"
 LOGF="$LOGDIR/$(date '+%Y%m%d-%H%M%S')-${TICKET_NAME}-${THASH}.log"
 PRIOLOG=$(prio_log "$TPRIO" "$TBASE" "$TEFF")
 log "DISPATCH $THASH kind=${TKIND:--} persona=${TPERSONA:-none} sid=$SID log=$(basename "$LOGF") $PRIOLOG"
@@ -961,8 +1024,11 @@ select_reuse_candidate() {
     acquire_slock || return 1
   fi
 
-  local rc_path rc_hash rc_kind rc_persona rc_prio rc_base rc_eff RCPATH
-  while IFS='|' read -r rc_path rc_hash rc_kind rc_persona rc_prio rc_base rc_eff; do
+  local rc_path rc_hash rc_kind rc_persona rc_prio rc_base rc_eff rc_squadp RCPATH
+  # §5-5 §안 하는 것 - 세션 재활용은 안 갈린다(문자열 일치 하나). $persona는 이미 이 세션이
+  # 최초 디스패치에서 스쿼드를 풀어 확정한 값이라 rc_squadp를 다시 덮어 쓸 이유가 없다 -
+  # 필드 수만 맞춘다(안 맞추면 마지막 값 rc_eff가 squad_persona를 삼킨다).
+  while IFS='|' read -r rc_path rc_hash rc_kind rc_persona rc_prio rc_base rc_eff rc_squadp; do
     [ -z "$rc_path" ] && continue
     [ "$rc_persona" = "$persona" ] || continue
     if RCPATH=$(python3 "$PY" claim "$rc_path" 2>/dev/null); then

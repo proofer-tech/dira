@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """티켓 큐 헬퍼(프로젝트 무관). <루트> = `tickets/`(큐)와 `personas/`를 담은 티켓 루트.
 
-select <루트>          미할당 열린 티켓들을 오래된 순으로 -> "path|hash|kind|persona|priority|baseline|effective"
+select <루트>          미할당 열린 티켓들을 오래된 순으로 ->
+                       "path|hash|kind|persona|priority|baseline|effective|squad_persona"
+                       (여덟째 필드는 `squad:`가 풀린 리더 이름 - 없으면 빈 문자열)
 wips   <루트>          진행중(`.wip`) 티켓 전부 -> "path|hash|effective|assigned_at|pid|owner"
 assign <path> <sid>    frontmatter에 session_id/assigned_at 기록
+setpersona <path> <이름>  frontmatter의 persona: 기록 (claim 뒤 스쿼드 해석 결과를 남긴다)
 clear  <path>          frontmatter의 session_id/assigned_at 비우기 (할당 취소)
 list   <루트>          열린 티켓 전체 상태 표
 find   <루트> <hash>   해시로 티켓 경로 찾기
@@ -96,6 +99,44 @@ def persona_of(fm):
     """
     p = (fm.get("persona") or "").strip().strip("\"'")
     return p if PERSONA_RE.match(p) else ""
+
+
+def squad_of(fm):
+    """frontmatter `squad:`. 없으면 "" - 이름 규칙은 페르소나와 한 이름공간이다(§5-5 §값)."""
+    s = (fm.get("squad") or "").strip().strip("\"'")
+    return s if PERSONA_RE.match(s) else ""
+
+
+def squad_leader(troot, squad, h=""):
+    """`squads/<squad>/members` 첫 유효 줄의 페르소나 이름(리더) - §5-5 §개정.
+
+    리더 모델에서 고르기는 이 줄 하나다 - 진행중 수를 세지 않으므로 프로세스가 안 뜬다(§E12).
+    squads/ 없음 - members 없음/빈 파일 - 첫 줄 이름이 PERSONA_RE 밖, 넷 다 같은 처분이다:
+    "" + WARN 한 줄(§5-5 §검증 (E5)) - 호출자는 종전 경로(`persona:`)로 떨어진다. 이름 검증은
+    여기서 한다 - 이 값이 그대로 `persona:`에 쓰여 `personas/<값>/PROFILE.md` 경로를 만든다
+    (`persona_of`와 같은 신뢰 경계).
+    """
+    path = os.path.join(troot, "squads", squad, "members")
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            lines = f.read().split("\n")
+    except OSError:
+        print("WARN 스쿼드 {} 못 읽음 {} ({}) - 종전 경로로 처리".format(squad, h, path),
+              file=sys.stderr)
+        return ""
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        name = line.split(None, 1)[0]
+        if PERSONA_RE.match(name):
+            return name
+        print("WARN 스쿼드 {} 첫 줄 이름이 규칙 밖이다 {} 값={!r} - 종전 경로로 처리".format(
+            squad, h, name), file=sys.stderr)
+        return ""
+    print("WARN 스쿼드 {} members가 비었다 {} - 종전 경로로 처리".format(squad, h),
+          file=sys.stderr)
+    return ""
 
 
 def tickets_in(troot):
@@ -322,6 +363,7 @@ def scan(troot, now=None):
         if end < 0:
             continue
         h = ticket_hash(p, fm)
+        sq = squad_of(fm)
         rows.append({
             "path": p,
             "hash": h,
@@ -336,6 +378,8 @@ def scan(troot, now=None):
             "priority": prio.get(h, PRIORITY_DEFAULT),
             "baseline": baseline.get(h, PRIORITY_DEFAULT),
             "effective": eff.get(h, PRIORITY_DEFAULT),
+            # `squad:`가 풀린 리더 이름 - 없거나 못 읽으면 "" (§5-5 §개정, 호출자는 persona로 떨어진다)
+            "squad_persona": squad_leader(troot, sq, h) if sq else "",
         })
     rows.sort(key=lambda r: (-r["effective"], r["birth"], r["path"]))
     return rows
@@ -874,9 +918,9 @@ def main():
         # 미할당 열린 티켓을 유효 우선순위 높은 순(§1-3)으로 전부. 호출자가 위에서부터 claim 시도.
         for r in scan(sys.argv[2]):
             if not r["assigned"] and not r["unmet"]:
-                print("{}|{}|{}|{}|{}|{}|{}".format(
+                print("{}|{}|{}|{}|{}|{}|{}|{}".format(
                     r["path"], r["hash"], r["kind"], r["persona"],
-                    r["priority"], r["baseline"], r["effective"]))
+                    r["priority"], r["baseline"], r["effective"], r["squad_persona"]))
         return
 
     if cmd == "wips":
@@ -973,6 +1017,12 @@ def main():
 
     if cmd == "setpid":
         set_fm_keys(sys.argv[2], {"pid": sys.argv[3]})
+        return
+
+    if cmd == "setpersona":
+        # 스쿼드 해석 결과(리더 이름)를 claim 뒤 기록한다(§5-5 §개정 §상한). `assign`의 인자
+        # 규약은 안 건드린다 - setpid-setinbox와 같은 모양의 별도 서브커맨드다.
+        set_fm_keys(sys.argv[2], {"persona": sys.argv[3]})
         return
 
     if cmd == "setinbox":
