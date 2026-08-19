@@ -12,7 +12,7 @@ const SITE_TITLE = "dira";
 const SITE_DESCRIPTION =
   "티켓을 큐에 넣으면 cron에 물린 워커가 claude 세션에 넘깁니다. 파일시스템이 곧 큐인 티켓 디스패처.";
 
-/** 매뉴얼 24장(`docs/*.md` — 23장 + 목차). `docs/[[...slug]]`가 이 목록으로 굽는다. */
+/** 매뉴얼 26장(`docs/*.md` — 25장 + 목차). `docs/[[...slug]]`가 이 목록으로 굽는다. */
 export const docNames = readdirSync(join(process.cwd(), "docs"))
   .filter((f) => f.endsWith(".md"))
   .map((f) => f.slice(0, -3));
@@ -25,7 +25,7 @@ export const rootNames = ["privacy", "terms"];
 /** `cleanUrls: true`가 내던 그 경로다 — `.html`을 안 붙이고 `index` 조각은 지운다. */
 export const docPath = (name: string) => (name === "index" ? "/docs/" : `/docs/${name}`);
 
-/** 굽는 25장의 절대 URL. `app/sitemap.ts`가 이것을 그대로 싣는다 — `404`는 안 든다
+/** 굽는 26장의 절대 URL. `app/sitemap.ts`가 이것을 그대로 싣는다 — `404`는 안 든다
  *  (마크다운 페이지가 아니고 색인 대상도 아니다). */
 export const pageUrls = ["/", ...rootNames.map((n) => `/${n}`), ...docNames.map(docPath)].map(
   (path) => `${ORIGIN}${path}`,

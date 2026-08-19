@@ -63,4 +63,4 @@ rm ~/.config/dira/analytics.json
 
 무엇을 왜 보내는지, 보존 기간과 위탁처는 [개인정보처리방침](/privacy)에 있습니다.
 
-다음은 [마치면서](/docs/closing)입니다.
+다음은 [답변 대기를 밖으로 보내기](/docs/webhook)입니다.

@@ -14,7 +14,7 @@ const b = s.indexOf("\nconst FLAT", a);
 assert.ok(a >= 0 && b > a, "page.tsx: 사이드바 구간을 못 찾았다");
 const tokens = [...s.slice(a, b).matchAll(/\b(text|link): "([^"]*)"/g)].map((m) => [m[1], m[2]]);
 
-test("사이드바 링크 24개가 `docs/*.md`와 한 장도 안 어긋난다", () => {
+test("사이드바 링크 25개가 `docs/*.md`와 한 장도 안 어긋난다", () => {
   const linked = tokens.filter(([k]) => k === "link").map(([, v]) => v);
   const files = readdirSync("docs")
     .filter((f) => f.endsWith(".md") && f !== "index.md")
@@ -22,8 +22,8 @@ test("사이드바 링크 24개가 `docs/*.md`와 한 장도 안 어긋난다", 
   assert.deepEqual([...linked].sort(), files.sort());
 });
 
-test("그룹 6 + 링크 24 = 30항목", () => {
+test("그룹 6 + 링크 25 = 31항목", () => {
   // `link`가 없는 `text`가 그룹 라벨이다 — 6묶음이 §갈아 끼우는 것의 계약이다.
-  assert.equal(tokens.filter(([k]) => k === "link").length, 24);
-  assert.equal(tokens.filter(([k]) => k === "text").length, 30);
+  assert.equal(tokens.filter(([k]) => k === "link").length, 25);
+  assert.equal(tokens.filter(([k]) => k === "text").length, 31);
 });
