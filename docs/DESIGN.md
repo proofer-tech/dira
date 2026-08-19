@@ -29324,7 +29324,14 @@ git diff --stat master -- tick.sh tickets.py      # 0줄
 | (3) | `test_handoff_cap.py`(신규) | 위 둘. 판정은 **임시 큐**에서 낸다(제약 1) |
 | (4) | `.dira/protocols/세션-종료.md` | 결정 4 판별표 - 결정 5 `## 진행 기록` - 결정 6 키와 상한 |
 | (5) | `.dira/protocols/AGENTS.md` §미완으로 끝날 때 | 결정 4의 **첫 질문** 한 줄. 인라인 예산 6,500 B - 더하는 바이트보다 많이 줄이고 더한다 |
-| (6) | `apps/teams/**` - `protocols/CORE.md` - `tick.sh` | **무수정** |
+| (6) | 매뉴얼 - `apps/teams/docs/ref-frontmatter.md` - `states.md` - `logs.md` | 엔진이 쓰는 키 표에 `handoffs` 한 줄, 답변 요청으로 올라가는 사유가 는 자리 셋. `apps/teams` 아래지만 **글이라 writer가 든다**(PROFILE - 사용자가 읽는 글) |
+| (7) | `apps/teams/` 코드(`app/` `lib/` `components/`) - `protocols/CORE.md` - `tick.sh` | **무수정.** 화면은 `handoffs`를 안 읽는다 |
+
+**매뉴얼이 이미 이 자리를 말하고 있어서 (6)이 늘었다.** `ref-frontmatter.md`는 엔진이 쓰는 키를
+빠짐없이 적는 표이고(`attempts` `awaiting`이 거기 있다), `logs.md`의 `ASK` 줄과 `states.md`
+§*열려 있는데 아무 워커도 집지 않는 티켓의 사유는 넷입니다*가 답변 요청으로 올라가는 계기를
+열거한다. 결정 6이 키 하나와 계기 하나를 더하므로 손을 안 대면 매뉴얼 세 장이 틀린 채 남는다 -
+**빠뜨린 것이지 안 하기로 정한 것이 아니다.**
 
 **엔진 수정 승인을 따로 안 받는다.** 제약 1은 `864f39c9`로 뒤집혔고 이 변경이 경계 넷 안이다 -
 의존성 0(frontmatter 읽기와 기존 함수 호출뿐) - 프로토콜 무수정(상태 3종 - 해시 파일명 -
@@ -29356,9 +29363,12 @@ wc -c .dira/protocols/AGENTS.md                        # 6500 이하
 #    그 티켓이 열린 채로 `## 질문 n` + `awaiting:` + 존재하지 않는 dep을 갖는다
 # ④ ③의 티켓을 다시 claim하면 claim이 **성공**하고 `## 질문` 절이 한 벌 그대로다
 # ⑤ `handoffs: 3`이거나 키가 없는 티켓은 claim이 종전대로 성공한다(회귀 자리)
-# ⑥ 무수정 자리
-git diff --stat master -- tick.sh apps/teams protocols/CORE.md   # 0줄
-# ⑦ python3 -m pytest test_handoff_cap.py && python3 -m pytest    # 전부 통과
+# ⑥ 매뉴얼 세 장이 새 키와 새 사유를 말한다
+grep -c 'handoffs' apps/teams/docs/ref-frontmatter.md   # 1 이상
+grep -l '이어받기' apps/teams/docs/states.md apps/teams/docs/logs.md   # 두 장 다
+# ⑦ 무수정 자리 - 화면 코드는 이 키를 안 읽는다
+git diff --stat master -- tick.sh apps/teams/app apps/teams/lib apps/teams/components protocols/CORE.md   # 0줄
+# ⑧ python3 -m pytest test_handoff_cap.py && python3 -m pytest    # 전부 통과
 ```
 
 ### 안 하는 것
@@ -40039,6 +40049,9 @@ last:mb-0` 한 문자열). 열려 있는 축 둘(배경 - 테두리)은 판단�
 | P294-2 | 문서 - `AGENTS.md`에 두 절 신설(턴을 닫으면 끝난다 + 미완 이어받기) | developer | - | 발행 `81edc6c1` |
 | P294-3 | 구현 - `continued:` 배선(`완료(이어짐)` 배지 + 후속 링크) | developer | - | 발행 `fbdee15a` |
 | P294-4 | 문서 - 매뉴얼 `states.md` - `ref-frontmatter.md`가 이 둘을 말한다 | writer | P294-3 | 발행 `bf48b938` |
+| P294-5 | 구현 - `handoffs` 상한 3을 `claim`이 판정하고 `ask_human`에 사유 한 갈래 + `test_handoff_cap.py` | developer | - | 발행 `522a0b7a` |
+| P294-6 | 문서 - `세션-종료.md`에 판별표 - `## 진행 기록` - 키와 상한, `AGENTS.md`에 첫 질문 한 줄 | developer | - | 발행 `34070469` |
+| P294-7 | 문서 - 매뉴얼 세 장이 `handoffs`와 새 답변 요청 사유를 말한다 | writer | P294-5 | 발행 `29c58400` |
 
 **왕복 1회. 답이 `기타`로 와서 원인 규명이 조사로 넘어왔다.** 문항 1의 선택지 셋(시간 상한 -
 계정 한도 - 컨텍스트) 중 어느 것도 아니고, 사람이 근거로 지목한 것은 죽은 세션의 마지막 기록
@@ -40064,6 +40077,14 @@ last:mb-0` 한 문자열). 열려 있는 축 둘(배경 - 테두리)은 판단�
 후속 링크는 `derivedFrom`-`archivedBy`가 이미 서는 자리를 쓴다. **QA 0장** - 판정이 §수용조건
 일곱 줄이고 각 티켓의 `## Done when`이 나눠 진다. **writer 1장** - 매뉴얼이 티켓 상태
 (`states.md`)와 프론트매터 키 표(`ref-frontmatter.md`)를 이미 설명하고 있어 둘 다 낡는다.
+
+**개정 3장 - 자발 중단은 블록이 아니다 (2026-08-19, 요구 `6442ba35` - 답 `802a82d0`).** 같은
+요구의 세 줄 중 앞의 둘은 에픽 P299가 받았고, 셋째(*끊어가는 것은 블록이 아니다*)가 결정 2를
+뒤집는 갈래라 왕복 1회 후 `1.(a)`로 **결정 2를 그대로 유지**하기로 왔다. 그래서 이 회차가
+세우는 것은 오적재를 막는 판별표(결정 4) - `## 진행 기록`(결정 5) - 이어받기 상한 3(결정 6)이다.
+**developer 2장이 같은 이유로 또 갈린다** - 엔진(P294-5)은 git 커밋이고 프로토콜(P294-6)은
+gitignore된 큐 사본이다. **writer 1장(P294-7)은 P294-4와 같은 자리가 다시 낡기 때문이다** -
+`handoffs`가 엔진이 쓰는 키 표에 없고, 답변 요청으로 올라가는 사유가 하나 는다.
 
 ### P295. 인라인 예산이 12일 만에 되돌아왔다 - 예산 절을 더하는 자리에 둔다 (요구 `22e956db`)
 
