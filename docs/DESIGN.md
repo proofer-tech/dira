@@ -22358,14 +22358,23 @@ canonical은 **페이지마다 달라야 하는 값**이라 그러면 하위 25�
    문장이 선다.
 6. 큐의 에픽 전부가 제목과 내용을 든다 - 아래가 **한 줄도 안 찍는다**.
 
+**에픽의 목록은 디렉터리 하나가 아니다** - `listEpics`가 `epics/` 한 단계와 티켓 fm `epic:`
+값의 **합집합**을 낸다(결정 17). 디렉터리째 없는 자리(P300)를 `epics/*/` 글롭이 못 봐서
+검사가 조용히 통과한다 - 아래가 그 합집합을 그대로 센다.
+
 ```bash
-for d in .dira/epics/*/; do
-  f="$d/README.md"
-  t=$(sed -n '1,$p' "$f" 2>/dev/null | grep -m1 -v '^[[:space:]]*$')
+{ ls -1 .dira/epics 2>/dev/null
+  awk 'FNR==1{fm=0} FNR==1&&$0=="---"{fm=1;next} fm&&$0=="---"{fm=0} fm&&/^epic: /{sub(/^epic: */,"");print}' .dira/tickets/*.md
+} | sort -u | while read -r p; do
+  f=".dira/epics/$p/README.md"
+  t=$(grep -m1 -v '^[[:space:]]*$' "$f" 2>/dev/null)
   b=$(tail -n +2 "$f" 2>/dev/null | tr -d '[:space:]')
-  [ -n "$t" ] && [ -n "$b" ] || echo "MISSING $(basename "$d")"
+  [ -n "$t" ] && [ -n "$b" ] || echo "MISSING $p"
 done
 ```
+
+`awk`가 frontmatter 블록만 읽는 것이 이 검사의 값이다 - 본문에 `epic: P100`이라고 적힌 산문
+줄이 목록에 들면 없는 에픽이 영원히 `MISSING`으로 선다(실측 2건).
 
 ### 안 하는 것
 
