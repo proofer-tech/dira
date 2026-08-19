@@ -47,7 +47,14 @@ import {
   threadOf,
   type Ticket,
 } from "@/lib/queue";
-import { getProject, listPersonas, ontologyDir, resolveConfig } from "@/lib/projects";
+import {
+  getProject,
+  listPersonas,
+  ontologyDir,
+  resolveConfig,
+  squadNames,
+  squadsDir,
+} from "@/lib/projects";
 import { findStream, sessionIdOf } from "@/lib/transcript";
 import { decodeHash, engineCan } from "@/lib/urls";
 import { holderEngine, listWorkers } from "@/lib/workers";
@@ -195,6 +202,8 @@ export default async function TicketDetail({
   const personas = (await listPersonas(config.personas, tickets))
     .filter((p) => p.body !== null)
     .map((p) => p.name);
+  // 같은 select의 둘째 그룹(§5-5 §할당 입구 둘) — 페르소나와 같은 이유로 여기서 한 번만 읽는다.
+  const squads = await squadNames(squadsDir(project));
 
   // 답변 대기인가 — 입력칸의 답변 모드이자 절이 서는 세 조건 중 하나다(§2-3 ①·③).
   // `.wip`은 `isAwaiting`의 `state === "open"`이 구조적으로 막는다(제약 5).
@@ -302,6 +311,7 @@ export default async function TicketDetail({
           <NewTicketDialog
             project={id}
             personas={personas}
+            squads={squads}
             colors={project.personaColors}
             deps={depOptions}
             personaDir={config.personas}
@@ -311,6 +321,7 @@ export default async function TicketDetail({
               title: ticket.fm.title ?? "",
               kind: ticket.fm.kind ?? "",
               persona: ticket.fm.persona ?? "",
+              squad: ticket.fm.squad ?? "",
               body: ticket.body,
             }}
             vault={vault}
@@ -471,6 +482,7 @@ export default async function TicketDetail({
                 title={ticket.fm.title ?? ""}
                 kind={ticket.fm.kind ?? ""}
                 persona={ticket.fm.persona ?? ""}
+                squad={ticket.fm.squad ?? ""}
                 priority={ticket.priority}
                 effective={ticket.effective}
                 inheritedFrom={priorityInheritedFrom}
@@ -480,6 +492,7 @@ export default async function TicketDetail({
                 precedentDuedates={precedentDuedates}
                 followerDuedates={followerDuedates}
                 personas={personas}
+                squads={squads}
                 colors={project.personaColors}
                 body={ticket.body}
                 vault={vault}

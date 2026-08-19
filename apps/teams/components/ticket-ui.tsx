@@ -106,7 +106,9 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -225,6 +227,81 @@ function duedateConflict(
   return null;
 }
 
+/** §5-5 §할당 입구 둘 — persona/squad select 값. `squad:`가 이기는 정책(§5-5 §티켓이 드는 것)과
+ *  같은 순서로 보여준다: 스쿼드가 있으면 그 값, 아니면 페르소나 값, 둘 다 없으면 `없음`. */
+function assignmentValue(persona: string, squad: string): string | null {
+  return squad ? `squad:${squad}` : persona ? `persona:${persona}` : null;
+}
+
+/** 트리거에 그리는 값 — 접두사를 뗀 이름만 보여준다. `SelectValue`는 `items` 없는 Root에서
+ *  **값 문자열 그대로**를 그리므로(priority select의 `min-w-64` 주석과 같은 결함), 이 함수
+ *  없이는 트리거에 `persona:developer`가 그대로 뜬다. */
+function assignmentLabel(value: string | null): string {
+  if (!value) return "없음";
+  return value.slice(value.indexOf(":") + 1);
+}
+
+/** §5-5 §할당 입구 둘의 두 select(발행·편집)가 같이 쓰는 옵션 그룹 — 페르소나/스쿼드. 값에
+ *  접두사가 붙는다(`lib/paths.ts parseAssignment`와 짝). 스쿼드 항목엔 점을 안 그린다(§비주얼
+ *  §12 — 색은 페르소나의 신원 표식이고 스쿼드에 주면 표식이 두 벌이 된다, §5-5 §화면). */
+function AssignmentOptions({
+  personas,
+  squads,
+  colors,
+  current,
+  outOfListLabel,
+}: {
+  personas: string[];
+  squads: string[];
+  colors?: Record<string, string>;
+  /** 지금 값 — `{persona:"x"}` 또는 `{squad:"x"}` 또는 `{}`(없음) */
+  current: { persona?: string; squad?: string };
+  outOfListLabel: string;
+}) {
+  const personaOutOfList = current.persona && !personas.includes(current.persona);
+  const squadOutOfList = current.squad && !squads.includes(current.squad);
+  return (
+    <>
+      <SelectItem value={null}>없음</SelectItem>
+      {(personas.length > 0 || personaOutOfList) && (
+        <SelectGroup>
+          <SelectLabel>페르소나</SelectLabel>
+          {personas.map((p) => (
+            // **점만**이다 — 껍데기(배지) 안에 배지를 또 넣지 않는다(§5). `font-mono`는 값 목록이라 무수정
+            <SelectItem key={p} value={`persona:${p}`} className="font-mono">
+              <PersonaDot color={colors?.[p]} />
+              {p}
+            </SelectItem>
+          ))}
+          {personaOutOfList && (
+            <SelectItem value={`persona:${current.persona}`} className="font-mono">
+              <PersonaDot color={colors?.[current.persona!]} />
+              {current.persona}
+              <span className="text-xs text-muted-foreground">{outOfListLabel}</span>
+            </SelectItem>
+          )}
+        </SelectGroup>
+      )}
+      {(squads.length > 0 || squadOutOfList) && (
+        <SelectGroup>
+          <SelectLabel>스쿼드</SelectLabel>
+          {squads.map((s) => (
+            <SelectItem key={s} value={`squad:${s}`} className="font-mono">
+              {s}
+            </SelectItem>
+          ))}
+          {squadOutOfList && (
+            <SelectItem value={`squad:${current.squad}`} className="font-mono">
+              {current.squad}
+              <span className="text-xs text-muted-foreground">{outOfListLabel}</span>
+            </SelectItem>
+          )}
+        </SelectGroup>
+      )}
+    </>
+  );
+}
+
 /** frontmatter의 title·kind·persona + 본문 원문. `.wip`이면 이 폼은 렌더되지 않고
  *  서버 액션도 다시 거부한다(렌더 시점 판정은 저장 시점엔 이미 낡았다).
  *
@@ -236,6 +313,7 @@ export function TicketEditForm({
   title,
   kind,
   persona,
+  squad,
   priority,
   effective,
   inheritedFrom,
@@ -245,6 +323,7 @@ export function TicketEditForm({
   precedentDuedates,
   followerDuedates,
   personas,
+  squads,
   colors,
   body,
   vault,
@@ -254,6 +333,9 @@ export function TicketEditForm({
   title: string;
   kind: string;
   persona: string;
+  /** 원값(`ticket.fm.squad`) — `persona`와 한 select를 쓴다(§5-5 §할당 입구 둘). 둘 다 값이 있으면
+   *  `squad:`가 이긴다(§5-5 §티켓이 드는 것) — 저장 시점엔 서버가 정확히 하나만 남긴다 */
+  squad: string;
   /** 원값(`ticket.priority`) — 없거나 잘못되면 3이다(`lib/queue.ts priorityOf`) */
   priority: number;
   /** 유효 우선순위(`ticket.effective`) — 파일에 안 쓴다. `priority`와 다르면 상속 한 줄을 그린다 */
@@ -275,6 +357,8 @@ export function TicketEditForm({
   /** 발행 다이얼로그와 같은 목록 — `listPersonas` 결과 중 `PROFILE.md`가 있는 이름. 상세 페이지가
    *  이미 읽은 것을 넘긴다(§3 "선택지 데이터는 이미 읽은 것을 넘긴다") */
   personas: string[];
+  /** `squadNames` 결과 — 상세 페이지가 이미 읽은 것을 넘긴다(§5-5 §할당 입구 둘, 같은 이유) */
+  squads: string[];
   /** 이름 → 팔레트 키(레지스트리 `personaColors`). 없는 이름은 빈 점이다(§비주얼 §12) */
   colors?: Record<string, string>;
   body: string;
@@ -336,27 +420,20 @@ export function TicketEditForm({
         </div>
         <div className="space-y-2">
           <Label htmlFor="t-persona">persona</Label>
-          <Select name="persona" defaultValue={persona || null}>
+          {/* §5-5 §할당 입구 둘 — 칸은 하나, 그 안에서 그룹이 갈린다. 값 접두사(`persona:`/
+              `squad:`)는 서버 `parseAssignment`가 첫 `:`에서 가른다 */}
+          <Select name="persona" defaultValue={assignmentValue(persona, squad)}>
             <SelectTrigger id="t-persona" className="w-40 font-mono">
-              <SelectValue placeholder="없음" />
+              <SelectValue placeholder="없음">{assignmentLabel}</SelectValue>
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value={null}>없음</SelectItem>
-              {personas.map((p) => (
-                // 발행 폼과 같다 — **점만**이고 `font-mono`는 무수정이다(§비주얼 §12)
-                <SelectItem key={p} value={p} className="font-mono">
-                  <PersonaDot color={colors?.[p]} />
-                  {p}
-                </SelectItem>
-              ))}
-              {persona && !personas.includes(persona) && (
-                // 목록 밖 현재 값. 색은 이름으로 조회하므로 여기도 같은 규칙이다(대개 빈 점)
-                <SelectItem value={persona} className="font-mono">
-                  <PersonaDot color={colors?.[persona]} />
-                  {persona}
-                  <span className="text-xs text-muted-foreground">현재 값</span>
-                </SelectItem>
-              )}
+              <AssignmentOptions
+                personas={personas}
+                squads={squads}
+                colors={colors}
+                current={squad ? { squad } : { persona }}
+                outOfListLabel="현재 값"
+              />
             </SelectContent>
           </Select>
         </div>
@@ -1494,6 +1571,7 @@ export function RequestDialog({
 export function NewTicketDialog({
   project,
   personas,
+  squads,
   colors,
   deps,
   personaDir,
@@ -1506,6 +1584,8 @@ export function NewTicketDialog({
   /** 프로필(`PROFILE.md`)이 있는 이름만. 보드의 **필터 목록을 넘기면 안 된다** — 그쪽은
    *  티켓이 참조하는 프로필 없는 이름까지 포함한다(§3) */
   personas: string[];
+  /** `squadNames` 결과 — 보드가 이미 읽은 것을 넘긴다(§5-5 §할당 입구 둘) */
+  squads: string[];
   /** 이름 → 팔레트 키(레지스트리 `personaColors`). 없는 이름은 빈 점이다(§비주얼 §12) */
   colors?: Record<string, string>;
   deps: DepOption[];
@@ -1516,8 +1596,9 @@ export function NewTicketDialog({
   /** 복제 모드 — 원본 frontmatter **원문**과 본문 전문(`## 결과` 포함)을 채운다.
    *  `deps`는 **넣지 않는다**: 원본의 선행은 원본이 이미 소비한 것이고, 그대로 복제하면 새 티켓이
    *  끝난 선행을 다시 기다리거나(미완이면) 착수 불가로 태어난다. 제목에 `(사본)`도 안 붙인다 —
-   *  사람이 조건만 바꿔 다시 시키려는 것이지 이름을 바꾸려는 게 아니다. */
-  copy?: { stem: string; title: string; kind: string; persona: string; body: string };
+   *  사람이 조건만 바꿔 다시 시키려는 것이지 이름을 바꾸려는 게 아니다.
+   *  `squad`도 원본 값 그대로 따라간다(§5-5 §화면 「복제」) — 엔진 키(session_id 등)는 안 넘어간다. */
+  copy?: { stem: string; title: string; kind: string; persona: string; squad: string; body: string };
   /** `board.new`(`n`)를 듣는다. **보드의 두 자리만 켠다** — 티켓 상세의 복제 버튼도 이 컴포넌트라
    *  켜면 상세에서 `n`이 복제 다이얼로그를 연다(§0-6 `어디서 듣나`는 보드다) */
   hotkey?: boolean;
@@ -1649,36 +1730,25 @@ export function NewTicketDialog({
             </div>
             <div className="space-y-2">
               <Label htmlFor="n-persona">persona</Label>
-              <Select name="persona" defaultValue={copy?.persona || null}>
+              {/* §5-5 §할당 입구 둘 — 편집 폼과 같은 칸 하나, 같은 그룹 둘 */}
+              <Select name="persona" defaultValue={assignmentValue(copy?.persona ?? "", copy?.squad ?? "")}>
                 <SelectTrigger
                   id="n-persona"
                   className="w-40"
-                  // 복제는 원본 값이 이미 들어 있다 — 페르소나 0개라고 잠그면 그 값을 못 지운다
-                  disabled={personas.length === 0 && !copy?.persona}
+                  // 복제는 원본 값이 이미 들어 있다 — 선택지 0개라고 잠그면 그 값을 못 지운다
+                  disabled={personas.length === 0 && squads.length === 0 && !copy?.persona && !copy?.squad}
                 >
                   {/* 비우는 게 정상이다 — 페르소나 없이도 디스패치된다(protocols/tickets.md) */}
-                  <SelectValue placeholder="없음" />
+                  <SelectValue placeholder="없음">{assignmentLabel}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={null}>없음</SelectItem>
-                  {personas.map((p) => (
-                    // 항목은 **점만**이다 — 껍데기(배지) 안에 배지를 또 넣지 않는다(§5).
-                    // `font-mono`는 무수정: 이 자리는 배지가 아니라 값 목록이다(§비주얼 §12)
-                    <SelectItem key={p} value={p} className="font-mono">
-                      <PersonaDot color={colors?.[p]} />
-                      {p}
-                    </SelectItem>
-                  ))}
-                  {/* 프로필이 지워진 페르소나로 만든 티켓도 원본 값 그대로 열린다 — 안 그리면
-                      select가 제 값을 못 그리고 사본이 조용히 페르소나를 잃는다(§2 편집 항) */}
-                  {copy?.persona && !personas.includes(copy.persona) && (
-                    <SelectItem value={copy.persona} className="font-mono">
-                      {/* 편집 폼의 같은 줄과 같다 — 점을 빼면 이 줄만 이름이 왼쪽으로 튀어나온다(§12 `순서`) */}
-                      <PersonaDot color={colors?.[copy.persona]} />
-                      {copy.persona}
-                      <span className="text-xs text-muted-foreground">원본 값</span>
-                    </SelectItem>
-                  )}
+                  <AssignmentOptions
+                    personas={personas}
+                    squads={squads}
+                    colors={colors}
+                    current={copy?.squad ? { squad: copy.squad } : { persona: copy?.persona }}
+                    outOfListLabel="원본 값"
+                  />
                 </SelectContent>
               </Select>
             </div>

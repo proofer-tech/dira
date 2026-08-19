@@ -19,7 +19,7 @@ import { redirect } from "next/navigation";
 import { track } from "@/lib/analytics";
 import { verifyAttachments, withAttachments } from "@/lib/attachments";
 import { kickIdleWorker } from "@/lib/kick";
-import { NAME_RE, isHash } from "@/lib/paths";
+import { isHash, parseAssignment } from "@/lib/paths";
 import { PRIORITY_DEFAULT, PRIORITY_MAX, PRIORITY_MIN, reqTitle, stemOf } from "@/lib/queue";
 import { epicTitle } from "@/lib/epics";
 import { getProject, resolveConfig } from "@/lib/projects";
@@ -73,12 +73,9 @@ export async function createTicket(
       throw new Error(`kind는 ${KINDS.join(" · ")} 중 하나입니다: ${kind}`);
     }
 
-    const persona = req ? "pm" : fmValue("persona", String(form.get("persona") ?? ""));
-    // 엔진이 이 값으로 `<personas>/<이름>/PROFILE.md` 경로를 만든다(tick.sh). 규칙 밖이면
-    // 조용히 무시돼 프로필 없이 세션이 돈다.
-    if (persona && !NAME_RE.test(persona)) {
-      throw new Error(`persona는 영문·숫자·_·- 만 됩니다(엔진이 경로로 씁니다): ${persona}`);
-    }
+    // §5-5 §할당 입구 둘 — select 값은 `persona:<이름>`/`squad:<이름>` 접두사고 서버가 정확히
+    // 하나만 frontmatter에 쓴다. 요구 접수는 안 갈린다(§요구사항 레이어 결정 8, `persona: pm` 고정).
+    const { persona, squad } = req ? { persona: "pm", squad: "" } : parseAssignment(String(form.get("persona") ?? ""));
 
     // 요구 접수가 화면의 활성 에픽을 물려받는다(DESIGN.md §에픽 §결정 10) — 발행 다이얼로그는
     // 이 필드를 안 보내므로 항상 빈 값이라 저절로 안 걸린다. 값 검증-정규화는 안 한다(§안 하는
@@ -137,6 +134,7 @@ export async function createTicket(
         `title: ${title}`,
         ...(kind ? [`kind: ${kind}`] : []),
         ...(persona ? [`persona: ${persona}`] : []),
+        ...(squad ? [`squad: ${squad}`] : []),
         ...(epic ? [`epic: ${epic}`] : []),
         // 요구 접수는 안 쓴다 — 키가 없으면 엔진이 3으로 읽어 서버가 고정한 것과 같은 결과다.
         ...(req ? [] : [`priority: ${priority}`]),

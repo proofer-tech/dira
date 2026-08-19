@@ -21,7 +21,7 @@ import { findTicket, unassign, type UnassignRun } from "@/lib/engine";
 import { followup, type FollowupResult } from "@/lib/followup";
 import { interject, type InterjectResult } from "@/lib/interject";
 import { kickIdleWorker } from "@/lib/kick";
-import { NAME_RE, isHash, resolveWithin } from "@/lib/paths";
+import { isHash, parseAssignment, resolveWithin } from "@/lib/paths";
 import { findStream, sessionIdOf, tailEvents, type StreamEvent } from "@/lib/transcript";
 import {
   awaitingOf,
@@ -233,8 +233,8 @@ function fmValue(name: string, raw: string): string {
   return v;
 }
 
-/** 저장 — 읽고-고치고-쓰기. 건드리는 frontmatter 키는 title·kind·persona·priority·duedate
- *  다섯뿐이고 나머지(session_id·owner·attempts·pid…)는 엔진 것이라 그대로 둔다.
+/** 저장 — 읽고-고치고-쓰기. 건드리는 frontmatter 키는 title·kind·persona·squad·priority·duedate
+ *  여섯뿐이고 나머지(session_id·owner·attempts·pid…)는 엔진 것이라 그대로 둔다.
  *
  *  ponytail: deps는 편집하지 않는다 — 자유 입력은 오타 해시로 영구 대기를 만들어 스펙이 금지한다
  *  (DESIGN.md §3). 검색 가능한 멀티셀렉트가 필요하고 그건 티켓 발행(fb4f2723)이 만든다. */
@@ -248,10 +248,14 @@ export async function saveTicket(_prev: SaveState, form: FormData): Promise<Save
     const title = fmValue("제목", String(form.get("title") ?? ""));
     if (!title) return { error: "제목을 입력하세요." };
     const kind = fmValue("kind", String(form.get("kind") ?? ""));
-    const persona = fmValue("persona", String(form.get("persona") ?? ""));
-    if (persona && !NAME_RE.test(persona)) {
-      // 엔진이 이 값으로 페르소나 디렉터리 경로를 만든다. 규칙 밖이면 조용히 무시돼 프로필이 안 붙는다.
-      return { error: `persona는 영문·숫자·_·- 만 됩니다(엔진이 경로로 씁니다): ${persona}` };
+    // §5-5 §할당 입구 둘 — select 값은 `persona:<이름>`/`squad:<이름>` 접두사고, 서버가 쓰는 키는
+    // 정확히 하나다. 스쿼드를 고르면 `squad:`를 쓰고 `persona:` 줄을 지운다(반대도 같다) —
+    // 아래 `writeTicket`의 `undefined`가 그 줄을 통째로 지운다.
+    let assignment: { persona: string; squad: string };
+    try {
+      assignment = parseAssignment(String(form.get("persona") ?? ""));
+    } catch (e) {
+      return { error: (e as Error).message };
     }
 
     // select라 항상 1~5가 오지만, 요청은 손으로도 만들 수 있다 — 범위 밖·정수 아님은 조용히
@@ -275,7 +279,14 @@ export async function saveTicket(_prev: SaveState, form: FormData): Promise<Save
 
     await writeTicket(
       t.path,
-      { title, kind, persona, priority, duedate: duedateRaw || undefined },
+      {
+        title,
+        kind,
+        persona: assignment.squad ? undefined : assignment.persona,
+        squad: assignment.squad || undefined,
+        priority,
+        duedate: duedateRaw || undefined,
+      },
       body,
     );
     revalidatePath(`/p/${projectId}/tickets/${encodeURIComponent(t.stem)}`);

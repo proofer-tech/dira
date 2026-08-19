@@ -88,7 +88,15 @@ import {
 } from "@/lib/queue";
 import { buildVault } from "@/lib/markdown-wikilinks";
 import { listTree } from "@/lib/protocols";
-import { getProject, listPersonas, ontologyDir, readLanguage, resolveConfig } from "@/lib/projects";
+import {
+  getProject,
+  listPersonas,
+  ontologyDir,
+  readLanguage,
+  resolveConfig,
+  squadNames,
+  squadsDir,
+} from "@/lib/projects";
 import { findStream, lastActivity, sessionIdOf, type StreamEvent } from "@/lib/transcript";
 import { doneLimit, rowLimit } from "@/lib/urls";
 
@@ -347,6 +355,8 @@ export default async function Board({
   //  - deps가 가리키는 이름은 frontmatter의 `ticket:`이 아니라 상태 접미사를 뗀 파일명(`stem`)이다.
   //    큐 순서를 뒤집는다 — 방금 만든 티켓에 엮는 경우가 대부분이고, 뒤집으면 그게 목록 맨 위다.
   const personaChoices = profiles.filter((p) => p.body !== null).map((p) => p.name);
+  // 스쿼드 그룹(§5-5 §할당 입구 둘) — 페르소나와 같은 이유로 여기서 한 번만 읽는다.
+  const squadChoices = await squadNames(squadsDir(project));
   const depOptions = tickets
     .map((t) => ({ hash: t.stem, title: t.title, met: t.state === "done", duedate: t.fm.duedate ?? "" }))
     .reverse();
@@ -694,6 +704,7 @@ export default async function Board({
           <NewTicketDialog
             project={id}
             personas={personaChoices}
+            squads={squadChoices}
             colors={colors}
             deps={depOptions}
             personaDir={config.personas}
@@ -715,6 +726,7 @@ export default async function Board({
             <NewTicketDialog
               project={id}
               personas={personaChoices}
+              squads={squadChoices}
               colors={colors}
               deps={depOptions}
               personaDir={config.personas}

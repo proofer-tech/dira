@@ -14,6 +14,22 @@ export const PROJECT_ID_RE = /^[a-z0-9-]+$/;
 export const isName = (s: string) => NAME_RE.test(s);
 export const isProjectId = (s: string) => PROJECT_ID_RE.test(s);
 
+/** §5-5 §할당 입구 둘의 select 값 — `persona:<이름>` / `squad:<이름>` 접두사 하나, 빈 값은
+ *  `없음`. 이름에 `:`이 못 들어가므로(`NAME_RE`) 첫 `:`에서 한 번만 가른다. 발행(`createTicket`)
+ *  과 편집(`saveTicket`) 양쪽이 같은 파싱을 써야 판정이 갈리지 않는다 — 그래서 `"use server"`
+ *  파일 밖 여기 하나에 둔다(`fmValue` 네 줄과 달리 이건 진짜 공유할 수 있다). */
+export function parseAssignment(raw: string): { persona: string; squad: string } {
+  const v = raw.trim();
+  if (!v) return { persona: "", squad: "" };
+  const i = v.indexOf(":");
+  const prefix = i < 0 ? "" : v.slice(0, i);
+  const name = i < 0 ? v : v.slice(i + 1);
+  if ((prefix !== "persona" && prefix !== "squad") || !NAME_RE.test(name)) {
+    throw new Error(`persona 값이 올바르지 않습니다(persona:<이름> 또는 squad:<이름>): ${raw}`);
+  }
+  return prefix === "squad" ? { persona: "", squad: name } : { persona: name, squad: "" };
+}
+
 /** 티켓 해시 = URL에 실리는 티켓 식별자. 파일명 stem이거나 frontmatter `ticket:` 값이고
  *  (`tickets.py ticket_hash`) **엔진은 둘 다 임의 문자열을 허용한다** — 한글 파일명으로 도는
  *  큐가 실제로 있다. 옛 규칙 `^[a-z0-9-]{4,40}$`은 엔진이 디스패치하는 티켓(`순수한글.md`)을
