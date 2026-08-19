@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { Suffixes } from "./queue.ts";
@@ -181,6 +181,18 @@ test("에픽 만들기 — 빈 키·줄바꿈·큐 밖 경로를 막는다", asy
   const escape = await createEpic(root, "../../../etc", "제목");
   assert.strictEqual(escape.ok, false);
   if (!escape.ok) assert.strictEqual(escape.reason, "invalid");
+});
+
+test("에픽 만들기 — 빈 제목·공백만 있는 제목을 막고, 디렉터리도 안 생긴다(결정 19-1)", async () => {
+  const empty = await createEpic(root, "P998", "");
+  assert.strictEqual(empty.ok, false);
+  if (!empty.ok) assert.strictEqual(empty.reason, "empty");
+  assert.strictEqual(existsSync(path.join(root, "epics", "P998")), false);
+
+  const blank = await createEpic(root, "P998", "   ");
+  assert.strictEqual(blank.ok, false);
+  if (!blank.ok) assert.strictEqual(blank.reason, "empty");
+  assert.strictEqual(existsSync(path.join(root, "epics", "P998")), false);
 });
 
 test("키 제안 — P<숫자> 꼴의 최댓값 + 1, P273-2처럼 접미가 붙은 값은 안 센다", () => {

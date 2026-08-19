@@ -131,6 +131,7 @@ export type CreateEpicResult =
 export async function createEpic(root: string, key: string, title: string): Promise<CreateEpicResult> {
   const k = key.trim();
   if (!k) return { ok: false, reason: "empty", error: "키를 입력하세요." };
+  if (!title.trim()) return { ok: false, reason: "empty", error: "제목을 입력하세요." };
   if (/[\r\n]/.test(k)) return { ok: false, reason: "invalid", error: "키에 줄바꿈을 넣을 수 없습니다." };
   const dir = await epicDir(root, k);
   if (!dir) return { ok: false, reason: "invalid", error: `키가 큐 밖을 가리킵니다: ${k}` };

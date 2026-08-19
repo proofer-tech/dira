@@ -108,7 +108,7 @@ export function EpicCreateButton({
         <DialogFooter>
           <DialogClose render={<Button variant="outline" />}>{t(locale, "common.cancel")}</DialogClose>
           <Button
-            disabled={pending || !key.trim()}
+            disabled={pending || !key.trim() || !title.trim()}
             onClick={() =>
               start(async () => {
                 const r = await createEpic(projectId, key, title);
