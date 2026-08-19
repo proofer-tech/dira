@@ -356,7 +356,7 @@ test("extractSkillArchive — subtree가 아카이브에 없으면 갈래 13(§�
 
 // ── 주소 한 줄(URL) → SkillUpload[] (§5-1 §넷째 입구 · §비주얼 §25 ⑦) ─────────
 
-test("parseSkillAddress — 주소 갈래 표 여섯(§5-1). 네트워크를 안 탄다", () => {
+test("parseSkillAddress — 주소 갈래 표 다섯(§5-1). 네트워크를 안 탄다", () => {
   assert.deepEqual(parseSkillAddress("https://github.com/o/r"), {
     fetchUrl: "https://codeload.github.com/o/r/zip/HEAD",
   });
@@ -375,15 +375,6 @@ test("parseSkillAddress — 주소 갈래 표 여섯(§5-1). 네트워크를 안
     parseSkillAddress("https://raw.githubusercontent.com/o/r/main/skills/foo/SKILL.md"),
     { fetchUrl: "https://codeload.github.com/o/r/zip/main", subtree: "skills/foo" },
   );
-  assert.deepEqual(parseSkillAddress("https://skills.sh/s/x.skill"), {
-    fetchUrl: "https://skills.sh/s/x.skill",
-  });
-});
-
-test("parseSkillAddress — www.skills.sh는 skills.sh의 정본 리디렉션 대상이라 같은 자리로 받는다", () => {
-  assert.deepEqual(parseSkillAddress("https://www.skills.sh/s/x.skill"), {
-    fetchUrl: "https://www.skills.sh/s/x.skill",
-  });
 });
 
 test("parseSkillAddress — 호스트 목록 밖 · 모양이 표에 없다 → 갈래 10, 요청을 안 낸다", () => {
@@ -394,13 +385,13 @@ test("parseSkillAddress — 호스트 목록 밖 · 모양이 표에 없다 → 
         e instanceof SkillInstallError && /받을 수 없습니다/.test(e.message) && e.detail === address,
     );
   rejects("http://github.com/o/r"); // https가 아니다
-  rejects("https://example.com/x.skill"); // 호스트가 넷 밖이다
+  rejects("https://example.com/x.skill"); // 호스트가 셋 밖이다
   rejects("file:///etc/passwd");
   rejects("이건 주소가 아니다");
   rejects("https://github.com/o"); // 레포까지 안 온다
   rejects("https://github.com/o/r/issues/5"); // tree·blob이 아니다
   rejects("https://github.com/o/r/blob/main/SKILL.md"); // 파일이 레포 바로 아래다 — <path>가 없다
-  rejects("https://skills.sh/s/x.zip"); // .skill로 안 끝난다
+  rejects("https://skills.sh/s/x.skill"); // skills.sh는 호스트 목록 밖이다
 });
 
 /** `globalThis.fetch`를 잠깐 바꿔 낀다 — 진짜 네트워크를 안 탄다. */
@@ -471,7 +462,7 @@ test("fetchSkillFromAddress — 갈래 11: HTTP 상태와 네트워크 끊김을
   );
 });
 
-test("fetchSkillFromAddress — 갈래 10: 리디렉션 뒤 최종 호스트가 넷 밖이면 거절한다", async () => {
+test("fetchSkillFromAddress — 갈래 10: 리디렉션 뒤 최종 호스트가 셋 밖이면 거절한다", async () => {
   await assert.rejects(
     () =>
       withMockFetch(
@@ -485,26 +476,50 @@ test("fetchSkillFromAddress — 갈래 10: 리디렉션 뒤 최종 호스트가 
   );
 });
 
-test("fetchSkillFromAddress — skills.sh의 308이 www.skills.sh로 떨어져도 거절하지 않는다", async () => {
-  const zip = buildZip([{ path: "SKILL.md", data: Buffer.from("---\nname: from-www\n---\n") }]);
-  const files = await withMockFetch(
-    async () => mockResponse(zip, { status: 200, url: "https://www.skills.sh/s/x.skill" }),
-    () => fetchSkillFromAddress("https://skills.sh/s/x.skill"),
+test("fetchSkillFromAddress — 갈래 10: skills.sh 주소는 fetch를 아예 안 부르고 거절한다", async () => {
+  let called = false;
+  await assert.rejects(
+    () =>
+      withMockFetch(async () => {
+        called = true;
+        throw new Error("호출되면 안 된다");
+      }, () => fetchSkillFromAddress("https://skills.sh/s/x.skill")),
+    (e: unknown) =>
+      e instanceof SkillInstallError &&
+      /받을 수 없습니다/.test(e.message) &&
+      e.detail === "https://skills.sh/s/x.skill",
   );
-  assert.equal(files[0].bytes.toString("utf8"), "---\nname: from-www\n---\n");
+  assert.equal(called, false);
 });
 
-test("fetchSkillFromAddress — www.skills.sh를 흉내낸 다른 호스트는 여전히 거절한다", async () => {
+test("fetchSkillFromAddress — 갈래 10: www.skills.sh 주소도 같은 이유로 거절한다", async () => {
+  let called = false;
+  await assert.rejects(
+    () =>
+      withMockFetch(async () => {
+        called = true;
+        throw new Error("호출되면 안 된다");
+      }, () => fetchSkillFromAddress("https://www.skills.sh/s/x.skill")),
+    (e: unknown) =>
+      e instanceof SkillInstallError &&
+      /받을 수 없습니다/.test(e.message) &&
+      e.detail === "https://www.skills.sh/s/x.skill",
+  );
+  assert.equal(called, false);
+});
+
+test("fetchSkillFromAddress — github.com을 흉내낸 다른 호스트로 리디렉션되면 거절한다", async () => {
   await assert.rejects(
     () =>
       withMockFetch(
-        async () => mockResponse(Buffer.from("x"), { status: 200, url: "https://evil-www.skills.sh/x" }),
-        () => fetchSkillFromAddress("https://skills.sh/s/x.skill"),
+        async () =>
+          mockResponse(Buffer.from("x"), { status: 200, url: "https://github.com.evil.example/x" }),
+        () => fetchSkillFromAddress("https://github.com/o/r"),
       ),
     (e: unknown) =>
       e instanceof SkillInstallError &&
       /받을 수 없습니다/.test(e.message) &&
-      e.detail === "https://evil-www.skills.sh/x",
+      e.detail === "https://github.com.evil.example/x",
   );
 });
 

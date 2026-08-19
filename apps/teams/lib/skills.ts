@@ -348,32 +348,23 @@ export async function extractSkillArchive(
 
 // ── 주소 한 줄(URL) → SkillUpload[] (§5-1 §넷째 입구) ─────────────────────────
 
-/** 이 넷만 받는다(§5-1 §호스트 목록 넷). `https`가 아니거나 이 밖이면 요청을 안 낸다 — IP
+/** 이 셋만 받는다(§5-1 §호스트 목록 셋). `https`가 아니거나 이 밖이면 요청을 안 낸다 — IP
  *  리터럴 · 사설 대역 · `file:`을 따로 세는 코드를 안 만드는 이유다(목록 하나가 그 전부를 막는다).
  *  리디렉션 뒤 최종 호스트(`res.url`)도 이 목록으로 판정한다. */
 const SKILL_ADDRESS_HOSTS = new Set([
   "github.com",
   "codeload.github.com",
   "raw.githubusercontent.com",
-  "skills.sh",
 ]);
-
-/** `skills.sh`(정점 도메인)는 실측(2026-08-20)상 모든 요청을 308로 `www.skills.sh`에
- *  리디렉션한다 - 그 응답도 여기 §호스트 목록 넷으로 되판정하므로, 목록을 다섯으로 늘리지 않고
- *  이 별칭 하나로 `www.skills.sh`를 `skills.sh`와 같은 자리로 접는다(정확히 이 문자열만 - 접두사
- *  일치가 아니다, `evil-www.skills.sh` 같은 변종을 새지 않는다). */
-function normalizeSkillHost(hostname: string): string {
-  return hostname === "www.skills.sh" ? "skills.sh" : hostname;
-}
 
 /** §5-1 §타임아웃 — 전체 30초. 헤더뿐 아니라 본문을 다 받는 시간까지 잰다(기존 `AbortSignal.timeout`
  *  조립 그대로 — `lib/usage.ts`의 5초 프로브와 다른 수인 이유는 §5-1 §넷째 입구가 적었다). */
 const SKILL_FETCH_TIMEOUT_MS = 30_000;
 
-/** 갈래 10(§비주얼 §25 ⑦) — 표에 없는 모양이거나 호스트가 넷 밖이면 요청을 내기 전에 거절한다. */
+/** 갈래 10(§비주얼 §25 ⑦) — 표에 없는 모양이거나 호스트가 셋 밖이면 요청을 내기 전에 거절한다. */
 function badSkillAddress(address: string): never {
   throw new SkillInstallError(
-    "이 주소로는 받을 수 없습니다 — GitHub 레포나 그 안의 폴더 주소, 또는 skills.sh의 .skill 주소를 붙입니다",
+    "이 주소로는 받을 수 없습니다 - GitHub 레포나 그 안의 폴더 주소를 붙입니다",
     address,
   );
 }
@@ -387,13 +378,10 @@ export function parseSkillAddress(address: string): { fetchUrl: string; subtree?
   } catch {
     return badSkillAddress(address);
   }
-  if (url.protocol !== "https:" || !SKILL_ADDRESS_HOSTS.has(normalizeSkillHost(url.hostname)))
+  if (url.protocol !== "https:" || !SKILL_ADDRESS_HOSTS.has(url.hostname))
     return badSkillAddress(address);
   const seg = url.pathname.split("/").filter(Boolean);
 
-  if (normalizeSkillHost(url.hostname) === "skills.sh") {
-    return url.pathname.endsWith(".skill") ? { fetchUrl: address } : badSkillAddress(address);
-  }
   if (url.hostname === "github.com") {
     if (seg.length === 2) return { fetchUrl: `https://codeload.github.com/${seg[0]}/${seg[1]}/zip/HEAD` };
     if (seg[2] === "tree" && seg.length >= 4) {
@@ -473,7 +461,7 @@ export async function fetchSkillFromAddress(address: string): Promise<SkillUploa
       `GET ${fetchUrl}: ${(e as Error).message}`,
     );
   }
-  if (!SKILL_ADDRESS_HOSTS.has(normalizeSkillHost(new URL(res.url).hostname))) {
+  if (!SKILL_ADDRESS_HOSTS.has(new URL(res.url).hostname)) {
     await res.body?.cancel();
     return badSkillAddress(res.url);
   }
