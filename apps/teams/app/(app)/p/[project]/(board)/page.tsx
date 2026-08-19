@@ -43,7 +43,7 @@ import {
 } from "@/components/board-ui";
 import { EmptyState } from "@/components/empty-state";
 import { EpicSidebar } from "@/components/epic-sidebar";
-import { PersonaBadge } from "@/components/persona-badge";
+import { PersonaBadge, SquadBadge } from "@/components/persona-badge";
 import { PriorityMeter } from "@/components/priority-meter";
 import { DepBadge, StatusBadge, daysSince, statusLabel } from "@/components/status-badge";
 import { AnswerDialog, NewTicketDialog, RequestDialog } from "@/components/ticket-ui";
@@ -66,6 +66,7 @@ import {
   SORT_KEYS,
   TABLE_DEFAULT_SORT,
   archivesOf,
+  assigneeOf,
   awaitingOf,
   continuedOf,
   defaultAnswerOf,
@@ -607,11 +608,17 @@ export default async function Board({
           식별자라 안 자르고, 길면 카드가 한 줄 자라며 배지를 안 민다 */}
       <span className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
         {t.kind ? (KIND_LABELS[t.kind] ?? t.kind) : "—"} ·
-        {t.persona ? (
-          <PersonaBadge name={t.persona} color={colors[t.persona]} state={t.state} />
-        ) : (
-          "—"
-        )}
+        {(() => {
+          const assignee = assigneeOf(t);
+          if (!assignee.name) return "—";
+          // §5-5 §할당 입구 둘 §보드 표시 — persona:가 빈 스쿼드 티켓은 squad: 값으로 떨어진다.
+          // 색 점은 안 그린다(스쿼드에 색이 없다) — <SquadBadge>가 그 규칙을 든다.
+          return assignee.squad ? (
+            <SquadBadge name={assignee.name} />
+          ) : (
+            <PersonaBadge name={assignee.name} color={colors[assignee.name]} state={t.state} />
+          );
+        })()}
         <WipWorker t={t} />
       </span>
       {t.deps.length > 0 && (
@@ -1097,15 +1104,21 @@ export default async function Board({
                             {/* 배지가 셀의 `text-sm`을 대체한다(§비주얼 §12) — 셀에 남은 `text-sm`은
                                 배지가 없는 `—`(담당 없음) 한 글자용이다. Badge는 제 `text-xs`를 갖는다 */}
                             <TableCell className="px-3 py-0 text-sm">
-                              {t.persona ? (
-                                <PersonaBadge
-                                  name={t.persona}
-                                  color={colors[t.persona]}
-                                  state={t.state}
-                                />
-                              ) : (
-                                "—"
-                              )}
+                              {(() => {
+                                const assignee = assigneeOf(t);
+                                if (!assignee.name) return "—";
+                                // §5-5 §보드 표시 — persona:가 빈 스쿼드 티켓은 squad: 값으로 떨어진다.
+                                // 색 점은 안 그린다.
+                                return assignee.squad ? (
+                                  <SquadBadge name={assignee.name} />
+                                ) : (
+                                  <PersonaBadge
+                                    name={assignee.name}
+                                    color={colors[assignee.name]}
+                                    state={t.state}
+                                  />
+                                );
+                              })()}
                             </TableCell>
                             <TableCell className="px-3 py-0">
                               {t.deps.length === 0 ? (

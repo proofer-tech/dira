@@ -23,6 +23,7 @@ export type Ticket = {
   title: string;
   kind: string;
   persona: string; // PERSONA_RE 통과한 것만
+  squad: string; // frontmatter squad:, 같은 PERSONA_RE. §5-5 — 보드는 persona가 비면 이 값으로 떨어진다
   deps: string[];
   unmet: string[]; // .done이 아닌 deps. 못 찾은 해시도 미충족(보수적)
   assigned: boolean;
@@ -391,6 +392,7 @@ export async function listTickets(root: string, config: Suffixes, now: Date = ne
     // ponytail: birthtime이 없는 파일시스템은 0으로 온다 → mtime (tickets.py와 같은 폴백).
     const birth = st.birthtimeMs || st.mtimeMs;
     const persona = unquote(fm.persona ?? "");
+    const squad = unquote(fm.squad ?? "");
     out.push({
       hash,
       stem: stemOf(p, config),
@@ -400,6 +402,7 @@ export async function listTickets(root: string, config: Suffixes, now: Date = ne
       title: unquote(fm.title ?? ""),
       kind: unquote(fm.kind ?? ""),
       persona: PERSONA_RE.test(persona) ? persona : "",
+      squad: PERSONA_RE.test(squad) ? squad : "",
       deps,
       unmet: deps.filter((h) => {
         const hit = findAny(ix, h, config);
@@ -449,6 +452,15 @@ export function statusOf(t: Ticket): TicketStatus {
   if (t.state !== "open") return t.state;
   if (t.assigned) return "assigned";
   return t.unmet.length ? "blocked" : "open";
+}
+
+/** 보드 담당 표시(§5-5 §할당 입구 둘 §보드 표시) — `persona:`가 있으면 그 값, 없고 `squad:`가
+ *  있으면 그 값. 그 창은 `대기`~claim 사이뿐이다(claim이 `persona:`를 쓰게 되는 것은 엔진 승인
+ *  이후의 일이라 이 함수는 frontmatter를 그대로 읽을 뿐 스쿼드를 풀지 않는다). */
+export function assigneeOf(t: Ticket): { name: string; squad: boolean } {
+  if (t.persona) return { name: t.persona, squad: false };
+  if (t.squad) return { name: t.squad, squad: true };
+  return { name: "", squad: false };
 }
 
 // ── 요구사항 왕복 (DESIGN.md §요구사항 레이어 결정 5) ────────────────────────

@@ -81,3 +81,15 @@ export function PersonaBadge({
     </Badge>
   );
 }
+
+/** 스쿼드 값 표시(§5-5 §할당 입구 둘 §보드 표시) — `persona:`가 빈 스쿼드 티켓에서 보드가
+ *  `squad:` 값으로 떨어질 때 쓴다. **색 점이 없다** — 스쿼드에 색이 없다(§5-5 §안 하는 것).
+ *  점 대신 이 배지 자체가 스쿼드 표식이다 — 정확한 모양은 designer 몫이다(§5-5 §모양-자리-라벨,
+ *  §비주얼 새 절이 나오면 그 절을 따른다). */
+export function SquadBadge({ name, className }: { name: string; className?: string }) {
+  return (
+    <Badge variant="outline" className={className}>
+      스쿼드 {name}
+    </Badge>
+  );
+}

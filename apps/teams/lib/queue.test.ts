@@ -15,6 +15,7 @@ import {
   HIDE_DONE_STATUSES,
   archivedBy,
   archivesOf,
+  assigneeOf,
   awaitingOf,
   awaitingUnlocked,
   continuedOf,
@@ -1858,4 +1859,69 @@ test("관계선 간선 — deps 양방향 + req · 화면 밖은 안 싣는다 (
   assert.strictEqual(edges.has("dddd4444"), false);
   assert.deepStrictEqual(of("aaaa1111").filter((e) => e.endsWith("dddd4444")), []);
   assert.deepStrictEqual(of("eeee5555"), []);
+});
+
+// ── 스쿼드 — Ticket.squad (§5-5) ─────────────────────────────────────────────
+
+/** tickets.py에 `squad_of`가 없다(엔진 승인 전 — §5-5 §크기, 이 티켓은 엔진 0줄이다). 그래도
+ *  값을 거르는 규칙은 엔진이 이미 정의해 둔 `PERSONA_RE`·`read_fm` 그대로다 — 새 정규식을
+ *  TS에서만 만들면 그 자리가 갈릴 수 있으니, 파이썬 쪽에서 **그 상수를 직접 불러** 같은 값을
+ *  뽑아 대조한다(§제약 3 — 눈으로 안 맞춘다). */
+function pySquadOf(root: string, hash: string): string {
+  const script =
+    "import sys\n" +
+    `sys.path.insert(0, ${JSON.stringify(path.dirname(PY))})\n` +
+    "import tickets as T\n" +
+    "p = T.find_any(sys.argv[1], sys.argv[2])\n" +
+    "fm = T.read_fm(p)[0] if p else {}\n" +
+    "v = (fm.get('squad') or '').strip().strip('\\\"\\'')\n" +
+    "print(v if T.PERSONA_RE.match(v) else '')\n";
+  return execFileSync("python3", ["-c", script, root, hash], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "ignore"],
+  }).trim();
+}
+
+test("스쿼드 — Ticket.squad가 tickets.py PERSONA_RE와 같은 값으로 걸러진다(§5-5 §값 · §제약 3)", async () => {
+  const root = newRoot();
+  await write(root, "aaaa1111.md", fm({ ticket: "aaaa1111", title: "정상", squad: "frontend" }));
+  await write(root, "bbbb2222.md", fm({ ticket: "bbbb2222", title: "슬래시", squad: "a/b" })); // PERSONA_RE 밖
+  await write(root, "cccc3333.md", fm({ ticket: "cccc3333", title: "없음" })); // squad: 키 자체 없음
+  await write(
+    root,
+    "dddd4444.md",
+    fm({ ticket: "dddd4444", title: "둘 다", persona: "developer", squad: "backend" }),
+  );
+
+  const tickets = await listTickets(root, DEFAULT);
+  const by = (h: string) => tickets.find((t) => t.hash === h)!;
+  for (const h of ["aaaa1111", "bbbb2222", "cccc3333", "dddd4444"]) {
+    assert.strictEqual(by(h).squad, pySquadOf(root, h), h);
+  }
+  assert.strictEqual(by("aaaa1111").squad, "frontend");
+  assert.strictEqual(by("bbbb2222").squad, ""); // PERSONA_RE 밖 → 빈 문자열(persona와 같은 처분)
+  assert.strictEqual(by("cccc3333").squad, "");
+  // §5-5 §티켓이 드는 것 — squad:와 persona:가 같이 있어도 GUI는 둘 다 그대로 든다(누가 이기는지는
+  // 엔진 claim의 일이고 이 필드는 frontmatter 원문을 읽을 뿐이다)
+  assert.strictEqual(by("dddd4444").persona, "developer");
+  assert.strictEqual(by("dddd4444").squad, "backend");
+});
+
+test("보드 담당(assigneeOf) — persona:가 있으면 그 값, 없고 squad:만 있으면 그 값(§5-5 §보드 표시)", async () => {
+  const root = newRoot();
+  await write(root, "aaaa1111.md", fm({ ticket: "aaaa1111", title: "페르소나만", persona: "developer" }));
+  await write(root, "bbbb2222.md", fm({ ticket: "bbbb2222", title: "스쿼드만", squad: "frontend" }));
+  await write(
+    root,
+    "cccc3333.md",
+    fm({ ticket: "cccc3333", title: "둘 다 — persona가 이긴다", persona: "qa", squad: "backend" }),
+  );
+  await write(root, "dddd4444.md", fm({ ticket: "dddd4444", title: "아무것도 없음" }));
+
+  const tickets = await listTickets(root, DEFAULT);
+  const by = (h: string) => tickets.find((t) => t.hash === h)!;
+  assert.deepStrictEqual(assigneeOf(by("aaaa1111")), { name: "developer", squad: false });
+  assert.deepStrictEqual(assigneeOf(by("bbbb2222")), { name: "frontend", squad: true });
+  assert.deepStrictEqual(assigneeOf(by("cccc3333")), { name: "qa", squad: false });
+  assert.deepStrictEqual(assigneeOf(by("dddd4444")), { name: "", squad: false });
 });

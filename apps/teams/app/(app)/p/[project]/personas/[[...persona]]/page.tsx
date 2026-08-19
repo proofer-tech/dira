@@ -85,6 +85,11 @@ export default async function Personas({
     }),
   );
   const missing = personas.filter((p) => p.body === null);
+  // §5-5 §프로필-스쿼드가 없는 것은 경고다 첫 갈래 — 티켓이 `squad:`로 드는 이름의
+  // `squads/<이름>/`가 없다. 둘째 갈래(멤버 중 프로필 없는 이름)는 위 `missingProfile`이
+  // 왼쪽 스쿼드 줄에서 이미 표식으로 든다(dc3a2fa4) — 그릇이 갈릴 뿐 같은 경고다.
+  const squadNames = new Set(squads.map((s) => s.name));
+  const ticketsWithMissingSquad = tickets.filter((t) => t.squad && !squadNames.has(t.squad));
 
   return (
     <div className="space-y-4">
@@ -126,6 +131,29 @@ export default async function Personas({
               {missing.map((p) => (
                 <p key={p.name} className="font-mono text-xs break-all">
                   {p.name} — 티켓 {p.refs.total}건이 참조 · {p.file}
+                </p>
+              ))}
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* §5-5 §프로필-스쿼드가 없는 것은 경고다 — 같은 Alert 그릇, 새 컴포넌트 0 · 새 문구
+          규칙 0(위 `missing` 블록과 같은 조립: WARN 한 줄 안내 + 해시별 목록). */}
+      {ticketsWithMissingSquad.length > 0 && (
+        <Alert className="max-w-3xl">
+          <TriangleAlert aria-hidden className="text-status-stale" />
+          <AlertTitle>없는 스쿼드를 참조하는 티켓이 있습니다</AlertTitle>
+          <AlertDescription>
+            <div className="space-y-1">
+              <p>
+                엔진은 이 값을 만나면 <span className="font-mono text-xs">WARN</span>만 남기고{" "}
+                <strong className="font-medium">종전 경로</strong>(persona:가 있으면 그 값, 없으면
+                페르소나 없이)로 디스패치합니다.
+              </p>
+              {ticketsWithMissingSquad.map((t) => (
+                <p key={t.hash} className="font-mono text-xs break-all">
+                  {t.hash} — squad: {t.squad} · {t.title}
                 </p>
               ))}
             </div>
