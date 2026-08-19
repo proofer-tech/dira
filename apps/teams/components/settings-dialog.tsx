@@ -699,6 +699,22 @@ function TokensSection({
   );
 }
 
+/** 트리 행 표식 — CLI를 못 찾은 엔진 줄에만 서는 빈 링 하나(§비주얼 §45 §표식, 요구
+ *  `475d3385` 후보 11, `9a0dfbee`). 판정을 안 내린다(자격증명은 안 본다) — 채운 점이 아니라
+ *  빈 링인 이유, 색이 `--status-stale`이 아니라 `border-muted-foreground`인 이유는 그 절에
+ *  있다. 접근가능 이름은 기존 키 하나(새 문구 0). */
+function NotInstalledMark({ show }: { show: boolean }) {
+  const t = useT();
+  if (!show) return null;
+  return (
+    <span
+      role="img"
+      aria-label={t("settings.other.notInstalled")}
+      className="ml-auto size-2 shrink-0 rounded-full border border-muted-foreground"
+    />
+  );
+}
+
 /** claude 아닌 엔진 노드 하나 — 사실 둘(CLI 경로 · 자격증명 파일)만 말한다. 판정을 안 내리므로
  *  `TriangleAlert`도 색도 안 쓴다 — claude ⓪처럼 "이게 없으면 워커가 못 뜬다"를 아는 것이
  *  아니라 "찾았다/못 찾았다"만 아는 층이다(§0-4 §개정 `b0966e66`). §0-17로 자기 트리 노드가
@@ -1065,7 +1081,8 @@ export function SettingsDialog({
                       aria-current={activeNode === "claude" ? "true" : undefined}
                       onClick={() => selectNode("claude")}
                     >
-                      <span className="font-mono">{claudeCrumb}</span>
+                      <span className="truncate font-mono">{claudeCrumb}</span>
+                      <NotInstalledMark show={auth.cli === null} />
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                   {/* §0-17 — 나머지 §4-3 카탈로그 엔진. 목록을 여기서 다시 적지 않는다
@@ -1078,7 +1095,8 @@ export function SettingsDialog({
                         aria-current={activeNode === e.engine ? "true" : undefined}
                         onClick={() => selectNode(e.engine)}
                       >
-                        <span className="font-mono">{e.engine}</span>
+                        <span className="truncate font-mono">{e.engine}</span>
+                        <NotInstalledMark show={e.cli === null} />
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   ))}

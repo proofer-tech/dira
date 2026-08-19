@@ -12,6 +12,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { DEFAULT_LOCALE, t as translate, type Locale } from "./i18n.ts";
 import { isMultiTokenAllowed, readMultiplay, registryPath } from "./projects.ts";
+import { ENGINES, type EngineId } from "./workers.ts";
 
 /** 레지스트리와 **같은 디렉터리**다(엔진의 `$LOCAL`). 규칙을 두 벌로 적지 않으려고
  *  `registryPath()`에서 파생시킨다 — `TICKET_LOCAL` 존중도 거기 한 곳에만 있다. */
@@ -44,10 +45,17 @@ export async function readAuth(): Promise<AuthStatus> {
 // `login status`류 서브프로세스를 부르지 않고, `auth.json`의 JWT `exp`도 읽지 않는다
 // (그 값을 재는 것은 아직 안 여는 발급·관리 층의 일이다).
 
-export type OtherEngine = "codex" | "grok" | "agy";
+export type OtherEngine = Exclude<EngineId, "claude">;
 
-/** 실행파일 이름 = §4-3 템플릿의 첫 토큰. 엔진이 하나 늘면 이 표에만 더한다. */
-const OTHER_ENGINE_BINS: Record<OtherEngine, string> = { codex: "codex", grok: "grok", agy: "agy" };
+/** 실행파일 이름의 정본은 §4-3 카탈로그다(`ENGINES[].argv[0]`, `lib/workers.ts`) — 여기서
+ *  두 벌째 안 적는다(§0-17 §개정 후보 11, `9a0dfbee`). 함수 몸통 안에서만 `ENGINES`를
+ *  참조한다 — `workers.ts`가 이 파일을 값으로 임포트해서(`isEligible`·`tokensPath`) 생기는
+ *  순환을, 모듈 최상위에서 안 읽으면 초기화 순서와 무관하게 피한다. */
+function engineBin(id: EngineId): string {
+  const e = ENGINES.find((x) => x.id === id);
+  if (!e) throw new Error(`모르는 엔진입니다: ${id}`);
+  return e.argv[0];
+}
 
 /** codex·grok의 자격증명 파일 자리(§4-3 §개정 표). agy는 파일이 아니라 macOS 키체인이라
  *  여기 없다 — `readOtherEngineAuth`가 그 엔진만 상시 문구로 답한다. */
@@ -68,14 +76,15 @@ export type OtherEngineAuth = {
 /** `home`은 테스트가 픽스처 디렉터리로 갈아 끼우는 자리다(`usage.ts`의 `root` 기본 인자와
  *  같은 관용구) — 실제 홈을 밟지 않고 파일 유무 두 갈래를 잰다. */
 export async function readOtherEngineAuth(home = homedir()): Promise<OtherEngineAuth[]> {
+  const others = ENGINES.filter((e): e is (typeof ENGINES)[number] & { id: OtherEngine } => e.id !== "claude");
   return Promise.all(
-    (Object.keys(OTHER_ENGINE_BINS) as OtherEngine[]).map(async (engine) => {
+    others.map(async ({ id: engine, argv }) => {
       const rel = CRED_FILE[engine];
       const credPath = rel ? path.join(home, rel) : null;
       const s = credPath ? await stat(credPath).catch(() => null) : null;
       return {
         engine,
-        cli: findExecutable(OTHER_ENGINE_BINS[engine]),
+        cli: findExecutable(argv[0]),
         credPath: s ? credPath : null,
         credMtime: s ? when(s.mtime) : null,
       };
@@ -528,9 +537,11 @@ export function findExecutable(name: string): string | null {
   return null;
 }
 
-/** claude 전용 별칭 — 층 ②가 몰 대상이 이 값이라 호출자를 두 벌로 안 바꾼다. */
+/** claude 전용 별칭 — 층 ②가 몰 대상이 이 값이라 호출자를 두 벌로 안 바꾼다. 이름은
+ *  카탈로그 파생이다(`engineBin`, §0-17 §개정 후보 11) — 카탈로그가 늘어도 훑는 이름은
+ *  여기 하나에서만 는다. */
 export function findClaude(): string | null {
-  return findExecutable("claude");
+  return findExecutable(engineBin("claude"));
 }
 
 /** 층 ②를 시작한다. 앞선 시도가 남아 있으면 먼저 죽인다 — pty를 두 번 물 수 없다. */
