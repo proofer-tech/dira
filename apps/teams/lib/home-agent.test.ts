@@ -35,11 +35,16 @@ const {
   toolFlags,
   personaBlock,
   snapshotOf,
+  isOnceWhen,
+  isValidWhen,
+  judgeSchedule,
+  SCHEDULE_LOOKBACK_MS,
+  runSchedules,
 } = await import("./home-agent.ts");
 type HomeChunk = Awaited<ReturnType<typeof pollHome>>;
 const { tailEvents } = await import("./transcript.ts");
 type StreamEvent = Awaited<ReturnType<typeof tailEvents>>["events"][number];
-const { registryPath, resolveConfig } = await import("./projects.ts");
+const { registryPath, resolveConfig, addProject } = await import("./projects.ts");
 const { listTickets } = await import("./queue.ts");
 const { listWorkers, lockPath } = await import("./workers.ts");
 
@@ -446,7 +451,7 @@ const uuid = (n: number) => `021f80d9-294c-4bea-948b-3b6f0c4501${String(n).padSt
 
 test("대화 목록 — 새 대화 · 전환 · 경로 관문. UUID가 아닌 줄은 없는 것과 같다", async () => {
   assert.strictEqual(sessionsPath(), path.join(LOCAL, "home-sessions.json"));
-  assert.deepStrictEqual(await readHome("p1"), { conversations: [], current: null }); // 파일이 없다
+  assert.deepStrictEqual(await readHome("p1"), { conversations: [], current: null, schedules: [] }); // 파일이 없다
   assert.strictEqual(await readSessionId("p1"), null);
 
   // 이미 대화가 하나 있는 프로젝트(= 첫 질문이 끝난 상태)
@@ -494,7 +499,7 @@ test("대화 목록 — 새 대화 · 전환 · 경로 관문. UUID가 아닌 �
 
   // 깨진 JSON은 빈 맵이다 — 홈 화면이 500이 되는 것보다 대화 하나를 새로 시작하는 게 낫다
   writeFileSync(sessionsPath(), "{ not json");
-  assert.deepStrictEqual(await readHome("p1"), { conversations: [], current: null });
+  assert.deepStrictEqual(await readHome("p1"), { conversations: [], current: null, schedules: [] });
 });
 
 test("옛 형식(문자열 한 줄)은 대화 한 개짜리 목록으로 읽힌다 — 사람 머신에 이미 있는 파일이다", async () => {
@@ -504,9 +509,10 @@ test("옛 형식(문자열 한 줄)은 대화 한 개짜리 목록으로 읽힌�
   assert.deepStrictEqual(await readHome("old"), {
     conversations: [{ id: sid, title: "", created: "" }], // 첫 질문도 만든 시각도 그 형식에 없다
     current: sid, // 돌던 대화가 그대로 열린다 — 못 읽으면 그 사람은 그걸 잃는다
+    schedules: [],
   });
   assert.strictEqual(await readSessionId("old"), sid);
-  assert.deepStrictEqual(await readHome("broken"), { conversations: [], current: null });
+  assert.deepStrictEqual(await readHome("broken"), { conversations: [], current: null, schedules: [] });
 
   // 그 위에 `새 대화`를 열면 옛 대화가 목록에 남는다(종전은 지우는 것이었다)
   const next = await newConversation("old");
@@ -1394,5 +1400,200 @@ test("pollHome — 왕복 사이 current가 다른 대화로 넘어가면 옛 ta
     assert.strictEqual(stale.reset, true);
 
     assert.strictEqual(stopAsk(sidA), true); // 정리 — 도는 A를 죽인다
+  });
+});
+
+// ── 스케줄 (§7-2) ────────────────────────────────────────────────────────────
+
+/** cron 판정은 머신 로컬 시각(`Date` getter)으로 도므로, 테스트도 로컬 컴포넌트로 시각을
+ *  짓는다 — ISO+오프셋 문자열을 파싱하면 이 프로세스가 도는 시간대에 따라 기대값이 갈린다. */
+const local = (y: number, mo: number, d: number, h: number, mi = 0) => new Date(y, mo - 1, d, h, mi, 0, 0).getTime();
+
+test("§7-2 판정 — 단발은 창 안에서 한 번, last가 있으면 다시 안 돈다, 31일보다 오래면 안 돈다", () => {
+  const when = "2026-08-20T09:00:00+09:00";
+  const at = Date.parse(when);
+  const created = at - 60_000;
+
+  assert.strictEqual(judgeSchedule({ when, lastDueMs: null, createdMs: created, nowMs: at - 1000 }), null);
+  assert.strictEqual(judgeSchedule({ when, lastDueMs: null, createdMs: created, nowMs: at + 1000 }), at);
+  // 이미 돌았다 — `last`가 있으면 다시 안 돈다(켜고 끄는 칸이 없다)
+  assert.strictEqual(judgeSchedule({ when, lastDueMs: at, createdMs: created, nowMs: at + 10_000_000 }), null);
+  // 31일보다 오래 지난 단발은 앱을 켜도 안 돈다(§7-2 수용조건) — 창의 시작이 그 전으로 안 밀린다
+  assert.strictEqual(
+    judgeSchedule({ when, lastDueMs: null, createdMs: created, nowMs: at + SCHEDULE_LOOKBACK_MS + 60_000 }),
+    null,
+  );
+});
+
+test("§7-2 판정 — 매일 cron은 창 안에 낀 여러 9시 중 마지막 것 하나만 회차가 된다(몰아 돌리지 않는다)", () => {
+  const createdMs = local(2026, 8, 17, 0, 0);
+  const nowMs = local(2026, 8, 19, 10, 0); // 이틀치(18일·19일) 9시가 창 안에 다 든다
+  const due = judgeSchedule({ when: "0 9 * * *", lastDueMs: null, createdMs, nowMs });
+  assert.strictEqual(due, local(2026, 8, 19, 9, 0));
+  // 그 due를 last로 다시 재면 다음 9시 전까지는 안 돈다
+  assert.strictEqual(judgeSchedule({ when: "0 9 * * *", lastDueMs: due, createdMs, nowMs: due! + 3_600_000 }), null);
+});
+
+test("§7-2 판정 — 매주(요일 하나)·매월(일 하나) cron도 로컬 시각 필드로 맞는다", () => {
+  const dow = new Date(2026, 7, 24).getDay(); // 2026-08-24의 요일 번호(값 자체는 안 가정한다)
+  const weekly = judgeSchedule({
+    when: `0 9 * * ${dow}`,
+    lastDueMs: null,
+    createdMs: local(2026, 8, 17, 0, 0),
+    nowMs: local(2026, 8, 24, 9, 30),
+  });
+  assert.strictEqual(weekly, local(2026, 8, 24, 9, 0));
+
+  const monthly = judgeSchedule({
+    when: "0 9 1 * *",
+    lastDueMs: null,
+    createdMs: local(2026, 8, 1, 0, 0),
+    nowMs: local(2026, 9, 1, 9, 30),
+  });
+  assert.strictEqual(monthly, local(2026, 9, 1, 9, 0));
+});
+
+test("§7-2 §관문 — 못 읽는 when(필드 수 틀림 · 파싱 불가)은 없는 것으로 친다", () => {
+  assert.strictEqual(judgeSchedule({ when: "0 9 * *", lastDueMs: null, createdMs: 0, nowMs: 10 ** 12 }), null);
+  assert.strictEqual(judgeSchedule({ when: "not-a-date", lastDueMs: null, createdMs: 0, nowMs: 10 ** 12 }), null);
+  assert.strictEqual(isOnceWhen("2026-08-20T09:00:00+09:00"), true);
+  assert.strictEqual(isOnceWhen("0 9 * * *"), false);
+  assert.strictEqual(isValidWhen("0 9 1 * *"), true); // 매월
+  assert.strictEqual(isValidWhen("0 9 * * 1"), true); // 매주
+  assert.strictEqual(isValidWhen("2026-08-20T09:00:00+09:00"), true); // 단발
+  assert.strictEqual(isValidWhen("* * * *"), false); // 필드 4개
+  assert.strictEqual(isValidWhen("0 9 mon * *"), false); // 정수·`*` 아닌 자리
+});
+
+test("스케줄 저장 — home-sessions.json의 schedules 칸이 readHome-writeHome을 그대로 탄다. 못 읽는 줄은 없는 것이다", async () => {
+  writeFileSync(
+    sessionsPath(),
+    JSON.stringify({
+      schedtest: {
+        conversations: [],
+        current: null,
+        schedules: [
+          { id: "s1", created: "2026-08-19T16:20:00+09:00", when: "0 9 * * 1", prompt: "월요일 9시", session_id: "" },
+          { id: "s2", when: "0 9 * *", prompt: "필드 4개" }, // 못 읽는 when — 없는 줄
+          { when: "0 9 * * *", prompt: "id 없음" }, // id 없음 — 없는 줄
+          { id: "s3", when: "not-a-date", prompt: "단발 파싱 불가" }, // 못 읽는 when
+        ],
+      },
+    }),
+  );
+  const home = await readHome("schedtest");
+  assert.deepStrictEqual(
+    home.schedules.map((s) => s.id),
+    ["s1"],
+  );
+  assert.strictEqual(home.schedules[0]?.when, "0 9 * * 1");
+  assert.strictEqual(home.schedules[0]?.session_id, ""); // 관문 통과 못 함 — 형만 정규화된다
+
+  // `새 대화`가 schedules를 안 지운다(대화 목록과 다른 칸이다 — §7-2 §저장)
+  await newConversation("schedtest");
+  assert.deepStrictEqual(
+    (await readHome("schedtest")).schedules.map((s) => s.id),
+    ["s1"],
+  );
+});
+
+test("runSchedules — 하트비트가 부르는 디스패치. 트랜스크립트 없는 옛 session_id는 새 세션으로 밀리고, 단발은 두 번 안 돈다", async () => {
+  const root = fixture();
+  const project = await addProject("스케줄 큐", root, "sched-run");
+
+  const dueAt = Date.now() - 1000; // 창 안 — 이미 지난 단발 시각
+  const when = new Date(dueAt).toISOString();
+  writeFileSync(
+    sessionsPath(),
+    JSON.stringify({
+      [project.id]: {
+        conversations: [],
+        current: null,
+        schedules: [
+          {
+            id: "s1",
+            created: new Date(dueAt - 60_000).toISOString(),
+            when,
+            prompt: "회차 프롬프트",
+            session_id: "11111111-2222-3333-4444-555555555555", // 다른 머신 값 — 트랜스크립트가 없다
+          },
+        ],
+      },
+    }),
+  );
+
+  // **ARGV는 이 파일 전체가 공유하는 누적 로그다**(첫 줄 뿐이라 프롬프트 끝의 한 줄은 여기서
+  // 못 본다 — `echo "$@" | head -1`가 여러 줄짜리 프롬프트의 첫 줄만 남긴다, 위 §왕복 머리 주석).
+  // 그래서 절대 줄 수가 아니라 **이 호출이 늘린 줄 수**(델타)로 스폰 여부를 잰다.
+  const linesOf = () => readFileSync(ARGV, "utf8").trim().split("\n");
+
+  await withFake("", async () => {
+    const before = linesOf().length;
+    await runSchedules(Date.now());
+    for (let i = 0; i < 400 && isAsking(project.id); i++) await new Promise((r) => setTimeout(r, 25));
+    assert.strictEqual(isAsking(project.id), false);
+
+    const s = (await readHome(project.id)).schedules[0]!;
+    assert.notStrictEqual(s.session_id, "11111111-2222-3333-4444-555555555555"); // 새 세션으로 밀었다
+    assert.match(s.session_id, /^[0-9a-f-]{36}$/);
+    assert.strictEqual(s.last?.due, when);
+
+    // **`current`를 안 본다** — 스케줄 회차는 사람 대화 목록에 안 든다
+    assert.deepStrictEqual((await readHome(project.id)).conversations, []);
+
+    const after = linesOf();
+    assert.strictEqual(after.length, before + 1); // 정확히 한 번 스폰했다
+    assert.match(after.at(-1) ?? "", /^-p --session-id /); // 트랜스크립트가 없었다 — 새 세션이다
+
+    // 단발이라 다시 안 돈다 — 두 번째 틱은 새 줄을 안 쓴다
+    await runSchedules(Date.now());
+    assert.strictEqual(linesOf().length, before + 1);
+  });
+});
+
+test("runSchedules — 이미 도는 회차는 버리고 last만 올라간다(밀려 쌓이지 않는다, 세션도 안 갈린다)", async () => {
+  const root = fixture();
+  const project = await addProject("스케줄 busy", root, "sched-busy");
+
+  const base = Date.now() - 5 * 60_000;
+  writeFileSync(
+    sessionsPath(),
+    JSON.stringify({
+      [project.id]: {
+        conversations: [],
+        current: null,
+        schedules: [
+          { id: "b1", created: new Date(base).toISOString(), when: "* * * * *", prompt: "매분", session_id: "" },
+        ],
+      },
+    }),
+  );
+
+  // ARGV는 파일 전체가 공유하는 누적 로그다(위 §runSchedules 첫 테스트 주석과 같은 이유) — 델타로 잰다.
+  const linesOf = () => readFileSync(ARGV, "utf8").trim().split("\n").length;
+
+  await withFake("hang", async () => {
+    const before = linesOf();
+    const t0 = base + 60_000;
+    await runSchedules(t0);
+    // 스폰됐는지는 서버의 활동으로 확인한다 — `hang` 모드는 끝나지 않으므로 `isAsking`이 참인 채로 산다
+    assert.strictEqual(isAsking(project.id), true);
+    const first = (await readHome(project.id)).schedules[0]!;
+    assert.ok(first.session_id);
+    // `ask()`는 스냅샷·페르소나를 fs에서 읽은 뒤에야 spawn한다(`runSchedules`는 그 전에 이미
+    // 돌아온다 — 띄우고 바로 돌아온다, §7-2) — ARGV 줄이 늘 때까지 기다린다
+    for (let i = 0; i < 400 && linesOf() === before; i++) await new Promise((r) => setTimeout(r, 25));
+    assert.strictEqual(linesOf(), before + 1);
+
+    const t1 = t0 + 60_000; // 다음 맞는 분 — 앞 회차가 아직 도는 중
+    await runSchedules(t1);
+    const second = (await readHome(project.id)).schedules[0]!;
+    assert.strictEqual(second.session_id, first.session_id); // 세션은 안 갈렸다 — 버렸다
+    assert.notStrictEqual(second.last?.due, first.last?.due); // last는 그래도 올라갔다
+    assert.strictEqual(linesOf(), before + 1); // 새 스폰 없다
+
+    assert.strictEqual(stopAsk(first.session_id), true); // 정리 — 도는 회차를 죽인다
+    for (let i = 0; i < 400 && isAsking(project.id); i++) await new Promise((r) => setTimeout(r, 25));
+    assert.strictEqual(isAsking(project.id), false);
   });
 });

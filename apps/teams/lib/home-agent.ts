@@ -77,7 +77,7 @@ import { mkdir, readdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { findClaude, tokenPath } from "./auth.ts";
 import type { Run } from "./engine.ts";
-import { getProject, registryPath, resolveConfig, type Project, type ProjectConfig } from "./projects.ts";
+import { getProject, readProjects, registryPath, resolveConfig, type Project, type ProjectConfig } from "./projects.ts";
 import { isAwaiting, listTickets, reqTitle, statusOf, type Ticket } from "./queue.ts";
 import { findTranscript, lastEvent, sessionIdOf, tailEvents, type StreamEvent } from "./transcript.ts";
 import { engineCell, listWorkers, workerOf, type Worker } from "./workers.ts";
@@ -149,10 +149,119 @@ export type Conversation = {
   model?: string;
 };
 
+// ── 스케줄 (§7-2) — 좌측 패널 둘째 그룹이 시각에 홈 에이전트를 깨운다 ───────────
+//
+// **엔진이 한 번도 안 읽는다** — 읽는 쪽도 쓰는 쪽도 이 GUI 서버 하나다. 그래서 저장 자리는
+// 대화 목록과 같은 파일(`home-sessions.json`)이고 새 파일은 0개다(§7-2 §저장).
+
+/** `when`의 갈래를 가르는 것은 **`T` 하나다**(§7-2 §단발과 주기가 한 칸에 담긴다). 단발은
+ *  ISO 8601 + 오프셋, 나머지 셋(매일·매주·매월)은 5필드 cron — 화면이 만들고 사람은 안 쓴다. */
+export function isOnceWhen(when: string): boolean {
+  return when.includes("T");
+}
+
+/** 화면이 만드는 넷뿐이라 각 자리는 `*` 아니면 정수 하나다(리스트·범위 문법이 없다). **못 읽는
+ *  `when`은 없는 것으로 친다**(§7-2 — `parseHome`의 관문과 같은 선) — 이 판정이 그 관문이다. */
+export function isValidWhen(when: string): boolean {
+  if (isOnceWhen(when)) return Number.isFinite(Date.parse(when));
+  const fields = when.trim().split(/\s+/);
+  return fields.length === 5 && fields.every((f) => f === "*" || /^\d+$/.test(f));
+}
+
+/** 5필드 cron 한 분을 **머신 로컬 시각**과 맞춘다(§7-2 §시간대 — `Date` getter가 이미 로컬이고,
+ *  지금 crontab이 워커를 깨우는 판정과 같은 자다). */
+function matchesCronMinute(cron: string, d: Date): boolean {
+  const [min, hour, dom, month, dow] = cron.trim().split(/\s+/);
+  const eq = (f: string, v: number) => f === "*" || Number(f) === v;
+  return (
+    eq(min!, d.getMinutes()) &&
+    eq(hour!, d.getHours()) &&
+    eq(dom!, d.getDate()) &&
+    eq(month!, d.getMonth() + 1) &&
+    eq(dow!, d.getDay())
+  );
+}
+
+/** §7-2 §되짚는 창 — 그보다 오래 앱이 꺼져 있었으면 놓친 회차는 없는 것으로 하고 다음 맞는
+ *  분부터 돈다. 새 수를 발명한 게 아니다 — 갈래 넷의 가장 긴 주기(매월)가 한 주기다. */
+export const SCHEDULE_LOOKBACK_MS = 31 * 24 * 60 * 60 * 1000;
+
+/** §7-2 §판정의 입력. **시계도 인자다** — `judgeSchedule`이 순수 함수로 서는 이유가 이것이다
+ *  (`pnpm test`가 시계를 주입해 판정한다). `lastDueMs`가 없으면(`null`) 창의 시작은 `createdMs`다
+ *  ("오늘 만든 스케줄이 어제 회차를 돌지 않는다"). */
+export type ScheduleJudgeInput = { when: string; lastDueMs: number | null; createdMs: number; nowMs: number };
+
+/** §7-2 §판정 — `(마지막 예정 시각, 지금]`에 맞는 분이 하나라도 있으면 그 회차의 예정 시각(ms)을
+ *  낸다. 없으면 `null`. 맞는 분이 여럿이면 **마지막** 것 하나 — 몰아 돌리지 않는다. 단발은
+ *  `lastDueMs`가 있으면(=이미 돌았으면) 다시 안 돈다. 못 읽는 `when`은 없는 것으로 친다.
+ *
+ *  **31일 캡이 `once`에도 그냥 적용된다** — 창의 시작을 뒤로 못 미는 것 하나로 "31일보다 오래
+ *  지난 단발은 안 돈다"가 따로 분기 없이 선다(§7-2 수용조건). */
+export function judgeSchedule({ when, lastDueMs, createdMs, nowMs }: ScheduleJudgeInput): number | null {
+  if (!isValidWhen(when)) return null;
+  const windowStart = Math.max(lastDueMs ?? createdMs, nowMs - SCHEDULE_LOOKBACK_MS);
+  if (isOnceWhen(when)) {
+    if (lastDueMs !== null) return null;
+    const at = Date.parse(when);
+    return at > windowStart && at <= nowMs ? at : null;
+  }
+  // 분 단위로 훑는다 — 최악(31일 공백)도 44,640회라 값이 트리비얼하다(핫패스가 아니다: 15초마다
+  // 한 번, 보통 창은 1~2분이다).
+  const startMinute = Math.floor(windowStart / 60_000) + 1;
+  const endMinute = Math.floor(nowMs / 60_000);
+  let due: number | null = null;
+  for (let m = startMinute; m <= endMinute; m++) {
+    const t = m * 60_000;
+    if (matchesCronMinute(when, new Date(t))) due = t;
+  }
+  return due;
+}
+
+/** 저장 형식(§7-2 §저장) 그대로. `home-sessions.json`의 그 프로젝트 값에 `schedules` 배열 한
+ *  칸으로 산다 — `Conversation`과 같은 파일, 같은 원자적 쓰기(`writeHome`)를 탄다. */
+export type Schedule = {
+  id: string;
+  /** ISO. `last`가 없을 때 판정 창의 시작이 된다 */
+  created: string;
+  /** 단발(ISO 8601 + 오프셋) 또는 5필드 cron. 화면이 쓰고 사람은 안 고친다 */
+  when: string;
+  /** 사람의 문장 그대로 — 고쳐 쓰지 않는다(§7-2 §회차의 질문) */
+  prompt: string;
+  /** 첫 회차가 민 값 — 그 뒤 회차가 `--resume`으로 잇는다. **`sessionIdOf` 관문을 통과한 값만
+   *  산다** — 통과 못 하거나 가리키는 트랜스크립트가 없으면 다음 회차가 새 세션으로 민다 */
+  session_id: string;
+  /** 마지막으로 판정한 예정 시각과 그때의 실제 시각 — <돌았나>를 담지 않는다(§7-2) */
+  last?: { due: string; at: string };
+};
+
+/** 한 줄의 관문. **못 읽는 `when`은 없는 것으로 친다**(`parseHome`의 대화 관문과 같은 선) —
+ *  `id`·`prompt`도 형이 아니면 같이 없는 줄이다. `session_id`는 형만 본다(빈 값·깨진 값이어도
+ *  줄 자체는 산다 — 그 값을 실제로 쓰는 자리(디스패치)가 `sessionIdOf` 관문을 다시 지난다). */
+function parseSchedule(v: unknown): Schedule | null {
+  const o = (v && typeof v === "object" && !Array.isArray(v) ? v : {}) as Record<string, unknown>;
+  if (typeof o.id !== "string" || !o.id) return null;
+  if (typeof o.prompt !== "string") return null;
+  if (typeof o.when !== "string" || !isValidWhen(o.when)) return null;
+  const rawLast = o.last && typeof o.last === "object" ? (o.last as Record<string, unknown>) : null;
+  const last =
+    rawLast && typeof rawLast.due === "string" && typeof rawLast.at === "string"
+      ? { due: rawLast.due, at: rawLast.at }
+      : undefined;
+  return {
+    id: o.id,
+    created: typeof o.created === "string" ? o.created : "",
+    when: o.when,
+    prompt: o.prompt,
+    session_id: sessionIdOf({ session_id: typeof o.session_id === "string" ? o.session_id : "" }) ?? "",
+    ...(last ? { last } : {}),
+  };
+}
+
 /** 한 프로젝트가 이 파일에 갖는 것 전부. **`current`는 대화 목록 밖을 가리킬 수 있다** —
  *  좌측 패널의 워커 세션을 고르면 그 session id가 여기 들어오고 `conversations`에는 줄이
- *  안 생긴다(§7 §고르면 홈 대화 스레드에 열린다 — 워커 세션이 사람 대화 20을 밀어내면 안 된다). */
-export type Home = { conversations: Conversation[]; current: string | null };
+ *  안 생긴다(§7 §고르면 홈 대화 스레드에 열린다 — 워커 세션이 사람 대화 20을 밀어내면 안 된다).
+ *  `schedules`는 §7-2 — 화면·엔진 둘 다 안 읽는 프로젝트는 언제나 빈 배열이다. */
+export type Home = { conversations: Conversation[]; current: string | null; schedules: Schedule[] };
 
 /** §7: **프로젝트당 최근 20개.** 넘으면 오래된 줄이 이 파일에서 빠진다 —
  *  **트랜스크립트는 안 지운다**(`~/.claude`는 남의 디렉터리다). */
@@ -188,7 +297,9 @@ function parseHome(v: unknown): Home {
   const uuid = (x: unknown) => sessionIdOf({ session_id: typeof x === "string" ? x : "" });
   if (typeof v === "string") {
     const id = uuid(v);
-    return id ? { conversations: [{ id, title: "", created: "" }], current: id } : { conversations: [], current: null };
+    return id
+      ? { conversations: [{ id, title: "", created: "" }], current: id, schedules: [] }
+      : { conversations: [], current: null, schedules: [] };
   }
   const o = (v && typeof v === "object" && !Array.isArray(v) ? v : {}) as Record<string, unknown>;
   const conversations = (Array.isArray(o.conversations) ? o.conversations : []).flatMap((r): Conversation[] => {
@@ -205,11 +316,17 @@ function parseHome(v: unknown): Home {
       },
     ];
   });
+  // **못 읽는 줄은 없는 것으로 친다**(§7-2 — 대화 관문과 같은 선). 사람이 이 파일을 손으로
+  // 고칠 수 있다는 전제도 같다.
+  const schedules = (Array.isArray(o.schedules) ? o.schedules : []).flatMap((r): Schedule[] => {
+    const s = parseSchedule(r);
+    return s ? [s] : [];
+  });
   // **`current`의 관문은 `sessionIdOf` 하나다**(§7 §고르면 홈 대화 스레드에 열린다 — 종전
   // *"목록에 있는 줄만 가리킨다"*에서 넓혔다). 워커 세션을 고르면 대화 목록에 없는 값이 여기
   // 들어오기 때문이다. **무엇을 가리키는지는 읽는 쪽이 판정한다**(`pollHome`) — 대화도 워커
   // 세션도 아니면 화면은 대화 0건과 같이 뜬다(온보딩). 경로가 되는 값의 방어는 그대로 이 한 줄이다.
-  return { conversations, current: uuid(o.current) || null };
+  return { conversations, current: uuid(o.current) || null, schedules };
 }
 
 /** 목록 읽기 — 화면이 대화 목록을 그리는 출처(§비주얼 §24). */
@@ -243,7 +360,7 @@ export async function readSessionId(projectId: string): Promise<string | null> {
 /** 목록 끝에 줄 하나를 붙이고 **오래된 쪽을 상한에서 자른다**(§7 상한 20). 새 줄은 항상 끝이라
  *  앞에서 자르는 것이 곧 "가장 오래된 줄이 빠진다"이고, 방금 연 대화는 잘릴 수 없다. */
 function append(home: Home, row: Conversation): Home {
-  return { conversations: [...home.conversations, row].slice(-LIMIT), current: row.id };
+  return { ...home, conversations: [...home.conversations, row].slice(-LIMIT), current: row.id };
 }
 
 const openRow = (): Conversation => ({
@@ -760,6 +877,7 @@ async function settleFirstTurn(projectId: string, sessionId: string, ok: boolean
   const entry = runs.get(sessionId);
   if (entry && next.id !== sessionId) runs.set(next.id, entry);
   await writeHome(projectId, {
+    ...home,
     conversations: home.conversations.map((c) => (c.id === sessionId ? next : c)),
     current: home.current === sessionId ? next.id : home.current,
   });
@@ -1151,6 +1269,93 @@ export async function startAsk(
     (e: Error) => (entry.result = { ok: false, reason: "other", output: e.message, sessionId: "", resumed: false }),
   );
   return null;
+}
+
+// ── 스케줄 디스패치 (§7-2 §깨우는 것은 앱의 서버다) ──────────────────────────
+//
+// **하트비트(`machine-state.ts`)가 매 틱 부르는 것 하나** — 새 타이머 0 · 새 프로세스 0 ·
+// 새 cron 줄 0. 판정(`judgeSchedule`)은 순수하고, 여기부터는 그 결과를 큐 → 프로젝트 전부에
+// 대해 돌리는 불순한 절반이다(§7-2 §판정의 자리).
+
+/** 한 줄만 갈아 끼운다 — `writeHome`을 그대로 타므로 새 쓰기 경로가 없다(§7-2 새 파일 0개). */
+async function patchSchedule(projectId: string, id: string, patch: Partial<Schedule>): Promise<void> {
+  const home = await readHome(projectId);
+  await writeHome(projectId, { ...home, schedules: home.schedules.map((s) => (s.id === id ? { ...s, ...patch } : s)) });
+}
+
+/** 한 스케줄의 회차 하나. **`current`를 안 본다** — `beginTurn`을 안 거치고 `ask`에 세션을
+ *  직접 박는다(§7-2: "회차는 그 줄의 `session_id`로 돈다" — `conversations`에 줄이 안 생긴다).
+ *
+ *  **이미 도는 회차가 있으면 버린다**(§7-2 §판정) — 판정 기준은 "그 스케줄이 마지막으로 쓴
+ *  `session_id`가 지금 `runs`에 결과 없이 살아 있나"다. 새로 뽑을 세션 id가 아니라 **저장된
+ *  옛 값**으로 봐야 한다: 아직 트랜스크립트가 없는 도는 회차는(`findTranscript`가 파일 생성
+ *  전이면 null) 그 검사를 새 uuid로 하면 늘 "안 도는 것"으로 오판해 중복 스폰이 난다.
+ *
+ *  버렸든 쐈든 **`last`는 이번 판정의 분으로 올라간다** — 안 올리면 다음 15초 틱이 같은 분을
+ *  또 맞다고 보고 회차가 밀려 쌓인다(§7-2). */
+async function runScheduleTurn(
+  project: Pick<Project, "id" | "name" | "root">,
+  schedule: Schedule,
+  dueMs: number,
+  nowMs: number,
+): Promise<void> {
+  const due = new Date(dueMs).toISOString();
+  const at = new Date(nowMs).toISOString();
+
+  const prev = runs.get(schedule.session_id);
+  if (prev && prev.result === null) {
+    await patchSchedule(project.id, schedule.id, { last: { due, at } });
+    return; // 이번 회차는 버린다 — 세션도 안 갈고 스폰도 안 한다
+  }
+
+  // **`sessionIdOf` 관문을 통과하고 트랜스크립트가 실재해야 이어붙인다** — 통과 못 하거나
+  // 가리키는 파일이 없으면(다른 머신에서 온 값 · `~/.claude` 정리) 새 세션으로 민다(§7-2 §저장).
+  const known = sessionIdOf({ session_id: schedule.session_id });
+  const transcript = known ? await findTranscript(known) : null;
+  const sessionId = transcript ? known! : randomUUID();
+  const resumed = transcript !== null;
+
+  await patchSchedule(project.id, schedule.id, { session_id: sessionId, last: { due, at } });
+
+  const entry = { projectId: project.id, result: null as Answer | null, live: newLive() };
+  runs.set(sessionId, entry);
+  // §7-2 §회차의 질문 — `prompt`는 고쳐 쓰지 않는다. 붙는 것은 한 줄뿐이고 시각 둘 다 인자로
+  // 왔다(`buildPrompt`는 이 문자열을 그대로 `question`으로 받아 여전히 순수하다).
+  const q = `${schedule.prompt}\n\n스케줄이 깨웠다 - 예정 시각 ${due} - 실제 시각 ${at}`;
+  void ask(project, q, entry.live, { sessionId, resumed }).then(
+    (a) => (entry.result = a),
+    (e: Error) => (entry.result = { ok: false, reason: "other", output: e.message, sessionId: "", resumed: false }),
+  );
+}
+
+/** §7-2 §깨우는 자리 — `machine-state.ts`의 15초 하트비트가 부르는 것 하나. 등록된 프로젝트
+ *  전부를 훑어 각자의 `schedules`를 판정한다.
+ *
+ *  레지스트리·홈 파일을 못 읽으면 이번 틱은 조용히 건너뛴다 — 하트비트가 던지면 §0-14 판정까지
+ *  같이 죽는다(다음 틱이 15초 뒤에 다시 본다).
+ *
+ *  // ponytail: 회차가 스레드로 열려야 `runs` 항목이 `dropRun`으로 지워진다(폴링이 그 자리다).
+ *  //           사람이 그 스케줄을 한 번도 안 열면 안 지워진다 — 대화(상한 20)와 달리 스케줄은
+ *  //           수가 안 막혀 있어 오래 도는 프로젝트에서 이 맵이 자란다. 문제라고 말하는 날
+ *  //           `dropRun`을 여기서도 부른다(결과가 이미 있으면 폴링 없이도 지운다). */
+export async function runSchedules(nowMs: number = Date.now()): Promise<void> {
+  const projects = await readProjects().catch(() => [] as Project[]);
+  for (const project of projects) {
+    const home = await readHome(project.id).catch(() => null);
+    if (!home) continue;
+    for (const schedule of home.schedules) {
+      const createdMs = Date.parse(schedule.created);
+      const lastDueMs = schedule.last ? Date.parse(schedule.last.due) : null;
+      const due = judgeSchedule({
+        when: schedule.when,
+        createdMs: Number.isFinite(createdMs) ? createdMs : nowMs,
+        lastDueMs: lastDueMs !== null && Number.isFinite(lastDueMs) ? lastDueMs : null,
+        nowMs,
+      });
+      // 한 스케줄의 디스패치 실패(fs 오류 등)가 이 틱의 나머지 스케줄·§0-14 판정까지 죽이면 안 된다
+      if (due !== null) await runScheduleTurn(project, schedule, due, nowMs).catch(() => {});
+    }
+  }
 }
 
 /** 폴링 한 번 = 화면이 아는 전부. 페이지의 첫 렌더도 이걸 부른다(`offset` 0 · `sessionId` null). */

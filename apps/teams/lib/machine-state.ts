@@ -5,6 +5,7 @@ import { execFile } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
+import { runSchedules } from "./home-agent.ts";
 import { localDir } from "./paths.ts";
 
 const execFileP = promisify(execFile);
@@ -138,6 +139,9 @@ async function tickOnce(): Promise<void> {
   s.lastHeartbeatAt = now;
   s.offline = nextOffline(s.offline, await scutilReachable());
   await writeHeartbeatAt(now);
+  // §7-2 §깨우는 자리 — 새 타이머를 안 만든다. 판정은 `runSchedules`(순수 함수 `judgeSchedule` 위의
+  // 그 절반)가 지고, 여기는 그 함수에 <지금>을 넣고 부르는 것뿐이다.
+  await runSchedules(now);
 }
 
 async function initState(): Promise<LiveState> {
