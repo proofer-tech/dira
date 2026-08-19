@@ -7,6 +7,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { runSchedules } from "./home-agent.ts";
 import { localDir } from "./paths.ts";
+import { readAlerts, writeAlerts } from "./workers.ts";
 
 const execFileP = promisify(execFile);
 
@@ -82,6 +83,18 @@ export function filterRead(resume: ResumeEvent | null, readTo: number | null): R
   return resume && resume.to === readTo ? null : resume;
 }
 
+/** ⑥ 사건 하나를 편지함에 적는다(§0-10 §받은 편지함 §쓰는 자리) — 하트비트가 새 공백을 볼
+ *  때마다. 키는 `to`라 병합으로 `to`가 자라면 새 줄이다(§0-14 §읽음 처리가 정한 그 단위
+ *  그대로 — *멈춤이 더 길어졌다*는 새 사실이다). */
+export async function recordResumeEvent(event: ResumeEvent): Promise<void> {
+  const alerts = await readAlerts();
+  const machine = {
+    ...alerts.machine,
+    [String(event.to)]: { from: event.from, kind: event.kind, archived: null },
+  };
+  await writeAlerts({ ...alerts, machine });
+}
+
 // ---- 모듈 스코프 — 여기부터 side effect(파일 I/O · 서브프로세스 · 타이머) ----
 
 function heartbeatPath(): string {
@@ -135,7 +148,10 @@ async function tickOnce(): Promise<void> {
   if (!s) return;
   const now = Date.now();
   const gapEvent = sleepGap(s.lastHeartbeatAt, now);
-  if (gapEvent) s.resume = mergeResume(s.resume, gapEvent);
+  if (gapEvent) {
+    s.resume = mergeResume(s.resume, gapEvent);
+    await recordResumeEvent(s.resume);
+  }
   s.lastHeartbeatAt = now;
   s.offline = nextOffline(s.offline, await scutilReachable());
   await writeHeartbeatAt(now);
@@ -189,8 +205,19 @@ export function machineState(nowMs: number = Date.now()): MachineState {
   return { offline: s.offline.offline, resume: filterRead(fresh, s.readTo) };
 }
 
-/** Server Action이 부르는 쓰기 — 화면이 그 순간 보인 이벤트의 `to`를 모듈 메모리에 적는다
- *  (§0-14 §읽음 처리). 파일 0개 — 초기화 전(사실상 없는 창)이면 아직 이벤트가 없으므로 무시한다. */
-export function markResumeRead(toMs: number): void {
+/** Server Action이 부르는 쓰기 — 화면이 그 순간 보인 이벤트의 `to`를 보관한다(§0-10 §보관 =
+ *  읽음이다). 모듈 메모리의 `readTo`는 지금 이 서버가 그 값을 즉시 반영하는 자리로 남고,
+ *  편지함의 `archived`가 재시작을 넘겨 사는 자리다 — §0-14 §읽음 처리의
+ *  ~~저장은 모듈 메모리다 - alerts.json에 안 적는다. 파일 0개~~가 여기서 뒤집힌다(§0-10 §저장).
+ *  편지함에 그 사건이 없으면(상한에 밀렸거나 아직 하트비트가 못 적었으면) 조용히 넘어간다. */
+export async function markResumeRead(toMs: number): Promise<void> {
   if (g.__diraMachineState) g.__diraMachineState.readTo = toMs;
+  const alerts = await readAlerts();
+  const key = String(toMs);
+  if (!alerts.machine[key]) return;
+  const machine = {
+    ...alerts.machine,
+    [key]: { ...alerts.machine[key], archived: new Date().toISOString() },
+  };
+  await writeAlerts({ ...alerts, machine });
 }

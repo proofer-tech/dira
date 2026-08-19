@@ -998,11 +998,11 @@ async function failureOf(
   return { at, hash, reason, log };
 }
 
-// ── 읽음 처리 (DESIGN.md §0-5 §읽음 처리) ───────────────────────────────────
+// ── 받은 편지함 (DESIGN.md §0-10 §받은 편지함 §저장) ─────────────────────────
 //
-// **판정 4단계**: 위 3단계가 만든 실패의 `log`가 그 루트의 읽음 목록에 있으면 `null`이다.
-// 판정 **뒤에** 걷는 필터라서 큐 파일은 한 바이트도 안 바뀌고, 적히는 사실은 *큐가 나았다*가
-// 아니라 *이 머신이 이 실패를 봤다*이다. 판정이 하나이므로 종 항목과 워커 행이 같이 걷힌다.
+// `~/.config/dira/alerts.json`이 편지함이다 — 최상위 `queues`(② 사건, 큐 루트별) ·
+// `machine`(⑥ 사건, 머신 전체) 두 칸. 판정 **뒤에** 걷는 필터라서 큐 파일은 한 바이트도 안
+// 바뀌고, 적히는 사실은 *큐가 나았다*가 아니라 *이 머신이 이 사건을 봤다*이다.
 
 /** 레지스트리·토큰·키맵·`analytics.json`과 **같은 디렉터리**다(`lib/analytics.ts:20`의 그 한 줄).
  *  **`.dira` 안이 아니다** — 머신당 하나이고 큐를 오염시키지 않는다. */
@@ -1010,64 +1010,102 @@ export function alertsPath(): string {
   return path.join(localDir(), "alerts.json");
 }
 
-/** `{ "<큐 루트 절대경로>": { "<로그 파일명>": "<그 FAIL 줄의 시각>" } }`.
- *  **루트로 한 겹 나눈다** — 워커 이름(`w1`)은 템플릿 복사라 프로젝트끼리 겹친다. */
-type Alerts = Record<string, Record<string, string>>;
+/** ② 사건 하나 — 로그 파일명이 키라 여기 안 든다(`WorkerFailure`의 나머지 세 칸 + 보관 시각). */
+export type MailboxFailure = { at: string; hash: string; reason: string; archived: string | null };
+/** ⑥ 사건 하나 — `to`가 키라 여기 안 든다. `kind`를 `machine-state.ts`의 `ResumeKind`로 좁히지
+ *  않는다 — 그 타입을 들여오면 `machine-state → workers`의 기존 임포트 방향과 겹친 순환이 하나
+ *  더 는다. 저장 모양만 아는 이 파일은 문자열로 충분하다. */
+export type MailboxResume = { from: number; kind: string; archived: string | null };
+export type Mailbox = {
+  queues: Record<string, Record<string, MailboxFailure>>;
+  machine: Record<string, MailboxResume>;
+};
+const EMPTY_MAILBOX: Mailbox = { queues: {}, machine: {} };
+const QUEUE_CAP = 200;
+const MACHINE_CAP = 200;
 
-/** 없음·못 읽음·JSON 아님·모양 다름 = **읽음 0개**다. 실패를 지어내지도 숨기지도 않는다 —
- *  손으로 고칠 수 있는 파일 하나가 배너를 켜거나 끄면 그게 두 번째 진실이다. */
-async function readAlerts(): Promise<Alerts> {
+const isRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object";
+
+/** 없음·못 읽음·JSON 아님·**옛 모양**(최상위에 `queues`가 없다) = 빈 편지함이다. 마이그레이션
+ *  0줄 — 그 순간 살아 있던 마크만 잃고 다음 쓰기에서 파일이 새 모양이 된다(§0-10 §저장). */
+export async function readAlerts(): Promise<Mailbox> {
   let obj: unknown;
   try {
     obj = JSON.parse(await readFile(alertsPath(), "utf8"));
   } catch {
-    return {};
+    return EMPTY_MAILBOX;
   }
-  const out: Alerts = {};
-  if (!obj || typeof obj !== "object") return out;
-  for (const [root, marks] of Object.entries(obj as Record<string, unknown>)) {
-    if (!marks || typeof marks !== "object") continue;
-    const kept = Object.entries(marks as Record<string, unknown>).filter(
-      ([, at]) => typeof at === "string",
-    ) as [string, string][];
-    if (kept.length > 0) out[root] = Object.fromEntries(kept);
+  if (!isRecord(obj) || !("queues" in obj)) return EMPTY_MAILBOX;
+  const queues: Mailbox["queues"] = {};
+  if (isRecord(obj.queues)) {
+    for (const [root, events] of Object.entries(obj.queues)) {
+      if (!isRecord(events)) continue;
+      const kept: Record<string, MailboxFailure> = {};
+      for (const [log, ev] of Object.entries(events)) {
+        if (!isRecord(ev) || typeof ev.at !== "string" || typeof ev.hash !== "string" || typeof ev.reason !== "string") {
+          continue;
+        }
+        kept[log] = { at: ev.at, hash: ev.hash, reason: ev.reason, archived: typeof ev.archived === "string" ? ev.archived : null };
+      }
+      if (Object.keys(kept).length > 0) queues[root] = kept;
+    }
   }
-  return out;
+  const machine: Mailbox["machine"] = {};
+  if (isRecord(obj.machine)) {
+    for (const [to, ev] of Object.entries(obj.machine)) {
+      if (!isRecord(ev) || typeof ev.from !== "number" || typeof ev.kind !== "string") continue;
+      machine[to] = { from: ev.from, kind: ev.kind, archived: typeof ev.archived === "string" ? ev.archived : null };
+    }
+  }
+  return { queues, machine };
 }
 
-/** 실패 **하나**를 읽음으로 표시한다. 단위가 워커가 아니라 그 실패의 로그 파일명이라
- *  (`tick.sh:264`가 디스패치마다 새로 만든다) 읽음 처리한 뒤 새 `FAIL`이 오면 파일명이 달라
- *  항목이 다시 켜진다 — 워커로 잡으면 다음 사고까지 같이 묻힌다.
- *
- *  **쓸 때 신선도 창보다 오래된 항목을 버린다**(루트 전부에서). 그 실패는 이미 `lastFailure`에서
- *  빠졌으므로 마크가 가릴 것이 없다 — 파일이 안 자란다. 별도 만료 규칙이 없다: 읽음은 창과
- *  함께 죽는다.
- *
- *  ponytail: 읽은 것 위에 덮어쓴다(`saveSettings`와 같은 벌). 두 창이 동시에 누르면 뒤엣것이
- *  이겨 앞의 마크가 날아갈 수 있고 최악이 항목이 다시 보이는 것이라 락을 두지 않는다. */
-export async function markAlertsRead(
-  root: string,
-  failures: readonly Pick<WorkerFailure, "log" | "at">[],
-): Promise<void> {
-  const alerts = await readAlerts();
-  const marks = { ...alerts[root] };
-  for (const f of failures) marks[f.log] = f.at;
+/** 넘치면 이른 것부터 버린다(`at`/키 기준) — **보관 여부를 안 본다**(§0-10 §무한히 쌓이는 것,
+ *  안 그러면 안 보관한 것만으로 파일이 자라 상한이 상한이 아니게 된다). */
+function capByAge<V>(
+  events: Record<string, V>,
+  limit: number,
+  tsOf: (key: string, v: V) => number,
+): Record<string, V> {
+  const entries = Object.entries(events);
+  if (entries.length <= limit) return events;
+  entries.sort((a, b) => tsOf(a[0], a[1]) - tsOf(b[0], b[1]));
+  return Object.fromEntries(entries.slice(entries.length - limit));
+}
 
-  const now = Date.now();
-  // `at`은 runner.log가 쓴 `2026-07-31 18:09:49`다 — `failureOf`와 **같은 식으로** 판다.
-  const fresh = (at: string) => {
-    const ts = Date.parse(at.replace(" ", "T"));
-    return Number.isFinite(ts) && now - ts <= FRESH_MS;
-  };
-  const next: Alerts = {};
-  for (const [r, m] of Object.entries({ ...alerts, [root]: marks })) {
-    const kept = Object.entries(m).filter(([, at]) => fresh(at));
-    if (kept.length > 0) next[r] = Object.fromEntries(kept);
+/** 큐 루트당 ② 200건 + 머신 전체 ⑥ 200건(§0-10 §무한히 쌓이는 것). 파일을 통째로 다시 쓴다.
+ *
+ *  ponytail: 락을 두지 않는다(옛 `markAlertsRead`의 그 벌 그대로) — 두 창이 동시에 써도 최악이
+ *  방금 쓴 사건 하나가 날아가는 것이고, 그 사건은 판정 원본(`workers/logs/`·하트비트)에 아직
+ *  살아 있어 다음 호출에서 다시 적힌다. */
+export async function writeAlerts(mailbox: Mailbox): Promise<void> {
+  const queues: Mailbox["queues"] = {};
+  for (const [root, events] of Object.entries(mailbox.queues)) {
+    if (Object.keys(events).length === 0) continue;
+    queues[root] = capByAge(events, QUEUE_CAP, (_k, v) => Date.parse(v.at.replace(" ", "T")));
   }
-
+  const machine = capByAge(mailbox.machine, MACHINE_CAP, (key) => Number(key));
   const p = alertsPath();
   await mkdir(path.dirname(p), { recursive: true });
-  await writeFile(p, JSON.stringify(next, null, 2) + "\n", "utf8");
+  await writeFile(p, JSON.stringify({ queues, machine }, null, 2) + "\n", "utf8");
+}
+
+/** ②의 `보관`(§0-10 §보관 = 읽음이다) — 그 실패들의 `archived`에 시각을 적는다. 단위가
+ *  워커가 아니라 그 실패의 로그 파일명이라(`tick.sh:264`가 디스패치마다 새로 만든다) 보관한
+ *  뒤 새 `FAIL`이 오면 파일명이 달라 항목이 다시 켜진다 — 워커로 잡으면 다음 사고까지 같이
+ *  묻힌다. 큐 파일은 한 바이트도 안 바뀐다 — 적히는 사실은 *이 머신이 이 실패를 봤다*이다.
+ *
+ *  ponytail: 읽은 것 위에 덮어쓴다(`saveSettings`와 같은 벌) — 두 창이 동시에 누르면 뒤엣것이
+ *  이겨 앞의 보관이 날아갈 수 있고 최악이 항목이 다시 보이는 것이라 락을 두지 않는다. */
+export async function markAlertsRead(
+  root: string,
+  failures: readonly Pick<WorkerFailure, "log">[],
+): Promise<void> {
+  const alerts = await readAlerts();
+  const events = { ...alerts.queues[root] };
+  const now = new Date().toISOString();
+  for (const f of failures) if (events[f.log]) events[f.log] = { ...events[f.log], archived: now };
+  await writeAlerts({ ...alerts, queues: { ...alerts.queues, [root]: events } });
 }
 
 /** `owner:` → 워커 이름. tick.sh 207행이 `<페르소나> / <TICKET_NAME>-<sid[:8]>`를 쓰므로
@@ -1237,11 +1275,25 @@ export async function listWorkers(root: string, tickets: Ticket[] = []): Promise
     });
   }
 
-  // 판정 4단계 (§0-5 §읽음 처리). **살아 있는 실패가 0개면 `alerts.json`을 열지 않는다** —
-  // 정상 상태에서 이 파일을 여는 횟수가 0이다(§0-5 §비용의 그 셈 그대로).
+  // 판정 4단계 (§0-10 §받은 편지함 §쓰는 자리). **살아 있는 실패가 0개면 `alerts.json`을
+  // 열지 않는다** — 정상 상태에서 이 파일을 여는 횟수가 0이다(§0-5 §비용의 그 셈 그대로).
+  // 처음 보는 사건만 편지함에 적고(그 로그 파일명이 없을 때), 이미 보관된 사건은 화면에서 걷는다.
   if (out.some((w) => w.lastFailure)) {
-    const marks = (await readAlerts())[root] ?? {};
-    for (const w of out) if (w.lastFailure && marks[w.lastFailure.log]) w.lastFailure = null;
+    const alerts = await readAlerts();
+    const events = { ...alerts.queues[root] };
+    let added = false;
+    for (const w of out) {
+      if (!w.lastFailure) continue;
+      const existing = events[w.lastFailure.log];
+      if (existing) {
+        if (existing.archived) w.lastFailure = null;
+      } else {
+        const { at, hash, reason } = w.lastFailure;
+        events[w.lastFailure.log] = { at, hash, reason, archived: null };
+        added = true;
+      }
+    }
+    if (added) await writeAlerts({ ...alerts, queues: { ...alerts.queues, [root]: events } });
   }
 
   // tick.sh 39행: TICKET_CWD 줄이 없는 워커의 실효 cwd는 루트의 부모다(contextOf와 같은 기준).

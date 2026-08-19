@@ -496,12 +496,13 @@ export async function resetKeymapAction(id?: string): Promise<{ error?: string }
   return {};
 }
 
-/** 알림 ②의 `읽음으로 표시` (DESIGN.md §0-5 §읽음 처리). 그 순간 나열된 실패 **전부**를
- *  읽음으로 적는다 — 단위가 워커도 항목도 아니라 실패 하나고 키가 그 로그 파일명이다.
+/** 알림 ②의 `읽음으로 표시`(§0-10 §보관 = 읽음이다). 그 순간 나열된 실패 **전부**를
+ *  보관한다 — 단위가 워커도 항목도 아니라 실패 하나고 키가 그 로그 파일명이다.
  *
  *  **루트는 클라이언트가 안 보낸다.** 등록된 `id`로 레지스트리에서 찾고, 없으면 아무것도 안
  *  쓴다(셸 레이아웃의 `notFound()`와 같은 규칙 — 등록된 root가 이 앱의 권한 범위다).
- *  `log`·`at`은 파일 경로가 아니라 `alerts.json`의 키·값으로만 쓰인다(`lib/workers.ts`).
+ *  `log`는 파일 경로가 아니라 `alerts.json`의 키로만 쓰인다(`lib/workers.ts`). `at`은 여기서
+ *  안 쓴다 — 보관은 지금 살아 있는 값을 시각으로 덮어쓰는 것뿐이다.
  *
  *  **큐 파일은 한 바이트도 안 바뀐다** — 적히는 사실은 *큐가 나았다*가 아니라 *이 머신이 이
  *  실패를 봤다*이다(§0-5). 판정이 하나라 종 항목과 워커 화면(§4)의 사유 블록이 같이 걷힌다:
@@ -516,11 +517,12 @@ export async function markFailuresReadAction(
   revalidatePath("/", "layout");
 }
 
-/** 알림 ⑥의 `읽음으로 표시` (DESIGN.md §0-14 §읽음 처리). 화면이 그 순간 보인 이벤트의 `to`를
- *  모듈 메모리에 적는다 — 단위는 이벤트 하나(②처럼 프로젝트 루트를 넘기지 않는다. ⑥은 머신
- *  하나의 상태라 프로젝트 스코프가 아니다). `alerts.json` 무수정, 파일 0개. */
+/** 알림 ⑥의 `읽음으로 표시`(§0-10 §보관 = 읽음이다). 화면이 그 순간 보인 이벤트의 `to`를
+ *  보관한다 — 단위는 이벤트 하나(②처럼 프로젝트 루트를 넘기지 않는다. ⑥은 머신 하나의 상태라
+ *  프로젝트 스코프가 아니다). `alerts.json`에 적힌다 — §0-14의 옛 `파일 0개`는 §0-10 §저장이
+ *  뒤집었다(편지함은 판정의 창이 아니라 사건의 기록이다). */
 export async function markResumeReadAction(toMs: number): Promise<void> {
-  markResumeRead(toMs);
+  await markResumeRead(toMs);
   revalidatePath("/", "layout");
 }
 

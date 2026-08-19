@@ -660,7 +660,7 @@ test("lastFailure — 살아 있는 엔진 쿨다운이 신선도 창을 대신�
   assert.strictEqual((await listWorkers(root))[0].lastFailure, null);
 });
 
-// ── 읽음 처리 (§0-5 §읽음 처리) ─────────────────────────────────────────────
+// ── 받은 편지함 (§0-10 §받은 편지함) ─────────────────────────────────────────
 
 /** 워커마다 `FAIL` 한 줄 + 그 로그 파일 하나. 로그 파일명이 읽음의 **키**라 인자로 받는다. */
 function failRoot(specs: { name: string; log: string; minutesAgo?: number }[]): string {
@@ -684,7 +684,15 @@ function failRoot(specs: { name: string; log: string; minutesAgo?: number }[]): 
 const putAlerts = (obj: unknown) =>
   writeFileSync(alertsPath(), typeof obj === "string" ? obj : JSON.stringify(obj));
 
-test("읽음 처리 ① 표시한 실패는 `null`이다 — 다른 루트의 같은 파일명은 안 묻는다 (§0-5)", async () => {
+/** §0-10 §저장의 ② 사건 값 — `failRoot`가 만든 실패의 hash·reason과 맞춘다. */
+const mailboxFailure = (at: string, archived: string | null = null) => ({
+  at,
+  hash: "a1111111",
+  reason: LIMIT,
+  archived,
+});
+
+test("읽음 처리 ① 보관된 실패는 `null`이다 — 다른 루트의 같은 파일명은 안 묻는다 (§0-10)", async () => {
   const root = failRoot([{ name: "w1", log: "fail-w1.log" }]);
   const other = failRoot([{ name: "w1", log: "fail-w1.log" }]);
 
@@ -692,7 +700,7 @@ test("읽음 처리 ① 표시한 실패는 `null`이다 — 다른 루트의 �
   rmSync(alertsPath(), { force: true });
   assert.strictEqual((await listWorkers(root))[0].lastFailure?.log, "fail-w1.log");
 
-  putAlerts({ [root]: { "fail-w1.log": stamp(1) } });
+  putAlerts({ queues: { [root]: { "fail-w1.log": mailboxFailure(stamp(1), stamp(0)) } } });
   assert.strictEqual((await listWorkers(root))[0].lastFailure, null);
   // 루트로 한 겹 나누는 이유: 워커 이름도 로그 파일명 모양도 프로젝트끼리 겹친다.
   assert.strictEqual((await listWorkers(other))[0].lastFailure?.log, "fail-w1.log");
@@ -700,28 +708,24 @@ test("읽음 처리 ① 표시한 실패는 `null`이다 — 다른 루트의 �
 
 test("읽음 처리 ② 같은 워커라도 로그 파일명이 다른 실패는 안 묻힌다 (다음 사고가 다시 켜진다)", async () => {
   const root = failRoot([{ name: "w1", log: "fail-w1-new.log" }]);
-  putAlerts({ [root]: { "fail-w1-old.log": stamp(1) } }); // 앞 사고를 읽음으로 표시해 둔 상태
+  // 앞 사고는 보관된 상태
+  putAlerts({ queues: { [root]: { "fail-w1-old.log": mailboxFailure(stamp(10), stamp(1)) } } });
   const w = (await listWorkers(root))[0];
   assert.strictEqual(w.lastFailure?.log, "fail-w1-new.log");
 });
 
-test("읽음 처리 ③ 쓸 때 신선도 창(10분)이 지난 마크를 버린다 — 파일이 안 자란다", async () => {
+test("읽음 처리 ③ 옛 모양(최상위가 절대경로 맵) 파일은 안 읽는다 — 마이그레이션 0줄 (§0-10 §저장)", async () => {
   const root = failRoot([{ name: "w1", log: "fail-w1.log" }]);
-  const old = "/다른/큐/.dira";
-  const lessStale = stamp(9); // 한 번만 만든다 — 픽스처와 단언에서 따로 부르면 초가 넘어갈 때 어긋난다
-  putAlerts({
-    [root]: { "지난-사고.log": stamp(20), "덜-지난-사고.log": lessStale },
-    [old]: { "남의-지난-사고.log": stamp(30) }, // 마크가 전부 죽은 루트는 키째 사라진다
-  });
+  // 완전히 유효한 옛 값(시각 문자열)이어도 최상위에 `queues`가 없으면 빈 편지함으로 시작한다.
+  putAlerts({ [root]: { "fail-w1.log": stamp(1) } });
+  assert.strictEqual((await listWorkers(root))[0].lastFailure?.log, "fail-w1.log");
 
-  const at = stamp(0);
-  await markAlertsRead(root, [{ log: "fail-w1.log", at }]);
-
-  assert.deepStrictEqual(JSON.parse(readFileSync(alertsPath(), "utf8")), {
-    [root]: { "덜-지난-사고.log": lessStale, "fail-w1.log": at },
-  });
-  // 방금 쓴 마크가 실제로 판정을 걷는다(파일 모양만 맞고 판정이 안 붙는 길을 닫는다).
-  assert.strictEqual((await listWorkers(root))[0].lastFailure, null);
+  // 다음 쓰기에서 파일이 새 모양(`queues`·`machine` 두 칸)이 된다.
+  await markAlertsRead(root, []);
+  assert.deepStrictEqual(
+    Object.keys(JSON.parse(readFileSync(alertsPath(), "utf8"))).sort(),
+    ["machine", "queues"],
+  );
 });
 
 test("읽음 처리 ④ 파일이 없거나 JSON이 아니면 읽음 0개다 (실패를 지어내지도 숨기지도 않는다)", async () => {
@@ -736,6 +740,23 @@ test("읽음 처리 ④ 파일이 없거나 JSON이 아니면 읽음 0개다 (�
     put();
     assert.strictEqual((await listWorkers(root))[0].lastFailure?.log, "fail-w1.log");
   }
+});
+
+test("읽음 처리 ⑤ 상한 — 큐 루트당 200건, 넘치면 `at`이 이른 것부터 버린다 (§0-10 §무한히 쌓이는 것)", async () => {
+  const root = failRoot([{ name: "w1", log: "fail-w1.log" }]);
+  const events: Record<string, ReturnType<typeof mailboxFailure>> = {};
+  // i가 클수록 `stamp(1000 - i)`가 더 최근이다 — old-0이 가장 오래됐다.
+  for (let i = 0; i < 250; i++) events[`old-${i}.log`] = mailboxFailure(stamp(1000 - i));
+  putAlerts({ queues: { [root]: events } });
+
+  await markAlertsRead(root, []); // 아무것도 안 바뀌어도 쓰기는 상한을 적용한다
+  const kept = Object.keys(JSON.parse(readFileSync(alertsPath(), "utf8")).queues[root]);
+  assert.strictEqual(kept.length, 200);
+  // 버려진 50개는 가장 오래된 것들(old-0..old-49)이다 — 보관 여부를 안 본다.
+  assert.deepStrictEqual(
+    kept.sort(),
+    Array.from({ length: 200 }, (_, i) => `old-${i + 50}.log`).sort(),
+  );
 });
 
 /** 주어진 경로를 **실제로 여는 횟수**를 센다. "정상 상태의 새 I/O가 0"은 눈으로 못 맞춘다.

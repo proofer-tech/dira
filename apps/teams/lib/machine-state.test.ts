@@ -1,5 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import {
   FRESHNESS_MS,
   GAP_THRESHOLD_MS,
@@ -8,13 +11,20 @@ import {
   filterRead,
   isFresh,
   isReachable,
+  markResumeRead,
   mergeResume,
   nextOffline,
   powerOffGap,
+  recordResumeEvent,
   sleepGap,
   startHeartbeat,
   type ResumeEvent,
 } from "./machine-state.ts";
+import { alertsPath } from "./workers.ts";
+
+// 진짜 `~/.config/dira/alerts.json`을 밟지 않는다(§0-10 §저장) — `recordResumeEvent`·
+// `markResumeRead`가 파일 I/O를 하므로 이 테스트만의 디렉터리로 가둔다.
+process.env.TICKET_LOCAL = mkdtempSync(path.join(tmpdir(), "mst-local-"));
 
 test("판정 1 파싱 — 온라인 실측 문자열은 Reachable, 오프라인은 그 낱말이 없다", () => {
   // 이 세션은 이 머신의 실제 scutil -r 출력을 그대로 썼다: `Reachable,Transient Connection`.
@@ -92,4 +102,43 @@ test("핫리로드 가드 — 두 번째 startHeartbeat는 새 타이머를 안 
     if (g.__diraMachineTimer) clearInterval(g.__diraMachineTimer);
     delete g.__diraMachineTimer;
   }
+});
+
+// ── 받은 편지함 (§0-10 §받은 편지함) — ⑥의 저장이 파일로 내려온다 ────────────
+
+test("recordResumeEvent — 병합으로 to가 자라면 편지함에 새 줄이 선다 (§0-10 §쓰는 자리)", async () => {
+  rmSync(alertsPath(), { force: true });
+  const first: ResumeEvent = { from: 0, to: 100_000, kind: "slept" };
+  await recordResumeEvent(first);
+  const grown: ResumeEvent = { from: 0, to: 200_000, kind: "slept" }; // mergeResume이 낼 모양
+  await recordResumeEvent(grown);
+
+  const written = JSON.parse(readFileSync(alertsPath(), "utf8"));
+  assert.deepStrictEqual(written.machine["100000"], { from: 0, kind: "slept", archived: null });
+  assert.deepStrictEqual(written.machine["200000"], { from: 0, kind: "slept", archived: null });
+});
+
+test("markResumeRead — 그 `to`의 사건에 archived 시각을 적는다 (§0-10 §보관 = 읽음이다)", async () => {
+  rmSync(alertsPath(), { force: true });
+  const ev: ResumeEvent = { from: 0, to: 300_000, kind: "poweredOff" };
+  await recordResumeEvent(ev);
+
+  await markResumeRead(300_000);
+  const written = JSON.parse(readFileSync(alertsPath(), "utf8"));
+  assert.equal(typeof written.machine["300000"].archived, "string");
+
+  // 편지함에 없는 `to`(상한에 밀렸거나 아직 하트비트가 안 적은 사건)는 조용히 넘어간다.
+  await assert.doesNotReject(markResumeRead(999_999));
+});
+
+test("recordResumeEvent — 머신 전체 상한 200건, 넘치면 `to`가 이른 것부터 버린다 (§0-10 §무한히 쌓이는 것)", async () => {
+  rmSync(alertsPath(), { force: true });
+  for (let i = 0; i < 205; i++) await recordResumeEvent({ from: i, to: 1000 + i, kind: "slept" });
+
+  const written = JSON.parse(readFileSync(alertsPath(), "utf8"));
+  const keys = Object.keys(written.machine)
+    .map(Number)
+    .sort((a, b) => a - b);
+  assert.strictEqual(keys.length, 200);
+  assert.strictEqual(keys[0], 1005); // 가장 이른 5개(1000..1004)가 버려졌다
 });
