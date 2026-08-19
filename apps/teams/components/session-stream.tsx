@@ -940,7 +940,14 @@ function Row({
   e: StreamEvent;
   onToggle: (ev: React.SyntheticEvent<HTMLDetailsElement>) => void;
 }) {
-  const summary = e.sidechain ? `서브 · ${e.summary}` : e.summary;
+  const t = useT();
+  // 오류 표식(§비주얼 §60) — `MarkerContent` 첫머리 텍스트 마커. `서브`가 출처, `오류`가 성질이라
+  // 순서가 `서브 · 오류 · <요약>`이다(§60 ⑤). 표식 낱말만 `text-foreground`, 나머지는 Marker
+  // 기본값 `text-muted-foreground` 그대로 — 색이 아니라 밝기로 갈린다(§60 ②).
+  const errorLabel = e.error ? t("progress.stream.error") : null;
+  const summary = [e.sidechain ? "서브" : null, errorLabel, e.summary]
+    .filter((s) => s !== null)
+    .join(" · ");
   // 시각·도구명은 `shrink-0`이라, 줄이 넘칠 때 줄어드는 칸은 `MarkerContent` 하나다
   // (그 `min-w-0`이 종전 `minmax(0,1fr)`가 하던 일이다).
   const cells = (
@@ -955,7 +962,15 @@ function Row({
         {e.label}
       </span>
       <MarkerContent className={cn("truncate", e.summaryMono && "font-mono")} title={summary}>
-        {summary}
+        {errorLabel ? (
+          <>
+            {e.sidechain ? "서브 · " : null}
+            <span className="text-foreground">{errorLabel}</span>
+            {` · ${e.summary}`}
+          </>
+        ) : (
+          summary
+        )}
       </MarkerContent>
     </>
   );

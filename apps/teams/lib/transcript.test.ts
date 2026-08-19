@@ -506,6 +506,54 @@ test("사건 매핑 — tool_result의 블록 배열도 접힌다 (실측: text�
   assert.equal(e.summary, "3줄");
 });
 
+test("사건 매핑 — is_error가 오류 판정의 유일한 근거다 (§2-12 ② ⑨-1)", () => {
+  const result = (is_error?: unknown, content: unknown = "출력") =>
+    recordToEvents(
+      JSON.parse(
+        rec({
+          type: "user",
+          uuid: "u-e",
+          timestamp: "2026-08-19T00:00:00.000Z",
+          message: {
+            role: "user",
+            content: [
+              { type: "tool_result", content, ...(is_error === undefined ? {} : { is_error }) },
+            ],
+          },
+        }).trim(),
+      ),
+    )[0];
+
+  assert.equal(result(true).error, true); // is_error: true면 오류다
+  assert.equal(result(false).error, undefined); // is_error: false면 아니다
+  assert.equal(result(undefined).error, undefined); // 키가 없으면 아니다
+  assert.equal(result(true, [{ type: "text", text: "본문" }]).error, true); // content가 블록 배열인 오류도 오류다
+  // 문자열을 안 읽는다는 판정의 회귀 가드 — `Exit code 1`이 첫 줄이어도 is_error가 없으면 아니다
+  assert.equal(result(undefined, "Exit code 1\n실패").error, undefined);
+});
+
+test("사건 매핑 — 오류는 tool_result 사건에만 서고 짝인 tool_use에는 안 선다 (§2-12 ⑨-2)", () => {
+  const [toolUse] = recordToEvents(
+    JSON.parse(
+      assistant([
+        { type: "tool_use", name: "Bash", input: { command: "false", description: "실패하는 명령" } },
+      ]).trim(),
+    ),
+  );
+  const [toolResult] = recordToEvents(
+    JSON.parse(
+      rec({
+        type: "user",
+        uuid: "u-e2",
+        timestamp: "2026-08-19T00:00:01.000Z",
+        message: { role: "user", content: [{ type: "tool_result", content: "실패", is_error: true }] },
+      }).trim(),
+    ),
+  );
+  assert.equal(toolUse.error, undefined);
+  assert.equal(toolResult.error, true);
+});
+
 test("사건 매핑 — assistant text는 접히지 않는다(label이 비어 있다)", () => {
   const [e] = recordToEvents(JSON.parse(assistant([{ type: "text", text: "I'll start." }]).trim()));
   assert.deepEqual([e.kind, e.label, e.summary, e.body], ["text", "", "", "I'll start."]);

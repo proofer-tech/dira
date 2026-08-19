@@ -36,6 +36,10 @@ export type StreamEvent = {
   // 키 자체가 없다. `undefined`로 채우면 골든 테스트의 `deepEqual`이 키 유무로 갈린다.
   diff?: DiffLine[];
   replaceAll?: boolean; // `diff`가 있을 때만 뜻이 있다 — `replace_all: true`
+  // `tool_result` 블록의 `is_error === true`(§2-12 ②) — 그 값 하나만 본다. `content` 문자열도
+  // 종료 코드도 안 읽는다. 짝인 `tool_use`에는 안 선다. `undefined`로 채우면 골든 테스트의
+  // `deepEqual`이 키 유무로 갈린다(`diff`와 같은 이유).
+  error?: true;
 };
 
 /** §경로 방어. `session_id`는 사람 입력이 아니라 티켓 fm에서만 오고, 경로가 되기 전에 이걸 통과한다.
@@ -430,6 +434,7 @@ type Block = {
   tool_name?: string;
   input?: unknown;
   content?: unknown;
+  is_error?: unknown;
 };
 
 /** 레코드 하나 → 사건 0..n개 (§2-1 표). assistant 한 레코드가 thinking+text+tool_use를 함께 담는다.
@@ -551,7 +556,13 @@ export function recordToEvents(rec: unknown, collapseFirstPrompt = false): Strea
       }
       case "tool_result": {
         const body = resultText(b.content);
-        push(i, { kind: "tool_result", label: "결과", summary: `${lines(body)}줄`, body });
+        push(i, {
+          kind: "tool_result",
+          label: "결과",
+          summary: `${lines(body)}줄`,
+          body,
+          ...(b.is_error === true ? { error: true } : {}),
+        });
         break;
       }
       // 모르는 블록(`image` 등)은 조용히 건너뛴다
