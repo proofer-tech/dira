@@ -11,11 +11,17 @@
 import { revalidatePath } from "next/cache";
 import {
   createPersona,
+  createSquad,
   deletePersona,
+  deleteSquad,
   getProject,
+  personaNames,
   resolveConfig,
+  saveSquadMembers,
   savePersona,
   setPersonaColor,
+  squadNames,
+  squadsDir,
 } from "@/lib/projects";
 import {
   deletePersonaMemory,
@@ -50,6 +56,13 @@ async function personasDir(projectId: string): Promise<string> {
   return (await resolveConfig(project)).personas;
 }
 
+/** 스쿼드 디렉터리 — `ontologyDir`과 같은 근거로 워커 재정의를 안 연다(§5-5 §값). */
+async function squadsDirFor(projectId: string): Promise<string> {
+  const project = await getProject(projectId);
+  if (!project) throw new Error(`등록되지 않은 프로젝트입니다: ${projectId}`);
+  return squadsDir(project);
+}
+
 function fail(e: unknown): PersonaResult {
   return { ok: false, message: (e as Error).message };
 }
@@ -70,7 +83,51 @@ export async function savePersonaAction(
 
 export async function createPersonaAction(projectId: string, name: string): Promise<PersonaResult> {
   try {
-    await createPersona(await personasDir(projectId), name.trim());
+    const trimmed = name.trim();
+    // 스쿼드와 한 이름공간이다(§5-5 §값) — 겹치면 §할당 입구 둘에서 항목이 구별되지 않는다.
+    const squads = await squadNames(await squadsDirFor(projectId));
+    if (squads.includes(trimmed)) throw new Error(`이미 있는 스쿼드 이름입니다: ${trimmed}`);
+    await createPersona(await personasDir(projectId), trimmed);
+    revalidatePath(`/p/${projectId}/personas`);
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** 스쿼드 생성(DESIGN.md §5-5). 페르소나와 한 이름공간이라 겹치면 거부한다 — `NAME_RE` 검사가
+ *  이미 서 있는 그 자리에 목록 조회 한 번이 는다(§5-5 §값). */
+export async function createSquadAction(projectId: string, name: string): Promise<PersonaResult> {
+  try {
+    const trimmed = name.trim();
+    const personas = await personaNames(await personasDir(projectId));
+    if (personas.includes(trimmed)) throw new Error(`이미 있는 페르소나 이름입니다: ${trimmed}`);
+    await createSquad(await squadsDirFor(projectId), trimmed);
+    revalidatePath(`/p/${projectId}/personas`);
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** 멤버 저장(DESIGN.md §5-5 §화면) — 고른 이름을 목록 순서로 한 줄씩, 0개면 빈 파일. */
+export async function saveSquadMembersAction(
+  projectId: string,
+  name: string,
+  members: string[],
+): Promise<PersonaResult> {
+  try {
+    await saveSquadMembers(await squadsDirFor(projectId), name, members);
+    revalidatePath(`/p/${projectId}/personas`);
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function deleteSquadAction(projectId: string, name: string): Promise<PersonaResult> {
+  try {
+    await deleteSquad(await squadsDirFor(projectId), name);
     revalidatePath(`/p/${projectId}/personas`);
     return { ok: true };
   } catch (e) {

@@ -20,7 +20,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { listTickets } from "@/lib/queue";
 import { decodeHash } from "@/lib/urls";
-import { getProject, listPersonas, resolveConfig, usingDefault } from "@/lib/projects";
+import { getProject, listPersonas, listSquads, resolveConfig, squadsDir, usingDefault } from "@/lib/projects";
 import {
   claudeConfigDir,
   listInstalledSkills,
@@ -52,11 +52,20 @@ export default async function Personas({
   // 후보 목록(이 머신)은 페르소나 수와 무관하게 한 번이다.
   // 워커 목록도 같은 렌더에 실린다 — 엔진 미지정 힌트(§23 §개정)가 그 실효값을 여기서 읽는다.
   // `holding`은 이 힌트에 안 쓰이므로 티켓을 안 넘긴다(listWorkers 기본값 그대로).
-  const [personas, installed, workers] = await Promise.all([
+  // 스쿼드(§5-5)는 같은 렌더에 실린다 — 페르소나 목록과 같은 왕복이어야 "프로필 없는 멤버"
+  // 표식이 그 자리에서 바로 갈린다(스쿼드 후보 수와 무관하게 이 화면 렌더 한 번에 한다).
+  const [personas, installed, workers, squadList] = await Promise.all([
     listPersonas(config.personas, tickets),
     listInstalledSkills(),
     listWorkers(project.root),
+    listSquads(squadsDir(project)),
   ]);
+  const squads = squadList.map((s) => ({
+    ...s,
+    // §5-5 §프로필-스쿼드가 없는 것은 경고다 — 이름이 personas 디렉터리에 없거나 PROFILE.md가
+    // 없으면(body === null) "프로필 없다"는 하나의 사실이다.
+    missingProfile: s.members.some((m) => !personas.some((p) => p.name === m && p.body !== null)),
+  }));
   const engineHint = personaEngineHint(workers.map((w) => w.engine));
   const rows = await Promise.all(
     personas.map(async (p) => {
@@ -137,6 +146,7 @@ export default async function Personas({
           // 안 맞는 값 하나로 같은 사유가 뜬다(§5 §선택이 경로에 담긴다).
           initial={persona?.map(decodeHash).join("/") ?? null}
           rows={rows}
+          squads={squads}
           colors={project.personaColors ?? {}}
           installed={installed}
           configDir={claudeConfigDir()}

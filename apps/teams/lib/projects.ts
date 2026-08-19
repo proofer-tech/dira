@@ -691,3 +691,77 @@ export async function deletePersona(dir: string, name: string): Promise<void> {
   const file = await profilePath(dir, name);
   await rm(path.dirname(file), { recursive: true, force: true });
 }
+
+// ── 스쿼드 (DESIGN.md §5-5) ─────────────────────────────────────────────────
+// `<root>/squads/<이름>/members` — `personas/`의 형제, 큐의 다섯째 사이드카.
+// `ontologyDir`과 같은 근거로 새 환경변수가 없다(워커 재정의를 안 연다) — 스캐폴딩도 안 한다,
+// 첫 스쿼드를 만드는 순간 이 함수들이 `mkdir`한다.
+
+export type Squad = {
+  name: string;
+  /** `members` 파일 한 줄에 하나. 파서를 안 만든다 — 줄마다 trim, 빈 줄은 버린다(§5-5 §값) */
+  members: string[];
+};
+
+export function squadsDir(project: Pick<Project, "root">): string {
+  return path.join(project.root, "squads");
+}
+
+/** 이름 검증 + 경로 조립은 페르소나와 같은 규칙이다(`NAME_RE` — 엔진이 이 값으로 경로를 만든다).
+ *  이름공간이 페르소나와 겹치는지는 여기서 안 본다 — 호출부(Server Action)가 양쪽 디렉터리를
+ *  같이 들고 있어야 판정할 수 있다. */
+async function squadMembersPath(dir: string, name: string): Promise<string> {
+  if (!NAME_RE.test(name)) {
+    throw new Error(
+      `스쿼드 이름은 영문·숫자·_·- 만 됩니다: ${name || "(비어 있음)"} — 엔진이 이 이름으로 <squads>/<이름>/members 경로를 만듭니다.`,
+    );
+  }
+  return resolveWithin(dir, path.join(name, "members"));
+}
+
+export async function squadNames(dir: string): Promise<string[]> {
+  const ents = await readdir(dir, { withFileTypes: true }).catch(() => []);
+  return ents
+    .filter((e) => e.isDirectory() && NAME_RE.test(e.name))
+    .map((e) => e.name)
+    .sort();
+}
+
+async function readSquadMembers(dir: string, name: string): Promise<string[]> {
+  const file = await squadMembersPath(dir, name);
+  const text = await readFile(file, "utf8").catch(() => "");
+  return text
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l !== "");
+}
+
+export async function listSquads(dir: string): Promise<Squad[]> {
+  return Promise.all(
+    (await squadNames(dir)).map(async (name) => ({ name, members: await readSquadMembers(dir, name) })),
+  );
+}
+
+/** 생성은 `O_EXCL`(빈 `members` 파일) — `createPersona`와 같은 이유(이미 있는 스쿼드를 조용히
+ *  덮지 않는다). 이름이 페르소나와 겹치는지는 호출부가 먼저 거부한다(§5-5 §값 — 한 이름공간). */
+export async function createSquad(dir: string, name: string): Promise<string> {
+  await mkdir(expandHome(dir), { recursive: true });
+  const file = await squadMembersPath(dir, name);
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(file, "", { flag: "wx" });
+  return file;
+}
+
+/** 저장. 문법은 스킬 사이드카와 같다(`items.join("\n") + "\n"`) — 0개면 빈 파일이다(§5-5 §값:
+ *  파서가 없어 빈 파일도 "멤버 0"으로 그냥 읽힌다). */
+export async function saveSquadMembers(dir: string, name: string, members: string[]): Promise<void> {
+  const file = await squadMembersPath(dir, name);
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(file, members.length > 0 ? members.join("\n") + "\n" : "", "utf8");
+}
+
+/** 디렉터리째 지운다 — `deletePersona`와 같다. */
+export async function deleteSquad(dir: string, name: string): Promise<void> {
+  const file = await squadMembersPath(dir, name);
+  await rm(path.dirname(file), { recursive: true, force: true });
+}

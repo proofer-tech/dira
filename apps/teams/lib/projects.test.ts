@@ -11,10 +11,13 @@ process.env.TICKET_LOCAL = LOCAL;
 const {
   addProject,
   createPersona,
+  createSquad,
   deletePersona,
+  deleteSquad,
   getProject,
   isMultiTokenAllowed,
   listPersonas,
+  listSquads,
   multiplayPath,
   multitokenPath,
   readMultiplay,
@@ -22,11 +25,14 @@ const {
   readProjects,
   registryPath,
   removeProject,
+  saveSquadMembers,
   savePersona,
   setMultiplayEnabled,
   setMultitoken,
   setPersonaColor,
   slugify,
+  squadNames,
+  squadsDir,
   renameProject,
   reorderProjects,
   resolveConfig,
@@ -525,6 +531,63 @@ test("페르소나 — 이름 규칙과 심링크 탈출은 서버에서 거부�
   await assert.rejects(() => savePersona(dir, "evil", "덮어쓰기"), /기준 디렉터리 밖이다/);
   await assert.rejects(() => deletePersona(dir, "evil"), /기준 디렉터리 밖이다/);
   assert.strictEqual(readFileSync(path.join(secret, "PROFILE.md"), "utf8"), "남의 파일\n");
+});
+
+test("스쿼드 — 목록·생성·저장·삭제, 새 환경변수 없이 root/squads (DESIGN.md §5-5)", async () => {
+  const root = newQueue({ "w1.sh": "" });
+  const dir = squadsDir({ root });
+  assert.strictEqual(dir, path.join(root, "squads")); // TICKET_SQUADS 같은 재정의가 없다
+
+  // 첫 스쿼드를 만들기 전에는 squads/가 없는 게 기본이다 — 목록은 빈 배열이지 예외가 아니다
+  assert.deepStrictEqual(await squadNames(dir), []);
+  assert.deepStrictEqual(await listSquads(dir), []);
+
+  await createSquad(dir, "frontend");
+  assert.strictEqual(readFileSync(path.join(dir, "frontend", "members"), "utf8"), ""); // 빈 파일
+  await assert.rejects(() => createSquad(dir, "frontend"), /EEXIST/); // O_EXCL
+
+  // 저장 — 목록 순서로 한 줄씩, 끝에 개행 하나(§5-1 사이드카와 같은 문법)
+  await saveSquadMembers(dir, "frontend", ["developer", "designer"]);
+  assert.strictEqual(
+    readFileSync(path.join(dir, "frontend", "members"), "utf8"),
+    "developer\ndesigner\n",
+  );
+  assert.deepStrictEqual(await squadNames(dir), ["frontend"]);
+  assert.deepStrictEqual(await listSquads(dir), [
+    { name: "frontend", members: ["developer", "designer"] },
+  ]);
+
+  // 파서를 안 만든다 — 양끝 공백과 빈 줄은 손으로 쓴 파일에서도 버려진다
+  writeFileSync(path.join(dir, "frontend", "members"), "  developer  \n\nqa\n");
+  assert.deepStrictEqual(await listSquads(dir), [{ name: "frontend", members: ["developer", "qa"] }]);
+
+  // 0개로 저장하면 빈 파일 — "멤버 0"으로 그냥 읽힌다
+  await saveSquadMembers(dir, "frontend", []);
+  assert.strictEqual(readFileSync(path.join(dir, "frontend", "members"), "utf8"), "");
+  assert.deepStrictEqual(await listSquads(dir), [{ name: "frontend", members: [] }]);
+
+  await deleteSquad(dir, "frontend");
+  assert.strictEqual(existsSync(path.join(dir, "frontend")), false);
+});
+
+test("스쿼드 — 이름 규칙과 심링크 탈출은 서버에서 거부한다", async () => {
+  const root = newQueue({ "w1.sh": "" });
+  const dir = squadsDir({ root });
+  mkdirSync(dir, { recursive: true });
+  const secret = mkdtempSync(path.join(tmpdir(), "fst-secret-"));
+  roots.push(secret);
+  writeFileSync(path.join(secret, "members"), "남의 파일\n");
+
+  for (const bad of ["../../.ssh", "..", "a/b", "", "이름", "a b"]) {
+    await assert.rejects(() => createSquad(dir, bad), /영문·숫자·_·- 만 됩니다/);
+    await assert.rejects(() => saveSquadMembers(dir, bad, ["x"]), /영문·숫자·_·- 만 됩니다/);
+    await assert.rejects(() => deleteSquad(dir, bad), /영문·숫자·_·- 만 됩니다/);
+  }
+
+  symlinkSync(secret, path.join(dir, "evil"));
+  await assert.rejects(() => saveSquadMembers(dir, "evil", ["x"]), /기준 디렉터리 밖이다/);
+  await assert.rejects(() => deleteSquad(dir, "evil"), /기준 디렉터리 밖이다/);
+  assert.strictEqual(readFileSync(path.join(secret, "members"), "utf8"), "남의 파일\n");
 });
 
 test("readSummary — 연결됨은 카운트, 연결 안 됨은 사유 원문 + 카운트 없음", async () => {

@@ -9,13 +9,16 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { Check, ChevronDown, ChevronRight, Trash2, TriangleAlert } from "lucide-react";
 import {
   createPersonaAction,
+  createSquadAction,
   deletePersonaAction,
   deletePersonaMemoryAction,
+  deleteSquadAction,
   installSkillAction,
   savePersonaAction,
   savePersonaEngineAction,
   savePersonaLimitAction,
   savePersonaSkillsAction,
+  saveSquadMembersAction,
   setPersonaColorAction,
   type PersonaResult,
 } from "@/app/(app)/p/[project]/personas/actions";
@@ -71,6 +74,7 @@ import {
   Sidebar,
   SidebarContent,
   SidebarGroup,
+  SidebarGroupLabel,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
@@ -107,6 +111,16 @@ export type PersonaRow = {
   /** `engine` 사이드카의 값(§제약 1 §결정 기록 §열한 번째). `null` = 파일 없음·모양이 다름 =
    *  **지정 없음**(그 페르소나는 워커 자신의 엔진을 쓴다). `limit`과 같은 이유로 자수에 안 더한다 */
   engine: PersonaEngineValue;
+};
+
+/** 서버가 읽어 넘긴 스쿼드 한 항목(DESIGN.md §5-5). 색·자수·스킬·메모리·상한이 **없다** —
+ *  스쿼드는 후보 풀이지 프로필을 든 신원이 아니다. */
+export type SquadRow = {
+  name: string;
+  /** `squads/<이름>/members` 한 줄에 하나. 저장된 값 그대로다 */
+  members: string[];
+  /** 멤버 중 `personas/`에 `PROFILE.md`가 없는 이름이 있다(§5-5 §경고) */
+  missingProfile: boolean;
 };
 
 /** §6 에러 3요소 중 1·2번. 사유는 원문 그대로 — 삼키지 않는다. */
@@ -208,8 +222,13 @@ function ColorPicker({
 
 // ── 생성 ────────────────────────────────────────────────────────────────────
 
+type CreateKind = "persona" | "squad";
+
 /** 이름 규칙은 **서버가** 판정한다(`tickets.py PERSONA_RE`와 같은 규칙). 여기서 미리 막지 않는
- *  이유: 클라이언트 검증은 검증이 아니고, 규칙이 두 군데 있으면 갈린다. 대신 사유를 그 자리에 띄운다. */
+ *  이유: 클라이언트 검증은 검증이 아니고, 규칙이 두 군데 있으면 갈린다. 대신 사유를 그 자리에 띄운다.
+ *
+ *  **만들기 입구는 하나다**(§5-5 §화면) — 종류 칸(`페르소나`/`스쿼드`) 하나가 늘었을 뿐, 다이얼로그도
+ *  트리거도 이 하나뿐이다. 이름이 페르소나·스쿼드 한 이름공간이라 겹치면 서버가 거부한다. */
 export function CreatePersonaButton({
   projectId,
   variant,
@@ -218,6 +237,7 @@ export function CreatePersonaButton({
   variant?: "default" | "outline";
 }) {
   const [open, setOpen] = useState(false);
+  const [kind, setKind] = useState<CreateKind>("persona");
   const [name, setName] = useState("");
   const [result, setResult] = useState<PersonaResult | null>(null);
   const [pending, start] = useTransition();
@@ -228,34 +248,64 @@ export function CreatePersonaButton({
       onOpenChange={(o) => {
         setOpen(o);
         if (!o) {
+          setKind("persona");
           setName("");
           setResult(null);
         }
       }}
     >
-      <DialogTrigger render={<Button size="sm" variant={variant} />}>페르소나 생성</DialogTrigger>
+      <DialogTrigger render={<Button size="sm" variant={variant} />}>만들기</DialogTrigger>
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle>페르소나 생성</DialogTitle>
+          <DialogTitle>{kind === "persona" ? "페르소나 생성" : "스쿼드 생성"}</DialogTitle>
           <DialogDescription>
-            티켓의 <span className="font-mono text-xs">persona:</span> 값이 곧 디렉터리 이름입니다.
-            프로필 본문은 세션 프롬프트 머리에 인라인됩니다.
+            {kind === "persona" ? (
+              <>
+                티켓의 <span className="font-mono text-xs">persona:</span> 값이 곧 디렉터리
+                이름입니다. 프로필 본문은 세션 프롬프트 머리에 인라인됩니다.
+              </>
+            ) : (
+              <>
+                프로필이 있는 페르소나를 후보 풀로 묶습니다 — 티켓의{" "}
+                <span className="font-mono text-xs">squad:</span> 값이 되고, 디스패치가 그중
+                진행중이 가장 적은 하나를 고릅니다. 리더도 위임도 아닙니다.
+              </>
+            )}
           </DialogDescription>
         </DialogHeader>
+        <div className="space-y-2">
+          <Label htmlFor="create-kind">종류</Label>
+          <Select value={kind} onValueChange={(v) => setKind(v as CreateKind)}>
+            <SelectTrigger id="create-kind" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="persona">페르소나</SelectItem>
+              <SelectItem value="squad">스쿼드</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
         <div className="space-y-2">
           <Label htmlFor="persona-name">이름</Label>
           <Input
             id="persona-name"
             className="font-mono"
-            placeholder="developer"
+            placeholder={kind === "persona" ? "developer" : "frontend"}
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
           <p className="text-xs text-muted-foreground">
-            영문·숫자·_·-. 파일은 &lt;personas&gt;/&lt;이름&gt;/PROFILE.md 가 됩니다
+            영문·숫자·_·-.{" "}
+            {kind === "persona"
+              ? "파일은 <personas>/<이름>/PROFILE.md 가 됩니다"
+              : "파일은 <squads>/<이름>/members 가 됩니다"}
+            . 페르소나와 스쿼드는 이름을 공유합니다 — 겹치면 거부됩니다
           </p>
           {result?.message && (
-            <Failure title="페르소나를 만들지 못했습니다" message={result.message} />
+            <Failure
+              title={kind === "persona" ? "페르소나를 만들지 못했습니다" : "스쿼드를 만들지 못했습니다"}
+              message={result.message}
+            />
           )}
         </div>
         <DialogFooter>
@@ -264,7 +314,10 @@ export function CreatePersonaButton({
             disabled={pending || !name.trim()}
             onClick={() =>
               start(async () => {
-                const r = await createPersonaAction(projectId, name);
+                const r =
+                  kind === "persona"
+                    ? await createPersonaAction(projectId, name)
+                    : await createSquadAction(projectId, name);
                 setResult(r);
                 if (r.ok) setOpen(false);
               })
@@ -343,10 +396,25 @@ const editChars = (e: PersonaEdit) =>
  *  언마운트돼 저장 안 한 편집이 사라진다(그 못은 그대로 선다. 뽑은 것은 *딥링크 경로가 없다*는
  *  근거뿐이다). native History API는 Next 16이 그대로 받아서 `usePathname()`은 따라오고 서버
  *  왕복은 없다. `?persona=` 쿼리는 안 만든다 — 값이 두 벌이 된다. */
+/** 스쿼드 오른쪽 칸의 편집 상태 — 페르소나의 `PersonaEdit`과 같은 이유로 `PersonasPane`이
+ *  든다(§5-5 §화면 "미저장 멤버 변경도 다른 줄을 고르는 동안 살아 있다" = §5 그대로). */
+type SquadEdit = {
+  /** 파일에 저장된 값(서버가 되읽어 준 것) */
+  saved: string[];
+  /** 체크한 이름들의 초안. 순서는 저장이 다시 정하므로(화면 목록 순서) 여기서는 뜻이 없다 */
+  picked: string[];
+};
+
+const initialSquadEdit = (row: SquadRow): SquadEdit => ({ saved: row.members, picked: row.members });
+
+/** 순서 없이 집합으로 비교한다 — 멤버 순서는 사람이 정하는 값이 아니다(§5-5 §안 하는 것). */
+const sameMembers = (a: string[], b: string[]) => a.length === b.length && a.every((m) => b.includes(m));
+
 export function PersonasPane({
   projectId,
   initial,
   rows,
+  squads,
   colors,
   installed: initialInstalled,
   configDir,
@@ -360,6 +428,9 @@ export function PersonasPane({
   initial: string | null;
   /** 1개 이상이다 — 0개는 호출부가 `<EmptyState>`로 갈라 2단을 안 그린다 */
   rows: PersonaRow[];
+  /** 스쿼드 그룹(§5-5) — 0개면 그 그룹을 안 그린다. 페르소나와 이름공간을 공유하므로 선택은
+   *  여전히 세그먼트 하나다 */
+  squads: SquadRow[];
   /** 레지스트리의 팔레트 키 맵. 없거나 팔레트 밖이면 빈 점이다(§12) */
   colors: Record<string, string>;
   /** 이 머신에 설치된 스킬(§5-1). 페르소나 수와 무관하게 서버가 한 번 읽어 내렸다 */
@@ -378,6 +449,7 @@ export function PersonasPane({
 }) {
   const [selected, setSelected] = useState<string | null>(initial);
   const [edits, setEdits] = useState<Record<string, PersonaEdit>>({});
+  const [squadEdits, setSquadEdits] = useState<Record<string, SquadEdit>>({});
   // import(§5-1 §import)가 이 머신에 스킬을 하나 깔면 후보 목록이 는다 — 서버가 준 초기값이
   // 아니라 이 상태를 그린다. 위 `edits`와 같은 이유로 여기(페인 전체)에 산다: 다른 줄을 고르는
   // 순간 오른쪽 칸이 바뀌어도 방금 깐 스킬은 모든 페르소나의 다이얼로그에서 보여야 한다.
@@ -403,6 +475,10 @@ export function PersonasPane({
   // 사유가 뜬다: 세그먼트가 둘 이상인 경로도 같은 자리로 온다(이어 붙인 값이 이름과 안 맞는다).
   const current = selected === null ? rows[0] : rows.find((r) => r.name === selected);
   const editOf = (row: PersonaRow) => edits[row.name] ?? initialEdit(row);
+  // 스쿼드는 페르소나와 한 이름공간이라(§5-5) `selected`가 겹치는 일이 없다 — `current`가
+  // 없을 때만 스쿼드 목록에서 찾는다. 기본 선택(`selected === null`)은 페르소나 첫 줄뿐이다.
+  const currentSquad = selected !== null && current === undefined ? squads.find((s) => s.name === selected) : undefined;
+  const squadEditOf = (row: SquadRow) => squadEdits[row.name] ?? initialSquadEdit(row);
 
   return (
     // **이 2단 행 자신이 `SidebarProvider`다**(§비주얼 §34 ①) — `Sidebar`가 `collapsible="none"`
@@ -427,10 +503,13 @@ export function PersonasPane({
         {/* `py-2`가 면의 세로 패딩이고, 부품 기본 `min-h-0 flex-1 overflow-auto`가 스크롤을 든다.
             **가로 패딩은 0이다**(`SidebarGroup className="p-0"`) — 줄이 `p-2`로 그 8px을 이미
             들고 있어 면이 더하면 줄 안쪽이 16px 줄어 잘리는 자리가 옮겨 간다(§33 · §34 §값 여덟).
-            그룹이 하나뿐이라 `SidebarContent`의 그룹 사이 `gap`도, `SidebarGroupLabel`도 없다 —
-            이 목록은 머리 낱말이 원래 0개다(§5). */}
-        <SidebarContent className="py-2">
+            **그룹 둘이다**(§5-5) — `페르소나`와 `스쿼드`. `gap-4`가 그룹 사이 간격이다
+            (`home-ui.tsx`의 두 그룹과 같은 조립). */}
+        <SidebarContent className="gap-4 py-2">
           <SidebarGroup className="p-0">
+            {/* 머리 낱말이 새로 생겼다(§5-5 — 그룹이 둘이 되면서). `h-6`은 `home-ui.tsx`의
+                좌측 패널 그룹 머리와 같은 눈금이다. */}
+            <SidebarGroupLabel className="h-6 text-muted-foreground">페르소나</SidebarGroupLabel>
             {/* 줄 사이 간격이 0.5(2px)였던 자리를 `SidebarMenu`의 `gap-0.5`가 든다(§34 판정표) */}
             <SidebarMenu aria-label="페르소나" className="gap-0.5">
               {rows.map((row) => {
@@ -512,11 +591,64 @@ export function PersonasPane({
               })}
             </SidebarMenu>
           </SidebarGroup>
+
+          {/* 스쿼드 그룹(§5-5 §화면) — **0개면 그리지 않는다**. 색 점·자수·스킬·메모리·상한
+              전부 스쿼드에 없는 값이라 줄이 한 줄로 끝난다(§5-5 §화면 표). */}
+          {squads.length > 0 && (
+            <SidebarGroup className="p-0">
+              <SidebarGroupLabel className="h-6 text-muted-foreground">스쿼드</SidebarGroupLabel>
+              <SidebarMenu aria-label="스쿼드" className="gap-0.5">
+                {squads.map((squad) => {
+                  const active = squad.name === currentSquad?.name;
+                  // §5-5 §화면 "기본 선택 - 동시 선택 - 편집 보존 - 저장 안 됨: §5 그대로" —
+                  // 스쿼드 칸의 미저장 멤버 변경도 페르소나와 같은 표식을 왼쪽 줄에 남긴다.
+                  const dirty = !sameMembers(squadEditOf(squad).picked, squadEditOf(squad).saved);
+                  return (
+                    <SidebarMenuItem key={squad.name}>
+                      <SidebarMenuButton
+                        type="button"
+                        className="cursor-pointer"
+                        isActive={active}
+                        aria-current={active ? "true" : undefined}
+                        onClick={() => select(squad.name)}
+                      >
+                        <span className="flex min-w-0 grow items-baseline gap-2">
+                          <span className="min-w-0 truncate font-mono text-sm">{squad.name}</span>
+                          <span className="whitespace-nowrap text-xs text-muted-foreground">
+                            멤버 {squad.members.length}
+                          </span>
+                          {/* §5-5 §프로필-스쿼드가 없는 것은 경고다 — 배지 문구는 designer 몫이다(§5-5
+                              §모양-자리-라벨). 페르소나의 `프로필 없음`과 뜻이 갈리므로 같은 문구를
+                              그대로 재사용하지 않는다. */}
+                          {squad.missingProfile && <Badge variant="outline">멤버 프로필 없음</Badge>}
+                          {dirty && (
+                            <Badge variant="outline" className="ml-auto self-center">
+                              저장 안 됨
+                            </Badge>
+                          )}
+                        </span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                })}
+              </SidebarMenu>
+            </SidebarGroup>
+          )}
         </SidebarContent>
       </Sidebar>
 
       <div className="min-w-0 grow">
-        {current === undefined ? (
+        {currentSquad !== undefined ? (
+          <SquadDetail
+            key={currentSquad.name}
+            projectId={projectId}
+            row={currentSquad}
+            personas={rows}
+            edit={squadEditOf(currentSquad)}
+            onEdit={(next) => setSquadEdits((prev) => ({ ...prev, [currentSquad.name]: next }))}
+            onDeleted={() => select(null)}
+          />
+        ) : current === undefined ? (
           // **404가 아니다** — 왼쪽 목록은 계속 선다(§5). 그릇은 §6 프로토콜의 `?core=` 거부와
           // 같은 것 그대로다: 새 컴포넌트도 새 문구도 0이다.
           <Alert variant="destructive">
@@ -690,6 +822,193 @@ function PersonaDetail({
         }
       />
     </div>
+  );
+}
+
+// ── 스쿼드 상세 (DESIGN.md §5-5 §화면) ───────────────────────────────────────
+
+/** 오른쪽 칸 — 스쿼드일 때는 `멤버` 절 하나 + `삭제`만 선다. textarea도 `디스패치 정책`도
+ *  스킬·메모리 절도 없다(§5-5 §화면 표) — 스쿼드는 프로필을 든 신원이 아니라 후보 풀이다.
+ *  머리에 색 점이 없는 이유도 같다: 색은 페르소나의 신원 표식이다(§12). */
+function SquadDetail({
+  projectId,
+  row,
+  personas,
+  edit,
+  onEdit,
+  onDeleted,
+}: {
+  projectId: string;
+  row: SquadRow;
+  /** 체크리스트가 고르는 후보 — `body !== null`인 것만 선택 가능하다(§5-5 §화면 "PROFILE.md가
+   *  있는 것") */
+  personas: PersonaRow[];
+  edit: SquadEdit;
+  onEdit: (next: SquadEdit) => void;
+  onDeleted: () => void;
+}) {
+  const [result, setResult] = useState<PersonaResult | null>(null);
+  const [headError, setHeadError] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+  const dirty = !sameMembers(edit.picked, edit.saved);
+
+  const eligible = personas.filter((p) => p.body !== null).map((p) => p.name);
+  // 저장된 멤버 중 지금은 고를 수 없는 이름(프로필이 없어졌다) — 체크리스트에 없으니 잃지
+  // 않으려면 따로 보여주고 `제거`로만 뗀다(스킬 절 orphans와 같은 처리, §비주얼 §25).
+  const orphans = edit.picked.filter((m) => !eligible.includes(m));
+
+  const toggle = (name: string) =>
+    onEdit({
+      ...edit,
+      picked: edit.picked.includes(name)
+        ? edit.picked.filter((x) => x !== name)
+        : [...edit.picked, name],
+    });
+
+  return (
+    <div className="space-y-3">
+      {/* 머리 — 이름 · `삭제`(§5-5 §화면). 색 점이 없다: 스쿼드는 신원이 아니다 */}
+      <div className="flex items-center gap-2">
+        <span className="font-mono text-sm break-all">{row.name}</span>
+        <span className="ml-auto">
+          <DeleteSquadButton
+            projectId={projectId}
+            row={row}
+            onDeleted={onDeleted}
+            onError={setHeadError}
+          />
+        </span>
+      </div>
+
+      {headError && <Failure title="삭제하지 못했습니다" message={headError} />}
+
+      {/* 본문은 `멤버` 절 하나뿐이다(§5-5 §화면) — textarea·디스패치 정책·스킬·메모리 절이 없다 */}
+      <section className="space-y-2 border-t pt-3">
+        <h3 className="text-sm font-medium">멤버</h3>
+        {eligible.length === 0 ? (
+          <p className="text-xs text-muted-foreground">
+            프로필이 있는 페르소나가 없습니다 — 먼저 페르소나를 만듭니다.
+          </p>
+        ) : (
+          <ul className="space-y-1">
+            {eligible.map((name) => (
+              <li key={name}>
+                {/* 체크 표시는 스킬 다이얼로그의 항목과 같은 관용구다(`Check` 아이콘 + 폭 4) */}
+                <button
+                  type="button"
+                  className="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1 text-left hover:bg-accent"
+                  onClick={() => toggle(name)}
+                >
+                  <span className="flex w-4 shrink-0 justify-center">
+                    {edit.picked.includes(name) && <Check aria-hidden className="size-4" />}
+                  </span>
+                  <span className="font-mono text-xs">{name}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {orphans.length > 0 && (
+          <div className="space-y-1">
+            <p className="text-xs text-muted-foreground">
+              프로필 없는 멤버 — 고를 수 없고 제거만 됩니다
+            </p>
+            <ul className="space-y-1">
+              {orphans.map((name) => (
+                <li key={name} className="flex items-center gap-2 px-2">
+                  <code className="font-mono text-xs text-muted-foreground">{name}</code>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="ml-auto"
+                    onClick={() => onEdit({ ...edit, picked: edit.picked.filter((x) => x !== name) })}
+                  >
+                    제거
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {result && !result.ok && <Failure title="저장하지 못했습니다" message={result.message ?? ""} />}
+        <div className="flex items-center justify-end gap-4">
+          {result?.ok && !dirty && <span className="text-sm text-muted-foreground">저장됐습니다.</span>}
+          <Button
+            size="sm"
+            disabled={pending || !dirty}
+            onClick={() =>
+              start(async () => {
+                // 목록 순서 = 화면 목록 순서다(§5-5 §안 하는 것 — 사람이 정하지 않는다).
+                // orphans는 화면에 자리가 없어 뒤에 그대로 붙인다 — 잃지 않는 것이 순서보다 우선이다.
+                const members = [...eligible.filter((n) => edit.picked.includes(n)), ...orphans];
+                const r = await saveSquadMembersAction(projectId, row.name, members);
+                setResult(r);
+                if (r.ok) onEdit({ saved: members, picked: members });
+              })
+            }
+          >
+            {pending ? "저장 중…" : "저장"}
+          </Button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+/** 되돌릴 수 없다. §5 페르소나 `삭제`와 같은 벌이지만 참조 티켓 경고가 없다 — `squad:`를 읽는
+ *  엔진이 아직 없다(§5-5 §크기 — 엔진 승인 왕복은 별도 티켓이라 셀 값이 없다). */
+function DeleteSquadButton({
+  projectId,
+  row,
+  onDeleted,
+  onError,
+}: {
+  projectId: string;
+  row: SquadRow;
+  onDeleted: () => void;
+  onError: (message: string) => void;
+}) {
+  const [pending, start] = useTransition();
+
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger
+        render={
+          <Button variant="ghost" size="sm">
+            <Trash2 aria-hidden />
+            삭제
+          </Button>
+        }
+      />
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>스쿼드 삭제 — {row.name}</AlertDialogTitle>
+          <AlertDialogDescription>
+            <span className="font-mono text-xs break-all">squads/{row.name}</span> 디렉터리를
+            지웁니다. 되돌릴 수 없습니다. 이 스쿼드를 참조하는 티켓의{" "}
+            <span className="font-mono text-xs">squad:</span> 값은 그대로 남습니다.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel autoFocus>취소</AlertDialogCancel>
+          <AlertDialogAction
+            variant="destructive"
+            disabled={pending}
+            onClick={() =>
+              start(async () => {
+                const r = await deleteSquadAction(projectId, row.name);
+                if (r.ok) onDeleted();
+                else onError(r.message ?? "삭제하지 못했습니다.");
+              })
+            }
+          >
+            삭제
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 
