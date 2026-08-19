@@ -10,7 +10,11 @@
  *    브라우저로 안 나간다(아래 `engineLimits`).
  *
  *  **파일 쓰기는 여전히 0이다.** `claudeLimit`이 새로 여는 것은 파일이 아니라 네트워크
- *  호출(`POST`) 하나다 — 읽기 전용이라는 계약은 그대로 산다. */
+ *  호출(`POST`) 하나다 — 읽기 전용이라는 계약은 그대로 산다.
+ *
+ *  **§2-13(티켓·에픽 원가)이 이 파일에 얹혀 산다** — 같은 로그, 같은 캐시 Map, 안 읽던 키
+ *  하나(`total_cost_usd`)만 는다. `ticketCost`·`epicCost`·`ticketCostChunk`·`epicCostChunk`가
+ *  그 값이고, §0-8 판정 1의 위 문장(`$` 안 읽는다)은 그 판정 자신의 범위에서 그대로 참이다. */
 import { access, readdir, readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
@@ -43,7 +47,7 @@ export type Usage = {
  *  **`split("-")[2]`를 쓰지 않는다** — 워커 이름에 `-`가 들어갈 수 있다. 앞 2필드와 마지막
  *  1필드를 고정하고 **가운데 전부**가 이름이다(`workerOf`가 sid 8자를 길이로 가르는 것과 같은 선).
  *  `at`은 tick.sh의 `date '+%Y%m%d-%H%M%S'`, 즉 **이 머신 로컬 시각**이라 로컬로 판다. */
-export function parseLogName(file: string): { at: number; worker: string } | null {
+export function parseLogName(file: string): { at: number; worker: string; hash: string } | null {
   const m = /^(\d{8})-(\d{6})-(.+)-([^-]+)\.log$/.exec(file);
   if (!m) return null;
   const [, d, t] = m;
@@ -57,7 +61,9 @@ export function parseLogName(file: string): { at: number; worker: string } | nul
   ).getTime();
   // 한글 워커 이름을 만들 수 있는 자리다(TICKET_NAME). readdir이 NFD를 주는 파일시스템이
   // 있어서 정규화 없이 키를 만들면 `listWorkers`의 이름과 안 붙는다(`queue.ts`와 같은 이유).
-  return Number.isFinite(at) ? { at, worker: m[3].normalize("NFC") } : null;
+  // **넷째 그룹(해시)도 같이 돌려준다**(§2-13) — `split("-")[2]`를 안 쓰는 것과 같은 이유로
+  // 이 그룹도 버리지 않는다. `at`·`worker` 소비자는 새 키를 무시하면 그만이라 안 깨진다.
+  return Number.isFinite(at) ? { at, worker: m[3].normalize("NFC"), hash: m[4] } : null;
 }
 
 /** 세션 하나의 토큰. **넷을 더한 한 수**다 — 가중치를 우리가 매기지 않는다(§0-8).
@@ -78,13 +84,38 @@ function tokensOf(rec: Record<string, unknown> | null): number | null {
   );
 }
 
-/** **끝난 로그는 불변이다** — 그래서 `경로 → 합계`를 프로세스 수명 동안 들고 있는다.
+/** 세션 하나의 원가(§2-13 판정 1·3) — claude CLI가 자기 회계로 적어 둔 `total_cost_usd` 그대로다.
+ *  캐시 두 축을 각자 단가로 이미 센 값이라(실측 `20260819-163330-w2-38337fa2.log`) 우리가 곱하는
+ *  단가표가 0이다 — `추정`이 아니다. `tokensOf`가 이미 `usage` 유무로 캐시 게이트를 쳤으므로
+ *  여기서 또 없음을 unaccounted로 세지 않는다(실측 `usage`가 있는 212건 전부에 이 키도 있었다). */
+function costOf(rec: Record<string, unknown> | null): number {
+  const c = rec?.total_cost_usd;
+  return typeof c === "number" && Number.isFinite(c) ? c : 0;
+}
+
+/** **끝난 로그는 불변이다** — 그래서 `경로 → { 토큰, 비용 }`을 프로세스 수명 동안 들고 있는다.
  *  이게 없으면 5초 폴링마다 창 안의 파일 100여 개(실측 215MB · 최대 14MB짜리)를 다시 연다.
  *  정상 상태에서 새로 여는 파일은 지난 폴링 이후 끝난 것뿐이라 0~2개다.
  *
- *  ponytail: 무한히 자라는 Map이다. 항목 하나가 `경로 → number`고 이 머신의 로그가 하루
- *  수백 개라 서버 수명 안에서 문제가 아니다. 문제가 되면 창 밖 키를 지우는 한 줄을 붙인다. */
-const cache = new Map<string, number>();
+ *  **§2-13이 이 Map에 값을 하나 더 든다** — 새 캐시도 새 폴링 루프도 없다. `listUsage`(창 안·
+ *  토큰)와 `ticketCost`(창 없음·해시별·원가) 둘 다 이 한 Map을 공유한다.
+ *
+ *  ponytail: 무한히 자라는 Map이다. 항목 하나가 `경로 → { number, number }`고 이 머신의 로그가
+ *  하루 수백 개라 서버 수명 안에서 문제가 아니다. 문제가 되면 창 밖 키를 지우는 한 줄을 붙인다. */
+const cache = new Map<string, { tokens: number; cost: number }>();
+
+/** 로그 파일 하나를 읽어 `{ 토큰, 비용 }`을 낸다. 마지막 줄에서 `usage`를 못 읽으면 `null`이고
+ *  **캐시하지 않는다** — 0으로 굳히면 그 세션은 영원히 0이다(다음 호출이 다시 본다). */
+async function readLog(full: string): Promise<{ tokens: number; cost: number } | null> {
+  const hit = cache.get(full);
+  if (hit !== undefined) return hit;
+  const rec = await lastJsonLine(full);
+  const tokens = tokensOf(rec);
+  if (tokens === null) return null;
+  const entry = { tokens, cost: costOf(rec) };
+  cache.set(full, entry);
+  return entry;
+}
 
 /** 창 안에서 **끝난** 세션들의 워커별 토큰 합.
  *
@@ -103,23 +134,125 @@ export async function listUsage(root: string, windowMs = DEFAULT_WINDOW_MS): Pro
     names.map(async (file) => {
       const meta = parseLogName(file);
       if (!meta || meta.at < since) return; // 창 밖 · 우리 이름이 아님 → 안 연다
-      const full = path.join(dir, file);
-      let tokens = cache.get(full);
-      if (tokens === undefined) {
-        const got = tokensOf(await lastJsonLine(full));
-        // 토큰을 못 읽은 세션은 **캐시하지 않는다** — 다음 폴링에 다시 본다.
-        if (got === null) {
-          unaccounted++;
-          return;
-        }
-        cache.set(full, (tokens = got));
+      const hit = await readLog(path.join(dir, file));
+      // 토큰을 못 읽은 세션은 다음 폴링에 다시 본다(`readLog`가 캐시하지 않았다).
+      if (!hit) {
+        unaccounted++;
+        return;
       }
-      byWorker[meta.worker] = (byWorker[meta.worker] ?? 0) + tokens;
-      total += tokens;
+      byWorker[meta.worker] = (byWorker[meta.worker] ?? 0) + hit.tokens;
+      total += hit.tokens;
     }),
   );
 
   return { byWorker, total, unaccounted };
+}
+
+/** 티켓 하나의 원가 원본(§비주얼 §63 ①③) — **모름**을 가르는 최소 정보만 낸다. 로그가 0개인지
+ *  (②③) 있는데 종료 기록이 없는지(①)는 `logFiles`·`sessions` 둘로 호출부가 가른다. */
+export type TicketCost = {
+  /** 그 해시를 든 로그 전부의 `total_cost_usd` 합. **합계에 든 세션이 0개면 `null`**(§2-13 천장 ①
+   *  — `모름`은 이 값 하나가 가른다. `$0.00`이 이 자리에 못 서는 것을 이 조건이 구조로 막는다) */
+  cost: number | null;
+  /** 합계에 든(= 종료 기록을 읽은) 세션 수 */
+  sessions: number;
+  /** 이 해시의 로그인데 못 읽어 합계 밖인 세션 수 — §0-8 `unaccounted`와 같은 뜻이다 */
+  unaccounted: number;
+  /** 이 해시로 파일명이 갈리는 로그 총수(`sessions + unaccounted`). `모름`의 title이 이 수로
+   *  ①(로그는 있는데 종료 기록이 없다)과 ②③(로그가 0개다)을 가른다 */
+  logFiles: number;
+};
+
+/** 티켓 하나의 원가(§2-13 판정 1) — 그 해시를 든 로그 **전부**의 합이다. **창이 없다**: §0-8의
+ *  5시간 창은 "한도가 얼마 남았나"의 창이라 여기 안 걸린다 — 티켓의 원가는 그 티켓의 생애
+ *  전체다. 해시가 안 맞는 파일은 **파일명만 보고 건너뛴다**(열지 않는다) — §0-8이 창 밖 파일에
+ *  쓰는 방어와 같은 성질이고, 가르는 축이 창에서 해시로 바뀌었을 뿐이다. */
+export async function ticketCost(root: string, hash: string): Promise<TicketCost> {
+  const dir = path.join(root, "workers", "logs");
+  const names = await readdir(dir).catch(() => [] as string[]);
+
+  let cost = 0;
+  let sessions = 0;
+  let unaccounted = 0;
+  let logFiles = 0;
+
+  await Promise.all(
+    names.map(async (file) => {
+      const meta = parseLogName(file);
+      if (!meta || meta.hash !== hash) return; // 해시가 다르면 안 연다
+      logFiles++;
+      const hit = await readLog(path.join(dir, file));
+      if (!hit) {
+        unaccounted++;
+        return;
+      }
+      cost += hit.cost;
+      sessions++;
+    }),
+  );
+
+  return { cost: sessions > 0 ? cost : null, sessions, unaccounted, logFiles };
+}
+
+/** 에픽 하나의 원가(§2-13 판정 5) — **따로 세지 않는다**. 그 에픽 티켓들의 `ticketCost` 합이다.
+ *  `known`은 원가를 아는(`cost !== null`) 티켓 수, `total`은 그 에픽의 전체 티켓 수 — 화면이
+ *  `아는 티켓 수 / 전체`로 그린다. `hashes`가 빈 배열(에픽에 티켓이 0개)이면 `total`도 0이고,
+ *  호출부가 그 값을 보고 덩이 자체를 안 그린다. */
+export type EpicCost = { cost: number | null; known: number; total: number };
+
+export async function epicCost(root: string, hashes: string[]): Promise<EpicCost> {
+  const results = await Promise.all(hashes.map((h) => ticketCost(root, h)));
+  let cost = 0;
+  let known = 0;
+  for (const r of results) {
+    if (r.cost === null) continue;
+    cost += r.cost;
+    known++;
+  }
+  return { cost: known > 0 ? cost : null, known, total: hashes.length };
+}
+
+/** §비주얼 §63 ② — 축약 없이 소수 두 자리 고정, `toLocaleString`이 천 단위 구분을 준다.
+ *  `formatTokens`의 가수 규칙(v<10이면 소수 한 자리)은 **축약했을 때의 해상도**라 여기서 발동할
+ *  자리가 없다 — 소수 자리를 정하는 것은 그 규칙이 아니라 통화의 최소 단위다(두 자리 고정). */
+export function formatCost(cost: number): string {
+  return `$${cost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+/** 원가 덩이 하나(§비주얼 §63 ①) — `text`가 그 줄에 그대로 서고, `title`은 **`모름`일 때만**
+ *  선다(네이티브 `title` — §63 ③이 `<Tooltip>`을 거절한 근거 그대로). */
+export type CostChunk = { text: string; title?: string };
+
+/** 진행 기록 머리 줄의 원가 덩이(§비주얼 §63 ①④) — 원가 · 세션 수 · 합계 밖 세션 수.
+ *  세션 수 칸은 `cost`가 있을 때만 선다(합계 0개 = `모름`이면 통째로 빠진다 — 위 `TicketCost`
+ *  주석과 같은 조건 하나). `모름`의 `title`은 로그가 있는데 종료 기록이 없는지(①), 로그
+ *  자체가 0개인지(②③)를 가른다 — §2-13 §천장 ②③은 "같은 글자로 보이는 것이 옳다"고 못박았다. */
+export async function ticketCostChunk(root: string, hash: string): Promise<CostChunk> {
+  const c = await ticketCost(root, hash);
+  if (c.cost === null) {
+    return {
+      text: "모름",
+      title:
+        c.logFiles > 0
+          ? `이 해시의 로그 ${c.logFiles}개에 종료 기록이 없습니다`
+          : `workers/logs/*-${hash}.log가 이 머신에 0개입니다`,
+    };
+  }
+  let text = `${formatCost(c.cost)} · 세션 ${c.sessions}개`;
+  if (c.unaccounted > 0) text += ` · 이 합계에 없는 세션 ${c.unaccounted}개`;
+  return { text };
+}
+
+/** 에픽 화면 오른쪽 머리의 원가 덩이(§비주얼 §63 ①⑤) — 원가 · 아는 티켓 수 / 전체.
+ *  분수는 **아는 수 < 전체일 때만** 선다(`60 / 60`은 아무 말도 안 한다). `hashes`가 빈 배열이면
+ *  `null` — 그 에픽에 셀 대상이 없어 호출부가 덩이 자체를 안 그린다. 에픽의 `모름`엔 `title`이
+ *  없다 — 티켓마다 이유가 달라 한 문장으로 못 적고, 분수가 이미 그 일을 한다(§2-13 §③). */
+export async function epicCostChunk(root: string, hashes: string[]): Promise<string | null> {
+  if (hashes.length === 0) return null;
+  const c = await epicCost(root, hashes);
+  let text = c.cost === null ? "모름" : formatCost(c.cost);
+  if (c.known < c.total) text += ` · 원가를 아는 티켓 ${c.known} / ${c.total}`;
+  return text;
 }
 
 /** 읽히는 크기로 줄인다 — `0` · `995` · `1.2k` · `18k` · `2.6M`.

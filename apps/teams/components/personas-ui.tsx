@@ -2207,7 +2207,7 @@ function AddSkillsDialog({
         <DialogFooter>
           <DialogClose render={<Button variant="outline" />}>취소</DialogClose>
           <Button
-            disabled={pending || installing}
+            disabled={pending || installing !== null}
             onClick={() =>
               start(async () => {
                 setFailure(null);

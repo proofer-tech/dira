@@ -104,6 +104,7 @@ export function SessionStream({
   awaiting = false,
   answerFile,
   vault,
+  costChunk,
 }: {
   project: string;
   stem: string;
@@ -138,6 +139,10 @@ export function SessionStream({
   /** 이름 -> href 벌(§비주얼 §10 §위키링크) — 서버가 한 번 읽어 내려준다. 이 컴포넌트는 폴링
    *  중에도 이 값을 다시 안 읽는다(못 — 렌더러가 이름 집합을 안 읽는다). */
   vault?: Vault;
+  /** 원가 덩이(§비주얼 §63 ①④) — 서버가 `ticketCostChunk`로 미리 지어 내려준다(이 파일은
+   *  `node:fs`를 못 타서 로그를 직접 못 연다). `undefined`면 그 자리에 아무것도 안 선다 —
+   *  절이 서는 조건이 h2가 서는 조건과 같아 호출부가 이미 그 조건으로 걸러 넘긴다. */
+  costChunk?: { text: string; title?: string };
 }) {
   const [events, setEvents] = useState<StreamEvent[]>([]);
   const [live, setLive] = useState(initialLive);
@@ -280,9 +285,18 @@ export function SessionStream({
           이 줄도 이제 조건부가 아니다(종전엔 `stream`일 때만 줄 자체가 섰다). 오른쪽 무리
           (`!live` 문구 + 버튼)만 `stream`일 때 뜬다 — 흐르는 스트림이 없으면 "지금 스트림
           상태"를 말할 것이 없다(§29 ②). `h-8` 고정은 그 무리가 떴다 사라질 때 줄이 안
-          튀게 하는 것이 근거다(§18 ④ · §21). */}
+          튀게 하는 것이 근거다(§18 ④ · §21). h2와 원가 덩이는 **왼쪽 무리**로 baseline
+          묶인다(§비주얼 §63 ④ — 오른쪽 무리와 조건이 다르다: 원가는 `workers/logs/`가 출처라
+          `stream` 여부와 무관하게 h2가 서면 선다). */}
       <div className="flex h-8 items-center justify-between gap-2">
-        <h2 className="text-sm font-medium">진행 기록</h2>
+        <div className="flex min-w-0 items-baseline gap-2">
+          <h2 className="text-sm font-medium">진행 기록</h2>
+          {costChunk && (
+            <span className="text-xs text-muted-foreground" title={costChunk.title}>
+              {costChunk.text}
+            </span>
+          )}
+        </div>
         {stream && (
           <div className="flex items-center gap-2">
             {!live && <p className="text-xs text-muted-foreground">끝난 세션 · 갱신 없음</p>}

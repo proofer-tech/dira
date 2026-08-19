@@ -22,7 +22,8 @@ import { Button } from "@/components/ui/button";
 import { WorkerChips } from "@/components/worker-mark";
 import { epicMemory, epicReadmeBody, epicTitle, listEpics, NO_EPIC, type EpicMemory } from "@/lib/epics";
 import { t } from "@/lib/i18n";
-import { listTickets } from "@/lib/queue";
+import { epicOf, listTickets } from "@/lib/queue";
+import { epicCostChunk } from "@/lib/usage";
 import { decodeHash } from "@/lib/urls";
 import { getProject, readLanguage, resolveConfig } from "@/lib/projects";
 
@@ -81,10 +82,15 @@ export default async function Epics({
 
   let memories: EpicMemory[] = [];
   let readme: string | null = null;
+  let costText: string | null = null;
   if (current) {
-    [memories, readme] = await Promise.all([
+    [memories, readme, costText] = await Promise.all([
       epicMemory(project.root, current.epic),
       epicReadmeBody(project.root, current.epic),
+      // 원가 덩이(§비주얼 §63 ①⑤) — 이 에픽 티켓들의 해시 전부. 이미 읽은 `tickets`에서
+      // 거른다(새 스캔 0) — `epicOf`가 없는 티켓엔 `""`을 주므로 `(에픽 없음)`은 여기 안 온다
+      // (`current`가 `realEpics`에서만 나오므로 `""`와 안 겹친다).
+      epicCostChunk(project.root, tickets.filter((tk) => epicOf(tk) === current.epic).map((tk) => tk.hash)),
     ]);
   }
 
@@ -147,12 +153,15 @@ export default async function Epics({
               </div>
             </div>
 
-            {/* 완료 N 뒤 워커 칩 — 안 자른다, 넘치면 줄이 는다(§비주얼 §52 ⑥-3) */}
+            {/* 완료 N 뒤 워커 칩, 그 뒤 원가 덩이 — 안 자른다, 넘치면 줄이 는다(§비주얼 §52 ⑥-3 ·
+                §63 ⑤). 원가가 칩 앞이 아니라 뒤인 이유: 칩은 `진행중 N`의 누구고, 원가를 그
+                사이에 끼우면 수와 이름이 떨어져 사람이 둘을 따로 읽는다(§63 ⑤). */}
             <p className="flex flex-wrap items-baseline gap-2 text-xs text-muted-foreground">
               <span>
                 대기 {current.counts.open} · 진행중 {current.counts.wip} · 완료 {current.counts.done}
               </span>
               <WorkerChips names={current.workers} />
+              {costText && <span>{costText}</span>}
             </p>
 
             {/* README 첫 줄 뒤 본문 — 이 에픽이 무슨 작업인지 사람이 적어 두는 자리(§결정 6).

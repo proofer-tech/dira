@@ -56,6 +56,7 @@ import {
   squadsDir,
 } from "@/lib/projects";
 import { findStream, sessionIdOf } from "@/lib/transcript";
+import { ticketCostChunk } from "@/lib/usage";
 import { decodeHash, engineCan } from "@/lib/urls";
 import { holderEngine, listWorkers } from "@/lib/workers";
 
@@ -219,8 +220,13 @@ export default async function TicketDetail({
   // 사라진다**(보드에서 접수한 요구가 정확히 그 모양이다). 넷째가 없으면 **회수된 열림 티켓**
   // (reap이 `session_id`를 지운다 — `tickets.py` `REAP_CLEAR`)이 남긴 계획도 같이 사라진다 —
   // 그 화면이 말하는 것이 정확히 "어디까지 갔나"다.
+  const hasProgress = !!(sessionId || thread.length > 0 || awaiting || plans.length > 0);
+  // 원가 덩이(§비주얼 §63 ①④) — **h2가 서면 선다**, 즉 이 절이 서는 조건과 같다. 창이 없다
+  // (§2-13 판정 1) — 이 해시를 든 로그 전부를 매 렌더마다 다시 훑되, 끝난 로그는 `usage.ts`의
+  // 캐시가 잡는다(§0-8과 같은 Map).
+  const costChunk = hasProgress ? await ticketCostChunk(project.root, ticket.hash) : undefined;
   const progressSection =
-    sessionId || thread.length > 0 || awaiting || plans.length > 0 ? (
+    hasProgress ? (
       <section className="space-y-2">
         {/* 스트림이 없는 엔진(오늘 codex)이면 트랜스크립트가 **있을 수 없다**(§4-3 표) —
             그래도 컴포넌트를 세운다:
@@ -243,6 +249,7 @@ export default async function TicketDetail({
             awaiting={awaiting}
             answerFile={awaiting ? `${awaitingOf(ticket)}${config.done}.md` : undefined}
             vault={vault}
+            costChunk={costChunk}
           />
         ) : (
           <>
@@ -250,8 +257,16 @@ export default async function TicketDetail({
                 든다. `질문·답변`이 아닌 이유도 같다 — `진행 기록`은 **이 티켓에 무슨 일이
                 있었나** 한 가지를 가리킨다(§0-9 · §2-3 ①). `Card`가 아니라 `<section>` + `h2`다.
                 `SessionStream`이 서는 분기에서는 그 컴포넌트가 이 h2를 머리 줄에 물고 간다
-                (§비주얼 §29 ③ P173) — 여기는 상자 안이 통째로 빌 때만 남는 자리다. */}
-            <h2 className="text-sm font-medium">진행 기록</h2>
+                (§비주얼 §29 ③ P173) — 여기는 상자 안이 통째로 빌 때만 남는 자리다.
+                원가 덩이도 h2 옆에 같이 선다(§비주얼 §63 ④ — 조건이 h2와 같다). */}
+            <div className="flex min-w-0 items-baseline gap-2">
+              <h2 className="text-sm font-medium">진행 기록</h2>
+              {costChunk && (
+                <span className="text-xs text-muted-foreground" title={costChunk.title}>
+                  {costChunk.text}
+                </span>
+              )}
+            </div>
             {/* 상자 안이 통째로 빌 때만 남는 자리다(§29 ④ 빈 상태 3행). 액션이 없다 — 사람이 할
                 일이 없다(§9). `action` 자리엔 왜 없는지 사람이 직접 쳐 볼 글롭을 넣는다.
                 **여기 남는 것은 "왜"를 모르는 경우뿐이다**(§비주얼 §23 ⑤): 완료 티켓
