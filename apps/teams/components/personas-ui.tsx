@@ -19,9 +19,11 @@ import {
   savePersonaLimitAction,
   savePersonaSkillsAction,
   saveSquadMembersAction,
+  saveSquadRulesAction,
   setPersonaColorAction,
   type PersonaResult,
 } from "@/app/(app)/p/[project]/personas/actions";
+import type { SquadMember } from "@/lib/projects";
 import { Markdown } from "@/components/markdown";
 import { MarkdownEditor } from "@/components/markdown-editor";
 import type { Vault } from "@/lib/markdown-wikilinks";
@@ -117,11 +119,32 @@ export type PersonaRow = {
  *  스쿼드는 후보 풀이지 프로필을 든 신원이 아니다. */
 export type SquadRow = {
   name: string;
-  /** `squads/<이름>/members` 한 줄에 하나. 저장된 값 그대로다 */
-  members: string[];
+  /** `squads/<이름>/members` 한 줄에 하나. 저장된 값 그대로다 — **첫 항목이 리더다**(§5-5 §개정) */
+  members: SquadMember[];
+  /** `squads/<이름>/rules` 전문. 없으면 `""`(§5-5 §개정 — 리더 세션에만 실린다) */
+  rules: string;
   /** 멤버 중 `personas/`에 `PROFILE.md`가 없는 이름이 있다(§5-5 §경고) */
   missingProfile: boolean;
 };
+
+/** 스쿼드 블록(§5-5 §개정 "실리는 값" — 이름·멤버 전원의 이름·역할·리더)의 바이트 수. 프롬프트
+ *  조립 자체는 엔진 몫이라(P304 갈래 A/B) 정확한 문구는 아직 없다 — 여기는 상한 배지가 재는
+ *  근사치다. `ponytail:` 리더 세션이 실제로 받는 블록 포맷이 서면(엔진 승인 이후) 그 함수를
+ *  가져다 쓴다 — 지금은 §5-5 §값이 나열한 네 값만 최소로 조립한다. */
+function squadBlockBytes(name: string, members: { name: string; role: string }[]): number {
+  const lines = [
+    `스쿼드 ${name}`,
+    ...members.map((m, i) => `${m.name}${m.role ? ` ${m.role}` : ""}${i === 0 ? " (리더)" : ""}`),
+  ];
+  return new TextEncoder().encode(lines.join("\n")).length;
+}
+
+const SQUAD_BLOCK_MAX_BYTES = 1_500;
+
+/** 역할이 빈 멤버 줄의 자리표시 — 프로필 첫 줄(§5-5 §개정 "역할이 없는 줄"). 값이 아니다. */
+function profileTitle(body: string | null): string {
+  return body ? body.split("\n")[0] : "";
+}
 
 /** §6 에러 3요소 중 1·2번. 사유는 원문 그대로 — 삼키지 않는다. */
 function Failure({ title, message }: { title: string; message: string }) {
@@ -400,15 +423,39 @@ const editChars = (e: PersonaEdit) =>
  *  든다(§5-5 §화면 "미저장 멤버 변경도 다른 줄을 고르는 동안 살아 있다" = §5 그대로). */
 type SquadEdit = {
   /** 파일에 저장된 값(서버가 되읽어 준 것) */
-  saved: string[];
-  /** 체크한 이름들의 초안. 순서는 저장이 다시 정하므로(화면 목록 순서) 여기서는 뜻이 없다 */
+  saved: { members: SquadMember[]; rules: string };
+  /** 체크한 이름들의 초안. 순서는 저장이 다시 정하므로(화면 목록 순서 = 리더를 정하는 순서,
+   *  §5-5 §개정) 여기서는 뜻이 없다 */
   picked: string[];
+  /** 이름별 역할 초안. 프로필이 없어진(orphan) 멤버의 역할도 여기 남아 있어야 저장 때 잃지
+   *  않는다 — `initialSquadEdit`이 저장된 멤버 전원의 역할로 채운다 */
+  roles: Record<string, string>;
+  /** `rules` 초안 */
+  rules: string;
 };
 
-const initialSquadEdit = (row: SquadRow): SquadEdit => ({ saved: row.members, picked: row.members });
+const initialSquadEdit = (row: SquadRow): SquadEdit => ({
+  saved: { members: row.members, rules: row.rules },
+  picked: row.members.map((m) => m.name),
+  roles: Object.fromEntries(row.members.map((m) => [m.name, m.role])),
+  rules: row.rules,
+});
 
-/** 순서 없이 집합으로 비교한다 — 멤버 순서는 사람이 정하는 값이 아니다(§5-5 §안 하는 것). */
-const sameMembers = (a: string[], b: string[]) => a.length === b.length && a.every((m) => b.includes(m));
+/** 순서 없이 이름+역할 집합으로 비교한다 — 멤버 순서는 사람이 정하는 값이 아니다(§5-5 §안 하는 것,
+ *  화면 목록 고정 순서가 정한다). */
+const sameSquadMembers = (a: SquadMember[], b: SquadMember[]) => {
+  if (a.length !== b.length) return false;
+  const sb = new Map(b.map((m) => [m.name, m.role]));
+  return a.every((m) => sb.get(m.name) === m.role);
+};
+
+/** 지금 칸에서 픽·역할 초안이 실제로 갈렸나(§5-5 §화면 "저장 안 됨") — 순서는 안 본다(위와 같은
+ *  이유), `rules`는 따로 비교한다. */
+const squadDirty = (edit: SquadEdit): boolean =>
+  !sameSquadMembers(
+    edit.picked.map((name) => ({ name, role: (edit.roles[name] ?? "").trim() })),
+    edit.saved.members,
+  ) || edit.rules !== edit.saved.rules;
 
 export function PersonasPane({
   projectId,
@@ -602,7 +649,7 @@ export function PersonasPane({
                   const active = squad.name === currentSquad?.name;
                   // §5-5 §화면 "기본 선택 - 동시 선택 - 편집 보존 - 저장 안 됨: §5 그대로" —
                   // 스쿼드 칸의 미저장 멤버 변경도 페르소나와 같은 표식을 왼쪽 줄에 남긴다.
-                  const dirty = !sameMembers(squadEditOf(squad).picked, squadEditOf(squad).saved);
+                  const dirty = squadDirty(squadEditOf(squad));
                   return (
                     <SidebarMenuItem key={squad.name}>
                       <SidebarMenuButton
@@ -850,12 +897,24 @@ function SquadDetail({
   const [result, setResult] = useState<PersonaResult | null>(null);
   const [headError, setHeadError] = useState<string | null>(null);
   const [pending, start] = useTransition();
-  const dirty = !sameMembers(edit.picked, edit.saved);
+  const dirty = squadDirty(edit);
 
   const eligible = personas.filter((p) => p.body !== null).map((p) => p.name);
+  const profileOf = (name: string) => personas.find((p) => p.name === name)?.body ?? null;
   // 저장된 멤버 중 지금은 고를 수 없는 이름(프로필이 없어졌다) — 체크리스트에 없으니 잃지
   // 않으려면 따로 보여주고 `제거`로만 뗀다(스킬 절 orphans와 같은 처리, §비주얼 §25).
   const orphans = edit.picked.filter((m) => !eligible.includes(m));
+  // 저장 순서 = 화면 목록 순서다(§5-5 §안 하는 것) — **첫 항목이 리더다**(§5-5 §개정). orphans는
+  // 화면에 자리가 없어 뒤에 그대로 붙는다.
+  const orderedMembers: SquadMember[] = [...eligible.filter((n) => edit.picked.includes(n)), ...orphans].map(
+    (name) => ({ name, role: (edit.roles[name] ?? "").trim() }),
+  );
+  const leaderName = orderedMembers[0]?.name;
+  const blockBytes = squadBlockBytes(
+    row.name,
+    orderedMembers.map((m) => ({ name: m.name, role: m.role || profileTitle(profileOf(m.name)) })),
+  );
+  const overBudget = blockBytes > SQUAD_BLOCK_MAX_BYTES;
 
   const toggle = (name: string) =>
     onEdit({
@@ -864,6 +923,8 @@ function SquadDetail({
         ? edit.picked.filter((x) => x !== name)
         : [...edit.picked, name],
     });
+
+  const setRole = (name: string, role: string) => onEdit({ ...edit, roles: { ...edit.roles, [name]: role } });
 
   return (
     <div className="space-y-3">
@@ -882,30 +943,73 @@ function SquadDetail({
 
       {headError && <Failure title="삭제하지 못했습니다" message={headError} />}
 
-      {/* 본문은 `멤버` 절 하나뿐이다(§5-5 §화면) — textarea·디스패치 정책·스킬·메모리 절이 없다 */}
+      {/* `rules` — 사이드카 둘째(§5-5 §개정). 리더 세션 프롬프트에만 실린다, 없어도 된다.
+          부품은 PROFILE 본문과 같은 `MarkdownEditor`다 — designer 사양(`55eba77f`)이 아직 안
+          서서 이 화면 안의 기존 조립을 그대로 쓴다. */}
       <section className="space-y-2 border-t pt-3">
-        <h3 className="text-sm font-medium">멤버</h3>
+        <h3 className="text-sm font-medium">규칙</h3>
+        <p className="text-xs text-muted-foreground">
+          리더가 멤버를 고르고 티켓을 낼 때만 보는 자유 서술 — 없어도 됩니다.
+        </p>
+        <MarkdownEditor
+          name="rules"
+          defaultValue={edit.rules}
+          rows={6}
+          className="font-mono"
+          onChange={(rules) => onEdit({ ...edit, rules })}
+        />
+      </section>
+
+      {/* 본문은 `멤버` 절이다(§5-5 §화면) — textarea·디스패치 정책·스킬·메모리 절이 없다 */}
+      <section className="space-y-2 border-t pt-3">
+        <h3 className="flex items-center gap-2 text-sm font-medium">
+          멤버
+          {/* 스쿼드 블록 상한(§5-5 §개정 · §6 결정 7 넷째 자리) — 집행 자리는 이 화면이다 */}
+          <Badge variant={overBudget ? "destructive" : "secondary"} className="ml-auto font-mono font-normal">
+            스쿼드 블록 {blockBytes.toLocaleString()} / {SQUAD_BLOCK_MAX_BYTES.toLocaleString()} B
+            {overBudget && " · 상한 초과"}
+          </Badge>
+        </h3>
         {eligible.length === 0 ? (
           <p className="text-xs text-muted-foreground">
             프로필이 있는 페르소나가 없습니다 — 먼저 페르소나를 만듭니다.
           </p>
         ) : (
           <ul className="space-y-1">
-            {eligible.map((name) => (
-              <li key={name}>
-                {/* 체크 표시는 스킬 다이얼로그의 항목과 같은 관용구다(`Check` 아이콘 + 폭 4) */}
-                <button
-                  type="button"
-                  className="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1 text-left hover:bg-accent"
-                  onClick={() => toggle(name)}
-                >
-                  <span className="flex w-4 shrink-0 justify-center">
-                    {edit.picked.includes(name) && <Check aria-hidden className="size-4" />}
-                  </span>
-                  <span className="font-mono text-xs">{name}</span>
-                </button>
-              </li>
-            ))}
+            {eligible.map((name) => {
+              const picked = edit.picked.includes(name);
+              return (
+                <li key={name} className="flex items-center gap-2 px-2 py-1">
+                  {/* 체크 표시는 스킬 다이얼로그의 항목과 같은 관용구다(`Check` 아이콘 + 폭 4) */}
+                  <button
+                    type="button"
+                    className="flex min-w-0 grow cursor-pointer items-center gap-2 rounded text-left hover:bg-accent"
+                    onClick={() => toggle(name)}
+                  >
+                    <span className="flex w-4 shrink-0 justify-center">
+                      {picked && <Check aria-hidden className="size-4" />}
+                    </span>
+                    <span className="font-mono text-xs">{name}</span>
+                    {picked && name === leaderName && (
+                      <Badge variant="outline" className="text-2xs">
+                        리더
+                      </Badge>
+                    )}
+                  </button>
+                  {/* 역할 칸(§5-5 §개정) — 체크된 줄만 편집한다. 빈 값은 프로필 첫 줄이
+                      placeholder로 보일 뿐 저장되는 값이 아니다("역할이 없는 줄") */}
+                  {picked && (
+                    <Input
+                      value={edit.roles[name] ?? ""}
+                      onChange={(e) => setRole(name, e.target.value)}
+                      placeholder={profileTitle(profileOf(name))}
+                      className="h-7 max-w-56 font-mono text-xs"
+                      aria-label={`${name}의 역할`}
+                    />
+                  )}
+                </li>
+              );
+            })}
           </ul>
         )}
 
@@ -940,12 +1044,15 @@ function SquadDetail({
             disabled={pending || !dirty}
             onClick={() =>
               start(async () => {
-                // 목록 순서 = 화면 목록 순서다(§5-5 §안 하는 것 — 사람이 정하지 않는다).
-                // orphans는 화면에 자리가 없어 뒤에 그대로 붙인다 — 잃지 않는 것이 순서보다 우선이다.
-                const members = [...eligible.filter((n) => edit.picked.includes(n)), ...orphans];
-                const r = await saveSquadMembersAction(projectId, row.name, members);
+                const [membersResult, rulesResult] = await Promise.all([
+                  saveSquadMembersAction(projectId, row.name, orderedMembers),
+                  edit.rules !== edit.saved.rules
+                    ? saveSquadRulesAction(projectId, row.name, edit.rules)
+                    : Promise.resolve<PersonaResult>({ ok: true }),
+                ]);
+                const r = !membersResult.ok ? membersResult : rulesResult;
                 setResult(r);
-                if (r.ok) onEdit({ saved: members, picked: members });
+                if (r.ok) onEdit({ ...edit, saved: { members: orderedMembers, rules: edit.rules } });
               })
             }
           >

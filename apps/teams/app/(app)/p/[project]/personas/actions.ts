@@ -18,10 +18,12 @@ import {
   personaNames,
   resolveConfig,
   saveSquadMembers,
+  saveSquadRules,
   savePersona,
   setPersonaColor,
   squadNames,
   squadsDir,
+  type SquadMember,
 } from "@/lib/projects";
 import {
   deletePersonaMemory,
@@ -111,14 +113,29 @@ export async function createSquadAction(projectId: string, name: string): Promis
   }
 }
 
-/** 멤버 저장(DESIGN.md §5-5 §화면) — 고른 이름을 목록 순서로 한 줄씩, 0개면 빈 파일. */
+/** 멤버 저장(DESIGN.md §5-5 §화면) — 고른 이름 + 역할을 목록 순서로 한 줄씩, 0개면 빈 파일. */
 export async function saveSquadMembersAction(
   projectId: string,
   name: string,
-  members: string[],
+  members: SquadMember[],
 ): Promise<PersonaResult> {
   try {
     await saveSquadMembers(await squadsDirFor(projectId), name, members);
+    revalidatePath(`/p/${projectId}/personas`);
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** `rules` 저장(DESIGN.md §5-5 §개정) — 빈 값이면 파일을 지운다. */
+export async function saveSquadRulesAction(
+  projectId: string,
+  name: string,
+  rules: string,
+): Promise<PersonaResult> {
+  try {
+    await saveSquadRules(await squadsDirFor(projectId), name, rules);
     revalidatePath(`/p/${projectId}/personas`);
     return { ok: true };
   } catch (e) {

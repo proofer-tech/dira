@@ -64,7 +64,7 @@ export default async function Personas({
     ...s,
     // §5-5 §프로필-스쿼드가 없는 것은 경고다 — 이름이 personas 디렉터리에 없거나 PROFILE.md가
     // 없으면(body === null) "프로필 없다"는 하나의 사실이다.
-    missingProfile: s.members.some((m) => !personas.some((p) => p.name === m && p.body !== null)),
+    missingProfile: s.members.some((m) => !personas.some((p) => p.name === m.name && p.body !== null)),
   }));
   const engineHint = personaEngineHint(workers.map((w) => w.engine));
   const rows = await Promise.all(

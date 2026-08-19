@@ -713,10 +713,16 @@ export async function deletePersona(dir: string, name: string): Promise<void> {
 // `ontologyDir`과 같은 근거로 새 환경변수가 없다(워커 재정의를 안 연다) — 스캐폴딩도 안 한다,
 // 첫 스쿼드를 만드는 순간 이 함수들이 `mkdir`한다.
 
+/** `members` 한 줄 — 이름과 역할(§5-5 §개정). 역할이 없으면 `""`(호출부가 프로필 첫 줄을
+ *  자리표시로 보인다 — 값이 아니라 화면 표시일 뿐이다) */
+export type SquadMember = { name: string; role: string };
+
 export type Squad = {
   name: string;
   /** `members` 파일 한 줄에 하나. 파서를 안 만든다 — 줄마다 trim, 빈 줄은 버린다(§5-5 §값) */
-  members: string[];
+  members: SquadMember[];
+  /** `rules` 사이드카 전문. 파일이 없으면 `""`(§5-5 §개정 — 리더 세션 프롬프트에만 실린다) */
+  rules: string;
 };
 
 export function squadsDir(project: Pick<Project, "root">): string {
@@ -726,13 +732,22 @@ export function squadsDir(project: Pick<Project, "root">): string {
 /** 이름 검증 + 경로 조립은 페르소나와 같은 규칙이다(`NAME_RE` — 엔진이 이 값으로 경로를 만든다).
  *  이름공간이 페르소나와 겹치는지는 여기서 안 본다 — 호출부(Server Action)가 양쪽 디렉터리를
  *  같이 들고 있어야 판정할 수 있다. */
-async function squadMembersPath(dir: string, name: string): Promise<string> {
+async function squadDirPath(dir: string, name: string): Promise<string> {
   if (!NAME_RE.test(name)) {
     throw new Error(
       `스쿼드 이름은 영문·숫자·_·- 만 됩니다: ${name || "(비어 있음)"} — 엔진이 이 이름으로 <squads>/<이름>/members 경로를 만듭니다.`,
     );
   }
-  return resolveWithin(dir, path.join(name, "members"));
+  return resolveWithin(dir, name);
+}
+
+async function squadMembersPath(dir: string, name: string): Promise<string> {
+  return path.join(await squadDirPath(dir, name), "members");
+}
+
+/** `rules` — 사이드카 둘째(§5-5 §개정). `members`와 같은 이름공간 검증을 거친다. */
+async function squadRulesPath(dir: string, name: string): Promise<string> {
+  return path.join(await squadDirPath(dir, name), "rules");
 }
 
 export async function squadNames(dir: string): Promise<string[]> {
@@ -743,18 +758,35 @@ export async function squadNames(dir: string): Promise<string[]> {
     .sort();
 }
 
-async function readSquadMembers(dir: string, name: string): Promise<string[]> {
+/** 첫 공백에서 한 번만 자른다(`split(None, 1)`) — 이름 규칙은 첫 칸에만 걸리고 역할은 자유
+ *  서술이다(§5-5 §개정 표). 양끝 공백은 값이 아니다 — 줄·역할 둘 다 trim한다. */
+function parseSquadMemberLine(line: string): SquadMember {
+  const m = /^(\S+)\s*(.*)$/.exec(line)!; // line은 이미 trim + 빈 줄 제외라 항상 매치한다
+  return { name: m[1], role: m[2].trim() };
+}
+
+async function readSquadMembers(dir: string, name: string): Promise<SquadMember[]> {
   const file = await squadMembersPath(dir, name);
   const text = await readFile(file, "utf8").catch(() => "");
   return text
     .split("\n")
     .map((l) => l.trim())
-    .filter((l) => l !== "");
+    .filter((l) => l !== "")
+    .map(parseSquadMemberLine);
+}
+
+async function readSquadRules(dir: string, name: string): Promise<string> {
+  const file = await squadRulesPath(dir, name);
+  return await readFile(file, "utf8").catch(() => "");
 }
 
 export async function listSquads(dir: string): Promise<Squad[]> {
   return Promise.all(
-    (await squadNames(dir)).map(async (name) => ({ name, members: await readSquadMembers(dir, name) })),
+    (await squadNames(dir)).map(async (name) => ({
+      name,
+      members: await readSquadMembers(dir, name),
+      rules: await readSquadRules(dir, name),
+    })),
   );
 }
 
@@ -768,12 +800,25 @@ export async function createSquad(dir: string, name: string): Promise<string> {
   return file;
 }
 
-/** 저장. 문법은 스킬 사이드카와 같다(`items.join("\n") + "\n"`) — 0개면 빈 파일이다(§5-5 §값:
+/** 저장. 줄은 `<이름>` 또는 `<이름> <역할>`(역할이 있을 때만) — 0개면 빈 파일이다(§5-5 §값:
  *  파서가 없어 빈 파일도 "멤버 0"으로 그냥 읽힌다). */
-export async function saveSquadMembers(dir: string, name: string, members: string[]): Promise<void> {
+export async function saveSquadMembers(dir: string, name: string, members: SquadMember[]): Promise<void> {
   const file = await squadMembersPath(dir, name);
   await mkdir(path.dirname(file), { recursive: true });
-  await writeFile(file, members.length > 0 ? members.join("\n") + "\n" : "", "utf8");
+  const lines = members.map((m) => (m.role ? `${m.name} ${m.role}` : m.name));
+  await writeFile(file, lines.length > 0 ? lines.join("\n") + "\n" : "", "utf8");
+}
+
+/** 저장. 빈 값이면 파일을 지운다(= 없음, `writePersonaLimit`과 같은 규약 — §5-5 §개정 "없어도
+ *  된다"). */
+export async function saveSquadRules(dir: string, name: string, rules: string): Promise<void> {
+  const file = await squadRulesPath(dir, name);
+  if (rules === "") {
+    await rm(file, { force: true });
+    return;
+  }
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(file, rules, "utf8");
 }
 
 /** 디렉터리째 지운다 — `deletePersona`와 같다. */

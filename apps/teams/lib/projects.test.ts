@@ -26,6 +26,7 @@ const {
   registryPath,
   removeProject,
   saveSquadMembers,
+  saveSquadRules,
   savePersona,
   setMultiplayEnabled,
   setMultitoken,
@@ -546,25 +547,53 @@ test("스쿼드 — 목록·생성·저장·삭제, 새 환경변수 없이 root
   assert.strictEqual(readFileSync(path.join(dir, "frontend", "members"), "utf8"), ""); // 빈 파일
   await assert.rejects(() => createSquad(dir, "frontend"), /EEXIST/); // O_EXCL
 
-  // 저장 — 목록 순서로 한 줄씩, 끝에 개행 하나(§5-1 사이드카와 같은 문법)
-  await saveSquadMembers(dir, "frontend", ["developer", "designer"]);
+  // 저장 — 역할이 있으면 `<이름> <역할>`, 없으면 `<이름>` 한 줄, 목록 순서, 끝에 개행 하나
+  await saveSquadMembers(dir, "frontend", [
+    { name: "developer", role: "프론트를 맡는다" },
+    { name: "designer", role: "" },
+  ]);
   assert.strictEqual(
     readFileSync(path.join(dir, "frontend", "members"), "utf8"),
-    "developer\ndesigner\n",
+    "developer 프론트를 맡는다\ndesigner\n",
   );
   assert.deepStrictEqual(await squadNames(dir), ["frontend"]);
   assert.deepStrictEqual(await listSquads(dir), [
-    { name: "frontend", members: ["developer", "designer"] },
+    {
+      name: "frontend",
+      members: [
+        { name: "developer", role: "프론트를 맡는다" },
+        { name: "designer", role: "" },
+      ],
+      rules: "",
+    },
   ]);
 
-  // 파서를 안 만든다 — 양끝 공백과 빈 줄은 손으로 쓴 파일에서도 버려진다
-  writeFileSync(path.join(dir, "frontend", "members"), "  developer  \n\nqa\n");
-  assert.deepStrictEqual(await listSquads(dir), [{ name: "frontend", members: ["developer", "qa"] }]);
+  // 파서를 안 만든다 — 첫 공백 한 번만 자르고, 양끝 공백·빈 줄은 손으로 쓴 파일에서도 버려진다
+  writeFileSync(path.join(dir, "frontend", "members"), "  developer  \n\nqa   프론트 리드  \n");
+  assert.deepStrictEqual(
+    (await listSquads(dir))[0].members,
+    [
+      { name: "developer", role: "" },
+      { name: "qa", role: "프론트 리드" },
+    ],
+  );
 
   // 0개로 저장하면 빈 파일 — "멤버 0"으로 그냥 읽힌다
   await saveSquadMembers(dir, "frontend", []);
   assert.strictEqual(readFileSync(path.join(dir, "frontend", "members"), "utf8"), "");
-  assert.deepStrictEqual(await listSquads(dir), [{ name: "frontend", members: [] }]);
+  assert.deepStrictEqual((await listSquads(dir))[0].members, []);
+
+  // `rules` — 사이드카 둘째. 빈 값으로 저장하면 파일이 없는 상태와 같다(§5-5 §개정)
+  assert.strictEqual(existsSync(path.join(dir, "frontend", "rules")), false);
+  await saveSquadRules(dir, "frontend", "PR은 작게 쪼갠다.");
+  assert.strictEqual(
+    readFileSync(path.join(dir, "frontend", "rules"), "utf8"),
+    "PR은 작게 쪼갠다.",
+  );
+  assert.strictEqual((await listSquads(dir))[0].rules, "PR은 작게 쪼갠다.");
+  await saveSquadRules(dir, "frontend", "");
+  assert.strictEqual(existsSync(path.join(dir, "frontend", "rules")), false);
+  assert.strictEqual((await listSquads(dir))[0].rules, "");
 
   await deleteSquad(dir, "frontend");
   assert.strictEqual(existsSync(path.join(dir, "frontend")), false);
@@ -580,12 +609,12 @@ test("스쿼드 — 이름 규칙과 심링크 탈출은 서버에서 거부한�
 
   for (const bad of ["../../.ssh", "..", "a/b", "", "이름", "a b"]) {
     await assert.rejects(() => createSquad(dir, bad), /영문·숫자·_·- 만 됩니다/);
-    await assert.rejects(() => saveSquadMembers(dir, bad, ["x"]), /영문·숫자·_·- 만 됩니다/);
+    await assert.rejects(() => saveSquadMembers(dir, bad, [{ name: "x", role: "" }]), /영문·숫자·_·- 만 됩니다/);
     await assert.rejects(() => deleteSquad(dir, bad), /영문·숫자·_·- 만 됩니다/);
   }
 
   symlinkSync(secret, path.join(dir, "evil"));
-  await assert.rejects(() => saveSquadMembers(dir, "evil", ["x"]), /기준 디렉터리 밖이다/);
+  await assert.rejects(() => saveSquadMembers(dir, "evil", [{ name: "x", role: "" }]), /기준 디렉터리 밖이다/);
   await assert.rejects(() => deleteSquad(dir, "evil"), /기준 디렉터리 밖이다/);
   assert.strictEqual(readFileSync(path.join(secret, "members"), "utf8"), "남의 파일\n");
 });
