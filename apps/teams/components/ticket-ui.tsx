@@ -251,12 +251,15 @@ function assignmentValue(persona: string, squad: string): string | null {
   return squad ? `squad:${squad}` : persona ? `persona:${persona}` : null;
 }
 
-/** 트리거에 그리는 값 — 접두사를 뗀 이름만 보여준다. `SelectValue`는 `items` 없는 Root에서
- *  **값 문자열 그대로**를 그리므로(priority select의 `min-w-64` 주석과 같은 결함), 이 함수
- *  없이는 트리거에 `persona:developer`가 그대로 뜬다. */
+/** 트리거에 그리는 값 — `SelectValue`는 `items` 없는 Root에서 **값 문자열 그대로**를 그리므로
+ *  (priority select의 `min-w-64` 주석과 같은 결함), 이 함수 없이는 트리거에 `persona:developer`가
+ *  그대로 뜬다. §비주얼 §61 (5) — 스쿼드면 `스쿼드 <이름>`(낱말이 유일한 채널), 페르소나면
+ *  이름만(비대칭이 뜻이다 — 기본은 페르소나고 스쿼드가 예외다). */
 function assignmentLabel(value: string | null): string {
   if (!value) return "없음";
-  return value.slice(value.indexOf(":") + 1);
+  const i = value.indexOf(":");
+  const name = value.slice(i + 1);
+  return value.slice(0, i) === "squad" ? `스쿼드 ${name}` : name;
 }
 
 /** §5-5 §할당 입구 둘의 두 select(발행·편집)가 같이 쓰는 옵션 그룹 — 페르소나/스쿼드. 값에

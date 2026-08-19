@@ -161,8 +161,10 @@ export default async function Personas({
         </Alert>
       )}
 
-      {personas.length === 0 ? (
-        // 0개면 2단을 안 그린다(§5) — 고를 것도 그릴 것도 없는 빈 칸 두 개가 서면 고장으로 읽힌다
+      {personas.length === 0 && squads.length === 0 ? (
+        // 둘 다 0개면 2단을 안 그린다(§5, §비주얼 §61 (8)) — 페르소나 0 + 스쿼드 n>0에서
+        // 걷으면 방금 만든 스쿼드가 화면에서 사라지고 지울 길이 없어진다(이름이 한
+        // 이름공간이라 그 이름의 페르소나도 못 만든다)
         <EmptyState text="페르소나 없음" action={<CreatePersonaButton projectId={id} />} />
       ) : (
         // ponytail: 폭 제한 없음 — §5의 §4 예외. 2단만 전체 폭이고 경고 Alert는 문단 폭이다.

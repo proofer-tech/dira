@@ -473,7 +473,8 @@ export function PersonasPane({
   /** 경로의 페르소나 세그먼트(없으면 `null` = 명시 선택 없음 → 목록 첫 줄). 서버가 준 것은
    *  **첫 값뿐**이다 — 그 뒤 선택은 이 컴포넌트와 `popstate`가 든다 */
   initial: string | null;
-  /** 1개 이상이다 — 0개는 호출부가 `<EmptyState>`로 갈라 2단을 안 그린다 */
+  /** `rows`와 `squads` 중 **하나는 1개 이상**이다 — 둘 다 0개면 호출부가 `<EmptyState>`로
+   *  갈라 2단을 안 그린다(§비주얼 §61 (8)). `rows`만 0개면 스쿼드가 기본 선택으로 뜬다. */
   rows: PersonaRow[];
   /** 스쿼드 그룹(§5-5) — 0개면 그 그룹을 안 그린다. 페르소나와 이름공간을 공유하므로 선택은
    *  여전히 세그먼트 하나다 */
@@ -523,8 +524,11 @@ export function PersonasPane({
   const current = selected === null ? rows[0] : rows.find((r) => r.name === selected);
   const editOf = (row: PersonaRow) => edits[row.name] ?? initialEdit(row);
   // 스쿼드는 페르소나와 한 이름공간이라(§5-5) `selected`가 겹치는 일이 없다 — `current`가
-  // 없을 때만 스쿼드 목록에서 찾는다. 기본 선택(`selected === null`)은 페르소나 첫 줄뿐이다.
-  const currentSquad = selected !== null && current === undefined ? squads.find((s) => s.name === selected) : undefined;
+  // 없을 때만 스쿼드 목록에서 찾는다. §비주얼 §61 (8) — 기본 선택(`selected === null`)이
+  // 페르소나 0개(= `current`가 애초에 없음)라도 스쿼드 첫 줄로 떨어진다(`rows[0] ?? squads[0]`와
+  // 같은 값이다 — `current`가 `PersonaRow`뿐이라 나머지는 이 분기가 대신 진다).
+  const currentSquad =
+    current === undefined ? (selected === null ? squads[0] : squads.find((s) => s.name === selected)) : undefined;
   const squadEditOf = (row: SquadRow) => squadEdits[row.name] ?? initialSquadEdit(row);
 
   return (
@@ -555,8 +559,11 @@ export function PersonasPane({
         <SidebarContent className="gap-4 py-2">
           <SidebarGroup className="p-0">
             {/* 머리 낱말이 새로 생겼다(§5-5 — 그룹이 둘이 되면서). `h-6`은 `home-ui.tsx`의
-                좌측 패널 그룹 머리와 같은 눈금이다. */}
-            <SidebarGroupLabel className="h-6 text-muted-foreground">페르소나</SidebarGroupLabel>
+                좌측 패널 그룹 머리와 같은 눈금이다. §비주얼 §61 (2) — 그룹이 둘일 때만 선다:
+                스쿼드 0개면 이 머리도 안 그린다(24px 위 `<h1>페르소나`와 같은 낱말의 반복이라). */}
+            {squads.length > 0 && (
+              <SidebarGroupLabel className="h-6 text-muted-foreground">페르소나</SidebarGroupLabel>
+            )}
             {/* 줄 사이 간격이 0.5(2px)였던 자리를 `SidebarMenu`의 `gap-0.5`가 든다(§34 판정표) */}
             <SidebarMenu aria-label="페르소나" className="gap-0.5">
               {rows.map((row) => {
@@ -660,14 +667,20 @@ export function PersonasPane({
                         onClick={() => select(squad.name)}
                       >
                         <span className="flex min-w-0 grow items-baseline gap-2">
-                          <span className="min-w-0 truncate font-mono text-sm">{squad.name}</span>
+                          <span className="min-w-0 truncate font-mono text-sm" title={squad.name}>
+                            {squad.name}
+                          </span>
                           <span className="whitespace-nowrap text-xs text-muted-foreground">
                             멤버 {squad.members.length}
                           </span>
                           {/* §5-5 §프로필-스쿼드가 없는 것은 경고다 — 배지 문구는 designer 몫이다(§5-5
                               §모양-자리-라벨). 페르소나의 `프로필 없음`과 뜻이 갈리므로 같은 문구를
                               그대로 재사용하지 않는다. */}
-                          {squad.missingProfile && <Badge variant="outline">멤버 프로필 없음</Badge>}
+                          {squad.missingProfile && (
+                            <Badge variant="outline" className="self-center">
+                              멤버 프로필 없음
+                            </Badge>
+                          )}
                           {dirty && (
                             <Badge variant="outline" className="ml-auto self-center">
                               저장 안 됨
@@ -980,22 +993,23 @@ function SquadDetail({
               const picked = edit.picked.includes(name);
               return (
                 <li key={name} className="flex items-center gap-2 px-2 py-1">
-                  {/* 체크 표시는 스킬 다이얼로그의 항목과 같은 관용구다(`Check` 아이콘 + 폭 4) */}
-                  <button
-                    type="button"
-                    className="flex min-w-0 grow cursor-pointer items-center gap-2 rounded text-left hover:bg-accent"
-                    onClick={() => toggle(name)}
-                  >
-                    <span className="flex w-4 shrink-0 justify-center">
-                      {picked && <Check aria-hidden className="size-4" />}
-                    </span>
+                  {/* §비주얼 §61 (3) — 네이티브 체크박스. `<button>`+`Check` 아이콘은 체크
+                      상태가 낭독에 안 실린다. `리더` 배지는 `label` 밖이라 접근명이 `<이름>`
+                      하나로 남는다((14) §리더 §낭독). */}
+                  <label className="flex min-w-0 grow cursor-pointer items-center gap-2 rounded hover:bg-accent">
+                    <input
+                      type="checkbox"
+                      className="size-4 shrink-0"
+                      checked={picked}
+                      onChange={() => toggle(name)}
+                    />
                     <span className="font-mono text-xs">{name}</span>
-                    {picked && name === leaderName && (
-                      <Badge variant="outline" className="text-2xs">
-                        리더
-                      </Badge>
-                    )}
-                  </button>
+                  </label>
+                  {picked && name === leaderName && (
+                    <Badge variant="outline" className="text-2xs">
+                      리더
+                    </Badge>
+                  )}
                   {/* 역할 칸(§5-5 §개정) — 체크된 줄만 편집한다. 빈 값은 프로필 첫 줄이
                       placeholder로 보일 뿐 저장되는 값이 아니다("역할이 없는 줄") */}
                   {picked && (
