@@ -266,7 +266,7 @@ function openWindow(origin: string): BrowserWindow {
 // 알림이 쏟아지면 그 알림은 다음 주에 꺼진다. 둘 다 같은 30초 타이머를 나눠 쓴다(`boot()`) —
 // `setInterval`을 하나 더 만들지 않는다.
 
-type Awaiting = { project: string; stem: string; hash: string; title: string };
+type Awaiting = { project: string; projectName: string; stem: string; hash: string; title: string };
 type GateItem = { project: string; tree: string; count: number; at: string };
 
 /** `null` = 아직 씨를 안 뿌렸다. 빈 집합(`답변 대기 0건`)과 다른 상태다 — 섞으면 첫 응답이
@@ -276,7 +276,7 @@ let seen: Set<string> | null = null;
 function notify(item: Awaiting, origin: string) {
   const n = new Notification({
     title: "답변 대기",
-    body: `${item.title || item.hash} — ${item.project}`,
+    body: `${item.title || item.hash} — ${item.projectName}`,
   });
   n.on("click", () => {
     const url = `${origin}/p/${encodeURIComponent(item.project)}/tickets/${encodeURIComponent(item.stem)}`;

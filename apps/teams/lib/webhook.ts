@@ -72,10 +72,10 @@ export type WebhookPayload = { text: string; project: string; hash: string; titl
 /** `text` 한 칸의 조립. `wrap`(자리표시자 하나)로는 셋을 못 담고, 여기 한 번뿐인 조합이라
  *  범용 치환기를 새로 만들지 않는다(`lib/i18n.ts`의 `wrap` 주석과 같은 판단) — 인라인 치환
  *  셋으로 끝낸다. */
-export function webhookText(locale: Locale, item: Pick<AwaitingItem, "title" | "project" | "hash">): string {
+export function webhookText(locale: Locale, item: Pick<AwaitingItem, "title" | "projectName" | "hash">): string {
   return t(locale, "webhook.text")
     .replace("{title}", item.title)
-    .replace("{project}", item.project)
+    .replace("{project}", item.projectName)
     .replace("{hash}", item.hash);
 }
 
@@ -153,7 +153,7 @@ export async function webhookTick(nowMs: number = Date.now()): Promise<void> {
 // ── 테스트 보내기 — 델타 집합을 안 건드린다 (§0-10 §화면) ────────────────────
 
 /** 답변 대기가 0건인 큐에서도 눌리는 것이 요건이다 — 자리표시 한 벌. */
-const PLACEHOLDER_ITEM: AwaitingItem = { project: "-", stem: "-", hash: "-", title: "-" };
+const PLACEHOLDER_ITEM: AwaitingItem = { project: "-", projectName: "-", stem: "-", hash: "-", title: "-" };
 
 export type WebhookTestResult = { ok: true } | { ok: false; host: string; reason: string };
 

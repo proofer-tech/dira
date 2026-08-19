@@ -55,7 +55,14 @@ test("readWebhookUrl — 파일이 없으면 null이다(꺼진 상태가 기본)
 
 // ── 델타 — 첫 스캔은 조용히 씨를 뿌린다 · 직전 집합과의 차집합만 ────────────
 
-const item = (project: string, stem: string) => ({ project, stem, hash: `${project}-${stem}`, title: `t-${stem}` });
+// projectName을 project(id)와 다르게 둔다 — webhookText가 조용히 id로 되돌아가는 회귀를 잡는다.
+const item = (project: string, stem: string) => ({
+  project,
+  projectName: `${project} teams`,
+  stem,
+  hash: `${project}-${stem}`,
+  title: `t-${stem}`,
+});
 
 test("webhookDelta — seen=null(첫 스캔)이면 toSend가 0건이다 · keys는 채워진다", () => {
   const items = [item("p1", "a"), item("p1", "b")];
@@ -83,17 +90,18 @@ test("webhookDelta — 사라진 티켓은 안 보낸다(풀린 것을 알리지
 
 // ── 본문 조립 — 키 다섯, 담지 않는 것 ────────────────────────────────────────
 
-test("webhookText — 언어별 template에 셋을 갈아 끼운다", () => {
+test("webhookText — 언어별 template에 셋을 갈아 끼운다, 프로젝트 자리는 표시 이름이다", () => {
   const i = item("myproj", "abc");
-  assert.equal(webhookText("ko", i), "답변 대기: t-abc - myproj (myproj-abc)");
-  assert.equal(webhookText("en", i), "Awaiting answer: t-abc - myproj (myproj-abc)");
+  assert.equal(webhookText("ko", i), "답변 대기: t-abc - myproj teams (myproj-abc)");
+  assert.equal(webhookText("en", i), "Awaiting answer: t-abc - myproj teams (myproj-abc)");
 });
 
-test("webhookBody — 키가 정확히 다섯이고 stem·큐 루트가 안 들어간다", () => {
+test("webhookBody — 키가 정확히 다섯이고 stem·큐 루트가 안 들어간다, project 키는 id 그대로다", () => {
   const i = item("myproj", "abc");
   const body = webhookBody("ko", i, 1_770_000_000_000);
   assert.deepEqual(Object.keys(body).sort(), ["at", "hash", "project", "text", "title"]);
   assert.equal(body.project, "myproj");
+  assert.ok(body.text.includes("myproj teams"));
   assert.equal(body.hash, "myproj-abc");
   assert.equal(body.title, "t-abc");
   assert.equal(body.at, new Date(1_770_000_000_000).toISOString());

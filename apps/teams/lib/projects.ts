@@ -246,14 +246,22 @@ export async function getProject(id: string): Promise<Project | null> {
 /** 답변 대기 티켓 — 등록된 프로젝트 전부. `isAwaiting` 하나를 부르는 것이 전부다(제약 3 —
  *  두 벌째 판정을 만들지 않는다). `app/(app)/api/awaiting/route.ts`(Electron main용)와
  *  `lib/webhook.ts`(§0-10 §답변 대기가 앱 밖으로 나간다) 둘이 이 한 스캔을 나눠 쓴다. */
-export type AwaitingItem = { project: string; stem: string; hash: string; title: string };
+export type AwaitingItem = {
+  project: string; // id — URL 조각, 델타 키
+  projectName: string; // 표시 이름 (DESIGN.md §0-10 §주소와 형식)
+  stem: string;
+  hash: string;
+  title: string;
+};
 
 export async function listAwaiting(): Promise<AwaitingItem[]> {
   const projects = await readProjects();
   const found = await Promise.all(
     projects.map(async (p) => {
       const tickets = await listTickets(p.root, await resolveConfig(p));
-      return tickets.filter(isAwaiting).map((t) => ({ project: p.id, stem: t.stem, hash: t.hash, title: t.title }));
+      return tickets
+        .filter(isAwaiting)
+        .map((t) => ({ project: p.id, projectName: p.name, stem: t.stem, hash: t.hash, title: t.title }));
     }),
   );
   return found.flat();
