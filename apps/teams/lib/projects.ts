@@ -259,6 +259,39 @@ export async function listAwaiting(): Promise<AwaitingItem[]> {
   return found.flat();
 }
 
+// ── 통합 게이트 표식 (DESIGN.md §4-14 §표식 파일 · §0-10 ⑧, 요구 `90b7d019`) ───
+//
+// 판정은 dispatch-gate.sh가 이미 했다 — git을 부르지 않고 표식 파일 하나만 읽어 옮긴다
+// (§판정을 두 벌로 만들지 않는다). `app/(app)/api/gate/route.ts`가 등록된 프로젝트마다
+// 이 함수를 부른다(§4-14가 "새 판정식도 게이트 쪽엔 0개" — 여기도 마찬가지다).
+
+export type GateDirty = { tree: string; count: number; at: string; paths: string[] };
+
+/** 표식 머리(첫 줄)의 시각 자리. 이 파일은 `dispatch-gate.sh`의 `date +%Y-%m-%dT%H:%M:%S%z`
+ *  (콜론을 끼워 넣은 것)가 쓰므로 항상 오프셋을 갖는다 — `queue.ts`의 `ISO_DATETIME_RE`(마감
+ *  입력용, 오프셋 선택)보다 좁게 잡는다. */
+const GATE_AT_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/;
+
+/** `<root>/workers/.gate-dirty` 하나를 읽는다(§4-14 §표식 파일). 파일이 없으면 `null` —
+ *  존재가 판정이다. **못 읽거나 첫 줄이 계약 모양이 아니면 `null`이다**(반쯤 쓴 파일로 종을
+ *  켜지 않는다) — 머리뿐이고 나열 줄이 0개인 파일도 여기 든다(정상 생산자는 더러울 때만 쓰고
+ *  그때는 항상 줄이 1개 이상이다). 첫 줄은 **첫 공백에서만** 가른다 — 받는 트리 경로에 공백이
+ *  있어도 뒤쪽이 통째로 경로라 안 깨진다. */
+export async function readGateDirty(root: string): Promise<GateDirty | null> {
+  const text = await readFile(path.join(root, "workers", ".gate-dirty"), "utf8").catch(() => null);
+  if (text === null) return null;
+  const lines = text.split("\n");
+  if (lines.at(-1) === "") lines.pop(); // 끝의 개행이 낸 빈 조각
+  if (lines.length < 2) return null;
+  const sp = lines[0].indexOf(" ");
+  if (sp < 0) return null;
+  const at = lines[0].slice(0, sp);
+  const tree = lines[0].slice(sp + 1);
+  if (!GATE_AT_RE.test(at) || !tree) return null;
+  const paths = lines.slice(1);
+  return { tree, count: paths.length, at, paths };
+}
+
 async function writeProjects(projects: Project[]): Promise<void> {
   const p = registryPath();
   await mkdir(path.dirname(p), { recursive: true });

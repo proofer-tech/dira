@@ -20,6 +20,7 @@ const {
   listSquads,
   multiplayPath,
   multitokenPath,
+  readGateDirty,
   readMultiplay,
   readSummary,
   readProjects,
@@ -771,4 +772,57 @@ test("다중계정 허용 — 세 상태(파일 없음=플래그 / 1 / 0), 판�
     else process.env.DIRA_MULTI_TOKEN = saved;
     rmSync(multitokenPath(), { force: true });
   }
+});
+
+// ── readGateDirty (DESIGN.md §4-14 §표식 파일, 요구 90b7d019) ────────────────
+
+/** `<root>/workers/.gate-dirty`를 직접 쓴다. `newQueue`는 워커 셸 파일용이라 안 쓴다. */
+function writeGateFlag(root: string, content: string): void {
+  mkdirSync(path.join(root, "workers"), { recursive: true });
+  writeFileSync(path.join(root, "workers", ".gate-dirty"), content);
+}
+
+test("readGateDirty — 파일이 없으면 null(= 보류 아님)", async () => {
+  const root = newQueue(null);
+  assert.equal(await readGateDirty(root), null);
+});
+
+test("readGateDirty — 정상 표식을 읽는다: 머리 + 나열 줄 = 건수", async () => {
+  const root = newQueue(null);
+  writeGateFlag(
+    root,
+    "2026-08-20T06:15:00+09:00 /Users/hsol/Projects/dira\n" +
+      "M  apps/teams/lib/projects.ts\n" +
+      "?? apps/teams/lib/gate.ts\n",
+  );
+  assert.deepEqual(await readGateDirty(root), {
+    tree: "/Users/hsol/Projects/dira",
+    count: 2,
+    at: "2026-08-20T06:15:00+09:00",
+    paths: ["M  apps/teams/lib/projects.ts", "?? apps/teams/lib/gate.ts"],
+  });
+});
+
+test("readGateDirty — 경로에 공백이 든 줄이 안 깨진다(첫 공백에서만 가른다)", async () => {
+  const root = newQueue(null);
+  writeGateFlag(root, "2026-08-20T06:15:00+09:00 /Users/h sol/my project\nM  a b.txt\n");
+  assert.deepEqual(await readGateDirty(root), {
+    tree: "/Users/h sol/my project",
+    count: 1,
+    at: "2026-08-20T06:15:00+09:00",
+    paths: ["M  a b.txt"],
+  });
+});
+
+test("readGateDirty — 반쯤 쓴 파일은 null이다: 빈 파일 · 머리뿐인 파일 · 시각이 ISO 8601이 아닌 파일", async () => {
+  const root = newQueue(null);
+
+  writeGateFlag(root, "");
+  assert.equal(await readGateDirty(root), null);
+
+  writeGateFlag(root, "2026-08-20T06:15:00+09:00 /tree\n");
+  assert.equal(await readGateDirty(root), null);
+
+  writeGateFlag(root, "그냥어제 /tree\nM  a.txt\n");
+  assert.equal(await readGateDirty(root), null);
 });
