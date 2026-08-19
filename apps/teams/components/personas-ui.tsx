@@ -83,6 +83,7 @@ import {
   SidebarProvider,
 } from "@/components/ui/sidebar";
 import { Textarea } from "@/components/ui/textarea";
+import { budgetLabel, byteLength, MEMORY_MAX_BYTES, PERSONA_MAX_BYTES } from "@/lib/budgets";
 import { skillUploadError } from "@/lib/skill-upload-limit";
 import type { Memory, Skill } from "@/lib/skills";
 import { decodeHash, engineMissing, PERSONA_COLORS, personaDotClass } from "@/lib/urls";
@@ -100,19 +101,21 @@ export type PersonaRow = {
   refs: { open: number; wip: number; total: number };
   /** `skills.md`의 목록 줄(§5-1). 문법에 안 맞는 줄은 여기 없고 파일에는 그대로 있다 */
   skills: Skill[];
-  /** `skills.md` **파일 전체** 자수 — 왼쪽 목록 줄의 자수가 이걸 더한다(§비주얼 §25 ①) */
+  /** `skills.md` **파일 전체** 바이트 수 — 왼쪽 목록 줄의 예산 합이 이걸 더한다(§비주얼 §25 ①,
+   *  §프롬프트 층 결정 11) */
   skillsChars: number;
   /** `skills-off.md`의 목록 줄(§5-1 §n:m 배정과 비활성). 서버가 이미 활성과 겹치는 이름을 뺀
-   *  값이다(§5-1 §충돌 — 활성이 이긴다). 자수를 안 든다 — 이 파일은 인라인되지 않는다 */
+   *  값이다(§5-1 §충돌 — 활성이 이긴다). 바이트 수를 안 든다 — 이 파일은 인라인되지 않는다 */
   offSkills: Skill[];
   /** `memory/*.md` 한 단계 글롭. 세션이 쓰고 사람이 지운다(§5-2). **`text`가 파일 전체라
-   *  자수는 화면이 더한다** — `skillsChars`처럼 따로 받지 않는다(목록 밖 글자가 없다) */
+   *  바이트 수는 화면이 더한다** — `skillsChars`와 달리 프로필+스킬 예산 합에는 안 든다
+   *  (§프롬프트 층 결정 11 (4) — 자기 예산을 따로 든다) */
   memories: Memory[];
   /** `limit` 사이드카의 정수(§5-4). `null` = 파일 없음·빈 파일·정수 아님 = **상한 없음**.
-   *  자수에 안 더한다 — 이 파일은 프롬프트에 안 실린다(엔진이 디스패치 앞에서 읽는 정책값이다) */
+   *  예산 합에 안 더한다 — 이 파일은 프롬프트에 안 실린다(엔진이 디스패치 앞에서 읽는 정책값이다) */
   limit: number | null;
   /** `engine` 사이드카의 값(§제약 1 §결정 기록 §열한 번째). `null` = 파일 없음·모양이 다름 =
-   *  **지정 없음**(그 페르소나는 워커 자신의 엔진을 쓴다). `limit`과 같은 이유로 자수에 안 더한다 */
+   *  **지정 없음**(그 페르소나는 워커 자신의 엔진을 쓴다). `limit`과 같은 이유로 예산 합에 안 더한다 */
   engine: PersonaEngineValue;
 };
 
@@ -403,8 +406,10 @@ const personaSegment = (pathname: string): string | null => {
   return rest === undefined ? null : rest.split("/").map(decodeHash).join("/");
 };
 
-const editChars = (e: PersonaEdit) =>
-  e.body.length + e.skillsChars + e.memories.reduce((n, m) => n + m.text.length, 0);
+/** 프로필+스킬 합 바이트 — `PERSONA_MAX_BYTES`와 비교되는 값이다(§프롬프트 층 결정 11 (4)).
+ *  메모리는 안 든다 — 프롬프트에 안 실려 이 상한과 무관하고, 자기 예산(`MEMORY_MAX_BYTES`)을
+ *  `MemorySection` 머리가 따로 든다. */
+const editBytes = (e: PersonaEdit) => byteLength(e.body) + e.skillsChars;
 
 /** 2단 — 왼쪽이 목록, 오른쪽이 고른 페르소나(§5). 조립은 §6 프로토콜 화면과 같다
  *  (왼쪽 고정폭 + 오른쪽 `grow`, 좁으면 세로로 쌓인다).
@@ -635,9 +640,11 @@ export function PersonasPane({
                           {/* 프로필 본문은 **모든 디스패치 프롬프트에 인라인된다** — 길이가 곧 비용이다(§5).
                               목록에 둬야 "누가 프롬프트를 얼마나 먹는가"를 비교할 수 있다. `skills.md`도
                               디스패치마다 인라인되지만 `memory/*.md`는 `9d7ba932` 뒤로 프롬프트에 안
-                              실린다 — 그래도 자수가 셋의 합인 근거는 메모리가 **셋 중 유일하게 사람
-                              손 없이 자라는 몫**이라는 것이다(§5-2 §자수가 재는 것) */}
-                          <span className="ml-auto font-mono whitespace-nowrap">{editChars(e)}자</span>
+                              실린다 — 그래서 이 합에 메모리는 안 든다(§프롬프트 층 결정 11 (4)).
+                              `PERSONA_MAX_BYTES`(5,000B)와 비교되는 것도 이 합뿐이다 */}
+                          <span className="ml-auto font-mono whitespace-nowrap">
+                            {budgetLabel(editBytes(e), PERSONA_MAX_BYTES)}
+                          </span>
                         </span>
                       </div>
                     </SidebarMenuButton>
@@ -877,7 +884,7 @@ function PersonaDetail({
         name={row.name}
         dir={row.file.replace(/\/PROFILE\.md$/, "")}
         memories={edit.memories}
-        chars={edit.memories.reduce((n, m) => n + m.text.length, 0)}
+        chars={edit.memories.reduce((n, m) => n + byteLength(m.text), 0)}
         onDeleted={(file) =>
           onEdit({ ...edit, memories: edit.memories.filter((m) => m.file !== file) })
         }
@@ -1721,8 +1728,11 @@ function SkillsSection({
     <section className="space-y-2 border-t pt-3">
       <div className="flex items-baseline gap-2">
         <h3 className="text-sm font-medium">스킬</h3>
-        {/* 0개일 때 `0자`는 참이지만 아무것도 안 말한다 — 바로 아래 한 줄이 이미 말했다 */}
-        {skills.length > 0 && <span className="text-xs text-muted-foreground">{chars}자</span>}
+        {/* 0개일 때 `0 B`는 참이지만 아무것도 안 말한다 — 바로 아래 한 줄이 이미 말했다.
+            상한이 없다 — `editBytes`의 합계 일부일 뿐이라 여기서 발명하지 않는다(결정 11 (3)) */}
+        {skills.length > 0 && (
+          <span className="text-xs text-muted-foreground">{budgetLabel(chars)}</span>
+        )}
         <AddSkillsDialog
           current={skills}
           installed={installed}
@@ -1860,8 +1870,14 @@ function MemorySection({
     <section className="space-y-2 border-t pt-3">
       <div className="flex items-baseline gap-2">
         <h3 className="text-sm font-medium">메모리</h3>
-        {/* 0장일 때 `0자`는 참이지만 아무것도 안 말한다(§25 ②와 같은 판정) */}
-        {memories.length > 0 && <span className="text-xs text-muted-foreground">{chars}자</span>}
+        {/* 0장일 때 `0 B`는 참이지만 아무것도 안 말한다(§25 ②와 같은 판정). 자기 예산
+            (`MEMORY_MAX_BYTES` = `AGENTS.md` §회고 예산)과 비교된다 — 프로필+스킬 합과는
+            별개다(§프롬프트 층 결정 11 (4)) */}
+        {memories.length > 0 && (
+          <span className="text-xs text-muted-foreground">
+            {budgetLabel(chars, MEMORY_MAX_BYTES)}
+          </span>
+        )}
       </div>
 
       {memories.length === 0 ? (

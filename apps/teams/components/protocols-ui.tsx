@@ -4,7 +4,7 @@
  *
  *  트리는 여기 없다: 서버 컴포넌트가 `<Link href="?file=…">`으로 그린다(선택 상태는 URL이 담고,
  *  클라이언트 상태 라이브러리를 쓰지 않는다는 규약 그대로다). 여기 있는 건 fs를 만지는 액션과,
- *  **타이핑하는 동안 살아 있어야 하는 문자 수**뿐이다 — AGENTS.md는 길이가 곧 세션 비용이라
+ *  **타이핑하는 동안 살아 있어야 하는 바이트 수**뿐이다 — AGENTS.md는 길이가 곧 세션 비용이라
  *  저장 후에 알려주면 늦다. */
 import { useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { budgetLabel, byteLength, QUEUE_AGENTS_MAX_BYTES } from "@/lib/budgets";
 
 /** §6 에러 3요소 중 1·2번. 사유는 원문 그대로 — 서버가 거부한 이유가 여기 적혀 온다. */
 function Failure({ title, message }: { title: string; message: string }) {
@@ -47,11 +48,15 @@ function Failure({ title, message }: { title: string; message: string }) {
 }
 
 /** 최상위 `AGENTS.md`는 tick.sh가 **모든 세션 프롬프트에 인라인**한다(155~168행). 나머지는
- *  그 안에서 가리키면 세션이 필요할 때 직접 읽는다 — 배지가 그 차이를 말한다. */
-export function InlineBadge({ chars }: { chars: number }) {
+ *  그 안에서 가리키면 세션이 필요할 때 직접 읽는다 — 배지가 그 차이를 말한다.
+ *
+ *  `bytes`는 UTF-8 바이트 — `wc -c`와 같은 값이라야 예산과 비교된다(§프롬프트 층 결정 11).
+ *  `max`가 있으면 서식이 `{n} / {max} B`(넘으면 뒤에 ` 초과`), 없으면 `{n} B` 하나뿐이다
+ *  (§비주얼 §61 (13) 그대로 — 새 서식 0, 새 색 0). */
+export function InlineBadge({ bytes, max }: { bytes: number; max?: number }) {
   return (
     <Badge variant="secondary" title="tick.sh가 이 파일 전문을 모든 세션 프롬프트 머리에 붙입니다">
-      전원 프롬프트에 인라인 · {chars.toLocaleString()}자
+      전원 프롬프트에 인라인 · {budgetLabel(bytes, max)}
     </Badge>
   );
 }
@@ -171,7 +176,7 @@ export function ProtocolEditor({
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-mono text-sm break-all">{rel}</span>
           {inlined ? (
-            <InlineBadge chars={[...text].length} />
+            <InlineBadge bytes={byteLength(text)} max={QUEUE_AGENTS_MAX_BYTES} />
           ) : (
             <span className="text-xs text-muted-foreground">세션이 필요할 때 읽음</span>
           )}

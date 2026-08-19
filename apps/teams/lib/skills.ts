@@ -23,6 +23,7 @@ import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { MAX_BYTES } from "./attachment-limit.ts";
+import { byteLength } from "./budgets.ts";
 import { skillUploadError } from "./skill-upload-limit.ts";
 import { expandHome, resolveWithin } from "./paths.ts";
 import { personaFilePath } from "./projects.ts";
@@ -500,8 +501,9 @@ const HEADER = `## 스킬
 
 `;
 
-/** 목록 + **파일 전체 자수**. 화면이 둘 다 든다: 목록은 문법에 맞는 줄만이고(사람이 덧붙인
- *  산문은 안 그린다), 접힌 줄의 자수는 `tick.sh`가 주입하는 **파일 전체**를 센다(§비주얼 §25).
+/** 목록 + **파일 전체 바이트 수**. 화면이 둘 다 든다: 목록은 문법에 맞는 줄만이고(사람이 덧붙인
+ *  산문은 안 그린다), 접힌 줄의 바이트 수는 `tick.sh`가 주입하는 **파일 전체**를 센다(§비주얼
+ *  §25, §프롬프트 층 결정 11 — 예산은 `wc -c`와 같은 단위라야 비교가 된다).
  *  한 번 읽어 둘로 나눠주는 이유가 그것이다 — 화면이 같은 파일을 두 번 열지 않는다.
  *
  *  파일이 없으면 `[]`·`0`. 기준 디렉터리(해석된 `TICKET_PERSONAS`)가 아직 없는 큐도 같다 —
@@ -529,7 +531,7 @@ async function readSkillsSidecar(
       .map((l) => ITEM_RE.exec(l.trimEnd()))
       .filter((m) => m !== null)
       .map((m) => ({ name: m[1], description: m[2] })),
-    chars: text.length,
+    chars: byteLength(text),
   };
 }
 
@@ -750,9 +752,10 @@ export function memoryExcerpt(text: string): string {
   return line.trim().replace(/^# /, "");
 }
 
-/** 목록 + **파일 전체 자수의 합**. 접힌 줄의 자수가 이 값을 `PROFILE.md`·`skills.md`에 더한다
- *  (§비주얼 §32 ①) — 엔진이 인라인하는 것이 파일 전체라 파일명 줄도 `관련:`·`출처:` 줄도 센다.
- *  `--- <파일명>` 구분 줄은 주입이 만드는 글자라 안 센다.
+/** 목록 + **파일 전체 바이트 수의 합**. 접힌 줄의 바이트 수가 이 값을 `PROFILE.md`·`skills.md`와
+ *  **따로** 든다(§비주얼 §32 ①, §프롬프트 층 결정 11 (4) — 메모리는 프롬프트에 안 실려 5,000B
+ *  합계에서 빠지고, `AGENTS.md` §회고 예산(150,000B)을 재는 별개 표시가 된다). 파일명 줄도
+ *  `관련:`·`출처:` 줄도 센다. `--- <파일명>` 구분 줄은 주입이 만드는 글자라 안 센다.
  *
  *  글롭은 **한 단계**다(`tick.sh`의 `for m in "$MEMDIR"/*.md`와 같은 판정 — 하위 디렉터리는
  *  안 읽는다). `memory/`가 없으면 `[]`·`0`이고 그게 정상이다(§5-2 — WARN도 없다). */
@@ -767,7 +770,7 @@ export async function readPersonaMemory(
       return { file: file.name, excerpt: memoryExcerpt(text), text };
     }),
   );
-  return { memories, chars: memories.reduce((n, m) => n + m.text.length, 0) };
+  return { memories, chars: memories.reduce((n, m) => n + byteLength(m.text), 0) };
 }
 
 /** 삭제. **클라이언트가 준 이름은 이 디렉터리를 실제로 나열해 나온 목록 안에 있을 때만** 지운다

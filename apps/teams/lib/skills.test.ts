@@ -594,17 +594,17 @@ test("백틱이 든 스킬 이름은 거부한다 — 쓴 파일을 못 읽게 �
   );
 });
 
-test("자수는 파일 전체다 — 목록에 안 뜨는 산문까지 센다", async () => {
+test("바이트 수는 파일 전체다 — 목록에 안 뜨는 산문까지 센다", async () => {
   await writePersonaSkills(personas, "counter", [{ name: "alpha", description: "설명" }]);
   const file = path.join(personas, "counter", "skills.md");
   const before = await readPersonaSkillsFile(personas, "counter");
-  assert.equal(before.chars, readFileSync(file, "utf8").length);
+  assert.equal(before.chars, Buffer.byteLength(readFileSync(file, "utf8")));
   assert.equal(before.skills.length, 1);
 
   writeFileSync(file, readFileSync(file, "utf8") + "\n손으로 적은 줄.\n");
   const after = await readPersonaSkillsFile(personas, "counter");
   assert.deepEqual(after.skills, before.skills); // 목록은 그대로
-  assert.equal(after.chars, before.chars + "\n손으로 적은 줄.\n".length); // 자수만 는다
+  assert.equal(after.chars, before.chars + Buffer.byteLength("\n손으로 적은 줄.\n")); // 바이트 수만 는다
 
   assert.deepEqual(await readPersonaSkillsFile(personas, "no-such-persona"), {
     skills: [],
@@ -743,11 +743,11 @@ test("메모리 읽기 — 한 단계 글롭 · 발췌는 첫 비어 있지 않�
   assert.equal(memories[2].text, readFileSync(path.join(dir, "워크트리 push 경합.md"), "utf8"));
 });
 
-test("자수는 파일 전체의 합 — 접힌 줄의 `자수`가 이걸 더한다", async () => {
+test("바이트 수는 파일 전체의 합 — 접힌 줄의 바이트 수가 이걸 더한다", async () => {
   const dir = memoryFixture("chars");
   const { chars } = await readPersonaMemory(personas, "chars");
   const sum = ["beta.md", "blank.md", "워크트리 push 경합.md"]
-    .map((f) => readFileSync(path.join(dir, f), "utf8").length)
+    .map((f) => Buffer.byteLength(readFileSync(path.join(dir, f), "utf8")))
     .reduce((a, b) => a + b, 0);
   assert.equal(chars, sum);
   assert.ok(chars > 0);

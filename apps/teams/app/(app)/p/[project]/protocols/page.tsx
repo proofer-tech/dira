@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { byteLength, CORE_MAX_BYTES, QUEUE_AGENTS_MAX_BYTES } from "@/lib/budgets";
 import {
   CORE_INLINED,
   listTree,
@@ -205,7 +206,9 @@ export default async function Protocols({
                         >
                           <Lock aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
                           <span className="font-mono break-all">{f.name}</span>
-                          {f.name === CORE_INLINED && <InlineBadge chars={[...f.text].length} />}
+                          {f.name === CORE_INLINED && (
+                            <InlineBadge bytes={byteLength(f.text)} max={CORE_MAX_BYTES} />
+                          )}
                         </SidebarMenuButton>
                       </SidebarMenuItem>
                     ))}
@@ -244,7 +247,9 @@ export default async function Protocols({
                               className="size-3.5 shrink-0 text-muted-foreground"
                             />
                             <span className="font-mono break-all">{e.name}</span>
-                            {e.inlineChars !== undefined && <InlineBadge chars={e.inlineChars} />}
+                            {e.inlineBytes !== undefined && (
+                              <InlineBadge bytes={e.inlineBytes} max={QUEUE_AGENTS_MAX_BYTES} />
+                            )}
                           </SidebarMenuButton>
                         </SidebarMenuItem>
                       ),
@@ -326,7 +331,7 @@ function CoreView({ file, vendored }: { file: CoreFile; vendored: boolean }) {
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-mono text-sm break-all">{file.path}</span>
         {inlined ? (
-          <InlineBadge chars={[...file.text].length} />
+          <InlineBadge bytes={byteLength(file.text)} max={CORE_MAX_BYTES} />
         ) : (
           <span className="text-xs text-muted-foreground">세션이 필요할 때 읽음</span>
         )}

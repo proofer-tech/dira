@@ -10,6 +10,7 @@
  *  프로젝트 해석은 얇은 서버 액션. 경로 방어를 Next 없이 `node --test`로 못박기 위해서이기도 하다. */
 import { link, lstat, mkdir, readFile, readdir, realpath, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { byteLength } from "./budgets.ts";
 import { expandHome, resolveWithin } from "./paths.ts";
 import { engineRepo } from "./scaffold.ts";
 
@@ -20,8 +21,9 @@ export type ProtocolEntry = {
   /** 들여쓰기 단계. 트리 컴포넌트 대신 이 값으로 그린다 */
   depth: number;
   isDir: boolean;
-  /** 최상위 `AGENTS.md`만 — 모든 세션 프롬프트에 인라인된다(tick.sh 155~168행). 길이가 곧 비용이다 */
-  inlineChars?: number;
+  /** 최상위 `AGENTS.md`만 — 모든 세션 프롬프트에 인라인된다(tick.sh 155~168행). UTF-8 바이트 수
+   *  다 — `wc -c`와 같은 값이라야 예산과 비교된다(§프롬프트 층 결정 11) */
+  inlineBytes?: number;
 };
 
 /** 트리. 심링크된 디렉터리는 따라 들어가지 않는다(readdir recursive의 기본 동작) — 루프도 막고
@@ -54,7 +56,7 @@ export async function listTree(baseDir: string): Promise<ProtocolEntry[]> {
   const agents = entries.find((e) => e.rel === "AGENTS.md" && !e.isDir);
   if (agents) {
     const text = await readFile(path.join(base, "AGENTS.md"), "utf8").catch(() => "");
-    agents.inlineChars = [...text].length; // 코드포인트 수. UTF-16 단위로 세면 이모지가 2로 잡힌다
+    agents.inlineBytes = byteLength(text);
   }
   return entries;
 }

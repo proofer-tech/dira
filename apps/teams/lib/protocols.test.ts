@@ -88,10 +88,13 @@ test("중첩 트리 — 부모 바로 뒤에 자식, .md 아닌 파일도 보인
   assert.ok(!tree.some((e) => e.rel.includes("id_rsa")));
 });
 
-test("최상위 AGENTS.md만 인라인 문자 수를 단다", async () => {
+test("최상위 AGENTS.md만 인라인 바이트 수를 단다", async () => {
   const tree = await listTree(shared);
-  assert.strictEqual(tree.find((e) => e.rel === "AGENTS.md")!.inlineChars, "협업 프로토콜\n".length);
-  assert.strictEqual(tree.find((e) => e.rel === "부록/용어.md")!.inlineChars, undefined);
+  assert.strictEqual(
+    tree.find((e) => e.rel === "AGENTS.md")!.inlineBytes,
+    Buffer.byteLength("협업 프로토콜\n"),
+  );
+  assert.strictEqual(tree.find((e) => e.rel === "부록/용어.md")!.inlineBytes, undefined);
 });
 
 test("디렉터리가 없으면 빈 트리 — 에러가 아니다", async () => {
