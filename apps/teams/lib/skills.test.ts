@@ -380,6 +380,12 @@ test("parseSkillAddress — 주소 갈래 표 여섯(§5-1). 네트워크를 안
   });
 });
 
+test("parseSkillAddress — www.skills.sh는 skills.sh의 정본 리디렉션 대상이라 같은 자리로 받는다", () => {
+  assert.deepEqual(parseSkillAddress("https://www.skills.sh/s/x.skill"), {
+    fetchUrl: "https://www.skills.sh/s/x.skill",
+  });
+});
+
 test("parseSkillAddress — 호스트 목록 밖 · 모양이 표에 없다 → 갈래 10, 요청을 안 낸다", () => {
   const rejects = (address: string) =>
     assert.throws(
@@ -476,6 +482,29 @@ test("fetchSkillFromAddress — 갈래 10: 리디렉션 뒤 최종 호스트가 
       e instanceof SkillInstallError &&
       /받을 수 없습니다/.test(e.message) &&
       e.detail === "https://evil.example/payload",
+  );
+});
+
+test("fetchSkillFromAddress — skills.sh의 308이 www.skills.sh로 떨어져도 거절하지 않는다", async () => {
+  const zip = buildZip([{ path: "SKILL.md", data: Buffer.from("---\nname: from-www\n---\n") }]);
+  const files = await withMockFetch(
+    async () => mockResponse(zip, { status: 200, url: "https://www.skills.sh/s/x.skill" }),
+    () => fetchSkillFromAddress("https://skills.sh/s/x.skill"),
+  );
+  assert.equal(files[0].bytes.toString("utf8"), "---\nname: from-www\n---\n");
+});
+
+test("fetchSkillFromAddress — www.skills.sh를 흉내낸 다른 호스트는 여전히 거절한다", async () => {
+  await assert.rejects(
+    () =>
+      withMockFetch(
+        async () => mockResponse(Buffer.from("x"), { status: 200, url: "https://evil-www.skills.sh/x" }),
+        () => fetchSkillFromAddress("https://skills.sh/s/x.skill"),
+      ),
+    (e: unknown) =>
+      e instanceof SkillInstallError &&
+      /받을 수 없습니다/.test(e.message) &&
+      e.detail === "https://evil-www.skills.sh/x",
   );
 });
 

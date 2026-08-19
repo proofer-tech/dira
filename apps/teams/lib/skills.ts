@@ -357,6 +357,14 @@ const SKILL_ADDRESS_HOSTS = new Set([
   "skills.sh",
 ]);
 
+/** `skills.sh`(정점 도메인)는 실측(2026-08-20)상 모든 요청을 308로 `www.skills.sh`에
+ *  리디렉션한다 - 그 응답도 여기 §호스트 목록 넷으로 되판정하므로, 목록을 다섯으로 늘리지 않고
+ *  이 별칭 하나로 `www.skills.sh`를 `skills.sh`와 같은 자리로 접는다(정확히 이 문자열만 - 접두사
+ *  일치가 아니다, `evil-www.skills.sh` 같은 변종을 새지 않는다). */
+function normalizeSkillHost(hostname: string): string {
+  return hostname === "www.skills.sh" ? "skills.sh" : hostname;
+}
+
 /** §5-1 §타임아웃 — 전체 30초. 헤더뿐 아니라 본문을 다 받는 시간까지 잰다(기존 `AbortSignal.timeout`
  *  조립 그대로 — `lib/usage.ts`의 5초 프로브와 다른 수인 이유는 §5-1 §넷째 입구가 적었다). */
 const SKILL_FETCH_TIMEOUT_MS = 30_000;
@@ -378,10 +386,11 @@ export function parseSkillAddress(address: string): { fetchUrl: string; subtree?
   } catch {
     return badSkillAddress(address);
   }
-  if (url.protocol !== "https:" || !SKILL_ADDRESS_HOSTS.has(url.hostname)) return badSkillAddress(address);
+  if (url.protocol !== "https:" || !SKILL_ADDRESS_HOSTS.has(normalizeSkillHost(url.hostname)))
+    return badSkillAddress(address);
   const seg = url.pathname.split("/").filter(Boolean);
 
-  if (url.hostname === "skills.sh") {
+  if (normalizeSkillHost(url.hostname) === "skills.sh") {
     return url.pathname.endsWith(".skill") ? { fetchUrl: address } : badSkillAddress(address);
   }
   if (url.hostname === "github.com") {
@@ -463,7 +472,7 @@ export async function fetchSkillFromAddress(address: string): Promise<SkillUploa
       `GET ${fetchUrl}: ${(e as Error).message}`,
     );
   }
-  if (!SKILL_ADDRESS_HOSTS.has(new URL(res.url).hostname)) {
+  if (!SKILL_ADDRESS_HOSTS.has(normalizeSkillHost(new URL(res.url).hostname))) {
     await res.body?.cancel();
     return badSkillAddress(res.url);
   }
