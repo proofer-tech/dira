@@ -217,8 +217,13 @@ export function BoardFilter({
  *
  *  ponytail: 고정 5초 전체 재스캔. 천장은 큐 크기다(파일 수십 개 × 4바이트 stat이라 지금은 공짜).
  *            수백 건이 되거나 탭을 여러 개 켜두는 게 문제되면 mtime 조건부 응답 → 그 다음이 SSE.
- *            숨은 탭은 아예 건너뛴다 — 배경 탭 열 개가 5초마다 큐를 훑을 이유가 없다. */
-export function BoardPolling() {
+ *            숨은 탭은 아예 건너뛴다 — 배경 탭 열 개가 5초마다 큐를 훑을 이유가 없다.
+ *
+ *  **5초 바닥 위에 이른 갱신을 얹는다**(DESIGN.md §보드 갱신, 요구 `7cd6dea2`) — 지우지 않는다,
+ *  그게 안전망이다. `/api/revision`이 주는 메모리 안 정수를 250ms마다 묻고 **갈린 회차에만**
+ *  `router.refresh()`를 부른다. 기준선은 서버가 그린 시점의 값(`rev` prop)이라 첫 회차가
+ *  무조건 재렌더를 부르지 않는다 — `WipBodyPolling`이 `mtime`을 받는 것과 같은 자리다. */
+export function BoardPolling({ project, rev }: { project: string; rev: number }) {
   const router = useRouter();
   useEffect(() => {
     const timer = setInterval(() => {
@@ -226,6 +231,37 @@ export function BoardPolling() {
     }, 5000);
     return () => clearInterval(timer);
   }, [router]);
+
+  useEffect(() => {
+    let stop = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let since = rev;
+    // 앞 왕복이 끝난 뒤에 다음을 예약한다 — `WipBodyPolling`과 같은 이유(겹친 왕복이 같은
+    // 변경에 `router.refresh()`를 두 번 부르는 것을 막는다).
+    const poll = async () => {
+      try {
+        if (!document.hidden) {
+          const r = await fetch(`/api/revision?project=${encodeURIComponent(project)}`).then(
+            (res) => res.json() as Promise<{ rev: number }>,
+          );
+          if (stop) return;
+          if (r.rev !== since) {
+            since = r.rev;
+            router.refresh();
+          }
+        }
+      } catch {
+        // 이 왕복 하나만 버린다 — 한 회차 실패로 5초 바닥까지 끊기지 않는다.
+      }
+      if (!stop) timer = setTimeout(poll, 250);
+    };
+    timer = setTimeout(poll, 250);
+    return () => {
+      stop = true;
+      clearTimeout(timer);
+    };
+  }, [project, rev, router]);
+
   return null;
 }
 

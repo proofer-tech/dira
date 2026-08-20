@@ -59,6 +59,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { boardRevision } from "@/lib/board-revision";
 import { NO_EPIC, epicTitle, epicsFromTickets, listEpics } from "@/lib/epics";
 import { t } from "@/lib/i18n";
 import {
@@ -693,7 +694,7 @@ export default async function Board({
     // 한 사슬이고 **한 칸이라도 `min-h-0`이 빠지면** 그 칸이 내용만큼 늘어나 문서가 도로 길어진다.
     // 위에서 고정되는 것(h1 · 툴바)은 그대로 두고 마지막 칸(레인 · 테이블 바디)만 flex-1이다.
     <div className="flex min-h-0 flex-1 flex-col gap-4">
-      <BoardPolling />
+      <BoardPolling project={id} rev={boardRevision(project.root)} />
 
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-lg font-semibold">보드</h1>
