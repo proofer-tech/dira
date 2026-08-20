@@ -542,6 +542,13 @@ export const ko: Record<string, string> = {
  *  | deps 대기(배지) | Blocked | `dep`을 안 쓰는 근거는 위 `선행` 줄과 같다 |
  *  | 한도 · 사용률 · 리셋 · 소모 속도 | limit · used · reset · tokens/min | status bar의 넷. 피드백 `fe25d40e`가 *사전 밖에서 지어낸 낱말*로 잡은 그 자리라, 여기가 정본이다 |
  *  | 열림(전환기의 티켓 수) | open | 파일이 열려 있는 티켓 전부라 배지 `Open`보다 넓지만, 엔진이 그 파일 상태를 부르는 이름이 `open` 하나다 — 셋째 낱말을 만들지 않는다 |
+ *  | 프로토콜 파일 · 코어 프로토콜 | protocol file · core protocol | `7a86fd5c`(프로토콜 묶음)가 더한 줄부터 아래 |
+ *  | 인라인(프롬프트에) | inline(d) | tick.sh가 전문을 프롬프트 머리에 붙이는 그 동작. `embed`로 풀지 않는다 — 스펙·매뉴얼이 쓰는 낱말이 이것 하나다 |
+ *  | vendored | vendored | 코어 사본이 큐 안에 있는 상태. 한국어 화면도 이 낱말을 그대로 쓴다(결정 8-d) |
+ *  | 되돌리기(편집기) | Revert | 저장 안 한 편집을 버리는 자리다. **`기본값으로 되돌리기`(Reset to default)와 다른 낱말이다** — 돌아가는 곳이 기본값이 아니라 마지막 저장본이다 |
+ *  | 이름변경 · 기본값 가정 | Rename · assumed default | 뒤엣것은 경로 옆 꼬리라 소문자다(`settings.tokens.addedSuffix`가 선 그 벌) |
+ *  | 원문(읽기 전용 칸의 낭독 이름) | source | 화면에 안 뜨는 접근가능 이름(`CORE.md source`) |
+ *  | 자(글자 수) | chars | 복수형 장치가 없어 늘 복수로 둔다 — 이 자리는 1이 거의 안 선다 |
  *
  *  **어순이 뒤집히는 자리는 접두·접미 두 키로 쪼갠다.** 한국어는 이름 뒤에 다 붙지만(`<이름>
  *  삭제`) 영어는 동사가 앞에 선다(`Delete <name>`) — 한쪽이 비는 것이 정상이고, 조립은
@@ -920,6 +927,104 @@ export const en: Record<string, string> = {
   "worker.defect.noExec.title": "No exec bit",
   "worker.defect.noExec.why":
     "cron can't start it — Permission denied. tick.sh never runs, so runner.log never gains a line and open tickets just sit there.",
+
+  // 프로토콜 화면(§0-16 §발행 §묶음 표 7, `7a86fd5c`) — `ko`는 `93c106b3`이 넣었다. 어순이
+  // 뒤집혀 조각의 몫이 갈린 자리는 그 자리마다 주석을 달았고, 조립 결과는 `i18n.test.ts`가
+  // 두 언어 다 못박는다.
+  "protocols.inline.tooltip": "tick.sh pastes this file in full at the top of every session prompt",
+  // 뒤에 `{budgetLabel(...)}`가 공백 하나를 사이에 두고 붙는다(`1,234 / 6,500 B`).
+  "protocols.inline.badge": "Inlined in every prompt ·",
+
+  "protocols.new.title": "New file",
+  "protocols.new.descPrefix": "A path relative to the protocols directory.",
+  "protocols.new.descSuffix":
+    " creates any subdirectories along the way. The file starts empty and the editor opens on it right away.",
+  "protocols.new.pathLabel": "Path",
+  // 한국어는 경로가 문장 끝에 서지만 영어는 동사가 앞이라 조각의 몫이 갈린다 — 접두가
+  // 문장을 다 지고 접미는 괄호를 닫는다(`... directory (../ · absolute).`).
+  "protocols.new.pathHintPrefix": "The server rejects paths that leave the directory (",
+  "protocols.new.pathHintSuffix": "· absolute).",
+  "protocols.new.failTitle": "Couldn't create the file",
+
+  "protocols.readWhenNeeded": "Read when a session needs it",
+  // 글자 수 뒤에 붙는다 — 한국어는 공백이 없고(`123자`) 영어는 하나 있다(`123 chars`).
+  "protocols.charSuffix": " chars",
+  "protocols.editor.inlinedHintPrefix": "This file goes into every session prompt in full —",
+  "protocols.editor.inlinedHintSuffix":
+    " pastes it at the top. Length is what every session costs. Move the detailed rules into another file in the same directory and point at it here, and a session reads them only when it needs them.",
+  "protocols.editor.saveFailTitle": "Couldn't save",
+  "protocols.editor.revert": "Revert",
+  "protocols.editor.saved": "Saved.",
+
+  "protocols.rename.trigger": "Rename",
+  "protocols.rename.dialogTitlePrefix": "Rename —",
+  "protocols.rename.desc":
+    "Change the relative path and the file moves into a subdirectory too. If that name already exists the rename is refused — nothing gets overwritten quietly.",
+  "protocols.rename.pathLabel": "New path",
+  "protocols.rename.agentsWarnTitle": "Rename it and it drops out of the prompt",
+  "protocols.rename.agentsWarnPrefix": "tick.sh reads only the name",
+  "protocols.rename.agentsWarnSuffix":
+    ". Under any other name a session starts with no collaboration protocol — no error, no warning.",
+  "protocols.rename.failTitle": "Couldn't rename",
+  "protocols.rename.working": "Renaming…",
+
+  "protocols.delete.trigger": "Delete",
+  "protocols.delete.dialogTitle": "Delete file",
+  // 파일 이름 뒤에 바로 붙는다 — 한국어는 조사가 붙고(`handoff.md를`) 영어는 공백이 하나 있다.
+  "protocols.delete.descSuffix": " will be deleted. This can't be undone.",
+  "protocols.delete.agentsWarnTitle": "Every session will start with no collaboration protocol",
+  "protocols.delete.agentsWarnBody":
+    "tick.sh just moves on when the file isn't there — no error, no warning. The project keeps running; only the sessions won't know the rules.",
+  "protocols.delete.failTitle": "Couldn't delete",
+  "protocols.delete.working": "Deleting…",
+
+  "protocols.sidebar.collapse": "Collapse the file list",
+  "protocols.sidebar.expand": "Expand the file list",
+  "protocols.sidebar.ariaLabel": "Protocol files",
+  "protocols.usingDefault": "assumed default",
+  // 변수(`TICKET_PROTOCOLS`) 앞이 동사라, 한국어가 접미에 둔 `읽지 못해`가 영어에서는 접두로
+  // 올라온다. 가운데 조각은 공백으로 연다 — 변수와 바로 맞닿는다.
+  "protocols.default.hintPrefix": "Couldn't read",
+  "protocols.default.hintMiddle": " from the worker file, so this screen assumes the engine default (",
+  "protocols.default.rootPath": "<root>/protocols",
+  "protocols.default.hintSuffix": "). Point the worker at another path and this screen follows it.",
+  "protocols.empty.title": "No files",
+  "protocols.empty.bodyPrefix": "This project runs even with no protocols —",
+  "protocols.empty.bodyMiddle": " just moves on when there's no",
+  "protocols.empty.bodySuffix":
+    ". A session only starts without knowing the collaboration rules — how each ticket kind is handled, how to hand off, how to report.",
+  "protocols.rejected.title": "Can't open this path",
+  "protocols.core.notFoundPrefix": "Not a file in the core protocol:",
+  "protocols.picker.expanded": "Pick a file.",
+  "protocols.picker.collapsed": "Expand the file list and pick a file.",
+  "protocols.core.vendoredPrefix": "This file is the core copy vendored into this queue —",
+  "protocols.core.notVendoredPrefix": "This file lives in the engine repo, not in the queue —",
+  // 굵게 서는 조각이 `every project`라, 한국어가 접미에 둔 `모든 세션 프롬프트 맨 앞에`가
+  // 영어에서는 가운데로 올라오고 접미에는 마침표만 남는다.
+  "protocols.core.inlinedMiddle": " pastes it in full at the top of every session prompt in",
+  "protocols.core.inlinedAllProjects": "every project",
+  "protocols.core.inlinedSuffix": ".",
+  "protocols.core.notInlinedSuffix":
+    " points at it and a session reads it when it needs it (it isn't inlined into the prompt).",
+  "protocols.core.readOnlyNote": "Read-only here (this screen edits the project layer).",
+  // textarea aria-label — `wrap(file.name, ..., "")`가 공백 하나로 잇는다(`CORE.md source`).
+  "protocols.core.rawLabelSuffix": "source",
+
+  "protocols.action.unknownProjectPrefix": "Not a registered project:",
+
+  // lib/protocols.ts — fs 검증 사유. 뒤에 붙는 이름·경로·바이트 수는 값이라 안 건드린다.
+  "protocols.lib.coreReadFailPrefix": "Couldn't read the core protocol —",
+  "protocols.lib.coreEmptyPrefix": "No core protocol —",
+  "protocols.lib.isDirectory": "This is a directory.",
+  // 바이트 수 뒤에 바로 붙는다 — 한국어와 달리 공백이 하나 있다(`2000000 bytes — ...`).
+  "protocols.lib.tooLargeSuffix": " bytes — over 1MB, so the editor won't open it.",
+  "protocols.lib.notText": "Not a text file (NUL bytes) — can't edit it.",
+  "protocols.lib.missingPrefix": "No such file (it may have been deleted):",
+  "protocols.lib.notRegularPrefix": "Not a regular file:",
+  "protocols.lib.nameRequired": "Enter a file name.",
+  "protocols.lib.dirNoDeletePrefix": "This screen doesn't delete directories:",
+  "protocols.lib.newNameRequired": "Enter the new name.",
+  "protocols.lib.dirNoMovePrefix": "This screen doesn't move directories:",
 };
 
 const DICTS: Record<Locale, Record<string, string>> = { ko, en };

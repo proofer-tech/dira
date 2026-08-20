@@ -96,6 +96,7 @@ const FILLED = [
   "status.",
   "dep.",
   "board.", // board.column.epic(806e483a)도 이 접두사로 덮인다
+  "protocols.", // 7a86fd5c가 en을 채우고 여기 더했다(묶음 7의 프로토콜 갈래)
 ];
 
 test("이미 찬 묶음(설정·마감·셸)의 ko 키는 en에 하나도 안 빠졌다", () => {
@@ -404,6 +405,101 @@ test("93c106b3 — 프로토콜 화면의 조립 문구가 원문과 바이트 �
   assert.strictEqual(
     `${t(l, "protocols.lib.dirNoMovePrefix")} sub`,
     "디렉터리는 이 화면에서 옮기지 않습니다: sub",
+  );
+});
+
+// 7a86fd5c — 같은 자리의 영어. 어순이 뒤집혀 조각의 몫이 갈린 자리(경로 힌트 · 기본값 안내 ·
+// 코어 산문 · 바이트 수 꼬리)가 영어에서도 한 문장이 되는지 본다. 조립식은 `93c106b3` 테스트와
+// 글자 하나까지 같다 — 갈리는 것은 사전 값뿐이다.
+test("7a86fd5c — 프로토콜 화면의 조립 문구가 영어에서도 문장이 된다(en)", () => {
+  const l = "en" as const;
+
+  assert.strictEqual(
+    `${t(l, "protocols.new.descPrefix")} /${t(l, "protocols.new.descSuffix")}`,
+    "A path relative to the protocols directory. / creates any subdirectories along the way. The file starts empty and the editor opens on it right away.",
+  );
+  assert.strictEqual(
+    `${t(l, "protocols.new.pathHintPrefix")}../ ${t(l, "protocols.new.pathHintSuffix")}`,
+    "The server rejects paths that leave the directory (../ · absolute).",
+  );
+  assert.strictEqual(
+    `${t(l, "protocols.editor.inlinedHintPrefix")} tick.sh${t(l, "protocols.editor.inlinedHintSuffix")}`,
+    "This file goes into every session prompt in full — tick.sh pastes it at the top. Length is what every session costs. Move the detailed rules into another file in the same directory and point at it here, and a session reads them only when it needs them.",
+  );
+  assert.strictEqual(
+    `${t(l, "protocols.rename.dialogTitlePrefix")} handoff.md`,
+    "Rename — handoff.md",
+  );
+  assert.strictEqual(
+    `${t(l, "protocols.rename.agentsWarnPrefix")} AGENTS.md${t(l, "protocols.rename.agentsWarnSuffix")}`,
+    "tick.sh reads only the name AGENTS.md. Under any other name a session starts with no collaboration protocol — no error, no warning.",
+  );
+  assert.strictEqual(
+    `handoff.md${t(l, "protocols.delete.descSuffix")}`,
+    "handoff.md will be deleted. This can't be undone.",
+  );
+  assert.strictEqual(
+    `${t(l, "protocols.default.hintPrefix")} TICKET_PROTOCOLS${t(l, "protocols.default.hintMiddle")}${t(l, "protocols.default.rootPath")}${t(l, "protocols.default.hintSuffix")}`,
+    "Couldn't read TICKET_PROTOCOLS from the worker file, so this screen assumes the engine default (<root>/protocols). Point the worker at another path and this screen follows it.",
+  );
+  assert.strictEqual(
+    `${t(l, "protocols.empty.bodyPrefix")} tick.sh${t(l, "protocols.empty.bodyMiddle")} AGENTS.md${t(l, "protocols.empty.bodySuffix")}`,
+    "This project runs even with no protocols — tick.sh just moves on when there's no AGENTS.md. A session only starts without knowing the collaboration rules — how each ticket kind is handled, how to hand off, how to report.",
+  );
+  assert.strictEqual(
+    `${t(l, "protocols.core.vendoredPrefix")} tick.sh${t(l, "protocols.core.inlinedMiddle")} ${t(l, "protocols.core.inlinedAllProjects")}${t(l, "protocols.core.inlinedSuffix")} ${t(l, "protocols.core.readOnlyNote")}`,
+    "This file is the core copy vendored into this queue — tick.sh pastes it in full at the top of every session prompt in every project. Read-only here (this screen edits the project layer).",
+  );
+  assert.strictEqual(
+    `${t(l, "protocols.core.notVendoredPrefix")} CORE-FOO.md${t(l, "protocols.core.notInlinedSuffix")} ${t(l, "protocols.core.readOnlyNote")}`,
+    "This file lives in the engine repo, not in the queue — CORE-FOO.md points at it and a session reads it when it needs it (it isn't inlined into the prompt). Read-only here (this screen edits the project layer).",
+  );
+  assert.strictEqual(wrap("CORE.md", t(l, "protocols.core.rawLabelSuffix"), ""), "CORE.md source");
+  assert.strictEqual(
+    `${t(l, "protocols.core.notFoundPrefix")} missing.md`,
+    "Not a file in the core protocol: missing.md",
+  );
+
+  // 글자 수 꼬리 — 한국어는 공백이 없고(`1,234자`) 영어는 하나 있다.
+  assert.strictEqual(`${(1234).toLocaleString("en-US")}${t(l, "protocols.charSuffix")}`, "1,234 chars");
+  // 배지 — 뒤에 `budgetLabel(...)`이 공백 하나를 두고 붙는다.
+  assert.strictEqual(
+    `${t(l, "protocols.inline.badge")} 6,700 / 6,500 B`,
+    "Inlined in every prompt · 6,700 / 6,500 B",
+  );
+
+  // lib/protocols.ts가 짓는 fs 검증 사유.
+  assert.strictEqual(
+    `${t(l, "protocols.lib.coreReadFailPrefix")} /q/protocols (ENOENT)`,
+    "Couldn't read the core protocol — /q/protocols (ENOENT)",
+  );
+  assert.strictEqual(
+    `${t(l, "protocols.lib.coreEmptyPrefix")} /q/protocols`,
+    "No core protocol — /q/protocols",
+  );
+  assert.strictEqual(
+    `${2000000}${t(l, "protocols.lib.tooLargeSuffix")}`,
+    "2000000 bytes — over 1MB, so the editor won't open it.",
+  );
+  assert.strictEqual(
+    `${t(l, "protocols.lib.missingPrefix")} handoff.md`,
+    "No such file (it may have been deleted): handoff.md",
+  );
+  assert.strictEqual(
+    `${t(l, "protocols.lib.notRegularPrefix")} handoff.md`,
+    "Not a regular file: handoff.md",
+  );
+  assert.strictEqual(
+    `${t(l, "protocols.lib.dirNoDeletePrefix")} sub`,
+    "This screen doesn't delete directories: sub",
+  );
+  assert.strictEqual(
+    `${t(l, "protocols.lib.dirNoMovePrefix")} sub`,
+    "This screen doesn't move directories: sub",
+  );
+  assert.strictEqual(
+    `${t(l, "protocols.action.unknownProjectPrefix")} myproj`,
+    "Not a registered project: myproj",
   );
 });
 
