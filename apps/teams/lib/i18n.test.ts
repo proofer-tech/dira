@@ -503,6 +503,122 @@ test("7a86fd5c — 프로토콜 화면의 조립 문구가 영어에서도 문�
   );
 });
 
+// 화면 이행 셋째 묶음 - 페르소나 갈래(§0-16 §발행 §묶음 표 행 7, `204be4da`). 변수를 낀 조립
+// 문구가 원문(이행 전 하드코딩 한국어)과 한 글자도 안 갈리는지 못박는다. 조립식은
+// `personas-ui.tsx`·`personas/actions.ts`·`lib/skills.ts`·`[[...persona]]/page.tsx`의 JSX ·
+// 템플릿 리터럴 그대로다(줄바꿈만 있는 공백은 지워지고, 같은 줄의 공백 하나는 남는다).
+test("204be4da — 스쿼드 블록 근사치(스쿼드 이름 · 리더 꼬리) 조립이 원문 그대로다", () => {
+  assert.strictEqual(`${wrap(t("ko", "persona.squad.blockNamePrefix"), "myteam", "")}`, "스쿼드 myteam");
+  assert.strictEqual(` ${t("ko", "persona.squad.blockLeaderSuffix")}`, " (리더)");
+});
+
+test("204be4da — 사이드바 참조 줄(열린 · 진행중 · 완료 · 티켓 접두)이 원문 그대로다", () => {
+  assert.strictEqual(wrap(t("ko", "persona.refs.openPrefix"), "2", ""), "열린 2");
+  assert.strictEqual(wrap(t("ko", "status.label.wip"), "1", ""), "진행중 1");
+  assert.strictEqual(wrap(t("ko", "status.label.done"), "3", ""), "완료 3");
+  assert.strictEqual(
+    wrap(t("ko", "persona.refs.ticketPrefix"), "열린 2 · 진행중 1", ""),
+    "티켓 열린 2 · 진행중 1",
+  );
+});
+
+test("204be4da — 색 sr-only 라벨과 스쿼드 역할 aria-label이 원문 그대로다", () => {
+  assert.strictEqual(wrap(t("ko", "persona.color.labelPrefix"), "blue", ""), "색: blue");
+  assert.strictEqual(`alice${t("ko", "persona.squad.roleAriaSuffix")}`, "alice의 역할");
+});
+
+test("204be4da — 스쿼드 멤버·규칙 배지(바이트 수 · 초과 꼬리)가 원문 그대로다", () => {
+  const members = `${t("ko", "persona.squad.membersBadgePrefix")} 1,600 / 1,500 B${` ${t("ko", "persona.squad.overBudgetSuffix")}`}`;
+  assert.strictEqual(members, "멤버 전원 프롬프트에 인라인 · 1,600 / 1,500 B 초과");
+  assert.strictEqual(`${t("ko", "persona.squad.rulesBadgePrefix")} 120 B`, "리더 프롬프트에 인라인 · 120 B");
+});
+
+test("204be4da — 엔진 예고 줄(없는 기능 나열)이 원문 그대로다", () => {
+  const missing = ["참견", "웹훅"];
+  const line = `claude ${t("ko", "persona.engine.missingMiddle")} ${missing.join(t("ko", "persona.engine.missingJoiner"))}${t("ko", "persona.engine.missingSuffix")}`;
+  assert.strictEqual(line, "claude 워커는 참견과 웹훅이 없습니다 — 티켓 수행은 같습니다.");
+});
+
+test("204be4da — 스쿼드 삭제 확인 다이얼로그(제목 · 본문)가 원문 그대로다", () => {
+  assert.strictEqual(`${t("ko", "persona.squadDelete.titlePrefix")} myteam`, "스쿼드 삭제 — myteam");
+  const body = `squads/myteam ${t("ko", "persona.squadDelete.bodyMiddle")} squad: ${t("ko", "persona.squadDelete.bodyAfter")}`;
+  assert.strictEqual(
+    body,
+    "squads/myteam 디렉터리를 지웁니다. 되돌릴 수 없습니다. 이 스쿼드를 참조하는 티켓의 squad: 값은 그대로 남습니다.",
+  );
+});
+
+test("204be4da — 커스텀 엔진 덮어쓰기 확인 다이얼로그가 원문 그대로다", () => {
+  assert.strictEqual(`${t("ko", "persona.engine.overwriteTitlePrefix")} dev`, "커스텀 엔진 값을 덮어씁니다 — dev");
+  const body = `${t("ko", "persona.engine.overwriteBodyPrefix")} --foo ${t("ko", "persona.engine.overwriteBodySuffix")}`;
+  assert.strictEqual(
+    body,
+    "지금 engine 파일에 카탈로그 밖 인자가 있습니다: --foo 여기서 저장하면 이 인자는 사라지고 고른 값으로 바뀝니다.",
+  );
+});
+
+test("204be4da — 메모리 삭제 확인 다이얼로그(제목 · 본문)가 원문 그대로다", () => {
+  assert.strictEqual(`${t("ko", "persona.memory.deleteTitlePrefix")} note1`, "메모리 삭제 — note1");
+  const body = `path/memory/note1.md ${t("ko", "persona.memory.deleteBodyAfterPath")}`;
+  assert.strictEqual(
+    body,
+    "path/memory/note1.md 파일을 지웁니다. 되돌릴 수 없습니다 — 이 화면에 편집도 추가도 없습니다. 다음 디스패치부터 세션이 이 개념을 못 찾습니다.",
+  );
+});
+
+test("204be4da — 페르소나 삭제 확인 다이얼로그(제목 · 본문 · 참조 경고)가 원문 그대로다", () => {
+  assert.strictEqual(`${t("ko", "persona.delete.titlePrefix")} dev`, "페르소나 삭제 — dev");
+  assert.strictEqual(
+    `personas/dev ${t("ko", "persona.delete.bodyAfterPath")}`,
+    "personas/dev 디렉터리를 안의 파일까지 지웁니다. 되돌릴 수 없습니다.",
+  );
+  const refsTitle = `${t("ko", "persona.delete.refsWarnPrefix")} 3${t("ko", "persona.delete.refsWarnSuffix")}${` ${t("ko", "persona.delete.refsWipPrefix")} 1${t("ko", "persona.delete.refsWipSuffix")}`}`;
+  assert.strictEqual(refsTitle, "이 페르소나를 참조하는 티켓이 3건 있습니다 (진행중 1건)");
+  const desc = `${t("ko", "persona.delete.refsBody")} WARN${t("ko", "persona.warn.engineSuffix")} ${t("ko", "persona.wording.withoutPersona")} ${t("ko", "persona.delete.dispatchDetail")}`;
+  assert.strictEqual(
+    desc,
+    "티켓은 지워지지 않습니다. 프로필이 없어지면 엔진은 WARN만 남기고 페르소나 없이 디스패치합니다 — 세션이 역할·권한을 모르는 채로 시작합니다.",
+  );
+});
+
+test("204be4da — 생성 다이얼로그(설명 · 이름 힌트)가 원문 그대로다", () => {
+  const personaDesc = `${t("ko", "persona.create.personaDescPrefix")} persona: ${t("ko", "persona.create.personaDescSuffix")}`;
+  assert.strictEqual(
+    personaDesc,
+    "티켓의 persona: 값이 곧 디렉터리 이름입니다. 프로필 본문은 세션 프롬프트 머리에 인라인됩니다.",
+  );
+  const squadDesc = `${t("ko", "persona.create.squadDescPrefix")} squad: ${t("ko", "persona.create.squadDescSuffix")}`;
+  assert.strictEqual(
+    squadDesc,
+    "프로필이 있는 페르소나를 후보 풀로 묶습니다 — 티켓의 squad: 값이 되고, 디스패치가 그중 진행중이 가장 적은 하나를 고릅니다. 리더도 위임도 아닙니다.",
+  );
+  const nameHint = `${t("ko", "persona.create.nameHintPrefix")} ${t("ko", "persona.create.nameHintPersonaFile")}${t("ko", "persona.create.nameHintSuffix")}`;
+  assert.strictEqual(
+    nameHint,
+    "영문·숫자·_·-. 파일은 <personas>/<이름>/PROFILE.md 가 됩니다. 페르소나와 스쿼드는 이름을 공유합니다 — 겹치면 거부됩니다",
+  );
+});
+
+test("204be4da — 스킬 검색 0건 · 다중 드롭 거절 개수가 원문 그대로다", () => {
+  assert.strictEqual(`"foo"${t("ko", "persona.skill.searchEmptySuffix")}`, `"foo"와 일치하는 스킬 0건`);
+  assert.strictEqual(`3${t("ko", "persona.skill.countSuffix")}`, "3개");
+});
+
+test("204be4da — 페르소나 화면(page.tsx) 프로필 없음 · 스쿼드 경고 경고문이 원문 그대로다", () => {
+  const missingBody = `${t("ko", "persona.missing.enginePrefix")} WARN${t("ko", "persona.warn.engineSuffix")} ${t("ko", "persona.wording.withoutPersona")} ${t("ko", "persona.missing.dispatchDetail")}`;
+  assert.strictEqual(
+    missingBody,
+    "엔진은 이 이름을 만나면 WARN만 남기고 페르소나 없이 디스패치합니다 — 디스패치가 실패하는 게 아니라, 세션이 역할·권한을 모르는 채로 시작합니다. 그 이름을 왼쪽에서 고르고 오른쪽의 빈 본문을 채워 저장하면 파일이 만들어집니다.",
+  );
+  const squadWarnBody = `${t("ko", "persona.squadWarn.enginePrefix")} WARN${t("ko", "persona.warn.engineSuffix")} ${t("ko", "persona.squadWarn.strongLabel")}${t("ko", "persona.squadWarn.parenPrefix")} ${t("ko", "persona.wording.withoutPersona")}${t("ko", "persona.squadWarn.parenSuffix")}`;
+  assert.strictEqual(
+    squadWarnBody,
+    "엔진은 이 값을 만나면 WARN만 남기고 종전 경로(persona:가 있으면 그 값, 없으면 페르소나 없이)로 디스패치합니다.",
+  );
+  const refsLine = `dev ${t("ko", "persona.missing.refsMiddle")} 3${t("ko", "persona.missing.refsSuffix")} PROFILE.md`;
+  assert.strictEqual(refsLine, "dev — 티켓 3건이 참조 · PROFILE.md");
+});
+
 test("readLanguage — 파일 없으면 기본값 ko, set 뒤에는 그 값을 읽는다", async () => {
   rmSync(languagePath(), { force: true });
   assert.strictEqual(await readLanguage(), "ko");

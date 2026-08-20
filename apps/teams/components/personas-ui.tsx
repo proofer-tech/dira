@@ -27,6 +27,8 @@ import type { SquadMember } from "@/lib/projects";
 import { Markdown } from "@/components/markdown";
 import { MarkdownEditor } from "@/components/markdown-editor";
 import type { Vault } from "@/lib/markdown-wikilinks";
+import { useT } from "@/components/language-provider";
+import { wrap } from "@/lib/i18n";
 // 왼쪽 목록 줄의 점도 보드·칸반·필터와 **같은 컴포넌트**다(§5) — 색 조회의 출처는 하나다
 import { PersonaDot } from "@/components/persona-badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -134,11 +136,17 @@ export type SquadRow = {
 /** 스쿼드 블록(§5-5 §개정 §스쿼드 블록 - §블록의 틀)의 바이트 수. tick.sh:736-788이 실제로
  *  조립하는 문구와 문자 그대로 맞춘다 - 머리/꼬리 `=====` 줄 + 멤버 줄 `<이름>[ (리더)] - <역할>`,
  *  잰 범위는 머리 `=====`의 첫 글자부터 꼬리 `=====`의 마지막 글자까지(감싼 개행은 안 센다). */
-function squadBlockBytes(name: string, members: { name: string; role: string }[]): number {
+function squadBlockBytes(
+  name: string,
+  members: { name: string; role: string }[],
+  t: (key: string) => string,
+): number {
   const lines = [
-    `===== 스쿼드 ${name} =====`,
-    ...members.map((m, i) => `${m.name}${i === 0 ? " (리더)" : ""} - ${m.role}`),
-    "===== 스쿼드 끝 =====",
+    `===== ${wrap(t("persona.squad.blockNamePrefix"), name, "")} =====`,
+    ...members.map(
+      (m, i) => `${m.name}${i === 0 ? ` ${t("persona.squad.blockLeaderSuffix")}` : ""} - ${m.role}`,
+    ),
+    `===== ${t("persona.squad.blockNamePrefix")} ${t("persona.squad.blockEndSuffix")} =====`,
   ];
   return new TextEncoder().encode(lines.join("\n")).length;
 }
@@ -164,11 +172,12 @@ function Failure({ title, message }: { title: string; message: string }) {
 }
 
 /** `열린 2 · 진행중 1` — 0인 종류는 뺀다. 참조가 없으면 null(호출자가 자리를 비운다). */
-function refsLabel(refs: PersonaRow["refs"]): string | null {
+function refsLabel(refs: PersonaRow["refs"], t: (key: string) => string): string | null {
   const parts = [
-    refs.open > 0 && `열린 ${refs.open}`,
-    refs.wip > 0 && `진행중 ${refs.wip}`,
-    refs.total - refs.open - refs.wip > 0 && `완료 ${refs.total - refs.open - refs.wip}`,
+    refs.open > 0 && wrap(t("persona.refs.openPrefix"), String(refs.open), ""),
+    refs.wip > 0 && wrap(t("status.label.wip"), String(refs.wip), ""),
+    refs.total - refs.open - refs.wip > 0 &&
+      wrap(t("status.label.done"), String(refs.total - refs.open - refs.wip), ""),
   ].filter(Boolean);
   return parts.length ? parts.join(" · ") : null;
 }
@@ -189,6 +198,7 @@ function ColorPicker({
   color?: string;
   onError: (message: string | null) => void;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [current, setCurrent] = useState(color);
   const [, start] = useTransition();
@@ -198,7 +208,7 @@ function ColorPicker({
       setCurrent(next ?? undefined);
       setOpen(false);
       const r = await setPersonaColorAction(projectId, name, next);
-      onError(r.ok ? null : (r.message ?? "색을 저장하지 못했습니다."));
+      onError(r.ok ? null : (r.message ?? t("persona.color.saveFailedMessage")));
       if (!r.ok) setCurrent(color);
     });
 
@@ -214,7 +224,9 @@ function ColorPicker({
       >
         <PersonaDot color={current} />
         {/* 색만으로 뜻을 전하지 않는다(§0) — 점은 aria-hidden이고 값은 여기서 말한다 */}
-        <span className="sr-only">{current ? `색: ${current}` : "색 없음"}</span>
+        <span className="sr-only">
+          {current ? wrap(t("persona.color.labelPrefix"), current, "") : t("persona.color.none")}
+        </span>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-auto p-2">
         <div className="grid grid-cols-3 gap-2">
@@ -234,7 +246,7 @@ function ColorPicker({
           {/* 9번째 칸이 `색 없음`이다 — 3×3이 정확히 차서 빈 칸이 없다(§12) */}
           <button
             type="button"
-            aria-label="색 없음"
+            aria-label={t("persona.color.none")}
             onClick={() => pick(null)}
             className={cn(
               "size-6 cursor-pointer rounded-full border border-muted-foreground",
@@ -263,6 +275,7 @@ export function CreatePersonaButton({
   projectId: string;
   variant?: "default" | "outline";
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [kind, setKind] = useState<CreateKind>("persona");
   const [name, setName] = useState("");
@@ -281,39 +294,40 @@ export function CreatePersonaButton({
         }
       }}
     >
-      <DialogTrigger render={<Button size="sm" variant={variant} />}>만들기</DialogTrigger>
+      <DialogTrigger render={<Button size="sm" variant={variant} />}>{t("common.create")}</DialogTrigger>
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle>{kind === "persona" ? "페르소나 생성" : "스쿼드 생성"}</DialogTitle>
+          <DialogTitle>
+            {kind === "persona" ? t("persona.create.personaTitle") : t("persona.create.squadTitle")}
+          </DialogTitle>
           <DialogDescription>
             {kind === "persona" ? (
               <>
-                티켓의 <span className="font-mono text-xs">persona:</span> 값이 곧 디렉터리
-                이름입니다. 프로필 본문은 세션 프롬프트 머리에 인라인됩니다.
+                {t("persona.create.personaDescPrefix")} <span className="font-mono text-xs">persona:</span>{" "}
+                {t("persona.create.personaDescSuffix")}
               </>
             ) : (
               <>
-                프로필이 있는 페르소나를 후보 풀로 묶습니다 — 티켓의{" "}
-                <span className="font-mono text-xs">squad:</span> 값이 되고, 디스패치가 그중
-                진행중이 가장 적은 하나를 고릅니다. 리더도 위임도 아닙니다.
+                {t("persona.create.squadDescPrefix")}{" "}
+                <span className="font-mono text-xs">squad:</span> {t("persona.create.squadDescSuffix")}
               </>
             )}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-2">
-          <Label htmlFor="create-kind">종류</Label>
+          <Label htmlFor="create-kind">{t("persona.create.kindLabel")}</Label>
           <Select value={kind} onValueChange={(v) => setKind(v as CreateKind)}>
             <SelectTrigger id="create-kind" className="w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="persona">페르소나</SelectItem>
-              <SelectItem value="squad">스쿼드</SelectItem>
+              <SelectItem value="persona">{t("shell.nav.personas")}</SelectItem>
+              <SelectItem value="squad">{t("persona.word.squad")}</SelectItem>
             </SelectContent>
           </Select>
         </div>
         <div className="space-y-2">
-          <Label htmlFor="persona-name">이름</Label>
+          <Label htmlFor="persona-name">{t("persona.create.nameLabel")}</Label>
           <Input
             id="persona-name"
             className="font-mono"
@@ -322,21 +336,21 @@ export function CreatePersonaButton({
             onChange={(e) => setName(e.target.value)}
           />
           <p className="text-xs text-muted-foreground">
-            영문·숫자·_·-.{" "}
+            {t("persona.create.nameHintPrefix")}{" "}
             {kind === "persona"
-              ? "파일은 <personas>/<이름>/PROFILE.md 가 됩니다"
-              : "파일은 <squads>/<이름>/members 가 됩니다"}
-            . 페르소나와 스쿼드는 이름을 공유합니다 — 겹치면 거부됩니다
+              ? t("persona.create.nameHintPersonaFile")
+              : t("persona.create.nameHintSquadFile")}
+            {t("persona.create.nameHintSuffix")}
           </p>
           {result?.message && (
             <Failure
-              title={kind === "persona" ? "페르소나를 만들지 못했습니다" : "스쿼드를 만들지 못했습니다"}
+              title={kind === "persona" ? t("persona.create.personaFailTitle") : t("persona.create.squadFailTitle")}
               message={result.message}
             />
           )}
         </div>
         <DialogFooter>
-          <DialogClose render={<Button variant="outline" />}>취소</DialogClose>
+          <DialogClose render={<Button variant="outline" />}>{t("common.cancel")}</DialogClose>
           <Button
             disabled={pending || !name.trim()}
             onClick={() =>
@@ -350,7 +364,7 @@ export function CreatePersonaButton({
               })
             }
           >
-            {pending ? "만드는 중…" : "만들기"}
+            {pending ? t("common.creating") : t("common.create")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -501,6 +515,7 @@ export function PersonasPane({
    *  같은 문자열을 받는다(engine 파일이 있는 카드는 어차피 안 그린다). */
   engineHint: string | null;
 }) {
+  const t = useT();
   const [selected, setSelected] = useState<string | null>(initial);
   const [edits, setEdits] = useState<Record<string, PersonaEdit>>({});
   const [squadEdits, setSquadEdits] = useState<Record<string, SquadEdit>>({});
@@ -568,13 +583,15 @@ export function PersonasPane({
                 좌측 패널 그룹 머리와 같은 눈금이다. §비주얼 §61 (2) — 그룹이 둘일 때만 선다:
                 스쿼드 0개면 이 머리도 안 그린다(24px 위 `<h1>페르소나`와 같은 낱말의 반복이라). */}
             {squads.length > 0 && (
-              <SidebarGroupLabel className="h-6 text-muted-foreground">페르소나</SidebarGroupLabel>
+              <SidebarGroupLabel className="h-6 text-muted-foreground">
+                {t("shell.nav.personas")}
+              </SidebarGroupLabel>
             )}
             {/* 줄 사이 간격이 0.5(2px)였던 자리를 `SidebarMenu`의 `gap-0.5`가 든다(§34 판정표) */}
-            <SidebarMenu aria-label="페르소나" className="gap-0.5">
+            <SidebarMenu aria-label={t("shell.nav.personas")} className="gap-0.5">
               {rows.map((row) => {
                 const e = editOf(row);
-                const refs = refsLabel(row.refs);
+                const refs = refsLabel(row.refs, t);
                 const active = row.name === current?.name;
                 return (
                   <SidebarMenuItem key={row.name}>
@@ -606,36 +623,42 @@ export function PersonasPane({
                           <span className="min-w-0 truncate font-mono text-sm">{row.name}</span>
                           {e.saved === null && (
                             <Badge variant="outline" className="self-center">
-                              프로필 없음
+                              {t("persona.badge.noProfile")}
                             </Badge>
                           )}
                           {/* 저장 버튼이 오른쪽에 있다 — 다른 줄을 고른 채 잊으면 이게 유일한 표시다(§5) */}
                           {e.body !== (e.saved ?? "") && (
                             <Badge variant="outline" className="ml-auto self-center">
-                              저장 안 됨
+                              {t("persona.badge.unsaved")}
                             </Badge>
                           )}
                         </span>
                         <span className="flex items-baseline gap-2 text-xs text-muted-foreground">
                           <span className="min-w-0 truncate" title={row.file}>
-                            {refs ? `티켓 ${refs}` : "참조하는 티켓 없음"}
+                            {refs ? wrap(t("persona.refs.ticketPrefix"), refs, "") : t("persona.refs.none")}
                           </span>
                           {/* `티켓 n` 뒤 · 자수 앞 — "무엇을 참조하나 → 무엇을 쓰나 → 얼마나 먹나"다
                               (§비주얼 §25 ①). 0개면 안 그린다: 고정폭 메타라 빠져도 줄이 안 흔들린다 */}
                           {e.skills.length > 0 && (
-                            <span className="whitespace-nowrap">스킬 {e.skills.length}</span>
+                            <span className="whitespace-nowrap">
+                              {t("persona.word.skills")} {e.skills.length}
+                            </span>
                           )}
                           {/* `스킬 n` 뒤 · `자수` 앞이다(§비주얼 §32 ①) — "무엇을 참조하나 → 무엇을 쓰나 →
                               **무엇을 배웠나** → 얼마나 먹나". `장`을 안 붙인다: 앞 둘과 같은 종류의 값이다 */}
                           {e.memories.length > 0 && (
-                            <span className="whitespace-nowrap">메모리 {e.memories.length}</span>
+                            <span className="whitespace-nowrap">
+                              {t("persona.word.memory")} {e.memories.length}
+                            </span>
                           )}
                           {/* `메모리 n` 뒤 · `자수` 앞이다(§5-4 §화면) — 앞의 셋이 *무엇이 실리나*고
                               이건 정책값이라 실리는 것들 뒤에 선다. **파일이 없으면 아무것도 안
                               그린다**: 빈 값이 기본이라 `상한 없음`을 쓸 자리가 아니다.
                               **`상한 n / 지금 m`을 안 그린다** — 지금 도는 수는 보드가 준다(§5-4) */}
                           {e.limit !== null && (
-                            <span className="whitespace-nowrap">상한 {e.limit}</span>
+                            <span className="whitespace-nowrap">
+                              {t("persona.word.limit")} {e.limit}
+                            </span>
                           )}
                           {/* 프로필 본문은 **모든 디스패치 프롬프트에 인라인된다** — 길이가 곧 비용이다(§5).
                               목록에 둬야 "누가 프롬프트를 얼마나 먹는가"를 비교할 수 있다. `skills.md`도
@@ -658,8 +681,10 @@ export function PersonasPane({
               전부 스쿼드에 없는 값이라 줄이 한 줄로 끝난다(§5-5 §화면 표). */}
           {squads.length > 0 && (
             <SidebarGroup className="p-0">
-              <SidebarGroupLabel className="h-6 text-muted-foreground">스쿼드</SidebarGroupLabel>
-              <SidebarMenu aria-label="스쿼드" className="gap-0.5">
+              <SidebarGroupLabel className="h-6 text-muted-foreground">
+                {t("persona.word.squad")}
+              </SidebarGroupLabel>
+              <SidebarMenu aria-label={t("persona.word.squad")} className="gap-0.5">
                 {squads.map((squad) => {
                   const active = squad.name === currentSquad?.name;
                   // §5-5 §화면 "기본 선택 - 동시 선택 - 편집 보존 - 저장 안 됨: §5 그대로" —
@@ -679,19 +704,19 @@ export function PersonasPane({
                             {squad.name}
                           </span>
                           <span className="whitespace-nowrap text-xs text-muted-foreground">
-                            멤버 {squad.members.length}
+                            {t("persona.word.members")} {squad.members.length}
                           </span>
                           {/* §5-5 §프로필-스쿼드가 없는 것은 경고다 — 배지 문구는 designer 몫이다(§5-5
                               §모양-자리-라벨). 페르소나의 `프로필 없음`과 뜻이 갈리므로 같은 문구를
                               그대로 재사용하지 않는다. */}
                           {squad.missingProfile && (
                             <Badge variant="outline" className="self-center">
-                              멤버 프로필 없음
+                              {t("persona.badge.squadNoProfile")}
                             </Badge>
                           )}
                           {dirty && (
                             <Badge variant="outline" className="ml-auto self-center">
-                              저장 안 됨
+                              {t("persona.badge.unsaved")}
                             </Badge>
                           )}
                         </span>
@@ -721,7 +746,7 @@ export function PersonasPane({
           // 같은 것 그대로다: 새 컴포넌트도 새 문구도 0이다.
           <Alert variant="destructive">
             <TriangleAlert aria-hidden />
-            <AlertTitle>이 경로는 열 수 없습니다</AlertTitle>
+            <AlertTitle>{t("persona.route.notFound")}</AlertTitle>
             <AlertDescription>
               <span className="font-mono text-xs break-all">{selected}</span>
             </AlertDescription>
@@ -784,6 +809,7 @@ function PersonaDetail({
   modelPattern: string;
   engineHint: string | null;
 }) {
+  const t = useT();
   const [result, setResult] = useState<PersonaResult | null>(null);
   // 삭제·색은 둘 다 이 칸 머리에서 누르므로 사유도 머리 아래다 — 실패는 **누른 곳**이다(§5).
   const [headError, setHeadError] = useState<{ title: string; message: string } | null>(null);
@@ -800,7 +826,7 @@ function PersonaDetail({
           name={row.name}
           color={color}
           onError={(message) =>
-            setHeadError(message ? { title: "색을 저장하지 못했습니다", message } : null)
+            setHeadError(message ? { title: t("persona.color.saveFailedTitle"), message } : null)
           }
         />
         <span className="font-mono text-sm break-all">{row.name}</span>
@@ -810,7 +836,7 @@ function PersonaDetail({
               projectId={projectId}
               row={row}
               onDeleted={onDeleted}
-              onError={(message) => setHeadError({ title: "삭제하지 못했습니다", message })}
+              onError={(message) => setHeadError({ title: t("persona.action.deleteFailedTitle"), message })}
             />
           </span>
         )}
@@ -841,10 +867,14 @@ function PersonaDetail({
         className="font-mono"
         onChange={(body) => onEdit({ ...edit, body })}
       />
-      {result && !result.ok && <Failure title="저장하지 못했습니다" message={result.message ?? ""} />}
+      {result && !result.ok && (
+        <Failure title={t("persona.action.saveFailedTitle")} message={result.message ?? ""} />
+      )}
       {/* 오른쪽 정렬, 1차 액션이 가장 오른쪽 — 결과 문구는 버튼 왼쪽이다(§비주얼 §4-3) */}
       <div className="flex items-center justify-end gap-4">
-        {result?.ok && !dirty && <span className="text-sm text-muted-foreground">저장됐습니다.</span>}
+        {result?.ok && !dirty && (
+          <span className="text-sm text-muted-foreground">{t("persona.action.savedNotice")}</span>
+        )}
         <Button
           size="sm"
           disabled={pending || !dirty}
@@ -857,7 +887,7 @@ function PersonaDetail({
             })
           }
         >
-          {pending ? "저장 중…" : "저장"}
+          {pending ? t("common.saving") : t("common.save")}
         </Button>
       </div>
 
@@ -915,6 +945,7 @@ function SquadDetail({
   onEdit: (next: SquadEdit) => void;
   onDeleted: () => void;
 }) {
+  const t = useT();
   const [membersResult, setMembersResult] = useState<PersonaResult | null>(null);
   const [rulesResult, setRulesResult] = useState<PersonaResult | null>(null);
   const [headError, setHeadError] = useState<string | null>(null);
@@ -935,6 +966,7 @@ function SquadDetail({
   const blockBytes = squadBlockBytes(
     row.name,
     orderedMembers.map((m) => ({ name: m.name, role: m.role || profileTitle(profileOf(m.name)) })),
+    t,
   );
   const overBudget = blockBytes > SQUAD_BLOCK_MAX_BYTES;
   const rulesBytes = new TextEncoder().encode(edit.rules).length;
@@ -971,38 +1003,36 @@ function SquadDetail({
         </span>
       </div>
 
-      {headError && <Failure title="삭제하지 못했습니다" message={headError} />}
+      {headError && <Failure title={t("persona.action.deleteFailedTitle")} message={headError} />}
 
       {/* `rules` — 사이드카 둘째(§5-5 §개정). 리더 세션 프롬프트에만 실린다, 없어도 된다.
           모양은 §비주얼 §61 (12)가 정한다 — `Textarea` 한 면이다: `rules`는 md가 아니고
           (파서 없음), 렌더되는 자리가 앱에 0개다(유일한 독자가 리더 세션의 프롬프트다). */}
       <section className="space-y-2 border-t pt-3">
         <h3 className="flex items-center gap-2 text-sm font-medium">
-          규칙
+          {t("persona.squad.rulesHeading")}
           {/* 규칙 배지 — §61 (13). 상한이 없다: §5-5 §개정이 안 줬고 이 절이 발명하지 않는다 */}
           <Badge
             variant="secondary"
             className="ml-auto font-mono font-normal"
-            title="리더로 뜬 세션의 프롬프트에만 이 파일 전문이 붙습니다"
+            title={t("persona.squad.rulesBadgeTitle")}
           >
-            리더 프롬프트에 인라인 · {rulesBytes.toLocaleString()} B
+            {t("persona.squad.rulesBadgePrefix")} {rulesBytes.toLocaleString()} B
           </Badge>
         </h3>
         <Textarea
-          aria-label="규칙"
+          aria-label={t("persona.squad.rulesHeading")}
           className="font-mono"
           value={edit.rules}
           onChange={(e) => onEdit({ ...edit, rules: e.target.value })}
         />
-        <p className="text-xs text-muted-foreground">
-          리더 세션의 프롬프트에만 실립니다. 비우면 리더는 멤버 이름과 각자의 역할만 봅니다.
-        </p>
+        <p className="text-xs text-muted-foreground">{t("persona.squad.rulesHint")}</p>
         {rulesResult && !rulesResult.ok && (
-          <Failure title="저장하지 못했습니다" message={rulesResult.message ?? ""} />
+          <Failure title={t("persona.action.saveFailedTitle")} message={rulesResult.message ?? ""} />
         )}
         <div className="flex items-center justify-end gap-4">
           {rulesResult?.ok && !rulesDirty && (
-            <span className="text-sm text-muted-foreground">저장됐습니다.</span>
+            <span className="text-sm text-muted-foreground">{t("persona.action.savedNotice")}</span>
           )}
           <Button
             size="sm"
@@ -1015,7 +1045,7 @@ function SquadDetail({
               })
             }
           >
-            {rulesPending ? "저장 중…" : "저장"}
+            {rulesPending ? t("common.saving") : t("common.save")}
           </Button>
         </div>
       </section>
@@ -1023,23 +1053,22 @@ function SquadDetail({
       {/* 본문은 `멤버` 절이다(§5-5 §화면) — textarea·디스패치 정책·스킬·메모리 절이 없다 */}
       <section className="space-y-2 border-t pt-3">
         <h3 className="flex items-center gap-2 text-sm font-medium">
-          멤버
+          {t("persona.squad.membersHeading")}
           {/* 스쿼드 블록 상한(§5-5 §개정 · §6 결정 7 넷째 자리) — 집행 자리는 이 화면이다.
               넘어도 색은 안 갈아 끼운다(§61 (13)) — 넘은 것 자체는 위반이 아니고, 저장 자체를
               막지도 않는다. 낱말 `초과`만 는다 */}
           <Badge
             variant="secondary"
             className="ml-auto font-mono font-normal"
-            title="이 스쿼드의 멤버는 티켓이 스쿼드를 안 들어도 이 블록을 프롬프트로 받습니다"
+            title={t("persona.squad.membersBadgeTitle")}
           >
-            멤버 전원 프롬프트에 인라인 · {blockBytes.toLocaleString()} / {SQUAD_BLOCK_MAX_BYTES.toLocaleString()} B
-            {overBudget && " 초과"}
+            {t("persona.squad.membersBadgePrefix")} {blockBytes.toLocaleString()} /{" "}
+            {SQUAD_BLOCK_MAX_BYTES.toLocaleString()} B
+            {overBudget && ` ${t("persona.squad.overBudgetSuffix")}`}
           </Badge>
         </h3>
         {eligible.length === 0 ? (
-          <p className="text-xs text-muted-foreground">
-            프로필이 있는 페르소나가 없습니다 — 먼저 페르소나를 만듭니다.
-          </p>
+          <p className="text-xs text-muted-foreground">{t("persona.squad.noEligible")}</p>
         ) : (
           <ul className="space-y-1">
             {eligible.map((name) => {
@@ -1061,7 +1090,7 @@ function SquadDetail({
                   {/* 리더 표식 — §61 (14) §리더. 체크 묶음 밖: 색 0 · 아이콘 0, 낱말 하나뿐이다 */}
                   {picked && name === leaderName && (
                     <Badge variant="outline" className="h-5 shrink-0 px-2 text-xs">
-                      리더
+                      {t("persona.squad.leaderBadge")}
                     </Badge>
                   )}
                   {/* 역할 칸(§5-5 §개정 · §61 (14)) — 체크된 줄만 편집한다. 빈 값은 프로필 첫 줄이
@@ -1073,7 +1102,7 @@ function SquadDetail({
                       onChange={(e) => setRole(name, e.target.value)}
                       placeholder={profileTitle(profileOf(name))}
                       className="min-w-0 grow text-xs md:text-xs"
-                      aria-label={`${name}의 역할`}
+                      aria-label={`${name}${t("persona.squad.roleAriaSuffix")}`}
                     />
                   )}
                 </li>
@@ -1081,15 +1110,11 @@ function SquadDetail({
             })}
           </ul>
         )}
-        <p className="text-xs text-muted-foreground">
-          역할을 비우면 그 페르소나의 프로필 첫 줄이 역할이 됩니다.
-        </p>
+        <p className="text-xs text-muted-foreground">{t("persona.squad.roleHint")}</p>
 
         {orphans.length > 0 && (
           <div className="space-y-1">
-            <p className="text-xs text-muted-foreground">
-              프로필 없는 멤버 — 고를 수 없고 제거만 됩니다
-            </p>
+            <p className="text-xs text-muted-foreground">{t("persona.squad.orphansHeading")}</p>
             <ul className="space-y-1">
               {orphans.map((name) => (
                 <li key={name} className="flex items-center gap-2 px-2">
@@ -1100,7 +1125,7 @@ function SquadDetail({
                     className="ml-auto"
                     onClick={() => onEdit({ ...edit, picked: edit.picked.filter((x) => x !== name) })}
                   >
-                    제거
+                    {t("persona.action.remove")}
                   </Button>
                 </li>
               ))}
@@ -1109,11 +1134,11 @@ function SquadDetail({
         )}
 
         {membersResult && !membersResult.ok && (
-          <Failure title="저장하지 못했습니다" message={membersResult.message ?? ""} />
+          <Failure title={t("persona.action.saveFailedTitle")} message={membersResult.message ?? ""} />
         )}
         <div className="flex items-center justify-end gap-4">
           {membersResult?.ok && !membersDirty && (
-            <span className="text-sm text-muted-foreground">저장됐습니다.</span>
+            <span className="text-sm text-muted-foreground">{t("persona.action.savedNotice")}</span>
           )}
           <Button
             size="sm"
@@ -1126,7 +1151,7 @@ function SquadDetail({
               })
             }
           >
-            {membersPending ? "저장 중…" : "저장"}
+            {membersPending ? t("common.saving") : t("common.save")}
           </Button>
         </div>
       </section>
@@ -1147,6 +1172,7 @@ function DeleteSquadButton({
   onDeleted: () => void;
   onError: (message: string) => void;
 }) {
+  const t = useT();
   const [pending, start] = useTransition();
 
   return (
@@ -1155,21 +1181,23 @@ function DeleteSquadButton({
         render={
           <Button variant="ghost" size="sm">
             <Trash2 aria-hidden />
-            삭제
+            {t("persona.action.delete")}
           </Button>
         }
       />
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>스쿼드 삭제 — {row.name}</AlertDialogTitle>
+          <AlertDialogTitle>
+            {t("persona.squadDelete.titlePrefix")} {row.name}
+          </AlertDialogTitle>
           <AlertDialogDescription>
-            <span className="font-mono text-xs break-all">squads/{row.name}</span> 디렉터리를
-            지웁니다. 되돌릴 수 없습니다. 이 스쿼드를 참조하는 티켓의{" "}
-            <span className="font-mono text-xs">squad:</span> 값은 그대로 남습니다.
+            <span className="font-mono text-xs break-all">squads/{row.name}</span>{" "}
+            {t("persona.squadDelete.bodyMiddle")}{" "}
+            <span className="font-mono text-xs">squad:</span> {t("persona.squadDelete.bodyAfter")}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel autoFocus>취소</AlertDialogCancel>
+          <AlertDialogCancel autoFocus>{t("common.cancel")}</AlertDialogCancel>
           <AlertDialogAction
             variant="destructive"
             disabled={pending}
@@ -1177,11 +1205,11 @@ function DeleteSquadButton({
               start(async () => {
                 const r = await deleteSquadAction(projectId, row.name);
                 if (r.ok) onDeleted();
-                else onError(r.message ?? "삭제하지 못했습니다.");
+                else onError(r.message ?? t("persona.action.deleteFailedMessage"));
               })
             }
           >
-            삭제
+            {t("persona.action.delete")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -1216,10 +1244,11 @@ function DispatchPolicySection({
   onLimitSaved: (limit: number | null) => void;
   onEngineSaved: (engine: { engineId: string; model: string } | null) => void;
 }) {
+  const t = useT();
   return (
     <section className="space-y-2 border-t pt-3">
       <div className="flex items-baseline gap-2">
-        <h3 className="text-sm font-medium">디스패치 정책</h3>
+        <h3 className="text-sm font-medium">{t("persona.policy.heading")}</h3>
       </div>
       {/* `flex-wrap`이 좁은 폭 대응 전부다 — 각 필드가 `라벨 트리거` 한 덩어리라 쌍 안에서는
           안 갈라진다(§44 §좁은 폭 줄바꿈) */}
@@ -1261,6 +1290,7 @@ function LimitField({
   limit: number | null;
   onSaved: (limit: number | null) => void;
 }) {
+  const t = useT();
   const saved = limit === null ? "" : String(limit);
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState(saved);
@@ -1279,14 +1309,14 @@ function LimitField({
         setError(null);
         setOpen(false);
       } else {
-        setError(r.message ?? "상한을 저장하지 못했습니다.");
+        setError(r.message ?? t("persona.limit.saveFailed"));
       }
     });
 
   return (
     <span className="flex items-center gap-2">
       <span id={labelId} className="text-xs text-muted-foreground">
-        상한
+        {t("persona.word.limit")}
       </span>
       <Popover
         open={open}
@@ -1306,27 +1336,27 @@ function LimitField({
         >
           {/* 값이 있으면 argv 토큰이라 mono, `없음`은 문장이라 sans(§44 ② 값 서체) */}
           <span className={limit !== null ? "font-mono text-xs" : undefined}>
-            {limit === null ? "없음" : limit}
+            {limit === null ? t("persona.limit.none") : limit}
           </span>
           <ChevronDown aria-hidden className="size-3" />
         </PopoverTrigger>
         <PopoverContent align="start">
           <div className="space-y-2">
-            <Label htmlFor={`limit-${name}`}>동시 워커 상한</Label>
+            <Label htmlFor={`limit-${name}`}>{t("persona.limit.popoverLabel")}</Label>
             <Input
               id={`limit-${name}`}
               type="number"
               min={0}
               step={1}
-              placeholder="없음"
+              placeholder={t("persona.limit.none")}
               className="w-full font-mono"
               value={value}
               onChange={(e) => setValue(e.target.value)}
             />
           </div>
-          <p className="text-xs text-muted-foreground">비우면 상한 없음 · 0이면 디스패치 정지</p>
-          <p className="text-xs text-muted-foreground">다음 티켓 선정부터 적용됩니다.</p>
-          {error && <Failure title="상한을 저장하지 못했습니다" message={error} />}
+          <p className="text-xs text-muted-foreground">{t("persona.limit.popoverHint")}</p>
+          <p className="text-xs text-muted-foreground">{t("persona.policy.nextTicketHint")}</p>
+          {error && <Failure title={t("persona.limit.saveFailedTitle")} message={error} />}
           {/* 상한에는 왼쪽 보조 버튼이 없다(§44 ③) — `저장`만 `ml-auto`로 오른쪽 끝 */}
           <div className="flex items-center justify-between gap-2">
             <Button
@@ -1337,7 +1367,7 @@ function LimitField({
                 if (ready) save();
               }}
             >
-              {pending ? "저장 중…" : "저장"}
+              {pending ? t("common.saving") : t("common.save")}
             </Button>
           </div>
         </PopoverContent>
@@ -1359,10 +1389,6 @@ export type EngineCatalog = readonly { id: string; models: readonly string[] }[]
  *  **지정 없음**이다(엔진 Select가 비어 있는 채로 열린다 — §23 ③ 손으로 쓴 값과 같은 표현). */
 type EnginePick = { engine: string; model: string; custom?: boolean };
 
-/** 목록에 없는 **화면만의 항목**. 값이 곧 라벨이고 모델 이름과 겹칠 수 없다 — 서버의
- *  `MODEL_RE`가 한글도 `…`도 안 받는다. */
-const CUSTOM = "직접 입력…";
-
 /** 지금 값으로 만들 수 있는가. 직접 입력만 걸린다 — 빈 값(`+`가 0글자를 안 받는다)과 셸
  *  메타문자가 여기서 막힌다. **즉시 거절일 뿐이고** 진짜 검증은 서버가 다시 한다(§23 ④). */
 const enginePickOk = (pick: EnginePick, modelPattern: string) =>
@@ -1383,6 +1409,12 @@ function EngineFields({
   onChange: (v: EnginePick) => void;
   idPrefix: string;
 }) {
+  const t = useT();
+  // 목록에 없는 **화면만의 항목**. 값이 곧 라벨이고 모델 이름과 겹칠 수 없다 — 서버의
+  // `MODEL_RE`가 한글도 `…`도 안 받는다. 컴포넌트 안에 두는 이유: 로케일이 바뀌면 라벨도
+  // 바뀌어야 하는데, 비교 판정(`String(v) === CUSTOM`)과 표시가 같은 렌더 안에서 같은 값을
+  // 봐야 한다 — 저장되는 상태는 `custom: true` 플래그뿐이라 이 문자열 자체는 안 남는다.
+  const CUSTOM = t("persona.engine.customOption");
   const models = engines.find((e) => e.id === value.engine)?.models ?? [];
   // 고른 엔진에 **없는** 기능들(§4-3 · §23 ⑤ 예고 줄). 판정도 이름도 `lib/urls.ts` 한 자리다.
   const missing = engineMissing(value.engine);
@@ -1393,13 +1425,13 @@ function EngineFields({
   return (
     <>
       <div className="space-y-2">
-        <Label htmlFor={`${idPrefix}-engine`}>엔진</Label>
+        <Label htmlFor={`${idPrefix}-engine`}>{t("persona.engine.label")}</Label>
         {/* 엔진을 바꾸면 모델은 `모델 지정 안 함`으로 돌아간다 — 목록이 엔진에 딸려 있어서
             `opus`를 든 채 codex로 넘어가면 화면이 없는 조합을 보여준다(§23 ③). */}
         <Select value={value.engine} onValueChange={(v) => onChange({ engine: String(v), model: "" })}>
           <SelectTrigger id={`${idPrefix}-engine`} className="w-full font-mono">
             {/* 비는 자리는 **지정 없음**이다 — 그 페르소나는 워커 자신의 엔진을 쓴다 */}
-            <SelectValue placeholder="지정 없음" />
+            <SelectValue placeholder={t("persona.engine.unset")} />
           </SelectTrigger>
           <SelectContent>
             {engines.map((e) => (
@@ -1412,7 +1444,7 @@ function EngineFields({
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor={`${idPrefix}-model`}>모델</Label>
+        <Label htmlFor={`${idPrefix}-model`}>{t("persona.engine.modelLabel")}</Label>
         <Select
           value={value.custom ? CUSTOM : value.model}
           onValueChange={(v) =>
@@ -1432,12 +1464,12 @@ function EngineFields({
             {/* **라벨은 화면이 붙인다**(§23 ③). `모델 지정 안 함`의 값은 빈 문자열이라
                 Select에 맡기면 트리거에 **빈 줄 하나**가 뜬다(실측 — 항목 라벨은 팝업이
                 열린 뒤에야 등록된다). 이 절이 막는 빈칸이 되살아나는 자리다. */}
-            <SelectValue>{(v) => (v ? String(v) : "모델 지정 안 함")}</SelectValue>
+            <SelectValue>{(v) => (v ? String(v) : t("persona.engine.noModel"))}</SelectValue>
           </SelectTrigger>
           <SelectContent>
             {models.map((m) => (
               <SelectItem key={m} value={m} className={m ? "font-mono" : undefined}>
-                {m || "모델 지정 안 함"}
+                {m || t("persona.engine.noModel")}
               </SelectItem>
             ))}
             <SelectItem value={CUSTOM}>{CUSTOM}</SelectItem>
@@ -1448,10 +1480,10 @@ function EngineFields({
             {/* 받는 것은 **모델 이름 한 토큰**이다 — argv 전체가 아니다(§23 ④). 라벨은 위
                 Select가 갖고 있어서 칸은 `aria-label`로 자기 이름을 댄다. */}
             <Input
-              aria-label="모델 이름 직접 입력"
+              aria-label={t("persona.engine.customModelAriaLabel")}
               aria-describedby={hintId}
               className="font-mono"
-              placeholder="모델 이름"
+              placeholder={t("persona.engine.modelNamePlaceholder")}
               value={value.model}
               onChange={(e) =>
                 onChange({ engine: value.engine, model: e.target.value, custom: true })
@@ -1462,11 +1494,11 @@ function EngineFields({
               // `Alert`가 아닌 이유가 이것이다(§22 ③ · §23 ④).
               <p id={hintId} role="alert" className="flex items-center gap-1.5 text-xs text-destructive">
                 <TriangleAlert className="size-3.5" aria-hidden />
-                공백·따옴표는 쓸 수 없습니다 — 모델 이름 한 토큰만
+                {t("persona.engine.modelBadHint")}
               </p>
             ) : (
               <p id={hintId} className="text-xs text-muted-foreground">
-                엔진에 그대로 넘어갑니다 — 공백·따옴표 없는 한 토큰
+                {t("persona.engine.modelPassthroughHint")}
               </p>
             )}
           </>
@@ -1478,7 +1510,8 @@ function EngineFields({
           없다 — `=== "codex"`로 적으면 grok에서 이 줄이 통째로 안 뜬다. */}
       {engines.some((e) => e.id === value.engine) && missing.length > 0 && (
         <p className="text-xs text-muted-foreground">
-          {value.engine} 워커는 {missing.join("과 ")}이 없습니다 — 티켓 수행은 같습니다.
+          {value.engine} {t("persona.engine.missingMiddle")} {missing.join(t("persona.engine.missingJoiner"))}
+          {t("persona.engine.missingSuffix")}
         </p>
       )}
     </>
@@ -1504,6 +1537,7 @@ function EngineField({
   modelPattern: string;
   onSaved: (engine: { engineId: string; model: string } | null) => void;
 }) {
+  const t = useT();
   const catalog = engine && "engineId" in engine ? engine : null;
   const custom = engine && "raw" in engine ? engine.raw : null;
   const initial = (): EnginePick => ({ engine: catalog?.engineId ?? "", model: catalog?.model ?? "" });
@@ -1521,7 +1555,7 @@ function EngineField({
     ? catalog.model
       ? `${catalog.engineId} · ${catalog.model}`
       : catalog.engineId
-    : custom ?? "지정 없음";
+    : (custom ?? t("persona.engine.unset"));
 
   const save = (id: string | null, model: string, force = false) =>
     start(async () => {
@@ -1534,14 +1568,14 @@ function EngineField({
       } else if (r.custom) {
         setConfirmRaw(r.custom);
       } else {
-        setError(r.message ?? "엔진을 저장하지 못했습니다.");
+        setError(r.message ?? t("persona.engine.saveFailed"));
       }
     });
 
   return (
     <span className="flex items-center gap-2">
       <span id={labelId} className="text-xs text-muted-foreground">
-        엔진
+        {t("persona.engine.label")}
       </span>
       <Popover
         open={open}
@@ -1581,8 +1615,8 @@ function EngineField({
             onChange={setPick}
             idPrefix={`persona-engine-${name}`}
           />
-          <p className="text-xs text-muted-foreground">다음 티켓 선정부터 적용됩니다.</p>
-          {error && <Failure title="엔진을 저장하지 못했습니다" message={error} />}
+          <p className="text-xs text-muted-foreground">{t("persona.policy.nextTicketHint")}</p>
+          {error && <Failure title={t("persona.engine.saveFailedTitle")} message={error} />}
           <div className="flex items-center justify-between gap-2">
             {engine && (
               <Button
@@ -1591,7 +1625,7 @@ function EngineField({
                 disabled={pending}
                 onClick={() => save(null, "")}
               >
-                지정 해제
+                {t("persona.engine.unsetAction")}
               </Button>
             )}
             <Button
@@ -1602,7 +1636,7 @@ function EngineField({
                 if (ready) save(pick.engine, pick.model);
               }}
             >
-              {pending ? "저장 중…" : "저장"}
+              {pending ? t("common.saving") : t("common.save")}
             </Button>
           </div>
         </PopoverContent>
@@ -1610,17 +1644,19 @@ function EngineField({
       <AlertDialog open={confirmRaw !== null} onOpenChange={(o) => !o && setConfirmRaw(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>커스텀 엔진 값을 덮어씁니다 — {name}</AlertDialogTitle>
+            <AlertDialogTitle>
+              {t("persona.engine.overwriteTitlePrefix")} {name}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              지금 engine 파일에 카탈로그 밖 인자가 있습니다:{" "}
-              <span className="font-mono text-xs break-all">{confirmRaw}</span> 여기서 저장하면
-              이 인자는 사라지고 고른 값으로 바뀝니다.
+              {t("persona.engine.overwriteBodyPrefix")}{" "}
+              <span className="font-mono text-xs break-all">{confirmRaw}</span>{" "}
+              {t("persona.engine.overwriteBodySuffix")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel autoFocus>취소</AlertDialogCancel>
+            <AlertDialogCancel autoFocus>{t("common.cancel")}</AlertDialogCancel>
             <AlertDialogAction disabled={pending} onClick={() => save(pick.engine, pick.model, true)}>
-              그래도 저장
+              {t("persona.engine.overwriteConfirm")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -1658,6 +1694,7 @@ function SkillsSection({
   configDir: string;
   onSaved: (skills: Skill[], chars: number, offSkills: Skill[]) => void;
 }) {
+  const t = useT();
   const [removing, setRemoving] = useState<string | null>(null);
   const [toggling, setToggling] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -1686,7 +1723,7 @@ function SkillsSection({
             offSkills.map((s) => s.name),
           );
       setRemoving(null);
-      if (!r.ok) setError(r.message ?? "스킬을 저장하지 못했습니다.");
+      if (!r.ok) setError(r.message ?? t("persona.skill.saveFailed"));
     });
 
   /** `끄기`/`켜기` — 누른 그 순간 두 파일을 쓴다. `저장`을 기다리지 않는다(§비주얼 §25 ⑥). */
@@ -1702,7 +1739,7 @@ function SkillsSection({
         : [...offSkills.map((s) => s.name), skillName];
       const r = await save(picked, offPicked);
       setToggling(null);
-      if (!r.ok) setError(r.message ?? "스킬을 저장하지 못했습니다.");
+      if (!r.ok) setError(r.message ?? t("persona.skill.saveFailed"));
     });
 
   /** 활성·비활성 두 목록이 **같은 벌**이다(§비주얼 §25 ⑥ 껍데기) — 이름·설명·`제거`는 글자
@@ -1719,7 +1756,7 @@ function SkillsSection({
           한 번 더 누르는 것이다. 어휘도 가른다: 디렉터리는 `삭제`, 목록 한 줄은 `제거`(§25 ②).
           **`제거`는 여기서 안 바뀐다**(§비주얼 §25 ⑥ — `disabled` 그대로, `aria-disabled`가 아니다) */}
       <Button variant="ghost" size="sm" className="self-center" disabled={busy} onClick={onRemove}>
-        {removing === s.name ? "제거 중…" : "제거"}
+        {removing === s.name ? t("persona.skill.removingAction") : t("persona.action.remove")}
       </Button>
     </li>
   );
@@ -1727,7 +1764,7 @@ function SkillsSection({
   return (
     <section className="space-y-2 border-t pt-3">
       <div className="flex items-baseline gap-2">
-        <h3 className="text-sm font-medium">스킬</h3>
+        <h3 className="text-sm font-medium">{t("persona.word.skills")}</h3>
         {/* 0개일 때 `0 B`는 참이지만 아무것도 안 말한다 — 바로 아래 한 줄이 이미 말했다.
             상한이 없다 — `editBytes`의 합계 일부일 뿐이라 여기서 발명하지 않는다(결정 11 (3)) */}
         {skills.length > 0 && (
@@ -1744,21 +1781,15 @@ function SkillsSection({
 
       {skills.length === 0 && offSkills.length === 0 ? (
         // `<EmptyState>`가 아니다 — 화면의 1차 콘텐츠가 아니고 다음 행동은 절 머리에 있다(§25 ②)
-        <p className="text-xs text-muted-foreground">
-          고른 스킬이 없습니다 — 디스패치 프롬프트에 스킬 절이 실리지 않습니다.
-        </p>
+        <p className="text-xs text-muted-foreground">{t("persona.skill.emptyNone")}</p>
       ) : skills.length === 0 ? (
         // 활성 0 - 비활성 m(§비주얼 §25 ⑥) — 주어만 갈린다. 다음 행동은 아래 `켜기`다
-        <p className="text-xs text-muted-foreground">
-          켜 둔 스킬이 없습니다 — 디스패치 프롬프트에 스킬 절이 실리지 않습니다.
-        </p>
+        <p className="text-xs text-muted-foreground">{t("persona.skill.emptyAllOff")}</p>
       ) : (
         <>
           {/* 어휘는 §비주얼 §23 ⑤의 문형 그대로다(`<무엇>은 claude 엔진에서만 …`). 이건 경고가
               아니라 상시 참인 사실이라 `Alert`가 아니다 — 이 화면에는 엔진 값이 아예 없다 */}
-          <p className="text-xs text-muted-foreground">
-            스킬은 claude 엔진에서만 실립니다 — codex 워커가 물면 이 절은 프롬프트에 안 갑니다.
-          </p>
+          <p className="text-xs text-muted-foreground">{t("persona.skill.claudeOnlyHint")}</p>
           <ul className="space-y-1">
             {skills.map((s) =>
               row(
@@ -1773,7 +1804,7 @@ function SkillsSection({
                     toggle(s.name, false);
                   }}
                 >
-                  {toggling === s.name ? "끄는 중…" : "끄기"}
+                  {toggling === s.name ? t("persona.skill.turningOff") : t("persona.skill.turnOff")}
                 </Button>,
                 () => removeFrom(s.name, false),
               ),
@@ -1786,7 +1817,7 @@ function SkillsSection({
           (§비주얼 §25 ⑥). 0개면 머리도 목록도 안 그린다 */}
       {offSkills.length > 0 && (
         <>
-          <h4 className="text-xs font-medium text-muted-foreground">비활성</h4>
+          <h4 className="text-xs font-medium text-muted-foreground">{t("persona.skill.offHeading")}</h4>
           <ul className="space-y-1">
             {offSkills.map((s) =>
               row(
@@ -1801,7 +1832,7 @@ function SkillsSection({
                     toggle(s.name, true);
                   }}
                 >
-                  {toggling === s.name ? "켜는 중…" : "켜기"}
+                  {toggling === s.name ? t("persona.skill.turningOn") : t("persona.skill.turnOn")}
                 </Button>,
                 () => removeFrom(s.name, true),
               ),
@@ -1810,7 +1841,7 @@ function SkillsSection({
         </>
       )}
 
-      {error && <Failure title="스킬을 저장하지 못했습니다" message={error} />}
+      {error && <Failure title={t("persona.skill.saveFailedTitle")} message={error} />}
     </section>
   );
 }
@@ -1838,6 +1869,7 @@ function MemorySection({
   chars: number;
   onDeleted: (file: string) => void;
 }) {
+  const t = useT();
   const [error, setError] = useState<string | null>(null);
   const listRef = useRef<HTMLUListElement>(null);
 
@@ -1869,7 +1901,7 @@ function MemorySection({
   return (
     <section className="space-y-2 border-t pt-3">
       <div className="flex items-baseline gap-2">
-        <h3 className="text-sm font-medium">메모리</h3>
+        <h3 className="text-sm font-medium">{t("persona.word.memory")}</h3>
         {/* 0장일 때 `0 B`는 참이지만 아무것도 안 말한다(§25 ②와 같은 판정). 자기 예산
             (`MEMORY_MAX_BYTES` = `AGENTS.md` §회고 예산)과 비교된다 — 프로필+스킬 합과는
             별개다(§프롬프트 층 결정 11 (4)) */}
@@ -1883,9 +1915,7 @@ function MemorySection({
       {memories.length === 0 ? (
         // 스킬 절의 빈 상태와 방향이 다르다 — 여기는 다음 행동이 사람에게 없어서 이 한 줄이
         // **누가 채우는가**를 말한다. 없으면 버튼 없는 빈 절이 고장으로 읽힌다(§32 ②)
-        <p className="text-xs text-muted-foreground">
-          메모리가 없습니다 — 세션이 회고에서 남기면 여기에 쌓입니다.
-        </p>
+        <p className="text-xs text-muted-foreground">{t("persona.memory.empty")}</p>
       ) : (
         <ul ref={listRef} onClick={openWikilink} className="space-y-1">
           {memories.map((m) => (
@@ -1937,7 +1967,7 @@ function MemorySection({
       )}
 
       {/* 실패는 **누른 곳**이다 — 이건 펼쳐야 만질 수 있어서 절 맨 아래다(§32 다섯 상태) */}
-      {error && <Failure title="메모리를 지우지 못했습니다" message={error} />}
+      {error && <Failure title={t("persona.memory.deleteFailedTitle")} message={error} />}
     </section>
   );
 }
@@ -1961,6 +1991,7 @@ function DeleteMemoryButton({
   /** 성공하면 `null`, 실패하면 사유 — 자리는 호출자(절 맨 아래)다 */
   onDone: (message: string | null) => void;
 }) {
+  const t = useT();
   const [pending, start] = useTransition();
 
   return (
@@ -1969,32 +2000,33 @@ function DeleteMemoryButton({
         render={
           <Button variant="ghost" size="sm" disabled={pending}>
             <Trash2 aria-hidden />
-            {pending ? "삭제 중…" : "삭제"}
+            {pending ? t("persona.memory.deletingAction") : t("persona.action.delete")}
           </Button>
         }
       />
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>메모리 삭제 — {memory.file.replace(/\.md$/, "")}</AlertDialogTitle>
+          <AlertDialogTitle>
+            {t("persona.memory.deleteTitlePrefix")} {memory.file.replace(/\.md$/, "")}
+          </AlertDialogTitle>
           <AlertDialogDescription>
             <span className="font-mono text-xs break-all">{`${dir}/memory/${memory.file}`}</span>{" "}
-            파일을 지웁니다. 되돌릴 수 없습니다 — 이 화면에 편집도 추가도 없습니다.
-            다음 디스패치부터 세션이 이 개념을 못 찾습니다.
+            {t("persona.memory.deleteBodyAfterPath")}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel autoFocus>취소</AlertDialogCancel>
+          <AlertDialogCancel autoFocus>{t("common.cancel")}</AlertDialogCancel>
           <AlertDialogAction
             variant="destructive"
             disabled={pending}
             onClick={() =>
               start(async () => {
                 const r = await deletePersonaMemoryAction(projectId, name, memory.file);
-                onDone(r.ok ? null : (r.message ?? "메모리를 지우지 못했습니다."));
+                onDone(r.ok ? null : (r.message ?? t("persona.memory.deleteFailedMessage")));
               })
             }
           >
-            삭제
+            {t("persona.action.delete")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -2054,6 +2086,7 @@ function AddSkillsDialog({
   configDir: string;
   save: (picked: string[]) => Promise<PersonaResult>;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [picked, setPicked] = useState<string[]>([]);
@@ -2109,10 +2142,10 @@ function AddSkillsDialog({
           setQuery(name);
         }
       } else {
-        setFailure({ title: r.title ?? "스킬을 설치하지 못했습니다", message: r.message ?? "" });
+        setFailure({ title: r.title ?? t("persona.skill.installFailedTitle"), message: r.message ?? "" });
       }
     } catch {
-      setFailure({ title: "스킬을 설치하지 못했습니다", message: "" });
+      setFailure({ title: t("persona.skill.installFailedTitle"), message: "" });
     } finally {
       setInstalling(null);
     }
@@ -2160,9 +2193,8 @@ function AddSkillsDialog({
     // 한 번에 하나만 받는다(§비주얼 §25 ⑤ 표 9 - §5-1) — 서버에 아무것도 안 보낸다.
     if (entries.length > 1) {
       setFailure({
-        title:
-          "한 번에 스킬 하나만 설치합니다 — 놓은 최상위 항목이 둘 이상입니다. 하나만 다시 놓습니다",
-        message: `${entries.length}개`,
+        title: t("persona.skill.multiDropRejected"),
+        message: `${entries.length}${t("persona.skill.countSuffix")}`,
       });
       return;
     }
@@ -2180,7 +2212,7 @@ function AddSkillsDialog({
       // 화면만 알아서 서버에 못 보낸다(§비주얼 §25 ⑤ 표 «+»).
       if (!items.some((it) => it.path === "SKILL.md")) {
         setFailure({
-          title: "고른 폴더 바로 아래에 SKILL.md가 없습니다",
+          title: t("persona.skill.installMissingSkillMd"),
           message: `${entry.name}/`,
         });
         return;
@@ -2235,7 +2267,7 @@ function AddSkillsDialog({
       }}
     >
       <DialogTrigger render={<Button variant="outline" size="sm" className="ml-auto self-center" />}>
-        스킬 추가
+        {t("persona.skill.addHeading")}
       </DialogTrigger>
       <DialogContent
         className={cn("sm:max-w-lg", dragging && "ring-2 ring-primary")}
@@ -2266,31 +2298,29 @@ function AddSkillsDialog({
         }}
       >
         <DialogHeader>
-          <DialogTitle>스킬 추가</DialogTitle>
-          <DialogDescription>
-            이 머신에 설치된 스킬입니다. 고른 것이 이 페르소나의 디스패치 프롬프트에 실립니다.
-          </DialogDescription>
+          <DialogTitle>{t("persona.skill.addHeading")}</DialogTitle>
+          <DialogDescription>{t("persona.skill.addDialogDesc")}</DialogDescription>
         </DialogHeader>
 
         <Command>
           <CommandInput
-            placeholder="스킬 검색 — 이름 또는 설명"
+            placeholder={t("persona.skill.searchPlaceholder")}
             value={query}
             onValueChange={setQuery}
           />
           <CommandList>
             {installed.length + orphans.length > 0 && (
-              <CommandEmpty>{`"${query}"와 일치하는 스킬 0건`}</CommandEmpty>
+              <CommandEmpty>{`"${query}"${t("persona.skill.searchEmptySuffix")}`}</CommandEmpty>
             )}
             {orphans.length > 0 ? (
               <>
-                <CommandGroup heading="이 머신에 없음">
-                  {orphans.map((s) =>
-                    item(s, "설치된 스킬 목록에 없습니다 — 다른 머신에서 고른 것일 수 있습니다"),
-                  )}
+                <CommandGroup heading={t("persona.skill.notOnMachineHeading")}>
+                  {orphans.map((s) => item(s, t("persona.skill.orphanNote")))}
                 </CommandGroup>
                 <CommandSeparator />
-                <CommandGroup heading="설치된 스킬">{installed.map((s) => item(s))}</CommandGroup>
+                <CommandGroup heading={t("persona.skill.installedHeading")}>
+                  {installed.map((s) => item(s))}
+                </CommandGroup>
               </>
             ) : (
               // 전부 후보 안에 있으면(정상) 머리 없는 평평한 목록이다 — 항상 켜진 머리는
@@ -2301,21 +2331,17 @@ function AddSkillsDialog({
                 에러가 아니다 — 스킬을 하나도 안 깐 머신은 정상이다(§25 다섯 상태) */}
             {installed.length === 0 && (
               <div className="space-y-1 px-2 py-6 text-center">
-                <p className="text-sm">이 머신에서 스킬을 찾지 못했습니다</p>
+                <p className="text-sm">{t("persona.skill.noneOnMachine")}</p>
                 <p className="font-mono text-xs break-all text-muted-foreground">
                   {configDir}/skills/*/SKILL.md
                 </p>
                 <p className="font-mono text-xs break-all text-muted-foreground">
                   {configDir}/plugins/marketplaces/*/skills/*/SKILL.md
                 </p>
-                <p className="text-xs text-muted-foreground">
-                  CLAUDE_CONFIG_DIR이 없으면 &lt;config&gt;는 ~/.claude입니다
-                </p>
+                <p className="text-xs text-muted-foreground">{t("persona.skill.configDirHint")}</p>
                 {/* §비주얼 §25 ⑤ — 후보 0개가 이 기능의 첫 독자다. 다음 행동은 바로 아래 44px의
                     `찾아보기` 하나와 드롭이다(경로를 다시 안 적는다 — 위 두 글롭이 이미 그 자리다) */}
-                <p className="text-xs text-muted-foreground">
-                  아래에서 파일을 골라 지금 설치할 수 있습니다
-                </p>
+                <p className="text-xs text-muted-foreground">{t("persona.skill.installFromBelow")}</p>
               </div>
             )}
           </CommandList>
@@ -2328,10 +2354,10 @@ function AddSkillsDialog({
         <div className="flex items-center gap-2">
           <span className="min-w-0 text-xs text-muted-foreground">
             {dragging
-              ? "놓으면 설치합니다"
+              ? t("persona.skill.dropToInstall")
               : installing === "url"
-                ? "주소에서 받는 중입니다 — 최대 30초"
-                : "목록에 없으면 폴더를 이 창에 끌어다 놓거나 파일을 골라 설치합니다"}
+                ? t("persona.skill.fetchingAddress")
+                : t("persona.skill.dropHint")}
           </span>
           <input
             ref={fileInputRef}
@@ -2353,7 +2379,7 @@ function AddSkillsDialog({
             disabled={installing !== null}
             onClick={() => fileInputRef.current?.click()}
           >
-            {installing === "file" ? "설치 중…" : "찾아보기"}
+            {installing === "file" ? t("persona.skill.installing") : t("persona.skill.browse")}
           </Button>
         </div>
 
@@ -2369,7 +2395,7 @@ function AddSkillsDialog({
         >
           <div className="flex items-center gap-2">
             <Input
-              aria-label="스킬 주소"
+              aria-label={t("persona.skill.addressAriaLabel")}
               className="min-w-0 grow font-mono"
               placeholder="https://github.com/owner/repo"
               spellCheck={false}
@@ -2382,7 +2408,7 @@ function AddSkillsDialog({
               aria-disabled={!address.trim() || installing !== null}
               className="aria-disabled:opacity-50"
             >
-              설치
+              {t("persona.skill.installAction")}
             </Button>
           </div>
         </form>
@@ -2391,7 +2417,7 @@ function AddSkillsDialog({
             `저장` 실패와 import 실패가 이 그릇 하나를 나눠 쓴다(마지막에 누른 것 하나만 선다) */}
         {failure && <Failure title={failure.title} message={failure.message} />}
         <DialogFooter>
-          <DialogClose render={<Button variant="outline" />}>취소</DialogClose>
+          <DialogClose render={<Button variant="outline" />}>{t("common.cancel")}</DialogClose>
           <Button
             disabled={pending || installing !== null}
             onClick={() =>
@@ -2399,11 +2425,11 @@ function AddSkillsDialog({
                 setFailure(null);
                 const r = await save(picked);
                 if (r.ok) setOpen(false);
-                else setFailure({ title: "스킬을 저장하지 못했습니다", message: r.message ?? "" });
+                else setFailure({ title: t("persona.skill.saveFailedTitle"), message: r.message ?? "" });
               })
             }
           >
-            {pending ? "저장 중…" : "저장"}
+            {pending ? t("common.saving") : t("common.save")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -2424,6 +2450,7 @@ function DeleteButton({
   onDeleted: () => void;
   onError: (message: string) => void;
 }) {
+  const t = useT();
   const [pending, start] = useTransition();
 
   return (
@@ -2432,18 +2459,20 @@ function DeleteButton({
         render={
           <Button variant="ghost" size="sm">
             <Trash2 aria-hidden />
-            삭제
+            {t("persona.action.delete")}
           </Button>
         }
       />
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>페르소나 삭제 — {row.name}</AlertDialogTitle>
+          <AlertDialogTitle>
+            {t("persona.delete.titlePrefix")} {row.name}
+          </AlertDialogTitle>
           <AlertDialogDescription>
             <span className="font-mono text-xs break-all">
               {row.file.replace(/\/PROFILE\.md$/, "")}
             </span>{" "}
-            디렉터리를 안의 파일까지 지웁니다. 되돌릴 수 없습니다.
+            {t("persona.delete.bodyAfterPath")}
           </AlertDialogDescription>
         </AlertDialogHeader>
         {/* 티켓은 지우지 않는다 — 남은 티켓은 페르소나 없이 디스패치된다(tick.sh 188행) */}
@@ -2451,19 +2480,22 @@ function DeleteButton({
           <Alert>
             <TriangleAlert aria-hidden className="text-status-stale" />
             <AlertTitle>
-              이 페르소나를 참조하는 티켓이 {row.refs.open + row.refs.wip}건 있습니다
-              {row.refs.wip > 0 && ` (진행중 ${row.refs.wip}건)`}
+              {t("persona.delete.refsWarnPrefix")} {row.refs.open + row.refs.wip}
+              {t("persona.delete.refsWarnSuffix")}
+              {row.refs.wip > 0 &&
+                ` ${t("persona.delete.refsWipPrefix")} ${row.refs.wip}${t("persona.delete.refsWipSuffix")}`}
             </AlertTitle>
             <AlertDescription>
-              티켓은 지워지지 않습니다. 프로필이 없어지면 엔진은{" "}
-              <span className="font-mono text-xs">WARN</span>만 남기고{" "}
-              <strong className="font-medium">페르소나 없이</strong> 디스패치합니다 — 세션이
-              역할·권한을 모르는 채로 시작합니다.
+              {t("persona.delete.refsBody")}{" "}
+              <span className="font-mono text-xs">WARN</span>
+              {t("persona.warn.engineSuffix")}{" "}
+              <strong className="font-medium">{t("persona.wording.withoutPersona")}</strong>{" "}
+              {t("persona.delete.dispatchDetail")}
             </AlertDescription>
           </Alert>
         )}
         <AlertDialogFooter>
-          <AlertDialogCancel autoFocus>취소</AlertDialogCancel>
+          <AlertDialogCancel autoFocus>{t("common.cancel")}</AlertDialogCancel>
           <AlertDialogAction
             variant="destructive"
             disabled={pending}
@@ -2471,11 +2503,11 @@ function DeleteButton({
               start(async () => {
                 const r = await deletePersonaAction(projectId, row.name);
                 if (r.ok) onDeleted();
-                else onError(r.message ?? "삭제하지 못했습니다.");
+                else onError(r.message ?? t("persona.action.deleteFailedMessage"));
               })
             }
           >
-            삭제
+            {t("persona.action.delete")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

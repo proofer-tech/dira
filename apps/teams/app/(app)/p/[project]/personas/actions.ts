@@ -9,6 +9,7 @@
  *  검증(이름 규칙 · 기준 디렉터리 접두)은 `lib/projects.ts`에 있다. 이 파일이 하는 일은
  *  프로젝트 id → 해석된 디렉터리와, Error를 직렬화 가능한 결과로 바꾸는 것뿐이다. */
 import { revalidatePath } from "next/cache";
+import { t, wrap } from "@/lib/i18n";
 import {
   createPersona,
   createSquad,
@@ -55,14 +56,14 @@ export type InstallSkillResult = { ok: boolean; title?: string; message?: string
 /** 등록된 프로젝트의 해석된 페르소나 디렉터리만 만진다. URL 조각으로 임의 경로를 열지 않는다. */
 async function personasDir(projectId: string): Promise<string> {
   const project = await getProject(projectId);
-  if (!project) throw new Error(`등록되지 않은 프로젝트입니다: ${projectId}`);
+  if (!project) throw new Error(wrap(t("ko", "persona.error.unknownProjectPrefix"), projectId, ""));
   return (await resolveConfig(project)).personas;
 }
 
 /** 스쿼드 디렉터리 — `ontologyDir`과 같은 근거로 워커 재정의를 안 연다(§5-5 §값). */
 async function squadsDirFor(projectId: string): Promise<string> {
   const project = await getProject(projectId);
-  if (!project) throw new Error(`등록되지 않은 프로젝트입니다: ${projectId}`);
+  if (!project) throw new Error(wrap(t("ko", "persona.error.unknownProjectPrefix"), projectId, ""));
   return squadsDir(project);
 }
 
@@ -89,7 +90,8 @@ export async function createPersonaAction(projectId: string, name: string): Prom
     const trimmed = name.trim();
     // 스쿼드와 한 이름공간이다(§5-5 §값) — 겹치면 §할당 입구 둘에서 항목이 구별되지 않는다.
     const squads = await squadNames(await squadsDirFor(projectId));
-    if (squads.includes(trimmed)) throw new Error(`이미 있는 스쿼드 이름입니다: ${trimmed}`);
+    if (squads.includes(trimmed))
+      throw new Error(wrap(t("ko", "persona.error.squadNameTakenPrefix"), trimmed, ""));
     await createPersona(await personasDir(projectId), trimmed);
     revalidatePath(`/p/${projectId}/personas`);
     return { ok: true };
@@ -104,7 +106,8 @@ export async function createSquadAction(projectId: string, name: string): Promis
   try {
     const trimmed = name.trim();
     const personas = await personaNames(await personasDir(projectId));
-    if (personas.includes(trimmed)) throw new Error(`이미 있는 페르소나 이름입니다: ${trimmed}`);
+    if (personas.includes(trimmed))
+      throw new Error(wrap(t("ko", "persona.error.personaNameTakenPrefix"), trimmed, ""));
     await createSquad(await squadsDirFor(projectId), trimmed);
     revalidatePath(`/p/${projectId}/personas`);
     return { ok: true };
@@ -255,7 +258,9 @@ export async function installSkillAction(
       const files = formData.getAll("file").filter((f): f is File => f instanceof File);
       const paths = formData.getAll("path").map(String);
       if (files.length === 0 || files.length !== paths.length) {
-        throw new Error(`파일과 경로의 수가 안 맞습니다: ${files.length} / ${paths.length}`);
+        throw new Error(
+          wrap(t("ko", "persona.skill.fileCountMismatchPrefix"), `${files.length} / ${paths.length}`, ""),
+        );
       }
       uploads =
         files.length === 1 && files[0].name.endsWith(".skill")
@@ -272,7 +277,7 @@ export async function installSkillAction(
     return { ok: true, installed: await listInstalledSkills(), name: skill.name };
   } catch (e) {
     if (e instanceof SkillInstallError) return { ok: false, title: e.message, message: e.detail };
-    return { ok: false, title: "스킬을 설치하지 못했습니다", message: (e as Error).message };
+    return { ok: false, title: t("ko", "persona.skill.installFailedTitle"), message: (e as Error).message };
   }
 }
 
@@ -289,7 +294,7 @@ export async function savePersonaLimitAction(
   try {
     const text = value.trim();
     if (text !== "" && !/^\d+$/.test(text)) {
-      throw new Error(`상한은 0 이상의 정수여야 합니다: ${value}`);
+      throw new Error(wrap(t("ko", "persona.limit.invalidPrefix"), value, ""));
     }
     const limit = text === "" ? null : Number(text);
     await writePersonaLimit(await personasDir(projectId), name, limit);

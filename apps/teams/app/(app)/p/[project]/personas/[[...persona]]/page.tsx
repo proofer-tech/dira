@@ -18,9 +18,18 @@ import { EmptyState } from "@/components/empty-state";
 import { CreatePersonaButton, PersonasPane } from "@/components/personas-ui";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import { t } from "@/lib/i18n";
 import { listTickets } from "@/lib/queue";
 import { decodeHash } from "@/lib/urls";
-import { getProject, listPersonas, listSquads, resolveConfig, squadsDir, usingDefault } from "@/lib/projects";
+import {
+  getProject,
+  listPersonas,
+  listSquads,
+  readLanguage,
+  resolveConfig,
+  squadsDir,
+  usingDefault,
+} from "@/lib/projects";
 import {
   claudeConfigDir,
   listInstalledSkills,
@@ -41,6 +50,7 @@ export default async function Personas({
   params: Promise<{ project: string; persona?: string[] }>;
 }) {
   const { project: id, persona } = await params;
+  const locale = await readLanguage();
   const project = await getProject(id);
   if (!project) notFound();
 
@@ -89,22 +99,22 @@ export default async function Personas({
   // `squads/<이름>/`가 없다. 둘째 갈래(멤버 중 프로필 없는 이름)는 위 `missingProfile`이
   // 왼쪽 스쿼드 줄에서 이미 표식으로 든다(dc3a2fa4) — 그릇이 갈릴 뿐 같은 경고다.
   const squadNames = new Set(squads.map((s) => s.name));
-  const ticketsWithMissingSquad = tickets.filter((t) => t.squad && !squadNames.has(t.squad));
+  const ticketsWithMissingSquad = tickets.filter((tk) => tk.squad && !squadNames.has(tk.squad));
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-4">
-        <h1 className="text-lg font-semibold">페르소나</h1>
+        <h1 className="text-lg font-semibold">{t(locale, "shell.nav.personas")}</h1>
         {personas.length > 0 && <CreatePersonaButton projectId={id} />}
       </div>
 
       <div className="flex items-center gap-2 text-xs">
-        <span className="text-muted-foreground">디렉터리</span>
+        <span className="text-muted-foreground">{t(locale, "persona.dir.label")}</span>
         <span className="font-mono break-all">{config.personas}</span>
         {/* 색을 쓰지 않는다 — 경고가 아니라 사실이다(§8 해석 결과 표와 같은 배지) */}
         {usingDefault(config, "personas") && (
-          <Badge variant="outline" title="워커 파일에서 TICKET_PERSONAS를 찾지 못해 기본값을 씁니다">
-            기본값 가정
+          <Badge variant="outline" title={t(locale, "persona.dir.defaultTitle")}>
+            {t(locale, "persona.dir.defaultBadge")}
           </Badge>
         )}
       </div>
@@ -112,25 +122,23 @@ export default async function Personas({
       {missing.length > 0 && (
         <Alert className="max-w-3xl">
           <TriangleAlert aria-hidden className="text-status-stale" />
-          <AlertTitle>프로필 파일이 없는 페르소나가 있습니다</AlertTitle>
+          <AlertTitle>{t(locale, "persona.missing.title")}</AlertTitle>
           <AlertDescription>
             <div className="space-y-1">
               <p>
-                엔진은 이 이름을 만나면 <span className="font-mono text-xs">WARN</span>만 남기고{" "}
-                <strong className="font-medium">페르소나 없이</strong> 디스패치합니다 — 디스패치가
-                실패하는 게 아니라, 세션이 역할·권한을 모르는 채로 시작합니다. 그 이름을 왼쪽에서
-                고르고 오른쪽의 빈 본문을 채워 저장하면 파일이 만들어집니다.
+                {t(locale, "persona.missing.enginePrefix")} <span className="font-mono text-xs">WARN</span>
+                {t(locale, "persona.warn.engineSuffix")}{" "}
+                <strong className="font-medium">{t(locale, "persona.wording.withoutPersona")}</strong>{" "}
+                {t(locale, "persona.missing.dispatchDetail")}
               </p>
               {/* §5-1 · §비주얼 §25 ④ — 새 경고 UI를 만들지 않고 이 Alert에 한 절을 덧붙인다.
                   §32 ⑤가 그 문장을 메모리까지 넓혔다: 사실이 하나고 근거가 하나라(둘 다 페르소나
                   프롬프트 안에 산다) 문장을 하나 더 붙이지 않는다 */}
-              <p>
-                프로필이 없으면 스킬·메모리도 실리지 않습니다 — 두 블록 다 페르소나 프롬프트 안에
-                삽니다.
-              </p>
+              <p>{t(locale, "persona.missing.noSkillsMemory")}</p>
               {missing.map((p) => (
                 <p key={p.name} className="font-mono text-xs break-all">
-                  {p.name} — 티켓 {p.refs.total}건이 참조 · {p.file}
+                  {p.name} {t(locale, "persona.missing.refsMiddle")} {p.refs.total}
+                  {t(locale, "persona.missing.refsSuffix")} {p.file}
                 </p>
               ))}
             </div>
@@ -143,17 +151,19 @@ export default async function Personas({
       {ticketsWithMissingSquad.length > 0 && (
         <Alert className="max-w-3xl">
           <TriangleAlert aria-hidden className="text-status-stale" />
-          <AlertTitle>없는 스쿼드를 참조하는 티켓이 있습니다</AlertTitle>
+          <AlertTitle>{t(locale, "persona.squadWarn.title")}</AlertTitle>
           <AlertDescription>
             <div className="space-y-1">
               <p>
-                엔진은 이 값을 만나면 <span className="font-mono text-xs">WARN</span>만 남기고{" "}
-                <strong className="font-medium">종전 경로</strong>(persona:가 있으면 그 값, 없으면
-                페르소나 없이)로 디스패치합니다.
+                {t(locale, "persona.squadWarn.enginePrefix")} <span className="font-mono text-xs">WARN</span>
+                {t(locale, "persona.warn.engineSuffix")}{" "}
+                <strong className="font-medium">{t(locale, "persona.squadWarn.strongLabel")}</strong>
+                {t(locale, "persona.squadWarn.parenPrefix")} {t(locale, "persona.wording.withoutPersona")}
+                {t(locale, "persona.squadWarn.parenSuffix")}
               </p>
-              {ticketsWithMissingSquad.map((t) => (
-                <p key={t.hash} className="font-mono text-xs break-all">
-                  {t.hash} — squad: {t.squad} · {t.title}
+              {ticketsWithMissingSquad.map((tk) => (
+                <p key={tk.hash} className="font-mono text-xs break-all">
+                  {tk.hash} — squad: {tk.squad} · {tk.title}
                 </p>
               ))}
             </div>
@@ -165,7 +175,7 @@ export default async function Personas({
         // 둘 다 0개면 2단을 안 그린다(§5, §비주얼 §61 (8)) — 페르소나 0 + 스쿼드 n>0에서
         // 걷으면 방금 만든 스쿼드가 화면에서 사라지고 지울 길이 없어진다(이름이 한
         // 이름공간이라 그 이름의 페르소나도 못 만든다)
-        <EmptyState text="페르소나 없음" action={<CreatePersonaButton projectId={id} />} />
+        <EmptyState text={t(locale, "persona.empty.title")} action={<CreatePersonaButton projectId={id} />} />
       ) : (
         // ponytail: 폭 제한 없음 — §5의 §4 예외. 2단만 전체 폭이고 경고 Alert는 문단 폭이다.
         // 색은 큐가 아니라 레지스트리에 있다(§5) — 같은 서버 렌더에 실려서 점 스켈레톤이 없다

@@ -25,6 +25,7 @@ import { promisify } from "node:util";
 import { MAX_BYTES } from "./attachment-limit.ts";
 import { byteLength } from "./budgets.ts";
 import { skillUploadError } from "./skill-upload-limit.ts";
+import { t, wrap } from "./i18n.ts";
 import { expandHome, resolveWithin } from "./paths.ts";
 import { personaFilePath } from "./projects.ts";
 import { type EngineId, NO_MODEL, parseEngineValue, renderEngineBlock } from "./workers.ts";
@@ -171,10 +172,10 @@ export async function installSkill(
   // §비주얼 §25 ⑤ 표 «+» — 폴더 바로 아래에 SKILL.md가 없다. 화면이 폴더 모드에서 먼저 거절하므로
   // (원래 폴더 이름은 화면만 안다) 여기 닿는 것은 직접 호출뿐이다 — detail은 아는 값(파일명)으로 채운다.
   if (!skillMd) {
-    throw new SkillInstallError("고른 폴더 바로 아래에 SKILL.md가 없습니다", "SKILL.md");
+    throw new SkillInstallError(t("ko", "persona.skill.installMissingSkillMd"), "SKILL.md");
   }
   const badPath = files.find((f) => hasBadPathComponent(f.path));
-  if (badPath) throw new Error(`올바르지 않은 경로입니다: ${badPath.path}`);
+  if (badPath) throw new Error(wrap(t("ko", "persona.skill.installBadPathPrefix"), badPath.path, ""));
   const limitError = skillUploadError(
     files.length,
     files.reduce((n, f) => n + f.bytes.length, 0),
@@ -184,13 +185,13 @@ export async function installSkill(
   const skill = parseSkillFm(skillMd.bytes.toString("utf8"));
   if (!skill) {
     throw new SkillInstallError(
-      "고른 파일의 frontmatter에 name이 없습니다 — 설치될 디렉터리 이름이 name입니다",
+      t("ko", "persona.skill.installNoName"),
       skillMd.originalName ?? skillMd.path,
     );
   }
   if (!SKILL_NAME_RE.test(skill.name)) {
     throw new SkillInstallError(
-      "name을 디렉터리 이름으로 쓸 수 없습니다 — 영숫자로 시작하고 영숫자 · . _ - 만, 64자까지입니다",
+      t("ko", "persona.skill.installBadName"),
       `name: ${skill.name}`,
     );
   }
@@ -202,10 +203,7 @@ export async function installSkill(
     await mkdir(dest);
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code === "EEXIST") {
-      throw new SkillInstallError(
-        "이 이름의 스킬이 이 머신에 이미 있습니다 — 덮지 않습니다. 지우거나 name을 바꾼 뒤 다시 고릅니다",
-        dest,
-      );
+      throw new SkillInstallError(t("ko", "persona.skill.installNameConflict"), dest);
     }
     throw e;
   }
@@ -238,7 +236,7 @@ async function runUnzip(args: string[]): Promise<{ stdout: string }> {
     const err = e as NodeJS.ErrnoException & { code?: number | string; stderr?: string; stdout?: string };
     const firstLine = (err.stderr?.trim() || err.stdout?.trim() || err.message).split("\n")[0];
     throw new SkillInstallError(
-      "이 파일을 풀지 못했습니다 — .skill은 zip이어야 합니다",
+      t("ko", "persona.skill.unzipFailed"),
       `unzip ${err.code ?? "?"}: ${firstLine}`,
     );
   }
@@ -305,10 +303,7 @@ export async function extractSkillArchive(
       cut = `${repoRoot}${subtree}/`;
       entries = entries.filter((e) => e.path.startsWith(cut));
       if (entries.length === 0) {
-        throw new SkillInstallError(
-          "주소가 가리키는 폴더가 그 레포에 없습니다 — 브랜치나 경로가 맞는지 확인합니다",
-          subtree,
-        );
+        throw new SkillInstallError(t("ko", "persona.skill.subtreeNotFound"), subtree);
       }
     }
 
@@ -328,10 +323,7 @@ export async function extractSkillArchive(
     const isSingleTopDir = only !== null && relPaths.every((p) => p !== only);
     const hasTopSkillMd = relPaths.some((p) => p === "SKILL.md");
     if (!hasTopSkillMd && !isSingleTopDir) {
-      throw new SkillInstallError(
-        ".skill 안에서 SKILL.md를 찾지 못했습니다 — 최상위에 있거나 폴더 하나 바로 아래에 있어야 합니다",
-        originalName,
-      );
+      throw new SkillInstallError(t("ko", "persona.skill.skillMdNotFound"), originalName);
     }
     const strip = !hasTopSkillMd && isSingleTopDir ? `${cut}${only}/` : cut;
 
@@ -363,10 +355,7 @@ const SKILL_FETCH_TIMEOUT_MS = 30_000;
 
 /** 갈래 10(§비주얼 §25 ⑦) — 표에 없는 모양이거나 호스트가 셋 밖이면 요청을 내기 전에 거절한다. */
 function badSkillAddress(address: string): never {
-  throw new SkillInstallError(
-    "이 주소로는 받을 수 없습니다 - GitHub 레포나 그 안의 폴더 주소를 붙입니다",
-    address,
-  );
+  throw new SkillInstallError(t("ko", "persona.skill.badAddress"), address);
 }
 
 /** 주소 한 줄 → codeload zip 주소 + 남길 하위 트리(§5-1 §주소 갈래 표 여섯). API를 안 부른다 —
@@ -425,17 +414,14 @@ async function readLimitedBody(res: Response, fetchUrl: string): Promise<Buffer>
       total += value.length;
       if (total > MAX_BYTES) {
         await reader.cancel();
-        throw new SkillInstallError(
-          "받는 크기가 상한을 넘어 끊었습니다 — 레포 전체를 받으므로 큰 레포는 내려받아 파일로 깝니다",
-          `${MAX_BYTES / 1024 / 1024}MB`,
-        );
+        throw new SkillInstallError(t("ko", "persona.skill.tooLarge"), `${MAX_BYTES / 1024 / 1024}MB`);
       }
       chunks.push(value);
     }
   } catch (e) {
     if (e instanceof SkillInstallError) throw e;
     throw new SkillInstallError(
-      "주소에서 받지 못했습니다 — 주소가 맞는지, 공개된 레포인지 확인합니다",
+      t("ko", "persona.skill.fetchFailed"),
       `GET ${fetchUrl}: ${(e as Error).message}`,
     );
   }
@@ -457,7 +443,7 @@ export async function fetchSkillFromAddress(address: string): Promise<SkillUploa
     res = await fetch(fetchUrl, { signal: AbortSignal.timeout(SKILL_FETCH_TIMEOUT_MS) });
   } catch (e) {
     throw new SkillInstallError(
-      "주소에서 받지 못했습니다 — 주소가 맞는지, 공개된 레포인지 확인합니다",
+      t("ko", "persona.skill.fetchFailed"),
       `GET ${fetchUrl}: ${(e as Error).message}`,
     );
   }
@@ -468,7 +454,7 @@ export async function fetchSkillFromAddress(address: string): Promise<SkillUploa
   if (!res.ok) {
     await res.body?.cancel();
     throw new SkillInstallError(
-      "주소에서 받지 못했습니다 — 주소가 맞는지, 공개된 레포인지 확인합니다",
+      t("ko", "persona.skill.fetchFailed"),
       `GET ${fetchUrl}: HTTP ${res.status}`,
     );
   }
@@ -578,7 +564,8 @@ async function writeSkillsSidecar(
   const items = skills.map((s) => {
     const n = s.name.trim();
     // 백틱·줄바꿈이 들어가면 우리가 쓴 파일을 우리가 못 읽는다(ITEM_RE). 설명은 접고, 이름은 거절.
-    if (!n || /[`\n]/.test(n)) throw new Error(`스킬 이름에 쓸 수 없는 문자: ${JSON.stringify(s.name)}`);
+    if (!n || /[`\n]/.test(n))
+      throw new Error(wrap(t("ko", "persona.skill.badNamePrefix"), JSON.stringify(s.name), ""));
     return `- \`${n}\` — ${s.description.replace(/\s+/g, " ").trim()}`;
   });
 
@@ -647,7 +634,7 @@ export async function writePersonaLimit(dir: string, name: string, limit: number
     return;
   }
   if (!Number.isInteger(limit) || limit < 0) {
-    throw new Error(`상한은 0 이상의 정수여야 합니다: ${limit}`);
+    throw new Error(wrap(t("ko", "persona.limit.invalidPrefix"), String(limit), ""));
   }
   await mkdir(path.dirname(file), { recursive: true });
   await writeFile(file, `${limit}\n`, "utf8");
@@ -686,7 +673,7 @@ export async function readPersonaEngine(
 export class PersonaEngineCustomError extends Error {
   readonly raw: string;
   constructor(raw: string) {
-    super(`커스텀 인자가 있는 engine 파일입니다: ${raw}`);
+    super(wrap(t("ko", "persona.engine.customPrefix"), raw, ""));
     this.name = "PersonaEngineCustomError";
     this.raw = raw;
   }
@@ -721,7 +708,7 @@ export async function writePersonaEngine(
   const back = await readPersonaEngine(dir, name);
   if (!back || !("engineId" in back) || back.engineId !== id || back.model !== model) {
     await rm(file, { force: true });
-    throw new Error(`쓴 블록을 다시 읽으면 값이 달라집니다. 쓰지 않았습니다.`);
+    throw new Error(t("ko", "persona.engine.writeVerifyFailed"));
   }
   return back;
 }
@@ -770,7 +757,7 @@ export async function readPersonaMemory(
 export async function deletePersonaMemory(dir: string, name: string, file: string): Promise<void> {
   const files = await memoryFiles(dir, name);
   const target = files.find((f) => f.name.normalize("NFC") === file.normalize("NFC"));
-  if (!target) throw new Error(`메모리 파일이 목록에 없습니다: ${file}`);
+  if (!target) throw new Error(wrap(t("ko", "persona.memory.notInListPrefix"), file, ""));
   await rm(path.join(target.dir, target.name));
 }
 
