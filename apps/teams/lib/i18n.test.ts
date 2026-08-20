@@ -98,6 +98,23 @@ const FILLED = [
   "board.", // board.column.epic(806e483a)도 이 접두사로 덮인다
   "protocols.", // 7a86fd5c가 en을 채우고 여기 더했다(묶음 7의 프로토콜 갈래)
   "persona.", // b5d9735d가 en을 채우고 여기 더했다(묶음 7의 페르소나 갈래)
+  // 묶음 11(공용 컴포넌트·순수 유틸)은 화면 접두가 아니라 파일 스코프 접두라 줄이 열넷이다 —
+  // `90db2822`가 en을 채우고 여기 더했다. `markdown.`은 점까지가 접두라 `markdownEditor.`·
+  // `markdownWikilinks.`를 안 덮는다(그래서 셋을 따로 적는다).
+  "budgets.",
+  "markdownEditor.",
+  "updateToast.",
+  "workerMark.",
+  "pathPicker.",
+  "markdown.",
+  "markdownWikilinks.",
+  "copyCommand.",
+  "attachmentLimit.",
+  "skillUpload.",
+  "paths.",
+  "feedback.",
+  "projectActions.",
+  "appLayout.",
 ];
 
 test("이미 찬 묶음(설정·마감·셸)의 ko 키는 en에 하나도 안 빠졌다", () => {
@@ -732,6 +749,47 @@ test("b5d9735d - page.tsx 경고 두 갈래가 영어에서도 선다(`WARN` 뒤
   );
   const refsLine = `dev ${t(l, "persona.missing.refsMiddle")} 3${t(l, "persona.missing.refsSuffix")} PROFILE.md`;
   assert.strictEqual(refsLine, "dev — referenced by 3 tickets · PROFILE.md");
+});
+
+// 묶음 11(`90db2822`) — 수를 가운데 끼운 자리가 넷이라(예산 꼬리 · 1건 상한 · 스킬 상한 둘)
+// 조립을 순수 함수째로 부른다. 조각만 맞대면 `Over the 200-file install limit`처럼 하이픈이
+// 수에 붙는 자리가 안 잡힌다.
+test("90db2822 — 수를 낀 조합 문구가 두 언어에서 다 선다", async () => {
+  const { budgetLabel } = await import("./budgets.ts");
+  const { oversizeError } = await import("./attachment-limit.ts");
+  const { skillUploadError } = await import("./skill-upload-limit.ts");
+
+  assert.strictEqual(budgetLabel(6_700, 6_500, "ko"), "6,700 / 6,500 B 초과");
+  assert.strictEqual(budgetLabel(6_700, 6_500, "en"), "6,700 / 6,500 B over");
+  // 상한 안이면 두 언어가 같은 글자다 — 갈리는 것은 넘은 꼬리뿐이다.
+  assert.strictEqual(budgetLabel(1_200, 6_500, "en"), "1,200 / 6,500 B");
+
+  assert.strictEqual(
+    oversizeError(25 * 1024 * 1024, "en"),
+    "Over 20MB (25.0MB) — upload just the part you need.",
+  );
+
+  assert.deepStrictEqual(skillUploadError(412, 10, "en"), {
+    title: "Over the 200-file install limit",
+    message: "412 files",
+  });
+  assert.deepStrictEqual(skillUploadError(3, 30 * 1024 * 1024, "en"), {
+    title: "Over the 20MB install limit",
+    message: "30.0MB",
+  });
+
+  // 진행률은 `%` 앞에 공백 하나(update-toast.tsx의 JSX 그대로).
+  assert.strictEqual(
+    `${t("en", "updateToast.progress.prefix")} 42%`,
+    "Downloading the update… 42%",
+  );
+  // sr-only 접두는 이름에 공백 없이 붙는다 — 값이 공백으로 닫아야 낭독이 선다.
+  assert.strictEqual(`${t("en", "workerMark.srPrefix")}w3`, "Worker w3");
+  // 같은 거절을 두 액션 파일이 각자 말한다 — 문장이 갈리면 안 된다.
+  assert.strictEqual(
+    t("en", "projectActions.unknownProjectPrefix"),
+    t("en", "protocols.action.unknownProjectPrefix"),
+  );
 });
 
 test("readLanguage — 파일 없으면 기본값 ko, set 뒤에는 그 값을 읽는다", async () => {

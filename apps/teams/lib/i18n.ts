@@ -813,6 +813,10 @@ export const ko: Record<string, string> = {
  *  | 비활성(스킬) | Off | **토큰의 `비활성`(Disabled)과 다른 자리다** — `켜기`/`끄기` 쌍의 반대말이라 `Off` |
  *  | 초과 | over | 예산 배지의 꼬리(`1,600 / 1,500 B over`) |
  *  | 생성(다이얼로그 제목) | New | `티켓 발행 = New ticket`이 선 그 벌 — 여는 것의 이름이지 동사가 아니다 |
+ *  | 위지윅 · 원문(편집기 두 면) | rich text · source | `90db2822`(공용 컴포넌트 묶음)가 더한 줄부터 아래. 뒤엣것은 위 `원문` 줄과 같은 낱말이다 |
+ *  | 상한(거절 제목) | limit | 예산 꼬리의 `초과`(위 줄)와 같은 낱말이 상한 거절 제목에도 선다 |
+ *  | 의견(깃허브 이슈 제목) | Feedback | 제품이 그 화면을 부르는 이름이 `의견`이다 — `Report`가 아니다 |
+ *  | 업데이트 | update | 데스크톱 앱이 받아 다는 그것. `upgrade`로 안 부른다 |
  *
  *  **어순이 뒤집히는 자리는 접두·접미 두 키로 쪼갠다.** 한국어는 이름 뒤에 다 붙지만(`<이름>
  *  삭제`) 영어는 동사가 앞에 선다(`Delete <name>`) — 한쪽이 비는 것이 정상이고, 조립은
@@ -1499,6 +1503,71 @@ export const en: Record<string, string> = {
   "workers.engineHint.prefix": "Not set — uses the engine of whichever worker claims the ticket",
   "workers.engineHint.allPrefix": "currently all ",
   "workers.engineHint.nowPrefix": "currently ",
+  // 공용 컴포넌트·순수 유틸 묶음(§0-16 §발행 §묶음 표 행 11, `90db2822`) — ko는 `c9f2eec5`가
+  // 뽑았다. 이 묶음의 문구는 **한 자리가 아니라 여섯 자리에서 같이 읽힌다**(`markdown-editor.tsx`
+  // 하나가 화면 여섯을 문다) — 그래서 화면 이름을 안 넣고 동작만 적는다.
+  // **꼬리 `budgets.overSuffix`는 이 블록에 없다** — `50fd4b34`가 회귀를 고치면서
+  // 위에 먼저 채웠고, 값은 여기서 채웠을 것과 같다(` over`).
+
+  // 아이콘 버튼의 접근명 겸 툴팁 — 지금 면이 아니라 **누르면 가는 면**을 말한다.
+  "markdownEditor.toggle.toRaw": "Switch to source",
+  "markdownEditor.toggle.toWysiwyg": "Switch to rich text",
+
+  // 뒤에 `{percent}%`가 공백 하나를 두고 붙는다(`Downloading the update… 42%`).
+  "updateToast.progress.prefix": "Downloading the update…",
+  "updateToast.confirm.message": "Something is still running. Restart anyway?",
+  "updateToast.confirm.cancel": "Cancel",
+  "updateToast.confirm.restart": "Restart",
+  "updateToast.downloaded.title": "Update downloaded",
+  "updateToast.downloaded.notesToggle": "What changed",
+  "updateToast.downloaded.later": "Apply on next start",
+  "updateToast.downloaded.restartNow": "Restart now",
+
+  // sr-only 접두 — 뒤에 이름이 공백 없이 붙고(`Worker w3`), 묶음에서는 한 번만 나온다
+  // (`Worker w3 w4`). 낭독의 첫 낱말이라 대문자다(`protocols.sidebar.ariaLabel`과 같은 벌).
+  "workerMark.srPrefix": "Worker ",
+
+  "pathPicker.browse": "Browse",
+
+  "markdown.empty": "(empty)",
+  "markdownWikilinks.noTarget": "No target",
+
+  "copyCommand.ariaLabel": "Copy the command",
+
+  // 뒤에 바이트 수(소수 1자리)가 공백 없이 붙는다(`Over 20MB (23.4MB) — ...`).
+  "attachmentLimit.oversizePrefix": "Over 20MB (",
+  "attachmentLimit.oversizeSuffix": "MB) — upload just the part you need.",
+
+  // 상한 거절 제목 둘 — 수를 가운데 두고 `Over the 200-file install limit` ·
+  // `Over the 20MB install limit`. 한국어가 문장이던 자리를 영어는 명사구로 세운다.
+  "skillUpload.tooManyFilesPrefix": "Over the ",
+  "skillUpload.tooManyFilesSuffix": "-file install limit",
+  // 앞의 수에 공백 하나로 붙는다(`412 files`). 복수형 장치가 없어 늘 복수로 둔다 —
+  // 이 문장이 서는 것은 상한(200)을 넘긴 뒤라 1이 안 선다.
+  "skillUpload.fileCountSuffix": " files",
+  "skillUpload.tooManyBytesPrefix": "Over the ",
+  "skillUpload.tooManyBytesSuffix": "MB install limit",
+
+  // 신뢰 경계 검증 사유(lib/paths.ts) — 뒤에 붙는 값(이름·경로)은 안 건드린다.
+  "paths.invalidAssignmentPrefix": "Invalid persona value (persona:<name> or squad:<name>):",
+  // 뒤에 `${target} -> ${real}`이 공백 하나씩 사이에 두고 붙는다.
+  "paths.outsideBasePrefix": "Path is outside the base directory:",
+  // 뒤에 `${base})`가 공백 하나를 사이에 두고 붙는다(`(base <경로>)`).
+  "paths.outsideBaseSuffix": "(base",
+
+  // 뒤에 의견 첫 줄(최대 40자)이 공백 없이 붙는다.
+  "feedback.titlePrefix": "Feedback — ",
+  "feedback.versionLabel": "Version",
+  "feedback.sessionLabel": "Session",
+
+  // 앞엣것은 `protocols.action.unknownProjectPrefix`와 **같은 문장이다** — 같은 거절을
+  // 두 액션 파일이 각자 말하는 자리라 낱말이 갈리면 안 된다.
+  "projectActions.unknownProjectPrefix": "Not a registered project:",
+  "projectActions.fileMissing": "No file came through — pick it again.",
+
+  // `<meta name="description">` — 화면에 안 뜨고 제품 한 줄 설명이다(§0-9가 이 값을 그렇게
+  // 갈랐다). 명사구라 마침표를 안 찍는다.
+  "appLayout.description": "Control room for a filesystem ticket queue",
 };
 
 const DICTS: Record<Locale, Record<string, string>> = { ko, en };
