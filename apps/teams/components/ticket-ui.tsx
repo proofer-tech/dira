@@ -251,6 +251,17 @@ function assignmentValue(persona: string, squad: string): string | null {
   return squad ? `squad:${squad}` : persona ? `persona:${persona}` : null;
 }
 
+/** 발행 다이얼로그의 기본 선택 — 복제는 원본이 이긴다(둘 다 비어도 `없음`, 기본값이 덮지
+ *  않는다). 새 발행은 `default`라는 스쿼드가 있으면 그것, 없으면 `없음`이다
+ *  (§5-5 §기본 스쿼드 `default` §기본 선택). */
+function newTicketAssignmentDefault(
+  copy: { persona?: string; squad?: string } | undefined,
+  squads: string[],
+): string | null {
+  if (copy) return assignmentValue(copy.persona ?? "", copy.squad ?? "");
+  return squads.includes("default") ? "squad:default" : null;
+}
+
 /** 트리거에 그리는 값 — `SelectValue`는 `items` 없는 Root에서 **값 문자열 그대로**를 그리므로
  *  (priority select의 `min-w-64` 주석과 같은 결함), 이 함수 없이는 트리거에 `persona:developer`가
  *  그대로 뜬다. §비주얼 §61 (5) — 스쿼드면 `스쿼드 <이름>`(낱말이 유일한 채널), 페르소나면
@@ -1751,8 +1762,10 @@ export function NewTicketDialog({
             </div>
             <div className="space-y-2">
               <Label htmlFor="n-persona">persona</Label>
-              {/* §5-5 §할당 입구 둘 — 편집 폼과 같은 칸 하나, 같은 그룹 둘 */}
-              <Select name="persona" defaultValue={assignmentValue(copy?.persona ?? "", copy?.squad ?? "")}>
+              {/* §5-5 §할당 입구 둘 — 편집 폼과 같은 칸 하나, 같은 그룹 둘. 기본 선택은
+                  §5-5 §기본 스쿼드 `default` §기본 선택 — 복제가 아니면 `default` 스쿼드가
+                  있을 때 그것을 기본으로 문다 */}
+              <Select name="persona" defaultValue={newTicketAssignmentDefault(copy, squads)}>
                 <SelectTrigger
                   id="n-persona"
                   className="w-40"

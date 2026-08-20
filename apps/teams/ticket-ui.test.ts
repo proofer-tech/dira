@@ -19,3 +19,36 @@ test("assignmentLabel — squad는 `스쿼드 <이름>`, persona는 이름만, �
   assert.equal(assignmentLabel("persona:developer"), "developer");
   assert.equal(assignmentLabel(null), "없음");
 });
+
+// `newTicketAssignmentDefault`는 내부에서 `assignmentValue`를 부르므로 둘 다 뽑아서 같이 이발한다.
+const avStart = s.indexOf("function assignmentValue");
+const avEnd = s.indexOf("\n}", avStart) + 2;
+const assignmentValueSrc = s
+  .slice(avStart, avEnd)
+  .replace(/function assignmentValue\([\s\S]*?\{/, "function assignmentValue(persona, squad) {");
+
+const ntadStart = s.indexOf("function newTicketAssignmentDefault");
+const ntadEnd = s.indexOf("\n}", ntadStart) + 2;
+assert.ok(ntadStart > 0 && ntadEnd > ntadStart, "newTicketAssignmentDefault 함수를 못 찾았다");
+const newTicketAssignmentDefaultSrc = s
+  .slice(ntadStart, ntadEnd)
+  .replace(/function newTicketAssignmentDefault\([\s\S]*\{/, "function newTicketAssignmentDefault(copy, squads) {");
+
+const newTicketAssignmentDefault = new Function(
+  `${assignmentValueSrc}\n${newTicketAssignmentDefaultSrc}\nreturn newTicketAssignmentDefault;`,
+)();
+
+test("newTicketAssignmentDefault — (D3) default 스쿼드가 있으면 그것, 없으면 없음", () => {
+  assert.equal(newTicketAssignmentDefault(undefined, ["default", "frontend"]), "squad:default");
+  assert.equal(newTicketAssignmentDefault(undefined, ["frontend"]), null);
+  assert.equal(newTicketAssignmentDefault(undefined, []), null);
+});
+
+test("newTicketAssignmentDefault — 복제는 원본 값이 이긴다, 둘 다 빈 원본은 없음", () => {
+  assert.equal(
+    newTicketAssignmentDefault({ persona: "developer", squad: "" }, ["default"]),
+    "persona:developer",
+  );
+  assert.equal(newTicketAssignmentDefault({ persona: "", squad: "frontend" }, ["default"]), "squad:frontend");
+  assert.equal(newTicketAssignmentDefault({ persona: "", squad: "" }, ["default"]), null);
+});
