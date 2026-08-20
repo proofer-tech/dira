@@ -59,6 +59,7 @@ crontab은 cron이 읽는 예약 목록입니다. 여기에 한 줄이 올라가
   protocols/ontology.md                       온톨로지 규약
   protocols/CORE*.md                          코어 문서 사본 셋. 티켓 문법이 여기 있다
   personas/{pm,developer,qa,designer,archive-manager}/PROFILE.md
+  squads/default/members                      스쿼드 하나. 페르소나 넷이 들고 리더는 pm이다
   workers/w1.sh                               워커 하나. 실행 권한까지 붙어 있다
   self-heal.sh                                앱을 지우면 워커가 스스로 물러납니다
 ```
@@ -66,6 +67,10 @@ crontab은 cron이 읽는 예약 목록입니다. 여기에 한 줄이 올라가
 여기에 **crontab 등록**(`w1.sh`를 30초마다 부르는 줄)과 **레지스트리 등록**(앱이 이 프로젝트를
 목록에 들고 있게 하는 것)이 더해집니다. `<프로젝트>` 안에 만드는 것은 `.dira` 하나뿐이고
 프로젝트 소스에는 손대지 않습니다.
+
+`squads/default/`는 그 페르소나 넷을 한 이름으로 묶어 둔 스쿼드입니다. 티켓을 발행할 때
+수행자 칸이 이 스쿼드로 골라져 있습니다. 그렇게 발행한 티켓은 리더인 pm에게 갑니다.
+[스쿼드](/docs/squads)에서 다룹니다.
 
 워커는 하나입니다. 한 번에 티켓 하나가 돈다는 뜻입니다. 동시에 두 건 이상 돌리고 싶으면
 워커를 더 만들면 됩니다. [워커](/docs/worker)에서 다룹니다.
