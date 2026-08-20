@@ -14,6 +14,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, open } from "node:fs/promises";
 import path from "node:path";
 import { oversizeError } from "./attachment-limit.ts";
+import { DEFAULT_LOCALE, type Locale } from "./i18n.ts";
 import { resolveWithin } from "./paths.ts";
 import type { Project } from "./projects.ts";
 
@@ -46,10 +47,11 @@ export function safeName(raw: string): string {
 export async function saveAttachment(
   project: Pick<Project, "root">,
   file: File,
+  locale: Locale = DEFAULT_LOCALE,
 ): Promise<SaveResult> {
   // 신뢰 경계. 바이트를 읽기 **전에** 크기를 본다 — 20MB를 버퍼에 올린 뒤 거절하면 거절이 비싸다.
   // 화면도 같은 함수를 보내기 전에 부르지만(`attachment-field.tsx`) 판정은 여기가 한다.
-  const oversize = oversizeError(file.size);
+  const oversize = oversizeError(file.size, locale);
   if (oversize) return { ok: false, error: oversize };
   const name = safeName(file.name ?? "");
   if (!name) {

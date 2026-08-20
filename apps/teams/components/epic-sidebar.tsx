@@ -195,7 +195,7 @@ export function EpicSidebar({
                                         {t(locale, "status.label.wip")} {row.counts.wip}
                                       </span>
                                     )}
-                                    <WorkerChips names={row.workers} cap={WORKER_CHIP_CAP} />
+                                    <WorkerChips names={row.workers} cap={WORKER_CHIP_CAP} locale={locale} />
                                   </span>
                                 )}
                               </span>
@@ -219,7 +219,7 @@ export function EpicSidebar({
                         {/* 패널 3행 — 워커 전부. cap 없음, 0명이면 줄이 통째로 안 선다 */}
                         {row.workers.length > 0 && (
                           <div className="flex flex-wrap items-baseline gap-2">
-                            <WorkerChips names={row.workers} />
+                            <WorkerChips names={row.workers} locale={locale} />
                           </div>
                         )}
                         {/* 패널 4행 — 상세 문(넓은 문) */}

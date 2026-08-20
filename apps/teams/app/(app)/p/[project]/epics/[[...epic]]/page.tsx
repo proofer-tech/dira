@@ -160,7 +160,7 @@ export default async function Epics({
               <span>
                 대기 {current.counts.open} · 진행중 {current.counts.wip} · 완료 {current.counts.done}
               </span>
-              <WorkerChips names={current.workers} />
+              <WorkerChips names={current.workers} locale={locale} />
               {costText && <span>{costText}</span>}
             </p>
 
@@ -168,7 +168,7 @@ export default async function Epics({
                 제목 줄은 위 머리가 이미 그렸으니 여기는 본문뿐이다. */}
             {readme ? (
               <div className="max-w-3xl">
-                <Markdown text={readme} />
+                <Markdown text={readme} locale={locale} />
               </div>
             ) : (
               <p className="text-xs text-muted-foreground">

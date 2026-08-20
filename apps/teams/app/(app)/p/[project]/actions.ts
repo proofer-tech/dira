@@ -31,7 +31,7 @@ export async function uploadAttachment(
   if (!(file instanceof File)) {
     return { ok: false, error: t(locale, "projectActions.fileMissing") };
   }
-  return saveAttachment(project, file);
+  return saveAttachment(project, file, locale);
 }
 
 /** 사이드바 그룹 머리의 새 에픽 입구 (DESIGN.md §에픽 결정 17) — 판정·쓰기는 전부

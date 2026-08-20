@@ -21,6 +21,7 @@
  *  기존 파일 어디에 얹어도 나머지 셸이 그 파일을 import한다 — `keymap-provider.tsx`와 같은 축. */
 import { useEffect, useState } from "react";
 import { feedbackMetaAction, trackEvent } from "@/app/actions";
+import { useLocale } from "@/components/language-provider";
 import { issueUrl, type FeedbackMeta } from "@/lib/feedback";
 import { Button } from "@/components/ui/button";
 import {
@@ -34,6 +35,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 
 export function FeedbackDialog() {
+  const locale = useLocale();
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   const [meta, setMeta] = useState<FeedbackMeta | null>(null);
@@ -53,7 +55,7 @@ export function FeedbackDialog() {
 
   // 상한을 넘겼는지는 **URL을 실제로 만들어야** 안다(제목·두 줄이 예산을 같이 먹는다).
   // 그리는 김에 만들어 두고 보내기는 이 값을 그대로 연다 — 두 번 조립하지 않는다.
-  const built = meta && text.trim() ? issueUrl(text, meta) : null;
+  const built = meta && text.trim() ? issueUrl(text, meta, locale) : null;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>

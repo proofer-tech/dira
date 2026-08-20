@@ -25,7 +25,7 @@ import { promisify } from "node:util";
 import { MAX_BYTES } from "./attachment-limit.ts";
 import { byteLength } from "./budgets.ts";
 import { skillUploadError } from "./skill-upload-limit.ts";
-import { t, wrap } from "./i18n.ts";
+import { DEFAULT_LOCALE, t, wrap, type Locale } from "./i18n.ts";
 import { expandHome, resolveWithin } from "./paths.ts";
 import { personaFilePath } from "./projects.ts";
 import { type EngineId, NO_MODEL, parseEngineValue, renderEngineBlock } from "./workers.ts";
@@ -167,6 +167,7 @@ function hasBadPathComponent(p: string): boolean {
 export async function installSkill(
   files: SkillUpload[],
   configDir: string = claudeConfigDir(),
+  locale: Locale = DEFAULT_LOCALE,
 ): Promise<Skill> {
   const skillMd = files.find((f) => f.path === "SKILL.md");
   // §비주얼 §25 ⑤ 표 «+» — 폴더 바로 아래에 SKILL.md가 없다. 화면이 폴더 모드에서 먼저 거절하므로
@@ -179,6 +180,7 @@ export async function installSkill(
   const limitError = skillUploadError(
     files.length,
     files.reduce((n, f) => n + f.bytes.length, 0),
+    locale,
   );
   if (limitError) throw new SkillInstallError(limitError.title, limitError.message);
 
@@ -289,6 +291,7 @@ export async function extractSkillArchive(
   bytes: Buffer,
   originalName = "archive.skill",
   subtree?: string,
+  locale: Locale = DEFAULT_LOCALE,
 ): Promise<SkillUpload[]> {
   const dir = await mkdtemp(path.join(tmpdir(), "skill-import-"));
   try {
@@ -310,6 +313,7 @@ export async function extractSkillArchive(
     const limitError = skillUploadError(
       entries.length,
       entries.reduce((n, e) => n + e.bytes, 0),
+      locale,
     );
     if (limitError) throw new SkillInstallError(limitError.title, limitError.message);
 
@@ -435,7 +439,10 @@ async function readLimitedBody(res: Response, fetchUrl: string): Promise<Buffer>
  *
  *  거절하면 `<config>/skills` 아래에도 임시 디렉터리에도 아무것도 안 남는다 — 요청 자체가
  *  거절되면 `extractSkillArchive`를 아예 안 부르고, 부른 뒤의 거절은 그 함수의 `finally`가 건다. */
-export async function fetchSkillFromAddress(address: string): Promise<SkillUpload[]> {
+export async function fetchSkillFromAddress(
+  address: string,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<SkillUpload[]> {
   const { fetchUrl, subtree } = parseSkillAddress(address);
 
   let res: Response;
@@ -460,7 +467,7 @@ export async function fetchSkillFromAddress(address: string): Promise<SkillUploa
   }
 
   const bytes = await readLimitedBody(res, fetchUrl);
-  return extractSkillArchive(bytes, address, subtree);
+  return extractSkillArchive(bytes, address, subtree, locale);
 }
 
 // ── 페르소나가 고른 스킬 (`<personas>/<이름>/skills.md`) ─────────────────────

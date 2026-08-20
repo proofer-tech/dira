@@ -9,7 +9,7 @@
  *  검증(이름 규칙 · 기준 디렉터리 접두)은 `lib/projects.ts`에 있다. 이 파일이 하는 일은
  *  프로젝트 id → 해석된 디렉터리와, Error를 직렬화 가능한 결과로 바꾸는 것뿐이다. */
 import { revalidatePath } from "next/cache";
-import { t, wrap } from "@/lib/i18n";
+import { DEFAULT_LOCALE, t, wrap, type Locale } from "@/lib/i18n";
 import {
   createPersona,
   createSquad,
@@ -248,12 +248,13 @@ export async function savePersonaSkillsAction(
  *  (`message`·`detail`)을 `title`·`message`로 그대로 옮긴다 — 갈래마다 사유가 다르다. */
 export async function installSkillAction(
   formData: FormData,
+  locale: Locale = DEFAULT_LOCALE,
 ): Promise<InstallSkillResult & { installed?: Skill[]; name?: string }> {
   try {
     const address = formData.get("address");
     let uploads: SkillUpload[];
     if (typeof address === "string" && address !== "") {
-      uploads = await fetchSkillFromAddress(address);
+      uploads = await fetchSkillFromAddress(address, locale);
     } else {
       const files = formData.getAll("file").filter((f): f is File => f instanceof File);
       const paths = formData.getAll("path").map(String);
@@ -264,7 +265,7 @@ export async function installSkillAction(
       }
       uploads =
         files.length === 1 && files[0].name.endsWith(".skill")
-          ? await extractSkillArchive(Buffer.from(await files[0].arrayBuffer()), files[0].name)
+          ? await extractSkillArchive(Buffer.from(await files[0].arrayBuffer()), files[0].name, undefined, locale)
           : await Promise.all(
               files.map(async (file, i) => ({
                 path: paths[i],
@@ -273,7 +274,7 @@ export async function installSkillAction(
               })),
             );
     }
-    const skill = await installSkill(uploads);
+    const skill = await installSkill(uploads, undefined, locale);
     return { ok: true, installed: await listInstalledSkills(), name: skill.name };
   } catch (e) {
     if (e instanceof SkillInstallError) return { ok: false, title: e.message, message: e.detail };

@@ -52,6 +52,7 @@ import {
   getProject,
   listPersonas,
   ontologyDir,
+  readLanguage,
   resolveConfig,
   squadNames,
   squadsDir,
@@ -95,6 +96,7 @@ export default async function TicketDetail({
   if (!(await stat(project.root).catch(() => null))) return null;
 
   const config = await resolveConfig(project);
+  const locale = await readLanguage();
   const file = await findTicket(project.root, hash, config);
   if (!file) notFound();
 
@@ -453,7 +455,7 @@ export default async function TicketDetail({
             assigned={ticket.assigned && ticket.state !== "done"}
             ghost={ticket.state === "open" && ticket.assigned}
             wip={ticket.state === "wip"}
-            mark={<WipWorker t={ticket} />}
+            mark={<WipWorker t={ticket} locale={locale} />}
           />
 
           {/* 볼 것이 있으면 여기다 — 본문 위(§2-3 ④). 스트림·왕복을 보러 여는 화면에서 본문을
@@ -489,6 +491,7 @@ export default async function TicketDetail({
                   text={bodyRead}
                   breaks={ticket.fm.kind === "request" ? "untilHeading" : undefined}
                   vault={vault}
+                  locale={locale}
                 />
               ) : (
                 <EmptyState text="본문 없음" />

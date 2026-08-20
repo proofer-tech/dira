@@ -21,6 +21,7 @@
 import { useRef, useState, type ReactNode } from "react";
 import { Paperclip, TriangleAlert, X } from "lucide-react";
 import { uploadAttachment } from "@/app/(app)/p/[project]/actions";
+import { useLocale } from "@/components/language-provider";
 import { oversizeError } from "@/lib/attachment-limit";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -39,6 +40,7 @@ type Chip = { id: number; name: string; path?: string; error?: string };
 export type Attachments = ReturnType<typeof useAttachments>;
 
 export function useAttachments(project: string) {
+  const locale = useLocale();
   const [chips, setChips] = useState<Chip[]>([]);
   /** 상한 초과로 **안 붙인** 개수. 그 파일들은 칩이 안 서므로(§27 실패 표) 이 수가 유일한 흔적이다. */
   const [dropped, setDropped] = useState(0);
@@ -81,7 +83,7 @@ export function useAttachments(project: string) {
       // 1건 상한은 **올리기 전에** 본다. 넘긴 요청은 Next의 `bodySizeLimit`에 걸려 서버 액션에
       // 닿지 못하고, 그러면 사유가 §6 3요소가 아니라 Next의 영어 마스킹 문구가 된다(`6dab7cc8`).
       // 판정은 서버(`saveAttachment`)가 다시 한다 — 같은 `oversizeError`다.
-      const oversize = oversizeError(file.size);
+      const oversize = oversizeError(file.size, locale);
       setChips((prev) => [...prev, { id, name, error: oversize ?? undefined }]);
       if (!oversize) void upload(id, name, file);
     }

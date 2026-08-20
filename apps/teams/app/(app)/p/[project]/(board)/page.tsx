@@ -629,7 +629,7 @@ export default async function Board({
             <PersonaBadge name={assignee.name} color={colors[assignee.name]} state={t.state} />
           );
         })()}
-        <WipWorker t={t} />
+        <WipWorker t={t} locale={locale} />
       </span>
       {t.deps.length > 0 && (
         // 라벨은 세어주지 않는다 — 어느 해시가 무엇인지는 <DepBadge>가
@@ -889,7 +889,7 @@ export default async function Board({
                               <span data-epic-line className="shrink-0 text-xs font-normal text-muted-foreground">
                                 {laneRows.length}건
                               </span>
-                              <WorkerChips names={workers} />
+                              <WorkerChips names={workers} locale={locale} />
                             </div>
                             <div className="flex gap-4">
                               {STATUSES.map((s) => {
@@ -1159,7 +1159,7 @@ export default async function Board({
                                 className="block max-w-[24ch] truncate font-mono text-xs text-muted-foreground"
                                 title={t.fm.owner ?? ""}
                               >
-                                <WipWorker t={t} full />
+                                <WipWorker t={t} full locale={locale} />
                               </span>
                             </TableCell>
                             {/* 스윔레인 대신 표를 잡는 컬럼(§에픽 결정 7 §표뷰) — 값 그대로,

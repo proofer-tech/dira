@@ -2076,6 +2076,7 @@ function AddSkillsDialog({
   save: (picked: string[]) => Promise<PersonaResult>;
 }) {
   const t = useT();
+  const locale = useLocale();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [picked, setPicked] = useState<string[]>([]);
@@ -2119,7 +2120,7 @@ function AddSkillsDialog({
     setFailure(null);
     setInstalling(source);
     try {
-      const r = await installSkillAction(formData);
+      const r = await installSkillAction(formData, locale);
       if (r.ok) {
         onInstalled(r.installed ?? []);
         // §비주얼 §25 ⑦ §성공 — 주소 칸을 비운다(같은 주소를 두 번 깔 일이 없다).
@@ -2149,6 +2150,7 @@ function AddSkillsDialog({
     const limitError = skillUploadError(
       items.length,
       items.reduce((n, it) => n + it.file.size, 0),
+      locale,
     );
     if (limitError) {
       setFailure(limitError);
