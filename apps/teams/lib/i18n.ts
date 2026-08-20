@@ -800,6 +800,13 @@ export const ko: Record<string, string> = {
  *  | 이름변경 · 기본값 가정 | Rename · assumed default | 뒤엣것은 경로 옆 꼬리라 소문자다(`settings.tokens.addedSuffix`가 선 그 벌) |
  *  | 원문(읽기 전용 칸의 낭독 이름) | source | 화면에 안 뜨는 접근가능 이름(`CORE.md source`) |
  *  | 자(글자 수) | chars | 복수형 장치가 없어 늘 복수로 둔다 — 이 자리는 1이 거의 안 선다 |
+ *  | 스쿼드 · 멤버 · 리더 · 규칙 | squad · member · leader · rules | `b5d9735d`(페르소나 묶음)가 더한 줄부터 아래 |
+ *  | 스킬 · 메모리 · 프로필 | skill · memory · profile | |
+ *  | 상한(동시 워커) | limit | status bar의 `한도`와 같은 낱말이다 — 재는 것이 다를 뿐 사람이 부르는 이름은 하나다 |
+ *  | 지정 없음 · 지정 해제 | Not set · Clear | 값과 그 값을 지우는 버튼이라 낱말이 갈린다 |
+ *  | 비활성(스킬) | Off | **토큰의 `비활성`(Disabled)과 다른 자리다** — `켜기`/`끄기` 쌍의 반대말이라 `Off` |
+ *  | 초과 | over | 예산 배지의 꼬리(`1,600 / 1,500 B over`) |
+ *  | 생성(다이얼로그 제목) | New | `티켓 발행 = New ticket`이 선 그 벌 — 여는 것의 이름이지 동사가 아니다 |
  *
  *  **어순이 뒤집히는 자리는 접두·접미 두 키로 쪼갠다.** 한국어는 이름 뒤에 다 붙지만(`<이름>
  *  삭제`) 영어는 동사가 앞에 선다(`Delete <name>`) — 한쪽이 비는 것이 정상이고, 조립은
@@ -1276,6 +1283,211 @@ export const en: Record<string, string> = {
   "protocols.lib.dirNoDeletePrefix": "This screen doesn't delete directories:",
   "protocols.lib.newNameRequired": "Enter the new name.",
   "protocols.lib.dirNoMovePrefix": "This screen doesn't move directories:",
+
+  // 화면 이행 셋째 묶음 - 페르소나 갈래(§0-16 §발행 §묶음 표 행 7). `204be4da`가 넣은 `ko`의 짝이고
+  // 조각을 쪼갠 자리는 그쪽이 정한 그대로다 - 여기서 갈리는 것은 **어느 조각이 무엇을 지느냐**뿐이다
+  // (한국어는 이름 뒤에 붙고 영어는 동사가 앞에 선다).
+
+  // actions.ts · lib/skills.ts - 서버 액션-모듈 함수라 `t("ko", ...)`로 고정해 부르는 벽이다.
+  // 지금은 화면에 한국어로 뜨지만 사전은 타고 있다 - 벽이 걷히는 날 이 줄들이 그대로 선다.
+  "persona.error.unknownProjectPrefix": "Not a registered project:",
+  "persona.error.squadNameTakenPrefix": "That squad name is taken:",
+  "persona.error.personaNameTakenPrefix": "That persona name is taken:",
+  "persona.skill.fileCountMismatchPrefix": "Files and paths don't match in count:",
+  "persona.skill.installFailedTitle": "Couldn't install the skill",
+  "persona.limit.invalidPrefix": "The limit has to be an integer of 0 or more:",
+  "persona.skill.installMissingSkillMd": "No SKILL.md directly inside the folder you picked",
+  "persona.skill.installBadPathPrefix": "Not a valid path:",
+  "persona.skill.installNoName":
+    "The file you picked has no name in its frontmatter — name is the directory it installs into",
+  "persona.skill.installBadName":
+    "That name can't be a directory name — it starts with a letter or digit, holds only letters, digits and . _ -, and stops at 64 characters",
+  "persona.skill.installNameConflict":
+    "A skill by this name is already on this machine — nothing gets overwritten. Delete it or change name, then pick again",
+  "persona.skill.unzipFailed": "Couldn't unpack this file — a .skill has to be a zip",
+  "persona.skill.subtreeNotFound": "That repo has no folder at this address — check the branch and the path",
+  "persona.skill.skillMdNotFound":
+    "No SKILL.md inside the .skill — it belongs at the top level, or directly inside one folder",
+  "persona.skill.badAddress": "Can't fetch from this address — paste a GitHub repo, or a folder inside one",
+  "persona.skill.tooLarge":
+    "Stopped — the download went past the size limit. This pulls the whole repo, so grab a big one yourself and install it from a file",
+  "persona.skill.fetchFailed": "Couldn't fetch from that address — check the address, and that the repo is public",
+  "persona.skill.badNamePrefix": "Characters a skill name can't hold:",
+  "persona.engine.customPrefix": "This engine file holds custom arguments:",
+  "persona.engine.writeVerifyFailed": "Reading the block back gives a different value. Nothing was written.",
+  "persona.memory.notInListPrefix": "No such memory file in the list:",
+
+  // 페르소나 화면 - `[[...persona]]/page.tsx`.
+  "persona.dir.label": "Directory",
+  "persona.dir.defaultTitle": "Couldn't find TICKET_PERSONAS in the worker file, so this uses the default",
+  "persona.dir.defaultBadge": "assumed default",
+  "persona.missing.title": "Some personas have no profile file",
+  // 세 경고가 `<WARN>` 뒤에서 갈라진다 - 한국어는 `만 남기고`가 조각 하나로 셋을 다 받지만,
+  // 영어는 동사(`dispatches`)가 이 조각으로 올라와야 세 문장이 다 선다. 그래서 값이 공백으로 연다.
+  "persona.missing.enginePrefix": "When the engine meets this name it leaves a",
+  "persona.warn.engineSuffix": " and nothing else, then dispatches",
+  "persona.wording.withoutPersona": "without a persona",
+  "persona.missing.dispatchDetail":
+    "— dispatch doesn't fail, the session just starts without knowing its role or permissions. Pick that name on the left, fill the empty body on the right, save, and the file gets created.",
+  "persona.missing.noSkillsMemory":
+    "No profile means no skills and no memory either — both blocks live inside the persona prompt.",
+  "persona.missing.refsMiddle": "— referenced by",
+  "persona.missing.refsSuffix": " tickets ·",
+  "persona.squadWarn.title": "Some tickets point at a squad that doesn't exist",
+  "persona.squadWarn.enginePrefix": "When the engine meets this value it leaves a",
+  "persona.squadWarn.strongLabel": "down the old path",
+  "persona.squadWarn.parenPrefix": " (the persona: value if the ticket has one, otherwise",
+  "persona.squadWarn.parenSuffix": ").",
+  "persona.empty.title": "No personas",
+
+  // 페르소나 화면 - `personas-ui.tsx`.
+  "persona.word.squad": "Squads",
+  "persona.word.skills": "Skills",
+  "persona.word.memory": "Memory",
+  "persona.word.limit": "Limit",
+  "persona.word.members": "Members",
+  "persona.action.delete": "Delete",
+  // **이 셋만 한국어다.** 화면에 안 뜨고, tick.sh:736-788이 프롬프트에 실제로 쓰는 블록의 바이트
+  // 수를 재는 데만 쓰인다(`squadBlockBytes`) - 엔진에는 로케일이 없어 그 블록은 어느 화면에서나
+  // 한국어다. 영어로 옮기면 en 화면의 상한 배지가 실물보다 8B 적게 세서, 1,500B를 갓 넘긴
+  // 스쿼드가 안 넘은 것처럼 뜬다. 아래 `en 사전에 한글이 없다` 테스트가 이 접두를 비켜 간다.
+  // 사전에서 아예 걷어내는 것이 바른 자리다 -> `50fd4b34`(developer).
+  "persona.squad.blockNamePrefix": "스쿼드",
+  "persona.squad.blockLeaderSuffix": "(리더)",
+  "persona.squad.blockEndSuffix": "끝",
+  "persona.refs.openPrefix": "Open",
+  // 뒤에 `Open 2 · In progress 1`이 `wrap`으로 붙는다 - 숫자를 콜론 뒤로 보내는 셸 묶음의 그 벌이다.
+  "persona.refs.ticketPrefix": "Tickets:",
+  "persona.refs.none": "No tickets reference it",
+  "persona.color.saveFailedMessage": "Couldn't save the color.",
+  "persona.color.saveFailedTitle": "Couldn't save the color",
+  "persona.color.labelPrefix": "Color:",
+  "persona.color.none": "No color",
+  "persona.create.personaTitle": "New persona",
+  "persona.create.squadTitle": "New squad",
+  "persona.create.personaDescPrefix": "A ticket's",
+  "persona.create.personaDescSuffix":
+    "value is the directory name. The profile body is inlined at the top of the session prompt.",
+  "persona.create.squadDescPrefix":
+    "Groups personas that have a profile into a candidate pool — it becomes a ticket's",
+  "persona.create.squadDescSuffix":
+    "value, and dispatch picks whichever member has the fewest tickets in progress. It isn't a leader and it isn't delegation.",
+  "persona.create.kindLabel": "Kind",
+  "persona.create.nameLabel": "Name",
+  "persona.create.nameHintPrefix": "Letters, digits, _ and -.",
+  "persona.create.nameHintPersonaFile": "The file becomes <personas>/<name>/PROFILE.md",
+  "persona.create.nameHintSquadFile": "The file becomes <squads>/<name>/members",
+  "persona.create.nameHintSuffix": ". Personas and squads share one namespace — a collision is rejected",
+  "persona.create.personaFailTitle": "Couldn't create the persona",
+  "persona.create.squadFailTitle": "Couldn't create the squad",
+  "persona.badge.noProfile": "No profile",
+  "persona.badge.unsaved": "Unsaved",
+  "persona.badge.squadNoProfile": "Member has no profile",
+  "persona.route.notFound": "This path can't be opened",
+  "persona.action.saveFailedTitle": "Couldn't save",
+  "persona.action.savedNotice": "Saved.",
+  "persona.action.deleteFailedTitle": "Couldn't delete",
+  "persona.action.deleteFailedMessage": "Couldn't delete.",
+  "persona.action.remove": "Remove",
+  "persona.squad.rulesHeading": "Rules",
+  "persona.squad.rulesBadgeTitle": "Only a session running as leader gets this file in full in its prompt",
+  "persona.squad.rulesBadgePrefix": "Inlined in the leader prompt ·",
+  "persona.squad.rulesHint":
+    "This rides only in the leader session's prompt. Leave it empty and the leader sees member names and their roles, nothing more.",
+  "persona.squad.membersHeading": "Members",
+  "persona.squad.membersBadgeTitle":
+    "Members of this squad get this block in their prompt even when the ticket names no squad",
+  "persona.squad.membersBadgePrefix": "Inlined in every member's prompt ·",
+  "persona.squad.overBudgetSuffix": "over",
+  "persona.squad.noEligible": "No persona has a profile yet — create a persona first.",
+  // aria-label이 `<이름>`에 공백 없이 붙는다(`alice's role`).
+  "persona.squad.roleAriaSuffix": "'s role",
+  "persona.squad.leaderBadge": "Leader",
+  "persona.squad.roleHint": "Leave a role empty and the first line of that persona's profile becomes the role.",
+  "persona.squad.orphansHeading": "Members with no profile — you can't pick them, only remove them",
+  "persona.squadDelete.titlePrefix": "Delete squad —",
+  "persona.squadDelete.bodyMiddle":
+    "will be deleted, directory and all. This can't be undone. On tickets that point at this squad, the",
+  "persona.squadDelete.bodyAfter": "value stays as it is.",
+  "persona.policy.heading": "Dispatch policy",
+  "persona.policy.nextTicketHint": "This takes effect from the next ticket picked.",
+  "persona.limit.saveFailed": "Couldn't save the limit.",
+  "persona.limit.saveFailedTitle": "Couldn't save the limit",
+  "persona.limit.none": "None",
+  "persona.limit.popoverLabel": "Concurrent worker limit",
+  "persona.limit.popoverHint": "Empty means no limit · 0 stops dispatch",
+  "persona.engine.label": "Engine",
+  "persona.engine.unset": "Not set",
+  "persona.engine.modelLabel": "Model",
+  "persona.engine.noModel": "No model",
+  // `MODEL_RE`가 `…`를 안 받아 모델 이름과 겹칠 수 없다 - 한국어가 한글로 얻던 것을 여기서는
+  // 말줄임표가 준다(`ko`의 `직접 입력…`과 같은 장치).
+  "persona.engine.customOption": "Type one in…",
+  "persona.engine.customModelAriaLabel": "Type in a model name",
+  "persona.engine.modelNamePlaceholder": "Model name",
+  "persona.engine.modelBadHint": "No spaces, no quotes — one token, the model name",
+  "persona.engine.modelPassthroughHint": "Passed to the engine as-is — one token, no spaces, no quotes",
+  // 없는 기능을 이어 붙이는 자리 - 값이 둘 이상일 때만 사이에 선다(`join`).
+  "persona.engine.missingJoiner": " and ",
+  "persona.engine.missingMiddle": "workers have no",
+  "persona.engine.missingSuffix": " — running tickets is the same.",
+  "persona.engine.saveFailed": "Couldn't save the engine.",
+  "persona.engine.saveFailedTitle": "Couldn't save the engine",
+  "persona.engine.unsetAction": "Clear",
+  "persona.engine.overwriteTitlePrefix": "This overwrites a custom engine value —",
+  "persona.engine.overwriteBodyPrefix": "The engine file currently holds arguments outside the catalog:",
+  "persona.engine.overwriteBodySuffix": "Save here and they go away, replaced by what you picked.",
+  "persona.engine.overwriteConfirm": "Save anyway",
+  "persona.skill.saveFailed": "Couldn't save the skills.",
+  "persona.skill.saveFailedTitle": "Couldn't save the skills",
+  "persona.skill.removingAction": "Removing…",
+  "persona.skill.emptyNone": "No skills picked — the dispatch prompt carries no skills section.",
+  "persona.skill.emptyAllOff": "No skills turned on — the dispatch prompt carries no skills section.",
+  "persona.skill.claudeOnlyHint":
+    "Skills ride on the claude engine only — when a codex worker claims the ticket, this section never reaches the prompt.",
+  "persona.skill.turningOff": "Turning off…",
+  "persona.skill.turnOff": "Turn off",
+  "persona.skill.offHeading": "Off",
+  "persona.skill.turningOn": "Turning on…",
+  "persona.skill.turnOn": "Turn on",
+  "persona.memory.empty": "No memory yet — it piles up here as sessions leave notes in their retrospectives.",
+  "persona.memory.deleteFailedTitle": "Couldn't delete the memory",
+  "persona.memory.deleteFailedMessage": "Couldn't delete the memory.",
+  "persona.memory.deletingAction": "Deleting…",
+  "persona.memory.deleteTitlePrefix": "Delete memory —",
+  "persona.memory.deleteBodyAfterPath":
+    "will be deleted. This can't be undone — this screen has no edit and no add. From the next dispatch on, a session can't find this concept.",
+  "persona.skill.multiDropRejected":
+    "One skill installs at a time — you dropped more than one top-level item. Drop just one",
+  "persona.skill.countSuffix": " items",
+  "persona.skill.addHeading": "Add skills",
+  "persona.skill.addDialogDesc":
+    "Skills installed on this machine. What you pick rides in this persona's dispatch prompt.",
+  "persona.skill.searchPlaceholder": "Search skills — name or description",
+  // 앞에 `"질의"`가 그대로 붙는다 - 설정 검색이 선 그 벌이다.
+  "persona.skill.searchEmptySuffix": ": no matching skills",
+  "persona.skill.notOnMachineHeading": "Not on this machine",
+  "persona.skill.orphanNote": "Not in the installed list — it may have been picked on another machine",
+  "persona.skill.installedHeading": "Installed skills",
+  "persona.skill.noneOnMachine": "No skills found on this machine",
+  "persona.skill.configDirHint": "With no CLAUDE_CONFIG_DIR, <config> is ~/.claude",
+  "persona.skill.installFromBelow": "Pick a file below to install one now",
+  "persona.skill.dropToInstall": "Drop to install",
+  "persona.skill.fetchingAddress": "Fetching from the address — up to 30 seconds",
+  "persona.skill.dropHint": "Not in the list? Drag a folder onto this window, or pick a file to install",
+  "persona.skill.installing": "Installing…",
+  "persona.skill.browse": "Browse",
+  "persona.skill.addressAriaLabel": "Skill address",
+  "persona.skill.installAction": "Install",
+  "persona.delete.titlePrefix": "Delete persona —",
+  "persona.delete.bodyAfterPath": "will be deleted, files and all. This can't be undone.",
+  // 한국어는 수가 앞에 서고(`티켓이 3건`) 영어는 뒤에 선다 - 조각의 몫이 갈릴 뿐 자리는 같다.
+  "persona.delete.refsWarnPrefix": "This persona is referenced by",
+  "persona.delete.refsWarnSuffix": " tickets",
+  "persona.delete.refsWipPrefix": "(in progress:",
+  "persona.delete.refsWipSuffix": ")",
+  "persona.delete.refsBody": "Tickets aren't deleted. With the profile gone the engine leaves a",
+  "persona.delete.dispatchDetail": "— the session starts without knowing its role or permissions.",
 };
 
 const DICTS: Record<Locale, Record<string, string>> = { ko, en };

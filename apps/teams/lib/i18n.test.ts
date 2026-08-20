@@ -97,6 +97,7 @@ const FILLED = [
   "dep.",
   "board.", // board.column.epic(806e483a)도 이 접두사로 덮인다
   "protocols.", // 7a86fd5c가 en을 채우고 여기 더했다(묶음 7의 프로토콜 갈래)
+  "persona.", // b5d9735d가 en을 채우고 여기 더했다(묶음 7의 페르소나 갈래)
 ];
 
 test("이미 찬 묶음(설정·마감·셸)의 ko 키는 en에 하나도 안 빠졌다", () => {
@@ -278,11 +279,32 @@ test("90be3eeb — 셸 조립 문구가 영어에서도 문장이 된다", () =>
 
 // 화면에 남은 한국어를 여기서 잡는다 — 사전 값 자체에 한글이 섞이면 폴백이 아니라 오타다.
 // 언어 이름 둘만 예외다(영어 화면에서도 `한국어`는 `한국어`로 적는다).
-test("en 사전에 한글이 없다 — 언어 이름 둘만 예외다", () => {
+test("en 사전에 한글이 없다 — 언어 이름 둘과 스쿼드 블록만 예외다", () => {
   const hangul = Object.entries(en)
-    .filter(([k, v]) => /[가-힣]/.test(v) && !k.startsWith("settings.language."))
+    .filter(
+      ([k, v]) =>
+        /[가-힣]/.test(v) &&
+        !k.startsWith("settings.language.") &&
+        // `persona.squad.block*`는 **화면 문구가 아니다** — tick.sh:736-788이 프롬프트에 쓰는
+        // 블록의 바이트 수를 재는 데만 쓰인다(`squadBlockBytes`). 엔진에 로케일이 없어 그 블록은
+        // 어느 화면에서나 한국어라, 영어로 옮기면 en 화면의 상한 배지가 실물보다 적게 센다.
+        // 사전에서 걷어내는 것이 바른 자리다 -> `50fd4b34`(developer). 아래가 그 8B를 못박는다.
+        !k.startsWith("persona.squad.block"),
+    )
     .map(([k]) => k);
   assert.deepStrictEqual(hangul, []);
+});
+
+test("스쿼드 블록 바이트 — 두 로케일이 같은 수를 센다(tick.sh가 쓰는 한국어 블록)", () => {
+  const block = (l: "ko" | "en") =>
+    [
+      `===== ${wrap(t(l, "persona.squad.blockNamePrefix"), "myteam", "")} =====`,
+      `alice ${t(l, "persona.squad.blockLeaderSuffix")} - 리더 역할`,
+      `===== ${t(l, "persona.squad.blockNamePrefix")} ${t(l, "persona.squad.blockEndSuffix")} =====`,
+    ].join("\n");
+  assert.strictEqual(block("en"), block("ko"));
+  assert.match(block("ko"), /^===== 스쿼드 myteam =====\n/);
+  assert.match(block("ko"), /\n===== 스쿼드 끝 =====$/);
 });
 
 // 932ae344가 뽑은 자리들이 영어에서도 문장이 되는가. 한국어는 이름 뒤에 다 붙지만 영어는
@@ -617,6 +639,119 @@ test("204be4da — 페르소나 화면(page.tsx) 프로필 없음 · 스쿼드 �
   );
   const refsLine = `dev ${t("ko", "persona.missing.refsMiddle")} 3${t("ko", "persona.missing.refsSuffix")} PROFILE.md`;
   assert.strictEqual(refsLine, "dev — 티켓 3건이 참조 · PROFILE.md");
+});
+
+// b5d9735d - 같은 자리의 영어. 어순이 뒤집혀 조각의 몫이 갈린 자리(참조 줄 · 삭제 확인 · 경고
+// 세 갈래 · 생성 설명)가 영어에서도 한 문장이 되는지 본다. 조립식은 위 `204be4da` 테스트와
+// 글자 하나까지 같다 - 갈리는 것은 사전 값뿐이다.
+test("b5d9735d - 사이드바 참조 줄 · 색 라벨 · 역할 aria가 영어에서도 선다", () => {
+  const l = "en" as const;
+  assert.strictEqual(wrap(t(l, "persona.refs.openPrefix"), "2", ""), "Open 2");
+  assert.strictEqual(wrap(t(l, "status.label.wip"), "1", ""), "In progress 1");
+  assert.strictEqual(wrap(t(l, "status.label.done"), "3", ""), "Done 3");
+  assert.strictEqual(
+    wrap(t(l, "persona.refs.ticketPrefix"), "Open 2 · In progress 1", ""),
+    "Tickets: Open 2 · In progress 1",
+  );
+  assert.strictEqual(wrap(t(l, "persona.color.labelPrefix"), "blue", ""), "Color: blue");
+  // 이름에 공백 없이 붙는다 - 한국어 `의 역할`이 지던 몫을 소유격이 진다
+  assert.strictEqual(`alice${t(l, "persona.squad.roleAriaSuffix")}`, "alice's role");
+});
+
+test("b5d9735d - 스쿼드 멤버 · 규칙 배지가 영어에서도 선다", () => {
+  const l = "en" as const;
+  const members = `${t(l, "persona.squad.membersBadgePrefix")} 1,600 / 1,500 B${` ${t(l, "persona.squad.overBudgetSuffix")}`}`;
+  assert.strictEqual(members, "Inlined in every member's prompt · 1,600 / 1,500 B over");
+  assert.strictEqual(
+    `${t(l, "persona.squad.rulesBadgePrefix")} 120 B`,
+    "Inlined in the leader prompt · 120 B",
+  );
+});
+
+test("b5d9735d - 엔진 예고 줄이 영어에서도 선다(하나일 때도 이음말이 안 샌다)", () => {
+  const l = "en" as const;
+  const line = (missing: string[]) =>
+    `claude ${t(l, "persona.engine.missingMiddle")} ${missing.join(t(l, "persona.engine.missingJoiner"))}${t(l, "persona.engine.missingSuffix")}`;
+  // 실제 값(`engineMissing`의 라벨)은 아직 사전 밖 한국어다 - 이 자리는 값이라 안 건드린다.
+  // 그 라벨을 사전으로 들이는 것은 `50fd4b34`(developer) 몫이다.
+  assert.strictEqual(
+    line(["interject", "session stream"]),
+    "claude workers have no interject and session stream — running tickets is the same.",
+  );
+  assert.strictEqual(line(["interject"]), "claude workers have no interject — running tickets is the same.");
+});
+
+test("b5d9735d - 스쿼드 삭제 · 엔진 덮어쓰기 확인 다이얼로그가 영어에서도 선다", () => {
+  const l = "en" as const;
+  assert.strictEqual(`${t(l, "persona.squadDelete.titlePrefix")} myteam`, "Delete squad — myteam");
+  assert.strictEqual(
+    `squads/myteam ${t(l, "persona.squadDelete.bodyMiddle")} squad: ${t(l, "persona.squadDelete.bodyAfter")}`,
+    "squads/myteam will be deleted, directory and all. This can't be undone. On tickets that point at this squad, the squad: value stays as it is.",
+  );
+  assert.strictEqual(
+    `${t(l, "persona.engine.overwriteTitlePrefix")} dev`,
+    "This overwrites a custom engine value — dev",
+  );
+  assert.strictEqual(
+    `${t(l, "persona.engine.overwriteBodyPrefix")} --foo ${t(l, "persona.engine.overwriteBodySuffix")}`,
+    "The engine file currently holds arguments outside the catalog: --foo Save here and they go away, replaced by what you picked.",
+  );
+});
+
+test("b5d9735d - 메모리 · 페르소나 삭제 확인 다이얼로그가 영어에서도 선다", () => {
+  const l = "en" as const;
+  assert.strictEqual(`${t(l, "persona.memory.deleteTitlePrefix")} note1`, "Delete memory — note1");
+  assert.strictEqual(
+    `path/memory/note1.md ${t(l, "persona.memory.deleteBodyAfterPath")}`,
+    "path/memory/note1.md will be deleted. This can't be undone — this screen has no edit and no add. From the next dispatch on, a session can't find this concept.",
+  );
+  assert.strictEqual(`${t(l, "persona.delete.titlePrefix")} dev`, "Delete persona — dev");
+  assert.strictEqual(
+    `personas/dev ${t(l, "persona.delete.bodyAfterPath")}`,
+    "personas/dev will be deleted, files and all. This can't be undone.",
+  );
+  // 한국어는 수가 앞에 서고(`티켓이 3건 있습니다`) 영어는 뒤에 선다 - 조각 넷의 자리는 같다
+  const refsTitle = `${t(l, "persona.delete.refsWarnPrefix")} 3${t(l, "persona.delete.refsWarnSuffix")}${` ${t(l, "persona.delete.refsWipPrefix")} 1${t(l, "persona.delete.refsWipSuffix")}`}`;
+  assert.strictEqual(refsTitle, "This persona is referenced by 3 tickets (in progress: 1)");
+  const desc = `${t(l, "persona.delete.refsBody")} WARN${t(l, "persona.warn.engineSuffix")} ${t(l, "persona.wording.withoutPersona")} ${t(l, "persona.delete.dispatchDetail")}`;
+  assert.strictEqual(
+    desc,
+    "Tickets aren't deleted. With the profile gone the engine leaves a WARN and nothing else, then dispatches without a persona — the session starts without knowing its role or permissions.",
+  );
+});
+
+test("b5d9735d - 생성 다이얼로그 · 스킬 검색 0건이 영어에서도 선다", () => {
+  const l = "en" as const;
+  assert.strictEqual(
+    `${t(l, "persona.create.personaDescPrefix")} persona: ${t(l, "persona.create.personaDescSuffix")}`,
+    "A ticket's persona: value is the directory name. The profile body is inlined at the top of the session prompt.",
+  );
+  assert.strictEqual(
+    `${t(l, "persona.create.squadDescPrefix")} squad: ${t(l, "persona.create.squadDescSuffix")}`,
+    "Groups personas that have a profile into a candidate pool — it becomes a ticket's squad: value, and dispatch picks whichever member has the fewest tickets in progress. It isn't a leader and it isn't delegation.",
+  );
+  assert.strictEqual(
+    `${t(l, "persona.create.nameHintPrefix")} ${t(l, "persona.create.nameHintPersonaFile")}${t(l, "persona.create.nameHintSuffix")}`,
+    "Letters, digits, _ and -. The file becomes <personas>/<name>/PROFILE.md. Personas and squads share one namespace — a collision is rejected",
+  );
+  assert.strictEqual(`"foo"${t(l, "persona.skill.searchEmptySuffix")}`, `"foo": no matching skills`);
+  assert.strictEqual(`3${t(l, "persona.skill.countSuffix")}`, "3 items");
+});
+
+test("b5d9735d - page.tsx 경고 두 갈래가 영어에서도 선다(`WARN` 뒤 조각 하나를 셋이 나눠 쓴다)", () => {
+  const l = "en" as const;
+  const missingBody = `${t(l, "persona.missing.enginePrefix")} WARN${t(l, "persona.warn.engineSuffix")} ${t(l, "persona.wording.withoutPersona")} ${t(l, "persona.missing.dispatchDetail")}`;
+  assert.strictEqual(
+    missingBody,
+    "When the engine meets this name it leaves a WARN and nothing else, then dispatches without a persona — dispatch doesn't fail, the session just starts without knowing its role or permissions. Pick that name on the left, fill the empty body on the right, save, and the file gets created.",
+  );
+  const squadWarnBody = `${t(l, "persona.squadWarn.enginePrefix")} WARN${t(l, "persona.warn.engineSuffix")} ${t(l, "persona.squadWarn.strongLabel")}${t(l, "persona.squadWarn.parenPrefix")} ${t(l, "persona.wording.withoutPersona")}${t(l, "persona.squadWarn.parenSuffix")}`;
+  assert.strictEqual(
+    squadWarnBody,
+    "When the engine meets this value it leaves a WARN and nothing else, then dispatches down the old path (the persona: value if the ticket has one, otherwise without a persona).",
+  );
+  const refsLine = `dev ${t(l, "persona.missing.refsMiddle")} 3${t(l, "persona.missing.refsSuffix")} PROFILE.md`;
+  assert.strictEqual(refsLine, "dev — referenced by 3 tickets · PROFILE.md");
 });
 
 test("readLanguage — 파일 없으면 기본값 ko, set 뒤에는 그 값을 읽는다", async () => {
