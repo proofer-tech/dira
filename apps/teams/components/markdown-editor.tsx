@@ -47,7 +47,7 @@ import { useT } from "@/components/language-provider";
 import { matchCombo } from "@/lib/keymap";
 import type { Vault } from "@/lib/markdown-wikilinks";
 import { cn } from "@/lib/utils";
-import { blockBreaks, commitEditable, splitBlocks } from "@/lib/markdown-editor-blocks";
+import { blockBreaks, commitEditable, resolveSplit } from "@/lib/markdown-editor-blocks";
 
 /** 앱 하나짜리 값(못 ② — 칸마다 안 갈린다). §0-11 `dira-manual-theme`와 같은 자리의 키다. */
 const MODE_KEY = "dira-markdown-editor-mode";
@@ -154,7 +154,7 @@ export function MarkdownEditor({
     }
   }
 
-  const split = useMemo(() => splitBlocks(text), [text]);
+  const split = useMemo(() => resolveSplit(mode, text), [text, mode]);
 
   function commitActiveEditable(el: Element) {
     const next = commitEditable(el, split);

@@ -4,8 +4,10 @@ import {
   blockBreaks,
   commitEditable,
   domToMarkdown,
+  EMPTY_SPLIT,
   joinBlocks,
   replaceBlock,
+  resolveSplit,
   splitBlocks,
 } from "./markdown-editor-blocks.ts";
 
@@ -127,6 +129,18 @@ test("항등 — head + blocks.join('') + tail === 원문 (fm 있는 픽스처 �
 test("firstHeadingIndex가 head를 안 센다 — fm 뒤 첫 heading의 인덱스", () => {
   const split = splitBlocks(FM_FIXTURE);
   assert.equal(split.firstHeadingIndex, 0);
+});
+
+// DESIGN.md §편집 칸의 입력 지연 §수용조건 2 — 원문 면에서 키 하나가 splitBlocks를 0회 부른다.
+// `resolveSplit("raw", ...)`이 EMPTY_SPLIT과 참조가 같다는 것이 그 증거다: splitBlocks를 실제로
+// 불렀다면 새로 파싱한 객체가 나와 이 `===`가 깨진다.
+test("resolveSplit — raw 모드는 splitBlocks를 안 불러 EMPTY_SPLIT을 그대로 돌려준다 (후보 A)", () => {
+  assert.strictEqual(resolveSplit("raw", FM_FIXTURE), EMPTY_SPLIT);
+  assert.strictEqual(resolveSplit("raw", "# 제목\n\n본문.\n"), EMPTY_SPLIT);
+});
+
+test("resolveSplit — wysiwyg 모드는 splitBlocks와 같은 값이다", () => {
+  assert.deepEqual(resolveSplit("wysiwyg", FM_FIXTURE), splitBlocks(FM_FIXTURE));
 });
 
 test("commitEditable — data-head 표면을 고치면 head만 갈리고 블록 열 바이트가 안 갈린다", () => {

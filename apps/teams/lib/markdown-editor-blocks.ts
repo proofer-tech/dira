@@ -53,6 +53,17 @@ export function splitBlocks(source: string): SplitResult {
   return { head, blocks, tail: rest.slice(cursor), firstHeadingIndex };
 }
 
+/** 원문 면(`Textarea`)이 렌더에도 커밋에도 안 쓰는 값 - 그 면에서 이 상수를 그대로 돌려주면
+ *  `splitBlocks`(remark 파싱)가 키마다 도는 것을 막는다(DESIGN.md §편집 칸의 입력 지연 §후보 A). */
+export const EMPTY_SPLIT: SplitResult = { head: "", blocks: [], tail: "", firstHeadingIndex: null };
+
+/** `components/markdown-editor.tsx`의 `useMemo(() => resolveSplit(mode, text), [text, mode])`가
+ *  부르는 자리 하나뿐이다 - 면 판정을 `lib/`로 빼서 "원문 면은 0회"를 `node --test`로 잠근다
+ *  (JSX인 `markdown-editor.tsx` 자신은 이 레포의 관용대로 `node --test`가 못 읽는다). */
+export function resolveSplit(mode: "wysiwyg" | "raw", text: string): SplitResult {
+  return mode === "raw" ? EMPTY_SPLIT : splitBlocks(text);
+}
+
 /** 프론트매터 + 블록 배열 + 꼬리를 원문으로 되돌린다. */
 export function joinBlocks({ head, blocks, tail }: Pick<SplitResult, "head" | "blocks" | "tail">): string {
   return head + blocks.join("") + tail;

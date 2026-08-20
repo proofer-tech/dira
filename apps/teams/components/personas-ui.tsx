@@ -5,7 +5,7 @@
  *  fs를 만지는 건 서버 액션뿐이다(`app/p/[project]/personas/actions.ts`). 파일 하나에 모은 이유는
  *  `workers-ui.tsx`와 같다 — 같은 화면의 세 액션이 같은 문구(엔진이 WARN만 남긴다 · 이름 규칙)를
  *  쓰므로 쪼개면 자리가 갈린다. */
-import { useEffect, useRef, useState, useTransition } from "react";
+import { memo, useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { Check, ChevronDown, ChevronRight, Trash2, TriangleAlert } from "lucide-react";
 import {
   createPersonaAction,
@@ -902,6 +902,37 @@ function PersonaDetail({
   const [pending, start] = useTransition();
   const dirty = edit.body !== (edit.saved ?? "");
 
+  // 본문 textarea가 키마다 `onEdit`을 불러 `edit`을 갈아 끼운다(§편집 칸의 입력 지연) — 아래
+  // 세 절(정책·스킬·메모리)에 넘기는 콜백을 여기서 매 렌더 새로 만들면 `memo`가 무의미해진다.
+  // `edit`·`onEdit`의 **최신 값**은 ref로 받고 콜백 자체는 마운트에 한 번만 만든다.
+  const editRef = useRef(edit);
+  const onEditRef = useRef(onEdit);
+  useEffect(() => {
+    editRef.current = edit;
+    onEditRef.current = onEdit;
+  });
+  const onLimitSaved = useCallback(
+    (limit: number | null) => onEditRef.current({ ...editRef.current, limit }),
+    [],
+  );
+  const onEngineSaved = useCallback(
+    (engine: PersonaEngineValue) => onEditRef.current({ ...editRef.current, engine }),
+    [],
+  );
+  const onSkillsSaved = useCallback(
+    (skills: Skill[], skillsChars: number, offSkills: Skill[]) =>
+      onEditRef.current({ ...editRef.current, skills, skillsChars, offSkills }),
+    [],
+  );
+  const onMemoryDeleted = useCallback(
+    (file: string) =>
+      onEditRef.current({
+        ...editRef.current,
+        memories: editRef.current.memories.filter((m) => m.file !== file),
+      }),
+    [],
+  );
+
   return (
     <div className="space-y-3">
       {/* 머리 — 색 점(팔레트 팝오버 트리거) · 이름 · `삭제`(§5). 전부 껍데기라 세로 중앙이다 */}
@@ -942,8 +973,8 @@ function PersonaDetail({
         engines={engines}
         modelPattern={modelPattern}
         engineHint={engineHint}
-        onLimitSaved={(limit) => onEdit({ ...edit, limit })}
-        onEngineSaved={(engine) => onEdit({ ...edit, engine })}
+        onLimitSaved={onLimitSaved}
+        onEngineSaved={onEngineSaved}
       />
 
       <MarkdownEditor
@@ -987,9 +1018,7 @@ function PersonaDetail({
         installed={installed}
         onInstalled={onInstalled}
         configDir={configDir}
-        onSaved={(skills, skillsChars, offSkills) =>
-          onEdit({ ...edit, skills, skillsChars, offSkills })
-        }
+        onSaved={onSkillsSaved}
       />
 
       {/* 메모리 절(§비주얼 §32 ②) — 스킬 절 **바로 뒤**다. 화면이 주입 순서를 그대로 보인다
@@ -1001,9 +1030,7 @@ function PersonaDetail({
         dir={row.file.replace(/\/PROFILE\.md$/, "")}
         memories={edit.memories}
         chars={edit.memories.reduce((n, m) => n + byteLength(m.text), 0)}
-        onDeleted={(file) =>
-          onEdit({ ...edit, memories: edit.memories.filter((m) => m.file !== file) })
-        }
+        onDeleted={onMemoryDeleted}
       />
     </div>
   );
@@ -1306,7 +1333,10 @@ function DeleteSquadButton({
 
 /** §44 ①이 신설한 절. 스킬·메모리 절과 껍데기(`space-y-2 border-t pt-3`)가 글자 하나까지
  *  같다 — 머리에 버튼·자수가 없는 것만 다르다(값 둘이 각자 자기 트리거를 든다, §44 ②). */
-function DispatchPolicySection({
+// 본문 textarea가 키마다 부모(`edits`)를 갈아 끼우므로(§비주얼 §44 위 절 - PersonaDetail) 이
+// 절도 매 키 재렌더를 받는다 - `memo`로 그 재렌더를 끊는다(DESIGN.md §편집 칸의 입력 지연 §후보
+// B). `PersonaDetail`이 콜백을 ref로 고정해 주는 것과 짝이다(그쪽 주석 참조).
+const DispatchPolicySection = memo(function DispatchPolicySection({
   projectId,
   name,
   limit,
@@ -1355,7 +1385,7 @@ function DispatchPolicySection({
       )}
     </section>
   );
-}
+});
 
 /** 값이 곧 트리거인 팝오버(§44 ③ — 엔진과 같은 저장 관용구로 통일). **비우면 파일을 지운다**
  *  (= 상한 없음), 판정은 서버가 한다(`type="number"`는 힌트일 뿐).
@@ -1759,7 +1789,9 @@ function EngineField({
  *
  *  실패 자리가 둘로 갈리는 이유는 §비주얼 §25 다섯 상태다 — **누른 곳**에 뜬다.
  *  `제거`·`끄기`·`켜기`는 여기 절 아래, 다이얼로그의 `저장`은 그 `DialogFooter` 위다. */
-function SkillsSection({
+// DispatchPolicySection과 같은 이유의 memo다(위 주석 참조) - 이 절의 목록이 커도(설치된 스킬이
+// 많은 머신) 본문 타이핑이 그 목록을 다시 그리지 않는다.
+const SkillsSection = memo(function SkillsSection({
   projectId,
   name,
   skills,
@@ -1930,7 +1962,7 @@ function SkillsSection({
       {error && <Failure title={t("persona.skill.saveFailedTitle")} message={error} />}
     </section>
   );
-}
+});
 
 // ── 메모리 (DESIGN.md §5-2 · §비주얼 §32) ───────────────────────────────────
 
@@ -1939,7 +1971,10 @@ function SkillsSection({
  *
  *  스킬 절과 껍데기·머리·목록이 같은 값인 것은 의도다(§32 ⓪) — 두 절이 한 칸에 위아래로 서므로
  *  값이 갈리면 그 자체가 "다른 성격"이라는 거짓말이 된다. 갈리는 것은 다섯뿐이고 전부 §32에 있다. */
-function MemorySection({
+// DispatchPolicySection과 같은 이유의 memo다(위 주석 참조) - 이 절이 실측에서 드러난 실제
+// 비용 자리다: 페르소나마다 쌓이는 `memory/*.md` 전문을 `<Markdown>`으로 블록마다 다 그려서
+// (이 큐의 pm 하나가 이미 34장 - 377KB), memo 없이는 본문 한 글자마다 그 전부를 다시 그렸다.
+const MemorySection = memo(function MemorySection({
   projectId,
   name,
   dir,
@@ -2057,7 +2092,7 @@ function MemorySection({
       {error && <Failure title={t("persona.memory.deleteFailedTitle")} message={error} />}
     </section>
   );
-}
+});
 
 /** 되돌리는 경로가 화면에 없다(추가도 편집도 이 절에 없고 쓰는 쪽이 세션이다) — 그래서
  *  스킬의 `제거`와 달리 `Trash2` + `alert-dialog`다(§32 ④ · §5 인벤토리의 다섯 번째 자리).
