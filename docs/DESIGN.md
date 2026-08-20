@@ -41090,8 +41090,8 @@ Electron main의 30초 폴링. 여기에 designer 값(아이콘-축)이 화면 �
 
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
-| P308-1 | 이행 - 행 11 열일곱 파일의 한국어를 `ko` 사전 키로 + `budgetLabel(.., locale)` 배선 | developer | P307-3 | 발행 |
-| P308-2 | 그 키들의 **영어 문구** | writer | P308-1 | 발행 |
+| P308-1 | 이행 - 행 11 열일곱 파일의 한국어를 `ko` 사전 키로 + `budgetLabel(.., locale)` 배선 `c9f2eec5` | developer | P307-3 | 발행 |
+| P308-2 | 그 키들의 **영어 문구** `90db2822` | writer | P308-1 | 발행 |
 
 **P308-1이 P307-3(`204be4da`)을 기다리는 것은 하드다.** `budgetLabel` 호출부 둘이
 `personas-ui.tsx`인데 그 파일을 P307-3이 지금 물고 있다 - 같은 hunk를 두 티켓이 문다.
