@@ -1351,7 +1351,7 @@ export const en: Record<string, string> = {
   // 수를 재는 데만 쓰인다(`squadBlockBytes`) - 엔진에는 로케일이 없어 그 블록은 어느 화면에서나
   // 한국어다. 영어로 옮기면 en 화면의 상한 배지가 실물보다 8B 적게 세서, 1,500B를 갓 넘긴
   // 스쿼드가 안 넘은 것처럼 뜬다. 아래 `en 사전에 한글이 없다` 테스트가 이 접두를 비켜 간다.
-  // 사전에서 아예 걷어내는 것이 바른 자리다 -> `50fd4b34`(developer).
+  // 사전에서 아예 걷어내는 것이 바른 자리다 - 판단은 `50fd4b34`(pm 피드백)에 물었다.
   "persona.squad.blockNamePrefix": "스쿼드",
   "persona.squad.blockLeaderSuffix": "(리더)",
   "persona.squad.blockEndSuffix": "끝",

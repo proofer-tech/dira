@@ -288,7 +288,7 @@ test("en 사전에 한글이 없다 — 언어 이름 둘과 스쿼드 블록만
         // `persona.squad.block*`는 **화면 문구가 아니다** — tick.sh:736-788이 프롬프트에 쓰는
         // 블록의 바이트 수를 재는 데만 쓰인다(`squadBlockBytes`). 엔진에 로케일이 없어 그 블록은
         // 어느 화면에서나 한국어라, 영어로 옮기면 en 화면의 상한 배지가 실물보다 적게 센다.
-        // 사전에서 걷어내는 것이 바른 자리다 -> `50fd4b34`(developer). 아래가 그 8B를 못박는다.
+        // 사전에서 걷어내는 것이 바른 자리다 - `50fd4b34`(pm 피드백). 아래가 그 8B를 못박는다.
         !k.startsWith("persona.squad.block"),
     )
     .map(([k]) => k);
@@ -673,7 +673,7 @@ test("b5d9735d - 엔진 예고 줄이 영어에서도 선다(하나일 때도 �
   const line = (missing: string[]) =>
     `claude ${t(l, "persona.engine.missingMiddle")} ${missing.join(t(l, "persona.engine.missingJoiner"))}${t(l, "persona.engine.missingSuffix")}`;
   // 실제 값(`engineMissing`의 라벨)은 아직 사전 밖 한국어다 - 이 자리는 값이라 안 건드린다.
-  // 그 라벨을 사전으로 들이는 것은 `50fd4b34`(developer) 몫이다.
+  // 그 라벨은 묶음 표 행 10(재유입 회수) 몫이다 - `50fd4b34`이 그 사실을 pm에 올렸다.
   assert.strictEqual(
     line(["interject", "session stream"]),
     "claude workers have no interject and session stream — running tickets is the same.",
