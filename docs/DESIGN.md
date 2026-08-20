@@ -12044,21 +12044,22 @@ R=/Users/hsol/Projects/dira/.dira                   # 큐 루트
 
 # ① 재디스패치 티켓의 토큰량이 세션 전부의 합이다 - 마지막 하나가 아니다
 ls "$R"/workers/logs/*-21d702a5.log | wc -l          # 2 이상(실측 8)
-#   <상세>에서 `진행 기록` 머리 줄의 세션 수가 그 수와 같고, 토큰량은 그 로그들의
-#   usage 넷의 합과 같다:
+#   <상세>에서 `진행 기록` 머리 줄의 세션 수가 그 수와 같고, 토큰량은 그 로그들
+#   **마지막 줄** usage 넷의 합과 같다. 마지막 줄에 `usage`가 없는 로그는 그 세션 수에서
+#   빠지고 `이 합계에 없는 세션 n개`(④)로 선다 - 그래서 세션 수가 위 `wc -l`보다 작을 수 있다:
 python3 - "$R" 21d702a5 <<'PY'
 import sys,os,json,glob
 r,h=sys.argv[1],sys.argv[2]; t=0; n=0
 K=("input_tokens","output_tokens","cache_creation_input_tokens","cache_read_input_tokens")
 for p in glob.glob(f"{r}/workers/logs/*-{h}.log"):
     s=os.path.getsize(p); f=open(p,'rb'); f.seek(max(0,s-65536))
-    for L in reversed(f.read().decode('utf-8','replace').splitlines()):
-        L=L.strip()
-        if L.startswith('{') and L.endswith('}'):
-            try: o=json.loads(L)
-            except Exception: continue
-            u=o.get('usage')
-            if isinstance(u,dict): t+=sum(int(u.get(k,0) or 0) for k in K); n+=1; break
+    # 마지막 줄 하나만 본다 - 화면이 읽는 `lastJsonLine`(`lib/workers.ts`)과 같은 방법이고
+    # 판정 1의 문장 그대로다. 이전 줄로 내려가면 아무 turn의 `usage`나 주워 세션 수부터
+    # 갈린다(지적 `b223e64d` - `47269ee5` 실측: 4건 132,575,671 대 2건 83,193,952).
+    L=f.read().decode('utf-8','replace').rstrip('\n').split('\n')[-1]
+    try: u=json.loads(L).get('usage')
+    except Exception: u=None
+    if isinstance(u,dict): t+=sum(int(u.get(k,0) or 0) for k in K); n+=1
 print(f"세션 {n}건 - {t:,} 토큰")
 PY
 
