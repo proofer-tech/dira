@@ -573,12 +573,6 @@ export const ko: Record<string, string> = {
   // `common.delete`를 새로 만들지 않는다 — `common.*`는 이미 en이 다 찬 묶음이라
   // (`i18n.test.ts` FILLED) 여기서 키를 늘리면 그 테스트가 깨진다. en은 다음 티켓(P307-4) 몫이다.
   "persona.action.delete": "삭제",
-  // 스쿼드 블록 바이트 수(§5-5 §개정 §스쿼드 블록 - `squadBlockBytes`, `92ee1491`이 tick.sh:736-788의
-  // 머리/꼬리 `=====` 줄 - 멤버 줄 `<이름>[ (리더)] - <역할>` 그대로 맞췄다) - 이 문자열 자체는
-  // 화면에 안 뜨고 상한 배지가 재는 바이트 수 계산에만 쓰인다.
-  "persona.squad.blockNamePrefix": "스쿼드",
-  "persona.squad.blockLeaderSuffix": "(리더)",
-  "persona.squad.blockEndSuffix": "끝",
   "persona.refs.openPrefix": "열린",
   "persona.refs.ticketPrefix": "티켓",
   "persona.refs.none": "참조하는 티켓 없음",
@@ -707,7 +701,9 @@ export const ko: Record<string, string> = {
   "persona.delete.dispatchDetail": "디스패치합니다 — 세션이 역할·권한을 모르는 채로 시작합니다.",
 
   // 공용 컴포넌트·순수 유틸 묶음(§0-16 §발행 §묶음 표 행 11, `c9f2eec5`) — 화면이 둘 이상 무는
-  // 파일이라 화면 접두 대신 파일 스코프 접두를 쓴다. en은 `90db2822`가 채운다.
+  // 파일이라 화면 접두 대신 파일 스코프 접두를 쓴다. en 나머지는 `90db2822`가 채운다 — 이 한
+  // 줄만 `50fd4b34`가 먼저 채웠다(en 화면에서 `budgetLabel`이 한글 `초과`를 그대로 흘리는
+  // 회귀가 있어서다 - 아래 `urls.`·`workers.` 두 자리와 같은 증상).
   "budgets.overSuffix": " 초과",
 
   "markdownEditor.toggle.toRaw": "원문으로",
@@ -758,6 +754,16 @@ export const ko: Record<string, string> = {
   "projectActions.fileMissing": "파일이 오지 않았습니다 — 다시 고르세요.",
 
   "appLayout.description": "파일시스템 티켓 큐 관제",
+
+  // 페르소나·프로토콜 두 화면이 공유하는 공용 lib 셋(§4-3 표 · §비주얼 §23 ⑤, `50fd4b34`) —
+  // 화면 파일이 아니라 `lib/urls.ts`·`lib/workers.ts`에 있어 §0-16 §발행 이행이 안 닿았던 자리다.
+  // `persona.squad.block*`(위 삭제한 세 키)는 반대로 옮긴다 - tick.sh가 실제로 쓰는 블록은
+  // 엔진에 로케일이 없어 늘 한국어라, `squadBlockBytes`(`lib/budgets.ts`)가 리터럴로 직접 센다.
+  "urls.feature.interject": "참견",
+  "urls.feature.stream": "세션 스트림",
+  "workers.engineHint.prefix": "미지정 — 티켓을 집는 워커의 엔진을 씁니다",
+  "workers.engineHint.allPrefix": "지금 전부 ",
+  "workers.engineHint.nowPrefix": "지금 ",
 };
 
 /** 제품 낱말의 영어 대응 — **여기가 한자리다**(621c7a97). 다음 묶음이 같은 것을 다르게 부르지
@@ -1347,14 +1353,8 @@ export const en: Record<string, string> = {
   "persona.word.limit": "Limit",
   "persona.word.members": "Members",
   "persona.action.delete": "Delete",
-  // **이 셋만 한국어다.** 화면에 안 뜨고, tick.sh:736-788이 프롬프트에 실제로 쓰는 블록의 바이트
-  // 수를 재는 데만 쓰인다(`squadBlockBytes`) - 엔진에는 로케일이 없어 그 블록은 어느 화면에서나
-  // 한국어다. 영어로 옮기면 en 화면의 상한 배지가 실물보다 8B 적게 세서, 1,500B를 갓 넘긴
-  // 스쿼드가 안 넘은 것처럼 뜬다. 아래 `en 사전에 한글이 없다` 테스트가 이 접두를 비켜 간다.
-  // 사전에서 아예 걷어내는 것이 바른 자리다 - 판단은 `50fd4b34`(pm 피드백)에 물었다.
-  "persona.squad.blockNamePrefix": "스쿼드",
-  "persona.squad.blockLeaderSuffix": "(리더)",
-  "persona.squad.blockEndSuffix": "끝",
+  // `persona.squad.block*` 세 키는 `50fd4b34`가 사전에서 걷어냈다 - `squadBlockBytes`
+  // (`lib/budgets.ts`)가 tick.sh:736-788의 리터럴을 직접 센다(ko 쪽 주석과 같은 이유).
   "persona.refs.openPrefix": "Open",
   // 뒤에 `Open 2 · In progress 1`이 `wrap`으로 붙는다 - 숫자를 콜론 뒤로 보내는 셸 묶음의 그 벌이다.
   "persona.refs.ticketPrefix": "Tickets:",
@@ -1488,6 +1488,17 @@ export const en: Record<string, string> = {
   "persona.delete.refsWipSuffix": ")",
   "persona.delete.refsBody": "Tickets aren't deleted. With the profile gone the engine leaves a",
   "persona.delete.dispatchDetail": "— the session starts without knowing its role or permissions.",
+
+  // `c9f2eec5` 묶음의 나머지는 `90db2822`가 채운다 — 이 한 줄만 `50fd4b34`가 먼저 채웠다
+  // (ko 쪽 주석과 같은 이유, `budgetLabel`의 en 회귀).
+  "budgets.overSuffix": " over",
+
+  // 공용 lib 셋(`50fd4b34`) — ko와 같은 자리, 위 주석 참고.
+  "urls.feature.interject": "Interject",
+  "urls.feature.stream": "Session stream",
+  "workers.engineHint.prefix": "Not set — uses the engine of whichever worker claims the ticket",
+  "workers.engineHint.allPrefix": "currently all ",
+  "workers.engineHint.nowPrefix": "currently ",
 };
 
 const DICTS: Record<Locale, Record<string, string>> = { ko, en };

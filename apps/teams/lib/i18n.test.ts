@@ -529,10 +529,8 @@ test("7a86fd5c — 프로토콜 화면의 조립 문구가 영어에서도 문�
 // 문구가 원문(이행 전 하드코딩 한국어)과 한 글자도 안 갈리는지 못박는다. 조립식은
 // `personas-ui.tsx`·`personas/actions.ts`·`lib/skills.ts`·`[[...persona]]/page.tsx`의 JSX ·
 // 템플릿 리터럴 그대로다(줄바꿈만 있는 공백은 지워지고, 같은 줄의 공백 하나는 남는다).
-test("204be4da — 스쿼드 블록 근사치(스쿼드 이름 · 리더 꼬리) 조립이 원문 그대로다", () => {
-  assert.strictEqual(`${wrap(t("ko", "persona.squad.blockNamePrefix"), "myteam", "")}`, "스쿼드 myteam");
-  assert.strictEqual(` ${t("ko", "persona.squad.blockLeaderSuffix")}`, " (리더)");
-});
+// 스쿼드 블록 자체는 `50fd4b34`로 사전을 떠나 `squadBlockBytes`(`lib/budgets.ts`)의
+// 리터럴로 옮겼다 — 그 조립 검증은 `budgets.test.ts`에 산다.
 
 test("204be4da — 사이드바 참조 줄(열린 · 진행중 · 완료 · 티켓 접두)이 원문 그대로다", () => {
   assert.strictEqual(wrap(t("ko", "persona.refs.openPrefix"), "2", ""), "열린 2");

@@ -22,3 +22,19 @@ export function budgetLabel(bytes: number, max?: number, locale: Locale = DEFAUL
   const over = bytes > max ? t(locale, "budgets.overSuffix") : "";
   return `${bytes.toLocaleString()} / ${max.toLocaleString()} B${over}`;
 }
+
+export const SQUAD_BLOCK_MAX_BYTES = 1_500;
+
+/** 스쿼드 블록(§5-5 §개정 §스쿼드 블록 - §블록의 틀)의 바이트 수. tick.sh:736-788이 실제로
+ *  조립하는 문구와 문자 그대로 맞춘다 - 머리/꼬리 `=====` 줄 + 멤버 줄 `<이름>[ (리더)] - <역할>`,
+ *  잰 범위는 머리 `=====`의 첫 글자부터 꼬리 `=====`의 마지막 글자까지(감싼 개행은 안 센다).
+ *  엔진(tick.sh)에 로케일이 없어 이 블록은 어느 화면에서나 한국어다 — 사전을 안 타고
+ *  리터럴을 직접 쓴다(`persona.squad.block*` 세 키를 없앤 자리). */
+export function squadBlockBytes(name: string, members: { name: string; role: string }[]): number {
+  const lines = [
+    `===== 스쿼드 ${name} =====`,
+    ...members.map((m, i) => `${m.name}${i === 0 ? " (리더)" : ""} - ${m.role}`),
+    `===== 스쿼드 끝 =====`,
+  ];
+  return byteLength(lines.join("\n"));
+}

@@ -27,6 +27,7 @@ import { cache } from "react";
 import { NAME_RE, expandHome, localDir, resolveWithin, shellPath, shellValue } from "./paths.ts";
 import type { Ticket } from "./queue.ts";
 import { isEligible, tokensPath, type TokenEntry, type TokensFile } from "./auth.ts";
+import { DEFAULT_LOCALE, t, type Locale } from "./i18n.ts";
 
 export type WorkerStatus = "running" | "idle" | "stopped" | "stale";
 
@@ -804,17 +805,20 @@ export function engineCell(engine: string | null): {
 /** 페르소나 엔진 `지정 없음`에 다는 실효값 힌트(§비주얼 §23 §개정 · 요구 `445ff9e1`). 입력은
  *  `listWorkers`가 준 각 워커의 `engine` 필드 그대로다(대입 없으면 `null`) — 판정은 이 함수
  *  하나뿐이고 클라이언트는 그리기만 한다(§44 ④). 워커가 0개면 돌 것이 없어 기본값도 없다. */
-export function personaEngineHint(engines: (string | null)[]): string | null {
+export function personaEngineHint(
+  engines: (string | null)[],
+  locale: Locale = DEFAULT_LOCALE,
+): string | null {
   if (engines.length === 0) return null;
   const counts = new Map<string, number>();
   for (const e of engines) {
     const label = engineCell(e).label;
     counts.set(label, (counts.get(label) ?? 0) + 1);
   }
-  const prefix = "미지정 — 티켓을 집는 워커의 엔진을 씁니다";
+  const prefix = t(locale, "workers.engineHint.prefix");
   if (counts.size === 1) {
     const [label] = counts.keys();
-    return `${prefix} (지금 전부 ${label})`;
+    return `${prefix} (${t(locale, "workers.engineHint.allPrefix")}${label})`;
   }
   // 수 내림차순, 구분자 ` / `(라벨 안의 `·`와 안 섞이게). `Map`이 삽입 순서를 지켜 동률은
   // 먼저 나온 라벨이 앞에 온다 — `sort`가 안정 정렬이라 그 순서가 산다.
@@ -822,7 +826,7 @@ export function personaEngineHint(engines: (string | null)[]): string | null {
     .sort((a, b) => b[1] - a[1])
     .map(([label, n]) => `${label} ×${n}`)
     .join(" / ");
-  return `${prefix} (지금 ${parts})`;
+  return `${prefix} (${t(locale, "workers.engineHint.nowPrefix")}${parts})`;
 }
 
 /** 블록 치환, 없으면 **삽입**. 파일을 안 건드리는 순수 함수다.

@@ -76,7 +76,10 @@ export default async function Personas({
     // 없으면(body === null) "프로필 없다"는 하나의 사실이다.
     missingProfile: s.members.some((m) => !personas.some((p) => p.name === m.name && p.body !== null)),
   }));
-  const engineHint = personaEngineHint(workers.map((w) => w.engine));
+  const engineHint = personaEngineHint(
+    workers.map((w) => w.engine),
+    locale,
+  );
   const rows = await Promise.all(
     personas.map(async (p) => {
       // 상한·엔진도 같은 렌더에 실린다(§5-4 §화면 · §제약 1 §결정 기록 §열한 번째) — 오른쪽 칸

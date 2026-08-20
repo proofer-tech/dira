@@ -85,7 +85,14 @@ import {
   SidebarProvider,
 } from "@/components/ui/sidebar";
 import { Textarea } from "@/components/ui/textarea";
-import { budgetLabel, byteLength, MEMORY_MAX_BYTES, PERSONA_MAX_BYTES } from "@/lib/budgets";
+import {
+  budgetLabel,
+  byteLength,
+  MEMORY_MAX_BYTES,
+  PERSONA_MAX_BYTES,
+  SQUAD_BLOCK_MAX_BYTES,
+  squadBlockBytes,
+} from "@/lib/budgets";
 import { skillUploadError } from "@/lib/skill-upload-limit";
 import type { Memory, Skill } from "@/lib/skills";
 import { decodeHash, engineMissing, PERSONA_COLORS, personaDotClass } from "@/lib/urls";
@@ -132,26 +139,6 @@ export type SquadRow = {
   /** 멤버 중 `personas/`에 `PROFILE.md`가 없는 이름이 있다(§5-5 §경고) */
   missingProfile: boolean;
 };
-
-/** 스쿼드 블록(§5-5 §개정 §스쿼드 블록 - §블록의 틀)의 바이트 수. tick.sh:736-788이 실제로
- *  조립하는 문구와 문자 그대로 맞춘다 - 머리/꼬리 `=====` 줄 + 멤버 줄 `<이름>[ (리더)] - <역할>`,
- *  잰 범위는 머리 `=====`의 첫 글자부터 꼬리 `=====`의 마지막 글자까지(감싼 개행은 안 센다). */
-function squadBlockBytes(
-  name: string,
-  members: { name: string; role: string }[],
-  t: (key: string) => string,
-): number {
-  const lines = [
-    `===== ${wrap(t("persona.squad.blockNamePrefix"), name, "")} =====`,
-    ...members.map(
-      (m, i) => `${m.name}${i === 0 ? ` ${t("persona.squad.blockLeaderSuffix")}` : ""} - ${m.role}`,
-    ),
-    `===== ${t("persona.squad.blockNamePrefix")} ${t("persona.squad.blockEndSuffix")} =====`,
-  ];
-  return new TextEncoder().encode(lines.join("\n")).length;
-}
-
-const SQUAD_BLOCK_MAX_BYTES = 1_500;
 
 /** 역할이 빈 멤버 줄의 자리표시 — 프로필 첫 줄(§5-5 §개정 "역할이 없는 줄"). 값이 아니다. */
 function profileTitle(body: string | null): string {
@@ -967,7 +954,6 @@ function SquadDetail({
   const blockBytes = squadBlockBytes(
     row.name,
     orderedMembers.map((m) => ({ name: m.name, role: m.role || profileTitle(profileOf(m.name)) })),
-    t,
   );
   const overBudget = blockBytes > SQUAD_BLOCK_MAX_BYTES;
   const rulesBytes = new TextEncoder().encode(edit.rules).length;
@@ -1411,6 +1397,7 @@ function EngineFields({
   idPrefix: string;
 }) {
   const t = useT();
+  const locale = useLocale();
   // 목록에 없는 **화면만의 항목**. 값이 곧 라벨이고 모델 이름과 겹칠 수 없다 — 서버의
   // `MODEL_RE`가 한글도 `…`도 안 받는다. 컴포넌트 안에 두는 이유: 로케일이 바뀌면 라벨도
   // 바뀌어야 하는데, 비교 판정(`String(v) === CUSTOM`)과 표시가 같은 렌더 안에서 같은 값을
@@ -1418,7 +1405,7 @@ function EngineFields({
   const CUSTOM = t("persona.engine.customOption");
   const models = engines.find((e) => e.id === value.engine)?.models ?? [];
   // 고른 엔진에 **없는** 기능들(§4-3 · §23 ⑤ 예고 줄). 판정도 이름도 `lib/urls.ts` 한 자리다.
-  const missing = engineMissing(value.engine);
+  const missing = engineMissing(value.engine, locale);
   // 빈 칸은 아직 거절이 아니다 — `직접 입력…`을 고르자마자 빨간 줄이 뜨면 사람이 무엇을
   // 잘못했는지 모른다. 못 만든다는 사실은 부르는 쪽의 1차 버튼이 말한다(`enginePickOk`).
   const bad = !!value.custom && value.model !== "" && !new RegExp(modelPattern).test(value.model);
