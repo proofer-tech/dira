@@ -5,8 +5,10 @@
 import { useState } from "react";
 import { Check, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useT } from "@/components/language-provider";
 
 export function CopyCommand({ cmd }: { cmd: string }) {
+  const t = useT();
   const [copied, setCopied] = useState(false);
   return (
     <div className="flex items-center gap-2 rounded-md border bg-muted/50 px-3 py-2">
@@ -14,7 +16,7 @@ export function CopyCommand({ cmd }: { cmd: string }) {
       <Button
         variant="ghost"
         size="icon-sm"
-        aria-label="명령어 복사"
+        aria-label={t("copyCommand.ariaLabel")}
         onClick={async () => {
           await navigator.clipboard.writeText(cmd);
           setCopied(true);

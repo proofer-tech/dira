@@ -14,6 +14,8 @@
  *  `node:fs`를 끈다)가 필요해서 그 파일에 두면 빌드가 깨진다. 부르는 곳은 서버 페이지 둘뿐이다. */
 import { workerOf } from "@/lib/workers";
 import type { Ticket } from "@/lib/queue";
+// 프롭 이름 `t`(Ticket)가 이미 있어 사전 함수는 별칭으로 들인다.
+import { DEFAULT_LOCALE, t as translate, type Locale } from "@/lib/i18n";
 
 /** §19 프리미티브 — `<span>` 칩 하나. `Badge`가 아닌 이유는 §19(옆의 `PersonaBadge`·중립 상태
  *  배지와 실루엣이 겹친다). 뒤집는 축은 **밝기와 그릇 둘뿐**이고 서체·크기는 종전 그대로다. */
@@ -26,12 +28,20 @@ const CHIP =
  *   `aria-hidden`으로 두고 원문을 `sr-only`로 한 번 더 낸다(§19 접근성) — 칩 안의 `워커 `
  *   접두어도 그 안에 들어가 같이 숨는다. 마크가 없으면(`.done` 행 등) 종전 그대로 전문뿐이다.
  */
-export function WipWorker({ t, full }: { t: Ticket; full?: boolean }) {
+export function WipWorker({
+  t,
+  full,
+  locale = DEFAULT_LOCALE,
+}: {
+  t: Ticket;
+  full?: boolean;
+  locale?: Locale;
+}) {
   const name = t.state === "wip" ? workerOf(t.fm.owner ?? "") : null;
   // ①③에서 워커 이름을 말하는 글자는 이 마크뿐이라 `aria-hidden`이 아니다(§12 점·§18 모션과 갈린다)
   const chip = name && (
     <span className={CHIP}>
-      <span className="sr-only">워커 </span>
+      <span className="sr-only">{translate(locale, "workerMark.srPrefix")}</span>
       {name}
     </span>
   );
@@ -62,14 +72,22 @@ export function WipWorker({ t, full }: { t: Ticket; full?: boolean }) {
  * @param cap 슬롯 상한(§52 ⑥) — **사이드바(④)에만 건다.** 넘는 이름은 칩 하나(`+n`)로 접히고
  *   접힌 이름은 그 칩 안에 `sr-only`로 전부 남는다. ⑤⑥은 `cap`을 안 준다 — 그 자리는 안 자른다.
  */
-export function WorkerChips({ names, cap }: { names: string[]; cap?: number }) {
+export function WorkerChips({
+  names,
+  cap,
+  locale = DEFAULT_LOCALE,
+}: {
+  names: string[];
+  cap?: number;
+  locale?: Locale;
+}) {
   if (names.length === 0) return null; // 0명이면 새 글자 0(§에픽 결정 9 — `없음`도 `-`도 아니다)
   const shown = cap && names.length > cap ? names.slice(0, cap) : names;
   const rest = names.slice(shown.length);
   return (
     <>
       {/* 묶음에 접두어 한 번 — 칩 안에 넣으면 `워커 w3 워커 w4`가 된다(§52 ⑥ 접근성) */}
-      <span className="sr-only">워커 </span>
+      <span className="sr-only">{translate(locale, "workerMark.srPrefix")}</span>
       {shown.map((name) => (
         <span key={name} className={CHIP}>
           {name}

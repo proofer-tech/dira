@@ -17,17 +17,19 @@ import { saveAttachment } from "@/lib/attachments";
 import { createEpic as writeEpic, type CreateEpicResult } from "@/lib/epics";
 import { getProject } from "@/lib/projects";
 import type { SaveResult } from "@/lib/attachments";
+import { DEFAULT_LOCALE, t, type Locale } from "@/lib/i18n";
 
 export async function uploadAttachment(
   projectId: string,
   form: FormData,
+  locale: Locale = DEFAULT_LOCALE,
 ): Promise<SaveResult> {
   const project = await getProject(projectId);
-  if (!project) return { ok: false, error: `등록되지 않은 프로젝트입니다: ${projectId}` };
+  if (!project) return { ok: false, error: `${t(locale, "projectActions.unknownProjectPrefix")} ${projectId}` };
   const file = form.get("file");
   // 폼은 손으로 만들 수 있다 — 문자열이 와도 `saveAttachment`에 넘기지 않는다.
   if (!(file instanceof File)) {
-    return { ok: false, error: "파일이 오지 않았습니다 — 다시 고르세요." };
+    return { ok: false, error: t(locale, "projectActions.fileMissing") };
   }
   return saveAttachment(project, file);
 }
@@ -39,9 +41,15 @@ export async function createEpic(
   projectId: string,
   key: string,
   title: string,
+  locale: Locale = DEFAULT_LOCALE,
 ): Promise<CreateEpicResult> {
   const project = await getProject(projectId);
-  if (!project) return { ok: false, reason: "other", error: `등록되지 않은 프로젝트입니다: ${projectId}` };
+  if (!project)
+    return {
+      ok: false,
+      reason: "other",
+      error: `${t(locale, "projectActions.unknownProjectPrefix")} ${projectId}`,
+    };
   const r = await writeEpic(project.root, key, title);
   if (r.ok) {
     revalidatePath(`/p/${projectId}`);

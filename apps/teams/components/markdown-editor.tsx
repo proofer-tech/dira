@@ -43,6 +43,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Markdown } from "@/components/markdown";
 import { useKeymap } from "@/components/keymap-provider";
+import { useT } from "@/components/language-provider";
 import { matchCombo } from "@/lib/keymap";
 import type { Vault } from "@/lib/markdown-wikilinks";
 import { cn } from "@/lib/utils";
@@ -138,6 +139,7 @@ export function MarkdownEditor({
    *  읽지 않는다 — 못 ⑤와 같은 원칙, 서버가 한 번 읽어 내려준 값을 그대로 흘린다. */
   vault?: Vault;
 }) {
+  const t = useT();
   const mode = useSyncExternalStore(subscribeMode, readMode, () => SERVER_MODE);
   const [innerText, setInnerText] = useState(defaultValue ?? "");
   const text = controlledValue ?? innerText;
@@ -191,7 +193,7 @@ export function MarkdownEditor({
   }
 
   // 사라진 라벨 문장을 그대로 접근명 + 툴팁으로 옮긴다(§50 §접근명) — 화면 글자는 아이콘 하나뿐이다.
-  const toggleLabel = mode === "wysiwyg" ? "원문으로" : "위지윅으로";
+  const toggleLabel = mode === "wysiwyg" ? t("markdownEditor.toggle.toRaw") : t("markdownEditor.toggle.toWysiwyg");
 
   // 위지윅 면의 첫 편집 표면 — 마운트 때 한 번 초점을 준다(원문 면은 `Textarea`의 네이티브
   // `autoFocus`가 대신한다). 다이얼로그가 열릴 때마다 이 컴포넌트가 새로 마운트되므로 재열 때도

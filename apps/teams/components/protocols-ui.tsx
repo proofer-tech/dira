@@ -56,9 +56,10 @@ function Failure({ title, message }: { title: string; message: string }) {
  *  (§비주얼 §61 (13) 그대로 — 새 서식 0, 새 색 0). */
 export function InlineBadge({ bytes, max }: { bytes: number; max?: number }) {
   const t = useT();
+  const locale = useLocale();
   return (
     <Badge variant="secondary" title={t("protocols.inline.tooltip")}>
-      {t("protocols.inline.badge")} {budgetLabel(bytes, max)}
+      {t("protocols.inline.badge")} {budgetLabel(bytes, max, locale)}
     </Badge>
   );
 }

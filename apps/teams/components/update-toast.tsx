@@ -46,6 +46,7 @@ const FOCUS_CSS = `
 /** 다 받았습니다(①) - 진행률(②) - 재확인(⑤) 셋의 몸통. `notes`는 `undefined`(아직 안 왔다) -
  *  `null`(compare 실패, 노트 없음) - `string`(왔다) 셋을 진다. */
 function StickyBody({
+  t,
   view,
   percent,
   notes,
@@ -55,6 +56,7 @@ function StickyBody({
   onRestart,
   onCancel,
 }: {
+  t: (key: string) => string;
   view: "progress" | "downloaded" | "confirm";
   percent: number;
   notes: string | null | undefined;
@@ -67,7 +69,9 @@ function StickyBody({
   if (view === "progress") {
     return (
       <div className="flex w-full flex-col gap-2">
-        <p className="text-sm font-medium">업데이트를 받는 중 {percent}%</p>
+        <p className="text-sm font-medium">
+          {t("updateToast.progress.prefix")} {percent}%
+        </p>
         {/* §26 게이지 관용구 그대로 - 전이 0(§55 §진행률 상자 근거 셋) */}
         <div className="h-2 w-full rounded-full bg-muted">
           <div className="h-2 rounded-full bg-muted-foreground" style={{ width: `${percent}%` }} />
@@ -79,13 +83,13 @@ function StickyBody({
   if (view === "confirm") {
     return (
       <div className="flex w-full flex-col gap-2">
-        <p className="text-sm font-medium">지금 도는 일이 있습니다. 그래도 재시작할까요?</p>
+        <p className="text-sm font-medium">{t("updateToast.confirm.message")}</p>
         <div className="mt-1.5 flex items-center gap-2 text-popover-foreground">
           <Button variant="outline" size="xs" className="ml-auto" onClick={onCancel}>
-            취소
+            {t("updateToast.confirm.cancel")}
           </Button>
           <Button variant="default" size="xs" onClick={onRestart}>
-            재시작
+            {t("updateToast.confirm.restart")}
           </Button>
         </div>
       </div>
@@ -97,7 +101,7 @@ function StickyBody({
   const notesLoading = notesOpen && notes === undefined;
   return (
     <div className="flex w-full flex-col gap-2">
-      <p className="text-sm font-medium">업데이트를 받았습니다</p>
+      <p className="text-sm font-medium">{t("updateToast.downloaded.title")}</p>
       {notesOpen && typeof notes === "string" && (
         <div className="max-h-48 overflow-y-auto text-xs whitespace-pre-wrap text-muted-foreground">
           {notes}
@@ -112,7 +116,7 @@ function StickyBody({
             disabled={notesLoading}
             onClick={onToggleNotes}
           >
-            무엇이 바뀌었나
+            {t("updateToast.downloaded.notesToggle")}
             {notesOpen ? (
               <ChevronDown aria-hidden className="size-3" />
             ) : (
@@ -121,10 +125,10 @@ function StickyBody({
           </Button>
         )}
         <Button variant="outline" size="xs" className="ml-auto" onClick={onLater}>
-          다음 시작에 적용
+          {t("updateToast.downloaded.later")}
         </Button>
         <Button variant="default" size="xs" onClick={onRestart}>
-          지금 재시작
+          {t("updateToast.downloaded.restartNow")}
         </Button>
       </div>
     </div>
@@ -191,6 +195,7 @@ export function UpdateToast() {
     toast.custom(
       () => (
         <StickyBody
+          t={t}
           view={view}
           percent={percent}
           notes={notes}
@@ -209,7 +214,7 @@ export function UpdateToast() {
       ),
       { id: STICKY_ID, duration: Infinity },
     );
-  }, [view, percent, notes, notesOpen]);
+  }, [view, percent, notes, notesOpen, t]);
 
   if (!desktop) return null;
 

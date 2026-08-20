@@ -8,6 +8,7 @@ import { DesktopFindBar } from "@/components/find-bar";
 import { UpdateToast } from "@/components/update-toast";
 import { ScreenView } from "@/components/project-switcher";
 import { readKeymap, readLanguage } from "@/lib/projects";
+import { t } from "@/lib/i18n";
 import "../globals.css";
 
 // sans는 `globals.css`의 `@font-face`(원티드산스 · `public/fonts/`)가 든다 — 그래서 Geist
@@ -21,11 +22,14 @@ const geistMono = Geist_Mono({
 // 합친 이사(`6a24257d`)로 `public/icon.svg`가 정본이 되면서(§한 코드베이스 §부딪히는 것, 파일명 해시가 안 붙는
 // URL이 계약이라서다) 여기서 명시로 못박는다. `(site)/layout.tsx`도 같은 값을 못박는다 —
 // 두 루트 레이아웃이 갈려서 한쪽에만 적으면 나머지 트리의 파비콘이 없어진다.
-export const metadata: Metadata = {
-  title: "dira",
-  description: "파일시스템 티켓 큐 관제",
-  icons: { icon: { url: "/icon.svg", type: "image/svg+xml" } },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await readLanguage();
+  return {
+    title: "dira",
+    description: t(locale, "appLayout.description"),
+    icons: { icon: { url: "/icon.svg", type: "image/svg+xml" } },
+  };
+}
 
 export default async function RootLayout({
   children,

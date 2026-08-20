@@ -7,17 +7,19 @@
  *  커스텀 mdast 노드 타입(`wikilink`)에 `data.hName`/`hProperties`/`hChildren`을 실어
  *  `mdast-util-to-hast`의 "unknown node" 경로로 `<a>`/`<span>`을 직접 낳는다 — 새 rehype
  *  핸들러 없이 되는 값이라 의존성이 늘지 않는다. */
+import { DEFAULT_LOCALE, t, type Locale } from "./i18n.ts";
+
 export type Vault = Record<string, string>;
 
 type Node = { type: string; value?: string; children?: Node[]; data?: Record<string, unknown> };
 
 const WIKILINK = /\[\[([^\]]+)\]\]/g;
 
-function transform(node: Node, vault: Vault): void {
+function transform(node: Node, vault: Vault, locale: Locale): void {
   if (!node.children) return;
   node.children = node.children.flatMap((c) => {
     if (c.type !== "text" || !c.value?.includes("[[")) {
-      transform(c, vault);
+      transform(c, vault, locale);
       return [c];
     }
     const parts: Node[] = [];
@@ -38,7 +40,7 @@ function transform(node: Node, vault: Vault): void {
           hName: href ? "a" : "span",
           hProperties: href
             ? { href, "data-wikilink": name }
-            : { "data-wikilink": name, title: "대상 없음" },
+            : { "data-wikilink": name, title: t(locale, "markdownWikilinks.noTarget") },
           hChildren: [{ type: "text", value: display }],
         },
       });
@@ -49,10 +51,10 @@ function transform(node: Node, vault: Vault): void {
   });
 }
 
-export function wikilinks(vault?: Vault) {
+export function wikilinks(vault?: Vault, locale: Locale = DEFAULT_LOCALE) {
   return () => (tree: unknown) => {
     if (!vault) return;
-    for (const child of (tree as Node).children ?? []) transform(child, vault);
+    for (const child of (tree as Node).children ?? []) transform(child, vault, locale);
   };
 }
 

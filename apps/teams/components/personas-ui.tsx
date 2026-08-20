@@ -27,7 +27,7 @@ import type { SquadMember } from "@/lib/projects";
 import { Markdown } from "@/components/markdown";
 import { MarkdownEditor } from "@/components/markdown-editor";
 import type { Vault } from "@/lib/markdown-wikilinks";
-import { useT } from "@/components/language-provider";
+import { useLocale, useT } from "@/components/language-provider";
 import { wrap } from "@/lib/i18n";
 // 왼쪽 목록 줄의 점도 보드·칸반·필터와 **같은 컴포넌트**다(§5) — 색 조회의 출처는 하나다
 import { PersonaDot } from "@/components/persona-badge";
@@ -516,6 +516,7 @@ export function PersonasPane({
   engineHint: string | null;
 }) {
   const t = useT();
+  const locale = useLocale();
   const [selected, setSelected] = useState<string | null>(initial);
   const [edits, setEdits] = useState<Record<string, PersonaEdit>>({});
   const [squadEdits, setSquadEdits] = useState<Record<string, SquadEdit>>({});
@@ -666,7 +667,7 @@ export function PersonasPane({
                               실린다 — 그래서 이 합에 메모리는 안 든다(§프롬프트 층 결정 11 (4)).
                               `PERSONA_MAX_BYTES`(5,000B)와 비교되는 것도 이 합뿐이다 */}
                           <span className="ml-auto font-mono whitespace-nowrap">
-                            {budgetLabel(editBytes(e), PERSONA_MAX_BYTES)}
+                            {budgetLabel(editBytes(e), PERSONA_MAX_BYTES, locale)}
                           </span>
                         </span>
                       </div>
@@ -1870,6 +1871,7 @@ function MemorySection({
   onDeleted: (file: string) => void;
 }) {
   const t = useT();
+  const locale = useLocale();
   const [error, setError] = useState<string | null>(null);
   const listRef = useRef<HTMLUListElement>(null);
 
@@ -1907,7 +1909,7 @@ function MemorySection({
             별개다(§프롬프트 층 결정 11 (4)) */}
         {memories.length > 0 && (
           <span className="text-xs text-muted-foreground">
-            {budgetLabel(chars, MEMORY_MAX_BYTES)}
+            {budgetLabel(chars, MEMORY_MAX_BYTES, locale)}
           </span>
         )}
       </div>

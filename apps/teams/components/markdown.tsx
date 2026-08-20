@@ -10,6 +10,7 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { softBreaks } from "@/lib/markdown-breaks";
 import { wikilinks, type Vault } from "@/lib/markdown-wikilinks";
+import { DEFAULT_LOCALE, t, type Locale } from "@/lib/i18n";
 
 /** `h4~h6`도 `h3`과 같은 값이다 — 단계를 더 만들지 않는다(이 큐의 본문에 4단계 중첩이 없다). */
 const H3 = "mt-4 mb-1 text-base font-medium";
@@ -147,14 +148,17 @@ export function Markdown({
   text,
   breaks,
   vault,
+  locale = DEFAULT_LOCALE,
 }: {
   text: string;
   breaks?: "all" | "untilHeading";
   /** 이름 -> href 벌 (§10 §위키링크). 안 주면 `[[이름]]`은 종전 그대로 글자다 — 이 값을 안
    *  주는 자리(홈 대화 · 프로토콜 편집기 등 오늘 화면 전부)의 렌더는 한 글자도 안 바뀐다. */
   vault?: Vault;
+  locale?: Locale;
 }) {
-  if (!text.trim()) return <p className="text-sm text-muted-foreground">(내용 없음)</p>;
+  if (!text.trim())
+    return <p className="text-sm text-muted-foreground">{t(locale, "markdown.empty")}</p>;
   return (
     // `min-w-0`이 없으면 다이얼로그(grid)에서 아래 표·펜스의 `overflow-x-auto`가 무력화된다.
     // 리듬은 요소가 각자 들고 있다 — `space-y-*`를 걸지 않는다(제목 위 여백 > 문단 사이 간격).
@@ -163,7 +167,7 @@ export function Markdown({
         remarkPlugins={[
           remarkGfm,
           ...(breaks ? [softBreaks(breaks)] : []),
-          ...(vault ? [wikilinks(vault)] : []),
+          ...(vault ? [wikilinks(vault, locale)] : []),
         ]}
         components={components}
       >

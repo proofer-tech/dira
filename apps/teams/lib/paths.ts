@@ -3,6 +3,7 @@
 import { realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
+import { DEFAULT_LOCALE, t, type Locale } from "./i18n.ts";
 
 /** 워커/페르소나 이름. tickets.py의 PERSONA_RE와 같은 규칙. */
 export const NAME_RE = /^[A-Za-z0-9_-]+$/;
@@ -18,14 +19,17 @@ export const isProjectId = (s: string) => PROJECT_ID_RE.test(s);
  *  `없음`. 이름에 `:`이 못 들어가므로(`NAME_RE`) 첫 `:`에서 한 번만 가른다. 발행(`createTicket`)
  *  과 편집(`saveTicket`) 양쪽이 같은 파싱을 써야 판정이 갈리지 않는다 — 그래서 `"use server"`
  *  파일 밖 여기 하나에 둔다(`fmValue` 네 줄과 달리 이건 진짜 공유할 수 있다). */
-export function parseAssignment(raw: string): { persona: string; squad: string } {
+export function parseAssignment(
+  raw: string,
+  locale: Locale = DEFAULT_LOCALE,
+): { persona: string; squad: string } {
   const v = raw.trim();
   if (!v) return { persona: "", squad: "" };
   const i = v.indexOf(":");
   const prefix = i < 0 ? "" : v.slice(0, i);
   const name = i < 0 ? v : v.slice(i + 1);
   if ((prefix !== "persona" && prefix !== "squad") || !NAME_RE.test(name)) {
-    throw new Error(`persona 값이 올바르지 않습니다(persona:<이름> 또는 squad:<이름>): ${raw}`);
+    throw new Error(`${t(locale, "paths.invalidAssignmentPrefix")} ${raw}`);
   }
   return prefix === "squad" ? { persona: "", squad: name } : { persona: name, squad: "" };
 }
@@ -97,11 +101,17 @@ export function shellPath(raw: string): string | null {
  *  기준은 프로젝트 root가 아니라 **그 용도의 해석된 디렉터리**다 — 페르소나 편집의 기준은
  *  해석된 TICKET_PERSONAS이고 그건 루트 밖일 수 있다(이 레포의 큐가 당장 그렇다).
  *  양쪽 다 realpath한 뒤 비교한다: 심링크로 나가는 건 문자열 비교로 못 막는다. */
-export async function resolveWithin(baseDir: string, target: string): Promise<string> {
+export async function resolveWithin(
+  baseDir: string,
+  target: string,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<string> {
   const base = await realpath(expandHome(baseDir));
   const real = await realpathOfDeepestExisting(path.resolve(base, expandHome(target)));
   if (real !== base && !real.startsWith(base + path.sep)) {
-    throw new Error(`경로가 기준 디렉터리 밖이다: ${target} -> ${real} (기준 ${base})`);
+    throw new Error(
+      `${t(locale, "paths.outsideBasePrefix")} ${target} -> ${real} ${t(locale, "paths.outsideBaseSuffix")} ${base})`,
+    );
   }
   return real;
 }

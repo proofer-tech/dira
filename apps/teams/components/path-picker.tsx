@@ -11,6 +11,8 @@
  *  자리가 두 파일(projects-ui · workers-ui)이라 여기 있다(AGENTS.md 새 파일 규칙). */
 import { useSyncExternalStore } from "react";
 import { Button } from "@/components/ui/button";
+import { useT } from "@/components/language-provider";
+import { wrap } from "@/lib/i18n";
 
 declare global {
   interface Window {
@@ -53,6 +55,7 @@ export function PickPath({
   label: string;
   onPick: (abs: string) => void;
 }) {
+  const t = useT();
   const desktop = useIsDesktop();
   if (!desktop) return null;
 
@@ -60,13 +63,13 @@ export function PickPath({
     <Button
       type="button"
       variant="outline"
-      aria-label={`${label} 찾아보기`}
+      aria-label={wrap(label, t("pathPicker.browse"), "")}
       onClick={async () => {
         const picked = await window.dira?.pickPath(mode);
         if (picked) onPick(picked);
       }}
     >
-      찾아보기
+      {t("pathPicker.browse")}
     </Button>
   );
 }

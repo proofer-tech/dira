@@ -705,6 +705,59 @@ export const ko: Record<string, string> = {
   "persona.delete.refsWipSuffix": "건)",
   "persona.delete.refsBody": "티켓은 지워지지 않습니다. 프로필이 없어지면 엔진은",
   "persona.delete.dispatchDetail": "디스패치합니다 — 세션이 역할·권한을 모르는 채로 시작합니다.",
+
+  // 공용 컴포넌트·순수 유틸 묶음(§0-16 §발행 §묶음 표 행 11, `c9f2eec5`) — 화면이 둘 이상 무는
+  // 파일이라 화면 접두 대신 파일 스코프 접두를 쓴다. en은 `90db2822`가 채운다.
+  "budgets.overSuffix": " 초과",
+
+  "markdownEditor.toggle.toRaw": "원문으로",
+  "markdownEditor.toggle.toWysiwyg": "위지윅으로",
+
+  "updateToast.progress.prefix": "업데이트를 받는 중",
+  "updateToast.confirm.message": "지금 도는 일이 있습니다. 그래도 재시작할까요?",
+  "updateToast.confirm.cancel": "취소",
+  "updateToast.confirm.restart": "재시작",
+  "updateToast.downloaded.title": "업데이트를 받았습니다",
+  "updateToast.downloaded.notesToggle": "무엇이 바뀌었나",
+  "updateToast.downloaded.later": "다음 시작에 적용",
+  "updateToast.downloaded.restartNow": "지금 재시작",
+
+  // sr-only 접두 — 칩 안에 넣으면 이름마다 반복돼 "워커 w3 워커 w4"가 된다(worker-mark.tsx).
+  "workerMark.srPrefix": "워커 ",
+
+  "pathPicker.browse": "찾아보기",
+
+  "markdown.empty": "(내용 없음)",
+  "markdownWikilinks.noTarget": "대상 없음",
+
+  "copyCommand.ariaLabel": "명령어 복사",
+
+  // 뒤에 바이트 수(소수 1자리)가 공백 없이 붙는다(`20MB를 넘습니다 (23.4MB) — ...`).
+  "attachmentLimit.oversizePrefix": "20MB를 넘습니다 (",
+  "attachmentLimit.oversizeSuffix": "MB) — 필요한 부분만 잘라서 올리세요.",
+
+  "skillUpload.tooManyFilesPrefix": "설치할 파일이 상한 ",
+  "skillUpload.tooManyFilesSuffix": "개를 넘습니다",
+  "skillUpload.fileCountSuffix": "개",
+  "skillUpload.tooManyBytesPrefix": "설치할 파일의 합계가 상한 ",
+  "skillUpload.tooManyBytesSuffix": "MB를 넘습니다",
+
+  // 신뢰 경계 검증 사유(lib/paths.ts) — 값(이름·경로) 자체는 안 건드리고 둘러싼 문장만 옮긴다.
+  "paths.invalidAssignmentPrefix": "persona 값이 올바르지 않습니다(persona:<이름> 또는 squad:<이름>):",
+  // 뒤에 `${target} -> ${real}`이 공백 하나씩 사이에 두고 붙는다.
+  "paths.outsideBasePrefix": "경로가 기준 디렉터리 밖이다:",
+  // 뒤에 `${base})`가 공백 하나를 사이에 두고 붙는다(`(기준 <경로>)`).
+  "paths.outsideBaseSuffix": "(기준",
+
+  // 뒤에 의견 첫 줄(최대 40자)이 공백 없이 붙는다.
+  "feedback.titlePrefix": "의견 — ",
+  "feedback.versionLabel": "버전",
+  "feedback.sessionLabel": "세션",
+
+  "projectActions.unknownProjectPrefix": "등록되지 않은 프로젝트입니다:",
+  "projectActions.fileMissing": "파일이 오지 않았습니다 — 다시 고르세요.",
+
+  "appLayout.description": "파일시스템 티켓 큐 관제",
 };
 
 /** 제품 낱말의 영어 대응 — **여기가 한자리다**(621c7a97). 다음 묶음이 같은 것을 다르게 부르지
