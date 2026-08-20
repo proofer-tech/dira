@@ -279,33 +279,15 @@ test("90be3eeb — 셸 조립 문구가 영어에서도 문장이 된다", () =>
 
 // 화면에 남은 한국어를 여기서 잡는다 — 사전 값 자체에 한글이 섞이면 폴백이 아니라 오타다.
 // 언어 이름 둘만 예외다(영어 화면에서도 `한국어`는 `한국어`로 적는다).
-test("en 사전에 한글이 없다 — 언어 이름 둘과 스쿼드 블록만 예외다", () => {
+test("en 사전에 한글이 없다 — 언어 이름 둘만 예외다", () => {
   const hangul = Object.entries(en)
-    .filter(
-      ([k, v]) =>
-        /[가-힣]/.test(v) &&
-        !k.startsWith("settings.language.") &&
-        // `persona.squad.block*`는 **화면 문구가 아니다** — tick.sh:736-788이 프롬프트에 쓰는
-        // 블록의 바이트 수를 재는 데만 쓰인다(`squadBlockBytes`). 엔진에 로케일이 없어 그 블록은
-        // 어느 화면에서나 한국어라, 영어로 옮기면 en 화면의 상한 배지가 실물보다 적게 센다.
-        // 사전에서 걷어내는 것이 바른 자리다 - `50fd4b34`(pm 피드백). 아래가 그 8B를 못박는다.
-        !k.startsWith("persona.squad.block"),
-    )
+    .filter(([k, v]) => /[가-힣]/.test(v) && !k.startsWith("settings.language."))
     .map(([k]) => k);
   assert.deepStrictEqual(hangul, []);
 });
 
-test("스쿼드 블록 바이트 — 두 로케일이 같은 수를 센다(tick.sh가 쓰는 한국어 블록)", () => {
-  const block = (l: "ko" | "en") =>
-    [
-      `===== ${wrap(t(l, "persona.squad.blockNamePrefix"), "myteam", "")} =====`,
-      `alice ${t(l, "persona.squad.blockLeaderSuffix")} - 리더 역할`,
-      `===== ${t(l, "persona.squad.blockNamePrefix")} ${t(l, "persona.squad.blockEndSuffix")} =====`,
-    ].join("\n");
-  assert.strictEqual(block("en"), block("ko"));
-  assert.match(block("ko"), /^===== 스쿼드 myteam =====\n/);
-  assert.match(block("ko"), /\n===== 스쿼드 끝 =====$/);
-});
+// 스쿼드 블록 바이트 검증은 `50fd4b34`로 사전을 떠나 `squadBlockBytes`(`lib/budgets.ts`)의
+// 리터럴로 옮겼다 — `budgets.test.ts`에 산다(`persona.squad.block*` 세 키는 이제 사전에 없다).
 
 // 932ae344가 뽑은 자리들이 영어에서도 문장이 되는가. 한국어는 이름 뒤에 다 붙지만 영어는
 // 동사가 앞에 서므로, 접두·접미 두 조각을 `wrap`이 붙이고 빈 쪽을 지운다.
