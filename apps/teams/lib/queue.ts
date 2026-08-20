@@ -664,17 +664,23 @@ export type PlanItem = {
 };
 
 const PLAN_LINE = /^-\s*\[([ x])\]\s*(.*)$/;
-// 줄 끝의 `(<시작>)` 또는 `(<시작> -> <끝>)` — frontmatter `assigned_at`과 같은 ISO 8601 + 오프셋(§2-11①)
-const PLAN_TIME =
-  /\s*\((\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:Z|[+-]\d{2}:\d{2}))(?:\s*->\s*(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:Z|[+-]\d{2}:\d{2})))?\)\s*$/;
+const ISO = "\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:Z|[+-]\\d{2}:\\d{2})";
+// 시각 짝 — `(<시작> -> <끝>)`(정본), `(<시작>) -> <끝>`(끝이 괄호 밖), `(<시작>)`(시작만).
+// 항목 전체를 이어붙인 문자열 안에서 찾는다(§2-11① 판정 1-2) — 줄 끝이 아니어도 된다,
+// 뒤에 남는 꼬리말은 이 매치가 안 먹는다(판정 3).
+const PLAN_TIME_PAIR = new RegExp(`\\s*\\((${ISO})(?:\\s*->\\s*(${ISO}))?\\)(?:\\s*->\\s*(${ISO}))?`, "g");
 
 /** 티켓 본문의 `## 진행 계획` 절 → 계획 목록(§2-11①). 체크박스 줄이 아닌 줄은 건너뛴다 —
  *  형식이 어긋난 줄에 상태를 지어내지 않는다.
  *
+ *  **항목은 한 물리 줄이 아니다**(§2-11① 요구 `29a9f060`) — 다음 체크박스 줄까지(없으면 절
+ *  끝까지)의 모든 줄을 이어 붙인 다음, 그 안에서 **마지막 시각 짝**을 찾는다. 걷어낸 자리에
+ *  남는 꼬리말(괄호 뒤 텍스트 등)은 문장의 일부로 둔다.
+ *
  *  판정 순서 — **취소**(문장이 `~~`로 감싸였다) → **완료**(상자가 켜졌다) → **진행중**(시작이
  *  있다) → **미착수**. `questionsOf`와 한 파일·같은 루프 모양이다. */
 export function planOf(body: string): PlanItem[] {
-  const items: PlanItem[] = [];
+  const groups: { checked: boolean; lines: string[] }[] = [];
   let inSection = false;
   for (const line of body.split("\n")) {
     if (/^#{1,2}\s/.test(line)) {
@@ -683,22 +689,30 @@ export function planOf(body: string): PlanItem[] {
     }
     if (!inSection) continue;
     const m = line.match(PLAN_LINE);
-    if (!m) continue;
-    const checked = m[1] === "x";
-    let rest = m[2];
+    if (m) groups.push({ checked: m[1] === "x", lines: [m[2]] });
+    else if (groups.length) groups[groups.length - 1].lines.push(line.trim());
+  }
+
+  return groups.map(({ checked, lines }) => {
+    const joined = lines.join(" ").replace(/\s+/g, " ").trim();
     let start: string | null = null;
     let end: string | null = null;
-    const t = rest.match(PLAN_TIME);
-    if (t) {
-      start = t[1];
-      end = t[2] ?? null;
-      rest = rest.slice(0, t.index).trimEnd();
+    let rest = joined;
+
+    let last: RegExpExecArray | null = null;
+    PLAN_TIME_PAIR.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = PLAN_TIME_PAIR.exec(joined))) last = m;
+    if (last) {
+      start = last[1];
+      end = last[2] ?? last[3] ?? null;
+      rest = (joined.slice(0, last.index) + joined.slice(last.index + last[0].length)).trim();
     }
+
     const strike = rest.match(/^~~(.*)~~$/);
     const state: PlanState = strike ? "cancelled" : checked ? "done" : start ? "doing" : "todo";
-    items.push({ text: (strike ? strike[1] : rest).trim(), state, start, end });
-  }
-  return items;
+    return { text: (strike ? strike[1] : rest).trim(), state, start, end };
+  });
 }
 
 /** `questionsOf`가 데려간 절과 `## 진행 계획`(§2-11⑤)을 뺀 본문 — **읽기 전용 렌더(`<Markdown>`)만**
