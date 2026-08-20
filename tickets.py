@@ -698,7 +698,7 @@ def _quote(text):
     return "\n".join(("> " + l) if l.strip() else ">" for l in text.split("\n"))
 
 
-def ask_context(fm, body):
+def ask_context(fm, body, handoff=False):
     """자동 상신 질문에 붙일 판단 재료 -- 티켓 Goal · 블록 · 죽은 세션 로그 꼬리.
 
     정형문("3회 죽었다")만으로는 사람이 답할 자료가 화면에 없었다(요구 11990127: jaso에서
@@ -706,6 +706,9 @@ def ask_context(fm, body):
     블록은 상한이 없다(결정 13 (1)) - Goal 600자 · 로그 1500자는 그대로고, 잘리면 `_capped`가
     그 사실을 적는다(결정 13 (2)). 세션 로그는 티켓 파일 어디에도 없는 유일한 정보라 없으면
     없다고 적는다.
+
+    `handoff`(§미완으로 끝나는 세션 §개정 2 (2))는 판정이 claim 성공 직후라 할당 필드가
+    아직 안 쓰여 `session_id`가 구조적으로 없는 갈래다 - 죽은 세션 절을 아예 안 붙인다.
     """
     out = ""
     goal = _section(body, "Goal")
@@ -714,6 +717,8 @@ def ask_context(fm, body):
     blk = _section(body, "블록")
     if blk:
         out += "\n### 티켓 블록\n\n{}\n".format(_quote(blk))
+    if handoff:
+        return out
     tr = transcript_of(fm)
     tail = transcript_tail(tr) if tr else ""
     return out + "\n### 죽은 세션 마지막 기록\n\n{}\n".format(
@@ -769,21 +774,25 @@ def ask_human(path, h, attempts, why, blocked=False, killed=False, handoff=False
     fm, lines, end = read_fm(path)
     body = lines[end:]
     try:
-        ctx = ask_context(fm, body)
+        ctx = ask_context(fm, body, handoff=handoff)
     except Exception as e:                   # 자료 수집 실패가 답변 요청 자체를 막지 않는다
-        ctx = "\n### 죽은 세션 마지막 기록\n\n> 자료를 읽지 못했습니다: {}\n".format(e)
+        ctx = ("" if handoff else
+               "\n### 죽은 세션 마지막 기록\n\n> 자료를 읽지 못했습니다: {}\n".format(e))
     # 사유는 경로마다 사실이 다르다. 블록은 세션이 실패한 게 아니라 벽을 보고 판정하고 멈춘 것이다.
     cause = ("사람이 강제 중단했습니다" if killed
              else "이어받기가 3회를 넘었습니다" if handoff
              else "세션이 `## 블록`을 남기고 멈췄습니다" if blocked
              else "자동 회수 {}회 실패({})".format(attempts, why))
-    q = _block_question(_section(body, "블록"))
+    # handoff는 죽은 세션도 `## 블록`도 없는 갈래다(개정 2 (1)) - 블록의 결정 11 형식
+    # 물음이 우연히 몸통에 남아 있어도 승격시키지 않는다.
+    q = "" if handoff else _block_question(_section(body, "블록"))
     if q:
         # 결정 13 (5) - 물음이 곧 카드 제목이라 가리킬 곳이 없다. 남는 것은 사유 한 줄이다.
         head = "{}. 엔진은 더 시도하지 않습니다.\n\n{}\n".format(cause, q)
         options = _ask_options(2)
     else:
         ask = ("이 티켓을 계속 갈지, 무엇을 바꿔서 갈지 답해주세요." if killed
+               else "남은 범위가 한 세션에 드는지, 이 티켓을 그대로 더 갈지 답해주세요." if handoff
                else "아래 인용한 `## 블록`에 적힌 결정을 답해주세요."
                if any(re.match(r"^##\s*블록", nfc(l)) for l in body)
                else "세션이 왜 계속 죽는지, 이 티켓을 계속 갈지 답해주세요.")

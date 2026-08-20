@@ -41,6 +41,13 @@ try:
     body = open(back, encoding="utf-8").read()
     assert "## 질문 1" in body, "질문 절이 안 붙었다\n" + body
     assert "이어받기가 3회를 넘었습니다" in body, "본문에 사유가 없다\n" + body
+    # 개정 2 (1) - 물음은 회수 실패 갈래("세션이 왜 계속 죽는지")가 아니라 범위를 묻는 한 줄이다
+    assert "남은 범위가 한 세션에 드는지, 이 티켓을 그대로 더 갈지 답해주세요." in body, \
+        "handoff 물음이 스펙 문장과 다르다\n" + body
+    assert "세션이 왜 계속 죽는지" not in body, "handoff 카드가 회수 실패 물음을 그대로 썼다\n" + body
+    # 개정 2 (2) - 죽은 세션이 없는 갈래라 그 절을 안 붙인다. 티켓 Goal은 붙는다
+    assert "### 죽은 세션 마지막 기록" not in body, "handoff 카드에 없는 사고의 로그 절이 붙었다\n" + body
+    assert "### 티켓 Goal" in body and "> 테스트." in body, "handoff 카드에 티켓 Goal이 안 붙었다\n" + body
     fm_a, lines_a, end_a = T.read_fm(back)
     awaiting = (fm_a.get("awaiting") or "").strip()
     assert awaiting, "awaiting이 안 걸렸다\n" + str(fm_a)
@@ -75,6 +82,29 @@ try:
         assert opt in body, "고정 선택지 누락 - " + opt
     assert fm_a.get("default_answer") == "1.(a)", "default_answer가 종전과 다르다\n" + str(fm_a)
 
-    print("PASS 5/5 - 이어받기 3회 상한(claim 실패/재claim/회귀 둘/ask_human 사유)")
+    # ⑥ 개정 2 (4) - 나머지 세 갈래(회수 실패 - 블록 - 강제 중단)의 카드는 한 글자도 안 갈린다
+    p5 = mk(ws, "dddd0004")
+    T.ask_human(p5, "dddd0004", 3, "SSL_ERROR", blocked=False, killed=False, handoff=False)
+    body5 = open(p5, encoding="utf-8").read()
+    assert "자동 회수 3회 실패(SSL_ERROR)" in body5, "회수 실패 사유 문구가 갈렸다\n" + body5
+    assert "세션이 왜 계속 죽는지, 이 티켓을 계속 갈지 답해주세요." in body5, \
+        "회수 실패 물음이 갈렸다\n" + body5
+    assert "### 죽은 세션 마지막 기록" in body5, "회수 실패 갈래에서 로그 절이 없어졌다\n" + body5
+
+    p6 = mk(ws, "eeee0005")
+    T.ask_human(p6, "eeee0005", 0, "", blocked=True)
+    body6 = open(p6, encoding="utf-8").read()
+    assert "세션이 `## 블록`을 남기고 멈췄습니다" in body6, "블록 사유 문구가 갈렸다\n" + body6
+    assert "### 죽은 세션 마지막 기록" in body6, "블록 갈래에서 로그 절이 없어졌다\n" + body6
+
+    p7 = mk(ws, "ffff0006")
+    T.ask_human(p7, "ffff0006", 0, "", killed=True)
+    body7 = open(p7, encoding="utf-8").read()
+    assert "사람이 강제 중단했습니다" in body7, "강제 중단 사유 문구가 갈렸다\n" + body7
+    assert "이 티켓을 계속 갈지, 무엇을 바꿔서 갈지 답해주세요." in body7, \
+        "강제 중단 물음이 갈렸다\n" + body7
+    assert "### 죽은 세션 마지막 기록" in body7, "강제 중단 갈래에서 로그 절이 없어졌다\n" + body7
+
+    print("PASS 6/6 - 이어받기 3회 상한(claim 실패/재claim/회귀 둘/ask_human 사유/나머지 세 갈래 회귀)")
 finally:
     shutil.rmtree(ws, ignore_errors=True)
