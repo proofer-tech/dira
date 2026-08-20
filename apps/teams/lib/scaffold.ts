@@ -41,6 +41,7 @@ const TEMPLATE_FILES = [
   "personas/qa/PROFILE.md",
   "personas/designer/PROFILE.md",
   "personas/archive-manager/PROFILE.md",
+  "squads/default/members",
 ];
 
 /** 엔진 레포 경로. **`DIRA_ENGINE`이 있으면 그것이고**(패키징된 `.app`이 번들의 엔진을 userData로

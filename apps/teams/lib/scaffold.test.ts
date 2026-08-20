@@ -31,6 +31,7 @@ const SET = [
   ".dira/personas/qa/PROFILE.md",
   ".dira/personas/designer/PROFILE.md",
   ".dira/personas/archive-manager/PROFILE.md",
+  ".dira/squads/default/members",
   ".dira/workers/w1.sh",
   ".dira/self-heal.sh",
   ".dira/dispatch-gate.sh",
@@ -94,6 +95,11 @@ test("scaffold — §0-3 집합 그대로, 두 번째는 전부 skipped", async 
   const ontologyTemplate = await readFile(path.join(repo.path, "templates/protocols/ontology.md"), "utf8");
   assert.equal(ontology, ontologyTemplate);
 
+  // (D1) 기본 스쿼드 default — 이름 넷, 역할 칸 없음, 끝이 개행 하나, rules는 안 만든다
+  const members = await readFile(path.join(project, ".dira/squads/default/members"), "utf8");
+  assert.equal(members, "pm\ndeveloper\nqa\ndesigner\n");
+  await assert.rejects(() => stat(path.join(project, ".dira/squads/default/rules")));
+
   // ⑤ w1.sh — 활성 TICKET_CWD 없음, tick.sh 절대경로, 755
   const w1 = path.join(project, ".dira/workers/w1.sh");
   const sh = await readFile(w1, "utf8");
@@ -142,6 +148,8 @@ test("scaffold — §0-3 집합 그대로, 두 번째는 전부 skipped", async 
   assert.deepEqual(second.written, []);
   assert.equal(await readFile(agents, "utf8"), before);
   assert.equal(await readFile(path.join(project, ".gitignore"), "utf8"), ".dira\n");
+  // (D2) 소급 0 — 재실행해도 members 내용이 안 갈린다
+  assert.equal(await readFile(path.join(project, ".dira/squads/default/members"), "utf8"), members);
 });
 
 /** §0-19 네 갈래 — 파서 없이 트림-완전일치로만 판정한다. */
