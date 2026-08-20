@@ -31,6 +31,8 @@ const {
   readHome,
   newConversation,
   switchConversation,
+  createSchedule,
+  deleteSchedule,
   workerSessions,
   toolFlags,
   personaBlock,
@@ -38,6 +40,7 @@ const {
   isOnceWhen,
   isValidWhen,
   judgeSchedule,
+  nextScheduleDue,
   SCHEDULE_LOOKBACK_MS,
   runSchedules,
 } = await import("./home-agent.ts");
@@ -1465,6 +1468,40 @@ test("§7-2 §관문 — 못 읽는 when(필드 수 틀림 · 파싱 불가)은 
   assert.strictEqual(isValidWhen("0 9 mon * *"), false); // 정수·`*` 아닌 자리
 });
 
+/** §비주얼 §62 (3) §다음 예정 시각 — `judgeSchedule`과 짝인 순수 함수. 저건 "지금 돌아야
+ *  하나"(트리거)를 묻고 이건 "다음엔 언제 돌 것 같나"(화면 값)를 묻는다 — 같은 `windowStart`
+ *  셈이 `overdue`의 경계가 된다는 것이 이 절이 지키는 계약이다. */
+test("nextScheduleDue — 단발: last 있으면 overdue, 31일 넘게 지나도 overdue, 미래는 아니다", () => {
+  const when = "2026-08-20T09:00:00+09:00";
+  const at = Date.parse(when);
+  const created = at - 60_000;
+
+  // 아직 안 온 미래 — overdue 아니다
+  assert.deepStrictEqual(nextScheduleDue({ when, created: new Date(created).toISOString() }, at - 1000), {
+    at,
+    overdue: false,
+  });
+  // 이미 돌았다 — `last`가 있으면 무조건 overdue(재판정 없이 즉시 안다)
+  assert.deepStrictEqual(
+    nextScheduleDue(
+      { when, created: new Date(created).toISOString(), last: { due: when, at: when } },
+      at + 10_000_000,
+    ),
+    { at, overdue: true },
+  );
+  // 안 돌았지만 31일보다 오래 지났다 — `judgeSchedule`이 다시 못 돌릴 만큼 지나 overdue다
+  assert.deepStrictEqual(
+    nextScheduleDue({ when, created: new Date(created).toISOString() }, at + SCHEDULE_LOOKBACK_MS + 60_000),
+    { at, overdue: true },
+  );
+});
+
+test("nextScheduleDue — 반복(매일)은 다음 맞는 미래 분을 내고 overdue가 절대 안 선다", () => {
+  const nowMs = local(2026, 8, 19, 10, 0);
+  const r = nextScheduleDue({ when: "0 9 * * *", created: new Date(local(2026, 8, 17, 0, 0)).toISOString() }, nowMs);
+  assert.deepStrictEqual(r, { at: local(2026, 8, 20, 9, 0), overdue: false }); // 오늘 9시는 지났다 — 내일 9시다
+});
+
 test("스케줄 저장 — home-sessions.json의 schedules 칸이 readHome-writeHome을 그대로 탄다. 못 읽는 줄은 없는 것이다", async () => {
   writeFileSync(
     sessionsPath(),
@@ -1495,6 +1532,62 @@ test("스케줄 저장 — home-sessions.json의 schedules 칸이 readHome-write
     (await readHome("schedtest")).schedules.map((s) => s.id),
     ["s1"],
   );
+});
+
+/** `새 스케줄`(§비주얼 §62 (5)) — **신뢰 경계 값이라 여기서 다시 검증한다**(클라이언트의
+ *  `disabled`는 검증이 아니다). 빈 문장·못 읽는 `when`은 줄을 안 만든다. */
+test("createSchedule — 빈 문장·못 읽는 when은 거절, 정상 값은 줄이 서고 session_id가 빈 문자열이다", async () => {
+  assert.strictEqual(await createSchedule("cstest", "0 9 * * *", "   "), null); // 빈 문장
+  assert.strictEqual(await createSchedule("cstest", "0 9 * *", "매일 9시"), null); // 필드 4개
+  assert.deepStrictEqual((await readHome("cstest")).schedules, []); // 거절된 시도는 파일에 안 남는다
+
+  const row = await createSchedule("cstest", "0 9 * * *", "  매일 9시  ");
+  assert.ok(row);
+  assert.strictEqual(row!.prompt, "매일 9시"); // 앞뒤 공백을 trim한다
+  assert.strictEqual(row!.session_id, ""); // 첫 회차가 아직 안 밀었다
+  assert.deepStrictEqual(
+    (await readHome("cstest")).schedules.map((s) => s.id),
+    [row!.id],
+  );
+});
+
+/** `스케줄 삭제`(§비주얼 §62 (4)) — 그 줄만 빠지고 나머지는 그대로다. 트랜스크립트 삭제가
+ *  없다는 것은 이 함수가 `schedules` 배열 밖을 건드리지 않는다는 것으로 이미 보장된다. */
+test("deleteSchedule — 그 줄만 빠지고 나머지는 그대로다", async () => {
+  const a = await createSchedule("deltest", "0 9 * * *", "A");
+  const b = await createSchedule("deltest", "0 10 * * *", "B");
+  await deleteSchedule("deltest", a!.id);
+  assert.deepStrictEqual(
+    (await readHome("deltest")).schedules.map((s) => s.id),
+    [b!.id],
+  );
+});
+
+/** §7-2 §고르면 무엇이 서나 — 회차가 있는 스케줄은 **워커 세션 줄과 같은 자다**: `current`가
+ *  그 `session_id`가 되고(`switchConversation`), 폴링의 `sid` 판정도 그 값을 안다(`pollHome`).
+ *  회차 0건(`session_id` 빈 문자열)은 이 관문에 안 걸린다 — 화면이 로컬로 처리하는 자리다
+ *  (`home-ui.tsx`의 `pendingSchedule`). */
+test("switchConversation·pollHome — 회차가 있는 스케줄의 session_id로도 current를 옮길 수 있다", async () => {
+  const sid = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+  writeFileSync(
+    sessionsPath(),
+    JSON.stringify({
+      pickschedtest: {
+        conversations: [],
+        current: null,
+        schedules: [{ id: "s1", created: "2026-08-19T16:20:00+09:00", when: "0 9 * * *", prompt: "p", session_id: sid }],
+      },
+    }),
+  );
+  assert.strictEqual(await switchConversation("pickschedtest", sid), true);
+  assert.strictEqual((await readHome("pickschedtest")).current, sid);
+
+  const chunk = await pollHome("pickschedtest", null, 0);
+  assert.strictEqual(chunk.sessionId, sid); // 대화도 워커 세션도 아니지만 온보딩으로 안 떨어진다
+  assert.strictEqual(chunk.schedules[0]?.id, "s1");
+
+  // 아직 회차가 없는 스케줄(session_id 빈 문자열)은 거절된다 — 화면이 로컬로 처리하는 자리다
+  assert.strictEqual(await switchConversation("pickschedtest", ""), false);
 });
 
 test("runSchedules — 하트비트가 부르는 디스패치. 트랜스크립트 없는 옛 session_id는 새 세션으로 밀리고, 단발은 두 번 안 돈다", async () => {

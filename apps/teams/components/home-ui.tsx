@@ -43,15 +43,17 @@
  *  한 마디가 더 선다. 상태마다 띠를 따로 세우지 않는 이유는 **답이 끝나는 순간 높이가 안
  *  튀어야** 해서다 — 자동 스크롤이 바닥을 물고 있는 화면에서 24px 점프가 가장 나쁘다(§13). */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 // `Check`은 **패널에서 빠졌다**(§비주얼 §34 ③). import는 남는다 — 같은 파일의 `복사` 버튼이
 // 눌린 뒤 1.2초 동안 그 글리프를 든다(§24 §띠). §34가 *lucide `Check`이 빠진다*고 적은 것은
 // 좌측 패널 얘기다.
-import { ArrowDown, Check, Copy, Send, TriangleAlert } from "lucide-react";
+import { ArrowDown, Check, Copy, Send, Trash2, TriangleAlert } from "lucide-react";
 import {
   askHome,
   clearHome,
+  createSchedule,
+  deleteSchedule,
   pollHomeAnswer,
   stopHome,
   switchHome,
@@ -63,20 +65,44 @@ import {
   useAttachments,
 } from "@/components/attachment-field";
 import { CopyCommand } from "@/components/copy-command";
+import { EmptyState } from "@/components/empty-state";
 import { FindBar } from "@/components/find-bar";
 import { useKeymap } from "@/components/keymap-provider";
 import { Markdown } from "@/components/markdown";
 import { Bundle } from "@/components/session-stream";
 import { StatusBadge } from "@/components/status-badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import {
   InputGroup,
   InputGroupAddon,
   InputGroupButton,
   InputGroupTextarea,
 } from "@/components/ui/input-group";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Message, MessageContent, MessageHeader } from "@/components/ui/message";
 import {
   MessageScroller,
@@ -86,19 +112,31 @@ import {
   MessageScrollerProvider,
   MessageScrollerViewport,
 } from "@/components/ui/message-scroller";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Sidebar,
   SidebarContent,
   SidebarGroup,
   SidebarGroupLabel,
   SidebarMenu,
+  SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarProvider,
 } from "@/components/ui/sidebar";
-import type { Activity, Answer, AnswerReason, Home, HomeChunk, Turn, WorkerSession } from "@/lib/home-agent";
+import { Textarea } from "@/components/ui/textarea";
+import type {
+  Activity,
+  Answer,
+  AnswerReason,
+  Home,
+  HomeChunk,
+  ScheduleView,
+  Turn,
+  WorkerSession,
+} from "@/lib/home-agent";
 import { formatCombo, matchCombo } from "@/lib/keymap";
-import { chatRows, groupProgress, visibleChatRows } from "@/lib/urls";
+import { chatRows, dateTimeLabel, groupProgress, scheduleRows, visibleChatRows } from "@/lib/urls";
 import { cn } from "@/lib/utils";
 
 /** 화면이 답할 수 있다고 약속하는 범위가 곧 온보딩 예시 넷이다(§24 — 요구 원문의 예시 +
@@ -125,9 +163,13 @@ const NO_TURNS = "지금 대화가 이미 비어 있습니다 — 여기에 물�
  *  우리가 쓰는 파일의 모양이고 이 목록은 매 응답 큐에서 다시 파생된다. `current` 한 칸이
  *  둘을 통틀어 가리키고, 그래서 **체크가 패널 전체에 하나다**(§24).
  *
- *  **`Home` 전체가 아니라 `Pick`이다** — `schedules`(§7-2)는 아직 이 화면이 안 그린다(그 그릇은
- *  `0d19708d`가 짓는다). 이 패널이 그 칸까지 요구하면 화면 없는 서버 계약이 먼저 무너진다. */
-type Panel = Pick<Home, "conversations" | "current"> & { workers: WorkerSession[] };
+ *  **`Home`의 `schedules`는 원본이 아니라 `ScheduleView[]`다**(§비주얼 §62) — 화면용 값
+ *  (`at`·`overdue`)을 서버가 이미 얹어 보낸다(`nextScheduleDue`가 `node:fs`가 섞인 파일에 있어
+ *  클라이언트가 직접 못 잰다). */
+type Panel = Pick<Home, "conversations" | "current"> & {
+  workers: WorkerSession[];
+  schedules: ScheduleView[];
+};
 
 /** 폴링 주기 둘(§7 §답은 흐른다 · §폴링은 서버가 잊어도 안 끊긴다). 자세한 근거는 아래
  *  `useEffect` 머리 주석. **천장은 없다**(§7 §천장이 없다 — 요구 `8db4d0f6`이 서버의
@@ -210,8 +252,13 @@ export function HomeUI({
   const [home, setHome] = useState<Panel>({
     conversations: initial.conversations,
     workers: initial.workers,
+    schedules: initial.schedules,
     current: initial.sessionId,
   });
+  // **회차 0건인 스케줄을 보는 동안만 선다**(§비주얼 §62 (6)) — 그 줄은 `session_id`가 비어
+  // 있어 `current`가 될 수 없다(서버의 `switchConversation`이 빈 값을 안 받는다). 그래서 선택을
+  // 로컬로만 기억한다. 값이 있으면 대화 컬럼이 스레드 대신 그 스케줄의 빈 상태를 그린다.
+  const [pendingSchedule, setPendingSchedule] = useState<ScheduleView | null>(null);
   // 폴링이 들고 다니는 두 값. 렌더에 안 쓰므로 상태가 아니다(바뀔 때마다 그릴 것이 없다).
   const session = useRef(initial.sessionId);
   const offset = useRef(initial.offset);
@@ -303,7 +350,12 @@ export function HomeUI({
         offset.current = r.offset;
         setPartial(r.partial);
         setActivity(r.activity);
-        setHome({ conversations: r.conversations, workers: r.workers, current: r.sessionId });
+        setHome({
+          conversations: r.conversations,
+          workers: r.workers,
+          schedules: r.schedules,
+          current: r.sessionId,
+        });
         setRunningIds(r.runningSessions);
         // `reset` = 세션이 갈렸다(서버가 0부터 다시 읽었다). 이어붙이면 옛 대화가 두 벌이 된다.
         setTurns((prev) => {
@@ -391,7 +443,9 @@ export function HomeUI({
   const send = async () => {
     // `readOnly`가 여기 있는 것이 실효 잠금이다(§24 ② — `보내기`의 `aria-disabled`는 표시다).
     // 서버도 같은 판정을 한 번 더 한다: 이 폼 상태는 새로고침에 풀린다(`startAsk`).
-    if (busy || empty || readOnly) return;
+    // **`pendingSchedule`이 잠금 (3)이다**(§비주얼 §62 (7) — 회차 0건인 스케줄을 보는 동안).
+    // 걸 세션이 없다 — 여기서 보내면 사람 턴이 그 스케줄의 실행 이력 첫 줄이 된다.
+    if (busy || empty || readOnly || pendingSchedule) return;
     // 보낸 글을 칸에서 비운다 — **다음 질문을 미리 쓸 수 있다는 것이 §24가 입력칸을 안 잠근
     // 이유**다. 실패하면 그 글을 도로 넣는다(§21 실패 규칙: 쓴 글은 남는다). 그 사이에 사람이
     // 다음 질문을 쓰기 시작했으면 **그쪽이 이긴다** — 사람이 방금 친 글을 덮지 않는다.
@@ -428,7 +482,7 @@ export function HomeUI({
   const apply = (c: HomeChunk) => {
     session.current = c.sessionId;
     offset.current = c.offset;
-    setHome({ conversations: c.conversations, workers: c.workers, current: c.sessionId });
+    setHome({ conversations: c.conversations, workers: c.workers, schedules: c.schedules, current: c.sessionId });
     setTurns(c.stopped ? markStopped(c.turns) : c.turns);
     setRunning(c.running);
     setRunningIds(c.runningSessions);
@@ -437,6 +491,7 @@ export function HomeUI({
     setStopping(false);
     setFail(c.failed);
     setEcho(null); // 갈아탄 대화의 것이 아니다 — 앞 대화에서 보낸 에코를 여기로 안 옮긴다
+    setPendingSchedule(null); // 실제 세션으로 갈아탔다 — 회차 0건 스케줄 화면은 이 자리가 아니다
   };
 
   /** 접힌 줄을 열고 닫는다(§비주얼 §24 ⑦ §자동 스크롤). `<Bundle>`이 요구하는 자리지만
@@ -501,15 +556,49 @@ export function HomeUI({
             것의 이름**이고, 그 표시는 1건에서도 참이다(§4-1과 같다). */}
         {home.conversations.length > 0 && (
           <SidePanel
+            project={project}
             home={home}
             runningIds={runningIds}
+            // 세 그룹을 통틀어 지금 서 있는 표식 하나(§비주얼 §62 (2) §선택 표식 — "표식은 세
+            // 그룹을 통틀어 한 줄에만 든다"). 회차 0건 스케줄을 보는 동안은 `home.current`가
+            // 못 갈리므로(위 `pendingSchedule` 주석) 그 스케줄의 `id`가 대신 선다.
+            selected={pendingSchedule ? pendingSchedule.id : home.current}
             // `새 대화`의 잠금 하나(§24 §0건) — **`busy`가 두 번째 조각이다**: 첫 질문 직후는
             // 턴이 0건인데도 그 대화가 비어 있지 않다(위 `NO_TURNS` 주석).
             noTurns={turns.length === 0 && !busy}
             onNew={async () => apply(await clearHome(project))}
             onPick={async (id) => {
+              setPendingSchedule(null); // 회차 0건 스케줄 화면에서 벗어난다
               setHome((now) => ({ ...now, current: id })); // 체크만 낙관적으로(§24 로딩 항)
               apply(await switchHome(project, id));
+            }}
+            onPickSchedule={async (s) => {
+              // **회차가 있으면 워커 세션 줄과 같은 자다**(§7-2 §고르면 무엇이 서나) — `current`가
+              // 그 `session_id`가 되고 트랜스크립트가 열린다. `switchConversation`이 스케줄의
+              // `session_id`도 이제 안다(위 `home-agent.ts` 개정).
+              if (s.session_id) {
+                setPendingSchedule(null);
+                setHome((now) => ({ ...now, current: s.session_id }));
+                apply(await switchHome(project, s.session_id));
+                return;
+              }
+              // **회차 0건** — 걸 세션이 없다(§비주얼 §62 (6)). 서버 왕복 없이 로컬로만 연다.
+              setPendingSchedule(s);
+              setTurns([]);
+              setRunning(false);
+              setPartial("");
+              setActivity(null);
+              setFail(null);
+              setEcho(null);
+              setStopping(false);
+            }}
+            onSchedulesChange={(schedules) => {
+              setHome((now) => ({ ...now, schedules }));
+              // 보고 있던 회차 0건 스케줄이 지워졌으면 화면이 그 유령을 붙들지 않는다.
+              setPendingSchedule((p) => {
+                if (!p) return null;
+                return schedules.find((s) => s.id === p.id) ?? null;
+              });
             }}
           />
         )}
@@ -528,7 +617,23 @@ export function HomeUI({
             onboarding && "justify-center",
           )}
         >
-          {onboarding ? (
+          {pendingSchedule ? (
+            /* 회차 0건인 스케줄(§비주얼 §62 (6)) — 대화 0건과 **자리는 같고 그릇은 다르다**:
+               `<EmptyState>`를 쓴다(§24의 셋째 예외 — "한 줄로는 무엇을 물어볼 수 있는지를 못
+               알려준다"의 근거가 여기 없다. 말할 사실은 "아직 안 돌았고 언제 돈다" 한 줄이다).
+               예시 넷은 셋째 자리에서 통째로 빠진다(아래) — 지금 안 쓸 수 있는 입력칸의 내용을
+               권하지 않는다. */
+            <EmptyState
+              text="회차 없음"
+              action={
+                <span className="text-xs text-muted-foreground">
+                  {pendingSchedule.overdue
+                    ? "예정 시각이 지나 이 스케줄은 돌지 않습니다 — 지우고 다시 만듭니다"
+                    : `${dateTimeLabel(pendingSchedule.at)}에 첫 회차가 돕니다 — 이 앱이 떠 있는 동안에만 돕니다`}
+                </span>
+              }
+            />
+          ) : onboarding ? (
             /* 대화 0건 = 이 화면의 온보딩이다(§6 빈 상태 규칙의 셋째 예외 — 한 줄로는 이 에이전트에게
                무엇을 물어볼 수 있는지를 못 알려준다). 스레드 상자는 아예 안 그린다 — 빈 상자가 서는
                순간이 없다(§13). 폼은 이 묶음의 **가운데 줄**이다: 온보딩이 폼을 대신하지 않는다. */
@@ -771,9 +876,14 @@ export function HomeUI({
                     판단이다(§24: 다음 질문을 미리 쓸 수 있다). */}
                 <AttachmentButton att={att} />
                 {/* 보조 문구 — `첨부` 다음 · `ml-auto` 앞이 2차 자리다(§27 손잡이 줄 순서).
-                    **셋 다 배타적이라 한 자리를 다투지 않는다**(§비주얼 §24 §손잡이 줄 왼쪽
-                    문구): 워커 세션 · 대화(턴 1건 이상) · 대화(턴 0건 = 없다). */}
-                {worker ? (
+                    **넷 다 배타적이라 한 자리를 다투지 않는다**(§비주얼 §24 §손잡이 줄 왼쪽
+                    문구 · §62 §손잡이 줄 왼쪽 문구 — 다섯째 행): 회차 0건 스케줄 · 워커 세션 ·
+                    대화(턴 1건 이상) · 대화(턴 0건 = 없다). */}
+                {pendingSchedule ? (
+                  <span className="min-w-0 truncate text-xs text-muted-foreground">
+                    첫 회차가 돌기 전에는 이 스케줄에 말을 걸 수 없습니다
+                  </span>
+                ) : worker ? (
                   <WorkerNote project={project} worker={worker} />
                 ) : home.current && turns.length > 0 ? (
                   <SessionInfo sessionId={home.current} model={conv?.model} />
@@ -789,7 +899,7 @@ export function HomeUI({
                   type="submit"
                   variant="default"
                   size="xs"
-                  aria-disabled={busy || empty || readOnly}
+                  aria-disabled={busy || empty || readOnly || pendingSchedule !== null}
                   className="aria-disabled:opacity-50"
                 >
                   <Send aria-hidden />
@@ -809,8 +919,10 @@ export function HomeUI({
           </form>
 
           {/* 셋째 자리 — 0건이면 예시 4개(워커 0개인 큐에서만 2개), 아니면 `null`이다.
-              **자리를 배열에서 빼지 않는다**(위). */}
-          {onboarding ? (
+              **자리를 배열에서 빼지 않는다**(위). **회차 0건 스케줄은 0개다**(§비주얼 §62 (6)) —
+              `pendingSchedule`이 서면 `onboarding`도 같이 참이 되지만(턴 0건 · 안 도는 중) 예시는
+              이 자리에서 따로 걷는다. */}
+          {onboarding && !pendingSchedule ? (
             <div className="flex flex-wrap gap-2">
               {[...examples, ...EXAMPLES].map((q) => (
                 // **제출하지 않는다**(§24): ① 한 질문이 프로세스 하나고 상한이 5분이다 — 클릭 한 번에
@@ -1031,6 +1143,11 @@ const MARK =
   "shrink-0 text-xs text-muted-foreground tabular-nums group-hover/menu-button:text-foreground";
 const RUNNING = "답하는 중";
 
+/** `스케줄` 줄의 아랫줄(§비주얼 §62 (2) — 워커 세션 아랫줄과 같은 승격 짝이되 `shrink-0`이
+ *  없다: 이 줄은 시각 하나가 통째로 차지하는 **한 줄**이지, `MARK`처럼 제목 옆 오른쪽 끝에
+ *  붙는 조각이 아니다. `font-mono`가 없는 이유도 그 절과 같다 — 이 값은 리터럴이 아니라 시각이다. */
+const SCHEDULE_TIME = "text-xs text-muted-foreground tabular-nums group-hover/menu-button:text-foreground";
+
 /** 좌측 패널 (§비주얼 §24 §좌측 패널 · §7 §좌측 패널 · §비주얼 §34) — **shadcn `sidebar`**다.
  *
  *  **팝오버가 걷혔다**(`01e5293b`, 요구 `48b13597`). 걷힌 것은 **자리와 그릇 둘뿐**이고 줄의
@@ -1055,26 +1172,46 @@ const RUNNING = "답하는 중";
  *  워커 세션 줄의 순서·상한·값은 서버의 `workerSessions`가 정한다(§7 — `.wip` 전부 + `.done` 10).
  *  `session id`는 안 그린다: UUID 36자이고 사람이 이 화면에서 그 값을 쓸 일이 없다(§6과 같은 자). */
 function SidePanel({
+  project,
   home,
   runningIds,
+  selected,
   noTurns,
   onNew,
   onPick,
+  onPickSchedule,
+  onSchedulesChange,
 }: {
+  project: string;
   home: Panel;
   /** 지금 도는 session id 전부 — **줄의 오른쪽 끝을 정하는 값 하나다**(§24 §도는 대화의 표식).
-   *  두 그룹이 같은 목록을 본다: 대화 줄은 시각이 자리를 내주고, 워커 줄은 비어 있던 자리다. */
+   *  세 그룹이 같은 목록을 본다: 대화·스케줄 줄은 시각이 자리를 내주고, 워커 줄은 비어 있던 자리다. */
   runningIds: string[];
+  /** 세 그룹을 통틀어 지금 서 있는 표식 하나(§34 ③ · §비주얼 §62 (2)). **`home.current`와
+   *  다를 수 있다** — 회차 0건 스케줄을 보는 동안은 그 스케줄의 `id`가 대신 선다(부르는 쪽의
+   *  `pendingSchedule`). */
+  selected: string | null;
   /** `새 대화`를 잠글까 — `턴 0건` **그리고** `그 대화에 도는 것이 없다`(§24 §0건 · `1a925a73`).
    *  판정이 스레드 쪽 상태 둘에서 나오므로 `Panel`에 안 얹고 프롭으로 받는다. */
   noTurns: boolean;
   onNew: () => void;
   onPick: (id: string) => void;
+  onPickSchedule: (s: ScheduleView) => void;
+  onSchedulesChange: (schedules: ScheduleView[]) => void;
 }) {
   // 연 줄 수(§7 §`대화` 목록은 3줄부터) — 저장 안 한다. `SidePanel`이 대화 0건에서만
   // 언마운트되므로(위 §0건) 폴링·전환·새 대화로는 이 값이 안 되돌아간다.
   const [openCount, setOpenCount] = useState(3);
-  const { rows, showMore } = visibleChatRows(chatRows(home.conversations), openCount, home.current);
+  const { rows, showMore } = visibleChatRows(chatRows(home.conversations), openCount, selected);
+  // **스케줄 그룹의 열린 줄 수 — `대화`와 같은 관용구, 별도 상태다**(§비주얼 §62 (1) `더보기` —
+  // "3줄부터 · `더보기`가 3줄씩 연다 · `대화` 그룹과 같은 자"). 두 그룹의 `더보기`가 서로 안
+  // 얽힌다 — 스케줄을 열어도 대화 줄 수는 그대로다.
+  const [scheduleOpenCount, setScheduleOpenCount] = useState(3);
+  const { rows: scheduleRowsVisible, showMore: showMoreSchedules } = visibleChatRows(
+    scheduleRows(home.schedules),
+    scheduleOpenCount,
+    selected,
+  );
   return (
     // 표면 층(§비주얼 §33) — **가르는 쌍에서 드는 것은 목록 쪽 하나다.** 대화 스레드는
     // 무수정이고(산문은 페이지 폭을 그대로 쓴다), 둘 다 얹으면 남는 경계가 `gap-8`뿐이라
@@ -1175,10 +1312,10 @@ function SidePanel({
                     금지한 4.34다. */}
                 <SidebarMenuButton
                   className={ROW}
-                  isActive={r.id === home.current}
-                  aria-current={r.id === home.current ? "true" : undefined}
+                  isActive={r.id === selected}
+                  aria-current={r.id === selected ? "true" : undefined}
                   onClick={() => {
-                    if (r.id !== home.current) onPick(r.id);
+                    if (r.id !== selected) onPick(r.id);
                   }}
                 >
                   {/* 체크 칸이 걷혀 줄 안쪽이 238px이다(§34 ③) — 제목이 ≈14자에서 잘린다
@@ -1208,6 +1345,67 @@ function SidePanel({
           </SidebarMenu>
         </SidebarGroup>
 
+      {/* `스케줄` (§7-2 §화면 · §비주얼 §62) — **셋째 그릇이지만 둘째 자리다**(`대화`와
+          `워커 세션` 사이). 머리 행은 스케줄이 0개여도 선다(§62 (1) §0건 — 이 그룹이 §24 §0건의
+          예외다: 저 둘은 목록 밖에 입구가 있지만 스케줄의 입구는 이 머리 행 하나뿐이다). */}
+      <SidebarGroup className="p-0">
+        <SidebarGroupLabel className="h-6 text-muted-foreground">
+          스케줄
+          <ScheduleCreateDialog project={project} onCreated={onSchedulesChange} />
+        </SidebarGroupLabel>
+        {home.schedules.length > 0 && (
+          <SidebarMenu aria-label="스케줄">
+            {scheduleRowsVisible.map((r) => {
+              const sched = home.schedules.find((s) => s.id === r.id);
+              if (!sched) return null;
+              return (
+                <SidebarMenuItem key={r.id}>
+                  {/* **`워커 세션` 줄과 같은 문자열이다**(§62 (2)) — 갈리는 클래스가
+                      `items-start` 하나. 삭제가 서면서 이 줄만 `pr-8`이 붙어 오른쪽 끝이
+                      다른 두 그룹보다 24px 왼쪽이다(부품의 `group-has-data-*` 자동 패딩 —
+                      덮을 클래스 0). */}
+                  <SidebarMenuButton
+                    className={cn(ROW, "items-start")}
+                    isActive={r.id === selected}
+                    aria-current={r.id === selected ? "true" : undefined}
+                    onClick={() => {
+                      if (r.id !== selected) onPickSchedule(sched);
+                    }}
+                  >
+                    <div className="flex min-w-0 grow flex-col gap-0.5">
+                      <div className="flex items-center gap-2">
+                        {/* **제목 전문이 `title`로 선다 — 이 줄에만 그렇다**(§62 (2)): 회차
+                            0건인 스케줄에는 전문을 볼 다른 자리(첫 말풍선 · 상세)가 없다. */}
+                        <span className="min-w-0 grow truncate text-sm" title={sched.prompt}>
+                          {r.title}
+                        </span>
+                        {sched.session_id !== "" && runningIds.includes(sched.session_id) && (
+                          <span className={MARK}>{RUNNING}</span>
+                        )}
+                      </div>
+                      {/* 아랫줄 = 다음 예정 시각 하나(§62 (3)) — 갈래를 낱말로 같이 안 적는다.
+                          `<StatusBadge>`도 안 쓴다: 그 배지는 이 패널에서 이미 *티켓이 `.wip`*을
+                          말하고 스케줄에는 티켓이 없다. */}
+                      <span className={SCHEDULE_TIME}>{r.time}</span>
+                    </div>
+                  </SidebarMenuButton>
+                  <ScheduleDeleteAction project={project} schedule={sched} onDeleted={onSchedulesChange} />
+                </SidebarMenuItem>
+              );
+            })}
+            {/* `더보기` — `대화` 그룹의 그것과 같은 벌이다(§62 (1)). 삭제도 시각도 안 든다:
+                패널 자신의 컨트롤이지 스케줄이 아니다. */}
+            {showMoreSchedules && (
+              <SidebarMenuItem>
+                <SidebarMenuButton className={ROW} onClick={() => setScheduleOpenCount((c) => c + 3)}>
+                  <span className="min-w-0 grow truncate text-sm text-muted-foreground">더보기</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            )}
+          </SidebarMenu>
+        )}
+      </SidebarGroup>
+
       {/* `워커 세션` (§24 §좌측 패널 · §7 §워커 세션 목록) — 0건이면 **그룹째** 안 그린다.
           한 줄이 **2행**인 것은 담는 사실이 다섯이라서다(워커 · 제목 · 해시 · 도는지 · 지금 것):
           256px 한 줄에 넣으면 제목이 5자에서 잘려 식별이 안 된다. 시각을 안 그린다 — 이 그룹의
@@ -1227,10 +1425,10 @@ function SidePanel({
               // 갈리는 클래스가 `items-start` 하나다 — 2줄 묶음이 통째로 앉고 부품 기본
               // `items-center`를 덮는다(§24 한 줄의 모양 표). 잠금은 여기서도 걷혔다(위).
               className={cn(ROW, "items-start")}
-              isActive={w.id === home.current}
-              aria-current={w.id === home.current ? "true" : undefined}
+              isActive={w.id === selected}
+              aria-current={w.id === selected ? "true" : undefined}
               onClick={() => {
-                if (w.id !== home.current) onPick(w.id);
+                if (w.id !== selected) onPick(w.id);
               }}
             >
               <div className="flex min-w-0 grow flex-col gap-0.5">
@@ -1267,5 +1465,290 @@ function SidePanel({
       )}
       </SidebarContent>
     </Sidebar>
+  );
+}
+
+/** 화면의 갈래 넷(§비주얼 §62 (5)) — `when`에 저장되는 값은 §7-2 §단발과 주기가 한 칸에
+ *  담긴다의 형식 그대로다. 낱말이 `단발`이 아니라 `한 번만`인 이유는 §0-9다 — 화면의 말은
+ *  사람의 말이고 `단발`은 이 문서의 어휘다. */
+type ScheduleKind = "once" | "daily" | "weekly" | "monthly";
+
+/** `SelectValue`는 `items`를 안 준 Root에서 값 문자열 그대로를 그린다(`ticket-ui.tsx`의 같은
+ *  주석) — `once`·`daily` 같은 내부 값이 트리거에 그대로 나온다. 렌더 프롭으로 라벨을 덮는다
+ *  (`personas-ui.tsx`의 엔진 select와 같은 처방). */
+const KIND_LABEL: Record<ScheduleKind, string> = { once: "한 번만", daily: "매일", weekly: "매주", monthly: "매월" };
+
+const WEEKDAYS = [
+  { label: "월", value: "1" },
+  { label: "화", value: "2" },
+  { label: "수", value: "3" },
+  { label: "목", value: "4" },
+  { label: "금", value: "5" },
+  { label: "토", value: "6" },
+  { label: "일", value: "0" },
+];
+
+/** `매월`의 일 — **1~28뿐이다**(§7-2 §단발과 주기가 한 칸에 담긴다 §매월의 일이 28까지인
+ *  이유 — 29~31을 허용하면 그 날이 없는 달에 회차가 조용히 없어진다). */
+const MONTH_DAYS = Array.from({ length: 28 }, (_, i) => String(i + 1));
+
+/** 갈래 넷 → `when`(§7-2 §단발과 주기가 한 칸에 담긴다). cron 필드 순서는 `home-agent.ts`의
+ *  `matchesCronMinute`과 같다(분 · 시 · 일 · 월 · 요일) — 이 순서가 갈리면 화면이 만든 스케줄이
+ *  서버에서 다른 요일 · 다른 날에 돈다. `date`·`time`이 아직 비어 있으면 빈 문자열을 낸다 —
+ *  호출부의 `disabled`가 이미 그 창을 막으므로 여기서 값을 지어내지 않는다. */
+function buildWhen(kind: ScheduleKind, date: string, time: string, weekday: string, day: string): string {
+  if (kind === "once") return date ? new Date(date).toISOString() : "";
+  if (!time) return "";
+  const [h, m] = time.split(":");
+  if (kind === "daily") return `${Number(m)} ${Number(h)} * * *`;
+  if (kind === "weekly") return `${Number(m)} ${Number(h)} * * ${weekday}`;
+  return `${Number(m)} ${Number(h)} ${day} * *`;
+}
+
+/** §6 에러 3요소 중 1·2번 — `epic-sidebar-create.tsx`의 `Failure`와 같은 값이다. */
+function ScheduleFailure({ message }: { message: string }) {
+  return (
+    <Alert variant="destructive">
+      <TriangleAlert aria-hidden />
+      <AlertTitle>스케줄을 만들지 못했습니다</AlertTitle>
+      <AlertDescription>
+        <span className="font-mono text-xs break-all">{message}</span>
+      </AlertDescription>
+    </Alert>
+  );
+}
+
+/** `스케줄` 머리 행의 `새 스케줄`(§비주얼 §62 (4)(5)) — 조립은 `epic-sidebar-create.tsx`가
+ *  이미 선 그것이다(그 파일 머리 주석 — "사이드바 그룹 머리의 버튼이 다이얼로그를 여는 화면이
+ *  이 앱에 이미 있다"). **cron 문자열은 한 자도 화면에 안 보인다** — 갈래 넷이 `when` 한 칸으로
+ *  접히고 사람은 낱말(반복 · 시각 · 문장)만 본다(§62 §검증 (11)).
+ *
+ *  **패널 안이 아니라 다이얼로그다**(§62 (5)) — 207px 레일에 select 둘 + 시각 + textarea가
+ *  안 들고, 만드는 폼은 이 앱에서 늘 다이얼로그였다. 화면은 안 옮긴다 — 성공하면 다이얼로그만
+ *  닫고 부모가 받은 `onCreated`가 목록을 갈아 끼운다. */
+function ScheduleCreateDialog({
+  project,
+  onCreated,
+}: {
+  project: string;
+  onCreated: (schedules: ScheduleView[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [kind, setKind] = useState<ScheduleKind>("once");
+  const [date, setDate] = useState("");
+  const [time, setTime] = useState("");
+  const [weekday, setWeekday] = useState("1");
+  const [day, setDay] = useState("1");
+  const [prompt, setPrompt] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+
+  // 열 때도 닫을 때도 초기화한다(`epic-sidebar-create.tsx`와 같은 값) — 취소 · `Esc` ·
+  // 바깥 클릭 다 이 길이다(§62 (5) §닫으면 — "세 칸을 초기값으로 되돌린다").
+  const reset = () => {
+    setKind("once");
+    setDate("");
+    setTime("");
+    setWeekday("1");
+    setDay("1");
+    setPrompt("");
+    setError(null);
+  };
+
+  // `만들기` 잠금(§62 (5)) — "시각과 문장이 둘 다 비어 있지 않을 때만 열린다". 시각 칸은
+  // 갈래마다 다른 컨트롤이라 판정도 갈래를 본다 — `once`는 `date`, 나머지는 `time`이다
+  // (요일 · 일은 select라 기본값이 있어 늘 채워져 있다).
+  const timeFilled = kind === "once" ? date !== "" : time !== "";
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o);
+        reset();
+      }}
+    >
+      <DialogTrigger render={<Button variant="ghost" size="xs" className="ml-auto text-foreground" />}>
+        새 스케줄
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>새 스케줄</DialogTitle>
+          {/* 화면이 말해야 하는 사실 — 자리 (1/2)(§62 (7)). 회차 0건 판정 문장의 `action`과
+              **한 글자까지 같다**. */}
+          <DialogDescription>
+            정한 시각에 홈 에이전트가 이 문장을 수행합니다. 이 앱이 떠 있는 동안에만 돕니다 —
+            꺼져 있던 사이의 회차는 앱을 켤 때 한 번만 늦게 돕니다.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="schedule-kind">반복</Label>
+            <Select value={kind} onValueChange={(v) => setKind(v as ScheduleKind)}>
+              {/* 여는 초점 — 첫 칸이 나머지 칸의 모양을 정한다(§62 (5), 에픽 다이얼로그의 첫
+                  `Input`과 같은 자리). */}
+              <SelectTrigger id="schedule-kind" autoFocus className="w-full">
+                <SelectValue>{KIND_LABEL[kind]}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="once">한 번만</SelectItem>
+                <SelectItem value="daily">매일</SelectItem>
+                <SelectItem value="weekly">매주</SelectItem>
+                <SelectItem value="monthly">매월</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="schedule-time">시각</Label>
+            {/* 갈래마다 컨트롤이 하나 또는 둘로 갈린다(§62 (5) §갈래 넷) — 라벨은 `시각` 하나로
+                안 갈린다. **네이티브 입력이다 — 캘린더 라이브러리 0개**(§1-4와 같은 판정). */}
+            {kind === "once" && (
+              <Input
+                id="schedule-time"
+                type="datetime-local"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+              />
+            )}
+            {kind === "daily" && (
+              <Input id="schedule-time" type="time" value={time} onChange={(e) => setTime(e.target.value)} />
+            )}
+            {kind === "weekly" && (
+              <div className="flex gap-2">
+                <Select value={weekday} onValueChange={(v) => setWeekday(v ?? "1")}>
+                  <SelectTrigger className="w-24">
+                    <SelectValue>{WEEKDAYS.find((w) => w.value === weekday)?.label}</SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {WEEKDAYS.map((w) => (
+                      <SelectItem key={w.value} value={w.value}>
+                        {w.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Input
+                  id="schedule-time"
+                  type="time"
+                  className="grow"
+                  value={time}
+                  onChange={(e) => setTime(e.target.value)}
+                />
+              </div>
+            )}
+            {kind === "monthly" && (
+              <div className="space-y-1">
+                <div className="flex gap-2">
+                  <Select value={day} onValueChange={(v) => setDay(v ?? "1")}>
+                    <SelectTrigger className="w-24">
+                      <SelectValue>{day}일</SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {MONTH_DAYS.map((d) => (
+                        <SelectItem key={d} value={d}>
+                          {d}일
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    id="schedule-time"
+                    type="time"
+                    className="grow"
+                    value={time}
+                    onChange={(e) => setTime(e.target.value)}
+                  />
+                </div>
+                {/* 없는 항목은 사람이 고장으로 읽는다(§62 (5)) — 28로 닫은 근거를 화면이
+                    한 번 말한다. `말일`이라는 값을 발명하지 않는다. */}
+                <p className="text-xs text-muted-foreground">
+                  29일부터 31일까지는 없는 달이 있어서 고를 수 없습니다.
+                </p>
+              </div>
+            )}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="schedule-prompt">문장</Label>
+            <Textarea
+              id="schedule-prompt"
+              rows={4}
+              placeholder="답변 대기 티켓을 훑고 사람이 답할 것이 있으면 요구사항으로 올려라."
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+            />
+          </div>
+          {error && <ScheduleFailure message={error} />}
+        </div>
+        <DialogFooter>
+          <DialogClose render={<Button variant="outline" />}>취소</DialogClose>
+          <Button
+            disabled={pending || !prompt.trim() || !timeFilled}
+            onClick={() =>
+              start(async () => {
+                const when = buildWhen(kind, date, time, weekday, day);
+                const r = await createSchedule(project, when, prompt);
+                if (r.ok) {
+                  onCreated(r.schedules);
+                  setOpen(false);
+                  reset();
+                } else {
+                  setError(r.error);
+                }
+              })
+            }
+          >
+            {pending ? "만드는 중…" : "만들기"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** 줄마다 삭제(§비주얼 §62 (4)) — `SidebarMenuAction` + `alert-dialog`. **이 패널의 첫 행
+ *  액션이다**(상시 노출 — `showOnHover`를 안 쓴다). 되돌리는 길이 화면에 0개라서 확인을
+ *  끼운다: 지운 줄은 `schedules`에서 빠지고 `conversations`에도 없어서 그 스레드로 가는 길이
+ *  사라진다. **트랜스크립트는 안 지운다**(`~/.claude`는 남의 디렉터리다). */
+function ScheduleDeleteAction({
+  project,
+  schedule,
+  onDeleted,
+}: {
+  project: string;
+  schedule: ScheduleView;
+  onDeleted: (schedules: ScheduleView[]) => void;
+}) {
+  const [pending, start] = useTransition();
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger render={<SidebarMenuAction className="size-6" />}>
+        <Trash2 aria-hidden />
+        <span className="sr-only">스케줄 삭제</span>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>스케줄을 지웁니다</AlertDialogTitle>
+          <AlertDialogDescription>
+            {schedule.prompt.split("\n")[0] || schedule.prompt}
+            <br />
+            지난 회차의 대화를 화면에서 다시 열 수 없습니다.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel autoFocus>취소</AlertDialogCancel>
+          <AlertDialogAction
+            variant="destructive"
+            disabled={pending}
+            onClick={() =>
+              start(async () => {
+                onDeleted(await deleteSchedule(project, schedule.id));
+              })
+            }
+          >
+            삭제
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }

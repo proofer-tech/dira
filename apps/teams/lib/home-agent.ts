@@ -217,6 +217,35 @@ export function judgeSchedule({ when, lastDueMs, createdMs, nowMs }: ScheduleJud
   return due;
 }
 
+/** §비주얼 §62 (3) §다음 예정 시각 — `judgeSchedule`과 짝인 순수 함수다. 저건 "지금 돌아야
+ *  하나"를 묻는 트리거고 이건 "다음엔 언제 돌 것 같나"를 묻는 화면의 값이다 — 트리거가 아니라서
+ *  결과를 저장하지 않는다(호출마다 다시 잰다). **단발**은 자기 시각이 유일한 값이라 `last`가
+ *  있으면(이미 돌았다) `overdue`이고, 없어도 `judgeSchedule`이 다시 못 돌릴 만큼 지났으면
+ *  (`at <= windowStart`, `judgeSchedule`과 같은 셈) 역시 `overdue`다. **반복**은 정의상 항상
+ *  다음 맞는 미래 분이라 `overdue`가 설 자리가 없다 — 그래서 갈래 두 함수가 아니라 한 함수의
+ *  두 분기다. */
+export function nextScheduleDue(
+  { when, created, last }: Pick<Schedule, "when" | "created" | "last">,
+  nowMs: number = Date.now(),
+): { at: number; overdue: boolean } {
+  if (isOnceWhen(when)) {
+    const at = Date.parse(when);
+    if (last) return { at, overdue: true };
+    const createdMs = Date.parse(created);
+    const windowStart = Math.max(Number.isFinite(createdMs) ? createdMs : nowMs, nowMs - SCHEDULE_LOOKBACK_MS);
+    return { at, overdue: at <= windowStart };
+  }
+  // 다음 맞는 분을 앞으로 훑는다 — 최악(매월 28일)도 31일 = 44,640분이라 `judgeSchedule`의 같은
+  // 셈으로 트리비얼하다. 화면의 갈래 넷이 `dom`을 1~28로 닫아 두므로 이 창 안에 반드시 있다.
+  const start = Math.floor(nowMs / 60_000) + 1;
+  const end = start + SCHEDULE_LOOKBACK_MS / 60_000;
+  for (let m = start; m <= end; m++) {
+    const t = m * 60_000;
+    if (matchesCronMinute(when, new Date(t))) return { at: t, overdue: false };
+  }
+  return { at: nowMs, overdue: false }; // 못 찾을 리 없다 — 위 문단이 근거다(방어값)
+}
+
 /** 저장 형식(§7-2 §저장) 그대로. `home-sessions.json`의 그 프로젝트 값에 `schedules` 배열 한
  *  칸으로 산다 — `Conversation`과 같은 파일, 같은 원자적 쓰기(`writeHome`)를 탄다. */
 export type Schedule = {
@@ -233,6 +262,17 @@ export type Schedule = {
   /** 마지막으로 판정한 예정 시각과 그때의 실제 시각 — <돌았나>를 담지 않는다(§7-2) */
   last?: { due: string; at: string };
 };
+
+/** 패널 줄이 그리는 값 — `Schedule`에 `nextScheduleDue`의 결과를 얹는다. 화면(client)은
+ *  `isOnceWhen`·`matchesCronMinute` 같은 값 함수를 이 파일에서 못 가져온다(`node:fs` import가
+ *  섞여 있어 클라이언트 번들이 안 된다 — `lib/urls.ts` 머리 주석과 같은 선) — 그래서 서버가
+ *  이미 계산해 데이터로 내려보낸다. `lib/urls.ts`의 `scheduleRows`가 이 값을 문자열로만 접는다. */
+export type ScheduleView = Schedule & { at: number; overdue: boolean };
+
+/** 폴링·서버 액션 응답에 실어 보낼 스케줄 목록 — `readHome`이 주는 원본에 화면용 값을 얹는다. */
+export function scheduleViews(schedules: Schedule[], nowMs: number = Date.now()): ScheduleView[] {
+  return schedules.map((s) => ({ ...s, ...nextScheduleDue(s, nowMs) }));
+}
 
 /** 한 줄의 관문. **못 읽는 `when`은 없는 것으로 친다**(`parseHome`의 대화 관문과 같은 선) —
  *  `id`·`prompt`도 형이 아니면 같이 없는 줄이다. `session_id`는 형만 본다(빈 값·깨진 값이어도
@@ -392,6 +432,10 @@ export async function switchConversation(projectId: string, sessionId: string): 
   const home = await readHome(projectId);
   const known =
     home.conversations.some((c) => c.id === sessionId) ||
+    // 회차가 있는 스케줄 줄(§7-2 §고르면 무엇이 서나 — 워커 세션 줄과 같은 자다: `current`가
+    // 그 `session_id`가 된다). 아직 한 번도 안 돈 스케줄은 `session_id`가 빈 문자열이라 여기
+    // 걸리지 않는다 — 그 줄을 고르는 것은 화면이 로컬로 처리한다(§비주얼 §62 (6)).
+    home.schedules.some((s) => s.session_id === sessionId) ||
     (await workerSessionsById(projectId)).some((w) => w.id === sessionId);
   if (!known) return false;
   await writeHome(projectId, { ...home, current: sessionId });
@@ -1271,6 +1315,40 @@ export async function startAsk(
   return null;
 }
 
+// ── 스케줄 만들기 - 지우기 (§7-2 §화면 - §비주얼 §62 (4)(5)) ─────────────────
+//
+// 화면이 부르는 쪽이다(위 `newConversation`·`switchConversation`과 같은 층). `when`은
+// 클라이언트가 갈래 넷을 접어 만든 문자열이라 **신뢰 경계 값이다** — 클라이언트 검증(폼의
+// `disabled`)은 검증이 아니라서 여기서 `isValidWhen`을 다시 본다.
+
+/** `새 스케줄` 다이얼로그의 `만들기` — 갈래 넷이 이미 `when` 한 칸으로 접힌 값을 받는다(§7-2
+ *  §단발과 주기가 한 칸에 담긴다). 빈 문장이나 못 읽는 `when`은 **줄을 안 만들고 `null`을 낸다** —
+ *  빈 문장은 아무 말도 안 하는 회차를 영영 반복하고, 못 읽는 `when`은 `parseSchedule`의 관문에
+ *  걸려 다음 읽기부터 없는 줄이 된다(사람이 방금 만든 줄이 새로고침하면 사라지는 유령이 된다). */
+export async function createSchedule(projectId: string, when: string, prompt: string): Promise<Schedule | null> {
+  const p = prompt.trim();
+  if (!p || !isValidWhen(when)) return null;
+  const home = await readHome(projectId);
+  const row: Schedule = { id: randomUUID(), created: new Date().toISOString(), when, prompt: p, session_id: "" };
+  await writeHome(projectId, { ...home, schedules: [...home.schedules, row] });
+  return row;
+}
+
+/** `스케줄 삭제`(§7-2 §안 하는 것 — 켜고 끄기 대신 이 자리가 받는다). **트랜스크립트는 안
+ *  지운다**(`~/.claude`는 남의 디렉터리다) — 지우는 것은 이 배열의 줄 하나뿐이라 그 스레드로
+ *  가는 길이 화면에서 사라질 뿐이다(§비주얼 §62 (4) §확인을 끼우는 이유). */
+export async function deleteSchedule(projectId: string, id: string): Promise<void> {
+  const home = await readHome(projectId);
+  await writeHome(projectId, { ...home, schedules: home.schedules.filter((s) => s.id !== id) });
+}
+
+/** 만들기·삭제 뒤 화면이 즉시 받아 갈 최신 목록(§비주얼 §24 로딩 항 — 다음 5초/폴링을 안
+ *  기다린다). `readHome`을 다시 부르는 것이 값이다: 같은 파일에 쓰는 다른 탭·회차와 겹쳐도
+ *  이 함수가 방금 쓴 값이 아니라 **지금 파일에 있는 값**을 낸다. */
+export async function readScheduleViews(projectId: string, nowMs: number = Date.now()): Promise<ScheduleView[]> {
+  return scheduleViews((await readHome(projectId)).schedules, nowMs);
+}
+
 // ── 스케줄 디스패치 (§7-2 §깨우는 것은 앱의 서버다) ──────────────────────────
 //
 // **하트비트(`machine-state.ts`)가 매 틱 부르는 것 하나** — 새 타이머 0 · 새 프로세스 0 ·
@@ -1371,6 +1449,10 @@ export type HomeChunk = {
    *  이유도 같다 — 화면이 아는 전부가 이 응답 하나다. 출처만 다르다(저건 우리가 쓴 파일이고
    *  이건 큐에서 파생된다). 못 읽으면 빈 목록이다(`listWorkerSessions`) */
   workers: WorkerSession[];
+  /** **좌측 패널의 스케줄 그룹**(§7-2 §화면 · §비주얼 §62). 대화·워커 세션과 같은 응답에 담는
+   *  이유도 같다 — `readHome`이 이미 `schedules`를 들고 있다(공짜다). `at`·`overdue`는
+   *  `scheduleViews`가 이 폴링 시각 기준으로 얹는 값이라 화면은 시계를 다시 안 잰다. */
+  schedules: ScheduleView[];
   turns: Turn[];
   offset: number;
   /** 세션이 갈렸다(`새 대화` 뒤 첫 질문 · 첫 질문 실패 뒤 재시도) — 화면은 **갈아 끼운다** */
@@ -1460,14 +1542,21 @@ export async function pollHome(
   /** 나가는 문 셋이 **같은 판정 하나**를 지난다 — 둘이 예외 경로라 잊기 쉬운 자리다 */
   const chunk = (c: Omit<HomeChunk, "done">): HomeChunk => ({ ...c, done: pollDone(c) });
   // 목록과 `current`를 **한 번에** 읽는다 — 화면이 둘 다 이 응답에서 받는다(위 `conversations`).
-  const { conversations, current } = await readHome(projectId);
+  const { conversations, current, schedules } = await readHome(projectId);
   const workers = await workerSessionsById(projectId);
+  const scheduleList = scheduleViews(schedules);
   // **`current`가 아무것도 안 가리킬 수 있다.** 보던 워커 세션의 티켓이 큐에서 사라지면 이름도
   // 줄도 없다 — 그때는 **대화 0건과 같다**(§7 §고르면 홈 대화 스레드에 열린다: 온보딩이 선다.
   // 트랜스크립트는 안 지운다). **실패 ⑤가 아니다** — 그건 줄이 있는데 트랜스크립트만 없는
   // 경우고(§비주얼 §24 다섯 상태 에러), 둘을 가르는 것이 이 판정 하나다.
+  // **회차가 있는 스케줄도 여기 걸린다**(§7-2 §고르면 무엇이 서나 — 워커 세션 줄과 같은 자다).
+  // 아직 안 돈 스케줄은 `session_id`가 빈 문자열이라 `current`가 그 값이 될 수 없다 — 그 줄을
+  // 고르는 것은 화면이 로컬로 처리한다(§비주얼 §62 (6), `home-ui.tsx`).
   const sid =
-    current && (conversations.some((c) => c.id === current) || workers.some((w) => w.id === current))
+    current &&
+    (conversations.some((c) => c.id === current) ||
+      workers.some((w) => w.id === current) ||
+      schedules.some((s) => s.session_id === current))
       ? current
       : null;
   const reset = sid !== sessionId;
@@ -1504,6 +1593,7 @@ export async function pollHome(
       sessionId: null,
       conversations,
       workers,
+      schedules: scheduleList,
       turns: [],
       offset: 0,
       reset,
@@ -1530,6 +1620,7 @@ export async function pollHome(
       sessionId: sid,
       conversations,
       workers,
+      schedules: scheduleList,
       turns: [],
       offset: at,
       reset,
@@ -1571,6 +1662,7 @@ export async function pollHome(
     sessionId: sid,
     conversations,
     workers,
+    schedules: scheduleList,
     turns,
     offset: r.offset,
     reset,

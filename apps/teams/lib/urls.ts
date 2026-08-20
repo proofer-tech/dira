@@ -255,6 +255,29 @@ export function visibleChatRows<T extends { id: string }>(
   return { rows: rows.slice(0, count), showMore: count < rows.length };
 }
 
+/** 홈 좌측 패널 **스케줄** 그룹의 한 줄(§비주얼 §62 (2)(3)) — `chatRows`와 같은 자리, 같은
+ *  이유다(`pnpm test`가 JSX를 못 읽는다). 자르기·`더보기`는 새 함수가 필요 없다 — 반환 모양이
+ *  `chatRows`와 같은 `{ id · title · time }`이라 **`visibleChatRows`를 그대로 다시 쓴다**.
+ *
+ *  **정렬은 안 한다** — §62 (9)가 "`schedules` 배열 순서(만든 순)"로 못박았다: 다음 예정
+ *  시각으로 정렬하면 매일 스케줄 셋의 순서가 자정마다 뒤집힌다.
+ *
+ *  `title`은 `prompt`의 첫 줄(§7-2 §저장 — 스케줄에는 `title` 칸이 없다). `time`은
+ *  `dateTimeLabel`(대화 목록과 다른 자리에 이미 있는 그 서식 — §62 (3)이 "새 서식이 아니라
+ *  같은 어휘 두 칸을 이어 붙인 것"이라 적은 값)에 지난 단발이면 `지남` 한 낱말을 붙인다.
+ *  `at`·`overdue`는 **서버**(`home-agent.ts`의 `nextScheduleDue`)가 이미 잰 값이다 — 여기서
+ *  cron을 다시 읽지 않는다: 그 판정 함수는 `node:fs`가 섞인 파일에 있어 클라이언트 번들에
+ *  못 들어온다(이 파일 머리 주석과 같은 선). */
+export function scheduleRows(
+  schedules: { id: string; prompt: string; at: number; overdue: boolean }[],
+  now = Date.now(),
+): { id: string; title: string; time: string }[] {
+  return schedules.map((s) => {
+    const label = dateTimeLabel(s.at, now);
+    return { id: s.id, title: s.prompt.split("\n")[0] || s.prompt, time: s.overdue ? `${label} 지남` : label };
+  });
+}
+
 /** 세션 스트림(§2-1)의 사건 줄을 **펼칠 수 있나** — 셰브런·`<details>`를 거는 유일한 판정.
  *  본문이 없으면 펼쳐도 빈 상자라 어포던스를 주지 않는다: `thinking` 본문은 암호화돼
  *  빈 문자열로 오는 게 전부다(실측 75/75). §2-1의 계약은 "펼치면 원문"이고, 원문이 없는 줄에서

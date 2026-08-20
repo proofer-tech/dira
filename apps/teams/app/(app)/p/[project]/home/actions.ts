@@ -13,14 +13,18 @@
  *  모르는 것이라 폴링이 직접 읽는다. 티켓도 레지스트리도 안 바뀌므로 다시 그릴 화면이 없다. */
 import { verifyAttachments, withAttachments } from "@/lib/attachments";
 import {
+  createSchedule as createScheduleRow,
+  deleteSchedule as deleteScheduleRow,
   newConversation,
   pollHome,
+  readScheduleViews,
   readSessionId,
   startAsk,
   stopAsk,
   switchConversation,
   type Answer,
   type HomeChunk,
+  type ScheduleView,
 } from "@/lib/home-agent";
 import { getProject } from "@/lib/projects";
 
@@ -69,6 +73,7 @@ export async function pollHomeAnswer(
       sessionId: null,
       conversations: [], // 못 읽는 큐 = 열 목록도 없다. 패널이 안 그려진다(§24 0건)
       workers: [], // 〃 — 워커 세션은 그 큐에서 파생된다(§7 좌측 패널)
+      schedules: [], // 〃 — 스케줄도 같은 파일에서 파생된다(§7-2)
       turns: [],
       offset: 0,
       reset: true,
@@ -132,4 +137,36 @@ export async function switchHome(projectId: string, sessionId: string): Promise<
     // 등록이 풀린 프로젝트 — 갈아 끼울 것이 없다. 아래 폴링이 빈 대화로 물러난다(위와 같은 선)
   }
   return pollHomeAnswer(projectId, null, 0);
+}
+
+/** `새 스케줄` 다이얼로그의 `만들기`(§비주얼 §62 (5)). **대화·스레드는 안 건드린다** — 그래서
+ *  `pollHomeAnswer`(전체 재폴링)를 안 쓰고 최신 스케줄 목록만 돌려준다: 그걸 쓰면 `sessionId`가
+ *  `null`로 강제되어 지금 보던 대화·워커 세션이 튄다(§24 로딩 항이 막으려는 그 점프).
+ *  실패(빈 문장·못 읽는 `when`)는 `ok: false`로 낸다 — `epic-sidebar-create.tsx`의 `Failure`와
+ *  같은 모양이다. */
+export async function createSchedule(
+  projectId: string,
+  when: string,
+  prompt: string,
+): Promise<{ ok: true; schedules: ScheduleView[] } | { ok: false; error: string }> {
+  try {
+    const project = await required(projectId);
+    const row = await createScheduleRow(project.id, when, prompt);
+    if (!row) return { ok: false, error: "시각 또는 문장을 확인하세요." };
+    return { ok: true, schedules: await readScheduleViews(project.id) };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
+
+/** `스케줄 삭제`(§비주얼 §62 (4)) — 위와 같은 이유로 스케줄 목록만 돌려준다. `alert-dialog`
+ *  확인을 이미 거친 뒤라 실패해도 조용히 물러난다(지울 것이 이미 없으면 그것도 성공과 같다). */
+export async function deleteSchedule(projectId: string, id: string): Promise<ScheduleView[]> {
+  try {
+    const project = await required(projectId);
+    await deleteScheduleRow(project.id, id);
+    return await readScheduleViews(project.id);
+  } catch {
+    return [];
+  }
 }

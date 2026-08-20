@@ -23,6 +23,7 @@ import {
   remainingLabel,
   rowLimit,
   ROW_PAGE,
+  scheduleRows,
   screenOf,
   timeLabel,
   visibleChatRows,
@@ -631,6 +632,30 @@ test("visibleChatRows — 0줄 · 3줄 · 4줄 · 20줄 · current가 창 밖", 
 
   // current가 null(워커 세션을 보는 중) — openCount 그대로, 창 밖 취급을 안 한다
   assert.deepEqual(visibleChatRows(rowsOf(20), 3, null), { rows: rowsOf(3), showMore: true });
+});
+
+/** 스케줄 목록 한 줄 (§비주얼 §62 (2)(3)) — `title`은 `prompt` 첫 줄, `time`은 `dateTimeLabel`
+ *  + 지난 단발이면 `지남`. **정렬은 안 한다**(§62 (9) — `schedules` 배열 순서 그대로, `at`으로
+ *  다시 정렬하면 매일 스케줄 셋의 순서가 자정마다 뒤집힌다). */
+test("scheduleRows — 제목은 prompt 첫 줄 · 시각은 dateTimeLabel · 지난 단발은 `지남` · 정렬 안 함", () => {
+  const now = new Date(2026, 7, 20, 9, 0).getTime();
+  const iso = (...a: [number, number, number, number, number]) => new Date(...a).getTime();
+  const rows = scheduleRows(
+    [
+      // 뒤에 왔지만(만든 순 나중) 시각은 더 이르다 — 그래도 순서가 안 바뀐다(정렬 없음)
+      { id: "s2", prompt: "매일 아침 보드를 훑어라", at: iso(2026, 7, 20, 9, 0), overdue: false },
+      { id: "s1", prompt: "답변 대기 티켓을 훑고\n요구사항으로 올려라", at: iso(2026, 7, 24, 9, 0), overdue: false },
+      { id: "s3", prompt: "릴리스 노트 초안", at: iso(2026, 7, 18, 9, 0), overdue: true },
+    ],
+    now,
+  );
+  assert.deepEqual(rows, [
+    { id: "s2", title: "매일 아침 보드를 훑어라", time: "09:00" }, // 오늘 — HH:MM
+    { id: "s1", title: "답변 대기 티켓을 훑고", time: "8/24 09:00" }, // 다른 날 — M/D HH:MM, 제목은 첫 줄만
+    { id: "s3", title: "릴리스 노트 초안", time: "8/18 09:00 지남" }, // 이미 돈 단발
+  ]);
+
+  assert.deepEqual(scheduleRows([]), []); // 0건 — 머리 행만 서는 화면의 근거다
 });
 
 /** 찾기 바가 훑는 자 (DESIGN.md §7 §대화 안에서 찾기 · §비주얼 §30) — **대소문자 무시
