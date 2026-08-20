@@ -819,6 +819,24 @@ test("unarchivedResumes — 보관 안 된 머신 사건만, `to`가 숫자로 �
   assert.deepStrictEqual(rows, [{ to: 1000, from: 500, kind: "slept" }]);
 });
 
+test("unarchivedResumes — 안 보관한 사건 전부를 `to` 내림차순으로 낸다(상위 N건으로 안 자른다, §0-10 개정 `4ea7e8d9`)", async () => {
+  putAlerts({
+    queues: {},
+    machine: {
+      "1000": { from: 500, kind: "slept", archived: null },
+      "3000": { from: 2500, kind: "poweredOff", archived: null },
+      "2000": { from: 1500, kind: "slept", archived: null },
+      "9000": { from: 8500, kind: "slept", archived: "2026-08-01T00:00:00.000Z" }, // 보관됨 — 안 섞인다
+    },
+  });
+  const alerts = await readAlerts();
+  const rows = unarchivedResumes(alerts);
+  assert.deepStrictEqual(
+    rows.map((r) => r.to),
+    [3000, 2000, 1000], // 전부 셋 - 내림차순
+  );
+});
+
 test("archivedRows — ②⑥의 보관된 사건만 시각 내림차순 한 벌로 섞는다. 판정을 다시 안 돌린다", async () => {
   const root = "/q/a";
   const to = Date.now();

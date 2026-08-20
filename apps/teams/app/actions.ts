@@ -524,12 +524,12 @@ export async function markFailuresReadAction(
   revalidatePath("/", "layout");
 }
 
-/** 알림 ⑥의 `읽음으로 표시`(§0-10 §보관 = 읽음이다). 화면이 그 순간 보인 이벤트의 `to`를
- *  보관한다 — 단위는 이벤트 하나(②처럼 프로젝트 루트를 넘기지 않는다. ⑥은 머신 하나의 상태라
- *  프로젝트 스코프가 아니다). `alerts.json`에 적힌다 — §0-14의 옛 `파일 0개`는 §0-10 §저장이
- *  뒤집었다(편지함은 판정의 창이 아니라 사건의 기록이다). */
-export async function markResumeReadAction(toMs: number): Promise<void> {
-  await markResumeRead(toMs);
+/** 알림 ⑥의 `보관`(§0-10 §보관 = 읽음이다). 화면이 그 순간 나열한 사건 전부의 `to`를 한 번에
+ *  보관한다(②처럼 프로젝트 루트를 넘기지 않는다 — ⑥은 머신 하나의 상태라 프로젝트 스코프가
+ *  아니다). `alerts.json`에 적힌다 — §0-14의 옛 `파일 0개`는 §0-10 §저장이 뒤집었다(편지함은
+ *  판정의 창이 아니라 사건의 기록이다). */
+export async function markResumeReadAction(toMsList: number[]): Promise<void> {
+  await markResumeRead(toMsList);
   revalidatePath("/", "layout");
 }
 

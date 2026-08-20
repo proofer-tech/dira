@@ -1149,13 +1149,14 @@ export function unarchivedFailures(mailbox: Mailbox, root: string): UnarchivedFa
 }
 
 /** ⑥의 켜짐 조건 + 안 보관한 사건 — `machineState()`의 신선도 창에 낀 "지금" 하나가 아니라
- *  편지함이 든 전부를 본다. 화면은 그중 가장 최근(`to` 최대) 하나를 항목의 내용으로 쓴다
- *  (§비주얼 §28 — ⑥은 나열이 없는 항목 하나다). */
+ *  편지함이 든 전부를 낸다(개정 `4ea7e8d9` — §비주얼 §28: ⑥이 나열을 받아 상위 N건으로
+ *  안 자른다). 정렬은 `to` 내림차순 — 화면이 다시 정렬하지 않는다. */
 export type UnarchivedResume = { to: number; from: number; kind: string };
 export function unarchivedResumes(mailbox: Mailbox): UnarchivedResume[] {
   return Object.entries(mailbox.machine)
     .filter(([, e]) => !e.archived)
-    .map(([to, e]) => ({ to: Number(to), from: e.from, kind: e.kind }));
+    .map(([to, e]) => ({ to: Number(to), from: e.from, kind: e.kind }))
+    .sort((a, b) => b.to - a.to);
 }
 
 /** 보관함 목록(§비주얼 §28 ⑨) — ②⑥의 보관된 사건을 시각 내림차순 한 벌로 섞는다. **판정을

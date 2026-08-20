@@ -155,12 +155,9 @@ export default async function ProjectLayout({
     log: f.log,
     at: f.at,
   }));
-  const machineResumes = unarchivedResumes(mailbox);
-  // ⑥은 나열이 없는 항목 하나다(§비주얼 §28) — 안 보관한 것 중 가장 최근(`to` 최대) 하나를 보여준다.
-  const resume: UnarchivedResume | null =
-    machineResumes.length > 0
-      ? machineResumes.reduce((a, b) => (b.to > a.to ? b : a))
-      : null;
+  // ⑥은 안 보관한 사건 전부를 나열로 든다(개정 `4ea7e8d9` — §비주얼 §28). 정렬은
+  // `unarchivedResumes`가 이미 `to` 내림차순으로 낸다 — 여기서 다시 안 정렬한다.
+  const resumes = unarchivedResumes(mailbox);
   // ⑧ 알림용(§4-14 §표식 파일). 판정은 게이트가 이미 했다 — 표식 파일 하나만 읽는다(§판정을
   // 두 벌로 만들지 않는다). 새 fs 읽기 1(다른 여섯은 `readSummary`가 이미 읽어 둔 것을 접는데,
   // 이 값은 그 함수가 안 읽는 자리다).
@@ -179,7 +176,7 @@ export default async function ProjectLayout({
   // 상태가 아니라 사람이 스스로 건 약속이고, 위 일곱이 뜬 판에서는 그것들이 먼저 풀려야 마감도 산다.
   const alerts = {
     offline: current.machine.offline,
-    resume: machineResumes.length > 0,
+    resume: resumes.length > 0,
     // ⑧도 큐를 못 읽으면 꺼진다(§0-10 §켜짐 - 꺼짐) — 판정의 원본이 `<루트>/workers/` 아래
     // 파일 하나라 ②와 같은 자리에서 같이 막힌다.
     gate: current.connected && gate !== null,
@@ -267,7 +264,7 @@ export default async function ProjectLayout({
                     auth={auth}
                     alerts={alerts}
                     authRegistered={authRegistered}
-                    resume={resume}
+                    resumes={resumes}
                     gate={gate}
                     failures={failures}
                     assigned={current.assigned}
@@ -390,7 +387,7 @@ function NotificationItems({
   auth,
   alerts,
   authRegistered,
-  resume,
+  resumes,
   gate,
   failures,
   assigned,
@@ -412,7 +409,7 @@ function NotificationItems({
     due: boolean;
   };
   authRegistered: boolean;
-  resume: UnarchivedResume | null;
+  resumes: UnarchivedResume[];
   gate: GateDirty | null;
   failures: { name: string; reason: string; log: string; at: string }[];
   assigned: { hash: string; stem: string }[];
@@ -433,28 +430,38 @@ function NotificationItems({
         <p className="col-start-2 text-sm text-foreground">{t(locale, "bell.offline.hint")}</p>
       </>
     ),
-    // ⑥ 복귀(§0-14). 유일하게 과거를 말하는 항목이고 신선도 10분이 그것을 이력이 아니게 한다.
-    // 제목은 kind로 갈린다 — `Moon` 같은 한 획으로 둘을 덮지 않는 것과 같은 이유로 문구도 하나가
-    // 아니다. 시각 표기는 `timeLabel`이 아니라 `dateTimeLabel`이다(§비주얼 §28 ⑤ — 다른 날에도
-    // 시각을 안 버린다).
-    resume && (
+    // ⑥ 복귀(§0-14 · §0-10 개정 `4ea7e8d9`). 유일하게 과거를 말하는 항목이고 신선도 10분이
+    // 그것을 이력이 아니게 한다. 제목은 이제 건수다(③④⑦의 `<주어> <n>건` 그 벌) — `kind`는
+    // 나열 행으로 내려갔다. 안 보관한 사건 전부를 그린다 — 상위 N건으로 안 자른다.
+    resumes.length > 0 && (
       <>
         <RotateCcw aria-hidden className="mt-0.5 size-4 text-status-blocked" />
         <p className="col-start-2 text-sm font-medium">
-          {resume.kind === "slept"
-            ? t(locale, "bell.resume.titleSlept")
-            : t(locale, "bell.resume.titleWake")}
+          {t(locale, "bell.resume.titlePrefix")} {resumes.length}
+          {t(locale, "bell.resume.titleSuffix")}
         </p>
-        <p className="col-start-2 text-sm text-foreground">
-          {dateTimeLabel(resume.from)}
-          {t(locale, "bell.resume.middle")} {dateTimeLabel(resume.to)}
-          {t(locale, "bell.resume.after")}
-        </p>
+        <p className="col-start-2 text-sm text-foreground">{t(locale, "bell.resume.body")}</p>
+        {/* 보관함의 ⑥ 행 두 칸 그대로다(§비주얼 §28) — 그릇만 이 칸의 `col-start-2 grid gap-2`고
+            시각 칸의 색이 muted가 아니라 상속(`--foreground`)이다. 시각 표기는 `dateTimeLabel`
+            (다른 날에도 시각을 안 버린다). */}
+        <div className="col-start-2 grid gap-2">
+          {resumes.map((r) => (
+            <span key={r.to} className="flex items-baseline gap-2">
+              <span className="shrink-0 font-mono text-xs tabular-nums">
+                {dateTimeLabel(r.from)} - {dateTimeLabel(r.to)}
+              </span>
+              <span className="shrink-0 text-xs">
+                {r.kind === "slept" ? t(locale, "bell.archive.kindSlept") : t(locale, "bell.archive.kindWake")}
+              </span>
+            </span>
+          ))}
+        </div>
         <p className="col-start-2 text-sm text-foreground">{t(locale, "bell.resume.noAction")}</p>
-        {/* ②와 같은 벌 — 행의 오른쪽 끝(§비주얼 §4-3). ⑤는 무수정이다(§0-14 §읽음 처리 — 살아
+        {/* ②와 같은 벌 — 행의 오른쪽 끝(§비주얼 §4-3). 누르면 그 순간 나열된 사건 전부가
+            보관된다(§0-10 §보관 — 개정 `4ea7e8d9`). ⑤는 무수정이다(§0-14 §읽음 처리 — 살아
             있는 판정이라 붙이지 않는다). */}
         <span className="col-start-2 flex justify-end">
-          <MarkResumeReadButton toMs={resume.to} />
+          <MarkResumeReadButton toMsList={resumes.map((r) => r.to)} />
         </span>
       </>
     ),

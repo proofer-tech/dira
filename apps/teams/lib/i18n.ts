@@ -274,22 +274,23 @@ export const ko: Record<string, string> = {
   // 개정 `38337fa2`).
   "bell.archive.toggle": "보관함",
   "bell.archive.empty": "보관한 알림 없음",
-  // 보관함 행(⑥) 종류 낱말 — 팝오버 ⑥ 항목의 문장형 제목(`bell.resume.title*`)과 달리
-  // §비주얼 §28 ⑨ 칸 2는 짧은 낱말 자리라 별도 키다(`f2f80429` 판정).
+  // 보관함 행(⑥) 종류 낱말 — 팝오버 ⑥ 항목의 나열 행도 이 키를 그대로 쓴다(개정 `4ea7e8d9`로
+  // ⑥의 제목이 건수가 되면서 `kind`가 나열로 내려갔다 — `f2f80429`가 따로 뗀 근거였던
+  // *문장형 제목과 톤이 갈린다*는 이제 없다).
   "bell.archive.kindSlept": "잠자기",
   "bell.archive.kindWake": "꺼짐",
   "bell.offline.title": "네트워크가 끊겨 있습니다",
   "bell.offline.body":
     "세션이 열리지 못하고 티켓은 그때마다 대기로 돌아갑니다. 연결이 돌아오면 저절로 재개됩니다.",
   "bell.offline.hint": "Wi-Fi 또는 유선 연결을 확인하세요.",
-  "bell.resume.titleSlept": "잠자기에서 복귀했습니다",
-  "bell.resume.titleWake": "꺼져 있다가 켜졌습니다",
-  // `<from>부터 <to>까지 …` — 변수 둘이라 가운데·꼬리로 쪼갠다(`ticket.priority.inherited*`와 같은 조립).
-  "bell.resume.middle": "부터",
-  "bell.resume.after": "까지 큐가 멈춰 있었습니다. 잃은 것은 없습니다 — 이미 다시 돌고 있습니다.",
+  // 제목이 건수다(③④⑦의 `<주어> <n>건` 그 벌 — 개정 `4ea7e8d9`로 `titleSlept`/`titleWake`/
+  // `middle`/`after` 넷에서 갈렸다. `kind`는 나열 행으로 내려갔다).
+  "bell.resume.titlePrefix": "큐가 멈춰 있던 구간",
+  "bell.resume.titleSuffix": "건",
+  "bell.resume.body": "잃은 것은 없습니다 — 이미 다시 돌고 있습니다.",
   "bell.resume.noAction": "고칠 일은 없습니다.",
   // 종 ⑧(§4-14 §표식 파일 · §0-10 ⑧). 본문은 게이트가 표식 첫 줄에 적은 받는 트리 절대경로
-  // 앞에 붙는 꼬리다(`<tree>가 …` — `bell.resume.middle`과 같은 조립 방식, 요구 `90b7d019`).
+  // 앞에 붙는 꼬리다(`<tree>가 …` — `bell.assigned.titlePrefix`와 같은 앞·뒤 조립 방식, 요구 `90b7d019`).
   "bell.gate.title": "커밋 안 된 변경이 디스패치를 막고 있습니다",
   "bell.gate.bodySuffix":
     "가 깨끗해질 때까지 워커가 티켓을 아예 안 집습니다. 고장난 것은 없습니다 - 커밋하거나 되돌리면 다음 tick부터 저절로 재개됩니다.",
@@ -1077,12 +1078,9 @@ export const en: Record<string, string> = {
   "bell.offline.body":
     "Sessions can't open, and every ticket goes back to Open as it happens. It all picks up again on its own once the connection returns.",
   "bell.offline.hint": "Check Wi-Fi or the wired connection.",
-  "bell.resume.titleSlept": "Back from sleep",
-  "bell.resume.titleWake": "The machine was off and came back",
-  // `<from><중간> <to><꼬리>`. **중간이 공백으로 여는 것은 의도다** — 앞에 시각이 공백 없이
-  // 바로 붙는다(`ticket.priority.inheritedMiddle`과 같은 사정).
-  "bell.resume.middle": " to",
-  "bell.resume.after": ": the queue sat stopped. Nothing was lost — it's already running again.",
+  "bell.resume.titlePrefix": "Stretches the queue sat stopped:",
+  "bell.resume.titleSuffix": "",
+  "bell.resume.body": "Nothing was lost — it's already running again.",
   "bell.resume.noAction": "Nothing to fix.",
   "bell.gate.title": "Uncommitted changes are blocking dispatch",
   "bell.gate.bodySuffix":

@@ -160,12 +160,14 @@ export function MarkFailuresReadButton({
   );
 }
 
-/** ⑥ `잠자기·꺼짐에서 복귀`의 `읽음으로 표시` (§0-14 §읽음 처리 · §비주얼 §4-3).
- *  ②의 그 벌 — 행 오른쪽 끝, 초점을 먼저 그릇으로 옮기고, 결과 표시 없이 항목이 사라진다.
+/** ⑥ `잠자기·꺼짐에서 복귀`의 `보관` (§0-14 §읽음 처리 · §0-10 §⑥이 한 항목으로 서고 한 번에
+ *  보관된다 · §비주얼 §4-3). ②의 그 벌 — 행 오른쪽 끝, 초점을 먼저 그릇으로 옮기고, 결과 표시
+ *  없이 항목이 사라진다.
  *
- *  **넘기는 것은 `to` 하나다.** 누르는 사이 병합으로 `to`가 자랐으면 표시가 빗나가 항목이
- *  남는다 — 그것이 맞다(새 사실은 다시 봐야 한다, §0-14). */
-export function MarkResumeReadButton({ toMs }: { toMs: number }) {
+ *  **지금 나열된 사건 전부의 `to`를 그대로 넘긴다**(②의 `MarkFailuresReadButton`과 같은 자리).
+ *  누르는 사이 병합으로 어느 사건의 `to`가 자랐으면 그 사건은 목록에 없던 값으로 넘어가 표시가
+ *  빗나가고 항목이 남는다 — 그것이 맞다(새 사실은 다시 봐야 한다, §0-14). */
+export function MarkResumeReadButton({ toMsList }: { toMsList: number[] }) {
   const [pending, start] = useTransition();
   const t = useT();
   return (
@@ -176,7 +178,7 @@ export function MarkResumeReadButton({ toMs }: { toMs: number }) {
       onClick={(e) => {
         e.currentTarget.closest<HTMLElement>('[data-slot="popover-content"]')?.focus();
         start(async () => {
-          await markResumeReadAction(toMs);
+          await markResumeReadAction(toMsList);
         });
       }}
     >

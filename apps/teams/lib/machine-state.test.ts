@@ -118,17 +118,20 @@ test("recordResumeEvent — 병합으로 to가 자라면 편지함에 새 줄이
   assert.deepStrictEqual(written.machine["200000"], { from: 0, kind: "slept", archived: null });
 });
 
-test("markResumeRead — 그 `to`의 사건에 archived 시각을 적는다 (§0-10 §보관 = 읽음이다)", async () => {
+test("markResumeRead — 목록에 든 `to` 전부의 archived를 한 번에 적는다 (§0-10 §⑥이 한 항목으로 서고 한 번에 보관된다)", async () => {
   rmSync(alertsPath(), { force: true });
-  const ev: ResumeEvent = { from: 0, to: 300_000, kind: "poweredOff" };
-  await recordResumeEvent(ev);
+  const a: ResumeEvent = { from: 0, to: 300_000, kind: "poweredOff" };
+  const b: ResumeEvent = { from: 300_000, to: 400_000, kind: "slept" };
+  await recordResumeEvent(a);
+  await recordResumeEvent(b);
 
-  await markResumeRead(300_000);
+  await markResumeRead([300_000, 400_000]);
   const written = JSON.parse(readFileSync(alertsPath(), "utf8"));
   assert.equal(typeof written.machine["300000"].archived, "string");
+  assert.equal(typeof written.machine["400000"].archived, "string");
 
-  // 편지함에 없는 `to`(상한에 밀렸거나 아직 하트비트가 안 적은 사건)는 조용히 넘어간다.
-  await assert.doesNotReject(markResumeRead(999_999));
+  // 목록에 없는 `to`(상한에 밀렸거나 아직 하트비트가 안 적은 사건)는 조용히 넘어간다.
+  await assert.doesNotReject(markResumeRead([999_999]));
 });
 
 test("recordResumeEvent — 머신 전체 상한 200건, 넘치면 `to`가 이른 것부터 버린다 (§0-10 §무한히 쌓이는 것)", async () => {

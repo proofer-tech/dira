@@ -227,13 +227,10 @@ test("dd97c69c — 연결 안 됨 배너 제목(변수 프로젝트 이름)이 �
   assert.strictEqual(title("myproj"), `프로젝트 "myproj"의 .dira를 읽을 수 없습니다`);
 });
 
-test("dd97c69c — 복귀(⑥) from·to 두 변수 조립이 원문 그대로다", () => {
-  const body = (from: string, to: string) =>
-    `${from}${t("ko", "bell.resume.middle")} ${to}${t("ko", "bell.resume.after")}`;
-  assert.strictEqual(
-    body("14:00", "15:30"),
-    "14:00부터 15:30까지 큐가 멈춰 있었습니다. 잃은 것은 없습니다 — 이미 다시 돌고 있습니다.",
-  );
+test("4ea7e8d9 — 복귀(⑥) 제목이 건수로 조립된다", () => {
+  const resumeTitle = (n: number) =>
+    `${t("ko", "bell.resume.titlePrefix")} ${n}${t("ko", "bell.resume.titleSuffix")}`;
+  assert.strictEqual(resumeTitle(3), "큐가 멈춰 있던 구간 3건");
 });
 
 test("dd97c69c — status bar `% 사용` 뒤에 창 이름이 붙어도 안 붙어도 원문 그대로다", () => {
@@ -270,12 +267,9 @@ test("90be3eeb — 셸 조립 문구가 영어에서도 문장이 된다", () =>
     `${t("en", "shell.error.titlePrefix")} "${name}"${t("en", "shell.error.titleSuffix")}`;
   assert.strictEqual(bannerTitle("myproj"), `Can't read .dira in project "myproj"`);
 
-  const resume = (from: string, to: string) =>
-    `${from}${t("en", "bell.resume.middle")} ${to}${t("en", "bell.resume.after")}`;
-  assert.strictEqual(
-    resume("14:00", "15:30"),
-    "14:00 to 15:30: the queue sat stopped. Nothing was lost — it's already running again.",
-  );
+  const resumeTitle = (n: number) =>
+    `${t("en", "bell.resume.titlePrefix")} ${n}${t("en", "bell.resume.titleSuffix")}`;
+  assert.strictEqual(resumeTitle(3), "Stretches the queue sat stopped: 3");
 
   // idle 풀의 `sr-only` 꼬리는 라벨에 공백 없이 붙는다 — 값이 공백으로 열어야 낭독이 선다
   assert.strictEqual(
