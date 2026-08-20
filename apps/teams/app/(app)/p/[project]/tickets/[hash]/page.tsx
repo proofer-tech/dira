@@ -228,7 +228,7 @@ export default async function TicketDetail({
   // (reap이 `session_id`를 지운다 — `tickets.py` `REAP_CLEAR`)이 남긴 계획도 같이 사라진다 —
   // 그 화면이 말하는 것이 정확히 "어디까지 갔나"다.
   const hasProgress = !!(sessionId || thread.length > 0 || awaiting || plans.length > 0);
-  // 원가 덩이(§비주얼 §63 ①④) — **h2가 서면 선다**, 즉 이 절이 서는 조건과 같다. 창이 없다
+  // 토큰량 덩이(§비주얼 §63 ①④) — **h2가 서면 선다**, 즉 이 절이 서는 조건과 같다. 창이 없다
   // (§2-13 판정 1) — 이 해시를 든 로그 전부를 매 렌더마다 다시 훑되, 끝난 로그는 `usage.ts`의
   // 캐시가 잡는다(§0-8과 같은 Map).
   const costChunk = hasProgress ? await ticketCostChunk(project.root, ticket.hash) : undefined;
@@ -265,7 +265,7 @@ export default async function TicketDetail({
                 있었나** 한 가지를 가리킨다(§0-9 · §2-3 ①). `Card`가 아니라 `<section>` + `h2`다.
                 `SessionStream`이 서는 분기에서는 그 컴포넌트가 이 h2를 머리 줄에 물고 간다
                 (§비주얼 §29 ③ P173) — 여기는 상자 안이 통째로 빌 때만 남는 자리다.
-                원가 덩이도 h2 옆에 같이 선다(§비주얼 §63 ④ — 조건이 h2와 같다). */}
+                토큰량 덩이도 h2 옆에 같이 선다(§비주얼 §63 ④ — 조건이 h2와 같다). */}
             <div className="flex min-w-0 items-baseline gap-2">
               <h2 className="text-sm font-medium">진행 기록</h2>
               {costChunk && (

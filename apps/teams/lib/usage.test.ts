@@ -56,8 +56,8 @@ function putLog(root: string, file: string, rec: object | null): string {
   return full;
 }
 
-/** 실측 모양(2026-08-01). 넷 말고도 필드가 많고 §0-8은 넷만 더한다 — `total_cost_usd`는
- *  §2-13(`ticketCost`)이 읽는다. */
+/** 실측 모양(2026-08-01). 넷 말고도 필드가 많고 §0-8과 §2-13(`ticketCost`) 둘 다 그 넷만
+ *  더한다 — `total_cost_usd`는 실측 그대로 넣어 두지만 §2-13 §개정 뒤로는 아무도 안 읽는다. */
 const usage = (i: number, o: number, cc: number, cr: number, cost = 9.99) => ({
   is_error: false,
   total_cost_usd: cost,
@@ -129,18 +129,18 @@ test("listUsage — 끝난 로그는 캐시하고 안 끝난 로그는 캐시하
 
 // ── §2-13 (티켓·에픽 원가) ────────────────────────────────────────────────
 
-test("ticketCost — 재디스패치 티켓은 그 해시를 든 로그 전부의 합이다 · 창이 없다", async () => {
+test("ticketCost — 재디스패치 티켓은 그 해시를 든 로그 전부의 `usage` 넷의 합이다 · 창이 없다", async () => {
   const root = makeRoot();
-  // 창(5시간) 훨씬 밖인데도 원가는 잡힌다 — §0-8의 창은 여기 안 걸린다.
-  putLog(root, logName(60 * 40, "w1", "21d70200"), usage(0, 0, 0, 1, 10));
-  putLog(root, logName(60 * 20, "w2", "21d70200"), usage(0, 0, 0, 1, 5.5));
-  putLog(root, logName(5, "w1", "21d70200"), usage(0, 0, 0, 1, 9.43));
+  // 창(5시간) 훨씬 밖인데도 토큰량은 잡힌다 — §0-8의 창은 여기 안 걸린다.
+  putLog(root, logName(60 * 40, "w1", "21d70200"), usage(0, 0, 0, 700_000));
+  putLog(root, logName(60 * 20, "w2", "21d70200"), usage(0, 0, 0, 300_000));
+  putLog(root, logName(5, "w1", "21d70200"), usage(0, 0, 0, 100_000));
   // 해시가 다르면 파일명만 보고 건너뛴다 — 합에 안 들어간다
-  putLog(root, logName(5, "w1", "ffffffff"), usage(0, 0, 0, 1, 999));
+  putLog(root, logName(5, "w1", "ffffffff"), usage(0, 0, 0, 999_999));
 
   const c = await ticketCost(root, "21d70200");
   assert.equal(c.sessions, 3);
-  assert.equal(Math.round(c.cost! * 100) / 100, 24.93);
+  assert.equal(c.cost, 1_100_000); // `total_cost_usd`가 아니라 usage 넷의 합
   assert.equal(c.unaccounted, 0);
   assert.equal(c.logFiles, 3);
 });
@@ -161,25 +161,25 @@ test("ticketCost — 합계 0개는 `모름`(cost null) · 로그 있음(unaccou
   assert.equal(noLog.logFiles, 0);
 });
 
-test("ticketCost — 참인 $0을 그대로 낸다 · 캐시를 `listUsage`와 공유한다", async () => {
+test("ticketCost — 참인 0 토큰을 그대로 낸다 · 캐시를 `listUsage`와 공유한다", async () => {
   const root = makeRoot();
-  const done = putLog(root, logName(10, "w1", "cccccccc"), usage(0, 0, 0, 1, 0));
+  const done = putLog(root, logName(10, "w1", "cccccccc"), usage(0, 0, 0, 0));
 
   // listUsage가 먼저 읽어 캐시에 넣는다(모듈 레벨 Map 공유 — §2-13이 §0-8 Map에 얹혀 산다).
   await listUsage(root);
-  writeFileSync(done, JSON.stringify(usage(0, 0, 0, 1, 500)) + "\n"); // 캐시 뒤에 값을 바꿔치기
+  writeFileSync(done, JSON.stringify(usage(0, 0, 0, 500)) + "\n"); // 캐시 뒤에 값을 바꿔치기
   const c = await ticketCost(root, "cccccccc");
   assert.equal(c.cost, 0); // 새로 안 읽었다 — 캐시가 산 것이다. 그리고 0은 `모름`이 아니다
 });
 
-test("ticketCostChunk — 원가 · 세션 수 · 합계 밖 세션 수, `모름`의 title 둘", async () => {
+test("ticketCostChunk — 라벨 `이 티켓` · 토큰량 · 세션 수 · 합계 밖 세션 수, `모름`의 title 둘", async () => {
   const root = makeRoot();
-  putLog(root, logName(5, "w1", "dddddddd"), usage(0, 0, 0, 1, 4.7));
-  putLog(root, logName(6, "w2", "dddddddd"), usage(0, 0, 0, 1, 0));
+  putLog(root, logName(5, "w1", "dddddddd"), usage(0, 0, 0, 4_000_000));
+  putLog(root, logName(6, "w2", "dddddddd"), usage(0, 0, 0, 900_000));
   putLog(root, logName(7, "w1", "dddddddd"), null); // 이 셋째 세션은 아직 안 끝났다
 
   const chunk = await ticketCostChunk(root, "dddddddd");
-  assert.equal(chunk.text, "$4.70 · 세션 2개 · 이 합계에 없는 세션 1개");
+  assert.equal(chunk.text, "이 티켓 4.9M 토큰 · 세션 2개 · 이 합계에 없는 세션 1개");
   assert.equal(chunk.title, undefined); // 값이 있으면 title이 없다(모름 전용)
 
   const missing = await ticketCostChunk(root, "eeeeeeee"); // 로그가 이 해시로 0개
@@ -192,33 +192,34 @@ test("ticketCostChunk — 원가 · 세션 수 · 합계 밖 세션 수, `모름
   assert.match(wip.title!, /로그 1개에 종료 기록이 없습니다/);
 });
 
-test("epicCost · epicCostChunk — 티켓들의 합 · 아는 티켓 수 / 전체", async () => {
+test("epicCost · epicCostChunk — 티켓들의 `usage` 합 · 라벨 `이 에픽` · 아는 티켓 수 / 전체", async () => {
   const root = makeRoot();
-  putLog(root, logName(5, "w1", "11111111"), usage(0, 0, 0, 1, 2.5));
-  putLog(root, logName(5, "w1", "22222222"), usage(0, 0, 0, 1, 1.5));
+  putLog(root, logName(5, "w1", "11111111"), usage(0, 0, 0, 2_500_000));
+  putLog(root, logName(5, "w1", "22222222"), usage(0, 0, 0, 1_500_000));
   // "33333333"은 로그가 0개 — `모름`이라 합에서 빠지지만 분모에는 든다
 
   const c = await epicCost(root, ["11111111", "22222222", "33333333"]);
-  assert.equal(c.cost, 4);
+  assert.equal(c.cost, 4_000_000);
   assert.equal(c.known, 2);
   assert.equal(c.total, 3);
 
   const chunk = await epicCostChunk(root, ["11111111", "22222222", "33333333"]);
-  assert.equal(chunk, "$4.00 · 원가를 아는 티켓 2 / 3");
+  assert.equal(chunk, "이 에픽 4.0M 토큰 · 토큰량을 아는 티켓 2 / 3");
 
   // 아는 수 == 전체면 분수가 안 선다(`60/60`은 아무 말도 안 한다)
   const full = await epicCostChunk(root, ["11111111", "22222222"]);
-  assert.equal(full, "$4.00");
+  assert.equal(full, "이 에픽 4.0M 토큰");
 
   // 티켓 0개 — 덩이 자체가 안 선다
   assert.equal(await epicCostChunk(root, []), null);
 });
 
-test("formatCost — 축약 없이 소수 두 자리 고정 · 천 단위 구분", () => {
-  assert.equal(formatCost(4.7), "$4.70");
-  assert.equal(formatCost(0), "$0.00");
-  assert.equal(formatCost(1204.35), "$1,204.35");
-  assert.equal(formatCost(24.926), "$24.93"); // 반올림
+test("formatCost — `formatTokens` + 단위 낱말 `토큰`", () => {
+  assert.equal(formatCost(0), "0 토큰");
+  assert.equal(formatCost(995), "995 토큰");
+  assert.equal(formatCost(700_591), "701k 토큰"); // 실측 최소(§비주얼 §63 실측)
+  assert.equal(formatCost(4_900_000), "4.9M 토큰");
+  assert.equal(formatCost(108_681_611), "109M 토큰"); // 실측 최대
 });
 
 test("formatTokens — 0은 빈칸이 아니고 큰 수는 읽히게 줄인다", () => {

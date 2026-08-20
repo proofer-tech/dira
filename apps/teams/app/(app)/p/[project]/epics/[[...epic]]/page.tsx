@@ -87,7 +87,7 @@ export default async function Epics({
     [memories, readme, costText] = await Promise.all([
       epicMemory(project.root, current.epic),
       epicReadmeBody(project.root, current.epic),
-      // 원가 덩이(§비주얼 §63 ①⑤) — 이 에픽 티켓들의 해시 전부. 이미 읽은 `tickets`에서
+      // 토큰량 덩이(§비주얼 §63 ①⑤) — 이 에픽 티켓들의 해시 전부. 이미 읽은 `tickets`에서
       // 거른다(새 스캔 0) — `epicOf`가 없는 티켓엔 `""`을 주므로 `(에픽 없음)`은 여기 안 온다
       // (`current`가 `realEpics`에서만 나오므로 `""`와 안 겹친다).
       epicCostChunk(project.root, tickets.filter((tk) => epicOf(tk) === current.epic).map((tk) => tk.hash)),
@@ -153,8 +153,8 @@ export default async function Epics({
               </div>
             </div>
 
-            {/* 완료 N 뒤 워커 칩, 그 뒤 원가 덩이 — 안 자른다, 넘치면 줄이 는다(§비주얼 §52 ⑥-3 ·
-                §63 ⑤). 원가가 칩 앞이 아니라 뒤인 이유: 칩은 `진행중 N`의 누구고, 원가를 그
+            {/* 완료 N 뒤 워커 칩, 그 뒤 토큰량 덩이 — 안 자른다, 넘치면 줄이 는다(§비주얼 §52 ⑥-3 ·
+                §63 ⑤). 토큰량이 칩 앞이 아니라 뒤인 이유: 칩은 `진행중 N`의 누구고, 토큰량을 그
                 사이에 끼우면 수와 이름이 떨어져 사람이 둘을 따로 읽는다(§63 ⑤). */}
             <p className="flex flex-wrap items-baseline gap-2 text-xs text-muted-foreground">
               <span>
