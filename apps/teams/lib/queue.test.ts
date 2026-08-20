@@ -71,13 +71,32 @@ function pyList(root: string, env: Record<string, string> = {}): string {
   });
 }
 
-/** tickets.py main()의 `select` 출력 형식(§1-3 §순서). `pySelect`는 §요구사항 왕복 절 근처에
- *  이미 있다(모듈 최상위 함수 선언은 끌어올려지므로 여기서 먼저 불러도 된다). */
-function tsSelect(tickets: Ticket[]): string {
+/** `squad_leader`(tickets.py, 개정 `2ced9d39`)를 그대로 불러 리더 이름을 뽑는다 — 파일 읽기·
+ *  WARN 분기까지 있는 로직이라 TS로 새로 베끼면 그 자리가 갈릴 수 있다(§제약 3, `pySquadOf`와
+ *  같은 근거). `squad`가 없으면 엔진과 같이 호출 자체를 건너뛴다. */
+function pySquadLeader(root: string, squad: string, hash: string): string {
+  if (!squad) return "";
+  const script =
+    "import sys\n" +
+    `sys.path.insert(0, ${JSON.stringify(path.dirname(PY))})\n` +
+    "import tickets as T\n" +
+    "print(T.squad_leader(sys.argv[1], sys.argv[2], sys.argv[3]))\n";
+  return execFileSync("python3", ["-c", script, root, squad, hash], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "ignore"], // squad_leader의 WARN(stderr)은 버린다 — 값만 본다
+  }).trim();
+}
+
+/** tickets.py main()의 `select` 출력 형식(§1-3 §순서 · 개정 `2ced9d39`의 8번째 칸). `pySelect`는
+ *  §요구사항 왕복 절 근처에 이미 있다(모듈 최상위 함수 선언은 끌어올려지므로 여기서 먼저 불러도 된다). */
+function tsSelect(tickets: Ticket[], root: string): string {
   const rows = queueOrder(tickets).filter(isDispatchable);
   return (
     rows
-      .map((t) => `${t.path}|${t.hash}|${t.kind}|${t.persona}|${t.priority}|${t.baseline}|${t.effective}`)
+      .map(
+        (t) =>
+          `${t.path}|${t.hash}|${t.kind}|${t.persona}|${t.priority}|${t.baseline}|${t.effective}|${pySquadLeader(root, t.squad, t.hash)}`,
+      )
       .join("\n") + (rows.length ? "\n" : "")
   );
 }
@@ -297,7 +316,7 @@ test("우선순위 — 값 파싱: 없음·범위 밖·정수 아님은 3, 정�
   assert.strictEqual(by("aaaa0002").priority, 3);
   assert.strictEqual(by("aaaa0003").priority, 3);
   assert.strictEqual(by("aaaa0004").priority, 5);
-  assert.strictEqual(tsSelect(tickets), pySelect(root));
+  assert.strictEqual(tsSelect(tickets, root), pySelect(root));
 });
 
 test("우선순위 — 상속: deps 역방향 · 체인 전체 · 순환은 안 멈춘다(§1-3 §유효 우선순위)", async () => {
@@ -350,7 +369,7 @@ test("우선순위 — 상속: deps 역방향 · 체인 전체 · 순환은 안 
   // 파일에 안 쓴다 — B·C의 원값은 여전히 3이다
   assert.strictEqual(by("bbbb0002").priority, 3);
   assert.strictEqual(by("bbbb0003").priority, 3);
-  assert.strictEqual(tsSelect(tickets), pySelect(root));
+  assert.strictEqual(tsSelect(tickets, root), pySelect(root));
 });
 
 test("우선순위 — 정렬: (-effective, birth, path) 교차 + 같은 값 안 FIFO(§1-3 §순서)", async () => {
@@ -375,7 +394,25 @@ test("우선순위 — 정렬: (-effective, birth, path) 교차 + 같은 값 안
     queueOrder(tickets).map((t) => t.hash),
     ["cccc0005", "cccc0001", "cccc0002", "cccc0003", "cccc0004"],
   );
-  assert.strictEqual(tsSelect(tickets), pySelect(root));
+  assert.strictEqual(tsSelect(tickets, root), pySelect(root));
+});
+
+test("우선순위 — select 8번째 칸: squad:가 있으면 squads/<이름>/members 첫 줄 리더, 없으면 빈 문자열(§1-3 §순서 · 개정 `2ced9d39`)", async () => {
+  const root = newRoot();
+  mkdirSync(path.join(root, "squads", "frontend"), { recursive: true });
+  writeFileSync(path.join(root, "squads", "frontend", "members"), "developer 프론트 담당\n");
+  await write(
+    root,
+    "dddd0001.md",
+    fm({ ticket: "dddd0001", title: "스쿼드", kind: "work", squad: "frontend" }),
+  );
+  await write(root, "dddd0002.md", fm({ ticket: "dddd0002", title: "스쿼드 없음", kind: "work" }));
+
+  const tickets = await listTickets(root, DEFAULT);
+  const rows = pySelect(root).trim().split("\n");
+  assert.strictEqual(rows.find((r) => r.includes("dddd0001"))?.split("|").pop(), "developer");
+  assert.strictEqual(rows.find((r) => r.includes("dddd0002"))?.split("|").pop(), "");
+  assert.strictEqual(tsSelect(tickets, root), pySelect(root));
 });
 
 // ── 마감 (§1-4 §값 · §파생 · §전이 · §계산 시점) ────────────────────────────────
