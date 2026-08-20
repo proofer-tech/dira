@@ -481,7 +481,7 @@ export function ProjectSwitcher({
  *  로고 하나만 남기라고 했다. 툴팁·라벨로 대신하지도 않는다("그냥 로고 클릭"이 요구다). */
 const NAV = [
   { seg: "", labelKey: "shell.nav.board" },
-  { seg: "/personas", labelKey: "shell.nav.personas" },
+  { seg: "/personas", labelKey: "persona.word.squad" },
   { seg: "/protocols", labelKey: "shell.nav.protocols" },
   { seg: "/ontology", labelKey: "shell.nav.ontology" },
   { seg: "/workers", labelKey: "shell.nav.workers" },

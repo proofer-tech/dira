@@ -107,7 +107,7 @@ export default async function Personas({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-4">
-        <h1 className="text-lg font-semibold">{t(locale, "shell.nav.personas")}</h1>
+        <h1 className="text-lg font-semibold">{t(locale, "persona.word.squad")}</h1>
         {personas.length > 0 && <CreatePersonaButton projectId={id} />}
       </div>
 
