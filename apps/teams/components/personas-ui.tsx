@@ -512,33 +512,165 @@ export function PersonasPane({
   // 순간 오른쪽 칸이 바뀌어도 방금 깐 스킬은 모든 페르소나의 다이얼로그에서 보여야 한다.
   const [installed, setInstalled] = useState<Skill[]>(initialInstalled);
 
+  /** 이름을 `members`에 든 스쿼드들(§비주얼 §61 (17) §펼침). 스쿼드 자신의 이름은 어느
+   *  `members`에도 안 실리므로(한 이름공간이라도 스쿼드가 스쿼드를 못 먹는다) 스쿼드를 골라도
+   *  빈 배열이다 — 그래서 스쿼드 선택은 펼침을 안 만든다(§검증 아래 §접힘 설명 그대로). */
+  const squadsContaining = (name: string): string[] =>
+    squads.filter((squad) => squad.members.some((m) => m.name === name)).map((squad) => squad.name);
+
+  /** 펼친 스쿼드 이름의 집합 — localStorage도 URL도 안 쓴다(계약 §접힘 상태의 저장 — 없다).
+   *  처음 값은 **고른 페르소나를 든 스쿼드들뿐**이다: `initial`이 스쿼드 이름이거나 `null`이면
+   *  펼 자식이 없어 빈 집합이다(§비주얼 §61 (19) 8행 — 기본 선택이 `squads[0]`으로 갈린 뒤의 값). */
+  const [expandedSquads, setExpandedSquads] = useState<Set<string>>(
+    () => new Set(initial === null ? [] : squadsContaining(initial)),
+  );
+
+  /** 손잡이 하나가 이름 하나를 들고 낸다(§비주얼 §61 (17) §펼침 — "안 접히는 줄이 0개") */
+  const toggleSquad = (name: string) => {
+    setExpandedSquads((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  };
+
+  /** 선택이 갈리면 그 이름을 든 스쿼드가 집합에 는다 — **빠지는 것은 없다**(§검증 `(F5)`) */
+  const expandForSelection = (name: string | null) => {
+    if (name === null) return;
+    const containing = squadsContaining(name);
+    if (containing.length === 0) return;
+    setExpandedSquads((prev) => new Set([...prev, ...containing]));
+  };
+
   // **뒤로가기가 왼쪽 선택과 오른쪽 칸을 같이 되돌린다**(§5 표 ③ — 지금은 URL만 되돌아가고
   // 화면이 안 따라온다). `pushState`는 이 이벤트를 안 쏘므로 여기 오는 것은 사람의 뒤로/앞으로뿐이다.
+  // **뒤로가기도 펼침 집합을 든다** — 계약이 저장 채널을 하나로 못박아서다(§비주얼 §61 (17)).
   useEffect(() => {
-    const sync = () => setSelected(personaSegment(location.pathname));
+    const sync = () => {
+      const name = personaSegment(location.pathname);
+      setSelected(name);
+      expandForSelection(name);
+    };
     addEventListener("popstate", sync);
     return () => removeEventListener("popstate", sync);
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [squads]);
 
   /** 선택을 바꾸는 유일한 자리 — 상태와 주소를 같이 옮긴다. `router.push`가 아닌 것이 계약이다
    *  (서버 왕복이 없어 편집 중 textarea가 안 죽는다 — 위 절 머리). */
   const select = (name: string | null) => {
     setSelected(name);
+    expandForSelection(name);
     const seg = name === null ? "" : `/${encodeURIComponent(name)}`;
     history.pushState(null, "", `/p/${projectId}/personas${seg}`);
   };
 
-  // 명시 선택이 없으면 목록 첫 줄이다(§5 표 — 안 갈린다). 있는데 목록에 없으면 오른쪽 칸에
-  // 사유가 뜬다: 세그먼트가 둘 이상인 경로도 같은 자리로 온다(이어 붙인 값이 이름과 안 맞는다).
-  const current = selected === null ? rows[0] : rows.find((r) => r.name === selected);
+  // 명시 선택이 없으면 **스쿼드 목록 첫 줄**이다(§비주얼 §61 (19) 8행 — `rows[0] ?? squads[0]`이
+  // `squads[0] ?? rows[0]`으로 갈렸다). 있는데 목록에 없으면 오른쪽 칸에 사유가 뜬다: 세그먼트가
+  // 둘 이상인 경로도 같은 자리로 온다(이어 붙인 값이 이름과 안 맞는다).
+  const current =
+    selected === null ? (squads.length > 0 ? undefined : rows[0]) : rows.find((r) => r.name === selected);
   const editOf = (row: PersonaRow) => edits[row.name] ?? initialEdit(row);
   // 스쿼드는 페르소나와 한 이름공간이라(§5-5) `selected`가 겹치는 일이 없다 — `current`가
-  // 없을 때만 스쿼드 목록에서 찾는다. §비주얼 §61 (8) — 기본 선택(`selected === null`)이
-  // 페르소나 0개(= `current`가 애초에 없음)라도 스쿼드 첫 줄로 떨어진다(`rows[0] ?? squads[0]`와
-  // 같은 값이다 — `current`가 `PersonaRow`뿐이라 나머지는 이 분기가 대신 진다).
+  // 없을 때만 스쿼드 목록에서 찾는다.
   const currentSquad =
     current === undefined ? (selected === null ? squads[0] : squads.find((s) => s.name === selected)) : undefined;
   const squadEditOf = (row: SquadRow) => squadEdits[row.name] ?? initialSquadEdit(row);
+
+  // 어느 `members`에도 없는 페르소나만 `스쿼드 없음` 묶음에 선다(§비주얼 §61 (17) — `rows` 순서
+  // 그대로, 새 정렬 0). 스쿼드가 0개면 이 집합을 안 쓴다 — 그때는 아래에서 `rows`가 평평하게 선다.
+  const assignedNames = new Set(squads.flatMap((squad) => squad.members.map((m) => m.name)));
+  const unassigned = rows.filter((row) => !assignedNames.has(row.name));
+
+  /** 페르소나 줄 — 값 일곱은 무수정이다(§비주얼 §61 (17) §자식 줄). 스쿼드가 0개면 종전대로
+   *  `p-2`(`indent=false`)로 평평하게 서고, 스쿼드나 `스쿼드 없음`의 자식이면 `pl-11`(`indent=true`,
+   *  한 칸 12px)이 붙는다 — 그 밖의 값·조립은 두 자리가 완전히 같다. */
+  const renderPersonaRow = (row: PersonaRow, indent: boolean) => {
+    const e = editOf(row);
+    const refs = refsLabel(row.refs, t);
+    const active = row.name === current?.name;
+    return (
+      <SidebarMenuItem key={row.name}>
+        {/* **선택 표식이 `isActive` 하나다**(§34 ③) — 겹이 둘이고(면
+            `bg-sidebar-accent` = `--muted` 값 + `font-medium`) 종전 `bg-muted
+            font-medium`과 **같은 값**이다. `aria-current`는 종전에도 있었다.
+            **`render`를 안 준다** — 기본 태그 `<button>`이고, 여기에
+            `render={<Link>}`를 쓰면 선택이 URL에 담겨 서버 재렌더가 편집 중
+            textarea를 언마운트한다(§34 서는 못 4 · 아래 절 머리 주석).
+            남는 클래스: 부품에 없는 `cursor-pointer` · 접기용 고정 높이
+            `h-8`을 덮는 `h-auto`(2행 줄이 눌린다) · 2행 묶음을 윗줄에 붙이는
+            `items-start` · 자식일 때만 붙는 `pl-11`(§비주얼 §61 (17)). */}
+        <SidebarMenuButton
+          type="button"
+          className={cn("h-auto cursor-pointer items-start", indent && "pl-11")}
+          isActive={active}
+          aria-current={active ? "true" : undefined}
+          onClick={() => select(row.name)}
+        >
+          {/* 값이 여덟이고 칸이 좁다 — 이름 줄과 메타 줄로 세운다(§5). 값을 빼지 않는다.
+              글자는 밑선이고(§5 정렬 표) 껍데기(점 · 배지 2종)는 행의 세로 중앙이다.
+              **`span`이 아니라 `div`다** — 부품의 `[&>span:last-child]:truncate`가
+              직계 `span`을 물어서, 이 묶음이 `span`이면 두 줄짜리 상자에 `truncate`가
+              걸린다(홈의 2행 줄과 같은 처리) */}
+          <div className="flex min-w-0 grow flex-col gap-0.5">
+            <span className="flex items-baseline gap-2">
+              {/* 왼쪽 줄의 점은 **읽기 전용**이다 — 고르는 자리는 오른쪽 머리다(§5) */}
+              <PersonaDot color={colors[row.name]} />
+              <span className="min-w-0 truncate font-mono text-sm">{row.name}</span>
+              {e.saved === null && (
+                <Badge variant="outline" className="self-center">
+                  {t("persona.badge.noProfile")}
+                </Badge>
+              )}
+              {/* 저장 버튼이 오른쪽에 있다 — 다른 줄을 고른 채 잊으면 이게 유일한 표시다(§5) */}
+              {e.body !== (e.saved ?? "") && (
+                <Badge variant="outline" className="ml-auto self-center">
+                  {t("persona.badge.unsaved")}
+                </Badge>
+              )}
+            </span>
+            <span className="flex items-baseline gap-2 text-xs text-muted-foreground">
+              <span className="min-w-0 truncate" title={row.file}>
+                {refs ? wrap(t("persona.refs.ticketPrefix"), refs, "") : t("persona.refs.none")}
+              </span>
+              {/* `티켓 n` 뒤 · 자수 앞 — "무엇을 참조하나 → 무엇을 쓰나 → 얼마나 먹나"다
+                  (§비주얼 §25 ①). 0개면 안 그린다: 고정폭 메타라 빠져도 줄이 안 흔들린다 */}
+              {e.skills.length > 0 && (
+                <span className="whitespace-nowrap">
+                  {t("persona.word.skills")} {e.skills.length}
+                </span>
+              )}
+              {/* `스킬 n` 뒤 · `자수` 앞이다(§비주얼 §32 ①) — "무엇을 참조하나 → 무엇을 쓰나 →
+                  **무엇을 배웠나** → 얼마나 먹나". `장`을 안 붙인다: 앞 둘과 같은 종류의 값이다 */}
+              {e.memories.length > 0 && (
+                <span className="whitespace-nowrap">
+                  {t("persona.word.memory")} {e.memories.length}
+                </span>
+              )}
+              {/* `메모리 n` 뒤 · `자수` 앞이다(§5-4 §화면) — 앞의 셋이 *무엇이 실리나*고
+                  이건 정책값이라 실리는 것들 뒤에 선다. **파일이 없으면 아무것도 안
+                  그린다**: 빈 값이 기본이라 `상한 없음`을 쓸 자리가 아니다.
+                  **`상한 n / 지금 m`을 안 그린다** — 지금 도는 수는 보드가 준다(§5-4) */}
+              {e.limit !== null && (
+                <span className="whitespace-nowrap">
+                  {t("persona.word.limit")} {e.limit}
+                </span>
+              )}
+              {/* 프로필 본문은 **모든 디스패치 프롬프트에 인라인된다** — 길이가 곧 비용이다(§5).
+                  목록에 둬야 "누가 프롬프트를 얼마나 먹는가"를 비교할 수 있다. `skills.md`도
+                  디스패치마다 인라인되지만 `memory/*.md`는 `9d7ba932` 뒤로 프롬프트에 안
+                  실린다 — 그래서 이 합에 메모리는 안 든다(§프롬프트 층 결정 11 (4)).
+                  `PERSONA_MAX_BYTES`(5,000B)와 비교되는 것도 이 합뿐이다 */}
+              <span className="ml-auto font-mono whitespace-nowrap">
+                {budgetLabel(editBytes(e), PERSONA_MAX_BYTES, locale)}
+              </span>
+            </span>
+          </div>
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+    );
+  };
 
   return (
     // **이 2단 행 자신이 `SidebarProvider`다**(§비주얼 §34 ①) — `Sidebar`가 `collapsible="none"`
@@ -563,131 +695,67 @@ export function PersonasPane({
         {/* `py-2`가 면의 세로 패딩이고, 부품 기본 `min-h-0 flex-1 overflow-auto`가 스크롤을 든다.
             **가로 패딩은 0이다**(`SidebarGroup className="p-0"`) — 줄이 `p-2`로 그 8px을 이미
             들고 있어 면이 더하면 줄 안쪽이 16px 줄어 잘리는 자리가 옮겨 간다(§33 · §34 §값 여덟).
-            **그룹 둘이다**(§5-5) — `페르소나`와 `스쿼드`. `gap-4`가 그룹 사이 간격이다
+            **최상위 축이 스쿼드다**(§비주얼 §61 (17)) — `페르소나` 그룹 머리가 없다. 그 낱말은
+            이제 24px 위 `<h1>스쿼드`가 든다(P304-20, (18)). `gap-4`가 그룹 사이 간격이다
             (`home-ui.tsx`의 두 그룹과 같은 조립). */}
         <SidebarContent className="gap-4 py-2">
-          <SidebarGroup className="p-0">
-            {/* 머리 낱말이 새로 생겼다(§5-5 — 그룹이 둘이 되면서). `h-6`은 `home-ui.tsx`의
-                좌측 패널 그룹 머리와 같은 눈금이다. §비주얼 §61 (2) — 그룹이 둘일 때만 선다:
-                스쿼드 0개면 이 머리도 안 그린다(24px 위 `<h1>페르소나`와 같은 낱말의 반복이라). */}
-            {squads.length > 0 && (
-              <SidebarGroupLabel className="h-6 text-muted-foreground">
-                {t("shell.nav.personas")}
-              </SidebarGroupLabel>
-            )}
-            {/* 줄 사이 간격이 0.5(2px)였던 자리를 `SidebarMenu`의 `gap-0.5`가 든다(§34 판정표) */}
-            <SidebarMenu aria-label={t("shell.nav.personas")} className="gap-0.5">
-              {rows.map((row) => {
-                const e = editOf(row);
-                const refs = refsLabel(row.refs, t);
-                const active = row.name === current?.name;
-                return (
-                  <SidebarMenuItem key={row.name}>
-                    {/* **선택 표식이 `isActive` 하나다**(§34 ③) — 겹이 둘이고(면
-                        `bg-sidebar-accent` = `--muted` 값 + `font-medium`) 종전 `bg-muted
-                        font-medium`과 **같은 값**이다. `aria-current`는 종전에도 있었다.
-                        **`render`를 안 준다** — 기본 태그 `<button>`이고, 여기에
-                        `render={<Link>}`를 쓰면 선택이 URL에 담겨 서버 재렌더가 편집 중
-                        textarea를 언마운트한다(§34 서는 못 4 · 아래 절 머리 주석).
-                        남는 클래스가 셋이다: 부품에 없는 `cursor-pointer` · 접기용 고정 높이
-                        `h-8`을 덮는 `h-auto`(2행 줄이 눌린다) · 2행 묶음을 윗줄에 붙이는
-                        `items-start`. */}
-                    <SidebarMenuButton
-                      type="button"
-                      className="h-auto cursor-pointer items-start"
-                      isActive={active}
-                      aria-current={active ? "true" : undefined}
-                      onClick={() => select(row.name)}
-                    >
-                      {/* 값이 여덟이고 칸이 좁다 — 이름 줄과 메타 줄로 세운다(§5). 값을 빼지 않는다.
-                          글자는 밑선이고(§5 정렬 표) 껍데기(점 · 배지 2종)는 행의 세로 중앙이다.
-                          **`span`이 아니라 `div`다** — 부품의 `[&>span:last-child]:truncate`가
-                          직계 `span`을 물어서, 이 묶음이 `span`이면 두 줄짜리 상자에 `truncate`가
-                          걸린다(홈의 2행 줄과 같은 처리) */}
-                      <div className="flex min-w-0 grow flex-col gap-0.5">
-                        <span className="flex items-baseline gap-2">
-                          {/* 왼쪽 줄의 점은 **읽기 전용**이다 — 고르는 자리는 오른쪽 머리다(§5) */}
-                          <PersonaDot color={colors[row.name]} />
-                          <span className="min-w-0 truncate font-mono text-sm">{row.name}</span>
-                          {e.saved === null && (
-                            <Badge variant="outline" className="self-center">
-                              {t("persona.badge.noProfile")}
-                            </Badge>
-                          )}
-                          {/* 저장 버튼이 오른쪽에 있다 — 다른 줄을 고른 채 잊으면 이게 유일한 표시다(§5) */}
-                          {e.body !== (e.saved ?? "") && (
-                            <Badge variant="outline" className="ml-auto self-center">
-                              {t("persona.badge.unsaved")}
-                            </Badge>
-                          )}
-                        </span>
-                        <span className="flex items-baseline gap-2 text-xs text-muted-foreground">
-                          <span className="min-w-0 truncate" title={row.file}>
-                            {refs ? wrap(t("persona.refs.ticketPrefix"), refs, "") : t("persona.refs.none")}
-                          </span>
-                          {/* `티켓 n` 뒤 · 자수 앞 — "무엇을 참조하나 → 무엇을 쓰나 → 얼마나 먹나"다
-                              (§비주얼 §25 ①). 0개면 안 그린다: 고정폭 메타라 빠져도 줄이 안 흔들린다 */}
-                          {e.skills.length > 0 && (
-                            <span className="whitespace-nowrap">
-                              {t("persona.word.skills")} {e.skills.length}
-                            </span>
-                          )}
-                          {/* `스킬 n` 뒤 · `자수` 앞이다(§비주얼 §32 ①) — "무엇을 참조하나 → 무엇을 쓰나 →
-                              **무엇을 배웠나** → 얼마나 먹나". `장`을 안 붙인다: 앞 둘과 같은 종류의 값이다 */}
-                          {e.memories.length > 0 && (
-                            <span className="whitespace-nowrap">
-                              {t("persona.word.memory")} {e.memories.length}
-                            </span>
-                          )}
-                          {/* `메모리 n` 뒤 · `자수` 앞이다(§5-4 §화면) — 앞의 셋이 *무엇이 실리나*고
-                              이건 정책값이라 실리는 것들 뒤에 선다. **파일이 없으면 아무것도 안
-                              그린다**: 빈 값이 기본이라 `상한 없음`을 쓸 자리가 아니다.
-                              **`상한 n / 지금 m`을 안 그린다** — 지금 도는 수는 보드가 준다(§5-4) */}
-                          {e.limit !== null && (
-                            <span className="whitespace-nowrap">
-                              {t("persona.word.limit")} {e.limit}
-                            </span>
-                          )}
-                          {/* 프로필 본문은 **모든 디스패치 프롬프트에 인라인된다** — 길이가 곧 비용이다(§5).
-                              목록에 둬야 "누가 프롬프트를 얼마나 먹는가"를 비교할 수 있다. `skills.md`도
-                              디스패치마다 인라인되지만 `memory/*.md`는 `9d7ba932` 뒤로 프롬프트에 안
-                              실린다 — 그래서 이 합에 메모리는 안 든다(§프롬프트 층 결정 11 (4)).
-                              `PERSONA_MAX_BYTES`(5,000B)와 비교되는 것도 이 합뿐이다 */}
-                          <span className="ml-auto font-mono whitespace-nowrap">
-                            {budgetLabel(editBytes(e), PERSONA_MAX_BYTES, locale)}
-                          </span>
-                        </span>
-                      </div>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                );
-              })}
-            </SidebarMenu>
-          </SidebarGroup>
-
-          {/* 스쿼드 그룹(§5-5 §화면) — **0개면 그리지 않는다**. 색 점·자수·스킬·메모리·상한
-              전부 스쿼드에 없는 값이라 줄이 한 줄로 끝난다(§5-5 §화면 표). */}
-          {squads.length > 0 && (
+          {squads.length > 0 ? (
             <SidebarGroup className="p-0">
-              <SidebarGroupLabel className="h-6 text-muted-foreground">
-                {t("persona.word.squad")}
-              </SidebarGroupLabel>
+              {/* 줄 사이 간격이 0.5(2px)였던 자리를 `SidebarMenu`의 `gap-0.5`가 든다(§34 판정표) */}
               <SidebarMenu aria-label={t("persona.word.squad")} className="gap-0.5">
                 {squads.map((squad) => {
+                  const expanded = expandedSquads.has(squad.name);
                   const active = squad.name === currentSquad?.name;
                   // §5-5 §화면 "기본 선택 - 동시 선택 - 편집 보존 - 저장 안 됨: §5 그대로" —
                   // 스쿼드 칸의 미저장 멤버 변경도 페르소나와 같은 표식을 왼쪽 줄에 남긴다.
                   const dirty = squadDirty(squadEditOf(squad));
+                  const childrenId = `squad-members-${squad.name}`;
+                  // `rows`에 없는 멤버 이름은 줄을 안 세운다(§비주얼 §61 (17) §자식 줄) —
+                  // 그 사실은 위 `멤버 프로필 없음` 배지와 오른쪽 칸이 이미 든다.
+                  const memberRows = squad.members
+                    .map((m) => rows.find((r) => r.name === m.name))
+                    .filter((r): r is PersonaRow => r !== undefined);
                   return (
                     <SidebarMenuItem key={squad.name}>
+                      {/* 접기 손잡이 — 줄의 **둘째 과녁**이다(§비주얼 §61 (17)). 줄 자신이 이미
+                          선택 버튼이라 `<details>`도 `SidebarMenuAction`도 못 쓴다 — `<button>`
+                          안에 `<button>`이 못 들어가므로 `SidebarMenuItem`(li, 기본 `relative`)
+                          안의 **형제**다. DOM 순서가 줄 버튼 **앞**이라 탭 순서도 그렇다. 트랜지션
+                          0 — `aria-expanded:[&>svg]:rotate-90`만 회전을 낸다(`group-open`이 샐
+                          자리가 같이 없어진다). */}
+                      <button
+                        type="button"
+                        aria-expanded={expanded}
+                        aria-controls={childrenId}
+                        onClick={() => toggleSquad(squad.name)}
+                        className="absolute top-1 left-1 flex size-6 items-center justify-center rounded-md hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 aria-expanded:[&>svg]:rotate-90"
+                      >
+                        <ChevronRight aria-hidden className="size-3.5 shrink-0" />
+                        <span className="sr-only">
+                          {wrap(squad.name, t("persona.squad.toggleMembersSuffix"), "")}
+                        </span>
+                      </button>
+                      {/* `pl-8`이 기본 `p-2`의 왼쪽 8을 덮어 손잡이 자리(24px)를 낸다 —
+                          나머지(`h-8` `gap-2` `items-center`)는 무수정(§비주얼 §61 (19) 4행) */}
                       <SidebarMenuButton
                         type="button"
-                        className="cursor-pointer"
+                        className="pl-8"
                         isActive={active}
                         aria-current={active ? "true" : undefined}
                         onClick={() => select(squad.name)}
                       >
                         <span className="flex min-w-0 grow items-baseline gap-2">
+                          {/* 겹친 색 점 — 순서는 `members`(왼쪽 끝이 리더), 상한 **5**를 넘으면
+                              안 그린다. 세는 값은 옆의 `멤버 n`이 이미 들어 `+n`을 안 그린다.
+                              전문은 이 묶음의 네이티브 `title`이 든다(§비주얼 §61 (17)) */}
+                          <span
+                            className="flex shrink-0 -space-x-0.5"
+                            title={squad.members.map((m) => m.name).join(", ")}
+                          >
+                            {squad.members.slice(0, 5).map((m) => (
+                              <PersonaDot key={m.name} color={colors[m.name]} className="ring-1 ring-border" />
+                            ))}
+                          </span>
                           <span className="min-w-0 truncate font-mono text-sm" title={squad.name}>
                             {squad.name}
                           </span>
@@ -709,9 +777,39 @@ export function PersonasPane({
                           )}
                         </span>
                       </SidebarMenuButton>
+                      {/* 자식이 0개인 스쿼드도 손잡이가 서고 펴면 아무것도 안 나온다 — 분기 0
+                          (§비주얼 §61 (17) §자식이 0개인 스쿼드) */}
+                      {expanded && (
+                        <SidebarMenu id={childrenId} className="gap-0.5">
+                          {memberRows.map((row) => renderPersonaRow(row, true))}
+                        </SidebarMenu>
+                      )}
                     </SidebarMenuItem>
                   );
                 })}
+              </SidebarMenu>
+            </SidebarGroup>
+          ) : (
+            <SidebarGroup className="p-0">
+              {/* 스쿼드가 0개면 묶음 머리가 0개고 페르소나가 종전 `p-2`로 평평하게 선다 —
+                  종전 화면과 마크업 diff 0줄(§비주얼 §61 (17) §스쿼드가 0개면) */}
+              <SidebarMenu aria-label={t("shell.nav.personas")} className="gap-0.5">
+                {rows.map((row) => renderPersonaRow(row, false))}
+              </SidebarMenu>
+            </SidebarGroup>
+          )}
+
+          {/* `스쿼드 없음` — 어느 `members`에도 없는 페르소나만 목록 맨 아래에 선다. 안 접힌다 —
+              스쿼드가 아니고, 접으면 어디에도 안 든 페르소나가 화면에서 사라진다(§비주얼 §61 (17)).
+              `미배정`을 안 쓴다 — §12의 빈 점 `미할당`과 한 글자 차이라 §0-9(한 값에 한 낱말)의
+              반대쪽이 된다. */}
+          {squads.length > 0 && unassigned.length > 0 && (
+            <SidebarGroup className="p-0">
+              <SidebarGroupLabel className="h-6 text-muted-foreground">
+                {t("persona.squad.unassignedGroup")}
+              </SidebarGroupLabel>
+              <SidebarMenu aria-label={t("persona.squad.unassignedGroup")} className="gap-0.5">
+                {unassigned.map((row) => renderPersonaRow(row, true))}
               </SidebarMenu>
             </SidebarGroup>
           )}

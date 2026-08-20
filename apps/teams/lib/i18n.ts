@@ -571,6 +571,10 @@ export const ko: Record<string, string> = {
   "persona.word.memory": "메모리",
   "persona.word.limit": "상한",
   "persona.word.members": "멤버",
+  // 좌측 목록의 축이 스쿼드로 갈리며 는 둘(§비주얼 §61 (17), 티켓 c1e94f73) — 버튼 라벨
+  // 급의 짧은 문구라 `en`도 여기서 같이 채운다(화면 프로즈가 아니라 developer 몫).
+  "persona.squad.unassignedGroup": "스쿼드 없음",
+  "persona.squad.toggleMembersSuffix": "멤버 목록",
   // `common.delete`를 새로 만들지 않는다 — `common.*`는 이미 en이 다 찬 묶음이라
   // (`i18n.test.ts` FILLED) 여기서 키를 늘리면 그 테스트가 깨진다. en은 다음 티켓(P307-4) 몫이다.
   "persona.action.delete": "삭제",
@@ -1354,6 +1358,8 @@ export const en: Record<string, string> = {
   "persona.word.memory": "Memory",
   "persona.word.limit": "Limit",
   "persona.word.members": "Members",
+  "persona.squad.unassignedGroup": "No squad",
+  "persona.squad.toggleMembersSuffix": "member list",
   "persona.action.delete": "Delete",
   // `persona.squad.block*` 세 키는 `50fd4b34`가 사전에서 걷어냈다 - `squadBlockBytes`
   // (`lib/budgets.ts`)가 tick.sh:736-788의 리터럴을 직접 센다(ko 쪽 주석과 같은 이유).
