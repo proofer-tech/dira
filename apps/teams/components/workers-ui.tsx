@@ -447,7 +447,7 @@ export function WorkerRowActions({ projectId, row }: { projectId: string; row: W
                 여는 순간 티켓이 끝났으면 첫 응답에서 폴링이 멈춘다. */}
             {/* 엔진 이름을 같이 넘긴다 — codex면 상자 대신 사유가, 참견 폼엔 비활성 + 사유가
                 뜬다(§4-3 · §비주얼 §23 ⑤). 여기서는 화면이 그 값을 직접 쓰고 있는 행이다. */}
-            <SessionStream project={projectId} stem={holding} live engine={row.engineName} />
+            <SessionStream project={projectId} stem={holding} live engine={row.engineName} variant="worker" />
           </DialogContent>
         </Dialog>
       )}

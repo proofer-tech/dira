@@ -27,6 +27,8 @@ import { useRouter } from "next/navigation";
 import {
   ArrowDown,
   ChevronRight,
+  CircleCheck,
+  CirclePlay,
   FilePlus2,
   Send,
   Square,
@@ -47,8 +49,10 @@ import { Markdown } from "@/components/markdown";
 import type { Vault } from "@/lib/markdown-wikilinks";
 import { AnswerForm } from "@/components/ticket-ui";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   InputGroup,
   InputGroupAddon,
@@ -68,16 +72,35 @@ import type { StreamEvent } from "@/lib/transcript";
 import {
   engineCan,
   expandable,
+  formatElapsed,
   type GroupedItem,
   groupProgress,
   interjectMode,
+  matchesStreamFilter,
   mergeProgress,
   NO_QUESTION_SECTION_NOTICE,
   planBlocks,
+  type ProgressFilterKind,
   progressMarkerText,
+  toolChipCounts,
   type InterjectMode,
 } from "@/lib/urls";
 import { cn } from "@/lib/utils";
+
+/** 워커 스트림 다이얼로그 툴바의 필터 넷(§2-15 ⑥ 표) — 순서 · i18n 키가 이 배열 하나에 있다. */
+const STREAM_FILTERS: { kind: ProgressFilterKind; labelKey: string }[] = [
+  { kind: "talk", labelKey: "progress.stream.filterTalk" },
+  { kind: "tool", labelKey: "progress.stream.filterTool" },
+  { kind: "thinking", labelKey: "progress.stream.filterThinking" },
+  { kind: "prompt", labelKey: "progress.stream.filterPrompt" },
+];
+
+const STREAM_FILTER_DEFAULT: Record<ProgressFilterKind, boolean> = {
+  talk: true,
+  tool: true,
+  thinking: true,
+  prompt: true,
+};
 
 /** 레코드의 `timestamp`는 UTC다 — **로컬 시간으로 렌더한다**(§2-1: `13:55:10Z` = KST `22:55:10`).
  *  `toLocaleTimeString`을 쓰지 않는 이유: 로케일에 따라 `오후 10:55:10`이 나온다. 8자 고정이라
@@ -106,6 +129,7 @@ export function SessionStream({
   answerFile,
   vault,
   costChunk,
+  variant,
 }: {
   project: string;
   stem: string;
@@ -148,12 +172,20 @@ export function SessionStream({
    *  `node:fs`를 못 타서 로그를 직접 못 연다). `undefined`면 그 자리에 아무것도 안 선다 —
    *  절이 서는 조건이 h2가 서는 조건과 같아 호출부가 이미 그 조건으로 걸러 넘긴다. */
   costChunk?: { text: string; title?: string };
+  /** 갈래(§2-15 ①) — `"worker"`면 워커 스트림 다이얼로그의 모양(머리 상태 배지·소요, 도구 칩 줄,
+   *  검색·필터·건수 툴바)을 입는다. `undefined`(티켓 상세)는 종전 화면과 클래스 0 차이다 —
+   *  아래 검색·필터 상태도 선언은 하되 이 갈래에서만 읽는다. */
+  variant?: "worker";
 }) {
   const [events, setEvents] = useState<StreamEvent[]>([]);
   const [live, setLive] = useState(initialLive);
   const [inbox, setInbox] = useState<boolean | null>(null); // null = 첫 폴링이 아직 안 왔다
   const [done, setDone] = useState(false); // 티켓이 `.done`인가 — 폼의 모드다(§21)
   const [detached, setDetached] = useState(false); // 바닥에서 떨어졌다 = 자동 스크롤 안 한다
+  // 워커 다이얼로그 툴바(§2-15 ⑥) — 티켓 상세에서는 안 읽는 값이라 그 화면 렌더는 안 갈린다.
+  const [query, setQuery] = useState("");
+  const [kindFilter, setKindFilter] = useState(STREAM_FILTER_DEFAULT);
+  const t = useT();
   // 진행중 계획의 창 끝(`planBlocks`의 `now`) — 렌더 본문은 `Date.now()`를 직접 못 부른다
   // (`react-hooks/purity`). 초기값은 마운트 시 한 번, 이후는 poll effect가 매 왕복마다 갱신한다.
   const [now, setNow] = useState(() => Date.now());
@@ -223,8 +255,14 @@ export function SessionStream({
     else if (box.current) setDetached(!atBottom(box.current));
   };
 
+  // 워커 다이얼로그의 검색·필터(§2-15 ⑥) — **맞는 사건만 남는다**, 티켓 상세는 안 거른다
+  // (`variant`가 `undefined`면 이 필터가 늘 참이라 `events`와 한 배열이다).
+  const searching = variant === "worker" && query.trim() !== "";
+  const visibleEvents =
+    variant === "worker" ? events.filter((e) => matchesStreamFilter(e, kindFilter, query)) : events;
+
   // 시간순 한 줄기(§2-3 ②) — 순서 규칙은 `lib/urls.ts`의 순수 함수가 들고 있고 테스트가 못박는다.
-  const merged = mergeProgress(events, thread);
+  const merged = mergeProgress(visibleEvents, thread);
   // 말풍선인가는 `label === ""` 하나로 판정한다(assistant `text` · 참견 · 첫 아닌 사용자 프롬프트가
   // 전부 빈 label). `groupProgress`가 그 줄기를 말풍선(경계)과 그 사이 묶음으로 가른다(§2-6 ②).
   const isBubble = (e: StreamEvent) => e.label === "";
@@ -233,6 +271,13 @@ export function SessionStream({
   const threadKey = new Map(thread.map((t, i) => [t, `t${i}`]));
   // 진행 표식 문구(§2-6 ③) — **파싱된 마지막 스트림 레코드** 하나가 판정한다(병합·묶음과 무관).
   const markerText = progressMarkerText(events.at(-1)?.kind);
+
+  // 워커 다이얼로그 머리의 소요(§2-15 ④)와 칩 줄(§2-15 ⑤) — 항상 **거르지 않은 `events`**를
+  // 본다(도구 칩은 묶음이 접혀 있어도 세고, 소요는 필터·검색과 무관하게 이 세션 전체를 잰다).
+  const elapsedMs = events.length
+    ? (live ? now : Date.parse(events[events.length - 1].ts)) - Date.parse(events[0].ts)
+    : null;
+  const toolChips = variant === "worker" ? toolChipCounts(events) : [];
 
   // `windowEvents`·`planBlocks`(`lib/urls.ts`)는 `{ ts? }`를 직접 든 배열을 받는다 —
   // `mergeProgress`의 출력은 `{event}`/`{thread}` 래퍼라 그 자리에 `ts`를 얹어 통과시킨다.
@@ -288,27 +333,95 @@ export function SessionStream({
           튀게 하는 것이 근거다(§18 ④ · §21). h2와 토큰량 덩이는 **왼쪽 무리**로 baseline
           묶인다(§비주얼 §63 ④ — 오른쪽 무리와 조건이 다르다: 토큰량은 `workers/logs/`가 출처라
           `stream` 여부와 무관하게 h2가 서면 선다). */}
-      <div className="flex h-8 items-center justify-between gap-2">
-        <div className="flex min-w-0 items-baseline gap-2">
-          <h2 className="text-sm font-medium">진행 기록</h2>
-          {costChunk && (
-            <span className="text-xs text-muted-foreground" title={costChunk.title}>
-              {costChunk.text}
-            </span>
-          )}
-        </div>
-        {stream && (
-          <div className="flex items-center gap-2">
-            {!live && <p className="text-xs text-muted-foreground">끝난 세션 · 갱신 없음</p>}
-            {detached && (
-              <Button variant="ghost" size="sm" onClick={() => setDetached(false)}>
-                <ArrowDown aria-hidden className="size-3.5" />
-                맨 아래로
-              </Button>
+      {variant === "worker" ? (
+        // 워커 스트림 다이얼로그(§2-15 ①·④·⑤·⑥, 값 §비주얼 §64) — 종전 `flex h-8` 머리 줄을
+        // 상태 배지 + 소요로, 그 아래 도구 칩 줄과 검색·필터·건수 툴바가 잇는다. **`noStream`이면
+        // 이 겹이 전부 안 선다**(§2-15 ⑨ 에러 행) — 아래 `<EmptyState>` 하나가 그 자리를 대신한다.
+        !noStream && (
+          <div className="space-y-2">
+            <div className="flex h-8 items-center gap-2">
+              <Badge variant="outline">
+                {live ? (
+                  <CirclePlay aria-hidden className="size-3.5" />
+                ) : (
+                  <CircleCheck aria-hidden className="size-3.5" />
+                )}
+                {t(live ? "progress.stream.stateLive" : "progress.stream.stateDone")}
+              </Badge>
+              {elapsedMs !== null && (
+                <span className="text-xs text-muted-foreground tabular-nums">
+                  {t("progress.stream.elapsed")} {formatElapsed(elapsedMs)}
+                </span>
+              )}
+            </div>
+            {toolChips.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs text-muted-foreground">{t("progress.stream.tools")}</span>
+                {toolChips.map(([label, n]) => (
+                  <Badge key={label} variant="secondary">
+                    <span className="font-mono">{label}</span>
+                    <span className="tabular-nums">{n}</span>
+                  </Badge>
+                ))}
+              </div>
+            )}
+            <div className="flex h-8 flex-wrap items-center gap-2">
+              <Input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={t("progress.stream.searchPlaceholder")}
+                className="w-64"
+              />
+              <span className="text-xs text-muted-foreground">{t("progress.stream.filter")}</span>
+              {STREAM_FILTERS.map((f) => {
+                const on = kindFilter[f.kind];
+                return (
+                  <button
+                    key={f.kind}
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() => setKindFilter((prev) => ({ ...prev, [f.kind]: !prev[f.kind] }))}
+                  >
+                    <Badge variant={on ? "secondary" : "outline"} className={on ? undefined : "text-muted-foreground"}>
+                      {t(f.labelKey)}
+                    </Badge>
+                  </button>
+                );
+              })}
+              <span className="ml-auto text-xs text-muted-foreground tabular-nums">기록 {merged.length}건</span>
+              {!live && <p className="text-xs text-muted-foreground">끝난 세션 · 갱신 없음</p>}
+              {detached && (
+                <Button variant="ghost" size="sm" onClick={() => setDetached(false)}>
+                  <ArrowDown aria-hidden className="size-3.5" />
+                  맨 아래로
+                </Button>
+              )}
+            </div>
+          </div>
+        )
+      ) : (
+        <div className="flex h-8 items-center justify-between gap-2">
+          <div className="flex min-w-0 items-baseline gap-2">
+            <h2 className="text-sm font-medium">진행 기록</h2>
+            {costChunk && (
+              <span className="text-xs text-muted-foreground" title={costChunk.title}>
+                {costChunk.text}
+              </span>
             )}
           </div>
-        )}
-      </div>
+          {stream && (
+            <div className="flex items-center gap-2">
+              {!live && <p className="text-xs text-muted-foreground">끝난 세션 · 갱신 없음</p>}
+              {detached && (
+                <Button variant="ghost" size="sm" onClick={() => setDetached(false)}>
+                  <ArrowDown aria-hidden className="size-3.5" />
+                  맨 아래로
+                </Button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
       {noStream && (
         /* §비주얼 §23 ⑤ 사후 — §9가 이미 세워 둔 `<EmptyState>`에 문구만 갈아 끼운다.
            `Alert`가 아니다: 사람이 할 일이 없고(원문도 다음 행동도 없다), §9가 스트림 부재를
@@ -344,7 +457,11 @@ export function SessionStream({
             stream ? "h-[32rem]" : "max-h-[32rem]",
           )}
         >
-          {blocks.map((block, bi) =>
+          {variant === "worker" && merged.length === 0 && events.length > 0 ? (
+            // 검색·필터가 전부 걸러냈다(§2-15 ⑥·⑨) — 칩 줄·머리는 위에서 이미 그렸고 안 갈린다.
+            <p className={cn(LINE, "text-xs text-muted-foreground")}>{t("progress.stream.noMatch")}</p>
+          ) : (
+            blocks.map((block, bi) =>
             block.kind === "outside" ? (
               <ProgressItems
                 key={`o${bi}`}
@@ -355,6 +472,7 @@ export function SessionStream({
                 threadKey={threadKey}
                 onToggle={onToggle}
                 vault={vault}
+                forceOpen={searching}
               />
             ) : (
               <PlanBlock
@@ -370,7 +488,7 @@ export function SessionStream({
                 vault={vault}
               />
             ),
-          )}
+          ))}
           {/* 진행 표식(§18 ④) — **자리가 한 갈래다**(개정 요구 `c1312f3d`): 계획이 있든 없든
               상자 안 맨 아래다. 진행중 계획 아코디언을 접어도 안 숨는다 — `<details>` 밖에
               선다. 마지막 사건 다음 줄이 올 자리를 지킨다. **말풍선 아래로 안 내려간다**:
@@ -423,11 +541,15 @@ function ProgressItems({
   threadKey,
   onToggle,
   vault,
+  forceOpen,
 }: {
   items: GroupedItem<StreamEvent, ThreadItem>[];
   threadKey: Map<ThreadItem, string>;
   onToggle: (e: React.SyntheticEvent<HTMLDetailsElement>) => void;
   vault?: Vault;
+  /** 워커 다이얼로그 검색이 켜져 있는 동안 묶음을 강제로 연다(§2-15 ②) — 기본은 안 건드린다
+   *  (`undefined` = 종전 그대로 손으로 펼친 것만 열린다). 티켓 상세는 이 prop을 안 넘긴다. */
+  forceOpen?: boolean;
 }) {
   return (
     <>
@@ -435,7 +557,9 @@ function ProgressItems({
         if (g.kind === "event") return <StreamBubble key={g.event.key} e={g.event} />;
         if (g.kind === "thread")
           return <ThreadRow key={threadKey.get(g.thread)} item={g.thread} vault={vault} />;
-        return <Bundle key={g.events[0].key} events={g.events} onToggle={onToggle} />;
+        return (
+          <Bundle key={g.events[0].key} events={g.events} onToggle={onToggle} forceOpen={forceOpen} />
+        );
       })}
     </>
   );
@@ -1051,13 +1175,18 @@ function Row({
 export function Bundle({
   events,
   onToggle,
+  forceOpen,
 }: {
   events: StreamEvent[];
   onToggle: (ev: React.SyntheticEvent<HTMLDetailsElement>) => void;
+  /** 워커 다이얼로그 검색 중에 강제로 연다(§2-15 ②) — `undefined`/`false`는 종전 그대로
+   *  `<details>`가 안 통제된다(홈 스레드 호출부는 이 prop을 안 넘긴다). */
+  forceOpen?: boolean;
 }) {
   return (
     <details
       className="open:[&>summary>span>svg:first-child]:rotate-90"
+      open={forceOpen || undefined}
       onToggle={onToggle}
     >
       <Marker

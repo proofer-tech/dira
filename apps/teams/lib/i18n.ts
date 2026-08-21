@@ -367,6 +367,24 @@ export const ko: Record<string, string> = {
   // 오류인 결과 줄 표식(§비주얼 §60 ⑧) — `결과`·`서브`·`n줄`은 무수정이라 키로 안 올린다.
   "progress.stream.error": "오류",
 
+  // 워커 스트림 다이얼로그(§2-15 ⑩) — 머리 상태 낱말 · 소요 라벨 · 칩 줄 라벨 · 툴바 · 2단 상세.
+  // `기록 n건` · `서브` · `오류` · `생각` · `결과` · `프롬프트` · `배정`은 이미 있는 문자열이라
+  // 키를 새로 안 만든다(§2-15 ⑩ 각주).
+  "progress.stream.stateLive": "진행중",
+  "progress.stream.stateDone": "완료",
+  "progress.stream.elapsed": "소요",
+  "progress.stream.tools": "도구",
+  "progress.stream.searchPlaceholder": "이 기록 검색",
+  "progress.stream.filter": "필터",
+  "progress.stream.filterTalk": "대화",
+  "progress.stream.filterTool": "도구",
+  "progress.stream.filterThinking": "생각",
+  "progress.stream.filterPrompt": "프롬프트",
+  "progress.stream.noMatch": "맞는 기록이 없습니다",
+  // `pickRow` · `input` · `result` · `copy` · `closeDetail`(§2-15 ⑧ 2단 상세)는 다음 장
+  // (`268943e7`)이 쓴다 - 이 장은 안 그려서 여기 안 올린다("이 장이 쓰는 것만" 판정).
+
+
   "board.epic.label": "에픽",
   "board.epic.all": "전체",
   "board.epic.none": "(에픽 없음)",
@@ -1173,6 +1191,18 @@ export const en: Record<string, string> = {
   "progress.plan.done": "Done",
 
   "progress.stream.error": "Error",
+
+  "progress.stream.stateLive": "Running",
+  "progress.stream.stateDone": "Done",
+  "progress.stream.elapsed": "Elapsed",
+  "progress.stream.tools": "Tools",
+  "progress.stream.searchPlaceholder": "Search this record",
+  "progress.stream.filter": "Filter",
+  "progress.stream.filterTalk": "Messages",
+  "progress.stream.filterTool": "Tools",
+  "progress.stream.filterThinking": "Thinking",
+  "progress.stream.filterPrompt": "Prompts",
+  "progress.stream.noMatch": "No matching records",
 
   "board.epic.label": "Epics",
   "board.epic.all": "All",

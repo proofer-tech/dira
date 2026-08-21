@@ -555,6 +555,54 @@ export function planBlocks<E extends { ts?: string }>(
 export const progressMarkerText = (lastKind?: string): string =>
   lastKind === "thinking" ? "생각하는 중 · 2초마다" : "따라가는 중 · 2초마다";
 
+/** 소요 시간 서식(DESIGN.md §2-15 ⑦ 표) — 워커 스트림 다이얼로그 머리(§2-15 ④)와 사건 줄
+ *  소요 칸(§2-15 ⑦, 티켓 `268943e7`)이 같은 함수 하나를 쓴다. 로케일을 안 타는 이유는 표의
+ *  단위(`s` · `m`)가 두 언어에서 같은 글자라서다. */
+export function formatElapsed(ms: number): string {
+  const s = ms / 1000;
+  if (s < 10) return `${s.toFixed(1)}s`;
+  if (s < 60) return `${Math.floor(s)}s`;
+  const m = Math.floor(s / 60);
+  return `${m}m ${Math.floor(s - m * 60)}s`;
+}
+
+/** 워커 스트림 다이얼로그 필터 넷(§2-15 ⑥ 표) — 파싱이 이미 아는 `kind`(+ `interject`의 `label`)
+ *  하나로 갈린다. `StreamEvent`(transcript.ts)를 직접 import하지 않는 이유는 이 파일 머리와
+ *  같다 — 제네릭 최소 형태만 받는다. */
+export type ProgressFilterKind = "talk" | "tool" | "thinking" | "prompt";
+
+export function progressFilterKindOf(e: { kind: string; label: string }): ProgressFilterKind {
+  if (e.kind === "tool_use" || e.kind === "tool_result") return "tool";
+  if (e.kind === "thinking") return "thinking";
+  if (e.kind === "prompt") return "prompt";
+  if (e.kind === "interject") return e.label === "배정" ? "prompt" : "talk";
+  return "talk"; // text
+}
+
+/** 워커 스트림 다이얼로그 검색 + 필터(§2-15 ⑥) — 한 사건이 화면에 남는가. 필터가 먼저 걸러내고
+ *  (kind만 본다 · ⑥ 표), 검색어는 `label` · `summary` · `body` 셋을 대소문자 무시로 훑는다. */
+export function matchesStreamFilter<
+  E extends { kind: string; label: string; summary: string; body: string },
+>(e: E, kindFilter: Record<ProgressFilterKind, boolean>, query: string): boolean {
+  if (!kindFilter[progressFilterKindOf(e)]) return false;
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  return (e.label + e.summary + e.body).toLowerCase().includes(q);
+}
+
+/** 도구 칩 줄(§2-15 ⑤) — `tool_use`를 도구 이름으로 센다. 횟수 내림차순, 같으면 처음 나온 순
+ *  (`Map`은 삽입 순으로 돌고 `Array#sort`는 안정 정렬이라 동률은 자연히 그 순서로 남는다). */
+export function toolChipCounts<E extends { kind: string; label: string }>(
+  events: E[],
+): [string, number][] {
+  const counts = new Map<string, number>();
+  for (const e of events) {
+    if (e.kind !== "tool_use") continue;
+    counts.set(e.label, (counts.get(e.label) ?? 0) + 1);
+  }
+  return [...counts].sort((a, b) => b[1] - a[1]);
+}
+
 /** 페르소나 색 팔레트 키 (DESIGN.md §비주얼 §12). 레지스트리에 이 문자열 그대로 저장된다.
  *  **자유 hex가 아니라 고정 8색인 이유**는 §5에 있다 — 라이트/다크 두 벌과 대비를 사람이
  *  즉석에서 못 맞춘다. 서버(레지스트리 쓰기 검증)와 클라이언트(스와치 목록)가 같은 목록을

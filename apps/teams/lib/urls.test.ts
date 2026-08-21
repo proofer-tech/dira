@@ -9,14 +9,18 @@ import {
   engineCan,
   engineMissing,
   findMatches,
+  formatElapsed,
   formatRemaining,
   groupProgress,
   hasFindBar,
   interjectMode,
+  matchesStreamFilter,
   mergeProgress,
   parentPath,
   planBlocks,
+  progressFilterKindOf,
   progressMarkerText,
+  toolChipCounts,
   projectPath,
   relationPath,
   relativeUnderAny,
@@ -520,6 +524,58 @@ test("progressMarkerText — 마지막 레코드가 thinking이면 '생각하는
   assert.equal(progressMarkerText("thinking"), "생각하는 중 · 2초마다");
   assert.equal(progressMarkerText("tool_use"), "따라가는 중 · 2초마다");
   assert.equal(progressMarkerText(undefined), "따라가는 중 · 2초마다");
+});
+
+test("formatElapsed — §2-15 ⑦ 표 셋: 10초 미만 소수 한 자리, 60초 미만 정수, 그 위 <m>m <s>s", () => {
+  assert.equal(formatElapsed(0), "0.0s");
+  assert.equal(formatElapsed(500), "0.5s");
+  assert.equal(formatElapsed(8_000), "8.0s");
+  assert.equal(formatElapsed(9_999), "10.0s"); // toFixed가 반올림하는 경계 — 10초 갈래가 하나 밀린다
+  assert.equal(formatElapsed(20_000), "20s");
+  assert.equal(formatElapsed(59_000), "59s");
+  assert.equal(formatElapsed(60_000), "1m 0s");
+  assert.equal(formatElapsed(230_000), "3m 50s");
+});
+
+test("progressFilterKindOf — §2-15 ⑥ 표: kind 하나 + interject의 label로 넷을 가른다", () => {
+  assert.equal(progressFilterKindOf({ kind: "text", label: "" }), "talk");
+  assert.equal(progressFilterKindOf({ kind: "interject", label: "" }), "talk");
+  assert.equal(progressFilterKindOf({ kind: "tool_use", label: "Bash" }), "tool");
+  assert.equal(progressFilterKindOf({ kind: "tool_result", label: "" }), "tool");
+  assert.equal(progressFilterKindOf({ kind: "thinking", label: "생각" }), "thinking");
+  assert.equal(progressFilterKindOf({ kind: "prompt", label: "프롬프트" }), "prompt");
+  assert.equal(progressFilterKindOf({ kind: "interject", label: "배정" }), "prompt");
+});
+
+const ALL_ON = { talk: true, tool: true, thinking: true, prompt: true };
+
+test("matchesStreamFilter — 필터가 kind로 먼저 거르고, 검색어는 label · summary · body를 대소문자 무시로 훑는다", () => {
+  const e = { kind: "tool_use", label: "Bash", summary: "ls -la", body: "실행 결과" };
+  assert.equal(matchesStreamFilter(e, ALL_ON, ""), true);
+  assert.equal(matchesStreamFilter(e, { ...ALL_ON, tool: false }, ""), false);
+  assert.equal(matchesStreamFilter(e, ALL_ON, "bash"), true); // label, 대소문자 무시
+  assert.equal(matchesStreamFilter(e, ALL_ON, "결과"), true); // body
+  assert.equal(matchesStreamFilter(e, ALL_ON, "없는말"), false);
+  // 검색어가 맞아도 필터가 그 kind를 껐으면 진다
+  assert.equal(matchesStreamFilter(e, { ...ALL_ON, tool: false }, "bash"), false);
+});
+
+test("toolChipCounts — 도구 이름별 개수, 횟수 내림차순 · 동률은 처음 나온 순 · tool_use만 센다", () => {
+  const events = [
+    { kind: "tool_use", label: "Read" },
+    { kind: "tool_use", label: "Bash" },
+    { kind: "tool_result", label: "" },
+    { kind: "tool_use", label: "Bash" },
+    { kind: "tool_use", label: "Edit" },
+    { kind: "tool_use", label: "Read" },
+    { kind: "tool_use", label: "Bash" },
+  ];
+  assert.deepEqual(toolChipCounts(events), [
+    ["Bash", 3],
+    ["Read", 2],
+    ["Edit", 1],
+  ]);
+  assert.deepEqual(toolChipCounts([]), []);
 });
 
 /** §비주얼 §26 ④. `lib/usage.ts`에 있던 `resetLabel`이 이 파일로 온 검증이다 — 홈 대화 목록(§24)이
