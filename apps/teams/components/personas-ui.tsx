@@ -1277,7 +1277,7 @@ function SquadDetail({
           value={edit.roles[m.name] ?? ""}
           onChange={(e) => setRole(m.name, e.target.value)}
           placeholder={profileTitle(profileOf(m.name))}
-          className="ml-4 text-xs md:text-xs"
+          className="ml-4 w-[calc(100%-1rem)] text-xs md:text-xs"
           aria-label={`${m.name}${t("persona.squad.roleAriaSuffix")}`}
         />
       </li>
