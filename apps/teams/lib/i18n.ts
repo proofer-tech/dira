@@ -634,7 +634,7 @@ export const ko: Record<string, string> = {
   "persona.squad.dropToRemove": "놓으면 멤버에서 뺍니다",
   "persona.squad.designateLeader": "리더로 지정",
   "persona.squad.unassignLeader": "리더 해제",
-  "persona.squad.emptyRoster": "아직 멤버가 없습니다 — 후보를 끌어 오거나 추가를 누릅니다",
+  "persona.squad.emptyRoster": "아직 멤버가 없습니다 - 후보를 끌어 오거나 추가를 누릅니다",
   "persona.squad.noCandidates": "프로필이 있는 페르소나가 전부 멤버입니다",
   "persona.squad.announceAdded": "멤버에 넣었습니다",
   "persona.squad.announceRemoved": "멤버에서 뺐습니다",

@@ -1341,7 +1341,7 @@ function SquadDetail({
                   // 없다(저장 순서가 그 이름을 꼬리에 두므로 지정이 참이 될 수 없다, N9).
                   if (isOrphan) {
                     return (
-                      <li key={m.name} className="flex items-center gap-2 rounded-md px-2 py-1.5">
+                      <li key={m.name} className="flex items-center gap-2 rounded-md px-2">
                         <span className="font-mono text-xs">{m.name}</span>
                         <Badge variant="outline" className="self-center">
                           {t("persona.badge.noProfile")}
@@ -1453,7 +1453,7 @@ function SquadDetail({
                       draggable
                       onDragStart={onCardDragStart(name, "candidates")}
                       onDragEnd={endDrag}
-                      className="flex items-center gap-2 rounded-md px-2 py-1.5"
+                      className="flex items-center gap-2 rounded-md px-2"
                     >
                       <PersonaDot color={colors[name]} />
                       <span className="font-mono text-xs">{name}</span>
