@@ -44,7 +44,7 @@ export default async function RootLayout({
   const locale = await readLanguage();
   return (
     <html
-      lang="ko"
+      lang={locale}
       className={`${geistMono.variable} h-full overflow-hidden antialiased`}
     >
       {/* 세로 스크롤의 주체는 `main`이다 — 문서가 아니다(§비주얼 §4). `h-full`이라 셸이 뷰포트
