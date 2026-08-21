@@ -100,6 +100,7 @@ export function SessionStream({
   plans = [],
   answerOptions = [],
   defaultAnswer = "",
+  body = "",
   stream = true,
   awaiting = false,
   answerFile,
@@ -126,6 +127,10 @@ export function SessionStream({
   /** frontmatter `default_answer:`(결정 12 (4)) — 서버가 `defaultAnswerOf(ticket)`로 내려보낸다.
    *  `AnswerForm`의 초기 체크·입력칸으로만 쓰인다. 없으면(PM이 손으로 쓴 질문) 종전 화면 그대로다. */
   defaultAnswer?: string;
+  /** 질문 절 밖의 본문(결정 14 ①, 요구 `c37fe0d3`) — 서버가 `bodyWithoutQuestions(ticket.body)`로
+   *  내려보낸다. 답변 모드의 `AnswerForm`에 그대로 흘려보낸다. 없으면(계획 절이 없는 티켓처럼
+   *  body를 안 읽는 자리) 그 접힘 자체가 없다. */
+  body?: string;
   /** 이 상자에 **스트림 줄이 흐르는가**(§29 ② 갈림길). 서버가 트랜스크립트 파일 하나로 판정한다.
    *  참이면 `h-[32rem]` 고정 + 머리 줄(버튼이 떴다 사라질 때 안 튄다), 거짓이면 `max-h-[32rem]` +
    *  머리 줄 없음 — 흐르는 것이 없으면 고정 높이의 근거도 머리 줄의 근거도 없다.
@@ -263,6 +268,7 @@ export function SessionStream({
       answerFile={answerFile}
       answerOptions={answerOptions}
       defaultAnswer={defaultAnswer}
+      body={body}
       vault={vault}
     />
   );
@@ -644,6 +650,7 @@ function ProgressForm({
   answerFile,
   answerOptions,
   defaultAnswer,
+  body = "",
   vault,
 }: {
   project: string;
@@ -664,6 +671,8 @@ function ProgressForm({
   /** frontmatter `default_answer:`(결정 12 (4)) — `answerOptions`처럼 답변 모드에서만 쓰인다 */
   defaultAnswer?: string;
   answerFile?: string;
+  /** 질문 절 밖의 본문(결정 14 ①) — `answerOptions`처럼 답변 모드에서만 쓰인다 */
+  body?: string;
   /** 이름 -> href 벌(§비주얼 §10 §위키링크) — 답변 모드의 `AnswerForm`에 그대로 흘려보낸다 */
   vault?: Vault;
 }) {
@@ -719,6 +728,7 @@ function ProgressForm({
           answerFile={answerFile}
           options={answerOptions}
           defaultAnswer={defaultAnswer}
+          body={body}
           vault={vault}
         />
       </div>
