@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { orderedSquadMembers, sameSquadMembers } from "./squads.ts";
+import { applyLeaderOverride, orderedSquadMembers, sameSquadMembers } from "./squads.ts";
 
 // §5-5 §개정 계약 표 순위 1-2-3 — `default`의 실측(`pm` `developer` `qa` `designer` `writer`)과
 // 같은 모양: 화면 목록(`eligible`)은 알파벳 순인데 파일 순서는 그것과 다르다.
@@ -51,4 +51,53 @@ test("sameSquadMembers — 이름+역할이 같아도 순서가 다르면 다른
   ];
   assert.equal(sameSquadMembers(a, a), true);
   assert.equal(sameSquadMembers(a, b), false);
+});
+
+// §5-5 §개정("멤버 칸이 로스터가 된다") — 리더로 지정(N5) - 해제(N6) - 지정한 이름을 로스터에서
+// 뺀 경우(로스터에 없는 이름을 지정한 채로 부른다)까지 세 갈래.
+test("applyLeaderOverride — 지정하면 그 이름이 첫 자리로 온다", () => {
+  const base = [
+    { name: "pm", role: "" },
+    { name: "developer", role: "" },
+    { name: "qa", role: "" },
+  ];
+  assert.deepEqual(
+    applyLeaderOverride(base, "qa").map((m) => m.name),
+    ["qa", "pm", "developer"],
+  );
+});
+
+test("applyLeaderOverride — 해제(leader: null)하면 원래 순서(저장 순서 계약의 출력)로 돌아간다", () => {
+  const base = [
+    { name: "pm", role: "" },
+    { name: "developer", role: "" },
+    { name: "qa", role: "" },
+  ];
+  assert.deepEqual(
+    applyLeaderOverride(base, null).map((m) => m.name),
+    ["pm", "developer", "qa"],
+  );
+});
+
+test("applyLeaderOverride — 지정한 이름이 로스터에서 빠지면(base 밖) 원본 그대로다", () => {
+  const base = [
+    { name: "pm", role: "" },
+    { name: "developer", role: "" },
+  ];
+  // "qa"를 리더로 지정한 뒤 로스터에서 뺀 경우 — base에 이미 qa가 없다
+  assert.deepEqual(
+    applyLeaderOverride(base, "qa").map((m) => m.name),
+    ["pm", "developer"],
+  );
+});
+
+test("applyLeaderOverride — 이미 첫 자리인 이름을 지정해도 순서가 안 갈린다", () => {
+  const base = [
+    { name: "pm", role: "" },
+    { name: "developer", role: "" },
+  ];
+  assert.deepEqual(
+    applyLeaderOverride(base, "pm").map((m) => m.name),
+    ["pm", "developer"],
+  );
 });

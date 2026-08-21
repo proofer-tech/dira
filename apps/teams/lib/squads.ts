@@ -26,3 +26,14 @@ export function orderedSquadMembers(
 export function sameSquadMembers(a: SquadMember[], b: SquadMember[]): boolean {
   return a.length === b.length && a.every((m, i) => m.name === b[i].name && m.role === b[i].role);
 }
+
+/** §5-5 §개정("멤버 칸이 로스터가 된다") — `orderedSquadMembers`(위, P311-2 계약)의 출력 위에
+ *  "첫 자리 하나를 사람이 옮기는 것"(리더 지정/해제) 하나만 얹는다. `orderedSquadMembers` 자신은
+ *  다시 안 쓴다 — 이 함수는 그 결과를 후처리하는 새 함수다.
+ *  `leader`가 `base`에 없으면(로스터에서 빠졌다) 원본 그대로다 — 지정한 이름이 사라지면 지정이
+ *  조용히 무효가 된다(엔진의 `members` 첫 줄은 여전히 정확히 한 이름이다). */
+export function applyLeaderOverride(base: SquadMember[], leader: string | null): SquadMember[] {
+  const idx = leader ? base.findIndex((m) => m.name === leader) : -1;
+  if (idx <= 0) return base;
+  return [base[idx], ...base.slice(0, idx), ...base.slice(idx + 1)];
+}
