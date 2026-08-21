@@ -95,6 +95,7 @@ import {
 } from "@/lib/budgets";
 import { skillUploadError } from "@/lib/skill-upload-limit";
 import type { Memory, Skill } from "@/lib/skills";
+import { orderedSquadMembers, sameSquadMembers } from "@/lib/squads";
 import { decodeHash, engineMissing, PERSONA_COLORS, personaDotClass } from "@/lib/urls";
 import { cn } from "@/lib/utils";
 
@@ -431,8 +432,8 @@ const editBytes = (e: PersonaEdit) => byteLength(e.body) + e.skillsChars;
 type SquadEdit = {
   /** 파일에 저장된 값(서버가 되읽어 준 것) */
   saved: { members: SquadMember[]; rules: string };
-  /** 체크한 이름들의 초안. 순서는 저장이 다시 정하므로(화면 목록 순서 = 리더를 정하는 순서,
-   *  §5-5 §개정) 여기서는 뜻이 없다 */
+  /** 체크한 이름들의 초안. 순서는 저장이 `orderedSquadMembers`로 다시 정하므로(§5-5 §개정 —
+   *  파일 순서 보존 + 새 체크만 화면 목록 순서로 뒤에 붙는다) 여기서는 뜻이 없다 */
   picked: string[];
   /** 이름별 역할 초안. 프로필이 없어진(orphan) 멤버의 역할도 여기 남아 있어야 저장 때 잃지
    *  않는다 — `initialSquadEdit`이 저장된 멤버 전원의 역할로 채운다 */
@@ -448,21 +449,23 @@ const initialSquadEdit = (row: SquadRow): SquadEdit => ({
   rules: row.rules,
 });
 
-/** 순서 없이 이름+역할 집합으로 비교한다 — 멤버 순서는 사람이 정하는 값이 아니다(§5-5 §안 하는 것,
- *  화면 목록 고정 순서가 정한다). */
-const sameSquadMembers = (a: SquadMember[], b: SquadMember[]) => {
-  if (a.length !== b.length) return false;
-  const sb = new Map(b.map((m) => [m.name, m.role]));
-  return a.every((m) => sb.get(m.name) === m.role);
-};
+/** `personas`(§5-5 §개정 계약 표의 화면 목록) 중 프로필이 있는 이름 — `orderedSquadMembers`의
+ *  `eligibleNames` 인자다. 왼쪽 배지와 `SquadDetail` 양쪽이 같은 `rows`를 넘겨 판정이 갈리지
+ *  않는다. */
+const eligibleNames = (personas: PersonaRow[]): string[] =>
+  personas.filter((p) => p.body !== null).map((p) => p.name);
 
-/** 지금 칸에서 픽·역할 초안이 실제로 갈렸나(§5-5 §화면 "저장 안 됨") — 순서는 안 본다(위와 같은
- *  이유), `rules`는 따로 비교한다. */
-const squadDirty = (edit: SquadEdit): boolean =>
+/** 지금 칸에서 저장될 순서(`orderedSquadMembers`)가 파일과 실제로 갈렸나(§5-5 §개정 "저장 안
+ *  됨") — 저장이 순서를 만드는 그 함수를 그대로 불러 비교한다. */
+const membersDirty = (edit: SquadEdit, personas: PersonaRow[]): boolean =>
   !sameSquadMembers(
-    edit.picked.map((name) => ({ name, role: (edit.roles[name] ?? "").trim() })),
+    orderedSquadMembers(edit.picked, edit.roles, edit.saved.members, eligibleNames(personas)),
     edit.saved.members,
-  ) || edit.rules !== edit.saved.rules;
+  );
+
+/** 왼쪽 목록 줄의 `저장 안 됨` 판정 — 멤버(순서 포함) + `rules` 둘을 합쳐 본다. */
+const squadDirty = (edit: SquadEdit, personas: PersonaRow[]): boolean =>
+  membersDirty(edit, personas) || edit.rules !== edit.saved.rules;
 
 export function PersonasPane({
   projectId,
@@ -708,7 +711,7 @@ export function PersonasPane({
                   const active = squad.name === currentSquad?.name;
                   // §5-5 §화면 "기본 선택 - 동시 선택 - 편집 보존 - 저장 안 됨: §5 그대로" —
                   // 스쿼드 칸의 미저장 멤버 변경도 페르소나와 같은 표식을 왼쪽 줄에 남긴다.
-                  const dirty = squadDirty(squadEditOf(squad));
+                  const dirty = squadDirty(squadEditOf(squad), rows);
                   const childrenId = `squad-members-${squad.name}`;
                   // `rows`에 없는 멤버 이름은 줄을 안 세운다(§비주얼 §61 (17) §자식 줄) —
                   // 그 사실은 위 `멤버 프로필 없음` 배지와 오른쪽 칸이 이미 든다.
@@ -1070,11 +1073,10 @@ function SquadDetail({
   // 저장된 멤버 중 지금은 고를 수 없는 이름(프로필이 없어졌다) — 체크리스트에 없으니 잃지
   // 않으려면 따로 보여주고 `제거`로만 뗀다(스킬 절 orphans와 같은 처리, §비주얼 §25).
   const orphans = edit.picked.filter((m) => !eligible.includes(m));
-  // 저장 순서 = 화면 목록 순서다(§5-5 §안 하는 것) — **첫 항목이 리더다**(§5-5 §개정). orphans는
-  // 화면에 자리가 없어 뒤에 그대로 붙는다.
-  const orderedMembers: SquadMember[] = [...eligible.filter((n) => edit.picked.includes(n)), ...orphans].map(
-    (name) => ({ name, role: (edit.roles[name] ?? "").trim() }),
-  );
+  // 저장 순서 = 계약 표 순위 1-2-3(§5-5 §개정) — 파일 순서 그대로인 기존 체크 + 새 체크는 화면
+  // 목록 순서로 뒤에 + orphans는 꼬리. **첫 항목이 리더다**(§5-5 §개정, 여기서는 안 갈린다).
+  // 왼쪽 목록 배지와 같은 함수를 부른다(위 `membersDirty`) — 판정이 갈리지 않는다.
+  const orderedMembers: SquadMember[] = orderedSquadMembers(edit.picked, edit.roles, edit.saved.members, eligible);
   const leaderName = orderedMembers[0]?.name;
   const blockBytes = squadBlockBytes(
     row.name,
@@ -1084,10 +1086,7 @@ function SquadDetail({
   const rulesBytes = new TextEncoder().encode(edit.rules).length;
   // 절이 둘(멤버 - 규칙)이라 저장도 둘이다(§비주얼 §61 (15) 4행) — 왼쪽 줄의 `저장 안 됨`은
   // 여전히 `squadDirty` 하나로 합쳐 본다(그 배지는 절이 아니라 줄의 값이다).
-  const membersDirty = !sameSquadMembers(
-    edit.picked.map((name) => ({ name, role: (edit.roles[name] ?? "").trim() })),
-    edit.saved.members,
-  );
+  const isMembersDirty = membersDirty(edit, personas);
   const rulesDirty = edit.rules !== edit.saved.rules;
 
   const toggle = (name: string) =>
@@ -1249,12 +1248,12 @@ function SquadDetail({
           <Failure title={t("persona.action.saveFailedTitle")} message={membersResult.message ?? ""} />
         )}
         <div className="flex items-center justify-end gap-4">
-          {membersResult?.ok && !membersDirty && (
+          {membersResult?.ok && !isMembersDirty && (
             <span className="text-sm text-muted-foreground">{t("persona.action.savedNotice")}</span>
           )}
           <Button
             size="sm"
-            disabled={membersPending || !membersDirty}
+            disabled={membersPending || !isMembersDirty}
             onClick={() =>
               startMembers(async () => {
                 const r = await saveSquadMembersAction(projectId, row.name, orderedMembers);
