@@ -40,6 +40,11 @@ export type StreamEvent = {
   // 종료 코드도 안 읽는다. 짝인 `tool_use`에는 안 선다. `undefined`로 채우면 골든 테스트의
   // `deepEqual`이 키 유무로 갈린다(`diff`와 같은 이유).
   error?: true;
+  // 도구 호출 id(§2-15 ③) — 이 `tool_use`와 그 짝 `tool_result`를 잇는 값. claude는
+  // `tool_use.id` / `tool_result.tool_use_id`, grok은 `toolCallId`가 원천이다. `kind`가
+  // `tool_use`·`tool_result`인 사건에만 선다 — 다른 종에는 `diff`·`error`와 같은 이유로 키
+  // 자체가 없다.
+  toolId?: string;
 };
 
 /** §경로 방어. `session_id`는 사람 입력이 아니라 티켓 fm에서만 오고, 경로가 되기 전에 이걸 통과한다.
@@ -391,7 +396,13 @@ function grokRecord(rec: unknown, cwd?: string): unknown {
   const p = (r.params ?? {}) as { update?: unknown; _meta?: unknown };
   const u = p.update;
   if (!u || typeof u !== "object") return null;
-  const up = u as { sessionUpdate?: unknown; content?: unknown; rawInput?: unknown; _meta?: unknown };
+  const up = u as {
+    sessionUpdate?: unknown;
+    content?: unknown;
+    rawInput?: unknown;
+    _meta?: unknown;
+    toolCallId?: unknown;
+  };
   const eventId = ((p._meta ?? {}) as { eventId?: unknown }).eventId;
   const label = (((up._meta ?? {}) as Record<string, unknown>)["x.ai/tool"] ?? {}) as {
     label?: unknown;
@@ -409,17 +420,20 @@ function grokRecord(rec: unknown, cwd?: string): unknown {
       return msg("assistant", [{ type: "text", text: grokText(up.content) }]);
     case "agent_thought_chunk":
       return msg("assistant", [{ type: "thinking", thinking: grokText(up.content) }]);
-    case "tool_call":
-      return msg("assistant", [
-        { type: "tool_use", name: label.label, input: up.rawInput },
-      ]);
+    case "tool_call": {
+      const id = typeof up.toolCallId === "string" ? up.toolCallId : undefined;
+      return msg("assistant", [{ type: "tool_use", name: label.label, input: up.rawInput, id }]);
+    }
     case "tool_call_update": {
       // **본문 없는 갱신은 안 흘린다.** 한 도구 호출에 갱신이 여러 번 오고(실측 세션 하나에서
       // 호출 24 · 갱신 85) 그중 26건은 상태만 바뀐 줄이라 `결과 · 0줄`이 스트림을 덮는다.
       // 같은 판정이 이 파일에 이미 있다 — 본문 없는 `enqueue`를 안 흘리는 그 줄(피드백
       // `edec37eb`)이고, 판정을 `resultText`로 하므로 **사건이 쓸 글과 같은 값**을 본다.
       const content = (Array.isArray(up.content) ? up.content : []).map(grokBlock);
-      return resultText(content).trim() ? msg("user", [{ type: "tool_result", content }]) : null;
+      const id = typeof up.toolCallId === "string" ? up.toolCallId : undefined;
+      return resultText(content).trim()
+        ? msg("user", [{ type: "tool_result", content, tool_use_id: id }])
+        : null;
     }
     default:
       return null;
@@ -435,6 +449,8 @@ type Block = {
   input?: unknown;
   content?: unknown;
   is_error?: unknown;
+  id?: unknown;
+  tool_use_id?: unknown;
 };
 
 /** 레코드 하나 → 사건 0..n개 (§2-1 표). assistant 한 레코드가 thinking+text+tool_use를 함께 담는다.
@@ -550,6 +566,7 @@ export function recordToEvents(rec: unknown, collapseFirstPrompt = false): Strea
           summary: s.text,
           summaryMono: s.mono,
           body: b.input === undefined ? "" : JSON.stringify(b.input, null, 2),
+          ...(typeof b.id === "string" ? { toolId: b.id } : {}),
           ...(edit ? { diff: lineDiff(edit.old, edit.new), replaceAll: edit.replaceAll } : {}),
         });
         break;
@@ -561,6 +578,7 @@ export function recordToEvents(rec: unknown, collapseFirstPrompt = false): Strea
           label: "결과",
           summary: `${lines(body)}줄`,
           body,
+          ...(typeof b.tool_use_id === "string" ? { toolId: b.tool_use_id } : {}),
           ...(b.is_error === true ? { error: true } : {}),
         });
         break;
