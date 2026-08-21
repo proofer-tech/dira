@@ -111,8 +111,10 @@ export function engineName(engine: string | null): string {
   // `null` = 대입이 없다 = tick.sh 기본값이 실제로 돈다. 인증 배너(§0-4)가 그 워커에도 서야 한다.
   const first = (engine ?? DEFAULT_ENGINE).trim().split(/\s+/)[0] ?? "";
   const name = path.basename(first.replace(/^(['"])(.*)\1$/, "$2"));
-  // 엔진 수정 24번째: 고정 경로 이름 `dira`는 claude로 정규화한다(tick.sh의 같은 판정과 짝).
-  return name === "dira" ? "claude" : name;
+  // 엔진 수정 27번째 계약 3(tick.sh:550-554와 같은 판정, 한 자리뿐이다):
+  // dira -> claude(24번째 그대로), dira-<x> -> <x>, 그 외는 basename 그대로.
+  if (name === "dira") return "claude";
+  return name.startsWith("dira-") ? name.slice("dira-".length) : name;
 }
 
 /** tick.sh와 **같이** 조립한다:
@@ -634,8 +636,10 @@ export const ENGINES: readonly {
     flag: "--model",
     // 별칭은 정의상 최신을 가리키는 고정 포인터라 풀네임과 달리 안 낡는다(§4-3 근거 2).
     models: [NO_MODEL, "opus", "sonnet", "fable", "haiku"],
+    // 엔진 수정 27번째 계약 2·5: PATH의 이름이 아니라 고정 경로다 — 사람이 화면에서 한 번
+    // 고르면 §24가 구운 하드링크를 되돌리던 회귀(GUI가 §24를 매번 되돌리고 있었다)를 막는다.
     argv: [
-      "claude",
+      '"$HOME/.config/dira/bin/dira"',
       "-p",
       "--session-id",
       '"{sid}"',
@@ -658,7 +662,7 @@ export const ENGINES: readonly {
     // `workspace-write`로도 부족하다 — `.dira`가 워크트리 밖(큐)을 가리켜 티켓 rename이 막힌다.
     // `--skip-git-repo-check` 없으면 레포가 아닌 TICKET_CWD에서 매 tick 즉시 거부된다.
     argv: [
-      "codex",
+      '"$HOME/.config/dira/bin/dira-codex"',
       "exec",
       "--json",
       "-s",
@@ -678,7 +682,7 @@ export const ENGINES: readonly {
     // `--permission-mode bypassPermissions` 하나로 파일 쓰기까지 지난다(실측 §4-3 §grok).
     // codex가 `-s danger-full-access`를 **필요로 했던 것**과 갈리는 자리다.
     argv: [
-      "grok",
+      '"$HOME/.config/dira/bin/dira-grok"',
       "-p",
       '"{prompt}"',
       "--session-id",
@@ -713,7 +717,7 @@ export const ENGINES: readonly {
     // `-p "{prompt}"`가 맨 뒤인 이유와 `--print-timeout 5400s`가 있는 이유는 위 헤더 주석과
     // §4-3 표(agy 행 둘)에 있다. `<T>`가 아니라 고정값인 것은 §4-3 §agy ⑥ 천장 1과 같은 자리다.
     argv: [
-      "agy",
+      '"$HOME/.config/dira/bin/dira-agy"',
       "--output-format",
       "stream-json",
       "--dangerously-skip-permissions",

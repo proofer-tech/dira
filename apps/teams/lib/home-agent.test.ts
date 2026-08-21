@@ -66,10 +66,12 @@ function fixture() {
   mkdirSync(tickets, { recursive: true });
 
   // w1은 엔진 대입이 있고(opus), w2는 없다(= tick.sh 기본값 · `기본값 가정`)
+  // §27 계약 5: 첫 토큰은 고정 경로 리터럴이다 — 실제 페르소나 파일이 쓰는 값 그대로다.
   writeFileSync(
     path.join(workers, "w1.sh"),
-    '#!/bin/bash\nTICKET_ENGINE=(claude -p --session-id "{sid}" --dangerously-skip-permissions' +
-      " --model opus --input-format stream-json --output-format stream-json --verbose)\n" +
+    '#!/bin/bash\nTICKET_ENGINE=("$HOME/.config/dira/bin/dira" -p --session-id "{sid}"' +
+      ' --dangerously-skip-permissions --model opus --input-format stream-json' +
+      " --output-format stream-json --verbose)\n" +
       `TICKET_CWD=${path.dirname(root)}\n. /nowhere/tick.sh\n`,
   );
   writeFileSync(path.join(workers, "w2.sh"), `#!/bin/bash\nTICKET_CWD=${path.dirname(root)}\n. /nowhere/tick.sh\n`);

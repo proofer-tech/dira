@@ -47,14 +47,11 @@ export async function readAuth(): Promise<AuthStatus> {
 
 export type OtherEngine = Exclude<EngineId, "claude">;
 
-/** 실행파일 이름의 정본은 §4-3 카탈로그다(`ENGINES[].argv[0]`, `lib/workers.ts`) — 여기서
- *  두 벌째 안 적는다(§0-17 §개정 후보 11, `9a0dfbee`). 함수 몸통 안에서만 `ENGINES`를
- *  참조한다 — `workers.ts`가 이 파일을 값으로 임포트해서(`isEligible`·`tokensPath`) 생기는
- *  순환을, 모듈 최상위에서 안 읽으면 초기화 순서와 무관하게 피한다. */
+/** PATH에서 찾는 실행파일 이름은 **카탈로그 id 그 자체**다 — claude·codex·grok·agy 넷 다
+ *  CLI 이름이 id와 같다. §27부터 `ENGINES[].argv[0]`은 dira 고정 경로 래퍼(§4-3 §27)라 더는
+ *  PATH 이름이 아니다 — 원본 CLI를 찾을 때 그 값을 두 번째로 안 쓴다. */
 function engineBin(id: EngineId): string {
-  const e = ENGINES.find((x) => x.id === id);
-  if (!e) throw new Error(`모르는 엔진입니다: ${id}`);
-  return e.argv[0];
+  return id;
 }
 
 /** codex·grok의 자격증명 파일 자리(§4-3 §개정 표). agy는 파일이 아니라 macOS 키체인이라
@@ -78,13 +75,13 @@ export type OtherEngineAuth = {
 export async function readOtherEngineAuth(home = homedir()): Promise<OtherEngineAuth[]> {
   const others = ENGINES.filter((e): e is (typeof ENGINES)[number] & { id: OtherEngine } => e.id !== "claude");
   return Promise.all(
-    others.map(async ({ id: engine, argv }) => {
+    others.map(async ({ id: engine }) => {
       const rel = CRED_FILE[engine];
       const credPath = rel ? path.join(home, rel) : null;
       const s = credPath ? await stat(credPath).catch(() => null) : null;
       return {
         engine,
-        cli: findExecutable(argv[0]),
+        cli: findExecutable(engineBin(engine)),
         credPath: s ? credPath : null,
         credMtime: s ? when(s.mtime) : null,
       };

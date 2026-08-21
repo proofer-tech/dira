@@ -133,6 +133,26 @@ test("engineName — tick.sh:52의 basename \"${TICKET_ENGINE[0]}\"과 판정이
   // 엔진 수정 24번째(§제약 1 §결정 기록): 고정 경로 이름 `dira`는 claude로 정규화한다.
   // bash의 순정 basename과는 여기서 갈리므로(값이 "dira") 위 for 루프 밖에서 따로 못박는다.
   assert.strictEqual(engineName('dira -p --session-id "x"'), "claude");
+  // 엔진 수정 27번째 계약 3: dira-<x> -> <x>(tick.sh:552와 같은 판정).
+  assert.strictEqual(
+    engineName('"/Users/x/.config/dira/bin/dira-codex" exec --json "{prompt}"'),
+    "codex",
+  );
+});
+
+test("engineName·parseEngineValue — 고정 경로를 쓰는 오늘의 페르소나 값이 표준으로 읽힌다 (§27)", () => {
+  // .dira/personas/developer/engine이 오늘 실제로 쓰는 값 그대로다(사람 손으로 갱신되지 않는다,
+  // §27 계약 5) — 카탈로그 argv[0]을 고정 경로로 안 바꾸면 이 값이 `parseEngineValue`에서
+  // `null`로 읽혀 §비주얼 §23의 `커스텀` 배지가 서는 회귀(이 왕복이 시작된 증상)가 재현된다.
+  const todaysPersonaValue =
+    '"$HOME/.config/dira/bin/dira" -p --session-id "{sid}" --dangerously-skip-permissions ' +
+    "--model sonnet --input-format stream-json --output-format stream-json --verbose";
+  assert.notStrictEqual(parseEngineValue(todaysPersonaValue), null);
+  assert.deepStrictEqual(parseEngineValue(todaysPersonaValue), {
+    engineId: "claude",
+    model: "sonnet",
+  });
+  assert.strictEqual(engineName(todaysPersonaValue), "claude");
 });
 
 test("listWorkers — running · stale · stopped 판정", async () => {
@@ -2185,7 +2205,7 @@ test("엔진 템플릿 — 바꿔 쓸 수 없는 자리 일곱을 못박는다 (
   // grok은 codex와 같은 비스트리밍 경로이므로 프롬프트가 argv로 간다. 다만 위치 인자가 아니라
   // `-p`의 값이라 **맨 끝이 아니다** — 그래서 이 단언은 codex의 것과 모양이 갈린다.
   assert.deepStrictEqual(grok, [
-    "grok",
+    '"$HOME/.config/dira/bin/dira-grok"',
     "-p",
     '"{prompt}"',
     "--session-id",
@@ -2234,33 +2254,32 @@ test("엔진 템플릿 — 바꿔 쓸 수 없는 자리 일곱을 못박는다 (
 
 test("엔진 카탈로그의 claude = tick.sh의 실제 기본값이다 (눈으로 안 맞춘다)", () => {
   // 손으로 적은 사본은 반드시 갈린다 — `DEFAULT_ENGINE`이 이미 한 번 갈려 있었다(§결과).
-  // 엔진 파일에서 그 대입만 떼어 **진짜 bash로 펴서** 토큰을 대조한다.
+  // §27 계약 5: 카탈로그 argv[0]은 tick.sh의 `$FIXED_ENGINE`과 같은 리터럴이다 — 엔진 파일에서
+  // 그 대입만 떼어 **진짜 bash로 펴서** 토큰을 대조한다(눈으로 안 맞춘다).
   const tick = readFileSync(path.join(import.meta.dirname, "..", "..", "..", "tick.sh"), "utf8");
+  const binDir = tick.match(/^BIN_DIR=.*$/m);
+  assert.ok(binDir, "tick.sh에서 BIN_DIR 대입을 못 찾았다");
   const fixed = tick.match(/^FIXED_ENGINE=.*$/m);
   assert.ok(fixed, "tick.sh에서 FIXED_ENGINE 대입을 못 찾았다");
   const m = tick.match(/^\[ \$\{#TICKET_ENGINE\[@\]\} -eq 0 \] && (TICKET_ENGINE=\([\s\S]*?\))$/m);
   assert.ok(m, "tick.sh에서 기본 TICKET_ENGINE 대입을 못 찾았다");
-  // 첫 토큰은 실제로 `$FIXED_ENGINE`(TCC 고정 경로, 엔진 수정 24번째 계약 1)이다 — 그런데 그
-  // 경로를 못 만들었거나 실행 불가면 tick.sh가 그 자리에서 이름 "claude"로 되돌린다(계약 5).
-  // 이 테스트 환경(과 갓 세팅한 실제 머신)은 `$LOCAL/bin/dira`가 없으니 매번 그 되돌림이
-  // 걸린다 — 그 되돌림 코드도 손으로 안 베끼고 tick.sh에서 그대로 떼어와 같이 편다.
-  const fallback = tick.match(
-    /^  if \[ "\$\(basename "\$\{TICKET_ENGINE\[0\]\}"\)" = "dira" \][\s\S]*?\n  fi$/m,
-  );
-  assert.ok(fallback, "tick.sh에서 dira->claude 되돌림 분기를 못 찾았다");
+  // HOME을 고정 문자열로 몰아 카탈로그 쪽 `$HOME` 리터럴 치환과 같은 값으로 맞춘다 — 실제
+  // 홈 디렉터리를 안 밟는다.
+  const HOME_STUB = "/tmp/dira-parity-test-home";
   const got = execFileSync(
     "bash",
     [
       "-c",
-      `LOCAL="/tmp/dira-parity-test-$$-nonexistent"\n${fixed[0]}\n${m[1]}\n${fallback[0]}\nprintf '%s\\n' "\${TICKET_ENGINE[@]}"`,
+      `HOME=${HOME_STUB}\n${binDir[0]}\n${fixed[0]}\n${m[1]}\nprintf '%s\\n' "\${TICKET_ENGINE[@]}"`,
     ],
     { encoding: "utf8" },
   )
     .trim()
     .split("\n");
-  // 카탈로그 토큰은 **파일에 적히는 모양**이라 `"{sid}"`처럼 따옴표가 살아 있다. bash가 벗긴 쪽에 맞춘다.
+  // 카탈로그 토큰은 **파일에 적히는 모양**이라 `"{sid}"`처럼 따옴표와 `$HOME` 리터럴이 살아
+  // 있다. bash가 벗기고 편 쪽에 맞춘다.
   assert.deepStrictEqual(
-    engineArgv("claude").map((t) => t.replace(/^"(.*)"$/, "$1")),
+    engineArgv("claude").map((t) => t.replace(/^"(.*)"$/, "$1").replace("$HOME", HOME_STUB)),
     got,
   );
 });
@@ -2282,15 +2301,15 @@ test("renderEngineBlock ↔ parseEngineValue — 카탈로그 전 조합이 왕�
   // 다시 그려 대조하므로 카탈로그가 틀리면 같이 틀린다. 여기가 스펙 대조다(§4-3 §템플릿 3벌).
   assert.deepStrictEqual(
     parseEngineValue(
-      'grok -p "{prompt}" --session-id "{sid}" --permission-mode bypassPermissions' +
-        " --output-format streaming-messages-json",
+      '"$HOME/.config/dira/bin/dira-grok" -p "{prompt}" --session-id "{sid}"' +
+        " --permission-mode bypassPermissions --output-format streaming-messages-json",
     ),
     { engineId: "grok", model: NO_MODEL },
   );
   assert.deepStrictEqual(
     parseEngineValue(
-      'grok -p "{prompt}" --session-id "{sid}" --permission-mode bypassPermissions' +
-        " -m grok-4.5 --output-format streaming-messages-json",
+      '"$HOME/.config/dira/bin/dira-grok" -p "{prompt}" --session-id "{sid}"' +
+        " --permission-mode bypassPermissions -m grok-4.5 --output-format streaming-messages-json",
     ),
     { engineId: "grok", model: "grok-4.5" },
   );
