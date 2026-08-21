@@ -626,19 +626,24 @@ export const ko: Record<string, string> = {
   "persona.squad.noEligible": "프로필이 있는 페르소나가 없습니다 — 먼저 페르소나를 만듭니다.",
   "persona.squad.roleAriaSuffix": "의 역할",
   "persona.squad.openPersonaAriaSuffix": "엽니다",
+  // §비주얼 §61 (21) §리더 묶음 — 낱말 `리더`가 묶음 머리로 서고 카드의 배지는 죽는다. 자리만
+  // 갈리고 문구는 무수정이라 새 키가 아니다.
   "persona.squad.leaderBadge": "리더",
   "persona.squad.roleHint": "역할을 비우면 그 페르소나의 프로필 첫 줄이 역할이 됩니다.",
-  // §5-5 §개정("멤버 칸이 로스터가 된다") — 체크 목록이 그릇 둘로 갈리며 는 문구 열(DESIGN.md
-  // §비주얼 §61 (21) §두 언어). 버튼 라벨·짧은 문구라 `en`도 여기서 같이 채운다(developer 몫).
-  "persona.squad.designateLeader": "리더로 지정",
-  "persona.squad.unassignLeader": "리더 해제",
-  // §5-5 §개정("후보 그릇을 걷고 `추가`-`제거`로 바꾼다") — 후보 그릇·드래그 문구가 죽어
-  // 지워지고(candidatesHeading · dropToAdd · dropToRemove · noCandidates) 검색 목록 문구가 든다.
+  // §5-5 §개정("리더 자리에서 내려온 이름은 스쿼드에서 빠진다") — 카드의 리더 지정/해제가
+  // 리더 절의 `추가`로 옮겨가며 죽는 문구(DESIGN.md §비주얼 §61 (21) §두 언어). 버튼
+  // 라벨·짧은 문구라 `en`도 여기서 같이 채운다(developer 몫).
   "persona.squad.emptyRoster": "아직 멤버가 없습니다 - 추가를 누릅니다",
   "persona.squad.addSearchPlaceholder": "이름 검색",
-  "persona.squad.addSearchEmpty": "프로필이 있고 아직 멤버가 아닌 이름이 없습니다",
+  "persona.squad.addSearchEmpty": "고를 이름이 없습니다",
+  "persona.squad.addSearchZeroMatch": "일치하는 이름 0건",
+  "persona.squad.notInSquadHeading": "이 스쿼드에 없음",
+  "persona.squad.noLeader": "리더 없음",
+  "persona.squad.leaderRemoveConfirmTitlePrefix": "리더 제거 —",
+  "persona.squad.leaderRemoveConfirmBody":
+    "그 이름이 이 스쿼드에서 빠지고 역할 칸에 적은 글자도 같이 없어집니다. 저장을 안 하면 되돌아옵니다.",
   "persona.squad.announceAdded": "멤버에 넣었습니다",
-  "persona.squad.announceRemoved": "멤버에서 뺐습니다",
+  "persona.squad.announceRemoved": "스쿼드에서 뺐습니다",
   "persona.squad.announceLeader": "리더입니다",
   "persona.squadDelete.titlePrefix": "스쿼드 삭제 —",
   "persona.squadDelete.bodyMiddle":
@@ -1429,13 +1434,17 @@ export const en: Record<string, string> = {
   "persona.squad.openPersonaAriaSuffix": "open",
   "persona.squad.leaderBadge": "Leader",
   "persona.squad.roleHint": "Leave a role empty and the first line of that persona's profile becomes the role.",
-  "persona.squad.designateLeader": "Make leader",
-  "persona.squad.unassignLeader": "Unassign leader",
   "persona.squad.emptyRoster": "No members yet — press Add",
   "persona.squad.addSearchPlaceholder": "Search names",
-  "persona.squad.addSearchEmpty": "No persona with a profile is left to add",
+  "persona.squad.addSearchEmpty": "No name left to pick",
+  "persona.squad.addSearchZeroMatch": "0 names match",
+  "persona.squad.notInSquadHeading": "Not in this squad",
+  "persona.squad.noLeader": "No leader",
+  "persona.squad.leaderRemoveConfirmTitlePrefix": "Remove leader —",
+  "persona.squad.leaderRemoveConfirmBody":
+    "That name leaves this squad and the role text is cleared too. Skip saving to undo it.",
   "persona.squad.announceAdded": "added to members",
-  "persona.squad.announceRemoved": "removed from members",
+  "persona.squad.announceRemoved": "removed from squad",
   "persona.squad.announceLeader": "is leader",
   "persona.squadDelete.titlePrefix": "Delete squad —",
   "persona.squadDelete.bodyMiddle":

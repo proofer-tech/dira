@@ -441,10 +441,16 @@ type SquadEdit = {
   roles: Record<string, string>;
   /** `rules` 초안 */
   rules: string;
-  /** §5-5 §개정("멤버 칸이 로스터가 된다") — 사람이 `리더로 지정`한 이름. `null` = 지정 없음,
-   *  리더는 저장 순서 계약(`orderedSquadMembers`)이 낸 첫 이름 그대로다. `applyLeaderOverride`가
+  /** §5-5 §개정("멤버 칸이 로스터가 된다") — 사람이 리더 절의 `추가`로 고른 이름. `null` = 지정
+   *  없음, 리더는 저장 순서 계약(`orderedSquadMembers`)이 낸 첫 이름 그대로다. `applyLeaderOverride`가
    *  이 값을 얹는다 */
   leader: string | null;
+  /** §비주얼 §61 (21) §빈 묶음 — 리더 카드의 `제거`를 누른 뒤 화면이 `리더 없음`을 보이는 저장 전
+   *  상태다(계약 §깨지는 계약). `leader`가 `null`이면 `finalOrderedMembers`의 첫 이름이 그대로
+   *  리더로 계산되므로(§엔진 무수정), 이 플래그가 없으면 화면이 그 이름을 다시 리더로 그린다 —
+   *  화면 표시만 가르는 값이라 저장 값(`orderedMembers`)에는 영향을 안 준다. 리더 절의 `추가`가
+   *  다시 고르면 `false`로 되돌아온다 */
+  leaderCleared: boolean;
 };
 
 const initialSquadEdit = (row: SquadRow): SquadEdit => ({
@@ -453,6 +459,7 @@ const initialSquadEdit = (row: SquadRow): SquadEdit => ({
   roles: Object.fromEntries(row.members.map((m) => [m.name, m.role])),
   rules: row.rules,
   leader: null,
+  leaderCleared: false,
 });
 
 /** `personas`(§5-5 §개정 계약 표의 화면 목록) 중 프로필이 있는 이름 — `orderedSquadMembers`의
@@ -1129,56 +1136,78 @@ function SquadDetail({
   const [headError, setHeadError] = useState<string | null>(null);
   const [membersPending, startMembers] = useTransition();
   const [rulesPending, startRules] = useTransition();
-  // 이동의 결과를 읽는 라이브 리전(§5-5 §개정 - 추가/제거 §낭독) — 그릇 이름은 `aria-labelledby`가
-  // 이미 읽으므로 여기서는 "끝난 이동"만 알린다.
+  // 이동의 결과를 읽는 라이브 리전(§비주얼 §61 (21) §라이브 리전) — 그릇 소속은 `aria-labelledby`가
+  // 이미 읽으므로 여기서는 "끝난 이동"만 알린다. 절 사이 이동과 스쿼드에서 빠지는 것은 다른 문장이다.
   const [announce, setAnnounce] = useState("");
-  const rosterHeadingId = useId();
-  // `추가` 팝오버 — board-ui.tsx `FilterPopover`와 같은 `Popover`+`Command` 조합(§5-5 §개정 -
-  // 후보 그릇을 걷고 `추가`-`제거`로 바꾼다). 열 때마다 검색어를 새로 시작한다.
-  const [addOpen, setAddOpen] = useState(false);
-  const addTriggerId = useId();
+  const leaderHeadingId = useId();
+  const memberHeadingId = useId();
+  const leaderAddTriggerId = useId();
+  const memberAddTriggerId = useId();
 
-  // 키보드 `제거` 뒤 포커스가 `추가`로 옮겨간다(§비주얼 §61 (21) §키보드) — 누른 카드가 그
-  // 자리에서 사라지므로 안 옮기면 포커스가 `body`로 떨어진다. `rAF`는 이 클릭이 낸 `onEdit`
-  // 재렌더가 커밋된 다음 프레임에 돈다. `추가` 쪽은 팝오버가 닫히며 트리거로 포커스를 스스로
-  // 돌려준다(Radix 포커스 복귀) — 여기서 옮길 필요가 없다.
-  const focusAddTrigger = () => {
+  // 교체 · 리더 카드의 `제거`가 같은 confirm 한 벌을 쓴다(§비주얼 §61 (21) §교체 confirm) —
+  // `name`은 그 confirm이 지키는 앞 리더, `onConfirm`은 "진행"을 눌렀을 때 실행할 변화 자체다.
+  const [leaderConfirm, setLeaderConfirm] = useState<{ name: string; onConfirm: () => void } | null>(
+    null,
+  );
+
+  // 카드의 `제거` 뒤 포커스가 그 묶음 머리의 `추가`로 옮겨간다(§비주얼 §61 (21) §키보드) — 누른
+  // 카드가 그 자리에서 사라지므로 안 옮기면 포커스가 `body`로 떨어진다. `rAF`는 이 클릭이 낸
+  // `onEdit` 재렌더가 커밋된 다음 프레임에 돈다. `추가` 쪽은 팝오버가 닫히며 트리거로 포커스를
+  // 스스로 돌려준다(Radix 포커스 복귀) — 여기서 옮길 필요가 없다.
+  const focusTrigger = (id: string) => {
     requestAnimationFrame(() => {
-      document.getElementById(addTriggerId)?.focus();
+      document.getElementById(id)?.focus();
     });
   };
 
   const eligible = personas.filter((p) => p.body !== null).map((p) => p.name);
   const profileOf = (name: string) => personas.find((p) => p.name === name)?.body ?? null;
   // 로스터 = 저장 순서 계약의 출력(`finalOrderedMembers`, §5-5 §개정) — 프로필 없는 멤버도
-  // 그 함수가 이미 꼬리에 둔다(순위 3). 후보 = eligible 중 아직 안 고른 것, 화면 목록 순서 그대로.
+  // 그 함수가 이미 꼬리에 둔다(순위 3). `leaderCleared`는 그 출력의 첫 이름을 화면에서만 감춘다 —
+  // 저장 값(`orderedMembers` 그 자체)은 안 갈린다(§비주얼 §61 (21) §깨지는 계약, 계약 무수정).
   const orderedMembers: SquadMember[] = finalOrderedMembers(edit, personas);
+  const leaderMember = edit.leaderCleared ? undefined : orderedMembers[0];
+  const memberSection = edit.leaderCleared ? orderedMembers : orderedMembers.slice(1);
+  // `추가` 목록에 안 드는 이름 — 리더든 멤버든 이미 이 스쿼드에 있으면 안 든다(계약 §값).
   const candidates = eligible.filter((name) => !edit.picked.includes(name));
-  const leaderName = orderedMembers[0]?.name;
+  // 리더 절 `추가`의 위 묶음(§비주얼 §61 (21) §닫힌 목록) — 지금 멤버 중 프로필이 있는 이름만.
+  // 프로필 없는 멤버는 리더가 못 된다 — 그 판정은 `eligible` 필터가 저절로 낸다(계약 §안 갈리는 것).
+  const currentMemberNames = memberSection.filter((m) => eligible.includes(m.name)).map((m) => m.name);
 
   const addMember = (name: string) => {
-    onEdit({ ...edit, picked: edit.picked.includes(name) ? edit.picked : [...edit.picked, name] });
+    onEdit({ ...edit, picked: [...edit.picked, name] });
     setAnnounce(wrap(name, t("persona.squad.announceAdded"), ""));
-    setAddOpen(false);
   };
   const removeMember = (name: string) => {
-    onEdit({
-      ...edit,
-      picked: edit.picked.filter((x) => x !== name),
-      leader: edit.leader === name ? null : edit.leader,
-    });
+    onEdit({ ...edit, picked: edit.picked.filter((x) => x !== name) });
     setAnnounce(wrap(name, t("persona.squad.announceRemoved"), ""));
-    focusAddTrigger();
+    focusTrigger(memberAddTriggerId);
   };
-  const designateLeader = (name: string) => {
-    onEdit({ ...edit, leader: name });
-    setAnnounce(wrap(name, t("persona.squad.announceLeader"), ""));
-  };
-  const unassignLeader = () => {
-    // 해제 뒤 새 리더는 저장 순서 계약이 낸 첫 이름이다 — override 없이 다시 그 함수를 부른다.
-    const next = orderedSquadMembers(edit.picked, edit.roles, edit.saved.members, eligible)[0]?.name;
-    onEdit({ ...edit, leader: null });
-    if (next) setAnnounce(wrap(next, t("persona.squad.announceLeader"), ""));
+  // 리더를 갈아 끼우는 것(§비주얼 §61 (21) §값) — 교체(`nextName`이 온다)와 리더 카드의 `제거`
+  // (`nextName === null`)가 이 함수 하나다. **앞 리더는 confirm을 거치든 안 거치든 스쿼드에서
+  // 빠진다** — confirm은 역할 칸에 글자가 있을 때만 "묻는 것"이고 무엇이 일어나는지는 안 가른다.
+  const changeLeader = (nextName: string | null) => {
+    const prevName = leaderMember?.name ?? null;
+    const commit = () => {
+      let nextPicked = prevName ? edit.picked.filter((n) => n !== prevName) : edit.picked;
+      if (nextName && !nextPicked.includes(nextName)) nextPicked = [...nextPicked, nextName];
+      onEdit({ ...edit, picked: nextPicked, leader: nextName, leaderCleared: nextName === null });
+      // 교체는 두 문장이 한 줄에 한 번에 선다(§비주얼 §61 (21) §라이브 리전).
+      setAnnounce(
+        [
+          prevName ? wrap(prevName, t("persona.squad.announceRemoved"), "") : "",
+          nextName ? wrap(nextName, t("persona.squad.announceLeader"), "") : "",
+        ]
+          .filter(Boolean)
+          .join(" "),
+      );
+      if (nextName === null) focusTrigger(leaderAddTriggerId);
+    };
+    if (prevName && (edit.roles[prevName] ?? "").trim() !== "") {
+      setLeaderConfirm({ name: prevName, onConfirm: commit });
+    } else {
+      commit();
+    }
   };
 
   const blockBytes = squadBlockBytes(
@@ -1193,6 +1222,67 @@ function SquadDetail({
   const rulesDirty = edit.rules !== edit.saved.rules;
 
   const setRole = (name: string, role: string) => onEdit({ ...edit, roles: { ...edit.roles, [name]: role } });
+
+  // 카드 — 두 묶음(리더 · 멤버)에서 같은 모양이다(§비주얼 §61 (21) §카드). 프로필 없는 멤버는
+  // 후보 줄과 같은 한 줄이다 — 역할 칸도 색 점도 없다. 리더는 `추가` 목록이 프로필 있는 이름만
+  // 드니 orphan이 될 수 없다(계약 §안 갈리는 것).
+  const renderCard = (m: SquadMember, onRemove: () => void) => {
+    if (!eligible.includes(m.name)) {
+      return (
+        <li key={m.name} className="flex items-center gap-2 rounded-md px-2">
+          <span className="font-mono text-xs">{m.name}</span>
+          <Badge variant="outline" className="self-center">
+            {t("persona.badge.noProfile")}
+          </Badge>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="ml-auto"
+            aria-label={wrap(m.name, t("persona.action.remove"), "")}
+            onClick={onRemove}
+          >
+            {t("persona.action.remove")}
+          </Button>
+        </li>
+      );
+    }
+    return (
+      <li key={m.name} className="space-y-1 rounded-md border p-2">
+        <div className="flex items-center gap-2">
+          <PersonaDot color={colors[m.name]} />
+          {/* 이름 손잡이 — 카드 전체가 아니라 이름 하나다(§5-5 §개정 - 로스터의 이름이 그
+              페르소나로 가는 손잡이가 된다). 모양은 새로 안 정한다: 부품도 색 토큰도 그대로고
+              `hover:underline`만 늘어 손잡이라는 것을 알린다. */}
+          <button
+            type="button"
+            className="cursor-pointer font-mono text-xs hover:underline"
+            aria-label={wrap(m.name, t("persona.squad.openPersonaAriaSuffix"), "")}
+            onClick={() => onSelect(m.name)}
+          >
+            {m.name}
+          </button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="ml-auto"
+            aria-label={wrap(m.name, t("persona.action.remove"), "")}
+            onClick={onRemove}
+          >
+            {t("persona.action.remove")}
+          </Button>
+        </div>
+        {/* 역할 칸(§5-5 §개정 · §61 (14)) — 빈 값은 프로필 첫 줄이 placeholder로 보일 뿐 저장되는
+            값이 아니다("역할이 없는 줄"). 이름은 식별자라 mono, 역할은 문장이라 sans */}
+        <Input
+          value={edit.roles[m.name] ?? ""}
+          onChange={(e) => setRole(m.name, e.target.value)}
+          placeholder={profileTitle(profileOf(m.name))}
+          className="ml-4 text-xs md:text-xs"
+          aria-label={`${m.name}${t("persona.squad.roleAriaSuffix")}`}
+        />
+      </li>
+    );
+  };
 
   return (
     <div className="space-y-3">
@@ -1257,11 +1347,12 @@ function SquadDetail({
       </section>
 
       {/* 본문은 `멤버` 절이다(§5-5 §화면) — textarea·디스패치 정책·스킬·메모리 절이 없다.
-          §5-5 §개정("후보 그릇을 걷고 `추가`-`제거`로 바꾼다") — 체크 목록도 후보 그릇도 없다.
-          체크박스 0개, 넣는 것은 절 머리의 `추가`, 빼는 것은 카드의 `제거`다(§비주얼 §61 (21)). */}
+          §비주얼 §61 (21) — 절 안이 **리더**(카드 0-1장)와 **멤버**(카드 n장) 묶음 둘로 갈린다.
+          체크박스 0개, 넣는 것은 각 묶음 머리의 `추가`, 빼는 것은 카드의 `제거`다. 리더를 정하는
+          손잡이는 리더 묶음의 `추가` 하나 — 카드에 리더 지정/해제 슬롯이 없다(계약). */}
       <section className="space-y-2 border-t pt-3">
         <h3 className="flex items-center gap-2 text-sm font-medium">
-          <span id={rosterHeadingId}>{t("persona.squad.membersHeading")}</span>
+          <span>{t("persona.squad.membersHeading")}</span>
           {/* 스쿼드 블록 상한(§5-5 §개정 · §6 결정 7 넷째 자리) — 집행 자리는 이 화면이다.
               넘어도 색은 안 갈아 끼운다(§61 (13)) — 넘은 것 자체는 위반이 아니고, 저장 자체를
               막지도 않는다. 낱말 `초과`만 는다 */}
@@ -1274,134 +1365,61 @@ function SquadDetail({
             {SQUAD_BLOCK_MAX_BYTES.toLocaleString()} B
             {overBudget && ` ${t("persona.squad.overBudgetSuffix")}`}
           </Badge>
-          {/* `추가` — 검색 칸이 있는 닫힌 목록(`Popover`+`Command`, board-ui.tsx `FilterPopover`와
-              같은 관용구). 프로필이 있고 아직 멤버가 아닌 이름만 든다(§5-5 §개정 §값). */}
-          <Popover open={addOpen} onOpenChange={setAddOpen}>
-            <PopoverTrigger
-              id={addTriggerId}
-              aria-labelledby={`${rosterHeadingId} ${addTriggerId}`}
-              render={<Button variant="outline" size="sm" />}
-            >
-              {t("common.add")}
-            </PopoverTrigger>
-            <PopoverContent align="end" className="w-64 p-0">
-              <Command>
-                <CommandInput placeholder={t("persona.squad.addSearchPlaceholder")} />
-                <CommandList className="max-h-72">
-                  <CommandEmpty>{t("persona.squad.addSearchEmpty")}</CommandEmpty>
-                  {candidates.map((name) => (
-                    <CommandItem key={name} value={name} onSelect={() => addMember(name)}>
-                      <PersonaDot color={colors[name]} />
-                      <span className="font-mono text-xs">{name}</span>
-                    </CommandItem>
-                  ))}
-                </CommandList>
-              </Command>
-            </PopoverContent>
-          </Popover>
         </h3>
         {eligible.length === 0 ? (
           <p className="text-xs text-muted-foreground">{t("persona.squad.noEligible")}</p>
         ) : (
           <>
-            {/* 로스터 — 이 스쿼드의 멤버. 카드 한 장(값 다섯 · 두 행) + 프로필 없는 멤버는 꼬리의
-                한 줄(§비주얼 §61 (21) §로스터의 꼬리). `aria-labelledby`가 위 절 제목을 가리킨다 —
-                소속이 낭독에 실리는 채널은 그릇의 이름이지 줄의 상태가 아니다(계약 §낭독). */}
-            <ul aria-labelledby={rosterHeadingId} className="space-y-1 rounded-md p-1">
-              {orderedMembers.length === 0 ? (
-                <li className="px-2 py-3 text-xs text-muted-foreground">
-                  {t("persona.squad.emptyRoster")}
-                </li>
-              ) : (
-                orderedMembers.map((m) => {
-                  const isOrphan = !eligible.includes(m.name);
-                  const isLeader = m.name === leaderName;
-                  // 프로필 없는 멤버 — 후보 줄과 같은 한 줄이다. 역할 칸도 리더 손잡이도 색 점도
-                  // 없다(저장 순서가 그 이름을 꼬리에 두므로 지정이 참이 될 수 없다, N9).
-                  if (isOrphan) {
-                    return (
-                      <li key={m.name} className="flex items-center gap-2 rounded-md px-2">
-                        <span className="font-mono text-xs">{m.name}</span>
-                        <Badge variant="outline" className="self-center">
-                          {t("persona.badge.noProfile")}
-                        </Badge>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="ml-auto"
-                          aria-label={wrap(m.name, t("persona.action.remove"), "")}
-                          onClick={() => removeMember(m.name)}
-                        >
-                          {t("persona.action.remove")}
-                        </Button>
-                      </li>
-                    );
-                  }
-                  return (
-                    <li key={m.name} className="space-y-1 rounded-md border p-2">
-                      <div className="flex items-center gap-2">
-                        <PersonaDot color={colors[m.name]} />
-                        {/* 이름 손잡이 — 카드 전체가 아니라 이름 하나다(§5-5 §개정 - 로스터의
-                            이름이 그 페르소나로 가는 손잡이가 된다). 모양은 새로 안 정한다: 부품도
-                            색 토큰도 그대로고 `hover:underline`만 늘어 손잡이라는 것을 알린다. */}
-                        <button
-                          type="button"
-                          className="cursor-pointer font-mono text-xs hover:underline"
-                          aria-label={wrap(m.name, t("persona.squad.openPersonaAriaSuffix"), "")}
-                          onClick={() => onSelect(m.name)}
-                        >
-                          {m.name}
-                        </button>
-                        {/* 리더 표식 — §61 (14) §리더 무수정. 색 0 · 아이콘 0, 낱말 하나뿐이다 */}
-                        {isLeader && (
-                          <Badge variant="outline" className="h-5 shrink-0 px-2 text-xs">
-                            {t("persona.squad.leaderBadge")}
-                          </Badge>
-                        )}
-                        {/* 리더 지정/해제 — 카드의 다섯째 슬롯(§비주얼 §61 (21) §리더). 이 티켓이
-                            안 여는 자리 — §5-5 §개정(리더 절)이 라운드 2의 답을 기다린다. */}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="ml-auto"
-                          aria-label={wrap(
-                            m.name,
-                            t(isLeader ? "persona.squad.unassignLeader" : "persona.squad.designateLeader"),
-                            "",
-                          )}
-                          onClick={() => (isLeader ? unassignLeader() : designateLeader(m.name))}
-                        >
-                          {t(isLeader ? "persona.squad.unassignLeader" : "persona.squad.designateLeader")}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          aria-label={wrap(m.name, t("persona.action.remove"), "")}
-                          onClick={() => removeMember(m.name)}
-                        >
-                          {t("persona.action.remove")}
-                        </Button>
-                      </div>
-                      {/* 역할 칸(§5-5 §개정 · §61 (14)) — 빈 값은 프로필 첫 줄이 placeholder로
-                          보일 뿐 저장되는 값이 아니다("역할이 없는 줄"). 이름은 식별자라 mono,
-                          역할은 문장이라 sans */}
-                      <Input
-                        value={edit.roles[m.name] ?? ""}
-                        onChange={(e) => setRole(m.name, e.target.value)}
-                        placeholder={profileTitle(profileOf(m.name))}
-                        className="ml-4 text-xs md:text-xs"
-                        aria-label={`${m.name}${t("persona.squad.roleAriaSuffix")}`}
-                      />
-                    </li>
-                  );
-                })
-              )}
-            </ul>
+            {/* 리더 묶음 — 카드 0장 또는 1장(§비주얼 §61 (21) §값). 낱말 `리더`가 묶음 머리로
+                서고 카드에 배지가 없다 — 그 아래에 카드가 서는 것이 곧 리더라는 사실이다. */}
+            <div className="space-y-1">
+              <p className="flex items-center gap-2 text-xs font-medium">
+                <span id={leaderHeadingId}>{t("persona.squad.leaderBadge")}</span>
+                <SquadAddButton
+                  triggerId={leaderAddTriggerId}
+                  headingId={leaderHeadingId}
+                  colors={colors}
+                  primaryGroup={{ heading: t("persona.squad.membersHeading"), names: currentMemberNames }}
+                  secondaryGroup={{ heading: t("persona.squad.notInSquadHeading"), names: candidates }}
+                  onPick={changeLeader}
+                />
+              </p>
+              <ul aria-labelledby={leaderHeadingId} className="space-y-1">
+                {leaderMember ? (
+                  renderCard(leaderMember, () => changeLeader(null))
+                ) : (
+                  <li className="px-2 text-xs">{t("persona.squad.noLeader")}</li>
+                )}
+              </ul>
+            </div>
+
+            {/* 멤버 묶음 — 리더가 아닌 나머지 + 프로필 없는 멤버의 꼬리(§비주얼 §61 (21) §꼬리).
+                `추가` 목록에 리더 이름이 안 든다 — 리더가 `edit.picked`에 남아 `candidates`에서
+                저절로 빠진다. */}
+            <div className="space-y-1 pt-2">
+              <p className="flex items-center gap-2 text-xs font-medium">
+                <span id={memberHeadingId}>{t("persona.squad.membersHeading")}</span>
+                <SquadAddButton
+                  triggerId={memberAddTriggerId}
+                  headingId={memberHeadingId}
+                  colors={colors}
+                  secondaryGroup={{ names: candidates }}
+                  onPick={addMember}
+                />
+              </p>
+              <ul aria-labelledby={memberHeadingId} className="space-y-1">
+                {memberSection.length === 0 ? (
+                  <li className="px-2 text-xs text-muted-foreground">{t("persona.squad.emptyRoster")}</li>
+                ) : (
+                  memberSection.map((m) => renderCard(m, () => removeMember(m.name)))
+                )}
+              </ul>
+            </div>
             <p className="text-xs text-muted-foreground">{t("persona.squad.roleHint")}</p>
           </>
         )}
-        {/* 이동의 결과 — 그릇 소속은 `aria-labelledby`가 실었으니 여기는 "끝난 이동"만 알린다
-            (계약 §낭독, §비주얼 §61 (21)). */}
+        {/* 이동의 결과 — 절 사이 이동과 스쿼드에서 빠지는 것이 다른 문장이다(계약 §접근성,
+            §비주얼 §61 (21) §라이브 리전). 그릇 소속은 `aria-labelledby`가 이미 실었다. */}
         <span role="status" className="sr-only">
           {announce}
         </span>
@@ -1428,7 +1446,101 @@ function SquadDetail({
           </Button>
         </div>
       </section>
+
+      {/* 교체 · 리더 카드의 `제거` confirm 한 벌(§비주얼 §61 (21) §교체 confirm) — 앞 리더의
+          역할 칸에 글자가 있을 때만 선다. 취소하면 아무 것도 안 갈리고 `저장 안 됨`도 안 켜진다. */}
+      <AlertDialog open={leaderConfirm !== null} onOpenChange={(o) => !o && setLeaderConfirm(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {t("persona.squad.leaderRemoveConfirmTitlePrefix")} {leaderConfirm?.name}
+            </AlertDialogTitle>
+            <AlertDialogDescription>{t("persona.squad.leaderRemoveConfirmBody")}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel autoFocus>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                leaderConfirm?.onConfirm();
+                setLeaderConfirm(null);
+              }}
+            >
+              {t("persona.action.remove")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
+  );
+}
+
+/** 절 머리의 `추가` — `Popover`+`Command`, board-ui.tsx `FilterPopover`·(21) 위 skill 설치
+ *  다이얼로그와 같은 관용구다(§비주얼 §61 (21) §닫힌 목록). `primaryGroup`이 있고 비지 않은
+ *  경우에만 두 묶음(구분선 하나)이 서고, 아니면 `secondaryGroup`만 든 평평한 목록이다 — 항상
+ *  켜진 머리는 한 줄을 먹고 아무것도 안 가른다(§25 ③이 같은 자리에서 낸 판정 그대로). */
+function SquadAddButton({
+  triggerId,
+  headingId,
+  colors,
+  primaryGroup,
+  secondaryGroup,
+  onPick,
+}: {
+  triggerId: string;
+  headingId: string;
+  colors: Record<string, string>;
+  primaryGroup?: { heading: string; names: string[] };
+  secondaryGroup: { heading?: string; names: string[] };
+  onPick: (name: string) => void;
+}) {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  const grouped = (primaryGroup?.names.length ?? 0) > 0;
+  const total = (primaryGroup?.names.length ?? 0) + secondaryGroup.names.length;
+  const item = (name: string) => (
+    <CommandItem
+      key={name}
+      value={name}
+      onSelect={() => {
+        onPick(name);
+        setOpen(false);
+      }}
+    >
+      <PersonaDot color={colors[name]} />
+      <span className="font-mono text-xs truncate" title={name}>
+        {name}
+      </span>
+    </CommandItem>
+  );
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger
+        id={triggerId}
+        aria-labelledby={`${headingId} ${triggerId}`}
+        render={<Button variant="ghost" size="sm" />}
+      >
+        {t("common.add")}
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-64 p-0">
+        <Command>
+          <CommandInput placeholder={t("persona.squad.addSearchPlaceholder")} />
+          <CommandList className="max-h-72">
+            <CommandEmpty>
+              {total === 0 ? t("persona.squad.addSearchEmpty") : t("persona.squad.addSearchZeroMatch")}
+            </CommandEmpty>
+            {grouped && primaryGroup ? (
+              <>
+                <CommandGroup heading={primaryGroup.heading}>{primaryGroup.names.map(item)}</CommandGroup>
+                <CommandSeparator />
+                <CommandGroup heading={secondaryGroup.heading}>{secondaryGroup.names.map(item)}</CommandGroup>
+              </>
+            ) : (
+              secondaryGroup.names.map(item)
+            )}
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
   );
 }
 
