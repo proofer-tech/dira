@@ -1129,23 +1129,22 @@ function SquadDetail({
   const [headError, setHeadError] = useState<string | null>(null);
   const [membersPending, startMembers] = useTransition();
   const [rulesPending, startRules] = useTransition();
-  // 드래그 상태 — 그릇 둘(§비주얼 §61 (21) §드래그). 과녁은 그릇이지 줄이 아니다: `dragOver`는
-  // 놓으면 실제로 값이 바뀌는 그릇(출발한 쪽은 0 — "커서가 금지")만 든다.
-  const [dragFrom, setDragFrom] = useState<"roster" | "candidates" | null>(null);
-  const [dragName, setDragName] = useState<string | null>(null);
-  const [dragOver, setDragOver] = useState<"roster" | "candidates" | null>(null);
-  // 이동의 결과를 읽는 라이브 리전(§비주얼 §61 (21) §낭독) — 그릇 이름은 `aria-labelledby`가
+  // 이동의 결과를 읽는 라이브 리전(§5-5 §개정 - 추가/제거 §낭독) — 그릇 이름은 `aria-labelledby`가
   // 이미 읽으므로 여기서는 "끝난 이동"만 알린다.
   const [announce, setAnnounce] = useState("");
   const rosterHeadingId = useId();
-  const candidatesHeadingId = useId();
+  // `추가` 팝오버 — board-ui.tsx `FilterPopover`와 같은 `Popover`+`Command` 조합(§5-5 §개정 -
+  // 후보 그릇을 걷고 `추가`-`제거`로 바꾼다). 열 때마다 검색어를 새로 시작한다.
+  const [addOpen, setAddOpen] = useState(false);
+  const addTriggerId = useId();
 
-  // 키보드 `추가`/`제거` 뒤 포커스가 짝 손잡이로 옮겨간다(§비주얼 §61 (21) §키보드) — 누른
-  // 버튼이 그 자리에서 사라지므로 안 옮기면 포커스가 `body`로 떨어진다. `rAF`는 이 클릭이 낸
-  // `onEdit` 재렌더가 커밋된 다음 프레임에 돈다 — 그때는 짝 손잡이가 이미 DOM에 있다.
-  const focusCounterpart = (name: string) => {
+  // 키보드 `제거` 뒤 포커스가 `추가`로 옮겨간다(§비주얼 §61 (21) §키보드) — 누른 카드가 그
+  // 자리에서 사라지므로 안 옮기면 포커스가 `body`로 떨어진다. `rAF`는 이 클릭이 낸 `onEdit`
+  // 재렌더가 커밋된 다음 프레임에 돈다. `추가` 쪽은 팝오버가 닫히며 트리거로 포커스를 스스로
+  // 돌려준다(Radix 포커스 복귀) — 여기서 옮길 필요가 없다.
+  const focusAddTrigger = () => {
     requestAnimationFrame(() => {
-      document.querySelector<HTMLElement>(`[data-focus-target="${CSS.escape(name)}"]`)?.focus();
+      document.getElementById(addTriggerId)?.focus();
     });
   };
 
@@ -1160,7 +1159,7 @@ function SquadDetail({
   const addMember = (name: string) => {
     onEdit({ ...edit, picked: edit.picked.includes(name) ? edit.picked : [...edit.picked, name] });
     setAnnounce(wrap(name, t("persona.squad.announceAdded"), ""));
-    focusCounterpart(name);
+    setAddOpen(false);
   };
   const removeMember = (name: string) => {
     onEdit({
@@ -1169,7 +1168,7 @@ function SquadDetail({
       leader: edit.leader === name ? null : edit.leader,
     });
     setAnnounce(wrap(name, t("persona.squad.announceRemoved"), ""));
-    focusCounterpart(name);
+    focusAddTrigger();
   };
   const designateLeader = (name: string) => {
     onEdit({ ...edit, leader: name });
@@ -1180,42 +1179,6 @@ function SquadDetail({
     const next = orderedSquadMembers(edit.picked, edit.roles, edit.saved.members, eligible)[0]?.name;
     onEdit({ ...edit, leader: null });
     if (next) setAnnounce(wrap(next, t("persona.squad.announceLeader"), ""));
-  };
-
-  const onCardDragStart = (name: string, from: "roster" | "candidates") => (e: React.DragEvent) => {
-    e.dataTransfer.effectAllowed = "move";
-    setDragName(name);
-    setDragFrom(from);
-  };
-  const endDrag = () => {
-    setDragName(null);
-    setDragFrom(null);
-    setDragOver(null);
-  };
-  // §함정 1(결정 8) — `preventDefault`가 없으면 `drop`이 안 뜨고 브라우저가 기본 동작으로 간다.
-  const onContainerDragOver = (container: "roster" | "candidates") => (e: React.DragEvent) => {
-    if (!dragFrom) return;
-    e.preventDefault();
-    // 출발한 그릇으로 되돌리는 것은 값이 없다(계약 "로스터 안 재정렬 없다") — 링 0, 커서 금지.
-    const target = container === dragFrom ? null : container;
-    e.dataTransfer.dropEffect = target ? "move" : "none";
-    if (dragOver !== target) setDragOver(target);
-  };
-  // §함정 2 — 자식 경계마다 뜨는 `dragleave`가 링을 떨게 한다. `relatedTarget`이 그릇 안이면 무시.
-  const onContainerDragLeave = (container: "roster" | "candidates") => (e: React.DragEvent) => {
-    if (dragOver !== container) return;
-    const related = e.relatedTarget as Node | null;
-    if (related && e.currentTarget.contains(related)) return;
-    setDragOver(null);
-  };
-  // §함정 3 — `drop`과 `dragend` 둘 다 링을 끈다.
-  const onContainerDrop = (container: "roster" | "candidates") => (e: React.DragEvent) => {
-    e.preventDefault();
-    if (dragName && dragFrom && dragFrom !== container) {
-      if (container === "roster") addMember(dragName);
-      else removeMember(dragName);
-    }
-    endDrag();
   };
 
   const blockBytes = squadBlockBytes(
@@ -1294,17 +1257,11 @@ function SquadDetail({
       </section>
 
       {/* 본문은 `멤버` 절이다(§5-5 §화면) — textarea·디스패치 정책·스킬·메모리 절이 없다.
-          §5-5 §개정("멤버 칸이 로스터가 된다") — 체크 목록이 그릇 둘(로스터·후보)로 갈린다.
-          체크박스 0개, 소속은 어느 그릇에 있나다(§비주얼 §61 (21)). */}
+          §5-5 §개정("후보 그릇을 걷고 `추가`-`제거`로 바꾼다") — 체크 목록도 후보 그릇도 없다.
+          체크박스 0개, 넣는 것은 절 머리의 `추가`, 빼는 것은 카드의 `제거`다(§비주얼 §61 (21)). */}
       <section className="space-y-2 border-t pt-3">
         <h3 className="flex items-center gap-2 text-sm font-medium">
           <span id={rosterHeadingId}>{t("persona.squad.membersHeading")}</span>
-          {/* 드래그 중 문장 — 겨눈 그릇에만 선다. 제목과 배지 사이(§비주얼 §61 (21) §드래그) */}
-          {dragOver === "roster" && (
-            <span className="text-xs font-normal text-muted-foreground">
-              {t("persona.squad.dropToAdd")}
-            </span>
-          )}
           {/* 스쿼드 블록 상한(§5-5 §개정 · §6 결정 7 넷째 자리) — 집행 자리는 이 화면이다.
               넘어도 색은 안 갈아 끼운다(§61 (13)) — 넘은 것 자체는 위반이 아니고, 저장 자체를
               막지도 않는다. 낱말 `초과`만 는다 */}
@@ -1317,6 +1274,31 @@ function SquadDetail({
             {SQUAD_BLOCK_MAX_BYTES.toLocaleString()} B
             {overBudget && ` ${t("persona.squad.overBudgetSuffix")}`}
           </Badge>
+          {/* `추가` — 검색 칸이 있는 닫힌 목록(`Popover`+`Command`, board-ui.tsx `FilterPopover`와
+              같은 관용구). 프로필이 있고 아직 멤버가 아닌 이름만 든다(§5-5 §개정 §값). */}
+          <Popover open={addOpen} onOpenChange={setAddOpen}>
+            <PopoverTrigger
+              id={addTriggerId}
+              aria-labelledby={`${rosterHeadingId} ${addTriggerId}`}
+              render={<Button variant="outline" size="sm" />}
+            >
+              {t("common.add")}
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-64 p-0">
+              <Command>
+                <CommandInput placeholder={t("persona.squad.addSearchPlaceholder")} />
+                <CommandList className="max-h-72">
+                  <CommandEmpty>{t("persona.squad.addSearchEmpty")}</CommandEmpty>
+                  {candidates.map((name) => (
+                    <CommandItem key={name} value={name} onSelect={() => addMember(name)}>
+                      <PersonaDot color={colors[name]} />
+                      <span className="font-mono text-xs">{name}</span>
+                    </CommandItem>
+                  ))}
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
         </h3>
         {eligible.length === 0 ? (
           <p className="text-xs text-muted-foreground">{t("persona.squad.noEligible")}</p>
@@ -1325,16 +1307,7 @@ function SquadDetail({
             {/* 로스터 — 이 스쿼드의 멤버. 카드 한 장(값 다섯 · 두 행) + 프로필 없는 멤버는 꼬리의
                 한 줄(§비주얼 §61 (21) §로스터의 꼬리). `aria-labelledby`가 위 절 제목을 가리킨다 —
                 소속이 낭독에 실리는 채널은 그릇의 이름이지 줄의 상태가 아니다(계약 §낭독). */}
-            <ul
-              aria-labelledby={rosterHeadingId}
-              className={cn(
-                "space-y-1 rounded-md p-1",
-                dragOver === "roster" && "inset-ring-2 inset-ring-primary",
-              )}
-              onDragOver={onContainerDragOver("roster")}
-              onDragLeave={onContainerDragLeave("roster")}
-              onDrop={onContainerDrop("roster")}
-            >
+            <ul aria-labelledby={rosterHeadingId} className="space-y-1 rounded-md p-1">
               {orderedMembers.length === 0 ? (
                 <li className="px-2 py-3 text-xs text-muted-foreground">
                   {t("persona.squad.emptyRoster")}
@@ -1356,7 +1329,6 @@ function SquadDetail({
                           variant="ghost"
                           size="sm"
                           className="ml-auto"
-                          data-focus-target={m.name}
                           aria-label={wrap(m.name, t("persona.action.remove"), "")}
                           onClick={() => removeMember(m.name)}
                         >
@@ -1366,23 +1338,14 @@ function SquadDetail({
                     );
                   }
                   return (
-                    <li
-                      key={m.name}
-                      draggable
-                      onDragStart={onCardDragStart(m.name, "roster")}
-                      onDragEnd={endDrag}
-                      className="space-y-1 rounded-md border p-2"
-                    >
+                    <li key={m.name} className="space-y-1 rounded-md border p-2">
                       <div className="flex items-center gap-2">
                         <PersonaDot color={colors[m.name]} />
                         {/* 이름 손잡이 — 카드 전체가 아니라 이름 하나다(§5-5 §개정 - 로스터의
-                            이름이 그 페르소나로 가는 손잡이가 된다). `draggable={false}`가
-                            없으면 조상 드래그가 눌러도 안 눌리고 끌린다 — 위 리더/제거 손잡이와
-                            같은 관용구. 모양은 새로 안 정한다: 부품도 색 토큰도 그대로고
-                            `hover:underline`만 늘어 손잡이라는 것을 알린다. */}
+                            이름이 그 페르소나로 가는 손잡이가 된다). 모양은 새로 안 정한다: 부품도
+                            색 토큰도 그대로고 `hover:underline`만 늘어 손잡이라는 것을 알린다. */}
                         <button
                           type="button"
-                          draggable={false}
                           className="cursor-pointer font-mono text-xs hover:underline"
                           aria-label={wrap(m.name, t("persona.squad.openPersonaAriaSuffix"), "")}
                           onClick={() => onSelect(m.name)}
@@ -1395,13 +1358,12 @@ function SquadDetail({
                             {t("persona.squad.leaderBadge")}
                           </Badge>
                         )}
-                        {/* 리더 지정/해제 — 카드의 다섯째 슬롯(§비주얼 §61 (21) §리더).
-                            `draggable={false}`가 없으면 조상 드래그가 눌러도 안 눌리고 끌린다. */}
+                        {/* 리더 지정/해제 — 카드의 다섯째 슬롯(§비주얼 §61 (21) §리더). 이 티켓이
+                            안 여는 자리 — §5-5 §개정(리더 절)이 라운드 2의 답을 기다린다. */}
                         <Button
                           variant="ghost"
                           size="sm"
                           className="ml-auto"
-                          draggable={false}
                           aria-label={wrap(
                             m.name,
                             t(isLeader ? "persona.squad.unassignLeader" : "persona.squad.designateLeader"),
@@ -1414,8 +1376,6 @@ function SquadDetail({
                         <Button
                           variant="ghost"
                           size="sm"
-                          draggable={false}
-                          data-focus-target={m.name}
                           aria-label={wrap(m.name, t("persona.action.remove"), "")}
                           onClick={() => removeMember(m.name)}
                         >
@@ -1431,7 +1391,6 @@ function SquadDetail({
                         placeholder={profileTitle(profileOf(m.name))}
                         className="ml-4 text-xs md:text-xs"
                         aria-label={`${m.name}${t("persona.squad.roleAriaSuffix")}`}
-                        draggable={false}
                       />
                     </li>
                   );
@@ -1439,59 +1398,6 @@ function SquadDetail({
               )}
             </ul>
             <p className="text-xs text-muted-foreground">{t("persona.squad.roleHint")}</p>
-
-            {/* 후보 — 프로필이 있고 아직 멤버가 아닌 페르소나. 한 줄(값 둘 + `추가`) — 역할 칸도
-                리더 손잡이도 없다(저장될 자리가 없는 값이다). 순서는 페르소나 목록 순서 그대로다. */}
-            <div className="pt-2">
-              <p id={candidatesHeadingId} className="flex items-center gap-2 text-xs font-medium">
-                {t("persona.squad.candidatesHeading")}
-                {dragOver === "candidates" && (
-                  <span className="font-normal text-muted-foreground">
-                    {t("persona.squad.dropToRemove")}
-                  </span>
-                )}
-              </p>
-              <ul
-                aria-labelledby={candidatesHeadingId}
-                className={cn(
-                  "space-y-1 rounded-md p-1",
-                  dragOver === "candidates" && "inset-ring-2 inset-ring-primary",
-                )}
-                onDragOver={onContainerDragOver("candidates")}
-                onDragLeave={onContainerDragLeave("candidates")}
-                onDrop={onContainerDrop("candidates")}
-              >
-                {candidates.length === 0 ? (
-                  <li className="px-2 py-3 text-xs text-muted-foreground">
-                    {t("persona.squad.noCandidates")}
-                  </li>
-                ) : (
-                  candidates.map((name) => (
-                    <li
-                      key={name}
-                      draggable
-                      onDragStart={onCardDragStart(name, "candidates")}
-                      onDragEnd={endDrag}
-                      className="flex items-center gap-2 rounded-md px-2"
-                    >
-                      <PersonaDot color={colors[name]} />
-                      <span className="font-mono text-xs">{name}</span>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="ml-auto"
-                        draggable={false}
-                        data-focus-target={name}
-                        aria-label={wrap(name, t("common.add"), "")}
-                        onClick={() => addMember(name)}
-                      >
-                        {t("common.add")}
-                      </Button>
-                    </li>
-                  ))
-                )}
-              </ul>
-            </div>
           </>
         )}
         {/* 이동의 결과 — 그릇 소속은 `aria-labelledby`가 실었으니 여기는 "끝난 이동"만 알린다
