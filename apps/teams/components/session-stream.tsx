@@ -248,12 +248,6 @@ export function SessionStream({
   const effectivePlans = plans.map((p, i) =>
     p.state === "doing" && i !== lastDoing ? { ...p, state: "done" as const } : p,
   );
-  // 참견 모드인가 — `interjectMode`(§21)의 앞 두 판정만 쓴다. `done`이면 이어받기(폼이 종전
-  // 자리 그대로 · §비주얼 §59 ⑥), 그 밖엔 `live`인 동안 항상 참견이다. 실패 잔해(`failed`)는
-  // 자리 결정에 안 쓴다 — 그 갈래는 이미 `!live`라 진행중 계획이 열려 있을 일이 없다.
-  const interjecting = !done && live;
-  // 참견 폼이 들어갈 계획 — 없으면(-1) 폼은 종전 자리(상자 밖)다(§2-11④ 폼 자리 표).
-  const activeDoing = interjecting && lastDoing !== -1 ? lastDoing : -1;
 
   const form = (
     <ProgressForm
@@ -365,28 +359,25 @@ export function SessionStream({
                   isBubble,
                 )}
                 count={block.events.length}
-                active={block.index === activeDoing}
-                markerText={markerText}
-                form={block.index === activeDoing ? form : null}
                 onToggle={onToggle}
                 threadKey={threadKey}
                 vault={vault}
               />
             ),
           )}
-          {/* 진행 표식(§18 ④) — **진행중 계획이 없을 때만 여기다**(종전 자리). 있으면 그 계획
-              아코디언 안 맨 아래로 옮긴다(위 `<PlanBlock active>` — §비주얼 §59 ⑥). 마지막 사건
-              다음 줄이 올 자리를 지킨다. **말풍선 아래로 안 내려간다**: `.wip`인 동안 상자의 맨
-              끝은 항상 스트림 사건이고(답 없는 질문은 열린 티켓에만 있다 — §29 ③) 옛 답변은
-              `birth`가 지금 세션 첫 사건보다 앞이다. `<Marker>`도 `<details>`도 아니다: §9가
-              Marker 기본값을 하나도 안 덮기로 했는데 여기는 `text-xs`여야 한다(폴링 상태 3종이
-              한 종류인 채로 자리만 옮겼다). 눌러 볼 것이 없으니 hover도 없다. `mx-1`이 8px
-              점을 16px 칸(= MarkerIcon 폭) 가운데 세워 문구를 다른 두 줄과 같은 x=36px에
-              맞춘다. // ponytail: 정렬용 래퍼 대신 마진 4px. 점이 커지면 그때 래퍼. 문구를
-              같이 드는 이유는 `prefers-reduced-motion`이다 — 모션만으로 말하지 않는다.
-              **문구는 마지막 레코드가 `thinking`이면 갈린다**(§2-6 ③, 요구 `cbdc2cb4`) —
-              판정은 `progressMarkerText`(`lib/urls.ts`) 하나다. */}
-          {activeDoing === -1 && live && (
+          {/* 진행 표식(§18 ④) — **자리가 한 갈래다**(개정 요구 `c1312f3d`): 계획이 있든 없든
+              상자 안 맨 아래다. 진행중 계획 아코디언을 접어도 안 숨는다 — `<details>` 밖에
+              선다. 마지막 사건 다음 줄이 올 자리를 지킨다. **말풍선 아래로 안 내려간다**:
+              `.wip`인 동안 상자의 맨 끝은 항상 스트림 사건이고(답 없는 질문은 열린 티켓에만
+              있다 — §29 ③) 옛 답변은 `birth`가 지금 세션 첫 사건보다 앞이다. `<Marker>`도
+              `<details>`도 아니다: §9가 Marker 기본값을 하나도 안 덮기로 했는데 여기는
+              `text-xs`여야 한다(폴링 상태 3종이 한 종류인 채로 자리만 옮겼다). 눌러 볼 것이
+              없으니 hover도 없다. `mx-1`이 8px 점을 16px 칸(= MarkerIcon 폭) 가운데 세워
+              문구를 다른 두 줄과 같은 x=36px에 맞춘다. // ponytail: 정렬용 래퍼 대신 마진
+              4px. 점이 커지면 그때 래퍼. 문구를 같이 드는 이유는 `prefers-reduced-motion`이다
+              — 모션만으로 말하지 않는다. **문구는 마지막 레코드가 `thinking`이면 갈린다**
+              (§2-6 ③, 요구 `cbdc2cb4`) — 판정은 `progressMarkerText`(`lib/urls.ts`) 하나다. */}
+          {live && (
             <div className="flex items-center gap-2 px-3 text-xs leading-6 text-muted-foreground">
               <span
                 aria-hidden
@@ -407,14 +398,13 @@ export function SessionStream({
         <p className="px-3 text-xs text-muted-foreground">{NO_QUESTION_SECTION_NOTICE}</p>
       )}
 
-      {/* 입력칸 — **진행중 계획이 있으면 그 안(위 `<PlanBlock active>`), 없으면 상자 밖 · 밑의
-          종전 자리다**(§2-11④ 폼 자리 표 · §비주얼 §59 ⑥). 여기 한 곳에 다니까 티켓 상세와
-          워커 다이얼로그가 같은 폼을 그린다(§2-1 Q2=(a)). 두 자리 다 **같은 `form` 엘리먼트**를
-          쓴다 — 어느 쪽이든 항상 마운트해 두고 그릴지 말지는 컴포넌트가 스스로 판정한다 — 조건을
-          바깥에 두면 `live`가 내려가는 순간(2초 폴링) 실패 사유와 사람이 쓴 글이 언마운트로 같이
+      {/* 입력칸 — **자리가 한 갈래다**(개정 요구 `c1312f3d`): 상자 밖 · 밑, 계획이 있든 없든
+          같다. 여기 한 곳에 다니까 티켓 상세와 워커 다이얼로그가 같은 폼을 그린다
+          (§2-1 Q2=(a)). 항상 마운트해 두고 그릴지 말지는 컴포넌트가 스스로 판정한다 — 조건을
+          밖에 두면 `live`가 내려가는 순간(2초 폴링) 실패 사유와 사람이 쓴 글이 언마운트로 같이
           증발한다(§21 예외 항). **codex에서도 자리를 지운다는 뜻이 아니다**(§비주얼 §23 ⑤):
           비활성 + 사유 한 줄로 뜬다 — 진입점을 지우면 화면은 "왜 없는지"를 말할 자리를 잃는다. */}
-      {activeDoing === -1 && form}
+      {form}
     </div>
   );
 }
@@ -455,9 +445,6 @@ function PlanBlock({
   plan,
   items,
   count,
-  active,
-  markerText,
-  form,
   onToggle,
   threadKey,
   vault,
@@ -467,11 +454,6 @@ function PlanBlock({
   /** 그 창의 사건 수 — 꼬리 `기록 n건`(§59 ③). §9 묶음 줄과 같은 문자열이라 새 i18n 키가
    *  아니다(§59 ⑩ 범위 판정). */
   count: number;
-  /** 지금 진행중이고 세션이 살아 있다 — 이 계획이 표식 · 폼을 문다(§59 ⑥). 진행중 모양이
-   *  둘 이상이면 파일 순서상 마지막 하나에만 참이다(`SessionStream`이 미리 판정해 넘긴다). */
-  active: boolean;
-  markerText: string;
-  form: React.ReactNode;
   onToggle: (e: React.SyntheticEvent<HTMLDetailsElement>) => void;
   threadKey: Map<ThreadItem, string>;
   vault?: Vault;
@@ -539,18 +521,6 @@ function PlanBlock({
         <ChevronRight aria-hidden className="size-4 shrink-0 text-muted-foreground" />
       </summary>
       <ProgressItems items={items} threadKey={threadKey} onToggle={onToggle} vault={vault} />
-      {active && (
-        <div className="flex items-center gap-2 px-3 text-xs leading-6 text-muted-foreground">
-          <span
-            aria-hidden
-            className="mx-1 size-2 shrink-0 animate-wip-pulse rounded-full bg-muted-foreground motion-reduce:animate-none"
-          />
-          {markerText}
-        </div>
-      )}
-      {/* `relative bg-background` 둘이 붙는 제목 줄이 이 폼 위로 올라오는 좁은 갈래를 닫는다
-          (§59 ⑥-1 §치르는 값 — 문서 순서가 늦은 쪽이 이겨 폼이 위에 선다). */}
-      {active && <div className="relative bg-background px-3 pt-2">{form}</div>}
     </details>
   );
 }
