@@ -554,6 +554,42 @@ test("사건 매핑 — 오류는 tool_result 사건에만 서고 짝인 tool_us
   assert.equal(toolResult.error, true);
 });
 
+test("사건 매핑 — toolId가 tool_use·tool_result의 짝을 잇는다 (§2-15 ③)", () => {
+  const [toolUse] = recordToEvents(
+    JSON.parse(assistant([{ type: "tool_use", id: "toolu_1", name: "Bash", input: { command: "ls" } }]).trim()),
+  );
+  assert.equal(toolUse.toolId, "toolu_1");
+
+  const [toolResult] = recordToEvents(
+    JSON.parse(
+      rec({
+        type: "user",
+        uuid: "u-tid",
+        timestamp: "2026-08-20T00:00:00.000Z",
+        message: { role: "user", content: [{ type: "tool_result", tool_use_id: "toolu_1", content: "출력" }] },
+      }).trim(),
+    ),
+  );
+  assert.equal(toolResult.toolId, "toolu_1");
+
+  // id가 없으면 키 자체가 없다 — `undefined`로 채우면 골든의 deepEqual이 키 유무로 갈린다
+  const [noId] = recordToEvents(
+    JSON.parse(assistant([{ type: "tool_use", name: "Bash", input: { command: "ls" } }]).trim()),
+  );
+  assert.equal("toolId" in noId, false);
+  const [noIdResult] = recordToEvents(
+    JSON.parse(
+      rec({
+        type: "user",
+        uuid: "u-noid",
+        timestamp: "2026-08-20T00:00:01.000Z",
+        message: { role: "user", content: [{ type: "tool_result", content: "출력" }] },
+      }).trim(),
+    ),
+  );
+  assert.equal("toolId" in noIdResult, false);
+});
+
 test("사건 매핑 — assistant text는 접히지 않는다(label이 비어 있다)", () => {
   const [e] = recordToEvents(JSON.parse(assistant([{ type: "text", text: "I'll start." }]).trim()));
   assert.deepEqual([e.kind, e.label, e.summary, e.body], ["text", "", "", "I'll start."]);
@@ -735,6 +771,28 @@ test("grok — ACP 청크 다섯이 §2-1의 kind로 접히고 나머지는 건�
   assert.equal(events[2].body, JSON.stringify({ file_path: `${GROK_CWD}/target.txt`, content: "done\n" }, null, 2));
   assert.deepEqual([events[3].label, events[3].body], ["결과", `한 줄\n두 줄\n${GROK_CWD}/target.txt`]);
   assert.deepEqual([events[4].label, events[4].body], ["", "DONE"]);
+});
+
+test("grok — toolCallId가 claude 모양 id·tool_use_id로 접혀 짝을 잇는다 (§2-15 ③)", async () => {
+  const f = path.join(tmp, "grok-toolid.jsonl");
+  writeFileSync(
+    f,
+    gup(1785892170, "gt-1", {
+      sessionUpdate: "tool_call",
+      toolCallId: "call-tid",
+      rawInput: { command: "ls" },
+      _meta: { "x.ai/tool": { label: "Bash" } },
+    }) +
+      gup(1785892171, "gt-2", {
+        sessionUpdate: "tool_call_update",
+        toolCallId: "call-tid",
+        content: [{ type: "content", content: { type: "text", text: "출력" } }],
+      }),
+  );
+  const { events } = await tailEvents(f, 0, true);
+  assert.deepEqual(events.map((e) => e.kind), ["tool_use", "tool_result"]);
+  assert.equal(events[0].toolId, "call-tid");
+  assert.equal(events[1].toolId, "call-tid");
 });
 
 test("grok — timestamp가 unix 초다. StreamEvent.ts는 종전대로 UTC ISO다", async () => {
