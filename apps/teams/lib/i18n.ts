@@ -625,6 +625,7 @@ export const ko: Record<string, string> = {
   "persona.squad.overBudgetSuffix": "초과",
   "persona.squad.noEligible": "프로필이 있는 페르소나가 없습니다 — 먼저 페르소나를 만듭니다.",
   "persona.squad.roleAriaSuffix": "의 역할",
+  "persona.squad.openPersonaAriaSuffix": "엽니다",
   "persona.squad.leaderBadge": "리더",
   "persona.squad.roleHint": "역할을 비우면 그 페르소나의 프로필 첫 줄이 역할이 됩니다.",
   // §5-5 §개정("멤버 칸이 로스터가 된다") — 체크 목록이 그릇 둘로 갈리며 는 문구 열(DESIGN.md
@@ -1425,6 +1426,7 @@ export const en: Record<string, string> = {
   "persona.squad.noEligible": "No persona has a profile yet — create a persona first.",
   // aria-label이 `<이름>`에 공백 없이 붙는다(`alice's role`).
   "persona.squad.roleAriaSuffix": "'s role",
+  "persona.squad.openPersonaAriaSuffix": "open",
   "persona.squad.leaderBadge": "Leader",
   "persona.squad.roleHint": "Leave a role empty and the first line of that persona's profile becomes the role.",
   "persona.squad.candidatesHeading": "Candidates",

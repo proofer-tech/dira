@@ -882,6 +882,7 @@ export function PersonasPane({
             edit={squadEditOf(currentSquad)}
             onEdit={(next) => setSquadEdits((prev) => ({ ...prev, [currentSquad.name]: next }))}
             onDeleted={() => select(null)}
+            onSelect={select}
           />
         ) : current === undefined ? (
           // **404가 아니다** — 왼쪽 목록은 계속 선다(§5). 그릇은 §6 프로토콜의 `?core=` 거부와
@@ -1105,6 +1106,7 @@ function SquadDetail({
   edit,
   onEdit,
   onDeleted,
+  onSelect,
 }: {
   projectId: string;
   row: SquadRow;
@@ -1116,6 +1118,10 @@ function SquadDetail({
   edit: SquadEdit;
   onEdit: (next: SquadEdit) => void;
   onDeleted: () => void;
+  /** 로스터 카드의 이름 손잡이가 부르는 그 채널(§5-5 §개정 - 로스터의 이름이 그 페르소나로
+   *  가는 손잡이가 된다) — `PersonasPane`의 `select` 그대로다. `<Link>`도 `router.push`도
+   *  아니다: 서버 왕복이 나면 이 화면의 미저장 편집(`edit`)이 죽는다. */
+  onSelect: (name: string) => void;
 }) {
   const t = useT();
   const [membersResult, setMembersResult] = useState<PersonaResult | null>(null);
@@ -1369,7 +1375,20 @@ function SquadDetail({
                     >
                       <div className="flex items-center gap-2">
                         <PersonaDot color={colors[m.name]} />
-                        <span className="font-mono text-xs">{m.name}</span>
+                        {/* 이름 손잡이 — 카드 전체가 아니라 이름 하나다(§5-5 §개정 - 로스터의
+                            이름이 그 페르소나로 가는 손잡이가 된다). `draggable={false}`가
+                            없으면 조상 드래그가 눌러도 안 눌리고 끌린다 — 위 리더/제거 손잡이와
+                            같은 관용구. 모양은 새로 안 정한다: 부품도 색 토큰도 그대로고
+                            `hover:underline`만 늘어 손잡이라는 것을 알린다. */}
+                        <button
+                          type="button"
+                          draggable={false}
+                          className="cursor-pointer font-mono text-xs hover:underline"
+                          aria-label={wrap(m.name, t("persona.squad.openPersonaAriaSuffix"), "")}
+                          onClick={() => onSelect(m.name)}
+                        >
+                          {m.name}
+                        </button>
                         {/* 리더 표식 — §61 (14) §리더 무수정. 색 0 · 아이콘 0, 낱말 하나뿐이다 */}
                         {isLeader && (
                           <Badge variant="outline" className="h-5 shrink-0 px-2 text-xs">
