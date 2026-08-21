@@ -731,10 +731,15 @@ function TokensSection({
       {rows.map((row) => (
         <li
           key={row.id}
-          className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-md border p-2"
+          className="flex items-center justify-between gap-x-3 gap-y-1 rounded-md border p-2"
         >
           <div className="min-w-0 space-y-0.5">
-            <div className="flex min-w-0 items-center gap-2">
+            {/* §개정 요구 6bd79a47 — flex-wrap이었다. flex는 줄을 가를 때 아이템의 content
+                크기로 먼저 판정해 갈 줄이 있으면 줄이지 않고 감는데, 배지가 가장 넓은
+                행에서 그 감김이 라벨의 truncate보다 먼저 일어났다. 라벨만 flex-1(basis 0%)로
+                줄 판정에서 빠지게 하면 배지·연필 버튼(둘 다 shrink-0)만으로 줄을 가르므로
+                배지가 넘칠 때만 라벨 줄 아래로 내려간다. */}
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
               {editingId === row.id ? (
                 <form
                   className="flex items-center gap-1"
@@ -759,7 +764,7 @@ function TokensSection({
                 </form>
               ) : (
                 <>
-                  <span className="truncate text-sm font-medium" title={row.label}>
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium" title={row.label}>
                     {row.label}
                   </span>
                   <Button
