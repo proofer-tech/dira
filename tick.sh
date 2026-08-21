@@ -123,7 +123,12 @@ except OSError: tok = b""
 print(hashlib.sha1(tok).hexdigest()[:12])' \
     "$TOKENF"
 }
-arm_cdown() { printf '%s\n%s\n' "$1" "$(engine_fp)" > "$CDOWN"; }
+# $2(known)는 복귀 시각을 리밋이 실제로 줬는지 - 1이면 있음, 그 외(빈 값 포함)는 미상.
+# token-rotate.sh의 tick 모드가 이 3번째 줄로 "미상" 쿨다운엔 exhaustedUntil을 안 찍는다
+# (요구 61028b02/fc92d14e: 미상 쿨다운을 진짜 계정 소진과 같은 칸에 찍어 마지막 eligible
+# 계정이 죽고 NO_ELIGIBLE로 큐가 11분 멈춘 실측). 옛 2줄 파일을 읽는 쪽은 3번째 read가
+# EOF라 빈 값 -> 안전측(미상 취급)으로 떨어진다.
+arm_cdown() { printf '%s\n%s\n%s\n' "$1" "$(engine_fp)" "${2:-0}" > "$CDOWN"; }
 
 # claude 인증 + 엔진 쿨다운 게이트. ENGINE_NAME·CDOWN이 이미 정해진 상태에서 부른다.
 # 통과 못하면 SKIP을 로그하고 1을 반환한다 - 이 엔진을 쓰는 후보 전체를 건너뛰라는 뜻이라
@@ -1224,9 +1229,9 @@ if [ -n "${FAILED:-}" ]; then
   # 그 시각까지 기다린다. 안 줬거나 이미 지난 값이면 300초로 떨어진다(실측 min이 -355초다).
   # 티켓이 닫혔든 말든 엔진이 불능인지 여부와는 무관하다 - 위 가드 밖에 그대로 둔다.
   if [ "$REASON" = "api_error" ]; then
-    NOW=$(date +%s); UNTIL=$(( NOW + CDOWN_W ))
-    case "$RESET" in ''|*[!0-9]*) ;; *) [ "$RESET" -gt "$UNTIL" ] && UNTIL="$RESET" ;; esac
-    arm_cdown "$UNTIL"
+    NOW=$(date +%s); UNTIL=$(( NOW + CDOWN_W )); KNOWN=0
+    case "$RESET" in ''|*[!0-9]*) ;; *) KNOWN=1; [ "$RESET" -gt "$UNTIL" ] && UNTIL="$RESET" ;; esac
+    arm_cdown "$UNTIL" "$KNOWN"
     log "NOTE 엔진 불능 - $((UNTIL - NOW))초 쿨다운(복귀 ${RESET:-미상})"
   fi
   if [ -n "${CLOSED:-}" ]; then
