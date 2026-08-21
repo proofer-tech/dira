@@ -381,9 +381,11 @@ export const ko: Record<string, string> = {
   "progress.stream.filterThinking": "생각",
   "progress.stream.filterPrompt": "프롬프트",
   "progress.stream.noMatch": "맞는 기록이 없습니다",
-  // `pickRow` · `input` · `result` · `copy` · `closeDetail`(§2-15 ⑧ 2단 상세)는 다음 장
-  // (`268943e7`)이 쓴다 - 이 장은 안 그려서 여기 안 올린다("이 장이 쓰는 것만" 판정).
-
+  "progress.stream.pickRow": "줄을 고르면 여기에 입력과 결과가 섭니다",
+  "progress.stream.input": "입력",
+  "progress.stream.result": "결과",
+  "progress.stream.copy": "복사",
+  "progress.stream.closeDetail": "상세 닫기",
 
   "board.epic.label": "에픽",
   "board.epic.all": "전체",
@@ -1203,6 +1205,11 @@ export const en: Record<string, string> = {
   "progress.stream.filterThinking": "Thinking",
   "progress.stream.filterPrompt": "Prompts",
   "progress.stream.noMatch": "No matching records",
+  "progress.stream.pickRow": "Pick a row to see its input and result",
+  "progress.stream.input": "Input",
+  "progress.stream.result": "Result",
+  "progress.stream.copy": "Copy",
+  "progress.stream.closeDetail": "Close detail",
 
   "board.epic.label": "Epics",
   "board.epic.all": "All",

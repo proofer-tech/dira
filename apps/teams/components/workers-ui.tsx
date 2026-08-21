@@ -432,11 +432,13 @@ export function WorkerRowActions({ projectId, row }: { projectId: string; row: W
           — 워커 표에 `running` 여러 줄이 있어도 도는 폴링은 열어 둔 하나뿐이다. */}
       {holding && (
         <Dialog open={streaming} onOpenChange={setStreaming}>
-          {/* **`max-h`·`overflow`는 이 호출부에만 더한다**(§비주얼 §21). `DialogContent`는 둘 다
-              없고 `<html>`이 `overflow-hidden`이라, 참견 폼이 붙어 절이 692px이 되면 다이얼로그가
-              780px이고 최악(입력 상한 + 실패 Alert) 928px에서 **스크롤도 없이 잘린다.**
-              컴포넌트를 고치지 않는 이유는 스트림을 담은 이 다이얼로그만 키가 커서다. */}
-          <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-3xl">
+          {/* **폭·`max-h`·`overflow`는 이 호출부에만 더한다**(§비주얼 §64 ①②). `DialogContent`
+              등록은 `grid`고 이 다이얼로그만 `flex flex-col`로 간다 — 세로 배분을 flex에 넘겨
+              머리·칩 줄·툴바를 고정하고 목록·상세가 각자 스크롤하게 한다(§2-15 ⑧ 못 2). 폭은
+              종전 `sm:max-w-3xl`(768)에서 `75rem`(1200)으로 넓어진다(§비주얼 §64 ① — 목록 640
+              + 상세 512의 유도값). 컴포넌트를 고치지 않는 이유는 스트림을 담은 이 다이얼로그만
+              키가 커서다. */}
+          <DialogContent className="flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden sm:max-w-[75rem]">
             <DialogHeader>
               <DialogTitle>세션 스트림 — {row.name}</DialogTitle>
               <DialogDescription className="font-mono text-xs break-all">

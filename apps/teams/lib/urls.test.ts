@@ -16,10 +16,12 @@ import {
   interjectMode,
   matchesStreamFilter,
   mergeProgress,
+  pairTool,
   parentPath,
   planBlocks,
   progressFilterKindOf,
   progressMarkerText,
+  relativeElapsed,
   toolChipCounts,
   projectPath,
   relationPath,
@@ -576,6 +578,39 @@ test("toolChipCounts — 도구 이름별 개수, 횟수 내림차순 · 동률�
     ["Edit", 1],
   ]);
   assert.deepEqual(toolChipCounts([]), []);
+});
+
+test("pairTool — toolId로 짝을 잇는다. 짝이 여럿이면 전부 이어지고 소요는 마지막 짝까지다", () => {
+  const events = [
+    { kind: "tool_use", toolId: "a", ts: "2026-08-21T00:00:00Z" },
+    { kind: "tool_result", toolId: "a", ts: "2026-08-21T00:00:01Z" },
+    { kind: "tool_use", toolId: "b", ts: "2026-08-21T00:00:02Z" }, // grok — 갱신 여럿
+    { kind: "tool_result", toolId: "b", ts: "2026-08-21T00:00:03Z" },
+    { kind: "tool_result", toolId: "b", ts: "2026-08-21T00:00:05Z" },
+    { kind: "tool_use", toolId: "c", ts: "2026-08-21T00:00:06Z" }, // 도는 마지막 호출 — 짝 없음
+  ];
+  const single = pairTool(events[0], events);
+  assert.equal(single.results.length, 1);
+  assert.equal(single.elapsedMs, 1000);
+
+  const multi = pairTool(events[2], events);
+  assert.deepEqual(multi.results, [events[3], events[4]]);
+  assert.equal(multi.elapsedMs, 3000); // 마지막 짝까지
+
+  const none = pairTool(events[5], events);
+  assert.deepEqual(none.results, []);
+  assert.equal(none.elapsedMs, null);
+
+  // tool_use가 아니거나 toolId가 없으면 짝이 없다
+  assert.deepEqual(pairTool(events[1], events).results, []);
+  assert.deepEqual(pairTool({ kind: "tool_use", ts: "2026-08-21T00:00:00Z" }, events).results, []);
+});
+
+test("relativeElapsed — `+mm:ss`, mm은 두 자 패딩(60분을 넘으면 세 자)", () => {
+  const base = "2026-08-21T00:00:00Z";
+  assert.equal(relativeElapsed(base, base), "+00:00");
+  assert.equal(relativeElapsed("2026-08-21T00:02:02Z", base), "+02:02");
+  assert.equal(relativeElapsed("2026-08-21T01:42:37Z", base), "+102:37");
 });
 
 /** §비주얼 §26 ④. `lib/usage.ts`에 있던 `resetLabel`이 이 파일로 온 검증이다 — 홈 대화 목록(§24)이

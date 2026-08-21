@@ -603,6 +603,37 @@ export function toolChipCounts<E extends { kind: string; label: string }>(
   return [...counts].sort((a, b) => b[1] - a[1]);
 }
 
+export type ToolPair<E> = { results: E[]; elapsedMs: number | null };
+
+/** `tool_use`와 그 짝 `tool_result`들을 잇는다(§2-15 ③, 티켓 `268943e7`). `toolId`가 같은
+ *  `tool_result` 전부가 짝이다(grok은 한 호출에 갱신이 여럿 온다) — 순서대로 이어지고 소요는
+ *  **마지막** 짝까지다. 짝이 아직 없으면(도는 마지막 호출) 빈 배열 + `elapsedMs: null`이다 —
+ *  화면은 그 자리에서 소요 칸을 비우고 `결과` 절을 안 그린다. 파싱이 아니라 화면이 누적 배열에서
+ *  매번 다시 잇는다(§2-15 ③ — 증분 파서에 상태를 안 들인다). */
+export function pairTool<E extends { kind: string; toolId?: string; ts: string }>(
+  toolUse: E,
+  events: E[],
+): ToolPair<E> {
+  const results =
+    toolUse.kind === "tool_use" && toolUse.toolId
+      ? events.filter((e) => e.kind === "tool_result" && e.toolId === toolUse.toolId)
+      : [];
+  const elapsedMs = results.length
+    ? Date.parse(results[results.length - 1].ts) - Date.parse(toolUse.ts)
+    : null;
+  return { results, elapsedMs };
+}
+
+/** 줄의 상대 시각(§2-15 ⑦) — 기준은 이 세션의 첫 사건. `+<mm>:<ss>`, `mm`은 두 자 패딩(60분을
+ *  넘으면 `padStart`가 그대로 세 자를 낸다 — 시 단위를 새로 안 만든다). 절대 시각은 잃지 않는다 —
+ *  화면이 이 칸의 `title`에 따로 붙인다. */
+export function relativeElapsed(ts: string, baseTs: string): string {
+  const totalSec = Math.max(0, Math.floor((Date.parse(ts) - Date.parse(baseTs)) / 1000));
+  const mm = Math.floor(totalSec / 60);
+  const ss = totalSec % 60;
+  return `+${String(mm).padStart(2, "0")}:${String(ss).padStart(2, "0")}`;
+}
+
 /** 페르소나 색 팔레트 키 (DESIGN.md §비주얼 §12). 레지스트리에 이 문자열 그대로 저장된다.
  *  **자유 hex가 아니라 고정 8색인 이유**는 §5에 있다 — 라이트/다크 두 벌과 대비를 사람이
  *  즉석에서 못 맞춘다. 서버(레지스트리 쓰기 검증)와 클라이언트(스와치 목록)가 같은 목록을

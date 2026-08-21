@@ -29,6 +29,7 @@ import {
   ChevronRight,
   CircleCheck,
   CirclePlay,
+  Copy,
   FilePlus2,
   Send,
   Square,
@@ -36,6 +37,7 @@ import {
   SquareMinus,
   SquareX,
   TriangleAlert,
+  X,
 } from "lucide-react";
 import { sendFollowup, sendInterject, tailSession } from "@/app/(app)/p/[project]/tickets/[hash]/actions";
 import {
@@ -79,9 +81,11 @@ import {
   matchesStreamFilter,
   mergeProgress,
   NO_QUESTION_SECTION_NOTICE,
+  pairTool,
   planBlocks,
   type ProgressFilterKind,
   progressMarkerText,
+  relativeElapsed,
   toolChipCounts,
   type InterjectMode,
 } from "@/lib/urls";
@@ -113,6 +117,17 @@ function localTime(iso: string): string {
 
 /** 바닥에 붙어 있나. 줄 1.5개(32px) 안이면 붙은 것으로 본다(§9 자동 스크롤). */
 const atBottom = (el: HTMLElement) => el.scrollHeight - el.scrollTop - el.clientHeight < 32;
+
+/** 워커 다이얼로그에서만 도는 줄 컨텍스트(§2-15 ⑦⑧, 티켓 `268943e7`) — `Row`·`Bundle`·
+ *  `ProgressItems`가 받아 그대로 흘려보낸다. `undefined`면 종전 티켓 상세 화면과 클래스 0
+ *  차이다(그 화면은 이 prop 자체를 안 넘긴다). `allEvents`는 **거르지 않은** 누적 배열이다 —
+ *  검색·필터로 짝이 숨어도 소요·결과 절은 그대로 서야 한다(§2-15 ③). */
+type WorkerRowCtx = {
+  baseTs: string;
+  allEvents: StreamEvent[];
+  selectedKey: string | null;
+  onSelect: (e: StreamEvent) => void;
+};
 
 export function SessionStream({
   project,
@@ -185,6 +200,9 @@ export function SessionStream({
   // 워커 다이얼로그 툴바(§2-15 ⑥) — 티켓 상세에서는 안 읽는 값이라 그 화면 렌더는 안 갈린다.
   const [query, setQuery] = useState("");
   const [kindFilter, setKindFilter] = useState(STREAM_FILTER_DEFAULT);
+  // 2단 상세(§2-15 ⑧) — 고른 사건의 key 하나가 상태다. `<details>`가 아니다: 같은 것을 두
+  // 자리에 안 그린다. 티켓 상세에서는 안 읽는다(아래 `workerCtx`가 그 화면에서 `undefined`다).
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const t = useT();
   // 진행중 계획의 창 끝(`planBlocks`의 `now`) — 렌더 본문은 `Date.now()`를 직접 못 부른다
   // (`react-hooks/purity`). 초기값은 마운트 시 한 번, 이후는 poll effect가 매 왕복마다 갱신한다.
@@ -279,6 +297,21 @@ export function SessionStream({
     : null;
   const toolChips = variant === "worker" ? toolChipCounts(events) : [];
 
+  // 2단 상세(§2-15 ⑦⑧) — `allEvents`는 거르지 않은 `events`다(짝을 잇는 것이 검색·필터와
+  // 무관해야 한다, 위 ④⑤ 주석과 같은 이유). 고른 사건은 **보이는 목록**(`visibleEvents`)에서
+  // 찾는다 — 검색·필터가 그 줄을 가리면 선택이 저절로 풀린다(§2-15 ⑨ 필터 0건 — 상태를 따로
+  // 안 지운다, 다시 보이면 그대로 되살아난다).
+  const workerCtx: WorkerRowCtx | undefined =
+    variant === "worker"
+      ? {
+          baseTs: events[0]?.ts ?? "",
+          allEvents: events,
+          selectedKey,
+          onSelect: (e) => setSelectedKey(e.key),
+        }
+      : undefined;
+  const selectedEvent = workerCtx ? (visibleEvents.find((e) => e.key === selectedKey) ?? null) : null;
+
   // `windowEvents`·`planBlocks`(`lib/urls.ts`)는 `{ ts? }`를 직접 든 배열을 받는다 —
   // `mergeProgress`의 출력은 `{event}`/`{thread}` 래퍼라 그 자리에 `ts`를 얹어 통과시킨다.
   // 스레드 항목은 `ts`가 없으므로 `windowEvents`가 **앞 사건의 시각을 물려받는** 그 규칙
@@ -323,7 +356,15 @@ export function SessionStream({
     // `DialogContent`가 `grid`라 이 절은 그리드 아이템이고 `min-width: auto` = 내용의 min-content다.
     // 펼친 `<pre>`의 `break-words`는 min-content를 안 줄여서(줄이는 건 `break-all`) 긴 한 줄이
     // 그대로 열 폭이 된다 — 실측 768px 다이얼로그의 `scrollWidth`가 13125px이었다.
-    <div className="min-w-0 space-y-2">
+    <div
+      className={cn(
+        "min-w-0 space-y-2",
+        // §비주얼 §64 ② — `min-h-0`이 사슬 전체에 걸린다: `DialogContent`(호출부가 `flex
+        // flex-col overflow-hidden`으로 간다) -> 이 래퍼 -> 2단 행 -> 두 단. 한 고리라도
+        // 빠지면 flex 자식이 안 줄고 참견 폼이 자랄 때 다이얼로그가 스크롤한다.
+        variant === "worker" && "flex min-h-0 flex-col",
+      )}
+    >
       {/* 머리 줄 — `진행 기록` h2와 `맨 아래로`가 같은 행에 선다(§비주얼 §29 ③ P173).
           h2는 이 절이 서는 다섯 상태 전부에서 무조건 렌더된다(종전엔 `page.tsx`가 이 h2를
           따로 그렸다 — `<SessionStream>`이 안 서는 "둘 다 0" 빈 상태만 거기 남는다) — 그래서
@@ -443,75 +484,108 @@ export function SessionStream({
       )}
       {/* 상자는 **그릴 것이 있을 때만** 선다. codex이고 스레드도 없으면 위 `<EmptyState>` 하나가
           이 자리의 전부다(종전 그대로) — 빈 상자를 하나 더 그리는 것은 소음이다(§29 ④). */}
-      {(stream || merged.length > 0) && (
-        /* 배경에 틴트를 깔지 않는다 — `--muted`를 깔면 접힌 줄의 `--muted-foreground`가 4.34로
-            AA 미달이고(§9 함정 1) 말풍선 실측표 7종도 이 면 위에서 잰 값이다(§29 ①).
-            512px인 이유는 머리와 바닥이 한 화면에 같이 들어와서다 — 참견 최악 840에 852까지
-            여유가 12px이라 한 단계도 못 키운다(§29 ②). 흐르는 것이 없으면 `max-`다:
-            답변 대기 한 건짜리 요구사항에 470px짜리 빈 상자를 그리지 않는다. */
-        <div
-          ref={box}
-          onScroll={(e) => setDetached(!atBottom(e.currentTarget))}
-          className={cn(
-            "overflow-y-auto rounded-md border bg-background py-2",
-            stream ? "h-[32rem]" : "max-h-[32rem]",
-          )}
-        >
-          {variant === "worker" && merged.length === 0 && events.length > 0 ? (
-            // 검색·필터가 전부 걸러냈다(§2-15 ⑥·⑨) — 칩 줄·머리는 위에서 이미 그렸고 안 갈린다.
-            <p className={cn(LINE, "text-xs text-muted-foreground")}>{t("progress.stream.noMatch")}</p>
-          ) : (
-            blocks.map((block, bi) =>
-            block.kind === "outside" ? (
-              <ProgressItems
-                key={`o${bi}`}
-                items={groupProgress(
-                  block.events.map((w) => w.it),
-                  isBubble,
-                )}
-                threadKey={threadKey}
-                onToggle={onToggle}
-                vault={vault}
-                forceOpen={searching}
-              />
-            ) : (
-              <PlanBlock
-                key={`p${block.index}`}
-                plan={effectivePlans[block.index]}
-                items={groupProgress(
-                  block.events.map((w) => w.it),
-                  isBubble,
-                )}
-                count={block.events.length}
-                onToggle={onToggle}
-                threadKey={threadKey}
-                vault={vault}
-              />
-            ),
-          ))}
-          {/* 진행 표식(§18 ④) — **자리가 한 갈래다**(개정 요구 `c1312f3d`): 계획이 있든 없든
-              상자 안 맨 아래다. 진행중 계획 아코디언을 접어도 안 숨는다 — `<details>` 밖에
-              선다. 마지막 사건 다음 줄이 올 자리를 지킨다. **말풍선 아래로 안 내려간다**:
-              `.wip`인 동안 상자의 맨 끝은 항상 스트림 사건이고(답 없는 질문은 열린 티켓에만
-              있다 — §29 ③) 옛 답변은 `birth`가 지금 세션 첫 사건보다 앞이다. `<Marker>`도
-              `<details>`도 아니다: §9가 Marker 기본값을 하나도 안 덮기로 했는데 여기는
-              `text-xs`여야 한다(폴링 상태 3종이 한 종류인 채로 자리만 옮겼다). 눌러 볼 것이
-              없으니 hover도 없다. `mx-1`이 8px 점을 16px 칸(= MarkerIcon 폭) 가운데 세워
-              문구를 다른 두 줄과 같은 x=36px에 맞춘다. // ponytail: 정렬용 래퍼 대신 마진
-              4px. 점이 커지면 그때 래퍼. 문구를 같이 드는 이유는 `prefers-reduced-motion`이다
-              — 모션만으로 말하지 않는다. **문구는 마지막 레코드가 `thinking`이면 갈린다**
-              (§2-6 ③, 요구 `cbdc2cb4`) — 판정은 `progressMarkerText`(`lib/urls.ts`) 하나다. */}
-          {live && (
-            <div className="flex items-center gap-2 px-3 text-xs leading-6 text-muted-foreground">
-              <span
-                aria-hidden
-                className="mx-1 size-2 shrink-0 animate-wip-pulse rounded-full bg-muted-foreground motion-reduce:animate-none"
-              />
-              {markerText}
+      {(stream || merged.length > 0) &&
+        (() => {
+          const listContent = (
+            <>
+              {variant === "worker" && merged.length === 0 && events.length > 0 ? (
+                // 검색·필터가 전부 걸러냈다(§2-15 ⑥·⑨) — 칩 줄·머리는 위에서 이미 그렸고 안 갈린다.
+                <p className={cn(LINE, "text-xs text-muted-foreground")}>{t("progress.stream.noMatch")}</p>
+              ) : (
+                blocks.map((block, bi) =>
+                block.kind === "outside" ? (
+                  <ProgressItems
+                    key={`o${bi}`}
+                    items={groupProgress(
+                      block.events.map((w) => w.it),
+                      isBubble,
+                    )}
+                    threadKey={threadKey}
+                    onToggle={onToggle}
+                    vault={vault}
+                    forceOpen={searching}
+                    ctx={workerCtx}
+                  />
+                ) : (
+                  <PlanBlock
+                    key={`p${block.index}`}
+                    plan={effectivePlans[block.index]}
+                    items={groupProgress(
+                      block.events.map((w) => w.it),
+                      isBubble,
+                    )}
+                    count={block.events.length}
+                    onToggle={onToggle}
+                    threadKey={threadKey}
+                    vault={vault}
+                  />
+                ),
+              ))}
+              {/* 진행 표식(§18 ④) — **자리가 한 갈래다**(개정 요구 `c1312f3d`): 계획이 있든 없든
+                  상자 안 맨 아래다. 진행중 계획 아코디언을 접어도 안 숨는다 — `<details>` 밖에
+                  선다. 마지막 사건 다음 줄이 올 자리를 지킨다. **말풍선 아래로 안 내려간다**:
+                  `.wip`인 동안 상자의 맨 끝은 항상 스트림 사건이고(답 없는 질문은 열린 티켓에만
+                  있다 — §29 ③) 옛 답변은 `birth`가 지금 세션 첫 사건보다 앞이다. `<Marker>`도
+                  `<details>`도 아니다: §9가 Marker 기본값을 하나도 안 덮기로 했는데 여기는
+                  `text-xs`여야 한다(폴링 상태 3종이 한 종류인 채로 자리만 옮겼다). 눌러 볼 것이
+                  없으니 hover도 없다. `mx-1`이 8px 점을 16px 칸(= MarkerIcon 폭) 가운데 세워
+                  문구를 다른 두 줄과 같은 x=36px에 맞춘다. // ponytail: 정렬용 래퍼 대신 마진
+                  4px. 점이 커지면 그때 래퍼. 문구를 같이 드는 이유는 `prefers-reduced-motion`이다
+                  — 모션만으로 말하지 않는다. **문구는 마지막 레코드가 `thinking`이면 갈린다**
+                  (§2-6 ③, 요구 `cbdc2cb4`) — 판정은 `progressMarkerText`(`lib/urls.ts`) 하나다. */}
+              {live && (
+                <div className="flex items-center gap-2 px-3 text-xs leading-6 text-muted-foreground">
+                  <span
+                    aria-hidden
+                    className="mx-1 size-2 shrink-0 animate-wip-pulse rounded-full bg-muted-foreground motion-reduce:animate-none"
+                  />
+                  {markerText}
+                </div>
+              )}
+            </>
+          );
+
+          // 배경에 틴트를 깔지 않는다 — `--muted`를 깔면 접힌 줄의 `--muted-foreground`가 4.34로
+          // AA 미달이고(§9 함정 1) 말풍선 실측표 7종도 이 면 위에서 잰 값이다(§29 ①).
+          if (workerCtx) {
+            // 워커 다이얼로그 2단(§2-15 ⑧, 값 §비주얼 §64 ①②③⑦) — 목록 단은 §9의 그 상자
+            // 그대로고(`h-[32rem]`이 행으로 올라갔다), 상세 단이 오른쪽에 선다. `lg` 미만은
+            // 세로로 접혀 상세가 목록 아래다(§64 ⑩) — 두 단이 각자 스크롤하고 이 행 자체는
+            // 안 스크롤한다(§2-15 ⑧ 못 2 — 검색 상자가 위로 사라지지 않는다).
+            return (
+              <div className="flex min-h-0 flex-col space-y-2 lg:h-[32rem] lg:flex-row lg:space-y-0 lg:gap-4">
+                <div
+                  ref={box}
+                  onScroll={(e) => setDetached(!atBottom(e.currentTarget))}
+                  className="min-h-0 overflow-y-auto rounded-md border bg-background py-2 lg:h-full lg:min-w-[32rem] lg:basis-[40rem]"
+                >
+                  {listContent}
+                </div>
+                <DetailPanel
+                  event={selectedEvent}
+                  baseTs={workerCtx.baseTs}
+                  allEvents={workerCtx.allEvents}
+                  onClose={() => setSelectedKey(null)}
+                />
+              </div>
+            );
+          }
+          // 512px인 이유는 머리와 바닥이 한 화면에 같이 들어와서다 — 참견 최악 840에 852까지
+          // 여유가 12px이라 한 단계도 못 키운다(§29 ②). 흐르는 것이 없으면 `max-`다:
+          // 답변 대기 한 건짜리 요구사항에 470px짜리 빈 상자를 그리지 않는다.
+          return (
+            <div
+              ref={box}
+              onScroll={(e) => setDetached(!atBottom(e.currentTarget))}
+              className={cn(
+                "overflow-y-auto rounded-md border bg-background py-2",
+                stream ? "h-[32rem]" : "max-h-[32rem]",
+              )}
+            >
+              {listContent}
             </div>
-          )}
-        </div>
-      )}
+          );
+        })()}
 
       {/* 결정 11 ⑩ — `awaiting`인데 본문에 `## 질문 n` 절이 없으면(실측 8건) 스레드 자리가
           통째로 비고 화면이 "답변 대기"라고만 말해 무엇을 묻는지가 안 보였다. 폼은 안 감춘다 —
@@ -542,6 +616,7 @@ function ProgressItems({
   onToggle,
   vault,
   forceOpen,
+  ctx,
 }: {
   items: GroupedItem<StreamEvent, ThreadItem>[];
   threadKey: Map<ThreadItem, string>;
@@ -550,6 +625,8 @@ function ProgressItems({
   /** 워커 다이얼로그 검색이 켜져 있는 동안 묶음을 강제로 연다(§2-15 ②) — 기본은 안 건드린다
    *  (`undefined` = 종전 그대로 손으로 펼친 것만 열린다). 티켓 상세는 이 prop을 안 넘긴다. */
   forceOpen?: boolean;
+  /** 워커 다이얼로그 줄 컨텍스트(§2-15 ⑦⑧) — `Bundle`을 거쳐 `Row`까지 그대로 흘려보낸다. */
+  ctx?: WorkerRowCtx;
 }) {
   return (
     <>
@@ -558,7 +635,13 @@ function ProgressItems({
         if (g.kind === "thread")
           return <ThreadRow key={threadKey.get(g.thread)} item={g.thread} vault={vault} />;
         return (
-          <Bundle key={g.events[0].key} events={g.events} onToggle={onToggle} forceOpen={forceOpen} />
+          <Bundle
+            key={g.events[0].key}
+            events={g.events}
+            onToggle={onToggle}
+            forceOpen={forceOpen}
+            ctx={ctx}
+          />
         );
       })}
     </>
@@ -1047,6 +1130,20 @@ const LINE = "px-3 leading-6 scroll-mt-6";
  *  계획 <-> 계획도 8이고, `first`/`last`가 상자 `py-2`와 겹치는 것을 막는다. */
 const PLAN_BLOCK = "my-2 first:mt-0 last:mb-0";
 
+/** Edit diff 렌더 — `Row`(펼친 원문)와 `DetailPanel`(입력 절)이 공유한다(§9 §펼친 Edit — 그릇만
+ *  갈린다, 값은 §2-15 ⑧ "diff가 있으면 §9 계약 그대로"). 색 0 — 갈리는 것은 머리 2칸 `- `/`+ `/`
+ *  `  ` 하나다. 줄당 `<div>` + 걸이 들여쓰기(`pl-[2ch] -indent-[2ch]`)라 줄바꿈된 이음줄이 부호
+ *  열을 안 밟는다 — 색이 없어서 그 열의 무결성이 이 블록의 전부다. */
+function diffOrBody(e: StreamEvent) {
+  return e.diff
+    ? e.diff.map((l, i) => (
+        <div key={i} className="pl-[2ch] -indent-[2ch]">
+          {l.kind + " " + l.text}
+        </div>
+      ))
+    : e.body;
+}
+
 /** 접힌 줄 — `<Marker>` 한 줄. `tool_use`·`thinking`·`tool_result`·세션 프롬프트가 전부 이 모양이다.
  *  고정폭 4열은 (a)가 버렸다(요구 `e3020347`) — 시각(mono 8자)만 세로로 맞고 도구명부터 줄마다
  *  어긋난다. 도구명에 `max-w-[7rem]`만 남은 것이 종전 고정폭이 묶던 흔들림 범위를 대신한다.
@@ -1054,9 +1151,13 @@ const PLAN_BLOCK = "my-2 first:mt-0 last:mb-0";
 function Row({
   e,
   onToggle,
+  ctx,
 }: {
   e: StreamEvent;
   onToggle: (ev: React.SyntheticEvent<HTMLDetailsElement>) => void;
+  /** 워커 다이얼로그(§2-15 ⑦⑧, 티켓 `268943e7`)에서만 선다 — 상대 시각·소요 칸·선택 상태를
+   *  준다. `undefined`면 아래가 전부 종전 티켓 상세 화면(`<details>` 인라인 펼침)이다. */
+  ctx?: WorkerRowCtx;
 }) {
   const t = useT();
   // 오류 표식(§비주얼 §60) — `MarkerContent` 첫머리 텍스트 마커. `서브`가 출처, `오류`가 성질이라
@@ -1066,11 +1167,20 @@ function Row({
   const summary = [e.sidechain ? "서브" : null, errorLabel, e.summary]
     .filter((s) => s !== null)
     .join(" · ");
-  // 시각·도구명은 `shrink-0`이라, 줄이 넘칠 때 줄어드는 칸은 `MarkerContent` 하나다
+  // 워커 다이얼로그의 소요 칸(§2-15 ⑦) — `tool_use` 줄에만, 짝이 없으면 칸이 빈다.
+  const elapsedMs = ctx && e.kind === "tool_use" ? pairTool(e, ctx.allEvents).elapsedMs : null;
+  // 시각·도구명·소요는 `shrink-0`이라, 줄이 넘칠 때 줄어드는 칸은 `MarkerContent` 하나다
   // (그 `min-w-0`이 종전 `minmax(0,1fr)`가 하던 일이다).
   const cells = (
     <>
-      <span className="shrink-0 font-mono tabular-nums">{localTime(e.ts)}</span>
+      {ctx ? (
+        // 상대 시각(§2-15 ⑦) — 절대 시각은 잃지 않는다: `title`이 종전 `HH:MM:SS`를 든다.
+        <span className="shrink-0 font-mono tabular-nums" title={localTime(e.ts)}>
+          {relativeElapsed(e.ts, ctx.baseTs)}
+        </span>
+      ) : (
+        <span className="shrink-0 font-mono tabular-nums">{localTime(e.ts)}</span>
+      )}
       {/* mono면 엔진이 실제로 부른 이름이고, sans면 우리가 붙인 이름이다(§9).
           판정은 `kind` 하나다 — 화면이 도구 목록을 다시 갖지 않는다. */}
       <span
@@ -1090,8 +1200,34 @@ function Row({
           summary
         )}
       </MarkerContent>
+      {ctx && e.kind === "tool_use" && (
+        <span className="ml-auto shrink-0 font-mono tabular-nums">
+          {elapsedMs !== null ? formatElapsed(elapsedMs) : null}
+        </span>
+      )}
     </>
   );
+
+  if (ctx) {
+    // 워커 다이얼로그 — 인라인 펼침이 없다(§2-15 ⑧: "왼쪽 목록의 그 자리 아래 펼침이
+    // 없어진다"). 줄 하나가 그대로 고를 수 있는 `<button>`이고, `MarkerIcon`은 늘 비어
+    // 있다(펼칠 것이 없으니 회전할 chevron도 없다 — 열의 정렬만 지킨다).
+    return (
+      <Marker
+        render={<button type="button" />}
+        aria-current={ctx.selectedKey === e.key ? "true" : undefined}
+        onClick={() => ctx.onSelect(e)}
+        className={cn(
+          LINE,
+          "cursor-pointer outline-none hover:bg-muted/50 hover:text-foreground aria-current:bg-muted aria-current:font-medium aria-current:text-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:ring-inset",
+        )}
+      >
+        <MarkerIcon />
+        {cells}
+      </Marker>
+    );
+  }
+
   // 펼칠 것이 없으면 어포던스도 없다(`expandable` — 판정은 `lib/urls.ts` 하나다).
   // 여기 오는 건 본문이 암호화된 `thinking`이다(실측 75/75). 줄 자체는 그대로 흘리고
   // — 빼면 생각하는 동안 화면이 조용해진다 — `MarkerIcon` 칸만 §9대로 **비워서 유지**한다.
@@ -1144,18 +1280,7 @@ function Row({
           </p>
         )}
         <pre className="mt-1 mb-2 ml-6 max-h-96 overflow-auto rounded-md bg-muted p-3 font-mono text-xs break-words whitespace-pre-wrap text-foreground">
-          {e.diff ? (
-            /* 색 0(§9) — 갈리는 것은 머리 2칸 `- `/`+ `/`  ` 하나다. 셋이 색·크기·서체·배경까지
-               같다. 줄당 `<div>` + 걸이 들여쓰기(`pl-[2ch] -indent-[2ch]`)라 줄바꿈된 이음줄이
-               부호 열을 안 밟는다 — 색이 없어서 그 열의 무결성이 이 블록의 전부다. */
-            e.diff.map((l, i) => (
-              <div key={i} className="pl-[2ch] -indent-[2ch]">
-                {l.kind + " " + l.text}
-              </div>
-            ))
-          ) : (
-            e.body
-          )}
+          {diffOrBody(e)}
         </pre>
       </div>
     </details>
@@ -1176,12 +1301,16 @@ export function Bundle({
   events,
   onToggle,
   forceOpen,
+  ctx,
 }: {
   events: StreamEvent[];
   onToggle: (ev: React.SyntheticEvent<HTMLDetailsElement>) => void;
   /** 워커 다이얼로그 검색 중에 강제로 연다(§2-15 ②) — `undefined`/`false`는 종전 그대로
    *  `<details>`가 안 통제된다(홈 스레드 호출부는 이 prop을 안 넘긴다). */
   forceOpen?: boolean;
+  /** 워커 다이얼로그 줄 컨텍스트(§2-15 ⑦⑧) — 안의 `Row`들에 그대로 흘려보낸다. 이 묶음 접힌
+   *  줄 자체는 여전히 `<details>`다(§2-15 ② — 얹는 것은 펼친 뒤의 줄과 상자 바깥뿐이다). */
+  ctx?: WorkerRowCtx;
 }) {
   return (
     <details
@@ -1202,9 +1331,127 @@ export function Bundle({
         <MarkerContent className="tabular-nums">기록 {events.length}건</MarkerContent>
       </Marker>
       {events.map((e) => (
-        <Row key={e.key} e={e} onToggle={onToggle} />
+        <Row key={e.key} e={e} onToggle={onToggle} ctx={ctx} />
       ))}
     </details>
+  );
+}
+
+/** 상세 단의 `<pre>`(§비주얼 §64 ⑦) — §9의 그 클래스에서 둘을 뺀다: `ml-6`(줄의 `MarkerIcon` 열에
+ *  맞추던 값 — 이 단에는 그 열이 없다) · `max-h-96`(이 단은 상세 몸(`overflow-y-auto`)이 이미
+ *  자기 스크롤을 든다). 나머지는 §9 그대로다. */
+const PANEL_PRE =
+  "mt-1 mb-2 overflow-auto rounded-md bg-muted p-3 font-mono text-xs break-words whitespace-pre-wrap text-foreground";
+
+/** 상세 단의 절 하나 — `입력`·`결과` 공용(§2-15 ⑧). 머리는 라벨 + `ml-auto` 복사 버튼이고,
+ *  누르면 **그 절의 원문**이 클립보드로 간다(다른 절과 절 사이에는 안 걸린다). */
+function DetailSection({
+  label,
+  copyText,
+  children,
+}: {
+  label: string;
+  copyText: string;
+  children: React.ReactNode;
+}) {
+  const t = useT();
+  return (
+    <section className="mt-2 first:mt-0">
+      <div className="flex h-6 items-center">
+        <span className="text-xs text-muted-foreground">{label}</span>
+        <Button
+          variant="ghost"
+          size="xs"
+          className="ml-auto"
+          onClick={() => void navigator.clipboard.writeText(copyText)}
+        >
+          <Copy aria-hidden />
+          {t("progress.stream.copy")}
+        </Button>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+/** 2단 상세(§2-15 ⑧, 값 §비주얼 §64 ③⑦⑧) — 오른쪽 단. 고른 줄이 없으면 빈 상태 문구를 든
+ *  채로 **단 자체는 남는다**(레이아웃이 안 튄다). 고르면 도구 이름 + 상대 시각 + 소요 + 닫기가
+ *  머리, `입력`(본문, `diff`가 있으면 §9 계약 그대로 줄 단위 diff) · `결과`(짝 `tool_result`의
+ *  본문 — 짝이 없으면 절 자체가 없다)가 몸이다. */
+function DetailPanel({
+  event,
+  baseTs,
+  allEvents,
+  onClose,
+}: {
+  event: StreamEvent | null;
+  baseTs: string;
+  allEvents: StreamEvent[];
+  onClose: () => void;
+}) {
+  const t = useT();
+  const shell = "flex min-h-0 flex-col rounded-md border bg-background lg:h-full lg:min-w-96 lg:flex-1";
+
+  if (!event) {
+    return (
+      <div className={shell}>
+        <p className="px-3 py-2 text-xs text-muted-foreground">{t("progress.stream.pickRow")}</p>
+      </div>
+    );
+  }
+
+  const { results, elapsedMs } = pairTool(event, allEvents);
+
+  return (
+    <div className={shell}>
+      <div className="flex h-8 shrink-0 items-center gap-2 px-3">
+        <span
+          className={cn("max-w-[7rem] shrink-0 truncate", event.kind === "tool_use" && "font-mono")}
+          title={event.label}
+        >
+          {event.label}
+        </span>
+        <span className="shrink-0 font-mono tabular-nums" title={localTime(event.ts)}>
+          {relativeElapsed(event.ts, baseTs)}
+        </span>
+        {event.kind === "tool_use" && elapsedMs !== null && (
+          <span className="shrink-0 font-mono tabular-nums">{formatElapsed(elapsedMs)}</span>
+        )}
+        <Button variant="ghost" size="icon-sm" className="ml-auto" onClick={onClose}>
+          <X aria-hidden />
+          <span className="sr-only">{t("progress.stream.closeDetail")}</span>
+        </Button>
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-2">
+        <DetailSection label={t("progress.stream.input")} copyText={event.body}>
+          {event.replaceAll && (
+            <p className="text-xs text-muted-foreground">
+              <span className="font-mono">replace_all</span> · 일치하는 곳 전부
+            </p>
+          )}
+          <pre className={PANEL_PRE}>{diffOrBody(event)}</pre>
+        </DetailSection>
+        {results.length > 0 && (
+          <DetailSection
+            label={t("progress.stream.result")}
+            copyText={results.map((r) => r.body).join("\n\n")}
+          >
+            <div className="space-y-2">
+              {results.map((r) => (
+                <div key={r.key}>
+                  {r.error && (
+                    <p className="text-xs">
+                      <span className="text-foreground">{t("progress.stream.error")}</span>
+                    </p>
+                  )}
+                  <pre className={PANEL_PRE}>{r.body}</pre>
+                </div>
+              ))}
+            </div>
+          </DetailSection>
+        )}
+      </div>
+    </div>
   );
 }
 
