@@ -567,6 +567,7 @@ export const ko: Record<string, string> = {
   // 페르소나 화면 - `personas-ui.tsx`(클라이언트 컴포넌트, `useT()`로 읽는다). 재사용 낱말은
   // `persona.word.*` - 여러 자리가 같은 낱말을 그대로 쓴다(§0-16 §키 규약 - 중복 값 0).
   "persona.word.squad": "스쿼드",
+  "persona.squad.collapseToggle": "모아보기",
   "persona.word.skills": "스킬",
   "persona.word.memory": "메모리",
   "persona.word.limit": "상한",
@@ -1354,6 +1355,9 @@ export const en: Record<string, string> = {
 
   // 페르소나 화면 - `personas-ui.tsx`.
   "persona.word.squad": "Squads",
+  // ko 정본은 요구가 부른 낱말 그대로다(§5-5 §개정 - 모아보기 토글) — 이 한 낱말은 버튼
+  // 라벨이라 developer가 직접 채운다(writer 산문 경계 밖, PROFILE §권한).
+  "persona.squad.collapseToggle": "Group view",
   "persona.word.skills": "Skills",
   "persona.word.memory": "Memory",
   "persona.word.limit": "Limit",
