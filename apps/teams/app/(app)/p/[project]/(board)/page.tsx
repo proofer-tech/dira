@@ -69,6 +69,7 @@ import {
   archivesOf,
   assigneeOf,
   awaitingOf,
+  bodyWithoutQuestions,
   continuedOf,
   defaultAnswerOf,
   epicOf,
@@ -656,6 +657,7 @@ export default async function Board({
           thread={threadOf(tickets, t, config, { foldQuotes: true })}
           options={lastQuestionOptions(threadOf(tickets, t, config))}
           defaultAnswer={defaultAnswerOf(t)}
+          body={bodyWithoutQuestions(t.body)}
           vault={vault}
         />
       )}

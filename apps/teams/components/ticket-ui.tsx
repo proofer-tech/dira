@@ -895,6 +895,7 @@ export function AnswerForm({
   answerFile,
   options,
   defaultAnswer = "",
+  body: ticketBody,
   vault,
 }: {
   project: string;
@@ -907,6 +908,11 @@ export function AnswerForm({
   /** frontmatter `default_answer:`(결정 12 (4)) — 미리 골라 둔 답. 서버가 `defaultAnswerOf(ticket)`로
    *  내려보낸다. 없으면(PM이 손으로 쓴 질문) 체크 0개, 종전 화면 그대로다. */
   defaultAnswer?: string;
+  /** 질문 절 밖의 본문(결정 14 ①, 요구 `c37fe0d3`) — 서버가 `bodyWithoutQuestions(ticket.body)`로
+   *  내려보낸다. `## 질문 n`·`## 진행 계획`은 그 함수가 이미 뺐다. 카드 아래 접힌 `<details>`
+   *  하나로 그린다 — 빈 문자열이면 그 접힘 자체가 없다(③). 이름을 `body`가 아니라
+   *  `ticketBody`로 받는 이유: 이 폼 안에 이미 같은 이름의 상태(조립되는 답변 글)가 있다. */
+  body: string;
   /** 이름 -> href 벌(§비주얼 §10 §위키링크) — 위지윅 면에 그대로 흘려보낸다 */
   vault?: Vault;
 }) {
@@ -1024,6 +1030,23 @@ export function AnswerForm({
           ))}
         </div>
       )}
+      {/* 결정 14 ① — 질문 절 밖의 본문. 카드 아래 접힌 채로 데려온다(③ 빈 문자열이면 접힘
+          자체가 없다). 네이티브 `<details>`다(`AnswerThread`의 인용 접힘과 같은 관용구) —
+          아코디언 라이브러리를 안 쓴다. */}
+      {ticketBody.trim() !== "" && (
+        <details className="group/body">
+          <summary className="flex cursor-pointer list-none items-center gap-1 text-xs text-muted-foreground [&::-webkit-details-marker]:hidden">
+            <ChevronRight
+              aria-hidden
+              className="size-3.5 shrink-0 transition-transform group-open/body:rotate-90"
+            />
+            본문
+          </summary>
+          <div className="ml-[1.125rem]">
+            <Markdown text={ticketBody} vault={vault} />
+          </div>
+        </details>
+      )}
       {/* 보이는 `<Label>`도 `a-body` id도 없다(§29 ②) — 이름을 이미 말하는 것이 두 자리 다 있다:
           상세는 절 제목 `진행 기록`, 다이얼로그는 `DialogTitle`(`답변 — <제목>`). placeholder는
           라벨이 아니라서 `aria-label`이 접근 가능한 이름을 받는다. 문구는 참견·이어받기와 같은
@@ -1079,6 +1102,8 @@ function AnswerFields({
   thread: ThreadItem[];
   options: OptionGroup[];
   defaultAnswer?: string;
+  /** 질문 절 밖의 본문(결정 14 ①) — `AnswerForm`에 그대로 흘려보낸다(`...props` 스프레드) */
+  body: string;
   vault?: Vault;
 }) {
   return (
@@ -1108,6 +1133,8 @@ export function AnswerDialog({
   thread: ThreadItem[];
   options: OptionGroup[];
   defaultAnswer?: string;
+  /** 질문 절 밖의 본문(결정 14 ①) — `AnswerFields`에 그대로 흘려보낸다(`...props` 스프레드) */
+  body: string;
   /** 다이얼로그 머리에 요구사항 제목을 적는다 — 보드에서는 어느 카드를 열었는지가 안 보인다 */
   title: string;
   /** 이름 -> href 벌(§비주얼 §10 §위키링크) — `AnswerFields`에 그대로 흘려보낸다 */
