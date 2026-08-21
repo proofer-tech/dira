@@ -51,38 +51,42 @@ TICKET_PROMPT_FMT="${TICKET_PROMPT_FMT:-%s 티켓을 확인해 주세요. (해�
 TICKET_REUSE="${TICKET_REUSE:-1}"
 TICKET_REUSE_CTX="${TICKET_REUSE_CTX:-100000}"
 
-# 엔진 수정 스물네 번째 계약 1-2-3: 워커가 부르는 실행 파일의 자리를 고정 경로 하나로 모은다.
+# 엔진 수정 스물네·스물일곱 번째 계약: 워커가 부르는 실행 파일의 자리를 고정 경로로 모은다.
 # claude 실행 파일은 심링크고 실체가 업데이트마다 새 버전 디렉터리로 옮겨간다(이 머신 버전
 # 디렉터리 32개) - macOS TCC는 허용을 절대경로로 적어서 매 업데이트가 새 TCC 항목이 된다.
-# $LOCAL/bin/dira를 그 실체로 매 tick 다시 겨눠, 경로 문자열은 고정한 채(TCC 항목 1개) 가리키는
+# BIN_DIR을 그 실체로 매 tick 다시 겨눠, 경로 문자열은 고정한 채(TCC 항목 1개) 가리키는
 # 실체만 갈리게 한다. 심링크는 답이 아니다 - exec가 심링크를 풀어서 TCC가 여전히 버전 경로를 본다.
-FIXED_ENGINE="$LOCAL/bin/dira"
+# §27 계약 1: bin 자리는 TICKET_LOCAL을 안 탄다 - 프로젝트가 락·토큰을 자기 디렉터리로 빼도
+# 실행 파일은 머신에 한 자리다(오늘 기본값이 이미 이 값이라 도는 경로는 안 갈린다).
+BIN_DIR="$HOME/.config/dira/bin"
+FIXED_ENGINE="$BIN_DIR/dira"
 refresh_fixed_engine() {
-  local src same tmp
-  src="$(command -v claude 2>/dev/null)" || return 1
-  src="$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$src" 2>/dev/null)"
-  [ -x "$src" ] || return 1
-  if [ -e "$FIXED_ENGINE" ]; then
-    # 이미 그 실체를 가리키면 매 tick 파일을 다시 굽지 않는다 - st_dev+st_ino 비교
-    same="$(python3 -c '
-import os, sys
-a, b = os.stat(sys.argv[1]), os.stat(sys.argv[2])
-print(1 if (a.st_dev, a.st_ino) == (b.st_dev, b.st_ino) else 0)
-' "$FIXED_ENGINE" "$src" 2>/dev/null)"
-    [ "$same" = "1" ] && return 0
-  fi
-  mkdir -p "$(dirname "$FIXED_ENGINE")" 2>/dev/null || return 1
-  tmp="$FIXED_ENGINE.tmp.$$"
-  # 하드링크 우선(볼륨을 안 넘으면 즉시고 바이너리 크기를 매 업데이트마다 안 문다 - 실측:
-  # 이 머신 claude 바이너리 306MB, ~/.local/bin과 $LOCAL이 같은 st_dev라 하드링크가 선다).
-  # 볼륨이 갈리면(다른 머신 구성) ln이 실패하고 복사로 떨어진다. 임시 이름에 만든 뒤 mv로
-  # 원자 교체 - 여러 워커가 동시에 tick을 돌아도 실행 파일이 반쪽으로 보이는 창이 없다.
-  if ln "$src" "$tmp" 2>/dev/null || cp "$src" "$tmp" 2>/dev/null; then
-    mv -f "$tmp" "$FIXED_ENGINE"
-  else
-    rm -f "$tmp"
-    return 1
-  fi
+  # §27 계약 2: 카탈로그 넷을 각각 굽는다 - claude만 이름이 dira, 나머지는 dira-<엔진>
+  # (§24 계약 3 접미사 판정과 대응). PATH에 없는 엔진은 조용히 건너뛴다(WARN 없음).
+  local pair cmd bin src tmp
+  mkdir -p "$BIN_DIR" 2>/dev/null || return 1
+  for pair in claude:dira codex:dira-codex grok:dira-grok agy:dira-agy; do
+    cmd="${pair%%:*}"
+    bin="$BIN_DIR/${pair#*:}"
+    src="$(command -v "$cmd" 2>/dev/null)" || continue
+    [ -x "$src" ] || continue
+    # 이미 그 실체를 가리키면 매 tick 파일을 다시 굽지 않는다 - `-ef`가 심링크를 풀어서
+    # device+inode를 비교한다(= 아래 python3 realpath와 같은 판정, 서브프로세스 없이).
+    [ -e "$bin" ] && [ "$bin" -ef "$src" ] && continue
+    tmp="$bin.tmp.$$"
+    # 하드링크 우선(볼륨을 안 넘으면 즉시고 바이너리 크기를 매 업데이트마다 안 문다 - 실측:
+    # 이 머신 claude 바이너리 306MB, ~/.local/bin과 BIN_DIR이 같은 st_dev라 하드링크가 선다).
+    # 볼륨이 갈리면(다른 머신 구성) ln이 실패하고 복사로 떨어진다. 임시 이름에 만든 뒤 mv로
+    # 원자 교체 - 여러 워커가 동시에 tick을 돌아도 실행 파일이 반쪽으로 보이는 창이 없다.
+    if ln "$src" "$tmp" 2>/dev/null || cp "$src" "$tmp" 2>/dev/null; then
+      mv -f "$tmp" "$bin"
+    else
+      rm -f "$tmp"
+    fi
+  done
+  # §27 계약 4: mv -f가 지금 실행 중인 고정 경로를 못 덮을 때(macOS ETXTBSY, 워커 여러 장이
+  # 도는 큐에서는 정상) 남는 임시 파일을 갱신할 때마다 쓸어낸다. 갱신 실패는 종전대로 조용하다.
+  rm -f "$BIN_DIR"/*.tmp.[0-9]* 2>/dev/null
 }
 refresh_fixed_engine
 
@@ -540,13 +544,20 @@ while IFS='|' read -r c_path c_hash c_kind c_persona c_prio c_base c_eff c_squad
     PENGINE="${TICKET_PERSONAS:-$TICKET_ROOT/personas}/$c_persona/engine"
     [ -r "$PENGINE" ] && . "$PENGINE"
   fi
-  # 엔진 수정 24번째 계약 5: 고정 경로를 못 만들었거나(권한-볼륨-원본 없음) 그 경로가 실행
-  # 가능하지 않으면 종전대로 이름 "claude"로 돌아가 PATH에서 찾는다 - 디스패치를 막지 않는다.
-  if [ "$(basename "${TICKET_ENGINE[0]}")" = "dira" ] && [ ! -x "${TICKET_ENGINE[0]}" ]; then
-    TICKET_ENGINE[0]="claude"
+  # §27 계약 3: 접미사에서 이름을 딴다 - dira -> claude(§24 계약 4 그대로), dira-<x> -> <x>.
+  # 판정은 여기 한 자리뿐이다 - 아래 스킬 주입 조건도 다시 basename을 부르지 않고 이 값을 읽는다.
+  ENGBN="$(basename "${TICKET_ENGINE[0]}")"
+  case "$ENGBN" in
+    dira) ENGSUF="claude" ;;
+    dira-*) ENGSUF="${ENGBN#dira-}" ;;
+    *) ENGSUF="" ;;
+  esac
+  # 엔진 수정 24번째 계약 5 + §27 계약 3 폴백: 고정 경로를 못 만들었거나(권한-볼륨-원본 없음)
+  # 그 경로가 실행 가능하지 않으면 종전대로 PATH의 이름으로 돌아간다 - 디스패치를 막지 않는다.
+  if [ -n "$ENGSUF" ] && [ ! -x "${TICKET_ENGINE[0]}" ]; then
+    TICKET_ENGINE[0]="$ENGSUF"
   fi
-  ENGINE_NAME="$(basename "${TICKET_ENGINE[0]}")"
-  [ "$ENGINE_NAME" = "dira" ] && ENGINE_NAME="claude"  # 엔진 수정 24번째: 고정 경로 이름은 claude로 판정한다
+  ENGINE_NAME="${ENGSUF:-$ENGBN}"
   CDOWN="$LOCAL/run/cooldown-$ENGINE_NAME${TICKET_SLOT:+-$TICKET_SLOT}"
 
   # 어느 엔진인지가 후보에 달렸으므로 ENGINE_NAME·claude 인증·쿨다운도 후보 확정 뒤에 판정한다
@@ -697,7 +708,7 @@ elif [ -r "$PROFILE" ]; then
   # Claude 엔진일 때만이다 - codex엔 스킬 개념이 없어서 "없는 도구를 쓰라"는 문장이 된다.
   SKILLS="${TICKET_PERSONAS:-$TICKET_ROOT/personas}/$TPERSONA/skills.md"
   SKILLBLOCK=""
-  if [ -r "$SKILLS" ] && [[ "$(basename "${TICKET_ENGINE[0]}")" =~ ^(claude|dira)$ ]]; then
+  if [ -r "$SKILLS" ] && [ "$ENGINE_NAME" = "claude" ]; then
     SKILLBLOCK="
 ===== $TPERSONA 스킬 ($SKILLS) =====
 $(cat "$SKILLS")
