@@ -1431,7 +1431,7 @@ export const en: Record<string, string> = {
   "persona.squad.dropToAdd": "Drop to add as a member",
   "persona.squad.dropToRemove": "Drop to remove from members",
   "persona.squad.designateLeader": "Make leader",
-  "persona.squad.unassignLeader": "Remove as leader",
+  "persona.squad.unassignLeader": "Unassign leader",
   "persona.squad.emptyRoster": "No members yet — drag a candidate here or press Add",
   "persona.squad.noCandidates": "Every persona with a profile is already a member",
   "persona.squad.announceAdded": "added to members",
