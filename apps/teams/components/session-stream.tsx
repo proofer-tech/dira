@@ -514,7 +514,6 @@ export function SessionStream({
                       block.events.map((w) => w.it),
                       isBubble,
                     )}
-                    count={block.events.length}
                     onToggle={onToggle}
                     threadKey={threadKey}
                     vault={vault}
@@ -648,25 +647,23 @@ function ProgressItems({
   );
 }
 
-/** 계획 아코디언 한 줄(DESIGN.md §비주얼 §59) — 네 상태(§2-11①)가 손잡이 유무 · 기본 열림 ·
- *  꼬리 문구로 여섯 갈래로 갈린다(§59 ③). `<Marker>`가 아니다(§59 ②) — 그 기본값
- *  `text-sm text-muted-foreground`가 계획 제목의 밝기 · 크기를 둘 다 덮는다. `group`을
- *  안 붙인다(§59 ④ 컴파일 실측) — 붙이면 안쪽 두 겹(묶음 줄 · 펼친 원문)의 닫힌 chevron이
- *  이 계획을 여는 순간 같이 돈다. 손잡이가 오른쪽 끝으로 가서 회전 셀렉터는 자식 결합자의
- *  마지막 자식(`svg:last-child`)을 짚는다 — 왼쪽 첫 자리는 상태 글리프가 쓴다(§59 ④). */
+/** 계획 아코디언 한 줄(DESIGN.md §비주얼 §59) — 네 상태(§2-11①)가 손잡이 유무 · 기본 열림으로
+ *  여섯 갈래로 갈린다(§59 ③). 꼬리 문구 `기록 n건`은 안쪽 묶음 줄과 같은 수를 두 번 세어
+ *  겹침 개정으로 죽었다(§59 ③-1) — 남는 것은 글리프 · 제목 · 손잡이 셋이다. `<Marker>`가
+ *  아니다(§59 ②) — 그 기본값 `text-sm text-muted-foreground`가 계획 제목의 밝기 · 크기를
+ *  둘 다 덮는다. `group`을 안 붙인다(§59 ④ 컴파일 실측) — 붙이면 안쪽 두 겹(묶음 줄 · 펼친
+ *  원문)의 닫힌 chevron이 이 계획을 여는 순간 같이 돈다. 손잡이가 오른쪽 끝으로 가서 회전
+ *  셀렉터는 자식 결합자의 마지막 자식(`svg:last-child`)을 짚는다 — 왼쪽 첫 자리는 상태
+ *  글리프가 쓴다(§59 ④). */
 function PlanBlock({
   plan,
   items,
-  count,
   onToggle,
   threadKey,
   vault,
 }: {
   plan: PlanItem;
   items: GroupedItem<StreamEvent, ThreadItem>[];
-  /** 그 창의 사건 수 — 꼬리 `기록 n건`(§59 ③). §9 묶음 줄과 같은 문자열이라 새 i18n 키가
-   *  아니다(§59 ⑩ 범위 판정). */
-  count: number;
   onToggle: (e: React.SyntheticEvent<HTMLDetailsElement>) => void;
   threadKey: Map<ThreadItem, string>;
   vault?: Vault;
@@ -689,15 +686,8 @@ function PlanBlock({
       {plan.text}
     </span>
   );
-  // 꼬리 문구는 `기록 n건` 하나로 준다 — 상태 낱말(미착수·취소)은 왼쪽 칸의 `sr-only`로
-  // 옮겨 앉았다(§59 ③). 0건이면 이 칸이 없다.
-  const tail =
-    count > 0 ? (
-      <span className="ml-auto shrink-0 text-xs text-muted-foreground tabular-nums">기록 {count}건</span>
-    ) : null;
-
   // 진행중은 늘 손잡이가 있다(기록 0건이어도 — §59 ③). 완료 · 취소는 기록이 있을 때만이다.
-  const hasHandle = plan.state === "doing" || count > 0;
+  const hasHandle = plan.state === "doing" || items.length > 0;
   if (!hasHandle) {
     // 미착수 · 완료(0건) · 취소(0건) — 그릇이 `<div>`다. 상태 글리프가 왼쪽 칸을 채워
     // 제목을 다른 갈래와 같은 x=36에 맞춘다(§9 접힌 줄이 펼칠 것 없을 때 쓰는 같은 수).
@@ -706,7 +696,6 @@ function PlanBlock({
         {glyph}
         <span className="sr-only">{stateLabel}</span>
         {title}
-        {tail}
       </div>
     );
   }
@@ -730,8 +719,7 @@ function PlanBlock({
         {glyph}
         <span className="sr-only">{stateLabel}</span>
         {title}
-        {tail}
-        <ChevronRight aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+        <ChevronRight aria-hidden className="ml-auto size-4 shrink-0 text-muted-foreground" />
       </summary>
       <ProgressItems items={items} threadKey={threadKey} onToggle={onToggle} vault={vault} />
     </details>
