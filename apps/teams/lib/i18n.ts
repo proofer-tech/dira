@@ -236,6 +236,9 @@ export const ko: Record<string, string> = {
   "common.unit.hour": "시간",
   "common.unit.minute": "분",
   "common.unit.day": "일",
+  // 페르소나 상세 머리 2행 "마지막 활동"(§비주얼 §66 ③) — `<n><단위> <ago>`가 두 로케일에서
+  // 같은 어순으로 선다(`12분 전` · `12m ago`).
+  "common.suffix.ago": "전",
 
   // 셸 둘째 묶음(§0-16 §발행 §묶음 표 2, `dd97c69c`) — 헤더 · 알림 종 일곱 · status bar ·
   // 배너 · 전환기 · `status-badge.tsx`(상태 배지 · deps 배지 — 보드·상세도 이 벌을 공유한다).
@@ -631,6 +634,9 @@ export const ko: Record<string, string> = {
   "persona.badge.squadNoProfile": "멤버 프로필 없음",
   "persona.tab.activity": "활동",
   "persona.tab.profile": "프로필",
+  "persona.head.runningSessionsPrefix": "도는 세션",
+  "persona.head.closedSuffix": "닫음",
+  "persona.head.squadPrefix": "스쿼드",
   "persona.route.notFound": "이 경로는 열 수 없습니다",
   // 여러 절(프로필-스쿼드-스킬-메모리-정책값)이 같은 저장-삭제 결과 문구를 그대로 재사용한다
   // (§0-16 §키 규약 - 중복 값 0).
@@ -1104,6 +1110,7 @@ export const en: Record<string, string> = {
   "common.unit.hour": "h",
   "common.unit.minute": "m",
   "common.unit.day": "d",
+  "common.suffix.ago": "ago",
 
   // 셸 둘째 묶음(§0-16 §발행 §묶음 표 2) — `ko`는 `dd97c69c`, 이 영어가 `90be3eeb`다.
   // 셸은 모든 화면 위에 서므로 **여기서 고른 낱말이 다음 묶음 일곱의 어휘가 된다** — 새 낱말은
@@ -1479,6 +1486,9 @@ export const en: Record<string, string> = {
   "persona.badge.squadNoProfile": "Member has no profile",
   "persona.tab.activity": "Activity",
   "persona.tab.profile": "Profile",
+  "persona.head.runningSessionsPrefix": "Running",
+  "persona.head.closedSuffix": "closed",
+  "persona.head.squadPrefix": "Squad",
   "persona.route.notFound": "This path can't be opened",
   "persona.action.saveFailedTitle": "Couldn't save",
   "persona.action.savedNotice": "Saved.",

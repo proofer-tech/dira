@@ -6,6 +6,7 @@
  *  `workers-ui.tsx`와 같다 — 같은 화면의 세 액션이 같은 문구(엔진이 WARN만 남긴다 · 이름 규칙)를
  *  쓰므로 쪼개면 자리가 갈린다. */
 import { memo, useCallback, useEffect, useId, useRef, useState, useTransition } from "react";
+import Link from "next/link";
 import { Check, ChevronDown, ChevronRight, Trash2, TriangleAlert } from "lucide-react";
 import {
   createPersonaAction,
@@ -129,6 +130,12 @@ export type PersonaRow = {
   /** `engine` 사이드카의 값(§제약 1 §결정 기록 §열한 번째). `null` = 파일 없음·모양이 다름 =
    *  **지정 없음**(그 페르소나는 워커 자신의 엔진을 쓴다). `limit`과 같은 이유로 예산 합에 안 더한다 */
   engine: PersonaEngineValue;
+  /** `runner.log`의 이 페르소나 최신 종료 줄(§5-6 §머리 2행 "마지막 활동"). 한 번도 안 돌았으면
+   *  `null` — 자리를 비운다. `4ea1147a`(활동 데이터 자리)가 서면 그 값이 이 자리를 흡수한다 —
+   *  이 필드는 그때까지 `personaRuns`에서 직접 뽑는다(§5-6 §머리 참고). */
+  lastActivity: { minutesAgo: number; hash: string } | null;
+  /** 이 페르소나를 멤버로 든 스쿼드 이름(§5-5). 0개면 머리 2행에서 자리를 비운다. */
+  squads: string[];
 };
 
 /** 서버가 읽어 넘긴 스쿼드 한 항목(DESIGN.md §5-5). 색·자수·스킬·메모리·상한이 **없다** —
@@ -1006,28 +1013,71 @@ function PersonaDetail({
     [],
   );
 
+  // 1행 역할 자리(§비주얼 §66 ②) — `body === null`이면 `프로필 없음` 배지가 대신 선다.
+  const roleFirstLine = row.body !== null ? profileTitle(row.body) : null;
+  // 2행 첫 값(§비주얼 §66 ③) — 상한이 없으면 `/ 상한 m`을 안 붙인다(§5-4).
+  const runningLabel = `${t("persona.head.runningSessionsPrefix")} ${row.refs.wip}`;
+  const sessionsText =
+    row.limit !== null ? `${runningLabel} / ${t("persona.word.limit")} ${row.limit}` : runningLabel;
+
   return (
     <div className="space-y-3">
-      {/* 머리 — 색 점(팔레트 팝오버 트리거) · 이름 · `삭제`(§5). 전부 껍데기라 세로 중앙이다 */}
-      <div className="flex items-center gap-2">
+      {/* 머리 1행 — 색 점 · 이름(mono) · 프로필 첫 줄(역할) · `삭제`(§5-6 §머리, §비주얼 §66 ②).
+          §5 왼쪽 목록 줄과 같은 baseline 규칙 — 글자는 밑선, 알약·점은 세로 중앙(self-center) */}
+      <div className="flex items-baseline gap-2">
         {/* 색을 고르는 자리는 이 화면 하나뿐이고, 그 자리가 여기다(§5) */}
-        <ColorPicker
-          projectId={projectId}
-          name={row.name}
-          color={color}
-          onError={(message) =>
-            setHeadError(message ? { title: t("persona.color.saveFailedTitle"), message } : null)
-          }
-        />
-        <span className="font-mono text-sm break-all">{row.name}</span>
+        <span className="self-center">
+          <ColorPicker
+            projectId={projectId}
+            name={row.name}
+            color={color}
+            onError={(message) =>
+              setHeadError(message ? { title: t("persona.color.saveFailedTitle"), message } : null)
+            }
+          />
+        </span>
+        <span className="shrink-0 font-mono text-sm">{row.name}</span>
+        {roleFirstLine !== null ? (
+          <span className="min-w-0 grow truncate text-sm text-muted-foreground" title={roleFirstLine}>
+            {roleFirstLine}
+          </span>
+        ) : (
+          <Badge variant="outline" className="self-center">
+            {t("persona.badge.noProfile")}
+          </Badge>
+        )}
         {edit.saved !== null && (
-          <span className="ml-auto">
+          <span className="ml-auto shrink-0 self-center">
             <DeleteButton
               projectId={projectId}
               row={row}
               onDeleted={onDeleted}
               onError={(message) => setHeadError({ title: t("persona.action.deleteFailedTitle"), message })}
             />
+          </span>
+        )}
+      </div>
+
+      {/* 머리 2행 — 메타(§비주얼 §66 ③): `도는 세션 n / 상한 m` · 마지막 활동 · 스쿼드.
+          구분자를 안 넣는다 — `gap-4`가 이미 가른다. 정책값 컨트롤·예산은 여기 안 올린다(§5-6 §머리) */}
+      <div className="flex items-baseline gap-4 text-xs text-muted-foreground">
+        <span>{sessionsText}</span>
+        {row.lastActivity && (
+          <span>
+            {row.lastActivity.minutesAgo}
+            {t("common.unit.minute")} {t("common.suffix.ago")}{" "}
+            <Link
+              href={`/p/${projectId}/tickets/${encodeURIComponent(row.lastActivity.hash)}`}
+              className="font-mono underline"
+            >
+              {row.lastActivity.hash}
+            </Link>{" "}
+            {t("persona.head.closedSuffix")}
+          </span>
+        )}
+        {row.squads.length > 0 && (
+          <span>
+            {t("persona.head.squadPrefix")} {row.squads.join(", ")}
           </span>
         )}
       </div>

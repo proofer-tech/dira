@@ -12,6 +12,7 @@
  *  **이 값으로 경로를 조립하지 않는다.** 나열해 나온 이름과 맞춰만 보고(§6 `?core=`와 같다)
  *  안 맞으면 오른쪽 칸에 사유가 뜬다 — 그 판정은 `PersonasPane`이 든다(선택이 클라이언트
  *  상태라 서버에서 한 번 더 갈라 봐야 두 벌이 된다). */
+import path from "node:path";
 import { notFound } from "next/navigation";
 import { TriangleAlert } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
@@ -39,10 +40,33 @@ import {
   readPersonaOffSkillsFile,
   readPersonaSkillsFile,
 } from "@/lib/skills";
-import { ENGINES, listWorkers, MODEL_RE, personaEngineHint } from "@/lib/workers";
+import {
+  ENGINES,
+  lastLogByWorker,
+  listWorkers,
+  MODEL_RE,
+  personaEngineHint,
+  type PersonaRun,
+} from "@/lib/workers";
 
 // 프로필 파일은 GUI 밖에서도 바뀌고(에디터) 참조 건수는 디스패처가 바꾼다 — 굳히지 않는다.
 export const dynamic = "force-dynamic";
+
+/** 머리 2행 "마지막 활동"(§5-6 §머리, §비주얼 §66 ③) — 이 persona의 `personaRuns` 중 가장
+ *  늦게 끝난 실행 하나. `4ea1147a`(활동 데이터 자리)가 서면 그 자리가 이 계산을 흡수한다 —
+ *  그때까지 새 파서 없이 `lastLogByWorker`가 이미 페어링해 둔 값에서 최댓값만 뽑는다. */
+function lastActivityFor(
+  name: string,
+  personaRuns: Record<string, PersonaRun[]>,
+): { minutesAgo: number; hash: string } | null {
+  let best: PersonaRun | null = null;
+  for (const r of personaRuns[name] ?? []) {
+    if (!best || r.endAt > best.endAt) best = r;
+  }
+  if (!best) return null;
+  const ms = Date.now() - Date.parse(best.endAt.replace(" ", "T"));
+  return { minutesAgo: Math.max(0, Math.floor(ms / 60_000)), hash: best.hash };
+}
 
 export default async function Personas({
   params,
@@ -80,6 +104,9 @@ export default async function Personas({
     workers.map((w) => w.engine),
     locale,
   );
+  // 머리 2행 "마지막 활동"의 출처(§5-6 §머리) — `listWorkers`가 같은 경로로 이미 읽어 뒀으니
+  // `cache()`가 이 호출을 새 파일 읽기 없이 되돌린다(워커 목록과 같은 이유, workers.ts 참고).
+  const { personaRuns } = await lastLogByWorker(path.join(project.root, "workers"));
   const rows = await Promise.all(
     personas.map(async (p) => {
       // 상한·엔진도 같은 렌더에 실린다(§5-4 §화면 · §제약 1 §결정 기록 §열한 번째) — 오른쪽 칸
@@ -94,7 +121,19 @@ export default async function Personas({
       // 손으로 두 파일에 같은 이름을 넣어 두면 활성이 이긴다(§5-1 §충돌) — 화면은 그 이름을
       // 활성으로 한 번만 그린다. 파일 자체는 다음 저장이 고친다(savePersonaSkillsAction).
       const offSkills = rawOff.filter((o) => !skills.some((a) => a.name === o.name));
-      return { ...p, skills, skillsChars: chars, offSkills, memories, limit, engine };
+      // 머리 2행 "스쿼드 <이름>"(§5-5) — 이 이름을 멤버로 든 스쿼드들.
+      const memberSquads = squads.filter((s) => s.members.some((m) => m.name === p.name)).map((s) => s.name);
+      return {
+        ...p,
+        skills,
+        skillsChars: chars,
+        offSkills,
+        memories,
+        limit,
+        engine,
+        lastActivity: lastActivityFor(p.name, personaRuns),
+        squads: memberSquads,
+      };
     }),
   );
   const missing = personas.filter((p) => p.body === null);
