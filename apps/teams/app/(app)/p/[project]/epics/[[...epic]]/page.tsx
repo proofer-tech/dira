@@ -20,7 +20,15 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { WorkerChips } from "@/components/worker-mark";
-import { epicMemory, epicReadmeBody, epicTitle, listEpics, NO_EPIC, type EpicMemory } from "@/lib/epics";
+import {
+  epicMemory,
+  epicReadmeBody,
+  epicTitle,
+  listEpics,
+  NO_EPIC,
+  resolveMarkdownRefs,
+  type EpicMemory,
+} from "@/lib/epics";
 import { t } from "@/lib/i18n";
 import { epicOf, listTickets } from "@/lib/queue";
 import { epicCostChunk } from "@/lib/usage";
@@ -93,6 +101,8 @@ export default async function Epics({
       epicCostChunk(project.root, tickets.filter((tk) => epicOf(tk) === current.epic).map((tk) => tk.hash)),
     ]);
   }
+  // 산문 속 해시-P번호 표식(§9) — README 본문 한 조각만 훑는다. `readme`가 null이면 안 부른다.
+  const refs = readme ? await resolveMarkdownRefs(project.root, id, [readme], tickets, epics) : undefined;
 
   return (
     // `EpicSidebar`가 자기 `SidebarProvider`를 이미 든다(§52 ①) — 여기는 형제 열 하나와
@@ -168,7 +178,7 @@ export default async function Epics({
                 제목 줄은 위 머리가 이미 그렸으니 여기는 본문뿐이다. */}
             {readme ? (
               <div className="max-w-3xl">
-                <Markdown text={readme} locale={locale} />
+                <Markdown text={readme} locale={locale} refs={refs} />
               </div>
             ) : (
               <p className="text-xs text-muted-foreground">

@@ -17,10 +17,12 @@ import { revalidatePath } from "next/cache";
 import { track } from "@/lib/analytics";
 import { verifyAttachments, withAttachments } from "@/lib/attachments";
 import { writeEpic } from "@/lib/epic";
+import { listEpics, resolveMarkdownRefs } from "@/lib/epics";
 import { findTicket, unassign, type UnassignRun } from "@/lib/engine";
 import { followup, type FollowupResult } from "@/lib/followup";
 import { interject, type InterjectResult } from "@/lib/interject";
 import { kickIdleWorker } from "@/lib/kick";
+import { mayHaveRefs, type RefIndex } from "@/lib/markdown-refs";
 import { isHash, parseAssignment, resolveWithin } from "@/lib/paths";
 import { findStream, sessionIdOf, tailEvents, type StreamEvent } from "@/lib/transcript";
 import {
@@ -87,7 +89,13 @@ export type StreamChunk = {
    *  `live` 하나로는 안 갈린다: `.done`과 열림이 **둘 다 `live === false`**이고 열림엔 이 입구가
    *  없다(§2-2 안 만드는 것 3). `inbox`와 같은 이유로 이 응답에 얹는다 — 상태는 이미 읽었다. */
   done: boolean;
+  /** 이 회차에 새로 온 `events`만 훑어 나온 산문 속 해시-P번호 표식의 값(§9 §클라이언트가
+   *  폴링하는 자리 — "그 응답이 자기 해석 결과를 같이 싣는다"). `mayHaveRefs`가 그 모양을 한
+   *  글자도 못 찾으면(대부분의 회차) 빈 인덱스고 `listTickets`를 다시 안 돈다. */
+  refs: RefIndex;
 };
+
+const NO_REFS: RefIndex = { tickets: {}, epics: {} };
 
 /** 세션 스트림 폴링 (DESIGN.md §2-1 · §9). 클라이언트가 `offset`을 들고 오면 **그 뒤에 붙은
  *  바이트만** 읽어 사건 + 새 `offset`을 돌려준다. Route Handler를 만들지 않는다 — 서버 fs 접근은
@@ -113,14 +121,29 @@ export async function tailSession(
     const live = t.state === "wip";
     const inbox = t.inbox;
     const done = t.state === "done";
-    if (!t.sessionId) return { events: [], offset: at, live, inbox, done };
+    if (!t.sessionId) return { events: [], offset: at, live, inbox, done, refs: NO_REFS };
     // 어느 엔진 형식인지는 **파일이 어느 트리에 있나**가 정한다(§4-3 §grok) — 이 폴링이 워커
     // 목록을 읽지 않는 이유다. 2초마다 새로 무는 fs는 종전 그대로 티켓 하나 + 글롭이다.
     const s = await findStream(t.sessionId);
-    if (!s) return { events: [], offset: at, live, inbox, done };
-    return { ...(await tailEvents(s.file, at, s.grok)), live, inbox, done };
+    if (!s) return { events: [], offset: at, live, inbox, done, refs: NO_REFS };
+    const chunk = await tailEvents(s.file, at, s.grok);
+    // 이 회차의 새 글만 훑는다 — `mayHaveRefs`가 그 모양을 못 찾으면 `listTickets`를 안 돈다
+    // (대부분의 회차, §성능 예산). 걸리면 그때만 큐 전체를 다시 읽는다 — 다른 폴링(보드 5초)도
+    // 이미 매 회차 fs를 새로 문다, 여기는 걸리는 회차만이라 더 싸다.
+    const text = chunk.events.map((e) => e.body).join("\n");
+    const refs = mayHaveRefs(text)
+      ? await (async () => {
+          const project = await getProject(projectId);
+          if (!project) return NO_REFS;
+          const config = await resolveConfig(project);
+          const tickets = await listTickets(project.root, config);
+          const epics = await listEpics(project.root, tickets);
+          return resolveMarkdownRefs(project.root, projectId, [text], tickets, epics);
+        })()
+      : NO_REFS;
+    return { ...chunk, live, inbox, done, refs };
   } catch {
-    return { events: [], offset: at, live: false, inbox: false, done: false };
+    return { events: [], offset: at, live: false, inbox: false, done: false, refs: NO_REFS };
   }
 }
 

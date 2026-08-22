@@ -77,6 +77,8 @@ import { mkdir, readdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { findClaude, tokenPath } from "./auth.ts";
 import type { Run } from "./engine.ts";
+import { listEpics, resolveMarkdownRefs } from "./epics.ts";
+import { mayHaveRefs, type RefIndex } from "./markdown-refs.ts";
 import { getProject, readProjects, registryPath, resolveConfig, type Project, type ProjectConfig } from "./projects.ts";
 import { isAwaiting, listTickets, reqTitle, statusOf, type Ticket } from "./queue.ts";
 import { findTranscript, lastEvent, sessionIdOf, tailEvents, type StreamEvent } from "./transcript.ts";
@@ -1510,7 +1512,13 @@ export type HomeChunk = {
   answered: boolean;
   /** **폴링을 끊어도 되는가**(`pollDone`). `running`의 반대가 아니다 — 아래 주석이 그 자리다 */
   done: boolean;
+  /** 이 회차의 새 `turns`(+ 도는 답 `partial`)만 훑어 나온 산문 속 해시-P번호 표식의 값
+   *  (§9 §클라이언트가 폴링하는 자리 — `tailSession`의 `refs`와 같은 계약). `mayHaveRefs`가
+   *  그 모양을 못 찾으면(대부분의 회차) 빈 인덱스고 `listTickets`를 다시 안 돈다. */
+  refs: RefIndex;
 };
+
+const NO_REFS: RefIndex = { tickets: {}, epics: {} };
 
 /** **폴링을 끊는 근거**(§7 §폴링은 서버가 잊어도 안 끊긴다 — 요구 `116b3c37`). `running: false`
  *  하나로는 못 끊는다: `runs`는 프로세스 메모리라 dev의 recompile·서버 재시작에 휘발하고, 그러면
@@ -1630,6 +1638,7 @@ export async function pollHome(
       stopped,
       failed,
       answered,
+      refs: NO_REFS,
     });
   }
 
@@ -1663,6 +1672,7 @@ export async function pollHome(
         (done
           ? { ...done, ok: false, reason: "no-transcript", output: `~/.claude/projects/*/${sid}.jsonl` }
           : null),
+      refs: NO_REFS,
     });
   }
   const r = await tailEvents(file, at);
@@ -1684,6 +1694,21 @@ export async function pollHome(
   const overlap = partial !== "" && partial === lastAnswer;
   if (overlap && entry) entry.live.partial = "";
   const dedupedPartial = overlap ? "" : partial;
+  // 산문 속 해시-P번호 표식(§9) — 이 회차의 새 `turns`(질문·답만, 접힌 줄 제외) + 도는 답의
+  // `partial`만 훑는다. `mayHaveRefs`가 그 모양을 못 찾으면(대부분의 회차) `listTickets`를
+  // 다시 안 돈다 — 홈은 이 앱에서 폴링 주기가 가장 짧은 자리라(§7 §천장이 없다) 여기가
+  // 걸리면 비용이 가장 크다.
+  const newText = [...turns.filter((t) => t.role !== "line").map((t) => t.text), dedupedPartial].join("\n");
+  const refs = mayHaveRefs(newText)
+    ? await (async () => {
+        const project = await getProject(projectId);
+        if (!project) return NO_REFS;
+        const config = await resolveConfig(project);
+        const homeTickets = await listTickets(project.root, config);
+        const epics = await listEpics(project.root, homeTickets);
+        return resolveMarkdownRefs(project.root, projectId, [newText], homeTickets, epics);
+      })()
+    : NO_REFS;
   return chunk({
     sessionId: sid,
     conversations,
@@ -1699,5 +1724,6 @@ export async function pollHome(
     stopped,
     failed,
     answered,
+    refs,
   });
 }

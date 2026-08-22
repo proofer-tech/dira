@@ -14,6 +14,7 @@ import {
   epicReadmeBody,
   epicTitle,
   listEpics,
+  resolveMarkdownRefs,
   saveEpicReadme,
   suggestEpicKey,
 } from "./epics.ts";
@@ -230,6 +231,56 @@ test("키 제안 — P<숫자> 꼴의 최댓값 + 1, P273-2처럼 접미가 붙�
   assert.strictEqual(suggestEpicKey([mk("P10"), mk("P273"), mk("P273-2"), mk(NO_EPIC)]), "P274");
   assert.strictEqual(suggestEpicKey([mk(NO_EPIC)]), ""); // P<숫자> 꼴이 하나도 없다
   assert.strictEqual(suggestEpicKey([]), "");
+});
+
+// `resolveMarkdownRefs`는 자기 전용 큐를 쓴다 — 위 `root`는 뒤따르는 "README 저장" 테스트들이
+// P273의 제목·건수를 계속 바꿔서, 공유하면 실행 순서에 값이 갈린다.
+const refsRoot = mkdtempSync(path.join(tmpdir(), "fse-refs-"));
+process.on("exit", () => rmSync(refsRoot, { recursive: true, force: true }));
+mkdirSync(path.join(refsRoot, "tickets"));
+writeFileSync(
+  path.join(refsRoot, "tickets", "d1234567.md"),
+  `${fm({ ticket: "d1234567", title: "본문 티켓", epic: "P501" })}## Goal\n\n첫 산문 줄.\n`,
+);
+writeFileSync(
+  path.join(refsRoot, "tickets", "e2345678.wip.md"),
+  fm({ ticket: "e2345678", title: "진행 티켓", persona: "developer" }),
+);
+mkdirSync(path.join(refsRoot, "epics", "P501"), { recursive: true });
+writeFileSync(path.join(refsRoot, "epics", "P501", "README.md"), "P501 제목\n\n본문\n");
+
+test("resolveMarkdownRefs — 글에 나온 stem·P번호만 채운다, 티켓 값은 새 파일 읽기 0", async () => {
+  const tickets = await listTickets(refsRoot, DEFAULT);
+  const epics = await listEpics(refsRoot, tickets);
+  const idx = await resolveMarkdownRefs(refsRoot, "proj", ["본문에 d1234567과 P501을 인용한다"], tickets, epics);
+  assert.deepStrictEqual(Object.keys(idx.tickets), ["d1234567"]);
+  assert.deepStrictEqual(Object.keys(idx.epics), ["P501"]);
+  const t = idx.tickets.d1234567;
+  assert.strictEqual(t.title, "본문 티켓");
+  assert.strictEqual(t.state, "open");
+  assert.strictEqual(t.status, "open");
+  assert.strictEqual(t.bodyPreview, "첫 산문 줄.");
+  assert.strictEqual(t.href, "/p/proj/tickets/d1234567");
+  const e = idx.epics.P501;
+  assert.strictEqual(e.title, "P501 제목");
+  assert.strictEqual(e.body, "본문");
+  assert.deepStrictEqual(e.counts, epics.find((x) => x.epic === "P501")!.counts);
+});
+
+test("resolveMarkdownRefs — 글에 없는 stem·P번호는 값이 안 든다", async () => {
+  const tickets = await listTickets(refsRoot, DEFAULT);
+  const epics = await listEpics(refsRoot, tickets);
+  const idx = await resolveMarkdownRefs(refsRoot, "proj", ["아무 참조도 없는 글"], tickets, epics);
+  assert.deepStrictEqual(idx.tickets, {});
+  assert.deepStrictEqual(idx.epics, {});
+});
+
+test("resolveMarkdownRefs — 진행중 티켓은 state가 wip다", async () => {
+  const tickets = await listTickets(refsRoot, DEFAULT);
+  const epics = await listEpics(refsRoot, tickets);
+  const idx = await resolveMarkdownRefs(refsRoot, "proj", ["e2345678 진행 중"], tickets, epics);
+  assert.strictEqual(idx.tickets.e2345678.state, "wip");
+  assert.strictEqual(idx.tickets.e2345678.assignee.name, "developer");
 });
 
 test("앱은 DESIGN.md를 안 판다(§검증 (4))", () => {

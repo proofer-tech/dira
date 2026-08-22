@@ -27,6 +27,7 @@ import {
 import type { SquadMember } from "@/lib/projects";
 import { Markdown } from "@/components/markdown";
 import { MarkdownEditor } from "@/components/markdown-editor";
+import type { RefIndex } from "@/lib/markdown-refs";
 import type { Vault } from "@/lib/markdown-wikilinks";
 import { useLocale, useT } from "@/components/language-provider";
 import { wrap } from "@/lib/i18n";
@@ -506,6 +507,7 @@ export function PersonasPane({
   engines,
   modelPattern,
   engineHint,
+  refs,
 }: {
   projectId: string;
   /** 경로의 페르소나 세그먼트(없으면 `null` = 명시 선택 없음 → 목록 첫 줄). 서버가 준 것은
@@ -532,6 +534,10 @@ export function PersonasPane({
    *  것이 없으면 `null` — 페르소나 이름과 무관하게 워커 목록 하나에서 나온 값이라 모든 카드가
    *  같은 문자열을 받는다(engine 파일이 있는 카드는 어차피 안 그린다). */
   engineHint: string | null;
+  /** 산문 속 해시-P번호 표식의 값(§9) — 이 프로젝트의 모든 페르소나 `memory/*.md`를 훑어
+   *  서버가 한 번에 내려준다(`rows`가 이미 그 전문을 같은 렌더에 들고 있는 것과 같은 이유 —
+   *  카드를 펼칠 때 새 요청이 없다). `MemorySection`에 그대로 흘려보낸다. */
+  refs?: RefIndex;
 }) {
   const t = useT();
   const locale = useLocale();
@@ -936,6 +942,7 @@ export function PersonasPane({
             engines={engines}
             modelPattern={modelPattern}
             engineHint={engineHint}
+            refs={refs}
           />
         )}
       </div>
@@ -958,6 +965,7 @@ function PersonaDetail({
   engines,
   modelPattern,
   engineHint,
+  refs,
 }: {
   projectId: string;
   row: PersonaRow;
@@ -974,6 +982,8 @@ function PersonaDetail({
   engines: EngineCatalog;
   modelPattern: string;
   engineHint: string | null;
+  /** 산문 속 해시-P번호 표식의 값(§9) — `MemorySection`에 그대로 흘려보낸다 */
+  refs?: RefIndex;
 }) {
   const t = useT();
   const [result, setResult] = useState<PersonaResult | null>(null);
@@ -1176,6 +1186,7 @@ function PersonaDetail({
             memories={edit.memories}
             chars={edit.memories.reduce((n, m) => n + byteLength(m.text), 0)}
             onDeleted={onMemoryDeleted}
+            refs={refs}
           />
         </TabsContent>
       </Tabs>
@@ -2352,6 +2363,7 @@ const MemorySection = memo(function MemorySection({
   memories,
   chars,
   onDeleted,
+  refs,
 }: {
   projectId: string;
   name: string;
@@ -2360,6 +2372,8 @@ const MemorySection = memo(function MemorySection({
   memories: Memory[];
   chars: number;
   onDeleted: (file: string) => void;
+  /** 산문 속 해시-P번호 표식의 값(§9) */
+  refs?: RefIndex;
 }) {
   const t = useT();
   const locale = useLocale();
@@ -2451,7 +2465,7 @@ const MemorySection = memo(function MemorySection({
                 {/* 상한이 없으면 한 줄이 116자다(§32 §폭 실측). `pl-6` = chevron 16 + gap 8이라
                     전문이 파일명 왼쪽 끝에 맞는다. `<Markdown>` 값은 한 클래스도 안 덮는다(§10) */}
                 <div className="max-w-3xl pt-1 pb-3 pl-6">
-                  <Markdown text={m.text} vault={vault} />
+                  <Markdown text={m.text} vault={vault} refs={refs} />
                 </div>
               </details>
             </li>

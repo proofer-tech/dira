@@ -59,6 +59,7 @@ import { useHotkey, useKeymap } from "@/components/keymap-provider";
 import { useLocale, useT } from "@/components/language-provider";
 import { Markdown } from "@/components/markdown";
 import { MarkdownEditor } from "@/components/markdown-editor";
+import type { RefIndex } from "@/lib/markdown-refs";
 import type { Vault } from "@/lib/markdown-wikilinks";
 import { PersonaDot } from "@/components/persona-badge";
 import { PriorityMeter } from "@/components/priority-meter";
@@ -757,10 +758,13 @@ export function UnassignButton({
 export function AnswerThread({
   thread,
   vault,
+  refs,
 }: {
   thread: ThreadItem[];
   /** 이름 -> href 벌(§비주얼 §10 §위키링크) — 질문·답변 둘 다 티켓 본문에서 왔다 */
   vault?: Vault;
+  /** 산문 속 해시-P번호 표식의 값(§9) — 질문·답변·인용 넷 다 받는다 */
+  refs?: RefIndex;
 }) {
   return (
     <>
@@ -794,7 +798,7 @@ export function AnswerThread({
                             {item.hash && <span className="ml-2 font-mono">{item.hash}</span>}
                           </MessageHeader>
                           {/* PM이 손으로 감은 절이라 줄바꿈을 안 그린다(§10 면제) */}
-                          <Markdown text={item.text} vault={vault} />
+                          <Markdown text={item.text} vault={vault} refs={refs} />
                           {/* 결정 12 (5) — 인용 3종을 접어서 낸다. 상한은 안 내린다: 펼치면
                               `item.text`에서 뗀 그 전문이 그대로 나온다(`queue.ts` `threadOf`의
                               `foldQuotes`). 네이티브 `<details>`다(session-stream.tsx와 같은
@@ -812,7 +816,7 @@ export function AnswerThread({
                                 {q.heading}
                               </summary>
                               <div className="ml-[1.125rem]">
-                                <Markdown text={q.text} vault={vault} />
+                                <Markdown text={q.text} vault={vault} refs={refs} />
                               </div>
                             </details>
                           ))}
@@ -841,7 +845,7 @@ export function AnswerThread({
                           <Bubble variant="outline" align="end">
                             <BubbleContent>
                               {/* 답변 본문은 **사람이 입력칸에 친 글**이라 줄바꿈을 그린다(§10 면제) */}
-                              <Markdown text={item.text} breaks="all" vault={vault} />
+                              <Markdown text={item.text} breaks="all" vault={vault} refs={refs} />
                             </BubbleContent>
                           </Bubble>
                         </MessageContent>
@@ -901,6 +905,7 @@ export function AnswerForm({
   defaultAnswer = "",
   body: ticketBody,
   vault,
+  refs,
 }: {
   project: string;
   hash: string;
@@ -919,6 +924,9 @@ export function AnswerForm({
   body: string;
   /** 이름 -> href 벌(§비주얼 §10 §위키링크) — 위지윅 면에 그대로 흘려보낸다 */
   vault?: Vault;
+  /** 산문 속 해시-P번호 표식의 값(§9) — 아래 접힌 본문 `<Markdown>`만 받는다. 위지윅
+   *  `<MarkdownEditor>`에는 안 준다(§9 축 1-1 — 편집 면은 표식이 0개다). */
+  refs?: RefIndex;
 }) {
   const [state, action, pending] = useActionState<SaveState, FormData>(answerRequirement, {});
   // 문항마다 하나(§결정 11 ⑨) — 하위 문항(`1-1.`)도 자기 칸을 가지므로 picks는 그룹 트리를
@@ -1047,7 +1055,7 @@ export function AnswerForm({
             본문
           </summary>
           <div className="ml-[1.125rem]">
-            <Markdown text={ticketBody} vault={vault} />
+            <Markdown text={ticketBody} vault={vault} refs={refs} />
           </div>
         </details>
       )}
@@ -1098,6 +1106,7 @@ export function AnswerForm({
 function AnswerFields({
   thread,
   vault,
+  refs,
   ...props
 }: {
   project: string;
@@ -1109,11 +1118,13 @@ function AnswerFields({
   /** 질문 절 밖의 본문(결정 14 ①) — `AnswerForm`에 그대로 흘려보낸다(`...props` 스프레드) */
   body: string;
   vault?: Vault;
+  /** 산문 속 해시-P번호 표식의 값(§9) — `AnswerThread`·`AnswerForm`에 그대로 흘려보낸다 */
+  refs?: RefIndex;
 }) {
   return (
     <>
-      <AnswerThread thread={thread} vault={vault} />
-      <AnswerForm {...props} vault={vault} />
+      <AnswerThread thread={thread} vault={vault} refs={refs} />
+      <AnswerForm {...props} vault={vault} refs={refs} />
     </>
   );
 }
@@ -1143,6 +1154,8 @@ export function AnswerDialog({
   title: string;
   /** 이름 -> href 벌(§비주얼 §10 §위키링크) — `AnswerFields`에 그대로 흘려보낸다 */
   vault?: Vault;
+  /** 산문 속 해시-P번호 표식의 값(§9) — `AnswerFields`에 그대로 흘려보낸다 */
+  refs?: RefIndex;
 }) {
   return (
     <Dialog>

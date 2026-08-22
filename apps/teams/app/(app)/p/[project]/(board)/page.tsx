@@ -60,7 +60,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { boardRevision } from "@/lib/board-revision";
-import { NO_EPIC, epicTitle, epicsFromTickets, listEpics } from "@/lib/epics";
+import { NO_EPIC, epicTitle, epicsFromTickets, listEpics, resolveMarkdownRefs } from "@/lib/epics";
 import { t } from "@/lib/i18n";
 import {
   HIDE_DONE_STATUSES,
@@ -348,6 +348,23 @@ export default async function Board({
         .map(async (e) => [e.epic, await epicTitle(project.root, e.epic)] as const),
     ),
   );
+
+  // 산문 속 해시-P번호 표식(§9) — 답변 다이얼로그의 스레드·본문뿐이다(그 다이얼로그가 유일하게
+  // `<Markdown>`을 그리는 자리). `AnswerDialog`는 `isAwaiting(t)`인 카드에만 뜨므로 그 티켓들의
+  // 글만 훑는다 — 보드 전체 티켓 본문을 훑지 않는다(§성능 예산).
+  const answerRefs = await (async () => {
+    const awaitingTickets = tickets.filter(isAwaiting);
+    if (!awaitingTickets.length) return undefined;
+    const texts = awaitingTickets.flatMap((t) => {
+      const th = threadOf(tickets, t, config, { foldQuotes: true });
+      return [
+        bodyWithoutQuestions(t.body),
+        ...th.map((item) => item.text),
+        ...th.flatMap((item) => item.quotes?.map((q) => q.text) ?? []),
+      ];
+    });
+    return resolveMarkdownRefs(project.root, id, texts, tickets, epics);
+  })();
 
   // 발행 다이얼로그의 선택지 둘. **보드가 이미 읽은 것을 넘긴다** — `readdir`도 큐 스캔도 다시
   // 하지 않는다(§3).
@@ -658,6 +675,7 @@ export default async function Board({
           defaultAnswer={defaultAnswerOf(t)}
           body={bodyWithoutQuestions(t.body)}
           vault={vault}
+          refs={answerRefs}
         />
       )}
       {/* **카드의 마지막 자식** — 이 세션이 방금 한 일 한 줄(§1-1 ·

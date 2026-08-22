@@ -25,6 +25,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { findTicket } from "@/lib/engine";
+import { listEpics, resolveMarkdownRefs } from "@/lib/epics";
 import { buildVault } from "@/lib/markdown-wikilinks";
 import { listTree } from "@/lib/protocols";
 import {
@@ -199,6 +200,19 @@ export default async function TicketDetail({
   // 읽기 전용 본문 — 스레드가 데려간 `## 질문 n` 절을 뺀 것. 편집 폼은 아래에서 원문을 쓴다.
   const bodyRead = bodyWithoutQuestions(ticket.body);
 
+  // 산문 속 해시-P번호 표식(§9) — 이 페이지가 서버에서 그리는 본문·스레드만 훑는다. 세션
+  // 스트림의 사건은 클라이언트 폴링(`tailSession`)이 각자 자기 회차를 훑어 응답에 싣는다
+  // (`actions.ts` §9 §클라이언트가 폴링하는 자리) — 여기서 훑지 않는다(0건 상태로 시작해서
+  // 훑을 글이 없다).
+  const epics = await listEpics(project.root, tickets);
+  const refs = await resolveMarkdownRefs(
+    project.root,
+    id,
+    [bodyRead, ...thread.map((item) => item.text), ...thread.flatMap((item) => item.quotes?.map((q) => q.text) ?? [])],
+    tickets,
+    epics,
+  );
+
   // 진행 계획(§2-11① · §비주얼 §59) — `## 진행 계획` 절이 없으면 빈 배열이고 그때 진행 기록은
   // 개정 전 화면 그대로다(`<SessionStream>` 기본값과 같은 판정).
   const plans = planOf(ticket.body);
@@ -256,6 +270,7 @@ export default async function TicketDetail({
             awaiting={awaiting}
             answerFile={awaiting ? `${awaitingOf(ticket)}${config.done}.md` : undefined}
             vault={vault}
+            refs={refs}
             costChunk={costChunk}
           />
         ) : (
@@ -491,6 +506,7 @@ export default async function TicketDetail({
                   text={bodyRead}
                   breaks={ticket.fm.kind === "request" ? "untilHeading" : undefined}
                   vault={vault}
+                  refs={refs}
                   locale={locale}
                 />
               ) : (

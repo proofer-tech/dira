@@ -69,6 +69,7 @@ import { EmptyState } from "@/components/empty-state";
 import { FindBar } from "@/components/find-bar";
 import { useKeymap } from "@/components/keymap-provider";
 import { Markdown } from "@/components/markdown";
+import type { RefIndex } from "@/lib/markdown-refs";
 import { Bundle } from "@/components/session-stream";
 import { StatusBadge } from "@/components/status-badge";
 import {
@@ -241,6 +242,10 @@ export function HomeUI({
   // 저건 트랜스크립트다. 끝나는 순간 서버가 빈 문자열을 주고 같은 응답의 `turns`가 그 답을
   // 진짜 줄로 데려온다. **한 답이 두 벌로 안 그려지는 자리가 그 교대다** — 여기서 다시 안 막는다.
   const [partial, setPartial] = useState(initial.partial);
+  // 산문 속 해시-P번호 표식의 값(§9 §클라이언트가 폴링하는 자리) — 폴링 응답이 새 turns·
+  // partial에서 훑어 낸 값을 여기 누적한다. 대화가 갈리면(`reset`·`apply`) 옛 대화 값을 버리고
+  // 갈아 끼운다 — 다른 대화의 표식이 섞여 남지 않는다.
+  const [liveRefs, setLiveRefs] = useState<RefIndex>(initial.refs);
   // `중지`를 눌렀다. **낙관적으로 라벨을 안 바꾼다**(§24) — 그 버튼 하나가 `aria-disabled`가
   // 될 뿐이고, 띠가 액션 줄로 바뀌는 것은 서버가 끝을 알린 뒤다.
   const [stopping, setStopping] = useState(false);
@@ -357,6 +362,15 @@ export function HomeUI({
           current: r.sessionId,
         });
         setRunningIds(r.runningSessions);
+        // `turns`와 같은 축이다 — `reset`이면 갈아 끼우고, 아니면 누적한다(키가 같으면 최신이 이긴다).
+        setLiveRefs((prev) =>
+          r.reset
+            ? r.refs
+            : {
+                tickets: { ...prev.tickets, ...r.refs.tickets },
+                epics: { ...prev.epics, ...r.refs.epics },
+              },
+        );
         // `reset` = 세션이 갈렸다(서버가 0부터 다시 읽었다). 이어붙이면 옛 대화가 두 벌이 된다.
         setTurns((prev) => {
           const next = r.reset ? r.turns : r.turns.length ? [...prev, ...r.turns] : prev;
@@ -484,6 +498,7 @@ export function HomeUI({
     offset.current = c.offset;
     setHome({ conversations: c.conversations, workers: c.workers, schedules: c.schedules, current: c.sessionId });
     setTurns(c.stopped ? markStopped(c.turns) : c.turns);
+    setLiveRefs(c.refs); // 대화를 통째로 갈아 끼운다 — 옛 대화의 표식 값을 안 섞는다
     setRunning(c.running);
     setRunningIds(c.runningSessions);
     setPartial(c.partial);
@@ -692,7 +707,7 @@ export function HomeUI({
                                     {/* 이 자리에 오는 문자열은 **전부 입력칸에서 왔다** — 사람이
                                         친 줄바꿈을 그대로 그린다(§10 면제). 아래 에이전트 답의
                                         `Prose`는 안 켠다: 그건 감아서 쓰는 쪽의 글이다 */}
-                                    <Markdown text={t.text} breaks="all" />
+                                    <Markdown text={t.text} breaks="all" refs={liveRefs} />
                                   </BubbleContent>
                                 </Bubble>
                               </MessageContent>
@@ -703,7 +718,7 @@ export function HomeUI({
                                쓸 데가 없다. 띠가 이 항목 **안**에 있는 이유는 §24 그대로다 — 도는
                                답이 언제나 마지막이라 보이는 자리가 같고, 답이 끝날 때 높이가 안 튄다. */
                             <>
-                              <Prose text={t.text} />
+                              <Prose text={t.text} refs={liveRefs} />
                               <Band>
                                 {/* 중지된 답 — **실패가 아니다**(§7). `<StatusBadge>`도 색도 없다:
                                     이건 큐의 상태가 아니라 답 하나가 끝난 방식이라 13번째 상태를
@@ -741,7 +756,7 @@ export function HomeUI({
                             <MessageHeader className="sr-only m-0">질문</MessageHeader>
                             <Bubble variant="outline" align="end">
                               <BubbleContent>
-                                <Markdown text={echo} breaks="all" />
+                                <Markdown text={echo} breaks="all" refs={liveRefs} />
                               </BubbleContent>
                             </Bubble>
                           </MessageContent>
@@ -768,7 +783,7 @@ export function HomeUI({
                             빈 문자열로 내린다(요구 `c5d287ac`) — 화면은 여전히 `partial !== ""`
                             하나만 본다. 워커 세션은 서버가 `partial`을 언제나 빈 문자열로 주므로
                             (`running`이 아니다) 이 산문 자체가 안 선다. */}
-                        {partial !== "" && <Prose text={partial} />}
+                        {partial !== "" && <Prose text={partial} refs={liveRefs} />}
                         <Band>
                           <span
                             aria-hidden
@@ -960,11 +975,11 @@ export function HomeUI({
  *  글자가 같은 축에 선다. 자 단위 상한을 안 얹는다(요청 `bcf8299d`가 지운 값이 `max-w-3xl`
  *  = 읽는 산문 폭이었다).
  *  `// ponytail: 상한이 필요해지면 여기 `max-w-[70ch]` 한 클래스다.` */
-function Prose({ text }: { text: string }) {
+function Prose({ text, refs }: { text: string; refs?: RefIndex }) {
   return (
     <div className="px-3">
       <span className="sr-only">답</span>
-      <Markdown text={text} />
+      <Markdown text={text} refs={refs} />
     </div>
   );
 }

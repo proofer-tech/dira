@@ -48,6 +48,7 @@ import {
 } from "@/components/attachment-field";
 import { EmptyState } from "@/components/empty-state";
 import { Markdown } from "@/components/markdown";
+import type { RefIndex } from "@/lib/markdown-refs";
 import type { Vault } from "@/lib/markdown-wikilinks";
 import { AnswerForm } from "@/components/ticket-ui";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -143,6 +144,7 @@ export function SessionStream({
   awaiting = false,
   answerFile,
   vault,
+  refs: initialRefs,
   costChunk,
   variant,
 }: {
@@ -183,6 +185,10 @@ export function SessionStream({
   /** 이름 -> href 벌(§비주얼 §10 §위키링크) — 서버가 한 번 읽어 내려준다. 이 컴포넌트는 폴링
    *  중에도 이 값을 다시 안 읽는다(못 — 렌더러가 이름 집합을 안 읽는다). */
   vault?: Vault;
+  /** 산문 속 해시-P번호 표식의 값(§9) — 서버가 초기 본문·스레드를 훑어 내려준다. **폴링 중에는
+   *  이 값이 갱신된다**(vault와 갈리는 자리): `tailSession`의 새 사건에 그 모양이 있으면 응답이
+   *  자기 해석 결과를 같이 싣고(아래 poll effect), 이 컴포넌트가 그것을 누적해 둔다. */
+  refs?: RefIndex;
   /** 토큰량 덩이(§비주얼 §63 ①④) — 서버가 `ticketCostChunk`로 미리 지어 내려준다(이 파일은
    *  `node:fs`를 못 타서 로그를 직접 못 연다). `undefined`면 그 자리에 아무것도 안 선다 —
    *  절이 서는 조건이 h2가 서는 조건과 같아 호출부가 이미 그 조건으로 걸러 넘긴다. */
@@ -193,6 +199,9 @@ export function SessionStream({
   variant?: "worker";
 }) {
   const [events, setEvents] = useState<StreamEvent[]>([]);
+  // 폴링이 실어 오는 새 표식 값을 누적한다(§9 §클라이언트가 폴링하는 자리) — vault와 달리
+  // 이 값은 마운트 뒤에도 자란다. 키가 같으면 최신 응답이 이긴다(상태·제목이 바뀔 수 있다).
+  const [liveRefs, setLiveRefs] = useState<RefIndex>(initialRefs ?? { tickets: {}, epics: {} });
   const [live, setLive] = useState(initialLive);
   const [inbox, setInbox] = useState<boolean | null>(null); // null = 첫 폴링이 아직 안 왔다
   const [done, setDone] = useState(false); // 티켓이 `.done`인가 — 폼의 모드다(§21)
@@ -237,6 +246,12 @@ export function SessionStream({
         offset.current = r.offset;
         setNow(Date.now()); // 진행중 계획 창 끝을 이 왕복 시각으로 갱신한다(§now 정의부)
         if (r.events.length) setEvents((prev) => [...prev, ...r.events]);
+        if (Object.keys(r.refs.tickets).length || Object.keys(r.refs.epics).length) {
+          setLiveRefs((prev) => ({
+            tickets: { ...prev.tickets, ...r.refs.tickets },
+            epics: { ...prev.epics, ...r.refs.epics },
+          }));
+        }
         setInbox(r.inbox); // 참견 폼의 활성 판정(§2-2) — 서버가 매 폴링마다 fm에서 다시 읽는다
         setDone(r.done); // 폼의 모드(§21) — `.wip`이 `.done`이 되는 그 폴링에서 칸이 이어받기가 된다
         if (!r.live) {
@@ -348,6 +363,7 @@ export function SessionStream({
       defaultAnswer={defaultAnswer}
       body={body}
       vault={vault}
+      refs={liveRefs}
     />
   );
 
@@ -503,6 +519,7 @@ export function SessionStream({
                     threadKey={threadKey}
                     onToggle={onToggle}
                     vault={vault}
+                    refs={liveRefs}
                     forceOpen={searching}
                     ctx={workerCtx}
                   />
@@ -517,6 +534,7 @@ export function SessionStream({
                     onToggle={onToggle}
                     threadKey={threadKey}
                     vault={vault}
+                    refs={liveRefs}
                   />
                 ),
               ))}
@@ -614,6 +632,7 @@ function ProgressItems({
   threadKey,
   onToggle,
   vault,
+  refs,
   forceOpen,
   ctx,
 }: {
@@ -621,6 +640,8 @@ function ProgressItems({
   threadKey: Map<ThreadItem, string>;
   onToggle: (e: React.SyntheticEvent<HTMLDetailsElement>) => void;
   vault?: Vault;
+  /** 산문 속 해시-P번호 표식의 값(§9) — `StreamBubble`·`ThreadRow` 둘 다 받는다 */
+  refs?: RefIndex;
   /** 워커 다이얼로그 검색이 켜져 있는 동안 묶음을 강제로 연다(§2-15 ②) — 기본은 안 건드린다
    *  (`undefined` = 종전 그대로 손으로 펼친 것만 열린다). 티켓 상세는 이 prop을 안 넘긴다. */
   forceOpen?: boolean;
@@ -630,9 +651,9 @@ function ProgressItems({
   return (
     <>
       {items.map((g) => {
-        if (g.kind === "event") return <StreamBubble key={g.event.key} e={g.event} />;
+        if (g.kind === "event") return <StreamBubble key={g.event.key} e={g.event} refs={refs} />;
         if (g.kind === "thread")
-          return <ThreadRow key={threadKey.get(g.thread)} item={g.thread} vault={vault} />;
+          return <ThreadRow key={threadKey.get(g.thread)} item={g.thread} vault={vault} refs={refs} />;
         return (
           <Bundle
             key={g.events[0].key}
@@ -661,12 +682,15 @@ function PlanBlock({
   onToggle,
   threadKey,
   vault,
+  refs,
 }: {
   plan: PlanItem;
   items: GroupedItem<StreamEvent, ThreadItem>[];
   onToggle: (e: React.SyntheticEvent<HTMLDetailsElement>) => void;
   threadKey: Map<ThreadItem, string>;
   vault?: Vault;
+  /** 산문 속 해시-P번호 표식의 값(§9) — `ProgressItems`에 그대로 흘려보낸다 */
+  refs?: RefIndex;
 }) {
   const t = useT();
   const cancelled = plan.state === "cancelled";
@@ -721,7 +745,7 @@ function PlanBlock({
         {title}
         <ChevronRight aria-hidden className="ml-auto size-4 shrink-0 text-muted-foreground" />
       </summary>
-      <ProgressItems items={items} threadKey={threadKey} onToggle={onToggle} vault={vault} />
+      <ProgressItems items={items} threadKey={threadKey} onToggle={onToggle} vault={vault} refs={refs} />
     </details>
   );
 }
@@ -736,7 +760,16 @@ function PlanBlock({
  *  답변에만 붙이면 한 쌍의 헤더가 서로 다른 모양이 된다. 순서는 자리가 말한다.
  *  hover도 펼침도 없다 — 산문·말풍선 둘 다 펼칠 것이 없다(스트림 줄의 `hover:bg-muted/50`은
  *  어포던스다). */
-function ThreadRow({ item, vault }: { item: ThreadItem; vault?: Vault }) {
+function ThreadRow({
+  item,
+  vault,
+  refs,
+}: {
+  item: ThreadItem;
+  vault?: Vault;
+  /** 산문 속 해시-P번호 표식의 값(§9) */
+  refs?: RefIndex;
+}) {
   if (item.role === "question") {
     return (
       <div className="px-3 py-2">
@@ -747,7 +780,7 @@ function ThreadRow({ item, vault }: { item: ThreadItem; vault?: Vault }) {
           {item.hash && <span className="ml-2 font-mono">{item.hash}</span>}
         </MessageHeader>
         {/* 질문은 PM이 감은 절이라 줄바꿈을 안 그린다(§10 면제 — §9와 같은 판정) */}
-        <Markdown text={item.text} vault={vault} />
+        <Markdown text={item.text} vault={vault} refs={refs} />
       </div>
     );
   }
@@ -766,7 +799,7 @@ function ThreadRow({ item, vault }: { item: ThreadItem; vault?: Vault }) {
           <Bubble variant="outline" align="end">
             <BubbleContent>
               {/* 답변은 사람이 친 글이라 줄바꿈을 그린다(§10 면제) */}
-              <Markdown text={item.text} breaks="all" vault={vault} />
+              <Markdown text={item.text} breaks="all" vault={vault} refs={refs} />
             </BubbleContent>
           </Bubble>
         </MessageContent>
@@ -847,6 +880,7 @@ function ProgressForm({
   defaultAnswer,
   body = "",
   vault,
+  refs,
 }: {
   project: string;
   stem: string;
@@ -870,6 +904,8 @@ function ProgressForm({
   body?: string;
   /** 이름 -> href 벌(§비주얼 §10 §위키링크) — 답변 모드의 `AnswerForm`에 그대로 흘려보낸다 */
   vault?: Vault;
+  /** 산문 속 해시-P번호 표식의 값(§9) — 답변 모드의 `AnswerForm`에 그대로 흘려보낸다 */
+  refs?: RefIndex;
 }) {
   const router = useTrackedRouter();
   const [text, setText] = useState("");
@@ -925,6 +961,7 @@ function ProgressForm({
           defaultAnswer={defaultAnswer}
           body={body}
           vault={vault}
+          refs={refs}
         />
       </div>
     ) : null;
@@ -1454,7 +1491,7 @@ function DetailPanel({
  *  좌 = `세션`(assistant `text`) · 우 = `사람`(첫 아닌 사용자 프롬프트 · 참견) — 파싱이 아는 것이
  *  그것뿐이다. 줄바꿈은 §10 면제와 같은 판정이다: 세션은 파일에 쓰듯 쓴 글이라 `breaks` 없이,
  *  사람은 입력칸에 친 글이라 `breaks="all"`로 친 줄바꿈이 정본이다. */
-function StreamBubble({ e }: { e: StreamEvent }) {
+function StreamBubble({ e, refs }: { e: StreamEvent; refs?: RefIndex }) {
   const session = e.kind === "text";
   const who = session ? "세션" : "사람";
   const header = e.sidechain ? `서브 · ${who}` : who;
@@ -1465,7 +1502,7 @@ function StreamBubble({ e }: { e: StreamEvent }) {
         {/* `px-0` — 항목 껍데기의 `px-3`과 겹치지 않게, 헤더가 산문 첫 글자와 같은 x(12)에
             선다(§9) */}
         <MessageHeader className="px-0">{header}</MessageHeader>
-        <Markdown text={e.body} />
+        <Markdown text={e.body} refs={refs} />
       </div>
     );
   }
@@ -1476,7 +1513,7 @@ function StreamBubble({ e }: { e: StreamEvent }) {
           <MessageHeader>{header}</MessageHeader>
           <Bubble variant="outline" align="end">
             <BubbleContent>
-              <Markdown text={e.body} breaks="all" />
+              <Markdown text={e.body} breaks="all" refs={refs} />
             </BubbleContent>
           </Bubble>
         </MessageContent>

@@ -19,6 +19,7 @@ import { EmptyState } from "@/components/empty-state";
 import { CreatePersonaButton, PersonasPane } from "@/components/personas-ui";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import { listEpics, resolveMarkdownRefs } from "@/lib/epics";
 import { t } from "@/lib/i18n";
 import { listTickets } from "@/lib/queue";
 import { decodeHash } from "@/lib/urls";
@@ -136,6 +137,17 @@ export default async function Personas({
       };
     }),
   );
+  // 산문 속 해시-P번호 표식(§9) — 이 화면은 카드마다 메모리 전문을 이미 같은 렌더에 들고
+  // 있다(위 `rows` 주석) - 그 전문 전부를 한 번에 훑는다. 페르소나 수와 무관하게 왕복 하나다.
+  const epics = await listEpics(project.root, tickets);
+  const refs = await resolveMarkdownRefs(
+    project.root,
+    id,
+    rows.flatMap((r) => r.memories.map((m) => m.text)),
+    tickets,
+    epics,
+  );
+
   const missing = personas.filter((p) => p.body === null);
   // §5-5 §프로필-스쿼드가 없는 것은 경고다 첫 갈래 — 티켓이 `squad:`로 드는 이름의
   // `squads/<이름>/`가 없다. 둘째 갈래(멤버 중 프로필 없는 이름)는 위 `missingProfile`이
@@ -235,6 +247,7 @@ export default async function Personas({
           engines={ENGINES}
           modelPattern={MODEL_RE.source}
           engineHint={engineHint}
+          refs={refs}
         />
       )}
     </div>

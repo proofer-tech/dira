@@ -4,8 +4,9 @@
  *  dira는 아무 프로젝트에나 붙는 GUI라 스펙 문서를 파싱하면 dira 전용 기능이 된다. */
 import { mkdir, open, readFile, readdir, rm } from "node:fs/promises";
 import path from "node:path";
+import { collectRefs, bodyPreview, type EpicRefValue, type RefIndex, type TicketRefValue } from "./markdown-refs.ts";
 import { resolveWithin } from "./paths.ts";
-import { epicOf, type Ticket, type TicketState } from "./queue.ts";
+import { assigneeOf, epicOf, isAwaiting, statusOf, type Ticket, type TicketState } from "./queue.ts";
 // 발췌 규칙(첫 줄, 선두 `# ` 제거)이 페르소나 메모리와 같은 값이다 — 두 벌을 안 둔다(§32 ③).
 import { memoryExcerpt } from "./skills.ts";
 // 워커 이름 파싱은 여기서 다시 안 짓는다 — 워커 화면·칸반 카드와 같은 규칙 하나(§에픽 결정 9).
@@ -223,4 +224,62 @@ export async function deleteEpicMemory(root: string, epic: string, file: string)
   const target = files.find((f) => f.name.normalize("NFC") === file.normalize("NFC"));
   if (!target) throw new Error(`메모리 파일이 목록에 없습니다: ${file}`);
   await rm(path.join(target.dir, target.name));
+}
+
+/** `<Markdown>` 산문 속 해시-P번호 표식의 값을 채운다(§9 §화면이 해석해서 내려준다,
+ *  요구 `cadd5e04`). **새 파일 읽기 0** — 티켓 값 넷은 `listTickets`가 이미 파싱해 둔 것을
+ *  Map으로 조회할 뿐이다. 에픽 README만 새로 읽고, **그 글에 실제로 나온 에픽만 - 한 번**이다
+ *  (`texts`를 훑어 나온 P번호 집합 크기만큼만 `epicTitle`·`epicReadmeBody`가 돈다).
+ *
+ *  `texts`를 배열로 받는 이유 — 티켓 상세 한 렌더에 본문·스레드·질문이 여러 조각이라, 조각마다
+ *  따로 훑으면 겹치는 에픽의 README를 두 번 읽는다. 합쳐서 한 번 훑고 한 번 읽는다. */
+export async function resolveMarkdownRefs(
+  root: string,
+  project: string,
+  texts: string[],
+  tickets: Ticket[],
+  epics: Epic[],
+): Promise<RefIndex> {
+  const known = { tickets: new Set(tickets.map((t) => t.stem)), epics: new Set(epics.map((e) => e.epic)) };
+  const hitTickets = new Set<string>();
+  const hitEpics = new Set<string>();
+  for (const text of texts) {
+    const hit = collectRefs(text, known);
+    for (const s of hit.tickets) hitTickets.add(s);
+    for (const e of hit.epics) hitEpics.add(e);
+  }
+
+  const byStem = new Map(tickets.map((t) => [t.stem, t]));
+  const ticketsOut: Record<string, TicketRefValue> = {};
+  for (const stem of hitTickets) {
+    const ticket = byStem.get(stem);
+    if (!ticket) continue;
+    const awaiting = isAwaiting(ticket);
+    ticketsOut[stem] = {
+      stem,
+      href: `/p/${project}/tickets/${encodeURIComponent(stem)}`,
+      state: ticket.state,
+      status: awaiting ? "awaiting" : statusOf(ticket),
+      // §비주얼 §1 `daysSince`와 같은 식이다(`components/status-badge.tsx`) — 이 파일은
+      // `components/`를 참조하지 않는 경계라(위 §머리말) 여기서 다시 쓴다.
+      days: awaiting ? Math.floor((Date.now() - ticket.mtime) / 86_400_000) : undefined,
+      title: ticket.title,
+      bodyPreview: bodyPreview(ticket.body),
+      assignee: assigneeOf(ticket),
+    };
+  }
+
+  const byEpic = new Map(epics.map((e) => [e.epic, e]));
+  const epicsOut: Record<string, EpicRefValue> = {};
+  for (const epic of hitEpics) {
+    epicsOut[epic] = {
+      epic,
+      href: `/p/${project}/epics/${encodeURIComponent(epic)}`,
+      title: await epicTitle(root, epic),
+      body: await epicReadmeBody(root, epic),
+      counts: byEpic.get(epic)?.counts ?? { open: 0, wip: 0, done: 0 },
+    };
+  }
+
+  return { tickets: ticketsOut, epics: epicsOut };
 }

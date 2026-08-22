@@ -8,7 +8,9 @@ import { Children } from "react";
 import { Square, SquareCheck } from "lucide-react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { CODE_SPAN_CLASS, QueueRef, type QueueRefProps } from "@/components/queue-ref";
 import { softBreaks } from "@/lib/markdown-breaks";
+import { refMarkers, type RefIndex } from "@/lib/markdown-refs";
 import { wikilinks, type Vault } from "@/lib/markdown-wikilinks";
 import { DEFAULT_LOCALE, t, type Locale } from "@/lib/i18n";
 
@@ -84,9 +86,7 @@ const components: Components = {
   em: (p) => <em {...drop(p)} className="italic" />,
   // 세로 패딩 없음 — 주면 문단 줄 높이가 줄마다 튄다. `text-foreground`는 못박는다
   // (`--muted-foreground`/`--muted`는 라이트에서 4.34다 — §10 대비표의 유일한 함정).
-  code: (p) => (
-    <code {...drop(p)} className="rounded-sm bg-muted px-1 font-mono text-sm text-foreground" />
-  ),
+  code: (p) => <code {...drop(p)} className={CODE_SPAN_CLASS} />,
   // `pre > code`의 배경·패딩만 여기서 끈다. react-markdown 10은 `inline` prop을 안 주므로
   // 코드 스팬과 펜스를 컴포넌트에서 가를 수 없다 — 값은 §10 표 그대로고 거는 자리만 부모다.
   // 높이 상한을 두지 않는다(§9의 `max-h-96`은 512px 컨테이너 안이라 필요했다. 본문은 페이지가 스크롤한다).
@@ -111,12 +111,22 @@ const components: Components = {
   // §3의 `h-9` 밀도 오버라이드를 쓰지 않는다 — 본문의 표는 셀이 여러 줄로 감긴다.
   td: (p) => <td {...drop(p)} className="border-b border-border px-3 py-2 align-top" />,
   // **색을 주지 않는다.** 밑줄이 이미 링크를 말하고, `--primary`를 쓰면 §0이 깨진다.
-  a: (p) => (
-    <a
-      {...drop(p)}
-      className="underline decoration-muted-foreground underline-offset-2 hover:decoration-foreground"
-    />
-  ),
+  //
+  // **`queueref` 프로퍼티가 있으면 진짜 링크가 아니라 `lib/markdown-refs.ts refMarkers`가
+  // 낳은 표식이다**(§비주얼 §31 §산문 안의 해시 - 갈래 D, §9) — `react-markdown`의
+  // `Components` 타입이 `JSX.IntrinsicElements`로 닫혀 있어 새 태그 이름을 못 받으므로
+  // (위키링크가 `a`·`span`만 재사용하는 것과 같은 제약) 그 값을 `a`에 얹어 보내고 여기서
+  // 가로챈다 — 실제 DOM에는 이 프로퍼티가 안 나간다(아래로 안 흘려보낸다).
+  a: (p) => {
+    const q = p as unknown as { queueref?: QueueRefProps };
+    if (q.queueref) return <QueueRef {...q.queueref} />;
+    return (
+      <a
+        {...drop(p)}
+        className="underline decoration-muted-foreground underline-offset-2 hover:decoration-foreground"
+      />
+    );
+  },
   blockquote: (p) => (
     <blockquote {...drop(p)} className="my-3 border-l-2 border-border pl-3 text-muted-foreground" />
   ),
@@ -148,6 +158,7 @@ export function Markdown({
   text,
   breaks,
   vault,
+  refs,
   locale = DEFAULT_LOCALE,
 }: {
   text: string;
@@ -155,6 +166,10 @@ export function Markdown({
   /** 이름 -> href 벌 (§10 §위키링크). 안 주면 `[[이름]]`은 종전 그대로 글자다 — 이 값을 안
    *  주는 자리(홈 대화 · 프로토콜 편집기 등 오늘 화면 전부)의 렌더는 한 글자도 안 바뀐다. */
   vault?: Vault;
+  /** 이 글에 실제로 나온 티켓 해시-P번호의 값(§9, `lib/epics.ts resolveMarkdownRefs`). 안
+   *  주거나 빈 인덱스면 표식이 0개다 — `<MarkdownEditor>`의 위지윅 면이 이 프롭을 안 주는
+   *  것으로 §9 축 1-1(편집 면에는 표식이 없다)을 지킨다. */
+  refs?: RefIndex;
   locale?: Locale;
 }) {
   if (!text.trim())
@@ -168,6 +183,7 @@ export function Markdown({
           remarkGfm,
           ...(breaks ? [softBreaks(breaks)] : []),
           ...(vault ? [wikilinks(vault, locale)] : []),
+          ...(refs ? [refMarkers(refs, locale)] : []),
         ]}
         components={components}
       >

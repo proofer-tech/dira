@@ -253,6 +253,18 @@ test("domToMarkdown — 코드 스팬 [[...epic]]은 위키링크 변환 밖이�
   assert.equal(domToMarkdown(el(root), split.blocks[0]), split.blocks[0]);
 });
 
+// 산문 속 해시-P번호 표식(§9 축 1-1) — `<MarkdownEditor>`는 `<Markdown>`에 `refs`를 안 넘기므로
+// `lib/markdown-refs.ts refMarkers` 자체가 안 걸린다. 그래서 위지윅 DOM에는 표식 전용 요소가
+// 아예 없고(평범한 텍스트 노드뿐), `domToMarkdown`이 되읽어도 원문이 한 바이트도 안 갈린다.
+test("domToMarkdown — 표식 후보(8자 hex)도 편집기 DOM엔 특수 요소가 없어 그대로 왕복한다", () => {
+  const source = "54ed135a 확인\n";
+  const split = splitBlocks(source);
+  const root = new FakeElement("div", [new FakeElement("p", [new FakeText("54ed135a 확인")])], {
+    "data-block-index": "0",
+  });
+  assert.equal(domToMarkdown(el(root), split.blocks[0]), split.blocks[0]);
+});
+
 test("domToMarkdown — data-wikilink 없는 보통 링크는 종전대로 [텍스트](href)다 (회귀 0)", () => {
   const source = "[텍스트](https://example.com)\n";
   const split = splitBlocks(source);
