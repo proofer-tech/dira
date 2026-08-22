@@ -740,7 +740,12 @@ export function PersonasPane({
                 <PersonaDot key={m.name} color={colors[m.name]} className="ring-1 ring-border" />
               ))}
             </span>
-            <span className="min-w-0 truncate font-mono text-sm" title={squad.name}>
+            {/* `font-medium`은 켠 축(모아보기 켬)에서만 — 덩어리의 머리 굵기다(§비주얼 §61 (22)
+                §경계). 끈 축은 자식 줄이 0개라 덩어리가 될 것이 없어 무수정이다. */}
+            <span
+              className={cn("min-w-0 truncate font-mono text-sm", collapsible && "font-medium")}
+              title={squad.name}
+            >
               {squad.name}
             </span>
             <span className="whitespace-nowrap text-xs text-muted-foreground">
@@ -759,7 +764,9 @@ export function PersonasPane({
           </span>
         </SidebarMenuButton>
         {collapsible && expanded && (
-          <SidebarMenu id={childrenId} className="gap-0.5">
+          // `mt-0.5`(§비주얼 §61 (22) §경계) — 스쿼드 줄과 첫 자식 사이도 2. 종전엔 그 자리에
+          // 여백 클래스가 없어 0이었다. 자식 사이는 `gap-0.5` 그대로 2다.
+          <SidebarMenu id={childrenId} className="mt-0.5 gap-0.5">
             {memberRows.map((row) => renderPersonaRow(row, true))}
           </SidebarMenu>
         )}
@@ -826,8 +833,9 @@ export function PersonasPane({
             </SidebarGroup>
           ) : groupBySquad ? (
             <SidebarGroup className="p-0">
-              {/* 줄 사이 간격이 0.5(2px)였던 자리를 `SidebarMenu`의 `gap-0.5`가 든다(§34 판정표) */}
-              <SidebarMenu aria-label={t("persona.word.squad")} className="gap-0.5">
+              {/* `gap-2`(종전 `gap-0.5`, §비주얼 §61 (22) §경계) — 스쿼드 덩어리 사이를 8로
+                  벌린다. 덩어리 안(스쿼드 줄-자식)은 위 `mt-0.5`가 2로 든다. */}
+              <SidebarMenu aria-label={t("persona.word.squad")} className="gap-2">
                 {squads.map((squad) => renderSquadRow(squad, true))}
               </SidebarMenu>
             </SidebarGroup>
@@ -1144,11 +1152,14 @@ function SquadDetail({
   const leaderAddTriggerId = useId();
   const memberAddTriggerId = useId();
 
-  // 교체 · 리더 카드의 `제거`가 같은 confirm 한 벌을 쓴다(§비주얼 §61 (21) §교체 confirm) —
-  // `name`은 그 confirm이 지키는 앞 리더, `onConfirm`은 "진행"을 눌렀을 때 실행할 변화 자체다.
-  const [leaderConfirm, setLeaderConfirm] = useState<{ name: string; onConfirm: () => void } | null>(
-    null,
-  );
+  // 교체 · 리더 카드의 `제거`가 같은 confirm 한 벌을 쓴다(§비주얼 §61 (22) §confirm) —
+  // `name`은 그 confirm이 지키는 앞 리더, `hasRole`이 문장 2(역할 손실)를 켜고, `onConfirm`은
+  // "진행"을 눌렀을 때 실행할 변화 자체다.
+  const [leaderConfirm, setLeaderConfirm] = useState<{
+    name: string;
+    hasRole: boolean;
+    onConfirm: () => void;
+  } | null>(null);
 
   // 카드의 `제거` 뒤 포커스가 그 묶음 머리의 `추가`로 옮겨간다(§비주얼 §61 (21) §키보드) — 누른
   // 카드가 그 자리에서 사라지므로 안 옮기면 포커스가 `body`로 떨어진다. `rAF`는 이 클릭이 낸
@@ -1203,8 +1214,10 @@ function SquadDetail({
       );
       if (nextName === null) focusTrigger(leaderAddTriggerId);
     };
-    if (prevName && (edit.roles[prevName] ?? "").trim() !== "") {
-      setLeaderConfirm({ name: prevName, onConfirm: commit });
+    // §5-5 §개정(2026-08-23) — confirm은 리더 절이 차 있으면 언제나 앞선다. 역할 칸이 빈
+    // 앞 리더를 갈 때도 뜬다(넓어진 조건). `hasRole`만 문장 2(역할 손실)를 켜고 끈다.
+    if (prevName) {
+      setLeaderConfirm({ name: prevName, hasRole: (edit.roles[prevName] ?? "").trim() !== "", onConfirm: commit });
     } else {
       commit();
     }
@@ -1371,9 +1384,10 @@ function SquadDetail({
         ) : (
           <>
             {/* 리더 묶음 — 카드 0장 또는 1장(§비주얼 §61 (21) §값). 낱말 `리더`가 묶음 머리로
-                서고 카드에 배지가 없다 — 그 아래에 카드가 서는 것이 곧 리더라는 사실이다. */}
+                서고 카드에 배지가 없다 — 그 아래에 카드가 서는 것이 곧 리더라는 사실이다.
+                `border-b pb-1`은 §비주얼 §61 (22) §경계 — 묶음 머리가 자기 그릇의 뚜껑이 된다. */}
             <div className="space-y-1">
-              <p className="flex items-center gap-2 text-xs font-medium">
+              <p className="flex items-center gap-2 border-b pb-1 text-xs font-medium">
                 <span id={leaderHeadingId}>{t("persona.squad.leaderBadge")}</span>
                 <SquadAddButton
                   triggerId={leaderAddTriggerId}
@@ -1395,9 +1409,9 @@ function SquadDetail({
 
             {/* 멤버 묶음 — 리더가 아닌 나머지 + 프로필 없는 멤버의 꼬리(§비주얼 §61 (21) §꼬리).
                 `추가` 목록에 리더 이름이 안 든다 — 리더가 `edit.picked`에 남아 `candidates`에서
-                저절로 빠진다. */}
-            <div className="space-y-1 pt-2">
-              <p className="flex items-center gap-2 text-xs font-medium">
+                저절로 빠진다. `pt-4`(종전 `pt-2`)는 §비주얼 §61 (22) — 두 묶음 사이 16 -> 24. */}
+            <div className="space-y-1 pt-4">
+              <p className="flex items-center gap-2 border-b pb-1 text-xs font-medium">
                 <span id={memberHeadingId}>{t("persona.squad.membersHeading")}</span>
                 <SquadAddButton
                   triggerId={memberAddTriggerId}
@@ -1447,15 +1461,24 @@ function SquadDetail({
         </div>
       </section>
 
-      {/* 교체 · 리더 카드의 `제거` confirm 한 벌(§비주얼 §61 (21) §교체 confirm) — 앞 리더의
-          역할 칸에 글자가 있을 때만 선다. 취소하면 아무 것도 안 갈리고 `저장 안 됨`도 안 켜진다. */}
+      {/* 교체 · 리더 카드의 `제거` confirm 한 벌(§비주얼 §61 (22) §confirm) — 리더 절이 차
+          있으면 언제나 선다. 문장 셋 중 가운데(역할 손실)만 역할 칸에 글자가 있을 때 선다.
+          취소하면 아무 것도 안 갈리고 `저장 안 됨`도 안 켜진다. */}
       <AlertDialog open={leaderConfirm !== null} onOpenChange={(o) => !o && setLeaderConfirm(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
               {t("persona.squad.leaderRemoveConfirmTitlePrefix")} {leaderConfirm?.name}
             </AlertDialogTitle>
-            <AlertDialogDescription>{t("persona.squad.leaderRemoveConfirmBody")}</AlertDialogDescription>
+            <AlertDialogDescription>
+              {[
+                t("persona.squad.leaderRemoveConfirmBody"),
+                leaderConfirm?.hasRole ? t("persona.squad.leaderRemoveConfirmBodyRole") : "",
+                t("persona.squad.leaderRemoveConfirmBodyUndo"),
+              ]
+                .filter(Boolean)
+                .join(" ")}
+            </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel autoFocus>{t("common.cancel")}</AlertDialogCancel>

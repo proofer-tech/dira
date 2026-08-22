@@ -660,8 +660,11 @@ export const ko: Record<string, string> = {
   "persona.squad.notInSquadHeading": "이 스쿼드에 없음",
   "persona.squad.noLeader": "리더 없음",
   "persona.squad.leaderRemoveConfirmTitlePrefix": "리더 제거 —",
-  "persona.squad.leaderRemoveConfirmBody":
-    "그 이름이 이 스쿼드에서 빠지고 역할 칸에 적은 글자도 같이 없어집니다. 저장을 안 하면 되돌아옵니다.",
+  // §5-5 §개정(2026-08-23) — confirm 문장 셋. 문장 1은 항상, 2(이 키)는 앞 리더의 역할 칸에
+  // 글자가 있을 때만, 3은 항상 선다(§비주얼 §61 (22) §값). 한 단락에 공백으로 이어 붙인다.
+  "persona.squad.leaderRemoveConfirmBody": "그 이름이 이 스쿼드에서 빠집니다.",
+  "persona.squad.leaderRemoveConfirmBodyRole": "역할 칸에 적은 글자도 같이 없어집니다.",
+  "persona.squad.leaderRemoveConfirmBodyUndo": "저장을 안 하면 되돌아옵니다.",
   "persona.squad.announceAdded": "멤버에 넣었습니다",
   "persona.squad.announceRemoved": "스쿼드에서 뺐습니다",
   "persona.squad.announceLeader": "리더입니다",
@@ -1478,8 +1481,9 @@ export const en: Record<string, string> = {
   "persona.squad.notInSquadHeading": "Not in this squad",
   "persona.squad.noLeader": "No leader",
   "persona.squad.leaderRemoveConfirmTitlePrefix": "Remove leader —",
-  "persona.squad.leaderRemoveConfirmBody":
-    "That name leaves this squad and the role text is cleared too. Skip saving to undo it.",
+  "persona.squad.leaderRemoveConfirmBody": "That name leaves this squad.",
+  "persona.squad.leaderRemoveConfirmBodyRole": "The role text is cleared too.",
+  "persona.squad.leaderRemoveConfirmBodyUndo": "Skip saving to undo it.",
   "persona.squad.announceAdded": "added to members",
   "persona.squad.announceRemoved": "removed from squad",
   "persona.squad.announceLeader": "is leader",
