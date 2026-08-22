@@ -414,7 +414,7 @@ function RenameOntologyButton({ projectId, rel }: { projectId: string; rel: stri
 // ── 삭제 ────────────────────────────────────────────────────────────────────
 
 function DeleteOntologyButton({ projectId, rel }: { projectId: string; rel: string }) {
-  const router = useRouter();
+  const router = useTrackedRouter();
   const sidebarOff = useSearchParams().get("sidebar") === "off";
   const [open, setOpen] = useState(false);
   const [result, setResult] = useState<OntologyResult | null>(null);

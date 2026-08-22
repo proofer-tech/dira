@@ -8972,7 +8972,7 @@ GUI가 추측해야 하고 되돌릴 수 없다. 이것은 `chmod +x <그 파일
 | 입구 | 자리 | 신호를 얻는 법 |
 |---|---|---|
 | `<Link>` | 셸 내비 - 칸반 카드 - 표 행 - 파일트리 - 사이드바 (17파일) | Next **16.2.12**가 `useLinkStatus`를 준다 - 새 의존성 0 |
-| `router.push` / `router.replace` | **전환기**(요구가 든 자리, `:411`) - `프로젝트 목록`(`:448` `:467`) - 핫키 `nav.*`(`:504` `:505`) - `Esc` 부모 이동(`:519`) - 발행/삭제 성공 뒤 이동(`projects-ui:826` - `ontology-ui:101` `:249` - `session-stream:977` - `ticket-ui:1288`) - 파일 선택(`ontology-ui:216` `:400` - `protocols-ui:140` `:325`) - **보드 필터 갈이**(`board-ui:50`) | 부르는 쪽이 `useTransition`으로 감싸 셸에 알린다 |
+| `router.push` / `router.replace` | **전환기**(요구가 든 자리, `:411`) - `프로젝트 목록`(`:448` `:467`) - 핫키 `nav.*`(`:504` `:505`) - `Esc` 부모 이동(`:519`) - 발행/삭제 성공 뒤 이동(`projects-ui:826` - `ontology-ui:101` `:249` `:454`(삭제) - `session-stream:977` - `ticket-ui:1288`) - 파일 선택(`ontology-ui:216` `:400` - `protocols-ui:140` `:325`) - **보드 필터 갈이**(`board-ui:50`) | 부르는 쪽이 `useTransition`으로 감싸 셸에 알린다 |
 
 - **`useLinkStatus` 하나로 끝내지 않는다.** 그 훅은 `<Link>` 자손에서만 산다 - 요구가 지목한
   전환기는 `router.push`라 그 훅이 닿지 않는다. 한쪽만 하면 **요구가 그대로 남는다.**
