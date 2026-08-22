@@ -85,6 +85,7 @@ import {
   SidebarMenuItem,
   SidebarProvider,
 } from "@/components/ui/sidebar";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import {
   budgetLabel,
@@ -1033,77 +1034,101 @@ function PersonaDetail({
 
       {headError && <Failure title={headError.title} message={headError.message} />}
 
-      {/* §비주얼 §44 ① — 정책값 둘(상한·엔진)은 신원(머리)도 프롬프트 3절(PROFILE·스킬·메모리)도
-          아니라 그 사이에 낀 절 하나다. 프롬프트 3절은 디스패치에 실리는 순서를 그대로 보이는데
-          정책값은 한 바이트도 안 실려서, 그 연속 **앞**에 선다(뒤에 두면 textarea 16행 아래로
-          내려가 스크롤 없이 안 보인다) */}
-      <DispatchPolicySection
-        projectId={projectId}
-        name={row.name}
-        limit={edit.limit}
-        engine={edit.engine}
-        engines={engines}
-        modelPattern={modelPattern}
-        engineHint={engineHint}
-        onLimitSaved={onLimitSaved}
-        onEngineSaved={onEngineSaved}
-      />
+      {/* 탭 둘 — `활동`(기본, 빈 그릇 — 본문은 `46d7ef1e`) · `프로필`(종전 내용 그대로, 순서
+          무변경). URL에 안 담는다 — 경로가 이미 페르소나 이름을 담는다(§5-6 §탭 둘) */}
+      <Tabs defaultValue="activity">
+        <TabsList variant="line">
+          <TabsTrigger value="activity" className="flex-none">
+            {t("persona.tab.activity")}
+          </TabsTrigger>
+          <TabsTrigger value="profile" className="flex-none">
+            {t("persona.tab.profile")}
+            {/* 미저장 편집은 `활동` 탭에 있는 동안 화면에서 사라진다 — 왼쪽 목록 줄의 같은
+                배지가 오른쪽 칸 밖이라 그 자리를 못 대신한다(§5-6 §탭 둘) */}
+            {dirty && (
+              <Badge variant="outline" className="self-center">
+                {t("persona.badge.unsaved")}
+              </Badge>
+            )}
+          </TabsTrigger>
+        </TabsList>
 
-      <MarkdownEditor
-        name="body"
-        defaultValue={edit.body}
-        rows={16}
-        className="font-mono"
-        onChange={(body) => onEdit({ ...edit, body })}
-      />
-      {result && !result.ok && (
-        <Failure title={t("persona.action.saveFailedTitle")} message={result.message ?? ""} />
-      )}
-      {/* 오른쪽 정렬, 1차 액션이 가장 오른쪽 — 결과 문구는 버튼 왼쪽이다(§비주얼 §4-3) */}
-      <div className="flex items-center justify-end gap-4">
-        {result?.ok && !dirty && (
-          <span className="text-sm text-muted-foreground">{t("persona.action.savedNotice")}</span>
-        )}
-        <Button
-          size="sm"
-          disabled={pending || !dirty}
-          onClick={() =>
-            start(async () => {
-              const body = edit.body;
-              const r = await savePersonaAction(projectId, row.name, body);
-              setResult(r);
-              if (r.ok) onEdit({ ...edit, saved: body, body });
-            })
-          }
-        >
-          {pending ? t("common.saving") : t("common.save")}
-        </Button>
-      </div>
+        <TabsContent value="activity" />
 
-      {/* 스킬 절(§비주얼 §25 ②). 값이 한 줄도 안 바뀐다 — 카드에서 오른쪽 칸으로 따라왔을 뿐이다 */}
-      <SkillsSection
-        projectId={projectId}
-        name={row.name}
-        skills={edit.skills}
-        chars={edit.skillsChars}
-        offSkills={edit.offSkills}
-        installed={installed}
-        onInstalled={onInstalled}
-        configDir={configDir}
-        onSaved={onSkillsSaved}
-      />
+        <TabsContent value="profile" className="space-y-3">
+          {/* §비주얼 §44 ① — 정책값 둘(상한·엔진)은 신원(머리)도 프롬프트 3절(PROFILE·스킬·메모리)도
+              아니라 그 사이에 낀 절 하나다. 프롬프트 3절은 디스패치에 실리는 순서를 그대로 보이는데
+              정책값은 한 바이트도 안 실려서, 그 연속 **앞**에 선다(뒤에 두면 textarea 16행 아래로
+              내려가 스크롤 없이 안 보인다) */}
+          <DispatchPolicySection
+            projectId={projectId}
+            name={row.name}
+            limit={edit.limit}
+            engine={edit.engine}
+            engines={engines}
+            modelPattern={modelPattern}
+            engineHint={engineHint}
+            onLimitSaved={onLimitSaved}
+            onEngineSaved={onEngineSaved}
+          />
 
-      {/* 메모리 절(§비주얼 §32 ②) — 스킬 절 **바로 뒤**다. 화면이 주입 순서를 그대로 보인다
-          (PROFILE → 스킬 → 메모리). 0장이어도 그린다: `삭제`가 사는 자리를 사람이 배우는
-          화면이 여기뿐이고, 오늘 이 큐의 카드가 전부 0장이다 */}
-      <MemorySection
-        projectId={projectId}
-        name={row.name}
-        dir={row.file.replace(/\/PROFILE\.md$/, "")}
-        memories={edit.memories}
-        chars={edit.memories.reduce((n, m) => n + byteLength(m.text), 0)}
-        onDeleted={onMemoryDeleted}
-      />
+          <MarkdownEditor
+            name="body"
+            defaultValue={edit.body}
+            rows={16}
+            className="font-mono"
+            onChange={(body) => onEdit({ ...edit, body })}
+          />
+          {result && !result.ok && (
+            <Failure title={t("persona.action.saveFailedTitle")} message={result.message ?? ""} />
+          )}
+          {/* 오른쪽 정렬, 1차 액션이 가장 오른쪽 — 결과 문구는 버튼 왼쪽이다(§비주얼 §4-3) */}
+          <div className="flex items-center justify-end gap-4">
+            {result?.ok && !dirty && (
+              <span className="text-sm text-muted-foreground">{t("persona.action.savedNotice")}</span>
+            )}
+            <Button
+              size="sm"
+              disabled={pending || !dirty}
+              onClick={() =>
+                start(async () => {
+                  const body = edit.body;
+                  const r = await savePersonaAction(projectId, row.name, body);
+                  setResult(r);
+                  if (r.ok) onEdit({ ...edit, saved: body, body });
+                })
+              }
+            >
+              {pending ? t("common.saving") : t("common.save")}
+            </Button>
+          </div>
+
+          {/* 스킬 절(§비주얼 §25 ②). 값이 한 줄도 안 바뀐다 — 카드에서 오른쪽 칸으로 따라왔을 뿐이다 */}
+          <SkillsSection
+            projectId={projectId}
+            name={row.name}
+            skills={edit.skills}
+            chars={edit.skillsChars}
+            offSkills={edit.offSkills}
+            installed={installed}
+            onInstalled={onInstalled}
+            configDir={configDir}
+            onSaved={onSkillsSaved}
+          />
+
+          {/* 메모리 절(§비주얼 §32 ②) — 스킬 절 **바로 뒤**다. 화면이 주입 순서를 그대로 보인다
+              (PROFILE → 스킬 → 메모리). 0장이어도 그린다: `삭제`가 사는 자리를 사람이 배우는
+              화면이 여기뿐이고, 오늘 이 큐의 카드가 전부 0장이다 */}
+          <MemorySection
+            projectId={projectId}
+            name={row.name}
+            dir={row.file.replace(/\/PROFILE\.md$/, "")}
+            memories={edit.memories}
+            chars={edit.memories.reduce((n, m) => n + byteLength(m.text), 0)}
+            onDeleted={onMemoryDeleted}
+          />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

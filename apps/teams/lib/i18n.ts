@@ -629,6 +629,8 @@ export const ko: Record<string, string> = {
   "persona.badge.noProfile": "프로필 없음",
   "persona.badge.unsaved": "저장 안 됨",
   "persona.badge.squadNoProfile": "멤버 프로필 없음",
+  "persona.tab.activity": "활동",
+  "persona.tab.profile": "프로필",
   "persona.route.notFound": "이 경로는 열 수 없습니다",
   // 여러 절(프로필-스쿼드-스킬-메모리-정책값)이 같은 저장-삭제 결과 문구를 그대로 재사용한다
   // (§0-16 §키 규약 - 중복 값 0).
@@ -1475,6 +1477,8 @@ export const en: Record<string, string> = {
   "persona.badge.noProfile": "No profile",
   "persona.badge.unsaved": "Unsaved",
   "persona.badge.squadNoProfile": "Member has no profile",
+  "persona.tab.activity": "Activity",
+  "persona.tab.profile": "Profile",
   "persona.route.notFound": "This path can't be opened",
   "persona.action.saveFailedTitle": "Couldn't save",
   "persona.action.savedNotice": "Saved.",
