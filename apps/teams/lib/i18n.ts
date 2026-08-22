@@ -810,6 +810,9 @@ export const ko: Record<string, string> = {
   "workers.engineHint.prefix": "미지정 — 티켓을 집는 워커의 엔진을 씁니다",
   "workers.engineHint.allPrefix": "지금 전부 ",
   "workers.engineHint.nowPrefix": "지금 ",
+  // §5-3 §온톨로지 자리를 워커가 재정의한다 §결정 2 — 사람이 워커 `.sh`를 손으로 고쳐 경계를
+  // 어긴 경우다(엔진은 검사하지 않는다). 워커 화면의 온톨로지 행에만 붙는다.
+  "workers.ontologyInWorktree": "이 프로젝트의 git 작업 트리 안입니다",
 };
 
 /** 제품 낱말의 영어 대응 — **여기가 한자리다**(621c7a97). 다음 묶음이 같은 것을 다르게 부르지
@@ -1581,6 +1584,7 @@ export const en: Record<string, string> = {
   "workers.engineHint.prefix": "Not set — uses the engine of whichever worker claims the ticket",
   "workers.engineHint.allPrefix": "currently all ",
   "workers.engineHint.nowPrefix": "currently ",
+  "workers.ontologyInWorktree": "Inside this project's git working tree",
   // 공용 컴포넌트·순수 유틸 묶음(§0-16 §발행 §묶음 표 행 11, `90db2822`) — ko는 `c9f2eec5`가
   // 뽑았다. 이 묶음의 문구는 **한 자리가 아니라 여섯 자리에서 같이 읽힌다**(`markdown-editor.tsx`
   // 하나가 화면 여섯을 문다) — 그래서 화면 이름을 안 넣고 동작만 적는다.

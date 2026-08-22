@@ -60,7 +60,7 @@ async function personasDir(projectId: string): Promise<string> {
   return (await resolveConfig(project)).personas;
 }
 
-/** 스쿼드 디렉터리 — `ontologyDir`과 같은 근거로 워커 재정의를 안 연다(§5-5 §값). */
+/** 스쿼드 디렉터리 — 온톨로지 기준 디렉터리와 같은 근거로 워커 재정의를 안 연다(§5-5 §값). */
 async function squadsDirFor(projectId: string): Promise<string> {
   const project = await getProject(projectId);
   if (!project) throw new Error(wrap(t("ko", "persona.error.unknownProjectPrefix"), projectId, ""));

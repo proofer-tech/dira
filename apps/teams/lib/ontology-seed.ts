@@ -109,7 +109,7 @@ export function buildSeed(answers: OntologySurveyAnswers): OntologySeed {
   return { objectTypes, relationTypes };
 }
 
-/** 시드가 실제로 쓰는 파일 하나 — 기준 디렉터리(`ontologyDir(project)`) 상대경로 + 전문. */
+/** 시드가 실제로 쓰는 파일 하나 — 기준 디렉터리(해석된 `TICKET_ONTOLOGY`) 상대경로 + 전문. */
 export type OntologySeedFile = { rel: string; text: string };
 
 /** `_ontology/SCHEMA.md` — 지도 한 장. 형식은 `protocols/ontology.md` §형식(§작성 4단계) ·

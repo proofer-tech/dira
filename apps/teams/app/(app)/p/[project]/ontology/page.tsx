@@ -1,9 +1,9 @@
 /** 온톨로지 `/p/<project>/ontology` — 파일트리 + 원문 에디터 (DESIGN.md §5-3 §온톨로지 빌더 §화면).
  *
  *  `protocols/page.tsx`의 판박이다 — 프로토콜 화면이 이미 «기준 디렉터리 + 파일트리 사이드바 +
- *  원문 에디터 + `?file=` URL 상태»라는 완성된 관용구라서다. **기준 디렉터리는
- *  `ontologyDir(project)` 고정이다** — 엔진이 `ONTDIR`을 `$TICKET_ROOT/ontology`로 하드코딩해서
- *  `TICKET_PROTOCOLS`처럼 워커가 재정의할 길이 없다.
+ *  원문 에디터 + `?file=` URL 상태»라는 완성된 관용구라서다. **기준 디렉터리는 해석된
+ *  `TICKET_ONTOLOGY`다**(`resolveConfig`, 기본값 `<큐 루트>/ontology`) — `TICKET_PROTOCOLS`와
+ *  같은 재정의 길이 §5-3 §온톨로지 자리를 워커가 재정의한다로 열렸다.
  *
  *  코어 프로토콜(`readCore`)·`AGENTS.md` 인라인 배지 같은 프로토콜 전용 개념은 없다 — 온톨로지가
  *  세션 프롬프트에 싣는 것은 위치 + 검색 방법뿐인 상수 블록이고(§5-2), 본문은 항상 세션이 필요할
@@ -50,7 +50,7 @@ import {
   type ProtocolEntry,
   type ProtocolFile,
 } from "@/lib/protocols";
-import { getProject, ontologyDir, resolveConfig } from "@/lib/projects";
+import { getProject, resolveConfig } from "@/lib/projects";
 import { cn } from "@/lib/utils";
 
 /** `tree`에서 지표 계산에 필요한 텍스트를 모아 순수 함수(`computeOntologyMetrics`)에 넘긴다.
@@ -132,7 +132,8 @@ export default async function Ontology({
     </Tooltip>
   );
 
-  const base = ontologyDir(project);
+  const config = await resolveConfig(project);
+  const base = config.ontology;
   const tree = await listTree(base);
   const metrics = tree.length > 0 ? await loadMetrics(base, tree) : null;
   // 위지윅 면의 `[[이름]]` -> 링크(§비주얼 §10 §위키링크) — 이름 집합은 여기서 한 번 읽는다.
@@ -147,7 +148,6 @@ export default async function Ontology({
   // 컴포넌트(`OntologyImport`)의 번들에 못 들어간다.
   let importTickets: { stem: string; hash: string; status: string; folder: string }[] = [];
   if ((metrics && metrics.schemaViolations.length > 0) || tree.length > 0) {
-    const config = await resolveConfig(project);
     const tickets = await listTickets(project.root, config);
     if (metrics && metrics.schemaViolations.length > 0) {
       fixTicket = openFixTicket(tickets, ONTOLOGY_FIX_MARKER);

@@ -42,6 +42,10 @@ export type ProjectConfig = {
   protocols: string;
   inProgress: string; // 상태 접미사
   done: string;
+  /** 온톨로지 기준 디렉터리 — 기본값 `<큐 루트>/ontology`, `TICKET_ONTOLOGY`로 재정의(DESIGN.md
+   *  §5-3 §온톨로지 자리를 워커가 재정의한다). 엔진은 `TICKET_ROOT/ontology`로 하드코딩된
+   *  값을 그대로 쓰므로(`tick.sh:601`) 화면은 이 해석된 값 하나만 본다 — 고정 함수를 안 둔다. */
+  ontology: string;
   cwd: string; // 첫 워커 값 (한 경로가 필요한 호출자용)
   /** `TICKET_CWD`를 읽은 워커만. 워커마다 자기 워크트리를 쓰는 게 정상이라 목록으로 본다. */
   cwdByWorker: Record<string, string>;
@@ -454,6 +458,7 @@ const KEYS = {
   TICKET_INPROGRESS: "inProgress",
   TICKET_DONE: "done",
   TICKET_CWD: "cwd",
+  TICKET_ONTOLOGY: "ontology",
 } as const;
 type Field = (typeof KEYS)[keyof typeof KEYS];
 
@@ -466,7 +471,7 @@ export { shellValue };
 type Parsed = { kv: Partial<Record<Field, string>>; bad: Partial<Record<Field, string>> };
 
 /** 기준 디렉터리로 쓰이는 키. 상대경로면 서버 cwd(`apps/teams/`) 기준으로 풀리므로 해석 실패다. */
-const PATH_FIELDS = new Set<Field>(["personas", "protocols", "cwd"]);
+const PATH_FIELDS = new Set<Field>(["personas", "protocols", "cwd", "ontology"]);
 
 /** 워커 파일 하나의 할당문. `bad`는 **해석 못 한 라인 원문** — 셸 구문(`$X`·`$(…)`·백틱)이
  *  남았거나, 경로 키인데 절대경로가 아닌 경우다.
@@ -499,6 +504,7 @@ export async function resolveConfig(project: Pick<Project, "root">): Promise<Pro
     protocols: path.join(root, "protocols"),
     inProgress: ".wip",
     done: ".done",
+    ontology: path.join(root, "ontology"),
     cwd: path.dirname(root),
   };
 
@@ -550,10 +556,17 @@ export function usingDefault(config: ProjectConfig, key: string): boolean {
   return config.assumed.includes(key) || config.unresolved.some((u) => u.key === key);
 }
 
-/** 온톨로지 기준 디렉터리 — `protocols`와 달리 워커 재정의를 안 연다. 엔진이 `ONTDIR`을
- *  `$TICKET_ROOT/ontology`로 하드코딩하므로(`tick.sh:601`) 화면도 그 값 하나만 본다. */
-export function ontologyDir(project: Pick<Project, "root">): string {
-  return path.join(project.root, "ontology");
+/** 해석된 `TICKET_ONTOLOGY`가 이 프로젝트의 git 작업 트리 안을 가리키는가 — §5-3 §결정 2
+ *  `3의 기계적 판정` 세 줄 그대로(순수 함수, fs 없음). 사본이 갈리는 자리는 둘뿐이다: 주
+ *  체크아웃의 추적 트리, 또는 워커 워크트리(`<큐 루트>/worktrees/`). 기본값(`<큐 루트>/ontology`)과
+ *  큐 밖 절대경로는 둘 다 안전해 `false`다. 사람이 워커 `.sh`를 손으로 고쳐 이 경계를 어겨도
+ *  엔진은 검사하지 않으므로(§값 — 엔진은 값을 검사하지 않는다) 화면이 이 사실을 고발한다. */
+export function ontologyInWorktree(root: string, ontology: string): boolean {
+  const under = (p: string, base: string) => p === base || p.startsWith(base + path.sep);
+  if (!under(ontology, path.dirname(root))) return false; // 주 체크아웃 밖 — 받는다
+  const worktrees = path.join(root, "worktrees");
+  if (under(ontology, root) && !under(ontology, worktrees)) return false; // 큐 루트 아래 — 받는다
+  return true; // 그 밖: 주 체크아웃의 추적 트리이거나 워커 워크트리
 }
 
 // ── 목록·전환기용 요약 ──────────────────────────────────────────────────────
@@ -751,7 +764,7 @@ export async function deletePersona(dir: string, name: string): Promise<void> {
 
 // ── 스쿼드 (DESIGN.md §5-5) ─────────────────────────────────────────────────
 // `<root>/squads/<이름>/members` — `personas/`의 형제, 큐의 다섯째 사이드카.
-// `ontologyDir`과 같은 근거로 새 환경변수가 없다(워커 재정의를 안 연다) — 스캐폴딩도 안 한다,
+// 온톨로지 기준 디렉터리와 같은 근거로 새 환경변수가 없다(워커 재정의를 안 연다) — 스캐폴딩도 안 한다,
 // 첫 스쿼드를 만드는 순간 이 함수들이 `mkdir`한다.
 
 /** `members` 한 줄 — 이름과 역할(§5-5 §개정). 역할이 없으면 `""`(호출부가 프로필 첫 줄을

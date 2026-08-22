@@ -39,7 +39,7 @@ import { hasRegisteredToken, readAuth, readOtherEngineAuth, readTokenRows, readT
 import { DEFAULT_LOCALE, t, type Locale } from "@/lib/i18n";
 import { buildVault } from "@/lib/markdown-wikilinks";
 import { listTree } from "@/lib/protocols";
-import { ontologyDir, readGateDirty, readSummary, readProjects, readLanguage, type GateDirty } from "@/lib/projects";
+import { readGateDirty, readSummary, readProjects, readLanguage, resolveConfig, type GateDirty } from "@/lib/projects";
 import type { DueAlert } from "@/lib/queue";
 import { engineLimits, formatTokens, listUsage, parseLogName, usageRates, type EngineLimit } from "@/lib/usage";
 import {
@@ -108,7 +108,7 @@ export default async function ProjectLayout({
   const current = items.find((t) => t.id === id)!;
   const root = projects.find((t) => t.id === id)!.root;
   // 위키링크 vault(§비주얼 §10 §위키링크) — 셸에 한 번만 마운트되는 요구 접수 단축키가 받는다.
-  const ontologyTree = await listTree(ontologyDir({ root }));
+  const ontologyTree = await listTree((await resolveConfig({ root })).ontology);
   const vault = buildVault(ontologyTree, (rel) => `/p/${id}/ontology?file=${encodeURIComponent(rel)}`);
   // 셸 전체(헤더 · 알림 종 일곱 · status bar · 배너)가 이 사전을 쓴다(§0-16 §발행 §묶음 표 2,
   // `dd97c69c`) — ⑦만 옮겼던 첫 자리(`a50c8304`)에서 나머지 여섯이 여기서 이어졌다. idle 풀

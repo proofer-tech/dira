@@ -36,7 +36,7 @@ import {
 import { listTickets } from "@/lib/queue";
 import { formatTokens, listUsage } from "@/lib/usage";
 import { dateTimeLabel } from "@/lib/urls";
-import { getProject, readLanguage, resolveConfig, usingDefault } from "@/lib/projects";
+import { getProject, ontologyInWorktree, readLanguage, resolveConfig, usingDefault } from "@/lib/projects";
 import {
   cronUnregisterCmd,
   cronRegisterCmd,
@@ -57,6 +57,7 @@ const LABEL: Record<string, string> = {
   protocols: "프로토콜 (TICKET_PROTOCOLS)",
   inProgress: "진행중 접미사 (TICKET_INPROGRESS)",
   done: "완료 접미사 (TICKET_DONE)",
+  ontology: "온톨로지 (TICKET_ONTOLOGY)",
 };
 
 /** 배지 옆 보조 문구 (DESIGN.md §비주얼 디렉션 §2 워커 4상태). */
@@ -135,6 +136,15 @@ export default async function Workers({ params }: { params: Promise<{ project: s
     { key: LABEL.protocols, value: config.protocols, assumed: usingDefault(config, "protocols") },
     { key: LABEL.inProgress, value: config.inProgress, assumed: usingDefault(config, "inProgress") },
     { key: LABEL.done, value: config.done, assumed: usingDefault(config, "done") },
+    {
+      key: LABEL.ontology,
+      value: config.ontology,
+      assumed: usingDefault(config, "ontology"),
+      // §5-3 §결정 2 — 사람이 워커 `.sh`를 손으로 고쳐 경계를 어긴 경우만 선다(엔진은 검사하지 않는다).
+      warn: ontologyInWorktree(project.root, config.ontology)
+        ? t(locale, "workers.ontologyInWorktree")
+        : null,
+    },
   ];
   // cwd는 resolveConfig가 애초에 conflicts에 넣지 않는다(갈리는 게 정상 — edc5e1a7).
   const divergent = config.conflicts;
@@ -420,6 +430,12 @@ export default async function Workers({ params }: { params: Promise<{ project: s
                     {s.value}
                     {s.assumed && (
                       <span className="ml-2 font-sans text-muted-foreground">기본값 가정</span>
+                    )}
+                    {s.warn && (
+                      <span className="ml-2 inline-flex items-center gap-1 font-sans text-status-stale">
+                        <TriangleAlert aria-hidden className="size-3.5" />
+                        {s.warn}
+                      </span>
                     )}
                   </TableCell>
                 </TableRow>

@@ -93,7 +93,6 @@ import { listTree } from "@/lib/protocols";
 import {
   getProject,
   listPersonas,
-  ontologyDir,
   readLanguage,
   resolveConfig,
   squadNames,
@@ -275,7 +274,7 @@ export default async function Board({
   const config = await resolveConfig(project);
   const tickets = await listTickets(project.root, config);
   // 위키링크 vault(§비주얼 §10 §위키링크) — 답변 다이얼로그·요구 접수·발행 다이얼로그가 그대로 받는다.
-  const ontologyTree = await listTree(ontologyDir(project));
+  const ontologyTree = await listTree(config.ontology);
   const vault = buildVault(ontologyTree, (rel) => `/p/${id}/ontology?file=${encodeURIComponent(rel)}`);
   // 우선순위 미터의 sr-only 문구(§비주얼 §49) + 에픽 스윔레인·표 컬럼의 새 문구뿐(§0-16) —
   // 화면 나머지는 아직 미이행이다.

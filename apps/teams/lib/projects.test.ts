@@ -20,6 +20,7 @@ const {
   listSquads,
   multiplayPath,
   multitokenPath,
+  ontologyInWorktree,
   readGateDirty,
   readMultiplay,
   readSummary,
@@ -82,7 +83,8 @@ test("resolveConfig — 워커에 값 없음: 기본값 + assumed 전부", async
   assert.strictEqual(c.inProgress, ".wip");
   assert.strictEqual(c.done, ".done");
   assert.strictEqual(c.cwd, path.dirname(root));
-  assert.deepStrictEqual(c.assumed.sort(), ["cwd", "done", "inProgress", "personas", "protocols"]);
+  assert.strictEqual(c.ontology, path.join(root, "ontology"));
+  assert.deepStrictEqual(c.assumed.sort(), ["cwd", "done", "inProgress", "ontology", "personas", "protocols"]);
   assert.deepStrictEqual(c.conflicts, []);
   assert.deepStrictEqual(c.unresolved, []); // 못 읽은 라인이 없다 = 해석 실패도 없다
 });
@@ -91,7 +93,7 @@ test("resolveConfig — 워커 0개(디렉터리도 없음)", async () => {
   const root = newQueue(null);
   const c = await resolveConfig({ root });
   assert.strictEqual(c.personas, path.join(root, "personas"));
-  assert.strictEqual(c.assumed.length, 5);
+  assert.strictEqual(c.assumed.length, 6);
 });
 
 test("resolveConfig — $HOME 치환, 루트 밖 페르소나, 한글 접미사", async () => {
@@ -111,7 +113,7 @@ test("resolveConfig — $HOME 치환, 루트 밖 페르소나, 한글 접미사"
   assert.strictEqual(c.protocols, path.join(homedir(), "Projects/dira/docs/protocols"));
   assert.strictEqual(c.inProgress, "-진행중");
   assert.strictEqual(c.done, "-완료");
-  assert.deepStrictEqual(c.assumed, ["cwd"]); // cwd만 워커에 없다
+  assert.deepStrictEqual(c.assumed, ["cwd", "ontology"]); // cwd·ontology만 워커에 없다
 });
 
 test("resolveConfig — 해석 불가 변수는 기본값 + unresolved(assumed 아니다)", async () => {
@@ -128,7 +130,7 @@ test("resolveConfig — 해석 불가 변수는 기본값 + unresolved(assumed �
     { key: "personas", raw: 'TICKET_PERSONAS="$UNSET_VAR/personas"', worker: "w1" },
     { key: "cwd", raw: 'TICKET_CWD="$TICKET_ROOT/../wt/w1"', worker: "w1" },
   ]);
-  assert.deepStrictEqual(c.assumed.sort(), ["done", "inProgress", "protocols"]);
+  assert.deepStrictEqual(c.assumed.sort(), ["done", "inProgress", "ontology", "protocols"]);
   assert.ok(usingDefault(c, "personas") && usingDefault(c, "done")); // 다른 화면은 둘을 안 가른다
 });
 
@@ -154,7 +156,7 @@ test("resolveConfig — 명령 치환·백틱·상대경로는 실효값이 되�
     { key: "protocols", raw: "TICKET_PROTOCOLS=`whoami`", worker: "w1" },
     { key: "cwd", raw: "TICKET_CWD=../wt/w1", worker: "w1" },
   ]);
-  assert.deepStrictEqual(c.assumed, ["done"]); // 있는데 못 읽은 것은 assumed가 아니다
+  assert.deepStrictEqual(c.assumed, ["done", "ontology"]); // 있는데 못 읽은 것은 assumed가 아니다
   assert.ok(usingDefault(c, "personas") && usingDefault(c, "protocols")); // 화면에 [해석 실패]
 });
 
@@ -204,6 +206,51 @@ test("resolveConfig — 워커 하나뿐이어도 cwdByWorker에 담는다", asy
   const root = newQueue({ "w1.sh": 'TICKET_CWD="$HOME/wt/w1"\n' });
   const c = await resolveConfig({ root });
   assert.deepStrictEqual(c.cwdByWorker, { w1: path.join(homedir(), "wt/w1") });
+});
+
+// ── TICKET_ONTOLOGY (DESIGN.md §5-3 §온톨로지 자리를 워커가 재정의한다) ────────
+
+test("resolveConfig — TICKET_ONTOLOGY 재정의: 큐 밖 절대경로를 그대로 쓴다", async () => {
+  const root = newQueue({ "w1.sh": 'TICKET_ONTOLOGY="$HOME/vault/ontology"\n' });
+  const c = await resolveConfig({ root });
+  assert.strictEqual(c.ontology, path.join(homedir(), "vault/ontology"));
+  assert.ok(!c.assumed.includes("ontology"));
+  assert.ok(!ontologyInWorktree(root, c.ontology)); // 큐 밖 절대경로 = 안전
+});
+
+test("resolveConfig — TICKET_ONTOLOGY 상대경로는 해석 실패(기본값 + unresolved)", async () => {
+  const root = newQueue({ "w1.sh": "TICKET_ONTOLOGY=../vault\n" });
+  const c = await resolveConfig({ root });
+  assert.strictEqual(c.ontology, path.join(root, "ontology")); // 기본값을 쓴다
+  assert.deepStrictEqual(c.unresolved, [
+    { key: "ontology", raw: "TICKET_ONTOLOGY=../vault", worker: "w1" },
+  ]);
+  assert.ok(!c.assumed.includes("ontology")); // 값은 있었다 — 없는 것과 다른 사실이다
+});
+
+test("resolveConfig — TICKET_ONTOLOGY 워커끼리 값이 갈리면 conflicts", async () => {
+  const root = newQueue({
+    "w1.sh": 'TICKET_ONTOLOGY="$HOME/vault-a"\n',
+    "w2.sh": 'TICKET_ONTOLOGY="$HOME/vault-b"\n',
+  });
+  const c = await resolveConfig({ root });
+  assert.strictEqual(c.ontology, path.join(homedir(), "vault-a")); // 첫 워커 값
+  assert.deepStrictEqual(c.conflicts, [
+    {
+      key: "ontology",
+      byWorker: { w1: path.join(homedir(), "vault-a"), w2: path.join(homedir(), "vault-b") },
+    },
+  ]);
+});
+
+test("resolveConfig — TICKET_ONTOLOGY가 워커 워크트리 안이면 ontologyInWorktree가 경고한다", async () => {
+  const root = newQueue({ "w1.sh": "" });
+  const insideWorktree = path.join(root, "worktrees", "w1", "ontology");
+  const c = await resolveConfig({ root });
+  assert.ok(!ontologyInWorktree(root, c.ontology)); // 기본값(<큐 루트>/ontology) — 안전
+  assert.ok(ontologyInWorktree(root, insideWorktree)); // 워커 워크트리 — 경고
+  assert.ok(ontologyInWorktree(root, path.join(path.dirname(root), "ontology-copy"))); // 주 체크아웃의 추적 트리 — 경고
+  assert.ok(!ontologyInWorktree(root, path.join(homedir(), "vault"))); // 큐 밖 — 안전
 });
 
 // ── 레지스트리 ──────────────────────────────────────────────────────────────

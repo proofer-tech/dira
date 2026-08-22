@@ -51,7 +51,6 @@ import {
 import {
   getProject,
   listPersonas,
-  ontologyDir,
   readLanguage,
   resolveConfig,
   squadNames,
@@ -102,7 +101,7 @@ export default async function TicketDetail({
 
   // 위키링크 vault(§비주얼 §10 §위키링크) — 이 프로젝트의 온톨로지. 이름 집합은 여기서 한 번
   // 읽고 아래 모든 렌더·편집 자리(본문 · 스레드 · 세션 스트림 · 복제 다이얼로그)에 그대로 흘린다.
-  const ontologyTree = await listTree(ontologyDir(project));
+  const ontologyTree = await listTree(config.ontology);
   const vault = buildVault(ontologyTree, (rel) => `/p/${id}/ontology?file=${encodeURIComponent(rel)}`);
 
   // §1-4 §계산 시점 — 한 번 읽어 이 렌더 전부(스캔·아래 "남은" 계산)에 같은 시각을 쓴다.

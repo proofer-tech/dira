@@ -3,7 +3,7 @@
 /** 온톨로지 화면의 서버 액션 — 저장 · 새 파일 · 삭제 · 이름변경.
  *
  *  `protocols/actions.ts`와 같은 분담: fs는 `lib/protocols.ts`가, 여기는 프로젝트 id → 기준
- *  디렉터리 해석과 Error 직렬화만 한다. 기준은 `ontologyDir()` 하나뿐이다(재정의를 안 연다). */
+ *  디렉터리 해석과 Error 직렬화만 한다. 기준은 해석된 `TICKET_ONTOLOGY`(`resolveConfig`) 하나뿐이다. */
 import { randomUUID } from "node:crypto";
 import { open, readdir } from "node:fs/promises";
 import path from "node:path";
@@ -14,7 +14,7 @@ import { kickIdleWorker } from "@/lib/kick";
 import { buildOntologySeedFiles, type OntologySurveyAnswers } from "@/lib/ontology-seed";
 import { isRealDirectory } from "@/lib/paths";
 import { createFile, deleteFile, listTree, renameFile, saveFile } from "@/lib/protocols";
-import { getProject, ontologyDir, resolveConfig } from "@/lib/projects";
+import { getProject, resolveConfig } from "@/lib/projects";
 import {
   ONTOLOGY_FIX_MARKER,
   ONTOLOGY_MIGRATION_MARKER,
@@ -35,7 +35,7 @@ export type OntologyResult = {
 async function baseOf(projectId: string): Promise<string> {
   const project = await getProject(projectId);
   if (!project) throw new Error(`등록되지 않은 프로젝트입니다: ${projectId}`);
-  return ontologyDir(project);
+  return (await resolveConfig(project)).ontology;
 }
 
 function fail(e: unknown): OntologyResult {
@@ -225,7 +225,7 @@ export async function fixOntologySchemaAction(projectId: string): Promise<FixTic
     const existing = openFixTicket(tickets, ONTOLOGY_FIX_MARKER);
     if (existing) return { ok: true, stem: existing.stem };
 
-    const base = ontologyDir(project);
+    const base = config.ontology;
     const tree = await listTree(base);
     const metrics = tree.length > 0 ? await loadMetrics(base, tree) : null;
 
