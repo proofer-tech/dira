@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, writeFile, rm, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { computeOntologyMetrics } from "./ontology.ts";
+import { computeOntologyMetrics, isDiraFormat } from "./ontology.ts";
 import { listTree, readTextFile } from "./protocols.ts";
 
 // JSX가 있는 page.tsx는 node --test로 통째로 import할 수 없다 — 여기선 실제 소스에서
@@ -470,4 +470,47 @@ test("스키마 파일 경로 — page.tsx의 loadMetrics가 찾는 rel은 _onto
   } finally {
     await rm(base, { recursive: true, force: true });
   }
+});
+
+test("isDiraFormat — 둘 다 없으면 형식이 아니다", () => {
+  assert.equal(
+    isDiraFormat([
+      { rel: "README.md", isDir: false },
+      { rel: "notes", isDir: true },
+      { rel: "notes/오늘.md", isDir: false },
+    ]),
+    false,
+  );
+});
+
+test("isDiraFormat — SCHEMA.md만 있어도 선다", () => {
+  assert.equal(
+    isDiraFormat([
+      { rel: "_ontology", isDir: true },
+      { rel: "_ontology/SCHEMA.md", isDir: false },
+    ]),
+    true,
+  );
+});
+
+test("isDiraFormat — objects/만 있어도 선다(빈 디렉터리도 포함)", () => {
+  assert.equal(isDiraFormat([{ rel: "objects", isDir: true }]), true);
+  assert.equal(
+    isDiraFormat([
+      { rel: "objects", isDir: true },
+      { rel: "objects/사람", isDir: true },
+      { rel: "objects/사람/철수.md", isDir: false },
+    ]),
+    true,
+  );
+});
+
+test("isDiraFormat — 둘 다 있으면 선다", () => {
+  assert.equal(
+    isDiraFormat([
+      { rel: "_ontology/SCHEMA.md", isDir: false },
+      { rel: "objects/사람/철수.md", isDir: false },
+    ]),
+    true,
+  );
 });

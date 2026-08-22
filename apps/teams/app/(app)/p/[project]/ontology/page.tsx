@@ -31,8 +31,9 @@ import {
 } from "@/components/ui/sidebar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { statusLabel } from "@/components/status-badge";
+import { t } from "@/lib/i18n";
 import { buildVault } from "@/lib/markdown-wikilinks";
-import { computeOntologyMetrics, type OntologyMetrics } from "@/lib/ontology";
+import { computeOntologyMetrics, isDiraFormat, type OntologyMetrics } from "@/lib/ontology";
 import {
   ONTOLOGY_FIX_MARKER,
   importFolderOf,
@@ -50,7 +51,7 @@ import {
   type ProtocolEntry,
   type ProtocolFile,
 } from "@/lib/protocols";
-import { getProject, resolveConfig } from "@/lib/projects";
+import { getProject, readLanguage, resolveConfig } from "@/lib/projects";
 import { cn } from "@/lib/utils";
 
 /** `tree`에서 지표 계산에 필요한 텍스트를 모아 순수 함수(`computeOntologyMetrics`)에 넘긴다.
@@ -132,10 +133,13 @@ export default async function Ontology({
     </Tooltip>
   );
 
+  const locale = await readLanguage();
   const config = await resolveConfig(project);
   const base = config.ontology;
   const tree = await listTree(base);
-  const metrics = tree.length > 0 ? await loadMetrics(base, tree) : null;
+  // §5-3 §온톨로지 자리를 워커가 재정의한다 §결정 3 — 형식이 아닌 폴더는 지표를 아예 안 낸다.
+  const diraFormat = isDiraFormat(tree);
+  const metrics = tree.length > 0 && diraFormat ? await loadMetrics(base, tree) : null;
   // 위지윅 면의 `[[이름]]` -> 링크(§비주얼 §10 §위키링크) — 이름 집합은 여기서 한 번 읽는다.
   const vault = buildVault(tree, (rel) => `/p/${id}/ontology?file=${encodeURIComponent(rel)}`);
 
@@ -185,6 +189,14 @@ export default async function Ontology({
       </div>
 
       {metrics && <OntologyMetricsPanel metrics={metrics} projectId={id} fixTicket={fixTicket} />}
+
+      {tree.length > 0 && !diraFormat && (
+        <Alert>
+          <TriangleAlert aria-hidden className="text-status-stale" />
+          <AlertTitle>{t(locale, "ontology.notDira.title")}</AlertTitle>
+          <AlertDescription>{t(locale, "ontology.notDira.body")}</AlertDescription>
+        </Alert>
+      )}
 
       {tree.length === 0 && (
         // §5-3 §생성 — 온톨로지 없이 도는 프로젝트가 정상이다: 여기서 디렉터리를 만들지 않는다.

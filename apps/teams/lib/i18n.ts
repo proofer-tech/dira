@@ -817,6 +817,11 @@ export const ko: Record<string, string> = {
   // §5-3 §온톨로지 자리를 워커가 재정의한다 §결정 2 — 사람이 워커 `.sh`를 손으로 고쳐 경계를
   // 어긴 경우다(엔진은 검사하지 않는다). 워커 화면의 온톨로지 행에만 붙는다.
   "workers.ontologyInWorktree": "이 프로젝트의 git 작업 트리 안입니다",
+  // §5-3 §온톨로지 자리를 워커가 재정의한다 §결정 3 — `_ontology/SCHEMA.md`도 `objects/`도
+  // 없는 폴더를 가리켰을 때. 지표-검사 표 대신 이 한 장이 뜬다.
+  "ontology.notDira.title": "dira 형식이 아닙니다",
+  "ontology.notDira.body":
+    "_ontology/SCHEMA.md도 objects/도 없습니다 — 아직 이 폴더를 dira 형식으로 옮기지 않은 것뿐입니다. 아래 가져오기로 옮겨오세요.",
 };
 
 /** 제품 낱말의 영어 대응 — **여기가 한자리다**(621c7a97). 다음 묶음이 같은 것을 다르게 부르지
@@ -1656,6 +1661,10 @@ export const en: Record<string, string> = {
   // `<meta name="description">` — 화면에 안 뜨고 제품 한 줄 설명이다(§0-9가 이 값을 그렇게
   // 갈랐다). 명사구라 마침표를 안 찍는다.
   "appLayout.description": "Control room for a filesystem ticket queue",
+
+  "ontology.notDira.title": "Not dira format",
+  "ontology.notDira.body":
+    "No _ontology/SCHEMA.md or objects/ here — this folder just hasn't been moved into dira format yet. Use import below to bring it in.",
 };
 
 const DICTS: Record<Locale, Record<string, string>> = { ko, en };

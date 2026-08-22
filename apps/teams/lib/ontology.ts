@@ -7,6 +7,17 @@
  *  fs 모듈을 import하지 않는다 — 읽기는 호출자가 `lib/protocols.ts`로 하고, 여기는 이미 읽은
  *  텍스트만 받는다. 그래야 `node --test`로 이 판정 하나만 떼어 검증할 수 있다. */
 
+/** dira 형식 판정(§5-3 §온톨로지 자리를 워커가 재정의한다 §결정 3) — `_ontology/SCHEMA.md`와
+ *  `objects/` 둘 다 없으면 형식이 아니다. 하나라도 있으면 선 것이고, 그 뒤는 종전 지표-검사
+ *  그대로다(반쪽인 것은 `schemaViolations`가 이미 말한다). 호출자(`page.tsx`)는 이 값이
+ *  거짓이면 `computeOntologyMetrics`를 아예 안 부른다 — 위반 수백 줄이 <폴더가 망가졌다>로
+ *  안 읽히게. */
+export function isDiraFormat(tree: { rel: string; isDir: boolean }[]): boolean {
+  const hasSchema = tree.some((e) => !e.isDir && e.rel === "_ontology/SCHEMA.md");
+  const hasObjects = tree.some((e) => e.rel === "objects" || e.rel.startsWith("objects/"));
+  return hasSchema || hasObjects;
+}
+
 const NORMATIVE = /(해야 한다|하는 게 낫다|하지 않는다|하지 말|권장한다|바람직하다|해야만|짚고 넘어가)/;
 
 /** 문장 경계를 `.!?` 뒤 공백·문자열 끝으로 어림한다 — 규범 문장 검출과 같은 정밀도(§5-3 §형식
