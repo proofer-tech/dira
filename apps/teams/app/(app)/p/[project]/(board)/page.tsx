@@ -45,6 +45,7 @@ import { EmptyState } from "@/components/empty-state";
 import { EpicSidebar } from "@/components/epic-sidebar";
 import { PersonaBadge, SquadBadge } from "@/components/persona-badge";
 import { PriorityMeter } from "@/components/priority-meter";
+import { TitleRefs } from "@/components/queue-ref";
 import { DepBadge, StatusBadge, daysSince, statusLabel } from "@/components/status-badge";
 import { AnswerDialog, NewTicketDialog, RequestDialog } from "@/components/ticket-ui";
 import { WipWorker, WorkerChips } from "@/components/worker-mark";
@@ -62,6 +63,7 @@ import {
 import { boardRevision } from "@/lib/board-revision";
 import { NO_EPIC, epicTitle, epicsFromTickets, listEpics, resolveMarkdownRefs } from "@/lib/epics";
 import { t } from "@/lib/i18n";
+import { mayHaveRefs } from "@/lib/markdown-refs";
 import {
   HIDE_DONE_STATUSES,
   SORT_KEYS,
@@ -366,6 +368,19 @@ export default async function Board({
     return resolveMarkdownRefs(project.root, id, texts, tickets, epics);
   })();
 
+  // 티켓 제목이 글자로 서는 자리(§9 뒤쪽 절반) — 칸반 카드 제목 · 표뷰 제목 셀. 훑는 것은
+  // **지금 화면에 실제로 그릴 `rows`의 제목뿐**이다(§9 §화면이 해석해서 내려준다) — 큐 전체
+  // 제목을 훑지 않는다(§성능 예산).
+  const titleRefs = mayHaveRefs(rows.map((t) => t.title).join("\n"))
+    ? await resolveMarkdownRefs(
+        project.root,
+        id,
+        rows.map((t) => t.title),
+        tickets,
+        epics,
+      )
+    : { tickets: {}, epics: {} };
+
   // 발행 다이얼로그의 선택지 둘. **보드가 이미 읽은 것을 넘긴다** — `readdir`도 큐 스캔도 다시
   // 하지 않는다(§3).
   //  - persona는 위 필터 목록과 **다르다**: `body !== null`(= PROFILE.md가 있다)만 남긴다.
@@ -626,9 +641,12 @@ export default async function Board({
         </span>
         {isAwaiting(t) && <StatusBadge status="awaiting" days={daysSince(t.mtime)} />}
       </div>
-      {/* 카드 title은 2줄까지(§6). 전문은 `title` 속성으로 본다 */}
+      {/* 카드 title은 2줄까지(§6). 전문은 `title` 속성으로 본다. `layered`가 표식 앵커에만
+          `relative z-10`을 준다(§9 뒤쪽 절반 · §비주얼 §31 §층) — 카드 전체가 위 해시 앵커의
+          `after:absolute after:inset-0`로 늘어난 링크라, 표식만 올리지 않으면 눌리는 것이
+          표식이 아니라 카드다. 나머지 글자는 그대로 밑에 있어 카드 클릭이 안 죽는다 */}
       <span className="line-clamp-2 text-sm" title={t.title}>
-        {t.title || "(제목 없음)"}
+        {t.title ? <TitleRefs title={t.title} refs={titleRefs} locale={locale} layered /> : "(제목 없음)"}
       </span>
       {/* 배지가 줄 안에 섞이므로 flex다 — 텍스트 baseline 정렬에 맡기면
           20px 배지가 줄을 밀어 카드마다 높이가 갈린다.
@@ -1127,7 +1145,11 @@ export default async function Board({
                               {/* 폭 상한은 1440에서 컬럼 8개가 다 들어가도록 잡은 값이다(§4 사이드바를
                                   쓰지 않는 이유). deps가 4개 넘게 달린 행은 가로 스크롤로 넘긴다 */}
                               <span className="block max-w-[34ch] truncate text-sm" title={t.title}>
-                                {t.title || "(제목 없음)"}
+                                {t.title ? (
+                                  <TitleRefs title={t.title} refs={titleRefs} locale={locale} layered />
+                                ) : (
+                                  "(제목 없음)"
+                                )}
                               </span>
                             </TableCell>
                             <TableCell className="px-3 py-0 text-sm">

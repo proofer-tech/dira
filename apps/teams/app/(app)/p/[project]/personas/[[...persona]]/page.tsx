@@ -17,6 +17,7 @@ import { notFound } from "next/navigation";
 import { TriangleAlert } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { CreatePersonaButton, PersonasPane } from "@/components/personas-ui";
+import { TitleRefs } from "@/components/queue-ref";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { listEpics, resolveMarkdownRefs } from "@/lib/epics";
@@ -137,23 +138,24 @@ export default async function Personas({
       };
     }),
   );
-  // 산문 속 해시-P번호 표식(§9) — 이 화면은 카드마다 메모리 전문을 이미 같은 렌더에 들고
-  // 있다(위 `rows` 주석) - 그 전문 전부를 한 번에 훑는다. 페르소나 수와 무관하게 왕복 하나다.
-  const epics = await listEpics(project.root, tickets);
-  const refs = await resolveMarkdownRefs(
-    project.root,
-    id,
-    rows.flatMap((r) => r.memories.map((m) => m.text)),
-    tickets,
-    epics,
-  );
-
   const missing = personas.filter((p) => p.body === null);
   // §5-5 §프로필-스쿼드가 없는 것은 경고다 첫 갈래 — 티켓이 `squad:`로 드는 이름의
   // `squads/<이름>/`가 없다. 둘째 갈래(멤버 중 프로필 없는 이름)는 위 `missingProfile`이
   // 왼쪽 스쿼드 줄에서 이미 표식으로 든다(dc3a2fa4) — 그릇이 갈릴 뿐 같은 경고다.
   const squadNames = new Set(squads.map((s) => s.name));
   const ticketsWithMissingSquad = tickets.filter((tk) => tk.squad && !squadNames.has(tk.squad));
+
+  // 산문 속 해시-P번호 표식(§9) — 이 화면은 카드마다 메모리 전문을 이미 같은 렌더에 들고
+  // 있다(위 `rows` 주석) - 그 전문 전부를 한 번에 훑는다. 페르소나 수와 무관하게 왕복 하나다.
+  // §9 뒤쪽 절반 — 스쿼드 티켓 경고 줄의 **제목**도 같은 왕복에 얹는다(새 fs 읽기 0).
+  const epics = await listEpics(project.root, tickets);
+  const refs = await resolveMarkdownRefs(
+    project.root,
+    id,
+    [...rows.flatMap((r) => r.memories.map((m) => m.text)), ...ticketsWithMissingSquad.map((tk) => tk.title)],
+    tickets,
+    epics,
+  );
 
   return (
     <div className="space-y-4">
@@ -217,7 +219,8 @@ export default async function Personas({
               </p>
               {ticketsWithMissingSquad.map((tk) => (
                 <p key={tk.hash} className="font-mono text-xs break-all">
-                  {tk.hash} — squad: {tk.squad} · {tk.title}
+                  {tk.hash} — squad: {tk.squad} ·{" "}
+                  {tk.title ? <TitleRefs title={tk.title} refs={refs} locale={locale} /> : tk.title}
                 </p>
               ))}
             </div>

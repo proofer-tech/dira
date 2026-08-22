@@ -10,6 +10,7 @@ import { notFound } from "next/navigation";
 import { Lock, TriangleAlert } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { Markdown } from "@/components/markdown";
+import { TitleRefs } from "@/components/queue-ref";
 import { SessionStream } from "@/components/session-stream";
 import { DepBadge, StatusBadge, daysSince } from "@/components/status-badge";
 import { WipWorker } from "@/components/worker-mark";
@@ -200,15 +201,20 @@ export default async function TicketDetail({
   // 읽기 전용 본문 — 스레드가 데려간 `## 질문 n` 절을 뺀 것. 편집 폼은 아래에서 원문을 쓴다.
   const bodyRead = bodyWithoutQuestions(ticket.body);
 
-  // 산문 속 해시-P번호 표식(§9) — 이 페이지가 서버에서 그리는 본문·스레드만 훑는다. 세션
-  // 스트림의 사건은 클라이언트 폴링(`tailSession`)이 각자 자기 회차를 훑어 응답에 싣는다
-  // (`actions.ts` §9 §클라이언트가 폴링하는 자리) — 여기서 훑지 않는다(0건 상태로 시작해서
-  // 훑을 글이 없다).
+  // 산문 속 해시-P번호 표식(§9) — 이 페이지가 서버에서 그리는 본문·스레드·**제목**(§9 뒤쪽
+  // 절반 — `h1`도 이 표식이 서는 자리다)만 훑는다. 세션 스트림의 사건은 클라이언트 폴링
+  // (`tailSession`)이 각자 자기 회차를 훑어 응답에 싣는다(`actions.ts` §9 §클라이언트가 폴링하는
+  // 자리) — 여기서 훑지 않는다(0건 상태로 시작해서 훑을 글이 없다).
   const epics = await listEpics(project.root, tickets);
   const refs = await resolveMarkdownRefs(
     project.root,
     id,
-    [bodyRead, ...thread.map((item) => item.text), ...thread.flatMap((item) => item.quotes?.map((q) => q.text) ?? [])],
+    [
+      ticket.title,
+      bodyRead,
+      ...thread.map((item) => item.text),
+      ...thread.flatMap((item) => item.quotes?.map((q) => q.text) ?? []),
+    ],
     tickets,
     epics,
   );
@@ -326,7 +332,10 @@ export default async function TicketDetail({
     <div className="max-w-3xl space-y-6 xl:max-w-7xl">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex min-w-0 items-center gap-3">
-          <h1 className="text-lg font-semibold">{ticket.title || "(제목 없음)"}</h1>
+          {/* §9 뒤쪽 절반 — 위에 덮인 앵커가 없어 `layered`를 안 준다(§비주얼 §31 §층) */}
+          <h1 className="text-lg font-semibold">
+            {ticket.title ? <TitleRefs title={ticket.title} refs={refs} locale={locale} /> : "(제목 없음)"}
+          </h1>
           {/* 보드와 **같은 말**을 쓴다 — 같은 티켓이 한쪽에서 `deps 대기`, 다른 쪽에서
               `답변 대기`로 보이면 배지가 상태 표현의 유일한 출처인 의미가 없다(§1 보드) */}
           {isAwaiting(ticket) ? (
