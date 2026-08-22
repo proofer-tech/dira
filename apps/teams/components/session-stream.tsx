@@ -1217,8 +1217,9 @@ function Row({
   }
 
   // 펼칠 것이 없으면 어포던스도 없다(`expandable` — 판정은 `lib/urls.ts` 하나다).
-  // 여기 오는 건 본문이 암호화된 `thinking`이다(실측 75/75). 줄 자체는 그대로 흘리고
-  // — 빼면 생각하는 동안 화면이 조용해진다 — `MarkerIcon` 칸만 §9대로 **비워서 유지**한다.
+  // 여기 오는 건 `display: "omitted"`라 본문이 빈 `thinking`이다(실측 75/75, 플래그 없는 세션).
+  // 줄 자체는 그대로 흘리고 — 빼면 생각하는 동안 화면이 조용해진다 — `MarkerIcon` 칸만 §9대로
+  // **비워서 유지**한다.
   if (!expandable(e)) {
     return (
       <Marker className={LINE}>

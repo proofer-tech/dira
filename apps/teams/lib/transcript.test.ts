@@ -436,7 +436,8 @@ test("사건 매핑 — thinking·tool_result는 크기가 있고 원문이 함�
     "가나다라마",
   ]);
 
-  // 본문이 암호화된 thinking(실측 91개 중 86개)도 줄은 흘린다 — 크기만 감춘다
+  // 본문이 빈 thinking(`display: "omitted"`, 실측 91개 중 86개)도 줄은 흘린다 — 크기만 감춘다.
+  // 암호화되는 건 `signature` 필드뿐이고, `thinking` 본문은 이 디스패치 옵션이 비우는 것이다.
   const [blank] = recordToEvents(
     JSON.parse(assistant([{ type: "thinking", thinking: "", signature: "CAIS…" }]).trim()),
   );
@@ -472,7 +473,8 @@ test("어포던스 — 빈 본문 줄은 펼칠 수 없고, 있는 쪽은 그대
   assert.deepEqual([full.label, full.summary, full.body], ["생각", "5자", "가나다라마"]);
   assert.equal(expandable(full), true);
 
-  // 빈 본문(암호화된 thinking — 실측 75/75): 줄은 흐르되 셰브런·<details>가 없다.
+  // 빈 본문(`display: "omitted"`가 비운 thinking — 실측 75/75, 플래그 없는 세션): 줄은 흐르되
+  // 셰브런·<details>가 없다.
   // 이게 참으로 뒤집히면 화면에 **열리는 빈 상자**가 돌아온다(20f3d308).
   const blank = think("");
   assert.equal(blank.label, "생각"); // 줄 자체는 계속 흐른다

@@ -452,7 +452,7 @@ test("toTurns — 도구·생각·서브 줄이 `line`으로 같이 나온다, �
     turns.map((t) => [t.role, t.text]),
     [
       ["question", "w2는 뭘 하나"],
-      ["line", "생각"], // thinking, 본문 암호화(빈 문자열) — summary도 비어 label로 떨어진다
+      ["line", "생각"], // thinking, 본문 빈 문자열(`display: "omitted"`) — summary도 비어 label로 떨어진다
       ["line", "/x/y.md"], // tool_use Read — cwd가 없어 `file_path` 원문이 summary다
       ["answer", "w2는 `aaaa0001`을 물고 있습니다."],
       ["line", "서브가 한 말"], // sidechain text — label·summary가 둘 다 비어 `body` 앞머리로 떨어진다

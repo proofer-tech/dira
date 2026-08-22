@@ -279,8 +279,10 @@ export function scheduleRows(
 }
 
 /** 세션 스트림(§2-1)의 사건 줄을 **펼칠 수 있나** — 셰브런·`<details>`를 거는 유일한 판정.
- *  본문이 없으면 펼쳐도 빈 상자라 어포던스를 주지 않는다: `thinking` 본문은 암호화돼
- *  빈 문자열로 오는 게 전부다(실측 75/75). §2-1의 계약은 "펼치면 원문"이고, 원문이 없는 줄에서
+ *  본문이 없으면 펼쳐도 빈 상자라 어포던스를 주지 않는다: `display: "omitted"`인 디스패치는
+ *  `thinking` 본문을 빈 문자열로 준다(실측 75/75, `--thinking-display summarized` 없이). 암호화돼
+ *  오는 건 `signature` 필드뿐이고, 그 플래그를 붙인 세션은 같은 자리가 채워져 온다(`f3efc03d`).
+ *  §2-1의 계약은 "펼치면 원문"이고, 원문이 없는 줄에서
  *  셰브런이 "여기 원문이 있다"고 말하면 그 계약이 그 줄에서만 거짓이 된다.
  *  `elapsedSuffix`와 같은 이유로 여기 산다 — `pnpm test`가 JSX를 못 읽고, 스트림은 클라이언트다. */
 export const expandable = (e: { body: string }) => e.body !== "";

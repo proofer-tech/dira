@@ -549,7 +549,8 @@ export function recordToEvents(rec: unknown, collapseFirstPrompt = false): Strea
         else push(i, { kind: "text", label: "", summary: "", body: b.text ?? "" });
         break;
       case "thinking": {
-        // 본문이 암호화돼 `thinking: ""`로 오는 레코드가 대부분이다(실측 91개 중 86개).
+        // `display: "omitted"`가 `thinking: ""`를 주는 레코드가 대부분이다(실측 91개 중 86개,
+        // `--thinking-display summarized` 없이). 암호화되는 건 `signature` 필드뿐이다.
         // 그래도 **줄은 흘린다** — 빼면 생각하는 동안 화면이 조용해져서 "멈춘 것"과
         // 구별되지 않는다(§2-1이 서브에이전트 줄을 빼지 않는 것과 같은 이유). 크기만 감춘다.
         const t = b.thinking ?? "";
