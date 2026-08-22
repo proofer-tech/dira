@@ -16,16 +16,16 @@ persona profile, or ticket on conflict. Worker dir: `<root>/worktrees/<worker>`.
    on every ticket; the list holds this ticket's own work.
 3. Do the work. Nothing outside `## Done when`. Flip each box `- [ ]` -> `- [x]`
    the moment it is actually true - not in a batch at the end, not before.
-4. Append `## 결과` - what changed, verification commands + actual output, pushed
-   commit hashes.
+4. Append `## 결과` - what changed, how verified (one-line summary, not full
+   output), pushed commit hashes.
 5. Confirm push succeeded, **then** rename to `<hash>.done.md` - the completion
    report; skip it and the ticket stays incomplete. `.done` before push records
    unintegrated work as done. Only `mv` allowed: `.wip` -> `.done`.
 
-### Retrospective (회고) - before `## 결과`
+### Retrospective (회고) - only when there is something to leave
 
-Leave what only this session learned in `personas/<name>/memory/` (your persona);
-nothing to leave -> leave nothing. Rules + format: `CORE-MEMORY.md`.
+Only-this-session lesson -> `personas/<name>/memory/` (your persona); none ->
+skip it. Rules + format: `CORE-MEMORY.md`.
 
 ## Ticket kinds - `kind:`
 
