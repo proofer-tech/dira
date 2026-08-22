@@ -87,23 +87,25 @@ import { engineCell, listWorkers, workerOf, type Worker } from "./workers.ts";
  *  셸은 리다이렉트·`sh -c`로 어느 경로든 쓰므로 그게 있으면 아래 스코프가 아무것도 안 막는다. */
 const TOOLS = "Read,Glob,Grep,Write,Edit";
 
-/** 쓰기가 닿는 곳(§7 §쓰기가 닿는 곳이 **다섯**이 된다 — 요구 `bd3cd201`) + `tickets/**`.
- *  **상대 글롭**이라 값이 프로젝트마다 다르다 — 아래가 상수 배열(`TOOL_FLAGS`)이 아니라 함수인
- *  이유가 이 한 줄이다. 여기 없는 것은 밖이다: `worktrees/**`(아래에 실제 프로젝트 코드가 있다) ·
- *  repo의 나머지 전부(소스 · `docs/**` · 엔진) · 큐 밖 전부.
+/** 쓰기가 닿는 곳 중 **큐 루트 기준** 다섯(§7 §쓰기가 닿는 곳이 **다섯**이 된다 — 요구
+ *  `bd3cd201`) + `tickets/**`. **상대 글롭**이라 값이 프로젝트마다 다르다 — 아래가 상수 배열
+ *  (`TOOL_FLAGS`)이 아니라 함수인 이유가 이 한 줄이다. 여기 없는 것은 밖이다: `worktrees/**`
+ *  (아래에 실제 프로젝트 코드가 있다) · repo의 나머지 전부(소스 · `docs/**` · 엔진) · 큐 밖 전부.
  *
- *  ontology·AGENTS.md 둘이 아카이빙 산출물의 자리다(§5-3 산출물 ①②). **종전에 그 둘만
- *  repo(`dirname(root)`) 기준이었다** — 큐는 git에 안 들어가는 것이 불변식이라(CORE §큐의
- *  불변식 3) 온톨로지를 큐 안에 두면 clone한 사람에게 0장이라는 근거였다. 그 값은 뒤집힌 것이
- *  아니라 **대가로 지불됐다**(§5-3 §아카이빙 산출물은 큐 안에 산다 §파는 것). 대신 repo 쪽
- *  예외가 **0**이 되어 요구 `20e4a6f4`(실제 프로젝트는 못 고친다)가 예외 없이 선다 —
+ *  `ontology/**`는 여기 없다 — **해석된 온톨로지 기준**이라 큐 루트에 얹을 수 없고
+ *  `toolFlags`가 따로 받는다(요구 `85114387` §결정 4 — `TICKET_ONTOLOGY`가 큐 밖을 가리키면
+ *  이 자리도 큐 밖이 된다). AGENTS.md가 아카이빙 산출물의 나머지 한 자리다(§5-3 산출물 ②).
+ *  **종전엔 그 둘 다 repo(`dirname(root)`) 기준이었다** — 큐는 git에 안 들어가는 것이 불변식이라
+ *  (CORE §큐의 불변식 3) 온톨로지를 큐 안에 두면 clone한 사람에게 0장이라는 근거였다. 그 값은
+ *  뒤집힌 것이 아니라 **대가로 지불됐다**(§5-3 §아카이빙 산출물은 큐 안에 산다 §파는 것). 대신
+ *  repo 쪽 예외가 **0**이 되어 요구 `20e4a6f4`(실제 프로젝트는 못 고친다)가 예외 없이 선다 —
  *  개정 `22a803de`. `AGENTS.md`는 아직 그 자리에 파일이 없을 수 있어 `Write`가 필요하다.
  *
  *  **`tickets/**`는 종전에 `Write`가 안 붙는 자리였다**(별도 상수 `EDIT_ONLY` — 시킨 일이
  *  *티켓 본문에 링크를 추가*(산출물 ③)이지 티켓 발행이 아니었다). 요구 `64b45d3c`가 그 결정을
  *  뒤집었다(§7 §홈 대화에서 요구사항이 접수된다) — 열린 것은 `kind: request` 하나뿐이고,
  *  플래그는 파일 내용을 못 봐서 그 제약은 여기서 안 지고 `buildPrompt`의 경계 문단이 진다. */
-const WRITABLE = ["personas/**", "protocols/**", "workers/*.sh", "ontology/**", "AGENTS.md", "tickets/**"];
+const WRITABLE = ["personas/**", "protocols/**", "workers/*.sh", "AGENTS.md", "tickets/**"];
 
 /** 도구 표면을 정하는 플래그 **전부**. **네 조각이 각자 다른 층을 막으므로** 하나라도 빠지면
  *  표면이 넓어진다(머리 주석의 A/B): `--tools`가 built-in 목록을 다섯으로 만들고,
@@ -118,12 +120,21 @@ const WRITABLE = ["personas/**", "protocols/**", "workers/*.sh", "ontology/**", 
  *
  *  **`home-agent.test.ts`가 이 반환값을 검증한다.** `--allowed-tools`만 남기는 회귀가 `89962e56`
  *  그 사건이었고, 그건 코드를 봐서는 안 틀려 보인다 — 플래그 이름이 하는 일을 말해주지 않는다. */
-export function toolFlags(root: string): string[] {
+/** `ontologyDir`은 **해석된 값**(`resolveConfig(project).ontology`)이다 — 기본값 큐에서는
+ *  `<root>/ontology`와 글자로 같고, `TICKET_ONTOLOGY`가 재정의한 큐에서는 큐 밖 절대경로일 수
+ *  있다(요구 `85114387` §결정 4). 이 함수는 그 값을 그대로 스코프에 얹을 뿐 해석하지 않는다 —
+ *  고정 함수(`ontologyDir(project)`)를 여기 두지 않는다(DESIGN.md §5-3: 고정 함수가 남으면
+ *  그 하나가 옛 자리를 판다). */
+export function toolFlags(root: string, ontologyDir: string): string[] {
   // 절대경로는 **슬래시 둘로 시작한다**(`Write(//<절대경로>/**)` — 실측 `7e35d300`. `**`는 깊이 무제한).
   const abs = (base: string, glob: string) => `//${path.join(base, glob)}`;
-  // 여섯 다 큐 루트 아래다 — repo(`dirname(root)`) 기준 항이 **0**이다(개정 `22a803de`).
+  // 다섯은 큐 루트 아래다 — repo(`dirname(root)`) 기준 항이 **0**이다(개정 `22a803de`).
   // `tickets/**`가 `Write`까지 받는 것은 요구 `64b45d3c`가 뒤집은 자리다(위 `WRITABLE` 주석).
-  const scope = WRITABLE.map((g) => abs(root, g)).flatMap((p) => [`Write(${p})`, `Edit(${p})`]);
+  // 여섯째(온톨로지)만 `ontologyDir` 기준이다 — 재정의한 큐에서는 그게 큐 밖이다(§결정 4).
+  const scope = [...WRITABLE.map((g) => abs(root, g)), abs(ontologyDir, "**")].flatMap((p) => [
+    `Write(${p})`,
+    `Edit(${p})`,
+  ]);
   // `--allowed-tools`의 값은 여기서 **토큰 여러 개**다 — 뒤에 `--output-format`이 와야 한다(머리 주석).
   return ["--tools", TOOLS, "--strict-mcp-config", "--permission-mode", "manual", "--allowed-tools", "Read", "Glob", "Grep", ...scope];
 }
@@ -694,16 +705,20 @@ export async function personaBlock(personasDir: string, name: string = HOME_PERS
  *  **`tickets/**`에 `Write`가 붙은 자리는 종전과 다르게 진다**(요구 `64b45d3c` — §7 §홈 대화에서
  *  요구사항이 접수된다). 플래그의 경로 스코프는 파일 내용을 못 보므로 *`kind: request`만 만든다*는
  *  제약을 여기 프롬프트 글이 진다 — §7 §`kind`를 지는 것이 글이다가 박은 그 자리다. 경로를
- *  절대경로로 안 쓰는 것은 스냅샷이 이미 큐 루트를 적어 주기 때문이다. */
-export function buildPrompt(snapshot: string, question: string, persona = ""): string {
+ *  절대경로로 안 쓰는 것은 스냅샷이 이미 큐 루트를 적어 주기 때문이다.
+ *
+ *  **`ontologyDir`은 예외 — 절대경로 그대로 적는다.** 나머지 다섯은 큐 루트 기준이라 상대
+ *  글롭으로 충분하지만, 온톨로지는 재정의한 큐에서 큐 밖을 가리킬 수 있어(요구 `85114387`
+ *  §결정 4) 상대 표기로 못 박으면 에이전트가 큐 루트 아래 옛 자리를 판다. */
+export function buildPrompt(snapshot: string, question: string, ontologyDir: string, persona = ""): string {
   return `${persona ? `${persona}\n\n` : ""}${snapshot}
 
 ---
 
 **고칠 수 있는 것은 이것뿐이다** — 큐 루트 아래 \`personas/**\` · \`protocols/**\` ·
-\`workers/*.sh\` · \`ontology/**\` · \`AGENTS.md\`. 그 밖(\`worktrees/**\` 아래 프로젝트 코드 ·
-repo 전부 · 큐 밖 전부)은 도구가 거부한다. 거부되면 우회하지 말고 무엇이 왜 막혔는지 그대로
-말한다.
+\`workers/*.sh\` · \`AGENTS.md\`, 그리고 온톨로지 \`${ontologyDir}/**\`. 그 밖(\`worktrees/**\` 아래
+프로젝트 코드 · repo 나머지 · 여기 없는 자리 전부)은 도구가 거부한다. 거부되면 우회하지 말고
+무엇이 왜 막혔는지 그대로 말한다.
 
 **\`tickets/**\`에는 새 파일도 쓸 수 있다 — 사람이 그 턴에 요구사항으로 올려 달라고 했을
 때만.** 그때 만드는 것은 \`kind: request\` 티켓 하나뿐이다(\`work\`·\`feedback\`·\`answer\`는
@@ -844,14 +859,23 @@ export async function ask(
   }
 
   const { sessionId, resumed } = turn ?? (await beginTurn(project.id, q));
-  // 페르소나 디렉터리는 워커 스크립트가 옮길 수 있다(`TICKET_PERSONAS`) — 기본값을 여기 다시 쓰지
-  // 않고 `resolveConfig`가 해석한 값을 그대로 쓴다. 못 읽으면 페르소나 없이 간다(§7: WARN 없다).
-  const personas = (await resolveConfig(project).catch(() => null))?.personas;
-  const prompt = buildPrompt(await snapshotOf(project), q, personas ? await personaBlock(personas) : "");
+  // 페르소나·온톨로지 둘 다 워커 스크립트가 옮길 수 있다(`TICKET_PERSONAS`·`TICKET_ONTOLOGY`) —
+  // 기본값을 여기 다시 쓰지 않고 `resolveConfig`가 해석한 값을 그대로 쓴다(고정 함수를 안 둔다 —
+  // DESIGN.md §5-3). 못 읽으면 페르소나 없이, 온톨로지는 기본 자리(`<root>/ontology`)로 간다
+  // (§7: WARN 없다 — 큐를 못 읽는 사건은 `snapshotOf`가 이미 사유를 담아 말한다).
+  const config = await resolveConfig(project).catch(() => null);
+  const ontology = config?.ontology ?? path.join(project.root, "ontology");
+  const prompt = buildPrompt(
+    await snapshotOf(project),
+    q,
+    ontology,
+    config?.personas ? await personaBlock(config.personas) : "",
+  );
 
   const run = await runClaude(
     bin,
-    project.root, // 큐 루트 하나로 cwd(그 부모)와 경로 스코프가 같이 나온다 — 둘이 갈릴 자리가 없다
+    project.root, // 큐 루트 하나로 cwd(그 부모)와 경로 스코프 다섯이 같이 나온다 — 둘이 갈릴 자리가 없다
+    ontology,
     prompt,
     [...(resumed ? ["--resume", sessionId] : ["--session-id", sessionId])],
     live,
@@ -1048,11 +1072,13 @@ function judge(
   return { ok: true, output: text };
 }
 
-/** `root`는 **큐 루트**다. cwd(그 부모 — 머리 주석)와 경로 스코프가 **한 값에서 나온다** —
- *  둘을 따로 받으면 스코프가 다른 큐를 가리키는 조합이 만들어질 수 있다. */
+/** `root`는 **큐 루트**다. cwd(그 부모 — 머리 주석)와 경로 스코프 다섯이 **한 값에서 나온다** —
+ *  둘을 따로 받으면 스코프가 다른 큐를 가리키는 조합이 만들어질 수 있다. `ontologyDir`은
+ *  따로 받는다 — 재정의한 큐에서는 그 값이 `root` 밖이라 같은 값에서 못 나온다(`toolFlags` 주석). */
 async function runClaude(
   bin: string,
   root: string,
+  ontologyDir: string,
   prompt: string,
   session: string[],
   live: Live,
@@ -1060,7 +1086,7 @@ async function runClaude(
   const args = [
     "-p",
     ...session,
-    ...toolFlags(root),
+    ...toolFlags(root, ontologyDir),
     "--output-format",
     "stream-json",
     "--include-partial-messages",

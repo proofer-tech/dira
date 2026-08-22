@@ -232,11 +232,19 @@ test("workerSessions — `.wip` 전부가 먼저, `.done`은 최근 10개. sessi
 });
 
 test("buildPrompt — 스냅샷이 질문 앞에 오고 경계가 글로 들어간다", () => {
-  const p = buildPrompt("SNAP", "w1이 지금 무슨 일을 하고 있나?");
+  const p = buildPrompt("SNAP", "w1이 지금 무슨 일을 하고 있나?", "/Users/x/proj/.dira/ontology");
   assert.ok(p.indexOf("SNAP") < p.indexOf("w1이 지금"));
   // 종전 `(쓰기 도구는 애초에 막혀 있다)`가 거짓이 된 자리 — 새 경계가 다 글로 서고
   // 막힌 쪽도 이름으로 선다(막힌 것을 두드리다 끝나는 턴이 사람에게는 고장으로 보인다)
-  for (const s of ["personas/**", "protocols/**", "workers/*.sh", "AGENTS.md", "ontology/**", "worktrees/**", "tickets/**"]) {
+  for (const s of [
+    "personas/**",
+    "protocols/**",
+    "workers/*.sh",
+    "AGENTS.md",
+    "/Users/x/proj/.dira/ontology/**",
+    "worktrees/**",
+    "tickets/**",
+  ]) {
     assert.ok(p.includes(s), `프롬프트에 ${s}가 없다 — §7 §쓰기가 닿는 곳이 다섯이 된다`);
   }
   assert.ok(!p.includes("쓰기 도구는 애초에 막혀"));
@@ -244,7 +252,7 @@ test("buildPrompt — 스냅샷이 질문 앞에 오고 경계가 글로 들어�
   // 고치지 않는다*는 이 페르소나가 하는 일(본문에 링크를 단다)과 정면으로 부딪쳤다.
   assert.ok(!p.includes("질의응답 에이전트"));
   assert.ok(!p.includes("고치지도 않는다"));
-  assert.match(p, /거부되면 우회하지 말고 무엇이 왜 막혔는지 그대로\s*\n?\s*말한다/);
+  assert.match(p, /거부되면\s+우회하지\s+말고\s+무엇이\s+왜\s+막혔는지\s+그대로\s+말한다/);
   // **`새 티켓을 만들지 않는다`는 §7 §홈 대화에서 요구사항이 접수된다가 뒤집은 문장이다** —
   // 이제 프롬프트에 없어야 한다. 대신 여섯 가지가 선다(§7 §`kind`를 지는 것이 글이다 · §본문은 두 층이다).
   assert.ok(!p.includes("새 티켓을 만들지 않는다"));
@@ -259,11 +267,20 @@ test("buildPrompt — 스냅샷이 질문 앞에 오고 경계가 글로 들어�
 });
 
 test("buildPrompt — 페르소나 블록이 스냅샷 앞에 선다 (§7 §페르소나가 실린다)", () => {
-  const p = buildPrompt("SNAP", "질문", "PERSONA");
+  const p = buildPrompt("SNAP", "질문", "/Users/x/proj/.dira/ontology", "PERSONA");
   assert.ok(p.startsWith("PERSONA\n\n"));
   assert.ok(p.indexOf("PERSONA") < p.indexOf("SNAP"));
   // 순수 함수의 계약: 인자로 받은 것만 붙인다(fs를 안 탄다 — 읽기는 `personaBlock`이 한다)
   assert.strictEqual(questionOf(p), "질문");
+});
+
+test("buildPrompt — 재정의된 온톨로지는 큐 밖 절대경로 그대로 문장에 선다 (요구 `85114387` §결정 4)", () => {
+  const p = buildPrompt("SNAP", "질문", "/Users/x/vault/ontology");
+  assert.ok(p.includes("/Users/x/vault/ontology/**"));
+  // 나머지 다섯은 여전히 큐 루트 아래 상대 글롭이다 — 옮기는 것은 온톨로지 하나뿐이다
+  for (const s of ["personas/**", "protocols/**", "workers/*.sh", "AGENTS.md", "tickets/**"]) {
+    assert.ok(p.includes(s));
+  }
 });
 
 test("personaBlock — 세 조각이 tick.sh:265와 같은 순서로 · 없으면 빈 문자열", async () => {
@@ -306,8 +323,9 @@ test("personaBlock — 세 조각이 tick.sh:265와 같은 순서로 · 없으�
   assert.strictEqual(await personaBlock(personas, "pm"), "");
 });
 
-test("toolFlags — 네 조각과 경로 스코프 여섯 (89962e56 · 7e35d300 · bd3cd201 · 64b45d3c)", () => {
-  const flags = toolFlags("/Users/x/proj/.dira");
+test("toolFlags — 네 조각과 경로 스코프 여섯 (89962e56 · 7e35d300 · bd3cd201 · 64b45d3c · 85114387)", () => {
+  // 기본값 큐 — 온톨로지도 큐 루트 아래다(`resolveConfig`가 기본값으로 주는 그 값)
+  const flags = toolFlags("/Users/x/proj/.dira", "/Users/x/proj/.dira/ontology");
 
   // ① 네 조각이 다 있다. `--allowed-tools`는 **도구를 빼지 않고**(권한 목록이다) 나머지 셋 중
   // 하나라도 빠지면 세션에 `Bash`가 살아난다 — 그게 `89962e56` 그 사건이다. 지금은 넷째가
@@ -353,14 +371,34 @@ test("toolFlags — 네 조각과 경로 스코프 여섯 (89962e56 · 7e35d300 
   assert.ok(!flags.some((f) => f.includes("Bash")));
 });
 
+test("toolFlags — 재정의된 온톨로지는 큐 밖 절대경로가 스코프에 서고 나머지 다섯은 그대로다 (요구 `85114387` §결정 4)", () => {
+  const flags = toolFlags("/Users/x/proj/.dira", "/Users/x/vault/ontology");
+  const scope = flags.slice(flags.indexOf("--allowed-tools") + 1);
+  // 옮긴 자리 — 큐 밖 절대경로 그대로
+  for (const tool of ["Write", "Edit"]) {
+    assert.ok(scope.includes(`${tool}(///Users/x/vault/ontology/**)`));
+  }
+  // 옛 자리(큐 루트 아래 `ontology/**`)는 더 이상 없다 — 재정의했으면 옛 자리는 못 쓴다
+  assert.ok(!scope.some((s) => s.includes("/Users/x/proj/.dira/ontology")));
+  // 나머지 다섯은 여전히 큐 루트 아래다 — 옮기는 것은 온톨로지 하나뿐이다(§결정 4)
+  for (const p of ["personas/**", "protocols/**", "workers/*.sh", "AGENTS.md", "tickets/**"]) {
+    for (const tool of ["Write", "Edit"]) {
+      assert.ok(scope.includes(`${tool}(///Users/x/proj/.dira/${p})`));
+    }
+  }
+});
+
 test("questionOf — 스냅샷·지시문을 떼고 사람이 쓴 질문만 남는다 (§비주얼 §24 말풍선)", () => {
   const q = "w2가 지금 무슨 일을 하고 있나";
-  assert.strictEqual(questionOf(buildPrompt(renderSnapshot0(), q)), q);
+  assert.strictEqual(questionOf(buildPrompt(renderSnapshot0(), q, "/tmp/x/.dira/ontology")), q);
   // 표식이 없는 글(우리가 안 만든 턴 · 사람이 터미널에서 이어 쓴 질문)은 **전문 그대로**다.
   // 여기서 잘라내면 화면이 그 턴을 통째로 삼킨다.
   assert.strictEqual(questionOf("그냥 물어본 말"), "그냥 물어본 말");
   // 질문 안에 같은 표식이 또 있어도 **첫 번째(우리 것)**에서 갈린다 — 뒤에서 자르면 사람 글이 잘린다
-  assert.strictEqual(questionOf(buildPrompt("SNAP", "## 질문\n\n중첩된 글")), "## 질문\n\n중첩된 글");
+  assert.strictEqual(
+    questionOf(buildPrompt("SNAP", "## 질문\n\n중첩된 글", "/Users/x/proj/.dira/ontology")),
+    "## 질문\n\n중첩된 글",
+  );
 });
 
 // 계약이 갈렸다(§7 §스레드가 트랜스크립트 전부를 그린다 — 요구 `10714c38`) — 종전 이름
@@ -379,7 +417,7 @@ test("toTurns — 도구·생각·서브 줄이 `line`으로 같이 나온다, �
         type: "user",
         uuid: "u1",
         timestamp: "2026-08-01T05:00:00.000Z",
-        message: { role: "user", content: buildPrompt("SNAP\n## 티켓 4건", "w2는 뭘 하나") },
+        message: { role: "user", content: buildPrompt("SNAP\n## 티켓 4건", "w2는 뭘 하나", "/tmp/x/.dira/ontology") },
       }),
       // ② 답 — 한 레코드가 생각 · 도구 · 텍스트를 같이 담는다. 남아야 하는 것은 텍스트뿐이다
       rec({
@@ -677,6 +715,48 @@ test("첫 질문이 실패한 대화 — 줄과 제목은 남고 session id만 �
   }
 });
 
+test("ask — TICKET_ONTOLOGY 재정의 큐에서 --allowed-tools가 옮긴 자리를 쓴다 (요구 `85114387` §결정 4)", async () => {
+  const root = path.join(mkdtempSync(path.join(tmpdir(), "ha-ont-")), ".dira");
+  tmps.push(path.dirname(root));
+  const workers = path.join(root, "workers");
+  mkdirSync(workers, { recursive: true });
+  const vault = mkdtempSync(path.join(tmpdir(), "ha-vault-")); // 이 프로젝트의 git 작업 트리 밖
+  tmps.push(vault);
+  writeFileSync(
+    path.join(workers, "w1.sh"),
+    `#!/bin/bash\nTICKET_ONTOLOGY="${vault}"\nTICKET_CWD=${path.dirname(root)}\n. /nowhere/tick.sh\n`,
+  );
+
+  const bin = mkdtempSync(path.join(tmpdir(), "ha-bin-"));
+  tmps.push(bin);
+  const log = path.join(LOCAL, "ontology-argv.log");
+  writeFileSync(
+    path.join(bin, "claude"),
+    `#!/bin/sh\nprintf '%s\\n' "$*" >> "${log}"\necho '{"type":"result","is_error":false,"result":"답"}'\n`,
+    { mode: 0o755 },
+  );
+
+  const project = { id: "ontology-test", name: "큐", root };
+  const path0 = process.env.PATH;
+  process.env.PATH = `${bin}:${path0 ?? ""}`;
+  try {
+    const r = await ask(project, "질문");
+    assert.strictEqual(r.ok, true, r.output);
+    const argv = readFileSync(log, "utf8").trim();
+    // 옮긴 자리 — 큐 밖 절대경로가 스코프에 선다
+    assert.ok(argv.includes(`Edit(//${vault}/**)`));
+    assert.ok(argv.includes(`Write(//${vault}/**)`));
+    // 옛 자리(큐 루트 아래 `ontology/`)는 더 이상 스코프에 없다
+    assert.ok(!argv.includes(`${root}/ontology`));
+    // 나머지 다섯은 여전히 큐 루트 아래다 — 옮기는 것은 온톨로지 하나뿐이다(§결정 4)
+    assert.ok(argv.includes(`Edit(//${root}/personas/**)`));
+    // cwd(스냅샷 읽기 근거)는 안 갈린다 — 그대로 큐의 부모다
+    assert.match(argv, new RegExp(`작업 디렉터리\\(= 이 세션의 cwd\\): ${path.dirname(root).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
+  } finally {
+    process.env.PATH = path0;
+  }
+});
+
 test("toTurns — 중지가 남기는 가짜 줄 셋은 대화가 아니다 (§7 §도는 답을 멈춘다 실측 ⑷)", async () => {
   const dir = mkdtempSync(path.join(tmpdir(), "ha-ghost-"));
   tmps.push(dir);
@@ -698,12 +778,12 @@ test("toTurns — 중지가 남기는 가짜 줄 셋은 대화가 아니다 (§7
   writeFileSync(
     file,
     [
-      user("u1", buildPrompt("SNAP", "40문장 써라")),
+      user("u1", buildPrompt("SNAP", "40문장 써라", "/tmp/x/.dira/ontology")),
       asst("a1", "1. 1은 곱셈의 항등원이라"),
       user("u2", "[Request interrupted by user]"), // 중지가 남긴 것
       user("u3", "Continue from where you left off."), // `--resume`이 넣은 것
       asst("a2", "No response requested."), // 그 답
-      user("u4", buildPrompt("SNAP", "어디까지 썼나")),
+      user("u4", buildPrompt("SNAP", "어디까지 썼나", "/tmp/x/.dira/ontology")),
       "",
     ].join("\n"),
   );
@@ -723,7 +803,7 @@ test("toTurns — 중지가 남기는 가짜 줄 셋은 대화가 아니다 (§7
   // (§비주얼 §24는 띠를 답의 산문 블록에 붙이고, 여기는 그 블록 자체가 없다)
   writeFileSync(
     file,
-    [user("u6", buildPrompt("SNAP", "묻자마자 멈춤")), user("u7", "[Request interrupted by user]"), ""].join("\n"),
+    [user("u6", buildPrompt("SNAP", "묻자마자 멈춤", "/tmp/x/.dira/ontology")), user("u7", "[Request interrupted by user]"), ""].join("\n"),
   );
   assert.deepStrictEqual(
     toTurns((await tailEvents(file, 0)).events).map((t) => [t.text, t.stopped]),
@@ -1230,6 +1310,8 @@ test("워커 세션 — 사라진 `current`는 대화 0건과 같고, 고르면 
   assert.ok((argv.at(-1) ?? "").includes(`Edit(//${root}/personas/**)`));
   // 아카이빙 산출물 둘도 **큐 루트 아래**다 — repo 기준 항이 0이다(개정 `22a803de`)
   assert.ok((argv.at(-1) ?? "").includes(`Write(//${root}/AGENTS.md)`));
+  // 재정의를 안 한 큐 — 온톨로지도 여전히 큐 루트 아래다(회귀 0, 요구 `85114387` §결정 4)
+  assert.ok((argv.at(-1) ?? "").includes(`Edit(//${root}/ontology/**)`));
   assert.ok(!(argv.at(-1) ?? "").includes(`//${path.dirname(root)}/DIRA.md`));
   // `tickets/**`는 이제 `Write`도 받는다(요구 `64b45d3c` — §7 §홈 대화에서 요구사항이 접수된다)
   assert.ok((argv.at(-1) ?? "").includes(`Edit(//${root}/tickets/**)`));
