@@ -350,6 +350,7 @@ TICKET_ENGINE=(codex exec --json "{prompt}")
 | `TICKET_NAME` | 워커 파일명 | 로그 접두 + 티켓 `owner` 표기 |
 | `TICKET_CWD` | 티켓 루트의 부모 | 디스패치된 세션의 작업 디렉터리 |
 | `TICKET_PERSONAS` | `<루트>/personas` | 페르소나 프로필 디렉터리 |
+| `TICKET_ONTOLOGY` | `<루트>/ontology` | 온톨로지 디렉터리. 큐 밖 절대경로로 재정의할 수 있다 |
 | `TICKET_PROTOCOLS` | `<루트>/protocols` | 협업 프로토콜 디렉터리. 그 안의 `AGENTS.md`가 전원 프롬프트에 실린다 |
 | `TICKET_CONTEXT` | (없음) | `("<경로>\|<설명>" ...)` 배열. 프롬프트 꼬리에 참조 자료로 붙는다. 없는 경로는 건너뛰고 `WARN`만. `$TICKET_CWD`를 쓰면 아래 치환자 표 |
 | `TICKET_ENGINE` | `(claude -p --session-id "{sid}" --dangerously-skip-permissions --input-format stream-json --output-format stream-json --verbose)` | 실행 엔진 argv. `{prompt}`-`{sid}` 치환 - 아래 치환자 표. 기본 엔진은 스트리밍 입력이라 최초 프롬프트를 stdin으로 넣는다(그래서 기본값에 `{prompt}`가 없다) |

@@ -38,9 +38,14 @@ def write(path, body):
     return path
 
 
-def build(root, force=False):
+def build(root, force=False, ontology=None):
     args = ["python3", GRAPH, "build", root] + (["--force"] if force else [])
-    r = subprocess.run(args, capture_output=True, text=True, timeout=60)
+    env = dict(os.environ)
+    if ontology is not None:
+        env["TICKET_ONTOLOGY"] = ontology
+    else:
+        env.pop("TICKET_ONTOLOGY", None)
+    r = subprocess.run(args, capture_output=True, text=True, env=env, timeout=60)
     assert r.returncode == 0, "build rc={}\n{}{}".format(r.returncode, r.stdout, r.stderr)
     return r.stdout
 
@@ -266,10 +271,30 @@ try:
         "회귀: 질의를 그대로 인용한 문서가 더는 정답 문서를 안 이긴다 - 고쳐졌으면 이 assert를 " \
         "고치고 4a14fbea kind:feedback 판정도 갱신할 것: {}".format(lscored)
 
+    # ---- 12) TICKET_ONTOLOGY 재정의 - graph.py도 <온톨로지>/objects/<타입>/을 그 자리에서 본다
+    # (85114387). 큐 안 ontology/objects는 비워둬 재정의가 실제로 먹혔는지 가른다 ----
+    oroot = os.path.join(tmp, "oroot")
+    extont = os.path.join(tmp, "밖온톨로지")
+    write(os.path.join(oroot, "tickets", "cccccccc.md"),
+          "---\nticket: cccccccc\ntitle: 재정의\nkind: work\n---\n\n## Goal\n무관\n")
+    write(os.path.join(extont, "objects", "기능", "밖개념.md"),
+          "---\ntype: 기능\nname: 밖개념\n---\n\n# 밖개념\n큐 밖 온톨로지 객체\n")
+    build(oroot, force=True, ontology=extont)
+    og = load(oroot)
+    assert any(n["id"] == "밖개념" and n["type"] == "온톨로지 객체" for n in og["nodes"]), \
+        "TICKET_ONTOLOGY 자리의 objects/가 인덱스에 안 들었다: {}".format(og["nodes"])
+
+    # 재정의 없이 같은 큐를 다시 빌드하면 큐 안 ontology/objects(없음)로 돌아간다 - 밖개념은 빠진다
+    build(oroot, force=True)
+    og2 = load(oroot)
+    assert not any(n["id"] == "밖개념" for n in og2["nodes"]), \
+        "TICKET_ONTOLOGY 없이도 밖 온톨로지 객체가 남았다: {}".format(og2["nodes"])
+
     print("PASS 노드6종-간선(deps-req-archives-awaiting-인용-위키링크-절참조-근거-구현-links)-"
           "중복제목#N-검증①(표준라이브러리)-검증⑦(큐 무수정)-증분(무변경 0-1장 수정 1-삭제 반영)-"
           "검증⑧(graph.json 없어도 tick.sh 무WARN)-시드매칭(exact우선-무관어배제-빈결과)-"
           "예산절단(안넘김-먼노드부터자름)-query/path/explain CLI-"
-          "3332cdb9 회귀(Q3 프로토콜 절 발췌 고침-Q1 채점식 근본한계 문서화)")
+          "3332cdb9 회귀(Q3 프로토콜 절 발췌 고침-Q1 채점식 근본한계 문서화)-"
+          "TICKET_ONTOLOGY 재정의(objects/ 자리 이동-미설정시 기본값 복귀)")
 finally:
     shutil.rmtree(tmp, ignore_errors=True)

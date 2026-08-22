@@ -31,6 +31,7 @@ import unicodedata
 IN_PROGRESS = os.environ.get("TICKET_INPROGRESS") or ".wip"
 DONE = os.environ.get("TICKET_DONE") or ".done"
 CLOSED_SUFFIXES = (IN_PROGRESS, DONE)
+ONTOLOGY_DIR = os.environ.get("TICKET_ONTOLOGY") or None
 
 HASH_RE = r"[0-9a-f]{8}"
 CITE_RE = re.compile(r"`(" + HASH_RE + r")`")
@@ -316,7 +317,7 @@ def source_files(troot):
     """(경로, 종류, 부가정보) - 종류는 extract_* 디스패치 키. 없는 디렉터리는 건너뛴다
     (못 5 - 없으면 그냥 없다, 온톨로지 없는 프로젝트와 같은 선)."""
     out = [(p, "ticket", None) for p in list_md(os.path.join(troot, "tickets"))]
-    obj_root = os.path.join(troot, "ontology", "objects")
+    obj_root = os.path.join(ONTOLOGY_DIR or os.path.join(troot, "ontology"), "objects")
     if os.path.isdir(obj_root):
         for typ in sorted(os.listdir(obj_root)):
             out += [(p, "ontology", None) for p in list_md(os.path.join(obj_root, typ))]

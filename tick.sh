@@ -99,7 +99,9 @@ TICKET_ENGINE=(${TICKET_ENGINE[@]+"${TICKET_ENGINE[@]}"})
   --dangerously-skip-permissions \
   --input-format stream-json --output-format stream-json --verbose)
 # 상태 접미사는 tickets.py가 환경변수로 읽는다(미설정이면 .wip/.done).
-export TICKET_INPROGRESS="${TICKET_INPROGRESS:-}" TICKET_DONE="${TICKET_DONE:-}"
+# TICKET_ONTOLOGY는 graph.py가 같은 형태로 읽는다(미설정이면 <큐>/ontology, 아래 ONTDIR과 동일).
+export TICKET_INPROGRESS="${TICKET_INPROGRESS:-}" TICKET_DONE="${TICKET_DONE:-}" \
+  TICKET_ONTOLOGY="${TICKET_ONTOLOGY:-}"
 # 이 시점의 값이 "기본 엔진"이다(워커 대입 -> 없으면 위 기본값). `personas/<이름>/engine`이
 # 있으면 티켓 선정 루프 안에서 후보의 persona가 확정된 뒤 이 배열을 덮어쓴다(§제약 1 §결정
 # 기록 §열한 번째) - 그래서 ENGINE_NAME 계산·쿨다운·claude 인증 게이트도 전부 그 뒤로
@@ -689,7 +691,7 @@ fi
 # 절 수와 무관하게 크기가 고정된다. _ontology/SCHEMA.md가 타입 지도(객체·관계·액션)라 그게
 # 진입점이고, 나머지 개념에 닿는 길은 세션의 grep이다. 없거나 비면 안 붙고 WARN도 없다(없는 것이
 # 정상이다).
-ONTDIR="$TICKET_ROOT/ontology"
+ONTDIR="${TICKET_ONTOLOGY:-$TICKET_ROOT/ontology}"
 if find "$ONTDIR" -type f -name '*.md' 2>/dev/null | grep -q .; then
   PROMPT="아래는 이 큐의 온톨로지가 사는 곳입니다.
 
