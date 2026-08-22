@@ -16,8 +16,9 @@ import {
   useTransition,
   type ReactNode,
 } from "react";
-import Link from "next/link";
+import Link from "@/components/link";
 import { useRouter } from "next/navigation";
+import { useTrackedRouter } from "@/lib/route-pending";
 import {
   ArrowDown,
   Check,
@@ -1245,7 +1246,7 @@ export function DeleteTicketButton({
    *  불리언이 아니라 문장인 이유: 툴팁이 **왜** 못 지우는지를 말해야 하는데 두 사유가 다르다. */
   locked: string | null;
 }) {
-  const router = useRouter();
+  const router = useTrackedRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
 

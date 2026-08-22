@@ -6,8 +6,9 @@
  *  URL이 담는다는 규약도 같다). 온톨로지에는 인라인 프롬프트 배지·`AGENTS.md` 특수 케이스가
  *  없다 — 세션 프롬프트에는 목차만 실리고(§5-2) 이 화면이 여는 것은 그 목차가 가리키는 본문이다. */
 import { useEffect, useState, useTransition } from "react";
-import Link from "next/link";
+import Link from "@/components/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useTrackedRouter } from "@/lib/route-pending";
 import { FilePlus2, PencilLine, Trash2, TriangleAlert } from "lucide-react";
 import {
   createOntologyAction,
@@ -82,7 +83,7 @@ export function OntologyImport({
   projectId: string;
   tickets: { stem: string; hash: string; status: string; folder: string }[];
 }) {
-  const router = useRouter();
+  const router = useTrackedRouter();
   const [folder, setFolder] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -156,7 +157,7 @@ export function NewOntologyFileButton({
   projectId: string;
   variant?: "default" | "outline";
 }) {
-  const router = useRouter();
+  const router = useTrackedRouter();
   const sidebarOff = useSearchParams().get("sidebar") === "off";
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
@@ -232,7 +233,7 @@ export function NewOntologyFileButton({
  *  있으면 클라이언트 상태가 필요 없다). 발행되면 그 티켓 상세로 이동한다 — `NewOntologyFileButton`이
  *  새 파일 만들고 그 파일로 이동하는 것과 같은 결이다. */
 export function FixSchemaViolationsButton({ projectId }: { projectId: string }) {
-  const router = useRouter();
+  const router = useTrackedRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -345,7 +346,7 @@ export function OntologyEditor({
 // ── 이름변경 ────────────────────────────────────────────────────────────────
 
 function RenameOntologyButton({ projectId, rel }: { projectId: string; rel: string }) {
-  const router = useRouter();
+  const router = useTrackedRouter();
   const sidebarOff = useSearchParams().get("sidebar") === "off";
   const [open, setOpen] = useState(false);
   const [to, setTo] = useState(rel);

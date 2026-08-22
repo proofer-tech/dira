@@ -7,7 +7,7 @@
  *  여기서 세지 않는다 — 셸이 서버에서 세서 props로 넘긴다. 내비는 활성 링크 판정에 현재 경로가
  *  필요해서 여기 있다(서버 레이아웃은 pathname을 모른다). */
 import { useEffect, useState, useTransition } from "react";
-import Link from "next/link";
+import Link from "@/components/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCommandState } from "cmdk";
 import { Check, ChevronDown, ChevronsUpDown, ChevronUp, List, Settings2 } from "lucide-react";
@@ -35,6 +35,7 @@ import {
 } from "@/app/actions";
 import { formatCombo } from "@/lib/keymap";
 import { isTyping, useHotkey, useKeymap } from "@/components/keymap-provider";
+import { useDelayedFlag, useTrackedRouter } from "@/lib/route-pending";
 
 /** 헤더 좌측 브랜드 마크 (§비주얼 §14 `헤더 표시`). **두 셸이 같이 쓴다** — 프로젝트 스코프 셸과
  *  루트 셸에서 값이 전부 같고 다른 건 `href` 하나다(§4: 프로젝트는 `/p/<project>`, 루트는 `/`).
@@ -317,6 +318,10 @@ export function ProjectSwitcher({
   currentId: string;
 }) {
   const router = useRouter();
+  // §비주얼 §65 ④ 전용 — `/`(프로젝트 관리 · 등록 해제 뒤)로 나가는 길은 셸이 통째로 갈려
+  // `<RoutePending/>`이 못 산다(§0-22 결정 1). 위 `router`는 그 두 자리에 그대로 남고, 셸 표식이
+  // 붙는 것은 프로젝트를 실제로 바꾸는 이동(`trackedRouter`) 하나뿐이다.
+  const trackedRouter = useTrackedRouter();
   const t = useT();
   const locale = useLocale();
   const pathname = usePathname(); // searchParams가 안 실린다 = 필터·검색을 공짜로 버린다
@@ -331,6 +336,9 @@ export function ProjectSwitcher({
     setShown(currentId);
     setGoing(null);
   }
+  // `프로젝트 관리` 항목 자신의 상태(§65 ④) — 셸 표식과 같은 300ms 지연, 같은 상수.
+  const [managingOpening, setManagingOpening] = useState(false);
+  const showManagingOpening = useDelayedFlag(managingOpening);
   // 레일의 `설정` — 팔레트를 먼저 닫고(§4-1) 그 뒤에 이 다이얼로그를 띄운다. `key={id}`가
   // 대상이 바뀔 때만 상태를 새로 시작시키고(해석 결과 · 이름 입력 · 확인 화면), 같은
   // 대상을 다시 여닫을 때는 인스턴스를 유지해 닫힘 애니메이션이 산다.
@@ -408,7 +416,7 @@ export function ProjectSwitcher({
                       close();
                       if (p.id !== currentId) {
                         setGoing(p);
-                        router.push(projectPath(pathname, p.id));
+                        trackedRouter.push(projectPath(pathname, p.id));
                       }
                     }}
                   >
@@ -445,10 +453,21 @@ export function ProjectSwitcher({
               })}
               <CommandSeparator className="my-1" />
               {/* 찾는 큐가 없으면 다음 행동은 등록이다 — 검색으로 걸러지지 않는다 */}
-              <CommandItem forceMount value={t("shell.nav.projects")} onSelect={() => router.push("/")}>
+              <CommandItem
+                forceMount
+                value={t("shell.nav.projects")}
+                onSelect={() => {
+                  setManagingOpening(true);
+                  router.push("/");
+                }}
+              >
                 <List aria-hidden className="size-4" />
                 {t("shell.nav.projects")}
-                <CommandShortcut>{formatCombo(bindings["project.search"])}</CommandShortcut>
+                <CommandShortcut className={showManagingOpening ? "tracking-normal" : undefined}>
+                  {showManagingOpening
+                    ? t("shell.switcher.opening")
+                    : formatCombo(bindings["project.search"])}
+                </CommandShortcut>
               </CommandItem>
             </CommandList>
           </Command>
@@ -490,7 +509,8 @@ const NAV = [
 export function ProjectNav({ id }: { id: string }) {
   const t = useT();
   const pathname = usePathname();
-  const router = useRouter();
+  // 셸 안에서 끝나는 이동뿐이다(핫키 - `Esc`) — 셸 표식이 그대로 붙는다(§0-22 결정 2).
+  const router = useTrackedRouter();
   const base = `/p/${id}`;
   const rest = pathname.startsWith(base) ? pathname.slice(base.length) : "";
 

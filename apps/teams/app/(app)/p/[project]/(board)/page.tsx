@@ -28,7 +28,7 @@
  *  스켈레톤은 첫 로드 한 번의 편의고 큐를 안 따라가는 보드는 이 제품이 아니다. 첫 도착은
  *  fs 한 번 읽기라 짧다(실측 +0.03~0.39s) — 상세 화면(§2)이 스켈레톤 없이 사는 것과 같은 이유다. */
 import { stat } from "node:fs/promises";
-import Link from "next/link";
+import Link from "@/components/link";
 import { notFound } from "next/navigation";
 import { Archive, ArrowDown, ArrowUp, ChevronsUpDown, TriangleAlert, X } from "lucide-react";
 import {

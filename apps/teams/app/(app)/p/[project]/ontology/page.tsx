@@ -8,7 +8,7 @@
  *  코어 프로토콜(`readCore`)·`AGENTS.md` 인라인 배지 같은 프로토콜 전용 개념은 없다 — 온톨로지가
  *  세션 프롬프트에 싣는 것은 위치 + 검색 방법뿐인 상수 블록이고(§5-2), 본문은 항상 세션이 필요할
  *  때 직접 읽는다. */
-import Link from "next/link";
+import Link from "@/components/link";
 import { notFound } from "next/navigation";
 import { ChevronRight, FileText, PanelLeft, TriangleAlert } from "lucide-react";
 import {

@@ -4,7 +4,7 @@
  *  여러 요청을 처리하므로 전역에 담으면 엉뚱한 큐에 쓰는 사고가 난다. */
 import { homedir } from "node:os";
 import { Suspense } from "react";
-import Link from "next/link";
+import Link from "@/components/link";
 import { notFound } from "next/navigation";
 import {
   Bell,

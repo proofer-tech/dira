@@ -44,7 +44,7 @@
  *  튀어야** 해서다 — 자동 스크롤이 바닥을 물고 있는 화면에서 24px 점프가 가장 나쁘다(§13). */
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import Link from "next/link";
+import Link from "@/components/link";
 // `Check`은 **패널에서 빠졌다**(§비주얼 §34 ③). import는 남는다 — 같은 파일의 `복사` 버튼이
 // 눌린 뒤 1.2초 동안 그 글리프를 든다(§24 §띠). §34가 *lucide `Check`이 빠진다*고 적은 것은
 // 좌측 패널 얘기다.

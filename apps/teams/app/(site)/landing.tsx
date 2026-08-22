@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import Link from "next/link";
+import Link from "@/components/link";
 import Typed from "typed.js";
 import { Pause, Play, TriangleAlert } from "lucide-react";
 import { registerProject, type CreateState, type RegisterState } from "@/app/actions";

@@ -10,8 +10,8 @@
  *  한 파일에 있는 이유: 해석 결과 표를 생성 직후와 행 액션의 설정 다이얼로그가 **같은 표**로
  *  쓴다(DESIGN.md §7). 파일을 쪼개면 두 자리가 갈린다. fs 접근은 전부 서버 액션 뒤에 있다. */
 import { Fragment, useCallback, useEffect, useState, useTransition } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
+import Link from "@/components/link";
+import { useTrackedRouter } from "@/lib/route-pending";
 import { ChevronDown, ChevronUp, Settings2, TriangleAlert, Unlink } from "lucide-react";
 import {
   createProject,
@@ -815,7 +815,7 @@ function OntologyMigration({
   projectId: string;
   ticket: { stem: string; hash: string; status: string } | null;
 }) {
-  const router = useRouter();
+  const router = useTrackedRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

@@ -4,7 +4,7 @@
  *  락은 프로젝트의 **워커 파일 목록에서 시작해** 찾는다 — 락 디렉터리는 머신 전역이라 모든
  *  프로젝트의 락이 섞여 있고 락 이름에서 프로젝트를 역추적할 수 없다(§워커 상태 판정). */
 import { Fragment } from "react";
-import Link from "next/link";
+import Link from "@/components/link";
 import { notFound } from "next/navigation";
 import { CloudOff, Hourglass, TriangleAlert } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";

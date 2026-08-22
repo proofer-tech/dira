@@ -9,7 +9,7 @@
  *  그릴 것이 0이다. 사이드바의 그 줄만 목적지가 보드다(§결정 6). 어떤 티켓도 안 쓰는 값으로
  *  들어오면 404가 아니라 페르소나 화면과 같은 `Alert`("이 경로는 열 수 없습니다") — 에픽은
  *  티켓이 만들고 사라질 수 있다. */
-import Link from "next/link";
+import Link from "@/components/link";
 import { notFound } from "next/navigation";
 import { TriangleAlert } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";

@@ -5,7 +5,7 @@
  *  기준은 `resolveConfig(project).protocols` 하나뿐이고, 경로 방어의 접두도 그 디렉터리다.
  *
  *  선택 파일은 URL `?file=`이 담는다 — 새로고침·공유가 공짜고 클라이언트 상태가 필요 없다. */
-import Link from "next/link";
+import Link from "@/components/link";
 import { notFound } from "next/navigation";
 import { FileText, Folder, Lock, PanelLeft, TriangleAlert } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";

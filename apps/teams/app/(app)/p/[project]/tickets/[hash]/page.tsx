@@ -5,7 +5,7 @@
  *  실제 파일을 받고, 못 찾으면 404다(§경로 방어). */
 import { stat } from "node:fs/promises";
 import path from "node:path";
-import Link from "next/link";
+import Link from "@/components/link";
 import { notFound } from "next/navigation";
 import { Lock, TriangleAlert } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";

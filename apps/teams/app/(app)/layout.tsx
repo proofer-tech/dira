@@ -6,6 +6,7 @@ import { LanguageProvider } from "@/components/language-provider";
 import { FeedbackDialog } from "@/components/feedback-dialog";
 import { DesktopFindBar } from "@/components/find-bar";
 import { UpdateToast } from "@/components/update-toast";
+import { RoutePending } from "@/components/route-pending";
 import { ScreenView } from "@/components/project-switcher";
 import { readKeymap, readLanguage } from "@/lib/projects";
 import { t } from "@/lib/i18n";
@@ -75,6 +76,9 @@ export default async function RootLayout({
                   (§0-16). `<FeedbackDialog>`-`<DesktopFindBar>`와 같은 자리 - 화면 이동 없이
                   지금 화면 위에 뜬다 */}
               <UpdateToast />
+              {/* §0-22 - §비주얼 §65. `{children}` 뒤 - 헤더의 `sticky z-50`과 DOM 순서로
+                  갈리는 같은 `z-50`이다(§65 ②) */}
+              <RoutePending />
             </KeymapProvider>
           </LanguageProvider>
         </TooltipProvider>

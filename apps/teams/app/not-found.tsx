@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import Link from "@/components/link";
 
 /** 루트 레이아웃이 둘이라(`(app)` · `(site)`, §한 코드베이스 §부딪히는 것 ①) 이 파일이
  *  **셋째 자리**다 — 어느 그룹의 라우트에도 안 걸리는 진짜 미확인 URL(예: `/asdf`)만 여기로

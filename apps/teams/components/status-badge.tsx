@@ -11,7 +11,7 @@
  *  쓰이므로 `useLocale()`로 고정하지 않는다(developer memory "i18n 서버 문자열은 로케일이
  *  없다" — 한쪽은 `readLanguage()`, 한쪽은 `useLocale()`로 호출부가 채운다). 아직 이 프롭을 안
  *  넘기는 자리(다음 묶음 몫인 화면들)는 `ko` 기본값으로 떨어져 종전과 같은 화면이 선다. */
-import Link from "next/link";
+import Link from "@/components/link";
 import {
   Check,
   Circle,

@@ -4,7 +4,7 @@
  *  **세그먼트가 아니라 여기 있는 이유**: `notFound()`를 부른 게 `p/[project]/layout.tsx`이고,
  *  레이아웃이 던진 것은 자기 세그먼트의 not-found로 못 잡는다(경계가 위에 있어야 한다).
  *  `app/p/[project]/not-found.tsx`를 두면 Next 기본 404가 뜬다 — 실제로 확인했다. */
-import Link from "next/link";
+import Link from "@/components/link";
 
 export default function NotFound() {
   return (

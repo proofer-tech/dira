@@ -10,6 +10,7 @@
  *  수백 줄이고, 전환기가 이미 같은 컴포넌트를 쓴다). */
 import { Children, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useTrackedRouter } from "@/lib/route-pending";
 import { Check, ChevronsUpDown, ListFilter, Search, TriangleAlert } from "lucide-react";
 import { setTicketEpic } from "@/app/(app)/p/[project]/tickets/[hash]/actions";
 import { useHotkey } from "@/components/keymap-provider";
@@ -33,7 +34,7 @@ import type { RelationEdge } from "@/lib/queue";
 /** 필터·검색은 히스토리를 남기지 않는다(`replace`) — 글자마다 한 칸씩 쌓이면 뒤로가기로
  *  보드에서 나갈 수 없다. 정렬·필터 해제는 `<Link>`(push)라 뒤로가기가 정상 동작한다. */
 function useUrlNav() {
-  const router = useRouter();
+  const router = useTrackedRouter();
   const pathname = usePathname();
   // 문자열로 받는다 — 객체 신원으로 비교하면 폴링 리렌더마다 effect가 다시 돈다(디바운스가 안 끝난다).
   const qs = useSearchParams().toString();

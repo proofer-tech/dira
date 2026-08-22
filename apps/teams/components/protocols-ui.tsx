@@ -8,6 +8,7 @@
  *  저장 후에 알려주면 늦다. */
 import { useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useTrackedRouter } from "@/lib/route-pending";
 import { FilePlus2, PencilLine, Trash2, TriangleAlert } from "lucide-react";
 import {
   createProtocolAction,
@@ -78,7 +79,7 @@ export function NewFileButton({
   projectId: string;
   variant?: "default" | "outline";
 }) {
-  const router = useRouter();
+  const router = useTrackedRouter();
   const t = useT();
   const locale = useLocale();
   const sidebarOff = useSearchParams().get("sidebar") === "off";
@@ -258,7 +259,7 @@ export function ProtocolEditor({
 // ── 이름변경 ────────────────────────────────────────────────────────────────
 
 function RenameButton({ projectId, rel }: { projectId: string; rel: string }) {
-  const router = useRouter();
+  const router = useTrackedRouter();
   const t = useT();
   const locale = useLocale();
   const sidebarOff = useSearchParams().get("sidebar") === "off";

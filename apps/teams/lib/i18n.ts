@@ -259,6 +259,10 @@ export const ko: Record<string, string> = {
   "shell.switcher.emptyQueriedGlue": "와",
   "shell.switcher.emptySuffix": "일치하는 프로젝트 0건",
   "shell.switcher.openLabel": "열림",
+  // §0-22 - §비주얼 §65 ④ — 전환기 `프로젝트 관리` 항목이 `/`로 나가는 동안 든다(300ms 지연).
+  "shell.switcher.opening": "여는 중",
+  // §0-22 - §비주얼 §65 ⑤ — 셸 표식(`<RoutePending/>`)의 `role="status"` 안 `sr-only` 낱말.
+  "shell.pending.srLabel": "이동 중",
   // 업데이트 토스트 그릇의 낭독 이름(§비주얼 §55 (10)) — `<Toaster containerAriaLabel>`.
   "shell.update.ariaLabel": "알림",
 
@@ -1109,6 +1113,8 @@ export const en: Record<string, string> = {
   "shell.switcher.emptyQueriedGlue": ":",
   "shell.switcher.emptySuffix": "No matching projects",
   "shell.switcher.openLabel": "open",
+  "shell.switcher.opening": "Opening",
+  "shell.pending.srLabel": "Loading",
   "shell.update.ariaLabel": "Notifications",
 
   // 알림 종(§0-10 문구 표 · §비주얼 §28). 개수 제목 넷은 전부 `bell.due.titlePrefix`가 연 수를

@@ -6,7 +6,7 @@
  *
  *  서버 컴포넌트다 — 목록도 제목도 페이지가 이미 읽은 값을 그대로 받는다(새 클라이언트 상태 ·
  *  새 폴링 · 새 스켈레톤 0개, §52 §로딩). */
-import Link from "next/link";
+import Link from "@/components/link";
 import { NotebookText, PanelLeft } from "lucide-react";
 import {
   Sidebar,

@@ -23,7 +23,7 @@
  *  없는 쪽은 상자 자리에 `<EmptyState>`, 폼 자리에 비활성 + 사유 한 줄이다.
  *  **진입점을 지우지 않는다** — 조용히 사라지면 사람은 고장으로 읽는다. */
 import { useEffect, useId, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useTrackedRouter } from "@/lib/route-pending";
 import {
   ArrowDown,
   ChevronRight,
@@ -883,7 +883,7 @@ function ProgressForm({
   /** 이름 -> href 벌(§비주얼 §10 §위키링크) — 답변 모드의 `AnswerForm`에 그대로 흘려보낸다 */
   vault?: Vault;
 }) {
-  const router = useRouter();
+  const router = useTrackedRouter();
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
