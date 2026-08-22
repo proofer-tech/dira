@@ -748,6 +748,11 @@ export type ThreadItem = {
   /** 결정 12 (5) — `opts.foldQuotes`로 뗀 인용. 뗄 것이 있을 때만 값이 있다(§`threadOf`).
    *  답변에는 없다. */
   quotes?: QuoteSection[];
+  /** 결정 15 (1) — `quotes`가 있을 때만 값이 있다. 문항이 한 벌뿐(`optionsOf`가 준 문항 수
+   *  `<= 1`)이면 `true`(인용을 펼친 채로 낸다) — 세션이 결정 11 형식으로 물음을 남겨 문항이
+   *  이미 인용 밖에 두 벌 이상 섰으면 `false`(종전대로 접는다, 안 그러면 같은 글이 두 번 선다).
+   *  판정은 문항 수 하나다 — 인용 제목 문자열은 안 본다(결정 12 §못박는 것). */
+  quotesOpen?: boolean;
   /** 답변 티켓의 stem. 질문은 없다(요구사항 본문의 일부다) */
   hash?: string;
   /** 답변 파일의 `birth`(ms) — **진행 기록의 시각이다**(§2-3 ②. `mergeProgress`가 쓴다).
@@ -783,11 +788,13 @@ export function threadOf(
     if (questions[i]) {
       const { heading, text } = questions[i];
       const quotes = opts?.foldQuotes ? quotesOf(text) : [];
-      thread.push(
-        quotes.length
-          ? { role: "question", heading, text: withoutQuotes(text), quotes }
-          : { role: "question", heading, text },
-      );
+      if (quotes.length) {
+        const withoutQ = withoutQuotes(text);
+        const quotesOpen = optionsOf(withoutQ).length <= 1;
+        thread.push({ role: "question", heading, text: withoutQ, quotes, quotesOpen });
+      } else {
+        thread.push({ role: "question", heading, text });
+      }
     }
     if (answers[i]) {
       thread.push({

@@ -1522,6 +1522,63 @@ test("threadOf — foldQuotes: 기본 꺼짐은 무수정, 켜면 인용만 quot
   assert.deepStrictEqual(folded[0].quotes, [{ heading: "티켓 Goal", text: "원래 목표." }]);
 });
 
+/** `threadOf` — `quotesOpen`(결정 15 (1)). 판정은 `optionsOf`가 준 문항 수 하나다 — 인용
+ *  제목 문자열은 안 본다(결정 15 (2), 수용조건 4): 인용 제목이 3종인 절과 4종(엔진이 안 쓰는
+ *  제목 하나를 더한 픽스처)인 절이 문항 수가 같으면 판정도 같다. */
+test("threadOf — quotesOpen: 문항 한 벌은 펼침, 두 벌은 접힘, 인용 제목 개수는 안 본다 (결정 15)", async () => {
+  const r = newRoot();
+  await write(
+    r,
+    "r2000001.md",
+    fm({ ticket: "r2000001", title: "블록 폴백 - 인용 3종", kind: "request" }) +
+      "## 질문 1\n\n" +
+      "다시 시도할까요?\n\n### 1. 이 티켓을 어떻게 할까요\n\n- (a) 다시 시도한다\n- (b) 그만둔다\n\n" +
+      "### 티켓 Goal\n\n원래 하려던 일.\n\n### 티켓 블록\n\n막힌 이유.\n\n" +
+      "### 죽은 세션 마지막 기록\n\nlast log line.\n",
+  );
+  await write(
+    r,
+    "r2000002.md",
+    fm({ ticket: "r2000002", title: "블록 폴백 - 인용 4종(제목 하나 더)", kind: "request" }) +
+      "## 질문 1\n\n" +
+      "다시 시도할까요?\n\n### 1. 이 티켓을 어떻게 할까요\n\n- (a) 다시 시도한다\n- (b) 그만둔다\n\n" +
+      "### 티켓 Goal\n\n원래 하려던 일.\n\n### 티켓 블록\n\n막힌 이유.\n\n" +
+      "### 죽은 세션 마지막 기록\n\nlast log line.\n\n### 엔진이 안 쓰는 제목\n\n덤 텍스트.\n",
+  );
+  await write(
+    r,
+    "r2000003.md",
+    fm({ ticket: "r2000003", title: "결정 11 형식 - 문항 2벌", kind: "request" }) +
+      "## 질문 1\n\n" +
+      "### 1. 그릇\n\n- (a) 첫째\n- (b) 둘째\n\n### 2. 수명\n\n- (a) 첫째\n- (b) 둘째\n\n" +
+      "### 아무 인용\n\n덤 텍스트.\n",
+  );
+  const tickets = await listTickets(r, DEFAULT);
+
+  // 문항 한 벌(인용 3종) — 펼침
+  const oneGroup = threadOf(tickets, tickets.find((x) => x.hash === "r2000001")!, DEFAULT, {
+    foldQuotes: true,
+  });
+  assert.strictEqual(oneGroup[0].quotesOpen, true);
+  assert.strictEqual(oneGroup[0].quotes?.length, 3);
+
+  // 문항 한 벌 그대로, 인용만 4종 — 판정은 안 갈린다(제목 개수가 아니라 문항 수로 갈린다)
+  const oneGroupFourQuotes = threadOf(
+    tickets,
+    tickets.find((x) => x.hash === "r2000002")!,
+    DEFAULT,
+    { foldQuotes: true },
+  );
+  assert.strictEqual(oneGroupFourQuotes[0].quotesOpen, true);
+  assert.strictEqual(oneGroupFourQuotes[0].quotes?.length, 4);
+
+  // 문항 두 벌 — 접힘(세션의 물음이 이미 인용 밖에 서 있다)
+  const twoGroups = threadOf(tickets, tickets.find((x) => x.hash === "r2000003")!, DEFAULT, {
+    foldQuotes: true,
+  });
+  assert.strictEqual(twoGroups[0].quotesOpen, false);
+});
+
 /** `composeAnswer` — 조립 결과 모양은 §결정 11에 실린 실측 형식과 같다:
  *  `1.(a)` / `2.(a)(b) 덧붙임` / `3.(a)(a-1)` / `3-1.(b) 덧붙임`. */
 test("composeAnswer — 줄머리 번호 + 다중 선택 + 덧붙임 조립 (결정 11 ⑥)", () => {

@@ -798,9 +798,12 @@ export function AnswerThread({
                           {/* 결정 12 (5) — 인용 3종을 접어서 낸다. 상한은 안 내린다: 펼치면
                               `item.text`에서 뗀 그 전문이 그대로 나온다(`queue.ts` `threadOf`의
                               `foldQuotes`). 네이티브 `<details>`다(session-stream.tsx와 같은
-                              값) — 아코디언 라이브러리를 안 쓴다. */}
+                              값) — 아코디언 라이브러리를 안 쓴다.
+                              결정 15 (1) — 문항이 한 벌뿐이면 `item.quotesOpen`이 `true`라 처음부터
+                              펼쳐 낸다(클릭 0회로 결정할 내용이 화면에 있다). 두 벌 이상이면 종전대로
+                              접는다. */}
                           {item.quotes?.map((q: QuoteSection, qi: number) => (
-                            <details key={qi} className="group/quote mt-2">
+                            <details key={qi} className="group/quote mt-2" open={item.quotesOpen}>
                               <summary className="flex cursor-pointer list-none items-center gap-1 text-xs text-muted-foreground [&::-webkit-details-marker]:hidden">
                                 <ChevronRight
                                   aria-hidden
