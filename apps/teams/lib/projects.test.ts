@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 
@@ -40,6 +40,7 @@ const {
   reorderProjects,
   resolveConfig,
   usingDefault,
+  validateOntologyInput,
 } = await import("./projects.ts");
 const { filterTickets, listTickets } = await import("./queue.ts");
 const {
@@ -251,6 +252,50 @@ test("resolveConfig — TICKET_ONTOLOGY가 워커 워크트리 안이면 ontolog
   assert.ok(ontologyInWorktree(root, insideWorktree)); // 워커 워크트리 — 경고
   assert.ok(ontologyInWorktree(root, path.join(path.dirname(root), "ontology-copy"))); // 주 체크아웃의 추적 트리 — 경고
   assert.ok(!ontologyInWorktree(root, path.join(homedir(), "vault"))); // 큐 밖 — 안전
+});
+
+// ── validateOntologyInput (§5-3 §온톨로지 자리를 워커가 재정의한다 §결정 2, 티켓 cd662a73) ──
+// `root`를 realpath로 정규화한 뒤 쓴다 — 등록된 프로젝트의 root는 이미 그렇다(addProject가
+// 등록 시점에 realpath한다). 안 하면 macOS의 $TMPDIR(`/var` → `/private/var` 심링크)에서
+// 입력 쪽만 realpath되어 경계 비교가 갈린다.
+
+test("validateOntologyInput — 절대경로 + 실재 + 워크트리 밖: realpath를 돌려준다", async () => {
+  const root = realpathSync(newQueue({ "w1.sh": "" }));
+  const vault = mkdtempSync(path.join(tmpdir(), "fst-vault-"));
+  roots.push(vault);
+  assert.strictEqual(await validateOntologyInput(root, vault), realpathSync(vault));
+});
+
+test("validateOntologyInput — 상대경로는 거절", async () => {
+  const root = realpathSync(newQueue({ "w1.sh": "" }));
+  await assert.rejects(validateOntologyInput(root, "../vault"), /절대경로여야 합니다/);
+});
+
+test("validateOntologyInput — 없는 디렉터리는 거절", async () => {
+  const root = realpathSync(newQueue({ "w1.sh": "" }));
+  await assert.rejects(
+    validateOntologyInput(root, path.join(root, "no-such-dir")),
+    /실재하는 디렉터리가 아닙니다/,
+  );
+});
+
+test("validateOntologyInput — 워커 워크트리 안이면 거절", async () => {
+  const root = realpathSync(newQueue({ "w1.sh": "" }));
+  const inside = path.join(root, "worktrees", "w1", "ontology");
+  mkdirSync(inside, { recursive: true });
+  await assert.rejects(validateOntologyInput(root, inside), /git 작업 트리 안입니다/);
+});
+
+test("validateOntologyInput — 주 체크아웃의 추적 트리 직하도 거절", async () => {
+  const root = realpathSync(newQueue({ "w1.sh": "" }));
+  const inside = path.join(path.dirname(root), "ontology-copy");
+  mkdirSync(inside, { recursive: true });
+  await assert.rejects(validateOntologyInput(root, inside), /git 작업 트리 안입니다/);
+});
+
+test("validateOntologyInput — en 로케일이면 영어 문구", async () => {
+  const root = realpathSync(newQueue({ "w1.sh": "" }));
+  await assert.rejects(validateOntologyInput(root, "../vault", "en"), /Must be an absolute path/);
 });
 
 // ── 레지스트리 ──────────────────────────────────────────────────────────────

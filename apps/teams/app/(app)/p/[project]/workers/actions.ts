@@ -10,7 +10,8 @@
 import { revalidatePath } from "next/cache";
 import { track } from "@/lib/analytics";
 import { runWorker } from "@/lib/engine";
-import { getProject } from "@/lib/projects";
+import { DEFAULT_LOCALE, type Locale } from "@/lib/i18n";
+import { getProject, validateOntologyInput } from "@/lib/projects";
 import {
   applyCommonSource,
   applyDispatchGate,
@@ -28,6 +29,7 @@ import {
   stopWorker,
   writeCommonContext,
   writeContext,
+  writeOntology,
   type EngineId,
   type WorkerContext,
   type WorktreePrep,
@@ -278,6 +280,29 @@ export async function copyContextAction(
     const context = await copyContext(await rootOf(projectId), from, to);
     revalidatePath(`/p/${projectId}`, "layout");
     return { ok: true, context };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+// ── 온톨로지 자리 (§5-3 §온톨로지 자리를 워커가 재정의한다, 티켓 cd662a73) ────────
+
+/** `TICKET_ONTOLOGY` 저장 — 워커 전부에 같은 값을 쓴다(Done when 2). `value`가 빈 문자열이면
+ *  기본값 가정으로 되돌린다(그 줄을 지운다, Done when 5) — 별도의 초기화 액션을 안 만든다.
+ *  검증(`validateOntologyInput`)이 던지면 **어느 파일도 안 건드리고** 사유를 그대로 넘긴다
+ *  (§6 에러 3요소, `fail()`이 이미 하는 일). */
+export async function saveOntologyAction(
+  projectId: string,
+  value: string,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<WorkerActionResult> {
+  try {
+    const root = await rootOf(projectId);
+    const trimmed = value.trim();
+    const resolved = trimmed ? await validateOntologyInput(root, trimmed, locale) : null;
+    await writeOntology(root, resolved);
+    revalidatePath(`/p/${projectId}`, "layout");
+    return { ok: true };
   } catch (e) {
     return fail(e);
   }

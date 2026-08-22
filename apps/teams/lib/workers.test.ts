@@ -70,11 +70,13 @@ const {
   startWorker,
   stopWorker,
   prepareWorktree,
+  rewriteOntology,
   workerGroups,
   workerOf,
   worktreeCmds,
   writeCommonContext,
   writeContext,
+  writeOntology,
   readAlerts,
   unarchivedFailures,
   unarchivedResumes,
@@ -1657,6 +1659,52 @@ test("writeContext — 셸에 위험한 입력과 모양이 다른 블록은 거
     execFileSync("cat", [path.join(root, "workers", "w1.sh")], { encoding: "utf8" }),
     CTX_SH,
   );
+});
+
+// ── TICKET_ONTOLOGY 쓰기 (§5-3 §온톨로지 자리를 워커가 재정의한다 §결정 1 (b), 티켓 cd662a73) ──
+
+test("rewriteOntology — 줄이 없으면 넣고, 있으면 값만 갈고, null이면 지운다", () => {
+  const noShebang = 'TICKET_CWD="$HOME/wt/w1"\n. tick.sh\n';
+  assert.strictEqual(
+    rewriteOntology(noShebang, "/vault/ontology"),
+    'TICKET_ONTOLOGY="/vault/ontology"\nTICKET_CWD="$HOME/wt/w1"\n. tick.sh\n',
+  );
+  const withShebang = '#!/bin/bash\nTICKET_CWD="$HOME/wt/w1"\n. tick.sh\n';
+  assert.strictEqual(
+    rewriteOntology(withShebang, "/vault/ontology"),
+    '#!/bin/bash\nTICKET_ONTOLOGY="/vault/ontology"\nTICKET_CWD="$HOME/wt/w1"\n. tick.sh\n',
+  );
+  // 값만 간다 — 들여쓰기·export 접두·나머지 줄은 한 글자도 안 바뀐다
+  const existing = '#!/bin/bash\nexport TICKET_ONTOLOGY="/old"\nTICKET_CWD="$HOME/wt/w1"\n. tick.sh\n';
+  assert.strictEqual(
+    rewriteOntology(existing, "/new/place"),
+    '#!/bin/bash\nexport TICKET_ONTOLOGY="/new/place"\nTICKET_CWD="$HOME/wt/w1"\n. tick.sh\n',
+  );
+  // null = 지운다(기본값 가정으로 되돌리는 길)
+  assert.strictEqual(rewriteOntology(existing, null), '#!/bin/bash\nTICKET_CWD="$HOME/wt/w1"\n. tick.sh\n');
+  // 없는데 지우면 no-op
+  assert.strictEqual(rewriteOntology(noShebang, null), noShebang);
+});
+
+test("writeOntology — 워커 전부에 같은 값을 쓰고, 갈렸던 값도 통일된다", async () => {
+  const root = makeRoot({
+    "w1.sh": "#!/bin/bash\n. tick.sh\n",
+    "w2.sh": '#!/bin/bash\nTICKET_ONTOLOGY="$HOME/vault-a"\n. tick.sh\n',
+  });
+  await writeOntology(root, "/vault/shared");
+  for (const n of ["w1.sh", "w2.sh"]) {
+    const text = execFileSync("cat", [path.join(root, "workers", n)], { encoding: "utf8" });
+    assert.match(text, /TICKET_ONTOLOGY="\/vault\/shared"/);
+  }
+  // 755가 안 깨진다(워커 파일 모드를 잃지 않는다)
+  assert.strictEqual(statSync(path.join(root, "workers", "w1.sh")).mode & 0o777, 0o755);
+
+  // null = 기본값 가정으로 되돌린다 — 줄이 워커 파일에서 지워진다
+  await writeOntology(root, null);
+  for (const n of ["w1.sh", "w2.sh"]) {
+    const text = execFileSync("cat", [path.join(root, "workers", n)], { encoding: "utf8" });
+    assert.doesNotMatch(text, /TICKET_ONTOLOGY/);
+  }
 });
 
 test("copyContext — $TICKET_CWD가 살아 옮겨간다(받는 워커는 자기 워크트리를 가리킨다)", async () => {

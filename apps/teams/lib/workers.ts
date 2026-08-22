@@ -1611,6 +1611,56 @@ export function rewriteCwd(text: string, root: string, name: string): string {
   return lines.join("\n");
 }
 
+// ── 온톨로지 자리 (§5-3 §온톨로지 자리를 워커가 재정의한다, 티켓 cd662a73) ────────
+
+/** `TICKET_ONTOLOGY=` 줄. `cwdAssign`과 같은 모양이고 공유하지 않는다(이 값은 한 함수에서만 쓴다). */
+const ontologyAssign = /^[ \t]*(?:export[ \t]+)?TICKET_ONTOLOGY=(.*)$/gm;
+/** 그 줄 전체(개행 포함) — 지울 때만 쓴다. */
+const ontologyLine = /^[ \t]*(?:export[ \t]+)?TICKET_ONTOLOGY=.*\n?/gm;
+
+/** `TICKET_ONTOLOGY` 줄 하나만 다시 쓴다 — `rewriteCwd`와 같은 관용구(들여쓰기·`export` 접두는
+ *  그대로, 바뀌는 건 `=` 오른쪽뿐). `value`가 `null`이면 그 줄을 **지운다** — 기본값 가정으로
+ *  되돌리는 길(Done when 5)이 이 한 줄이다. 줄이 없는데 값을 넣을 땐 위치를 추측하지 않는다 —
+ *  `#!` 다음 줄, 아니면 맨 앞(`rewriteCwd`와 같다). 절대경로·존재·워크트리 경계 검증은 호출자의
+ *  몫이다(`projects.ts`의 `validateOntologyInput` — 여기서 그 파일을 import하면 순환이다,
+ *  `projects.ts`가 이미 `workers.ts`를 쓴다). */
+export function rewriteOntology(text: string, value: string | null): string {
+  if (value === null) return text.match(ontologyLine) ? text.replace(ontologyLine, "") : text;
+  const val = dq(value);
+  // `.match`는 `/g` 정규식의 lastIndex를 남기지 않는다(`rewriteCwd`와 같은 이유).
+  if (text.match(ontologyAssign)) {
+    return text.replace(ontologyAssign, (m, v: string) => m.slice(0, m.length - v.length) + val);
+  }
+  const lines = text.split("\n");
+  lines.splice(lines[0].startsWith("#!") ? 1 : 0, 0, `TICKET_ONTOLOGY=${val}`);
+  return lines.join("\n");
+}
+
+/** 워커 **전부**의 `TICKET_ONTOLOGY` 줄을 같은 값으로 바꾼다 — 온톨로지는 큐 전체의 것이라
+ *  워커마다 갈리면 세션이 서로 다른 폴더를 본다(Done when 2). `value`가 검증된 값(또는 기본값
+ *  복귀의 `null`)이라고 믿는다 — 이 함수는 이미 검증된 값을 쓰기만 한다.
+ *
+ *  자기 검증은 `writeContext`와 같은 관용구다: **쓰기 전에** 계산한 `next`를 다시 파싱해 원하는
+ *  값이 나오는지 확인하고, 워커 하나라도 다르면 **어느 파일도 쓰지 않는다** — 절반만 바뀐 큐를
+ *  만들지 않는다. */
+export async function writeOntology(root: string, value: string | null): Promise<void> {
+  const dir = path.join(root, "workers");
+  const names = (await readdir(dir).catch(() => [] as string[])).filter((n) => n.endsWith(".sh"));
+  const writes: { file: string; next: string; mode: number }[] = [];
+  for (const n of names) {
+    const file = path.join(dir, n);
+    const text = await readFile(file, "utf8");
+    const next = rewriteOntology(text, value);
+    const m = [...next.matchAll(ontologyAssign)][0];
+    const got = m ? shellPath(m[1]) : null;
+    if (got !== value) {
+      throw new Error(`${n}에 쓴 뒤 값을 다시 읽으면 달라집니다. 어느 파일도 쓰지 않았습니다.`);
+    }
+    writes.push({ file, next, mode: (await stat(file)).mode & 0o777 });
+  }
+  for (const w of writes) await atomicWrite(w.file, w.next, w.mode);
+}
+
 /** 워커 파일의 `. "<레포>/tick.sh"` 줄. 엔진 코드 위치는 **워커 파일에만** 적혀 있다. */
 export const sourceTick = /^[ \t]*(?:\.|source)[ \t]+(.*tick\.sh["']?)[ \t]*$/m;
 

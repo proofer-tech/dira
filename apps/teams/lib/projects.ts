@@ -6,7 +6,7 @@ import { mkdir, readFile, readdir, realpath, rm, stat, writeFile } from "node:fs
 import { homedir } from "node:os";
 import path from "node:path";
 import { isMultiToken } from "./flags.ts";
-import { DEFAULT_LOCALE, type Locale } from "./i18n.ts";
+import { DEFAULT_LOCALE, t, type Locale } from "./i18n.ts";
 import { DEFAULT_KEYMAP, defaultBindings, type Bindings, type Keymap } from "./keymap.ts";
 import { machineState, type MachineState } from "./machine-state.ts";
 import {
@@ -567,6 +567,38 @@ export function ontologyInWorktree(root: string, ontology: string): boolean {
   const worktrees = path.join(root, "worktrees");
   if (under(ontology, root) && !under(ontology, worktrees)) return false; // 큐 루트 아래 — 받는다
   return true; // 그 밖: 주 체크아웃의 추적 트리이거나 워커 워크트리
+}
+
+/** 티켓 cd662a73 — 화면이 `TICKET_ONTOLOGY`로 받는 입력을 검증한다(§5-3 §온톨로지 자리를
+ *  워커가 재정의한다 §결정 2, 셋을 다 지나야 받는다). 통과하면 워커 파일에 그대로 쓸 realpath를
+ *  돌려준다 — 상대경로·심링크를 남기지 않는다.
+ *
+ *  거절 셋의 순서가 곧 판정 순서다: 절대경로가 아니면 존재 확인을 할 필요가 없고, 존재하지
+ *  않으면 워크트리 경계를 잴 realpath가 없다. 셋째 판정은 새로 만들지 않는다 — 위
+ *  `ontologyInWorktree`(§결정 2 `3의 기계적 판정` 그대로) 하나를 그대로 부른다. */
+export async function validateOntologyInput(
+  root: string,
+  input: string,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<string> {
+  const given = expandHome(input.trim());
+  if (!path.isAbsolute(given)) {
+    throw new Error(`${t(locale, "workers.ontology.notAbsolute")} ${input.trim() || "(비어 있음)"}`);
+  }
+  let real: string;
+  try {
+    real = await realpath(given);
+    if (!(await stat(real)).isDirectory()) throw new Error("not a directory");
+  } catch {
+    throw new Error(`${t(locale, "workers.ontology.notDirectory")} ${given}`);
+  }
+  // `root`도 realpath로 편다 — macOS는 `$TMPDIR`(`/var` → `/private/var`)처럼 흔한 경로에도
+  // 심링크 성분이 있다. `real` 쪽만 펴고 `root`는 그대로 두면 둘의 접두가 갈려 워크트리 안을
+  // 밖으로 오판한다(등록된 프로젝트는 `addProject`가 이미 폈지만, 그 계약에 기대지 않는다).
+  if (ontologyInWorktree(await realpath(root), real)) {
+    throw new Error(`${real} — ${t(locale, "workers.ontologyInWorktree")}`);
+  }
+  return real;
 }
 
 // ── 목록·전환기용 요약 ──────────────────────────────────────────────────────
