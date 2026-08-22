@@ -867,38 +867,73 @@ const RESULT_VERBS = new Set(["DONE", "FAIL", "TIMEOUT", "KILLED"]);
  *  두어 개가 통째로 보인다. */
 const RECENT_LINES = 20;
 
+/** DISPATCH가 여는 실행 하나를 닫는 넷(§5-6 §실측) — `RESULT_VERBS`와 다른 집합이다.
+ *  `KILLED` 대신 `STALL`이다: `STALL`이 이미 실패 시각이고 뒤따르는 `KILLED`는 그 실패를
+ *  강제 종료하는 부수 효과 줄이다(같은 해시가 `STALL` 직후 `KILLED`를 또 낸다 — 실측). */
+const PERSONA_RUN_VERBS = new Set(["DONE", "FAIL", "TIMEOUT", "STALL"]);
+
+/** `DISPATCH` → 종료 페어링 하나(§5-6 §실측 — `persona-activity.ts`가 페르소나별로 되짚는다).
+ *  `verb`는 `PERSONA_RUN_VERBS` 중 하나, `dispatchAt`·`endAt`은 로그 줄의 시각 원문
+ *  (`2026-08-23 05:12:42`, 이 머신 로컬)이다. */
+export type PersonaRun = { hash: string; verb: string; dispatchAt: string; endAt: string };
+
 /** runner.log는 워커 전체가 한 파일에 섞여 쌓인다: `2026-07-30 13:19:01 [w3] SKIP …`.
  *  실효 `TICKET_NAME` → **최근 20줄**(최신이 앞) + **마지막 결과 줄**(§0-5 판정 1단계) +
- *  **해시별 `DISPATCH` 집계**(§2-14 (2) — 티켓 상세 재시도 줄의 원본).
+ *  **해시별 `DISPATCH` 집계**(§2-14 (2) — 티켓 상세 재시도 줄의 원본) + **페르소나별 실행 페어링**
+ *  (§5-6 §실측 — `persona-activity.ts`의 소요·되돌아옴·마지막 활동·30일 막대의 원본) +
+ *  **로그가 닿는 가장 이른 시각**(§5-6 §66 "로그가 닿는 날 수").
  *
  *  ponytail: 파일 전체를 읽고 뒤에서 훑는다(실측 1.5MB · 15,858줄 · 13.5ms). **꼬리만 읽으면
  *  오래 멈춘 워커의 마지막 줄을 잃는다** — 그 줄이 파일 앞쪽에 있어서 `stopped` 워커의 마지막
  *  활동이 `—`가 된다(§4-7). 상한이 문제면 로테이션이 먼저다(`tick.sh`의 일이다).
  *
- *  **`cache()`로 요청당 1회다**(`crontabText`와 같은 이유) — `listWorkers`와 `reassignCount`가
- *  같은 `workersDir`로 이 함수를 각자 부르는데, 캐시가 없으면 상세 화면 한 번에 이 5.7MB 파일을
- *  두 번 연다(§2-14 (7) §성능 예산 "새 파일 읽기가 0회"). */
-const lastLogByWorker = cache(
+ *  **`cache()`로 요청당 1회다**(`crontabText`와 같은 이유) — `listWorkers`·`reassignCount`·
+ *  `personaActivity`가 같은 `workersDir`로 이 함수를 각자 부르는데, 캐시가 없으면 상세 화면
+ *  한 번에 이 5.7MB 파일을 여러 번 연다(§2-14 (7) §성능 예산 "새 파일 읽기가 0회"). 페르소나
+ *  페어링을 별도 파서로 새로 두지 않고 이 한 벌의 backward 루프에 얹은 이유도 같다 — 파일을
+ *  두 번 훑지 않는다. */
+export const lastLogByWorker = cache(
   async (
     workersDir: string,
   ): Promise<{
     byWorker: Record<string, { recent: string[]; result: string | null }>;
     dispatchByHash: Record<string, number>;
+    personaRuns: Record<string, PersonaRun[]>;
+    logStart: string | null;
   }> => {
     const text = await readFile(path.join(workersDir, "runner.log"), "utf8").catch(() => "");
     const byWorker: Record<string, { recent: string[]; result: string | null }> = {};
     const dispatchByHash: Record<string, number> = {};
+    const personaRuns: Record<string, PersonaRun[]> = {};
+    // 해시별 "아직 안 닫힌" 종료 줄 — backward라 종료가 자기 DISPATCH보다 먼저 걸린다(재시도의
+    // 안쪽 페어링이 우선이라 이미 걸려 있으면 안 덮는다 — 더 이른 종료는 그 앞의 DISPATCH 몫이다).
+    const pendingEnd: Record<string, { verb: string; at: string }> = {};
+    let logStart: string | null = null;
     const lines = text.split("\n");
     for (let i = lines.length - 1; i >= 0; i--) {
-      // 세 번째 캡처(해시)는 `DISPATCH` 줄에만 있다 — 다른 동사 줄은 `undefined`라 아래에서 안 센다.
-      const m = /^\S+ \S+ \[([^\]]+)\] (\S+)(?: (\S+))?/.exec(lines[i]);
+      // 네 번째 캡처(해시)는 `DISPATCH`류 줄에만 있다 — 다른 동사 줄은 `undefined`라 아래에서 안 센다.
+      const m = /^(\S+ \S+) \[([^\]]+)\] (\S+)(?: (\S+))?/.exec(lines[i]);
       if (!m) continue;
-      const e = (byWorker[m[1]] ??= { recent: [], result: null });
+      const [, at, worker, verb, tok] = m;
+      logStart = at; // 뒤에서 앞으로 훑으니 루프 끝에 남는 값이 가장 이른 줄이다
+      const e = (byWorker[worker] ??= { recent: [], result: null });
       if (e.recent.length < RECENT_LINES) e.recent.push(lines[i]); // 뒤에서 왔으니 최신이 앞이다
-      if (e.result === null && RESULT_VERBS.has(m[2])) e.result = lines[i];
-      if (m[2] === "DISPATCH" && m[3]) dispatchByHash[m[3]] = (dispatchByHash[m[3]] ?? 0) + 1;
+      if (e.result === null && RESULT_VERBS.has(verb)) e.result = lines[i];
+      if (verb === "DISPATCH" && tok) {
+        dispatchByHash[tok] = (dispatchByHash[tok] ?? 0) + 1;
+        const pending = pendingEnd[tok];
+        if (pending) {
+          const persona = /(?:^| )persona=(\S+)/.exec(lines[i])?.[1];
+          if (persona && persona !== "none") {
+            (personaRuns[persona] ??= []).push({ hash: tok, verb: pending.verb, dispatchAt: at, endAt: pending.at });
+          }
+          delete pendingEnd[tok];
+        }
+      } else if (PERSONA_RUN_VERBS.has(verb) && tok && !pendingEnd[tok]) {
+        pendingEnd[tok] = { verb, at };
+      }
     }
-    return { byWorker, dispatchByHash };
+    return { byWorker, dispatchByHash, personaRuns, logStart };
   },
 );
 

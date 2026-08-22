@@ -59,6 +59,7 @@ const {
   registerCron,
   engineName,
   holderEngine,
+  lastLogByWorker,
   limitWaitUntil,
   lockPath,
   listWorkers,
@@ -338,6 +339,45 @@ test("reassignCount — DISPATCH 줄 수 빼기 1, 다른 해시는 안 세고 �
   assert.strictEqual(await reassignCount(root, "aaaa1111"), 0); // 1개면 값이 없다(호출부가 0을 "줄 없음"으로 받는다)
   assert.strictEqual(await reassignCount(root, "bbbb2222"), 2); // 3개면 2다
   assert.strictEqual(await reassignCount(root, "cccc3333"), 0); // 줄이 아예 없는 해시 — 남의 DISPATCH를 안 센다
+});
+
+test("lastLogByWorker — 페르소나별 DISPATCH -> DONE 페어링 (§5-6 §실측)", async () => {
+  const root = makeRoot({ "w1.sh": "#!/bin/bash\n" });
+  writeFileSync(
+    path.join(root, "workers", "runner.log"),
+    [
+      "2026-08-01 00:00:00 [w1] DISPATCH aaaa1111 kind=work persona=dev sid=x log=x.log prio=3",
+      "2026-08-01 00:10:00 [w1] DONE aaaa1111 sid=x",
+      // 다른 페르소나 줄은 안 섞인다
+      "2026-08-01 00:11:00 [w1] DISPATCH bbbb2222 kind=work persona=pm sid=y log=y.log prio=3",
+      "2026-08-01 00:20:00 [w1] DONE bbbb2222 sid=y",
+      "",
+    ].join("\n"),
+  );
+
+  const { personaRuns, logStart } = await lastLogByWorker(path.join(root, "workers"));
+  assert.deepStrictEqual(personaRuns.dev, [
+    { hash: "aaaa1111", verb: "DONE", dispatchAt: "2026-08-01 00:00:00", endAt: "2026-08-01 00:10:00" },
+  ]);
+  assert.deepStrictEqual(personaRuns.pm, [
+    { hash: "bbbb2222", verb: "DONE", dispatchAt: "2026-08-01 00:11:00", endAt: "2026-08-01 00:20:00" },
+  ]);
+  assert.strictEqual(logStart, "2026-08-01 00:00:00"); // 로그가 닿는 가장 이른 줄
+});
+
+test("lastLogByWorker — 짝이 없는 DISPATCH는 페어링을 안 만든다 (아직 도는 실행 · 종료 없이 로그가 끝남)", async () => {
+  const root = makeRoot({ "w1.sh": "#!/bin/bash\n" });
+  writeFileSync(
+    path.join(root, "workers", "runner.log"),
+    [
+      // aaaa1111: DISPATCH만 있고 종료가 없다 — 지금 도는 티켓
+      "2026-08-01 00:00:00 [w1] DISPATCH aaaa1111 kind=work persona=dev sid=x log=x.log prio=3",
+      "",
+    ].join("\n"),
+  );
+
+  const { personaRuns } = await lastLogByWorker(path.join(root, "workers"));
+  assert.deepStrictEqual(personaRuns.dev ?? [], []); // 짝이 없으니 실행 0건 — 지어내지 않는다
 });
 
 test("주석 처리된 할당문은 설정이 아니다 (worker.sh.example이 통째로 주석이다)", async () => {
