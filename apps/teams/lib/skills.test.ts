@@ -414,7 +414,7 @@ function mockResponse(body: BodyInit | null, init: ResponseInit & { url?: string
 test("fetchSkillFromAddress — 정상 경로: 받은 zip이 extractSkillArchive를 그대로 거친다", async () => {
   const zip = buildZip([{ path: "SKILL.md", data: Buffer.from("---\nname: from-url\n---\n") }]);
   const files = await withMockFetch(
-    async () => mockResponse(zip, { status: 200 }),
+    async () => mockResponse(Uint8Array.from(zip), { status: 200 }),
     () => fetchSkillFromAddress("https://github.com/o/r"),
   );
   assert.deepEqual(files, [{ path: "SKILL.md", bytes: files[0].bytes }]);

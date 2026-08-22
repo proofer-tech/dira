@@ -254,13 +254,13 @@ test("lastRateLimits — 마지막 것이 이긴다 · 잘린 줄을 건너뛴�
 
   // 한 세션에 여러 번 실린다 — **마지막이 최신이다**
   const two = ["{\"type\":\"session_meta\"}", line(42, "a"), "{\"type\":\"response_item\"}", line(44, "b")];
-  assert.equal(lastRateLimits(two.join("\n")).primary.used_percent, 44);
+  assert.equal(lastRateLimits(two.join("\n"))!.primary!.used_percent, 44);
 
   // 세션이 쓰는 중이라 마지막 줄이 잘렸다 — 그 앞 줄로 물러난다(사유를 지어내지 않는다)
-  assert.equal(lastRateLimits([line(42, "a"), line(44, "b").slice(0, 60)].join("\n")).primary.used_percent, 42);
+  assert.equal(lastRateLimits([line(42, "a"), line(44, "b").slice(0, 60)].join("\n"))!.primary!.used_percent, 42);
 
   // 한도에 닿으면 codex가 수를 아예 안 싣는다. `rate_limits`는 있고 `primary`만 null이다
-  assert.equal(lastRateLimits(line(null, "a")).primary, null);
+  assert.equal(lastRateLimits(line(null, "a"))!.primary, null);
 
   // 턴이 없던 세션 — `token_count`가 아예 없다
   assert.equal(lastRateLimits("{\"type\":\"session_meta\"}\n"), null);

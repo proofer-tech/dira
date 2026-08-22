@@ -10,13 +10,13 @@ import assert from "node:assert";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { boardRevision, type WatchFn } from "./board-revision.ts";
+import { boardRevision, type WatchFn, type Watcher } from "./board-revision.ts";
 
 function fakeWatch(): { watch: WatchFn; fire: () => void } {
   let onEvent: (() => void) | null = null;
   const watch: WatchFn = (_dir, cb) => {
     onEvent = cb;
-    return { on: () => undefined, unref: () => undefined, close: () => undefined };
+    return { on: () => undefined, unref: () => undefined, close: () => undefined } as unknown as Watcher;
   };
   return { watch, fire: () => onEvent?.() };
 }

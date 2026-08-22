@@ -1401,7 +1401,7 @@ test("createWorker — 엔진은 고른 값이다. 템플릿에서 딸려 오지
 
   // 판정은 **화면이 읽는 그 길**로 한다 — listWorkers가 읽은 값의 역파싱이다
   const got = Object.fromEntries(
-    (await listWorkers(root, [], SFX)).map((w) => [w.name, engineCell(w.engine).value]),
+    (await listWorkers(root, [])).map((w) => [w.name, engineCell(w.engine).value]),
   );
   assert.deepStrictEqual(got.w2, { engineId: "claude", model: "opus" });
   assert.deepStrictEqual(got.w3, { engineId: "claude", model: NO_MODEL });
@@ -1410,7 +1410,7 @@ test("createWorker — 엔진은 고른 값이다. 템플릿에서 딸려 오지
   // 신뢰 경계: 값 검증은 파일을 만들기 **전에** 던진다 — 반쯤 만들어진 워커가 남지 않는다
   await assert.rejects(createWorker(root, "w4", "claude", "a b; rm -rf /"), /쓸 수 없는 문자/);
   await assert.rejects(createWorker(root, "w4", "gemini" as "claude"), /모르는 엔진/);
-  assert.strictEqual((await listWorkers(root, [], SFX)).some((w) => w.name === "w4"), false);
+  assert.strictEqual((await listWorkers(root, [])).some((w) => w.name === "w4"), false);
 });
 
 // ── prepareWorktree (§4 생성 4항) ───────────────────────────────────────────

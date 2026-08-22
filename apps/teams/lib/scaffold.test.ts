@@ -229,7 +229,9 @@ test("scaffold — CORE*.md는 엔진 protocols/에서 그대로 복사, templat
 test("scaffold — 데스크톱 extraResources만으로 만든 가짜 엔진에서도 성공한다", async (t) => {
   const desktopDir = new URL("../../desktop/", import.meta.url);
   const pkg = JSON.parse(await readFile(new URL("package.json", desktopDir), "utf8"));
-  const engineEntries = pkg.build.extraResources.filter((e) => e.to.startsWith("engine/"));
+  const engineEntries = pkg.build.extraResources.filter((e: { from: string; to: string }) =>
+    e.to.startsWith("engine/"),
+  );
   assert.ok(engineEntries.length > 0, "engine/으로 나르는 항목이 없다");
 
   const dir = await tmp();

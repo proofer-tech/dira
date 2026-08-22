@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import { NextRequest } from "next/server.js";
+import type { RequestInit } from "next/dist/server/web/spec-extension/request.js";
 import { proxy } from "./proxy.ts";
 
 function req(url: string, init?: RequestInit) {

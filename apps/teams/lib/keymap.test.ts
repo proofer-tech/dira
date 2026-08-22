@@ -3,6 +3,7 @@ import assert from "node:assert";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import type { Bindings } from "./keymap.ts";
 
 // 진짜 키맵(~/.config/dira/keymap.json)을 밟지 않는다. import 전에 건다 — `auth.test.ts`와 같다.
 const LOCAL = mkdtempSync(path.join(tmpdir(), "fst-keymap-"));
@@ -42,7 +43,7 @@ test("DEFAULT_KEYMAP — §0-6 액션 표 8줄과 id·기본키가 같다", () =
   // 기본값끼리 겹치면 첫 화면부터 거짓말이다
   assert.strictEqual(new Set(DEFAULT_KEYMAP.map((a) => a.combo)).size, DEFAULT_KEYMAP.length);
   // 기본값 전부가 자기 검증을 통과한다(못 쓰는 키를 기본값으로 박지 않았다)
-  const b = Object.fromEntries(DEFAULT_KEYMAP.map((a) => [a.id, a.combo]));
+  const b = Object.fromEntries(DEFAULT_KEYMAP.map((a) => [a.id, a.combo])) as Bindings;
   for (const a of DEFAULT_KEYMAP) assert.strictEqual(validateBinding(b, a.id, a.combo), null, a.id);
 });
 

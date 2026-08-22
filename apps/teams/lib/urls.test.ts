@@ -581,7 +581,7 @@ test("toolChipCounts — 도구 이름별 개수, 횟수 내림차순 · 동률�
 });
 
 test("pairTool — toolId로 짝을 잇는다. 짝이 여럿이면 전부 이어지고 소요는 마지막 짝까지다", () => {
-  const events = [
+  const events: { kind: string; toolId?: string; ts: string }[] = [
     { kind: "tool_use", toolId: "a", ts: "2026-08-21T00:00:00Z" },
     { kind: "tool_result", toolId: "a", ts: "2026-08-21T00:00:01Z" },
     { kind: "tool_use", toolId: "b", ts: "2026-08-21T00:00:02Z" }, // grok — 갱신 여럿
