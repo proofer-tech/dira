@@ -16,6 +16,7 @@ import {
   NewOntologyFileButton,
   OntologyEditor,
   OntologyImport,
+  OntologyLocationEditor,
   OntologySurveyForm,
 } from "@/components/ontology-ui";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -51,7 +52,7 @@ import {
   type ProtocolEntry,
   type ProtocolFile,
 } from "@/lib/protocols";
-import { getProject, readLanguage, resolveConfig } from "@/lib/projects";
+import { getProject, ontologyInWorktree, readLanguage, resolveConfig, usingDefault } from "@/lib/projects";
 import { cn } from "@/lib/utils";
 
 /** `tree`에서 지표 계산에 필요한 텍스트를 모아 순수 함수(`computeOntologyMetrics`)에 넘긴다.
@@ -136,6 +137,11 @@ export default async function Ontology({
   const locale = await readLanguage();
   const config = await resolveConfig(project);
   const base = config.ontology;
+  const ontologyAssumed = usingDefault(config, "ontology");
+  // §5-3 §편집 표면이 사는 화면 §결정 2 — 사람이 워커 `.sh`를 손으로 고쳐 경계를 어긴 경우만
+  // 선다(엔진은 검사하지 않는다). 종전에는 워커 화면 온톨로지 행의 캡션이었다(티켓 cd662a73) —
+  // 편집 표면을 따라 이 화면으로 옮긴다(티켓 c5d51522).
+  const ontologyWarn = ontologyInWorktree(project.root, base) ? t(locale, "ontology.location.inWorktree") : null;
   const tree = await listTree(base);
   // §5-3 §온톨로지 자리를 워커가 재정의한다 §결정 3 — 형식이 아닌 폴더는 지표를 아예 안 낸다.
   const diraFormat = isDiraFormat(tree);
@@ -183,7 +189,26 @@ export default async function Ontology({
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-lg font-semibold">온톨로지</h1>
-          <p className="font-mono text-xs break-all text-muted-foreground">{base}</p>
+          {/* 이 경로 줄이 편집 표면이다(§5-3 §편집 표면이 사는 화면, 티켓 c5d51522) — 파일트리가
+              0장인 프로젝트에서도 이 조건문 밖이라 그대로 선다. */}
+          <OntologyLocationEditor
+            projectId={id}
+            initialValue={ontologyAssumed ? "" : base}
+            locale={locale}
+            placeholder={t(locale, "ontology.location.placeholder")}
+            saveLabel={t(locale, "ontology.location.save")}
+            failureTitle={t(locale, "ontology.location.saveFailed")}
+          />
+          <div className="mt-1 font-mono text-xs break-all text-muted-foreground">
+            {base}
+            {ontologyAssumed && <span className="ml-2 font-sans">기본값 가정</span>}
+            {ontologyWarn && (
+              <span className="ml-2 inline-flex items-center gap-1 font-sans text-status-stale">
+                <TriangleAlert aria-hidden className="size-3.5" />
+                {ontologyWarn}
+              </span>
+            )}
+          </div>
         </div>
         {tree.length > 0 && <NewOntologyFileButton projectId={id} />}
       </div>

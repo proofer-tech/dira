@@ -20,6 +20,10 @@ import {
   submitOntologySurveyAction,
   type OntologyResult,
 } from "@/app/(app)/p/[project]/ontology/actions";
+// `saveOntologyAction`은 위 것(파일 원문 저장)과 이름이 겹친다 — 워커 화면에서 온 자리
+// 편집(`TICKET_ONTOLOGY`)이라 별칭으로 들여온다(티켓 c5d51522, 이름 충돌은 종전 cd662a73의
+// `saveOntologyAction`과 이 파일이 이미 들고 있던 동명 함수 사이였다).
+import { saveOntologyAction as saveOntologyLocationAction } from "@/app/(app)/p/[project]/workers/actions";
 import { MarkdownEditor } from "@/components/markdown-editor";
 import { PickPath } from "@/components/path-picker";
 import type { Vault } from "@/lib/markdown-wikilinks";
@@ -37,6 +41,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import type { Locale } from "@/lib/i18n";
 import {
   Q1_OPTIONS,
   Q2_CHIPS,
@@ -56,6 +61,62 @@ function Failure({ title, message }: { title: string; message: string }) {
         <span className="font-mono text-xs break-all">{message}</span>
       </AlertDescription>
     </Alert>
+  );
+}
+
+/** `TICKET_ONTOLOGY` 편집 — 온톨로지 화면 제목 밑 경로 줄이 이 편집 표면이다(§5-3 §편집
+ *  표면이 사는 화면, 티켓 c5d51522). 워커 화면(`workers-ui.tsx`)의 `OntologyEditor`를 그대로
+ *  옮긴 것 — 저장 액션(`saveOntologyLocationAction`)·검증·쓰기 경로는 한 글자도 안 고쳤다.
+ *  비우고 저장하면 그 줄이 워커 파일에서 지워져 기본값 가정으로 되돌아간다 — 별도의
+ *  되돌리기 버튼을 안 둔다.
+ *
+ *  성공하면 `revalidatePath`가 이 화면도 다시 그려 아래 캡션(현재 값·기본값 가정·워크트리
+ *  경고)에 반영한다. 실패 사유는 서버 문장 그대로다(§6 에러 3요소). */
+export function OntologyLocationEditor({
+  projectId,
+  initialValue,
+  locale,
+  placeholder,
+  saveLabel,
+  failureTitle,
+}: {
+  projectId: string;
+  initialValue: string;
+  locale: Locale;
+  placeholder: string;
+  saveLabel: string;
+  failureTitle: string;
+}) {
+  const [value, setValue] = useState(initialValue);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+  return (
+    <div>
+      <div className="flex items-center gap-2">
+        <Input
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder={placeholder}
+          className="h-7 font-mono text-xs"
+        />
+        <Button
+          size="sm"
+          variant="outline"
+          aria-disabled={pending}
+          className="aria-disabled:opacity-50"
+          onClick={() => {
+            if (pending) return; // §58 §못 누르는 실효 — aria-disabled에는 pointer-events-none이 없다
+            start(async () => {
+              const r = await saveOntologyLocationAction(projectId, value, locale);
+              setError(r.ok ? null : (r.message ?? null));
+            });
+          }}
+        >
+          {saveLabel}
+        </Button>
+      </div>
+      {error && <Failure title={failureTitle} message={error} />}
+    </div>
   );
 }
 

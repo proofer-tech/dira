@@ -16,7 +16,6 @@ import {
   CreateWorkerButton,
   ExecBitFix,
   ExpandScope,
-  OntologyEditor,
   WorkerContextCell,
   WorkerActivityCell,
   WorkerContextRow,
@@ -37,7 +36,7 @@ import {
 import { listTickets } from "@/lib/queue";
 import { formatTokens, listUsage } from "@/lib/usage";
 import { dateTimeLabel } from "@/lib/urls";
-import { getProject, ontologyInWorktree, readLanguage, resolveConfig, usingDefault } from "@/lib/projects";
+import { getProject, readLanguage, resolveConfig, usingDefault } from "@/lib/projects";
 import {
   cronUnregisterCmd,
   cronRegisterCmd,
@@ -131,20 +130,16 @@ export default async function Workers({ params }: { params: Promise<{ project: s
     unregisterCmd: cronUnregisterCmd(w),
   }));
 
-  // 표시만 하는 값들(편집은 범위 밖 — 4e2850eb). 온톨로지만 예외다(§5-3 §온톨로지 자리를
-  // 워커가 재정의한다 §결정 1 (b), 티켓 cd662a73) — 아래 별도 행에서 편집 표면을 낸다.
-  // 해석은 resolveConfig 하나가 한다.
+  // 표시만 하는 값들(편집은 범위 밖 — 4e2850eb). 해석은 resolveConfig 하나가 한다.
   const settings = [
     { key: LABEL.personas, value: config.personas, assumed: usingDefault(config, "personas") },
     { key: LABEL.protocols, value: config.protocols, assumed: usingDefault(config, "protocols") },
     { key: LABEL.inProgress, value: config.inProgress, assumed: usingDefault(config, "inProgress") },
     { key: LABEL.done, value: config.done, assumed: usingDefault(config, "done") },
+    // 온톨로지도 이제 나머지 넷과 같은 표시 전용 행이다 — 편집 표면과 워크트리 경고 캡션은
+    // 온톨로지 화면으로 옮겼다(§5-3 §편집 표면이 사는 화면, 티켓 c5d51522).
+    { key: LABEL.ontology, value: config.ontology, assumed: usingDefault(config, "ontology") },
   ];
-  const ontologyAssumed = usingDefault(config, "ontology");
-  // §5-3 §결정 2 — 사람이 워커 `.sh`를 손으로 고쳐 경계를 어긴 경우만 선다(엔진은 검사하지 않는다).
-  const ontologyWarn = ontologyInWorktree(project.root, config.ontology)
-    ? t(locale, "workers.ontologyInWorktree")
-    : null;
   // cwd는 resolveConfig가 애초에 conflicts에 넣지 않는다(갈리는 게 정상 — edc5e1a7).
   const divergent = config.conflicts;
 
@@ -415,9 +410,9 @@ export default async function Workers({ params }: { params: Promise<{ project: s
       {rows.length > 0 && (
         <section className="space-y-2 pt-4">
           <div>
-            <h2 className="text-sm font-semibold">나머지 워커 설정</h2>
+            <h2 className="text-sm font-semibold">나머지 워커 설정 (표시만)</h2>
             <p className="text-sm text-muted-foreground">
-              온톨로지를 뺀 나머지는 이 화면에서 고치지 않습니다 — 워커 파일을 손으로 편집합니다.
+              이 값들은 이 화면에서 고치지 않습니다 — 워커 파일을 손으로 편집합니다.
             </p>
           </div>
           <Table>
@@ -433,34 +428,6 @@ export default async function Workers({ params }: { params: Promise<{ project: s
                   </TableCell>
                 </TableRow>
               ))}
-              {/* §5-3 §온톨로지 자리를 워커가 재정의한다 §결정 1 (b) — 표 안의 유일한 편집 가능
-                  행이다(티켓 cd662a73). 저장 성공은 `revalidatePath`가 표 전체를 다시 그려
-                  아래 캡션(현재 값·기본값 가정·워크트리 경고)에 반영한다. */}
-              <TableRow>
-                <TableCell className="w-48 px-3 py-2 align-top text-xs text-muted-foreground">
-                  {LABEL.ontology}
-                </TableCell>
-                <TableCell className="px-3 py-2">
-                  <OntologyEditor
-                    projectId={id}
-                    initialValue={ontologyAssumed ? "" : config.ontology}
-                    locale={locale}
-                    placeholder={t(locale, "workers.ontology.placeholder")}
-                    saveLabel={t(locale, "workers.ontology.save")}
-                    failureTitle={t(locale, "workers.ontology.saveFailed")}
-                  />
-                  <div className="mt-1 font-mono text-xs break-all text-muted-foreground">
-                    {config.ontology}
-                    {ontologyAssumed && <span className="ml-2 font-sans">기본값 가정</span>}
-                    {ontologyWarn && (
-                      <span className="ml-2 inline-flex items-center gap-1 font-sans text-status-stale">
-                        <TriangleAlert aria-hidden className="size-3.5" />
-                        {ontologyWarn}
-                      </span>
-                    )}
-                  </div>
-                </TableCell>
-              </TableRow>
             </TableBody>
           </Table>
           {/* TICKET_CWD는 워커마다 다른 게 정상이라 여기 없다(워크트리 하나면 두 세션이 서로를

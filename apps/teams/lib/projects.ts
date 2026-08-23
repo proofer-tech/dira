@@ -583,20 +583,20 @@ export async function validateOntologyInput(
 ): Promise<string> {
   const given = expandHome(input.trim());
   if (!path.isAbsolute(given)) {
-    throw new Error(`${t(locale, "workers.ontology.notAbsolute")} ${input.trim() || "(비어 있음)"}`);
+    throw new Error(`${t(locale, "ontology.location.notAbsolute")} ${input.trim() || "(비어 있음)"}`);
   }
   let real: string;
   try {
     real = await realpath(given);
     if (!(await stat(real)).isDirectory()) throw new Error("not a directory");
   } catch {
-    throw new Error(`${t(locale, "workers.ontology.notDirectory")} ${given}`);
+    throw new Error(`${t(locale, "ontology.location.notDirectory")} ${given}`);
   }
   // `root`도 realpath로 편다 — macOS는 `$TMPDIR`(`/var` → `/private/var`)처럼 흔한 경로에도
   // 심링크 성분이 있다. `real` 쪽만 펴고 `root`는 그대로 두면 둘의 접두가 갈려 워크트리 안을
   // 밖으로 오판한다(등록된 프로젝트는 `addProject`가 이미 폈지만, 그 계약에 기대지 않는다).
   if (ontologyInWorktree(await realpath(root), real)) {
-    throw new Error(`${real} — ${t(locale, "workers.ontologyInWorktree")}`);
+    throw new Error(`${real} — ${t(locale, "ontology.location.inWorktree")}`);
   }
   return real;
 }

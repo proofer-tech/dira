@@ -30,7 +30,6 @@ import {
   registerWorkerAction,
   saveCommonContextAction,
   saveContextAction,
-  saveOntologyAction,
   stopWorkerAction,
   type ContextResult,
   type WorkerActionResult,
@@ -54,7 +53,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { TableCell, TableRow } from "@/components/ui/table";
-import type { Locale } from "@/lib/i18n";
 import { relativeUnderAny } from "@/lib/urls";
 import { cn } from "@/lib/utils";
 
@@ -165,60 +163,6 @@ export function ExecBitFix({
       {error && <Failure title="실행 비트를 켜지 못했습니다" message={error} />}
       <CopyCommand cmd={cmd} />
     </>
-  );
-}
-
-/** `TICKET_ONTOLOGY` 편집 — "나머지 워커 설정" 표의 유일한 편집 가능 행이다(§5-3 §온톨로지
- *  자리를 워커가 재정의한다 §결정 1 (b), 티켓 cd662a73). 비우고 저장하면 그 줄이 워커 파일에서
- *  지워져 기본값 가정으로 되돌아간다(Done when 5) — 별도의 되돌리기 버튼을 안 둔다.
- *
- *  성공하면 `revalidatePath`가 표 전체를 다시 그린다 — `ExecBitFix`와 같은 판단으로 이
- *  컴포넌트가 성공 배지를 따로 세우지 않는다. 실패 사유는 서버 문장 그대로다(§6 에러 3요소). */
-export function OntologyEditor({
-  projectId,
-  initialValue,
-  locale,
-  placeholder,
-  saveLabel,
-  failureTitle,
-}: {
-  projectId: string;
-  initialValue: string;
-  locale: Locale;
-  placeholder: string;
-  saveLabel: string;
-  failureTitle: string;
-}) {
-  const [value, setValue] = useState(initialValue);
-  const [error, setError] = useState<string | null>(null);
-  const [pending, start] = useTransition();
-  return (
-    <div>
-      <div className="flex items-center gap-2">
-        <Input
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          placeholder={placeholder}
-          className="h-7 font-mono text-xs"
-        />
-        <Button
-          size="sm"
-          variant="outline"
-          aria-disabled={pending}
-          className="aria-disabled:opacity-50"
-          onClick={() => {
-            if (pending) return; // §58 §못 누르는 실효 — aria-disabled에는 pointer-events-none이 없다
-            start(async () => {
-              const r = await saveOntologyAction(projectId, value, locale);
-              setError(r.ok ? null : (r.message ?? null));
-            });
-          }}
-        >
-          {saveLabel}
-        </Button>
-      </div>
-      {error && <Failure title={failureTitle} message={error} />}
-    </div>
   );
 }
 

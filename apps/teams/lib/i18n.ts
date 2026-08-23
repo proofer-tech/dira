@@ -842,23 +842,25 @@ export const ko: Record<string, string> = {
   "workers.engineHint.prefix": "미지정 — 티켓을 집는 워커의 엔진을 씁니다",
   "workers.engineHint.allPrefix": "지금 전부 ",
   "workers.engineHint.nowPrefix": "지금 ",
-  // §5-3 §온톨로지 자리를 워커가 재정의한다 §결정 2 — 사람이 워커 `.sh`를 손으로 고쳐 경계를
-  // 어긴 경우다(엔진은 검사하지 않는다). 워커 화면의 온톨로지 행에만 붙는다.
-  "workers.ontologyInWorktree": "이 프로젝트의 git 작업 트리 안입니다",
-  // §5-3 §온톨로지 자리를 워커가 재정의한다 §결정 3 — `_ontology/SCHEMA.md`도 `objects/`도
+  // §5-3 §편집 표면이 사는 화면 §결정 2 — 사람이 워커 `.sh`를 손으로 고쳐 경계를
+  // 어긴 경우다(엔진은 검사하지 않는다). 온톨로지 화면의 경로 줄 + 워커 화면의 읽기 전용
+  // 행 둘 다 붙는다(티켓 c5d51522 — 편집 표면은 온톨로지 화면으로, 이 키는 그 네임스페이스로).
+  "ontology.location.inWorktree": "이 프로젝트의 git 작업 트리 안입니다",
+  // §5-3 §편집 표면이 사는 화면 §결정 3 — `_ontology/SCHEMA.md`도 `objects/`도
   // 없는 폴더를 가리켰을 때. 지표-검사 표 대신 이 한 장이 뜬다.
   "ontology.notDira.title": "dira 형식이 아닙니다",
   "ontology.notDira.body":
     "_ontology/SCHEMA.md도 objects/도 없습니다 — 아직 이 폴더를 dira 형식으로 옮기지 않은 것뿐입니다. 아래 가져오기로 옮겨오세요.",
-  // 티켓 cd662a73 — 화면에서 TICKET_ONTOLOGY를 편집하는 폼(§결정 1 (b)). 거절 사유 둘은 여기서
-  // prefix로 쓰고 값이 뒤에 붙는다(`projectActions.unknownProjectPrefix`와 같은 관용구) — 셋째
-  // 거절(워크트리 안)은 위 `workers.ontologyInWorktree`를 그대로 재사용한다(새 문구를 안 만든다).
-  "workers.ontology.edit": "온톨로지 자리 편집",
-  "workers.ontology.placeholder": "이 프로젝트의 git 작업 트리 밖 절대경로",
-  "workers.ontology.save": "저장",
-  "workers.ontology.saveFailed": "저장하지 못했습니다",
-  "workers.ontology.notAbsolute": "절대경로여야 합니다:",
-  "workers.ontology.notDirectory": "실재하는 디렉터리가 아닙니다:",
+  // 티켓 cd662a73이 만들고 c5d51522가 온톨로지 화면으로 옮긴 폼 — 화면에서 TICKET_ONTOLOGY를
+  // 편집한다(§결정 1 (b)). 거절 사유 둘은 여기서 prefix로 쓰고 값이 뒤에 붙는다
+  // (`projectActions.unknownProjectPrefix`와 같은 관용구) — 셋째 거절(워크트리 안)은 위
+  // `ontology.location.inWorktree`를 그대로 재사용한다(새 문구를 안 만든다).
+  "ontology.location.edit": "온톨로지 자리 편집",
+  "ontology.location.placeholder": "이 프로젝트의 git 작업 트리 밖 절대경로",
+  "ontology.location.save": "저장",
+  "ontology.location.saveFailed": "저장하지 못했습니다",
+  "ontology.location.notAbsolute": "절대경로여야 합니다:",
+  "ontology.location.notDirectory": "실재하는 디렉터리가 아닙니다:",
 };
 
 /** 제품 낱말의 영어 대응 — **여기가 한자리다**(621c7a97). 다음 묶음이 같은 것을 다르게 부르지
@@ -1652,14 +1654,15 @@ export const en: Record<string, string> = {
   "workers.engineHint.prefix": "Not set — uses the engine of whichever worker claims the ticket",
   "workers.engineHint.allPrefix": "currently all ",
   "workers.engineHint.nowPrefix": "currently ",
-  "workers.ontologyInWorktree": "Inside this project's git working tree",
-  // 티켓 cd662a73 — see the ko block for why the third rejection reuses `workers.ontologyInWorktree`.
-  "workers.ontology.edit": "Edit ontology location",
-  "workers.ontology.placeholder": "Absolute path outside this project's git working tree",
-  "workers.ontology.save": "Save",
-  "workers.ontology.saveFailed": "Couldn't save",
-  "workers.ontology.notAbsolute": "Must be an absolute path:",
-  "workers.ontology.notDirectory": "Not an existing directory:",
+  "ontology.location.inWorktree": "Inside this project's git working tree",
+  // Ticket cd662a73, moved to this namespace by c5d51522 — see the ko block for why the third
+  // rejection reuses `ontology.location.inWorktree`.
+  "ontology.location.edit": "Edit ontology location",
+  "ontology.location.placeholder": "Absolute path outside this project's git working tree",
+  "ontology.location.save": "Save",
+  "ontology.location.saveFailed": "Couldn't save",
+  "ontology.location.notAbsolute": "Must be an absolute path:",
+  "ontology.location.notDirectory": "Not an existing directory:",
   // 공용 컴포넌트·순수 유틸 묶음(§0-16 §발행 §묶음 표 행 11, `90db2822`) — ko는 `c9f2eec5`가
   // 뽑았다. 이 묶음의 문구는 **한 자리가 아니라 여섯 자리에서 같이 읽힌다**(`markdown-editor.tsx`
   // 하나가 화면 여섯을 문다) — 그래서 화면 이름을 안 넣고 동작만 적는다.
