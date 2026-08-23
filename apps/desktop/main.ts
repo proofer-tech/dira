@@ -608,13 +608,22 @@ autoUpdater.on("update-downloaded", (info) => {
   surfaceUpdate({ kind: "downloaded", version: info.version });
 });
 
+// 맥의 `quitAndInstall()`은 `app.quit()`을 안 거치고 **창을 먼저 닫은 뒤에야**
+// `before-quit-for-update`를 낸다(§못박는 것 3 넷째 경로) — 그 이벤트만 듣고 있으면
+// `win.on("close")`(N1)가 아직 `quitting === false`인 순간에 먼저 걸려 창을 숨긴다.
+// 이벤트 순서에 기대지 않도록 호출 직전, 우리가 재시작을 결정한 바로 그 자리에서 세운다.
+function quitAndInstallNow() {
+  quitting = true;
+  autoUpdater.quitAndInstall();
+}
+
 /** T5 — `지금 재시작`. 첫 클릭은 `busy`를 확인해 필요하면 재확인 토스트를 보내고, 그 토스트의
  *  `재시작`(같은 `restart` 액션)은 재확인 없이 바로 `quitAndInstall()`한다. `isBusy()`의 신뢰
  *  경계 처리(응답 실패·boolean 아닌 값 → `true`)는 무수정이다. */
 async function handleRestart() {
   if (restartAsked) {
     restartAsked = false;
-    autoUpdater.quitAndInstall();
+    quitAndInstallNow();
     return;
   }
   if (readyOrigin && (await isBusy(readyOrigin))) {
@@ -622,7 +631,7 @@ async function handleRestart() {
     surfaceUpdate({ kind: "confirm" });
     return;
   }
-  autoUpdater.quitAndInstall();
+  quitAndInstallNow();
 }
 
 /** U1(`manual`) · 켤 때와 U2를 켠 직후의 배경 검사(`!manual`).
