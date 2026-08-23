@@ -23564,8 +23564,15 @@ apps/
 - `killServer()`도 안 돈다. 앱이 안 죽었으니 아직 이 못을 어긴 상태는 아니지만, 이 경로가 실제로
   앱을 끄게 되는 순간 자식이 남는다.
 
-**판정은 `main.ts`가 `before-quit-for-update`를 듣는가 하나다.** 실제 적용까지는 릴리스 2회가
-필요해서(P277 §QA 0장과 같은 자리) 코드 판정을 여기에 둔다.
+**리스너를 다는 것으로는 부족했다 - 그 이벤트는 창이 닫힌 다음에 온다.** P280-2가
+`before-quit-for-update`에서 `quitting`을 세웠고 그 리스너는 v1.0.27에도 살아 있었는데
+증상은 그대로 재발했다(요구 `ace286ff`, 2026-08-23). 이벤트가 뜨는 시점엔 N1의 close
+가로채기가 이미 `quitting === false`인 채로 창을 숨긴 뒤라, 있어도 늦게 세워 늦다.
+
+**판정은 `quitAndInstall()`을 부르는 그 자리에서 `quitting`을 직접 세우는가다** - 이벤트
+순서에 기대지 않는 자리다. `before-quit-for-update` 리스너는 다른 경로의 안전망으로
+`killServer()`까지 그대로 둔다. 실제 적용까지는 릴리스 2회가 필요해서(P277 §QA 0장과
+같은 자리) 코드 판정을 여기에 둔다.
 
 4. **창은 자기가 띄운 오리진만 연다.** `contextIsolation: true` - `nodeIntegration: false`,
    `will-navigate`-`setWindowOpenHandler`는 `http://127.0.0.1:<port>` 밖을 전부 거부하고
