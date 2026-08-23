@@ -43,3 +43,30 @@ test("안쪽 §9 묶음 줄은 한 글자도 안 갈린다 — 겹치지 않는 
     "§9 묶음 줄의 `기록 n건`이 갈렸다",
   );
 });
+
+// 티켓 `0da4466e`(요구 `4f761c5a` 답 `90c1d300`): 참견 칸·답변 칸이 목적지를 안 말해 사람이
+// 답변 대기 카드가 사라진 자리에 참견을 쓰고 실패를 보는 문제. 판정(`interjectMode`, 셋이
+// 배타)은 `lib/urls.test.ts`가 이미 못박는다 — 여기서 못박는 것은 그 판정이 그리는 **문구**다.
+test("참견 칸 placeholder가 목적지를 칸 안에서 말한다 — `도는 세션에 말 걸기`(§Done when 1)", () => {
+  assert.match(
+    s,
+    /placeholder=\{followup \? "이어서 무엇을 할지 쓰기" : "도는 세션에 말 걸기"\}/,
+    "참견 placeholder가 `도는 세션에 말 걸기`가 아니다 — 참견 칸이 도는 세션에 간다는 것을 안 말한다",
+  );
+});
+
+test("답변 대기면 참견 폼이 안 서고 목적지 문장과 함께 답변 폼으로 통째로 갈린다(§Done when 2)", () => {
+  // `mode === "answer"`가 참견 폼 조립보다 먼저 `return`해 같은 자리에 참견 입력칸이 안 선다 —
+  // 그래서 사람이 그 칸에 답을 쓰고 보내기를 눌러 `not-wip` 실패 문구를 보는 경로 자체가 없다.
+  const answerBranch = s.indexOf('if (mode === "answer")');
+  const formBuilt = s.indexOf("<InputGroupTextarea");
+  assert.ok(
+    answerBranch >= 0 && formBuilt >= 0 && answerBranch < formBuilt,
+    "답변 분기가 참견 폼보다 먼저 return하지 않는다",
+  );
+  assert.match(
+    s,
+    /답변을 달면 이 티켓이 다시 큐에 뜨고 담당 세션이 이어서 봅니다\./,
+    "답변 모드가 무엇을 하는지 가리키는 문장이 없다",
+  );
+});
