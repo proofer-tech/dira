@@ -22,6 +22,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { listEpics, resolveMarkdownRefs } from "@/lib/epics";
 import { t } from "@/lib/i18n";
+import { personaActivity } from "@/lib/persona-activity";
 import { listTickets } from "@/lib/queue";
 import { decodeHash } from "@/lib/urls";
 import {
@@ -70,6 +71,13 @@ function lastActivityFor(
   return { minutesAgo: Math.max(0, Math.floor(ms / 60_000)), hash: best.hash };
 }
 
+/** 이 렌더 전체가 같이 쓰는 "지금"(§비주얼 §66 ⑦ "경과" · "닫힌 상대 시각") — 컴포넌트 본문에서
+ *  직접 `Date.now()`를 안 부르는 이유는 위 `lastActivityFor`와 같다(순수성 린트 —
+ *  `react-hooks/purity`가 컴포넌트 본문의 impure 호출을 막는다. 평범한 함수 하나로 감싼다). */
+function currentMs(): number {
+  return Date.now();
+}
+
 export default async function Personas({
   params,
 }: {
@@ -81,6 +89,7 @@ export default async function Personas({
   if (!project) notFound();
 
   const config = await resolveConfig(project);
+  const nowMs = currentMs();
   // 티켓을 같이 읽는 이유: 프로필 없는 페르소나 경고와 삭제 경고가 둘 다 참조 건수를 쓴다.
   const tickets = await listTickets(project.root, config);
   // 스킬·메모리는 `listPersonas`와 **같은 렌더**에 실린다(§비주얼 §25 · §32 로딩 — 카드를 펼칠 때
@@ -112,13 +121,16 @@ export default async function Personas({
   const rows = await Promise.all(
     personas.map(async (p) => {
       // 상한·엔진도 같은 렌더에 실린다(§5-4 §화면 · §제약 1 §결정 기록 §열한 번째) — 오른쪽 칸
-      // 머리가 그리는 값이라 스킬·메모리와 같은 벌이다
-      const [{ skills, chars }, { skills: rawOff }, { memories }, limit, engine] = await Promise.all([
+      // 머리가 그리는 값이라 스킬·메모리와 같은 벌이다. `personaActivity`(4ea1147a)도 여기 —
+      // `활동` 탭 절 넷의 출처다(§비주얼 §66, 티켓 `46d7ef1e`). `runner.log`는 `cache()`로
+      // 요청당 1회다(위 `lastLogByWorker` 호출과 같은 경로 — 새 파일 읽기가 안 늘어난다).
+      const [{ skills, chars }, { skills: rawOff }, { memories }, limit, engine, activity] = await Promise.all([
         readPersonaSkillsFile(config.personas, p.name),
         readPersonaOffSkillsFile(config.personas, p.name),
         readPersonaMemory(config.personas, p.name),
         readPersonaLimit(config.personas, p.name),
         readPersonaEngine(config.personas, p.name),
+        personaActivity(p.name, tickets, project.root, config),
       ]);
       // 손으로 두 파일에 같은 이름을 넣어 두면 활성이 이긴다(§5-1 §충돌) — 화면은 그 이름을
       // 활성으로 한 번만 그린다. 파일 자체는 다음 저장이 고친다(savePersonaSkillsAction).
@@ -135,6 +147,7 @@ export default async function Personas({
         engine,
         lastActivity: lastActivityFor(p.name, personaRuns),
         squads: memberSquads,
+        activity,
       };
     }),
   );
@@ -251,6 +264,7 @@ export default async function Personas({
           modelPattern={MODEL_RE.source}
           engineHint={engineHint}
           refs={refs}
+          nowMs={nowMs}
         />
       )}
     </div>

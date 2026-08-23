@@ -7,7 +7,7 @@
  *  않고 그 자리에서 직접 계산한다(공식은 같다). */
 import path from "node:path";
 import { derivedFrom, isAwaiting, planOf, type Suffixes, type Ticket } from "./queue.ts";
-import { lastLogByWorker } from "./workers.ts";
+import { lastLogByWorker, workerOf } from "./workers.ts";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const THIRTY_DAY_MS = 30 * DAY_MS;
@@ -37,10 +37,20 @@ export type PersonaNowItem = {
   hash: string;
   title: string;
   kind: string;
-  owner: string | null;
+  /** `owner:`에서 `workerOf`로 뽑은 워커 이름(§비주얼 §66 ⑦ "워커" — `w1`~`w8` 두 자다).
+   *  전체 `owner:` 문자열이 아니다 — 화면은 이미 페르소나 축이라 그 반쪽은 필요 없다.
+   *  `lib/workers.ts`가 `node:fs`를 끄는 클라이언트 컴포넌트에서는 못 부르니 여기서 미리 판다
+   *  (`worker-mark.tsx`와 같은 이유). */
+  worker: string | null;
   assignedAt: string | null;
   plan: { done: number; total: number } | null;
+  /** `## 블록`이 붙어 열린 채 멈춘 티켓(§비주얼 §66 ⑧) — 화면은 상태 점 대신 이 값 하나만
+   *  본다. 새 파서가 아니다 — 이미 손에 든 `body`에 정규식 한 줄이다(`questionsOf`가
+   *  `## 질문`을 잡는 것과 같은 모양). */
+  blocked: boolean;
 };
+
+const BLOCKED_HEADING_RE = /^##\s*블록/m;
 
 /** §5-6 (2) `기다리는 것` 한 줄. */
 export type PersonaWaitingItem = { hash: string; title: string; mtime: number };
@@ -53,7 +63,8 @@ export type PersonaRecentItem = {
   closedAt: number;
   durationMin: number | null;
   reassigns: number | null;
-  owner: string | null;
+  /** `PersonaNowItem.worker`와 같은 값 — `workerOf(owner)`. */
+  worker: string | null;
 };
 
 /** §5-6 (4) `30일` 블록. `daily`는 오래된 날이 먼저이고 길이가 곧 "로그가 닿는 날 수"다. */
@@ -93,9 +104,10 @@ export async function personaActivity(
         hash: t.hash,
         title: t.title,
         kind: t.kind,
-        owner: t.fm.owner ?? null,
+        worker: t.fm.owner ? workerOf(t.fm.owner) : null,
         assignedAt: t.fm.assigned_at ?? null,
         plan: plan.length ? { done: plan.filter((p) => p.state === "done").length, total: plan.length } : null,
+        blocked: BLOCKED_HEADING_RE.test(t.body),
       };
     });
 
@@ -119,7 +131,7 @@ export async function personaActivity(
       closedAt: t.mtime,
       durationMin: run ? (logTimeMs(run.endAt) - logTimeMs(run.dispatchAt)) / 60000 : null,
       reassigns: seenByLog ? Math.max(0, dispatchByHash[t.hash] - 1) : null,
-      owner: t.fm.owner ?? null,
+      worker: t.fm.owner ? workerOf(t.fm.owner) : null,
     };
   });
 

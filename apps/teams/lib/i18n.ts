@@ -637,6 +637,26 @@ export const ko: Record<string, string> = {
   "persona.head.runningSessionsPrefix": "도는 세션",
   "persona.head.closedSuffix": "닫음",
   "persona.head.squadPrefix": "스쿼드",
+  // 활동 탭 절 넷(§비주얼 §66 - 티켓 `46d7ef1e`). 값은 `personaActivity`(4ea1147a)가 이미
+  // 센다 - 여기는 절 제목 · 빈 절 한 줄 · 30일 라벨뿐이다.
+  "persona.activity.nowHeading": "지금",
+  "persona.activity.waitingHeading": "기다리는 것",
+  "persona.activity.recentHeading": "최근",
+  "persona.activity.recentBoardLink": "보드에서 보기",
+  "persona.activity.thirtyDayHeading": "30일",
+  "persona.activity.nowEmpty": "지금 도는 티켓 없음",
+  "persona.activity.recentEmpty": "닫은 티켓 없음",
+  // `## 블록`이 붙어 열린 채 멈춘 `.wip` 줄에만 서는 낱말(§비주얼 §66 ⑧) - 색·아이콘 없이 이 한
+  // 낱말뿐이다.
+  "persona.activity.blocked": "막힘",
+  "persona.activity.closedLabel": "닫은 티켓",
+  "persona.activity.closedUnit": "장",
+  "persona.activity.durationLabel": "소요 중앙값",
+  // "되돌아옴"은 티켓 상세의 "다시 할당"(ticket.retries.*)과 같은 값(reassignCount)이지만
+  // 낱말을 새로 고른다(§5-6 - 성적이 아니라 직렬화 비용이라는 이 화면의 어휘).
+  "persona.activity.reassignLabel": "되돌아옴",
+  "persona.activity.reassignUnit": "회",
+  "persona.activity.issuedLabel": "낸 티켓",
   "persona.route.notFound": "이 경로는 열 수 없습니다",
   // 여러 절(프로필-스쿼드-스킬-메모리-정책값)이 같은 저장-삭제 결과 문구를 그대로 재사용한다
   // (§0-16 §키 규약 - 중복 값 0).
@@ -1489,6 +1509,20 @@ export const en: Record<string, string> = {
   "persona.head.runningSessionsPrefix": "Running",
   "persona.head.closedSuffix": "closed",
   "persona.head.squadPrefix": "Squad",
+  "persona.activity.nowHeading": "Now",
+  "persona.activity.waitingHeading": "Waiting on",
+  "persona.activity.recentHeading": "Recent",
+  "persona.activity.recentBoardLink": "View on board",
+  "persona.activity.thirtyDayHeading": "Last 30 days",
+  "persona.activity.nowEmpty": "No tickets running now",
+  "persona.activity.recentEmpty": "No tickets closed yet",
+  "persona.activity.blocked": "Blocked",
+  "persona.activity.closedLabel": "Closed:",
+  "persona.activity.closedUnit": "",
+  "persona.activity.durationLabel": "Median duration:",
+  "persona.activity.reassignLabel": "Reassigned:",
+  "persona.activity.reassignUnit": "",
+  "persona.activity.issuedLabel": "Issued:",
   "persona.route.notFound": "This path can't be opened",
   "persona.action.saveFailedTitle": "Couldn't save",
   "persona.action.savedNotice": "Saved.",

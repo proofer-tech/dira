@@ -28,7 +28,13 @@ function fmtLog(ms: number): string {
 }
 
 /** 테스트 픽스처용 최소 `Ticket`. 실제 파일을 안 거친다 — `personaActivity`는 배열만 받는다. */
-function mkTicket(o: { hash: string; persona: string; state: "open" | "wip" | "done"; mtime?: number }): Ticket {
+function mkTicket(o: {
+  hash: string;
+  persona: string;
+  state: "open" | "wip" | "done";
+  mtime?: number;
+  body?: string;
+}): Ticket {
   return {
     hash: o.hash,
     stem: o.hash,
@@ -47,7 +53,7 @@ function mkTicket(o: { hash: string; persona: string; state: "open" | "wip" | "d
     effective: 3,
     effectiveDue: null,
     fm: {},
-    body: "",
+    body: o.body ?? "",
     birth: o.mtime ?? 0,
     mtime: o.mtime ?? 0,
   };
@@ -147,4 +153,17 @@ test("personaActivity — 짝이 없는 DISPATCH: 재시도의 첫 DISPATCH는 �
   assert.strictEqual(activity.recent[0].durationMin, 7); // 짝이 맞은 재시도 DISPATCH -> DONE만 잰다
   assert.strictEqual(activity.recent[0].reassigns, 1); // DISPATCH 두 번 - 1
   assert.strictEqual(activity.thirtyDay.reassignSum, 1);
+});
+
+test("personaActivity — `## 블록`이 붙은 .wip만 blocked다(§비주얼 §66 ⑧)", async () => {
+  const root = makeRoot("");
+  const tickets = [
+    mkTicket({ hash: "bbbb2222", persona: "dev", state: "wip", body: "## 블록\n\n사유" }),
+    mkTicket({ hash: "cccc4444", persona: "dev", state: "wip", body: "## 진행 계획\n\n- [x] 끝" }),
+  ];
+
+  const activity = await personaActivity("dev", tickets, root, SFX);
+  const byHash = new Map(activity.now.map((n) => [n.hash, n]));
+  assert.strictEqual(byHash.get("bbbb2222")?.blocked, true);
+  assert.strictEqual(byHash.get("cccc4444")?.blocked, false);
 });

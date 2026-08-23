@@ -5,7 +5,7 @@
  *  fs를 만지는 건 서버 액션뿐이다(`app/p/[project]/personas/actions.ts`). 파일 하나에 모은 이유는
  *  `workers-ui.tsx`와 같다 — 같은 화면의 세 액션이 같은 문구(엔진이 WARN만 남긴다 · 이름 규칙)를
  *  쓰므로 쪼개면 자리가 갈린다. */
-import { memo, useCallback, useEffect, useId, useRef, useState, useTransition } from "react";
+import { memo, type ReactNode, useCallback, useEffect, useId, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { Check, ChevronDown, ChevronRight, Trash2, TriangleAlert } from "lucide-react";
 import {
@@ -100,7 +100,15 @@ import {
 import { skillUploadError } from "@/lib/skill-upload-limit";
 import type { Memory, Skill } from "@/lib/skills";
 import { applyLeaderOverride, orderedSquadMembers, sameSquadMembers } from "@/lib/squads";
-import { decodeHash, engineMissing, PERSONA_COLORS, personaDotClass } from "@/lib/urls";
+import { agoLabel, decodeHash, engineMissing, PERSONA_COLORS, personaDotClass } from "@/lib/urls";
+import { daysSince, KIND_LABELS } from "@/components/status-badge";
+import type {
+  PersonaActivity,
+  PersonaNowItem,
+  PersonaRecentItem,
+  PersonaThirtyDay,
+  PersonaWaitingItem,
+} from "@/lib/persona-activity";
 import { cn } from "@/lib/utils";
 
 /** `engine` 사이드카가 읽어 낸 값 3종(`readPersonaEngine`과 같은 모양). `{ raw }`는 카탈로그와
@@ -137,6 +145,9 @@ export type PersonaRow = {
   lastActivity: { minutesAgo: number; hash: string } | null;
   /** 이 페르소나를 멤버로 든 스쿼드 이름(§5-5). 0개면 머리 2행에서 자리를 비운다. */
   squads: string[];
+  /** `활동` 탭 절 넷의 값 전부(§비주얼 §66, 티켓 `46d7ef1e`) — `personaActivity`(4ea1147a)가
+   *  이 렌더에서 이미 뽑아 둔 것. 이 화면은 값을 다시 세지 않고 포맷만 한다. */
+  activity: PersonaActivity;
 };
 
 /** 서버가 읽어 넘긴 스쿼드 한 항목(DESIGN.md §5-5). 색·자수·스킬·메모리·상한이 **없다** —
@@ -508,6 +519,7 @@ export function PersonasPane({
   modelPattern,
   engineHint,
   refs,
+  nowMs,
 }: {
   projectId: string;
   /** 경로의 페르소나 세그먼트(없으면 `null` = 명시 선택 없음 → 목록 첫 줄). 서버가 준 것은
@@ -538,6 +550,11 @@ export function PersonasPane({
    *  서버가 한 번에 내려준다(`rows`가 이미 그 전문을 같은 렌더에 들고 있는 것과 같은 이유 —
    *  카드를 펼칠 때 새 요청이 없다). `MemorySection`에 그대로 흘려보낸다. */
   refs?: RefIndex;
+  /** 서버가 이 렌더에서 한 번 잰 `Date.now()`(§비주얼 §66 ⑦ "경과" · "닫힌 상대 시각") — 클라이언트
+   *  가 다시 재지 않는다. `force-dynamic`이라 새로고침 전까지 이 화면의 다른 값도 이미 그 순간의
+   *  스냅샷이라, 여기서 새로 `Date.now()`를 부르면 SSR과 하이드레이션이 다른 시각을 잴 수 있다
+   *  (`when()`·`lastActivityFor`와 같은 이유로 서버 값을 그대로 흘려보낸다). */
+  nowMs: number;
 }) {
   const t = useT();
   const locale = useLocale();
@@ -943,6 +960,7 @@ export function PersonasPane({
             modelPattern={modelPattern}
             engineHint={engineHint}
             refs={refs}
+            nowMs={nowMs}
           />
         )}
       </div>
@@ -966,6 +984,7 @@ function PersonaDetail({
   modelPattern,
   engineHint,
   refs,
+  nowMs,
 }: {
   projectId: string;
   row: PersonaRow;
@@ -984,6 +1003,8 @@ function PersonaDetail({
   engineHint: string | null;
   /** 산문 속 해시-P번호 표식의 값(§9) — `MemorySection`에 그대로 흘려보낸다 */
   refs?: RefIndex;
+  /** `PersonasPane`의 그 값 그대로 — `활동` 탭의 "경과"·"닫힌 상대 시각"이 쓴다. */
+  nowMs: number;
 }) {
   const t = useT();
   const [result, setResult] = useState<PersonaResult | null>(null);
@@ -1113,7 +1134,19 @@ function PersonaDetail({
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="activity" />
+        <TabsContent value="activity" className="space-y-3">
+          <ActivityNowSection projectId={projectId} items={row.activity.now} nowMs={nowMs} />
+          {row.activity.waiting.length > 0 && (
+            <ActivityWaitingSection projectId={projectId} items={row.activity.waiting} />
+          )}
+          <ActivityRecentSection
+            projectId={projectId}
+            personaName={row.name}
+            items={row.activity.recent}
+            nowMs={nowMs}
+          />
+          <ActivityThirtyDaySection thirtyDay={row.activity.thirtyDay} />
+        </TabsContent>
 
         <TabsContent value="profile" className="space-y-3">
           {/* §비주얼 §44 ① — 정책값 둘(상한·엔진)은 신원(머리)도 프롬프트 3절(PROFILE·스킬·메모리)도
@@ -1191,6 +1224,206 @@ function PersonaDetail({
         </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+// ── 활동 탭 절 넷 (DESIGN.md §5-6 §활동 탭 · §비주얼 §66, 값은 4ea1147a) ────────────
+
+/** 절 셋(`지금`·`기다리는 것`·`최근`)이 공유하는 한 줄 그릇(§비주얼 §66 ⑦) — 해시와 제목만
+ *  한 `<Link>`로 감싼다(§31 갈래 A2, `hover:underline` 하나로 말한다 — 해시 자신은 밑줄이
+ *  없다). 나머지 값은 형제 `<span>`이다. */
+function ActivityRow({
+  projectId,
+  hash,
+  title,
+  children,
+}: {
+  projectId: string;
+  hash: string;
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex items-baseline gap-2 py-1 text-xs text-muted-foreground">
+      <Link
+        href={`/p/${projectId}/tickets/${encodeURIComponent(hash)}`}
+        className="flex min-w-0 grow items-baseline gap-2 hover:underline"
+      >
+        <span className="shrink-0 font-mono">{hash}</span>
+        <span className="min-w-0 grow truncate text-sm text-foreground" title={title}>
+          {title}
+        </span>
+      </Link>
+      {children}
+    </div>
+  );
+}
+
+/** §5-6 (1) `지금` — `.wip` 중 이 persona. 0장이면 한 줄 문구다(§0-20 — 판정 문장이 아니라
+ *  사실 문장). `상태 점`을 안 그린다(§비주얼 §66 ⑧) — 갈리는 값은 `막힘` 하나뿐이다. */
+function ActivityNowSection({
+  projectId,
+  items,
+  nowMs,
+}: {
+  projectId: string;
+  items: PersonaNowItem[];
+  nowMs: number;
+}) {
+  const t = useT();
+  const locale = useLocale();
+  return (
+    <section className="space-y-2 border-t pt-3">
+      <h3 className="text-sm font-medium">{t("persona.activity.nowHeading")}</h3>
+      {items.length === 0 ? (
+        <p className="text-xs text-muted-foreground">{t("persona.activity.nowEmpty")}</p>
+      ) : (
+        items.map((item) => (
+          <ActivityRow key={item.hash} projectId={projectId} hash={item.hash} title={item.title}>
+            <span className="shrink-0">{KIND_LABELS[item.kind] ?? item.kind}</span>
+            {item.blocked && <span className="shrink-0">{t("persona.activity.blocked")}</span>}
+            {item.worker && <span className="shrink-0 font-mono">{item.worker}</span>}
+            {item.assignedAt && (
+              <span className="shrink-0">{agoLabel(nowMs - Date.parse(item.assignedAt), locale)}</span>
+            )}
+            {item.plan && (
+              <span className="shrink-0 font-mono">
+                {item.plan.done}/{item.plan.total}
+              </span>
+            )}
+          </ActivityRow>
+        ))
+      )}
+    </section>
+  );
+}
+
+/** §5-6 (2) `기다리는 것` — `isAwaiting`인 것. 0장이면 **절 자체를 안 그린다**(호출부가 이미
+ *  거른다) — `지금`과 갈리는 지점: 여기는 비어 있는 것이 정상이라 빈 절이 자리만 먹는다. */
+function ActivityWaitingSection({
+  projectId,
+  items,
+}: {
+  projectId: string;
+  items: PersonaWaitingItem[];
+}) {
+  const t = useT();
+  return (
+    <section className="space-y-2 border-t pt-3">
+      <h3 className="text-sm font-medium">{t("persona.activity.waitingHeading")}</h3>
+      {items.map((item) => {
+        const days = daysSince(item.mtime);
+        return (
+          <ActivityRow key={item.hash} projectId={projectId} hash={item.hash} title={item.title}>
+            {/* 경과 표시는 `<n>일` 한 벌이다(§2 §경과 표시) — 0이면 안 붙인다 */}
+            {days > 0 && (
+              <span className="shrink-0">
+                {days}
+                {t("common.unit.day")}
+              </span>
+            )}
+          </ActivityRow>
+        );
+      })}
+    </section>
+  );
+}
+
+/** §5-6 (3) `최근` — `.done` 중 이 persona, 최신 20장. 성공 배지가 없다(§성공률을 안 만든다).
+ *  소요·되돌아옴은 로그가 안 닿으면 `null`이라 자리를 비운다(0으로 안 채운다). 머리 오른쪽의
+ *  `보드에서 보기`가 `더 보기`를 대신한다(§5-6 — 페이지네이션을 새로 안 만든다). */
+function ActivityRecentSection({
+  projectId,
+  personaName,
+  items,
+  nowMs,
+}: {
+  projectId: string;
+  personaName: string;
+  items: PersonaRecentItem[];
+  nowMs: number;
+}) {
+  const t = useT();
+  const locale = useLocale();
+  return (
+    <section className="space-y-2 border-t pt-3">
+      <h3 className="flex items-center gap-2 text-sm font-medium">
+        {t("persona.activity.recentHeading")}
+        <Link
+          href={`/p/${projectId}?persona=${encodeURIComponent(personaName)}`}
+          className="ml-auto text-xs font-normal text-muted-foreground hover:underline"
+        >
+          {t("persona.activity.recentBoardLink")}
+        </Link>
+      </h3>
+      {items.length === 0 ? (
+        <p className="text-xs text-muted-foreground">{t("persona.activity.recentEmpty")}</p>
+      ) : (
+        items.map((item) => (
+          <ActivityRow key={item.hash} projectId={projectId} hash={item.hash} title={item.title}>
+            <span className="shrink-0">{KIND_LABELS[item.kind] ?? item.kind}</span>
+            <span className="shrink-0">{agoLabel(nowMs - item.closedAt, locale)}</span>
+            {item.durationMin !== null && (
+              <span className="shrink-0 font-mono">{Math.round(item.durationMin)}m</span>
+            )}
+            {/* 1회 이상일 때만 선다(§5-6) — `0회`도 자리를 안 먹는다 */}
+            {item.reassigns !== null && item.reassigns >= 1 && (
+              <span className="shrink-0">
+                {t("persona.activity.reassignLabel")} {item.reassigns}
+                {t("persona.activity.reassignUnit")}
+              </span>
+            )}
+            {item.worker && <span className="shrink-0 font-mono">{item.worker}</span>}
+          </ActivityRow>
+        ))
+      )}
+    </section>
+  );
+}
+
+/** §5-6 (4) `30일` — 숫자 넷 한 줄 + 막대(§비주얼 §66 ⑩). 절은 항상 서고 값이 0이어도 그대로
+ *  그린다(§비주얼 §66 ⑨) — `소요 중앙값`만 로그 창 밖(`null`)이면 자리를 비운다. */
+function ActivityThirtyDaySection({ thirtyDay }: { thirtyDay: PersonaThirtyDay }) {
+  const t = useT();
+  const valueClass = "text-sm font-mono text-foreground tabular-nums";
+  const scale = Math.max(4, ...thirtyDay.daily.map((d) => d.count));
+  return (
+    <section className="space-y-2 border-t pt-3">
+      <h3 className="text-sm font-medium">{t("persona.activity.thirtyDayHeading")}</h3>
+      <div className="flex flex-wrap items-baseline gap-4 text-xs text-muted-foreground">
+        <span>
+          {t("persona.activity.closedLabel")} <span className={valueClass}>{thirtyDay.closed}</span>
+          {t("persona.activity.closedUnit")}
+        </span>
+        {thirtyDay.durationMedianMin !== null && (
+          <span>
+            {t("persona.activity.durationLabel")}{" "}
+            <span className={valueClass}>{thirtyDay.durationMedianMin.toFixed(1)}m</span>
+          </span>
+        )}
+        <span>
+          {t("persona.activity.reassignLabel")} <span className={valueClass}>{thirtyDay.reassignSum}</span>
+          {t("persona.activity.reassignUnit")}
+        </span>
+        <span>
+          {t("persona.activity.issuedLabel")} <span className={valueClass}>{thirtyDay.issued}</span>
+          {t("persona.activity.closedUnit")}
+        </span>
+      </div>
+      {thirtyDay.daily.length > 0 && (
+        <div className="flex h-6 items-end gap-px">
+          {thirtyDay.daily.map((d) => (
+            <div
+              key={d.date}
+              aria-hidden
+              className={cn("w-1.5", d.count === 0 ? "bg-border" : "bg-foreground")}
+              style={{ height: d.count === 0 ? 1 : Math.max(2, Math.round((d.count / scale) * 24)) }}
+              title={`${d.date} ${d.count}${t("persona.activity.closedUnit")}`}
+            />
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 

@@ -46,7 +46,7 @@ import { EpicSidebar } from "@/components/epic-sidebar";
 import { PersonaBadge, SquadBadge } from "@/components/persona-badge";
 import { PriorityMeter } from "@/components/priority-meter";
 import { TitleRefs } from "@/components/queue-ref";
-import { DepBadge, StatusBadge, daysSince, statusLabel } from "@/components/status-badge";
+import { DepBadge, KIND_LABELS, StatusBadge, daysSince, statusLabel } from "@/components/status-badge";
 import { AnswerDialog, NewTicketDialog, RequestDialog } from "@/components/ticket-ui";
 import { WipWorker, WorkerChips } from "@/components/worker-mark";
 import { Badge } from "@/components/ui/badge";
@@ -125,16 +125,6 @@ const STATUSES = ["open", "wip", "done"] as const;
  *  패리티) 레인은 흐름의 단계를 그린다. `deps 대기`·`답변 대기`는 `대기` 레인에 앉고
  *  `assigned`는 필터에만 남는다. */
 const STATUS_OPTIONS = ["open", "blocked", "awaiting", "assigned", "wip", "done"] as const;
-
-/** `kind:` → 화면 문구(§1 보드 §보드가 `kind`를 한글로 말한다). **선택지 목록이 아니라 라벨
- *  대응표다** — `kind`는 프로젝트마다 다르므로 표에 없는 값은 파일에 적힌 그대로 그린다
- *  (`KIND_LABELS[v] ?? v`. 상태 필터의 `known ? statusLabel(known) : v`와 같은 모양). */
-const KIND_LABELS: Record<string, string> = {
-  work: "작업",
-  request: "요구사항",
-  feedback: "피드백",
-  answer: "답변",
-};
 
 /** 뷰 전환은 `<Link>` 2개다 — `tabs`를 설치하지 않은 이유가 이것이다(DESIGN.md §5). */
 const VIEWS = [

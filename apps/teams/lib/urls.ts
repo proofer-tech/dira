@@ -202,6 +202,20 @@ export function remainingLabel(ms: number, locale: Locale): string {
   return m === 0 ? `${h}${hUnit}` : `${h}${hUnit} ${m}${mUnit}`;
 }
 
+/** 지난 시각 하나 → `<n><단위> 전`(§비주얼 §66 ⑦ "경과" · "닫힌 상대 시각"). 분 -> 시간 -> 일로
+ *  접는다 — 페르소나 활동 탭의 `지금`(경과)·`최근`(닫힌 상대 시각) 줄이 같은 함수를 쓴다.
+ *
+ *  `elapsedMs`는 호출부가 이미 `Date.now() - <시각>`으로 잰 값이다 — 여기서 새로 `Date.now()`를
+ *  안 부른다(서버 컴포넌트가 한 렌더에 한 번만 재게 하려는 것, `lastActivityFor`와 같은 이유). */
+export function agoLabel(elapsedMs: number, locale: Locale): string {
+  const minutes = Math.max(0, Math.round(elapsedMs / 60_000));
+  if (minutes < 60) return `${minutes}${t(locale, "common.unit.minute")} ${t(locale, "common.suffix.ago")}`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}${t(locale, "common.unit.hour")} ${t(locale, "common.suffix.ago")}`;
+  const days = Math.floor(hours / 24);
+  return `${days}${t(locale, "common.unit.day")} ${t(locale, "common.suffix.ago")}`;
+}
+
 /** "마감까지 <남은>"의 <남은>(§1-4 §화면) — 임계값이 5시간·7일뿐이라(§1-4 §값) 분 단위 정밀도가
  *  필요 없다: 1시간 미만은 뭉뚱그리고, 하루가 넘으면 일 단위로 접는다.
  *
