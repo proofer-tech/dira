@@ -644,7 +644,7 @@ export function HomeUI({
                 <span className="text-xs text-muted-foreground">
                   {pendingSchedule.overdue
                     ? "예정 시각이 지나 이 스케줄은 돌지 않습니다 — 지우고 다시 만듭니다"
-                    : `${dateTimeLabel(pendingSchedule.at)}에 첫 회차가 돕니다 — 이 앱이 떠 있는 동안에만 돕니다`}
+                    : `${dateTimeLabel(pendingSchedule.at)}에 첫 회차가 돕니다. 스케줄은 이 앱이 떠 있는 동안에만 돕니다 — 앱을 꺼도 큐의 티켓은 계속 디스패치됩니다`}
                 </span>
               }
             />
@@ -1592,7 +1592,8 @@ function ScheduleCreateDialog({
           {/* 화면이 말해야 하는 사실 — 자리 (1/2)(§62 (7)). 회차 0건 판정 문장의 `action`과
               **한 글자까지 같다**. */}
           <DialogDescription>
-            정한 시각에 홈 에이전트가 이 문장을 수행합니다. 이 앱이 떠 있는 동안에만 돕니다 —
+            정한 시각에 홈 에이전트가 이 문장을 수행합니다.{" "}
+            스케줄은 이 앱이 떠 있는 동안에만 돕니다 — 앱을 꺼도 큐의 티켓은 계속 디스패치됩니다.{" "}
             꺼져 있던 사이의 회차는 앱을 켤 때 한 번만 늦게 돕니다.
           </DialogDescription>
         </DialogHeader>
