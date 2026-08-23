@@ -143,7 +143,52 @@ try:
     fm_g = T.read_fm(pg)[0]
     assert "default_answer" not in fm_g, "G: 세션 물음이 있는데 default_answer가 있다\n" + str(fm_g)
 
-    print("PASS 7/7")
+    # H) 요구 4f761c5a — 묵은 블록(fresh_block 거짓)은 문항이 안 승격되고 정형문·제목이 갈린다
+    ph = mk(ws, "hhhh0001", [], body="## Goal\n작업.\n\n## 블록\n결정해주세요.\n\n"
+            "### 1. 이걸 어떻게 할까요\n\n- (a) 이렇게 한다\n- (b) 저렇게 한다\n\n"
+            "## 질문 1\n\n이전 라운드 질문.\n")
+    assert not T.fresh_block(ph), "H: 픽스처가 신선한 블록으로 판정됐다(마지막 절이 질문이어야 한다)"
+    T.ask_human(ph, "hhhh0001", 3, "자동 회수", blocked=False)
+    h_ = open(ph, encoding="utf-8").read()
+    assert "## 질문 2" in h_, "H: 새 질문 절이 안 붙었다\n" + h_
+    new_q = h_[h_.index("## 질문 2"):]
+    assert "### 1. 이 티켓을 어떻게 할까요" in new_q, "H: 고정 선택지가 1번으로 안 섰다\n" + new_q
+    assert not re.search(r"(?m)^### 1\. 이걸 어떻게 할까요", new_q), \
+        "H: 묵은 블록의 물음이 문항으로 승격됐다\n" + new_q
+    assert "### 이미 답한 블록" in new_q, "H: 인용 제목이 안 갈렸다\n" + new_q
+    assert "### 티켓 블록" not in new_q, "H: 묵은 블록인데 신선한 제목이 붙었다\n" + new_q
+    assert "세션이 왜 계속 죽는지, 이 티켓을 계속 갈지 답해주세요" in new_q, \
+        "H: 정형문이 안 바뀌었다\n" + new_q
+    assert "아래 인용한 `## 블록`에 적힌 결정을 답해주세요" not in new_q, \
+        "H: 신선 블록용 옛 정형문이 남았다\n" + new_q
+
+    # I) 요구 4f761c5a — deps의 `kind: answer` 티켓 전문이 라운드 순서로 실린다. 없으면 절이 안 생긴다
+    with open(os.path.join(ws, "tickets", "ans0002.done.md"), "w", encoding="utf-8") as f:
+        f.write("---\nticket: ans0002\nkind: answer\n---\n\n## 답변 2\n\n두 번째 라운드 답.\n")
+    with open(os.path.join(ws, "tickets", "ans0001.done.md"), "w", encoding="utf-8") as f:
+        f.write("---\nticket: ans0001\nkind: answer\n---\n\n## 답변 1\n\n첫 라운드 답.\n")
+    pi = mk(ws, "iiii0002", ["deps: [ans0002, ans0001]"], body="## Goal\n작업.\n")
+    T.ask_human(pi, "iiii0002", 0, "", blocked=False)
+    i_ = open(pi, encoding="utf-8").read()
+    assert "### 이미 받은 답변" in i_, "I: 답변 절이 안 붙었다\n" + i_
+    assert i_.index("첫 라운드 답") < i_.index("두 번째 라운드 답"), \
+        "I: 답변이 라운드 순서로 안 섰다(dep에 적힌 순서를 그대로 썼다)\n" + i_
+    assert "### 이미 받은 답변" not in b, "I: 답 없는 B에 빈 절이 붙었다\n" + b
+
+    # J) 요구 4f761c5a — 마지막 레코드가 큐 운영 알림(`<task-notification>`)이면 그 앞 발화를 싣는다
+    tp2 = os.path.join(home, "notif.jsonl")
+    with open(tp2, "w", encoding="utf-8") as f:
+        f.write(rec("assistant", "실제 발화입니다."))
+        f.write(rec("user", "<task-notification> status: killed"))
+    assert T.transcript_tail(tp2) == "[assistant] 실제 발화입니다.", \
+        "J: 알림 레코드를 세션 발화로 잘못 집었다\n" + T.transcript_tail(tp2)
+    tp3 = os.path.join(home, "notif-only.jsonl")
+    with open(tp3, "w", encoding="utf-8") as f:
+        f.write(rec("user", "<task-notification> status: killed"))
+    assert T.transcript_tail(tp3) == "", \
+        "J: 앞에 발화가 없는데 알림을 발화로 집었다\n" + T.transcript_tail(tp3)
+
+    print("PASS 10/10")
     print(a[a.index("## 질문 1"):])
 finally:
     if old_home is None:

@@ -653,7 +653,9 @@ def transcript_tail(path):
         except ValueError:
             continue
         txt = _rec_text(rec)
-        if txt:
+        # 큐 운영 알림(`<task-notification>` 등 봉투 태그)은 세션의 발화가 아니다 -
+        # 실측 29ec5f08: 마지막 레코드가 이거라 판단 재료가 0이었다. 건너뛰고 그 앞 발화를 찾는다.
+        if txt and not txt.startswith("<task-notification>"):
             return "[{}] {}".format(
                 str((rec.get("message") or {}).get("role") or rec.get("type") or "?"), txt)
     return ""
@@ -698,14 +700,40 @@ def _quote(text):
     return "\n".join(("> " + l) if l.strip() else ">" for l in text.split("\n"))
 
 
-def ask_context(fm, body, handoff=False):
-    """자동 상신 질문에 붙일 판단 재료 -- 티켓 Goal · 블록 · 죽은 세션 로그 꼬리.
+def _answers_of(troot, lines, end):
+    """deps 중 `kind: answer` 티켓의 본문 전문, 질문 N에 답변 N이 짝인 라운드 순서.
+
+    `awaiting`은 마지막 라운드 것만 가리켜 이전 라운드 답을 놓친다(PM PROFILE와 같은 이유) -
+    `deps`의 stem을 전부 열어야 다 보인다(요구 4f761c5a).
+    """
+    out = []
+    for dep in deps_of(lines, end):
+        p = find_any(troot, dep)
+        if not p:
+            continue
+        dfm, dlines, dend = read_fm(p)
+        if (dfm.get("kind") or "").strip() != "answer":
+            continue
+        text = "\n".join(dlines[dend:]).strip()
+        m = re.search(r"답변\s*(\d+)", text)
+        out.append((int(m.group(1)) if m else 0, text))
+    out.sort(key=lambda t: t[0])
+    return [t for _, t in out]
+
+
+def ask_context(fm, body, handoff=False, block_fresh=True, answers=None):
+    """자동 상신 질문에 붙일 판단 재료 -- 티켓 Goal · 이미 받은 답변 · 블록 · 죽은 세션 로그 꼬리.
 
     정형문("3회 죽었다")만으로는 사람이 답할 자료가 화면에 없었다(요구 11990127: jaso에서
     3라운드가 "다시 시도해보세요"로 소모됐다). 인용이 화면에서 접혀 있으므로(결정 12 (5))
     블록은 상한이 없다(결정 13 (1)) - Goal 600자 · 로그 1500자는 그대로고, 잘리면 `_capped`가
     그 사실을 적는다(결정 13 (2)). 세션 로그는 티켓 파일 어디에도 없는 유일한 정보라 없으면
     없다고 적는다.
+
+    `block_fresh`(fresh_block과 같은 판정, 호출자가 넘긴다)가 거짓이면 인용한 블록은 이미
+    지난 라운드에서 답한 것이다 - 제목을 갈라 "지금 답해야 할 블록"과 헛갈리지 않게 한다.
+    `answers`는 `_answers_of`가 모은, 이미 답한 라운드의 전문이다(요구 4f761c5a) - 없으면
+    절 자체를 안 붙인다.
 
     `handoff`(§미완으로 끝나는 세션 §개정 2 (2))는 판정이 claim 성공 직후라 할당 필드가
     아직 안 쓰여 `session_id`가 구조적으로 없는 갈래다 - 죽은 세션 절을 아예 안 붙인다.
@@ -714,9 +742,13 @@ def ask_context(fm, body, handoff=False):
     goal = _section(body, "Goal")
     if goal:
         out += "\n### 티켓 Goal\n\n{}\n".format(_quote(_capped(goal, 600)))
+    if answers:
+        out += "\n### 이미 받은 답변\n\n{}\n".format(
+            "\n\n".join(_quote(a) for a in answers))
     blk = _section(body, "블록")
     if blk:
-        out += "\n### 티켓 블록\n\n{}\n".format(_quote(blk))
+        out += "\n### {}\n\n{}\n".format(
+            "티켓 블록" if block_fresh else "이미 답한 블록", _quote(blk))
     if handoff:
         return out
     tr = transcript_of(fm)
@@ -773,8 +805,10 @@ def ask_human(path, h, attempts, why, blocked=False, killed=False, handoff=False
     a = uuid.uuid4().hex[:8]
     fm, lines, end = read_fm(path)
     body = lines[end:]
+    troot = os.path.dirname(os.path.dirname(path))
     try:
-        ctx = ask_context(fm, body, handoff=handoff)
+        ctx = ask_context(fm, body, handoff=handoff, block_fresh=blocked,
+                           answers=_answers_of(troot, lines, end))
     except Exception as e:                   # 자료 수집 실패가 답변 요청 자체를 막지 않는다
         ctx = ("" if handoff else
                "\n### 죽은 세션 마지막 기록\n\n> 자료를 읽지 못했습니다: {}\n".format(e))
@@ -784,8 +818,10 @@ def ask_human(path, h, attempts, why, blocked=False, killed=False, handoff=False
              else "세션이 `## 블록`을 남기고 멈췄습니다" if blocked
              else "자동 회수 {}회 실패({})".format(attempts, why))
     # handoff는 죽은 세션도 `## 블록`도 없는 갈래다(개정 2 (1)) - 블록의 결정 11 형식
-    # 물음이 우연히 몸통에 남아 있어도 승격시키지 않는다.
-    q = "" if handoff else _block_question(_section(body, "블록"))
+    # 물음이 우연히 몸통에 남아 있어도 승격시키지 않는다. `blocked`(=fresh_block)가 거짓이면
+    # 그 블록은 이미 지난 라운드에서 답한 것이다 - 묵은 물음을 새 라운드의 문항으로 다시 세우지
+    # 않는다(요구 4f761c5a).
+    q = "" if handoff or not blocked else _block_question(_section(body, "블록"))
     if q:
         # 결정 13 (5) - 물음이 곧 카드 제목이라 가리킬 곳이 없다. 남는 것은 사유 한 줄이다.
         head = "{}. 엔진은 더 시도하지 않습니다.\n\n{}\n".format(cause, q)
@@ -793,8 +829,7 @@ def ask_human(path, h, attempts, why, blocked=False, killed=False, handoff=False
     else:
         ask = ("이 티켓을 계속 갈지, 무엇을 바꿔서 갈지 답해주세요." if killed
                else "남은 범위가 한 세션에 드는지, 이 티켓을 그대로 더 갈지 답해주세요." if handoff
-               else "아래 인용한 `## 블록`에 적힌 결정을 답해주세요."
-               if any(re.match(r"^##\s*블록", nfc(l)) for l in body)
+               else "아래 인용한 `## 블록`에 적힌 결정을 답해주세요." if blocked
                else "세션이 왜 계속 죽는지, 이 티켓을 계속 갈지 답해주세요.")
         # 지시어는 `아래`다 -- 인용(결정 6)은 정형문 다음에 붙고, 화면에선 답변칸이 본문 위에 있다.
         head = "{}. 엔진은 더 시도하지 않습니다 — {}\n".format(cause, ask)
