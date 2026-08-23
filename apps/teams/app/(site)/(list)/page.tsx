@@ -12,6 +12,7 @@ import { readAuth, readOtherEngineAuth } from "@/lib/auth";
 import { type AuthView } from "@/components/settings-dialog";
 import { LanguageProvider } from "@/components/language-provider";
 import { ProjectRows, type ProjectRow } from "@/components/projects-ui";
+import { UpdateToast } from "@/components/update-toast";
 import { isLandingOnly } from "@/lib/flags";
 import { DEFAULT_LOCALE } from "@/lib/i18n";
 import { readLanguage, readProjects, readSummary, registryPath } from "@/lib/projects";
@@ -105,6 +106,11 @@ export default async function Page() {
       >
         {rows.length > 0 && <ProjectRows rows={rows} />}
       </Landing>
+      {/* T1(§릴리스 - 자동 업데이트 §표면이 창 안으로 들어온다, 요구 `1c5db160`) - 창이 처음 여는
+          화면이 홈이라 `(app)/layout.tsx`와 같은 자리가 여기도 서야 한다. 브라우저·랜딩-only에서는
+          `useIsDesktop()`이 `false`라 이 컴포넌트가 그 자리에서 바로 `null`이다 - 새로 서는 것도
+          fs 읽기도 늘지 않는다. */}
+      <UpdateToast />
     </LanguageProvider>
   );
 }
