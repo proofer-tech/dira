@@ -1468,6 +1468,31 @@ test("optionsOf — optionLabel이 안 자른다, 볼드 마커만 걷는다 (�
   assert.ok(!long[0].options[0].label.endsWith("...")); // 말줄임이 안 붙는다
 });
 
+/** `optionsOf` — **선택지를 두 줄로 접으면 둘째 줄부터 라벨에 안 담긴다**(현행 동작 고정,
+ *  실측 `4f761c5a` 질문 1). 파서가 `split("\n")` 줄 단위라 이어지는 줄은 `HEADING_RE`도
+ *  `OPTION_LINE`도 아니라 버려진다. 파서를 안 고치는 것이 결정이다 — 선택지 뒤에 산문이 오는
+ *  절이 많아서 이어지는 줄을 라벨에 붙이면 그 산문이 선택지에 딸려 들어간다. 규약은
+ *  `.dira/protocols/질문-형식.md` §못 넷 — 선택지 하나는 한 줄로 쓴다. */
+test("optionsOf — 접은 선택지는 첫 줄까지만 라벨이다 (실측 4f761c5a 질문 1)", () => {
+  const folded = optionsOf(
+    "### 1. 무엇을 고치나\n" +
+      "- (a) 인용을 지운다\n" +
+      "- (b) 인용은 남기되 `이미 답한 블록`으로 이름 붙이고, 그 블록의 문항을 선택지 카드로 안\n" +
+      "      세우고, 정형문도 세션이 왜 계속 죽는지로 돌린다\n",
+  );
+  assert.strictEqual(folded[0].options.length, 2);
+  assert.strictEqual(
+    folded[0].options[1].label,
+    "인용은 남기되 `이미 답한 블록`으로 이름 붙이고, 그 블록의 문항을 선택지 카드로 안",
+  );
+  // 접은 둘째 줄은 라벨 어디에도 없고, 선택지를 새로 만들지도 않는다
+  assert.ok(!folded[0].options[1].label.includes("세우고"));
+  assert.deepStrictEqual(
+    folded[0].options.map((o) => o.letter),
+    ["a", "b"],
+  );
+});
+
 /** `quotesOf`/`withoutQuotes` — 결정 12 (5). 실측 형태(`## 질문 n` 안에 문항 + 인용 3종)로
  *  판정한다: 번호 붙은 `### 1.`은 문항이라 안 떼이고, 번호 없는 `###`(제목이 무엇이든)은 인용
  *  이라 떼인다 — **제목 문자열로 안 고른다**(결정 12 못박는 것). 둘을 합치면 원문과 같다. */
