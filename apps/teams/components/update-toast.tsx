@@ -194,23 +194,27 @@ export function UpdateToast() {
     }
     toast.custom(
       () => (
-        <StickyBody
-          t={t}
-          view={view}
-          percent={percent}
-          notes={notes}
-          notesOpen={notesOpen}
-          onToggleNotes={() => setNotesOpen((v) => !v)}
-          onLater={() => {
-            setView(null);
-            void window.dira?.updateAction("later");
-          }}
-          onRestart={() => void window.dira?.updateAction("restart")}
-          onCancel={() => {
-            void window.dira?.updateAction("later");
-            beginDownloaded(); // ⑤ 취소는 ①로 되돌아간다 - 되돌릴 상태가 0이다(§55)
-          }}
-        />
+        // sonner가 `toast.custom` 상자에 `data-styled="false"`를 달아 §55 (5)(6)의 몸(면 - 변 -
+        // 라운드 - 그림자 - padding)이 안 걸린다(§55 §배선 함정 셋째) - 그 몸을 이 엘리먼트가 진다.
+        <div className="w-full rounded-lg border border-border bg-popover p-4 shadow-[0_4px_12px_rgba(0,0,0,0.1)]">
+          <StickyBody
+            t={t}
+            view={view}
+            percent={percent}
+            notes={notes}
+            notesOpen={notesOpen}
+            onToggleNotes={() => setNotesOpen((v) => !v)}
+            onLater={() => {
+              setView(null);
+              void window.dira?.updateAction("later");
+            }}
+            onRestart={() => void window.dira?.updateAction("restart")}
+            onCancel={() => {
+              void window.dira?.updateAction("later");
+              beginDownloaded(); // ⑤ 취소는 ①로 되돌아간다 - 되돌릴 상태가 0이다(§55)
+            }}
+          />
+        </div>
       ),
       { id: STICKY_ID, duration: Infinity },
     );
