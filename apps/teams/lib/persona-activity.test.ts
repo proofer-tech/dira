@@ -107,3 +107,44 @@ test("personaActivity — 다른 persona 티켓은 안 섞인다 (지금·최근
   );
   assert.deepStrictEqual(activity.recent, []); // pm의 완료 티켓이 dev 최근에 안 샌다
 });
+
+test("personaActivity — persona 없는(빈 문자열) 티켓은 제외된다", async () => {
+  const now = Date.now();
+  const root = makeRoot("");
+  const tickets = [
+    mkTicket({ hash: "ffff6666", persona: "", state: "wip" }), // persona: 없음
+    mkTicket({ hash: "ffff7777", persona: "", state: "done", mtime: now }),
+    mkTicket({ hash: "eeee5555", persona: "dev", state: "wip" }),
+  ];
+
+  const activity = await personaActivity("dev", tickets, root, SFX);
+  assert.deepStrictEqual(
+    activity.now.map((t) => t.hash),
+    ["eeee5555"],
+  );
+  assert.deepStrictEqual(activity.recent, []); // persona 없는 완료 티켓이 안 샌다
+});
+
+test("personaActivity — 짝이 없는 DISPATCH: 재시도의 첫 DISPATCH는 실행으로 안 세지만 되돌아옴엔 잡힌다", async () => {
+  const now = Date.now();
+  const hash = "aaaa1111";
+  const firstDispatch = now - 10 * DAY_MS;
+  const retryDispatch = now - 9 * DAY_MS;
+  const doneAt = retryDispatch + 7 * 60_000;
+  const root = makeRoot(
+    [
+      // 첫 DISPATCH는 응답 없이 죽었다 — 짝이 될 종료 줄이 없다(재시도의 DISPATCH가 그 자리를 먼저 채운다)
+      `${fmtLog(firstDispatch)} [w1] DISPATCH ${hash} kind=work persona=dev sid=x log=x.log prio=3`,
+      `${fmtLog(retryDispatch)} [w1] DISPATCH ${hash} kind=work persona=dev sid=y log=y.log prio=3`,
+      `${fmtLog(doneAt)} [w1] DONE ${hash} sid=y`,
+      "",
+    ].join("\n"),
+  );
+  const tickets = [mkTicket({ hash, persona: "dev", state: "done", mtime: doneAt })];
+
+  const activity = await personaActivity("dev", tickets, root, SFX);
+  assert.strictEqual(activity.recent.length, 1);
+  assert.strictEqual(activity.recent[0].durationMin, 7); // 짝이 맞은 재시도 DISPATCH -> DONE만 잰다
+  assert.strictEqual(activity.recent[0].reassigns, 1); // DISPATCH 두 번 - 1
+  assert.strictEqual(activity.thirtyDay.reassignSum, 1);
+});

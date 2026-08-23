@@ -1,12 +1,13 @@
 /** 페르소나 하나의 활동을 모으는 자리 (DESIGN.md §5-6 §활동 탭 — 티켓 `4ea1147a`).
  *
- *  새 파서는 0개다 — `planOf`·`isAwaiting`·`derivedFrom`(`./queue.ts`)과 `reassignCount`·
+ *  새 파서는 0개다 — `planOf`·`isAwaiting`·`derivedFrom`(`./queue.ts`)과
  *  `lastLogByWorker`(`./workers.ts`)가 이미 있다. 이 파일이 하는 일은 그것들을 페르소나 축으로
- *  한 자리에 모으는 것뿐이다. `runner.log`는 `lastLogByWorker`의 `cache()`로 요청당 1회만
- *  읽힌다 — 이 함수가 페르소나 수만큼 불려도 실제 읽기는 늘지 않는다. */
+ *  한 자리에 모으는 것뿐이다. `runner.log`는 이 함수 안에서 `lastLogByWorker`를 딱 한 번만
+ *  부른다 — `dispatchByHash`가 이미 손에 있으니 되돌아옴 합은 `reassignCount`를 또 부르지
+ *  않고 그 자리에서 직접 계산한다(공식은 같다). */
 import path from "node:path";
 import { derivedFrom, isAwaiting, planOf, type Suffixes, type Ticket } from "./queue.ts";
-import { lastLogByWorker, reassignCount } from "./workers.ts";
+import { lastLogByWorker } from "./workers.ts";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const THIRTY_DAY_MS = 30 * DAY_MS;
@@ -124,8 +125,12 @@ export async function personaActivity(
 
   const windowStart = now - THIRTY_DAY_MS;
   const closedInWindow = doneTickets.filter((t) => t.mtime >= windowStart);
-  const reassignSum = (await Promise.all(closedInWindow.map((t) => reassignCount(root, t.hash)))).reduce(
-    (a, b) => a + b,
+  // ponytail: reassignCount(root, hash)를 티켓마다 부르면 매번 lastLogByWorker를 다시 타는데
+  // cache()는 리액트 요청 경계 밖에서 메모가 안 돼 8만 줄 로그를 그 횟수만큼 다시 훑는다(실측
+  // pm 30일 595건에서 타임아웃). 위에서 이미 뽑은 dispatchByHash를 그대로 쓴다 — 공식은
+  // reassignCount와 동일(Math.max(0, count - 1)), 로그 재파싱만 없앤다.
+  const reassignSum = closedInWindow.reduce(
+    (sum, t) => sum + Math.max(0, (dispatchByHash[t.hash] ?? 0) - 1),
     0,
   );
   const issued = closedInWindow.reduce((sum, t) => sum + derivedFrom(tickets, t, sfx).length, 0);
