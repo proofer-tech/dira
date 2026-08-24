@@ -254,6 +254,10 @@ test("buildPrompt — 스냅샷이 질문 앞에 오고 경계가 글로 들어�
   assert.ok(!p.includes("질의응답 에이전트"));
   assert.ok(!p.includes("고치지도 않는다"));
   assert.match(p, /거부되면\s+우회하지\s+말고\s+무엇이\s+왜\s+막혔는지\s+그대로\s+말한다/);
+  // §7-3(요구 `b100a3aa`) — 셸 문단이 붙는다. 읽고 세는 것만 되고 쓰는 명령은 거부된다는
+  // 문장이 있고, 우회 금지는 기존 문장을 재사용한다(글이 두 번 서므로 위 정규식도 여전히 맞는다).
+  assert.match(p, /셸로는\s+읽고\s+세는\s+것만\s+된다/);
+  assert.ok(!p.match(/Bash\(/), "허용목록을 프롬프트에 전재하지 않는다 — 정본은 플래그다");
   // **`새 티켓을 만들지 않는다`는 §7 §홈 대화에서 요구사항이 접수된다가 뒤집은 문장이다** —
   // 이제 프롬프트에 없어야 한다. 대신 여섯 가지가 선다(§7 §`kind`를 지는 것이 글이다 · §본문은 두 층이다).
   assert.ok(!p.includes("새 티켓을 만들지 않는다"));
@@ -334,10 +338,22 @@ test("toolFlags — 네 조각과 경로 스코프 여섯 (89962e56 · 7e35d300 
   for (const flag of ["--tools", "--strict-mcp-config", "--permission-mode", "--allowed-tools"]) {
     assert.ok(flags.includes(flag), `${flag}가 빠졌다 — 도구 표면이 §7 표보다 넓어진다`);
   }
-  // ② `--tools` 값은 variadic 함정 때문에 **쉼표 한 토큰**이다(공백으로 나누면 질문까지 도구로 먹는다)
-  assert.strictEqual(flags[flags.indexOf("--tools") + 1], "Read,Glob,Grep,Write,Edit");
+  // ② `--tools` 값은 variadic 함정 때문에 **쉼표 한 토큰**이다(공백으로 나누면 질문까지 도구로 먹는다).
+  // `Bash`가 §7-3(요구 `b100a3aa`)의 승격이다 — 열리는 것은 도구가 아니라 아래 허용목록 열하나뿐이다.
+  assert.strictEqual(flags[flags.indexOf("--tools") + 1], "Read,Glob,Grep,Write,Edit,Bash");
 
   const scope = flags.slice(flags.indexOf("--allowed-tools") + 1);
+  // ①' §7-3 결정 4의 열하나가 `Bash(<명령>:*)` 꼴로 글자까지 같다. `git`은 두 낱말 프리픽스뿐이다.
+  for (const cmd of ["ls", "cat", "head", "tail", "wc", "sort", "uniq", "cut", "grep", "jq", "git log"]) {
+    assert.ok(scope.includes(`Bash(${cmd}:*)`), `Bash(${cmd}:*)가 없다 — §7-3 결정 4`);
+  }
+  // 목록 밖 이름은 **`Bash(...)` 프리픽스 어디에도** 안 나온다 — 쓰는 명령(awk·sed·rm)과 임의
+  // 실행(python3)과 git의 위험한 하위명령(commit)이 프리픽스로도 안 들어온다. 다른 플래그(예:
+  // `--permission-mode`)의 부분 문자열 오탐을 피하려 `Bash(...)` 토큰만 본다.
+  const bashTokens = flags.filter((f) => f.startsWith("Bash("));
+  for (const outside of ["awk", "sed", "python3", "rm", "git commit"]) {
+    assert.ok(!bashTokens.includes(`Bash(${outside}:*)`), `Bash(${outside}:*)가 있다 — §7-3 결정 4 밖이다`);
+  }
   // ③ 쓰기가 닿는 곳 **여섯**이 다 있다. `Write`·`Edit` 양쪽에 붙어야 한다 — 한쪽만 스코프면
   // 다른 쪽이 큐 전체를 연다(절대경로는 `//` 접두다 — 실측 문법). **여섯이 다 큐 루트 아래다**
   // — 종전 뒤 둘이 repo(`dirname(root)`) 기준이던 것이 개정 `22a803de`로 큐 안으로 왔고,
@@ -361,15 +377,15 @@ test("toolFlags — 네 조각과 경로 스코프 여섯 (89962e56 · 7e35d300 
     assert.ok(!scope.some((s) => s.includes(out)), `${out}가 스코프에 들었다 — 요구가 막으라고 한 것이다`);
   }
   // repo(`dirname(root)`) 기준 항이 **0**이다 — 경로 스코프 전부가 큐 루트 아래로 시작한다
-  // (개정 `22a803de`. 이 한 줄이 요구 `20e4a6f4`를 예외 없이 세우는 자리다)
-  for (const s of scope.filter((s) => s.includes("("))) {
+  // (개정 `22a803de`. 이 한 줄이 요구 `20e4a6f4`를 예외 없이 세우는 자리다). `Bash(...)`는
+  // 경로 스코프가 아니라 명령 프리픽스라 이 검사 밖이다(§7-3 결정 4).
+  for (const s of scope.filter((s) => s.startsWith("Write(") || s.startsWith("Edit("))) {
     assert.match(s, /^(Write|Edit)\(\/\/\/Users\/x\/proj\/\.dira\//, `${s}가 큐 루트 밖이다`);
   }
   // ⑤ 스코프 없는 맨 `Write`·`Edit`는 큐 전체를 연다 — 그것도 없어야 한다
   assert.ok(!scope.includes("Write") && !scope.includes("Edit"));
-  // ⑥ `--dangerously-skip-permissions`(스코프를 통째로 끈다) · `Bash`(셸은 경로로 못 막는다)는 §7이 뺀 것이다
+  // ⑥ `--dangerously-skip-permissions`(스코프를 통째로 끈다)는 §7이 여전히 안 쓰는 것이다 — §7-3도 안 뒤집었다
   assert.ok(!flags.some((f) => f.includes("dangerously")));
-  assert.ok(!flags.some((f) => f.includes("Bash")));
 });
 
 test("toolFlags — 재정의된 온톨로지는 큐 밖 절대경로가 스코프에 서고 나머지 다섯은 그대로다 (요구 `85114387` §결정 4)", () => {
@@ -1023,7 +1039,7 @@ test("`중지` — SIGTERM 하나로 끝나고, 받은 글은 남고, 다음 질
   // 새 형식이 도구 표면을 안 넓혔다 — 늘어난 것은 출력 형식 셋뿐이다
   assert.match(
     argv.at(-1) ?? "",
-    /--tools Read,Glob,Grep,Write,Edit .*--output-format stream-json --include-partial-messages --verbose/,
+    /--tools Read,Glob,Grep,Write,Edit,Bash .*--output-format stream-json --include-partial-messages --verbose/,
   );
 });
 
@@ -1307,7 +1323,7 @@ test("워커 세션 — 사라진 `current`는 대화 0건과 같고, 고르면 
   });
   const argv = readFileSync(ARGV, "utf8").trim().split("\n");
   assert.match(argv.at(-1) ?? "", new RegExp(`^-p --resume ${done} `));
-  assert.match(argv.at(-1) ?? "", /--tools Read,Glob,Grep,Write,Edit --strict-mcp-config --permission-mode manual/);
+  assert.match(argv.at(-1) ?? "", /--tools Read,Glob,Grep,Write,Edit,Bash --strict-mcp-config --permission-mode manual/);
   // 경로 스코프가 **이 프로젝트의 큐 루트**로 서 있다(`toolFlags(root)` — 상수 배열이면 못 하는 일이다)
   assert.ok((argv.at(-1) ?? "").includes(`Edit(//${root}/personas/**)`));
   // 아카이빙 산출물 둘도 **큐 루트 아래**다 — repo 기준 항이 0이다(개정 `22a803de`)

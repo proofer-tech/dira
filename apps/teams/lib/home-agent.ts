@@ -9,10 +9,10 @@
  *
  *  ```
  *  <claude> -p  --session-id <uuid> | --resume <uuid>
- *               --tools Read,Glob,Grep,Write,Edit
+ *               --tools Read,Glob,Grep,Write,Edit,Bash
  *               --strict-mcp-config
  *               --permission-mode manual
- *               --allowed-tools Read Glob Grep 'Write(//<큐 루트>/personas/**)' 'Edit(…)' … (11개)
+ *               --allowed-tools Read Glob Grep 'Bash(ls:*)' … (열하나) 'Write(//<큐 루트>/personas/**)' 'Edit(…)' …
  *               --output-format stream-json --include-partial-messages --verbose
  *               "<프롬프트>"
  *  ```
@@ -70,7 +70,13 @@
  *  실측). tick.sh 비스트리밍 경로가 `</dev/null`을 붙인 것과 같은 사건이다(`7d9fbe9`).
  *  `execFile`이 대신 해 주던 것 하나는 여기서 직접 든다: stdout 버퍼 — 상한이 없다(줄 단위로
  *  먹고 버린다). **시계 타이머는 없다**(요구 `8db4d0f6` — §7 §천장이 없다). 끝의 근거는 결과
- *  객체 · 프로세스의 죽음(`close`에 결과 줄이 없으면 실패 ③) · `stopAsk`의 `SIGTERM` 셋뿐이다. */
+ *  객체 · 프로세스의 죽음(`close`에 결과 줄이 없으면 실패 ③) · `stopAsk`의 `SIGTERM` 셋뿐이다.
+ *
+ *  **`Bash`가 빠져 있던 근거(위 A/B)는 안 죽었다 — 그 위에 §7-3이 한 층을 더 얹었다**(요구
+ *  `b100a3aa`). 셸이 경로 스코프를 못 지는 것은 그대로 참이라 열리는 것은 `Bash` 전체가
+ *  아니라 **허용목록에 든 읽기 전용 명령 열하나**(`TOOLS`·`toolFlags` 주석)이고, 그 목록이
+ *  `;`·`&&`·`$( )`·`>` 우회를 실제로 막는지는 실측(`ef1e8c89`, DESIGN.md §7-3)이 쟀다 — 갈래는
+ *  (가) 세그먼트별: 허용 명령 단독·허용 명령만의 파이프라인은 돌고 비허용이 섞이면 전부 거부된다. */
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdir, readdir, readFile, rename, writeFile } from "node:fs/promises";
@@ -84,10 +90,21 @@ import { isAwaiting, listTickets, reqTitle, statusOf, type Ticket } from "./queu
 import { findTranscript, lastEvent, sessionIdOf, tailEvents, type StreamEvent } from "./transcript.ts";
 import { engineCell, listWorkers, workerOf, type Worker } from "./workers.ts";
 
-/** 세션에 존재하는 도구 전부(§7 표 `세션의 도구는 Read·Glob·Grep·Write·Edit 다섯뿐이다`).
- *  **쉼표 한 토큰**이다(머리 주석의 variadic 함정). `Bash`가 없는 것이 경로 스코프의 전제다 —
- *  셸은 리다이렉트·`sh -c`로 어느 경로든 쓰므로 그게 있으면 아래 스코프가 아무것도 안 막는다. */
-const TOOLS = "Read,Glob,Grep,Write,Edit";
+/** 세션에 존재하는 도구 전부. **쉼표 한 토큰**이다(머리 주석의 variadic 함정). `Bash`가 들어간
+ *  것은 §7-3(요구 `b100a3aa`)의 승격이다 — 셸이 경로 스코프를 못 넘는 것은 그대로 참이라
+ *  `--allowed-tools`의 프리픽스 허용목록(`BASH_ALLOWED`)이 그 자리를 진다. `Write`·`Edit`의
+ *  경로 스코프는 한 글자도 안 갈렸다(§7-3 결정 1). */
+const TOOLS = "Read,Glob,Grep,Write,Edit,Bash";
+
+/** §7-3 결정 4 — `--allowed-tools`에 여는 읽기 전용 명령 열하나. `Bash(<명령>:*)` 꼴로 붙는다.
+ *  실측(`ef1e8c89`)이 갈래 (가) 세그먼트별을 확정했다 — 허용 명령 단독·허용 명령만의
+ *  파이프라인은 돌고, `;`·`&&`·`$( )`·`>`·비허용 단독이 섞이면 전부 거부된다. **목록이 계약이고
+ *  여기 없는 것은 세션에 없다**(자동 거부) — `awk`·`sed`(이름은 읽기 같지만 쓴다),
+ *  `python3`·`sh`·`bash`·`xargs`·`find`(임의 실행/삭제)는 뺐다. `git`은 **두 낱말 프리픽스로만**
+ *  든다(`Bash(git log:*)`) — 통째로 열면 `commit`·`checkout`·`push`가 같은 이름 아래 들어온다
+ *  (두 낱말 프리픽스가 먹는 것도 실측이 쟀다). `cat`은 파이프의 앞자리일 뿐 — 파일 한 장을
+ *  읽을 때 쓰는 것은 여전히 `Read`다(결정 1). */
+const BASH_ALLOWED = ["ls", "cat", "head", "tail", "wc", "sort", "uniq", "cut", "grep", "jq", "git log"];
 
 /** 쓰기가 닿는 곳 중 **큐 루트 기준** 다섯(§7 §쓰기가 닿는 곳이 **다섯**이 된다 — 요구
  *  `bd3cd201`) + `tickets/**`. **상대 글롭**이라 값이 프로젝트마다 다르다 — 아래가 상수 배열
@@ -138,7 +155,8 @@ export function toolFlags(root: string, ontologyDir: string): string[] {
     `Edit(${p})`,
   ]);
   // `--allowed-tools`의 값은 여기서 **토큰 여러 개**다 — 뒤에 `--output-format`이 와야 한다(머리 주석).
-  return ["--tools", TOOLS, "--strict-mcp-config", "--permission-mode", "manual", "--allowed-tools", "Read", "Glob", "Grep", ...scope];
+  const bash = BASH_ALLOWED.map((cmd) => `Bash(${cmd}:*)`);
+  return ["--tools", TOOLS, "--strict-mcp-config", "--permission-mode", "manual", "--allowed-tools", "Read", "Glob", "Grep", ...bash, ...scope];
 }
 
 // ── 프로젝트 → 대화 목록 (§7 §대화가 여럿이다) ──────────────────────────────
@@ -704,6 +722,11 @@ export async function personaBlock(personasDir: string, name: string = HOME_PERS
  *  두드리다 답을 못 하고 끝나는 턴**은 사람에게 그냥 고장으로 보인다. 그 자리가 `worktrees/**`와
  *  repo 전부다(개정 `22a803de`로 repo 쪽 예외가 0이 됐다).
  *
+ *  **§7-3(요구 `b100a3aa`)이 셸 문단을 하나 더 얹는다.** `Bash`가 열려도 읽고 세는 것만
+ *  되고(`BASH_ALLOWED`) 쓰는 명령은 거부되는 것을 글로도 적는다 — 근거는 위와 같다. 목록을
+ *  전재하지 않는다(정본은 플래그다) — 글이 지는 것은 *우회하지 않는다* 하나뿐이라 기존 문장을
+ *  그대로 재사용한다.
+ *
  *  **`tickets/**`에 `Write`가 붙은 자리는 종전과 다르게 진다**(요구 `64b45d3c` — §7 §홈 대화에서
  *  요구사항이 접수된다). 플래그의 경로 스코프는 파일 내용을 못 보므로 *`kind: request`만 만든다*는
  *  제약을 여기 프롬프트 글이 진다 — §7 §`kind`를 지는 것이 글이다가 박은 그 자리다. 경로를
@@ -721,6 +744,10 @@ export function buildPrompt(snapshot: string, question: string, ontologyDir: str
 \`workers/*.sh\` · \`AGENTS.md\`, 그리고 온톨로지 \`${ontologyDir}/**\`. 그 밖(\`worktrees/**\` 아래
 프로젝트 코드 · repo 나머지 · 여기 없는 자리 전부)은 도구가 거부한다. 거부되면 우회하지 말고
 무엇이 왜 막혔는지 그대로 말한다.
+
+**셸로는 읽고 세는 것만 된다.** 로그를 자르고 세고 줄 세우는 읽기 전용 명령만 돌고, 쓰는
+명령(파일을 만들거나 덮어쓰거나 리다이렉트하는 것)은 거부된다. 거부되면 우회하지 말고 무엇이
+왜 막혔는지 그대로 말한다.
 
 **\`tickets/**\`에는 새 파일도 쓸 수 있다 — 사람이 그 턴에 요구사항으로 올려 달라고 했을
 때만.** 그때 만드는 것은 \`kind: request\` 티켓 하나뿐이다(\`work\`·\`feedback\`·\`answer\`는
