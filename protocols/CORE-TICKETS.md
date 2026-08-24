@@ -45,7 +45,7 @@ wrong ticket.
 | `title:` | ✓ | One human-readable line, no quotes. `:` must be followed by a value |
 | `kind:` | | `work` \| `request` \| `feedback` \| `answer` |
 | `persona:` | | A persona the project defines (under `<queue>/personas/`). Absent -> dispatched persona-less (normal) |
-| `deps:` | | `[a1b2c3d4, e5f6a7b8]`. Appears in the queue only when all are `.done` |
+| `deps:` | | `[a1b2c3d4, e5f6a7b8]`. Appears in the queue only when all are `.done`. Overuse serializes the queue - set only when start is genuinely impossible without it |
 | `priority:` | | `1`-`5`. Missing/unreadable/out-of-range -> read as `3`, no queue migration needed. A ticket a higher-priority ticket depends on inherits that ticket's value (see project docs for the exact rule) |
 | `duedate:` | | ISO 8601 datetime, e.g. `2026-08-14T18:00:00+09:00` (offset optional - read as local time if omitted). Absent/unreadable -> no deadline, no queue migration needed. Feeds the same priority machine as a clock: **≤5 hours remaining (including already past) -> treated as priority 5**, **≥7 days remaining (only on a ticket that has its own `duedate:`) -> treated as priority 1**. Between those two, the explicit `priority:` (or `3`) stands. Never rewrites `priority:` - the override is judgment-time only (see project docs for the exact rule) |
 | `awaiting:` | | The **one answer stem** currently waited on. **Put the same value in `deps` too** - `deps` is the lock; this is what the GUI reads as "awaiting answer". Written by request-splitting sessions on `kind: request`, and by `reap` on tickets past the auto-reclaim cap (any kind). **Not deleted after the answer lands** (history) - whether still waiting is judged by the existence of `tickets/<awaiting>.done.md` |
