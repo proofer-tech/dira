@@ -17,6 +17,7 @@ import { createServer } from "node:net";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { releaseNotes } from "./release-notes.ts";
+import { decideRevive, isExternalDeath } from "./revive.ts";
 
 /** 패키징하면 standalone 산출물이 통째로 `Contents/Resources/server/`에 들어간다
  *  (package.json `build.extraResources`). 소스에서 돌 때는 `apps/teams` 옆이다. */
@@ -40,6 +41,14 @@ let quitting = false;
 /** **서버가 준비된 뒤에만** 값이 있다 — `second-instance`가 그 전에 올 수 있어서 모듈
  *  스코프다. 준비 전의 오리진을 담아두면 두 번째 실행이 아직 안 듣는 포트로 창을 연다. */
 let readyOrigin: string | null = null;
+/** 렌더러 사망(`render-process-gone`)이나 로드 실패(`did-fail-load`)를 겪은 뒤 `true`다.
+ *  창 자체는 파괴되지 않은 채로 내용만 죽는 경우(못박는 것 9)를 `win.isDestroyed()`가
+ *  못 보므로 따로 든다. 창을 새로 열거나 되살릴 때 `false`로 되돌아간다. */
+let contentDead = false;
+/** `killServer()`가 자식을 죽이기 **직전**에 그 자식을 여기 적어 둔다. 자식의 `exit`가 이
+ *  참조와 같은 것이면 우리가 벌인 일이고, 다르면(`null`이거나 다른 자식) 밖에서 죽은
+ *  것이다(못박는 것 9 — `isExternalDeath`). */
+let killedIntentionally: ChildProcess | null = null;
 
 /** OS가 준 빈 포트. 7331 고정은 브라우저의 계약이고 창은 자기 서버를 알고 있다 (못박는 것 1). */
 function freePort(): Promise<number> {
@@ -167,6 +176,17 @@ function startServer(port: number): ChildProcess {
   proc.stderr?.on("data", (b) => (stderr += b));
   proc.stdout?.on("data", (b) => process.stdout.write(b));
   proc.on("error", (e) => (stderr += `${e.message}\n`));
+  // 못박는 것 9 — 자식이 죽는 것을 본다. `killServer()`가 먼저 지운 것(정상 종료·재시작
+  // 중 정리)이면 `killedIntentionally`가 이 자식을 가리키고 있어 조용히 넘어간다. 그 참조가
+  // 다르면 밖에서(`kill -9` 등) 죽은 것이라 정리만 하고 되살리기는 다음 `showWindow()`가 맡는다.
+  proc.on("exit", (code, signal) => {
+    const external = isExternalDeath(proc, killedIntentionally);
+    killedIntentionally = null;
+    if (external) {
+      console.log(`[dira] 자식 서버가 밖에서 죽었습니다 (code ${code ?? signal ?? "?"}) — 되살리기 대상입니다`);
+      killServer();
+    }
+  });
   return proc;
 }
 
@@ -188,7 +208,10 @@ async function waitForReady(origin: string, proc: ChildProcess): Promise<string 
 }
 
 function killServer() {
-  if (child && child.exitCode === null) child.kill("SIGTERM");
+  if (child && child.exitCode === null) {
+    killedIntentionally = child; // 이 자식의 `exit`는 우리가 벌인 일이다 — 밖에서 죽은 것이 아니다
+    child.kill("SIGTERM");
+  }
   child = null;
   holdSleep(false); // N6의 caffeinate도 여기서 놓는다 — `-w`는 크래시용이고 정상 경로가 아니다
 }
@@ -218,11 +241,24 @@ function showFailure(reason: string) {
 
 /** 창은 자기가 띄운 오리진만 연다 (못박는 것 4). 이 창은 fs를 만지는 서버 바로 앞이다. */
 function openWindow(origin: string): BrowserWindow {
+  contentDead = false; // 새로 여는 창이라 아직 아무것도 안 죽었다
   const win = new BrowserWindow({
     width: 1440,
     height: 900,
     title: "dira",
     webPreferences: { contextIsolation: true, nodeIntegration: false, preload: PRELOAD },
+  });
+
+  // 못박는 것 9 — 창은 안 파괴됐는데 내용만 죽는 두 경로. `win.isDestroyed()`가 못 보므로
+  // 이 플래그로 든다 — 다음 `showWindow()`가 되살리기로 갈지 이것으로 가른다.
+  win.webContents.on("render-process-gone", (_e, details) => {
+    contentDead = true;
+    console.log(`[dira] 렌더러가 죽었습니다 (${details.reason}) — 되살리기 대상입니다`);
+  });
+  win.webContents.on("did-fail-load", (_e, code, description, url, isMainFrame) => {
+    if (!isMainFrame) return; // iframe·서브리소스는 안 본다 — 이 창의 본문이 죽은 것만 본다
+    contentDead = true;
+    console.log(`[dira] 로드에 실패했습니다 (${code} ${description}) — 되살리기 대상입니다`);
   });
 
   const external = (url: string) => {
@@ -493,7 +529,7 @@ function surfaceUpdate(detail: UpdateDetail) {
   if (detail.kind !== "downloaded" && detail.kind !== "message") return;
   const body = detail.kind === "downloaded" ? `${detail.version}을 받았습니다` : detail.text;
   const n = new Notification({ title: "dira 업데이트", body });
-  n.on("click", () => readyOrigin && showWindow(readyOrigin));
+  n.on("click", () => readyOrigin && showWindow());
   n.show();
 }
 
@@ -700,9 +736,9 @@ ipcMain.handle("dira:update-action", async (_e, action: unknown) => {
 /** 트레이 메뉴. **열 때마다 새로 만든다** — 체크 상태의 원본은 OS이고(N4) 앱 안 변수에 담아두면
  *  시스템 설정 → 로그인 항목에서 끈 것이 메뉴에는 켜진 채로 남는다. `setContextMenu`는 메뉴를
  *  한 번 박고 끝이라 그 갱신 자리가 없어서 안 쓴다 — 클릭 때마다 `popUpContextMenu`로 띄운다. */
-function trayMenu(origin: string): Menu {
+function trayMenu(): Menu {
   return Menu.buildFromTemplate([
-    { label: "열기", click: () => showWindow(origin) },
+    { label: "열기", click: () => showWindow() },
     { type: "separator" },
     {
       label: "로그인 시 자동 실행",
@@ -716,7 +752,9 @@ function trayMenu(origin: string): Menu {
       label: "남은 일이 있으면 잠자기 방지",
       type: "checkbox",
       checked: existsSync(noSleepFlag()),
-      click: (item) => setNoSleep(item.checked, origin),
+      // 못박는 것 9 되살리기 뒤에도 지금 오리진(`readyOrigin`)을 본다 — 열 때마다 새로
+      // 만드는 메뉴라 트레이가 뜬 뒤 자식이 재시작됐어도 옛 오리진을 들고 있지 않는다.
+      click: (item) => setNoSleep(item.checked, readyOrigin!),
     },
     {
       // U2 (R5·R8). N4 옆이고 상태의 원본은 마커 파일이라 여기도 열 때마다 읽는다.
@@ -731,7 +769,7 @@ function trayMenu(origin: string): Menu {
 }
 
 /** 메뉴바 아이콘. */
-function createTray(origin: string) {
+function createTray() {
   // 템플릿 이미지 — 색을 갖지 않고 알파만 있다. 라이트/다크 메뉴바를 macOS가 각각 칠한다.
   // @2x는 파일명 규약으로 nativeImage가 알아서 집는다 (trayTemplate@2x.png).
   // 안 보이면 코드도 자산도 아니다: 노치 있는 맥에서 메뉴바가 꽉 차면 macOS가 새 상태 항목을
@@ -742,7 +780,7 @@ function createTray(origin: string) {
 
   tray = new Tray(image);
   tray.setToolTip("dira");
-  const popUp = () => tray?.popUpContextMenu(trayMenu(origin));
+  const popUp = () => tray?.popUpContextMenu(trayMenu());
   tray.on("click", popUp);
   tray.on("right-click", popUp);
 }
@@ -788,7 +826,7 @@ async function showAbout() {
  *  `Event`가 `CustomEvent`로 남는 것뿐이라 리스너 쪽 코드는 안 갈린다. */
 function dispatchToWindow(event: string, what: string, opts: { detail?: unknown; showWindow?: boolean } = {}) {
   if (!readyOrigin) return console.log(`[dira] ${what} — 서버가 아직 준비 중입니다`);
-  if (opts.showWindow ?? true) showWindow(readyOrigin);
+  if (opts.showWindow ?? true) showWindow();
   const detail = opts.detail !== undefined ? `, { detail: ${JSON.stringify(opts.detail)} }` : "";
   win?.webContents
     .executeJavaScript(`window.dispatchEvent(new CustomEvent(${JSON.stringify(event)}${detail}))`)
@@ -852,10 +890,37 @@ function installAppMenu() {
   Menu.setApplicationMenu(menu);
 }
 
-function showWindow(origin: string) {
-  // 렌더러가 죽어 창이 파괴된 뒤라면 다시 만든다. 서버는 그대로라 포트도 그대로다.
+/** 못박는 것 9 — 창을 다시 올릴 때마다 무엇이 죽어 있는지 보고 갈린다. 아무것도 안 죽었으면
+ *  종전 그대로 보여주기만 한다. 뭔가 죽었으면 서버 생사 하나로 갈린다(`decideRevive`) — 살아
+ *  있으면 창만 다시 읽고, 죽어 있으면 자식부터 다시 띄운 뒤 새 오리진으로 창을 읽는다.
+ *  되살리기가 실패하면 흰 창을 남기지 않고 못 2의 실패 화면으로 간다. */
+async function showWindow() {
+  const action = decideRevive({ winDestroyed: !win || win.isDestroyed(), contentDead, serverAlive: child !== null });
+  if (action === "show") {
+    win!.show();
+    win!.focus();
+    return;
+  }
+  console.log(`[dira] 창을 되살립니다 (${action})`);
+  contentDead = false;
+  let origin = readyOrigin!;
+  if (action === "restart-server") {
+    const port = await freePort();
+    origin = `http://127.0.0.1:${port}`;
+    child = startServer(port);
+    const reason = await waitForReady(origin, child);
+    if (reason) {
+      killServer();
+      if (win && !win.isDestroyed()) win.destroy();
+      win = null;
+      showFailure(reason); // 흰 창을 그대로 두지 않는다
+      return;
+    }
+    readyOrigin = origin;
+  }
   if (!win || win.isDestroyed()) win = openWindow(origin);
-  else win.show();
+  else win.loadURL(origin);
+  win.show();
   win.focus();
 }
 
@@ -874,8 +939,8 @@ async function boot() {
   }
   readyOrigin = origin; // 여기부터 `second-instance`가 창을 열 수 있다
   win = openWindow(origin);
-  createTray(origin);
-  app.on("activate", () => showWindow(origin)); // 독 아이콘도 `열기`와 같은 자리로 간다
+  createTray();
+  app.on("activate", () => showWindow()); // 독 아이콘도 `열기`와 같은 자리로 간다
 
   // U2가 켜져 있으면(기본) 켤 때 한 번 검사해 받아둔다. await하지 않는다 — 네트워크가
   // 기동 경로에 앉으면 안 된다. 실패는 `error` 리스너가 로그로만 남긴다 (R5·R6).
@@ -918,7 +983,7 @@ if (!app.requestSingleInstanceLock()) {
       return;
     }
     console.log("[dira] 두 번째 실행 — 첫 번째 창을 엽니다");
-    showWindow(readyOrigin);
+    showWindow();
   });
   app.whenReady().then(boot);
 }

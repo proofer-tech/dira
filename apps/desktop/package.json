@@ -26,6 +26,7 @@
     "files": [
       "main.ts",
       "release-notes.ts",
+      "revive.ts",
       "preload.cjs",
       "package.json",
       "ga.json",
