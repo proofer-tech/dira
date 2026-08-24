@@ -23405,6 +23405,44 @@ designer 몫 - **§비주얼 §24(홈 화면)가 받는다.** 다른 절로 안 
   화이트리스트)을 스펙에 박으면 경계가 없는 채로 있는 것과 같다 - §`kind`를 지는 것이 글이다의
   `tickets/????????.md` 항과 같은 판정이다.
 
+#### 실측 - (가) 세그먼트별로 확정된다 (2026-08-24, 이 머신 hsol.local - `claude` 2.1.241)
+
+cwd는 `/tmp/dira-bash-ab-ws`(진짜 큐도 이 repo도 아니다) - 로그 한 장
+(`.dira/workers/logs/20260824-145841-w6-b100a3aa.log`, 22줄 - `rror` 4건)을 `test.log`로
+복사해 대상으로 썼다. 커맨드는 홈 에이전트의 네 조각 무수정(`--tools` - `--strict-mcp-config` -
+`--permission-mode manual` - `--allowed-tools`) - 갈린 것은 둘뿐, `--tools`에 `Bash` 추가,
+`--allowed-tools`에 아래 결정 4의 열하나를 `Bash(<명령>:*)`로 얹었다. 케이스 여덟을 각각 한
+세션(`-p`, 새 `--session-id`)으로 돌렸다. 판정은 `ls /tmp/dira-bash-ab-*`(파일이 생겼나) -
+트랜스크립트 - `permission_denials`는 방증이다.
+
+| # | 명령 | 도구가 돌았나 | `permission_denials` | 파일 생겼나 |
+|---|---|---|---|---|
+| ① 허용 단독 | `tail -5 test.log` | 돌았다 - `is_error:false` | 0 | - |
+| ② 허용만의 파이프라인 | `grep -c rror test.log \| sort \| uniq -c` | 돌았다 - 결과 `1 4` | 0 | - |
+| ③ `;` 비허용 | `tail -1 test.log; echo x > .../dira-bash-ab-3` | 첫 호출 거부, 모델이 안전한 `tail -1`만 재시도해 성공 | 1 | **없음** |
+| ④ `&&` 비허용 | `tail -1 test.log && echo x > .../dira-bash-ab-4` | 거부, 재시도 없이 종료 | 1 | **없음** |
+| ⑤ 명령 치환 | `echo $(whoami) > .../dira-bash-ab-5` | 거부 - `Contains command_substitution` | 1 | **없음** |
+| ⑥ 리다이렉트 | `tail -1 test.log > .../dira-bash-ab-6` | 거부 - `Output redirection ... was blocked` | 1 | **없음** |
+| ⑦ 비허용 단독 | `python3 -c "..." .../dira-bash-ab-7` | 거부 - `This command requires approval` | 1 | **없음** |
+| ⑧ 두 낱말 프리픽스 | `git log --oneline -1` | 돌았다 - `bacee41 seed` | 0 | - |
+
+**갈래는 (가) 세그먼트별이다.** 허용 명령 단독(①)도 허용 명령만의 파이프라인(②)도 그대로 돌고,
+`;` - `&&` - `$( )` - `>` - 비허용 단독(③-⑦)은 전부 거부되어 `ls /tmp/dira-bash-ab-*`에 다섯 다
+파일이 0개다. **⑧(두 낱말 프리픽스)도 먹는다** - `Bash(git log:*)`가 `git log --oneline -1`을
+그대로 통과시켰다(거부 0건).
+
+**거부 메커니즘은 프리픽스 매칭 하나가 아니다.** ③-⑥이 물린 것은 `Bash(<명령>:*)` 세그먼트
+매칭이 아니라 **Claude Code 자체의 쓰기 샌드박스**다 - `>`가 가리키는 경로가 세션 cwd
+(`/tmp/dira-bash-ab-ws`) 밖이면 프리픽스 허용 여부와 무관하게 `Output redirection ... was
+blocked`로 구조적으로 막힌다(③은 `;`로 붙은 앞 세그먼트가 먼저 이 거부를 맞은 뒤 모델이
+안전한 명령만 다시 시도해 성공했다 - 그래도 `permission_denials`는 1건으로 남는다). ⑤는
+`$( )` 자체를 구문으로 잡아 `Contains command_substitution`으로 막는다. **⑦만 결정 4의
+프리픽스 목록에 없는 명령이라서 거부됐다** - `This command requires approval`이 원래 가정한
+프리픽스 매칭이다. **결론(파일 0개)은 셋 다 같지만 막는 층이 둘**이라, 구현 티켓은 "허용목록
+프리픽스가 막는다"로 뭉뚱그려 적지 않는다 - 홈 에이전트의 실제 cwd(`dirname(root)`, 큐 루트가
+아니라 repo 루트)에서 이 쓰기 샌드박스가 결정 4의 경로 스코프와 어떻게 겹치는지는 여기서
+안 쟀다.
+
 #### 결정 4 - 허용목록은 읽기 전용 명령 열하나다
 
 `--allowed-tools`에 이 열하나가 `Bash(<명령>:*)` 꼴로 붙는다. **이 목록이 계약이고 여기 없는
