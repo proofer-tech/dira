@@ -45,6 +45,7 @@ const {
   DISPATCH_GATE_FILE,
   dispatchGateSh,
   dispatchGateSourceLine,
+  dispatchGateState,
   SELF_HEAL_FILE,
   SELF_HEAL_SH,
   selfHealSourceLine,
@@ -2039,6 +2040,52 @@ test("applyDispatchGate — 픽스처 큐 왕복 1회: 브랜치는 AGENTS.md에
   // ⑥ 앵커 없음·이름 규칙은 쓰지 않고 사유를 준다
   await assert.rejects(applyDispatchGate(root, "none"), /줄이 없습니다/);
   await assert.rejects(applyDispatchGate(root, "../evil"), /영문·숫자/);
+});
+
+test("dispatchGateState — 네 갈래: 없음·최신·낡음·손으로 깐 판 (§4-14 §소급, 티켓 c9c94c20)", async () => {
+  const root = makeRoot({ "w1.sh": CTX_SH });
+  const gate = path.join(root, DISPATCH_GATE_FILE);
+
+  assert.strictEqual(await dispatchGateState(root, "main"), "none");
+
+  writeFileSync(gate, dispatchGateSh("main"));
+  assert.strictEqual(await dispatchGateState(root, "main"), "latest");
+
+  // 관리 표식(템플릿 셋째 줄 "GUI가 만들고 관리한다")은 그대로 살아 있고 나머지 바이트만 다르다
+  writeFileSync(gate, dispatchGateSh("main") + "\n# hand edit\n");
+  assert.strictEqual(await dispatchGateState(root, "main"), "stale");
+
+  // 관리 표식이 아예 없다 — 사람이 처음부터 손으로 깐 판
+  writeFileSync(gate, "손으로 처음부터 깐 판\n");
+  assert.strictEqual(await dispatchGateState(root, "main"), "handEdited");
+
+  // 브랜치가 다르면 "최신"도 그 브랜치 기준으로 다시 갈린다 — 값 하나가 아니라 비교식이다
+  writeFileSync(gate, dispatchGateSh("main"));
+  assert.strictEqual(await dispatchGateState(root, "dev"), "stale");
+});
+
+test("applyDispatchGate — 낡음은 갈아 끼우고 손으로 깐 판은 안 건드린다 (§4-14 §소급, 티켓 c9c94c20)", async () => {
+  const root = makeRoot({ "w1.sh": CTX_SH });
+  chmodSync(path.join(root, "workers", "w1.sh"), 0o755);
+  mkdirSync(path.join(root, "protocols"), { recursive: true });
+  writeFileSync(path.join(root, "protocols", "AGENTS.md"), "본문...\n**끝나면**: `git push . HEAD:main`\n");
+  const gate = path.join(root, DISPATCH_GATE_FILE);
+
+  // 낡음 — §4-14 §검증 6의 그 실측 그대로(`printf '\n# hand edit\n' >>`) 만든 상태
+  writeFileSync(gate, dispatchGateSh("main") + "\n# hand edit\n");
+  assert.strictEqual((await listWorkers(root)).find((w) => w.name === "w1")!.dispatchGateStale, true);
+  assert.strictEqual(await applyDispatchGate(root, "w1"), true); // source 줄도 같이 들어간다
+  assert.strictEqual(readFileSync(gate, "utf8"), dispatchGateSh("main")); // 지금 판으로 갈아 끼웠다
+  assert.strictEqual(statSync(gate).mode & 0o777, 0o644);
+  assert.strictEqual((await listWorkers(root)).find((w) => w.name === "w1")!.dispatchGateStale, false);
+
+  // 손으로 깐 판 — 관리 표식이 없다. 액션이 불려도(source 줄은 이미 있어 no-op) 파일은 안 갈린다
+  writeFileSync(gate, "손으로 처음부터 깐 판\n");
+  const before = readFileSync(gate, "utf8");
+  assert.strictEqual(await applyDispatchGate(root, "w1"), false);
+  assert.strictEqual(readFileSync(gate, "utf8"), before);
+  // 손으로 깐 판은 "낡음"이 아니다 — 화면 경고 축이 다르다(§4-14 §소급, 이 티켓의 범위 밖)
+  assert.strictEqual((await listWorkers(root)).find((w) => w.name === "w1")!.dispatchGateStale, false);
 });
 
 /** §4-14 §검증 2·3 — 받는 트리가 통합 브랜치를 체크아웃 중일 때만 잰다. **진짜 git + 진짜

@@ -91,6 +91,8 @@ export type WorkerRow = {
   /** 통합 게이트 `source` 줄이 있는가. false면 받는 트리가 더러워도 그냥 디스패치돼 push에서만
    *  막힌다 (§4-14) */
   dispatchGateSource: boolean;
+  /** `<루트>/dispatch-gate.sh`가 낡음인가(§4-14 §소급). `source` 줄이 있어도 이게 true면 경고한다 */
+  dispatchGateStale: boolean;
   /** `TICKET_CWD`. null = 줄이 없다(엔진 기본값 = 루트의 부모) */
   cwd: string | null;
   /** 작업 디렉터리 결함 (§4, 넷째는 §0-21). **0개가 정상**이고 그때 행은 아무것도 늘지 않는다.
@@ -1117,9 +1119,10 @@ export function WorkerContextRow({
   const healBtnRef = useRef<HTMLButtonElement>(null);
   const gateBtnRef = useRef<HTMLButtonElement>(null);
   const gets = row.commonSource ? common : [];
+  // 통합 게이트 경고는 `source` 줄이 없거나(§4-14) 있어도 파일 내용이 낡았으면 선다(§4-14 §소급).
+  const gateWarn = !row.dispatchGateSource || row.dispatchGateStale;
   // 접혀 있어도 이 행이 서는 조건 — 경고 여섯 중 하나라도 있으면이다(§35 #4).
-  const warned =
-    !!warnings || !row.commonSource || !row.selfHealSource || !row.dispatchGateSource || !row.context.ok;
+  const warned = !!warnings || !row.commonSource || !row.selfHealSource || gateWarn || !row.context.ok;
   // 활동 펼침도 이 행이 받는다(§4-7) — 조건을 안 넓히면 셀을 눌러도 받을 행이 없다.
   if (!warned && !expanded && !activity) return null;
 
@@ -1210,19 +1213,34 @@ export function WorkerContextRow({
           )}
 
           {/* 이 줄이 없으면 받는 트리가 더러워도 이 워커는 그냥 디스패치되고, 세션이 일을 다 끝낸
-              뒤 push에서만 막힌다(§4-14 §소급). 모양은 위 둘과 같다. */}
-          {!row.dispatchGateSource && (
+              뒤 push에서만 막힌다(§4-14 §소급). 줄이 있어도 `dispatch-gate.sh` 내용이 낡았으면
+              이 워커가 옛 판을 그대로 돈다 — 판정만 늘고 모양은 위 둘과 같다. */}
+          {gateWarn && (
             <Alert>
               <TriangleAlert aria-hidden className="text-status-stale" />
-              <AlertTitle>이 워커는 받는 트리가 더러워도 그냥 디스패치됩니다</AlertTitle>
+              <AlertTitle>
+                {row.dispatchGateSource
+                  ? "이 워커의 통합 게이트가 낡았습니다"
+                  : "이 워커는 받는 트리가 더러워도 그냥 디스패치됩니다"}
+              </AlertTitle>
               <AlertDescription>
                 <div className="space-y-2">
                   <p>
-                    {row.name}.sh에 <span className="font-mono text-xs">dispatch-gate.sh</span>를{" "}
-                    <span className="font-mono text-xs">.</span> 하는 줄이 없습니다 — 받는 트리가
-                    더러운 채로 디스패치되면 세션이 일을 다 끝낸 뒤 push에서만 거부됩니다. 적용하면{" "}
-                    <span className="font-mono text-xs">. tick.sh</span> 바로 위에 한 줄이
-                    들어갑니다(통합 브랜치는 protocols/AGENTS.md에서 읽습니다).
+                    {row.dispatchGateSource ? (
+                      <>
+                        <span className="font-mono text-xs">dispatch-gate.sh</span>의 내용이 지금
+                        판과 다릅니다 — 이 워커는 옛 통합 게이트를 그대로 돕니다. 적용하면 파일을
+                        지금 판으로 덮어씁니다.
+                      </>
+                    ) : (
+                      <>
+                        {row.name}.sh에 <span className="font-mono text-xs">dispatch-gate.sh</span>를{" "}
+                        <span className="font-mono text-xs">.</span> 하는 줄이 없습니다 — 받는 트리가
+                        더러운 채로 디스패치되면 세션이 일을 다 끝낸 뒤 push에서만 거부됩니다.
+                        적용하면 <span className="font-mono text-xs">. tick.sh</span> 바로 위에 한
+                        줄이 들어갑니다(통합 브랜치는 protocols/AGENTS.md에서 읽습니다).
+                      </>
+                    )}
                   </p>
                   <Button
                     ref={gateBtnRef}

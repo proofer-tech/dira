@@ -91,6 +91,9 @@ export type Worker = {
   /** 통합 게이트 `source` 줄이 있는가. false면 받는 트리가 더러워도 그냥 디스패치돼 push에서만
    *  막힌다 (§4-14) */
   dispatchGateSource: boolean;
+  /** `<루트>/dispatch-gate.sh`가 **낡음**(내용이 다르고 관리 표식은 있다)인가 — 프로젝트당 한
+   *  판정이라 워커마다 같은 값이다. `source` 줄이 있어도 이게 true면 화면이 경고한다(§4-14 §소급) */
+  dispatchGateStale: boolean;
   /** `TICKET_CWD` (셸 없이 읽은 절대경로). null = 줄이 없다 → 엔진 기본값은 루트의 부모다 */
   cwd: string | null;
   /** 작업 디렉터리 결함 (§4). **0개가 정상이고 그때 화면은 아무것도 늘지 않는다** */
@@ -1334,6 +1337,11 @@ export async function listWorkers(root: string, tickets: Ticket[] = []): Promise
 
   const [cronRaw, logs] = await Promise.all([crontabText(), lastLogByWorker(dir)]);
   const cron = nfc(cronRaw);
+  // 게이트 낡음은 프로젝트 하나에 한 판정이다(§4-14 §소급) — 워커마다 다시 읽지 않는다. 통합
+  // 브랜치를 못 읽으면(스캐폴딩 이전 큐) 낡음을 잴 수 없어 조용히 false로 둔다 — 그 프로젝트는
+  // 종전대로 `source` 줄 경고만 산다.
+  const gateBranch = await integrationBranchOf(root);
+  const gateStale = gateBranch !== null && (await dispatchGateState(root, gateBranch)) === "stale";
   // 쿨다운은 **엔진마다** 하나이고 머신 전역이다(`tick.sh:62`). 워커마다 열지 않도록 이 패스
   // 안에서 엔진 이름으로 한 번만 읽는다 — 오늘 엔진 종류는 1개다. 실패가 없는 워커는 아예 안
   // 부르므로(§0-5 §비용) 정상 상태에서는 이 읽기도 0회다.
@@ -1381,6 +1389,7 @@ export async function listWorkers(root: string, tickets: Ticket[] = []): Promise
       // 이 줄이 없는 워커는 받는 트리가 더러워도 디스패치된다 — 화면이 경고 + `통합 게이트 적용`
       // (§4-14 §소급).
       dispatchGateSource: dispatchGateSourceRe.test(text),
+      dispatchGateStale: gateStale,
       cwd: parsed.cwd,
       defects: [], // 공유 판정이 목록 전체를 봐야 하므로 행을 다 만든 뒤에 채운다
     });
@@ -1948,6 +1957,20 @@ export function dispatchGateSourceLine(root: string): string {
  *  한다) — `selfHealSourceRe`와 같은 천장이고 같은 이유다. */
 const dispatchGateSourceRe = /^[ \t]*(?:\.|source)[ \t]+[^\n]*dispatch-gate\.sh/m;
 
+/** 템플릿 셋째 줄 — 관리 표식(§4-14 §소급). 새로 만들지 않는다, 이미 있는 문장을 그대로 쓴다. */
+const DISPATCH_GATE_MARKER = "GUI가 만들고 관리한다";
+
+export type DispatchGateState = "none" | "latest" | "stale" | "handEdited";
+
+/** `<루트>/dispatch-gate.sh`의 지금 상태를 넷으로 가른다 (§4-14 §소급). 판정은 **내용 비교
+ *  하나** — 새 버전 번호도 새 표식 파일도 안 만든다. */
+export async function dispatchGateState(root: string, branch: string): Promise<DispatchGateState> {
+  const text = await readFile(path.join(root, DISPATCH_GATE_FILE), "utf8").catch(() => null);
+  if (text === null) return "none";
+  if (text === dispatchGateSh(branch)) return "latest";
+  return text.includes(DISPATCH_GATE_MARKER) ? "stale" : "handEdited";
+}
+
 /** 이미 스캐폴딩된 프로젝트의 통합 브랜치를 `protocols/AGENTS.md`에서 읽는다 — scaffold가 이미
  *  `<통합 브랜치>`를 치환해 둔 그 파일 하나가, 소급 적용이 새 입력 없이 값을 구하는 유일한 자리다
  *  (§4-14 — "통합 브랜치 값은 이미 손에 있다"). 못 찾으면 null이다. */
@@ -1972,11 +1995,9 @@ export async function applyDispatchGate(root: string, name: string): Promise<boo
   }
 
   const gate = path.join(root, DISPATCH_GATE_FILE);
-  const exists = await stat(gate).then(
-    () => true,
-    () => false,
-  );
-  if (!exists) await atomicWrite(gate, dispatchGateSh(branch), 0o644);
+  // 없음·낡음만 (덮어)쓴다 — 최신은 쓸 이유가 없고, 손으로 깐 판은 그 사실이 곧 사유라 안 건드린다.
+  const state = await dispatchGateState(root, branch);
+  if (state === "none" || state === "stale") await atomicWrite(gate, dispatchGateSh(branch), 0o644);
   if (dispatchGateSourceRe.test(text)) return false;
 
   const m = text.match(sourceTick); // `/m` 앵커라 index가 그 줄 처음이다
