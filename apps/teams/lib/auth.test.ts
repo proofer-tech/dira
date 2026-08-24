@@ -20,6 +20,8 @@ process.on("exit", () => rmSync(LOCAL, { recursive: true, force: true }));
 
 const {
   addToken,
+  captureEngineProfile,
+  deleteEngineProfile,
   deleteToken,
   findClaude,
   findExecutable,
@@ -29,11 +31,15 @@ const {
   ptyLines,
   pollSetup,
   readAuth,
+  readEngineProfileRows,
   readOtherEngineAuth,
   readTokenRows,
   readTokens,
   saveToken,
+  setActiveEngineProfile,
   setActiveToken,
+  setEngineProfileEnabled,
+  setEngineProfileLabel,
   setTokenEnabled,
   setTokenLabel,
   startSetup,
@@ -773,4 +779,148 @@ test("readOtherEngineAuth — CLI 탐색은 findExecutable(엔진 실행파일 �
   // 값이 없다는 것이 아니라 **같은 판정 함수를 부른다는 것**을 잰다
   assert.strictEqual(rows.find((e) => e.engine === "grok")!.cli, findExecutable("grok"));
   assert.strictEqual(rows.find((e) => e.engine === "agy")!.cli, findExecutable("agy"));
+});
+
+// ── codex · grok 프로필 — 계정 목록 (DESIGN.md §0-23 §그릇 §잠금 §화면) ────────────
+
+/** `~/.codex` 자리의 픽스처 — `auth.json` 하나(권한 `0600`)를 든 홈 디렉터리다. */
+function makeEngineHome(rel: string): string {
+  const home = mkdtempSync(path.join(tmpdir(), "fst-auth-enginehome-"));
+  process.on("exit", () => rmSync(home, { recursive: true, force: true }));
+  mkdirSync(path.join(home, rel), { recursive: true });
+  writeFileSync(path.join(home, rel, "auth.json"), '{"ok":true}', { mode: 0o600 });
+  return home;
+}
+
+function engineDir(engine: "codex" | "grok", id: string): string {
+  return path.join(path.dirname(tokensPath()), "engines", engine, id);
+}
+
+test("captureEngineProfile — 원본을 통째로 복사한다. 디렉터리 0700, 안의 파일은 원본 권한 그대로", async () => {
+  process.env.TICKET_LOCAL = mkdtempSync(path.join(tmpdir(), "fst-auth-capture-")); // 빈 상태에서 잰다
+  const home = makeEngineHome(".codex");
+  const entry = await captureEngineProfile("codex", home);
+
+  const dir = engineDir("codex", entry.id);
+  assert.strictEqual(statSync(dir).mode & 0o777, 0o700);
+  assert.strictEqual(readFileSync(path.join(dir, "auth.json"), "utf8"), '{"ok":true}');
+  assert.strictEqual(statSync(path.join(dir, "auth.json")).mode & 0o777, 0o600);
+
+  // 첫 담기 — 곧바로 활성이고 tokens.json에는 이름표뿐이다(`token` 칸이 없다)
+  const file = await readTokens();
+  assert.strictEqual(file.codex!.active, entry.id);
+  assert.deepStrictEqual(file.codex!.profiles, [entry]);
+  assert.ok(!("token" in entry));
+});
+
+test("captureEngineProfile — 원본이 없으면 던진다(버튼이 이미 막지만 방어로 한 번 더 잰다)", async () => {
+  const emptyHome = mkdtempSync(path.join(tmpdir(), "fst-auth-nohome-"));
+  process.on("exit", () => rmSync(emptyHome, { recursive: true, force: true }));
+  await assert.rejects(() => captureEngineProfile("codex", emptyHome));
+});
+
+test("captureEngineProfile — claude 토큰을 쓰는 동안 codex 프로필이 안 사라진다(TokensFile 여러 키)", async () => {
+  process.env.TICKET_LOCAL = mkdtempSync(path.join(tmpdir(), "fst-auth-multikey-"));
+  const home = makeEngineHome(".codex");
+  const entry = await captureEngineProfile("codex", home);
+
+  await addToken("sk-ant-oat01-fixture-multi"); // claude 쪽 writeTokens 호출
+
+  const file = await readTokens();
+  assert.strictEqual(file.codex!.profiles.length, 1); // codex 항목이 살아 있다
+  assert.strictEqual(file.codex!.profiles[0].id, entry.id);
+  assert.ok(file.claude!.tokens.some((t) => t.token === "sk-ant-oat01-fixture-multi"));
+});
+
+test("captureEngineProfile · setEngineProfileEnabled · deleteEngineProfile — 잠금 밖에서는 append, 활성/삭제가 claude와 같은 판정", async () => {
+  process.env.DIRA_MULTI_TOKEN = "1";
+  process.env.TICKET_LOCAL = mkdtempSync(path.join(tmpdir(), "fst-auth-grokflow-"));
+  const homeA = makeEngineHome(".grok");
+  const homeB = makeEngineHome(".grok");
+
+  const a = await captureEngineProfile("grok", homeA);
+  const b = await captureEngineProfile("grok", homeB);
+  let file = await readTokens();
+  assert.strictEqual(file.grok!.profiles.length, 2); // append — 안 겹친다
+  assert.strictEqual(file.grok!.active, a.id); // 활성은 안 움직인다(eligible한 활성이 이미 있다)
+
+  await setEngineProfileEnabled("grok", a.id, false); // 활성을 끄면 다음 eligible(b)로 넘어간다
+  file = await readTokens();
+  assert.strictEqual(file.grok!.active, b.id);
+
+  await setEngineProfileLabel("grok", b.id, "  둘째 계정  ");
+  const rows = await readEngineProfileRows("grok");
+  assert.strictEqual(rows.find((r) => r.id === b.id)!.label, "둘째 계정"); // trim
+
+  await deleteEngineProfile("grok", b.id); // 항목 + engines/grok/<id>/ 둘 다 지운다
+  file = await readTokens();
+  assert.strictEqual(file.grok!.profiles.length, 1);
+  assert.strictEqual(existsSync(engineDir("grok", b.id)), false);
+  assert.strictEqual(existsSync(engineDir("grok", a.id)), true); // a는 그대로다
+});
+
+test("captureEngineProfile — 잠금 빌드에서는 append가 아니라 active 자리 교체다(§0-23 §잠금 계약 ①)", async () => {
+  const saved = process.env.DIRA_MULTI_TOKEN;
+  try {
+    delete process.env.DIRA_MULTI_TOKEN; // 잠금 빌드
+    process.env.TICKET_LOCAL = mkdtempSync(path.join(tmpdir(), "fst-auth-codexlock-"));
+
+    const homeA = makeEngineHome(".codex");
+    const a = await captureEngineProfile("codex", homeA);
+    let file = await readTokens();
+    assert.strictEqual(file.codex!.profiles.length, 1);
+
+    const homeB = makeEngineHome(".codex");
+    const b = await captureEngineProfile("codex", homeB);
+    file = await readTokens();
+    assert.strictEqual(file.codex!.profiles.length, 1); // 계약 ① — 항목 수가 안 늘었다
+    assert.strictEqual(file.codex!.active, b.id);
+    assert.strictEqual(file.codex!.profiles[0].id, b.id);
+    // a의 디렉터리는 지우지 않는다(§0-23 §잠금 계약 ③과 같은 결 — 지우는 손은 `삭제` 하나뿐)
+    assert.strictEqual(existsSync(engineDir("codex", a.id)), true);
+  } finally {
+    if (saved === undefined) delete process.env.DIRA_MULTI_TOKEN;
+    else process.env.DIRA_MULTI_TOKEN = saved;
+  }
+});
+
+test("readEngineProfileRows — 잠금 빌드에서는 행이 최대 하나고, 이미 여러 개인 파일을 만나도 항목·디렉터리를 안 지운다(§0-23 §잠금 계약 ②③)", async () => {
+  const activeA: import("./auth.ts").ProfileEntry = {
+    id: "a".repeat(12),
+    addedAt: "2026-08-01T00:00:00.000Z",
+    enabled: true,
+    exhaustedUntil: null,
+  };
+  const untouchedB: import("./auth.ts").ProfileEntry = {
+    id: "b".repeat(12),
+    label: "B계정",
+    addedAt: "2026-08-02T00:00:00.000Z",
+    enabled: true,
+    exhaustedUntil: null,
+  };
+  await writeTokens({ codex: { active: activeA.id, profiles: [activeA, untouchedB] } });
+
+  const saved = process.env.DIRA_MULTI_TOKEN;
+  try {
+    delete process.env.DIRA_MULTI_TOKEN; // 잠금 빌드
+
+    const rows = await readEngineProfileRows("codex");
+    assert.strictEqual(rows.length, 1); // 계약 ②
+    assert.strictEqual(rows[0].id, activeA.id);
+
+    const file = await readTokens();
+    assert.strictEqual(file.codex!.profiles.length, 2); // 계약 ③ — 항목을 안 지운다(읽기만으로는)
+  } finally {
+    if (saved === undefined) delete process.env.DIRA_MULTI_TOKEN;
+    else process.env.DIRA_MULTI_TOKEN = saved;
+  }
+});
+
+test("setActiveEngineProfile — 목록에 없는 id는 조용히 무시한다(방어)", async () => {
+  process.env.TICKET_LOCAL = mkdtempSync(path.join(tmpdir(), "fst-auth-noop-"));
+  const home = makeEngineHome(".grok");
+  const entry = await captureEngineProfile("grok", home);
+  await setActiveEngineProfile("grok", "생전-없는-id");
+  const file = await readTokens();
+  assert.strictEqual(file.grok!.active, entry.id); // 안 바뀌었다
 });

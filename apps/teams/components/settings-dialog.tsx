@@ -29,8 +29,11 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import {
+  captureEngineProfileAction,
+  deleteEngineProfileAction,
   deleteTokenAction,
   readAnalyticsAction,
+  readEngineProfileRowsAction,
   readMultiplayAction,
   readMultitokenAction,
   readTokenRowsAction,
@@ -38,8 +41,11 @@ import {
   resetKeymapAction,
   saveTokenAction,
   sendSetupCodeAction,
+  setActiveEngineProfileAction,
   setAnalyticsAction,
   setBindingAction,
+  setEngineProfileEnabledAction,
+  setEngineProfileLabelAction,
   setLanguageAction,
   setMultiplayAction,
   setMultitokenAction,
@@ -52,7 +58,15 @@ import {
   setActiveTokenAction,
   testWebhookAction,
 } from "@/app/actions";
-import type { OtherEngine, OtherEngineAuth, SetupState, TokenRow, TokenStatus } from "@/lib/auth";
+import type {
+  OtherEngine,
+  OtherEngineAuth,
+  ProfileEngine,
+  ProfileRow,
+  SetupState,
+  TokenRow,
+  TokenStatus,
+} from "@/lib/auth";
 import { useHotkey, useKeymap } from "@/components/keymap-provider";
 import { useLocale, useT } from "@/components/language-provider";
 import type { Locale } from "@/lib/i18n";
@@ -672,12 +686,18 @@ function TokenStatusBadge({ status }: { status: TokenStatus }) {
  *  덮어쓰기가 아니라 append고, **활성은 안 움직인다**(§0-13 §화면, P179) — 새/중복 토큰은 `대기`로
  *  들어간다(eligible한 활성이 없을 때만 예외로 활성이 된다). 지금 쓸 토큰은 `대기` 행의 `사용`
  *  버튼으로 사람이 직접 고른다. 활성화·사용 어느 쪽도 `oauth-token` 쓰기는 이 컴포넌트가 직접
- *  하지 않는다 — `setTokenEnabledAction`·`setActiveTokenAction`이 `lib/auth.ts`의 `writeTokens` 안에서만 한다. */
+ *  하지 않는다 — `setTokenEnabledAction`·`setActiveTokenAction`이 `lib/auth.ts`의 `writeTokens` 안에서만 한다.
+ *
+ *  **`engine`이 있으면 codex · grok 계정 목록이다**(§0-23 §화면 — 행·상태·조작을 claude와
+ *  그대로 재사용한다, 새 컴포넌트 0). 갈리는 것은 부르는 서버 액션 넷뿐이고 렌더 트리는
+ *  한 벌이다 — `ProfileRow`에는 가릴 비밀이 없어 `masked` 줄만 조건부로 접힌다. */
 function TokensSection({
+  engine,
   refreshKey,
   onCount,
   multiToken,
 }: {
+  engine?: ProfileEngine;
   refreshKey: string | null;
   /** §0-13 §트리거 문구 — 트리거가 행 수를 알아야 `추가`/`변경`을 가른다. 새 서버 왕복을 안 낸다. */
   onCount?: (n: number) => void;
@@ -688,36 +708,52 @@ function TokensSection({
   multiToken: boolean | null;
 }) {
   const t = useT();
-  const [rows, setRows] = useState<TokenRow[] | null>(null);
+  const [rows, setRows] = useState<(TokenRow | ProfileRow)[] | null>(null);
   const [pending, start] = useTransition();
   // 행 라벨 편집(P180-1, §0-13 §라벨) — 한 번에 한 행만 연다. `editValue`는 `rawLabel`에서
   // 시작한다(표시용 `label`은 `계정 N` 순번이 섞여 있어 그대로 프리필하면 그 문자열이 저장된다).
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
 
-  const apply = (r: TokenRow[]) => {
+  const apply = (r: (TokenRow | ProfileRow)[]) => {
     setRows(r);
     onCount?.(r.length);
   };
 
-  // `refreshKey`는 부르는 쪽의 `savedAt`이다 — 층 ②·③이 토큰을 저장하면 그 값이 바뀌어 목록을
-  // 다시 읽는다("인증하기/토큰추가 시 토큰 목록에 추가됩니다", §0-13 §화면). 새 폴링 루프를
-  // 따로 만들지 않는다 — 이미 있는 신호를 의존성으로 빌린다.
-  // `multiToken`도 의존성이다 — 서버의 `readTokenRows`가 잠금 여부로 행 자체를 거른다
-  // (§0-13 §잠금 계약 ②). 이 값이 없으면 `다중계정 허용`을 켜도 목록이 옛 필터(행 하나)에
+  // `refreshKey`는 부르는 쪽의 `savedAt`(claude) 또는 담기 횟수(codex·grok)다 — 층 ②·③(또는
+  // 담기 버튼)이 저장하면 그 값이 바뀌어 목록을 다시 읽는다. 새 폴링 루프를 따로 만들지 않는다 —
+  // 이미 있는 신호를 의존성으로 빌린다.
+  // `multiToken`도 의존성이다 — 서버의 목록 함수가 잠금 여부로 행 자체를 거른다(§0-13 §잠금
+  // 계약 ②, §0-23 §잠금). 이 값이 없으면 `다중계정 허용`을 켜도 목록이 옛 필터(행 하나)에
   // 머문다(§0-18 §검증 2 — 재시작 없이 같은 화면에서 갈린다).
   useEffect(() => {
-    void readTokenRowsAction().then(apply);
+    void (engine ? readEngineProfileRowsAction(engine) : readTokenRowsAction()).then(apply);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refreshKey, multiToken]);
+  }, [refreshKey, multiToken, engine]);
 
-  const setEnabled = (row: TokenRow, enabled: boolean) =>
-    start(async () => apply(await setTokenEnabledAction(row.id, enabled)));
-  const remove = (row: TokenRow) => start(async () => apply(await deleteTokenAction(row.id)));
-  const use = (row: TokenRow) => start(async () => apply(await setActiveTokenAction(row.id)));
-  const saveLabel = (row: TokenRow) =>
+  const setEnabled = (row: TokenRow | ProfileRow, enabled: boolean) =>
+    start(async () =>
+      apply(
+        engine
+          ? await setEngineProfileEnabledAction(engine, row.id, enabled)
+          : await setTokenEnabledAction(row.id, enabled),
+      ),
+    );
+  const remove = (row: TokenRow | ProfileRow) =>
+    start(async () =>
+      apply(engine ? await deleteEngineProfileAction(engine, row.id) : await deleteTokenAction(row.id)),
+    );
+  const use = (row: TokenRow | ProfileRow) =>
+    start(async () =>
+      apply(engine ? await setActiveEngineProfileAction(engine, row.id) : await setActiveTokenAction(row.id)),
+    );
+  const saveLabel = (row: TokenRow | ProfileRow) =>
     start(async () => {
-      apply(await setTokenLabelAction(row.id, editValue));
+      apply(
+        engine
+          ? await setEngineProfileLabelAction(engine, row.id, editValue)
+          : await setTokenLabelAction(row.id, editValue),
+      );
       setEditingId(null);
     });
 
@@ -787,9 +823,10 @@ function TokensSection({
               )}
               <TokenStatusBadge status={row.status} />
             </div>
-            {/* 가린 값 — 값 전체를 그리지 않는다. `복사` 버튼도 없다(§0-13 §화면) */}
+            {/* 가린 값 — 값 전체를 그리지 않는다. `복사` 버튼도 없다(§0-13 §화면).
+                `ProfileRow`(codex·grok)에는 가릴 값 자체가 없다 — `masked` 줄이 접힌다 */}
             <p className="font-mono text-xs break-all text-muted-foreground">
-              {row.masked}{" "}
+              {"masked" in row && `${row.masked} `}
               <span className="font-sans">
                 · {row.addedAt} {t("settings.tokens.addedSuffix")}
               </span>
@@ -859,9 +896,33 @@ function NotInstalledMark({ show }: { show: boolean }) {
 /** claude 아닌 엔진 노드 하나 — 사실 둘(CLI 경로 · 자격증명 파일)만 말한다. 판정을 안 내리므로
  *  `TriangleAlert`도 색도 안 쓴다 — claude ⓪처럼 "이게 없으면 워커가 못 뜬다"를 아는 것이
  *  아니라 "찾았다/못 찾았다"만 아는 층이다(§0-4 §개정 `b0966e66`). §0-17로 자기 트리 노드가
- *  됐으므로 머리도 claude와 같은 벌(패널 `h3` · `font-mono`, §비주얼 §45 ③ §벌)이다. */
-function OtherEngineSection({ engine, className }: { engine: OtherEngineAuth; className?: string }) {
+ *  됐으므로 머리도 claude와 같은 벌(패널 `h3` · `font-mono`, §비주얼 §45 ③ §벌)이다.
+ *
+ *  **codex · grok은 계정 목록 + 담기 버튼도 얻는다**(§0-23 §화면). 새 컴포넌트를 안 둔다 — 목록은
+ *  `TokensSection` 그대로(claude와 같은 행 · 상태 · 조작), 담기는 이 함수 안의 상태 셋뿐이다.
+ *  agy는 `engine.engine`이 `ProfileEngine`이 아니므로 그 블록을 안 그린다. */
+function OtherEngineSection({
+  engine,
+  multiToken,
+  className,
+}: {
+  engine: OtherEngineAuth;
+  multiToken: boolean | null;
+  className?: string;
+}) {
   const t = useT();
+  const [pending, start] = useTransition();
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [error, setError] = useState<string | undefined>();
+  const isProfileEngine = engine.engine === "codex" || engine.engine === "grok";
+
+  const capture = () =>
+    start(async () => {
+      const r = await captureEngineProfileAction(engine.engine as ProfileEngine);
+      setError(r.error);
+      if (!r.error) setRefreshKey((k) => k + 1);
+    });
+
   const cred =
     engine.engine === "agy" ? (
       t("settings.other.agyCred")
@@ -887,6 +948,32 @@ function OtherEngineSection({ engine, className }: { engine: OtherEngineAuth; cl
         )}
       </p>
       <p className="text-sm text-muted-foreground">{cred}</p>
+      {/* agy는 목록도 버튼도 없다 — 갈리는 것은 위 `자격증명` 문구 하나뿐이다(§0-23 §화면) */}
+      {isProfileEngine && (
+        <>
+          <h4 className="text-sm font-medium">{t("settings.other.accounts")}</h4>
+          <TokensSection
+            engine={engine.engine as ProfileEngine}
+            refreshKey={String(refreshKey)}
+            multiToken={multiToken}
+          />
+          <div className="space-y-1">
+            {/* 담기 버튼의 활성 판정 — `자격증명` 줄이 이미 잰 그 사실 하나다(§0-23 §화면, 새 판정 0) */}
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={pending || engine.credPath === null}
+              onClick={capture}
+            >
+              {pending ? t("common.saving") : t("settings.other.capture")}
+            </Button>
+            <p className="text-xs text-muted-foreground">
+              {engine.credPath === null ? t("settings.other.captureBlocked") : t("settings.other.captureHint")}
+            </p>
+            {error && <p className="text-xs text-destructive">{error}</p>}
+          </div>
+        </>
+      )}
     </section>
   );
 }
@@ -1532,6 +1619,7 @@ export function SettingsDialog({
               <OtherEngineSection
                 key={e.engine}
                 engine={e}
+                multiToken={multiToken}
                 className={cn(activeNode !== e.engine && "md:hidden")}
               />
             ))}

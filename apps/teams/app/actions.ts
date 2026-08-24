@@ -11,16 +11,24 @@ import path from "node:path";
 import { revalidatePath } from "next/cache";
 import {
   addToken,
+  captureEngineProfile,
+  deleteEngineProfile,
   deleteToken,
   pollSetup,
   readAuth,
+  readEngineProfileRows,
   readTokenRows,
   sendSetupCode,
+  setActiveEngineProfile,
   setActiveToken,
+  setEngineProfileEnabled,
+  setEngineProfileLabel,
   setTokenEnabled,
   setTokenLabel,
   startSetup,
   stopSetup,
+  type ProfileEngine,
+  type ProfileRow,
   type SetupState,
   type TokenRow,
 } from "@/lib/auth";
@@ -433,6 +441,61 @@ export async function deleteTokenAction(id: string): Promise<TokenRow[]> {
   await deleteToken(id);
   revalidatePath("/", "layout");
   return readTokenRows(await readLanguage());
+}
+
+// ── codex · grok 계정 목록 (DESIGN.md §0-23 §화면) ────────────────────────────
+//
+// claude 위 다섯 액션과 같은 벌이다 — 저장 통로(`writeTokens`)도 판정(`isEligible` ·
+// `isMultiTokenAllowed`)도 `lib/auth.ts`에서 그대로 재사용한다. 여기서 하는 일은 Error를
+// 직렬화 가능한 결과로 바꾸는 것뿐이다(파일 위 주석과 같은 이유).
+
+export async function readEngineProfileRowsAction(engine: ProfileEngine): Promise<ProfileRow[]> {
+  return readEngineProfileRows(engine, await readLanguage());
+}
+
+/** `담기` 버튼 — 원본이 없으면(방어, 버튼은 이미 비활성) 사유를 그대로 돌려준다. */
+export async function captureEngineProfileAction(
+  engine: ProfileEngine,
+): Promise<{ rows?: ProfileRow[]; error?: string }> {
+  try {
+    await captureEngineProfile(engine);
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+  revalidatePath("/", "layout"); // codex·grok에는 배너가 안 걸리지만 claude와 같은 무효화 폭을 쓴다
+  return { rows: await readEngineProfileRows(engine, await readLanguage()) };
+}
+
+export async function setEngineProfileEnabledAction(
+  engine: ProfileEngine,
+  id: string,
+  enabled: boolean,
+): Promise<ProfileRow[]> {
+  await setEngineProfileEnabled(engine, id, enabled);
+  revalidatePath("/", "layout");
+  return readEngineProfileRows(engine, await readLanguage());
+}
+
+export async function setActiveEngineProfileAction(engine: ProfileEngine, id: string): Promise<ProfileRow[]> {
+  await setActiveEngineProfile(engine, id);
+  revalidatePath("/", "layout");
+  return readEngineProfileRows(engine, await readLanguage());
+}
+
+export async function setEngineProfileLabelAction(
+  engine: ProfileEngine,
+  id: string,
+  label: string,
+): Promise<ProfileRow[]> {
+  await setEngineProfileLabel(engine, id, label);
+  return readEngineProfileRows(engine, await readLanguage());
+}
+
+/** `삭제` 버튼 — `deleteEngineProfile`이 항목과 `engines/<엔진>/<id>/`를 같이 지운다. */
+export async function deleteEngineProfileAction(engine: ProfileEngine, id: string): Promise<ProfileRow[]> {
+  await deleteEngineProfile(engine, id);
+  revalidatePath("/", "layout");
+  return readEngineProfileRows(engine, await readLanguage());
 }
 
 /** 인증 다이얼로그 층 ② — `claude setup-token`을 GUI가 pty로 몬다(DESIGN.md §0-4).

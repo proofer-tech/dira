@@ -5,9 +5,9 @@
  *  `.authwarn`은 건드리지 않는다: 엔진이 "이미 한 번 경고했다"를 적어 두는 자기 파일이고,
  *  토큰이 생기면 61행 조건이 먼저 꺼져 다시 보지 않는다(§0-4). */
 import { spawn, type ChildProcess } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { accessSync, constants, statSync } from "node:fs";
-import { chmod, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, cp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import { DEFAULT_LOCALE, t as translate, type Locale } from "./i18n.ts";
@@ -128,9 +128,21 @@ export type TokenEntry = {
 };
 
 type ClaudeTokens = { active: string; tokens: TokenEntry[] };
-/** claude 하나만 다룬다(§0-13 §범위) — 최상위 키는 다른 엔진이 자격증명을 우리 파일로 가질 때를
- *  위해 미리 산다. 오늘은 `claude` 밖의 키를 아무도 안 쓴다. */
-export type TokensFile = { claude?: ClaudeTokens };
+
+/** codex · grok 계정 하나(§0-23 §그릇). `TokenEntry`와 다섯 필드가 같지만 **`token` 칸이 없다** —
+ *  자격증명은 `engines/<엔진>/<id>/` 디렉터리 안에 있고 여기는 이름표만 든다. */
+export type ProfileEntry = {
+  id: string;
+  label?: string;
+  addedAt: string;
+  enabled: boolean;
+  exhaustedUntil: number | null;
+};
+export type EngineProfiles = { active: string; profiles: ProfileEntry[] };
+
+/** claude는 토큰 문자열, codex · grok은 프로필 디렉터리 이름표다(§0-23 §그릇) — 담는 모양이
+ *  갈려서 최상위 키의 값 타입도 갈린다. */
+export type TokensFile = { claude?: ClaudeTokens; codex?: EngineProfiles; grok?: EngineProfiles };
 
 /** 레지스트리·`oauth-token`·키맵과 **같은 디렉터리**다. `tokenPath()`와 같은 한 줄. */
 export function tokensPath(): string {
@@ -222,14 +234,14 @@ export async function readTokens(): Promise<TokensFile> {
 
   if (!file.claude) {
     const entry = newEntry(current);
-    const next: TokensFile = { claude: { active: entry.id, tokens: [entry] } };
+    const next: TokensFile = { ...file, claude: { active: entry.id, tokens: [entry] } };
     await writeTokens(next);
     return next;
   }
 
   if (!file.claude.tokens.some((t) => t.token === current)) {
     const entry = newEntry(current);
-    const next: TokensFile = { claude: { active: entry.id, tokens: [...file.claude.tokens, entry] } };
+    const next: TokensFile = { ...file, claude: { active: entry.id, tokens: [...file.claude.tokens, entry] } };
     await writeTokens(next);
     return next;
   }
@@ -257,21 +269,21 @@ export async function addToken(raw: string, label?: string): Promise<TokenEntry>
 
   if (!(await isMultiTokenAllowed())) {
     if (existing) {
-      await writeTokens({ claude: { active: existing.id, tokens } });
+      await writeTokens({ ...file, claude: { active: existing.id, tokens } });
       return existing;
     }
     const entry = newEntry(token, label);
     const activeIdx = tokens.findIndex((t) => t.id === (file.claude?.active ?? ""));
     const replaceIdx = activeIdx >= 0 ? activeIdx : 0;
     const nextTokens = tokens.length === 0 ? [entry] : tokens.map((t, i) => (i === replaceIdx ? entry : t));
-    await writeTokens({ claude: { active: entry.id, tokens: nextTokens } });
+    await writeTokens({ ...file, claude: { active: entry.id, tokens: nextTokens } });
     return entry;
   }
 
   const entry = existing ?? newEntry(token, label);
   const nextTokens = existing ? tokens : [...tokens, entry];
   const active = reconcileActive(file.claude?.active ?? "", nextTokens);
-  await writeTokens({ claude: { active, tokens: nextTokens } });
+  await writeTokens({ ...file, claude: { active, tokens: nextTokens } });
   return entry;
 }
 
@@ -353,11 +365,18 @@ export async function readTokenRows(locale: Locale = DEFAULT_LOCALE): Promise<To
 
 /** `active`가 여전히 eligible이면 그대로 두고, 아니면 다음 eligible로 넘긴다(§0-13 §상태 —
  *  "활성 토큰을 비활성화·삭제하면 그 자리에서 다음 eligible로 넘어간다"). 하나도 없으면
- *  손대지 않는다 — eligible 0이면 `writeTokens`가 그 경우 `oauth-token`을 지운다. */
-function reconcileActive(active: string, tokens: TokenEntry[]): string {
-  const current = tokens.find((t) => t.id === active);
+ *  손대지 않는다 — eligible 0이면 `writeTokens`가 그 경우 `oauth-token`을 지운다.
+ *
+ *  `TokenEntry` · `ProfileEntry` 둘 다 이 판정에 필요한 세 필드(`id` · `enabled` ·
+ *  `exhaustedUntil`)를 그대로 갖는다 — codex · grok 프로필에도 이 함수 그대로 쓴다(§0-23 §그릇,
+ *  판정을 두 벌로 안 적는다). */
+function reconcileActive<T extends { id: string; enabled: boolean; exhaustedUntil: number | null }>(
+  active: string,
+  entries: T[],
+): string {
+  const current = entries.find((e) => e.id === active);
   if (current && isEligible(current)) return active;
-  return tokens.find((t) => isEligible(t))?.id ?? active;
+  return entries.find((e) => isEligible(e))?.id ?? active;
 }
 
 /** 행의 `활성화`/`비활성화` 버튼 — `enabled`만 바꾼다(§0-13 §상태: 이 축은 사람만 쓴다).
@@ -367,7 +386,7 @@ export async function setTokenEnabled(id: string, enabled: boolean): Promise<voi
   const engine = file.claude;
   if (!engine) return;
   const tokens = engine.tokens.map((t) => (t.id === id ? { ...t, enabled } : t));
-  await writeTokens({ claude: { active: reconcileActive(engine.active, tokens), tokens } });
+  await writeTokens({ ...file, claude: { active: reconcileActive(engine.active, tokens), tokens } });
 }
 
 /** 행의 `사용` 버튼 — 지금 쓸 토큰을 사람이 직접 고른다(§0-13 §화면 · P179). eligible이면서
@@ -378,7 +397,7 @@ export async function setActiveToken(id: string): Promise<void> {
   const file = await readTokens();
   const engine = file.claude;
   if (!engine || !engine.tokens.some((t) => t.id === id)) return;
-  await writeTokens({ claude: { active: id, tokens: engine.tokens } });
+  await writeTokens({ ...file, claude: { active: id, tokens: engine.tokens } });
 }
 
 /** 행의 라벨 편집(P180-1, §0-13 §라벨). `label`만 간다 — `active`도 손대지 않는다(다른 축과
@@ -389,7 +408,7 @@ export async function setTokenLabel(id: string, label: string): Promise<void> {
   if (!engine) return;
   const trimmed = label.trim();
   const tokens = engine.tokens.map((t) => (t.id === id ? { ...t, label: trimmed || undefined } : t));
-  await writeTokens({ claude: { active: engine.active, tokens } });
+  await writeTokens({ ...file, claude: { active: engine.active, tokens } });
 }
 
 /** 행의 `삭제` 버튼 — 마지막 하나를 지워도 막지 않는다(§0-13 §상태). */
@@ -399,7 +418,159 @@ export async function deleteToken(id: string): Promise<void> {
   if (!engine) return;
   const tokens = engine.tokens.filter((t) => t.id !== id);
   const active = tokens.length ? reconcileActive(engine.active, tokens) : "";
-  await writeTokens({ claude: { active, tokens } });
+  await writeTokens({ ...file, claude: { active, tokens } });
+}
+
+// ── codex · grok 프로필 — 계정 목록 (DESIGN.md §0-23 §그릇 §잠금 §화면) ────────────
+//
+// claude와 자격증명의 모양이 갈린다 — 토큰 문자열이 아니라 `~/.codex` · `~/.grok` 디렉터리
+// 통째다. 그래서 담는 것은 그 디렉터리의 사본이고, `tokens.json`은 그 사본을 가리키는
+// 이름표(`ProfileEntry`)만 든다. 잠금 · 활성 판정은 claude와 같은 함수(`isEligible` ·
+// `reconcileActive`)를 그대로 쓴다 — 두 벌로 안 적는다.
+
+export type ProfileEngine = Extract<OtherEngine, "codex" | "grok">;
+
+/** 프로필 디렉터리가 사는 자리 — `tokens.json`과 같은 `<LOCAL>` 아래다(§0-23 §그릇). */
+function engineProfileDir(engine: ProfileEngine, id: string): string {
+  return path.join(path.dirname(registryPath()), "engines", engine, id);
+}
+
+/** 원본이 사는 곳 — `CRED_FILE`(자격증명 *파일*)의 부모 디렉터리다. 두 벌로 안 적는다. */
+function engineHomeDir(home: string, engine: ProfileEngine): string {
+  return path.join(home, path.dirname(CRED_FILE[engine]!));
+}
+
+/** `삭제` 버튼 — 항목과 그 프로필 디렉터리를 같이 지운다(§0-23 §화면). `tokens.json`을 먼저
+ *  써서 화면이 항상 파일과 일치하게 하고, 디렉터리는 그 뒤에 지운다(claude `deleteToken`과
+ *  같은 순서). */
+export async function deleteEngineProfile(engine: ProfileEngine, id: string): Promise<void> {
+  const file = await readTokensFile();
+  const current = file[engine];
+  if (!current) return;
+  const profiles = current.profiles.filter((p) => p.id !== id);
+  const active = profiles.length ? reconcileActive(current.active, profiles) : "";
+  await writeTokens({ ...file, [engine]: { active, profiles } });
+  await rm(engineProfileDir(engine, id), { recursive: true, force: true });
+}
+
+/** `담기` 버튼 — 터미널의 지금 로그인 상태(`home`의 `.codex` · `.grok`)를 통째로 복사한다
+ *  (§0-23 §그릇). `id`는 무작위고 중복을 안 잡는다 — 같은 계정을 두 번 담으면 행이 둘 선다,
+ *  사람이 라벨로 구분하고 지운다.
+ *
+ *  **잠금(§0-13 §잠금 계약 ①)에서는 append가 아니라 `active` 자리 교체다** — `addToken`과
+ *  같은 규칙. 교체로 목록에서 빠진 옛 항목의 디렉터리는 §0-23 §잠금 계약 ③(*"디렉터리도
+ *  안 지운다"*)을 따라 그대로 둔다 — 지우는 손은 `삭제` 버튼 하나뿐이다.
+ *  ponytail: 그 디렉터리는 고아로 남는다 — 자동 회전이 서는 날 `engines/` 청소도 같이 연다. */
+export async function captureEngineProfile(
+  engine: ProfileEngine,
+  home = homedir(),
+): Promise<ProfileEntry> {
+  const src = engineHomeDir(home, engine);
+  await stat(src); // 원본이 없으면 여기서 던진다 — 버튼은 이미 비활성이지만 방어로 한 번 더 잰다
+
+  const file = await readTokensFile();
+  const profiles = file[engine]?.profiles ?? [];
+  const id = randomUUID();
+  const dir = engineProfileDir(engine, id);
+  await mkdir(path.dirname(dir), { recursive: true });
+  await cp(src, dir, { recursive: true });
+  await chmod(dir, 0o700);
+  const entry: ProfileEntry = { id, addedAt: new Date().toISOString(), enabled: true, exhaustedUntil: null };
+
+  if (!(await isMultiTokenAllowed())) {
+    const activeIdx = profiles.findIndex((p) => p.id === (file[engine]?.active ?? ""));
+    const replaceIdx = activeIdx >= 0 ? activeIdx : 0;
+    const nextProfiles =
+      profiles.length === 0 ? [entry] : profiles.map((p, i) => (i === replaceIdx ? entry : p));
+    await writeTokens({ ...file, [engine]: { active: entry.id, profiles: nextProfiles } });
+    return entry;
+  }
+
+  const nextProfiles = [...profiles, entry];
+  const active = reconcileActive(file[engine]?.active ?? "", nextProfiles);
+  await writeTokens({ ...file, [engine]: { active, profiles: nextProfiles } });
+  return entry;
+}
+
+/** 행의 `활성화`/`비활성화` 버튼 — claude `setTokenEnabled`와 같은 모양. */
+export async function setEngineProfileEnabled(
+  engine: ProfileEngine,
+  id: string,
+  enabled: boolean,
+): Promise<void> {
+  const file = await readTokensFile();
+  const current = file[engine];
+  if (!current) return;
+  const profiles = current.profiles.map((p) => (p.id === id ? { ...p, enabled } : p));
+  await writeTokens({ ...file, [engine]: { active: reconcileActive(current.active, profiles), profiles } });
+}
+
+/** 행의 `사용` 버튼 — claude `setActiveToken`과 같은 모양. */
+export async function setActiveEngineProfile(engine: ProfileEngine, id: string): Promise<void> {
+  const file = await readTokensFile();
+  const current = file[engine];
+  if (!current || !current.profiles.some((p) => p.id === id)) return;
+  await writeTokens({ ...file, [engine]: { active: id, profiles: current.profiles } });
+}
+
+/** 행의 라벨 편집 — claude `setTokenLabel`과 같은 모양. 같은 계정을 두 번 담아 행이 둘 설 때
+ *  사람이 이걸로 구분한다(§0-23 §그릇). */
+export async function setEngineProfileLabel(
+  engine: ProfileEngine,
+  id: string,
+  label: string,
+): Promise<void> {
+  const file = await readTokensFile();
+  const current = file[engine];
+  if (!current) return;
+  const trimmed = label.trim();
+  const profiles = current.profiles.map((p) => (p.id === id ? { ...p, label: trimmed || undefined } : p));
+  await writeTokens({ ...file, [engine]: { active: current.active, profiles } });
+}
+
+/** 화면이 그리는 목록 — claude `TokenRow`와 같은 벌이지만 가릴 비밀이 없다(`masked` 칸 없음).
+ *
+ *  **잠금(§0-23 §잠금 계약 ②)에서는 행이 최대 하나다** — `active`가 가리키는 항목만 낸다.
+ *  이미 여러 개를 담고 있어도(계약 ③) 나머지는 파일에 그대로 남을 뿐 화면에 안 나온다 —
+ *  `readTokenRows`와 같은 필터. */
+export type ProfileRow = {
+  id: string;
+  label: string;
+  rawLabel: string;
+  addedAt: string;
+  shared: boolean;
+  status: TokenStatus;
+};
+
+export async function readEngineProfileRows(
+  engine: ProfileEngine,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<ProfileRow[]> {
+  const file = await readTokensFile();
+  const current = file[engine];
+  if (!current) return [];
+  const now = Math.floor(Date.now() / 1000);
+  const multiToken = await isMultiTokenAllowed();
+  const source = multiToken ? current.profiles : current.profiles.filter((p) => p.id === current.active);
+  const simultaneous = multiToken && (await readMultiplay());
+  return source.map((p, i) => {
+    const shared = p.id === current.active;
+    return {
+      id: p.id,
+      label: p.label ?? `${translate(locale, "settings.tokens.accountFallbackPrefix")} ${i + 1}`,
+      rawLabel: p.label ?? "",
+      addedAt: when(new Date(p.addedAt)),
+      shared,
+      status:
+        (simultaneous || shared) && isEligible(p, now)
+          ? { kind: "active" }
+          : !p.enabled
+            ? { kind: "disabled" }
+            : p.exhaustedUntil != null && p.exhaustedUntil > now
+              ? { kind: "exhausted", resumesAt: when(new Date(p.exhaustedUntil * 1000)) }
+              : { kind: "pending" },
+    };
+  });
 }
 
 // ── ② 발급 — `claude setup-token`을 GUI가 pty로 몬다 (§0-4) ─────────────────
