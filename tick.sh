@@ -63,23 +63,26 @@ FIXED_ENGINE="$BIN_DIR/dira"
 refresh_fixed_engine() {
   # §27 계약 2: 카탈로그 넷을 각각 굽는다 - claude만 이름이 dira, 나머지는 dira-<엔진>
   # (§24 계약 3 접미사 판정과 대응). PATH에 없는 엔진은 조용히 건너뛴다(WARN 없음).
-  local pair cmd bin src tmp
+  local pair cmd bin src real tmp
   mkdir -p "$BIN_DIR" 2>/dev/null || return 1
   for pair in claude:dira codex:dira-codex grok:dira-grok agy:dira-agy; do
     cmd="${pair%%:*}"
     bin="$BIN_DIR/${pair#*:}"
     src="$(command -v "$cmd" 2>/dev/null)" || continue
     [ -x "$src" ] || continue
-    # 이미 그 실체를 가리키면 매 tick 파일을 다시 굽지 않는다 - `-ef`가 심링크를 풀어서
-    # device+inode를 비교한다(= 아래 python3 realpath와 같은 판정, 서브프로세스 없이).
-    [ -e "$bin" ] && [ "$bin" -ef "$src" ] && continue
+    # §계약 3 판정(2026-08-25): 신선도는 굽힌 파일의 inode가 아니라 <PATH의 실체가 여전히
+    # 같은가>로 잰다 - 아래가 복사라 `-ef`(device+inode 비교)는 언제나 거짓이 된다. 실체 경로를
+    # `$bin.src`에 적어 두고 문자열로 대조한다(`readlink -f`는 BSD에 없어 python3로 낸다).
+    real="$(python3 -c 'import os,sys;print(os.path.realpath(sys.argv[1]))' "$src" 2>/dev/null)"
+    [ -n "$real" ] || continue
+    [ -e "$bin" ] && [ "$(cat "$bin.src" 2>/dev/null)" = "$real" ] && continue
     tmp="$bin.tmp.$$"
-    # 하드링크 우선(볼륨을 안 넘으면 즉시고 바이너리 크기를 매 업데이트마다 안 문다 - 실측:
-    # 이 머신 claude 바이너리 306MB, ~/.local/bin과 BIN_DIR이 같은 st_dev라 하드링크가 선다).
-    # 볼륨이 갈리면(다른 머신 구성) ln이 실패하고 복사로 떨어진다. 임시 이름에 만든 뒤 mv로
-    # 원자 교체 - 여러 워커가 동시에 tick을 돌아도 실행 파일이 반쪽으로 보이는 창이 없다.
-    if ln "$src" "$tmp" 2>/dev/null || cp "$src" "$tmp" 2>/dev/null; then
-      mv -f "$tmp" "$bin"
+    # 별도 inode로 굽는다 - 하드링크는 tccd가 원본 inode의 이름을 그대로 아이덴티티로 적어
+    # TCC 항목이 안 모인다(§계약 3 판정 실측). APFS 클론(`cp -c`)이 서면 디스크를 안 물고,
+    # 안 서면(다른 볼륨·비-APFS) 보통 복사로 떨어진다. 임시 이름에 만든 뒤 mv로 원자 교체 -
+    # 여러 워커가 동시에 tick을 돌아도 실행 파일이 반쪽으로 보이는 창이 없다.
+    if cp -c "$src" "$tmp" 2>/dev/null || cp "$src" "$tmp" 2>/dev/null; then
+      mv -f "$tmp" "$bin" && printf '%s' "$real" > "$bin.src" 2>/dev/null
     else
       rm -f "$tmp"
     fi
