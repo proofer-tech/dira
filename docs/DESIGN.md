@@ -44811,10 +44811,10 @@ P313-8은 그 화면이 선 뒤에 쓴다 - 매뉴얼이 아직 없는 화면을
 
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
-| P316-1 | 문구 - codex - grok 계정 목록 머리 - 담기 버튼 - 원본 없음 사유 - agy가 못 하는 이유 - 멀티플레잉 설명(`ko`/`en` 두 벌) | writer | - | 발행 |
-| P316-2 | 훅 - `multiplay.sh`가 `CODEX_HOME` - `GROK_HOME`을 세운다 + `verify-multiplay.sh` 확장 | developer | - | 발행 |
-| P316-3 | 그릇 + 화면 - `tokens.json` 엔진 키 둘 - 프로필 디렉터리 복사 - 패널 두 벌 - 잠금 | developer | P316-1 | 발행 |
-| P316-4 | QA - §0-23 §검증 열 줄 | qa | P316-2, P316-3 | 발행 |
+| P316-1 | 문구 - codex - grok 계정 목록 머리 - 담기 버튼 - 원본 없음 사유 - agy가 못 하는 이유 - 멀티플레잉 설명(`ko`/`en` 두 벌) `5d4028a7` | writer | - | 발행 |
+| P316-2 | 훅 - `multiplay.sh`가 `CODEX_HOME` - `GROK_HOME`을 세운다 + `verify-multiplay.sh` 확장 `c5ff1c38` | developer | - | 발행 |
+| P316-3 | 그릇 + 화면 - `tokens.json` 엔진 키 둘 - 프로필 디렉터리 복사 - 패널 두 벌 - 잠금 `47471930` | developer | `5d4028a7` | 발행 |
+| P316-4 | QA - §0-23 §검증 열 줄 `8eccdb7e` | qa | `c5ff1c38`, `47471930` | 발행 |
 
 **`deps`가 두 줄뿐이다.** P316-2(훅)와 P316-3(화면)은 만지는 파일이 안 겹친다 -
 전자는 `.dira/`의 셸 두 장, 후자는 `apps/teams/`다. 그릇의 모양은 §0-23 §그릇이 이미 못박아서
