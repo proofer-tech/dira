@@ -1135,6 +1135,9 @@ function PersonaDetail({
         </TabsList>
 
         <TabsContent value="activity" className="space-y-3">
+          {/* 30일 - 지금 - 기다리는 것 - 최근 (§5-6 §활동 탭 §개정, 요구 `cd96f485`) — `최근`
+              20줄이 그래프를 스크롤 밖으로 밀던 것을 요약을 먼저 세우는 순서로 뒤집는다 */}
+          <ActivityThirtyDaySection thirtyDay={row.activity.thirtyDay} />
           <ActivityNowSection projectId={projectId} items={row.activity.now} nowMs={nowMs} />
           {row.activity.waiting.length > 0 && (
             <ActivityWaitingSection projectId={projectId} items={row.activity.waiting} />
@@ -1145,7 +1148,6 @@ function PersonaDetail({
             items={row.activity.recent}
             nowMs={nowMs}
           />
-          <ActivityThirtyDaySection thirtyDay={row.activity.thirtyDay} />
         </TabsContent>
 
         <TabsContent value="profile" className="space-y-3">
@@ -1416,7 +1418,7 @@ function ActivityThirtyDaySection({ thirtyDay }: { thirtyDay: PersonaThirtyDay }
             <div
               key={d.date}
               aria-hidden
-              className={cn("w-1.5", d.count === 0 ? "bg-border" : "bg-foreground")}
+              className={cn("flex-1", d.count === 0 ? "bg-border" : "bg-foreground")}
               style={{ height: d.count === 0 ? 1 : Math.max(2, Math.round((d.count / scale) * 24)) }}
               title={`${d.date} ${d.count}${t("persona.activity.closedUnit")}`}
             />
