@@ -125,8 +125,12 @@ try:
         "앞 블록이 큐 AGENTS.md 프로토콜 끝으로 안 끝난다\n" + head[-200:]
     assert tail.startswith("please pick up c0c00001"), \
         "뒤 블록이 티켓 해시 문장으로 안 시작한다\n" + tail[:200]
-    assert tail.rstrip().endswith("아래 전부입니다."), \
+    assert tail.rstrip().endswith("그 지침을 따르세요."), \
         "뒤 블록이 언어 안내로 안 끝난다\n" + tail[-200:]
+    # 한국어 문장 지침은 안 변하는 6KB 상수라 앞 블록(캐시되는 문서 층)에 산다 - 꼬리로
+    # 새면 회차마다 캐시 밖에서 다시 쓰인다(이 절이 막는 회귀가 정확히 그것이다).
+    assert "===== 한국어 문장 지침" in head and "===== 한국어 문장 지침" not in tail, \
+        "한국어 문장 지침 블록이 앞 블록에 없다(또는 꼬리로 샜다)"
 
     assert head + tail == full_prompt, \
         "두 블록을 이어 붙인 것이 dryrun 프롬프트와 다르다\n--- head+tail\n{}\n--- dryrun\n{}".format(

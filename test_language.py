@@ -83,6 +83,8 @@ try:
     assert "언어 안내" in base, "language.json이 없는데 ko 주입이 안 됐다\n" + base
     assert "## 결과" in base and "docs/" in base, "산출물 한국어 고정 짝이 안 실렸다\n" + base
     assert warns(root) == [], "language.json이 없는데 WARN이 났다: {}".format(warns(root))
+    assert "===== 한국어 문장 지침" in base and "엠대시" in base, \
+        "한국어 문장 지침 블록이 안 실렸다\n" + base
 
     # 1) 명시적으로 ko -> 기준선과 바이트 단위로 같다
     write(langfile, json.dumps({"locale": "ko"}))
@@ -111,6 +113,8 @@ try:
     assert "korean" in tail.lower(), "산출물은 한국어 고정 짝이 안 실렸다\n" + tail
     assert "## 결과" in tail and "docs/" in tail, "산출물 대상(## 결과 · docs/)이 안 실렸다\n" + tail
     assert warns(root) == [], "en 주입에서 WARN이 났다: {}".format(warns(root))
+    # 지침은 로케일을 안 가린다 - en에서도 산출물이 한국어 고정이라 그대로 실린다.
+    assert "===== 한국어 문장 지침" in got, "en인데 한국어 문장 지침이 빠졌다\n" + got
 
     # 5c) §개정 2 -- 생각 예외 절이 ko·en 두 짝에 각각 실린다(허가지 금지가 아니다)
     # 줄바꿈이 낱말 사이에 낄 수 있어(예: "internal\nreasoning") 공백으로 정규화한 뒤 본다.
