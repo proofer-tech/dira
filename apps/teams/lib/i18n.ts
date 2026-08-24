@@ -97,10 +97,23 @@ export const ko: Record<string, string> = {
   "settings.tokens.deletePrefix": "",
   "settings.tokens.deleteSuffix": "삭제",
 
-  "settings.other.agyCred": "인증은 macOS 로그인 키체인에 있습니다 — 이 화면이 읽지 않습니다",
+  // §0-23 §화면 — agy 줄은 못 하는 이유까지 말한다. 키체인 항목이 `svce=gemini` 하나뿐이고
+  // 갈아 끼우는 레버가 `HOME`밖에 없어 이번 회차에 목록도 버튼도 안 세웠다(그 절 §agy).
+  "settings.other.agyCred":
+    "인증이 macOS 로그인 키체인에 있습니다 — 항목이 하나뿐이라 계정을 여러 장 못 씁니다. 갈아 끼우려면 워커의 HOME을 통째로 옮겨야 합니다.",
   "settings.other.codexMissing": "발견 못 함 — OPENAI_API_KEY로 도는 워커는 이 판정 밖입니다",
   "settings.other.grokMissing": "발견 못 함 — 터미널에서 grok 로그인이 필요합니다",
   "settings.other.notInstalled": "설치되지 않았습니다",
+
+  // §0-23 §화면 — codex · grok 패널이 얻는 목록과 버튼 하나. 넷 다 두 엔진 공용이다(엔진
+  // 이름은 바로 위 패널 머리가 이미 말한다). 담는 것이 토큰 문자열이 아니라 터미널의 지금
+  // 로그인 상태(`~/.codex` · `~/.grok` 사본)라 claude 쪽 `추가`와 낱말이 갈린다.
+  "settings.other.accounts": "계정",
+  "settings.other.capture": "지금 로그인된 계정 담기",
+  "settings.other.captureHint":
+    "터미널에서 쓰려는 계정으로 먼저 로그인하세요. 그 상태를 통째로 복사해 목록에 넣습니다.",
+  // 버튼이 비활성일 때 그 밑에 서는 한 줄. 판정은 위 `자격증명` 줄이 이미 잰 그 사실 하나다.
+  "settings.other.captureBlocked": "터미널에 로그인 상태가 없습니다 — 담을 것이 없어 누르지 못합니다.",
 
   "settings.keymap.description": "단축키입니다. 이 컴퓨터에 하나뿐이고 등록된 프로젝트 전부에 적용됩니다.",
   "settings.keymap.brokenTitle": "keymap.json을 읽지 못해 전부 기본값으로 떴습니다",
@@ -145,8 +158,9 @@ export const ko: Record<string, string> = {
   "settings.stats.turnOff": "끄기",
   "settings.stats.turnOn": "켜기",
 
+  // §0-23 §화면 — 스위치가 이제 세 엔진을 가른다. 종전 문장은 claude 계정을 전제했다.
   "settings.multiplay.description":
-    "다중계정 허용은 계정을 여러 장 등록할 수 있게 하고, 다중계정 동시사용은 그 계정들을 워커마다 나눠 동시에 씁니다.",
+    "다중계정 허용은 계정을 여러 장 등록할 수 있게 하고, 다중계정 동시사용은 그 계정들을 워커마다 나눠 동시에 씁니다. claude · codex · grok 세 엔진에 각각 적용됩니다 — agy는 계정이 하나뿐이라 빠집니다.",
   "settings.multitoken.enabled": "허용되어 있습니다",
   "settings.multitoken.disabled": "허용되지 않았습니다",
   "settings.multitoken.turnOff": "끄기",
@@ -994,10 +1008,18 @@ export const en: Record<string, string> = {
   "settings.tokens.deletePrefix": "Delete",
   "settings.tokens.deleteSuffix": "",
 
-  "settings.other.agyCred": "Credentials sit in the macOS login keychain — this screen doesn't read them",
+  "settings.other.agyCred":
+    "Credentials sit in the macOS login keychain — there's exactly one entry, so agy runs on a single account. Swapping it would mean moving a worker's whole HOME.",
   "settings.other.codexMissing": "Not found — workers running on OPENAI_API_KEY are outside this check",
   "settings.other.grokMissing": "Not found — run grok login in a terminal",
   "settings.other.notInstalled": "Not installed",
+
+  "settings.other.accounts": "Accounts",
+  "settings.other.capture": "Add the terminal's signed-in account",
+  "settings.other.captureHint":
+    "Sign in to the account you want in a terminal first. This copies that login as-is into the list.",
+  "settings.other.captureBlocked":
+    "No terminal login here — there's nothing to copy, so the button stays off.",
 
   "settings.keymap.description":
     "Keyboard shortcuts. One set per machine, applied to every registered project.",
@@ -1048,7 +1070,7 @@ export const en: Record<string, string> = {
   "settings.stats.turnOn": "Turn on",
 
   "settings.multiplay.description":
-    "Allow multi-account lets you register more than one account; simultaneous multi-account use splits them across workers to run at the same time.",
+    "Allow multi-account lets you register more than one account; simultaneous multi-account use splits them across workers to run at the same time. Both apply to claude, codex, and grok — agy is left out, since it only ever has one account.",
   "settings.multitoken.enabled": "Allowed",
   "settings.multitoken.disabled": "Not allowed",
   "settings.multitoken.turnOff": "Turn off",
