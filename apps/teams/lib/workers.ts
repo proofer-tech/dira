@@ -1894,11 +1894,77 @@ export const DISPATCH_GATE_SH = `#!/bin/bash
 #
 # ponytail: 받는 트리가 <통합 브랜치>를 체크아웃 중일 때만 잰다. updateInstead가 거부하는 것은
 # 체크아웃된 브랜치로 push할 때뿐이라, 다른 브랜치·detached HEAD면 더러워도 막지 않는다. 전용
-# 워크트리 확인(도그푸딩 큐의 선행조건 1)은 여기 없다 — 이 프로젝트의 첫 워커는 TICKET_CWD를 안
-# 받아서, 그 조건을 그대로 옮기면 갓 만든 프로젝트가 첫 tick부터 영구 정지한다.
+# 워크트리 확인(도그푸딩 큐의 선행조건 1 — 남과 공유하나)은 여기 없다 — 이 프로젝트의 첫 워커는
+# TICKET_CWD를 안 받아서, 그 조건을 그대로 옮기면 갓 만든 프로젝트가 첫 tick부터 영구 정지한다.
+# 다만 §4-14 §없는 워크트리를 게이트가 만든다는 옮긴다 — 그 디렉터리가 없다는 조건 하나만 보고,
+# TICKET_CWD가 비어 있으면 안 닿는다(아래 첫 줄).
 
 # list·unassign·reap은 GUI가 부른다. 통합과 무관하므로 막지 않는다
 if [ "\${1:-tick}" = tick ] || [ "\${1:-tick}" = dryrun ]; then
+  # §4-14 §없는 워크트리를 게이트가 만든다 — TICKET_CWD가 표준 자리(<루트>/worktrees/<이름>)인데
+  # 그 디렉터리가 없으면 worktreeCmds의 3단계를 셸로 친다. 하나라도 어긋나면 아무것도 안 하고
+  # 지나간다(종전 동작 그대로 — 이 블록이 서기 전엔 이 게이트에 그런 조건이 아예 없었다).
+  if [ -n "\${TICKET_CWD:-}" ]; then
+    _gate_me=$(basename "$0" .sh)
+    _gate_dir=$(dirname "$0")
+    # pwd -P로 미리 정규화하지 않는다 — 맥 /tmp -> /private/tmp 별칭이 TICKET_CWD(정규화 전
+    # 문자열)와 어긋난다. dirname은 심링크를 안 편다(TICKET_CWD가 쓰는 그 표기 그대로)
+    _gate_root=$(dirname "$_gate_dir")
+    _gate_notree="$_gate_dir/.gate-notree-$_gate_me"
+    _gate_standard=0
+    [ "$TICKET_CWD" = "$_gate_root/worktrees/$_gate_me" ] && _gate_standard=1
+
+    if [ "$_gate_standard" = 1 ] && [ ! -d "$TICKET_CWD" ]; then
+      _gate_project=$(dirname "$_gate_root")
+      _gate_made=0
+      if git -C "$_gate_project" rev-parse --show-toplevel >/dev/null 2>&1; then
+        _gate_made=1
+        # 등록만 남은 자리를 먼저 걷는다 — 안 걷으면 add가 missing but already registered로
+        # 멈춘다(§4 생성 4항 갈래표). 살아 있는 트리는 안 건드린다
+        git -C "$_gate_project" worktree prune >/dev/null 2>&1
+        if git -C "$_gate_project" show-ref --verify --quiet "refs/heads/wt/$_gate_me"; then
+          git -C "$_gate_project" worktree add "$TICKET_CWD" "wt/$_gate_me" >/dev/null 2>&1 || _gate_made=0
+        else
+          git -C "$_gate_project" worktree add "$TICKET_CWD" -b "wt/$_gate_me" >/dev/null 2>&1 || _gate_made=0
+        fi
+        # ln -s 함정(실사고 bf4d8878) — 대상이 이미 있으면 절대 안 친다. 있는 채로 치면 실패하는
+        # 대신 그 안쪽에 .dira/.dira를 만든다
+        if [ "$_gate_made" = 1 ] && [ ! -e "$TICKET_CWD/.dira" ]; then
+          ln -s ../.. "$TICKET_CWD/.dira" 2>/dev/null || _gate_made=0
+        fi
+        # ls -ld로는 심링크라는 것까지만 보인다 — 이 큐를 가리키는지는 pwd -P로 확인한다.
+        # 둘 다 지금 존재하니 여기서만 양쪽을 pwd -P로 정규화해 비교한다(/private 별칭 상쇄)
+        if [ "$_gate_made" = 1 ]; then
+          _gate_root_real=$(cd "$_gate_root" 2>/dev/null && pwd -P)
+          [ "$(cd "$TICKET_CWD/.dira" 2>/dev/null && pwd -P)" = "$_gate_root_real" ] || _gate_made=0
+          unset _gate_root_real
+        fi
+      fi
+      unset _gate_project
+
+      if [ "$_gate_made" != 1 ]; then
+        if [ ! -f "$_gate_notree" ]; then
+          echo "$(date '+%Y-%m-%d %H:%M:%S') GATE 디스패치 보류 — $_gate_me 에 전용 워크트리가 없다."
+          echo "  TICKET_CWD=$TICKET_CWD — 자동 생성을 시도했지만 실패했다."
+          echo "  만들면 다음 tick부터 저절로 풀린다:"
+          echo "    git -C $(dirname "$_gate_root") worktree add $TICKET_CWD -b wt/$_gate_me"
+          echo "    ln -s $_gate_root $TICKET_CWD/.dira"
+          echo "  이 줄은 상태가 바뀔 때만 뜬다."
+          touch "$_gate_notree" 2>/dev/null
+        fi
+        unset _gate_made _gate_me _gate_dir _gate_root _gate_notree _gate_standard
+        exit 0
+      fi
+      unset _gate_made
+    fi
+
+    if [ -f "$_gate_notree" ] && [ -d "$TICKET_CWD" ]; then
+      rm -f "$_gate_notree"
+      echo "$(date '+%Y-%m-%d %H:%M:%S') GATE 해제 — $_gate_me 워크트리 $TICKET_CWD 확인. 디스패치 재개."
+    fi
+    unset _gate_me _gate_dir _gate_root _gate_notree _gate_standard
+  fi
+
   _gate_branch="<통합 브랜치>"
   _gate_main=$(git -C "\${TICKET_CWD:-$PWD}" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) &&
     _gate_main=$(dirname "$_gate_main")

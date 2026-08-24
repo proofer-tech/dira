@@ -2151,6 +2151,57 @@ test("dispatchGateSh — 통합 브랜치 체크아웃 여부로 막고 안 막�
   assert.strictEqual(existsSync(flag), false);
 });
 
+/** §4-14 §없는 워크트리를 게이트가 만든다 — GUI가 관리하는 `DISPATCH_GATE_SH` 쪽. 조건 셋(표준
+ *  자리 · 없음 · git 레포)을 다 만족할 때만 만들고, 하나라도 어긋나면 종전대로 아무것도 안
+ *  한다(이 게이트엔 선행조건 1이 아예 없었다 — 새 프로젝트 첫 워커의 TICKET_CWD 빈값이 그대로 산다).
+ *  **진짜 git + 진짜 bash로 돌린다** — 값어치가 그 판정이라 모킹하면 검증할 게 남지 않는다. */
+test("dispatchGateSh — 없는 표준 워크트리를 게이트가 만든다 (§4-14 §없는 워크트리를 게이트가 만든다)", () => {
+  const { root } = makeRepo();
+  const gate = path.join(root, "dispatch-gate.sh");
+  writeFileSync(gate, dispatchGateSh("main"));
+  const worker = path.join(root, "workers", "w2.sh"); // $0 — 파일 자체는 없어도 된다
+  const tree = path.join(root, "worktrees", "w2"); // 표준 자리
+
+  const run = (cwd: string) =>
+    execFileSync("bash", ["-c", `. ${JSON.stringify(gate)} tick; echo 끝`, worker], {
+      encoding: "utf8",
+      env: { ...process.env, TICKET_CWD: cwd },
+    });
+
+  // 1) 없는 표준 워크트리 — 만들고 그 자리에서 디스패치로 넘어간다(막지 않는다)
+  const made = run(tree);
+  assert.match(made, /끝/);
+  assert.doesNotMatch(made, /GATE/);
+  assert.strictEqual(statSync(tree).isDirectory(), true);
+  assert.strictEqual(readlinkSync(path.join(tree, ".dira")), "../..");
+  assert.strictEqual(realpathSync(path.join(tree, ".dira")), realpathSync(root));
+  assert.strictEqual(
+    execFileSync("git", ["-C", tree, "rev-parse", "--abbrev-ref", "HEAD"], { encoding: "utf8" }).trim(),
+    "wt/w2",
+  );
+
+  // 2) 등록만 남은 자리(디렉터리만 지움) — missing but already registered로 안 죽고 다시 세운다
+  rmSync(tree, { recursive: true, force: true });
+  const rebuilt = run(tree);
+  assert.match(rebuilt, /끝/);
+  assert.doesNotMatch(rebuilt, /GATE/);
+  assert.strictEqual(realpathSync(path.join(tree, ".dira")), realpathSync(root));
+
+  // 3) 표준 자리가 아니면 안 만든다 — 게이트 동작이 종전과 같다(막지도, 만들지도 않는다)
+  const elsewhere = path.join(tmpdir(), "dira-gate-elsewhere-" + process.pid);
+  rmSync(elsewhere, { recursive: true, force: true });
+  const notStandard = run(elsewhere);
+  assert.match(notStandard, /끝/);
+  assert.strictEqual(existsSync(elsewhere), false);
+
+  // 4) TICKET_CWD가 비어 있으면 이 블록에 안 닿는다(새 프로젝트 첫 워커가 영구 정지하지 않는다)
+  const empty = execFileSync("bash", ["-c", `. ${JSON.stringify(gate)} tick; echo 끝`, worker], {
+    encoding: "utf8",
+    env: { ...process.env, TICKET_CWD: "" },
+  });
+  assert.match(empty, /끝/);
+});
+
 /** `-l`과 `crontab -`이 **같은 파일**을 본다 — 쓴 뒤 다시 읽어 확인하는 `applyCrontab`의 경로다
  *  (`withWritableCrontab`은 셸 파이프라인용이라 읽기/쓰기 파일이 갈라져 있다).
  *  `failWrite`면 `crontab -`이 실패한다 — 해제 실패에 파일을 남기는지 보려고.
