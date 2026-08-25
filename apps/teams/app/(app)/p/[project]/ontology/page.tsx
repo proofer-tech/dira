@@ -198,6 +198,7 @@ export default async function Ontology({
             placeholder={t(locale, "ontology.location.placeholder")}
             saveLabel={t(locale, "ontology.location.save")}
             failureTitle={t(locale, "ontology.location.saveFailed")}
+            browseLabel={t(locale, "ontology.location.browse")}
           />
           <div className="mt-1 font-mono text-xs break-all text-muted-foreground">
             {base}

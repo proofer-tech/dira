@@ -870,6 +870,9 @@ export const ko: Record<string, string> = {
   // (`projectActions.unknownProjectPrefix`와 같은 관용구) — 셋째 거절(워크트리 안)은 위
   // `ontology.location.inWorktree`를 그대로 재사용한다(새 문구를 안 만든다).
   "ontology.location.edit": "온톨로지 자리 편집",
+  // 티켓 71eac784 — 이 화면에 `찾아보기` 피커가 둘이라(§데스크톱 앱 N3 §온톨로지 자리)
+  // `PickPath`의 `label` prop으로 아래 import 카드의 `가져올 폴더`와 구분한다.
+  "ontology.location.browse": "온톨로지 자리",
   "ontology.location.placeholder": "이 프로젝트의 git 작업 트리 밖 절대경로",
   "ontology.location.save": "저장",
   "ontology.location.saveFailed": "저장하지 못했습니다",
@@ -1680,6 +1683,7 @@ export const en: Record<string, string> = {
   // Ticket cd662a73, moved to this namespace by c5d51522 — see the ko block for why the third
   // rejection reuses `ontology.location.inWorktree`.
   "ontology.location.edit": "Edit ontology location",
+  "ontology.location.browse": "Ontology location",
   "ontology.location.placeholder": "Absolute path outside this project's git working tree",
   "ontology.location.save": "Save",
   "ontology.location.saveFailed": "Couldn't save",

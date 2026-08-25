@@ -79,6 +79,7 @@ export function OntologyLocationEditor({
   placeholder,
   saveLabel,
   failureTitle,
+  browseLabel,
 }: {
   projectId: string;
   initialValue: string;
@@ -86,6 +87,7 @@ export function OntologyLocationEditor({
   placeholder: string;
   saveLabel: string;
   failureTitle: string;
+  browseLabel: string;
 }) {
   const [value, setValue] = useState(initialValue);
   const [error, setError] = useState<string | null>(null);
@@ -99,6 +101,9 @@ export function OntologyLocationEditor({
           placeholder={placeholder}
           className="h-7 font-mono text-xs"
         />
+        {/* 환산 코드 0줄 — 고른 절대경로를 그대로 채운다. 작업 트리 안이면 저장이 서버에서
+            거부된다(§데스크톱 앱 N3 §온톨로지 자리 — 클라이언트가 미리 막지 않는다). */}
+        <PickPath mode="directory" label={browseLabel} onPick={setValue} />
         <Button
           size="sm"
           variant="outline"
