@@ -146,7 +146,11 @@ test("unassign — 산 세션은 코드 3으로 거부하고 --force면 끊고 �
   const r = scratch(["w1"]);
   process.env.TICKET_LOCAL = path.join(r, "local");
   const wip = path.join(r, "tickets", "aaaa9999.wip.md");
-  const victim = spawn("sleep", ["30"], { stdio: "ignore" });
+  // 3600s: 이 픽스처의 생존 창이 실측(느린 환경에서 두 unassign 호출 합계 78s)보다
+  // 넉넉해야 한다 — 짧으면 자연 만료가 강제 경로의 kill보다 먼저 와서 `ps`가 이미
+  // 죽었다고 답하고, 그러면 강제 경로 자체가 아니라 결정 9(자진 해제) 문구가 나온다
+  // (8eb1397d — `sleep 30`은 20~30s대 python3/bash 호출 지연이 겹치면 굶는다).
+  const victim = spawn("sleep", ["3600"], { stdio: "ignore" });
   try {
     writeFileSync(
       wip,
@@ -170,7 +174,7 @@ test("unassign — 산 세션은 코드 3으로 거부하고 --force면 끊고 �
     assert.match(back, /^pid:\s*$/m);
     assert.strictEqual(victim.killed || victim.exitCode !== null || victim.signalCode !== null, true);
   } finally {
-    victim.kill("SIGKILL"); // 거부 쪽에서 죽으면 `sleep 30`이 남는다
+    victim.kill("SIGKILL"); // 거부 쪽에서 죽으면 `sleep`이 남는다
   }
 });
 
