@@ -46,7 +46,7 @@ const TEMPLATE_FILES = [
 
 /** 엔진 레포 경로. **`DIRA_ENGINE`이 있으면 그것이고**(패키징된 `.app`이 번들의 엔진을 userData로
  *  꺼내 넘긴다 — §데스크톱 앱 못박는 것 8), 없으면 **GUI 자기 위치에서 유도한다**(§0-3 답변 2(a)).
- *  GUI는 `<엔진 레포>/apps/teams/`에 산다 — 상위 2단계가 레포다. `.app`에서는 서버가
+ *  GUI는 `<엔진 레포>/apps/teams/`에 있다 — 상위 2단계가 레포다. `.app`에서는 서버가
  *  `Contents/Resources/server/`에서 돌아 그 유도가 `Contents`를 가리키므로 env가 먼저다.
  *
  *  **`tick.sh` 존재 확인은 어느 쪽이든 그대로다.** 없으면 **거부한다. 폼 필드로 되묻지 않는다** —

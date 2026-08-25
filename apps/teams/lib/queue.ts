@@ -646,7 +646,7 @@ export function withoutQuotes(question: string): string {
   return out.join("\n").trim();
 }
 
-// `composeAnswer`는 `lib/urls.ts`에 산다 — 그 파일이 이미 "클라이언트·서버가 같은 규칙을
+// `composeAnswer`는 `lib/urls.ts`에 있다 — 그 파일이 이미 "클라이언트·서버가 같은 규칙을
 // 써야 하는 순수 함수" 자리다(AGENTS.md — node:*가 없는 파일). `AnswerForm`(클라이언트)이
 // 체크박스마다 이 함수를 직접 부른다. 재수출로 자리는 여기 하나로 보인다.
 export { composeAnswer, defaultPicks, type AnswerPick } from "./urls.ts";
@@ -998,7 +998,7 @@ export function resolveDep(tickets: Ticket[], dep: string, sfx: Suffixes): Ticke
   );
 }
 
-/** deps 해시 → 배지 종류. **판정이 사는 유일한 곳**이다(§비주얼 §2 deps 배지).
+/** deps 해시 → 배지 종류. **판정이 있는 유일한 곳**이다(§비주얼 §2 deps 배지).
  *
  *  보드 카드·보드 테이블·상세 관계 절 세 곳이 이걸 쓴다 — 같은 `kind: answer` dep이 화면마다
  *  다르게 보이면 안 된다. 우선순위: 큐에 없음 → 미충족 → 답변 → 충족. **`unmet`이 `answer`보다

@@ -54,7 +54,7 @@ export function expandHome(p: string): string {
 }
 
 /** 엔진의 `$LOCAL`(`tick.sh:33`) — 머신 로컬 저장 디렉터리. 레지스트리·토큰·키맵·
- *  `analytics.json`·`alerts.json`·락이 전부 여기 산다.
+ *  `analytics.json`·`alerts.json`·락이 전부 여기 있다.
  *
  *  `shellValue`와 같은 이유로 여기 있다: `projects.ts`의 `registryPath()`와 `workers.ts`의
  *  `lockPath()`가 같은 규칙을 쓰는데 둘이 서로를 import하면 순환이다. **`TICKET_LOCAL` 존중이

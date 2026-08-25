@@ -101,7 +101,7 @@ try:
           "# 개념 하나\n온톨로지-본문-마커-B\n\n## 절 B1\n본문 B1\n\n## 절 B2\n본문 B2\n")
     write(os.path.join(ontdir, "GUI", "보드.md"), "# 보드\n온톨로지-본문-마커-A\n")  # `## ` 0개
     got = dryrun(w, local)
-    block_start = "아래는 이 큐의 온톨로지가 사는 곳입니다.\n\n===== 온톨로지 (" + ontdir + ") =====\n"
+    block_start = "아래는 이 큐의 온톨로지가 있는 곳입니다.\n\n===== 온톨로지 (" + ontdir + ") =====\n"
     block_end = "\n===== 온톨로지 끝 =====\n\n"
     assert block_start in got, "온톨로지 블록이 프롬프트에 안 붙었다\n" + got
     assert block_end in got, "온톨로지 블록이 안 닫혔다\n" + got

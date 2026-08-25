@@ -10,7 +10,7 @@ process.env.TICKET_LOCAL = LOCAL;
 process.on("exit", () => rmSync(LOCAL, { recursive: true, force: true }));
 
 const { t, ko, en, wrap } = await import("./i18n.ts");
-// 파일 읽기/쓰기는 `registryPath()` 옆에 산다 — `i18n.ts`가 클라이언트 번들로 가기 때문이다
+// 파일 읽기/쓰기는 `registryPath()` 옆에 있다 — `i18n.ts`가 클라이언트 번들로 가기 때문이다
 // (그 파일 머리 주석, `keymap.test.ts`와 같은 이유로 같이 검증한다).
 const { languagePath, readLanguage, setLanguage } = await import("./projects.ts");
 
@@ -298,7 +298,7 @@ test("en 사전에 한글이 없다 — 언어 이름 둘만 예외다", () => {
 });
 
 // 스쿼드 블록 바이트 검증은 `50fd4b34`로 사전을 떠나 `squadBlockBytes`(`lib/budgets.ts`)의
-// 리터럴로 옮겼다 — `budgets.test.ts`에 산다(`persona.squad.block*` 세 키는 이제 사전에 없다).
+// 리터럴로 옮겼다 — `budgets.test.ts`에 있다(`persona.squad.block*` 세 키는 이제 사전에 없다).
 
 // 932ae344가 뽑은 자리들이 영어에서도 문장이 되는가. 한국어는 이름 뒤에 다 붙지만 영어는
 // 동사가 앞에 서므로, 접두·접미 두 조각을 `wrap`이 붙이고 빈 쪽을 지운다.
@@ -523,7 +523,7 @@ test("7a86fd5c — 프로토콜 화면의 조립 문구가 영어에서도 문�
 // `personas-ui.tsx`·`personas/actions.ts`·`lib/skills.ts`·`[[...persona]]/page.tsx`의 JSX ·
 // 템플릿 리터럴 그대로다(줄바꿈만 있는 공백은 지워지고, 같은 줄의 공백 하나는 남는다).
 // 스쿼드 블록 자체는 `50fd4b34`로 사전을 떠나 `squadBlockBytes`(`lib/budgets.ts`)의
-// 리터럴로 옮겼다 — 그 조립 검증은 `budgets.test.ts`에 산다.
+// 리터럴로 옮겼다 — 그 조립 검증은 `budgets.test.ts`에 있다.
 
 test("204be4da — 사이드바 참조 줄(열린 · 진행중 · 완료 · 티켓 접두)이 원문 그대로다", () => {
   assert.strictEqual(wrap(t("ko", "persona.refs.openPrefix"), "2", ""), "열린 2");

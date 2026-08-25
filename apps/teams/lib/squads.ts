@@ -1,5 +1,5 @@
 /** 스쿼드 멤버 저장 순서(DESIGN.md §5-5 §개정 "저장 순서가 저장된 순서를 보존한다") — 클라이언트
- *  컴포넌트와 그 테스트 양쪽에서 쓰는 순수 함수라 `lib/projects.ts`(node:fs)가 아니라 여기 산다.
+ *  컴포넌트와 그 테스트 양쪽에서 쓰는 순수 함수라 `lib/projects.ts`(node:fs)가 아니라 여기 있다.
  *  `personas-ui.tsx`의 왼쪽 목록 배지와 `SquadDetail` 오른쪽 칸이 이 파일의 두 함수를 같이
  *  불러 판정이 갈리지 않는다. */
 import type { SquadMember } from "./projects.ts";

@@ -828,7 +828,7 @@ export function personaEngineHint(
     return `${prefix} (${t(locale, "workers.engineHint.allPrefix")}${label})`;
   }
   // 수 내림차순, 구분자 ` / `(라벨 안의 `·`와 안 섞이게). `Map`이 삽입 순서를 지켜 동률은
-  // 먼저 나온 라벨이 앞에 온다 — `sort`가 안정 정렬이라 그 순서가 산다.
+  // 먼저 나온 라벨이 앞에 온다 — `sort`가 안정 정렬이라 그 순서가 그대로다.
   const parts = [...counts.entries()]
     .sort((a, b) => b[1] - a[1])
     .map(([label, n]) => `${label} ×${n}`)
@@ -1339,7 +1339,7 @@ export async function listWorkers(root: string, tickets: Ticket[] = []): Promise
   const cron = nfc(cronRaw);
   // 게이트 낡음은 프로젝트 하나에 한 판정이다(§4-14 §소급) — 워커마다 다시 읽지 않는다. 통합
   // 브랜치를 못 읽으면(스캐폴딩 이전 큐) 낡음을 잴 수 없어 조용히 false로 둔다 — 그 프로젝트는
-  // 종전대로 `source` 줄 경고만 산다.
+  // 종전대로 `source` 줄 경고만 그대로다.
   const gateBranch = await integrationBranchOf(root);
   const gateStale = gateBranch !== null && (await dispatchGateState(root, gateBranch)) === "stale";
   // 쿨다운은 **엔진마다** 하나이고 머신 전역이다(`tick.sh:62`). 워커마다 열지 않도록 이 패스
@@ -1514,7 +1514,7 @@ export function cronUnregisterCmd(worker: Pick<Worker, "path">): string {
 
 // ── crontab 쓰기 (제약 4 — 그 프로젝트의 워커 줄만) ─────────────────────────
 //
-// crontab은 **머신 전역**이다: 남의 프로젝트 큐와 사람의 무관한 잡이 같은 파일에 산다.
+// crontab은 **머신 전역**이다: 남의 프로젝트 큐와 사람의 무관한 잡이 같은 파일에 있다.
 // 그래서 변경을 텍스트 순수 함수로 계산한다 — 보존을 진짜 crontab 없이 테스트할 수 있어야 한다.
 
 /** 이 워커 파일 경로가 들어간 줄인가. **비교만 NFC로** 한다(`nfc` 주석 · a622f9e4·38eec0d4):
@@ -1569,7 +1569,7 @@ async function crontabForWrite(): Promise<string> {
  *
  *  그래도 상한은 있다. 아무도 창을 안 누르면 화면이 `만드는 중…`에 영원히 갇히고, "등록 실패는
  *  성공 보고를 막지 않는다"(§0-3 · §4)가 성립하지 않는다. 끊어서 **실패로 만들어야** 그 규약이
- *  산다 — 화면은 사유와 `cronRegisterCmd`를 보여주고 사람이 셸에서 마무리한다.
+ *  남는다 — 화면은 사유와 `cronRegisterCmd`를 보여주고 사람이 셸에서 마무리한다.
  *  (거부는 이 상한을 안 쓴다. 사람이 `허용 안 함`을 누르면 crontab이 즉시 EPERM으로 죽는다.)
  *  // ponytail: 고정 3분. 짧으면 사람의 클릭을 앞지르고 길면 화면이 갇힌다 — 문제가 되면 설정으로 */
 const CRONTAB_READ_TIMEOUT = 10_000;
@@ -1715,7 +1715,7 @@ export const tickSourceLine = (repo: string) => `. ${dq(path.join(repo, "tick.sh
 // ── 자가 정리 (DESIGN.md §4-4) ───────────────────────────────────────────────
 //
 // 앱을 지우면 `<레포>/tick.sh`가 사라져 **엔진 안의 코드는 그때 실행될 수 없다.** 그 순간에도
-// 도는 것은 cron이 부르는 워커 `.sh` 하나뿐이라 판정이 `. tick.sh` **위**에 산다.
+// 도는 것은 cron이 부르는 워커 `.sh` 하나뿐이라 판정이 `. tick.sh` **위**에 있다.
 // 파일을 **쓰는** 쪽(`SELF_HEAL_SH`)과 워커에 넣는 **줄**(`selfHealSourceLine`)이 한 자리에
 // 있어야 두 모양이 안 갈린다 — `sourceTick`/`tickSourceLine`과 같은 이유다.
 
@@ -2194,7 +2194,7 @@ export async function prepareWorktree(root: string, name: string): Promise<Workt
   }
   const branch = `wt/${name}`;
   // 큐 루트(`root`)는 항상 있다 — 워크트리가 없어도(재생성 전, 폴더만 지운 상태) 이 realpath는
-  // 산다. git이 등록에 저장하는 경로도 `add` 성공 직후의 realpath라 이렇게 다시 지어야
+  // 그대로다. git이 등록에 저장하는 경로도 `add` 성공 직후의 realpath라 이렇게 다시 지어야
   // 트리가 없어졌을 때도 같은 문자열이 된다(맥 `/private` 별칭 — `dir` 자체를 realpath하면
   // 없는 트리에서 실패해 이 별칭이 안 풀리고 아래 매칭이 늘 헛돈다).
   const queue = nfc(await realpath(root).catch(() => root));

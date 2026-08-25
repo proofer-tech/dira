@@ -165,7 +165,7 @@ test("ticketCost — 참인 0 토큰을 그대로 낸다 · 캐시를 `listUsage
   const root = makeRoot();
   const done = putLog(root, logName(10, "w1", "cccccccc"), usage(0, 0, 0, 0));
 
-  // listUsage가 먼저 읽어 캐시에 넣는다(모듈 레벨 Map 공유 — §2-13이 §0-8 Map에 얹혀 산다).
+  // listUsage가 먼저 읽어 캐시에 넣는다(모듈 레벨 Map 공유 — §2-13이 §0-8 Map에 얹혀 있다).
   await listUsage(root);
   writeFileSync(done, JSON.stringify(usage(0, 0, 0, 500)) + "\n"); // 캐시 뒤에 값을 바꿔치기
   const c = await ticketCost(root, "cccccccc");

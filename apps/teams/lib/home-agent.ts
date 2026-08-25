@@ -59,7 +59,7 @@
  *    (`Error: When using --print, --output-format=stream-json requires --verbose`),
  *    ③ 대신 stdout에 `system`·`rate_limit_event`가 섞이므로 **결과를 "마지막 줄"로 집으면 안 된다**
  *    — 줄마다 파싱해 `type`으로 가른다(`eatLine`).
- *    **성패·사유 판정은 그대로 산다**: `is_error`·`result`·`api_error_status`(§비주얼 §24 ②의
+ *    **성패·사유 판정은 그대로 남는다**: `is_error`·`result`·`api_error_status`(§비주얼 §24 ②의
  *    401/403)가 전부 `{"type":"result"}` **한 줄**에 있고, `json` 형식에서 잰 값과 글자로 같았다.
  *
  *  프롬프트는 **argv 마지막 토큰**이다(stdin이 아니다). 그리고 자식의 stdin을 **즉시 닫는다** —
@@ -116,7 +116,7 @@ const BASH_ALLOWED = ["ls", "cat", "head", "tail", "wc", "sort", "uniq", "cut", 
  *  이 자리도 큐 밖이 된다). AGENTS.md가 아카이빙 산출물의 나머지 한 자리다(§5-3 산출물 ②).
  *  **종전엔 그 둘 다 repo(`dirname(root)`) 기준이었다** — 큐는 git에 안 들어가는 것이 불변식이라
  *  (CORE §큐의 불변식 3) 온톨로지를 큐 안에 두면 clone한 사람에게 0장이라는 근거였다. 그 값은
- *  뒤집힌 것이 아니라 **대가로 지불됐다**(§5-3 §아카이빙 산출물은 큐 안에 산다 §파는 것). 대신
+ *  뒤집힌 것이 아니라 **대가로 지불됐다**(§5-3 §아카이빙 산출물은 큐 안에 있다 §파는 것). 대신
  *  repo 쪽 예외가 **0**이 되어 요구 `20e4a6f4`(실제 프로젝트는 못 고친다)가 예외 없이 선다 —
  *  개정 `22a803de`. `AGENTS.md`는 아직 그 자리에 파일이 없을 수 있어 `Write`가 필요하다.
  *
@@ -278,7 +278,7 @@ export function nextScheduleDue(
 }
 
 /** 저장 형식(§7-2 §저장) 그대로. `home-sessions.json`의 그 프로젝트 값에 `schedules` 배열 한
- *  칸으로 산다 — `Conversation`과 같은 파일, 같은 원자적 쓰기(`writeHome`)를 탄다. */
+ *  칸으로 남는다 — `Conversation`과 같은 파일, 같은 원자적 쓰기(`writeHome`)를 탄다. */
 export type Schedule = {
   id: string;
   /** ISO. `last`가 없을 때 판정 창의 시작이 된다 */
@@ -288,7 +288,7 @@ export type Schedule = {
   /** 사람의 문장 그대로 — 고쳐 쓰지 않는다(§7-2 §회차의 질문) */
   prompt: string;
   /** 첫 회차가 민 값 — 그 뒤 회차가 `--resume`으로 잇는다. **`sessionIdOf` 관문을 통과한 값만
-   *  산다** — 통과 못 하거나 가리키는 트랜스크립트가 없으면 다음 회차가 새 세션으로 민다 */
+   *  남는다** — 통과 못 하거나 가리키는 트랜스크립트가 없으면 다음 회차가 새 세션으로 민다 */
   session_id: string;
   /** 마지막으로 판정한 예정 시각과 그때의 실제 시각 — <돌았나>를 담지 않는다(§7-2) */
   last?: { due: string; at: string };
@@ -307,7 +307,7 @@ export function scheduleViews(schedules: Schedule[], nowMs: number = Date.now())
 
 /** 한 줄의 관문. **못 읽는 `when`은 없는 것으로 친다**(`parseHome`의 대화 관문과 같은 선) —
  *  `id`·`prompt`도 형이 아니면 같이 없는 줄이다. `session_id`는 형만 본다(빈 값·깨진 값이어도
- *  줄 자체는 산다 — 그 값을 실제로 쓰는 자리(디스패치)가 `sessionIdOf` 관문을 다시 지난다). */
+ *  줄 자체는 그대로다 — 그 값을 실제로 쓰는 자리(디스패치)가 `sessionIdOf` 관문을 다시 지난다). */
 function parseSchedule(v: unknown): Schedule | null {
   const o = (v && typeof v === "object" && !Array.isArray(v) ? v : {}) as Record<string, unknown>;
   if (typeof o.id !== "string" || !o.id) return null;
@@ -788,7 +788,7 @@ export function questionOf(prompt: string): string {
  *  (`InterjectReason`과 같은 규약). `other`는 §24 표에 항이 없는 나머지다.
  *
  *  **`timeout`은 이름이 낡았다 — 값은 안 바꾼다.** 시계가 걷힌 뒤(요구 `8db4d0f6` — §7
- *  §천장이 없다) 이 사유는 **③이 재정의된 자리**로 옮겨 산다: "5분을 넘겼다"가 아니라
+ *  §천장이 없다) 이 사유는 **③이 재정의된 자리**로 옮겨 간다: "5분을 넘겼다"가 아니라
  *  "자식이 결과 객체 없이 죽었다"다(아래 `judge`의 `!result` 분기). 화면 쪽(`home-ui.tsx`
  *  `FAIL.timeout`)이 이 문자열 키로 걸려 있어(§24 문구 갈이는 4c8e82d8) 여기서 이름을 갈면
  *  그 파일까지 손대야 한다 — 값의 뜻만 바꾸고 키는 그대로 둔다. */
@@ -1565,7 +1565,7 @@ const NO_REFS: RefIndex = { tickets: {}, epics: {} };
 /** **폴링을 끊는 근거**(§7 §폴링은 서버가 잊어도 안 끊긴다 — 요구 `116b3c37`). `running: false`
  *  하나로는 못 끊는다: `runs`는 프로세스 메모리라 dev의 recompile·서버 재시작에 휘발하고, 그러면
  *  자식이 아직 도는데도 그 값이 false로 온다. 화면이 거기서 끊으면 질문만 든 채 얼고 새로고침
- *  전까지 안 산다.
+ *  전까지 안 통한다.
  *
  *  **끝의 증거는 `answered`가 첫째다** — 실행층이 결과 객체를 채웠고 이 폴링이 그걸 집어 갔다.
  *  휘발한 자리에는 그 객체가 아예 없으므로 둘이 정확히 갈린다. `failed`·`stopped`를 따로 안 보는
@@ -1596,7 +1596,7 @@ const NO_REFS: RefIndex = { tickets: {}, epics: {} };
  *  새 줄이 안 붙었으면(흔하다: 상태 변화는 큐 파일 쪽이지 트랜스크립트 쪽이 아니다) `turns`가
  *  이 폴링에서 여전히 0건이라 둘째 증거로도 못 끊는다. `workers` 목록은 **매 폴링 큐를 다시
  *  읽으므로**(`workerSessionsById`) 트랜스크립트에 새 줄이 있든 없든 그 전환을 그 폴링에서
- *  바로 안다 — 첫째 증거(`answered`)는 그대로 산다(그건 우리 자식의 것이라 워커 세션에는
+ *  바로 안다 — 첫째 증거(`answered`)는 그대로 남는다(그건 우리 자식의 것이라 워커 세션에는
  *  애초에 안 선다). */
 export const pollDone = (
   c: Pick<HomeChunk, "running" | "turns" | "answered" | "sessionId" | "workers">,

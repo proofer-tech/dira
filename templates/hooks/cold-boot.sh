@@ -15,9 +15,9 @@ if [ "${1:-tick}" = tick ] || [ "${1:-tick}" = dryrun ]; then
   _cb_dryrun=0
   [ "${1:-tick}" = dryrun ] && _cb_dryrun=1
 
-  # WORKERS = 이 파일을 source한 워커 .sh가 사는 디렉터리(tick.sh:24와 같은 산식 - 심볼릭
+  # WORKERS = 이 파일을 source한 워커 .sh가 있는 디렉터리(tick.sh:24와 같은 산식 - 심볼릭
   # 링크를 실체 경로로 바꿔야 tick.sh가 만드는 락 경로의 sha1 입력과 일치한다).
-  # ROOT = 그 위 - tickets/ workers/ worktrees/가 나란히 사는 이 큐의 자리.
+  # ROOT = 그 위 - tickets/ workers/ worktrees/가 나란히 있는 이 큐의 자리.
   _cb_workers=$(cd "$(dirname "$0")" 2>/dev/null && pwd -P)
   _cb_root=$(dirname "$_cb_workers")
   _cb_local="${TICKET_LOCAL:-$HOME/.config/dira}"

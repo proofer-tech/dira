@@ -179,7 +179,7 @@ test("rowLimit — 정본 URL도 쓰레기 값도 30행으로 떨어진다(§1 �
   for (const v of [null, "", "0", "abc", "-5", "10", "30"]) assert.equal(rowLimit(v), 30);
 });
 
-test("rowLimit — 30보다 큰 값은 그대로 산다(내려 읽던 자리가 폴링에 안 되감긴다)", () => {
+test("rowLimit — 30보다 큰 값은 그대로 남는다(내려 읽던 자리가 폴링에 안 되감긴다)", () => {
   assert.equal(rowLimit("60"), 60);
   assert.equal(rowLimit("786"), 786);
   // 소수·공백이 섞여도 `Number`가 판정한다 — `parseInt`처럼 앞자리만 먹고 넘어가지 않는다
@@ -194,7 +194,7 @@ test("doneLimit — 정본 URL도 쓰레기 값도 20건으로 떨어진다(§1 
   for (const v of [null, "", "0", "abc", "-5", "10", "20"]) assert.equal(doneLimit(v), 20);
 });
 
-test("doneLimit — 20보다 큰 값은 그대로 산다(내려 읽던 자리가 폴링에 안 되감긴다)", () => {
+test("doneLimit — 20보다 큰 값은 그대로 남는다(내려 읽던 자리가 폴링에 안 되감긴다)", () => {
   assert.equal(doneLimit("40"), 40);
   assert.equal(doneLimit("206"), 206);
 });
@@ -667,7 +667,7 @@ test("formatRemaining — 1시간 미만·시간·일 경계, 두 언어", () =>
 });
 
 /** 홈 대화 목록의 한 줄 (§비주얼 §24 대화 목록). 파일이 주는 순서와 화면이 그리는 순서가 다르고
- *  (파일은 만든 순, 화면은 최근이 위) 제목·시각 둘 다 비어 있을 수 있어서 판정이 여기 산다. */
+ *  (파일은 만든 순, 화면은 최근이 위) 제목·시각 둘 다 비어 있을 수 있어서 판정이 여기 있다. */
 test("chatRows — 최근이 위 · 제목 없는 대화는 `새 대화` · 시각은 §26 ④", () => {
   const now = new Date(2026, 7, 1, 17, 30).getTime();
   const iso = (...a: [number, number, number, number, number]) => new Date(...a).toISOString();

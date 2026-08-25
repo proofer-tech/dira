@@ -110,7 +110,7 @@ try:
         "파생 1이 raw priority 5를 못 덮었다: " + str(order)
     reset(root)
 
-    # --- ③ 가운데(5시간 초과 ~ 7일 미만)는 안 갈린다 - 명시값이 그대로 산다 ---
+    # --- ③ 가운데(5시간 초과 ~ 7일 미만)는 안 갈린다 - 명시값이 그대로 남는다 ---
     mk(root, "aaaa0005", "priority: 3\nduedate: {}\n".format(due(timedelta(days=2))))
     mk(root, "bbbb0006", "priority: 3\n")
     rows, err = scan_at(root)

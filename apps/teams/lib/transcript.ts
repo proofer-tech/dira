@@ -178,7 +178,7 @@ export async function tailEvents(
       }
       // **첫 `enqueue`는 안 흘린다**(§2-1) — 세션 프롬프트와 같은 글이고 이미 접힌 줄로 있다.
       // 판정은 `content` 비교가 아니라 **레코드 단위 첫 하나**이고(실측: record 0), 그래서
-      // 레코드 간 상태다 — `promptSeen`과 같은 자리에 산다.
+      // 레코드 간 상태다 — `promptSeen`과 같은 자리에 있다.
       if (isEnqueue(rec)) {
         const first = !enqueueSeen;
         enqueueSeen = true;
@@ -198,7 +198,7 @@ export async function tailEvents(
  *
  *  파일 **전문**을 읽고 **뒤에서부터** 줄 단위로 훑어 **세울 글자가 있는** 첫 `tool_use`·assistant
  *  `text`에서 멈춘다. `tool_result`·`thinking`·`prompt`·`interject`는 *진행중이다*만 말하는데 그건
- *  이미 셋이 말한다(레인 · §18 점 · §19 워커 마크) — 걸러도 갱신은 산다(§1-1 실측: 남는 둘의
+ *  이미 셋이 말한다(레인 · §18 점 · §19 워커 마크) — 걸러도 갱신은 그대로다(§1-1 실측: 남는 둘의
  *  간격 p50 8.6s). 히트 0 · 읽기 실패는 둘 다 `null`이고 화면은 **줄 자체를 안 세운다**
  *  (§1-1 §없을 때 · §경계).
  *

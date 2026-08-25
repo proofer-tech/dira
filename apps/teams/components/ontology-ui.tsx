@@ -65,7 +65,7 @@ function Failure({ title, message }: { title: string; message: string }) {
 }
 
 /** `TICKET_ONTOLOGY` 편집 — 온톨로지 화면 제목 밑 경로 줄이 이 편집 표면이다(§5-3 §편집
- *  표면이 사는 화면, 티켓 c5d51522). 워커 화면(`workers-ui.tsx`)의 `OntologyEditor`를 그대로
+ *  표면이 있는 화면, 티켓 c5d51522). 워커 화면(`workers-ui.tsx`)의 `OntologyEditor`를 그대로
  *  옮긴 것 — 저장 액션(`saveOntologyLocationAction`)·검증·쓰기 경로는 한 글자도 안 고쳤다.
  *  비우고 저장하면 그 줄이 워커 파일에서 지워져 기본값 가정으로 되돌아간다 — 별도의
  *  되돌리기 버튼을 안 둔다.

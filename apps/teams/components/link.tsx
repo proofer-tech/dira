@@ -1,6 +1,6 @@
 "use client";
 
-/** `next/link`를 감싼 것 - `useLinkStatus`가 `<Link>` 자손에서만 사는 제약(§0-22 결정 2) 때문에
+/** `next/link`를 감싼 것 - `useLinkStatus`가 `<Link>` 자손에서만 도는 제약(§0-22 결정 2) 때문에
  *  이 자리가 필요하다. 이름을 그대로 `Link`로 내보내 17개 소비 파일은 import 한 줄만 갈린다 -
  *  JSX 사용 자리 - props - ref 전달은 무수정이다.
  *

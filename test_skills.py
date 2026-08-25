@@ -86,7 +86,7 @@ try:
     other = dryrun(wcx, local)
     assert "스킬-마커" not in other, "codex 엔진에 스킬 블록이 붙었다\n" + other
 
-    # 4) PROFILE.md가 없으면 사이드카가 있어도 안 붙는다(스킬은 페르소나 프롬프트 안에서만 산다)
+    # 4) PROFILE.md가 없으면 사이드카가 있어도 안 붙는다(스킬은 페르소나 프롬프트 안에만 있다)
     os.remove(os.path.join(root, "tickets", "5c111001.md"))
     write(os.path.join(root, "personas", "nop", "skills.md"), "# 스킬\n고아-스킬-마커\n")
     mk(root, "5c111002", fm="kind: work\npersona: nop\n")

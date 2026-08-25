@@ -173,7 +173,7 @@ export async function ticketMtime(
 }
 
 /** 참견 보내기 (DESIGN.md §2-2). 스트림 아래 form이 부르는 자리이고, `tailSession`과 같은
- *  이유로 여기 산다 — Route Handler를 만들지 않는다(§아키텍처 트리 무수정).
+ *  이유로 여기 있다 — Route Handler를 만들지 않는다(§아키텍처 트리 무수정).
  *
  *  **판정과 쓰기는 전부 `lib/interject.ts`가 한다.** 여기서 상태를 다시 보지 않는 것은 판정이
  *  두 곳으로 갈리지 않게 하려는 것이다(§2-2 "화면이 들고 있던 값을 믿지 않는다"는 그 함수의 계약).

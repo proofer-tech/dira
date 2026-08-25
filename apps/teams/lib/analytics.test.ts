@@ -126,7 +126,7 @@ test("client_id는 파일의 install_id고 session_id는 파일에 안 쓴다", 
   reset();
   await track("feedback_submit", {});
   const saved = JSON.parse(readFileSync(FILE, "utf8"));
-  assert.deepStrictEqual(Object.keys(saved), ["install_id"]); // 사는 키는 둘뿐, 세션은 없다
+  assert.deepStrictEqual(Object.keys(saved), ["install_id"]); // 담기는 키는 둘뿐, 세션은 없다
   assert.strictEqual(calls[0].body.client_id, saved.install_id);
   // 두 번째 실행이 같은 id를 쓴다(설치 한 벌 = 영구)
   calls = [];

@@ -29,7 +29,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 TICK = os.path.join(HERE, "tick.sh")
 PY = os.path.join(HERE, "tickets.py")
 
-# init 한 줄을 뱉고 stdin을 빨면서 사는 엔진. 안 빨면 프롬프트 주입이 안 끝나 STALL로 죽는다.
+# init 한 줄을 뱉고 stdin을 빨면서 도는 엔진. 안 빨면 프롬프트 주입이 안 끝나 STALL로 죽는다.
 # `exec`는 test_feed_stall.py와 같은 이유다 - 프로세스를 하나로 만들어 kill이 진짜 엔진에 닿게 한다.
 FAKE_ENGINE = """\
 #!/bin/bash
@@ -217,7 +217,7 @@ try:
     assert os.path.exists(os.path.join(tickets, "eeee0005.md")), \
         "강제 뒤 백로그로 안 돌아왔다: " + str(os.listdir(tickets))
 
-    # 잠금이 부모의 clear+release를 지나서 산다(§순서가 계약이다 1) - 창이 0이다
+    # 잠금이 부모의 clear+release를 지나서도 남는다(§순서가 계약이다 1) - 창이 0이다
     body = open(os.path.join(tickets, "eeee0005.md"), encoding="utf-8").read()
     assert re.search(r"^awaiting: [0-9a-f]{8}$", body, re.M), \
         "부모가 풀면서 잠금이 사라졌다\n" + body

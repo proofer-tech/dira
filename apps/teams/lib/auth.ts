@@ -430,12 +430,12 @@ export async function deleteToken(id: string): Promise<void> {
 
 export type ProfileEngine = Extract<OtherEngine, "codex" | "grok">;
 
-/** 프로필 디렉터리가 사는 자리 — `tokens.json`과 같은 `<LOCAL>` 아래다(§0-23 §그릇). */
+/** 프로필 디렉터리가 있는 자리 — `tokens.json`과 같은 `<LOCAL>` 아래다(§0-23 §그릇). */
 function engineProfileDir(engine: ProfileEngine, id: string): string {
   return path.join(path.dirname(registryPath()), "engines", engine, id);
 }
 
-/** 원본이 사는 곳 — `CRED_FILE`(자격증명 *파일*)의 부모 디렉터리다. 두 벌로 안 적는다. */
+/** 원본이 있는 곳 — `CRED_FILE`(자격증명 *파일*)의 부모 디렉터리다. 두 벌로 안 적는다. */
 function engineHomeDir(home: string, engine: ProfileEngine): string {
   return path.join(home, path.dirname(CRED_FILE[engine]!));
 }

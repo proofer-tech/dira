@@ -133,7 +133,7 @@ try:
     deep_block = deep[deep.index(block_start):deep.index(block_end) + len(block_end)]
     assert deep_block == block, "memory/<하위>/x.md가 블록을 바꿨다\n" + deep
 
-    # 6) PROFILE.md가 없으면 메모리도 안 붙는다(메모리는 페르소나 프롬프트 안에서만 산다)
+    # 6) PROFILE.md가 없으면 메모리도 안 붙는다(메모리는 페르소나 프롬프트 안에만 있다)
     os.remove(os.path.join(root, "tickets", "5c111001.md"))
     write(os.path.join(root, "personas", "nop", "memory", "m.md"), "# 고아\n## 고아-절-마커\n")
     mk(root, "5c111002", fm="kind: work\npersona: nop\n")

@@ -735,7 +735,7 @@ test("lastFailure — 살아 있는 엔진 쿨다운이 신선도 창을 대신�
   const put = (line1: string) => writeFileSync(cd, `${line1}\n지문\n`);
   const secs = (n: number) => String(Math.floor(Date.now() / 1000) + n);
 
-  // ⓐ 15분 전 FAIL + 살아 있는 쿨다운 → 산다. 그 파일이 *지금 불능이고 언제까지다*를 말한다
+  // ⓐ 15분 전 FAIL + 살아 있는 쿨다운 → 남는다. 그 파일이 *지금 불능이고 언제까지다*를 말한다
   put(secs(3600));
   assert.strictEqual((await listWorkers(root))[0].lastFailure?.hash, "a1111111");
 
@@ -1414,7 +1414,7 @@ test("createWorker — TICKET_CWD를 템플릿에서 물려받지 않는다 (w4�
   );
 });
 
-test("createWorker — TICKET_CWD·TICKET_ENGINE 말고는 한 줄도 안 바뀐다 (게이트·source·컨텍스트가 산다)", async () => {
+test("createWorker — TICKET_CWD·TICKET_ENGINE 말고는 한 줄도 안 바뀐다 (게이트·source·컨텍스트가 그대로다)", async () => {
   const root = makeRoot({ "w1.sh": WT_SH });
   const { path: file } = await createWorker(root, "w4");
   const before = WT_SH.split("\n");
@@ -2153,7 +2153,7 @@ test("dispatchGateSh — 통합 브랜치 체크아웃 여부로 막고 안 막�
 
 /** §4-14 §없는 워크트리를 게이트가 만든다 — GUI가 관리하는 `DISPATCH_GATE_SH` 쪽. 조건 셋(표준
  *  자리 · 없음 · git 레포)을 다 만족할 때만 만들고, 하나라도 어긋나면 종전대로 아무것도 안
- *  한다(이 게이트엔 선행조건 1이 아예 없었다 — 새 프로젝트 첫 워커의 TICKET_CWD 빈값이 그대로 산다).
+ *  한다(이 게이트엔 선행조건 1이 아예 없었다 — 새 프로젝트 첫 워커의 TICKET_CWD 빈값이 그대로 남는다).
  *  **진짜 git + 진짜 bash로 돌린다** — 값어치가 그 판정이라 모킹하면 검증할 게 남지 않는다. */
 test("dispatchGateSh — 없는 표준 워크트리를 게이트가 만든다 (§4-14 §없는 워크트리를 게이트가 만든다)", () => {
   const { root } = makeRepo();

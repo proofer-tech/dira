@@ -39,7 +39,7 @@ apps/teams/
                         큐 파일을 건드리는 Server Action은 그 화면 폴더에 둔다
                         (`workers/actions.ts`·`tickets/[hash]/actions.ts`·`(board)/actions.ts`·
                         `protocols/actions.ts`). 발행·요구 접수는 **라우트가 아니라 보드의
-                        다이얼로그**라 `createTicket`이 `(board)/`에 산다(DESIGN.md §3).
+                        다이얼로그**라 `createTicket`이 `(board)/`에 있다(DESIGN.md §3).
                         클라이언트에서 `@/app/p/[project]/…/actions`로 그냥 import된다
       p/[project]/home/   프로젝트 홈 — 질의 에이전트(§7). `actions.ts`가 넷(묻기·폴링·중지·새 대화)이고
                         **큐 파일을 하나도 안 건드리는 유일한 화면 액션**이다 — 질문이 티켓으로
@@ -158,7 +158,7 @@ apps/teams/
     markdown-breaks.ts  `<Markdown breaks>`의 remark 플러그인 (§비주얼 §10 **면제** — 사람이 입력칸에
                         친 줄바꿈만 그린다). `remark-breaks`를 안 들인 이유는 `untilHeading`이다:
                         요구 티켓 본문은 첫 `##` **앞까지만** 켜는데 그 패키지는 트리 전체다.
-                        `components/`가 아니라 여기 사는 이유는 JSX를 `node --test`가 못 읽어서다
+                        `components/`가 아니라 여기 있는 이유는 JSX를 `node --test`가 못 읽어서다
     utils.ts            shadcn cn() — 건드리지 않는다
     *.test.ts           node --test
   components/           손으로 만드는 컴포넌트 (DESIGN.md §5 커스텀)
@@ -191,13 +191,13 @@ apps/teams/
                         같이 쓰고 `href`만 다르다 — 셸마다 인라인하면 §14가 2벌로 고정한 사본이
                         3벌이 된다. 새 파일 대신 여기 둔 이유는 아래 "새 파일을 늘리지 않는다"
                         + **`<ScreenView/>`**(§0-11) — 루트 레이아웃에 한 번 서서 화면 7종의
-                        `screen_view`를 다 보낸다. 같은 이유로 여기 산다(이미 `usePathname()`을
+                        `screen_view`를 다 보낸다. 같은 이유로 여기 있다(이미 `usePathname()`을
                         쓰는 셸 조각이고 그리는 것이 없다). **서버 컴포넌트로는 못 옮긴다** —
                         보드가 5초마다 refresh해서 렌더마다 보내면 체류 시간이 조회수가 된다
                         + **`<NotificationPopover>`**(§28 ④) — 알림 종의 그릇. 트리거·내용
                         마크업은 셸에 그대로 있고(`children`) 여기 있는 것은 열림 상태 하나다.
                         안에서 `<a>`를 누르면 닫는다 — `<button>` 둘(`토큰 저장`·`할당 해제`)은
-                        안 닫는다. 같은 이유로 여기 산다(셸의 클라이언트 조각 · 새 파일 0)
+                        안 닫는다. 같은 이유로 여기 있다(셸의 클라이언트 조각 · 새 파일 0)
     settings-dialog.tsx `설정` 다이얼로그(섹션 셋 — 인증 §0-4 · 키설정 §0-6 · 사용 통계 §0-11)
                         + 그것을 여는 트리거. **두 셸 헤더 우측 끝과
                         프로젝트 셸 인증 배너 CTA가 같이 쓴다** — 자리가 둘이라 어느 한쪽에
@@ -207,8 +207,8 @@ apps/teams/
                         목록 표가 서버가 아니라 여기 있는 이유는 `<ProjectRows>` 주석에 있다
                         (`955a8237`: 서버가 행 엘리먼트를 그리면 순서 변경이 화면에 안 붙는다)
     ticket-ui.tsx       편집 폼 · 할당 해제 · 삭제 + **보드의 발행 · 요구 접수
-                        다이얼로그**(§3 — 라우트가 아니다. 트리거가 보드에 산다)
-                        + **답변 폼 한 벌 `AnswerForm`**(§2-3 ③) — 자리가 둘이라 여기 산다:
+                        다이얼로그**(§3 — 라우트가 아니다. 트리거가 보드에 있다)
+                        + **답변 폼 한 벌 `AnswerForm`**(§2-3 ③) — 자리가 둘이라 여기 있다:
                         보드 답변 다이얼로그(`AnswerFields` = `AnswerThread` + 이 폼)와 티켓 상세
                         `진행 기록` 절의 답변 모드(`session-stream.tsx`가 import한다). 같은 서버
                         액션 · 같은 문구 · 같은 실패다. `AnswerThread`(§13 말풍선 스크롤러)는
@@ -294,7 +294,7 @@ apps/teams/
                         (`lib/urls.ts`의 `hasFindBar` — `screenOf`를 접는다).
                         **루트 레이아웃에 한 번 선다**(`app/layout.tsx`, `KeymapProvider` 안):
                         붙는 화면이 다섯이고 레이아웃이 둘로 갈려서 화면마다 얹으면 같은 두 줄이
-                        다섯 벌이 된다. 같은 이유로 여기 산다(새 파일 0)
+                        다섯 벌이 된다. 같은 이유로 여기 있다(새 파일 0)
                         **새 파일인 이유**: 쓰는 곳이 두 화면이라 어느 한쪽에 얹으면 나머지가
                         그 파일을 import한다(`keymap-provider.tsx`와 같은 축)
     copy-command.tsx    실행 대신 복사시키는 명령 블록

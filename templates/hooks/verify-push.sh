@@ -1,8 +1,8 @@
 #!/bin/bash
 # 재현 검증 - 티켓 29096a45(DESIGN.md §통합 push의 벽, 결정 1~5) - templates/hooks/push.sh.
 #
-# 정본(push.sh) 옆에 둔다 - 이 파일의 대상이 .dira/가 아니라 여기 사는 정본이라 그렇다
-# (verify-token-rotate.sh - verify-multiplay.sh는 대상이 .dira/에만 사는 스크립트라 거기 산다 -
+# 정본(push.sh) 옆에 둔다 - 이 파일의 대상이 .dira/가 아니라 여기 있는 정본이라 그렇다
+# (verify-token-rotate.sh - verify-multiplay.sh는 대상이 .dira/에만 있는 스크립트라 거기 있다 -
 # 같은 규칙, 다른 위치). 전부 mktemp 합성 레포에서 돈다 - 도그푸딩 큐(~/Projects/dira)는 안 만진다
 # (제약 1).
 #

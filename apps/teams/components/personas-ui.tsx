@@ -562,7 +562,7 @@ export function PersonasPane({
   const [edits, setEdits] = useState<Record<string, PersonaEdit>>({});
   const [squadEdits, setSquadEdits] = useState<Record<string, SquadEdit>>({});
   // import(§5-1 §import)가 이 머신에 스킬을 하나 깔면 후보 목록이 는다 — 서버가 준 초기값이
-  // 아니라 이 상태를 그린다. 위 `edits`와 같은 이유로 여기(페인 전체)에 산다: 다른 줄을 고르는
+  // 아니라 이 상태를 그린다. 위 `edits`와 같은 이유로 여기(페인 전체)에 있다: 다른 줄을 고르는
   // 순간 오른쪽 칸이 바뀌어도 방금 깐 스킬은 모든 페르소나의 다이얼로그에서 보여야 한다.
   const [installed, setInstalled] = useState<Skill[]>(initialInstalled);
 
@@ -582,7 +582,7 @@ export function PersonasPane({
   /** 모아보기 — 켜면 최상위가 스쿼드(위 집합이 그리는 화면), 끄면 묶음 둘(`스쿼드` -
    *  `페르소나`, 이 순서)이 나란히 선다(§5-5 §개정 - 모아보기 토글, 요구 `998b7849`). 기본
    *  켜짐, **저장 0** — localStorage · 쿠키 · URL 파라미터 어디에도 안 싣는다. 끄는 동안에도
-   *  `expandedSquads`는 그대로 둔다 — 다시 켜면 종전 펼침이 산다(계약 §왕복). */
+   *  `expandedSquads`는 그대로 둔다 — 다시 켜면 종전 펼침이 그대로다(계약 §왕복). */
   const [groupBySquad, setGroupBySquad] = useState(true);
 
   /** 손잡이 하나가 이름 하나를 들고 낸다(§비주얼 §61 (17) §펼침 — "안 접히는 줄이 0개") */
@@ -1212,7 +1212,7 @@ function PersonaDetail({
           />
 
           {/* 메모리 절(§비주얼 §32 ②) — 스킬 절 **바로 뒤**다. 화면이 주입 순서를 그대로 보인다
-              (PROFILE → 스킬 → 메모리). 0장이어도 그린다: `삭제`가 사는 자리를 사람이 배우는
+              (PROFILE → 스킬 → 메모리). 0장이어도 그린다: `삭제`가 있는 자리를 사람이 배우는
               화면이 여기뿐이고, 오늘 이 큐의 카드가 전부 0장이다 */}
           <MemorySection
             projectId={projectId}

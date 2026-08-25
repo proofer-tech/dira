@@ -26,7 +26,7 @@
  *  경계를 페이지 안 `<Suspense>`로 옮기면 나을 것 같지만 **안 낫는다** — 위 가운데 줄이 그
  *  실측이다(3회 중 2회 실패. 되는 회차는 첫 로드가 느려 fallback이 실제로 떴던 회차다).
  *  스켈레톤은 첫 로드 한 번의 편의고 큐를 안 따라가는 보드는 이 제품이 아니다. 첫 도착은
- *  fs 한 번 읽기라 짧다(실측 +0.03~0.39s) — 상세 화면(§2)이 스켈레톤 없이 사는 것과 같은 이유다. */
+ *  fs 한 번 읽기라 짧다(실측 +0.03~0.39s) — 상세 화면(§2)이 스켈레톤 없이 도는 것과 같은 이유다. */
 import { stat } from "node:fs/promises";
 import Link from "@/components/link";
 import { notFound } from "next/navigation";
@@ -116,7 +116,7 @@ export const dynamic = "force-dynamic";
  *
  *  `assigned`가 없는 이유(§1 보드 · 사람 요청 `b69e26ce`): 정상 흐름에 없는 상태를 흐름을 그리는
  *  뷰에 레인으로 세우면 비어 있는 게 정상인 컬럼이 화면 폭을 상시 먹고 "여기도 티켓이 지나간다"고
- *  말한다. 그 티켓이 사는 곳은 셸의 알림 배너다(§0-2). **테이블·필터에서는 빼지 않는다** —
+ *  말한다. 그 티켓이 있는 곳은 셸의 알림 배너다(§0-2). **테이블·필터에서는 빼지 않는다** —
  *  빼면 GUI가 CLI `list`보다 덜 보인다. */
 const STATUSES = ["open", "wip", "done"] as const;
 
@@ -603,7 +603,7 @@ export default async function Board({
       data-stem={t.stem}
       // 에픽으로 끄는 소스는 `open` 카드뿐이다(§에픽 결정 8). 명시적 `false`가
       // 필요하다 — 카드 안 해시가 `<a>`라 안 두면 브라우저 기본 드래그(링크 고스트)가
-      // 산다(§비주얼 §52 ⑤ (4)). `cursor-grab`은 안 붙인다 — 카드 전체가 링크라
+      // 그대로 남는다(§비주얼 §52 ⑤ (4)). `cursor-grab`은 안 붙인다 — 카드 전체가 링크라
       // 커서가 이미 그 사실을 말한다(같은 절).
       draggable={t.state === "open"}
       className="card-tint relative gap-2 px-4"

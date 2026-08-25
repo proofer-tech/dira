@@ -137,7 +137,7 @@ export default async function Workers({ params }: { params: Promise<{ project: s
     { key: LABEL.inProgress, value: config.inProgress, assumed: usingDefault(config, "inProgress") },
     { key: LABEL.done, value: config.done, assumed: usingDefault(config, "done") },
     // 온톨로지도 이제 나머지 넷과 같은 표시 전용 행이다 — 편집 표면과 워크트리 경고 캡션은
-    // 온톨로지 화면으로 옮겼다(§5-3 §편집 표면이 사는 화면, 티켓 c5d51522).
+    // 온톨로지 화면으로 옮겼다(§5-3 §편집 표면이 있는 화면, 티켓 c5d51522).
     { key: LABEL.ontology, value: config.ontology, assumed: usingDefault(config, "ontology") },
   ];
   // cwd는 resolveConfig가 애초에 conflicts에 넣지 않는다(갈리는 게 정상 — edc5e1a7).
@@ -295,7 +295,7 @@ export default async function Workers({ params }: { params: Promise<{ project: s
                   <WorkerRowActions projectId={id} row={w} />
                 </TableCell>
               </TableRow>
-              {/* 이 워커의 둘째 행 — 경고 다섯과 펼친 컨텍스트가 한 셀에 산다(§비주얼 §35 #4).
+              {/* 이 워커의 둘째 행 — 경고 다섯과 펼친 컨텍스트가 한 셀에 있다(§비주얼 §35 #4).
                   경고가 하나도 없고 접혀 있으면 행 자체가 없다 — 정상 상태에 켜져 있는 경고를
                   만들지 않는다. 여기서 넘기는 둘은 서버가 그린다:
 

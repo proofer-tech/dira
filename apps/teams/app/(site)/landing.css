@@ -4,7 +4,7 @@
    ② 같은 파일이 지던 리셋 251줄 중 이 페이지에 실제로 서는 요소만 세운다.
    ③ vitepress 크롬을 끄던 규칙 셋(`.VPNav`·`.VPLocalNav`·`#VPContent`)과 `.VPSkipLink`의
       잉크색을 정하던 `--vp-*` 두 줄이 죽었다 — 끌 크롬도 칠할 스킵링크도 없다.
-   전환 티켓(§순서 ⑧)이 `.vitepress/`를 지울 때까지 저 파일과 이 파일이 같이 산다. */
+   전환 티켓(§순서 ⑧)이 `.vitepress/`를 지울 때까지 저 파일과 이 파일이 같이 남는다. */
 
 /* ① 킬 스위치 — vitepress `base.css`의 첫 블록 그대로다. §모션 §판정표 6행 중 다섯이
    *"CSS라 base.css가 덮는다"*로 접근성을 닫아 놨고, 그 근거가 이 블록 하나였다.
@@ -458,7 +458,7 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
 /* ③ 커서를 못 보는 자리(터치 · 키보드)에 눌러진다는 것을 준다(§모션 §판정표 ③).
    1.02에서 1.00으로 눌린다 — 정지 상태는 scale(1)이라 열 박스가 안 갈린다.
    **`.gallery`를 셀렉터에서 뺐다**(§로드맵 §P235-1): 확대 링크가 갤러리 밖 두 절에도
-   서면서 같은 부품이 두 자리에 산다 — 규칙을 새로 쓰면 같은 값이 두 벌이 된다.
+   서면서 같은 부품이 두 자리에 있다 — 규칙을 새로 쓰면 같은 값이 두 벌이 된다.
    규칙 수는 그대로다. `display: block`이 여기 있어야 갤러리 밖에서도 인라인 앵커의
    줄 상자가 캡처 아래에 빈 띠를 안 남긴다. */
 .dira-landing .zoom {
@@ -782,7 +782,7 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
 
 @media (max-width: 480px) {
   /* 390에서 `content` 열이 342라 레인이 114px인데 한 줄 카드는 130.84px이다. 레인을 셋으로
-     두고 카드를 두 줄로 접는다 — 다섯 폭 전부에서 여행이 그대로 산다. 밴드 높이는 안 갈린다. */
+     두고 카드를 두 줄로 접는다 — 다섯 폭 전부에서 여행이 그대로 남는다. 밴드 높이는 안 갈린다. */
   .dira-landing .tk { display: block; height: auto; padding: 4px 8px; line-height: 14px; }
   .dira-landing .tk-name { height: 14px; }
   .dira-landing .tk-name i { height: 14px; line-height: 14px; transform: translateY(calc(var(--lane, 0) * -14px)); }

@@ -319,7 +319,7 @@ export function ProjectSwitcher({
 }) {
   const router = useRouter();
   // §비주얼 §65 ④ 전용 — `/`(프로젝트 관리 · 등록 해제 뒤)로 나가는 길은 셸이 통째로 갈려
-  // `<RoutePending/>`이 못 산다(§0-22 결정 1). 위 `router`는 그 두 자리에 그대로 남고, 셸 표식이
+  // `<RoutePending/>`이 못 뜬다(§0-22 결정 1). 위 `router`는 그 두 자리에 그대로 남고, 셸 표식이
   // 붙는 것은 프로젝트를 실제로 바꾸는 이동(`trackedRouter`) 하나뿐이다.
   const trackedRouter = useTrackedRouter();
   const t = useT();
@@ -341,7 +341,7 @@ export function ProjectSwitcher({
   const showManagingOpening = useDelayedFlag(managingOpening);
   // 레일의 `설정` — 팔레트를 먼저 닫고(§4-1) 그 뒤에 이 다이얼로그를 띄운다. `key={id}`가
   // 대상이 바뀔 때만 상태를 새로 시작시키고(해석 결과 · 이름 입력 · 확인 화면), 같은
-  // 대상을 다시 여닫을 때는 인스턴스를 유지해 닫힘 애니메이션이 산다.
+  // 대상을 다시 여닫을 때는 인스턴스를 유지해 닫힘 애니메이션이 그대로다.
   const [settingsProject, setSettingsProject] = useState<SwitcherProject | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
 

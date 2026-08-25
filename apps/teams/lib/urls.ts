@@ -298,7 +298,7 @@ export function scheduleRows(
  *  오는 건 `signature` 필드뿐이고, 그 플래그를 붙인 세션은 같은 자리가 채워져 온다(`f3efc03d`).
  *  §2-1의 계약은 "펼치면 원문"이고, 원문이 없는 줄에서
  *  셰브런이 "여기 원문이 있다"고 말하면 그 계약이 그 줄에서만 거짓이 된다.
- *  `elapsedSuffix`와 같은 이유로 여기 산다 — `pnpm test`가 JSX를 못 읽고, 스트림은 클라이언트다. */
+ *  `elapsedSuffix`와 같은 이유로 여기 있다 — `pnpm test`가 JSX를 못 읽고, 스트림은 클라이언트다. */
 export const expandable = (e: { body: string }) => e.body !== "";
 
 /** 기능 → **그 기능이 되는 엔진 이름 집합** (§4-3 §codex를 고르면 GUI 기능 둘이 죽는다, 표).
@@ -312,7 +312,7 @@ export const expandable = (e: { body: string }) => e.body !== "";
  *  §23 ⑤ 예고 줄)이 이름을 따로 적으면 표를 고칠 때 문장이 안 따라온다. 리터럴이 아니라 키인
  *  이유는 `50fd4b34` — en 화면에서도 이 이름이 영어여야 한다.
  *
- *  `urls.ts`에 사는 이유는 이 파일 머리의 그 이유다: 판정하는 자리가 서버(§2 티켓 상세 ·
+ *  `urls.ts`에 있는 이유는 이 파일 머리의 그 이유다: 판정하는 자리가 서버(§2 티켓 상세 ·
  *  §0-8 잔여)와 클라이언트(§2-1 스트림 · §4 워커 폼) 양쪽이고, `lib/workers.ts`는 `node:fs`를
  *  물어 클라이언트 번들에 못 들어간다. */
 const FEATURE_ENGINES = {
@@ -358,7 +358,7 @@ export function engineMissing(engine: string, locale: Locale = DEFAULT_LOCALE): 
  *  **제약 5를 호출부의 예의가 아니라 이 함수의 구조로 지키기 위해서다**: 둘이 동시에 참인 값이
  *  어쩌다 들어와도 `.wip`에서 답변칸이 서지 않는다.
  *
- *  `elapsedSuffix`와 같은 이유로 JSX가 아니라 여기 산다(`pnpm test`가 JSX를 못 읽는다). */
+ *  `elapsedSuffix`와 같은 이유로 JSX가 아니라 여기 있다(`pnpm test`가 JSX를 못 읽는다). */
 export type InterjectMode = "interject" | "followup" | "answer" | null;
 
 export function interjectMode(s: {
@@ -653,7 +653,7 @@ export function relativeElapsed(ts: string, baseTs: string): string {
 /** 페르소나 색 팔레트 키 (DESIGN.md §비주얼 §12). 레지스트리에 이 문자열 그대로 저장된다.
  *  **자유 hex가 아니라 고정 8색인 이유**는 §5에 있다 — 라이트/다크 두 벌과 대비를 사람이
  *  즉석에서 못 맞춘다. 서버(레지스트리 쓰기 검증)와 클라이언트(스와치 목록)가 같은 목록을
- *  써야 해서 여기 산다. 여기 없는 키는 에러가 아니라 **중립 점**이다(§12). */
+ *  써야 해서 여기 있다. 여기 없는 키는 에러가 아니라 **중립 점**이다(§12). */
 export const PERSONA_COLORS = [
   "orange",
   "yellow",
@@ -672,7 +672,7 @@ export const PERSONA_COLORS = [
  *  오타가 나도 화면이 안 깨지고, 회색으로 채우지 않아 "누가 고른 9번째 색"으로도 안 읽힌다.
  *  `<PersonaBadge>`가 그리는 자리 5곳과 색 고르는 스와치가 **같은 이 함수**를 쓴다 —
  *  자리마다 표를 다시 쓰면 어느 화면 하나가 조용히 색 없이 남는다.
- *  JSX가 아니라 여기 사는 이유는 `elapsedSuffix`와 같다(`pnpm test`가 JSX를 못 읽는다). */
+ *  JSX가 아니라 여기 있는 이유는 `elapsedSuffix`와 같다(`pnpm test`가 JSX를 못 읽는다). */
 const PERSONA_DOT = new Map([
   ["orange", "bg-persona-orange"],
   ["yellow", "bg-persona-yellow"],
@@ -700,7 +700,7 @@ export const personaDotClass = (color?: string): string =>
  *
  *  제어점의 y가 앵커의 y와 같다 — 곡선이 두 앵커의 세로 범위를 못 벗어나므로 선이 레인 머리로
  *  올라가지 않는다. 지켜야 할 성질이라 값이 아니라 근거로 적는다(§17).
- *  JSX가 아니라 여기 사는 이유는 `elapsedSuffix`와 같다(`pnpm test`가 JSX를 못 읽는다). */
+ *  JSX가 아니라 여기 있는 이유는 `elapsedSuffix`와 같다(`pnpm test`가 JSX를 못 읽는다). */
 export type Anchor = { left: number; right: number; cx: number; y: number };
 
 export function relationPath(a: Anchor, b: Anchor): string {
@@ -749,7 +749,7 @@ export function relativeUnderAny(picked: string, bases: string[]): string {
 
 /** 한 문자열에서 **일치한 곳의 시작 오프셋 전부** (DESIGN.md §7 §대화 안에서 찾기 · §비주얼 §30).
  *  `<FindBar>`가 텍스트 노드마다 이걸 불러 `Range`를 만든다 — **JSX는 `node --test`가 못 읽으므로
- *  컴포넌트의 순수 판정이 여기 산다**(AGENTS.md). 훑는 자는 §1 보드 검색과 같은 것 하나다:
+ *  컴포넌트의 순수 판정이 여기 있다**(AGENTS.md). 훑는 자는 §1 보드 검색과 같은 것 하나다:
  *  **대소문자 무시 부분일치**. 정규식도 단어 단위도 대소문자 토글도 없다(§30 ⑦).
  *
  *  **겹치는 일치는 안 센다** — `aaa`에서 `aa`는 1건이다. 겹치면 §30 ④의 *겹침 없음*이 깨져
@@ -771,7 +771,7 @@ export type AnswerPick = { number: string; letters: string[]; note: string };
 
 /** 그룹별 선택 + 덧붙임을 답변 본문으로 조립한다(결정 10 ⑦⑧) — 줄머리는 그룹 번호 그대로,
  *  다중 선택은 `(a)(b)`, 덧붙임은 한 칸 뒤에 붙인다. 고른 것도 덧붙임도 없는 그룹은 줄이 안 선다.
- *  **`lib/queue.ts`가 아니라 여기 사는 이유는 이 파일 머리와 같다** — `AnswerForm`(클라이언트)이
+ *  **`lib/queue.ts`가 아니라 여기 있는 이유는 이 파일 머리와 같다** — `AnswerForm`(클라이언트)이
  *  체크박스마다 이 함수를 직접 불러 입력칸을 다시 쓴다(§비주얼 §29 방향). `queue.ts`는 `node:fs`를
  *  타서 그 값을 못 부른다. */
 export function composeAnswer(picks: AnswerPick[]): string {
@@ -796,7 +796,7 @@ export function defaultPicks(groups: OptionGroup[], defaultAnswer: string): Answ
 
 /** `awaiting`인데 본문에 `## 질문 n` 절이 없는 요구사항(DESIGN.md §요구사항 레이어 결정 11 ⑩)의
  *  스레드 자리 문구 — 상세(`session-stream.tsx`)와 보드 답변 다이얼로그(`ticket-ui.tsx`
- *  `AnswerThread`) 둘 다 이 값 하나를 그린다. **`lib/queue.ts`가 아니라 여기 사는 이유는 이 파일
+ *  `AnswerThread`) 둘 다 이 값 하나를 그린다. **`lib/queue.ts`가 아니라 여기 있는 이유는 이 파일
  *  머리와 같다** — 둘 다 클라이언트 컴포넌트라 `node:fs`를 타는 `queue.ts`에서 값을 못 부른다.
  *  폼은 안 감춘다 — 사람이 산문으로 답할 길은 그대로 남는다. */
 export const NO_QUESTION_SECTION_NOTICE = "질문 절 없음 — 산문으로 아래에 답을 남길 수 있습니다";

@@ -300,7 +300,7 @@ test("isEligible — enabled && (exhaustedUntil이 없거나 지났다), 그 한
   assert.strictEqual(isEligible({ enabled: true, exhaustedUntil: null }), true);
   assert.strictEqual(isEligible({ enabled: false, exhaustedUntil: null }), false);
   const now = Math.floor(Date.now() / 1000);
-  assert.strictEqual(isEligible({ enabled: true, exhaustedUntil: now + 60 }, now), false); // 아직 산다
+  assert.strictEqual(isEligible({ enabled: true, exhaustedUntil: now + 60 }, now), false); // 아직 남아 있다
   assert.strictEqual(isEligible({ enabled: true, exhaustedUntil: now - 1 }, now), true); // 창이 지났다
 });
 

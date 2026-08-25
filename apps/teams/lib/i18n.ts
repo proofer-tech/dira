@@ -594,7 +594,7 @@ export const ko: Record<string, string> = {
   "persona.missing.dispatchDetail":
     "디스패치합니다 — 디스패치가 실패하는 게 아니라, 세션이 역할·권한을 모르는 채로 시작합니다. 그 이름을 왼쪽에서 고르고 오른쪽의 빈 본문을 채워 저장하면 파일이 만들어집니다.",
   "persona.missing.noSkillsMemory":
-    "프로필이 없으면 스킬·메모리도 실리지 않습니다 — 두 블록 다 페르소나 프롬프트 안에 삽니다.",
+    "프로필이 없으면 스킬·메모리도 실리지 않습니다 — 두 블록 다 페르소나 프롬프트 안에 있습니다.",
   // 프로필 없는 페르소나 목록 줄 `<이름> — 티켓 <n>건이 참조 · <파일>` — 변수 셋이라
   // `wrap`(변수 하나 전용)이 아니라 조각 둘로 쪼갠다.
   "persona.missing.refsMiddle": "— 티켓",
@@ -860,11 +860,11 @@ export const ko: Record<string, string> = {
   // 워커 설정 다이얼로그 트리거(§4-15 결정 2 - §비주얼 §35 개정 ①, 티켓 ec2791db). 다이얼로그
   // 제목이 같은 낱말을 재사용해 새 문구는 이 하나로 끝난다.
   "workers.settingsDialog.trigger": "워커 설정",
-  // §5-3 §편집 표면이 사는 화면 §결정 2 — 사람이 워커 `.sh`를 손으로 고쳐 경계를
+  // §5-3 §편집 표면이 있는 화면 §결정 2 — 사람이 워커 `.sh`를 손으로 고쳐 경계를
   // 어긴 경우다(엔진은 검사하지 않는다). 온톨로지 화면의 경로 줄 + 워커 화면의 읽기 전용
   // 행 둘 다 붙는다(티켓 c5d51522 — 편집 표면은 온톨로지 화면으로, 이 키는 그 네임스페이스로).
   "ontology.location.inWorktree": "이 프로젝트의 git 작업 트리 안입니다",
-  // §5-3 §편집 표면이 사는 화면 §결정 3 — `_ontology/SCHEMA.md`도 `objects/`도
+  // §5-3 §편집 표면이 있는 화면 §결정 3 — `_ontology/SCHEMA.md`도 `objects/`도
   // 없는 폴더를 가리켰을 때. 지표-검사 표 대신 이 한 장이 뜬다.
   "ontology.notDira.title": "dira 형식이 아닙니다",
   "ontology.notDira.body":

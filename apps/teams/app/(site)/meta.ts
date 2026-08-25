@@ -2,7 +2,7 @@ import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import type { Metadata } from "next";
 
-/** 굽는 라우트 목록과 그 라우트의 메타데이터가 한 자리에 산다 — 사이트맵·canonical·
+/** 굽는 라우트 목록과 그 라우트의 메타데이터가 한 자리에 있다 — 사이트맵·canonical·
  *  `generateStaticParams`가 **같은 목록**을 봐야 어긋날 자리가 통째로 없어진다.
  *  종전 정본은 `config.ts`의 `transformPageData`(canonical·og·twitter 11줄)와
  *  `sitemap: { hostname }` 한 줄이고, 값은 한 개도 안 갈렸다(§SEO ② 태그 · §사이트 기반). */

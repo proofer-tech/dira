@@ -202,7 +202,7 @@ export default async function Personas({
               </p>
               {/* §5-1 · §비주얼 §25 ④ — 새 경고 UI를 만들지 않고 이 Alert에 한 절을 덧붙인다.
                   §32 ⑤가 그 문장을 메모리까지 넓혔다: 사실이 하나고 근거가 하나라(둘 다 페르소나
-                  프롬프트 안에 산다) 문장을 하나 더 붙이지 않는다 */}
+                  프롬프트 안에 있다) 문장을 하나 더 붙이지 않는다 */}
               <p>{t(locale, "persona.missing.noSkillsMemory")}</p>
               {missing.map((p) => (
                 <p key={p.name} className="font-mono text-xs break-all">

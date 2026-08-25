@@ -13,11 +13,11 @@ import { Behaviors, DarkToggle, MenuToggle, NavToggle, NO_FLASH } from "./shell"
 // 루트 산문 2장 `privacy`·`terms`) **한 벌**을 쓴다 — 렌더가 같아야 앵커 `id`·코드 토큰·표가
 // 안 갈리고, 셸이 같아야 크롬 여덟이 두 장에서 사라지지 않는다(§사이트 기반 §루트 산문 2장의
 // 셸 — 자리로 가르면 여덟이 같이 면제되고 그것이 지적 `f74ad5a7`을 낳은 자리다).
-// 파일이 하나인 것은 `Shell`이 `Doc`을 담는 그릇이라서다. 라우트 세그먼트 밖에 산다.
+// 파일이 하나인 것은 `Shell`이 `Doc`을 담는 그릇이라서다. 라우트 세그먼트 밖에 있다.
 
 // vitepress `config.ts:10-23`의 여섯 줄 그대로다. NFKD가 한글 음절을 자모로 쪼개고 결합문자
 // 제거가 자모를 안 건드려서 산출 `id`가 NFD로 남는 것을 끝의 `.normalize("NFC")`가 고정한다.
-// ponytail: 두 벌이 산다. 전환 티켓(§순서 ⑧)이 `.vitepress/`를 지울 때 이쪽만 남는다.
+// ponytail: 두 벌이 그대로다. 전환 티켓(§순서 ⑧)이 `.vitepress/`를 지울 때 이쪽만 남는다.
 const rControl = /[\u0000-\u001f]/g;
 const rSpecial = /[\s~`!@#$%^&*()\-_+=[\]{}|\\;:"'“”‘’<>,.?/]+/g;
 const rCombining = /[\u0300-\u036F]/g;

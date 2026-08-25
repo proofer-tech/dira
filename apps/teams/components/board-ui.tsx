@@ -388,7 +388,7 @@ const laneVisible = (top: number, bottom: number, lr: DOMRect) => bottom > lr.to
  *   - **레인 세로 스크롤** — `scroll`은 버블하지 않으므로 스트립에서 **캡처로** 받는다.
  *   - **창 리사이즈** — `window` 리스너.
  *   - **5초 폴링 리렌더** — 서버가 `relations`를 새로 주면 아래 effect가 다시 돌아 재측정한다.
- *     그래서 호버 stem이 effect 안의 지역변수가 아니라 `useState`다(effect가 다시 돌아도 산다).
+ *     그래서 호버 stem이 effect 안의 지역변수가 아니라 `useState`다(effect가 다시 돌아도 그대로다).
  *
  *  못 그리는 것은 **조용히 뺀다**(§17 에러): 상대가 DOM에 없거나(필터·검색·완료 20건 자르기)
  *  자기 레인의 보이는 상자와 안 겹치면 그 획만 없다. `화면 밖 N건` 같은 표시는 없다. */

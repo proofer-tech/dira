@@ -13,7 +13,7 @@ set -uo pipefail
 
 export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
-# 코드(이 레포)와 워커(티켓 루트 안)는 다른 곳에 산다.
+# 코드(이 레포)와 워커(티켓 루트 안)는 다른 곳에 있다.
 #   BASH_SOURCE = 이 파일(source돼도 맞다)  |  $0 = 나를 source한 워커 스크립트
 SELF="${BASH_SOURCE[0]}"
 while [ -L "$SELF" ]; do SELF="$(readlink "$SELF")"; done
@@ -340,7 +340,7 @@ case "$CMD" in
       fi
       # 죽이기 **전에** 답변 대기로 잠근다(§2-5 §개정). 열림에는 잠금이 없어서 같은 워커가
       # 1~4초 뒤 다시 문다 - 중단이 중단이 아니게 된다. 여기가 세 가지가 동시에 성립하는
-      # 유일한 구간이다: 창이 0이고(deps·awaiting은 clear+release를 지나 산다), 티켓 파일을
+      # 유일한 구간이다: 창이 0이고(deps·awaiting은 clear+release를 지나서도 남는다), 티켓 파일을
       # 쓰는 것이 나 혼자고(부모는 wait에 서 있다), 인용할 transcript가 아직 안 지워졌다.
       if ASK=$(python3 "$PY" askhuman "$P"); then log "$ASK"; else log "ASK-FAIL $H 답변 대기 잠금 실패"; fi
       # 강제: pid를 죽이면 그 세션의 부모 tick.sh가 wait에서 실패 판정으로 떨어져 이미
@@ -698,7 +698,7 @@ fi
 # 정상이다).
 ONTDIR="${TICKET_ONTOLOGY:-$TICKET_ROOT/ontology}"
 if find "$ONTDIR" -type f -name '*.md' 2>/dev/null | grep -q .; then
-  PROMPT="아래는 이 큐의 온톨로지가 사는 곳입니다.
+  PROMPT="아래는 이 큐의 온톨로지가 있는 곳입니다.
 
 ===== 온톨로지 ($ONTDIR) =====
 $ONTDIR 안의 _ontology/SCHEMA.md가 지도입니다(객체·관계·액션 타입의 진입점). 본문은 안 실립니다 -
@@ -942,7 +942,7 @@ OUTF="$LOGDIR/.out-${SID}"
 
 # --- 참견 입구: 스트리밍 입력 엔진일 때만 FIFO를 판다 ---
 # 갈림은 최종 argv에 `--input-format stream-json`이 인접해 있는가 하나다. 없으면 종전 그대로
-# (프로세스가 스스로 끝나고 RC가 판정) - Codex와 가짜 엔진이 그 경로로 산다.
+# (프로세스가 스스로 끝나고 RC가 판정) - Codex와 가짜 엔진이 그 경로로 간다.
 prev=""
 for arg in "${ENGINE[@]}"; do
   if [ "$prev" = "--input-format" ] && [ "$arg" = "stream-json" ]; then
@@ -964,7 +964,7 @@ if [ -n "$INBOX" ]; then
   # init조차 못 내고 멎는다. 2026-08-04 실측 - 동시 6개 FIFO 대형 프롬프트는 6/6 STALL,
   # 같은 프롬프트를 파일로 먹이면 6/6이 2초에 init. 1개만 띄우면 FIFO로도 되므로 한동안
   # 안 보이다가 워커가 늘면서 터졌다(7/30 실패 0% -> 8/3 22시 86%).
-  # cat 두 방으로 이어 붙여 참견 입구는 그대로 산다: 프롬프트 다음 줄부터 FIFO가 stdin이다.
+  # cat 두 방으로 이어 붙여 참견 입구는 그대로 남는다: 프롬프트 다음 줄부터 FIFO가 stdin이다.
   # 그룹에도 9>&-를 건다. cat이 fd 9(쓰기 끝)를 물려받으면 우리가 닫아도 자기가 writer라
   # EOF를 못 봐서 세션이 죽은 뒤에도 영영 남는다.
   # content가 문자열 하나면 매 디스패치 안 변하는 문서 층(HEAD)까지 변하는 꼬리(TAIL)와 한
@@ -1345,6 +1345,6 @@ if [ -n "$REAL" ] && [ "$REAL" != "$SID" ] && owns "$TPATH"; then
   python3 "$PY" assign "$TPATH" "$REAL"
   log "NOTE $THASH 세션키 정정 $SID -> $REAL"
 fi
-rm -f "$CDOWN"          # 세션이 끝까지 갔다 = 엔진이 산다. 창이 남아 있으면 여기서 푼다.
+rm -f "$CDOWN"          # 세션이 끝까지 갔다 = 엔진이 멀쩡하다. 창이 남아 있으면 여기서 푼다.
 log "DONE $THASH sid=${REAL:-$SID}"
 exit 0

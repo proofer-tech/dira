@@ -42,7 +42,7 @@ import {
 import { createTicket, type NewTicketState } from "@/app/(app)/p/[project]/(board)/actions";
 import type { UnassignRun } from "@/lib/engine";
 import { matchCombo } from "@/lib/keymap";
-// `composeAnswer`(§비주얼 §29 방향 — 체크박스마다 다시 돈다)는 여기 산다: node:*가 없는
+// `composeAnswer`(§비주얼 §29 방향 — 체크박스마다 다시 돈다)는 여기 있다: node:*가 없는
 // 클라이언트·서버 공용 순수 함수 자리다(AGENTS.md). `lib/queue.ts`는 `node:fs`를 타서 못 부른다.
 import {
   activeEpicFrom,
@@ -859,7 +859,7 @@ export function AnswerThread({
                 라벨을 `sr-only`로 숨기지 않는다(§13 — 아이콘만이면 "한 화면 아래로"와 안 갈린다).
                 variant·size·자리는 컴포넌트 기본값이 이미 §13 값이다.
                 **문구는 `맨 아래로`다**(§29 ③ — 상세의 병합 상자와 같은 말을 쓴다. 그릇·자리·모양은
-                §13 그대로다: 여기는 스크롤 위에 뜨는 층이라 그림자 근거가 산다) */}
+                §13 그대로다: 여기는 스크롤 위에 뜨는 층이라 그림자 근거가 그대로다) */}
             <MessageScrollerButton>
               <ArrowDown aria-hidden />
               맨 아래로
@@ -1725,7 +1725,7 @@ export function NewTicketDialog({
     .map((d) => ({ hash: d.hash, duedate: d.duedate }));
   const duedateConflictHash = duedateConflict(duedateInput, precedentDuedates, []);
 
-  // `⌘I`(§0-6 `board.new`). **이 컴포넌트만 보드 밖에도 산다**(티켓 상세의 복제) — 그래서
+  // `⌘I`(§0-6 `board.new`). **이 컴포넌트만 보드 밖에도 있다**(티켓 상세의 복제) — 그래서
   // 범위가 저절로 맞지 않고 부르는 쪽이 켠다. 여는 자리는 `RequestDialog`와 같은 `guard.close`다.
   useHotkey("board.new", (e) => {
     if (!hotkey) return;

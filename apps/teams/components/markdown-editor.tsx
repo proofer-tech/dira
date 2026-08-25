@@ -186,7 +186,7 @@ export function MarkdownEditor({
       // placeholder 표면이 blocks.map 표면으로 갈아 끼워진다(§P236-1 영역) — 그 remount로
       // e.currentTarget이 트리에서 빠진 옛 노드가 되면 호출부의 `e.currentTarget.closest("form")`이
       // null을 짚는다. 폼 탐색은 그릇 안 어느 후손에서 시작해도 같은 값이라, 절대 안 갈리는
-      // 루트로 옮겨 둔다(React가 이 이벤트 처리 끝에 null로 되돌리므로 우리 호출 안에서만 산다).
+      // 루트로 옮겨 둔다(React가 이 이벤트 처리 끝에 null로 되돌리므로 우리 호출 안에만 있다).
       e.currentTarget = rootRef.current ?? e.currentTarget;
     }
     onKeyDownRef.current?.(e); // 면이 키를 먹지 않는다 — 커밋 뒤 그대로 호출부로 넘긴다(못 ③)

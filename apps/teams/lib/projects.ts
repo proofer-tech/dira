@@ -1,6 +1,6 @@
 /** 프로젝트 레지스트리 + 프로젝트별 설정 해석 (DESIGN.md §프로젝트, §프로젝트별 설정 해석).
  *
- *  GUI는 큐 하나에 붙어 사는 게 아니라 사용자가 등록한 큐들을 전환하며 본다. 레지스트리는
+ *  GUI는 큐 하나에 붙어 있는 게 아니라 사용자가 등록한 큐들을 전환하며 본다. 레지스트리는
  *  머신 로컬 JSON 한 파일이고, 큐 위치·접미사·페르소나 디렉터리는 전부 프로젝트에서 받아온다. */
 import { mkdir, readFile, readdir, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -722,7 +722,7 @@ export type Persona = {
  *  엔진이 이 값으로 경로를 만들므로 `../../.ssh` 같은 이름은 프롬프트에 실려 나간다.
  *  통과해도 문자열을 믿지 않고 `resolveWithin`으로 기준 디렉터리 안인지 확인한다(심링크 포함).
  *
- *  파일명을 인자로 받는 이유: 페르소나 디렉터리에 사는 파일이 `PROFILE.md` 하나가 아니다
+ *  파일명을 인자로 받는 이유: 페르소나 디렉터리에 있는 파일이 `PROFILE.md` 하나가 아니다
  *  (`skills.md` — §5-1, `lib/skills.ts`). 방어가 두 벌이 되면 한쪽만 고쳐지는 날이 온다. */
 export async function personaFilePath(dir: string, name: string, file: string): Promise<string> {
   if (!NAME_RE.test(name)) {

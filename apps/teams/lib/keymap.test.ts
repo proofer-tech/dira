@@ -12,7 +12,7 @@ process.on("exit", () => rmSync(LOCAL, { recursive: true, force: true }));
 
 const { DEFAULT_KEYMAP, actionName, comboOf, formatCombo, matchCombo, shouldFire, validateBinding } =
   await import("./keymap.ts");
-// 파일 세 함수는 `registryPath()` 옆에 산다 — `keymap.ts`가 클라이언트 번들로 가기 때문이다
+// 파일 세 함수는 `registryPath()` 옆에 있다 — `keymap.ts`가 클라이언트 번들로 가기 때문이다
 // (그 파일 머리 주석). 여기서 같이 검증한다: 계약이 하나고 픽스처도 하나다.
 const { keymapPath, readKeymap, writeKeymap } = await import("./projects.ts");
 
@@ -145,7 +145,7 @@ test("shouldFire — 글 쓰는 중이면 `Mod` 없는 조합과 화면을 떠�
   assert.ok(shouldFire(ev({ key: "i", metaKey: true }), "board.new", "Mod+i", true));
   assert.ok(shouldFire(ev({ key: "k", metaKey: true }), "project.search", "Mod+k", true));
   // ④ 기본값을 맨글쇠로 되돌린 사람도 종전 거동을 그대로 받는다 — 검색 칸에 `n`을 쳐도
-  //    발행 다이얼로그가 열리지 않는다. 판정의 두 항 중 앞 항이 이 사람만을 위해 산다(§0-6)
+  //    발행 다이얼로그가 열리지 않는다. 판정의 두 항 중 앞 항이 이 사람만을 위해 남는다(§0-6)
   assert.ok(!shouldFire(ev({ key: "n" }), "board.new", "n", true));
   assert.ok(shouldFire(ev({ key: "n" }), "board.new", "n", false));
   // 가드를 통과해도 매칭은 매칭이다

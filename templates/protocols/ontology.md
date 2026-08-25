@@ -82,7 +82,7 @@ pm이 판정을 거절하면 그 요구는 티켓 본문에 남고 객체는 기
 본문에 남는다.** 산문을 금지하지 않는다 — 속성과 관계만 남으면 온톨로지가 아니라 테이블이 되고,
 "이 객체가 무엇이며 왜 이런 상태인가"라는 맥락이 사라진다.
 
-타입 정의는 `ontology/_ontology/<타입>.md`에 산다. 지도는 `ontology/_ontology/SCHEMA.md` 한
+타입 정의는 `ontology/_ontology/<타입>.md`에 있다. 지도는 `ontology/_ontology/SCHEMA.md` 한
 장 — 타입 이름 · 한 줄 뜻 · 정의 파일 링크만 든다. 새 객체는 `ontology/templates/<타입>.md`에서
 시작한다(frontmatter 키가 빈 채로 서 있고 채워서 옮긴다).
 

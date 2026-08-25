@@ -1312,7 +1312,7 @@ export function SettingsDialog({
               }}
             />
             {/* md 미만(767 이하)은 트리가 없다 — 종전 모양(섹션 넷 세로 나열 + 단일 스크롤)이
-                그대로 서고 검색칸만 산다(§45 ③). `w-full`이 등록 `w-(--sidebar-width)`를 덮고
+                그대로 서고 검색칸만 그대로다(§45 ③). `w-full`이 등록 `w-(--sidebar-width)`를 덮고
                 `bg-transparent`는 다크에서 필요하다(`--sidebar` 0.205 ≠ `--surface` 0.18, ③). */}
             <Sidebar collapsible="none" className="hidden min-h-0 w-full flex-1 bg-transparent md:flex">
               <SidebarContent className="gap-4 px-1 pb-1">

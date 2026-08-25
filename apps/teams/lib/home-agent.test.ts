@@ -524,7 +524,7 @@ test("대화 목록 — 새 대화 · 전환 · 경로 관문. UUID가 아닌 �
 
   // `새 대화`는 **여는 것**이다 — 옛 대화가 목록에 남고 `current`는 새 줄이다(§7)
   const b = await newConversation("p1");
-  await newConversation("p2"); // 파일 하나에 프로젝트 전부가 산다
+  await newConversation("p2"); // 파일 하나에 프로젝트 전부가 그대로다
   const home = await readHome("p1");
   assert.deepStrictEqual(
     home.conversations.map((c) => c.id),
@@ -1139,7 +1139,7 @@ test("실패 ② 인증 — 새 형식에서도 판정은 `api_error_status` 401
     assert.strictEqual(end.stopped, false);
   });
   // 세션을 못 연 채로 끝났으므로 그 줄은 **여전히 `fresh`다** — 다음 질문은 `--session-id`로
-  // 다시 연다(안 열린 세션에 `--resume`을 걸면 그 화면은 영영 안 산다)
+  // 다시 연다(안 열린 세션에 `--resume`을 걸면 그 화면은 영영 안 통한다)
   assert.strictEqual((await readHome(project.id)).conversations.at(-1)?.fresh, true);
 });
 
@@ -1270,7 +1270,7 @@ test("워커 세션 — 사라진 `current`는 대화 0건과 같고, 고르면 
     writeFileSync(path.join(root, "tickets", name), `---\n${fm}---\n\n본문\n`);
   put("aaaa1111.wip.md", `ticket: aaaa1111\ntitle: 도는 티켓\nsession_id: ${run}\nowner: developer / w1-deadbeef\n`);
   put("aaaa2222.done.md", `ticket: aaaa2222\ntitle: 끝난 티켓\nsession_id: ${done}\nowner: pm / w3-deadbeef\n`);
-  // 워커 세션의 트랜스크립트는 **워크트리 cwd 슬러그** 아래 산다 — `findTranscript`가 cwd와
+  // 워커 세션의 트랜스크립트는 **워크트리 cwd 슬러그** 아래 있다 — `findTranscript`가 cwd와
   // 무관하게 찾는다는 것이 이 티켓이 서는 근거다(§7 실측, `b96e7996`)
   writeFileSync(
     path.join(TRANSCRIPTS, `${done}.jsonl`),
@@ -1771,7 +1771,7 @@ test("runSchedules — 이미 도는 회차는 버리고 last만 올라간다(�
     const before = linesOf();
     const t0 = base + 60_000;
     await runSchedules(t0);
-    // 스폰됐는지는 서버의 활동으로 확인한다 — `hang` 모드는 끝나지 않으므로 `isAsking`이 참인 채로 산다
+    // 스폰됐는지는 서버의 활동으로 확인한다 — `hang` 모드는 끝나지 않으므로 `isAsking`이 참인 채로 남는다
     assert.strictEqual(isAsking(project.id), true);
     const first = (await readHome(project.id)).schedules[0]!;
     assert.ok(first.session_id);

@@ -143,7 +143,7 @@ import { cn } from "@/lib/utils";
 /** 화면이 답할 수 있다고 약속하는 범위가 곧 온보딩 예시 넷이다(§24 — 요구 원문의 예시 +
  *  §7이 스냅샷에 넣기로 한 것). 늘리려면 스냅샷이 먼저 늘어야 한다.
  *
- *  **여기 사는 것은 뒤의 둘뿐이다.** 앞의 둘은 워커 이름을 담아서 이 큐에 실제로 등록된
+ *  **여기 있는 것은 뒤의 둘뿐이다.** 앞의 둘은 워커 이름을 담아서 이 큐에 실제로 등록된
  *  워커에서 나와야 하고(§24 §앞의 둘은 이 큐에 실제로 등록된 워커 이름), 그 문장은 서버가
  *  만들어 `examples` prop으로 온다 — 워커 0개인 큐에서는 빈 배열이라 예시가 2개다. */
 const EXAMPLES = ["답변 대기 티켓이 왜 안 도나", "이 프로젝트의 프로토콜을 요약해 달라"];
@@ -375,7 +375,7 @@ export function HomeUI({
         setTurns((prev) => {
           const next = r.reset ? r.turns : r.turns.length ? [...prev, ...r.turns] : prev;
           // **중지 표식을 서버 응답에서도 받는다.** 트랜스크립트의 `[Request interrupted by user]`가
-          // `toTurns`에서 같은 칸을 채우지만(새로고침이 사는 근거), 그 줄이 이 폴링보다 늦게
+          // `toTurns`에서 같은 칸을 채우지만(새로고침이 남는 근거), 그 줄이 이 폴링보다 늦게
           // 쓰이는 창이 있다 — 그때 화면이 `중지됨`을 통째로 놓친다. 두 근거가 같은 칸을 채운다.
           return r.stopped ? markStopped(next) : next;
         });
@@ -861,7 +861,7 @@ export function HomeUI({
                 onChange={(e) => setText(e.target.value)}
                 onPaste={att.onPaste}
                 // `Enter`가 보낸다(§7-1) — `⇧`·`⌥`·`⌃` 중 하나라도 눌리면 줄바꿈이 그대로
-                // 들어간다. `⌘↵`(`Ctrl+Enter` 포함)는 `matchCombo`로 그대로 산다. 둘 다
+                // 들어간다. `⌘↵`(`Ctrl+Enter` 포함)는 `matchCombo`로 그대로 남는다. 둘 다
                 // `isComposing`이면 안 보내 받침을 확정하는 `Enter`에 글이 날아가지 않는다.
                 onKeyDown={(e) => {
                   if (matchCombo(e.nativeEvent, sendCombo)) {
@@ -1321,7 +1321,7 @@ function SidePanel({
                     `bg-sidebar-accent`(= `--muted` 값, §24가 hover에 쓰던 그것) + `font-medium`.
                     §0이 요구하는 *색 말고도 하나*를 굵기가 든다. `Check`이 걷힌 자리에
                     **`aria-current`가 처음 선다** — 종전 체크는 `aria-hidden`이라 AT에 표식이
-                    0개였다. `isActive`가 내는 것은 `data-active` 하나로 화면에만 산다.
+                    0개였다. `isActive`가 내는 것은 `data-active` 하나로 화면에만 있다.
                     **`hover:bg-sidebar-accent`와 보조 글자의 `group-hover/menu-button:
                     text-foreground`는 짝이다** — `--muted-foreground` on `--muted`는 §21이
                     금지한 4.34다. */}

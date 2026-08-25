@@ -28,7 +28,7 @@ export function analyticsPath(): string {
 // **이 타입이 표를 닫는다.** 표 밖의 이름·파라미터는 컴파일이 거부한다. GA4는 모르는 이름도
 // 받아 주므로 타입이 막지 않으면 화면에 조용히 쌓인다. 늘리려면 §0-11 표를 먼저 고친다.
 
-// `Screen`과 경로 → enum 매핑(`screenOf`)은 `urls.ts`에 산다 — 그것을 부르는 쪽이 클라이언트다.
+// `Screen`과 경로 → enum 매핑(`screenOf`)은 `urls.ts`에 있다 — 그것을 부르는 쪽이 클라이언트다.
 
 export type Events = {
   app_open: { app_version: string; shell: "desktop" | "browser" };
@@ -67,7 +67,7 @@ export function shellParams(): Events["app_open"] {
   return { app_version: v || "dev", shell: v ? "desktop" : "browser" };
 }
 
-// ── 파일 — 사는 키는 `install_id`·`enabled` 둘뿐이다 ────────────────────────
+// ── 파일 — 담기는 키는 `install_id`·`enabled` 둘뿐이다 ────────────────────────
 
 type Settings = { install_id?: string; enabled?: boolean };
 

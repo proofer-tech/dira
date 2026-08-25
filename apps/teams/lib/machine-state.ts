@@ -212,7 +212,7 @@ export function machineState(nowMs: number = Date.now()): MachineState {
 /** Server Action이 부르는 쓰기 — 화면이 그 순간 나열한 사건 전부의 `to`를 한 번에 보관한다
  *  (§0-10 §보관 = 읽음이다 — 개정 `4ea7e8d9`로 단위가 이벤트 하나에서 목록이 됐다. 키는 안
  *  갈린다). 모듈 메모리의 `readTo`는 그 목록의 최댓값 — 지금 이 서버가 그 값을 즉시 반영하는
- *  자리로 남고, 편지함의 `archived`가 재시작을 넘겨 사는 자리다(§0-10 §저장). 목록에 없는 `to`나
+ *  자리로 남고, 편지함의 `archived`가 재시작을 넘겨 있는 자리다(§0-10 §저장). 목록에 없는 `to`나
  *  편지함에 그 사건이 없으면(상한에 밀렸거나 아직 하트비트가 못 적었으면) 조용히 넘어간다. */
 export async function markResumeRead(toMsList: number[]): Promise<void> {
   if (toMsList.length === 0) return;
