@@ -7704,8 +7704,8 @@ P183-3만 둘을 하드로 문다(모양 정본과 모듈 계약이 없으면 �
 
 | # | 무엇 | persona | deps |
 |---|---|---|---|
-| 1 | 구현 - 박의 머신 스코프 셋(`heartbeat` 쓰기 - `runSchedules` - `webhookTick`)을 소유자 하나만 돈다 + 순수 함수 판정 + `node --test` | developer | - |
-| 2 | QA - 위 수용조건 다섯 줄 판정(서버 둘을 실제로 띄운다) | qa | 1 |
+| 1 | 구현 - 박의 머신 스코프 셋(`heartbeat` 쓰기 - `runSchedules` - `webhookTick`)을 소유자 하나만 돈다 + 순수 함수 판정 + `node --test` `f71c2cda` | developer | - |
+| 2 | QA - 위 수용조건 다섯 줄 판정(서버 둘을 실제로 띄운다) `33355186` | qa | `f71c2cda` |
 
 **엔진에 닿는 값 0이다** - `tick.sh` - `tickets.py` - `test_*.py`를 안 만지고 새 cron 줄도 없다.
 
