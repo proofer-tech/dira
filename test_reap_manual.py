@@ -69,6 +69,15 @@ try:
     pj = mk(ws, "jjjj0000", ["session_id: nosuchsession-zzzz",
                              "assigned_at: " + iso(-T.REAP_GRACE_SEC - 60)],
             body="## 목표\n테스트\n\n## 블록\n사람이 로그인해야 한다.\n\n## 질문 1\n\n답해주세요.\n")
+    # L) 결정 16 - REAP_CLEAR 여섯 키 전부 빔 + mtime이 유예를 넘음 -> 주인 없는 `.wip` -> 회수
+    pl = mk(ws, "llll1111", [])
+    old = time.time() - T.REAP_GRACE_SEC - 60
+    os.utime(pl, (old, old))
+    # M) 같은 모양인데 마지막 절이 `## 블록` -> 열림 + awaiting + `## 질문 1`(결정 7과 같은 결과)
+    pm = mk(ws, "mmmm2222", [], body="## 목표\n테스트\n\n## 블록\n결정해주세요.\n")
+    os.utime(pm, (old, old))
+    # N) 같은 모양인데 mtime이 유예 이내 -> claim 직후일 수 있으니 아직 안 본다
+    pn = mk(ws, "nnnn3333", [])
 
     msgs = T.reap(ws)
     joined = "\n".join(msgs)
@@ -125,6 +134,24 @@ try:
     assert "REAP jjjj0000 attempts=1" in joined, "J: 묵은 블록을 신선으로 봤다\n" + joined
     assert not T.read_fm(jopen)[0].get("awaiting", "").strip(), "J: 묵은 블록에 awaiting을 걸었다"
 
+    # L) 주인 없는 `.wip`(결정 16) - 열림으로 회수되고 메시지에 해시가 남는다
+    lopen = os.path.join(ws, "tickets/llll1111.md")
+    assert not os.path.exists(pl) and os.path.exists(lopen), "L: 주인 없는 .wip이 회수되지 않았다"
+    assert "llll1111" in joined, "L: 회수 메시지에 해시가 없다\n" + joined
+
+    # M) 같은 모양 + 신선한 블록 -> 답변 요청(결정 7과 같은 결과)
+    mopen = os.path.join(ws, "tickets/mmmm2222.md")
+    assert not os.path.exists(pm) and os.path.exists(mopen), "M: 주인 없는 블록 .wip이 열리지 않았다"
+    assert "ASK mmmm2222" in joined, "M: 답변 요청으로 안 올라갔다\n" + joined
+    mfm, mlines, mend = T.read_fm(mopen)
+    mawait = mfm["awaiting"].strip()
+    assert len(mawait) == 8, "M: awaiting 미기록 " + repr(mawait)
+    assert "## 질문 1" in "\n".join(mlines[mend:]), "M: 질문 절이 없다"
+
+    # N) 여섯 키 전부 빈 것은 같지만 mtime이 유예 이내 -> claim 직후일 수 있어 손대지 않는다
+    assert os.path.exists(pn), "N: 유예 이내인데 회수했다"
+    assert "nnnn3333" not in joined, "N: 유예 이내인데 보고했다\n" + joined
+
     # H) 유령 회귀(5f0498c9): 리퍼 둘이 겹쳐도 사라진 .wip을 되살리지 않는다
     ph = mk(ws, "hhhh8888", ["session_id: nosuchsession-zzzz",
                              "assigned_at: " + iso(-T.REAP_GRACE_SEC - 60)])
@@ -175,7 +202,7 @@ try:
     assert out == "", "K3: 미충족 dep인데 잠갔다: " + out
     assert not T.read_fm(pk3)[0].get("awaiting", "").strip(), "K3: awaiting이 생겼다"
 
-    print("PASS 13/13")
+    print("PASS 16/16")
     for m in msgs:
         print("  " + m)
 finally:

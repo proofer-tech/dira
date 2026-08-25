@@ -889,13 +889,22 @@ def reclaim(path, fm, why):
 def reap_manual(path, fm, now):
     """손으로 잡은 진행중 티켓(session_id 없음) 판정. 메시지 리스트 반환.
 
-    pid가 없으면 종전대로 손대지 않는다(생존을 확인할 방법이 없으므로 회수도 하지 않는다).
+    pid가 없으면 종전대로 손대지 않는다(생존을 확인할 방법이 없으므로 회수도 하지 않는다) --
+    단, `REAP_CLEAR` 여섯 키가 전부 비어 있으면 애초에 아무도 claim하지 않은 주인 없는 `.wip`이다
+    (DESIGN.md 결정 16). 그때는 파일 mtime이 `REAP_GRACE_SEC`을 넘긴 뒤에만 `reclaim`으로
+    되돌린다 -- claim(rename)과 frontmatter 기록 사이의 순간에는 여섯 키가 다 비어 있으므로
+    유예가 없으면 방금 claim한 티켓을 그 세션의 손에서 빼앗는다.
     pid 죽음 = 회수. pid 살아있음 = 트랜스크립트를 테일해 유휴 여부만 보고하고 건드리지 않는다 --
     작업 중인 워크트리를 자동 회수하면 미완 변경분이 붕 뜨므로, 블록 처리 규약대로 사람 판단에 맡긴다.
     """
     pid = (fm.get("pid") or "").strip().strip("\"'")
     if not pid.isdigit():
-        return []
+        if any((fm.get(k) or "").strip() for k in REAP_CLEAR):
+            return []                    # 손 클레임(pid만 없음) - 종전대로 안 건드린다
+        mtime = datetime.fromtimestamp(os.path.getmtime(path), timezone.utc)
+        if (now - mtime).total_seconds() < REAP_GRACE_SEC:
+            return []                    # claim 직후일 수 있다 - 유예 안
+        return [reclaim(path, fm, "주인 없는 `.wip`(REAP_CLEAR 전부 빔)")]
     h = ticket_hash(path, fm)
     try:
         at = datetime.fromisoformat((fm.get("claimed_at") or "").strip())
