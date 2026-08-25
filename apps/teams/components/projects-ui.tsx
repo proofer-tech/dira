@@ -206,6 +206,7 @@ export function CreateForm({
   // 피커가 값을 넣으려면 제어 입력이어야 한다.
   const [dir, setDir] = useState("");
   const [spec, setSpec] = useState("");
+  const [ontology, setOntology] = useState("");
   const slug = slugify(name);
   const showId = (name.trim() !== "" && slug === "") || !!state.needId;
   const err = state.error;
@@ -229,6 +230,7 @@ export function CreateForm({
             get("dir"),
             get("branch"),
             get("spec"),
+            get("ontology"),
             get("id") || undefined,
           );
           setState(r);
@@ -306,6 +308,26 @@ export function CreateForm({
         </div>
         <p className="text-xs text-muted-foreground">
           선택. 비우면 그 줄(AGENTS.md 지도 표 한 행)을 자리표시자 그대로 둡니다
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="create-ontology">온톨로지 자리</Label>
+        {/* 고른 절대경로를 그대로 채운다 — 스펙 문서 칸과 달리 상대경로 환산이 없다
+            (§0-3 §온톨로지 자리를 만들 때 정한다). 비우면 아무것도 안 쓴다(선택) */}
+        <div className="flex items-center gap-2">
+          <Input
+            id="create-ontology"
+            name="ontology"
+            className="font-mono"
+            placeholder="<프로젝트 폴더>/.dira/ontology"
+            value={ontology}
+            onChange={(e) => setOntology(e.target.value)}
+          />
+          <PickPath mode="directory" label="온톨로지 자리" onPick={setOntology} />
+        </div>
+        <p className="text-xs text-muted-foreground">
+          선택. 비우면 기본값(&lt;프로젝트 폴더&gt;/.dira/ontology)을 씁니다
         </p>
       </div>
 

@@ -61,6 +61,7 @@ import {
   setMultiplayEnabled,
   isMultiTokenAllowed,
   setMultitoken,
+  validateOntologyInput,
   type Project,
   type ProjectConfig,
 } from "@/lib/projects";
@@ -76,7 +77,13 @@ import {
   type Ticket,
 } from "@/lib/queue";
 import { preflight, scaffold } from "@/lib/scaffold";
-import { cronRegisterCmd, listWorkers, markAlertsRead, registerCron } from "@/lib/workers";
+import {
+  cronRegisterCmd,
+  listWorkers,
+  markAlertsRead,
+  registerCron,
+  writeOntology,
+} from "@/lib/workers";
 import { tildePath } from "@/lib/urls";
 import {
   maskWebhookUrl,
@@ -278,6 +285,9 @@ export type CreateState = RegisterState & {
     cron: boolean;
     cronError?: string;
     registerCmd: string;
+    /** 온톨로지 자리 칸을 채웠는데 거절됐다(§0-3 §온톨로지 자리를 만들 때 정한다). `cronError`와
+     *  같은 규약 — 만들기는 되돌리지 않고, 사유와 함께 온톨로지 화면에서 다시 정하라고 안내한다. */
+    ontologyError?: string;
   };
 };
 
@@ -294,6 +304,7 @@ export async function createProject(
   projectDir: string,
   branch: string,
   specDoc: string,
+  ontology?: string,
   id?: string,
 ): Promise<CreateState> {
   let created: CreateState["created"] | undefined;
@@ -309,6 +320,21 @@ export async function createProject(
       branch: branch.trim(),
       specDoc: specDoc.trim() || undefined,
     });
+
+    // 온톨로지 자리 (§0-3 §온톨로지 자리를 만들 때 정한다) — scaffold 다음, registerCron 앞.
+    // 비면 아무것도 안 쓴다(0바이트). 거절돼도 만들기를 안 되돌린다 — cronError와 같은 규약으로
+    // 사유만 결과에 담는다. 검증도 쓰기도 저장 액션(workers/actions.ts)이 이미 쓰는 그 함수다.
+    let ontologyError: string | undefined;
+    const ontologyInput = ontology?.trim();
+    if (ontologyInput) {
+      try {
+        const resolved = await validateOntologyInput(made.root, ontologyInput, await readLanguage());
+        await writeOntology(made.root, resolved);
+      } catch (e) {
+        ontologyError = (e as Error).message;
+      }
+    }
+
     const workerPath = path.join(made.root, "workers", "w1.sh");
     const cronError = await registerCron(workerPath).then(
       () => undefined,
@@ -321,6 +347,7 @@ export async function createProject(
       skipped: made.skipped,
       cron: !cronError,
       cronError,
+      ontologyError,
       registerCmd: cronRegisterCmd({ path: workerPath }),
     };
 

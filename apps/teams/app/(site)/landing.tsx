@@ -229,6 +229,18 @@ export default function Landing({
               </AlertDescription>
             </Alert>
           )}
+          {createdInfo.ontologyError && (
+            <Alert variant="destructive">
+              <TriangleAlert aria-hidden />
+              <AlertTitle>온톨로지 자리를 정하지 못했습니다</AlertTitle>
+              <AlertDescription className="grid gap-2">
+                <span className="break-all">{createdInfo.ontologyError}</span>
+                <Link href={`/p/${view.project.id}/ontology`} className="underline">
+                  온톨로지 화면에서 다시 정하세요
+                </Link>
+              </AlertDescription>
+            </Alert>
+          )}
         </div>
       )}
       <ConfigTable view={view} />
