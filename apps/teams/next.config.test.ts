@@ -9,7 +9,7 @@ import assert from "node:assert";
  *  `next.config.ts`의 `env.DIRA_MULTI_TOKEN`은 항상 정의된 문자열("0"/"1")이어야 한다 — 그래야
  *  어느 방향이든 Next 번들러가 리터럴로 굽는다. `flags.test.ts`처럼 `isMultiToken()`을 직접
  *  부르는 테스트는 `next.config.ts`를 안 거치므로 이 결함을 못 잡는다(그건 이미 통과했었다). */
-test("next.config env.DIRA_MULTI_TOKEN — 없어도 undefined를 안 흘리고 \"0\"으로 못박는다", async () => {
+test("next.config env.DIRA_MULTI_TOKEN — 없어도 undefined를 안 흘리고 \"0\"으로 고정한다", async () => {
   const saved = process.env.DIRA_MULTI_TOKEN;
   try {
     delete process.env.DIRA_MULTI_TOKEN;

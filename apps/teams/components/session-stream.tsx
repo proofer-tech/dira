@@ -295,7 +295,7 @@ export function SessionStream({
   const visibleEvents =
     variant === "worker" ? events.filter((e) => matchesStreamFilter(e, kindFilter, query)) : events;
 
-  // 시간순 한 줄기(§2-3 ②) — 순서 규칙은 `lib/urls.ts`의 순수 함수가 들고 있고 테스트가 못박는다.
+  // 시간순 한 줄기(§2-3 ②) — 순서 규칙은 `lib/urls.ts`의 순수 함수가 들고 있고 테스트가 고정한다.
   const merged = mergeProgress(visibleEvents, thread);
   // 말풍선인가는 `label === ""` 하나로 판정한다(assistant `text` · 참견 · 첫 아닌 사용자 프롬프트가
   // 전부 빈 label). `groupProgress`가 그 줄기를 말풍선(경계)과 그 사이 묶음으로 가른다(§2-6 ②).

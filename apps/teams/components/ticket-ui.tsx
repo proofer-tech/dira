@@ -735,7 +735,7 @@ export function UnassignButton({
       )}
       {assigned && ghost && (
         <p className="text-xs text-muted-foreground">
-          열린 티켓에 <span className="font-mono">session_id</span>가 박혀 있습니다 —{" "}
+          열린 티켓에 <span className="font-mono">session_id</span>가 적혀 있습니다 —{" "}
           <span className="font-mono">select</span>가 영구 제외하고{" "}
           <span className="font-mono">reap</span>은 <span className="font-mono">.wip</span>만 보므로,
           할당 해제만이 이 티켓을 큐로 되돌립니다.
@@ -1361,7 +1361,7 @@ function useCloseGuard(dirty: boolean, reset: () => void) {
   };
 }
 
-/** 닫기 확인 — 문구·기본 초점은 §3이 박아둔 값이다. 삭제 확인(`DeleteTicketButton`)과 같은
+/** 닫기 확인 — 문구·기본 초점은 §3이 정해 둔 값이다. 삭제 확인(`DeleteTicketButton`)과 같은
  *  `AlertDialog`고 같은 규칙이다: 기본 초점이 취소 쪽이라 Enter 한 번에 글이 날아가지 않는다. */
 function DiscardConfirm({ guard }: { guard: ReturnType<typeof useCloseGuard> }) {
   return (

@@ -29,7 +29,7 @@ function getServerSnapshot() {
 /** 300ms 지나서도 `active`면 `true`를 낸다 - 그 전에 꺼지면 한 프레임도 안 뜬다(§65 ③).
  *  전환기 `프로젝트 관리` 항목의 "여는 중"(§65 ④)도 이 지연을 그대로 쓴다.
  *
- *  `active`가 꺼지면 **렌더 중에** 바로 `visible`을 내린다(React가 문서로 못박은 "이전 값과
+ *  `active`가 꺼지면 **렌더 중에** 바로 `visible`을 내린다(React가 문서로 고정한 "이전 값과
  *  비교해 렌더 중 상태를 조정하는" 패턴) - 이펙트 본문에서 곧장 `setState`를 부르면 커밋
  *  직후 렌더가 한 번 더 도는 것을 react-hooks/set-state-in-effect가 잡는다. */
 export function useDelayedFlag(active: boolean, delayMs: number = ROUTE_PENDING_DELAY_MS) {

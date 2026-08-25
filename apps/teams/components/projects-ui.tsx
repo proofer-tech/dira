@@ -276,7 +276,7 @@ export function CreateForm({
           />
           <PickPath mode="directory" label="프로젝트 폴더" onPick={setDir} />
         </div>
-        {/* `.dira`가 아니라 그 부모다 — 등록 폼과 갈리는 지점이라 도움말로 못박는다 */}
+        {/* `.dira`가 아니라 그 부모다 — 등록 폼과 갈리는 지점이라 도움말로 고정한다 */}
         <p className="text-xs text-muted-foreground">여기에 .dira를 만듭니다. ~는 확장됩니다</p>
       </div>
 

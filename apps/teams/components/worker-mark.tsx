@@ -50,7 +50,7 @@ export function WipWorker({
   const owner = t.fm.owner ?? "";
   if (!name) return owner || "—";
   // `workerOf`의 계약 그대로 — 이름 뒤는 `-` + sid 8자다. 새 파싱 규칙이 아니라 그 결과가 선 자리고,
-  // 둘이 갈리지 않는 것은 `lib/workers.test.ts`의 "워커 마크 ② 전문 자리"가 못박는다
+  // 둘이 갈리지 않는 것은 `lib/workers.test.ts`의 "워커 마크 ② 전문 자리"가 고정한다
   const at = owner.length - name.length - 9;
   return (
     <>

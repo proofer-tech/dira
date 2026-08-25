@@ -21,7 +21,7 @@ const geistMono = Geist_Mono({
 
 // `icons`는 `app/icon.svg`(Next 메타데이터 관행)가 지던 것이다 — 옛 site 패키지를
 // 합친 이사(`6a24257d`)로 `public/icon.svg`가 정본이 되면서(§한 코드베이스 §부딪히는 것, 파일명 해시가 안 붙는
-// URL이 계약이라서다) 여기서 명시로 못박는다. `(site)/layout.tsx`도 같은 값을 못박는다 —
+// URL이 계약이라서다) 여기서 명시로 고정한다. `(site)/layout.tsx`도 같은 값을 고정한다 —
 // 두 루트 레이아웃이 갈려서 한쪽에만 적으면 나머지 트리의 파비콘이 없어진다.
 export async function generateMetadata(): Promise<Metadata> {
   const locale = await readLanguage();

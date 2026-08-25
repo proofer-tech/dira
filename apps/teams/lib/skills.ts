@@ -98,7 +98,7 @@ async function readSkillFile(file: string): Promise<Skill | null> {
 
 /** `SKILL.md` frontmatter에서 `name`·`description`만 꺼낸다. **YAML 파서를 안 쓴다**
  *  (AGENTS.md §의존성). 접힘(`>`)·리터럴(`|`) 블록은 더 들여쓴 줄을 **공백으로 접어 한 줄**로
- *  만든다(§5-1) — 우리가 이 값으로 하는 일은 목록 한 줄에 박는 것뿐이라 줄바꿈이 뜻을 갖지 않는다.
+ *  만든다(§5-1) — 우리가 이 값으로 하는 일은 목록 한 줄에 넣는 것뿐이라 줄바꿈이 뜻을 갖지 않는다.
  *  `name:`이 없으면 null이다: 이름이 곧 지목이라 이름 없는 스킬은 고를 수 없다. */
 export function parseSkillFm(text: string): Skill | null {
   const lines = text.split("\n");

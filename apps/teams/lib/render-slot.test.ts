@@ -1,4 +1,4 @@
-/** `render={<X/>}`의 `data-slot` 승자를 못박는다 (티켓 `41e37153`).
+/** `render={<X/>}`의 `data-slot` 승자를 고정한다 (티켓 `41e37153`).
  *
  *  base-ui의 트리거는 `mergeProps(트리거props, render.props)`로 **render 쪽을 이기게** 한다
  *  (`@base-ui/react/internals/useRenderElement.mjs`). 그런데 그 `render.props`는 flight 참조가

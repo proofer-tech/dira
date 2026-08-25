@@ -6,7 +6,7 @@
  *
  *  **읽기 조회는 부르지 않는다**: 해시 → 경로는 `lib/queue.ts`의 미러(`findPath` = `find_any`)가
  *  답한다. 스폰이 요청마다 160~360ms고 세션 스트림은 2초마다 그 길로 온다(38b11db5). 미러는
- *  패리티 테스트로 못박혀 있고, 원자성이 걸린 건 여기 없다 — 판정은 파일 목록 하나다. */
+ *  패리티 테스트로 고정돼 있고, 원자성이 걸린 건 여기 없다 — 판정은 파일 목록 하나다. */
 import { execFile } from "node:child_process";
 import path from "node:path";
 import { promisify } from "node:util";

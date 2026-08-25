@@ -213,7 +213,7 @@ export function MarkdownEditor({
       if (!root || !(active instanceof HTMLElement) || !active.isContentEditable || !root.contains(active)) return;
       const next = commitEditable(active, split);
       if (next === null) return;
-      if (hiddenInputRef.current) hiddenInputRef.current.value = next; // state 리렌더 전에 값을 박는다
+      if (hiddenInputRef.current) hiddenInputRef.current.value = next; // state 리렌더 전에 값을 넣는다
       setText(next);
     };
   });

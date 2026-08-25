@@ -58,7 +58,7 @@ apps/site/
 
 ### 버전 드리프트를 코드로 막는다
 
-기존 페이지는 `v0.1.2`가 본문에 박혀 있고 `apps/desktop/package.json`은 이미 `0.1.4`다.
+기존 페이지는 `v0.1.2`가 본문에 적혀 있고 `apps/desktop/package.json`은 이미 `0.1.4`다.
 `release.yml`이 master 커밋마다 bump하므로 손으로 적는 한 영구히 어긋난다.
 
 `.vitepress/config.ts`가 빌드 때 `../desktop/package.json`의 `version`을 읽어 테마 데이터로

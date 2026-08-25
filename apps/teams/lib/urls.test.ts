@@ -648,8 +648,8 @@ test("remainingLabel — 시·분, 0분도 그대로 그린다", () => {
   assert.equal(remainingLabel(-1000, "ko"), "0분"); // 경계를 지나도 음수를 안 그린다
 });
 
-// en 화면에 한글이 새는 회귀(`4f7def31`)를 못박는다 — `i18n.test.ts`의 조립 문구
-// 테스트(`blocked("en", "3h 30m", 2)`)가 미리 못박은 그 낱말과 같다.
+// en 화면에 한글이 새는 회귀(`4f7def31`)를 고정한다 — `i18n.test.ts`의 조립 문구
+// 테스트(`blocked("en", "3h 30m", 2)`)가 미리 고정한 그 낱말과 같다.
 test("remainingLabel — en은 약어로 그린다", () => {
   assert.equal(remainingLabel(3 * 3600_000 + 30 * 60_000, "en"), "3h 30m");
   assert.equal(remainingLabel(42 * 60_000, "en"), "42m");

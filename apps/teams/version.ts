@@ -2,7 +2,7 @@
  *  `release.yml`이 master 커밋마다 bump하므로 손으로 적는 한 반드시 어긋난다. */
 // 종전(이사 `6a24257d` 전의 옛 site 패키지)에는 정적 JSON import(`import pkg from
 // "../desktop/package.json" with { type: "json" }`)였다. `apps/teams`는 `next.config.ts`가
-// `turbopack.root`를 `apps/teams`로 못박아서(§한 코드베이스 §부딪히는 것 ④ — Next가 홈
+// `turbopack.root`를 `apps/teams`로 고정해서(§한 코드베이스 §부딪히는 것 ④ — Next가 홈
 // 디렉터리를 안 훑는 계약이다) 그 root 밖인 `apps/desktop/package.json`을 정적 import로
 // 못 부른다("server relative imports are not implemented yet" — turbopack 실측).
 //

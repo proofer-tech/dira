@@ -394,7 +394,7 @@ catch가 무조건 그 경로라 파일 배치로는 못 고친다(위 둘째 �
 
 **`build` 스크립트의 `NODE_ENV=production`을 지우지 마라.** `next build`는 물려받은
 `NODE_ENV`를 존중한다(`next/dist/bin/next:66` — `process.env.NODE_ENV || 'production'`).
-`next dev`는 자기 프로세스에 `NODE_ENV=development`를 박고(같은 파일 `:95`), dira 앱이
+`next dev`는 자기 프로세스에 `NODE_ENV=development`를 지정하고(같은 파일 `:95`), dira 앱이
 그 프로세스에서 워커를 detach spawn하므로(`lib/kick.ts:32`) **앱이 띄운 세션은 전부
 `NODE_ENV=development`를 물려받는다.** 그 환경에서 굽던 옛 `next build`는 커밋과 무관하게
 항상 `/_global-error` 프리렌더에서 `TypeError: Cannot read properties of null (reading
@@ -456,7 +456,7 @@ import { listTickets } from "./queue.ts";   // lib 안에서는 확장자 `.ts`�
 **타입만 가져올 때는 `import type`을 쓴다** — 안 쓰면 런타임에 없는 바인딩을 import해서 터진다.
 
 `lib/queue.ts`는 `tickets.py`와 판정이 같아야 한다(NFC 정규화, 상태 접미사, `deps` 두 문법,
-미할당 판정). 눈으로 맞추지 말고 **패리티 테스트**로 못박는다 — 같은 픽스처 큐에 대해
+미할당 판정). 눈으로 맞추지 말고 **패리티 테스트**로 고정한다 — 같은 픽스처 큐에 대해
 `python3 tickets.py list`와 TS 결과를 비교한다.
 
 ## 의존성 근거

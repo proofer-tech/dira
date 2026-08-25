@@ -312,7 +312,7 @@ cd apps/teams && pnpm install && pnpm dev     # http://localhost:7331
 
 **엔진 없이도 돌지만 엔진을 대체하지 않는다.** GUI만 띄워도 큐를 읽고 티켓을 만들 수 있지만
 그 티켓을 실제로 물어 세션에 넘기는 건 여전히 cron에 물린 워커다. GUI는 같은 파일을 보는 창이고,
-읽기 판정이 `tickets.py`와 갈리지 않도록 패리티 테스트로 못박아 둔다(`cd apps/teams && pnpm test`).
+읽기 판정이 `tickets.py`와 갈리지 않도록 패리티 테스트로 고정해 둔다(`cd apps/teams && pnpm test`).
 
 위 **의존성 0은 엔진이 하는 약속**이고 GUI는 그 밖이다 - 별개 Next.js 앱이라 의존성도 자기
 몫이고, 안 쓰면 `pnpm install`을 할 일도 없다. 제품 스펙은 [`docs/DESIGN.md`](docs/DESIGN.md).

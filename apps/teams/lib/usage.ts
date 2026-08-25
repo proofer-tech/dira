@@ -87,7 +87,7 @@ function tokensOf(rec: Record<string, unknown> | null): number | null {
 
 /** 세션 하나의 토큰량(§2-13 §개정 — 원판은 `total_cost_usd`를 읽었다). `tokensOf`가 이미 내는
  *  그 합을 그대로 돌려준다 — 새 파서 0개. 캐시 Map의 `cost` 필드가 개정 뒤 담는 값이 이것이다
- *  (필드 이름은 안 바꾼다 — 닿는 자리가 이 여섯 함수로 못박혀 있고 `readLog`·캐시는 그 밖이다). */
+ *  (필드 이름은 안 바꾼다 — 닿는 자리가 이 여섯 함수로 고정돼 있고 `readLog`·캐시는 그 밖이다). */
 function costOf(rec: Record<string, unknown> | null): number {
   return tokensOf(rec) ?? 0;
 }
@@ -228,8 +228,8 @@ export type CostChunk = { text: string; title?: string };
  *  가를 두 번째 수가 있을 때만 뜻이 있다). 세션 수 칸은 `cost`가 있을 때만 선다(합계 0개 =
  *  `모름`이면 통째로 빠진다 — 위 `TicketCost` 주석과 같은 조건 하나). `모름`의 `title`은 로그가
  *  있는데 종료 기록이 없는지(①), 로그 자체가 0개인지(②③)를 가른다 — §2-13 §천장 ②③은 "같은
- *  글자로 보이는 것이 옳다"고 못박았다. `모름`이어도 `unaccounted > 0`(= `.wip`의 도는 세션)이면
- *  §0-8과 같은 문구를 마저 붙인다 — §천장 ①이 `모름`과 이 문구를 같이 세우라고 못박았다(둘은
+ *  글자로 보이는 것이 옳다"고 고정했다. `모름`이어도 `unaccounted > 0`(= `.wip`의 도는 세션)이면
+ *  §0-8과 같은 문구를 마저 붙인다 — §천장 ①이 `모름`과 이 문구를 같이 세우라고 정했다(둘은
  *  배타적 분기가 아니다). */
 export async function ticketCostChunk(root: string, hash: string): Promise<CostChunk> {
   const c = await ticketCost(root, hash);
@@ -372,7 +372,7 @@ function workerOfRest<T extends { worker: string }>(rest: string, workers: T[]):
  *  **`workers/<w>.sh`의 `TICKET_CWD`를 파싱하지 않는다** — 실측으로 이 큐의 워커 8개 중 넷이
  *  `TICKET_CWD="$HOME/…"`로 셸 변수를 안 펼친 채 적혀 있어서, 문자열 그대로 인코딩하면 없는
  *  디렉터리가 나오고 **에러가 아니라 0이 된다**(화면이 절반만 세면서 통과한다). 대신 큐 루트에서
- *  유도한 접두로 고른다 — CORE §워커 작업 디렉터리가 못 박은 그 규칙이다. */
+ *  유도한 접두로 고른다 — CORE §워커 작업 디렉터리가 고정한 그 규칙이다. */
 async function scanRate(root: string, projects: string): Promise<Record<string, number>> {
   const trees = path.join(root, "worktrees");
   // 워크트리를 쓰면 그 아래 **전부**가 이 프로젝트다(하위 디렉터리에서 뜬 세션도 든다).
@@ -485,7 +485,7 @@ function maxWindow(candidates: Window[]): Window | null {
 }
 
 /** 분 → 사람이 읽는 창 이름(`5시간`·`7일`). codex의 `window_minutes`가 실측 없이 아무 값이나
- *  올 수 있어 claude처럼 키 이름에 못 박지 않는다.
+ *  올 수 있어 claude처럼 키 이름에 고정하지 않는다.
  *
  *  ponytail: 일·시간·분 셋만 안다. 더 잘게(주 단위 등) 필요해지면 그때 분기 하나 더 붙인다.
  *  낱말은 로케일을 탄다(§0-16, `dd97c69c`) — `common.unit.*`을 그대로 쓴다(새 단위 사전이 아니다). */
@@ -513,7 +513,7 @@ export function pickCodexWindow(rl: CodexRateLimits | null, locale: Locale = DEF
   return maxWindow(candidates);
 }
 
-/** 분 → 헤더 키(§0-8 §재개정 (1)). 키가 `5h`·`7d`로 못 박혀 있어 `windowLabel`이 분에서 만드는
+/** 분 → 헤더 키(§0-8 §재개정 (1)). 키가 `5h`·`7d`로 고정돼 있어 `windowLabel`이 분에서 만드는
  *  이름을 그대로 재활용한다(300분 = `5시간`, 10080분 = `7일`) — 새 사전을 안 만든다. */
 const CLAUDE_WINDOW_MINUTES = { "5h": 5 * 60, "7d": 7 * 24 * 60 } as const;
 

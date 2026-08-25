@@ -94,7 +94,7 @@ export async function saveAttachment(
  *  경로를 만든 것은 위 `saveAttachment`지만 돌아오는 길은 브라우저다 — 화면이 그리는
  *  `<input type="hidden" name="attachment">`는 값의 **표기**이지 값이 아니고, 요청은 손으로
  *  만들 수 있다. 밖을 가리키는 경로가 그대로 본문에 실리면 그 티켓을 받은 세션이 `Read`로
- *  큐 밖 파일을 연다 — §8이 자리를 `attachments/` 하나로 못박은 것이 여기서 무너진다.
+ *  큐 밖 파일을 연다 — §8이 자리를 `attachments/` 하나로 고정한 것이 여기서 무너진다.
  *
  *  판정은 `saveAttachment`와 **같은 `resolveWithin`**이다(규칙이 둘이면 한쪽이 낡는다).
  *  빈 목록이면 fs를 안 만진다: `attachments/`는 첫 첨부에 생기므로 아직 없을 수 있다. */

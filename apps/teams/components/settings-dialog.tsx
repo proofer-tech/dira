@@ -978,7 +978,7 @@ function OtherEngineSection({
   );
 }
 
-/** 화면에 키를 적는 그릇 하나 — 값은 §비주얼 §21이 박았다(**배경 없음**: `bg-muted`를 깔면
+/** 화면에 키를 적는 그릇 하나 — 값은 §비주얼 §21이 정했다(**배경 없음**: `bg-muted`를 깔면
  *  라이트 4.34로 AA 미달). 안에 들어가는 글자는 `formatCombo`가 만든다. */
 function Kbd({ className, children }: { className?: string; children: React.ReactNode }) {
   return (
@@ -1266,7 +1266,7 @@ export function SettingsDialog({
           )
         }
       />
-      {/* 폭·높이는 §비주얼 §45(요구 `6793ecb7`)가 못박은 값이다 — 패널 내용폭 480 정박에서
+      {/* 폭·높이는 §비주얼 §45(요구 `6793ecb7`)가 고정한 값이다 — 패널 내용폭 480 정박에서
           역산된다. `md:overflow-hidden`이 다이얼로그 쪽 스크롤을 닫는다 — md+에서는 패널만
           스크롤한다(아래 SidebarProvider). md 미만은 종전처럼 다이얼로그 하나가 스크롤한다. */}
       <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto md:overflow-hidden sm:max-w-[44rem]">

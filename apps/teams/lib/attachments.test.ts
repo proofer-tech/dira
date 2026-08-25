@@ -58,7 +58,7 @@ test("같은 이름 두 번이 서로 안 덮는다", async () => {
 
 test("20MB 초과가 거절된다 — 다른 셋과 다른 문장이다", async () => {
   // 21MB를 실제로 할당하지 않는다: 크기 판정이 `arrayBuffer()` **앞**이라 읽히지 않는다
-  // (그게 이 테스트가 못박는 것이기도 하다 — 읽은 뒤 거절하면 거절이 비싸다).
+  // (그게 이 테스트가 고정하는 것이기도 하다 — 읽은 뒤 거절하면 거절이 비싸다).
   const huge = {
     name: "dump.bin",
     size: MAX_BYTES + 1,
@@ -77,7 +77,7 @@ test("20MB 초과가 거절된다 — 다른 셋과 다른 문장이다", async 
 });
 
 test("상한 경계 — 정확히 20 MiB는 통과, 1바이트 크면 §6 문장", async () => {
-  // 바이트를 진짜로 20MB 만들지 않는다. 이 테스트가 못박는 것은 부등호(`>` vs `>=`)이지
+  // 바이트를 진짜로 20MB 만들지 않는다. 이 테스트가 고정하는 것은 부등호(`>` vs `>=`)이지
   // 쓰기가 아니다 — 쓰기는 위 두 테스트가 이미 본다.
   const edge = (size: number) =>
     ({ name: "edge.bin", size, arrayBuffer: async () => new ArrayBuffer(0) }) as unknown as File;

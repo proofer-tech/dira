@@ -17,7 +17,7 @@ const { languagePath, readLanguage, setLanguage } = await import("./projects.ts"
 test("없는 키는 ko로 떨어진다 — 빈 문자열도 키 이름 노출도 아니다", () => {
   assert.strictEqual(t("ko", "settings.language.label"), "언어");
   // 621c7a97이 설정 다이얼로그의 en을 채운 뒤로, 실제로 폴백에 걸리는 키는 **다음 묶음이
-  // ko부터 넣는 동안**에만 생긴다. 그 상태를 여기서 만들어 못박는다 — 이 폴백이 109파일을
+  // ko부터 넣는 동안**에만 생긴다. 그 상태를 여기서 만들어 고정한다 — 이 폴백이 109파일을
   // 묶음으로 쪼갤 수 있게 하는 못이다(§0-16 §장치 "없는 키").
   ko["test.koOnly"] = "아직 영어가 없다";
   try {
@@ -32,7 +32,7 @@ test("ko에도 없는 키는 개발 실수로 던진다", () => {
 });
 
 // 30a8f5c3 첫 묶음 — `settings-dialog.tsx`가 변수와 조합해 그리는 문구는 원문과 한 글자도
-// 안 갈려야 한다(§0-16 Done when). 단일 키 치환은 자명해 검증하지 않고, 조합만 못박는다.
+// 안 갈려야 한다(§0-16 Done when). 단일 키 치환은 자명해 검증하지 않고, 조합만 고정한다.
 test("settings-dialog.tsx의 조합 문구 — 원문 그대로 재조립된다", () => {
   assert.strictEqual(
     `${t("ko", "settings.keymap.resetTooltipPrefix")} ⌘K${t("ko", "settings.keymap.resetTooltipSuffix")}`,
@@ -57,7 +57,7 @@ test("settings-dialog.tsx의 조합 문구 — 영어도 문장이 된다", () =
 });
 
 // 932ae344 — 사전 밖에 있던 서버 문자열(키맵 액션 이름 · 거절 사유 · aria-label 조합 · 토큰
-// 표시명 접두)을 ko 키로 뽑았다. 조합 결과가 원문과 한 글자도 안 갈리는지 여기서 못박는다.
+// 표시명 접두)을 ko 키로 뽑았다. 조합 결과가 원문과 한 글자도 안 갈리는지 여기서 고정한다.
 test("932ae344 — 새로 뽑은 조합 문구들이 원문 그대로 재조립된다", () => {
   assert.strictEqual(
     `${t("ko", "settings.keymap.action.project.search")} ${t("ko", "settings.keymap.resetActionSuffix")}`,
@@ -125,7 +125,7 @@ test("이미 찬 묶음(설정·마감·셸)의 ko 키는 en에 하나도 안 �
 });
 
 // 62e0b85e — 우선순위 묶음. 상속 한 줄은 해시·유효값 두 변수 사이에 사전 조각이 끼는 자리라
-// 조립 결과를 두 언어 다 못박는다(`ticket-ui.tsx`의 JSX는 줄바꿈 공백을 지우므로, 조각과
+// 조립 결과를 두 언어 다 고정한다(`ticket-ui.tsx`의 JSX는 줄바꿈 공백을 지우므로, 조각과
 // 해시 사이에 공백이 없고 조각과 유효값 사이에만 공백 하나가 있다).
 test("우선순위 상속 한 줄 — 두 언어에서 다 문장이 된다", () => {
   const line = (l: "ko" | "en", hash: string, effective: number) =>
@@ -146,7 +146,7 @@ test("우선순위 다섯 단계에 꼬리 문구가 전부 있다", () => {
 });
 
 // 5debff0e — 마감 묶음. 값이 끼는 문장이 셋이라(파생 한 줄 · 종 ⑦ 제목 · 종 ⑦ 나열) 조립 결과를
-// 두 언어 다 못박는다. 조립식은 `ticket-ui.tsx`·`layout.tsx`의 JSX 그대로다 — 줄바꿈 공백이
+// 두 언어 다 고정한다. 조립식은 `ticket-ui.tsx`·`layout.tsx`의 JSX 그대로다 — 줄바꿈 공백이
 // 지워지는 자리(해시 뒤 · 숫자 뒤)에만 조각이 공백 없이 붙는다.
 test("마감 파생 한 줄 — 두 언어에서 다 문장이 된다", () => {
   const line = (l: "ko" | "en", remaining: string, baseline: number) =>
@@ -194,7 +194,7 @@ test("종 ⑦ 제목·나열 — 두 언어에서 다 문장이 된다", () => {
 });
 
 // 셸 둘째 묶음(§0-16 §발행 §묶음 표 2, `dd97c69c`) — 변수를 낀 조립 문구들이 원문과 한 글자도
-// 안 갈리는지 못박는다. 조립식은 `layout.tsx`·`project-switcher.tsx`의 JSX 그대로다(줄바꿈만
+// 안 갈리는지 고정한다. 조립식은 `layout.tsx`·`project-switcher.tsx`의 JSX 그대로다(줄바꿈만
 // 있는 공백은 지워지고, 같은 줄의 공백 하나는 남는다).
 test("dd97c69c — 알림 트리거·종 넷(②③④의 개수 제목)·전환기 0건 조립이 원문 그대로다", () => {
   const trigger = (n: number) =>
@@ -241,7 +241,7 @@ test("dd97c69c — status bar `% 사용` 뒤에 창 이름이 붙어도 안 붙�
 });
 
 // 90be3eeb — 그 조립들의 영어. 어순이 갈리는 자리(숫자를 콜론 뒤로 보낸 제목 · 꼬리가 빈
-// 배너 제목 · 공백으로 여는 조각 둘)만 못박는다. 단일 키 치환은 위 전수 대조가 이미 잡는다.
+// 배너 제목 · 공백으로 여는 조각 둘)만 고정한다. 단일 키 치환은 위 전수 대조가 이미 잡는다.
 test("90be3eeb — 셸 조립 문구가 영어에서도 문장이 된다", () => {
   const trigger = (n: number) =>
     `${t("en", "bell.trigger.countPrefix")} ${n}${t("en", "bell.trigger.countSuffix")}`;
@@ -338,7 +338,7 @@ test("wrap — 빈 조각은 빠지고 공백이 겹치지 않는다", () => {
 });
 
 // 93c106b3 — 프로토콜 화면(묶음 7). 변수가 낀 조각 조립이 이행 전 원문과 바이트 단위로
-// 같은지 못박는다(en은 아직 없으므로 ko만 — 7a86fd5c가 en을 채운 뒤 그쪽에서 두 언어를 본다).
+// 같은지 고정한다(en은 아직 없으므로 ko만 — 7a86fd5c가 en을 채운 뒤 그쪽에서 두 언어를 본다).
 // 조립식은 각 JSX의 실제 형태 그대로다(줄바꿈만 있는 자리는 공백 0, 명시 공백은 그대로 하나).
 test("93c106b3 — 프로토콜 화면의 조립 문구가 원문과 바이트 단위로 같다(ko)", () => {
   const l = "ko" as const;
@@ -519,7 +519,7 @@ test("7a86fd5c — 프로토콜 화면의 조립 문구가 영어에서도 문�
 });
 
 // 화면 이행 셋째 묶음 - 페르소나 갈래(§0-16 §발행 §묶음 표 행 7, `204be4da`). 변수를 낀 조립
-// 문구가 원문(이행 전 하드코딩 한국어)과 한 글자도 안 갈리는지 못박는다. 조립식은
+// 문구가 원문(이행 전 하드코딩 한국어)과 한 글자도 안 갈리는지 고정한다. 조립식은
 // `personas-ui.tsx`·`personas/actions.ts`·`lib/skills.ts`·`[[...persona]]/page.tsx`의 JSX ·
 // 템플릿 리터럴 그대로다(줄바꿈만 있는 공백은 지워지고, 같은 줄의 공백 하나는 남는다).
 // 스쿼드 블록 자체는 `50fd4b34`로 사전을 떠나 `squadBlockBytes`(`lib/budgets.ts`)의

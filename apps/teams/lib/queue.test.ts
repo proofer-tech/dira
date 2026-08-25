@@ -791,7 +791,7 @@ test("식별자 — stem 파생 · 경고 조건은 엔진 find와 판정이 같
 
 /** 같은 stem이 두 상태로 동시에 있는 큐 — `_find_stem`은 바깥이 **파일** · 안쪽이 접미사라
  *  이기는 것은 접미사 순서가 아니라 **파일 목록 순서**다. stem 인덱스(`923f5f34`)가 후보 3개 중
- *  목록에서 가장 앞선 파일을 고르는지 못박는다: 접미사 순서(`""` → wip → done)로 골랐다면
+ *  목록에서 가장 앞선 파일을 고르는지 고정한다: 접미사 순서(`""` → wip → done)로 골랐다면
  *  dup00002가 `.md`로 떨어져 여기서 깨진다.
  *
  *  **여기서만 엔진과 대조하지 않는다.** `tickets_in`은 `glob.glob`(디렉터리 원본 순서)이고
@@ -801,7 +801,7 @@ test("식별자 — stem 파생 · 경고 조건은 엔진 find와 판정이 같
  *  하나다). 사람이 손으로 복사해 만든 경우에만 생기고, 그때 화면과 CLI가 다른 파일을 가리킨다. */
 test("find_any — 같은 stem이 두 상태로 있으면 파일 순서가 이긴다(접미사 순서가 아니다)", async () => {
   const root = newRoot();
-  // `ticket:`을 stem으로 박는다 — 둘 다 같은 해시를 묻게 해서 findAny가 **누구를 고르는지** 본다
+  // `ticket:`을 stem으로 넣는다 — 둘 다 같은 해시를 묻게 해서 findAny가 **누구를 고르는지** 본다
   for (const n of ["dup00001.md", "dup00001.wip.md", "dup00002.done.md", "dup00002.md"]) {
     await write(root, n, fm({ ticket: n.split(".")[0], title: "중복 stem" }));
   }
@@ -981,7 +981,7 @@ test("보드 — 5상태 판정 · 필터 AND/OR · 검색 대상 · 정렬", as
 
   // 완료는 기본으로 **보인다**(§1 보드 · 사람 요청 `38108932`) — `status`가 URL에 하나도 없으면
   // page.tsx가 상태 6값을 넣고, `완료 숨기기` 프리셋이 `HIDE_DONE_STATUSES`를 넣는다.
-  // "없을 때 무엇을 넣느냐"는 그쪽 유도라 여기서는 **넣는 두 값이 각각 무엇을 내는지**를 못박는다.
+  // "없을 때 무엇을 넣느냐"는 그쪽 유도라 여기서는 **넣는 두 값이 각각 무엇을 내는지**를 고정한다.
   // (분량은 상태 축이 아니라 칸반 `완료` 레인의 최근 20건 자르기가 받는다 — 필터 판정 밖이다.)
   assert.ok(!HIDE_DONE_STATUSES.includes("done")); // 섞이면 프리셋이 자기 이름과 다른 일을 한다
   const allStatuses = [...HIDE_DONE_STATUSES, "done"]; // = 상태 필터 선택지 6개 = 기본값
@@ -1090,7 +1090,7 @@ function pySelect(root: string, env: Record<string, string> = {}): string {
 }
 
 /** 답변 파일 하나가 큐의 잠금을 푸는 것과 GUI 판정이 같은 순간에 켜지고 꺼지는지.
- *  판정만 맞추면 소용없다 — 실제로 `select`에 뜨는지를 엔진에게 물어 못박는다. */
+ *  판정만 맞추면 소용없다 — 실제로 `select`에 뜨는지를 엔진에게 물어 고정한다. */
 test("답변 대기 판정 + 답변 파일 생성으로 재큐 (엔진과 대조)", async () => {
   const r = newRoot();
   await write(
@@ -1382,7 +1382,7 @@ test("optionsOf — 옛 형식 거부: (가)(A), ### Q1., 헤딩 없는 그룹 (
   assert.deepStrictEqual(optionsOf("### Q1. 그릇과 수명\n- (a) 첫째\n- (b) 둘째"), []);
   // 번호 없는 그룹의 `Q<n>` 폴백도 죽는다 — `###` 헤딩 자체가 없으면 그룹이 없다
   assert.deepStrictEqual(optionsOf("- (a) 첫째\n- (b) 둘째\n- (c) 셋째"), []);
-  // 목록 마커 없는 줄은 산문이다(결정 10 ②가 이미 못박았고 11도 그대로, `083e3c1c` 실측)
+  // 목록 마커 없는 줄은 산문이다(결정 10 ②가 이미 고정했고 11도 그대로, `083e3c1c` 실측)
   assert.deepStrictEqual(
     optionsOf("### 1.\n다른 요구의 답을 인용하며 (b) 표시 전용을 문장 안에 쓴다."),
     [{ heading: "1.", number: "1.", options: [], sub: [] }],
@@ -1671,7 +1671,7 @@ test("defaultPicks — default_answer를 초기 picks로 (결정 12 (4)(5))", ()
 });
 
 /** `lastQuestionOptions` — `AnswerForm`(클라이언트)이 받는 카드 데이터의 서버 쪽 조립.
- *  `optionsOf`가 이미 못박은 파싱을 **어느 라운드에** 돌리는지만 재확인한다(결정 11 ①). */
+ *  `optionsOf`가 이미 고정한 파싱을 **어느 라운드에** 돌리는지만 재확인한다(결정 11 ①). */
 test("lastQuestionOptions — 마지막 질문 라운드에서만 돈다, 질문 0개는 빈 배열", () => {
   const answered = "### 1.\n- (a) 첫째\n- (b) 둘째\n";
   const openWithOptions = "### 1.\n- (a) 셋째\n";
@@ -1765,8 +1765,8 @@ test("req 왕복 — 출처·파생 양방향, deps와 섞이지 않고 큐를 �
 
 // ── 보드 표현 (DESIGN.md §1 보드 요구사항·`kind: answer` 항 · 결정 4) ─────────
 //
-// 위 테스트가 **판정**을 못박고, 이 테스트는 그 판정이 **보드의 컬럼·필터·목록**으로 어떻게
-// 번역되는지를 못박는다: 답변 대기는 `blocked`의 하위 종류이고 답변 파일은 기본 목록에 없다.
+// 위 테스트가 **판정**을 고정하고, 이 테스트는 그 판정이 **보드의 컬럼·필터·목록**으로 어떻게
+// 번역되는지를 고정한다: 답변 대기는 `blocked`의 하위 종류이고 답변 파일은 기본 목록에 없다.
 
 test("보드 — 답변 대기는 deps 대기의 하위 종류 · kind: answer 기본 제외", async () => {
   const root = newRoot();

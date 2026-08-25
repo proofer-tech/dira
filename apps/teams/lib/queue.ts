@@ -2,7 +2,7 @@
  *
  *  판정이 한 글자라도 갈리면 GUI가 거짓말을 한다. 그래서 이 파일은 예쁘게 쓰지 않고
  *  `tickets.py`의 함수(is_open_name·read_fm·deps_of·deps_unmet·find_any·scan)를 줄 단위로
- *  베낀다. 눈으로 맞추지 말고 queue.test.ts의 패리티 테스트로 못박는다.
+ *  베낀다. 눈으로 맞추지 말고 queue.test.ts의 패리티 테스트로 고정한다.
  *  YAML 파서를 쓰지 않는 이유도 같다 — 엔진이 정규식이라 파서를 쓰면 판정이 갈린다. */
 import { readFile, readdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";

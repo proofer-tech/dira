@@ -106,7 +106,7 @@ function MessageScrollerViewport({
         // 계산된다**(CSS Overflow 3). 그래서 자손이 1px만 삐져나와도 가로 스크롤바가 15px을 먹고
         // **상시** 그려졌다(답과 입력칸 사이 회색 띠 — 1440×900 실측). §비주얼 §24의 "스크롤하는
         // 요소는 Viewport 하나"는 그 하나가 **세로로만** 스크롤한다는 뜻이라, 축을 계산에 맡기지
-        // 않고 여기서 못박는다. 넓은 것(표·펜스)은 자기 그릇이 `overflow-x-auto`로 받으므로
+        // 않고 여기서 고정한다. 넓은 것(표·펜스)은 자기 그릇이 `overflow-x-auto`로 받으므로
         // (`components/markdown.tsx`) 여기서 잘리는 건 없다.
         // `command.tsx`·`select.tsx`도 같은 짝을 쓴다
         "w-full min-h-0 min-w-0 overflow-x-hidden overflow-y-auto overscroll-contain contain-content",

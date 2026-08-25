@@ -186,7 +186,7 @@ test("workerSessions — `.wip` 전부가 먼저, `.done`은 최근 10개. sessi
   tmps.push(path.dirname(root));
   const tickets = path.join(root, "tickets");
   mkdirSync(tickets, { recursive: true });
-  // mtime을 손으로 박는다 — 같은 초에 쓰이면 정렬을 판정할 수 없다
+  // mtime을 손으로 넣는다 — 같은 초에 쓰이면 정렬을 판정할 수 없다
   const put = (name: string, fm: string, min: number) => {
     const p = path.join(tickets, name);
     writeFileSync(p, `---\n${fm}---\n\n본문\n`);
@@ -334,7 +334,7 @@ test("toolFlags — 네 조각과 경로 스코프 여섯 (89962e56 · 7e35d300 
 
   // ① 네 조각이 다 있다. `--allowed-tools`는 **도구를 빼지 않고**(권한 목록이다) 나머지 셋 중
   // 하나라도 빠지면 세션에 `Bash`가 살아난다 — 그게 `89962e56` 그 사건이다. 지금은 넷째가
-  // 경로 스코프까지 지므로 그것도 **존재**로 못박는다. 실측은 `home-agent.ts` 머리 주석에 있다.
+  // 경로 스코프까지 지므로 그것도 **존재**로 고정한다. 실측은 `home-agent.ts` 머리 주석에 있다.
   for (const flag of ["--tools", "--strict-mcp-config", "--permission-mode", "--allowed-tools"]) {
     assert.ok(flags.includes(flag), `${flag}가 빠졌다 — 도구 표면이 §7 표보다 넓어진다`);
   }
@@ -596,7 +596,7 @@ test("상한 20 — 21번째 대화를 열면 가장 오래된 줄이 파일에�
 });
 
 /** 화면이 대화 목록을 **폴링 응답 하나**에서 받는다(§비주얼 §24 — 트리거도 스레드도 그 한 벌이다).
- *  두 가지를 같이 못박는다: 목록이 그 응답에 들어 있다는 것과, **전환한 대화의 트랜스크립트가
+ *  두 가지를 같이 고정한다: 목록이 그 응답에 들어 있다는 것과, **전환한 대화의 트랜스크립트가
  *  그려진다**는 것. 뒤엣것이 `switchConversation` 단독 검증과 갈리는 자리다 — 저건 파일에 무엇을
  *  쓰느냐이고 여기는 **그래서 화면에 무엇이 그려지느냐**다. */
 test("폴링이 대화 목록을 데려온다 — 전환하면 그 대화의 트랜스크립트가 그려지고, 21개째여도 20줄이다", async () => {
@@ -1484,7 +1484,7 @@ test("답 줄을 도는 중에 집어 가도 프로세스가 죽는 폴링에서
  *  도착하면, 응답은 A가 아니라 B의 것으로 온다 — 화면은 `r.sessionId !== target`으로 그
  *  응답을 버려야 한다(`components/home-ui.tsx`의 `poll()`). 이 계약이 조용히 바뀌면(예:
  *  넘긴 sessionId로 데이터를 고르게 바뀌면) 그 가드는 죽은 코드가 되고 아무도 모른다 —
- *  여기서 못박는다. */
+ *  여기서 고정한다. */
 test("pollHome — 왕복 사이 current가 다른 대화로 넘어가면 옛 target으로 물어도 새 대화가 온다", async () => {
   const project = { id: "stale-poll-test", name: "큐", root: CWD };
   await withFake("hang", async () => {

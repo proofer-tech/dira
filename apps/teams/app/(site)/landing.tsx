@@ -601,7 +601,7 @@ export default function Landing({
     않고 남은 것까지 지우시려면 <code>~/.config/dira/analytics.json</code> 한 개를 지우면
     됩니다</li>
   </ul>
-  {/* 그림 — 새로 찍지 않는다. `08-onboarding`이 §매뉴얼 §스크린샷이 박아 둔 «프로젝트 0건일
+  {/* 그림 — 새로 찍지 않는다. `08-onboarding`이 §매뉴얼 §스크린샷이 정해 둔 «프로젝트 0건일
       때의 `/`»고 그것이 설치 후 첫 화면이다(로드맵 §P235-1). alt는 `docs/first-ticket.md:14`가
       이미 쓰던 문장에서 이 절이 가리키는 것만 남겼다. 자리·간격은 위 절과 같다. */}
   <figure style={{ marginTop: 24 }}>

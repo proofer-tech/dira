@@ -62,7 +62,7 @@ const nextConfig: NextConfig = {
   experimental: { serverActions: { bodySizeLimit: BODY_SIZE_LIMIT }, proxyClientMaxBodySize: BODY_SIZE_LIMIT },
   // 다중 토큰 잠금(DESIGN.md §0-13 §잠금) — `isMultiToken()`이 읽는 값을 빌드 시각에 상수로
   // 인라인한다. 런타임 env로 두면 배포한 dmg가 잠금 분기를 품은 채 나가 env 하나로 열린다.
-  // 값을 항상 "0"/"1" 중 하나로 못박는다 — `next/dist/lib/static-env.js`의 `getNextConfigEnv`가
+  // 값을 항상 "0"/"1" 중 하나로 고정한다 — `next/dist/lib/static-env.js`의 `getNextConfigEnv`가
   // `value != null`일 때만 치환 규칙을 만들어서, 빌드 시각 값이 `undefined`(잠금 빌드)면 치환
   // 자체가 안 생기고 서버 청크에 `process.env.DIRA_MULTI_TOKEN` 표현식이 그대로 남아 런타임
   // 프로세스 env로 매 요청 재평가된다(28f72b69) — 잠금 방향이 정확히 안 굳는다.

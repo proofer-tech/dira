@@ -3,7 +3,7 @@
  *  조회는 `tickets.py find`의 미러가 답한다(38b11db5 — 스폰이 요청마다 160~360ms였다). 그래서
  *  여기서 볼 것은 **판정이 엔진과 같은가**다: 경로를 조립하면 통과할 수 없는 케이스(접미사 붙은
  *  이름·`re-` 폴백·형식 밖 해시·`ticket:`이 파일명과 갈린 티켓)를 고른다.
- *  find_any 자체의 패리티(엔진 출력과 줄 단위 대조)는 `queue.test.ts`가 못박는다. */
+ *  find_any 자체의 패리티(엔진 출력과 줄 단위 대조)는 `queue.test.ts`가 고정한다. */
 import { test } from "node:test";
 import assert from "node:assert";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -44,7 +44,7 @@ test("findTicket — 접미사·`re-` 폴백을 엔진과 같이 판정한다", 
 });
 
 /** a606dd0e — 보드는 `Ticket.hash`(frontmatter 우선)로 링크를 걸고 조회는 stem으로 했다.
- *  둘이 갈리는 티켓은 화면이 링크한 URL이 404였다. 여기서 판정을 못박는다:
+ *  둘이 갈리는 티켓은 화면이 링크한 URL이 404였다. 여기서 판정을 고정한다:
  *  **보드가 URL에 실을 수 있는 값은 전부 파일로 해석된다.** */
 test("findTicket — 해시가 파일명 stem과 갈려도 찾는다", async () => {
   const t = (n: string) => path.join(root, "tickets", n);
@@ -134,7 +134,7 @@ test("unassign — 워커 0개면 부를 스크립트가 없다(화면은 이 �
 /** §2-5 — 산 세션은 종료 코드 `3`으로 거부되고, `--force`면 그 세션을 끊고 풀린다.
  *
  *  **판정은 코드다. 거부 문구가 아니다**: 화면이 문구를 정규식으로 읽으면 문구를 고치는 순간
- *  확인 다이얼로그가 조용히 사라진다. 그래서 여기서 못박는 것은 `run.code === 3` 하나다.
+ *  확인 다이얼로그가 조용히 사라진다. 그래서 여기서 고정하는 것은 `run.code === 3` 하나다.
  *
  *  산 pid는 진짜로 만든다(`sleep`) — `ps`가 답해야 `tick.sh`의 생존 판정이 돈다. 조상 사슬
  *  면제에는 안 걸린다: 이 자식은 워커 스크립트의 **형제**지 조상이 아니다(주인 세션이 자기 손으로

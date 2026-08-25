@@ -4,7 +4,7 @@ import test from "node:test";
 
 // `project-switcher.tsx`는 next/CSS를 끌고 오는 클라이언트 컴포넌트라 import를 못 댄다
 // (선례 `sidebar.test.ts` · `settings-dialog.test.ts`) — 그래서 소스 글자를 댄다.
-// 티켓 a722fe44: 전환기 항목에 `/`의 행 액션 셋을 배선한다. 여기서 못박는 것은 손으로 보기
+// 티켓 a722fe44: 전환기 항목에 `/`의 행 액션 셋을 배선한다. 여기서 고정하는 것은 손으로 보기
 // 쉬운 자리(모양·색)가 아니라 회귀가 조용한 자리(팔레트-다이얼로그 순서·키 삼킴·검색 중 비활성·
 // 등록 해제 뒤 이동)다.
 const s = readFileSync("components/project-switcher.tsx", "utf8");

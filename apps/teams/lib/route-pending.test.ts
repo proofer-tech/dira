@@ -4,12 +4,12 @@ import { createPendingSet } from "./route-pending-set.ts";
 
 // `route-pending.ts`(React · next/navigation을 문 파일)는 여기서 직접 import 못 한다 —
 // `project-switcher.test.ts` 머리 주석과 같은 사유(node 네이티브 TS 로더의 모듈 해석 실측).
-// 값 하나(`ROUTE_PENDING_DELAY_MS = 300`)는 소스 문자열로 못박는다.
+// 값 하나(`ROUTE_PENDING_DELAY_MS = 300`)는 소스 문자열로 고정한다.
 import { readFileSync } from "node:fs";
 const routePendingSrc = readFileSync("lib/route-pending.ts", "utf8");
 
 // §0-22 결정 2 — `<Link>`(useLinkStatus) · `router.push`/`replace`(useTransition) 두 갈래가
-// 소스별 토큰으로 이 집계기 하나에 모인다. 여기서 못박는 건 눈으로 보기 쉬운 값(300)이 아니라
+// 소스별 토큰으로 이 집계기 하나에 모인다. 여기서 고정하는 건 눈으로 보기 쉬운 값(300)이 아니라
 // 조용히 깨지는 자리 — dedup과 다중 소스 겹침이다.
 
 test("ROUTE_PENDING_DELAY_MS는 300이다 — §비주얼 §65 ③ 상수 하나", () => {

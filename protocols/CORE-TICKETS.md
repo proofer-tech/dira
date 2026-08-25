@@ -163,11 +163,15 @@ new writing**:
 | `선다` `서 있다` `세운다` (화면 요소가) | `뜬다` `생긴다` `그려진다` `성립한다` `만든다` |
 | `말한다` `말해 준다` (화면/제목/문서/수가) | `보여준다` `알려 준다` `적혀 있다` `가리킨다` |
 | `숨 쉰다` `깨어난다` `자리 잡고 산다` | banned, no replacement |
+| `못박는다` `못박았다` `못박은` | `고정한다` `정했다` `명시했다` `정한` |
+| `값을 박는다` `해시가 박혀 있다` | `값을 넣는다` `해시가 적혀 있다` |
 
 The exception is a real process, session, or pid - `pid가 살아 있다`, `세션이 아직 살아
 있다`, `부모가 wait에 서 있다` stay as they are, and so does any sentence whose subject is a
 person. A ticket, file, or setting is not a live thing: write `열려 있는 동안`, `그대로
-남는다`.
+남는다`. `박다`/`못박다` is banned as a metaphor for fixing a rule or a value (the vendored
+guidance's own example: `코드로 박는 자리 -> 코드에 명시하는 상황`); quoting the section
+name `§못박는 것` keeps its letters until that section is renamed.
 
 Already-written files aren't rewritten under this rule - the §Characters clause above
 applies here word for word.

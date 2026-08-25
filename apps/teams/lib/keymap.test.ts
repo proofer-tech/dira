@@ -42,7 +42,7 @@ test("DEFAULT_KEYMAP — §0-6 액션 표 8줄과 id·기본키가 같다", () =
   assert.strictEqual(actionName("en", "project.search"), "Search projects");
   // 기본값끼리 겹치면 첫 화면부터 거짓말이다
   assert.strictEqual(new Set(DEFAULT_KEYMAP.map((a) => a.combo)).size, DEFAULT_KEYMAP.length);
-  // 기본값 전부가 자기 검증을 통과한다(못 쓰는 키를 기본값으로 박지 않았다)
+  // 기본값 전부가 자기 검증을 통과한다(못 쓰는 키를 기본값으로 넣지 않았다)
   const b = Object.fromEntries(DEFAULT_KEYMAP.map((a) => [a.id, a.combo])) as Bindings;
   for (const a of DEFAULT_KEYMAP) assert.strictEqual(validateBinding(b, a.id, a.combo), null, a.id);
 });

@@ -27,7 +27,7 @@ PY = os.path.join(HERE, "tickets.py")
 # 호출자의 `capture_output`이 EOF를 못 봐서 STALL이 제때 떴는데도 상한에 걸린다.
 # **그게 플랫폼마다 갈렸다**: macOS bash는 스크립트 마지막 명령을 exec로 바꿔치기해서 우연히
 # 프로세스가 하나였고, 리눅스 bash는 fork해서 둘이었다(CI 실측 2026-08-01: 61s).
-# 재현하려는 것은 주입 정지지 bash의 최적화가 아니라서, 손으로 `exec`를 박아 양쪽을 맞춘다.
+# 재현하려는 것은 주입 정지지 bash의 최적화가 아니라서, 손으로 `exec`를 넣어 양쪽을 맞춘다.
 DEAF_ENGINE = """\
 #!/bin/bash
 printf '{"type":"system","subtype":"init"}\\n'

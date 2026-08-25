@@ -6,7 +6,7 @@ import test from "node:test";
 // (선례 `sidebar.test.ts` · `settings-dialog.test.ts` · `project-switcher.test.ts`) —
 // 그래서 소스 글자를 댄다.
 // 티켓 830b8f22 (§비주얼 §58): 복구 버튼 넷이 성공하면 그 순간 초점을 든 버튼일 때만
-// `이름` 셀로 초점을 옮기고 sr-only 문장 하나를 낭독한다. 여기서 못박는 것은 넷이 같은
+// `이름` 셀로 초점을 옮기고 sr-only 문장 하나를 낭독한다. 여기서 고정하는 것은 넷이 같은
 // 관용구로 갈렸다는 것(§처방)과, 그 조건("옮기는 조건")이 실제로 `document.activeElement`를
 // 확인한 뒤에만 발동한다는 것 — 눈으로 보이지 않는 회귀라 소스 검사로 고정한다.
 const s = readFileSync("components/workers-ui.tsx", "utf8");

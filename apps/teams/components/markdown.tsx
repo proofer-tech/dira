@@ -86,7 +86,7 @@ const components: Components = {
   ),
   strong: (p) => <strong {...drop(p)} className="font-semibold" />,
   em: (p) => <em {...drop(p)} className="italic" />,
-  // 세로 패딩 없음 — 주면 문단 줄 높이가 줄마다 튄다. `text-foreground`는 못박는다
+  // 세로 패딩 없음 — 주면 문단 줄 높이가 줄마다 튄다. `text-foreground`는 고정한다
   // (`--muted-foreground`/`--muted`는 라이트에서 4.34다 — §10 대비표의 유일한 함정).
   code: (p) => <code {...drop(p)} className={CODE_SPAN_CLASS} />,
   // `pre > code`의 배경·패딩만 여기서 끈다. react-markdown 10은 `inline` prop을 안 주므로

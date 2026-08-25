@@ -186,7 +186,7 @@ const KEY_GLYPH: Record<string, string> = {
 };
 
 /** **화면에 키를 적는 코드는 이 함수만 쓴다.** 맥이 아닌 데서도 `Mod`는 `⌘`으로 적는다 —
- *  `matchCombo`가 `ctrlKey`를 같이 받는 것과 짝이고, 지금 박혀 있는 `⌘K`·`⌘↵`가 그 선례다
+ *  `matchCombo`가 `ctrlKey`를 같이 받는 것과 짝이고, 지금 기본으로 잡혀 있는 `⌘K`·`⌘↵`가 그 선례다
  *  (`session-stream.tsx:313`). 조합자 순서는 맥 관례(`⌥⇧⌘`)다. */
 export function formatCombo(combo: string): string {
   const c = parseCombo(combo);

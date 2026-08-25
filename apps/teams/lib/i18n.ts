@@ -436,7 +436,7 @@ export const ko: Record<string, string> = {
   "epics.readme.bodyLabel": "내용",
   "epics.readme.saveFailed": "저장하지 못했습니다",
   "status.hint.awaiting": "PM이 되물었다 — 요구사항 상세에서 답을 쓰면 다시 큐에 뜬다. 자동 만료는 없다",
-  "status.hint.assigned": "session_id가 박힌 열린 티켓 — 큐에서 영구 제외된다. 할당 해제로 되돌린다",
+  "status.hint.assigned": "session_id가 적힌 열린 티켓 — 큐에서 영구 제외된다. 할당 해제로 되돌린다",
 
   // deps 배지(§2 deps 배지) — `DepBadge`가 쓴다.
   "dep.hint.met": "충족 — 완료된 티켓",
@@ -956,7 +956,7 @@ export const en: Record<string, string> = {
 
   "settings.search.placeholder": "Search settings",
   // 앞에 `"질의"`가 그대로 붙는다(`CommandEmpty`) — 쌍따옴표에 콜론이 바로 붙으므로 값이
-  // 공백으로 시작하지 않는다. 조립 결과는 `i18n.test.ts`가 못박는다.
+  // 공백으로 시작하지 않는다. 조립 결과는 `i18n.test.ts`가 고정한다.
   "settings.search.emptySuffix": ": no matching settings",
   "settings.search.claudeCli": "CLI path",
   "settings.search.claudeAccounts": "Accounts",
@@ -1112,7 +1112,7 @@ export const en: Record<string, string> = {
   // 상속 한 줄. **`inheritedMiddle`이 공백으로 시작하는 것은 의도다** — 앞에 해시가 공백 없이
   // 바로 붙는다(한국어는 `<해시>가`로 조사가 붙어 공백이 없어야 하고, 영어는 낱말이 갈린다).
   // 꼬리는 비었다: 영어는 숫자가 문장 끝이라 뒤에 붙을 것이 없다. `t`는 `""`를 그대로 돌려주고
-  // `ko` 폴백으로 안 샌다. 조립 결과는 `i18n.test.ts`가 두 언어 다 못박는다.
+  // `ko` 폴백으로 안 샌다. 조립 결과는 `i18n.test.ts`가 두 언어 다 고정한다.
   "ticket.priority.inheritedMiddle": " is waiting on this, so it comes up as",
   "ticket.priority.inheritedAfter": "",
   // 다섯 항목의 꼬리. `Later`·`Sooner`는 짝으로 읽힌다 — 목록을 열면 다섯이 한 화면에 선다.
@@ -1342,7 +1342,7 @@ export const en: Record<string, string> = {
 
   // 프로토콜 화면(§0-16 §발행 §묶음 표 7, `7a86fd5c`) — `ko`는 `93c106b3`이 넣었다. 어순이
   // 뒤집혀 조각의 몫이 갈린 자리는 그 자리마다 주석을 달았고, 조립 결과는 `i18n.test.ts`가
-  // 두 언어 다 못박는다.
+  // 두 언어 다 고정한다.
   "protocols.inline.tooltip": "tick.sh pastes this file in full at the top of every session prompt",
   // 뒤에 `{budgetLabel(...)}`가 공백 하나를 사이에 두고 붙는다(`1,234 / 6,500 B`).
   "protocols.inline.badge": "Inlined in every prompt ·",

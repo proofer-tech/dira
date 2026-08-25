@@ -38,7 +38,7 @@ import { findMatches, hasFindBar } from "@/lib/urls";
 const FIND = "dira-find";
 const CURRENT = "dira-find-current";
 
-/** 두 규칙이 `globals.css`가 아니라 여기 있는 이유는 §30 ⑧이다 — Next 16.2.12에 박힌
+/** 두 규칙이 `globals.css`가 아니라 여기 있는 이유는 §30 ⑧이다 — Next 16.2.12에 딸려 온
  *  lightningcss가 `::highlight()`를 몰라서 빌드·`next dev`가 경고 7건을 찍는다(기능은 멀쩡하다).
  *  **값은 §30 ④가 정본이다 — 손으로 고치지 않는다.** 대비는 그 표에서 이미 쟀다.
  *  React 19가 `precedence`를 보고 `<head>`로 올리고 `href`로 중복을 지운다(두 화면에 한 벌).

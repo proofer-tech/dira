@@ -135,7 +135,7 @@ test("engineName — tick.sh:52의 basename \"${TICKET_ENGINE[0]}\"과 판정이
   assert.strictEqual(engineName(cases[4]), "grok"); // 여기도 안 선다 — 같은 함수가 판정한다
   assert.strictEqual(engineName(""), ""); // 값이 깨져 못 읽었으면 claude가 아니다 = 이름도 없다
   // 엔진 수정 24번째(§제약 1 §결정 기록): 고정 경로 이름 `dira`는 claude로 정규화한다.
-  // bash의 순정 basename과는 여기서 갈리므로(값이 "dira") 위 for 루프 밖에서 따로 못박는다.
+  // bash의 순정 basename과는 여기서 갈리므로(값이 "dira") 위 for 루프 밖에서 따로 고정한다.
   assert.strictEqual(engineName('dira -p --session-id "x"'), "claude");
   // 엔진 수정 27번째 계약 3: dira-<x> -> <x>(tick.sh:552와 같은 판정).
   assert.strictEqual(
@@ -237,7 +237,7 @@ test("cron 판정 — crontab은 NFC, 파일시스템 경로는 NFD인 한글 �
   for (const n of ["w1.sh", "w2.sh"]) writeFileSync(path.join(dir, n), "#!/bin/bash\n");
 
   const nfd = path.join(dir, "w1.sh");
-  // 픽스처가 진짜 NFD인지 못박는다 — 같아지면 이 테스트는 아무것도 검증하지 않는다
+  // 픽스처가 진짜 NFD인지 고정한다 — 같아지면 이 테스트는 아무것도 검증하지 않는다
   assert.notStrictEqual(nfd, nfd.normalize("NFC"));
 
   const restore = withFakeCrontab(
@@ -1106,7 +1106,7 @@ test("cron 명령어 — NFC crontab 줄 · NFD 경로에서 해제가 진짜로
   // readdir/realpath는 이걸 NFD로 준다.
   const p = "/Users/x/공유 드라이브/it's/workers/w1.sh".normalize("NFD");
   const log = "/Users/x/공유 드라이브/it's/workers/cron.log".normalize("NFD");
-  // 픽스처가 진짜 NFD인지 못박는다 — 같아지면 이 테스트는 아무것도 검증하지 않는다
+  // 픽스처가 진짜 NFD인지 고정한다 — 같아지면 이 테스트는 아무것도 검증하지 않는다
   assert.notStrictEqual(p, p.normalize("NFC"));
 
   const other = "* * * * * /usr/local/bin/other.sh";
@@ -1136,7 +1136,7 @@ test("cron 명령어 — NFC crontab 줄 · NFD 경로에서 해제가 진짜로
 });
 
 /** 이 머신의 진짜 crontab을 닮은 픽스처: 남의 프로젝트 큐 · 주석 · 환경변수 · 인용된 줄.
- *  **한 줄이라도 잃으면 이 변경은 사고다**(제약 4) — 그래서 보존을 바이트로 못박는다.
+ *  **한 줄이라도 잃으면 이 변경은 사고다**(제약 4) — 그래서 보존을 바이트로 고정한다.
  *  순수 함수만 부르므로 `crontab` 명령을 아예 실행하지 않는다. */
 const FIXTURE = [
   "PATH=/usr/local/bin:/usr/bin:/bin",
@@ -1176,7 +1176,7 @@ test("cronRegister/cronUnregister — 대상 줄만 바뀌고 나머지는 바�
 
 test("cronRegister — NFD 경로가 NFC로 적힌 줄과 매칭된다 (a622f9e4·38eec0d4)", () => {
   const nfd = "/Users/x/공유 드라이브/it's/workers/w1.sh".normalize("NFD");
-  assert.notStrictEqual(nfd, nfd.normalize("NFC")); // 픽스처가 진짜 NFD인지 못박는다
+  assert.notStrictEqual(nfd, nfd.normalize("NFC")); // 픽스처가 진짜 NFD인지 고정한다
   const nfcLine = `* * * * * "${nfd.normalize("NFC")}" >> "${"/Users/x/공유 드라이브/it's/workers/cron.log".normalize("NFC")}" 2>&1`;
   const tab = `# 주석\n${nfcLine}\n@reboot /Users/x/bin/other.sh\n`;
 
@@ -2361,7 +2361,7 @@ test("cronWriteError — 권한 거부만 '앱 관리'로 번역하고 나머지
 
 // ── 엔진 · 모델 선택 (§4-3) ─────────────────────────────────────────────────
 
-test("엔진 템플릿 — 바꿔 쓸 수 없는 자리 일곱을 못박는다 (§4-3 표)", () => {
+test("엔진 템플릿 — 바꿔 쓸 수 없는 자리 일곱을 고정한다 (§4-3 표)", () => {
   const claude = engineArgv("claude");
   // ① `--input-format stream-json` 인접. tick.sh:263-270이 이 인접성 하나로 FIFO를 판다 —
   //    떨어지면 §2-2 참견이 조용히 죽는다. 판정식을 엔진과 같은 모양으로 다시 쓴다.
@@ -2483,7 +2483,7 @@ test("renderEngineBlock ↔ parseEngineValue — 카탈로그 전 조합이 왕�
       assert.strictEqual(engineName(value), e.id);
     }
   }
-  // 스펙이 글자로 박아 둔 grok 두 문자열을 **손으로 적어** 되읽는다 — 위 루프는 카탈로그를
+  // 스펙이 글자로 적어 둔 grok 두 문자열을 **손으로 적어** 되읽는다 — 위 루프는 카탈로그를
   // 다시 그려 대조하므로 카탈로그가 틀리면 같이 틀린다. 여기가 스펙 대조다(§4-3 §템플릿 3벌).
   assert.deepStrictEqual(
     parseEngineValue(

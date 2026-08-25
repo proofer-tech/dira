@@ -175,7 +175,7 @@ export function EpicSidebar({
                                   {titles[row.epic] ?? t(locale, "board.epic.noTitle")}
                                 </span>
                                 {/* P번호 등급(§에픽 결정 11 · §비주얼 §52 ②) — 라벨보다 크지도 두껍지도
-                                    않다. `font-normal`을 여기서 박아야 선택 줄의 `font-medium` 상속을 끊는다. */}
+                                    않다. `font-normal`을 여기서 지정해야 선택 줄의 `font-medium` 상속을 끊는다. */}
                                 <span className="shrink-0 text-xs font-normal text-muted-foreground">
                                   ({row.epic})
                                 </span>

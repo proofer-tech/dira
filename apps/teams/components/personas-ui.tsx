@@ -605,7 +605,7 @@ export function PersonasPane({
 
   // **뒤로가기가 왼쪽 선택과 오른쪽 칸을 같이 되돌린다**(§5 표 ③ — 지금은 URL만 되돌아가고
   // 화면이 안 따라온다). `pushState`는 이 이벤트를 안 쏘므로 여기 오는 것은 사람의 뒤로/앞으로뿐이다.
-  // **뒤로가기도 펼침 집합을 든다** — 계약이 저장 채널을 하나로 못박아서다(§비주얼 §61 (17)).
+  // **뒤로가기도 펼침 집합을 든다** — 계약이 저장 채널을 하나로 고정해서다(§비주얼 §61 (17)).
   useEffect(() => {
     const sync = () => {
       const name = personaSegment(location.pathname);

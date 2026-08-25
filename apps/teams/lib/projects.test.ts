@@ -446,7 +446,7 @@ test("elapsedSuffix — 0일은 붙지 않는다", () => {
 
 /** 팔레트 8색이 **전부** 클래스를 갖는다 — 하나가 표에서 빠지면 그 색을 고른 페르소나만
  *  조용히 빈 점이 된다(화면은 안 깨지므로 눈으로는 안 걸린다). 조립하지 않고 리터럴로 쓰는
- *  이유(Tailwind 정적 스캔)가 곧 빠뜨릴 수 있다는 뜻이라 여기서 못박는다.
+ *  이유(Tailwind 정적 스캔)가 곧 빠뜨릴 수 있다는 뜻이라 여기서 고정한다.
  *  모르는 키·미할당이 빈 점인 것은 에러가 아니라 계약이다(DESIGN.md §비주얼 §12). */
 test("personaDotClass — 팔레트 8색 전부 + 모르는 키는 빈 점", () => {
   for (const c of PERSONA_COLORS) assert.strictEqual(personaDotClass(c), `bg-persona-${c}`);

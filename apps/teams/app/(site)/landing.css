@@ -474,7 +474,7 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
      잘라서 높이를 맞추지 않는다 — 캡션이 캡처의 오른쪽 끝을 가리키는 것이 있어서
      (07-qa-thread의 오른쪽 frontmatter) object-fit:cover로 자르면 캡션이 없는 것을 가리킨다.
      행 간격은 figcaption · .arrows의 margin-top이 이미 주므로 row-gap은 0이다.
-     행은 셋이다 — 캡처 · 캡션 · 링크. 셋을 행으로 못박는다(§랜딩 §갤러리 식별자로
+     행은 셋이다 — 캡처 · 캡션 · 링크. 셋을 행으로 고정한다(§랜딩 §갤러리 식별자로
      레일 아래 식별자가 걷히며 넷에서 하나 줄었다). */
   .dira-landing .gallery { grid-template-rows: auto auto auto; row-gap: 0; }
   .dira-landing .gallery figure { display: grid; grid-row: span 3; grid-template-rows: subgrid; }
@@ -734,7 +734,7 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
 /* §랜딩 §개편 §움직이는 티켓(ⓕ). 카드 한 장이 <main> 안에서 sticky로 붙어 페이지를 끝까지
    따라가며 레인 셋을 건넌다. 조상에 overflow 계열이 하나도 없다(MAIN → HTML 여덟 단계
    전부 `visible`, 실측) — sticky가 조용히 죽는 자리가 없다. `top: 60px`은 header 높이다.
-   z-index는 header(10)보다 낮다: 둘이 겹치는 순간이 없지만 순서를 못박아 둔다.
+   z-index는 header(10)보다 낮다: 둘이 겹치는 순간이 없지만 순서를 고정해 둔다.
    밴드는 `.wrap`이라 위·아래 룰이 화면 끝까지 가고(«하이라인» 여덟에 흡수) 레인은
    `content` 열에 선다. 세로 padding은 밴드가 갖는다 — 안의 격자는 세로를 안 갖는다. */
 .dira-landing .travel {

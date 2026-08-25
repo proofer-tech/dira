@@ -163,7 +163,7 @@ export const doneLimit = (done: string | null) => Math.max(DONE_LANE_LIMIT, Numb
  *  **쓰는 곳이 둘이다** — 사용량 리셋 시각(§26 ④, 서버 렌더)과 **홈 대화 목록의 만든 시각**
  *  (§비주얼 §24, 클라이언트 렌더). `lib/usage.ts`에 있던 `resetLabel`이 여기로 온 이유가 그것이다:
  *  저 파일은 `node:fs`를 import해서 클라이언트 번들에 못 들어간다(`elapsedSuffix`와 같은 축).
- *  §24가 대화 목록에 **"새 서식 0"**을 박았으므로 두 화면이 같은 함수를 쓴다. */
+ *  §24가 대화 목록에 **"새 서식 0"**을 정했으므로 두 화면이 같은 함수를 쓴다. */
 export function timeLabel(at: number, now = Date.now()): string {
   const d = new Date(at);
   const n = new Date(now);
@@ -273,7 +273,7 @@ export function visibleChatRows<T extends { id: string }>(
  *  이유다(`pnpm test`가 JSX를 못 읽는다). 자르기·`더보기`는 새 함수가 필요 없다 — 반환 모양이
  *  `chatRows`와 같은 `{ id · title · time }`이라 **`visibleChatRows`를 그대로 다시 쓴다**.
  *
- *  **정렬은 안 한다** — §62 (9)가 "`schedules` 배열 순서(만든 순)"로 못박았다: 다음 예정
+ *  **정렬은 안 한다** — §62 (9)가 "`schedules` 배열 순서(만든 순)"로 고정했다: 다음 예정
  *  시각으로 정렬하면 매일 스케줄 셋의 순서가 자정마다 뒤집힌다.
  *
  *  `title`은 `prompt`의 첫 줄(§7-2 §저장 — 스케줄에는 `title` 칸이 없다). `time`은
