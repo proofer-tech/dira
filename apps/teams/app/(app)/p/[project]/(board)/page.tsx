@@ -724,7 +724,28 @@ export default async function Board({
       <BoardPolling project={id} rev={boardRevision(project.root)} />
 
       <div className="flex items-center justify-between gap-4">
-        <h1 className="text-lg font-semibold">보드</h1>
+        {/* 고른 에픽을 말하는 `h1`(§에픽 결정 21) — 표기는 에픽 화면 머리(`epics/[[...epic]]/
+            page.tsx` 142-147행)를 그대로 물려받는다. `query.epic === null`이면 `보드` 한
+            낱말뿐이고, `""`(빈 값)이면 `board.epic.none`이 "(에픽 없음)"을 이미 담고 있어
+            P번호 칸을 안 붙인다. */}
+        <h1 className="flex items-baseline gap-2 text-lg font-semibold">
+          <span>{t(locale, "shell.nav.board")}</span>
+          {query.epic !== null && (
+            <>
+              <span className="text-muted-foreground">&gt;</span>
+              <span>
+                {query.epic === ""
+                  ? t(locale, "board.epic.none")
+                  : (titles[query.epic] ?? t(locale, "board.epic.noTitle"))}
+              </span>
+              {query.epic !== "" && (
+                <span className="shrink-0 text-xs font-normal text-muted-foreground">
+                  ({query.epic})
+                </span>
+              )}
+            </>
+          )}
+        </h1>
         {/* 발행도 접수도 라우트가 아니라 **이 화면의 다이얼로그**다(§3) — 눌러도 URL이 안 바뀌므로
             필터·검색·뷰·스크롤이 그대로 남고 취소가 곧 닫기다. 내비를 5개로 늘리지 않는다.
             `요구 접수`가 primary·오른쪽이다(사람 요청 `08e23555`) */}
