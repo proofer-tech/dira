@@ -852,9 +852,23 @@ type Live = {
   child: ChildProcess | null;
   /** 사람이 멈췄다. spawn보다 먼저 눌렸을 수도 있어서 **핸들이 아니라 이 플래그**가 근거다 */
   stopping: boolean;
+  /** 트랜스크립트가 이미 들인 답 중 아직 겹침 판정을 안 거친 마지막 텍스트(§7 §누적기를 비우는
+   *  자리 — 실측 `2cad40e3`). CPU 경합에서 `delta`가 `keep`보다 늦게 처리되면, 답 줄이 `turns`로
+   *  넘어간 그 폴링에서는 `partial`이 아직 비어 있어 겹침 판정이 못 걸리고, 다음 폴링에 `partial`이
+   *  뒤늦게 채워질 땐 그 답 줄이 이미 소비돼 이 폴링의 `turns`엔 없다 — 폴링 하나짜리 지역 비교로는
+   *  이 창을 못 잡는다. `message_start`에서 `partial`과 함께 비운다(새 라운드가 시작되면 옛 값과
+   *  더는 비교하지 않는다). */
+  lastAnswer: string | null;
 };
 
-const newLive = (): Live => ({ partial: "", activity: null, model: null, child: null, stopping: false });
+const newLive = (): Live => ({
+  partial: "",
+  activity: null,
+  model: null,
+  child: null,
+  stopping: false,
+  lastAnswer: null,
+});
 
 /** 질문 하나 = 프로세스 하나(§7). 첫 질문이 세션을 열고 다음 질문이 그것을 잇는다.
  *
@@ -1047,6 +1061,7 @@ function eatLine(line: string, live: Live): ResultLine | null {
     // 세션에서 `index: 0`이 두 번 났다). 앞 메시지의 완결된 답은 이미 트랜스크립트에 있어서
     // 폴링이 **진짜 줄**로 데려온다 — 여기 남겨 두면 그 답이 화면에 두 벌이 된다.
     live.partial = "";
+    live.lastAnswer = null;
   } else if (ev?.type === "content_block_start" && ev.content_block?.type === "tool_use") {
     if (typeof ev.content_block.name === "string") live.activity = { kind: "tool", tool: ev.content_block.name };
   } else if (ev?.type === "content_block_delta" && ev.delta?.type === "thinking_delta") {
@@ -1717,7 +1732,12 @@ export async function pollHome(
   // 다시 안 걸린다. 도구가 도는 동안(`message_start` 전) 그 창이 통째로 두 벌이었다.
   // 누적기를 비워도 잃을 글이 없다: 한 메시지에서 텍스트 블록 뒤에 오는 델타는 도구 인자
   // (`input_json_delta`)뿐이고 그건 애초에 안 붙는다(`eatLine`).
-  const lastAnswer = turns.filter((t) => t.role === "answer").at(-1)?.text;
+  // 이 폴링이 새로 읽은 `turns`에 답이 있으면 그게 최신이다 — 없으면 `entry.live.lastAnswer`가
+  // 앞선 폴링에서 기억해 둔 값을 댄다(CPU 경합에서 `partial`이 한 박자 늦게 채워지는 창 — 실측
+  // `2cad40e3`, 위 `Live.lastAnswer` 주석 참조).
+  const newAnswer = turns.filter((t) => t.role === "answer").at(-1)?.text;
+  if (newAnswer !== undefined && entry) entry.live.lastAnswer = newAnswer;
+  const lastAnswer = newAnswer ?? entry?.live.lastAnswer;
   const overlap = partial !== "" && partial === lastAnswer;
   if (overlap && entry) entry.live.partial = "";
   const dedupedPartial = overlap ? "" : partial;
