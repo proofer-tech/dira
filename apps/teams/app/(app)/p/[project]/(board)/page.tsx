@@ -724,15 +724,13 @@ export default async function Board({
       <BoardPolling project={id} rev={boardRevision(project.root)} />
 
       <div className="flex items-center justify-between gap-4">
-        {/* 고른 에픽을 말하는 `h1`(§에픽 결정 21) — 표기는 에픽 화면 머리(`epics/[[...epic]]/
-            page.tsx` 142-147행)를 그대로 물려받는다. `query.epic === null`이면 `보드` 한
-            낱말뿐이고, `""`(빈 값)이면 `board.epic.none`이 "(에픽 없음)"을 이미 담고 있어
-            P번호 칸을 안 붙인다. */}
+        {/* 보드 > <제목> (P번호)(§에픽 결정 21) — 표기는 에픽 화면 머리(`epics/[[...epic]]/page.tsx`
+            142-147행)를 그대로 물려받는다. `보드`는 리터럴이 아니라 링크도 아니다 */}
         <h1 className="flex items-baseline gap-2 text-lg font-semibold">
           <span>{t(locale, "shell.nav.board")}</span>
           {query.epic !== null && (
             <>
-              <span className="text-muted-foreground">&gt;</span>
+              <span className="font-normal text-muted-foreground">{">"}</span>
               <span>
                 {query.epic === ""
                   ? t(locale, "board.epic.none")
