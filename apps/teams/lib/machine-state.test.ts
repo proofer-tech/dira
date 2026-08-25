@@ -10,10 +10,12 @@ import {
   MERGE_WINDOW_MS,
   filterRead,
   isFresh,
+  isOwner,
   isReachable,
   markResumeRead,
   mergeResume,
   nextOffline,
+  parseHeartbeatMark,
   powerOffGap,
   recordResumeEvent,
   sleepGap,
@@ -85,6 +87,22 @@ test("읽음 필터 — 읽은 to와 같으면 지워지고, 병합으로 to가 
   assert.deepEqual(filterRead(grown, ev.to), grown); // 병합으로 to가 자란 뒤 → 다시 나온다
   assert.deepEqual(filterRead(ev, 999), ev); // 빗나간 to(이미 자란 이벤트) → 무시되고 남는다
   assert.equal(filterRead(null, ev.to), null);
+});
+
+test("하트비트 표식 파싱 — 새 형식(JSON)과 옛 형식(시각 하나)을 둘 다 읽는다", () => {
+  assert.deepEqual(parseHeartbeatMark('{"owner":"a","at":1000}'), { owner: "a", at: 1000 });
+  assert.deepEqual(parseHeartbeatMark("1000"), { owner: null, at: 1000 }); // 옛 형식
+  assert.equal(parseHeartbeatMark(""), null);
+  assert.equal(parseHeartbeatMark("not json or a number"), null);
+  assert.equal(parseHeartbeatMark("{}"), null); // at 없음
+});
+
+test("§개정 소유자 판정 — 표식 없음 / 내 것 / 남의 것이고 신선함 / 남의 것이고 오래됨", () => {
+  const now = 1_000_000;
+  assert.equal(isOwner(null, "me", now), true); // 표식 없음 — 내가 소유자
+  assert.equal(isOwner({ owner: "me", at: now - 5_000 }, "me", now), true); // 내 것
+  assert.equal(isOwner({ owner: "other", at: now - 5_000 }, "me", now), false); // 남의 것 — 신선함(60초 안)
+  assert.equal(isOwner({ owner: "other", at: now - GAP_THRESHOLD_MS - 1 }, "me", now), true); // 남의 것 — 오래됨
 });
 
 test("핫리로드 가드 — 두 번째 startHeartbeat는 새 타이머를 안 만든다", () => {

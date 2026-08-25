@@ -2,7 +2,8 @@
  *  `runs` 맵)에서 15초 하트비트를 돌려 `{ offline, resume }`를 낸다. 화면 배선(종 항목 ⑤·⑥,
  *  시각 문자열 포맷)은 별도 티켓(`1087db4d`)이 한다 — 여기가 내는 `from`·`to`는 epoch ms다. */
 import { execFile } from "node:child_process";
-import { readFile, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { runSchedules } from "./home-agent.ts";
@@ -39,6 +40,36 @@ export function nextOffline(prev: OfflineTally, reachable: boolean): OfflineTall
   if (reachable) return { offline: false, misses: 0 };
   const misses = prev.misses + 1;
   return { offline: prev.offline || misses >= 2, misses };
+}
+
+/** §0-14 §개정(2026-08-26) — 하트비트 표식. 소유자 판정과 기동 시 공백 판정이 함께 읽는다.
+ *  `owner`가 `null`인 것은 옛 형식(시각 하나)이었던 파일 — 표식 없음과 같은 갈래로 다룬다. */
+export type HeartbeatMark = { owner: string | null; at: number };
+
+/** 하트비트 표식 파싱 — 새 형식은 `{owner, at}` JSON, 옛 형식은 시각 하나(숫자 문자열)뿐이다.
+ *  §개정 §수용조건 4 — 형식이 갈려도 기동 시 `poweredOff` 판정이 옛 파일을 그대로 읽는다. */
+export function parseHeartbeatMark(raw: string): HeartbeatMark | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  if (!trimmed.startsWith("{")) {
+    const n = Number(trimmed);
+    return Number.isFinite(n) ? { owner: null, at: n } : null;
+  }
+  try {
+    const obj = JSON.parse(trimmed);
+    return typeof obj.at === "number" && Number.isFinite(obj.at)
+      ? { owner: typeof obj.owner === "string" ? obj.owner : null, at: obj.at }
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/** §개정 §결정 — 소유자 판정. 표식이 없거나 내 것이면 소유자다. 남의 것이면 공백 문턱(60초)
+ *  보다 오래된 경우에만 이어받는다 — 신선하면 그 박에서 머신 스코프 셋을 건너뛴다. */
+export function isOwner(mark: HeartbeatMark | null, myId: string, nowMs: number): boolean {
+  if (!mark || mark.owner === myId) return true;
+  return nowMs - mark.at > GAP_THRESHOLD_MS;
 }
 
 /** 판정 2 — 도는 중 공백. 하트비트 간격 > 60초면 프로세스가 얼어 있었다(잠자기) — 박을 이었다는
@@ -98,22 +129,30 @@ export async function recordResumeEvent(event: ResumeEvent): Promise<void> {
 
 // ---- 모듈 스코프 — 여기부터 side effect(파일 I/O · 서브프로세스 · 타이머) ----
 
+// §개정 — 이 프로세스의 소유권 표식 정체성. 서버가 죽고 뜰 때마다 새로 발급되므로,
+// 재기동한 프로세스는 자기가 죽기 전에 쓴 옛 표식도 "남의 것"으로 본다(그게 맞다 — 죽은
+// 동안 다른 서버가 이어받았을 수 있다).
+const MY_ID = randomUUID();
+
 function heartbeatPath(): string {
   return path.join(localDir(), "heartbeat");
 }
 
-async function readHeartbeatAt(): Promise<number | null> {
+async function readHeartbeatMark(): Promise<HeartbeatMark | null> {
   try {
-    const n = Number((await readFile(heartbeatPath(), "utf8")).trim());
-    return Number.isFinite(n) ? n : null;
+    return parseHeartbeatMark(await readFile(heartbeatPath(), "utf8"));
   } catch {
     return null;
   }
 }
 
-// 원자적 쓰기는 필요 없다(§0-14) — 읽는 자가 자기 자신뿐이고 깨진 값은 "파일 없음"과 같은 갈래다.
-async function writeHeartbeatAt(nowMs: number): Promise<void> {
-  await writeFile(heartbeatPath(), String(nowMs), "utf8");
+// §개정 §결정 — 원자적 쓰기가 이제 필요하다. 읽는 자가 자기 자신뿐이 아니게 됐다(서버 둘이
+// 같은 파일을 본다). tmp + rename은 `writeHome`(home-agent.ts)과 같은 선례다.
+async function writeHeartbeatMark(nowMs: number): Promise<void> {
+  const file = heartbeatPath();
+  const tmp = `${file}.${randomUUID()}.tmp`;
+  await writeFile(tmp, JSON.stringify({ owner: MY_ID, at: nowMs }), "utf8");
+  await rename(tmp, file);
 }
 
 async function scutilReachable(): Promise<boolean> {
@@ -155,20 +194,25 @@ async function tickOnce(): Promise<void> {
   }
   s.lastHeartbeatAt = now;
   s.offline = nextOffline(s.offline, await scutilReachable());
-  await writeHeartbeatAt(now);
-  // §7-2 §깨우는 자리 — 새 타이머를 안 만든다. 판정은 `runSchedules`(순수 함수 `judgeSchedule` 위의
-  // 그 절반)가 지고, 여기는 그 함수에 <지금>을 넣고 부르는 것뿐이다.
-  await runSchedules(now);
-  // §0-10 §답변 대기가 앱 밖으로 나간다 — 같은 이유로 새 타이머 0. 주소가 없으면 `webhookTick`이
-  // 그 자리에서 돌아온다(큐를 안 훑는다).
-  await webhookTick(now);
+  // §개정 §결정 — 박마다 소유자 판정 한 번. 남의 것이 신선하면 머신 스코프 셋(heartbeat 쓰기 -
+  // runSchedules - webhookTick)을 건너뛴다. offline·resume은 위에서 이미 끝났다(프로세스 스코프,
+  // 안 갈린다).
+  if (isOwner(await readHeartbeatMark(), MY_ID, now)) {
+    await writeHeartbeatMark(now);
+    // §7-2 §깨우는 자리 — 새 타이머를 안 만든다. 판정은 `runSchedules`(순수 함수 `judgeSchedule` 위의
+    // 그 절반)가 지고, 여기는 그 함수에 <지금>을 넣고 부르는 것뿐이다.
+    await runSchedules(now);
+    // §0-10 §답변 대기가 앱 밖으로 나간다 — 같은 이유로 새 타이머 0. 주소가 없으면 `webhookTick`이
+    // 그 자리에서 돌아온다(큐를 안 훑는다).
+    await webhookTick(now);
+  }
 }
 
 async function initState(): Promise<LiveState> {
   const now = Date.now();
-  const [heartbeatAt, boottime] = await Promise.all([readHeartbeatAt(), boottimeMs()]);
-  const resume = boottime !== null ? powerOffGap(heartbeatAt, boottime, now) : null;
-  await writeHeartbeatAt(now);
+  const [heartbeatMark, boottime] = await Promise.all([readHeartbeatMark(), boottimeMs()]);
+  const resume = boottime !== null ? powerOffGap(heartbeatMark?.at ?? null, boottime, now) : null;
+  await writeHeartbeatMark(now);
   return { offline: INITIAL_OFFLINE, resume, lastHeartbeatAt: now, readTo: null };
 }
 
