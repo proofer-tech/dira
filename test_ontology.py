@@ -142,7 +142,22 @@ try:
     assert "===== 온톨로지 (" + ontdir + ") =====" not in ext, \
         "재정의했는데 기본 자리(<큐>/ontology)가 블록에 남았다\n" + ext
 
+    # 6) 재정의 자리에 md 500장을 두 층(층a/층b)에 걸쳐 두면 - `find | grep -q .`가
+    #    파이프 버퍼(수십 KB)를 넘겨 find가 SIGPIPE로 죽고, `set -o pipefail`이 그 141을
+    #    올려 판정을 "없다"로 뒤집던 자리다(P313-9). 파일명에 150자를 채워 총량을 파이프
+    #    버퍼 위로 올린다 - 짧은 파일명이면 버퍼 안에 다 들어가 race가 안 걸린다.
+    bigdir = os.path.join(tmp, "큰온톨로지")
+    pad = "x" * 150
+    for i in range(500):
+        sub = "층a" if i % 2 == 0 else "층b"
+        write(os.path.join(bigdir, sub, "개념{:03d}{}.md".format(i, pad)),
+              "# 개념{}\n본문\n".format(i))
+    big = dryrun(w, local, ontology=bigdir)
+    assert ("===== 온톨로지 (" + bigdir + ") =====") in big, \
+        "md 500장 · 두 층 재정의 자리에서 온톨로지 블록이 안 붙었다(141 회귀)\n" + big
+
     print("PASS 위치+검색 방법 상수 블록·본문/목차 미주입·재귀·공백 파일명·"
-          "파일 늘어도 불변·페르소나 무관·없으면 WARN 0줄·TICKET_ONTOLOGY 재정의")
+          "파일 늘어도 불변·페르소나 무관·없으면 WARN 0줄·TICKET_ONTOLOGY 재정의·"
+          "md 500장 두 층에서도 붙음(P313-9)")
 finally:
     shutil.rmtree(tmp, ignore_errors=True)

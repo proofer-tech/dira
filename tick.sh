@@ -463,7 +463,7 @@ done
 HASPRIO1=""
 # select 출력은 이제 8필드다(끝에 squad_persona가 붙는다, §5-5) - `|1$`는 그 필드가 비어 있을
 # 때만 우연히 맞는다. 7번째 필드(effective) 위치로 고정해서 본다.
-printf '%s\n' "$CANDS" | grep -qE '^([^|]*\|){6}1\|' && HASPRIO1=1
+grep -qE '^([^|]*\|){6}1\|' <<< "$CANDS" && HASPRIO1=1
 if [ "$CMD" = "tick" ] && { [ -n "$LIMITED" ] || [ -n "$HASPRIO1" ]; }; then
   acquire_slock || exit 0
 fi
@@ -697,7 +697,7 @@ fi
 # 진입점이고, 나머지 개념에 닿는 길은 세션의 grep이다. 없거나 비면 안 붙고 WARN도 없다(없는 것이
 # 정상이다).
 ONTDIR="${TICKET_ONTOLOGY:-$TICKET_ROOT/ontology}"
-if find "$ONTDIR" -type f -name '*.md' 2>/dev/null | grep -q .; then
+if [ -n "$(find "$ONTDIR" -type f -name '*.md' 2>/dev/null)" ]; then
   PROMPT="아래는 이 큐의 온톨로지가 있는 곳입니다.
 
 ===== 온톨로지 ($ONTDIR) =====
@@ -734,7 +734,7 @@ $(cat "$SKILLS")
   # grep이다(엔진이 만드는 색인은 0). 되돌리려면 이 if를 종전 for 루프로 바꾼다.
   MEMDIR="${TICKET_PERSONAS:-$TICKET_ROOT/personas}/$TPERSONA/memory"
   MEMBLOCK=""
-  if find "$MEMDIR" -maxdepth 1 -type f -name '*.md' 2>/dev/null | grep -q .; then
+  if [ -n "$(find "$MEMDIR" -maxdepth 1 -type f -name '*.md' 2>/dev/null)" ]; then
     MEMBLOCK="
 ===== $TPERSONA 메모리 ($MEMDIR) =====
 이 큐에서 알아낸 교훈이 파일별로 쌓인 곳입니다(CORE.md §회고가 쓰는 자리). 본문은 안 실립니다 -
