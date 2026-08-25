@@ -2,6 +2,17 @@ import path from "node:path";
 import type { NextConfig } from "next";
 import { BODY_SIZE_LIMIT } from "./lib/attachment-limit.ts";
 
+/** `pnpm build`가 `TypeError: generate is not a function`으로 죽으면 이 파일이 원인이
+ *  아니다 - `next/dist/server/config.js`의 `loadConfig`는 `__NEXT_PRIVATE_STANDALONE_CONFIG`
+ *  환경 변수가 켜져 있으면 이 파일을 통째로 건너뛰고 그 값을 그대로 `JSON.parse`해서 설정으로
+ *  쓴다. `output: "standalone"`으로 구운 서버(`next start`용 `server.js`)가 자기 자신에게
+ *  이 변수를 심어 두는 값이라 원래는 런타임 전용인데, 그 서버를 조상 프로세스로 둔 셸에서
+ *  `pnpm build`를 돌리면 셸 상속으로 새어 들어온다. `JSON`은 함수를 못 담으므로 `generateBuildId`
+ *  가 빠지고, 빌드가 그 값을 바로 호출하면서 깨진다(실측: dira 데스크톱 앱의 `next-server`가
+ *  워커 셸의 조상이던 자리). `package.json`의 `build` 스크립트가 이 변수를 `unset`하고
+ *  시작하는 이유가 그래서다 - 지우는 자리를 여기가 아니라 거기에 둔 것은, 이 값이 있으면
+ *  `next.config.ts` 자체가 로드되지 않아 여기서 방어해도 늦기 때문이다. */
+
 /** 파일 추적의 뿌리. `turbopack.root`와 `outputFileTracingRoot`가 **같은 값**이어야 한다 —
  *  다르면 Next가 경고를 내고 프로젝트 전체를 추적한다(실측 로그: *"Both `outputFileTracingRoot`
  *  and `turbopack.root` are set, but they must have the same value"*).
