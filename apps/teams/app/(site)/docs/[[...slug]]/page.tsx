@@ -84,7 +84,7 @@ const FLAT = SIDEBAR.flatMap((g) => g.items);
 // `generateStaticParams`는 그래서 걷는다: 27장 정적 HTML보다 이 한 자리의 정확성이 우선이다.
 export const dynamic = "force-dynamic";
 
-/** `slug`는 URL에서 온다. 목록에 없는 이름으로 파일을 읽지 않는다 — 정적 산출에는 안 서는
+/** `slug`는 URL에서 온다. 목록에 없는 이름으로 파일을 읽지 않는다 — 정적 산출에는 안 뜨는
  *  경로지만 `dev`에서는 임의 세그먼트가 그대로 들어온다. */
 const nameOf = (slug?: string[]) => {
   const name = slug?.length ? slug.join("/") : "index";
