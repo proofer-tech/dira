@@ -80,6 +80,8 @@ export default async function ProjectLayout({
         running: s.workers.filter((w) => w.status === "running").length,
         connected: s.connected,
         error: s.error,
+        // §67 ① 헤더 브랜드 마크용. 판정은 `readSummary`가 이미 센 것 — 새 fs 읽기 0
+        wip: s.wip,
         assigned: s.assigned, // §0-2 알림용. 전환기는 이 필드를 쓰지 않는다
         // §0-10 ④ 알림용. 판정은 `readSummary`가 `isAwaiting`으로 이미 했다 — 새 fs 읽기 0
         awaiting: s.awaiting,
@@ -204,7 +206,7 @@ export default async function ProjectLayout({
         {/* href는 그 프로젝트의 첫 화면 = **홈**이다(§7 · §비주얼 §4가 예고한 이동). 보드의 URL은
             안 움직인다 — `/p/<project>/`는 그대로다. `/`(프로젝트 관리)로 가는 길은 전환기 하단
             항목 하나로 남는다(§4). 나머지 값은 루트 셸과 같다(§14 · BrandMark). */}
-        <BrandMark href={`/p/${id}/home`} />
+        <BrandMark href={`/p/${id}/home`} wip={current.wip ?? 0} />
         <ProjectNav id={id} />
         {/* 우측 끝은 전환기 오른쪽의 `설정`이다 — 두 셸이 같은 자리에 같은 것을 갖는다
             (§비주얼 §4). 헤더의 `gap-6`이 아니라 이 둘 사이는 `gap-2`라 묶어서 오른쪽으로 민다 */}

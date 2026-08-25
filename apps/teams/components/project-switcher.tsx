@@ -70,21 +70,45 @@ export function ScreenView() {
   return null;
 }
 
-export function BrandMark({ href }: { href: string }) {
+export function BrandMark({ href, wip = 0 }: { href: string; wip?: number }) {
   return (
     <Link
       href={href}
       aria-label="dira"
       className="-m-2 flex size-8 shrink-0 items-center justify-center rounded-md text-foreground outline-none hover:bg-accent focus-visible:ring-3 focus-visible:ring-ring/50"
     >
+      {/* §비주얼 §67 ③ — `.wip` 1건 이상이면 마크 모양으로 잘린 띠 한 장이 마크 위를 지나간다.
+          오버레이는 DOM 형제가 아니라 이 `<svg>` 안의 `<g>`다 — `clipPath`가 `<use>`로 마크
+          자신을 참조하므로 `d`가 여덟째 자리로 안 늘어난다. `clipRule`은 `clipPath`가 읽는
+          속성(`fill-rule`이 아니다)이라 이게 없으면 마크의 구멍이 클립에서 메워진다. */}
       <svg
         aria-hidden
         viewBox="0 0 32 32"
         fill="currentColor"
         fillRule="evenodd"
-        className="size-4"
+        clipRule="evenodd"
+        className={wip > 0 ? "size-4 mark-shimmer" : "size-4"}
       >
-        <path d="M2 0H10A2 2 0 0 1 12 2V6H30A2 2 0 0 1 32 8V30A2 2 0 0 1 30 32H2A2 2 0 0 1 0 30V2A2 2 0 0 1 2 0ZM10 10H22A2 2 0 0 1 24 12V14A4 4 0 0 0 24 22V24A2 2 0 0 1 22 26H10A2 2 0 0 1 8 24V22A4 4 0 0 0 8 14V12A2 2 0 0 1 10 10Z" />
+        <path
+          id="dira-mark"
+          data-mark="body"
+          d="M2 0H10A2 2 0 0 1 12 2V6H30A2 2 0 0 1 32 8V30A2 2 0 0 1 30 32H2A2 2 0 0 1 0 30V2A2 2 0 0 1 2 0ZM10 10H22A2 2 0 0 1 24 12V14A4 4 0 0 0 24 22V24A2 2 0 0 1 22 26H10A2 2 0 0 1 8 24V22A4 4 0 0 0 8 14V12A2 2 0 0 1 10 10Z"
+        />
+        {wip > 0 && (
+          <>
+            <clipPath id="dira-mark-clip">
+              <use href="#dira-mark" />
+            </clipPath>
+            <linearGradient id="dira-mark-band">
+              <stop offset="45%" stopColor="var(--muted-foreground)" />
+              <stop offset="50%" stopColor="var(--foreground)" />
+              <stop offset="55%" stopColor="var(--muted-foreground)" />
+            </linearGradient>
+            <g data-mark="band" clipPath="url(#dira-mark-clip)">
+              <rect x="-48" y="0" width="80" height="32" fill="url(#dira-mark-band)" />
+            </g>
+          </>
+        )}
       </svg>
     </Link>
   );
