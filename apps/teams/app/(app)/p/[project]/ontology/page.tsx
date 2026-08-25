@@ -139,7 +139,7 @@ export default async function Ontology({
   const base = config.ontology;
   const ontologyAssumed = usingDefault(config, "ontology");
   // §5-3 §편집 표면이 있는 화면 §결정 2 — 사람이 워커 `.sh`를 손으로 고쳐 경계를 어긴 경우만
-  // 선다(엔진은 검사하지 않는다). 종전에는 워커 화면 온톨로지 행의 캡션이었다(티켓 cd662a73) —
+  // 뜬다(엔진은 검사하지 않는다). 종전에는 워커 화면 온톨로지 행의 캡션이었다(티켓 cd662a73) —
   // 편집 표면을 따라 이 화면으로 옮긴다(티켓 c5d51522).
   const ontologyWarn = ontologyInWorktree(project.root, base) ? t(locale, "ontology.location.inWorktree") : null;
   const tree = await listTree(base);
@@ -190,7 +190,7 @@ export default async function Ontology({
         <div>
           <h1 className="text-lg font-semibold">온톨로지</h1>
           {/* 이 경로 줄이 편집 표면이다(§5-3 §편집 표면이 있는 화면, 티켓 c5d51522) — 파일트리가
-              0장인 프로젝트에서도 이 조건문 밖이라 그대로 선다. */}
+              0장인 프로젝트에서도 이 조건문 밖이라 그대로 뜬다. */}
           <OntologyLocationEditor
             projectId={id}
             initialValue={ontologyAssumed ? "" : base}

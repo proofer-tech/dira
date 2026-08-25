@@ -125,20 +125,20 @@ try:
         "파일을 늘렸는데 온톨로지 블록이 자랐다\n--- 전\n{}\n--- 후\n{}".format(block, grown_block)
     os.remove(os.path.join(ontdir, "넷째.md"))
 
-    # 4) `persona:` 없는 티켓에도 붙는다(페르소나 if 밖에 서는 자리다)
+    # 4) `persona:` 없는 티켓에도 붙는다(페르소나 if 밖에 뜨는 자리다)
     os.remove(os.path.join(root, "tickets", "5c112001.md"))
     mk(root, "5c112002", fm="kind: work\n")
     nop = dryrun(w, local)
     assert "데브-프로필-마커" not in nop, "persona 없는 티켓에 프로필이 붙었다\n" + nop
     assert block in nop, "persona 없는 티켓에 온톨로지가 안 붙었다\n" + nop
 
-    # 5) TICKET_ONTOLOGY 재정의 - 큐 밖 임시 디렉터리를 가리키면 그 자리가 블록에 선다.
+    # 5) TICKET_ONTOLOGY 재정의 - 큐 밖 임시 디렉터리를 가리키면 그 자리가 블록에 뜬다.
     #    기본값 케이스(위 1~4)는 이 변수를 안 건드려 무수정으로 통과했다(85114387).
     extdir = os.path.join(tmp, "밖온톨로지")
     write(os.path.join(extdir, "외부개념.md"), "# 외부개념\n외부-온톨로지-마커\n")
     ext = dryrun(w, local, ontology=extdir)
     ext_start = "===== 온톨로지 (" + extdir + ") =====\n"
-    assert ext_start in ext, "TICKET_ONTOLOGY 자리가 블록에 안 섰다\n" + ext
+    assert ext_start in ext, "TICKET_ONTOLOGY 자리가 블록에 안 떴다\n" + ext
     assert "===== 온톨로지 (" + ontdir + ") =====" not in ext, \
         "재정의했는데 기본 자리(<큐>/ontology)가 블록에 남았다\n" + ext
 

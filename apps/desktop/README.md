@@ -70,7 +70,7 @@ pnpm dev         # teams 빌드 + 조립 + 앱 실행
 자동 업데이트의 채널은 **공개 GitHub 레포의 Releases 하나**다(`../../docs/DESIGN.md`
 §릴리스 · 자동 업데이트 R1).
 
-**레포는 섰다** — `proofer-tech/dira`(공개), `origin` 연결됨(2026-08-01). 그전까지 이 절은
+**레포는 생겼다** — `proofer-tech/dira`(공개), `origin` 연결됨(2026-08-01). 그전까지 이 절은
 "사람이 레포를 만들고 origin을 붙이고 GH_TOKEN을 쥔다" 세 줄이었고 셋 다 닫혔다.
 
 **두 가지 방법이 있고 스크립트는 하나다.**
@@ -284,7 +284,7 @@ SVG에서 직접 래스터하는 것이 그 절이 넘긴 실측이다.
 7. **자식 서버는 독에 타일을 갖지 않는다.** 서버를 `process.execPath`(`Contents/MacOS/dira`)로
    띄우면 LaunchServices가 자식을 같은 번들의 앱 인스턴스로 등록해 **창을 안 만드는 빈 타일**이
    하나 더 생긴다. `Contents/Frameworks/dira Helper.app`의 실행파일로 띄운다 — 같은 바이너리인데
-   그 번들의 `Info.plist`에 `LSUIElement`가 서 있어 타일을 안 만든다(`ELECTRON_RUN_AS_NODE`는
+   그 번들의 `Info.plist`에 `LSUIElement`가 떠 있어 타일을 안 만든다(`ELECTRON_RUN_AS_NODE`는
    그대로다). **Helper 번들 이름은 `productName`에서 나온다** — `package.json`의 그 값을 바꾸면
    `main.ts`의 `nodeBin()`이 못 찾고 타일이 조용히 돌아온다(못 찾으면 `execPath`로 떨어진다).
 
@@ -366,7 +366,7 @@ N4는 OS가 값을 갖지만(`getLoginItemSettings`) 여기엔 그런 자리가 
 
 **개발 실행에서는 검사하지 않는다.** `app.isPackaged`가 거짓이면 U1은 그 사실을 다이얼로그로
 말하고, 배경 검사는 로그 한 줄만 남기고 끝낸다. `pnpm dev`에서 electron-updater를 부르면
-패키징되지 않은 앱이라며 죽고 그 예외가 기동 경로에 앉는다.
+패키징되지 않은 앱이라며 죽고 그 예외가 기동 경로에 놓인다.
 
 `electron-updater`는 **`dependencies`**다(`devDependencies`가 아니다) — 번들에 실려야 한다.
 그래서 `build.files`에 `node_modules/**/*`가 있다. electron-builder가 프로덕션 의존성만

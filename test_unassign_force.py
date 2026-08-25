@@ -123,7 +123,7 @@ try:
     assert not re.search(r"^(session_id|pid|inbox):[ \t]*\S", body, re.M), \
         "할당 값이 안 비었다\n" + body
     assert "UNASSIGN bbbb0002 강제" in readlog(), readlog()
-    assert "답변 대기로 잠갔다" in r.stdout, "성공 stdout이 잠금을 안 말한다: " + r.stdout
+    assert "답변 대기로 잠갔다" in r.stdout, "성공 stdout이 잠금을 안 알려 준다: " + r.stdout
 
     # --- 3b) 그 티켓은 답변 대기로 잠긴 채 열렸다 - 아무도 못 가져간다(§개정) ---
     m = re.search(r"^awaiting: ([0-9a-f]{8})$", body, re.M)
@@ -202,7 +202,7 @@ try:
     alive.append(tick)
     wip = os.path.join(tickets, "eeee0005.wip.md")
     assert wait_for(lambda: "DISPATCH eeee0005" in readlog() and os.path.exists(wip)), \
-        "디스패치가 안 섰다\n" + readlog()
+        "디스패치가 안 떴다\n" + readlog()
     # 세션이 정말 살아서 stdin을 빨고 있어야(=inbox가 광고돼야) 강제가 재현이다
     assert wait_for(lambda: "inbox:" in open(wip, encoding="utf-8").read()
                     and open(wip, encoding="utf-8").read().split("inbox:")[1][:2].strip()), \

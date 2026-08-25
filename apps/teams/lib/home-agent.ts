@@ -117,7 +117,7 @@ const BASH_ALLOWED = ["ls", "cat", "head", "tail", "wc", "sort", "uniq", "cut", 
  *  **종전엔 그 둘 다 repo(`dirname(root)`) 기준이었다** — 큐는 git에 안 들어가는 것이 불변식이라
  *  (CORE §큐의 불변식 3) 온톨로지를 큐 안에 두면 clone한 사람에게 0장이라는 근거였다. 그 값은
  *  뒤집힌 것이 아니라 **대가로 지불됐다**(§5-3 §아카이빙 산출물은 큐 안에 있다 §파는 것). 대신
- *  repo 쪽 예외가 **0**이 되어 요구 `20e4a6f4`(실제 프로젝트는 못 고친다)가 예외 없이 선다 —
+ *  repo 쪽 예외가 **0**이 되어 요구 `20e4a6f4`(실제 프로젝트는 못 고친다)가 예외 없이 뜬다 —
  *  개정 `22a803de`. `AGENTS.md`는 아직 그 자리에 파일이 없을 수 있어 `Write`가 필요하다.
  *
  *  **`tickets/**`는 종전에 `Write`가 안 붙는 자리였다**(별도 상수 `EDIT_ONLY` — 시킨 일이
@@ -138,7 +138,7 @@ const WRITABLE = ["personas/**", "protocols/**", "workers/*.sh", "AGENTS.md", "t
  *  경계를 통째로 없앤다.**
  *
  *  **`home-agent.test.ts`가 이 반환값을 검증한다.** `--allowed-tools`만 남기는 회귀가 `89962e56`
- *  그 사건이었고, 그건 코드를 봐서는 안 틀려 보인다 — 플래그 이름이 하는 일을 말해주지 않는다. */
+ *  그 사건이었고, 그건 코드를 봐서는 안 틀려 보인다 — 플래그 이름이 하는 일을 알려 주지 않는다. */
 /** `ontologyDir`은 **해석된 값**(`resolveConfig(project).ontology`)이다 — 기본값 큐에서는
  *  `<root>/ontology`와 글자로 같고, `TICKET_ONTOLOGY`가 재정의한 큐에서는 큐 밖 절대경로일 수
  *  있다(요구 `85114387` §결정 4). 이 함수는 그 값을 그대로 스코프에 얹을 뿐 해석하지 않는다 —
@@ -217,7 +217,7 @@ function matchesCronMinute(cron: string, d: Date): boolean {
  *  분부터 돈다. 새 수를 발명한 게 아니다 — 갈래 넷의 가장 긴 주기(매월)가 한 주기다. */
 export const SCHEDULE_LOOKBACK_MS = 31 * 24 * 60 * 60 * 1000;
 
-/** §7-2 §판정의 입력. **시계도 인자다** — `judgeSchedule`이 순수 함수로 서는 이유가 이것이다
+/** §7-2 §판정의 입력. **시계도 인자다** — `judgeSchedule`이 순수 함수로 뜨는 이유가 이것이다
  *  (`pnpm test`가 시계를 주입해 판정한다). `lastDueMs`가 없으면(`null`) 창의 시작은 `createdMs`다
  *  ("오늘 만든 스케줄이 어제 회차를 돌지 않는다"). */
 export type ScheduleJudgeInput = { when: string; lastDueMs: number | null; createdMs: number; nowMs: number };
@@ -227,7 +227,7 @@ export type ScheduleJudgeInput = { when: string; lastDueMs: number | null; creat
  *  `lastDueMs`가 있으면(=이미 돌았으면) 다시 안 돈다. 못 읽는 `when`은 없는 것으로 친다.
  *
  *  **31일 캡이 `once`에도 그냥 적용된다** — 창의 시작을 뒤로 못 미는 것 하나로 "31일보다 오래
- *  지난 단발은 안 돈다"가 따로 분기 없이 선다(§7-2 수용조건). */
+ *  지난 단발은 안 돈다"가 따로 분기 없이 뜬다(§7-2 수용조건). */
 export function judgeSchedule({ when, lastDueMs, createdMs, nowMs }: ScheduleJudgeInput): number | null {
   if (!isValidWhen(when)) return null;
   const windowStart = Math.max(lastDueMs ?? createdMs, nowMs - SCHEDULE_LOOKBACK_MS);
@@ -500,7 +500,7 @@ export type WorkerSession = {
 };
 
 /** §7: 끝난 세션은 **최근 10개**(대화 20과 같은 자리에 두는 수다 — 세지 않으면 티켓 수백 장이
- *  좌측에 선다). 도는 것(`.wip`)은 안 자른다: 그건 지금 이 큐의 사실이고 워커 수만큼이다. */
+ *  좌측에 뜬다). 도는 것(`.wip`)은 안 자른다: 그건 지금 이 큐의 사실이고 워커 수만큼이다. */
 const WORKER_SESSION_LIMIT = 10;
 
 /** 큐 → 워커 세션 목록. **순수 함수다**(`renderSnapshot`과 같은 선 — fs를 안 탄다).
@@ -631,7 +631,7 @@ export function renderSnapshot({ project, config, tickets, workers, newTicketHas
 }
 
 /** 큐를 한 번 읽어 스냅샷을 만든다. 못 읽으면 **사유를 그대로 담은 스냅샷**이다 — 던지면
- *  질문 자체가 사라지고, 삼키면 에이전트가 "워커가 없다"고 거짓말한다(§6 에러 3요소).
+ *  질문 자체가 사라지고, 삼키면 에이전트가 "워커가 없다"고 거짓알려 준다(§6 에러 3요소).
  *
  *  **새 티켓 해시도 여기서 민다**(§7 §해시는 사람이 손으로 안 민다) — 큐를 못 읽으면 안 민다:
  *  쓰기도 못 하는 자리에서 못 쓸 값을 실어 주면 에이전트가 그걸 믿는다. 그래서 실패 갈래의
@@ -712,11 +712,11 @@ export async function personaBlock(personasDir: string, name: string = HOME_PERS
 
 /** 페르소나 + 스냅샷 + 경계 + 질문. **순수 함수다**(fs를 안 탄다 — 읽기는 `personaBlock`이
  *  밖에서 하고 조립된 문자열이 인자로 온다). **질문마다 새로 붙인다** — 세션 첫 턴에만 넣으면
- *  두 번째 질문부터 낡은 상태를 말한다(§7).
+ *  두 번째 질문부터 낡은 상태를 알려 준다(§7).
  *
  *  **종전 고정 지시문(`너는 이 큐를 보는 GUI의 질의응답 에이전트다 …`)은 죽었다**(§7 §페르소나가
  *  실린다). PROFILE과 정면으로 부딪쳐서다 — 저 문단은 *티켓을 고치지 않는다*고 적었고 이 페르소나가
- *  하는 일이 **티켓 본문에 링크를 다는 것**이다(§5-3 산출물 ③). 누구인지는 이제 PROFILE이 말한다.
+ *  하는 일이 **티켓 본문에 링크를 다는 것**이다(§5-3 산출물 ③). 누구인지는 이제 PROFILE이 알려 준다.
  *
  *  **경계 문장은 살아 있다.** 플래그가 막는 것과 별개로 글이 필요한 이유는 종전과 같다: **막힌 것을
  *  두드리다 답을 못 하고 끝나는 턴**은 사람에게 그냥 고장으로 보인다. 그 자리가 `worktrees/**`와
@@ -743,11 +743,11 @@ export function buildPrompt(snapshot: string, question: string, ontologyDir: str
 **고칠 수 있는 것은 이것뿐이다** — 큐 루트 아래 \`personas/**\` · \`protocols/**\` ·
 \`workers/*.sh\` · \`AGENTS.md\`, 그리고 온톨로지 \`${ontologyDir}/**\`. 그 밖(\`worktrees/**\` 아래
 프로젝트 코드 · repo 나머지 · 여기 없는 자리 전부)은 도구가 거부한다. 거부되면 우회하지 말고
-무엇이 왜 막혔는지 그대로 말한다.
+무엇이 왜 막혔는지 그대로 알려 준다.
 
 **셸로는 읽고 세는 것만 된다.** 로그를 자르고 세고 줄 세우는 읽기 전용 명령만 돌고, 쓰는
 명령(파일을 만들거나 덮어쓰거나 리다이렉트하는 것)은 거부된다. 거부되면 우회하지 말고 무엇이
-왜 막혔는지 그대로 말한다.
+왜 막혔는지 그대로 알려 준다.
 
 **\`tickets/**\`에는 새 파일도 쓸 수 있다 — 사람이 그 턴에 요구사항으로 올려 달라고 했을
 때만.** 그때 만드는 것은 \`kind: request\` 티켓 하나뿐이다(\`work\`·\`feedback\`·\`answer\`는
@@ -905,7 +905,7 @@ export async function ask(
   // 페르소나·온톨로지 둘 다 워커 스크립트가 옮길 수 있다(`TICKET_PERSONAS`·`TICKET_ONTOLOGY`) —
   // 기본값을 여기 다시 쓰지 않고 `resolveConfig`가 해석한 값을 그대로 쓴다(고정 함수를 안 둔다 —
   // DESIGN.md §5-3). 못 읽으면 페르소나 없이, 온톨로지는 기본 자리(`<root>/ontology`)로 간다
-  // (§7: WARN 없다 — 큐를 못 읽는 사건은 `snapshotOf`가 이미 사유를 담아 말한다).
+  // (§7: WARN 없다 — 큐를 못 읽는 사건은 `snapshotOf`가 이미 사유를 담아 알려 준다).
   const config = await resolveConfig(project).catch(() => null);
   const ontology = config?.ontology ?? path.join(project.root, "ontology");
   const prompt = buildPrompt(
@@ -1173,7 +1173,7 @@ async function runClaude(
       resolve(r);
     };
     child.on("error", (e) => settle({ ok: false, reason: "spawn", output: [e.message, stderr].join("\n").trim() }));
-    // `exit`이 아니라 `close`다 — 결과 줄이 **마지막에** 오므로 stdout을 다 읽은 뒤라야 판정이 선다.
+    // `exit`이 아니라 `close`다 — 결과 줄이 **마지막에** 오므로 stdout을 다 읽은 뒤라야 판정이 뜬다.
     // ponytail: 손자 프로세스가 stdout을 물고 있으면 자식이 죽어도 이게 안 온다(화면은 영영
     //           `도는 중`이다). `--strict-mcp-config`라 지금 손자가 없다 — 생기는 날 `exit` +
     //           유예 타이머로 내린다.
@@ -1239,7 +1239,7 @@ const INTERRUPTED = "[Request interrupted by user]";
  *  버렸다(이 세션의 도구는 읽기 셋뿐이라 날 일이 없었지만, 좌측 패널에서 여는 워커 세션은 Task를
  *  쓸 수 있다). `line`의 `text`는 `label`·`summary`가 둘 다 비는 드문 경우(sidechain의 `text`
  *  블록 — `recordToEvents`가 그 kind에 label·summary를 안 채운다)를 위한 안전망으로 `body` 앞
- *  40자를 쓴다 — 빈 접힌 줄을 세우지 않는다. */
+ *  40자를 쓴다 — 빈 접힌 줄을 만들지 않는다. */
 export function toTurns(events: StreamEvent[]): Turn[] {
   const turns: Turn[] = [];
   // 중지 표식은 **가장 가까운 답**의 것이다(`line`을 건너뛴다 — 도구가 도는 중에도 표식이 그
@@ -1320,7 +1320,7 @@ export const isAsking = (projectId: string): boolean => runningIn(projectId).len
  *  아니라 session id인 것이 그 전부다. 남의 대화를 멈추는 경로를 안 만든다(가서 누른다).
  *
  *  돌려주는 것은 **죽일 것이 있었나**다 — 누르는 사이에 답이 도착했으면 false다(화면은 그 다음
- *  폴링이 이미 `running: false`를 말한다). 여기서 맵을 지우지 않는다: 자식이 실제로 닫히면
+ *  폴링이 이미 `running: false`를 알려 준다). 여기서 맵을 지우지 않는다: 자식이 실제로 닫히면
  *  `runClaude`가 `stopped`를 채우고, 그걸 집어 가는 것은 종전대로 폴링 한 번이다. */
 export function stopAsk(sessionId: string): boolean {
   const live = runs.get(sessionId)?.live;
@@ -1335,7 +1335,7 @@ export function stopAsk(sessionId: string): boolean {
  *  ① 도는 동안 폴링이 답의 조각을 그려야 하고 ② 새로고침해도 따라가야 하고
  *  ③ 실패 ④를 판정할 곳이 서버여야 한다. 셋 다 "누가 도는지"를 서버가 알아야 한다는 한 사실이다.
  *
- *  돌려주는 것은 **실패뿐**이다(`null` = 시작했다). 성공의 도착은 폴링이 말한다.
+ *  돌려주는 것은 **실패뿐**이다(`null` = 시작했다). 성공의 도착은 폴링이 알려 준다.
  *
  *  **잠금의 단위는 한 대화다**(§7 §대화마다 따로 돈다). A가 도는 동안 B의 질문은 그냥 받는다 —
  *  그래서 질문이 들어갈 **session id를 먼저 정하고**(`beginTurn`) 그 키로 본다. 검사와 등록
@@ -1572,7 +1572,7 @@ const NO_REFS: RefIndex = { tickets: {}, epics: {} };
  *  이유도 이것이다: 둘 다 그 객체가 있어야 채워지는 값이라 이미 포함된다.
  *
  *  **`turns`만으로는 못 끊었다**(QA `0a284011` 실측, 왕복 5회 전부 · 워커 세션도 `새 대화`도).
- *  답 줄은 프로세스가 죽기 한참 전에 트랜스크립트에 서고(답 5~40초 · 자식 죽음 14초) **도는 중의
+ *  답 줄은 프로세스가 죽기 한참 전에 트랜스크립트에 뜨고(답 5~40초 · 자식 죽음 14초) **도는 중의
  *  폴링이 그것을 이미 집어 가 `offset`을 밀어 둔다.** `running: false`가 오는 마지막 응답의
  *  `turns`는 그래서 **빈 배열**이고, 여기가 영영 false라 화면은 천장 5분(`CEILING_MS`)까지
  *  `보내기`·패널 줄 16개·`새 대화`를 잠갔다. *"마지막 응답이 그 답을 함께 데려온다"*가 그 오독이다.
@@ -1584,7 +1584,7 @@ const NO_REFS: RefIndex = { tickets: {}, epics: {} };
  *  (요구 `8db4d0f6` — §7 §천장이 없다) — 화면 쪽은 화면 결선 티켓(`4c8e82d8`)이 걷는다.**
  *
  *  **`turns.length`는 종을 안 가린다** — `line`이 늘어도 이 판정은 그대로다. 첫 증거(`answered`)는
- *  이미 종과 무관하고, 둘째 증거는 원래도 "질문이 파일에 먼저 서는" 것만으로 채워지는 수였다
+ *  이미 종과 무관하고, 둘째 증거는 원래도 "질문이 파일에 먼저 뜨는" 것만으로 채워지는 수였다
  *  (`toTurns`가 항상 첫 프롬프트를 맨 먼저 넣는다) — `line`이 그 사실을 안 바꾼다.
  *
  *  **워커 세션은 셋째 증거를 쓴다**(§7 §도는 워커 세션은 스레드에서도 돈다 — 요구 `161a881e`).
@@ -1597,7 +1597,7 @@ const NO_REFS: RefIndex = { tickets: {}, epics: {} };
  *  이 폴링에서 여전히 0건이라 둘째 증거로도 못 끊는다. `workers` 목록은 **매 폴링 큐를 다시
  *  읽으므로**(`workerSessionsById`) 트랜스크립트에 새 줄이 있든 없든 그 전환을 그 폴링에서
  *  바로 안다 — 첫째 증거(`answered`)는 그대로 남는다(그건 우리 자식의 것이라 워커 세션에는
- *  애초에 안 선다). */
+ *  애초에 안 뜬다). */
 export const pollDone = (
   c: Pick<HomeChunk, "running" | "turns" | "answered" | "sessionId" | "workers">,
 ): boolean => {
@@ -1622,7 +1622,7 @@ export async function pollHome(
   const workers = await workerSessionsById(projectId);
   const scheduleList = scheduleViews(schedules);
   // **`current`가 아무것도 안 가리킬 수 있다.** 보던 워커 세션의 티켓이 큐에서 사라지면 이름도
-  // 줄도 없다 — 그때는 **대화 0건과 같다**(§7 §고르면 홈 대화 스레드에 열린다: 온보딩이 선다.
+  // 줄도 없다 — 그때는 **대화 0건과 같다**(§7 §고르면 홈 대화 스레드에 열린다: 온보딩이 뜬다.
   // 트랜스크립트는 안 지운다). **실패 ⑤가 아니다** — 그건 줄이 있는데 트랜스크립트만 없는
   // 경우고(§비주얼 §24 다섯 상태 에러), 둘을 가르는 것이 이 판정 하나다.
   // **회차가 있는 스케줄도 여기 걸린다**(§7-2 §고르면 무엇이 서나 — 워커 세션 줄과 같은 자다).
@@ -1722,7 +1722,7 @@ export async function pollHome(
   // **겹침 판정**(§7 §누적기를 비우는 자리 — 요구 `3dc948ac` · 실측 `c5d287ac`, 이 머신).
   // 누적기는 `message_start`에서만 비므로(`eatLine` 무수정) 도구가 도는 동안은 그대로 있다.
   // 비우는 자리를 `content_block_start`로 당기는 갈래는 버렸다 — 실측(3회 재현)에서 텍스트
-  // 블록의 트랜스크립트 레코드가 다음 `content_block_start`보다 늘 105~587ms **뒤**에 섰다.
+  // 블록의 트랜스크립트 레코드가 다음 `content_block_start`보다 늘 105~587ms **뒤**에 떴다.
   // 그 자리로 당기면 그 지연만큼 화면에 빈 구간이 생긴다(§7이 "두 벌보다 나쁘다"고 적은 그것).
   // 대신 여기서 **마지막 답 줄과 누적분이 같으면 누적분을 뺀다** — 트랜스크립트가 그 답을
   // 이미 `turns`로 들인 바로 이 응답에서 뺀다(순서와 무관하게 통하는 이유는 `## 결과` 참조).

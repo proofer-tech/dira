@@ -27,7 +27,7 @@ test("플러그인 없으면 종전대로 `**`가 글자로 남는다 — §10 �
 });
 
 // §10 §수용조건 1 — `.dira/tickets/a1927a60.done.md:36`의 버그 리포트 원문.
-test("수용조건 1 — 코드 스팬을 낀 `**`가 strong 하나로 선다(`**`가 안 남는다)", () => {
+test("수용조건 1 — 코드 스팬을 낀 `**`가 strong 하나로 뜬다(`**`가 안 남는다)", () => {
   assert.equal(
     html("**릴리스된 최신 버전은 `v1.0.29`**입니다."),
     "<p><strong>릴리스된 최신 버전은 <code>v1.0.29</code></strong>입니다.</p>",
@@ -40,7 +40,7 @@ test("수용조건 1 — 코드 스팬 뒤에 조사가 바로 붙어도 닫힌�
 });
 
 // §10 §수용조건 2 — `.dira/tickets/0146fd70.done.md:26`의 실측 산문.
-test("수용조건 2 — 인용을 낀 홑 `*`가 em으로 서고 `*`가 안 남는다", () => {
+test("수용조건 2 — 인용을 낀 홑 `*`가 em으로 뜨고 `*`가 안 남는다", () => {
   assert.equal(
     html('*"사람의 편집이 원인인 사례는 문서화된 것이 없다"*고 쓸 뻔했다'),
     "<p><em>&quot;사람의 편집이 원인인 사례는 문서화된 것이 없다&quot;</em>고 쓸 뻔했다</p>",
@@ -90,7 +90,7 @@ const refIndex: RefIndex = {
   epics: {},
 };
 
-test("`refMarkers`도 이 변환 다음 자리에서 종전대로 돈다(코드 스팬 참조가 표식으로 선다)", () => {
+test("`refMarkers`도 이 변환 다음 자리에서 종전대로 돈다(코드 스팬 참조가 표식으로 뜬다)", () => {
   const out = html("**해시는 `54ed135a`**입니다", [remarkGfm, closeEmphasis, refMarkers(refIndex)]);
   assert.match(out, /^<p><strong>해시는 <a[^>]*queueref[^>]*>[\s\S]*<\/a><\/strong>입니다<\/p>$/);
 });

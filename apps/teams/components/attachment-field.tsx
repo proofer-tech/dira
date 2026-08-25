@@ -131,7 +131,7 @@ export function useAttachments(project: string) {
   };
 }
 
-/** 칩 줄 + 실패 사유 줄 + 손잡이가 앉은 액션 행(§27). `children`은 그 행의 오른쪽 —
+/** 칩 줄 + 실패 사유 줄 + 손잡이가 놓인 액션 행(§27). `children`은 그 행의 오른쪽 —
  *  1차 액션(`발행`·`요구 접수`)이 여전히 행의 가장 오른쪽이다(§비주얼 §4-3). */
 export function AttachmentField({ att, children }: { att: Attachments; children?: ReactNode }) {
   const picker = useRef<HTMLInputElement>(null);
@@ -204,7 +204,7 @@ export function AttachmentProblems({ att }: { att: Attachments }) {
 }
 
 /** 칩 줄 — `<InputGroup>` 배치(§27 표 오른쪽 열). 손잡이 addon **앞**에 두고 둘 다 `order-last`라
- *  DOM 순서가 그대로 선다. addon이 `role="group"`을 이미 갖고 있어 이름만 얹는다. 0개면 줄이 없다. */
+ *  DOM 순서가 그대로 뜬다. addon이 `role="group"`을 이미 갖고 있어 이름만 얹는다. 0개면 줄이 없다. */
 export function AttachmentChips({ att }: { att: Attachments }) {
   if (att.chips.length === 0) return null;
   return (
@@ -230,7 +230,7 @@ export function AttachmentChips({ att }: { att: Attachments }) {
  *
  *  파일 입력은 `sr-only`가 아니라 `hidden`이다. `InputGroupAddon`의 onClick이 addon 여백을 누르면
  *  `parentElement.querySelector("input")`을 focus하는데(실측 — 그 그릇의 컨트롤은 `textarea`라
- *  지금까지 아무것도 못 찾았다), `sr-only`면 그 포커스가 **보이지 않는 요소**에 앉는다.
+ *  지금까지 아무것도 못 찾았다), `sr-only`면 그 포커스가 **보이지 않는 요소**에 놓인다.
  *  `display:none`은 focus가 안 먹고 `.click()`은 그대로 먹는다. */
 export function AttachmentButton({ att, locked }: { att: Attachments; locked?: boolean }) {
   const picker = useRef<HTMLInputElement>(null);

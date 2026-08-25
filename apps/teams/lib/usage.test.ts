@@ -206,11 +206,11 @@ test("epicCost · epicCostChunk — 티켓들의 `usage` 합 · 라벨 `이 에�
   const chunk = await epicCostChunk(root, ["11111111", "22222222", "33333333"]);
   assert.equal(chunk, "이 에픽 4.0M 토큰 · 토큰량을 아는 티켓 2 / 3");
 
-  // 아는 수 == 전체면 분수가 안 선다(`60/60`은 아무 말도 안 한다)
+  // 아는 수 == 전체면 분수가 안 뜬다(`60/60`은 아무 말도 안 한다)
   const full = await epicCostChunk(root, ["11111111", "22222222"]);
   assert.equal(full, "이 에픽 4.0M 토큰");
 
-  // 티켓 0개 — 덩이 자체가 안 선다
+  // 티켓 0개 — 덩이 자체가 안 뜬다
   assert.equal(await epicCostChunk(root, []), null);
 });
 

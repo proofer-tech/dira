@@ -56,7 +56,7 @@ export function maskWebhookUrl(url: string): string {
 }
 
 /** 빈 문자열은 끈다(키를 지운다) — 그 밖은 `https://`만 받는다. **거절되면 파일을 안 건드린다**
- *  (검증이 어떤 `fs` 호출보다 먼저다). 접두사 이후는 안 잰다(§주소와 형식 — SSRF 전제가 안 선다). */
+ *  (검증이 어떤 `fs` 호출보다 먼저다). 접두사 이후는 안 잰다(§주소와 형식 — SSRF 전제가 안 뜬다). */
 export async function setWebhookUrl(raw: string): Promise<void> {
   const url = raw.trim();
   if (url && !/^https:\/\//i.test(url)) {
@@ -101,7 +101,7 @@ export async function postWebhook(url: string, payload: WebhookPayload): Promise
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
 }
 
-// ── 델타 — 직전 집합과의 차집합만 (§델타는 이미 서 있다 · `apps/desktop/main.ts`의 `pollAwaiting`과 같은 관용구) ──
+// ── 델타 — 직전 집합과의 차집합만 (§델타는 이미 떠 있다 · `apps/desktop/main.ts`의 `pollAwaiting`과 같은 관용구) ──
 
 const keyOf = (i: Pick<AwaitingItem, "project" | "stem">): string => `${i.project}/${i.stem}`;
 

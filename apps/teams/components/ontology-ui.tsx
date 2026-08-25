@@ -139,7 +139,7 @@ const fileHref = (projectId: string, rel: string, sidebarOff: boolean) =>
  *
  *  `tickets`는 이 마커(`ontology-import:<폴더>`)를 든 열린 티켓 전부다 — 폴더당 한 장이라
  *  첫 그림에 판정할 폴더가 없어 부르는 쪽(서버)이 미리 훑어 내려준다(§56 §새 것). 버튼은
- *  이 목록과 무관하게 항상 선다 — 다른 폴더를 막지 않는다(§5-3). `status`·`folder`는 서버가
+ *  이 목록과 무관하게 항상 뜬다 — 다른 폴더를 막지 않는다(§5-3). `status`·`folder`는 서버가
  *  이미 옮긴 문자열이다 — `statusOf`·`importFolderOf`는 `lib/queue.ts` runtime이라 클라이언트
  *  번들에 못 들어간다(`node:fs/promises` 의존). */
 export function OntologyImport({
@@ -295,7 +295,7 @@ export function NewOntologyFileButton({
 
 // ── 위반 카드 `문제해결` (§P230) ─────────────────────────────────────────────
 
-/** 위반 카드가 버튼 상태일 때만 선다 — 링크 상태는 `page.tsx`가 직접 그린다(정리 티켓이 이미
+/** 위반 카드가 버튼 상태일 때만 뜬다 — 링크 상태는 `page.tsx`가 직접 그린다(정리 티켓이 이미
  *  있으면 클라이언트 상태가 필요 없다). 발행되면 그 티켓 상세로 이동한다 — `NewOntologyFileButton`이
  *  새 파일 만들고 그 파일로 이동하는 것과 같은 결이다. */
 export function FixSchemaViolationsButton({ projectId }: { projectId: string }) {
@@ -552,7 +552,7 @@ function CheckRow({
 
 /** 생성 직후 온보딩 화면의 본문(§5-3 §생성 — 설문 4문항). **폼은 LLM을 안 기다린다** —
  *  제출은 `submitOntologySurveyAction`을 한 번 부르고 끝나고(그 액션 자체가 응답을 즉시
- *  돌려준다), 실제 `_ontology/SCHEMA.md` 등 시드 파일 전부가 서는 것은 그 뒤다. 제출 후에는 파일이 나타날 때까지 잠깐
+ *  돌려준다), 실제 `_ontology/SCHEMA.md` 등 시드 파일 전부가 뜨는 것은 그 뒤다. 제출 후에는 파일이 나타날 때까지 잠깐
  *  새로고침한다 — 파일이 생기면 부모(`page.tsx`)가 이 컴포넌트 대신 파일트리를 그려서
  *  폴링이 스스로 끝난다(언마운트). **문항 4개에 «객체»·«타입»·«관계»·«온톨로지»가 없다** —
  *  값은 `lib/ontology-seed.ts`의 상수 그대로다.

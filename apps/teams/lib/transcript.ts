@@ -31,18 +31,18 @@ export type StreamEvent = {
   summaryMono: boolean;
   body: string;
   sidechain: boolean; // isSidechain — 화면이 `서브` 표시를 붙인다
-  // Edit 모양(`old_string`·`new_string` 둘 다 문자열)인 `tool_use`에서만 선다(§2-1 §펼친 Edit).
+  // Edit 모양(`old_string`·`new_string` 둘 다 문자열)인 `tool_use`에서만 뜬다(§2-1 §펼친 Edit).
   // 있으면 화면이 `body`(JSON 전문) 대신 이 줄 단위 diff를 그린다 — 없으면(대부분의 tool_use)
   // 키 자체가 없다. `undefined`로 채우면 골든 테스트의 `deepEqual`이 키 유무로 갈린다.
   diff?: DiffLine[];
   replaceAll?: boolean; // `diff`가 있을 때만 뜻이 있다 — `replace_all: true`
   // `tool_result` 블록의 `is_error === true`(§2-12 ②) — 그 값 하나만 본다. `content` 문자열도
-  // 종료 코드도 안 읽는다. 짝인 `tool_use`에는 안 선다. `undefined`로 채우면 골든 테스트의
+  // 종료 코드도 안 읽는다. 짝인 `tool_use`에는 안 뜬다. `undefined`로 채우면 골든 테스트의
   // `deepEqual`이 키 유무로 갈린다(`diff`와 같은 이유).
   error?: true;
   // 도구 호출 id(§2-15 ③) — 이 `tool_use`와 그 짝 `tool_result`를 잇는 값. claude는
   // `tool_use.id` / `tool_result.tool_use_id`, grok은 `toolCallId`가 원천이다. `kind`가
-  // `tool_use`·`tool_result`인 사건에만 선다 — 다른 종에는 `diff`·`error`와 같은 이유로 키
+  // `tool_use`·`tool_result`인 사건에만 뜬다 — 다른 종에는 `diff`·`error`와 같은 이유로 키
   // 자체가 없다.
   toolId?: string;
 };
@@ -105,7 +105,7 @@ export async function findTranscript(
  *
  *  **디렉터리 이름을 cwd에서 찍지 않고 claude와 같은 글롭을 돈다.** 규칙(퍼센트 인코딩)을 아는
  *  것과 그 자리에서 cwd를 아는 것은 다른 문제다: 완료 티켓은 무는 워커가 없어 `holderEngine`이
- *  `null`인데 스트림은 리플레이로 서야 하고(claude가 그렇다), cwd를 화면에서 받으면 경로가 되는
+ *  `null`인데 스트림은 리플레이로 떠야 하고(claude가 그렇다), cwd를 화면에서 받으면 경로가 되는
  *  입력이 둘로 는다(§경로 방어는 `session_id` 하나만 통과시킨다). **규칙 자체는 `grokCwd`가
  *  되돌리는 방향으로 쓴다** — claude의 규칙(`usage.ts:166`)과 한 함수가 아니다. */
 export async function findGrokTranscript(
@@ -120,7 +120,7 @@ export async function findGrokTranscript(
  *
  *  **엔진 이름을 묻지 않는다.** 두 CLI가 각자 자기 트리에만 자기 세션을 남기므로 *파일이 어느
  *  트리에 있느냐*가 곧 형식이고, 그래서 이 값이 `holderEngine`과 독립이다 — 워커가 이미 놓아 준
- *  완료 티켓에서도 스트림이 선다. claude를 먼저 보므로 claude 큐에서는 읽기가 종전과 같다
+ *  완료 티켓에서도 스트림이 뜬다. claude를 먼저 보므로 claude 큐에서는 읽기가 종전과 같다
  *  (`~/.grok`을 아예 안 연다). */
 export async function findStream(sessionId: string): Promise<{ file: string; grok: boolean } | null> {
   const claude = await findTranscript(sessionId);
@@ -198,12 +198,12 @@ export async function tailEvents(
  *
  *  파일 **전문**을 읽고 **뒤에서부터** 줄 단위로 훑어 **세울 글자가 있는** 첫 `tool_use`·assistant
  *  `text`에서 멈춘다. `tool_result`·`thinking`·`prompt`·`interject`는 *진행중이다*만 말하는데 그건
- *  이미 셋이 말한다(레인 · §18 점 · §19 워커 마크) — 걸러도 갱신은 그대로다(§1-1 실측: 남는 둘의
+ *  이미 셋이 알려 준다(레인 · §18 점 · §19 워커 마크) — 걸러도 갱신은 그대로다(§1-1 실측: 남는 둘의
  *  간격 p50 8.6s). 히트 0 · 읽기 실패는 둘 다 `null`이고 화면은 **줄 자체를 안 세운다**
  *  (§1-1 §없을 때 · §경계).
  *
  *  **요약이 빈 `tool_use`는 안 고르고 뒤로 더 훑는다**(§1-1 §개정 · 요구 `d8772349`). 그 줄이
- *  `Bash`처럼 도구 이름만 서는 것이 실측 히트의 8.2%(화면 시간 8.5%)였다. 지우지 않고 물러서는
+ *  `Bash`처럼 도구 이름만 뜨는 것이 실측 히트의 8.2%(화면 시간 8.5%)였다. 지우지 않고 물러서는
  *  이유는 지우면 카드가 24px 줄었다 늘었다 하며 레인 안 카드를 밀어서다(§36 §버린 안). 물러선
  *  값의 나이는 p50 16.9초 · p90 119.1초이고, 뒤로 더 훑는 사건 수는 p50 2 · 최대 27이다.
  *
@@ -350,7 +350,7 @@ export function grokCwd(dir: string): string | undefined {
   try {
     return decodeURIComponent(dir);
   } catch {
-    return undefined; // 홀로 선 `%` — 요약이 절대경로로 선다(빈 상태가 아니다)
+    return undefined; // 홀로 선 `%` — 요약이 절대경로로 뜬다(빈 상태가 아니다)
   }
 }
 
@@ -387,7 +387,7 @@ const grokBlock = (raw: unknown): unknown => {
  *  ponytail: 그 이름표로 `toolSummary`가 걸리는 것은 claude와 낱말이 같은 `Write` 하나다
  *  (`file_path`까지 같다). `Run Command`의 `description`·`Read`의 `target_file`도 세우려면
  *  grok 도구 이름표를 하나 둬야 하는데 그 표는 도구가 늘 때마다 낡는다 — 지금은 접힌 줄에
- *  라벨이 서고 펼치면 `rawInput` 전문이 있다. 요약이 빈 도구가 눈에 걸리면 그때 표를 만든다. */
+ *  라벨이 뜨고 펼치면 `rawInput` 전문이 있다. 요약이 빈 도구가 눈에 걸리면 그때 표를 만든다. */
 function grokRecord(rec: unknown, cwd?: string): unknown {
   if (!rec || typeof rec !== "object") return null;
   const r = rec as { timestamp?: unknown; params?: unknown };
@@ -478,7 +478,7 @@ export function recordToEvents(rec: unknown, collapseFirstPrompt = false): Strea
   // `remove`는 세션이 그걸 집어 갔다는 뜻이라 **같은 문장이 두 번 뜬다** — 안 흘린다.
   // `dequeue`·모르는 `operation`·`content` 없는 줄(실측 셋 다 있다)은 조용히 건너뛴다.
   // `content`가 없는 `enqueue`는 이 머신 실측 1675건 중 815건이다(피드백 `edec37eb`) — 흘리면
-  // 본문 없는 `참견` 줄이 서서 화면이 "사람이 참견했다"고 거짓말한다. 공백뿐인 것도 같다.
+  // 본문 없는 `참견` 줄이 떠서 화면이 "사람이 참견했다"고 거짓알려 준다. 공백뿐인 것도 같다.
   if (r.type === "queue-operation") {
     const text = typeof r.content === "string" ? r.content : "";
     if (!isEnqueue(r) || !text.trim() || HARNESS_ENVELOPE.test(text)) return [];

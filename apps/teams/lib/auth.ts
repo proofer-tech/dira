@@ -40,7 +40,7 @@ export async function readAuth(): Promise<AuthStatus> {
 
 // ── 다른 엔진의 상태 층 — 사실 둘만, 판정은 안 한다 (§0-4 §개정 `b0966e66`) ──────────
 //
-// §4-3 카탈로그(claude·codex·grok·agy)와 엔진 선택 컨트롤이 서면서, 엔진을 고르는 사람이
+// §4-3 카탈로그(claude·codex·grok·agy)와 엔진 선택 컨트롤이 뜨면서, 엔진을 고르는 사람이
 // 인증이 섰는지 볼 자리가 이 다이얼로그에 없었다. 여기서 여는 것은 **상태 층뿐**이다 —
 // `login status`류 서브프로세스를 부르지 않고, `auth.json`의 JWT `exp`도 읽지 않는다
 // (그 값을 재는 것은 아직 안 여는 발급·관리 층의 일이다).
@@ -192,7 +192,7 @@ async function writeTokensFile(next: TokensFile): Promise<void> {
 }
 
 /** `oauth-token`은 여기서만 다시 쓴다. eligible이 하나도 없으면 지운다 →
- *  §0-4의 `Claude 토큰이 없습니다`가 저절로 선다(§0-13 §상태). */
+ *  §0-4의 `Claude 토큰이 없습니다`가 저절로 뜬다(§0-13 §상태). */
 async function syncOauthToken(file: TokensFile): Promise<void> {
   const engine = file.claude;
   if (!engine || !engine.tokens.some((t) => isEligible(t))) {
@@ -257,7 +257,7 @@ export async function readTokens(): Promise<TokensFile> {
  *  판정을 두 벌로 적지 않는다. 지금 쓸 토큰을 사람이 직접 고르는 손은 `setActiveToken`이다.
  *
  *  **잠금(§0-13 §잠금 계약 ①)에서는 append가 아니라 `active` 자리 교체다.** 이미 아는 토큰이면
- *  그 자리를 그대로 활성으로 삼고(항목 0개 변화), 새 토큰이면 지금 `active`가 앉은 인덱스를
+ *  그 자리를 그대로 활성으로 삼고(항목 0개 변화), 새 토큰이면 지금 `active`가 놓인 인덱스를
  *  새 항목으로 갈아 끼운다 — 배열 길이가 안 늘어난다. 다른 인덱스의 항목(계약 ③이 지키는
  *  대상)은 안 건드린다. */
 export async function addToken(raw: string, label?: string): Promise<TokenEntry> {
@@ -454,13 +454,13 @@ export async function deleteEngineProfile(engine: ProfileEngine, id: string): Pr
 }
 
 /** `담기` 버튼 — 터미널의 지금 로그인 상태(`home`의 `.codex` · `.grok`)를 통째로 복사한다
- *  (§0-23 §그릇). `id`는 무작위고 중복을 안 잡는다 — 같은 계정을 두 번 담으면 행이 둘 선다,
+ *  (§0-23 §그릇). `id`는 무작위고 중복을 안 잡는다 — 같은 계정을 두 번 담으면 행이 둘 뜬다,
  *  사람이 라벨로 구분하고 지운다.
  *
  *  **잠금(§0-13 §잠금 계약 ①)에서는 append가 아니라 `active` 자리 교체다** — `addToken`과
  *  같은 규칙. 교체로 목록에서 빠진 옛 항목의 디렉터리는 §0-23 §잠금 계약 ③(*"디렉터리도
  *  안 지운다"*)을 따라 그대로 둔다 — 지우는 손은 `삭제` 버튼 하나뿐이다.
- *  ponytail: 그 디렉터리는 고아로 남는다 — 자동 회전이 서는 날 `engines/` 청소도 같이 연다. */
+ *  ponytail: 그 디렉터리는 고아로 남는다 — 자동 회전이 뜨는 날 `engines/` 청소도 같이 연다. */
 export async function captureEngineProfile(
   engine: ProfileEngine,
   home = homedir(),

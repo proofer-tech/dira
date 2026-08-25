@@ -167,7 +167,7 @@ export async function createTicket(
     }
 
     // 라벨은 서버가 만든다 — `epicTitle()`과 결정 5의 `제목 없음 (P273)` 갈래가 여기 한 자리에만
-    // 있고, 화면은 이 문장을 그대로 띄운다(P번호가 라벨 옆에서 단독으로 안 선다).
+    // 있고, 화면은 이 문장을 그대로 띄운다(P번호가 라벨 옆에서 단독으로 안 뜬다).
     if (req && epic) {
       const label = (await epicTitle(project.root, epic)) ?? "제목 없음";
       message = `요구사항이 ${label} (${epic}) 에픽으로 접수되었습니다.`;
@@ -186,7 +186,7 @@ export async function createTicket(
 
   revalidatePath(`/p/${projectId}`); // 보드에 새 티켓이 뜬다 — 두 경로 공통이다
   // 요구 접수는 **이동하지 않는다**: 상세는 frontmatter 표·deps·세션 스트림이 있는 운영 화면이라
-  // "당신이 티켓을 만들었다"고 말한다. 실제로 일어난 일은 큐가 요구를 접수했고 해석은 PM이
+  // "당신이 티켓을 만들었다"고 알려 준다. 실제로 일어난 일은 큐가 요구를 접수했고 해석은 PM이
   // 한다는 것이다 — 접수 확인은 다이얼로그 안에 남고 상세는 링크가 된다(사람 지적 `fb0d309c`).
   // 발행은 종전대로 상세로 간다: 그쪽은 kind·persona·deps를 직접 고른 운영자의 동작이다.
   if (req) return { ok: true, hash, message };

@@ -390,7 +390,7 @@ test("사건 매핑 — cwd 밖 파일은 전체 경로가 남는다", () => {
   assert.equal(e.summary, "/etc/hosts");
 });
 
-test("사건 매핑 — Edit 모양(old_string·new_string 둘 다 문자열)이면 diff가 서고, 아니면 없다", () => {
+test("사건 매핑 — Edit 모양(old_string·new_string 둘 다 문자열)이면 diff가 뜨고, 아니면 없다", () => {
   const [edit] = recordToEvents(
     JSON.parse(
       assistant([
@@ -406,7 +406,7 @@ test("사건 매핑 — Edit 모양(old_string·new_string 둘 다 문자열)이
   assert.equal(edit.replaceAll, true);
 
   // 판정은 도구 이름이 아니라 모양이다 — 이름이 Edit가 아니어도 old_string·new_string 둘 다
-  // 문자열이면 선다(§2-1: codex의 Edit형 tool_call이 같은 모양으로 오면 공짜로 덮인다)
+  // 문자열이면 뜬다(§2-1: codex의 Edit형 tool_call이 같은 모양으로 오면 공짜로 덮인다)
   const [shaped] = recordToEvents(
     JSON.parse(assistant([{ type: "tool_use", name: "apply_patch", input: { old_string: "a", new_string: "b" } }]).trim()),
   );
@@ -534,7 +534,7 @@ test("사건 매핑 — is_error가 오류 판정의 유일한 근거다 (§2-12
   assert.equal(result(undefined, "Exit code 1\n실패").error, undefined);
 });
 
-test("사건 매핑 — 오류는 tool_result 사건에만 서고 짝인 tool_use에는 안 선다 (§2-12 ⑨-2)", () => {
+test("사건 매핑 — 오류는 tool_result 사건에만 뜨고 짝인 tool_use에는 안 뜬다 (§2-12 ⑨-2)", () => {
   const [toolUse] = recordToEvents(
     JSON.parse(
       assistant([

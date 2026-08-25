@@ -61,7 +61,7 @@ export default function Landing({
   /** 경로 피커·생성 폼이 `~`로 친 값을 펴는 데만 쓴다. */
   home?: string;
   /** 프로젝트 목록 표(§한 코드베이스 §홈). 풀 모드에서 `<main>`의 첫 블록 `#projects`
-   *  슬롯에 선다(§비주얼 §47, P199-10). */
+   *  슬롯에 뜬다(§비주얼 §47, P199-10). */
   children?: React.ReactNode;
 }) {
   // 초기값은 빌드 시점의 `apps/desktop/package.json`. 비우면 hydration이 어긋난다.
@@ -298,9 +298,9 @@ export default function Landing({
     // 관측 대상은 <main> 직계 블록 중 `.travel`·`#projects`를 뺀 나머지(`.wrap`)이고, 첫
     // 블록(`.hero`)이 레인 0 · 마지막 둘이 레인 2 · 그 사이가 레인 1이다. `#projects`는
     // 슬롯이라 셈에서 뺀다 — 안 빼면 프로젝트 수에 따라 `.hero` 상단이 관측 띠(뷰포트
-    // 중앙 10%) 위로 올라가 `scrollY=0`에서 레인 0이 조용히 안 서는 경우가 생긴다(§비주얼
+    // 중앙 10%) 위로 올라가 `scrollY=0`에서 레인 0이 조용히 안 뜨는 경우가 생긴다(§비주얼
     // §47 실측). `.armed`와 같은 배치다 — JS가 죽으면 data-lane이 없고 카드는 레인 0에
-    // 그냥 서 있다. reduce에서도 레인은 그대로 간다: 이름이 갈리는 것은 모션이 아니라
+    // 그냥 떠 있다. reduce에서도 레인은 그대로 간다: 이름이 갈리는 것은 모션이 아니라
     // 내용이고, 미끄러지는 420ms만 킬 스위치의 `transition-duration: 0s !important`가 지운다.
     const travel = document.querySelector<HTMLElement>(".travel");
     if (travel) {
@@ -326,7 +326,7 @@ export default function Landing({
     (async () => {
       try {
         // 위젯이 부르던 바로 그 URL이다(DESIGN §별 버튼을 우리 버튼으로 §고르는 것 ②).
-        // 못 읽으면 stars가 빈 채로 남아 개수 칸이 아예 안 선다 — 콘솔에도 아무것도 안 띄운다.
+        // 못 읽으면 stars가 빈 채로 남아 개수 칸이 아예 안 뜬다 — 콘솔에도 아무것도 안 띄운다.
         const repo = await (
           await fetch("https://api.github.com/repos/proofer-tech/dira")
         ).json();
@@ -374,7 +374,7 @@ export default function Landing({
   return (
     <div className="dira-landing">
 
-{/* ① 릴리스 배너 — 풀 모드에서 안 선다(§한 코드베이스 §홈 표). 파는 절이라서다. */}
+{/* ① 릴리스 배너 — 풀 모드에서 안 뜬다(§한 코드베이스 §홈 표). 파는 절이라서다. */}
 {!fullMode && (
 <div className="ann">
   <div className="wrap">
@@ -403,7 +403,7 @@ export default function Landing({
         {stars && <span className="star-count" aria-hidden="true">{stars}</span>}
       </a>
       {/* ② 헤더 `앱 다운로드` → `새로 만들기`·`설정` 둘로 갈린다(§한 코드베이스 §홈 표 ·
-          §비주얼 §46 ③). `프로젝트 관리`는 목적지가 자기가 서 있는 페이지의 꼭대기라 안
+          §비주얼 §46 ③). `프로젝트 관리`는 목적지가 자기가 떠 있는 페이지의 꼭대기라 안
           올린다(`/#projects`는 이미 이 페이지에 열려 있다) — §홈 §자기 자신을 가리키던 버튼.
           0건이면 `새로 만들기`가 빠져 primary가 0개다. */}
       {fullMode ? (
@@ -427,7 +427,7 @@ export default function Landing({
 {/* 여행하는 티켓 한 장(DESIGN §랜딩 §개편 §움직이는 티켓). 페이지가 파는 것을 페이지가
     수행한다 — 이 제품에서 레인을 건너는 것은 애니메이션이 아니라 `rename` 한 번이다
     (코어 §큐의 불변식 1). 실리는 글자는 전부 제품이 쓰는 식별자이고 산문 노드가 0개다.
-    장식이라 aria-hidden이다(§남는 규칙 ②). 절마다 새 카드를 세우지 않는다 — 이 한 장이
+    장식이라 aria-hidden이다(§남는 규칙 ②). 절마다 새 카드를 만들지 않는다 — 이 한 장이
     <main> 안에서 sticky로 붙어 페이지를 끝까지 따라간다. */}
 <div className="travel wrap" aria-hidden="true">
   <div className="lanes">
@@ -437,7 +437,7 @@ export default function Landing({
 
 {/* 목록·온보딩·오류 슬롯 — 풀 모드에서 `<main>`의 첫 블록이다(§한 코드베이스 §홈 ⓪,
     §비주얼 §47). `id="projects"`가 그 슬롯이다 — 표가 아니라 **자리**를 가리킨다
-    (0건에서는 목록이 아니라 온보딩 폼이, 오류에서는 배너가 그 자리에 선다). 랜딩-only에는
+    (0건에서는 목록이 아니라 온보딩 폼이, 오류에서는 배너가 그 자리에 뜬다). 랜딩-only에는
     이 블록 자체가 없다. */}
 {fullMode && (
   <div id="projects" className="wrap">
@@ -497,7 +497,7 @@ export default function Landing({
     협업해 끝내는 과정은 jira처럼 실시간으로 지켜볼 수 있습니다. PC에 나만의 멀티 에이전트
     시스템을 아주 쉽게 만들어보세요.
   </p>
-  {/* 랜딩-only에서만 선다 — 풀 모드는 이 자리가 걷혀 아무것도 안 들어온다(§한 코드베이스
+  {/* 랜딩-only에서만 뜬다 — 풀 모드는 이 자리가 걷혀 아무것도 안 들어온다(§한 코드베이스
       §홈 표 ③, 걷힌 근거는 목록이 이제 위 `#projects`로 나가서다). */}
   {!fullMode && (
     <>
@@ -517,10 +517,10 @@ export default function Landing({
 
 {/* SECTION A 한 무대(로드맵 §P237-5, 값은 §P237-1 판정표 자리 ④). 세 절을 그릇 하나가
     감싸 901px 이상 + `animation-timeline: view()` 지원 브라우저에서만 sticky 크로스페이드가
-    선다 — `landing.css`의 `@supports`가 거짓이면 이 그릇은 그냥 빈 껍데기라 세 절이
+    뜬다 — `landing.css`의 `@supports`가 거짓이면 이 그릇은 그냥 빈 껍데기라 세 절이
     지금처럼 세로로 쌓인다. 노드는 하나도 안 늘거나 줄지 않았다. 첫 패널(§자리 ④ 확장,
     `e0701973`)이 무대에 합류해 지나는 장면이 둘 → 셋이 됐다 — 절은 안 합쳐지고 `<h2>`
-    셋이 그대로 선다. */}
+    셋이 그대로 뜬다. */}
 <div className="stage">
 <section className="wrap reveal">
   <h2>말하면 이루어집니다</h2>
@@ -547,13 +547,13 @@ export default function Landing({
     </li>
   </ol>
 </section>
-{/* 아카이빙·온톨로지 — `.done` 다음 이야기라 30초 설명 바로 뒤에 선다(로드맵 §P228 §랜딩).
-    번호가 없는 것은 §한 코드베이스 §홈 표에 안 실려서다 — 두 모드 다 선다. 새 CSS 0. */}
+{/* 아카이빙·온톨로지 — `.done` 다음 이야기라 30초 설명 바로 뒤에 뜬다(로드맵 §P228 §랜딩).
+    번호가 없는 것은 §한 코드베이스 §홈 표에 안 실려서다 — 두 모드 다 뜬다. 새 CSS 0. */}
 <section className="wrap reveal">
   <h2>끝난 일은 기록으로 남습니다</h2>
   <ul className="marks">
     <li><b>티켓이 <code>.done</code>이 되면 아카이빙 티켓이 한 장 따라 붙습니다.</b> 완료 카드
-    아래에 <code>아카이빙중</code> 한 줄이 서고 이것도 워커가 받아서 하는 일이라 어디까지
+    아래에 <code>아카이빙중</code> 한 줄이 뜨고 이것도 워커가 받아서 하는 일이라 어디까지
     갔는지 그대로 보입니다</li>
     <li><b>남는 것은 마크다운 한 장과 티켓 맨 아래 한 절입니다.</b> 아카이빙을 맡은 워커가 방금
     끝난 일에서 사실을 추려 프로젝트 폴더의 <code>.dira/ontology/</code>에 적고 그 티켓 본문에는{" "}
@@ -570,7 +570,7 @@ export default function Landing({
   <p className="body" style={{ marginTop: 24 }}>일을 시킬수록 워커는 이 프로젝트에
   능숙해집니다. 어제 누가 무엇을 정했는지 읽고 시작하니, 같은 이야기를 두 번 하지 않아도
   됩니다.</p>
-  {/* 그림 — 목록 첫 항목이 말하는 그 한 줄이 실제로 선 자리(로드맵 §P235-1). 자리가 `.arrows`
+  {/* 그림 — 목록 첫 항목이 말하는 그 한 줄이 실제로 뜨는 자리(로드맵 §P235-1). 자리가 `.arrows`
       바로 앞인 것은 아래 절과 같은 규칙이다: 절은 언제나 나가는 링크로 끝난다.
       `.gallery` 밖이라 `figure`는 margin 0이다 — 위 `.body`와 **같은 인라인 24**를 준다
       (새 CSS 규칙 0). `.zoom`은 갤러리 셋과 같은 부품이다(§랜딩 §갤러리 ③ — 라이트박스 0). */}
@@ -584,7 +584,7 @@ export default function Landing({
 
 {/* 「오로지 내 PC에」 — 앞 절이 «기록이 프로젝트 폴더에 남는다»로 끝나서, 그 파일이 어디에도
     안 간다는 이야기가 여기서 이어진다(로드맵 §P229 §랜딩). 모델 호출은 감추지 않고 한 마디로
-    적는다 — 셋째 항목이 그 자리다. 두 모드 다 선다. 새 CSS 0. */}
+    적는다 — 셋째 항목이 그 자리다. 두 모드 다 뜬다. 새 CSS 0. */}
 <section className="wrap reveal">
   <h2>계정을 만들 필요가 없습니다</h2>
   <ul className="marks">
@@ -646,7 +646,7 @@ export default function Landing({
       <figcaption>일이 어떻게 흘러가는지 티켓 단위로 들여다볼 수 있습니다. 생각과 다른 방향으로 가고 있으면 티켓을 할당 해제해 중단시킵니다. 아직 시작하지 않은 티켓은 본문을 고쳐 원하는 방향을 자세히 적어 둘 수도 있습니다.</figcaption>
       <p className="arrows"><a href="/docs/screens#티켓-상세">업무 투명성</a></p>
     </figure>
-    {/* 넷째는 12열을 통째로 쓴다. `.gallery`가 3열이라 넷이 한 줄에 못 서는데, 열을 넷으로
+    {/* 넷째는 12열을 통째로 쓴다. `.gallery`가 3열이라 넷이 한 줄에 못 뜨는데, 열을 넷으로
         줄이는 쪽은 §랜딩 §갤러리가 이미 버린 안이다(1열 1032px에서도 캡처가 0.65로 줄어
         안 읽힌다 — `landing.css` 갤러리 주석 ③). 그래서 셋은 두고 넷째만 한 줄을 쓴다.
         900 이하 1열에서도 `1 / -1`이 그 한 칸이라 접힘이 안 갈린다. 레일은 무채색 —
@@ -660,7 +660,7 @@ export default function Landing({
   </div>
 </section>
 
-{/* ⑥ 설치 3단계 — 풀 모드에서 안 선다(§한 코드베이스 §홈 표). 파는 절이라서다. */}
+{/* ⑥ 설치 3단계 — 풀 모드에서 안 뜬다(§한 코드베이스 §홈 표). 파는 절이라서다. */}
 {!fullMode && (
 <section className="wrap reveal">
   <p className="eyebrow">설치</p>
@@ -756,7 +756,7 @@ export default function Landing({
         <li>사내툴과 연동 <span className="soon">준비중</span></li>
       </ul>
     </li>
-    {/* 열이 아니라 행이 는다 — 이 카드는 유료 열 셋과 같은 열에 안 서고 전 열을 잡는다. */}
+    {/* 열이 아니라 행이 는다 — 이 카드는 유료 열 셋과 같은 열에 안 뜨고 전 열을 잡는다. */}
     <li className="wide">
       <b>페르소나 마켓 <span className="soon">준비중</span></b>
       <ul className="marks">

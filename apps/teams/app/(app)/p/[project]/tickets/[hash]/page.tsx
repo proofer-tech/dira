@@ -184,13 +184,13 @@ export default async function TicketDetail({
   const archivers = archivedBy(tickets, ticket, config);
 
   // 세션 스트림 (§2-1). 갈림길은 **세션이 붙은 적이 있는가** 하나다(§9 빈 상태 표):
-  // `session_id`가 없거나 UUID가 아니면 절 자체를 감추고(상태 배지가 이미 말한다), 있는데
+  // `session_id`가 없거나 UUID가 아니면 절 자체를 감추고(상태 배지가 이미 알려 준다), 있는데
   // 글롭 매치가 0개·2개 이상이면 `트랜스크립트 없음`이다. **어느 쪽도 에러로 그리지 않는다.**
   // 출처가 둘이다(claude · grok) — 어느 쪽이든 여기서는 **파일이 하나 있나**로만 쓴다(§4-3 §grok).
   const sessionId = sessionIdOf(ticket.fm);
   const transcript = sessionId ? await findStream(sessionId) : null;
   // 갈림길이 하나 늘었다: **이 티켓을 물고 있는 워커의 엔진**(§4-3 · §비주얼 §23 ⑤). 그 엔진에
-  // 없는 기능이 있으면 화면이 그걸 말한다 — 진입점을 지우지 않는다. 완료 티켓은 아무도 안 물고
+  // 없는 기능이 있으면 화면이 그걸 알려 준다 — 진입점을 지우지 않는다. 완료 티켓은 아무도 안 물고
   // 있어 `null`이고, 그때는 종전 빈 상태 그대로다(추측해서 문구를 고르지 않는다).
   const engine = holderEngine(workers, ticket.stem);
 
@@ -202,7 +202,7 @@ export default async function TicketDetail({
   const bodyRead = bodyWithoutQuestions(ticket.body);
 
   // 산문 속 해시-P번호 표식(§9) — 이 페이지가 서버에서 그리는 본문·스레드·**제목**(§9 뒤쪽
-  // 절반 — `h1`도 이 표식이 서는 자리다)만 훑는다. 세션 스트림의 사건은 클라이언트 폴링
+  // 절반 — `h1`도 이 표식이 뜨는 자리다)만 훑는다. 세션 스트림의 사건은 클라이언트 폴링
   // (`tailSession`)이 각자 자기 회차를 훑어 응답에 싣는다(`actions.ts` §9 §클라이언트가 폴링하는
   // 자리) — 여기서 훑지 않는다(0건 상태로 시작해서 훑을 글이 없다).
   const epics = await listEpics(project.root, tickets);
@@ -232,7 +232,7 @@ export default async function TicketDetail({
   // 같은 select의 둘째 그룹(§5-5 §할당 입구 둘) — 페르소나와 같은 이유로 여기서 한 번만 읽는다.
   const squads = await squadNames(squadsDir(project));
 
-  // 답변 대기인가 — 입력칸의 답변 모드이자 절이 서는 세 조건 중 하나다(§2-3 ①·③).
+  // 답변 대기인가 — 입력칸의 답변 모드이자 절이 뜨는 세 조건 중 하나다(§2-3 ①·③).
   // `.wip`은 `isAwaiting`의 `state === "open"`이 구조적으로 막는다(제약 5).
   const awaiting = isAwaiting(ticket);
 
@@ -241,13 +241,13 @@ export default async function TicketDetail({
   // (§2-3 ④ · §비주얼 §11 순서 줄) 조건을 두 자리에 흩뿌리면 둘이 어긋나 절이 사라지거나 두
   // 벌로 뜬다 — 여기서 만들고 아래는 `above` 하나로 꽂을 자리만 고른다.
   //
-  // **절이 서는 조건이 넷이다**(§2-3 ①의 셋 + §2-11④ 넷째 — `## 진행 계획`이 있다). 종전엔
+  // **절이 뜨는 조건이 넷이다**(§2-3 ①의 셋 + §2-11④ 넷째 — `## 진행 계획`이 있다). 종전엔
   // `session_id` 하나였고, 그러면 **한 번도 디스패치된 적 없는 요구사항의 답변칸이 통째로
   // 사라진다**(보드에서 접수한 요구가 정확히 그 모양이다). 넷째가 없으면 **회수된 열림 티켓**
   // (reap이 `session_id`를 지운다 — `tickets.py` `REAP_CLEAR`)이 남긴 계획도 같이 사라진다 —
-  // 그 화면이 말하는 것이 정확히 "어디까지 갔나"다.
+  // 그 화면이 가리키는 것이 정확히 "어디까지 갔나"다.
   const hasProgress = !!(sessionId || thread.length > 0 || awaiting || plans.length > 0);
-  // 토큰량 덩이(§비주얼 §63 ①④) — **h2가 서면 선다**, 즉 이 절이 서는 조건과 같다. 창이 없다
+  // 토큰량 덩이(§비주얼 §63 ①④) — **h2가 뜨면 뜬다**, 즉 이 절이 뜨는 조건과 같다. 창이 없다
   // (§2-13 판정 1) — 이 해시를 든 로그 전부를 매 렌더마다 다시 훑되, 끝난 로그는 `usage.ts`의
   // 캐시가 잡는다(§0-8과 같은 Map).
   const costChunk = hasProgress ? await ticketCostChunk(project.root, ticket.hash) : undefined;
@@ -255,11 +255,11 @@ export default async function TicketDetail({
     hasProgress ? (
       <section className="space-y-2">
         {/* 스트림이 없는 엔진(오늘 codex)이면 트랜스크립트가 **있을 수 없다**(§4-3 표) —
-            그래도 컴포넌트를 세운다:
+            그래도 컴포넌트를 만든다:
             왜 없는지와 참견 폼의 사유가 그 안에 있고, 두 진입점(여기 · 워커 행)이 같은
             조각을 그린다(§비주얼 §23 ⑤). 스레드·답변 대기·계획만 있는 경우(극단 A — 세션이
             붙은 적 없는 요구사항 · 회수된 열림 티켓)도 여기로 온다: 상자는 `max-h`가 되고
-            **스트림이 없다는 말을 하지 않는다**(§29 ④ — `대기` 배지가 이미 말한다). */}
+            **스트림이 없다는 말을 하지 않는다**(§29 ④ — `대기` 배지가 이미 알려 준다). */}
         {transcript || engineCan("stream", engine) === false || thread.length > 0 || awaiting || plans.length > 0 ? (
           <SessionStream
             project={id}
@@ -284,9 +284,9 @@ export default async function TicketDetail({
             {/* 이름이 `세션 스트림`이 아닌 이유: 이 절이 이제 세션이 안 남긴 것(사람이 쓴 답변)도
                 든다. `질문·답변`이 아닌 이유도 같다 — `진행 기록`은 **이 티켓에 무슨 일이
                 있었나** 한 가지를 가리킨다(§0-9 · §2-3 ①). `Card`가 아니라 `<section>` + `h2`다.
-                `SessionStream`이 서는 분기에서는 그 컴포넌트가 이 h2를 머리 줄에 물고 간다
+                `SessionStream`이 뜨는 분기에서는 그 컴포넌트가 이 h2를 머리 줄에 물고 간다
                 (§비주얼 §29 ③ P173) — 여기는 상자 안이 통째로 빌 때만 남는 자리다.
-                토큰량 덩이도 h2 옆에 같이 선다(§비주얼 §63 ④ — 조건이 h2와 같다). */}
+                토큰량 덩이도 h2 옆에 같이 뜬다(§비주얼 §63 ④ — 조건이 h2와 같다). */}
             <div className="flex min-w-0 items-baseline gap-2">
               <h2 className="text-sm font-medium">진행 기록</h2>
               {costChunk && (
@@ -314,7 +314,7 @@ export default async function TicketDetail({
     ) : null;
 
   // 자리 — **볼 것이 있으면 본문 위, 부재의 사유만 그리면 본문 아래**(§2-3 ④. 종전 규칙
-  // `42ed33bc`, 답 `7208f987` = (c)가 조건 하나만 넓어진 채 그대로 선다). 갈리는 값은 종전과
+  // `42ed33bc`, 답 `7208f987` = (c)가 조건 하나만 넓어진 채 그대로 뜬다). 갈리는 값은 종전과
   // 같은 성격이다: 볼 것이 있는가. 부재의 사유만 그리는 절은 본문을 밀 값이 없다.
   const above = !!transcript || thread.length > 0 || awaiting;
 
@@ -470,7 +470,7 @@ export default async function TicketDetail({
               완료돼도 `session_id`를 들고 있어 `assigned`가 거의 항상 참인데, 거기서 해제는 큐를
               바꾸지 못하고(`release`가 뗄 접미사가 없고 `select`·`reap` 어느 쪽도 완료를 안 본다)
               `clear`가 담당 세션 기록만 지운다. `assigned`·`wip`이 둘 다 거짓이면 이 컴포넌트가
-              통째로 사라진다 — 비활성 버튼이 아니라 없는 것이고, 사유는 위 잠금 `Alert`가 말한다.
+              통째로 사라진다 — 비활성 버튼이 아니라 없는 것이고, 사유는 위 잠금 `Alert`가 알려 준다.
               서버 액션 `unassignTicket`도 같은 판정을 한 번 더 한다(화면 제약은 검증이 아니다). */}
           <UnassignButton
             project={id}
@@ -500,7 +500,7 @@ export default async function TicketDetail({
               <WipBodyPolling project={id} stem={ticket.stem} mtime={ticket.mtime} />
             )}
             {/* **열린 티켓만 편집 폼이다.** `.wip`(세션이 물고 있다)과 `.done`(불변 기록)은 같은
-                읽기 전용 자리를 쓴다 — 사유는 위 Alert가 각자 말한다. 판정을 상태 하나로 두는
+                읽기 전용 자리를 쓴다 — 사유는 위 Alert가 각자 알려 준다. 판정을 상태 하나로 두는
                 이유: `!== "open"`이면 나중에 상태가 늘어도 기본이 읽기 전용이다. */}
             {ticket.state !== "open" ? (
               // 읽기만 한다 — 원문일 이유가 없다(§비주얼 §10). 편집 폼 쪽은 종전대로 원문이다.
@@ -581,7 +581,7 @@ export default async function TicketDetail({
             <h2 className="text-sm font-medium">관계</h2>
             {/* **선행을 unmet으로 걸러내지 않는다**(§2, `b9775505`) — 걸러면 충족된 선행이 라벨 없이
                 떠서 `막고 있는 것 없음` 바로 밑에 배지가 붙고 한 라벨 안에서 두 문장이 서로를 부정했다.
-                막혀 있는지는 머리의 상태 배지가 말하고, 개별 해시의 상태는 배지 아이콘이 말한다.
+                막혀 있는지는 머리의 상태 배지가 말하고, 개별 해시의 상태는 배지 아이콘이 알려 준다.
                 한 줄로 합친다(§43 ②) — `[선행 배지들] → 이 티켓 → [후행 배지들]`. 후행도
                 `TicketLine`(제목 포함) 대신 `DepBadge`로 그린다 — 선행과 같은 모양이라야 한 줄에
                 자연스럽게 섞인다. 선행·후행 둘 다 0건이어도 이 행은 남는다 — "이 티켓" 칩이
@@ -655,7 +655,7 @@ export default async function TicketDetail({
             )}
 
             {/* 아카이브 — 같은 절의 다섯째 줄이고 양방향이다(§5-3 §표시 규약 ④). 보드에서는 이
-                관계가 대상 카드 하단 한 줄로 서고, 여기서는 양쪽 상세가 서로를 가리킨다.
+                관계가 대상 카드 하단 한 줄로 뜨고, 여기서는 양쪽 상세가 서로를 가리킨다.
                 아카이브가 없는 평범한 티켓엔 아무것도 안 붙는다 — 말할 값이 0이다. */}
             {(archives || archivers.length > 0) && (
               <div className="space-y-4 border-t pt-4">

@@ -135,7 +135,7 @@ export function ConfigTable({ view }: { view: ResolvedView }) {
                       </Badge>
                     </Hint>
                   ))}
-                  {/* 무엇을 못 읽었는지는 원문 라인만이 말해준다(§7 해석 실패).
+                  {/* 무엇을 못 읽었는지는 원문 라인만이 알려 준다(§7 해석 실패).
                       `basis-full`이면 wrap 컨테이너가 알아서 값 아래 줄로 내린다 */}
                   {row.unresolved?.map(({ worker, raw }) => (
                     <div
@@ -183,7 +183,7 @@ export const CREATE_BLURB =
  *  **상태가 여기 있는 이유**: 다이얼로그가 닫히면 이 컴포넌트가 언마운트돼 값이 저절로
  *  비워진다(부모가 손으로 되돌리지 않는다).
  *
- *  성공하면 결과는 **목록 아래 결과 슬롯**으로 올라간다(`onCreated`) — 서는 자리가 둘이라
+ *  성공하면 결과는 **목록 아래 결과 슬롯**으로 올라간다(`onCreated`) — 뜨는 자리가 둘이라
  *  결과를 여기 두면 어느 그릇으로 만들었느냐에 따라 결과가 다른 자리에 뜬다(§0 마지막 항). */
 export function CreateForm({
   dialog,
@@ -191,7 +191,7 @@ export function CreateForm({
   onRegister,
   home,
 }: {
-  /** 다이얼로그 안이면 푸터에 `취소`가 같이 선다. 인라인 카드는 제출 하나다(§비주얼 §7 온보딩) */
+  /** 다이얼로그 안이면 푸터에 `취소`가 같이 뜬다. 인라인 카드는 제출 하나다(§비주얼 §7 온보딩) */
   dialog?: boolean;
   onCreated: (s: CreateState) => void;
   /** `.dira`가 이미 있는 **큐**였다 — 만들지 않고 등록으로 보낸다(§0-3 답변 4(b)).
@@ -363,7 +363,7 @@ export function CreateForm({
       )}
 
       {/* 첫 등록은 macOS `앱 관리` 승인 창을 지난다(§제약 4) — 그동안 crontab이 블록되고
-          여기는 `만드는 중…`으로 서 있다. 창을 못 알아보면 3분 뒤 등록만 실패한다. */}
+          여기는 `만드는 중…`으로 떠 있다. 창을 못 알아보면 3분 뒤 등록만 실패한다. */}
       {pending && (
         <p className="text-xs text-muted-foreground">
           권한 창이 뜨면 [허용]을 누르세요 — crontab 등록이 그 대답을 기다립니다.
@@ -441,7 +441,7 @@ export type ProjectRow = {
 };
 
 /** 자원 줄의 자리 라벨. `w-16`(64px)은 `페르소나` 4자가 12px에서 들어가는 폭이고,
- *  `leading-5`가 있어야 12px 글자가 `h-5` 배지와 같은 중심에 선다(§비주얼 §7). */
+ *  `leading-5`가 있어야 12px 글자가 `h-5` 배지와 같은 중심에 뜬다(§비주얼 §7). */
 const LABEL = "w-16 shrink-0 text-xs leading-5 text-muted-foreground";
 /** 값이 0개일 때. **문장이므로 `font-mono`가 아니다**(§비주얼 §3). */
 const EMPTY = "text-xs leading-5 text-muted-foreground";
@@ -565,7 +565,7 @@ export function ProjectRows({ rows }: { rows: ProjectRow[] }) {
                   <div className="flex items-start gap-2">
                     <span className={LABEL}>워커</span>
                     {t.workers.length > 0 ? (
-                      // 워커 수만큼 배지를 세우지 않는다 — 라벨이 대부분 같은 글자라
+                      // 워커 수만큼 배지를 만들지 않는다 — 라벨이 대부분 같은 글자라
                       // 반복이 이 줄에서 제일 넓은 요소가 된다. 상태별로 묶고 이름을 뒤에.
                       <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
                         {t.workers.map((g) => (
@@ -827,7 +827,7 @@ export function ProjectSettingsDialog({
  *  성공하면 그 티켓 상세로 이동한다(§56 ⑤ — 포커스가 손 밑에서 사라지는 창을 안 만든다).
  *
  *  `ticket`은 이 마커(`ontology-migration`)를 든 열린 티켓 — 프로젝트당 한 장이라 부르는
- *  쪽(서버)이 첫 그림에서 판정해 내려준다. 있으면 버튼 대신 그 줄이 선다(§56 §세 상태 ③).
+ *  쪽(서버)이 첫 그림에서 판정해 내려준다. 있으면 버튼 대신 그 줄이 뜬다(§56 §세 상태 ③).
  *  `status`는 서버가 이미 `statusLabel(statusOf(t))`로 옮긴 문자열이다 — `statusOf`는
  *  `lib/queue.ts` runtime이라 클라이언트 번들에 못 들어간다(`node:fs/promises` 의존). */
 function OntologyMigration({

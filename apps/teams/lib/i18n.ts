@@ -42,7 +42,7 @@ export const ko: Record<string, string> = {
   "settings.tree.authGroup": "인증",
   "settings.tree.keymap": "키설정",
   "settings.tree.stats": "사용 통계",
-  // 사이드바 트리에는 안 선다(§0-18) — 검색으로만 닿는다. 그래도 이름은 다른 노드와 같은
+  // 사이드바 트리에는 안 뜬다(§0-18) — 검색으로만 닿는다. 그래도 이름은 다른 노드와 같은
   // 키 규약(`settings.tree.<node>`)을 쓴다 — 화면 자리가 하나 늘 뿐 이름 짓는 법은 안 갈린다.
   "settings.tree.multiplay": "멀티플레잉",
   // 둘째 사이드바 그룹의 aria-label — 그룹 자신은 머리글이 없다(§45 ③), 접근가능 이름만 필요하다
@@ -97,7 +97,7 @@ export const ko: Record<string, string> = {
   "settings.tokens.deletePrefix": "",
   "settings.tokens.deleteSuffix": "삭제",
 
-  // §0-23 §화면 — agy 줄은 못 하는 이유까지 말한다. 키체인 항목이 `svce=gemini` 하나뿐이고
+  // §0-23 §화면 — agy 줄은 못 하는 이유까지 알려 준다. 키체인 항목이 `svce=gemini` 하나뿐이고
   // 갈아 끼우는 레버가 `HOME`밖에 없어 이번 회차에 목록도 버튼도 안 세웠다(그 절 §agy).
   "settings.other.agyCred":
     "인증이 macOS 로그인 키체인에 있습니다 — 항목이 하나뿐이라 계정을 여러 장 못 씁니다. 갈아 끼우려면 워커의 HOME을 통째로 옮겨야 합니다.",
@@ -106,13 +106,13 @@ export const ko: Record<string, string> = {
   "settings.other.notInstalled": "설치되지 않았습니다",
 
   // §0-23 §화면 — codex · grok 패널이 얻는 목록과 버튼 하나. 넷 다 두 엔진 공용이다(엔진
-  // 이름은 바로 위 패널 머리가 이미 말한다). 담는 것이 토큰 문자열이 아니라 터미널의 지금
+  // 이름은 바로 위 패널 머리가 이미 알려 준다). 담는 것이 토큰 문자열이 아니라 터미널의 지금
   // 로그인 상태(`~/.codex` · `~/.grok` 사본)라 claude 쪽 `추가`와 낱말이 갈린다.
   "settings.other.accounts": "계정",
   "settings.other.capture": "지금 로그인된 계정 담기",
   "settings.other.captureHint":
     "터미널에서 쓰려는 계정으로 먼저 로그인하세요. 그 상태를 통째로 복사해 목록에 넣습니다.",
-  // 버튼이 비활성일 때 그 밑에 서는 한 줄. 판정은 위 `자격증명` 줄이 이미 잰 그 사실 하나다.
+  // 버튼이 비활성일 때 그 밑에 뜨는 한 줄. 판정은 위 `자격증명` 줄이 이미 잰 그 사실 하나다.
   "settings.other.captureBlocked": "터미널에 로그인 상태가 없습니다 — 담을 것이 없어 누르지 못합니다.",
 
   "settings.keymap.description": "단축키입니다. 이 컴퓨터에 하나뿐이고 등록된 프로젝트 전부에 적용됩니다.",
@@ -125,7 +125,7 @@ export const ko: Record<string, string> = {
   "settings.keymap.resetTooltipPrefix": "기본값",
   "settings.keymap.resetTooltipSuffix": "(으)로 되돌립니다",
   // 되돌리기 버튼의 aria-label(`<이름> 기본값으로 되돌리기`) — 위 툴팁 문구와는 다른 문장이다.
-  // 한국어는 이름 뒤가 전부라 접두가 빈다. 영어는 동사가 앞에 서서 둘로 갈린다(`wrap` 참고).
+  // 한국어는 이름 뒤가 전부라 접두가 빈다. 영어는 동사가 앞에 떠서 둘로 갈린다(`wrap` 참고).
   "settings.keymap.resetActionPrefix": "",
   "settings.keymap.resetActionSuffix": "기본값으로 되돌리기",
   "settings.keymap.change": "바꾸기",
@@ -230,7 +230,7 @@ export const ko: Record<string, string> = {
   "ticket.duedate.clear": "지우기",
   // 파생 한 줄 `마감까지 <남은> — 우선순위 <파생>으로 뜹니다`. 변수 둘(남은·파생)이라
   // `ticket.priority.inherited*`와 같은 앞·중간·뒤 세 조각 조립이다. 우선순위의 상속 한 줄과
-  // 같은 자리이고 둘 다 서면 한 줄에 이어 붙는다(§1-3의 그 자리 그대로).
+  // 같은 자리이고 둘 다 뜨면 한 줄에 이어 붙는다(§1-3의 그 자리 그대로).
   "ticket.duedate.derivedPrefix": "마감까지",
   "ticket.duedate.derivedMiddle": "— 우선순위",
   "ticket.duedate.derivedAfter": "로 뜹니다",
@@ -241,7 +241,7 @@ export const ko: Record<string, string> = {
   "ticket.duedate.reversalSuffix": "와 마감 순서가 어긋납니다 — 선행이 후행보다 늦게 끝날 수 없습니다",
 
   // 되돌아온 횟수 한 줄(§2-14 (2) · §비주얼 §11 §개정). `{prefix} {n}{suffix}` —
-  // `bell.assigned.title*`와 같은 짝이다. 2회 이상일 때만 서고 1회 이하면 줄 자체가 없다.
+  // `bell.assigned.title*`와 같은 짝이다. 2회 이상일 때만 뜨고 1회 이하면 줄 자체가 없다.
   "ticket.retries.linePrefix": "다시 할당",
   "ticket.retries.lineSuffix": "회",
 
@@ -251,7 +251,7 @@ export const ko: Record<string, string> = {
   "common.unit.minute": "분",
   "common.unit.day": "일",
   // 페르소나 상세 머리 2행 "마지막 활동"(§비주얼 §66 ③) — `<n><단위> <ago>`가 두 로케일에서
-  // 같은 어순으로 선다(`12분 전` · `12m ago`).
+  // 같은 어순으로 뜬다(`12분 전` · `12m ago`).
   "common.suffix.ago": "전",
 
   // 셸 둘째 묶음(§0-16 §발행 §묶음 표 2, `dd97c69c`) — 헤더 · 알림 종 일곱 · status bar ·
@@ -353,7 +353,7 @@ export const ko: Record<string, string> = {
   "statusbar.tokens.suffix": "토큰",
   "statusbar.limit.unreadable": "한도를 읽을 수 없습니다",
   // 아래 다섯은 `lib/usage.ts`가 만드는 `EngineLimit.error`의 꼬리(엔진 이름·경로가 접두로 붙는다) —
-  // 화면(`EngineCell`)이 `title`에 싣는다. claude의 실패도 §0-8 §재개정으로 이제 이 사유가 선다.
+  // 화면(`EngineCell`)이 `title`에 싣는다. claude의 실패도 §0-8 §재개정으로 이제 이 사유가 뜬다.
   "statusbar.limit.unknownOriginSuffix": "한도를 주는 원본을 모릅니다",
   "statusbar.limit.noRolloutSuffix": "rollout 파일이 없습니다",
   "statusbar.limit.rateLimitsNullSuffix": "rate_limits.primary·secondary가 모두 null입니다",
@@ -361,7 +361,7 @@ export const ko: Record<string, string> = {
   "statusbar.limit.noUnifiedHeaderSuffix": "unified-5h·7d의 utilization이 없습니다",
 
   // 상태 배지(§비주얼 §2 · §4-1) — 보드·상세·워커 화면이 `status-badge.tsx` 하나를 공유하므로
-  // 여기 한 벌만 옮기면 그 화면들도 같이 선다(그 화면들 자신의 이행은 각자의 묶음 몫이다).
+  // 여기 한 벌만 옮기면 그 화면들도 같이 뜬다(그 화면들 자신의 이행은 각자의 묶음 몫이다).
   // `running`·`idle`·`stopped`·`stale`은 한글이 없어 그대로 두되, 조회를 한 벌로 맞추려고 키를 준다.
   "status.label.open": "대기",
   "status.label.blocked": "deps 대기",
@@ -402,7 +402,7 @@ export const ko: Record<string, string> = {
   "progress.stream.filterThinking": "생각",
   "progress.stream.filterPrompt": "프롬프트",
   "progress.stream.noMatch": "맞는 기록이 없습니다",
-  "progress.stream.pickRow": "줄을 고르면 여기에 입력과 결과가 섭니다",
+  "progress.stream.pickRow": "줄을 고르면 여기에 입력과 결과가 뜹니다",
   "progress.stream.input": "입력",
   "progress.stream.result": "결과",
   "progress.stream.copy": "복사",
@@ -452,7 +452,7 @@ export const ko: Record<string, string> = {
   // 이 사전으로 안 옮겨졌다(`workers/page.tsx`의 `DEFECT` 그대로) — 이 티켓의 몫은 이 하나뿐이다.
   "worker.defect.noExec.title": "실행 비트 없음",
   "worker.defect.noExec.why":
-    "cron이 Permission denied로 워커를 못 띄웁니다 — tick.sh가 아예 안 돌아 runner.log가 한 줄도 늘지 않고, 열린 티켓이 그대로 섭니다.",
+    "cron이 Permission denied로 워커를 못 띄웁니다 — tick.sh가 아예 안 돌아 runner.log가 한 줄도 늘지 않고, 열린 티켓이 그대로 뜹니다.",
 
   // 프로토콜 화면(§0-16 §발행 §묶음 표 7, `93c106b3`) — protocols-ui.tsx · protocols/page.tsx ·
   // protocols/actions.ts · lib/protocols.ts. en은 `7a86fd5c`가 채운다.
@@ -661,7 +661,7 @@ export const ko: Record<string, string> = {
   "persona.activity.thirtyDayHeading": "30일",
   "persona.activity.nowEmpty": "지금 도는 티켓 없음",
   "persona.activity.recentEmpty": "닫은 티켓 없음",
-  // `## 블록`이 붙어 열린 채 멈춘 `.wip` 줄에만 서는 낱말(§비주얼 §66 ⑧) - 색·아이콘 없이 이 한
+  // `## 블록`이 붙어 열린 채 멈춘 `.wip` 줄에만 뜨는 낱말(§비주얼 §66 ⑧) - 색·아이콘 없이 이 한
   // 낱말뿐이다.
   "persona.activity.blocked": "막힘",
   "persona.activity.closedLabel": "닫은 티켓",
@@ -693,7 +693,7 @@ export const ko: Record<string, string> = {
   "persona.squad.noEligible": "프로필이 있는 페르소나가 없습니다 — 먼저 페르소나를 만듭니다.",
   "persona.squad.roleAriaSuffix": "의 역할",
   "persona.squad.openPersonaAriaSuffix": "엽니다",
-  // §비주얼 §61 (21) §리더 묶음 — 낱말 `리더`가 묶음 머리로 서고 카드의 배지는 죽는다. 자리만
+  // §비주얼 §61 (21) §리더 묶음 — 낱말 `리더`가 묶음 머리로 뜨고 카드의 배지는 죽는다. 자리만
   // 갈리고 문구는 무수정이라 새 키가 아니다.
   "persona.squad.leaderBadge": "리더",
   "persona.squad.roleHint": "역할을 비우면 그 페르소나의 프로필 첫 줄이 역할이 됩니다.",
@@ -708,7 +708,7 @@ export const ko: Record<string, string> = {
   "persona.squad.noLeader": "리더 없음",
   "persona.squad.leaderRemoveConfirmTitlePrefix": "리더 제거 —",
   // §5-5 §개정(2026-08-23) — confirm 문장 셋. 문장 1은 항상, 2(이 키)는 앞 리더의 역할 칸에
-  // 글자가 있을 때만, 3은 항상 선다(§비주얼 §61 (22) §값). 한 단락에 공백으로 이어 붙인다.
+  // 글자가 있을 때만, 3은 항상 뜬다(§비주얼 §61 (22) §값). 한 단락에 공백으로 이어 붙인다.
   "persona.squad.leaderRemoveConfirmBody": "그 이름이 이 스쿼드에서 빠집니다.",
   "persona.squad.leaderRemoveConfirmBodyRole": "역할 칸에 적은 글자도 같이 없어집니다.",
   "persona.squad.leaderRemoveConfirmBodyUndo": "저장을 안 하면 되돌아옵니다.",
@@ -923,7 +923,7 @@ export const ko: Record<string, string> = {
  *  | 되돌리기(편집기) | Revert | 저장 안 한 편집을 버리는 자리다. **`기본값으로 되돌리기`(Reset to default)와 다른 낱말이다** — 돌아가는 곳이 기본값이 아니라 마지막 저장본이다 |
  *  | 이름변경 · 기본값 가정 | Rename · assumed default | 뒤엣것은 경로 옆 꼬리라 소문자다(`settings.tokens.addedSuffix`가 선 그 벌) |
  *  | 원문(읽기 전용 칸의 낭독 이름) | source | 화면에 안 뜨는 접근가능 이름(`CORE.md source`) |
- *  | 자(글자 수) | chars | 복수형 장치가 없어 늘 복수로 둔다 — 이 자리는 1이 거의 안 선다 |
+ *  | 자(글자 수) | chars | 복수형 장치가 없어 늘 복수로 둔다 — 이 자리는 1이 거의 안 뜬다 |
  *  | 스쿼드 · 멤버 · 리더 · 규칙 | squad · member · leader · rules | `b5d9735d`(페르소나 묶음)가 더한 줄부터 아래 |
  *  | 스킬 · 메모리 · 프로필 | skill · memory · profile | |
  *  | 상한(동시 워커) | limit | status bar의 `한도`와 같은 낱말이다 — 재는 것이 다를 뿐 사람이 부르는 이름은 하나다 |
@@ -932,12 +932,12 @@ export const ko: Record<string, string> = {
  *  | 초과 | over | 예산 배지의 꼬리(`1,600 / 1,500 B over`) |
  *  | 생성(다이얼로그 제목) | New | `티켓 발행 = New ticket`이 선 그 벌 — 여는 것의 이름이지 동사가 아니다 |
  *  | 위지윅 · 원문(편집기 두 면) | rich text · source | `90db2822`(공용 컴포넌트 묶음)가 더한 줄부터 아래. 뒤엣것은 위 `원문` 줄과 같은 낱말이다 |
- *  | 상한(거절 제목) | limit | 예산 꼬리의 `초과`(위 줄)와 같은 낱말이 상한 거절 제목에도 선다 |
+ *  | 상한(거절 제목) | limit | 예산 꼬리의 `초과`(위 줄)와 같은 낱말이 상한 거절 제목에도 뜬다 |
  *  | 의견(깃허브 이슈 제목) | Feedback | 제품이 그 화면을 부르는 이름이 `의견`이다 — `Report`가 아니다 |
  *  | 업데이트 | update | 데스크톱 앱이 받아 다는 그것. `upgrade`로 안 부른다 |
  *
  *  **어순이 뒤집히는 자리는 접두·접미 두 키로 쪼갠다.** 한국어는 이름 뒤에 다 붙지만(`<이름>
- *  삭제`) 영어는 동사가 앞에 선다(`Delete <name>`) — 한쪽이 비는 것이 정상이고, 조립은
+ *  삭제`) 영어는 동사가 앞에 뜬다(`Delete <name>`) — 한쪽이 비는 것이 정상이고, 조립은
  *  `wrap`이 한다.
  *
  *  문장의 결: 개발자 도구다. 짧게 쓰고, 동사로 쓰고, 문장부호 하나로 끝낼 수 있으면 거기서
@@ -1115,7 +1115,7 @@ export const en: Record<string, string> = {
   // `ko` 폴백으로 안 샌다. 조립 결과는 `i18n.test.ts`가 두 언어 다 고정한다.
   "ticket.priority.inheritedMiddle": " is waiting on this, so it comes up as",
   "ticket.priority.inheritedAfter": "",
-  // 다섯 항목의 꼬리. `Later`·`Sooner`는 짝으로 읽힌다 — 목록을 열면 다섯이 한 화면에 선다.
+  // 다섯 항목의 꼬리. `Later`·`Sooner`는 짝으로 읽힌다 — 목록을 열면 다섯이 한 화면에 뜬다.
   "ticket.priority.level.1": "Only when nothing is running",
   "ticket.priority.level.2": "Later",
   "ticket.priority.level.3": "Default",
@@ -1132,7 +1132,7 @@ export const en: Record<string, string> = {
     "The due date has passed, or it's close and a ticket they depend on is still unfinished.",
   "bell.due.overdue": "Past due",
   // 나열의 다른 갈래 — `<남은> <중간> <n><접미>`. **접미가 공백으로 시작하는 것은 의도다**(숫자에
-  // 바로 붙는 자리다). `2 of its prerequisites`로 적어 **1건일 때도 문장이 선다** — 이 앱에 복수형
+  // 바로 붙는 자리다). `2 of its prerequisites`로 적어 **1건일 때도 문장이 뜬다** — 이 앱에 복수형
   // 장치가 없어서(`next-intl` 0개) 숫자 뒤에 복수 명사를 바로 두면 `1 prerequisites`가 뜬다.
   "bell.due.blockedMiddle": "left, but blocked by",
   "bell.due.blockedSuffix": " of its prerequisites",
@@ -1183,7 +1183,7 @@ export const en: Record<string, string> = {
   "shell.switcher.searchPlaceholder": "Search projects — name or path",
   // 0건 문구. 접착제가 쌍따옴표에 바로 붙어 콜론으로 받는다(`settings.search.emptySuffix`가 연
   // 그 수). **꼬리가 대문자로 여는 것은 그 키와 갈리는 지점이다** — 검색어가 없으면 이 조각이
-  // 혼자 서서 문장 전체가 된다.
+  // 혼자 떠서 문장 전체가 된다.
   "shell.switcher.emptyQueriedGlue": ":",
   "shell.switcher.emptySuffix": "No matching projects",
   "shell.switcher.openLabel": "open",
@@ -1411,7 +1411,7 @@ export const en: Record<string, string> = {
   "protocols.picker.collapsed": "Expand the file list and pick a file.",
   "protocols.core.vendoredPrefix": "This file is the core copy vendored into this queue —",
   "protocols.core.notVendoredPrefix": "This file lives in the engine repo, not in the queue —",
-  // 굵게 서는 조각이 `every project`라, 한국어가 접미에 둔 `모든 세션 프롬프트 맨 앞에`가
+  // 굵게 뜨는 조각이 `every project`라, 한국어가 접미에 둔 `모든 세션 프롬프트 맨 앞에`가
   // 영어에서는 가운데로 올라오고 접미에는 마침표만 남는다.
   "protocols.core.inlinedMiddle": " pastes it in full at the top of every session prompt in",
   "protocols.core.inlinedAllProjects": "every project",
@@ -1440,10 +1440,10 @@ export const en: Record<string, string> = {
 
   // 화면 이행 셋째 묶음 - 페르소나 갈래(§0-16 §발행 §묶음 표 행 7). `204be4da`가 넣은 `ko`의 짝이고
   // 조각을 쪼갠 자리는 그쪽이 정한 그대로다 - 여기서 갈리는 것은 **어느 조각이 무엇을 지느냐**뿐이다
-  // (한국어는 이름 뒤에 붙고 영어는 동사가 앞에 선다).
+  // (한국어는 이름 뒤에 붙고 영어는 동사가 앞에 뜬다).
 
   // actions.ts · lib/skills.ts - 서버 액션-모듈 함수라 `t("ko", ...)`로 고정해 부르는 벽이다.
-  // 지금은 화면에 한국어로 뜨지만 사전은 타고 있다 - 벽이 걷히는 날 이 줄들이 그대로 선다.
+  // 지금은 화면에 한국어로 뜨지만 사전은 타고 있다 - 벽이 걷히는 날 이 줄들이 그대로 뜬다.
   "persona.error.unknownProjectPrefix": "Not a registered project:",
   "persona.error.squadNameTakenPrefix": "That squad name is taken:",
   "persona.error.personaNameTakenPrefix": "That persona name is taken:",
@@ -1477,7 +1477,7 @@ export const en: Record<string, string> = {
   "persona.dir.defaultBadge": "assumed default",
   "persona.missing.title": "Some personas have no profile file",
   // 세 경고가 `<WARN>` 뒤에서 갈라진다 - 한국어는 `만 남기고`가 조각 하나로 셋을 다 받지만,
-  // 영어는 동사(`dispatches`)가 이 조각으로 올라와야 세 문장이 다 선다. 그래서 값이 공백으로 연다.
+  // 영어는 동사(`dispatches`)가 이 조각으로 올라와야 세 문장이 다 뜬다. 그래서 값이 공백으로 연다.
   "persona.missing.enginePrefix": "When the engine meets this name it leaves a",
   "persona.warn.engineSuffix": " and nothing else, then dispatches",
   "persona.wording.withoutPersona": "without a persona",
@@ -1612,7 +1612,7 @@ export const en: Record<string, string> = {
   "persona.engine.modelNamePlaceholder": "Model name",
   "persona.engine.modelBadHint": "No spaces, no quotes — one token, the model name",
   "persona.engine.modelPassthroughHint": "Passed to the engine as-is — one token, no spaces, no quotes",
-  // 없는 기능을 이어 붙이는 자리 - 값이 둘 이상일 때만 사이에 선다(`join`).
+  // 없는 기능을 이어 붙이는 자리 - 값이 둘 이상일 때만 사이에 뜬다(`join`).
   "persona.engine.missingJoiner": " and ",
   "persona.engine.missingMiddle": "workers have no",
   "persona.engine.missingSuffix": " — running tickets is the same.",
@@ -1666,7 +1666,7 @@ export const en: Record<string, string> = {
   "persona.skill.installAction": "Install",
   "persona.delete.titlePrefix": "Delete persona —",
   "persona.delete.bodyAfterPath": "will be deleted, files and all. This can't be undone.",
-  // 한국어는 수가 앞에 서고(`티켓이 3건`) 영어는 뒤에 선다 - 조각의 몫이 갈릴 뿐 자리는 같다.
+  // 한국어는 수가 앞에 뜨고(`티켓이 3건`) 영어는 뒤에 뜬다 - 조각의 몫이 갈릴 뿐 자리는 같다.
   "persona.delete.refsWarnPrefix": "This persona is referenced by",
   "persona.delete.refsWarnSuffix": " tickets",
   "persona.delete.refsWipPrefix": "(in progress:",
@@ -1701,7 +1701,7 @@ export const en: Record<string, string> = {
   // **꼬리 `budgets.overSuffix`는 이 블록에 없다** — `50fd4b34`가 회귀를 고치면서
   // 위에 먼저 채웠고, 값은 여기서 채웠을 것과 같다(` over`).
 
-  // 아이콘 버튼의 접근명 겸 툴팁 — 지금 면이 아니라 **누르면 가는 면**을 말한다.
+  // 아이콘 버튼의 접근명 겸 툴팁 — 지금 면이 아니라 **누르면 가는 면**을 알려 준다.
   "markdownEditor.toggle.toRaw": "Switch to source",
   "markdownEditor.toggle.toWysiwyg": "Switch to rich text",
 
@@ -1735,7 +1735,7 @@ export const en: Record<string, string> = {
   "skillUpload.tooManyFilesPrefix": "Over the ",
   "skillUpload.tooManyFilesSuffix": "-file install limit",
   // 앞의 수에 공백 하나로 붙는다(`412 files`). 복수형 장치가 없어 늘 복수로 둔다 —
-  // 이 문장이 서는 것은 상한(200)을 넘긴 뒤라 1이 안 선다.
+  // 이 문장이 뜨는 것은 상한(200)을 넘긴 뒤라 1이 안 뜬다.
   "skillUpload.fileCountSuffix": " files",
   "skillUpload.tooManyBytesPrefix": "Over the ",
   "skillUpload.tooManyBytesSuffix": "MB install limit",

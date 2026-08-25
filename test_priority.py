@@ -88,7 +88,7 @@ try:
 
     # --- ① 정렬 — priority가 FIFO를 이긴다 ---
     # aaaa(1)를 가장 먼저, cccc(5)를 가장 늦게 만든다. 알파벳 순(경로 tie-break)만 봐도 aaaa가
-    # 먼저 서야 하는 판인데, 유효 우선순위가 그 순서를 뒤집어 cccc가 첫 줄에 서야 한다.
+    # 먼저 떠야 하는 판인데, 유효 우선순위가 그 순서를 뒤집어 cccc가 첫 줄에 떠야 한다.
     mk(root, "aaaa0001", "priority: 1\n")
     mk(root, "bbbb0002", "priority: 3\n")
     mk(root, "cccc0003", "priority: 5\n")
@@ -255,7 +255,7 @@ TICKET_ENGINE=("{tmp}/fake-engine.sh" --input-format stream-json)
         wip = os.path.join(root, "tickets", h + ".wip.md")
         assert wait_for(lambda: os.path.exists(wip) and "inbox:" in
                         open(wip, encoding="utf-8").read()), \
-            "{} 디스패치가 안 섰다\n{}".format(h, runlog())
+            "{} 디스패치가 안 떴다\n{}".format(h, runlog())
         return wip
 
     procs = []
@@ -273,7 +273,7 @@ TICKET_ENGINE=("{tmp}/fake-engine.sh" --input-format stream-json)
 
         # --- ⑦ 선점 — 워커 전원이 바쁜 판에서 5를 넣으면 유효 최저 하나만 죽는다 ---
         # w1은 eff 3, w2는 eff 2(전역 최저) - 1은 안 쓴다(1 게이트가 걸려 디스패치 자체가
-        # 안 선다 - 이미 진행중 티켓이 있는 판이라서다, §1-3 §1 게이트). attempts를 미리
+        # 안 뜬다 - 이미 진행중 티켓이 있는 판이라서다, §1-3 §1 게이트). attempts를 미리
         # 심어 ⑨(무변)도 같이 잰다.
         wip_w1 = dispatch_busy(w1, "cccc1003", "priority: 3\n")
         wip_w2 = dispatch_busy(w2, "dddd1004", "priority: 2\nattempts: 2\n")

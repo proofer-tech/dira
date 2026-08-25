@@ -110,7 +110,7 @@ export type Preflight =
   | { ok: false; queue: boolean; root: string; message: string };
 
 /** `.dira`가 이미 있으면 **만들지 않는다**(§0-3 답변 4(b)). 안의 상태로 문구만 갈린다 —
- *  큐면 등록으로 보내고, 큐가 아니면 고치거나 지우라고 말한다. 빈 `.dira`를 스캐폴딩으로
+ *  큐면 등록으로 보내고, 큐가 아니면 고치거나 지우라고 알려 준다. 빈 `.dira`를 스캐폴딩으로
  *  채우지 않는 이유는 사람이 무엇을 지우는지 알고 지우는 편이 낫기 때문이다. */
 export async function preflight(projectDir: string): Promise<Preflight> {
   const { root } = queueRoot(projectDir);

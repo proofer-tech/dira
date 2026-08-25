@@ -99,7 +99,7 @@ function MessageScrollerViewport({
       }}
       className={cn(
         // 등록 항목의 `scroll-fade-b`·`scrollbar-*` 넷을 덜어냈다(§비주얼 §13 — 장식이고,
-        // "아래에 더 있다"는 `최신으로` 버튼이 이미 글자로 말한다). `globals.css`는 한 줄도 안 는다
+        // "아래에 더 있다"는 `최신으로` 버튼이 이미 글자로 알려 준다). `globals.css`는 한 줄도 안 는다
         //
         // **`overflow-x-hidden`은 축약이 아니라 계약이다**(`462d90be`): CSS는 `overflow-y`만
         // `auto`인 상태를 허용하지 않는다 — 한쪽이 `auto`면 남은 쪽의 `visible`은 **`auto`로

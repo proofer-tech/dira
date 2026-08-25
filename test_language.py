@@ -126,7 +126,7 @@ try:
     again = dryrun(w, local)
     assert again == got, "같은 locale=en인데 블록이 매번 달라졌다(상수여야 한다)"
 
-    # 6) `persona:` 없는 티켓에도 붙는다(페르소나 if 밖에 서는 자리다) -- 위 케이스가 이미
+    # 6) `persona:` 없는 티켓에도 붙는다(페르소나 if 밖에 뜨는 자리다) -- 위 케이스가 이미
     #    persona 없는 티켓(5c112003)으로 돌았으므로 여기서는 그 사실을 명시적으로 밝힌다.
     assert "persona" not in open(os.path.join(root, "tickets", "5c112003.md"),
                                   encoding="utf-8").read()

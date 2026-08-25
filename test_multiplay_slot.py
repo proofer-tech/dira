@@ -98,7 +98,7 @@ try:
     before = len(log())
     tick()
     assert "FAIL aaaa0002" in log()[before:], log()[before:]
-    assert os.path.exists(cdown), "무슬롯 쿨다운이 $LOCAL/run/cooldown-claude에 안 섰다"
+    assert os.path.exists(cdown), "무슬롯 쿨다운이 $LOCAL/run/cooldown-claude에 안 떴다"
     assert not os.path.exists(cdown_a) and not os.path.exists(cdown_b), \
         "무슬롯 쿨다운이 슬롯 파일에 샜다"
     os.remove(os.path.join(root, "tickets", "aaaa0002.md"))  # FAIL로 되돌아온 티켓 - 뒤 케이스와 안 겹치게 치운다
@@ -125,7 +125,7 @@ try:
     before = len(log())
     tick(TICKET_SLOT="slotA")
     assert "FAIL bbbb0002" in log()[before:], log()[before:]
-    assert os.path.exists(cdown_a), "슬롯A 쿨다운이 $LOCAL/run/cooldown-claude-slotA에 안 섰다"
+    assert os.path.exists(cdown_a), "슬롯A 쿨다운이 $LOCAL/run/cooldown-claude-slotA에 안 떴다"
     os.remove(os.path.join(root, "tickets", "bbbb0002.md"))  # FAIL로 되돌아온 티켓 - 뒤 케이스와 안 겹치게 치운다
 
     # --- §검증 3: 슬롯이 다른 워커는 한쪽 쿨다운에 안 걸린다 ---

@@ -28,7 +28,7 @@ test("계획 꼬리 문구가 없다 — `기록 n건`을 두 번 세는 줄이 
   );
 });
 
-test("계획 손잡이가 `ml-auto`를 받는다 — 꼬리가 죽으며 옮겨 앉은 그 자리(§59 ③-1)", () => {
+test("계획 손잡이가 `ml-auto`를 받는다 — 꼬리가 죽으며 옮겨 놓인 그 자리(§59 ③-1)", () => {
   assert.equal(
     (s.match(/ml-auto size-4 shrink-0 text-muted-foreground/g) ?? []).length,
     1,
@@ -47,18 +47,18 @@ test("안쪽 §9 묶음 줄은 한 글자도 안 갈린다 — 겹치지 않는 
 // 티켓 `0da4466e`(요구 `4f761c5a` 답 `90c1d300`): 참견 칸·답변 칸이 목적지를 안 말해 사람이
 // 답변 대기 카드가 사라진 자리에 참견을 쓰고 실패를 보는 문제. 판정(`interjectMode`, 셋이
 // 배타)은 `lib/urls.test.ts`가 이미 고정한다 — 여기서 고정하는 것은 그 판정이 그리는 **문구**다.
-test("참견 칸 placeholder가 목적지를 칸 안에서 말한다 — `도는 세션에 말 걸기`(§Done when 1)", () => {
+test("참견 칸 placeholder가 목적지를 칸 안에서 알려 준다 — `도는 세션에 말 걸기`(§Done when 1)", () => {
   assert.match(
     s,
     /placeholder=\{followup \? "이어서 무엇을 할지 쓰기" : "도는 세션에 말 걸기"\}/,
-    "참견 placeholder가 `도는 세션에 말 걸기`가 아니다 — 참견 칸이 도는 세션에 간다는 것을 안 말한다",
+    "참견 placeholder가 `도는 세션에 말 걸기`가 아니다 — 참견 칸이 도는 세션에 간다는 것을 안 알려 준다",
   );
 });
 
 // 티켓 707d1448(요구 ea26bd52, 답 55ff2be0, §2-15 ⑭ · §비주얼 §64): `결과` 절이 원문 `<pre>`
 // 하나에서 마크다운 + 원문 두 면이 된다. 여기서 고정하는 것은 눈으로 보면 지나치기 쉬운 넷 —
 // 밀도 클래스가 §64 표 그대로인지, 파싱이 폴링마다 다시 안 도는지(메모 키), 빈 짝이 마크다운
-// 문구 없이 빈 상자로 남는지, 줄을 바꾸면 상태가 정말 새로 서는지(key).
+// 문구 없이 빈 상자로 남는지, 줄을 바꾸면 상태가 정말 새로 뜨는지(key).
 test("`결과` 마크다운 면의 밀도 겹이 §비주얼 §64 표 그대로다", () => {
   assert.match(
     s,
@@ -78,7 +78,7 @@ test("`결과` 마크다운 파싱이 폴링마다 다시 안 돈다 — 메모 
   );
 });
 
-test("`결과` 짝의 본문이 공백뿐이면 마크다운 면에 `markdown.empty` 문구가 안 선다", () => {
+test("`결과` 짝의 본문이 공백뿐이면 마크다운 면에 `markdown.empty` 문구가 안 뜬다", () => {
   assert.match(
     s,
     /r\.body\.trim\(\) \? \(\s*<Markdown text=\{r\.body\} breaks="all" className=\{RESULT_MARKDOWN_CLASS\} \/>\s*\) : \(\s*<pre className=\{PANEL_PRE\} \/>\s*\)/,
@@ -94,8 +94,8 @@ test("`결과` 절이 `key={event.key}`로 달려 다른 줄을 고르면 다시
   );
 });
 
-test("답변 대기면 참견 폼이 안 서고 목적지 문장과 함께 답변 폼으로 통째로 갈린다(§Done when 2)", () => {
-  // `mode === "answer"`가 참견 폼 조립보다 먼저 `return`해 같은 자리에 참견 입력칸이 안 선다 —
+test("답변 대기면 참견 폼이 안 뜨고 목적지 문장과 함께 답변 폼으로 통째로 갈린다(§Done when 2)", () => {
+  // `mode === "answer"`가 참견 폼 조립보다 먼저 `return`해 같은 자리에 참견 입력칸이 안 뜬다 —
   // 그래서 사람이 그 칸에 답을 쓰고 보내기를 눌러 `not-wip` 실패 문구를 보는 경로 자체가 없다.
   const answerBranch = s.indexOf('if (mode === "answer")');
   const formBuilt = s.indexOf("<InputGroupTextarea");

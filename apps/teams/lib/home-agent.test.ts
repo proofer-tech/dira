@@ -208,7 +208,7 @@ test("workerSessions — `.wip` 전부가 먼저, `.done`은 최근 10개. sessi
 
   // ① 상한 10은 `.done`에만 걸린다 — 도는 것은 안 자른다
   assert.strictEqual(rows.length, 11);
-  // ② 도는 것이 먼저. `session_id` 없는 `.wip`은 없는 줄이다(도는데도 목록에 못 선다)
+  // ② 도는 것이 먼저. `session_id` 없는 `.wip`은 없는 줄이다(도는데도 목록에 못 뜬다)
   assert.deepStrictEqual(
     rows.map((r) => r.running),
     [true, ...Array(10).fill(false)],
@@ -235,8 +235,8 @@ test("workerSessions — `.wip` 전부가 먼저, `.done`은 최근 10개. sessi
 test("buildPrompt — 스냅샷이 질문 앞에 오고 경계가 글로 들어간다", () => {
   const p = buildPrompt("SNAP", "w1이 지금 무슨 일을 하고 있나?", "/Users/x/proj/.dira/ontology");
   assert.ok(p.indexOf("SNAP") < p.indexOf("w1이 지금"));
-  // 종전 `(쓰기 도구는 애초에 막혀 있다)`가 거짓이 된 자리 — 새 경계가 다 글로 서고
-  // 막힌 쪽도 이름으로 선다(막힌 것을 두드리다 끝나는 턴이 사람에게는 고장으로 보인다)
+  // 종전 `(쓰기 도구는 애초에 막혀 있다)`가 거짓이 된 자리 — 새 경계가 다 글로 뜨고
+  // 막힌 쪽도 이름으로 뜬다(막힌 것을 두드리다 끝나는 턴이 사람에게는 고장으로 보인다)
   for (const s of [
     "personas/**",
     "protocols/**",
@@ -253,13 +253,13 @@ test("buildPrompt — 스냅샷이 질문 앞에 오고 경계가 글로 들어�
   // 고치지 않는다*는 이 페르소나가 하는 일(본문에 링크를 단다)과 정면으로 부딪쳤다.
   assert.ok(!p.includes("질의응답 에이전트"));
   assert.ok(!p.includes("고치지도 않는다"));
-  assert.match(p, /거부되면\s+우회하지\s+말고\s+무엇이\s+왜\s+막혔는지\s+그대로\s+말한다/);
+  assert.match(p, /거부되면\s+우회하지\s+말고\s+무엇이\s+왜\s+막혔는지\s+그대로\s+알려 준다/);
   // §7-3(요구 `b100a3aa`) — 셸 문단이 붙는다. 읽고 세는 것만 되고 쓰는 명령은 거부된다는
   // 문장이 있고, 우회 금지는 기존 문장을 재사용한다(글이 두 번 서므로 위 정규식도 여전히 맞는다).
   assert.match(p, /셸로는\s+읽고\s+세는\s+것만\s+된다/);
   assert.ok(!p.match(/Bash\(/), "허용목록을 프롬프트에 전재하지 않는다 — 정본은 플래그다");
   // **`새 티켓을 만들지 않는다`는 §7 §홈 대화에서 요구사항이 접수된다가 뒤집은 문장이다** —
-  // 이제 프롬프트에 없어야 한다. 대신 여섯 가지가 선다(§7 §`kind`를 지는 것이 글이다 · §본문은 두 층이다).
+  // 이제 프롬프트에 없어야 한다. 대신 여섯 가지가 뜬다(§7 §`kind`를 지는 것이 글이다 · §본문은 두 층이다).
   assert.ok(!p.includes("새 티켓을 만들지 않는다"));
   assert.match(p, /kind: request/); // ① 만드는 것은 kind: request 하나
   assert.match(p, /사람이 그 턴에 요구사항으로 올려 달라고 했을\s*\n?\s*때만/); // ② 그 턴에만
@@ -271,7 +271,7 @@ test("buildPrompt — 스냅샷이 질문 앞에 오고 경계가 글로 들어�
   assert.ok(p.startsWith("SNAP"));
 });
 
-test("buildPrompt — 페르소나 블록이 스냅샷 앞에 선다 (§7 §페르소나가 실린다)", () => {
+test("buildPrompt — 페르소나 블록이 스냅샷 앞에 뜬다 (§7 §페르소나가 실린다)", () => {
   const p = buildPrompt("SNAP", "질문", "/Users/x/proj/.dira/ontology", "PERSONA");
   assert.ok(p.startsWith("PERSONA\n\n"));
   assert.ok(p.indexOf("PERSONA") < p.indexOf("SNAP"));
@@ -279,7 +279,7 @@ test("buildPrompt — 페르소나 블록이 스냅샷 앞에 선다 (§7 §페�
   assert.strictEqual(questionOf(p), "질문");
 });
 
-test("buildPrompt — 재정의된 온톨로지는 큐 밖 절대경로 그대로 문장에 선다 (요구 `85114387` §결정 4)", () => {
+test("buildPrompt — 재정의된 온톨로지는 큐 밖 절대경로 그대로 문장에 뜬다 (요구 `85114387` §결정 4)", () => {
   const p = buildPrompt("SNAP", "질문", "/Users/x/vault/ontology");
   assert.ok(p.includes("/Users/x/vault/ontology/**"));
   // 나머지 다섯은 여전히 큐 루트 아래 상대 글롭이다 — 옮기는 것은 온톨로지 하나뿐이다
@@ -295,7 +295,7 @@ test("personaBlock — 세 조각이 tick.sh:265와 같은 순서로 · 없으�
   // ① 디렉터리가 통째로 없다 — 빈 문자열이고 WARN도 없다(§7: 이 티켓이 `39ee5ae0` 없이 먼저 든다)
   assert.strictEqual(await personaBlock(personas), "");
 
-  // ② PROFILE만 있다 — 사이드카 블록이 아예 안 선다
+  // ② PROFILE만 있다 — 사이드카 블록이 아예 안 뜬다
   const dir = path.join(personas, "archive-manager");
   mkdirSync(path.join(dir, "memory"), { recursive: true });
   writeFileSync(path.join(dir, "PROFILE.md"), "나는 아카이브 담당이다.\n");
@@ -321,7 +321,7 @@ test("personaBlock — 세 조각이 tick.sh:265와 같은 순서로 · 없으�
   assert.ok(full.indexOf("--- a-첫째.md") < full.indexOf("--- b-두번째.md"));
   assert.ok(!full.includes("md가 아니다"));
   assert.ok(!full.includes("안 실린다"));
-  // 이름은 프로필 머리 문장에도 선다(워커 쪽 문장과 같은 자리 — 누구로 도는지가 첫 줄이다)
+  // 이름은 프로필 머리 문장에도 뜬다(워커 쪽 문장과 같은 자리 — 누구로 도는지가 첫 줄이다)
   assert.match(full, /^당신은 이 프로젝트의 'archive-manager'입니다\./);
 
   // ④ 이름이 다르면 아무것도 없다 — 고정 페르소나 하나만 읽는다
@@ -388,7 +388,7 @@ test("toolFlags — 네 조각과 경로 스코프 여섯 (89962e56 · 7e35d300 
   assert.ok(!flags.some((f) => f.includes("dangerously")));
 });
 
-test("toolFlags — 재정의된 온톨로지는 큐 밖 절대경로가 스코프에 서고 나머지 다섯은 그대로다 (요구 `85114387` §결정 4)", () => {
+test("toolFlags — 재정의된 온톨로지는 큐 밖 절대경로가 스코프에 뜨고 나머지 다섯은 그대로다 (요구 `85114387` §결정 4)", () => {
   const flags = toolFlags("/Users/x/proj/.dira", "/Users/x/vault/ontology");
   const scope = flags.slice(flags.indexOf("--allowed-tools") + 1);
   // 옮긴 자리 — 큐 밖 절대경로 그대로
@@ -761,7 +761,7 @@ test("ask — TICKET_ONTOLOGY 재정의 큐에서 --allowed-tools가 옮긴 자�
     const r = await ask(project, "질문");
     assert.strictEqual(r.ok, true, r.output);
     const argv = readFileSync(log, "utf8").trim();
-    // 옮긴 자리 — 큐 밖 절대경로가 스코프에 선다
+    // 옮긴 자리 — 큐 밖 절대경로가 스코프에 뜬다
     assert.ok(argv.includes(`Edit(//${vault}/**)`));
     assert.ok(argv.includes(`Write(//${vault}/**)`));
     // 옛 자리(큐 루트 아래 `ontology/`)는 더 이상 스코프에 없다
@@ -870,7 +870,7 @@ case "$FAKE_MODE" in
     # 포그라운드 sleep이면 trap이 그게 끝난 뒤에 돈다. stdout을 떼는 것도 필수 —
     # 안 떼면 죽은 뒤에도 손자가 파이프를 물고 있어 부모의 \`close\`가 안 온다
     sleep 60 >/dev/null 2>&1 & wait ;;
-  late)   # QA \`0a284011\` 실측 — **답 줄이 먼저 서고 프로세스는 한참 뒤에 죽는다**(5~40초 vs 14초).
+  late)   # QA \`0a284011\` 실측 — **답 줄이 먼저 뜨고 프로세스는 한참 뒤에 죽는다**(5~40초 vs 14초).
           # 도는 중의 폴링이 그 줄을 집어 가므로 마지막 응답의 \`turns\`가 빈다
     say '{"type":"stream_event","event":{"type":"message_start"},"parent_tool_use_id":null}'
     delta "답"
@@ -922,7 +922,7 @@ esac
 chmodSync(path.join(FAKE, "claude"), 0o755);
 const withFake = <T>(mode: string, fn: () => Promise<T>): Promise<T> => {
   const path0 = process.env.PATH;
-  process.env.PATH = `${FAKE}:${path0 ?? ""}`; // 앞에 선다. `sleep`을 쓰므로 원래 PATH도 남긴다
+  process.env.PATH = `${FAKE}:${path0 ?? ""}`; // 앞에 뜬다. `sleep`을 쓰므로 원래 PATH도 남긴다
   process.env.FAKE_MODE = mode;
   return fn().finally(() => {
     process.env.PATH = path0;
@@ -1043,7 +1043,7 @@ test("`중지` — SIGTERM 하나로 끝나고, 받은 글은 남고, 다음 질
   );
 });
 
-test("실패 ③ 재정의 — 자식이 결과 객체 없이 죽으면 종료 코드(신호) · stderr 꼬리가 선다 (kill -9 실측)", async () => {
+test("실패 ③ 재정의 — 자식이 결과 객체 없이 죽으면 종료 코드(신호) · stderr 꼬리가 뜬다 (kill -9 실측)", async () => {
   const project = { id: "crash-test", name: "큐", root: CWD };
   const pidFile = path.join(mkdtempSync(path.join(tmpdir(), "ha-pid-")), "pid");
   tmps.push(path.dirname(pidFile));
@@ -1271,7 +1271,7 @@ test("워커 세션 — 사라진 `current`는 대화 0건과 같고, 고르면 
   put("aaaa1111.wip.md", `ticket: aaaa1111\ntitle: 도는 티켓\nsession_id: ${run}\nowner: developer / w1-deadbeef\n`);
   put("aaaa2222.done.md", `ticket: aaaa2222\ntitle: 끝난 티켓\nsession_id: ${done}\nowner: pm / w3-deadbeef\n`);
   // 워커 세션의 트랜스크립트는 **워크트리 cwd 슬러그** 아래 있다 — `findTranscript`가 cwd와
-  // 무관하게 찾는다는 것이 이 티켓이 서는 근거다(§7 실측, `b96e7996`)
+  // 무관하게 찾는다는 것이 이 티켓이 뜨는 근거다(§7 실측, `b96e7996`)
   writeFileSync(
     path.join(TRANSCRIPTS, `${done}.jsonl`),
     JSON.stringify({
@@ -1297,7 +1297,7 @@ test("워커 세션 — 사라진 `current`는 대화 0건과 같고, 고르면 
   assert.strictEqual(gone.sessionId, null); // **대화 0건과 같다** — 체크가 갈 자리가 없다
   assert.deepStrictEqual(gone.turns, []);
   assert.strictEqual(gone.failed, null); // 실패 ⑤가 아니다(줄 자체가 없다)
-  // 목록은 그대로 선다 — 도는 것이 먼저고 워커 이름·제목·해시가 큐에서 온다
+  // 목록은 그대로 뜬다 — 도는 것이 먼저고 워커 이름·제목·해시가 큐에서 온다
   assert.deepStrictEqual(
     gone.workers.map((w) => [w.id, w.worker, w.title, w.hash, w.running]),
     [
@@ -1324,7 +1324,7 @@ test("워커 세션 — 사라진 `current`는 대화 0건과 같고, 고르면 
   const argv = readFileSync(ARGV, "utf8").trim().split("\n");
   assert.match(argv.at(-1) ?? "", new RegExp(`^-p --resume ${done} `));
   assert.match(argv.at(-1) ?? "", /--tools Read,Glob,Grep,Write,Edit,Bash --strict-mcp-config --permission-mode manual/);
-  // 경로 스코프가 **이 프로젝트의 큐 루트**로 서 있다(`toolFlags(root)` — 상수 배열이면 못 하는 일이다)
+  // 경로 스코프가 **이 프로젝트의 큐 루트**로 떠 있다(`toolFlags(root)` — 상수 배열이면 못 하는 일이다)
   assert.ok((argv.at(-1) ?? "").includes(`Edit(//${root}/personas/**)`));
   // 아카이빙 산출물 둘도 **큐 루트 아래**다 — repo 기준 항이 0이다(개정 `22a803de`)
   assert.ok((argv.at(-1) ?? "").includes(`Write(//${root}/AGENTS.md)`));
@@ -1338,7 +1338,7 @@ test("워커 세션 — 사라진 `current`는 대화 0건과 같고, 고르면 
   // 페르소나가 없는 큐에서 홈이 그대로 도는 것이 계약이다(§7 — WARN도 없다)
   assert.match(argv.at(-1) ?? "", / --verbose # 지금 이 프로젝트의 상태$/);
 
-  // ③-b 페르소나 파일이 생기면 **다음 질문부터** 프롬프트 맨 앞에 선다. 이 한 줄이
+  // ③-b 페르소나 파일이 생기면 **다음 질문부터** 프롬프트 맨 앞에 뜬다. 이 한 줄이
   //     `resolveConfig` → `personaBlock` → `buildPrompt` → spawn까지 이어졌음의 증거다.
   const profileDir = path.join(root, "personas", "archive-manager");
   mkdirSync(profileDir, { recursive: true });
@@ -1356,7 +1356,7 @@ test("워커 세션 — 사라진 `current`는 대화 0건과 같고, 고르면 
   assert.strictEqual((await readHome(id)).current, done);
 
   // ④ 도는 워커 세션 — 서버가 거절한다(화면의 `보내기` 잠금은 폼 상태라 새로고침에 풀린다)
-  assert.strictEqual(await switchConversation(id, run), true); // 보는 것까지는 선다
+  assert.strictEqual(await switchConversation(id, run), true); // 보는 것까지는 뜬다
   const refused = await startAsk(project, "지금 무엇을 하고 있나");
   assert.strictEqual(refused?.ok, false);
   assert.strictEqual(refused?.reason, "other"); // 여섯 번째 실패 코드를 안 만든다
@@ -1409,7 +1409,7 @@ test("도는 워커 세션은 스레드에서도 돈다 — 활동은 트랜스�
 
   // ② 티켓이 끝난다(`.wip` → `.done`) — **트랜스크립트에는 새 줄이 안 붙는다**(이 전환은 큐
   //    파일 쪽 사실이지 트랜스크립트 쪽 사실이 아니다 — `offset`을 그대로 넘겨 그것을 재현한다).
-  //    그런데도 다음 폴링에서 활동이 사라지고 끊어도 되는 근거가 선다: `workers` 목록 자체가
+  //    그런데도 다음 폴링에서 활동이 사라지고 끊어도 되는 근거가 뜬다: `workers` 목록 자체가
   //    매 폴링 큐를 다시 읽어 그 전환을 안다(`turns`가 0건이어도 편지 온다).
   const donePath = path.join(root, "tickets", "wla00001.done.md");
   writeFileSync(donePath, readFileSync(ticketPath, "utf8"));
@@ -1429,7 +1429,7 @@ test("폴링을 끊는 근거는 `running`이 아니라 **답이 왔다**다 (§
     pollDone({ running: false, turns: [], answered: false, sessionId: null, workers: [], ...c });
 
   // ① **정상 종료 — `turns`가 비어도 끝이다.** 이 한 줄이 QA `0a284011`이 잡은 자리다:
-  //    답 줄은 프로세스가 죽기 한참 전에 트랜스크립트에 서고 도는 중의 폴링이 그것을 이미
+  //    답 줄은 프로세스가 죽기 한참 전에 트랜스크립트에 뜨고 도는 중의 폴링이 그것을 이미
   //    집어 갔다(`offset`이 밀렸다). 실행층이 결과 객체를 넘긴 것(`answered`)이 근거다.
   assert.strictEqual(chunk({ answered: true }), true);
   // ② 빈 종료 — `running: false`인데 아무 증거도 없다. `runs`가 휘발한 자리다(dev recompile).
@@ -1499,7 +1499,7 @@ test("pollHome — 왕복 사이 current가 다른 대화로 넘어가면 옛 ta
     assert.notStrictEqual(sidB, sidA);
 
     // 화면이 A를 향해 이미 쐈던 왕복(target=sidA)이 지금 도착한다고 가정 — 서버는 넘긴 값을
-    // 데이터 선택에 안 쓴다. 응답은 B고, `reset`이 서서 옛 offset을 못 이어붙인다.
+    // 데이터 선택에 안 쓴다. 응답은 B고, `reset`이 떠서 옛 offset을 못 이어붙인다.
     const stale = await pollHome(project.id, sidA, 999);
     assert.strictEqual(stale.sessionId, sidB);
     assert.strictEqual(stale.reset, true);
@@ -1598,7 +1598,7 @@ test("nextScheduleDue — 단발: last 있으면 overdue, 31일 넘게 지나도
   );
 });
 
-test("nextScheduleDue — 반복(매일)은 다음 맞는 미래 분을 내고 overdue가 절대 안 선다", () => {
+test("nextScheduleDue — 반복(매일)은 다음 맞는 미래 분을 내고 overdue가 절대 안 뜬다", () => {
   const nowMs = local(2026, 8, 19, 10, 0);
   const r = nextScheduleDue({ when: "0 9 * * *", created: new Date(local(2026, 8, 17, 0, 0)).toISOString() }, nowMs);
   assert.deepStrictEqual(r, { at: local(2026, 8, 20, 9, 0), overdue: false }); // 오늘 9시는 지났다 — 내일 9시다
@@ -1638,7 +1638,7 @@ test("스케줄 저장 — home-sessions.json의 schedules 칸이 readHome-write
 
 /** `새 스케줄`(§비주얼 §62 (5)) — **신뢰 경계 값이라 여기서 다시 검증한다**(클라이언트의
  *  `disabled`는 검증이 아니다). 빈 문장·못 읽는 `when`은 줄을 안 만든다. */
-test("createSchedule — 빈 문장·못 읽는 when은 거절, 정상 값은 줄이 서고 session_id가 빈 문자열이다", async () => {
+test("createSchedule — 빈 문장·못 읽는 when은 거절, 정상 값은 줄이 뜨고 session_id가 빈 문자열이다", async () => {
   assert.strictEqual(await createSchedule("cstest", "0 9 * * *", "   "), null); // 빈 문장
   assert.strictEqual(await createSchedule("cstest", "0 9 * *", "매일 9시"), null); // 필드 4개
   assert.deepStrictEqual((await readHome("cstest")).schedules, []); // 거절된 시도는 파일에 안 남는다

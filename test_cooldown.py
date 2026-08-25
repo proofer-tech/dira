@@ -34,7 +34,7 @@ TICKET_ENGINE=("{tmp}/fake-engine.sh" "{{sid}}" "--input-format" "stream-json" $
 . "{tick}"
 """
 
-# codex 모양 재현용: 스트리밍 플래그가 없다 - INBOX가 안 서고 RC로 판정한다(§4-9 §개정).
+# codex 모양 재현용: 스트리밍 플래그가 없다 - INBOX가 안 뜨고 RC로 판정한다(§4-9 §개정).
 WORKER2 = """\
 #!/bin/bash
 TICKET_NAME="w2"

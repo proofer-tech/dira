@@ -59,7 +59,7 @@ export function EpicCreateButton({
       open={open}
       onOpenChange={(o) => {
         // 열 때도 닫을 때도 초기화한다 — 여는 순간의 `suggestedKey`가 최신이라야
-        // 이전 회차에서 만든 값 바로 다음 번호가 다시 선다(취소·ESC·바깥 클릭 다 이 길이다).
+        // 이전 회차에서 만든 값 바로 다음 번호가 다시 뜬다(취소·ESC·바깥 클릭 다 이 길이다).
         setOpen(o);
         setTitle("");
         setKey(suggestedKey);

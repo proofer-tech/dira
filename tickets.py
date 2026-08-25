@@ -767,7 +767,7 @@ _ASK_OPTIONS_BODY = ("이 티켓을 어떻게 할까요\n\n"
 
 
 def _ask_options(n):
-    """고정 선택지 문항. 세션의 물음이 앞에 서면(결정 13 (3)) n이 2로 밀린다."""
+    """고정 선택지 문항. 세션의 물음이 앞에 뜨면(결정 13 (3)) n이 2로 밀린다."""
     return "\n### {}. {}".format(n, _ASK_OPTIONS_BODY)
 
 
@@ -1124,7 +1124,7 @@ def main():
             return
         # 사람이 강제 중단한 티켓을 답변 대기로 잠근다(DESIGN.md §2-5 §개정). tick.sh가
         # `kill -TERM` **직전에** 부른다 - 잠금(deps·awaiting)은 부모의 clear+release를
-        # 지나서 살아남으므로, 티켓은 열리자마자 잠긴 채로 선다(창이 0이다).
+        # 지나서 살아남으므로, 티켓은 열리자마자 잠긴 채로 뜬다(창이 0이다).
         print(ask_human(path, ticket_hash(path, read_fm(path)[0]), 0,
                         "사람이 강제 중단", killed=True))
         return

@@ -212,7 +212,7 @@ const KINDS = ["work", "request", "feedback"];
 /** 우선순위 select의 선택지 — `lib/queue.ts PRIORITY_MIN/MAX`와 같은 값이다(§1-3 §값).
  *  값으로 import하지 않는다 — 이 파일은 클라이언트 컴포넌트라 `node:fs/promises`를 끄는
  *  `lib/queue.ts`를 값으로 물면 번들이 깨진다(`ThreadItem`처럼 타입만 문다). 5도 빼지 않는다:
- *  GUI 앞에 앉은 것이 사람이다. */
+ *  GUI 앞에 놓인 것이 사람이다. */
 const PRIORITIES = [1, 2, 3, 4, 5];
 
 /** `duedate:` 문자열 → ms, 못 읽으면 null(§1-4 §값과 같은 관용 — 새 파서를 안 만든다).
@@ -473,7 +473,7 @@ export function TicketEditForm({
         </div>
         <div className="space-y-2">
           {/* 미터는 select 라벨 왼쪽, 같은 gap-1(§비주얼 §49 §자리) — 자기 `priority`를 그린다,
-              유효 우선순위가 아니다(상속은 아래 한 줄이 말한다) */}
+              유효 우선순위가 아니다(상속은 아래 한 줄이 알려 준다) */}
           <span className="inline-flex items-center gap-1">
             <PriorityMeter priority={priority} locale={locale} />
             <Label htmlFor="t-priority">{t("ticket.priority.label")}</Label>
@@ -612,7 +612,7 @@ export function UnassignButton({
 }) {
   const [pending, start] = useTransition();
   const [run, setRun] = useState<UnassignRun | null>(null);
-  // `.wip`은 할당 여부와 무관하게 잠금 카드가 서야 한다 — 버튼만 그 안에서 빠진다
+  // `.wip`은 할당 여부와 무관하게 잠금 카드가 떠야 한다 — 버튼만 그 안에서 빠진다
   if (!wip && !assigned && !run) return null; // 할당 안 된 티켓엔 이 액션이 없다
 
   const call = (force: boolean) =>
@@ -634,7 +634,7 @@ export function UnassignButton({
   /* 여섯 번째 `AlertDialog`이고 앞 다섯과 성격이 다르다(§5 · §2-5 §확인) — 지우는 것이 아니라
      **끊는 것**이고, 버튼이 여는 것이 아니라 엔진이 거부한 뒤에 열린다. 그래서 `AlertDialogTrigger`가
      없고 `open`을 상태가 쥔다(`DiscardConfirm`과 같은 모양이다).
-     본문은 사실 셋을 다 말한다: 세션이 죽는다 · 커밋 안 된 변경은 남는다 · 티켓은 돌아가되
+     본문은 사실 셋을 다 알려 준다: 세션이 죽는다 · 커밋 안 된 변경은 남는다 · 티켓은 돌아가되
      답을 쓰기 전에는 아무 워커도 안 가져간다. 둘째 줄이 없으면 사람이 파일이 날아간 줄 알고
      안 누르거나, 눌러 놓고 지워졌다고 믿는다(요구 본문의 `진행한 작업을 삭제`가 화면이 보는
      사실과 다르다). 셋째 줄은 개정(§2-5 §개정)이 갈았다 — 엔진이 죽이기 직전에 답변 대기로
@@ -692,10 +692,10 @@ export function UnassignButton({
     ));
 
   /* `.wip`은 지금 세션이 그 파일로 일하고 있다 — 잠금 사유를 그 자리에 적는다(제약 5).
-     자물쇠가 움직이는 이유는 §18 ③: 이 문장이 서 있는 **이유**가 지금 누가 일하고 있다는
+     자물쇠가 움직이는 이유는 §18 ③: 이 문장이 떠 있는 **이유**가 지금 누가 일하고 있다는
      사실이라, 정지한 자물쇠는 그것을 과거형으로 읽는다. `.done` 자물쇠는 정지다(page.tsx) —
      영영 안 풀리는 잠금이라 기다릴 것이 없다.
-     `Alert`는 열이 하나 는 것뿐이다: 손잡이가 오른쪽 끝에서 제목·설명 두 줄에 걸쳐 선다. */
+     `Alert`는 열이 하나 는 것뿐이다: 손잡이가 오른쪽 끝에서 제목·설명 두 줄에 걸쳐 뜬다. */
   if (wip)
     return (
       <div className="space-y-2">
@@ -704,7 +704,7 @@ export function UnassignButton({
             aria-hidden
             className="animate-wip-pulse text-status-active motion-reduce:animate-none"
           />
-          {/* 꼬리의 마크가 **누구인지**를 말한다(§비주얼 §19 ③ · 사람 요구 `47678a71`).
+          {/* 꼬리의 마크가 **누구인지**를 알려 준다(§비주얼 §19 ③ · 사람 요구 `47678a71`).
               `AlertDescription`이 아니라 여기인 이유: 할당 해제를 누를지 기다릴지가
               제목 한 줄에서 갈려야 한다(§2). 문구·`Lock`·`.done` `Alert`는 무수정 */}
           <AlertTitle>세션에 할당된 티켓입니다 — 편집·삭제 잠금 {mark}</AlertTitle>
@@ -784,7 +784,7 @@ export function AnswerThread({
                 {thread.map((item, i) => {
                   // 질문(PM)은 산문, 답변(사람)은 말풍선(§비주얼 §9 §산문과 말풍선 · §13
                   // §질문 쪽은 산문이다 — §2-7 ①). 종전엔 **정렬**이 역할을 갈랐지만 질문 쪽이
-                  // 그릇을 잃은 뒤로는 **그릇**이 앞에 서고 정렬은 그 결과다(§13 §값).
+                  // 그릇을 잃은 뒤로는 **그릇**이 앞에 뜨고 정렬은 그 결과다(§13 §값).
                   // 아바타는 없다 — 참여자가 둘이고 그릇·정렬이 이미 가른다.
                   if (item.role === "question") {
                     return (
@@ -830,7 +830,7 @@ export function AnswerThread({
                         <MessageContent>
                           {/* 헤더는 말풍선 **밖 · 위**다(§13) — 안에 넣으면 본문의 소유자가
                               `<Markdown>` 하나가 아니게 되고 §10 루트의 `[&>:first-child]:mt-0`이
-                              거짓이 된다. 밖이면 앉는 면이 `--card`고 거기서 `--muted-foreground`는
+                              거짓이 된다. 밖이면 놓이는 면이 `--card`고 거기서 `--muted-foreground`는
                               4.73 / 6.91이다. 오른쪽 정렬은 `MessageContent`가 `data-align=end`에서
                               자식을 `self-end`로 밀어 같이 준다 */}
                           <MessageHeader>
@@ -869,7 +869,7 @@ export function AnswerThread({
       )}
       {/* 결정 11 ⑩ — 이 컴포넌트는 `isAwaiting(t)`일 때만 열린다(호출부 `AnswerDialog`), 그래서
           `thread.length === 0`은 곧 "답변 대기인데 `## 질문 n` 절이 없다"이다(실측 8건). 스크롤러
-          없이 이 줄 하나만 서고 폼은 안 감춘다 — 산문으로 답할 길은 아래에 그대로 있다. 상세
+          없이 이 줄 하나만 뜨고 폼은 안 감춘다 — 산문으로 답할 길은 아래에 그대로 있다. 상세
           (`session-stream.tsx`)와 문구를 `lib/urls.ts` 값 하나로 공유한다. */}
       {thread.length === 0 && <p className="text-xs text-muted-foreground">{NO_QUESTION_SECTION_NOTICE}</p>}
     </>
@@ -1059,7 +1059,7 @@ export function AnswerForm({
           </div>
         </details>
       )}
-      {/* 보이는 `<Label>`도 `a-body` id도 없다(§29 ②) — 이름을 이미 말하는 것이 두 자리 다 있다:
+      {/* 보이는 `<Label>`도 `a-body` id도 없다(§29 ②) — 이름을 이미 가리키는 것이 두 자리 다 있다:
           상세는 절 제목 `진행 기록`, 다이얼로그는 `DialogTitle`(`답변 — <제목>`). placeholder는
           라벨이 아니라서 `aria-label`이 접근 가능한 이름을 받는다. 문구는 참견·이어받기와 같은
           문법(`[대상]에 [행위]기`)이다 — 한 칸이 모드를 말하는 방식이 셋 다 같아진다.
@@ -1102,7 +1102,7 @@ export function AnswerForm({
 
 /** 스레드 + 답변 폼 — **보드의 답변 다이얼로그가 그리는 것**이다(§1 보드 요구사항 항).
  *  엮는 쪽은 `lib/queue.ts threadOf`고 폼은 `AnswerForm` 한 벌이다. 상세는 이 조합을 안 쓴다:
- *  거기서는 스레드가 `진행 기록` 상자 안으로 들어가고 폼만 그 아래에 선다(§2-3 ①). */
+ *  거기서는 스레드가 `진행 기록` 상자 안으로 들어가고 폼만 그 아래에 뜬다(§2-3 ①). */
 function AnswerFields({
   thread,
   vault,
@@ -1199,7 +1199,7 @@ export function AnswerDialog({
  *
  *  **`<SessionStream>` 폴링에 안 얹었다**(§2-4 ③): 그쪽은 `if (codex) return`으로 끊겨 codex
  *  워커가 문 티켓이 안 따라간다. 여기 판정은 상태 하나고(`.wip`인가 — 서버가 `.wip`일 때만 이
- *  조각을 세운다) 엔진을 안 본다. 열림 티켓 자리는 편집 폼이라 애초에 손대지 않는다.
+ *  조각을 만든다) 엔진을 안 본다. 열림 티켓 자리는 편집 폼이라 애초에 손대지 않는다.
  *
  *  ponytail: 3초 고정 · 숨은 탭 건너뛰기(`BoardPolling`과 같은 규칙). 안 바뀐 회차가 mtime
  *            하나라 조건부 응답에서 더 깎을 것이 없고, 그 다음이 SSE다. */
@@ -1621,7 +1621,7 @@ export function RequestDialog({
             {/* 실패는 이 자리에 남는다 — 닫으면 본문과 함께 사라진다(§3) */}
             {live && state.error && <Failure title="접수하지 못했습니다" message={state.error} />}
             {/* 칩 줄 · 실패 사유 줄 · 액션 행(§27). 제출 버튼은 사람이 지목한 자리 그대로
-                행의 오른쪽 끝이고(요구 `027d8e96` · §비주얼 §4-3) 손잡이가 그 왼쪽에 앉는다 */}
+                행의 오른쪽 끝이고(요구 `027d8e96` · §비주얼 §4-3) 손잡이가 그 왼쪽에 놓인다 */}
             <AttachmentField att={att}>
               <Button type="submit" disabled={pending || !body.trim()}>
                 {pending ? "접수 중…" : "요구 접수"}

@@ -96,7 +96,7 @@ function StickyBody({
     );
   }
 
-  // view === "downloaded" - 노트가 아예 없는 경로(`notes === null`)에서는 손잡이가 안 선다.
+  // view === "downloaded" - 노트가 아예 없는 경로(`notes === null`)에서는 손잡이가 안 뜬다.
   const showNotesButton = notes !== null;
   const notesLoading = notesOpen && notes === undefined;
   return (

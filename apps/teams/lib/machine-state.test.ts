@@ -124,7 +124,7 @@ test("핫리로드 가드 — 두 번째 startHeartbeat는 새 타이머를 안 
 
 // ── 받은 편지함 (§0-10 §받은 편지함) — ⑥의 저장이 파일로 내려온다 ────────────
 
-test("recordResumeEvent — 병합으로 to가 자라면 편지함에 새 줄이 선다 (§0-10 §쓰는 자리)", async () => {
+test("recordResumeEvent — 병합으로 to가 자라면 편지함에 새 줄이 뜬다 (§0-10 §쓰는 자리)", async () => {
   rmSync(alertsPath(), { force: true });
   const first: ResumeEvent = { from: 0, to: 100_000, kind: "slept" };
   await recordResumeEvent(first);
@@ -136,7 +136,7 @@ test("recordResumeEvent — 병합으로 to가 자라면 편지함에 새 줄이
   assert.deepStrictEqual(written.machine["200000"], { from: 0, kind: "slept", archived: null });
 });
 
-test("markResumeRead — 목록에 든 `to` 전부의 archived를 한 번에 적는다 (§0-10 §⑥이 한 항목으로 서고 한 번에 보관된다)", async () => {
+test("markResumeRead — 목록에 든 `to` 전부의 archived를 한 번에 적는다 (§0-10 §⑥이 한 항목으로 뜨고 한 번에 보관된다)", async () => {
   rmSync(alertsPath(), { force: true });
   const a: ResumeEvent = { from: 0, to: 300_000, kind: "poweredOff" };
   const b: ResumeEvent = { from: 300_000, to: 400_000, kind: "slept" };

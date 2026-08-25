@@ -71,9 +71,9 @@ try:
     assert "### 죽은 세션 마지막 기록" in a, "A: 로그 절 없음\n" + a
     assert "SSL_ERROR_SYSCALL" in a, "A: 로그 꼬리 인용 없음\n" + a
     assert "이거 해줘" not in a, "A: 마지막 레코드가 아니라 앞 레코드를 붙였다\n" + a
-    # 결정 12 (1)(2)(4) - 문항 한 벌이 인용 앞에 서고 default_answer가 fm에 실린다.
+    # 결정 12 (1)(2)(4) - 문항 한 벌이 인용 앞에 뜨고 default_answer가 fm에 실린다.
     assert a.index("### 1. 이 티켓을 어떻게 할까요") < a.index("### 티켓 Goal"), \
-        "A: 문항이 인용보다 뒤에 섰다\n" + a
+        "A: 문항이 인용보다 뒤에 떴다\n" + a
     for opt in ("- (a) 다시 시도한다", "- (b) 내가 손보고 나서 다시 시도한다",
                 "- (c) 그만둔다", "- (d) 아래 칸에 직접 쓴다"):
         assert opt in a, "A: 선택지 누락 - " + opt
@@ -133,9 +133,9 @@ try:
     T.ask_human(pg, "gggg7777", 0, "", blocked=True)
     g = open(pg, encoding="utf-8").read()
     import re
-    assert re.search(r"(?m)^### 1\. 이걸 어떻게 할까요", g), "G: 물음이 인용 밖 문항으로 안 섰다\n" + g
+    assert re.search(r"(?m)^### 1\. 이걸 어떻게 할까요", g), "G: 물음이 인용 밖 문항으로 안 떴다\n" + g
     assert g.index("### 1. 이걸 어떻게 할까요") < g.index("### 티켓 Goal"), \
-        "G: 물음이 인용보다 뒤에 섰다\n" + g
+        "G: 물음이 인용보다 뒤에 떴다\n" + g
     assert "> ### 1. 이걸 어떻게 할까요" in g, "G: 블록 인용에서 물음이 빠졌다(인용 3종은 그대로)\n" + g
     assert "### 2. 이 티켓을 어떻게 할까요" in g, "G: 고정 벌이 2로 안 밀렸다\n" + g
     assert "### 1. 이 티켓을 어떻게 할까요" not in g, "G: 고정 벌이 여전히 1이다\n" + g
@@ -152,7 +152,7 @@ try:
     h_ = open(ph, encoding="utf-8").read()
     assert "## 질문 2" in h_, "H: 새 질문 절이 안 붙었다\n" + h_
     new_q = h_[h_.index("## 질문 2"):]
-    assert "### 1. 이 티켓을 어떻게 할까요" in new_q, "H: 고정 선택지가 1번으로 안 섰다\n" + new_q
+    assert "### 1. 이 티켓을 어떻게 할까요" in new_q, "H: 고정 선택지가 1번으로 안 떴다\n" + new_q
     assert not re.search(r"(?m)^### 1\. 이걸 어떻게 할까요", new_q), \
         "H: 묵은 블록의 물음이 문항으로 승격됐다\n" + new_q
     assert "### 이미 답한 블록" in new_q, "H: 인용 제목이 안 갈렸다\n" + new_q
@@ -172,7 +172,7 @@ try:
     i_ = open(pi, encoding="utf-8").read()
     assert "### 이미 받은 답변" in i_, "I: 답변 절이 안 붙었다\n" + i_
     assert i_.index("첫 라운드 답") < i_.index("두 번째 라운드 답"), \
-        "I: 답변이 라운드 순서로 안 섰다(dep에 적힌 순서를 그대로 썼다)\n" + i_
+        "I: 답변이 라운드 순서로 안 떴다(dep에 적힌 순서를 그대로 썼다)\n" + i_
     assert "### 이미 받은 답변" not in b, "I: 답 없는 B에 빈 절이 붙었다\n" + b
 
     # J) 요구 4f761c5a — 마지막 레코드가 큐 운영 알림(`<task-notification>`)이면 그 앞 발화를 싣는다

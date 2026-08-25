@@ -9,7 +9,7 @@
 
 /** dira 형식 판정(§5-3 §온톨로지 자리를 워커가 재정의한다 §결정 3) — `_ontology/SCHEMA.md`와
  *  `objects/` 둘 다 없으면 형식이 아니다. 하나라도 있으면 선 것이고, 그 뒤는 종전 지표-검사
- *  그대로다(반쪽인 것은 `schemaViolations`가 이미 말한다). 호출자(`page.tsx`)는 이 값이
+ *  그대로다(반쪽인 것은 `schemaViolations`가 이미 알려 준다). 호출자(`page.tsx`)는 이 값이
  *  거짓이면 `computeOntologyMetrics`를 아예 안 부른다 — 위반 수백 줄이 <폴더가 망가졌다>로
  *  안 읽히게. */
 export function isDiraFormat(tree: { rel: string; isDir: boolean }[]): boolean {

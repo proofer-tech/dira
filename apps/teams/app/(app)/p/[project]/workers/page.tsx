@@ -112,7 +112,7 @@ export default async function Workers({ params }: { params: Promise<{ project: s
   // 창 안(기본 5시간)에 끝난 세션들의 워커별 토큰 (§0-8 판정 1). 창 밖 로그는 열지도 않는다.
   const usage = await listUsage(project.root);
   // `tokens.json` 파일 읽기 1회, 워커 수와 무관하다(§비주얼 §57 §로딩). `null`이면 `리밋 대기`가
-  // 행 전체에 안 선다 — eligible이 1장이라도 있거나 tokens.json이 없다.
+  // 행 전체에 안 뜬다 — eligible이 1장이라도 있거나 tokens.json이 없다.
   const limitUntil = await limitWaitUntil();
   // 소비의 키는 로그 파일명에서 온 **실효 `TICKET_NAME`**이고 표의 행은 파일 stem이다 — 그 둘이
   // 갈린 워커만 조용히 `0`으로 뜨지 않게 여기서 한 번 옮긴다. NFC로 맞추는 것은 `parseLogName`이
@@ -149,7 +149,7 @@ export default async function Workers({ params }: { params: Promise<{ project: s
         <div className="flex flex-wrap items-baseline gap-x-2">
           <h1 className="text-lg font-semibold">워커</h1>
           {/* 상단 합계 = 아래 열의 합(§0-8 그릇). 새 컴포넌트를 만들지 않는다 — 한 줄이다.
-              뒤에 붙는 수는 이 판정의 천장을 말한다: 토큰은 세션이 끝날 때 한 번 쓰이고
+              뒤에 붙는 수는 이 판정의 천장을 알려 준다: 토큰은 세션이 끝날 때 한 번 쓰이고
               신호로 죽은 세션은 아예 안 쓰므로 그만큼 합계가 실제보다 적다. 침묵하면 사람이
               "덜 썼다"로 읽는다(§0-8). **`끝난 뒤 반영됩니다`라고 약속하지 않는다** — 실측
               13건 중 8건이 rc 143/137로 죽어 토큰이 영영 안 온다(`4a884d8d`). */}
@@ -241,8 +241,8 @@ export default async function Workers({ params }: { params: Promise<{ project: s
                 <TableCell className="px-3 py-0">
                   <div className="flex items-center gap-2">
                     <StatusBadge status={w.status} />
-                    {/* `status` 배지를 대체하지 않고 나란히 선다(§비주얼 §57 §2) — claude가
-                        eligible 0장이고 이 워커가 실제로 `idle`(락 없음)일 때만 선다. */}
+                    {/* `status` 배지를 대체하지 않고 나란히 뜬다(§비주얼 §57 §2) — claude가
+                        eligible 0장이고 이 워커가 실제로 `idle`(락 없음)일 때만 뜬다. */}
                     {w.status === "idle" && w.engineName === "claude" && limitUntil != null && (
                       <Badge
                         variant="outline"

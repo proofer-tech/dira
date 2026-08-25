@@ -37,7 +37,7 @@ export function issueTitle(text: string, locale: Locale = DEFAULT_LOCALE): strin
 }
 
 /** 본문 = 사람이 쓴 내용 + 구분선 + 두 줄. **그 외에 아무것도 안 넣는다**(§0-12).
- *  자른 사실도 여기 안 적는다 — 그건 폼이 말한다(`truncated`). */
+ *  자른 사실도 여기 안 적는다 — 그건 폼이 알려 준다(`truncated`). */
 function tailOf(meta: FeedbackMeta, locale: Locale): string {
   return `\n\n---\n- ${t(locale, "feedback.versionLabel")}: ${meta.version}\n- ${t(locale, "feedback.sessionLabel")}: ${meta.session}`;
 }

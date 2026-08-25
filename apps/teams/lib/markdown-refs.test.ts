@@ -130,7 +130,7 @@ function html(text: string, idx: RefIndex = index) {
   );
 }
 
-test("맨 글자 위 - 표식이 선다", () => {
+test("맨 글자 위 - 표식이 뜬다", () => {
   assert.equal(
     html(`${stem} 확인`),
     '<p><mark data-kind="ticket" data-coded="false">54ed135a</mark> 확인</p>',

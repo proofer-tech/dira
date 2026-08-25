@@ -109,7 +109,7 @@ test("첫 이벤트 · 30분 경계에서 app_open이 앞에 붙는다", async (
   );
   assert.strictEqual(calls[0].body.events[0].params.session_id, String(T0));
 
-  // 마지막 이벤트로부터 30분을 넘기면 새 세션이고 app_open이 다시 앞에 선다
+  // 마지막 이벤트로부터 30분을 넘기면 새 세션이고 app_open이 다시 앞에 뜬다
   calls = [];
   const t2 = T0 + 29 * 60_000 + 31 * 60_000;
   at(t2);

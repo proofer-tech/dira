@@ -49,7 +49,7 @@ import { useDelayedFlag, useTrackedRouter } from "@/lib/route-pending";
  *
  *  ponytail: 훅이 없는 정적 마크업인데 이 파일의 `"use client"`에 얹혀 클라이언트 번들로 간다.
  *  새 파일을 늘리지 않는 쪽을 택했다(AGENTS.md §구조). 마크업 몇 백 바이트라 재는 값이 아니다. */
-/** `screen_view` 하나 (DESIGN.md §0-11 이벤트 표). 루트 레이아웃에 한 번 서서 **화면 8종 전부**를
+/** `screen_view` 하나 (DESIGN.md §0-11 이벤트 표). 루트 레이아웃에 한 번 떠서 **화면 8종 전부**를
  *  덮는다 — 페이지마다 심으면 enum이 7곳에 흩어지고 한 곳이 조용히 빠진다.
  *
  *  **URL이 아니라 enum 하나가 나간다**(익명 규칙). 접는 것은 `screenOf` 하나고 표 밖의 경로
@@ -161,7 +161,7 @@ export function MarkFailuresReadButton({
   );
 }
 
-/** ⑥ `잠자기·꺼짐에서 복귀`의 `보관` (§0-14 §읽음 처리 · §0-10 §⑥이 한 항목으로 서고 한 번에
+/** ⑥ `잠자기·꺼짐에서 복귀`의 `보관` (§0-14 §읽음 처리 · §0-10 §⑥이 한 항목으로 뜨고 한 번에
  *  보관된다 · §비주얼 §4-3). ②의 그 벌 — 행 오른쪽 끝, 초점을 먼저 그릇으로 옮기고, 결과 표시
  *  없이 항목이 사라진다.
  *
@@ -346,7 +346,7 @@ export function ProjectSwitcher({
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   // 키도 하단 힌트도 **키맵에서 나온다**(§0-6 · §4-1 마지막 줄) — 하드코딩하면 사람이 키를
-  // 바꾼 뒤에 화면이 옛 키를 말한다. 기본값 `Mod+k`는 브라우저 기본(검색창 포커스)을 뺏는다.
+  // 바꾼 뒤에 화면이 옛 키를 알려 준다. 기본값 `Mod+k`는 브라우저 기본(검색창 포커스)을 뺏는다.
   const { bindings } = useKeymap();
   useHotkey("project.search", (e) => {
     e.preventDefault();

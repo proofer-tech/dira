@@ -61,7 +61,7 @@ test("readKeymap — 파일이 없으면 기본값 전부, broken은 false", asy
   assert.strictEqual(k.bindings["project.search"], "Mod+k");
 });
 
-test("readKeymap — JSON이 깨져도 던지지 않고 broken으로 말한다", async () => {
+test("readKeymap — JSON이 깨져도 던지지 않고 broken으로 알려 준다", async () => {
   put("{ 이건 JSON이 아니다");
   const k = await readKeymap();
   assert.strictEqual(k.broken, true);
@@ -214,7 +214,7 @@ const BOUND = Object.fromEntries(DEFAULT_KEYMAP.map((a) => [a.id, a.combo])) as 
 test("validateBinding — 겹치면 상대 액션 id를 담아 거절한다", () => {
   const e = validateBinding(BOUND, "board.new", "Mod+f")!;
   assert.strictEqual(e.conflict, "board.search");
-  // 문구가 상대 액션의 **이름**을 말한다. `^`가 있어야 `프로젝트 검색`과 안 헷갈린다
+  // 문구가 상대 액션의 **이름**을 알려 준다. `^`가 있어야 `프로젝트 검색`과 안 헷갈린다
   assert.match(e.reason, /^검색과 겹칩니다/);
   // 자기 자신과는 안 겹친다(안 바꾸고 저장해도 통과한다)
   assert.strictEqual(validateBinding(BOUND, "board.new", "Mod+i"), null);

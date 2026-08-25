@@ -363,7 +363,7 @@ TICKET_ENGINE=("{tmp}/fake-stream-engine.sh" --input-format stream-json)
         wip = os.path.join(root, "tickets", h + ".wip.md")
         assert wait_for(lambda: os.path.exists(wip) and "inbox:" in
                         open(wip, encoding="utf-8").read()), \
-            "{} 디스패치가 안 섰다\n{}".format(h, preemptlog())
+            "{} 디스패치가 안 떴다\n{}".format(h, preemptlog())
         return wip
 
     procs = []

@@ -53,7 +53,7 @@ export default async function Page() {
     locale = await readLanguage();
 
     // 레지스트리가 깨졌으면 GUI가 고쳐 쓰려 들지 않는다 — 원문 + 여는 명령을 보여주고
-    // 사람이 연다. 랜딩 절 전부는 그대로 선다(§비주얼 §46 ⑤ 레지스트리 오류 상태).
+    // 사람이 연다. 랜딩 절 전부는 그대로 뜬다(§비주얼 §46 ⑤ 레지스트리 오류 상태).
     let projects: Awaited<ReturnType<typeof readProjects>> = [];
     try {
       projects = await readProjects();
@@ -107,8 +107,8 @@ export default async function Page() {
         {rows.length > 0 && <ProjectRows rows={rows} />}
       </Landing>
       {/* T1(§릴리스 - 자동 업데이트 §표면이 창 안으로 들어온다, 요구 `1c5db160`) - 창이 처음 여는
-          화면이 홈이라 `(app)/layout.tsx`와 같은 자리가 여기도 서야 한다. 브라우저·랜딩-only에서는
-          `useIsDesktop()`이 `false`라 이 컴포넌트가 그 자리에서 바로 `null`이다 - 새로 서는 것도
+          화면이 홈이라 `(app)/layout.tsx`와 같은 자리가 여기도 떠야 한다. 브라우저·랜딩-only에서는
+          `useIsDesktop()`이 `false`라 이 컴포넌트가 그 자리에서 바로 `null`이다 - 새로 뜨는 것도
           fs 읽기도 늘지 않는다. */}
       <UpdateToast />
     </LanguageProvider>

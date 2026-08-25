@@ -636,7 +636,7 @@ export type ProjectSummary = {
    *  `daysSince`(`components/status-badge.tsx`) 하나다.
    *
    *  못 읽은 프로젝트는 빈 배열이다(`assigned`의 그 규칙 그대로 — 판정 자체가 불가능하면
-   *  항목이 없는 게 답이고 그 자리에는 `연결 안 됨`이 이미 서 있다). */
+   *  항목이 없는 게 답이고 그 자리에는 `연결 안 됨`이 이미 떠 있다). */
   awaiting: { hash: string; stem: string; mtime: number }[];
   /** 마감을 못 지킬 티켓(§1-4 §종 항목 ⑦ — 지난 마감 또는 5시간 안에 남았는데 선행이 안 끝남).
    *  판정은 `dueAlertOf` 하나뿐이고 그 값이 이미 보는 `effectiveDue`·`unmet`도 이 `listTickets`

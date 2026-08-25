@@ -73,8 +73,8 @@ export function EpicSidebar({
   const allTotal = epics.reduce((n, e) => n + e.counts.open + e.counts.wip + e.counts.done, 0);
   const allWip = epics.reduce((n, e) => n + e.counts.wip, 0);
   // 접힌 컨트롤(펴기)과 펼친 컨트롤(접기)은 글리프 하나가 두 방향을 다 낸다(§52 ⑦) — 자리도
-  // 같다: `SidebarGroupLabel`이 서는 그 행(`h-6`·`px-2`). `ml-auto`는 결정 17이 만들기로
-  // 옮긴다(§52 ⑩) — 둘째 컨트롤이 서면서 그 자리가 만들기·접기 **쌍**의 앞쪽으로 간다.
+  // 같다: `SidebarGroupLabel`이 뜨는 그 행(`h-6`·`px-2`). `ml-auto`는 결정 17이 만들기로
+  // 옮긴다(§52 ⑩) — 둘째 컨트롤이 뜨면서 그 자리가 만들기·접기 **쌍**의 앞쪽으로 간다.
   const toggle = (
     <Button
       variant="ghost"
@@ -110,7 +110,7 @@ export function EpicSidebar({
             <SidebarGroup className="p-0">
               {/* 드래그 중 "놓을 에픽을 고릅니다"로 갈리는 자리(§비주얼 §52 ⑤ (2)) —
                   `board-ui.tsx`의 `EpicDrag`가 이 속성으로 찾는다. 표식은 **행이 아니라 낱말을
-                  감싸는 span**에 붙는다(§52 ⑩ §함정) — 만들기의 `DialogTrigger`가 이 행에 서면서
+                  감싸는 span**에 붙는다(§52 ⑩ §함정) — 만들기의 `DialogTrigger`가 이 행에 뜨면서
                   `innerHTML` 왕복(드래그 시작/끝)에 그 컨트롤이 갈리지 않아야 한다. 왕복이 행
                   전체를 갈아 끼우면 React 핸들러를 든 버튼이 되돌아온 뒤 죽는다. */}
               <SidebarGroupLabel className="h-6 gap-1 text-muted-foreground">
@@ -187,8 +187,8 @@ export function EpicSidebar({
                               >
                                 <span>{total}건</span>
                                 {row.counts.wip > 0 && (
-                                  // 칩이 서면 `진행중 n`을 걷는다(§에픽 결정 14 - §52 ②) - 워커 칩과
-                                  // 폴백 글자는 같은 사실의 두 모양이라 한 줄에 하나만 선다.
+                                  // 칩이 뜨면 `진행중 n`을 걷는다(§에픽 결정 14 - §52 ②) - 워커 칩과
+                                  // 폴백 글자는 같은 사실의 두 모양이라 한 줄에 하나만 뜬다.
                                   <span className="ml-auto flex items-baseline gap-1">
                                     {row.workers.length === 0 && (
                                       <span>
@@ -216,7 +216,7 @@ export function EpicSidebar({
                           {t(locale, "status.label.wip")} {row.counts.wip} ·{" "}
                           {t(locale, "status.label.done")} {row.counts.done}
                         </p>
-                        {/* 패널 3행 — 워커 전부. cap 없음, 0명이면 줄이 통째로 안 선다 */}
+                        {/* 패널 3행 — 워커 전부. cap 없음, 0명이면 줄이 통째로 안 뜬다 */}
                         {row.workers.length > 0 && (
                           <div className="flex flex-wrap items-baseline gap-2">
                             <WorkerChips names={row.workers} locale={locale} />

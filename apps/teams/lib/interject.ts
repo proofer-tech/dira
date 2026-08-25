@@ -121,7 +121,7 @@ export async function interject(
     }
     if (code === "EPIPE") {
       // `ENXIO`로 뭉치지 않는다 — 사유는 같아도(세션이 끝났다) mono 원문에 `ENXIO:`를 적으면
-      // 화면이 안 난 errno를 적는 셈이다. 문장이 이미 무슨 일이 났는지 말한다.
+      // 화면이 안 난 errno를 적는 셈이다. 문장이 이미 무슨 일이 났는지 알려 준다.
       return fail("other", "세션이 이미 끝났습니다 — 쓰는 중에 입구가 닫혔습니다.");
     }
     return fail("other", `참견을 쓰지 못했습니다(${code ?? "?"}): ${(e as Error).message}`);

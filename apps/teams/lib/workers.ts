@@ -77,7 +77,7 @@ export type Worker = {
    *  `[기본값 가정]` 배지가 붙고 claude 기본 블록은 안 붙는다(§비주얼 §23 ① 표시 4종).
    *  실효 값이 필요한 자리는 `engineName`·`engineCell`이 `null`을 받아 기본값을 편다 */
   engine: string | null;
-  /** runner.log에서 이 워커의 **최근 20줄**(최신이 앞). 셀은 `[0]`을 쓰고 펼치면 전부 선다
+  /** runner.log에서 이 워커의 **최근 20줄**(최신이 앞). 셀은 `[0]`을 쓰고 펼치면 전부 뜬다
    *  (§4-7). 마지막 한 줄을 따로 들지 않는 것은 두 필드가 갈릴 자리를 안 만드는 것이다 */
   recentLog: string[];
   /** 외부 요인으로 죽은 마지막 세션 (§0-5). **정상 상태에서는 항상 `null`이다** */
@@ -111,7 +111,7 @@ export type Worker = {
  *  ponytail: 셸을 실행하지 않으니 따옴표만 벗긴다 — `$VAR` 전개는 `parseWorkerFile`의 다른
  *  값들과 같은 선이다(전개해야 하면 `shellValue`가 이미 있는 자리로 옮긴다). */
 export function engineName(engine: string | null): string {
-  // `null` = 대입이 없다 = tick.sh 기본값이 실제로 돈다. 인증 배너(§0-4)가 그 워커에도 서야 한다.
+  // `null` = 대입이 없다 = tick.sh 기본값이 실제로 돈다. 인증 배너(§0-4)가 그 워커에도 떠야 한다.
   const first = (engine ?? DEFAULT_ENGINE).trim().split(/\s+/)[0] ?? "";
   const name = path.basename(first.replace(/^(['"])(.*)\1$/, "$2"));
   // 엔진 수정 27번째 계약 3(tick.sh:550-554와 같은 판정, 한 자리뿐이다):
@@ -506,7 +506,7 @@ export function commonSourceLine(root: string): string {
 const commonSourceRe = /^[ \t]*(?:\.|source)[ \t]+[^\n]*context\.sh/m;
 
 /** 공통 항목의 `$TICKET_CWD`를 펼 후보들. **공통을 실제로 `source`하는 워커의 값만** 본다 —
- *  못 받는 워커의 cwd로 판정하면 카드가 남의 사실을 말한다. 하나도 없으면 tick.sh 39행 기본값.
+ *  못 받는 워커의 cwd로 판정하면 카드가 남의 사실을 알려 준다. 하나도 없으면 tick.sh 39행 기본값.
  *  ponytail: 워커 파일을 여기서 한 번 더 읽는다(프로젝트당 한 자릿수 파일). `listWorkers`와
  *  합치려면 `Worker`에 cwd를 싣고 호출자 셋을 다 고쳐야 한다 — 느려지면 그때 한다. */
 async function commonCwds(root: string): Promise<string[]> {
@@ -624,7 +624,7 @@ const MODEL_SLOT = " model";
 export const ENGINE_ARR = "TICKET_ENGINE";
 
 /** 화면이 그리는 목록의 유일한 출처. **모델 이름은 실측으로만 오른다** — 확인 못 한 이름을
- *  올리는 것이 §4-3이 말하는 "화면이 거짓말한다"이다. 갱신 명령은 `f6dd8478` §결과에 있다. */
+ *  올리는 것이 §4-3이 말하는 "화면이 거짓알려 준다"이다. 갱신 명령은 `f6dd8478` §결과에 있다. */
 export const ENGINES: readonly {
   id: EngineId;
   /** 모델 플래그. `claude --model` · `codex -m` · `grok -m` · `agy --model` (넷 다 실재한다 — §4-3) */
@@ -679,7 +679,7 @@ export const ENGINES: readonly {
     id: "grok",
     flag: "-m",
     // `grok models`가 오늘 내는 이름 하나(실측 2026-08-05, `grok 0.2.118`). **별칭이 아니라
-    // 풀네임이라 반드시 낡는다** — claude의 근거 2가 grok에는 안 선다. 갱신은 `grok models`.
+    // 풀네임이라 반드시 낡는다** — claude의 근거 2가 grok에는 안 뜬다. 갱신은 `grok models`.
     models: [NO_MODEL, "grok-4.5"],
     // `--sandbox`가 없는 것은 누락이 아니다 — grok 기본 sandbox 프로파일이 이미 `off`이고
     // `--permission-mode bypassPermissions` 하나로 파일 쓰기까지 지난다(실측 §4-3 §grok).
@@ -701,7 +701,7 @@ export const ENGINES: readonly {
     id: "agy",
     flag: "--model",
     // `agy models` 11종(실측 2026-08-05, GUI 도메인 — §4-3 §agy ⑤). **별칭이 아니라 풀네임이라
-    // 반드시 낡는다** — claude의 근거 2가 agy에는 안 선다. 갱신은 사람이 `agy models`로 한다.
+    // 반드시 낡는다** — claude의 근거 2가 agy에는 안 뜬다. 갱신은 사람이 `agy models`로 한다.
     // `--effort`가 따로 있는데 단위를 안 넓힌다 — 강도가 이미 이름 접미사(-high/-medium/-low)다.
     models: [
       NO_MODEL,
@@ -784,7 +784,7 @@ export function parseEngineValue(engine: string): { engineId: EngineId; model: s
  *  |---|---|---|
  *  | 카탈로그와 맞음 · 모델 있음 | `claude · opus` | 없음 |
  *  | 〃 · 모델 없음 | `codex` | 없음 |
- *  | **없음**(`engine === null`) | `claude` | `assumed` — 실제로 도는 값을 그리고 배지가 사실을 말한다 |
+ *  | **없음**(`engine === null`) | `claude` | `assumed` — 실제로 도는 값을 그리고 배지가 사실을 알려 준다 |
  *  | 카탈로그와 안 맞음 | `mock-engine`(첫 토큰 basename) | `custom` |
  *
  *  판정이 서버에 있는 이유: 클라이언트가 카탈로그를 다시 대조하면 같은 4종이 두 벌이 된다. */
@@ -839,7 +839,7 @@ export function personaEngineHint(
 /** 블록 치환, 없으면 **삽입**. 파일을 안 건드리는 순수 함수다.
  *
  *  §4는 컨텍스트에 대해 "없으면 GUI가 넣지 않는다(삽입 자리를 짚을 앵커가 없다)"고 정했는데
- *  엔진은 그 논리가 안 선다: 지금 이 큐의 워커 전부에 `TICKET_ENGINE` 대입이 없어서 거부하면
+ *  엔진은 그 논리가 안 뜬다: 지금 이 큐의 워커 전부에 `TICKET_ENGINE` 대입이 없어서 거부하면
  *  기능이 **모든 기존 워커에서 안 열린다**(§4-3). 대입 하나뿐이라 `source` 줄 위 어디에 놓든
  *  결과가 같으므로 고를 것이 없다 — 추측이 아니다. */
 function applyEngineBlock(text: string, id: EngineId, model: string): string {
@@ -860,13 +860,13 @@ function applyEngineBlock(text: string, id: EngineId, model: string): string {
  *    6~13초 뒤에 오는데 보드 폴링이 5초라 매분 그 창에 걸린다).
  *  - `SKIP`·`HOLD` — "지금 물 티켓이 없다"이지 환경이 나았다는 증거가 아니다.
  *  - `WARN`·`REAP`·`UNASSIGN`·`ERROR`·`NOTE` — tick 결과가 아니다. `ERROR cwd 없음`은 §4
- *    작업 디렉터리 결함이 이미 자기 자리에서 말한다 — 같은 사실을 두 자리에 쓰지 않는다.
+ *    작업 디렉터리 결함이 이미 자기 자리에서 알려 준다 — 같은 사실을 두 자리에 쓰지 않는다.
  *
  *  `KILLED`는 §2-5가 더한다 — 상한을 안 넘고 신호로 죽은 세션(`강제 할당 해제`가 만든다).
  *  안 더하면 강제 중단한 워커의 배너가 **그 앞의 오래된 결과 줄**을 읽는다. */
 const RESULT_VERBS = new Set(["DONE", "FAIL", "TIMEOUT", "KILLED"]);
 
-/** `마지막 활동` 셀을 펼치면 서는 줄 수 (§4-7). tick 한 바퀴가 6~8줄이라 20줄이면 최근 티켓
+/** `마지막 활동` 셀을 펼치면 뜨는 줄 수 (§4-7). tick 한 바퀴가 6~8줄이라 20줄이면 최근 티켓
  *  두어 개가 통째로 보인다. */
 const RECENT_LINES = 20;
 
@@ -1047,7 +1047,7 @@ async function failureOf(
   const ts = Date.parse(at.replace(" ", "T"));
   if (!Number.isFinite(ts)) return null;
   // §4-9 §배너가 꺼지는 구멍. 창이 지났어도 **살아 있는 쿨다운이 10분보다 정확한 증거다** — 그
-  // 파일은 *지금 엔진이 불능이고 언제까지다*를 직접 말한다. 그동안은 새 `FAIL`이 구조적으로 안
+  // 파일은 *지금 엔진이 불능이고 언제까지다*를 직접 알려 준다. 그동안은 새 `FAIL`이 구조적으로 안
   // 생기므로(게이트가 `select` 앞에서 `exit 0`) 창만 보면 큐가 멈춘 채로 배너가 꺼진다.
   // 값은 10분 그대로이고 조건이 하나 는다 — 쿨다운이 없거나 만료면 위 문장 그대로다.
   if (Date.now() - ts > FRESH_MS && Date.now() >= (await coolUntil())) return null;
@@ -2127,7 +2127,7 @@ export async function applyExecBit(root: string, name: string): Promise<void> {
 
 /** `prepareWorktree`의 결과. 화면이 **이것만으로** 성공·정상종료·실패 패널을 그린다(§6 에러 3요소). */
 export type WorktreePrep = {
-  /** 만든(또는 만들려던) 트리 경로. 성공 패널이 이 경로를 말한다 */
+  /** 만든(또는 만들려던) 트리 경로. 성공 패널이 이 경로를 알려 준다 */
   dir: string;
   /** 끝난 단계 수 0~3 (트리 → 심링크 → 검증). 3이면 성공이다 */
   done: number;
@@ -2334,7 +2334,7 @@ export async function stopWorker(root: string, name: string): Promise<boolean> {
  *  true = 새로 넣었다 / false = 이미 등록돼 있었다(no-op). 판정이 `registerCron`의 반환값이
  *  아니라 **등록 전의 `cron`**인 이유: `cronRegister`는 있던 줄을 지우고 맨 뒤에 다시 넣으므로
  *  줄 뒤에 남의 잡이 있으면 텍스트는 바뀐다(`changed = true`). 그건 "등록돼 있지 않았다"가
- *  아니다 — 화면이 말해야 하는 사실은 `중단`과 대칭인 이쪽이다. */
+ *  아니다 — 화면이 알려야 하는 사실은 `중단`과 대칭인 이쪽이다. */
 export async function startWorker(root: string, name: string): Promise<boolean> {
   const w = (await listWorkers(root)).find((x) => x.name === name);
   if (!w) throw new Error(`없는 워커입니다: ${name}`);

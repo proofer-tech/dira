@@ -105,7 +105,7 @@ export type ConfigRow = {
   byWorker?: Record<string, string>;
   /** `작업 디렉터리` 행만. 워커별 나열이고 **경고가 아니다**(DESIGN.md §0-0 그 행 표기). */
   perWorker?: { worker: string; value: string }[];
-  /** 해석 못 한 할당문 원문. 값 아래 한 줄씩 그린다 — 무엇을 못 읽었는지 그것만이 말해준다. */
+  /** 해석 못 한 할당문 원문. 값 아래 한 줄씩 그린다 — 무엇을 못 읽었는지 그것만이 알려 준다. */
   unresolved?: { worker: string; raw: string }[];
 };
 
@@ -120,7 +120,7 @@ export type ResolvedView = {
   rows: ConfigRow[];
   /** 하나라도 워커 간 값이 갈렸는가 — 표 아래 Alert 한 줄의 근거. */
   hasConflict: boolean;
-  /** 설정 다이얼로그의 `OntologyMigration` — 열려 있으면 버튼 대신 그 줄이 선다(§비주얼 §56
+  /** 설정 다이얼로그의 `OntologyMigration` — 열려 있으면 버튼 대신 그 줄이 뜬다(§비주얼 §56
    *  ⑤). 다이얼로그가 첫 그림부터 판정된 값으로 그리게 이 해석 결과와 같이 나른다. */
   ontologyMigrationTicket: MarkerTicketLine | null;
   /** 설정 다이얼로그의 `OntologyImport` — 폴더당 한 장이라 목록이다(§비주얼 §56 ⑤). */
@@ -410,7 +410,7 @@ export async function unregisterProjectAction(id: string): Promise<ActionResult>
 /** 인증 다이얼로그 층 ③ — 붙여 넣은 토큰을 제자리에 놓는다(DESIGN.md §0-4 · §0-13).
  *
  *  **유효성은 판정하지 않는다** — 접두사로 거르면 형식이 바뀔 때 멀쩡한 토큰을 GUI가 거부한다.
- *  실제 유효성은 워커가 돌아야 드러나고, 다이얼로그가 그렇게 말한다.
+ *  실제 유효성은 워커가 돌아야 드러나고, 다이얼로그가 그렇게 알려 준다.
  *
  *  **덮어쓰기가 아니라 목록 append다 — 활성은 안 움직인다**(§0-13 §화면, P179). eligible한 활성이
  *  이미 있으면 그 자리에 머물고 이 토큰은 `대기`로 들어간다; eligible이 하나도 없을 때만(첫 토큰 등)

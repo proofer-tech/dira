@@ -10,7 +10,7 @@
  *  붙인다. 이 컴포넌트는 서버(셸·보드·상세·워커)와 클라이언트(`project-switcher.tsx`) 양쪽에서
  *  쓰이므로 `useLocale()`로 고정하지 않는다(developer memory "i18n 서버 문자열은 로케일이
  *  없다" — 한쪽은 `readLanguage()`, 한쪽은 `useLocale()`로 호출부가 채운다). 아직 이 프롭을 안
- *  넘기는 자리(다음 묶음 몫인 화면들)는 `ko` 기본값으로 떨어져 종전과 같은 화면이 선다. */
+ *  넘기는 자리(다음 묶음 몫인 화면들)는 `ko` 기본값으로 떨어져 종전과 같은 화면이 뜬다. */
 import Link from "@/components/link";
 import {
   Check,
@@ -73,10 +73,10 @@ const STATUS: Record<Status, Spec> = {
   blocked: { labelKey: "status.label.blocked", icon: Lock, variant: "outline", tint: BLOCKED },
   // 이상 상태가 **아니다** — PM이 물었고 사람이 답할 일이 있다는 정상 신호다(§요구사항 레이어
   // 결정 4). 그래서 막힘 색을 그대로 쓰고 새 색 토큰을 만들지 않는다. 갈리는 건 아이콘·라벨뿐이고,
-  // 방치는 `days`(경과일)가 말한다. 아이콘은 designer가 확정했다(`588bc5bc` → DESIGN.md §2):
+  // 방치는 `days`(경과일)가 알려 준다. 아이콘은 designer가 확정했다(`588bc5bc` → DESIGN.md §2):
   // 말풍선+답장 화살표다. 물음표 원(`MessageCircleQuestionMark`)은 안 쓴다 — 14px에서 deps 배지의
   // `큐에 없는 해시`(`CircleQuestionMark`, **같은 BLOCKED 색**)와 실루엣이 겹치고, 보드에서 두
-  // 배지가 상태 컬럼·deps 컬럼에 나란히 앉는다.
+  // 배지가 상태 컬럼·deps 컬럼에 나란히 놓인다.
   awaiting: {
     labelKey: "status.label.awaiting",
     icon: MessageSquareReply,
@@ -114,7 +114,7 @@ const STATUS: Record<Status, Spec> = {
 export const statusLabel = (status: Status, locale: Locale = DEFAULT_LOCALE) =>
   t(locale, STATUS[status].labelKey);
 
-/** `kind:` → 화면 문구(§1 보드 §보드가 `kind`를 한글로 말한다). 선택지 목록이 아니라 라벨
+/** `kind:` → 화면 문구(§1 보드 §보드가 `kind`를 한글로 알려 준다). 선택지 목록이 아니라 라벨
  *  대응표다 — `kind`는 프로젝트마다 다르므로 표에 없는 값은 파일에 적힌 그대로 그린다
  *  (`KIND_LABELS[v] ?? v`). 원래 보드(`(board)/page.tsx`)의 지역 상수였다가 여기로 옮겼다 —
  *  페르소나 상세 활동 탭(§비주얼 §66 ⑧)이 "같은 사실은 한 자리"(§0-9) 원칙으로 같은 표를
@@ -140,7 +140,7 @@ export const daysSince = (ms: number) => Math.floor((Date.now() - ms) / 86_400_0
  *  **`continued`·`href`는 `done` 전용이다**(§P294 §미완으로 끝나는 세션 결정 3) — `continued:`가
  *  있는 완료 티켓만 `완료(이어짐)`으로 갈라 그린다. `href`는 호출부가 `continuedOf` stem을
  *  `resolveDep`으로 이미 풀어서 주는 값이다 — 이 컴포넌트는 데이터를 조회하지 않는다(`DepBadge`의
- *  `href`와 같은 자리). 큐에 없는 stem이면 호출부가 `href`를 안 줘서 링크 없이 배지만 선다. */
+ *  `href`와 같은 자리). 큐에 없는 stem이면 호출부가 `href`를 안 줘서 링크 없이 배지만 뜬다. */
 export function StatusBadge({
   status,
   days,
@@ -210,7 +210,7 @@ export function DepBadge({
       {hash}
       {/* 아이콘은 `aria-hidden`이고 사유는 `title`뿐이라, 이 문구가 비시각 사용자에게 종류를
           말하는 유일한 통로다(§비주얼 §2, 사람 요청 `1f2ac454`). 옆 라벨의 `· 미충족 n`을
-          지우면서 여기로 옮겼다 — 건수 대신 **어느 해시가** 무엇인지를 말한다. */}
+          지우면서 여기로 옮겼다 — 건수 대신 **어느 해시가** 무엇인지를 알려 준다. */}
       <span className="sr-only">{reason}</span>
     </Badge>
   );

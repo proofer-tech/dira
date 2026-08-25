@@ -79,7 +79,7 @@ export type WorkerRow = {
    *  넘긴다: `lib/workers.ts`가 `node:fs`를 타서 이 파일이 그 함수를 못 import한다(§규약).
    *  세션 스트림·참견이 이 값 하나로 갈린다(§4-3 · §비주얼 §23 ⑤) */
   engineName: string;
-  /** runner.log에서 이 워커의 최근 20줄(최신이 앞). `[0]`이 `마지막 활동` 셀이고 펼치면 전부 선다 */
+  /** runner.log에서 이 워커의 최근 20줄(최신이 앞). `[0]`이 `마지막 활동` 셀이고 펼치면 전부 뜬다 */
   recentLog: string[];
   registerCmd: string;
   unregisterCmd: string;
@@ -170,7 +170,7 @@ export function ExecBitFix({
 }
 
 /** 첫 등록은 macOS `앱 관리` 승인 창을 지난다(§제약 4) — 그동안 crontab이 블록되고 버튼은
- *  `…중`으로 서 있다. 창을 못 알아보면 3분 뒤 등록만 실패한다.
+ *  `…중`으로 떠 있다. 창을 못 알아보면 3분 뒤 등록만 실패한다.
  *  **생성과 재등록이 같은 `crontab -` 쓰기라 같은 벽에서 멈춘다** — 그래서 문구도 하나다(§4 재등록). */
 function CrontabApproval() {
   return (
@@ -376,8 +376,8 @@ export function WorkerRowActions({ projectId, row }: { projectId: string; row: W
         {pending ? "reap…" : "reap"}
       </Button>
       {/* 못 여는 행에서도 **지우지 않고 비활성으로 남긴다**(§4 세션 스트림 · §비주얼 §4-3 —
-          요구 `3d717e8b`). 지우면 오른쪽 정렬이라 그 행만 `reap`이 옆으로 옮겨 앉는다.
-          사유 문구·툴팁은 안 붙인다 — 같은 행 `물고 있는 티켓` 열이 `—`인 것이 이미 말한다.
+          요구 `3d717e8b`). 지우면 오른쪽 정렬이라 그 행만 `reap`이 옆으로 옮겨 놓인다.
+          사유 문구·툴팁은 안 붙인다 — 같은 행 `물고 있는 티켓` 열이 `—`인 것이 이미 알려 준다.
           `aria-disabled`가 아니라 `disabled`다: 이 행에는 해당이 없는 조작이라 탭 순서에
           죽은 정거장을 만들지 않는다(선례 = 아래 컨텍스트 항목 행 `▲▼`) */}
       <Button
@@ -392,7 +392,7 @@ export function WorkerRowActions({ projectId, row }: { projectId: string; row: W
           `cron`이다(§4 재등록): 뺄 줄이 있으면 `중단`, 없으면 `재등록`이다. `running`인데
           미등록인 워커에도 `재등록`이 뜬다(락과 crontab은 직교한다 — §워커 상태 판정).
           배타 토글은 한 슬롯이고 **넓은 쪽(`재등록` 55.2px) 폭으로 고정**한다(§비주얼 §4-3) —
-          안 하면 자수가 갈리는 만큼 왼쪽 버튼들이 행마다 다른 x에 선다(실측 11.1px) */}
+          안 하면 자수가 갈리는 만큼 왼쪽 버튼들이 행마다 다른 x에 뜬다(실측 11.1px) */}
       {row.cron ? (
         <Button variant="ghost" size="sm" className="min-w-14" onClick={() => setStopping(true)}>
           중단
@@ -474,7 +474,7 @@ export function WorkerRowActions({ projectId, row }: { projectId: string; row: W
             </DialogDescription>
           </DialogHeader>
           {stopped?.ok ? (
-            // 이미 미등록이었으면 no-op이라고 말한다 — 에러가 아니다
+            // 이미 미등록이었으면 no-op이라고 알려 준다 — 에러가 아니다
             <p className="text-sm font-medium">{stopped.message}</p>
           ) : (
             // 여는 버튼이 `row.cron`으로 갈리므로 "이미 미등록입니다"를 여기서 미리 말하지
@@ -531,7 +531,7 @@ export function WorkerRowActions({ projectId, row }: { projectId: string; row: W
             </DialogDescription>
           </DialogHeader>
           {registered?.ok ? (
-            // 이미 등록돼 있었으면 no-op이라고 말한다 — `중단`이 미등록에 대해 말하는 것과 대칭이다
+            // 이미 등록돼 있었으면 no-op이라고 알려 준다 — `중단`이 미등록에 대해 가리키는 것과 대칭이다
             <p className="text-sm font-medium">{registered.message}</p>
           ) : (
             registered && (
@@ -639,7 +639,7 @@ export function WorkerRowActions({ projectId, row }: { projectId: string; row: W
 // ── 컨텍스트 경로 (TICKET_CONTEXT) ──────────────────────────────────────────
 
 /** 존재 여부 표시. **없는 건 에러가 아니다** — 엔진이 건너뛰고 WARN만 남긴다(tick.sh 148행).
- *  그래서 없음은 destructive가 아니라 중립색이고, 문구가 그 사실을 말한다. */
+ *  그래서 없음은 destructive가 아니라 중립색이고, 문구가 그 사실을 알려 준다. */
 function ExistsMark({ row }: { row: ContextRow }) {
   const [Icon, tint, label] =
     row.exists === true
@@ -661,7 +661,7 @@ function ExistsMark({ row }: { row: ContextRow }) {
 }
 
 /** 블록 모양이 예상과 달라 GUI가 못 고칠 때의 사유 패널. **편집기 밖에 있는 이유**(§비주얼 §35
- *  §다섯째 경고): 이것은 워커 하나짜리 경고 다섯 중 하나라 접힌 행에서도 서야 한다 — 편집기
+ *  §다섯째 경고): 이것은 워커 하나짜리 경고 다섯 중 하나라 접힌 행에서도 떠야 한다 — 편집기
  *  안에 두면 펼쳐야 보이는 경고가 된다. 공통 카드는 종전대로 편집기가 이걸 부른다. */
 function ContextRejection({
   file,
@@ -896,7 +896,7 @@ type ExpandApi = [
 const ExpandCtx = createContext<ExpandApi>([null, () => {}, null, () => {}, () => {}]);
 
 /** 표 본문이 드는 펼침 상태 하나. **DOM을 한 조각도 안 그리므로** `<TableBody>` 안에 그대로
- *  선다 — 서버가 그린 행들을 children으로 받는다(행 마크업은 페이지에 그대로 있다). */
+ *  뜬다 — 서버가 그린 행들을 children으로 받는다(행 마크업은 페이지에 그대로 있다). */
 export function ExpandScope({ children }: { children: React.ReactNode }) {
   const [expanded, setExpanded] = useState<Expanded>(null);
   const [success, setSuccess] = useState<Success>(null);
@@ -942,7 +942,7 @@ export function WorkerNameCell({ row }: { row: WorkerRow }) {
  *
  *  값은 이 워커의 `TICKET_CONTEXT` 항목 수다. **0개는 `—`가 아니라 `0`**이고(안 갖고 있다는 것은
  *  확인된 사실이다 — 토큰 열과 같은 이유), 못 읽는 워커는 `—` + `disabled`다(사유는 같은 행의
- *  둘째 행이 항상 말한다). 버튼을 지우지 않는 것은 §4 §세션 스트림과 같은 규칙이다. */
+ *  둘째 행이 항상 알려 준다). 버튼을 지우지 않는 것은 §4 §세션 스트림과 같은 규칙이다. */
 export function WorkerContextCell({ row }: { row: WorkerRow }) {
   const [open, setOpen] = useContext(ExpandCtx);
   const expanded = open?.name === row.name && open.panel === "context";
@@ -970,7 +970,7 @@ export function WorkerContextCell({ row }: { row: WorkerRow }) {
 /** `마지막 활동` 열 — **이 표의 셋째 컨트롤 셀**(§4-7). 조립은 위 `컨텍스트` 셀 그대로이고 셀에
  *  뜨는 값은 **무수정**이다: 여전히 마지막 한 줄 · `max-w-[20rem] truncate` · `title` 전문.
  *  달라지는 것은 그 값이 이제 토글이라는 것뿐이고, 펼치면 둘째 행이 최근 20줄을 잘림 없이 받는다.
- *  줄이 0개면 종전대로 `—` + `disabled`다(사유를 안 붙인다 — 그 `—`가 이미 말한다). */
+ *  줄이 0개면 종전대로 `—` + `disabled`다(사유를 안 붙인다 — 그 `—`가 이미 알려 준다). */
 export function WorkerActivityCell({ row }: { row: WorkerRow }) {
   const [open, setOpen] = useContext(ExpandCtx);
   const expanded = open?.name === row.name && open.panel === "activity";
@@ -1214,16 +1214,16 @@ export function WorkerContextRow({
   const healBtnRef = useRef<HTMLButtonElement>(null);
   const gateBtnRef = useRef<HTMLButtonElement>(null);
   const gets = row.commonSource ? common : [];
-  // 통합 게이트 경고는 `source` 줄이 없거나(§4-14) 있어도 파일 내용이 낡았으면 선다(§4-14 §소급).
+  // 통합 게이트 경고는 `source` 줄이 없거나(§4-14) 있어도 파일 내용이 낡았으면 뜬다(§4-14 §소급).
   const gateWarn = !row.dispatchGateSource || row.dispatchGateStale;
-  // 접혀 있어도 이 행이 서는 조건 — 경고 여섯 중 하나라도 있으면이다(§35 #4).
+  // 접혀 있어도 이 행이 뜨는 조건 — 경고 여섯 중 하나라도 있으면이다(§35 #4).
   const warned = !!warnings || !row.commonSource || !row.selfHealSource || gateWarn || !row.context.ok;
   // 활동 펼침도 이 행이 받는다(§4-7) — 조건을 안 넓히면 셀을 눌러도 받을 행이 없다.
   if (!warned && !expanded && !activity) return null;
 
   return (
     <TableRow className="hover:bg-transparent">
-      {/* 셀에 줄바꿈을 허용한다 — `TableCell` 기본값이 `nowrap`이라 패널 산문이 한 줄로 서고
+      {/* 셀에 줄바꿈을 허용한다 — `TableCell` 기본값이 `nowrap`이라 패널 산문이 한 줄로 뜨고
           auto table layout이 그 max-content를 컬럼 폭 배분에 넣는다(§비주얼 §6 텍스트 잘림). */}
       <TableCell colSpan={9} className="px-3 py-2 whitespace-normal">
         <div className="space-y-2">
@@ -1363,7 +1363,7 @@ export function WorkerContextRow({
           )}
 
           {/* 다섯째 경고 — 블록을 못 읽는 워커의 사유(§35 §다섯째 경고). 편집기 안이 아니라 여기
-              있는 이유는 접힌 행에서도 서야 해서다. 이 워커는 펼침이 없다(`컨텍스트` 열이 `disabled`). */}
+              있는 이유는 접힌 행에서도 떠야 해서다. 이 워커는 펼침이 없다(`컨텍스트` 열이 `disabled`). */}
           {!row.context.ok && (
             <ContextRejection
               file={`${row.name}.sh`}
@@ -1427,7 +1427,7 @@ export function WorkerContextRow({
               `tabIndex={0}` — `overflow-y-auto` 상자는 크롬에서 기본으로 포커스를 못 받아
               키보드만 쓰는 사람이 감긴 줄에 못 닿는다(WCAG 2.1.1 · §37 §접근성).
               `whitespace-pre-wrap break-all` 무수정 — `pre`로 바꾸면 표가 1869.5px로 벌어진다.
-              ponytail: 연속으로 같은 본문이 서면 `× n`으로 접는 것이 다음 단계다. 지금은 안 만든다. */}
+              ponytail: 연속으로 같은 본문이 뜨면 `× n`으로 접는 것이 다음 단계다. 지금은 안 만든다. */}
           {activity && (
             <div
               data-activity-panel

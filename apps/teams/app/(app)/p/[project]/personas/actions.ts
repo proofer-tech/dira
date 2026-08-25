@@ -101,7 +101,7 @@ export async function createPersonaAction(projectId: string, name: string): Prom
 }
 
 /** 스쿼드 생성(DESIGN.md §5-5). 페르소나와 한 이름공간이라 겹치면 거부한다 — `NAME_RE` 검사가
- *  이미 서 있는 그 자리에 목록 조회 한 번이 는다(§5-5 §값). */
+ *  이미 떠 있는 그 자리에 목록 조회 한 번이 는다(§5-5 §값). */
 export async function createSquadAction(projectId: string, name: string): Promise<PersonaResult> {
   try {
     const trimmed = name.trim();

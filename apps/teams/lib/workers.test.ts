@@ -131,8 +131,8 @@ test("engineName — tick.sh:52의 basename \"${TICKET_ENGINE[0]}\"과 판정이
     ).trim();
     assert.strictEqual(engineName(engine), bash, engine);
   }
-  assert.strictEqual(engineName(cases[3]), "codex"); // 이 워커에는 배너가 안 선다
-  assert.strictEqual(engineName(cases[4]), "grok"); // 여기도 안 선다 — 같은 함수가 판정한다
+  assert.strictEqual(engineName(cases[3]), "codex"); // 이 워커에는 배너가 안 뜬다
+  assert.strictEqual(engineName(cases[4]), "grok"); // 여기도 안 뜬다 — 같은 함수가 판정한다
   assert.strictEqual(engineName(""), ""); // 값이 깨져 못 읽었으면 claude가 아니다 = 이름도 없다
   // 엔진 수정 24번째(§제약 1 §결정 기록): 고정 경로 이름 `dira`는 claude로 정규화한다.
   // bash의 순정 basename과는 여기서 갈리므로(값이 "dira") 위 for 루프 밖에서 따로 고정한다.
@@ -147,7 +147,7 @@ test("engineName — tick.sh:52의 basename \"${TICKET_ENGINE[0]}\"과 판정이
 test("engineName·parseEngineValue — 고정 경로를 쓰는 오늘의 페르소나 값이 표준으로 읽힌다 (§27)", () => {
   // .dira/personas/developer/engine이 오늘 실제로 쓰는 값 그대로다(사람 손으로 갱신되지 않는다,
   // §27 계약 5) — 카탈로그 argv[0]을 고정 경로로 안 바꾸면 이 값이 `parseEngineValue`에서
-  // `null`로 읽혀 §비주얼 §23의 `커스텀` 배지가 서는 회귀(이 왕복이 시작된 증상)가 재현된다.
+  // `null`로 읽혀 §비주얼 §23의 `커스텀` 배지가 뜨는 회귀(이 왕복이 시작된 증상)가 재현된다.
   const todaysPersonaValue =
     '"$HOME/.config/dira/bin/dira" -p --session-id "{sid}" --dangerously-skip-permissions ' +
     "--model sonnet --input-format stream-json --output-format stream-json --verbose";
@@ -178,7 +178,7 @@ test("listWorkers — running · stale · stopped 판정", async () => {
   );
   assert.strictEqual(ws[0].lockPid, process.pid);
   // crontab에 없는 워커는 stopped다. 이 판정이 뒤집히면 목록 행이 거짓말을 한다.
-  // 묶음 순서는 §2 4상태 표 순서다 — stale이 뒤에 서는 것이 이 assert의 요점이다(심각도 순 아님).
+  // 묶음 순서는 §2 4상태 표 순서다 — stale이 뒤에 뜨는 것이 이 assert의 요점이다(심각도 순 아님).
   assert.deepStrictEqual(workerGroups(ws), [
     { status: "running", names: ["w1"] },
     { status: "stopped", names: ["w3"] },
@@ -293,7 +293,7 @@ test("TICKET_NAME 재정의 — 락·로그는 파일명이 아니라 실효 이
 
   const [w] = await listWorkers(root);
   assert.strictEqual(w.name, "a"); // 액션이 가리키는 건 파일이다
-  assert.strictEqual(w.status, "running"); // 파일명으로 찾았으면 stopped로 거짓말했다
+  assert.strictEqual(w.status, "running"); // 파일명으로 찾았으면 stopped로 거짓적었다
   assert.strictEqual(w.engine, 'codex exec --json "{prompt}"');
   assert.match(w.recentLog[0], /\[reviewer\] SKIP/);
 });
@@ -612,7 +612,7 @@ test("workerOf — owner 표기에서 워커 이름 하나, 형식이 아니면 
 });
 
 /** 워커 마크 ② 전문 자리 (§비주얼 §19). 테이블 `owner` 셀은 전문을 **값 무수정으로** 두고 그
- *  안의 워커 이름 구간만 칩으로 세운다 — 자르는 자리를 `components/worker-mark.tsx`가
+ *  안의 워커 이름 구간만 칩으로 바꾼다 — 자르는 자리를 `components/worker-mark.tsx`가
  *  `owner.length - name.length - 9`로 계산한다(`workerOf`의 계약: 이름 뒤는 `-` + sid 8자).
  *  둘이 갈리면 셀에 엉뚱한 구간이 칩이 되거나 전문이 조용히 바뀐다. */
 test("워커 마크 ② 전문 자리 — 자르고 붙이면 owner 원문 그대로다", () => {
@@ -620,7 +620,7 @@ test("워커 마크 ② 전문 자리 — 자르고 붙이면 owner 원문 그�
     const name = workerOf(owner);
     assert.ok(name, owner);
     const at = owner.length - name.length - 9;
-    assert.strictEqual(owner.slice(at, at + name.length), name); // 칩이 서는 구간이 이름이다
+    assert.strictEqual(owner.slice(at, at + name.length), name); // 칩이 뜨는 구간이 이름이다
     assert.strictEqual(owner.slice(0, at) + name + owner.slice(at + name.length), owner); // 원문 무수정
   }
 });
@@ -735,7 +735,7 @@ test("lastFailure — 살아 있는 엔진 쿨다운이 신선도 창을 대신�
   const put = (line1: string) => writeFileSync(cd, `${line1}\n지문\n`);
   const secs = (n: number) => String(Math.floor(Date.now() / 1000) + n);
 
-  // ⓐ 15분 전 FAIL + 살아 있는 쿨다운 → 남는다. 그 파일이 *지금 불능이고 언제까지다*를 말한다
+  // ⓐ 15분 전 FAIL + 살아 있는 쿨다운 → 남는다. 그 파일이 *지금 불능이고 언제까지다*를 알려 준다
   put(secs(3600));
   assert.strictEqual((await listWorkers(root))[0].lastFailure?.hash, "a1111111");
 
@@ -980,7 +980,7 @@ test("lastFailure — eligible 토큰이 남아 있으면 §0-10 ② 항목을 �
   const root = failRoot([{ name: "w1", log: "fail-w1.log" }]); // 1분 전 = 신선도 창 안
   rmSync(alertsPath(), { force: true });
 
-  // ⓐ tokens.json이 없다 — 목록을 안 쓰는 판(오늘 전부). 종전 판정 그대로 선다.
+  // ⓐ tokens.json이 없다 — 목록을 안 쓰는 판(오늘 전부). 종전 판정 그대로 뜬다.
   rmSync(tokensPath(), { force: true });
   assert.strictEqual((await listWorkers(root))[0].lastFailure?.log, "fail-w1.log");
 
@@ -993,7 +993,7 @@ test("lastFailure — eligible 토큰이 남아 있으면 §0-10 ② 항목을 �
   );
   assert.strictEqual((await listWorkers(root))[0].lastFailure, null);
 
-  // ⓒ 전부 소진(비활성 포함) — eligible이 0이다. 요구의 *모두*가 여기라 항목이 선다.
+  // ⓒ 전부 소진(비활성 포함) — eligible이 0이다. 요구의 *모두*가 여기라 항목이 뜬다.
   writeFileSync(
     tokensPath(),
     JSON.stringify({
@@ -1218,7 +1218,7 @@ test("화면이 말하는 폴링 간격 = `cronLine`이 진짜 넣는 간격 (�
 // ── 자가 정리 §4-4 ──────────────────────────────────────────────────────────
 
 /** §4-4 표 3줄을 **진짜 bash로** 판정한다. 워커 파일을 실제로 만들어 `bash <워커>`로 돌리므로
- *  `$0`이 cron이 주는 것과 같은 문자열이다(계약이 그 위에 서 있다).
+ *  `$0`이 cron이 주는 것과 같은 문자열이다(계약이 그 위에 떠 있다).
  *
  *  진짜 crontab도 진짜 dira 큐도 안 건드린다(선례 §로드맵 P53): `crontab`은 PATH 앞 스텁이
  *  가로채고(`-l`은 `tab.txt`, `crontab -`은 `out.txt`에 쓴다), 큐·엔진 레포·`TICKET_LOCAL`은
@@ -1556,7 +1556,7 @@ test("prepareWorktree — dirname(root)가 git 레포가 아니면 실패가 아
   const root = path.join(base, ".dira");
   mkdirSync(path.join(root, "workers"), { recursive: true });
   const r = await prepareWorktree(root, "w2");
-  assert.strictEqual(r.skipped, true); // 화면이 에러가 아니라 사실로 말한다 (§4 생성 4항)
+  assert.strictEqual(r.skipped, true); // 화면이 에러가 아니라 사실로 알려 준다 (§4 생성 4항)
   assert.strictEqual(r.done, 0);
   assert.match(r.reason ?? "", /git 레포가 아닙니다/);
   assert.deepStrictEqual(r.rest, []); // 안 해도 되는 일에 명령을 주지 않는다
@@ -2273,12 +2273,12 @@ test("startWorker — 중단의 역방향. 줄이 정확히 2줄 늘고, 두 번
     assert.strictEqual(w.cron, true);
     assert.strictEqual(w.status, "running"); // 물고 있는 티켓은 그대로 간다
 
-    // 이미 등록된 상태에서 다시 눌러도 줄이 늘지 않고 **no-op이라고 말한다**. 이 자리가
+    // 이미 등록된 상태에서 다시 눌러도 줄이 늘지 않고 **no-op이라고 알려 준다**. 이 자리가
     // `registerCron`의 반환값과 갈린다: 줄을 지우고 맨 뒤에 다시 넣으므로 뒤에 남의 줄이
     // 있으면 텍스트는 바뀐다(changed=true) — 그래도 "등록돼 있었다"가 사실이다.
     await registerCron(w2); // w2를 맨 뒤로 보낸다 = w1 줄이 마지막이 아닌 배치
     assert.strictEqual(await startWorker(root, "w1"), false); // 화면이 말하는 사실은 이쪽이다
-    // 텍스트는 실제로 바뀌었다(w1 줄이 w2 뒤로 갔다) — 그런데도 위가 no-op이라고 말한다
+    // 텍스트는 실제로 바뀌었다(w1 줄이 w2 뒤로 갔다) — 그런데도 위가 no-op이라고 알려 준다
     assert.strictEqual(c.tab(), `${other}${cronLine({ path: w2 })}\n${cronLine({ path: w1 })}\n`);
     assert.strictEqual(count(w1), 2);
     assert.strictEqual(count("backup.sh"), 1); // 남의 잡은 그대로
@@ -2369,7 +2369,7 @@ test("엔진 템플릿 — 바꿔 쓸 수 없는 자리 일곱을 고정한다 (
   for (let i = 1; i < claude.length; i++) {
     if (claude[i - 1] === "--input-format" && claude[i] === "stream-json") fifo = true;
   }
-  assert.ok(fifo, `FIFO 판정이 안 선다: ${claude.join(" ")}`);
+  assert.ok(fifo, `FIFO 판정이 안 뜬다: ${claude.join(" ")}`);
   // ② claude에는 {prompt}가 없다 — 최초 프롬프트는 FIFO로 간다(argv에도 넣으면 두 번 들어간다)
   assert.ok(!claude.join(" ").includes("{prompt}"));
   // ④ --session-id "{sid}" — tick.sh:94 reap 생존 판정과 §2-1 스트림 파일 이름이 이 값이다
@@ -2479,7 +2479,7 @@ test("renderEngineBlock ↔ parseEngineValue — 카탈로그 전 조합이 왕�
       const value = engineArgv(e.id, m).join(" ");
       assert.strictEqual(block, `TICKET_ENGINE=(${value})`);
       assert.deepStrictEqual(parseEngineValue(value), { engineId: e.id, model: m });
-      // 엔진 이름 판정(§0-4 인증 배너)이 그대로 선다
+      // 엔진 이름 판정(§0-4 인증 배너)이 그대로 뜬다
       assert.strictEqual(engineName(value), e.id);
     }
   }

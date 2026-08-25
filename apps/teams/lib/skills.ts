@@ -137,7 +137,7 @@ export type SkillUpload = { path: string; bytes: Buffer; originalName?: string }
 
 /** import 실패 사유를 두 조각으로 낸다(§비주얼 §25 ⑤) — 사람이 읽는 문장(`message` =
  *  `Error.message`)과 기계값(`detail`, mono). 서버 액션이 이 둘을 `AlertTitle`·
- *  `AlertDescription`에 그대로 나눠 얹는다 — 갈래마다 문장이 다르다는 계약이 타입에 선다. */
+ *  `AlertDescription`에 그대로 나눠 얹는다 — 갈래마다 문장이 다르다는 계약이 타입에 뜬다. */
 export class SkillInstallError extends Error {
   readonly detail: string;
   constructor(message: string, detail: string) {
@@ -722,7 +722,7 @@ export async function writePersonaEngine(
 
 // ── 페르소나 메모리 (`<personas>/<이름>/memory/*.md` · §5-2) ─────────────────
 
-/** 개념 하나 = 파일 하나. `file`은 **확장자를 단 파일명**이다(삭제가 이 값으로 선다 — 화면이
+/** 개념 하나 = 파일 하나. `file`은 **확장자를 단 파일명**이다(삭제가 이 값으로 뜬다 — 화면이
  *  `.md`를 떼는 것은 표시 규칙이다. §비주얼 §32 ③). `text`는 파일 원문 그대로다. */
 export type Memory = { file: string; excerpt: string; text: string };
 

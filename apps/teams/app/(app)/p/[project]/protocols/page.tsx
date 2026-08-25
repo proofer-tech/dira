@@ -180,7 +180,7 @@ export default async function Protocols({
         // 안 덮으면 이 화면 아래로 빈 뷰포트 높이가 생긴다.
         <SidebarProvider className="min-h-0 flex-col gap-6 lg:flex-row">
           {/* 트리 — 서버 렌더 링크. 들여쓰기가 중첩을 그린다(트리 컴포넌트를 만들지 않는다).
-              **면이 선다**(§34 ④ — 가로 형제 · 경계 확정 · 종류가 다른 쌍에서 목록 쪽이 든다):
+              **면이 뜬다**(§34 ④ — 가로 형제 · 경계 확정 · 종류가 다른 쌍에서 목록 쪽이 든다):
               `bg-surface`+`border`+`rounded-lg`. `bg-sidebar`를 덮는 이유는 그 토큰이 다크에서
               `--card`(0.205)라 카드가 면 위에서 사라져서다(§34 ②).
               **랜드마크가 `<nav>` 태그에서 이 `role`/`aria-label`로 옮겼다** — 부품에 `render`가
@@ -339,7 +339,7 @@ const ROW =
  *  컴포넌트로 따로 그린다 — 저장·이름변경·삭제 버튼이 코드에 아예 없고 클라이언트 액션도 안 실린다.
  *  잠금이 조건문 하나가 아니라 배치다(서버 액션은 어차피 큐 안 경로만 받는다).
  *
- *  `vendored`가 서있으면(결정 8-d) 세션이 실제로 받는 파일이 큐 사본이라 산문도 그걸 말한다 —
+ *  `vendored`가 서있으면(결정 8-d) 세션이 실제로 받는 파일이 큐 사본이라 산문도 그걸 알려 준다 —
  *  `file.path`는 두 경우 다 `readCore`가 실제로 읽은 절대경로라 이미 맞다(위 배지 옆). */
 function CoreView({ file, vendored, locale }: { file: CoreFile; vendored: boolean; locale: Locale }) {
   const inlined = file.name === CORE_INLINED;

@@ -164,7 +164,7 @@ test("되돌아온 횟수 한 줄 — 두 언어에서 다 문장이 된다", ()
   assert.strictEqual(line("en", 273), "Reassigned: 273");
 });
 
-test("마감 역전 한 줄 — 해시가 공백 없이 앞에 붙어도 두 언어에서 다 선다", () => {
+test("마감 역전 한 줄 — 해시가 공백 없이 앞에 붙어도 두 언어에서 다 뜬다", () => {
   const line = (l: "ko" | "en", hash: string) => `${hash}${t(l, "ticket.duedate.reversalSuffix")}`;
   assert.strictEqual(
     line("ko", "high0002"),
@@ -189,7 +189,7 @@ test("종 ⑦ 제목·나열 — 두 언어에서 다 문장이 된다", () => {
     blocked("en", "3h 30m", 2),
     "3h 30m left, but blocked by 2 of its prerequisites",
   );
-  // 1건이어도 문장이 선다 — 이 앱에 복수형 장치가 없어 숫자 뒤 명사를 그대로 두면 깨지는 자리다
+  // 1건이어도 문장이 뜬다 — 이 앱에 복수형 장치가 없어 숫자 뒤 명사를 그대로 두면 깨지는 자리다
   assert.strictEqual(blocked("en", "1h", 1), "1h left, but blocked by 1 of its prerequisites");
 });
 
@@ -255,7 +255,7 @@ test("90be3eeb — 셸 조립 문구가 영어에서도 문장이 된다", () =>
     `${t("en", "bell.awaiting.titlePrefix")} ${n}${t("en", "bell.awaiting.titleSuffix")}`;
   assert.strictEqual(awaitingTitle(2), "Tickets waiting on an answer: 2");
 
-  // 검색어가 없으면 꼬리가 혼자 선다 — 그래서 이 조각만 대문자로 연다(설정 검색과 갈리는 지점)
+  // 검색어가 없으면 꼬리가 혼자 뜬다 — 그래서 이 조각만 대문자로 연다(설정 검색과 갈리는 지점)
   const empty = (q: string) =>
     q
       ? `"${q}"${t("en", "shell.switcher.emptyQueriedGlue")} ${t("en", "shell.switcher.emptySuffix")}`
@@ -271,7 +271,7 @@ test("90be3eeb — 셸 조립 문구가 영어에서도 문장이 된다", () =>
     `${t("en", "bell.resume.titlePrefix")} ${n}${t("en", "bell.resume.titleSuffix")}`;
   assert.strictEqual(resumeTitle(3), "Stretches the queue sat stopped: 3");
 
-  // idle 풀의 `sr-only` 꼬리는 라벨에 공백 없이 붙는다 — 값이 공백으로 열어야 낭독이 선다
+  // idle 풀의 `sr-only` 꼬리는 라벨에 공백 없이 붙는다 — 값이 공백으로 열어야 낭독이 뜬다
   assert.strictEqual(
     `${t("en", "status.label.idle")}${t("en", "statusbar.idleSrOnlySuffix")}`,
     "idle workers",
@@ -281,7 +281,7 @@ test("90be3eeb — 셸 조립 문구가 영어에서도 문장이 된다", () =>
     `codex: ${t("en", "statusbar.limit.unknownOriginSuffix")}`,
     "codex: no known source for its limit",
   );
-  // `% 사용` 자리 — 창 이름이 붙어도 안 붙어도 선다(`windowLabel`이 `common.unit.*`를 탄다)
+  // `% 사용` 자리 — 창 이름이 붙어도 안 붙어도 뜬다(`windowLabel`이 `common.unit.*`를 탄다)
   const usage = (pct: number, window: string) =>
     `${pct}% ${t("en", "statusbar.usage.suffix")}${window && ` · ${window}`}`;
   assert.strictEqual(usage(42, ""), "42% used");
@@ -302,7 +302,7 @@ test("en 사전에 한글이 없다 — 언어 이름 둘만 예외다", () => {
 
 // 932ae344가 뽑은 자리들이 영어에서도 문장이 되는가. 한국어는 이름 뒤에 다 붙지만 영어는
 // 동사가 앞에 서므로, 접두·접미 두 조각을 `wrap`이 붙이고 빈 쪽을 지운다.
-test("6914f1d1 — 어순이 뒤집히는 조합 문구가 두 언어에서 다 선다", () => {
+test("6914f1d1 — 어순이 뒤집히는 조합 문구가 두 언어에서 다 뜬다", () => {
   const reset = (l: "ko" | "en", n: string) =>
     wrap(t(l, "settings.keymap.resetActionPrefix"), n, t(l, "settings.keymap.resetActionSuffix"));
   assert.strictEqual(reset("ko", "프로젝트 검색"), "프로젝트 검색 기본값으로 되돌리기");
@@ -635,7 +635,7 @@ test("204be4da — 페르소나 화면(page.tsx) 프로필 없음 · 스쿼드 �
 // b5d9735d - 같은 자리의 영어. 어순이 뒤집혀 조각의 몫이 갈린 자리(참조 줄 · 삭제 확인 · 경고
 // 세 갈래 · 생성 설명)가 영어에서도 한 문장이 되는지 본다. 조립식은 위 `204be4da` 테스트와
 // 글자 하나까지 같다 - 갈리는 것은 사전 값뿐이다.
-test("b5d9735d - 사이드바 참조 줄 · 색 라벨 · 역할 aria가 영어에서도 선다", () => {
+test("b5d9735d - 사이드바 참조 줄 · 색 라벨 · 역할 aria가 영어에서도 뜬다", () => {
   const l = "en" as const;
   assert.strictEqual(wrap(t(l, "persona.refs.openPrefix"), "2", ""), "Open 2");
   assert.strictEqual(wrap(t(l, "status.label.wip"), "1", ""), "In progress 1");
@@ -649,7 +649,7 @@ test("b5d9735d - 사이드바 참조 줄 · 색 라벨 · 역할 aria가 영어�
   assert.strictEqual(`alice${t(l, "persona.squad.roleAriaSuffix")}`, "alice's role");
 });
 
-test("b5d9735d - 스쿼드 멤버 · 규칙 배지가 영어에서도 선다", () => {
+test("b5d9735d - 스쿼드 멤버 · 규칙 배지가 영어에서도 뜬다", () => {
   const l = "en" as const;
   const members = `${t(l, "persona.squad.membersBadgePrefix")} 1,600 / 1,500 B${` ${t(l, "persona.squad.overBudgetSuffix")}`}`;
   assert.strictEqual(members, "Inlined in every member's prompt · 1,600 / 1,500 B over");
@@ -659,7 +659,7 @@ test("b5d9735d - 스쿼드 멤버 · 규칙 배지가 영어에서도 선다", (
   );
 });
 
-test("b5d9735d - 엔진 예고 줄이 영어에서도 선다(하나일 때도 이음말이 안 샌다)", () => {
+test("b5d9735d - 엔진 예고 줄이 영어에서도 뜬다(하나일 때도 이음말이 안 샌다)", () => {
   const l = "en" as const;
   const line = (missing: string[]) =>
     `claude ${t(l, "persona.engine.missingMiddle")} ${missing.join(t(l, "persona.engine.missingJoiner"))}${t(l, "persona.engine.missingSuffix")}`;
@@ -672,7 +672,7 @@ test("b5d9735d - 엔진 예고 줄이 영어에서도 선다(하나일 때도 �
   assert.strictEqual(line(["interject"]), "claude workers have no interject — running tickets is the same.");
 });
 
-test("b5d9735d - 스쿼드 삭제 · 엔진 덮어쓰기 확인 다이얼로그가 영어에서도 선다", () => {
+test("b5d9735d - 스쿼드 삭제 · 엔진 덮어쓰기 확인 다이얼로그가 영어에서도 뜬다", () => {
   const l = "en" as const;
   assert.strictEqual(`${t(l, "persona.squadDelete.titlePrefix")} myteam`, "Delete squad — myteam");
   assert.strictEqual(
@@ -689,7 +689,7 @@ test("b5d9735d - 스쿼드 삭제 · 엔진 덮어쓰기 확인 다이얼로그�
   );
 });
 
-test("b5d9735d - 메모리 · 페르소나 삭제 확인 다이얼로그가 영어에서도 선다", () => {
+test("b5d9735d - 메모리 · 페르소나 삭제 확인 다이얼로그가 영어에서도 뜬다", () => {
   const l = "en" as const;
   assert.strictEqual(`${t(l, "persona.memory.deleteTitlePrefix")} note1`, "Delete memory — note1");
   assert.strictEqual(
@@ -701,7 +701,7 @@ test("b5d9735d - 메모리 · 페르소나 삭제 확인 다이얼로그가 영�
     `personas/dev ${t(l, "persona.delete.bodyAfterPath")}`,
     "personas/dev will be deleted, files and all. This can't be undone.",
   );
-  // 한국어는 수가 앞에 서고(`티켓이 3건 있습니다`) 영어는 뒤에 선다 - 조각 넷의 자리는 같다
+  // 한국어는 수가 앞에 뜨고(`티켓이 3건 있습니다`) 영어는 뒤에 뜬다 - 조각 넷의 자리는 같다
   const refsTitle = `${t(l, "persona.delete.refsWarnPrefix")} 3${t(l, "persona.delete.refsWarnSuffix")}${` ${t(l, "persona.delete.refsWipPrefix")} 1${t(l, "persona.delete.refsWipSuffix")}`}`;
   assert.strictEqual(refsTitle, "This persona is referenced by 3 tickets (in progress: 1)");
   const desc = `${t(l, "persona.delete.refsBody")} WARN${t(l, "persona.warn.engineSuffix")} ${t(l, "persona.wording.withoutPersona")} ${t(l, "persona.delete.dispatchDetail")}`;
@@ -711,7 +711,7 @@ test("b5d9735d - 메모리 · 페르소나 삭제 확인 다이얼로그가 영�
   );
 });
 
-test("b5d9735d - 생성 다이얼로그 · 스킬 검색 0건이 영어에서도 선다", () => {
+test("b5d9735d - 생성 다이얼로그 · 스킬 검색 0건이 영어에서도 뜬다", () => {
   const l = "en" as const;
   assert.strictEqual(
     `${t(l, "persona.create.personaDescPrefix")} persona: ${t(l, "persona.create.personaDescSuffix")}`,
@@ -729,7 +729,7 @@ test("b5d9735d - 생성 다이얼로그 · 스킬 검색 0건이 영어에서도
   assert.strictEqual(`3${t(l, "persona.skill.countSuffix")}`, "3 items");
 });
 
-test("b5d9735d - page.tsx 경고 두 갈래가 영어에서도 선다(`WARN` 뒤 조각 하나를 셋이 나눠 쓴다)", () => {
+test("b5d9735d - page.tsx 경고 두 갈래가 영어에서도 뜬다(`WARN` 뒤 조각 하나를 셋이 나눠 쓴다)", () => {
   const l = "en" as const;
   const missingBody = `${t(l, "persona.missing.enginePrefix")} WARN${t(l, "persona.warn.engineSuffix")} ${t(l, "persona.wording.withoutPersona")} ${t(l, "persona.missing.dispatchDetail")}`;
   assert.strictEqual(
@@ -748,7 +748,7 @@ test("b5d9735d - page.tsx 경고 두 갈래가 영어에서도 선다(`WARN` 뒤
 // 묶음 11(`90db2822`) — 수를 가운데 끼운 자리가 넷이라(예산 꼬리 · 1건 상한 · 스킬 상한 둘)
 // 조립을 순수 함수째로 부른다. 조각만 맞대면 `Over the 200-file install limit`처럼 하이픈이
 // 수에 붙는 자리가 안 잡힌다.
-test("90db2822 — 수를 낀 조합 문구가 두 언어에서 다 선다", async () => {
+test("90db2822 — 수를 낀 조합 문구가 두 언어에서 다 뜬다", async () => {
   const { budgetLabel } = await import("./budgets.ts");
   const { oversizeError } = await import("./attachment-limit.ts");
   const { skillUploadError } = await import("./skill-upload-limit.ts");
@@ -777,9 +777,9 @@ test("90db2822 — 수를 낀 조합 문구가 두 언어에서 다 선다", asy
     `${t("en", "updateToast.progress.prefix")} 42%`,
     "Downloading the update… 42%",
   );
-  // sr-only 접두는 이름에 공백 없이 붙는다 — 값이 공백으로 닫아야 낭독이 선다.
+  // sr-only 접두는 이름에 공백 없이 붙는다 — 값이 공백으로 닫아야 낭독이 뜬다.
   assert.strictEqual(`${t("en", "workerMark.srPrefix")}w3`, "Worker w3");
-  // 같은 거절을 두 액션 파일이 각자 말한다 — 문장이 갈리면 안 된다.
+  // 같은 거절을 두 액션 파일이 각자 알려 준다 — 문장이 갈리면 안 된다.
   assert.strictEqual(
     t("en", "projectActions.unknownProjectPrefix"),
     t("en", "protocols.action.unknownProjectPrefix"),

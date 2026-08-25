@@ -224,7 +224,7 @@ function buildLinkTypeDoc(rel: OntologySeed["relationTypes"][number]): string {
 }
 
 /** `ontology/templates/<타입>.md` — 새 객체가 시작하는 빈 frontmatter(§5-3 §생성 "템플릿도
- *  시드가 같이 낸다"). 키만 서 있고 값은 비어 있다 — 채우는 것은 성장 루프의 몫이다. */
+ *  시드가 같이 낸다"). 키만 떠 있고 값은 비어 있다 — 채우는 것은 성장 루프의 몫이다. */
 function buildObjectTemplate(type: string, seed: OntologySeed): string {
   const outgoing = seed.relationTypes.filter((r) => r.domain === type);
   const linksBlock = outgoing.length

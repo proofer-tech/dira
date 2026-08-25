@@ -96,7 +96,7 @@ export async function renameOntologyAction(
  *  것 자체가 계약이다("폼이 LLM을 안 기다린다"). `home-agent.ts`의 `startAsk`가 같은 결로
  *  "띄우고 바로 돌아온다"를 쓴다.
  *
- *  시드가 서면 첫 채움(§5-3 §첫 채움)을 잇는다 — `publishOntologyMigrationAction`이 마이그레이션
+ *  시드가 뜨면 첫 채움(§5-3 §첫 채움)을 잇는다 — `publishOntologyMigrationAction`이 마이그레이션
  *  티켓 한 장을 큐에 발행한다(§5-3: "제출이 마이그레이션 티켓을 자동 발행"). 시드 쓰기와 같은
  *  자리에서 `void`로 띄우므로 이 액션도 첫 채움을 안 기다린다. 발행 액션은 실패해도 던지지 않고
  *  `PublishTicketResult`로 물러난다(자기 안의 try/catch) — 시드는 이미 남은 뒤이므로 이 제출
@@ -213,7 +213,7 @@ function writeFixTicket(root: string, sfx: Suffixes, violations: string[]): Prom
 
 /** 위반 카드의 `문제해결`(§P230). 판정(`openFixTicket`)은 카드가 버튼/링크를 고를 때 부르는
  *  것과 같은 함수다 — 발행 직전에 큐를 다시 훑어 이미 열려있거나 도는 정리 티켓이 있으면
- *  새로 만들지 않고 그 stem을 돌려준다(실패가 아니다 — 사람이 원한 상태가 이미 서 있다).
+ *  새로 만들지 않고 그 stem을 돌려준다(실패가 아니다 — 사람이 원한 상태가 이미 떠 있다).
  *  탭이 둘이거나 요청을 손으로 만들어도 이 재확인을 지날 수 없다. */
 export async function fixOntologySchemaAction(projectId: string): Promise<FixTicketResult> {
   try {

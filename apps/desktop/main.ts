@@ -94,7 +94,7 @@ function userPath(): string {
 /** 자식을 띄울 실행파일. Electron 자신을 노드로 돌리는 것은 그대로지만 **`process.execPath`가
  *  아니다** — `.app/Contents/MacOS/dira`로 띄우면 LaunchServices가 그 자식을 같은 번들의 앱
  *  인스턴스로 등록해 창을 안 만드는 **빈 독 타일**이 하나 더 생긴다(`lsappinfo`가 `type="Foreground"`
- *  `!cgsConnection`으로 찍는다, `e59ceae4`). Helper 번들은 `Info.plist`에 `LSUIElement`가 서 있어
+ *  `!cgsConnection`으로 찍는다, `e59ceae4`). Helper 번들은 `Info.plist`에 `LSUIElement`가 떠 있어
  *  타일을 안 만든다 — Electron이 자기 유틸리티 프로세스를 그것으로 띄우는 이유다 (고정하는 것 7).
  *  바이너리는 같은 것이라 `ELECTRON_RUN_AS_NODE`도 고정하는 것 3도 그대로다. */
 function nodeBin(): string {
@@ -279,7 +279,7 @@ function openWindow(origin: string): BrowserWindow {
   // N1 — 빨간 버튼은 앱을 끝내지 않고 창을 숨긴다. 파괴하지 않으므로 `열기`가 이미 그려진
   // 보드를 그대로 되돌린다(다시 로드하면 그 시점부터 콜드 스타트다). 종료 경로에서만 통과시킨다.
   //
-  // 전체 화면 창을 그대로 숨기면 macOS가 그 Space를 남긴다 — 검은 화면 하나가 그대로 선다.
+  // 전체 화면 창을 그대로 숨기면 macOS가 그 Space를 남긴다 — 검은 화면 하나가 그대로 뜬다.
   // 벗고 **나서** 숨긴다. `setFullScreen(false)` 직후는 아직 애니메이션 중이라 같은 증상이라
   // `leave-full-screen`을 기다린다. `once` — `on`이면 닫을 때마다 쌓인다.
   win.on("close", (e) => {
@@ -538,7 +538,7 @@ function surfaceUpdate(detail: UpdateDetail) {
  *  앱이 죽는다. 다운로드 중 실패도 여기로 온다(그쪽은 await할 자리가 없다) — `lastPercent`가
  *  `-1`보다 크면 다운로드가 돌던 중이었다는 뜻이라 그 진행률 상자를 실패 문구로 갈아 끼운다
  *  (T4). 체크 단계의 실패(다운로드 시작 전)는 여기서 토스트를 안 띄운다 — `checkForUpdate`의
- *  수동 경로가 그쪽을 이미 말한다. */
+ *  수동 경로가 그쪽을 이미 알려 준다. */
 autoUpdater.on("error", (e) => {
   console.error(`[dira] 업데이트 실패: ${e.message}`);
   if (lastPercent < 0) return;
@@ -630,7 +630,7 @@ async function isBusy(origin: string): Promise<boolean> {
   }
 }
 
-// R6 — 다 받으면 사실만 말한다. `다음 시작에 적용`(기본)은 종전처럼 아무 일도 안 하고,
+// R6 — 다 받으면 사실만 알려 준다. `다음 시작에 적용`(기본)은 종전처럼 아무 일도 안 하고,
 // `지금 재시작`은 `busy`를 확인한 뒤에만 재시작한다(요구 `9a04dabc` — §재재판정).
 // **토스트 본문 한 줄이 R6의 사실이고 노트는 `notes` 액션으로 딴 곳에서 편다**(R7 — 요약이
 // 죽어도 그 한 줄은 이미 떠 있다). `releaseNotes()`를 **await하지 않는다**(T6) — 요약에 최대
@@ -673,7 +673,7 @@ async function handleRestart() {
 /** U1(`manual`) · 켤 때와 U2를 켠 직후의 배경 검사(`!manual`).
  *
  *  **개발 실행에서는 검사하지 않는다**(R5) — 패키징되지 않은 앱에 걸면 electron-updater가
- *  그 사실로 죽고 그 예외가 기동 경로에 앉는다. 손으로 누른 U1은 그 사실을 다이얼로그로 말한다.
+ *  그 사실로 죽고 그 예외가 기동 경로에 놓인다. 손으로 누른 U1은 그 사실을 다이얼로그로 알려 준다.
  *
  *  **최신이어도 다이얼로그를 띄운다**(R5 U1). 손으로 누른 명령에 아무 반응이 없으면 사람은
  *  고장으로 읽는다. `owner`/`repo`가 자리표시자인 채로 눌러도 마찬가지다 — 사유가 그 자리에 뜬다
@@ -835,7 +835,7 @@ function dispatchToWindow(event: string, what: string, opts: { detail?: unknown;
 
 const openFeedback = () => dispatchToWindow("dira:feedback", "의견 폼");
 /** N5 — 듣는 쪽은 `apps/teams/components/find-bar.tsx`다. **바가 뜨지 않는 화면**
- *  (보드 · 홈 — 그 둘은 `⌘F`가 자기 일을 한다)에서는 그 컴포넌트가 안 서 있어 무동작이다. */
+ *  (보드 · 홈 — 그 둘은 `⌘F`가 자기 일을 한다)에서는 그 컴포넌트가 안 떠 있어 무동작이다. */
 const openFind = () => dispatchToWindow("dira:find", "찾기 바");
 
 /** `About dira`의 click을 잡으려면 **`{ role: "appMenu" }` 한 줄을 항목들로 펼쳐야 한다** —

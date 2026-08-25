@@ -116,7 +116,7 @@ export const dynamic = "force-dynamic";
  *
  *  `assigned`가 없는 이유(§1 보드 · 사람 요청 `b69e26ce`): 정상 흐름에 없는 상태를 흐름을 그리는
  *  뷰에 레인으로 세우면 비어 있는 게 정상인 컬럼이 화면 폭을 상시 먹고 "여기도 티켓이 지나간다"고
- *  말한다. 그 티켓이 있는 곳은 셸의 알림 배너다(§0-2). **테이블·필터에서는 빼지 않는다** —
+ *  알려 준다. 그 티켓이 있는 곳은 셸의 알림 배너다(§0-2). **테이블·필터에서는 빼지 않는다** —
  *  빼면 GUI가 CLI `list`보다 덜 보인다. */
 const STATUSES = ["open", "wip", "done"] as const;
 
@@ -161,7 +161,7 @@ function when(ms: number): string {
  *  요소에 주면 글자가 상자 밖으로 밀린다. 바깥이 면을, 안이 글자를 든다.
  *
  *  `aria-hidden`은 **바깥**에 붙는다 — 선까지 통째로 숨는다. 5초마다 갈리는 글이라 붙이면
- *  스크린리더가 카드마다 계속 말한다. `aria-live`도 `role="status"`도 안 붙는다(§18이 같은
+ *  스크린리더가 카드마다 계속 알려 준다. `aria-live`도 `role="status"`도 안 붙는다(§18이 같은
  *  이유로 거절했다). 정본은 §2-3이고 카드 전체가 이미 거기로 가는 링크라 이 줄에는 링크도
  *  툴팁도 안 붙인다(§1-1 §푸는 규칙).
  *
@@ -190,7 +190,7 @@ function when(ms: number): string {
  *  때문이다(값이 갈린 것이 아니다). `흐릿하게`는 이제 `text-2xs`(11px)가 낸다.
  *
  *  구분자 ` · `는 **둘 다 있을 때만** 넣는다. assistant `text`는 `label`·`summary`가 둘 다
- *  비므로(실측 히트의 13.9%) §2-1과 같은 처방으로 `body`의 첫 줄을 세운다 — 리더도 §2-1도
+ *  비므로(실측 히트의 13.9%) §2-1과 같은 처방으로 `body`의 첫 줄을 만든다 — 리더도 §2-1도
  *  안 고치고 **소비자가 정하는 판정 한 줄**이다(§36). */
 function wipLine(e: StreamEvent | null) {
   if (!e) return null;
@@ -210,7 +210,7 @@ function wipLine(e: StreamEvent | null) {
 /** 완료 카드 하단의 아카이브 한 줄(§5-3 §표시 규약 ③) — 그릇·간격은 위 `wipLine`과 **같은 값**이다
  *  (§비주얼 §36 ①. 사람이 그 스트립을 이름으로 지목했다 — 새 유틸 0 · 새 토큰 0 · 새 간격 값 0).
  *
- *  갈리는 셋만 적는다. **`wip-shimmer`는 안 붙인다**: 그 빛이 말하는 것은 *지금 갱신되고 있다*인데
+ *  갈리는 셋만 적는다. **`wip-shimmer`는 안 붙인다**: 그 빛이 가리키는 것은 *지금 갱신되고 있다*인데
  *  이 줄의 글자는 폴링으로 안 갈린다(§5-3 §개정 ② 첫 행 — 두 줄이 건드리는 속성이 아예 다르다).
  *  **줄에 `aria-hidden` 없음**: `.wip` 줄이 그걸 다는 이유는 5초마다 갈리는 글이라서고, 이 줄은
  *  안 갈리는 **링크**라 숨기면 포커스만 잡히는 보이지 않는 링크가 된다. **`relative z-10`**:
@@ -218,14 +218,14 @@ function wipLine(e: StreamEvent | null) {
  *  보드에서 아카이브 티켓으로 가는 유일한 길이다.
  *
  *  **표식 하나가 §18의 밝기로 숨쉰다**(§비주얼 §42 — 사람 요구 `2f9fce51`이 '아카이브' 인지와
- *  '진행중' 인지 둘을 요구했다). 아이콘이 앞의 것을, 모션이 뒤의 것을 말한다. 붙는 곳은 **표식
+ *  '진행중' 인지 둘을 요구했다). 아이콘이 앞의 것을, 모션이 뒤의 것을 알려 준다. 붙는 곳은 **표식
  *  자신**이고 글자·링크·스트립에는 안 붙는다 — `opacity`는 자식 전부를 먹어서 부모에 붙이면
  *  글자가 알파 0.3까지 같이 내려간다(§18 §함정). 12px은 14px 줄 상자에 위아래 1px씩 남는 값이라
  *  카드 높이가 안 는다(`size-3.5`는 여유가 0이다). `globals.css`는 0줄 갈린다 — §18 재사용이다.
  *
  *  문구는 셋뿐이고 **상태 배지를 안 쓴다**: 카드의 배지는 *이 카드의 상태*를 말하는 자리라
  *  같은 실루엣이 다른 티켓의 상태를 말하면 사람이 완료 카드를 `진행중`으로 읽는다. 해시도 안
- *  세운다 — 카드에 이미 대상 해시가 있어서 둘째 해시가 서면 어느 것이 이 카드인지 흔들린다. */
+ *  그린다 — 카드에 이미 대상 해시가 있어서 둘째 해시가 뜨면 어느 것이 이 카드인지 흔들린다. */
 function archiveLine(a: Ticket | undefined, href: (t: Ticket) => string) {
   if (!a) return null;
   return (
@@ -309,7 +309,7 @@ export default async function Board({
   // 각주는 "지금 화면의 건수와 레인 합계가 왜 다른가"를 설명하는 것이고, 필터가 걸리면
   // 레인도 같이 좁아진다. `rows.length - 레인합계`와 같은 값이다(`statusOf`는 5상태 중 하나).
   const undispatched = rows.filter((t) => statusOf(t) === "assigned").length;
-  // 실효 상태 집합에 `done`이 없으면 완료가 화면에서 빠진다 — 그 사실을 건수 옆 한 줄이 말한다.
+  // 실효 상태 집합에 `done`이 없으면 완료가 화면에서 빠진다 — 그 사실을 건수 옆 한 줄이 알려 준다.
   // 기본 화면에는 URL 파라미터가 없어서 `applied` 배지도 `필터 초기화`도 없다: 이 줄이 완료로 가는
   // 유일한 길이다. 세는 방법은 **다른 필터(kind·persona·검색)를 그대로 두고 상태만 완료로** 바꾼
   // 같은 `filterTickets`다 — 판정을 여기서 다시 쓰면 건수와 목록이 갈린다.
@@ -358,7 +358,7 @@ export default async function Board({
     return resolveMarkdownRefs(project.root, id, texts, tickets, epics);
   })();
 
-  // 티켓 제목이 글자로 서는 자리(§9 뒤쪽 절반) — 칸반 카드 제목 · 표뷰 제목 셀. 훑는 것은
+  // 티켓 제목이 글자로 뜨는 자리(§9 뒤쪽 절반) — 칸반 카드 제목 · 표뷰 제목 셀. 훑는 것은
   // **지금 화면에 실제로 그릴 `rows`의 제목뿐**이다(§9 §화면이 해석해서 내려준다) — 큐 전체
   // 제목을 훑지 않는다(§성능 예산).
   const titleRefs = mayHaveRefs(rows.map((t) => t.title).join("\n"))
@@ -500,7 +500,7 @@ export default async function Board({
    *
    *  거르는 둘이 계약이다. **아카이브가 `.done`이면 줄이 없다**(끝난 아카이브는 기본 상태라
    *  말할 값이 0이다 — 안 그러면 완료 레인 20장이 전부 같은 문장을 인다). **대상이 `.done`일
-   *  때만** 선다: 발행부터 rename까지 몇 초 대상이 `.wip`인 창이 있는데 그때는 `.wip` 줄이
+   *  때만** 뜬다: 발행부터 rename까지 몇 초 대상이 `.wip`인 창이 있는데 그때는 `.wip` 줄이
    *  이긴다(같은 슬롯이라 겹치지 않는다). 대상이 둘 이상이면 `birth`가 가장 큰 하나만 — 줄이
    *  둘이 되면 카드 높이가 갈린다. */
   const archives = new Map<string, Ticket>();
@@ -604,7 +604,7 @@ export default async function Board({
       // 에픽으로 끄는 소스는 `open` 카드뿐이다(§에픽 결정 8). 명시적 `false`가
       // 필요하다 — 카드 안 해시가 `<a>`라 안 두면 브라우저 기본 드래그(링크 고스트)가
       // 그대로 남는다(§비주얼 §52 ⑤ (4)). `cursor-grab`은 안 붙인다 — 카드 전체가 링크라
-      // 커서가 이미 그 사실을 말한다(같은 절).
+      // 커서가 이미 그 사실을 알려 준다(같은 절).
       draggable={t.state === "open"}
       className="card-tint relative gap-2 px-4"
     >
@@ -621,7 +621,7 @@ export default async function Board({
         <span className="inline-flex items-center gap-1">
           <PriorityMeter priority={t.priority} locale={locale} />
           {/* §비주얼 §31 ① 갈래 A — 밑줄 없음. 링크임은 카드의
-              `card-tint` 호버 + 커서 + 이 앵커에 걸리는 포커스 링이 말한다 */}
+              `card-tint` 호버 + 커서 + 이 앵커에 걸리는 포커스 링이 알려 준다 */}
           <Link
             href={href(t)}
             className="rounded-sm font-mono text-xs text-muted-foreground after:absolute after:inset-0"
@@ -659,7 +659,7 @@ export default async function Board({
       </span>
       {t.deps.length > 0 && (
         // 라벨은 세어주지 않는다 — 어느 해시가 무엇인지는 <DepBadge>가
-        // 색·아이콘으로, 스크린리더에는 배지 안 `sr-only` 문구로 말한다.
+        // 색·아이콘으로, 스크린리더에는 배지 안 `sr-only` 문구로 알려 준다.
         <span className="relative z-10 flex flex-wrap items-center gap-1">
           <span className="text-xs text-muted-foreground">deps</span>
           {depBadges(tickets, t, config).map((d) => (
@@ -692,7 +692,7 @@ export default async function Board({
           갱신이 멈춘 자리에서 `방금`이 거짓말이다). 위 `AnswerDialog`와
           자리를 다투지 않는다 — `isAwaiting`은 `state === "open"`만
           참이라 한 카드에 둘이 같이 서지 않는다.
-          **완료 카드에는 아카이브 한 줄이 같은 슬롯에 선다**(§5-3
+          **완료 카드에는 아카이브 한 줄이 같은 슬롯에 뜬다**(§5-3
           §표시 규약 ③): 두 Map의 조건이 `.wip`↔`.done`으로 배타라
           한 카드가 둘을 같이 들 수 없다.
           간격은 8 / 선 / 8 / 줄 / 8이다: 위 8px은 `<Card>`의 `gap-2`,
@@ -830,7 +830,7 @@ export default async function Board({
                   붙여 두면 한 줄로 남는다 — 그 폭에서 문서는 이미 가로로 흐르고 있다(레인 138px) */}
               <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
                 {rows.length === total ? `티켓 ${total}건` : `티켓 ${rows.length} / ${total}건`}
-                {/* 완료가 빠졌다는 사실은 여기서만 말한다 — 두 뷰 공통이고 0건 화면에서도 뜬다
+                {/* 완료가 빠졌다는 사실은 여기서만 알려 준다 — 두 뷰 공통이고 0건 화면에서도 뜬다
                     (큐가 완료뿐이면 이 링크가 유일한 출구다). 상태 6값 URL로 간 화면에서는
                     실효 집합에 `done`이 있으므로 이 줄이 사라진다 */}
                 {hiddenDone > 0 && (
@@ -855,7 +855,7 @@ export default async function Board({
           </div>
 
           {/* 드롭 실패 한 줄(§비주얼 §52 ⑤ (5)) — 툴바 아래·2단 행 위, 폭 전체 하나. 위 줄이
-              이미 보드 전체에 대한 사실(티켓 N/M건)을 드는 자리라 같은 높이에 선다. 쉼에는
+              이미 보드 전체에 대한 사실(티켓 N/M건)을 드는 자리라 같은 높이에 뜬다. 쉼에는
               아무것도 안 그린다 — `EpicDrag`가 실패했을 때만 `<Alert>`를 낸다. */}
           <EpicDrag project={id} />
 
@@ -1025,7 +1025,7 @@ export default async function Board({
                           <div data-lane className="-m-1 min-h-0 flex-1 space-y-2 overflow-y-auto p-1">
                             {group.length === 0 && rows.length > 0 ? (
                               // <EmptyState>는 화면 하나의 빈 상태용이다(py-10 + 1차 액션 버튼). 레인
-                              // 3개에 그걸 깔면 같은 버튼이 3개 생긴다 — 여기선 건수 0만 말한다.
+                              // 3개에 그걸 깔면 같은 버튼이 3개 생긴다 — 여기선 건수 0만 알려 준다.
                               // 전체 0건일 땐 위 블록이 이미 말했으므로 이 자리표시자는 안 그린다(§6).
                               <p className="rounded-md border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">
                                 0건
@@ -1065,7 +1065,7 @@ export default async function Board({
                   <TableHeader className="sticky top-0 z-20">
                     <TableRow className="h-9 hover:bg-transparent">
                       {columns.map(({ key, label }) => {
-                        // 파라미터가 없으면 화면이 `생성일` 내림차순으로 서 있다 — 그 자리에서
+                        // 파라미터가 없으면 화면이 `생성일` 내림차순으로 떠 있다 — 그 자리에서
                         // 헤더도 활성 + `ArrowDown`이다(§1 보드. 아니면 헤더가 거짓말을 한다).
                         // 클릭 3단계는 이 표시와 무관하게 `sortHref`가 실제 `sortKey`로 정한다 —
                         // `생성일`에 특례가 없다.
@@ -1206,7 +1206,7 @@ export default async function Board({
                               {when(t.birth)}
                             </TableCell>
                             <TableCell className="px-3 py-0">
-                              {/* 값·컬럼 무수정 — 전문이 그대로 남고 그 안의 워커 이름만 마크로 선다
+                              {/* 값·컬럼 무수정 — 전문이 그대로 남고 그 안의 워커 이름만 마크로 뜬다
                                   (§비주얼 §19 ②). 폭 제약·`title` 툴팁도 종전 그대로다 */}
                               <span
                                 className="block max-w-[24ch] truncate font-mono text-xs text-muted-foreground"

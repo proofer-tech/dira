@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """graph.py build 자체검증: 노드 6종-간선(deps/req/archives/awaiting/인용/위키링크/절참조/
-근거/구현/links:) 이 §그래프 탐색 §노드와 간선 표대로 서는가, 증분 빌드가 안 바뀐 파일을
+근거/구현/links:) 이 §그래프 탐색 §노드와 간선 표대로 뜨는가, 증분 빌드가 안 바뀐 파일을
 다시 안 읽는가, 큐(티켓 frontmatter)를 안 건드리는가, 인덱스가 없어도 tick.sh가 WARN 없이
 도는가(검증 ⑧). 뒤쪽은 query/path/explain의 시드 매칭(exact/prefix/substring 우선순위 -
 무관어 배제 - 빈 낱말 빈 결과)과 예산 절단(안 넘김 - 먼 노드부터 자름)을 함수 단위로 잰다.
@@ -89,7 +89,7 @@ try:
           "# 테스트 스펙\n\n## 검증\n검증 절 본문.\n\n## 그래프 규칙\n§검증을 인용한다.\n\n"
           "## 중복\n첫 번째.\n\n## 중복\n두 번째.\n")
 
-    # ---- 1) build 콜드 -> 노드 6종 전부 서고, 표의 간선이 전부 만들어진다 ----
+    # ---- 1) build 콜드 -> 노드 6종 전부 뜨고, 표의 간선이 전부 만들어진다 ----
     out = build(root, force=True)
     assert "OK build" in out, "요약 줄이 안 찍혔다\n" + out
     g = load(root)

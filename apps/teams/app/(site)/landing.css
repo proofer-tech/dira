@@ -1,7 +1,7 @@
 /* 랜딩 전역 CSS. `.vitepress/theme/custom.css`를 그대로 옮겼고 값은 한 개도 안 고쳤다 —
    갈린 것은 세 자리뿐이다(§사이트 기반 §걷히는 계약 ③④ · §갈아 끼우는 것).
    ① vitepress `base.css`가 지던 `prefers-reduced-motion` 킬 스위치를 명시로 세운다.
-   ② 같은 파일이 지던 리셋 251줄 중 이 페이지에 실제로 서는 요소만 세운다.
+   ② 같은 파일이 지던 리셋 251줄 중 이 페이지에 실제로 뜨는 요소만 세운다.
    ③ vitepress 크롬을 끄던 규칙 셋(`.VPNav`·`.VPLocalNav`·`#VPContent`)과 `.VPSkipLink`의
       잉크색을 정하던 `--vp-*` 두 줄이 죽었다 — 끌 크롬도 칠할 스킵링크도 없다.
    전환 티켓(§순서 ⑧)이 `.vitepress/`를 지울 때까지 저 파일과 이 파일이 같이 남는다. */
@@ -23,7 +23,7 @@
   }
 }
 
-/* ② 리셋. `base.css` 251줄 중 이 페이지에 서는 요소만 옮겼다 — form 컨트롤·table·
+/* ② 리셋. `base.css` 251줄 중 이 페이지에 뜨는 요소만 옮겼다 — form 컨트롤·table·
    blockquote·pre·MathJax·vite 오버레이는 잡을 요소가 0개고, `--vp-*` 값을 읽던 선언
    (`body`의 font-family·color, placeholder 색)은 읽을 변수가 없어졌다. 그 둘은 안 옮긴다.
    판정은 이 목록이 아니라 네 폭 박스 대조다(§사이트 기반 §검증). */
@@ -83,7 +83,7 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
 .dira-landing { color-scheme: light; }
 
 /* ① 3트랙 full-bleed 격자(§랜딩 §개편 §방향·토큰 «격자»). 기본 자식은 `content` 열에
-   서고, 화면 끝까지 가야 하는 밴드·룰은 자기 규칙에 `grid-column: full`을 적는다 —
+   뜨고, 화면 끝까지 가야 하는 밴드·룰은 자기 규칙에 `grid-column: full`을 적는다 —
    그것이 하이라인을 3 → 8로 늘리는 손잡이이고 뒤따르는 두 티켓이 소비하는 프리미티브다.
    종전의 `max-width` + `padding-inline: 24px`이 여기 자리를 내줬다. 그대로 두면 거터가
    격자와 이중으로 들어 390 `.steps`가 342 → 294로 줄었다(designer 실측).
@@ -206,10 +206,10 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
   color: var(--faint); font-variant-numeric: tabular-nums;
 }
 
-/* 풀 모드 헤더 넷이 서는 최소 폭은 488이다(실측) — 그 아래는 `매뉴얼`을 걷는다(§비주얼
+/* 풀 모드 헤더 넷이 뜨는 최소 폭은 488이다(실측) — 그 아래는 `매뉴얼`을 걷는다(§비주얼
    §46 ③). 걷는 기준은 *이 페이지에서 회수되나*다 — `매뉴얼`은 footer §문서 열에 같은
-   링크가 서 있다. `새로 만들기`·`설정`은 회수할 곳이 0이라 안 걷는다. `프로젝트 관리`는
-   회수돼서 걷히던 것이 아니라 목적지가 이 페이지 꼭대기라 아예 안 선다(§홈 §자기 자신을
+   링크가 떠 있다. `새로 만들기`·`설정`은 회수할 곳이 0이라 안 걷는다. `프로젝트 관리`는
+   회수돼서 걷히던 것이 아니라 목적지가 이 페이지 꼭대기라 아예 안 뜬다(§홈 §자기 자신을
    가리키던 버튼) — 걷는 것이 하나뿐이라 이 규칙은 순서를 안 갖는다. 다시 재도 임계는
    640이다(481~487 구멍, 개수 숨는 480 아래 섬 — §46 ③). `btn-manual`은 풀 모드에서만
    붙는다(`landing.tsx`) — 랜딩-only 헤더(넷 이하)는 이 규칙 밖이다. */
@@ -274,7 +274,7 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
 /* ⑥→① 스크롤 진입(§P235 §모션 §판정표 ①). 움직이는 주체가 블록이 아니라 블록 안 27칸이다 —
    격자 그릇(`.steps`·`.plans`·`.stats-list`·`.gallery`)과 캡처(`figure`, ②③이 대신 받는다)를
    빼고 그 그릇의 자식 `li`를 대신 센다. `.armed`는 onMounted의 IntersectionObserver만 붙이므로
-   JS가 죽으면 안 걸리고 27칸이 그냥 서 있다. 쉬는 상태를 opacity: 0으로 두지 않는다.
+   JS가 죽으면 안 걸리고 27칸이 그냥 떠 있다. 쉬는 상태를 opacity: 0으로 두지 않는다.
    지연은 딴 규칙이다(아래) — 여기 `transition` 단축을 쓰면 지연이 0으로 리셋되고, 여기
    `:not()`이 특정도를 올리면 지연 규칙(낮은 특정도)을 이겨서 지연이 통째로 죽는다
    (실측 27칸 중 22칸이 `0s`로 붙었다). */
@@ -311,7 +311,7 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
 .dira-landing .hero figure { margin-top: 64px; }
 
 /* ②③ 스크롤 위치에 연속으로 묶인 겹(§P235 §모션 §판정표 ②③). `animation-timeline: view()`가
-   없는 브라우저에서는 이 블록 전체가 안 걸려 캡처가 그냥 서 있다 — 그 상태가 정본이다
+   없는 브라우저에서는 이 블록 전체가 안 걸려 캡처가 그냥 떠 있다 — 그 상태가 정본이다
    (못 ⑦ · ②). 전역 킬 스위치(위 12행)는 `animation-duration`을 보는데 이 애니메이션은
    진행이 시간이 아니라 스크롤 위치라 그 블록이 안 먹는다 — `reduce`는 여기서 따로 죽인다. */
 @supports (animation-timeline: view()) {
@@ -369,7 +369,7 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
       /* 자리 ④ 회귀(`3774014a` · `bb65e25b`) — 행이 전부 암시 `auto`라 `align-content: normal`
          (=`stretch`)이면 남는 세로 공간이 행 사이 사이에 갈려 타이틀·본문 여백이 벌어진다.
          `center`는 행을 늘리지 않고 남는 공간을 블록 위·아래로만 보낸다 — `<figure>`의
-         `align-self: center`(아래)와 같은 축에 선다. */
+         `align-self: center`(아래)와 같은 축에 뜬다. */
       align-content: center;
       grid-template-columns:
         [full-start] minmax(24px, 1fr)
@@ -390,7 +390,7 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
        버려져 `span 1`)이 됐다 — `<figure>`가 왼쪽 글이 실제로 쓰는 행 수(절마다 다르다)와
        무관하게 1행 한 칸에 앉고 그 칸이 그림 높이로 자랐다. `span 100`은 왼쪽 글이 몇 행을
        쓰든(지금 3~4행) 항상 넘치게 잡아 실제로 안 쓰는 뒤쪽 행은 빈 채(0px)로 남고,
-       `<figure>`는 왼쪽 글이 실제로 걸치는 높이 안에서 `align-self: center`로 선다. */
+       `<figure>`는 왼쪽 글이 실제로 걸치는 높이 안에서 `align-self: center`로 뜬다. */
     .dira-landing .stage > .wrap > figure { grid-column: mid-end / content-end; grid-row: 1 / span 100; align-self: center; }
 
     /* 크로스페이드 — 절 하나가 통째로 겹으로 오간다(`figure` 자신의 `dira-shot-in`은
@@ -398,7 +398,7 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
        그 자리에서 다음 절이 들어온다(§자리 ④ 확장 실측 «opacity>0.02인 구간이 0px»).
        가운데 패널에 `dira-stage-in`과 `dira-stage-out`을 같이 달지 않는다 — 둘 다 `both`로
        채우면 뒤에 선언한 쪽의 역방향 채움이 앞쪽의 fade-in을 통째로 덮어 패널2가 처음부터
-       보인다(실측으로 밟았다). `dira-stage-thru` 하나가 들어오고·서 있고·나가는 것을 다 진다. */
+       보인다(실측으로 밟았다). `dira-stage-thru` 하나가 들어오고·떠 있고·나가는 것을 다 진다. */
     @keyframes dira-stage-out { to { opacity: 0; transform: translateY(-16px); } }
     @keyframes dira-stage-in { from { opacity: 0; transform: translateY(16px); } }
     @keyframes dira-stage-thru {
@@ -427,7 +427,7 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
 /* ── stats ──────────────────────────────────────── */
 /* 위·아래 룰이 화면 끝까지 간다 — `.stats`가 `.wrap`이고 그 격자가 `max-width`를 놓은
    뒤로 이 요소 자체가 뷰포트 폭이다(§방향·토큰 «하이라인» — 1080에서 끊기던 둘이
-   여덟에 흡수되는 자리). 안의 `ul`·`.stats-note`는 `content` 열에 서서 1080이다.
+   여덟에 흡수되는 자리). 안의 `ul`·`.stats-note`는 `content` 열에 놓여 1080이다.
    `repeat(4, 1fr)`을 12열 `span 3`으로 다시 적지 않는다 — 이 격자의 거터는 0이고
    (칸을 가르는 것이 gap이 아니라 `border-left`다) 거터 0에서 둘은 같은 트랙이다.
    §지금 값의 거터 세 값 20·40·48은 `.plans`·`.gallery`·`.two`이고 여기는 그 셋이 아니다. */
@@ -458,7 +458,7 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
 /* ③ 커서를 못 보는 자리(터치 · 키보드)에 눌러진다는 것을 준다(§모션 §판정표 ③).
    1.02에서 1.00으로 눌린다 — 정지 상태는 scale(1)이라 열 박스가 안 갈린다.
    **`.gallery`를 셀렉터에서 뺐다**(§로드맵 §P235-1): 확대 링크가 갤러리 밖 두 절에도
-   서면서 같은 부품이 두 자리에 있다 — 규칙을 새로 쓰면 같은 값이 두 벌이 된다.
+   뜨면서 같은 부품이 두 자리에 있다 — 규칙을 새로 쓰면 같은 값이 두 벌이 된다.
    규칙 수는 그대로다. `display: block`이 여기 있어야 갤러리 밖에서도 인라인 앵커의
    줄 상자가 캡처 아래에 빈 띠를 안 남긴다. */
 .dira-landing .zoom {
@@ -498,7 +498,7 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
 /* `.stats`가 자기 아래 변으로 이미 그은 경계다 — 두 줄이 겹치면 2px이 된다. */
 .dira-landing .stats + section { border-top: 0; }
 
-/* ④ 하이라인 — 절이 «시작한다»고 말한다(§P235 §모션 §판정표 ④). border-top 색을 옮기고
+/* ④ 하이라인 — 절이 «시작한다»고 알려 준다(§P235 §모션 §판정표 ④). border-top 색을 옮기고
    `::before`가 같은 자리에 실제 선을 그린다 — border-top을 0으로 하면 박스가 줄어 문서가
    밀린다(§모션 ④ `.arrows a::before`와 같은 어휘). `.armed`가 없으면 scaleX(1)이 기본이라
    JS가 죽어도 선이 그어져 있다. `no-hi`(갤러리 절)는 원래 `border-top: 0`이라 선을 안 긋는다. */
@@ -519,7 +519,7 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
 .dira-landing .marks b { color: var(--fg); font-weight: 650; }
 
 .dira-landing .arrows { margin: 24px 0 0; display: flex; flex-wrap: wrap; gap: 8px 24px; }
-/* ④ 본문 링크 여섯이 "더 읽을 데로 가는 문"인 것을 헤더 버튼과 다른 표현으로 말한다
+/* ④ 본문 링크 여섯이 "더 읽을 데로 가는 문"인 것을 헤더 버튼과 다른 표현으로 알려 준다
    (§모션 §판정표 ④). 회색 레일 위로 --fg 레일이 왼쪽에서 자란다 — 종전
    `:hover { border-color: var(--fg) }` 한 줄이 그 자리를 내준다. position: relative는
    박스를 안 바꾼다(폭 119.8 그대로). ::after는 안 건드린다. */
@@ -537,7 +537,7 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
 .dira-landing .arrows a:focus-visible::before { transform: scaleX(1); }
 .dira-landing .arrows a::after { content: " →"; color: var(--faint); }
 
-/* 상태 레일 아래에 서는 등폭 식별자 한 낱말(§방향·토큰 «색»의 모양 절반). 서는 문자열이
+/* 상태 레일 아래에 뜨는 등폭 식별자 한 낱말(§방향·토큰 «색»의 모양 절반). 뜨는 문자열이
    전부 제품이 이미 쓰는 식별자다 — `.md`(상태 없음) · `.wip` · `.done`은 코어 §큐의
    불변식 1이 정한 파일명 3종이고, 지금 이 셋뿐이다(`.gallery` 둘은 §랜딩 §갤러리 식별자로
    걷혔다). 한글 문장 · 제목 · 라벨은 0개다(§남는 규칙 ②). aria-hidden을 안 단다 — 색을 못
@@ -592,18 +592,18 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
   .dira-landing .plans > li { grid-column: auto; }
 }
 
-/* 카드 셋이 같은 높이로 선다 — 그리드 기본값(normal = stretch)이라 적을 선언이 없다.
+/* 카드 셋이 같은 높이로 뜬다 — 그리드 기본값(normal = stretch)이라 적을 선언이 없다.
    Pro·Enterprise 아래가 비는데 그 빈칸을 채울 값이 정본에 없다(금액도 CTA도 안 만든다).
    흰 자리가 산출물이다 — 빠뜨린 자리로 읽고 채우지 않는다.
    카드 패딩 24는 위 공유 규칙이 이미 준다(`.steps`가 22 → 24로 붙어 값이 같아졌다). */
 /* 지금 쓸 수 있는 것은 Free 하나다. 두께 · 면 · 크기는 그대로라 격자가 안 흔들린다.
-   색만으로 지는 의미가 아니다 — 그 사실은 카드 안에 글자로 이미 서 있다. */
+   색만으로 지는 의미가 아니다 — 그 사실은 카드 안에 글자로 이미 떠 있다. */
 .dira-landing .plans > li:first-child { border-color: var(--fg); }
 .dira-landing .plans > li > b {
   display: block; font-size: 20px; font-weight: 700; letter-spacing: -0.03em; line-height: 1.3;
   margin: 0 0 16px; padding-bottom: 16px; border-bottom: 1px solid var(--border);
 }
-/* 뱃지를 오른쪽 레일로 보내 항목 이름 아홉이 한 왼쪽 선에 선다. `—` 글머리는 뺀다 —
+/* 뱃지를 오른쪽 레일로 보내 항목 이름 아홉이 한 왼쪽 선에 뜬다. `—` 글머리는 뺀다 —
    표식이 둘이면 선이 둘로 갈린다. */
 .dira-landing .plans .marks li { display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; padding: 8px 0; }
 .dira-landing .plans .marks li::before { content: none; }
@@ -664,12 +664,12 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
 .dira-landing .plan-cycle-toggle:focus-visible { color: var(--fg); }
 
 /* ── engine ─────────────────────────────────────── */
-/* 12열에서 비대칭이 서는 유일한 자리 — `span 7` / `span 5`(§방향·토큰 «격자»).
+/* 12열에서 비대칭이 뜨는 유일한 자리 — `span 7` / `span 5`(§방향·토큰 «격자»).
    minmax(0, 1fr) — 트랙 최소폭을 0으로 눌러야 한다. 그냥 1fr이면 트랙의 자동
    최소 크기가 내용에 맞춰져, 안 끊기는 긴 토큰(`<code>`의 경로)이 트랙을 밀어내고
    페이지 전체에 가로 스크롤이 생긴다. */
 .dira-landing .two { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: 24px; row-gap: 48px; align-items: start; margin-top: 32px; }
-/* 12열은 901 이상에서만 선다 — 아래 `@media (max-width:900px)`의 1열 되돌림에 안 맡긴다.
+/* 12열은 901 이상에서만 뜬다 — 아래 `@media (max-width:900px)`의 1열 되돌림에 안 맡긴다.
    `> :first-child`가 (0,3,0)이라 거기 적은 `> *`(0,2,0)를 이겨서, 접힌 폭에서 `span 5`가
    암시 열을 만들고 오른쪽 칸만 48px 좁아졌다(실측 768 `720 / 672` · 390 `342 / 294`). */
 @media (min-width: 901px) {
@@ -736,7 +736,7 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
    전부 `visible`, 실측) — sticky가 조용히 죽는 자리가 없다. `top: 60px`은 header 높이다.
    z-index는 header(10)보다 낮다: 둘이 겹치는 순간이 없지만 순서를 고정해 둔다.
    밴드는 `.wrap`이라 위·아래 룰이 화면 끝까지 가고(«하이라인» 여덟에 흡수) 레인은
-   `content` 열에 선다. 세로 padding은 밴드가 갖는다 — 안의 격자는 세로를 안 갖는다. */
+   `content` 열에 뜬다. 세로 padding은 밴드가 갖는다 — 안의 격자는 세로를 안 갖는다. */
 .dira-landing .travel {
   position: sticky; top: 60px; z-index: 5;
   background: var(--bg);

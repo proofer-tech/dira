@@ -483,7 +483,7 @@ test("isDiraFormat — 둘 다 없으면 형식이 아니다", () => {
   );
 });
 
-test("isDiraFormat — SCHEMA.md만 있어도 선다", () => {
+test("isDiraFormat — SCHEMA.md만 있어도 뜬다", () => {
   assert.equal(
     isDiraFormat([
       { rel: "_ontology", isDir: true },
@@ -493,7 +493,7 @@ test("isDiraFormat — SCHEMA.md만 있어도 선다", () => {
   );
 });
 
-test("isDiraFormat — objects/만 있어도 선다(빈 디렉터리도 포함)", () => {
+test("isDiraFormat — objects/만 있어도 뜬다(빈 디렉터리도 포함)", () => {
   assert.equal(isDiraFormat([{ rel: "objects", isDir: true }]), true);
   assert.equal(
     isDiraFormat([
@@ -505,7 +505,7 @@ test("isDiraFormat — objects/만 있어도 선다(빈 디렉터리도 포함)"
   );
 });
 
-test("isDiraFormat — 둘 다 있으면 선다", () => {
+test("isDiraFormat — 둘 다 있으면 뜬다", () => {
   assert.equal(
     isDiraFormat([
       { rel: "_ontology/SCHEMA.md", isDir: false },

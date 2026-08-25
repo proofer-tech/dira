@@ -84,7 +84,7 @@ export async function followup(
 
   const stem = stemOf(file, sfx);
   // `title`만 복제와 갈린다(§2-2): 다이얼로그가 없어 고칠 자리가 없으므로 원본 제목을 그대로
-  // 쓰면 보드에 같은 제목이 두 줄 서고 어느 쪽이 후속인지 화면이 말할 수 없다.
+  // 쓰면 보드에 같은 제목이 두 줄 뜨고 어느 쪽이 후속인지 화면이 말할 수 없다.
   const title = reqTitle(content);
   // 원본 값 그대로다. `kind`는 검증하지 않는다 — 엔진이 안 보는 값이고 목록 밖 값(`answer` 등)도
   // 원본이 그렇게 살아 있었다. `persona`는 엔진이 `<personas>/<이름>/PROFILE.md` 경로로 쓰므로

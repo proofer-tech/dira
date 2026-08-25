@@ -37,7 +37,7 @@ async function required(projectId: string) {
   return project;
 }
 
-/** 질문 하나를 띄운다. 돌려주는 것은 **실패뿐**이고(`null` = 시작했다) 답의 도착은 폴링이 말한다.
+/** 질문 하나를 띄운다. 돌려주는 것은 **실패뿐**이고(`null` = 시작했다) 답의 도착은 폴링이 알려 준다.
  *  이미 도는 질문이 있으면 `busy`로 거절한다(§24 실패 ④) — 기다리게 하지 않는다. */
 export async function askHome(
   projectId: string,
@@ -99,7 +99,7 @@ export async function pollHomeAnswer(
  *
  *  **멈추는 것은 지금 보는 대화 하나다**(§7 §대화마다 따로 돈다 — 대화마다 따로 돌므로 프로젝트
  *  단위로 죽이면 남의 대화까지 밟는다). 그 대화가 곧 `current`라 화면이 값을 안 들고 온다 —
- *  버튼은 보는 대화에만 서고, 남의 대화를 멈추는 버튼은 안 만든다(가서 누른다). */
+ *  버튼은 보는 대화에만 뜨고, 남의 대화를 멈추는 버튼은 안 만든다(가서 누른다). */
 export async function stopHome(projectId: string): Promise<boolean> {
   try {
     const sid = await readSessionId((await required(projectId)).id);

@@ -56,7 +56,7 @@ import {
 export const dynamic = "force-dynamic";
 
 /** 머리 2행 "마지막 활동"(§5-6 §머리, §비주얼 §66 ③) — 이 persona의 `personaRuns` 중 가장
- *  늦게 끝난 실행 하나. `4ea1147a`(활동 데이터 자리)가 서면 그 자리가 이 계산을 흡수한다 —
+ *  늦게 끝난 실행 하나. `4ea1147a`(활동 데이터 자리)가 뜨면 그 자리가 이 계산을 흡수한다 —
  *  그때까지 새 파서 없이 `lastLogByWorker`가 이미 페어링해 둔 값에서 최댓값만 뽑는다. */
 function lastActivityFor(
   name: string,

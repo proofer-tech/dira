@@ -499,7 +499,7 @@ export const reqOf = (t: Ticket): string => unquote(t.fm.req ?? "");
 export const archivesOf = (t: Ticket): string => unquote(t.fm.archives ?? "");
 
 /** 이 티켓이 속한 에픽의 P번호(DESIGN.md §에픽 결정 1). 값은 문자열 그대로가 키다 —
- *  접두사를 벗기거나 정규화하지 않는다: `epic: P273`과 `epic: P273-2`는 다른 에픽으로 선다. */
+ *  접두사를 벗기거나 정규화하지 않는다: `epic: P273`과 `epic: P273-2`는 다른 에픽으로 뜬다. */
 export const epicOf = (t: Ticket): string => unquote(t.fm.epic ?? "");
 
 /** `ask_human`이 골라 둔 답(§요구사항 레이어 결정 12 (4)) — 조립 형식 그대로 `1.(a)`.
@@ -750,7 +750,7 @@ export type ThreadItem = {
   quotes?: QuoteSection[];
   /** 결정 15 (1) — `quotes`가 있을 때만 값이 있다. 문항이 한 벌뿐(`optionsOf`가 준 문항 수
    *  `<= 1`)이면 `true`(인용을 펼친 채로 낸다) — 세션이 결정 11 형식으로 물음을 남겨 문항이
-   *  이미 인용 밖에 두 벌 이상 섰으면 `false`(종전대로 접는다, 안 그러면 같은 글이 두 번 선다).
+   *  이미 인용 밖에 두 벌 이상 섰으면 `false`(종전대로 접는다, 안 그러면 같은 글이 두 번 뜬다).
    *  판정은 문항 수 하나다 — 인용 제목 문자열은 안 본다(결정 12 §고정하는 것). */
   quotesOpen?: boolean;
   /** 답변 티켓의 stem. 질문은 없다(요구사항 본문의 일부다) */
@@ -1106,7 +1106,7 @@ export const continuedOf = (t: Ticket): string => unquote(t.fm.continued ?? "");
 
 /** 칸반 호버 관계선의 간선 (DESIGN.md §1 보드 · §비주얼 §17). 상세 §2 관계 절이 그리는 것과
  *  **같은 간선**이다: `deps`(선행 · 후행 역참조) + `req:`(요구사항 ↔ 나온 티켓).
- *  met/unmet으로 거르지 않는다 — 상세가 안 거르는 것과 같은 이유고 개별 상태는 배지가 말한다.
+ *  met/unmet으로 거르지 않는다 — 상세가 안 거르는 것과 같은 이유고 개별 상태는 배지가 알려 준다.
  *
  *  **fs를 1건도 더 읽지 않는다**: 보드가 이미 읽은 `tickets`와 `depBadges`·`derivedFrom`이
  *  쓰는 `resolveDep`·`reqOf` 그대로다. 선에는 방향이 없으므로 **양쪽에 넣는다** — 호버된

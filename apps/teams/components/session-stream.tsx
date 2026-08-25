@@ -3,7 +3,7 @@
 /** 진행 기록 (DESIGN.md §2-3 · §비주얼 §29 · §2-6) — 종전 세션 스트림(§2-1 · §9)이 **한 상자**로 넓어졌다.
  *
  *  상자 안에 문법이 둘이다. 세션이 흘린 **스트림 줄**(§9 — 접힌 `<Marker>` 한 줄. 색 토큰은 하나도
- *  안 쓴다)과 대화 넷이 서는 **말풍선**(§13 · §2-6 — 테두리 네 변 + 좌우 정렬이 역할을 가른다).
+ *  안 쓴다)과 대화 넷이 뜨는 **말풍선**(§13 · §2-6 — 테두리 네 변 + 좌우 정렬이 역할을 가른다).
  *  **§2-6이 그 둘의 경계를 다시 그었다** — assistant `text`와 사람이 친 말(참견 · 첫 아닌 사용자
  *  프롬프트)만 말풍선이고, 나머지 사건(`tool_use`·`thinking`·`tool_result`·세션 프롬프트, `서브`
  *  포함)은 말풍선 사이에서 접힌 묶음 한 항목(`기록 n건`)이 된다 — 펼치면 그 안의 사건 줄들이
@@ -123,7 +123,7 @@ const atBottom = (el: HTMLElement) => el.scrollHeight - el.scrollTop - el.client
 /** 워커 다이얼로그에서만 도는 줄 컨텍스트(§2-15 ⑦⑧, 티켓 `268943e7`) — `Row`·`Bundle`·
  *  `ProgressItems`가 받아 그대로 흘려보낸다. `undefined`면 종전 티켓 상세 화면과 클래스 0
  *  차이다(그 화면은 이 prop 자체를 안 넘긴다). `allEvents`는 **거르지 않은** 누적 배열이다 —
- *  검색·필터로 짝이 숨어도 소요·결과 절은 그대로 서야 한다(§2-15 ③). */
+ *  검색·필터로 짝이 숨어도 소요·결과 절은 그대로 떠야 한다(§2-15 ③). */
 type WorkerRowCtx = {
   baseTs: string;
   allEvents: StreamEvent[];
@@ -191,8 +191,8 @@ export function SessionStream({
    *  자기 해석 결과를 같이 싣고(아래 poll effect), 이 컴포넌트가 그것을 누적해 둔다. */
   refs?: RefIndex;
   /** 토큰량 덩이(§비주얼 §63 ①④) — 서버가 `ticketCostChunk`로 미리 지어 내려준다(이 파일은
-   *  `node:fs`를 못 타서 로그를 직접 못 연다). `undefined`면 그 자리에 아무것도 안 선다 —
-   *  절이 서는 조건이 h2가 서는 조건과 같아 호출부가 이미 그 조건으로 걸러 넘긴다. */
+   *  `node:fs`를 못 타서 로그를 직접 못 연다). `undefined`면 그 자리에 아무것도 안 뜬다 —
+   *  절이 뜨는 조건이 h2가 뜨는 조건과 같아 호출부가 이미 그 조건으로 걸러 넘긴다. */
   costChunk?: { text: string; title?: string };
   /** 갈래(§2-15 ①) — `"worker"`면 워커 스트림 다이얼로그의 모양(머리 상태 배지·소요, 도구 칩 줄,
    *  검색·필터·건수 툴바)을 입는다. `undefined`(티켓 상세)는 종전 화면과 클래스 0 차이다 —
@@ -221,7 +221,7 @@ export function SessionStream({
   const box = useRef<HTMLDivElement>(null);
 
   // 이 워커에 이 화면이 **없을 수 있다**(§4-3 · §비주얼 §23 ⑤). 고장이 아니라 기능 집합의
-  // 차이라 진입점은 그대로 두고 그 자리에서 왜 없는지를 말한다. 판정은 엔진 이름 하나고 모델은
+  // 차이라 진입점은 그대로 두고 그 자리에서 왜 없는지를 알려 준다. 판정은 엔진 이름 하나고 모델은
   // 안 본다. **둘은 한 값이 아니다** — grok은 스트림이 되고 참견은 안 된다(§4-3 표 · §grok).
   // `=== false`인 것이 규약이다: `null`(엔진을 모르는 완료 티켓)은 종전 그대로 그린다.
   const noStream = engineCan("stream", engine ?? null) === false;
@@ -233,7 +233,7 @@ export function SessionStream({
   // **앞 왕복이 끝난 뒤에 다음을 예약한다**(`bcfcdda4` — 홈과 같은 고장을 같은 방법으로 막는다).
   // `setInterval`이면 왕복이 주기보다 길어지는 순간 두 `poll`이 같은 `offset.current`를 읽고
   // 서버가 같은 바이트 구간을 두 벌 주고 둘 다 `[...prev, ...r.events]`로 이어붙는다 —
-  // 사건 줄이 두 벌 서고 key가 같아 React가 경고를 찍는다. 여기가 홈보다 조용한 이유는 주기가
+  // 사건 줄이 두 벌 뜨고 key가 같아 React가 경고를 찍는다. 여기가 홈보다 조용한 이유는 주기가
   // 2초라서일 뿐이다(왕복 하나가 트랜스크립트 tail이라 큰 세션·느린 디스크면 넘길 수 있다).
   useEffect(() => {
     // 있을 수 없는 파일을 2초마다 묻지 않는다 — codex는 트랜스크립트를 아예 안 남긴다(§4-3 표).
@@ -382,19 +382,19 @@ export function SessionStream({
         variant === "worker" && "flex min-h-0 flex-col",
       )}
     >
-      {/* 머리 줄 — `진행 기록` h2와 `맨 아래로`가 같은 행에 선다(§비주얼 §29 ③ P173).
-          h2는 이 절이 서는 다섯 상태 전부에서 무조건 렌더된다(종전엔 `page.tsx`가 이 h2를
-          따로 그렸다 — `<SessionStream>`이 안 서는 "둘 다 0" 빈 상태만 거기 남는다) — 그래서
-          이 줄도 이제 조건부가 아니다(종전엔 `stream`일 때만 줄 자체가 섰다). 오른쪽 무리
+      {/* 머리 줄 — `진행 기록` h2와 `맨 아래로`가 같은 행에 뜬다(§비주얼 §29 ③ P173).
+          h2는 이 절이 뜨는 다섯 상태 전부에서 무조건 렌더된다(종전엔 `page.tsx`가 이 h2를
+          따로 그렸다 — `<SessionStream>`이 안 뜨는 "둘 다 0" 빈 상태만 거기 남는다) — 그래서
+          이 줄도 이제 조건부가 아니다(종전엔 `stream`일 때만 줄 자체가 떴다). 오른쪽 무리
           (`!live` 문구 + 버튼)만 `stream`일 때 뜬다 — 흐르는 스트림이 없으면 "지금 스트림
           상태"를 말할 것이 없다(§29 ②). `h-8` 고정은 그 무리가 떴다 사라질 때 줄이 안
           튀게 하는 것이 근거다(§18 ④ · §21). h2와 토큰량 덩이는 **왼쪽 무리**로 baseline
           묶인다(§비주얼 §63 ④ — 오른쪽 무리와 조건이 다르다: 토큰량은 `workers/logs/`가 출처라
-          `stream` 여부와 무관하게 h2가 서면 선다). */}
+          `stream` 여부와 무관하게 h2가 뜨면 뜬다). */}
       {variant === "worker" ? (
         // 워커 스트림 다이얼로그(§2-15 ①·④·⑤·⑥, 값 §비주얼 §64) — 종전 `flex h-8` 머리 줄을
         // 상태 배지 + 소요로, 그 아래 도구 칩 줄과 검색·필터·건수 툴바가 잇는다. **`noStream`이면
-        // 이 겹이 전부 안 선다**(§2-15 ⑨ 에러 행) — 아래 `<EmptyState>` 하나가 그 자리를 대신한다.
+        // 이 겹이 전부 안 뜬다**(§2-15 ⑨ 에러 행) — 아래 `<EmptyState>` 하나가 그 자리를 대신한다.
         !noStream && (
           <div className="space-y-2">
             <div className="flex h-8 items-center gap-2">
@@ -485,7 +485,7 @@ export function SessionStream({
            `Alert`가 아니다: 사람이 할 일이 없고(원문도 다음 행동도 없다), §9가 스트림 부재를
            이미 `부재이지 고장이 아니다`로 판정했고, codex 워커에겐 이게 상시 상태라 정상
            상태에 켜진 경고가 된다(§0-2). 폴링도 안 돈다 — 빈 스트림을 돌리지 않는다.
-           **문구가 엔진 이름을 말한다**: 이 자리에 서는 엔진이 codex 하나가 아니게 됐다
+           **문구가 엔진 이름을 알려 준다**: 이 자리에 뜨는 엔진이 codex 하나가 아니게 됐다
            (집합 밖 = 손으로 쓴 `TICKET_ENGINE`도 여기로 온다 — §4-3 개정). **"claude 엔진에서만
            됩니다"라고 세지 않는다** — `FEATURE_ENGINES.stream.engines`가 이미 claude·grok
            둘이라 그 문장이 틀렸다(신고 `3d0a5585`). 이 자리가 답할 것은 "왜 비었나"뿐이라
@@ -499,7 +499,7 @@ export function SessionStream({
           }
         />
       )}
-      {/* 상자는 **그릴 것이 있을 때만** 선다. codex이고 스레드도 없으면 위 `<EmptyState>` 하나가
+      {/* 상자는 **그릴 것이 있을 때만** 뜬다. codex이고 스레드도 없으면 위 `<EmptyState>` 하나가
           이 자리의 전부다(종전 그대로) — 빈 상자를 하나 더 그리는 것은 소음이다(§29 ④). */}
       {(stream || merged.length > 0) &&
         (() => {
@@ -541,7 +541,7 @@ export function SessionStream({
               ))}
               {/* 진행 표식(§18 ④) — **자리가 한 갈래다**(개정 요구 `c1312f3d`): 계획이 있든 없든
                   상자 안 맨 아래다. 진행중 계획 아코디언을 접어도 안 숨는다 — `<details>` 밖에
-                  선다. 마지막 사건 다음 줄이 올 자리를 지킨다. **말풍선 아래로 안 내려간다**:
+                  뜬다. 마지막 사건 다음 줄이 올 자리를 지킨다. **말풍선 아래로 안 내려간다**:
                   `.wip`인 동안 상자의 맨 끝은 항상 스트림 사건이고(답 없는 질문은 열린 티켓에만
                   있다 — §29 ③) 옛 답변은 `birth`가 지금 세션 첫 사건보다 앞이다. `<Marker>`도
                   `<details>`도 아니다: §9가 Marker 기본값을 하나도 안 덮기로 했는데 여기는
@@ -567,7 +567,7 @@ export function SessionStream({
           // AA 미달이고(§9 함정 1) 말풍선 실측표 7종도 이 면 위에서 잰 값이다(§29 ①).
           if (workerCtx) {
             // 워커 다이얼로그 2단(§2-15 ⑧, 값 §비주얼 §64 ①②③⑦) — 목록 단은 §9의 그 상자
-            // 그대로고(`h-[32rem]`이 행으로 올라갔다), 상세 단이 오른쪽에 선다. `lg` 미만은
+            // 그대로고(`h-[32rem]`이 행으로 올라갔다), 상세 단이 오른쪽에 뜬다. `lg` 미만은
             // 세로로 접혀 상세가 목록 아래다(§64 ⑩) — 두 단이 각자 스크롤하고 이 행 자체는
             // 안 스크롤한다(§2-15 ⑧ 못 2 — 검색 상자가 위로 사라지지 않는다).
             return (
@@ -606,8 +606,8 @@ export function SessionStream({
         })()}
 
       {/* 결정 11 ⑩ — `awaiting`인데 본문에 `## 질문 n` 절이 없으면(실측 8건) 스레드 자리가
-          통째로 비고 화면이 "답변 대기"라고만 말해 무엇을 묻는지가 안 보였다. 폼은 안 감춘다 —
-          아래 `ProgressForm`이 그대로 서고 사람은 산문으로 답을 쓸 수 있다. `<EmptyState>`를
+          통째로 비고 화면이 "답변 대기"라고만 적혀 무엇을 묻는지가 안 보였다. 폼은 안 감춘다 —
+          아래 `ProgressForm`이 그대로 뜨고 사람은 산문으로 답을 쓸 수 있다. `<EmptyState>`를
           안 쓴다 — 1차 콘텐츠가 아니고(§9), 그 자리는 `AnswerThread`(보드 다이얼로그)와 값 하나를
           공유한다(`lib/urls.ts`). 새 색 0 — 에러가 아니라 §9 관용구 그대로 `muted-foreground`. */}
       {awaiting && thread.length === 0 && (
@@ -697,7 +697,7 @@ function PlanBlock({
   const cancelled = plan.state === "cancelled";
   // 왼쪽 16px 칸이 상태를 든다(§59 ③) — 넷이 `rect 18x18 @3,3 rx=2`를 공유해 칸 전체가
   // *상태 넷인 컨트롤 하나*로 읽힌다. 잉크 사다리는 양을 그린다: 지난 것(완료·취소)은
-  // `--muted-foreground`로 물러나고 남은 것(미착수)·지금 것(진행중)은 `--foreground`로 선다.
+  // `--muted-foreground`로 물러나고 남은 것(미착수)·지금 것(진행중)은 `--foreground`로 뜬다.
   const Icon = plan.state === "todo" ? Square : plan.state === "doing" ? SquareMinus : cancelled ? SquareX : SquareCheck;
   const ink = plan.state === "done" || cancelled ? "text-muted-foreground" : "text-foreground";
   const stateLabel = t(`progress.plan.${plan.state === "todo" ? "pending" : plan.state}`);
@@ -756,9 +756,9 @@ function PlanBlock({
  *  뿐이다. 답변(사람)은 §13 말풍선 계약 그대로 무수정이다.
  *
  *  `px-3`은 스트림 줄과 **같은 거터다**(§29 ① x=12 — 산문 헤더 `px-0`이 그 위에 얹혀 항목 첫
- *  글자와 나란히 선다). `py-2`가 §13 `gap-4`를 그대로 낸다(말풍선끼리 8+8=16 · 줄과는 8).
+ *  글자와 나란히 뜬다). `py-2`가 §13 `gap-4`를 그대로 낸다(말풍선끼리 8+8=16 · 줄과는 8).
  *  **시각을 안 붙인다**: 질문은 자기 파일이 없어 시각이 없고, 지어내지 않기로 한 것이 §2-3 ②다 —
- *  답변에만 붙이면 한 쌍의 헤더가 서로 다른 모양이 된다. 순서는 자리가 말한다.
+ *  답변에만 붙이면 한 쌍의 헤더가 서로 다른 모양이 된다. 순서는 자리가 알려 준다.
  *  hover도 펼침도 없다 — 산문·말풍선 둘 다 펼칠 것이 없다(스트림 줄의 `hover:bg-muted/50`은
  *  어포던스다). */
 function ThreadRow({
@@ -774,7 +774,7 @@ function ThreadRow({
   if (item.role === "question") {
     return (
       <div className="px-3 py-2">
-        {/* 헤더가 자기 본문 첫 글자와 같은 x(12)에 선다(§9) — `px-0`은 항목 껍데기의 `px-3`과
+        {/* 헤더가 자기 본문 첫 글자와 같은 x(12)에 뜬다(§9) — `px-0`은 항목 껍데기의 `px-3`과
             겹치지 않게 하는 한 클래스다. */}
         <MessageHeader className="px-0">
           {item.heading || "질문"}
@@ -790,7 +790,7 @@ function ThreadRow({
       <Message align="end">
         <MessageContent>
           {/* 헤더는 말풍선 **밖 · 위**다(§13) — 안에 넣으면 본문의 소유자가 `<Markdown>` 하나가
-              아니게 되고 §10 루트의 `[&>:first-child]:mt-0`이 거짓이 된다. 앉는 면이 `--card`가
+              아니게 되고 §10 루트의 `[&>:first-child]:mt-0`이 거짓이 된다. 놓이는 면이 `--card`가
               아니라 `--background`라 `--muted-foreground`가 4.73 / 7.63이다(§29 ① — 병합으로
               한 칸 좋아지는 유일한 자리고, 새로 잰 것이 아니라 §9 표의 1행이다) */}
           <MessageHeader>
@@ -946,7 +946,7 @@ function ProgressForm({
   // 답변 모드 — 그릇이 갈리는 유일한 모드다(§2-3 ③). `answerFile`이 없으면 그릴 것이 없다
   // (워커 다이얼로그가 그 값을 안 넘긴다. 거기엔 답변 대기 티켓이 애초에 없다 — `.wip`만 물린다).
   // **문구 한 줄이 폼 위에 남는다**: 종전 답변 카드 머리(`Card`)가 없어졌고, 그 문장은 이 버튼이
-  // 무엇을 하는지를 말한다(§2-3 ③). 보드 다이얼로그에서는 `DialogDescription`이 같은 말을 하므로
+  // 무엇을 하는지를 알려 준다(§2-3 ③). 보드 다이얼로그에서는 `DialogDescription`이 같은 말을 하므로
   // 폼 안에 넣지 않는다 — 넣으면 거기서 두 번 뜬다.
   if (mode === "answer") {
     return answerFile ? (
@@ -979,9 +979,9 @@ function ProgressForm({
   const closed = !followup && !live; // 세션이 끝났고 실패가 남아 있다 = 읽기 전용 잔해
   // 완료 모드는 `inbox`를 아예 안 본다 — 보내는 곳이 FIFO가 아니라 새 파일이다(§21).
   // **`live`인 동안만이다.** `!inbox`만 보면 회수된 티켓에서도 켜진다 — 엔진의 `clear`가
-  // `session_id`와 함께 `inbox`도 비우므로(`tickets.py`) `closed`와 같은 폴링에 동시에 서고,
+  // `session_id`와 함께 `inbox`도 비우므로(`tickets.py`) `closed`와 같은 폴링에 동시에 뜨고,
   // 남은 폼의 입력칸이 `disabled`가 돼 §21이 `readOnly`로 지키려던 선택·복사를 잃는다. §21이
-  // 그릇의 흐림을 의도한 자리는 하나뿐이고, 그 화면의 사유는 실패 Alert가 말한다(사유 한 줄도
+  // 그릇의 흐림을 의도한 자리는 하나뿐이고, 그 화면의 사유는 실패 Alert가 알려 준다(사유 한 줄도
   // 같이 안 뜬다).
   // 입구가 없다 = 그릇 통째로 비활성(§21). 참견이 없는 엔진은 **입구가 생길 일이 없는** 워커라
   // 같은 자리다(`tick.sh:263-270`이 `--input-format stream-json` 인접에서만 FIFO를 판다 — §4-3).
@@ -1089,7 +1089,7 @@ function ProgressForm({
             {/* **`disabled`가 아니라 `aria-disabled`다.** `InputGroup`의 흐림은 `:has(:disabled)`라
                 (빌드된 CSS 실측) 버튼 하나만 잠가도 **그릇이 통째로** 흐려진다 — 빈 입력이 기본
                 상태이므로 placeholder가 §21이 금지한 1.85 대비로 상시 떨어진다. 그릇을 흐리는 것은
-                입구가 없을 때(입력칸 `disabled`)로 남기고, 못 누른다는 사실은 이 버튼만 말한다.
+                입구가 없을 때(입력칸 `disabled`)로 남기고, 못 누른다는 사실은 이 버튼만 알려 준다.
                 누를 수 없음의 실효는 `send()`의 첫 줄이 지킨다(클릭·⌘↵ 양쪽). */}
             <InputGroupButton
               type="submit"
@@ -1124,7 +1124,7 @@ function ProgressForm({
         <p id={offId} className="text-xs text-muted-foreground">
           {/* 참견이 없는 엔진은 사유가 티켓이 아니라 **엔진**이다(§4-3 · §비주얼 §23 ⑤).
               `inbox가 없습니다`도 참이지만 그건 결과고, 사람이 고칠 수 있는 것으로 읽힌다 —
-              이 워커는 그런 워커다. **엔진 이름을 말한다**: 이 자리에 서는 엔진이 codex
+              이 워커는 그런 워커다. **엔진 이름을 알려 준다**: 이 자리에 뜨는 엔진이 codex
               하나가 아니게 됐고(grok도 온다), 이름이 없으면 사람이 어느 쪽인지 모른다. */}
           {noInterject
             ? `이 워커의 엔진은 ${engine}입니다 — 참견은 claude 엔진에서만 됩니다`
@@ -1152,7 +1152,7 @@ function ProgressForm({
 /** 접힌 줄·묶음 줄이 같이 쓰는 거터(§9 · §2-6 ②) — `Row`·`Bundle` 공용. */
 const LINE = "px-3 leading-6 scroll-mt-6";
 
-/** 계획 묶음 그릇 — 8은 묶음 **밖**에만 선다(DESIGN.md §비주얼 §59 ⑤, 재개정). 형제끼리 병합돼
+/** 계획 묶음 그릇 — 8은 묶음 **밖**에만 뜬다(DESIGN.md §비주얼 §59 ⑤, 재개정). 형제끼리 병합돼
  *  계획 <-> 계획도 8이고, `first`/`last`가 상자 `py-2`와 겹치는 것을 막는다. */
 const PLAN_BLOCK = "my-2 first:mt-0 last:mb-0";
 
@@ -1181,7 +1181,7 @@ function Row({
 }: {
   e: StreamEvent;
   onToggle: (ev: React.SyntheticEvent<HTMLDetailsElement>) => void;
-  /** 워커 다이얼로그(§2-15 ⑦⑧, 티켓 `268943e7`)에서만 선다 — 상대 시각·소요 칸·선택 상태를
+  /** 워커 다이얼로그(§2-15 ⑦⑧, 티켓 `268943e7`)에서만 뜬다 — 상대 시각·소요 칸·선택 상태를
    *  준다. `undefined`면 아래가 전부 종전 티켓 상세 화면(`<details>` 인라인 펼침)이다. */
   ctx?: WorkerRowCtx;
 }) {
@@ -1317,7 +1317,7 @@ function Row({
 /** 묶음 접힌 줄 — 말풍선 사이 연속 사건은 한 항목이다(§2-6 ② · §비주얼 §9 §묶음 접힌 줄).
  *  접힌 줄과 **같은 그릇**(`<details>` + `<Marker render={<summary />}>`)이라 이 겹은 그릇을 안
  *  늘린다. 시각·도구명 슬롯은 없다 — 묶음 안에 도구가 여럿이라 하나를 골라 세우면 거짓말이다.
- *  `기록 n건`이 그 자리에 선다(sans + `tabular-nums`, `truncate`도 `title`도 없다 — 고정 문구라
+ *  `기록 n건`이 그 자리에 뜬다(sans + `tabular-nums`, `truncate`도 `title`도 없다 — 고정 문구라
  *  안 잘린다). 펼치면 이 절의 사건 줄들이 **그대로** 나온다 — 들여쓰기를 안 늘린다.
  *
  *  **`export`인 이유 — 줄 렌더러는 한 벌이다**(§7 §스레드가 트랜스크립트 전부를 그린다). 홈
@@ -1562,7 +1562,7 @@ function StreamBubble({ e, refs }: { e: StreamEvent; refs?: RefIndex }) {
     return (
       <div className="px-3 py-2">
         {/* `px-0` — 항목 껍데기의 `px-3`과 겹치지 않게, 헤더가 산문 첫 글자와 같은 x(12)에
-            선다(§9) */}
+            뜬다(§9) */}
         <MessageHeader className="px-0">{header}</MessageHeader>
         <Markdown text={e.body} refs={refs} />
       </div>

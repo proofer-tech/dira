@@ -39,7 +39,7 @@ export default async function RootLayout({
 }>) {
   // 키맵은 **여기서 한 번** 읽는다(§0-6 배선). 두 셸이 다 이 아래고 파일 하나짜리 읽기라
   // 셸마다 중복해서 읽을 이유가 없다. `readKeymap()`은 던지지 않는다 — 키맵 파일 하나가
-  // 앱 전체를 못 열게 하면 안 된다(깨졌다는 사실은 `broken`으로 화면이 말한다).
+  // 앱 전체를 못 열게 하면 안 된다(깨졌다는 사실은 `broken`으로 화면이 알려 준다).
   const keymap = await readKeymap();
   // §0-16 §장치. 머신 하나짜리 설정이라 키맵과 같은 자리에서 같이 읽는다.
   const locale = await readLanguage();

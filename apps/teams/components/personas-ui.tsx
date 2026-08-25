@@ -140,7 +140,7 @@ export type PersonaRow = {
    *  **지정 없음**(그 페르소나는 워커 자신의 엔진을 쓴다). `limit`과 같은 이유로 예산 합에 안 더한다 */
   engine: PersonaEngineValue;
   /** `runner.log`의 이 페르소나 최신 종료 줄(§5-6 §머리 2행 "마지막 활동"). 한 번도 안 돌았으면
-   *  `null` — 자리를 비운다. `4ea1147a`(활동 데이터 자리)가 서면 그 값이 이 자리를 흡수한다 —
+   *  `null` — 자리를 비운다. `4ea1147a`(활동 데이터 자리)가 뜨면 그 값이 이 자리를 흡수한다 —
    *  이 필드는 그때까지 `personaRuns`에서 직접 뽑는다(§5-6 §머리 참고). */
   lastActivity: { minutesAgo: number; hash: string } | null;
   /** 이 페르소나를 멤버로 든 스쿼드 이름(§5-5). 0개면 머리 2행에서 자리를 비운다. */
@@ -232,7 +232,7 @@ function ColorPicker({
         }
       >
         <PersonaDot color={current} />
-        {/* 색만으로 뜻을 전하지 않는다(§0) — 점은 aria-hidden이고 값은 여기서 말한다 */}
+        {/* 색만으로 뜻을 전하지 않는다(§0) — 점은 aria-hidden이고 값은 여기서 알려 준다 */}
         <span className="sr-only">
           {current ? wrap(t("persona.color.labelPrefix"), current, "") : t("persona.color.none")}
         </span>
@@ -445,7 +445,7 @@ const editBytes = (e: PersonaEdit) => byteLength(e.body) + e.skillsChars;
  *
  *  **선택은 경로가 담고 `pushState`로 담는다**(§5 §선택이 경로에 담긴다. 사람 요구 `8429c041`).
  *  `router.push`도 `<Link>`도 아니다 — 그러면 서버가 다시 렌더하면서 앞 페르소나의 textarea가
- *  언마운트돼 저장 안 한 편집이 사라진다(그 규칙은 그대로 선다. 뽑은 것은 *딥링크 경로가 없다*는
+ *  언마운트돼 저장 안 한 편집이 사라진다(그 규칙은 그대로 뜬다. 뽑은 것은 *딥링크 경로가 없다*는
  *  근거뿐이다). native History API는 Next 16이 그대로 받아서 `usePathname()`은 따라오고 서버
  *  왕복은 없다. `?persona=` 쿼리는 안 만든다 — 값이 두 벌이 된다. */
 /** 스쿼드 오른쪽 칸의 편집 상태 — 페르소나의 `PersonaEdit`과 같은 이유로 `PersonasPane`이
@@ -580,7 +580,7 @@ export function PersonasPane({
   );
 
   /** 모아보기 — 켜면 최상위가 스쿼드(위 집합이 그리는 화면), 끄면 묶음 둘(`스쿼드` -
-   *  `페르소나`, 이 순서)이 나란히 선다(§5-5 §개정 - 모아보기 토글, 요구 `998b7849`). 기본
+   *  `페르소나`, 이 순서)이 나란히 뜬다(§5-5 §개정 - 모아보기 토글, 요구 `998b7849`). 기본
    *  켜짐, **저장 0** — localStorage · 쿠키 · URL 파라미터 어디에도 안 싣는다. 끄는 동안에도
    *  `expandedSquads`는 그대로 둔다 — 다시 켜면 종전 펼침이 그대로다(계약 §왕복). */
   const [groupBySquad, setGroupBySquad] = useState(true);
@@ -638,13 +638,13 @@ export function PersonasPane({
     current === undefined ? (selected === null ? squads[0] : squads.find((s) => s.name === selected)) : undefined;
   const squadEditOf = (row: SquadRow) => squadEdits[row.name] ?? initialSquadEdit(row);
 
-  // 어느 `members`에도 없는 페르소나만 `스쿼드 없음` 묶음에 선다(§비주얼 §61 (17) — `rows` 순서
-  // 그대로, 새 정렬 0). 스쿼드가 0개면 이 집합을 안 쓴다 — 그때는 아래에서 `rows`가 평평하게 선다.
+  // 어느 `members`에도 없는 페르소나만 `스쿼드 없음` 묶음에 뜬다(§비주얼 §61 (17) — `rows` 순서
+  // 그대로, 새 정렬 0). 스쿼드가 0개면 이 집합을 안 쓴다 — 그때는 아래에서 `rows`가 평평하게 뜬다.
   const assignedNames = new Set(squads.flatMap((squad) => squad.members.map((m) => m.name)));
   const unassigned = rows.filter((row) => !assignedNames.has(row.name));
 
   /** 페르소나 줄 — 값 일곱은 무수정이다(§비주얼 §61 (17) §자식 줄). 스쿼드가 0개면 종전대로
-   *  `p-2`(`indent=false`)로 평평하게 서고, 스쿼드나 `스쿼드 없음`의 자식이면 `pl-11`(`indent=true`,
+   *  `p-2`(`indent=false`)로 평평하게 뜨고, 스쿼드나 `스쿼드 없음`의 자식이면 `pl-11`(`indent=true`,
    *  한 칸 12px)이 붙는다 — 그 밖의 값·조립은 두 자리가 완전히 같다. */
   const renderPersonaRow = (row: PersonaRow, indent: boolean) => {
     const e = editOf(row);
@@ -668,7 +668,7 @@ export function PersonasPane({
           aria-current={active ? "true" : undefined}
           onClick={() => select(row.name)}
         >
-          {/* 값이 여덟이고 칸이 좁다 — 이름 줄과 메타 줄로 세운다(§5). 값을 빼지 않는다.
+          {/* 값이 여덟이고 칸이 좁다 — 이름 줄과 메타 줄로 만든다(§5). 값을 빼지 않는다.
               글자는 밑선이고(§5 정렬 표) 껍데기(점 · 배지 2종)는 행의 세로 중앙이다.
               **`span`이 아니라 `div`다** — 부품의 `[&>span:last-child]:truncate`가
               직계 `span`을 물어서, 이 묶음이 `span`이면 두 줄짜리 상자에 `truncate`가
@@ -709,7 +709,7 @@ export function PersonasPane({
                 </span>
               )}
               {/* `메모리 n` 뒤 · `자수` 앞이다(§5-4 §화면) — 앞의 셋이 *무엇이 실리나*고
-                  이건 정책값이라 실리는 것들 뒤에 선다. **파일이 없으면 아무것도 안
+                  이건 정책값이라 실리는 것들 뒤에 뜬다. **파일이 없으면 아무것도 안
                   그린다**: 빈 값이 기본이라 `상한 없음`을 쓸 자리가 아니다.
                   **`상한 n / 지금 m`을 안 그린다** — 지금 도는 수는 보드가 준다(§5-4) */}
               {e.limit !== null && (
@@ -740,7 +740,7 @@ export function PersonasPane({
     const dirty = squadDirty(squadEditOf(squad), rows);
     const expanded = collapsible && expandedSquads.has(squad.name);
     const childrenId = `squad-members-${squad.name}`;
-    // `rows`에 없는 멤버 이름은 줄을 안 세운다(§비주얼 §61 (17) §자식 줄).
+    // `rows`에 없는 멤버 이름은 줄을 안 만든다(§비주얼 §61 (17) §자식 줄).
     const memberRows = squad.members
       .map((m) => rows.find((r) => r.name === m.name))
       .filter((r): r is PersonaRow => r !== undefined);
@@ -816,9 +816,9 @@ export function PersonasPane({
       {/* 왼쪽 목록 — 줄 자체가 선택을 받는다. **안에 버튼이 없다**(§5): 색·삭제가 오른쪽 머리로
           갔으므로 버튼 안의 버튼도 `preventDefault` 처방도 없다.
           **그릇이 `nav` + `button` 목록에서 shadcn `sidebar`로 갈렸다**(요구 `14529463` ·
-          §비주얼 §34 판정표 `페르소나 목록` 행). **랜드마크를 안 세운다** — 줄이 링크가 아니라
+          §비주얼 §34 판정표 `페르소나 목록` 행). **랜드마크를 안 만든다** — 줄이 링크가 아니라
           버튼이라 내비가 아니다. 이름은 아래 `SidebarMenu`(ul)의 `aria-label`이 든다.
-          **면이 선다**(§34 ④ — 이 자리는 종전에 면도 테두리도 없었다). 면을 내는 것은
+          **면이 뜬다**(§34 ④ — 이 자리는 종전에 면도 테두리도 없었다). 면을 내는 것은
           `bg-surface`이고 부품 기본 `bg-sidebar`를 덮는다(§34 ②): 그 토큰은 라이트에서
           `--surface`와 **같은 값**이지만 다크에서 `--card`(0.205)라, 그대로 두면 카드 대 면이
           1.00이 되고 칸반 레인(0.18)과 갈려 층이 셋이라는 §33의 계약이 화면마다 깨진다.
@@ -827,7 +827,7 @@ export function PersonasPane({
       <Sidebar collapsible="none" className="w-full shrink-0 rounded-lg border bg-surface lg:w-80">
         {/* 모아보기 — 좌측 목록 면 안, 목록 위 첫 정거장(§5-5 §개정 - 모아보기 토글 §자리).
             `SidebarContent`가 스크롤을 들어서(부품 기본 `overflow-auto`) 이 헤더는 목록과 같이
-            안 구른다. **스쿼드 0개면 아예 안 세운다** — 두 상태가 한 픽셀도 안 갈리는 스위치는
+            안 구른다. **스쿼드 0개면 아예 안 만든다** — 두 상태가 한 픽셀도 안 갈리는 스위치는
             소음이다(계약 §스위치 §스쿼드 0개). 부품 기본 `flex flex-col gap-2 p-2` 그대로 —
             새 눈금 0. */}
         {squads.length > 0 && (
@@ -856,7 +856,7 @@ export function PersonasPane({
         <SidebarContent className="gap-4 py-2">
           {squads.length === 0 ? (
             <SidebarGroup className="p-0">
-              {/* 스쿼드가 0개면 묶음 머리가 0개고 페르소나가 종전 `p-2`로 평평하게 선다 —
+              {/* 스쿼드가 0개면 묶음 머리가 0개고 페르소나가 종전 `p-2`로 평평하게 뜬다 —
                   종전 화면과 마크업 diff 0줄(§비주얼 §61 (17) §스쿼드가 0개면) */}
               <SidebarMenu aria-label={t("shell.nav.personas")} className="gap-0.5">
                 {rows.map((row) => renderPersonaRow(row, false))}
@@ -872,9 +872,9 @@ export function PersonasPane({
             </SidebarGroup>
           ) : (
             // 끈 상태 — 묶음 둘, 이 순서(요구가 부른 순서). `페르소나` 묶음은 전원이다 — 스쿼드에
-            // 든 이름도 여기 한 줄로 선다(계약 §안 하는 것). 묶음 머리는 둘 다 값이 있을 때만
-            // 선다(§5-5 §개정 §값 표 - (2) §그룹 머리와 같은 판정) — `rows`가 0개면 스쿼드 묶음도
-            // 머리 없이 선다.
+            // 든 이름도 여기 한 줄로 뜬다(계약 §안 하는 것). 묶음 머리는 둘 다 값이 있을 때만
+            // 뜬다(§5-5 §개정 §값 표 - (2) §그룹 머리와 같은 판정) — `rows`가 0개면 스쿼드 묶음도
+            // 머리 없이 뜬다.
             <>
               <SidebarGroup className="p-0">
                 {rows.length > 0 && (
@@ -899,7 +899,7 @@ export function PersonasPane({
             </>
           )}
 
-          {/* `스쿼드 없음` — 어느 `members`에도 없는 페르소나만 목록 맨 아래에 선다. 안 접힌다 —
+          {/* `스쿼드 없음` — 어느 `members`에도 없는 페르소나만 목록 맨 아래에 뜬다. 안 접힌다 —
               스쿼드가 아니고, 접으면 어디에도 안 든 페르소나가 화면에서 사라진다(§비주얼 §61 (17)).
               `미배정`을 안 쓴다 — §12의 빈 점 `미할당`과 한 글자 차이라 §0-9(한 값에 한 낱말)의
               반대쪽이 된다. 끈 상태에는 이 묶음이 없다(§5-5 §개정 §값 표) — `페르소나` 묶음이
@@ -931,7 +931,7 @@ export function PersonasPane({
             onSelect={select}
           />
         ) : current === undefined ? (
-          // **404가 아니다** — 왼쪽 목록은 계속 선다(§5). 그릇은 §6 프로토콜의 `?core=` 거부와
+          // **404가 아니다** — 왼쪽 목록은 계속 뜬다(§5). 그릇은 §6 프로토콜의 `?core=` 거부와
           // 같은 것 그대로다: 새 컴포넌트도 새 문구도 0이다.
           <Alert variant="destructive">
             <TriangleAlert aria-hidden />
@@ -1044,7 +1044,7 @@ function PersonaDetail({
     [],
   );
 
-  // 1행 역할 자리(§비주얼 §66 ②) — `body === null`이면 `프로필 없음` 배지가 대신 선다.
+  // 1행 역할 자리(§비주얼 §66 ②) — `body === null`이면 `프로필 없음` 배지가 대신 뜬다.
   const roleFirstLine = row.body !== null ? profileTitle(row.body) : null;
   // 2행 첫 값(§비주얼 §66 ③) — 상한이 없으면 `/ 상한 m`을 안 붙인다(§5-4).
   const runningLabel = `${t("persona.head.runningSessionsPrefix")} ${row.refs.wip}`;
@@ -1136,7 +1136,7 @@ function PersonaDetail({
 
         <TabsContent value="activity" className="space-y-3">
           {/* 30일 - 지금 - 기다리는 것 - 최근 (§5-6 §활동 탭 §개정, 요구 `cd96f485`) — `최근`
-              20줄이 그래프를 스크롤 밖으로 밀던 것을 요약을 먼저 세우는 순서로 뒤집는다 */}
+              20줄이 그래프를 스크롤 밖으로 밀던 것을 요약을 먼저 그리는 순서로 뒤집는다 */}
           <ActivityThirtyDaySection thirtyDay={row.activity.thirtyDay} />
           <ActivityNowSection projectId={projectId} items={row.activity.now} nowMs={nowMs} />
           {row.activity.waiting.length > 0 && (
@@ -1153,7 +1153,7 @@ function PersonaDetail({
         <TabsContent value="profile" className="space-y-3">
           {/* §비주얼 §44 ① — 정책값 둘(상한·엔진)은 신원(머리)도 프롬프트 3절(PROFILE·스킬·메모리)도
               아니라 그 사이에 낀 절 하나다. 프롬프트 3절은 디스패치에 실리는 순서를 그대로 보이는데
-              정책값은 한 바이트도 안 실려서, 그 연속 **앞**에 선다(뒤에 두면 textarea 16행 아래로
+              정책값은 한 바이트도 안 실려서, 그 연속 **앞**에 뜬다(뒤에 두면 textarea 16행 아래로
               내려가 스크롤 없이 안 보인다) */}
           <DispatchPolicySection
             projectId={projectId}
@@ -1232,7 +1232,7 @@ function PersonaDetail({
 // ── 활동 탭 절 넷 (DESIGN.md §5-6 §활동 탭 · §비주얼 §66, 값은 4ea1147a) ────────────
 
 /** 절 셋(`지금`·`기다리는 것`·`최근`)이 공유하는 한 줄 그릇(§비주얼 §66 ⑦) — 해시와 제목만
- *  한 `<Link>`로 감싼다(§31 갈래 A2, `hover:underline` 하나로 말한다 — 해시 자신은 밑줄이
+ *  한 `<Link>`로 감싼다(§31 갈래 A2, `hover:underline` 하나로 알려 준다 — 해시 자신은 밑줄이
  *  없다). 나머지 값은 형제 `<span>`이다. */
 function ActivityRow({
   projectId,
@@ -1368,7 +1368,7 @@ function ActivityRecentSection({
             {item.durationMin !== null && (
               <span className="shrink-0 font-mono">{Math.round(item.durationMin)}m</span>
             )}
-            {/* 1회 이상일 때만 선다(§5-6) — `0회`도 자리를 안 먹는다 */}
+            {/* 1회 이상일 때만 뜬다(§5-6) — `0회`도 자리를 안 먹는다 */}
             {item.reassigns !== null && item.reassigns >= 1 && (
               <span className="shrink-0">
                 {t("persona.activity.reassignLabel")} {item.reassigns}
@@ -1383,7 +1383,7 @@ function ActivityRecentSection({
   );
 }
 
-/** §5-6 (4) `30일` — 숫자 넷 한 줄 + 막대(§비주얼 §66 ⑩). 절은 항상 서고 값이 0이어도 그대로
+/** §5-6 (4) `30일` — 숫자 넷 한 줄 + 막대(§비주얼 §66 ⑩). 절은 항상 뜨고 값이 0이어도 그대로
  *  그린다(§비주얼 §66 ⑨) — `소요 중앙값`만 로그 창 밖(`null`)이면 자리를 비운다. */
 function ActivityThirtyDaySection({ thirtyDay }: { thirtyDay: PersonaThirtyDay }) {
   const t = useT();
@@ -1431,7 +1431,7 @@ function ActivityThirtyDaySection({ thirtyDay }: { thirtyDay: PersonaThirtyDay }
 
 // ── 스쿼드 상세 (DESIGN.md §5-5 §화면) ───────────────────────────────────────
 
-/** 오른쪽 칸 — 스쿼드일 때는 `멤버` 절 하나 + `삭제`만 선다. textarea도 `디스패치 정책`도
+/** 오른쪽 칸 — 스쿼드일 때는 `멤버` 절 하나 + `삭제`만 뜬다. textarea도 `디스패치 정책`도
  *  스킬·메모리 절도 없다(§5-5 §화면 표) — 스쿼드는 프로필을 든 신원이 아니라 후보 풀이다.
  *  머리에 색 점이 없는 이유도 같다: 색은 페르소나의 신원 표식이다(§12). */
 function SquadDetail({
@@ -1524,7 +1524,7 @@ function SquadDetail({
       let nextPicked = prevName ? edit.picked.filter((n) => n !== prevName) : edit.picked;
       if (nextName && !nextPicked.includes(nextName)) nextPicked = [...nextPicked, nextName];
       onEdit({ ...edit, picked: nextPicked, leader: nextName, leaderCleared: nextName === null });
-      // 교체는 두 문장이 한 줄에 한 번에 선다(§비주얼 §61 (21) §라이브 리전).
+      // 교체는 두 문장이 한 줄에 한 번에 뜬다(§비주얼 §61 (21) §라이브 리전).
       setAnnounce(
         [
           prevName ? wrap(prevName, t("persona.squad.announceRemoved"), "") : "",
@@ -1705,7 +1705,7 @@ function SquadDetail({
         ) : (
           <>
             {/* 리더 묶음 — 카드 0장 또는 1장(§비주얼 §61 (21) §값). 낱말 `리더`가 묶음 머리로
-                서고 카드에 배지가 없다 — 그 아래에 카드가 서는 것이 곧 리더라는 사실이다.
+                뜨고 카드에 배지가 없다 — 그 아래에 카드가 뜨는 것이 곧 리더라는 사실이다.
                 `border-b pb-1`은 §비주얼 §61 (22) §경계 — 묶음 머리가 자기 그릇의 뚜껑이 된다. */}
             <div className="space-y-1">
               <p className="flex items-center gap-2 border-b pb-1 text-xs font-medium">
@@ -1783,7 +1783,7 @@ function SquadDetail({
       </section>
 
       {/* 교체 · 리더 카드의 `제거` confirm 한 벌(§비주얼 §61 (22) §confirm) — 리더 절이 차
-          있으면 언제나 선다. 문장 셋 중 가운데(역할 손실)만 역할 칸에 글자가 있을 때 선다.
+          있으면 언제나 뜬다. 문장 셋 중 가운데(역할 손실)만 역할 칸에 글자가 있을 때 뜬다.
           취소하면 아무 것도 안 갈리고 `저장 안 됨`도 안 켜진다. */}
       <AlertDialog open={leaderConfirm !== null} onOpenChange={(o) => !o && setLeaderConfirm(null)}>
         <AlertDialogContent>
@@ -1820,7 +1820,7 @@ function SquadDetail({
 
 /** 절 머리의 `추가` — `Popover`+`Command`, board-ui.tsx `FilterPopover`·(21) 위 skill 설치
  *  다이얼로그와 같은 관용구다(§비주얼 §61 (21) §닫힌 목록). `primaryGroup`이 있고 비지 않은
- *  경우에만 두 묶음(구분선 하나)이 서고, 아니면 `secondaryGroup`만 든 평평한 목록이다 — 항상
+ *  경우에만 두 묶음(구분선 하나)이 뜨고, 아니면 `secondaryGroup`만 든 평평한 목록이다 — 항상
  *  켜진 머리는 한 줄을 먹고 아무것도 안 가른다(§25 ③이 같은 자리에서 낸 판정 그대로). */
 function SquadAddButton({
   triggerId,
@@ -2008,7 +2008,7 @@ const DispatchPolicySection = memo(function DispatchPolicySection({
  *  (= 상한 없음), 판정은 서버가 한다(`type="number"`는 힌트일 뿐).
  *
  *  초안이 이 컴포넌트의 지역 상태인 것은 종전과 같다 — 다른 줄을 고르면 `PersonaDetail`이
- *  `key`로 다시 서서 파일의 값으로 돌아간다. 팝오버를 닫는 것(`Esc`·바깥 클릭)이 곧 취소다 —
+ *  `key`로 다시 떠서 파일의 값으로 돌아간다. 팝오버를 닫는 것(`Esc`·바깥 클릭)이 곧 취소다 —
  *  `취소` 버튼을 따로 두지 않는다(§44 ③ 닫기 행). */
 function LimitField({
   projectId,
@@ -2152,7 +2152,7 @@ function EngineFields({
   // 고른 엔진에 **없는** 기능들(§4-3 · §23 ⑤ 예고 줄). 판정도 이름도 `lib/urls.ts` 한 자리다.
   const missing = engineMissing(value.engine, locale);
   // 빈 칸은 아직 거절이 아니다 — `직접 입력…`을 고르자마자 빨간 줄이 뜨면 사람이 무엇을
-  // 잘못했는지 모른다. 못 만든다는 사실은 부르는 쪽의 1차 버튼이 말한다(`enginePickOk`).
+  // 잘못했는지 모른다. 못 만든다는 사실은 부르는 쪽의 1차 버튼이 알려 준다(`enginePickOk`).
   const bad = !!value.custom && value.model !== "" && !new RegExp(modelPattern).test(value.model);
   const hintId = `${idPrefix}-model-hint`;
   return (
@@ -2500,7 +2500,7 @@ const SkillsSection = memo(function SkillsSection({
     <section className="space-y-2 border-t pt-3">
       <div className="flex items-baseline gap-2">
         <h3 className="text-sm font-medium">{t("persona.word.skills")}</h3>
-        {/* 0개일 때 `0 B`는 참이지만 아무것도 안 말한다 — 바로 아래 한 줄이 이미 말했다.
+        {/* 0개일 때 `0 B`는 참이지만 아무것도 안 알려 준다 — 바로 아래 한 줄이 이미 적었다.
             상한이 없다 — `editBytes`의 합계 일부일 뿐이라 여기서 발명하지 않는다(결정 11 (3)) */}
         {skills.length > 0 && (
           <span className="text-xs text-muted-foreground">{budgetLabel(chars)}</span>
@@ -2548,7 +2548,7 @@ const SkillsSection = memo(function SkillsSection({
         </>
       )}
 
-      {/* 비활성 목록 — 활성 1개 이상일 때만 서는 것이 아니라 **비활성이 1개 이상일 때만** 선다
+      {/* 비활성 목록 — 활성 1개 이상일 때만 뜨는 것이 아니라 **비활성이 1개 이상일 때만** 뜬다
           (§비주얼 §25 ⑥). 0개면 머리도 목록도 안 그린다 */}
       {offSkills.length > 0 && (
         <>
@@ -2644,7 +2644,7 @@ const MemorySection = memo(function MemorySection({
     <section className="space-y-2 border-t pt-3">
       <div className="flex items-baseline gap-2">
         <h3 className="text-sm font-medium">{t("persona.word.memory")}</h3>
-        {/* 0장일 때 `0 B`는 참이지만 아무것도 안 말한다(§25 ②와 같은 판정). 자기 예산
+        {/* 0장일 때 `0 B`는 참이지만 아무것도 안 알려 준다(§25 ②와 같은 판정). 자기 예산
             (`MEMORY_MAX_BYTES` = `AGENTS.md` §회고 예산)과 비교된다 — 프로필+스킬 합과는
             별개다(§프롬프트 층 결정 11 (4)) */}
         {memories.length > 0 && (
@@ -2656,7 +2656,7 @@ const MemorySection = memo(function MemorySection({
 
       {memories.length === 0 ? (
         // 스킬 절의 빈 상태와 방향이 다르다 — 여기는 다음 행동이 사람에게 없어서 이 한 줄이
-        // **누가 채우는가**를 말한다. 없으면 버튼 없는 빈 절이 고장으로 읽힌다(§32 ②)
+        // **누가 채우는가**를 알려 준다. 없으면 버튼 없는 빈 절이 고장으로 읽힌다(§32 ②)
         <p className="text-xs text-muted-foreground">{t("persona.memory.empty")}</p>
       ) : (
         <ul ref={listRef} onClick={openWikilink} className="space-y-1">
@@ -2677,7 +2677,7 @@ const MemorySection = memo(function MemorySection({
                       `.md`를 떼는 것은 계약이다(§5-2). 확장자가 붙는 자리는 삭제 확인 하나다 */}
                   <code className="shrink-0 font-mono text-xs">{m.file.replace(/\.md$/, "")}</code>
                   {/* `title`을 안 붙인다 — 전문을 보는 자리가 이 줄을 누르는 것이다(§32 ③).
-                      발췌가 비는 파일(빈 파일·공백뿐)도 파일명으로 목록에 선다(§5-2) */}
+                      발췌가 비는 파일(빈 파일·공백뿐)도 파일명으로 목록에 뜬다(§5-2) */}
                   <span className="min-w-0 grow truncate text-xs text-muted-foreground">
                     {m.excerpt}
                   </span>
@@ -2834,7 +2834,7 @@ function AddSkillsDialog({
   const [query, setQuery] = useState("");
   const [picked, setPicked] = useState<string[]>([]);
   // `저장` 실패와 import 실패가 그릇 하나를 나눠 쓴다(§비주얼 §25 ⑤ — 마지막에 누른 것 하나만
-  // 선다). title·message가 각각 `AlertTitle`(sans)·`AlertDescription`(mono)이다.
+  // 뜬다). title·message가 각각 `AlertTitle`(sans)·`AlertDescription`(mono)이다.
   const [failure, setFailure] = useState<{ title: string; message: string } | null>(null);
   const [pending, start] = useTransition();
   // 입구가 파일 하나 - 주소 하나로 갈리면서 "무엇이 도나"가 다시 값을 갖는다(§비주얼 §25 ⑦) —
@@ -3158,7 +3158,7 @@ function AddSkillsDialog({
         </form>
 
         {/* 실패하면 다이얼로그가 열린 채로 남고 체크도 남는다 — 사유를 읽고 다시 누른다.
-            `저장` 실패와 import 실패가 이 그릇 하나를 나눠 쓴다(마지막에 누른 것 하나만 선다) */}
+            `저장` 실패와 import 실패가 이 그릇 하나를 나눠 쓴다(마지막에 누른 것 하나만 뜬다) */}
         {failure && <Failure title={failure.title} message={failure.message} />}
         <DialogFooter>
           <DialogClose render={<Button variant="outline" />}>{t("common.cancel")}</DialogClose>

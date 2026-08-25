@@ -119,7 +119,7 @@ export default async function ProjectLayout({
   // idle 워커 풀의 값(§1-2 · §비주얼 §38). 필터도 검색도 이 값을 안 좁힌다 — 셸이 그리므로
   // 구조적으로 못 좁힌다. `idle`이 0개면 값 자리에 문장이 온다(§38 §문구 둘). `전원 running`은
   // `running`이 하나라도 있을 때만 참이다 — `crontab -l`이 실패하면 전원 `stopped`가 되고
-  // 그때는 아는 것만 말한다(`없음`).
+  // 그때는 아는 것만 알려 준다(`없음`).
   const idle = current.groups.find((g) => g.status === "idle");
   const idlePool =
     idle?.names.join(" ") ??
@@ -294,7 +294,7 @@ export default async function ProjectLayout({
                 요구는 워커 화면에서 세션이 죽는 걸 보다가, 티켓 상세를 읽다가 생긴다 —
                 보드로 한 번 이동하게 하면 그 이동이 요구를 삼킨다. 보드에도 이 컴포넌트가
                 있지만 그쪽은 버튼이고 키를 안 듣는다(§0-4 `SettingsDialog`과 같은 모양).
-                **`connected`일 때만 선다**: 못 읽는 큐에는 접수해도 파일을 못 쓰는데,
+                **`connected`일 때만 뜬다**: 못 읽는 큐에는 접수해도 파일을 못 쓰는데,
                 열리고 나서 실패 사유를 보여 주면 사람이 글을 다 쓴 뒤에 잃는다(§3). */}
             <RequestDialog project={id} trigger="hotkey" vault={vault} />
             {children}
@@ -332,7 +332,7 @@ export default async function ProjectLayout({
           고정한 그것이다. 세 단계(`lg` 속도 · `md` 리셋 · `sm` 게이지)를 다 거치고도 넘치면
           `ml-auto` idle 풀이 먼저 0폭이 되고 그다음 넘친 칸이 `overflow-hidden`으로 잘린다.
           // ponytail: 엔진 2개는 어느 폭에서도 안 넘친다. 3개는 360–439 · 640–751 · 768–963 ·
-          // 1024–1202에서 넘치고 1203px부터 다 선다 — 오늘 이 큐의 엔진은 1개다.
+          // 1024–1202에서 넘치고 1203px부터 다 뜬다 — 오늘 이 큐의 엔진은 1개다.
           // 3개가 실재하면 그때 넷째 단계를 본다. */}
       {current.groups.length > 0 && (
         <footer className="flex h-7 shrink-0 items-center gap-6 overflow-hidden border-t bg-background px-6">
@@ -351,7 +351,7 @@ export default async function ProjectLayout({
               **그릇을 안 갖는다**: 이 바에 그릇이 하나도 없어서 얹으면 유일하게 누를 것처럼
               보인다. 주어가 머신(엔진 한도)에서 프로젝트(이 큐의 워커)로 바뀌는 것은 넓은 폭에선
               빈칸이, 좁은 폭에선 앞머리 `Clock`이 긋는다 — `·`는 엔진 칸의 절 구분자라 안 쓴다.
-              `Suspense` 밖이라 껍데기와 같이 즉시 선다(값이 이미 손에 있다 — §38 §다섯 상태 로딩).
+              `Suspense` 밖이라 껍데기와 같이 즉시 뜬다(값이 이미 손에 있다 — §38 §다섯 상태 로딩).
               묶는 컴포넌트를 안 만든다 — `// ponytail: 두 번째 자리가 생기면 그때 묶는다` */}
           <div className="ml-auto flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
             <Clock aria-hidden className="size-3 shrink-0" />
@@ -364,7 +364,7 @@ export default async function ProjectLayout({
             </span>
             {/* 자른다 — 이 바는 `h-7` + `overflow-hidden`이라 감기면 **세로로** 잘려 라벨까지
                 사라진다(§1-2 §자르기 개정). `truncate`는 값 `<span>`에만 걸고(풀에 걸면 `…`가
-                안 선다) 부모의 `min-w-0`이 그것을 실제로 걸리게 한다. `max-w-*`는 없다 —
+                안 뜬다) 부모의 `min-w-0`이 그것을 실제로 걸리게 한다. `max-w-*`는 없다 —
                 바의 마지막 요소라 뒤에 밀 것이 없고, 상한을 얹으면 넓은 화면에서 이유 없이 자른다 */}
             <span className="truncate font-mono" title={idlePool}>
               {idlePool}
@@ -380,7 +380,7 @@ export default async function ProjectLayout({
  *
  *  항목 하나가 배너 하나를 대신한다 — 해부(아이콘 열 16px + `gap-x-2`)는 `Alert`의 것 그대로고
  *  그릇만 `div`다. `Alert`로 감싸지 않는 이유: `--popover`가 `--card`와 같은 값이라 같은 색
- *  상자 안에 같은 색 상자가 여섯 서고, 사람이 치우라고 한 사각형 더미가 팝오버 안으로 이사한다.
+ *  상자 안에 같은 색 상자가 여섯 뜨고, 사람이 치우라고 한 사각형 더미가 팝오버 안으로 이사한다.
  *  **꺼진 알림은 항목이 아예 없다** — 회색으로 눕히지 않는다. */
 function NotificationItems({
   id,
@@ -559,7 +559,7 @@ function NotificationItems({
         <p className="col-start-2 text-sm text-foreground">{t(locale, "bell.assigned.body")}</p>
         <div className="col-start-2 grid gap-2">
           {assigned.map((t) => (
-            // 한 행이 두 줄이고 그 사이는 `gap-1`이다 — 붙은 두 줄이 한 티켓임을 간격이 말한다.
+            // 한 행이 두 줄이고 그 사이는 `gap-1`이다 — 붙은 두 줄이 한 티켓임을 간격이 알려 준다.
             <div key={t.stem} className="grid gap-1">
               <span className="flex items-center gap-1">
                 {/* 링크는 stem이다 — 상태가 바뀌어도 URL이 안 변한다(§식별자) */}
@@ -576,7 +576,7 @@ function NotificationItems({
                   TS로 다시 구현하지 않는다). 성공 `Alert`·실패 `<Failure>`도 그 안에 이미 있고
                   이 행 아래 그대로 뜬다. 버튼이 행 오른쪽 끝이 아닌 이유는 §비주얼 §4-3 예외 2다
                   (조작 대상은 바로 윗줄의 해시다).
-                  **`ghost={false}`**: 켜면 행마다 세 줄짜리 문단이 하나 더 서는데 그 말을 위
+                  **`ghost={false}`**: 켜면 행마다 세 줄짜리 문단이 하나 더 뜨는데 그 말을 위
                   본문이 항목 머리에서 이미 하고, 쓰는 낱말이 `select`·`reap`이다(§비주얼 §28 ⑤).
                   `hash`에 stem을 넘긴다 — 엔진 인자는 파일명이다(AGENTS.md §식별자) */}
               <UnassignButton
@@ -628,7 +628,7 @@ function NotificationItems({
                   진입점이 둘이 된다(§0-10 ④). 그래서 그 폼이 이미 있는 자리로 보낸다.
                   자리는 행의 오른쪽 끝(`ml-auto`)이다 — ③의 버튼이 왼쪽인 근거(조작 대상이
                   윗줄에 있다 · 회색 문구를 데려온다)가 여기엔 둘 다 없고, 배지 폭이 경과일
-                  자릿수로 갈려서 이어 붙이면 링크가 행마다 다른 x에 선다(§비주얼 §28 ④).
+                  자릿수로 갈려서 이어 붙이면 링크가 행마다 다른 x에 뜬다(§비주얼 §28 ④).
                   모양은 ①의 CTA와 같은 벌이다(`text-sm underline`) */}
               <Link
                 href={`/p/${id}/tickets/${encodeURIComponent(a.stem)}`}
@@ -803,7 +803,7 @@ async function EngineCells({
           limit={limits[e]}
           // **키가 없는 엔진은 이 항목이 통째로 빠진다**(오늘 codex — `~/.claude/projects/`는
           // claude가 쓰는 파일이다). 창 안에 세션이 없어서 나온 진짜 `0`은 키가 있는 `0`이라
-          // `0 토큰/분`으로 선다. `undefined`와 `0`이 그 둘을 가른다(§0-8 판정 4)
+          // `0 토큰/분`으로 뜬다. `undefined`와 `0`이 그 둘을 가른다(§0-8 판정 4)
           rate={rates[e]}
           // 그 엔진을 무는 워커들의 합이다. 키는 로그 파일명에서 온 **실효 `TICKET_NAME`**이고
           // NFC로 맞추는 것은 `parseLogName`이 readdir의 NFD를 정규화하기 때문이다(워커 화면과 같다).
@@ -893,7 +893,7 @@ function EngineCell({
               `사용` 두 글자가 이 `%`의 단위다 — 없으면 쓴 쪽인지 남은 쪽인지 화면만 봐서 못 가른다.
               `tabular-nums`가 없으면 폴링마다 자릿수 폭이 흔들려 옆 칸이 밀린다.
               창 이름(`5시간`·`7일`)은 새 슬롯이 아니라 이 `%`와 같은 span이다(§0-8 §묶는 창) —
-              `· 토큰/분`처럼 자기 `lg:inline`을 갖지 않고 `%`와 함께 서고 함께 빠진다. */}
+              `· 토큰/분`처럼 자기 `lg:inline`을 갖지 않고 `%`와 함께 뜨고 함께 빠진다. */}
           <span className={cn("text-xs whitespace-nowrap tabular-nums", over && "text-status-stale")}>
             {Math.round(value.usedPercent)}% {t(locale, "statusbar.usage.suffix")}
             {value.window && ` · ${value.window}`}
@@ -912,12 +912,12 @@ function EngineCell({
       {limit && "error" in limit && (
         <>
           {/* 게이지를 안 그린다 — 빈 트랙도 `0%`도 회색 막대도 없다(§0-8 판정 2). 그 자리에
-              판정 1의 소비량이 선다. `1.2M`으로 줄이지 않는다: 여기가 이 바의 유일한 절대 수다 */}
+              판정 1의 소비량이 뜬다. `1.2M`으로 줄이지 않는다: 여기가 이 바의 유일한 절대 수다 */}
           <span className="text-xs whitespace-nowrap tabular-nums">
             {tokens.toLocaleString()} {t(locale, "statusbar.tokens.suffix")}
           </span>
-          {/* 이 칸에만 절대 수 둘이 나란히 선다(창 5시간 누적 · 창 10분 속도). 같은 사실이
-              아니라는 것을 **단위 · 잉크 · `title`** 셋이 말한다(§26 ⑤) — 안 갈라 두면
+          {/* 이 칸에만 절대 수 둘이 나란히 뜬다(창 5시간 누적 · 창 10분 속도). 같은 사실이
+              아니라는 것을 **단위 · 잉크 · `title`** 셋이 알려 준다(§26 ⑤) — 안 갈라 두면
               "120만 중 250만" 같은 없는 관계로 읽힌다. 좁아져도 사유는 안 뺀다 */}
           {rateSlot}
           {/* 색도 아이콘도 안 쓴다 — 실패지 부재가 아니다(§0-8 §재개정 (5) — claude도 이제

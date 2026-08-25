@@ -27,7 +27,7 @@ const sortEpics = (epics: Epic[]): Epic[] =>
  *  건수는 `queue.ts`의 기존 `state` 판정을 그대로 쓴다 — 새 상태 판정을 안 만든다.
  *  워커 집합도 **같은 루프**에서 같이 낸다 — 새 읽기·새 폴링·새 상태 0(§에픽 결정 9).
  *
- *  디렉터리는 안 본다 — 스윔레인(`?lane=epic`)이 이 함수를 쓴다. 티켓 0건 에픽에 빈 띠를 세우지
+ *  디렉터리는 안 본다 — 스윔레인(`?lane=epic`)이 이 함수를 쓴다. 티켓 0건 에픽에 빈 띠를 만들지
  *  않는 것이 결정 7·17의 계약이라, 여기서 `epics/`를 합치면 그 계약이 깨진다. 사이드바가 원하는
  *  "빈 에픽도 뜬다"는 아래 `listEpics`가 이 함수 위에 얹는다. */
 export function epicsFromTickets(tickets: Ticket[]): Epic[] {
@@ -58,7 +58,7 @@ export function epicsFromTickets(tickets: Ticket[]): Epic[] {
 
 /** 사이드바·에픽 화면이 쓰는 목록(§에픽 결정 17) — `epicsFromTickets` 위에 큐 `epics/` 한 단계를
  *  합집합으로 얹는다. 티켓 0건이라 `epicsFromTickets`에 안 잡히는 키(방금 만든 에픽)도 `counts`
- *  전부 0·`workers` 빈 목록으로 목록에 선다. 디렉터리가 아예 없으면(`epics/`) 빈 목록 — 정상,
+ *  전부 0·`workers` 빈 목록으로 목록에 뜬다. 디렉터리가 아예 없으면(`epics/`) 빈 목록 — 정상,
  *  경고 없다(결정 2). */
 export async function listEpics(root: string, tickets: Ticket[]): Promise<Epic[]> {
   const epics = epicsFromTickets(tickets);

@@ -131,7 +131,7 @@ test("screenOf — 표에 없는 경로는 `null`이라 아무것도 안 보낸�
 test("페르소나 이름이 경로에 붙어도 같은 화면이다(§5 ①②)", () => {
   assert.equal(screenOf("/p/a/personas/designer"), "personas"); // 이름은 값에 안 남는다(§0-11)
   assert.equal(screenOf("/p/a/personas"), "personas"); // 세그먼트 없는 정본 URL도 종전대로
-  assert.equal(hasFindBar("/p/a/personas/designer"), true); // ①을 고치면 저절로 선다 — N5
+  assert.equal(hasFindBar("/p/a/personas/designer"), true); // ①을 고치면 저절로 뜬다 — N5
   assert.equal(parentPath("/p/a/personas/designer"), "/p/a"); // 안 고쳤다. 정규식이 이미 문다
 });
 
@@ -142,10 +142,10 @@ test("projectPath — 페르소나 이름은 옮겨 붙이지 않는다(§5 ④)
   assert.equal(projectPath("/p/a/personas", "b"), "/p/b/personas"); // 종전 그대로
 });
 
-/** N5의 찾기 바가 서는 자리 (DESIGN.md §데스크톱 앱 N5 표 1행). **보드·홈에서 서면 `⌘F`가
+/** N5의 찾기 바가 뜨는 자리 (DESIGN.md §데스크톱 앱 N5 표 1행). **보드·홈에서 뜨면 `⌘F`가
  *  두 벌이 된다** — 그 두 화면은 §0-6의 자기 갈래가 같은 키를 먹고 있어서 `preventDefault`가
  *  둘 다 걸리고 사람이 누른 키가 검색창 포커스와 이 바 열기를 동시에 한다. */
-test("hasFindBar — 보드·홈만 빼고 여섯 화면에 선다(§데스크톱 앱 N5)", () => {
+test("hasFindBar — 보드·홈만 빼고 여섯 화면에 뜬다(§데스크톱 앱 N5)", () => {
   assert.equal(hasFindBar("/p/dira"), false); // 보드 — `board-ui.tsx`가 먹는다
   assert.equal(hasFindBar("/p/dira/"), false); // 보드의 정본 URL과 같은 화면이다
   assert.equal(hasFindBar("/p/dira/home"), false); // 홈 — 자기 `<FindBar>`가 이미 있다(§7)
@@ -158,7 +158,7 @@ test("hasFindBar — 보드·홈만 빼고 여섯 화면에 선다(§데스크�
     "/p/dira/tickets/fff28e90",
   ])
     assert.equal(hasFindBar(p), true, p);
-  assert.equal(hasFindBar("/nosuchpage"), false); // 표 밖에는 안 선다(404)
+  assert.equal(hasFindBar("/nosuchpage"), false); // 표 밖에는 안 뜬다(404)
 });
 
 /** 칸반 호버 관계선 기하 (DESIGN.md §비주얼 §17). 레인이 하한 폭 288(`min-w-72`)까지
@@ -234,8 +234,8 @@ test("relationPath — 제어점의 y가 앵커의 y와 같다(선이 레인 머
 
 /** 기능 → 되는 엔진 집합 (DESIGN.md §4-3 개정 2026-08-05, 요구 `390f788b`).
  *
- *  **이게 틀리면 화면이 조용히 거짓말한다.** grok이 `=== "codex"`를 통과하지 못해 claude로
- *  읽히면 참견 form이 활성으로 서서 보낸 글이 아무 데도 안 가고, 반대로 스트림을 codex와 한
+ *  **이게 틀리면 화면이 조용히 거짓알려 준다.** grok이 `=== "codex"`를 통과하지 못해 claude로
+ *  읽히면 참견 form이 활성으로 떠서 보낸 글이 아무 데도 안 가고, 반대로 스트림을 codex와 한
  *  집합으로 묶으면 있는 트랜스크립트를 안 읽고 `없습니다`를 그린다. 어느 쪽도 에러가 안 난다 —
  *  그래서 여섯 자리가 이 함수 하나에 걸려 있고 검증도 여기 하나다. */
 test("engineCan — 기능마다 집합이 다르다. grok에서 둘이 갈린다(§4-3 표)", () => {
@@ -280,7 +280,7 @@ test("engineMissing — 없는 기능의 이름만, 표 순서대로(§비주얼
 
 /** 스트림 아래 입력 form의 모드 (DESIGN.md §비주얼 §21 `어느 폼을 그리나` 표 + 예외 둘).
  *  JSX 안에서 이 판정이 갈리면 완료 티켓에서 참견을 보내거나(닿을 곳이 없다) 열린 티켓에
- *  없어야 할 입구가 선다 — 그래서 판정만 순수 함수로 나와 있다. */
+ *  없어야 할 입구가 뜬다 — 그래서 판정만 순수 함수로 나와 있다. */
 const m = (o: Partial<Parameters<typeof interjectMode>[0]>) =>
   interjectMode({ polled: true, live: false, done: false, failed: false, ...o });
 
@@ -318,7 +318,7 @@ test("interjectMode — 답변 대기면 `answer`다(§2-3 ③ 표 2행)", () =>
 test("interjectMode — `.wip`에서 `answer`가 절대 안 나온다(제약 5)", () => {
   // 세 모드가 배타인 것은 이미 참이던 사실이지만(`awaiting`은 열린 티켓에만 걸린다),
   // 그 사실을 호출부가 아니라 **이 함수가 구조로** 지킨다. 둘이 같이 참인 값이 들어와도
-  // `.wip`에 답변칸이 서지 않는다 — 서면 `.wip`인 요구사항에 답이 달린다.
+  // `.wip`에 답변칸이 서지 않는다 — 뜨면 `.wip`인 요구사항에 답이 달린다.
   assert.equal(m({ live: true, awaiting: true }), "interject");
   assert.equal(m({ failed: true, awaiting: true }), "interject"); // 실패 잔해도 같다
   assert.equal(m({ done: true, awaiting: true }), "followup"); // `.done`은 종전대로 이긴다
@@ -339,17 +339,17 @@ test("mergeProgress ① — 사건만이면 준 순서 그대로다", () => {
     "2026-08-01T01:00:00Z",
     "2026-08-01T02:00:00Z",
   ]);
-  assert.deepEqual(mergeProgress([], []), []); // 절이 아예 안 서는 티켓
+  assert.deepEqual(mergeProgress([], []), []); // 절이 아예 안 뜨는 티켓
 });
 
 test("mergeProgress ② — 스레드만(세션 없음)이면 스레드가 그대로 나온다", () => {
   // 한 번도 디스패치된 적 없는 요구사항이다 — `session_id`가 없어 사건이 0건이고,
-  // 그래도 절은 선다(§2-3 ① 절이 서는 조건 3행).
+  // 그래도 절은 뜬다(§2-3 ① 절이 뜨는 조건 3행).
   const thread = [q("질문 1"), a("답변 1", 100), q("질문 2")];
   assert.deepEqual(order(mergeProgress([], thread)), ["질문 1", "답변 1", "질문 2"]);
 });
 
-test("mergeProgress ③ — 옛 답변이 지금 세션 첫 사건보다 앞에 선다(라운드 2)", () => {
+test("mergeProgress ③ — 옛 답변이 지금 세션 첫 사건보다 앞에 뜬다(라운드 2)", () => {
   // 스트림은 여전히 지금 `session_id` 하나다(§2-1 Q2=(a)) — 옛 세션 사건은 화면에 없고
   // 옛 라운드의 질문·답변만 남는다. 그래도 순서는 맞는다: 답변의 `birth`가 첫 사건보다 앞이다.
   const first = Date.parse("2026-08-01T03:00:00Z");
@@ -412,7 +412,7 @@ test("groupProgress ① — 말풍선 사이 연속 사건은 한 묶음이다",
 });
 
 test("groupProgress ② — 0건이면 묶음 줄 자체가 없다(상자 시작·끝 포함)", () => {
-  // 말풍선이 연달아 서면 그 사이엔 아무것도 안 그린다 — 빈 `기록 0건`을 세우지 않는다.
+  // 말풍선이 연달아 뜨면 그 사이엔 아무것도 안 그린다 — 빈 `기록 0건`을 세우지 않는다.
   const items: ProgressItem<EvL, Th>[] = [{ event: evL("e1", "") }, { event: evL("e2", "") }];
   assert.deepEqual(gorder(group(items)), ["e1", "e2"]);
 });
@@ -484,7 +484,7 @@ test("windowEvents — 겹치는 창: 앞 계획이 먼저 집는다, 한 사건
 const planKinds = (blocks: { kind: string; index?: number; events: { key: string }[] }[]) =>
   blocks.map((b) => (b.kind === "plan" ? `plan${b.index}` : "outside"));
 
-test("planBlocks — 계획 세우기 전 구간은 첫 계획 앞에 선다(§비주얼 §59 ⑦)", () => {
+test("planBlocks — 계획 세우기 전 구간은 첫 계획 앞에 뜬다(§비주얼 §59 ⑦)", () => {
   const plans = [plan("a", "done", "2026-08-01T01:00:00Z", "2026-08-01T02:00:00Z")];
   const events = [we("before", "2026-08-01T00:30:00Z"), we("during", "2026-08-01T01:30:00Z")];
   const blocks = planBlocks(plans, events, 0);
@@ -507,7 +507,7 @@ test("planBlocks — 창 없는 계획(미착수 · 기록 0건)도 파일 순�
   assert.deepEqual(wKeys(blocks[2].events), ["e2"]);
 });
 
-test("planBlocks — 계획 사이의 시간 틈은 그 두 계획 블록 사이에 선다(§비주얼 §59 ⑦)", () => {
+test("planBlocks — 계획 사이의 시간 틈은 그 두 계획 블록 사이에 뜬다(§비주얼 §59 ⑦)", () => {
   const plans = [
     plan("a", "done", "2026-08-01T01:00:00Z", "2026-08-01T02:00:00Z"),
     plan("b", "done", "2026-08-01T03:00:00Z", "2026-08-01T04:00:00Z"),
@@ -703,13 +703,13 @@ test("chatRows — 최근이 위 · 제목 없는 대화는 `새 대화` · 시�
 test("visibleChatRows — 0줄 · 3줄 · 4줄 · 20줄 · current가 창 밖", () => {
   const rowsOf = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `c${i}` }));
 
-  // 0줄 — 버튼이 안 선다
+  // 0줄 — 버튼이 안 뜬다
   assert.deepEqual(visibleChatRows(rowsOf(0), 3, undefined), { rows: [], showMore: false });
 
-  // 3줄 — 처음부터 다 보이고 버튼이 안 선다(안 보이는 줄이 0)
+  // 3줄 — 처음부터 다 보이고 버튼이 안 뜬다(안 보이는 줄이 0)
   assert.deepEqual(visibleChatRows(rowsOf(3), 3, undefined), { rows: rowsOf(3), showMore: false });
 
-  // 4줄 — 처음 3줄만 서고 버튼이 선다(안 보이는 줄이 1)
+  // 4줄 — 처음 3줄만 뜨고 버튼이 뜬다(안 보이는 줄이 1)
   assert.deepEqual(visibleChatRows(rowsOf(4), 3, undefined), { rows: rowsOf(3), showMore: true });
 
   // 20줄 — 더보기 한 번(openCount 6)에 3줄이 늘고, 남은 것이 3줄보다 적으면(openCount 18일 때
@@ -746,7 +746,7 @@ test("scheduleRows — 제목은 prompt 첫 줄 · 시각은 dateTimeLabel · �
     { id: "s3", title: "릴리스 노트 초안", time: "8/18 09:00 지남" }, // 이미 돈 단발
   ]);
 
-  assert.deepEqual(scheduleRows([]), []); // 0건 — 머리 행만 서는 화면의 근거다
+  assert.deepEqual(scheduleRows([]), []); // 0건 — 머리 행만 뜨는 화면의 근거다
 });
 
 /** 찾기 바가 훑는 자 (DESIGN.md §7 §대화 안에서 찾기 · §비주얼 §30) — **대소문자 무시

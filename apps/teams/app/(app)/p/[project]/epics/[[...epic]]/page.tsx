@@ -125,7 +125,7 @@ export default async function Epics({
         {realEpics.length === 0 ? (
           <EmptyState text={t(locale, "epics.empty")} />
         ) : requested !== null && current === undefined ? (
-          // 404가 아니다 — 왼쪽 목록은 계속 선다(페르소나 화면과 같은 그릇, §비주얼④)
+          // 404가 아니다 — 왼쪽 목록은 계속 뜬다(페르소나 화면과 같은 그릇, §비주얼④)
           <Alert variant="destructive">
             <TriangleAlert aria-hidden />
             <AlertTitle>이 경로는 열 수 없습니다</AlertTitle>

@@ -11,7 +11,7 @@ import remarkStringify from "remark-stringify";
 import remarkGfm from "remark-gfm";
 import type { Root } from "mdast";
 
-/** 후보 ⓐ — «지금 서 있는 것으로 되는 안». mdast `position`으로 최상위 블록의 원문 구간만
+/** 후보 ⓐ — «지금 떠 있는 것으로 되는 안». mdast `position`으로 최상위 블록의 원문 구간만
  *  이어붙인다. 자른 조각을 원문 순서 그대로 다시 붙이는 것뿐이라(수정 없이) **항등이 항상
  *  성립한다** — frontmatter를 remark가 오해석해도(플러그인 없이 setext heading으로 읽는
  *  경우가 있다) `position.end.offset`이 단조증가하는 한 `source.slice`가 원문을 빠짐없이

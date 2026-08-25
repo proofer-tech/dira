@@ -659,7 +659,7 @@ test("비활성 왕복 — 활성 -> 비활성 -> 활성, 설명을 잃지 않�
   assert.deepEqual(await readPersonaSkills(personas, "toggler"), [a, b]);
   assert.deepEqual((await readPersonaOffSkillsFile(personas, "toggler")).skills, []);
 
-  // b를 끈다 — 활성에서 빠지고 비활성에 같은 설명으로 선다
+  // b를 끈다 — 활성에서 빠지고 비활성에 같은 설명으로 뜬다
   await writePersonaSkills(personas, "toggler", [a]);
   await writePersonaOffSkills(personas, "toggler", [b]);
   assert.deepEqual(await readPersonaSkills(personas, "toggler"), [a]);
@@ -750,7 +750,7 @@ test("메모리 읽기 — 한 단계 글롭 · 발췌는 첫 비어 있지 않�
     memories.map((m) => [m.file, m.excerpt]),
     [
       ["beta.md", "제목 없이 시작한다"], // 앞의 빈 줄을 건너뛴다
-      ["blank.md", ""], // 발췌가 비어도 목록에 선다 — 화면이 파일명을 그린다
+      ["blank.md", ""], // 발췌가 비어도 목록에 뜬다 — 화면이 파일명을 그린다
       ["워크트리 push 경합.md", "워크트리 push 경합"], // `# `를 뗀다
     ],
   );

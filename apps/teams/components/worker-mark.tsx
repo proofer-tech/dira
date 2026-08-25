@@ -24,7 +24,7 @@ const CHIP =
 
 /**
  * @param full ② 테이블 `owner` 셀. 셀 원문(`pm / w6-83533def`)을 **값 무수정으로** 그대로 두고
- *   그 안의 워커 이름 구간만 칩으로 세운다. ①③과 반대로 정본이 셀 원문이라 시각 렌더를 통째로
+ *   그 안의 워커 이름 구간만 칩으로 바꾼다. ①③과 반대로 정본이 셀 원문이라 시각 렌더를 통째로
  *   `aria-hidden`으로 두고 원문을 `sr-only`로 한 번 더 낸다(§19 접근성) — 칩 안의 `워커 `
  *   접두어도 그 안에 들어가 같이 숨는다. 마크가 없으면(`.done` 행 등) 종전 그대로 전문뿐이다.
  */
@@ -49,7 +49,7 @@ export function WipWorker({
 
   const owner = t.fm.owner ?? "";
   if (!name) return owner || "—";
-  // `workerOf`의 계약 그대로 — 이름 뒤는 `-` + sid 8자다. 새 파싱 규칙이 아니라 그 결과가 선 자리고,
+  // `workerOf`의 계약 그대로 — 이름 뒤는 `-` + sid 8자다. 새 파싱 규칙이 아니라 그 결과가 뜨는 자리고,
   // 둘이 갈리지 않는 것은 `lib/workers.test.ts`의 "워커 마크 ② 전문 자리"가 고정한다
   const at = owner.length - name.length - 9;
   return (

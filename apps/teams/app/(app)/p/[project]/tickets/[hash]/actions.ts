@@ -240,7 +240,7 @@ export async function sendFollowup(
 
 /** 할당 해제가 막히는 상태는 `.done` **하나**라 Record가 아니다 — `.wip`의 해제는 이 액션의
  *  본래 용도고(죽은 세션 복구), 열린 티켓의 ghost 해제도 살아 있다. 화면의 잠금 `Alert`와 같은
- *  사실을 말한다: 막는 것이 아니라 남기는 것이 목적이다. */
+ *  사실을 알려 준다: 막는 것이 아니라 남기는 것이 목적이다. */
 const UNASSIGN_LOCKED_DONE =
   "완료 티켓은 할당 해제할 수 없습니다 — 담당 세션 기록(session_id·owner)은 누가 한 일인지를 남기려고 그대로 둡니다.";
 

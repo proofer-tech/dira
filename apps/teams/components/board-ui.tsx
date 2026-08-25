@@ -82,7 +82,7 @@ export function BoardSearch() {
   // `⌘F`(§0-6 `board.search`의 **보드 갈래**). **보드에만 있는 컴포넌트라 범위가 저절로 맞는다.**
   // `Mod` 조합이고 화면을 안 떠나는 액션이라 글 쓰는 중에도 듣는다 — 검색 칸에 글을 쓰다 눌러도
   // 온다(`useHotkey`의 가드는 그 둘로 판정한다). `preventDefault`는 크롬 찾기 바를 뺏는다 — 이 화면에서 찾기는
-  // 우리 것이라고 요구가 말했다(`6218440d`).
+  // 우리 것이라고 요구가 적었다(`6218440d`).
   useHotkey("board.search", (e) => {
     e.preventDefault();
     input.current?.focus();
@@ -371,7 +371,7 @@ export function BoardDoneLane({ more, children }: { more: boolean; children: Rea
 }
 
 /** §1의 보이는 판정 **하나** — 그 세로 구간이 자기 레인 스크롤러의 보이는 상자와 겹치는가.
- *  §17 관계선과 §20 레인 이동이 **같은 함수**를 부른다(판정이 갈리면 화면이 거짓말한다).
+ *  §17 관계선과 §20 레인 이동이 **같은 함수**를 부른다(판정이 갈리면 화면이 거짓알려 준다).
  *  rect가 아니라 `top`·`bottom`을 받는 이유는 §20이 **지금 DOM에 없는 자리**(종전 자리)도
  *  같은 판정에 태우기 때문이다. */
 const laneVisible = (top: number, bottom: number, lr: DOMRect) => bottom > lr.top && top < lr.bottom;
@@ -561,7 +561,7 @@ export function BoardLaneMotion() {
           continue;
 
         const ghost = el.cloneNode(true) as HTMLElement;
-        // 복제본이 접근성 트리에 서면 같은 티켓이 두 개로 읽힌다(§20 접근성).
+        // 복제본이 접근성 트리에 뜨면 같은 티켓이 두 개로 읽힌다(§20 접근성).
         ghost.setAttribute("aria-hidden", "true");
         ghost.setAttribute("inert", "");
         Object.assign(ghost.style, {

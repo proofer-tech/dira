@@ -60,7 +60,7 @@ export type Bindings = Record<ActionId, string>;
 export type Keymap = {
   /** **8개 액션 전부.** 파일이 없어도 깨져도 완전하다 — 화면이 빈 칸을 그릴 일이 없다 */
   bindings: Bindings;
-  /** 파일이 있는데 못 읽었다. 값으로 돌려주는 이유는 **화면이 말해야** 하기 때문이다 —
+  /** 파일이 있는데 못 읽었다. 값으로 돌려주는 이유는 **화면이 알려야** 하기 때문이다 —
    *  조용히 기본값으로 돌아가면 사람은 자기가 바꾼 키가 왜 안 듣는지 알 길이 없다 */
   broken: boolean;
   /** 못 읽은 **사유 원문**(파싱 에러 · 권한 에러). `broken`이 판정이고 이건 근거다 —
@@ -231,7 +231,7 @@ export function validateBinding(
   }
   for (const a of DEFAULT_KEYMAP) {
     if (a.id !== actionId && bindings[a.id] === combo) {
-      // 두 로케일이 같은 어순이다 — 이름이 앞에 서고 술어가 뒤다(`보내기와 겹칩니다.` ·
+      // 두 로케일이 같은 어순이다 — 이름이 앞에 뜨고 술어가 뒤다(`보내기와 겹칩니다.` ·
       // `Send already uses this key.`). 그래서 접두 조각이 없다.
       const name = actionName(locale, a.id);
       return {

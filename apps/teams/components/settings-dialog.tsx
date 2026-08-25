@@ -103,7 +103,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 /** §0-17 트리 — `claude` + §4-3 카탈로그의 나머지 엔진(`OtherEngine`) + §0-16 다섯째 `language`.
  *  순서가 §45 ③ 트리 그림·검색 인덱스의 순서다. 노드 목록을 여기서 다시 적지 않는다 —
  *  카탈로그(`OtherEngine`)가 늘면 이 유니온도 트리도 저절로 는다. */
-/** `multiplay` — §0-18 §자리의 숨은 여섯째 노드. 트리에는 안 선다(사이드바에 항목이 없다),
+/** `multiplay` — §0-18 §자리의 숨은 여섯째 노드. 트리에는 안 뜬다(사이드바에 항목이 없다),
  *  검색으로만 닿는다. 잠금 밖으로 나온 뒤로는 조건 없이 존재한다(§0-18 §기본값이 된다). */
 type SettingsNode = "claude" | OtherEngine | "keymap" | "stats" | "language" | "webhook" | "multiplay";
 
@@ -176,7 +176,7 @@ function KeymapSection({ className }: { className?: string }) {
       )}
 
       {/* 격자는 **목록이 갖고 줄은 빌린다**(§비주얼 §22 ①). 줄마다 `flex ml-auto`로 밀면
-          여덟 줄이 서로를 몰라 키가 각자 다른 x에 선다 — `auto` 트랙이 여덟 줄의 최대폭이다 */}
+          여덟 줄이 서로를 몰라 키가 각자 다른 x에 뜬다 — `auto` 트랙이 여덟 줄의 최대폭이다 */}
       <ul className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-x-3">
         {DEFAULT_KEYMAP.map((a) => {
           const combo = keymap.bindings[a.id];
@@ -306,7 +306,7 @@ function KeymapSection({ className }: { className?: string }) {
 /** §0-11 §끄는 자리 — 층은 둘이다: ①지금 보내는지 한 줄 ②끄기/켜기 버튼 하나.
  *
  *  **`switch`도 `checkbox`도 설치하지 않는다**(§비주얼 §5의 이 판정 문단). 켜짐/꺼짐 둘뿐인
- *  상태는 라벨이 바뀌는 버튼 하나가 이미 말한다 — 위 인증 섹션의 버튼들과 같은 벌이다.
+ *  상태는 라벨이 바뀌는 버튼 하나가 이미 알려 준다 — 위 인증 섹션의 버튼들과 같은 벌이다.
  *
  *  값은 **다이얼로그가 열릴 때** 읽는다(닫히면 이 컴포넌트가 unmount된다). 서버 프롭으로 안
  *  내리는 이유는 `readAnalyticsAction`의 주석에 있다. */
@@ -330,7 +330,7 @@ function AnalyticsSection({ className }: { className?: string }) {
           `보내는 중입니다`가 한 번 번쩍인다(그 한 줄이 이 섹션의 유일한 사실이다) */}
       {view && (
         <div className="flex items-center justify-between gap-4">
-          {/* ① 자격값이 없으면 켜짐/꺼짐과 무관하게 아무것도 안 나간다 — 그렇게 말한다 */}
+          {/* ① 자격값이 없으면 켜짐/꺼짐과 무관하게 아무것도 안 나간다 — 그렇게 알려 준다 */}
           <p data-setting="stats.status" className="text-sm">
             {!view.configured
               ? t("settings.stats.notConfigured")
@@ -339,7 +339,7 @@ function AnalyticsSection({ className }: { className?: string }) {
                 : t("settings.stats.disabled")}
           </p>
           {/* ② 안 보내는 빌드에는 버튼이 없다 — 거기 선 `끄기`는 켜져 있다는 거짓말이다.
-              끌 것이 없는 자리에 끄는 버튼을 두지 않는다(위 한 줄이 이미 전부를 말했다) */}
+              끌 것이 없는 자리에 끄는 버튼을 두지 않는다(위 한 줄이 이미 전부를 적었다) */}
           {view.configured && (
             <Button
               variant="outline"
@@ -550,7 +550,7 @@ function WebhookSection({ className }: { className?: string }) {
  *  (§0-18 §기본값이 된다 — 패널은 잠금 밖으로 나온다).
  *
  *  `switch`를 새로 설치하지 않는다 — `AnalyticsSection`과 같은 판정(버튼 하나가 라벨로 상태를
- *  말한다). 값은 다이얼로그가 열릴 때 읽는다 — 같은 이유(다이얼로그를 그리는 자리가 셋).
+ *  알려 준다). 값은 다이얼로그가 열릴 때 읽는다 — 같은 이유(다이얼로그를 그리는 자리가 셋).
  *
  *  토글이 둘이다 — `다중계정 허용`(신설, `multitoken` 파일)과 `다중계정 동시사용`(기존
  *  `multiplay`, 무수정). 서로 다른 파일-다른 서버 액션이라 한쪽이 다른 쪽을 막지 않는다. 두
@@ -877,7 +877,7 @@ function TokensSection({
   );
 }
 
-/** 트리 행 표식 — CLI를 못 찾은 엔진 줄에만 서는 빈 링 하나(§비주얼 §45 §표식, 요구
+/** 트리 행 표식 — CLI를 못 찾은 엔진 줄에만 뜨는 빈 링 하나(§비주얼 §45 §표식, 요구
  *  `475d3385` 후보 11, `9a0dfbee`). 판정을 안 내린다(자격증명은 안 본다) — 채운 점이 아니라
  *  빈 링인 이유, 색이 `--status-stale`이 아니라 `border-muted-foreground`인 이유는 그 절에
  *  있다. 접근가능 이름은 기존 키 하나(새 문구 0). */
@@ -893,7 +893,7 @@ function NotInstalledMark({ show }: { show: boolean }) {
   );
 }
 
-/** claude 아닌 엔진 노드 하나 — 사실 둘(CLI 경로 · 자격증명 파일)만 말한다. 판정을 안 내리므로
+/** claude 아닌 엔진 노드 하나 — 사실 둘(CLI 경로 · 자격증명 파일)만 알려 준다. 판정을 안 내리므로
  *  `TriangleAlert`도 색도 안 쓴다 — claude ⓪처럼 "이게 없으면 워커가 못 뜬다"를 아는 것이
  *  아니라 "찾았다/못 찾았다"만 아는 층이다(§0-4 §개정 `b0966e66`). §0-17로 자기 트리 노드가
  *  됐으므로 머리도 claude와 같은 벌(패널 `h3` · `font-mono`, §비주얼 §45 ③ §벌)이다.
@@ -1023,7 +1023,7 @@ export function SettingsDialog({
   const [activeNode, setActiveNode] = useState<SettingsNode>("claude");
   // 저장 직후엔 서버 프롭이 아직 옛 값이다 — 방금 쓴 것이 이긴다(층 ②·③ 어느 쪽이든)
   const savedAt = setup?.savedAt ?? result.savedAt ?? auth.savedAt;
-  // 토큰이 없어도 **claude 워커가 하나도 없으면** 이 컴퓨터는 이 토큰을 안 쓴다 — 안 말한다(§0-4)
+  // 토큰이 없어도 **claude 워커가 하나도 없으면** 이 컴퓨터는 이 토큰을 안 쓴다 — 안 알려 준다(§0-4)
   const needsAuth = !savedAt && auth.claudeUsed;
   // §0-16 §설정 노드 — 트리 라벨·검색 인덱스 이름에 쓰는 그 하나의 키
   const t = useT();
@@ -1120,7 +1120,7 @@ export function SettingsDialog({
       name: t("settings.webhook.test"),
       anchor: "webhook.test",
     },
-    // §0-18 §기본값이 된다 — 패널이 잠금 밖으로 나온 뒤로 이 세 줄은 조건 없이 선다(§검증 5).
+    // §0-18 §기본값이 된다 — 패널이 잠금 밖으로 나온 뒤로 이 세 줄은 조건 없이 뜬다(§검증 5).
     // 노드 자신 + 토글 둘(§0-18 §패널).
     { node: "multiplay" as const, crumbs: "", name: multiplayCrumb, anchor: "multiplay" },
     {
@@ -1235,7 +1235,7 @@ export function SettingsDialog({
         }
       }}
     >
-      {/* 인증이 필요하면 **이 버튼이** 말한다 — 배지를 따로 세우지 않는다(§0-4 · §비주얼 §4).
+      {/* 인증이 필요하면 **이 버튼이** 알려 준다 — 배지를 따로 세우지 않는다(§0-4 · §비주얼 §4).
           그때만 아이콘 칸(size-9 정사각)을 풀어 글자를 들인다. 접근가능 이름은 두 경우 다
           `t("settings.dialog.title")`로 같다 */}
       <DialogTrigger
@@ -1312,7 +1312,7 @@ export function SettingsDialog({
               }}
             />
             {/* md 미만(767 이하)은 트리가 없다 — 종전 모양(섹션 넷 세로 나열 + 단일 스크롤)이
-                그대로 서고 검색칸만 그대로다(§45 ③). `w-full`이 등록 `w-(--sidebar-width)`를 덮고
+                그대로 뜨고 검색칸만 그대로다(§45 ③). `w-full`이 등록 `w-(--sidebar-width)`를 덮고
                 `bg-transparent`는 다크에서 필요하다(`--sidebar` 0.205 ≠ `--surface` 0.18, ③). */}
             <Sidebar collapsible="none" className="hidden min-h-0 w-full flex-1 bg-transparent md:flex">
               <SidebarContent className="gap-4 px-1 pb-1">
@@ -1401,8 +1401,8 @@ export function SettingsDialog({
               (`TokensSection`·`AnalyticsSection`의 마운트 시 fetch), 입력 중이던 캡처 상자·
               편집 칸의 상태를 날린다. 패딩 0 — 오른쪽 여백은 `DialogContent p-4`가 이미 낸다. */}
           <div ref={panelRef} className="relative min-w-0 flex-1 md:overflow-y-auto">
-            {/* §45 ④ 목록 자리 — 패널을 덮는다(md+, 트리는 그대로 보인다) · md 미만은 흐름에 서서
-                섹션들을 밀어낸다. 서는 조건은 질의가 비어 있지 않을 때뿐이다. */}
+            {/* §45 ④ 목록 자리 — 패널을 덮는다(md+, 트리는 그대로 보인다) · md 미만은 흐름에 떠서
+                섹션들을 밀어낸다. 뜨는 조건은 질의가 비어 있지 않을 때뿐이다. */}
             {query && (
               <CommandList className="max-h-72 bg-popover md:absolute md:inset-0 md:z-10 md:max-h-none">
                 <CommandEmpty>{`"${query}"${t("settings.search.emptySuffix")}`}</CommandEmpty>
@@ -1426,7 +1426,7 @@ export function SettingsDialog({
             )}
 
             <section className={cn("space-y-2", activeNode !== "claude" && "md:hidden")}>
-              {/* 제목이 엔진 이름을 말한다 — 이 토큰을 읽는 것은 `TICKET_ENGINE[0]`이 claude인
+              {/* 제목이 엔진 이름을 알려 준다 — 이 토큰을 읽는 것은 `TICKET_ENGINE[0]`이 claude인
                   워커뿐이다(`tick.sh:52`). 다른 엔진(Codex 등)은 자체 인증을 쓴다(§0-4).
                   §0-17 — 이름은 카탈로그 id 그대로, 넷 다 같은 벌(`font-mono`)이다. */}
               <h3 data-setting="claude" className="font-mono text-sm font-medium">
@@ -1538,7 +1538,7 @@ export function SettingsDialog({
                     )}
 
                     {/* 조용히 실패하지 않는다 — 사유 원문 + 다음 행동(§비주얼 §6 에러 3요소).
-                        층 ③은 바로 아래 그대로 서 있다: 이 폴백이 제품의 바닥이다(§0-4 천장 항) */}
+                        층 ③은 바로 아래 그대로 떠 있다: 이 폴백이 제품의 바닥이다(§0-4 천장 항) */}
                     {setup?.error && (
                       <Alert variant="destructive">
                         <TriangleAlert aria-hidden />
@@ -1605,7 +1605,7 @@ export function SettingsDialog({
                     </p>
                     {result.error && <p className="text-xs text-destructive">{result.error}</p>}
                     {/* 삼키지 않는 것이 요건이지 미리 아는 것이 요건이 아니다 — 형식으로 거르지
-                        않으므로 "저장했다"까지만 말한다(§0-4) */}
+                        않으므로 "저장했다"까지만 알려 준다(§0-4) */}
                     {result.savedAt && <p className="text-xs">{t("settings.claude.tokenSaved")}</p>}
                   </form>
                 </PopoverContent>
@@ -1629,7 +1629,7 @@ export function SettingsDialog({
             <LanguageSection className={cn(activeNode !== "language" && "md:hidden")} />
             <WebhookSection className={cn(activeNode !== "webhook" && "md:hidden")} />
             {/* §0-18 §자리 — 가리는 클래스가 다섯과 다르다: `hidden`이라 폭과 무관하게 검색으로
-                고른 뒤에만 선다(§검증 11 — 767 이하에서도 세로로 쌓이는 섹션에 안 낀다).
+                고른 뒤에만 뜬다(§검증 11 — 767 이하에서도 세로로 쌓이는 섹션에 안 낀다).
                 §0-18 §기본값이 된다 — 패널이 잠금 밖으로 나와 조건 없이 렌더한다. */}
             <MultiplaySection
               className={cn(activeNode !== "multiplay" && "hidden")}

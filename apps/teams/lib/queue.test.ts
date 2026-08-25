@@ -374,7 +374,7 @@ test("우선순위 — 상속: deps 역방향 · 체인 전체 · 순환은 안 
 
 test("우선순위 — 정렬: (-effective, birth, path) 교차 + 같은 값 안 FIFO(§1-3 §순서)", async () => {
   const root = newRoot();
-  // birth 순서: 3,3,3(FIFO 확인) · 1 · 5(가장 늦게 태어남) — 그래도 5가 맨 위에 선다
+  // birth 순서: 3,3,3(FIFO 확인) · 1 · 5(가장 늦게 태어남) — 그래도 5가 맨 위에 뜬다
   await write(root, "cccc0001.md", fm({ ticket: "cccc0001", title: "3-첫", kind: "work" }));
   await write(root, "cccc0002.md", fm({ ticket: "cccc0002", title: "3-둘", kind: "work" }));
   await write(root, "cccc0003.md", fm({ ticket: "cccc0003", title: "3-셋", kind: "work" }));
@@ -1370,7 +1370,7 @@ test("optionsOf — 큐 실측 픽스처 (b6fa738b), 089035b0은 그룹 0개", (
 /** `optionsOf` — 옛 형식은 하나도 안 잡힌다(결정 11 ⑦). 한글·대문자 선택지, `Q1.` 헤딩,
  *  헤딩 없는 그룹의 `Q<n>` 폴백까지 셋 다 죽는다 — 헤딩이 없거나 번호가 없으면 그룹도 없다. */
 test("optionsOf — 옛 형식 거부: (가)(A), ### Q1., 헤딩 없는 그룹 (결정 11 ⑦)", () => {
-  // 한글 선택지 — letter 문자 클래스가 [a-z]뿐이라 헤딩은 서고 선택지만 0개
+  // 한글 선택지 — letter 문자 클래스가 [a-z]뿐이라 헤딩은 뜨고 선택지만 0개
   assert.deepStrictEqual(optionsOf("### 1.\n- (가) 첫째\n- (나) 둘째"), [
     { heading: "1.", number: "1.", options: [], sub: [] },
   ]);
@@ -1390,7 +1390,7 @@ test("optionsOf — 옛 형식 거부: (가)(A), ### Q1., 헤딩 없는 그룹 (
 });
 
 /** `optionsOf` — 계층: `1-1.`은 `1.` 카드 안의 하위 문항, `(a-1)`은 `(a)`의 하위 선택지다
- *  (결정 11 ④⑤). 나란한 별개 카드로 안 선다. */
+ *  (결정 11 ④⑤). 나란한 별개 카드로 안 뜬다. */
 test("optionsOf — 계층 문항·선택지를 읽는다 (결정 11 ④⑤)", () => {
   const hier = [
     "### 1. 무엇부터 세우나",
@@ -1446,7 +1446,7 @@ test("optionsOf — 계층 문항·선택지를 읽는다 (결정 11 ④⑤)", (
 
   // 부모 문항 없는 하위 문항은 형식 위반이라 버려진다(안전망) — 그룹째 없다
   assert.deepStrictEqual(optionsOf("### 1-1. 부모 없음\n- (a) x"), []);
-  // 부모 선택지 없는 하위 선택지도 버려진다 — 문항 자체는 그대로 선다
+  // 부모 선택지 없는 하위 선택지도 버려진다 — 문항 자체는 그대로 뜬다
   assert.deepStrictEqual(optionsOf("### 1. 문항\n- (a-1) 부모 없음"), [
     { heading: "1. 문항", number: "1.", options: [], sub: [] },
   ]);
@@ -1597,7 +1597,7 @@ test("threadOf — quotesOpen: 문항 한 벌은 펼침, 두 벌은 접힘, 인�
   assert.strictEqual(oneGroupFourQuotes[0].quotesOpen, true);
   assert.strictEqual(oneGroupFourQuotes[0].quotes?.length, 4);
 
-  // 문항 두 벌 — 접힘(세션의 물음이 이미 인용 밖에 서 있다)
+  // 문항 두 벌 — 접힘(세션의 물음이 이미 인용 밖에 떠 있다)
   const twoGroups = threadOf(tickets, tickets.find((x) => x.hash === "r2000003")!, DEFAULT, {
     foldQuotes: true,
   });
@@ -1630,7 +1630,7 @@ test("composeAnswer — 줄머리 번호 + 다중 선택 + 덧붙임 조립 (결
     ]),
     "3.(a)(a-1)\n3-1.(b) 이건 엔진마다 다를 것 같은데",
   );
-  // 고른 것 0 + 덧붙임 0인 그룹은 줄이 안 선다
+  // 고른 것 0 + 덧붙임 0인 그룹은 줄이 안 뜬다
   assert.strictEqual(
     composeAnswer([
       { number: "1.", letters: [], note: "" },
@@ -1873,7 +1873,7 @@ test("아카이브 티켓은 기본 목록에서 빠지고 persona 필터가 꺼
   const hashes = (ts: Ticket[]) => ts.map((t) => t.hash);
   const none = { kind: [], persona: [], status: [], q: "", epic: null };
 
-  // ① 기본 제외 — 카드도 행도 건수도 없다(대상 카드 하단 한 줄로만 선다)
+  // ① 기본 제외 — 카드도 행도 건수도 없다(대상 카드 하단 한 줄로만 뜬다)
   assert.strictEqual(inDefaultList(by("arch0001"), [], []), false);
   assert.deepStrictEqual(hashes(filterTickets(tickets, none)), ["aaaa1111"]);
   // ② persona 탈출구 — 그 티켓의 persona를 명시하면 뜬다(숨기는 게 아니다)
@@ -1925,7 +1925,7 @@ test("openFixTicket — 0장 · 열림/진행중 1장 · 완료만 세 경우 (�
   // ① 열림/진행중 1장 있으면 그것 — 다른 마커는 안 걸린다
   assert.strictEqual(openFixTicket(tickets, "ontology-schema")?.hash, "aaaa1111");
 
-  // ② `.done`만 있으면 null — 버튼이 다시 선다
+  // ② `.done`만 있으면 null — 버튼이 다시 뜬다
   const doneOnly = tickets.filter((t) => t.hash !== "aaaa1111");
   assert.strictEqual(openFixTicket(doneOnly, "ontology-schema"), null);
 
