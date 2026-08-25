@@ -159,11 +159,15 @@ new writing**:
 | `그대로 산다` (효력이 남는다) | `그대로 남는다` `그대로 유효하다` |
 | `안 산다` (성립하지 않는다) | `성립하지 않는다` `안 통한다` |
 | `살아난다` (버튼/칸이) | `켜진다` `눌릴 수 있게 된다` |
+| `앉는다` `앉힌다` `앉을 자리` | `붙는다` `들어간다` `놓인다` `들어갈 자리` |
+| `선다` `서 있다` `세운다` (화면 요소가) | `뜬다` `생긴다` `그려진다` `성립한다` `만든다` |
+| `말한다` `말해 준다` (화면/제목/문서/수가) | `보여준다` `알려 준다` `적혀 있다` `가리킨다` |
 | `숨 쉰다` `깨어난다` `자리 잡고 산다` | banned, no replacement |
 
-The exception is literal liveness of a **process, session, or pid** - `pid가 살아
-있다`, `세션이 아직 살아 있다` stay as they are. A ticket, file, or setting is
-not a live thing: write `열려 있는 동안`, `그대로 남는다`.
+The exception is a real process, session, or pid - `pid가 살아 있다`, `세션이 아직 살아
+있다`, `부모가 wait에 서 있다` stay as they are, and so does any sentence whose subject is a
+person. A ticket, file, or setting is not a live thing: write `열려 있는 동안`, `그대로
+남는다`.
 
 Already-written files aren't rewritten under this rule - the §Characters clause above
 applies here word for word.
