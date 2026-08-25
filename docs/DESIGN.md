@@ -45387,9 +45387,9 @@ P312-2는 파일이 달라(`lib/transcript.ts`) 아무것도 안 기다린다.
 | P313-6 | 홈 에이전트 - 쓰기 스코프와 프롬프트의 나열이 해석된 자리를 따라간다 | developer | P313-3 | 발행 |
 | P313-7 | GUI 편집의 자리 - 워커 화면의 편집 행이 온톨로지 화면 제목 밑으로 옮겨간다 (요구 `458e6626`) | developer | - | 발행 |
 | P313-8 | 매뉴얼 - 아카이빙과 온톨로지 장이 자리를 옮기는 법을 말한다 | writer | P313-7 | 발행 |
-| P313-9 | 엔진 - `pipefail`이 지운 온톨로지-메모리-우선순위 판정 셋을 파이프 없는 줄로 바꾼다 (요구 `d49c648d`) | developer | - | 발행 |
-| P313-10 | 문서 - archive-manager PROFILE과 `protocols/ontology.md`가 해석된 온톨로지를 기준으로 삼는다 (요구 `d49c648d`) | developer | - | 발행 |
-| P313-11 | 복구 - `.dira/ontology`에 떨어진 action-log 넉 줄을 vault로 옮기고 그 폴더를 걷는다 (요구 `d49c648d`) | archive-manager | - | 발행 |
+| P313-9 | 엔진 - `pipefail`이 지운 온톨로지-메모리-우선순위 판정 셋을 파이프 없는 줄로 바꾼다 (요구 `d49c648d`) `55e25889` | developer | - | 발행 |
+| P313-10 | 문서 - archive-manager PROFILE과 `protocols/ontology.md`가 해석된 온톨로지를 기준으로 삼는다 (요구 `d49c648d`) `abc78d03` | developer | - | 발행 |
+| P313-11 | 복구 - `.dira/ontology`에 떨어진 action-log 넉 줄을 vault로 옮기고 그 폴더를 걷는다 (요구 `d49c648d`) `4a0afe38` | archive-manager | - | 발행 |
 
 **왕복 1회 - 갈래 넷을 다 받았다.** 되물은 것은 무엇을 되사고 무엇을 그대로 파느냐였다.
 `22a803de`가 온톨로지를 큐 안으로 옮기며 판 대가(`clone한 사람에게 0장`)를 사람이 알고 골랐던
