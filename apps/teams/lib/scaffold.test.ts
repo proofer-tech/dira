@@ -338,12 +338,19 @@ test("preflight — .dira 유무와 큐 여부로 갈린다", async (t) => {
 });
 
 test("engineRepo — DIRA_ENGINE이 먼저다. 값이 없으면 cwd 유도가 그대로", async (t) => {
+  // 셸에 DIRA_ENGINE이 이미 있으면(예: 워커 셸) 기준값이 그 오염된 값이 된다 — 격리하고 복원한다
+  const prevEngine = process.env.DIRA_ENGINE;
+  delete process.env.DIRA_ENGINE;
+  t.after(() => {
+    if (prevEngine === undefined) delete process.env.DIRA_ENGINE;
+    else process.env.DIRA_ENGINE = prevEngine;
+  });
+
   const derived = engineRepo(); // env 없이 = 지금의 유도(레포 안에서 돌므로 성공한다)
   assert.ok("path" in derived, `유도가 깨졌다: ${JSON.stringify(derived)}`);
 
   const dir = await tmp();
   t.after(() => rm(dir, { recursive: true, force: true }));
-  t.after(() => void delete process.env.DIRA_ENGINE);
 
   // ① tick.sh가 없는 값 → 거부하고, 사유에 **그 경로**가 담긴다(유도 경로가 아니다)
   process.env.DIRA_ENGINE = dir;
