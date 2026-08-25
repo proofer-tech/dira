@@ -52,7 +52,8 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { TableCell, TableRow } from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
+import { useT } from "@/components/language-provider";
 import { relativeUnderAny } from "@/lib/urls";
 import { cn } from "@/lib/utils";
 
@@ -1070,6 +1071,100 @@ export function CommonContextCard({
         save={(items) => saveCommonContextAction(projectId, items)}
       />
     </div>
+  );
+}
+
+/** 머리(`h1 워커` 행)의 트리거가 여는 다이얼로그(§4-15 결정 1-2 · §비주얼 §35 개정, 티켓
+ *  `ec2791db`) — `공통 컨텍스트` 카드와 `나머지 워커 설정` 표가 페이지에서 이 다이얼로그 한 장의
+ *  섹션 둘로 옮겨왔다. 문구는 종전 두 섹션 글자 그대로고(§4-15 결정 3), 새로 나는 것은 트리거
+ *  라벨 하나뿐이다. 렌더 조건(`rows.length > 0`)은 부르는 쪽(`page.tsx`)이 쥔다. */
+export function WorkerSettingsDialog({
+  projectId,
+  filePath,
+  context,
+  cwds,
+  settings,
+  divergent,
+}: {
+  projectId: string;
+  /** `<루트>/context.sh` */
+  filePath: string;
+  context: { ok: true; items: ContextRow[] } | { ok: false; reason: string };
+  cwds: string[];
+  /** 표시 전용 다섯 행. `key`는 이미 사람이 읽을 라벨이다(`page.tsx`의 `LABEL`이 붙여 넘긴다) */
+  settings: { key: string; value: string; assumed: boolean }[];
+  /** 갈린 설정. `key`도 라벨이 붙어서 온다 — `LABEL`은 페이지 쪽 상수라 여기서 다시 안 찾는다 */
+  divergent: { key: string; text: string }[];
+}) {
+  const t = useT();
+  const label = t("workers.settingsDialog.trigger");
+  return (
+    <Dialog>
+      <DialogTrigger render={<Button variant="outline" size="sm" />}>{label}</DialogTrigger>
+      <DialogContent className="sm:max-w-[75rem] max-h-[calc(100dvh-2rem)] overflow-y-auto">
+        <DialogTitle>{label}</DialogTitle>
+        {/* 첫 섹션 — 편집 가능. 산문 195자 그대로(§4-15 §산문) */}
+        <section className="space-y-3">
+          <div>
+            <h2 className="text-sm font-semibold">공통 컨텍스트</h2>
+            <p className="text-sm text-muted-foreground">
+              워커 전원이 <span className="font-mono text-xs">source</span>하는 파일 하나입니다 —
+              <span className="font-mono text-xs break-all"> {filePath}</span>. 여기
+              항목은 각 워커 컨텍스트 목록의 <strong className="font-medium">최상단</strong>에
+              들어가고, 워커별 목록에서는 지울 수 없습니다. 한 줄을 고치면 전원에게 반영됩니다.
+              <span className="font-mono text-xs">$TICKET_CWD</span>는 워커마다 갈리므로 존재 여부는{" "}
+              <strong className="font-medium">전원에게 있을 때만</strong> 있음입니다 — 워커에 따라
+              갈리면 단정하지 않습니다(확인 못 했습니다).
+            </p>
+          </div>
+          <CommonContextCard projectId={projectId} filePath={filePath} context={context} cwds={cwds} />
+        </section>
+        {/* 둘째 섹션 — 표시 전용. 경계는 여기만(§비주얼 §35 개정 ③ "첫 섹션에는 경계가 없다") */}
+        <section className="space-y-2 border-t pt-4">
+          <div>
+            <h2 className="text-sm font-semibold">나머지 워커 설정 (표시만)</h2>
+            <p className="text-sm text-muted-foreground">
+              이 값들은 이 화면에서 고치지 않습니다 — 워커 파일을 손으로 편집합니다.
+            </p>
+          </div>
+          <Table>
+            <TableBody>
+              {settings.map((s) => (
+                <TableRow key={s.key} className="h-9">
+                  <TableCell className="w-48 px-3 py-0 text-xs text-muted-foreground">{s.key}</TableCell>
+                  <TableCell className="px-3 py-0 font-mono text-xs break-all">
+                    {s.value}
+                    {s.assumed && (
+                      <span className="ml-2 font-sans text-muted-foreground">기본값 가정</span>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+          {/* TICKET_CWD는 워커마다 다른 게 정상이라 여기 없다 — page.tsx의 종전 주석과 같은 근거 */}
+          {divergent.length > 0 && (
+            <Alert>
+              <TriangleAlert aria-hidden className="text-status-stale" />
+              <AlertTitle>워커 간 값이 갈렸습니다</AlertTitle>
+              <AlertDescription>
+                <div className="space-y-1">
+                  <p>
+                    엔진은 티켓을 디스패치한 워커의 값을 씁니다 — 같은 티켓이 어느 워커에 물리느냐로
+                    결과가 달라집니다.
+                  </p>
+                  {divergent.map((c) => (
+                    <p key={c.key} className="font-mono text-xs break-all">
+                      {c.key}: {c.text}
+                    </p>
+                  ))}
+                </div>
+              </AlertDescription>
+            </Alert>
+          )}
+        </section>
+      </DialogContent>
+    </Dialog>
   );
 }
 

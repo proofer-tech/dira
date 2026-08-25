@@ -857,6 +857,9 @@ export const ko: Record<string, string> = {
   "workers.engineHint.prefix": "미지정 — 티켓을 집는 워커의 엔진을 씁니다",
   "workers.engineHint.allPrefix": "지금 전부 ",
   "workers.engineHint.nowPrefix": "지금 ",
+  // 워커 설정 다이얼로그 트리거(§4-15 결정 2 - §비주얼 §35 개정 ①, 티켓 ec2791db). 다이얼로그
+  // 제목이 같은 낱말을 재사용해 새 문구는 이 하나로 끝난다.
+  "workers.settingsDialog.trigger": "워커 설정",
   // §5-3 §편집 표면이 사는 화면 §결정 2 — 사람이 워커 `.sh`를 손으로 고쳐 경계를
   // 어긴 경우다(엔진은 검사하지 않는다). 온톨로지 화면의 경로 줄 + 워커 화면의 읽기 전용
   // 행 둘 다 붙는다(티켓 c5d51522 — 편집 표면은 온톨로지 화면으로, 이 키는 그 네임스페이스로).
@@ -1681,6 +1684,7 @@ export const en: Record<string, string> = {
   "workers.engineHint.prefix": "Not set — uses the engine of whichever worker claims the ticket",
   "workers.engineHint.allPrefix": "currently all ",
   "workers.engineHint.nowPrefix": "currently ",
+  "workers.settingsDialog.trigger": "Worker settings",
   "ontology.location.inWorktree": "Inside this project's git working tree",
   // Ticket cd662a73, moved to this namespace by c5d51522 — see the ko block for why the third
   // rejection reuses `ontology.location.inWorktree`.

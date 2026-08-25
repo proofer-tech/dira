@@ -12,7 +12,6 @@ import { StatusBadge } from "@/components/status-badge";
 import { CopyCommand } from "@/components/copy-command";
 import { Badge } from "@/components/ui/badge";
 import {
-  CommonContextCard,
   CreateWorkerButton,
   ExecBitFix,
   ExpandScope,
@@ -21,6 +20,7 @@ import {
   WorkerContextRow,
   WorkerNameCell,
   WorkerRowActions,
+  WorkerSettingsDialog,
   type WorkerRow,
 } from "@/components/workers-ui";
 import { t } from "@/lib/i18n";
@@ -164,12 +164,27 @@ export default async function Workers({ params }: { params: Promise<{ project: s
           )}
         </div>
         {rows.length > 0 && (
-          <CreateWorkerButton
-            projectId={id}
-            canTemplate
-            firstCmd={firstWorkerCmd(project.root)}
-            defaultName={nextWorkerName(workers.map((w) => w.name))}
-          />
+          <div className="flex items-center gap-2 shrink-0">
+            <WorkerSettingsDialog
+              projectId={id}
+              filePath={`${project.root}/context.sh`}
+              context={common}
+              cwds={rows.map((w) => w.cwd).filter((c): c is string => !!c)}
+              settings={settings}
+              divergent={divergent.map((c) => ({
+                key: LABEL[c.key] ?? c.key,
+                text: Object.entries(c.byWorker)
+                  .map(([w, v]) => `${w}=${v}`)
+                  .join(" · "),
+              }))}
+            />
+            <CreateWorkerButton
+              projectId={id}
+              canTemplate
+              firstCmd={firstWorkerCmd(project.root)}
+              defaultName={nextWorkerName(workers.map((w) => w.name))}
+            />
+          </div>
         )}
       </div>
 
@@ -377,84 +392,6 @@ export default async function Workers({ params }: { params: Promise<{ project: s
             </ExpandScope>
           </TableBody>
         </Table>
-      )}
-
-      {/* 공통 컨텍스트 — 워커 전원이 보는 항목의 사본 하나(§4-1). **표 바로 아래다**(§비주얼 §35 #1):
-          워커별 목록과 나란히 봐야 무엇이 겹치는지 알 수 있고, 그 목록은 이제 표의 둘째 행 안에
-          있다. 새 화면도 새 내비 항목도 만들지 않는다. */}
-      {rows.length > 0 && (
-        // `pt-4`가 없다 — ⑤와 달리 이 절은 표에 붙어 있어야 한다(§35 #1: 나란히 봐야 무엇이
-        // 겹치는지 안다). §35의 실측값도 이 간격에서 나온 값이다(그 절의 `접힘` 810·843).
-        <section className="space-y-3">
-          <div>
-            <h2 className="text-sm font-semibold">공통 컨텍스트</h2>
-            <p className="text-sm text-muted-foreground">
-              워커 전원이 <span className="font-mono text-xs">source</span>하는 파일 하나입니다 —
-              <span className="font-mono text-xs break-all"> {project.root}/context.sh</span>. 여기
-              항목은 각 워커 컨텍스트 목록의 <strong className="font-medium">최상단</strong>에
-              들어가고, 워커별 목록에서는 지울 수 없습니다. 한 줄을 고치면 전원에게 반영됩니다.
-              <span className="font-mono text-xs">$TICKET_CWD</span>는 워커마다 갈리므로 존재 여부는{" "}
-              <strong className="font-medium">전원에게 있을 때만</strong> 있음입니다 — 워커에 따라
-              갈리면 단정하지 않습니다(확인 못 했습니다).
-            </p>
-          </div>
-          <CommonContextCard
-            projectId={id}
-            filePath={`${project.root}/context.sh`}
-            context={common}
-            cwds={rows.map((w) => w.cwd).filter((c): c is string => !!c)}
-          />
-        </section>
-      )}
-
-      {rows.length > 0 && (
-        <section className="space-y-2 pt-4">
-          <div>
-            <h2 className="text-sm font-semibold">나머지 워커 설정 (표시만)</h2>
-            <p className="text-sm text-muted-foreground">
-              이 값들은 이 화면에서 고치지 않습니다 — 워커 파일을 손으로 편집합니다.
-            </p>
-          </div>
-          <Table>
-            <TableBody>
-              {settings.map((s) => (
-                <TableRow key={s.key} className="h-9">
-                  <TableCell className="w-48 px-3 py-0 text-xs text-muted-foreground">{s.key}</TableCell>
-                  <TableCell className="px-3 py-0 font-mono text-xs break-all">
-                    {s.value}
-                    {s.assumed && (
-                      <span className="ml-2 font-sans text-muted-foreground">기본값 가정</span>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          {/* TICKET_CWD는 워커마다 다른 게 정상이라 여기 없다(워크트리 하나면 두 세션이 서로를
-              밟는다). 갈렸다고 경고하면 사람이 경고를 안 읽게 된다 — DESIGN.md §설정 해석. */}
-          {divergent.length > 0 && (
-            <Alert>
-              <TriangleAlert aria-hidden className="text-status-stale" />
-              <AlertTitle>워커 간 값이 갈렸습니다</AlertTitle>
-              <AlertDescription>
-                <div className="space-y-1">
-                  <p>
-                    엔진은 티켓을 디스패치한 워커의 값을 씁니다 — 같은 티켓이 어느 워커에 물리느냐로
-                    결과가 달라집니다.
-                  </p>
-                  {divergent.map((c) => (
-                    <p key={c.key} className="font-mono text-xs break-all">
-                      {LABEL[c.key] ?? c.key}:{" "}
-                      {Object.entries(c.byWorker)
-                        .map(([w, v]) => `${w}=${v}`)
-                        .join(" · ")}
-                    </p>
-                  ))}
-                </div>
-              </AlertDescription>
-            </Alert>
-          )}
-        </section>
       )}
     </div>
   );
