@@ -4,6 +4,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  fast-uri: ^3.1.5
+
 importers:
 
   .:
@@ -13,8 +16,8 @@ importers:
         version: 6.8.9
     devDependencies:
       electron:
-        specifier: ^40.0.0
-        version: 40.10.6
+        specifier: ^41.10.3
+        version: 41.10.6
       electron-builder:
         specifier: ^26.0.0
         version: 26.15.3(electron-builder-squirrel-windows@26.15.3)
@@ -134,6 +137,7 @@ packages:
   '@xmldom/xmldom@0.8.13':
     resolution: {integrity: sha512-KRYzxepc14G/CEpEGc3Yn+JKaAeT63smlDr+vjB8jRfgTBBI9wRj/nkQEO+ucV8p8I9bfKLWp37uHgFrbntPvw==}
     engines: {node: '>=10.0.0'}
+    deprecated: this version has critical issues, please update to the latest version
 
   abbrev@4.0.0:
     resolution: {integrity: sha512-a1wflyaL0tHtJSmLSOVybYhy22vRih4eduhhrkcjgrWGnRfrZtovJ2FRjxuTtkkj47O/baf0R86QU5OuYpz8fA==}
@@ -377,8 +381,8 @@ packages:
     resolution: {integrity: sha512-bO3y10YikuUwUuDUQRM4KfwNkKhnpVO7IPdbsrejwN9/AABJzzTQ4GeHwyzNSrVO+tEH3/Np255a3sVZpZDjvg==}
     engines: {node: '>=8.0.0'}
 
-  electron@40.10.6:
-    resolution: {integrity: sha512-TGjlkOU9Lg6K4KjDbsErywCWCIDaNgLh0q+xj0nlpRoQhevI7VBIxBTtJI/V30lypyLAaXMpnP9O9jui1/qRFw==}
+  electron@41.10.6:
+    resolution: {integrity: sha512-NEB7QnVpT2p8S9U5jOCPAtCyhl1WjRT/ODvJP6ec1/dZRUmf/EjYVOBb/dthCmJh4bISqpAroGJ/xRRxX7VwJw==}
     engines: {node: '>= 22.12.0'}
     hasBin: true
 
@@ -432,8 +436,8 @@ packages:
   fast-deep-equal@3.1.3:
     resolution: {integrity: sha512-f3qQ9oQy9j2AhBe/H9VC91wLmKBCCU/gDOnKNAYG5hswO7BLKj09Hc5HYNz9cGI++xlpDCIgDaitVs03ATR84Q==}
 
-  fast-uri@3.1.4:
-    resolution: {integrity: sha512-8JnbkQ4juDyvYs4mgFGQqg4yCYtFDtUtmp2QIQq11ZZe5CFQ5wcqm1rqDgAh/QdMySuBnPzMUiJUNZG5N/AiQw==}
+  fast-uri@3.1.6:
+    resolution: {integrity: sha512-7Ical1vFEMr0onbVzEDIreM22I4khW+fzyQPwvAFWBp1iwdshSZRsL4jjRvPG9JP1uiqMHRto+YU6R2/CzDz5Q==}
 
   fdir@6.5.0:
     resolution: {integrity: sha512-tIbYtZbucOs0BRGqPJkshJUYdL+SDH7dVM8gjy+ERp3WAUjLEFJE+02kanyHtwjWOnwrKYBiwAmM0p4kLJAnXg==}
@@ -600,8 +604,8 @@ packages:
     resolution: {integrity: sha512-AC/7JofJvZGrrneWNaEnJeOLUx+JlGt7tNa0wZiRPT4MY1wmfKjt2+6O2p2uz2+skll8OZZmJMNqeke7kKbNgQ==}
     hasBin: true
 
-  js-yaml@4.3.0:
-    resolution: {integrity: sha512-1td788aAnnZ5qs7V2QIRl1owjtYpbKt749Y3xauqQgwIIGF/xXWz1wMTEBx5O3LK3lXLVuqXPdPxj2BoFHaW9Q==}
+  js-yaml@4.3.1:
+    resolution: {integrity: sha512-CY6crGq313MX8GkwvB7tzgp99vjQxY1++5y10/BKN/GUfHqWaOGQMNZkBvqSzsZKWk/ijwHlWzzkLulsGHhjWQ==}
     hasBin: true
 
   json-buffer@3.0.1:
@@ -1237,7 +1241,7 @@ snapshots:
   ajv@8.20.0:
     dependencies:
       fast-deep-equal: 3.1.3
-      fast-uri: 3.1.4
+      fast-uri: 3.1.6
       json-schema-traverse: 1.0.0
       require-from-string: 2.0.2
 
@@ -1278,7 +1282,7 @@ snapshots:
       hosted-git-info: 4.1.0
       isbinaryfile: 5.0.7
       jiti: 2.7.0
-      js-yaml: 4.3.0
+      js-yaml: 4.3.1
       json5: 2.2.3
       lazy-val: 1.0.5
       minimatch: 10.2.6
@@ -1356,7 +1360,7 @@ snapshots:
       fs-extra: 10.1.0
       http-proxy-agent: 7.0.2
       https-proxy-agent: 7.0.6
-      js-yaml: 4.3.0
+      js-yaml: 4.3.1
       sanitize-filename: 1.6.4
       source-map-support: 0.5.21
       stat-mode: 1.0.0
@@ -1476,7 +1480,7 @@ snapshots:
       app-builder-lib: 26.15.3(dmg-builder@26.15.3)(electron-builder-squirrel-windows@26.15.3)
       builder-util: 26.15.3
       fs-extra: 10.1.0
-      js-yaml: 4.3.0
+      js-yaml: 4.3.1
     transitivePeerDependencies:
       - electron-builder-squirrel-windows
       - supports-color
@@ -1544,7 +1548,7 @@ snapshots:
     dependencies:
       builder-util-runtime: 9.7.0
       fs-extra: 10.1.0
-      js-yaml: 4.3.0
+      js-yaml: 4.3.1
       lazy-val: 1.0.5
       lodash.escaperegexp: 4.1.2
       lodash.isequal: 4.5.0
@@ -1565,7 +1569,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  electron@40.10.6:
+  electron@41.10.6:
     dependencies:
       '@electron-internal/extract-zip': 1.0.5
       '@electron/get': 5.1.0
@@ -1612,7 +1616,7 @@ snapshots:
 
   fast-deep-equal@3.1.3: {}
 
-  fast-uri@3.1.4: {}
+  fast-uri@3.1.6: {}
 
   fdir@6.5.0(picomatch@4.0.5):
     optionalDependencies:
@@ -1809,7 +1813,7 @@ snapshots:
 
   jiti@2.7.0: {}
 
-  js-yaml@4.3.0:
+  js-yaml@4.3.1:
     dependencies:
       argparse: 2.0.1
 
