@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { existsSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -19,8 +19,10 @@ const {
   webhookText,
   maskWebhookUrl,
   testSendWebhook,
+  webhookTick,
   resetWebhookSeenForTest,
 } = await import("./webhook.ts");
+const { addProject } = await import("./projects.ts");
 
 // ── 저장 한 쌍 — `https`만 받는다 · 권한 0600 ────────────────────────────────
 
@@ -166,4 +168,57 @@ test("testSendWebhook — 델타 집합(__diraWebhookSeen)을 안 건드린다",
   writeFileSync(webhookPath(), JSON.stringify({ url: "https://127.0.0.1:9/unreachable" }));
   await testSendWebhook();
   assert.equal((globalThis as { __diraWebhookSeen?: unknown }).__diraWebhookSeen, undefined);
+});
+
+// ── 재획득 — 소유자였다가 뺏기고 되찾으면 그 박은 다시 씨 뿌리기다 (티켓 2e5f2b25) ──────
+
+test("webhookTick — justRegainedOwnership이 서면 옛 seen이 있어도 조용히 씨만 다시 뿌린다, 다음 박부터 델타를 보낸다", async () => {
+  resetWebhookSeenForTest();
+
+  const projRoot = mkdtempSync(path.join(tmpdir(), "fst-webhook-proj-"));
+  const dira = path.join(projRoot, ".dira");
+  mkdirSync(path.join(dira, "tickets"), { recursive: true });
+  const proj = await addProject("wh-proj", dira, "wh-proj");
+  const fm = (o: Record<string, string>) =>
+    "---\n" + Object.entries(o).map(([k, v]) => `${k}: ${v}`).join("\n") + "\n---\n";
+  writeFileSync(
+    path.join(dira, "tickets", "r0000001.md"),
+    fm({ ticket: "r0000001", title: "질문 1", kind: "request", deps: "[a1111111]", awaiting: "a1111111" }),
+  );
+
+  const received: unknown[] = [];
+  const server = createServer((req, res) => {
+    let body = "";
+    req.on("data", (c: Buffer) => (body += c));
+    req.on("end", () => {
+      received.push(JSON.parse(body));
+      res.writeHead(200);
+      res.end();
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address() as { port: number };
+  writeFileSync(webhookPath(), JSON.stringify({ url: `http://127.0.0.1:${port}/hook` }));
+
+  // 이 프로세스가 전에 소유자였던 적 있다고 흉내낸다 — 옛 씨 뿌리기 집합에 이미 값이 있다
+  // (그중 "stale/project"는 지금 큐에 없는, 다른 서버 창에서 이미 나갔던 것).
+  (globalThis as { __diraWebhookSeen?: Set<string> }).__diraWebhookSeen = new Set(["stale/project"]);
+
+  await webhookTick(Date.now(), true); // 재획득 박
+  assert.equal(received.length, 0, "재획득 박은 아무것도 안 보낸다");
+  const seenAfterRegain = (globalThis as { __diraWebhookSeen?: Set<string> }).__diraWebhookSeen;
+  assert.deepEqual([...(seenAfterRegain ?? [])], ["wh-proj/r0000001"]); // 기준선이 지금 집합으로 다시 섰다
+
+  // 다음 박(재획득 신호 0)에서 새로 생긴 답변 대기만 델타로 나간다
+  writeFileSync(
+    path.join(dira, "tickets", "r0000002.md"),
+    fm({ ticket: "r0000002", title: "질문 2", kind: "request", deps: "[a2222222]", awaiting: "a2222222" }),
+  );
+  await webhookTick(Date.now());
+  server.close();
+
+  assert.equal(received.length, 1);
+  assert.equal((received[0] as { hash: string }).hash, "r0000002");
+  assert.equal((received[0] as { project: string }).project, proj.id);
+  rmSync(projRoot, { recursive: true, force: true });
 });

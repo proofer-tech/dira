@@ -179,6 +179,10 @@ type LiveState = {
   resume: ResumeEvent | null;
   lastHeartbeatAt: number;
   readTo: number | null;
+  // §개정(2026-08-26) — 직전 박의 소유자 여부. `webhookTick`에 재획득(`false -> true`)만 알리려면
+  // 매 박의 `isOwner` 결과를 여기 한 줄로 쥐고 있어야 한다(순수 함수 `isOwner` 자체는 박 사이
+  // 기억이 없다).
+  wasOwner: boolean;
 };
 type Globals = { __diraMachineState?: LiveState; __diraMachineTimer?: NodeJS.Timeout };
 const g = globalThis as unknown as Globals;
@@ -197,14 +201,19 @@ async function tickOnce(): Promise<void> {
   // §개정 §결정 — 박마다 소유자 판정 한 번. 남의 것이 신선하면 머신 스코프 셋(heartbeat 쓰기 -
   // runSchedules - webhookTick)을 건너뛴다. offline·resume은 위에서 이미 끝났다(프로세스 스코프,
   // 안 갈린다).
-  if (isOwner(await readHeartbeatMark(), MY_ID, now)) {
+  const nowOwner = isOwner(await readHeartbeatMark(), MY_ID, now);
+  // §개정(2026-08-26) — 이 프로세스 안에서 소유권이 `false -> true`로 갈리는 박만 재획득이다.
+  // 계속 소유자였던 박(true -> true)은 `webhookTick`의 모듈 메모리를 그대로 둬야 델타가 이어진다.
+  const justRegainedOwnership = nowOwner && !s.wasOwner;
+  s.wasOwner = nowOwner;
+  if (nowOwner) {
     await writeHeartbeatMark(now);
     // §7-2 §깨우는 자리 — 새 타이머를 안 만든다. 판정은 `runSchedules`(순수 함수 `judgeSchedule` 위의
     // 그 절반)가 지고, 여기는 그 함수에 <지금>을 넣고 부르는 것뿐이다.
     await runSchedules(now);
     // §0-10 §답변 대기가 앱 밖으로 나간다 — 같은 이유로 새 타이머 0. 주소가 없으면 `webhookTick`이
     // 그 자리에서 돌아온다(큐를 안 훑는다).
-    await webhookTick(now);
+    await webhookTick(now, justRegainedOwnership);
   }
 }
 
@@ -213,7 +222,10 @@ async function initState(): Promise<LiveState> {
   const [heartbeatMark, boottime] = await Promise.all([readHeartbeatMark(), boottimeMs()]);
   const resume = boottime !== null ? powerOffGap(heartbeatMark?.at ?? null, boottime, now) : null;
   await writeHeartbeatMark(now);
-  return { offline: INITIAL_OFFLINE, resume, lastHeartbeatAt: now, readTo: null };
+  // wasOwner는 false로 시작한다 — 위 writeHeartbeatMark로 이미 표식은 내 것이지만, 그것은
+  // tickOnce가 아직 한 번도 안 돈 상태다. 첫 tickOnce가 소유자로 판정되면 그 박이 재획득으로
+  // 잡히는데, 신선한 프로세스라 `webhookTick`의 모듈 메모리도 어차피 비어 있어 결과는 같다.
+  return { offline: INITIAL_OFFLINE, resume, lastHeartbeatAt: now, readTo: null, wasOwner: false };
 }
 
 /** 핫리로드 가드 — `globalThis`에 이미 타이머가 있으면 새로 안 만든다(Next dev가 이 모듈을

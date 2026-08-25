@@ -127,8 +127,17 @@ export function resetWebhookSeenForTest(): void {
 }
 
 /** `lib/machine-state.ts`의 `tickOnce`가 매 15초 부른다(§누가 보내나 — 새 타이머 0).
- *  **주소가 없으면 그 자리에서 돌아온다** — 큐를 안 훑는다(§비용). */
-export async function webhookTick(nowMs: number = Date.now()): Promise<void> {
+ *  **주소가 없으면 그 자리에서 돌아온다** — 큐를 안 훑는다(§비용).
+ *
+ *  `justRegainedOwnership`는 이 박에서 소유자 판정이 `false -> true`로 갈렸다는 신호다(§0-14
+ *  §개정 §결정 — 이어받은 서버는 조용히 씨를 뿌린다, *자기 모듈 메모리가 비어 있으므로*가
+ *  전제). 한 프로세스가 소유자 - 비소유자 - 소유자를 오가면 이 모듈 메모리(`g.__diraWebhookSeen`)
+ *  는 안 비어 있는데도 그 전제가 다시 참이어야 한다 — 비소유자였던 창에 쌓인 답변 대기까지
+ *  옛 집합과 비교해 한꺼번에 내보내면 안 된다. 그래서 신호가 서면 옛 집합을 지우고 이 박을
+ *  처음처럼 씨 뿌리기로 되돌린다. */
+export async function webhookTick(nowMs: number = Date.now(), justRegainedOwnership = false): Promise<void> {
+  if (justRegainedOwnership) delete g.__diraWebhookSeen;
+
   const url = await readWebhookUrl();
   if (!url) return;
 
