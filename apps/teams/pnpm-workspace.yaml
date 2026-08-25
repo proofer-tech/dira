@@ -2,6 +2,10 @@ allowBuilds:
   sharp: true
   unrs-resolver: true
 
+overrides:
+  postcss: '>=8.5.23'
+  sharp: '>=0.35.0'
+
 # pnpm 기본 레이아웃은 `node_modules/<pkg>` → `node_modules/.pnpm/<pkg>@<ver>/…`로 가는 심링크다.
 # Vercel의 산출물 배포 단계가 그걸 못 삼킨다 — 빌드는 끝까지 통과하고 마지막에
 # "The framework produced an invalid deployment package for a Serverless Function.
