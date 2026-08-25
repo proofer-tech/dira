@@ -38,6 +38,6 @@
 
 | 변수 | 기본값 | 뜻 |
 |---|---|---|
-| `TICKET_LOCAL` | `~/.config/dira` | 토큰(`oauth-token`)과 워커 락(`run/`)이 사는 자리. 큐 루트가 공유 드라이브에 있어도 여기는 이 머신만의 것입니다 |
+| `TICKET_LOCAL` | `~/.config/dira` | 토큰(`oauth-token`)과 워커 락(`run/`)을 두는 자리. 큐 루트가 공유 드라이브에 있어도 여기는 이 머신만의 것입니다 |
 
 다음은 [CLI](/docs/ref-cli)입니다.

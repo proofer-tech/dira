@@ -2,11 +2,12 @@
 
 Read this before creating any ticket. **Wrong syntax = the ticket silently never
 appears in the queue and waits forever.** It also holds what `CORE.md` points here
-for: asking back on a requirement, and the character substitutions.
+for: asking back on a requirement, the character substitutions, and the banned
+expressions.
 
 Same layer as `CORE.md` (the engine repo's `protocols/`). Not inlined into prompts -
 **read it when you write into a ticket file.** Paths below are relative to the queue
-root; where that root lives is the project docs' business.
+root; where that root sits is the project docs' business.
 
 ## Creating
 
@@ -98,7 +99,7 @@ Stopping halfway leaves the requirement stuck with nobody waiting on it.
 Round 2 overwrites `awaiting:` with a new stem and appends that one to `deps:` as
 well. Never delete `awaiting:` after an answer lands - it is history.
 
-Procedures for `req:` live in project docs (persona profiles, design doc).
+Procedures for `req:` are in project docs (persona profiles, design doc).
 
 ## Pitfalls
 
@@ -143,3 +144,26 @@ undecided - don't invent a substitution, ask.
 Already-written files aren't rewritten under this rule. Conversion is its own ticket,
 tracked separately, **skipping the substitutions above** - a mass rewrite of prose
 that already reads fine is churn, and the diff hides the edits that matter.
+
+## Words (금지 표현)
+
+Referenced from the `추가 금지 표현` block inlined into every dispatch, which carries the
+rule (no living verb on an inanimate subject - it isn't here because `CORE.md` is at its
+3,500 B budget). This is the decided replacement list - **the left side never appears in
+new writing**:
+
+| don't write | write |
+|---|---|
+| `A는 B에 산다` `삽니다` | `A는 B에 있다` `A를 B에 둔다` `B가 A를 갖는다` |
+| `사는 자리` `사는 곳` | `있는 자리` `두는 자리` `놓이는 자리` |
+| `그대로 산다` (효력이 남는다) | `그대로 남는다` `그대로 유효하다` |
+| `안 산다` (성립하지 않는다) | `성립하지 않는다` `안 통한다` |
+| `살아난다` (버튼/칸이) | `켜진다` `눌릴 수 있게 된다` |
+| `숨 쉰다` `깨어난다` `자리 잡고 산다` | banned, no replacement |
+
+The exception is literal liveness of a **process, session, or pid** - `pid가 살아
+있다`, `세션이 아직 살아 있다` stay as they are. A ticket, file, or setting is
+not a live thing: write `열려 있는 동안`, `그대로 남는다`.
+
+Already-written files aren't rewritten under this rule - the §Characters clause above
+applies here word for word.

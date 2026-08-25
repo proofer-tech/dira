@@ -1,6 +1,6 @@
 # Memory file format - core
 
-Referenced from `CORE.md` §Retrospective (회고). Files live in
+Referenced from `CORE.md` §Retrospective (회고). Files are in
 `personas/<name>/memory/`, one concept per file. Not inlined into prompts - dispatch
 prompts carry only the directory's location and how to grep it; sessions open files
 on demand, and `[[links]]` are followed one hop with

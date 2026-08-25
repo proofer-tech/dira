@@ -52,7 +52,7 @@ CI가 넣고, 레포에는 커밋되지 않습니다. **값이 없으면 코드�
 
 ## 지우는 법
 
-통계 파일은 `~/.config/dira/analytics.json` 하나입니다. 여기 사는 값은 `install_id`(GA4에
+통계 파일은 `~/.config/dira/analytics.json` 하나입니다. 여기 든 값은 `install_id`(GA4에
 보내는 익명 설치 식별자)와 `enabled`(껐을 때만 `false`로 적힙니다) 둘뿐입니다. 파일을 지우면
 다음 실행에서 새 `install_id`가 발급되고, 이전 통계와 이어지지 않는 새 설치로 잡힙니다.
 아래 한 줄을 터미널에 입력하시면 됩니다.
