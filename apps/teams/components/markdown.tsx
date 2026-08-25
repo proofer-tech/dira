@@ -9,6 +9,7 @@ import { Square, SquareCheck } from "lucide-react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { CODE_SPAN_CLASS, QueueRef, type QueueRefProps } from "@/components/queue-ref";
+import { closeEmphasis } from "@/lib/markdown-emphasis";
 import { softBreaks } from "@/lib/markdown-breaks";
 import { refMarkers, type RefIndex } from "@/lib/markdown-refs";
 import { wikilinks, type Vault } from "@/lib/markdown-wikilinks";
@@ -192,6 +193,7 @@ export function Markdown({
       <ReactMarkdown
         remarkPlugins={[
           remarkGfm,
+          closeEmphasis,
           ...(breaks ? [softBreaks(breaks)] : []),
           ...(vault ? [wikilinks(vault, locale)] : []),
           ...(refs ? [refMarkers(refs, locale)] : []),
