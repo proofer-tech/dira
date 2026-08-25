@@ -610,9 +610,9 @@ export function optionsOf(question: string): OptionGroup[] {
   return groups;
 }
 
-/** 결정 12 §못박는 것 — 인용 판정은 제목 문자열이 아니다. `optionsOf`가 문항으로 안 잡는
+/** 결정 12 §고정하는 것 — 인용 판정은 제목 문자열이 아니다. `optionsOf`가 문항으로 안 잡는
  *  `###`(`HEADING_RE`에 안 걸리는, 번호 없는 것)이 곧 인용이다. 제목 3개(`티켓 Goal` 등)를
- *  화면에 박으면 엔진이 인용을 하나 늘릴 때 그 절만 안 접힌다. */
+ *  화면에 적으면 엔진이 인용을 하나 늘릴 때 그 절만 안 접힌다. */
 const isQuoteHeading = (line: string) => /^###\s+/.test(line) && !HEADING_RE.test(line);
 
 /** 결정 12 (5)의 인용 한 장 — 제목과 몸통(헤더 줄 제외, trim). */
@@ -751,7 +751,7 @@ export type ThreadItem = {
   /** 결정 15 (1) — `quotes`가 있을 때만 값이 있다. 문항이 한 벌뿐(`optionsOf`가 준 문항 수
    *  `<= 1`)이면 `true`(인용을 펼친 채로 낸다) — 세션이 결정 11 형식으로 물음을 남겨 문항이
    *  이미 인용 밖에 두 벌 이상 섰으면 `false`(종전대로 접는다, 안 그러면 같은 글이 두 번 선다).
-   *  판정은 문항 수 하나다 — 인용 제목 문자열은 안 본다(결정 12 §못박는 것). */
+   *  판정은 문항 수 하나다 — 인용 제목 문자열은 안 본다(결정 12 §고정하는 것). */
   quotesOpen?: boolean;
   /** 답변 티켓의 stem. 질문은 없다(요구사항 본문의 일부다) */
   hash?: string;

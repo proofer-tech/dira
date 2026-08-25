@@ -445,7 +445,7 @@ const editBytes = (e: PersonaEdit) => byteLength(e.body) + e.skillsChars;
  *
  *  **선택은 경로가 담고 `pushState`로 담는다**(§5 §선택이 경로에 담긴다. 사람 요구 `8429c041`).
  *  `router.push`도 `<Link>`도 아니다 — 그러면 서버가 다시 렌더하면서 앞 페르소나의 textarea가
- *  언마운트돼 저장 안 한 편집이 사라진다(그 못은 그대로 선다. 뽑은 것은 *딥링크 경로가 없다*는
+ *  언마운트돼 저장 안 한 편집이 사라진다(그 규칙은 그대로 선다. 뽑은 것은 *딥링크 경로가 없다*는
  *  근거뿐이다). native History API는 Next 16이 그대로 받아서 `usePathname()`은 따라오고 서버
  *  왕복은 없다. `?persona=` 쿼리는 안 만든다 — 값이 두 벌이 된다. */
 /** 스쿼드 오른쪽 칸의 편집 상태 — 페르소나의 `PersonaEdit`과 같은 이유로 `PersonasPane`이
@@ -657,7 +657,7 @@ export function PersonasPane({
             font-medium`과 **같은 값**이다. `aria-current`는 종전에도 있었다.
             **`render`를 안 준다** — 기본 태그 `<button>`이고, 여기에
             `render={<Link>}`를 쓰면 선택이 URL에 담겨 서버 재렌더가 편집 중
-            textarea를 언마운트한다(§34 서는 못 4 · 아래 절 머리 주석).
+            textarea를 언마운트한다(§34 남는 규칙 4 · 아래 절 머리 주석).
             남는 클래스: 부품에 없는 `cursor-pointer` · 접기용 고정 높이
             `h-8`을 덮는 `h-auto`(2행 줄이 눌린다) · 2행 묶음을 윗줄에 붙이는
             `items-start` · 자식일 때만 붙는 `pl-11`(§비주얼 §61 (17)). */}

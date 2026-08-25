@@ -2,7 +2,7 @@
  *  큐 `AGENTS.md` · 페르소나 프로필+스킬 · 페르소나 메모리)을 호출부마다 적으면 사본이 넷이
  *  되고 다음 개정이 넷을 찾는다 — `attachment-limit.ts`와 같은 존재 이유다. `budgetLabel`의
  *  로케일 배선은 `lib/protocols.ts`가 세운 벌(`locale: Locale = DEFAULT_LOCALE`)을 그대로
- *  탄다 — `import`가 느는 것은 그 벌의 결과지, 이 파일이 지키던 못이 깨진 것이 아니다. */
+ *  탄다 — `import`가 느는 것은 그 벌의 결과지, 이 파일이 지키던 규칙이 깨진 것이 아니다. */
 import { DEFAULT_LOCALE, t, type Locale } from "./i18n.ts";
 
 export const CORE_MAX_BYTES = 3_500;

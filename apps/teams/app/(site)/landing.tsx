@@ -340,7 +340,7 @@ export default function Landing({
         const rel = await r.json();
         if (rel.tag_name) setVersion(rel.tag_name.replace(/^v/, ""));
         // 자산은 셋인데 `.dmg`는 하나다. `download`/`target`은 안 붙인다 — 받아지게 하는 것은
-        // GitHub이 자산 응답에 붙이는 Content-Disposition: attachment다(DESIGN §서는 못 ①②).
+        // GitHub이 자산 응답에 붙이는 Content-Disposition: attachment다(DESIGN §남는 규칙 ①②).
         const asset = rel.assets?.find((a: { name: string }) => a.name.endsWith(".dmg"));
         if (asset) setDmg(asset.browser_download_url);
       } catch {
@@ -427,7 +427,7 @@ export default function Landing({
 {/* 여행하는 티켓 한 장(DESIGN §랜딩 §개편 §움직이는 티켓). 페이지가 파는 것을 페이지가
     수행한다 — 이 제품에서 레인을 건너는 것은 애니메이션이 아니라 `rename` 한 번이다
     (코어 §큐의 불변식 1). 실리는 글자는 전부 제품이 쓰는 식별자이고 산문 노드가 0개다.
-    장식이라 aria-hidden이다(§서는 못 ②). 절마다 새 카드를 세우지 않는다 — 이 한 장이
+    장식이라 aria-hidden이다(§남는 규칙 ②). 절마다 새 카드를 세우지 않는다 — 이 한 장이
     <main> 안에서 sticky로 붙어 페이지를 끝까지 따라간다. */}
 <div className="travel wrap" aria-hidden="true">
   <div className="lanes">

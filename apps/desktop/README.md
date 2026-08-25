@@ -7,7 +7,7 @@
 Electron main ──spawn──> node server.js        (Next standalone 빌드, 127.0.0.1:<빈 포트>)
       │                       ↑
       ├─ BrowserWindow ───load┘   빨간 버튼은 숨기기다. 파괴하지 않는다
-      └─ Tray ─ 열기 · 로그인 시 자동 실행 · 자동 업데이트 · 종료   창이 없어도 앱은 산다
+      └─ Tray ─ 열기 · 로그인 시 자동 실행 · 자동 업데이트 · 종료   창이 없어도 앱은 돈다
 ```
 
 ## 실행
@@ -163,7 +163,7 @@ PATH를 물어** 서버에 물려 준다 — `.app`에서만 되는·안 되는 
 | 값 | 어디서 오나 |
 |---|---|
 | `PATH` | 로그인 셸이 답한 값 (바로 위) |
-| `DIRA_ENGINE` | 번들의 엔진을 userData로 꺼낸 경로 (못박는 것 8) |
+| `DIRA_ENGINE` | 번들의 엔진을 userData로 꺼낸 경로 (고정하는 것 8) |
 | `DIRA_APP_VERSION` | `app.getVersion()`. **유무가 곧 셸 판정이다** — 있으면 `desktop`, 없으면 `browser`(§0-11 `shellParams()`) |
 | `GA_MEASUREMENT_ID` · `GA_API_SECRET` | `ga.json`이 있으면 그 안의 두 값 (§0-11) |
 
@@ -267,14 +267,14 @@ SVG에서 직접 래스터하는 것이 그 절이 넘긴 실측이다.
 **`apps/teams`는 브라우저에서 그대로 돈다.** `pnpm dev` → `localhost:7331`은 이 앱과 무관하다.
 `teams`는 `electron`을 의존성으로 갖지 않는다 — 껍데기가 알맹이의 실행 조건이 되면 안 된다.
 
-## 못박은 것 (DESIGN.md §데스크톱 앱)
+## 고정한 것 (DESIGN.md §데스크톱 앱)
 
 1. **포트는 0으로 잡아 OS가 준 것을 쓴다.** 7331 고정은 브라우저의 계약이고, 고정하면
    `pnpm dev`가 떠 있는 흔한 상황에서 앱이 안 뜬다.
 2. **준비 판정은 HTTP다.** `GET http://127.0.0.1:<port>/`를 200ms 간격으로 30초까지 친다.
    stdout의 `Ready` 문자열은 안 본다.
 3. **자식 서버는 앱보다 오래 살지 않는다.** `before-quit`·`process exit`·`SIGINT/SIGTERM`
-   전부에서 죽인다. 반대로 **창보다는 오래 산다**(N1) — 빨간 버튼은 `close`를 가로채 `hide()`이고,
+   전부에서 죽인다. 반대로 **창보다는 오래 돈다**(N1) — 빨간 버튼은 `close`를 가로채 `hide()`이고,
    `before-quit`이 세운 `quitting` 플래그만 그 가로채기를 푼다. ⌘Q·트레이 `종료`가 같은 문으로 간다.
 4. **창은 자기가 띄운 오리진만 연다.** `contextIsolation: true`·`nodeIntegration: false`,
    `will-navigate`·`setWindowOpenHandler`가 밖을 전부 거부하고 http(s)만 `shell.openExternal`로
@@ -293,7 +293,7 @@ SVG에서 직접 래스터하는 것이 그 절이 넘긴 실측이다.
 30초마다 `GET /api/awaiting`을 물어보고 **직전 집합과의 차집합만** 알린다(배경 폴링이라 보드의
 5초와 다른 값인 것이 맞다). **앱을 켠 직후 첫 응답은 조용히 씨를 뿌린다** — 켤 때마다 밀린
 알림이 쏟아지면 그 알림은 다음 주에 꺼진다. 알림을 누르면 창이 그 티켓 상세로 간다.
-폴링 실패(서버가 죽음 · 응답이 배열이 아님)는 로그만 남기고 앱은 계속 산다.
+폴링 실패(서버가 죽음 · 응답이 배열이 아님)는 로그만 남기고 앱은 계속 돈다.
 
 `main.ts`는 Electron이 그대로 실행한다(Node 24 타입 스트리핑). 빌드 단계도 번들러도 없다.
 
@@ -336,7 +336,7 @@ osascript -l JavaScript -e 'ObjC.import("AppKit");var s=$.NSScreen.mainScreen; \
 
 `로그인 시 자동 실행`(N4)의 상태는 **OS가 갖는다**(`app.getLoginItemSettings()` → macOS 13+는
 `SMAppService`). 앱은 그 값을 어디에도 캐시하지 않는다 — 사람이 시스템 설정 → 로그인 항목에서
-빼버려도 다음에 연 메뉴가 맞는 상태를 그린다. 그래서 `tray.setContextMenu`(메뉴를 한 번 박고
+빼버려도 다음에 연 메뉴가 맞는 상태를 그린다. 그래서 `tray.setContextMenu`(메뉴를 한 번 정하고
 끝)를 안 쓰고 `click`·`right-click`에서 `popUpContextMenu(trayMenu())`로 매번 만들어 띄운다.
 
 `getLoginItemSettings().status`가 실제 진단값이다: `not-found`(등록된 적 없음) ·
@@ -357,7 +357,7 @@ osascript -l JavaScript -e 'ObjC.import("AppKit");var s=$.NSScreen.mainScreen; \
 
 **몰래 재시작하지 않는다**(R6). `autoInstallOnAppQuit`만 쓰고 지금 설치·재시작시키는 API는
 `main.ts`에 한 번도 안 나온다(`grep -c quitAndInstall main.ts` → `0`). 이 앱 뒤에는 도는 세션과
-cron 워커가 붙어 있어서, 임의 재시작이 §못박는 것 3(자식 서버는 앱보다 오래 살지 않는다)을
+cron 워커가 붙어 있어서, 임의 재시작이 §고정하는 것 3(자식 서버는 앱보다 오래 살지 않는다)을
 사람이 모르는 시점에 발동시킨다. 사람이 ⌘Q를 누르는 시점이 이미 「지금 재시작」 버튼이다.
 
 **U2의 상태는 `~/Library/Application Support/dira/no-auto-update`의 존재 여부다**(R8).
@@ -375,7 +375,7 @@ N4는 OS가 값을 갖지만(`getLoginItemSettings`) 여기엔 그런 자리가 
 ## 릴리즈 노트 — 앱이 받은 시점에 스스로 만든다 (`e80e2eae`)
 
 스펙은 R7이고 코드는 `release-notes.ts` 하나다. **`git log`가 아닌 이유는 받는 맥에 이 레포가
-없어서다** — 번들에 `.git`이 안 들어간다(§못박는 것 8). 원본은 공개 GitHub compare API
+없어서다** — 번들에 `.git`이 안 들어간다(§고정하는 것 8). 원본은 공개 GitHub compare API
 (`/repos/<o>/<r>/compare/v<현재>...v<새것>`)이고 **인증 헤더를 붙이지 않는다**(R1의 공개가 낳는 값).
 요약은 `claude -p`가 한다 — 새 npm 의존성 0개다.
 

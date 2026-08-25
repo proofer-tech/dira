@@ -117,7 +117,7 @@ test("scaffold — §0-3 집합 그대로, 두 번째는 전부 skipped", async 
   execFileSync("bash", ["-n", w1]);
 
   // ⑦ 자가 정리(§4-4) — 파일이 같이 생기고, `source` 줄이 `. tick.sh` **바로 위**다.
-  // 워커에 박히는 경로는 스캐폴딩이 돌려준 root 기준이다(= realpath, 751e3004).
+  // 워커에 정해지는 경로는 스캐폴딩이 돌려준 root 기준이다(= realpath, 751e3004).
   const heal = path.join(first.root, "self-heal.sh");
   execFileSync("bash", ["-n", heal]);
   const healLine = `. "${heal}" "${path.join(repo.path, "tick.sh")}"`;
@@ -222,7 +222,7 @@ test("scaffold — CORE*.md는 엔진 protocols/에서 그대로 복사, templat
   await assert.rejects(() => readFile(path.join(repo.path, "templates/protocols", names[0]), "utf8"));
 });
 
-/** DESIGN.md §데스크톱 앱 §못박는 것 8 — 판정은 "`extraResources`가 `engine/`으로 나르는 것만으로
+/** DESIGN.md §데스크톱 앱 §고정하는 것 8 — 판정은 "`extraResources`가 `engine/`으로 나르는 것만으로
  *  만든 가짜 엔진 레포에 대고 스캐폴딩이 성공하는가"다. 목록을 여기 베끼면 같은 손이 두 벌을
  *  세는 것이라 `apps/desktop/package.json`을 직접 읽는다 — 여섯 번째 읽기가 늘면 이 검사가
  *  먼저 빨개진다. */

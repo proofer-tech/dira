@@ -996,7 +996,7 @@ function Prose({ text, refs }: { text: string; refs?: RefIndex }) {
  *
  *  **`-mb-4`가 아래 16px을 흐름 밖으로 낸다**(§24 §띠가 흐름 밖에 선다, 개정 `bfadd068`). 항목이
  *  예약하는 높이는 산문 + 16px(24 - 16)이고, 겹쳐 쓰는 것은 항목 사이 `gap-4` 16px 하나다 —
- *  `absolute`가 아니라 이 한 클래스라 `mt-2` 8px 못이 산술 유도값이 되지 않는다. */
+ *  `absolute`가 아니라 이 한 클래스라 `mt-2` 8px 규칙이 산술 유도값이 되지 않는다. */
 function Band({ children }: { children: React.ReactNode }) {
   return (
     <div className="mt-2 -mb-4 flex items-center gap-2 px-3 text-xs leading-6 text-muted-foreground">
@@ -1018,7 +1018,7 @@ function Band({ children }: { children: React.ReactNode }) {
  *  아이콘·`h-6` 히트 영역은 그대로다(호버 전용과 갈리는 자리가 정확히 여기다).
  *
  *  **정지 상태는 `opacity-0`이다**(§24 §드러나는 조건, 개정 `bfadd068`). `display:none`이
- *  아니다 — `Tab`이 못 닿으면 키보드로 못 닿는다는 옛 못이 안 갚아진다. 드러나는 조건은
+ *  아니다 — `Tab`이 못 닿으면 키보드로 못 닿는다는 옛 규칙이 안 갚아진다. 드러나는 조건은
  *  `group-hover/answer` OR `group-focus-within/answer`(어느 쪽도 대체가 아니다). */
 function CopyAnswer({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -1255,7 +1255,7 @@ function SidePanel({
     //    필요 없다: 왼쪽은 창 끝, 위는 헤더의 `border-b`, 아래는 footer의 `border-t`다.
     // **면 `bg-surface`와 폭 `w-64 shrink-0`은 안 갈린다** — 요구가 뒤집은 것은 *떠 있는
     // 카드*이지 *자기 몸을 갖는 면*이 아니다. 면까지 걷으면 패널이 페이지와 같은 몸이 되고
-    // 요구가 시킨 *왼쪽 영역을 차지한다*가 화면에서 사라진다(§39 §서는 못 1).
+    // 요구가 시킨 *왼쪽 영역을 차지한다*가 화면에서 사라진다(§39 §남는 규칙 1).
     // 대화 컬럼은 312 → 288로 **같이 옮겨 간다**(§39 ②). 312는 아무도 고른 적 없는 산술
     // 결과이고 지켜야 할 것은 `gap-8`이라 거터도 컬럼 클래스도 무수정이다.
     <Sidebar

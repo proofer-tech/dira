@@ -76,7 +76,7 @@ img { max-width: 100%; height: auto; }
    직접 규칙이 이기던 종전 구조 그대로다(값이 갈리면 최소폭 계산이 갈린다). */
 h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
 
-/* ③ 랜딩은 라이트 전용이다(§랜딩 §개편 §서는 못 ③). OS 다크에서 새던 두 자리(결함
+/* ③ 랜딩은 라이트 전용이다(§랜딩 §개편 §남는 규칙 ③). OS 다크에서 새던 두 자리(결함
    `5763d711`) 중 `--vp-c-brand-1`(=`.VPSkipLink` 잉크색)은 칠할 요소를 잃어 같이 걷혔고,
    스킴 선언만 남는다 — 브라우저 기본 포커스 링(정거장 전부)의 유일한 손잡이다. UA 라이트
    링을 그대로 받으므로 우리 색이 하나도 안 는다. */
@@ -352,7 +352,7 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
    `e0701973`) ─────────────── */
 /* `@supports`가 거짓이거나 901px 미만이면 `.stage`에 규칙이 0건 걸려 세 절이 그냥
    지금처럼(각자 `.wrap`으로) 세로로 쌓인다 — 그 상태가 정본이다(못 ⑦의 예외 한 조각,
-   §뽑는 못 ③). `.stage`가 view-timeline의 주체이고 세 절은 이름 `--stage`로 그 구간을
+   §푸는 규칙 ③). `.stage`가 view-timeline의 주체이고 세 절은 이름 `--stage`로 그 구간을
    읽는다 — JS는 0줄이다. `reduce`는 `no-preference`로 이 블록 전체를 안 걸어 막는다(아래
    §reduce 참고) — 겹만 죽이면 `sticky` + 음수 `margin-top`이 남아 절들이 포개진다. */
 @supports (animation-timeline: view()) {
@@ -540,7 +540,7 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
 /* 상태 레일 아래에 서는 등폭 식별자 한 낱말(§방향·토큰 «색»의 모양 절반). 서는 문자열이
    전부 제품이 이미 쓰는 식별자다 — `.md`(상태 없음) · `.wip` · `.done`은 코어 §큐의
    불변식 1이 정한 파일명 3종이고, 지금 이 셋뿐이다(`.gallery` 둘은 §랜딩 §갤러리 식별자로
-   걷혔다). 한글 문장 · 제목 · 라벨은 0개다(§서는 못 ②). aria-hidden을 안 단다 — 색을 못
+   걷혔다). 한글 문장 · 제목 · 라벨은 0개다(§남는 규칙 ②). aria-hidden을 안 단다 — 색을 못
    보는 사람에게 상태를 지는 것이 바로 이 낱말이다. 색은 아래 .steps 블록이 자리마다 준다. */
 .dira-landing .sig {
   display: block; margin: 0 0 12px; font-family: var(--mono);

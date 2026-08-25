@@ -170,8 +170,7 @@ The exception is a real process, session, or pid - `pid가 살아 있다`, `세�
 있다`, `부모가 wait에 서 있다` stay as they are, and so does any sentence whose subject is a
 person. A ticket, file, or setting is not a live thing: write `열려 있는 동안`, `그대로
 남는다`. `박다`/`못박다` is banned as a metaphor for fixing a rule or a value (the vendored
-guidance's own example: `코드로 박는 자리 -> 코드에 명시하는 상황`); quoting the section
-name `§못박는 것` keeps its letters until that section is renamed.
+guidance's own example: `코드로 박는 자리 -> 코드에 명시하는 상황`);
 
 Already-written files aren't rewritten under this rule - the §Characters clause above
 applies here word for word.

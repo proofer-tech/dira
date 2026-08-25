@@ -1,10 +1,10 @@
 // dira 데스크톱 셸. 하는 일은 일곱이다 — Next standalone 서버를 자식으로 띄우고(번들의 엔진을
-// 그 전에 userData로 꺼내 `DIRA_ENGINE`으로 넘긴다, 못박는 것 8), 창이 그것을 열고,
+// 그 전에 userData로 꺼내 `DIRA_ENGINE`으로 넘긴다, 고정하는 것 8), 창이 그것을 열고,
 // 창을 닫아도 메뉴바에 남고(N1), 답변 대기 티켓이 새로 생기면 알리고(N2), 화면이 부르면
 // 네이티브 경로 다이얼로그를 띄우고(N3), 로그인 시 자동 실행을 켜고 끄고(N4), 큐에 일이 남아
 // 있으면 잠자기를 막고(N6 — 유휴도 뚜껑도), 1시간마다 새 버전을 찾아 받아두고 창이 보이면
 // 토스트로, 아니면 OS 알림으로 알린다(U1·U2·U3 — 설치는 다음 실행 때).
-// 스펙: ../../docs/DESIGN.md §데스크톱 앱 ("못박는 것" 1~8, N1~N6) · §릴리스 · 자동 업데이트
+// 스펙: ../../docs/DESIGN.md §데스크톱 앱 ("고정하는 것" 1~8, N1~N6) · §릴리스 · 자동 업데이트
 // (R5~R8) · §표면이 창 안으로 들어온다 (T1~T7).
 import { app, BrowserWindow, Menu, MenuItem, Notification, Tray, dialog, ipcMain, nativeImage, shell } from "electron";
 // 이름 가져오기(`import { autoUpdater }`)가 아닌 이유: electron-updater는 CJS이고 그 이름을
@@ -42,15 +42,15 @@ let quitting = false;
  *  스코프다. 준비 전의 오리진을 담아두면 두 번째 실행이 아직 안 듣는 포트로 창을 연다. */
 let readyOrigin: string | null = null;
 /** 렌더러 사망(`render-process-gone`)이나 로드 실패(`did-fail-load`)를 겪은 뒤 `true`다.
- *  창 자체는 파괴되지 않은 채로 내용만 죽는 경우(못박는 것 9)를 `win.isDestroyed()`가
+ *  창 자체는 파괴되지 않은 채로 내용만 죽는 경우(고정하는 것 9)를 `win.isDestroyed()`가
  *  못 보므로 따로 든다. 창을 새로 열거나 되살릴 때 `false`로 되돌아간다. */
 let contentDead = false;
 /** `killServer()`가 자식을 죽이기 **직전**에 그 자식을 여기 적어 둔다. 자식의 `exit`가 이
  *  참조와 같은 것이면 우리가 벌인 일이고, 다르면(`null`이거나 다른 자식) 밖에서 죽은
- *  것이다(못박는 것 9 — `isExternalDeath`). */
+ *  것이다(고정하는 것 9 — `isExternalDeath`). */
 let killedIntentionally: ChildProcess | null = null;
 
-/** OS가 준 빈 포트. 7331 고정은 브라우저의 계약이고 창은 자기 서버를 알고 있다 (못박는 것 1). */
+/** OS가 준 빈 포트. 7331 고정은 브라우저의 계약이고 창은 자기 서버를 알고 있다 (고정하는 것 1). */
 function freePort(): Promise<number> {
   // ponytail: listen(0) → close → 그 번호를 자식에게 넘긴다. 닫고 넘기는 사이가 이론상 경쟁
   // 구간이지만 로컬 1회 실행이라 실측 충돌이 없다. 부딪히면 자식 exit를 잡아 재시도.
@@ -95,8 +95,8 @@ function userPath(): string {
  *  아니다** — `.app/Contents/MacOS/dira`로 띄우면 LaunchServices가 그 자식을 같은 번들의 앱
  *  인스턴스로 등록해 창을 안 만드는 **빈 독 타일**이 하나 더 생긴다(`lsappinfo`가 `type="Foreground"`
  *  `!cgsConnection`으로 찍는다, `e59ceae4`). Helper 번들은 `Info.plist`에 `LSUIElement`가 서 있어
- *  타일을 안 만든다 — Electron이 자기 유틸리티 프로세스를 그것으로 띄우는 이유다 (못박는 것 7).
- *  바이너리는 같은 것이라 `ELECTRON_RUN_AS_NODE`도 못박는 것 3도 그대로다. */
+ *  타일을 안 만든다 — Electron이 자기 유틸리티 프로세스를 그것으로 띄우는 이유다 (고정하는 것 7).
+ *  바이너리는 같은 것이라 `ELECTRON_RUN_AS_NODE`도 고정하는 것 3도 그대로다. */
 function nodeBin(): string {
   const exe = basename(process.execPath); // 패키징 "dira" · 소스 "Electron"
   const helper = join(process.execPath, "..", "..", "Frameworks", `${exe} Helper.app`, "Contents", "MacOS", `${exe} Helper`);
@@ -104,7 +104,7 @@ function nodeBin(): string {
   return existsSync(helper) ? helper : process.execPath;
 }
 
-/** 못박는 것 8 — **엔진은 번들에 들어가고, 쓰이기 전에 번들 밖으로 나온다.** §0-3 스캐폴딩이
+/** 고정하는 것 8 — **엔진은 번들에 들어가고, 쓰이기 전에 번들 밖으로 나온다.** §0-3 스캐폴딩이
  *  읽는 넷(`tick.sh` · `tickets.py` · `templates/` · `worker.sh.example`)이 `Resources/engine/`에
  *  있고, 그것을 userData로 복사한 뒤 경로를 `DIRA_ENGINE`으로 서버에 넘긴다.
  *
@@ -176,7 +176,7 @@ function startServer(port: number): ChildProcess {
   proc.stderr?.on("data", (b) => (stderr += b));
   proc.stdout?.on("data", (b) => process.stdout.write(b));
   proc.on("error", (e) => (stderr += `${e.message}\n`));
-  // 못박는 것 9 — 자식이 죽는 것을 본다. `killServer()`가 먼저 지운 것(정상 종료·재시작
+  // 고정하는 것 9 — 자식이 죽는 것을 본다. `killServer()`가 먼저 지운 것(정상 종료·재시작
   // 중 정리)이면 `killedIntentionally`가 이 자식을 가리키고 있어 조용히 넘어간다. 그 참조가
   // 다르면 밖에서(`kill -9` 등) 죽은 것이라 정리만 하고 되살리기는 다음 `showWindow()`가 맡는다.
   proc.on("exit", (code, signal) => {
@@ -190,7 +190,7 @@ function startServer(port: number): ChildProcess {
   return proc;
 }
 
-/** 준비 판정은 HTTP다 — stdout의 `Ready` 문자열은 버전마다 바뀌고 깨져도 조용하다 (못박는 것 2). */
+/** 준비 판정은 HTTP다 — stdout의 `Ready` 문자열은 버전마다 바뀌고 깨져도 조용하다 (고정하는 것 2). */
 async function waitForReady(origin: string, proc: ChildProcess): Promise<string | null> {
   const deadline = Date.now() + READY_TIMEOUT_MS;
   while (Date.now() < deadline) {
@@ -239,7 +239,7 @@ function showFailure(reason: string) {
   win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
 }
 
-/** 창은 자기가 띄운 오리진만 연다 (못박는 것 4). 이 창은 fs를 만지는 서버 바로 앞이다. */
+/** 창은 자기가 띄운 오리진만 연다 (고정하는 것 4). 이 창은 fs를 만지는 서버 바로 앞이다. */
 function openWindow(origin: string): BrowserWindow {
   contentDead = false; // 새로 여는 창이라 아직 아무것도 안 죽었다
   const win = new BrowserWindow({
@@ -249,7 +249,7 @@ function openWindow(origin: string): BrowserWindow {
     webPreferences: { contextIsolation: true, nodeIntegration: false, preload: PRELOAD },
   });
 
-  // 못박는 것 9 — 창은 안 파괴됐는데 내용만 죽는 두 경로. `win.isDestroyed()`가 못 보므로
+  // 고정하는 것 9 — 창은 안 파괴됐는데 내용만 죽는 두 경로. `win.isDestroyed()`가 못 보므로
   // 이 플래그로 든다 — 다음 `showWindow()`가 되살리기로 갈지 이것으로 가른다.
   win.webContents.on("render-process-gone", (_e, details) => {
     contentDead = true;
@@ -297,7 +297,7 @@ function openWindow(origin: string): BrowserWindow {
 
 // ── N2 답변 대기 알림 + 디스패치 보류 알림 ──────────────────────────────────
 //
-// 판정은 서버가 한다(못박는 것 5) — main은 `GET /api/awaiting`·`GET /api/gate`를 물어보고
+// 판정은 서버가 한다(고정하는 것 5) — main은 `GET /api/awaiting`·`GET /api/gate`를 물어보고
 // **직전 집합과의 차집합만** 알린다. 켠 직후 첫 응답은 조용히 씨를 뿌린다: 앱을 켤 때마다 밀린
 // 알림이 쏟아지면 그 알림은 다음 주에 꺼진다. 둘 다 같은 30초 타이머를 나눠 쓴다(`boot()`) —
 // `setInterval`을 하나 더 만들지 않는다.
@@ -325,7 +325,7 @@ function notify(item: Awaiting, origin: string) {
   n.show();
 }
 
-/** 폴링 실패는 삼키되 로그로 남긴다 — 서버가 죽었거나 응답이 깨져도 앱은 계속 산다.
+/** 폴링 실패는 삼키되 로그로 남긴다 — 서버가 죽었거나 응답이 깨져도 앱은 계속 돈다.
  *  `Array.isArray`까지가 신뢰 경계다: 응답이 배열이 아니면 아래 루프가 던져 앱이 죽는다. */
 async function pollAwaiting(origin: string) {
   try {
@@ -473,7 +473,7 @@ ipcMain.handle("dira:pick-path", async (e, mode: unknown) => {
 // **받아두고 종료할 때 적용한다. 몰래 재시작하지 않는다**(R6): 기본 경로는 `autoInstallOnAppQuit`
 // 뿐이다. 지금 당장 설치하고 재시작시키는 호출은 U3의 `지금 재시작` 버튼을 눌렀을 때 딱 한 자리에서만
 // 난다(요구 `9a04dabc` — 판정은 `grep -c`라 이름을 여기 안 적는다). 이 앱 뒤에는 도는 세션과
-// cron 워커가 붙어 있어서 임의 재시작이 못박는 것 3(자식 서버는 앱보다 오래 살지 않는다)을 사람이
+// cron 워커가 붙어 있어서 임의 재시작이 고정하는 것 3(자식 서버는 앱보다 오래 살지 않는다)을 사람이
 // 모르는 시점에 발동시키는데, 사람이 손으로 누른 시점은 이미 아는 시점이고 남는 구멍(무엇이
 // 도는지)은 `busy` 확인이 막는다(§재재판정).
 
@@ -645,7 +645,7 @@ autoUpdater.on("update-downloaded", (info) => {
 });
 
 // 맥의 `quitAndInstall()`은 `app.quit()`을 안 거치고 **창을 먼저 닫은 뒤에야**
-// `before-quit-for-update`를 낸다(§못박는 것 3 넷째 경로) — 그 이벤트만 듣고 있으면
+// `before-quit-for-update`를 낸다(§고정하는 것 3 넷째 경로) — 그 이벤트만 듣고 있으면
 // `win.on("close")`(N1)가 아직 `quitting === false`인 순간에 먼저 걸려 창을 숨긴다.
 // 이벤트 순서에 기대지 않도록 호출 직전, 우리가 재시작을 결정한 바로 그 자리에서 세운다.
 function quitAndInstallNow() {
@@ -712,7 +712,7 @@ function setAutoUpdate(on: boolean) {
   if (on) checkForUpdate(false);
 }
 
-/** T7 — 오는 길은 채널 하나, 인자는 미리 아는 이름 하나다. 모르는 값은 버린다(못박는 것 4) —
+/** T7 — 오는 길은 채널 하나, 인자는 미리 아는 이름 하나다. 모르는 값은 버린다(고정하는 것 4) —
  *  렌더러가 보낸 값이 그대로 호출 인자가 되는 자리를 안 만든다. */
 ipcMain.handle("dira:update-action", async (_e, action: unknown) => {
   switch (action) {
@@ -735,7 +735,7 @@ ipcMain.handle("dira:update-action", async (_e, action: unknown) => {
 
 /** 트레이 메뉴. **열 때마다 새로 만든다** — 체크 상태의 원본은 OS이고(N4) 앱 안 변수에 담아두면
  *  시스템 설정 → 로그인 항목에서 끈 것이 메뉴에는 켜진 채로 남는다. `setContextMenu`는 메뉴를
- *  한 번 박고 끝이라 그 갱신 자리가 없어서 안 쓴다 — 클릭 때마다 `popUpContextMenu`로 띄운다. */
+ *  한 번 정하고 끝이라 그 갱신 자리가 없어서 안 쓴다 — 클릭 때마다 `popUpContextMenu`로 띄운다. */
 function trayMenu(): Menu {
   return Menu.buildFromTemplate([
     { label: "열기", click: () => showWindow() },
@@ -752,7 +752,7 @@ function trayMenu(): Menu {
       label: "남은 일이 있으면 잠자기 방지",
       type: "checkbox",
       checked: existsSync(noSleepFlag()),
-      // 못박는 것 9 되살리기 뒤에도 지금 오리진(`readyOrigin`)을 본다 — 열 때마다 새로
+      // 고정하는 것 9 되살리기 뒤에도 지금 오리진(`readyOrigin`)을 본다 — 열 때마다 새로
       // 만드는 메뉴라 트레이가 뜬 뒤 자식이 재시작됐어도 옛 오리진을 들고 있지 않는다.
       click: (item) => setNoSleep(item.checked, readyOrigin!),
     },
@@ -809,7 +809,7 @@ async function showAbout() {
 // ── 메뉴 → 렌더러 (§0-12 `Help > 의견 보내기` · N5 `Edit > 찾기`) ────────────
 
 /** **늘어난 렌더러 노출이 0개다.** preload에 새 API가 없고 `ipcRenderer`도 `fs`도 안 넘어간다
- *  (못박는 것 4) — main이 지금 떠 있는 문서에 이벤트 하나를 던지고 끝이다. 듣는 쪽은
+ *  (고정하는 것 4) — main이 지금 떠 있는 문서에 이벤트 하나를 던지고 끝이다. 듣는 쪽은
  *  `apps/teams/components/feedback-dialog.tsx` 하나다.
  *
  *  **`loadURL`로 다시 열지 않는다**(§0-12): 쓰던 글·펼친 스트림·필터가 날아간다. 지금 보고 있는
@@ -870,7 +870,7 @@ function installAppMenu() {
     { role: "viewMenu" },
     { role: "windowMenu" },
     // §0-12 — `Window` 다음이고 **항목은 하나다**. `About dira`는 위 앱 메뉴 첫 항목 그대로다
-    // (여기로 안 옮긴다). 메뉴 이름이 영어인 것은 옆의 role 라벨이 영어로 박혀 있어서고,
+    // (여기로 안 옮긴다). 메뉴 이름이 영어인 것은 옆의 role 라벨이 영어로 적혀 있어서고,
     // 우리가 만든 **항목**은 앱 안의 다른 항목들처럼 한글이다(트레이 `열기`·`종료`와 같은 벌).
     { label: "Help", submenu: [{ label: "의견 보내기", click: openFeedback }] },
   ]);
@@ -890,7 +890,7 @@ function installAppMenu() {
   Menu.setApplicationMenu(menu);
 }
 
-/** 못박는 것 9 — 창을 다시 올릴 때마다 무엇이 죽어 있는지 보고 갈린다. 아무것도 안 죽었으면
+/** 고정하는 것 9 — 창을 다시 올릴 때마다 무엇이 죽어 있는지 보고 갈린다. 아무것도 안 죽었으면
  *  종전 그대로 보여주기만 한다. 뭔가 죽었으면 서버 생사 하나로 갈린다(`decideRevive`) — 살아
  *  있으면 창만 다시 읽고, 죽어 있으면 자식부터 다시 띄운 뒤 새 오리진으로 창을 읽는다.
  *  되살리기가 실패하면 흰 창을 남기지 않고 못 2의 실패 화면으로 간다. */
@@ -964,10 +964,10 @@ async function boot() {
   }, POLL_MS);
 }
 
-// ── 못박는 것 6 — 인스턴스는 하나다 ────────────────────────────────────────
+// ── 고정하는 것 6 — 인스턴스는 하나다 ────────────────────────────────────────
 //
 // **서버 spawn·창·트레이보다 먼저 잡는다.** 늦게 잡으면 두 번째 인스턴스는 이미 서버를 띄운
-// 뒤고, 포트가 0이라(못박는 것 1) 충돌로 걸리지도 않는다 — 큐를 만지는 서버가 한 벌 더 조용히
+// 뒤고, 포트가 0이라(고정하는 것 1) 충돌로 걸리지도 않는다 — 큐를 만지는 서버가 한 벌 더 조용히
 // 떴다가 죽는다. 3이 종료 경로에서 막은 것이 시작 경로에서 새는 자리다.
 // 락 키는 정하지 않는다 — Electron 기본값(앱 단위)이다.
 if (!app.requestSingleInstanceLock()) {
@@ -988,7 +988,7 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(boot);
 }
 
-// 자식 서버는 앱보다 오래 살지 않는다 (못박는 것 3). 죽는 경로 전부에 건다.
+// 자식 서버는 앱보다 오래 살지 않는다 (고정하는 것 3). 죽는 경로 전부에 건다.
 // ⌘Q · 트레이 `종료` · SIGTERM이 전부 여기로 모인다 — `quitting`이 창의 close 가로채기를 푼다.
 app.on("before-quit", () => {
   quitting = true;

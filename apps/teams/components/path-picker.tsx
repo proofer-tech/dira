@@ -20,7 +20,7 @@ declare global {
      *  `ipcRenderer` 원본도 렌더러에 없다.
      *
      *  `updateAction`은 §릴리스 - 자동 업데이트 §표면이 창 안으로 들어온다 T7 - `update-toast.tsx`가
-     *  쓴다. 인자는 미리 아는 이름 하나이고 main이 `switch`로 갈라 모르는 값은 버린다(못박는 것 4). */
+     *  쓴다. 인자는 미리 아는 이름 하나이고 main이 `switch`로 갈라 모르는 값은 버린다(고정하는 것 4). */
     dira?: {
       pickPath(mode: "file" | "directory"): Promise<string | null>;
       updateAction(

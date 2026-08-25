@@ -39,7 +39,7 @@ export type PersonaNowItem = {
   kind: string;
   /** `owner:`에서 `workerOf`로 뽑은 워커 이름(§비주얼 §66 ⑦ "워커" — `w1`~`w8` 두 자다).
    *  전체 `owner:` 문자열이 아니다 — 화면은 이미 페르소나 축이라 그 반쪽은 필요 없다.
-   *  `lib/workers.ts`가 `node:fs`를 끄는 클라이언트 컴포넌트에서는 못 부르니 여기서 미리 판다
+   *  `lib/workers.ts`가 `node:fs`를 끄는 클라이언트 컴포넌트에남는 규칙 부르니 여기서 미리 판다
    *  (`worker-mark.tsx`와 같은 이유). */
   worker: string | null;
   assignedAt: string | null;

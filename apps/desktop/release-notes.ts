@@ -2,7 +2,7 @@
 // 스펙: ../../docs/DESIGN.md §릴리스 · 자동 업데이트 R7 (본문 첫 줄은 R6).
 //
 // **원본이 원격 API인 이유는 받는 맥에 이 레포가 없어서다.** 번들에 들어가는 것은 엔진 파일
-// 넷뿐이고 `.git`은 안 들어간다(§못박는 것 8) — `git log`가 아예 불가능하다.
+// 넷뿐이고 `.git`은 안 들어간다(§고정하는 것 8) — `git log`가 아예 불가능하다.
 //
 // 이 파일은 네트워크도 프로세스도 직접 만지지 않는다. 둘 다 인자(`Io`)로 받는다. 그래서
 // 아래 세 경로를 `release-notes.test.ts`가 electron도 GitHub도 `claude`도 없이 다 밟는다.
@@ -32,8 +32,8 @@ function titles(body: string): string[] {
     .filter(Boolean);
 }
 
-/** 분류-문체 규칙은 changelog-generator 참고 자료에서 베껴 여기 박는다(요구 `bde6e0f7`).
- *  앱이 그 원본 파일을 읽지 않는다 — 받는 맥에 그 경로가 없다(§못박는 것 8). 정본이 복사본이
+/** 분류-문체 규칙은 changelog-generator 참고 자료에서 베껴 여기 정한다(요구 `bde6e0f7`).
+ *  앱이 그 원본 파일을 읽지 않는다 — 받는 맥에 그 경로가 없다(§고정하는 것 8). 정본이 복사본이
  *  되는 대가로 새 의존 0을 산다. 형식(한국어 불릿 3~5줄, 헤딩·이모지 없음)은 R7이 지목해 그대로다. */
 function prompt(from: string, to: string, list: string[]): string {
   return [

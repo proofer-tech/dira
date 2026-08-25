@@ -25,7 +25,7 @@ apps/teams/
                         한다(`⌘F`가 그 컨텍스트를 읽는다) — 위 둘과 갈리는 유일한 조건이다
       not-found.tsx     404. `p/[project]/layout.tsx`의 notFound()를 받는 경계가 여기다
       api/awaiting/     **화면이 쓰지 않는다** — Electron main이 답변 대기를 물어보는 창구다
-                        (DESIGN.md §데스크톱 앱 N2 · 못박는 것 5). 판정은 `lib/queue.ts`의
+                        (DESIGN.md §데스크톱 앱 N2 · 고정하는 것 5). 판정은 `lib/queue.ts`의
                         `isAwaiting` 하나고 여기서 다시 쓰지 않는다.
                         화면이 필요한 데이터는 종전대로 서버 컴포넌트가 `lib/`를 직접 부른다
       api/work/         같은 성격의 둘째 창구 — `{busy}` 하나다(N6 `남은 일이 있으면 잠자기 방지`).
@@ -146,7 +146,7 @@ apps/teams/
                         (`install_id`는 `$TICKET_LOCAL/analytics.json`, `session_id`는 모듈 메모리
                         30분) · 자격값 읽기(`GA_MEASUREMENT_ID`·`GA_API_SECRET`, 없으면 안 보냄) ·
                         끄기 판정 · 익명 규칙. 트리거 자리에 `if (enabled)`를 흩뿌리지 않는다.
-                        **`gtag.js`를 안 쓴다**(렌더러에 원격 JS를 안 들인다 — 못박는 것 4):
+                        **`gtag.js`를 안 쓴다**(렌더러에 원격 JS를 안 들인다 — 고정하는 것 4):
                         서버가 `mp/collect`로 POST한다. **던지지 않고 호출자는 await하지 않는다**
                         (Promise를 주는 이유는 하나 — 테스트가 전송을 관찰한다). 이벤트 이름 8개는
                         `Events` 타입이 닫는다 — 표 밖의 이름은 컴파일이 거부한다(§0-11 표가 단일 출처)
@@ -173,7 +173,7 @@ apps/teams/
                         어느 화면 하나가 조용히 색 없이 남는다. 팔레트 표는 `lib/urls.ts`
     feedback-dialog.tsx `의견 보내기` 폼(§0-12) — `textarea` 하나 + 보내기. **여는 신호가 하나다**:
                         데스크톱 셸의 `Help > 의견 보내기`가 던지는 `dira:feedback` window 이벤트
-                        (`apps/desktop/main.ts` — preload에 새 API가 0개다. 못박는 것 4).
+                        (`apps/desktop/main.ts` — preload에 새 API가 0개다. 고정하는 것 4).
                         진입점이 그 메뉴 하나뿐이라 열림 상태를 자기가 든다. 보내기는 `window.open` 하나고
                         (`setWindowOpenHandler`가 외부로 보낸다 — **새 IPC 0개**) 서버로 가는 것은
                         `feedback_submit` 하나고 그 길은 `trackEvent` 하나다(§0-11). **의견 본문은 GA로 안 간다**.
@@ -475,5 +475,5 @@ import { listTickets } from "./queue.ts";   // lib 안에서는 확장자 `.ts`�
 | `remark-gfm` | 이 큐의 본문이 표와 체크리스트(`- [ ]`)로 가득한데 CommonMark에 둘 다 없다. `react-markdown`이 GFM을 기본으로 안 켠다 |
 | `cmdk` | shadcn `command`가 직접 import. DESIGN.md §5가 전환기·deps 멀티셀렉트·필터를 `command`로 정한 것의 대가다(검색·키보드 이동·필터링을 직접 쓰면 수백 줄). `add command`가 끌고 왔다 |
 | `shiki` | `app/(site)/doc.tsx`(매뉴얼 22장 코드펜스 하이라이팅). `apps/site` 이사(`6a24257d`, §한 코드베이스)로 들어왔다 — 렉서·문법·테마 매핑을 직접 쓰면 수백 줄이고, 다크 대응까지 필요하다(`--shiki-light`/`--shiki-dark` 두 변수) |
-| `typed.js` | 히어로 `<h1>` 타이핑(`landing.tsx:442`, DESIGN §P237 §뽑는 못 ①). **사람이 이름으로 지목했다** — 무의존 대안이 있었고 거절당했다(로드맵 §P237-2 `4655e36c`). 몇 줄을 대체했나로 정당화하지 않는다. 버전 고정(`3.0.0`, `^` 없이) — 랜딩이 유일한 공개 화면이라 자동 마이너 업데이트가 히어로 첫 줄을 조용히 바꾸는 자리를 안 만든다 |
+| `typed.js` | 히어로 `<h1>` 타이핑(`landing.tsx:442`, DESIGN §P237 §푸는 규칙 ①). **사람이 이름으로 지목했다** — 무의존 대안이 있었고 거절당했다(로드맵 §P237-2 `4655e36c`). 몇 줄을 대체했나로 정당화하지 않는다. 버전 고정(`3.0.0`, `^` 없이) — 랜딩이 유일한 공개 화면이라 자동 마이너 업데이트가 히어로 첫 줄을 조용히 바꾸는 자리를 안 만든다 |
 | `sonner` | 랜딩 사용 **0** — 레인 힌트 토스트가 걷혔다(DESIGN §랜딩 §레인 힌트 폐기). `package.json`에는 남는다 — §5 §부품 목록이 서버 액션 결과용으로 예약했다(같은 절) |
