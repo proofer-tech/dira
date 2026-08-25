@@ -55,6 +55,45 @@ test("참견 칸 placeholder가 목적지를 칸 안에서 말한다 — `도는
   );
 });
 
+// 티켓 707d1448(요구 ea26bd52, 답 55ff2be0, §2-15 ⑭ · §비주얼 §64): `결과` 절이 원문 `<pre>`
+// 하나에서 마크다운 + 원문 두 면이 된다. 여기서 못박는 것은 눈으로 보면 지나치기 쉬운 넷 —
+// 밀도 클래스가 §64 표 그대로인지, 파싱이 폴링마다 다시 안 도는지(메모 키), 빈 짝이 마크다운
+// 문구 없이 빈 상자로 남는지, 줄을 바꾸면 상태가 정말 새로 서는지(key).
+test("`결과` 마크다운 면의 밀도 겹이 §비주얼 §64 표 그대로다", () => {
+  assert.match(
+    s,
+    /const RESULT_MARKDOWN_CLASS =\s*\n\s*"text-sm leading-6 \[&_h1\]:text-base \[&_h2\]:text-sm \[&_h3\]:text-sm \[&_code\]:text-xs \[&_table\]:text-xs";/,
+    "밀도 겹 클래스 일곱이 §64 표와 다르다",
+  );
+});
+
+test("`결과` 마크다운 파싱이 폴링마다 다시 안 돈다 — 메모 키가 `copyText` 하나다", () => {
+  const memoStart = s.indexOf("const markdownView = useMemo(");
+  const memoEnd = s.indexOf(");", memoStart);
+  const memoBody = s.slice(memoStart, memoEnd);
+  assert.match(
+    memoBody,
+    /\[copyText\],\s*$/,
+    "`markdownView`의 useMemo 의존 배열이 `[copyText]` 하나가 아니다 — `results`를 걸면 폴링마다 재파싱한다",
+  );
+});
+
+test("`결과` 짝의 본문이 공백뿐이면 마크다운 면에 `markdown.empty` 문구가 안 선다", () => {
+  assert.match(
+    s,
+    /r\.body\.trim\(\) \? \(\s*<Markdown text=\{r\.body\} breaks="all" className=\{RESULT_MARKDOWN_CLASS\} \/>\s*\) : \(\s*<pre className=\{PANEL_PRE\} \/>\s*\)/,
+    "빈 짝이 `<Markdown>`을 그대로 타면 §10의 `markdown.empty` 문구가 뜬다 — 종전 빈 상자가 아니다",
+  );
+});
+
+test("`결과` 절이 `key={event.key}`로 달려 다른 줄을 고르면 다시 마크다운이다", () => {
+  assert.match(
+    s,
+    /<ResultSection key=\{event\.key\} results=\{results\} \/>/,
+    "`ResultSection`이 줄 키로 안 갈리면 토글 상태(`markdownOn`)가 다른 줄에서도 살아남는다",
+  );
+});
+
 test("답변 대기면 참견 폼이 안 서고 목적지 문장과 함께 답변 폼으로 통째로 갈린다(§Done when 2)", () => {
   // `mode === "answer"`가 참견 폼 조립보다 먼저 `return`해 같은 자리에 참견 입력칸이 안 선다 —
   // 그래서 사람이 그 칸에 답을 쓰고 보내기를 눌러 `not-wip` 실패 문구를 보는 경로 자체가 없다.

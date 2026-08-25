@@ -22,7 +22,7 @@
  *  `engineCan("interject", …)`(`lib/urls.ts`. codex는 둘 다 안 되고 grok은 앞만 된다).
  *  없는 쪽은 상자 자리에 `<EmptyState>`, 폼 자리에 비활성 + 사유 한 줄이다.
  *  **진입점을 지우지 않는다** — 조용히 사라지면 사람은 고장으로 읽는다. */
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTrackedRouter } from "@/lib/route-pending";
 import {
   ArrowDown,
@@ -65,7 +65,8 @@ import {
 import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/marker";
 import { Message, MessageContent, MessageHeader } from "@/components/ui/message";
 import { useKeymap } from "@/components/keymap-provider";
-import { useT } from "@/components/language-provider";
+import { useLocale, useT } from "@/components/language-provider";
+import { t as translate } from "@/lib/i18n";
 import { formatCombo, matchCombo } from "@/lib/keymap";
 import type { FollowupReason } from "@/lib/followup";
 import type { InterjectReason } from "@/lib/interject";
@@ -1370,25 +1371,40 @@ const PANEL_PRE =
   "mt-1 mb-2 overflow-auto rounded-md bg-muted p-3 font-mono text-xs break-words whitespace-pre-wrap text-foreground";
 
 /** 상세 단의 절 하나 — `입력`·`결과` 공용(§2-15 ⑧). 머리는 라벨 + `ml-auto` 복사 버튼이고,
- *  누르면 **그 절의 원문**이 클립보드로 간다(다른 절과 절 사이에는 안 걸린다). */
+ *  누르면 **그 절의 원문**이 클립보드로 간다(다른 절과 절 사이에는 안 걸린다).
+ *
+ *  `toggle`은 `결과` 절만 준다(§2-15 ⑭ 2 · §비주얼 §64 개정) — `입력` 절은 이 프롭이 없어
+ *  헤더 클래스가 종전 `flex h-6 items-center` 그대로다(`gap-2`는 토글이 있을 때만 는다). */
 function DetailSection({
   label,
   copyText,
+  toggle,
   children,
 }: {
   label: string;
   copyText: string;
+  toggle?: { pressed: boolean; onToggle: () => void };
   children: React.ReactNode;
 }) {
   const t = useT();
   return (
     <section className="mt-2 first:mt-0">
-      <div className="flex h-6 items-center">
+      <div className={cn("flex h-6 items-center", toggle && "gap-2")}>
         <span className="text-xs text-muted-foreground">{label}</span>
+        {toggle && (
+          <button type="button" aria-pressed={toggle.pressed} className="ml-auto" onClick={toggle.onToggle}>
+            <Badge
+              variant={toggle.pressed ? "secondary" : "outline"}
+              className={toggle.pressed ? undefined : "text-muted-foreground"}
+            >
+              {t("progress.stream.markdown")}
+            </Badge>
+          </button>
+        )}
         <Button
           variant="ghost"
           size="xs"
-          className="ml-auto"
+          className={toggle ? undefined : "ml-auto"}
           onClick={() => void navigator.clipboard.writeText(copyText)}
         >
           <Copy aria-hidden />
@@ -1397,6 +1413,70 @@ function DetailSection({
       </div>
       {children}
     </section>
+  );
+}
+
+/** 마크다운 밀도 겹 — §비주얼 §10 넷째 자리, 값은 §비주얼 §64 개정 2. 루트의 `text-base
+ *  leading-7`을 `cn`(twMerge)이 덮고, 다섯 요소 선택자는 특정도로 §10 표의 값을 이긴다. */
+const RESULT_MARKDOWN_CLASS =
+  "text-sm leading-6 [&_h1]:text-base [&_h2]:text-sm [&_h3]:text-sm [&_code]:text-xs [&_table]:text-xs";
+
+/** `결과` 절의 두 면(§2-15 ⑭) — 상태는 이 컴포넌트가 들고, `DetailPanel`이 `key={event.key}`로
+ *  달아 다른 줄을 고르면 새로 마운트돼 **다시 마크다운**이 된다(저장하는 자리 0개).
+ *
+ *  마크다운 파싱은 `useMemo`가 **본문 문자열을 키**로 막는다(§2-15 ⑭ 3) — 2초 폴링마다
+ *  `results` 배열은 새로 생겨도(`pairTool`이 매번 새로 잇는다) 본문이 안 갈리면 파싱이 0회다. */
+function ResultSection({ results }: { results: StreamEvent[] }) {
+  const t = useT();
+  const locale = useLocale();
+  const [markdownOn, setMarkdownOn] = useState(true);
+  const copyText = results.map((r) => r.body).join("\n\n");
+
+  const markdownView = useMemo(
+    () =>
+      results.map((r, i) => (
+        <div key={r.key} className={i > 0 ? "border-t border-border pt-2" : undefined}>
+          {r.error && (
+            <p className="text-xs">
+              <span className="text-foreground">{translate(locale, "progress.stream.error")}</span>
+            </p>
+          )}
+          {r.body.trim() ? (
+            <Markdown text={r.body} breaks="all" className={RESULT_MARKDOWN_CLASS} />
+          ) : (
+            <pre className={PANEL_PRE} />
+          )}
+        </div>
+      )),
+    // 메모 키는 본문 문자열(`copyText`) 하나다 — `results`는 폴링마다 새 배열이라 그대로 걸면
+    // 안 바뀐 본문도 매번 다시 파싱한다(§2-15 ⑭ 3). `locale`은 화면이 안 걸 때만 바뀐다(재마운트).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [copyText],
+  );
+
+  return (
+    <DetailSection
+      label={t("progress.stream.result")}
+      copyText={copyText}
+      toggle={{ pressed: markdownOn, onToggle: () => setMarkdownOn((v) => !v) }}
+    >
+      {markdownOn ? (
+        <div className="space-y-2">{markdownView}</div>
+      ) : (
+        <div className="space-y-2">
+          {results.map((r) => (
+            <div key={r.key}>
+              {r.error && (
+                <p className="text-xs">
+                  <span className="text-foreground">{t("progress.stream.error")}</span>
+                </p>
+              )}
+              <pre className={PANEL_PRE}>{r.body}</pre>
+            </div>
+          ))}
+        </div>
+      )}
+    </DetailSection>
   );
 }
 
@@ -1457,25 +1537,7 @@ function DetailPanel({
           )}
           <pre className={PANEL_PRE}>{diffOrBody(event)}</pre>
         </DetailSection>
-        {results.length > 0 && (
-          <DetailSection
-            label={t("progress.stream.result")}
-            copyText={results.map((r) => r.body).join("\n\n")}
-          >
-            <div className="space-y-2">
-              {results.map((r) => (
-                <div key={r.key}>
-                  {r.error && (
-                    <p className="text-xs">
-                      <span className="text-foreground">{t("progress.stream.error")}</span>
-                    </p>
-                  )}
-                  <pre className={PANEL_PRE}>{r.body}</pre>
-                </div>
-              ))}
-            </div>
-          </DetailSection>
-        )}
+        {results.length > 0 && <ResultSection key={event.key} results={results} />}
       </div>
     </div>
   );

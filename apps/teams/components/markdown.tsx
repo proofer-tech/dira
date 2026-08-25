@@ -13,6 +13,7 @@ import { softBreaks } from "@/lib/markdown-breaks";
 import { refMarkers, type RefIndex } from "@/lib/markdown-refs";
 import { wikilinks, type Vault } from "@/lib/markdown-wikilinks";
 import { DEFAULT_LOCALE, t, type Locale } from "@/lib/i18n";
+import { cn } from "@/lib/utils";
 
 /** `h4~h6`도 `h3`과 같은 값이다 — 단계를 더 만들지 않는다(이 큐의 본문에 4단계 중첩이 없다). */
 const H3 = "mt-4 mb-1 text-base font-medium";
@@ -160,6 +161,7 @@ export function Markdown({
   vault,
   refs,
   locale = DEFAULT_LOCALE,
+  className,
 }: {
   text: string;
   breaks?: "all" | "untilHeading";
@@ -171,13 +173,22 @@ export function Markdown({
    *  것으로 §9 축 1-1(편집 면에는 표식이 없다)을 지킨다. */
   refs?: RefIndex;
   locale?: Locale;
+  /** 루트에 겹치는 밀도 클래스(§비주얼 §10 §넷째 자리 - §비주얼 §64). `cn`(twMerge)이 루트의
+   *  `text-base leading-7`을 덮는다 - 안 주는 세 자리(왕복 스레드 - `.wip` 본문 - 메모리 전문)는
+   *  이 프롭이 없어 한 픽셀도 안 갈린다. */
+  className?: string;
 }) {
   if (!text.trim())
     return <p className="text-sm text-muted-foreground">{t(locale, "markdown.empty")}</p>;
   return (
     // `min-w-0`이 없으면 다이얼로그(grid)에서 아래 표·펜스의 `overflow-x-auto`가 무력화된다.
     // 리듬은 요소가 각자 들고 있다 — `space-y-*`를 걸지 않는다(제목 위 여백 > 문단 사이 간격).
-    <div className="min-w-0 text-base leading-7 break-words [&>:first-child]:mt-0 [&>:last-child]:mb-0 [&_li>ol]:my-1 [&_li>ul]:my-1">
+    <div
+      className={cn(
+        "min-w-0 text-base leading-7 break-words [&>:first-child]:mt-0 [&>:last-child]:mb-0 [&_li>ol]:my-1 [&_li>ul]:my-1",
+        className,
+      )}
+    >
       <ReactMarkdown
         remarkPlugins={[
           remarkGfm,
