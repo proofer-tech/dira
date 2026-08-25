@@ -76759,25 +76759,144 @@ flex flex-wrap items-baseline gap-4 text-xs text-muted-foreground
 **형상은 한 글자도 안 갈린다.** `d`도 `viewBox`도 `fill-rule`도 무수정이고 사본 수가 **일곱 그대로**다
 (§14 §일곱 자리 - 그 표 자체가 낡은 것은 §14 개정이 적었고 이 요구가 고치지 않는다).
 
-#### ③ 무엇으로 세우나 - `wip-shimmer`를 그대로는 못 쓴다 (designer의 칸)
+#### ③ 무엇으로 세우나 - 붙여 보고 골랐다 (designer의 칸이 닫힌다)
 
-**`wip-shimmer`(`globals.css` `@utility`)를 `BrandMark`에 붙이면 아무 일도 안 난다.** 그 유틸이
-`color: transparent` + `background-clip: text`로 서는데, **CSS 배경은 SVG 안의 `path`에 그려지지
-않는다** - 흐를 잉크가 애초에 없다. §36의 값이 *글자* 전용이라는 사실이 여기서 처음 걸린다.
+##### 붙여 봤다 - 안 그려지는 것은 **배경 그라디언트** 하나다
 
-**그래서 designer가 이 칸 하나를 정한다** - `.wip` 카드 스트립과 **같은 사실을 같은 박자로**
-말하는 빛을 SVG 면 위에 세우는 방법. 후보와 각각에 걸리는 것을 같이 적어 둔다(고르는 것은
-designer이고, 표 밖의 안을 골라도 된다 - 근거를 이 절에 적는다):
+`wip-shimmer`를 `BrandMark`에 그대로 걸고 헤드리스 크롬(1440x900, `/p/dira/home`)으로 마크 상자
+(20x20 CSS px를 4배로 확대)를 찍었다. **붙이는 자리에 따라 결과가 둘로 갈리고, 둘 다 못 쓴다.**
 
-| 후보 | 걸리는 것 |
+| 붙인 자리 | 계산된 값 | 화면 |
+|---|---|---|
+| `<svg className="size-4 wip-shimmer">` | `color: rgba(0, 0, 0, 0)` -> **`fill: rgba(0, 0, 0, 0)`** | **마크가 통째로 안 그려진다.** 6프레임 전부 md5가 같고 80x80 캡처의 색이 **한 종**(배경 `#FFFFFF` 6400px) |
+| `<Link className="... text-foreground wip-shimmer ...">` | `color`가 `--foreground` 그대로(같은 레이어에서 `text-foreground`가 나중에 정의되어 이긴다) | **아무 일도 안 난다.** 잉크가 정본대로 그려지고 PNG md5가 개정 이전(`0bece78c`)과 **바이트 단위로 같다** |
+
+**한 줄로 적는 사실은 이것이다 - `path`의 `fill`은 `currentColor`만 읽고 CSS 배경을 안 읽으므로,
+`wip-shimmer`가 흘려보내는 `background-image`가 마크 위에 한 픽셀도 안 그려진다.** `<svg>`에 걸면
+`color: transparent`가 `currentColor`를 타고 `fill`까지 내려가 마크가 사라지고(빛이 붙는 것이
+아니라 잉크가 빠진다), 링크에 걸면 잉크는 지켜지지만 `background-clip: text`가 클립할 글자가
+0자라 그라디언트가 그려질 곳이 없다. **§67 ③ 첫 문단의 `아무 일도 안 난다`는 링크 쪽에서만
+맞고, `<svg>` 쪽은 그보다 나쁘다.**
+
+##### 고른 안 - **표의 둘째(오버레이 한 겹)를 SVG 안으로 들여놓는다**
+
+**마크 모양으로 잘린 띠 한 장이 마크 위를 지나간다.** 오버레이를 DOM 형제로 두는 대신 같은
+`<svg>` 안의 `<g>`로 두고, 마크 자신을 `clipPath`로 삼아 잘라 낸다. 그 `clipPath`가 형상을
+복사하지 않고 **`<use href="#dira-mark">`로 참조**하므로 `d`가 여덟째 자리로 안 늘어난다.
+
+```jsx
+// components/project-switcher.tsx - BrandMark. `wip`은 셸이 내려주는 수다(위 ①)
+<svg aria-hidden viewBox="0 0 32 32" fill="currentColor"
+     fillRule="evenodd" clipRule="evenodd"
+     className={wip > 0 ? "size-4 mark-shimmer" : "size-4"}>
+  {/* `d`는 §14 §SVG 소스 그대로 한 글자도 안 갈린다 - 여기 다시 적지 않는다 */}
+  <path id="dira-mark" data-mark="body" d="..." />
+  {wip > 0 && (
+    <>
+      <clipPath id="dira-mark-clip"><use href="#dira-mark" /></clipPath>
+      <linearGradient id="dira-mark-band">
+        <stop offset="45%" stopColor="var(--muted-foreground)" />
+        <stop offset="50%" stopColor="var(--foreground)" />
+        <stop offset="55%" stopColor="var(--muted-foreground)" />
+      </linearGradient>
+      <g data-mark="band" clipPath="url(#dira-mark-clip)">
+        <rect x="-48" y="0" width="80" height="32" fill="url(#dira-mark-band)" />
+      </g>
+    </>
+  )}
+</svg>
+```
+
+```css
+/* globals.css - 새 색 토큰 0. 아래 둘이 이 절이 늘리는 전부다.
+   켜는 것과 끄는 것을 한 블록에 둔다 - §36 §모션 ②가 흩어 놓는 것을 금지한 그 이유 그대로다. */
+@keyframes mark-shimmer {
+  from { transform: translateX(0); }     /* 띠가 마크 왼쪽 밖에 있다 = 정지 상태 */
+  to   { transform: translateX(48px); }  /* 마크 오른쪽 밖으로 나간다 */
+}
+
+@utility mark-shimmer {
+  & > [data-mark="body"] { fill: var(--muted-foreground); }
+  & > [data-mark="band"] > rect { animation: mark-shimmer 3s linear infinite; }
+
+  @media (prefers-reduced-motion: reduce) {
+    & > [data-mark="body"] { fill: currentColor; }   /* 꺼진 상태의 정본 - §14 알파 1.0 */
+    & > [data-mark="band"] { display: none; }        /* 주차될 그라디언트가 애초에 없다 */
+  }
+}
+```
+
+**띠의 수 넷은 §36에서 그대로 옮긴 것이다.** 그라디언트 정지점 `45% - 50% - 55%`와 그릇 폭
+`80`(= 마크 폭 32의 **250%**)이 §36의 `background-size: 250%` + 같은 정지점과 같은 값이라,
+밝은 심의 폭이 **마크 폭의 25%**(8 유저 단위)로 §36과 같아진다. 이동 거리 `48`은 심이 마크 왼쪽
+밖에서 출발해 오른쪽 밖으로 빠지는 거리이고, `background-position-x` `100% -> 0%`가 §36에서
+만들던 그 궤적과 같다. **새로 고른 수가 0개다.**
+
+**이 안이 늘리는 것 전부.** `globals.css`에 `@keyframes` **하나** + `@utility` **하나**,
+`project-switcher.tsx`에 노드 **넷**(`clipPath` - `linearGradient` - `g` - `rect`)과 속성 셋
+(`id` - `data-mark` - `clipRule`)이다. **새 색 토큰 0 - 새 npm 패키지 0 - `components/ui/` 0줄 -
+새 커스텀 컴포넌트 0 - `d` 사본 0개 증가**(위 아홉 자리 무수정)다.
+
+**이름이 `wip-shimmer-*`가 아닌 이유.** §36 §등록 항목이 자기 검증으로
+`grep -c 'text-2xs\|wip-shimmer' app/globals.css # 5`를 적어 두었다. 이름에 `wip-shimmer`가 들어가면
+그 수가 남의 절에서 조용히 움직인다. `mark-shimmer`는 그 grep에 안 걸리고, 같은 예외의 두 자리는
+`shimmer`라는 낱말을 공유한다.
+
+##### 버린 안 - 표 셋에 하나를 더한다
+
+| 후보 | 왜 버렸나 |
 |---|---|
-| SVG `<linearGradient>` + `<animate>` - `fill`을 그 그라디언트로 | `stop-color="currentColor"`가 되므로 §14 색 못을 안 건드린다. `motion-reduce`에서 **그라디언트가 주차된 채 남는 함정**이 §36과 똑같이 걸린다(아래 ④ 둘째 못) |
-| 마크 위에 `aria-hidden` 오버레이 한 겹 | 새 커스텀 하나가 늘고, 히트 박스(`size-8`)와 포커스 링 박스를 안 건드리는 것을 같이 재야 한다 |
-| CSS `mask-image`로 마크를 세우고 배경을 흐르게 | **`d`가 여덟째 자리로 복사된다**(data URI 또는 새 파일). §14 §자산이 사본 수를 못으로 박았고 이 요구가 그것을 안 뽑는다 |
+| SVG `<linearGradient>` + `<animate>` (표 첫째) | **`motion-reduce`를 CSS로 못 끈다.** SMIL은 미디어 쿼리가 안 닿아 `svg.pauseAnimations()` 같은 JS가 붙어야 하고, 그렇게 멈춰도 `fill="url(#...)"`이 그대로라 **주차된 그라디언트**가 남는다(위 못 ②가 정확히 그것을 막는다). `x1`/`x2`/`gradientTransform`을 CSS로 애니메이션하는 길은 브라우저 지원이 갈린다 |
+| 마크 위에 `aria-hidden` 오버레이 한 겹 (표 둘째) | **채택했다. 다만 DOM 형제가 아니라 SVG 안의 `<g>`다.** 표가 걱정한 히트 박스(`size-8`)와 포커스 링 박스는 `<svg>` **안쪽** 좌표계에서만 그려지므로 애초에 안 닿는다 - 실측으로 확인했다(아래 못 표 셋째 행) |
+| CSS `mask-image` (표 셋째) | **`d`가 여덟째 자리로 복사된다.** 표의 근거 그대로이고 이 요구가 §14 §자산의 못을 안 뽑는다 |
+| 마크 정본(`--foreground`)을 그대로 두고 **어두운 띠**가 지나간다 | 라이트에서 검은 잉크 위를 밝은 회색이 지나가는 것이라 **§36 §모션 ②의 버린 안 첫 행**(`글자 위를 지나는 흰 오버레이`)과 같은 구현이다. 머리의 `빛은 더하기만 한다`를 그 자리에서 이미 위반으로 판정했다 |
 
-**박자는 §36 그대로다 - `3s linear infinite`.** 같은 예외의 두 자리가 같은 화면(보드)에 같이 뜨는데
-박자가 갈리면 한 화면에서 두 리듬이 돈다. **위상(phase)까지 맞추라고 요구하지 않는다** - 두 자리가
-같은 시각에 시작하는 것은 이 절이 안 정한다. designer가 다른 수를 고르려면 근거를 이 절에 적는다.
+##### §36의 유도를 그대로 못 옮기는 자리가 하나 있다 - **정본이 이미 대비 상한이다**
+
+§36은 *"어느 프레임에서도 4.5:1인 것이 실측이 아니라 성질이다"*를 이렇게 얻었다 - 정지 정본이
+`--muted-foreground`이고 빛이 `--foreground` 쪽으로만 밀므로, **하한이 곧 정지 값**이었다.
+**마크에서는 그 유도가 성립하지 않는다.** §14가 정한 정지 정본이 `--foreground`이고, 그것이
+이 팔레트에서 대비가 가장 높은 잉크다. 그보다 대비를 더 주는 값이 없다(라이트에서 `#0A0A0A`를
+`#000000`까지 밀어야 19.79 -> 21.00이고, 16px 마크에서 눈에 안 보인다). **더할 머리가 0이다.**
+
+그래서 이 자리는 하한을 **성질로 얻지 않고 값으로 잰다.** 도는 동안 마크의 바탕 잉크는
+`--muted-foreground`이고 띠가 지나는 동안만 `--foreground`이므로, 잉크가 두 회색 사이에 갇힌다는
+§36의 성질은 그대로 서고 **하한만 정지 값이 아니라 `--muted-foreground` 쪽으로 내려간다.**
+위 ④가 *"§14 표의 정지 값이 아니라 그 프레임이 하한이다"*라고 적어 둔 것이 이 자리다.
+
+**`빛은 더하기만 한다`는 그대로 지켜진다.** 그 못이 금지하는 것은 **모션이 대비를 깎는 것**이고
+(§36: *"여기서 더해지는 것은 밝기가 아니라 대비다"*), 이 안에서 움직이는 띠는 라이트에서 잉크를
+`#737373`에서 `#0A0A0A`로, 다크에서 `#A1A1A1`에서 `#FAFAFA`로 민다 - **두 모드 모두 대비가
+오르는 방향이다.** 내려가는 것은 모션이 아니라 조건이 참일 때의 바탕값이고, 그 바탕값의 하한을
+아래 못 표 첫 행에서 4.34까지 재서 3:1 위에 놓았다.
+
+##### 못 다섯을 어떻게 지키나 - 여섯 줄 전부 실측이다
+
+| §67 ④의 못 | 이 안의 처방 | 실측 |
+|---|---|---|
+| **어느 프레임에서도 3:1 이상** | 잉크가 `--muted-foreground`와 `--foreground` 사이에만 있다. 하한은 **`--muted-foreground` x `--accent`(hover)** | **라이트 4.34 - 다크 5.83.** 상한은 §14 표 그대로(18.15 / 14.48). 12프레임 전수에서 잉크가 `#737373`(115)에서 `#0A0A0A`(12) 사이에 갇혔다. **최저 칸 4.34가 기준선의 1.45배다** |
+| **`motion-reduce`에서 픽셀이 같다** | 빛이 **별도 요소**(`<g data-mark="band">`)라 `display: none`으로 통째로 걷힌다. 바탕은 `fill: currentColor`로 정본에 돌아온다. **주차될 그라디언트가 남을 자리가 없다** | `prefers-reduced-motion: reduce`를 걸고 찍은 md5가 **`0bece78c`** - 개정 이전 트리와 **바이트 단위로 같다** |
+| **레이아웃이 안 움직인다** | 움직이는 속성이 `<rect>`의 `transform` 하나이고, 그 `<rect>`가 `<svg>` 안쪽 좌표계에 있어 바깥 상자를 못 민다 | 12프레임 전수에서 마크 `getBoundingClientRect`가 **`x=24 y=15.5 w=16 h=16`으로 한 번도 안 갈렸고**, 헤더 높이가 **48** 그대로였다 |
+| **접근가능 이름이 0자 는다** | 더하는 노드가 전부 `<svg aria-hidden>` 안쪽이다. 링크의 `aria-label="dira"`도 `<svg aria-hidden>`도 무수정이고 `role`/`aria-live`가 0개다 | 마크업 상 `<svg>` 바깥이 한 글자도 안 갈린다 |
+| **정본은 모션이 아니라 글자다** | 모션이 걷혀도 진행중 레인의 카드와 전환기 항목의 수가 그대로다. 이 안이 그 글자를 한 자도 안 건드린다 | 해당 없음(마크업 범위가 `BrandMark` 안쪽뿐이다) |
+| **WCAG 2.2.2를 새로 안 진다** | 발판이 `motion-reduce` 하나 그대로이고 새 발판이 0개다. 조건이 거짓이면 띠 서브트리가 **DOM에 아예 없다** | 위 둘째 행과 같은 캡처 |
+
+**구멍이 메워지는 함정이 하나 있다 - `clipRule="evenodd"`를 같이 건다.** 마크의 구멍은
+`fill-rule="evenodd"`가 뚫는데(§14 §형상), `clipPath`가 읽는 것은 `fill-rule`이 아니라
+**`clip-rule`**이다. 안 걸면 클립이 구멍을 메운 모양이 되어 띠가 티켓 구멍 위를 지나간다 -
+실측으로 확인했다(속성을 떼자 마크 상자의 배경 픽셀 비율이 **56%에서 43.7%로** 떨어졌다).
+`<svg>` 루트에 한 낱말을 더하면 상속으로 `<use>`까지 내려간다.
+
+**`id` 셋은 문서 안에서 유일해야 한다.** `BrandMark` 사용처가 실측 **한 곳**이고(§14 개정) 위 ②가
+자리를 하나로 고정했으므로 고정 문자열로 충분하다. 자리가 둘로 늘어나는 개정이 오면 그 개정이
+`useId()`를 같이 답한다.
+
+##### 박자 - **`3s linear infinite` 그대로다**
+
+위 ③의 판정을 값으로 확인했다. **맞추는 것은 지속시간이지 속도가 아니다.** §36이 3s를 고른 근거는
+1440px 줄에서의 속도 202px/s였는데, 같은 속도를 16px 마크에 적용하면 주기가 **0.08s**가 되어
+초당 12회 번쩍이는 표식이 된다 - 같은 사실을 말하는 것이 아니라 경보가 되고, 한 화면에서 두 리듬이
+도는 것을 막으려던 애초의 목적과도 정반대다. **두 자리가 공유하는 것은 주기 하나다.**
 
 #### ④ 붙는 못 - 셋째 예외의 못 둘이 수 하나만 갈려서 그대로 온다
 
