@@ -22,6 +22,7 @@ import {
   Check,
   ChevronRight,
   Copy,
+  ExternalLink,
   Lock,
   MessageSquareReply,
   Trash2,
@@ -32,6 +33,7 @@ import {
 import {
   answerRequirement,
   deleteTicket,
+  openTicketFileAction,
   saveTicket,
   unassignTicket,
   type SaveState,
@@ -112,6 +114,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 /** 실패 사유는 원문 그대로. 삼키지 않는다(§6 에러 3요소). */
 function Failure({ title, message }: { title: string; message: string }) {
@@ -1183,6 +1186,44 @@ export function AnswerDialog({
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** 해시 줄의 "OS 기본 앱으로 열기" 아이콘 버튼(§10 §자리 다섯) — 이미 쓰는 아이콘 버튼 관용에
+ *  툴팁 한 줄이다. `openTicketFileAction`이 서버에서 다시 찾은 경로로만 `open`을 부른다. */
+export function OpenTicketFileButton({ project, hash }: { project: string; hash: string }) {
+  const t = useT();
+  const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  return (
+    <span className="inline-flex items-center gap-2">
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label={t("common.openInApp")}
+              disabled={pending}
+              onClick={() => {
+                if (pending) return;
+                start(async () => {
+                  setError(null);
+                  const r = await openTicketFileAction(project, hash);
+                  if (!r.ok) setError(r.message || t("common.openInApp.failed"));
+                });
+              }}
+            >
+              <ExternalLink aria-hidden />
+            </Button>
+          }
+        />
+        <TooltipContent>{t("common.openInApp")}</TooltipContent>
+      </Tooltip>
+      {error && <span className="text-xs text-destructive">{error}</span>}
+    </span>
   );
 }
 

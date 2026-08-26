@@ -3,7 +3,16 @@ import assert from "node:assert";
 import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
-import { expandHome, isHash, isName, isProjectId, isRealDirectory, resolveWithin } from "./paths.ts";
+import {
+  expandHome,
+  isHash,
+  isName,
+  isProjectId,
+  isRealDirectory,
+  openInApp,
+  openWithinApp,
+  resolveWithin,
+} from "./paths.ts";
 
 const tmp = mkdtempSync(path.join(tmpdir(), "fst-paths-"));
 process.on("exit", () => rmSync(tmp, { recursive: true, force: true }));
@@ -83,6 +92,17 @@ test("isRealDirectory — `~`도 편다(§7 다른 경로 칸과 같은 관용�
   } finally {
     process.env.HOME = home0;
   }
+});
+
+test("openWithinApp — 기준 밖 rel은 open을 안 부르고 거절로 끝난다(DESIGN.md §10)", async () => {
+  await assert.rejects(() => openWithinApp(base, "../secrets/id_rsa"), /기준 디렉터리 밖/);
+  await assert.rejects(() => openWithinApp(base, "escape/id_rsa"), /기준 디렉터리 밖/);
+});
+
+test("openInApp — 없는 파일은 실패로 끝나되 던지지 않는다", async () => {
+  const r = await openInApp(path.join(tmp, "정말-없는-파일-xyz.md"));
+  assert.strictEqual(r.ok, false);
+  assert.ok(typeof r.message === "string");
 });
 
 async function realBase(): Promise<string> {

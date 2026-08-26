@@ -9,17 +9,19 @@ import { useEffect, useState, useTransition } from "react";
 import Link from "@/components/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTrackedRouter } from "@/lib/route-pending";
-import { FilePlus2, PencilLine, Trash2, TriangleAlert } from "lucide-react";
+import { ExternalLink, FilePlus2, PencilLine, Trash2, TriangleAlert } from "lucide-react";
 import {
   createOntologyAction,
   deleteOntologyAction,
   fixOntologySchemaAction,
+  openOntologyFileAction,
   publishOntologyImportAction,
   renameOntologyAction,
   saveOntologyAction,
   submitOntologySurveyAction,
   type OntologyResult,
 } from "@/app/(app)/p/[project]/ontology/actions";
+import { useT } from "@/components/language-provider";
 // `saveOntologyAction`은 위 것(파일 원문 저장)과 이름이 겹친다 — 워커 화면에서 온 자리
 // 편집(`TICKET_ONTOLOGY`)이라 별칭으로 들여온다(티켓 c5d51522, 이름 충돌은 종전 cd662a73의
 // `saveOntologyAction`과 이 파일이 이미 들고 있던 동명 함수 사이였다).
@@ -41,6 +43,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { Locale } from "@/lib/i18n";
 import {
   Q1_OPTIONS,
@@ -358,6 +361,7 @@ export function OntologyEditor({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <span className="font-mono text-sm break-all">{rel}</span>
         <div className="flex items-center gap-1">
+          <OpenInAppButton action={() => openOntologyFileAction(projectId, rel)} />
           <RenameOntologyButton projectId={projectId} rel={rel} />
           <DeleteOntologyButton projectId={projectId} rel={rel} />
         </div>
@@ -410,6 +414,46 @@ export function OntologyEditor({
         </Button>
       </div>
     </div>
+  );
+}
+
+// ── 기본 앱으로 열기 ───────────────────────────────────────────────────────────
+
+/** 파일 이름 줄의 아이콘 버튼(§10 §자리 다섯, `protocols-ui.tsx`의 판박이) — 이미 쓰는 아이콘
+ *  버튼 관용에 툴팁 한 줄이다. 0이 아닌 코드로 끝나면 그 사유를 그대로 보여준다. */
+function OpenInAppButton({ action }: { action: () => Promise<{ ok: boolean; message?: string }> }) {
+  const t = useT();
+  const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  return (
+    <span className="inline-flex items-center gap-2">
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label={t("common.openInApp")}
+              disabled={pending}
+              onClick={() => {
+                if (pending) return;
+                start(async () => {
+                  setError(null);
+                  const r = await action();
+                  if (!r.ok) setError(r.message || t("common.openInApp.failed"));
+                });
+              }}
+            >
+              <ExternalLink aria-hidden />
+            </Button>
+          }
+        />
+        <TooltipContent>{t("common.openInApp")}</TooltipContent>
+      </Tooltip>
+      {error && <span className="text-xs text-destructive">{error}</span>}
+    </span>
   );
 }
 

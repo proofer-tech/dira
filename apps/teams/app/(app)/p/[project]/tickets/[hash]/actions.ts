@@ -23,7 +23,7 @@ import { followup, type FollowupResult } from "@/lib/followup";
 import { interject, type InterjectResult } from "@/lib/interject";
 import { kickIdleWorker } from "@/lib/kick";
 import { mayHaveRefs, type RefIndex } from "@/lib/markdown-refs";
-import { isHash, parseAssignment, resolveWithin } from "@/lib/paths";
+import { isHash, openInApp, parseAssignment, resolveWithin, type OpenResult } from "@/lib/paths";
 import { findStream, sessionIdOf, tailEvents, type StreamEvent } from "@/lib/transcript";
 import {
   awaitingOf,
@@ -75,6 +75,17 @@ async function target(projectId: string, hash: string): Promise<Target> {
     sessionId: end >= 0 ? sessionIdOf(fm) : null,
     inbox: end >= 0 && !!(fm.inbox ?? "").trim().replace(/^["']+|["']+$/g, ""),
   };
+}
+
+/** "OS 기본 앱으로 열기" 버튼(§10 §자리 다섯) — `target`이 `findTicket`(tickets.py find 미러)으로
+ *  다시 찾아낸 경로만 `open`에 준다. 화면이 그린 뒤 파일이 사라졌거나 잡혔어도 여기서 다시 본다. */
+export async function openTicketFileAction(projectId: string, hash: string): Promise<OpenResult> {
+  try {
+    const t = await target(projectId, hash);
+    return await openInApp(t.path);
+  } catch (e) {
+    return { ok: false, message: (e as Error).message };
+  }
 }
 
 export type StreamChunk = {

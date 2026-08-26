@@ -9,10 +9,11 @@
 import { useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTrackedRouter } from "@/lib/route-pending";
-import { FilePlus2, PencilLine, Trash2, TriangleAlert } from "lucide-react";
+import { ExternalLink, FilePlus2, PencilLine, Trash2, TriangleAlert } from "lucide-react";
 import {
   createProtocolAction,
   deleteProtocolAction,
+  openProtocolFileAction,
   renameProtocolAction,
   saveProtocolAction,
   type ProtocolResult,
@@ -34,6 +35,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { budgetLabel, byteLength, QUEUE_AGENTS_MAX_BYTES } from "@/lib/budgets";
 
 /** §6 에러 3요소 중 1·2번. 사유는 원문 그대로 — 서버가 거부한 이유가 여기 적혀 온다. */
@@ -194,6 +196,7 @@ export function ProtocolEditor({
           )}
         </div>
         <div className="flex items-center gap-1">
+          <OpenInAppButton action={() => openProtocolFileAction(projectId, rel, locale)} />
           <RenameButton projectId={projectId} rel={rel} />
           <DeleteButton projectId={projectId} rel={rel} />
         </div>
@@ -257,6 +260,47 @@ export function ProtocolEditor({
         </Button>
       </div>
     </div>
+  );
+}
+
+// ── 기본 앱으로 열기 ───────────────────────────────────────────────────────────
+
+/** 파일 이름 줄의 아이콘 버튼(§10 §자리 다섯) — 이미 쓰는 아이콘 버튼 관용에 툴팁 한 줄이다.
+ *  새 그릇도 새 색도 안 만든다. `action`이 서버가 이미 검증한 절대경로로 `open`을 부르고,
+ *  0이 아닌 코드로 끝나면 그 사유를 여기 그대로 보여준다(조용히 넘어가지 않는다). */
+function OpenInAppButton({ action }: { action: () => Promise<{ ok: boolean; message?: string }> }) {
+  const t = useT();
+  const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  return (
+    <span className="inline-flex items-center gap-2">
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label={t("common.openInApp")}
+              disabled={pending}
+              onClick={() => {
+                if (pending) return; // §58 처방 — 핸들러 첫 줄 가드
+                start(async () => {
+                  setError(null);
+                  const r = await action();
+                  if (!r.ok) setError(r.message || t("common.openInApp.failed"));
+                });
+              }}
+            >
+              <ExternalLink aria-hidden />
+            </Button>
+          }
+        />
+        <TooltipContent>{t("common.openInApp")}</TooltipContent>
+      </Tooltip>
+      {error && <span className="text-xs text-destructive">{error}</span>}
+    </span>
   );
 }
 

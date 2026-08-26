@@ -20,6 +20,7 @@ import {
   DeleteTicketButton,
   FrontmatterTable,
   NewTicketDialog,
+  OpenTicketFileButton,
   ReassignLine,
   TicketEditForm,
   UnassignButton,
@@ -354,6 +355,7 @@ export default async function TicketDetail({
             />
           )}
           <span className="font-mono text-xs text-muted-foreground">{ticket.hash}</span>
+          <OpenTicketFileButton project={id} hash={hash} />
         </div>
         <div className="flex items-center gap-2">
           {/* 복사는 **상태 3종 전부**에서 보인다 — 원본을 읽기만 하므로 `.wip`도 막을 이유가 없고,

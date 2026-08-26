@@ -2,7 +2,7 @@
  *
  *  에픽 목록의 정본은 큐(티켓 `epic:` 값)다 — 이 파일은 스펙 문서를 읽지 않는다(§검증 (4)).
  *  dira는 아무 프로젝트에나 붙는 GUI라 스펙 문서를 파싱하면 dira 전용 기능이 된다. */
-import { mkdir, open, readFile, readdir, rm } from "node:fs/promises";
+import { mkdir, open, readFile, readdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { collectRefs, bodyPreview, type EpicRefValue, type RefIndex, type TicketRefValue } from "./markdown-refs.ts";
 import { resolveWithin } from "./paths.ts";
@@ -107,6 +107,19 @@ export async function epicReadmeBody(root: string, epic: string): Promise<string
     .slice(titleIdx + 1)
     .join("\n")
     .trim();
+}
+
+/** `epics/<epic>/README.md`의 절대경로 — 파일이 실재할 때만. 없으면 null이다: 그 자리에 열
+ *  파일이 없는 것과 화면의 빈 상태(§결정 6 §README)가 같은 값을 써야 "OS 기본 앱으로 열기"
+ *  버튼이 없는 파일을 가리키지 않는다. */
+export async function epicReadmePath(root: string, epic: string): Promise<string | null> {
+  const dir = await epicDir(root, epic);
+  if (!dir) return null;
+  const full = path.join(dir, "README.md");
+  const exists = await stat(full)
+    .then((st) => st.isFile())
+    .catch(() => false);
+  return exists ? full : null;
 }
 
 /** 사이드바 입구의 키 칸 제안값(§에픽 결정 17 §키 제안) — 목록의 키 중 `P<숫자>` 꼴의 최댓값 + 1.

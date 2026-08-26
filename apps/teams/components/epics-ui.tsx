@@ -5,7 +5,7 @@
  *  골격이지만 그 파일은 페르소나 편집 상태(`edits`)에 깊이 얽혀 있어 그대로 재사용할 수 없다 —
  *  여기는 훨씬 얇다(추가·편집이 아예 없다). */
 import { useRef, useState, useTransition } from "react";
-import { ChevronRight, Trash2, TriangleAlert } from "lucide-react";
+import { ChevronRight, ExternalLink, Trash2, TriangleAlert } from "lucide-react";
 import { deleteEpicMemoryAction, saveEpicReadmeAction } from "@/app/(app)/p/[project]/epics/actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { MarkdownEditor } from "@/components/markdown-editor";
 import { Markdown } from "@/components/markdown";
 import type { EpicMemory } from "@/lib/epics";
@@ -128,6 +129,49 @@ export function EpicReadmeEditButton({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** 머리 줄의 "OS 기본 앱으로 열기" 아이콘 버튼(§10 §자리 다섯) — README.md가 있을 때만 호출부가
+ *  그린다. 이미 쓰는 아이콘 버튼 관용에 툴팁 한 줄이다. */
+export function OpenInAppButton({
+  action,
+  locale,
+}: {
+  action: () => Promise<{ ok: boolean; message?: string }>;
+  locale: Locale;
+}) {
+  const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  return (
+    <span className="inline-flex items-center gap-2">
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label={t(locale, "common.openInApp")}
+              disabled={pending}
+              onClick={() => {
+                if (pending) return;
+                start(async () => {
+                  setError(null);
+                  const r = await action();
+                  if (!r.ok) setError(r.message || t(locale, "common.openInApp.failed"));
+                });
+              }}
+            >
+              <ExternalLink aria-hidden />
+            </Button>
+          }
+        />
+        <TooltipContent>{t(locale, "common.openInApp")}</TooltipContent>
+      </Tooltip>
+      {error && <span className="text-xs text-destructive">{error}</span>}
+    </span>
   );
 }
 

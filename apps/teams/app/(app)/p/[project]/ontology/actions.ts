@@ -12,7 +12,7 @@ import { loadMetrics } from "@/app/(app)/p/[project]/ontology/page";
 import { track } from "@/lib/analytics";
 import { kickIdleWorker } from "@/lib/kick";
 import { buildOntologySeedFiles, type OntologySurveyAnswers } from "@/lib/ontology-seed";
-import { isRealDirectory } from "@/lib/paths";
+import { isRealDirectory, openWithinApp, type OpenResult } from "@/lib/paths";
 import { createFile, deleteFile, listTree, renameFile, saveFile } from "@/lib/protocols";
 import { getProject, resolveConfig } from "@/lib/projects";
 import {
@@ -74,6 +74,15 @@ export async function deleteOntologyAction(projectId: string, rel: string): Prom
     return { ok: true };
   } catch (e) {
     return fail(e);
+  }
+}
+
+/** "OS 기본 앱으로 열기" 버튼(§10 §자리 다섯) — `protocols/actions.ts`의 짝(같은 `openWithinApp`). */
+export async function openOntologyFileAction(projectId: string, rel: string): Promise<OpenResult> {
+  try {
+    return await openWithinApp(await baseOf(projectId), rel);
+  } catch (e) {
+    return { ok: false, message: (e as Error).message };
   }
 }
 

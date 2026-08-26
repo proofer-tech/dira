@@ -16,6 +16,7 @@ import {
   deletePersona,
   deleteSquad,
   getProject,
+  personaFilePath,
   personaNames,
   resolveConfig,
   saveSquadMembers,
@@ -26,6 +27,7 @@ import {
   squadsDir,
   type SquadMember,
 } from "@/lib/projects";
+import { openInApp, type OpenResult } from "@/lib/paths";
 import {
   deletePersonaMemory,
   extractSkillArchive,
@@ -82,6 +84,17 @@ export async function savePersonaAction(
     return { ok: true };
   } catch (e) {
     return fail(e);
+  }
+}
+
+/** "OS 기본 앱으로 열기" 버튼(§10 §자리 다섯) — `personaFilePath`가 이미 `resolveWithin`을
+ *  지나 낸 절대경로만 받는다(`lib/projects.ts`). */
+export async function openPersonaProfileAction(projectId: string, name: string): Promise<OpenResult> {
+  try {
+    const full = await personaFilePath(await personasDir(projectId), name, "PROFILE.md");
+    return await openInApp(full);
+  } catch (e) {
+    return { ok: false, message: (e as Error).message };
   }
 }
 

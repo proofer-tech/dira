@@ -1,8 +1,10 @@
 /** 경로 탈출 방어 — 신뢰 경계. 사용자 입력이 파일 경로가 되는 지점은 전부 여기를 통과한다.
  *  클라이언트 검증은 검증이 아니다(DESIGN.md §경로 방어). */
+import { execFile } from "node:child_process";
 import { realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
+import { promisify } from "node:util";
 import { DEFAULT_LOCALE, t, type Locale } from "./i18n.ts";
 
 /** 워커/페르소나 이름. tickets.py의 PERSONA_RE와 같은 규칙. */
@@ -142,4 +144,35 @@ export async function isRealDirectory(p: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+export type OpenResult = { ok: boolean; message?: string };
+
+/** 절대경로 하나를 OS가 확장자에 지정해 둔 기본 앱으로 연다(macOS `open`, DESIGN.md §10).
+ *  인자는 배열로 넘어가고 셸을 안 지난다. 실패해도 던지지 않는다 — rc가 0이 아니거나 스폰 자체가
+ *  안 되면(예: `open` 없는 플랫폼) 화면이 그대로 보여줄 사유를 돌려준다.
+ *
+ *  **이 함수 자신은 경로를 검증하지 않는다** — 호출자가 `resolveWithin`을 지난 값만 넘겨야
+ *  한다(아래 `openWithinApp`이 그 순서를 하나로 묶는다). */
+export async function openInApp(absPath: string): Promise<OpenResult> {
+  try {
+    await promisify(execFile)("open", [absPath]);
+    return { ok: true };
+  } catch (e) {
+    const err = e as NodeJS.ErrnoException & { stderr?: string };
+    return { ok: false, message: (err.stderr || err.message || "").trim() };
+  }
+}
+
+/** `resolveWithin`을 지난 경우에만 `openInApp`을 부른다 — 신뢰 경계 검사와 실행 사이에
+ *  다른 호출자가 끼어들 자리를 안 만든다(§경로 방어. `openInApp` 머리 주석과 짝). 기준 밖이면
+ *  `resolveWithin`이 던지고, 그 예외가 이 함수를 지나 그대로 호출자에게 간다 — `open`은
+ *  안 불린다. */
+export async function openWithinApp(
+  baseDir: string,
+  rel: string,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<OpenResult> {
+  const full = await resolveWithin(baseDir, rel, locale);
+  return openInApp(full);
 }

@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert";
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { Suffixes } from "./queue.ts";
@@ -12,6 +13,7 @@ import {
   deleteEpicMemory,
   epicMemory,
   epicReadmeBody,
+  epicReadmePath,
   epicTitle,
   listEpics,
   refreshKnownRefs,
@@ -127,6 +129,13 @@ test("에픽 메모리 — 한 단계 글롭, 하위 디렉터리 안 읽는다"
 test("README 본문 — 첫 줄(제목) 뒤부터, 없으면 null", async () => {
   assert.strictEqual(await epicReadmeBody(root, "P273"), "본문");
   assert.strictEqual(await epicReadmeBody(root, "P10"), null);
+});
+
+test("README 절대경로 — 파일이 실재할 때만, 디렉터리 자체가 없거나 ../면 null", async () => {
+  const realRoot = await realpath(root); // resolveWithin이 realpath로 비교한다(§경로 방어)
+  assert.strictEqual(await epicReadmePath(root, "P273"), path.join(realRoot, "epics", "P273", "README.md"));
+  assert.strictEqual(await epicReadmePath(root, "P10"), null);
+  assert.strictEqual(await epicReadmePath(root, "../../../etc"), null);
 });
 
 test("에픽 메모리 — 발췌는 첫 줄, 선두 `# `를 뗀다(페르소나 메모리와 같은 규칙)", async () => {

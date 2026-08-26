@@ -7,6 +7,7 @@
  *  같은 분담). 기준 디렉터리를 여기서 조립하지 않는다 — `resolveConfig`가 유일한 출처다. */
 import { revalidatePath } from "next/cache";
 import { DEFAULT_LOCALE, t, type Locale } from "@/lib/i18n";
+import { openWithinApp, type OpenResult } from "@/lib/paths";
 import { createFile, deleteFile, renameFile, saveFile } from "@/lib/protocols";
 import { getProject, resolveConfig } from "@/lib/projects";
 
@@ -69,6 +70,20 @@ export async function deleteProtocolAction(
     return { ok: true };
   } catch (e) {
     return fail(e);
+  }
+}
+
+/** "OS 기본 앱으로 열기" 버튼(§10 §자리 다섯) — `resolveWithin`을 지난 값만 `open`에 준다
+ *  (`openWithinApp`이 그 순서를 한 함수로 묶는다). 저장·삭제와 같은 기준 디렉터리를 쓴다. */
+export async function openProtocolFileAction(
+  projectId: string,
+  rel: string,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<OpenResult> {
+  try {
+    return await openWithinApp(await baseOf(projectId, locale), rel, locale);
+  } catch (e) {
+    return { ok: false, message: (e as Error).message };
   }
 }
 

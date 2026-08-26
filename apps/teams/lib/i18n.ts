@@ -192,6 +192,11 @@ export const ko: Record<string, string> = {
   "common.create": "만들기",
   "common.creating": "만드는 중…",
 
+  // 파일을 OS 기본 앱으로 여는 아이콘 버튼(DESIGN.md §10) — 자리 다섯(온톨로지·프로토콜·
+  // 페르소나·에픽·티켓 상세)이 이 두 키를 그대로 같이 쓴다.
+  "common.openInApp": "기본 앱으로 열기",
+  "common.openInApp.failed": "파일을 열지 못했습니다",
+
   // 발행 다이얼로그(§3)·티켓 상세 편집 폼(§2) select 라벨 — 같은 자리 같은 낱말이라 한 키를
   // 공유한다(§1-3 §값을 넣는 자리 셋. `62e0b85e`가 en을 채운다).
   "ticket.priority.label": "우선순위",
@@ -1108,6 +1113,9 @@ export const en: Record<string, string> = {
   "common.cancel": "Cancel",
   "common.create": "Create",
   "common.creating": "Creating…",
+
+  "common.openInApp": "Open with default app",
+  "common.openInApp.failed": "Couldn't open the file",
 
   "ticket.priority.label": "Priority",
   // 상속 한 줄. **`inheritedMiddle`이 공백으로 시작하는 것은 의도다** — 앞에 해시가 공백 없이

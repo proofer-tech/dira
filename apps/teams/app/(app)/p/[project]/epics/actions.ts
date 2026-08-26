@@ -8,7 +8,8 @@
  *  (`createEpic`이 `lib/epics.ts`에 위임하는 것과 같은 짝) — 여기가 하는 일은 프로젝트 id를
  *  실물로 바꾸고 성공 시 이 화면을 다시 그리는 것뿐이다. */
 import { revalidatePath } from "next/cache";
-import { deleteEpicMemory, saveEpicReadme, type CreateEpicResult } from "@/lib/epics";
+import { deleteEpicMemory, epicReadmePath, saveEpicReadme, type CreateEpicResult } from "@/lib/epics";
+import { openInApp, type OpenResult } from "@/lib/paths";
 import { getProject } from "@/lib/projects";
 
 export type EpicResult = { ok: boolean; message?: string };
@@ -30,6 +31,19 @@ export async function saveEpicReadmeAction(
   const r = await saveEpicReadme(project.root, epic, title, body);
   if (r.ok) revalidatePath(`/p/${projectId}/epics/${encodeURIComponent(epic)}`);
   return r;
+}
+
+/** "OS 기본 앱으로 열기" 버튼(§10 §자리 다섯) — `epicReadmePath`가 README.md 없으면 null을
+ *  주고, 그때는 열 파일이 없다는 사유로 끝난다(`open`은 안 불린다). */
+export async function openEpicReadmeAction(projectId: string, epic: string): Promise<OpenResult> {
+  try {
+    const root = await projectRoot(projectId);
+    const full = await epicReadmePath(root, epic);
+    if (!full) return { ok: false, message: "README.md가 없습니다." };
+    return await openInApp(full);
+  } catch (e) {
+    return { ok: false, message: (e as Error).message };
+  }
 }
 
 export async function deleteEpicMemoryAction(
