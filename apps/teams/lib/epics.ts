@@ -248,7 +248,32 @@ export async function resolveMarkdownRefs(
     for (const s of hit.tickets) hitTickets.add(s);
     for (const e of hit.epics) hitEpics.add(e);
   }
+  return finalizeRefs(root, project, tickets, epics, hitTickets, hitEpics);
+}
 
+/** 이미 아는 stem·P번호 값을 큐의 **지금** 상태로 다시 뽑는다(§아키텍처 §이른 갱신이 붙는
+ *  화면 §개정 4, 요구 `de0b759d`) — `resolveMarkdownRefs`와 갈리는 자리는 훑을 글이 없다는
+ *  것뿐이다: 새 글에서 찾는 대신 **호출부가 이미 들고 있는 키 집합**을 그대로 재해석한다.
+ *  로직은 한 벌(`finalizeRefs`)이라 두 함수가 서로 다른 값을 낼 수 없다. */
+export async function refreshKnownRefs(
+  root: string,
+  project: string,
+  tickets: Ticket[],
+  epics: Epic[],
+  knownTickets: readonly string[],
+  knownEpics: readonly string[],
+): Promise<RefIndex> {
+  return finalizeRefs(root, project, tickets, epics, new Set(knownTickets), new Set(knownEpics));
+}
+
+async function finalizeRefs(
+  root: string,
+  project: string,
+  tickets: Ticket[],
+  epics: Epic[],
+  hitTickets: Set<string>,
+  hitEpics: Set<string>,
+): Promise<RefIndex> {
   const byStem = new Map(tickets.map((t) => [t.stem, t]));
   const ticketsOut: Record<string, TicketRefValue> = {};
   for (const stem of hitTickets) {

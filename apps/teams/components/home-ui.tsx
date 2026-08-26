@@ -55,6 +55,7 @@ import {
   createSchedule,
   deleteSchedule,
   pollHomeAnswer,
+  refreshRefs,
   stopHome,
   switchHome,
 } from "@/app/(app)/p/[project]/home/actions";
@@ -419,6 +420,54 @@ export function HomeUI({
     // 사슬 안에서 대신 든다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project, running, anyRunning, readOnly]);
+
+  // 이미 그려진 표식의 회차 갱신(DESIGN.md §아키텍처 §이른 갱신이 붙는 화면 §개정 4,
+  // 요구 `de0b759d`) — 위 폴과 갈래가 다르다: 저 폴은 **답이 도는 동안만** 돈다(머리말 "홈은
+  // 5초 폴링을 하지 않는다"), 표식은 트랜스크립트가 아니라 큐가 근거라 대화가 쉬는 동안에도
+  // 따라가야 한다(`session-stream.tsx`의 같은 이름 효과와 로직도 서버 액션도 한 벌). 보드가
+  // 이미 쓰는 `/api/revision`을 2초마다 묻고 갈린 회차에만 다시 받는다 — 안 갈리면 정수 비교
+  // 하나로 끝난다.
+  const knownRefs = useRef({ tickets: [] as string[], epics: [] as string[] });
+  useEffect(() => {
+    knownRefs.current = { tickets: Object.keys(liveRefs.tickets), epics: Object.keys(liveRefs.epics) };
+  });
+  useEffect(() => {
+    let stop = false;
+    let since: number | null = null;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const poll = async () => {
+      try {
+        const r: { rev: number } = await fetch(
+          `/api/revision?project=${encodeURIComponent(project)}`,
+        ).then((res) => res.json());
+        if (stop) return;
+        if (since === null) {
+          since = r.rev; // 첫 회차는 기준선만 세운다 — 마운트 시점 값은 이미 최신이다
+        } else if (r.rev !== since) {
+          since = r.rev;
+          const known = knownRefs.current;
+          if (known.tickets.length || known.epics.length) {
+            const target = session.current; // 왕복 중 대화가 갈리면 이 응답을 버린다
+            const fresh = await refreshRefs(project, known);
+            if (!stop && session.current === target) {
+              setLiveRefs((prev) => ({
+                tickets: { ...prev.tickets, ...fresh.tickets },
+                epics: { ...prev.epics, ...fresh.epics },
+              }));
+            }
+          }
+        }
+      } catch {
+        // 이 왕복 하나만 버린다 — 위 폴들과 같은 자리.
+      }
+      if (!stop) timer = setTimeout(poll, 2000);
+    };
+    timer = setTimeout(poll, 2000);
+    return () => {
+      stop = true;
+      clearTimeout(timer);
+    };
+  }, [project]);
 
   const empty = !text.trim();
   const busy = running || starting;

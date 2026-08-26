@@ -12,6 +12,9 @@
  *  **`revalidatePath`를 부르지 않는다.** 대화의 출처는 트랜스크립트 파일이고 그건 Next 캐시가
  *  모르는 것이라 폴링이 직접 읽는다. 티켓도 레지스트리도 안 바뀌므로 다시 그릴 화면이 없다. */
 import { verifyAttachments, withAttachments } from "@/lib/attachments";
+import { listEpics, refreshKnownRefs } from "@/lib/epics";
+import type { RefIndex } from "@/lib/markdown-refs";
+import { listTickets } from "@/lib/queue";
 import {
   createSchedule as createScheduleRow,
   deleteSchedule as deleteScheduleRow,
@@ -26,7 +29,7 @@ import {
   type HomeChunk,
   type ScheduleView,
 } from "@/lib/home-agent";
-import { getProject } from "@/lib/projects";
+import { getProject, resolveConfig } from "@/lib/projects";
 
 /** 등록된 프로젝트인가. **클라이언트가 준 id는 신뢰 경계 밖이다** — 여기서 걸러야 등록 안 된
  *  값이 `home-sessions.json`의 키가 되지 않는다(경로가 되는 값은 그 파일의 **값**이고 그쪽
@@ -90,6 +93,26 @@ export async function pollHomeAnswer(
       // 없다. 참을 안 주면 화면이 있지도 않은 프로젝트를 5분 동안 다시 묻는다(머리 주석).
       done: true,
     };
+  }
+}
+
+/** 이미 그려진 표식이 큐가 갈린 회차에 값을 다시 받는 자리(DESIGN.md §아키텍처 §이른 갱신이
+ *  붙는 화면 §개정 4, 요구 `de0b759d`). 홈은 답이 도는 동안만 폴링하지만(머리말) 표식은
+ *  트랜스크립트가 아니라 큐가 근거라 대화가 쉬는 동안에도 따라가야 한다 — `tickets/[hash]`
+ *  화면의 같은 이름 액션과 로직은 한 벌(`lib/epics.ts refreshKnownRefs`)이고 여기서 다시 안 짓는다. */
+export async function refreshRefs(
+  projectId: string,
+  known: { tickets: string[]; epics: string[] },
+): Promise<RefIndex> {
+  if (!known.tickets.length && !known.epics.length) return { tickets: {}, epics: {} };
+  try {
+    const project = await required(projectId);
+    const config = await resolveConfig(project);
+    const tickets = await listTickets(project.root, config);
+    const epics = await listEpics(project.root, tickets);
+    return refreshKnownRefs(project.root, projectId, tickets, epics, known.tickets, known.epics);
+  } catch {
+    return { tickets: {}, epics: {} };
   }
 }
 

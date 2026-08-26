@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { Suffixes } from "./queue.ts";
@@ -14,6 +14,7 @@ import {
   epicReadmeBody,
   epicTitle,
   listEpics,
+  refreshKnownRefs,
   resolveMarkdownRefs,
   saveEpicReadme,
   suggestEpicKey,
@@ -281,6 +282,31 @@ test("resolveMarkdownRefs — 진행중 티켓은 state가 wip다", async () => 
   const idx = await resolveMarkdownRefs(refsRoot, "proj", ["e2345678 진행 중"], tickets, epics);
   assert.strictEqual(idx.tickets.e2345678.state, "wip");
   assert.strictEqual(idx.tickets.e2345678.assignee.name, "developer");
+});
+
+test("refreshKnownRefs — 이미 아는 stem의 값이 큐가 갈린 회차에 다시 읽힌다(요구 de0b759d)", async () => {
+  // `e2345678`은 위 refsRoot에서 `.wip`(진행중)로 만든 티켓 — 그 값을 한 번 읽어 두고("이미
+  // 그려진 표식"), 파일을 `.done`으로 rename한 뒤("큐가 갈린 회차") 같은 stem을 다시 물으면
+  // 값이 wip에 안 굳고 done으로 따라가야 한다. 안 그러면 이 테스트가 실패해 회귀를 잡는다.
+  const before = await listTickets(refsRoot, DEFAULT);
+  const seen = await resolveMarkdownRefs(refsRoot, "proj", ["e2345678 여기"], before, []);
+  assert.strictEqual(seen.tickets.e2345678.state, "wip");
+
+  renameSync(
+    path.join(refsRoot, "tickets", "e2345678.wip.md"),
+    path.join(refsRoot, "tickets", "e2345678.done.md"),
+  );
+  try {
+    const after = await listTickets(refsRoot, DEFAULT);
+    const revived = await refreshKnownRefs(refsRoot, "proj", after, [], Object.keys(seen.tickets), []);
+    assert.strictEqual(revived.tickets.e2345678.state, "done");
+    assert.strictEqual(revived.tickets.e2345678.status, "done");
+  } finally {
+    renameSync(
+      path.join(refsRoot, "tickets", "e2345678.done.md"),
+      path.join(refsRoot, "tickets", "e2345678.wip.md"),
+    );
+  }
 });
 
 test("앱은 DESIGN.md를 안 판다(§검증 (4))", () => {

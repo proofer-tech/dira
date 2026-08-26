@@ -39,7 +39,12 @@ import {
   TriangleAlert,
   X,
 } from "lucide-react";
-import { sendFollowup, sendInterject, tailSession } from "@/app/(app)/p/[project]/tickets/[hash]/actions";
+import {
+  refreshRefs,
+  sendFollowup,
+  sendInterject,
+  tailSession,
+} from "@/app/(app)/p/[project]/tickets/[hash]/actions";
 import {
   AttachmentButton,
   AttachmentChips,
@@ -270,6 +275,57 @@ export function SessionStream({
       clearTimeout(timer);
     };
   }, [project, stem, initialLive, noStream]);
+
+  // 이미 그려진 표식의 회차 갱신(DESIGN.md §아키텍처 §이른 갱신이 붙는 화면 §개정 4,
+  // 요구 `de0b759d`) — 위 폴과 갈래가 다르다: 저 폴은 `noStream`(codex)이거나 세션이 끝나면
+  // 멎지만, 표식의 판정 근거는 트랜스크립트가 아니라 큐라 계속 따라가야 한다(`ticketMtime`이
+  // `tailSession`과 갈라진 것과 같은 이유). 보드가 이미 쓰는 `/api/revision`을 2초마다 묻고
+  // **갈린 회차에만** 알고 있는 stem·P번호를 `refreshRefs`로 다시 받는다 — 안 갈리면 정수
+  // 비교 하나로 끝난다(큐를 다시 안 읽는다).
+  //
+  // ponytail: `board-ui.tsx BoardPolling`의 회차 비교 열 몇 줄과 모양이 같지만 공유 훅으로
+  // 안 뗐다 — 그 추출은 별도 티켓(`dfebf1e8`)이 `.wip`으로 이미 잡고 있는 자리라 여기서 손대면
+  // 충돌한다. 화면이 여럿에서 이 값을 되풀이해 필요로 하게 되면 그때 합친다.
+  const knownRefs = useRef({ tickets: [] as string[], epics: [] as string[] });
+  useEffect(() => {
+    knownRefs.current = { tickets: Object.keys(liveRefs.tickets), epics: Object.keys(liveRefs.epics) };
+  });
+  useEffect(() => {
+    let stop = false;
+    let since: number | null = null;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const poll = async () => {
+      try {
+        const r: { rev: number } = await fetch(
+          `/api/revision?project=${encodeURIComponent(project)}`,
+        ).then((res) => res.json());
+        if (stop) return;
+        if (since === null) {
+          since = r.rev; // 첫 회차는 기준선만 세운다 — 마운트 시점 값은 이미 최신이다
+        } else if (r.rev !== since) {
+          since = r.rev;
+          const known = knownRefs.current;
+          if (known.tickets.length || known.epics.length) {
+            const fresh = await refreshRefs(project, known);
+            if (!stop && (Object.keys(fresh.tickets).length || Object.keys(fresh.epics).length)) {
+              setLiveRefs((prev) => ({
+                tickets: { ...prev.tickets, ...fresh.tickets },
+                epics: { ...prev.epics, ...fresh.epics },
+              }));
+            }
+          }
+        }
+      } catch {
+        // 이 왕복 하나만 버린다 — 위 폴들과 같은 자리.
+      }
+      if (!stop) timer = setTimeout(poll, 2000);
+    };
+    timer = setTimeout(poll, 2000);
+    return () => {
+      stop = true;
+      clearTimeout(timer);
+    };
+  }, [project]);
 
   // 붙어 있을 때만 따라간다. 첫 렌더가 맨 아래에서 시작하는 것도 이 효과다(§9) — 그 자리가
   // **병합이 노린 자리다**: 답 없는 마지막 질문이 맨 끝이라(§2-3 ②) 첫 화면이 곧 "지금 무엇을

@@ -17,7 +17,7 @@ import { revalidatePath } from "next/cache";
 import { track } from "@/lib/analytics";
 import { verifyAttachments, withAttachments } from "@/lib/attachments";
 import { writeEpic } from "@/lib/epic";
-import { listEpics, resolveMarkdownRefs } from "@/lib/epics";
+import { listEpics, refreshKnownRefs, resolveMarkdownRefs } from "@/lib/epics";
 import { findTicket, unassign, type UnassignRun } from "@/lib/engine";
 import { followup, type FollowupResult } from "@/lib/followup";
 import { interject, type InterjectResult } from "@/lib/interject";
@@ -144,6 +144,28 @@ export async function tailSession(
     return { ...chunk, live, inbox, done, refs };
   } catch {
     return { events: [], offset: at, live: false, inbox: false, done: false, refs: NO_REFS };
+  }
+}
+
+/** 이미 그려진 표식이 큐가 갈린 회차에 값을 다시 받는 자리(DESIGN.md §아키텍처 §이른 갱신이
+ *  붙는 화면 §개정 4, 요구 `de0b759d`). `tailSession`에 안 얹은 이유는 `ticketMtime` 머리말과
+ *  같다 — 그 폴은 `noStream`(codex)이거나 세션이 끝나면 멎지만, 표식은 트랜스크립트가 아니라
+ *  큐가 근거라 계속 따라가야 한다. 클라이언트가 이미 아는 stem·P번호만 받아 그대로 되돌린다 —
+ *  새 큐 조회 통로가 아니라 §9의 해석 하나를 다른 신호(revision)로 다시 부르는 것뿐이다. */
+export async function refreshRefs(
+  projectId: string,
+  known: { tickets: string[]; epics: string[] },
+): Promise<RefIndex> {
+  if (!known.tickets.length && !known.epics.length) return NO_REFS;
+  try {
+    const project = await getProject(projectId);
+    if (!project) return NO_REFS;
+    const config = await resolveConfig(project);
+    const tickets = await listTickets(project.root, config);
+    const epics = await listEpics(project.root, tickets);
+    return refreshKnownRefs(project.root, projectId, tickets, epics, known.tickets, known.epics);
+  } catch {
+    return NO_REFS;
   }
 }
 
