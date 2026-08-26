@@ -43,13 +43,15 @@ const {
   nextScheduleDue,
   SCHEDULE_LOOKBACK_MS,
   runSchedules,
+  FLUENT_KO,
 } = await import("./home-agent.ts");
 type HomeChunk = Awaited<ReturnType<typeof pollHome>>;
 const { tailEvents } = await import("./transcript.ts");
 type StreamEvent = Awaited<ReturnType<typeof tailEvents>>["events"][number];
-const { registryPath, resolveConfig, addProject } = await import("./projects.ts");
+const { registryPath, resolveConfig, addProject, setLanguage } = await import("./projects.ts");
 const { listTickets } = await import("./queue.ts");
 const { listWorkers, lockPath } = await import("./workers.ts");
+const { engineRepo } = await import("./scaffold.ts");
 
 const p2 = (n: number) => String(n).padStart(2, "0");
 
@@ -775,6 +777,74 @@ test("ask — TICKET_ONTOLOGY 재정의 큐에서 --allowed-tools가 옮긴 자�
   }
 });
 
+test("ask — --append-system-prompt로 언어 안내(ko/en)와 지침 블록을 로케일과 무관하게 늘 함께 넘긴다 (§0-16 §주입 §개정 3-4)", async () => {
+  const root = path.join(mkdtempSync(path.join(tmpdir(), "ha-lang-")), ".dira");
+  tmps.push(path.dirname(root));
+  mkdirSync(path.join(root, "workers"), { recursive: true });
+
+  const bin = mkdtempSync(path.join(tmpdir(), "ha-bin-"));
+  tmps.push(bin);
+  // **로케일마다 log를 가른다** — 값이 여러 줄이라 한 log에 몰면 개행이 호출 경계와 섞인다
+  // (echo "$@" | head -1 관용구가 §왕복 픽스처에서 이 문제를 피하는 이유와 같다).
+  const logKo = path.join(LOCAL, "lang-argv-ko.log");
+  const logEn = path.join(LOCAL, "lang-argv-en.log");
+  writeFileSync(
+    path.join(bin, "claude"),
+    `#!/bin/sh
+log="\${LANG_LOG}"
+printf '%s\\n' "$*" >> "$log"
+echo '{"type":"result","is_error":false,"result":"답"}'
+`,
+    { mode: 0o755 },
+  );
+
+  const project = { id: "lang-test-ko", name: "큐", root };
+  const path0 = process.env.PATH;
+  process.env.PATH = `${bin}:${path0 ?? ""}`;
+  try {
+    await setLanguage("ko");
+    process.env.LANG_LOG = logKo;
+    const ko = await ask(project, "질문 하나");
+    assert.strictEqual(ko.ok, true, ko.output);
+
+    await setLanguage("en");
+    process.env.LANG_LOG = logEn;
+    const en = await ask({ ...project, id: "lang-test-en" }, "질문 둘"); // id를 갈라 새 대화 — resume과 안 섞인다
+    assert.strictEqual(en.ok, true, en.output);
+
+    const argvKo = readFileSync(logKo, "utf8");
+    const argvEn = readFileSync(logEn, "utf8");
+    // ① ko — 한국어 언어 안내
+    assert.ok(argvKo.includes("언어 안내: 이번 세션 동안 사용자에게 하는 모든 말을 한국어로"));
+    assert.ok(argvKo.includes("`kind: request` 티켓"));
+    // ② en — 영어 언어 안내
+    assert.ok(argvEn.includes("Language note: say everything you say to the user in English"));
+    assert.ok(argvEn.includes("`kind: request`\nticket body"));
+    // ③ 두 로케일 모두 한국어 문장 지침 블록이 로케일과 무관하게 실린다
+    assert.ok(argvKo.includes("===== 한국어 문장 지침 (fluent-korean, MIT (c) 2026 snflkd) ====="));
+    assert.ok(argvEn.includes("===== 한국어 문장 지침 (fluent-korean, MIT (c) 2026 snflkd) ====="));
+  } finally {
+    process.env.PATH = path0;
+    delete process.env.LANG_LOG;
+    await setLanguage("ko"); // 기본값으로 되돌린다 — 다음 테스트가 이 로케일을 물려받지 않게
+  }
+});
+
+test("FLUENT_KO — tick.sh의 FLUENTKO 히어독 본문과 바이트로 같다 (엔진 레포를 못 찾으면 건너뛴다)", (t) => {
+  const repo = engineRepo();
+  if (!("path" in repo)) {
+    t.skip(`엔진 레포를 못 찾았다: ${JSON.stringify(repo)}`);
+    return;
+  }
+  const tickSh = readFileSync(path.join(repo.path, "tick.sh"), "utf8");
+  const startMarker = "===== 한국어 문장 지침 (fluent-korean, MIT (c) 2026 snflkd) =====";
+  const endMarker = "===== 추가 끝 =====";
+  const start = tickSh.indexOf(startMarker);
+  const end = tickSh.indexOf(endMarker, start);
+  assert.ok(start >= 0 && end >= 0, "tick.sh에서 FLUENTKO 마커를 못 찾았다");
+  assert.strictEqual(FLUENT_KO, tickSh.slice(start, end + endMarker.length));
+});
+
 test("toTurns — 중지가 남기는 가짜 줄 셋은 대화가 아니다 (§7 §도는 답을 멈춘다 실측 ⑷)", async () => {
   const dir = mkdtempSync(path.join(tmpdir(), "ha-ghost-"));
   tmps.push(dir);
@@ -1334,12 +1404,21 @@ test("워커 세션 — 사라진 `current`는 대화 0건과 같고, 고르면 
   // `tickets/**`는 이제 `Write`도 받는다(요구 `64b45d3c` — §7 §홈 대화에서 요구사항이 접수된다)
   assert.ok((argv.at(-1) ?? "").includes(`Edit(//${root}/tickets/**)`));
   assert.ok((argv.at(-1) ?? "").includes(`Write(//${root}/tickets/**)`));
-  // **이 큐엔 `personas/`가 없다** — 프롬프트 첫 줄이 스냅샷이다(argv 로그는 첫 줄만 남는다).
-  // 페르소나가 없는 큐에서 홈이 그대로 도는 것이 계약이다(§7 — WARN도 없다)
-  assert.match(argv.at(-1) ?? "", / --verbose # 지금 이 프로젝트의 상태$/);
+  // **`--verbose` 바로 뒤는 이제 언어 층 둘이다**(§0-16 §주입 §개정 3-4 — `--append-system-prompt`).
+  // 그 값이 여러 줄이라 `head -1`이 지침 블록의 머리에서 끊는다 — 이 큐에 `personas/`가 없어도
+  // 프롬프트가 스냅샷으로 시작하는 것 자체는 argv로는 더 안 보인다(`buildPrompt` 단위 테스트가
+  // 이미 그 사실을 지킨다 — 페르소나가 없으면 스냅샷이 맨 앞이다).
+  assert.match(
+    argv.at(-1) ?? "",
+    / --verbose --append-system-prompt ===== 한국어 문장 지침 \(fluent-korean, MIT \(c\) 2026 snflkd\) =====$/,
+  );
 
-  // ③-b 페르소나 파일이 생기면 **다음 질문부터** 프롬프트 맨 앞에 뜬다. 이 한 줄이
-  //     `resolveConfig` → `personaBlock` → `buildPrompt` → spawn까지 이어졌음의 증거다.
+  // ③-b 페르소나 파일이 생기면 **다음 질문부터** 프롬프트 맨 앞에 뜬다 — `resolveConfig` →
+  //     `personaBlock` → `buildPrompt` → spawn으로 이어졌음의 증거인데, `--append-system-prompt`가
+  //     `--verbose` 바로 뒤에 낀 뒤로는 `head -1`이 그 지침 블록 머리에서 끊어 argv로는 더 안
+  //     보인다(위 §-1394 주석과 같은 이유) — `personaBlock`·`buildPrompt` 단위 테스트가 이 사실을
+  //     대신 지킨다. 여기서는 스폰 자체가 됐다는 것만 argv 줄 수로 확인한다.
+  const before = readFileSync(ARGV, "utf8").trim().split("\n").length;
   const profileDir = path.join(root, "personas", "archive-manager");
   mkdirSync(profileDir, { recursive: true });
   writeFileSync(path.join(profileDir, "PROFILE.md"), "나는 이 큐의 아카이브 담당이다.\n");
@@ -1347,10 +1426,7 @@ test("워커 세션 — 사라진 `current`는 대화 0건과 같고, 고르면 
     assert.strictEqual(await startAsk(project, "이제 누구냐"), null);
     await poller(id).until((c) => !c.running);
   });
-  assert.match(
-    readFileSync(ARGV, "utf8").trim().split("\n").at(-1) ?? "",
-    /--verbose 당신은 이 프로젝트의 'archive-manager'입니다\. /,
-  );
+  assert.strictEqual(readFileSync(ARGV, "utf8").trim().split("\n").length, before + 1);
   // 이어 물어도 대화 목록은 0건이다 — 사람 대화 20을 워커 세션이 밀어내지 않는다
   assert.deepStrictEqual((await readHome(id)).conversations, []);
   assert.strictEqual((await readHome(id)).current, done);

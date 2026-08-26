@@ -84,8 +84,17 @@ import path from "node:path";
 import { findClaude, tokenPath } from "./auth.ts";
 import type { Run } from "./engine.ts";
 import { listEpics, resolveMarkdownRefs } from "./epics.ts";
+import type { Locale } from "./i18n.ts";
 import { mayHaveRefs, type RefIndex } from "./markdown-refs.ts";
-import { getProject, readProjects, registryPath, resolveConfig, type Project, type ProjectConfig } from "./projects.ts";
+import {
+  getProject,
+  readLanguage,
+  readProjects,
+  registryPath,
+  resolveConfig,
+  type Project,
+  type ProjectConfig,
+} from "./projects.ts";
 import { isAwaiting, listTickets, reqTitle, statusOf, type Ticket } from "./queue.ts";
 import { findTranscript, lastEvent, sessionIdOf, tailEvents, type StreamEvent } from "./transcript.ts";
 import { engineCell, listWorkers, workerOf, type Worker } from "./workers.ts";
@@ -914,6 +923,7 @@ export async function ask(
     ontology,
     config?.personas ? await personaBlock(config.personas) : "",
   );
+  const locale = await readLanguage(); // 위 §언어 층 둘 — 못 읽으면 `ko`로 흡수한다(같은 판정)
 
   const run = await runClaude(
     bin,
@@ -922,6 +932,7 @@ export async function ask(
     prompt,
     [...(resumed ? ["--resume", sessionId] : ["--session-id", sessionId])],
     live,
+    locale,
   );
 
   // **중지는 여기서 실패가 아니다**(`ok: true`): 중지한 턴도 트랜스크립트에 남고 같은 sid로
@@ -1116,6 +1127,111 @@ function judge(
   return { ok: true, output: text };
 }
 
+// ── 언어 층 둘 (§0-16 §주입 §개정 3-4) ──────────────────────────────────────
+//
+// `tick.sh`가 워커에 주는 두 층을 홈 세션에도 준다 — 언어 안내(로케일이 ko/en을 가른다)와
+// 한국어 문장 지침(로케일을 안 가리고 상시). 워커는 이 둘을 프롬프트 문자열에 섞어 넣지만
+// (캐시 갈래가 있다 — §엔진 수정 스물다섯 번째 승인) 홈은 CLI가 질문마다 새 프로세스를 띄우니
+// 캐시가 없다 — 그래서 `--append-system-prompt` 하나로 두 블록을 그대로 넘긴다. `buildPrompt`는
+// 안 건드린다(이 층은 시스템 프롬프트로 간다).
+//
+// 언어 안내 두 짝은 `tick.sh`의 `case "$LOCALE"` 블록과 **틀이 같고 산출물 목록만 다르다** —
+// 홈이 실제로 쓰는 자리(`kind: request` 티켓 본문 · `personas/**` · `protocols/**` ·
+// `workers/*.sh` · 온톨로지)로 갈린다. 커밋 메시지 · `docs/`는 안 적는다 — 홈은 `Bash`가 없어
+// 커밋을 못 하고 `docs/`는 쓰기 스코프 밖이다. 워커 쪽 문장의 마지막 줄(지침 블록을 가리키는
+// 한 줄)은 안 붙인다 — 그 줄이 산 근거(한국어 1만 줄 뒤에 묻히는 것을 막는다)가 홈의 시스템
+// 프롬프트에는 없다.
+//
+// `FLUENT_KO`는 `tick.sh`의 `FLUENTKO` 히어독 본문과 **바이트로 같아야 한다**(`home-agent.test.ts`가
+// 지킨다). 파일이 아니라 인라인 상수인 이유 · 부분 손질 금지 근거는 그 히어독 머리 주석과 같다 —
+// 사본을 큐에 두면 사람이 지울 수 있고 dmg 배포에는 폴백할 엔진 레포가 없다. 갱신은 그 히어독을
+// 통째로 갈아 끼울 때 이 상수도 같이 간다.
+export const FLUENT_KO = `===== 한국어 문장 지침 (fluent-korean, MIT (c) 2026 snflkd) =====
+당신은 한국어를 활용해야 하는 상황에 있다면 본 문서에 제시된 지침들을 준수해야 합니다. 그럼으로써 의사소통의 효율성을 높일 수 있습니다. 이 지침들은, 의미가 명확하며 비교적 가독성이 높고 안정적인 구조를 지닌 한국어 문장을 출력하는 방법을 자세히 설명합니다. 인용, 코드, 코드 주석에는 이 지침들을 적용하지 않습니다.
+
+
+## 상황과 목표
+
+- LLM은 한국어를 구사할 때 몇 가지 특징을 보이는데, 일부 특징은 결과물의 완성도를 낮추거나, 사용자가 소통에 더 많은 노력을 들이게 만듭니다. 이 문서에 작성된 사항들을 준수하면 이런 현상을 개선할 수 있습니다.
+
+- 이 문서에서 제시하는 지침들을 요약하는 것은 일반적으로 권장되지 않습니다. 그렇게 한다면 조항마다 첨부된 예시를 확인할 수 없으므로 조항의 문구가 구체적으로 어떤 동작을 의도했는지 파악하기 어렵습니다. 또한 요약에 포함된 몇 가지 지침을 제외한 나머지 지침들은 잘 준수되지 않는 방향으로 서술 압력이 작동하게 될 수도 있습니다. 그리고 목적과 의도를 생략하고 제한 사항만 요약한다면 목적에 부합하지 않게 기계적으로 지침을 준수했는지 확인하게 될 수도 있습니다.
+
+
+## 동작 범위
+
+1. 본문의 지침들은 한국어를 활용하는 상황에서 그 한국어를 명확하게 출력하라는 지시입니다. 외국어 문장이나 어휘를 출력해야 하는 상황에서, 그것을 한국어로 번역하거나 대체하라는 지시가 아닙니다.
+
+2. 변수명과 주석, 커밋 메시지, 로그 문자열처럼 코드에 속하는 텍스트는 프로젝트의 기존 관례를 준수해야 합니다. 이러한 텍스트는 지침을 적용하면 안 되기 때문에 이 조항에서 한 번 더 강조하고 있습니다.
+
+3. 고유 명사와 기술 용어 등은, 통상적인 용례로 정착된 번역어 혹은 음차가 있다면 우선적으로 사용하고, 그렇지 않다면 원어를 유지함으로써, 한국어 사용자가 이해하기 편하고 의미를 잘 이해할 수 있도록 합니다.
+
+4. 사용자가 어떤 어조나 어휘를 사용하든지, 사용자 메시지의 어조를 모방하지 않고, 본문에서 제시하는 지침들을 일관되게 유지합니다.
+
+
+## 문장 단위
+
+1. 읽는 이가 문장의 의미를 충분히 이해할 수 있어야 하므로, 의미가 있는 문장 성분을 생략하지 않습니다. [그러면 경고가 붙습니다.→ ('그러면 이미 작업 중인 파일에도 경고 표지가 추가됩니다.'와 같이, 맥락과 정보를 충분히 제공하도록 수정) ]  특히 관형격 조사인 '~의'를 필요 이상으로 사용한다면, 의미를 담고 있는 문장 성분을 생략하기 쉬우므로 유의해야 합니다.  [사본의 문구는 작업의 상황을 → 사본에 기재된 문구는 작업이 진행되는 상황을]
+
+2. (이 2번 조항은 헤더와 목록에는 강제로 적용되는 사항이 아닙니다.) 명사구나 부사구, 연결어미로 문장을 끝내지 말고, 서술어와 종결어미를 사용하여 완성된 형태의 문장으로 끝을 맺어야 합니다.
+
+
+## 구 단위
+
+1. 필수적인 경우가 아니라면 조사와 어미를 생략하지 말아야 합니다. 또한 부사, 보조사와 선어말어미, 보조 용언을 적극적으로 활용하면, 의미가 명확한 한국어 문장을 완성할 수 있습니다. [이 결정은 이후 중요 정책이 갈리는 자리. 컨텍스트 압축 전 신중 반영한다. → 이 결정은 이후 중요한 정책에 지속적으로 영향을 주기 때문에, 컨텍스트가 압축되기 전에 신중히 반영합니다. → 지금 답변해주신 결정 사항은 이후 중요한 정책에도 지속적으로 영향을 미치기 때문에, 컨텍스트가 압축되기 전에 미리 신중하게 반영해 놓겠습니다.]
+
+2. 구체적인 의미를 담고 있는 한자어와 자연스러운 통사 구조를 결합하면, 풍부하고 명확한 의미를 전달할 수 있습니다. 따라서 맥락에 적합한 한자어를 적극적으로 활용하고, 그 한자어에 조사와 어미를 붙여서 어휘 사이의 관계를 확실하게 나타내야 합니다. [<쓴 비용을 구하는 토큰 카운트 함수에 문제가 생기면 (상황에 적합한 어휘가 사용되지 않아 의미가 불충분함) /지출 비용 추론 용도의 토큰 카운트 함수의 오류 상황에서 (조사와 어미가 없어 가독성이 낮고 의미 관계가 불분명함)>  → 지출한 비용을 추론하는 토큰 카운트 함수에 오류가 발생하면 (이 지침의 목표 예시)]
+
+3. 일반적인 어휘를 사용해야 하는 자리에 비유적 어휘를 사용하면 가독성이 낮고, 의미가 변질되기 쉽습니다. 따라서 꼭 필요한 경우가 아니라면 비유적 어휘로 일반적인 명사나 동사를 대체하지 않습니다. 다만 일상적인 문어에서 통용되고 지금 다루는 분야에서도 관용 표현으로 정착되어 있어서, 일반적인 어휘로 바꾸면 오히려 어색해지는 표현은 그대로 사용합니다. [<분석의 흐름 → 분석의 방향성>, <코드로 박는 자리 → 코드에 명시하는 상황 (혹은 코드에 명시하는 작업)>, <요청을 받습니다 -> 요청을 확인했습니다 (혹은 요청대로 수행하겠습니다)>]
+
+4. 엠대시(—)는 앞뒤 문장의 관계를 지나치게 함축하기 때문에 자제하고, 문맥과 형식에 따라 콜론이나 접속사로 대체합니다.
+
+
+## 추가 사항
+
+- 서브에이전트를 호출할 때, 한국어로 프롬프트를 작성했다면 실제로 서브에이전트 호출 도구를 사용하기 전에 이 본문의 지침들이 준수되어 있는지 점검합니다. 서브에이전트가 산출한 결과를 사용자에게 전달할 때에도 본문의 지침들이 그대로 적용됩니다.
+===== 지침 끝 =====
+
+===== 추가 금지 표현 (dira 엔진) =====
+사람이 읽는 글(티켓 본문, \`## 결과\`, \`## 블록\`, 커밋 메시지, \`docs/\` 아래)에서 무생물 주어에
+생물 동사를 붙이지 않습니다(위 <구 단위> 3의 구체적 사례입니다). 파일/카드/설정/규칙/계약은
+어디에 "산다"고도, "앉는다"고도, "선다"고도, 무엇을 "말한다"고도 쓰지 않습니다. 넷을 이렇게
+씁니다.
+- \`산다\` \`삽니다\` \`사는 자리\` \`살아난다\` -> "있다 / 둔다 / 붙는다 / 남는다 / 켜진다"
+- \`앉는다\` \`앉힌다\` \`앉을 자리\` -> "붙는다 / 들어간다 / 놓인다 / 들어갈 자리"
+- \`선다\` \`서 있다\` \`세운다\`(화면 요소가) -> "뜬다 / 생긴다 / 그려진다 / 성립한다 / 만든다"
+- \`말한다\` \`말해 준다\`(화면/제목/문서/수가) -> "보여준다 / 알려 준다 / 적혀 있다 / 가리킨다"
+\`박다\` \`못박다\`도 같은 이유로 안 씁니다 - 규칙/값/판정을 "박았다"고 쓰지 말고 "정했다 /
+명시했다 / 고정한다 / 적는다 / 넣는다"로 쓰십시오(위 <구 단위> 3이 든 예가 이것입니다).
+예외는 실제로 도는 프로세스, 세션, pid 하나뿐입니다 - \`pid가 살아 있다\`, \`부모가 wait에 서
+있다\`는 그대로 씁니다. 사람이 주어인 문장도 이 규칙의 대상이 아닙니다. 티켓과 파일은
+\`열려 있는 동안\`, \`그대로 남는다\`로 씁니다. 치환표는 \`CORE-TICKETS.md\` §Words에 있습니다.
+이미 쓰인 파일을 이 규칙으로 일괄 수정하지는 않습니다.
+===== 추가 끝 =====`;
+
+/** 워커 쪽(`tick.sh`) 문장과 같은 틀 — 마지막 줄(지침 블록을 가리키는 문장)만 뺀다. */
+const HOME_LANGUAGE_NOTE_KO = `언어 안내: 이번 세션 동안 사용자에게 하는 모든 말을 한국어로 하세요 -- 참견에
+답할 때만이 아니라 아무도 말을 안 걸어도 진행 기록 스트림에 남기는 산문까지입니다.
+생각하거나 내부적으로 추론하는 구간은 이 지시의 대상이 아닙니다 -- 어느 언어로
+생각해도 됩니다. 산출물은 그대로 한국어로 고정합니다 -- \`kind: request\` 티켓
+본문, \`personas/**\`, \`protocols/**\`, \`workers/*.sh\`, 온톨로지 전부입니다.`;
+
+const HOME_LANGUAGE_NOTE_EN = `Language note: say everything you say to the user in English for the rest of
+this session -- not only replies when someone writes in, but also any prose
+you leave in the progress stream even when no one does. Thinking or internal
+reasoning is not covered by this instruction -- you may think in any language.
+Keep every written deliverable in Korean regardless -- the \`kind: request\`
+ticket body, \`personas/**\`, \`protocols/**\`, \`workers/*.sh\`, and the ontology.`;
+
+function languageNote(locale: Locale): string {
+  return locale === "en" ? HOME_LANGUAGE_NOTE_EN : HOME_LANGUAGE_NOTE_KO;
+}
+
+/** `--append-system-prompt`로 넘길 값. 지침 블록이 앞, 언어 안내가 뒤다(워커 쪽 문서 층 -
+ *  꼬리 순서와 같다). */
+function systemPromptLayers(locale: Locale): string {
+  return `${FLUENT_KO}\n\n${languageNote(locale)}`;
+}
+
 /** `root`는 **큐 루트**다. cwd(그 부모 — 머리 주석)와 경로 스코프 다섯이 **한 값에서 나온다** —
  *  둘을 따로 받으면 스코프가 다른 큐를 가리키는 조합이 만들어질 수 있다. `ontologyDir`은
  *  따로 받는다 — 재정의한 큐에서는 그 값이 `root` 밖이라 같은 값에서 못 나온다(`toolFlags` 주석). */
@@ -1126,6 +1242,7 @@ async function runClaude(
   prompt: string,
   session: string[],
   live: Live,
+  locale: Locale,
 ): Promise<Run & { reason?: AnswerReason; stopped?: boolean }> {
   const args = [
     "-p",
@@ -1135,6 +1252,8 @@ async function runClaude(
     "stream-json",
     "--include-partial-messages",
     "--verbose", // 빼면 stdout 0바이트 + stderr 한 줄로 죽는다(머리 주석)
+    "--append-system-prompt", // 위 §언어 층 둘 — 단일 값이라 variadic 함정이 없다
+    systemPromptLayers(locale),
     prompt, // variadic 옵션 뒤에 오면 먹힌다 — 위 플래그들이 사이를 끊어 준다
   ];
 
