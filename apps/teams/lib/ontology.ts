@@ -518,7 +518,7 @@ export function computeOntologyMetrics(input: OntologyInput): OntologyMetrics {
 const ACTION_LOG_LINE = /^-\s*(\d{2}:\d{2})\s+(새객체|값갱신|관계추가|관계삭제|스키마개정|빈손):/;
 
 /** `- HH:MM <액션>: ...` 줄만 센다(03-seeding.md §5단계). `date`는 호출자가 파일명
- *  `action-log/YYYY/YYYY-MM-DD.md`에서 뽑아 준다 — 여기는 문자열 비교만 한다. */
+ *  `action-log/YYYY-MM-DD.md`에서 뽑아 준다 — 여기는 문자열 비교만 한다. */
 function parseActionLogs(
   logs: ActionLogInput[],
 ): Pick<OntologyMetrics, "emptyHanded" | "objectTrend" | "schemaStability" | "lastUpdated"> {
