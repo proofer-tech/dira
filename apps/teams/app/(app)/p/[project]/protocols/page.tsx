@@ -307,6 +307,7 @@ export default async function Protocols({
                 projectId={id}
                 rel={selected.rel}
                 initial={selected.text}
+                initialMtimeMs={selected.mtimeMs}
                 inlined={selected.rel === "AGENTS.md"}
               />
             )}

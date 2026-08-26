@@ -7,6 +7,7 @@ import {
   readdirSync,
   rmSync,
   symlinkSync,
+  utimesSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -151,6 +152,35 @@ test("저장 · 생성(O_EXCL) · 이름변경(덮어쓰지 않는다) · 삭제
   await deleteFile(shared, "옮긴것.md");
   await assert.rejects(() => deleteFile(shared, "부록"), /디렉터리는/); // 디렉터리는 안 지운다
   await assert.rejects(() => saveFile(shared, "옮긴것.md", "x"), /파일이 없습니다/);
+});
+
+// ── 저장 충돌 — mtime 왕복 (§10) ─────────────────────────────────────────────
+
+test("mtime이 안 바뀐 저장은 지금처럼 쓰이고, 그 사이 바뀌면 거절하고 파일을 지킨다", async () => {
+  const rel = "mtime-충돌.md";
+  const full = path.join(shared, rel);
+  await createFile(shared, rel);
+  await saveFile(shared, rel, "원본\n");
+
+  const read = await readTextFile(shared, rel);
+  assert.strictEqual(typeof read.mtimeMs, "number");
+
+  // 안 바뀐 채 저장 — 지금처럼 통과한다(Done when 4-1)
+  await saveFile(shared, rel, "고친 것\n", read.mtimeMs);
+  assert.strictEqual(readFileSync(full, "utf8"), "고친 것\n");
+
+  // 화면이 든 mtime(위 read 시점)보다 파일이 더 새로워졌다 — 다른 손이 그 사이 고친 것과 같은 모양이다
+  const outsideEdit = new Date(Date.now() + 60_000);
+  writeFileSync(full, "바깥 손이 고침\n");
+  utimesSync(full, outsideEdit, outsideEdit);
+
+  await assert.rejects(
+    () => saveFile(shared, rel, "화면이 쓰려던 것\n", read.mtimeMs),
+    /고쳤습니다/,
+  ); // Done when 4-2
+  assert.strictEqual(readFileSync(full, "utf8"), "바깥 손이 고침\n"); // 거절됐으니 그대로다
+
+  await deleteFile(shared, rel);
 });
 
 // ── 코어 — 큐 밖 · 읽기만 ───────────────────────────────────────────────────

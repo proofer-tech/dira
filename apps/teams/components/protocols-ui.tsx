@@ -159,11 +159,15 @@ export function ProtocolEditor({
   projectId,
   rel,
   initial,
+  initialMtimeMs,
   inlined,
 }: {
   projectId: string;
   rel: string;
   initial: string;
+  /** 이 파일을 읽었을 때의 mtime(§10 저장 충돌) — 저장이 그대로 되돌려 준다. `router.refresh()`
+   *  뒤에는 새로 읽은 값이 prop으로 다시 들어오므로 state로 들고 있지 않는다 */
+  initialMtimeMs?: number;
   /** 최상위 AGENTS.md인가 — 문자 수를 타이핑 중에도 보여준다 */
   inlined: boolean;
 }) {
@@ -243,7 +247,7 @@ export function ProtocolEditor({
           disabled={pending || !dirty}
           onClick={() =>
             start(async () => {
-              const r = await saveProtocolAction(projectId, rel, text, locale);
+              const r = await saveProtocolAction(projectId, rel, text, initialMtimeMs, locale);
               setResult(r);
               if (r.ok) router.refresh(); // 트리의 AGENTS.md 문자 수도 다시 읽는다
             })

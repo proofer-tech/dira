@@ -32,10 +32,11 @@ export async function saveProtocolAction(
   projectId: string,
   rel: string,
   text: string,
+  expectedMtimeMs?: number,
   locale: Locale = DEFAULT_LOCALE,
 ): Promise<ProtocolResult> {
   try {
-    await saveFile(await baseOf(projectId, locale), rel, text, locale);
+    await saveFile(await baseOf(projectId, locale), rel, text, expectedMtimeMs, locale);
     revalidatePath(`/p/${projectId}/protocols`);
     return { ok: true, rel };
   } catch (e) {

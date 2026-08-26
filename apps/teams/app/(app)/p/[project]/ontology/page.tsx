@@ -302,6 +302,7 @@ export default async function Ontology({
                 projectId={id}
                 rel={selected.rel}
                 initial={selected.text}
+                initialMtimeMs={selected.mtimeMs}
                 vault={vault}
               />
             )}

@@ -332,11 +332,15 @@ export function OntologyEditor({
   projectId,
   rel,
   initial,
+  initialMtimeMs,
   vault,
 }: {
   projectId: string;
   rel: string;
   initial: string;
+  /** 이 파일을 읽었을 때의 mtime(§10 저장 충돌) — 저장이 그대로 되돌려 준다. `router.refresh()`
+   *  뒤에는 새로 읽은 값이 prop으로 다시 들어오므로 state로 들고 있지 않는다 */
+  initialMtimeMs?: number;
   /** 이름 -> href 벌(§비주얼 §10 §위키링크) — 서버가 이 온톨로지 트리에서 한 번 빌드해 내려준다 */
   vault?: Vault;
 }) {
@@ -396,7 +400,7 @@ export function OntologyEditor({
           disabled={pending || !dirty}
           onClick={() =>
             start(async () => {
-              const r = await saveOntologyAction(projectId, rel, text);
+              const r = await saveOntologyAction(projectId, rel, text, initialMtimeMs);
               setResult(r);
               if (r.ok) router.refresh();
             })

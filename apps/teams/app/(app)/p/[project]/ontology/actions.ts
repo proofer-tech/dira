@@ -46,9 +46,10 @@ export async function saveOntologyAction(
   projectId: string,
   rel: string,
   text: string,
+  expectedMtimeMs?: number,
 ): Promise<OntologyResult> {
   try {
-    await saveFile(await baseOf(projectId), rel, text);
+    await saveFile(await baseOf(projectId), rel, text, expectedMtimeMs);
     revalidatePath(`/p/${projectId}/ontology`);
     return { ok: true, rel };
   } catch (e) {

@@ -206,8 +206,10 @@ export async function mirrorCore(queueProtocols: string): Promise<void> {
   }
 }
 
-/** 편집기가 열 수 있는 것과 못 여는 것. `text`가 null이면 `reason`이 이유다. */
-export type ProtocolFile = { rel: string; text: string | null; reason?: string };
+/** 편집기가 열 수 있는 것과 못 여는 것. `text`가 null이면 `reason`이 이유다.
+ *  `mtimeMs`는 `text`가 실려 있을 때만 있다 — 저장 왕복(`saveFile`)이 그 값을 되돌려 받는다
+ *  (§10 저장 충돌). */
+export type ProtocolFile = { rel: string; text: string | null; reason?: string; mtimeMs?: number };
 
 /** ponytail: NUL 바이트가 있으면 바이너리(git과 같은 판정). 인코딩은 추측하지 않는다 —
  *  UTF-8이 아닌 텍스트가 실제로 나오면 그때 판정을 늘린다. */
@@ -220,7 +222,8 @@ export async function readTextFile(
   locale: Locale = DEFAULT_LOCALE,
 ): Promise<ProtocolFile> {
   const full = await resolveWithin(baseDir, rel);
-  if ((await lstat(full)).isDirectory()) {
+  const st = await lstat(full);
+  if (st.isDirectory()) {
     return { rel, text: null, reason: t(locale, "protocols.lib.isDirectory") };
   }
   const buf = await readFile(full);
@@ -234,13 +237,18 @@ export async function readTextFile(
   if (buf.includes(0)) {
     return { rel, text: null, reason: t(locale, "protocols.lib.notText") };
   }
-  return { rel, text: buf.toString("utf8") };
+  return { rel, text: buf.toString("utf8"), mtimeMs: st.mtimeMs };
 }
 
+/** `expectedMtimeMs`는 화면이 파일을 읽었을 때 받은 `ProtocolFile.mtimeMs`다(§10 저장 충돌) —
+ *  없으면(내부 호출, 예: 온톨로지 시드 직후 저장) 충돌 검사를 건너뛴다. 있으면 쓰기 직전에
+ *  다시 잰 mtime이 그 값보다 새로울 때(=그 사이 다른 손이 고쳤을 때) 쓰지 않고 거절한다 —
+ *  잠그지 않는다, 다시 읽게 할 뿐이다. */
 export async function saveFile(
   baseDir: string,
   rel: string,
   text: string,
+  expectedMtimeMs?: number,
   locale: Locale = DEFAULT_LOCALE,
 ): Promise<void> {
   const full = await resolveWithin(baseDir, rel);
@@ -249,6 +257,9 @@ export async function saveFile(
   const st = await lstat(full).catch(() => null);
   if (!st) throw new Error(`${t(locale, "protocols.lib.missingPrefix")} ${rel}`);
   if (!st.isFile()) throw new Error(`${t(locale, "protocols.lib.notRegularPrefix")} ${rel}`);
+  if (expectedMtimeMs !== undefined && st.mtimeMs > expectedMtimeMs) {
+    throw new Error(t(locale, "protocols.lib.staleConflict"));
+  }
   await writeFile(full, text, "utf8");
 }
 
