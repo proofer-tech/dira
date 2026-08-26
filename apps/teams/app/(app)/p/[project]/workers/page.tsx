@@ -7,6 +7,8 @@ import { Fragment } from "react";
 import Link from "@/components/link";
 import { notFound } from "next/navigation";
 import { CloudOff, Hourglass, TriangleAlert } from "lucide-react";
+import { boardRevision } from "@/lib/board-revision";
+import { EarlyRefreshPolling } from "@/components/early-refresh";
 import { EmptyState } from "@/components/empty-state";
 import { StatusBadge } from "@/components/status-badge";
 import { CopyCommand } from "@/components/copy-command";
@@ -145,6 +147,11 @@ export default async function Workers({ params }: { params: Promise<{ project: s
 
   return (
     <div className="space-y-4">
+      {/* 이른 갱신 폴(DESIGN.md §이른 갱신이 붙는 화면 §개정 3, 요구 `de0b759d`) - 5초 바닥은
+          안 붙인다(§개정 2): watch 대상은 티켓 디렉터리 하나 그대로라 워커 자신의 상태(도는
+          중 - 유휴 - 멈춤 - 유실)는 안 붙는다 - 다시 그려지는 계기는 물고 있는 티켓이 갈릴 때다. */}
+      <EarlyRefreshPolling project={id} rev={boardRevision(project.root)} />
+
       <div className="flex items-center justify-between gap-4">
         <div className="flex flex-wrap items-baseline gap-x-2">
           <h1 className="text-lg font-semibold">워커</h1>
@@ -314,7 +321,7 @@ export default async function Workers({ params }: { params: Promise<{ project: s
                   w.defects.length > 0 || w.lastFailure ? (
                     <>
                       {w.defects.length > 0 && (
-                        // role은 status다 — 5초 폴링이 이 표를 다시 그리므로 alert면 재낭독 위험이다(§4-4)
+                        // role은 status다 — 이른 갱신 폴이 이 표를 다시 그리므로 alert면 재낭독 위험이다(§4-4)
                         <Alert role="status">
                           <TriangleAlert aria-hidden className="text-status-stale" />
                           <AlertTitle>

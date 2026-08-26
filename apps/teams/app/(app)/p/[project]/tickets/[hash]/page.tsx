@@ -8,6 +8,8 @@ import path from "node:path";
 import Link from "@/components/link";
 import { notFound } from "next/navigation";
 import { Lock, TriangleAlert } from "lucide-react";
+import { boardRevision } from "@/lib/board-revision";
+import { EarlyRefreshPolling } from "@/components/early-refresh";
 import { EmptyState } from "@/components/empty-state";
 import { Markdown } from "@/components/markdown";
 import { TitleRefs } from "@/components/queue-ref";
@@ -21,7 +23,6 @@ import {
   ReassignLine,
   TicketEditForm,
   UnassignButton,
-  WipBodyPolling,
 } from "@/components/ticket-ui";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -330,6 +331,11 @@ export default async function TicketDetail({
     // 2단일 때 왼쪽 단이 896(mono 93자)에서 멈춘다. 절이 자기 폭을 다시 정하면 이중 제한이다.
     // `mx-auto`는 쓰지 않는다 — 보드·워커가 `px-6` 왼쪽 정렬이라 이 화면만 가운데 오면 제목이 튄다.
     <div className="max-w-3xl space-y-6 xl:max-w-7xl">
+      {/* 상태 3종 전부(열림 - 진행중 - 완료)에서 돈다(DESIGN.md §이른 갱신이 붙는 화면 §개정 3,
+          요구 `de0b759d`). 판정 단위가 프로젝트라 이 티켓 자신의 본문·배지뿐 아니라 관계 절에
+          뜬 남의 배지도 같이 따라간다. */}
+      <EarlyRefreshPolling project={id} rev={boardRevision(project.root)} />
+
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex min-w-0 items-center gap-3">
           {/* §9 뒤쪽 절반 — 위에 덮인 앵커가 없어 `layered`를 안 준다(§비주얼 §31 §층) */}
@@ -492,13 +498,6 @@ export default async function TicketDetail({
 
           <section className="space-y-2">
             <h2 className="text-sm font-medium">본문</h2>
-            {/* `.wip`이면 이 절이 파일을 따라간다(§2-4 ③) — 세션이 `## Done when` 상자를 켜는
-                대로 새로고침 없이 바뀐다. 판정은 **상태 하나**고 엔진을 안 본다: `.done`은 불변
-                기록이고 열림은 편집 폼이라(사람이 쓰던 글) 둘 다 이 조각을 안 세운다. 기준선
-                mtime은 큐 스캔이 이미 읽어 둔 값이라 `stat`이 늘지 않는다. */}
-            {ticket.state === "wip" && (
-              <WipBodyPolling project={id} stem={ticket.stem} mtime={ticket.mtime} />
-            )}
             {/* **열린 티켓만 편집 폼이다.** `.wip`(세션이 물고 있다)과 `.done`(불변 기록)은 같은
                 읽기 전용 자리를 쓴다 — 사유는 위 Alert가 각자 알려 준다. 판정을 상태 하나로 두는
                 이유: `!== "open"`이면 나중에 상태가 늘어도 기본이 읽기 전용이다. */}

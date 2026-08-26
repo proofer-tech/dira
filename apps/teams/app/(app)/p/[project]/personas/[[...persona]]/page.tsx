@@ -15,6 +15,8 @@
 import path from "node:path";
 import { notFound } from "next/navigation";
 import { TriangleAlert } from "lucide-react";
+import { boardRevision } from "@/lib/board-revision";
+import { EarlyRefreshPolling } from "@/components/early-refresh";
 import { EmptyState } from "@/components/empty-state";
 import { CreatePersonaButton, PersonasPane } from "@/components/personas-ui";
 import { TitleRefs } from "@/components/queue-ref";
@@ -172,6 +174,10 @@ export default async function Personas({
 
   return (
     <div className="space-y-4">
+      {/* 이른 갱신 폴(DESIGN.md §이른 갱신이 붙는 화면 §개정 3, 요구 `de0b759d`) - 5초 바닥은
+          안 붙인다(§개정 2), 큐가 갈린 회차에만 다시 그린다. */}
+      <EarlyRefreshPolling project={id} rev={boardRevision(project.root)} />
+
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-lg font-semibold">{t(locale, "persona.word.squad")}</h1>
         {personas.length > 0 && <CreatePersonaButton projectId={id} />}

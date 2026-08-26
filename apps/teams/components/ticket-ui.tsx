@@ -10,14 +10,12 @@
 import {
   Fragment,
   useActionState,
-  useEffect,
   useRef,
   useState,
   useTransition,
   type ReactNode,
 } from "react";
 import Link from "@/components/link";
-import { useRouter } from "next/navigation";
 import { useTrackedRouter } from "@/lib/route-pending";
 import {
   ArrowDown,
@@ -35,7 +33,6 @@ import {
   answerRequirement,
   deleteTicket,
   saveTicket,
-  ticketMtime,
   unassignTicket,
   type SaveState,
 } from "@/app/(app)/p/[project]/tickets/[hash]/actions";
@@ -1192,63 +1189,6 @@ export function AnswerDialog({
 // ── 삭제 ────────────────────────────────────────────────────────────────────
 
 /** 확인 다이얼로그. 열린 티켓이 아니면 트리거 자체가 비활성이고 서버 액션도 다시 거부한다. */
-/** `.wip` 본문이 파일을 따라간다 (DESIGN.md §2-4 ③). 세션이 `## Done when` 상자를 켜는 대로
- *  새로고침 없이 바뀐다 — **상자만이 아니라 본문 전체**다(`## 결과`·`## 블록`도 세션이 쓴다).
- *  그리는 것이 없다: mtime이 움직인 회차에 `router.refresh()`를 부르면 서버 컴포넌트가 본문을
- *  다시 주고, `<Markdown>`의 상자 렌더(§비주얼 §10)는 한 줄도 안 바뀐다.
- *
- *  **`<SessionStream>` 폴링에 안 얹었다**(§2-4 ③): 그쪽은 `if (codex) return`으로 끊겨 codex
- *  워커가 문 티켓이 안 따라간다. 여기 판정은 상태 하나고(`.wip`인가 — 서버가 `.wip`일 때만 이
- *  조각을 만든다) 엔진을 안 본다. 열림 티켓 자리는 편집 폼이라 애초에 손대지 않는다.
- *
- *  ponytail: 3초 고정 · 숨은 탭 건너뛰기(`BoardPolling`과 같은 규칙). 안 바뀐 회차가 mtime
- *            하나라 조건부 응답에서 더 깎을 것이 없고, 그 다음이 SSE다. */
-export function WipBodyPolling({
-  project,
-  stem,
-  mtime,
-}: {
-  project: string;
-  stem: string;
-  /** 서버가 그린 시점의 mtime — 첫 회차가 무조건 재렌더를 부르지 않게 하는 기준선이다 */
-  mtime: number;
-}) {
-  const router = useRouter();
-  useEffect(() => {
-    let stop = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    let since = mtime;
-    // 앞 왕복이 끝난 뒤에 다음을 예약한다 — `setInterval`이면 느린 회차 둘이 겹쳐 같은 변경에
-    // `router.refresh()`를 두 번 부른다(`<SessionStream>`이 같은 이유로 같은 모양이다).
-    const poll = async () => {
-      try {
-        // 배경 탭은 건너뛴다 — 안 보는 화면 때문에 큐를 3초마다 stat할 이유가 없다.
-        if (!document.hidden) {
-          const r = await ticketMtime(project, stem);
-          if (stop) return;
-          // 파일이 그대로면 아무것도 안 한다 = 안 바뀐 폴링의 값이 0이다(§2-4 ③).
-          // `.wip`이 아니게 된 회차도 한 번 받는다: 상태 전이는 **rename**이고 rename은 mtime을
-          // 안 움직여서, 이 항이 없으면 완료된 티켓이 `진행중`으로 굳은 화면이 남는다.
-          if (r.mtime !== since || !r.live) {
-            since = r.mtime;
-            router.refresh();
-          }
-          if (!r.live) return; // 다음을 예약하지 않는다 = 폴링이 끊기는 자리다
-        }
-      } catch {
-        // 이 왕복 하나만 버린다 — 한 회차 실패로 추종이 끊기지 않는다.
-      }
-      if (!stop) timer = setTimeout(poll, 3000);
-    };
-    timer = setTimeout(poll, 3000);
-    return () => {
-      stop = true;
-      clearTimeout(timer);
-    };
-  }, [project, stem, mtime, router]);
-  return null;
-}
-
 export function DeleteTicketButton({
   project,
   hash,

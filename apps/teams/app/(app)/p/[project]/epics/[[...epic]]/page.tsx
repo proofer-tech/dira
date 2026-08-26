@@ -12,6 +12,8 @@
 import Link from "@/components/link";
 import { notFound } from "next/navigation";
 import { TriangleAlert } from "lucide-react";
+import { boardRevision } from "@/lib/board-revision";
+import { EarlyRefreshPolling } from "@/components/early-refresh";
 import { EmptyState } from "@/components/empty-state";
 import { EpicSidebar } from "@/components/epic-sidebar";
 import { EpicMemorySection, EpicReadmeEditButton } from "@/components/epics-ui";
@@ -108,6 +110,10 @@ export default async function Epics({
     // `EpicSidebar`가 자기 `SidebarProvider`를 이미 든다(§52 ①) — 여기는 형제 열 하나와
     // 나란한 플렉스 행이면 된다(보드의 `flex min-h-0 flex-1 gap-6`와 같은 값).
     <div className="flex min-h-0 gap-6">
+      {/* 이른 갱신 폴(DESIGN.md §이른 갱신이 붙는 화면 §개정 3, 요구 `de0b759d`) - 5초 바닥은
+          안 붙인다(§개정 2), 큐가 갈린 회차에만 다시 그린다. */}
+      <EarlyRefreshPolling project={id} rev={boardRevision(project.root)} />
+
       <EpicSidebar
         projectId={id}
         epics={epics}
