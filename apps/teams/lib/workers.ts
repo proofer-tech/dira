@@ -1093,6 +1093,38 @@ const MACHINE_CAP = 200;
 
 const isRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object";
 
+/** ⑥ 조각의 병합 창 — `machine-state.ts`의 `MERGE_WINDOW_MS`와 같은 값(10분, §0-14 §값)이다.
+ *  그 상수를 그대로 import하면 `machine-state.ts → workers.ts`의 기존 방향과 겹쳐 순환이 하나
+ *  생기므로, 값을 여기 다시 적는다(요구 `f830e318` — 이 값을 두는 자리는 구현이 정한다). */
+const RESUME_MERGE_WINDOW_MS = 10 * 60_000;
+
+/** ⑥ 조각을 구간 단위로 합친다(요구 `f830e318`) — 어떤 줄의 `from`이 다른 줄의 `to`에서 10분
+ *  안이면 `min(from) - max(to)` 한 줄로 묶는다. `kind`는 `poweredOff`가 하나라도 있으면
+ *  이기고, `archived`는 하나라도 `null`이면 구간 전체가 안 보관이다(§0-14 §읽음 처리 — 새
+ *  사실은 다시 봐야 한다). `readAlerts`가 부르는 한 곳뿐이다 — ⑥의 나열 · 보관함 · `보관` 버튼이
+ *  받는 `to` 목록이 전부 이 결과를 그대로 물려받는다. */
+function mergeMachineRows(machine: Mailbox["machine"]): Mailbox["machine"] {
+  const rows = Object.entries(machine)
+    .map(([to, e]) => ({ to: Number(to), from: e.from, kind: e.kind, archived: e.archived }))
+    .sort((a, b) => a.from - b.from);
+  const merged: (typeof rows)[number][] = [];
+  for (const row of rows) {
+    const last = merged[merged.length - 1];
+    if (last && row.from - last.to <= RESUME_MERGE_WINDOW_MS) {
+      last.to = Math.max(last.to, row.to);
+      if (row.kind === "poweredOff") last.kind = "poweredOff";
+      last.archived = last.archived && row.archived
+        ? (row.archived > last.archived ? row.archived : last.archived)
+        : null;
+    } else {
+      merged.push({ ...row });
+    }
+  }
+  return Object.fromEntries(
+    merged.map(({ to, from, kind, archived }) => [String(to), { from, kind, archived }]),
+  );
+}
+
 /** 없음·못 읽음·JSON 아님·**옛 모양**(최상위에 `queues`가 없다) = 빈 편지함이다. 마이그레이션
  *  0줄 — 그 순간 살아 있던 마크만 잃고 다음 쓰기에서 파일이 새 모양이 된다(§0-10 §저장). */
 export async function readAlerts(): Promise<Mailbox> {
@@ -1124,7 +1156,7 @@ export async function readAlerts(): Promise<Mailbox> {
       machine[to] = { from: ev.from, kind: ev.kind, archived: typeof ev.archived === "string" ? ev.archived : null };
     }
   }
-  return { queues, machine };
+  return { queues, machine: mergeMachineRows(machine) };
 }
 
 /** 넘치면 이른 것부터 버린다(`at`/키 기준) — **보관 여부를 안 본다**(§0-10 §무한히 쌓이는 것,

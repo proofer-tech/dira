@@ -874,7 +874,8 @@ test("unarchivedResumes — 보관 안 된 머신 사건만, `to`가 숫자로 �
     queues: {},
     machine: {
       "1000": { from: 500, kind: "slept", archived: null },
-      "2000": { from: 1500, kind: "poweredOff", archived: "2026-08-01T00:00:00.000Z" },
+      // 병합 창(10분) 밖으로 떨어뜨려 둔다 — 붙어 있으면 아래 병합 테스트와 겹친다.
+      "2000000": { from: 1_500_000, kind: "poweredOff", archived: "2026-08-01T00:00:00.000Z" },
     },
   });
   const alerts = await readAlerts();
@@ -886,18 +887,72 @@ test("unarchivedResumes — 안 보관한 사건 전부를 `to` 내림차순으�
   putAlerts({
     queues: {},
     machine: {
-      "1000": { from: 500, kind: "slept", archived: null },
-      "3000": { from: 2500, kind: "poweredOff", archived: null },
-      "2000": { from: 1500, kind: "slept", archived: null },
-      "9000": { from: 8500, kind: "slept", archived: "2026-08-01T00:00:00.000Z" }, // 보관됨 — 안 섞인다
+      // 넷 다 서로 10분(600_000ms) 넘게 떨어져 있다 — 병합이 안 걸린다.
+      "100000": { from: 0, kind: "slept", archived: null },
+      "1700000": { from: 1_600_000, kind: "poweredOff", archived: null },
+      "900000": { from: 800_000, kind: "slept", archived: null },
+      "100100000": { from: 100_000_000, kind: "slept", archived: "2026-08-01T00:00:00.000Z" }, // 보관됨 — 안 섞인다
     },
   });
   const alerts = await readAlerts();
   const rows = unarchivedResumes(alerts);
   assert.deepStrictEqual(
     rows.map((r) => r.to),
-    [3000, 2000, 1000], // 전부 셋 - 내림차순
+    [1700000, 900000, 100000], // 전부 셋 - 내림차순
   );
+});
+
+test("unarchivedResumes — 조각 셋이 한 줄이 된다 (10분 안 병합, 요구 `f830e318`)", async () => {
+  putAlerts({
+    queues: {},
+    machine: {
+      "100000": { from: 0, kind: "slept", archived: null },
+      "200000": { from: 100_000, kind: "slept", archived: null },
+      "300000": { from: 200_000, kind: "slept", archived: null },
+    },
+  });
+  const alerts = await readAlerts();
+  assert.deepStrictEqual(unarchivedResumes(alerts), [{ to: 300000, from: 0, kind: "slept" }]);
+});
+
+test("unarchivedResumes — 10분보다 먼 둘은 안 합쳐진다 (요구 `f830e318`)", async () => {
+  putAlerts({
+    queues: {},
+    machine: {
+      "100000": { from: 0, kind: "slept", archived: null },
+      "900000": { from: 800_000, kind: "slept", archived: null }, // 100000에서 700_000ms(>10분) 떨어짐
+    },
+  });
+  const alerts = await readAlerts();
+  assert.deepStrictEqual(
+    unarchivedResumes(alerts).map((r) => r.to),
+    [900000, 100000],
+  );
+});
+
+test("unarchivedResumes — 보관 뒤 자란 `to`가 그 줄을 다시 안 보관 상태로 만든다 (요구 `f830e318`)", async () => {
+  putAlerts({
+    queues: {},
+    machine: {
+      "100000": { from: 0, kind: "slept", archived: "2026-08-01T00:00:00.000Z" }, // 보관됨
+      "200000": { from: 100_000, kind: "slept", archived: null }, // 병합 창 안의 새 조각 — 안 보관
+    },
+  });
+  const alerts = await readAlerts();
+  assert.deepStrictEqual(unarchivedResumes(alerts), [{ to: 200000, from: 0, kind: "slept" }]);
+  assert.deepStrictEqual(archivedRows(alerts, "/q/a"), []); // 합친 것이 안 보관이라 보관함에 없다
+});
+
+test("unarchivedResumes — `poweredOff`가 하나라도 있으면 합친 줄이 `poweredOff`다 (요구 `f830e318`)", async () => {
+  putAlerts({
+    queues: {},
+    machine: {
+      "100000": { from: 0, kind: "slept", archived: null },
+      "200000": { from: 100_000, kind: "poweredOff", archived: null },
+    },
+  });
+  const alerts = await readAlerts();
+  assert.deepStrictEqual(unarchivedResumes(alerts), [{ to: 200000, from: 0, kind: "poweredOff" }]);
 });
 
 test("archivedRows — ②⑥의 보관된 사건만 시각 내림차순 한 벌로 섞는다. 판정을 다시 안 돌린다", async () => {

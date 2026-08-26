@@ -139,14 +139,16 @@ test("recordResumeEvent — 병합으로 to가 자라면 편지함에 새 줄이
 test("markResumeRead — 목록에 든 `to` 전부의 archived를 한 번에 적는다 (§0-10 §⑥이 한 항목으로 뜨고 한 번에 보관된다)", async () => {
   rmSync(alertsPath(), { force: true });
   const a: ResumeEvent = { from: 0, to: 300_000, kind: "poweredOff" };
-  const b: ResumeEvent = { from: 300_000, to: 400_000, kind: "slept" };
+  // 병합 창(10분 = 600_000ms) 밖으로 떨어뜨려 둔다 — 붙어 있으면 읽는 자리에서 한 줄로
+  // 합쳐져(요구 `f830e318`) 두 `to`를 따로 보관하는 이 테스트의 전제가 무너진다.
+  const b: ResumeEvent = { from: 1_000_000, to: 1_100_000, kind: "slept" };
   await recordResumeEvent(a);
   await recordResumeEvent(b);
 
-  await markResumeRead([300_000, 400_000]);
+  await markResumeRead([300_000, 1_100_000]);
   const written = JSON.parse(readFileSync(alertsPath(), "utf8"));
   assert.equal(typeof written.machine["300000"].archived, "string");
-  assert.equal(typeof written.machine["400000"].archived, "string");
+  assert.equal(typeof written.machine["1100000"].archived, "string");
 
   // 목록에 없는 `to`(상한에 밀렸거나 아직 하트비트가 안 적은 사건)는 조용히 넘어간다.
   await assert.doesNotReject(markResumeRead([999_999]));
@@ -154,12 +156,16 @@ test("markResumeRead — 목록에 든 `to` 전부의 archived를 한 번에 적
 
 test("recordResumeEvent — 머신 전체 상한 200건, 넘치면 `to`가 이른 것부터 버린다 (§0-10 §무한히 쌓이는 것)", async () => {
   rmSync(alertsPath(), { force: true });
-  for (let i = 0; i < 205; i++) await recordResumeEvent({ from: i, to: 1000 + i, kind: "slept" });
+  // 병합 창(10분) 밖으로 서로 떨어뜨려 둔다 — 안 그러면 읽는 자리에서 다 한 줄로 합쳐져
+  // (요구 `f830e318`) 200건을 못 채우고 상한 판정 자체가 안 걸린다.
+  for (let i = 0; i < 205; i++) {
+    await recordResumeEvent({ from: i * 1_000_000, to: i * 1_000_000 + 1_000, kind: "slept" });
+  }
 
   const written = JSON.parse(readFileSync(alertsPath(), "utf8"));
   const keys = Object.keys(written.machine)
     .map(Number)
     .sort((a, b) => a - b);
   assert.strictEqual(keys.length, 200);
-  assert.strictEqual(keys[0], 1005); // 가장 이른 5개(1000..1004)가 버려졌다
+  assert.strictEqual(keys[0], 5 * 1_000_000 + 1_000); // 가장 이른 5개(i=0..4)가 버려졌다
 });
