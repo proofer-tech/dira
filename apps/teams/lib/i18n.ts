@@ -414,6 +414,9 @@ export const ko: Record<string, string> = {
   "progress.stream.closeDetail": "상세 닫기",
   "progress.stream.markdown": "마크다운",
 
+  // 티켓 상세 진행 기록 절에서 워커 갈래 다이얼로그를 여는 문(§2-15 ⑮).
+  "progress.stream.expand": "크게 보기",
+
   "board.epic.label": "에픽",
   "board.epic.all": "전체",
   "board.epic.none": "(에픽 없음)",
@@ -1306,6 +1309,8 @@ export const en: Record<string, string> = {
   "progress.stream.copy": "Copy",
   "progress.stream.closeDetail": "Close detail",
   "progress.stream.markdown": "Markdown",
+
+  "progress.stream.expand": "Expand",
 
   "board.epic.label": "Epics",
   "board.epic.all": "All",

@@ -60,6 +60,13 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
   InputGroup,
@@ -218,6 +225,9 @@ export function SessionStream({
   // 2단 상세(§2-15 ⑧) — 고른 사건의 key 하나가 상태다. `<details>`가 아니다: 같은 것을 두
   // 자리에 안 그린다. 티켓 상세에서는 안 읽는다(아래 `workerCtx`가 그 화면에서 `undefined`다).
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  // `크게 보기`가 여는 워커 갈래 다이얼로그(§2-15 ⑮) — 티켓 상세 갈래에서만 읽는다. 워커
+  // 다이얼로그(`variant === "worker"`)는 이 문을 다시 안 그린다(아래 렌더 갈래가 막는다).
+  const [expanded, setExpanded] = useState(false);
   const t = useT();
   // 진행중 계획의 창 끝(`planBlocks`의 `now`) — 렌더 본문은 `Date.now()`를 직접 못 부른다
   // (`react-hooks/purity`). 초기값은 마운트 시 한 번, 이후는 poll effect가 매 왕복마다 갱신한다.
@@ -523,15 +533,21 @@ export function SessionStream({
               </span>
             )}
           </div>
-          {stream && (
+          {/* 오른쪽 무리 — `stream`일 때만 뜨던 종전 두 항목(끝난 세션 문구 · 맨 아래로)은
+              한 클래스도 안 갈린다. `크게 보기`(§2-15 ⑮)만 조건이 넓다 — 아래 인라인 스크롤
+              상자가 뜨는 조건과 같다(`stream || merged.length > 0`, 자리는 `맨 아래로` 다음). */}
+          {(stream || merged.length > 0) && (
             <div className="flex items-center gap-2">
-              {!live && <p className="text-xs text-muted-foreground">끝난 세션 · 갱신 없음</p>}
-              {detached && (
+              {stream && !live && <p className="text-xs text-muted-foreground">끝난 세션 · 갱신 없음</p>}
+              {stream && detached && (
                 <Button variant="ghost" size="sm" onClick={() => setDetached(false)}>
                   <ArrowDown aria-hidden className="size-3.5" />
                   맨 아래로
                 </Button>
               )}
+              <Button variant="ghost" size="sm" onClick={() => setExpanded(true)}>
+                {t("progress.stream.expand")}
+              </Button>
             </div>
           )}
         </div>
@@ -592,6 +608,8 @@ export function SessionStream({
                     threadKey={threadKey}
                     vault={vault}
                     refs={liveRefs}
+                    forceOpen={searching}
+                    ctx={workerCtx}
                   />
                 ),
               ))}
@@ -677,6 +695,38 @@ export function SessionStream({
           증발한다(§21 예외 항). **codex에서도 자리를 지운다는 뜻이 아니다**(§비주얼 §23 ⑤):
           비활성 + 사유 한 줄로 뜬다 — 진입점을 지우면 화면은 "왜 없는지"를 말할 자리를 잃는다. */}
       {form}
+
+      {/* `크게 보기`가 여는 워커 갈래 다이얼로그(§2-15 ⑮) — 그릇 · 제목 · 문구가 `workers-ui.tsx`의
+          그 다이얼로그와 짝이다(§비주얼 §64 흡수 표). 이 절이 받은 값 전부를 그대로 물려주고
+          갈래만 `"worker"`로 얹는다 — `costChunk`는 안 넘긴다(워커 갈래의 머리가 안 그린다).
+          `variant === "worker"`일 때는 안 그린다 — 이 문은 티켓 상세 갈래에만 있다. */}
+      {variant !== "worker" && (
+        <Dialog open={expanded} onOpenChange={setExpanded}>
+          <DialogContent className="flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden sm:max-w-[75rem]">
+            <DialogHeader>
+              <DialogTitle>진행 기록</DialogTitle>
+              <DialogDescription className="font-mono text-xs break-all">{stem}</DialogDescription>
+            </DialogHeader>
+            <SessionStream
+              project={project}
+              stem={stem}
+              live={live}
+              engine={engine}
+              thread={thread}
+              plans={plans}
+              answerOptions={answerOptions}
+              defaultAnswer={defaultAnswer}
+              body={body}
+              stream={stream}
+              awaiting={awaiting}
+              answerFile={answerFile}
+              vault={vault}
+              refs={liveRefs}
+              variant="worker"
+            />
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }
@@ -740,6 +790,8 @@ function PlanBlock({
   threadKey,
   vault,
   refs,
+  forceOpen,
+  ctx,
 }: {
   plan: PlanItem;
   items: GroupedItem<StreamEvent, ThreadItem>[];
@@ -748,6 +800,11 @@ function PlanBlock({
   vault?: Vault;
   /** 산문 속 해시-P번호 표식의 값(§9) — `ProgressItems`에 그대로 흘려보낸다 */
   refs?: RefIndex;
+  /** 워커 다이얼로그 검색이 켜져 있는 동안 완료·취소 계획도 강제로 연다(§2-15 ⑮) —
+   *  `ProgressItems`에도 그대로 흘려보내고, 이 계획 자체의 `<details open>` 판정에도 더한다. */
+  forceOpen?: boolean;
+  /** 워커 다이얼로그 줄 컨텍스트(§2-15 ⑦⑧) — `ProgressItems`에 그대로 흘려보낸다. */
+  ctx?: WorkerRowCtx;
 }) {
   const t = useT();
   const cancelled = plan.state === "cancelled";
@@ -783,7 +840,7 @@ function PlanBlock({
 
   return (
     <details
-      open={plan.state === "doing" || undefined}
+      open={plan.state === "doing" || forceOpen || undefined}
       onToggle={onToggle}
       className={cn(PLAN_BLOCK, "open:[&>summary>svg:last-child]:rotate-90")}
     >
@@ -802,7 +859,15 @@ function PlanBlock({
         {title}
         <ChevronRight aria-hidden className="ml-auto size-4 shrink-0 text-muted-foreground" />
       </summary>
-      <ProgressItems items={items} threadKey={threadKey} onToggle={onToggle} vault={vault} refs={refs} />
+      <ProgressItems
+        items={items}
+        threadKey={threadKey}
+        onToggle={onToggle}
+        vault={vault}
+        refs={refs}
+        forceOpen={forceOpen}
+        ctx={ctx}
+      />
     </details>
   );
 }
