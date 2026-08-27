@@ -702,7 +702,7 @@ export async function readWorkersPanelAction(): Promise<WorkersPanelView> {
   const [poolNames, summaries, limits] = await Promise.all([
     listPoolWorkers(),
     Promise.all(projects.map((p) => readSummary(p))),
-    Promise.all(projects.map((p) => readPoolLimit(p.root).then((l) => l.limit))),
+    Promise.all(projects.map((p) => readPoolLimit(p.root).then((l) => l.limit ?? 0))),
   ]);
   const pool = await Promise.all(
     poolNames.map(async (w) => ({ name: w.name, status: await poolWorkerFullStatus(w.name) })),

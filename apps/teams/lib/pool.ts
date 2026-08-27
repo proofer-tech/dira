@@ -71,7 +71,7 @@ mkdir -p "$_pool_run" 2>/dev/null
 if ! mkdir "$_pool_lock" 2>/dev/null; then
   _pool_pid=$(cat "$_pool_lock/pid" 2>/dev/null)
   if [ -n "\${_pool_pid:-}" ] && kill -0 "$_pool_pid" 2>/dev/null; then
-    echo "$(date '+%Y-%m-%d %H:%M:%S') SKIP $_pool_name — 슬롯이 이미 pid $_pool_pid에 잡혀 있다."
+    echo "$(date '+%Y-%m-%d %H:%M:%S') SKIP $_pool_name — 슬롯이 이미 pid \${_pool_pid}에 잡혀 있다."
     exit 0
   fi
   # 죽은 잠금(주인이 없다) — 되찾는다. mkdir은 다시 안 친다(안이 이미 있는 디렉터리다).
@@ -342,7 +342,7 @@ export async function listBorrowedPoolWorkers(root: string): Promise<string[]> {
   const out: string[] = [];
   for (const n of names) {
     const text = await readFile(path.join(dir, n), "utf8").catch(() => "");
-    const marker = poolWorkerNameOf(text);
+    const marker = poolShimNameOf(text);
     if (marker) out.push(marker);
   }
   return out.sort();
