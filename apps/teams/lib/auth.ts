@@ -637,6 +637,80 @@ const SETUP_TIMEOUT_MS = 120_000;
  *  **않는** 것과 축이 다르다. 여기선 화면 잡음 속에서 토큰을 골라낼 표식이 이것뿐이다. */
 const TOKEN_RE = /sk-ant-[A-Za-z0-9._-]{20,}/;
 
+// ── 토큰을 escape 없는 텍스트에서 집는다 — 가리기도 같은 판정을 쓴다 (§0-4 §개정 `443dd1fa`) ──
+//
+// 실측(CLI 2.1.247): 폭 200칸을 잡아 줘도 Ink는 토큰 한 줄을 세 토막으로 그렸고(`sk-ant-oa` +
+// 35자 + 61자), 토막 사이에 커서 이동 escape가 들어갔다 — `TOKEN_RE.exec(raw)`는 토막 하나가
+// 20자를 못 채워 걸리지 않는다. 그래서 raw가 아니라 **escape를 걷어낸 텍스트**에서 집는다.
+
+/** `\x1b[...[@-~]` 하나 — CSI 전부(커서 이동 포함)를 한 매처로 묶는다. `y`(sticky)라
+ *  `lastIndex`에서만 걸고, 실패하면 한 글자만 걷는다(아래 `foldRaw`). */
+const CSI_Y = /\x1b\[[0-9;?>=!]*[ -/]*[@-~]/y;
+const OSC_Y = /\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/y;
+
+/** raw를 escape 없는 "이어붙인" 텍스트로 접는다. `ptyLines`와 다르게 커서 이동을 공백으로
+ *  바꾸지 않고 **지운다** — 토큰 토막 사이의 커서 이동은 사람이 보는 진짜 공백이 아니다.
+ *  줄바꿈(`\r`·`\n`)도 같이 접는다 — 폭이 좁아 토큰이 줄바꿈으로 쪼개져도 이어 잡는다.
+ *  `rawIndex[i]`는 `text[i]`가 raw의 어느 인덱스에서 왔는지다 — 마스킹이 원문 구간을
+ *  되찾는 데 쓴다. */
+function foldRaw(raw: string): { text: string; rawIndex: number[] } {
+  let text = "";
+  const rawIndex: number[] = [];
+  let i = 0;
+  while (i < raw.length) {
+    OSC_Y.lastIndex = i;
+    const osc = OSC_Y.exec(raw);
+    if (osc) {
+      i += osc[0].length;
+      continue;
+    }
+    CSI_Y.lastIndex = i;
+    const csi = CSI_Y.exec(raw);
+    if (csi) {
+      i += csi[0].length;
+      continue;
+    }
+    const ch = raw[i];
+    if (ch === "\x1b") {
+      i += 2; // ESC 7 · ESC 8 같은 두 글자짜리
+      continue;
+    }
+    if (ch === "\r" || ch === "\n") {
+      i += 1;
+      continue;
+    }
+    text += ch;
+    rawIndex.push(i);
+    i += 1;
+  }
+  return { text, rawIndex };
+}
+
+/** `feed()`가 부른다 — escape 없는 이어붙인 텍스트에서 첫 토큰을 집는다. 토막 사이에 escape가
+ *  있든 줄바꿈이 있든 `foldRaw`가 이미 이어 놨으므로 `TOKEN_RE`를 그대로 쓴다. */
+function extractToken(raw: string): string | null {
+  return TOKEN_RE.exec(foldRaw(raw).text)?.[0] ?? null;
+}
+
+/** `view()`가 부른다 — `extractToken`과 **같은 자리**(`foldRaw` + `TOKEN_RE`)에서 찾은 토큰의
+ *  자리를 raw의 원래 인덱스로 되짚어, 그 구간(토막 사이 escape·줄바꿈 포함) 전부를 가림
+ *  문자열로 갈아 끼운다. 이 결과가 `ptyLines`로 가므로, 토막이 escape로 갈렸든 줄로
+ *  갈렸든 화면엔 조각이 안 남는다. */
+function maskTokens(raw: string): string {
+  const { text, rawIndex } = foldRaw(raw);
+  const re = new RegExp(TOKEN_RE, "g");
+  let masked = "";
+  let cursor = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text))) {
+    const start = rawIndex[m.index];
+    const end = rawIndex[m.index + m[0].length - 1] + 1;
+    masked += raw.slice(cursor, start) + "sk-ant-…";
+    cursor = end;
+  }
+  return masked + raw.slice(cursor);
+}
+
 // ponytail: 토큰은 머신당 하나라 동시에 몰 이유가 없다 — 세션도 하나다.
 let setup: {
   child: ChildProcess;
@@ -655,12 +729,12 @@ function view(s: NonNullable<typeof setup> | null): SetupState {
     // `savedAt`을 화면이 다시 못 묻는다(§0-13 §저장이 끝나면). 정착은 저장(또는 저장 실패)이
     // 기록된 뒤에만 보인다 — 판정을 여기 한 자리에 둔다.
     running: !s.settled || (s.savedAt === undefined && s.error === undefined),
-    lines: ptyLines(s.raw)
+    // CLI는 토큰을 화면에 그대로 찍는다. 여기는 파일이 아니라 **화면**이라 가린다 — 이미
+    // 제자리에 저장했으므로 사람이 이 값을 눈으로 옮겨 적을 일이 없다. 줄로 접기(`ptyLines`)
+    // **전에** raw에서 가려야 토막(§0-4 §개정 `443dd1fa`)이 조각으로 안 남는다.
+    lines: ptyLines(maskTokens(s.raw))
       // 종료 표식은 우리가 심은 것이지 CLI가 사람에게 한 말이 아니다 — 로그에서 뺀다
-      .filter((l) => !l.startsWith(EXIT_MARK))
-      // CLI는 토큰을 화면에 그대로 찍는다. 여기는 파일이 아니라 **화면**이라 가린다 —
-      // 이미 제자리에 저장했으므로 사람이 이 값을 눈으로 옮겨 적을 일이 없다
-      .map((l) => l.replace(new RegExp(TOKEN_RE, "g"), "sk-ant-…")),
+      .filter((l) => !l.startsWith(EXIT_MARK)),
     savedAt: s.savedAt,
     error: s.error,
   };
@@ -742,8 +816,10 @@ export function startSetup(): SetupState {
   const feed = (d: Buffer) => {
     if (s.settled) return;
     s.raw = (s.raw + d.toString()).slice(-256_000);
-    const m = TOKEN_RE.exec(s.raw);
-    if (!m) {
+    // raw가 아니라 escape를 걷어낸 텍스트에서 집는다(§0-4 §개정 `443dd1fa`) — 토막 사이에
+    // 커서 이동 escape가 있거나 줄바꿈으로 접혀 있어도 `extractToken`이 이어서 잡는다
+    const token = extractToken(s.raw);
+    if (!token) {
       // 토큰이 먼저다 — 잡았으면 종료 표식이 같은 청크에 있어도 성공이다
       const bye = s.raw.match(new RegExp(`${EXIT_MARK}(\\d+)`));
       if (bye) settle(s, `토큰을 받지 못한 채 끝났습니다 (종료 코드 ${bye[1]}).`);
@@ -753,7 +829,7 @@ export function startSetup(): SetupState {
     kill(s);
     // 덮어쓰기가 아니라 목록 append다 — 활성은 `addToken`의 `reconcileActive` 판정을 그대로
     // 따른다(§0-13 §화면, P179). eligible한 활성이 이미 있으면 대기로 들어간다
-    addToken(m[0])
+    addToken(token)
       .then(readAuth)
       .then((a) => {
         s.savedAt = a.savedAt ?? undefined;

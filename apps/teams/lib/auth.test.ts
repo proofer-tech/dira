@@ -182,6 +182,34 @@ test("startSetup — pty로 몰고, 토큰을 집어 저장하고, 프로세스�
   await until(() => !alive(pid));
 });
 
+test("startSetup — 토막난 토큰(커서 이동 escape·줄바꿈으로 갈린)도 이어 집고, 진행 로그에도 조각이 안 남는다 (§0-4 §개정 `443dd1fa`)", async () => {
+  process.env.TICKET_LOCAL = mkdtempSync(path.join(tmpdir(), "fst-auth-frag-"));
+  // 실측(CLI 2.1.247)의 모양 그대로 세 토막(prefix + 35자 + 61자)이다 — 첫 경계는 커서 이동
+  // escape, 둘째 경계는 실제 줄바꿈으로 접는다. 값은 지어낸 것이다(실물을 옮겨 적지 않는다).
+  // 토큰 바로 뒤에 붙는 `Store`는 딸려 들어가면 안 되는 낱말이다
+  const FRAG1 = "sk-ant-oa";
+  const FRAG2 = "B".repeat(35);
+  const FRAG3 = "C".repeat(61);
+  const TOKEN = FRAG1 + FRAG2 + FRAG3;
+  stubClaude(`printf '${FRAG1}\\033[46G${FRAG2}\\r\\n'\nprintf '${FRAG3} Store\\r\\n'\nsleep 60`);
+  armPidfile();
+  startSetup();
+  await until(() => !!pollSetup().savedAt);
+
+  const s = pollSetup();
+  assert.strictEqual(s.error, undefined);
+  const saved = await import("node:fs/promises").then((fs) => fs.readFile(tokenPath(), "utf8"));
+  // 집은 값이 CLI가 찍은 토큰과 글자 하나까지 같다 — `Store`도, 공백·개행도 안 섞인다
+  assert.strictEqual(saved, TOKEN);
+
+  // 진행 로그의 가리기도 토막을 잡는다 — 원문 토막이 한 조각도 안 남는다
+  assert.ok(!s.lines.some((l) => l.includes(FRAG2)), s.lines.join("|"));
+  assert.ok(!s.lines.some((l) => l.includes(FRAG3)), s.lines.join("|"));
+  assert.ok(s.lines.some((l) => l.includes("sk-ant-…")), s.lines.join("|"));
+
+  stopSetup();
+});
+
 test("startSetup — 토큰을 잡고 저장이 기록되기 전에 폴링이 끼어도 running:false+savedAt 없음+error 없음인 순간이 없다 (§0-13 §저장이 끝나면)", async () => {
   process.env.TICKET_LOCAL = mkdtempSync(path.join(tmpdir(), "fst-auth-window-"));
   stubClaude(`printf 'sk-ant-oat01-${"y".repeat(40)}\\r\\n'\nsleep 60`);

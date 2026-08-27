@@ -919,7 +919,7 @@ export function PersonasPane({
         </SidebarContent>
       </Sidebar>
 
-      <div className="min-w-0 grow">
+      <div className="min-w-0 grow @container">
         {currentSquad !== undefined ? (
           <SquadDetail
             key={currentSquad.name}
@@ -1153,79 +1153,88 @@ function PersonaDetail({
           />
         </TabsContent>
 
-        <TabsContent value="profile" className="space-y-3">
-          {/* §비주얼 §44 ① — 정책값 둘(상한·엔진)은 신원(머리)도 프롬프트 3절(PROFILE·스킬·메모리)도
-              아니라 그 사이에 낀 절 하나다. 프롬프트 3절은 디스패치에 실리는 순서를 그대로 보이는데
-              정책값은 한 바이트도 안 실려서, 그 연속 **앞**에 뜬다(뒤에 두면 textarea 16행 아래로
-              내려가 스크롤 없이 안 보인다) */}
-          <DispatchPolicySection
-            projectId={projectId}
-            name={row.name}
-            limit={edit.limit}
-            engine={edit.engine}
-            engines={engines}
-            modelPattern={modelPattern}
-            engineHint={engineHint}
-            onLimitSaved={onLimitSaved}
-            onEngineSaved={onEngineSaved}
-          />
+        {/* 왼쪽 2/3 - 오른쪽(사이드바) 1/3, 임계 폭 아래는 종전 세로 한 줄(§5-6 §탭 둘 §개정,
+            요구 `b157aee4` - §비주얼 §66 ⑭). 재는 자는 뷰포트가 아니라 위 `@container`다 */}
+        <TabsContent
+          value="profile"
+          className="grid grid-cols-1 items-start gap-3 @4xl:grid-cols-[2fr_1fr] @4xl:gap-6"
+        >
+          <div className="space-y-3">
+            {/* §비주얼 §44 ① — 정책값 둘(상한·엔진)은 신원(머리)도 프롬프트 3절(PROFILE·스킬·메모리)도
+                아니라 그 사이에 낀 절 하나다. 프롬프트 3절은 디스패치에 실리는 순서를 그대로 보이는데
+                정책값은 한 바이트도 안 실려서, 그 연속 **앞**에 뜬다(뒤에 두면 textarea 16행 아래로
+                내려가 스크롤 없이 안 보인다) */}
+            <DispatchPolicySection
+              projectId={projectId}
+              name={row.name}
+              limit={edit.limit}
+              engine={edit.engine}
+              engines={engines}
+              modelPattern={modelPattern}
+              engineHint={engineHint}
+              onLimitSaved={onLimitSaved}
+              onEngineSaved={onEngineSaved}
+            />
 
-          <MarkdownEditor
-            name="body"
-            defaultValue={edit.body}
-            rows={16}
-            className="font-mono"
-            onChange={(body) => onEdit({ ...edit, body })}
-          />
-          {result && !result.ok && (
-            <Failure title={t("persona.action.saveFailedTitle")} message={result.message ?? ""} />
-          )}
-          {/* 오른쪽 정렬, 1차 액션이 가장 오른쪽 — 결과 문구는 버튼 왼쪽이다(§비주얼 §4-3) */}
-          <div className="flex items-center justify-end gap-4">
-            {result?.ok && !dirty && (
-              <span className="text-sm text-muted-foreground">{t("persona.action.savedNotice")}</span>
+            <MarkdownEditor
+              name="body"
+              defaultValue={edit.body}
+              rows={16}
+              className="font-mono"
+              onChange={(body) => onEdit({ ...edit, body })}
+            />
+            {result && !result.ok && (
+              <Failure title={t("persona.action.saveFailedTitle")} message={result.message ?? ""} />
             )}
-            <Button
-              size="sm"
-              disabled={pending || !dirty}
-              onClick={() =>
-                start(async () => {
-                  const body = edit.body;
-                  const r = await savePersonaAction(projectId, row.name, body);
-                  setResult(r);
-                  if (r.ok) onEdit({ ...edit, saved: body, body });
-                })
-              }
-            >
-              {pending ? t("common.saving") : t("common.save")}
-            </Button>
+            {/* 오른쪽 정렬, 1차 액션이 가장 오른쪽 — 결과 문구는 버튼 왼쪽이다(§비주얼 §4-3) */}
+            <div className="flex items-center justify-end gap-4">
+              {result?.ok && !dirty && (
+                <span className="text-sm text-muted-foreground">{t("persona.action.savedNotice")}</span>
+              )}
+              <Button
+                size="sm"
+                disabled={pending || !dirty}
+                onClick={() =>
+                  start(async () => {
+                    const body = edit.body;
+                    const r = await savePersonaAction(projectId, row.name, body);
+                    setResult(r);
+                    if (r.ok) onEdit({ ...edit, saved: body, body });
+                  })
+                }
+              >
+                {pending ? t("common.saving") : t("common.save")}
+              </Button>
+            </div>
           </div>
 
-          {/* 스킬 절(§비주얼 §25 ②). 값이 한 줄도 안 바뀐다 — 카드에서 오른쪽 칸으로 따라왔을 뿐이다 */}
-          <SkillsSection
-            projectId={projectId}
-            name={row.name}
-            skills={edit.skills}
-            chars={edit.skillsChars}
-            offSkills={edit.offSkills}
-            installed={installed}
-            onInstalled={onInstalled}
-            configDir={configDir}
-            onSaved={onSkillsSaved}
-          />
+          <div className="space-y-3">
+            {/* 스킬 절(§비주얼 §25 ②). 값이 한 줄도 안 바뀐다 — 카드에서 오른쪽 칸으로 따라왔을 뿐이다 */}
+            <SkillsSection
+              projectId={projectId}
+              name={row.name}
+              skills={edit.skills}
+              chars={edit.skillsChars}
+              offSkills={edit.offSkills}
+              installed={installed}
+              onInstalled={onInstalled}
+              configDir={configDir}
+              onSaved={onSkillsSaved}
+            />
 
-          {/* 메모리 절(§비주얼 §32 ②) — 스킬 절 **바로 뒤**다. 화면이 주입 순서를 그대로 보인다
-              (PROFILE → 스킬 → 메모리). 0장이어도 그린다: `삭제`가 있는 자리를 사람이 배우는
-              화면이 여기뿐이고, 오늘 이 큐의 카드가 전부 0장이다 */}
-          <MemorySection
-            projectId={projectId}
-            name={row.name}
-            dir={row.file.replace(/\/PROFILE\.md$/, "")}
-            memories={edit.memories}
-            chars={edit.memories.reduce((n, m) => n + byteLength(m.text), 0)}
-            onDeleted={onMemoryDeleted}
-            refs={refs}
-          />
+            {/* 메모리 절(§비주얼 §32 ②) — 스킬 절 **바로 뒤**다. 화면이 주입 순서를 그대로 보인다
+                (PROFILE → 스킬 → 메모리). 0장이어도 그린다: `삭제`가 있는 자리를 사람이 배우는
+                화면이 여기뿐이고, 오늘 이 큐의 카드가 전부 0장이다 */}
+            <MemorySection
+              projectId={projectId}
+              name={row.name}
+              dir={row.file.replace(/\/PROFILE\.md$/, "")}
+              memories={edit.memories}
+              chars={edit.memories.reduce((n, m) => n + byteLength(m.text), 0)}
+              onDeleted={onMemoryDeleted}
+              refs={refs}
+            />
+          </div>
         </TabsContent>
       </Tabs>
     </div>
@@ -2483,10 +2492,15 @@ const SkillsSection = memo(function SkillsSection({
   /** 활성·비활성 두 목록이 **같은 벌**이다(§비주얼 §25 ⑥ 껍데기) — 이름·설명·`제거`는 글자
    *  하나까지 같고, 갈리는 것은 `handle`(끄기/켜기) 하나뿐이다. */
   const row = (s: Skill, handle: React.ReactNode, onRemove: () => void) => (
-    <li key={s.name} className="flex items-baseline gap-2">
+    <li key={s.name} className="flex flex-wrap items-baseline gap-2">
       {/* 이름은 프롬프트에 그대로 실려 지목이 되는 토큰이다 — 안 자른다(§6 식별자) */}
       <code className="shrink-0 font-mono text-xs">{s.name}</code>
-      <span className="min-w-0 grow truncate text-xs text-muted-foreground" title={s.description}>
+      {/* 1/3 칸에서는 넘치는 자리가 가로가 아니라 행이 된다 — 설명이 2행으로 내려가 칸 폭을
+          전부 얻는다(§비주얼 §66 ⑭) */}
+      <span
+        className="min-w-0 grow truncate text-xs text-muted-foreground @4xl:order-last @4xl:basis-full"
+        title={s.description}
+      >
         {s.description}
       </span>
       {handle}
@@ -2535,7 +2549,7 @@ const SkillsSection = memo(function SkillsSection({
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="self-center aria-disabled:opacity-50"
+                  className="self-center aria-disabled:opacity-50 @4xl:ml-auto"
                   aria-disabled={busy}
                   onClick={() => {
                     if (busy) return; // §58 처방 — 핸들러 첫 줄 가드
@@ -2563,7 +2577,7 @@ const SkillsSection = memo(function SkillsSection({
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="self-center aria-disabled:opacity-50"
+                  className="self-center aria-disabled:opacity-50 @4xl:ml-auto"
                   aria-disabled={busy}
                   onClick={() => {
                     if (busy) return;
@@ -2671,17 +2685,20 @@ const MemorySection = memo(function MemorySection({
                   `accordion`·`collapsible`은 안 깐다 — 이 자리도 같은 값이다(§32 ③).
                   `data-mem-name`은 위키링크 클릭이 펼칠 대상을 찾는 자리다(§10 §자리 표) */}
               <details className="group/mem" data-mem-name={m.file.replace(/\.md$/, "")}>
-                <summary className="flex cursor-pointer list-none items-baseline gap-2 [&::-webkit-details-marker]:hidden">
+                <summary className="flex flex-wrap cursor-pointer list-none items-baseline gap-2 [&::-webkit-details-marker]:hidden">
                   <ChevronRight
                     aria-hidden
                     className="size-4 shrink-0 self-center text-muted-foreground transition-transform group-open/mem:rotate-90"
                   />
                   {/* 파일명이 곧 개념 이름이고 `[[링크]]`가 가리키는 값이다 — 안 자른다(§6 식별자).
-                      `.md`를 떼는 것은 계약이다(§5-2). 확장자가 붙는 자리는 삭제 확인 하나다 */}
-                  <code className="shrink-0 font-mono text-xs">{m.file.replace(/\.md$/, "")}</code>
+                      `.md`를 떼는 것은 계약이다(§5-2). 확장자가 붙는 자리는 삭제 확인 하나다.
+                      한글 문장이라 감기면 낱말 안이 안 갈린다 — `shrink-0`을 스킬 이름과 달리
+                      벗는다(§비주얼 §66 ⑭) */}
+                  <code className="font-mono text-xs @4xl:shrink">{m.file.replace(/\.md$/, "")}</code>
                   {/* `title`을 안 붙인다 — 전문을 보는 자리가 이 줄을 누르는 것이다(§32 ③).
-                      발췌가 비는 파일(빈 파일·공백뿐)도 파일명으로 목록에 뜬다(§5-2) */}
-                  <span className="min-w-0 grow truncate text-xs text-muted-foreground">
+                      발췌가 비는 파일(빈 파일·공백뿐)도 파일명으로 목록에 뜬다(§5-2). 1/3 칸에서는
+                      2행으로 내려가 칸 폭을 전부 얻는다(§비주얼 §66 ⑭) */}
+                  <span className="min-w-0 grow truncate text-xs text-muted-foreground @4xl:order-last @4xl:basis-full">
                     {m.excerpt}
                   </span>
                   {/* 줄 자신이 `<summary>`라 클릭이 곧 펼침 토글이다 — **여기만 `preventDefault`가
