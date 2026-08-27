@@ -49,6 +49,10 @@ let contentDead = false;
  *  참조와 같은 것이면 우리가 벌인 일이고, 다르면(`null`이거나 다른 자식) 밖에서 죽은
  *  것이다(고정하는 것 9 — `isExternalDeath`). */
 let killedIntentionally: ChildProcess | null = null;
+/** 고정하는 것 9 개정 — 창이 떠 있는 채로 죽음을 본 자리에서 `reviveIfVisible`이 도는 동안
+ *  `true`다. 같은 사고로 렌더러 사망과 자식 `exit`가 함께 울려도 이 플래그가 뒤엣것을 건너뛰어
+ *  `showWindow()`가(그 안의 `restart-server`가) 두 번 안 돈다. */
+let reviving = false;
 
 /** OS가 준 빈 포트. 7331 고정은 브라우저의 계약이고 창은 자기 서버를 알고 있다 (고정하는 것 1). */
 function freePort(): Promise<number> {
@@ -185,6 +189,7 @@ function startServer(port: number): ChildProcess {
     if (external) {
       console.log(`[dira] 자식 서버가 밖에서 죽었습니다 (code ${code ?? signal ?? "?"}) — 되살리기 대상입니다`);
       killServer();
+      reviveIfVisible("자식 서버가 밖에서 죽었습니다");
     }
   });
   return proc;
@@ -254,12 +259,19 @@ function openWindow(origin: string): BrowserWindow {
   win.webContents.on("render-process-gone", (_e, details) => {
     contentDead = true;
     console.log(`[dira] 렌더러가 죽었습니다 (${details.reason}) — 되살리기 대상입니다`);
+    reviveIfVisible("렌더러가 죽었습니다");
   });
   win.webContents.on("did-fail-load", (_e, code, description, url, isMainFrame) => {
     if (!isMainFrame) return; // iframe·서브리소스는 안 본다 — 이 창의 본문이 죽은 것만 본다
     contentDead = true;
     console.log(`[dira] 로드에 실패했습니다 (${code} ${description}) — 되살리기 대상입니다`);
+    reviveIfVisible("로드에 실패했습니다");
   });
+  // 고정하는 것 9 §안 하는 것 — 멈춘 렌더러는 안 되살린다. 되살리기를 안 거는 이유는 방아쇠가
+  // 없어서가 아니라, 사람 동의 없이 다시 읽으면 쓰던 입력을 버리기 때문이다. 로그만 남겨서
+  // 죽은 것과 멈춘 것을 다음 세션이 stdout으로 가를 수 있게 한다.
+  win.webContents.on("unresponsive", () => console.log("[dira] 렌더러가 응답하지 않습니다 — 되살리기는 걸지 않습니다"));
+  win.webContents.on("responsive", () => console.log("[dira] 렌더러가 다시 응답합니다"));
 
   const external = (url: string) => {
     const u = URL.parse(url);
@@ -888,6 +900,28 @@ function installAppMenu() {
   } else console.error("[dira] Edit 메뉴를 못 찾아 `찾기` 항목을 붙이지 못했습니다");
 
   Menu.setApplicationMenu(menu);
+}
+
+/** 고정하는 것 9 개정 — 창이 이미 떠 있는 채로 죽음을 본 그 자리에서 즉시 되살린다.
+ *  `render-process-gone` · `did-fail-load`(본문) · 자식의 밖 `exit`, 셋의 리스너가 부른다.
+ *  판정(`decideRevive`)은 한 자도 안 바뀐다 — 갈리는 것은 그것을 부르는 방아쇠뿐이다.
+ *
+ *  창이 파괴됐거나 안 보이면 아무것도 안 하고 다음 `showWindow()`(사람이 창을 다시 꺼내는
+ *  다섯 줄 — 트레이 `열기` · 독 `activate` · 두 번째 실행 · 알림 클릭 · 디스패치)에 맡긴다 —
+ *  안 보는 화면 때문에 자식 서버를 다시 띄우지 않는다.
+ *
+ *  `reviving`으로 겹침을 막는다 — 같은 사고로 리스너 둘이 함께 울려도(예: 렌더러 사망과 자식
+ *  exit가 한 크래시에서 같이 난다) `showWindow()`를 두 번 안 부른다. */
+async function reviveIfVisible(trigger: string) {
+  if (!win || win.isDestroyed() || !win.isVisible()) return;
+  if (reviving) return;
+  reviving = true;
+  try {
+    console.log(`[dira] ${trigger} — 창이 보이는 채로 죽어 그 자리에서 되살립니다`);
+    await showWindow();
+  } finally {
+    reviving = false;
+  }
 }
 
 /** 고정하는 것 9 — 창을 다시 올릴 때마다 무엇이 죽어 있는지 보고 갈린다. 아무것도 안 죽었으면
