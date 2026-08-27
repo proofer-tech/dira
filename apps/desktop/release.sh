@@ -58,7 +58,7 @@ fi
 # 커밋·태그를 만든다. 여기 `.git`은 레포 루트에 있고 `apps/desktop`에는 없어서, npm은 조용히
 # bump만 하고 0으로 끝난다 — 커밋 0 · 태그 0. 4번은 그대로 돌아서 자산이 나오고, 5번의
 # push가 `Everything up-to-date`인 채 `gh release create`가 **버전 커밋이 없는 원격 HEAD에**
-# `v<x.y.z>` 태그를 박는다: 받는 사람의 앱 버전과 태그가 가리키는 소스가 갈린다(실측 2026-08-01).
+# `v<x.y.z>` 태그를 단다: 받는 사람의 앱 버전과 태그가 가리키는 소스가 갈린다(실측 2026-08-01).
 npm version "$bump" --no-git-tag-version || exit 1
 ver=$(node -p "require('./package.json').version")
 git commit -q -m "release v$ver" package.json || exit 1
@@ -71,7 +71,7 @@ git tag -a "v$ver" -m "release v$ver" || exit 1
 # 덮어서, 올라가는 `.dmg`는 sign-dmg가 막으려던 상태 그대로다 — 받는 맥의 첫 더블클릭이
 # Gatekeeper에 막히고 올린 사람은 모른다 (§릴리스 R4-5). 그래서 publish는 electron-builder가
 # 아니라 gh가 한다. `build.publish`는 그대로다 — latest-mac.yml을 굽는 것이 그 설정이다.
-# 그 「gh가 한다」를 코드로 박는 것이 `dist`의 `--publish never`다. 빼면 CI에서는 조용하지만
+# 그 「gh가 한다」를 코드로 적는 것이 `dist`의 `--publish never`다. 빼면 CI에서는 조용하지만
 # (push 트리거라 `GITHUB_REF`가 태그가 아니다) 사람 맥에서는 electron-builder가 자기 몫의
 # **draft 릴리스**를 따로 만들어 올린다 — 아래 `gh release create`가 만드는 published 옆에
 # 같은 버전 draft가 하나 더 남는다.

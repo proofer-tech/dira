@@ -165,6 +165,7 @@ new writing**:
 | `숨 쉰다` `깨어난다` `자리 잡고 산다` | banned, no replacement |
 | `못박는다` `못박았다` `못박은` | `고정한다` `정했다` `명시했다` `정한` |
 | `값을 박는다` `해시가 박혀 있다` | `값을 넣는다` `해시가 적혀 있다` |
+| `스펙에 박았다` `절이 박은 값` `박혀 있다` | `스펙에 적었다` `절이 적은 값` `적혀 있다` |
 | `못 5` `뽑은 못` `못 하나` (고정된 규칙) | `규칙 5` `뽑은 규칙` `규칙 하나` `결정 하나` |
 
 The exception is a real process, session, or pid - `pid가 살아 있다`, `세션이 아직 살아
@@ -174,6 +175,13 @@ person. A ticket, file, or setting is not a live thing: write `열려 있는 동
 guidance's own example: `코드로 박는 자리 -> 코드에 명시하는 상황`); the noun `못` is banned
 for the same reason - a fixed rule is `규칙 5`, not `못 5`, and `못 5를 깬다` is `규칙 5를
 어긴다`. The negation adverb `못` (`못 읽는다`, `못 지운다`) is not covered by this rule.
+
+**`박` is also a noun in this codebase** - one beat of the heartbeat (`webhookTick`), as in
+`이 박에서`, `재획득 박은`, `매 박마다`, `박을 이었다`. That noun is not this rule's target;
+only the verb `박다` is. A sweep that substitutes on the bare syllable `박` breaks it, and has
+broken it once already (`4d259d16` turned `문서는 못 찾는다` into `문남는 규칙 찾는다` and
+mangled a verbatim human quote). Match the verb's endings, never the bare syllable - the same
+caution applies to `못`, whose negation-adverb sense outnumbers the banned noun by ten to one.
 
 Already-written files aren't rewritten under this rule - the §Characters clause above
 applies here word for word.

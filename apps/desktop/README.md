@@ -240,7 +240,7 @@ xcrun stapler validate dist/*.dmg                  # dmg에도 티켓이 붙어�
 
 여기서 갈리는 것:
 
-- **`identity`를 안 쓴다.** `null`이면 서명을 끄는 스위치가 되고, 이름을 박으면 그 맥의
+- **`identity`를 안 쓴다.** `null`이면 서명을 끄는 스위치가 되고, 이름을 넣으면 그 맥의
   인증서 이름에 빌드가 묶인다. 비워두면 electron-builder가 키체인에서 알아서 찾고
   못 찾으면 이유를 찍고 지나간다 — 우리가 원하는 두 갈래가 그대로다.
 - **`entitlements.mac.plist`는 3줄이지만 셋 다 필요하다.** JIT 둘이 없으면 서명된 앱이
