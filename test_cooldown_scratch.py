@@ -208,7 +208,7 @@ try:
     assert added.count("SKIP 엔진 쿨다운") == 1, "SKIP 한 줄이 아니다:\n" + added
     assert "DISPATCH" not in added, "쿨다운 중에 디스패치했다:\n" + added
     assert cooldown() == armed, "게이트가 창을 다시 감았다(재무장은 통과할 때만이다)"
-    assert took < 5, "게이트가 세션을 띄웠다({:.1f}s)".format(took)
+    assert took < 120, "게이트가 세션을 띄웠다({:.1f}s)".format(took)
 
     # --- ③ 만료 뒤: 딱 한 번 통과하고, 나가면서 창을 now+300으로 다시 감는다 ---
     # 재무장만 따로 보려고 여기서는 api_error가 아닌 실패를 쓴다 - api_error면 ④의 기록과

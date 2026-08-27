@@ -113,6 +113,14 @@ BASE_ENGINE=("${TICKET_ENGINE[@]}")
 
 CDOWN_W=300   # 리밋이 복귀 시각을 안 줄 때(네트워크 실패 등)의 창 + 만료 직후 재무장 창
 
+# 세션이 실제로 디스패치되는 순간(engine_gate_ok가 게이트를 통과하는 순간)의 엔진 지문.
+# api_error는 세션이 끝난(최대 몇 시간 뒤) 자리에서 arm_cdown을 부르는데, 그때 $TOKENF를 다시
+# 읽으면 이미 다음 계정으로 회전된 뒤일 수 있다 - 그 값을 그대로 쓰면 늦게 도착한 보고가 리밋을
+# 만난 적 없는 새 계정을 소진으로 찍고, 동시 세션 수만큼 계정이 연쇄로 말라 NO_ELIGIBLE로 큐가
+# 멎는다(DESIGN.md §0-13 §한 리밋 사건에 계정 하나만 태운다, 실측 2026-08-27). 그래서 게이트를
+# 통과하는 순간의 값을 여기 붙잡아 두고 arm_cdown이 기본값으로 쓴다.
+DISPATCH_FP=""
+
 # 엔진 지문 = **인증 토큰만**. 사람이 계정을 바꾸면 값이 갈리고 그 순간 쿨다운이 풀린다 -
 # 리밋이 준 복귀 시각을 그대로 기다리면 계정을 바꿔도 몇 시간을 놀기 때문이다(요구 15ceae18).
 #
@@ -133,7 +141,7 @@ print(hashlib.sha1(tok).hexdigest()[:12])' \
 # (요구 61028b02/fc92d14e: 미상 쿨다운을 진짜 계정 소진과 같은 칸에 찍어 마지막 eligible
 # 계정이 죽고 NO_ELIGIBLE로 큐가 11분 멈춘 실측). 옛 2줄 파일을 읽는 쪽은 3번째 read가
 # EOF라 빈 값 -> 안전측(미상 취급)으로 떨어진다.
-arm_cdown() { printf '%s\n%s\n%s\n' "$1" "$(engine_fp)" "${2:-0}" > "$CDOWN"; }
+arm_cdown() { printf '%s\n%s\n%s\n' "$1" "${DISPATCH_FP:-$(engine_fp)}" "${2:-0}" > "$CDOWN"; }
 
 # claude 인증 + 엔진 쿨다운 게이트. ENGINE_NAME·CDOWN이 이미 정해진 상태에서 부른다.
 # 통과 못하면 SKIP을 로그하고 1을 반환한다 - 이 엔진을 쓰는 후보 전체를 건너뛰라는 뜻이라
@@ -153,13 +161,15 @@ engine_gate_ok() {
       return 1
     fi
   fi
+  local CUR_FP
+  CUR_FP="$(engine_fp)"
   if [ -f "$CDOWN" ]; then
     local UNTIL WAS_FP NOW
     UNTIL=""; WAS_FP=""
     { read -r UNTIL; read -r WAS_FP; } < "$CDOWN"
     case "$UNTIL" in ''|*[!0-9]*) UNTIL=0 ;; esac
     NOW=$(date +%s)
-    if [ "$WAS_FP" != "$(engine_fp)" ]; then
+    if [ "$WAS_FP" != "$CUR_FP" ]; then
       rm -f "$CDOWN"
       log "NOTE 엔진 쿨다운 해제 - 토큰·모델이 바뀌었다(남은 창 $((UNTIL - NOW))초를 안 기다린다)"
     elif [ "$NOW" -lt "$UNTIL" ]; then
@@ -167,6 +177,7 @@ engine_gate_ok() {
       return 1
     fi
   fi
+  DISPATCH_FP="$CUR_FP"   # 이 후보가 실제로 나가는 순간의 지문 - arm_cdown이 나중에 이 값을 쓴다
   return 0
 }
 
