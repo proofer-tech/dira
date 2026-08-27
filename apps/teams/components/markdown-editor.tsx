@@ -6,7 +6,7 @@
  *
  *  **직렬화 방식은 `98052584`의 판정 그대로다** — mdast `position`으로 최상위 블록의 원문 구간만
  *  잘라 쓴다(`lib/markdown-editor-blocks.ts`). 안 고친 블록은 슬라이스 그대로 다시 이어붙이므로
- *  항등이 유지되고(못 ①), 고친 블록만 그 파일의 `domToMarkdown`이 편집된 DOM을 되읽어 갈아 끼운다.
+ *  항등이 유지되고(규칙 ①), 고친 블록만 그 파일의 `domToMarkdown`이 편집된 DOM을 되읽어 갈아 끼운다.
  *
  *  **위지윅 면은 읽기 전용 렌더(`<Markdown>`, §10)를 블록별로 그대로 재사용한다** — 값을 두 벌로
  *  베끼지 않는다. 블록마다 감싼 `contentEditable`이 편집 표면이고, 포커스가 있는 동안 그 블록의
@@ -49,7 +49,7 @@ import type { Vault } from "@/lib/markdown-wikilinks";
 import { cn } from "@/lib/utils";
 import { blockBreaks, commitEditable, resolveSplit } from "@/lib/markdown-editor-blocks";
 
-/** 앱 하나짜리 값(못 ② — 칸마다 안 갈린다). §0-11 `dira-manual-theme`와 같은 자리의 키다. */
+/** 앱 하나짜리 값(규칙 ② — 칸마다 안 갈린다). §0-11 `dira-manual-theme`와 같은 자리의 키다. */
 const MODE_KEY = "dira-markdown-editor-mode";
 type Mode = "wysiwyg" | "raw";
 
@@ -62,7 +62,7 @@ function readMode(): Mode {
 }
 
 /** `useEffect` 안에서 곧바로 `setMode(...)`를 부르면 이 앱의 lint(`react-hooks/set-state-in-effect`)가
- *  에러로 잡는다(`use-mobile.ts`와 같은 사유). 값이 앱 하나짜리라(못 ②) 모든 칸이 같은 값을 보게
+ *  에러로 잡는다(`use-mobile.ts`와 같은 사유). 값이 앱 하나짜리라(규칙 ②) 모든 칸이 같은 값을 보게
  *  `useSyncExternalStore`로 옮긴다 — `writeMode`가 이 리스너들을 불러 다른 칸도 같이 갈아 낀다. */
 const modeListeners = new Set<() => void>();
 function subscribeMode(onChange: () => void) {
@@ -113,7 +113,7 @@ export function MarkdownEditor({
    *  없으면 그 줄 자체가 없다(③④⑤⑥⑦) */
   label?: ReactNode;
   placeholder?: string;
-  /** 그 글이 렌더되는 자리의 값(§10 표) — 이 컴포넌트가 스스로 정하지 않는다(못 ⑤) */
+  /** 그 글이 렌더되는 자리의 값(§10 표) — 이 컴포넌트가 스스로 정하지 않는다(규칙 ⑤) */
   breaks?: "all" | "untilHeading";
   rows?: number;
   className?: string;
@@ -131,12 +131,12 @@ export function MarkdownEditor({
   onKeyDown?: (e: React.KeyboardEvent<HTMLElement>) => void;
   /** 열릴 때 캐럿을 이 편집 표면에 둔다(§3 §열리면 첫 포커스) — 원문 면은 `Textarea`가 네이티브
    *  `autoFocus`를 그대로 받고(React가 form 요소에 폴리필한다), 위지윅 면은 `div`라 그 폴리필이
-   *  안 먹어 아래 마운트 effect가 직접 `.focus()`한다. 호출부가 안 주면 종전대로다(못 ⑤ 같은 원칙 —
+   *  안 먹어 아래 마운트 effect가 직접 `.focus()`한다. 호출부가 안 주면 종전대로다(규칙 ⑤ 같은 원칙 —
    *  이 컴포넌트가 스스로 켜지 않는다). */
   autoFocus?: boolean;
   /** 이름 -> href 벌(§비주얼 §10 §위키링크) — 위지윅 면이 읽기 전용 렌더를 그대로 재사용하므로
    *  (위 top 주석) 호출부가 이 표를 안 주면 종전대로 `[[이름]]`이 글자다. 이 컴포넌트가 스스로
-   *  읽지 않는다 — 못 ⑤와 같은 원칙, 서버가 한 번 읽어 내려준 값을 그대로 흘린다. */
+   *  읽지 않는다 — 규칙 ⑤와 같은 원칙, 서버가 한 번 읽어 내려준 값을 그대로 흘린다. */
   vault?: Vault;
 }) {
   const t = useT();
@@ -189,7 +189,7 @@ export function MarkdownEditor({
       // 루트로 옮겨 둔다(React가 이 이벤트 처리 끝에 null로 되돌리므로 우리 호출 안에만 있다).
       e.currentTarget = rootRef.current ?? e.currentTarget;
     }
-    onKeyDownRef.current?.(e); // 면이 키를 먹지 않는다 — 커밋 뒤 그대로 호출부로 넘긴다(못 ③)
+    onKeyDownRef.current?.(e); // 면이 키를 먹지 않는다 — 커밋 뒤 그대로 호출부로 넘긴다(규칙 ③)
   }
 
   // 사라진 라벨 문장을 그대로 접근명 + 툴팁으로 옮긴다(§50 §접근명) — 화면 글자는 아이콘 하나뿐이다.

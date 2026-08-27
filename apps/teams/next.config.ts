@@ -17,11 +17,11 @@ import { BODY_SIZE_LIMIT } from "./lib/attachment-limit.ts";
  *  다르면 Next가 경고를 내고 프로젝트 전체를 추적한다(실측 로그: *"Both `outputFileTracingRoot`
  *  and `turbopack.root` are set, but they must have the same value"*).
  *
- *  로컬·dmg에서는 `apps/teams/`다: 상위 홈 디렉터리에도 `pnpm-workspace.yaml`이 있어서 안 못박으면
+ *  로컬·dmg에서는 `apps/teams/`다: 상위 홈 디렉터리에도 `pnpm-workspace.yaml`이 있어서 안 고정하면
  *  Next가 `~/`를 워크스페이스 루트로 잡고 홈 전체를 추적한다.
  *
  *  **Vercel에서는 레포 루트다**(`/vercel/path0` — 루트 디렉터리가 `apps/teams`여도 클론은 레포
- *  통째다). 저쪽 빌더가 NFT 경로를 그 자리 기준으로 되읽기 때문에 `apps/teams/`로 못박으면 빌드가
+ *  통째다). 저쪽 빌더가 NFT 경로를 그 자리 기준으로 되읽기 때문에 `apps/teams/`로 고정하면 빌드가
  *  통과한 뒤 산출물 배포 단계가 `ENOENT: lstat '/vercel/path0/.next/package.json'`로 깨진다
  *  (실측 `dpl_Q4jbxx…`). 한쪽만 맞추는 것도 안 된다 — 뿌리가 어긋난 채로는 pnpm 심링크까지
  *  전부 추적돼 *"invalid deployment package for a Serverless Function"*이 된다(실측 `dpl_A92tzR…`). */

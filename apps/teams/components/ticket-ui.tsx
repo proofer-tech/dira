@@ -411,7 +411,7 @@ export function TicketEditForm({
   // 저장을 누르기 전에 여기서 막는다). uncontrolled로 두면 리렌더 없이 값이 바뀌어 못 잰다.
   const [duedateInput, setDuedateInput] = useState(duedate);
   const conflict = duedateConflict(duedateInput, precedentDuedates, followerDuedates);
-  // 본문 편집기의 `breaks`(못 ⑤)가 이 값을 따라간다 — 발행 다이얼로그(§P236-4)와 같은 판정,
+  // 본문 편집기의 `breaks`(규칙 ⑤)가 이 값을 따라간다 — 발행 다이얼로그(§P236-4)와 같은 판정,
   // "폼에서 고른 kind"이지 저장된 kind가 아니다.
   const [kindValue, setKindValue] = useState(kind || "");
   return (
@@ -1572,7 +1572,7 @@ export function RequestDialog({
             <input type="hidden" name="epic" ref={epicRef} />
             {/* 요구 본문은 상세에서 `<Markdown breaks="untilHeading">`로 렌더된다(§10 표 — 이
                 다이얼로그가 만드는 티켓은 항상 `kind: request`다). 위지윅 면의 `Enter`가 그
-                렌더와 같아지려면 값이 여기서도 `untilHeading`이어야 한다(못 ⑤). */}
+                렌더와 같아지려면 값이 여기서도 `untilHeading`이어야 한다(규칙 ⑤). */}
             <MarkdownEditor
               name="body"
               value={body}
@@ -1674,7 +1674,7 @@ export function NewTicketDialog({
   const [title, setTitle] = useState(blankTitle);
   const [body, setBody] = useState(blankBody);
   // kind만 예외로 든다 — 저장 자체는 여전히 select의 폼 제출(name="kind")이 하지만, 본문
-  // 편집기의 `breaks`(못 ⑤)가 "폼에서 고른 kind"를 따라가야 한다(`TicketEditForm`의 `kindValue`와
+  // 편집기의 `breaks`(규칙 ⑤)가 "폼에서 고른 kind"를 따라가야 한다(`TicketEditForm`의 `kindValue`와
   // 같은 판정, §P236-4).
   const [kindValue, setKindValue] = useState(copy ? copy.kind || "" : "work");
   // 발행은 항상 비어서 연다(§1-4 §화면 "기본은 비어 있다" — priority와 같은 이유로 복제도 안
@@ -1876,7 +1876,7 @@ export function NewTicketDialog({
           <DepsPicker options={deps} picked={picked} setPicked={setPicked} />
 
           {/* 페이지였을 때는 16줄이었다 — 다이얼로그는 세로 예산이 창이라 12줄이다(§3 크기).
-              `breaks`는 위 kind select가 지금 고른 값을 따라간다(못 ⑤ — `TicketEditForm`과
+              `breaks`는 위 kind select가 지금 고른 값을 따라간다(규칙 ⑤ — `TicketEditForm`과
               같은 판정) — 저장 안 한 kind 변경도 이 미리보기에 바로 걸린다. */}
           <MarkdownEditor
             name="body"

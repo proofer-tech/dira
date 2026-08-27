@@ -128,7 +128,7 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
      갈리던 것(§개편 §지금 값 ⑤)이 여기서 한 값으로 닫힌다. */
   --mono: "Geist Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
   /* 본문도 같은 처리다 — 얼굴을 앞에 세우고 종전 스택을 폴백으로 그대로 남긴다.
-     `--mono`는 무수정이다(P149 못 ⑧ — 등폭 Geist Mono에 워드마크와 앱 캡처가 걸려 있다). */
+     `--mono`는 무수정이다(P149 규칙 ⑧ — 등폭 Geist Mono에 워드마크와 앱 캡처가 걸려 있다). */
   --sans: "Wanted Sans Variable", -apple-system, BlinkMacSystemFont, "Pretendard", "Apple SD Gothic Neo", "Segoe UI", sans-serif;
   --maxw: 1080px;
 }
@@ -312,7 +312,7 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
 
 /* ②③ 스크롤 위치에 연속으로 묶인 겹(§P235 §모션 §판정표 ②③). `animation-timeline: view()`가
    없는 브라우저에서는 이 블록 전체가 안 걸려 캡처가 그냥 떠 있다 — 그 상태가 정본이다
-   (못 ⑦ · ②). 전역 킬 스위치(위 12행)는 `animation-duration`을 보는데 이 애니메이션은
+   (규칙 ⑦ · ②). 전역 킬 스위치(위 12행)는 `animation-duration`을 보는데 이 애니메이션은
    진행이 시간이 아니라 스크롤 위치라 그 블록이 안 먹는다 — `reduce`는 여기서 따로 죽인다. */
 @supports (animation-timeline: view()) {
   @keyframes dira-shot-in { from { opacity: 0; transform: translateY(28px); } }
@@ -351,7 +351,7 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
 /* ── SECTION A 한 무대 (로드맵 §P237-5·확장 §P237-13, 값은 §판정표 자리 ④ 재판정
    `e0701973`) ─────────────── */
 /* `@supports`가 거짓이거나 901px 미만이면 `.stage`에 규칙이 0건 걸려 세 절이 그냥
-   지금처럼(각자 `.wrap`으로) 세로로 쌓인다 — 그 상태가 정본이다(못 ⑦의 예외 한 조각,
+   지금처럼(각자 `.wrap`으로) 세로로 쌓인다 — 그 상태가 정본이다(규칙 ⑦의 예외 한 조각,
    §푸는 규칙 ③). `.stage`가 view-timeline의 주체이고 세 절은 이름 `--stage`로 그 구간을
    읽는다 — JS는 0줄이다. `reduce`는 `no-preference`로 이 블록 전체를 안 걸어 막는다(아래
    §reduce 참고) — 겹만 죽이면 `sticky` + 음수 `margin-top`이 남아 절들이 포개진다. */
@@ -624,7 +624,7 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
 
 /* ── plan cycle + stop handle (§P237 자리 ⑥, `8cbb65e0` 판정표) ─── */
 /* 강조는 카드 위 변의 3px 레일이다 — §모션 ④(`.arrows a::before`)와 같은 어휘라
-   새 관용구가 0이고 `::before`라 카드 박스가 0px 갈린다. `.wide`는 고리 밖(§못 ①·②).
+   새 관용구가 0이고 `::before`라 카드 박스가 0px 갈린다. `.wide`는 고리 밖(§규칙 ①·②).
    `content`는 `.cycling`이 있을 때만 생긴다 — JS가 죽거나 `reduce`면 순환이 필요한
    상태 자체가 안 생긴다(전역 킬 스위치에 안 기댄다). */
 .dira-landing .plans > li:not(.wide) { position: relative; }

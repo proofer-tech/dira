@@ -2,7 +2,7 @@
  *  ⓐ 후보와 같은 커서 방식 — 최상위 mdast 블록마다 원문 슬라이스를 자른다. 그 파일은 전체
  *  문자열 하나만 돌려주므로(측정용) 블록 배열이 필요한 편집기는 여기서 따로 자른다.
  *
- *  안 고친 블록은 이 슬라이스 그대로 다시 이어붙이면 항등이 유지된다(못 ① — 근거는
+ *  안 고친 블록은 이 슬라이스 그대로 다시 이어붙이면 항등이 유지된다(규칙 ① — 근거는
  *  `markdown-roundtrip.ts`의 항등 성질과 같다: `position.end.offset`이 단조증가하는 한
  *  커서 슬라이스 합은 정의상 원문과 같다). */
 import { unified } from "unified";
@@ -70,7 +70,7 @@ export function joinBlocks({ head, blocks, tail }: Pick<SplitResult, "head" | "b
 }
 
 /** 인덱스 하나만 갈아 끼운 전체 문자열. 나머지 블록은 손 안 댄 슬라이스라 그 밖 바이트가 안 갈린다
- *  (못 ① 둘째 반쪽 — "고친 자리 밖에서 바이트가 안 갈린다"). */
+ *  (규칙 ① 둘째 반쪽 — "고친 자리 밖에서 바이트가 안 갈린다"). */
 export function replaceBlock(split: SplitResult, index: number, newBlockText: string): string {
   const blocks = split.blocks.slice();
   blocks[index] = newBlockText;
@@ -252,7 +252,7 @@ export function domToMarkdown(root: Element, originalBlockText: string): string 
 /** 블록이 아직 하나도 없는 빈 칸(③④가 시작하는 자리 — `split.blocks.length === 0`)에서 처음
  *  치는 글을 되읽는다. 위 변환기들은 `<Markdown>`이 그린 알려진 태그 열(h1~6·p·ul…)만 다루면
  *  되지만, 여긴 그 렌더가 아직 없다 — 브라우저가 `Enter`마다 만드는 `<div>`(빈 줄이면 안의
- *  `<br>`)를 줄바꿈 하나로 되읽어야 한다(못 ⑤. 안 그러면 `Array.from(root.children)`이 첫
+ *  `<br>`)를 줄바꿈 하나로 되읽어야 한다(규칙 ⑤. 안 그러면 `Array.from(root.children)`이 첫
  *  줄의 맨 텍스트 노드를 세지 않아 그 줄이 통째로 사라진다). */
 export function looseTextOf(root: Element): string {
   const lines: string[] = [];

@@ -315,7 +315,7 @@ def list_md(d):
 
 def source_files(troot):
     """(경로, 종류, 부가정보) - 종류는 extract_* 디스패치 키. 없는 디렉터리는 건너뛴다
-    (못 5 - 없으면 그냥 없다, 온톨로지 없는 프로젝트와 같은 선)."""
+    (규칙 5 - 없으면 그냥 없다, 온톨로지 없는 프로젝트와 같은 선)."""
     out = [(p, "ticket", None) for p in list_md(os.path.join(troot, "tickets"))]
     obj_root = os.path.join(ONTOLOGY_DIR or os.path.join(troot, "ontology"), "objects")
     if os.path.isdir(obj_root):
@@ -582,7 +582,7 @@ def token_tier(qt, node_token_set):
 
 def score_nodes(query_text, node_ids, node_token_sets, idf, degree):
     """(점수, node_id) 내림차순 - 동점은 degree 내림차순, id 오름차순. 겹치는 낱말이 하나도
-    없는 노드는 아예 안 낀다(없으면 지어내지 않는다 - 못 4)."""
+    없는 노드는 아예 안 낀다(없으면 지어내지 않는다 - 규칙 4)."""
     qtokens = list(dict.fromkeys(tokenize(query_text)))
     if not qtokens:
         return []

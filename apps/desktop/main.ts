@@ -927,7 +927,7 @@ async function reviveIfVisible(trigger: string) {
 /** 고정하는 것 9 — 창을 다시 올릴 때마다 무엇이 죽어 있는지 보고 갈린다. 아무것도 안 죽었으면
  *  종전 그대로 보여주기만 한다. 뭔가 죽었으면 서버 생사 하나로 갈린다(`decideRevive`) — 살아
  *  있으면 창만 다시 읽고, 죽어 있으면 자식부터 다시 띄운 뒤 새 오리진으로 창을 읽는다.
- *  되살리기가 실패하면 흰 창을 남기지 않고 못 2의 실패 화면으로 간다. */
+ *  되살리기가 실패하면 흰 창을 남기지 않고 규칙 2의 실패 화면으로 간다. */
 async function showWindow() {
   const action = decideRevive({ winDestroyed: !win || win.isDestroyed(), contentDead, serverAlive: child !== null });
   if (action === "show") {

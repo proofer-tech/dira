@@ -652,7 +652,7 @@ export function SessionStream({
             // 워커 다이얼로그 2단(§2-15 ⑧, 값 §비주얼 §64 ①②③⑦) — 목록 단은 §9의 그 상자
             // 그대로고(`h-[32rem]`이 행으로 올라갔다), 상세 단이 오른쪽에 뜬다. `lg` 미만은
             // 세로로 접혀 상세가 목록 아래다(§64 ⑩) — 두 단이 각자 스크롤하고 이 행 자체는
-            // 안 스크롤한다(§2-15 ⑧ 못 2 — 검색 상자가 위로 사라지지 않는다).
+            // 안 스크롤한다(§2-15 ⑧ 규칙 2 — 검색 상자가 위로 사라지지 않는다).
             return (
               <div className="flex min-h-0 flex-col space-y-2 lg:h-[32rem] lg:flex-row lg:space-y-0 lg:gap-4">
                 <div

@@ -1,5 +1,5 @@
 /** 무손실 왕복 하네스 (DESIGN.md 로드맵 §P236-1). 마크다운 원문을 «원문 → 편집기 모델 → 원문»으로
- *  돌려 바이트가 갈리는 자리를 센다 — 못 ①(원문이 정본이다)의 판정 도구다.
+ *  돌려 바이트가 갈리는 자리를 센다 — 규칙 ①(원문이 정본이다)의 판정 도구다.
  *
  *  **새 의존성 0.** `unified`·`remark-parse`·`remark-stringify`·`@types/mdast`는 이미
  *  `react-markdown`·`remark-gfm`이 물고 오는 패키지라 `package.json`에 안 적는다 — 이 머신의 pnpm이
@@ -15,7 +15,7 @@ import type { Root } from "mdast";
  *  이어붙인다. 자른 조각을 원문 순서 그대로 다시 붙이는 것뿐이라(수정 없이) **항등이 항상
  *  성립한다** — frontmatter를 remark가 오해석해도(플러그인 없이 setext heading으로 읽는
  *  경우가 있다) `position.end.offset`이 단조증가하는 한 `source.slice`가 원문을 빠짐없이
- *  덮는다. 이 항등성 자체가 못 ①의 "안 고치면 안 갈린다"를 만족한다. */
+ *  덮는다. 이 항등성 자체가 규칙 ①의 "안 고치면 안 갈린다"를 만족한다. */
 export function splicedRoundTrip(source: string): string {
   const tree = unified().use(remarkParse).use(remarkGfm).parse(source) as Root;
   let out = "";

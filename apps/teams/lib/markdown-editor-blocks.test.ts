@@ -76,7 +76,7 @@ function fakeLooseEditable(lines: string[]): FakeElement {
 }
 const el = (x: FakeElement) => x as unknown as Element;
 
-test("안 고치면 바이트가 그대로다 (못 ①)", () => {
+test("안 고치면 바이트가 그대로다 (규칙 ①)", () => {
   const source = "# 제목\n\n본문 한 줄.\n\n- [ ] 하나\n- [x] 둘\n\n| a | b |\n|---|---|\n| 1 | 2 |\n";
   assert.equal(joinBlocks(splitBlocks(source)), source);
 });
@@ -86,7 +86,7 @@ test("빈 문자열도 항등이다", () => {
   assert.equal(joinBlocks(splitBlocks("\n")), "\n");
 });
 
-test("블록 하나만 갈아 끼우면 그 밖은 안 갈린다 (못 ① 둘째 반쪽)", () => {
+test("블록 하나만 갈아 끼우면 그 밖은 안 갈린다 (규칙 ① 둘째 반쪽)", () => {
   const source = "첫 블록.\n\n둘째 블록.\n\n셋째 블록.\n";
   const split = splitBlocks(source);
   assert.equal(split.blocks.length, 3);
@@ -199,7 +199,7 @@ test("commitEditable — DOM이 커밋값과 같으면 null(안 바뀐 값으로
 });
 
 test("commitEditable — 블록이 아직 없는 빈 칸(③④ 시작 자리)에서 처음 친 글도 담는다", () => {
-  const split = splitBlocks(""); // 못 ⑤가 지키는 자리 — blocks.length === 0
+  const split = splitBlocks(""); // 규칙 ⑤가 지키는 자리 — blocks.length === 0
   const liveDom = fakeLooseEditable(["첫 줄", "둘째 줄"]);
   assert.equal(commitEditable(el(liveDom), split), "첫 줄\n둘째 줄\n");
 });

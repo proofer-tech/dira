@@ -1472,7 +1472,7 @@ test("optionsOf — optionLabel이 안 자른다, 볼드 마커만 걷는다 (�
  *  실측 `4f761c5a` 질문 1). 파서가 `split("\n")` 줄 단위라 이어지는 줄은 `HEADING_RE`도
  *  `OPTION_LINE`도 아니라 버려진다. 파서를 안 고치는 것이 결정이다 — 선택지 뒤에 산문이 오는
  *  절이 많아서 이어지는 줄을 라벨에 붙이면 그 산문이 선택지에 딸려 들어간다. 규약은
- *  `.dira/protocols/질문-형식.md` §못 넷 — 선택지 하나는 한 줄로 쓴다. */
+ *  `.dira/protocols/질문-형식.md` §규칙 넷 — 선택지 하나는 한 줄로 쓴다. */
 test("optionsOf — 접은 선택지는 첫 줄까지만 라벨이다 (실측 4f761c5a 질문 1)", () => {
   const folded = optionsOf(
     "### 1. 무엇을 고치나\n" +

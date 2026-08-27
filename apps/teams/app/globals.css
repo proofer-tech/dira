@@ -46,7 +46,7 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  /* 등폭은 이 개정에서 한 자도 안 갈린다(P149 못 ⑧) — 워드마크·앱 캡처가 랜딩과 같은
+  /* 등폭은 이 개정에서 한 자도 안 갈린다(P149 규칙 ⑧) — 워드마크·앱 캡처가 랜딩과 같은
      얼굴이어야 한다. sans만 원티드산스로 간다. */
   --font-sans: "Wanted Sans Variable";
   /* `--font-geist-mono`는 `(app)/layout.tsx`의 `next/font`만 세운다 — `(site)` 트리(홈 포함)에서
@@ -345,7 +345,7 @@
 
 /* §비주얼 §0 애니메이션 금지의 **셋째 예외**(사람 요구 `b646dd4a` · 값 §36 §고른 값 ②).
    §18은 `opacity`가 제자리에서 흔들리고 이 절은 **잉크의 색이 위치를 따라 흐른다** —
-   두 절이 건드리는 속성이 아예 달라서 `animate-wip-pulse`를 재사용하지 않는다(§36 못 ②).
+   두 절이 건드리는 속성이 아예 달라서 `animate-wip-pulse`를 재사용하지 않는다(§36 규칙 ②).
    그라디언트의 두 끝이 `--muted-foreground`와 `--foreground`이고 **둘 다 채도 0**이라
    어느 프레임의 어느 픽셀도 휘도가 그 둘 사이에 갇힌다 → 대비 하한이 곧 정지 값이다
    (라이트 호버 4.53 · 다크 호버 6.39). 라이트에서 잉크가 *깊어지는* 것이 맞다 —

@@ -399,7 +399,7 @@ catch가 무조건 그 경로라 파일 배치로는 못 고친다(위 둘째 �
 `NODE_ENV=development`를 물려받는다.** 그 환경에서 굽던 옛 `next build`는 커밋과 무관하게
 항상 `/_global-error` 프리렌더에서 `TypeError: Cannot read properties of null (reading
 'useContext')`로 죽었다 — 없는 결함을 보고하게 만들고 나가도 되는 릴리즈를 막았다
-(티켓 `bb6d332e`). 여기서 못박으면 CI·`apps/desktop`의 `pnpm dist`·세션이 한 줄로 같이 낫는다.
+(티켓 `bb6d332e`). 여기서 고정하면 CI·`apps/desktop`의 `pnpm dist`·세션이 한 줄로 같이 낫는다.
 
 ## 규칙
 

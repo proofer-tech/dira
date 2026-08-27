@@ -165,7 +165,7 @@ new writing**:
 | `숨 쉰다` `깨어난다` `자리 잡고 산다` | banned, no replacement |
 | `못박는다` `못박았다` `못박은` | `고정한다` `정했다` `명시했다` `정한` |
 | `값을 박는다` `해시가 박혀 있다` | `값을 넣는다` `해시가 적혀 있다` |
-| `못 5` `뽑은 못` `못 하나` (고정된 규칙) | `규칙 5` `푼 규칙` `규칙 하나` `결정 하나` |
+| `못 5` `뽑은 못` `못 하나` (고정된 규칙) | `규칙 5` `뽑은 규칙` `규칙 하나` `결정 하나` |
 
 The exception is a real process, session, or pid - `pid가 살아 있다`, `세션이 아직 살아
 있다`, `부모가 wait에 서 있다` stay as they are, and so does any sentence whose subject is a

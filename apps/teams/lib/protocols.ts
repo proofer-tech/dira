@@ -7,7 +7,7 @@
  *  기준을 인자로 받는 이유가 이것이고, 호출자는 `resolveConfig(project).protocols`를 넘긴다.
  *
  *  `lib/workers.ts` ↔ `workers/actions.ts`와 같은 분담이다: fs 로직은 여기, `revalidatePath`와
- *  프로젝트 해석은 얇은 서버 액션. 경로 방어를 Next 없이 `node --test`로 못박기 위해서이기도 하다. */
+ *  프로젝트 해석은 얇은 서버 액션. 경로 방어를 Next 없이 `node --test`로 고정하기 위해서이기도 하다. */
 import { link, lstat, mkdir, readFile, readdir, realpath, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { byteLength } from "./budgets.ts";

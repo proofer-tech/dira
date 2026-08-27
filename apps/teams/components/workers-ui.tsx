@@ -437,7 +437,7 @@ export function WorkerRowActions({ projectId, row }: { projectId: string; row: W
         <Dialog open={streaming} onOpenChange={setStreaming}>
           {/* **폭·`max-h`·`overflow`는 이 호출부에만 더한다**(§비주얼 §64 ①②). `DialogContent`
               등록은 `grid`고 이 다이얼로그만 `flex flex-col`로 간다 — 세로 배분을 flex에 넘겨
-              머리·칩 줄·툴바를 고정하고 목록·상세가 각자 스크롤하게 한다(§2-15 ⑧ 못 2). 폭은
+              머리·칩 줄·툴바를 고정하고 목록·상세가 각자 스크롤하게 한다(§2-15 ⑧ 규칙 2). 폭은
               종전 `sm:max-w-3xl`(768)에서 `75rem`(1200)으로 넓어진다(§비주얼 §64 ① — 목록 640
               + 상세 512의 유도값). 컴포넌트를 고치지 않는 이유는 스트림을 담은 이 다이얼로그만
               키가 커서다. */}

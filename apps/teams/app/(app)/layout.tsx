@@ -13,7 +13,7 @@ import { t } from "@/lib/i18n";
 import "../globals.css";
 
 // sans는 `globals.css`의 `@font-face`(원티드산스 · `public/fonts/`)가 든다 — 그래서 Geist
-// 임포트가 여기 없다. `Geist_Mono`만 남는다(`--font-mono` 무수정 · P149 못 ⑧).
+// 임포트가 여기 없다. `Geist_Mono`만 남는다(`--font-mono` 무수정 · P149 규칙 ⑧).
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
