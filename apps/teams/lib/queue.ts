@@ -6,6 +6,7 @@
  *  YAML 파서를 쓰지 않는 이유도 같다 — 엔진이 정규식이라 파서를 쓰면 판정이 갈린다. */
 import { readFile, readdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { resolveWithin } from "./paths.ts";
 import type { ProjectConfig } from "./projects.ts";
 
 export type TicketState = "open" | "wip" | "done";
@@ -140,19 +141,28 @@ function isoOffsetMs(off: string): number {
  *  새 파서를 안 만든다, 정규식 하나가 `fromisoformat` 대신이다). 오프셋 있는 값은 그 오프셋의
  *  절대 시각으로, 없는 값은 로컬 시각으로 읽는다 — 둘 다 `Date`(절대 시각)라 이후 `now`와의
  *  차는 오프셋 유무와 무관하게 맞다(tickets.py가 로컬로 변환해 버리는 것과 같은 결과다). */
-export function duedateOf(fm: Record<string, string>, h = ""): Date | null {
-  if (!("duedate" in fm)) return null;
-  const raw = unquote(fm.duedate ?? "");
-  const m = raw ? ISO_DATETIME_RE.exec(raw) : null;
-  if (!m) {
-    console.warn(`WARN duedate 못 읽음 ${h} 값=${JSON.stringify(raw)} - 마감 없음으로 읽음`);
-    return null;
-  }
+/** ISO 8601 + 오프셋 문자열 → 절대 시각. 오프셋 없는 값은 로컬 시각으로 읽는다. `duedate`뿐
+ *  아니라 같은 서식인 `polling_until`·`polled_at`(§폴링 대기 결정 2 — `assigned_at`과 같은 서식)도
+ *  이 파서 하나를 쓴다. 못 읽으면 `null` — WARN은 호출부가 문맥(어느 키인지)을 알아야 적으므로 여기서 안 낸다. */
+function parseIsoOffset(raw: string): Date | null {
+  const m = ISO_DATETIME_RE.exec(raw);
+  if (!m) return null;
   const [, y, mo, d, hh, mi, ss, off] = m;
   const sec = ss ? Math.trunc(Number(ss)) : 0;
   if (!off) return new Date(Number(y), Number(mo) - 1, Number(d), Number(hh), Number(mi), sec);
   const utcMs = Date.UTC(Number(y), Number(mo) - 1, Number(d), Number(hh), Number(mi), sec);
   return new Date(utcMs - isoOffsetMs(off));
+}
+
+export function duedateOf(fm: Record<string, string>, h = ""): Date | null {
+  if (!("duedate" in fm)) return null;
+  const raw = unquote(fm.duedate ?? "");
+  const parsed = raw ? parseIsoOffset(raw) : null;
+  if (!parsed) {
+    console.warn(`WARN duedate 못 읽음 ${h} 값=${JSON.stringify(raw)} - 마감 없음으로 읽음`);
+    return null;
+  }
+  return parsed;
 }
 
 /** tickets.py derive_priority. §1-4 §파생: 남은 <= 5시간이면 5(지난 마감 포함) · 자기 duedate가
@@ -487,6 +497,98 @@ export function isAwaiting(t: Ticket): boolean {
 export function awaitingUnlocked(t: Ticket): boolean {
   const a = nfc(awaitingOf(t));
   return t.state === "open" && !!a && !t.deps.some((d) => nfc(d) === a);
+}
+
+// ── 폴링 대기 (DESIGN.md §폴링 대기 결정 2·4·9) ───────────────────────────────
+
+/** frontmatter `polling:` — 폴 스크립트의 **파일명 하나**(경로가 아니다, 결정 2). */
+export const pollingScriptOf = (t: Ticket): string => unquote(t.fm.polling ?? "");
+
+/** 대기 중인가 — `polling`이 비어 있지 않으면 대기다(결정 2 "이 키가 비어 있지 않으면 대기다").
+ *  `tickets.py`는 아직 이 판정이 없다(엔진 승인분 `1a20c422`이 미완이고 이 티켓은 그걸 안
+ *  기다린다) — `queue.test.ts`의 패리티 테스트는 `read_fm`을 직접 불러 같은 문자열 판정
+ *  (`bool(값.strip())`)을 대조한다. */
+export function isPolling(t: Ticket): boolean {
+  return t.state === "open" && !!pollingScriptOf(t);
+}
+
+/** `polling_until` — 세션이 이 티켓의 사정에 맞게 적어 둔 대기 상한(결정 2). */
+export const pollingUntilOf = (t: Ticket): Date | null => {
+  const raw = unquote(t.fm.polling_until ?? "");
+  return raw ? parseIsoOffset(raw) : null;
+};
+
+/** `polled_at` — 엔진이 마지막으로 스크립트를 돌린 시각. 없으면 아직 한 번도 안 돌린 것이다(결정 2). */
+export const polledAtOf = (t: Ticket): Date | null => {
+  const raw = unquote(t.fm.polled_at ?? "");
+  return raw ? parseIsoOffset(raw) : null;
+};
+
+/** 상한까지 남은 ms — 상한이 없으면 `null`, 지났으면 음수다(결정 9 "상한 지남"의 재료).
+ *  `dueAlertOf`처럼 유효마감 그래프를 타지 않는다 — frontmatter 값 하나 대 하나라 그래프가 필요
+ *  없다(마감의 §1-4 역방향 상속과 달리 폴링 상한은 다른 티켓으로 전이되지 않는다). */
+export function pollingRemainingMs(t: Ticket, now: Date): number | null {
+  const until = pollingUntilOf(t);
+  return until ? until.getTime() - now.getTime() : null;
+}
+
+/** 스크립트 머리의 `# dira-poll-interval: <초>`(결정 4) — 없으면 매 tick(`null`). 엔진이 읽는
+ *  그 한 줄과 같은 정규식이다 — 새 파서를 안 만든다. */
+export function pollingIntervalOf(scriptBody: string): number | null {
+  const m = /^#\s*dira-poll-interval:\s*(\d+)/m.exec(scriptBody);
+  return m ? parseInt(m[1], 10) : null;
+}
+
+/** `<루트>/폴/<이름>` 하나를 읽는다 — **경로를 조립하지 않는다**(§신뢰 경계). `resolveWithin`이
+ *  `../`·심링크로 `polls/` 밖을 나가는 값을 던지고, 그 던진 것도 없는 파일도 여기서 `null`로
+ *  접는다 — 상세가 "파일이 없다"고 뜨고 화면이 안 깨진다(결정 9). */
+async function readPollFile(root: string, name: string): Promise<string | null> {
+  try {
+    const full = await resolveWithin(path.join(root, "polls"), name);
+    return await readFile(full, "utf8");
+  } catch {
+    return null;
+  }
+}
+
+/** 스크립트 본문(결정 9 상세 절의 "스크립트 파일명과 본문"). */
+export const pollingScriptBody = (root: string, script: string): Promise<string | null> =>
+  readPollFile(root, script);
+
+/** `<루트>/polls/<해시>.log` — 엔진이 이미 마지막 200줄로 잘라 쓰므로(결정 4) GUI는 창을 또
+ *  만들지 않고 파일 그대로를 꼬리로 보여준다. `<해시>`는 `tickets.py ticket_hash`와 같은 값인
+ *  `Ticket.hash`다(엔진이 로그를 그 이름으로 쓴다) — `stem`이 아니다. */
+export const pollingLogTail = (root: string, hash: string): Promise<string | null> =>
+  readPollFile(root, `${hash}.log`);
+
+/** 상세 "폴링 대기" 절의 재료 한 번에(결정 9 표 §티켓 상세) — 스크립트·로그 두 파일 읽기를
+ *  병렬로 묶는다. 호출부(상세 페이지)는 `isPolling`이 참인 티켓에만 부른다 — 지운 뒤에도 남는
+ *  `polling_until`·`polled_at`(결정 7)을 이 회차는 안 보여준다("지금 대기 중"만이 범위다). */
+export type PollingDetail = {
+  script: string;
+  scriptBody: string | null;
+  intervalSec: number | null;
+  until: Date | null;
+  remainingMs: number | null;
+  polledAt: Date | null;
+  logTail: string | null;
+};
+
+export async function pollingDetailOf(root: string, t: Ticket, now: Date): Promise<PollingDetail> {
+  const script = pollingScriptOf(t);
+  const [scriptBody, logTail] = await Promise.all([
+    pollingScriptBody(root, script),
+    pollingLogTail(root, t.hash),
+  ]);
+  return {
+    script,
+    scriptBody,
+    intervalSec: scriptBody !== null ? pollingIntervalOf(scriptBody) : null,
+    until: pollingUntilOf(t),
+    remainingMs: pollingRemainingMs(t, now),
+    polledAt: polledAtOf(t),
+    logTail,
+  };
 }
 
 /** 출처 요구사항 stem. `deps`가 아니다 — 선후가 아니라 출처고, 엮으면 큐가 직렬화된다(결정 5). */

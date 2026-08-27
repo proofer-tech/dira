@@ -29,10 +29,19 @@ import {
   inDefaultList,
   isAwaiting,
   isDispatchable,
+  isPolling,
   listTickets,
   openFixTicket,
   openImportTickets,
   ontologyImportMarker,
+  polledAtOf,
+  pollingDetailOf,
+  pollingIntervalOf,
+  pollingLogTail,
+  pollingRemainingMs,
+  pollingScriptBody,
+  pollingScriptOf,
+  pollingUntilOf,
   queueOrder,
   bodyWithoutQuestions,
   composeAnswer,
@@ -1213,6 +1222,151 @@ test("답변 대기 판정 + 답변 파일 생성으로 재큐 (엔진과 대조
   assert.match(pySelect(r), /r0000001\.md\|r0000001\|request\|pm/);
   // 답변 파일 자체는 열린 티켓이 아니라 `list`를 어지럽히지 않는다
   assert.doesNotMatch(pyList(r), /a1111111/);
+});
+
+// ── 폴링 대기 (DESIGN.md §폴링 대기 결정 2·4·9) ───────────────────────────────
+
+/** `tickets.py`엔 아직 `isPolling` 자체가 없다(엔진 승인분 `1a20c422` 미완, 이 티켓은 안
+ *  기다린다 — 티켓 본문). 패리티로 고정할 수 있는 것은 결정 2가 적은 값 하나뿐이다: "이 키가
+ *  비어 있지 않으면 대기다". `is_assigned`(tickets.py)와 같은 문자열 판정(`strip().strip("'\"")`)
+ *  이라 `read_fm`을 직접 불러 그 식 그대로 대조한다 — TS로 새로 베끼면 그 자리가 갈릴 수 있다
+ *  (`pySquadLeader`와 같은 근거). */
+function pyPollingBool(file: string): boolean {
+  const script =
+    "import sys\n" +
+    `sys.path.insert(0, ${JSON.stringify(path.dirname(PY))})\n` +
+    "import tickets as T\n" +
+    "fm, _, _ = T.read_fm(sys.argv[1])\n" +
+    "print(bool((fm.get('polling') or '').strip().strip('\\'\"')))\n";
+  return (
+    execFileSync("python3", ["-c", script, file], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim() ===
+    "True"
+  );
+}
+
+test("isPolling — polling 키가 비어 있지 않으면 대기(결정 2), tickets.py read_fm과 대조", async () => {
+  const r = newRoot();
+  await write(r, "p0000001.md", fm({ ticket: "p0000001", title: "대기", polling: "ok.sh" }));
+  await write(r, "p0000002.md", fm({ ticket: "p0000002", title: "따옴표", polling: '"ok.sh"' }));
+  await write(r, "p0000003.md", fm({ ticket: "p0000003", title: "값 없음" }));
+  await write(r, "p0000004.md", fm({ ticket: "p0000004", title: "빈 값", polling: "" }));
+  // `.wip` — `polling` 값은 있지만 `state !== "open"`이라 `isPolling`은 거짓이다. `tickets.py`는
+  // 상태를 안 보는 문자열 판정이라 여기서만 True — 결정 2의 "열린 티켓"을 TS가 얹은 것이지
+  // 패리티가 깨진 게 아니다(주석대로).
+  await write(
+    r,
+    "p0000005.wip.md",
+    fm({ ticket: "p0000005", title: "물고 있는 중", polling: "ok.sh", session_id: "sess-p5" }),
+  );
+
+  const tickets = await listTickets(r, DEFAULT);
+  const at = (h: string) => tickets.find((t) => t.hash === h)!;
+
+  for (const h of ["p0000001", "p0000002", "p0000003", "p0000004", "p0000005"]) {
+    const t = at(h);
+    const py = pyPollingBool(t.path);
+    if (h === "p0000005") {
+      assert.strictEqual(py, true);
+      assert.strictEqual(isPolling(t), false);
+    } else {
+      assert.strictEqual(isPolling(t), py, h);
+    }
+  }
+  assert.strictEqual(pollingScriptOf(at("p0000001")), "ok.sh");
+  assert.strictEqual(pollingScriptOf(at("p0000002")), "ok.sh");
+});
+
+test("pollingUntilOf·polledAtOf — assigned_at과 같은 ISO 8601 + 오프셋 서식(결정 2)", async () => {
+  const r = newRoot();
+  await write(
+    r,
+    "p0000006.md",
+    fm({
+      ticket: "p0000006",
+      title: "상한 있음",
+      polling: "ok.sh",
+      polling_until: "2026-08-27T23:00:00+09:00",
+      polled_at: "2026-08-27T22:30:00+09:00",
+    }),
+  );
+  await write(r, "p0000007.md", fm({ ticket: "p0000007", title: "아직 안 돌림", polling: "ok.sh" }));
+
+  const tickets = await listTickets(r, DEFAULT);
+  const at = (h: string) => tickets.find((t) => t.hash === h)!;
+
+  const t6 = at("p0000006");
+  assert.strictEqual(pollingUntilOf(t6)?.toISOString(), new Date("2026-08-27T23:00:00+09:00").toISOString());
+  assert.strictEqual(polledAtOf(t6)?.toISOString(), new Date("2026-08-27T22:30:00+09:00").toISOString());
+  // 상한 전 — 남은 ms가 양수
+  assert.strictEqual(
+    pollingRemainingMs(t6, new Date("2026-08-27T22:45:00+09:00")) === null
+      ? null
+      : pollingRemainingMs(t6, new Date("2026-08-27T22:45:00+09:00"))! > 0,
+    true,
+  );
+  // 상한 지남 — 남은 ms가 음수(결정 9 "상한 지남"의 재료)
+  assert.strictEqual(pollingRemainingMs(t6, new Date("2026-08-28T00:00:00+09:00"))! < 0, true);
+
+  const t7 = at("p0000007");
+  assert.strictEqual(pollingUntilOf(t7), null);
+  assert.strictEqual(polledAtOf(t7), null);
+  assert.strictEqual(pollingRemainingMs(t7, new Date()), null);
+});
+
+test("pollingIntervalOf — 스크립트 머리의 dira-poll-interval(결정 4), 없으면 매 tick", () => {
+  assert.strictEqual(pollingIntervalOf("#!/bin/bash\n# dira-poll-interval: 300\necho hi\n"), 300);
+  assert.strictEqual(pollingIntervalOf("#!/bin/bash\necho hi\n"), null);
+  // 주석이 셔뱅 바로 다음 줄이 아니어도 찾는다(첫 줄만 보지 않는다)
+  assert.strictEqual(
+    pollingIntervalOf("#!/bin/bash\n# 설명\n# dira-poll-interval: 5\necho hi\n"),
+    5,
+  );
+});
+
+test("pollingScriptBody·pollingLogTail·pollingDetailOf — 폴 파일 읽기(결정 4·9), 없으면 null(§신뢰 경계)", async () => {
+  const r = newRoot();
+  mkdirSync(path.join(r, "polls"));
+  writeFileSync(
+    path.join(r, "polls", "ok.sh"),
+    "#!/bin/bash\n# dira-poll-interval: 60\necho 특이점\n",
+  );
+  writeFileSync(path.join(r, "polls", "p0000008.log"), "마지막 출력 꼬리\n");
+  await write(
+    r,
+    "p0000008.md",
+    fm({
+      ticket: "p0000008",
+      title: "폴 파일 있음",
+      polling: "ok.sh",
+      polling_until: "2026-08-27T23:00:00+09:00",
+    }),
+  );
+  // 파일 자체가 없다 — 스크립트도 로그도 폴 디렉터리도 없다(§Done when "파일이 없으면 없다고 뜨고
+  // 화면이 안 깨진다")
+  await write(r, "p0000009.md", fm({ ticket: "p0000009", title: "폴 파일 없음", polling: "missing.sh" }));
+  // 경로 탈출 — `resolveWithin`이 던지고 `null`로 접힌다(§신뢰 경계, 클라이언트 검증은 검증이 아니다)
+  await write(r, "p0000010.md", fm({ ticket: "p0000010", title: "탈출 시도", polling: "../../../etc/passwd" }));
+
+  const tickets = await listTickets(r, DEFAULT);
+  const at = (h: string) => tickets.find((t) => t.hash === h)!;
+
+  assert.strictEqual(await pollingScriptBody(r, pollingScriptOf(at("p0000008"))), "#!/bin/bash\n# dira-poll-interval: 60\necho 특이점\n");
+  assert.strictEqual(await pollingLogTail(r, at("p0000008").hash), "마지막 출력 꼬리\n");
+
+  const now = new Date("2026-08-27T22:00:00+09:00");
+  const detail = await pollingDetailOf(r, at("p0000008"), now);
+  assert.strictEqual(detail.script, "ok.sh");
+  assert.strictEqual(detail.intervalSec, 60);
+  assert.strictEqual(detail.logTail, "마지막 출력 꼬리\n");
+  assert.strictEqual(detail.remainingMs! > 0, true);
+
+  const missing = await pollingDetailOf(r, at("p0000009"), now);
+  assert.strictEqual(missing.scriptBody, null);
+  assert.strictEqual(missing.intervalSec, null);
+  assert.strictEqual(missing.logTail, null);
+
+  const escape = await pollingDetailOf(r, at("p0000010"), now);
+  assert.strictEqual(escape.scriptBody, null);
 });
 
 // ── §2-11①§요구 86921371 — planOf (DESIGN.md §2-11①) ──────────────────────────

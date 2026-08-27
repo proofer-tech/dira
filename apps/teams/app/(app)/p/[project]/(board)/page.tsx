@@ -62,7 +62,7 @@ import {
 } from "@/components/ui/table";
 import { boardRevision } from "@/lib/board-revision";
 import { NO_EPIC, epicTitle, epicsFromTickets, listEpics, resolveMarkdownRefs } from "@/lib/epics";
-import { t } from "@/lib/i18n";
+import { t, type Locale } from "@/lib/i18n";
 import { mayHaveRefs } from "@/lib/markdown-refs";
 import {
   HIDE_DONE_STATUSES,
@@ -78,9 +78,11 @@ import {
   filterTickets,
   inDefaultList,
   isAwaiting,
+  isPolling,
   lastQuestionOptions,
   listTickets,
   depBadges,
+  pollingRemainingMs,
   relationEdges,
   resolveDep,
   sortTableRows,
@@ -101,7 +103,7 @@ import {
   squadsDir,
 } from "@/lib/projects";
 import { findStream, lastActivity, sessionIdOf, type StreamEvent } from "@/lib/transcript";
-import { doneLimit, rowLimit } from "@/lib/urls";
+import { doneLimit, formatRemaining, rowLimit } from "@/lib/urls";
 
 // 큐는 GUI 밖에서(cron·세션이) 바뀐다. 프리렌더하면 빌드 시점 내용이 굳는다.
 export const dynamic = "force-dynamic";
@@ -245,6 +247,20 @@ function archiveLine(a: Ticket | undefined, href: (t: Ticket) => string) {
   );
 }
 
+/** 폴링 대기 카드 배지(DESIGN.md §폴링 대기 결정 9) — `isAwaiting`과 같은 자리(카드 우상단)의
+ *  또 다른 오버레이다. 요구의 "언제까지(시간 또는 조건)" 중 **시간**이 여기다 — 조건(스크립트
+ *  본문)은 카드에 안 적고 상세로 미룬다(결정 9 "조건을 카드에 요약해 적지 않는다"). 상한을
+ *  지났으면 `대기중`이 아니라 `상한 지남` 하나로 갈린다(라벨 자체가 바뀐다, 접미사가 아니다). */
+function PollingBadge({ ticket, now, locale }: { ticket: Ticket; now: Date; locale: Locale }) {
+  const remainingMs = pollingRemainingMs(ticket, now);
+  if (remainingMs !== null && remainingMs < 0) {
+    return <StatusBadge status="pollingOverdue" locale={locale} />;
+  }
+  const suffix =
+    remainingMs !== null ? ` · ${formatRemaining(remainingMs, locale)} ${t(locale, "common.suffix.remaining")}` : "";
+  return <StatusBadge status="polling" suffix={suffix} locale={locale} />;
+}
+
 export default async function Board({
   params,
   searchParams,
@@ -264,7 +280,10 @@ export default async function Board({
   for (const [k, v] of Object.entries(raw)) for (const x of [v ?? []].flat()) sp.append(k, x);
 
   const config = await resolveConfig(project);
-  const tickets = await listTickets(project.root, config);
+  // §폴링 대기 §계산 시점 — 카드의 "남은 시간"이 이 렌더 전체에서 같은 시각을 쓴다
+  // (상세 페이지의 `now`와 같은 자리, §1-4 §계산 시점 관용구).
+  const now = new Date();
+  const tickets = await listTickets(project.root, config, now);
   // 위키링크 vault(§비주얼 §10 §위키링크) — 답변 다이얼로그·요구 접수·발행 다이얼로그가 그대로 받는다.
   const ontologyTree = await listTree(config.ontology);
   const vault = buildVault(ontologyTree, (rel) => `/p/${id}/ontology?file=${encodeURIComponent(rel)}`);
@@ -629,7 +648,11 @@ export default async function Board({
             {t.hash}
           </Link>
         </span>
-        {isAwaiting(t) && <StatusBadge status="awaiting" days={daysSince(t.mtime)} />}
+        {isAwaiting(t) ? (
+          <StatusBadge status="awaiting" days={daysSince(t.mtime)} />
+        ) : (
+          isPolling(t) && <PollingBadge ticket={t} now={now} locale={locale} />
+        )}
       </div>
       {/* 카드 title은 2줄까지(§6). 전문은 `title` 속성으로 본다. `layered`가 표식 앵커에만
           `relative z-10`을 준다(§9 뒤쪽 절반 · §비주얼 §31 §층) — 카드 전체가 위 해시 앵커의

@@ -279,9 +279,14 @@ export const ko: Record<string, string> = {
   "common.unit.hour": "시간",
   "common.unit.minute": "분",
   "common.unit.day": "일",
+  // 폴링 대기 절(§폴링 대기 결정 4·9) 주기 표기 — `300초`처럼 숫자에 바로 붙는다.
+  "common.unit.second": "초",
   // 페르소나 상세 머리 2행 "마지막 활동"(§비주얼 §66 ③) — `<n><단위> <ago>`가 두 로케일에서
   // 같은 어순으로 뜬다(`12분 전` · `12m ago`).
   "common.suffix.ago": "전",
+  // 폴링 대기 배지·상세 절의 남은 시간(§폴링 대기 결정 9) — `agoLabel`의 `common.suffix.ago`와
+  // 같은 자리, 반대 방향(지난 게 아니라 남은 것)이다.
+  "common.suffix.remaining": "남음",
 
   // 셸 둘째 묶음(§0-16 §발행 §묶음 표 2, `dd97c69c`) — 헤더 · 알림 종 일곱 · status bar ·
   // 배너 · 전환기 · `status-badge.tsx`(상태 배지 · deps 배지 — 보드·상세도 이 벌을 공유한다).
@@ -406,6 +411,10 @@ export const ko: Record<string, string> = {
   "status.label.stale": "stale",
   "status.label.connected": "연결됨",
   "status.label.disconnected": "연결 안 됨",
+  // 폴링 대기(§폴링 대기 결정 9) — `blocked`의 하위 종류가 아니다(`isPolling`이 별도 판정),
+  // 그래도 배지 표 한 자리를 같이 쓴다(`isAwaiting`과 같은 자리 — 5상태를 안 늘린다).
+  "status.label.polling": "대기중",
+  "status.label.pollingOverdue": "상한 지남",
 
   // 진행 기록 안 계획 아코디언(§비주얼 §59 ⑩) — 왼쪽 칸 상태 글리프의 `sr-only` 낱말 넷.
   // `기록 n건`은 §9 묶음 줄과 같은 문자열이라 여기 안 올린다(그 절의 범위 판정).
@@ -469,12 +478,27 @@ export const ko: Record<string, string> = {
   "epics.readme.saveFailed": "저장하지 못했습니다",
   "status.hint.awaiting": "PM이 되물었다 — 요구사항 상세에서 답을 쓰면 다시 큐에 뜬다. 자동 만료는 없다",
   "status.hint.assigned": "session_id가 적힌 열린 티켓 — 큐에서 영구 제외된다. 할당 해제로 되돌린다",
+  "status.hint.pollingOverdue": "폴링 상한을 지났다 — 다음 tick에 답변 대기로 잠긴다",
 
   // deps 배지(§2 deps 배지) — `DepBadge`가 쓴다.
   "dep.hint.met": "충족 — 완료된 티켓",
   "dep.hint.unmet": "미충족 — 아직 완료되지 않았다",
   "dep.hint.missing": "큐에 없는 해시 — 영구 대기",
   "dep.hint.answer": "답변 기록 — 이 요구사항의 답변",
+
+  // 티켓 상세 "폴링 대기" 절(§폴링 대기 결정 9 표 §티켓 상세) — 스크립트 파일명·본문·주기·
+  // 상한과 남은 시간·마지막 폴링 시각·마지막 출력 꼬리.
+  "polling.section.title": "폴링 대기",
+  "polling.field.script": "스크립트",
+  "polling.field.scriptBody": "스크립트 본문",
+  "polling.field.interval": "주기",
+  "polling.interval.everyTick": "매 tick",
+  "polling.field.until": "상한",
+  "polling.field.polledAt": "마지막 폴링",
+  "polling.polledAt.never": "아직 안 돌림",
+  "polling.field.logTail": "마지막 출력",
+  "polling.scriptBody.missing": "스크립트 파일 없음",
+  "polling.logTail.missing": "출력 기록 없음",
 
   // 표 컬럼(§에픽 결정 7 §표뷰) — 띠 머리 라벨은 `board.epic.noTitle`을 그대로 재사용한다
   // (사이드바와 같은 글자여야 한다, §1 - 한 사실을 두 모양으로 그리지 않는다).
@@ -1235,7 +1259,9 @@ export const en: Record<string, string> = {
   "common.unit.hour": "h",
   "common.unit.minute": "m",
   "common.unit.day": "d",
+  "common.unit.second": "s",
   "common.suffix.ago": "ago",
+  "common.suffix.remaining": "left",
 
   // 셸 둘째 묶음(§0-16 §발행 §묶음 표 2) — `ko`는 `dd97c69c`, 이 영어가 `90be3eeb`다.
   // 셸은 모든 화면 위에 서므로 **여기서 고른 낱말이 다음 묶음 일곱의 어휘가 된다** — 새 낱말은
@@ -1346,6 +1372,8 @@ export const en: Record<string, string> = {
   "status.label.stale": "stale",
   "status.label.connected": "Connected",
   "status.label.disconnected": "Disconnected",
+  "status.label.polling": "Polling",
+  "status.label.pollingOverdue": "Deadline passed",
 
   "progress.plan.pending": "Not started",
   "progress.plan.cancelled": "Cancelled",
@@ -1402,12 +1430,26 @@ export const en: Record<string, string> = {
     "The PM asked something back — write an answer on the request page and it returns to the queue. It never expires on its own",
   "status.hint.assigned":
     "An open ticket with a session_id in it — the queue skips it for good. Unassign puts it back",
+  "status.hint.pollingOverdue": "The polling deadline has passed — the next tick locks it as awaiting answer",
 
   // deps 배지(§2 deps 배지).
   "dep.hint.met": "Met — that ticket is done",
   "dep.hint.unmet": "Unmet — not done yet",
   "dep.hint.missing": "No such hash in the queue — waits forever",
   "dep.hint.answer": "Answer on record — the answer to this request",
+
+  // Ticket detail "Polling" section (§폴링 대기 결정 9).
+  "polling.section.title": "Polling",
+  "polling.field.script": "Script",
+  "polling.field.scriptBody": "Script body",
+  "polling.field.interval": "Interval",
+  "polling.interval.everyTick": "Every tick",
+  "polling.field.until": "Deadline",
+  "polling.field.polledAt": "Last polled",
+  "polling.polledAt.never": "Not run yet",
+  "polling.field.logTail": "Last output",
+  "polling.scriptBody.missing": "Script file not found",
+  "polling.logTail.missing": "No output yet",
 
   "board.column.epic": "Epic",
 

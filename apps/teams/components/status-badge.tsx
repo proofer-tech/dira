@@ -44,6 +44,10 @@ export type Status =
   | "assigned"
   | "wip"
   | "done"
+  // 폴링 대기(DESIGN.md §폴링 대기 결정 9) — `isAwaiting`과 같은 자리의 또 다른 오버레이다.
+  // `blocked`의 하위 종류가 아니다: `isPolling`은 `deps`·`unmet`을 안 본다(queue.ts isPolling)
+  | "polling"
+  | "pollingOverdue"
   // 워커 4상태
   | "running"
   | "idle"
@@ -107,6 +111,17 @@ const STATUS: Record<Status, Spec> = {
   connected: { labelKey: "status.label.connected", icon: Plug, variant: "secondary" },
   // 워커 stale과 색은 공유하고 아이콘으로 갈린다 — 죽은 락과 없는 경로는 다른 사건이다.
   disconnected: { labelKey: "status.label.disconnected", icon: Unplug, variant: "outline", tint: STALE },
+  // 정상 흐름의 사정이다(`idle`과 같은 중립) — 세션이 방금 적어 둔 상한을 기다리는 중일 뿐이다.
+  polling: { labelKey: "status.label.polling", icon: Clock, variant: "secondary" },
+  // 상한이 지났다 — 다음 tick이 답변 대기로 잠근다(§폴링 대기 결정 7). `assigned`와 같은
+  // "고장은 아니지만 사람이 봐야 함" 색이다.
+  pollingOverdue: {
+    labelKey: "status.label.pollingOverdue",
+    icon: TriangleAlert,
+    variant: "outline",
+    tint: STALE,
+    hintKey: "status.hint.pollingOverdue",
+  },
 };
 
 /** 상태 라벨 문자열이 필요한 곳(보드 필터 선택지) — 배지 없이도 **같은 말**을 쓰게 한다.
@@ -144,6 +159,7 @@ export const daysSince = (ms: number) => Math.floor((Date.now() - ms) / 86_400_0
 export function StatusBadge({
   status,
   days,
+  suffix,
   className,
   locale = DEFAULT_LOCALE,
   continued = false,
@@ -151,6 +167,9 @@ export function StatusBadge({
 }: {
   status: Status;
   days?: number;
+  /** 자유 접미사 — `elapsedSuffix`의 "· N일" 전용 계산으로 못 담는 값(폴링 대기의 남은 시간
+   *  등)을 호출부가 이미 조립해 넘긴다. 있으면 `days` 계산보다 앞선다(둘을 같이 안 쓴다). */
+  suffix?: string;
   className?: string;
   locale?: Locale;
   continued?: boolean;
@@ -165,7 +184,7 @@ export function StatusBadge({
       title={hintKey ? t(locale, hintKey) : undefined}
     >
       <Icon aria-hidden className="size-3.5" />
-      {t(locale, labelKey) + elapsedSuffix(days, locale)}
+      {t(locale, labelKey) + (suffix ?? elapsedSuffix(days, locale))}
     </Badge>
   );
   return href ? <Link href={href}>{badge}</Link> : badge;

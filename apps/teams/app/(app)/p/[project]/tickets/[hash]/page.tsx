@@ -29,6 +29,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { findTicket } from "@/lib/engine";
 import { listEpics, resolveMarkdownRefs } from "@/lib/epics";
+import { t } from "@/lib/i18n";
 import { buildVault } from "@/lib/markdown-wikilinks";
 import { listTree } from "@/lib/protocols";
 import {
@@ -42,9 +43,11 @@ import {
   depBadges,
   derivedFrom,
   isAwaiting,
+  isPolling,
   lastQuestionOptions,
   listTickets,
   planOf,
+  pollingDetailOf,
   referrers,
   reqOf,
   resolveDep,
@@ -62,7 +65,7 @@ import {
 } from "@/lib/projects";
 import { findStream, nthInitOffset, sessionIdOf } from "@/lib/transcript";
 import { ticketCostChunk } from "@/lib/usage";
-import { decodeHash, engineCan } from "@/lib/urls";
+import { dateTimeLabel, decodeHash, engineCan, formatRemaining } from "@/lib/urls";
 import { dispatchRound, holderEngine, lastDispatchSid, listWorkers, reassignCount } from "@/lib/workers";
 
 // 큐는 GUI 밖에서(cron·세션이) 바뀐다. 프리렌더하면 빌드 시점 내용이 굳는다.
@@ -337,6 +340,10 @@ export default async function TicketDetail({
   // 같은 성격이다: 볼 것이 있는가. 부재의 사유만 그리는 절은 본문을 밀 값이 없다.
   const above = !!transcript || thread.length > 0 || awaiting;
 
+  // 폴링 대기 절(DESIGN.md §폴링 대기 결정 9) — 지금 대기 중일 때만 부른다. 지운 뒤에도 남는
+  // `polling_until`·`polled_at`(결정 7)은 이 회차의 범위 밖이다("지금 대기 중"만 보여준다).
+  const polling = isPolling(ticket) ? await pollingDetailOf(project.root, ticket, now) : null;
+
   // 복사 다이얼로그의 deps 선택지. 보드와 **같은 한 줄**이다(§3 — deps가 가리키는 이름은
   // `ticket:`이 아니라 stem이고, 큐 순서를 뒤집어야 방금 만든 티켓이 맨 위다).
   // 이미 읽은 `tickets`를 넘긴다 — `readdir`도 큐 스캔도 다시 하지 않는다.
@@ -594,6 +601,59 @@ export default async function TicketDetail({
                 `FrontmatterTable`(ticket-ui.tsx)이 가진다. */}
             <FrontmatterTable fm={ticket.fm} file={path.basename(ticket.path)} />
           </section>
+
+          {/* 폴링 대기 절(§폴링 대기 결정 9 표 §티켓 상세) — 요구의 "언제까지(시간 또는 조건)" 중
+              **조건**이 여기다(시간은 보드 카드의 남은 시각, §1 보드). 스크립트 본문이 그 조건의
+              정본이라 한 줄로 요약해 옮기지 않는다(요약이 둘째 정본이 되는 걸 막는다, 결정 9). */}
+          {polling && (
+            <section className="space-y-2">
+              <h2 className="text-sm font-medium">{t(locale, "polling.section.title")}</h2>
+              <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+                <dt className="text-muted-foreground">{t(locale, "polling.field.script")}</dt>
+                <dd className="font-mono text-xs break-all">{polling.script}</dd>
+                <dt className="text-muted-foreground">{t(locale, "polling.field.interval")}</dt>
+                <dd>
+                  {polling.intervalSec !== null
+                    ? `${polling.intervalSec}${t(locale, "common.unit.second")}`
+                    : t(locale, "polling.interval.everyTick")}
+                </dd>
+                <dt className="text-muted-foreground">{t(locale, "polling.field.until")}</dt>
+                <dd>
+                  {polling.until ? dateTimeLabel(polling.until.getTime(), now.getTime()) : "—"}
+                  {polling.remainingMs !== null &&
+                    (polling.remainingMs < 0
+                      ? ` · ${t(locale, "status.label.pollingOverdue")}`
+                      : ` · ${formatRemaining(polling.remainingMs, locale)} ${t(locale, "common.suffix.remaining")}`)}
+                </dd>
+                <dt className="text-muted-foreground">{t(locale, "polling.field.polledAt")}</dt>
+                <dd>
+                  {polling.polledAt
+                    ? dateTimeLabel(polling.polledAt.getTime(), now.getTime())
+                    : t(locale, "polling.polledAt.never")}
+                </dd>
+              </dl>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">{t(locale, "polling.field.scriptBody")}</p>
+                {polling.scriptBody !== null ? (
+                  <pre className="max-h-64 overflow-auto rounded-md bg-muted p-3 font-mono text-xs break-words whitespace-pre-wrap text-foreground">
+                    {polling.scriptBody}
+                  </pre>
+                ) : (
+                  <EmptyState text={t(locale, "polling.scriptBody.missing")} />
+                )}
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">{t(locale, "polling.field.logTail")}</p>
+                {polling.logTail !== null ? (
+                  <pre className="max-h-64 overflow-auto rounded-md bg-muted p-3 font-mono text-xs break-words whitespace-pre-wrap text-foreground">
+                    {polling.logTail}
+                  </pre>
+                ) : (
+                  <EmptyState text={t(locale, "polling.logTail.missing")} />
+                )}
+              </div>
+            </section>
+          )}
 
           <section className="space-y-4">
             <h2 className="text-sm font-medium">관계</h2>
