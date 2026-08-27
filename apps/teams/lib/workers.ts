@@ -86,6 +86,11 @@ export type Worker = {
   context: WorkerContext;
   /** 공통 컨텍스트 `source` 줄이 있는가. false면 이 워커는 공통을 못 받는다 (§4-1) */
   commonSource: boolean;
+  /** 공통 워커 풀의 shim인가 — 둘째 줄 표식 `# dira-pool: <이름>`이 있으면 참이다(§4-16 결정 2·6).
+   *  판정을 두 벌로 안 적는다: `lib/pool.ts`의 `poolWorkerNameOf`와 같은 정규식이다(순환 import를
+   *  피하려고 여기서 다시 적는다 — `pool.ts`가 이미 `createWorker`·`deleteWorker`를 이 파일에서
+   *  가져간다). */
+  commonWorker: boolean;
   /** 자가 정리 `source` 줄이 있는가. false면 dira를 지워도 이 워커의 cron 줄이 남는다 (§4-4) */
   selfHealSource: boolean;
   /** 통합 게이트 `source` 줄이 있는가. false면 받는 트리가 더러워도 그냥 디스패치돼 push에서만
@@ -1416,6 +1421,9 @@ export async function listWorkers(root: string, tickets: Ticket[] = []): Promise
       context: await contextOf(root, text, parsed.cwd),
       // 이 줄이 없는 워커는 공통을 못 받는다 — 화면이 경고 + `공통 적용`을 띄운다(§4-1).
       commonSource: commonSourceRe.test(text),
+      // 표식은 파일의 **둘째 줄**이어야 한다(`pool.ts`의 `poolWorkerNameOf`와 같은 기준) — 아무
+      // 데나 있는 주석과 가르기 위해서다.
+      commonWorker: /^# dira-pool: \S+$/.test(text.split("\n")[1] ?? ""),
       // 이 줄이 없는 워커는 자기 cron 줄을 못 뺀다 — 화면이 경고 + `자가 정리 적용`(§4-4 §소급).
       selfHealSource: selfHealSourceRe.test(text),
       // 이 줄이 없는 워커는 받는 트리가 더러워도 디스패치된다 — 화면이 경고 + `통합 게이트 적용`

@@ -105,7 +105,19 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
  *  카탈로그(`OtherEngine`)가 늘면 이 유니온도 트리도 저절로 는다. */
 /** `multiplay` — §0-18 §자리의 숨은 여섯째 노드. 트리에는 안 뜬다(사이드바에 항목이 없다),
  *  검색으로만 닿는다. 잠금 밖으로 나온 뒤로는 조건 없이 존재한다(§0-18 §기본값이 된다). */
-type SettingsNode = "claude" | OtherEngine | "keymap" | "stats" | "language" | "webhook" | "multiplay";
+/** `workers` — 열째 노드(§4-16 결정 5, 티켓 `757c4d04`). 그 티켓이 트리 줄과 패널을 낸다 —
+ *  이 유니온에 이름만 먼저 얹는 것은 §4-16 결정 6(이 파일이 아니라 프로젝트 워커 표의 `공통`
+ *  배지)이 이 노드로 여는 문을 열어야 해서다(`openWorkerSettingsNode` 아래). */
+type SettingsNode = "claude" | OtherEngine | "keymap" | "stats" | "language" | "webhook" | "multiplay" | "workers";
+
+/** 다른 화면(프로젝트 워커 표의 `공통` 배지, §4-16 결정 6)이 이 다이얼로그를 `workers` 노드로
+ *  연다. **아이콘 트리거 인스턴스만 듣는다** — 두 셸 어디서나 하나뿐인 헤더 버튼이 기준이다
+ *  (`⌘;`가 icon만 듣는 것과 같은 이유, 위 주석 참조). 전역 상태·URL 파라미터를 새로 만들지
+ *  않는다는 §0-4 원칙은 그대로다 — DOM 이벤트 하나로 판을 넘긴다(새 커스텀 컴포넌트 0). */
+const OPEN_WORKERS_NODE_EVENT = "dira:settings-open-workers";
+export function openWorkerSettingsNode() {
+  window.dispatchEvent(new Event(OPEN_WORKERS_NODE_EVENT));
+}
 
 /** §0-15 §검색 레지스트리 한 줄 — `{트리 경로, 항목 이름, 이동 대상}`. `crumbs`가 빈 문자열이면
  *  결과 줄은 `name` 하나만 그린다(트리 노드 이름 자신 — §45 ⑤ 예시의 `키설정`). `anchor`는
@@ -1183,6 +1195,22 @@ export function SettingsDialog({
   useHotkey("settings.open", () => {
     if (trigger === "icon") setOpen(true);
   });
+
+  // `openWorkerSettingsNode`(위) — `공통` 배지가 이 다이얼로그를 `workers` 노드로 연다. 같은
+  // 기준(`icon` 트리거만)으로 이중 오픈을 피한다. 여는 부수효과는 `onOpenChange(true)`와 같은
+  // 셋(`addOpen` 초기화·`multiToken` 다시 읽기)이고, 마지막에 `activeNode`만 `workers`로 덮는다 —
+  // 안 그러면 `onOpenChange`가 이미 `claude`로 되돌려 놓는다.
+  useEffect(() => {
+    if (trigger !== "icon") return;
+    const onOpen = () => {
+      setOpen(true);
+      setAddOpen(needsAuth);
+      setActiveNode("workers");
+      void readMultitokenAction().then(setMultiToken);
+    };
+    window.addEventListener(OPEN_WORKERS_NODE_EVENT, onOpen);
+    return () => window.removeEventListener(OPEN_WORKERS_NODE_EVENT, onOpen);
+  }, [trigger, needsAuth]);
 
   // 진행 로그는 폴링으로 받는다 — 이 앱에 소켓은 없다(세션 스트림과 같은 방식).
   // 돌고 있을 때만 돈다: `running`이 꺼지면 effect가 정리되고 폴링이 멈춘다.

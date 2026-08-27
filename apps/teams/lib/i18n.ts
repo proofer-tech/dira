@@ -869,6 +869,23 @@ export const ko: Record<string, string> = {
   // 워커 설정 다이얼로그 트리거(§4-15 결정 2 - §비주얼 §35 개정 ①, 티켓 ec2791db). 다이얼로그
   // 제목이 같은 낱말을 재사용해 새 문구는 이 하나로 끝난다.
   "workers.settingsDialog.trigger": "워커 설정",
+  // 다이얼로그 셋째 섹션 — 공통 워커 빌리기(§4-16 결정 6 - §비주얼 §68 ④, 티켓 28c4d25f).
+  "workers.pool.sectionTitle": "공통 워커 빌리기",
+  "workers.pool.limitLabel": "상한",
+  "workers.pool.limitNone": "없음",
+  "workers.pool.limitPopoverLabel": "동시 빌리기 상한",
+  "workers.pool.limitPopoverHint": "0이거나 비우면 안 빌립니다 — 상한은 동시에 도는 수이고 예약이 아닙니다.",
+  "workers.pool.saveFailed": "상한을 저장하지 못했습니다.",
+  "workers.pool.saveFailedTitle": "상한을 저장하지 못했습니다",
+  "workers.pool.countPrefix": "공통 워커 ",
+  "workers.pool.countSuffix": "명이 이 프로젝트에 들어와 있습니다",
+  "workers.pool.countZero": "들어와 있는 공통 워커가 없습니다",
+  "workers.pool.warnUnreadable": "pool-limit을 읽지 못했습니다 — 안 빌리는 것으로 읽습니다.",
+  "workers.pool.blockedPrefix": "티켓을 물고 있어 못 뺀 공통 워커: ",
+  // 프로젝트 워커 표 · 설정 워커 패널이 공유하는 배지(§4-16 결정 6 §68 ⑤ — 낱말은 §4-1의
+  // `공통` 배지와 같다). 이 화면의 새 배지가 처음 i18n을 타는 자리다.
+  "workers.pool.badge": "공통",
+  "workers.pool.badgeTitle": "이 워커는 공통 워커 풀의 슬롯입니다 — cron 줄은 풀에 있고 이 파일에는 없습니다",
   // §5-3 §편집 표면이 있는 화면 §결정 2 — 사람이 워커 `.sh`를 손으로 고쳐 경계를
   // 어긴 경우다(엔진은 검사하지 않는다). 온톨로지 화면의 경로 줄 + 워커 화면의 읽기 전용
   // 행 둘 다 붙는다(티켓 c5d51522 — 편집 표면은 온톨로지 화면으로, 이 키는 그 네임스페이스로).
@@ -1700,6 +1717,20 @@ export const en: Record<string, string> = {
   "workers.engineHint.allPrefix": "currently all ",
   "workers.engineHint.nowPrefix": "currently ",
   "workers.settingsDialog.trigger": "Worker settings",
+  "workers.pool.sectionTitle": "Borrow shared workers",
+  "workers.pool.limitLabel": "Limit",
+  "workers.pool.limitNone": "None",
+  "workers.pool.limitPopoverLabel": "Concurrent borrow limit",
+  "workers.pool.limitPopoverHint": "0 or empty means no borrowing — the limit is how many run at once, not a reservation.",
+  "workers.pool.saveFailed": "Couldn't save the limit.",
+  "workers.pool.saveFailedTitle": "Couldn't save the limit",
+  "workers.pool.countPrefix": "",
+  "workers.pool.countSuffix": " shared worker(s) are in this project",
+  "workers.pool.countZero": "No shared workers are in this project",
+  "workers.pool.warnUnreadable": "Couldn't read pool-limit — reading it as not borrowing.",
+  "workers.pool.blockedPrefix": "Still holding a ticket, couldn't remove: ",
+  "workers.pool.badge": "Shared",
+  "workers.pool.badgeTitle": "This worker is a slot in the shared worker pool — the cron line lives in the pool, not this file",
   "ontology.location.inWorktree": "Inside this project's git working tree",
   // Ticket cd662a73, moved to this namespace by c5d51522 — see the ko block for why the third
   // rejection reuses `ontology.location.inWorktree`.

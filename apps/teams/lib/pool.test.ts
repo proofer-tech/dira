@@ -22,9 +22,11 @@ process.env.TICKET_LOCAL = LOCAL;
 
 const {
   POOL_DISPATCHER_SH,
+  applyPoolLimit,
   borrowPoolWorker,
   createPoolWorker,
   deletePoolWorker,
+  listBorrowedPoolWorkers,
   listPoolWorkers,
   poolDir,
   poolWorkerStatus,
@@ -33,6 +35,14 @@ const {
   writePoolLimit,
 } = await import("./pool.ts");
 const { scaffold } = await import("./scaffold.ts");
+const { lockPath } = await import("./workers.ts");
+
+/** 락은 디렉터리 + 안의 pid 파일 — `workers.test.ts`의 `putLock`과 같은 관용구다. */
+function putLock(workersDir: string, name: string, pid: number) {
+  const dir = lockPath(workersDir, name);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(path.join(dir, "pid"), String(pid));
+}
 
 const tmps: string[] = [];
 const tmp = (prefix: string) => {
@@ -118,7 +128,8 @@ test("createPoolWorker·listPoolWorkers·deletePoolWorker — 파일 목록이 �
 
 test("readPoolLimit·writePoolLimit — §4-16 결정 3: 0/없음 = 안 빌린다, 못 읽는 값은 경고", async () => {
   const dir = tmp("pool-limit-");
-  assert.deepStrictEqual(await readPoolLimit(dir), { limit: 0, warn: false }); // 파일 없음
+  // 파일 없음 — §68 ④ §트리거 값: `null`이지 `0`이 아니다(화면이 `없음`으로 그린다)
+  assert.deepStrictEqual(await readPoolLimit(dir), { limit: null, warn: false });
 
   await writePoolLimit(dir, 3);
   assert.deepStrictEqual(await readPoolLimit(dir), { limit: 3, warn: false });
@@ -296,4 +307,56 @@ test("returnPoolWorker — shim이 아닌 프로젝트 워커는 이 경로로 �
   const { root } = await scaffold(base, { branch: "main" });
   await assert.rejects(returnPoolWorker(root, "w1"), /공통 워커 shim이 아닙니다/);
   assert.strictEqual(existsSync(path.join(root, "workers", "w1.sh")), true);
+});
+
+// ── applyPoolLimit — Done when 28c4d25f 3·4·5 (상한 저장 ↔ shim 전원 반영) ──────
+
+test("applyPoolLimit — 1 이상으로 저장하면 공통 워커 전원의 shim이 들어가고, 0으로 되돌리면 전부 빠진다", async () => {
+  process.env.TICKET_LOCAL = tmp("pool-apply-a-local-"); // poolDir()가 이 값을 본다 — 딴 테스트와 안 섞는다
+  const { base } = makeRepo();
+  const { root } = await scaffold(base, { branch: "main" });
+  await createPoolWorker("pool-1");
+  await createPoolWorker("pool-2");
+
+  const up = await applyPoolLimit(root, 3);
+  assert.deepStrictEqual(up, { blocked: [] });
+  assert.deepStrictEqual(await listBorrowedPoolWorkers(root), ["pool-1", "pool-2"]);
+  assert.deepStrictEqual(await readPoolLimit(root), { limit: 3, warn: false });
+
+  const down = await applyPoolLimit(root, 0);
+  assert.deepStrictEqual(down, { blocked: [] });
+  assert.deepStrictEqual(await listBorrowedPoolWorkers(root), []);
+  assert.deepStrictEqual(await readPoolLimit(root), { limit: 0, warn: false });
+});
+
+test("applyPoolLimit — 이름이 겹치면 통째로 던지고 pool-limit은 안 쓴다", async () => {
+  process.env.TICKET_LOCAL = tmp("pool-apply-b-local-");
+  const { base } = makeRepo();
+  const { root } = await scaffold(base, { branch: "main" });
+  const w1 = readFileSync(path.join(root, "workers", "w1.sh"), "utf8");
+  writeFileSync(path.join(root, "workers", "pool-1.sh"), w1, { mode: 0o755 });
+  await createPoolWorker("pool-1");
+
+  await assert.rejects(applyPoolLimit(root, 2), /이미 같은 이름의 프로젝트 워커/);
+  assert.deepStrictEqual(await readPoolLimit(root), { limit: null, warn: false }); // 안 쓰였다
+});
+
+test("applyPoolLimit — 티켓을 물고 있는 shim은 안 지워지고 blocked로 사유가 뜬다", async () => {
+  process.env.TICKET_LOCAL = tmp("pool-apply-c-local-");
+  const { base } = makeRepo();
+  const { root } = await scaffold(base, { branch: "main" });
+  await createPoolWorker("pool-1");
+  await createPoolWorker("pool-2");
+  await applyPoolLimit(root, 1);
+
+  // pool-1만 티켓을 물고 있는 것으로 만든다(락 + 살아 있는 pid)
+  putLock(path.join(root, "workers"), "pool-1", process.pid);
+
+  const { blocked } = await applyPoolLimit(root, 0);
+  assert.strictEqual(blocked.length, 1);
+  assert.strictEqual(blocked[0].name, "pool-1");
+  assert.match(blocked[0].reason, /티켓을 물고 있습니다/);
+  // 막힌 것은 남고, 안 막힌 것은 마저 지워졌다 — pool-limit은 그래도 0으로 쓰인다(사실이다)
+  assert.deepStrictEqual(await listBorrowedPoolWorkers(root), ["pool-1"]);
+  assert.deepStrictEqual(await readPoolLimit(root), { limit: 0, warn: false });
 });

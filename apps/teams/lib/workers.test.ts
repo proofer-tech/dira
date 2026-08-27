@@ -1994,6 +1994,18 @@ test("applyCommonSource — 삽입 위치는 닫는 `)` 다음 줄, 두 번째�
   await assert.rejects(applyCommonSource(root, "../evil"), /영문·숫자/);
 });
 
+test("listWorkers — commonWorker는 둘째 줄의 `# dira-pool:` 표식만 본다(§4-16 결정 2·6)", async () => {
+  const root = makeRoot({
+    "w1.sh": "#!/bin/bash\n. tick.sh\n", // 표식 없음 — 프로젝트 워커
+    "pool-1.sh": "#!/bin/bash\n# dira-pool: pool-1\n. tick.sh\n", // 표식이 둘째 줄
+    "odd.sh": "#!/bin/bash\necho x\n# dira-pool: odd\n. tick.sh\n", // 표식이 셋째 줄 — 안 친다
+  });
+  const rows = await listWorkers(root);
+  assert.strictEqual(rows.find((w) => w.name === "w1")!.commonWorker, false);
+  assert.strictEqual(rows.find((w) => w.name === "pool-1")!.commonWorker, true);
+  assert.strictEqual(rows.find((w) => w.name === "odd")!.commonWorker, false);
+});
+
 test("applySelfHeal — 픽스처 큐 왕복 1회: 경고 뜸 → 적용 → 경고 사라짐 → bash -n (§4-4 §소급)", async () => {
   const root = makeRoot({
     "w1.sh": CTX_SH,

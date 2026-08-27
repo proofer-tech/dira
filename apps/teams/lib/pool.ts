@@ -282,18 +282,20 @@ export async function returnPoolWorker(root: string, name: string): Promise<void
 
 // ── 빌리기 상한 (`<루트>/pool-limit`, §4-16 결정 3) ─────────────────────────
 
-/** `limit`은 실효 상한(못 읽으면 0 = 안 빌린다). `warn`은 **파일이 있는데** 못 읽은 값(문자·
- *  음수·빈 파일)이었다는 뜻이다 — 파일이 아예 없는 것과 다른 사실이라 화면이 경고 한 줄을
- *  세울 근거로 따로 든다(결정 3 "못 읽는 값은 안 빌리는 것으로 읽고 화면에 경고 한 줄을
- *  세운다"). 파서는 안 만든다 — `readPersonaLimit`(skills.ts)과 같은 정규식 하나(`^\d+$`)다. */
-export type PoolLimit = { limit: number; warn: boolean };
+/** `limit`은 실효 상한. **`null` = 파일이 아예 없다**(§68 ④ §트리거 값: 없으면 `없음`, `0`은
+ *  `0`으로) — 파일이 있는데 값이 `0`인 것과 다른 사실이라 화면이 다른 글자를 그린다. `warn`은
+ *  **파일이 있는데** 못 읽은 값(문자·음수·빈 파일)이었다는 뜻이다 — 그때 `limit`은 안 빌리는
+ *  것과 같은 효과인 `0`을 주고 화면이 경고 한 줄을 세운다(결정 3 "못 읽는 값은 안 빌리는 것으로
+ *  읽고 화면에 경고 한 줄을 세운다"). 파서는 안 만든다 — `readPersonaLimit`(skills.ts)과 같은
+ *  정규식 하나(`^\d+$`)다. */
+export type PoolLimit = { limit: number | null; warn: boolean };
 
 export async function readPoolLimit(root: string): Promise<PoolLimit> {
   const text = await readFile(path.join(root, "pool-limit"), "utf8").catch((e) => {
     if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
     return null;
   });
-  if (text === null) return { limit: 0, warn: false }; // 파일 없음 — 안 빌린다. 경고 아니다.
+  if (text === null) return { limit: null, warn: false }; // 파일 없음 — 없음이지 0이 아니다.
   const trimmed = text.trim();
   return /^\d+$/.test(trimmed) ? { limit: Number(trimmed), warn: false } : { limit: 0, warn: true };
 }
@@ -306,4 +308,47 @@ export async function writePoolLimit(root: string, limit: number): Promise<void>
   }
   await mkdir(root, { recursive: true });
   await writeFile(path.join(root, "pool-limit"), `${limit}\n`, "utf8");
+}
+
+/** 지금 이 프로젝트에 들어와 있는 공통 워커 이름들(§4-16 결정 6 §셋째 섹션 현황 문구) —
+ *  `<루트>/workers/*.sh` 중 shim 표식이 있는 것만. 다이얼로그를 열 때만 부른다(폴링 아님). */
+export async function listBorrowedPoolWorkers(root: string): Promise<string[]> {
+  const dir = path.join(root, "workers");
+  const names = (await readdir(dir).catch(() => [] as string[])).filter((n) => n.endsWith(".sh"));
+  const out: string[] = [];
+  for (const n of names) {
+    const text = await readFile(path.join(dir, n), "utf8").catch(() => "");
+    const marker = poolWorkerNameOf(text);
+    if (marker) out.push(marker);
+  }
+  return out.sort();
+}
+
+/** `pool-limit` 저장 + 그 프로젝트의 shim 전원 반영(§4-16 결정 3 "1 이상으로 저장하면 공통 워커
+ *  전원의 shim이 들어가고, 0으로 되돌리면 전부 빠진다"). **이름 충돌은 통째로 던진다** — 어느
+ *  shim이 이미 몇 개 들어간 뒤라도 `pool-limit` 자체는 안 쓴다(사람이 사유를 보고 다시 저장한다).
+ *  **삭제 쪽은 부분 실패를 견딘다** — 티켓을 물고 있는 shim만 걸러 `blocked`로 돌려주고 나머지는
+ *  마저 지운 뒤 `pool-limit`은 `0`으로 쓴다(그 값 자체는 사실이다 — 막힌 shim이 남아 있어도
+ *  "이 프로젝트가 더는 안 빌린다"는 참이다). */
+export async function applyPoolLimit(
+  root: string,
+  limit: number,
+): Promise<{ blocked: { name: string; reason: string }[] }> {
+  if (limit >= 1) {
+    const pool = await listPoolWorkers();
+    for (const w of pool) await borrowPoolWorker(root, w.name);
+    await writePoolLimit(root, limit);
+    return { blocked: [] };
+  }
+  const borrowed = await listBorrowedPoolWorkers(root);
+  const blocked: { name: string; reason: string }[] = [];
+  for (const name of borrowed) {
+    try {
+      await returnPoolWorker(root, name);
+    } catch (e) {
+      blocked.push({ name, reason: (e as Error).message });
+    }
+  }
+  await writePoolLimit(root, limit);
+  return { blocked };
 }
