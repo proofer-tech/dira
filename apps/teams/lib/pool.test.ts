@@ -29,9 +29,11 @@ const {
   listBorrowedPoolWorkers,
   listPoolWorkers,
   poolDir,
-  poolWorkerStatus,
+  poolWorkerFullStatus,
   readPoolLimit,
   returnPoolWorker,
+  startPoolWorker,
+  stopPoolWorker,
   writePoolLimit,
 } = await import("./pool.ts");
 const { scaffold } = await import("./scaffold.ts");
@@ -94,6 +96,28 @@ function runDispatcher(dispatcherPath: string, local: string): string {
   });
 }
 
+/** 진짜 crontab을 안 건드리는 PATH 스텁(`workers.test.ts`의 `withLiveCrontab`과 같은 관용구) —
+ *  `-l`과 `crontab -`이 같은 파일을 본다. `poolWorkerFullStatus`·`startPoolWorker`가 이 파일을
+ *  읽고 쓴다. */
+function withLiveCrontab(text: string) {
+  const bin = tmp("pool-cronbin-");
+  const tab = path.join(bin, "tab.txt");
+  writeFileSync(tab, text);
+  writeFileSync(
+    path.join(bin, "crontab"),
+    `#!/bin/sh\nif [ "$1" = "-l" ]; then cat ${JSON.stringify(tab)}; else cat > ${JSON.stringify(tab + ".new")} && mv ${JSON.stringify(tab + ".new")} ${JSON.stringify(tab)}; fi\n`,
+    { mode: 0o755 },
+  );
+  const prev = process.env.PATH;
+  process.env.PATH = `${bin}:${prev}`;
+  return {
+    tab: () => readFileSync(tab, "utf8"),
+    restore: () => {
+      process.env.PATH = prev;
+    },
+  };
+}
+
 test("POOL_DISPATCHER_SH — 진짜 bash·python3로 문법 확인 (§4-16 결정 2)", () => {
   const dir = tmp("pool-syn-");
   const file = path.join(dir, "x.sh");
@@ -120,8 +144,27 @@ test("createPoolWorker·listPoolWorkers·deletePoolWorker — 파일 목록이 �
   // O_EXCL — 있는 공통 워커를 덮지 않는다
   await assert.rejects(createPoolWorker("pool-1"), /EEXIST/);
 
-  assert.strictEqual(await poolWorkerStatus("pool-1"), "idle");
-  await deletePoolWorker("pool-1");
+  // 파일만 있고 crontab에는 아직 없다 — §비주얼 §68 ① 4상태 그대로(shim이 아니라 풀 파일이라
+  // 판정 넷이 전부 참이다). 등록은 `createPoolWorkerAction`이 이 함수 다음에 한다(§4-16 결정 5).
+  const c = withLiveCrontab("");
+  try {
+    assert.strictEqual(await poolWorkerFullStatus("pool-1"), "stopped");
+    assert.strictEqual(await startPoolWorker("pool-1"), true);
+    assert.match(c.tab(), /pool-1\.sh/);
+    assert.strictEqual(await poolWorkerFullStatus("pool-1"), "idle"); // 만든 직후 등록하면 idle이다
+    assert.strictEqual(await startPoolWorker("pool-1"), false); // 이미 등록 = no-op
+
+    assert.strictEqual(await stopPoolWorker("pool-1"), true);
+    assert.strictEqual(await poolWorkerFullStatus("pool-1"), "stopped");
+    assert.strictEqual(await stopPoolWorker("pool-1"), false); // 이미 미등록 = no-op
+
+    // 삭제는 crontab 줄부터 뺀다 — 등록된 채로 지워도 crontab에 파일 없는 줄이 안 남는다.
+    await startPoolWorker("pool-1");
+    await deletePoolWorker("pool-1");
+    assert.doesNotMatch(c.tab(), /pool-1\.sh/);
+  } finally {
+    c.restore();
+  }
   assert.deepStrictEqual(await listPoolWorkers(), []);
   await assert.rejects(deletePoolWorker("pool-1"), /없는 공통 워커/);
 });

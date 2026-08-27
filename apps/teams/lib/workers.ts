@@ -109,6 +109,11 @@ export type Worker = {
   /** `no-exec` 결함의 CopyCommand(`chmod +x <절대경로>`, §0-21 결정 2) — `no-exec`가 없으면
    *  없다. 복구 버튼은 이 판정의 몫이 아니다(§0-21 결정 3, 로드맵 P290-4가 붙인다) */
   execFix?: string;
+  /** 공통 워커 풀의 shim인가(§4-16 결정 2 — 둘째 줄 `# dira-pool: <이름>` 표식, `poolShimNameOf`로
+   *  판정한다). shim도 이 파일 목록에 그대로 섞여 있어서(`createWorker`가 만든 같은 모양의 파일이라)
+   *  `listWorkers`가 굳이 걸러내지 않고 이 필드 하나로 알려 준다 — 설정 `워커` 패널의 `공통` 배지·
+   *  종류 필터가 이 값을 읽는다(§비주얼 §68) */
+  pool: boolean;
 };
 
 /** 엔진 이름 = **첫 토큰의 basename**. `tick.sh:52`의 `basename "${TICKET_ENGINE[0]}"`와 같은
@@ -138,8 +143,10 @@ export function lockPath(workersDir: string, name: string): string {
   return path.join(localDir(), "run", `${name}-${h}.lock`);
 }
 
-/** 락은 디렉터리다(`mkdir`가 원자적 획득). 안의 `pid` 파일이 소유 프로세스다. */
-async function lockOf(dir: string): Promise<{ held: boolean; pid: number | null }> {
+/** 락은 디렉터리다(`mkdir`가 원자적 획득). 안의 `pid` 파일이 소유 프로세스다.
+ *  **`export`다** — `pool.ts`의 `poolWorkerFullStatus`가 같은 판정을 슬롯 잠금(`pool-<이름>.lock`)에
+ *  다시 쓴다(§4-16 티켓 열째 노드). 락 디렉터리 이름 규칙만 다르고 판정은 한 벌이어야 한다. */
+export async function lockOf(dir: string): Promise<{ held: boolean; pid: number | null }> {
   const held = await stat(dir).then(
     (s) => s.isDirectory(),
     () => false,
@@ -150,8 +157,9 @@ async function lockOf(dir: string): Promise<{ held: boolean; pid: number | null 
   return { held: true, pid: Number.isInteger(pid) && pid > 0 ? pid : null };
 }
 
-/** `kill -0`. EPERM은 남의 프로세스지만 **살아 있다**는 뜻이다. */
-function alive(pid: number): boolean {
+/** `kill -0`. EPERM은 남의 프로세스지만 **살아 있다**는 뜻이다. `export`는 위 `lockOf`와 같은 이유
+ *  (`pool.ts`의 `poolWorkerFullStatus`가 재사용한다). */
+export function alive(pid: number): boolean {
   try {
     process.kill(pid, 0);
     return true;
@@ -164,8 +172,9 @@ function alive(pid: number): boolean {
  *  macOS `crontab -l`은 사람이 넣은 줄을 NFC로 그대로 주는데 `realpath()`는 같은 경로를
  *  NFD(자모 분해)로 돌려주는 파일시스템이 있다(구글 드라이브 마운트). 정규화 없이 비교하면
  *  cron에 등록돼 도는 워커가 `stopped` + `미등록`으로 뜨고, 화면이 권하는 등록 명령을 실행하면
- *  **중복 cron 줄**이 생긴다. */
-const nfc = (s: string) => s.normalize("NFC");
+ *  **중복 cron 줄**이 생긴다. `export`는 `pool.ts`가 풀 파일의 crontab 부분일치를 같은 함수로 재는
+ *  이유다(판정이 두 벌로 갈리면 화면이 거짓말을 한다). */
+export const nfc = (s: string) => s.normalize("NFC");
 
 /** **요청당 1회**. 셸이 전환기 카운트를 위해 등록된 프로젝트 전부에 `listWorkers`를 돌리므로
  *  이게 없으면 한 화면에 `crontab -l` 프로세스가 프로젝트 수만큼 뜬다(§성능 예산: 요청당
@@ -176,8 +185,11 @@ const nfc = (s: string) => s.normalize("NFC");
  *  워커 화면이 계속 거짓말을 한다 — 그게 원래 캐시를 안 넣었던 이유고, 그 조건이 여기서 지켜진다.
  *
  *  쓰기 경로는 `crontabForWrite`가 따로 읽는다(캐시 대상이 아니다) — 렌더 때 읽은 값 위에 쓰면
- *  그 사이 남의 변경을 되돌린다. */
-const crontabText = cache(async (): Promise<string> => {
+ *  그 사이 남의 변경을 되돌린다.
+ *
+ *  `export`는 `pool.ts`의 `poolWorkerFullStatus`가 같은 요청 안에서 재사용하는 이유다 — 풀 줄도
+ *  crontab 진입점이라(§4-16 결정 2) 같은 캐시를 한 번 더 쓰지 두 번째 `crontab -l`을 안 띄운다. */
+export const crontabText = cache(async (): Promise<string> => {
   try {
     const { stdout } = await promisify(execFile)("crontab", ["-l"]);
     return stdout;
@@ -1352,6 +1364,16 @@ async function cwdDefects(
   );
 }
 
+/** 공통 워커 shim 여부(§4-16 결정 2). 표식은 **파일의 둘째 줄**이어야 한다 — 아무 데나 있는 주석과
+ *  가르기 위해서다. `pool.ts`(`borrowPoolWorker`)가 쓰는 것과 같은 정규식을 여기로 옮겼다 —
+ *  `listWorkers`가 `Worker.pool`을 채우려면 이 판정이 있어야 하는데, 두 파일에 각자 있으면 갈릴
+ *  위험이 있다(제약: shim은 프로젝트 워커와 파일 목록을 공유하므로 `listWorkers`가 먼저 안다). */
+export function poolShimNameOf(text: string): string | null {
+  const line = text.split("\n")[1] ?? "";
+  const m = /^# dira-pool: (\S+)$/.exec(line);
+  return m ? m[1] : null;
+}
+
 // ── 목록 ────────────────────────────────────────────────────────────────────
 
 /** 프로젝트의 워커 전부. 이름 순.
@@ -1432,6 +1454,8 @@ export async function listWorkers(root: string, tickets: Ticket[] = []): Promise
       dispatchGateStale: gateStale,
       cwd: parsed.cwd,
       defects: [], // 공유 판정이 목록 전체를 봐야 하므로 행을 다 만든 뒤에 채운다
+      // 표식의 이름이 이 파일의 stem과 같아야 한다 — 안 맞으면 손으로 붙인 낯선 주석이지 shim이 아니다.
+      pool: poolShimNameOf(text) === name,
     });
   }
 

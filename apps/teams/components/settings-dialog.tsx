@@ -18,6 +18,8 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { flushSync } from "react-dom";
 import { useRouter } from "next/navigation";
 import {
+  Check,
+  ChevronsUpDown,
   CirclePlay,
   Circle as CircleIcon,
   Clock,
@@ -30,7 +32,9 @@ import {
 } from "lucide-react";
 import {
   captureEngineProfileAction,
+  createPoolWorkerAction,
   deleteEngineProfileAction,
+  deletePoolWorkerAction,
   deleteTokenAction,
   readAnalyticsAction,
   readEngineProfileRowsAction,
@@ -38,6 +42,8 @@ import {
   readMultitokenAction,
   readTokenRowsAction,
   readWebhookAction,
+  readWorkersPanelAction,
+  registerPoolWorkerAction,
   resetKeymapAction,
   saveTokenAction,
   sendSetupCodeAction,
@@ -54,6 +60,7 @@ import {
   setWebhookAction,
   startSetupAction,
   pollSetupAction,
+  stopPoolWorkerAction,
   stopSetupAction,
   setActiveTokenAction,
   testWebhookAction,
@@ -69,18 +76,32 @@ import type {
 } from "@/lib/auth";
 import { useHotkey, useKeymap } from "@/components/keymap-provider";
 import { useLocale, useT } from "@/components/language-provider";
+import Link from "@/components/link";
+import { StatusBadge, statusLabel } from "@/components/status-badge";
 import type { Locale } from "@/lib/i18n";
 import { DEFAULT_KEYMAP, MODIFIER_KEYS, actionName, formatCombo, type ActionId } from "@/lib/keymap";
 import { wrap } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import {
+  EMPTY_WORKERS_FILTERS,
+  POOL_PROJECT_VALUE,
+  filteredGroups,
+  filteredPool,
+  type WorkersFilters,
+  type WorkersKind,
+  type WorkersPanelView,
+} from "@/lib/workers-panel";
+import type { WorkerStatus } from "@/lib/workers";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -647,6 +668,336 @@ function MultiplaySection({
   );
 }
 
+/** 필터 축 하나(§비주얼 §68 ③) — 보드 `BoardFilter`와 같은 마크업(트리거·팝오버·`Command` 다중
+ *  선택)이지만 상태는 URL이 아니라 이 다이얼로그의 React 상태다(§45가 이미 고정한 판정 — 담으면
+ *  서버 재렌더가 패널 캡처 모드를 날린다). 부품을 안 빌려 오고 마크업만 같다. */
+function WorkersFilterAxis({
+  label,
+  options,
+  selected,
+  onChange,
+}: {
+  label: string;
+  options: { value: string; label: string }[];
+  selected: string[];
+  onChange: (values: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const toggle = (value: string) =>
+    onChange(selected.includes(value) ? selected.filter((v) => v !== value) : [...selected, value]);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger
+        render={
+          <Button variant="outline" size="sm" role="combobox" aria-expanded={open} className="h-8 max-w-52 gap-2" />
+        }
+      >
+        <span className="truncate">
+          {label}
+          {selected.length > 0 &&
+            `: ${selected.map((v) => options.find((o) => o.value === v)?.label ?? v).join(", ")}`}
+        </span>
+        <ChevronsUpDown aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-64 p-0">
+        <Command>
+          <CommandInput placeholder={label} />
+          <CommandList className="max-h-72">
+            <CommandEmpty>{label}</CommandEmpty>
+            {options.map((o) => (
+              <CommandItem key={o.value} value={`${o.value} ${o.label}`} onSelect={() => toggle(o.value)}>
+                <span className="w-4 shrink-0">{selected.includes(o.value) && <Check aria-hidden className="size-4" />}</span>
+                <span className="truncate">{o.label}</span>
+              </CommandItem>
+            ))}
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+type PoolOpKind = "stop" | "register" | "delete";
+
+/** 풀 줄 하나(§비주얼 §68 ②) — 조작이 붙는 유일한 줄. 이 줄 자신의 조작 중에만 버튼을 잠근다
+ *  (다른 줄의 조작이 이 줄을 안 막는다 — 워커 표의 행별 `useTransition`과 같은 결). 성공하면
+ *  부르는 쪽(`WorkersSection`)의 `onDone`이 패널을 다시 읽는다 — 실패하면 이 줄에서만 안다. */
+function PoolRow({
+  name,
+  status,
+  borrowedBy,
+  t,
+  onOp,
+  onDone,
+}: {
+  name: string;
+  status: WorkerStatus;
+  borrowedBy: number;
+  t: (key: string) => string;
+  onOp: (kind: PoolOpKind, name: string) => Promise<{ error?: string }>;
+  onDone: () => void;
+}) {
+  const locale = useLocale();
+  const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const run = (kind: PoolOpKind) =>
+    start(async () => {
+      const r = await onOp(kind, name);
+      if (r.error) setError(r.error);
+      else {
+        setError(null);
+        onDone();
+      }
+    });
+
+  return (
+    <div className="space-y-1">
+      <div className="flex h-8 items-center gap-2 rounded-md px-2">
+        <span className="min-w-0 flex-1 truncate font-mono text-xs">{name}</span>
+        <StatusBadge status={status} locale={locale} />
+        <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+          {borrowedBy}
+          {t("settings.workers.borrowedBySuffix")}
+        </span>
+        <div className="flex shrink-0 items-center gap-1">
+          {status === "idle" || status === "running" || status === "stale" ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="min-w-14"
+              disabled={pending}
+              onClick={() => run("stop")}
+            >
+              {t("settings.workers.stop")}
+            </Button>
+          ) : (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="min-w-14"
+              disabled={pending}
+              onClick={() => run("register")}
+            >
+              {t("settings.workers.register")}
+            </Button>
+          )}
+          <Button variant="ghost" size="sm" disabled={pending} onClick={() => run("delete")}>
+            {t("settings.workers.delete")}
+          </Button>
+        </div>
+      </div>
+      {error && (
+        <Alert variant="destructive">
+          <TriangleAlert aria-hidden />
+          <AlertTitle>{name}</AlertTitle>
+          <AlertDescription>
+            <span className="font-mono text-xs break-all">{error}</span>
+          </AlertDescription>
+        </Alert>
+      )}
+    </div>
+  );
+}
+
+/** 설정 트리 열째 노드 `워커` (DESIGN.md §4-16 결정 5 · §비주얼 §68). 읽는 시점은 이 컴포넌트가
+ *  마운트될 때뿐이다 — 다른 패널(`WebhookSection` 등)과 같은 결로 `useEffect(() => {...}, [])`
+ *  하나가 전부이고, 상시 폴링에 안 붙는다(§4-16 결정 5 §읽는 시점). `closeDialog`는 전체 목록 줄이
+ *  프로젝트 워커 화면으로 갈 때 이 다이얼로그를 닫는다. */
+function WorkersSection({ className, closeDialog }: { className?: string; closeDialog: () => void }) {
+  const t = useT();
+  const locale = useLocale();
+  const [view, setView] = useState<WorkersPanelView | null>(null);
+  const [filters, setFilters] = useState<WorkersFilters>(EMPTY_WORKERS_FILTERS);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createName, setCreateName] = useState("");
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [createPending, startCreate] = useTransition();
+
+  const load = () => void readWorkersPanelAction().then(setView);
+  useEffect(load, []);
+
+  const poolOp = (kind: PoolOpKind, name: string) =>
+    kind === "stop"
+      ? stopPoolWorkerAction(name)
+      : kind === "register"
+        ? registerPoolWorkerAction(name)
+        : deletePoolWorkerAction(name);
+
+  const hasFilters = filters.project.length > 0 || filters.kind.length > 0 || filters.status.length > 0;
+  const pool = view ? filteredPool(view, filters) : [];
+  const groups = view ? filteredGroups(view, filters) : [];
+
+  const projectOptions = [
+    { value: POOL_PROJECT_VALUE, label: t("settings.workers.commonBadge") },
+    ...(view?.projects.map((p) => ({ value: p.id, label: p.name })) ?? []),
+  ];
+  const kindOptions: { value: WorkersKind; label: string }[] = [
+    { value: "pool", label: t("settings.workers.commonBadge") },
+    { value: "project", label: t("settings.workers.filterProject") },
+  ];
+  const statusOptions: { value: WorkerStatus; label: string }[] = (
+    ["running", "idle", "stopped", "stale"] as const
+  ).map((s) => ({ value: s, label: statusLabel(s, locale) }));
+
+  return (
+    <section className={cn("space-y-2 border-t pt-4 md:border-t-0 md:pt-0", className)}>
+      <h3 data-setting="workers" className="text-sm font-medium">
+        {t("settings.tree.workers")}
+      </h3>
+
+      <div data-setting="workers.filter" className="flex flex-wrap items-center gap-2">
+        <WorkersFilterAxis
+          label={t("settings.workers.filterProject")}
+          options={projectOptions}
+          selected={filters.project}
+          onChange={(project) => setFilters((f) => ({ ...f, project }))}
+        />
+        <WorkersFilterAxis
+          label={t("settings.workers.filterKind")}
+          options={kindOptions}
+          selected={filters.kind}
+          onChange={(kind) => setFilters((f) => ({ ...f, kind: kind as WorkersKind[] }))}
+        />
+        <WorkersFilterAxis
+          label={t("settings.workers.filterStatus")}
+          options={statusOptions}
+          selected={filters.status}
+          onChange={(status) => setFilters((f) => ({ ...f, status: status as WorkerStatus[] }))}
+        />
+        {hasFilters && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="ml-auto"
+            onClick={() => setFilters(EMPTY_WORKERS_FILTERS)}
+          >
+            {t("settings.workers.filterReset")}
+          </Button>
+        )}
+      </div>
+
+      <div className="space-y-4">
+        <div className="space-y-1">
+          <div data-setting="workers.pool" className="flex items-center justify-between gap-2">
+            <h4 className="text-sm font-medium">{t("settings.workers.poolHeading")}</h4>
+            <Dialog
+              open={createOpen}
+              onOpenChange={(o) => {
+                setCreateOpen(o);
+                if (!o) {
+                  setCreateName("");
+                  setCreateError(null);
+                }
+              }}
+            >
+              <DialogTrigger render={<Button size="sm" />}>{t("settings.workers.create")}</DialogTrigger>
+              <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle>{t("settings.workers.create")}</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-2">
+                  <Label htmlFor="pool-worker-name">{t("settings.workers.create")}</Label>
+                  <Input
+                    id="pool-worker-name"
+                    className="font-mono"
+                    value={createName}
+                    onChange={(e) => setCreateName(e.target.value)}
+                  />
+                  {createError && (
+                    <Alert variant="destructive">
+                      <TriangleAlert aria-hidden />
+                      <AlertDescription>
+                        <span className="font-mono text-xs break-all">{createError}</span>
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </div>
+                <DialogFooter>
+                  <DialogClose render={<Button variant="outline" />}>{t("common.cancel")}</DialogClose>
+                  <Button
+                    disabled={createPending || !createName.trim()}
+                    onClick={() =>
+                      startCreate(async () => {
+                        const r = await createPoolWorkerAction(createName);
+                        if (r.error) return setCreateError(r.error);
+                        setCreateOpen(false);
+                        load();
+                      })
+                    }
+                  >
+                    {createPending ? t("common.saving") : t("common.save")}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
+          {!view || view.pool.length === 0 ? (
+            <p className="text-sm text-muted-foreground">{t("settings.workers.poolEmpty")}</p>
+          ) : pool.length === 0 ? (
+            <p className="text-sm text-muted-foreground">{t("settings.workers.filteredEmpty")}</p>
+          ) : (
+            pool.map((p) => (
+              <PoolRow
+                key={p.name}
+                name={p.name}
+                status={p.status}
+                borrowedBy={p.borrowedBy}
+                t={t}
+                onOp={poolOp}
+                onDone={load}
+              />
+            ))
+          )}
+        </div>
+
+        <div className="space-y-1">
+          <div data-setting="workers.all">
+            <h4 className="text-sm font-medium">{t("settings.workers.allHeading")}</h4>
+          </div>
+          {!view || view.projects.length === 0 ? (
+            <p className="text-sm text-muted-foreground">{t("settings.workers.projectsEmpty")}</p>
+          ) : groups.length === 0 ? (
+            <p className="text-sm text-muted-foreground">{t("settings.workers.filteredEmpty")}</p>
+          ) : (
+            groups.map((g) => (
+              <div key={g.id}>
+                <div className="flex h-7 items-center gap-2 px-2 text-xs font-medium text-muted-foreground">
+                  <span>{g.name}</span>
+                  {g.connected ? (
+                    <span className="ml-auto tabular-nums">{g.workers.length}</span>
+                  ) : (
+                    <StatusBadge status="disconnected" locale={locale} className="ml-auto shrink-0" />
+                  )}
+                </div>
+                {!g.connected && g.error && (
+                  <p className="pl-4 text-xs text-muted-foreground break-all">{g.error}</p>
+                )}
+                {g.workers.map((w) => (
+                  <Link
+                    key={w.name}
+                    href={`/p/${g.id}/workers`}
+                    onClick={closeDialog}
+                    className="flex h-8 items-center gap-2 rounded-md px-2 pl-4 hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <span className="min-w-0 flex-1 truncate font-mono text-xs">{w.name}</span>
+                    {w.pool && (
+                      <Badge variant="outline" className="shrink-0 font-sans" title={t("settings.workers.commonBadgeTitle")}>
+                        {t("settings.workers.commonBadge")}
+                      </Badge>
+                    )}
+                    <StatusBadge status={w.status} locale={locale} />
+                  </Link>
+                ))}
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 /** 행 하나의 상태 배지 — §0-13 §화면의 네 상태. 색·아이콘 레시피는 `status-badge.tsx`와 같은
  *  토큰(`text-status-active`·`text-status-stale`)을 그대로 쓴다(`projects-ui.tsx`도 같은 문자열을
  *  그대로 반복한다 — Tailwind가 클래스명을 정적으로 봐야 해서 이 프로젝트는 상수로 묶지 않는다). */
@@ -1050,6 +1401,7 @@ export function SettingsDialog({
   const keymapCrumb = t("settings.tree.keymap");
   const statsCrumb = t("settings.tree.stats");
   const webhookCrumb = t("settings.tree.webhook");
+  const workersCrumb = t("settings.tree.workers");
   const multiplayCrumb = t("settings.tree.multiplay");
   const searchIndex: SearchEntry[] = [
     { node: "claude", crumbs: authCrumb, name: claudeCrumb, anchor: "claude" },
@@ -1131,6 +1483,26 @@ export function SettingsDialog({
       crumbs: webhookCrumb,
       name: t("settings.webhook.test"),
       anchor: "webhook.test",
+    },
+    // §4-16 결정 5 §검색 인덱스 — 노드 자신 + 항목 셋(공통 워커 풀 · 전체 워커 · 필터).
+    { node: "workers", crumbs: "", name: workersCrumb, anchor: "workers" },
+    {
+      node: "workers",
+      crumbs: workersCrumb,
+      name: t("settings.workers.poolHeading"),
+      anchor: "workers.pool",
+    },
+    {
+      node: "workers",
+      crumbs: workersCrumb,
+      name: t("settings.workers.allHeading"),
+      anchor: "workers.all",
+    },
+    {
+      node: "workers",
+      crumbs: workersCrumb,
+      name: t("settings.workers.filterCrumb"),
+      anchor: "workers.filter",
     },
     // §0-18 §기본값이 된다 — 패널이 잠금 밖으로 나온 뒤로 이 세 줄은 조건 없이 뜬다(§검증 5).
     // 노드 자신 + 토글 둘(§0-18 §패널).
@@ -1418,6 +1790,17 @@ export function SettingsDialog({
                       <span>{webhookCrumb}</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
+                  {/* 열째 노드(§4-16 결정 5) — `설정 분류` 그룹의 마지막, `웹훅` 다음. sans, 표식 0개
+                      (§비주얼 §68 ① — 분류 이름이지 엔진 id가 아니다). */}
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      isActive={activeNode === "workers"}
+                      aria-current={activeNode === "workers" ? "true" : undefined}
+                      onClick={() => selectNode("workers")}
+                    >
+                      <span>{workersCrumb}</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
                 </SidebarMenu>
               </SidebarGroup>
             </SidebarContent>
@@ -1656,6 +2039,10 @@ export function SettingsDialog({
             <AnalyticsSection className={cn(activeNode !== "stats" && "md:hidden")} />
             <LanguageSection className={cn(activeNode !== "language" && "md:hidden")} />
             <WebhookSection className={cn(activeNode !== "webhook" && "md:hidden")} />
+            <WorkersSection
+              className={cn(activeNode !== "workers" && "md:hidden")}
+              closeDialog={() => setOpen(false)}
+            />
             {/* §0-18 §자리 — 가리는 클래스가 다섯과 다르다: `hidden`이라 폭과 무관하게 검색으로
                 고른 뒤에만 뜬다(§검증 11 — 767 이하에서도 세로로 쌓이는 섹션에 안 낀다).
                 §0-18 §기본값이 된다 — 패널이 잠금 밖으로 나와 조건 없이 렌더한다. */}

@@ -54,6 +54,7 @@ import {
   resolveConfig,
   readKeymap,
   readProjects,
+  readSummary,
   writeKeymap,
   readLanguage,
   setLanguage,
@@ -92,6 +93,16 @@ import {
   testSendWebhook,
   type WebhookTestResult,
 } from "@/lib/webhook";
+import {
+  createPoolWorker,
+  deletePoolWorker,
+  listPoolWorkers,
+  poolWorkerFullStatus,
+  readPoolLimit,
+  startPoolWorker,
+  stopPoolWorker,
+} from "@/lib/pool";
+import { buildWorkersPanel, type WorkersPanelView } from "@/lib/workers-panel";
 
 /** 해석 결과 표 한 행. 서버가 배지까지 정해서 넘긴다 — 클라이언트는 그리기만 한다. */
 export type ConfigRow = {
@@ -679,6 +690,80 @@ export async function readMultitokenAction(): Promise<boolean> {
 export async function setMultitokenAction(enabled: boolean): Promise<boolean> {
   await setMultitoken(enabled);
   return isMultiTokenAllowed();
+}
+
+/** 설정 트리 열째 노드 `워커` (DESIGN.md §4-16 결정 5 · §비주얼 §68) — 다이얼로그가 열릴 때
+ *  한 번 읽는다(상시 폴링에 안 붙는다 — §4-16 결정 5 §읽는 시점). 등록 프로젝트 전부의
+ *  `workers/*.sh`를 훑으므로(`readSummary`가 이미 하는 `listWorkers`) 새 순회를 안 만들고,
+ *  풀 쪽만 `listPoolWorkers`·`poolWorkerFullStatus`·`readPoolLimit`으로 더한다. 조립은
+ *  `buildWorkersPanel`(fs 의존 0) 하나가 진다 — 여기는 I/O만 진다. */
+export async function readWorkersPanelAction(): Promise<WorkersPanelView> {
+  const projects = await readProjects();
+  const [poolNames, summaries, limits] = await Promise.all([
+    listPoolWorkers(),
+    Promise.all(projects.map((p) => readSummary(p))),
+    Promise.all(projects.map((p) => readPoolLimit(p.root).then((l) => l.limit))),
+  ]);
+  const pool = await Promise.all(
+    poolNames.map(async (w) => ({ name: w.name, status: await poolWorkerFullStatus(w.name) })),
+  );
+  return buildWorkersPanel(
+    pool,
+    projects.map((p, i) => ({
+      id: p.id,
+      name: p.name,
+      connected: summaries[i].connected,
+      error: summaries[i].error,
+      workers: summaries[i].workers,
+    })),
+    limits,
+  );
+}
+
+/** `공통 워커 풀` 덩이의 `워커 생성`. **만든 직후 crontab까지 등록한다** — 풀 파일은 cron
+ *  진입점이라(§4-16 결정 2) 등록 없이는 `stopped`로 뜬다, `## Done when`이 요구하는 "만든 직후
+ *  idle"은 파일 생성 + 등록 두 단계를 합쳐야 성립한다(`createWorkerAction`이 `createWorker` 뒤에
+ *  바로 `registerCron`을 부르는 것과 같은 자리). */
+export async function createPoolWorkerAction(name: string): Promise<{ error?: string }> {
+  try {
+    const trimmed = name.trim();
+    await createPoolWorker(trimmed);
+    await startPoolWorker(trimmed);
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+  return {};
+}
+
+/** 풀 줄의 `중단` — crontab 줄만 뺀다. 도는 세션은 끝까지 간다(§4 중단과 같은 판정). */
+export async function stopPoolWorkerAction(name: string): Promise<{ error?: string }> {
+  try {
+    await stopPoolWorker(name);
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+  return {};
+}
+
+/** 풀 줄의 `재등록` — `중단`의 역방향. crontab 줄만 다시 넣는다. */
+export async function registerPoolWorkerAction(name: string): Promise<{ error?: string }> {
+  try {
+    await startPoolWorker(name);
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+  return {};
+}
+
+/** 풀 줄의 `삭제` — 지금 어느 프로젝트를 물고 있으면 거절한다(`deletePoolWorker`가 던지는 사유
+ *  그대로). */
+export async function deletePoolWorkerAction(name: string): Promise<{ error?: string }> {
+  try {
+    await deletePoolWorker(name);
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+  return {};
 }
 
 /** 사용 통계 섹션 층 ① (DESIGN.md §0-11 §끄는 자리) — 다이얼로그가 열릴 때 한 줄이 읽는다.

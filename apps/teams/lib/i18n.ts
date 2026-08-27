@@ -49,6 +49,8 @@ export const ko: Record<string, string> = {
   "settings.tree.categoryGroup": "설정 분류",
   // 여섯째 노드 — §0-10이 정한 글자, `언어` 다음(§비주얼 §45 §개정 `475d3385`)
   "settings.tree.webhook": "웹훅",
+  // 열째 노드(§4-16 결정 5) — `설정 분류` 그룹의 마지막, `웹훅` 다음
+  "settings.tree.workers": "워커",
 
   "settings.claude.descriptionMulti":
     "워커가 Claude에 붙을 때 쓰는 장기 토큰 목록입니다. 이 컴퓨터에 하나뿐이고, 계정 여러 개를 두면 리밋을 만난 쪽 대신 다음 계정으로 돌아갑니다.",
@@ -183,6 +185,28 @@ export const ko: Record<string, string> = {
   "settings.webhook.testFailPrefix": "보내지 못했습니다",
   "settings.webhook.off": "보내지 않습니다",
   "settings.webhook.rejectHttps": "https 주소만 받습니다",
+
+  // 설정 `워커` 패널(§4-16 결정 5 · §비주얼 §68). 재사용 낱말(생성·중단·재등록·삭제·공통 배지)도
+  // 이 패널은 t()로만 문구를 그리므로 키가 새로 난다 — 값은 워커 표(`workers-ui.tsx`)와 같다.
+  "settings.workers.poolHeading": "공통 워커 풀",
+  "settings.workers.allHeading": "전체 워커",
+  "settings.workers.filterCrumb": "필터",
+  "settings.workers.create": "워커 생성",
+  "settings.workers.stop": "중단",
+  "settings.workers.register": "재등록",
+  "settings.workers.delete": "삭제",
+  "settings.workers.commonBadge": "공통",
+  "settings.workers.commonBadgeTitle":
+    "이 워커는 공통 워커 풀의 슬롯입니다 — cron 줄은 풀에 있고 이 파일에는 없습니다",
+  // "<n>곳" — 숫자 뒤에 바로 붙는다(`settings.search.emptySuffix`와 같은 접미 관용구, 공백 없음)
+  "settings.workers.borrowedBySuffix": "곳",
+  "settings.workers.filterProject": "프로젝트",
+  "settings.workers.filterKind": "종류",
+  "settings.workers.filterStatus": "상태",
+  "settings.workers.filterReset": "필터 초기화",
+  "settings.workers.filteredEmpty": "조건에 맞는 워커 0건",
+  "settings.workers.poolEmpty": "공통 워커가 없습니다 — 만들면 빌리기를 켠 프로젝트마다 들어갑니다.",
+  "settings.workers.projectsEmpty": "등록된 프로젝트가 없습니다.",
 
   "common.save": "저장",
   "common.saving": "저장 중…",
@@ -998,6 +1022,7 @@ export const en: Record<string, string> = {
   "settings.tree.categoryGroup": "Setting categories",
   "settings.tree.multiplay": "Multiplaying",
   "settings.tree.webhook": "Webhook",
+  "settings.tree.workers": "Workers",
 
   "settings.claude.descriptionMulti":
     "Long-lived tokens that workers use to reach Claude. One list per machine. Keep several accounts and a worker that hits a limit rolls over to the next one.",
@@ -1125,6 +1150,26 @@ export const en: Record<string, string> = {
   "settings.webhook.testFailPrefix": "Couldn't send",
   "settings.webhook.off": "Not sending",
   "settings.webhook.rejectHttps": "Only https addresses are accepted",
+
+  "settings.workers.poolHeading": "Common worker pool",
+  "settings.workers.allHeading": "All workers",
+  "settings.workers.filterCrumb": "Filter",
+  "settings.workers.create": "Create worker",
+  "settings.workers.stop": "Stop",
+  "settings.workers.register": "Register",
+  "settings.workers.delete": "Delete",
+  "settings.workers.commonBadge": "Common",
+  "settings.workers.commonBadgeTitle":
+    "This worker is a slot in the common worker pool — the cron line lives in the pool, not this file",
+  // "<n> projects" — a space precedes it (English reads naturally with one, unlike the Korean suffix)
+  "settings.workers.borrowedBySuffix": " projects",
+  "settings.workers.filterProject": "Project",
+  "settings.workers.filterKind": "Kind",
+  "settings.workers.filterStatus": "Status",
+  "settings.workers.filterReset": "Clear filters",
+  "settings.workers.filteredEmpty": "0 workers match the filter",
+  "settings.workers.poolEmpty": "No common workers — creating one adds it to every project that borrows.",
+  "settings.workers.projectsEmpty": "No registered projects.",
 
   "common.save": "Save",
   "common.saving": "Saving…",

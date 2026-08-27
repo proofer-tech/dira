@@ -40,7 +40,10 @@ test("다이얼로그 닫힘 갈래와 팝오버 열림 갈래가 resetAddAttemp
 });
 
 test("팝오버가 열릴 때 stopSetupAction()을 안 부른다", () => {
-  const popoverStart = s.indexOf("<Popover");
+  // `s.indexOf("<Popover")`는 안 쓴다 — 이 화면에 다른 `<Popover>`(예: `워커` 패널의 필터
+  // 축)가 늘면 그쪽을 먼저 짚어 이 구간이 엉뚱하게 넓어진다. `open={addOpen}`으로 이 팝오버만
+  // 짚는다.
+  const popoverStart = s.indexOf("open={addOpen}");
   const popoverOpenChangeEnd = s.indexOf("setAddOpen(o);", popoverStart);
   assert.ok(popoverOpenChangeEnd > popoverStart, "Popover onOpenChange를 못 찾았다");
   const popoverOnOpenChange = s.slice(popoverStart, popoverOpenChangeEnd);
@@ -54,4 +57,36 @@ test("다이얼로그가 닫힐 때는 여전히 stopSetupAction()을 부른다"
   const dialogClose = s.slice(s.indexOf("} else {"), s.indexOf("}\n      }}"));
   assert.ok(dialogClose.includes("resetAddAttempt();"));
   assert.ok(dialogClose.includes("void stopSetupAction();"));
+});
+
+// §4-16 결정 5 — 설정 트리 열째 노드 `워커`. 화면을 못 띄우니(next/CSS) 소스 글자로 잰다
+// (위 블록과 같은 전제).
+
+test("검색 인덱스에 워커 항목 넷(노드 자신 · 공통 워커 풀 · 전체 워커 · 필터)이 있다", () => {
+  for (const anchor of ["workers", "workers.pool", "workers.all", "workers.filter"]) {
+    assert.ok(
+      s.includes(`anchor: "${anchor}"`),
+      `검색 인덱스에 anchor: "${anchor}" 항목이 없다`,
+    );
+  }
+});
+
+test("트리 노드가 SettingsNode 유니온에 있고 `설정 분류` 그룹의 마지막(웹훅 다음)이다", () => {
+  assert.match(s, /type SettingsNode =[\s\S]*?\| "workers"/, "SettingsNode에 \"workers\"가 없다");
+  // `설정 분류` 그룹 안에서 `webhook` 항목이 `workers` 항목보다 먼저 나오고, 그 뒤로
+  // `SidebarGroup`이 닫힐 때까지 다른 노드 버튼이 없다 — `workers`가 그 그룹의 마지막이다.
+  const webhookItem = s.indexOf('isActive={activeNode === "webhook"}');
+  const workersItem = s.indexOf('isActive={activeNode === "workers"}');
+  assert.ok(webhookItem > 0 && workersItem > webhookItem, "workers 사이드바 항목이 webhook 다음에 없다");
+  const groupEnd = s.indexOf("</SidebarGroup>", workersItem);
+  const nextItem = s.indexOf("isActive={activeNode ===", workersItem + 1);
+  assert.ok(groupEnd > 0 && (nextItem < 0 || nextItem > groupEnd), "workers 뒤에 같은 그룹 항목이 더 있다");
+});
+
+test("WorkersSection이 패널에 마운트된다", () => {
+  assert.ok(s.includes("function WorkersSection("), "WorkersSection 정의를 못 찾았다");
+  assert.ok(
+    s.includes('<WorkersSection\n              className={cn(activeNode !== "workers" && "md:hidden")}'),
+    "WorkersSection이 패널에 마운트되지 않는다",
+  );
 });

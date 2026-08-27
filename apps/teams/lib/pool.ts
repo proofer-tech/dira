@@ -9,7 +9,18 @@
 import { chmod, mkdir, readFile, readdir, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { NAME_RE, localDir } from "./paths.ts";
-import { createWorker, deleteWorker } from "./workers.ts";
+import {
+  alive,
+  createWorker,
+  crontabText,
+  deleteWorker,
+  lockOf,
+  nfc,
+  poolShimNameOf,
+  registerCron,
+  unregisterCron,
+  type WorkerStatus,
+} from "./workers.ts";
 
 function validPoolName(name: string): void {
   if (!NAME_RE.test(name)) {
@@ -183,44 +194,65 @@ export async function listPoolWorkers(): Promise<{ name: string; path: string }[
 }
 
 /** 슬롯 잠금(`run/pool-<이름>.lock`)의 `pid`·`project`. `null` = 지금 아무 프로젝트도 안 물고
- *  있다(잠금이 없거나, 있어도 주인이 죽었다 — `listWorkers`의 `lockOf`+`alive`와 같은 판정을
- *  잠금 이름 규칙만 다르게 다시 쓴다: 이 락은 sha1 해시가 아니라 `pool-<이름>` 그대로다). */
+ *  있다(잠금이 없거나, 있어도 주인이 죽었다). 판정은 `workers.ts`의 `lockOf`+`alive` 그대로
+ *  재사용한다 — 잠금 이름 규칙만 다르다(sha1 해시가 아니라 `pool-<이름>` 그대로). */
 async function poolSlotHolder(name: string): Promise<{ pid: number; project: string } | null> {
   const dir = path.join(localDir(), "run", `pool-${name}.lock`);
-  const isDir = await stat(dir).then((s) => s.isDirectory(), () => false);
-  if (!isDir) return null;
-  const pid = Number.parseInt((await readFile(path.join(dir, "pid"), "utf8").catch(() => "")).trim(), 10);
-  if (!Number.isInteger(pid) || pid <= 0) return null;
-  try {
-    process.kill(pid, 0);
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code !== "EPERM") return null; // 죽었다
-  }
+  const { held, pid } = await lockOf(dir);
+  if (!held || pid === null || !alive(pid)) return null;
   const project = (await readFile(path.join(dir, "project"), "utf8").catch(() => "")).trim();
   return { pid, project };
 }
 
-export async function poolWorkerStatus(name: string): Promise<"running" | "idle"> {
-  return (await poolSlotHolder(name)) ? "running" : "idle";
+/** 풀 줄의 4상태(DESIGN.md §비주얼 §68 ①) — 풀 파일은 cron 진입점이라 `listWorkers`와 같은
+ *  공식이 그대로 참이다("이 줄에는 거짓이 없다"). 슬롯 잠금은 `poolSlotHolder`와 같은 디렉터리를
+ *  다시 열지 않고 `lockOf`를 직접 써서 `pid`·생존 여부를 함께 얻는다. */
+export async function poolWorkerFullStatus(name: string): Promise<WorkerStatus> {
+  const { held, pid } = await lockOf(path.join(localDir(), "run", `pool-${name}.lock`));
+  const cron = nfc(await crontabText());
+  const inCron = cron.includes(nfc(path.join(poolDir(), `${name}.sh`)));
+  return held ? (pid && alive(pid) ? "running" : "stale") : inCron ? "idle" : "stopped";
 }
 
-/** 삭제. 지금 어느 프로젝트를 물고 있으면 막는다 — `deleteWorker`의 `running` 판정과 같은
- *  이유다(락과 도는 세션이 붕 뜬다). **빌리는 프로젝트 전부의 shim을 걷는 것은 이 함수의 몫이
- *  아니다** — 등록 프로젝트를 전부 훑어야 하는 화면 쪽 오케스트레이션이고, 이 티켓은 그
- *  화면이 부를 원자 함수(`returnPoolWorker`)까지만 낸다. */
+/** 등록 = crontab 줄만 넣는다(DESIGN.md §비주얼 §68 ② `재등록`). 풀 파일도 cron 진입점이라
+ *  `registerCron`을 그대로 쓴다 — 프로젝트 워커의 `startWorker`와 같은 함수다. */
+export async function startPoolWorker(name: string): Promise<boolean> {
+  return registerCron(path.join(poolDir(), `${name}.sh`));
+}
+
+/** 중단 = crontab 줄만 뺀다. 파일도 슬롯 잠금도 안 건드린다 — 물고 있는 프로젝트는 끝까지 간다
+ *  (§4 중단과 같은 판정, `stopWorker`와 같은 함수). */
+export async function stopPoolWorker(name: string): Promise<boolean> {
+  return unregisterCron(path.join(poolDir(), `${name}.sh`));
+}
+
+/** 삭제. **crontab 줄부터 뺀 뒤에 파일을 지운다** — 뒤집으면 그 사이 1분에 cron이 없는 파일을
+ *  실행한다(`deleteWorker`와 같은 순서). 지금 어느 프로젝트를 물고 있으면 막는다 — `deleteWorker`의
+ *  `running` 판정과 같은 이유다(락과 도는 세션이 붕 뜬다). **빌리는 프로젝트 전부의 shim을 걷는
+ *  것은 이 함수의 몫이 아니다** — 등록 프로젝트를 전부 훑어야 하는 화면 쪽 오케스트레이션이고,
+ *  이 티켓은 그 화면이 부를 원자 함수(`returnPoolWorker`)까지만 낸다. */
 export async function deletePoolWorker(name: string): Promise<void> {
   validPoolName(name);
+  const file = path.join(poolDir(), `${name}.sh`);
+  const exists = await stat(file).then(
+    () => true,
+    () => false,
+  );
+  if (!exists) throw new Error(`없는 공통 워커입니다: ${name}`);
   const holder = await poolSlotHolder(name);
   if (holder) {
     throw new Error(
       `${name}이(가) 지금 ${holder.project} 프로젝트를 물고 있습니다(pid ${holder.pid}). 끝난 뒤 삭제하세요.`,
     );
   }
-  const file = path.join(poolDir(), `${name}.sh`);
-  await unlink(file).catch((e) => {
-    if ((e as NodeJS.ErrnoException).code === "ENOENT") throw new Error(`없는 공통 워커입니다: ${name}`);
-    throw e;
+  // `cronFailed`는 화면이 해제 명령어를 이 실패에만 보여주려고 본다 — `deleteWorker`와 같은 신호.
+  await unregisterCron(file).catch((e: Error) => {
+    throw Object.assign(
+      new Error(`crontab에서 ${name} 줄을 빼지 못했습니다: ${e.message} 파일은 지우지 않았습니다.`),
+      { cronFailed: true },
+    );
   });
+  await unlink(file);
 }
 
 // ── shim 워커 (`<루트>/workers/<공통 워커 이름>.sh`) ────────────────────────
@@ -235,14 +267,6 @@ function poolMarkerLine(name: string): string {
   return `# dira-pool: ${name}`;
 }
 
-/** shim 여부 판정. 표식은 **파일의 둘째 줄**이어야 한다(§4-16 결정 2) — 아무 데나 있는 주석과
- *  가르기 위해서다. */
-function poolWorkerNameOf(text: string): string | null {
-  const line = text.split("\n")[1] ?? "";
-  const m = /^# dira-pool: (\S+)$/.exec(line);
-  return m ? m[1] : null;
-}
-
 /** 대여. **이름이 겹치면 거절한다** — 같은 이름의 프로젝트 워커가 이미 있는 큐에는 shim을 안
  *  넣고 사유를 던진다(넣으면 남의 워커 파일을 덮는다). 이미 이 공통 워커를 빌린 상태(shim이
  *  이미 있다)는 멱등하게 그 경로를 돌려준다 — 화면이 상한을 두 번 저장해도 안 죽는다.
@@ -255,7 +279,7 @@ export async function borrowPoolWorker(root: string, name: string): Promise<{ pa
   const file = path.join(root, "workers", `${name}.sh`);
   const existing = await readFile(file, "utf8").catch(() => null);
   if (existing !== null) {
-    if (poolWorkerNameOf(existing) === name) return { path: file }; // 이미 빌렸다 — no-op
+    if (poolShimNameOf(existing) === name) return { path: file }; // 이미 빌렸다 — no-op
     throw new Error(
       `이미 같은 이름의 프로젝트 워커가 있습니다: ${name} — 공통 워커 이름은 이 프로젝트의 워커 이름과 겹칠 수 없습니다.`,
     );
@@ -274,7 +298,7 @@ export async function returnPoolWorker(root: string, name: string): Promise<void
   const file = path.join(root, "workers", `${name}.sh`);
   const text = await readFile(file, "utf8").catch(() => null);
   if (text === null) return; // 이미 없다 — no-op
-  if (poolWorkerNameOf(text) !== name) {
+  if (poolShimNameOf(text) !== name) {
     throw new Error(`${name}은(는) 공통 워커 shim이 아닙니다 — 이 함수로 지우지 않습니다.`);
   }
   await deleteWorker(root, name);
