@@ -231,7 +231,7 @@ export function SessionStream({
   // 2단 상세(§2-15 ⑧) — 고른 사건의 key 하나가 상태다. `<details>`가 아니다: 같은 것을 두
   // 자리에 안 그린다. 티켓 상세에서는 안 읽는다(아래 `workerCtx`가 그 화면에서 `undefined`다).
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  // `크게 보기`가 여는 워커 갈래 다이얼로그(§2-15 ⑮) — 티켓 상세 갈래에서만 읽는다. 워커
+  // `자세히 보기`가 여는 워커 갈래 다이얼로그(§2-15 ⑮) — 티켓 상세 갈래에서만 읽는다. 워커
   // 다이얼로그(`variant === "worker"`)는 이 문을 다시 안 그린다(아래 렌더 갈래가 막는다).
   const [expanded, setExpanded] = useState(false);
   const t = useT();
@@ -543,7 +543,7 @@ export function SessionStream({
             )}
           </div>
           {/* 오른쪽 무리 — `stream`일 때만 뜨던 종전 두 항목(끝난 세션 문구 · 맨 아래로)은
-              한 클래스도 안 갈린다. `크게 보기`(§2-15 ⑮)만 조건이 넓다 — 아래 인라인 스크롤
+              한 클래스도 안 갈린다. `자세히 보기`(§2-15 ⑮)만 조건이 넓다 — 아래 인라인 스크롤
               상자가 뜨는 조건과 같다(`stream || merged.length > 0`, 자리는 `맨 아래로` 다음). */}
           {(stream || merged.length > 0) && (
             <div className="flex items-center gap-2">
@@ -705,7 +705,7 @@ export function SessionStream({
           비활성 + 사유 한 줄로 뜬다 — 진입점을 지우면 화면은 "왜 없는지"를 말할 자리를 잃는다. */}
       {form}
 
-      {/* `크게 보기`가 여는 워커 갈래 다이얼로그(§2-15 ⑮) — 그릇 · 제목 · 문구가 `workers-ui.tsx`의
+      {/* `자세히 보기`가 여는 워커 갈래 다이얼로그(§2-15 ⑮) — 그릇 · 제목 · 문구가 `workers-ui.tsx`의
           그 다이얼로그와 짝이다(§비주얼 §64 흡수 표). 이 절이 받은 값 전부를 그대로 물려주고
           갈래만 `"worker"`로 얹는다 — `costChunk`는 안 넘긴다(워커 갈래의 머리가 안 그린다).
           `variant === "worker"`일 때는 안 그린다 — 이 문은 티켓 상세 갈래에만 있다. */}
