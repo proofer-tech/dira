@@ -9,6 +9,7 @@ import {
   findTranscript,
   grokCwd,
   lastActivity,
+  nthInitOffset,
   recordToEvents,
   sessionIdOf,
   tailEvents,
@@ -132,6 +133,36 @@ test("tailEvents — 흘릴 수 없는 레코드를 조용히 건너뛴다. 던�
   );
   const r = await tailEvents(f, 0);
   assert.deepEqual(r.events.map((e) => e.body), ["살아남는다"]);
+});
+
+// ---------- 재활용 세션 구간 (§2-3 개정, 요구 22fd4fda) ----------
+
+test("nthInitOffset — n번째 system init 레코드의 바이트 오프셋. n개보다 적으면 지금 파일 끝", async () => {
+  const f = path.join(tmp, "reused-session.jsonl");
+  const init1 = rec({ type: "system", subtype: "init" });
+  const body1 = assistant([{ type: "text", text: "1회차" }]);
+  const result = rec({ type: "result" });
+  const init2 = rec({ type: "system", subtype: "init" });
+  const body2 = assistant([{ type: "text", text: "2회차" }]);
+  writeFileSync(f, init1 + body1 + result + init2 + body2);
+
+  assert.equal(await nthInitOffset(f, 1), 0); // 첫 init은 파일 맨 앞
+  const off2 = Buffer.byteLength(init1 + body1 + result);
+  assert.equal(await nthInitOffset(f, 2), off2);
+
+  // 그 오프셋부터 흘리면 1회차 사건이 하나도 안 온다(§2-3 개정 표)
+  const tail = await tailEvents(f, off2);
+  assert.deepEqual(tail.events.map((e) => e.body), ["2회차"]);
+
+  // init이 2개뿐인데 3번째를 물으면 — 무관한 구간(1·2회차) 대신 지금 파일 끝이다
+  const end = Buffer.byteLength(init1 + body1 + result + init2 + body2);
+  assert.equal(await nthInitOffset(f, 3), end);
+  const empty = await tailEvents(f, end);
+  assert.deepEqual(empty.events, []);
+});
+
+test("nthInitOffset — 파일이 없으면 0 (부르는 쪽이 이미 findStream으로 있음을 확인했다)", async () => {
+  assert.equal(await nthInitOffset(path.join(tmp, "없는파일.jsonl"), 2), 0);
 });
 
 // ---------- 방금 한 일 (§1-1 · lastActivity) ----------

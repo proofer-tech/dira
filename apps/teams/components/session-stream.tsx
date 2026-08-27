@@ -161,6 +161,7 @@ export function SessionStream({
   costChunk,
   variant,
   rev,
+  startOffset = 0,
 }: {
   project: string;
   stem: string;
@@ -216,6 +217,10 @@ export function SessionStream({
    *  없으면(워커 다이얼로그처럼 진입 시점에 이미 그려진 표식이 없는 자리) 첫 응답이 기준선이
    *  된다 — 그 창에서 갈리는 변경을 놓쳐도 애초에 갱신할 "이미 그려진" 표식이 없다. */
   rev?: number;
+  /** 재활용 세션(§4-11)의 구간 시작 바이트 오프셋(§2-3 개정, 요구 `22fd4fda`) — 서버가
+   *  `dispatchRound`·`nthInitOffset`으로 미리 계산해 내려준다. 기본값 0은 종전 그대로다
+   *  (회차 1 · 세션이 안 붙은 자리 · 이 prop을 안 넘기는 워커 다이얼로그). */
+  startOffset?: number;
 }) {
   const [events, setEvents] = useState<StreamEvent[]>([]);
   // 폴링이 실어 오는 새 표식 값을 누적한다(§9 §클라이언트가 폴링하는 자리) — vault와 달리
@@ -238,7 +243,7 @@ export function SessionStream({
   // 진행중 계획의 창 끝(`planBlocks`의 `now`) — 렌더 본문은 `Date.now()`를 직접 못 부른다
   // (`react-hooks/purity`). 초기값은 마운트 시 한 번, 이후는 poll effect가 매 왕복마다 갱신한다.
   const [now, setNow] = useState(() => Date.now());
-  const offset = useRef(0);
+  const offset = useRef(startOffset);
   const box = useRef<HTMLDivElement>(null);
 
   // 이 워커에 이 화면이 **없을 수 있다**(§4-3 · §비주얼 §23 ⑤). 고장이 아니라 기능 집합의

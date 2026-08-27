@@ -129,6 +129,49 @@ export async function findStream(sessionId: string): Promise<{ file: string; gro
   return grok ? { file: grok, grok: true } : null;
 }
 
+/** `n`번째(1부터) `{"type":"system","subtype":"init"}` 레코드의 바이트 오프셋(§2-3 개정 - 재활용
+ *  세션에서는 자기 회차만 흘린다, 요구 `22fd4fda`). CLI가 디스패치 회차마다 이 레코드를 하나씩
+ *  새로 찍는다 — 재활용 세션도 그렇다(실측: sid `08885d19`은 `init` 11-225행 둘, 224행이 앞
+ *  회차의 `result`).
+ *
+ *  **`n`개보다 적으면 지금 파일 끝**이다(`null`이 아니다) — 이 회차가 아직 `init`을 못 찍었거나
+ *  (막 디스패치돼 세션이 도는 중일 수 있다) 영영 못 찍은 것이고, 어느 쪽이든 **앞 회차의 내용을
+ *  보여주면 틀린다**. 끝에서부터면 앞 회차는 하나도 안 뜨고, 도는 세션이면 폴링이 그 `init`이
+ *  찍히는 순간부터 이어서 정확히 줍는다 — 특별 취급 없이 §2-1의 바이트 오프셋 tail 그대로다.
+ *  파일을 못 읽으면(삭제·권한) `0`이다 — 부르는 쪽이 이미 `findStream`으로 있음을 확인했다.
+ *
+ *  **회차 1은 부르지 않는다.** `init` #1 앞에도 훅 레코드가 몇 줄 있어 거기서 자르면 첫 프롬프트
+ *  접기(offset 0 전용)가 깨진다 — 회차 1은 오프셋 0 그대로가 계약이다. */
+export async function nthInitOffset(file: string, n: number): Promise<number> {
+  let buf: Buffer;
+  try {
+    buf = await readFile(file);
+  } catch {
+    return 0;
+  }
+  let count = 0;
+  let pos = 0;
+  while (pos < buf.length) {
+    const nl = buf.indexOf(0x0a, pos);
+    const end = nl < 0 ? buf.length : nl;
+    const line = buf.toString("utf8", pos, end);
+    if (line.trim()) {
+      try {
+        const rec = JSON.parse(line) as { type?: unknown; subtype?: unknown };
+        if (rec.type === "system" && rec.subtype === "init") {
+          count++;
+          if (count === n) return pos;
+        }
+      } catch {
+        // 깨진 줄은 건너뛴다 — 이 파일의 계약 그대로(모르는 것은 던지지 않는다)
+      }
+    }
+    if (nl < 0) break;
+    pos = nl + 1;
+  }
+  return buf.length; // n개보다 적다 — 지금 끝에서부터(위 계약)
+}
+
 /** `offset` 뒤에 붙은 바이트만 읽어 사건 + 새 offset. 2MB를 매번 다시 읽지 않는다.
  *
  *  - **불완전한 마지막 줄을 버린다.** 새 offset은 마지막 `\n`까지로 되돌리고 다음 폴링이

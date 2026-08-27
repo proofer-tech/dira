@@ -60,10 +60,10 @@ import {
   squadNames,
   squadsDir,
 } from "@/lib/projects";
-import { findStream, sessionIdOf } from "@/lib/transcript";
+import { findStream, nthInitOffset, sessionIdOf } from "@/lib/transcript";
 import { ticketCostChunk } from "@/lib/usage";
 import { decodeHash, engineCan } from "@/lib/urls";
-import { holderEngine, listWorkers, reassignCount } from "@/lib/workers";
+import { dispatchRound, holderEngine, lastDispatchSid, listWorkers, reassignCount } from "@/lib/workers";
 
 // 큐는 GUI 밖에서(cron·세션이) 바뀐다. 프리렌더하면 빌드 시점 내용이 굳는다.
 export const dynamic = "force-dynamic";
@@ -189,8 +189,19 @@ export default async function TicketDetail({
   // `session_id`가 없거나 UUID가 아니면 절 자체를 감추고(상태 배지가 이미 알려 준다), 있는데
   // 글롭 매치가 0개·2개 이상이면 `트랜스크립트 없음`이다. **어느 쪽도 에러로 그리지 않는다.**
   // 출처가 둘이다(claude · grok) — 어느 쪽이든 여기서는 **파일이 하나 있나**로만 쓴다(§4-3 §grok).
-  const sessionId = sessionIdOf(ticket.fm);
+  //
+  // **재활용 세션(§4-11)은 자기 회차만 흘린다**(§2-3 개정, 요구 `22fd4fda`). `session_id`가 비면
+  // (회수된 티켓) `runner.log`의 마지막 `DISPATCH sid=`로 폴백하고(§2-1 Q2=(a)를 안 연다 — 세션
+  // 하나 - 구간 하나), 회차가 2 이상이면 그 회차의 `system init` 레코드부터 자른다. `grok`은
+  // `init` 레코드가 없어 대상 밖이다(회차 1과 같은 오프셋 0). `lastLogByWorker`가 이미
+  // `listWorkers`·`reassignCount`로 이 요청 안에서 한 번 읽혔다(`cache()`) — 파일을 두 번 안 연다.
+  const sessionId = sessionIdOf(ticket.fm) ?? (await lastDispatchSid(project.root, ticket.stem));
   const transcript = sessionId ? await findStream(sessionId) : null;
+  let startOffset = 0;
+  if (transcript && sessionId && !transcript.grok) {
+    const round = await dispatchRound(project.root, ticket.stem, sessionId);
+    if (round >= 2) startOffset = await nthInitOffset(transcript.file, round);
+  }
   // 갈림길이 하나 늘었다: **이 티켓을 물고 있는 워커의 엔진**(§4-3 · §비주얼 §23 ⑤). 그 엔진에
   // 없는 기능이 있으면 화면이 그걸 알려 준다 — 진입점을 지우지 않는다. 완료 티켓은 아무도 안 물고
   // 있어 `null`이고, 그때는 종전 빈 상태 그대로다(추측해서 문구를 고르지 않는다).
@@ -278,6 +289,8 @@ export default async function TicketDetail({
             body={bodyRead}
             // 스트림 지분이 있는가 = 트랜스크립트 파일 하나다(§29 ② — 고정 높이와 머리 줄의 근거)
             stream={!!transcript}
+            // 재활용 세션의 회차 구간 시작(§2-3 개정, 요구 `22fd4fda`) — 회차 1이면 0.
+            startOffset={startOffset}
             awaiting={awaiting}
             answerFile={awaiting ? `${awaitingOf(ticket)}${config.done}.md` : undefined}
             vault={vault}

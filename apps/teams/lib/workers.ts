@@ -920,11 +920,22 @@ export const lastLogByWorker = cache(
     dispatchByHash: Record<string, number>;
     personaRuns: Record<string, PersonaRun[]>;
     logStart: string | null;
+    // §2-3 개정(요구 `22fd4fda`) — 재활용 세션에서 진행 기록이 자기 회차만 흘리는 재료 둘.
+    // **해시별 마지막(최신) `DISPATCH` 줄의 `sid=`**. `session_id`가 회수로 빈 티켓의 폴백이다
+    // (§2-1 Q2=(a) — 세션 하나 - 구간 하나. 옛 라운드는 끌어오지 않는다).
+    sidByHash: Record<string, string>;
+    // **sid별 `DISPATCH` 해시 순서(시간순, 해시 무관)**. 이 sid의 `DISPATCH` 줄들 중 어느 해시가
+    // 몇 번째인지가 §2-3 개정의 "회차 번호 n"이다.
+    dispatchesBySid: Record<string, string[]>;
   }> => {
     const text = await readFile(path.join(workersDir, "runner.log"), "utf8").catch(() => "");
     const byWorker: Record<string, { recent: string[]; result: string | null }> = {};
     const dispatchByHash: Record<string, number> = {};
     const personaRuns: Record<string, PersonaRun[]> = {};
+    const sidByHash: Record<string, string> = {};
+    // sid별 해시 순서를 **뒤에서부터** 쌓는다(이 루프가 backward라서다) — 반환 직전에 뒤집어
+    // 시간순으로 되돌린다.
+    const dispatchSeqBySidRev: Record<string, string[]> = {};
     // 해시별 "아직 안 닫힌" 종료 줄 — backward라 종료가 자기 DISPATCH보다 먼저 걸린다(재시도의
     // 안쪽 페어링이 우선이라 이미 걸려 있으면 안 덮는다 — 더 이른 종료는 그 앞의 DISPATCH 몫이다).
     const pendingEnd: Record<string, { verb: string; at: string }> = {};
@@ -941,6 +952,11 @@ export const lastLogByWorker = cache(
       if (e.result === null && RESULT_VERBS.has(verb)) e.result = lines[i];
       if (verb === "DISPATCH" && tok) {
         dispatchByHash[tok] = (dispatchByHash[tok] ?? 0) + 1;
+        const sid = /(?:^| )sid=(\S+)/.exec(lines[i])?.[1];
+        if (sid) {
+          if (!(tok in sidByHash)) sidByHash[tok] = sid; // backward라 첫 히트가 가장 최신이다
+          (dispatchSeqBySidRev[sid] ??= []).push(tok);
+        }
         const pending = pendingEnd[tok];
         if (pending) {
           const persona = /(?:^| )persona=(\S+)/.exec(lines[i])?.[1];
@@ -953,9 +969,31 @@ export const lastLogByWorker = cache(
         pendingEnd[tok] = { verb, at };
       }
     }
-    return { byWorker, dispatchByHash, personaRuns, logStart };
+    const dispatchesBySid: Record<string, string[]> = {};
+    for (const [sid, seq] of Object.entries(dispatchSeqBySidRev)) dispatchesBySid[sid] = seq.slice().reverse();
+    return { byWorker, dispatchByHash, personaRuns, logStart, sidByHash, dispatchesBySid };
   },
 );
+
+/** fm `session_id`가 비었을 때(회수된 티켓)의 폴백 — `runner.log`에서 이 해시의 마지막 `DISPATCH`
+ *  줄의 `sid=`(§2-3 개정, 요구 `22fd4fda`). 로그에도 없으면 `null` — 정말로 디스패치된 적이 없거나
+ *  로테이션으로 빠진 것이다. */
+export async function lastDispatchSid(root: string, hash: string): Promise<string | null> {
+  const { sidByHash } = await lastLogByWorker(path.join(root, "workers"));
+  return sidByHash[hash] ?? null;
+}
+
+/** 이 sid에서 이 해시가 몇 번째 회차인가(1부터) — `DISPATCH` 줄들 중 **이 해시인 마지막 줄의
+ *  순번**(해시 무관, §2-3 개정 표). 진행 기록이 `system init` 레코드 몇 번째부터 자를지의 근거다.
+ *  이 sid의 로그에서 해시를 못 찾으면(로테이션으로 빠졌다) `1`로 물러난다 — 오프셋 0, 종전 그대로. */
+export async function dispatchRound(root: string, hash: string, sid: string): Promise<number> {
+  const { dispatchesBySid } = await lastLogByWorker(path.join(root, "workers"));
+  const seq = dispatchesBySid[sid] ?? [];
+  for (let i = seq.length - 1; i >= 0; i--) {
+    if (seq[i] === hash) return i + 1;
+  }
+  return 1;
+}
 
 /** 이 티켓이 되돌아온 횟수 — `runner.log`의 `DISPATCH <해시>` 줄 수 빼기 1(DESIGN.md §2-14 (2)).
  *  첫 디스패치는 재시도가 아니라서 뺀다. 줄이 0개(한 번도 안 디스패치)여도 음수로 안 내려간다.

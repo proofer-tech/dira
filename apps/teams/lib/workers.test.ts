@@ -19,6 +19,7 @@ import { createRequire, syncBuiltinESMExports } from "node:module";
 import path from "node:path";
 import { listTickets } from "./queue.ts";
 import { tokensPath } from "./auth.ts";
+import { nthInitOffset, tailEvents } from "./transcript.ts";
 
 // 진짜 락 디렉터리(~/.config/dira/run)를 밟지 않는다. import 전에 건다.
 const LOCAL = mkdtempSync(path.join(tmpdir(), "fst-local-"));
@@ -35,6 +36,8 @@ const {
   copyContext,
   createWorker,
   cronLine,
+  dispatchRound,
+  lastDispatchSid,
   cronRegister,
   cronRegisterCmd,
   cronUnregister,
@@ -379,6 +382,109 @@ test("lastLogByWorker — 짝이 없는 DISPATCH는 페어링을 안 만든다 (
 
   const { personaRuns } = await lastLogByWorker(path.join(root, "workers"));
   assert.deepStrictEqual(personaRuns.dev ?? [], []); // 짝이 없으니 실행 0건 — 지어내지 않는다
+});
+
+test("lastLogByWorker — sidByHash·dispatchesBySid: 재활용 세션 구간의 재료 (§2-3 개정, 요구 22fd4fda)", async () => {
+  const root = makeRoot({ "w1.sh": "#!/bin/bash\n" });
+  writeFileSync(
+    path.join(root, "workers", "runner.log"),
+    [
+      // sid x가 티켓 둘을 이어 문다(재활용) — aaaa1111 먼저, bbbb2222 나중
+      "2026-08-01 00:00:00 [w1] DISPATCH aaaa1111 kind=work persona=dev sid=x log=x.log prio=3",
+      "2026-08-01 00:10:00 [w1] DONE aaaa1111 sid=x",
+      "2026-08-01 00:11:00 [w1] DISPATCH bbbb2222 kind=work persona=dev sid=x log=x.log prio=3",
+      // cccc3333는 재시도 — sid가 y에서 z로 갈린다. sidByHash는 마지막(z)을 준다
+      "2026-08-01 01:00:00 [w1] DISPATCH cccc3333 kind=work persona=dev sid=y log=y.log prio=3",
+      "2026-08-01 01:05:00 [w1] FAIL cccc3333 sid=y",
+      "2026-08-01 01:06:00 [w1] DISPATCH cccc3333 kind=work persona=dev sid=z log=z.log prio=3",
+      "",
+    ].join("\n"),
+  );
+
+  const { sidByHash, dispatchesBySid } = await lastLogByWorker(path.join(root, "workers"));
+  assert.deepStrictEqual(sidByHash, { aaaa1111: "x", bbbb2222: "x", cccc3333: "z" });
+  assert.deepStrictEqual(dispatchesBySid.x, ["aaaa1111", "bbbb2222"]); // 시간순
+  assert.deepStrictEqual(dispatchesBySid.y, ["cccc3333"]);
+  assert.deepStrictEqual(dispatchesBySid.z, ["cccc3333"]);
+});
+
+test("dispatchRound — 이 sid의 DISPATCH 줄들 중 이 해시인 마지막 줄의 순번, 못 찾으면 1 (§2-3 개정 표)", async () => {
+  const root = makeRoot({ "w1.sh": "#!/bin/bash\n" });
+  writeFileSync(
+    path.join(root, "workers", "runner.log"),
+    [
+      "2026-08-01 00:00:00 [w1] DISPATCH aaaa1111 kind=work persona=dev sid=x log=x.log prio=3",
+      "2026-08-01 00:10:00 [w1] DONE aaaa1111 sid=x",
+      "2026-08-01 00:11:00 [w1] DISPATCH bbbb2222 kind=work persona=dev sid=x log=x.log prio=3",
+      "",
+    ].join("\n"),
+  );
+
+  assert.strictEqual(await dispatchRound(root, "aaaa1111", "x"), 1);
+  assert.strictEqual(await dispatchRound(root, "bbbb2222", "x"), 2);
+  assert.strictEqual(await dispatchRound(root, "cccc3333", "x"), 1); // 로그에 없다 — 1로 물러난다
+});
+
+test("lastDispatchSid — fm session_id가 빈 회수된 티켓이 마지막 DISPATCH의 sid를 폴백으로 찾는다", async () => {
+  const root = makeRoot({ "w1.sh": "#!/bin/bash\n" });
+  writeFileSync(
+    path.join(root, "workers", "runner.log"),
+    [
+      "2026-08-01 00:00:00 [w1] DISPATCH aaaa1111 kind=work persona=dev sid=x log=x.log prio=3",
+      // 재시도로 회수됐다 — 마지막 DISPATCH는 sid=y
+      "2026-08-01 01:00:00 [w1] DISPATCH aaaa1111 kind=work persona=dev sid=y log=y.log prio=3",
+      "",
+    ].join("\n"),
+  );
+
+  assert.strictEqual(await lastDispatchSid(root, "aaaa1111"), "y"); // 마지막
+  assert.strictEqual(await lastDispatchSid(root, "zzzz9999"), null); // 로그에 없다
+});
+
+test("§2-3 개정 — 재활용 세션에서는 자기 회차만 흘린다: 해시 둘이 각자 다른 구간을 받는다 (요구 22fd4fda, 실측 모양)", async () => {
+  const sid = "645a7c59-5d99-4c48-8fbb-2486bb297203";
+  const projects = mkdtempSync(path.join(tmpdir(), "fst-round-projects-"));
+  tmps.push(projects);
+  const dir = path.join(projects, "-tmp-x");
+  mkdirSync(dir, { recursive: true });
+  const rec = (o: object) => JSON.stringify(o) + "\n";
+  const text = (t: string) =>
+    rec({
+      type: "assistant",
+      uuid: `u-${t}`,
+      timestamp: "2026-08-27T00:00:00.000Z",
+      message: { role: "assistant", content: [{ type: "text", text: t }] },
+    });
+  const init = rec({ type: "system", subtype: "init" });
+  const result = rec({ type: "result" });
+  // 실측 모양(§2-3 개정 §구간의 경계): init 둘, 사이에 result 하나 — 앞 회차 본문, 뒤 회차 본문
+  const file = path.join(dir, `${sid}.jsonl`);
+  writeFileSync(file, init + text("443dd1fa 본문") + result + init + text("b157aee4 본문"));
+
+  const root = makeRoot({ "w1.sh": "#!/bin/bash\n" });
+  writeFileSync(
+    path.join(root, "workers", "runner.log"),
+    [
+      `2026-08-27 00:00:00 [w1] DISPATCH 443dd1fa kind=work persona=dev sid=${sid} log=x.log prio=3`,
+      `2026-08-27 00:13:00 [w1] DONE 443dd1fa sid=${sid}`,
+      `2026-08-27 00:14:00 [w1] DISPATCH b157aee4 kind=work persona=dev sid=${sid} log=y.log prio=3`,
+      "",
+    ].join("\n"),
+  );
+
+  // 443dd1fa: 회차 1 — 오프셋 0, §2-1 그대로(개정 전과 한 줄도 안 갈린다)
+  assert.strictEqual(await dispatchRound(root, "443dd1fa", sid), 1);
+  const a = await tailEvents(file, 0);
+  assert.deepEqual(a.events.map((e) => e.body), ["443dd1fa 본문", "b157aee4 본문"]);
+
+  // b157aee4: fm session_id가 비었다고 가정(회수된 티켓) — runner.log 폴백이 같은 sid를 찾는다
+  const fallbackSid = await lastDispatchSid(root, "b157aee4");
+  assert.strictEqual(fallbackSid, sid);
+  const round2 = await dispatchRound(root, "b157aee4", sid);
+  assert.strictEqual(round2, 2);
+  const off2 = await nthInitOffset(file, round2);
+  const b = await tailEvents(file, off2);
+  assert.deepEqual(b.events.map((e) => e.body), ["b157aee4 본문"]); // 443dd1fa의 사건이 하나도 안 온다
 });
 
 test("주석 처리된 할당문은 설정이 아니다 (worker.sh.example이 통째로 주석이다)", async () => {

@@ -25,6 +25,7 @@ import { kickIdleWorker } from "@/lib/kick";
 import { mayHaveRefs, type RefIndex } from "@/lib/markdown-refs";
 import { isHash, openInApp, parseAssignment, resolveWithin, type OpenResult } from "@/lib/paths";
 import { findStream, sessionIdOf, tailEvents, type StreamEvent } from "@/lib/transcript";
+import { lastDispatchSid } from "@/lib/workers";
 import {
   awaitingOf,
   isAwaiting,
@@ -66,13 +67,18 @@ async function target(projectId: string, hash: string): Promise<Target> {
   const p = await findTicket(project.root, hash, config);
   if (!p) throw new Error(`큐에 없는 티켓입니다: ${hash}`);
   const { fm, end } = readFm(await readFile(p, "utf8"));
+  const stem = stemOf(p, config);
+  // 회수된 티켓은 fm `session_id`가 비어(claim 기록이라 놓아줄 때 지운다) 폴링이 자기 기록에 못
+  // 닿는다 — `runner.log`의 마지막 `DISPATCH sid=`로 폴백한다(§2-3 개정, 요구 `22fd4fda`).
+  // fm에 값이 있으면(`.wip`은 늘 그렇다) 이 폴백은 안 돌아 2초 폴링마다 로그를 새로 안 연다.
+  const sessionId = end >= 0 ? (sessionIdOf(fm) ?? (await lastDispatchSid(project.root, stem))) : null;
   return {
     root: project.root,
     path: p,
-    stem: stemOf(p, config),
+    stem,
     state: stateOf(path.basename(p), config),
     assigned: end >= 0 && !!(fm.session_id ?? "").trim().replace(/^["']+|["']+$/g, ""),
-    sessionId: end >= 0 ? sessionIdOf(fm) : null,
+    sessionId,
     inbox: end >= 0 && !!(fm.inbox ?? "").trim().replace(/^["']+|["']+$/g, ""),
   };
 }
