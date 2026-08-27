@@ -352,11 +352,11 @@ export function CreateWorkerButton({
   );
 }
 
-// ── 행 액션: reap · 중단/재등록 · 삭제 ──────────────────────────────────────
+// ── 행 액션: 스트림 · 중단/재등록 · 삭제 ──────────────────────────────────────
+// reap은 §4-17(요구 ac7ba0e2)로 이 행에서 빠져 `워커 설정` 다이얼로그 넷째 섹션으로 옮겨갔다.
 
 export function WorkerRowActions({ projectId, row }: { projectId: string; row: WorkerRow }) {
   const [pending, start] = useTransition();
-  const [reap, setReap] = useState<WorkerActionResult | null>(null);
   const [stopping, setStopping] = useState(false);
   const [stopped, setStopped] = useState<WorkerActionResult | null>(null);
   const [registering, setRegistering] = useState(false);
@@ -371,20 +371,8 @@ export function WorkerRowActions({ projectId, row }: { projectId: string; row: W
 
   return (
     <div className="flex items-center justify-end gap-1">
-      {/* 판정도 rename도 엔진이 한다 — GUI는 부르고 출력을 보여줄 뿐이다(제약 2).
-          `min-w-16`(64px)은 §비주얼 §4-3 슬롯 고정 — `reap…`가 `reap`보다 넓어서 누른 자리가
-          커지면 안 된다(실측 45.6 → 56.6px. 옆 토글과 달리 56px으로는 0.6px 넘친다) */}
-      <Button
-        variant="ghost"
-        size="sm"
-        className="min-w-16"
-        disabled={pending}
-        onClick={() => start(async () => setReap(await reapWorkerAction(projectId, row.name)))}
-      >
-        {pending ? "reap…" : "reap"}
-      </Button>
       {/* 못 여는 행에서도 **지우지 않고 비활성으로 남긴다**(§4 세션 스트림 · §비주얼 §4-3 —
-          요구 `3d717e8b`). 지우면 오른쪽 정렬이라 그 행만 `reap`이 옆으로 옮겨 놓인다.
+          요구 `3d717e8b`). 지우면 오른쪽 정렬이라 그 행만 나머지 버튼이 옆으로 옮겨 놓인다.
           사유 문구·툴팁은 안 붙인다 — 같은 행 `물고 있는 티켓` 열이 `—`인 것이 이미 알려 준다.
           `aria-disabled`가 아니라 `disabled`다: 이 행에는 해당이 없는 조작이라 탭 순서에
           죽은 정거장을 만들지 않는다(선례 = 아래 컨텍스트 항목 행 `▲▼`) */}
@@ -429,29 +417,6 @@ export function WorkerRowActions({ projectId, row }: { projectId: string; row: W
       <Button variant="ghost" size="sm" disabled={row.commonWorker} onClick={() => setDeleting(true)}>
         삭제
       </Button>
-
-      {/* reap 출력 */}
-      <Dialog open={!!reap} onOpenChange={(o) => !o && setReap(null)}>
-        <DialogContent className="sm:max-w-xl">
-          <DialogHeader>
-            <DialogTitle>reap — {row.name}</DialogTitle>
-            <DialogDescription>
-              세션이 죽었는데 진행중으로 남은 티켓을 백로그로 되돌립니다.
-            </DialogDescription>
-          </DialogHeader>
-          {reap && !reap.ok && (
-            <Failure title={`${row.name}.sh reap 실패`} message={reap.message ?? reap.output ?? ""} />
-          )}
-          {reap?.output && (
-            <pre className="max-h-64 overflow-auto rounded-md border bg-muted/50 p-3 font-mono text-xs break-all whitespace-pre-wrap">
-              {reap.output}
-            </pre>
-          )}
-          <DialogFooter>
-            <DialogClose render={<Button variant="outline" autoFocus />}>닫기</DialogClose>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* 세션 스트림 — **진입점 하나다**(§4 · §2-1 Q2=(a)). 대상만 `holding`이고 컴포넌트도
           Server Action(`tailSession`)도 티켓 상세가 쓰는 것 그대로다. 그래서 두 화면이 같은
@@ -1126,6 +1091,7 @@ export function WorkerSettingsDialog({
   poolWorkerCount,
   settings,
   divergent,
+  firstWorkerName,
 }: {
   projectId: string;
   /** `<루트>/context.sh` */
@@ -1141,6 +1107,9 @@ export function WorkerSettingsDialog({
   settings: { key: string; value: string; assumed: boolean }[];
   /** 갈린 설정. `key`도 라벨이 붙어서 온다 — `LABEL`은 페이지 쪽 상수라 여기서 다시 안 찾는다 */
   divergent: { key: string; text: string }[];
+  /** 워커 표 첫 행 이름 — 넷째 섹션의 `reap`이 부르는 스크립트다(§4-17 결정 2). `reap`은 큐
+   *  전체를 훑어서 어느 워커로 불러도 결과가 같다 — 고르는 규칙을 새로 만들지 않는다 */
+  firstWorkerName: string;
 }) {
   const t = useT();
   const label = t("workers.settingsDialog.trigger");
@@ -1148,6 +1117,8 @@ export function WorkerSettingsDialog({
   // 현황 문구가 즉시 맞아야 한다(`LimitField`의 `onSaved`와 같은 자리, `personas-ui.tsx`).
   const [limit, setLimit] = useState(poolLimit);
   const [count, setCount] = useState(poolWorkerCount);
+  const [reapPending, startReap] = useTransition();
+  const [reap, setReap] = useState<WorkerActionResult | null>(null);
   return (
     <Dialog>
       <DialogTrigger render={<Button variant="outline" size="sm" />}>{label}</DialogTrigger>
@@ -1184,7 +1155,7 @@ export function WorkerSettingsDialog({
             }}
           />
         </section>
-        {/* 넷째 섹션 — 표시 전용. 경계는 여기만(§비주얼 §35 개정 ③ "첫 섹션에는 경계가 없다") */}
+        {/* 셋째 섹션 — 표시 전용. 경계는 여기만(§비주얼 §35 개정 ③ "첫 섹션에는 경계가 없다") */}
         <section className="space-y-2 border-t pt-4">
           <div>
             <h2 className="text-sm font-semibold">나머지 워커 설정 (표시만)</h2>
@@ -1226,6 +1197,44 @@ export function WorkerSettingsDialog({
                 </div>
               </AlertDescription>
             </Alert>
+          )}
+        </section>
+        {/* 넷째(마지막) 섹션 — 스테일 수거(§4-17 결정 1, 티켓 642dd26f). 종전에는 행마다
+            `reap` 버튼과 출력 다이얼로그였다 — `reap`은 그 워커만이 아니라 큐 전체를 훑으므로
+            워커별 사본이 성립하지 않는다(§4-17 사실 3). 프로젝트에 버튼 하나만 남기고 표의
+            첫 행 스크립트로 부른다(결정 2). 다이얼로그 안에서 다이얼로그를 새로 열지 않고
+            출력은 이 섹션 안에 뜬다(결정 3) — 알맹이(`Failure`·`pre`)와 산문은 종전 reap 출력
+            다이얼로그 글자 그대로다. 앞의 셋은 값이고 이것은 실행이라 맨 뒤다. */}
+        <section className="space-y-2 border-t pt-4">
+          <div>
+            <h2 className="text-sm font-semibold">{t("workers.reap.sectionTitle")}</h2>
+            <p className="text-sm text-muted-foreground">
+              세션이 죽었는데 진행중으로 남은 티켓을 백로그로 되돌립니다.
+            </p>
+          </div>
+          {/* `min-w-16`(64px)은 §비주얼 §4-3 슬롯 고정을 그대로 따라온다 — `reap…`가 `reap`보다
+              넓어서 누른 자리가 커지면 안 된다 */}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="min-w-16"
+            disabled={reapPending}
+            onClick={() =>
+              startReap(async () => setReap(await reapWorkerAction(projectId, firstWorkerName)))
+            }
+          >
+            {reapPending ? "reap…" : "reap"}
+          </Button>
+          {reap && !reap.ok && (
+            <Failure
+              title={`${firstWorkerName}.sh reap 실패`}
+              message={reap.message ?? reap.output ?? ""}
+            />
+          )}
+          {reap?.output && (
+            <pre className="max-h-64 overflow-auto rounded-md border bg-muted/50 p-3 font-mono text-xs break-all whitespace-pre-wrap">
+              {reap.output}
+            </pre>
           )}
         </section>
       </DialogContent>

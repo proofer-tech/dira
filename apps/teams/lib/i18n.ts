@@ -946,6 +946,9 @@ export const ko: Record<string, string> = {
   "workers.pool.countZero": "들어와 있는 공통 워커가 없습니다",
   "workers.pool.warnUnreadable": "pool-limit을 읽지 못했습니다 — 안 빌리는 것으로 읽습니다.",
   "workers.pool.blockedPrefix": "티켓을 물고 있어 못 뺀 공통 워커: ",
+  // 다이얼로그 넷째(마지막) 섹션 — 스테일 수거(§4-17 결정 1, 티켓 642dd26f). 행의 `reap`
+  // 버튼이 이 섹션 머리 하나로 옮겨온다 — 새로 짓지 않고 §4가 이미 쓰는 이름을 그대로 쓴다.
+  "workers.reap.sectionTitle": "스테일 수거",
   // 프로젝트 워커 표 · 설정 워커 패널이 공유하는 배지(§4-16 결정 6 §68 ⑤ — 낱말은 §4-1의
   // `공통` 배지와 같다). 이 화면의 새 배지가 처음 i18n을 타는 자리다.
   "workers.pool.badge": "공통",
@@ -1832,6 +1835,7 @@ export const en: Record<string, string> = {
   "workers.pool.countZero": "No shared workers are in this project",
   "workers.pool.warnUnreadable": "Couldn't read pool-limit — reading it as not borrowing.",
   "workers.pool.blockedPrefix": "Still holding a ticket, couldn't remove: ",
+  "workers.reap.sectionTitle": "Stale collection",
   "workers.pool.badge": "Shared",
   "workers.pool.badgeTitle": "This worker is a slot in the shared worker pool — the cron line lives in the pool, not this file",
   "ontology.location.inWorktree": "Inside this project's git working tree",

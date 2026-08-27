@@ -190,6 +190,7 @@ export default async function Workers({ params }: { params: Promise<{ project: s
                   .map(([w, v]) => `${w}=${v}`)
                   .join(" · "),
               }))}
+              firstWorkerName={rows[0].name}
             />
             <CreateWorkerButton
               projectId={id}
