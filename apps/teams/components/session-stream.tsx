@@ -861,7 +861,9 @@ function PlanBlock({
       <summary
         className={cn(
           LINE,
-          "sticky -top-2 flex items-center gap-2 cursor-pointer list-none bg-background card-tint [&::-webkit-details-marker]:hidden",
+          // `z-20` — 말풍선 동작 단추(`bubble.tsx` `BubbleReactions` `absolute z-10`)보다
+          // 위여야 붙은 제목 줄 위로 기록 줄의 글자·말풍선이 겹쳐 그려지지 않는다(신고 `f5203ee0`).
+          "sticky -top-2 z-20 flex items-center gap-2 cursor-pointer list-none bg-background card-tint [&::-webkit-details-marker]:hidden",
         )}
       >
         {glyph}
