@@ -47,7 +47,8 @@ import { useT } from "@/components/language-provider";
 import { matchCombo } from "@/lib/keymap";
 import type { Vault } from "@/lib/markdown-wikilinks";
 import { cn } from "@/lib/utils";
-import { blockBreaks, commitEditable, resolveSplit } from "@/lib/markdown-editor-blocks";
+import { blockBreaks, commitEditable, joinBlocks, resolveSplit } from "@/lib/markdown-editor-blocks";
+import { FrontmatterRowsEditor } from "@/components/markdown-frontmatter-rows-editor";
 
 /** 앱 하나짜리 값(규칙 ② — 칸마다 안 갈린다). §0-11 `dira-manual-theme`와 같은 자리의 키다. */
 const MODE_KEY = "dira-markdown-editor-mode";
@@ -80,6 +81,37 @@ function writeMode(mode: Mode) {
     /* 이번 세션만 안 남을 뿐이라 삼킨다 */
   }
   modeListeners.forEach((onChange) => onChange());
+}
+
+/** 프론트매터 행/평문 손잡이 값(결정 4) - 위 `MODE_KEY`(위지윅/원문)와 같은 앱 하나짜리
+ *  관용구다. 기본은 행 편집기다(§비주얼 §50 §머리 줄). */
+const FM_MODE_KEY = "dira-frontmatter-editor-mode";
+type FrontmatterMode = "rows" | "plain";
+
+function readFrontmatterMode(): FrontmatterMode {
+  try {
+    return localStorage.getItem(FM_MODE_KEY) === "plain" ? "plain" : "rows";
+  } catch {
+    return "rows";
+  }
+}
+
+const frontmatterModeListeners = new Set<() => void>();
+function subscribeFrontmatterMode(onChange: () => void) {
+  frontmatterModeListeners.add(onChange);
+  return () => {
+    frontmatterModeListeners.delete(onChange);
+  };
+}
+const SERVER_FM_MODE: FrontmatterMode = "rows";
+
+function writeFrontmatterMode(mode: FrontmatterMode) {
+  try {
+    localStorage.setItem(FM_MODE_KEY, mode);
+  } catch {
+    /* 이번 세션만 안 남을 뿐이라 삼킨다 */
+  }
+  frontmatterModeListeners.forEach((onChange) => onChange());
 }
 
 // ── 컴포넌트 ──────────────────────────────────────────────────────────────
@@ -141,6 +173,7 @@ export function MarkdownEditor({
 }) {
   const t = useT();
   const mode = useSyncExternalStore(subscribeMode, readMode, () => SERVER_MODE);
+  const fmMode = useSyncExternalStore(subscribeFrontmatterMode, readFrontmatterMode, () => SERVER_FM_MODE);
   const [innerText, setInnerText] = useState(defaultValue ?? "");
   const text = controlledValue ?? innerText;
   // 제어(`value` 있음)면 부모(`onValueChange`)가 유일한 값의 주인이다. 아니면 이 컴포넌트가
@@ -194,6 +227,9 @@ export function MarkdownEditor({
 
   // 사라진 라벨 문장을 그대로 접근명 + 툴팁으로 옮긴다(§50 §접근명) — 화면 글자는 아이콘 하나뿐이다.
   const toggleLabel = mode === "wysiwyg" ? t("markdownEditor.toggle.toRaw") : t("markdownEditor.toggle.toWysiwyg");
+  // 프론트매터 행/평문 손잡이(결정 4) — 화면 글자와 접근명이 같은 문장이라 툴팁을 안 붙인다
+  // (§비주얼 §50 §머리 줄, 위 위지윅/원문 손잡이의 아이콘+툴팁 관용과 다르다).
+  const fmToggleLabel = fmMode === "rows" ? t("frontmatterRows.toggle.toPlain") : t("frontmatterRows.toggle.toRows");
 
   // 위지윅 면의 첫 편집 표면 — 마운트 때 한 번 초점을 준다(원문 면은 `Textarea`의 네이티브
   // `autoFocus`가 대신한다). 다이얼로그가 열릴 때마다 이 컴포넌트가 새로 마운트되므로 재열 때도
@@ -274,17 +310,42 @@ export function MarkdownEditor({
                 안 건다. 안의 `min-h-7`(빈 문단·placeholder)은 무수정이다. */}
             <div className="min-h-[84px]">
               {split.head && (
-                <div
-                  data-head=""
-                  contentEditable
-                  suppressContentEditableWarning
-                  aria-label="frontmatter"
-                  className="rounded-md bg-muted p-3 overflow-x-auto font-mono text-sm whitespace-pre-wrap mb-3"
-                  onBlur={(e) => commitActiveEditable(e.currentTarget)}
-                  onPaste={onPaste}
-                  onKeyDown={handleEditableKeyDown}
-                >
-                  {split.head}
+                // 머리 줄(§비주얼 §50 §머리 줄) — 행/평문 손잡이가 표면 첫 줄 왼쪽 끝에 붙는다.
+                // 행 편집기일 때만 `border-b pb-3 mb-3`으로 본문과 가른다 — 평문 칸은 자기
+                // `mb-3`(아래)이 이미 그 경계라 무수정으로 둔다(두 표면이 면을 안 나눈다).
+                <div className={cn("space-y-2", fmMode === "rows" && "border-b border-border pb-3 mb-3")}>
+                  <div className="flex h-7 items-center">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      aria-label={fmToggleLabel}
+                      onClick={() => writeFrontmatterMode(fmMode === "rows" ? "plain" : "rows")}
+                    >
+                      {fmToggleLabel}
+                    </Button>
+                  </div>
+                  {fmMode === "rows" ? (
+                    <FrontmatterRowsEditor
+                      head={split.head}
+                      onHeadChange={(newHead) => setText(joinBlocks({ head: newHead, blocks: split.blocks, tail: split.tail }))}
+                      onPaste={onPaste}
+                      onKeyDown={onKeyDown}
+                    />
+                  ) : (
+                    <div
+                      data-head=""
+                      contentEditable
+                      suppressContentEditableWarning
+                      aria-label="frontmatter"
+                      className="rounded-md bg-muted p-3 overflow-x-auto font-mono text-sm whitespace-pre-wrap mb-3"
+                      onBlur={(e) => commitActiveEditable(e.currentTarget)}
+                      onPaste={onPaste}
+                      onKeyDown={handleEditableKeyDown}
+                    >
+                      {split.head}
+                    </div>
+                  )}
                 </div>
               )}
               {split.blocks.length === 0 ? (

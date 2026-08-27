@@ -859,6 +859,22 @@ export const ko: Record<string, string> = {
   "markdownEditor.toggle.toRaw": "원문으로",
   "markdownEditor.toggle.toWysiwyg": "위지윅으로",
 
+  // §비주얼 §50 §프론트매터 행 편집기 — 머리 줄 손잡이(§접근명, 화면 글자와 같은 문장)
+  "frontmatterRows.toggle.toRows": "행으로",
+  "frontmatterRows.toggle.toPlain": "평문으로",
+  "frontmatterRows.empty": "프론트매터 행이 0개입니다.",
+  "frontmatterRows.addRow": "행 추가",
+  "frontmatterRows.keyLabel": "키",
+  "frontmatterRows.valueLabel": "값",
+  "frontmatterRows.addAfterKeyPrefix": "",
+  "frontmatterRows.addAfterKeySuffix": " 아래에 행 추가",
+  "frontmatterRows.removeKeyPrefix": "",
+  "frontmatterRows.removeKeySuffix": " 행 삭제",
+  "frontmatterRows.addAfterItemPrefix": "",
+  "frontmatterRows.addAfterItemSuffix": "번째 항목 아래에 행 추가",
+  "frontmatterRows.removeItemPrefix": "",
+  "frontmatterRows.removeItemSuffix": "번째 항목 행 삭제",
+
   "updateToast.progress.prefix": "업데이트를 받는 중",
   "updateToast.confirm.message": "지금 도는 일이 있습니다. 그래도 재시작할까요?",
   "updateToast.confirm.cancel": "취소",
@@ -1837,6 +1853,21 @@ export const en: Record<string, string> = {
   // 아이콘 버튼의 접근명 겸 툴팁 — 지금 면이 아니라 **누르면 가는 면**을 알려 준다.
   "markdownEditor.toggle.toRaw": "Switch to source",
   "markdownEditor.toggle.toWysiwyg": "Switch to rich text",
+
+  "frontmatterRows.toggle.toRows": "Switch to rows",
+  "frontmatterRows.toggle.toPlain": "Switch to plain text",
+  "frontmatterRows.empty": "No frontmatter rows.",
+  "frontmatterRows.addRow": "Add row",
+  "frontmatterRows.keyLabel": "Key",
+  "frontmatterRows.valueLabel": "Value",
+  "frontmatterRows.addAfterKeyPrefix": "Add row after ",
+  "frontmatterRows.addAfterKeySuffix": "",
+  "frontmatterRows.removeKeyPrefix": "Delete row ",
+  "frontmatterRows.removeKeySuffix": "",
+  "frontmatterRows.addAfterItemPrefix": "Add row after item ",
+  "frontmatterRows.addAfterItemSuffix": "",
+  "frontmatterRows.removeItemPrefix": "Delete row for item ",
+  "frontmatterRows.removeItemSuffix": "",
 
   // 뒤에 `{percent}%`가 공백 하나를 두고 붙는다(`Downloading the update… 42%`).
   "updateToast.progress.prefix": "Downloading the update…",

@@ -115,6 +115,7 @@ const FILLED = [
   "feedback.",
   "projectActions.",
   "appLayout.",
+  "frontmatterRows.", // 9ff6dec3가 ko·en을 같이 채웠다(§비주얼 §50 §프론트매터 행 편집기)
 ];
 
 test("이미 찬 묶음(설정·마감·셸)의 ko 키는 en에 하나도 안 빠졌다", () => {
