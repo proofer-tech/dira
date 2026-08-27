@@ -14,6 +14,10 @@ reap   <루트>          세션이 죽은 진행중 티켓을 백로그로 회�
 handclaim <path> [owner]  대화형 세션이 손으로 잡기. claim + pid/claimed_at/transcript 기록
 askhuman <path> [--if-blocked]  답변 대기로 잠그기 (deps + awaiting + `## 질문 n`).
                        --if-blocked면 신선한 블록 + 미충족 dep 0일 때만 잠그고, 아니면 조용히 끝남
+pollrows   <루트>       열린+폴링 대기 티켓 전부 -> "path|hash" (§폴링 대기 결정 3·5)
+pollstart  <path> <스크립트파일명> <상한>  polling/polling_until 기록 (`poll` 서브커맨드 성공 경로)
+pollplan   <path> [하한초]  이번 tick에 이 폴링 티켓을 어떻게 할지 -> WAIT / RUN <경로>[|로그] / ASK ...
+pollresult <path> <종료코드> [로그파일]  결정 4의 판정 반영 (0=해제, 1=대기, 그 밖=실패 카운트)
 
 큐는 루트 한 곳이고 하위 디렉터리는 없다. 디렉터리가 뜻하던 것은 전부 frontmatter로 갔다 --
 누가 수행하는지는 `persona:`(없으면 페르소나 없는 평범한 에이전트), 성격은 `kind:`.
@@ -86,6 +90,11 @@ def ticket_hash(path, fm):
 
 def is_assigned(fm):
     return bool((fm.get("session_id") or "").strip().strip("\"'"))
+
+
+def is_polling(fm):
+    """frontmatter `polling`(스크립트 파일명)이 비어 있지 않으면 폴링 대기다(§폴링 대기 결정 2)."""
+    return bool((fm.get("polling") or "").strip().strip("\"'"))
 
 
 PERSONA_RE = re.compile(r"^[A-Za-z0-9_-]+$")
@@ -371,6 +380,7 @@ def scan(troot, now=None):
             "persona": persona_of(fm),
             "birth": birth(p),
             "assigned": is_assigned(fm),
+            "polling": is_polling(fm),
             "session_id": (fm.get("session_id") or "").strip(),
             # deps 미충족이면 큐에서 제외한다(pull 규약을 디스패처 층에서 강제).
             # 없으면 세션이 착수를 거부하고 종료해 티켓이 진행중으로 유실된다(2026-07-28 05990d8e 실사고).
@@ -856,6 +866,36 @@ def ask_human(path, h, attempts, why, blocked=False, killed=False, handoff=False
     return "ASK {} awaiting={} - {}, 답변 요청으로 전환".format(h, a, cause)
 
 
+# §폴링 대기 결정 7 - 종전 _ASK_OPTIONS_BODY(다시 시도-손보고-그만-직접)와 다르다. 폴링은
+# 실패가 아니라 "조건이 안 왔다"이므로 선택지가 상한 연장 - 즉시 디스패치 - 닫기다.
+_POLL_ASK_OPTIONS_BODY = ("이 티켓을 어떻게 할까요\n\n"
+                          "- (a) 상한을 늘려 계속 기다린다\n"
+                          "- (b) 조건과 무관하게 지금 디스패치한다\n"
+                          "- (c) 이 티켓을 닫는다\n"
+                          "- (d) 아래 칸에 직접 쓴다\n")
+
+
+def ask_human_polling(path, why, log_tail):
+    """폴링 대기가 상한을 넘겼거나 `polling_fails`가 3에 닿아 답변 대기로 잠근다(결정 7).
+
+    지우는 것은 `polling` 하나다 - `polling_until`·`polled_at`·`polling_fails`는 이력으로
+    남는다(`ask_human`이 `attempts`를 이력으로 남기는 것과 같은 이유). 마지막 폴링 출력이
+    문항에 인용으로 들어간다 - 사람이 답할 수 있으려면 무엇을 기다렸는지가 같은 화면에 있어야 한다.
+    """
+    fm, lines, end = read_fm(path)
+    h = ticket_hash(path, fm)
+    a = uuid.uuid4().hex[:8]
+    n = sum(1 for l in lines[end:] if re.match(r"^##\s*질문", l)) + 1
+    head = "{}. 엔진은 더 폴링하지 않습니다.\n\n### {}. {}".format(why, n, _POLL_ASK_OPTIONS_BODY)
+    tail = "\n### 마지막 폴링 출력\n\n{}\n".format(
+        _quote(_capped(log_tail, 1500)) if log_tail.strip() else _quote("(출력 없음)"))
+    with open(path, "a", encoding="utf-8") as f:
+        f.write("\n## 질문 {}\n\n{}{}".format(n, head, tail))
+    set_deps(path, deps_of(lines, end) + [a])
+    set_fm_keys(path, {"awaiting": a, "polling": ""})
+    return "ASK {} awaiting={} - {}, 답변 요청으로 전환".format(h, a, why)
+
+
 def fresh_block(path):
     """본문의 마지막 `##` 절이 `블록`인지 -- 세션이 벽을 보고 "이건 사람이 푼다"고 판정했다는
     신선 판정(DESIGN.md 결정 7). 묵은 블록 뒤에는 ask_human이 붙인 `## 질문 n`이 반드시 오므로
@@ -996,8 +1036,10 @@ def main():
 
     if cmd == "select":
         # 미할당 열린 티켓을 유효 우선순위 높은 순(§1-3)으로 전부. 호출자가 위에서부터 claim 시도.
+        # 폴링 대기(§폴링 대기 결정 3)도 assigned·unmet과 같은 자리에서 뺀다 - 표시만 있고
+        # 잠금이 없는 상태를 만들지 않는다.
         for r in scan(sys.argv[2]):
-            if not r["assigned"] and not r["unmet"]:
+            if not r["assigned"] and not r["unmet"] and not r["polling"]:
                 print("{}|{}|{}|{}|{}|{}|{}|{}".format(
                     r["path"], r["hash"], r["kind"], r["persona"],
                     r["priority"], r["baseline"], r["effective"], r["squad_persona"]))
@@ -1036,6 +1078,8 @@ def main():
             when = datetime.fromtimestamp(r["birth"]).strftime("%Y-%m-%d %H:%M")
             if r["assigned"]:
                 mark = "할당됨 " + r["session_id"]
+            elif r["polling"]:
+                mark = "폴링 대기"
             elif r["unmet"]:
                 mark = "deps 대기 " + ",".join(r["unmet"])
             else:
@@ -1127,6 +1171,126 @@ def main():
         # 지나서 살아남으므로, 티켓은 열리자마자 잠긴 채로 뜬다(창이 0이다).
         print(ask_human(path, ticket_hash(path, read_fm(path)[0]), 0,
                         "사람이 강제 중단", killed=True))
+        return
+
+    if cmd == "pollrows":
+        # §폴링 대기 결정 3·5 - tick.sh 폴링 단계가 도는 열린+폴링 티켓 목록. "path|hash".
+        troot = sys.argv[2]
+        for p in tickets_in(troot):
+            if not is_open_name(os.path.basename(p)):
+                continue
+            try:
+                fm, _, end = read_fm(p)
+            except (OSError, UnicodeDecodeError):
+                continue
+            if end < 0 or not is_polling(fm):
+                continue
+            print("{}|{}".format(p, ticket_hash(p, fm)))
+        return
+
+    if cmd == "pollstart":
+        # 결정 8 성공 경로의 마지막 한 걸음 - `clear`+`release`로 이미 열린 티켓에 대기 키
+        # 둘을 얹는다(`workers/<w>.sh poll`이 부른다). `owner`도 여기서 비운다 - 결정 2가
+        # "주인이 없다"고 적었는데 공용 `clear`는 owner를 안 건드린다(unassign과 공유하는
+        # 자리라 그 동작을 안 바꾼다) - 폴링 전용으로 한 번 더 비운다.
+        path, script, until = sys.argv[2], sys.argv[3], sys.argv[4]
+        set_fm_keys(path, {"polling": script, "polling_until": until, "owner": ""})
+        return
+
+    if cmd == "pollplan":
+        # 폴링 단계의 티켓 하나당 판정 - "WAIT"(아직) · "RUN <스크립트경로>[|<눌림 로그줄>]"
+        # (지금 돌려야 한다) · ask_human_polling의 반환값(상한을 지나 답변 대기로 잠겼다, 그
+        # 문자열이 "ASK "로 시작해 tick.sh가 그대로 로그에 남긴다). $3 = tick 간격 하한(초).
+        path = sys.argv[2]
+        floor = int(sys.argv[3]) if len(sys.argv) > 3 else 0
+        fm, lines, end = read_fm(path)
+        h = ticket_hash(path, fm)
+        troot = os.path.dirname(os.path.dirname(path))
+        until_raw = (fm.get("polling_until") or "").strip().strip("\"'")
+        now = datetime.now().astimezone()
+        expired = False
+        if until_raw:
+            try:
+                until_dt = datetime.fromisoformat(until_raw)
+                if until_dt.tzinfo is None:
+                    until_dt = until_dt.astimezone()
+                expired = until_dt <= now
+            except ValueError:
+                pass   # 못 읽으면 만료로 안 본다 - 오판으로 잠그는 쪽이 더 나쁘다
+        if expired:
+            logf = os.path.join(troot, "polls", h + ".log")
+            try:
+                with open(logf, "r", encoding="utf-8", errors="replace") as f:
+                    tail = f.read()
+            except OSError:
+                tail = ""
+            print(ask_human_polling(path, "`polling_until` 상한을 지났습니다", tail))
+            return
+        script = (fm.get("polling") or "").strip().strip("\"'")
+        interval, clamp = 0, ""
+        try:
+            with open(os.path.join(troot, "polls", script), "r",
+                      encoding="utf-8", errors="replace") as f:
+                for line in f:
+                    m = re.match(r"^#\s*dira-poll-interval:\s*(\d+)", line)
+                    if m:
+                        interval = int(m.group(1))
+                        break
+                    if line.strip() and not line.startswith("#"):
+                        break   # 머리(주석 블록)를 벗어났다 - 더 안 본다
+        except OSError:
+            pass
+        if interval < floor:
+            if interval:
+                clamp = "POLL {} 주기 {}s -> tick 간격으로 눌렸다".format(h, interval)
+            interval = floor
+        polled_raw = (fm.get("polled_at") or "").strip().strip("\"'")
+        due = True
+        if polled_raw:
+            try:
+                polled_dt = datetime.fromisoformat(polled_raw)
+                if polled_dt.tzinfo is None:
+                    polled_dt = polled_dt.astimezone()
+                due = (now - polled_dt).total_seconds() >= interval
+            except ValueError:
+                pass
+        if not due:
+            print("WAIT")
+            return
+        print("RUN {}".format(os.path.join(troot, "polls", script)) +
+              ("|" + clamp if clamp else ""))
+        return
+
+    if cmd == "pollresult":
+        # 결정 4의 종료 코드 셋 판정. $4(로그 파일)는 3연속 오류로 답변 대기에 올릴 때만 읽는다.
+        path, rc = sys.argv[2], sys.argv[3]
+        logfile = sys.argv[4] if len(sys.argv) > 4 else ""
+        fm = read_fm(path)[0]
+        h = ticket_hash(path, fm)
+        now_iso = datetime.now().astimezone().isoformat(timespec="seconds")
+        try:
+            rc_i = int(rc)
+        except ValueError:
+            rc_i = -1   # 못 읽으면 오류측(안전측)으로 본다
+        if rc_i == 0:
+            set_fm_keys(path, {"polling": "", "polled_at": "", "polling_fails": ""})
+            print("POLL {} 0 - 조건 도달, 대기 해제".format(h))
+        elif rc_i == 1:
+            set_fm_keys(path, {"polled_at": now_iso})
+            print("POLL {} 1 - 아직 아니다".format(h))
+        else:
+            fails = int((fm.get("polling_fails") or "0").strip() or 0) + 1
+            set_fm_keys(path, {"polled_at": now_iso, "polling_fails": str(fails)})
+            print("POLL {} 오류(rc={}) - 실패 {}/3".format(h, rc, fails))
+            if fails >= 3:
+                tail = ""
+                if logfile:
+                    try:
+                        with open(logfile, "r", encoding="utf-8", errors="replace") as f:
+                            tail = f.read()
+                    except OSError:
+                        pass
+                print(ask_human_polling(path, "폴링 스크립트가 연속 3회 오류를 냈습니다", tail))
         return
 
     if cmd == "clear":

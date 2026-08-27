@@ -8,6 +8,9 @@
 #                        (산 세션이면 거부하고 exit 3. --force면 그 pid를 죽여서 푼다)
 #   <루트>/workers/w1.sh reap         스테일 수거만 1회
 #   <루트>/workers/w1.sh dryrun       실행 없이 선정 결과만 출력
+#   <루트>/workers/w1.sh poll H 스크립트파일명 상한   폴링 대기로 전환(§폴링 대기 결정 8).
+#                        <루트>/polls/<스크립트파일명>이 있어야 하고, 검사 다섯을 하나라도
+#                        걸리면 frontmatter를 안 고치고 0이 아닌 코드로 거절한다
 # 워커 계약(설정 가능한 값)은 worker.sh.example 참조.
 set -uo pipefail
 
@@ -33,7 +36,7 @@ RUNLOG="$WORKERS/runner.log"
 LOCAL="${TICKET_LOCAL:-$HOME/.config/dira}"
 # 멀티플레잉(§0-18): TICKET_SLOT이 비어 있으면 이 값은 오늘과 글자 그대로 같다.
 TOKENF="$LOCAL/oauth-token${TICKET_SLOT:+-$TICKET_SLOT}"
-mkdir -p "$LOGDIR" "$LOCAL/run" "$TICKET_ROOT/tickets"
+mkdir -p "$LOGDIR" "$LOCAL/run" "$TICKET_ROOT/tickets" "$TICKET_ROOT/polls"
 
 log() { printf '%s [%s] %s\n' "$(date '+%F %T')" "${TICKET_NAME:-?}" "$*" >> "$RUNLOG"; }
 
@@ -292,6 +295,24 @@ maybe_preempt() {
   kill -TERM "$VPID" 2>/dev/null
 }
 
+# --- §폴링 대기 결정 4 §실행 상한 30초 — 백그라운드 + kill 관용구(`timeout` 바이너리는
+# macOS 기본 설치에 없다). $1=스크립트 경로, $2=출력 파일(호출자가 마지막 200줄만 남긴다).
+# 반환값은 스크립트의 진짜 종료 코드, 상한을 넘겨 죽인 경우는 124(결정 4 "그 밖" 취급).
+run_capped() {
+  : > "$2"
+  "$1" > "$2" 2>&1 &
+  local pid=$! waited=0
+  while [ "$waited" -lt 30 ] && kill -0 "$pid" 2>/dev/null; do
+    sleep 1; waited=$((waited + 1))
+  done
+  if kill -0 "$pid" 2>/dev/null; then
+    kill -TERM "$pid" 2>/dev/null; sleep 2; kill -KILL "$pid" 2>/dev/null
+    wait "$pid" 2>/dev/null
+    return 124
+  fi
+  wait "$pid"
+}
+
 CMD="${1:-tick}"
 
 case "$CMD" in
@@ -392,9 +413,139 @@ case "$CMD" in
       [ -n "$line" ] && { log "$line"; echo "$line"; }
     done
     exit 0 ;;
+  poll)
+    # §폴링 대기 결정 8 - 워커 스크립트 서브커맨드 하나가 대기에 드는 문이다. 검사 다섯을
+    # 하나라도 걸리면 frontmatter를 한 글자도 안 고치고 0이 아닌 코드로 거절한다.
+    USAGE="사용법: $(basename "$0") poll <티켓해시> <스크립트 파일명> <상한 ISO 8601>"
+    H="${2:-}"; SCRIPT="${3:-}"; UNTIL="${4:-}"
+    if [ -z "$H" ] || [ -z "$SCRIPT" ] || [ -z "$UNTIL" ]; then echo "$USAGE" >&2; exit 2; fi
+    P=$(python3 "$PY" find "$TICKET_ROOT" "$H") || exit 1
+
+    # 검사 1 - 값에 '/'가 없다(`../`도 걸린다) + 파일이 실제로 있고 실행 권한이 있다.
+    case "$SCRIPT" in
+      */*) echo "거부: 스크립트 파일명에 '/'를 쓸 수 없다: $SCRIPT" >&2; exit 1 ;;
+    esac
+    SCRIPTPATH="$TICKET_ROOT/polls/$SCRIPT"
+    if [ ! -f "$SCRIPTPATH" ] || [ ! -x "$SCRIPTPATH" ]; then
+      echo "거부: 스크립트가 없거나 실행 권한이 없다: $SCRIPTPATH" >&2; exit 1
+    fi
+
+    # 검사 2 - 머리에 `# dira-poll-interval:` 줄이 있으면 그 값이 양의 정수다.
+    IVLINE=$(grep -m1 -E '^#[[:space:]]*dira-poll-interval:' "$SCRIPTPATH" 2>/dev/null)
+    if [ -n "$IVLINE" ]; then
+      IVVAL=$(printf '%s\n' "$IVLINE" | sed -n 's/^#[[:space:]]*dira-poll-interval:[[:space:]]*//p')
+      case "$IVVAL" in
+        ''|*[!0-9]*|0) echo "거부: dira-poll-interval이 양의 정수가 아니다: $IVVAL" >&2; exit 1 ;;
+      esac
+    fi
+
+    # 검사 3 - <상한>이 파싱되고 지금보다 뒤다.
+    UNTIL_EPOCH=$(python3 -c 'import sys, datetime
+try:
+    dt = datetime.datetime.fromisoformat(sys.argv[1])
+    if dt.tzinfo is None: dt = dt.astimezone()
+    print(int(dt.timestamp()))
+except Exception:
+    pass' "$UNTIL" 2>/dev/null)
+    case "$UNTIL_EPOCH" in
+      ''|*[!0-9]*) echo "거부: 상한 시각을 못 읽는다: $UNTIL" >&2; exit 1 ;;
+    esac
+    [ "$UNTIL_EPOCH" -gt "$(date +%s)" ] || { echo "거부: 상한이 과거다: $UNTIL" >&2; exit 1; }
+
+    # 검사 4 - 그 티켓의 주인이 자기 세션이다. unassign(위 §조상 사슬)과 같은 관용구다 -
+    # 이 poll 서브커맨드를 부르는 것은 그 티켓을 물고 있는 세션 자신이어야 한다.
+    UPID=$(sed -n 's/^pid:[[:space:]]*//p' "$P" | head -1 | tr -d "\"' ")
+    case "$UPID" in
+      ''|*[!0-9]*) echo "거부: 이 티켓에 pid가 없다 - 세션 소유를 확인할 수 없다" >&2; exit 1 ;;
+    esac
+    ANC=$$; OWNED=""
+    while [ "$ANC" != "0" ] && [ "$ANC" != "1" ] && [ -n "$ANC" ]; do
+      [ "$ANC" = "$UPID" ] && { OWNED=1; break; }
+      ANC=$(ps -p "$ANC" -o ppid= 2>/dev/null | tr -d ' ')
+    done
+    [ -n "$OWNED" ] || { echo "거부: 남의 티켓이다(pid=$UPID) - 자기 세션만 폴링에 넣을 수 있다" >&2; exit 1; }
+
+    # 검사 5 - 스크립트를 그 자리에서 한 번 돌려 본다. 0이면 이미 조건에 도달한 것이라
+    # 대기에 넣지 않고 그대로 둔다(tick 하나를 안 버린다). 그 밖(1이 아님)이면 거절한다.
+    TESTOUT="$LOCAL/run/poll-test-$$.log"
+    run_capped "$SCRIPTPATH" "$TESTOUT"; TESTRC=$?
+    rm -f "$TESTOUT"
+    if [ "$TESTRC" -eq 0 ]; then
+      echo "이미 조건에 도달했다 - 대기에 넣지 않는다: $H"
+      exit 0
+    elif [ "$TESTRC" -ne 1 ]; then
+      echo "거부: 스크립트가 오류를 냈다(rc=$TESTRC) - 대기에 넣지 않는다" >&2
+      exit 1
+    fi
+
+    # 다섯 검사를 다 지났다. unassign 결정 9 종료 경로와 같은 두 줄(clear+release)로 열고
+    # 그 위에 대기 키 둘을 얹는다.
+    python3 "$PY" clear "$P" || exit 1
+    RP=$(python3 "$PY" release "$P") || exit 1
+    python3 "$PY" pollstart "$RP" "$SCRIPT" "$UNTIL" || exit 1
+    log "POLL-START $H $SCRIPT until=$UNTIL"
+    echo "폴링 대기: $H -> $(basename "$RP") (스크립트 $SCRIPT, 상한 $UNTIL)"
+    exit 0 ;;
   dryrun|tick) ;;
   *) echo "알 수 없는 명령: $CMD"; exit 2 ;;
 esac
+
+# --- 스테일 수거: 세션이 죽었는데 진행중으로 남은 티켓을 백로그로 되돌린다 ---
+# 없으면 사람에게 질문하고 rc=0으로 종료한 세션의 티켓이 영구 유실된다(2026-07-28 스트림 실사고 3건).
+# §폴링 대기 결정 5와 같은 이유로 아래 워커 락(SKIP)보다 앞이다 - reap은 이 워커의 바쁨과
+# 무관한 큐 전체의 스테일 수거라, 원래도 워커 락 성패에 기댈 이유가 없었다.
+if [ "$CMD" = "tick" ]; then
+  python3 "$PY" reap "$TICKET_ROOT" 2>/dev/null | while IFS= read -r line; do
+    [ -n "$line" ] && log "$line"
+  done
+fi
+
+# --- §폴링 대기 결정 3·5·6 — 폴링 단계: reap 다음, `select` 앞이고, 이 워커가 바빠서 아래
+# 워커 락에 걸려 SKIP하는 자리보다도 앞이다 - 대기는 워커 슬롯과 무관한 큐 전체의 상태라서다.
+# 새 cron 줄 0개, 새 프로세스 0개 - 이미 깨어난 이 tick에 얹는다. 대기 티켓이 0건이면 파일
+# 목록 한 번 훑는 것으로 끝난다.
+POLL_FLOOR="${TICKET_POLL_FLOOR:-30}"
+poll_step() {
+  local ROWS p_path p_hash LOCKP OWNER PLAN rest scriptpath outf rc
+  ROWS=$(python3 "$PY" pollrows "$TICKET_ROOT" 2>/dev/null)
+  [ -z "$ROWS" ] && return 0
+  while IFS='|' read -r p_path p_hash; do
+    [ -z "$p_path" ] && continue
+    LOCKP="$LOCAL/run/poll-$p_hash.lock"
+    if ! mkdir "$LOCKP" 2>/dev/null; then
+      OWNER=$(cat "$LOCKP/pid" 2>/dev/null)
+      # 못 얻으면 기다리지 않고 이 티켓을 넘긴다(결정 6) - 다음 tick이 30~60초 뒤에 온다.
+      if [ -n "$OWNER" ] && kill -0 "$OWNER" 2>/dev/null; then continue; fi
+      rm -rf "$LOCKP"
+      mkdir "$LOCKP" 2>/dev/null || continue
+    fi
+    printf %s "$$" > "$LOCKP/pid"
+
+    # 주기 판정(polled_at + 머리의 초)은 잠금을 얻은 뒤에 다시 읽는다(결정 6) - pollplan이
+    # 매번 파일을 새로 읽으므로 여기서 부르는 것 자체가 그 재읽기다.
+    PLAN=$(python3 "$PY" pollplan "$p_path" "$POLL_FLOOR" 2>/dev/null)
+    case "$PLAN" in
+      WAIT) : ;;
+      "RUN "*)
+        rest="${PLAN#RUN }"
+        scriptpath="${rest%%|*}"
+        [ "$rest" != "$scriptpath" ] && log "${rest#*|}"
+        outf="$TICKET_ROOT/polls/$p_hash.log"
+        run_capped "$scriptpath" "$outf.tmp"; rc=$?
+        tail -n 200 "$outf.tmp" > "$outf" 2>/dev/null; rm -f "$outf.tmp"
+        python3 "$PY" pollresult "$p_path" "$rc" "$outf" | while IFS= read -r line; do
+          [ -n "$line" ] && log "$line"
+        done
+        ;;
+      "ASK "*) log "$PLAN" ;;
+      *) log "WARN POLL 알 수 없는 pollplan 출력: $p_hash: $PLAN" ;;
+    esac
+    rm -rf "$LOCKP"
+  done <<EOF
+$ROWS
+EOF
+}
+[ "$CMD" = "tick" ] && poll_step
 
 # 참견 입구(FIFO)와 최초 프롬프트 파일. 스트리밍 입력 엔진일 때만 실제 경로가 들어간다.
 INBOX=""; PRIMEF=""
@@ -425,14 +576,6 @@ if [ "$CMD" = "tick" ]; then
   printf %s "$$" > "$LOCK/pid"
   # 빈 값이면 rm -f ""가 되고 아무 일도 안 한다 -- 어떻게 죽든 FIFO가 남지 않게 여기 한 번만 건다.
   trap 'rm -rf "$LOCK" "$SLOCK"; rm -f "$INBOX" "$PRIMEF" "${PRIMEF:+$PRIMEF.fed}"' EXIT
-fi
-
-# --- 스테일 수거: 세션이 죽었는데 진행중으로 남은 티켓을 백로그로 되돌린다 ---
-# 없으면 사람에게 질문하고 rc=0으로 종료한 세션의 티켓이 영구 유실된다(2026-07-28 스트림 실사고 3건).
-if [ "$CMD" = "tick" ]; then
-  python3 "$PY" reap "$TICKET_ROOT" 2>/dev/null | while IFS= read -r line; do
-    [ -n "$line" ] && log "$line"
-  done
 fi
 
 # 엔진 쿨다운 게이트·claude 인증 게이트는 여기 없다 - 페르소나가 엔진을 정하므로 어느
