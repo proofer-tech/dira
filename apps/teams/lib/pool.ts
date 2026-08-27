@@ -9,6 +9,7 @@
 import { chmod, mkdir, readFile, readdir, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { NAME_RE, localDir } from "./paths.ts";
+import { readProjects } from "./projects.ts";
 import {
   alive,
   createWorker,
@@ -374,5 +375,39 @@ export async function applyPoolLimit(
     }
   }
   await writePoolLimit(root, limit);
+  return { blocked };
+}
+
+// ── 공통 워커 생성-삭제 전파 (DESIGN.md §4-16 결정 3 셋째 항목) ──────────────
+
+/** 새 공통 워커를 만들면 `pool-limit`이 1 이상인 등록 프로젝트 전부에 그 shim을 같은 요청 안에서
+ *  넣는다. `applyPoolLimit`의 borrow 루프와 같은 결 — 이름 충돌이면 그 자리에서 던진다(부분
+ *  실패를 견디지 않는다, 이미 들어간 shim은 되돌리지 않는다. `applyPoolLimit`도 같다). */
+export async function propagatePoolWorkerCreate(name: string): Promise<void> {
+  const projects = await readProjects();
+  for (const p of projects) {
+    const { limit } = await readPoolLimit(p.root);
+    if ((limit ?? 0) >= 1) await borrowPoolWorker(p.root, name);
+  }
+}
+
+/** 공통 워커를 지우면 빌리던 프로젝트 전부에서 그 shim을 같은 요청 안에서 뺀다.
+ *  `applyPoolLimit`의 반납 루프와 같은 결로 부분 실패를 견딘다 — 어느 프로젝트가 티켓을 물고
+ *  있어 못 빼면(`returnPoolWorker`가 던지는 사유) 그 프로젝트만 걸러 돌려주고 나머지는 마저
+ *  뺀다. */
+export async function propagatePoolWorkerDelete(
+  name: string,
+): Promise<{ blocked: { project: string; reason: string }[] }> {
+  const projects = await readProjects();
+  const blocked: { project: string; reason: string }[] = [];
+  for (const p of projects) {
+    const borrowed = await listBorrowedPoolWorkers(p.root);
+    if (!borrowed.includes(name)) continue;
+    try {
+      await returnPoolWorker(p.root, name);
+    } catch (e) {
+      blocked.push({ project: p.name, reason: (e as Error).message });
+    }
+  }
   return { blocked };
 }

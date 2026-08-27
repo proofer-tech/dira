@@ -98,6 +98,8 @@ import {
   deletePoolWorker,
   listPoolWorkers,
   poolWorkerFullStatus,
+  propagatePoolWorkerCreate,
+  propagatePoolWorkerDelete,
   readPoolLimit,
   startPoolWorker,
   stopPoolWorker,
@@ -723,12 +725,15 @@ export async function readWorkersPanelAction(): Promise<WorkersPanelView> {
 /** `공통 워커 풀` 덩이의 `워커 생성`. **만든 직후 crontab까지 등록한다** — 풀 파일은 cron
  *  진입점이라(§4-16 결정 2) 등록 없이는 `stopped`로 뜬다, `## Done when`이 요구하는 "만든 직후
  *  idle"은 파일 생성 + 등록 두 단계를 합쳐야 성립한다(`createWorkerAction`이 `createWorker` 뒤에
- *  바로 `registerCron`을 부르는 것과 같은 자리). */
+ *  바로 `registerCron`을 부르는 것과 같은 자리). **등록 직후 `pool-limit`이 1 이상인 프로젝트
+ *  전부에 shim을 넣는다**(§4-16 결정 3 셋째 항목) — 사람이 그 프로젝트마다 상한을 다시 저장할
+ *  필요가 없다. */
 export async function createPoolWorkerAction(name: string): Promise<{ error?: string }> {
   try {
     const trimmed = name.trim();
     await createPoolWorker(trimmed);
     await startPoolWorker(trimmed);
+    await propagatePoolWorkerCreate(trimmed);
   } catch (e) {
     return { error: (e as Error).message };
   }
@@ -755,15 +760,20 @@ export async function registerPoolWorkerAction(name: string): Promise<{ error?: 
   return {};
 }
 
-/** 풀 줄의 `삭제` — 지금 어느 프로젝트를 물고 있으면 거절한다(`deletePoolWorker`가 던지는 사유
- *  그대로). */
-export async function deletePoolWorkerAction(name: string): Promise<{ error?: string }> {
+/** 풀 줄의 `삭제` — 공통 워커 자신을 지금 어느 프로젝트가 물고 있으면 거절한다(`deletePoolWorker`가
+ *  던지는 사유 그대로, 무수정). 지운 뒤에는 빌리던 프로젝트 전부에서 그 shim을 같은 요청 안에서
+ *  뺀다(§4-16 결정 3 셋째 항목) — 프로젝트 하나가 티켓을 물고 있어 못 빼면 그 이름만 `blocked`에
+ *  담아 돌려주고 나머지는 마저 뺀다(`applyPoolLimit`의 부분 실패와 같은 모양). */
+export async function deletePoolWorkerAction(
+  name: string,
+): Promise<{ error?: string; blocked?: string[] }> {
   try {
     await deletePoolWorker(name);
   } catch (e) {
     return { error: (e as Error).message };
   }
-  return {};
+  const { blocked } = await propagatePoolWorkerDelete(name);
+  return { blocked: blocked.map((b) => b.project) };
 }
 
 /** 사용 통계 섹션 층 ① (DESIGN.md §0-11 §끄는 자리) — 다이얼로그가 열릴 때 한 줄이 읽는다.

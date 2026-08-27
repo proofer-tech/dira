@@ -30,6 +30,8 @@ const {
   listPoolWorkers,
   poolDir,
   poolWorkerFullStatus,
+  propagatePoolWorkerCreate,
+  propagatePoolWorkerDelete,
   readPoolLimit,
   returnPoolWorker,
   startPoolWorker,
@@ -402,4 +404,50 @@ test("applyPoolLimit — 티켓을 물고 있는 shim은 안 지워지고 blocke
   // 막힌 것은 남고, 안 막힌 것은 마저 지워졌다 — pool-limit은 그래도 0으로 쓰인다(사실이다)
   assert.deepStrictEqual(await listBorrowedPoolWorkers(root), ["pool-1"]);
   assert.deepStrictEqual(await readPoolLimit(root), { limit: 0, warn: false });
+});
+
+// ── propagatePoolWorkerCreate·propagatePoolWorkerDelete — Done when 596627ac ──
+
+test("propagatePoolWorkerCreate — pool-limit이 1 이상인 등록 프로젝트 전부에 shim이 들어가고, 0인 프로젝트는 안 들어간다", async () => {
+  const local = tmp("pool-prop-create-local-");
+  process.env.TICKET_LOCAL = local;
+  const { root: rootA } = await scaffold(makeRepo().base, { branch: "main" });
+  const { root: rootB } = await scaffold(makeRepo().base, { branch: "main" });
+  writeFileSync(path.join(rootA, "pool-limit"), "1\n");
+  writeFileSync(path.join(rootB, "pool-limit"), "0\n");
+  writeRegistry(local, [
+    { id: "a", root: rootA },
+    { id: "b", root: rootB },
+  ]);
+
+  await createPoolWorker("pool-1");
+  await propagatePoolWorkerCreate("pool-1");
+
+  assert.deepStrictEqual(await listBorrowedPoolWorkers(rootA), ["pool-1"]);
+  assert.deepStrictEqual(await listBorrowedPoolWorkers(rootB), []);
+});
+
+test("propagatePoolWorkerDelete — 빌리던 프로젝트 전부에서 shim이 빠지고, 티켓을 물고 있는 프로젝트만 blocked로 남는다", async () => {
+  const local = tmp("pool-prop-delete-local-");
+  process.env.TICKET_LOCAL = local;
+  const { root: rootA } = await scaffold(makeRepo().base, { branch: "main" });
+  const { root: rootB } = await scaffold(makeRepo().base, { branch: "main" });
+  writeRegistry(local, [
+    { id: "a", root: rootA },
+    { id: "b", root: rootB },
+  ]);
+
+  await createPoolWorker("pool-1");
+  await borrowPoolWorker(rootA, "pool-1");
+  await borrowPoolWorker(rootB, "pool-1");
+
+  // b가 지금 티켓을 물고 있는 것으로 만든다(락 + 살아 있는 pid) — `applyPoolLimit` 테스트의 putLock과 같다
+  putLock(path.join(rootB, "workers"), "pool-1", process.pid);
+
+  const { blocked } = await propagatePoolWorkerDelete("pool-1");
+  assert.strictEqual(blocked.length, 1);
+  assert.strictEqual(blocked[0].project, "b"); // writeRegistry가 name을 id 그대로 적는다
+  assert.match(blocked[0].reason, /티켓을 물고 있습니다/);
+  assert.deepStrictEqual(await listBorrowedPoolWorkers(rootA), []);
+  assert.deepStrictEqual(await listBorrowedPoolWorkers(rootB), ["pool-1"]); // 막힌 것은 남는다
 });

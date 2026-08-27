@@ -735,18 +735,22 @@ function PoolRow({
   status: WorkerStatus;
   borrowedBy: number;
   t: (key: string) => string;
-  onOp: (kind: PoolOpKind, name: string) => Promise<{ error?: string }>;
+  onOp: (kind: PoolOpKind, name: string) => Promise<{ error?: string; blocked?: string[] }>;
   onDone: () => void;
 }) {
   const locale = useLocale();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [blocked, setBlocked] = useState<string[]>([]);
   const run = (kind: PoolOpKind) =>
     start(async () => {
       const r = await onOp(kind, name);
-      if (r.error) setError(r.error);
-      else {
+      if (r.error) {
+        setError(r.error);
+        setBlocked([]);
+      } else {
         setError(null);
+        setBlocked(r.blocked ?? []);
         onDone();
       }
     });
@@ -795,6 +799,12 @@ function PoolRow({
             <span className="font-mono text-xs break-all">{error}</span>
           </AlertDescription>
         </Alert>
+      )}
+      {blocked.length > 0 && (
+        <p className="px-2 text-xs text-status-stale">
+          {t("workers.pool.blockedPrefix")}
+          {blocked.join(", ")}
+        </p>
       )}
     </div>
   );
