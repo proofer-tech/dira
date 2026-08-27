@@ -160,6 +160,7 @@ export function SessionStream({
   refs: initialRefs,
   costChunk,
   variant,
+  rev,
 }: {
   project: string;
   stem: string;
@@ -210,6 +211,11 @@ export function SessionStream({
    *  검색·필터·건수 툴바)을 입는다. `undefined`(티켓 상세)는 종전 화면과 클래스 0 차이다 —
    *  아래 검색·필터 상태도 선언은 하되 이 갈래에서만 읽는다. */
   variant?: "worker";
+  /** 서버가 그린 시점의 보드 회차(`boardRevision`) — 아래 "이미 그려진 표식의 회차 갱신" 폴의
+   *  기준선이다(`EarlyRefreshPolling`의 `rev` prop과 같은 값·같은 이유, 버그 `34dc2975`).
+   *  없으면(워커 다이얼로그처럼 진입 시점에 이미 그려진 표식이 없는 자리) 첫 응답이 기준선이
+   *  된다 — 그 창에서 갈리는 변경을 놓쳐도 애초에 갱신할 "이미 그려진" 표식이 없다. */
+  rev?: number;
 }) {
   const [events, setEvents] = useState<StreamEvent[]>([]);
   // 폴링이 실어 오는 새 표식 값을 누적한다(§9 §클라이언트가 폴링하는 자리) — vault와 달리
@@ -302,7 +308,10 @@ export function SessionStream({
   });
   useEffect(() => {
     let stop = false;
-    let since: number | null = null;
+    // 기준선은 서버가 그린 시점의 `rev`다(`rev` prop) — `EarlyRefreshPolling`과 같은 자리.
+    // 없으면(위 JSDoc) 첫 응답을 기준선으로 삼는다 — 그때도 마운트~첫 왕복 사이 창이 있지만
+    // 그 자리엔 애초에 "이미 그려진" 표식이 없어 놓쳐도 갱신할 것이 없다.
+    let since: number | null = rev ?? null;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const poll = async () => {
       try {
@@ -311,7 +320,7 @@ export function SessionStream({
         ).then((res) => res.json());
         if (stop) return;
         if (since === null) {
-          since = r.rev; // 첫 회차는 기준선만 세운다 — 마운트 시점 값은 이미 최신이다
+          since = r.rev; // 기준선이 없던 자리 — 첫 응답을 기준선으로 삼는다
         } else if (r.rev !== since) {
           since = r.rev;
           const known = knownRefs.current;
@@ -335,7 +344,7 @@ export function SessionStream({
       stop = true;
       clearTimeout(timer);
     };
-  }, [project]);
+  }, [project, rev]);
 
   // 붙어 있을 때만 따라간다. 첫 렌더가 맨 아래에서 시작하는 것도 이 효과다(§9) — 그 자리가
   // **병합이 노린 자리다**: 답 없는 마지막 질문이 맨 끝이라(§2-3 ②) 첫 화면이 곧 "지금 무엇을
@@ -723,6 +732,7 @@ export function SessionStream({
               vault={vault}
               refs={liveRefs}
               variant="worker"
+              rev={rev}
             />
           </DialogContent>
         </Dialog>

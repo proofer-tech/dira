@@ -109,3 +109,31 @@ test("답변 대기면 참견 폼이 안 뜨고 목적지 문장과 함께 답�
     "답변 모드가 무엇을 하는지 가리키는 문장이 없다",
   );
 });
+
+// 버그 34dc2975: "이미 그려진 표식의 회차 갱신" 폴이 `since`를 `null`로 시작해 마운트~첫
+// 왕복(최대 2초) 사이에 갈리는 변경을 기준선 자체가 흡수했다 — `EarlyRefreshPolling`처럼
+// 서버가 그린 시점의 `rev`를 기준선으로 받아야 그 창의 변경도 diff에 잡힌다.
+test("이미 그려진 표식 회차 갱신 폴이 `since`를 `rev` prop에서 받는다(버그 34dc2975)", () => {
+  const pollStart = s.indexOf("let stop = false;\n    // 기준선은 서버가 그린 시점의");
+  const pollEnd = s.indexOf("}, [project, rev]);", pollStart);
+  const pollBody = s.slice(pollStart, pollEnd + "}, [project, rev]);".length);
+  assert.ok(pollStart >= 0, "이미 그려진 표식 회차 갱신 폴을 못 찾았다 — 위 주석이 갈렸다");
+  assert.match(
+    pollBody,
+    /let since: number \| null = rev \?\? null;/,
+    "`since`가 `rev` prop이 아니라 여전히 `null`로만 시작한다",
+  );
+  assert.match(
+    pollBody,
+    /}, \[project, rev\]\);/,
+    "폴 이펙트의 의존 배열에 `rev`가 없다 — `rev`가 갈려도 기준선이 안 다시 선다",
+  );
+});
+
+test("`rev` prop이 `EarlyRefreshPolling`과 같은 값으로 재귀 `<SessionStream>` 호출에 물려간다(버그 34dc2975)", () => {
+  assert.match(
+    s,
+    /<SessionStream\n[\s\S]*?variant="worker"\n\s*rev=\{rev\}\n\s*\/>/,
+    "`크게 보기`가 여는 재귀 `<SessionStream>`이 `rev`를 안 물려받는다",
+  );
+});

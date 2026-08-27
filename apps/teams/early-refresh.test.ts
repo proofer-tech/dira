@@ -43,3 +43,18 @@ test("티켓 상세 - 페르소나 - 에픽 - 워커 화면이 EarlyRefreshPolli
     assert.ok(!/setInterval/.test(src), `${name} 화면에 5초 바닥(setInterval)이 붙었다 — §개정 2 위반`);
   }
 });
+
+// 버그 34dc2975: `SessionStream`의 "이미 그려진 표식 회차 갱신" 폴도 `EarlyRefreshPolling`과
+// 같은 기준선(`boardRevision`)을 받아야 마운트~첫 왕복 사이의 변경을 놓치지 않는다.
+test("티켓 상세가 `SessionStream`에도 `EarlyRefreshPolling`과 같은 `rev`를 넘긴다(버그 34dc2975)", () => {
+  assert.match(
+    ticketPage,
+    /const rev = boardRevision\(project\.root\);/,
+    "`rev` 상수가 없다 — EarlyRefreshPolling과 SessionStream이 다른 값을 볼 수 있다",
+  );
+  assert.match(
+    ticketPage,
+    /<SessionStream\n[\s\S]*?rev=\{rev\}\n\s*\/>/,
+    "`<SessionStream>`이 `rev` prop을 안 받는다",
+  );
+});
