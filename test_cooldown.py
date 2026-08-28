@@ -80,6 +80,7 @@ case "$(cat "{tmp}/mode")" in
     printf '{{"type":"rate_limit_event","rate_limit_info":{{"status":"allowed_warning","resetsAt":%s,"rateLimitType":"five_hour"}}}}\\n' "$(cat "{tmp}/decoy")"
     printf '{{"type":"rate_limit_event","rate_limit_info":{{"status":"rejected","resetsAt":%s,"rateLimitType":"five_hour","overageDisabledReason":"out_of_credits"}}}}\\n' "$(cat "{tmp}/resets")"
     printf "$ERR"',"terminal_reason":"api_error","api_error_status":429}}\\n' "$1" ;;
+  bad_request) printf "$ERR"',"terminal_reason":"api_error","api_error_status":400}}\\n' "$1" ;;
   other) printf "$ERR"',"terminal_reason":"aborted_streaming"}}\\n' "$1" ;;
   donedeath)
     # 세션이 자기 손으로 .done rename까지 마친 뒤 죽는 모양(§4-10). tick.sh는 이 순간
@@ -406,8 +407,38 @@ try:
         "쿨다운 지문이 세션이 실제로 쓴 계정(A)이 아니다: {} (fp(A)={}, fp(B)={})".format(
             got, fp_a, fp_b)
 
+    # --- ⑮ 재시도해도 안 낫는 요청 오류(4xx)는 창을 안 건다 ---
+    # api_error_status가 400이면 5분 뒤 같은 요청을 다시 보내도 같은 자리에서 같이 죽는다.
+    # 그때 창을 걸면 워커 전부가 게이트에서 막히고, 만료 직전 나간 워커가 또 같은 400을 받아
+    # 창을 되감는다(2026-08-28 실사고: cache_control 5개 400 하나가 큐를 6시간 세웠다).
+    # 창 없이 평범한 FAIL이어야 한다 - 티켓은 열림으로 돌아오고 다음 tick이 막히지 않는다.
+    for f_ in os.listdir(tickets):
+        if not f_.endswith(".done.md"):
+            os.remove(os.path.join(tickets, f_))
+    if os.path.exists(cool):
+        os.remove(cool)
+    mkfile(token, "tok-A")
+    mkfile(os.path.join(tickets, "6666f006.md"),
+           "---\nticket: 6666f006\ntitle: t\nkind: work\n---\n\n## Goal\ntest\n")
+    mode("bad_request")
+    before = len(log())
+    tick()
+    added = log()[before:]
+    assert not os.path.exists(cool), \
+        "요청 오류(400)인데 쿨다운을 걸었다 - 다음 워커까지 같이 막힌다:\n" + added
+    assert "FAIL 6666f006" in added, "요청 오류가 FAIL로 안 떨어졌다:\n" + added
+    assert "6666f006.md" in ls(), "티켓이 열림으로 안 돌아왔다: " + str(ls())
+    # 사람이 로그만 보고도 "엔진이 아니라 요청이 틀렸다"를 알아야 한다.
+    assert "요청 오류" in added, "요청 오류를 알리는 줄이 없다:\n" + added
+    # 뒤이은 tick이 게이트에 안 막힌다(같은 400을 또 받아도 그건 창이 아니라 그 세션의 실패다).
+    before = len(log())
+    tick()
+    assert "SKIP 엔진 쿨다운" not in log()[before:], \
+        "요청 오류 뒤 다음 tick이 쿨다운 게이트에 막혔다:\n" + log()[before:]
+
     print("OK - 엔진 쿨다운 (복귀 시각 · 게이트 · 재무장 · 토큰 교체 해제 · 모델 교체는 안 푼다 · "
-          ".done 뒤 죽은 세션 · codex/grok 한도 판정 · TICKET_SLOT이 토큰·쿨다운을 같이 가른다)")
+          ".done 뒤 죽은 세션 · codex/grok 한도 판정 · TICKET_SLOT이 토큰·쿨다운을 같이 가른다 · "
+          "재시도해도 안 낫는 4xx는 창을 안 건다)")
 finally:
     subprocess.run(["pkill", "-f", os.path.join(tmp, "fake-engine.sh")], capture_output=True)
     subprocess.run(["pkill", "-f", os.path.join(tmp, "codex-engine.sh")], capture_output=True)

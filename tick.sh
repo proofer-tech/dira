@@ -1132,16 +1132,20 @@ if [ -n "$INBOX" ]; then
   # cat 두 방으로 이어 붙여 참견 입구는 그대로 남는다: 프롬프트 다음 줄부터 FIFO가 stdin이다.
   # 그룹에도 9>&-를 건다. cat이 fd 9(쓰기 끝)를 물려받으면 우리가 닫아도 자기가 writer라
   # EOF를 못 봐서 세션이 죽은 뒤에도 영영 남는다.
-  # content가 문자열 하나면 매 디스패치 안 변하는 문서 층(HEAD)까지 변하는 꼬리(TAIL)와 한
-  # 캐시 항목으로 묶여 회차마다 새로 쓰이고 한 번도 안 읽힌다(P295 실측 `30944c7b`/`ac56cdab`).
-  # 블록 둘로 갈라 앞(HEAD)에만 cache_control ttl 1h를 달면 다음 디스패치가 그 프리픽스를
-  # 읽는다 - ttl을 빼거나 5m으로 두면 기본값 5m이 CLI 자기 몫 1h 블록보다 앞에 설 수 없어 API
-  # 400이 난다(§프롬프트 층 결정 10 §엔진 수정 스물다섯 번째 승인).
+  # cache_control은 우리 몫이 없다. CLI가 자기 몫으로 4개를 다 쓴다 - system 둘 + 대화 롤링
+  # 둘이고, 롤링 창은 도구 결과가 붙는 **둘째** 요청부터 2개가 된다(2026-08-28 실측: 로컬
+  # 기록 API로 요청 본문을 떠서 셌다. 턴1 = CLI 3 + 우리 1 = 4로 통과, 턴2 = CLI 4 + 우리 1
+  # = 5로 거부). 한 개라도 달면 그 세션은 둘째 요청에서 통째로 400이다 - "A maximum of 4
+  # blocks with cache_control may be provided. Found 5.". 그 400이 api_error로 읽혀 쿨다운을
+  # 다시 걸고, 만료 직전 나간 워커가 또 400을 받아 되감는 고리가 큐를 6시간 세웠다.
+  # 블록 둘로 가른 것은 그대로 남긴다 - 이어 붙인 것이 dryrun 프롬프트와 같다는 계약이
+  # test_cache_control.py에 있고, HEAD를 시스템 프롬프트로 옮겨 P295 이득을 되찾는 다음 수가
+  # 이 자리에서 갈린다(§프롬프트 층 결정 10 §엔진 수정 스물다섯 번째 승인 개정).
   PRIMEF="$LOCAL/run/prime-$SID.json"
   python3 -c 'import json,sys
 head, tail = sys.argv[1], sys.argv[2]
 content = [
-    {"type": "text", "text": head, "cache_control": {"type": "ephemeral", "ttl": "1h"}},
+    {"type": "text", "text": head},
     {"type": "text", "text": tail},
 ]
 sys.stdout.write(json.dumps({"type":"user","message":{"role":"user","content":content}},
@@ -1406,8 +1410,13 @@ printf '%s\n' "$OUT" >> "$LOGF"
 
 # 실제 세션키와 판정을 응답에서 읽는다. 옛 경로는 응답 전체가 JSON 하나이고,
 # stream-json은 JSONL이라 `result` 줄이 판정이다(전체 json.load는 거기서 깨진다).
-# 셋째 칸 terminal_reason이 엔진 불능(api_error)과 진짜 세션 실패를 가른다. api_error_status로는
-# 못 가른다 - 429가 아닌 네트워크 실패(ENOTFOUND)엔 그 키가 없는데 똑같이 불능이다.
+# 셋째 칸 terminal_reason이 엔진 불능(api_error)과 진짜 세션 실패를 가른다. api_error_status
+# 하나로는 못 가른다 - 429가 아닌 네트워크 실패(ENOTFOUND)엔 그 키가 없는데 똑같이 불능이다.
+# 다만 그 키가 4xx(408·429 제외)로 **있으면** 그건 요청 자체가 틀렸다는 증거다 - 5분 뒤 같은
+# 요청을 다시 보내도 같은 자리에서 같이 죽는다. 그때만 api_error에서 떼어 bad_request로 내려
+# 쿨다운을 건너뛴다(2026-08-28: cache_control 5개짜리 400 하나가 큐를 6시간 세웠다 - 만료
+# 직전 나간 워커가 또 400을 받아 창을 되감는 고리였다). segment_result의 사본은 안 건드린다 -
+# 거기 reason은 재활용 판정에 안 쓰이고 버려진다(호출부 _SEGREASON).
 # 넷째 칸은 리밋이 알려준 복귀 시각(epoch). `status: rejected`인 것만 센다 - 같은 이벤트가
 # `allowed_warning`으로도 오고(실측 1,058건) 그건 아직 통과한 요청이라 기다릴 이유가 없다.
 # reason 판정은 엔진 중립이다(§4-9 §개정 2026-08-05, 승인 04bd819d=(b)) - claude는 그대로
@@ -1427,6 +1436,10 @@ for ln in raw.splitlines():
         ok = "err" if o.get("is_error") else "ok"
         if "terminal_reason" in o:
             reason = o.get("terminal_reason", "") or ""
+            st = o.get("api_error_status")
+            if reason == "api_error" and isinstance(st, int) and 400 <= st < 500 \
+                    and st not in (408, 429):
+                reason = "bad_request"
         elif o.get("is_error"):
             errs = " ".join(str(e) for e in (o.get("errors") or [])).lower()
             if any(k in errs for k in LIMIT_WORDS):
@@ -1478,6 +1491,10 @@ if [ -n "${FAILED:-}" ]; then
     case "$RESET" in ''|*[!0-9]*) ;; *) KNOWN=1; [ "$RESET" -gt "$UNTIL" ] && UNTIL="$RESET" ;; esac
     arm_cdown "$UNTIL" "$KNOWN"
     log "NOTE 엔진 불능 - $((UNTIL - NOW))초 쿨다운(복귀 ${RESET:-미상})"
+  elif [ "$REASON" = "bad_request" ]; then
+    # 엔진은 멀쩡하고 우리가 보낸 요청이 틀렸다 - 창을 걸어 봐야 다음 워커가 같은 요청을 다시
+    # 보낼 뿐이다. 창 없이 평범한 FAIL로 떨어뜨려 다른 티켓·다른 엔진은 계속 돌게 둔다.
+    log "NOTE $THASH 요청 오류 - 쿨다운 없음(재시도해도 같은 자리에서 죽는다)"
   fi
   if [ -n "${CLOSED:-}" ]; then
     # 세션이 끝까지 수행하고 .done rename까지 자기 손으로 마친 뒤 죽었다 - 큐의 사실은 완료다.

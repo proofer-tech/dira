@@ -1,10 +1,22 @@
 #!/usr/bin/env python3
 """캐시 갈래(P295-10) 자체검증: 스트리밍 프라임 JSON의 `content`가 블록 둘로 갈리는가.
 
-앞 블록(안 변하는 문서 층 - CORE.md - 페르소나 - 온톨로지 - 큐 AGENTS.md)에만
-`cache_control:{"type":"ephemeral","ttl":"1h"}`가 있고, 뒤 블록(변하는 꼬리 - 티켓 해시 문장 -
-참조 컨텍스트 - 언어 안내)에는 없다. 두 블록 text를 이어 붙인 것이 `dryrun`이 찍는 프롬프트와
-바이트 단위로 같아야 한다(§프롬프트 층 결정 10 §엔진 수정 스물다섯 번째 승인).
+2026-08-28 개정 - 단언이 뒤집힌 자리와 그 이유:
+    옛 계약은 "앞 블록에만 cache_control ttl 1h가 있다"였다. 지금 계약은 "어느 블록에도
+    cache_control이 없다"다. 이 파일이 우리 블록 1개만 재고 CLI 몫과의 합은 안 재는 것이
+    사각지대였다 - 그 합이 API 상한 4를 넘어도 여기서는 초록이었다.
+    실측(로컬 기록 API로 요청 본문을 떠서 셈): CLI가 자기 몫으로 최대 4개를 쓴다 - system 둘
+    (에이전트 프롬프트 - 하네스 프롬프트) + 대화 롤링 둘. 롤링 창은 도구 결과가 붙는 **둘째**
+    요청부터 2개가 된다. 그래서 우리가 한 개라도 달면 첫 턴은 4로 통과하고 둘째 턴에서 5가 되어
+    세션이 통째로 400을 받는다("A maximum of 4 blocks with cache_control may be provided.
+    Found 5."). 그 400이 api_error로 읽혀 쿨다운을 걸고, 만료 직전 나간 워커가 또 400을 받아
+    창을 되감아 2026-08-28 04:50~10:52 큐가 멎었다(실패 세션 14건).
+    우리 몫을 0으로 내려야 합이 4 이하다 - 우리가 줄일 수 있는 유일한 몫이 우리 것뿐이다.
+    P295가 벌던 이득(안 변하는 문서 층을 디스패치 사이에 캐시로 읽기)은 이 자리에서는 못 지킨다
+    - HEAD를 시스템 프롬프트로 옮겨 CLI 자기 블록 안에 태우는 것이 다음 수다.
+
+블록 둘로 가르는 것 자체는 남는다: 두 블록 text를 이어 붙인 것이 `dryrun`이 찍는 프롬프트와
+바이트 단위로 같아야 한다(§프롬프트 층 결정 10 §엔진 수정 스물다섯 번째 승인 개정).
 
 임시 큐에서만 판정한다(도그푸딩 큐에서 엔진을 실험하지 않는다). 진짜 claude를 부르지 않고,
 stdin 첫 줄(프라임 JSON)을 파일로 받아 적는 가짜 스트림 엔진으로 본다(test_inbox.py 선례).
@@ -114,10 +126,11 @@ try:
 
     assert head_block.get("type") == "text", head_block
     assert tail_block.get("type") == "text", tail_block
-    assert head_block.get("cache_control") == {"type": "ephemeral", "ttl": "1h"}, \
-        "앞 블록 cache_control이 다르다: {}".format(head_block.get("cache_control"))
-    assert "cache_control" not in tail_block, \
-        "뒤 블록에 cache_control이 있으면 안 된다: {}".format(tail_block)
+    # 우리 몫은 0이다. 한 블록이라도 달면 CLI 몫 4와 합쳐 5가 되어 둘째 요청이 400으로 죽는다.
+    for name, blk in (("앞", head_block), ("뒤", tail_block)):
+        assert "cache_control" not in blk, \
+            "{} 블록에 cache_control이 있으면 안 된다(CLI 몫 4와 합쳐 API 상한 4를 넘는다): {}".format(
+                name, blk)
 
     head, tail = head_block["text"], tail_block["text"]
     assert head.startswith("===== CORE.md"), "앞 블록이 CORE.md로 안 시작한다\n" + head[:200]
@@ -136,6 +149,6 @@ try:
         "두 블록을 이어 붙인 것이 dryrun 프롬프트와 다르다\n--- head+tail\n{}\n--- dryrun\n{}".format(
             head + tail, full_prompt)
 
-    print("PASS 프라임 JSON 블록 둘 + 앞 블록만 cache_control ttl 1h + head+tail == dryrun 프롬프트")
+    print("PASS 프라임 JSON 블록 둘 + cache_control 0개(우리 몫) + head+tail == dryrun 프롬프트")
 finally:
     shutil.rmtree(tmp, ignore_errors=True)
