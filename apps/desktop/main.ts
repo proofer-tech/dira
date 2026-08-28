@@ -16,7 +16,7 @@ import { accessSync, constants, cpSync, existsSync, readFileSync, rmSync, statSy
 import { createServer } from "node:net";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { releaseNotes } from "./release-notes.ts";
+import { newNotesCache, releaseNotesCached } from "./release-notes.ts";
 import { decideRevive, isExternalDeath } from "./revive.ts";
 
 /** 패키징하면 standalone 산출물이 통째로 `Contents/Resources/server/`에 들어간다
@@ -503,6 +503,9 @@ function autoUpdateFlag(): string {
 /** 받아둔 버전 — T1 이어붙임(`state`)과 T6(`notes`)의 원본. `null`이면 받아둔 것이 없다.
  *  `notes`는 `releaseNotes()`가 돌려주는 promise를 그대로 들고 있다 — await하지 않는다(T6). */
 let pendingUpdate: { version: string; notes: Promise<string> } | null = null;
+/** R7 §시작 시점이 앞당겨진다 — `update-available`가 이 캐시에 노트를 미리 만들어 둔다.
+ *  `update-downloaded`는 버전이 같으면 그 promise를 그대로 받아 쓴다(`releaseNotesCached`). */
+const notesCache = newNotesCache();
 /** T4 — 직전에 보낸 정수 퍼센트. 다운로드가 안 도는 동안은 `-1`이라 `error`가 그 시점의
  *  실패인지(체크 단계) 다운로드 중 실패인지 이 값으로 가른다. */
 let lastPercent = -1;
@@ -642,17 +645,26 @@ async function isBusy(origin: string): Promise<boolean> {
   }
 }
 
+// R7 §시작 시점이 앞당겨진다 — `autoDownload`가 기본값 그대로 켜져 있어 `update-available`
+// 직후에 다운로드가 시작된다. 요약에 드는 최대 60초를 그 다운로드 시간과 겹치려고 여기서
+// 미리 불러 `notesCache`에 담아 둔다. 실패해도(compare 실패·claude 없음) `releaseNotes()`
+// 자신이 삼켜 문자열로 돌려주므로 여기서 잡을 예외가 없다.
+autoUpdater.on("update-available", (info) => {
+  releaseNotesCached(notesCache, app.getVersion(), info.version, publishSlug(), releaseIo);
+});
+
 // R6 — 다 받으면 사실만 알려 준다. `다음 시작에 적용`(기본)은 종전처럼 아무 일도 안 하고,
 // `지금 재시작`은 `busy`를 확인한 뒤에만 재시작한다(요구 `9a04dabc` — §재재판정).
 // **토스트 본문 한 줄이 R6의 사실이고 노트는 `notes` 액션으로 딴 곳에서 편다**(R7 — 요약이
 // 죽어도 그 한 줄은 이미 떠 있다). `releaseNotes()`를 **await하지 않는다**(T6) — 요약에 최대
 // 60초가 걸려 토스트가 그만큼 늦게 뜨면 안 된다. promise는 `pendingUpdate`가 들고 있다가
-// `notes` 액션을 누른 시점에 그대로 준다.
+// `notes` 액션을 누른 시점에 그대로 준다. `releaseNotesCached`는 `update-available`가 이미
+// 만들어 둔 것을 버전이 같으면 그대로 재사용하고, 다르면(드문 경우) 여기서 새로 만든다.
 autoUpdater.on("update-downloaded", (info) => {
   stopUpdatePolling(); // T3 — 다 받으면 폴링을 멈춘다
   lastPercent = -1;
   restartAsked = false;
-  pendingUpdate = { version: info.version, notes: releaseNotes(app.getVersion(), info.version, publishSlug(), releaseIo) };
+  pendingUpdate = { version: info.version, notes: releaseNotesCached(notesCache, app.getVersion(), info.version, publishSlug(), releaseIo) };
   surfaceUpdate({ kind: "downloaded", version: info.version });
 });
 

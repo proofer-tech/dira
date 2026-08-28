@@ -5,7 +5,7 @@
 // $ cd apps/desktop && pnpm test
 import assert from "node:assert/strict";
 import test from "node:test";
-import { releaseNotes } from "./release-notes.ts";
+import { newNotesCache, releaseNotes, releaseNotesCached } from "./release-notes.ts";
 
 // **여기서 삼키는 이유는 이 파일의 본체가 실패 경로라서다.** `releaseNotes()`는 세 경로를
 // 밟을 때마다 `[dira] 릴리즈 노트: …`를 찍는데, 초록으로 끝난 릴리스 로그에 그 아홉 줄이
@@ -99,6 +99,41 @@ test("커밋 0건 · 빈 요약 — 그래도 본문은 R6 문장이다", async 
     summarize: async () => "   \n",
   });
   assert.equal(blank, `${R6}\n\n• chore: 한 건`);
+});
+
+test("캐시 — 같은 버전을 두 번 요청해도 fetchText는 한 번만 불린다", async () => {
+  const cache = newNotesCache();
+  let fetchCount = 0;
+  const io = {
+    async fetchText() {
+      fetchCount++;
+      return compare("feat(트레이): 자동 업데이트 토글");
+    },
+    async summarize() {
+      return "• 요약";
+    },
+  };
+  const first = await releaseNotesCached(cache, "0.1.0", "0.2.0", SLUG, io);
+  const second = await releaseNotesCached(cache, "0.1.0", "0.2.0", SLUG, io);
+  assert.equal(fetchCount, 1);
+  assert.equal(first, second);
+});
+
+test("캐시 — 버전이 다르면 새로 만든다", async () => {
+  const cache = newNotesCache();
+  let fetchCount = 0;
+  const io = {
+    async fetchText() {
+      fetchCount++;
+      return compare("feat(트레이): 자동 업데이트 토글");
+    },
+    async summarize() {
+      return "• 요약";
+    },
+  };
+  await releaseNotesCached(cache, "0.1.0", "0.2.0", SLUG, io);
+  await releaseNotesCached(cache, "0.1.0", "0.3.0", SLUG, io);
+  assert.equal(fetchCount, 2);
 });
 
 test("제목 21건 — 20건 + `…외 N건`으로 잘린다(다이얼로그에 스크롤이 없다)", async () => {
