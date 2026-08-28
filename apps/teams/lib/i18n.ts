@@ -423,6 +423,10 @@ export const ko: Record<string, string> = {
   "progress.plan.doing": "진행중",
   "progress.plan.done": "완료",
 
+  // 배치 개정(§비주얼 §59 ⑦-1) — 계획 목록을 앞뒤로 감싸는 칸 둘의 제목 줄 낱말.
+  "progress.segment.assigned": "배정",
+  "progress.segment.finished": "마무리",
+
   // 오류인 결과 줄 표식(§비주얼 §60 ⑧) — `결과`·`서브`·`n줄`은 무수정이라 키로 안 올린다.
   "progress.stream.error": "오류",
 
@@ -1407,6 +1411,9 @@ export const en: Record<string, string> = {
   "progress.plan.cancelled": "Cancelled",
   "progress.plan.doing": "In progress",
   "progress.plan.done": "Done",
+
+  "progress.segment.assigned": "Assigned",
+  "progress.segment.finished": "Wrapping up",
 
   "progress.stream.error": "Error",
 

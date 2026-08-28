@@ -465,15 +465,80 @@ export function groupProgress<E, T>(
   return out;
 }
 
-/** §2-11④ 창 배분 — 계획 하나가 스트림의 한 구간을 집는다. 순서는 **계획 줄 순서**(파일 순서 —
- *  `plans` 배열 순서)가 정본이고 시각으로 재정렬하지 않는다. 창이 겹치면 **앞 계획이 먼저 집는다**
- *  (한 사건은 한 계획에만 든다). 어느 창에도 안 드는 사건은 `outside`로 시간순 그대로 나온다.
+/** 계획 하나 이상을 **파일 순서 연속 구간**으로 묶은 것. 시작 시각이 같은 계획 둘 이상만
+ *  묶이고(§2-11⑨ 판정1), 그 밖은 전부 길이 1인 홀몸 묶음이다 — 종전 `windowEvents`의 "계획
+ *  하나 = 창 하나"가 그 특수형이다. */
+function bundleUnits(plans: PlanItem[]): number[][] {
+  const units: number[][] = [];
+  let i = 0;
+  while (i < plans.length) {
+    const start = plans[i].start ? Date.parse(plans[i].start!) : NaN;
+    if (Number.isNaN(start)) {
+      units.push([i]);
+      i++;
+      continue;
+    }
+    let j = i + 1;
+    while (j < plans.length && plans[j].start && Date.parse(plans[j].start!) === start) j++;
+    units.push(Array.from({ length: j - i }, (_, k) => i + k));
+    i = j;
+  }
+  return units;
+}
+
+/** 묶음 하나의 창 — 첫 계획의 시작에서, **묶음의 마지막 계획**이 정하는 끝까지(§2-11⑨ 판정1).
+ *  끝을 정하는 규칙은 종전 §2-11④ 단일 계획 판정과 같다 — 진짜 진행중이면 `now`, 끝이 적혔으면
+ *  그 값, 아니면 묶음 다음 계획의 시작. */
+function unitWindow(
+  unit: number[],
+  plans: PlanItem[],
+  now: number,
+  lastDoing: number,
+): { start: number; end: number } | null {
+  const first = plans[unit[0]];
+  if (!first.start) return null;
+  const start = Date.parse(first.start);
+  if (Number.isNaN(start)) return null;
+  const lastIdx = unit[unit.length - 1];
+  const last = plans[lastIdx];
+  if (last.state === "doing" && lastIdx === lastDoing) return { start, end: now };
+  if (last.end) {
+    const end = Date.parse(last.end);
+    return Number.isNaN(end) ? null : { start, end };
+  }
+  const next = plans[lastIdx + 1];
+  if (!next?.start) return null;
+  const end = Date.parse(next.start);
+  return Number.isNaN(end) ? null : { start, end };
+}
+
+/** `items`를 `n`토막으로 **파일 순서(=시간순) 연속** 분할한다 — 균등하게 안 떨어지면 나머지는
+ *  앞 토막부터 한 건씩 간다(§2-11⑨ 판정1 · 판정3 공통 규칙, 수용조건 15). */
+function splitEvenly<E>(items: E[], n: number): E[][] {
+  const base = Math.floor(items.length / n);
+  const rem = items.length % n;
+  const out: E[][] = [];
+  let idx = 0;
+  for (let k = 0; k < n; k++) {
+    const size = base + (k < rem ? 1 : 0);
+    out.push(items.slice(idx, idx + size));
+    idx += size;
+  }
+  return out;
+}
+
+/** §2-11⑨ 판정1-2 — **묶음**과 **닻**. 시작 시각이 같은 계획 둘 이상은 한 묶음이고 창도
+ *  하나다 — 그 창의 사건을 묶음 안 계획들이 파일 순서대로 균등하게 나눠 갖는다(`splitEvenly`).
+ *  종전의 *창이 겹치면 앞 계획이 먼저 집는다*는 묶음 단위로 옮겨 갔을 뿐 죽지 않았다 — 창 claim은
+ *  여전히 파일 순서다. **닻**(창이 있고 그 창이 사건을 하나 이상 실제로 집는 묶음)만 자기 창의
+ *  사건을 갖는다 — 창이 없거나 비면 그 묶음의 계획들은 빈 버킷이고, 그 사건은 `outside`로 남아
+ *  `planBlocks`의 구간(판정3)이 나중에 나눠 준다.
  *
- *  **시작이 없는 계획은 창이 없다**(미착수 · 시작 없는 완료 — §2-11④ 표 그대로 한 판정으로 묶인다).
+ *  **시작이 없는 계획은 창이 없다**(미착수 · 시작 없는 완료).
  *
  *  **진행중 모양이 둘 이상이면 파일 순서상 마지막 하나만 진짜 진행중이다**(§2-11④) — 끝 시각을
  *  빼먹고 다음 계획으로 넘어간 실수이므로 앞의 것들은 "완료·끝 시각 없음"과 같은 규칙(다음 계획의
- *  시작으로 닫힌다)을 탄다. 다음 계획이 없거나 시작이 없으면 창이 없다.
+ *  시작으로 닫힌다)을 탄다.
  *
  *  `ts` 없는 사건은 `mergeProgress`와 같은 규칙(§2-3②) — 앞 사건의 시각을 물려받는다.
  *  `now`(ms)는 진짜 진행중 계획의 창 끝이다 — 순수 함수로 두려고 인자로 받는다(`Date.now()`를
@@ -484,20 +549,8 @@ export function windowEvents<E extends { ts?: string }>(
   now: number,
 ): { buckets: E[][]; outside: E[]; lastDoing: number } {
   const lastDoing = plans.reduce((last, p, i) => (p.state === "doing" ? i : last), -1);
-  const windows = plans.map((p, i) => {
-    if (!p.start) return null;
-    const start = Date.parse(p.start);
-    if (Number.isNaN(start)) return null;
-    if (p.state === "doing" && i === lastDoing) return { start, end: now };
-    if (p.end) {
-      const end = Date.parse(p.end);
-      return Number.isNaN(end) ? null : { start, end };
-    }
-    const next = plans[i + 1];
-    if (!next?.start) return null;
-    const end = Date.parse(next.start);
-    return Number.isNaN(end) ? null : { start, end };
-  });
+  const units = bundleUnits(plans);
+  const windows = units.map((u) => unitWindow(u, plans, now, lastDoing));
 
   // 사건의 시각. 못 읽으면 앞 사건 값을 물려받는다(`mergeProgress`와 같은 판정).
   let prev = -Infinity;
@@ -507,7 +560,7 @@ export function windowEvents<E extends { ts?: string }>(
   });
 
   const claimed = new Array(events.length).fill(false);
-  const buckets = windows.map((w) => {
+  const unitBuckets = windows.map((w) => {
     if (!w) return [];
     const bucket: E[] = [];
     events.forEach((e, i) => {
@@ -517,20 +570,29 @@ export function windowEvents<E extends { ts?: string }>(
     });
     return bucket;
   });
+
+  const buckets: E[][] = plans.map(() => []);
+  units.forEach((u, ui) => {
+    if (unitBuckets[ui].length === 0) return; // 닻이 아니다 — 사건 0건인 창은 안 갖는다
+    const shares = splitEvenly(unitBuckets[ui], u.length);
+    u.forEach((planIdx, k) => {
+      buckets[planIdx] = shares[k];
+    });
+  });
+
   const outside = events.filter((_, i) => !claimed[i]);
   return { buckets, outside, lastDoing };
 }
 
-/** 계획 아코디언 배치 순서(§비주얼 §59 ⑦) — `windowEvents`의 버킷·밖을 **화면이 그리는 순서
- *  하나의 목록**으로 편다. 계획은 언제나 **파일 순서**로 뜨고(§59 ①: "목록이 목록으로 읽힌다"),
- *  창이 없는 계획(미착수 · 기록 0건)은 시각이 없어 시간 축에 안 낀다 — 다음으로 사건을 문 계획
- *  직전에, 남으면 맨 끝에 뜬다. 계획 밖 사건은 `events`가 이미 시간순이라 **원본 순서를 그대로
- *  걷는 것**으로 자리를 얻는다 — 시각을 다시 비교하지 않는다(그 창 경계 값 자체가 `windowEvents`
- *  안에만 있고 밖으로 안 나온다).
+/** 계획 아코디언 배치 순서(§비주얼 §59 ⑦, §2-11⑨ 판정3-4) — `windowEvents`가 정한 닻의 사건에
+ *  더해, 닻이 못 집은 사건(`outside`)을 **구간**으로 갈라 그 자리에 놓인 닻 아닌 계획들이 파일
+ *  순서대로 균등하게 나눠 갖는다(`splitEvenly`, 나머지는 앞 계획부터). 나눠 가질 계획이 없는
+ *  구간(첫 닻 앞 · 닻 사이 · 마지막 닻 뒤)만 `outside` 블록으로 남는다 — 앞뒤 끝의 그 자리가
+ *  화면의 `배정`·`마무리` 칸이 된다(§비주얼 §59 ⑦-1). **판정4 — 시각을 다시 안 읽는다**: 구간
+ *  경계는 사건의 스트림 순서에서 얻고, `windowEvents`가 이미 정한 창 값을 다시 비교하지 않는다.
  *
- *  창이 겹쳐 한 계획의 사건이 시간상 두 토막으로 갈리는 사고(§2-11④가 이미 "받아들인다"로 둔
- *  자리)는 그 계획의 **첫 등장 자리에서 버킷 전체를 한 번**만 그린다 — 이후 같은 계획 사건을
- *  다시 만나도 building은 건너뛴다. */
+ *  계획은 언제나 **파일 순서**로 뜬다(§59 ①: "목록이 목록으로 읽힌다") — 창이 없는 계획(미착수 ·
+ *  기록 0건)도 다음으로 사건을 문 계획 직전에, 남으면 맨 끝에 뜬다. */
 export type ProgressBlock<E> = { kind: "outside"; events: E[] } | { kind: "plan"; index: number; events: E[] };
 
 export function planBlocks<E extends { ts?: string }>(
@@ -556,7 +618,20 @@ export function planBlocks<E extends { ts?: string }>(
     const start = i;
     while (i < events.length && owner.get(events[i]) === o) i++;
     if (o === undefined) {
-      blocks.push({ kind: "outside", events: events.slice(start, i) });
+      // 판정3 — 이 구간(닻이 못 집은 연속 사건)을, 자리에 놓인 닻 아닌 계획들이 나눠 갖는다.
+      // 다음 닻(o 다음에 만날 owner)보다 앞선 pending 계획 전부가 그 자리다.
+      const boundary = i < events.length ? owner.get(events[i])! : plans.length;
+      const gapPlans = [...pending].filter((p) => p < boundary).sort((a, b) => a - b);
+      const gapEvents = events.slice(start, i);
+      if (gapPlans.length === 0) {
+        blocks.push({ kind: "outside", events: gapEvents });
+      } else {
+        const shares = splitEvenly(gapEvents, gapPlans.length);
+        gapPlans.forEach((p, k) => {
+          pending.delete(p);
+          blocks.push({ kind: "plan", index: p, events: shares[k] });
+        });
+      }
     } else if (pending.delete(o)) {
       flushPendingBefore(o);
       blocks.push({ kind: "plan", index: o, events: buckets[o] });

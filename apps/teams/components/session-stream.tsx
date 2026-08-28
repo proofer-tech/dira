@@ -597,19 +597,38 @@ export function SessionStream({
               ) : (
                 blocks.map((block, bi) =>
                 block.kind === "outside" ? (
-                  <ProgressItems
-                    key={`o${bi}`}
-                    items={groupProgress(
-                      block.events.map((w) => w.it),
-                      isBubble,
-                    )}
-                    threadKey={threadKey}
-                    onToggle={onToggle}
-                    vault={vault}
-                    refs={liveRefs}
-                    forceOpen={searching}
-                    ctx={workerCtx}
-                  />
+                  // §2-11⑨ 결정2 — 계획 목록이 있는 상자에서 맨 앞·맨 뒤 `outside`만 `배정`·
+                  // `마무리` 칸이다. 사이 틈(§59 ⑦)은 표식 없이 종전대로 흐른다.
+                  plans.length > 0 && (bi === 0 || bi === blocks.length - 1) ? (
+                    <SegmentBlock
+                      key={`o${bi}`}
+                      label={t(bi === 0 ? "progress.segment.assigned" : "progress.segment.finished")}
+                      items={groupProgress(
+                        block.events.map((w) => w.it),
+                        isBubble,
+                      )}
+                      onToggle={onToggle}
+                      threadKey={threadKey}
+                      vault={vault}
+                      refs={liveRefs}
+                      forceOpen={searching}
+                      ctx={workerCtx}
+                    />
+                  ) : (
+                    <ProgressItems
+                      key={`o${bi}`}
+                      items={groupProgress(
+                        block.events.map((w) => w.it),
+                        isBubble,
+                      )}
+                      threadKey={threadKey}
+                      onToggle={onToggle}
+                      vault={vault}
+                      refs={liveRefs}
+                      forceOpen={searching}
+                      ctx={workerCtx}
+                    />
+                  )
                 ) : (
                   <PlanBlock
                     key={`p${block.index}`}
@@ -885,6 +904,46 @@ function PlanBlock({
         forceOpen={forceOpen}
         ctx={ctx}
       />
+    </details>
+  );
+}
+
+/** `배정`·`마무리` — 계획 목록을 앞뒤로 감싸는 칸 둘(§비주얼 §59 ⑦-1, §2-11⑨ 결정2). 계획
+ *  `<details>`와 그릇·손잡이·간격 문자열이 같다 — 갈리는 것은 왼쪽 16px 칸 하나뿐이다: 상태
+ *  글리프 대신 빈 칸(계획 항목이 아니라 그 밖 구간이라 켤 상태가 없다). `sr-only`가 없다 —
+ *  낱말 자신이 화면에도 낭독에도 뜨는 유일한 글자다. */
+function SegmentBlock({
+  label,
+  items,
+  onToggle,
+  threadKey,
+  vault,
+  refs,
+  forceOpen,
+  ctx,
+}: {
+  label: string;
+  items: GroupedItem<StreamEvent, ThreadItem>[];
+  onToggle: (e: React.SyntheticEvent<HTMLDetailsElement>) => void;
+  threadKey: Map<ThreadItem, string>;
+  vault?: Vault;
+  refs?: RefIndex;
+  forceOpen?: boolean;
+  ctx?: WorkerRowCtx;
+}) {
+  return (
+    <details open={forceOpen || undefined} onToggle={onToggle} className={cn(PLAN_BLOCK, "open:[&>summary>svg:last-child]:rotate-90")}>
+      <summary
+        className={cn(
+          LINE,
+          "sticky -top-2 z-20 flex items-center gap-2 cursor-pointer list-none bg-background card-tint [&::-webkit-details-marker]:hidden",
+        )}
+      >
+        <span aria-hidden className="size-4 shrink-0" />
+        <span className="truncate text-sm font-medium text-foreground">{label}</span>
+        <ChevronRight aria-hidden className="ml-auto size-4 shrink-0 text-muted-foreground" />
+      </summary>
+      <ProgressItems items={items} threadKey={threadKey} onToggle={onToggle} vault={vault} refs={refs} forceOpen={forceOpen} ctx={ctx} />
     </details>
   );
 }

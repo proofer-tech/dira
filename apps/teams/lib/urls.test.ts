@@ -522,6 +522,81 @@ test("planBlocks — 계획 사이의 시간 틈은 그 두 계획 블록 사이
   assert.deepEqual(wKeys(blocks[1].events), ["gap"]);
 });
 
+/** 배치 개정(DESIGN.md §2-11⑨ 판정1-4, 요구 `1c01c2d6`) — 묶음·닻·구간과 균등 분배 나머지. */
+test("windowEvents — 시작이 같은 계획 셋은 한 묶음이라 창 하나의 사건을 파일 순서대로 균등하게 나눠 갖는다(§2-11⑨ 판정1)", () => {
+  const plans = [
+    plan("a", "done", "2026-08-01T01:00:00Z"),
+    plan("b", "done", "2026-08-01T01:00:00Z"),
+    plan("c", "done", "2026-08-01T01:00:00Z", "2026-08-01T02:00:00Z"),
+  ];
+  const events = [
+    we("e1", "2026-08-01T01:10:00Z"),
+    we("e2", "2026-08-01T01:20:00Z"),
+    we("e3", "2026-08-01T01:30:00Z"),
+    we("e4", "2026-08-01T01:40:00Z"),
+    we("e5", "2026-08-01T01:50:00Z"),
+    we("e6", "2026-08-01T01:55:00Z"),
+  ];
+  const { buckets, outside } = windowEvents(plans, events, 0);
+  assert.deepEqual(wKeys(buckets[0]), ["e1", "e2"]);
+  assert.deepEqual(wKeys(buckets[1]), ["e3", "e4"]);
+  assert.deepEqual(wKeys(buckets[2]), ["e5", "e6"]);
+  assert.deepEqual(outside, []);
+});
+
+test("windowEvents — 묶음의 균등 분배가 안 떨어지면 나머지는 앞 계획부터 한 건씩 간다(§2-11⑨ 판정1)", () => {
+  const plans = [
+    plan("a", "done", "2026-08-01T01:00:00Z"),
+    plan("b", "done", "2026-08-01T01:00:00Z"),
+    plan("c", "done", "2026-08-01T01:00:00Z", "2026-08-01T02:00:00Z"),
+  ];
+  const events = [
+    we("e1", "2026-08-01T01:10:00Z"),
+    we("e2", "2026-08-01T01:20:00Z"),
+    we("e3", "2026-08-01T01:30:00Z"),
+    we("e4", "2026-08-01T01:40:00Z"),
+  ];
+  const { buckets } = windowEvents(plans, events, 0);
+  assert.deepEqual(wKeys(buckets[0]), ["e1", "e2"]); // 나머지 첫 건이 앞 계획으로
+  assert.deepEqual(wKeys(buckets[1]), ["e3"]);
+  assert.deepEqual(wKeys(buckets[2]), ["e4"]);
+});
+
+test("planBlocks — 닻이 하나도 없으면 세션 전체가 한 구간이라 계획들이 사건을 나눠 갖고 계획 밖이 0건이다(§2-11⑨ 판정3)", () => {
+  const plans = [plan("a", "todo", null), plan("b", "todo", null), plan("c", "todo", null)];
+  const events = [
+    we("e1", "2026-08-01T01:00:00Z"),
+    we("e2", "2026-08-01T01:10:00Z"),
+    we("e3", "2026-08-01T01:20:00Z"),
+  ];
+  const blocks = planBlocks(plans, events, 0);
+  assert.deepEqual(planKinds(blocks), ["plan0", "plan1", "plan2"]);
+  assert.deepEqual(wKeys(blocks[0].events), ["e1"]);
+  assert.deepEqual(wKeys(blocks[1].events), ["e2"]);
+  assert.deepEqual(wKeys(blocks[2].events), ["e3"]);
+});
+
+test("planBlocks — 닻 사이의 비닻 계획 둘은 그 구간 사건을 파일 순서로 나눠 갖는다(§2-11⑨ 판정3)", () => {
+  const plans = [
+    plan("anchor1", "done", "2026-08-01T01:00:00Z", "2026-08-01T02:00:00Z"),
+    plan("mid1", "todo", null),
+    plan("mid2", "todo", null),
+    plan("anchor2", "done", "2026-08-01T04:00:00Z", "2026-08-01T05:00:00Z"),
+  ];
+  const events = [
+    we("in1", "2026-08-01T01:30:00Z"),
+    we("g1", "2026-08-01T02:30:00Z"),
+    we("g2", "2026-08-01T03:00:00Z"),
+    we("in2", "2026-08-01T04:30:00Z"),
+  ];
+  const blocks = planBlocks(plans, events, 0);
+  assert.deepEqual(planKinds(blocks), ["plan0", "plan1", "plan2", "plan3"]);
+  assert.deepEqual(wKeys(blocks[0].events), ["in1"]);
+  assert.deepEqual(wKeys(blocks[1].events), ["g1"]);
+  assert.deepEqual(wKeys(blocks[2].events), ["g2"]);
+  assert.deepEqual(wKeys(blocks[3].events), ["in2"]);
+});
+
 test("progressMarkerText — 마지막 레코드가 thinking이면 '생각하는 중', 그 외엔 종전 문구", () => {
   assert.equal(progressMarkerText("thinking"), "생각하는 중 · 2초마다");
   assert.equal(progressMarkerText("tool_use"), "따라가는 중 · 2초마다");

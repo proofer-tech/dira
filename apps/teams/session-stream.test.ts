@@ -29,9 +29,12 @@ test("계획 꼬리 문구가 없다 — `기록 n건`을 두 번 세는 줄이 
 });
 
 test("계획 손잡이가 `ml-auto`를 받는다 — 꼬리가 죽으며 옮겨 놓인 그 자리(§59 ③-1)", () => {
+  // 배치 개정(§비주얼 §59 ⑦-1, 요구 `1c01c2d6`)으로 `SegmentBlock`(`배정`·`마무리`)이 계획과
+  // 같은 손잡이 문자열을 그대로 재사용해 자리가 하나 는다 — 새 문자열이 아니다(계약이 이미
+  // "문자열도 그대로다"로 넘긴 값).
   assert.equal(
     (s.match(/ml-auto size-4 shrink-0 text-muted-foreground/g) ?? []).length,
-    1,
+    2,
     "ChevronRight 손잡이가 ml-auto를 안 든다",
   );
 });
