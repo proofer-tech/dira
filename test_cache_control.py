@@ -1,22 +1,27 @@
 #!/usr/bin/env python3
-"""캐시 갈래(P295-10) 자체검증: 스트리밍 프라임 JSON의 `content`가 블록 둘로 갈리는가.
+"""캐시 갈래(P295-10) 자체검증: 안 변하는 문서 층이 캐시되는 자리로 가는가.
 
 2026-08-28 개정 - 단언이 뒤집힌 자리와 그 이유:
-    옛 계약은 "앞 블록에만 cache_control ttl 1h가 있다"였다. 지금 계약은 "어느 블록에도
-    cache_control이 없다"다. 이 파일이 우리 블록 1개만 재고 CLI 몫과의 합은 안 재는 것이
-    사각지대였다 - 그 합이 API 상한 4를 넘어도 여기서는 초록이었다.
+    옛 계약은 "프라임 JSON의 content가 블록 둘로 갈리고 앞 블록에만 cache_control ttl 1h가
+    있다"였다. 지금 계약은 "프라임은 꼬리 한 블록이고 cache_control이 하나도 없다. 문서 층은
+    `--append-system-prompt`로 간다"다.
+    이 파일이 우리 블록 1개만 재고 CLI 몫과의 합은 안 재는 것이 사각지대였다 - 그 합이 API
+    상한 4를 넘어도 여기서는 초록이었다.
     실측(로컬 기록 API로 요청 본문을 떠서 셈): CLI가 자기 몫으로 최대 4개를 쓴다 - system 둘
     (에이전트 프롬프트 - 하네스 프롬프트) + 대화 롤링 둘. 롤링 창은 도구 결과가 붙는 **둘째**
     요청부터 2개가 된다. 그래서 우리가 한 개라도 달면 첫 턴은 4로 통과하고 둘째 턴에서 5가 되어
     세션이 통째로 400을 받는다("A maximum of 4 blocks with cache_control may be provided.
     Found 5."). 그 400이 api_error로 읽혀 쿨다운을 걸고, 만료 직전 나간 워커가 또 400을 받아
-    창을 되감아 2026-08-28 04:50~10:52 큐가 멎었다(실패 세션 14건).
+    창을 되감아 2026-08-28 04:50~11:07 큐가 멎었다(실패 세션 14건).
     우리 몫을 0으로 내려야 합이 4 이하다 - 우리가 줄일 수 있는 유일한 몫이 우리 것뿐이다.
-    P295가 벌던 이득(안 변하는 문서 층을 디스패치 사이에 캐시로 읽기)은 이 자리에서는 못 지킨다
-    - HEAD를 시스템 프롬프트로 옮겨 CLI 자기 블록 안에 태우는 것이 다음 수다.
+    그러면서 P295 이득은 지킨다: `--append-system-prompt`로 넘긴 텍스트를 CLI가 자기 시스템
+    블록 **끝에** 이어 붙이는데 그 블록에는 CLI 자기 cache_control ttl 1h가 이미 달려 있다.
+    우리 블록을 하나도 안 쓰고 문서 층이 캐시 프리픽스 안에 들어간다(붙인 뒤에도 총 개수는
+    턴1 3 - 턴2 4). 옛 자리보다 오래 사는 캐시다 - 옛 자리는 매 커밋마다 갈리는 gitStatus
+    리마인더 뒤였는데 시스템 블록은 그 앞이다.
 
-블록 둘로 가르는 것 자체는 남는다: 두 블록 text를 이어 붙인 것이 `dryrun`이 찍는 프롬프트와
-바이트 단위로 같아야 한다(§프롬프트 층 결정 10 §엔진 수정 스물다섯 번째 승인 개정).
+이어 붙인 것이 프롬프트 전부라는 계약은 그대로다: argv의 문서 층 + 프라임 꼬리가 `dryrun`이
+찍는 프롬프트와 바이트 단위로 같아야 한다(§프롬프트 층 결정 10 §엔진 수정 스물다섯 번째 승인 개정).
 
 임시 큐에서만 판정한다(도그푸딩 큐에서 엔진을 실험하지 않는다). 진짜 claude를 부르지 않고,
 stdin 첫 줄(프라임 JSON)을 파일로 받아 적는 가짜 스트림 엔진으로 본다(test_inbox.py 선례).
@@ -46,6 +51,7 @@ ENGINE = """\
 #!/bin/bash
 IFS= read -r first
 printf '%s\\n' "$first" > "{tmp}/captured-prime.jsonl"
+printf '%s\\0' "$@" > "{tmp}/captured-argv"
 printf '{{"type":"system","subtype":"init"}}\\n'
 printf '{{"is_error":false,"num_turns":1,"session_id":"%s","type":"result","subtype":"success"}}\\n' "$1"
 sleep 60
@@ -120,35 +126,46 @@ try:
 
     assert prime.get("type") == "user", prime
     content = prime.get("message", {}).get("content")
-    assert isinstance(content, list) and len(content) == 2, \
-        "content가 블록 둘인 배열이 아니다: {}".format(content)
-    head_block, tail_block = content
-
-    assert head_block.get("type") == "text", head_block
+    assert isinstance(content, list) and len(content) == 1, \
+        "content가 꼬리 한 블록인 배열이 아니다: {}".format(content)
+    tail_block = content[0]
     assert tail_block.get("type") == "text", tail_block
     # 우리 몫은 0이다. 한 블록이라도 달면 CLI 몫 4와 합쳐 5가 되어 둘째 요청이 400으로 죽는다.
-    for name, blk in (("앞", head_block), ("뒤", tail_block)):
-        assert "cache_control" not in blk, \
-            "{} 블록에 cache_control이 있으면 안 된다(CLI 몫 4와 합쳐 API 상한 4를 넘는다): {}".format(
-                name, blk)
+    assert "cache_control" not in tail_block, \
+        "프라임 블록에 cache_control이 있으면 안 된다(CLI 몫 4와 합쳐 API 상한 4를 넘는다): {}".format(
+            tail_block)
 
-    head, tail = head_block["text"], tail_block["text"]
-    assert head.startswith("===== CORE.md"), "앞 블록이 CORE.md로 안 시작한다\n" + head[:200]
+    # 문서 층은 argv로 간다 - `--append-system-prompt <HEAD>`가 인자 **둘**로 인접해 있어야 한다.
+    with open(os.path.join(tmp, "captured-argv"), encoding="utf-8") as f:
+        argv = f.read().split("\0")[:-1]
+    assert "--append-system-prompt" in argv, \
+        "엔진 argv에 --append-system-prompt가 없다: {}".format(argv[:6])
+    i = argv.index("--append-system-prompt")
+    assert i + 1 < len(argv), "--append-system-prompt 뒤에 값이 없다: {}".format(argv)
+    head = argv[i + 1]
+    assert argv.count("--append-system-prompt") == 1, \
+        "--append-system-prompt가 두 번 붙었다(문서 층이 두 벌 간다): {}".format(argv)
+
+    tail = tail_block["text"]
+    assert head.startswith("===== CORE.md"), "문서 층이 CORE.md로 안 시작한다\n" + head[:200]
     assert head.rstrip().endswith("===== 프로토콜 끝 ====="), \
-        "앞 블록이 큐 AGENTS.md 프로토콜 끝으로 안 끝난다\n" + head[-200:]
+        "문서 층이 큐 AGENTS.md 프로토콜 끝으로 안 끝난다\n" + head[-200:]
     assert tail.startswith("please pick up c0c00001"), \
-        "뒤 블록이 티켓 해시 문장으로 안 시작한다\n" + tail[:200]
+        "프라임 블록이 티켓 해시 문장으로 안 시작한다\n" + tail[:200]
     assert tail.rstrip().endswith("그 지침을 따르세요."), \
-        "뒤 블록이 언어 안내로 안 끝난다\n" + tail[-200:]
-    # 한국어 문장 지침은 안 변하는 6KB 상수라 앞 블록(캐시되는 문서 층)에 있다 - 꼬리로
-    # 새면 회차마다 캐시 밖에서 다시 쓰인다(이 절이 막는 회귀가 정확히 그것이다).
+        "프라임 블록이 언어 안내로 안 끝난다\n" + tail[-200:]
+    # 한국어 문장 지침은 안 변하는 6KB 상수라 문서 층(캐시되는 쪽)에 있다 - 꼬리로 새면
+    # 회차마다 캐시 밖에서 다시 쓰인다(이 절이 막는 회귀가 정확히 그것이다).
     assert "===== 한국어 문장 지침" in head and "===== 한국어 문장 지침" not in tail, \
-        "한국어 문장 지침 블록이 앞 블록에 없다(또는 꼬리로 샜다)"
+        "한국어 문장 지침 블록이 문서 층에 없다(또는 꼬리로 샜다)"
+    # 문서 층이 프라임으로도 새면 같은 것이 두 벌 간다(토큰 두 배 + 캐시 무의미).
+    assert "===== CORE.md" not in tail, "문서 층이 프라임 블록으로 샜다\n" + tail[:200]
 
     assert head + tail == full_prompt, \
-        "두 블록을 이어 붙인 것이 dryrun 프롬프트와 다르다\n--- head+tail\n{}\n--- dryrun\n{}".format(
+        "argv 문서 층 + 프라임 꼬리가 dryrun 프롬프트와 다르다\n--- head+tail\n{}\n--- dryrun\n{}".format(
             head + tail, full_prompt)
 
-    print("PASS 프라임 JSON 블록 둘 + cache_control 0개(우리 몫) + head+tail == dryrun 프롬프트")
+    print("PASS 문서 층은 --append-system-prompt로 · 프라임은 꼬리 한 블록 · cache_control 0개(우리 몫) "
+          "· head+tail == dryrun 프롬프트")
 finally:
     shutil.rmtree(tmp, ignore_errors=True)

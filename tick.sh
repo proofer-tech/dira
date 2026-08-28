@@ -1132,24 +1132,30 @@ if [ -n "$INBOX" ]; then
   # cat 두 방으로 이어 붙여 참견 입구는 그대로 남는다: 프롬프트 다음 줄부터 FIFO가 stdin이다.
   # 그룹에도 9>&-를 건다. cat이 fd 9(쓰기 끝)를 물려받으면 우리가 닫아도 자기가 writer라
   # EOF를 못 봐서 세션이 죽은 뒤에도 영영 남는다.
-  # cache_control은 우리 몫이 없다. CLI가 자기 몫으로 4개를 다 쓴다 - system 둘 + 대화 롤링
+  # cache_control은 우리 몫이 0이다. CLI가 자기 몫으로 4개를 다 쓴다 - system 둘 + 대화 롤링
   # 둘이고, 롤링 창은 도구 결과가 붙는 **둘째** 요청부터 2개가 된다(2026-08-28 실측: 로컬
-  # 기록 API로 요청 본문을 떠서 셌다. 턴1 = CLI 3 + 우리 1 = 4로 통과, 턴2 = CLI 4 + 우리 1
-  # = 5로 거부). 한 개라도 달면 그 세션은 둘째 요청에서 통째로 400이다 - "A maximum of 4
-  # blocks with cache_control may be provided. Found 5.". 그 400이 api_error로 읽혀 쿨다운을
-  # 다시 걸고, 만료 직전 나간 워커가 또 400을 받아 되감는 고리가 큐를 6시간 세웠다.
-  # 블록 둘로 가른 것은 그대로 남긴다 - 이어 붙인 것이 dryrun 프롬프트와 같다는 계약이
-  # test_cache_control.py에 있고, HEAD를 시스템 프롬프트로 옮겨 P295 이득을 되찾는 다음 수가
-  # 이 자리에서 갈린다(§프롬프트 층 결정 10 §엔진 수정 스물다섯 번째 승인 개정).
+  # 기록 API로 요청 본문을 떠서 셌다). 우리가 한 개라도 달면 그 세션은 둘째 요청에서 통째로
+  # 400이다 - "A maximum of 4 blocks with cache_control may be provided. Found 5.". 그 400이
+  # api_error로 읽혀 쿨다운을 걸고, 만료 직전 나간 워커가 또 400을 받아 되감는 고리가 큐를
+  # 6시간 세웠다(04:50~11:07, 실패 세션 14건).
+  #
+  # 그러면서 P295 이득은 지킨다 - 안 변하는 문서 층(HEAD)을 프라임 JSON이 아니라
+  # `--append-system-prompt`로 넘긴다. CLI가 그 텍스트를 **자기 시스템 블록 끝에 이어 붙이고**,
+  # 그 블록에는 CLI 자기 cache_control ttl 1h가 이미 달려 있다(같은 실측: 붙인 뒤에도 요청의
+  # cache_control 총 개수는 턴1 3 - 턴2 4로 그대로다). 우리 블록을 하나도 안 쓰고 HEAD가
+  # 캐시 프리픽스 안에 들어간다. 덤으로 옛 자리보다 캐시가 오래 산다 - 옛 자리(첫 user 메시지)는
+  # 매 커밋마다 갈리는 gitStatus 리마인더 **뒤**였는데, 시스템 블록은 그 앞이라 커밋에 안 깨진다.
+  # 워커가 다른 세션의 것을 읽으려면 그 블록이 디스패치 사이에 같아야 하는데, 같다(같은 워커
+  # cwd로 띄운 세션 둘의 시스템 블록이 바이트 단위로 같은 것을 확인했다).
+  #
+  # 스트리밍 입력 엔진에만 붙인다 - 그 갈림(위 `--input-format stream-json` 인접 판정)이 곧
+  # claude다. 다른 엔진에 stream-json을 물리려면 이 플래그도 그 엔진 말로 옮겨야 한다.
+  ENGINE+=(--append-system-prompt "$HEAD")
   PRIMEF="$LOCAL/run/prime-$SID.json"
   python3 -c 'import json,sys
-head, tail = sys.argv[1], sys.argv[2]
-content = [
-    {"type": "text", "text": head},
-    {"type": "text", "text": tail},
-]
+content = [{"type": "text", "text": sys.argv[1]}]
 sys.stdout.write(json.dumps({"type":"user","message":{"role":"user","content":content}},
-                            ensure_ascii=False, separators=(",", ":")) + "\n")' "$HEAD" "$TAIL" > "$PRIMEF"
+                            ensure_ascii=False, separators=(",", ":")) + "\n")' "$TAIL" > "$PRIMEF"
   # 9>&-로 엔진의 fd 9 사본을 닫는다. 물려주면 엔진이 자기 쓰기 끝을 쥐고 있어, 아래에서
   # 우리가 fd 9를 닫아도 EOF를 영영 못 본다(FIFO의 writer가 0이 되어야 EOF다).
   # `.fed` 표식이 곧 "프롬프트가 엔진 stdin으로 다 들어갔다"이다. 파이프 버퍼보다 큰 프롬프트를
