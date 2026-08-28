@@ -22,6 +22,7 @@ import { findTicket, unassign, type UnassignRun } from "@/lib/engine";
 import { followup, type FollowupResult } from "@/lib/followup";
 import { interject, type InterjectResult } from "@/lib/interject";
 import { kickIdleWorker } from "@/lib/kick";
+import { parseFrontmatterHead } from "@/lib/markdown-frontmatter-rows";
 import { mayHaveRefs, type RefIndex } from "@/lib/markdown-refs";
 import { isHash, openInApp, parseAssignment, resolveWithin, type OpenResult } from "@/lib/paths";
 import { findStream, sessionIdOf, tailEvents, type StreamEvent } from "@/lib/transcript";
@@ -38,6 +39,8 @@ import {
   resolveDep,
   stateOf,
   stemOf,
+  stripBodyEnds,
+  ticketFrontmatterUpdates,
   writeTicket,
   type TicketState,
 } from "@/lib/queue";
@@ -330,6 +333,36 @@ export async function saveTicket(_prev: SaveState, form: FormData): Promise<Save
     revalidatePath(`/p/${projectId}`); // 보드의 title·kind·persona 컬럼
     // §4-5 — 편집으로 persona가 붙거나 deps 한 줄이 빠지면 그 순간 디스패치 가능해진다.
     // "정말 가능해졌나"는 판정하지 않는다(그러면 §큐 판정이 두 벌이다) — 그냥 tick 한 번이다.
+    await kickIdleWorker(t.root);
+    return { ok: true };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+/** frontmatter 행 편집기(DESIGN.md §프론트매터 행 편집기 결정 9, 티켓 `dc6364a4`) 저장 —
+ *  `saveTicket`처럼 열린 티켓만 쓰고, 같은 `revalidatePath`+`kickIdleWorker` 처분을 한다.
+ *  다른 것은 **무엇을 쓰는가**다: `saveTicket`은 다섯 폼 필드 + 본문 전체를 늘 다시 쓰고,
+ *  이 액션은 `head`(페이지가 폼 필드·엔진 키를 뺀 나머지 키만으로 짠 합성 frontmatter 원문)를
+ *  읽어 **바뀐 키만** `writeTicket`에 넘긴다(`ticketFrontmatterUpdates`) — 본문은 원문 그대로
+ *  되읽어 그대로 되쓴다(안 건드린 키·본문의 바이트가 안 갈린다). */
+export async function saveTicketFrontmatter(_prev: SaveState, form: FormData): Promise<SaveState> {
+  const projectId = String(form.get("project") ?? "");
+  const hash = String(form.get("hash") ?? "");
+  const head = String(form.get("head") ?? "");
+  try {
+    const t = await target(projectId, hash);
+    if (t.state !== "open") return { error: LOCKED[t.state] };
+
+    const text = await readFile(t.path, "utf8");
+    const { fm, lines, end } = readFm(text);
+    const rows = parseFrontmatterHead(head).rows;
+    const updates = ticketFrontmatterUpdates(fm, rows);
+    const body = stripBodyEnds(lines.slice(end + 1)).join("\n");
+    await writeTicket(t.path, updates, body);
+
+    revalidatePath(`/p/${projectId}/tickets/${encodeURIComponent(t.stem)}`);
+    revalidatePath(`/p/${projectId}`);
     await kickIdleWorker(t.root);
     return { ok: true };
   } catch (e) {

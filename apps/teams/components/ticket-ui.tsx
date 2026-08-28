@@ -35,6 +35,7 @@ import {
   deleteTicket,
   openTicketFileAction,
   saveTicket,
+  saveTicketFrontmatter,
   unassignTicket,
   type SaveState,
 } from "@/app/(app)/p/[project]/tickets/[hash]/actions";
@@ -58,6 +59,8 @@ import { useHotkey, useKeymap } from "@/components/keymap-provider";
 import { useLocale, useT } from "@/components/language-provider";
 import { Markdown } from "@/components/markdown";
 import { MarkdownEditor } from "@/components/markdown-editor";
+import { FrontmatterRowsEditor } from "@/components/markdown-frontmatter-rows-editor";
+import type { FrontmatterCandidates } from "@/lib/markdown-frontmatter-rows";
 import type { RefIndex } from "@/lib/markdown-refs";
 import type { Vault } from "@/lib/markdown-wikilinks";
 import { PersonaDot } from "@/components/persona-badge";
@@ -200,6 +203,45 @@ export function FrontmatterTable({ fm, file }: { fm: Record<string, string>; fil
         </Button>
       )}
     </>
+  );
+}
+
+/** 열린 티켓의 frontmatter 행 편집기(DESIGN.md §프론트매터 행 편집기 결정 9, 티켓 `dc6364a4`) -
+ *  다섯 폼 필드·엔진 실행 키를 뺀 나머지 키(`deps`-`req`-`epic`-`awaiting`-`continued`-
+ *  `archives` 등)를 이 칸에서 고친다. `head`는 page.tsx가 그 나머지 키만으로 짠 합성
+ *  frontmatter 원문이다(`lib/queue.ts`의 `TICKET_FORM_FIELD_KEYS`-`isTicketEngineKey`가 가르는
+ *  기준과 같다). `.wip`-`.done`은 이 컴포넌트를 안 쓴다(page.tsx가 그대로 `FrontmatterTable`을
+ *  쓴다) - 같은 잠금 문구를 두 벌 짓지 않는다(Done when 항목 2). */
+export function TicketFrontmatterPanel({
+  project,
+  hash,
+  head,
+  candidates,
+}: {
+  project: string;
+  hash: string;
+  head: string;
+  candidates: FrontmatterCandidates;
+}) {
+  const [state, action, pending] = useActionState<SaveState, FormData>(saveTicketFrontmatter, {});
+  const [value, setValue] = useState(head);
+  const t = useT();
+  return (
+    <form action={action} className="space-y-2">
+      <input type="hidden" name="project" value={project} />
+      <input type="hidden" name="hash" value={hash} />
+      {/* 값은 아래 행 편집기가 갈고, 여기는 그 state를 그대로 실어 제출한다 - 사람이 직접 치는
+          칸이 아니라 `readOnly`로 controlled 경고만 끈다. */}
+      <input type="hidden" name="head" value={value} readOnly />
+      <FrontmatterRowsEditor head={value} onHeadChange={setValue} candidates={candidates} />
+      {state.error && <Failure title={t("ticketFrontmatter.saveFailedTitle")} message={state.error} />}
+      <div className="flex flex-wrap items-center justify-end gap-4">
+        {state.ok && <span className="text-sm text-muted-foreground">{t("ticketFrontmatter.saved")}</span>}
+        <Button type="submit" size="sm" disabled={pending}>
+          {pending ? t("common.saving") : t("common.save")}
+        </Button>
+      </div>
+    </form>
   );
 }
 

@@ -133,6 +133,7 @@ function BracketListValue({
   onChange,
   onPaste,
   onKeyDown,
+  candidateOptions,
 }: {
   className?: string;
   rowKey: string | null;
@@ -140,6 +141,9 @@ function BracketListValue({
   onChange: (value: string) => void;
   onPaste?: (e: React.ClipboardEvent<HTMLElement>) => void;
   onKeyDown?: (e: React.KeyboardEvent<HTMLElement>) => void;
+  /** 값 검색 후보(결정 7·9, 티켓 `dc6364a4`) - 있으면 항목마다 `CandidateCombobox`, 없으면
+   *  종전 그대로 평범한 `Input`(`aliases: [...]`처럼 후보가 없는 목록형 값이 이 갈래다). */
+  candidateOptions?: string[] | null;
 }) {
   const t = useT();
   const items = splitListValue(value);
@@ -161,14 +165,27 @@ function BracketListValue({
       <div className="flex flex-col gap-1">
         {items.map((item, idx) => (
           <div key={idx} className="flex items-center gap-1">
-            <Input
-              aria-label={`${label} ${idx + 1}`}
-              className="min-w-0 grow font-mono"
-              value={item}
-              onChange={(e) => setItems(items.map((v, j) => (j === idx ? e.target.value : v)))}
-              onPaste={onPaste}
-              onKeyDown={onKeyDown}
-            />
+            {candidateOptions ? (
+              <CandidateCombobox
+                className="min-w-0 grow"
+                ariaLabel={`${label} ${idx + 1}`}
+                pickAriaLabel={t("frontmatterRows.pickValueLabel")}
+                value={item}
+                onValueChange={(v) => setItems(items.map((val, j) => (j === idx ? v : val)))}
+                options={candidateOptions}
+                onPaste={onPaste}
+                onKeyDown={onKeyDown}
+              />
+            ) : (
+              <Input
+                aria-label={`${label} ${idx + 1}`}
+                className="min-w-0 grow font-mono"
+                value={item}
+                onChange={(e) => setItems(items.map((v, j) => (j === idx ? e.target.value : v)))}
+                onPaste={onPaste}
+                onKeyDown={onKeyDown}
+              />
+            )}
             <Button
               type="button"
               variant="ghost"
@@ -292,6 +309,7 @@ export function FrontmatterRowsEditor({
                   onChange={(value) => commit(updateRow(doc.rows, i, { key: row.key, value }))}
                   onPaste={onPaste}
                   onKeyDown={onKeyDown}
+                  candidateOptions={valueOptions}
                 />
               ) : valueOptions ? (
                 <CandidateCombobox

@@ -243,9 +243,11 @@ export function keyCandidates(
   return [];
 }
 
-/** 행 `index`의 값 칸 검색 후보(결정 7) - `type:`(최상위, level 0)은 객체 타입, `links:` 아래
- *  대상 줄(목록 항목이고 조부모가 `links`)은 객체 이름. 그 밖은 검색이 안 열린다 - `null`을
- *  받으면 호출부가 평범한 입력 칸으로 그린다(`description:` 같은 자유 문장 칸이 이 갈래다). */
+/** 행 `index`의 값 칸 검색 후보(결정 7·9) - `type:`(최상위, level 0)은 객체 타입, 티켓
+ *  `deps:`·`req:`(최상위)는 티켓 해시, `links:` 아래 대상 줄(목록 항목이고 조부모가 `links`)은
+ *  객체 이름. `deps:`가 대괄호가 아니라 블록 리스트로 풀린 경우(부모가 `deps`인 목록 항목)도
+ *  같은 후보다. 그 밖은 검색이 안 열린다 - `null`을 받으면 호출부가 평범한 입력 칸으로 그린다
+ *  (`description:` 같은 자유 문장 칸이 이 갈래다). */
 export function valueCandidates(
   rows: FrontmatterRow[],
   index: number,
@@ -253,8 +255,10 @@ export function valueCandidates(
 ): string[] | null {
   const row = rows[index];
   if (row.level === 0 && row.key === "type") return candidates.objectTypes;
+  if (row.level === 0 && (row.key === "deps" || row.key === "req")) return candidates.ticketHashes;
   if (row.shape === "list-item") {
     const parent = parentRow(rows, index);
+    if (parent?.key === "deps") return candidates.ticketHashes;
     const parentIndex = parent ? rows.indexOf(parent) : -1;
     const grandparent = parentIndex >= 0 ? parentRow(rows, parentIndex) : null;
     if (grandparent?.key === "links") return candidates.objectNames;

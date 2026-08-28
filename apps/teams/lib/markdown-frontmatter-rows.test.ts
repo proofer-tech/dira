@@ -214,3 +214,30 @@ test("값 검색 - description: 같은 자유 문장 칸은 검색이 안 열린
   const index = doc.rows.findIndex((r) => r.key === "description");
   assert.equal(valueCandidates(doc.rows, index, candidates()), null);
 });
+
+// 티켓 상세 frontmatter 행 편집기(결정 9, 티켓 `dc6364a4`) - deps·req의 값 검색은 티켓 해시다.
+const TICKET_HEAD = `---
+title: 예시
+req: fc6463d2
+deps: [9ff6dec3, 873fbd1e]
+epic: P332
+---
+`;
+
+test("값 검색 - deps: 는 대괄호 목록이라도 항목 자리가 티켓 해시를 후보로 든다(결정 9)", () => {
+  const doc = parseFrontmatterHead(TICKET_HEAD);
+  const index = doc.rows.findIndex((r) => r.key === "deps");
+  assert.deepEqual(valueCandidates(doc.rows, index, candidates()), ["abc12345"]);
+});
+
+test("값 검색 - req: 도 티켓 해시가 후보다(결정 9)", () => {
+  const doc = parseFrontmatterHead(TICKET_HEAD);
+  const index = doc.rows.findIndex((r) => r.key === "req");
+  assert.deepEqual(valueCandidates(doc.rows, index, candidates()), ["abc12345"]);
+});
+
+test("값 검색 - epic: 같은 그 밖의 키는 티켓 해시 후보가 안 열린다(결정 9의 범위 - deps·req뿐)", () => {
+  const doc = parseFrontmatterHead(TICKET_HEAD);
+  const index = doc.rows.findIndex((r) => r.key === "epic");
+  assert.equal(valueCandidates(doc.rows, index, candidates()), null);
+});

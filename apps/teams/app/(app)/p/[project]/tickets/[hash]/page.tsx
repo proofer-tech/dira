@@ -23,6 +23,7 @@ import {
   OpenTicketFileButton,
   ReassignLine,
   TicketEditForm,
+  TicketFrontmatterPanel,
   UnassignButton,
 } from "@/components/ticket-ui";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -30,6 +31,7 @@ import { Badge } from "@/components/ui/badge";
 import { findTicket } from "@/lib/engine";
 import { listEpics, resolveMarkdownRefs } from "@/lib/epics";
 import { t } from "@/lib/i18n";
+import type { FrontmatterCandidates } from "@/lib/markdown-frontmatter-rows";
 import { buildVault } from "@/lib/markdown-wikilinks";
 import { listTree } from "@/lib/protocols";
 import {
@@ -44,6 +46,7 @@ import {
   derivedFrom,
   isAwaiting,
   isPolling,
+  isTicketEngineKey,
   lastQuestionOptions,
   listTickets,
   planOf,
@@ -53,6 +56,7 @@ import {
   resolveDep,
   statusOf,
   threadOf,
+  TICKET_FORM_FIELD_KEYS,
   type Ticket,
 } from "@/lib/queue";
 import {
@@ -351,6 +355,30 @@ export default async function TicketDetail({
     .map((t) => ({ hash: t.stem, title: t.title, met: t.state === "done", duedate: t.fm.duedate ?? "" }))
     .reverse();
 
+  // frontmatter 행 편집기(§프론트매터 행 편집기 결정 9, 티켓 `dc6364a4`) — 다섯 폼 필드·엔진
+  // 실행 키를 뺀 나머지 키만으로 합성 frontmatter 원문을 짠다. 티켓 fm은 늘 평평한 키/값 쌍이라
+  // (중첩·여러 줄 값 0건, `readFm`이 애초에 첫 줄만 읽는다) 한 줄씩 이어 붙이는 것으로 충분하다.
+  const ticketFmEditableKeys = Object.keys(ticket.fm).filter(
+    (k) => !TICKET_FORM_FIELD_KEYS.has(k) && !isTicketEngineKey(k),
+  );
+  const ticketFmHead =
+    "---\n" + ticketFmEditableKeys.map((k) => `${k}: ${ticket.fm[k]}\n`).join("") + "---\n";
+  // 후보 원천 여섯(결정 8) 중 이 화면이 여는 것은 티켓 해시 하나다(결정 9 — `deps:`·`req:`의 값
+  // 검색). 자기 자신은 뺀다(`depOptions`가 이미 그 목록이다, plan 3단계와 같은 자리).
+  const ticketFmCandidates: FrontmatterCandidates = {
+    objectTypes: [],
+    linkTypes: [],
+    objectNames: [],
+    personas: [],
+    squads: [],
+    ticketHashes: depOptions.filter((d) => d.hash !== ticket.stem).map((d) => d.hash),
+    typeProps: new Map(),
+  };
+  // 엔진 실행 키는 행 편집기가 안 그린다(위 `ticketFmEditableKeys`에서 이미 뺐다) — 결정 9가
+  // 요구하는 "보이되 못 고친다"는 이 부분집합을 기존 `FrontmatterTable`(읽기 전용)에 그대로
+  // 넘겨 채운다. 한 번도 claim 안 된 백로그 티켓은 이 키들이 fm에 아예 없어 표 자체가 없다.
+  const ticketEngineFm = Object.fromEntries(Object.entries(ticket.fm).filter(([k]) => isTicketEngineKey(k)));
+
   return (
     // 폭은 **여기 한 곳이 문다**(§비주얼 §11 `max-w-3xl` 재판정): 1단일 때 768로 종전과 같고,
     // 2단일 때 왼쪽 단이 896(mono 93자)에서 멈춘다. 절이 자기 폭을 다시 정하면 이중 제한이다.
@@ -598,8 +626,29 @@ export default async function TicketDetail({
                 `overflow-x-auto`가 그걸 가로 스크롤로 받아 값이 잘려 보인다(1440 실측).
                 `break-words`는 min-content 기여를 바꾸지 않으므로 폭을 고정해야 줄이 접힌다.
                 기본 노출을 `assigned_at`까지로 줄이는 토글(§43 ①)은 클라이언트 상태라
-                `FrontmatterTable`(ticket-ui.tsx)이 가진다. */}
-            <FrontmatterTable fm={ticket.fm} file={path.basename(ticket.path)} />
+                `FrontmatterTable`(ticket-ui.tsx)이 가진다.
+
+                **열린 티켓만 행 편집기다**(§프론트매터 행 편집기 결정 9) — `.wip`(세션이 물고
+                있다)·`.done`(불변 기록)은 그대로 이 `FrontmatterTable`을 쓴다. 잠금 사유는 위
+                본문 절의 Alert(`.done`)·`UnassignButton`(`.wip`)이 이미 한 번 그린다 — 여기서
+                같은 문구를 또 짓지 않는다(Done when 항목 2). */}
+            {ticket.state === "open" ? (
+              <>
+                <TicketFrontmatterPanel
+                  project={id}
+                  hash={hash}
+                  head={ticketFmHead}
+                  candidates={ticketFmCandidates}
+                />
+                {/* 엔진이 찍는 실행 키 — 보이되 못 고친다(결정 9). 값이 하나도 없으면(한 번도
+                    claim 안 된 백로그 티켓) 표 자체를 안 그린다. */}
+                {Object.keys(ticketEngineFm).length > 0 && (
+                  <FrontmatterTable fm={ticketEngineFm} file={path.basename(ticket.path)} />
+                )}
+              </>
+            ) : (
+              <FrontmatterTable fm={ticket.fm} file={path.basename(ticket.path)} />
+            )}
           </section>
 
           {/* 폴링 대기 절(§폴링 대기 결정 9 표 §티켓 상세) — 요구의 "언제까지(시간 또는 조건)" 중

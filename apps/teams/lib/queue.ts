@@ -1264,6 +1264,60 @@ export const LOCKED: Record<"wip" | "done", string> = {
   done: "완료 티켓은 편집할 수 없습니다 — 완료는 이 큐의 불변 기록입니다.",
 };
 
+/** §프론트매터 행 편집기 결정 9 — 티켓 상세 편집 폼이 이미 정본으로 삼는 다섯 키. 행 편집기
+ *  칸에서 안 뜬다(두 자리에서 같은 키를 고치면 나중에 저장한 쪽이 조용히 이긴다). */
+export const TICKET_FORM_FIELD_KEYS = new Set(["title", "kind", "persona", "squad", "priority", "duedate"]);
+
+/** §프론트매터 행 편집기 결정 9 — 엔진이 찍는 실행 키(`tickets.py` `REAP_CLEAR` + `attempts`·
+ *  `default_answer`·`polling` 계열)인가. 행 편집기에서 읽기 전용으로 뜬다 — 사람이 정하는 값이
+ *  아니라 엔진이 찍은 사실이라, 손으로 갈면 큐 불변(claim은 원자적 링크다)이 화면에서 깨진다. */
+export function isTicketEngineKey(key: string): boolean {
+  if (key.startsWith("polling")) return true;
+  return TICKET_ENGINE_KEYS.has(key);
+}
+const TICKET_ENGINE_KEYS = new Set([
+  "ticket",
+  "session_id",
+  "pid",
+  "owner",
+  "inbox",
+  "assigned_at",
+  "attempts",
+  "claimed_at",
+  "transcript",
+  "polled_at",
+  "default_answer",
+]);
+
+/** 행 편집기가 제출한 행(`markdown-frontmatter-rows.ts`의 `FrontmatterRow[]`, 키/값만 쓴다)을
+ *  `writeTicket`의 `updates`로 바꾼다. 폼 필드·엔진 키가 섞여 오면 던진다(§신뢰 경계 — 화면이
+ *  이미 그 행들을 안 그리지만, 서버도 한 번 더 거절한다). 값이 그대로인 키는 `updates`에 안 실어
+ *  `writeTicket`이 그 줄을 안 건드리게 한다(§프론트매터 행 편집기 결정 9 §Done when
+ *  "안 건드린 키의 바이트가 안 갈린다"). 원래 있던 편집 대상 키가 이번 제출에 없으면 지운
+ *  것이다(`undefined` — `writeTicket`이 줄 자체를 지운다). */
+export function ticketFrontmatterUpdates(
+  currentFm: Record<string, string>,
+  rows: { key: string | null; value: string | null }[],
+): Record<string, string | undefined> {
+  const updates: Record<string, string | undefined> = {};
+  const seen = new Set<string>();
+  for (const row of rows) {
+    const key = (row.key ?? "").trim();
+    if (!key || seen.has(key)) continue; // 빈 키·중복 키는 무시(결정 3과 같은 관용 — 문법 검증 없음)
+    seen.add(key);
+    if (TICKET_FORM_FIELD_KEYS.has(key) || isTicketEngineKey(key)) {
+      throw new Error(`프론트매터 칸에서 고칠 수 없는 키입니다: ${key}`);
+    }
+    const value = row.value ?? "";
+    if (currentFm[key] !== value) updates[key] = value;
+  }
+  for (const key of Object.keys(currentFm)) {
+    if (TICKET_FORM_FIELD_KEYS.has(key) || isTicketEngineKey(key)) continue;
+    if (!seen.has(key)) updates[key] = undefined;
+  }
+  return updates;
+}
+
 /** 티켓 파일 제자리 쓰기 — frontmatter 키 갱신 + 본문 교체. **읽고-고치고-쓰기**다.
  *
  *  frontmatter는 `tickets.py set_fm_keys`와 같은 규칙으로 손댄다: 있는 키는 그 줄을 바꾸고 없는

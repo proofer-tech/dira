@@ -64,6 +64,8 @@ import {
   statusOf,
   stemOf,
   threadOf,
+  ticketFrontmatterUpdates,
+  isTicketEngineKey,
   writeTicket,
   type Suffixes,
   type Ticket,
@@ -916,6 +918,54 @@ test("writeTicket — undefined는 그 키의 줄을 통째로 지운다(§1-4 �
   const after = (await listTickets(root, DEFAULT))[0];
   assert.strictEqual(after.fm.duedate, undefined);
   assert.strictEqual(after.baseline, after.priority); // 파생이 없다 = 마감 없음
+});
+
+// ── frontmatter 행 편집기 저장(§프론트매터 행 편집기 결정 9, 티켓 `dc6364a4`) ─────────────────
+
+test("isTicketEngineKey — REAP_CLEAR + attempts·default_answer·polling 계열, 그 밖은 아니다", () => {
+  for (const k of ["ticket", "session_id", "pid", "owner", "inbox", "assigned_at"]) {
+    assert.ok(isTicketEngineKey(k), `${k}는 엔진 키다`);
+  }
+  for (const k of ["attempts", "claimed_at", "transcript", "polling", "polling_until", "polled_at"]) {
+    assert.ok(isTicketEngineKey(k), `${k}는 엔진 키다`);
+  }
+  for (const k of ["deps", "req", "epic", "awaiting", "continued", "archives", "title"]) {
+    assert.ok(!isTicketEngineKey(k), `${k}는 엔진 키가 아니다`);
+  }
+});
+
+test("ticketFrontmatterUpdates — 바뀐 키만 싣는다, 안 바뀐 키는 updates에 안 실어 바이트를 안 건드린다", () => {
+  const currentFm = { ticket: "abc", title: "제목", req: "fc6463d2", epic: "P332" };
+  const rows = [
+    { key: "req", value: "fc6463d2" }, // 그대로
+    { key: "epic", value: "P336" }, // 고침
+    { key: "awaiting", value: "f048f255" }, // 새로 더함
+  ];
+  const updates = ticketFrontmatterUpdates(currentFm, rows);
+  assert.deepStrictEqual(updates, { epic: "P336", awaiting: "f048f255" });
+});
+
+test("ticketFrontmatterUpdates — 원래 있던 편집 대상 키가 빠지면 undefined(줄 삭제)", () => {
+  const currentFm = { ticket: "abc", req: "fc6463d2", epic: "P332" };
+  const updates = ticketFrontmatterUpdates(currentFm, [{ key: "req", value: "fc6463d2" }]);
+  assert.deepStrictEqual(updates, { epic: undefined });
+});
+
+test("ticketFrontmatterUpdates — 폼 필드·엔진 키를 행으로 내면 거절한다(§신뢰 경계)", () => {
+  assert.throws(() => ticketFrontmatterUpdates({}, [{ key: "title", value: "몰래 고치기" }]));
+  assert.throws(() => ticketFrontmatterUpdates({}, [{ key: "session_id", value: "x" }]));
+});
+
+test("ticketFrontmatterUpdates — 빈 키·중복 키는 무시한다(결정 3과 같은 관용)", () => {
+  const updates = ticketFrontmatterUpdates(
+    { epic: "P332" },
+    [
+      { key: "", value: "무시" },
+      { key: "epic", value: "P336" },
+      { key: "epic", value: "두 번째는 무시" },
+    ],
+  );
+  assert.deepStrictEqual(updates, { epic: "P336" });
 });
 
 test("effectiveDue — §1-4 유효마감이 Ticket에 실린다(파생 한 줄의 재료)", async () => {
