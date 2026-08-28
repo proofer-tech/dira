@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "DIRA_MULTI_TOKEN=${DIRA_MULTI_TOKEN:-1} next dev -p ${PORT:-7331}",
-    "build": "unset __NEXT_PRIVATE_STANDALONE_CONFIG; NODE_ENV=production next build",
+    "build": "unset __NEXT_PRIVATE_STANDALONE_CONFIG; NODE_ENV=production bash build-lock.sh next build",
     "start": "next start -p ${PORT:-7331}",
     "lint": "eslint",
     "test": "DIRA_MULTI_TOKEN=1 node --test \"*.test.ts\" \"lib/**/*.test.ts\""
