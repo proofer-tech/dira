@@ -16,7 +16,7 @@ import { accessSync, constants, cpSync, existsSync, readFileSync, rmSync, statSy
 import { createServer } from "node:net";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { newNotesCache, releaseNotesCached } from "./release-notes.ts";
+import { cachedNotes, cacheNotes, newNotesCache, releaseNotes } from "./release-notes.ts";
 import { decideRevive, isExternalDeath } from "./revive.ts";
 
 /** 패키징하면 standalone 산출물이 통째로 `Contents/Resources/server/`에 들어간다
@@ -650,7 +650,7 @@ async function isBusy(origin: string): Promise<boolean> {
 // 미리 불러 `notesCache`에 담아 둔다. 실패해도(compare 실패·claude 없음) `releaseNotes()`
 // 자신이 삼켜 문자열로 돌려주므로 여기서 잡을 예외가 없다.
 autoUpdater.on("update-available", (info) => {
-  releaseNotesCached(notesCache, app.getVersion(), info.version, publishSlug(), releaseIo);
+  cacheNotes(notesCache, info.version, releaseNotes(app.getVersion(), info.version, publishSlug(), releaseIo));
 });
 
 // R6 — 다 받으면 사실만 알려 준다. `다음 시작에 적용`(기본)은 종전처럼 아무 일도 안 하고,
@@ -658,13 +658,15 @@ autoUpdater.on("update-available", (info) => {
 // **토스트 본문 한 줄이 R6의 사실이고 노트는 `notes` 액션으로 딴 곳에서 편다**(R7 — 요약이
 // 죽어도 그 한 줄은 이미 떠 있다). `releaseNotes()`를 **await하지 않는다**(T6) — 요약에 최대
 // 60초가 걸려 토스트가 그만큼 늦게 뜨면 안 된다. promise는 `pendingUpdate`가 들고 있다가
-// `notes` 액션을 누른 시점에 그대로 준다. `releaseNotesCached`는 `update-available`가 이미
-// 만들어 둔 것을 버전이 같으면 그대로 재사용하고, 다르면(드문 경우) 여기서 새로 만든다.
+// `notes` 액션을 누른 시점에 그대로 준다. `cachedNotes`가 `update-available`이 이미 만들어
+// 둔 것을 버전이 같으면 그대로 돌려주고, 다르면(드문 경우) `null`이라 종전 경로 그대로
+// `releaseNotes()`를 여기서 새로 부른다 — 이 개정이 없던 시절과 같은 자리다.
 autoUpdater.on("update-downloaded", (info) => {
   stopUpdatePolling(); // T3 — 다 받으면 폴링을 멈춘다
   lastPercent = -1;
   restartAsked = false;
-  pendingUpdate = { version: info.version, notes: releaseNotesCached(notesCache, app.getVersion(), info.version, publishSlug(), releaseIo) };
+  const notes = cachedNotes(notesCache, info.version) ?? cacheNotes(notesCache, info.version, releaseNotes(app.getVersion(), info.version, publishSlug(), releaseIo));
+  pendingUpdate = { version: info.version, notes };
   surfaceUpdate({ kind: "downloaded", version: info.version });
 });
 

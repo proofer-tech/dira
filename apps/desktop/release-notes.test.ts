@@ -5,7 +5,7 @@
 // $ cd apps/desktop && pnpm test
 import assert from "node:assert/strict";
 import test from "node:test";
-import { newNotesCache, releaseNotes, releaseNotesCached } from "./release-notes.ts";
+import { cachedNotes, cacheNotes, newNotesCache, releaseNotes } from "./release-notes.ts";
 
 // **여기서 삼키는 이유는 이 파일의 본체가 실패 경로라서다.** `releaseNotes()`는 세 경로를
 // 밟을 때마다 `[dira] 릴리즈 노트: …`를 찍는데, 초록으로 끝난 릴리스 로그에 그 아홉 줄이
@@ -101,6 +101,11 @@ test("커밋 0건 · 빈 요약 — 그래도 본문은 R6 문장이다", async 
   assert.equal(blank, `${R6}\n\n• chore: 한 건`);
 });
 
+// main.ts의 두 리스너가 하는 것과 같다 — 캐시에 먼저 물어보고, 없으면 releaseNotes()를
+// 불러 채운다.
+const getOrMake = (cache: ReturnType<typeof newNotesCache>, from: string, to: string, io: Parameters<typeof releaseNotes>[3]) =>
+  cachedNotes(cache, to) ?? cacheNotes(cache, to, releaseNotes(from, to, SLUG, io));
+
 test("캐시 — 같은 버전을 두 번 요청해도 fetchText는 한 번만 불린다", async () => {
   const cache = newNotesCache();
   let fetchCount = 0;
@@ -113,8 +118,8 @@ test("캐시 — 같은 버전을 두 번 요청해도 fetchText는 한 번만 �
       return "• 요약";
     },
   };
-  const first = await releaseNotesCached(cache, "0.1.0", "0.2.0", SLUG, io);
-  const second = await releaseNotesCached(cache, "0.1.0", "0.2.0", SLUG, io);
+  const first = await getOrMake(cache, "0.1.0", "0.2.0", io);
+  const second = await getOrMake(cache, "0.1.0", "0.2.0", io);
   assert.equal(fetchCount, 1);
   assert.equal(first, second);
 });
@@ -131,8 +136,8 @@ test("캐시 — 버전이 다르면 새로 만든다", async () => {
       return "• 요약";
     },
   };
-  await releaseNotesCached(cache, "0.1.0", "0.2.0", SLUG, io);
-  await releaseNotesCached(cache, "0.1.0", "0.3.0", SLUG, io);
+  await getOrMake(cache, "0.1.0", "0.2.0", io);
+  await getOrMake(cache, "0.1.0", "0.3.0", io);
   assert.equal(fetchCount, 2);
 });
 

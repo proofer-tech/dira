@@ -51,30 +51,28 @@ function prompt(from: string, to: string, list: string[]): string {
   ].join("\n");
 }
 
-/** R7 §시작 시점이 앞당겨진다 — `update-available`가 미리 만들어 두면 `update-downloaded`는
- *  같은 버전일 때 그 promise를 그대로 받아 쓴다. 버전이 다르면(드문 경우) 새로 만든다. 캐시는
- *  호출자가 들고 있는 하나짜리 상자라 `main.ts`의 모듈 top-level 변수 하나와, 이 테스트 파일의
- *  테스트마다 새로 만드는 상자를 똑같이 쓴다 — 전역 상태가 테스트 사이로 새지 않는다. */
+/** R7 §시작 시점이 앞당겨진다 — 버전 하나에 `releaseNotes()` 호출 한 번. 호출자(`main.ts`의
+ *  `update-available`-`update-downloaded` 리스너)가 `cachedNotes()`로 먼저 물어보고, 없으면
+ *  (`null`) 종전 경로 그대로 `releaseNotes()`를 불러 `cacheNotes()`로 채운다 — 그 자리가
+ *  `update-downloaded`이면 "만들어 둔 버전과 다를 때 새로 만드는" 경로가 된다. 캐시는 호출자가
+ *  들고 있는 하나짜리 상자라 `main.ts`의 모듈 top-level 변수 하나와, 이 테스트 파일이 테스트마다
+ *  새로 만드는 상자를 똑같이 쓴다 — 전역 상태가 테스트 사이로 새지 않는다. */
 export type NotesCache = { current: { version: string; notes: Promise<string> } | null };
 
 export function newNotesCache(): NotesCache {
   return { current: null };
 }
 
-/** 캐시에 든 버전이 `to`와 같으면 그 promise를 돌려주고, 아니면 `releaseNotes()`를 새로
- *  불러 캐시를 갈아 끼운다. `releaseNotes()` 자신은 캐시를 모른다 — 실패 경로 셋과 출력
- *  형식은 이 래퍼가 있든 없든 같다. */
-export function releaseNotesCached(
-  cache: NotesCache,
-  from: string,
-  to: string,
-  slug: { owner: string; repo: string },
-  io: Io,
-): Promise<string> {
-  if (cache.current?.version !== to) {
-    cache.current = { version: to, notes: releaseNotes(from, to, slug, io) };
-  }
-  return cache.current.notes;
+/** 캐시에 든 버전이 `version`과 같으면 그 promise를, 아니면 `null`을 돌려준다. */
+export function cachedNotes(cache: NotesCache, version: string): Promise<string> | null {
+  return cache.current?.version === version ? cache.current.notes : null;
+}
+
+/** `notes`를 `version` 밑에 캐시로 넣고 그대로 돌려준다 — 호출자가 `releaseNotes()`가
+ *  돌려준 promise를 그대로 넘긴다. */
+export function cacheNotes(cache: NotesCache, version: string, notes: Promise<string>): Promise<string> {
+  cache.current = { version, notes };
+  return notes;
 }
 
 /** 세 경로 전부 **문자열을 돌려준다**. 절대 던지지 않는다 — 이 함수가 던지면 다이얼로그가 안 뜨고,
