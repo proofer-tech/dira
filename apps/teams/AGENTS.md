@@ -390,6 +390,25 @@ catch가 무조건 그 경로라 파일 배치로는 못 고친다(위 둘째 �
 | `pnpm test` | `node --test "lib/**/*.test.ts"` |
 | `pnpm lint` | eslint |
 
+**`pnpm dev`를 끄는 규칙.** `.dira/protocols/cdp.md`가 브라우저를 끝나면 죽이라고 정한 것과
+같은 규칙을 dev 서버에도 적용한다.
+
+- **띄운 세션이 죽인다.** 자기가 시작한 pid를 자기 턴 안에서 끝낸다.
+- **같은 트리에 둘째를 안 띄운다.** 띄우기 전에 그 트리에 이미 도는 `next dev`가 있으면 그것을 쓴다.
+
+이미 도는 서버는 포트가 아니라 트리 경로로 찾는다 - 포트는 겹치고 남의 프로젝트도 같은 값을 쓴다:
+
+```bash
+PID=$(pgrep -of "$(git rev-parse --show-toplevel)/apps/teams.*next dev")
+```
+
+`next dev`는 turbopack 워커까지 자식을 여러 벌 띄우므로 그 pid 하나만 죽이면 남은 자식이 포트를
+쥔 채 남는다. 프로세스 그룹째 죽인다:
+
+```bash
+kill -TERM -- -"$(ps -o pgid= -p "$PID" | tr -d ' ')"
+```
+
 `pnpm build`가 타입체크를 겸한다. 따로 `tsc`를 돌리지 않는다.
 
 **`build` 스크립트의 `NODE_ENV=production`을 지우지 마라.** `next build`는 물려받은
