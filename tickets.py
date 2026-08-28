@@ -731,8 +731,27 @@ def _answers_of(troot, lines, end):
     return [t for _, t in out]
 
 
-def ask_context(fm, body, handoff=False, block_fresh=True, answers=None):
-    """자동 상신 질문에 붙일 판단 재료 -- 티켓 Goal · 이미 받은 답변 · 블록 · 죽은 세션 로그 꼬리.
+def _log_tail(troot, h, limit=12):
+    """`<troot>/workers/runner.log`에서 해시 `h`가 든 줄을 뒤에서부터 최대 `limit`줄.
+
+    파일이 없거나 못 읽으면(또는 `h`가 비어 있으면) 빈 리스트 - 호출부가 그 자리를
+    "찾지 못했습니다"로 채운다.
+    """
+    if not h:
+        return []
+    pat = re.compile(r"\b" + re.escape(h) + r"\b")
+    try:
+        with open(os.path.join(troot, "workers", "runner.log"),
+                  encoding="utf-8", errors="replace") as f:
+            hits = [l.rstrip("\n") for l in f if pat.search(l)]
+    except OSError:
+        return []
+    return hits[-limit:]
+
+
+def ask_context(fm, body, troot, handoff=False, block_fresh=True, answers=None):
+    """자동 상신 질문에 붙일 판단 재료 -- 티켓 Goal · 이미 받은 답변 · 블록 · 엔진 판정 이력 ·
+    죽은 세션 로그 꼬리.
 
     정형문("3회 죽었다")만으로는 사람이 답할 자료가 화면에 없었다(요구 11990127: jaso에서
     3라운드가 "다시 시도해보세요"로 소모됐다). 인용이 화면에서 접혀 있으므로(결정 12 (5))
@@ -745,8 +764,13 @@ def ask_context(fm, body, handoff=False, block_fresh=True, answers=None):
     `answers`는 `_answers_of`가 모은, 이미 답한 라운드의 전문이다(요구 4f761c5a) - 없으면
     절 자체를 안 붙인다.
 
+    엔진 판정 이력(DESIGN.md §세션이 120초 안에 못 뜬다 결정 4, 요구 361d973e)은 `runner.log`가
+    그 세션을 어떻게 끊었는가고, 트랜스크립트는 세션이 무엇을 했는가다 - 서로 다른 것을 담으므로
+    트랜스크립트 유무·`handoff`와 무관하게 둘 다 붙인다(`ask_human`의 네 갈래가 전부 이 한
+    자리를 지난다).
+
     `handoff`(§미완으로 끝나는 세션 §개정 2 (2))는 판정이 claim 성공 직후라 할당 필드가
-    아직 안 쓰여 `session_id`가 구조적으로 없는 갈래다 - 죽은 세션 절을 아예 안 붙인다.
+    아직 안 쓰여 `session_id`가 구조적으로 없는 갈래다 - 죽은 세션 절만 아예 안 붙인다.
     """
     out = ""
     goal = _section(body, "Goal")
@@ -759,6 +783,10 @@ def ask_context(fm, body, handoff=False, block_fresh=True, answers=None):
     if blk:
         out += "\n### {}\n\n{}\n".format(
             "티켓 블록" if block_fresh else "이미 답한 블록", _quote(blk))
+    h = (fm.get("ticket") or "").strip().strip("\"'")
+    log = "\n".join(_log_tail(troot, h))
+    out += "\n### 엔진 판정 이력\n\n{}\n".format(
+        _quote(_capped(log, 1500) if log else "runner.log에서 판정 이력을 찾지 못했습니다"))
     if handoff:
         return out
     tr = transcript_of(fm)
@@ -817,7 +845,7 @@ def ask_human(path, h, attempts, why, blocked=False, killed=False, handoff=False
     body = lines[end:]
     troot = os.path.dirname(os.path.dirname(path))
     try:
-        ctx = ask_context(fm, body, handoff=handoff, block_fresh=blocked,
+        ctx = ask_context(fm, body, troot, handoff=handoff, block_fresh=blocked,
                            answers=_answers_of(troot, lines, end))
     except Exception as e:                   # 자료 수집 실패가 답변 요청 자체를 막지 않는다
         ctx = ("" if handoff else

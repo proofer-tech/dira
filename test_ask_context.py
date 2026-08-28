@@ -70,6 +70,11 @@ try:
     assert "### 티켓 블록" in a and "> 인증서가 없어서" in a, "A: 블록 인용 없음\n" + a
     assert "### 죽은 세션 마지막 기록" in a, "A: 로그 절 없음\n" + a
     assert "SSL_ERROR_SYSCALL" in a, "A: 로그 꼬리 인용 없음\n" + a
+    # 결정 4(요구 361d973e) - runner.log가 아예 없어도 절은 붙고 "찾지 못했습니다"로 채운다
+    assert "### 엔진 판정 이력" in a, "A: 판정 이력 절 없음\n" + a
+    assert "runner.log에서 판정 이력을 찾지 못했습니다" in a, "A: 못 찾았다는 말이 없다\n" + a
+    assert a.index("### 엔진 판정 이력") < a.index("### 죽은 세션 마지막 기록"), \
+        "A: 판정 이력이 로그 절보다 뒤에 떴다\n" + a
     assert "이거 해줘" not in a, "A: 마지막 레코드가 아니라 앞 레코드를 붙였다\n" + a
     # 결정 12 (1)(2)(4) - 문항 한 벌이 인용 앞에 뜨고 default_answer가 fm에 실린다.
     assert a.index("### 1. 이 티켓을 어떻게 할까요") < a.index("### 티켓 Goal"), \
@@ -188,7 +193,33 @@ try:
     assert T.transcript_tail(tp3) == "", \
         "J: 앞에 발화가 없는데 알림을 발화로 집었다\n" + T.transcript_tail(tp3)
 
-    print("PASS 10/10")
+    # K) 결정 4(요구 361d973e) — runner.log에서 해시 경계로 골라 뒤에서 최대 12줄만 싣는다
+    os.makedirs(os.path.join(ws, "workers"), exist_ok=True)
+    log_lines = ["2026-08-29 00:{:02d}:00 [w1] STALL kkkk8888 판정 {}".format(i, i)
+                 for i in range(15)]
+    log_lines.append("2026-08-29 00:20:00 [w1] NOTE xkkkk8888decoy 다른 해시의 부분일치")
+    with open(os.path.join(ws, "workers", "runner.log"), "w", encoding="utf-8") as f:
+        f.write("\n".join(log_lines) + "\n")
+    pk = mk(ws, "kkkk8888", [], body="## Goal\n판정 이력 확인.\n")
+    T.ask_human(pk, "kkkk8888", 3, "자동 회수", blocked=False)
+    k_ = open(pk, encoding="utf-8").read()
+    assert "### 엔진 판정 이력" in k_, "K: 판정 이력 절 없음\n" + k_
+    hist = k_.split("### 엔진 판정 이력")[1].split("###")[0]
+    assert "판정 3" in hist and "판정 14" in hist, "K: 마지막 12줄이 안 실렸다\n" + hist
+    assert "판정 0" not in hist and "판정 2" not in hist, "K: 12줄 넘는 옛 줄이 남았다\n" + hist
+    assert hist.index("판정 3") < hist.index("판정 14"), "K: 시간 순서가 안 지켜졌다\n" + hist
+    assert "decoy" not in hist, "K: 해시 경계 없이 부분일치를 잡았다\n" + hist
+
+    # L) 1,500자 상한 — 긴 줄 하나가 넘으면 `_capped`가 잘림 표시를 남긴다
+    with open(os.path.join(ws, "workers", "runner.log"), "a", encoding="utf-8") as f:
+        f.write("2026-08-29 00:21:00 [w1] NOTE llll7777 " + "z" * 2000 + "\n")
+    pl = mk(ws, "llll7777", [], body="## Goal\n긴 줄 상한 확인.\n")
+    T.ask_human(pl, "llll7777", 3, "자동 회수", blocked=False)
+    l_ = open(pl, encoding="utf-8").read()
+    hist_l = l_.split("### 엔진 판정 이력")[1].split("###")[0]
+    assert "(전문 " in hist_l and "자 중 앞 1500자)" in hist_l, "L: 1,500자 잘림 표시가 없다\n" + hist_l
+
+    print("PASS 12/12")
     print(a[a.index("## 질문 1"):])
 finally:
     if old_home is None:
