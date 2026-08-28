@@ -602,7 +602,7 @@ export function SessionStream({
                   plans.length > 0 && (bi === 0 || bi === blocks.length - 1) ? (
                     <SegmentBlock
                       key={`o${bi}`}
-                      label={t(bi === 0 ? "progress.segment.assigned" : "progress.segment.finished")}
+                      label={t(bi === 0 ? "progress.segment.assign" : "progress.segment.wrapup")}
                       items={groupProgress(
                         block.events.map((w) => w.it),
                         isBubble,
