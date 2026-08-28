@@ -22,6 +22,7 @@ import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from "@
 import { Input } from "@/components/ui/input";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 import {
   type FrontmatterCandidates,
   type FrontmatterDoc,
@@ -41,6 +42,22 @@ import { useT } from "@/components/language-provider";
 
 const INDENT_STEP_PX = 16;
 const INDENT_MAX_LEVEL = 4; // §비주얼 §50 §층 - 여백은 4단(64px)에서 멈춘다(행 모델은 안 갈린다)
+
+// §비주얼 §프론트매터 행 편집기 §개정(결정 11) - 프론트매터 전용 칸 한 벌. `Input`/`InputGroup`
+// 기본 벌(h-8 - 정지 border-input - px-2.5 py-1 - rounded-lg - text-base md:text-sm)을 뜯어
+// h-6 - 정지 투명 테두리(행 호버에서 border-input) - 두 면 다 bg-transparent - px-1.5 py-0 -
+// rounded-md - text-sm 고정으로 간다. `FM_CELL`은 평범한 `Input`에, `FM_CELL_GROUP`은 콤보박스의
+// `InputGroup` 그릇에, `FM_CELL_GROUP_INPUT`은 그 안의 `InputGroupInput`에 쓴다(테두리·배경은
+// 그릇 쪽이 이미 들고 있어 안쪽 입력에는 안 준다).
+const FM_CELL =
+  "h-6 rounded-md border-transparent bg-transparent px-1.5 py-0 text-sm font-mono group-hover:border-input dark:bg-transparent";
+const FM_CELL_GROUP =
+  "h-6 rounded-md border-transparent bg-transparent group-hover:border-input dark:bg-transparent";
+const FM_CELL_GROUP_INPUT = "h-6 px-1.5 py-0 text-sm font-mono";
+// §키 칸과 값 칸 - 144 고정 + 남는 것 전부, 임계 폭은 0개다(결정 10). 좁아지면 값 칸이 먼저 주고
+// (`basis-0 grow`) 다음에 키 칸이 준다(`shrink`) - `@xl:` 조건은 이 표면에서 0줄이다.
+const FM_KEY_LAYOUT = "w-36 min-w-14 shrink";
+const FM_VALUE_LAYOUT = "basis-0 grow min-w-16";
 
 function indentStyle(level: number) {
   const px = Math.min(level, INDENT_MAX_LEVEL) * INDENT_STEP_PX;
@@ -79,20 +96,24 @@ function CandidateCombobox({
   const t = useT();
   const [open, setOpen] = useState(false);
   return (
-    <InputGroup className={className}>
+    <InputGroup className={cn(FM_CELL_GROUP, className)}>
       <InputGroupInput
         aria-label={ariaLabel}
-        className="font-mono"
+        className={FM_CELL_GROUP_INPUT}
         value={value}
         onChange={(e) => onValueChange(e.target.value)}
         onPaste={onPaste}
         onKeyDown={onKeyDown}
       />
-      <InputGroupAddon align="inline-end">
+      <InputGroupAddon align="inline-end" className="py-0 pr-1">
         <Popover open={open} onOpenChange={setOpen}>
           <PopoverTrigger
             render={
-              <InputGroupButton size="icon-xs" aria-label={pickAriaLabel}>
+              <InputGroupButton
+                size="icon-xs"
+                aria-label={pickAriaLabel}
+                className="size-5 opacity-60 group-hover:opacity-100 focus-visible:opacity-100"
+              >
                 <ChevronDown aria-hidden />
               </InputGroupButton>
             }
@@ -251,11 +272,10 @@ export function FrontmatterRowsEditor({
   }
 
   return (
-    <div className="@container space-y-1">
+    <div>
       {doc.rows.map((row, i) => {
         const showKey = !(row.shape === "list-item" && row.key === null);
         const showValue = row.shape !== "parent";
-        const stacks = showKey && showValue; // §비주얼 §50 §키 칸과 값 칸 §임계 폭 아래
         const addLabel =
           row.shape === "list-item" && row.key === null
             ? `${t("frontmatterRows.addAfterItemPrefix")}${i + 1}${t("frontmatterRows.addAfterItemSuffix")}`
@@ -266,22 +286,19 @@ export function FrontmatterRowsEditor({
             : `${t("frontmatterRows.removeKeyPrefix")}${row.key ?? ""}${t("frontmatterRows.removeKeySuffix")}`;
         const keyOptions = candidates ? keyCandidates(doc.rows, i, candidates) : [];
         const valueOptions = candidates ? valueCandidates(doc.rows, i, candidates) : null;
-        const valueClassName = stacks
-          ? "order-4 ms-4 min-w-0 grow basis-full @xl:order-3 @xl:ms-0 @xl:basis-auto"
-          : "order-3 min-w-0 grow";
         return (
           <div
             key={i}
-            className="group flex flex-wrap items-start gap-x-2 gap-y-1 ps-(--fm-indent)"
+            className="group flex items-start gap-x-2 ps-(--fm-indent)"
             style={indentStyle(row.level)}
           >
-            <div className="order-1 w-4 shrink-0 text-center font-mono text-sm opacity-60" aria-hidden>
+            <div className="w-4 shrink-0 text-center font-mono text-sm opacity-60" aria-hidden>
               {row.shape === "list-item" ? "-" : null}
             </div>
             {showKey &&
               (keyOptions.length > 0 ? (
                 <CandidateCombobox
-                  className="order-2 min-w-0 grow @xl:w-40 @xl:grow-0"
+                  className={FM_KEY_LAYOUT}
                   ariaLabel={t("frontmatterRows.keyLabel")}
                   pickAriaLabel={t("frontmatterRows.pickKeyLabel")}
                   value={row.key ?? ""}
@@ -293,7 +310,7 @@ export function FrontmatterRowsEditor({
               ) : (
                 <Input
                   aria-label={t("frontmatterRows.keyLabel")}
-                  className="order-2 min-w-0 grow font-mono @xl:w-40 @xl:grow-0"
+                  className={cn(FM_CELL, FM_KEY_LAYOUT)}
                   value={row.key ?? ""}
                   onChange={(e) => commit(updateRow(doc.rows, i, { key: e.target.value, value: row.value }))}
                   onPaste={onPaste}
@@ -303,7 +320,7 @@ export function FrontmatterRowsEditor({
             {showValue ? (
               isBracketList(row.value ?? "") ? (
                 <BracketListValue
-                  className={valueClassName}
+                  className={FM_VALUE_LAYOUT}
                   rowKey={row.key}
                   value={row.value ?? "[]"}
                   onChange={(value) => commit(updateRow(doc.rows, i, { key: row.key, value }))}
@@ -313,7 +330,7 @@ export function FrontmatterRowsEditor({
                 />
               ) : valueOptions ? (
                 <CandidateCombobox
-                  className={valueClassName}
+                  className={FM_VALUE_LAYOUT}
                   ariaLabel={t("frontmatterRows.valueLabel")}
                   pickAriaLabel={t("frontmatterRows.pickValueLabel")}
                   value={row.value ?? ""}
@@ -325,7 +342,7 @@ export function FrontmatterRowsEditor({
               ) : (
                 <Input
                   aria-label={t("frontmatterRows.valueLabel")}
-                  className={`${valueClassName} font-mono`}
+                  className={cn(FM_CELL, FM_VALUE_LAYOUT)}
                   value={row.value ?? ""}
                   onChange={(e) => commit(updateRow(doc.rows, i, { key: row.key, value: e.target.value }))}
                   onPaste={onPaste}
@@ -333,10 +350,11 @@ export function FrontmatterRowsEditor({
                 />
               )
             ) : (
-              // 값 칸이 없는 부모 행도 손잡이가 행의 오른쪽 끝에 붙게 - 넓은 폭에서만 그 자리를 민다
-              <div className="order-3 hidden grow @xl:block" aria-hidden />
+              // 값이 빈 부모 행 - 값 칸을 안 그린다. 이 자리를 비워 둬야 키 칸 144px과 손잡이
+              // 둘의 자리가 안 갈리고 열 정렬이 유지된다(§부모 행과 목록 항목 행)
+              <div className={FM_VALUE_LAYOUT} aria-hidden />
             )}
-            <div className={`${stacks ? "order-3 @xl:order-4" : "order-4"} flex shrink-0 items-center gap-1`}>
+            <div className="flex shrink-0 items-center gap-1">
               <Button
                 type="button"
                 variant="ghost"
