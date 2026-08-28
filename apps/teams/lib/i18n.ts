@@ -875,6 +875,15 @@ export const ko: Record<string, string> = {
   "frontmatterRows.removeItemPrefix": "",
   "frontmatterRows.removeItemSuffix": "번째 항목 행 삭제",
 
+  // 티켓 `7e02b1ac` — 목록형 값의 콤마 항목 UI + 키 추천/값 검색 콤보박스(결정 5·6·7)
+  "frontmatterRows.addListItem": "항목 추가",
+  "frontmatterRows.removeListItemPrefix": "",
+  "frontmatterRows.removeListItemSuffix": " 항목 삭제",
+  "frontmatterRows.pickKeyLabel": "키 후보에서 고르기",
+  "frontmatterRows.pickValueLabel": "값 후보에서 고르기",
+  "frontmatterRows.searchPlaceholder": "검색",
+  "frontmatterRows.searchEmpty": "일치하는 항목 0건",
+
   "updateToast.progress.prefix": "업데이트를 받는 중",
   "updateToast.confirm.message": "지금 도는 일이 있습니다. 그래도 재시작할까요?",
   "updateToast.confirm.cancel": "취소",
@@ -1872,6 +1881,14 @@ export const en: Record<string, string> = {
   "frontmatterRows.addAfterItemSuffix": "",
   "frontmatterRows.removeItemPrefix": "Delete row for item ",
   "frontmatterRows.removeItemSuffix": "",
+
+  "frontmatterRows.addListItem": "Add item",
+  "frontmatterRows.removeListItemPrefix": "Delete item ",
+  "frontmatterRows.removeListItemSuffix": "",
+  "frontmatterRows.pickKeyLabel": "Pick from key candidates",
+  "frontmatterRows.pickValueLabel": "Pick from value candidates",
+  "frontmatterRows.searchPlaceholder": "Search",
+  "frontmatterRows.searchEmpty": "No matching items",
 
   // 뒤에 `{percent}%`가 공백 하나를 두고 붙는다(`Downloading the update… 42%`).
   "updateToast.progress.prefix": "Downloading the update…",

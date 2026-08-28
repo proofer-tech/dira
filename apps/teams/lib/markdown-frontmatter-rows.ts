@@ -185,3 +185,79 @@ export function splitListValue(value: string): string[] {
 export function joinListValue(items: string[]): string {
   return `[${items.join(", ")}]`;
 }
+
+/** 키 추천 - 값 검색 콤보박스의 후보 원천 여섯(결정 8). 새 캐시 파일이나 색인이 아니라 호출부
+ *  (서버 컴포넌트)가 이미 읽은 값을 그대로 묶어 넘긴다 - `objectNames`는 `buildVault`가 내는
+ *  이름 -> href 벌의 키, `personas`-`squads`-`ticketHashes`는 큐의 `personas/`-`squads/`-
+ *  `tickets/`를 이미 읽는 목록 함수들의 결과다. */
+export interface FrontmatterCandidates {
+  objectTypes: string[];
+  linkTypes: string[];
+  objectNames: string[];
+  personas: string[];
+  squads: string[];
+  ticketHashes: string[];
+  /** 타입 이름 -> 그 타입 `_ontology/object-types/<타입>.md` §Properties 표의 속성 이름 전부
+   *  (필수 불문, `lib/ontology.ts`의 `parseTypeProperties`가 만든다) */
+  typeProps: Map<string, string[]>;
+}
+
+/** frontmatter의 다섯 공통 키(결정 6 §2) - `type`은 이미 top-level에 있을 값이라 이 목록에도
+ *  넣는다(그 파일에 `type:`이 아직 없으면 추천에 뜬다). */
+const COMMON_KEYS = ["type", "name", "aliases", "tags", "description", "links"];
+
+/** 행 `index`의 부모 행 - 그 행보다 층이 얕은 가장 가까운 앞쪽 행(결정 1 스택과 같은 모양).
+ *  최상위 행(level 0)은 부모가 없다. */
+function parentRow(rows: FrontmatterRow[], index: number): FrontmatterRow | null {
+  const level = rows[index].level;
+  for (let i = index - 1; i >= 0; i--) {
+    if (rows[i].level < level) return rows[i];
+  }
+  return null;
+}
+
+/** 행 `index`의 키 칸 추천(결정 6). 최상위 키(level 0)는 그 파일 `type:`이 가리키는 §Properties
+ *  전부 + 공통 키에서 그 파일에 이미 있는 최상위 키를 뺀 목록이다. `links:` 아래 관계타입 층
+ *  (level 1, 부모가 `links`)은 `_ontology/link-types/`의 이름 다섯에서 그 층에 이미 쓴 것만
+ *  뺀다. 그 밖(목록 항목의 라벨 키 등)은 추천이 없다 - 호출부가 빈 배열을 받아 평범한 입력
+ *  칸으로 그린다. */
+export function keyCandidates(
+  rows: FrontmatterRow[],
+  index: number,
+  candidates: FrontmatterCandidates,
+): string[] {
+  const row = rows[index];
+  if (row.level === 0) {
+    const used = new Set(rows.filter((r) => r.level === 0 && r.key !== null).map((r) => r.key));
+    const type = rows.find((r) => r.level === 0 && r.key === "type")?.value?.trim();
+    const typeProps = type ? (candidates.typeProps.get(type) ?? []) : [];
+    return [...typeProps, ...COMMON_KEYS].filter((k) => !used.has(k));
+  }
+  const parent = parentRow(rows, index);
+  if (row.level === 1 && parent?.key === "links") {
+    const used = new Set(
+      rows.filter((r, i) => r.level === 1 && parentRow(rows, i) === parent).map((r) => r.key),
+    );
+    return candidates.linkTypes.filter((k) => !used.has(k));
+  }
+  return [];
+}
+
+/** 행 `index`의 값 칸 검색 후보(결정 7) - `type:`(최상위, level 0)은 객체 타입, `links:` 아래
+ *  대상 줄(목록 항목이고 조부모가 `links`)은 객체 이름. 그 밖은 검색이 안 열린다 - `null`을
+ *  받으면 호출부가 평범한 입력 칸으로 그린다(`description:` 같은 자유 문장 칸이 이 갈래다). */
+export function valueCandidates(
+  rows: FrontmatterRow[],
+  index: number,
+  candidates: FrontmatterCandidates,
+): string[] | null {
+  const row = rows[index];
+  if (row.level === 0 && row.key === "type") return candidates.objectTypes;
+  if (row.shape === "list-item") {
+    const parent = parentRow(rows, index);
+    const parentIndex = parent ? rows.indexOf(parent) : -1;
+    const grandparent = parentIndex >= 0 ? parentRow(rows, parentIndex) : null;
+    if (grandparent?.key === "links") return candidates.objectNames;
+  }
+  return null;
+}

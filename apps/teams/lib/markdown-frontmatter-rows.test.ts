@@ -1,14 +1,17 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  type FrontmatterCandidates,
   insertRow,
   isBracketList,
   joinListValue,
+  keyCandidates,
   parseFrontmatterHead,
   removeRow,
   splitListValue,
   stringifyFrontmatterHead,
   updateRow,
+  valueCandidates,
 } from "./markdown-frontmatter-rows.ts";
 
 // 온톨로지 실트리(179장)를 본뜬 픽스처 넷 — 평평한 fm, 두 층 중첩(`links:`), 여러 줄 값,
@@ -149,4 +152,65 @@ test("대괄호 밖 값의 콤마는 안 갈린다(결정 5)", () => {
   const row = doc.rows.find((r) => r.key === "description");
   assert.equal(row?.value, "cron이 분마다 띄우는 실행 단위 - 스크립트 w1.sh, 워크트리 w1");
   assert.equal(row?.value ? isBracketList(row.value) : true, false);
+});
+
+// 키 추천 · 값 검색 후보(결정 6·7) — 후보 원천 여섯(결정 8)을 한 벌로 묶은 픽스처.
+// `objectTypes`·`linkTypes`·`typeProps`는 NESTED_HEAD/FLAT_HEAD(`type: 워커`)와 맞춘다.
+function candidates(overrides: Partial<FrontmatterCandidates> = {}): FrontmatterCandidates {
+  return {
+    objectTypes: ["워커", "기능"],
+    linkTypes: ["돌린다", "고친다", "검증한다", "우회한다", "불러온다"],
+    objectNames: ["디스패치 루프", "큐"],
+    personas: ["developer"],
+    squads: ["default"],
+    ticketHashes: ["abc12345"],
+    typeProps: new Map([["워커", ["이름", "스크립트 경로", "워크트리 경로", "브랜치", ".dira 심링크 목표"]]]),
+    ...overrides,
+  };
+}
+
+test("키 추천 - 최상위 키는 그 파일 type: 이 가리키는 §Properties + 공통 키에서 이미 쓴 키를 뺀다(결정 6)", () => {
+  const doc = parseFrontmatterHead(FLAT_HEAD); // type: 워커, name·aliases·tags 이미 있음
+  const index = doc.rows.findIndex((r) => r.key === "aliases");
+  const options = keyCandidates(doc.rows, index, candidates());
+  assert.deepEqual(options, [
+    "이름",
+    "스크립트 경로",
+    "워크트리 경로",
+    "브랜치",
+    ".dira 심링크 목표",
+    "description",
+    "links",
+  ]);
+});
+
+test("키 추천 - links: 아래 관계타입 층은 링크 타입 5에서 그 층에 이미 쓴 것만 뺀다(결정 6)", () => {
+  const doc = parseFrontmatterHead(NESTED_HEAD); // links: 아래 돌린다·고친다 이미 있음
+  const index = doc.rows.findIndex((r) => r.key === "돌린다");
+  const options = keyCandidates(doc.rows, index, candidates());
+  assert.deepEqual(options, ["검증한다", "우회한다", "불러온다"]);
+});
+
+test("키 추천 - 목록 항목의 라벨 키에는 추천이 없다", () => {
+  const doc = parseFrontmatterHead(NESTED_HEAD);
+  const index = doc.rows.findIndex((r) => r.key === "디스패치 루프");
+  assert.deepEqual(keyCandidates(doc.rows, index, candidates()), []);
+});
+
+test("값 검색 - type: 은 객체 타입이 후보다(결정 7)", () => {
+  const doc = parseFrontmatterHead(NESTED_HEAD);
+  const index = doc.rows.findIndex((r) => r.key === "type");
+  assert.deepEqual(valueCandidates(doc.rows, index, candidates()), ["워커", "기능"]);
+});
+
+test("값 검색 - links: 아래 대상 줄은 객체 이름이 후보다(결정 7)", () => {
+  const doc = parseFrontmatterHead(NESTED_HEAD);
+  const index = doc.rows.findIndex((r) => r.key === "디스패치 루프");
+  assert.deepEqual(valueCandidates(doc.rows, index, candidates()), ["디스패치 루프", "큐"]);
+});
+
+test("값 검색 - description: 같은 자유 문장 칸은 검색이 안 열린다(결정 7)", () => {
+  const doc = parseFrontmatterHead(BRACKET_LIST_HEAD);
+  const index = doc.rows.findIndex((r) => r.key === "description");
+  assert.equal(valueCandidates(doc.rows, index, candidates()), null);
 });

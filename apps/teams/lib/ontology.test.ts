@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, writeFile, rm, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { computeOntologyMetrics, isDiraFormat } from "./ontology.ts";
+import { computeOntologyMetrics, isDiraFormat, parseTypeProperties } from "./ontology.ts";
 import { listTree, readTextFile } from "./protocols.ts";
 
 // JSX가 있는 page.tsx는 node --test로 통째로 import할 수 없다 — 여기선 실제 소스에서
@@ -138,6 +138,19 @@ test("필수 속성 — 타입 파일 §Properties의 `필수` ✅ 행에서 읽
   assert.equal(missing.length, 1);
   assert.match(joined, /필수 속성 누락: objects\/사람\/철수\.md \(사람\) -> 나이/);
   assert.doesNotMatch(joined, /영희/);
+});
+
+test("키 추천 원천 — parseTypeProperties는 필수 불문 속성 이름 전부를 읽는다(결정 6, 티켓 7e02b1ac)", () => {
+  const typeFiles = [
+    typeFile("사람", [
+      { name: "이름", required: true },
+      { name: "나이", required: true },
+      { name: "취미", required: false },
+    ]),
+  ];
+  const props = parseTypeProperties(typeFiles);
+  assert.deepEqual(props.get("사람"), ["이름", "나이", "취미"]);
+  assert.equal(props.get("동물"), undefined); // 타입 파일이 없으면 맵에 없다
 });
 
 test("필수 속성 — 타입 파일도 §Properties도 없으면 무판정(예외 없이 통과)", () => {

@@ -34,7 +34,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { statusLabel } from "@/components/status-badge";
 import { t } from "@/lib/i18n";
 import { buildVault } from "@/lib/markdown-wikilinks";
-import { computeOntologyMetrics, isDiraFormat, type OntologyMetrics } from "@/lib/ontology";
+import type { FrontmatterCandidates } from "@/lib/markdown-frontmatter-rows";
+import { computeOntologyMetrics, isDiraFormat, parseTypeProperties, type OntologyMetrics } from "@/lib/ontology";
 import {
   ONTOLOGY_FIX_MARKER,
   importFolderOf,
@@ -52,7 +53,16 @@ import {
   type ProtocolEntry,
   type ProtocolFile,
 } from "@/lib/protocols";
-import { getProject, ontologyInWorktree, readLanguage, resolveConfig, usingDefault } from "@/lib/projects";
+import {
+  getProject,
+  ontologyInWorktree,
+  personaNames,
+  readLanguage,
+  resolveConfig,
+  squadNames,
+  squadsDir,
+  usingDefault,
+} from "@/lib/projects";
 import { cn } from "@/lib/utils";
 
 /** `tree`에서 지표 계산에 필요한 텍스트를 모아 순수 함수(`computeOntologyMetrics`)에 넘긴다.
@@ -157,6 +167,9 @@ export default async function Ontology({
   // `importFolderOf`는 `lib/queue.ts` runtime이라(`node:fs/promises` 의존) 클라이언트
   // 컴포넌트(`OntologyImport`)의 번들에 못 들어간다.
   let importTickets: { stem: string; hash: string; status: string; folder: string }[] = [];
+  // 프론트매터 행 편집기의 후보 원천 여섯(DESIGN.md §프론트매터 행 편집기 결정 8, 티켓
+  // `7e02b1ac`) — 새 캐시 파일이나 색인 없이 이 화면·큐가 이미 읽는 값만 묶는다.
+  let candidates: FrontmatterCandidates | null = null;
   if ((metrics && metrics.schemaViolations.length > 0) || tree.length > 0) {
     const tickets = await listTickets(project.root, config);
     if (metrics && metrics.schemaViolations.length > 0) {
@@ -169,6 +182,30 @@ export default async function Ontology({
         status: statusLabel(statusOf(t)),
         folder: importFolderOf(t),
       }));
+
+      const basename = (rel: string) => rel.split("/").at(-1) ?? rel;
+      const typeFileEntries = tree.filter(
+        (e) => !e.isDir && e.rel.startsWith("_ontology/object-types/") && e.rel.endsWith(".md"),
+      );
+      const linkTypeEntries = tree.filter(
+        (e) => !e.isDir && e.rel.startsWith("_ontology/link-types/") && e.rel.endsWith(".md"),
+      );
+      const typeFiles = await Promise.all(
+        typeFileEntries.map(async (e) => ({ rel: e.rel, text: (await readTextFile(base, e.rel)).text ?? "" })),
+      );
+      const [personas, squads] = await Promise.all([
+        personaNames(config.personas, tickets),
+        squadNames(squadsDir(project)),
+      ]);
+      candidates = {
+        objectTypes: typeFileEntries.map((e) => basename(e.rel).replace(/\.md$/, "")),
+        linkTypes: linkTypeEntries.map((e) => basename(e.rel).replace(/\.md$/, "")),
+        objectNames: Object.keys(vault),
+        personas,
+        squads,
+        ticketHashes: tickets.map((t) => t.hash),
+        typeProps: parseTypeProperties(typeFiles),
+      };
     }
   }
 
@@ -304,6 +341,7 @@ export default async function Ontology({
                 initial={selected.text}
                 initialMtimeMs={selected.mtimeMs}
                 vault={vault}
+                candidates={candidates}
               />
             )}
           </div>

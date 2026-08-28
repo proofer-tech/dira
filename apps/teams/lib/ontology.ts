@@ -103,6 +103,29 @@ function parseSchema(text: string): Schema {
   return { types, relTypes };
 }
 
+/** `_ontology/object-types/<타입>.md`의 §Properties 표 한 행을 (이름, 필수 여부)로 읽는 공통
+ *  워커 — `parseRequiredProps`(필수 열로 거른다)와 `parseTypeProperties`(안 거른다, 프론트매터
+ *  행 편집기의 키 추천 원천 결정 6)가 같은 표를 두 조건으로 읽는다. 표 파싱 자체는 이 함수
+ *  하나뿐이다. */
+function readPropertiesTable(file: ObjectInput): { name: string; required: boolean }[] {
+  const rows: { name: string; required: boolean }[] = [];
+  let inProperties = false;
+  for (const raw of file.text.split("\n")) {
+    const s = raw.trim();
+    if (s.startsWith("## ")) {
+      inProperties = s.slice(3).trim() === "Properties";
+      continue;
+    }
+    if (!inProperties) continue;
+    const cells = s.startsWith("|") ? s.split("|").slice(1, -1).map((c) => c.trim()) : [];
+    if (cells.length < 3) continue;
+    const name = cells[0];
+    if (name === "이름" || TABLE_RULE.test(name)) continue;
+    rows.push({ name: name.replace(/^`+|`+$/g, ""), required: cells[2] === "✅" });
+  }
+  return rows;
+}
+
 /** `_ontology/object-types/<타입>.md`의 §Properties 표(`필수` 열 ✅ 행의 `이름`)에서 타입별
  *  필수 속성을 읽는다(P224 — 지도 `SCHEMA.md`가 아니라 타입 파일이 정본. §속성은 값을 든다와
  *  같은 근거로 지도엔 이 열을 안 되살린다). 타입 파일이 없거나 §Properties 절이 없으면 그
@@ -112,24 +135,30 @@ function parseRequiredProps(typeFiles: ObjectInput[]): Map<string, string[]> {
   for (const file of typeFiles) {
     const type = file.rel.split("/").pop()?.replace(/\.md$/, "") ?? "";
     if (!type) continue;
-    const names: string[] = [];
-    let inProperties = false;
-    for (const raw of file.text.split("\n")) {
-      const s = raw.trim();
-      if (s.startsWith("## ")) {
-        inProperties = s.slice(3).trim() === "Properties";
-        continue;
-      }
-      if (!inProperties) continue;
-      const cells = s.startsWith("|") ? s.split("|").slice(1, -1).map((c) => c.trim()) : [];
-      if (cells.length < 3) continue;
-      const name = cells[0];
-      if (name === "이름" || TABLE_RULE.test(name)) continue;
-      if (cells[2] === "✅") names.push(name.replace(/^`+|`+$/g, ""));
-    }
-    required.set(type, names);
+    required.set(
+      type,
+      readPropertiesTable(file)
+        .filter((p) => p.required)
+        .map((p) => p.name),
+    );
   }
   return required;
+}
+
+/** 프론트매터 행 편집기의 키 추천 원천 하나(DESIGN.md §프론트매터 행 편집기 결정 6) — 타입별
+ *  §Properties 표의 속성 이름 전부(필수 불문, `parseRequiredProps`와 달리 안 거른다). 타입
+ *  파일이 없거나 §Properties 절이 없으면 그 타입은 맵에 없다 — 호출자가 `?? []`로 받는다. */
+export function parseTypeProperties(typeFiles: ObjectInput[]): Map<string, string[]> {
+  const props = new Map<string, string[]>();
+  for (const file of typeFiles) {
+    const type = file.rel.split("/").pop()?.replace(/\.md$/, "") ?? "";
+    if (!type) continue;
+    props.set(
+      type,
+      readPropertiesTable(file).map((p) => p.name),
+    );
+  }
+  return props;
 }
 
 type ParsedObject = { prose: string[]; rels: [string, string][]; props: string[]; hasSection: boolean };

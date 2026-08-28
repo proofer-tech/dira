@@ -29,6 +29,7 @@ import { saveOntologyAction as saveOntologyLocationAction } from "@/app/(app)/p/
 import { MarkdownEditor } from "@/components/markdown-editor";
 import { PickPath } from "@/components/path-picker";
 import type { Vault } from "@/lib/markdown-wikilinks";
+import type { FrontmatterCandidates } from "@/lib/markdown-frontmatter-rows";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -337,6 +338,7 @@ export function OntologyEditor({
   initial,
   initialMtimeMs,
   vault,
+  candidates,
 }: {
   projectId: string;
   rel: string;
@@ -346,6 +348,9 @@ export function OntologyEditor({
   initialMtimeMs?: number;
   /** 이름 -> href 벌(§비주얼 §10 §위키링크) — 서버가 이 온톨로지 트리에서 한 번 빌드해 내려준다 */
   vault?: Vault;
+  /** 프론트매터 행 편집기의 후보 원천 여섯(티켓 `7e02b1ac`) — `vault`와 같이 서버가 한 번 읽어
+   *  내려준다 */
+  candidates?: FrontmatterCandidates | null;
 }) {
   const router = useRouter();
   const [text, setText] = useState(initial);
@@ -375,6 +380,7 @@ export function OntologyEditor({
         className="font-mono"
         onChange={setText}
         vault={vault}
+        candidates={candidates}
       />
 
       {result && !result.ok && <Failure title="저장하지 못했습니다" message={result.message ?? ""} />}

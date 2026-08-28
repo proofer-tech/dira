@@ -46,6 +46,7 @@ import { useKeymap } from "@/components/keymap-provider";
 import { useT } from "@/components/language-provider";
 import { matchCombo } from "@/lib/keymap";
 import type { Vault } from "@/lib/markdown-wikilinks";
+import type { FrontmatterCandidates } from "@/lib/markdown-frontmatter-rows";
 import { cn } from "@/lib/utils";
 import { blockBreaks, commitEditable, joinBlocks, resolveSplit } from "@/lib/markdown-editor-blocks";
 import { FrontmatterRowsEditor } from "@/components/markdown-frontmatter-rows-editor";
@@ -133,6 +134,7 @@ export function MarkdownEditor({
   onKeyDown,
   autoFocus,
   vault,
+  candidates,
 }: {
   name: string;
   /** 비제어 초기값 — 부모가 dirty 판정·리셋을 안 하는 자리(①)만 쓴다 */
@@ -170,6 +172,9 @@ export function MarkdownEditor({
    *  (위 top 주석) 호출부가 이 표를 안 주면 종전대로 `[[이름]]`이 글자다. 이 컴포넌트가 스스로
    *  읽지 않는다 — 규칙 ⑤와 같은 원칙, 서버가 한 번 읽어 내려준 값을 그대로 흘린다. */
   vault?: Vault;
+  /** 프론트매터 행 편집기의 키 추천·값 검색 후보 원천 여섯(§비주얼 §50 §프론트매터 행 편집기,
+   *  티켓 `7e02b1ac`) — `vault`와 같은 원칙으로 이 컴포넌트가 스스로 안 읽고 호출부가 내려준다. */
+  candidates?: FrontmatterCandidates | null;
 }) {
   const t = useT();
   const mode = useSyncExternalStore(subscribeMode, readMode, () => SERVER_MODE);
@@ -331,6 +336,7 @@ export function MarkdownEditor({
                       onHeadChange={(newHead) => setText(joinBlocks({ head: newHead, blocks: split.blocks, tail: split.tail }))}
                       onPaste={onPaste}
                       onKeyDown={onKeyDown}
+                      candidates={candidates}
                     />
                   ) : (
                     <div
