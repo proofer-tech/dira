@@ -77,8 +77,33 @@ if [ "${1:-tick}" = tick ] || [ "${1:-tick}" = dryrun ]; then
         echo "RM $_cb_w $_cb_dir ($_cb_size)"
       fi
     done
+
+    # 개정(§세션이 120초 안에 못 뜬다 결정 3) - 판정 셋을 통과한 이 트리에 뿌리를 둔 next dev도
+    # 죽인다. 판정은 cwd나 실행 경로가 그 트리 경로로 시작하는가 하나이고, 포트로 안 찾는다
+    # (포트는 겹치고 남의 프로젝트도 같은 값을 쓴다). worktrees/ 아래만 도므로 본체 체크아웃의
+    # next dev(사람이 쓰는 GUI, 포트 7331)는 이 루프 밖이라 대상이 아니다.
+    for _cb_ndpid in $(pgrep -f "next dev" 2>/dev/null); do
+      _cb_ndcwd=$(lsof -a -p "$_cb_ndpid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p')
+      # comm은 인터프리터 이름(node)뿐이라 트리를 못 가린다 - 실행되는 스크립트 경로가 담긴
+      # 전체 인자열에서 트리 경로로 시작하는 토큰이 있는지를 본다(공백 경계로 자른다).
+      _cb_ndargs=" $(ps -o args= -p "$_cb_ndpid" 2>/dev/null) "
+      _cb_ndmatch=0
+      case "$_cb_ndcwd" in "$_cb_wt"|"$_cb_wt"/*) _cb_ndmatch=1 ;; esac
+      case "$_cb_ndargs" in *" $_cb_wt"/*|*" $_cb_wt "*) _cb_ndmatch=1 ;; esac
+      [ "$_cb_ndmatch" = 1 ] || continue
+      # 자식을 여러 벌 띄우므로 프로세스 그룹째 죽인다 - 낱개만 죽이면 남은 자식이 포트를 쥔다.
+      _cb_ndpgid=$(ps -o pgid= -p "$_cb_ndpid" 2>/dev/null | tr -d ' ')
+      [ -n "$_cb_ndpgid" ] || continue
+      if [ "$_cb_dryrun" = 1 ]; then
+        echo "DRYRUN $_cb_w next dev pid=$_cb_ndpid pgid=$_cb_ndpgid"
+      else
+        kill -TERM -- "-$_cb_ndpgid" 2>/dev/null
+        echo "KILL $_cb_w next dev pid=$_cb_ndpid pgid=$_cb_ndpgid"
+      fi
+    done
   done
 
   unset _cb_dryrun _cb_workers _cb_root _cb_local _cb_wt _cb_w _cb_hash _cb_lock \
-        _cb_alive _cb_pid _cb_dir _cb_rel _cb_size
+        _cb_alive _cb_pid _cb_dir _cb_rel _cb_size \
+        _cb_ndpid _cb_ndcwd _cb_ndargs _cb_ndmatch _cb_ndpgid
 fi
