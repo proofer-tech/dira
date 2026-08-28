@@ -1,6 +1,7 @@
 #!/bin/bash
-# cold boot - 노는 워크트리의 빌드 산출물만 지운다.
-# 계약은 이 파일이다(스펙 문서에 사본이 없다) - 지우는 조건은 아래 판정 1~3 전부다.
+# cold boot - 노는 워크트리의 빌드 산출물과 세션이 안 죽인 dev 서버/헤드리스 브라우저를 지운다.
+# 계약은 이 파일이다(스펙 문서에 사본이 없다) - 디스크 갈래는 판정 1~3 전부, 프로세스 갈래는
+# 판정 1~2만 본다(§세션이 120초 안에 못 뜬다 결정 6 - 아래 각 갈래 앞 주석 참고).
 #
 # 정본은 여기(templates/hooks/cold-boot.sh)다. .dira는 gitignore라 추적이 안 되므로 큐마다
 # .dira/cold-boot.sh로 복사해 쓴다(dispatch-gate.sh, self-heal.sh, token-rotate.sh와 같은 자리).
@@ -50,10 +51,49 @@ if [ "${1:-tick}" = tick ] || [ "${1:-tick}" = dryrun ]; then
       continue
     fi
 
+    # 개정(§세션이 120초 안에 못 뜬다 결정 6) - 프로세스 갈래는 판정 셋 중 산 세션 없음 - 문
+    # .wip 0건 둘만 본다. 1시간 유휴는 여기서 안 본다 - 하루 종일 바쁜 트리는 그 조건에 영영
+    # 안 걸려 좀비가 쌓인다(실측 - `w4`에 03:11과 16:43 서버가 13시간 차로 나란히 쌓였다).
+    # 죽여도 값은 다음 세션이 자기 것을 새로 띄우는 것뿐이라 일찍 죽여도 안전하다(디스크 갈래의
+    # .next와 다르다 - 그건 일찍 지우면 다음 세션이 전체 빌드를 다시 치른다).
+    #
+    # 수거 대상 둘 - `apps/teams/AGENTS.md` §명령의 dev 서버(결정 2)와 `.dira/protocols/cdp.md`의
+    # 헤드리스 브라우저. 둘 다 판정과 죽이는 법이 같아(cwd나 실행 경로가 트리 경로로 시작하는가
+    # 하나, 포트로 안 찾고, 프로세스 그룹째 kill) 헬퍼 함수 하나로 겸한다.
+    _cb_reap() {
+      _cb_pattern=$1
+      for _cb_rpid in $(pgrep -f "$_cb_pattern" 2>/dev/null); do
+        _cb_rcwd=$(lsof -a -p "$_cb_rpid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p')
+        # comm은 인터프리터/바이너리 이름뿐이라 트리를 못 가린다 - 실행되는 스크립트나 프로필
+        # 경로가 담긴 전체 인자열에서 트리 경로로 시작하는 토큰이 있는지를 본다(공백 경계).
+        _cb_rargs=" $(ps -o args= -p "$_cb_rpid" 2>/dev/null) "
+        _cb_rmatch=0
+        case "$_cb_rcwd" in "$_cb_wt"|"$_cb_wt"/*) _cb_rmatch=1 ;; esac
+        case "$_cb_rargs" in *" $_cb_wt"/*|*" $_cb_wt "*) _cb_rmatch=1 ;; esac
+        [ "$_cb_rmatch" = 1 ] || continue
+        # 자식을 여러 벌 띄우므로 프로세스 그룹째 죽인다 - 낱개만 죽이면 남은 자식이 포트를 쥔다.
+        _cb_rpgid=$(ps -o pgid= -p "$_cb_rpid" 2>/dev/null | tr -d ' ')
+        [ -n "$_cb_rpgid" ] || continue
+        if [ "$_cb_dryrun" = 1 ]; then
+          echo "DRYRUN $_cb_w $_cb_pattern pid=$_cb_rpid pgid=$_cb_rpgid"
+        else
+          kill -TERM -- "-$_cb_rpgid" 2>/dev/null
+          echo "KILL $_cb_w $_cb_pattern pid=$_cb_rpid pgid=$_cb_rpgid"
+        fi
+      done
+    }
+    # worktrees/ 아래만 도므로 본체 체크아웃의 next dev(사람이 쓰는 GUI, 포트 7331)와 사람의
+    # 크롬은 이 루프 밖이라 대상이 아니다.
+    _cb_reap "next dev"
+    _cb_reap "Google Chrome.*--headless"
+    unset -f _cb_reap
+    unset _cb_pattern _cb_rpid _cb_rcwd _cb_rargs _cb_rmatch _cb_rpgid
+
     # 판정 3 - 마지막 디스패치로부터 1시간: 로그가 아예 없으면 이 조건은 충족으로 본다.
+    # 프로세스 갈래는 위에서 이미 끝났다 - 아래부터는 디스크 갈래 전용이다.
     if find "$_cb_root/workers/logs" -maxdepth 1 -name "*-$_cb_w-*.log" -mmin -60 \
          -print -quit 2>/dev/null | grep -q .; then
-      [ "$_cb_dryrun" = 1 ] && echo "SKIP $_cb_w - 최근 1시간 안에 디스패치됨"
+      [ "$_cb_dryrun" = 1 ] && echo "SKIP $_cb_w 디스크 - 최근 1시간 안에 디스패치됨"
       continue
     fi
 
@@ -77,33 +117,8 @@ if [ "${1:-tick}" = tick ] || [ "${1:-tick}" = dryrun ]; then
         echo "RM $_cb_w $_cb_dir ($_cb_size)"
       fi
     done
-
-    # 개정(§세션이 120초 안에 못 뜬다 결정 3) - 판정 셋을 통과한 이 트리에 뿌리를 둔 next dev도
-    # 죽인다. 판정은 cwd나 실행 경로가 그 트리 경로로 시작하는가 하나이고, 포트로 안 찾는다
-    # (포트는 겹치고 남의 프로젝트도 같은 값을 쓴다). worktrees/ 아래만 도므로 본체 체크아웃의
-    # next dev(사람이 쓰는 GUI, 포트 7331)는 이 루프 밖이라 대상이 아니다.
-    for _cb_ndpid in $(pgrep -f "next dev" 2>/dev/null); do
-      _cb_ndcwd=$(lsof -a -p "$_cb_ndpid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p')
-      # comm은 인터프리터 이름(node)뿐이라 트리를 못 가린다 - 실행되는 스크립트 경로가 담긴
-      # 전체 인자열에서 트리 경로로 시작하는 토큰이 있는지를 본다(공백 경계로 자른다).
-      _cb_ndargs=" $(ps -o args= -p "$_cb_ndpid" 2>/dev/null) "
-      _cb_ndmatch=0
-      case "$_cb_ndcwd" in "$_cb_wt"|"$_cb_wt"/*) _cb_ndmatch=1 ;; esac
-      case "$_cb_ndargs" in *" $_cb_wt"/*|*" $_cb_wt "*) _cb_ndmatch=1 ;; esac
-      [ "$_cb_ndmatch" = 1 ] || continue
-      # 자식을 여러 벌 띄우므로 프로세스 그룹째 죽인다 - 낱개만 죽이면 남은 자식이 포트를 쥔다.
-      _cb_ndpgid=$(ps -o pgid= -p "$_cb_ndpid" 2>/dev/null | tr -d ' ')
-      [ -n "$_cb_ndpgid" ] || continue
-      if [ "$_cb_dryrun" = 1 ]; then
-        echo "DRYRUN $_cb_w next dev pid=$_cb_ndpid pgid=$_cb_ndpgid"
-      else
-        kill -TERM -- "-$_cb_ndpgid" 2>/dev/null
-        echo "KILL $_cb_w next dev pid=$_cb_ndpid pgid=$_cb_ndpgid"
-      fi
-    done
   done
 
   unset _cb_dryrun _cb_workers _cb_root _cb_local _cb_wt _cb_w _cb_hash _cb_lock \
-        _cb_alive _cb_pid _cb_dir _cb_rel _cb_size \
-        _cb_ndpid _cb_ndcwd _cb_ndargs _cb_ndmatch _cb_ndpgid
+        _cb_alive _cb_pid _cb_dir _cb_rel _cb_size
 fi
