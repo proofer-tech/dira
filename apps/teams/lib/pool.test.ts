@@ -98,6 +98,18 @@ function runDispatcher(dispatcherPath: string, local: string): string {
   });
 }
 
+/** 고정 슬립 대신 파일 존재를 폴링한다 — 먼저 뜬 디스패처가 python3 선정 + `project` 마커 기록까지
+ *  끝냈다는 사실을 시스템 부하와 무관하게 확인한다(f03b5410: 고정 300ms는 이 레포의 부하가 크면
+ *  python3 기동 + `sed` 두 번 + `printf`를 못 따라가 마커가 아직 안 쓰인 채로 다음 디스패처가
+ *  돈다 — 실제 경합 창이 있다). */
+async function waitForFile(file: string, timeoutMs = 5000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!existsSync(file)) {
+    if (Date.now() > deadline) throw new Error(`시간 안에 안 생겼다: ${file}`);
+    await new Promise((r) => setTimeout(r, 20));
+  }
+}
+
 /** 진짜 crontab을 안 건드리는 PATH 스텁(`workers.test.ts`의 `withLiveCrontab`과 같은 관용구) —
  *  `-l`과 `crontab -`이 같은 파일을 본다. `poolWorkerFullStatus`·`startPoolWorker`가 이 파일을
  *  읽고 쓴다. */
@@ -207,7 +219,7 @@ test("풀 디스패처 — 슬롯이 하나라 같은 공통 워커가 동시에
   const first = spawn("bash", [dispatcher], { env: { ...process.env, TICKET_LOCAL: local } });
   let firstOut = "";
   first.stdout.on("data", (d) => (firstOut += d));
-  await new Promise((r) => setTimeout(r, 300)); // 먼저 뜬 쪽이 슬롯을 잡을 시간을 준다
+  await waitForFile(path.join(local, "run", "pool-pool-1.lock", "project")); // 먼저 뜬 쪽이 슬롯을 잡을 때까지 기다린다
 
   const secondOut = runDispatcher(dispatcher, local);
   assert.match(secondOut, /SKIP pool-1/);
@@ -272,7 +284,7 @@ test("풀 디스패처 — 공통 워커 둘 + 상한 1인 큐에 동시에 하�
   const { path: d2 } = await createPoolWorker("pool-2");
 
   const first = spawn("bash", [d1], { env: { ...process.env, TICKET_LOCAL: local } });
-  await new Promise((r) => setTimeout(r, 300));
+  await waitForFile(path.join(local, "run", "pool-pool-1.lock", "project")); // pool-1이 A를 물었다는 마커가 실제로 쓰일 때까지 기다린다
   const secondOut = runDispatcher(d2, local);
   assert.strictEqual(secondOut, ""); // 후보가 없다(A는 이미 상한) — SKIP 줄도 없다, 조용히 끝난다
   await new Promise((resolve) => first.on("exit", resolve));
