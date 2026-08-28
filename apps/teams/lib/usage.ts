@@ -19,7 +19,7 @@
 import { access, readdir, readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
-import { isEligible, readTokens } from "./auth.ts";
+import { CLAUDE_MESSAGES_URL, isEligible, probeClaudeToken, readTokens } from "./auth.ts";
 import { lastJsonLine } from "./workers.ts";
 import { DEFAULT_LOCALE, t, type Locale } from "./i18n.ts";
 
@@ -595,27 +595,6 @@ function readLimit(engine: string, locale: Locale): Promise<EngineLimit | null> 
   return Promise.resolve({ error: `${engine}: ${t(locale, "statusbar.limit.unknownOriginSuffix")}` });
 }
 
-const CLAUDE_MESSAGES_URL = "https://api.anthropic.com/v1/messages";
-
-/** 설치된 CLI 번들이 이 호출에 붙이는 헤더 그대로다(§0-8 §재개정 실측, CLI 2.1.234) —
- *  `anthropic-beta` 없이 치면 이 토큰(`user:inference` 전용)의 응답에 unified 헤더가 안 실린다. */
-const CLAUDE_PROBE_HEADERS = {
-  "anthropic-beta": "oauth-2025-04-20",
-  "anthropic-version": "2023-06-01",
-  "content-type": "application/json",
-  "user-agent": "claude-cli/2.1.234 (external, cli)",
-  "x-app": "cli",
-};
-
-/** `max_tokens: 1` + 가장 싼 모델(haiku) — 이 호출은 **공짜가 아니다**(§0-8 §재개정 (4)),
- *  재는 값이 재는 대상을 먹으므로 입출력을 최소로 문다. */
-const CLAUDE_PROBE_BODY = JSON.stringify({
-  model: "claude-haiku-4-5-20251001",
-  max_tokens: 1,
-  system: [{ type: "text", text: "You are Claude Code, Anthropic's official CLI for Claude." }],
-  messages: [{ role: "user", content: "hi" }],
-});
-
 /** claude — `POST /v1/messages`의 응답 헤더(§0-8 §재개정). 걷힌 개정 ①의 GET·CLI 자격증명
  *  파일은 안 돌아온다 — 읽는 것은 `tokens.json` 활성 항목 하나다(수용조건 1이 그 걷힘을 지킨다).
  *
@@ -633,14 +612,9 @@ async function claudeLimit(locale: Locale): Promise<EngineLimit | null> {
 
   let res: Response;
   try {
-    res = await fetch(CLAUDE_MESSAGES_URL, {
-      method: "POST",
-      headers: { authorization: `Bearer ${active.token}`, ...CLAUDE_PROBE_HEADERS },
-      body: CLAUDE_PROBE_BODY,
-      // TTL 캐시가 우리 것이므로 Next의 fetch 캐시는 끈다(같은 값을 두 겹으로 들지 않는다).
-      cache: "no-store",
-      signal: AbortSignal.timeout(5_000),
-    });
+    // 요청 한 벌은 `lib/auth.ts`에 있다 — 층 ②의 저장 전 검증(`verifiedToken`)이 같은 것을
+    // 쓴다. 헤더·본문을 여기서 다시 적으면 둘이 갈릴 자리가 생긴다.
+    res = await probeClaudeToken(active.token);
   } catch (e) {
     // 타임아웃·네트워크 단절. **사유를 지어내지 않는다** — 원문 그대로 title에 싣는다.
     return { error: `POST ${CLAUDE_MESSAGES_URL}: ${(e as Error).message}` };

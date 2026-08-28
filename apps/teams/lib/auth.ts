@@ -637,6 +637,51 @@ const SETUP_TIMEOUT_MS = 120_000;
  *  **않는** 것과 축이 다르다. 여기선 화면 잡음 속에서 토큰을 골라낼 표식이 이것뿐이다. */
 const TOKEN_RE = /sk-ant-[A-Za-z0-9._-]{20,}/;
 
+// ── 잡은 값이 진짜 토큰인가 — 설치본 CLI가 붙이는 그 요청 하나 (§0-8 §재개정) ─────────────
+//
+// `lib/usage.ts`의 잔여량 판정(§0-8 판정 2)과 **같은 요청 하나**다 — 두 벌로 안 적는다.
+// 자격증명을 다루는 자리가 여기라 원본을 이 파일에 둔다.
+
+export const CLAUDE_MESSAGES_URL = "https://api.anthropic.com/v1/messages";
+
+/** 설치된 CLI 번들이 이 호출에 붙이는 헤더 그대로다(실측, CLI 2.1.234) — `anthropic-beta`
+ *  없이 치면 이 토큰(`user:inference` 전용)의 응답에 unified 헤더가 안 실린다. */
+const CLAUDE_PROBE_HEADERS = {
+  "anthropic-beta": "oauth-2025-04-20",
+  "anthropic-version": "2023-06-01",
+  "content-type": "application/json",
+  "user-agent": "claude-cli/2.1.234 (external, cli)",
+  "x-app": "cli",
+};
+
+/** `max_tokens: 1` + 가장 싼 모델(haiku) — 이 호출은 **공짜가 아니다**, 재는 값이 재는 대상을
+ *  먹으므로 입출력을 최소로 문다. */
+const CLAUDE_PROBE_BODY = JSON.stringify({
+  model: "claude-haiku-4-5-20251001",
+  max_tokens: 1,
+  system: [{ type: "text", text: "You are Claude Code, Anthropic's official CLI for Claude." }],
+  messages: [{ role: "user", content: "hi" }],
+});
+
+/** 토큰 하나로 `POST /v1/messages`를 한 번 친다. **토큰은 이 함수를 안 떠난다** — 부르는 쪽이
+ *  받는 것은 `Response`뿐이다. */
+export function probeClaudeToken(token: string, timeoutMs = 5_000): Promise<Response> {
+  return fetch(CLAUDE_MESSAGES_URL, {
+    method: "POST",
+    headers: { authorization: `Bearer ${token}`, ...CLAUDE_PROBE_HEADERS },
+    body: CLAUDE_PROBE_BODY,
+    // TTL 캐시가 부르는 쪽 것이므로 Next의 fetch 캐시는 끈다(같은 값을 두 겹으로 들지 않는다).
+    cache: "no-store",
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+}
+
+/** `TOKEN_RE`의 하한(`sk-ant-` 7자 + `{20,}`)이다 — 그보다 짧으면 애초에 안 잡혔다. */
+const MIN_TOKEN_LEN = 27;
+/** 재그리기 잔여물이 이만큼까지 붙는다고 본다(실측은 5자). 한 번이 API 호출 하나라 무한정
+ *  묻지 않는다 — 깨끗하게 잡힌 보통 경우는 첫 판에 끝나 호출이 하나다. */
+const MAX_TRIM = 24;
+
 // ── 토큰을 escape 없는 텍스트에서 집는다 — 가리기도 같은 판정을 쓴다 (§0-4 §개정 `443dd1fa`) ──
 //
 // 실측(CLI 2.1.247): 폭 200칸을 잡아 줘도 Ink는 토큰 한 줄을 세 토막으로 그렸고(`sk-ant-oa` +
@@ -690,6 +735,36 @@ function foldRaw(raw: string): { text: string; rawIndex: number[] } {
  *  있든 줄바꿈이 있든 `foldRaw`가 이미 이어 놨으므로 `TOKEN_RE`를 그대로 쓴다. */
 function extractToken(raw: string): string | null {
   return TOKEN_RE.exec(foldRaw(raw).text)?.[0] ?? null;
+}
+
+/** 집은 값을 저장 전에 한 번 찔러 본다 — **`foldRaw`가 이어 붙인 값은 토큰보다 길 수 있다.**
+ *  커서 이동 escape를 적용하지 않고 *지우는* 탓에, Ink가 화면을 다시 그리면 그 잔여물이 토큰
+ *  뒤에 그대로 달라붙고 `TOKEN_RE`가 상한 없는 탐욕 매치라 거기까지 삼킨다. 실측(2026-08-29):
+ *  브라우저 인증이 113자를 저장해 401이었고 앞 108자가 200이었다. 경계가 `oat01` 한가운데
+ *  떨어지면 `sk-ant-oa01-`이 나온다(2026-08-28 여섯 건, 전부 401).
+ *
+ *  **형식을 하드코딩하지 않는다**(§0-4) — 길이도 문자셋도 우리 것이 아니라 바뀌면 멀쩡한
+ *  토큰을 거부하게 된다. 뒤에서 한 자씩 줄여 가며 **인증되는 첫 값**을 고른다.
+ *
+ *  판정은 `200`이 아니라 **`401이 아니다`**다: 한도에 닿은 계정은 멀쩡한 토큰으로도 `429`를
+ *  준다. 네트워크가 끊겨 한 번도 못 물어봤으면 잡은 값을 그대로 돌려준다 — 인증을 연결
+ *  상태에 걸지 않는다(틀렸으면 워커가 401로 알려 준다). */
+export async function verifiedToken(cand: string): Promise<{ token: string } | { error: string }> {
+  let asked = false;
+  for (let n = cand.length; n >= MIN_TOKEN_LEN && cand.length - n <= MAX_TRIM; n--) {
+    let res: Response;
+    try {
+      res = await probeClaudeToken(cand.slice(0, n));
+    } catch {
+      continue; // 타임아웃·단절 — 이 길이는 판정한 것이 아니다
+    }
+    asked = true;
+    await res.arrayBuffer().catch(() => {}); // 헤더만 쓴다 — 본문은 읽어 버린다(소켓을 안 붙든다)
+    if (res.status !== 401) return { token: cand.slice(0, n) };
+  }
+  return asked
+    ? { error: "CLI 화면에서 집은 값이 인증되지 않습니다. 다시 시도해 주세요." }
+    : { token: cand };
 }
 
 /** `view()`가 부른다 — `extractToken`과 **같은 자리**(`foldRaw` + `TOKEN_RE`)에서 찾은 토큰의
@@ -829,10 +904,15 @@ export function startSetup(): SetupState {
     kill(s);
     // 덮어쓰기가 아니라 목록 append다 — 활성은 `addToken`의 `reconcileActive` 판정을 그대로
     // 따른다(§0-13 §화면, P179). eligible한 활성이 이미 있으면 대기로 들어간다
-    addToken(token)
-      .then(readAuth)
-      .then((a) => {
-        s.savedAt = a.savedAt ?? undefined;
+    // 잡은 값을 그대로 안 담는다 — `verifiedToken`이 재그리기 잔여물을 떼어 낸다(위 주석)
+    verifiedToken(token)
+      .then(async (v) => {
+        if ("error" in v) {
+          s.error = v.error;
+          return;
+        }
+        await addToken(v.token);
+        s.savedAt = (await readAuth()).savedAt ?? undefined;
       })
       .catch((e: Error) => {
         s.error = `토큰을 잡았지만 저장하지 못했습니다: ${e.message}`;

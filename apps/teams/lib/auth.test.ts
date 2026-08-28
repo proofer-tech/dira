@@ -18,6 +18,12 @@ const LOCAL = mkdtempSync(path.join(tmpdir(), "fst-auth-"));
 process.env.TICKET_LOCAL = LOCAL;
 process.on("exit", () => rmSync(LOCAL, { recursive: true, force: true }));
 
+// 층 ②의 저장 전 검증(`verifiedToken`)이 `POST /v1/messages`를 친다 — 테스트가 진짜 네트워크를
+// 타지 않게 기본 스텁을 깐다. `401`이 아니면 통과라 CLI가 찍은 값이 그대로 저장된다.
+const realFetch = globalThis.fetch;
+globalThis.fetch = (async () => new Response("{}", { status: 200 })) as unknown as typeof fetch;
+process.on("exit", () => (globalThis.fetch = realFetch));
+
 const {
   addToken,
   captureEngineProfile,
@@ -46,6 +52,7 @@ const {
   stopSetup,
   tokenPath,
   tokensPath,
+  verifiedToken,
   writeTokens,
 } = await import("./auth.ts");
 const { multitokenPath, setMultiplayEnabled, setMultitoken } = await import("./projects.ts");
@@ -951,4 +958,77 @@ test("setActiveEngineProfile — 목록에 없는 id는 조용히 무시한다(�
   await setActiveEngineProfile("grok", "생전-없는-id");
   const file = await readTokens();
   assert.strictEqual(file.grok!.active, entry.id); // 안 바뀌었다
+});
+
+// ── 층 ② 저장 전 검증 — 재그리기 잔여물을 떼어 낸다 (auth.ts `verifiedToken`) ────────────
+//
+// `foldRaw`가 커서 이동을 지우고 이어 붙이므로 Ink 재그리기가 토큰 뒤에 달라붙고, 상한 없는
+// `TOKEN_RE`가 그것까지 삼킨다(실측 2026-08-29: 113자 401 / 앞 108자 200).
+
+/** `globalThis.fetch`를 잠깐 바꿔 낀다 — 진짜 네트워크를 안 탄다. `byLen`이 길이별 상태를 준다. */
+async function withFetch<T>(
+  byLen: (n: number) => number | "throw",
+  body: () => Promise<T>,
+): Promise<{ result: T; lens: number[] }> {
+  const orig = globalThis.fetch;
+  const lens: number[] = [];
+  globalThis.fetch = (async (_url: string, init: { headers: Record<string, string> }) => {
+    const tok = init.headers.authorization.slice("Bearer ".length);
+    lens.push(tok.length);
+    const st = byLen(tok.length);
+    if (st === "throw") throw new Error("네트워크 끊김");
+    return new Response("{}", { status: st });
+  }) as unknown as typeof fetch;
+  try {
+    return { result: await body(), lens };
+  } finally {
+    globalThis.fetch = orig;
+  }
+}
+
+test("verifiedToken — 깨끗하게 잡힌 값은 그대로, 호출은 한 번뿐이다", async () => {
+  const tok = "sk-ant-oat01-" + "x".repeat(95); // 108자
+  const { result, lens } = await withFetch(
+    () => 200,
+    () => verifiedToken(tok),
+  );
+  assert.deepStrictEqual(result, { token: tok });
+  assert.deepStrictEqual(lens, [108]); // 트림을 안 돈다 — 보통 경우가 호출 하나다
+});
+
+test("verifiedToken — 뒤에 붙은 재그리기 잔여물을 떼고 인증되는 값을 고른다", async () => {
+  const real = "sk-ant-oat01-" + "x".repeat(95); // 108자
+  const { result, lens } = await withFetch(
+    (n) => (n === real.length ? 200 : 401),
+    () => verifiedToken(real + "AbC9z"), // 실측과 같은 5자 잔여물
+  );
+  assert.deepStrictEqual(result, { token: real });
+  assert.deepStrictEqual(lens, [113, 112, 111, 110, 109, 108]); // 뒤에서 한 자씩
+});
+
+test("verifiedToken — 판정은 200이 아니라 `401이 아니다`다(한도에 닿은 계정은 429다)", async () => {
+  const tok = "sk-ant-oat01-" + "x".repeat(95);
+  const { result, lens } = await withFetch(
+    () => 429,
+    () => verifiedToken(tok),
+  );
+  assert.deepStrictEqual(result, { token: tok }); // 429는 멀쩡한 토큰이다 — 자르지 않는다
+  assert.deepStrictEqual(lens, [108]);
+});
+
+test("verifiedToken — 어느 길이도 인증이 안 되면 사유를 돌려준다(쓰레기를 안 담는다)", async () => {
+  const { result } = await withFetch(
+    () => 401,
+    () => verifiedToken("sk-ant-oa01-" + "x".repeat(122)),
+  );
+  assert.ok("error" in result, "error를 돌려줘야 한다");
+});
+
+test("verifiedToken — 한 번도 못 물어봤으면(네트워크 단절) 잡은 값을 그대로 둔다", async () => {
+  const tok = "sk-ant-oat01-" + "x".repeat(95);
+  const { result } = await withFetch(
+    () => "throw",
+    () => verifiedToken(tok),
+  );
+  assert.deepStrictEqual(result, { token: tok }); // 인증을 연결 상태에 걸지 않는다
 });
