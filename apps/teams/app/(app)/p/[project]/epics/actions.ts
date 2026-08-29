@@ -9,14 +9,15 @@
  *  실물로 바꾸고 성공 시 이 화면을 다시 그리는 것뿐이다. */
 import { revalidatePath } from "next/cache";
 import { deleteEpicMemory, epicReadmePath, saveEpicReadme, type CreateEpicResult } from "@/lib/epics";
+import { DEFAULT_LOCALE, t, type Locale } from "@/lib/i18n";
 import { openInApp, type OpenResult } from "@/lib/paths";
 import { getProject } from "@/lib/projects";
 
 export type EpicResult = { ok: boolean; message?: string };
 
-async function projectRoot(projectId: string): Promise<string> {
+async function projectRoot(projectId: string, locale: Locale): Promise<string> {
   const project = await getProject(projectId);
-  if (!project) throw new Error(`등록되지 않은 프로젝트입니다: ${projectId}`);
+  if (!project) throw new Error(`${t(locale, "home.action.unknownProjectPrefix")} ${projectId}`);
   return project.root;
 }
 
@@ -25,21 +26,27 @@ export async function saveEpicReadmeAction(
   epic: string,
   title: string,
   body: string,
+  locale: Locale = DEFAULT_LOCALE,
 ): Promise<CreateEpicResult> {
   const project = await getProject(projectId);
-  if (!project) return { ok: false, reason: "other", error: `등록되지 않은 프로젝트입니다: ${projectId}` };
-  const r = await saveEpicReadme(project.root, epic, title, body);
+  if (!project)
+    return { ok: false, reason: "other", error: `${t(locale, "home.action.unknownProjectPrefix")} ${projectId}` };
+  const r = await saveEpicReadme(project.root, epic, title, body, locale);
   if (r.ok) revalidatePath(`/p/${projectId}/epics/${encodeURIComponent(epic)}`);
   return r;
 }
 
 /** "OS 기본 앱으로 열기" 버튼(§10 §자리 다섯) — `epicReadmePath`가 README.md 없으면 null을
  *  주고, 그때는 열 파일이 없다는 사유로 끝난다(`open`은 안 불린다). */
-export async function openEpicReadmeAction(projectId: string, epic: string): Promise<OpenResult> {
+export async function openEpicReadmeAction(
+  projectId: string,
+  epic: string,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<OpenResult> {
   try {
-    const root = await projectRoot(projectId);
+    const root = await projectRoot(projectId, locale);
     const full = await epicReadmePath(root, epic);
-    if (!full) return { ok: false, message: "README.md가 없습니다." };
+    if (!full) return { ok: false, message: t(locale, "epics.readme.missing") };
     return await openInApp(full);
   } catch (e) {
     return { ok: false, message: (e as Error).message };
@@ -50,9 +57,10 @@ export async function deleteEpicMemoryAction(
   projectId: string,
   epic: string,
   file: string,
+  locale: Locale = DEFAULT_LOCALE,
 ): Promise<EpicResult> {
   try {
-    await deleteEpicMemory(await projectRoot(projectId), epic, file);
+    await deleteEpicMemory(await projectRoot(projectId, locale), epic, file, locale);
     revalidatePath(`/p/${projectId}/epics/${encodeURIComponent(epic)}`);
     return { ok: true };
   } catch (e) {

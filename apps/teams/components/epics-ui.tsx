@@ -114,7 +114,7 @@ export function EpicReadmeEditButton({
             disabled={pending || !title.trim() || !body.trim() || !dirty}
             onClick={() =>
               start(async () => {
-                const r = await saveEpicReadmeAction(projectId, epic, title, body);
+                const r = await saveEpicReadmeAction(projectId, epic, title, body, locale);
                 if (r.ok) {
                   setOpen(false);
                   setError(null);
@@ -179,10 +179,12 @@ export function EpicMemorySection({
   projectId,
   epic,
   memories,
+  locale,
 }: {
   projectId: string;
   epic: string;
   memories: EpicMemory[];
+  locale: Locale;
 }) {
   const [items, setItems] = useState(memories);
   const [error, setError] = useState<string | null>(null);
@@ -213,12 +215,10 @@ export function EpicMemorySection({
 
   return (
     <section className="space-y-2 border-t pt-3">
-      <h3 className="text-sm font-medium">메모리</h3>
+      <h3 className="text-sm font-medium">{t(locale, "epics.memory.heading")}</h3>
 
       {items.length === 0 ? (
-        <p className="text-xs text-muted-foreground">
-          메모리가 없습니다 — 세션이 회고에서 남기면 여기에 쌓입니다.
-        </p>
+        <p className="text-xs text-muted-foreground">{t(locale, "epics.memory.emptyHint")}</p>
       ) : (
         <ul ref={listRef} onClick={openWikilink} className="space-y-1">
           {items.map((m) => (
@@ -238,6 +238,7 @@ export function EpicMemorySection({
                       projectId={projectId}
                       epic={epic}
                       memory={m}
+                      locale={locale}
                       onDone={(message) => {
                         setError(message);
                         if (!message) setItems((prev) => prev.filter((x) => x.file !== m.file));
@@ -254,7 +255,7 @@ export function EpicMemorySection({
         </ul>
       )}
 
-      {error && <Failure title="메모리를 지우지 못했습니다" message={error} />}
+      {error && <Failure title={t(locale, "epics.memory.deleteFailedTitle")} message={error} />}
     </section>
   );
 }
@@ -263,11 +264,13 @@ function DeleteMemoryButton({
   projectId,
   epic,
   memory,
+  locale,
   onDone,
 }: {
   projectId: string;
   epic: string;
   memory: EpicMemory;
+  locale: Locale;
   /** 성공하면 `null`, 실패하면 사유 — 자리는 호출자(절 맨 아래)다 */
   onDone: (message: string | null) => void;
 }) {
@@ -279,32 +282,33 @@ function DeleteMemoryButton({
         render={
           <Button variant="ghost" size="sm" disabled={pending}>
             <Trash2 aria-hidden />
-            {pending ? "삭제 중…" : "삭제"}
+            {pending ? t(locale, "epics.memory.deleting") : t(locale, "epics.memory.delete")}
           </Button>
         }
       />
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>메모리 삭제 — {memory.file.replace(/\.md$/, "")}</AlertDialogTitle>
+          <AlertDialogTitle>
+            {t(locale, "epics.memory.deleteDialogTitlePrefix")} {memory.file.replace(/\.md$/, "")}
+          </AlertDialogTitle>
           <AlertDialogDescription>
             <span className="font-mono text-xs break-all">{`epics/${epic}/memory/${memory.file}`}</span>{" "}
-            파일을 지웁니다. 되돌릴 수 없습니다 — 이 화면에 편집도 추가도 없습니다.
-            다음 디스패치부터 세션이 이 개념을 못 찾습니다.
+            {t(locale, "epics.memory.deleteDialogBodySuffix")}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel autoFocus>취소</AlertDialogCancel>
+          <AlertDialogCancel autoFocus>{t(locale, "common.cancel")}</AlertDialogCancel>
           <AlertDialogAction
             variant="destructive"
             disabled={pending}
             onClick={() =>
               start(async () => {
-                const r = await deleteEpicMemoryAction(projectId, epic, memory.file);
-                onDone(r.ok ? null : (r.message ?? "메모리를 지우지 못했습니다."));
+                const r = await deleteEpicMemoryAction(projectId, epic, memory.file, locale);
+                onDone(r.ok ? null : (r.message ?? t(locale, "epics.memory.deleteFailedFallback")));
               })
             }
           >
-            삭제
+            {t(locale, "epics.memory.delete")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

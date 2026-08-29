@@ -135,7 +135,7 @@ export default async function Epics({
           // 404가 아니다 — 왼쪽 목록은 계속 뜬다(페르소나 화면과 같은 그릇, §비주얼④)
           <Alert variant="destructive">
             <TriangleAlert aria-hidden />
-            <AlertTitle>이 경로는 열 수 없습니다</AlertTitle>
+            <AlertTitle>{t(locale, "epics.route.notFound")}</AlertTitle>
             <AlertDescription>
               <span className="font-mono text-xs break-all">{requested}</span>
             </AlertDescription>
@@ -159,7 +159,7 @@ export default async function Epics({
               <div className="flex shrink-0 items-center gap-2">
                 {titles[current.epic] != null && (
                   <OpenInAppButton
-                    action={() => openEpicReadmeAction(id, current.epic)}
+                    action={() => openEpicReadmeAction(id, current.epic, locale)}
                     locale={locale}
                   />
                 )}
@@ -181,7 +181,8 @@ export default async function Epics({
                 사이에 끼우면 수와 이름이 떨어져 사람이 둘을 따로 읽는다(§63 ⑤). */}
             <p className="flex flex-wrap items-baseline gap-2 text-xs text-muted-foreground">
               <span>
-                대기 {current.counts.open} · 진행중 {current.counts.wip} · 완료 {current.counts.done}
+                {t(locale, "status.label.open")} {current.counts.open} · {t(locale, "status.label.wip")}{" "}
+                {current.counts.wip} · {t(locale, "status.label.done")} {current.counts.done}
               </span>
               <WorkerChips names={current.workers} locale={locale} />
               {costText && <span>{costText}</span>}
@@ -200,7 +201,7 @@ export default async function Epics({
               </p>
             )}
 
-            <EpicMemorySection projectId={id} epic={current.epic} memories={memories} />
+            <EpicMemorySection projectId={id} epic={current.epic} memories={memories} locale={locale} />
           </div>
         ) : null}
       </div>

@@ -4,6 +4,7 @@
  *  dira는 아무 프로젝트에나 붙는 GUI라 스펙 문서를 파싱하면 dira 전용 기능이 된다. */
 import { mkdir, open, readFile, readdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
+import { DEFAULT_LOCALE, t, type Locale } from "./i18n.ts";
 import { collectRefs, bodyPreview, type EpicRefValue, type RefIndex, type TicketRefValue } from "./markdown-refs.ts";
 import { resolveWithin } from "./paths.ts";
 import { assigneeOf, epicOf, isAwaiting, statusOf, type Ticket, type TicketState } from "./queue.ts";
@@ -142,13 +143,18 @@ export type CreateEpicResult =
   | { ok: true }
   | { ok: false; reason: "empty" | "invalid" | "exists" | "other"; error: string };
 
-export async function createEpic(root: string, key: string, title: string): Promise<CreateEpicResult> {
+export async function createEpic(
+  root: string,
+  key: string,
+  title: string,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<CreateEpicResult> {
   const k = key.trim();
-  if (!k) return { ok: false, reason: "empty", error: "키를 입력하세요." };
-  if (!title.trim()) return { ok: false, reason: "empty", error: "제목을 입력하세요." };
-  if (/[\r\n]/.test(k)) return { ok: false, reason: "invalid", error: "키에 줄바꿈을 넣을 수 없습니다." };
+  if (!k) return { ok: false, reason: "empty", error: t(locale, "epicsLib.keyRequired") };
+  if (!title.trim()) return { ok: false, reason: "empty", error: t(locale, "epicsLib.titleRequired") };
+  if (/[\r\n]/.test(k)) return { ok: false, reason: "invalid", error: t(locale, "epicsLib.keyNoNewline") };
   const dir = await epicDir(root, k);
-  if (!dir) return { ok: false, reason: "invalid", error: `키가 큐 밖을 가리킵니다: ${k}` };
+  if (!dir) return { ok: false, reason: "invalid", error: `${t(locale, "epicsLib.keyOutsideQueuePrefix")} ${k}` };
   try {
     await mkdir(dir, { recursive: true });
     // O_EXCL — 검사와 생성 사이가 항상 벌어진다(`lib/attachments.ts`의 `saveAttachment`와 같은
@@ -157,7 +163,7 @@ export async function createEpic(root: string, key: string, title: string): Prom
       if ((e as NodeJS.ErrnoException).code === "EEXIST") return null;
       throw e;
     });
-    if (!fh) return { ok: false, reason: "exists", error: `이미 있는 키입니다: ${k}` };
+    if (!fh) return { ok: false, reason: "exists", error: `${t(locale, "epicsLib.keyExistsPrefix")} ${k}` };
     try {
       await fh.writeFile(`${title.trim()}\n`);
     } finally {
@@ -165,7 +171,7 @@ export async function createEpic(root: string, key: string, title: string): Prom
     }
     return { ok: true };
   } catch (e) {
-    return { ok: false, reason: "other", error: `만들지 못했습니다: ${(e as Error).message}` };
+    return { ok: false, reason: "other", error: `${t(locale, "epicsLib.createFailedPrefix")} ${(e as Error).message}` };
   }
 }
 
@@ -181,24 +187,25 @@ export async function saveEpicReadme(
   epic: string,
   title: string,
   body: string,
+  locale: Locale = DEFAULT_LOCALE,
 ): Promise<CreateEpicResult> {
-  const t = title.trim();
+  const trimmedTitle = title.trim();
   const b = body.trim();
-  if (!t) return { ok: false, reason: "empty", error: "제목을 입력하세요." };
-  if (!b) return { ok: false, reason: "empty", error: "내용을 입력하세요." };
+  if (!trimmedTitle) return { ok: false, reason: "empty", error: t(locale, "epicsLib.titleRequired") };
+  if (!b) return { ok: false, reason: "empty", error: t(locale, "epicsLib.bodyRequired") };
   const dir = await epicDir(root, epic);
-  if (!dir) return { ok: false, reason: "invalid", error: `키가 큐 밖을 가리킵니다: ${epic}` };
+  if (!dir) return { ok: false, reason: "invalid", error: `${t(locale, "epicsLib.keyOutsideQueuePrefix")} ${epic}` };
   try {
     await mkdir(dir, { recursive: true });
     const fh = await open(path.join(dir, "README.md"), "w");
     try {
-      await fh.writeFile(`${t}\n\n${b}\n`);
+      await fh.writeFile(`${trimmedTitle}\n\n${b}\n`);
     } finally {
       await fh.close();
     }
     return { ok: true };
   } catch (e) {
-    return { ok: false, reason: "other", error: `저장하지 못했습니다: ${(e as Error).message}` };
+    return { ok: false, reason: "other", error: `${t(locale, "epicsLib.saveFailedPrefix")} ${(e as Error).message}` };
   }
 }
 
@@ -232,10 +239,15 @@ export async function epicMemory(root: string, epic: string): Promise<EpicMemory
 /** 삭제. 클라이언트가 준 파일명은 이 디렉터리를 실제로 나열해 나온 목록 안에 있을 때만 지운다
  *  (§경로 방어 — `lib/skills.ts`의 `deletePersonaMemory`와 같은 규칙). NFC로 대조한다(같은 이유:
  *  macOS HFS+가 파일명을 NFD로 돌려주는 자리가 있다). */
-export async function deleteEpicMemory(root: string, epic: string, file: string): Promise<void> {
+export async function deleteEpicMemory(
+  root: string,
+  epic: string,
+  file: string,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<void> {
   const files = await memoryFiles(root, epic);
   const target = files.find((f) => f.name.normalize("NFC") === file.normalize("NFC"));
-  if (!target) throw new Error(`메모리 파일이 목록에 없습니다: ${file}`);
+  if (!target) throw new Error(`${t(locale, "epicsLib.memoryFileNotFoundPrefix")} ${file}`);
   await rm(path.join(target.dir, target.name));
 }
 

@@ -628,6 +628,23 @@ export const ko: Record<string, string> = {
   "epics.readme.editDesc": "제목은 README.md 첫 줄, 내용은 그 뒤 본문입니다. 저장하면 파일을 덮어씁니다.",
   "epics.readme.bodyLabel": "내용",
   "epics.readme.saveFailed": "저장하지 못했습니다",
+  // 에픽 화면(§에픽 §결정 6, `c6b995d6`) — 잘못된 P번호로 들어온 자리(페르소나 화면과 같은
+  // Alert, `persona.route.notFound`와 같은 문장이지만 화면마다 자기 키를 든다).
+  "epics.route.notFound": "이 경로는 열 수 없습니다",
+  "epics.readme.missing": "README.md가 없습니다.",
+  "epics.memory.heading": "메모리",
+  "epics.memory.emptyHint": "메모리가 없습니다 — 세션이 회고에서 남기면 여기에 쌓입니다.",
+  "epics.memory.deleteFailedTitle": "메모리를 지우지 못했습니다",
+  "epics.memory.deleteFailedFallback": "메모리를 지우지 못했습니다.",
+  "epics.memory.deleting": "삭제 중…",
+  "epics.memory.delete": "삭제",
+  "epics.memory.deleteDialogTitlePrefix": "메모리 삭제 —",
+  "epics.memory.deleteDialogBodySuffix":
+    "파일을 지웁니다. 되돌릴 수 없습니다 — 이 화면에 편집도 추가도 없습니다. 다음 디스패치부터 세션이 이 개념을 못 찾습니다.",
+  // `components/epic-sidebar.tsx`는 보드·에픽 화면이 같이 쓰는 부품이라(§머리말) `board.epic.`
+  // 접두가 아니라 자기 파일 접두를 든다(`ontology.unit.count`·`boardPage.unit.count`와 같은 값,
+  // `board.`는 FILLED라 새 키를 못 넣는다).
+  "epicSidebar.unit.count": "건",
   "status.hint.awaiting": "PM이 되물었다 — 요구사항 상세에서 답을 쓰면 다시 큐에 뜬다. 자동 만료는 없다",
   "status.hint.assigned": "session_id가 적힌 열린 티켓 — 큐에서 영구 제외된다. 할당 해제로 되돌린다",
   "status.hint.pollingOverdue": "폴링 상한을 지났다 — 다음 tick에 답변 대기로 잠긴다",
@@ -1532,6 +1549,22 @@ export const ko: Record<string, string> = {
   "transcriptLib.tool": "도구",
   "transcriptLib.result": "결과",
   "transcriptLib.linesUnit": "줄",
+
+  // 에픽 갈래(§0-16 §묶음 표 행 12, `c6b995d6`) — `lib/epics.ts`. en은 후속 티켓이 채운다.
+  "epicsLib.keyRequired": "키를 입력하세요.",
+  "epicsLib.titleRequired": "제목을 입력하세요.",
+  "epicsLib.keyNoNewline": "키에 줄바꿈을 넣을 수 없습니다.",
+  "epicsLib.keyOutsideQueuePrefix": "키가 큐 밖을 가리킵니다:",
+  "epicsLib.keyExistsPrefix": "이미 있는 키입니다:",
+  "epicsLib.createFailedPrefix": "만들지 못했습니다:",
+  "epicsLib.bodyRequired": "내용을 입력하세요.",
+  "epicsLib.saveFailedPrefix": "저장하지 못했습니다:",
+  "epicsLib.memoryFileNotFoundPrefix": "메모리 파일이 목록에 없습니다:",
+
+  // `lib/epic.ts` — 카드를 에픽에 끌어다 놓는 쓰기의 실패 문구.
+  "epicLib.noNewline": "epic에 줄바꿈을 넣을 수 없습니다.",
+  "epicLib.notFoundPrefix": "큐에 없는 티켓입니다:",
+  "epicLib.noFrontmatterPrefix": "frontmatter 없음:",
 };
 
 /** 제품 낱말의 영어 대응 — **여기가 한자리다**(621c7a97). 다음 묶음이 같은 것을 다르게 부르지

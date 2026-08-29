@@ -141,7 +141,10 @@ export function EpicSidebar({
                         data-epic-line
                         className="flex items-baseline gap-2 text-xs text-muted-foreground"
                       >
-                        <span>{allTotal}건</span>
+                        <span>
+                          {allTotal}
+                          {t(locale, "epicSidebar.unit.count")}
+                        </span>
                         {allWip > 0 && (
                           <span className="ml-auto">
                             {t(locale, "status.label.wip")} {allWip}
@@ -185,7 +188,10 @@ export function EpicSidebar({
                                 data-epic-line
                                 className="flex items-baseline gap-2 text-xs text-muted-foreground"
                               >
-                                <span>{total}건</span>
+                                <span>
+                                  {total}
+                                  {t(locale, "epicSidebar.unit.count")}
+                                </span>
                                 {row.counts.wip > 0 && (
                                   // 칩이 뜨면 `진행중 n`을 걷는다(§에픽 결정 14 - §52 ②) - 워커 칩과
                                   // 폴백 글자는 같은 사실의 두 모양이라 한 줄에 하나만 뜬다.

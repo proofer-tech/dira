@@ -9,6 +9,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { findTicket } from "./engine.ts";
+import { DEFAULT_LOCALE, t, type Locale } from "./i18n.ts";
 import {
   LOCKED,
   readFm,
@@ -28,9 +29,9 @@ export type EpicWriteResult =
 /** frontmatter 값으로 들어갈 한 줄. `[hash]/actions.ts`의 `fmValue`와 같은 검사(개행 거부)다 —
  *  `"use server"` 파일에서 못 끌어온 헬퍼라 한 줄 다시 둔다(`(board)/actions.ts`도 같은 대가를
  *  치른다). */
-function fmValue(raw: string): string {
+function fmValue(raw: string, locale: Locale): string {
   const v = raw.trim();
-  if (/[\r\n]/.test(v)) throw new Error("epic에 줄바꿈을 넣을 수 없습니다.");
+  if (/[\r\n]/.test(v)) throw new Error(t(locale, "epicLib.noNewline"));
   return v;
 }
 
@@ -43,23 +44,24 @@ export async function writeEpic(
   sfx: Suffixes,
   hash: string,
   epic: string,
+  locale: Locale = DEFAULT_LOCALE,
 ): Promise<EpicWriteResult> {
   const file = await findTicket(root, hash, sfx);
-  if (!file) return { ok: false, reason: "missing", error: `큐에 없는 티켓입니다: ${hash}` };
+  if (!file) return { ok: false, reason: "missing", error: `${t(locale, "epicLib.notFoundPrefix")} ${hash}` };
 
   const state = stateOf(path.basename(file), sfx);
   if (state !== "open") return { ok: false, reason: "locked", error: LOCKED[state] };
 
   let value: string;
   try {
-    value = fmValue(epic);
+    value = fmValue(epic, locale);
   } catch (e) {
     return { ok: false, reason: "other", error: (e as Error).message };
   }
 
   const stem = stemOf(file, sfx);
   const { fm, lines, end } = readFm(await readFile(file, "utf8"));
-  if (end < 0) return { ok: false, reason: "other", error: `frontmatter 없음: ${file}` };
+  if (end < 0) return { ok: false, reason: "other", error: `${t(locale, "epicLib.noFrontmatterPrefix")} ${file}` };
 
   // 이미 그 값이면 아무것도 안 쓴다 — mtime 불변(§결정 8 "5초 폴링이 안 갈린 파일을 다시 그리게
   // 하지 않는다").
