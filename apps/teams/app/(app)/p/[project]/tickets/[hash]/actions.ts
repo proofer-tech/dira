@@ -20,6 +20,7 @@ import { writeEpic } from "@/lib/epic";
 import { listEpics, refreshKnownRefs, resolveMarkdownRefs } from "@/lib/epics";
 import { findTicket, unassign, type UnassignRun } from "@/lib/engine";
 import { followup, type FollowupResult } from "@/lib/followup";
+import { t, type Locale } from "@/lib/i18n";
 import { interject, type InterjectResult } from "@/lib/interject";
 import { kickIdleWorker } from "@/lib/kick";
 import { parseFrontmatterHead } from "@/lib/markdown-frontmatter-rows";
@@ -64,11 +65,12 @@ type Target = {
  *  URL 문자열을 그대로 넘기면 `findTicket` 폴백으로 들어온 표시값에서 화면은 뜨는데 엔진 호출만
  *  `티켓을 못 찾음`으로 실패한다(DESIGN.md §식별자). */
 async function target(projectId: string, hash: string): Promise<Target> {
+  const locale = await readLanguage();
   const project = await getProject(projectId);
-  if (!project) throw new Error(`등록되지 않은 프로젝트입니다: ${projectId}`);
+  if (!project) throw new Error(`${t(locale, "ticketDetail.unknownProjectPrefix")} ${projectId}`);
   const config = await resolveConfig(project);
   const p = await findTicket(project.root, hash, config);
-  if (!p) throw new Error(`큐에 없는 티켓입니다: ${hash}`);
+  if (!p) throw new Error(`${t(locale, "ticketDetail.ticketNotFoundPrefix")} ${hash}`);
   const { fm, end } = readFm(await readFile(p, "utf8"));
   const stem = stemOf(p, config);
   // 회수된 티켓은 fm `session_id`가 비어(claim 기록이라 놓아줄 때 지운다) 폴링이 자기 기록에 못
@@ -207,11 +209,12 @@ export async function sendInterject(
   attachments: string[] = [],
 ): Promise<InterjectResult> {
   try {
+    const locale = await readLanguage();
     const project = await getProject(projectId);
-    if (!project) throw new Error(`등록되지 않은 프로젝트입니다: ${projectId}`);
+    if (!project) throw new Error(`${t(locale, "ticketDetail.unknownProjectPrefix")} ${projectId}`);
     const config = await resolveConfig(project);
-    const attached = await verifyAttachments(project, attachments);
-    return await interject(project.root, config, stem, withAttachments(text, attached), await readLanguage());
+    const attached = await verifyAttachments(project, attachments, locale);
+    return await interject(project.root, config, stem, withAttachments(text, attached), locale);
   } catch (e) {
     // 여기 오는 건 프로젝트 조회·설정 해석이 던진 것뿐이다(§21 실패 4종에 없다) — `other`다.
     const error = (e as Error).message;
@@ -238,11 +241,12 @@ export async function sendFollowup(
   attachments: string[] = [],
 ): Promise<FollowupResult> {
   try {
+    const locale = await readLanguage();
     const project = await getProject(projectId);
-    if (!project) throw new Error(`등록되지 않은 프로젝트입니다: ${projectId}`);
+    if (!project) throw new Error(`${t(locale, "ticketDetail.unknownProjectPrefix")} ${projectId}`);
     const config = await resolveConfig(project);
-    const attached = await verifyAttachments(project, attachments);
-    const r = await followup(project.root, config, stem, withAttachments(text, attached));
+    const attached = await verifyAttachments(project, attachments, locale);
+    const r = await followup(project.root, config, stem, withAttachments(text, attached), locale);
     if (r.ok) {
       revalidatePath(`/p/${projectId}`);
       await kickIdleWorker(project.root); // §4-5 — 이어받기는 **새 열린 티켓 한 장**이다
@@ -258,18 +262,13 @@ export async function sendFollowup(
 /** 할당 해제가 막히는 상태는 `.done` **하나**라 Record가 아니다 — `.wip`의 해제는 이 액션의
  *  본래 용도고(죽은 세션 복구), 열린 티켓의 ghost 해제도 살아 있다. 화면의 잠금 `Alert`와 같은
  *  사실을 알려 준다: 막는 것이 아니라 남기는 것이 목적이다. */
-const UNASSIGN_LOCKED_DONE =
-  "완료 티켓은 할당 해제할 수 없습니다 — 담당 세션 기록(session_id·owner)은 누가 한 일인지를 남기려고 그대로 둡니다.";
-
-const DELETE_LOCKED: Record<"wip" | "done", string> = {
-  wip: "진행중 티켓은 삭제할 수 없습니다 — 세션에 할당된 티켓입니다.",
-  done: "완료 티켓은 삭제할 수 없습니다 — 이 해시를 deps로 둔 티켓이 영구 대기합니다.",
-};
+const deleteLockedMessage = (locale: Locale, state: "wip" | "done"): string =>
+  t(locale, state === "wip" ? "ticketDetail.deleteLockedWipMessage" : "ticketDetail.deleteLockedDoneMessage");
 
 /** frontmatter 값으로 들어갈 한 줄. 개행이 섞이면 frontmatter가 깨져 티켓이 큐에서 사라진다. */
-function fmValue(name: string, raw: string): string {
+function fmValue(locale: Locale, name: string, raw: string): string {
   const v = raw.trim();
-  if (/[\r\n]/.test(v)) throw new Error(`${name}에 줄바꿈을 넣을 수 없습니다.`);
+  if (/[\r\n]/.test(v)) throw new Error(`${name}${t(locale, "ticketDetail.noNewlineSuffix")}`);
   return v;
 }
 
@@ -282,12 +281,13 @@ export async function saveTicket(_prev: SaveState, form: FormData): Promise<Save
   const projectId = String(form.get("project") ?? "");
   const hash = String(form.get("hash") ?? "");
   try {
-    const t = await target(projectId, hash);
-    if (t.state !== "open") return { error: lockedReason(t.state) };
+    const locale = await readLanguage();
+    const t2 = await target(projectId, hash);
+    if (t2.state !== "open") return { error: lockedReason(t2.state, locale) };
 
-    const title = fmValue("제목", String(form.get("title") ?? ""));
-    if (!title) return { error: "제목을 입력하세요." };
-    const kind = fmValue("kind", String(form.get("kind") ?? ""));
+    const title = fmValue(locale, t(locale, "ticketDetail.titleFieldName"), String(form.get("title") ?? ""));
+    if (!title) return { error: t(locale, "ticketDetail.titleRequired") };
+    const kind = fmValue(locale, "kind", String(form.get("kind") ?? ""));
     // §5-5 §할당 입구 둘 — select 값은 `persona:<이름>`/`squad:<이름>` 접두사고, 서버가 쓰는 키는
     // 정확히 하나다. 스쿼드를 고르면 `squad:`를 쓰고 `persona:` 줄을 지운다(반대도 같다) —
     // 아래 `writeTicket`의 `undefined`가 그 줄을 통째로 지운다.
@@ -318,7 +318,7 @@ export async function saveTicket(_prev: SaveState, form: FormData): Promise<Save
     const body = String(form.get("body") ?? "").replace(/\r\n/g, "\n");
 
     await writeTicket(
-      t.path,
+      t2.path,
       {
         title,
         kind,
@@ -329,11 +329,11 @@ export async function saveTicket(_prev: SaveState, form: FormData): Promise<Save
       },
       body,
     );
-    revalidatePath(`/p/${projectId}/tickets/${encodeURIComponent(t.stem)}`);
+    revalidatePath(`/p/${projectId}/tickets/${encodeURIComponent(t2.stem)}`);
     revalidatePath(`/p/${projectId}`); // 보드의 title·kind·persona 컬럼
     // §4-5 — 편집으로 persona가 붙거나 deps 한 줄이 빠지면 그 순간 디스패치 가능해진다.
     // "정말 가능해졌나"는 판정하지 않는다(그러면 §큐 판정이 두 벌이다) — 그냥 tick 한 번이다.
-    await kickIdleWorker(t.root);
+    await kickIdleWorker(t2.root);
     return { ok: true };
   } catch (e) {
     return { error: (e as Error).message };
@@ -352,7 +352,7 @@ export async function saveTicketFrontmatter(_prev: SaveState, form: FormData): P
   const head = String(form.get("head") ?? "");
   try {
     const t = await target(projectId, hash);
-    if (t.state !== "open") return { error: lockedReason(t.state) };
+    if (t.state !== "open") return { error: lockedReason(t.state, await readLanguage()) };
 
     const text = await readFile(t.path, "utf8");
     const { fm, lines, end } = readFm(text);
@@ -389,8 +389,9 @@ export async function setTicketEpic(
   epic: string,
 ): Promise<EpicDropResult> {
   try {
+    const locale = await readLanguage();
     const project = await getProject(projectId);
-    if (!project) throw new Error(`등록되지 않은 프로젝트입니다: ${projectId}`);
+    if (!project) throw new Error(`${t(locale, "ticketDetail.unknownProjectPrefix")} ${projectId}`);
     const config = await resolveConfig(project);
     const r = await writeEpic(project.root, config, hash, epic);
     if (!r.ok) return r;
@@ -419,18 +420,19 @@ export async function unassignTicket(
   force = false,
 ): Promise<UnassignRun> {
   try {
-    const t = await target(projectId, hash);
-    if (t.state === "done") {
-      return { ok: false, output: UNASSIGN_LOCKED_DONE, worker: null };
+    const locale = await readLanguage();
+    const t2 = await target(projectId, hash);
+    if (t2.state === "done") {
+      return { ok: false, output: t(locale, "ticketDetail.unassignLockedDone"), worker: null };
     }
-    if (!t.assigned) {
-      return { ok: false, output: "할당된 티켓이 아닙니다(session_id가 비어 있습니다).", worker: null };
+    if (!t2.assigned) {
+      return { ok: false, output: t(locale, "ticketDetail.notAssigned"), worker: null };
     }
     // URL 문자열이 아니라 **찾아낸 파일의 stem**을 넘긴다 — 엔진 `find`는 파일명만 본다.
-    const r = await unassign(t.root, t.stem, force);
-    revalidatePath(`/p/${projectId}/tickets/${encodeURIComponent(t.stem)}`);
+    const r = await unassign(t2.root, t2.stem, force);
+    revalidatePath(`/p/${projectId}/tickets/${encodeURIComponent(t2.stem)}`);
     revalidatePath(`/p/${projectId}`);
-    if (r.ok) await kickIdleWorker(t.root); // §4-5 — `.wip` → 열림. 되돌린 티켓이 바로 다시 물린다
+    if (r.ok) await kickIdleWorker(t2.root); // §4-5 — `.wip` → 열림. 되돌린 티켓이 바로 다시 물린다
     return r;
   } catch (e) {
     return { ok: false, output: (e as Error).message, worker: null };
@@ -451,27 +453,26 @@ export async function answerRequirement(_prev: SaveState, form: FormData): Promi
   const projectId = String(form.get("project") ?? "");
   const hash = String(form.get("hash") ?? "");
   try {
+    const locale = await readLanguage();
     const project = await getProject(projectId);
-    if (!project) throw new Error(`등록되지 않은 프로젝트입니다: ${projectId}`);
+    if (!project) throw new Error(`${t(locale, "ticketDetail.unknownProjectPrefix")} ${projectId}`);
     const config = await resolveConfig(project);
     const file = await findTicket(project.root, hash, config);
-    if (!file) throw new Error(`큐에 없는 티켓입니다: ${hash}`);
+    if (!file) throw new Error(`${t(locale, "ticketDetail.ticketNotFoundPrefix")} ${hash}`);
 
     // 화면을 그린 뒤 세션이 이 티켓을 잡았거나 다른 창이 이미 답했을 수 있다 — 판정을 다시 한다.
     const tickets = await listTickets(project.root, config);
     const nfc = (s: string) => s.normalize("NFC");
-    const t = tickets.find((x) => nfc(x.path) === nfc(file));
-    if (!t || !isAwaiting(t)) {
-      throw new Error(
-        "지금 이 티켓은 답변 대기가 아닙니다 — 이미 답변이 달렸거나 세션이 잡았습니다. 화면을 새로고침해 상태를 확인하세요.",
-      );
+    const tk = tickets.find((x) => nfc(x.path) === nfc(file));
+    if (!tk || !isAwaiting(tk)) {
+      throw new Error(t(locale, "ticketDetail.notAwaitingAnymore"));
     }
 
-    const stem = awaitingOf(t);
+    const stem = awaitingOf(tk);
     // PM 세션이 쓴 값이지만 여기서 파일명이 된다 — 신뢰 경계다(경로 구분자·제어문자·dotfile).
     if (!isHash(stem)) {
       throw new Error(
-        `awaiting 값을 파일 이름으로 쓸 수 없습니다: ${stem}. 경로 구분자·제어문자가 없는 이름이어야 합니다 — 요구사항의 frontmatter를 고치세요.`,
+        `${t(locale, "ticketDetail.badAwaitingStemPrefix")} ${stem}${t(locale, "ticketDetail.badAwaitingStemSuffix")}`,
       );
     }
 
@@ -481,7 +482,7 @@ export async function answerRequirement(_prev: SaveState, form: FormData): Promi
     const clash = await findTicket(project.root, stem, config);
     if (clash) {
       throw new Error(
-        `${stem} 이름의 티켓이 이미 큐에 있습니다: ${path.basename(clash)}. 그 파일이 있는 한 답변 파일을 만들어도 엔진이 그쪽을 먼저 집어 요구사항이 영구 대기합니다. 그 파일을 확인해 정리하거나, PM에게 다른 awaiting 해시를 받으세요.`,
+        `${stem} ${t(locale, "ticketDetail.stemClashMiddle")} ${path.basename(clash)}${t(locale, "ticketDetail.stemClashSuffix")}`,
       );
     }
 
@@ -489,21 +490,24 @@ export async function answerRequirement(_prev: SaveState, form: FormData): Promi
     const answer = String(form.get("body") ?? "")
       .replace(/\r\n/g, "\n")
       .trim();
-    if (!answer) throw new Error("답변 내용을 입력하세요.");
+    if (!answer) throw new Error(t(locale, "ticketDetail.answerRequired"));
 
     // 라운드 번호 = 이미 달린 답변 수 + 1. 질문 절 번호와 같은 수를 쓴다(§요구사항 왕복 스레드).
     const n =
-      t.deps.filter((d) => resolveDep(tickets, d, config)?.kind === "answer").length + 1;
+      tk.deps.filter((d) => resolveDep(tickets, d, config)?.kind === "answer").length + 1;
 
     // 경로를 문자열로 믿지 않는다 — 큐 디렉터리 안인지 확인하고 그 결과로 연다(§경로 방어).
     const answerPath = await resolveWithin(
       path.join(project.root, "tickets"),
       `${stem}${config.done}.md`,
     );
+    // **제목·heading은 로케일과 무관하게 한국어로 고정한다** — `## 질문 n`을 찾는 엔진 파서
+    // (`queue.ts` `questionsOf`)와 같은 협약이고, 파일에 한 번 쓰이면 이후 다른 로케일로 보는
+    // 사람에게도 안 바뀌어야 한다(§0-16 §사전의 범위 — 화면 문구가 아니라 큐 데이터다).
     const text = [
       "---",
       `ticket: ${stem}`,
-      `title: 답변 — ${t.stem} #${n}`,
+      `title: 답변 — ${tk.stem} #${n}`,
       "kind: answer",
       "---",
       "",
@@ -517,7 +521,7 @@ export async function answerRequirement(_prev: SaveState, form: FormData): Promi
     const fh = await open(answerPath, "wx").catch((e) => {
       if ((e as NodeJS.ErrnoException).code === "EEXIST") {
         throw new Error(
-          `답변 파일이 이미 있습니다: ${path.basename(answerPath)}. 다른 창에서 방금 답했을 수 있습니다 — 새로고침해 스레드를 확인하세요.`,
+          `${t(locale, "ticketDetail.answerFileExistsPrefix")} ${path.basename(answerPath)}${t(locale, "ticketDetail.answerFileExistsSuffix")}`,
         );
       }
       throw e;
@@ -531,7 +535,7 @@ export async function answerRequirement(_prev: SaveState, form: FormData): Promi
     // §0-11 — 답변 파일이 실제로 쓰인 뒤다. 파라미터가 없다: 답변 본문도 해시도 안 간다.
     void track("answer_submit", {});
 
-    revalidatePath(`/p/${projectId}/tickets/${encodeURIComponent(t.stem)}`);
+    revalidatePath(`/p/${projectId}/tickets/${encodeURIComponent(tk.stem)}`);
     revalidatePath(`/p/${projectId}`); // 배지가 `deps 대기` → `대기`로 바뀐다 = 재큐의 증거
     // §4-5 — 답변 파일이 태어나 `<R>`의 deps가 충족됐다. 그 재큐를 cron이 아니라 지금 문다.
     await kickIdleWorker(project.root);
@@ -550,7 +554,7 @@ export async function deleteTicket(projectId: string, hash: string): Promise<Del
   try {
     const t = await target(projectId, hash);
     if (t.state !== "open") {
-      return { ok: false, message: DELETE_LOCKED[t.state] };
+      return { ok: false, message: deleteLockedMessage(await readLanguage(), t.state) };
     }
     await unlink(t.path);
     revalidatePath(`/p/${projectId}`);

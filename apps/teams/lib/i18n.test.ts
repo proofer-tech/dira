@@ -1126,6 +1126,81 @@ test("96327123 — 에픽 갈래의 조립 문구가 영어에서도 문장이 �
   );
 });
 
+// 03753945 — 티켓 상세·발행 화면(묶음 표 행 4). 변수가 낀 조립 문구가 원문과 바이트 단위로 같은지
+// 고정한다 — ko만이다(en은 P338-4가 채운다, `ticketDetail.*`는 아직 FILLED가 아니다).
+test("03753945 — 티켓 상세 화면의 조립 문구가 원문과 바이트 단위로 같다(ko)", () => {
+  const l = "ko" as const;
+
+  // UnassignButton — 강제 중단 확인 문구(hash + suffix), wip 잠금 설명(볼드 낀 두 조각)
+  assert.strictEqual(
+    `high0002${t(l, "ticketDetail.forceStopDescSuffix")}`,
+    "high0002를 물고 있는 세션이 아직 살아 있습니다. 강제로 중단하면 그 세션이 죽고, 티켓은 답변 대기로 잠깁니다 — 답변칸에 답을 쓰기 전에는 아무 워커도 다시 가져가지 않습니다. 워크트리에 커밋하지 않은 변경은 지워지지 않고 그대로 남습니다.",
+  );
+  assert.strictEqual(
+    `${t(l, "ticketDetail.wipLockDescPrefix")} ${t(l, "ticketDetail.unassign")}${t(l, "ticketDetail.wipLockDescSuffix")}`,
+    "진행중 티켓은 읽기만 합니다. 세션이 죽었다면 할당 해제로 큐에 되돌린 뒤 편집하세요.",
+  );
+  // ghost(열린 티켓 + session_id) 문구 — 코드 스팬 넷을 낀 다섯 조각
+  assert.strictEqual(
+    `${t(l, "ticketDetail.ghostPrefix")} session_id${t(l, "ticketDetail.ghostAfterSessionId")} select${t(l, "ticketDetail.ghostAfterSelect")} reap${t(l, "ticketDetail.ghostAfterReap")} .wip${t(l, "ticketDetail.ghostSuffix")}`,
+    "열린 티켓에 session_id가 적혀 있습니다 — select가 영구 제외하고 reap은 .wip만 보므로, 할당 해제만이 이 티켓을 큐로 되돌립니다.",
+  );
+
+  // page.tsx — 표시값 해시 불일치 두 문단
+  assert.strictEqual(
+    `${t(l, "ticketDetail.hashMismatchTitlePrefix")} high0002${t(l, "ticketDetail.hashMismatchTitleSuffix")}`,
+    "표시값 high0002로는 엔진이 이 티켓을 찾지 못합니다",
+  );
+  assert.strictEqual(
+    `ticket:${t(l, "ticketDetail.hashMismatchBody1")} deps:${t(l, "ticketDetail.hashMismatchBody2")} high0002${t(l, "ticketDetail.hashMismatchBody3")} .done${t(l, "ticketDetail.hashMismatchBody4")}`,
+    "ticket:이 파일명과 다릅니다. 엔진은 파일명으로만 찾으므로 deps:에는 high0002을 적어야 합니다 — 표시값을 적으면 이 티켓이 .done이 돼도 후행이 영구 대기입니다.",
+  );
+  assert.strictEqual(
+    `${t(l, "ticketDetail.hashMismatchFixPrefix")} ticket:${t(l, "ticketDetail.hashMismatchFixMid")} high0002${t(l, "ticketDetail.hashMismatchFixSuffix")}`,
+    "고치려면 ticket:을 high0002으로 맞추거나 파일 이름을 바꾸세요.",
+  );
+
+  // page.tsx — 잠금 없는 답변 대기
+  assert.strictEqual(
+    `awaiting: high0002${t(l, "ticketDetail.unlockedAwaitingBody1")} deps${t(l, "ticketDetail.unlockedAwaitingBody2")} deps${t(l, "ticketDetail.unlockedAwaitingBody3")} deps${t(l, "ticketDetail.unlockedAwaitingBody4")} high0002${t(l, "ticketDetail.unlockedAwaitingBody5")}`,
+    "awaiting: high0002가 있는데 deps에 그 해시가 없습니다. 엔진은 deps만 보므로 답변 없이도 이 티켓이 큐에 뜹니다 — 요구사항의 deps에 high0002를 넣으세요.",
+  );
+
+  // page.tsx — 완료 잠금
+  assert.strictEqual(
+    `${t(l, "ticketDetail.doneLockedBody1")} deps ${t(l, "ticketDetail.doneLockedBody2")} req: ${t(l, "ticketDetail.doneLockedBody3")}session_id·owner${t(l, "ticketDetail.doneLockedBody4")}`,
+    "완료는 이 큐의 불변 기록입니다 — 후행의 deps 해소와 req: 역참조가 이 파일의 존재에 걸려 있어 편집·삭제·할당 해제를 막습니다. 담당 세션 기록(session_id·owner)은 누가 한 일인지를 남기려고 그대로 둡니다. 이어서 할 일이 있으면 새 티켓을 만드세요.",
+  );
+
+  // actions.ts — 프로젝트/티켓 조회 실패, awaiting stem 거절, 답변 파일 충돌
+  assert.strictEqual(`${t(l, "ticketDetail.unknownProjectPrefix")} demo`, "등록되지 않은 프로젝트입니다: demo");
+  assert.strictEqual(`${t(l, "ticketDetail.ticketNotFoundPrefix")} high0002`, "큐에 없는 티켓입니다: high0002");
+  assert.strictEqual(
+    `${t(l, "ticketDetail.badAwaitingStemPrefix")} ../x${t(l, "ticketDetail.badAwaitingStemSuffix")}`,
+    "awaiting 값을 파일 이름으로 쓸 수 없습니다: ../x. 경로 구분자·제어문자가 없는 이름이어야 합니다 — 요구사항의 frontmatter를 고치세요.",
+  );
+  assert.strictEqual(
+    `high0002 ${t(l, "ticketDetail.stemClashMiddle")} high0002.md${t(l, "ticketDetail.stemClashSuffix")}`,
+    "high0002 이름의 티켓이 이미 큐에 있습니다: high0002.md. 그 파일이 있는 한 답변 파일을 만들어도 엔진이 그쪽을 먼저 집어 요구사항이 영구 대기합니다. 그 파일을 확인해 정리하거나, PM에게 다른 awaiting 해시를 받으세요.",
+  );
+  assert.strictEqual(
+    `${t(l, "ticketDetail.answerFileExistsPrefix")} high0002.done.md${t(l, "ticketDetail.answerFileExistsSuffix")}`,
+    "답변 파일이 이미 있습니다: high0002.done.md. 다른 창에서 방금 답했을 수 있습니다 — 새로고침해 스레드를 확인하세요.",
+  );
+
+  // attachment-field.tsx — 상한 초과(두 변수)
+  assert.strictEqual(
+    `${t(l, "attachmentField.dropLimitPrefix")} 10${t(l, "attachmentField.dropLimitMiddle")} 3${t(l, "attachmentField.dropLimitSuffix")}`,
+    "한 번에 10개까지 붙일 수 있습니다 — 3개는 붙이지 않았습니다.",
+  );
+
+  // followup.ts — 상태 mono 원문
+  assert.strictEqual(
+    `${t(l, "followupLib.stateDetailPrefix")} ${t(l, "followupLib.state.wip")}`,
+    "상태: 진행중",
+  );
+});
+
 test("readLanguage — 파일 없으면 기본값 ko, set 뒤에는 그 값을 읽는다", async () => {
   rmSync(languagePath(), { force: true });
   assert.strictEqual(await readLanguage(), "ko");

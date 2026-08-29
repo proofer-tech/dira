@@ -127,13 +127,14 @@ export default async function TicketDetail({
     return (
       <Alert className="max-w-3xl">
         <TriangleAlert aria-hidden className="text-status-stale" />
-        <AlertTitle>이 파일은 큐에 뜨지 않습니다 — frontmatter가 없습니다</AlertTitle>
+        <AlertTitle>{t(locale, "ticketDetail.notScannedTitle")}</AlertTitle>
         <AlertDescription className="grid gap-2">
           <span className="font-mono text-xs break-all">{file}</span>
           <span>
-            첫 줄이 <span className="font-mono">---</span>이고 닫는{" "}
-            <span className="font-mono">---</span>이 있어야 엔진이 티켓으로 봅니다. 손으로 열어
-            고치세요.
+            {t(locale, "ticketDetail.notScannedFirstLine")} <span className="font-mono">---</span>
+            {t(locale, "ticketDetail.notScannedClosing")}{" "}
+            <span className="font-mono">---</span>
+            {t(locale, "ticketDetail.notScannedSuffix")}
           </span>
         </AlertDescription>
       </Alert>
@@ -314,7 +315,7 @@ export default async function TicketDetail({
                 (§비주얼 §29 ③ P173) — 여기는 상자 안이 통째로 빌 때만 남는 자리다.
                 토큰량 덩이도 h2 옆에 같이 뜬다(§비주얼 §63 ④ — 조건이 h2와 같다). */}
             <div className="flex min-w-0 items-baseline gap-2">
-              <h2 className="text-sm font-medium">진행 기록</h2>
+              <h2 className="text-sm font-medium">{t(locale, "ticketDetail.progressHeading")}</h2>
               {costChunk && (
                 <span className="text-xs text-muted-foreground" title={costChunk.title}>
                   {costChunk.text}
@@ -327,7 +328,7 @@ export default async function TicketDetail({
                 리플레이처럼 되짚을 워커가 없어 엔진을 모르는 자리. 참이고, 왜인지 모르는 채로
                 참이다 — 없는 값을 추측해 `codex입니다`라고 쓰지 않는다. */}
             <EmptyState
-              text="트랜스크립트 없음"
+              text={t(locale, "ticketDetail.noTranscript")}
               action={
                 <span className="font-mono text-xs break-all text-muted-foreground">
                   {`~/.claude/projects/*/${sessionId}.jsonl`}
@@ -393,7 +394,11 @@ export default async function TicketDetail({
         <div className="flex min-w-0 items-center gap-3">
           {/* §9 뒤쪽 절반 — 위에 덮인 앵커가 없어 `layered`를 안 준다(§비주얼 §31 §층) */}
           <h1 className="text-lg font-semibold">
-            {ticket.title ? <TitleRefs title={ticket.title} refs={refs} locale={locale} /> : "(제목 없음)"}
+            {ticket.title ? (
+              <TitleRefs title={ticket.title} refs={refs} locale={locale} />
+            ) : (
+              t(locale, "ticketDetail.noTitle")
+            )}
           </h1>
           {/* 보드와 **같은 말**을 쓴다 — 같은 티켓이 한쪽에서 `deps 대기`, 다른 쪽에서
               `답변 대기`로 보이면 배지가 상태 표현의 유일한 출처인 의미가 없다(§1 보드) */}
@@ -439,9 +444,9 @@ export default async function TicketDetail({
             title={ticket.title}
             locked={
               ticket.state === "wip"
-                ? "진행중 티켓은 삭제할 수 없습니다 — 세션에 할당된 티켓입니다"
+                ? t(locale, "ticketDetail.deleteLockedWipTooltip")
                 : ticket.state === "done"
-                  ? "완료 티켓은 삭제할 수 없습니다 — 불변 기록입니다"
+                  ? t(locale, "ticketDetail.deleteLockedDoneTooltip")
                   : null
             }
           />
@@ -462,21 +467,27 @@ export default async function TicketDetail({
             <Alert>
               <TriangleAlert aria-hidden className="text-status-stale" />
               <AlertTitle>
-                표시값 <span className="font-mono">{ticket.hash}</span>로는 엔진이 이 티켓을 찾지
-                못합니다
+                {t(locale, "ticketDetail.hashMismatchTitlePrefix")}{" "}
+                <span className="font-mono">{ticket.hash}</span>
+                {t(locale, "ticketDetail.hashMismatchTitleSuffix")}
               </AlertTitle>
               <AlertDescription className="grid gap-2">
                 <span>
-                  frontmatter <span className="font-mono">ticket:</span>이 파일명과 다릅니다. 엔진은
-                  파일명으로만 찾으므로 <span className="font-mono">deps:</span>에는{" "}
-                  <b className="font-mono">{ticket.stem}</b>을 적어야 합니다 — 표시값을 적으면 이
-                  티켓이
-                  <span className="font-mono"> .done</span>이 돼도 후행이 영구 대기입니다.
+                  frontmatter <span className="font-mono">ticket:</span>
+                  {t(locale, "ticketDetail.hashMismatchBody1")}{" "}
+                  <span className="font-mono">deps:</span>
+                  {t(locale, "ticketDetail.hashMismatchBody2")}{" "}
+                  <b className="font-mono">{ticket.stem}</b>
+                  {t(locale, "ticketDetail.hashMismatchBody3")}
+                  <span className="font-mono"> .done</span>
+                  {t(locale, "ticketDetail.hashMismatchBody4")}
                 </span>
                 <span>
-                  고치려면 <span className="font-mono">ticket:</span>을{" "}
-                  <span className="font-mono">{ticket.stem}</span>으로 맞추거나 파일 이름을
-                  바꾸세요.
+                  {t(locale, "ticketDetail.hashMismatchFixPrefix")}{" "}
+                  <span className="font-mono">ticket:</span>
+                  {t(locale, "ticketDetail.hashMismatchFixMid")}{" "}
+                  <span className="font-mono">{ticket.stem}</span>
+                  {t(locale, "ticketDetail.hashMismatchFixSuffix")}
                 </span>
               </AlertDescription>
             </Alert>
@@ -487,14 +498,19 @@ export default async function TicketDetail({
           {awaitingUnlocked(ticket) && (
             <Alert>
               <TriangleAlert aria-hidden className="text-status-stale" />
-              <AlertTitle>잠금 없는 답변 대기 — 이 티켓은 답변 전에 디스패치된다</AlertTitle>
+              <AlertTitle>{t(locale, "ticketDetail.unlockedAwaitingTitle")}</AlertTitle>
               <AlertDescription>
                 <span>
-                  <span className="font-mono">awaiting: {awaitingOf(ticket)}</span>가 있는데{" "}
-                  <span className="font-mono">deps</span>에 그 해시가 없습니다. 엔진은{" "}
-                  <span className="font-mono">deps</span>만 보므로 답변 없이도 이 티켓이 큐에 뜹니다
-                  — 요구사항의 <span className="font-mono">deps</span>에{" "}
-                  <span className="font-mono">{awaitingOf(ticket)}</span>를 넣으세요.
+                  <span className="font-mono">awaiting: {awaitingOf(ticket)}</span>
+                  {t(locale, "ticketDetail.unlockedAwaitingBody1")}{" "}
+                  <span className="font-mono">deps</span>
+                  {t(locale, "ticketDetail.unlockedAwaitingBody2")}{" "}
+                  <span className="font-mono">deps</span>
+                  {t(locale, "ticketDetail.unlockedAwaitingBody3")}{" "}
+                  <span className="font-mono">deps</span>
+                  {t(locale, "ticketDetail.unlockedAwaitingBody4")}{" "}
+                  <span className="font-mono">{awaitingOf(ticket)}</span>
+                  {t(locale, "ticketDetail.unlockedAwaitingBody5")}
                 </span>
               </AlertDescription>
             </Alert>
@@ -507,14 +523,15 @@ export default async function TicketDetail({
           {ticket.state === "done" && (
             <Alert>
               <Lock aria-hidden className="text-status-done" />
-              <AlertTitle>완료 티켓은 읽기 전용입니다</AlertTitle>
+              <AlertTitle>{t(locale, "ticketDetail.doneLockedTitle")}</AlertTitle>
               <AlertDescription>
-                완료는 이 큐의 불변 기록입니다 — 후행의 <span className="font-mono">deps</span>{" "}
-                해소와 <span className="font-mono">req:</span> 역참조가 이 파일의 존재에 걸려 있어
-                편집·삭제·할당 해제를 막습니다. 담당 세션 기록(
+                {t(locale, "ticketDetail.doneLockedBody1")}{" "}
+                <span className="font-mono">deps</span>{" "}
+                {t(locale, "ticketDetail.doneLockedBody2")}{" "}
+                <span className="font-mono">req:</span>{" "}
+                {t(locale, "ticketDetail.doneLockedBody3")}
                 <span className="font-mono">session_id</span>·<span className="font-mono">owner</span>
-                )은 누가 한 일인지를 남기려고 그대로 둡니다. 이어서 할 일이 있으면 새 티켓을
-                만드세요.
+                {t(locale, "ticketDetail.doneLockedBody4")}
               </AlertDescription>
             </Alert>
           )}
@@ -551,7 +568,7 @@ export default async function TicketDetail({
           {above && progressSection}
 
           <section className="space-y-2">
-            <h2 className="text-sm font-medium">본문</h2>
+            <h2 className="text-sm font-medium">{t(locale, "ticketDetail.bodyLabel")}</h2>
             {/* **열린 티켓만 편집 폼이다.** `.wip`(세션이 물고 있다)과 `.done`(불변 기록)은 같은
                 읽기 전용 자리를 쓴다 — 사유는 위 Alert가 각자 알려 준다. 판정을 상태 하나로 두는
                 이유: `!== "open"`이면 나중에 상태가 늘어도 기본이 읽기 전용이다. */}
@@ -572,7 +589,7 @@ export default async function TicketDetail({
                   locale={locale}
                 />
               ) : (
-                <EmptyState text="본문 없음" />
+                <EmptyState text={t(locale, "ticketDetail.emptyBody")} />
               )
             ) : (
               // 폼에는 frontmatter **원문**을 넣는다. `ticket.persona`는 PERSONA_RE를 못 넘긴 값을
@@ -705,7 +722,7 @@ export default async function TicketDetail({
           )}
 
           <section className="space-y-4">
-            <h2 className="text-sm font-medium">관계</h2>
+            <h2 className="text-sm font-medium">{t(locale, "ticketDetail.relationsHeading")}</h2>
             {/* **선행을 unmet으로 걸러내지 않는다**(§2, `b9775505`) — 걸러면 충족된 선행이 라벨 없이
                 떠서 `막고 있는 것 없음` 바로 밑에 배지가 붙고 한 라벨 안에서 두 문장이 서로를 부정했다.
                 막혀 있는지는 머리의 상태 배지가 말하고, 개별 해시의 상태는 배지 아이콘이 알려 준다.
@@ -727,7 +744,7 @@ export default async function TicketDetail({
                   →
                 </span>
               )}
-              <Badge variant="secondary">이 티켓</Badge>
+              <Badge variant="secondary">{t(locale, "ticketDetail.thisTicket")}</Badge>
               {blocked.length > 0 && (
                 <span aria-hidden className="text-muted-foreground">
                   →
@@ -750,7 +767,9 @@ export default async function TicketDetail({
               <div className="space-y-4 border-t pt-4">
                 {req && (
                   <div className="space-y-2">
-                    <p className="text-xs text-muted-foreground">요구사항</p>
+                    <p className="text-xs text-muted-foreground">
+                      {t(locale, "ticketDetail.requirementLabel")}
+                    </p>
                     {reqTicket ? (
                       <TicketLine t={reqTicket} href={href(reqTicket)} />
                     ) : (
@@ -759,16 +778,18 @@ export default async function TicketDetail({
                       <DepBadge
                         hash={req}
                         kind="missing"
-                        hint="큐에 없는 요구사항 stem — 출처를 따라갈 수 없다"
+                        hint={t(locale, "ticketDetail.missingReqHint")}
                       />
                     )}
                   </div>
                 )}
                 {(derived.length > 0 || ticket.kind === "request") && (
                   <div className="space-y-2">
-                    <p className="text-xs text-muted-foreground">이 요구사항에서 나온 티켓</p>
+                    <p className="text-xs text-muted-foreground">
+                      {t(locale, "ticketDetail.derivedTicketsLabel")}
+                    </p>
                     {derived.length === 0 ? (
-                      <EmptyState text="아직 쪼갠 티켓 없음" />
+                      <EmptyState text={t(locale, "ticketDetail.noDerivedTickets")} />
                     ) : (
                       <div className="space-y-1">
                         {derived.map((t) => (
@@ -788,7 +809,9 @@ export default async function TicketDetail({
               <div className="space-y-4 border-t pt-4">
                 {archives && (
                   <div className="space-y-2">
-                    <p className="text-xs text-muted-foreground">아카이브 대상</p>
+                    <p className="text-xs text-muted-foreground">
+                      {t(locale, "ticketDetail.archiveTargetLabel")}
+                    </p>
                     {archiveTarget ? (
                       <TicketLine t={archiveTarget} href={href(archiveTarget)} />
                     ) : (
@@ -797,14 +820,16 @@ export default async function TicketDetail({
                       <DepBadge
                         hash={archives}
                         kind="missing"
-                        hint="큐에 없는 아카이브 대상 stem — 대상을 따라갈 수 없다"
+                        hint={t(locale, "ticketDetail.missingArchiveHint")}
                       />
                     )}
                   </div>
                 )}
                 {archivers.length > 0 && (
                   <div className="space-y-2">
-                    <p className="text-xs text-muted-foreground">아카이브</p>
+                    <p className="text-xs text-muted-foreground">
+                      {t(locale, "ticketDetail.archiveLabel")}
+                    </p>
                     <div className="space-y-1">
                       {archivers.map((t) => (
                         <TicketLine key={t.path} t={t} href={href(t)} />

@@ -14,7 +14,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, open } from "node:fs/promises";
 import path from "node:path";
 import { oversizeError } from "./attachment-limit.ts";
-import { DEFAULT_LOCALE, type Locale } from "./i18n.ts";
+import { DEFAULT_LOCALE, t, type Locale } from "./i18n.ts";
 import { resolveWithin } from "./paths.ts";
 import type { Project } from "./projects.ts";
 
@@ -57,7 +57,7 @@ export async function saveAttachment(
   if (!name) {
     return {
       ok: false,
-      error: "파일 이름이 없습니다 — 이름이 있는 파일로 다시 고르세요.",
+      error: t(locale, "attachmentsLib.noFileName"),
     };
   }
 
@@ -82,10 +82,13 @@ export async function saveAttachment(
       }
       return { ok: true, path: full };
     }
-    return { ok: false, error: "이름을 10번 뽑았는데 전부 이미 쓰이고 있습니다." };
+    return { ok: false, error: t(locale, "attachmentsLib.nameExhausted") };
   } catch (e) {
     // 사유 원문을 삼키지 않는다(§6 2번). 권한·용량·경로 방어가 전부 이 문장으로 나온다.
-    return { ok: false, error: `저장하지 못했습니다: ${(e as Error).message}` };
+    return {
+      ok: false,
+      error: `${t(locale, "attachmentsLib.saveFailedPrefix")} ${(e as Error).message}`,
+    };
   }
 }
 
@@ -101,6 +104,7 @@ export async function saveAttachment(
 export async function verifyAttachments(
   project: Pick<Project, "root">,
   paths: string[],
+  locale: Locale = DEFAULT_LOCALE,
 ): Promise<string[]> {
   if (paths.length === 0) return [];
   const dir = path.join(project.root, "attachments");
@@ -109,7 +113,7 @@ export async function verifyAttachments(
   } catch (e) {
     // §6 3요소 — 무엇이(원문에 경로가 들어 있다) · 왜 · 다음 행동.
     throw new Error(
-      `첨부 경로가 attachments/ 밖입니다 — 붙인 파일을 지우고 다시 고르세요: ${(e as Error).message}`,
+      `${t(locale, "attachmentsLib.outsidePathPrefix")} ${(e as Error).message}`,
     );
   }
 }

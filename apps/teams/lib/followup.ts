@@ -16,6 +16,7 @@ import { randomUUID } from "node:crypto";
 import { open, readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { findTicket } from "./engine.ts";
+import { DEFAULT_LOCALE, t, type Locale } from "./i18n.ts";
 import { NAME_RE } from "./paths.ts";
 import { readFm, reqTitle, stateOf, stemOf, type Suffixes, type TicketState } from "./queue.ts";
 
@@ -37,7 +38,8 @@ const fail = (reason: FollowupReason, error: string, detail = error): FollowupRe
 });
 
 /** `.done`이 아닌 두 상태의 mono 원문(§비주얼 §21의 `상태: 완료`와 같은 자리·반대 방향). */
-const STATE_KO: Record<TicketState, string> = { open: "열림", wip: "진행중", done: "완료" };
+const stateLabel = (locale: Locale, state: TicketState): string =>
+  t(locale, `followupLib.state.${state}`);
 
 /** python `.strip().strip("\"'")` — `queue.ts`의 unquote와 같은 정규화. */
 const unquote = (s: string) => s.trim().replace(/^["']+|["']+$/g, "");
@@ -59,27 +61,31 @@ export async function followup(
   sfx: Suffixes,
   hash: string,
   text: string,
+  locale: Locale = DEFAULT_LOCALE,
 ): Promise<FollowupResult> {
   // 신뢰 경계 입력 검증. 공백만인 참견으로 만들면 title 없는 티켓이 태어난다.
   const content = text.replace(/\r\n/g, "\n").trim();
-  if (!content) return fail("other", "보낼 내용을 입력하세요.");
+  if (!content) return fail("other", t(locale, "followupLib.emptyBody"));
 
   const file = await findTicket(root, hash, sfx);
-  if (!file) return fail("other", `큐에 없는 티켓입니다: ${hash}`);
+  if (!file) return fail("other", `${t(locale, "followupLib.ticketNotFoundPrefix")} ${hash}`);
 
   const state = stateOf(path.basename(file), sfx);
   if (state !== "done") {
     return fail(
       "not-done",
-      "완료 티켓이 아닙니다 — 이어받을 일이 아직 끝나지 않았습니다.",
-      `상태: ${STATE_KO[state]}`,
+      t(locale, "followupLib.notDoneReason"),
+      `${t(locale, "followupLib.stateDetailPrefix")} ${stateLabel(locale, state)}`,
     );
   }
 
   const { fm, lines, end } = readFm(await readFile(file, "utf8"));
   if (end < 0) {
     // scan()이 빼는 파일이다 — 엔진에게 안 보이는 티켓에서 값을 베끼면 없는 것을 이어받는 셈이다.
-    return fail("other", `frontmatter가 없거나 닫는 \`---\`이 없습니다: ${path.basename(file)}`);
+    return fail(
+      "other",
+      `${t(locale, "followupLib.malformedFrontmatterPrefix")} ${path.basename(file)}`,
+    );
   }
 
   const stem = stemOf(file, sfx);
@@ -144,8 +150,5 @@ export async function followup(
     }
     return { ok: true, stem: h };
   }
-  return fail(
-    "other",
-    "해시를 10번 뽑았는데 전부 이미 쓰이고 있습니다 — 큐 디렉터리를 확인하세요.",
-  );
+  return fail("other", t(locale, "followupLib.hashExhausted"));
 }

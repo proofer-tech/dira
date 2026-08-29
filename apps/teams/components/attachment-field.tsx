@@ -21,7 +21,7 @@
 import { useRef, useState, type ReactNode } from "react";
 import { Paperclip, TriangleAlert, X } from "lucide-react";
 import { uploadAttachment } from "@/app/(app)/p/[project]/actions";
-import { useLocale } from "@/components/language-provider";
+import { useLocale, useT } from "@/components/language-provider";
 import { oversizeError } from "@/lib/attachment-limit";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -41,6 +41,7 @@ export type Attachments = ReturnType<typeof useAttachments>;
 
 export function useAttachments(project: string) {
   const locale = useLocale();
+  const t = useT();
   const [chips, setChips] = useState<Chip[]>([]);
   /** 상한 초과로 **안 붙인** 개수. 그 파일들은 칩이 안 서므로(§27 실패 표) 이 수가 유일한 흔적이다. */
   const [dropped, setDropped] = useState(0);
@@ -59,7 +60,7 @@ export function useAttachments(project: string) {
     const r = await uploadAttachment(project, form).catch((e: unknown) => ({
       ok: false as const,
       // 서버 액션 자체가 던지는 경우(bodySizeLimit 초과 · 서버 재시작)에도 사유가 남아야 한다.
-      error: `올리지 못했습니다: ${e instanceof Error ? e.message : String(e)}`,
+      error: `${t("attachmentField.uploadFailedPrefix")} ${e instanceof Error ? e.message : String(e)}`,
     }));
     // 올라가는 동안 사람이 칩을 지웠으면 이 map은 아무것도 안 바꾼다. 올라간 파일은 안 지운다(§8 수명).
     setChips((prev) =>
@@ -110,7 +111,9 @@ export function useAttachments(project: string) {
   }
   const problems = [...byReason].map(([error, names]) => `${names.join(" · ")} — ${error}`);
   if (dropped > 0) {
-    problems.push(`한 번에 ${MAX_FILES}개까지 붙일 수 있습니다 — ${dropped}개는 붙이지 않았습니다.`);
+    problems.push(
+      `${t("attachmentField.dropLimitPrefix")} ${MAX_FILES}${t("attachmentField.dropLimitMiddle")} ${dropped}${t("attachmentField.dropLimitSuffix")}`,
+    );
   }
 
   return {
@@ -135,6 +138,7 @@ export function useAttachments(project: string) {
  *  1차 액션(`발행`·`요구 접수`)이 여전히 행의 가장 오른쪽이다(§비주얼 §4-3). */
 export function AttachmentField({ att, children }: { att: Attachments; children?: ReactNode }) {
   const picker = useRef<HTMLInputElement>(null);
+  const t = useT();
 
   return (
     <>
@@ -142,7 +146,7 @@ export function AttachmentField({ att, children }: { att: Attachments; children?
       {att.chips.length > 0 && (
         <div
           role="group"
-          aria-label={`첨부 ${att.chips.length}개`}
+          aria-label={`${t("attachmentField.attachWord")} ${att.chips.length}${t("attachmentField.countSuffix")}`}
           className="flex flex-wrap gap-2"
         >
           {att.chips.map((c) => (
@@ -179,7 +183,7 @@ export function AttachmentField({ att, children }: { att: Attachments; children?
           onClick={() => picker.current?.click()}
         >
           <Paperclip aria-hidden />
-          첨부
+          {t("attachmentField.attachWord")}
         </Button>
         {children}
       </div>
@@ -206,12 +210,13 @@ export function AttachmentProblems({ att }: { att: Attachments }) {
 /** 칩 줄 — `<InputGroup>` 배치(§27 표 오른쪽 열). 손잡이 addon **앞**에 두고 둘 다 `order-last`라
  *  DOM 순서가 그대로 뜬다. addon이 `role="group"`을 이미 갖고 있어 이름만 얹는다. 0개면 줄이 없다. */
 export function AttachmentChips({ att }: { att: Attachments }) {
+  const t = useT();
   if (att.chips.length === 0) return null;
   return (
     <InputGroupAddon
       align="block-end"
       className="flex-wrap"
-      aria-label={`첨부 ${att.chips.length}개`}
+      aria-label={`${t("attachmentField.attachWord")} ${att.chips.length}${t("attachmentField.countSuffix")}`}
     >
       {att.chips.map((c) => (
         <AttachmentChip key={c.id} chip={c} onRemove={() => att.remove(c.id)} />
@@ -234,6 +239,7 @@ export function AttachmentChips({ att }: { att: Attachments }) {
  *  `display:none`은 focus가 안 먹고 `.click()`은 그대로 먹는다. */
 export function AttachmentButton({ att, locked }: { att: Attachments; locked?: boolean }) {
   const picker = useRef<HTMLInputElement>(null);
+  const t = useT();
   const off = !!locked || att.chips.length >= MAX_FILES;
   return (
     <>
@@ -256,7 +262,7 @@ export function AttachmentButton({ att, locked }: { att: Attachments; locked?: b
         }}
       >
         <Paperclip aria-hidden />
-        첨부
+        {t("attachmentField.attachWord")}
       </InputGroupButton>
     </>
   );
@@ -265,6 +271,7 @@ export function AttachmentButton({ att, locked }: { att: Attachments; locked?: b
 /** 칩 한 벌(§27). 붙었다 / 올리는 중 / 실패가 **아이콘과 꼬리로만** 갈린다 —
  *  `variant="destructive"`를 안 쓰는 이유는 §1이 이미 잰 3.99다(§27 대비 표). */
 function AttachmentChip({ chip, onRemove }: { chip: Chip; onRemove: () => void }) {
+  const t = useT();
   const uploading = !chip.path && !chip.error;
   return (
     <Badge variant="secondary" className="max-w-[14rem]" aria-busy={uploading || undefined}>
@@ -280,13 +287,13 @@ function AttachmentChip({ chip, onRemove }: { chip: Chip; onRemove: () => void }
       </Tooltip>
       {uploading ? (
         // 스피너도 진행률도 없다 — 글자가 그 일을 한다(§27 · §비주얼 머리의 모션 두 자리)
-        <span className="shrink-0">올리는 중…</span>
+        <span className="shrink-0">{t("attachmentField.uploading")}</span>
       ) : (
         // 실패 칩에도 제거 버튼이 그대로 있다 — 치울 수단이 있어야 한다(§27)
         <button
           type="button"
           data-icon="inline-end"
-          aria-label={`${chip.name} 첨부 제거`}
+          aria-label={`${chip.name} ${t("attachmentField.removeSuffix")}`}
           className="shrink-0"
           onClick={onRemove}
         >

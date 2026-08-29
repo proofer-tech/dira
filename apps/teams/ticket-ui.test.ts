@@ -11,13 +11,17 @@ const end = s.indexOf("\n}", start) + 2;
 assert.ok(start > 0 && end > start, "assignmentLabel 함수를 못 찾았다");
 const src = s
   .slice(start, end)
-  .replace("(value: string | null): string {", "(value) {");
+  .replace("(value: string | null, t: (key: string) => string): string {", "(value, t) {");
 const assignmentLabel = new Function(`${src}\nreturn assignmentLabel;`)();
 
+// ko 사전의 두 키(`ticketDetail.none`·`ticketDetail.squadWord`)만 흉내 낸다 — i18n.ts 전체를
+// 끌어오지 않는다(이 파일의 관용, 위 주석과 같은 이유).
+const stubT = (key: string) => (key === "ticketDetail.none" ? "없음" : "스쿼드");
+
 test("assignmentLabel — squad는 `스쿼드 <이름>`, persona는 이름만, 없으면 `없음`", () => {
-  assert.equal(assignmentLabel("squad:frontend"), "스쿼드 frontend");
-  assert.equal(assignmentLabel("persona:developer"), "developer");
-  assert.equal(assignmentLabel(null), "없음");
+  assert.equal(assignmentLabel("squad:frontend", stubT), "스쿼드 frontend");
+  assert.equal(assignmentLabel("persona:developer", stubT), "developer");
+  assert.equal(assignmentLabel(null, stubT), "없음");
 });
 
 // `newTicketAssignmentDefault`는 내부에서 `assignmentValue`를 부르므로 둘 다 뽑아서 같이 이발한다.

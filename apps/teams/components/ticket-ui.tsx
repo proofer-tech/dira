@@ -159,6 +159,7 @@ export function ReassignLine({ count }: { count: number }) {
  *  자르는 지점은 `assigned_at` 키의 인덱스다. 그 키가 없으면(한 번도 claim 안 된 백로그 티켓)
  *  자를 지점이 없으므로 토글 자체를 그리지 않고 전 필드를 그대로 보여준다. */
 export function FrontmatterTable({ fm, file }: { fm: Record<string, string>; file: string }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const entries = Object.entries(fm);
   const cutIdx = entries.findIndex(([k]) => k === "assigned_at");
@@ -185,7 +186,9 @@ export function FrontmatterTable({ fm, file }: { fm: Record<string, string>; fil
           {visible.map(row)}
           {open && collapsed.map(row)}
           <TableRow className="h-9">
-            <TableCell className="w-28 px-3 py-0 text-sm text-muted-foreground">파일</TableCell>
+            <TableCell className="w-28 px-3 py-0 text-sm text-muted-foreground">
+              {t("ticketDetail.file")}
+            </TableCell>
             <TableCell className="px-3 py-0 font-mono text-xs break-words whitespace-normal">
               {file}
             </TableCell>
@@ -199,7 +202,7 @@ export function FrontmatterTable({ fm, file }: { fm: Record<string, string>; fil
           className="h-auto px-0 text-xs text-muted-foreground hover:text-foreground"
           onClick={() => setOpen((v) => !v)}
         >
-          {open ? "접기" : "펼치기"}
+          {open ? t("ticketDetail.collapse") : t("ticketDetail.expand")}
         </Button>
       )}
     </>
@@ -310,11 +313,11 @@ function newTicketAssignmentDefault(
  *  (priority select의 `min-w-64` 주석과 같은 결함), 이 함수 없이는 트리거에 `persona:developer`가
  *  그대로 뜬다. §비주얼 §61 (5) — 스쿼드면 `스쿼드 <이름>`(낱말이 유일한 채널), 페르소나면
  *  이름만(비대칭이 뜻이다 — 기본은 페르소나고 스쿼드가 예외다). */
-function assignmentLabel(value: string | null): string {
-  if (!value) return "없음";
+function assignmentLabel(value: string | null, t: (key: string) => string): string {
+  if (!value) return t("ticketDetail.none");
   const i = value.indexOf(":");
   const name = value.slice(i + 1);
-  return value.slice(0, i) === "squad" ? `스쿼드 ${name}` : name;
+  return value.slice(0, i) === "squad" ? `${t("ticketDetail.squadWord")} ${name}` : name;
 }
 
 /** §5-5 §할당 입구 둘의 두 select(발행·편집)가 같이 쓰는 옵션 그룹 — 페르소나/스쿼드. 값에
@@ -334,14 +337,15 @@ function AssignmentOptions({
   current: { persona?: string; squad?: string };
   outOfListLabel: string;
 }) {
+  const t = useT();
   const personaOutOfList = current.persona && !personas.includes(current.persona);
   const squadOutOfList = current.squad && !squads.includes(current.squad);
   return (
     <>
-      <SelectItem value={null}>없음</SelectItem>
+      <SelectItem value={null}>{t("ticketDetail.none")}</SelectItem>
       {(personas.length > 0 || personaOutOfList) && (
         <SelectGroup>
-          <SelectLabel>페르소나</SelectLabel>
+          <SelectLabel>{t("ticketDetail.personaWord")}</SelectLabel>
           {personas.map((p) => (
             // **점만**이다 — 껍데기(배지) 안에 배지를 또 넣지 않는다(§5). `font-mono`는 값 목록이라 무수정
             <SelectItem key={p} value={`persona:${p}`} className="font-mono">
@@ -360,7 +364,7 @@ function AssignmentOptions({
       )}
       {(squads.length > 0 || squadOutOfList) && (
         <SelectGroup>
-          <SelectLabel>스쿼드</SelectLabel>
+          <SelectLabel>{t("ticketDetail.squadWord")}</SelectLabel>
           {squads.map((s) => (
             <SelectItem key={s} value={`squad:${s}`} className="font-mono">
               {s}
@@ -476,10 +480,10 @@ export function TicketEditForm({
               (request면 §10 표 셋째 줄 `untilHeading`). 저장 자체는 여전히 폼 제출(name="kind")이 한다 */}
           <Select name="kind" value={kindValue || null} onValueChange={(v) => setKindValue(v ?? "")}>
             <SelectTrigger id="t-kind" className="w-40">
-              <SelectValue placeholder="없음" />
+              <SelectValue placeholder={t("ticketDetail.none")} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value={null}>없음</SelectItem>
+              <SelectItem value={null}>{t("ticketDetail.none")}</SelectItem>
               {KINDS.map((k) => (
                 <SelectItem key={k} value={k}>
                   {k}
@@ -488,7 +492,7 @@ export function TicketEditForm({
               {kind && !KINDS.includes(kind) && (
                 <SelectItem value={kind}>
                   {kind}
-                  <span className="text-xs text-muted-foreground">현재 값</span>
+                  <span className="text-xs text-muted-foreground">{t("ticketDetail.currentValue")}</span>
                 </SelectItem>
               )}
             </SelectContent>
@@ -500,7 +504,9 @@ export function TicketEditForm({
               `squad:`)는 서버 `parseAssignment`가 첫 `:`에서 가른다 */}
           <Select name="persona" defaultValue={assignmentValue(persona, squad)}>
             <SelectTrigger id="t-persona" className="w-40 font-mono">
-              <SelectValue placeholder="없음">{assignmentLabel}</SelectValue>
+              <SelectValue placeholder={t("ticketDetail.none")}>
+                {(v: string | null) => assignmentLabel(v, t)}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               <AssignmentOptions
@@ -508,7 +514,7 @@ export function TicketEditForm({
                 squads={squads}
                 colors={colors}
                 current={squad ? { squad } : { persona }}
-                outOfListLabel="현재 값"
+                outOfListLabel={t("ticketDetail.currentValue")}
               />
             </SelectContent>
           </Select>
@@ -599,19 +605,23 @@ export function TicketEditForm({
       <MarkdownEditor
         name="body"
         defaultValue={body}
-        label={<Label>본문</Label>}
+        label={<Label>{t("ticketDetail.bodyLabel")}</Label>}
         rows={24}
         className="font-mono"
         breaks={kindValue === "request" ? "untilHeading" : undefined}
         vault={vault}
       />
-      {state.error && <Failure title="저장하지 못했습니다" message={state.error} />}
+      {state.error && (
+        <Failure title={t("ticketFrontmatter.saveFailedTitle")} message={state.error} />
+      )}
       {/* 액션 행은 오른쪽 정렬이고 1차 액션이 가장 오른쪽이다(§비주얼 §4-3). 결과 문구는 버튼
           **왼쪽**이다 — 오른쪽에 두면 문구가 떴다 사라질 때마다 `저장`이 옆으로 움직인다 */}
       <div className="flex flex-wrap items-center justify-end gap-4">
-        {state.ok && <span className="text-sm text-muted-foreground">저장됐습니다.</span>}
+        {state.ok && (
+          <span className="text-sm text-muted-foreground">{t("ticketFrontmatter.saved")}</span>
+        )}
         <Button type="submit" disabled={pending || !!conflict}>
-          {pending ? "저장 중…" : "저장"}
+          {pending ? t("common.saving") : t("common.save")}
         </Button>
       </div>
     </form>
@@ -652,6 +662,7 @@ export function UnassignButton({
   /** 서버가 그린 `<WipWorker>` (§비주얼 §19 ③). `.wip`이 아니거나 `owner` 형식이 안 맞으면 없다 */
   mark?: ReactNode;
 }) {
+  const t = useT();
   const [pending, start] = useTransition();
   const [run, setRun] = useState<UnassignRun | null>(null);
   // `.wip`은 할당 여부와 무관하게 잠금 카드가 떠야 한다 — 버튼만 그 안에서 빠진다
@@ -669,7 +680,7 @@ export function UnassignButton({
   const button = (
     <Button variant="outline" size="sm" disabled={pending || !worker} onClick={() => call(false)}>
       <Unlink aria-hidden />
-      {pending ? "할당 해제 중…" : "할당 해제"}
+      {pending ? t("ticketDetail.unassigning") : t("ticketDetail.unassign")}
     </Button>
   );
 
@@ -685,18 +696,16 @@ export function UnassignButton({
     <AlertDialog open={asking} onOpenChange={(next) => !next && setRun(null)}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>도는 세션을 끊습니다</AlertDialogTitle>
+          <AlertDialogTitle>{t("ticketDetail.forceStopTitle")}</AlertDialogTitle>
           <AlertDialogDescription>
-            <span className="font-mono">{hash}</span>를 물고 있는 세션이 아직 살아 있습니다. 강제로
-            중단하면 그 세션이 죽고, 티켓은 답변 대기로 잠깁니다 — 답변칸에 답을 쓰기 전에는 아무
-            워커도 다시 가져가지 않습니다. 워크트리에 커밋하지 않은 변경은 지워지지 않고 그대로
-            남습니다.
+            <span className="font-mono">{hash}</span>
+            {t("ticketDetail.forceStopDescSuffix")}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel autoFocus>취소</AlertDialogCancel>
+          <AlertDialogCancel autoFocus>{t("common.cancel")}</AlertDialogCancel>
           <AlertDialogAction variant="destructive" disabled={pending} onClick={() => call(true)}>
-            강제 중단
+            {t("ticketDetail.forceStop")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -708,10 +717,10 @@ export function UnassignButton({
       <span className="font-mono">
         {worker}.sh unassign {hash}
       </span>{" "}
-      를 호출합니다
+      {t("ticketDetail.unassignCallSuffix")}
     </>
   ) : (
-    "이 프로젝트에 워커가 없습니다 — 할당 해제를 호출할 스크립트가 없습니다."
+    t("ticketDetail.noWorkerScript")
   );
 
   // 스크립트 출력은 그대로 보여준다: 백로그 복귀 여부가 여기 적혀 온다.
@@ -724,13 +733,16 @@ export function UnassignButton({
     (run.ok ? (
       <Alert>
         <Unlink aria-hidden />
-        <AlertTitle>할당 해제 완료{run.worker && ` — ${run.worker}`}</AlertTitle>
+        <AlertTitle>
+          {t("ticketDetail.unassignDoneTitle")}
+          {run.worker && ` — ${run.worker}`}
+        </AlertTitle>
         <AlertDescription>
           <pre className="font-mono text-xs whitespace-pre-wrap">{run.output}</pre>
         </AlertDescription>
       </Alert>
     ) : (
-      <Failure title="할당 해제 실패" message={run.output} />
+      <Failure title={t("ticketDetail.unassignFailedTitle")} message={run.output} />
     ));
 
   /* `.wip`은 지금 세션이 그 파일로 일하고 있다 — 잠금 사유를 그 자리에 적는다(제약 5).
@@ -749,12 +761,14 @@ export function UnassignButton({
           {/* 꼬리의 마크가 **누구인지**를 알려 준다(§비주얼 §19 ③ · 사람 요구 `47678a71`).
               `AlertDescription`이 아니라 여기인 이유: 할당 해제를 누를지 기다릴지가
               제목 한 줄에서 갈려야 한다(§2). 문구·`Lock`·`.done` `Alert`는 무수정 */}
-          <AlertTitle>세션에 할당된 티켓입니다 — 편집·삭제 잠금 {mark}</AlertTitle>
+          <AlertTitle>
+            {t("ticketDetail.wipLockTitle")} {mark}
+          </AlertTitle>
           <AlertDescription className="grid gap-1">
             {/* 손잡이가 옆으로 왔으므로 `아래`를 뺀다(§2) */}
             <span>
-              진행중 티켓은 읽기만 합니다. 세션이 죽었다면 <b>할당 해제</b>로 큐에 되돌린 뒤
-              편집하세요.
+              {t("ticketDetail.wipLockDescPrefix")} <b>{t("ticketDetail.unassign")}</b>
+              {t("ticketDetail.wipLockDescSuffix")}
             </span>
             {assigned && <span className="text-xs">{why}</span>}
           </AlertDescription>
@@ -777,10 +791,13 @@ export function UnassignButton({
       )}
       {assigned && ghost && (
         <p className="text-xs text-muted-foreground">
-          열린 티켓에 <span className="font-mono">session_id</span>가 적혀 있습니다 —{" "}
-          <span className="font-mono">select</span>가 영구 제외하고{" "}
-          <span className="font-mono">reap</span>은 <span className="font-mono">.wip</span>만 보므로,
-          할당 해제만이 이 티켓을 큐로 되돌립니다.
+          {t("ticketDetail.ghostPrefix")} <span className="font-mono">session_id</span>
+          {t("ticketDetail.ghostAfterSessionId")}{" "}
+          <span className="font-mono">select</span>
+          {t("ticketDetail.ghostAfterSelect")}{" "}
+          <span className="font-mono">reap</span>
+          {t("ticketDetail.ghostAfterReap")} <span className="font-mono">.wip</span>
+          {t("ticketDetail.ghostSuffix")}
         </p>
       )}
       {output}
@@ -808,6 +825,7 @@ export function AnswerThread({
   /** 산문 속 해시-P번호 표식의 값(§9) — 질문·답변·인용 넷 다 받는다 */
   refs?: RefIndex;
 }) {
+  const t = useT();
   return (
     <>
       {/* 스레드는 고정 높이 상자 안에서 스크롤된다(§2 · 사람 요청 `c01a9a11` Q1=(a) · §비주얼 §13).
@@ -821,7 +839,7 @@ export function AnswerThread({
       {thread.length > 0 && (
         <MessageScrollerProvider autoScroll>
           <MessageScroller>
-            <MessageScrollerViewport aria-label="답변 스레드" className="max-h-96">
+            <MessageScrollerViewport aria-label={t("ticketDetail.answerThreadAriaLabel")} className="max-h-96">
               <MessageScrollerContent>
                 {thread.map((item, i) => {
                   // 질문(PM)은 산문, 답변(사람)은 말풍선(§비주얼 §9 §산문과 말풍선 · §13
@@ -836,7 +854,7 @@ export function AnswerThread({
                             하는 한 클래스다(§9) */}
                         <div>
                           <MessageHeader className="px-0">
-                            {item.heading || "질문"}
+                            {item.heading || t("ticketDetail.question")}
                             {item.hash && <span className="ml-2 font-mono">{item.hash}</span>}
                           </MessageHeader>
                           {/* PM이 손으로 감은 절이라 줄바꿈을 안 그린다(§10 면제) */}
@@ -876,7 +894,7 @@ export function AnswerThread({
                               4.73 / 6.91이다. 오른쪽 정렬은 `MessageContent`가 `data-align=end`에서
                               자식을 `self-end`로 밀어 같이 준다 */}
                           <MessageHeader>
-                            {item.heading || "답변"}
+                            {item.heading || t("ticketDetail.answer")}
                             {item.hash && <span className="ml-2 font-mono">{item.hash}</span>}
                           </MessageHeader>
                           {/* 읽기만 하는 자리라 렌더된 마크다운이다(§비주얼 §10) — 말풍선 안에서도
@@ -904,7 +922,7 @@ export function AnswerThread({
                 §13 그대로다: 여기는 스크롤 위에 뜨는 층이라 그림자 근거가 그대로다) */}
             <MessageScrollerButton>
               <ArrowDown aria-hidden />
-              맨 아래로
+              {t("ticketDetail.scrollToBottom")}
             </MessageScrollerButton>
           </MessageScroller>
         </MessageScrollerProvider>
@@ -971,6 +989,7 @@ export function AnswerForm({
   refs?: RefIndex;
 }) {
   const [state, action, pending] = useActionState<SaveState, FormData>(answerRequirement, {});
+  const t = useT();
   // 문항마다 하나(§결정 11 ⑨) — 하위 문항(`1-1.`)도 자기 칸을 가지므로 picks는 그룹 트리를
   // 평평하게 편 순서와 1:1이다(§비주얼 §29 §두 단 ①). 트리 모양은 렌더 중 안 변하므로 이 순서는
   // 세션 동안 고정이다.
@@ -1045,7 +1064,7 @@ export function AnswerForm({
         <p className="text-sm font-medium">{g.heading}</p>
         {renderOptions(g.options, idx, 0)}
         <Input
-          placeholder="덧붙일 말"
+          placeholder={t("ticketDetail.addendum")}
           value={picks[idx].note}
           onChange={(e) =>
             applyPicks(picks.map((p, i) => (i === idx ? { ...p, note: e.target.value } : p)))
@@ -1094,7 +1113,7 @@ export function AnswerForm({
               aria-hidden
               className="size-3.5 shrink-0 transition-transform group-open/body:rotate-90"
             />
-            본문
+            {t("ticketDetail.bodyLabel")}
           </summary>
           <div className="ml-[1.125rem]">
             <Markdown text={ticketBody} vault={vault} refs={refs} />
@@ -1111,8 +1130,8 @@ export function AnswerForm({
         name="body"
         value={body}
         onValueChange={setBody}
-        ariaLabel="답변"
-        placeholder="질문에 답 쓰기"
+        ariaLabel={t("ticketDetail.answer")}
+        placeholder={t("ticketDetail.answerPlaceholder")}
         rows={8}
         className="font-mono"
         required
@@ -1125,17 +1144,18 @@ export function AnswerForm({
           if (!pending && !empty) e.currentTarget.closest("form")?.requestSubmit();
         }}
       />
-      {state.error && <Failure title="답변을 달지 못했습니다" message={state.error} />}
+      {state.error && <Failure title={t("ticketDetail.answerFailedTitle")} message={state.error} />}
       {/* 보조 텍스트는 버튼 왼쪽이다(§비주얼 §4-3) */}
       <div className="flex flex-wrap items-center justify-end gap-3">
         <span className="text-xs text-muted-foreground">
-          <span className="font-mono">tickets/{answerFile}</span>를 만듭니다
+          <span className="font-mono">tickets/{answerFile}</span>
+          {t("ticketDetail.createsFileSuffix")}
         </span>
         {/* 아이콘이 `답변 대기` 배지와 이 CTA를 잇는다 — 색은 안 쓴다(§비주얼 §15).
             보드 카드의 트리거와 같은 글자꼴이다 */}
         <Button type="submit" disabled={pending || empty}>
           <MessageSquareReply aria-hidden />
-          {pending ? "답변 다는 중…" : "답변 달기"}
+          {pending ? t("ticketDetail.answering") : t("ticketDetail.answerSubmit")}
         </Button>
       </div>
     </form>
@@ -1199,6 +1219,7 @@ export function AnswerDialog({
   /** 산문 속 해시-P번호 표식의 값(§9) — `AnswerFields`에 그대로 흘려보낸다 */
   refs?: RefIndex;
 }) {
+  const t = useT();
   return (
     <Dialog>
       <DialogTrigger
@@ -1210,14 +1231,14 @@ export function AnswerDialog({
         onClick={(e) => e.stopPropagation()}
       >
         <MessageSquareReply aria-hidden />
-        답변 달기
+        {t("ticketDetail.answerSubmit")}
       </DialogTrigger>
       <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>답변 — {title || props.hash}</DialogTitle>
-          <DialogDescription>
-            답변을 달면 이 티켓이 다시 큐에 뜨고 담당 세션이 이어서 봅니다.
-          </DialogDescription>
+          <DialogTitle>
+            {t("ticketDetail.answerDialogTitlePrefix")} {title || props.hash}
+          </DialogTitle>
+          <DialogDescription>{t("ticketDetail.answerDialogDesc")}</DialogDescription>
         </DialogHeader>
         {/* `min-w-0` — `DialogContent`가 `grid`라 아이템의 `min-width: auto`가 min-content로
             굳는다(실측 890 / 팝업 672). 안쪽 표·펜스의 `overflow-x-auto`가 그것에 무력화돼
@@ -1285,6 +1306,7 @@ export function DeleteTicketButton({
    *  불리언이 아니라 문장인 이유: 툴팁이 **왜** 못 지우는지를 말해야 하는데 두 사유가 다르다. */
   locked: string | null;
 }) {
+  const t = useT();
   const router = useTrackedRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -1293,7 +1315,7 @@ export function DeleteTicketButton({
     return (
       <Button variant="outline" size="sm" disabled title={locked}>
         <Trash2 aria-hidden />
-        삭제
+        {t("ticketDetail.delete")}
       </Button>
     );
   }
@@ -1305,20 +1327,20 @@ export function DeleteTicketButton({
           render={
             <Button variant="outline" size="sm">
               <Trash2 aria-hidden />
-              삭제
+              {t("ticketDetail.delete")}
             </Button>
           }
         />
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>티켓 삭제</AlertDialogTitle>
+            <AlertDialogTitle>{t("ticketDetail.deleteConfirmTitle")}</AlertDialogTitle>
             <AlertDialogDescription>
-              <span className="font-mono">{hash}</span> &quot;{title}&quot;의 파일을 지웁니다. 되돌릴
-              수 없습니다.
+              <span className="font-mono">{hash}</span> &quot;{title}&quot;
+              {t("ticketDetail.deleteConfirmDescSuffix")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel autoFocus>취소</AlertDialogCancel>
+            <AlertDialogCancel autoFocus>{t("common.cancel")}</AlertDialogCancel>
             <AlertDialogAction
               variant="destructive"
               disabled={pending}
@@ -1326,16 +1348,16 @@ export function DeleteTicketButton({
                 start(async () => {
                   const r = await deleteTicket(project, hash);
                   if (r.ok) router.push(`/p/${project}`);
-                  else setError(r.message ?? "삭제하지 못했습니다.");
+                  else setError(r.message ?? t("ticketDetail.deleteFailedFallback"));
                 })
               }
             >
-              삭제
+              {t("ticketDetail.delete")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-      {error && <Failure title="삭제하지 못했습니다" message={error} />}
+      {error && <Failure title={t("ticketDetail.deleteFailedTitle")} message={error} />}
     </>
   );
 }
@@ -1387,17 +1409,18 @@ function useCloseGuard(dirty: boolean, reset: () => void) {
 /** 닫기 확인 — 문구·기본 초점은 §3이 정해 둔 값이다. 삭제 확인(`DeleteTicketButton`)과 같은
  *  `AlertDialog`고 같은 규칙이다: 기본 초점이 취소 쪽이라 Enter 한 번에 글이 날아가지 않는다. */
 function DiscardConfirm({ guard }: { guard: ReturnType<typeof useCloseGuard> }) {
+  const t = useT();
   return (
     <AlertDialog open={guard.asking} onOpenChange={guard.setAsking}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>쓰던 내용이 있습니다</AlertDialogTitle>
-          <AlertDialogDescription>닫으면 지금 쓴 내용이 사라집니다.</AlertDialogDescription>
+          <AlertDialogTitle>{t("ticketDetail.discardTitle")}</AlertDialogTitle>
+          <AlertDialogDescription>{t("ticketDetail.discardDesc")}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel autoFocus>계속 쓰기</AlertDialogCancel>
+          <AlertDialogCancel autoFocus>{t("ticketDetail.keepWriting")}</AlertDialogCancel>
           <AlertDialogAction variant="destructive" onClick={guard.discard}>
-            버리고 닫기
+            {t("ticketDetail.discardAndClose")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -1418,6 +1441,7 @@ function DepsPicker({
   picked: string[];
   setPicked: (next: string[]) => void;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const byHash = new Map(options.map((o) => [o.hash, o]));
 
@@ -1431,7 +1455,7 @@ function DepsPicker({
             <DepBadge hash={h} kind={byHash.get(h)?.met ? "met" : "unmet"} />
             <button
               type="button"
-              aria-label={`deps ${h} 제거`}
+              aria-label={`deps ${h} ${t("ticketDetail.depsRemoveSuffix")}`}
               className="text-muted-foreground hover:text-foreground"
               onClick={() => setPicked(picked.filter((x) => x !== h))}
             >
@@ -1445,15 +1469,15 @@ function DepsPicker({
           <PopoverTrigger
             render={
               <Button type="button" variant="outline" size="sm" role="combobox" aria-expanded={open}>
-                티켓 선택
+                {t("ticketDetail.pickTicket")}
               </Button>
             }
           />
           <PopoverContent align="start" className="w-[28rem] p-0">
             <Command>
-              <CommandInput placeholder="티켓 검색 — 해시 또는 제목" />
+              <CommandInput placeholder={t("ticketDetail.searchPlaceholder")} />
               <CommandList className="max-h-80">
-                <CommandEmpty>일치하는 티켓 0건</CommandEmpty>
+                <CommandEmpty>{t("ticketDetail.noMatch")}</CommandEmpty>
                 {options.map((o) => (
                   <CommandItem
                     key={o.hash}
@@ -1474,11 +1498,11 @@ function DepsPicker({
                     <span className="flex min-w-0 grow items-center gap-2">
                       <span className="shrink-0 font-mono text-xs">{o.hash}</span>
                       <span className="truncate text-sm text-muted-foreground group-data-selected/command-item:text-foreground">
-                        {o.title || "(제목 없음)"}
+                        {o.title || t("ticketDetail.noTitle")}
                       </span>
                       {o.met && (
                         <span className="shrink-0 text-xs text-muted-foreground group-data-selected/command-item:text-foreground">
-                          완료
+                          {t("ticketDetail.met")}
                         </span>
                       )}
                     </span>
@@ -1489,9 +1513,7 @@ function DepsPicker({
           </PopoverContent>
         </Popover>
       </div>
-      <p className="text-xs text-muted-foreground">
-        전부 완료돼야 큐에 뜹니다. 없으면 착수가 불가능한 것만 고릅니다 — 남발하면 큐가 직렬화됩니다.
-      </p>
+      <p className="text-xs text-muted-foreground">{t("ticketDetail.depsHint")}</p>
     </div>
   );
 }
@@ -1518,6 +1540,7 @@ export function RequestDialog({
   /** 이름 -> href 벌(§비주얼 §10 §위키링크) — 위지윅 면에 그대로 흘려보낸다 */
   vault?: Vault;
 }) {
+  const t = useT();
   const [state, action, pending] = useActionState<NewTicketState, FormData>(createTicket, {});
   // 본문은 **controlled**여야 한다: React 19는 form action이 끝나면 폼을 리셋하므로, uncontrolled면
   // 발행이 실패한 순간 사람이 쓴 글이 사라진다(실측). 실패 사유만 남고 본문이 비면 사유가 무의미하다.
@@ -1560,18 +1583,21 @@ export function RequestDialog({
   return (
     <Dialog open={guard.open} onOpenChange={guard.close}>
       {/* 셸 것은 버튼을 안 그린다 — 헤더에 여섯 번째 것이 붙지 않고 보드 우상단 쌍도 무수정이다(§3) */}
-      {trigger === "button" && <DialogTrigger render={<Button size="sm" />}>요구 접수</DialogTrigger>}
+      {trigger === "button" && (
+        <DialogTrigger render={<Button size="sm" />}>{t("ticketDetail.requestAccept")}</DialogTrigger>
+      )}
       {/* 천장은 발행 다이얼로그와 같은 한 줄이다 — 이 폼의 `<Textarea>`는 `field-sizing-content`라
           본문만큼 자라는데 여기엔 `max-h`도 `overflow`도 없어 900 화면에서 본문 34줄이면 스크롤도
           없이 잘렸다. 칩 줄이 그 지점을 26줄로 당긴다(§비주얼 §27 높이 항 — 첨부가 만든 결함이
           아니라 148px 앞당기는 결함이다). `dialog.tsx`는 안 고친다 */}
       <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle>요구 접수</DialogTitle>
+          <DialogTitle>{t("ticketDetail.requestAccept")}</DialogTitle>
           {!done && (
             <DialogDescription>
-              필요한 것을 자연어로 쓰면 <span className="font-mono text-xs">kind: request</span>{" "}
-              티켓이 되고 해석합니다. 첫 줄이 제목이 됩니다.
+              {t("ticketDetail.requestDescPrefix")}{" "}
+              <span className="font-mono text-xs">kind: request</span>{" "}
+              {t("ticketDetail.requestDescSuffix")}
             </DialogDescription>
           )}
         </DialogHeader>
@@ -1589,10 +1615,10 @@ export function RequestDialog({
                 href={`/p/${project}/tickets/${done}`}
                 className="text-sm underline-offset-4 hover:underline"
               >
-                접수한 요구 보기
+                {t("ticketDetail.viewSubmittedRequest")}
               </Link>
               <Button variant="outline" size="sm" onClick={() => guard.close(false)}>
-                닫기
+                {t("common.close")}
               </Button>
             </div>
           </div>
@@ -1622,8 +1648,8 @@ export function RequestDialog({
               rows={12}
               required
               autoFocus
-              ariaLabel="요구 내용"
-              placeholder={"무엇이 필요한지 그냥 쓰세요.\n첫 줄이 제목이 됩니다."}
+              ariaLabel={t("ticketDetail.requestBodyAriaLabel")}
+              placeholder={t("ticketDetail.requestBodyPlaceholder")}
               breaks="untilHeading"
               vault={vault}
               onPaste={att.onPaste}
@@ -1642,12 +1668,14 @@ export function RequestDialog({
               }}
             />
             {/* 실패는 이 자리에 남는다 — 닫으면 본문과 함께 사라진다(§3) */}
-            {live && state.error && <Failure title="접수하지 못했습니다" message={state.error} />}
+            {live && state.error && (
+              <Failure title={t("ticketDetail.requestFailedTitle")} message={state.error} />
+            )}
             {/* 칩 줄 · 실패 사유 줄 · 액션 행(§27). 제출 버튼은 사람이 지목한 자리 그대로
                 행의 오른쪽 끝이고(요구 `027d8e96` · §비주얼 §4-3) 손잡이가 그 왼쪽에 놓인다 */}
             <AttachmentField att={att}>
               <Button type="submit" disabled={pending || !body.trim()}>
-                {pending ? "접수 중…" : "요구 접수"}
+                {pending ? t("ticketDetail.requesting") : t("ticketDetail.requestAccept")}
               </Button>
             </AttachmentField>
           </form>
@@ -1762,25 +1790,25 @@ export function NewTicketDialog({
         {copy ? (
           <>
             <Copy aria-hidden />
-            복제
+            {t("ticketDetail.duplicate")}
           </>
         ) : (
-          "티켓 발행"
+          t("ticketDetail.publish")
         )}
       </DialogTrigger>
       {/* 1440×900에서 본문 12줄이 다 들어가지만, 좁은 창·긴 deps 목록에서는 넘친다 — 잘리지
           않게 여기서 스크롤한다(§3 크기) */}
       <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{copy ? "티켓 복제" : "티켓 발행"}</DialogTitle>
+          <DialogTitle>{copy ? t("ticketDetail.duplicateTicketTitle") : t("ticketDetail.publish")}</DialogTitle>
           <DialogDescription>
             {copy ? (
               <>
-                <span className="font-mono">{copy.stem}</span>의 title·kind·persona·본문을 그대로
-                채웠습니다. deps는 복제되지 않습니다 — 필요하면 직접 고르세요.
+                <span className="font-mono">{copy.stem}</span>
+                {t("ticketDetail.duplicateDescSuffix")}
               </>
             ) : (
-              "선택지는 전부 이 프로젝트의 실제 값입니다 — 손으로 치는 건 title과 본문뿐입니다."
+              t("ticketDetail.publishDesc")
             )}
           </DialogDescription>
         </DialogHeader>
@@ -1795,7 +1823,7 @@ export function NewTicketDialog({
               id="n-title"
               name="title"
               required
-              placeholder="한 줄 제목 — 무엇을 하는지"
+              placeholder={t("ticketDetail.titlePlaceholder")}
               value={title}
               onChange={(e) => setTitle(e.target.value)}
             />
@@ -1809,10 +1837,10 @@ export function NewTicketDialog({
                   목록 밖 값은 서버가 발행 시점에 사유를 붙여 거부한다(`createTicket`의 KINDS). */}
               <Select name="kind" value={kindValue || null} onValueChange={(v) => setKindValue(v ?? "")}>
                 <SelectTrigger id="n-kind" className="w-40">
-                  <SelectValue placeholder="없음" />
+                  <SelectValue placeholder={t("ticketDetail.none")} />
                 </SelectTrigger>
                 <SelectContent>
-                  {copy && <SelectItem value={null}>없음</SelectItem>}
+                  {copy && <SelectItem value={null}>{t("ticketDetail.none")}</SelectItem>}
                   {KINDS.map((k) => (
                     <SelectItem key={k} value={k}>
                       {k}
@@ -1821,7 +1849,7 @@ export function NewTicketDialog({
                   {copy && copy.kind && !KINDS.includes(copy.kind) && (
                     <SelectItem value={copy.kind}>
                       {copy.kind}
-                      <span className="text-xs text-muted-foreground">원본 값</span>
+                      <span className="text-xs text-muted-foreground">{t("ticketDetail.originalValue")}</span>
                     </SelectItem>
                   )}
                 </SelectContent>
@@ -1840,7 +1868,9 @@ export function NewTicketDialog({
                   disabled={personas.length === 0 && squads.length === 0 && !copy?.persona && !copy?.squad}
                 >
                   {/* 비우는 게 정상이다 — 페르소나 없이도 디스패치된다(protocols/tickets.md) */}
-                  <SelectValue placeholder="없음">{assignmentLabel}</SelectValue>
+                  <SelectValue placeholder={t("ticketDetail.none")}>
+                    {(v: string | null) => assignmentLabel(v, t)}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <AssignmentOptions
@@ -1848,7 +1878,7 @@ export function NewTicketDialog({
                     squads={squads}
                     colors={colors}
                     current={copy?.squad ? { squad: copy.squad } : { persona: copy?.persona }}
-                    outOfListLabel="원본 값"
+                    outOfListLabel={t("ticketDetail.originalValue")}
                   />
                 </SelectContent>
               </Select>
@@ -1909,8 +1939,8 @@ export function NewTicketDialog({
             </div>
             {personas.length === 0 && (
               <p className="self-end pb-2 text-xs text-muted-foreground">
-                <span className="font-mono break-all">{personaDir}</span>에 페르소나 디렉터리가
-                없습니다.
+                <span className="font-mono break-all">{personaDir}</span>
+                {t("ticketDetail.noPersonaDirSuffix")}
               </p>
             )}
           </div>
@@ -1924,7 +1954,7 @@ export function NewTicketDialog({
             name="body"
             value={body}
             onValueChange={setBody}
-            label={<Label>본문</Label>}
+            label={<Label>{t("ticketDetail.bodyLabel")}</Label>}
             rows={12}
             className="font-mono"
             breaks={kindValue === "request" ? "untilHeading" : undefined}
@@ -1934,12 +1964,12 @@ export function NewTicketDialog({
 
           {/* 실패는 이 자리에 남는다 — 닫으면 본문과 함께 사라진다(§3) */}
           {state !== dismissed && state.error && (
-            <Failure title="발행하지 못했습니다" message={state.error} />
+            <Failure title={t("ticketDetail.publishFailedTitle")} message={state.error} />
           )}
           {/* 칩 줄 · 실패 사유 줄 · 액션 행(§27). 1차 액션은 여전히 가장 오른쪽이다 */}
           <AttachmentField att={att}>
             <Button type="submit" disabled={pending || !!duedateConflictHash}>
-              {pending ? "발행 중…" : "발행"}
+              {pending ? t("ticketDetail.publishing") : t("ticketDetail.publishSubmit")}
             </Button>
           </AttachmentField>
         </form>
