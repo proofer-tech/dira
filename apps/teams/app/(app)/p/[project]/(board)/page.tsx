@@ -229,18 +229,27 @@ function wipLine(e: StreamEvent | null) {
  *
  *  문구는 셋뿐이고 **상태 배지를 안 쓴다**: 카드의 배지는 *이 카드의 상태*를 말하는 자리라
  *  같은 실루엣이 다른 티켓의 상태를 말하면 사람이 완료 카드를 `진행중`으로 읽는다. 해시도 안
- *  그린다 — 카드에 이미 대상 해시가 있어서 둘째 해시가 뜨면 어느 것이 이 카드인지 흔들린다. */
+ *  그린다 — 카드에 이미 대상 해시가 있어서 둘째 해시가 뜨면 어느 것이 이 카드인지 흔들린다.
+ *
+ *  **줄 오른쪽 끝의 워커 칩**(§5-3 §표시 규약 §개정 2 · §42 §개정, 요구 `75ccff40`): 주어는
+ *  이 카드가 아니라 **아카이브 티켓 자신**이다(`WipWorker`가 `a.fm.owner`를 읽는다 — 대상은
+ *  `.done`이라 물고 있는 워커가 없다). 줄이 `flex`가 되고 `justify-between`이 칩을 오른쪽 끝으로
+ *  민다 — `ml-auto`를 칩에 안 붙이는 이유는 §19 칩 클래스 문자열이 여덟 자리에서 같아야 해서다.
+ *  `min-w-0`이 링크에 는 것은 긴 워커 이름이 칩을 줄 밖으로 안 밀도록 문구 쪽이 양보하게 하는
+ *  값이고, `truncate`가 줄에서 문구 `<span>`으로 내려간 것도 같은 이유다(안 그러면 칩 위아래
+ *  1px이 그 `overflow-hidden`에 잘린다). 칩이 없는 두 상태(대기·답변 대기)에서는 `WipWorker`가
+ *  `null`을 돌려줘 항목이 하나뿐이라 `justify-between`이 무동작이다 — 화면이 한 픽셀도 안 갈린다. */
 function archiveLine(a: Ticket | undefined, href: (t: Ticket) => string, locale: Locale) {
   if (!a) return null;
   return (
     <div className="-mx-4 -mb-2 border-t px-4 pt-2">
-      <div className="h-3.5 truncate text-2xs">
-        <Link href={href(a)} className="relative z-10 inline-flex items-center gap-1">
+      <div className="flex h-3.5 items-center justify-between gap-2 text-2xs">
+        <Link href={href(a)} className="relative z-10 inline-flex min-w-0 items-center gap-1">
           <Archive
             aria-hidden
             className="size-3 shrink-0 animate-wip-pulse motion-reduce:animate-none"
           />
-          <span>
+          <span className="truncate">
             {isAwaiting(a)
               ? t(locale, "boardPage.archive.awaitingAnswer")
               : a.state === "wip"
@@ -248,6 +257,7 @@ function archiveLine(a: Ticket | undefined, href: (t: Ticket) => string, locale:
                 : t(locale, "boardPage.archive.pending")}
           </span>
         </Link>
+        <WipWorker t={a} locale={locale} />
       </div>
     </div>
   );
