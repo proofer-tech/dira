@@ -23,6 +23,7 @@ import { useEffect, useRef, useState, type RefObject } from "react";
 import { usePathname } from "next/navigation";
 import { ChevronDown, ChevronUp, X } from "lucide-react";
 import { useHotkey } from "@/components/keymap-provider";
+import { useT } from "@/components/language-provider";
 import { useIsDesktop } from "@/components/path-picker";
 import {
   InputGroup,
@@ -124,6 +125,7 @@ export function FindBar({
   /** 닫을 때 돌아갈 포커스 — 두 화면이 갈리는 값 ②(§30 ⑤). 홈은 프롬프트 칸이다(§7). */
   restore: RefObject<HTMLElement | null>;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<Range[]>([]);
@@ -255,8 +257,8 @@ export function FindBar({
               끝나 있다. placeholder는 라벨이 아니라 `aria-label`을 같이 준다(§21과 같은 처리) */}
           <InputGroupInput
             ref={input}
-            aria-label="찾기"
-            placeholder="찾기"
+            aria-label={t("findBar.placeholder")}
+            placeholder={t("findBar.placeholder")}
             value={query}
             onChange={(e) => {
               jump.current = true;
@@ -282,7 +284,7 @@ export function FindBar({
             </InputGroupText>
             <InputGroupButton
               size="icon-xs"
-              aria-label="이전"
+              aria-label={t("findBar.prev")}
               aria-disabled={idle}
               className="aria-disabled:opacity-50"
               onClick={() => go(-1)}
@@ -291,14 +293,14 @@ export function FindBar({
             </InputGroupButton>
             <InputGroupButton
               size="icon-xs"
-              aria-label="다음"
+              aria-label={t("findBar.next")}
               aria-disabled={idle}
               className="aria-disabled:opacity-50"
               onClick={() => go(1)}
             >
               <ChevronDown aria-hidden className="size-3.5" />
             </InputGroupButton>
-            <InputGroupButton size="icon-xs" aria-label="닫기" onClick={close}>
+            <InputGroupButton size="icon-xs" aria-label={t("findBar.close")} onClick={close}>
               <X aria-hidden className="size-3.5" />
             </InputGroupButton>
           </InputGroupAddon>

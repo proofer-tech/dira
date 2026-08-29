@@ -130,19 +130,21 @@ const STATUS_OPTIONS = ["open", "blocked", "awaiting", "assigned", "wip", "done"
 
 /** 뷰 전환은 `<Link>` 2개다 — `tabs`를 설치하지 않은 이유가 이것이다(DESIGN.md §5). */
 const VIEWS = [
-  { value: "table", label: "테이블" },
-  { value: "kanban", label: "칸반" },
+  { value: "table", labelKey: "boardPage.view.table" },
+  { value: "kanban", labelKey: "boardPage.view.kanban" },
 ] as const;
 
-const COLUMNS: { key: SortKey; label: string }[] = [
-  { key: "status", label: "상태" },
-  { key: "hash", label: "해시" },
-  { key: "title", label: "제목" },
-  { key: "kind", label: "분류" },
-  { key: "persona", label: "페르소나" },
-  { key: "deps", label: "의존성" },
-  { key: "created", label: "생성일" },
-  { key: "owner", label: "담당" },
+// 라벨은 키만 든다 — 모듈 로드 시점에는 로케일을 모른다(§0-16, `f3a8794e`). `t()`는
+// 아래 `Board()` 안, locale이 실제로 있는 자리에서 부른다.
+const COLUMNS: { key: SortKey; labelKey: string }[] = [
+  { key: "status", labelKey: "boardPage.column.status" },
+  { key: "hash", labelKey: "boardPage.column.hash" },
+  { key: "title", labelKey: "boardPage.column.title" },
+  { key: "kind", labelKey: "boardPage.column.kind" },
+  { key: "persona", labelKey: "boardPage.column.persona" },
+  { key: "deps", labelKey: "boardPage.column.deps" },
+  { key: "created", labelKey: "boardPage.column.created" },
+  { key: "owner", labelKey: "boardPage.column.owner" },
 ];
 
 /** CLI `list`와 같은 표기(`%Y-%m-%d %H:%M`). 서버에서 만든다 — 로컬 도구라 서버와 브라우저가
@@ -228,7 +230,7 @@ function wipLine(e: StreamEvent | null) {
  *  문구는 셋뿐이고 **상태 배지를 안 쓴다**: 카드의 배지는 *이 카드의 상태*를 말하는 자리라
  *  같은 실루엣이 다른 티켓의 상태를 말하면 사람이 완료 카드를 `진행중`으로 읽는다. 해시도 안
  *  그린다 — 카드에 이미 대상 해시가 있어서 둘째 해시가 뜨면 어느 것이 이 카드인지 흔들린다. */
-function archiveLine(a: Ticket | undefined, href: (t: Ticket) => string) {
+function archiveLine(a: Ticket | undefined, href: (t: Ticket) => string, locale: Locale) {
   if (!a) return null;
   return (
     <div className="-mx-4 -mb-2 border-t px-4 pt-2">
@@ -239,7 +241,11 @@ function archiveLine(a: Ticket | undefined, href: (t: Ticket) => string) {
             className="size-3 shrink-0 animate-wip-pulse motion-reduce:animate-none"
           />
           <span>
-            {isAwaiting(a) ? "아카이빙 답변 대기" : a.state === "wip" ? "아카이빙중" : "아카이빙 대기"}
+            {isAwaiting(a)
+              ? t(locale, "boardPage.archive.awaitingAnswer")
+              : a.state === "wip"
+                ? t(locale, "boardPage.archive.inProgress")
+                : t(locale, "boardPage.archive.pending")}
           </span>
         </Link>
       </div>
@@ -414,9 +420,12 @@ export default async function Board({
     return next.toString() ? `?${next}` : `/p/${id}`;
   };
 
-  // 표 컬럼 9번째(§에픽 결정 7 §표뷰) — `COLUMNS`는 나머지 8개와 같이 정적이라 로케일이 없다.
-  // 여기서만 새 문구를 붙인다(§0-16, `board.column.epic`).
-  const columns = [...COLUMNS, { key: "epic" as const, label: t(locale, "board.column.epic") }];
+  // 표 컬럼 9개 — 8개는 위 `COLUMNS`의 키를 여기서 채우고, 9번째(에픽)만 이 자리에서 짓는다
+  // (§에픽 결정 7 §표뷰, §0-16 `f3a8794e`).
+  const columns = [
+    ...COLUMNS.map(({ key, labelKey }) => ({ key, label: t(locale, labelKey) })),
+    { key: "epic" as const, label: t(locale, "board.column.epic") },
+  ];
 
   /** 헤더 클릭 3단계: 오름차순 → 내림차순 → 기본 복귀. 정렬을 끌 방법이 없으면 기본 순서를
    *  다시 못 본다. 돌아가는 곳은 파라미터가 없는 화면이고 그 테이블은 생성일 내림차순이다
@@ -455,13 +464,25 @@ export default async function Board({
   })();
 
   const applied = [
-    ...query.kind.map((v) => ({ param: "kind", value: v, text: `분류: ${KIND_LABELS[v] ?? v}` })),
-    ...query.persona.map((v) => ({ param: "persona", value: v, text: `페르소나: ${v}` })),
+    ...query.kind.map((v) => ({
+      param: "kind",
+      value: v,
+      text: `${t(locale, "boardPage.column.kind")}: ${KIND_LABELS[v] ?? v}`,
+    })),
+    ...query.persona.map((v) => ({
+      param: "persona",
+      value: v,
+      text: `${t(locale, "boardPage.column.persona")}: ${v}`,
+    })),
     // 여기만 `query`가 아니라 **URL 그대로**다 — 배지는 "사람이 건 필터"의 목록이고 기본값은
     // 사람이 건 게 아니다. 기본 화면에 배지 5개와 `필터 초기화`가 뜨면 안 된다(§1 보드).
     ...sp.getAll("status").map((v) => {
       const known = STATUS_OPTIONS.find((s) => s === v);
-      return { param: "status", value: v, text: `상태: ${known ? statusLabel(known) : v}` };
+      return {
+        param: "status",
+        value: v,
+        text: `${t(locale, "boardPage.column.status")}: ${known ? statusLabel(known) : v}`,
+      };
     }),
     // 에픽도 같은 필터 그릇이라 0건 화면에서 같은 방식으로 풀린다(§에픽 결정 5).
     ...(query.epic !== null
@@ -572,7 +593,9 @@ export default async function Board({
   const noMatch = (
     <div className="flex flex-col items-center gap-3">
       <p className="text-sm text-muted-foreground">
-        {query.q ? `"${query.q}"와 일치하는 티켓 0건` : "조건에 맞는 티켓 0건"}
+        {query.q
+          ? `"${query.q}"${t(locale, "boardPage.noMatch.querySuffix")}`
+          : t(locale, "boardPage.noMatch.generic")}
       </p>
       {applied.length > 0 && (
         <div className="flex flex-wrap items-center justify-center gap-2">
@@ -595,7 +618,7 @@ export default async function Board({
         nativeButton={false}
         render={<Link href={view === "table" ? `/p/${id}?view=table` : `/p/${id}`} />}
       >
-        필터 초기화
+        {t(locale, "boardPage.filter.reset")}
       </Button>
     </div>
   );
@@ -609,6 +632,10 @@ export default async function Board({
     const cards = [...group].sort((a, b) => b.birth - a.birth).slice(0, doneN);
     return { cards, trimmed: group.length - cards.length };
   };
+
+  // renderCard·표뷰 둘 다 루프 변수 이름이 `t: Ticket`이라 그 안에서는 import한 `t()`가
+  // 가려진다 — 미리 여기서 구해 둔다(§0-16, `f3a8794e`).
+  const emptyTitle = t(locale, "boardPage.title.empty");
 
   /** 칸반 카드 하나 — 기본 3레인·스윔레인 둘 다 같은 카드를 그린다(§에픽 결정 1: 카드 내용은
    *  무수정 — 에픽은 띠 머리·사이드바가 이미 말하므로 카드에 배지를 더 안 단다). */
@@ -659,7 +686,11 @@ export default async function Board({
           `after:absolute after:inset-0`로 늘어난 링크라, 표식만 올리지 않으면 눌리는 것이
           표식이 아니라 카드다. 나머지 글자는 그대로 밑에 있어 카드 클릭이 안 죽는다 */}
       <span className="line-clamp-2 text-sm" title={t.title}>
-        {t.title ? <TitleRefs title={t.title} refs={titleRefs} locale={locale} layered /> : "(제목 없음)"}
+        {t.title ? (
+          <TitleRefs title={t.title} refs={titleRefs} locale={locale} layered />
+        ) : (
+          emptyTitle
+        )}
       </span>
       {/* 배지가 줄 안에 섞이므로 flex다 — 텍스트 baseline 정렬에 맡기면
           20px 배지가 줄을 밀어 카드마다 높이가 갈린다.
@@ -721,7 +752,7 @@ export default async function Board({
           간격은 8 / 선 / 8 / 줄 / 8이다: 위 8px은 `<Card>`의 `gap-2`,
           선 아래 8px은 `pt-2`, 카드 바닥까지 8px은 `py-4`(16)에서
           `-mb-2`(8)를 뺀 값이다(§36 §자리와 간격 — 새 간격 값 0) */}
-      {wipLines?.get(t.path) ?? archiveLine(archives.get(t.path), href)}
+      {wipLines?.get(t.path) ?? archiveLine(archives.get(t.path), href, locale)}
     </Card>
   );
 
@@ -789,7 +820,7 @@ export default async function Board({
       {total === 0 ? (
         // 빈 큐 — 필터 0건과 다른 문구다(§6). 원인이 다르므로 다음 행동도 다르다.
         <EmptyState
-          text="열린 티켓 없음"
+          text={t(locale, "boardPage.empty.noTickets")}
           // 버튼은 여전히 1개고(§6) 우상단과 **같은 다이얼로그**를 연다. 변종만 기본값이다 —
           // 큐가 비었다는 신호에 대한 다음 행동은 발행이다(§3).
           action={
@@ -811,24 +842,24 @@ export default async function Board({
             <BoardSearch />
             <BoardFilter
               param="kind"
-              label="분류"
+              label={t(locale, "boardPage.column.kind")}
               options={kinds.map((k) => ({ value: k, label: KIND_LABELS[k] ?? k }))}
             />
             <BoardFilter
               param="persona"
-              label="페르소나"
+              label={t(locale, "boardPage.column.persona")}
               options={personas.map((p) => ({ value: p, label: p, color: colors[p] }))}
               dot
             />
             <BoardFilter
               param="status"
-              label="상태"
+              label={t(locale, "boardPage.column.status")}
               options={STATUS_OPTIONS.map((s) => ({ value: s, label: statusLabel(s) }))}
               // 기본이 6개 전부이므로 1클릭으로 접을 값어치가 있는 쪽은 `완료 숨기기`다
               // (슬롯은 1개 그대로다). `defaults`는 팝오버 체크·트리거 라벨이 **실효값**을
               // 그리게 한다: 파라미터가 없어도 6개가 전부 체크된다.
               defaults={[...STATUS_OPTIONS]}
-              preset={{ label: "완료 숨기기", values: HIDE_DONE_STATUSES }}
+              preset={{ label: t(locale, "boardPage.filter.hideDone"), values: HIDE_DONE_STATUSES }}
             />
             <div className="ml-auto flex items-center gap-2">
               {VIEWS.map((v) => (
@@ -840,7 +871,7 @@ export default async function Board({
                   aria-current={view === v.value ? "page" : undefined}
                   render={<Link href={viewHref(v.value)} />}
                 >
-                  {v.label}
+                  {t(locale, v.labelKey)}
                 </Button>
               ))}
               {/* `shrink-0`은 idle 워커 풀이 이 줄을 떠난 뒤에도 남는다(풀은 이제 셸 하단 바다 —
@@ -850,7 +881,9 @@ export default async function Board({
                   그만큼 레인이 짧아진다(§1 §보드는 세로로 화면에 맞는다의 고정 요소 넷 중 하나다).
                   붙여 두면 한 줄로 남는다 — 그 폭에서 문서는 이미 가로로 흐르고 있다(레인 138px) */}
               <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-                {rows.length === total ? `티켓 ${total}건` : `티켓 ${rows.length} / ${total}건`}
+                {rows.length === total
+                  ? `${t(locale, "boardPage.count.label")} ${total}${t(locale, "boardPage.unit.count")}`
+                  : `${t(locale, "boardPage.count.label")} ${rows.length} / ${total}${t(locale, "boardPage.unit.count")}`}
                 {/* 완료가 빠졌다는 사실은 여기서만 알려 준다 — 두 뷰 공통이고 0건 화면에서도 뜬다
                     (큐가 완료뿐이면 이 링크가 유일한 출구다). 상태 6값 URL로 간 화면에서는
                     실효 집합에 `done`이 있으므로 이 줄이 사라진다 */}
@@ -861,7 +894,7 @@ export default async function Board({
                       href={allStatusHref}
                       className="underline underline-offset-2 hover:text-foreground"
                     >
-                      완료 {hiddenDone}건 숨김
+                      {`${t(locale, "boardPage.count.hiddenPrefix")} ${hiddenDone}${t(locale, "boardPage.unit.count")} ${t(locale, "boardPage.count.hiddenSuffix")}`}
                     </Link>
                   </>
                 )}
@@ -869,7 +902,7 @@ export default async function Board({
                     어긋난 숫자를 설명 없이 두지 않는다(§1 보드) — 그 티켓으로 가는 링크는
                     배너가 갖고 있다(§0-2). 0건이면 어긋나지 않으므로 각주도 없다 */}
                 {view === "kanban" && undispatched > 0 && (
-                  <span className="ml-1">(디스패치되지 않는 {undispatched}건은 상단 알림)</span>
+                  <span className="ml-1">{`(${t(locale, "boardPage.undispatched.prefix")} ${undispatched}${t(locale, "boardPage.undispatched.suffix")})`}</span>
                 )}
               </span>
             </div>
@@ -921,7 +954,7 @@ export default async function Board({
                               rows.filter((t) => (statusOf(t) === "blocked" ? "open" : statusOf(t)) === s)
                                 .length
                             }
-                            건
+                            {t(locale, "boardPage.unit.count")}
                           </span>
                         </div>
                       ))}
@@ -957,7 +990,8 @@ export default async function Board({
                               )}
                               {/* 드래그 중 "놓으면 이 에픽으로" 문장이 이 슬롯에 대신 든다(§52 ⑤ (3)) */}
                               <span data-epic-line className="shrink-0 text-xs font-normal text-muted-foreground">
-                                {laneRows.length}건
+                                {laneRows.length}
+                                {t(locale, "boardPage.unit.count")}
                               </span>
                               <WorkerChips names={workers} locale={locale} />
                             </div>
@@ -976,7 +1010,7 @@ export default async function Board({
                                   >
                                     {group.length === 0 ? (
                                       <p className="rounded-md border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">
-                                        0건
+                                        {t(locale, "boardPage.count.zero")}
                                       </p>
                                     ) : s === "done" ? (
                                       <BoardDoneLane more={trimmed > 0}>{cardEls}</BoardDoneLane>
@@ -1035,7 +1069,8 @@ export default async function Board({
                           <div className="flex items-center justify-between gap-2">
                             <StatusBadge status={s} />
                             <span className="text-xs tabular-nums text-muted-foreground">
-                              {group.length}건
+                              {group.length}
+                              {t(locale, "boardPage.unit.count")}
                             </span>
                           </div>
                           {/* `-m-1 p-1`은 위 스트립의 `-mx-1 px-1`과 **같은 이유**다 — 세로 overflow가
@@ -1049,7 +1084,7 @@ export default async function Board({
                               // 3개에 그걸 깔면 같은 버튼이 3개 생긴다 — 여기선 건수 0만 알려 준다.
                               // 전체 0건일 땐 위 블록이 이미 말했으므로 이 자리표시자는 안 그린다(§6).
                               <p className="rounded-md border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">
-                                0건
+                                {t(locale, "boardPage.count.zero")}
                               </p>
                             ) : s === "done" ? (
                               // 완료 레인만 무한스크롤이다(§1 §완료 항, 요구 `79cad792`) — 감시행이
@@ -1106,7 +1141,7 @@ export default async function Board({
                           >
                             <Link
                               href={sortHref(key)}
-                              aria-label={`${label} 정렬`}
+                              aria-label={`${label} ${t(locale, "boardPage.sort.ariaSuffix")}`}
                               className={`inline-flex items-center gap-1 rounded-sm ${
                                 active ? "text-foreground" : "text-muted-foreground"
                               }`}
@@ -1180,7 +1215,7 @@ export default async function Board({
                                 {t.title ? (
                                   <TitleRefs title={t.title} refs={titleRefs} locale={locale} layered />
                                 ) : (
-                                  "(제목 없음)"
+                                  emptyTitle
                                 )}
                               </span>
                             </TableCell>

@@ -55,6 +55,7 @@ function useUrlNav() {
 }
 
 export function BoardSearch() {
+  const t = useT();
   const { qs, replace } = useUrlNav();
   const url = new URLSearchParams(qs).get("q") ?? "";
   const input = useRef<HTMLInputElement>(null);
@@ -98,8 +99,8 @@ export function BoardSearch() {
         ref={input}
         value={text}
         onChange={(e) => setText(e.target.value)}
-        placeholder="title · 본문 · frontmatter 검색"
-        aria-label="티켓 검색"
+        placeholder={t("boardPage.search.placeholder")}
+        aria-label={t("boardPage.search.ariaLabel")}
       />
     </InputGroup>
   );
@@ -139,6 +140,7 @@ export function BoardFilter({
    *  상태 필터의 `전체 보기`만 쓴다(§1 보드). 다른 파라미터는 건드리지 않는다. */
   preset?: { label: string; values: string[] };
 }) {
+  const t = useT();
   const { qs, replace } = useUrlNav();
   const [open, setOpen] = useState(false);
   const sp = new URLSearchParams(qs);
@@ -178,9 +180,11 @@ export function BoardFilter({
       />
       <PopoverContent align="start" className="w-64 p-0">
         <Command>
-          <CommandInput placeholder={`${label} 검색`} />
+          <CommandInput placeholder={`${label} ${t("boardPage.filter.searchSuffix")}`} />
           <CommandList className="max-h-72">
-            <CommandEmpty>일치하는 {label} 0건</CommandEmpty>
+            <CommandEmpty>
+              {t("boardPage.filter.noMatchPrefix")} {label} {t("boardPage.count.zero")}
+            </CommandEmpty>
             {preset && (
               <>
                 {/* 값이 아니라 동작이다 — 체크 자리를 비워 두면 "안 고른 값"으로 읽힌다.
@@ -685,10 +689,10 @@ export function EpicDrag({ project }: { project: string }) {
             ? { title: r.error, message: dragged }
             : r.reason === "missing"
               ? {
-                  title: "티켓 파일을 찾지 못했습니다 — 큐에서 사라졌거나 상태가 갈렸습니다",
+                  title: t("boardPage.epicDrag.missingTitle"),
                   message: dragged,
                 }
-              : { title: "에픽을 옮기지 못했습니다", message: r.error },
+              : { title: t("boardPage.epicDrag.failTitle"), message: r.error },
       );
     };
 

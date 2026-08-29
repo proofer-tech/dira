@@ -787,6 +787,67 @@ test("90db2822 — 수를 낀 조합 문구가 두 언어에서 다 뜬다", asy
   );
 });
 
+// f3a8794e — 보드 화면(묶음 3). 변수가 낀 조각 조립이 이행 전 원문과 바이트 단위로 같은지
+// 못박는다(en은 아직 없으므로 ko만 — `6d818d48`가 en을 채운 뒤 그쪽에서 두 언어를 본다).
+test("f3a8794e — 보드 화면의 조립 문구가 원문과 바이트 단위로 같다(ko)", () => {
+  const l = "ko" as const;
+
+  // page.tsx `noMatch`
+  assert.strictEqual(
+    `"검색어"${t(l, "boardPage.noMatch.querySuffix")}`,
+    '"검색어"와 일치하는 티켓 0건',
+  );
+  assert.strictEqual(t(l, "boardPage.noMatch.generic"), "조건에 맞는 티켓 0건");
+
+  // page.tsx 건수 줄
+  assert.strictEqual(
+    `${t(l, "boardPage.count.label")} ${5}${t(l, "boardPage.unit.count")}`,
+    "티켓 5건",
+  );
+  assert.strictEqual(
+    `${t(l, "boardPage.count.label")} ${3} / ${5}${t(l, "boardPage.unit.count")}`,
+    "티켓 3 / 5건",
+  );
+  assert.strictEqual(
+    `${t(l, "boardPage.count.hiddenPrefix")} ${12}${t(l, "boardPage.unit.count")} ${t(l, "boardPage.count.hiddenSuffix")}`,
+    "완료 12건 숨김",
+  );
+  assert.strictEqual(
+    `(${t(l, "boardPage.undispatched.prefix")} ${3}${t(l, "boardPage.undispatched.suffix")})`,
+    "(디스패치되지 않는 3건은 상단 알림)",
+  );
+  assert.strictEqual(`${t(l, "boardPage.column.status")} ${t(l, "boardPage.sort.ariaSuffix")}`, "상태 정렬");
+
+  // board-ui.tsx BoardFilter · CommandEmpty
+  assert.strictEqual(`${t(l, "boardPage.column.owner")} ${t(l, "boardPage.filter.searchSuffix")}`, "담당 검색");
+  assert.strictEqual(
+    `${t(l, "boardPage.filter.noMatchPrefix")} ${t(l, "boardPage.column.owner")} ${t(l, "boardPage.count.zero")}`,
+    "일치하는 담당 0건",
+  );
+
+  // (board)/actions.ts
+  assert.strictEqual(
+    `${t(l, "boardPage.column.title")}${t(l, "boardPage.action.noNewlineSuffix")}`,
+    "제목에 줄바꿈을 넣을 수 없습니다.",
+  );
+  assert.strictEqual(
+    `${t(l, "boardPage.action.kindPrefix")} work · request · feedback ${t(l, "boardPage.action.kindMiddle")} bogus`,
+    "kind는 work · request · feedback 중 하나입니다: bogus",
+  );
+  assert.strictEqual(
+    `${t(l, "boardPage.action.unknownDepsPrefix")} abc123`,
+    "큐에 없는 deps 해시입니다: abc123",
+  );
+  assert.strictEqual(
+    `${t(l, "boardPage.action.unknownProjectPrefix")} myproj`,
+    "등록되지 않은 프로젝트입니다: myproj",
+  );
+  assert.strictEqual(
+    `${t(l, "boardPage.action.epicAcceptedPrefix")} ${t(l, "board.epic.noTitle")} (P123) ${t(l, "boardPage.action.epicAcceptedSuffix")}`,
+    "요구사항이 제목 없음 (P123) 에픽으로 접수되었습니다.",
+  );
+});
+
 test("readLanguage — 파일 없으면 기본값 ko, set 뒤에는 그 값을 읽는다", async () => {
   rmSync(languagePath(), { force: true });
   assert.strictEqual(await readLanguage(), "ko");

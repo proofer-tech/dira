@@ -991,6 +991,84 @@ export const ko: Record<string, string> = {
   "ontology.location.saveFailed": "저장하지 못했습니다",
   "ontology.location.notAbsolute": "절대경로여야 합니다:",
   "ontology.location.notDirectory": "실재하는 디렉터리가 아닙니다:",
+
+  // 보드 화면(§0-16 §발행 §묶음 표 행 3, `f3a8794e`) — page.tsx · board-ui.tsx · actions.ts.
+  // `board.*`는 §에픽 묶음이 이미 en을 채워 잠갔다(`FILLED`, i18n.test.ts) — 그 접두에 새 키를
+  // 못 넣으므로 이 갈래는 `boardPage.*`로 새로 연다. en은 `6d818d48`가 채운다.
+  "boardPage.view.table": "테이블",
+  "boardPage.view.kanban": "칸반",
+  // 표 컬럼 라벨 8개 — 스윔레인·표뷰의 필터 라벨과 같은 글자라(§에픽 결정 7 §표뷰) 그 자리도
+  // 이 키를 그대로 재사용한다(중복 값 0). 9번째(에픽)는 `board.column.epic`을 그대로 쓴다.
+  "boardPage.column.status": "상태",
+  "boardPage.column.hash": "해시",
+  "boardPage.column.title": "제목",
+  "boardPage.column.kind": "분류",
+  "boardPage.column.persona": "페르소나",
+  "boardPage.column.deps": "의존성",
+  "boardPage.column.created": "생성일",
+  "boardPage.column.owner": "담당",
+  // 완료 카드 하단 아카이브 한 줄(§5-3 §표시 규약 ③).
+  "boardPage.archive.awaitingAnswer": "아카이빙 답변 대기",
+  "boardPage.archive.inProgress": "아카이빙중",
+  "boardPage.archive.pending": "아카이빙 대기",
+  // 필터 0건(§6) — 검색어가 있을 때/없을 때 문구가 갈린다.
+  // 뒤에 `"${query.q}"`가 공백 없이 붙는다.
+  "boardPage.noMatch.querySuffix": "와 일치하는 티켓 0건",
+  "boardPage.noMatch.generic": "조건에 맞는 티켓 0건",
+  "boardPage.filter.reset": "필터 초기화",
+  "boardPage.filter.hideDone": "완료 숨기기",
+  // BoardFilter 팝오버의 커맨드 검색 placeholder — 앞에 필터 라벨이 공백 하나로 붙는다.
+  "boardPage.filter.searchSuffix": "검색",
+  // BoardFilter 팝오버의 0건(board-ui.tsx `CommandEmpty`) — 앞에 필터 라벨이 공백 하나로 붙는다.
+  "boardPage.filter.noMatchPrefix": "일치하는",
+  "boardPage.title.empty": "(제목 없음)",
+  "boardPage.empty.noTickets": "열린 티켓 없음",
+  // 건수 줄(§1 보드) — `티켓 N건` · `티켓 N / M건`. `unit.count`는 숫자 뒤에 공백 없이 붙는다.
+  "boardPage.count.label": "티켓",
+  "boardPage.unit.count": "건",
+  "boardPage.count.zero": "0건",
+  // `완료 N건 숨김` 링크 — prefix·unit·N·suffix가 이 순서로 공백 하나씩 사이에 붙는다.
+  "boardPage.count.hiddenPrefix": "완료",
+  "boardPage.count.hiddenSuffix": "숨김",
+  // `(디스패치되지 않는 N건은 상단 알림)` 각주 — 괄호는 코드가 직접 그린다.
+  "boardPage.undispatched.prefix": "디스패치되지 않는",
+  "boardPage.undispatched.suffix": "건은 상단 알림",
+  // 정렬 헤더의 aria-label — 앞에 컬럼 라벨이 공백 하나로 붙는다.
+  "boardPage.sort.ariaSuffix": "정렬",
+  "boardPage.search.placeholder": "title · 본문 · frontmatter 검색",
+  "boardPage.search.ariaLabel": "티켓 검색",
+  "boardPage.epicDrag.missingTitle": "티켓 파일을 찾지 못했습니다 — 큐에서 사라졌거나 상태가 갈렸습니다",
+  "boardPage.epicDrag.failTitle": "에픽을 옮기지 못했습니다",
+
+  // 발행 서버 액션(`(board)/actions.ts`) — `readLanguage()`를 직접 읽는다(§0-16 §장치). 이
+  // 액션을 부르는 `NewTicketDialog`가 `ticket-ui.tsx`(P338-3 갈래)라 locale을 그리로 못
+  // 넘긴다 — 파라미터를 넓히지 않고 파일 읽기로 푼다(선례 `93c106b3`과 다른 이유가 그것이다).
+  // 뒤에 필드 이름이 공백 없이 붙는다(`${name}에 줄바꿈을...`).
+  "boardPage.action.noNewlineSuffix": "에 줄바꿈을 넣을 수 없습니다.",
+  "boardPage.action.acceptedDefault": "요구사항이 접수되었습니다. 곧 PM이 검토할 예정입니다.",
+  // `projectActions.unknownProjectPrefix`와 같은 문장이다 — 같은 거절을 두 액션 파일이 각자
+  // 말하는 자리라 낱말이 갈리면 안 된다(선례 `c9f2eec5`와 같은 이유).
+  "boardPage.action.unknownProjectPrefix": "등록되지 않은 프로젝트입니다:",
+  "boardPage.action.reqBodyRequired": "요구 내용을 입력하세요.",
+  "boardPage.action.titleRequired": "제목을 입력하세요.",
+  // `kind는 ${KINDS.join(" · ")} 중 하나입니다: ${kind}` — `kind`는 frontmatter 키 이름이라
+  // 번역하지 않는다(다른 lib 실패 사유의 `kind:`·`persona:`와 같은 판단).
+  "boardPage.action.kindPrefix": "kind는",
+  "boardPage.action.kindMiddle": "중 하나입니다:",
+  "boardPage.action.unknownDepsPrefix": "큐에 없는 deps 해시입니다:",
+  "boardPage.action.hashExhausted": "해시를 10번 뽑았는데 전부 이미 쓰이고 있습니다 — 큐 디렉터리를 확인하세요.",
+  // `요구사항이 ${label} (${epic}) 에픽으로 접수되었습니다.` — 라벨이 없으면 `board.epic.noTitle`을
+  // 그대로 재사용한다(사이드바·이 문장이 같은 글자여야 한다).
+  "boardPage.action.epicAcceptedPrefix": "요구사항이",
+  "boardPage.action.epicAcceptedSuffix": "에픽으로 접수되었습니다.",
+
+  // 찾기 바(`find-bar.tsx`, `f3a8794e`) — 보드 화면 전용이 아니라 여러 화면이 무는 공용
+  // 컴포넌트라(레이아웃·홈·업데이트 토스트·경로 피커) 화면 접두가 아니라 파일 접두다
+  // (묶음 11과 같은 판단). en은 `6d818d48`가 채운다.
+  "findBar.placeholder": "찾기",
+  "findBar.prev": "이전",
+  "findBar.next": "다음",
+  "findBar.close": "닫기",
 };
 
 /** 제품 낱말의 영어 대응 — **여기가 한자리다**(621c7a97). 다음 묶음이 같은 것을 다르게 부르지

@@ -22,7 +22,8 @@ import { kickIdleWorker } from "@/lib/kick";
 import { isHash, parseAssignment } from "@/lib/paths";
 import { PRIORITY_DEFAULT, PRIORITY_MAX, PRIORITY_MIN, reqTitle, stemOf } from "@/lib/queue";
 import { epicTitle } from "@/lib/epics";
-import { getProject, resolveConfig } from "@/lib/projects";
+import { t, type Locale } from "@/lib/i18n";
+import { getProject, readLanguage, resolveConfig } from "@/lib/projects";
 
 /** `ok`·`hash`·`message`는 **요구 접수 경로에서만** 온다 — 발행은 종전대로 `redirect`라 값을
  *  돌려주지 않는다. */
@@ -32,9 +33,9 @@ export type NewTicketState = { error?: string; ok?: true; hash?: string; message
 const KINDS = ["work", "request", "feedback"];
 
 /** frontmatter 값으로 들어갈 한 줄. 개행이 섞이면 frontmatter가 깨져 티켓이 큐에서 사라진다. */
-function fmValue(name: string, raw: string): string {
+function fmValue(name: string, raw: string, locale: Locale): string {
   const v = raw.trim();
-  if (/[\r\n]/.test(v)) throw new Error(`${name}에 줄바꿈을 넣을 수 없습니다.`);
+  if (/[\r\n]/.test(v)) throw new Error(`${name}${t(locale, "boardPage.action.noNewlineSuffix")}`);
   return v;
 }
 
@@ -51,11 +52,16 @@ export async function createTicket(
   const projectId = String(form.get("project") ?? "");
   let hash = "";
   let req = false; // 끝의 `redirect` 여부가 이 값으로 갈린다 — try 밖에서 봐야 한다
+  // 이 액션을 부르는 `NewTicketDialog`는 `ticket-ui.tsx`(P338-3 갈래)라 locale을 못 넘긴다 —
+  // 파라미터를 넓히지 않고 여기서 직접 읽는다(§0-16 §장치, `f3a8794e`).
+  const locale = await readLanguage();
   // 접수 확인 문장(§에픽 §결정 10) — 활성 에픽이 없으면 종전 문장 그대로다.
-  let message = "요구사항이 접수되었습니다. 곧 PM이 검토할 예정입니다.";
+  let message = t(locale, "boardPage.action.acceptedDefault");
   try {
     const project = await getProject(projectId);
-    if (!project) throw new Error(`등록되지 않은 프로젝트입니다: ${projectId}`);
+    if (!project) {
+      throw new Error(`${t(locale, "boardPage.action.unknownProjectPrefix")} ${projectId}`);
+    }
     const config = await resolveConfig(project);
 
     // textarea는 CRLF로 온다(HTML 폼 규격). 그대로 쓰면 파일 줄끝이 갈린다.
@@ -65,12 +71,22 @@ export async function createTicket(
     // (DESIGN.md §3 요구 접수 모드). 폼이 안 보내도 여기서 정해지므로 요청을 손으로 만들어도 같다.
     req = String(form.get("mode") ?? "") === "req";
 
-    const title = req ? reqTitle(body) : fmValue("제목", String(form.get("title") ?? ""));
-    if (!title) throw new Error(req ? "요구 내용을 입력하세요." : "제목을 입력하세요.");
+    const title = req
+      ? reqTitle(body)
+      : fmValue(t(locale, "boardPage.column.title"), String(form.get("title") ?? ""), locale);
+    if (!title) {
+      throw new Error(
+        req
+          ? t(locale, "boardPage.action.reqBodyRequired")
+          : t(locale, "boardPage.action.titleRequired"),
+      );
+    }
 
-    const kind = req ? "request" : fmValue("kind", String(form.get("kind") ?? ""));
+    const kind = req ? "request" : fmValue("kind", String(form.get("kind") ?? ""), locale);
     if (kind && !KINDS.includes(kind)) {
-      throw new Error(`kind는 ${KINDS.join(" · ")} 중 하나입니다: ${kind}`);
+      throw new Error(
+        `${t(locale, "boardPage.action.kindPrefix")} ${KINDS.join(" · ")} ${t(locale, "boardPage.action.kindMiddle")} ${kind}`,
+      );
     }
 
     // §5-5 §할당 입구 둘 — select 값은 `persona:<이름>`/`squad:<이름>` 접두사고 서버가 정확히
@@ -80,7 +96,7 @@ export async function createTicket(
     // 요구 접수가 화면의 활성 에픽을 물려받는다(DESIGN.md §에픽 §결정 10) — 발행 다이얼로그는
     // 이 필드를 안 보내므로 항상 빈 값이라 저절로 안 걸린다. 값 검증-정규화는 안 한다(§안 하는
     // 것) — 문자열 그대로가 키다. `fmValue`가 막는 것은 개행 하나뿐이다.
-    const epic = fmValue("epic", String(form.get("epic") ?? ""));
+    const epic = fmValue("epic", String(form.get("epic") ?? ""), locale);
 
     // 우선순위(§1-3 §값을 넣는 자리 셋). 요구 접수는 select가 없으므로 **키 자체를 안 쓴다** —
     // 엔진이 없는 키를 3으로 읽어 같은 결과다. 발행은 select라 항상 1~5가 오지만, 요청은 손으로도
@@ -113,7 +129,9 @@ export async function createTicket(
       ? []
       : [...new Set(form.getAll("deps").map((d) => String(d).normalize("NFC")))];
     for (const d of deps) {
-      if (!isHash(d) || !stems.has(d)) throw new Error(`큐에 없는 deps 해시입니다: ${d}`);
+      if (!isHash(d) || !stems.has(d)) {
+        throw new Error(`${t(locale, "boardPage.action.unknownDepsPrefix")} ${d}`);
+      }
     }
 
     // 첨부(§8). 화면이 `saveAttachment`로 이미 올려 둔 **경로**만 온다 — 바이트는 이 액션을
@@ -163,14 +181,14 @@ export async function createTicket(
       hash = h;
     }
     if (!hash) {
-      throw new Error("해시를 10번 뽑았는데 전부 이미 쓰이고 있습니다 — 큐 디렉터리를 확인하세요.");
+      throw new Error(t(locale, "boardPage.action.hashExhausted"));
     }
 
     // 라벨은 서버가 만든다 — `epicTitle()`과 결정 5의 `제목 없음 (P273)` 갈래가 여기 한 자리에만
     // 있고, 화면은 이 문장을 그대로 띄운다(P번호가 라벨 옆에서 단독으로 안 뜬다).
     if (req && epic) {
-      const label = (await epicTitle(project.root, epic)) ?? "제목 없음";
-      message = `요구사항이 ${label} (${epic}) 에픽으로 접수되었습니다.`;
+      const label = (await epicTitle(project.root, epic)) ?? t(locale, "board.epic.noTitle");
+      message = `${t(locale, "boardPage.action.epicAcceptedPrefix")} ${label} (${epic}) ${t(locale, "boardPage.action.epicAcceptedSuffix")}`;
     }
 
     // §0-11 — 파일이 실제로 태어난 뒤다. `kind`가 비어 있으면(선택 항목이다) 엔진에서 일반
