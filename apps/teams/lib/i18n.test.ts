@@ -657,7 +657,7 @@ test("204be4da — 생성 다이얼로그(설명 · 이름 힌트)가 원문 그
   const squadDesc = `${t("ko", "persona.create.squadDescPrefix")} squad: ${t("ko", "persona.create.squadDescSuffix")}`;
   assert.strictEqual(
     squadDesc,
-    "프로필이 있는 페르소나를 후보 풀로 묶습니다 — 티켓의 squad: 값이 되고, 디스패치가 그중 진행중이 가장 적은 하나를 고릅니다. 리더도 위임도 아닙니다.",
+    "프로필이 있는 페르소나를 묶습니다. 스쿼드를 문 티켓은 members 파일의 첫 줄 한 사람에게만 가는데, 그 사람은 일을 직접 하지 않고 누가 할지 정해서 멤버 앞으로 새 티켓을 냅니다. 이 이름이 티켓의 squad: 값이 됩니다.",
   );
   const nameHint = `${t("ko", "persona.create.nameHintPrefix")} ${t("ko", "persona.create.nameHintPersonaFile")}${t("ko", "persona.create.nameHintSuffix")}`;
   assert.strictEqual(
@@ -773,7 +773,7 @@ test("b5d9735d - 생성 다이얼로그 · 스킬 검색 0건이 영어에서도
   );
   assert.strictEqual(
     `${t(l, "persona.create.squadDescPrefix")} squad: ${t(l, "persona.create.squadDescSuffix")}`,
-    "Groups personas that have a profile into a candidate pool — it becomes a ticket's squad: value, and dispatch picks whichever member has the fewest tickets in progress. It isn't a leader and it isn't delegation.",
+    "Groups personas that have a profile. A ticket filed against the squad goes only to the first name in the members file — that member doesn't do the work themselves, they decide who will and open a new ticket for that person. That name becomes a ticket's squad: value.",
   );
   assert.strictEqual(
     `${t(l, "persona.create.nameHintPrefix")} ${t(l, "persona.create.nameHintPersonaFile")}${t(l, "persona.create.nameHintSuffix")}`,

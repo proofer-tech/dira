@@ -864,9 +864,9 @@ export const ko: Record<string, string> = {
   "persona.create.personaDescPrefix": "티켓의",
   "persona.create.personaDescSuffix":
     "값이 곧 디렉터리 이름입니다. 프로필 본문은 세션 프롬프트 머리에 인라인됩니다.",
-  "persona.create.squadDescPrefix": "프로필이 있는 페르소나를 후보 풀로 묶습니다 — 티켓의",
-  "persona.create.squadDescSuffix":
-    "값이 되고, 디스패치가 그중 진행중이 가장 적은 하나를 고릅니다. 리더도 위임도 아닙니다.",
+  "persona.create.squadDescPrefix":
+    "프로필이 있는 페르소나를 묶습니다. 스쿼드를 문 티켓은 members 파일의 첫 줄 한 사람에게만 가는데, 그 사람은 일을 직접 하지 않고 누가 할지 정해서 멤버 앞으로 새 티켓을 냅니다. 이 이름이 티켓의",
+  "persona.create.squadDescSuffix": "값이 됩니다.",
   "persona.create.kindLabel": "종류",
   "persona.create.nameLabel": "이름",
   "persona.create.nameHintPrefix": "영문·숫자·_·-.",
@@ -2853,9 +2853,8 @@ export const en: Record<string, string> = {
   "persona.create.personaDescSuffix":
     "value is the directory name. The profile body is inlined at the top of the session prompt.",
   "persona.create.squadDescPrefix":
-    "Groups personas that have a profile into a candidate pool — it becomes a ticket's",
-  "persona.create.squadDescSuffix":
-    "value, and dispatch picks whichever member has the fewest tickets in progress. It isn't a leader and it isn't delegation.",
+    "Groups personas that have a profile. A ticket filed against the squad goes only to the first name in the members file — that member doesn't do the work themselves, they decide who will and open a new ticket for that person. That name becomes a ticket's",
+  "persona.create.squadDescSuffix": "value.",
   "persona.create.kindLabel": "Kind",
   "persona.create.nameLabel": "Name",
   "persona.create.nameHintPrefix": "Letters, digits, _ and -.",
