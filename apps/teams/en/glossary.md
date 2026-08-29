@@ -102,6 +102,14 @@ Never translate, never re-spell:
 | 역할 | role | The one line describing what a member does in a squad. |
 | 규칙 | rules | Say the `rules` file, never the rules, so it does not read as the protocol. |
 | 되돌아옴 | reassigned | The same word as `다시 할당` below. A ticket dispatched again after a session was cut off. |
+| 스케줄 | schedule | The row on the home screen. The group label is `Schedules`. |
+| 회차 | run | One firing of a schedule: one question and one answer. Never an iteration or a cycle. |
+| 홈 에이전트 | home agent | The session that answers on the home screen, and the one a schedule wakes. |
+| 웹훅 | webhook | The settings node is `Webhook`. |
+| 통합 게이트 | dispatch gate | The screen calls it that (`Apply dispatch gate`), so prose does too, even though the branch it guards is the integration branch. |
+| 받는 트리 | receiving tree | The original the workers' worktrees branched off - the project folder itself. |
+| 사용 통계 | usage analytics | The chapter word. The settings node reads `Usage stats`. |
+| 폴링 스크립트 | polling script | The file under `polls/` a scheduled ticket runs to judge its condition. |
 
 ## States and badges
 
@@ -317,6 +325,29 @@ label the screen actually shows. These rows are copied from the English dictiona
 | 경로 | Path |
 | 열림 | Open |
 | 연결 | Connected |
+| 주소 | Address |
+| 테스트 보내기 | Send test |
+| 보냈습니다 | Sent |
+| 보내지 못했습니다 | Couldn't send |
+| 보내지 않습니다 | Not sending |
+| 새 스케줄 | New schedule |
+| 스케줄 삭제 | Delete schedule |
+| 반복 | Repeat |
+| 한 번만 | Once |
+| 매일 | Daily |
+| 매주 | Weekly |
+| 매월 | Monthly |
+| 시각 | Time |
+| 문장 | Prompt |
+| 만들기 | Create |
+| 회차 없음 | No runs yet |
+| 새 대화 | New conversation |
+| 보내기 | Send |
+| 답하는 중 | Answering |
+| 답변 달기 | Post answer |
+| 통합 게이트 적용 | Apply dispatch gate |
+| 마지막 폴링 | Last polled |
+| 마지막 출력 | Last output |
 
 Four more for the same reason, all macOS wording rather than ours: `허용` is `Allow`, `앱 관리` is
 `App Management`, `개인정보 보호 및 보안` is `Privacy & Security`, and `전체 디스크 접근 권한` is
@@ -344,6 +375,11 @@ brackets stays byte for byte.
 | `<토큰>` | `<token>` |
 | `<브랜치>` | `<branch>` |
 | `<큐 폴더>` | `<queue folder>` |
+| `<파일명>` | `<filename>` |
+| `<워커이름>` | `<worker name>` |
+| `<받는 트리>` | `<receiving tree>` |
+| `<시각>` | `<time>` |
+| `<워커>` | `<worker>` |
 
 ## Screen sentences the manual quotes
 
@@ -378,6 +414,14 @@ the English dictionary takes its wording from here.
 | `Claude 토큰이 없습니다` | `No Claude token` |
 | `워커가 티켓을 집어도 세션을 못 열고 그대로 끝냅니다.` | `Workers will pick up a ticket, fail to open a session, and end there.` |
 | `세션이 열리자마자 죽는 워커` | `Workers that die the moment a session opens:` |
+| `답변을 기다리는 티켓` | `Tickets waiting on an answer:` |
+| `커밋 안 된 변경이 디스패치를 막고 있습니다` | `Uncommitted changes are blocking dispatch` |
+| `큐가 멈춰 있던 구간` | `Stretches the queue sat stopped:` |
+| `이 워커는 받는 트리가 더러워도 그냥 디스패치됩니다` | `This worker dispatches even when the receiving tree is dirty` |
+| `아직 안 돌림` | `Not run yet` |
+| `스크립트 파일 없음` | `Script file not found` |
+| `https 주소만 받습니다` | `Only https addresses are accepted` |
+| `스케줄을 지웁니다` | `This deletes the schedule` |
 | `이름을 바꾸면 프롬프트에서 빠집니다` | `Renaming it takes it out of the prompt` |
 | `모든 세션이 협업 프로토콜 없이 시작합니다` | `Every session will start with no collaboration protocol` |
 | `이 티켓 48M 토큰 · 세션 1개` | `This ticket 48M tokens · 1 session` |
