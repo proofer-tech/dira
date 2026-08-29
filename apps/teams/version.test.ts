@@ -4,7 +4,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { diraVersion } from "./version.ts";
+
+// 도그푸딩 세션엔 DIRA_APP_VERSION이 이미 앰비언트로 걸려 있다 - import 전에 걷어낸다
+// (`analytics.test.ts`와 같은 관용구 - 모듈 top-level 상수가 import 시점에 그 값을 굳힌다).
+delete process.env.DIRA_APP_VERSION;
+const { diraVersion } = await import("./version.ts");
 
 test("diraVersion이 apps/desktop/package.json의 version과 같다", () => {
   const pkg = JSON.parse(
