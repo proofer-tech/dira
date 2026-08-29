@@ -1140,10 +1140,10 @@ function judge(
   return { ok: true, output: text };
 }
 
-// ── 언어 층 둘 (§0-16 §주입 §개정 3-4) ──────────────────────────────────────
+// ── 언어 층 둘 (§0-16 §주입 §개정 3-5) ──────────────────────────────────────
 //
 // `tick.sh`가 워커에 주는 두 층을 홈 세션에도 준다 — 언어 안내(로케일이 ko/en을 가른다)와
-// 한국어 문장 지침(로케일을 안 가리고 상시). 워커는 이 둘을 프롬프트 문자열에 섞어 넣지만
+// 한국어 문장 지침(§개정 5부터 `ko`에서만). 워커는 이 둘을 프롬프트 문자열에 섞어 넣지만
 // (캐시 갈래가 있다 — §엔진 수정 스물다섯 번째 승인) 홈은 CLI가 질문마다 새 프로세스를 띄우니
 // 캐시가 없다 — 그래서 `--append-system-prompt` 하나로 두 블록을 그대로 넘긴다. `buildPrompt`는
 // 안 건드린다(이 층은 시스템 프롬프트로 간다).
@@ -1154,6 +1154,13 @@ function judge(
 // 커밋을 못 하고 `docs/`는 쓰기 스코프 밖이다. 워커 쪽 문장의 마지막 줄(지침 블록을 가리키는
 // 한 줄)은 안 붙인다 — 그 줄이 산 근거(한국어 1만 줄 뒤에 묻히는 것을 막는다)가 홈의 시스템
 // 프롬프트에는 없다.
+//
+// §개정 5(요구 `d8407b1a`)가 뽑은 것 둘 — 산출물 목록의 언어를 로케일이 고른다(`ko`는 종전
+// 그대로, `en`은 영어), 지침 블록은 `ko`일 때만 싣는다(`en`에서 0바이트). `HOME_LANGUAGE_NOTE_KO`는
+// 한 글자도 안 바뀐다 — 이 두 못이 갈리는 자리는 `en` 쪽 문장과 `systemPromptLayers`의 조건뿐이다.
+// `en` 문장에는 절 이름(`## 질문` · `## 결과` · `## 블록`)이 로케일과 무관한 리터럴이라는 절이
+// 하나 붙는다 — 그 이름이 없으면 엔진(`tickets.py`)과 화면(`lib/queue.ts`)이 문자열로 찾는
+// 표식이 영어 세션에서 안 뜬다.
 //
 // `FLUENT_KO`는 `tick.sh`의 `FLUENTKO` 히어독 본문과 **바이트로 같아야 한다**(`home-agent.test.ts`가
 // 지킨다). 파일이 아니라 인라인 상수인 이유 · 부분 손질 금지 근거는 그 히어독 머리 주석과 같다 —
@@ -1235,17 +1242,20 @@ const HOME_LANGUAGE_NOTE_EN = `Language note: say everything you say to the user
 this session -- not only replies when someone writes in, but also any prose
 you leave in the progress stream even when no one does. Thinking or internal
 reasoning is not covered by this instruction -- you may think in any language.
-Keep every written deliverable in Korean regardless -- the \`kind: request\`
-ticket body, \`personas/**\`, \`protocols/**\`, \`workers/*.sh\`, and the ontology.`;
+Write every deliverable in English as well -- the \`kind: request\` ticket
+body, \`personas/**\`, \`protocols/**\`, \`workers/*.sh\`, and the ontology.
+Keep section names themselves as literal strings regardless of language --
+\`## 질문\`, \`## 결과\`, and \`## 블록\` stay exactly as written; only the prose
+inside those sections changes language.`;
 
 function languageNote(locale: Locale): string {
   return locale === "en" ? HOME_LANGUAGE_NOTE_EN : HOME_LANGUAGE_NOTE_KO;
 }
 
-/** `--append-system-prompt`로 넘길 값. 지침 블록이 앞, 언어 안내가 뒤다(워커 쪽 문서 층 -
- *  꼬리 순서와 같다). */
+/** `--append-system-prompt`로 넘길 값. `ko`는 지침 블록이 앞·언어 안내가 뒤다(워커 쪽 문서 층 -
+ *  꼬리 순서와 같다). `en`은 지침 블록이 빠진다(§개정 5) - 언어 안내 한 짝만 남는다. */
 function systemPromptLayers(locale: Locale): string {
-  return `${FLUENT_KO}\n\n${languageNote(locale)}`;
+  return locale === "en" ? languageNote(locale) : `${FLUENT_KO}\n\n${languageNote(locale)}`;
 }
 
 /** `root`는 **큐 루트**다. cwd(그 부모 — 머리 주석)와 경로 스코프 다섯이 **한 값에서 나온다** —

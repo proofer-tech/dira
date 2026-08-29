@@ -777,7 +777,7 @@ test("ask — TICKET_ONTOLOGY 재정의 큐에서 --allowed-tools가 옮긴 자�
   }
 });
 
-test("ask — --append-system-prompt로 언어 안내(ko/en)와 지침 블록을 로케일과 무관하게 늘 함께 넘긴다 (§0-16 §주입 §개정 3-4)", async () => {
+test("ask — --append-system-prompt로 언어 안내를 로케일이 고르고, 지침 블록은 ko에서만 실린다 (§0-16 §주입 §개정 3-5)", async () => {
   const root = path.join(mkdtempSync(path.join(tmpdir(), "ha-lang-")), ".dira");
   tmps.push(path.dirname(root));
   mkdirSync(path.join(root, "workers"), { recursive: true });
@@ -817,12 +817,14 @@ echo '{"type":"result","is_error":false,"result":"답"}'
     // ① ko — 한국어 언어 안내
     assert.ok(argvKo.includes("언어 안내: 이번 세션 동안 사용자에게 하는 모든 말을 한국어로"));
     assert.ok(argvKo.includes("`kind: request` 티켓"));
-    // ② en — 영어 언어 안내
+    // ② en — 영어 언어 안내, 산출물도 영어로 지시하고 절 이름은 리터럴이라고 같이 지시한다
     assert.ok(argvEn.includes("Language note: say everything you say to the user in English"));
-    assert.ok(argvEn.includes("`kind: request`\nticket body"));
-    // ③ 두 로케일 모두 한국어 문장 지침 블록이 로케일과 무관하게 실린다
+    assert.ok(argvEn.includes("Write every deliverable in English as well"));
+    assert.ok(argvEn.includes("`kind: request` ticket\nbody"));
+    assert.ok(argvEn.includes("`## 질문`, `## 결과`, and `## 블록` stay exactly as written"));
+    // ③ 한국어 문장 지침 블록은 ko에서만 실린다 (§개정 5) — en은 0바이트다
     assert.ok(argvKo.includes("===== 한국어 문장 지침 (fluent-korean, MIT (c) 2026 snflkd) ====="));
-    assert.ok(argvEn.includes("===== 한국어 문장 지침 (fluent-korean, MIT (c) 2026 snflkd) ====="));
+    assert.ok(!argvEn.includes("===== 한국어 문장 지침 (fluent-korean, MIT (c) 2026 snflkd) ====="));
   } finally {
     process.env.PATH = path0;
     delete process.env.LANG_LOG;
