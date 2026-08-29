@@ -12,7 +12,6 @@
 import Link from "@/components/link";
 import { notFound } from "next/navigation";
 import { TriangleAlert } from "lucide-react";
-import { openEpicReadmeAction } from "@/app/(app)/p/[project]/epics/actions";
 import { boardRevision } from "@/lib/board-revision";
 import { EarlyRefreshPolling } from "@/components/early-refresh";
 import { EmptyState } from "@/components/empty-state";
@@ -158,10 +157,7 @@ export default async function Epics({
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 {titles[current.epic] != null && (
-                  <OpenInAppButton
-                    action={() => openEpicReadmeAction(id, current.epic, locale)}
-                    locale={locale}
-                  />
+                  <OpenInAppButton projectId={id} epic={current.epic} locale={locale} />
                 )}
                 <EpicReadmeEditButton
                   projectId={id}
