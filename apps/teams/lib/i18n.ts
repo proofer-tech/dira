@@ -4559,7 +4559,7 @@ export const en: Record<string, string> = {
   "transcriptLib.thinking": "Thinking",
   "transcriptLib.tool": "Tool",
   "transcriptLib.result": "Result",
-  "transcriptLib.linesUnit": " lines",
+  "transcriptLib.linesUnit": " line(s)",
 
   // 에픽 갈래(§0-16 §묶음 표 행 12) - `lib/epics.ts`. 뒤에 값이 붙는 넷은 콜론까지가 접두다.
   "epicsLib.keyRequired": "Enter a key.",

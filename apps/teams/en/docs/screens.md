@@ -392,7 +392,7 @@ You need this marker when a ticket has been running a while with no visible prog
 you go looking for where it went wrong yourself. Press a line with `Error` on it and what the tool
 said back comes out in full.
 
-![Two result lines inside an unfolded stage. The upper one reads `Result Error · 2 lines` with only the word `Error` in heavy type; right below it the same tool succeeded and its `Result` row carries no word marker.](/shots/13-error-marker.png)
+![Two result lines inside an unfolded stage. The upper one reads `Result Error · 2 line(s)` with only the word `Error` in heavy type; right below it the same tool succeeded and reads `Result 1 line(s)` with no word marker.](/shots/13-error-marker.png)
 
 There is no switch for showing errors only. There is no place counting them either. Sweep the box
 and look for `Error`. An error inside a folded stage shows only when you unfold that stage. The

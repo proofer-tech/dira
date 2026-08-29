@@ -476,6 +476,7 @@ these rows copy the English dictionary, and when the two disagree the dictionary
 | `https 주소만 받습니다` | `Only https addresses are accepted` |
 | `스케줄을 지웁니다` | `This deletes the schedule` |
 | `이름을 바꾸면 프롬프트에서 빠집니다` | `Rename it and it drops out of the prompt` |
+| `결과 1줄` | `Result 1 line(s)` | A result line in the progress record. The count carries the ` line(s)` suffix from the dictionary, so one line reads the same as many. |
 | `모든 세션이 협업 프로토콜 없이 시작합니다` | `Every session will start with no collaboration protocol` |
 | `이 티켓 48M 토큰 · 세션 1개` | `This ticket 48M tokens · Sessions 1` |
 | `· 이 합계에 없는 세션 3개` | `· outside this total: 3 session(s)` | The count carries the ` session(s)` suffix from the dictionary. |
