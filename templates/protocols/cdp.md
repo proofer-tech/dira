@@ -10,10 +10,16 @@
   (`ps -eo command | grep -o -- '--user-data-dir=[^ ]*'`로 살아 있는 경로를 뽑아 그 목록에
   없는 `/tmp/qa-*`만 지운다). **이 정리가 실패해도 브라우저 기동은 막지 않는다** - 실패하면
   건너뛰고 계속한다.
-- 기본은 헤드리스다. 스크린샷-클릭-폼 입력-팝오버 전부 CDP로 되고 창이 아예 안 뜬다. 포트는
+- 기본은 헤드리스다. 스크린샷-클릭-폼 입력-팝오버 전부 CDP로 되고 창이 아예 안 뜬다. 사람이
+  쓰는 `/Applications/Google Chrome.app`를 그대로 쓰지 않는다 - 그 앱의 자동 업데이트가
+  프레임워크를 제자리에서 교체하면 실행 중인 헤드리스 인스턴스가 깨진다. 갱신 주기가 분리된
+  전용 바이너리 `chrome-headless-shell`을 쓴다(`npx @puppeteer/browsers install
+  chrome-headless-shell@stable --path ~/.cache/dira`로 설치, 경로는 사람마다 다를 수 있으니
+  환경 변수 `DIRA_CHROME_HEADLESS`를 먼저 보고 없으면 그 설치 경로를 기본값으로 쓴다). 포트는
   `0`으로 줘서 커널이 고르게 하고(고정 포트는 다른 세션과 부딪힌다), crashpad와 각종 백그라운드
   동작은 전용 디렉터리로 돌리거나 꺼서 사람의 GUI 크롬 crashpad와 안 섞이게 한다:
-  `"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless --remote-debugging-port=0 --user-data-dir=/tmp/qa-<해시>/chrome-profile --crash-dumps-dir=/tmp/qa-<해시>/chrome-profile/crashpad --disable-breakpad --disable-component-update --disable-background-networking --no-first-run --no-default-browser-check --window-size=1440,900 about:blank &`
+  `"${DIRA_CHROME_HEADLESS:-$HOME/.cache/dira/chrome-headless-shell/mac_arm-152.0.7977.64/chrome-headless-shell-mac-arm64/chrome-headless-shell}" --remote-debugging-port=0 --user-data-dir=/tmp/qa-<해시>/chrome-profile --crash-dumps-dir=/tmp/qa-<해시>/chrome-profile/crashpad --disable-breakpad --disable-component-update --disable-background-networking --no-first-run --no-default-browser-check --window-size=1440,900 about:blank &`
+  `chrome-headless-shell`은 이미 헤드리스 전용 바이너리라 `--headless` 플래그가 없다.
   실제 포트는 커널이 고른 값이라 `<user-data-dir>/DevToolsActivePort` 파일 첫 줄에서 읽는다:
   `head -1 /tmp/qa-<해시>/chrome-profile/DevToolsActivePort`
 - **사람의 로그인이 들어 있는 프로필에는 헤드리스를 붙이지 않는다.** 헤드리스는 키체인에 못
