@@ -24,7 +24,7 @@ function registry(): Map<string, Entry> {
 }
 
 /** 지금 revision. 그 root의 워처가 없으면 여기서 건다. `workers/`는 절대 안 건다 —
- *  러너 로그가 초당 여러 번 자라 250ms 폴이 전체 렌더를 초당 네 번 부르게 된다.
+ *  러너 로그가 초당 여러 번 자라 1초 폴마다 거의 매번 전체 렌더가 걸리게 된다.
  *
  *  `watchImpl`은 테스트 주입용(선례: `machine-state.ts`의 `startHeartbeat(deps)`) — 실제
  *  `fs.watch` 이벤트 지연(실측 12~27ms)을 기다리지 않고 카운팅 로직만 결정적으로 검증한다. */

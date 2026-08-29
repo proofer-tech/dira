@@ -16,15 +16,15 @@ const personasPage = readFileSync("app/(app)/p/[project]/personas/[[...persona]]
 const epicsPage = readFileSync("app/(app)/p/[project]/epics/[[...epic]]/page.tsx", "utf8");
 const workersPage = readFileSync("app/(app)/p/[project]/workers/page.tsx", "utf8");
 
-test("EarlyRefreshPolling — 250ms마다 /api/revision을 묻고 5초 바닥은 안 든다", () => {
-  assert.match(earlyRefresh, /setTimeout\(poll, 250\)/, "250ms 폴이 없다");
+test("EarlyRefreshPolling — 1초마다 /api/revision을 묻고 5초 바닥은 안 든다", () => {
+  assert.match(earlyRefresh, /setTimeout\(poll, 1000\)/, "1초 폴이 없다");
   assert.match(earlyRefresh, /\/api\/revision\?project=/, "/api/revision 왕복이 없다");
   assert.ok(!/5000/.test(earlyRefresh), "EarlyRefreshPolling에 5초 바닥이 섞여 들어갔다");
 });
 
-test("BoardPolling — 5초 바닥을 유지한 채 EarlyRefreshPolling에 250ms 축을 위임한다", () => {
+test("BoardPolling — 5초 바닥을 유지한 채 EarlyRefreshPolling에 1초 축을 위임한다", () => {
   assert.match(boardUi, /setInterval\(\(\) => \{\s*\n\s*if \(!document\.hidden\) router\.refresh\(\);\s*\n\s*\}, 5000\)/, "5초 바닥이 없다");
-  assert.match(boardUi, /return <EarlyRefreshPolling project=\{project\} rev=\{rev\} \/>;/, "250ms 축을 EarlyRefreshPolling에 위임하지 않는다");
+  assert.match(boardUi, /return <EarlyRefreshPolling project=\{project\} rev=\{rev\} \/>;/, "1초 축을 EarlyRefreshPolling에 위임하지 않는다");
 });
 
 test("WipBodyPolling — 사라졌다, EarlyRefreshPolling이 대체한다", () => {

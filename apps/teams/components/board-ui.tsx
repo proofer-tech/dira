@@ -222,7 +222,7 @@ export function BoardFilter({
  *            숨은 탭은 아예 건너뛴다 — 배경 탭 열 개가 5초마다 큐를 훑을 이유가 없다.
  *
  *  **5초 바닥 위에 이른 갱신을 얹는다**(DESIGN.md §보드 갱신, 요구 `7cd6dea2`) — 지우지 않는다,
- *  그게 안전망이다. 250ms 축은 `EarlyRefreshPolling`(`components/early-refresh.tsx`)으로 뗐다
+ *  그게 안전망이다. 1초 축은 `EarlyRefreshPolling`(`components/early-refresh.tsx`)으로 뗐다
  *  (DESIGN.md §이른 갱신이 붙는 화면 §개정 1, 요구 `de0b759d`) — 보드만 이 5초 바닥을 그 위에
  *  더 얹는다. */
 export function BoardPolling({ project, rev }: { project: string; rev: number }) {
