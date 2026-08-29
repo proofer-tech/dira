@@ -48916,19 +48916,19 @@ build` 0개인데 로드 평균이 455다(실측 (5)). CPU를 쓰는 것이 Chro
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
 | P340-1 | 스펙 - §0-24 신설 + 이 블록 + 에픽 README | pm | - | 완료 - 왕복 1회, 발행 13장 |
-| P340-2 | 장치 - 판정 체인 넷 + 공개 라우트 넷 배선 + `en/` 원고 선택 + 폴백 + `og:locale` - `<html lang>` | developer | - | 발행 |
-| P340-3 | 문구 이행 - 공개 사이트 213건을 사전 `ko`로 + 언어 토글 + `check-landing-prose.py` 확장 | developer | P340-2 | 발행 |
-| P340-4 | 영어 - 공개 사이트 화면 문구 213건을 `en` 사전에 채운다 | writer | P340-3 | 발행 |
-| P340-5 | 영문 원고 - `en/glossary.md` + 시작하기 5장 | writer | - | 발행 |
-| P340-6 | 영문 원고 - `screens` 한 장 | writer | P340-5 | 발행 |
-| P340-7 | 영문 원고 - `barge-in` + `ticket-writing` + `states` | writer | P340-5 | 발행 |
-| P340-8 | 영문 원고 - `worker` + `concurrency` + `auth` + `protocols` | writer | P340-5 | 발행 |
-| P340-9 | 영문 원고 - `personas` + `squads` | writer | P340-5 | 발행 |
-| P340-10 | 영문 원고 - `ontology` + `epics` | writer | P340-5 | 발행 |
-| P340-11 | 영문 원고 - 운영 5장 | writer | P340-5 | 발행 |
-| P340-12 | 영문 원고 - 부록 5장 | writer | P340-5 | 발행 |
-| P340-13 | 영문 원고 - `terms` + `privacy` + 정본 문장 | writer | P340-5 | 발행 |
-| P340-14 | QA - 두 언어로 공개 라우트 넷과 폴백 세 단을 본다 | qa | P340-4 | 발행 |
+| P340-2 | 장치 - 판정 체인 넷 + 공개 라우트 넷 배선 + `en/` 원고 선택 + 폴백 + `og:locale` - `<html lang>` | developer | - | 발행 `1c3d3d40` |
+| P340-3 | 문구 이행 - 공개 사이트 213건을 사전 `ko`로 + 언어 토글 + `check-landing-prose.py` 확장 | developer | `1c3d3d40` | 발행 `76b659fd` |
+| P340-4 | 영어 - 공개 사이트 화면 문구 213건을 `en` 사전에 채운다 | writer | `76b659fd`, `73394f66` | 발행 `00ba786b` |
+| P340-5 | 영문 원고 - `en/glossary.md` + 시작하기 5장 | writer | - | 발행 `73394f66` |
+| P340-6 | 영문 원고 - `screens` 한 장 | writer | `73394f66` | 발행 `8da41421` |
+| P340-7 | 영문 원고 - `barge-in` + `ticket-writing` + `states` | writer | `73394f66` | 발행 `79c7a49a` |
+| P340-8 | 영문 원고 - `worker` + `concurrency` + `auth` + `protocols` | writer | `73394f66` | 발행 `2e36ce12` |
+| P340-9 | 영문 원고 - `personas` + `squads` | writer | `73394f66` | 발행 `be8f4372` |
+| P340-10 | 영문 원고 - `ontology` + `epics` | writer | `73394f66` | 발행 `fc465d9e` |
+| P340-11 | 영문 원고 - 운영 5장 | writer | `73394f66` | 발행 `45632bce` |
+| P340-12 | 영문 원고 - 부록 5장 | writer | `73394f66` | 발행 `3e452b38` |
+| P340-13 | 영문 원고 - `terms` + `privacy` + 정본 문장 | writer | `73394f66` | 발행 `75d222ff` |
+| P340-14 | QA - 두 언어로 공개 라우트 넷과 폴백 세 단을 본다 | qa | `00ba786b` | 발행 `3f94184c` |
 
 **원고를 여덟으로 가른 축은 사이드바 묶음과 분량이다.** 337 KB를 한 세션에 못 옮긴다.
 `screens` 한 장이 50.9 KB라 혼자 서고, 나머지는 사이드바 여섯 묶음을 30~53 KB 단위로 나눴다 -
