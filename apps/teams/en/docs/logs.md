@@ -59,7 +59,7 @@ While it runs, the file is usually empty. The worker collects the engine output 
 pours it in at once after the session ends. To watch a session in progress live, open the session
 stream on the ticket page. What that screen reads is not this file but the transcript, the record
 where Claude Code writes down, in order, what its session said and which tools it called ([The
-screens](/docs/screens) §Session stream).
+screens](/docs/screens) §The session stream).
 
 ## `cron.log` - the output of the worker script itself
 
