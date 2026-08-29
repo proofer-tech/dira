@@ -4,6 +4,11 @@ This file decides the English word for every product term the manual uses. Every
 chapter under `en/` follows it. The Korean manual is the source; this table is the only
 place where its vocabulary is fixed for English.
 
+**A word the screen already says wins.** For anything the app puts on screen, the English
+dictionary in `lib/i18n.ts` is the fact, and the rows here copy it. The manual tells a reader
+which button to press, so a label this table invents on its own sends them looking for a button
+that is not there. For manual prose with no screen behind it, this table decides.
+
 If you need a word that is not here, pick one and add the row in the same session. A term
 that appears in two chapters with two different English words is a bug, and it costs a
 second translation to undo.
@@ -49,29 +54,38 @@ Never translate, never re-spell:
 | 엔진 | engine | Both the two-file engine under the app and the CLI an LLM runs behind. Say LLM engine when the second one could be meant. |
 | 스테일 | stale | A ticket whose session is gone. |
 | 락, 잠금 | lock | The rename is the lock. |
-| 참견 | barge-in | Sending a line into a session that is already running. |
+| 참견 | interject | Noun and verb both. Sending a line into a session that is already running. The screen says `Interject`, so the manual does not call it a barge-in. |
 | 되묻기 | asking back | What pm does instead of guessing. |
-| 이어받기 | handoff | A `이어받기 티켓` is a handoff ticket. |
+| 이어받기 | handoff, follow-up | Two different things. A session passing the rest of a ticket on is a handoff, and `이어받기 티켓` is a handoff ticket. The screen feature, where a person writes a line on a done ticket to open a new one, is `Follow-up`. |
 | 통합 브랜치 | integration branch | |
 | 스펙 문서 | spec document | |
 | 슬러그 | slug | |
 | 수행자 | assignee | The persona or squad a ticket is issued to. |
-| 진행 기록 | activity log | The per-session record a ticket page shows. |
-| 폴링 대기 | polling wait | The section a scheduled ticket carries. |
+| 진행 기록 | Progress record | The per-session record a ticket page shows. The screen label is `Progress record`, and prose uses the same words. |
+| 폴링 대기 | Polling | The section a scheduled ticket carries, and the badge on its card. |
+| 선점 | preempt, preemption | What priority 5 does to a running session. The section the engine writes into the body stays `## 선점`. |
+| 선행, 후행 | prerequisite, the ticket waiting on it | `deps` is a frontmatter key, not a word for prose. |
+| 우선순위 | priority | The field label is `Priority`. |
+| 마감 | due date | The field label is `Due date`. |
+| 첨부 | attachment | The button and the chip group read `Attachments`. |
+| 트랜스크립트 | transcript | The file the engine leaves. Never a log. |
 
 ## States and badges
 
-The board has three lanes and four badges. Capitalize them as labels, lowercase them in
-running prose.
+The board has three lanes, and the badges below cover what a card can be while it sits in one.
+Capitalize them as labels, lowercase them in running prose.
 
 | Korean | English | Notes |
 |---|---|---|
-| 대기 | Backlog | The lane, and the filter option. The file is `<hash>.md`, open and waiting for the next tick. |
+| 대기 | Open | The lane, and the filter option. The file is `<hash>.md`, open and waiting for the next tick. Token status has its own word (`Pending`), which is a different thing. |
 | 진행중 | In progress | The lane. The file is `<hash>.wip.md`. |
 | 완료 | Done | The lane. The file is `<hash>.done.md`. |
 | 답변 대기 | Awaiting answer | The badge, and the frontmatter key stays `awaiting`. |
-| deps 대기 | Waiting on deps | The badge and the filter option. |
-| 대기중 | Waiting | The badge a scheduled ticket carries, with the time left. |
+| deps 대기 | Blocked | The badge and the filter option. The tag on the card itself still reads `deps`, and the unmet hashes sit next to it in orange. |
+| 대기중 | Polling | The badge a scheduled ticket carries, with the time left. |
+| 상한 지남 | Deadline passed | What that badge turns into once the polling deadline is past. |
+| 할당됨 | Assigned | The badge on an open file that has a `session_id` written in it. |
+| 완료(이어짐) | Done (continued) | The done badge on a ticket carrying `continued:`. |
 | 다시 할당 | Reassigned | The count on the ticket page. |
 
 ## Chapter titles
@@ -125,12 +139,12 @@ Section groups, in the table of contents and in the sidebar:
 ## Screen labels the manual quotes
 
 The manual tells the reader which button to press, so a label quoted here has to be the
-label the screen actually shows. The English dictionary in `lib/i18n.ts` is written after
-this file, and it takes its wording from this table.
+label the screen actually shows. These rows are copied from the English dictionary in
+`lib/i18n.ts`. When the two disagree, the dictionary is right and this table gets fixed.
 
 | Korean | English |
 |---|---|
-| 요구 접수 | Submit a request |
+| 요구 접수 | New request |
 | 티켓 발행 | New ticket |
 | 프로젝트 만들기 | Create project |
 | 새 프로젝트 | New project |
@@ -146,6 +160,16 @@ this file, and it takes its wording from this table.
 | 통합 브랜치 | Integration branch |
 | 스펙 문서 | Spec document |
 | 접수한 요구 보기 | View the request |
+| 복제 | Duplicate |
+| 할당 해제 | Unassign |
+| 답변 쓰기 | Write an answer |
+| 버리고 닫기 | Discard and close |
+| 진행 기록 | Progress record |
+| 폴링 대기 | Polling |
+| 우선순위 | Priority |
+| 마감 | Due date |
+| 없음 | None |
+| 스쿼드 default | Squad default |
 
 Two more rows for the same reason, both macOS wording rather than ours: `허용` is `Allow` and
 `앱 관리` is `App Management`.
@@ -179,5 +203,8 @@ the English dictionary takes its wording from here.
 | `<경로>/.dira는 이미 dira 프로젝트입니다. 만들지 않고 등록하세요.` | `<path>/.dira is already a dira project. Register it instead of creating one.` |
 | `claude CLI를 찾지 못했습니다 — 워커가 세션을 띄우지 못합니다` | `claude CLI not found — workers cannot start sessions` |
 | `요구사항이 접수되었습니다. 곧 PM이 검토할 예정입니다.` | `Your request has been submitted. pm will review it shortly.` |
+| `쓰던 내용이 있습니다` | `You have unsaved text` |
+| `아무도 집지 않는 티켓 <n>건` | `Tickets no one will claim: <n>` |
+| `(디스패치되지 않는 N건은 상단 알림)` | `(Not dispatched: N — see notifications)` |
 
 The em dash in those sentences is the app's, not ours. Keep it where the Korean has it.
