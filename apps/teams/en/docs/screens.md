@@ -691,10 +691,10 @@ writing as the page you see on the web. In the app, the list rides on top of it 
   `Connected` · `Actions`. Press the name for that project's board.
 - For a project that is not connected, the three count cells are empty. Not zero. Could not read and
   zero are different facts.
-- The right of the header carries `Manual` · `Star` · `New` · `Settings`. `Settings` here is a word,
-  not a gear.
-- With zero registered projects, the creation form unfolds where the table would be, and `New` drops
-  out of the header (see [Create your first project](/docs/first-ticket)).
+- The right of the header carries `Manual` · `Star` · `New project` · `Settings`.
+  `Settings` here is a word, not a gear.
+- With zero registered projects, the creation form unfolds where the table would be, and `New project`
+  drops out of the header (see [Create your first project](/docs/first-ticket)).
 
 ## The way to the manual and back
 
