@@ -11,6 +11,7 @@ import { PickPath } from "@/components/path-picker";
 import { SettingsDialog, type AuthView } from "@/components/settings-dialog";
 import { LanguageToggle } from "@/components/language-toggle";
 import { useT } from "@/components/language-provider";
+import { wrap } from "@/lib/i18n";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -176,7 +177,11 @@ export default function Landing({
               <span className="break-all">{registerErr.message}</span>
               {registerErr.dup && (
                 <Link href={`/p/${registerErr.dup.id}`}>
-                  {registerErr.dup.name} {t("landing.register.dupOpenSuffix")}
+                  {wrap(
+                    t("landing.register.dupOpenPrefix"),
+                    registerErr.dup.name,
+                    t("landing.register.dupOpenSuffix"),
+                  )}
                 </Link>
               )}
             </AlertDescription>

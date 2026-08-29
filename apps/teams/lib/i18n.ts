@@ -2144,6 +2144,9 @@ export const ko: Record<string, string> = {
   "landing.register.rootPickerLabel": "큐 경로",
   "landing.register.rootHint": "절대경로. ~는 확장됩니다",
   "landing.register.errorTitle": "등록하지 못했습니다",
+  // 이미 등록된 프로젝트로 가는 링크 — 한국어는 이름 뒤에 다 붙어 접두가 비고, 영어는
+  // 동사가 앞에 서서 접미가 빈다. 조립은 `wrap`이 한다(파일 맨 아래 주석).
+  "landing.register.dupOpenPrefix": "",
   "landing.register.dupOpenSuffix": "열기",
   "landing.register.pendingLabel": "등록 확인 중…",
   "landing.register.title": "프로젝트 등록",
@@ -2667,6 +2670,12 @@ export const en: Record<string, string> = {
   "common.cancel": "Cancel",
   "common.create": "Create",
   "common.creating": "Creating…",
+
+  // 공개 사이트 언어 토글 — 눌러서 건너갈 언어의 짧은 이름이다. 영어 화면에서 한국어로
+  // 건너가는 버튼이라 글자는 `KO`다(`한`은 이 사전에 한글을 들이고, 36x36 버튼에 `한국어`는
+  // 길다). `EN` 쪽은 두 사전이 같은 글자를 쓴다.
+  "languageToggle.shortKo": "KO",
+  "languageToggle.shortEn": "EN",
 
   "common.openInApp": "Open with default app",
   "common.openInApp.failed": "Couldn't open the file",
@@ -4565,6 +4574,262 @@ export const en: Record<string, string> = {
   "usageLib.title.noExitRecordPrefix": "No exit record in ",
   "usageLib.title.noExitRecordSuffix": " log(s) for this hash",
   "usageLib.title.noLogsSuffix": ": no matches on this machine",
+
+  // ── 공개 사이트(§0-24, 티켓 00ba786b·P340-4) ──────────────────────────
+  // 랜딩(`app/(site)/landing.tsx`) — 제품을 처음 만나는 사람이 읽는 마케팅 카피다. 절도
+  // 절 순서도 한국어 원문 그대로 두고 문장만 영어로 옮겼다. 등록 폼 다섯 칸은 이미 찬
+  // `project.create.*`와 같은 자리·같은 낱말이라 그 값을 글자 그대로 재사용한다.
+  "landing.register.nameLabel": "Name",
+  "landing.register.namePlaceholder": "dira itself",
+  "landing.register.idLabel": "URL slug",
+  "landing.register.idHint": "Couldn't build a URL slug from that name. Set one yourself (lowercase letters, digits, hyphens).",
+  "landing.register.rootLabel": "Path",
+  "landing.register.rootPickerLabel": "Queue path",
+  "landing.register.rootHint": "Absolute path. ~ is expanded",
+  "landing.register.errorTitle": "Couldn't register it",
+  // 이미 등록된 프로젝트로 가는 링크 — 한국어는 이름 뒤에 `열기`가 붙고 영어는 동사가 앞에
+  // 선다. `wrap`이 붙이고 빈 쪽을 지운다(§0-16 §장치 · `wrap` 주석).
+  "landing.register.dupOpenPrefix": "Open",
+  "landing.register.dupOpenSuffix": "",
+  "landing.register.pendingLabel": "Checking the registration…",
+  "landing.register.title": "Register project",
+
+  "landing.result.createdLabel": "Created",
+  "landing.result.registeredLabel": "Registered",
+  "landing.result.openBoardLabel": "Open the board",
+  // `{prefix} {n}{suffix}` — 숫자에 접미가 공백 없이 붙으므로 값이 공백으로 연다.
+  "landing.result.filesWrittenPrefix": "Wrote",
+  "landing.result.filesWrittenSuffix": " files.",
+  "landing.result.skippedPrefix": "Already there, skipped:",
+  "landing.result.engineRepoLabel": "Engine repo",
+  "landing.result.cronRegistered": "In crontab — it starts picking up tickets 30 seconds from now",
+  "landing.result.cronFailedTitle": "Couldn't register the crontab line",
+  "landing.result.ontologyFailedTitle": "Couldn't set the ontology location",
+  "landing.result.ontologyFailedLink": "Set it again from the ontology screen",
+
+  // `{count}`는 `landing.tsx`가 `.replace()`로 채우는 자리표시자다(ko 쪽 주석 참고).
+  "landing.banner.text": "Turn on auto-update and run the newest dira (v{count})!",
+  "landing.banner.releasesLink": "See the releases",
+
+  "landing.nav.manualLink": "Manual",
+  "landing.nav.createLabel": "New project",
+  "landing.nav.downloadAppLabel": "Download the app",
+  "landing.nav.installGuide": "Install guide",
+
+  "landing.projects.registryErrorTitle": "Couldn't read the project registry",
+  "landing.projects.emptyHint": "No projects registered yet. Make one and you're started.",
+  "landing.projects.registerHint": "Already have a .dira? Register it.",
+  "landing.projects.newProjectTitle": "New project",
+
+  "landing.hero.eyebrow": "Local multi-agent management system",
+  "landing.hero.title": "Build your own AI team",
+  "landing.hero.body":
+    "Throw a request in however you like and it still lands. Watch the whole thing live, the way you would in jira: the tickets being split up, the agents working together to finish them. Your own multi-agent system, on your own machine, and it's easy to set up.",
+  "landing.hero.downloadCta": "Download the macOS app",
+  "landing.hero.shotAlt":
+    "The dira board. Ticket cards sit in the three lanes Open, In progress and Done, and one of them crosses into the next lane.",
+  "landing.hero.shotCaption": "Fun fact: the dira app was built with dira.",
+
+  "landing.steps.title": "Say it and it gets done",
+  "landing.steps.step1Title": "① Submit a request",
+  "landing.steps.step1Body": "Write down what you want the way you would say it out loud. That's the whole job. The agents take the tedious, complicated rest.",
+  "landing.steps.step2Title": "② Everything moves at once",
+  "landing.steps.step2Body":
+    "The agent that takes your request works it out and splits it into tickets, one per piece of work. A worker with the right persona picks up each ticket, and together they finish what you asked for.",
+  "landing.steps.step3Title": "③ That's it. Easy, right?",
+  "landing.steps.step3Body":
+    "You see what the workers read and how they change it, live. When one gets stuck mid-job, it asks you. Ask and answer the way you would with a person, and the feature you wanted is finished!",
+
+  "landing.archiving.title": "Finished work stays on the record",
+  // `<b>{boldPrefix} <code>.done</code>{boldSuffix}</b> {prefix} <code>Archiving</code> {suffix}` —
+  // 코드 조각 둘이 문장 안에 박혀 있어 조각 넷의 자리가 고정이다(`wrap` 자리가 아니다).
+  "landing.archiving.item1BoldPrefix": "Once a ticket turns",
+  "landing.archiving.item1BoldSuffix": ", one archive ticket follows it.",
+  "landing.archiving.item1Prefix": "An",
+  "landing.archiving.item1Suffix": "line shows up under the done card, and because a worker takes that one too you can watch how far it has got",
+  "landing.archiving.item2Bold": "What's left is one markdown file and one section at the foot of the ticket.",
+  "landing.archiving.item2Prefix": "The worker that took the archiving picks the facts out of the job just finished, writes them into",
+  "landing.archiving.item2Mid": " in the project folder, and adds a",
+  "landing.archiving.item2Suffix": "section to that ticket's body",
+  "landing.archiving.item3Bold": "The next session starts out knowing where that is.",
+  "landing.archiving.item3Body": "Where the ontology sits and how to search it goes out in every prompt a worker gets",
+  "landing.archiving.item4Bold": "The files are plain markdown.",
+  "landing.archiving.item4Body": " ties them to each other, so a tool like Obsidian opens the folder whole. Move the project and the record moves with it",
+  "landing.archiving.promiseBody":
+    "The more you hand over, the better the workers know this project. They start by reading who decided what yesterday, so you never say the same thing twice.",
+  "landing.archiving.shotAlt":
+    "The In progress and Done lanes of the dira board. The second card in Done, a732ce19, carries a filing-cabinet icon and an «Archiving» line in its bottom row, and the card above it has no such line.",
+  "landing.archiving.shotCaption": "That line is a link. Press it and you land on the archive ticket, where you can see how far its worker has got.",
+  "landing.archiving.arrowLink": "Archiving and the ontology",
+
+  "landing.gallery.openOriginal": "Open at full size",
+  "landing.gallery.bargeAlt":
+    "While the session stream adds one tool call after another, a sentence typed into the box below and sent shows up in the stream as an interject line, and the session changes course from there.",
+  "landing.gallery.bargeCaption":
+    "\"Fair enough, nobody's perfect.\" Your request doesn't have to be perfect. Ask loosely, and interject while the work is running.",
+  "landing.gallery.bargeArrowLink": "Talking to a running session",
+  "landing.gallery.qaAlt": "The question and answer thread on a request ticket. An answer bubble sits to the right under the question, and the frontmatter carries an awaiting hash.",
+  "landing.gallery.qaCaption": "Of course they ask when they don't know. Agents run into things they can't decide, and then they ask. Answer the question and they go straight back to work.",
+  "landing.gallery.qaArrowLink": "Asking back and answering",
+  "landing.gallery.runningAlt": "An in-progress ticket page. The body and the Done when checklist on the left, the frontmatter table and relations on the right.",
+  "landing.gallery.runningCaption":
+    "You can look into the work one ticket at a time. If it's heading somewhere you didn't mean, unassign the ticket and it stops. On a ticket that hasn't started yet, edit the body and spell out the direction you want.",
+  "landing.gallery.runningArrowLink": "Work you can see",
+  "landing.gallery.ontologyAlt":
+    "The ontology screen. Under the title sits the path of the folder holding the cards, and below it a metrics panel of twelve cells, object · relation 96 · 184 among them. Beneath that the card file tree is on the left, and on the right an editor has the selected file _ontology/SCHEMA.md open in rich text.",
+  "landing.gallery.ontologyCaption": "Every time a ticket ends, the facts picked out of that job pile up here, one card at a time. They stay as markdown inside the project folder, so the next session and you open the same place.",
+
+  "landing.noAccount.title": "You don't need an account",
+  "landing.noAccount.item1Bold": "dira has no server.",
+  "landing.noAccount.item1Body": "No sign-up, no login. Download it and open it, that is all, and nothing you make gets uploaded anywhere",
+  "landing.noAccount.item2Bold": "Tickets and records are both inside the project folder.",
+  "landing.noAccount.item2Prefix": "The queue is the single directory",
+  "landing.noAccount.projectPlaceholder": "project",
+  "landing.noAccount.item2Suffix": "and what it holds is markdown files. There is nowhere to set permissions, so being able to open that folder is the permission",
+  "landing.noAccount.item3Bold": "The work does go out to the model.",
+  "landing.noAccount.item3Body": "When a worker starts a session, the ticket body and the code it needs travel through the engine you picked and reach the model. Outside that one channel, dira takes nothing away",
+  "landing.noAccount.item4Bold": "Turning usage analytics off is all it takes.",
+  "landing.noAccount.item4Prefix":
+    "We count eight things about what you press on screen. Ticket titles, ticket bodies, file paths and prompts are not carried. Turn it off in settings and nothing goes out from that moment on, and to wipe what is left, delete the one file",
+  "landing.noAccount.item4Suffix": "and you are done",
+  "landing.noAccount.shotAlt":
+    "The first screen when no project is registered. Under the line saying there are none, the New project card is open, with the Name, Project folder, Integration branch and Spec document fields and a Create project button.",
+  "landing.noAccount.shotCaption": "This is the screen the first time you open it after installing. You fill in a name and a project folder, and there is no field for an account.",
+  "landing.noAccount.arrowLink": "Usage analytics, and how to turn them off",
+
+  "landing.stats.dependenciesLabel": "Engine dependencies",
+  "landing.stats.dependenciesValue": "bash + the python3 standard library",
+  "landing.stats.concurrentWorkersLabel": "Workers running at once in this repo",
+  "landing.stats.ticketsLabel": "Tickets its own queue took",
+  "landing.stats.ticketsValue": "1762 done",
+  "landing.stats.hoursBig": "62 hours",
+  "landing.stats.hoursLabel": "From first commit to first release",
+  "landing.stats.hoursCommitsValue": "351 commits",
+  "landing.stats.note": "As of 2026-08-12",
+
+  "landing.install.eyebrow": "Install",
+  "landing.install.title": "Download it, install it, done",
+  "landing.install.body": "Get it and open it. You never have to open a terminal.",
+  // `<b>① <code>.dmg</code>{step1BoldSuffix}</b> <code>dira.app</code>{step1AppSuffix}
+  //  <code>Applications</code>{step1Body}` — 번호와 코드 조각 셋의 자리가 고정이다.
+  "landing.install.step1BoldSuffix": " — open it and drag.",
+  "landing.install.step1AppSuffix": " goes into",
+  "landing.install.applicationsFolder": "Applications",
+  "landing.install.step1Body": " and the install is over. The build is signed and notarized, so the Mac won't stop you on first open with a warning about an app it doesn't know",
+  "landing.install.step2Bold": "② Open the app for the first time and the form is already unfolded.",
+  "landing.install.step2Prefix": "Put in a name and a project folder, then press",
+  "landing.install.step2Suffix": ".",
+  "landing.install.step3Bold": "③ Thirty seconds later a worker starts sweeping the queue.",
+  "landing.install.step3Body": "Leave a ticket there and it gets picked up from then on",
+  "landing.install.item1BoldPrefix": "The engine is one of four —",
+  "landing.install.item1BoldMid": ",",
+  "landing.install.item1BoldSuffix": ", grok and agy.",
+  "landing.install.item1Prefix": "You pick the model along with the worker, and a name that isn't in the list you type in yourself. After that, press the",
+  "landing.install.item1Mid": "column on the workers screen to change it. Interject is on",
+  "landing.install.item1Suffix": " only, and the session stream is on claude and grok. The app runs on Apple Silicon Macs only",
+  "landing.install.item2Bold": "You can also run the engine alone, with no screen.",
+  "landing.install.item2Prefix": "On Linux, or when you don't need a screen, follow",
+  "landing.install.item2LinkText": "the route that gets the repo directly",
+  "landing.install.item2Suffix": ".",
+  "landing.install.fullGuideLink": "Full install guide",
+  "landing.install.firstTicketLink": "Create your first project",
+  "landing.install.cronOnlyLink": "Running the engine alone",
+
+  "landing.plan.eyebrow": "Plans",
+  "landing.plan.cycleResumeAriaLabel": "Resume the plan card cycle",
+  "landing.plan.cyclePauseAriaLabel": "Stop the plan card cycle",
+  "landing.plan.title": "Start free on your own machine",
+  "landing.plan.freeItem1": "Install and run the local app and engine yourself",
+  "landing.plan.freeItem2": "P2P collaboration with your teammates",
+  "landing.plan.freeItem3": "Engine MCP",
+  "landing.plan.soon": "Soon",
+  "landing.plan.freeBody": "The local engine and app are free forever. dira is rooting for a multi-agent ecosystem that builders make.",
+  "landing.plan.proItem1": "Cloud projects",
+  "landing.plan.proItem2": "dira's own cloud LLM",
+  "landing.plan.proItem3": "Web hosting for what you build",
+  "landing.plan.proItem4": "Cloud workers",
+  "landing.plan.enterpriseItem1": "Enterprise-only customization",
+  "landing.plan.enterpriseItem2": "Hooks into your internal tools",
+  "landing.plan.personaMarket": "Persona market",
+  "landing.plan.personaMarketItem": "We build the ecosystem together too",
+  "landing.plan.ctaBody": "No sign-up, no payment. Delete it if it doesn't suit you, so install it and see.",
+
+  "landing.footer.productHeading": "Product",
+  "landing.footer.downloadLink": "Download",
+  "landing.footer.releasesLink": "Releases",
+  "landing.footer.engineLink": "Engine",
+  "landing.footer.docsHeading": "Docs",
+  "landing.footer.templatesLink": "Templates",
+  "landing.footer.repoHeading": "Repo",
+  "landing.footer.issuesLink": "Issues",
+  "landing.footer.licenseLink": "MIT license",
+  "landing.footer.copyright": "© 2026 Proofer Inc. MIT.",
+  "landing.footer.termsLink": "Terms of service",
+  "landing.footer.privacyLink": "Privacy policy",
+
+  "landing.registerDialog.description": "Puts an existing .dira on the list. It creates no files.",
+
+  // 매뉴얼 사이드바 — 그룹 6 + 링크 26. 낱말은 `en/glossary.md` §Chapter titles와
+  // §Section groups 표에서 글자 그대로 가져온다(그 표가 각 장 `# ` 제목의 정본이다).
+  "manualSidebar.group.gettingStarted": "Getting started",
+  "manualSidebar.group.watching": "Watching",
+  "manualSidebar.group.writing": "Writing your own",
+  "manualSidebar.group.extending": "Scaling up",
+  "manualSidebar.group.operating": "Operating",
+  "manualSidebar.group.appendix": "Appendix",
+  "manualSidebar.item.whatIsDira": "About dira",
+  "manualSidebar.item.install": "Install",
+  "manualSidebar.item.firstTicket": "Create your first project",
+  "manualSidebar.item.requirements": "Submitting a request",
+  "manualSidebar.item.screens": "The screens",
+  "manualSidebar.item.bargeIn": "Talking to a running session",
+  "manualSidebar.item.ticketWriting": "Writing a ticket yourself",
+  "manualSidebar.item.states": "The states a ticket passes through",
+  "manualSidebar.item.worker": "Workers",
+  "manualSidebar.item.concurrency": "How many to run at once",
+  "manualSidebar.item.personas": "Personas",
+  "manualSidebar.item.squads": "Squads",
+  "manualSidebar.item.protocols": "Protocols",
+  "manualSidebar.item.ontology": "Archiving and the ontology",
+  "manualSidebar.item.epics": "Epics",
+  "manualSidebar.item.auth": "Authentication",
+  "manualSidebar.item.troubleshooting": "Troubleshooting",
+  "manualSidebar.item.logs": "Reading the logs",
+  "manualSidebar.item.analytics": "Usage analytics, and how to turn them off",
+  "manualSidebar.item.schedules": "Schedules",
+  "manualSidebar.item.webhook": "Sending Awaiting answer somewhere else",
+  "manualSidebar.item.closing": "Closing",
+  "manualSidebar.item.cron": "Running the engine alone",
+  "manualSidebar.item.refEnv": "Worker environment variables",
+  "manualSidebar.item.refCli": "CLI",
+  "manualSidebar.item.refFrontmatter": "frontmatter fields",
+
+  // 매뉴얼 셸 — 27장을 오가는 길잡이라 라벨은 짧게 둔다. `프로젝트 관리`는 앱 셸이 이미 쓰는
+  // `shell.nav.projects`와 같은 낱말로 맞춘다(같은 곳으로 가는 같은 링크다).
+  "manualShell.darkToggleAriaLabel": "Dark mode",
+  "manualShell.navToggleAriaLabel": "Open the menu",
+  "manualShell.menuToggleAriaLabel": "Open the sidebar",
+  "manualShell.menuLabel": "Menu",
+  "manualShell.copiedLabel": "Copied",
+  "manualShell.copyLabel": "Copy",
+  "manualShell.copyCodeAriaLabel": "Copy the code",
+  "manualShell.skipLink": "Skip to the content",
+  "manualShell.projectsLink": "Manage projects",
+  "manualShell.sidebarAriaLabel": "Manual contents",
+  "manualShell.editPageLink": "Edit this page",
+  "manualShell.prevNextAriaLabel": "Previous and next pages",
+  "manualShell.prevLabel": "Previous",
+  "manualShell.nextLabel": "Next",
+  "manualShell.onThisPageLabel": "On this page",
+
+  // 공개 사이트 오류·부재·메타. 앞의 둘은 앱 화면의 `errorBoundary.*`·`notFound.root.*`와
+  // 한국어가 같은 자리라 그 벌의 낱말을 따라간다(그쪽은 화면, 이쪽은 페이지다).
+  "siteError.title": "Couldn't render this page",
+  "siteError.noReason": "No reason given",
+  "siteError.retry": "Try again",
+  "siteNotFound.body": "There's no page at this address.",
+  "siteNotFound.homeLink": "Go home",
+  "siteMeta.description": "Drop a ticket in the queue and a cron-driven worker hands it to a claude session. A ticket dispatcher whose queue is the filesystem.",
 };
 
 const DICTS: Record<Locale, Record<string, string>> = { ko, en };

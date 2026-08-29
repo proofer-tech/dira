@@ -170,6 +170,18 @@ const FILLED = [
   "attachmentsLib.",
   "attachmentField.",
   "usageLib.", // 7ede7fc3가 en을 채우고 여기 더했다(§2-13 토큰량 덩이의 사전 갈이)
+  // 00ba786b가 en을 채우고 여기 더했다(P340-4, 공개 사이트 화면 문구). 화면 접두 넷
+  // (`landing.`·`manualSidebar.`·`manualShell.`·`siteMeta.`)과 라우트 접두 둘
+  // (`siteError.`·`siteNotFound.`), 그리고 부품 하나(`languageToggle.`)라 줄이 일곱이다.
+  // `siteError.`·`siteNotFound.`가 이미 찬 `errorBoundary.`·`notFound.`와 따로 서는 것은
+  // 공개 사이트와 앱 화면이 다른 파일이어서다(§0-24 §범위 표).
+  "landing.",
+  "manualSidebar.",
+  "manualShell.",
+  "siteError.",
+  "siteNotFound.",
+  "siteMeta.",
+  "languageToggle.",
 ];
 
 test("이미 찬 묶음(설정·마감·셸)의 ko 키는 en에 하나도 안 빠졌다", () => {
@@ -341,6 +353,61 @@ test("90be3eeb — 셸 조립 문구가 영어에서도 문장이 된다", () =>
     `${pct}% ${t("en", "statusbar.usage.suffix")}${window && ` · ${window}`}`;
   assert.strictEqual(usage(42, ""), "42% used");
   assert.strictEqual(usage(42, "5h"), "42% used · 5h");
+});
+
+// 00ba786b — 공개 사이트(P340-4). 랜딩은 조각 사이에 `<code>`가 박힌 자리가 많아 조각의
+// 순서가 JSX에 고정돼 있다. 그 자리들이 영어로도 한 문장이 되는지, 공백으로 여는 조각이
+// 제자리에 붙는지 조립 결과로 고정한다. 단일 키 치환은 위 전수 대조와 한글 판정이 이미 잡는다.
+test("공개 사이트 조합 문구 — 영어도 한 문장이 된다", () => {
+  // 어순이 뒤집히는 유일한 자리 — 한국어는 이름 뒤에 `열기`, 영어는 동사가 앞이다.
+  assert.strictEqual(
+    wrap(t("ko", "landing.register.dupOpenPrefix"), "myproject", t("ko", "landing.register.dupOpenSuffix")),
+    "myproject 열기",
+  );
+  assert.strictEqual(
+    wrap(t("en", "landing.register.dupOpenPrefix"), "myproject", t("en", "landing.register.dupOpenSuffix")),
+    "Open myproject",
+  );
+
+  // 숫자에 접미가 공백 없이 붙는다 — 영어 값이 공백으로 열어야 낱말이 안 붙는다.
+  const written = (l: "ko" | "en", n: number) =>
+    `${t(l, "landing.result.filesWrittenPrefix")} ${n}${t(l, "landing.result.filesWrittenSuffix")}`;
+  assert.strictEqual(written("ko", 12), "파일 12개를 만들었습니다.");
+  assert.strictEqual(written("en", 12), "Wrote 12 files.");
+
+  // 아카이빙 첫 항목 — `.done`과 `아카이빙중`(en `Archiving`) 둘이 문장 안에 박혀 있다.
+  assert.strictEqual(
+    `${t("en", "landing.archiving.item1BoldPrefix")} .done${t("en", "landing.archiving.item1BoldSuffix")}`,
+    "Once a ticket turns .done, one archive ticket follows it.",
+  );
+  assert.strictEqual(
+    `${t("en", "landing.archiving.item1Prefix")} ${t("en", "boardPage.archive.inProgress")} ${t("en", "landing.archiving.item1Suffix")}`,
+    "An Archiving line shows up under the done card, and because a worker takes that one too you can watch how far it has got",
+  );
+
+  // 설치 ① — 코드 조각 셋(`.dmg`·`dira.app`·`Applications`)이 한 줄에 이어 붙는다.
+  assert.strictEqual(
+    `.dmg${t("en", "landing.install.step1BoldSuffix")} dira.app${t("en", "landing.install.step1AppSuffix")} ${t("en", "landing.install.applicationsFolder")}${t("en", "landing.install.step1Body")}`,
+    ".dmg — open it and drag. dira.app goes into Applications and the install is over. The build is signed and notarized, so the Mac won't stop you on first open with a warning about an app it doesn't know",
+  );
+
+  // 엔진 넷 — `claude`와 `codex`가 나열 한가운데에 박혀 있다.
+  assert.strictEqual(
+    `${t("en", "landing.install.item1BoldPrefix")} claude${t("en", "landing.install.item1BoldMid")} codex${t("en", "landing.install.item1BoldSuffix")}`,
+    "The engine is one of four — claude, codex, grok and agy.",
+  );
+
+  // 큐 한 디렉터리 — 자리표시자가 코드 조각 안으로 들어간다.
+  assert.strictEqual(
+    `${t("en", "landing.noAccount.item2Prefix")} <${t("en", "landing.noAccount.projectPlaceholder")}>/.dira ${t("en", "landing.noAccount.item2Suffix")}`,
+    "The queue is the single directory <project>/.dira and what it holds is markdown files. There is nowhere to set permissions, so being able to open that folder is the permission",
+  );
+
+  // 배너는 `wrap`이 아니라 `.replace()`다(앞뒤에 공백이 붙으면 안 되는 자리).
+  assert.strictEqual(
+    t("en", "landing.banner.text").replace("{count}", "1.2.3"),
+    "Turn on auto-update and run the newest dira (v1.2.3)!",
+  );
 });
 
 // 화면에 남은 한국어를 여기서 잡는다 — 사전 값 자체에 한글이 섞이면 폴백이 아니라 오타다.
