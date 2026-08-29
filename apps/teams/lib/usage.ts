@@ -215,8 +215,8 @@ export async function epicCost(root: string, hashes: string[]): Promise<EpicCost
 /** §비주얼 §63 ② — 개정 뒤에는 `formatTokens`(§0-8 판정 1이 워커 화면에 쓰는 그 함수) + 단위
  *  낱말 `토큰`이다. 새 함수 0개 — 원판의 `toLocaleString` 소수 두 자리 고정(통화의 최소 단위)은
  *  통화가 없어져 같이 죽는다. 가수 규칙(v<10이면 소수 한 자리)은 `formatTokens`가 이미 쥔다. */
-export function formatCost(cost: number): string {
-  return `${formatTokens(cost)} 토큰`;
+export function formatCost(cost: number, locale: Locale = DEFAULT_LOCALE): string {
+  return `${formatTokens(cost)} ${t(locale, "statusbar.tokens.suffix")}`;
 }
 
 /** 토큰량 덩이 하나(§비주얼 §63 ①) — `text`가 그 줄에 그대로 뜨고, `title`은 **`모름`일 때만**
@@ -231,21 +231,27 @@ export type CostChunk = { text: string; title?: string };
  *  글자로 보이는 것이 옳다"고 고정했다. `모름`이어도 `unaccounted > 0`(= `.wip`의 도는 세션)이면
  *  §0-8과 같은 문구를 마저 붙인다 — §천장 ①이 `모름`과 이 문구를 같이 세우라고 정했다(둘은
  *  배타적 분기가 아니다). */
-export async function ticketCostChunk(root: string, hash: string): Promise<CostChunk> {
+export async function ticketCostChunk(
+  root: string,
+  hash: string,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<CostChunk> {
   const c = await ticketCost(root, hash);
+  const unaccountedSuffix = (n: number) =>
+    ` ${t(locale, "workers.tokenSummary.unaccountedPrefix")} ${n}${t(locale, "workers.tokenSummary.unaccountedSuffix")}`;
   if (c.cost === null) {
-    let text = "모름";
-    if (c.unaccounted > 0) text += ` · 이 합계에 없는 세션 ${c.unaccounted}개`;
+    let text = t(locale, "usageLib.unknown");
+    if (c.unaccounted > 0) text += unaccountedSuffix(c.unaccounted);
     return {
       text,
       title:
         c.logFiles > 0
-          ? `이 해시의 로그 ${c.logFiles}개에 종료 기록이 없습니다`
-          : `workers/logs/*-${hash}.log가 이 머신에 0개입니다`,
+          ? `${t(locale, "usageLib.title.noExitRecordPrefix")}${c.logFiles}${t(locale, "usageLib.title.noExitRecordSuffix")}`
+          : `workers/logs/*-${hash}.log${t(locale, "usageLib.title.noLogsSuffix")}`,
     };
   }
-  let text = `이 티켓 ${formatCost(c.cost)} · 세션 ${c.sessions}개`;
-  if (c.unaccounted > 0) text += ` · 이 합계에 없는 세션 ${c.unaccounted}개`;
+  let text = `${t(locale, "ticketDetail.thisTicket")} ${formatCost(c.cost, locale)} · ${t(locale, "usageLib.sessionCount.label")} ${c.sessions}${t(locale, "usageLib.sessionCount.unit")}`;
+  if (c.unaccounted > 0) text += unaccountedSuffix(c.unaccounted);
   return { text };
 }
 
@@ -254,11 +260,20 @@ export async function ticketCostChunk(root: string, hash: string): Promise<CostC
  *  뜬다(`60 / 60`은 아무 말도 안 한다). `hashes`가 빈 배열이면 `null` — 그 에픽에 셀 대상이
  *  없어 호출부가 덩이 자체를 안 그린다. 에픽의 `모름`엔 `title`이 없다 — 티켓마다 이유가 달라
  *  한 문장으로 못 적고, 분수가 이미 그 일을 한다(§2-13 §③). */
-export async function epicCostChunk(root: string, hashes: string[]): Promise<string | null> {
+export async function epicCostChunk(
+  root: string,
+  hashes: string[],
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<string | null> {
   if (hashes.length === 0) return null;
   const c = await epicCost(root, hashes);
-  let text = c.cost === null ? "모름" : `이 에픽 ${formatCost(c.cost)}`;
-  if (c.known < c.total) text += ` · 토큰량을 아는 티켓 ${c.known} / ${c.total}`;
+  let text =
+    c.cost === null
+      ? t(locale, "usageLib.unknown")
+      : `${t(locale, "usageLib.thisEpic")} ${formatCost(c.cost, locale)}`;
+  if (c.known < c.total) {
+    text += ` ${t(locale, "usageLib.epic.knownPrefix")}${c.known}${t(locale, "usageLib.epic.knownMid")}${c.total}${t(locale, "usageLib.epic.knownSuffix")}`;
+  }
   return text;
 }
 

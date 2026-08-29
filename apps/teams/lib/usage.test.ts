@@ -192,6 +192,25 @@ test("ticketCostChunk — 라벨 `이 티켓` · 토큰량 · 세션 수 · 합�
   assert.match(wip.title!, /로그 1개에 종료 기록이 없습니다/);
 });
 
+test("ticketCostChunk — locale=en도 사전으로 조립된다 (7ede7fc3)", async () => {
+  const root = makeRoot();
+  putLog(root, logName(5, "w1", "dddddddd"), usage(0, 0, 0, 4_000_000));
+  putLog(root, logName(6, "w2", "dddddddd"), usage(0, 0, 0, 900_000));
+  putLog(root, logName(7, "w1", "dddddddd"), null);
+
+  const chunk = await ticketCostChunk(root, "dddddddd", "en");
+  assert.equal(chunk.text, "This ticket 4.9M tokens · Sessions 2 · outside this total: 1 session(s)");
+
+  const missing = await ticketCostChunk(root, "eeeeeeee", "en");
+  assert.equal(missing.text, "Unknown");
+  assert.match(missing.title!, /no matches on this machine/);
+
+  putLog(root, logName(5, "w1", "ffffffff"), null);
+  const wip = await ticketCostChunk(root, "ffffffff", "en");
+  assert.equal(wip.text, "Unknown · outside this total: 1 session(s)");
+  assert.match(wip.title!, /No exit record in 1 log\(s\) for this hash/);
+});
+
 test("epicCost · epicCostChunk — 티켓들의 `usage` 합 · 라벨 `이 에픽` · 아는 티켓 수 / 전체", async () => {
   const root = makeRoot();
   putLog(root, logName(5, "w1", "11111111"), usage(0, 0, 0, 2_500_000));
@@ -214,12 +233,31 @@ test("epicCost · epicCostChunk — 티켓들의 `usage` 합 · 라벨 `이 에�
   assert.equal(await epicCostChunk(root, []), null);
 });
 
+test("epicCostChunk — locale=en도 사전으로 조립된다 (7ede7fc3)", async () => {
+  const root = makeRoot();
+  putLog(root, logName(5, "w1", "11111111"), usage(0, 0, 0, 2_500_000));
+  putLog(root, logName(5, "w1", "22222222"), usage(0, 0, 0, 1_500_000));
+
+  const chunk = await epicCostChunk(root, ["11111111", "22222222", "33333333"], "en");
+  assert.equal(chunk, "This epic 4.0M tokens · known token count for 2 of 3 tickets");
+
+  const full = await epicCostChunk(root, ["11111111", "22222222"], "en");
+  assert.equal(full, "This epic 4.0M tokens");
+
+  assert.equal(await epicCostChunk(root, [], "en"), null);
+});
+
 test("formatCost — `formatTokens` + 단위 낱말 `토큰`", () => {
   assert.equal(formatCost(0), "0 토큰");
   assert.equal(formatCost(995), "995 토큰");
   assert.equal(formatCost(700_591), "701k 토큰"); // 실측 최소(§비주얼 §63 실측)
   assert.equal(formatCost(4_900_000), "4.9M 토큰");
   assert.equal(formatCost(108_681_611), "109M 토큰"); // 실측 최대
+});
+
+test("formatCost — locale=en은 `tokens`다 (7ede7fc3)", () => {
+  assert.equal(formatCost(0, "en"), "0 tokens");
+  assert.equal(formatCost(4_900_000, "en"), "4.9M tokens");
 });
 
 test("formatTokens — 0은 빈칸이 아니고 큰 수는 읽히게 줄인다", () => {

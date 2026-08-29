@@ -271,7 +271,7 @@ export default async function TicketDetail({
   // 토큰량 덩이(§비주얼 §63 ①④) — **h2가 뜨면 뜬다**, 즉 이 절이 뜨는 조건과 같다. 창이 없다
   // (§2-13 판정 1) — 이 해시를 든 로그 전부를 매 렌더마다 다시 훑되, 끝난 로그는 `usage.ts`의
   // 캐시가 잡는다(§0-8과 같은 Map).
-  const costChunk = hasProgress ? await ticketCostChunk(project.root, ticket.hash) : undefined;
+  const costChunk = hasProgress ? await ticketCostChunk(project.root, ticket.hash, locale) : undefined;
   // `EarlyRefreshPolling`과 같은 값 — 이 렌더가 그려진 시점의 회차다(버그 `34dc2975`,
   // `SessionStream`의 "이미 그려진 표식 회차 갱신" 폴 기준선).
   const rev = boardRevision(project.root);

@@ -2107,6 +2107,20 @@ export const ko: Record<string, string> = {
   "epicLib.noNewline": "epic에 줄바꿈을 넣을 수 없습니다.",
   "epicLib.notFoundPrefix": "큐에 없는 티켓입니다:",
   "epicLib.noFrontmatterPrefix": "frontmatter 없음:",
+
+  // `lib/usage.ts` §2-13 토큰량 덩이(7ede7fc3) — 티켓·에픽 화면 머리에 서버가 조립해 내려주는
+  // 문구. `statusbar.tokens.suffix`(단위 `토큰`) · `ticketDetail.thisTicket`(라벨 `이 티켓`) ·
+  // `workers.tokenSummary.unaccounted*`(합계 밖 세션)는 이미 찬 사전을 그대로 재사용한다.
+  "usageLib.unknown": "모름",
+  "usageLib.thisEpic": "이 에픽",
+  "usageLib.sessionCount.label": "세션",
+  "usageLib.sessionCount.unit": "개",
+  "usageLib.epic.knownPrefix": "· 토큰량을 아는 티켓 ",
+  "usageLib.epic.knownMid": " / ",
+  "usageLib.epic.knownSuffix": "",
+  "usageLib.title.noExitRecordPrefix": "이 해시의 로그 ",
+  "usageLib.title.noExitRecordSuffix": "개에 종료 기록이 없습니다",
+  "usageLib.title.noLogsSuffix": "가 이 머신에 0개입니다",
 };
 
 /** 제품 낱말의 영어 대응 — **여기가 한자리다**(621c7a97). 다음 묶음이 같은 것을 다르게 부르지
@@ -4280,6 +4294,17 @@ export const en: Record<string, string> = {
   "epicLib.noNewline": "epic can't contain a line break.",
   "epicLib.notFoundPrefix": "Not a ticket in the queue:",
   "epicLib.noFrontmatterPrefix": "No frontmatter:",
+
+  "usageLib.unknown": "Unknown",
+  "usageLib.thisEpic": "This epic",
+  "usageLib.sessionCount.label": "Sessions",
+  "usageLib.sessionCount.unit": "",
+  "usageLib.epic.knownPrefix": "· known token count for ",
+  "usageLib.epic.knownMid": " of ",
+  "usageLib.epic.knownSuffix": " tickets",
+  "usageLib.title.noExitRecordPrefix": "No exit record in ",
+  "usageLib.title.noExitRecordSuffix": " log(s) for this hash",
+  "usageLib.title.noLogsSuffix": ": no matches on this machine",
 };
 
 const DICTS: Record<Locale, Record<string, string>> = { ko, en };

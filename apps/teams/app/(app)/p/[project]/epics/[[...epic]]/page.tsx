@@ -100,7 +100,11 @@ export default async function Epics({
       // 토큰량 덩이(§비주얼 §63 ①⑤) — 이 에픽 티켓들의 해시 전부. 이미 읽은 `tickets`에서
       // 거른다(새 스캔 0) — `epicOf`가 없는 티켓엔 `""`을 주므로 `(에픽 없음)`은 여기 안 온다
       // (`current`가 `realEpics`에서만 나오므로 `""`와 안 겹친다).
-      epicCostChunk(project.root, tickets.filter((tk) => epicOf(tk) === current.epic).map((tk) => tk.hash)),
+      epicCostChunk(
+        project.root,
+        tickets.filter((tk) => epicOf(tk) === current.epic).map((tk) => tk.hash),
+        locale,
+      ),
     ]);
   }
   // 산문 속 해시-P번호 표식(§9) — README 본문 한 조각만 훑는다. `readme`가 null이면 안 부른다.

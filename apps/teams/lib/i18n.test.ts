@@ -169,6 +169,7 @@ const FILLED = [
   "followupLib.",
   "attachmentsLib.",
   "attachmentField.",
+  "usageLib.", // 7ede7fc3가 en을 채우고 여기 더했다(§2-13 토큰량 덩이의 사전 갈이)
 ];
 
 test("이미 찬 묶음(설정·마감·셸)의 ko 키는 en에 하나도 안 빠졌다", () => {
