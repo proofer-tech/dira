@@ -2367,12 +2367,63 @@ test("dispatchGateSh — 없는 표준 워크트리를 게이트가 만든다 (�
   assert.match(notStandard, /끝/);
   assert.strictEqual(existsSync(elsewhere), false);
 
-  // 4) TICKET_CWD가 비어 있으면 이 블록에 안 닿는다(새 프로젝트 첫 워커가 영구 정지하지 않는다)
+  // 4) TICKET_CWD가 비어 있으면 이 블록에 안 닿는다(새 프로젝트 첫 워커가 영구 정지하지 않는다).
+  // 이 큐엔 워커 파일이 root/workers 아래 0개라(위에서 실제로 쓴 적이 없다) 아래 새 판정도
+  // 워커 수 1 미만이라 안 걸린다 — 둘 다 안 걸린다는 것만 이 단정으로 본다.
   const empty = execFileSync("bash", ["-c", `. ${JSON.stringify(gate)} tick; echo 끝`, worker], {
     encoding: "utf8",
     env: { ...process.env, TICKET_CWD: "" },
   });
   assert.match(empty, /끝/);
+});
+
+/** 첫 워커가 통합 체크아웃에서 일한다 — 워커가 둘이 되면 그것이 결함이다(요구 977419d7). §4-14
+ *  §없는 워크트리를 게이트가 만든다보다 앞에서, 워커 파일 수 하나로 잰다 — 워커가 둘 이상인데
+ *  TICKET_CWD가 빈 워커만 잡는다. 워커 하나뿐이면 그대로 지나간다(§0-3의 그 문장이 산다).
+ *  **진짜 bash로 돌린다** — 값어치가 그 판정이라 모킹하면 검증할 게 안 남는다. */
+test("dispatchGateSh — 워커 둘 이상인 큐에서 TICKET_CWD 없는 워커는 디스패치를 보류한다 (요구 977419d7)", () => {
+  const { root } = makeRepo();
+  const gate = path.join(root, "dispatch-gate.sh");
+  writeFileSync(gate, dispatchGateSh("main"));
+  const workersDir = path.join(root, "workers");
+  const w1 = path.join(workersDir, "w1.sh");
+  const w2 = path.join(workersDir, "w2.sh"); // $0 — 보류당하는 그 워커
+  writeFileSync(w1, "#!/bin/bash\n");
+  writeFileSync(w2, "#!/bin/bash\n");
+  const flag = path.join(workersDir, ".gate-notree-w2");
+
+  // 받는 트리 판정(하단, ${TICKET_CWD:-$PWD})이 진짜 git이 아닌 곳에서 조용히 no-op하도록
+  // cwd를 통제한다 — 이 테스트가 재는 것은 워커 수 판정이지 그 아래 더러움 판정이 아니다
+  const bare = mkdtempSync(path.join(tmpdir(), "fst-empty-cwd-"));
+  tmps.push(bare);
+  const run = () =>
+    execFileSync("bash", ["-c", `. ${JSON.stringify(gate)} tick; echo 끝`, w2], {
+      encoding: "utf8",
+      cwd: bare,
+      env: { ...process.env, TICKET_CWD: "" },
+    });
+
+  // 1) 워커 파일이 둘(w1·w2)인데 w2에는 TICKET_CWD가 없다 — 보류하고 표식 파일을 남긴다
+  const blocked = run();
+  assert.match(blocked, /GATE 디스패치 보류/);
+  assert.match(blocked, /TICKET_CWD가 없다/);
+  assert.doesNotMatch(blocked, /끝/); // exit 0으로 끊겨 다음 echo가 안 돈다
+  assert.strictEqual(existsSync(flag), true);
+
+  // 2) 같은 상태로 또 돌리면 막긴 막되, 상태가 안 바뀌었으니 메시지는 다시 안 찍는다
+  const beforeAgain = readFileSync(flag, "utf8");
+  const blockedAgain = run();
+  assert.doesNotMatch(blockedAgain, /GATE/);
+  assert.doesNotMatch(blockedAgain, /끝/);
+  assert.strictEqual(readFileSync(flag, "utf8"), beforeAgain);
+
+  // 3) 워커가 하나로 줄면(w1을 지운다) TICKET_CWD가 여전히 비어도 결함이 아니다(결정 1의 아래쪽
+  // 갈래) — 해제 줄과 함께 표식이 사라지고 디스패치로 넘어간다
+  rmSync(w1);
+  const released = run();
+  assert.match(released, /GATE 해제/);
+  assert.match(released, /끝/);
+  assert.strictEqual(existsSync(flag), false);
 });
 
 /** `-l`과 `crontab -`이 **같은 파일**을 본다 — 쓴 뒤 다시 읽어 확인하는 `applyCrontab`의 경로다
