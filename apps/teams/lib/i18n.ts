@@ -3126,9 +3126,9 @@ export const en: Record<string, string> = {
   "auth.setup.endedNoToken": "It ended without a token.",
 
   // lib/pool.ts — 파일 스코프 접두(§묶음 표 행 9, 티켓 4c195255). 이 문구가 뜨는 자리는
-  // settings 다이얼로그의 `Borrow shared workers` 섹션이라 낱말을 그 제목에 맞춘다.
-  "pool.name.invalidPrefix": "Shared worker names take letters, digits, _ and - only:",
-  "pool.notFoundPrefix": "No such shared worker:",
+  // settings 다이얼로그의 `Borrow common workers` 섹션이라 낱말을 그 제목에 맞춘다.
+  "pool.name.invalidPrefix": "Common worker names take letters, digits, _ and - only:",
+  "pool.notFoundPrefix": "No such common worker:",
   "pool.busyMid1": " is holding the ",
   "pool.busyMid2": "project right now (pid ",
   "pool.busySuffix": "). Delete it once that finishes.",
@@ -3136,8 +3136,8 @@ export const en: Record<string, string> = {
   "pool.cronRemoveFailMid": "line out of crontab:",
   "pool.cronRemoveFailSuffix": "— the file was left in place.",
   "pool.nameCollisionMid": "A project worker already has that name:",
-  "pool.nameCollisionSuffix": "— a shared worker can't take the same name as a worker in this project.",
-  "pool.notShimSuffix": " isn't a shared worker shim — this function won't delete it.",
+  "pool.nameCollisionSuffix": "— a common worker can't take the same name as a worker in this project.",
+  "pool.notShimSuffix": " isn't a common worker shim — this function won't delete it.",
   "pool.limit.invalidPrefix": "Takes an integer of 0 or more:",
 
   // lib/queue.ts — 파일 스코프 접두(§묶음 표 행 9, 티켓 4c195255). 티켓 상세 편집 폼과 에픽
@@ -3152,7 +3152,7 @@ export const en: Record<string, string> = {
   "engine.invalidHashPrefix": "Not a hash:",
   "engine.noWorkerToUnassign": "This project has no workers — there's no script to call for unassign.",
   "workers.settingsDialog.trigger": "Worker settings",
-  "workers.pool.sectionTitle": "Borrow shared workers",
+  "workers.pool.sectionTitle": "Borrow common workers",
   "workers.pool.limitLabel": "Limit",
   "workers.pool.limitNone": "None",
   "workers.pool.limitPopoverLabel": "Concurrent borrow limit",
@@ -3160,18 +3160,18 @@ export const en: Record<string, string> = {
   "workers.pool.saveFailed": "Couldn't save the limit.",
   "workers.pool.saveFailedTitle": "Couldn't save the limit",
   "workers.pool.countPrefix": "",
-  "workers.pool.countSuffix": " shared worker(s) are in this project",
-  "workers.pool.countZero": "No shared workers are in this project",
+  "workers.pool.countSuffix": " common worker(s) are in this project",
+  "workers.pool.countZero": "No common workers are in this project",
   "workers.pool.warnUnreadable": "Couldn't read pool-limit — reading it as not borrowing.",
   "workers.pool.blockedPrefix": "Still holding a ticket, couldn't remove: ",
   "workers.reap.sectionTitle": "Stale collection",
-  "workers.pool.badge": "Shared",
-  "workers.pool.badgeTitle": "This worker is a slot in the shared worker pool — the cron line lives in the pool, not this file",
+  "workers.pool.badge": "Common",
+  "workers.pool.badgeTitle": "This worker is a slot in the common worker pool — the cron line lives in the pool, not this file",
 
   // §0-16 §발행 §묶음 표 행 5 갈래(워커 화면) — `ko`는 610dc0c0, `en`은 e3d3b255.
   // `lib/workers.ts`가 만드는 실패 사유(`workers.crontab.*` · `workers.worktree.*` ·
   // `workers.context.*`의 나머지)는 행 9라 여기 없다.
-  "workers.crontabApprovalHint": "Hit [Allow] when the permission window opens — registering the crontab line waits on that answer.",
+  "workers.crontabApprovalHint": "Press [Allow] if a permission window opens — registering the crontab line waits on that answer.",
   "workers.notRunningYetHint": "It isn't running yet — run this command in your shell",
   "workers.cronRegisterFailedTitle": "Couldn't register the crontab line",
 
