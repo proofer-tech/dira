@@ -2193,6 +2193,11 @@ export const ko: Record<string, string> = {
  *  | 준비 명령 · 결함 | prep commands · defect | 뒤엣것은 표가 워커 하나를 두고 세는 이름이다 |
  *  | 개(항목 수) | listed | 숫자 뒤 꼬리다(`3 listed`). 위 `건`(found) 줄과 같은 사정 — 1도 뜨는데 복수형 장치가 없다 |
  *  | 번째 경로(피커 접근가능 이름) | path | 수가 앞에 오는 자리라 `path 1`로 못 뒤집는다 — `1 path Browse`로 읽힌다 |
+ *  | 첨부 · 개(첨부 수) | Attachments · listed | `c92a3ead`(티켓 상세·발행 묶음)가 더한 줄부터 아래. 낱말 하나가 버튼 라벨과 칩 묶음 낭독 이름을 겸하는데 수가 낱말 뒤로 오는 자리라(`Attachments 3 listed`) 버튼도 `Attach`가 아니다. 뒤엣것은 위 `개(항목 수)` 줄과 같은 낱말이다 |
+ *  | 요구사항 · 아카이브 대상 | Requirement · Archive target | 티켓이 `req:`·`archives:`로 가리키는 상대다. 앞엣것은 위 `답변` 줄이 말하는 그 요구사항이다 |
+ *  | 복제 · 강제 중단 | Duplicate · Force stop | 뒤엣것은 도는 세션을 끊고 티켓을 답변 대기로 잠그는 버튼이다 — 위 `선점` 줄과 달리 사람이 누른다 |
+ *  | 표시값 | the value shown here | frontmatter `ticket:`에 적힌 값이다. 엔진이 안 보는 값이라 `hash`로 안 부른다 — 찾는 이름은 파일 이름 하나다 |
+ *  | 답변 스레드 · 덧붙일 말 | Answer thread · Anything to add | 뒤엣것은 선택지 옆 자유 입력칸의 자리표시자다 |
  *
  *  **어순이 뒤집히는 자리는 접두·접미 두 키로 쪼갠다.** 한국어는 이름 뒤에 다 붙지만(`<이름>
  *  삭제`) 영어는 동사가 앞에 뜬다(`Delete <name>`) — 한쪽이 비는 것이 정상이고, 조립은
@@ -3428,6 +3433,193 @@ export const en: Record<string, string> = {
 
   "ticketFrontmatter.saveFailedTitle": "Couldn't save",
   "ticketFrontmatter.saved": "Saved.",
+
+  // 티켓 상세·발행 화면(묶음 표 행 4, 티켓 c92a3ead). 조합 문구가 많은데 이 갈래는 `wrap`을 안
+  // 쓰고 JSX·템플릿 리터럴이 조각 사이의 mono 스팬을 직접 들고 있다 — 자리 순서를 못 바꾸므로
+  // 영어도 그 순서에 맞춰 끊었다. 조각이 붙는 자리에 공백이 없으면 값이 공백으로 시작한다.
+  "ticketDetail.file": "File",
+  "ticketDetail.collapse": "Collapse",
+  "ticketDetail.expand": "Expand",
+  "ticketDetail.none": "None",
+  "ticketDetail.squadWord": "Squad",
+  "ticketDetail.personaWord": "Persona",
+  "ticketDetail.currentValue": "current value",
+  "ticketDetail.originalValue": "original value",
+  "ticketDetail.bodyLabel": "Body",
+  "ticketDetail.thisTicket": "This ticket",
+  "ticketDetail.noTitle": "(no title)",
+  "ticketDetail.met": "Done",
+  "ticketDetail.progressHeading": "Progress record",
+  "ticketDetail.relationsHeading": "Relations",
+  "ticketDetail.emptyBody": "No body",
+  "ticketDetail.noTranscript": "No transcript",
+
+  "ticketDetail.unassign": "Unassign",
+  "ticketDetail.unassigning": "Unassigning…",
+  "ticketDetail.forceStopTitle": "This stops a running session",
+  "ticketDetail.forceStopDescSuffix":
+    " is still held by a live session. Force-stopping kills that session and locks the ticket as awaiting answer — no worker takes it again until you write one in the answer box. Uncommitted changes in the worktree stay where they are.",
+  "ticketDetail.forceStop": "Force stop",
+  "ticketDetail.unassignCallSuffix": "runs.",
+  "ticketDetail.noWorkerScript": "This project has no worker — there's no script to call unassign on.",
+  "ticketDetail.unassignDoneTitle": "Unassigned",
+  "ticketDetail.unassignFailedTitle": "Couldn't unassign",
+  "ticketDetail.wipLockTitle": "A session holds this ticket — editing and deleting are locked",
+  "ticketDetail.wipLockDescPrefix": "A ticket in progress is read-only. If the session died, press",
+  "ticketDetail.wipLockDescSuffix": " to put it back in the queue, then edit it.",
+  "ticketDetail.ghostPrefix": "This open ticket carries a",
+  "ticketDetail.ghostAfterSessionId": " —",
+  "ticketDetail.ghostAfterSelect": " skips it for good and",
+  "ticketDetail.ghostAfterReap": " only looks at",
+  "ticketDetail.ghostSuffix": ", so only Unassign puts this ticket back in the queue.",
+
+  "ticketDetail.answerThreadAriaLabel": "Answer thread",
+  "ticketDetail.question": "Question",
+  "ticketDetail.answer": "Answer",
+  "ticketDetail.scrollToBottom": "Jump to the bottom",
+  "ticketDetail.addendum": "Anything to add",
+  "ticketDetail.answerPlaceholder": "Write an answer to the question",
+  "ticketDetail.answerFailedTitle": "Couldn't post the answer",
+  "ticketDetail.createsFileSuffix": " is created",
+  "ticketDetail.answering": "Posting the answer…",
+  "ticketDetail.answerSubmit": "Post answer",
+  "ticketDetail.answerDialogTitlePrefix": "Answer —",
+  "ticketDetail.answerDialogDesc":
+    "Answer it and this ticket comes back to the queue, and the session that holds it carries on.",
+
+  "ticketDetail.delete": "Delete",
+  "ticketDetail.deleteConfirmTitle": "Delete ticket",
+  "ticketDetail.deleteConfirmDescSuffix": " is deleted, file and all. This can't be undone.",
+  "ticketDetail.deleteFailedFallback": "Couldn't delete it.",
+  "ticketDetail.deleteFailedTitle": "Couldn't delete",
+  "ticketDetail.deleteLockedWipTooltip": "A ticket in progress can't be deleted — a session holds it",
+  "ticketDetail.deleteLockedDoneTooltip": "A finished ticket can't be deleted — it's a permanent record",
+  "ticketDetail.deleteLockedWipMessage": "A ticket in progress can't be deleted — a session holds it.",
+  "ticketDetail.deleteLockedDoneMessage":
+    "A finished ticket can't be deleted — every ticket that lists this hash in deps would wait forever.",
+
+  "ticketDetail.discardTitle": "You have unsaved text",
+  "ticketDetail.discardDesc": "Close it and what you typed is gone.",
+  "ticketDetail.keepWriting": "Keep writing",
+  "ticketDetail.discardAndClose": "Discard and close",
+
+  "ticketDetail.depsRemoveSuffix": "Remove",
+  "ticketDetail.pickTicket": "Pick a ticket",
+  "ticketDetail.searchPlaceholder": "Search tickets — hash or title",
+  "ticketDetail.noMatch": "No matching ticket",
+  "ticketDetail.depsHint":
+    "This ticket reaches the queue only once all of them are done. Pick only what makes a start impossible — pile them on and the queue runs one at a time.",
+
+  "ticketDetail.requestAccept": "New request",
+  "ticketDetail.requestDescPrefix": "Write what you need in plain words and it becomes a",
+  "ticketDetail.requestDescSuffix": "ticket for a session to read. The first line becomes the title.",
+  "ticketDetail.requestBodyAriaLabel": "Request",
+  "ticketDetail.requestBodyPlaceholder": "Just write what you need.\nThe first line becomes the title.",
+  "ticketDetail.requestFailedTitle": "Couldn't submit it",
+  "ticketDetail.requesting": "Submitting…",
+  "ticketDetail.viewSubmittedRequest": "See the request you submitted",
+
+  "ticketDetail.duplicate": "Duplicate",
+  "ticketDetail.publish": "New ticket",
+  "ticketDetail.duplicateTicketTitle": "Duplicate ticket",
+  "ticketDetail.duplicateDescSuffix":
+    "'s title, kind, persona and body are filled in below. deps aren't copied — pick them yourself if you need any.",
+  "ticketDetail.publishDesc":
+    "Every choice here is a real value from this project — you only type the title and the body.",
+  "ticketDetail.titlePlaceholder": "One-line title — what it does",
+  "ticketDetail.publishFailedTitle": "Couldn't publish it",
+  "ticketDetail.publishing": "Publishing…",
+  "ticketDetail.publishSubmit": "Publish",
+  "ticketDetail.noPersonaDirSuffix": " — no persona directory there.",
+
+  "ticketDetail.notScannedTitle": "This file never reaches the queue — it has no frontmatter",
+  "ticketDetail.notScannedFirstLine": "The engine reads a file as a ticket only when the first line is",
+  "ticketDetail.notScannedClosing": " and a closing",
+  "ticketDetail.notScannedSuffix": " follows. Open it and fix it by hand.",
+  "ticketDetail.hashMismatchTitlePrefix": "The engine can't find this ticket by",
+  "ticketDetail.hashMismatchTitleSuffix": ", the value shown here",
+  "ticketDetail.hashMismatchBody1": " and the file name disagree. The engine looks a ticket up by file name only, so",
+  "ticketDetail.hashMismatchBody2": " has to carry",
+  "ticketDetail.hashMismatchBody3":
+    " — write the value shown here instead and everything waiting on this ticket waits forever, even once it turns",
+  "ticketDetail.hashMismatchBody4": ".",
+  "ticketDetail.hashMismatchFixPrefix": "To fix it, set",
+  "ticketDetail.hashMismatchFixMid": " to",
+  "ticketDetail.hashMismatchFixSuffix": ", or rename the file.",
+  "ticketDetail.unlockedAwaitingTitle":
+    "Awaiting answer with no lock — this ticket gets dispatched before anyone answers",
+  "ticketDetail.unlockedAwaitingBody1": " is set, but that hash isn't in",
+  "ticketDetail.unlockedAwaitingBody2": ". The engine looks only at",
+  "ticketDetail.unlockedAwaitingBody3": ", so this ticket reaches the queue with no answer written — put",
+  "ticketDetail.unlockedAwaitingBody4": " on the requirement and list",
+  "ticketDetail.unlockedAwaitingBody5": " in it.",
+  "ticketDetail.doneLockedTitle": "A finished ticket is read-only",
+  "ticketDetail.doneLockedBody1": "Completion is this queue's permanent record — clearing",
+  "ticketDetail.doneLockedBody2": "on waiting tickets and back-references through",
+  "ticketDetail.doneLockedBody3":
+    "both hang on this file existing, so editing, deleting and unassigning are blocked. The session record (",
+  "ticketDetail.doneLockedBody4":
+    ") stays as it is so the queue keeps who did the work. If there's more to do, make a new ticket.",
+  "ticketDetail.requirementLabel": "Requirement",
+  "ticketDetail.missingReqHint": "This requirement stem isn't in the queue — there's no source to follow",
+  "ticketDetail.derivedTicketsLabel": "Tickets split out of this requirement",
+  "ticketDetail.noDerivedTickets": "Nothing split out yet",
+  "ticketDetail.archiveTargetLabel": "Archive target",
+  "ticketDetail.missingArchiveHint": "This archive target stem isn't in the queue — there's no target to follow",
+  "ticketDetail.archiveLabel": "Archive",
+
+  "ticketDetail.unknownProjectPrefix": "Not a registered project:",
+  "ticketDetail.ticketNotFoundPrefix": "Not a ticket in the queue:",
+  "ticketDetail.unassignLockedDone":
+    "A finished ticket can't be unassigned — the session record (session_id, owner) stays as it is so the queue keeps who did the work.",
+  "ticketDetail.noNewlineSuffix": " can't hold a line break.",
+  "ticketDetail.titleFieldName": "title",
+  "ticketDetail.titleRequired": "Type a title.",
+  "ticketDetail.notAssigned": "This ticket isn't assigned (session_id is empty).",
+  "ticketDetail.notAwaitingAnymore":
+    "This ticket isn't awaiting an answer any more — someone already answered, or a session claimed it. Refresh the page to see where it stands.",
+  "ticketDetail.badAwaitingStemPrefix": "This awaiting value can't be a file name:",
+  "ticketDetail.badAwaitingStemSuffix":
+    ". The name takes no path separator and no control character — fix the requirement's frontmatter.",
+  "ticketDetail.stemClashMiddle": "already names a ticket in the queue:",
+  "ticketDetail.stemClashSuffix":
+    ". While that file is there the engine picks it up first even after the answer file lands, and the requirement waits forever. Clear that file, or get a different awaiting hash from the PM.",
+  "ticketDetail.answerRequired": "Type an answer.",
+  "ticketDetail.answerFileExistsPrefix": "The answer file is already there:",
+  "ticketDetail.answerFileExistsSuffix":
+    ". Another window may have just answered — refresh and check the thread.",
+
+  // `lib/followup.ts` — `interjectLib.*`가 같은 자리의 형제다(참견). 두 사전이 같은 것을 다르게
+  // 부르지 않게 `state.*`·`statePrefix`·`ticketNotFoundPrefix`를 그쪽 낱말에 맞췄다.
+  "followupLib.state.open": "Open",
+  "followupLib.state.wip": "In progress",
+  "followupLib.state.done": "Done",
+  "followupLib.emptyBody": "Type something to send.",
+  "followupLib.ticketNotFoundPrefix": "Not a ticket in the queue:",
+  "followupLib.notDoneReason": "This isn't a finished ticket — the work to follow up on isn't over yet.",
+  "followupLib.stateDetailPrefix": "State:",
+  "followupLib.malformedFrontmatterPrefix": "No frontmatter, or no closing `---`:",
+  "followupLib.hashExhausted":
+    "Ten hashes drawn and every one is already taken — check the queue directory.",
+
+  // `lib/attachments.ts`
+  "attachmentsLib.noFileName": "This file has no name — pick one that has a name.",
+  "attachmentsLib.nameExhausted": "Ten names drawn and every one is already taken.",
+  "attachmentsLib.saveFailedPrefix": "Couldn't save it:",
+  "attachmentsLib.outsidePathPrefix":
+    "The attachment path lands outside attachments/ — drop what you attached and pick again:",
+
+  // `components/attachment-field.tsx` — `attachWord`는 버튼 라벨과 칩 묶음의 낭독 이름 둘을 겸한다.
+  // 수가 낱말 뒤로 오는 자리라 `Attachments 3 listed` 꼴이고, 그래서 버튼도 `Attach`가 아니라
+  // `Attachments`다(`sessionStream.recordCount`의 `Records 12`가 선 그 벌).
+  "attachmentField.uploadFailedPrefix": "Couldn't upload it:",
+  "attachmentField.dropLimitPrefix": "Up to",
+  "attachmentField.dropLimitMiddle": " files at a time —",
+  "attachmentField.dropLimitSuffix": " weren't attached.",
+  "attachmentField.attachWord": "Attachments",
+  "attachmentField.countSuffix": " listed",
+  "attachmentField.uploading": "Uploading…",
+  "attachmentField.removeSuffix": "remove attachment",
 
   // 뒤에 `{percent}%`가 공백 하나를 두고 붙는다(`Downloading the update… 42%`).
   "updateToast.progress.prefix": "Downloading the update…",

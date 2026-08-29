@@ -161,6 +161,14 @@ const FILLED = [
   "workers.ontology.",
   "workers.selfHeal.",
   "workers.worktree.",
+  // c92a3ead가 en을 채우고 여기 더했다(묶음 표 행 4의 티켓 상세·발행). 화면 접두 하나
+  // (`ticketDetail.`)와 파일 스코프 접두 셋(`followupLib.`·`attachmentsLib.`·`attachmentField.`)
+  // 이라 줄이 넷이다. `ticketDetail.`은 점까지가 접두라 이미 찬 `ticketFrontmatter.`를 안 덮고,
+  // 아직 안 찬 다음 묶음의 `ticket.` 하위 키에도 안 걸린다.
+  "ticketDetail.",
+  "followupLib.",
+  "attachmentsLib.",
+  "attachmentField.",
 ];
 
 test("이미 찬 묶음(설정·마감·셸)의 ko 키는 en에 하나도 안 빠졌다", () => {
@@ -1198,6 +1206,99 @@ test("03753945 — 티켓 상세 화면의 조립 문구가 원문과 바이트 
   assert.strictEqual(
     `${t(l, "followupLib.stateDetailPrefix")} ${t(l, "followupLib.state.wip")}`,
     "상태: 진행중",
+  );
+});
+
+// c92a3ead — 같은 조립 문구를 `en`으로 고정한다. 이 갈래는 `wrap`을 안 쓰고 JSX·템플릿 리터럴이
+// 조각 사이의 mono 스팬을 직접 들고 있어 **자리 순서를 못 바꾼다** — 영어 어순이 그 순서 안에서
+// 문장이 되는지를 여기서 잰다(한국어는 위 03753945 테스트가 이미 고정했다).
+test("c92a3ead — 티켓 상세 화면의 조립 문구가 en 어순으로 문장이 된다", () => {
+  const l = "en" as const;
+
+  assert.strictEqual(
+    `high0002${t(l, "ticketDetail.forceStopDescSuffix")}`,
+    "high0002 is still held by a live session. Force-stopping kills that session and locks the ticket as awaiting answer — no worker takes it again until you write one in the answer box. Uncommitted changes in the worktree stay where they are.",
+  );
+  assert.strictEqual(
+    `${t(l, "ticketDetail.wipLockDescPrefix")} ${t(l, "ticketDetail.unassign")}${t(l, "ticketDetail.wipLockDescSuffix")}`,
+    "A ticket in progress is read-only. If the session died, press Unassign to put it back in the queue, then edit it.",
+  );
+  assert.strictEqual(
+    `${t(l, "ticketDetail.ghostPrefix")} session_id${t(l, "ticketDetail.ghostAfterSessionId")} select${t(l, "ticketDetail.ghostAfterSelect")} reap${t(l, "ticketDetail.ghostAfterReap")} .wip${t(l, "ticketDetail.ghostSuffix")}`,
+    "This open ticket carries a session_id — select skips it for good and reap only looks at .wip, so only Unassign puts this ticket back in the queue.",
+  );
+
+  assert.strictEqual(
+    `${t(l, "ticketDetail.hashMismatchTitlePrefix")} high0002${t(l, "ticketDetail.hashMismatchTitleSuffix")}`,
+    "The engine can't find this ticket by high0002, the value shown here",
+  );
+  assert.strictEqual(
+    `ticket:${t(l, "ticketDetail.hashMismatchBody1")} deps:${t(l, "ticketDetail.hashMismatchBody2")} high0002${t(l, "ticketDetail.hashMismatchBody3")} .done${t(l, "ticketDetail.hashMismatchBody4")}`,
+    "ticket: and the file name disagree. The engine looks a ticket up by file name only, so deps: has to carry high0002 — write the value shown here instead and everything waiting on this ticket waits forever, even once it turns .done.",
+  );
+  assert.strictEqual(
+    `${t(l, "ticketDetail.hashMismatchFixPrefix")} ticket:${t(l, "ticketDetail.hashMismatchFixMid")} high0002${t(l, "ticketDetail.hashMismatchFixSuffix")}`,
+    "To fix it, set ticket: to high0002, or rename the file.",
+  );
+
+  assert.strictEqual(
+    `awaiting: high0002${t(l, "ticketDetail.unlockedAwaitingBody1")} deps${t(l, "ticketDetail.unlockedAwaitingBody2")} deps${t(l, "ticketDetail.unlockedAwaitingBody3")} deps${t(l, "ticketDetail.unlockedAwaitingBody4")} high0002${t(l, "ticketDetail.unlockedAwaitingBody5")}`,
+    "awaiting: high0002 is set, but that hash isn't in deps. The engine looks only at deps, so this ticket reaches the queue with no answer written — put deps on the requirement and list high0002 in it.",
+  );
+
+  assert.strictEqual(
+    `${t(l, "ticketDetail.doneLockedBody1")} deps ${t(l, "ticketDetail.doneLockedBody2")} req: ${t(l, "ticketDetail.doneLockedBody3")}session_id·owner${t(l, "ticketDetail.doneLockedBody4")}`,
+    "Completion is this queue's permanent record — clearing deps on waiting tickets and back-references through req: both hang on this file existing, so editing, deleting and unassigning are blocked. The session record (session_id·owner) stays as it is so the queue keeps who did the work. If there's more to do, make a new ticket.",
+  );
+
+  assert.strictEqual(
+    `${t(l, "ticketDetail.notScannedFirstLine")} ---${t(l, "ticketDetail.notScannedClosing")} ---${t(l, "ticketDetail.notScannedSuffix")}`,
+    "The engine reads a file as a ticket only when the first line is --- and a closing --- follows. Open it and fix it by hand.",
+  );
+  assert.strictEqual(
+    `${t(l, "ticketDetail.requestDescPrefix")} kind: request ${t(l, "ticketDetail.requestDescSuffix")}`,
+    "Write what you need in plain words and it becomes a kind: request ticket for a session to read. The first line becomes the title.",
+  );
+  assert.strictEqual(
+    `tickets/high0002.md${t(l, "ticketDetail.createsFileSuffix")}`,
+    "tickets/high0002.md is created",
+  );
+  assert.strictEqual(
+    `${t(l, "ticketDetail.titleFieldName")}${t(l, "ticketDetail.noNewlineSuffix")}`,
+    "title can't hold a line break.",
+  );
+
+  assert.strictEqual(`${t(l, "ticketDetail.unknownProjectPrefix")} demo`, "Not a registered project: demo");
+  assert.strictEqual(
+    `${t(l, "ticketDetail.ticketNotFoundPrefix")} high0002`,
+    "Not a ticket in the queue: high0002",
+  );
+  assert.strictEqual(
+    `${t(l, "ticketDetail.badAwaitingStemPrefix")} ../x${t(l, "ticketDetail.badAwaitingStemSuffix")}`,
+    "This awaiting value can't be a file name: ../x. The name takes no path separator and no control character — fix the requirement's frontmatter.",
+  );
+  assert.strictEqual(
+    `high0002 ${t(l, "ticketDetail.stemClashMiddle")} high0002.md${t(l, "ticketDetail.stemClashSuffix")}`,
+    "high0002 already names a ticket in the queue: high0002.md. While that file is there the engine picks it up first even after the answer file lands, and the requirement waits forever. Clear that file, or get a different awaiting hash from the PM.",
+  );
+  assert.strictEqual(
+    `${t(l, "ticketDetail.answerFileExistsPrefix")} high0002.done.md${t(l, "ticketDetail.answerFileExistsSuffix")}`,
+    "The answer file is already there: high0002.done.md. Another window may have just answered — refresh and check the thread.",
+  );
+
+  // attachment-field.tsx — 상한 초과(두 변수)와 칩 묶음의 낭독 이름(수가 낱말 뒤로 온다)
+  assert.strictEqual(
+    `${t(l, "attachmentField.dropLimitPrefix")} 10${t(l, "attachmentField.dropLimitMiddle")} 3${t(l, "attachmentField.dropLimitSuffix")}`,
+    "Up to 10 files at a time — 3 weren't attached.",
+  );
+  assert.strictEqual(
+    `${t(l, "attachmentField.attachWord")} 3${t(l, "attachmentField.countSuffix")}`,
+    "Attachments 3 listed",
+  );
+
+  assert.strictEqual(
+    `${t(l, "followupLib.stateDetailPrefix")} ${t(l, "followupLib.state.wip")}`,
+    "State: In progress",
   );
 });
 

@@ -8503,7 +8503,7 @@ n += len(re.findall(r">\s*([^<>{}]*[가-힣][^<>{}]*?)\s*<", src))
 | 1 | 설정 다이얼로그 | `settings-dialog.tsx` - `priority-meter.tsx` | - | **0** | 0 | **완료** (`30a8f5c3` / `ko`, `621c7a97` / `en`) |
 | 2 | **셸** | `p/[project]/layout.tsx`(헤더 - 알림 팝오버 일곱 - status bar - 배너) - `project-switcher.tsx` - `status-badge.tsx` - 셸이 그리는 `usage.ts`-`urls.ts` 파생 문구 | ≈63 | 17 (실 **12**) | 22 | **완료** (`dd97c69c` / `ko`, `90be3eeb` / `en`). **잔여는 재유입이다** - 아래 행 10 |
 | 3 | 보드 | `(board)/page.tsx` - `board-ui.tsx` - `(board)/actions.ts` - `find-bar.tsx` | ≈52 | 57 | 52 | **P338이 낸다** |
-| 4 | 티켓 상세-발행 | `ticket-ui.tsx` - `tickets/[hash]/{page,actions}.ts*` - `followup.ts` - `attachment-field.tsx` - `attachments.ts` | ≈172 | 173 | 172 | **P338이 낸다** - 사람이 지목한 `요구 접수 다이얼로그`가 여기다(`ticket-ui.tsx`) |
+| 4 | 티켓 상세-발행 | `ticket-ui.tsx` - `tickets/[hash]/{page,actions}.ts*` - `followup.ts` - `attachment-field.tsx` - `attachments.ts` | ≈172 | 173 | 172 | **완료** (`03753945` / `ko`, `c92a3ead` / `en`). 사람이 지목한 `요구 접수 다이얼로그`가 여기였다(`ticket-ui.tsx`). 잔여 9는 큐 데이터-프롬프트 지시문이라 §사전의 범위 밖이다 |
 | 5 | 워커-세션 스트림 | `workers-ui.tsx` - `workers/{page,actions}.ts*` - `session-stream.tsx` - `transcript.ts` - `interject.ts` | ≈222 | 240 | 251 | **P338이 낸다** - 갈래 둘(워커 화면 176 - 세션 스트림 75) |
 | 6 | 홈 | `home-ui.tsx` - `home-agent.ts` - `home/{page,actions}.ts*` | ≈91 | 94 | 135 | **P338이 낸다** |
 | 7 | 페르소나-프로토콜 | `personas-ui.tsx` - `protocols-ui.tsx` - 두 화면의 `page`-`actions` - `protocols.ts` - `skills.ts` | ≈185 | **271** | 1 | **완료** (`93c106b3`-`204be4da` / `ko`, `7a86fd5c`-`b5d9735d` / `en`). 잔여 1은 재유입이다 - 행 10 |
@@ -8589,6 +8589,26 @@ when이 `사전을 안 타는 한글 0자`인데, 실제로 훑으면 **범위 �
 본 둘째는 `workers/page.tsx:251`의 `<StatusBadge status={w.status} />`가 `locale`을 안 넘겨
 `ko`로 떨어지는 것인데, 워커 넉 자(`running`-`idle`-`stopped`-`stale`)는 두 언어가 같은 글자라
 지금은 화면에 안 드러난다.
+
+**여섯째-일곱째는 행 4가 `en`으로 훑다 만난 배지 둘이다**(`c92a3ead`). ⑨
+`tickets/[hash]/page.tsx`의 `<StatusBadge>` 세 자리(82 - 406 - 408)가 `locale`을 안 넘겨
+배지 글자(`대기`-`진행중`-`완료`-`답변 대기`-`할당됨`)와 그 `title` 힌트가 영어 화면에서
+한국어다 - 위 `workers/page.tsx:251`과 같은 결함인데, 티켓 넉 자는 두 언어가 다른 글자라
+**여기서는 눈에 드러난다.** ⑩ 같은 파일의 `<DepBadge>` 네 자리(735 - 754 - 778 - 820)와
+`ticket-ui.tsx:1455`도 마찬가지여서 `충족`-`미충족`-`큐에 없는 해시 - 영구 대기`가 한국어다.
+둘 다 `status-badge.tsx`가 `locale`을 프롭으로 받고 기본값이 `ko`인 자리라(그 파일은 행 11로
+이미 닫혔다) 고칠 자리가 사전이 아니라 부르는 쪽 배선이고, `en` 티켓이 못 문다 - 처분은
+⑤와 같은 피드백 `9ac5198c`가 든다.
+
+**같은 회차가 범위 밖 배선 둘을 더 봤다**(`c92a3ead`). ⑪ `lib/usage.ts`의 `ticketCostChunk`가
+티켓 상세의 `진행 기록` 머리에 `모름`과 그 `title`(`workers/logs/*-<해시>.log가 이 머신에
+0개입니다`)을 한국어로 띄운다 - 위 ⑧이 든 `epicCostChunk`와 **같은 파일-같은 사유**(그 함수들에
+`locale` 인자가 없다)라 새 적립이 아니고, 행 10이 이미 `usage.ts` 9로 세고 있다. ⑧이 에픽
+화면을 적었으니 티켓 상세도 같은 부르는 쪽이라는 것만 여기 보탠다. ⑫ `lib/urls.ts`의
+`progressMarkerText`가 `따라가는 중 - 2초마다`를 낸다(`session-stream.tsx:388`이 부른다) -
+`urls.ts`도 행 10이 6으로 세고 있어 새 적립이 아니다. **행 4의 파일 목록 안에서 잰 값은
+`사전을 안 타는 한글 0자`이고**(잔여 9는 §사전의 범위가 뺀 큐 데이터-프롬프트 지시문이다),
+위 넷은 전부 그 목록 밖이거나 배선이다.
 
 - **행을 앞당기지 않는다.** 행 10은 정의 자체가 `마지막 묶음 뒤에 한 번`이라 앞당기면 그 회차를
   다시 해야 하고, 행 9는 93건이라 Done when 한 줄을 참으로 만들려고 묶음 순서를 뒤집을 값이
