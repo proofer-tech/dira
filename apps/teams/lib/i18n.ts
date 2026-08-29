@@ -678,6 +678,9 @@ export const ko: Record<string, string> = {
   "worker.defect.noExec.title": "실행 비트 없음",
   "worker.defect.noExec.why":
     "cron이 Permission denied로 워커를 못 띄웁니다 — tick.sh가 아예 안 돌아 runner.log가 한 줄도 늘지 않고, 열린 티켓이 그대로 뜹니다.",
+  // `cwdDefects`의 `detail`(티켓 c7c284f6) — 위 title·why와 같은 kind인데 접두가 단수인 것은
+  // 티켓 b60520ea가 먼저 붙인 그대로다.
+  "worker.defect.noExec.detailSuffix": "에 실행 비트가 없습니다.",
 
   // 프로토콜 화면(§0-16 §발행 §묶음 표 7, `93c106b3`) — protocols-ui.tsx · protocols/page.tsx ·
   // protocols/actions.ts · lib/protocols.ts. en은 `7a86fd5c`가 채운다.
@@ -1638,6 +1641,15 @@ export const ko: Record<string, string> = {
   "workers.defect.noTicketCwd.title": "TICKET_CWD 없음",
   "workers.defect.noTicketCwd.why":
     "받는 트리에서 그대로 커밋합니다 — 미커밋 흔적이 남으면 통합 게이트가 큐의 워커 전부를 보류시킵니다.",
+  // 이 넷은 `cwdDefects`의 `WorkerDefect.detail`(§0-16 §묶음 표 행 9의 잔여, 티켓 c7c284f6) —
+  // 판정이 조립하는 문장의 고정 조각이고 가운데는 실제 경로다. `en`은 후속 티켓이 채운다.
+  "workers.defect.noTicketCwd.detailPrefix": "TICKET_CWD 줄이 없어",
+  "workers.defect.noTicketCwd.detailSuffix": "에서 일합니다.",
+  "workers.defect.missingCwd.detailSuffix": "가 없거나 디렉터리가 아닙니다.",
+  "workers.defect.missingLink.detailMissingSuffix": "가 없습니다.",
+  "workers.defect.missingLink.detailWrongMid": "가 큐 루트가 아니라",
+  "workers.defect.missingLink.detailWrongSuffix": "로 풀립니다.",
+  "workers.defect.sharedCwd.detailMid": "와 같은 경로입니다:",
   "workers.tokenSummary.label": "최근 5시간 토큰",
   "workers.tokenSummary.unaccountedPrefix": "· 이 합계에 없는 세션",
   "workers.tokenSummary.unaccountedSuffix": "개",
@@ -1647,6 +1659,10 @@ export const ko: Record<string, string> = {
   "workers.empty.noWorkerBodySuffix":
     "(할당 해제)도 할 수 없습니다 — 둘 다 워커 스크립트를 통해 엔진이 하는 일입니다(제약 2).",
   "workers.empty.engineRepoHint": "엔진 레포 경로는 채워지지 않습니다 — 워커 파일에만 적혀 있어서 GUI가 알 수 없습니다.",
+  // `firstWorkerCmd`의 자리표시자·`worktreeCmds`의 준비 명령 꼬리 주석(티켓 c7c284f6, §0-16
+  // §묶음 표 행 9의 잔여). `en`은 후속 티켓이 채운다.
+  "workers.firstWorkerCmd.repoPlaceholder": "dira 레포",
+  "workers.worktreeCmds.lsHintSuffix": "로 시작해야 한다",
   "workers.table.holdingHeader": "물고 있는 티켓",
   "workers.table.contextHeader": "컨텍스트",
   "workers.table.activityHeader": "마지막 활동",

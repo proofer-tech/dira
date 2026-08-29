@@ -1428,6 +1428,7 @@ export function holderEngine(workers: Worker[], stem: string): string | null {
 async function cwdDefects(
   root: string,
   ws: { name: string; cwd: string; rawCwd: string | null; path: string }[],
+  locale: Locale = DEFAULT_LOCALE,
 ): Promise<WorkerDefect[][]> {
   const queue = nfc(await realpath(root).catch(() => root));
   // 못 풀리는 경로(없는 디렉터리)는 문자열로 비교한다 — 없는 트리를 둘이 공유하는 것도 공유다.
@@ -1439,27 +1440,46 @@ async function cwdDefects(
     ws.map(async ({ name, cwd, rawCwd, path: file }, i) => {
       const out: WorkerDefect[] = [];
       if (rawCwd === null && ws.length > 1) {
-        out.push({ kind: "no-ticket-cwd", detail: `TICKET_CWD 줄이 없어 ${cwd} 에서 일합니다.` });
+        out.push({
+          kind: "no-ticket-cwd",
+          detail: `${t(locale, "workers.defect.noTicketCwd.detailPrefix")} ${cwd} ${t(locale, "workers.defect.noTicketCwd.detailSuffix")}`,
+        });
       }
       const isDir = await stat(cwd).then((s) => s.isDirectory(), () => false);
       if (!isDir) {
-        out.push({ kind: "missing-cwd", detail: `${cwd} 가 없거나 디렉터리가 아닙니다.` });
+        out.push({
+          kind: "missing-cwd",
+          detail: `${cwd} ${t(locale, "workers.defect.missingCwd.detailSuffix")}`,
+        });
       } else {
         // 트리 자체가 없으면 심링크를 따로 말하지 않는다 — 원인은 하나고 명령도 같다.
         const link = path.join(cwd, ".dira");
         const to = await realpath(link).then(nfc, () => null);
-        if (to === null) out.push({ kind: "missing-link", detail: `${link} 가 없습니다.` });
-        else if (to !== queue) {
-          out.push({ kind: "missing-link", detail: `${link} 가 큐 루트가 아니라 ${to} 로 풀립니다.` });
+        if (to === null) {
+          out.push({
+            kind: "missing-link",
+            detail: `${link} ${t(locale, "workers.defect.missingLink.detailMissingSuffix")}`,
+          });
+        } else if (to !== queue) {
+          out.push({
+            kind: "missing-link",
+            detail: `${link} ${t(locale, "workers.defect.missingLink.detailWrongMid")} ${to} ${t(locale, "workers.defect.missingLink.detailWrongSuffix")}`,
+          });
         }
       }
       const others = (byKey.get(keys[i]) ?? []).filter((n) => n !== name);
       if (others.length > 0) {
-        out.push({ kind: "shared-cwd", detail: `${others.join("·")}와 같은 경로입니다: ${cwd}` });
+        out.push({
+          kind: "shared-cwd",
+          detail: `${others.join("·")}${t(locale, "workers.defect.sharedCwd.detailMid")} ${cwd}`,
+        });
       }
       const mode = await stat(file).then((s) => s.mode, () => 0);
       if ((mode & 0o111) === 0) {
-        out.push({ kind: "no-exec", detail: `${file} 에 실행 비트가 없습니다.` });
+        out.push({
+          kind: "no-exec",
+          detail: `${file} ${t(locale, "worker.defect.noExec.detailSuffix")}`,
+        });
       }
       return out;
     }),
@@ -1489,7 +1509,11 @@ export function poolShimNameOf(text: string): string | null {
  *
  *  ponytail: `holding`은 **호출자가 이미 읽은 티켓 목록**에서 찾는다 — 큐를 두 번 읽지 않으려고.
  *  프로젝트 목록·전환기 요약은 holding을 안 쓰므로 안 넘긴다(그때는 항상 null이다). */
-export async function listWorkers(root: string, tickets: Ticket[] = []): Promise<Worker[]> {
+export async function listWorkers(
+  root: string,
+  tickets: Ticket[] = [],
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<Worker[]> {
   const dir = path.join(root, "workers");
   const names = (await readdir(dir).catch(() => [] as string[]))
     .filter((n) => n.endsWith(".sh"))
@@ -1584,7 +1608,7 @@ export async function listWorkers(root: string, tickets: Ticket[] = []): Promise
 
   // tick.sh 39행: TICKET_CWD 줄이 없는 워커의 실효 cwd는 루트의 부모다(contextOf와 같은 기준).
   const eff = out.map((w) => ({ name: w.name, cwd: w.cwd ?? path.dirname(root), rawCwd: w.cwd, path: w.path }));
-  const defects = await cwdDefects(root, eff);
+  const defects = await cwdDefects(root, eff, locale);
   defects.forEach((d, i) => {
     if (d.length === 0) return; // 결함 0개인 워커는 아무것도 늘지 않는다
     out[i].defects = d;
@@ -1592,7 +1616,7 @@ export async function listWorkers(root: string, tickets: Ticket[] = []): Promise
     // `no-exec`·`no-ticket-cwd`뿐인 워커에는 안 붙인다 — 그 셋은 각자 다른 준비 명령을 쓴다
     // (§0-21 결정 2·3, §977419d7 결정 3 — 세 축은 함께 있어도 서로 가리지 않는다).
     if (d.some((x) => x.kind !== "no-exec" && x.kind !== "no-ticket-cwd")) {
-      out[i].worktree = worktreeCmds(root, out[i].name);
+      out[i].worktree = worktreeCmds(root, out[i].name, locale);
     }
     if (d.some((x) => x.kind === "no-exec")) out[i].execFix = execBitCmd(out[i].path);
     if (d.some((x) => x.kind === "no-ticket-cwd")) out[i].cwdFix = ticketCwdLineCmd(root, out[i].name, out[i].path);
@@ -1802,10 +1826,10 @@ export const unregisterCron = (workerPath: string, locale: Locale = DEFAULT_LOCA
 
 /** 워커가 0개인 큐의 **첫 워커**를 손으로 만드는 명령. `<dira 레포>`는 채워지지 않는다 —
  *  엔진 코드 위치는 워커 파일에만 적혀 있고, 워커가 없으면 GUI가 알 방법이 없다(→ createWorker). */
-export function firstWorkerCmd(root: string, name = "w1"): string {
+export function firstWorkerCmd(root: string, name = "w1", locale: Locale = DEFAULT_LOCALE): string {
   const dir = sq(path.join(root, "workers"));
   const file = sq(path.join(root, "workers", `${name}.sh`));
-  return `mkdir -p ${dir} && cp <dira 레포>/worker.sh.example ${file} && chmod 755 ${file}`;
+  return `mkdir -p ${dir} && cp <${t(locale, "workers.firstWorkerCmd.repoPlaceholder")}>/worker.sh.example ${file} && chmod 755 ${file}`;
 }
 
 // ── 워크트리 (§4-2) ─────────────────────────────────────────────────────────
@@ -2310,12 +2334,12 @@ export async function applyDispatchGate(
  *  검증 줄은 장식이 아니다: `.dira`가 이미 있으면 `ln -s`가 실패하는 대신 그 **안쪽에**
  *  링크를 만든다(실사고 `bf4d8878`) — 세션이 미끼 큐를 보고 자기 티켓을 못 찾는다.
  *  `prepareWorktree`는 그래서 셸이 아니라 `fs.symlink` + `fs.realpath`로 간다. */
-export function worktreeCmds(root: string, name: string): string[] {
+export function worktreeCmds(root: string, name: string, locale: Locale = DEFAULT_LOCALE): string[] {
   const dir = worktreePath(root, name);
   return [
     `git -C ${sq(path.dirname(root))} worktree add ${sq(dir)} -b wt/${name}`,
     `ln -s ../.. ${sq(path.join(dir, ".dira"))}`,
-    `ls -ld ${sq(path.join(dir, ".dira"))}    # \`l\`로 시작해야 한다`,
+    `ls -ld ${sq(path.join(dir, ".dira"))}    # \`l\`${t(locale, "workers.worktreeCmds.lsHintSuffix")}`,
   ];
 }
 
@@ -2399,7 +2423,7 @@ export async function prepareWorktree(
   name: string,
   locale: Locale = DEFAULT_LOCALE,
 ): Promise<WorktreePrep> {
-  const cmds = worktreeCmds(root, name);
+  const cmds = worktreeCmds(root, name, locale);
   const dir = worktreePath(root, name);
   const stop = (done: number, reason: string): WorktreePrep => ({ dir, done, reason, rest: cmds.slice(done) });
   const why = (e: unknown) =>

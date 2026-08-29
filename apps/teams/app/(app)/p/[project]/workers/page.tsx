@@ -104,7 +104,7 @@ export default async function Workers({ params }: { params: Promise<{ project: s
   const config = await resolveConfig(project);
   // 물고 있는 티켓은 `.wip` 티켓의 `owner:`로 역추적한다 — 큐를 한 번만 읽고 넘긴다.
   const tickets = await listTickets(project.root, config);
-  const workers = await listWorkers(project.root, tickets);
+  const workers = await listWorkers(project.root, tickets, locale);
   // 파일이 없으면 항목 0개다 — 오류가 아니다(§4-1). 카드는 빈 상태 + `공통 항목 추가`로 뜬다.
   const common = await readCommonContext(project.root);
   const commonItems = common.ok ? common.items : [];
@@ -192,7 +192,7 @@ export default async function Workers({ params }: { params: Promise<{ project: s
             <CreateWorkerButton
               projectId={id}
               canTemplate
-              firstCmd={firstWorkerCmd(project.root)}
+              firstCmd={firstWorkerCmd(project.root, undefined, locale)}
               defaultName={nextWorkerName(workers.map((w) => w.name))}
             />
           </div>
@@ -207,7 +207,7 @@ export default async function Workers({ params }: { params: Promise<{ project: s
               <CreateWorkerButton
                 projectId={id}
                 canTemplate={false}
-                firstCmd={firstWorkerCmd(project.root)}
+                firstCmd={firstWorkerCmd(project.root, undefined, locale)}
               />
             }
           />
@@ -217,7 +217,7 @@ export default async function Workers({ params }: { params: Promise<{ project: s
               {t(locale, "workers.empty.noWorkerBodyMid")} <span className="font-mono text-xs">unassign</span>
               {t(locale, "workers.empty.noWorkerBodySuffix")}
             </p>
-            <CopyCommand cmd={firstWorkerCmd(project.root)} />
+            <CopyCommand cmd={firstWorkerCmd(project.root, undefined, locale)} />
             <p className="text-xs text-muted-foreground">{t(locale, "workers.empty.engineRepoHint")}</p>
           </div>
         </div>
