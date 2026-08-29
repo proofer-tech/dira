@@ -167,10 +167,10 @@ right. It is an operation that scans the whole queue, so it gives the same resul
 and there is no reason to keep one per row.
 
 - **Stream** opens the `Progress record` of the running session. It opens only when the worker is
-  `running` and the ticket it holds is known, and barge-in happens inside it ([Talking to a
+  `running` and the ticket it holds is known, and interjecting happens inside it ([Talking to a
   running session](/docs/barge-in)). On rows where it cannot open, the button is not removed; it
   stays dimmed. Only `claude` and `grok` leave a progress record, so a session running on `codex`
-  or `agy` never opens this button, and barge-in works on `claude` only. That is not a fault,
+  or `agy` never opens this button, and interjecting works on `claude` only. That is not a fault,
   just a different feature set, and the ticket gets done the same way.
 
 The other three touch different things.

@@ -18,7 +18,7 @@ not run, and your route is
 ### 2. Setting up an engine
 
 To drive dira you need one LLM engine you can call from the CLI. That is what a worker starts
-when it takes a ticket, so without it a ticket never moves out of `Backlog`. The default is
+when it takes a ticket, so without it a ticket never moves out of `Open`. The default is
 [`claude`](https://claude.com/claude-code).
 
 Open the `dira.app` you just moved and press `Settings` at the far right of the header. Look at

@@ -4,14 +4,14 @@ You made a project in the last chapter. Now tell dira what you want out of it.
 
 ## Submitting a request, issuing a ticket
 
-Two buttons sit at the top right of the board. `Submit a request` on the right is the front
+Two buttons sit at the top right of the board. `New request` on the right is the front
 door. `New ticket` on the left is the side road.
 
-![The submit-a-request dialog. One field for plain language and a submit button, and no field for kind, persona, or deps.](/shots/06-request.png)
+![The New request dialog. One field for plain language and a submit button, and no field for kind, persona, or deps.](/shots/06-request.png)
 
 `New ticket` makes you choose the title, the kind, the persona, and the deps yourself. It is a
 form for someone who already knows what happens, who does it, and in what order.
-`Submit a request` is one field of plain language. Nothing needs splitting up first. Write what
+`New request` is one field of plain language. Nothing needs splitting up first. Write what
 you want in whatever sentences you want; the splitting is the next section's job.
 
 - The first line becomes the title (cut at 80 characters). You do not write a title separately.
@@ -45,7 +45,7 @@ its hands off.
 
 That request then wears an `Awaiting answer` badge on the board, with the number of days it has
 been sitting there. Open the request detail and the question is in the thread, with a field
-underneath for your answer. Write the answer and the request goes back to `Backlog`, and this
+underneath for your answer. Write the answer and the request goes back to `Open`, and this
 time the pm session reads your answer along with everything else and carries on. It may ask more
 than once. Questions and answers pile up in the thread, paired by number.
 
