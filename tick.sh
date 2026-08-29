@@ -791,6 +791,12 @@ done
 # 돌리는 게 실전에서 관측됐다(§0-16 §주입 §개정 2, 요구 ef37b15e). 그래서 문장 ①에 예외 절을
 # 하나 더한다 -- 생각·내부 추론은 이 지시의 대상이 아니라는 자유 허가(금지 아님). 이유는 안
 # 적는다 -- 이유를 적으면 세션이 그 이유를 산출물·검증까지 넓혀 읽는다.
+# 문장 ②(산출물 언어)는 §0-16 §주입 §개정 5(요구 d8407b1a)로 로케일을 따른다 -- en이면 산출물도
+# 영어다. ko 경로는 바이트 단위로 안 갈린다. en 문장에는 절 이름(`## Goal`-`## Done when`-
+# `## 진행 계획`-`## 결과`-`## 블록`-`## 질문 n`)이 로케일과 무관한 리터럴이라는 절이 붙는다 --
+# 안 붙으면 영어 세션이 `## Result`라고 적어 자동 상신·계획 아코디언·답변 대기가 조용히 안 뜬다
+# (tickets.py:782,876,933 - lib/queue.ts:775). 아래 FLUENTKO 블록을 가리키던 recency 줄도
+# en에서는 그 블록 자체가 안 실려서 함께 뺀다.
 LOCALE=$(python3 -c 'import json, sys
 try:
     o = json.load(open(sys.argv[1], encoding="utf-8"))
@@ -805,9 +811,11 @@ Language note: say everything you say to the user in English for the rest of
 this session -- not only replies when someone writes in, but also any prose
 you leave in the progress stream even when no one does. Thinking or internal
 reasoning is not covered by this instruction -- you may think in any language.
-Keep every written deliverable in Korean regardless -- the ticket body,
-\`## 결과\`, commit messages, and anything under \`docs/\`. Follow the
-<한국어 문장 지침> block earlier in this prompt whenever you write that Korean."
+Keep every written deliverable in English -- the ticket body, \`## 결과\`,
+commit messages, and anything under \`docs/\`. Section names stay literal
+regardless of language -- \`## Goal\`, \`## Done when\`, \`## 진행 계획\`,
+\`## 결과\`, \`## 블록\`, and \`## 질문 n\` are written exactly as shown; only
+the prose inside those sections changes language."
   ;;
 *)
   PROMPT="$PROMPT
@@ -966,11 +974,12 @@ $PROMPT"
 
 # --- 한국어 문장 지침: 세션이 쓰는 한국어의 품질 규약을 인라인한다 ---
 # 언어 안내(§0-16 §주입)가 *어느 언어로* 말할지 정하고, 이 블록이 *그 한국어를 어떻게 쓸지*
-# 정한다. 세 짝이 아니라 별개 층이다 - 로케일을 안 가리고 상시 실린다(en에서도 산출물은
-# 한국어 고정이라 지침이 그대로 필요하다, §0-16 §주입 문장 ②).
+# 정한다. 세 짝이 아니라 별개 층이다 - §0-16 §주입 §개정 5(요구 d8407b1a) 전에는 로케일을 안
+# 가리고 상시 실렸으나, 그 개정이 산출물 언어를 로케일에 넘기면서 `en`에는 적용 대상이 없는
+# 지시가 됐다 - `ko`일 때만 싣는다. 꼬리의 `추가 금지 표현`도 같은 히어독이라 함께 빠진다.
 # 자리는 꼬리가 아니라 문서 층이다 - 매 디스패치 한 글자도 안 변하는 6KB 상수라서, 꼬리에
 # 두면 캐시 밖에서 회차마다 새로 쓰인다(§엔진 수정 스물다섯 번째 승인). recency는 꼬리의
-# 언어 안내가 이 블록을 한 줄로 가리켜 대신 든다.
+# 언어 안내가 이 블록을 한 줄로 가리켜 대신 든다(`ko`에서만 - `en` 꼬리는 그 줄도 뺀다).
 # 파일이 아니라 인라인 상수다 - 큐 vendored 사본을 만들면 사람이 지울 수 있고 dmg 배포에서
 # 조용히 0바이트가 된다(CORE.md와 달리 폴백할 사본이 없다). 엔진에 박으면 못 지운다.
 # 본문은 fluent-korean(MIT, (c) 2026 snflkd - github.com/snflkd/fluent-korean) 원문 그대로다 -
@@ -978,6 +987,7 @@ $PROMPT"
 # 갱신은 원문 갱신 때 이 블록을 통째로 갈아 끼우는 것이다(부분 손질 금지 - 같은 이유다).
 # `===== 지침 끝 =====` 뒤의 `추가 금지 표현`은 원문 밖이다 - 통째로 갈아 끼울 때 이 꼬리만
 # 남겨서 다시 붙인다(CORE.md가 3,500 B 예산에 붙어 있어 그 규칙이 여기 실린다).
+if [ "$LOCALE" != "en" ]; then
 PROMPT="$(cat <<'FLUENTKO'
 ===== 한국어 문장 지침 (fluent-korean, MIT (c) 2026 snflkd) =====
 당신은 한국어를 활용해야 하는 상황에 있다면 본 문서에 제시된 지침들을 준수해야 합니다. 그럼으로써 의사소통의 효율성을 높일 수 있습니다. 이 지침들은, 의미가 명확하며 비교적 가독성이 높고 안정적인 구조를 지닌 한국어 문장을 출력하는 방법을 자세히 설명합니다. 인용, 코드, 코드 주석에는 이 지침들을 적용하지 않습니다.
@@ -1047,6 +1057,7 @@ FLUENTKO
 )
 
 $PROMPT"
+fi
 
 # --- 코어 프로토콜: <엔진 레포>/protocols/CORE.md 를 프롬프트 맨 앞에 인라인한다 ---
 # 엔진이 읽는 계약(파일명 상태·claim·frontmatter 키·`## 블록`)이라 큐 밖에 살고 사본이 없다 -

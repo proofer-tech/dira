@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 """언어 주입 자체검증: $LOCAL/language.json의 locale이 프롬프트 맨 꼬리에 닿는가
-(§0-16 §주입 §개정).
+(§0-16 §주입 §개정, §개정 5).
 
 로케일이 무엇이든 프롬프트 맨 꼬리에 문장 두 짝이 실린다 -- ko면 한국어 문장, en이면
 영어 문장. 파일 없음·JSON 깨짐·객체 아님·모르는 값 넷 다 ko로 흡수한다(GUI의 readLanguage와
 같은 판정) -- 즉 이 넷의 출력이 명시적 ko와 바이트 단위로 같다.
+
+§개정 5(요구 d8407b1a)로 문장 ②(산출물 언어)도 로케일을 따른다 -- en이면 산출물이 영어다.
+절 이름(`## Goal` 등)은 로케일과 무관한 리터럴로 남고, 한국어 문장 지침 히어독(FLUENTKO)은
+`ko`일 때만 실린다(en에서는 적용 대상이 없다).
 
 임시 큐에서만 판정한다(도그푸딩 큐에서 엔진을 실험하지 않는다). 엔진을 실제로 부르지 않고
 `tick.sh dryrun`이 찍는 프롬프트로 본다. 실패하면 assert로 죽는다.
@@ -110,11 +114,20 @@ try:
     assert "언어 안내" not in got, "en인데 ko 문장이 같이 실렸다\n" + got
     tail = got[ctxend:]
     assert "english" in tail.lower(), "사용자에게 하는 말은 영어 짝이 안 실렸다\n" + tail
-    assert "korean" in tail.lower(), "산출물은 한국어 고정 짝이 안 실렸다\n" + tail
+    # §0-16 §주입 §개정 5: 산출물 언어도 로케일을 따른다 -- en에서는 산출물이 영어다.
+    assert "keep every written deliverable in english" in tail.lower(), \
+        "산출물 영어 고정 짝이 안 실렸다\n" + tail
+    assert "korean" not in tail.lower(), "en인데 산출물이 여전히 한국어로 고정돼 있다\n" + tail
     assert "## 결과" in tail and "docs/" in tail, "산출물 대상(## 결과 · docs/)이 안 실렸다\n" + tail
+    # 절 이름은 로케일과 무관한 리터럴이다(tickets.py:782,876,933 - lib/queue.ts:775가 문자열로 찾는다).
+    for lit in ("## Goal", "## Done when", "## 진행 계획", "## 결과", "## 블록", "## 질문 n"):
+        assert lit in tail, "절 이름 리터럴 {}가 en 문장에 안 실렸다\n{}".format(lit, tail)
     assert warns(root) == [], "en 주입에서 WARN이 났다: {}".format(warns(root))
-    # 지침은 로케일을 안 가린다 - en에서도 산출물이 한국어 고정이라 그대로 실린다.
-    assert "===== 한국어 문장 지침" in got, "en인데 한국어 문장 지침이 빠졌다\n" + got
+    # §개정 5: en에서는 지침 블록이 적용 대상 없는 지시가 돼 0바이트로 빠진다(꼬리의 가리키는
+    # 줄도 함께 빠진다) -- ko 문서 층에만 남는 히어독이라 이 검사는 got 전체로 본다.
+    assert "===== 한국어 문장 지침" not in got, "en인데 한국어 문장 지침이 실렸다\n" + got
+    assert "추가 금지 표현" not in got, "en인데 추가 금지 표현이 실렸다\n" + got
+    assert "<한국어 문장 지침>" not in got, "en인데 없는 블록을 가리키는 줄이 남았다\n" + got
 
     # 5c) §개정 2 -- 생각 예외 절이 ko·en 두 짝에 각각 실린다(허가지 금지가 아니다)
     # 줄바꿈이 낱말 사이에 낄 수 있어(예: "internal\nreasoning") 공백으로 정규화한 뒤 본다.

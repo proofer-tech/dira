@@ -165,7 +165,45 @@ try:
         "argv 문서 층 + 프라임 꼬리가 dryrun 프롬프트와 다르다\n--- head+tail\n{}\n--- dryrun\n{}".format(
             head + tail, full_prompt)
 
+    # --- en 경로(§0-16 §주입 §개정 5) - 지침 블록이 0바이트라 위 두 단언(head-tail 분리 -
+    # 블록이 앞 블록에 있다)의 대상 자체가 없다. 부재가 이 판정을 깨지 않는지를 본다.
+    langfile = os.path.join(local, "language.json")
+    write(langfile, json.dumps({"locale": "en"}))
+    write(os.path.join(root, "tickets", "c0c00002.md"),
+          "---\nticket: c0c00002\ntitle: t\nkind: work\npersona: dev\n---\n\n## Goal\ntest\n")
+
+    full_prompt_en = prompt_of(dryrun(worker, local))
+    assert "===== 한국어 문장 지침" not in full_prompt_en, \
+        "en인데 지침 블록이 여전히 실렸다\n" + full_prompt_en
+
+    r = subprocess.run([worker, "tick"], capture_output=True, text=True,
+                       env=dict(os.environ, TICKET_LOCAL=local), timeout=90)
+    assert r.returncode == 0, "en tick rc={}\n{}{}".format(r.returncode, r.stdout, r.stderr)
+
+    with open(captured_path, encoding="utf-8") as f:
+        prime_en = json.loads(f.read().strip())
+    content_en = prime_en.get("message", {}).get("content")
+    assert isinstance(content_en, list) and len(content_en) == 1, \
+        "en content가 꼬리 한 블록인 배열이 아니다: {}".format(content_en)
+    tail_block_en = content_en[0]
+    assert "cache_control" not in tail_block_en, \
+        "en 프라임 블록에 cache_control이 있으면 안 된다: {}".format(tail_block_en)
+
+    with open(os.path.join(tmp, "captured-argv"), encoding="utf-8") as f:
+        argv_en = f.read().split("\0")[:-1]
+    assert argv_en.count("--append-system-prompt") == 1, \
+        "en에서 --append-system-prompt가 중복되거나 없다: {}".format(argv_en)
+    head_en = argv_en[argv_en.index("--append-system-prompt") + 1]
+    tail_en = tail_block_en["text"]
+
+    assert "===== 한국어 문장 지침" not in head_en and "===== 한국어 문장 지침" not in tail_en, \
+        "en인데 지침 블록이 문서 층 또는 꼬리에 실렸다(부재여야 한다)"
+    assert head_en + tail_en == full_prompt_en, \
+        "en argv 문서 층 + 프라임 꼬리가 dryrun 프롬프트와 다르다"
+    assert "keep every written deliverable in english" in tail_en.lower(), \
+        "en 산출물 영어 고정 짝이 프라임 꼬리에 안 실렸다\n" + tail_en
+
     print("PASS 문서 층은 --append-system-prompt로 · 프라임은 꼬리 한 블록 · cache_control 0개(우리 몫) "
-          "· head+tail == dryrun 프롬프트")
+          "· head+tail == dryrun 프롬프트 · en 경로는 지침 블록 부재로도 판정이 안 깨진다")
 finally:
     shutil.rmtree(tmp, ignore_errors=True)
