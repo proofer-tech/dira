@@ -24,9 +24,8 @@
       "output": "dist"
     },
     "files": [
-      "main.ts",
-      "release-notes.ts",
-      "revive.ts",
+      "*.ts",
+      "!*.test.ts",
       "preload.cjs",
       "package.json",
       "ga.json",
