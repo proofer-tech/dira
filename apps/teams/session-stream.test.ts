@@ -47,6 +47,46 @@ test("안쪽 §9 묶음 줄은 한 글자도 안 갈린다 — 겹치지 않는 
   );
 });
 
+// 티켓 311b537a(§비주얼 §59 §안쪽 겹 개정, 요구 `7b87494f`): 계획 아코디언과 `배정`·`마무리`
+// 안에서는 §9 묶음 겹(`기록 n건`)이 한 번 더 안 접힌다 — 그 창의 사건 줄이 그릇의 직계 자식으로
+// 그대로 흐른다. 판정(`isPlanEdgeSegment`, 계획 안/밖을 가르는 쪽)은 순수 함수라
+// `lib/urls.test.ts`가 이미 고정한다 — 여기서 고정하는 것은 그 판정이 실제로 `flat` 프롭으로
+// 배선되어 접는 그릇 안에서만 `<Bundle>` 대신 `<Row>`가 직접 흐른다는 것이다.
+test("ProgressItems가 `flat`을 받으면 묶음을 `<Bundle>`로 안 감싸고 `<Row>`를 바로 흘린다(§59 ③-2)", () => {
+  assert.match(
+    s,
+    /if \(flat\) return g\.events\.map\(\(e\) => <Row key=\{e\.key\} e=\{e\} onToggle=\{onToggle\} ctx=\{ctx\} \/>\);/,
+    "flat 갈래가 Row를 직접 안 흘린다",
+  );
+});
+
+test("계획 아코디언 안의 ProgressItems는 `flat`이다 — 접는 그릇 안이라 묶음 겹이 없다(§59 ③-2)", () => {
+  const planBlockStart = s.indexOf("function PlanBlock(");
+  const planBlockEnd = s.indexOf("\nfunction SegmentBlock(");
+  const body = s.slice(planBlockStart, planBlockEnd);
+  assert.ok(planBlockStart >= 0 && planBlockEnd > planBlockStart, "PlanBlock 몸을 못 찾았다");
+  assert.match(body, /<ProgressItems\s[\s\S]*?\bflat\b[\s\S]*?\/>/, "PlanBlock의 ProgressItems가 flat을 안 받는다");
+});
+
+test("`배정`·`마무리`(SegmentBlock) 안의 ProgressItems도 `flat`이다 — 같은 그릇 벌이다(§59 ⑦-1)", () => {
+  const segmentBlockStart = s.indexOf("function SegmentBlock(");
+  const body = s.slice(segmentBlockStart);
+  assert.ok(segmentBlockStart >= 0, "SegmentBlock을 못 찾았다");
+  assert.match(
+    body,
+    /<ProgressItems items=\{items\} threadKey=\{threadKey\} onToggle=\{onToggle\} vault=\{vault\} refs=\{refs\} forceOpen=\{forceOpen\} ctx=\{ctx\} flat \/>/,
+    "SegmentBlock의 ProgressItems가 flat을 안 받는다",
+  );
+});
+
+test("계획 밖 틈(계획 사이)의 ProgressItems는 여전히 flat이 아니다 — §9 묶음이 그대로다(§59 ⑦)", () => {
+  assert.match(
+    s,
+    /isPlanEdgeSegment\(bi, blocks\.length, plans\.length > 0\) \? \(/,
+    "outside 블록의 접는 그릇 판정이 isPlanEdgeSegment를 안 쓴다",
+  );
+});
+
 // 티켓 `0da4466e`(요구 `4f761c5a` 답 `90c1d300`): 참견 칸·답변 칸이 목적지를 안 말해 사람이
 // 답변 대기 카드가 사라진 자리에 참견을 쓰고 실패를 보는 문제. 판정(`interjectMode`, 셋이
 // 배타)은 `lib/urls.test.ts`가 이미 고정한다 — 여기서 고정하는 것은 그 판정이 그리는 **문구**다.

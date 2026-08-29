@@ -92,6 +92,7 @@ import {
   type GroupedItem,
   groupProgress,
   interjectMode,
+  isPlanEdgeSegment,
   matchesStreamFilter,
   mergeProgress,
   NO_QUESTION_SECTION_NOTICE,
@@ -599,7 +600,7 @@ export function SessionStream({
                 block.kind === "outside" ? (
                   // §2-11⑨ 결정2 — 계획 목록이 있는 상자에서 맨 앞·맨 뒤 `outside`만 `배정`·
                   // `마무리` 칸이다. 사이 틈(§59 ⑦)은 표식 없이 종전대로 흐른다.
-                  plans.length > 0 && (bi === 0 || bi === blocks.length - 1) ? (
+                  isPlanEdgeSegment(bi, blocks.length, plans.length > 0) ? (
                     <SegmentBlock
                       key={`o${bi}`}
                       label={t(bi === 0 ? "progress.segment.assign" : "progress.segment.wrapup")}
@@ -776,6 +777,7 @@ function ProgressItems({
   refs,
   forceOpen,
   ctx,
+  flat,
 }: {
   items: GroupedItem<StreamEvent, ThreadItem>[];
   threadKey: Map<ThreadItem, string>;
@@ -788,6 +790,10 @@ function ProgressItems({
   forceOpen?: boolean;
   /** 워커 다이얼로그 줄 컨텍스트(§2-15 ⑦⑧) — `Bundle`을 거쳐 `Row`까지 그대로 흘려보낸다. */
   ctx?: WorkerRowCtx;
+  /** 접는 그릇(계획 · `배정` · `마무리`) 안인가(§비주얼 §59 ③-2, 안쪽 겹 개정 요구 `7b87494f`) —
+   *  참이면 묶음이 겹을 한 번 더 안 접고 그 사건 줄들이 이 그릇의 직계 자식으로 그대로 흐른다.
+   *  계획 밖(§59 ⑦)에서는 `undefined`로 종전(묶음 `<Bundle>`) 그대로다. */
+  flat?: boolean;
 }) {
   return (
     <>
@@ -795,6 +801,7 @@ function ProgressItems({
         if (g.kind === "event") return <StreamBubble key={g.event.key} e={g.event} refs={refs} />;
         if (g.kind === "thread")
           return <ThreadRow key={threadKey.get(g.thread)} item={g.thread} vault={vault} refs={refs} />;
+        if (flat) return g.events.map((e) => <Row key={e.key} e={e} onToggle={onToggle} ctx={ctx} />);
         return (
           <Bundle
             key={g.events[0].key}
@@ -811,10 +818,12 @@ function ProgressItems({
 
 /** 계획 아코디언 한 줄(DESIGN.md §비주얼 §59) — 네 상태(§2-11①)가 손잡이 유무 · 기본 열림으로
  *  여섯 갈래로 갈린다(§59 ③). 꼬리 문구 `기록 n건`은 안쪽 묶음 줄과 같은 수를 두 번 세어
- *  겹침 개정으로 죽었다(§59 ③-1) — 남는 것은 글리프 · 제목 · 손잡이 셋이다. `<Marker>`가
+ *  겹침 개정으로 죽었다(§59 ③-1) — 남는 것은 글리프 · 제목 · 손잡이 셋이다. **안쪽 겹 개정으로
+ *  안쪽 묶음 `<details>`도 죽는다**(§59 ③-2, 요구 `7b87494f`) — 펼치면 그 창의 사건 줄이
+ *  `<ProgressItems flat>`을 거쳐 그릇의 직계 자식으로 바로 흐른다. `<Marker>`가
  *  아니다(§59 ②) — 그 기본값 `text-sm text-muted-foreground`가 계획 제목의 밝기 · 크기를
- *  둘 다 덮는다. `group`을 안 붙인다(§59 ④ 컴파일 실측) — 붙이면 안쪽 두 겹(묶음 줄 · 펼친
- *  원문)의 닫힌 chevron이 이 계획을 여는 순간 같이 돈다. 손잡이가 오른쪽 끝으로 가서 회전
+ *  둘 다 덮는다. `group`을 안 붙인다(§59 ④ 컴파일 실측) — 붙이면 안쪽 겹(펼친 원문)의 닫힌
+ *  chevron이 이 계획을 여는 순간 같이 돈다. 손잡이가 오른쪽 끝으로 가서 회전
  *  셀렉터는 자식 결합자의 마지막 자식(`svg:last-child`)을 짚는다 — 왼쪽 첫 자리는 상태
  *  글리프가 쓴다(§59 ④). */
 function PlanBlock({
@@ -903,6 +912,7 @@ function PlanBlock({
         refs={refs}
         forceOpen={forceOpen}
         ctx={ctx}
+        flat
       />
     </details>
   );
@@ -943,7 +953,7 @@ function SegmentBlock({
         <span className="truncate text-sm font-medium text-foreground">{label}</span>
         <ChevronRight aria-hidden className="ml-auto size-4 shrink-0 text-muted-foreground" />
       </summary>
-      <ProgressItems items={items} threadKey={threadKey} onToggle={onToggle} vault={vault} refs={refs} forceOpen={forceOpen} ctx={ctx} />
+      <ProgressItems items={items} threadKey={threadKey} onToggle={onToggle} vault={vault} refs={refs} forceOpen={forceOpen} ctx={ctx} flat />
     </details>
   );
 }
@@ -1516,6 +1526,10 @@ function Row({
  *  늘린다. 시각·도구명 슬롯은 없다 — 묶음 안에 도구가 여럿이라 하나를 골라 세우면 거짓말이다.
  *  `기록 n건`이 그 자리에 뜬다(sans + `tabular-nums`, `truncate`도 `title`도 없다 — 고정 문구라
  *  안 잘린다). 펼치면 이 절의 사건 줄들이 **그대로** 나온다 — 들여쓰기를 안 늘린다.
+ *
+ *  **상자의 최상위 자식으로 흐르는 구간에만 선다**(§59 ③-2, 안쪽 겹 개정) — 접는 그릇(계획 ·
+ *  `배정` · `마무리`) 안에서는 `ProgressItems`가 `flat`을 받아 이 겹을 안 부르고 `Row`를 바로
+ *  흘린다. 부르는 자리는 계획 사이의 틈(§59 ⑦) · 계획 절이 없는 티켓 · 홈 대화 스레드 셋이다.
  *
  *  **`export`인 이유 — 줄 렌더러는 한 벌이다**(§7 §스레드가 트랜스크립트 전부를 그린다). 홈
  *  대화 스레드(`home-ui.tsx`)도 같은 사건 종을 접힌 줄로 그려야 하는데, `<SessionStream>` 통째를

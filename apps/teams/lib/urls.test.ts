@@ -14,6 +14,7 @@ import {
   groupProgress,
   hasFindBar,
   interjectMode,
+  isPlanEdgeSegment,
   matchesStreamFilter,
   mergeProgress,
   pairTool,
@@ -595,6 +596,23 @@ test("planBlocks — 닻 사이의 비닻 계획 둘은 그 구간 사건을 파
   assert.deepEqual(wKeys(blocks[1].events), ["g1"]);
   assert.deepEqual(wKeys(blocks[2].events), ["g2"]);
   assert.deepEqual(wKeys(blocks[3].events), ["in2"]);
+});
+
+/** 안쪽 겹 개정(DESIGN.md §비주얼 §59 ③-2, 요구 `7b87494f`) — `planBlocks`의 `outside` 블록 중
+ *  접는 그릇(§59 ⑦-1 `배정`·`마무리`)인 것을 가르는 판정. 이 값이 `ProgressItems`의 `flat`
+ *  프롭으로 흘러 §9 묶음 겹의 유무를 가른다(session-stream.test.ts가 그 배선을 고정한다). */
+test("isPlanEdgeSegment — 계획이 있으면 맨 앞·맨 뒤 outside 블록만 접는 그릇이다(§59 ⑦-1)", () => {
+  assert.equal(isPlanEdgeSegment(0, 3, true), true);
+  assert.equal(isPlanEdgeSegment(2, 3, true), true);
+  assert.equal(isPlanEdgeSegment(1, 3, true), false);
+});
+
+test("isPlanEdgeSegment — 블록이 하나뿐이면 그 하나가 맨 앞이자 맨 뒤라 접는 그릇이다", () => {
+  assert.equal(isPlanEdgeSegment(0, 1, true), true);
+});
+
+test("isPlanEdgeSegment — 계획이 없으면 어느 outside 블록도 접는 그릇이 아니다(계획 절이 없는 티켓)", () => {
+  assert.equal(isPlanEdgeSegment(0, 1, false), false);
 });
 
 test("progressMarkerText — 마지막 레코드가 thinking이면 '생각하는 중', 그 외엔 종전 문구", () => {

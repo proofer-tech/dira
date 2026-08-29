@@ -641,6 +641,15 @@ export function planBlocks<E extends { ts?: string }>(
   return blocks;
 }
 
+/** `planBlocks`가 낸 `outside` 블록 중 **접는 그릇**(§비주얼 §59 ⑦-1 `배정`·`마무리`)인 것을
+ *  가른다 — 계획이 하나라도 있을 때 맨 앞·맨 뒤 `outside`만이다(§2-11⑨ 결정2). 사이 틈은
+ *  표식 없이 종전대로 흐른다(§59 ⑦). 안쪽 겹 개정(요구 `7b87494f`)에서 이 판정이 §9 묶음
+ *  겹의 유무도 같이 가른다 — 접는 그릇(계획 · 이 칸) 안에서는 그 겹이 한 번 더 안 접힌다
+ *  (§59 ③-2) — `plan` 블록은 늘 접는 그릇이라 이 함수가 안 든다. */
+export function isPlanEdgeSegment(index: number, blockCount: number, hasPlans: boolean): boolean {
+  return hasPlans && (index === 0 || index === blockCount - 1);
+}
+
 /** 진행 표식 문구(§2-6 ③) — 파싱된 **마지막 스트림 레코드**의 종류 하나로 갈린다.
  *  `thinking` 뒤에 아무 레코드가 붙는 순간 종전 문구로 돌아간다. */
 export const progressMarkerText = (lastKind?: string): string =>
