@@ -840,6 +840,14 @@ test("scheduleRows — 제목은 prompt 첫 줄 · 시각은 dateTimeLabel · �
   ]);
 
   assert.deepEqual(scheduleRows([]), []); // 0건 — 머리 행만 뜨는 화면의 근거다
+
+  // locale이 en이면 접미사도 en을 탄다(`common.suffix.overdue`) — 한글 `지남`이 새면 안 된다
+  const rowsEn = scheduleRows(
+    [{ id: "s3", prompt: "릴리스 노트 초안", at: iso(2026, 7, 18, 9, 0), overdue: true }],
+    now,
+    "en",
+  );
+  assert.deepEqual(rowsEn, [{ id: "s3", title: "릴리스 노트 초안", time: "8/18 09:00 past" }]);
 });
 
 /** 찾기 바가 훑는 자 (DESIGN.md §7 §대화 안에서 찾기 · §비주얼 §30) — **대소문자 무시

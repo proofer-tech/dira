@@ -287,6 +287,8 @@ export const ko: Record<string, string> = {
   // 폴링 대기 배지·상세 절의 남은 시간(§폴링 대기 결정 9) — `agoLabel`의 `common.suffix.ago`와
   // 같은 자리, 반대 방향(지난 게 아니라 남은 것)이다.
   "common.suffix.remaining": "남음",
+  // 홈 좌측 패널 스케줄 줄의 이미 돈 단발(`scheduleRows`, §비주얼 §62 (3)) — `<시각> 지남`.
+  "common.suffix.overdue": "지남",
 
   // 셸 둘째 묶음(§0-16 §발행 §묶음 표 2, `dd97c69c`) — 헤더 · 알림 종 일곱 · status bar ·
   // 배너 · 전환기 · `status-badge.tsx`(상태 배지 · deps 배지 — 보드·상세도 이 벌을 공유한다).
@@ -2451,6 +2453,7 @@ export const en: Record<string, string> = {
   "common.unit.second": "s",
   "common.suffix.ago": "ago",
   "common.suffix.remaining": "left",
+  "common.suffix.overdue": "past",
 
   // 셸 둘째 묶음(§0-16 §발행 §묶음 표 2) — `ko`는 `dd97c69c`, 이 영어가 `90be3eeb`다.
   // 셸은 모든 화면 위에 서므로 **여기서 고른 낱말이 다음 묶음 일곱의 어휘가 된다** — 새 낱말은

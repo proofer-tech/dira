@@ -1280,7 +1280,7 @@ function SidePanel({
   // 얽힌다 — 스케줄을 열어도 대화 줄 수는 그대로다.
   const [scheduleOpenCount, setScheduleOpenCount] = useState(3);
   const { rows: scheduleRowsVisible, showMore: showMoreSchedules } = visibleChatRows(
-    scheduleRows(home.schedules),
+    scheduleRows(home.schedules, undefined, locale),
     scheduleOpenCount,
     selected,
   );

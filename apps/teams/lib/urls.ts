@@ -285,10 +285,12 @@ export function visibleChatRows<T extends { id: string }>(
 export function scheduleRows(
   schedules: { id: string; prompt: string; at: number; overdue: boolean }[],
   now = Date.now(),
+  locale: Locale = DEFAULT_LOCALE,
 ): { id: string; title: string; time: string }[] {
   return schedules.map((s) => {
     const label = dateTimeLabel(s.at, now);
-    return { id: s.id, title: s.prompt.split("\n")[0] || s.prompt, time: s.overdue ? `${label} 지남` : label };
+    const overdueSuffix = t(locale, "common.suffix.overdue");
+    return { id: s.id, title: s.prompt.split("\n")[0] || s.prompt, time: s.overdue ? `${label} ${overdueSuffix}` : label };
   });
 }
 
