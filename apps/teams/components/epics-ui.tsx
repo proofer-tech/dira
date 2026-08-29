@@ -247,7 +247,7 @@ export function EpicMemorySection({
                   </span>
                 </summary>
                 <div className="max-w-3xl pt-1 pb-3 pl-6">
-                  <Markdown text={m.text} vault={vault} />
+                  <Markdown text={m.text} vault={vault} locale={locale} />
                 </div>
               </details>
             </li>
