@@ -120,13 +120,6 @@ const FILLED = [
   "findBar.", // 같은 티켓 — 찾기 바는 화면 접두가 아니라 파일 접두다(묶음 11과 같은 판단)
   "home.", // c357313f가 en을 채우고 여기 더했다(묶음 표 행 6의 홈 갈래)
   "ontology.", // 024ec871이 en을 채우고 여기 더했다(묶음 표 행 12의 온톨로지 갈래)
-  // 96327123이 en을 채우고 여기 더했다(묶음 표 행 12의 에픽 갈래). 화면 접두 하나(`epics.`)와
-  // 파일 스코프 접두 셋(`epicSidebar.`·`epicsLib.`·`epicLib.`)이라 줄이 넷이다 — 점까지가
-  // 접두라 넷이 서로를 안 덮고, 이미 찬 `board.epic.`도 안 덮는다.
-  "epics.",
-  "epicSidebar.",
-  "epicsLib.",
-  "epicLib.",
   // 4c075aa9가 en을 채우고 여기 더했다(묶음 표 행 8의 프로젝트 관리 루트 셸). 화면 접두 셋
   // (`errorBoundary.`·`notFound.`·`project.`)과 파일 스코프 접두 넷(`scaffold.`·`projects.`·
   // `resolve.`·`feedbackDialog.`)이라 줄이 일곱이다. `project.`은 점까지가 접두라 이미 찬
@@ -1061,37 +1054,6 @@ test("024ec871 — 온톨로지 화면의 조립 문구가 영어에서도 문�
   assert.strictEqual(
     t(l, "ontology.action.hashExhausted"),
     t(l, "boardPage.action.hashExhausted"),
-  );
-});
-
-// 96327123 — 에픽 묶음. 조각이 붙는 자리 넷을 두 언어가 아니라 영어에서만 본다(ko는 c6b995d6이
-// 이미 고정했다). 사이드바 꼬리는 숫자에 공백 없이 붙고, 나머지 셋은 코드가 공백 하나를 넣는다.
-test("96327123 — 에픽 화면의 조립 문구가 영어에서도 문장이 된다(en)", () => {
-  const l = "en" as const;
-
-  // epic-sidebar.tsx 건수 줄 — 1도 흔히 뜨는 자리라 두 수를 다 본다.
-  assert.strictEqual(`12${t(l, "epicSidebar.unit.count")}`, "12 total");
-  assert.strictEqual(`1${t(l, "epicSidebar.unit.count")}`, "1 total");
-
-  // epics-ui.tsx 메모리 삭제 다이얼로그 — 제목은 파일명 앞, 본문은 경로 뒤에 붙는다.
-  assert.strictEqual(
-    `${t(l, "epics.memory.deleteDialogTitlePrefix")} 회고`,
-    "Delete memory — 회고",
-  );
-  assert.strictEqual(
-    `epics/P338/memory/a.md ${t(l, "epics.memory.deleteDialogBodySuffix")}`,
-    "epics/P338/memory/a.md will be deleted. This can't be undone — this screen has no edit and no add. From the next dispatch on, a session can't find this concept.",
-  );
-
-  // lib/epics.ts · lib/epic.ts 접두 셋 — 뒤에 값이 공백 하나로 붙는다.
-  assert.strictEqual(`${t(l, "epicsLib.keyExistsPrefix")} P338`, "That key is taken: P338");
-  assert.strictEqual(
-    `${t(l, "epicsLib.keyOutsideQueuePrefix")} ../x`,
-    "The key points outside the queue: ../x",
-  );
-  assert.strictEqual(
-    `${t(l, "epicLib.notFoundPrefix")} deadbeef`,
-    "No such ticket in the queue: deadbeef",
   );
 });
 
