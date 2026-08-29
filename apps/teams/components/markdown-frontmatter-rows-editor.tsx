@@ -146,7 +146,11 @@ function CandidateCombobox({
 
 /** 목록형 값의 콤마 항목 UI(결정 5) - `aliases: [a, b]`를 항목마다 한 줄로 그린다. 항목 0개는
  *  `항목 추가` 버튼 하나뿐이고(키 줄은 `[]`인 채로 남는다), 다 지워도 이 함수가 부르는
- *  `updateRow`가 `removeRow`가 아니라서 키 줄 자체는 안 사라진다. */
+ *  `updateRow`가 `removeRow`가 아니라서 키 줄 자체는 안 사라진다.
+ *
+ *  항목 0개에서 누른 `항목 추가`는 `joinListValue([""])`도 `"[]"`라 값이 안 갈리므로(결정 5의
+ *  0개 표현과 겹친다, 티켓 `4ae1fde0`), 커밋 전 빈 칸 한 줄을 `pendingEmpty`라는 이 컴포넌트만의
+ *  UI 상태로 띄운다 - 실제 글자를 치는 순간 그 값으로 `onChange`가 나가 정상 라운드트립을 탄다. */
 function BracketListValue({
   className,
   rowKey,
@@ -168,23 +172,26 @@ function BracketListValue({
 }) {
   const t = useT();
   const items = splitListValue(value);
+  const [pendingEmpty, setPendingEmpty] = useState(false);
   const setItems = (next: string[]) => onChange(joinListValue(next));
   const label = rowKey ?? t("frontmatterRows.valueLabel");
 
-  if (items.length === 0) {
+  if (items.length === 0 && !pendingEmpty) {
     return (
       <div className={className}>
-        <Button type="button" variant="outline" size="sm" onClick={() => setItems([""])}>
+        <Button type="button" variant="outline" size="sm" onClick={() => setPendingEmpty(true)}>
           {t("frontmatterRows.addListItem")}
         </Button>
       </div>
     );
   }
 
+  const displayItems = items.length === 0 ? [""] : items;
+
   return (
     <div className={className}>
       <div className="flex flex-col gap-1">
-        {items.map((item, idx) => (
+        {displayItems.map((item, idx) => (
           <div key={idx} className="flex items-center gap-1">
             {candidateOptions ? (
               <CandidateCombobox
@@ -192,7 +199,10 @@ function BracketListValue({
                 ariaLabel={`${label} ${idx + 1}`}
                 pickAriaLabel={t("frontmatterRows.pickValueLabel")}
                 value={item}
-                onValueChange={(v) => setItems(items.map((val, j) => (j === idx ? v : val)))}
+                onValueChange={(v) => {
+                  setPendingEmpty(false);
+                  setItems(displayItems.map((val, j) => (j === idx ? v : val)));
+                }}
                 options={candidateOptions}
                 onPaste={onPaste}
                 onKeyDown={onKeyDown}
@@ -202,7 +212,10 @@ function BracketListValue({
                 aria-label={`${label} ${idx + 1}`}
                 className="min-w-0 grow font-mono"
                 value={item}
-                onChange={(e) => setItems(items.map((v, j) => (j === idx ? e.target.value : v)))}
+                onChange={(e) => {
+                  setPendingEmpty(false);
+                  setItems(displayItems.map((v, j) => (j === idx ? e.target.value : v)));
+                }}
                 onPaste={onPaste}
                 onKeyDown={onKeyDown}
               />
@@ -213,7 +226,10 @@ function BracketListValue({
               size="icon-xs"
               aria-label={`${t("frontmatterRows.removeListItemPrefix")}${label} ${idx + 1}${t("frontmatterRows.removeListItemSuffix")}`}
               className="shrink-0 opacity-60 hover:opacity-100"
-              onClick={() => setItems(items.filter((_, j) => j !== idx))}
+              onClick={() => {
+                setPendingEmpty(false);
+                setItems(items.filter((_, j) => j !== idx));
+              }}
             >
               <X aria-hidden />
             </Button>
@@ -224,7 +240,7 @@ function BracketListValue({
           variant="ghost"
           size="sm"
           className="self-start"
-          onClick={() => setItems([...items, ""])}
+          onClick={() => setItems([...displayItems, ""])}
         >
           {t("frontmatterRows.addListItem")}
         </Button>
