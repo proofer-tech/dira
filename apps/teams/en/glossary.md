@@ -72,7 +72,7 @@ Never translate, never re-spell:
 | 첨부 | attachment | The button and the chip group read `Attachments`. |
 | 트랜스크립트 | transcript | The file the engine leaves. Never a log. |
 | 프로젝트 워커 | project worker | The worker that belongs to one project. |
-| 공통 워커 | shared worker | The machine-wide slot several projects take turns using. `공통 워커 풀` is the shared worker pool. |
+| 공통 워커 | shared worker | The machine-wide slot several projects take turns using. In prose it is a shared worker; the screen label for the pool is `Common worker pool`. |
 | 워커 락 | worker lock | What keeps one worker from starting a second session. |
 | 후보 | candidate | A ticket a worker may take this round. |
 | 상한 | cap | The ceiling in prose. The screen label is `Limit`. |
@@ -81,6 +81,17 @@ Never translate, never re-spell:
 | 예산 | budget | The byte budget on a file that is inlined into every prompt. |
 | 알림 종 | notification bell | |
 | 위지윅 | WYSIWYG | |
+| 표식 | marker | A hash or epic number in the writing that you can press. Manual-only word; nothing on screen is called this. |
+| 사건 | event | One line in the progress record. |
+| 단계 | stage | One line of the plan a session writes, and the accordion panel it becomes. |
+| 도구 | tool | What a session uses to read a file or run a command. |
+| 워커 마크 | worker mark | The `w6` at the end of the meta line on an in-progress card. |
+| 인라인 상자 | inline box | The progress record as it sits in the ticket page column, as opposed to the dialog. |
+| 다이얼로그 | dialog | Never modal or popup. |
+| 팝오버 | popover | What the bell opens. Not a dialog. |
+| 칩 | chip | The tool-name-and-count pills under the stream dialog's head. |
+| 창 (5시간 - 7일) | window | The stretch a usage percentage covers. |
+| 복귀 알림 | return notification | The bell item for stretches the queue sat stopped. |
 
 ## States and badges
 
@@ -190,7 +201,7 @@ label the screen actually shows. These rows are copied from the English dictiona
 | 공통 워커 빌리기 | Borrow shared workers |
 | 나머지 워커 설정 (표시만) | Other worker settings (read-only) |
 | 스테일 수거 | Reclaim stale |
-| 공통 워커 풀 | Shared worker pool |
+| 공통 워커 풀 | Common worker pool |
 | 전체 워커 | All workers |
 | 설정 분류 | Settings categories |
 | 공통 | Shared |
@@ -244,14 +255,58 @@ label the screen actually shows. These rows are copied from the English dictiona
 | 전원 프롬프트에 인라인 | Inlined in every prompt |
 | 세션이 필요할 때 읽음 | Read by the session when needed |
 | 초과 | over |
-| 상태 | State |
-| 물고 있는 티켓 | Ticket held |
+| 상태 | Status |
+| 물고 있는 티켓 | Holding |
 | 컨텍스트 | Context |
 | 마지막 활동 | Last activity |
 | 토큰(5시간) | Tokens (5h) |
 | 액션 | Actions |
 | 프로젝트 | Project |
 | 종류 | Kind |
+| 모아보기 | Group view |
+| 자세히 보기 | Expand |
+| 보관 | Archive |
+| 보관함 | Archived |
+| 미착수 | Not started |
+| 취소 (계획 단계) | Cancelled |
+| 배정 | Assignment |
+| 마무리 | Wrap-up |
+| 모름 | Unknown |
+| 프로젝트 관리 | Manage projects |
+| 참견 | Interject |
+| 이어받기 (완료 티켓의 칸) | Follow-up |
+| 대화 (홈 좌측 그룹) | Conversations |
+| 스케줄 | Schedules |
+| 워커 세션 | Worker sessions |
+| 더보기 | Show more |
+| 중지 | Stop |
+| 입력 | Input |
+| 결과 | Result |
+| 오류 | Error |
+| 마크다운 | Markdown |
+| 복사 | Copy |
+| 생각 | Thinking |
+| 대화 (스트림 필터) | Messages |
+| 도구 (스트림 필터) | Tools |
+| 프롬프트 (스트림 필터) | Prompts |
+| 이 기록 검색 | Search this record |
+| 맞는 기록이 없습니다 | No matching records |
+| 줄을 고르면 여기에 입력과 결과가 뜹니다 | Pick a row to see its input and result |
+| 소요 | Elapsed |
+| 아카이빙 대기 | Archiving — queued |
+| 아카이빙중 | Archiving |
+| 아카이빙 답변 대기 | Archiving — awaiting answer |
+| 알림 없음 | No notifications |
+| 보관한 알림 없음 | No archived notifications |
+| 한도를 읽을 수 없습니다 | Can't read the limit |
+| 최근 5시간 토큰 | Tokens, last 5 hours |
+| 키설정 | Keyboard shortcuts |
+| 사용 통계 | Usage stats |
+| 언어 | Language |
+| 웹훅 | Webhook |
+| 경로 | Path |
+| 열림 | Open |
+| 연결 | Connected |
 
 Four more for the same reason, all macOS wording rather than ours: `허용` is `Allow`, `앱 관리` is
 `App Management`, `개인정보 보호 및 보안` is `Privacy & Security`, and `전체 디스크 접근 권한` is
@@ -305,8 +360,18 @@ the English dictionary takes its wording from here.
 | `저장했습니다. 유효한지는 다음 디스패치에서 드러납니다.` | `Saved. Whether it is valid shows at the next dispatch.` |
 | `Claude 토큰이 없습니다` | `No Claude token` |
 | `워커가 티켓을 집어도 세션을 못 열고 그대로 끝냅니다.` | `Workers will pick up a ticket, fail to open a session, and end there.` |
-| `세션이 열리자마자 죽는 워커` | `workers whose sessions die the moment they open` |
+| `세션이 열리자마자 죽는 워커` | `Workers that die the moment a session opens:` |
 | `이름을 바꾸면 프롬프트에서 빠집니다` | `Renaming it takes it out of the prompt` |
 | `모든 세션이 협업 프로토콜 없이 시작합니다` | `Every session will start with no collaboration protocol` |
+| `이 티켓 48M 토큰 · 세션 1개` | `This ticket 48M tokens · 1 session` |
+| `· 이 합계에 없는 세션 3개` | `· outside this total: 3` |
+| `이 해시의 로그 3개에 종료 기록이 없습니다` | `None of the 3 logs for this hash has an exit record` |
+| `workers/logs/*-<해시>.log가 이 머신에 0개입니다` | `There are 0 workers/logs/*-<hash>.log files on this machine` |
+| `기록 145건` | `Records 145` |
 
 The em dash in those sentences is the app's, not ours. Keep it where the Korean has it.
+
+The last five rows are the token figure and the record count. Korean puts the number in the middle
+of the phrase and English puts it after the label, so the pieces are cut differently. The token
+sentences are still Korean in `lib/usage.ts`; the English above is what they take when they move
+into the dictionary.

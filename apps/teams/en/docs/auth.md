@@ -101,7 +101,7 @@ is no screen to move to.
 - There is no button to dismiss it. Put a token in place and the check turns itself off.
 - Expiry cannot be announced in advance. The expiry time is not written in the file and the CLI
   does not tell us. What breaks the silence after an expiry instead is the next item in the bell
-  (`workers whose sessions die the moment they open`). See [The screens](/docs/screens).
+  (`Workers that die the moment a session opens`). See [The screens](/docs/screens).
 
 ## Cloud mounts - Full Disk Access
 
