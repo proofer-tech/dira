@@ -131,6 +131,12 @@ const FILLED = [
   "resolve.",
   "project.",
   "feedbackDialog.",
+  // f2fcf747이 en을 채우고 여기 더했다(묶음 표 행 5의 세션 스트림 갈래). 화면 접두 하나
+  // (`sessionStream.`)와 파일 스코프 접두 둘(`interjectLib.`·`transcriptLib.`)이다 —
+  // 뒤의 둘은 여러 화면이 같은 사건 데이터를 나눠 써서 화면 접두를 못 붙인다.
+  "sessionStream.",
+  "interjectLib.",
+  "transcriptLib.",
 ];
 
 test("이미 찬 묶음(설정·마감·셸)의 ko 키는 en에 하나도 안 빠졌다", () => {

@@ -1636,6 +1636,13 @@ export const ko: Record<string, string> = {
  *  | 진행중 접미사 · 완료 접미사 | in-progress suffix · done suffix | 파일 이름 꼬리(`.wip`·`.done`)를 부르는 이름. 위 티켓 상태 줄의 낱말을 그대로 쓴다 |
  *  | 해석 실패 · 루트 밖 · 워커마다 다름 | resolve failed · outside root · differs per worker | 해석 결과 표의 배지 셋. `기본값 가정` 줄과 같은 이유로 소문자다 |
  *  | 마이그레이션 | migration | 온톨로지를 최신 규약으로 다시 올리는 그것. `upgrade`로 안 부른다 |
+ *  | 진행 기록 · 기록(건) | Progress record · Records | `f2fcf747`(세션 스트림 묶음)가 더한 줄부터 아래. 뒤엣것은 단위 낱말이 수 앞으로 못 가서 `Records 12` 꼴이다 |
+ *  | 참견 입구 | interject inbox | frontmatter `inbox`가 가리키는 FIFO다. `pipe`로 안 푼다 — 사람이 고칠 때 보는 이름이 `inbox` 하나다 |
+ *  | 이어받기 | follow-up | 완료 티켓에서 새 티켓 한 장을 내는 그 동작. 참견과 다른 자리라 낱말을 가른다 |
+ *  | 서브(사이드체인) | Sub | 한국어가 이미 줄인 낱말이라 영어도 줄인다 — 줄 안 표식이라 자리가 좁다 |
+ *  | 사람(말풍선 머리) | Person | 오른쪽 말풍선의 임자는 이 기계를 쓰는 사람 하나지만, 파싱이 아는 것은 `첫 아닌 사용자 프롬프트`까지라 `You`로 안 좁힌다 |
+ *  | 트랜스크립트 | transcript | 엔진이 남기는 그 파일. `log`로 안 부른다 |
+ *  | 배정 · 생각 · 도구 · 결과(사건 라벨) | Assignment · Thinking · Tool · Result | `progress.stream.*`·`progress.segment.*`가 이미 쓰는 낱말 그대로다 — 같은 것을 두 이름으로 안 부른다 |
  *
  *  **어순이 뒤집히는 자리는 접두·접미 두 키로 쪼갠다.** 한국어는 이름 뒤에 다 붙지만(`<이름>
  *  삭제`) 영어는 동사가 앞에 뜬다(`Delete <name>`) — 한쪽이 비는 것이 정상이고, 조립은
@@ -3042,6 +3049,99 @@ export const en: Record<string, string> = {
   "feedbackDialog.truncated":
     "The text is long, so the tail won't reach the issue — that's the limit of sending through a URL. Send it in parts, or paste the rest into the issue before you submit it.",
   "feedbackDialog.submit": "Open a GitHub issue",
+
+  // 세션 스트림(§0-16 §묶음 표 행 5 갈래, `f2fcf747`) — `components/session-stream.tsx` ·
+  // `lib/interject.ts` · `lib/transcript.ts`. ko는 `33563f49`가 넣었다.
+  //
+  // 묶음 줄의 수 세기는 `기록 n건` -> `Records n`이다. 영어는 단위 낱말이 수 앞으로 못 가서
+  // 꼬리가 빈다 — `persona.refs.openPrefix`가 `Open 2`로 이미 선 그 벌이고, `t`는 `""`를
+  // 그대로 돌려주므로 한국어로 안 샌다.
+  "sessionStream.recordCount.label": "Records",
+  "sessionStream.recordCount.unit": "",
+  "sessionStream.closedNoUpdate": "Session ended · no more updates",
+  "sessionStream.scrollToBottom": "Jump to the bottom",
+  "sessionStream.heading": "Progress record",
+  // 엔진 이름이 접두와 접미 사이에 낀다. 한국어는 `<엔진>입니다`로 끝나지만 영어는 이름이
+  // 명사구 가운데로 들어가서, 접미가 `engine`을 들고 문장을 닫는다
+  // (`This worker runs the codex engine`). 이름 앞 공백은 JSX가 주고 뒤 공백은 접미가 든다.
+  "sessionStream.engineIsPrefix": "This worker runs the",
+  "sessionStream.engineIsSuffix": " engine",
+  "sessionStream.noTranscriptSuffix": " leaves no transcript",
+  "sessionStream.claudeOnlySuffix": " engine — interject only works on the claude engine",
+  "sessionStream.noInboxStatic": "This session can't take an interject — the ticket has no inbox",
+  "sessionStream.question": "Question",
+  "sessionStream.answer": "Answer",
+  // §비주얼 §21 실패 4종. 제목은 무엇이 안 됐는지, `next`는 지금 무엇을 다시 하는지다 — 사람이
+  // 급할 때 읽는 자리라 원인만 적고 끝내지 않는다.
+  "sessionStream.fail.enxio.title": "Couldn't send it — the session has ended",
+  "sessionStream.fail.enxio.next":
+    "No session is running on this ticket any more. Copy the text above into a new ticket and give the instruction there.",
+  "sessionStream.fail.enoent.title": "Couldn't send it — there's no inbox",
+  "sessionStream.fail.enoent.next":
+    "The session just ended, or the engine never made the inbox. Send it once more, and if it still fails, give the instruction in a new ticket.",
+  "sessionStream.fail.notWip.title": "Couldn't send it — the ticket isn't in progress",
+  "sessionStream.fail.notWip.next": "An interject only reaches a running session. Give the instruction in a new ticket.",
+  "sessionStream.fail.noInbox.title": "Couldn't send it — this session can't take an interject",
+  "sessionStream.fail.noInbox.next":
+    "It's an older session, or an engine that doesn't make an inbox. Give the instruction in a new ticket.",
+  "sessionStream.fail.other.title": "Couldn't send it",
+  // 완료 모드(이어받기) 실패 2종 — `Couldn't send it`로 시작하지 않는다(§21). 여기서 생기는 것은
+  // FIFO로 가는 한 줄이 아니라 티켓 한 장이라, 동사가 `publish`다.
+  "sessionStream.failDone.notDone.title": "Couldn't publish it — this isn't a done ticket",
+  "sessionStream.failDone.notDone.next":
+    "A follow-up belongs to a done ticket. Refresh and look again — if a session is running, this box turns into an interject.",
+  "sessionStream.failDone.other.title": "Couldn't publish it",
+  "sessionStream.failDone.other.next": "Copy the text above and publish it from the board.",
+  "sessionStream.answerHint": "Answer it and this ticket comes back to the queue, and the session that holds it carries on.",
+  "sessionStream.followupAria": "Follow-up",
+  "sessionStream.interjectAria": "Interject",
+  "sessionStream.followupPlaceholder": "Write what to do next",
+  "sessionStream.interjectPlaceholder": "Say something to the running session",
+  "sessionStream.followupHint": "One new open ticket comes out of this",
+  "sessionStream.sentHint": "Sent · it shows in the stream below",
+  "sessionStream.publishing": "Publishing…",
+  "sessionStream.publishAction": "Publish follow-up",
+  "sessionStream.sending": "Sending…",
+  "sessionStream.sendAction": "Send",
+  "sessionStream.sub": "Sub",
+  "sessionStream.matchAllSuffix": "every match",
+  "sessionStream.session": "Session",
+  "sessionStream.person": "Person",
+
+  // `lib/interject.ts`(§2-2) — 화면이 §21의 문구 넷을 가르는 근거가 이 사유들이다. 괄호가
+  // 붙는 두 자리는 접두가 여는 괄호까지, `Mid`가 닫는 괄호와 콜론을 든다.
+  "interjectLib.state.open": "Open",
+  "interjectLib.state.wip": "In progress",
+  "interjectLib.state.done": "Done",
+  "interjectLib.emptyContent": "Type something to send.",
+  "interjectLib.unknownTicketPrefix": "Not a ticket in the queue:",
+  "interjectLib.notWipError": "This ticket isn't in progress — no session is running, so an interject has nowhere to land.",
+  "interjectLib.statePrefix": "State:",
+  "interjectLib.noInboxError":
+    "This session has no interject inbox (no `inbox` in the frontmatter) — you can only talk to a session opened with streaming input.",
+  "interjectLib.noInboxDetail": "no inbox in the frontmatter",
+  "interjectLib.relativeInboxPrefix": "The interject inbox path isn't absolute:",
+  "interjectLib.enxioError": "The session has already ended — the inbox is still there, but nothing is reading it.",
+  "interjectLib.enoentError": "The interject inbox is gone — it went away when the session ended.",
+  "interjectLib.openFailedPrefix": "Couldn't open the interject inbox (",
+  "interjectLib.openFailedMid": "):",
+  "interjectLib.notFifoPrefix": "The interject inbox isn't a FIFO:",
+  "interjectLib.eagainError": "The interject inbox is full — wait for the session to read it, then send again.",
+  "interjectLib.epipeError": "The session has already ended — the inbox closed while we were writing.",
+  "interjectLib.writeFailedPrefix": "Couldn't write the interject (",
+  "interjectLib.writeFailedMid": "):",
+
+  // `lib/transcript.ts`(§2-1) — 사건 라벨과 단위 둘. 라벨은 `progress.stream.*`가 이미 세운
+  // 대문자 한 낱말 꼴이고, 단위는 수 뒤에 바로 붙어서 앞 공백을 값이 든다
+  // (`settings.workers.borrowedBySuffix`가 선 그 벌). 복수형 장치가 없어 늘 복수다.
+  "transcriptLib.assigned": "Assignment",
+  "transcriptLib.charsUnit": " chars",
+  "transcriptLib.sessionPromptFirst": "Session prompt",
+  "transcriptLib.prompt": "Prompt",
+  "transcriptLib.thinking": "Thinking",
+  "transcriptLib.tool": "Tool",
+  "transcriptLib.result": "Result",
+  "transcriptLib.linesUnit": " lines",
 };
 
 const DICTS: Record<Locale, Record<string, string>> = { ko, en };
