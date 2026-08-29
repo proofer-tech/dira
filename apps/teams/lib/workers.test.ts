@@ -78,6 +78,7 @@ const {
   rewriteOntology,
   workerGroups,
   workerOf,
+  ticketCwdLineCmd,
   worktreeCmds,
   writeCommonContext,
   writeContext,
@@ -563,7 +564,7 @@ test("작업 디렉터리 결함 — 3종을 판정하고 정상 워커에는 �
   ]);
 });
 
-test("작업 디렉터리 결함 — TICKET_CWD 줄이 없으면 엔진 기본값(루트의 부모)으로 판정한다", async () => {
+test("작업 디렉터리 결함 — TICKET_CWD 줄이 없으면 엔진 기본값(루트의 부모)으로 판정한다 · 워커 하나뿐이면 결함 0개(요구 977419d7 결정 1)", async () => {
   // tick.sh 39행. 이 기본값은 큐가 있는 디렉터리라 `<부모>/.dira`가 곧 큐 루트다 = 정상.
   const base = mkdtempSync(path.join(tmpdir(), "fst-base-"));
   tmps.push(base);
@@ -574,7 +575,57 @@ test("작업 디렉터리 결함 — TICKET_CWD 줄이 없으면 엔진 기본�
   chmodSync(file, 0o755); // 이 테스트는 cwd 판정만 본다 — no-exec는 별도 테스트가 덮는다
   const [w] = await listWorkers(root);
   assert.strictEqual(w.cwd, null);
+  // 워커가 하나뿐이면 `no-ticket-cwd`가 안 선다 — §0-3의 그 문장이 그대로 맞는 자리다.
   assert.deepStrictEqual(w.defects, []);
+  assert.strictEqual(w.cwdFix, undefined);
+});
+
+test("TICKET_CWD 줄 없음 — 워커가 둘 이상이면 결함, CopyCommand 실행은 그 한 줄만 더한다 (요구 977419d7)", async () => {
+  const base = mkdtempSync(path.join(tmpdir(), "fst-base-"));
+  tmps.push(base);
+  const root = path.join(base, ".dira");
+  mkdirSync(path.join(root, "workers"), { recursive: true });
+  const file1 = path.join(root, "workers", "w1.sh");
+  const file2 = path.join(root, "workers", "w2.sh");
+  writeFileSync(file1, "#!/bin/bash\nTICKET_CONTEXT=()\n"); // 줄이 없다 — pofol의 w1과 같은 배치
+  chmodSync(file1, 0o755);
+  writeFileSync(
+    file2,
+    `#!/bin/bash\nTICKET_CWD="${path.join(root, "worktrees", "w2")}"\nTICKET_CONTEXT=()\n`,
+  );
+  chmodSync(file2, 0o755);
+  mkdirSync(path.join(root, "worktrees", "w2"), { recursive: true });
+  symlinkSync("../..", path.join(root, "worktrees", "w2", ".dira"));
+
+  const ws = await listWorkers(root);
+  const by = (n: string) => ws.find((w) => w.name === n)!;
+
+  // 실효 cwd는 여전히 루트의 부모(tick.sh 39행 기본값)다 — 그 사실과 그 경로가 사유에 담긴다.
+  assert.deepStrictEqual(by("w1").defects, [
+    { kind: "no-ticket-cwd", detail: `TICKET_CWD 줄이 없어 ${path.dirname(root)} 에서 일합니다.` },
+  ]);
+  // 준비 명령은 worktreeCmds의 3단계가 아니다 — 트리는 게이트 몫이다.
+  assert.strictEqual(by("w1").worktree, undefined);
+  assert.strictEqual(by("w1").cwdFix, ticketCwdLineCmd(root, "w1", file1));
+  assert.strictEqual(by("w1").cwdFix, `printf '%s\\n' 'TICKET_CWD="${path.join(root, "worktrees", "w1")}"' >> '${file1}'`);
+  // 나머지 워커의 판정은 한 줄도 안 바뀐다.
+  assert.deepStrictEqual(by("w2").defects, []);
+
+  // 실측: 이 CopyCommand를 셸에 그대로 붙여 넣으면 그 한 줄만 늘고 나머지는 한 글자도 안 바뀐다.
+  const before = readFileSync(file1, "utf8");
+  const modeBefore = statSync(file1).mode;
+  execFileSync("sh", ["-c", by("w1").cwdFix!]);
+  assert.strictEqual(
+    readFileSync(file1, "utf8"),
+    before + `TICKET_CWD="${path.join(root, "worktrees", "w1")}"\n`,
+  );
+  assert.strictEqual(statSync(file1).mode, modeBefore); // 실행 비트도 안 잃는다
+
+  // 다음 판정에서 no-ticket-cwd는 사라진다 — 트리 자체는 이 명령이 안 만들었으니 missing-cwd로 갈아탄다.
+  const w1After = (await listWorkers(root)).find((w) => w.name === "w1")!;
+  assert.deepStrictEqual(w1After.defects, [
+    { kind: "missing-cwd", detail: `${path.join(root, "worktrees", "w1")} 가 없거나 디렉터리가 아닙니다.` },
+  ]);
 });
 
 test("실행 비트 없음 — 판정·CopyCommand, status는 그대로다 (§0-21 결정 2 — 복구 버튼은 P290-4)", async () => {

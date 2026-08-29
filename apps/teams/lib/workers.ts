@@ -31,11 +31,17 @@ import { DEFAULT_LOCALE, t, type Locale } from "./i18n.ts";
 
 export type WorkerStatus = "running" | "idle" | "stopped" | "stale";
 
-/** 워커 결함 4종 (DESIGN.md §4 표, 넷째는 §0-21 결정 2). **`status`에 5번째 값을 만들지 않는다** —
- *  결함은 락·crontab의 사실과 직교한 축이다(사람이 도중에 트리를 지우면 `running` + 결함이다).
- *  넷째(`no-exec`)만 디렉터리가 아니라 워커 파일 자신에 대한 사실이지만, 표현은 같다(경고 배지 +
- *  사유) — 타입 이름을 넓히는 리네임은 하지 않는다(§0-21 결정 2). */
-export type WorkerDefectKind = "missing-cwd" | "missing-link" | "shared-cwd" | "no-exec";
+/** 워커 결함 5종 (DESIGN.md §4 표, 넷째는 §0-21 결정 2, 다섯째는 §977419d7 결정 1·3). **`status`에
+ *  5번째 값을 만들지 않는다** — 결함은 락·crontab의 사실과 직교한 축이다(사람이 도중에 트리를
+ *  지우면 `running` + 결함이다). 넷째(`no-exec`)는 디렉터리가 아니라 워커 파일 자신에 대한
+ *  사실이고, 다섯째(`no-ticket-cwd`)는 워커가 둘 이상일 때만 재는 판정이지만, 표현은 다 같다
+ *  (경고 배지 + 사유 + CopyCommand) — 타입 이름을 넓히는 리네임은 하지 않는다(§0-21 결정 2). */
+export type WorkerDefectKind =
+  | "missing-cwd"
+  | "missing-link"
+  | "shared-cwd"
+  | "no-exec"
+  | "no-ticket-cwd";
 
 /** `detail`은 판정에 **실제로 쓴 경로·워커 이름**이다. 결함 이름과 "그래서 무슨 일이
  *  일어나나"는 화면이 붙인다(§4 표와 같은 단어를 쓰게 한 자리에 둔다). */
@@ -109,6 +115,10 @@ export type Worker = {
   /** `no-exec` 결함의 CopyCommand(`chmod +x <절대경로>`, §0-21 결정 2) — `no-exec`가 없으면
    *  없다. 복구 버튼은 이 판정의 몫이 아니다(§0-21 결정 3, 로드맵 P290-4가 붙인다) */
   execFix?: string;
+  /** `no-ticket-cwd` 결함의 CopyCommand(§977419d7 결정 3) — 워커 파일에 `TICKET_CWD=` 한 줄만
+   *  더한다. `worktree`(3단계)가 아니다: 트리는 다음 tick에 게이트가 만든다. `no-ticket-cwd`가
+   *  없으면 없다 */
+  cwdFix?: string;
   /** 공통 워커 풀의 shim인가(§4-16 결정 2 — 둘째 줄 `# dira-pool: <이름>` 표식, `poolShimNameOf`로
    *  판정한다). shim도 이 파일 목록에 그대로 섞여 있어서(`createWorker`가 만든 같은 모양의 파일이라)
    *  `listWorkers`가 굳이 걸러내지 않고 이 필드 하나로 알려 준다 — 설정 `워커` 패널의 `공통` 배지·
@@ -1362,11 +1372,14 @@ export function holderEngine(workers: Worker[], stem: string): string | null {
  *  - 공유 판정도 `realpath` 키로 본다 — 표기·심링크가 달라도 같은 트리면 같은 트리다.
  *  - 실행 비트 판정(§0-21 결정 2)은 워커 `.sh` 자신의 `mode & 0o111`이다 — `cwd`가 아니라
  *    `path`를 본다. 앞의 셋과 별개 축이라 함께 있어도 서로 가리지 않는다.
+ *  - `TICKET_CWD` 줄 누락 판정(§977419d7 결정 1)은 `rawCwd`가 `null`이고 워커 파일이 둘 이상일
+ *    때만 선다 — 실효 cwd가 실재하는지, `.dira`가 큐 루트로 풀리는지는 안 본다(둘 다 통과하는
+ *    것이 이 결함의 모양이다). 워커 하나뿐인 큐에서는 §0-3 그대로 정상이다.
  *
  *  ponytail: 워커 수만큼 stat·realpath 3번이다(한 자릿수). 목록이 커지면 요청 단위 캐시. */
 async function cwdDefects(
   root: string,
-  ws: { name: string; cwd: string; path: string }[],
+  ws: { name: string; cwd: string; rawCwd: string | null; path: string }[],
 ): Promise<WorkerDefect[][]> {
   const queue = nfc(await realpath(root).catch(() => root));
   // 못 풀리는 경로(없는 디렉터리)는 문자열로 비교한다 — 없는 트리를 둘이 공유하는 것도 공유다.
@@ -1375,8 +1388,11 @@ async function cwdDefects(
   keys.forEach((k, i) => byKey.set(k, [...(byKey.get(k) ?? []), ws[i].name]));
 
   return Promise.all(
-    ws.map(async ({ name, cwd, path: file }, i) => {
+    ws.map(async ({ name, cwd, rawCwd, path: file }, i) => {
       const out: WorkerDefect[] = [];
+      if (rawCwd === null && ws.length > 1) {
+        out.push({ kind: "no-ticket-cwd", detail: `TICKET_CWD 줄이 없어 ${cwd} 에서 일합니다.` });
+      }
       const isDir = await stat(cwd).then((s) => s.isDirectory(), () => false);
       if (!isDir) {
         out.push({ kind: "missing-cwd", detail: `${cwd} 가 없거나 디렉터리가 아닙니다.` });
@@ -1519,16 +1535,19 @@ export async function listWorkers(root: string, tickets: Ticket[] = []): Promise
   }
 
   // tick.sh 39행: TICKET_CWD 줄이 없는 워커의 실효 cwd는 루트의 부모다(contextOf와 같은 기준).
-  const eff = out.map((w) => ({ name: w.name, cwd: w.cwd ?? path.dirname(root), path: w.path }));
+  const eff = out.map((w) => ({ name: w.name, cwd: w.cwd ?? path.dirname(root), rawCwd: w.cwd, path: w.path }));
   const defects = await cwdDefects(root, eff);
   defects.forEach((d, i) => {
     if (d.length === 0) return; // 결함 0개인 워커는 아무것도 늘지 않는다
     out[i].defects = d;
     // 명령 문자열은 §4 생성과 **같은 함수**에서 나온다 — 두 자리가 다른 걸 보여주면 안 된다.
-    // `no-exec`뿐인 워커에는 안 붙인다 — 그 준비 명령은 워크트리를 만드는 것이지 실행 비트와
-    // 무관하다(§0-21 결정 2·3, 두 축은 함께 있어도 서로 가리지 않는다).
-    if (d.some((x) => x.kind !== "no-exec")) out[i].worktree = worktreeCmds(root, out[i].name);
+    // `no-exec`·`no-ticket-cwd`뿐인 워커에는 안 붙인다 — 그 셋은 각자 다른 준비 명령을 쓴다
+    // (§0-21 결정 2·3, §977419d7 결정 3 — 세 축은 함께 있어도 서로 가리지 않는다).
+    if (d.some((x) => x.kind !== "no-exec" && x.kind !== "no-ticket-cwd")) {
+      out[i].worktree = worktreeCmds(root, out[i].name);
+    }
     if (d.some((x) => x.kind === "no-exec")) out[i].execFix = execBitCmd(out[i].path);
+    if (d.some((x) => x.kind === "no-ticket-cwd")) out[i].cwdFix = ticketCwdLineCmd(root, out[i].name, out[i].path);
   });
   return out;
 }
@@ -2246,6 +2265,16 @@ export function worktreeCmds(root: string, name: string): string[] {
  *  이 판정 티켓의 몫은 문자열까지다. */
 export function execBitCmd(file: string): string {
   return `chmod +x ${sq(file)}`;
+}
+
+/** `no-ticket-cwd` 결함(§977419d7 결정 3)의 CopyCommand — 워커 파일 끝에 `TICKET_CWD=` 한 줄만
+ *  덧붙인다(`>>`라 기존 줄은 한 글자도 안 바뀌고 실행 비트도 그대로다). `worktreeCmds`의 3단계가
+ *  아니다 — 트리 자체는 이 명령이 안 만들고, 다음 tick에 게이트가 만든다(§4-14 §없는 워크트리를
+ *  게이트가 만든다). 값은 `rewriteCwd`와 같은 `dq` 인용 규칙을 쓴다 — 파일에 실제로 들어가는
+ *  모양(`TICKET_CWD="…"`)과 갈리면 사람이 다시 파싱할 때 헷갈린다. */
+export function ticketCwdLineCmd(root: string, name: string, file: string): string {
+  const line = `TICKET_CWD=${dq(worktreePath(root, name))}`;
+  return `printf '%s\\n' ${sq(line)} >> ${sq(file)}`;
 }
 
 /** `no-exec` 결함(§0-21 결정 3)의 복구 버튼이 부르는 액션 — `workerFile`이 그 워커 하나로

@@ -89,6 +89,10 @@ const DEFECT: Record<Exclude<WorkerRow["defects"][number]["kind"], "no-exec">, {
     title: "작업 디렉터리 공유",
     why: "두 세션이 한 트리에서 한 브랜치를 밟습니다 — dispatch-gate.sh가 디스패치를 막습니다.",
   },
+  "no-ticket-cwd": {
+    title: "TICKET_CWD 없음",
+    why: "받는 트리에서 그대로 커밋합니다 — 미커밋 흔적이 남으면 통합 게이트가 큐의 워커 전부를 보류시킵니다.",
+  },
 };
 
 export default async function Workers({ params }: { params: Promise<{ project: string }> }) {
@@ -346,8 +350,9 @@ export default async function Workers({ params }: { params: Promise<{ project: s
                                 </p>
                               ))}
                               {/* `w.worktree`는 `missing-cwd`·`missing-link`·`shared-cwd` 중 하나라도
-                                  있을 때만 온다 — `no-exec`뿐인 워커에는 워크트리와 무관한 이 문단이
-                                  안 뜬다(§0-21 결정 2·3, 두 축은 함께 있어도 서로 안 가린다). */}
+                                  있을 때만 온다 — `no-exec`·`no-ticket-cwd`뿐인 워커에는 워크트리와
+                                  무관한 이 문단이 안 뜬다(§0-21 결정 2·3, §977419d7 결정 3 — 세 축은
+                                  함께 있어도 서로 안 가린다). */}
                               {w.worktree && (
                                 <p>
                                   준비 명령은 이 프로젝트의 배치인{" "}
@@ -362,9 +367,24 @@ export default async function Workers({ params }: { params: Promise<{ project: s
                               {w.worktree?.map((cmd) => (
                                 <CopyCommand key={cmd} cmd={cmd} />
                               ))}
+                              {/* `no-ticket-cwd`의 준비 명령(§977419d7 결정 3) — 워크트리 3단계가
+                                  아니라 워커 파일에 그 한 줄만 더한다. 트리 자체는 다음 tick에
+                                  게이트가 만든다(§4-14 §없는 워크트리를 게이트가 만든다). */}
+                              {w.cwdFix && (
+                                <>
+                                  <p>
+                                    이 명령은 워커 파일에{" "}
+                                    <span className="font-mono text-xs break-all">
+                                      TICKET_CWD="{project.root}/worktrees/{w.name}"
+                                    </span>{" "}
+                                    한 줄만 더합니다 — 트리는 다음 tick에 게이트가 만듭니다.
+                                  </p>
+                                  <CopyCommand cmd={w.cwdFix} />
+                                </>
+                              )}
                               {/* `no-exec` 복구 버튼(§0-21 결정 3, §비주얼 §57 §1) — 사실은 위
                                   (defects map) · 조작은 아래(이 버튼)가 같은 순서다. 성공하면
-                                  결함이 0개가 돼 이 `Alert` 자체가 사라진다. 나머지 결함 셋은
+                                  결함이 0개가 돼 이 `Alert` 자체가 사라진다. 나머지 결함들은
                                   버튼이 없다 — 판정 대상이 워커 파일 자신이라 추측이 0인 이
                                   결함 하나만의 예외다(§0-21 결정 3). */}
                               {w.execFix && (
