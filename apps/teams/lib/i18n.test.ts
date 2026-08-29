@@ -137,6 +137,14 @@ const FILLED = [
   "sessionStream.",
   "interjectLib.",
   "transcriptLib.",
+  // 96327123이 en을 채우고 여기 더했다(묶음 표 행 12의 에픽 갈래). 화면 접두 하나(`epics.`)와
+  // 파일 스코프 접두 셋(`epicSidebar.`·`epicsLib.`·`epicLib.`)이라 줄이 넷이다.
+  // `epics.`는 점까지가 접두라 `epicSidebar.`·`epicsLib.`·`epicLib.`을 안 덮는다.
+  // 사이드바는 보드·에픽 두 화면이 같이 쓰는 부품이라 화면 접두를 못 붙인다.
+  "epics.",
+  "epicSidebar.",
+  "epicsLib.",
+  "epicLib.",
 ];
 
 test("이미 찬 묶음(설정·마감·셸)의 ko 키는 en에 하나도 안 빠졌다", () => {
@@ -1054,6 +1062,51 @@ test("024ec871 — 온톨로지 화면의 조립 문구가 영어에서도 문�
   assert.strictEqual(
     t(l, "ontology.action.hashExhausted"),
     t(l, "boardPage.action.hashExhausted"),
+  );
+});
+
+test("96327123 — 에픽 갈래의 조립 문구가 영어에서도 문장이 된다(en)", () => {
+  const l = "en" as const;
+
+  // epic-sidebar.tsx 건수 — 수 뒤에 공백 없이 붙어 꼬리가 앞 공백을 든다.
+  assert.strictEqual(`12${t(l, "epicSidebar.unit.count")}`, "12 tickets");
+
+  // epics-ui.tsx 메모리 삭제 다이얼로그 — 제목은 이름이 뒤에, 본문은 경로가 앞에 낀다.
+  assert.strictEqual(
+    `${t(l, "epics.memory.deleteDialogTitlePrefix")} cdp`,
+    "Delete memory — cdp",
+  );
+  assert.strictEqual(
+    `epics/P338/memory/cdp.md ${t(l, "epics.memory.deleteDialogBodySuffix")}`,
+    "epics/P338/memory/cdp.md will be deleted. This can't be undone — this screen has no edit and no add. From the next dispatch on, a session can't find this concept.",
+  );
+
+  // lib/epics.ts · lib/epic.ts 실패 문구 — 콜론까지가 접두고 값이 공백 하나 뒤에 붙는다.
+  assert.strictEqual(
+    `${t(l, "epicsLib.keyOutsideQueuePrefix")} ../P338`,
+    "That key points outside the queue: ../P338",
+  );
+  assert.strictEqual(`${t(l, "epicsLib.keyExistsPrefix")} P338`, "That key already exists: P338");
+  assert.strictEqual(
+    `${t(l, "epicsLib.memoryFileNotFoundPrefix")} cdp.md`,
+    "No such memory file in the list: cdp.md",
+  );
+  assert.strictEqual(
+    `${t(l, "epicLib.notFoundPrefix")} 96327123`,
+    "Not a ticket in the queue: 96327123",
+  );
+  assert.strictEqual(
+    `${t(l, "epicLib.noFrontmatterPrefix")} 96327123.wip.md`,
+    "No frontmatter: 96327123.wip.md",
+  );
+
+  // 같은 사건을 두 낱말로 안 부르는 자리 셋 — 페르소나 화면과 문장이 같고, 저장 실패는
+  // 제목과 본문 접두가 같은 동사를 쓴다.
+  assert.strictEqual(t(l, "epics.route.notFound"), t(l, "persona.route.notFound"));
+  assert.strictEqual(t(l, "epics.memory.emptyHint"), t(l, "persona.memory.empty"));
+  assert.strictEqual(
+    `${t(l, "epics.readme.saveFailed")}:`,
+    t(l, "epicsLib.saveFailedPrefix"),
   );
 });
 

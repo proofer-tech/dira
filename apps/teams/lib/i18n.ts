@@ -1990,6 +1990,8 @@ export const ko: Record<string, string> = {
  *  | 사람(말풍선 머리) | Person | 오른쪽 말풍선의 임자는 이 기계를 쓰는 사람 하나지만, 파싱이 아는 것은 `첫 아닌 사용자 프롬프트`까지라 `You`로 안 좁힌다 |
  *  | 트랜스크립트 | transcript | 엔진이 남기는 그 파일. `log`로 안 부른다 |
  *  | 배정 · 생각 · 도구 · 결과(사건 라벨) | Assignment · Thinking · Tool · Result | `progress.stream.*`·`progress.segment.*`가 이미 쓰는 낱말 그대로다 — 같은 것을 두 이름으로 안 부른다 |
+ *  | 에픽 | epic | `96327123`(에픽 묶음)가 더한 줄부터 아래. 소문자다 — 화면 제목 자리에서만 첫 글자를 올린다. frontmatter 키 이름(`epic:`)과 같은 낱말이라 갈릴 자리가 없다 |
+ *  | 건(에픽 사이드바의 티켓 수) | tickets | 숫자 뒤 꼬리다(`12 tickets`). 지표의 `건`(`found`)과 다른 자리라 낱말을 가른다 — 여기서 세는 것이 티켓이라고 적어야 무엇의 수인지 안다 |
  *
  *  **어순이 뒤집히는 자리는 접두·접미 두 키로 쪼갠다.** 한국어는 이름 뒤에 다 붙지만(`<이름>
  *  삭제`) 영어는 동사가 앞에 뜬다(`Delete <name>`) — 한쪽이 비는 것이 정상이고, 조립은
@@ -2408,7 +2410,24 @@ export const en: Record<string, string> = {
   "epics.readme.edit": "Edit",
   "epics.readme.editDesc": "The title is the first line of README.md and the body is what follows; saving overwrites the file.",
   "epics.readme.bodyLabel": "Body",
-  "epics.readme.saveFailed": "Could not save",
+  "epics.readme.saveFailed": "Couldn't save",
+  // 에픽 화면(§에픽 §결정 6) - 잘못된 P번호로 들어온 자리라 페르소나 화면과 같은 Alert고,
+  // 문장도 `persona.route.notFound`와 같다(화면마다 자기 키를 들 뿐이다). 메모리 절도 같은
+  // 부품의 두 벌이라 `persona.memory.*`의 문장을 그대로 쓴다 - 같은 것을 두 이름으로 안 부른다.
+  "epics.route.notFound": "This path can't be opened",
+  "epics.readme.missing": "There's no README.md.",
+  "epics.memory.heading": "Memory",
+  "epics.memory.emptyHint": "No memory yet — it piles up here as sessions leave notes in their retrospectives.",
+  "epics.memory.deleteFailedTitle": "Couldn't delete the memory",
+  "epics.memory.deleteFailedFallback": "Couldn't delete the memory.",
+  "epics.memory.deleting": "Deleting…",
+  "epics.memory.delete": "Delete",
+  "epics.memory.deleteDialogTitlePrefix": "Delete memory —",
+  "epics.memory.deleteDialogBodySuffix":
+    "will be deleted. This can't be undone — this screen has no edit and no add. From the next dispatch on, a session can't find this concept.",
+  // 수 뒤에 바로 붙는 꼬리라 앞 공백을 값이 든다. 복수형 장치가 없어 늘 복수다
+  // (`persona.delete.refsWarnSuffix`가 선 그 벌).
+  "epicSidebar.unit.count": " tickets",
   // 배지의 `title`이라 마침표로 안 닫는다(`ko`도 같다).
   "status.hint.awaiting":
     "The PM asked something back — write an answer on the request page and it returns to the queue. It never expires on its own",
@@ -3489,6 +3508,23 @@ export const en: Record<string, string> = {
   "transcriptLib.tool": "Tool",
   "transcriptLib.result": "Result",
   "transcriptLib.linesUnit": " lines",
+
+  // 에픽 갈래(§0-16 §묶음 표 행 12) - `lib/epics.ts`. 뒤에 값이 붙는 넷은 콜론까지가 접두다.
+  "epicsLib.keyRequired": "Enter a key.",
+  "epicsLib.titleRequired": "Enter a title.",
+  "epicsLib.keyNoNewline": "A key can't contain a line break.",
+  "epicsLib.keyOutsideQueuePrefix": "That key points outside the queue:",
+  "epicsLib.keyExistsPrefix": "That key already exists:",
+  "epicsLib.createFailedPrefix": "Couldn't create it:",
+  "epicsLib.bodyRequired": "Enter a body.",
+  "epicsLib.saveFailedPrefix": "Couldn't save:",
+  "epicsLib.memoryFileNotFoundPrefix": "No such memory file in the list:",
+
+  // `lib/epic.ts` - 카드를 에픽에 끌어다 놓는 쓰기의 실패 문구. 첫 줄의 임자는 frontmatter
+  // 키 이름이라 소문자 그대로다(`boardPage.action.noNewlineSuffix`가 선 그 벌).
+  "epicLib.noNewline": "epic can't contain a line break.",
+  "epicLib.notFoundPrefix": "Not a ticket in the queue:",
+  "epicLib.noFrontmatterPrefix": "No frontmatter:",
 };
 
 const DICTS: Record<Locale, Record<string, string>> = { ko, en };
