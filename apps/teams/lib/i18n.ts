@@ -1266,6 +1266,232 @@ export const ko: Record<string, string> = {
   // `공통` 배지와 같다). 이 화면의 새 배지가 처음 i18n을 타는 자리다.
   "workers.pool.badge": "공통",
   "workers.pool.badgeTitle": "이 워커는 공통 워커 풀의 슬롯입니다 — cron 줄은 풀에 있고 이 파일에는 없습니다",
+
+  // §0-16 §발행 §묶음 표 행 5 갈래(워커 화면, 티켓 610dc0c0) — `components/workers-ui.tsx` ·
+  // `workers/page.tsx` · `workers/actions.ts`. en은 P338-6이 채운다. `workers.pool.*` ·
+  // `workers.settingsDialog.trigger` · `workers.reap.sectionTitle` · `worker.defect.noExec.*`는
+  // 이 화면이 이미 쓰던 키라 그대로 둔다(중복 안 만든다).
+  "workers.crontabApprovalHint": "권한 창이 뜨면 [허용]을 누르세요 — crontab 등록이 그 대답을 기다립니다.",
+  "workers.notRunningYetHint": "아직 돌지 않습니다 — 이 명령을 셸에서 실행하세요",
+  "workers.cronRegisterFailedTitle": "crontab에 등록하지 못했습니다",
+
+  // `no-exec` 복구 버튼(`ExecBitFix`, §0-21 결정 3).
+  "workers.execFix.failedDefaultMessage": "실행 비트를 켜지 못했습니다.",
+  "workers.execFix.successSentence": "실행 비트를 켰습니다",
+  "workers.execFix.pending": "켜는 중…",
+  "workers.execFix.button": "실행 비트 켜기",
+  "workers.execFix.failedTitle": "실행 비트를 켜지 못했습니다",
+
+  // 생성 다이얼로그(`CreateWorkerButton`, §4 생성).
+  "workers.create.worktreeStep0": "워크트리를 만들지 못했습니다",
+  "workers.create.worktreeStep1": ".dira 심링크를 만들지 못했습니다",
+  "workers.create.worktreeStep2": ".dira 심링크가 이 프로젝트를 가리키지 않습니다",
+  "workers.create.trigger": "워커 생성",
+  "workers.create.dialogTitle": "워커 생성",
+  "workers.create.dialogDescription":
+    "워커 하나가 크론잡 하나고, 한 번 실행에 티켓 1건을 끝냅니다. 동시성 = 워커 개수입니다.",
+  "workers.create.noTemplateBody1":
+    "이 프로젝트에는 템플릿으로 쓸 워커가 없습니다. GUI는 기존 워커를 복사해서만 만들 수 있습니다 — 엔진 코드(tick.sh)가 어디 있는지는 워커 파일에만 적혀 있습니다. 첫 워커는 손으로 만듭니다.",
+  "workers.create.noTemplateConfirmPrefix": "만든 뒤",
+  "workers.create.noTemplateConfirmSuffix": "등 값을 확인하고, 이 화면을 새로고침하면 나머지는 GUI에서 만들 수 있습니다.",
+  "workers.create.templateCopiedMiddle": "을 복사해",
+  "workers.create.templateCopiedSuffix": "를 만들고 755로 두었습니다. 내용을 확인하고 필요하면 손으로 고치세요.",
+  "workers.create.cronRegisteredMessage": "crontab에 등록했습니다 — 30초 뒤부터 티켓을 물어갑니다.",
+  "workers.create.worktreeSkippedPrefix": "워크트리는 만들지 않았습니다 —",
+  "workers.create.worktreeSkippedSuffix": "워커 파일과 crontab 등록은 그대로입니다.",
+  "workers.create.worktreeDoneLabel": "작업 디렉터리",
+  "workers.create.worktreeDoneMiddle": "를 만들고, 그 안의",
+  "workers.create.worktreeDoneSuffix": "가 이 프로젝트를 가리키는 것까지 확인했습니다.",
+  "workers.create.worktreeFailedHint":
+    "작업 디렉터리가 없으면 이 워커는 티켓을 물었다 되돌립니다 — 남은 명령을 셸에서 실행하세요",
+  "workers.create.nameLabel": "이름",
+  "workers.create.nameHint": "영문·숫자·_·-. 파일은 workers/<이름>.sh 가 됩니다",
+  "workers.create.failedTitle": "워커를 만들지 못했습니다",
+
+  // 행 액션 셋(스트림 · 중단/재등록 · 삭제, `WorkerRowActions`, §4).
+  "workers.row.streamButton": "스트림",
+  "workers.row.stopButton": "중단",
+  "workers.row.registerButton": "재등록",
+  "workers.row.deleteButton": "삭제",
+  "workers.row.streamDialogTitlePrefix": "세션 스트림 —",
+  "workers.row.stopDialogTitlePrefix": "워커 중단 —",
+  "workers.row.stopDialogDescription":
+    "crontab에서 이 워커 줄을 뺍니다. 파일은 지우지 않습니다 — 다시 등록하면 그대로 돌아옵니다.",
+  "workers.row.stopFailedTitle": "crontab에서 빼지 못했습니다",
+  "workers.row.runInShellHint": "이 명령을 셸에서 실행하세요",
+  "workers.row.stopRunningAlertTitle": "지금 티켓을 물고 있습니다",
+  "workers.row.stopRunningAlertBody":
+    "진행중인 세션은 죽이지 않습니다. crontab에서 빼도 지금 물고 있는 티켓이 끝난 뒤에 멈춥니다.",
+  "workers.row.stoppingPending": "중단하는 중…",
+  "workers.row.registerDialogTitlePrefix": "워커 재등록 —",
+  "workers.row.registerDialogDescription":
+    "crontab에 이 워커 줄을 다시 넣습니다. 파일은 이미 있으니 바뀌는 것은 그 한 줄뿐입니다.",
+  "workers.row.registeringPending": "등록하는 중…",
+  "workers.row.deleteDialogTitlePrefix": "워커 삭제 —",
+  "workers.row.deleteBlockedTitle": "지금은 삭제할 수 없습니다",
+  "workers.row.deleteBlockedPidPrefix": "이 워커가 티켓을 물고 있습니다(pid",
+  "workers.row.deleteBlockedPidSuffix":
+    "). 지금 지우면 락과 돌고 있는 세션이 붕 뜹니다. 먼저 중단하고, 물고 있는 티켓이 끝난 뒤 지우세요.",
+  "workers.row.deleteBodyText": "파일을 지웁니다. 이 프로젝트의 티켓은 삭제되지 않습니다.",
+  "workers.row.deleteCronPrefix": "crontab 줄도 같이 뺍니다 —",
+  "workers.row.deleteCronBold": "crontab 먼저, 파일 나중",
+  "workers.row.deleteCronSuffix": "입니다. 남겨 두면 cron이 1분마다 없는 파일을 실행하고 cron.log에 에러가 쌓입니다.",
+  "workers.row.deleteFailedTitlePrefix": "워커",
+  "workers.row.deleteFailedTitleSuffix": "삭제 실패",
+  "workers.row.deleteCronFailedHint": "파일은 그대로입니다 — 이 명령으로 crontab 줄을 뺀 뒤 다시 시도하세요",
+  "workers.row.deleteFailedDefaultMessage": "삭제하지 못했습니다.",
+  "workers.row.deletingPending": "삭제 중…",
+
+  // 컨텍스트 편집기 공유 부분(`ExistsMark` · `ContextRejection` · `ContextEditor`).
+  "workers.context.existsYes": "있음",
+  "workers.context.existsNo": "없음 — 엔진이 건너뛰고 WARN만 남깁니다",
+  "workers.context.existsAmbiguous": "경로를 한 값으로 확정하지 못했습니다",
+  "workers.context.existsUnsaved": "저장하면 확인합니다",
+  "workers.context.rejectionTitleMiddle": "의",
+  "workers.context.rejectionTitleSuffix": "블록을 GUI가 고칠 수 없습니다",
+  "workers.context.rejectionBodyPrefix":
+    "추측해서 쓰지 않습니다 — 엉뚱한 라인을 밟으면 워커가 죽고 cron이 조용히 실패합니다.",
+  "workers.context.rejectionBodySuffix": "를 손으로 편집한 뒤 이 화면을 새로고침하세요.",
+  "workers.context.missingLinePrefix": "넣을 줄은 이것 하나입니다 — 필수",
+  "workers.context.missingLineMiddle": "줄",
+  "workers.context.missingLineBold": "위",
+  "workers.context.missingLineSuffix":
+    "아무 곳에 붙이면 열립니다. GUI가 대신 넣지는 않습니다(삽입 자리를 짚을 앵커가 없습니다).",
+  "workers.context.pathAriaLabel": "경로",
+  "workers.context.descAriaLabel": "설명",
+  "workers.context.descPlaceholder": "설명(선택) — 세션이 읽을 이유",
+  "workers.context.pickPathLabelSuffix": "번째 경로",
+  "workers.context.moveUp": "위로",
+  "workers.context.moveDown": "아래로",
+  "workers.context.removeRow": "삭제",
+  "workers.context.saveFailedTitleSuffix": "를 저장하지 못했습니다",
+  "workers.context.overwriteHintPrefix": "저장하면",
+  "workers.context.overwriteHintMiddle": "의",
+  "workers.context.overwriteHintSuffix": "블록을 통째로 바꿉니다",
+  "workers.context.revertButton": "되돌리기",
+  "workers.context.countSuffix": "개",
+  "workers.context.commonReadFailed": "읽지 못했습니다",
+
+  // 공통 컨텍스트 카드(`CommonContextCard`, §4-1).
+  "workers.commonCard.emptyText": "공통 항목이 없습니다 — 워커는 각자 자기 항목만 읽습니다.",
+  "workers.commonCard.addLabel": "공통 항목 추가",
+
+  // 워커 설정 다이얼로그 나머지(`WorkerSettingsDialog`, §4-15).
+  "workers.settingsDialog.commonContextHeading": "공통 컨텍스트",
+  "workers.settingsDialog.commonContextIntro1": "워커 전원이",
+  "workers.settingsDialog.commonContextIntro2": "하는 파일 하나입니다 —",
+  "workers.settingsDialog.commonContextIntro3": ". 여기 항목은 각 워커 컨텍스트 목록의",
+  "workers.settingsDialog.commonContextIntro4":
+    "에 들어가고, 워커별 목록에서는 지울 수 없습니다. 한 줄을 고치면 전원에게 반영됩니다.",
+  "workers.settingsDialog.commonContextIntro5": "는 워커마다 갈리므로 존재 여부는",
+  "workers.settingsDialog.commonContextIntro6":
+    "있음입니다 — 워커에 따라 갈리면 단정하지 않습니다(확인 못 했습니다).",
+  "workers.settingsDialog.commonContextTopLabel": "최상단",
+  "workers.settingsDialog.commonContextEveryoneLabel": "전원에게 있을 때만",
+  "workers.settingsDialog.readonlyHeading": "나머지 워커 설정 (표시만)",
+  "workers.settingsDialog.readonlyDescription": "이 값들은 이 화면에서 고치지 않습니다 — 워커 파일을 손으로 편집합니다.",
+  "workers.settingsDialog.divergentTitle": "워커 간 값이 갈렸습니다",
+  "workers.settingsDialog.divergentBody":
+    "엔진은 티켓을 디스패치한 워커의 값을 씁니다 — 같은 티켓이 어느 워커에 물리느냐로 결과가 달라집니다.",
+  "workers.settingsDialog.reapDescription": "세션이 죽었는데 진행중으로 남은 티켓을 백로그로 되돌립니다.",
+  "workers.settingsDialog.reapFailedTitleSuffix": ".sh reap 실패",
+
+  // 워커 행의 둘째 행 경고 다섯(`WorkerContextRow`, §비주얼 §35).
+  "workers.contextRow.fileSuffixPrefix": ".sh에",
+  "workers.contextRow.fileSuffixGlue": "를",
+  "workers.contextRow.lineNotAddedDefault": "줄을 넣지 못했습니다.",
+  "workers.contextRow.applyingPending": "적용 중…",
+  "workers.contextRow.noCommonSourceTitle": "이 워커는 공통 컨텍스트를 받지 않습니다",
+  "workers.contextRow.noCommonSourceBodyMiddle": "하는 줄이 없습니다 — 위 공통 항목",
+  "workers.contextRow.noCommonSourceBodySuffix": "개가 이 워커의 세션에는 붙지 않습니다.",
+  "workers.contextRow.applyCommonButton": "공통 적용",
+  "workers.contextRow.commonAppliedSentence": "공통을 적용했습니다",
+  "workers.contextRow.applyCommonFailedTitle": "공통을 적용하지 못했습니다",
+  "workers.contextRow.noSelfHealTitle": "이 워커는 지워도 cron 줄이 남습니다",
+  "workers.contextRow.selfHealMissingMiddle":
+    "하는 줄이 없습니다 — dira를 지우면 이 워커의 crontab 2줄을 뺄 코드가 돌지 않고, cron이 1분마다 없는 파일을 부릅니다. 적용하면",
+  "workers.contextRow.selfHealMissingSuffix": "바로 위에 한 줄이 들어갑니다(엔진 경로는 이 파일의 그 줄에서 읽습니다).",
+  "workers.contextRow.applySelfHealButton": "자가 정리 적용",
+  "workers.contextRow.selfHealAppliedSentence": "자가 정리를 적용했습니다",
+  "workers.contextRow.applySelfHealFailedTitle": "자가 정리를 적용하지 못했습니다",
+  "workers.contextRow.gateStaleTitle": "이 워커의 통합 게이트가 낡았습니다",
+  "workers.contextRow.gateMissingTitle": "이 워커는 받는 트리가 더러워도 그냥 디스패치됩니다",
+  "workers.contextRow.gateStaleBody":
+    "의 내용이 지금 판과 다릅니다 — 이 워커는 옛 통합 게이트를 그대로 돕니다. 적용하면 파일을 지금 판으로 덮어씁니다.",
+  "workers.contextRow.gateMissingMiddle":
+    "하는 줄이 없습니다 — 받는 트리가 더러운 채로 디스패치되면 세션이 일을 다 끝낸 뒤 push에서만 거부됩니다. 적용하면",
+  "workers.contextRow.gateMissingSuffix": "바로 위에 한 줄이 들어갑니다(통합 브랜치는 protocols/AGENTS.md에서 읽습니다).",
+  "workers.contextRow.applyGateButton": "통합 게이트 적용",
+  "workers.contextRow.gateAppliedSentence": "통합 게이트를 적용했습니다",
+  "workers.contextRow.applyGateFailedTitle": "통합 게이트를 적용하지 못했습니다",
+  "workers.contextRow.expandedIntroPrefix": "워커별",
+  "workers.contextRow.expandedIntroMid1": "— 세션 프롬프트 꼬리에 항목의 경로와 설명이 붙습니다.",
+  "workers.contextRow.expandedIntroBold": "없는 항목은 에러가 아닙니다",
+  "workers.contextRow.expandedIntroMid2": "— 엔진이 건너뛰고 runner.log에",
+  "workers.contextRow.expandedIntroMid3":
+    "만 남깁니다 (클라우드 마운트가 안 붙은 상태에서 세션이 헛짚지 않게). 목록 최상단의",
+  "workers.contextRow.expandedIntroSuffix":
+    "배지 행은 아래 공통 컨텍스트이고 여기서는 고칠 수 없습니다 — 그 항목은 워커 파일에 없습니다.",
+  "workers.contextRow.copyThisLabel": "이 설정을 복사:",
+  "workers.contextRow.emptyWithCommon": "이 워커의 자기 항목은 없습니다 — 위 공통 항목만 받습니다.",
+  "workers.contextRow.emptyNoCommon": "항목이 없습니다 — 이 워커의 세션은 참조 컨텍스트 없이 시작합니다.",
+  "workers.contextRow.addItemLabel": "항목 추가",
+  "workers.contextRow.copyDialogTitlePrefix": "컨텍스트 복사 —",
+  "workers.contextRow.copyDescMid1": ".sh의 TICKET_CONTEXT 블록을",
+  "workers.contextRow.copyDescMid2": "의 항목",
+  "workers.contextRow.copyDescMid3": "개로 바꿉니다.",
+  "workers.contextRow.copyDescSuffix": "의 기존 항목은 남지 않습니다.",
+  "workers.contextRow.copyBodySuffix":
+    "는 펴지 않고 문자열째로 옮깁니다 — 받는 워커는 자기 작업 디렉터리를 가리킵니다. 컨텍스트가 워커마다 갈라져 있으면 같은 티켓이 어느 워커에 물리느냐로 결과가 달라집니다.",
+  "workers.contextRow.copyFailedTitle": "복사하지 못했습니다",
+  "workers.contextRow.copyingPending": "복사 중…",
+  "workers.contextRow.copyButton": "복사",
+  "workers.contextRow.copyFailedDefaultMessage": "복사하지 못했습니다.",
+
+  // `workers/page.tsx` — 표시 전용 설정 라벨 · 결함 사전 · 표 머리 · 빈 상태 · 배지.
+  "workers.status.stoppedNote": "crontab 미등록",
+  "workers.status.staleNote": "다음 tick이 회수한다",
+  "workers.defect.missingCwd.title": "작업 디렉터리 없음",
+  "workers.defect.missingCwd.why": "tick.sh가 ERROR cwd 없음을 남기고 락을 풀어 티켓을 되돌립니다 — 물었다 놓기만 합니다.",
+  "workers.defect.missingLink.title": ".dira 심링크 없음",
+  "workers.defect.missingLink.why":
+    "세션이 미끼 .dira를 보고 자기 티켓을 못 찾습니다 — 완료 신고도 못 하고 reap이 attempts만 올립니다.",
+  "workers.defect.sharedCwd.title": "작업 디렉터리 공유",
+  "workers.defect.sharedCwd.why": "두 세션이 한 트리에서 한 브랜치를 밟습니다 — dispatch-gate.sh가 디스패치를 막습니다.",
+  "workers.defect.noTicketCwd.title": "TICKET_CWD 없음",
+  "workers.defect.noTicketCwd.why":
+    "받는 트리에서 그대로 커밋합니다 — 미커밋 흔적이 남으면 통합 게이트가 큐의 워커 전부를 보류시킵니다.",
+  "workers.tokenSummary.label": "최근 5시간 토큰",
+  "workers.tokenSummary.unaccountedPrefix": "· 이 합계에 없는 세션",
+  "workers.tokenSummary.unaccountedSuffix": "개",
+  "workers.empty.text": "워커 없음",
+  "workers.empty.noWorkerBodyPrefix": "워커가 없으면 티켓이 디스패치되지 않을 뿐 아니라",
+  "workers.empty.noWorkerBodyMid": "(스테일 수거)과",
+  "workers.empty.noWorkerBodySuffix":
+    "(할당 해제)도 할 수 없습니다 — 둘 다 워커 스크립트를 통해 엔진이 하는 일입니다(제약 2).",
+  "workers.empty.engineRepoHint": "엔진 레포 경로는 채워지지 않습니다 — 워커 파일에만 적혀 있어서 GUI가 알 수 없습니다.",
+  "workers.table.holdingHeader": "물고 있는 티켓",
+  "workers.table.contextHeader": "컨텍스트",
+  "workers.table.activityHeader": "마지막 활동",
+  "workers.table.tokensHeader": "토큰(5시간)",
+  "workers.limitBadge.title": "지금 쓸 수 있는 Claude 계정이 0개입니다 — 이 시각이 지나면 다음 tick이 세션을 띄웁니다",
+  "workers.limitBadge.labelPrefix": "리밋 대기 ·",
+  "workers.defectAlert.worktreeHintPrefix": "준비 명령은 이 프로젝트의 배치인",
+  "workers.defectAlert.worktreeHintMid": "를 만듭니다(§4-2) —",
+  "workers.defectAlert.worktreeHintSuffix": "가 그 경로가 아니면 그 줄도 손으로 고치세요. 체크아웃은 GUI가 실행하지 않습니다.",
+  "workers.defectAlert.cwdFixPrefix": "이 명령은 워커 파일에",
+  "workers.defectAlert.cwdFixSuffix": "한 줄만 더합니다 — 트리는 다음 tick에 게이트가 만듭니다.",
+  "workers.lastFailure.title": "세션이 즉시 실패했습니다",
+
+  // `workers/actions.ts` — 서버 액션 결과 메시지(§4 · §4-16 · §4-17). rootOf의 거절은
+  // `resolve.unknownProjectPrefix`를 그대로 재사용한다(같은 거절을 액션 파일마다 각자 말한다).
+  "workers.stop.removedMessage": "crontab에서 뺐습니다 — 이 워커는 더 이상 새 티켓을 물지 않습니다.",
+  "workers.stop.noopMessage": "이미 crontab에 없었습니다 — 바꾼 것이 없습니다.",
+  "workers.register.addedMessage": "crontab에 넣었습니다 — 30초 뒤부터 티켓을 물어갑니다.",
+  "workers.register.noopMessage": "이미 crontab에 있었습니다 — 바꾼 것이 없습니다.",
+  "workers.pool.limitInvalidPrefix": "상한은 0 이상의 정수여야 합니다:",
+  "workers.reap.noStaleOutput": "수거할 스테일 티켓이 없습니다.",
+
   // §5-3 §편집 표면이 있는 화면 §결정 2 — 사람이 워커 `.sh`를 손으로 고쳐 경계를
   // 어긴 경우다(엔진은 검사하지 않는다). 온톨로지 화면의 경로 줄 + 워커 화면의 읽기 전용
   // 행 둘 다 붙는다(티켓 c5d51522 — 편집 표면은 온톨로지 화면으로, 이 키는 그 네임스페이스로).

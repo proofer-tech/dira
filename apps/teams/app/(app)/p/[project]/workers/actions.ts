@@ -10,7 +10,7 @@
 import { revalidatePath } from "next/cache";
 import { track } from "@/lib/analytics";
 import { runWorker } from "@/lib/engine";
-import { DEFAULT_LOCALE, type Locale } from "@/lib/i18n";
+import { DEFAULT_LOCALE, t, type Locale } from "@/lib/i18n";
 import { applyPoolLimit, listBorrowedPoolWorkers } from "@/lib/pool";
 import { getProject, validateOntologyInput } from "@/lib/projects";
 import {
@@ -62,9 +62,9 @@ export type WorkerActionResult = {
 };
 
 /** 등록된 프로젝트의 root만 만진다. URL 조각으로 임의 경로를 열지 않는다. */
-async function rootOf(projectId: string): Promise<string> {
+async function rootOf(projectId: string, locale: Locale = DEFAULT_LOCALE): Promise<string> {
   const project = await getProject(projectId);
-  if (!project) throw new Error(`등록되지 않은 프로젝트입니다: ${projectId}`);
+  if (!project) throw new Error(`${t(locale, "resolve.unknownProjectPrefix")} ${projectId}`);
   return project.root;
 }
 
@@ -80,9 +80,10 @@ export async function createWorkerAction(
    *  서버가 한다** — `createWorker`가 `engineArgv`로 모르는 엔진·셸 메타문자를 거부한다. */
   engine: string = "claude",
   model: string = "",
+  locale: Locale = DEFAULT_LOCALE,
 ): Promise<WorkerActionResult> {
   try {
-    const root = await rootOf(projectId);
+    const root = await rootOf(projectId, locale);
     const worker = name.trim();
     const { path, template } = await createWorker(root, worker, engine as EngineId, model);
     // **등록이 실패해도 파일 생성을 되돌리지 않는다** — 만든 것을 지우면 사람이 이름을 다시
@@ -127,15 +128,14 @@ export async function createWorkerAction(
 export async function stopWorkerAction(
   projectId: string,
   name: string,
+  locale: Locale = DEFAULT_LOCALE,
 ): Promise<WorkerActionResult> {
   try {
-    const removed = await stopWorker(await rootOf(projectId), name);
+    const removed = await stopWorker(await rootOf(projectId, locale), name);
     revalidatePath(`/p/${projectId}`, "layout");
     return {
       ok: true,
-      message: removed
-        ? "crontab에서 뺐습니다 — 이 워커는 더 이상 새 티켓을 물지 않습니다."
-        : "이미 crontab에 없었습니다 — 바꾼 것이 없습니다.",
+      message: removed ? t(locale, "workers.stop.removedMessage") : t(locale, "workers.stop.noopMessage"),
     };
   } catch (e) {
     return fail(e);
@@ -148,15 +148,14 @@ export async function stopWorkerAction(
 export async function registerWorkerAction(
   projectId: string,
   name: string,
+  locale: Locale = DEFAULT_LOCALE,
 ): Promise<WorkerActionResult> {
   try {
-    const added = await startWorker(await rootOf(projectId), name);
+    const added = await startWorker(await rootOf(projectId, locale), name);
     revalidatePath(`/p/${projectId}`, "layout");
     return {
       ok: true,
-      message: added
-        ? "crontab에 넣었습니다 — 30초 뒤부터 티켓을 물어갑니다."
-        : "이미 crontab에 있었습니다 — 바꾼 것이 없습니다.",
+      message: added ? t(locale, "workers.register.addedMessage") : t(locale, "workers.register.noopMessage"),
     };
   } catch (e) {
     return fail(e);
@@ -166,9 +165,10 @@ export async function registerWorkerAction(
 export async function deleteWorkerAction(
   projectId: string,
   name: string,
+  locale: Locale = DEFAULT_LOCALE,
 ): Promise<WorkerActionResult> {
   try {
-    await deleteWorker(await rootOf(projectId), name);
+    await deleteWorker(await rootOf(projectId, locale), name);
     revalidatePath(`/p/${projectId}`, "layout");
     return { ok: true };
   } catch (e) {
@@ -186,9 +186,10 @@ export async function saveContextAction(
   projectId: string,
   name: string,
   items: { path: string; desc: string }[],
+  locale: Locale = DEFAULT_LOCALE,
 ): Promise<ContextResult> {
   try {
-    const context = await writeContext(await rootOf(projectId), name, items);
+    const context = await writeContext(await rootOf(projectId, locale), name, items);
     revalidatePath(`/p/${projectId}`, "layout");
     return { ok: true, context };
   } catch (e) {
@@ -201,9 +202,10 @@ export async function saveContextAction(
 export async function saveCommonContextAction(
   projectId: string,
   items: { path: string; desc: string }[],
+  locale: Locale = DEFAULT_LOCALE,
 ): Promise<ContextResult> {
   try {
-    const context = await writeCommonContext(await rootOf(projectId), items);
+    const context = await writeCommonContext(await rootOf(projectId, locale), items);
     revalidatePath(`/p/${projectId}`, "layout");
     return { ok: true, context };
   } catch (e) {
@@ -216,9 +218,10 @@ export async function saveCommonContextAction(
 export async function applyCommonSourceAction(
   projectId: string,
   name: string,
+  locale: Locale = DEFAULT_LOCALE,
 ): Promise<WorkerActionResult> {
   try {
-    await applyCommonSource(await rootOf(projectId), name);
+    await applyCommonSource(await rootOf(projectId, locale), name);
     revalidatePath(`/p/${projectId}`, "layout");
     return { ok: true };
   } catch (e) {
@@ -231,9 +234,10 @@ export async function applyCommonSourceAction(
 export async function applySelfHealAction(
   projectId: string,
   name: string,
+  locale: Locale = DEFAULT_LOCALE,
 ): Promise<WorkerActionResult> {
   try {
-    await applySelfHeal(await rootOf(projectId), name);
+    await applySelfHeal(await rootOf(projectId, locale), name);
     revalidatePath(`/p/${projectId}`, "layout");
     return { ok: true };
   } catch (e) {
@@ -246,9 +250,10 @@ export async function applySelfHealAction(
 export async function applyDispatchGateAction(
   projectId: string,
   name: string,
+  locale: Locale = DEFAULT_LOCALE,
 ): Promise<WorkerActionResult> {
   try {
-    await applyDispatchGate(await rootOf(projectId), name);
+    await applyDispatchGate(await rootOf(projectId, locale), name);
     revalidatePath(`/p/${projectId}`, "layout");
     return { ok: true };
   } catch (e) {
@@ -261,9 +266,10 @@ export async function applyDispatchGateAction(
 export async function applyExecBitAction(
   projectId: string,
   name: string,
+  locale: Locale = DEFAULT_LOCALE,
 ): Promise<WorkerActionResult> {
   try {
-    await applyExecBit(await rootOf(projectId), name);
+    await applyExecBit(await rootOf(projectId, locale), name);
     revalidatePath(`/p/${projectId}`, "layout");
     return { ok: true };
   } catch (e) {
@@ -276,9 +282,10 @@ export async function copyContextAction(
   projectId: string,
   from: string,
   to: string,
+  locale: Locale = DEFAULT_LOCALE,
 ): Promise<ContextResult> {
   try {
-    const context = await copyContext(await rootOf(projectId), from, to);
+    const context = await copyContext(await rootOf(projectId, locale), from, to);
     revalidatePath(`/p/${projectId}`, "layout");
     return { ok: true, context };
   } catch (e) {
@@ -306,14 +313,15 @@ export type PoolLimitResult = {
 export async function savePoolLimitAction(
   projectId: string,
   value: string,
+  locale: Locale = DEFAULT_LOCALE,
 ): Promise<PoolLimitResult> {
   try {
     const text = value.trim();
     if (text !== "" && !/^\d+$/.test(text)) {
-      throw new Error(`상한은 0 이상의 정수여야 합니다: ${value}`);
+      throw new Error(`${t(locale, "workers.pool.limitInvalidPrefix")} ${value}`);
     }
     const limit = text === "" ? 0 : Number(text);
-    const root = await rootOf(projectId);
+    const root = await rootOf(projectId, locale);
     const { blocked } = await applyPoolLimit(root, limit);
     const count = (await listBorrowedPoolWorkers(root)).length;
     revalidatePath(`/p/${projectId}`, "layout");
@@ -335,7 +343,7 @@ export async function saveOntologyAction(
   locale: Locale = DEFAULT_LOCALE,
 ): Promise<WorkerActionResult> {
   try {
-    const root = await rootOf(projectId);
+    const root = await rootOf(projectId, locale);
     const trimmed = value.trim();
     const resolved = trimmed ? await validateOntologyInput(root, trimmed, locale) : null;
     await writeOntology(root, resolved);
@@ -350,11 +358,12 @@ export async function saveOntologyAction(
 export async function reapWorkerAction(
   projectId: string,
   name: string,
+  locale: Locale = DEFAULT_LOCALE,
 ): Promise<WorkerActionResult> {
   try {
-    const r = await runWorker(await rootOf(projectId), name, ["reap"]);
+    const r = await runWorker(await rootOf(projectId, locale), name, ["reap"]);
     revalidatePath(`/p/${projectId}`, "layout");
-    return { ok: r.ok, output: r.output || "수거할 스테일 티켓이 없습니다." };
+    return { ok: r.ok, output: r.output || t(locale, "workers.reap.noStaleOutput") };
   } catch (e) {
     return fail(e);
   }

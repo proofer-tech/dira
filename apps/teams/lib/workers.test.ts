@@ -1416,10 +1416,12 @@ test("cronRegister — 후행 개행이 없는 crontab에서도 줄이 이어 �
 test("화면이 말하는 폴링 간격 = `cronLine`이 진짜 넣는 간격 (눈으로 안 맞춘다)", () => {
   // 손으로 적은 사본은 갈린다 — 화면 넷이 `1분 뒤부터`라고 말하는 동안 등록은 30초였다(2f34f31b).
   // `cronLine`의 `sleep N` 줄에서 초를 **유도해** 사용자에게 보이는 문자열 전부와 대조한다.
+  // `workers-ui.tsx`·`workers/actions.ts`의 문구는 610dc0c0이 `lib/i18n.ts` ko 키로 옮겨서
+  // 그 값은 이제 소스가 아니라 사전에 있다 — 그래서 사전도 훑는다.
   const sleep = cronLine({ path: "/tmp/w1.sh" }).match(/\bsleep (\d+);/);
   assert.ok(sleep, "cronLine에 `sleep N` 줄이 없다 — 등록 단위가 2줄이 아니다");
   const src = ["components/projects-ui.tsx", "components/workers-ui.tsx", "app/actions.ts"]
-    .concat("app/(app)/p/[project]/workers/actions.ts", "app/(site)/landing.tsx")
+    .concat("app/(app)/p/[project]/workers/actions.ts", "app/(site)/landing.tsx", "lib/i18n.ts")
     .map((f) => readFileSync(path.join(import.meta.dirname, "..", f), "utf8"))
     .join("\n");
   const said = [...src.matchAll(/(\S+)\s*뒤부터 티켓을 물어갑니다/g)].map((m) => m[1]);

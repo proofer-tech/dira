@@ -57,7 +57,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
-import { useT } from "@/components/language-provider";
+import { useLocale, useT } from "@/components/language-provider";
 import { relativeUnderAny } from "@/lib/urls";
 import { cn } from "@/lib/utils";
 import type { PoolLimit } from "@/lib/pool";
@@ -151,6 +151,8 @@ export function ExecBitFix({
   name: string;
   cmd: string;
 }) {
+  const t = useT();
+  const locale = useLocale();
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   // §비주얼 §58 — 성공하면 그 순간 초점을 든 버튼일 때만 `이름` 셀로 낭독을 넘긴다.
@@ -167,17 +169,17 @@ export function ExecBitFix({
         onClick={() => {
           if (pending) return; // §58 §못 누르는 실효 — aria-disabled에는 pointer-events-none이 없다
           start(async () => {
-            const r = await applyExecBitAction(projectId, name);
-            setError(r.ok ? null : (r.message ?? "실행 비트를 켜지 못했습니다."));
+            const r = await applyExecBitAction(projectId, name, locale);
+            setError(r.ok ? null : (r.message ?? t("workers.execFix.failedDefaultMessage")));
             if (r.ok && document.activeElement === btnRef.current) {
-              announceSuccess(name, "실행 비트를 켰습니다");
+              announceSuccess(name, t("workers.execFix.successSentence"));
             }
           });
         }}
       >
-        {pending ? "켜는 중…" : "실행 비트 켜기"}
+        {pending ? t("workers.execFix.pending") : t("workers.execFix.button")}
       </Button>
-      {error && <Failure title="실행 비트를 켜지 못했습니다" message={error} />}
+      {error && <Failure title={t("workers.execFix.failedTitle")} message={error} />}
       <CopyCommand cmd={cmd} />
     </>
   );
@@ -187,21 +189,18 @@ export function ExecBitFix({
  *  `…중`으로 떠 있다. 창을 못 알아보면 3분 뒤 등록만 실패한다.
  *  **생성과 재등록이 같은 `crontab -` 쓰기라 같은 벽에서 멈춘다** — 그래서 문구도 하나다(§4 재등록). */
 function CrontabApproval() {
-  return (
-    <p className="text-xs text-muted-foreground">
-      권한 창이 뜨면 [허용]을 누르세요 — crontab 등록이 그 대답을 기다립니다.
-    </p>
-  );
+  const t = useT();
+  return <p className="text-xs text-muted-foreground">{t("workers.crontabApprovalHint")}</p>;
 }
 
 // ── 생성 ────────────────────────────────────────────────────────────────────
 
 /** §6 에러 3요소의 1번 — **어느 단계에서 멈췄나**. 인덱스는 `WorktreePrep.done`(= 끝난 단계 수)이다.
  *  성공(3)은 여기 없다 — 그 화면에는 에러가 없다. */
-const WORKTREE_STEP = [
-  "워크트리를 만들지 못했습니다",
-  ".dira 심링크를 만들지 못했습니다",
-  ".dira 심링크가 이 프로젝트를 가리키지 않습니다",
+const WORKTREE_STEP_KEYS = [
+  "workers.create.worktreeStep0",
+  "workers.create.worktreeStep1",
+  "workers.create.worktreeStep2",
 ];
 
 /** 워커 생성. **한 동작으로 끝난다** — 파일을 만들고 crontab 두 줄까지 서버가 등록한다(제약 4).
@@ -223,6 +222,8 @@ export function CreateWorkerButton({
    *  읽기 전용이 아니다 — 지우고 다시 쓸 수 있고, 닫으면 이 값으로 돌아간다. */
   defaultName?: string;
 }) {
+  const t = useT();
+  const locale = useLocale();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState(defaultName);
   const [result, setResult] = useState<WorkerActionResult | null>(null);
@@ -240,48 +241,39 @@ export function CreateWorkerButton({
         }
       }}
     >
-      <DialogTrigger render={<Button size="sm" variant={variant} />}>워커 생성</DialogTrigger>
+      <DialogTrigger render={<Button size="sm" variant={variant} />}>{t("workers.create.trigger")}</DialogTrigger>
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle>워커 생성</DialogTitle>
-          <DialogDescription>
-            워커 하나가 크론잡 하나고, 한 번 실행에 티켓 1건을 끝냅니다. 동시성 = 워커 개수입니다.
-          </DialogDescription>
+          <DialogTitle>{t("workers.create.dialogTitle")}</DialogTitle>
+          <DialogDescription>{t("workers.create.dialogDescription")}</DialogDescription>
         </DialogHeader>
 
         {!canTemplate ? (
           // 마지막 `. <엔진레포>/tick.sh` 한 줄을 GUI가 알 방법이 없다 — 추측해서 만들면
           // 돌지 않는 워커 파일이 생기고, 사람은 왜 안 도는지 모른다.
           <div className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              이 프로젝트에는 템플릿으로 쓸 워커가 없습니다. GUI는 기존 워커를 복사해서만 만들 수
-              있습니다 — 엔진 코드(tick.sh)가 어디 있는지는 워커 파일에만 적혀 있습니다.
-              첫 워커는 손으로 만듭니다.
-            </p>
+            <p className="text-sm text-muted-foreground">{t("workers.create.noTemplateBody1")}</p>
             <CopyCommand cmd={firstCmd} />
             <p className="text-sm text-muted-foreground">
-              만든 뒤 <span className="font-mono text-xs">TICKET_CWD</span> 등 값을 확인하고,
-              이 화면을 새로고침하면 나머지는 GUI에서 만들 수 있습니다.
+              {t("workers.create.noTemplateConfirmPrefix")} <span className="font-mono text-xs">TICKET_CWD</span>{" "}
+              {t("workers.create.noTemplateConfirmSuffix")}
             </p>
           </div>
         ) : created ? (
           <div className="space-y-3">
             <p className="text-sm">
-              <span className="font-mono text-xs">{created.template}</span>을 복사해{" "}
-              <span className="font-mono text-xs break-all">{created.path}</span>를 만들고 755로
-              두었습니다. 내용을 확인하고 필요하면 손으로 고치세요.
+              <span className="font-mono text-xs">{created.template}</span>
+              {t("workers.create.templateCopiedMiddle")}{" "}
+              <span className="font-mono text-xs break-all">{created.path}</span>
+              {t("workers.create.templateCopiedSuffix")}
             </p>
             {created.cron ? (
-              <p className="text-sm font-medium">
-                crontab에 등록했습니다 — 30초 뒤부터 티켓을 물어갑니다.
-              </p>
+              <p className="text-sm font-medium">{t("workers.create.cronRegisteredMessage")}</p>
             ) : (
               // 파일은 있고 등록만 실패했다. 되돌리지 않고 사람이 셸에서 마무리하게 한다.
               <div className="space-y-2">
-                <Failure title="crontab에 등록하지 못했습니다" message={created.cronError ?? ""} />
-                <p className="text-sm font-medium">
-                  아직 돌지 않습니다 — 이 명령을 셸에서 실행하세요
-                </p>
+                <Failure title={t("workers.cronRegisterFailedTitle")} message={created.cronError ?? ""} />
+                <p className="text-sm font-medium">{t("workers.notRunningYetHint")}</p>
                 <CopyCommand cmd={created.registerCmd} />
               </div>
             )}
@@ -292,26 +284,24 @@ export function CreateWorkerButton({
               {created.worktree.skipped ? (
                 // 레포가 아니다 = 실패가 아니라 정상 종료다. 파일도 crontab도 그대로다.
                 <p className="text-sm text-muted-foreground">
-                  워크트리는 만들지 않았습니다 — {created.worktree.reason} 워커 파일과 crontab
-                  등록은 그대로입니다.
+                  {t("workers.create.worktreeSkippedPrefix")} {created.worktree.reason}{" "}
+                  {t("workers.create.worktreeSkippedSuffix")}
                 </p>
               ) : created.worktree.done === 3 ? (
                 <p className="text-sm font-medium">
-                  작업 디렉터리{" "}
-                  <span className="font-mono text-xs break-all">{created.worktree.dir}</span>를
-                  만들고, 그 안의 <span className="font-mono text-xs">.dira</span>가 이 프로젝트를
-                  가리키는 것까지 확인했습니다.
+                  {t("workers.create.worktreeDoneLabel")}{" "}
+                  <span className="font-mono text-xs break-all">{created.worktree.dir}</span>
+                  {t("workers.create.worktreeDoneMiddle")}{" "}
+                  <span className="font-mono text-xs">.dira</span>
+                  {t("workers.create.worktreeDoneSuffix")}
                 </p>
               ) : (
                 <>
                   <Failure
-                    title={WORKTREE_STEP[created.worktree.done]}
+                    title={t(WORKTREE_STEP_KEYS[created.worktree.done])}
                     message={created.worktree.reason ?? ""}
                   />
-                  <p className="text-sm font-medium">
-                    작업 디렉터리가 없으면 이 워커는 티켓을 물었다 되돌립니다 — 남은 명령을 셸에서
-                    실행하세요
-                  </p>
+                  <p className="text-sm font-medium">{t("workers.create.worktreeFailedHint")}</p>
                   {created.worktree.rest.map((cmd) => (
                     <CopyCommand key={cmd} cmd={cmd} />
                   ))}
@@ -322,7 +312,7 @@ export function CreateWorkerButton({
         ) : (
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="worker-name">이름</Label>
+              <Label htmlFor="worker-name">{t("workers.create.nameLabel")}</Label>
               <Input
                 id="worker-name"
                 className="font-mono"
@@ -330,11 +320,9 @@ export function CreateWorkerButton({
                 value={name}
                 onChange={(e) => setName(e.target.value)}
               />
-              <p className="text-xs text-muted-foreground">
-                영문·숫자·_·-. 파일은 workers/&lt;이름&gt;.sh 가 됩니다
-              </p>
+              <p className="text-xs text-muted-foreground">{t("workers.create.nameHint")}</p>
             </div>
-            {result?.message && <Failure title="워커를 만들지 못했습니다" message={result.message} />}
+            {result?.message && <Failure title={t("workers.create.failedTitle")} message={result.message} />}
           </div>
         )}
 
@@ -342,14 +330,16 @@ export function CreateWorkerButton({
 
         <DialogFooter>
           <DialogClose render={<Button variant="outline" />}>
-            {created || !canTemplate ? "닫기" : "취소"}
+            {created || !canTemplate ? t("common.close") : t("common.cancel")}
           </DialogClose>
           {canTemplate && !created && (
             <Button
               disabled={pending || !name.trim()}
-              onClick={() => start(async () => setResult(await createWorkerAction(projectId, name)))}
+              onClick={() =>
+                start(async () => setResult(await createWorkerAction(projectId, name, undefined, undefined, locale)))
+              }
             >
-              {pending ? "만드는 중…" : "만들기"}
+              {pending ? t("common.creating") : t("common.create")}
             </Button>
           )}
         </DialogFooter>
@@ -362,6 +352,8 @@ export function CreateWorkerButton({
 // reap은 §4-17(요구 ac7ba0e2)로 이 행에서 빠져 `워커 설정` 다이얼로그 넷째 섹션으로 옮겨갔다.
 
 export function WorkerRowActions({ projectId, row }: { projectId: string; row: WorkerRow }) {
+  const t = useT();
+  const locale = useLocale();
   const [pending, start] = useTransition();
   const [stopping, setStopping] = useState(false);
   const [stopped, setStopped] = useState<WorkerActionResult | null>(null);
@@ -388,7 +380,7 @@ export function WorkerRowActions({ projectId, row }: { projectId: string; row: W
         disabled={!holding}
         onClick={() => setStreaming(true)}
       >
-        스트림
+        {t("workers.row.streamButton")}
       </Button>
       {/* 같은 줄에 대한 반대 동작이라 둘이 동시에 뜨는 상태가 없다 — 판정은 `status`가 아니라
           `cron`이다(§4 재등록): 뺄 줄이 있으면 `중단`, 없으면 `재등록`이다. `running`인데
@@ -407,7 +399,7 @@ export function WorkerRowActions({ projectId, row }: { projectId: string; row: W
           disabled={row.commonWorker}
           onClick={() => setStopping(true)}
         >
-          중단
+          {t("workers.row.stopButton")}
         </Button>
       ) : (
         <Button
@@ -417,11 +409,11 @@ export function WorkerRowActions({ projectId, row }: { projectId: string; row: W
           disabled={row.commonWorker}
           onClick={() => setRegistering(true)}
         >
-          재등록
+          {t("workers.row.registerButton")}
         </Button>
       )}
       <Button variant="ghost" size="sm" disabled={row.commonWorker} onClick={() => setDeleting(true)}>
-        삭제
+        {t("workers.row.deleteButton")}
       </Button>
 
       {/* 세션 스트림 — **진입점 하나다**(§4 · §2-1 Q2=(a)). 대상만 `holding`이고 컴포넌트도
@@ -438,7 +430,9 @@ export function WorkerRowActions({ projectId, row }: { projectId: string; row: W
               키가 커서다. */}
           <DialogContent className="flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden sm:max-w-[75rem]">
             <DialogHeader>
-              <DialogTitle>세션 스트림 — {row.name}</DialogTitle>
+              <DialogTitle>
+                {t("workers.row.streamDialogTitlePrefix")} {row.name}
+              </DialogTitle>
               <DialogDescription className="font-mono text-xs break-all">
                 {holding}
               </DialogDescription>
@@ -462,11 +456,10 @@ export function WorkerRowActions({ projectId, row }: { projectId: string; row: W
       >
         <DialogContent className="sm:max-w-xl">
           <DialogHeader>
-            <DialogTitle>워커 중단 — {row.name}</DialogTitle>
-            <DialogDescription>
-              crontab에서 이 워커 줄을 뺍니다. 파일은 지우지 않습니다 — 다시 등록하면 그대로
-              돌아옵니다.
-            </DialogDescription>
+            <DialogTitle>
+              {t("workers.row.stopDialogTitlePrefix")} {row.name}
+            </DialogTitle>
+            <DialogDescription>{t("workers.row.stopDialogDescription")}</DialogDescription>
           </DialogHeader>
           {stopped?.ok ? (
             // 이미 미등록이었으면 no-op이라고 알려 준다 — 에러가 아니다
@@ -476,8 +469,8 @@ export function WorkerRowActions({ projectId, row }: { projectId: string; row: W
             // 않는다 — 그 상태의 행에는 `중단`이 아니라 `재등록`이 있다(§4 재등록).
             stopped && (
               <div className="space-y-2">
-                <Failure title="crontab에서 빼지 못했습니다" message={stopped.message ?? ""} />
-                <p className="text-sm font-medium">이 명령을 셸에서 실행하세요</p>
+                <Failure title={t("workers.row.stopFailedTitle")} message={stopped.message ?? ""} />
+                <p className="text-sm font-medium">{t("workers.row.runInShellHint")}</p>
                 <CopyCommand cmd={row.unregisterCmd} />
               </div>
             )
@@ -485,23 +478,20 @@ export function WorkerRowActions({ projectId, row }: { projectId: string; row: W
           {row.status === "running" && (
             <Alert>
               <TriangleAlert aria-hidden className="text-status-stale" />
-              <AlertTitle>지금 티켓을 물고 있습니다</AlertTitle>
-              <AlertDescription>
-                진행중인 세션은 죽이지 않습니다. crontab에서 빼도 지금 물고 있는 티켓이 끝난 뒤에
-                멈춥니다.
-              </AlertDescription>
+              <AlertTitle>{t("workers.row.stopRunningAlertTitle")}</AlertTitle>
+              <AlertDescription>{t("workers.row.stopRunningAlertBody")}</AlertDescription>
             </Alert>
           )}
           <DialogFooter>
-            <DialogClose render={<Button variant="outline" autoFocus />}>닫기</DialogClose>
+            <DialogClose render={<Button variant="outline" autoFocus />}>{t("common.close")}</DialogClose>
             {!stopped?.ok && (
               <Button
                 disabled={pending}
                 onClick={() =>
-                  start(async () => setStopped(await stopWorkerAction(projectId, row.name)))
+                  start(async () => setStopped(await stopWorkerAction(projectId, row.name, locale)))
                 }
               >
-                {pending ? "중단하는 중…" : "중단"}
+                {pending ? t("workers.row.stoppingPending") : t("workers.row.stopButton")}
               </Button>
             )}
           </DialogFooter>
@@ -520,10 +510,10 @@ export function WorkerRowActions({ projectId, row }: { projectId: string; row: W
       >
         <DialogContent className="sm:max-w-xl">
           <DialogHeader>
-            <DialogTitle>워커 재등록 — {row.name}</DialogTitle>
-            <DialogDescription>
-              crontab에 이 워커 줄을 다시 넣습니다. 파일은 이미 있으니 바뀌는 것은 그 한 줄뿐입니다.
-            </DialogDescription>
+            <DialogTitle>
+              {t("workers.row.registerDialogTitlePrefix")} {row.name}
+            </DialogTitle>
+            <DialogDescription>{t("workers.row.registerDialogDescription")}</DialogDescription>
           </DialogHeader>
           {registered?.ok ? (
             // 이미 등록돼 있었으면 no-op이라고 알려 준다 — `중단`이 미등록에 대해 가리키는 것과 대칭이다
@@ -531,25 +521,23 @@ export function WorkerRowActions({ projectId, row }: { projectId: string; row: W
           ) : (
             registered && (
               <div className="space-y-2">
-                <Failure title="crontab에 등록하지 못했습니다" message={registered.message ?? ""} />
-                <p className="text-sm font-medium">
-                  아직 돌지 않습니다 — 이 명령을 셸에서 실행하세요
-                </p>
+                <Failure title={t("workers.cronRegisterFailedTitle")} message={registered.message ?? ""} />
+                <p className="text-sm font-medium">{t("workers.notRunningYetHint")}</p>
                 <CopyCommand cmd={row.registerCmd} />
               </div>
             )
           )}
           {pending && <CrontabApproval />}
           <DialogFooter>
-            <DialogClose render={<Button variant="outline" autoFocus />}>닫기</DialogClose>
+            <DialogClose render={<Button variant="outline" autoFocus />}>{t("common.close")}</DialogClose>
             {!registered?.ok && (
               <Button
                 disabled={pending}
                 onClick={() =>
-                  start(async () => setRegistered(await registerWorkerAction(projectId, row.name)))
+                  start(async () => setRegistered(await registerWorkerAction(projectId, row.name, locale)))
                 }
               >
-                {pending ? "등록하는 중…" : "재등록"}
+                {pending ? t("workers.row.registeringPending") : t("workers.row.registerButton")}
               </Button>
             )}
           </DialogFooter>
@@ -566,39 +554,40 @@ export function WorkerRowActions({ projectId, row }: { projectId: string; row: W
       >
         <DialogContent className="sm:max-w-xl">
           <DialogHeader>
-            <DialogTitle>워커 삭제 — {row.name}</DialogTitle>
+            <DialogTitle>
+              {t("workers.row.deleteDialogTitlePrefix")} {row.name}
+            </DialogTitle>
             <DialogDescription className="font-mono text-xs break-all">{row.path}</DialogDescription>
           </DialogHeader>
 
           {row.status === "running" ? (
             <Alert>
               <TriangleAlert aria-hidden className="text-status-stale" />
-              <AlertTitle>지금은 삭제할 수 없습니다</AlertTitle>
+              <AlertTitle>{t("workers.row.deleteBlockedTitle")}</AlertTitle>
               <AlertDescription>
-                이 워커가 티켓을 물고 있습니다(pid {row.lockPid ?? "?"}). 지금 지우면 락과 돌고 있는
-                세션이 붕 뜹니다. 먼저 중단하고, 물고 있는 티켓이 끝난 뒤 지우세요.
+                {t("workers.row.deleteBlockedPidPrefix")} {row.lockPid ?? "?"}
+                {t("workers.row.deleteBlockedPidSuffix")}
               </AlertDescription>
             </Alert>
           ) : (
             <>
-              <p className="text-sm text-muted-foreground">
-                파일을 지웁니다. 이 프로젝트의 티켓은 삭제되지 않습니다.
-              </p>
+              <p className="text-sm text-muted-foreground">{t("workers.row.deleteBodyText")}</p>
               {row.cron && (
                 <p className="text-sm">
-                  crontab 줄도 같이 뺍니다 — <span className="font-medium">crontab 먼저, 파일
-                  나중</span>입니다. 남겨 두면 cron이 1분마다 없는 파일을 실행하고 cron.log에
-                  에러가 쌓입니다.
+                  {t("workers.row.deleteCronPrefix")}{" "}
+                  <span className="font-medium">{t("workers.row.deleteCronBold")}</span>
+                  {t("workers.row.deleteCronSuffix")}
                 </p>
               )}
               {error && (
                 <div className="space-y-2">
-                  <Failure title={`워커 ${row.name} 삭제 실패`} message={error.message ?? ""} />
+                  <Failure
+                    title={`${t("workers.row.deleteFailedTitlePrefix")} ${row.name} ${t("workers.row.deleteFailedTitleSuffix")}`}
+                    message={error.message ?? ""}
+                  />
                   {error.cronFailed && (
                     <>
-                      <p className="text-sm font-medium">
-                        파일은 그대로입니다 — 이 명령으로 crontab 줄을 뺀 뒤 다시 시도하세요
-                      </p>
+                      <p className="text-sm font-medium">{t("workers.row.deleteCronFailedHint")}</p>
                       <CopyCommand cmd={row.unregisterCmd} />
                     </>
                   )}
@@ -608,20 +597,20 @@ export function WorkerRowActions({ projectId, row }: { projectId: string; row: W
           )}
 
           <DialogFooter>
-            <DialogClose render={<Button variant="outline" autoFocus />}>닫기</DialogClose>
+            <DialogClose render={<Button variant="outline" autoFocus />}>{t("common.close")}</DialogClose>
             {row.status !== "running" && (
               <Button
                 variant="destructive"
                 disabled={pending}
                 onClick={() =>
                   start(async () => {
-                    const r = await deleteWorkerAction(projectId, row.name);
+                    const r = await deleteWorkerAction(projectId, row.name, locale);
                     if (r.ok) setDeleting(false);
-                    else setError({ ...r, message: r.message ?? "삭제하지 못했습니다." });
+                    else setError({ ...r, message: r.message ?? t("workers.row.deleteFailedDefaultMessage") });
                   })
                 }
               >
-                {pending ? "삭제 중…" : "삭제"}
+                {pending ? t("workers.row.deletingPending") : t("workers.row.deleteButton")}
               </Button>
             )}
           </DialogFooter>
@@ -636,17 +625,18 @@ export function WorkerRowActions({ projectId, row }: { projectId: string; row: W
 /** 존재 여부 표시. **없는 건 에러가 아니다** — 엔진이 건너뛰고 WARN만 남긴다(tick.sh 148행).
  *  그래서 없음은 destructive가 아니라 중립색이고, 문구가 그 사실을 알려 준다. */
 function ExistsMark({ row }: { row: ContextRow }) {
+  const t = useT();
   const [Icon, tint, label] =
     row.exists === true
-      ? [Check, "text-status-done", "있음"]
+      ? [Check, "text-status-done", t("workers.context.existsYes")]
       : row.exists === false
-        ? [X, "text-muted-foreground", "없음 — 엔진이 건너뛰고 WARN만 남깁니다"]
+        ? [X, "text-muted-foreground", t("workers.context.existsNo")]
         : row.exists === null
           ? // 원인 중립. `null`은 못 편 변수가 남았을 때도, 워커에 따라 갈릴 때도 온다 —
             // 후자는 변수가 **펴졌는데** 결과가 갈린 것이라 "못 펴서"는 거짓이다(§4-1).
             // 경로는 아래 `title`이 한 번만 붙인다.
-            [CircleQuestionMark, "text-muted-foreground", "경로를 한 값으로 확정하지 못했습니다"]
-          : [CircleQuestionMark, "text-muted-foreground", "저장하면 확인합니다"];
+            [CircleQuestionMark, "text-muted-foreground", t("workers.context.existsAmbiguous")]
+          : [CircleQuestionMark, "text-muted-foreground", t("workers.context.existsUnsaved")];
   return (
     <span className="flex items-center gap-1" title={row.resolved ? `${row.resolved} — ${label}` : label}>
       <Icon aria-hidden className={cn("size-4 shrink-0", tint)} />
@@ -669,24 +659,30 @@ function ContextRejection({
   filePath: string;
   reason: string;
 }) {
+  const t = useT();
   // 사유가 `블록이 없습니다`일 때**만** 넣을 줄까지 준다(§4) — 나머지 사유는 파일에 이미
   // 있는 것을 사람이 보고 정할 일이지만 이건 답이 한 줄로 정해져 있다. 문자열은
-  // `parseContextBlock`이 내는 그 사유와 글자로 맞춘다(lib/workers.ts 199행).
+  // `parseContextBlock`이 내는 그 사유와 글자로 맞춘다(lib/workers.ts 199행) — 이 비교는
+  // 화면 문구가 아니라 서버 값과의 판정이라 사전으로 안 옮긴다(lib/workers.ts는 이 갈래 밖이다).
   const missing = reason === `${arr}=( … ) 블록이 없습니다`;
   return (
     <>
-      <Failure title={`${file}의 ${arr} 블록을 GUI가 고칠 수 없습니다`} message={reason} />
+      <Failure
+        title={`${file}${t("workers.context.rejectionTitleMiddle")} ${arr} ${t("workers.context.rejectionTitleSuffix")}`}
+        message={reason}
+      />
       <p className="text-sm text-muted-foreground">
-        추측해서 쓰지 않습니다 — 엉뚱한 라인을 밟으면 워커가 죽고 cron이 조용히 실패합니다.
-        <span className="font-mono text-xs break-all"> {filePath}</span>를 손으로 편집한 뒤 이
-        화면을 새로고침하세요.
+        {t("workers.context.rejectionBodyPrefix")}
+        <span className="font-mono text-xs break-all"> {filePath}</span>
+        {t("workers.context.rejectionBodySuffix")}
       </p>
       {missing && (
         <>
           <p className="text-sm text-muted-foreground">
-            넣을 줄은 이것 하나입니다 — 필수 <code className="font-mono text-xs">. …/tick.sh</code>{" "}
-            줄 <strong className="font-medium text-foreground">위</strong> 아무 곳에 붙이면
-            열립니다. GUI가 대신 넣지는 않습니다(삽입 자리를 짚을 앵커가 없습니다).
+            {t("workers.context.missingLinePrefix")} <code className="font-mono text-xs">. …/tick.sh</code>{" "}
+            {t("workers.context.missingLineMiddle")}{" "}
+            <strong className="font-medium text-foreground">{t("workers.context.missingLineBold")}</strong>{" "}
+            {t("workers.context.missingLineSuffix")}
           </p>
           {/* ponytail: `renderContextBlock([], arr)`과 같은 문자열을 손으로 적는다 — 서버
               전용 모듈(fs)이라 클라이언트에서 import할 수 없다. 0항목 모양이 바뀌면 여기도. */}
@@ -729,6 +725,7 @@ function ContextEditor({
   addLabel: string;
   save: (items: { path: string; desc: string }[]) => Promise<ContextResult>;
 }) {
+  const t = useT();
   const saved = context.ok ? context.items : [];
   const [rows, setRows] = useState<ContextRow[]>(saved);
   const [result, setResult] = useState<ContextResult | null>(null);
@@ -760,7 +757,7 @@ function ContextEditor({
           // 편집 행이 아님을 먼저 읽히게 한다.
           <div key={`common-${i}`} className="flex min-h-9 items-center gap-2 rounded-md bg-muted/50 px-2">
             <Badge variant="outline" className="shrink-0">
-              공통
+              {t("workers.pool.badge")}
             </Badge>
             <span className="flex-[2] truncate font-mono text-xs" title={r.path}>
               {r.path}
@@ -778,16 +775,16 @@ function ContextEditor({
             <div key={i} className="flex items-center gap-2">
               <ExistsMark row={r} />
               <Input
-                aria-label="경로"
+                aria-label={t("workers.context.pathAriaLabel")}
                 className="flex-[2] font-mono text-xs"
                 placeholder="$TICKET_CWD/docs/DESIGN.md"
                 value={r.path}
                 onChange={(e) => edit(i, { path: e.target.value })}
               />
               <Input
-                aria-label="설명"
+                aria-label={t("workers.context.descAriaLabel")}
                 className="flex-1 text-xs"
-                placeholder="설명(선택) — 세션이 읽을 이유"
+                placeholder={t("workers.context.descPlaceholder")}
                 value={r.desc}
                 onChange={(e) => edit(i, { desc: e.target.value })}
               />
@@ -799,7 +796,7 @@ function ContextEditor({
               {cwds && cwds.length > 0 && (
                 <PickPath
                   mode="file"
-                  label={`${i + 1}번째 경로`}
+                  label={`${i + 1}${t("workers.context.pickPathLabelSuffix")}`}
                   onPick={(p) => {
                     const rel = relativeUnderAny(p, cwds);
                     edit(i, { path: rel === p ? p : `$TICKET_CWD/${rel}` });
@@ -808,15 +805,15 @@ function ContextEditor({
               )}
               <Button variant="ghost" size="sm" disabled={i === 0} onClick={() => move(i, -1)}>
                 <ArrowUp aria-hidden />
-                <span className="sr-only">위로</span>
+                <span className="sr-only">{t("workers.context.moveUp")}</span>
               </Button>
               <Button variant="ghost" size="sm" disabled={i === rows.length - 1} onClick={() => move(i, 1)}>
                 <ArrowDown aria-hidden />
-                <span className="sr-only">아래로</span>
+                <span className="sr-only">{t("workers.context.moveDown")}</span>
               </Button>
               <Button variant="ghost" size="sm" onClick={() => setRows(rows.filter((_, j) => j !== i))}>
                 <X aria-hidden />
-                <span className="sr-only">삭제</span>
+                <span className="sr-only">{t("workers.context.removeRow")}</span>
               </Button>
             </div>
           ))
@@ -825,7 +822,7 @@ function ContextEditor({
 
       {/* 저장 거부(블록 모양이 예상과 다름)는 §6 에러 3요소 — 파일은 쓰이지 않았다 */}
       {result && !result.ok && (
-        <Failure title={`${file}를 저장하지 못했습니다`} message={result.message ?? ""} />
+        <Failure title={`${file}${t("workers.context.saveFailedTitleSuffix")}`} message={result.message ?? ""} />
       )}
 
       {/* 안내 문구 → 되돌리기 → 추가 → 저장, 오른쪽 정렬(§비주얼 §4-3).
@@ -834,10 +831,11 @@ function ContextEditor({
         {dirty && (
           <>
             <span className="text-xs text-muted-foreground">
-              저장하면 {file}의 {arr} 블록을 통째로 바꿉니다
+              {t("workers.context.overwriteHintPrefix")} {file}
+              {t("workers.context.overwriteHintMiddle")} {arr} {t("workers.context.overwriteHintSuffix")}
             </span>
             <Button variant="ghost" size="sm" disabled={pending} onClick={() => setRows(saved)}>
-              되돌리기
+              {t("workers.context.revertButton")}
             </Button>
           </>
         )}
@@ -856,7 +854,7 @@ function ContextEditor({
             })
           }
         >
-          {pending ? "저장 중…" : "저장"}
+          {pending ? t("common.saving") : t("common.save")}
         </Button>
       </div>
     </>
@@ -1061,13 +1059,17 @@ export function CommonContextCard({
    *  액션·새 필드가 0개다. */
   cwds: string[];
 }) {
+  const t = useT();
+  const locale = useLocale();
   return (
     <div className="space-y-3 rounded-md border p-3">
       <div className="flex items-center gap-2">
-        <Badge variant="outline">공통</Badge>
+        <Badge variant="outline">{t("workers.pool.badge")}</Badge>
         <span className="font-mono text-sm">context.sh</span>
         <span className="text-xs text-muted-foreground">
-          {context.ok ? `${context.items.length}개` : "읽지 못했습니다"}
+          {context.ok
+            ? `${context.items.length}${t("workers.context.countSuffix")}`
+            : t("workers.context.commonReadFailed")}
         </span>
       </div>
       <ContextEditor
@@ -1076,9 +1078,9 @@ export function CommonContextCard({
         filePath={filePath}
         context={context}
         cwds={cwds}
-        emptyText="공통 항목이 없습니다 — 워커는 각자 자기 항목만 읽습니다."
-        addLabel="공통 항목 추가"
-        save={(items) => saveCommonContextAction(projectId, items)}
+        emptyText={t("workers.commonCard.emptyText")}
+        addLabel={t("workers.commonCard.addLabel")}
+        save={(items) => saveCommonContextAction(projectId, items, locale)}
       />
     </div>
   );
@@ -1118,6 +1120,7 @@ export function WorkerSettingsDialog({
   firstWorkerName: string;
 }) {
   const t = useT();
+  const locale = useLocale();
   const label = t("workers.settingsDialog.trigger");
   // §35 ③의 그 관용구 — 저장 직후 서버 재검증(`revalidatePath`)이 오기 전에도 트리거 값과
   // 현황 문구가 즉시 맞아야 한다(`LimitField`의 `onSaved`와 같은 자리, `personas-ui.tsx`).
@@ -1133,15 +1136,18 @@ export function WorkerSettingsDialog({
         {/* 첫 섹션 — 편집 가능. 산문 195자 그대로(§4-15 §산문) */}
         <section className="space-y-3">
           <div>
-            <h2 className="text-sm font-semibold">공통 컨텍스트</h2>
+            <h2 className="text-sm font-semibold">{t("workers.settingsDialog.commonContextHeading")}</h2>
             <p className="text-sm text-muted-foreground">
-              워커 전원이 <span className="font-mono text-xs">source</span>하는 파일 하나입니다 —
-              <span className="font-mono text-xs break-all"> {filePath}</span>. 여기
-              항목은 각 워커 컨텍스트 목록의 <strong className="font-medium">최상단</strong>에
-              들어가고, 워커별 목록에서는 지울 수 없습니다. 한 줄을 고치면 전원에게 반영됩니다.
-              <span className="font-mono text-xs">$TICKET_CWD</span>는 워커마다 갈리므로 존재 여부는{" "}
-              <strong className="font-medium">전원에게 있을 때만</strong> 있음입니다 — 워커에 따라
-              갈리면 단정하지 않습니다(확인 못 했습니다).
+              {t("workers.settingsDialog.commonContextIntro1")} <span className="font-mono text-xs">source</span>
+              {t("workers.settingsDialog.commonContextIntro2")}
+              <span className="font-mono text-xs break-all"> {filePath}</span>
+              {t("workers.settingsDialog.commonContextIntro3")}{" "}
+              <strong className="font-medium">{t("workers.settingsDialog.commonContextTopLabel")}</strong>
+              {t("workers.settingsDialog.commonContextIntro4")}
+              <span className="font-mono text-xs">$TICKET_CWD</span>
+              {t("workers.settingsDialog.commonContextIntro5")}{" "}
+              <strong className="font-medium">{t("workers.settingsDialog.commonContextEveryoneLabel")}</strong>{" "}
+              {t("workers.settingsDialog.commonContextIntro6")}
             </p>
           </div>
           <CommonContextCard projectId={projectId} filePath={filePath} context={context} cwds={cwds} />
@@ -1164,10 +1170,8 @@ export function WorkerSettingsDialog({
         {/* 셋째 섹션 — 표시 전용. 경계는 여기만(§비주얼 §35 개정 ③ "첫 섹션에는 경계가 없다") */}
         <section className="space-y-2 border-t pt-4">
           <div>
-            <h2 className="text-sm font-semibold">나머지 워커 설정 (표시만)</h2>
-            <p className="text-sm text-muted-foreground">
-              이 값들은 이 화면에서 고치지 않습니다 — 워커 파일을 손으로 편집합니다.
-            </p>
+            <h2 className="text-sm font-semibold">{t("workers.settingsDialog.readonlyHeading")}</h2>
+            <p className="text-sm text-muted-foreground">{t("workers.settingsDialog.readonlyDescription")}</p>
           </div>
           <Table>
             <TableBody>
@@ -1177,7 +1181,9 @@ export function WorkerSettingsDialog({
                   <TableCell className="px-3 py-0 font-mono text-xs break-all">
                     {s.value}
                     {s.assumed && (
-                      <span className="ml-2 font-sans text-muted-foreground">기본값 가정</span>
+                      <span className="ml-2 font-sans text-muted-foreground">
+                        {t("resolve.badge.assumedDefault")}
+                      </span>
                     )}
                   </TableCell>
                 </TableRow>
@@ -1188,13 +1194,10 @@ export function WorkerSettingsDialog({
           {divergent.length > 0 && (
             <Alert>
               <TriangleAlert aria-hidden className="text-status-stale" />
-              <AlertTitle>워커 간 값이 갈렸습니다</AlertTitle>
+              <AlertTitle>{t("workers.settingsDialog.divergentTitle")}</AlertTitle>
               <AlertDescription>
                 <div className="space-y-1">
-                  <p>
-                    엔진은 티켓을 디스패치한 워커의 값을 씁니다 — 같은 티켓이 어느 워커에 물리느냐로
-                    결과가 달라집니다.
-                  </p>
+                  <p>{t("workers.settingsDialog.divergentBody")}</p>
                   {divergent.map((c) => (
                     <p key={c.key} className="font-mono text-xs break-all">
                       {c.key}: {c.text}
@@ -1214,9 +1217,7 @@ export function WorkerSettingsDialog({
         <section className="space-y-2 border-t pt-4">
           <div>
             <h2 className="text-sm font-semibold">{t("workers.reap.sectionTitle")}</h2>
-            <p className="text-sm text-muted-foreground">
-              세션이 죽었는데 진행중으로 남은 티켓을 백로그로 되돌립니다.
-            </p>
+            <p className="text-sm text-muted-foreground">{t("workers.settingsDialog.reapDescription")}</p>
           </div>
           {/* `min-w-16`(64px)은 §비주얼 §4-3 슬롯 고정을 그대로 따라온다 — `reap…`가 `reap`보다
               넓어서 누른 자리가 커지면 안 된다 */}
@@ -1226,14 +1227,14 @@ export function WorkerSettingsDialog({
             className="min-w-16"
             disabled={reapPending}
             onClick={() =>
-              startReap(async () => setReap(await reapWorkerAction(projectId, firstWorkerName)))
+              startReap(async () => setReap(await reapWorkerAction(projectId, firstWorkerName, locale)))
             }
           >
             {reapPending ? "reap…" : "reap"}
           </Button>
           {reap && !reap.ok && (
             <Failure
-              title={`${firstWorkerName}.sh reap 실패`}
+              title={`${firstWorkerName}${t("workers.settingsDialog.reapFailedTitleSuffix")}`}
               message={reap.message ?? reap.output ?? ""}
             />
           )}
@@ -1265,6 +1266,7 @@ function PoolLimitField({
   onSaved: (limit: PoolLimit, count: number) => void;
 }) {
   const t = useT();
+  const locale = useLocale();
   const saved = limit.limit === null ? "" : String(limit.limit);
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState(saved);
@@ -1275,7 +1277,7 @@ function PoolLimitField({
 
   const save = () =>
     start(async () => {
-      const r = await savePoolLimitAction(projectId, value);
+      const r = await savePoolLimitAction(projectId, value, locale);
       if (r.ok) {
         const nextLimit = { limit: r.limit ?? 0, warn: false };
         onSaved(nextLimit, r.count ?? 0);
@@ -1381,6 +1383,8 @@ export function WorkerContextRow({
   /** 작업 디렉터리 결함(§4) · 외부 요인 실패(§0-5). 둘 다 없으면 `null`이다 */
   warnings?: React.ReactNode;
 }) {
+  const t = useT();
+  const locale = useLocale();
   const [open, , , announceSuccess] = useContext(ExpandCtx);
   const expanded = open?.name === row.name && open.panel === "context";
   const activity = open?.name === row.name && open.panel === "activity";
@@ -1421,13 +1425,16 @@ export function WorkerContextRow({
           {!row.commonSource && (
             <Alert>
               <TriangleAlert aria-hidden className="text-status-stale" />
-              <AlertTitle>이 워커는 공통 컨텍스트를 받지 않습니다</AlertTitle>
+              <AlertTitle>{t("workers.contextRow.noCommonSourceTitle")}</AlertTitle>
               <AlertDescription>
                 <div className="space-y-2">
                   <p>
-                    {row.name}.sh에 <span className="font-mono text-xs">context.sh</span>를{" "}
-                    <span className="font-mono text-xs">.</span> 하는 줄이 없습니다 — 위 공통 항목{" "}
-                    {common.length}개가 이 워커의 세션에는 붙지 않습니다.
+                    {row.name}
+                    {t("workers.contextRow.fileSuffixPrefix")} <span className="font-mono text-xs">context.sh</span>
+                    {t("workers.contextRow.fileSuffixGlue")}{" "}
+                    <span className="font-mono text-xs">.</span> {t("workers.contextRow.noCommonSourceBodyMiddle")}{" "}
+                    {common.length}
+                    {t("workers.contextRow.noCommonSourceBodySuffix")}
                   </p>
                   <Button
                     ref={applyBtnRef}
@@ -1438,17 +1445,19 @@ export function WorkerContextRow({
                     onClick={() => {
                       if (pending) return; // §58 §못 누르는 실효 — aria-disabled에는 pointer-events-none이 없다
                       start(async () => {
-                        const r = await applyCommonSourceAction(projectId, row.name);
-                        setApplyError(r.ok ? null : (r.message ?? "줄을 넣지 못했습니다."));
+                        const r = await applyCommonSourceAction(projectId, row.name, locale);
+                        setApplyError(r.ok ? null : (r.message ?? t("workers.contextRow.lineNotAddedDefault")));
                         if (r.ok && document.activeElement === applyBtnRef.current) {
-                          announceSuccess(row.name, "공통을 적용했습니다");
+                          announceSuccess(row.name, t("workers.contextRow.commonAppliedSentence"));
                         }
                       });
                     }}
                   >
-                    {pending ? "적용 중…" : "공통 적용"}
+                    {pending ? t("workers.contextRow.applyingPending") : t("workers.contextRow.applyCommonButton")}
                   </Button>
-                  {applyError && <Failure title="공통을 적용하지 못했습니다" message={applyError} />}
+                  {applyError && (
+                    <Failure title={t("workers.contextRow.applyCommonFailedTitle")} message={applyError} />
+                  )}
                 </div>
               </AlertDescription>
             </Alert>
@@ -1459,15 +1468,16 @@ export function WorkerContextRow({
           {!row.selfHealSource && (
             <Alert>
               <TriangleAlert aria-hidden className="text-status-stale" />
-              <AlertTitle>이 워커는 지워도 cron 줄이 남습니다</AlertTitle>
+              <AlertTitle>{t("workers.contextRow.noSelfHealTitle")}</AlertTitle>
               <AlertDescription>
                 <div className="space-y-2">
                   <p>
-                    {row.name}.sh에 <span className="font-mono text-xs">self-heal.sh</span>를{" "}
-                    <span className="font-mono text-xs">.</span> 하는 줄이 없습니다 — dira를 지우면 이
-                    워커의 crontab 2줄을 뺄 코드가 돌지 않고, cron이 1분마다 없는 파일을 부릅니다.
-                    적용하면 <span className="font-mono text-xs">. tick.sh</span> 바로 위에 한 줄이
-                    들어갑니다(엔진 경로는 이 파일의 그 줄에서 읽습니다).
+                    {row.name}
+                    {t("workers.contextRow.fileSuffixPrefix")} <span className="font-mono text-xs">self-heal.sh</span>
+                    {t("workers.contextRow.fileSuffixGlue")}{" "}
+                    <span className="font-mono text-xs">.</span> {t("workers.contextRow.selfHealMissingMiddle")}{" "}
+                    <span className="font-mono text-xs">. tick.sh</span>{" "}
+                    {t("workers.contextRow.selfHealMissingSuffix")}
                   </p>
                   <Button
                     ref={healBtnRef}
@@ -1478,17 +1488,19 @@ export function WorkerContextRow({
                     onClick={() => {
                       if (healing) return; // §58 §못 누르는 실효
                       startHeal(async () => {
-                        const r = await applySelfHealAction(projectId, row.name);
-                        setHealError(r.ok ? null : (r.message ?? "줄을 넣지 못했습니다."));
+                        const r = await applySelfHealAction(projectId, row.name, locale);
+                        setHealError(r.ok ? null : (r.message ?? t("workers.contextRow.lineNotAddedDefault")));
                         if (r.ok && document.activeElement === healBtnRef.current) {
-                          announceSuccess(row.name, "자가 정리를 적용했습니다");
+                          announceSuccess(row.name, t("workers.contextRow.selfHealAppliedSentence"));
                         }
                       });
                     }}
                   >
-                    {healing ? "적용 중…" : "자가 정리 적용"}
+                    {healing ? t("workers.contextRow.applyingPending") : t("workers.contextRow.applySelfHealButton")}
                   </Button>
-                  {healError && <Failure title="자가 정리를 적용하지 못했습니다" message={healError} />}
+                  {healError && (
+                    <Failure title={t("workers.contextRow.applySelfHealFailedTitle")} message={healError} />
+                  )}
                 </div>
               </AlertDescription>
             </Alert>
@@ -1502,25 +1514,26 @@ export function WorkerContextRow({
               <TriangleAlert aria-hidden className="text-status-stale" />
               <AlertTitle>
                 {row.dispatchGateSource
-                  ? "이 워커의 통합 게이트가 낡았습니다"
-                  : "이 워커는 받는 트리가 더러워도 그냥 디스패치됩니다"}
+                  ? t("workers.contextRow.gateStaleTitle")
+                  : t("workers.contextRow.gateMissingTitle")}
               </AlertTitle>
               <AlertDescription>
                 <div className="space-y-2">
                   <p>
                     {row.dispatchGateSource ? (
                       <>
-                        <span className="font-mono text-xs">dispatch-gate.sh</span>의 내용이 지금
-                        판과 다릅니다 — 이 워커는 옛 통합 게이트를 그대로 돕니다. 적용하면 파일을
-                        지금 판으로 덮어씁니다.
+                        <span className="font-mono text-xs">dispatch-gate.sh</span>
+                        {t("workers.contextRow.gateStaleBody")}
                       </>
                     ) : (
                       <>
-                        {row.name}.sh에 <span className="font-mono text-xs">dispatch-gate.sh</span>를{" "}
-                        <span className="font-mono text-xs">.</span> 하는 줄이 없습니다 — 받는 트리가
-                        더러운 채로 디스패치되면 세션이 일을 다 끝낸 뒤 push에서만 거부됩니다.
-                        적용하면 <span className="font-mono text-xs">. tick.sh</span> 바로 위에 한
-                        줄이 들어갑니다(통합 브랜치는 protocols/AGENTS.md에서 읽습니다).
+                        {row.name}
+                        {t("workers.contextRow.fileSuffixPrefix")}{" "}
+                        <span className="font-mono text-xs">dispatch-gate.sh</span>
+                        {t("workers.contextRow.fileSuffixGlue")}{" "}
+                        <span className="font-mono text-xs">.</span> {t("workers.contextRow.gateMissingMiddle")}{" "}
+                        <span className="font-mono text-xs">. tick.sh</span>{" "}
+                        {t("workers.contextRow.gateMissingSuffix")}
                       </>
                     )}
                   </p>
@@ -1533,17 +1546,19 @@ export function WorkerContextRow({
                     onClick={() => {
                       if (gating) return; // §58 §못 누르는 실효
                       startGate(async () => {
-                        const r = await applyDispatchGateAction(projectId, row.name);
-                        setGateError(r.ok ? null : (r.message ?? "줄을 넣지 못했습니다."));
+                        const r = await applyDispatchGateAction(projectId, row.name, locale);
+                        setGateError(r.ok ? null : (r.message ?? t("workers.contextRow.lineNotAddedDefault")));
                         if (r.ok && document.activeElement === gateBtnRef.current) {
-                          announceSuccess(row.name, "통합 게이트를 적용했습니다");
+                          announceSuccess(row.name, t("workers.contextRow.gateAppliedSentence"));
                         }
                       });
                     }}
                   >
-                    {gating ? "적용 중…" : "통합 게이트 적용"}
+                    {gating ? t("workers.contextRow.applyingPending") : t("workers.contextRow.applyGateButton")}
                   </Button>
-                  {gateError && <Failure title="통합 게이트를 적용하지 못했습니다" message={gateError} />}
+                  {gateError && (
+                    <Failure title={t("workers.contextRow.applyGateFailedTitle")} message={gateError} />
+                  )}
                 </div>
               </AlertDescription>
             </Alert>
@@ -1566,16 +1581,18 @@ export function WorkerContextRow({
           {expanded && row.context.ok && (
             <div className="space-y-3 pt-1">
               <p className="text-sm text-muted-foreground">
-                워커별 <span className="font-mono text-xs">TICKET_CONTEXT</span> — 세션 프롬프트 꼬리에
-                항목의 경로와 설명이 붙습니다. <strong className="font-medium">없는 항목은 에러가 아닙니다</strong>{" "}
-                — 엔진이 건너뛰고 runner.log에 <span className="font-mono text-xs">WARN</span>만 남깁니다
-                (클라우드 마운트가 안 붙은 상태에서 세션이 헛짚지 않게). 목록 최상단의{" "}
-                <span className="font-mono text-xs">공통</span> 배지 행은 아래 공통 컨텍스트이고 여기서는
-                고칠 수 없습니다 — 그 항목은 워커 파일에 없습니다.
+                {t("workers.contextRow.expandedIntroPrefix")}{" "}
+                <span className="font-mono text-xs">TICKET_CONTEXT</span>{" "}
+                {t("workers.contextRow.expandedIntroMid1")}{" "}
+                <strong className="font-medium">{t("workers.contextRow.expandedIntroBold")}</strong>{" "}
+                {t("workers.contextRow.expandedIntroMid2")} <span className="font-mono text-xs">WARN</span>
+                {t("workers.contextRow.expandedIntroMid3")}{" "}
+                <span className="font-mono text-xs">{t("workers.pool.badge")}</span>{" "}
+                {t("workers.contextRow.expandedIntroSuffix")}
               </p>
               {others.length > 0 && (
                 <div className="flex items-center justify-end gap-1">
-                  <span className="text-xs text-muted-foreground">이 설정을 복사:</span>
+                  <span className="text-xs text-muted-foreground">{t("workers.contextRow.copyThisLabel")}</span>
                   {others.map((o) => (
                     <Button key={o} variant="ghost" size="sm" className="font-mono" onClick={() => setCopyTo(o)}>
                       → {o}
@@ -1594,11 +1611,11 @@ export function WorkerContextRow({
                 cwds={row.cwd ? [row.cwd] : []}
                 emptyText={
                   gets.length > 0
-                    ? "이 워커의 자기 항목은 없습니다 — 위 공통 항목만 받습니다."
-                    : "항목이 없습니다 — 이 워커의 세션은 참조 컨텍스트 없이 시작합니다."
+                    ? t("workers.contextRow.emptyWithCommon")
+                    : t("workers.contextRow.emptyNoCommon")
                 }
-                addLabel="항목 추가"
-                save={(items) => saveContextAction(projectId, row.name, items)}
+                addLabel={t("workers.contextRow.addItemLabel")}
+                save={(items) => saveContextAction(projectId, row.name, items, locale)}
               />
             </div>
           )}
@@ -1636,32 +1653,34 @@ export function WorkerContextRow({
             <DialogContent className="sm:max-w-xl">
               <DialogHeader>
                 <DialogTitle>
-                  컨텍스트 복사 — {row.name} → {copyTo}
+                  {t("workers.contextRow.copyDialogTitlePrefix")} {row.name} → {copyTo}
                 </DialogTitle>
                 <DialogDescription>
-                  {copyTo}.sh의 TICKET_CONTEXT 블록을 {row.name}의 항목 {saved.length}개로 바꿉니다.
-                  {copyTo}의 기존 항목은 남지 않습니다.
+                  {copyTo}
+                  {t("workers.contextRow.copyDescMid1")} {row.name}
+                  {t("workers.contextRow.copyDescMid2")} {saved.length}
+                  {t("workers.contextRow.copyDescMid3")} {copyTo}
+                  {t("workers.contextRow.copyDescSuffix")}
                 </DialogDescription>
               </DialogHeader>
               <p className="text-sm text-muted-foreground">
-                <span className="font-mono text-xs">$TICKET_CWD</span>는 펴지 않고 문자열째로 옮깁니다 —
-                받는 워커는 자기 작업 디렉터리를 가리킵니다. 컨텍스트가 워커마다 갈라져 있으면 같은
-                티켓이 어느 워커에 물리느냐로 결과가 달라집니다.
+                <span className="font-mono text-xs">$TICKET_CWD</span>
+                {t("workers.contextRow.copyBodySuffix")}
               </p>
-              {copyError && <Failure title="복사하지 못했습니다" message={copyError} />}
+              {copyError && <Failure title={t("workers.contextRow.copyFailedTitle")} message={copyError} />}
               <DialogFooter>
-                <DialogClose render={<Button variant="outline" />}>취소</DialogClose>
+                <DialogClose render={<Button variant="outline" />}>{t("common.cancel")}</DialogClose>
                 <Button
                   disabled={pending}
                   onClick={() =>
                     start(async () => {
-                      const r = await copyContextAction(projectId, row.name, copyTo!);
-                      setCopyError(r.ok ? null : (r.message ?? "복사하지 못했습니다."));
+                      const r = await copyContextAction(projectId, row.name, copyTo!, locale);
+                      setCopyError(r.ok ? null : (r.message ?? t("workers.contextRow.copyFailedDefaultMessage")));
                       if (r.ok) setCopyTo(null);
                     })
                   }
                 >
-                  {pending ? "복사 중…" : "복사"}
+                  {pending ? t("workers.contextRow.copyingPending") : t("workers.contextRow.copyButton")}
                 </Button>
               </DialogFooter>
             </DialogContent>

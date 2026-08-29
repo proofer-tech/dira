@@ -11,17 +11,39 @@ import test from "node:test";
 // 확인한 뒤에만 발동한다는 것 — 눈으로 보이지 않는 회귀라 소스 검사로 고정한다.
 const s = readFileSync("components/workers-ui.tsx", "utf8");
 
+// 610dc0c0(§0-16 §발행 §묶음 표 행 5)이 이 넷의 화면 문자열을 `lib/i18n.ts` ko 키로 옮겼다 —
+// 앵커도 리터럴이 아니라 `t("<키>")` 호출로 찾는다(값 자체는 `i18n.test.ts`가 고정한다).
 const BUTTONS = [
-  { label: "공통 적용", pendingVar: "pending", ref: "applyBtnRef", sentence: "공통을 적용했습니다" },
-  { label: "자가 정리 적용", pendingVar: "healing", ref: "healBtnRef", sentence: "자가 정리를 적용했습니다" },
-  { label: "통합 게이트 적용", pendingVar: "gating", ref: "gateBtnRef", sentence: "통합 게이트를 적용했습니다" },
-  { label: "실행 비트 켜기", pendingVar: "pending", ref: "btnRef", sentence: "실행 비트를 켰습니다" },
+  {
+    label: "workers.contextRow.applyCommonButton",
+    pendingVar: "pending",
+    ref: "applyBtnRef",
+    sentence: "workers.contextRow.commonAppliedSentence",
+  },
+  {
+    label: "workers.contextRow.applySelfHealButton",
+    pendingVar: "healing",
+    ref: "healBtnRef",
+    sentence: "workers.contextRow.selfHealAppliedSentence",
+  },
+  {
+    label: "workers.contextRow.applyGateButton",
+    pendingVar: "gating",
+    ref: "gateBtnRef",
+    sentence: "workers.contextRow.gateAppliedSentence",
+  },
+  {
+    label: "workers.execFix.button",
+    pendingVar: "pending",
+    ref: "btnRef",
+    sentence: "workers.execFix.successSentence",
+  },
 ];
 
 for (const { label, pendingVar, ref, sentence } of BUTTONS) {
   test(`${label} — disabled가 아니라 aria-disabled + 진행 중 재진입 가드`, () => {
-    const labelIdx = s.indexOf(`"${label}"`);
-    assert.ok(labelIdx > 0, `"${label}" 라벨을 못 찾았다`);
+    const labelIdx = s.indexOf(`t("${label}")`);
+    assert.ok(labelIdx > 0, `t("${label}") 호출을 못 찾았다`);
     const btnStart = s.lastIndexOf("<Button", labelIdx);
     const btnBody = s.slice(btnStart, labelIdx);
     assert.match(
@@ -43,8 +65,8 @@ for (const { label, pendingVar, ref, sentence } of BUTTONS) {
   });
 
   test(`${label} — 성공은 그 순간 초점을 든 버튼일 때만 낭독한다`, () => {
-    const sentIdx = s.indexOf(`"${sentence}"`);
-    assert.ok(sentIdx > 0, `성공 문장 "${sentence}"을 못 찾았다`);
+    const sentIdx = s.indexOf(`t("${sentence}")`);
+    assert.ok(sentIdx > 0, `t("${sentence}") 호출을 못 찾았다`);
     const guardStart = s.lastIndexOf("if (r.ok", sentIdx);
     assert.ok(guardStart > 0 && sentIdx - guardStart < 200, `${label}: r.ok 가드를 못 찾았다`);
     const guard = s.slice(guardStart, sentIdx);

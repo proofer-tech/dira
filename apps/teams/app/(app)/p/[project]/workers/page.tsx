@@ -54,45 +54,12 @@ import {
 // 워커는 GUI 밖에서(cron이) 상태를 바꾼다 — 프리렌더하면 빌드 시점 현황이 굳는다.
 export const dynamic = "force-dynamic";
 
-/** 설정 키 라벨. 경고와 표가 같은 단어를 쓰게 한 자리에 둔다. */
-const LABEL: Record<string, string> = {
-  personas: "페르소나 (TICKET_PERSONAS)",
-  protocols: "프로토콜 (TICKET_PROTOCOLS)",
-  inProgress: "진행중 접미사 (TICKET_INPROGRESS)",
-  done: "완료 접미사 (TICKET_DONE)",
-  ontology: "온톨로지 (TICKET_ONTOLOGY)",
-};
-
 /** 배지 옆 보조 문구 (DESIGN.md §비주얼 디렉션 §2 워커 4상태). */
-const NOTE: Record<WorkerRow["status"], string> = {
-  running: "",
-  idle: "",
-  stopped: "crontab 미등록",
-  stale: "다음 tick이 회수한다",
-};
-
-/** §4 표의 결함 이름 + "실제로 무슨 일이 일어나나". LABEL·NOTE와 같은 자리에 둔다 —
- *  판정은 `lib/workers.ts`가 하고 그 워커의 실제 경로는 `detail`로 온다.
- *
- *  넷째(`no-exec`)만 `lib/i18n.ts`에서 온다(§0-21 결정 2, 티켓 b60520ea) — 앞의 셋은 아직 이
- *  사전으로 안 옮겨졌다. 두 벌을 한 레코드에 섞어도 값은 둘 다 문자열이라 화면은 안 갈린다. */
-const DEFECT: Record<Exclude<WorkerRow["defects"][number]["kind"], "no-exec">, { title: string; why: string }> = {
-  "missing-cwd": {
-    title: "작업 디렉터리 없음",
-    why: "tick.sh가 ERROR cwd 없음을 남기고 락을 풀어 티켓을 되돌립니다 — 물었다 놓기만 합니다.",
-  },
-  "missing-link": {
-    title: ".dira 심링크 없음",
-    why: "세션이 미끼 .dira를 보고 자기 티켓을 못 찾습니다 — 완료 신고도 못 하고 reap이 attempts만 올립니다.",
-  },
-  "shared-cwd": {
-    title: "작업 디렉터리 공유",
-    why: "두 세션이 한 트리에서 한 브랜치를 밟습니다 — dispatch-gate.sh가 디스패치를 막습니다.",
-  },
-  "no-ticket-cwd": {
-    title: "TICKET_CWD 없음",
-    why: "받는 트리에서 그대로 커밋합니다 — 미커밋 흔적이 남으면 통합 게이트가 큐의 워커 전부를 보류시킵니다.",
-  },
+const NOTE_KEY: Record<WorkerRow["status"], string | null> = {
+  running: null,
+  idle: null,
+  stopped: "workers.status.stoppedNote",
+  stale: "workers.status.staleNote",
 };
 
 export default async function Workers({ params }: { params: Promise<{ project: string }> }) {
@@ -101,8 +68,33 @@ export default async function Workers({ params }: { params: Promise<{ project: s
   if (!project) notFound();
 
   const locale = await readLanguage();
+  /** 설정 키 라벨. 경고와 표가 같은 단어를 쓰게 한 자리에 둔다. */
+  const LABEL: Record<string, string> = {
+    personas: `${t(locale, "resolve.key.personas")} (TICKET_PERSONAS)`,
+    protocols: `${t(locale, "resolve.key.protocols")} (TICKET_PROTOCOLS)`,
+    inProgress: `${t(locale, "resolve.key.inProgress")} (TICKET_INPROGRESS)`,
+    done: `${t(locale, "resolve.key.done")} (TICKET_DONE)`,
+    ontology: `${t(locale, "shell.nav.ontology")} (TICKET_ONTOLOGY)`,
+  };
+  // §4 표의 결함 이름 + "실제로 무슨 일이 일어나나". 판정은 `lib/workers.ts`가 하고 그 워커의
+  // 실제 경로는 `detail`로 온다. `no-exec`만 종전부터 이 사전을 썼다(§0-21 결정 2, 티켓 b60520ea).
   const defect: Record<WorkerRow["defects"][number]["kind"], { title: string; why: string }> = {
-    ...DEFECT,
+    "missing-cwd": {
+      title: t(locale, "workers.defect.missingCwd.title"),
+      why: t(locale, "workers.defect.missingCwd.why"),
+    },
+    "missing-link": {
+      title: t(locale, "workers.defect.missingLink.title"),
+      why: t(locale, "workers.defect.missingLink.why"),
+    },
+    "shared-cwd": {
+      title: t(locale, "workers.defect.sharedCwd.title"),
+      why: t(locale, "workers.defect.sharedCwd.why"),
+    },
+    "no-ticket-cwd": {
+      title: t(locale, "workers.defect.noTicketCwd.title"),
+      why: t(locale, "workers.defect.noTicketCwd.why"),
+    },
     "no-exec": {
       title: t(locale, "worker.defect.noExec.title"),
       why: t(locale, "worker.defect.noExec.why"),
@@ -162,7 +154,7 @@ export default async function Workers({ params }: { params: Promise<{ project: s
 
       <div className="flex items-center justify-between gap-4">
         <div className="flex flex-wrap items-baseline gap-x-2">
-          <h1 className="text-lg font-semibold">워커</h1>
+          <h1 className="text-lg font-semibold">{t(locale, "shell.nav.workers")}</h1>
           {/* 상단 합계 = 아래 열의 합(§0-8 그릇). 새 컴포넌트를 만들지 않는다 — 한 줄이다.
               뒤에 붙는 수는 이 판정의 천장을 알려 준다: 토큰은 세션이 끝날 때 한 번 쓰이고
               신호로 죽은 세션은 아예 안 쓰므로 그만큼 합계가 실제보다 적다. 침묵하면 사람이
@@ -170,11 +162,12 @@ export default async function Workers({ params }: { params: Promise<{ project: s
               13건 중 8건이 rc 143/137로 죽어 토큰이 영영 안 온다(`4a884d8d`). */}
           {rows.length > 0 && (
             <p className="text-xs text-muted-foreground">
-              최근 5시간 토큰{" "}
+              {t(locale, "workers.tokenSummary.label")}{" "}
               <span className="font-mono tabular-nums text-foreground">
                 {formatTokens(usage.total)}
               </span>
-              {usage.unaccounted > 0 && ` · 이 합계에 없는 세션 ${usage.unaccounted}개`}
+              {usage.unaccounted > 0 &&
+                ` ${t(locale, "workers.tokenSummary.unaccountedPrefix")} ${usage.unaccounted}${t(locale, "workers.tokenSummary.unaccountedSuffix")}`}
             </p>
           )}
         </div>
@@ -209,7 +202,7 @@ export default async function Workers({ params }: { params: Promise<{ project: s
       {rows.length === 0 ? (
         <div className="max-w-3xl space-y-4">
           <EmptyState
-            text="워커 없음"
+            text={t(locale, "workers.empty.text")}
             action={
               <CreateWorkerButton
                 projectId={id}
@@ -220,30 +213,27 @@ export default async function Workers({ params }: { params: Promise<{ project: s
           />
           <div className="space-y-2">
             <p className="text-sm text-muted-foreground">
-              워커가 없으면 티켓이 디스패치되지 않을 뿐 아니라{" "}
-              <span className="font-mono text-xs">reap</span>(스테일 수거)과{" "}
-              <span className="font-mono text-xs">unassign</span>(할당 해제)도 할 수 없습니다 —
-              둘 다 워커 스크립트를 통해 엔진이 하는 일입니다(제약 2).
+              {t(locale, "workers.empty.noWorkerBodyPrefix")} <span className="font-mono text-xs">reap</span>
+              {t(locale, "workers.empty.noWorkerBodyMid")} <span className="font-mono text-xs">unassign</span>
+              {t(locale, "workers.empty.noWorkerBodySuffix")}
             </p>
             <CopyCommand cmd={firstWorkerCmd(project.root)} />
-            <p className="text-xs text-muted-foreground">
-              엔진 레포 경로는 채워지지 않습니다 — 워커 파일에만 적혀 있어서 GUI가 알 수 없습니다.
-            </p>
+            <p className="text-xs text-muted-foreground">{t(locale, "workers.empty.engineRepoHint")}</p>
           </div>
         </div>
       ) : (
         <Table>
           <TableHeader>
             <TableRow className="h-9">
-              <TableHead className="h-9 px-3 text-xs">이름</TableHead>
-              <TableHead className="h-9 px-3 text-xs">상태</TableHead>
-              <TableHead className="h-9 px-3 text-xs">물고 있는 티켓</TableHead>
-              <TableHead className="h-9 px-3 text-xs">컨텍스트</TableHead>
-              <TableHead className="h-9 px-3 text-xs">마지막 활동</TableHead>
+              <TableHead className="h-9 px-3 text-xs">{t(locale, "project.list.nameHeader")}</TableHead>
+              <TableHead className="h-9 px-3 text-xs">{t(locale, "boardPage.column.status")}</TableHead>
+              <TableHead className="h-9 px-3 text-xs">{t(locale, "workers.table.holdingHeader")}</TableHead>
+              <TableHead className="h-9 px-3 text-xs">{t(locale, "workers.table.contextHeader")}</TableHead>
+              <TableHead className="h-9 px-3 text-xs">{t(locale, "workers.table.activityHeader")}</TableHead>
               <TableHead className="h-9 px-3 text-right text-xs">pid</TableHead>
               {/* pid 옆이다 — 둘 다 오른쪽 정렬 숫자라 눈이 한 번에 훑는다 */}
-              <TableHead className="h-9 px-3 text-right text-xs">토큰(5시간)</TableHead>
-              <TableHead className="h-9 px-3 text-right text-xs">액션</TableHead>
+              <TableHead className="h-9 px-3 text-right text-xs">{t(locale, "workers.table.tokensHeader")}</TableHead>
+              <TableHead className="h-9 px-3 text-right text-xs">{t(locale, "project.list.actionsHeader")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -265,17 +255,17 @@ export default async function Workers({ params }: { params: Promise<{ project: s
                       <Badge
                         variant="outline"
                         className="text-status-blocked bg-status-blocked/10 border-status-blocked/30"
-                        title="지금 쓸 수 있는 Claude 계정이 0개입니다 — 이 시각이 지나면 다음 tick이 세션을 띄웁니다"
+                        title={t(locale, "workers.limitBadge.title")}
                       >
                         <Hourglass aria-hidden />
-                        리밋 대기 · {dateTimeLabel(limitUntil * 1000)}
+                        {t(locale, "workers.limitBadge.labelPrefix")} {dateTimeLabel(limitUntil * 1000)}
                       </Badge>
                     )}
                     {/* shim은 cron 줄이 원래 없다(§4-16 결정 2) — `stopped` 배지 자체는 참이지만
                         "crontab 미등록"은 다음 행동으로 `재등록`을 가리키는데 이 행에서는 막힌
                         조작이다. 대신 같은 행의 `공통` 배지가 사유를 답한다(§비주얼 §68 §거짓 한 칸). */}
-                    {NOTE[w.status] && !w.commonWorker && (
-                      <span className="text-xs text-muted-foreground">{NOTE[w.status]}</span>
+                    {NOTE_KEY[w.status] && !w.commonWorker && (
+                      <span className="text-xs text-muted-foreground">{t(locale, NOTE_KEY[w.status]!)}</span>
                     )}
                   </div>
                 </TableCell>
@@ -355,13 +345,13 @@ export default async function Workers({ params }: { params: Promise<{ project: s
                                   함께 있어도 서로 안 가린다). */}
                               {w.worktree && (
                                 <p>
-                                  준비 명령은 이 프로젝트의 배치인{" "}
+                                  {t(locale, "workers.defectAlert.worktreeHintPrefix")}{" "}
                                   <span className="font-mono text-xs break-all">
                                     {project.root}/worktrees/{w.name}
-                                  </span>
-                                  를 만듭니다(§4-2) —{" "}
-                                  <span className="font-mono text-xs">TICKET_CWD</span>가 그 경로가
-                                  아니면 그 줄도 손으로 고치세요. 체크아웃은 GUI가 실행하지 않습니다.
+                                  </span>{" "}
+                                  {t(locale, "workers.defectAlert.worktreeHintMid")}{" "}
+                                  <span className="font-mono text-xs">TICKET_CWD</span>
+                                  {t(locale, "workers.defectAlert.worktreeHintSuffix")}
                                 </p>
                               )}
                               {w.worktree?.map((cmd) => (
@@ -373,11 +363,11 @@ export default async function Workers({ params }: { params: Promise<{ project: s
                               {w.cwdFix && (
                                 <>
                                   <p>
-                                    이 명령은 워커 파일에{" "}
+                                    {t(locale, "workers.defectAlert.cwdFixPrefix")}{" "}
                                     <span className="font-mono text-xs break-all">
                                       TICKET_CWD="{project.root}/worktrees/{w.name}"
                                     </span>{" "}
-                                    한 줄만 더합니다 — 트리는 다음 tick에 게이트가 만듭니다.
+                                    {t(locale, "workers.defectAlert.cwdFixSuffix")}
                                   </p>
                                   <CopyCommand cmd={w.cwdFix} />
                                 </>
@@ -400,7 +390,9 @@ export default async function Workers({ params }: { params: Promise<{ project: s
                         // 명령이 아니고, 조작 0개가 §0-5의 결정이다(`Q2=(a)`).
                         <Alert role="status">
                           <CloudOff aria-hidden className="text-status-blocked" />
-                          <AlertTitle>{w.name} — 세션이 즉시 실패했습니다</AlertTitle>
+                          <AlertTitle>
+                            {w.name} — {t(locale, "workers.lastFailure.title")}
+                          </AlertTitle>
                           <AlertDescription>
                             {/* `<p>`가 아니라 `<div>`인 이유: `AlertDescription`이 마지막이 아닌
                                 `<p>`에 `mb-4`를 건다. 이 둘은 같은 사실의 세 좌표라 붙어 있어야
