@@ -1510,6 +1510,13 @@ export const ko: Record<string, string> = {
  *  | 빈손(회차 기록) | empty-handed | 아무것도 안 채운 회차다. 지표 이름은 `Empty-handed rate` |
  *  | 가져오기 · 정리 티켓 · 문제해결 | Import · Cleanup ticket · Fix violations | 끝엣것은 버튼이라 무엇을 고치는지까지 적는다 — 한국어가 카드 안에서 자명하던 자리다 |
  *  | 건(지표 단위) | found | 숫자 뒤 꼬리다(`3 found`). 이 자리는 1도 뜨는데 복수형 장치가 없어, 수를 세는 명사 대신 수가 몇이든 같은 꼴인 낱말을 쓴다 |
+ *  | 등록 · 등록 해제 | register · unregister | `4c075aa9`(프로젝트 관리 묶음)가 더한 줄부터 아래. 큐 파일은 안 건드리고 목록에만 올렸다 내리는 그 동작이다 |
+ *  | URL 조각 | URL slug | 주소의 `/p/<이것>` 한 칸. `id`는 레지스트리 키 이름이라 화면 낱말로 안 쓴다 |
+ *  | 프로젝트 폴더 · 통합 브랜치 · 스펙 문서 · 온톨로지 자리 | project folder · integration branch · spec document · ontology location | 생성 폼 네 칸 |
+ *  | 해석 결과 · 작업 디렉터리 | resolved values · working directory | 앞엣것은 워커 파일에서 읽어 낸 값들의 표 제목이다 |
+ *  | 진행중 접미사 · 완료 접미사 | in-progress suffix · done suffix | 파일 이름 꼬리(`.wip`·`.done`)를 부르는 이름. 위 티켓 상태 줄의 낱말을 그대로 쓴다 |
+ *  | 해석 실패 · 루트 밖 · 워커마다 다름 | resolve failed · outside root · differs per worker | 해석 결과 표의 배지 셋. `기본값 가정` 줄과 같은 이유로 소문자다 |
+ *  | 마이그레이션 | migration | 온톨로지를 최신 규약으로 다시 올리는 그것. `upgrade`로 안 부른다 |
  *
  *  **어순이 뒤집히는 자리는 접두·접미 두 키로 쪼갠다.** 한국어는 이름 뒤에 다 붙지만(`<이름>
  *  삭제`) 영어는 동사가 앞에 뜬다(`Delete <name>`) — 한쪽이 비는 것이 정상이고, 조립은
@@ -2746,6 +2753,176 @@ export const en: Record<string, string> = {
   "ontology.action.unknownProjectPrefix": "Not a registered project:",
   "ontology.action.hashExhausted":
     "Drew 10 hashes and every one is already taken — check the queue directory.",
+
+  // §0-16 §발행 §묶음 표 행 8(프로젝트 관리 루트 셸) — P338-11(`95749c14`)이 뽑은 ko 키 126개의
+  // 영어(티켓 `4c075aa9`). 등록되지 않은 프로젝트 한 줄은 `protocols.action.*`·`home.action.*`과
+  // 글자 그대로 같게 뒀다 — 같은 거절을 화면마다 다른 말로 하지 않는다.
+  "errorBoundary.title": "Couldn't render this screen",
+  "errorBoundary.noReason": "No reason given",
+  "errorBoundary.retry": "Try again",
+  // 가운데에 `/p/<project>`가 낀다(`… If it looked like /p/<project>, that slug isn't in the
+  // registry.`) — 한국어는 조각 뒤에 조사가 붙고 영어는 콤마가 붙는다.
+  "notFound.project.title": "Not found",
+  "notFound.project.bodyPrefix": "No screen matches this URL. If it looked like",
+  "notFound.project.urlExample": "/p/<project>",
+  "notFound.project.bodySuffix": ", that slug isn't in the registry.",
+  "notFound.project.link": "Project list",
+  "notFound.root.title": "404",
+  "notFound.root.body": "There's no page at this address.",
+  "notFound.root.homeLink": "Go home",
+
+  // `lib/scaffold.ts` — 엔진 미발견 한 줄은 `<prefix> <repo><mid> <hint>`로 조립된다. 한국어
+  // `mid`는 조사로 붙지만 영어는 앞에 공백 하나가 필요하다(`<repo> has no tick.sh.`).
+  "scaffold.engineNotFoundPrefix": "Couldn't find the engine repo —",
+  "scaffold.engineNotFoundMid": " has no tick.sh.",
+  "scaffold.engineNotFoundEnvHint": "That's where DIRA_ENGINE points.",
+  "scaffold.engineNotFoundDefaultHint": "The GUI has to run from <engine repo>/apps/teams/.",
+  "scaffold.notAbsolutePrefix": "Needs an absolute path:",
+  "scaffold.emptyPlaceholder": "(empty)",
+  "scaffold.alreadyQueueSuffix": " is already a dira project. Register it instead of creating it.",
+  "scaffold.notQueueSuffix":
+    " already exists but isn't a dira project. Create tickets/ and workers/ inside it, or delete it and create it again.",
+
+  // `lib/projects.ts` — 경로 뒤에 붙는 넷(`mountNotFound`·`notDirectory`·`alreadyRegistered`·
+  // `dupId`)은 값과 공백 없이 이어지므로 영어 쪽에 앞 공백을 둔다.
+  "projects.keymapNotObject": "Top level isn't an object",
+  "projects.registryShapePrefix": "The registry has an odd shape (no projects array):",
+  "projects.nameRequired": "Enter a name.",
+  "projects.notAbsolutePrefix": "Needs an absolute path:",
+  "projects.emptyPlaceholder": "(empty)",
+  "projects.mountNotFoundSuffix": " doesn't exist. Check the absolute path, and check that the mount is connected.",
+  "projects.notDirectorySuffix": " isn't a directory.",
+  "projects.notAQueueBody":
+    "This directory has neither tickets/ nor workers/ — it isn't a dira project. Create tickets/ and workers/ inside it, or delete it and start again from [New project].",
+  "projects.alreadyRegisteredPrefix": "Already registered as",
+  "projects.alreadyRegisteredSuffix": ".",
+  "projects.badIdFormatPrefix": "Bad URL slug — lowercase letters, digits and hyphens, 1-40 characters:",
+  "projects.needIdMessage":
+    "Couldn't build a URL slug from that name. Set one yourself (lowercase letters, digits, hyphens).",
+  "projects.dupIdPrefix": "The URL slug",
+  "projects.dupIdSuffix": " is already taken. Use a different name, or set the slug yourself.",
+  "projects.unknownProjectIdPrefix": "Unknown project:",
+  "projects.notAPersonaNamePrefix": "Not a persona name:",
+  "projects.notInPalettePrefix": "Not a palette color:",
+  // 이름 규칙 한 줄은 `<prefix> <name> <middle><file> <suffix>`로 조립된다 —
+  // `… — the engine builds <personas>/<name>/PROFILE.md from this name.`
+  "projects.personaNameRulePrefix": "Persona names take letters, digits, _ and - only:",
+  "projects.personaNameRuleMiddle": "— the engine builds <personas>/<name>/",
+  "projects.personaNameRuleSuffix": "from this name.",
+  "projects.squadNameRulePrefix": "Squad names take letters, digits, _ and - only:",
+  "projects.squadNameRuleSuffix": "— the engine builds <squads>/<name>/members from this name.",
+
+  // `app/actions.ts` §7 해석 결과 표 — 배지 넷은 값 옆 꼬리라 소문자다(`protocols.usingDefault`·
+  // `ontology.usingDefault`가 선 그 벌, 아래 낱말 표의 `기본값 가정` 줄).
+  "resolve.badge.assumedDefault": "assumed default",
+  "resolve.badge.resolveFailed": "resolve failed",
+  "resolve.badge.outsideRoot": "outside root",
+  "resolve.badgeHint.assumedDefault": "The worker file doesn't set this, so the default is used",
+  "resolve.badgeHint.resolveFailed":
+    "A variable other than $HOME is still in the value, so it couldn't be read — the screen uses the default",
+  "resolve.badgeHint.outsideRoot": "Points outside the project root",
+  "resolve.conflictBadge": "differs per worker",
+  "resolve.conflictAlert.title": "Workers disagree on this setting",
+  "resolve.conflictAlert.body": "The result changes with whichever worker picks the ticket up.",
+  "resolve.key.inProgress": "In-progress suffix",
+  "resolve.key.done": "Done suffix",
+  "resolve.key.personas": "Personas",
+  "resolve.key.protocols": "Protocols",
+  "resolve.key.cwd": "Working directory",
+  "resolve.key.workers": "Workers",
+  // 개수 뒤에 공백 없이 붙는다 — `w1 w2 w3 (3 total)`.
+  "resolve.workers.countSuffix": " total",
+  "resolve.workers.empty": "None — this project doesn't run",
+  "resolve.unknownProjectPrefix": "Not a registered project:",
+
+  "project.branchRequired": "Enter an integration branch.",
+  "project.createdRegisterFailedPrefix": "— .dira was created at",
+  "project.createdRegisterFailedSuffix": ". Register that path from the register card.",
+  "project.moveNoRoom": "No room left to move it.",
+
+  // `components/projects-ui.tsx` — 생성 폼·다이얼로그(§비주얼 §7 생성).
+  "project.create.blurb":
+    "Creates .dira and puts one worker in crontab — it starts picking up tickets 30 seconds later.",
+  "project.create.submitPending": "Creating…",
+  "project.create.submit": "Create project",
+  "project.create.nameLabel": "Name",
+  "project.create.namePlaceholder": "dira itself",
+  "project.create.idLabel": "URL slug",
+  "project.create.idHint":
+    "Couldn't build a URL slug from that name. Set one yourself (lowercase letters, digits, hyphens).",
+  "project.create.dirLabel": "Project folder",
+  "project.create.dirHelp": ".dira goes in here. ~ is expanded",
+  "project.create.branchLabel": "Integration branch",
+  "project.create.specLabel": "Spec document",
+  "project.create.specHelp": "Optional. Leave it empty and that line (one row of the AGENTS.md map table) stays a placeholder",
+  "project.create.ontologyLabel": "Ontology location",
+  "project.create.ontologyPlaceholder": "<project folder>/.dira/ontology",
+  "project.create.ontologyHelp": "Optional. Leave it empty and the default (<project folder>/.dira/ontology) is used",
+  "project.create.existsTitle": "Nothing was created",
+  "project.create.existsRegisterButton": "Go to register",
+  "project.create.failedTitle": "Couldn't create it",
+  "project.create.permissionHint": "Press [Allow] if a permission window opens — registering the crontab line waits on that answer.",
+  "project.create.cancel": "Cancel",
+  "project.create.dialogTitle": "New project",
+
+  // `components/projects-ui.tsx` — 목록 표(§비주얼 §7).
+  "project.list.nameHeader": "Name",
+  "project.list.pathHeader": "Path",
+  "project.list.openHeaderTitle": "Tickets whose file is open — waiting, waiting on deps, and assigned",
+  "project.list.openHeader": "Open",
+  "project.list.inProgressHeader": "In progress",
+  "project.list.doneHeader": "Done",
+  "project.list.connectedHeader": "Connected",
+  "project.list.actionsHeader": "Actions",
+  "project.list.personasLabel": "Personas",
+  "project.list.personasEmpty": "None",
+  "project.list.workersLabel": "Workers",
+
+  // 행 액션 — 손잡이 이름 앞에 프로젝트 이름이 붙는다(`dira Move up`).
+  "project.row.up": "Move up",
+  "project.row.down": "Move down",
+  "project.row.settings": "Settings",
+
+  // `components/projects-ui.tsx` — 설정 다이얼로그(이름 변경·등록 해제·해석 결과).
+  "project.settings.confirmTitle": "Unregister project",
+  "project.settings.confirmDescSuffix":
+    " comes off the list. This project's tickets aren't deleted — only the registry entry goes.",
+  "project.settings.confirmNote": "Register the same path again and it comes back as it was.",
+  "project.settings.cancel": "Cancel",
+  "project.settings.unregisterFailed": "Couldn't unregister it.",
+  "project.settings.unregisterButton": "Unregister",
+  "project.settings.readFailedTitle": "Couldn't read the settings",
+  "project.settings.resolveResultsHeading": "Resolved values",
+  "project.settings.loading": "Reading…",
+  "project.settings.reload": "Read again",
+  "project.settings.renameLabel": "Name",
+  "project.settings.save": "Save",
+  "project.settings.renameFailed": "Couldn't rename it.",
+  "project.settings.slugNotePrefix": "The URL slug",
+  "project.settings.slugNoteSuffix": " doesn't change — open links and bookmarks would break.",
+
+  // `components/projects-ui.tsx` — 온톨로지 마이그레이션 섹션. `linkPrefix` 뒤에 해시와 상태가
+  // 차례로 붙는다(`Migration 4c075aa9 done`).
+  "project.ontologyMigration.title": "Ontology migration",
+  "project.ontologyMigration.description":
+    "Sets one up if there's none, and re-applies the latest conventions if there is. Safe to run again.",
+  "project.ontologyMigration.linkPrefix": "Migration",
+  "project.ontologyMigration.startPending": "Publishing…",
+  "project.ontologyMigration.start": "Start migration",
+  "project.ontologyMigration.failedTitle": "Couldn't create the migration ticket",
+
+  // `components/feedback-dialog.tsx` — `feedback.versionLabel`·`feedback.sessionLabel`은 이미
+  // 찬 키를 그대로 쓴다(P338-11이 그렇게 갈랐다).
+  "feedbackDialog.title": "Send feedback",
+  "feedbackDialog.description":
+    "It opens as a GitHub issue with the text already filled in — you press submit there yourself.",
+  "feedbackDialog.textareaLabel": "Feedback",
+  "feedbackDialog.placeholder":
+    "Just write what got in your way, or what you need.\nThe first line becomes the issue title.",
+  "feedbackDialog.metaNote": "These two lines go into the issue with it.",
+  "feedbackDialog.truncated":
+    "The text is long, so the tail won't reach the issue — that's the limit of sending through a URL. Send it in parts, or paste the rest into the issue before you submit it.",
+  "feedbackDialog.submit": "Open a GitHub issue",
 };
 
 const DICTS: Record<Locale, Record<string, string>> = { ko, en };

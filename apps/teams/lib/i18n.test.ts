@@ -120,6 +120,17 @@ const FILLED = [
   "findBar.", // 같은 티켓 — 찾기 바는 화면 접두가 아니라 파일 접두다(묶음 11과 같은 판단)
   "home.", // c357313f가 en을 채우고 여기 더했다(묶음 표 행 6의 홈 갈래)
   "ontology.", // 024ec871이 en을 채우고 여기 더했다(묶음 표 행 12의 온톨로지 갈래)
+  // 4c075aa9가 en을 채우고 여기 더했다(묶음 표 행 8의 프로젝트 관리 루트 셸). 화면 접두 셋
+  // (`errorBoundary.`·`notFound.`·`project.`)과 파일 스코프 접두 넷(`scaffold.`·`projects.`·
+  // `resolve.`·`feedbackDialog.`)이라 줄이 일곱이다. `project.`은 점까지가 접두라 이미 찬
+  // `projectActions.`를 안 덮고 `projects.`도 따로 적는다.
+  "errorBoundary.",
+  "notFound.",
+  "scaffold.",
+  "projects.",
+  "resolve.",
+  "project.",
+  "feedbackDialog.",
 ];
 
 test("이미 찬 묶음(설정·마감·셸)의 ko 키는 en에 하나도 안 빠졌다", () => {
