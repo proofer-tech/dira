@@ -8508,14 +8508,15 @@ n += len(re.findall(r">\s*([^<>{}]*[가-힣][^<>{}]*?)\s*<", src))
 | 6 | 홈 | `home-ui.tsx` - `home-agent.ts` - `home/{page,actions}.ts*` | ≈91 | 94 | 135 | **P338이 낸다** |
 | 7 | 페르소나-프로토콜 | `personas-ui.tsx` - `protocols-ui.tsx` - 두 화면의 `page`-`actions` - `protocols.ts` - `skills.ts` | ≈185 | **271** | 1 | **완료** (`93c106b3`-`204be4da` / `ko`, `7a86fd5c`-`b5d9735d` / `en`). 잔여 1은 재유입이다 - 행 10 |
 | 8 | 프로젝트 관리(루트 셸) | `projects-ui.tsx` - `projects.ts` - `app/actions.ts` - `scaffold.ts` - `feedback-dialog.tsx` - 오류-부재 경계 넷(`app/not-found.tsx` - `(app)/not-found.tsx` - `(app)/error.tsx` - `global-error.tsx`) | ≈130 | 136 | 155 | **P338이 낸다** |
-| 9 | 나머지 `lib` 실패 사유 | `workers.ts` - `auth.ts` - `engine.ts` - `queue.ts` - `keymap.ts` - `pool.ts` - `queue-ref.tsx` 등 | ≈97 | 93 | 109 | **P338이 낸다**. `personaEngineHint` 한 건은 `50fd4b34`가 앞당겨 물었다 |
+| 9 | 나머지 `lib` 실패 사유 | `workers.ts` - `auth.ts` - `engine.ts` - `queue.ts` - `keymap.ts` - `pool.ts` - `queue-ref.tsx` 등 | ≈97 | 93 | 109 | **완료** (`daf72662` / `ko`, `4c195255` / `en`). `personaEngineHint` 한 건은 `50fd4b34`가 앞당겨 물었다. **잔여 8은 재유입이 아니라 안 옮겨진 것이다** - `workers.ts`의 `cwdDefects` 결함 문장 6 + `firstWorkerCmd`의 `<dira 레포>` + `worktreeCmds`의 꼬리 주석 하나. `ko` 키 추출과 `locale` 배선이라 `en` 티켓이 못 물어 `c7c284f6`(developer)이 받는다 |
 | 10 | **재유입 회수** | 이행을 끝낸 묶음에 그 뒤 다시 든 한글. 08-29에 40 - 행 2가 22(`project-switcher.tsx` 3 - `status-badge.tsx` 4 - `urls.ts` 6 - `usage.ts` 9) - 행 7이 1(`skills.ts`) - 행 11이 17(`markdown-roundtrip.ts` 8 - `webhook.ts` 3 - `budgets.ts` 3 - `machine-state.ts` 1 - `worker-mark.tsx` 1 - `paths.ts` 1) | - | 12 | 40 | 미발행 - **마지막 묶음 뒤에 한 번**. `urls.ts`의 기능 이름 둘은 `50fd4b34`가 앞당겨 문다 |
 | 11 | **공용 컴포넌트-순수 유틸** | 화면이 둘 이상 무는 파일. `markdown-editor.tsx` - `update-toast.tsx` - `worker-mark.tsx` - `path-picker.tsx` - `markdown.tsx` - `copy-command.tsx` - `budgets.ts` - `attachment-limit.ts` - `skill-upload-limit.ts` - `markdown-roundtrip.ts` - `markdown-wikilinks.ts` - `machine-state.ts` - `webhook.ts` - `paths.ts` - `feedback.ts` - `p/[project]/actions.ts` - `(app)/layout.tsx` | - | 42 | 17 | **완료** (`c9f2eec5` / `ko`, `90db2822` / `en`). 잔여는 재유입이다 - 행 10 |
 | 12 | 온톨로지-에픽 | `ontology-ui.tsx` - `ontology/{page,actions}.ts*` - `ontology.ts` - `ontology-seed.ts` - `epics-ui.tsx` - `epic-sidebar.tsx` - `epics/{page,actions}.ts*` - `epics.ts` - `epic.ts` | - | 218 | 220 | **P338이 낸다** - 갈래 둘(온톨로지 192 - 에픽 28) |
 
 **남은 합 - 08-08에 ≈1,012, 08-20에 1,336, 08-29에 1,134**(08-29는 행 3의 52 + 행 4의 172 +
 행 5의 251 + 행 6의 135 + 행 8의 155 + 행 9의 109 + 행 12의 220 + 행 10의 40이다. 행 1-2-7-11은
-이행이 끝났고 그 잔여는 행 10이 센다). 밖에 있는 것 둘은 세지 않았다 - `app/(site)/**`(랜딩-매뉴얼, ≈182)는 **답이
+이행이 끝났고 그 잔여는 행 10이 센다. 행 9는 이 재측정 **뒤에** 닫혀서 109가 아직 합에 남아
+있다). 밖에 있는 것 둘은 세지 않았다 - `app/(site)/**`(랜딩-매뉴얼, ≈182)는 **답이
 `(c)`가 아니라 `(b)`라 이 절 밖이고**(위 첫 표), `lib/i18n.ts`(≈117)는 사전 자신이다.
 
 **행 11-12는 08-20에 뒤늦게 났다**(지적 `ef4f3e62`). 08-08 칸이 빈 것은 0이었다는 뜻이 아니라

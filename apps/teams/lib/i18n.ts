@@ -2806,6 +2806,129 @@ export const en: Record<string, string> = {
   "workers.engineHint.prefix": "Not set — uses the engine of whichever worker claims the ticket",
   "workers.engineHint.allPrefix": "currently all ",
   "workers.engineHint.nowPrefix": "currently ",
+
+  // lib/workers.ts — 파일 스코프 접두(§묶음 표 행 9, 티켓 4c195255). 조각 키의 앞뒤 공백과
+  // 마침표는 `ko`와 짝이 아니라 **영어 조립 결과**에 맞춘다 — 변수가 앞에 오는 자리(`${arr}`·
+  // `${name}.sh`)는 조사가 없는 영어라 이어지는 조각이 서술어로 시작한다.
+  "workers.context.blockMissingSuffix": "=( … ) block not found",
+  "workers.context.multiAssignMid": "has ",
+  "workers.context.multiAssignSuffix": " assignments — the GUI won't decide which one takes effect",
+  "workers.context.appendAssign": "`+=` append assignment",
+  "workers.context.noClosingParen": "No closing `)`",
+  "workers.context.commentInBlock": "There's a comment inside the block",
+  "workers.context.unreadableEntryPrefix": "Can't read this as an entry:",
+  "workers.context.commandSubInEntryPrefix": "An entry has a command substitution $( ):",
+  "workers.context.dollarInSingleQuotePrefix": "A $ sits inside single quotes:",
+  "workers.context.emptyPath": "An entry has an empty path.",
+  "workers.context.pipeInPathPrefix": "A path can't contain | (the engine reads the first | as the description separator):",
+  "workers.context.pathLabel": "Path",
+  "workers.context.descLabel": "Description",
+  "workers.context.forbiddenCharsSuffix": ' can\'t contain " ` \\ or a newline:',
+  "workers.context.commandSubFieldSuffix": " can't contain a command substitution $( ):",
+  "workers.context.sameWorker": "Source and target are the same worker.",
+  "workers.context.copyReadFailMid": ": couldn't read its TICKET_CONTEXT block:",
+  "workers.context.rewriteMismatchPrefix": "Reading the block back after writing gives different entries (",
+  "workers.context.rewriteMismatchContentDiff": "content mismatch",
+  "workers.context.rewriteMismatchSuffix": "). Nothing was written.",
+  "workers.context.cantSafelyEditMid": ": the GUI can't safely edit its TICKET_CONTEXT block:",
+  "workers.context.editByHandSuffix": ". Edit the file by hand.",
+  "workers.context.commonReadFailMid": ": read failed:",
+  "workers.context.commonEditMid1": ": the GUI can't safely edit the ",
+  "workers.context.commonEditMid2": " block:",
+  "workers.context.sourceLineCantPlaceMid": ": the GUI can't tell where the source line goes:",
+  "workers.context.lineChangedAfterInsert": "The file doesn't match what was expected after the line went in. Nothing was written.",
+
+  "workers.engine.unknownEnginePrefix": "Unknown engine:",
+  "workers.engine.invalidModelCharsPrefix": "The model name has characters that aren't allowed (letters, digits, . _ : / - only):",
+  "workers.engine.noWorkerFileLine": "No `. <repo>/tick.sh` line — this file isn't a worker.",
+
+  "workers.crontab.readTimedOut":
+    "crontab -l didn't answer within 10 seconds, so it was stopped. Try running it in a shell yourself.",
+  // macOS 권한 창의 문구는 인용하지 않는다 — 시스템 언어에 따라 글자가 갈린다. 사람이 찾을 수
+  // 있는 것은 [Allow] 버튼과 설정 경로 둘이고, 그 둘만 적는다.
+  "workers.crontab.writeTimedOut":
+    "crontab - didn't answer within 3 minutes, so it was stopped. A macOS permission dialog may be waiting for an answer — if a window is asking to let this app administer your computer, click [Allow] and try again. You can also turn it on ahead of time in System Settings > Privacy & Security > App Management.",
+  "workers.crontab.readFailPrefix": "crontab -l failed:",
+  "workers.crontab.permissionDenied":
+    "Writing to crontab failed: this app doesn't have the 'App Management' permission — either [Don't Allow] was clicked in the approval dialog, or it was denied earlier. Turn this app on (dira, or the terminal that launched the GUI) in System Settings > Privacy & Security > App Management, then try again.",
+  "workers.crontab.otherFailPrefix": "crontab - failed:",
+  "workers.crontab.registerMismatch":
+    "The line went into crontab but isn't there when read back (this environment may be blocking the write silently).",
+  "workers.crontab.unregisterMismatch": "The line came out of crontab but is still there when read back.",
+
+  "workers.dispatchGate.branchUnreadable":
+    "Couldn't read this project's integration branch from protocols/AGENTS.md — edit the file by hand.",
+  "workers.dispatchGate.noSourceLineMid":
+    " has no `. <repo>/tick.sh` line, so the GUI can't tell where the integration gate goes. Edit the file by hand.",
+
+  "workers.selfHeal.noSourceLineMid":
+    " has no `. <repo>/tick.sh` line, so the GUI can't tell where the self-heal step goes. Edit the file by hand.",
+  "workers.selfHeal.enginePathMid": ": can't expand its engine path without a shell:",
+
+  "workers.worktree.notGitRepoSuffix": "isn't a git repo. That's fine if this setup doesn't use worktrees.",
+  "workers.worktree.addFailedPrefix": "git worktree add failed:",
+  "workers.worktree.symlinkExistsSuffix": "already exists. It was left alone — someone's work may be inside it.",
+  "workers.worktree.symlinkFailedPrefix": "Couldn't create the symlink:",
+  "workers.worktree.wrongResolveMid1": "doesn't resolve to the queue root (",
+  "workers.worktree.wrongResolveMid2": "); it resolves to",
+  "workers.worktree.wrongResolveSuffix": "instead.",
+  "workers.worktree.unresolved": "(unresolved)",
+
+  "workers.create.invalidNamePrefix": "Worker names take letters, digits, _ and - only:",
+  "workers.create.emptyName": "(empty)",
+  "workers.create.noTemplate":
+    "There's no worker to copy as a template. Make the first one by copying worker.sh.example from the engine repo.",
+
+  "workers.ontology.mismatchMid": ": the value reads back differently after writing. No file was written.",
+
+  "workers.manage.noSuchWorkerPrefix": "No such worker:",
+  "workers.manage.busyMid1": " is holding a ticket right now (pid ",
+  "workers.manage.busySuffix": "). Delete it once that finishes.",
+  "workers.manage.cronRemoveFailPrefix": "Couldn't take the",
+  "workers.manage.cronRemoveFailMid": "line out of crontab:",
+  // 앞에 `${e.message} `가 붙는다 - 영어는 그 사이에 마침표가 없어 두 문장이 붙어 읽힌다.
+  "workers.manage.cronRemoveFailSuffix": "— the file was left in place.",
+
+  // lib/auth.ts — 파일 스코프 접두(§묶음 표 행 9, 티켓 4c195255). settings 다이얼로그의 claude
+  // 인증 섹션이 이 문구를 그대로 보여준다.
+  "auth.token.empty": "The token is empty.",
+  "auth.token.hasWhitespace": "The token has spaces or line breaks in it. Paste a single line.",
+  "auth.verify.notAuthenticated": "The value picked up from the CLI screen doesn't authenticate. Try again.",
+  "auth.setup.pathNotFoundPrefix": "Couldn't find claude on PATH. (PATH=",
+  "auth.setup.pathNotFoundSuffix": ")",
+  "auth.setup.timeoutSuffix": " seconds passed with no token.",
+  "auth.setup.endedWithCodeMid": "It ended without a token (exit code ",
+  "auth.setup.endedWithCodeSuffix": ").",
+  "auth.setup.saveFailedPrefix": "Caught the token but couldn't save it:",
+  "auth.setup.execFailedPrefix": "Couldn't run it:",
+  "auth.setup.endedNoToken": "It ended without a token.",
+
+  // lib/pool.ts — 파일 스코프 접두(§묶음 표 행 9, 티켓 4c195255). 이 문구가 뜨는 자리는
+  // settings 다이얼로그의 `Borrow shared workers` 섹션이라 낱말을 그 제목에 맞춘다.
+  "pool.name.invalidPrefix": "Shared worker names take letters, digits, _ and - only:",
+  "pool.notFoundPrefix": "No such shared worker:",
+  "pool.busyMid1": " is holding the ",
+  "pool.busyMid2": "project right now (pid ",
+  "pool.busySuffix": "). Delete it once that finishes.",
+  "pool.cronRemoveFailPrefix": "Couldn't take the",
+  "pool.cronRemoveFailMid": "line out of crontab:",
+  "pool.cronRemoveFailSuffix": "— the file was left in place.",
+  "pool.nameCollisionMid": "A project worker already has that name:",
+  "pool.nameCollisionSuffix": "— a shared worker can't take the same name as a worker in this project.",
+  "pool.notShimSuffix": " isn't a shared worker shim — this function won't delete it.",
+  "pool.limit.invalidPrefix": "Takes an integer of 0 or more:",
+
+  // lib/queue.ts — 파일 스코프 접두(§묶음 표 행 9, 티켓 4c195255). 티켓 상세 편집 폼과 에픽
+  // 드래그가 같은 판정을 나눠 쓴다.
+  "queue.locked.wip": "A ticket in progress can't be edited — a session is working in that file.",
+  "queue.locked.done": "A finished ticket can't be edited — completion is this queue's permanent record.",
+  "queue.frontmatter.uneditableKeyPrefix": "The frontmatter field won't change this key:",
+  "queue.frontmatter.missingPrefix": "No frontmatter:",
+
+  // lib/engine.ts — 파일 스코프 접두(§묶음 표 행 9, 티켓 4c195255).
+  "engine.invalidWorkerNamePrefix": "Not a worker name:",
+  "engine.invalidHashPrefix": "Not a hash:",
+  "engine.noWorkerToUnassign": "This project has no workers — there's no script to call for unassign.",
   "workers.settingsDialog.trigger": "Worker settings",
   "workers.pool.sectionTitle": "Borrow shared workers",
   "workers.pool.limitLabel": "Limit",

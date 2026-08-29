@@ -145,6 +145,22 @@ const FILLED = [
   "epicSidebar.",
   "epicsLib.",
   "epicLib.",
+  // 4c195255가 en을 채우고 여기 더했다(묶음 표 행 9의 나머지 lib 실패 사유). 전부 파일 스코프
+  // 접두다 — 한 낱말이 워커 목록·설정 다이얼로그·티켓 상세에 같이 떠서 화면 접두를 못 붙인다.
+  // `workers.`를 통째로 못 적는 이유는 아직 안 찬 워커 화면 묶음이 같은 접두를 쓰기 때문이다.
+  // 그래서 이 티켓이 채운 하위 접두만 적고, 같은 이유로 `workers.context.`·`workers.create.`는
+  // 여기 없다(둘 다 워커 화면 묶음의 키가 섞여 있다 — 그 묶음이 찰 때 두 줄이 더해진다).
+  "auth.",
+  "pool.",
+  "queue.",
+  "engine.",
+  "workers.crontab.",
+  "workers.dispatchGate.",
+  "workers.engine.",
+  "workers.manage.",
+  "workers.ontology.",
+  "workers.selfHeal.",
+  "workers.worktree.",
 ];
 
 test("이미 찬 묶음(설정·마감·셸)의 ko 키는 en에 하나도 안 빠졌다", () => {
