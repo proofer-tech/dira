@@ -116,3 +116,24 @@ test("page.tsx가 이름 셀에 WorkerNameCell을 쓴다", () => {
   assert.match(page, /<WorkerNameCell row=\{w\} \/>/, "page.tsx가 WorkerNameCell을 안 쓴다");
   assert.ok(!page.includes('title={w.path}>\n                  {w.name}'), "옛 이름 셀 마크업이 남아 있다");
 });
+
+// 티켓 a72ff221: `ContextRejection`이 `reason`을 한국어 리터럴과 비교해 "블록 없음"을 판정하면
+// `en`에서는 `reason`이 영어라 두 문자열이 안 맞아 안내가 통째로 사라진다(사전 `4c195255`가
+// `en`을 채운 뒤 드러남). 서버가 이미 내는 `missing` 플래그로 판정해야 로케일과 무관하다.
+test("ContextRejection이 reason을 한국어 리터럴과 비교하지 않는다 — missing 플래그로 판정한다", () => {
+  assert.ok(!s.includes("블록이 없습니다"), "한국어 리터럴이 소스에 남아 있다");
+  const start = s.indexOf("function ContextRejection(");
+  assert.ok(start > 0, "ContextRejection을 못 찾았다");
+  const end = s.indexOf("\n}\n", start);
+  const body = s.slice(start, end);
+  assert.match(body, /missing\?: true/, "missing 프롭이 없다");
+  assert.ok(!/reason ===/.test(body), "reason을 다시 문자열 비교하고 있다");
+});
+
+test("ContextRejection 호출 두 곳 모두 missing을 넘긴다", () => {
+  const calls = [...s.matchAll(/<ContextRejection\b[\s\S]*?\/>/g)];
+  assert.equal(calls.length, 2, "ContextRejection 호출을 두 곳 못 찾았다");
+  for (const [call] of calls) {
+    assert.match(call, /missing=\{[^}]+\.missing\}/, `missing을 안 넘기는 호출: ${call}`);
+  }
+});

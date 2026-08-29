@@ -257,8 +257,11 @@ export type ContextItem = {
   exists: boolean | null;
 };
 
-/** 못 읽으면 편집 UI를 열지 않는다 — 사람이 손으로 고쳐야 한다는 사실과 이유를 넘긴다. */
-export type WorkerContext = { ok: true; items: ContextItem[] } | { ok: false; reason: string };
+/** 못 읽으면 편집 UI를 열지 않는다 — 사람이 손으로 고쳐야 한다는 사실과 이유를 넘긴다.
+ *  `missing`은 블록 자체가 없는 경우만 `true`다(§4) — 화면이 "넣을 줄" 안내를 이 플래그로 켠다. */
+export type WorkerContext =
+  | { ok: true; items: ContextItem[] }
+  | { ok: false; reason: string; missing?: true };
 
 /** 주석 처리된 블록(`# TICKET_CONTEXT=(`)에 걸리지 않게 줄 처음에 앵커한다.
  *
@@ -281,7 +284,7 @@ function splitEntry(entry: string): { path: string; desc: string } {
 
 export type ContextBlock =
   | { ok: true; items: { path: string; desc: string }[]; start: number; end: number }
-  | { ok: false; reason: string };
+  | { ok: false; reason: string; missing?: true };
 
 type ArrayBlock =
   | { ok: true; entries: string[]; start: number; end: number }

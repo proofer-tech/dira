@@ -89,7 +89,7 @@ export type WorkerRow = {
   registerCmd: string;
   unregisterCmd: string;
   /** TICKET_CONTEXT 항목 또는 GUI가 못 고치는 사유 */
-  context: { ok: true; items: ContextRow[] } | { ok: false; reason: string };
+  context: { ok: true; items: ContextRow[] } | { ok: false; reason: string; missing?: true };
   /** 공통 컨텍스트 `source` 줄이 있는가. false면 이 워커는 공통을 못 받는다 (§4-1) */
   commonSource: boolean;
   /** 공통 워커 풀의 shim인가(§4-16 결정 2·6) — 참이면 이름 셀에 `공통` 배지가 붙고, 행의
@@ -653,18 +653,15 @@ function ContextRejection({
   arr,
   filePath,
   reason,
+  missing,
 }: {
   file: string;
   arr: string;
   filePath: string;
   reason: string;
+  missing?: true;
 }) {
   const t = useT();
-  // 사유가 `블록이 없습니다`일 때**만** 넣을 줄까지 준다(§4) — 나머지 사유는 파일에 이미
-  // 있는 것을 사람이 보고 정할 일이지만 이건 답이 한 줄로 정해져 있다. 문자열은
-  // `parseContextBlock`이 내는 그 사유와 글자로 맞춘다(lib/workers.ts 199행) — 이 비교는
-  // 화면 문구가 아니라 서버 값과의 판정이라 사전으로 안 옮긴다(lib/workers.ts는 이 갈래 밖이다).
-  const missing = reason === `${arr}=( … ) 블록이 없습니다`;
   return (
     <>
       <Failure
@@ -712,7 +709,7 @@ function ContextEditor({
   arr: string;
   /** 손으로 고치라고 알릴 때 보여줄 절대경로 */
   filePath: string;
-  context: { ok: true; items: ContextRow[] } | { ok: false; reason: string };
+  context: { ok: true; items: ContextRow[] } | { ok: false; reason: string; missing?: true };
   /** 목록 **최상단**에 `공통` 배지 + 읽기 전용으로 붙는 항목(워커 카드에서만).
    *  **저장에 들어가지 않는다** — 이 항목은 워커 파일에 실제로 없다(§4-1) */
   common?: ContextRow[];
@@ -742,7 +739,9 @@ function ContextEditor({
   };
 
   if (!context.ok) {
-    return <ContextRejection file={file} arr={arr} filePath={filePath} reason={context.reason} />;
+    return (
+      <ContextRejection file={file} arr={arr} filePath={filePath} reason={context.reason} missing={context.missing} />
+    );
   }
 
   return (
@@ -1053,7 +1052,7 @@ export function CommonContextCard({
   projectId: string;
   /** `<루트>/context.sh` */
   filePath: string;
-  context: { ok: true; items: ContextRow[] } | { ok: false; reason: string };
+  context: { ok: true; items: ContextRow[] } | { ok: false; reason: string; missing?: true };
   /** 이 프로젝트 워커들의 `TICKET_CWD` 전부(값이 있는 것만) — 워커 하나가 아니라 전부가 기준이다
    *  (§데스크톱 앱 N3 §공통 컨텍스트의 기준). 화면이 이미 워커 행마다 들고 있는 값이라 새 서버
    *  액션·새 필드가 0개다. */
@@ -1104,7 +1103,7 @@ export function WorkerSettingsDialog({
   projectId: string;
   /** `<루트>/context.sh` */
   filePath: string;
-  context: { ok: true; items: ContextRow[] } | { ok: false; reason: string };
+  context: { ok: true; items: ContextRow[] } | { ok: false; reason: string; missing?: true };
   cwds: string[];
   /** `<루트>/pool-limit`의 지금 값(§4-16 결정 3). `limit: null` = 파일 없음(`없음`), `warn: true` =
    *  파일은 있는데 못 읽었다(안 빌리는 것으로 읽고 경고를 낸다) */
@@ -1572,6 +1571,7 @@ export function WorkerContextRow({
               arr="TICKET_CONTEXT"
               filePath={row.path}
               reason={row.context.reason}
+              missing={row.context.missing}
             />
           )}
 
