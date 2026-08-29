@@ -7,14 +7,14 @@ with each other.
 
 This is home with zero projects. The band along the top carries the `dira` logo and three
 buttons (`Manual` · `Star` · `Settings`), and the body opens with `dira` and a single line. That
-line is `No projects yet. Create one to get started.` Below it, `Already made a .dira? Register it.`
-and a `Register a project` button run across in one row, and after that comes the `New project`
-card. Its form is already open.
+line is `No projects registered yet. Make one and you're started.` Below it,
+`Already have a .dira? Register it.` and a `Register project` button run across in one row, and
+after that comes the `New project` card. Its form is already open.
 
 ![Home with zero projects. Under the line saying there are no projects, the new project card is unfolded, with fields for name, project folder, integration branch, and spec document, plus a create project button. A separate row above it holds the button for registering a .dira you already made.](/shots/08-onboarding.png)
 
-That form is what this chapter fills in. There is no `New` in the header. When the form is
-already unfolded in front of you, there is no reason to put a button that opens it on the same
+That form is what this chapter fills in. The header has no `New project` button. When the form
+is already unfolded in front of you, there is no reason to put a button that opens it on the same
 screen. The register row above is the side road, for anyone who already made a `.dira` or took
 over a project someone else was using. First time through, walk past it.
 
@@ -43,9 +43,9 @@ means the same place as `/Users/<your name>/Projects/myproject`.
 
 Press `Create project`.
 
-On a screen that already has projects, the same form opens as a dialog. `New` above the list is
-the trigger, and the fields, the help text, and the submit button are the ones you just filled
-in.
+On a screen that already has projects, the same form opens as a dialog. `New project` above the
+list is the trigger, and the fields, the help text, and the submit button are the ones you just
+filled in.
 
 ![The new project dialog. Fields for name, project folder, integration branch, and spec document, plus a create project button.](/shots/05-new-project.png)
 
@@ -82,7 +82,7 @@ more workers. [Workers](/docs/worker) covers it.
 On success a row appears in the list and a result card takes the form's place. The card has
 three lines: how many files were made, the engine repo path it derived, and then the last line.
 
-> `Registered on crontab — it starts taking tickets 30 seconds later`
+> `In crontab — it starts picking up tickets 30 seconds from now`
 
 Once you see that line, you are done. The card carries `Open the board` and `Close` together,
 and the result stays open until you press `Close`. If you are not in a rush, read it before you

@@ -216,9 +216,13 @@ label the screen actually shows. These rows are copied from the English dictiona
 | 요구 접수 | New request |
 | 티켓 발행 | New ticket |
 | 프로젝트 만들기 | Create project |
-| 새 프로젝트 | New project |
-| 새로 만들기 | New |
-| 프로젝트 등록 | Register a project |
+| 새 프로젝트 | New project | The card heading and the dialog title. |
+| 새로 만들기 | New project | The header button. In English it reads the same as the card heading above. |
+| 프로젝트 등록 | Register project |
+| 작업 | Work | Ticket kind. |
+| 요구사항 | Request | Ticket kind. |
+| 피드백 | Feedback | Ticket kind. |
+| 답변 | Answer | Ticket kind. |
 | 보드 열기 | Open the board |
 | 닫기 | Close |
 | 설정 | Settings |
@@ -436,11 +440,11 @@ these rows copy the English dictionary, and when the two disagree the dictionary
 
 | Korean | English | Notes |
 |---|---|---|
-| `등록된 프로젝트가 없습니다. 하나 만들면 시작합니다.` | `No projects yet. Create one to get started.` |
-| `이미 만들어 둔 .dira가 있다면 등록합니다.` | `Already made a .dira? Register it.` |
+| `등록된 프로젝트가 없습니다. 하나 만들면 시작합니다.` | `No projects registered yet. Make one and you're started.` |
+| `이미 만들어 둔 .dira가 있다면 등록합니다.` | `Already have a .dira? Register it.` |
 | `.dira를 만들고 워커 하나를 crontab에 올립니다 — 30초 뒤부터 티켓을 물어갑니다.` | `Creates .dira and puts one worker in crontab — it starts picking up tickets 30 seconds later.` |
 | `여기에 .dira를 만듭니다. ~는 확장됩니다` | `.dira goes in here. ~ is expanded` |
-| `crontab에 등록됨 — 30초 뒤부터 티켓을 물어갑니다` | `Registered on crontab — it starts taking tickets 30 seconds later` |
+| `crontab에 등록됨 — 30초 뒤부터 티켓을 물어갑니다` | `In crontab — it starts picking up tickets 30 seconds from now` |
 | `권한 창이 뜨면 [허용]을 누르세요 — crontab 등록이 그 대답을 기다립니다.` | `Press [Allow] if a permission window opens — registering the crontab line waits on that answer.` | The project creation screen and the one under `Worker settings` say this in the same words. |
 | `<경로>/.dira는 이미 dira 프로젝트입니다. 만들지 않고 등록하세요.` | `<path>/.dira is already a dira project. Register it instead of creating it.` |
 | `claude CLI를 찾지 못했습니다 — 워커가 세션을 띄우지 못합니다` | `No claude CLI here — workers can't start a session` |

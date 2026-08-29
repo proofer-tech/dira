@@ -174,11 +174,11 @@ still resting.
 There are four sections.
 
 - `Now` is the in-progress tickets this persona is holding. Each row shows the hash and the
-  title, the ticket kind (still Korean: `작업` work, `요구사항` request, `피드백` feedback,
-  `답변` answer), which worker took it, how long since it was claimed, and the `5/8` progress
-  of `## 진행 계획` (the plan section). A ticket with no plan leaves that spot empty. A ticket
-  where the session left a `## 블록` (the block section) and stopped gets `Blocked`. Holding
-  nothing gives you one line, `No tickets running now`.
+  title, the ticket kind (`Work`, `Request`, `Feedback`, `Answer`), which worker took it,
+  how long since it was claimed, and the `5/8` progress of `## 진행 계획` (the plan section).
+  A ticket with no plan leaves that spot empty. A ticket where the session left a `## 블록`
+  (the block section) and stopped gets `Blocked`. Holding nothing gives you one line,
+  `No tickets running now`.
 - `Waiting on` is the tickets locked while waiting for an answer from you. How many days it has
   been comes with it. How they come to be locked is in the asking-back section of
   [Submitting a request](/docs/requirements). **This section does not appear on the screen at
