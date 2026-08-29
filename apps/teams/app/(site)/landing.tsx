@@ -568,7 +568,7 @@ export default function Landing({
     <code>.dira/ontology/</code>{t("landing.archiving.item2Mid")}{" "}
     <code>## 아카이브</code> {t("landing.archiving.item2Suffix")}</li>
     <li><b>{t("landing.archiving.item3Bold")}</b> {t("landing.archiving.item3Body")}</li>
-    <li><b>{t("landing.archiving.item4Bold")}</b> <code>[[링크]]</code>{t("landing.archiving.item4Body")}</li>
+    <li><b>{t("landing.archiving.item4Bold")}</b> <code>{t("landing.archiving.item4Wikilink")}</code>{t("landing.archiving.item4Body")}</li>
   </ul>
   {/* ④ 「일을 할수록 더 능숙해지는」 — 기전을 이 절이 이미 다 말해서 약속 한 줄만 붙는다
       (로드맵 §P229, 사람 답 `14cd1aad`가 §P228의 비교 금지 한 축을 뒤집었다).

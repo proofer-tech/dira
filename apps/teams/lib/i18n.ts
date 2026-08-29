@@ -2210,6 +2210,7 @@ export const ko: Record<string, string> = {
   "landing.archiving.item3Bold": "다음 세션은 그 자리를 알고 시작합니다.",
   "landing.archiving.item3Body": "온톨로지가 어디에 있고 어떻게 찾는지가 워커에게 나가는 프롬프트마다 실립니다",
   "landing.archiving.item4Bold": "파일은 그냥 마크다운입니다.",
+  "landing.archiving.item4Wikilink": "[[링크]]",
   "landing.archiving.item4Body": "로 서로 이어져 있어 Obsidian 같은 도구로 폴더째 열립니다. 프로젝트를 옮기면 기록도 같이 따라갑니다",
   "landing.archiving.promiseBody":
     "일을 시킬수록 워커는 이 프로젝트에 능숙해집니다. 어제 누가 무엇을 정했는지 읽고 시작하니, 같은 이야기를 두 번 하지 않아도 됩니다.",
@@ -4654,6 +4655,7 @@ export const en: Record<string, string> = {
   "landing.archiving.item3Bold": "The next session starts out knowing where that is.",
   "landing.archiving.item3Body": "Where the ontology sits and how to search it goes out in every prompt a worker gets",
   "landing.archiving.item4Bold": "The files are plain markdown.",
+  "landing.archiving.item4Wikilink": "[[link]]",
   "landing.archiving.item4Body": " ties them to each other, so a tool like Obsidian opens the folder whole. Move the project and the record moves with it",
   "landing.archiving.promiseBody":
     "The more you hand over, the better the workers know this project. They start by reading who decided what yesterday, so you never say the same thing twice.",
