@@ -69,6 +69,7 @@ import { CopyCommand } from "@/components/copy-command";
 import { EmptyState } from "@/components/empty-state";
 import { FindBar } from "@/components/find-bar";
 import { useKeymap } from "@/components/keymap-provider";
+import { useLocale, useT } from "@/components/language-provider";
 import { Markdown } from "@/components/markdown";
 import type { RefIndex } from "@/lib/markdown-refs";
 import { Bundle } from "@/components/session-stream";
@@ -147,7 +148,7 @@ import { cn } from "@/lib/utils";
  *  **여기 있는 것은 뒤의 둘뿐이다.** 앞의 둘은 워커 이름을 담아서 이 큐에 실제로 등록된
  *  워커에서 나와야 하고(§24 §앞의 둘은 이 큐에 실제로 등록된 워커 이름), 그 문장은 서버가
  *  만들어 `examples` prop으로 온다 — 워커 0개인 큐에서는 빈 배열이라 예시가 2개다. */
-const EXAMPLES = ["답변 대기 티켓이 왜 안 도나", "이 프로젝트의 프로토콜을 요약해 달라"];
+const EXAMPLE_KEYS = ["home.example.ticketsWhy", "home.example.summarizeProtocols"];
 
 /** `새 대화`의 잠금 — **이제 이것 하나다**(§24 §~~잠금 두 자리~~ → 잠금 한 자리. 요구
  *  `4e9e54c5`가 ①을 걷었다: 답이 도는 동안 패널 줄도 이 버튼도 안 잠긴다. 옛 문구
@@ -158,7 +159,7 @@ const EXAMPLES = ["답변 대기 티켓이 왜 안 도나", "이 프로젝트의
  *  12px 끌어올린다). **조건이 하나 늘었다**(`1a925a73`) — `턴 0건` **그리고 그 대화에 도는 것이
  *  없다**: 첫 질문 직후는 턴이 아직 0건인데(낙관적 에코가 없다) 그 대화엔 방금 보낸 질문이 있다.
  *  종전에는 걷힌 ①이 이겨서 그 창을 가려 줬고, 그것만 걷으면 화면이 거짓말을 한다. */
-const NO_TURNS = "지금 대화가 이미 비어 있습니다 — 여기에 물어보세요";
+const NO_TURNS_KEY = "home.newConversationLocked";
 
 /** 좌측 패널이 그리는 것 전부 — **`home-sessions.json`의 형식(`Home`) + 큐에서 파생된 워커 세션**
  *  (§7 좌측 패널). 파일 쪽 타입에 워커 목록을 얹지 않는 이유는 저장하지 않기 때문이다: 저건
@@ -183,31 +184,31 @@ const SLOW_MS = 2_000;
 /** §비주얼 §24 실패 5종. **`reason` 코드로 갈린다** — `output` 문장을 되짚으면 문구를 한 자
  *  고치는 날 화면이 조용히 뭉친다(§21 `FAIL` 표와 같은 규약). `other`는 §24에 항이 없는
  *  나머지고 제목 한 줄 + 원문이다. `cmd`가 있는 것은 ① 하나뿐이다. */
-const FAIL: Record<AnswerReason, { title: string; next?: string; cmd?: string }> = {
+const FAIL_KEYS: Record<AnswerReason, { title: string; next?: string; cmd?: string }> = {
   spawn: {
-    title: "답을 받지 못했습니다 — 세션을 띄우지 못했습니다",
-    next: "엔진 CLI가 PATH에 있는지 확인하세요",
+    title: "home.fail.spawn.title",
+    next: "home.fail.spawn.next",
     cmd: "which claude",
   },
   auth: {
-    title: "답을 받지 못했습니다 — claude 인증이 없습니다",
-    next: "헤더 오른쪽 설정에서 장기 토큰을 넣고 다시 물어보세요.",
+    title: "home.fail.auth.title",
+    next: "home.fail.auth.next",
   },
   timeout: {
     // 이름은 낡았다 — 값의 뜻이 §7 §천장이 없다(`8db4d0f6`)로 죽음 기반이 됐다(`lib/home-agent.ts`의
     // `AnswerReason` 주석 참조). `output`은 `exit <코드>`/`signal <신호>` + stderr 꼬리다.
-    title: "답을 받지 못했습니다 — 세션이 답 없이 끝났습니다",
-    next: "다시 보내 보세요. 쓴 글은 그대로 남아 있습니다.",
+    title: "home.fail.timeout.title",
+    next: "home.fail.timeout.next",
   },
   busy: {
-    title: "보내지 못했습니다 — 답이 아직 도는 중입니다",
-    next: "끝나면 이 칸이 다시 열립니다. 새로고침하지 않아도 됩니다.",
+    title: "home.fail.busy.title",
+    next: "home.fail.busy.next",
   },
   "no-transcript": {
-    title: "답을 찾지 못했습니다 — 트랜스크립트가 없습니다",
-    next: "새 대화로 다시 물어보세요.",
+    title: "home.fail.noTranscript.title",
+    next: "home.fail.noTranscript.next",
   },
-  other: { title: "답을 받지 못했습니다" },
+  other: { title: "home.fail.other.title" },
 };
 
 export function HomeUI({
@@ -221,6 +222,8 @@ export function HomeUI({
   examples: string[];
   initial: HomeChunk;
 }) {
+  const t = useT();
+  const locale = useLocale();
   const [turns, setTurns] = useState<Turn[]>(initial.turns);
   // **새로고침해도 따라간다**: 서버가 "지금 도는 질문이 있다"를 알고 있어서(§7 실행층의 맵)
   // 이 값이 참으로 시작하면 폴링 효과가 그대로 다시 붙는다.
@@ -493,7 +496,7 @@ export function HomeUI({
     setEcho(question);
     // `다시 답하기`는 첨부 없이 부른다(§24 — 그 버튼이 다시 보내는 것은 **옛 질문 한 줄**이고,
     // 그 글에 첨부 경로가 필요했으면 이미 그 안에 적혀 있다).
-    const r = await askHome(project, question, paths);
+    const r = await askHome(project, question, paths, locale);
     setStarting(false);
     if (r) {
       setFail(r);
@@ -597,7 +600,7 @@ export function HomeUI({
           하나가 되고 gap이 설 사이가 0개다 — 값이 이미 0이라 걷어도 화면이 안 움직이지만,
           남겨 두면 다음 세션이 뺄셈의 24를 찾다가 이 클래스를 근거로 32px 행을 되살린다.
           그래서 스레드가 32 + 24 = **56px을 되찾는다**(§24 §높이 — `창 − 236`). */}
-      <h1 className="sr-only">홈</h1>
+      <h1 className="sr-only">{t("home.title")}</h1>
 
       {/* 2단 행(§24 세로 배치 표 · §좌측 패널) — 페이지 루트의 **유일한 flex 항목**이라
           `main`의 패딩 안 남은 높이를 통째로 받는다.
@@ -688,12 +691,12 @@ export function HomeUI({
                예시 넷은 셋째 자리에서 통째로 빠진다(아래) — 지금 안 쓸 수 있는 입력칸의 내용을
                권하지 않는다. */
             <EmptyState
-              text="회차 없음"
+              text={t("home.schedule.emptyTitle")}
               action={
                 <span className="text-xs text-muted-foreground">
                   {pendingSchedule.overdue
-                    ? "예정 시각이 지나 이 스케줄은 돌지 않습니다 — 지우고 다시 만듭니다"
-                    : `${dateTimeLabel(pendingSchedule.at)}에 첫 회차가 돕니다. 스케줄은 이 앱이 떠 있는 동안에만 돕니다 — 앱을 꺼도 큐의 티켓은 계속 디스패치됩니다`}
+                    ? t("home.schedule.overdueNote")
+                    : `${dateTimeLabel(pendingSchedule.at)}${t("home.schedule.dueAtSuffix")} ${t("home.schedule.liveNote")}`}
                 </span>
               }
             />
@@ -702,11 +705,8 @@ export function HomeUI({
                무엇을 물어볼 수 있는지를 못 알려준다). 스레드 상자는 아예 안 그린다 — 빈 상자가 뜨는
                순간이 없다(§13). 폼은 이 묶음의 **가운데 줄**이다: 온보딩이 폼을 대신하지 않는다. */
             <div className="space-y-2">
-              <h2 className="text-sm font-medium">이 프로젝트에 대해 묻는다</h2>
-              <p className="text-sm text-muted-foreground">
-                티켓과 프로젝트 자원(페르소나 · 프로토콜 · 워커)들을 읽고 답합니다. 프로젝트
-                자원을 수정하도록 할 수도 있습니다.
-              </p>
+              <h2 className="text-sm font-medium">{t("home.onboarding.title")}</h2>
+              <p className="text-sm text-muted-foreground">{t("home.onboarding.body")}</p>
             </div>
           ) : (
             /* 스레드(§13 그대로). **높이가 확정이라 `flex-1`이다**(§24) — §13이 `max-h`를 고정한
@@ -716,7 +716,7 @@ export function HomeUI({
                스크롤하는 요소는 여전히 Viewport 하나고, 화면에서 스크롤하는 것도 그것 하나다. */
             <MessageScrollerProvider autoScroll>
               <MessageScroller className="flex-1">
-                <MessageScrollerViewport ref={thread} aria-label="대화" className="flex-1">
+                <MessageScrollerViewport ref={thread} aria-label={t("home.conversationsLabel")} className="flex-1">
                   {/* `pb-4` — 마지막 답의 자리(§24 §마지막 답의 자리, 개정 `bfadd068`). 항목이
                       아니라 스크롤 컨텐츠 바닥에 건다: 도는 답도 언제나 마지막 항목이라 상태에
                       안 걸려야 답이 끝나는 순간 높이 점프가 0이다. */}
@@ -729,17 +729,17 @@ export function HomeUI({
                       if (g.kind === "bundle") {
                         return (
                           <MessageScrollerItem key={g.events[0].key} messageId={g.events[0].key}>
-                            <Bundle events={g.events.map((t) => t.event!)} onToggle={onLineToggle} />
+                            <Bundle events={g.events.map((e) => e.event!)} onToggle={onLineToggle} />
                           </MessageScrollerItem>
                         );
                       }
                       if (g.kind !== "event") return null; // "thread" — 이 화면엔 없는 종이다
-                      const t = g.event;
+                      const turn = g.event;
                       return (
                         // `group/answer`는 답·질문 항목 둘 다 받는다(§24 §드러나는 조건) — 질문
                         // 안에는 이 이름을 읽는 것이 없어 조건부 클래스를 만들 이유가 없다.
-                        <MessageScrollerItem key={t.key} messageId={t.key} className="group/answer">
-                          {t.role === "question" ? (
+                        <MessageScrollerItem key={turn.key} messageId={turn.key} className="group/answer">
+                          {turn.role === "question" ? (
                             /* 사람 질문 — §13 말풍선 그대로(`outline` · `align="end"`). 헤더는 말풍선
                                **밖 · 위**이고(§13) 라벨만 `sr-only`로 내려간다: 클래스 하나로 끝나서
                                새 요소가 아니다. 아바타는 없다(§24가 한 줄로 거절했다 — 페르소나 색과
@@ -750,13 +750,13 @@ export function HomeUI({
                                     절대배치 1×1px 상자를 만드는데, 여기선 `align="end"` 탓에 그 상자가
                                     **오른쪽 끝에** 떠서 음수 margin만큼 1px 넘쳤다. 안 보이는 라벨
                                     하나가 스레드 전체에 가로 스크롤바를 만들었다(1440×900 실측) */}
-                                <MessageHeader className="sr-only m-0">질문</MessageHeader>
+                                <MessageHeader className="sr-only m-0">{t("home.questionLabel")}</MessageHeader>
                                 <Bubble variant="outline" align="end">
                                   <BubbleContent>
                                     {/* 이 자리에 오는 문자열은 **전부 입력칸에서 왔다** — 사람이
                                         친 줄바꿈을 그대로 그린다(§10 면제). 아래 에이전트 답의
                                         `Prose`는 안 켠다: 그건 감아서 쓰는 쪽의 글이다 */}
-                                    <Markdown text={t.text} breaks="all" refs={liveRefs} />
+                                    <Markdown text={turn.text} breaks="all" refs={liveRefs} />
                                   </BubbleContent>
                                 </Bubble>
                               </MessageContent>
@@ -767,13 +767,15 @@ export function HomeUI({
                                쓸 데가 없다. 띠가 이 항목 **안**에 있는 이유는 §24 그대로다 — 도는
                                답이 언제나 마지막이라 보이는 자리가 같고, 답이 끝날 때 높이가 안 튄다. */
                             <>
-                              <Prose text={t.text} refs={liveRefs} />
+                              <Prose text={turn.text} refs={liveRefs} />
                               <Band>
                                 {/* 중지된 답 — **실패가 아니다**(§7). `<StatusBadge>`도 색도 없다:
                                     이건 큐의 상태가 아니라 답 하나가 끝난 방식이라 13번째 상태를
                                     만들지 않는다(§24). 자리는 진행 표식 문구가 앉던 그 자리다. */}
-                                {t.stopped && <span className="text-xs text-muted-foreground">중지됨</span>}
-                                <CopyAnswer text={t.text} />
+                                {turn.stopped && (
+                                  <span className="text-xs text-muted-foreground">{t("home.stopped")}</span>
+                                )}
+                                <CopyAnswer text={turn.text} />
                                 {/* **답을 갈아 끼우지 않는다**(§7) — 질문·답이 스레드 끝에 한 벌 더
                                     붙는다. 트랜스크립트가 정본이라 거기서 줄을 지울 수 없다.
                                     도는 중에 눌러도 여기서 막지 않는다: 서버가 §24 실패 ④로
@@ -784,9 +786,9 @@ export function HomeUI({
                                   variant="ghost"
                                   size="xs"
                                   className="opacity-0 group-hover/answer:opacity-100 group-focus-within/answer:opacity-100"
-                                  onClick={() => void run(questionFor(turns, turnIndex.get(t)!))}
+                                  onClick={() => void run(questionFor(turns, turnIndex.get(turn)!))}
                                 >
-                                  다시 답하기
+                                  {t("home.answer.retry")}
                                 </Button>
                               </Band>
                             </>
@@ -802,7 +804,7 @@ export function HomeUI({
                       <MessageScrollerItem key="echo" messageId="echo">
                         <Message align="end">
                           <MessageContent>
-                            <MessageHeader className="sr-only m-0">질문</MessageHeader>
+                            <MessageHeader className="sr-only m-0">{t("home.questionLabel")}</MessageHeader>
                             <Bubble variant="outline" align="end">
                               <BubbleContent>
                                 <Markdown text={echo} breaks="all" refs={liveRefs} />
@@ -843,7 +845,7 @@ export function HomeUI({
                               (요약 계산에 필요한 도구 인자가 `Activity`에 없다 — `lib/home-agent.ts`
                               `## 블록` 참조: §9 판정의 "요약이 비면 도구명 하나다" 갈래 그대로다). */}
                           {activity?.kind === "thinking" ? (
-                            "생각 중"
+                            t("home.activity.thinking")
                           ) : activity?.kind === "tool" ? (
                             <span
                               className="shrink-0 max-w-[7rem] truncate font-mono"
@@ -852,7 +854,7 @@ export function HomeUI({
                               {activity.tool}
                             </span>
                           ) : (
-                            "답하는 중"
+                            t("home.answering")
                           )}
                           {/* `ml-auto`가 없다 — 이 화면의 띠는 1440에서 ≈1392px이라 오른쪽 끝으로
                               밀면 버튼이 자기가 멈추는 글자에서 1200px 떨어져 홀로 뜬다
@@ -867,7 +869,7 @@ export function HomeUI({
                               className="aria-disabled:opacity-50"
                               onClick={() => void stop()}
                             >
-                              중지
+                              {t("home.stop")}
                             </Button>
                           )}
                         </Band>
@@ -878,7 +880,7 @@ export function HomeUI({
                 {/* 아래가 가려졌을 때만 뜬다(`data-active`). 라벨을 `sr-only`로 숨기지 않는다(§13) */}
                 <MessageScrollerButton>
                   <ArrowDown aria-hidden />
-                  최신으로
+                  {t("home.scrollToLatest")}
                 </MessageScrollerButton>
               </MessageScroller>
             </MessageScrollerProvider>
@@ -899,8 +901,8 @@ export function HomeUI({
             <InputGroup>
               <InputGroupTextarea
                 ref={input}
-                aria-label="질문"
-                placeholder="이 프로젝트에 대해 묻기"
+                aria-label={t("home.questionLabel")}
+                placeholder={t("home.askPlaceholder")}
                 className="max-h-32"
                 value={text}
                 // **도는 동안에도 편집 가능한 채로 둔다**(§24): `disabled`면 `:has(:disabled)`가
@@ -945,7 +947,7 @@ export function HomeUI({
                     대화(턴 1건 이상) · 대화(턴 0건 = 없다). */}
                 {pendingSchedule ? (
                   <span className="min-w-0 truncate text-xs text-muted-foreground">
-                    첫 회차가 돌기 전에는 이 스케줄에 말을 걸 수 없습니다
+                    {t("home.schedule.locked")}
                   </span>
                 ) : worker ? (
                   <WorkerNote project={project} worker={worker} />
@@ -967,7 +969,7 @@ export function HomeUI({
                   className="aria-disabled:opacity-50"
                 >
                   <Send aria-hidden />
-                  {busy ? "보내는 중…" : "보내기"}
+                  {busy ? t("home.sending") : t("home.send")}
                 </InputGroupButton>
               </InputGroupAddon>
             </InputGroup>
@@ -988,7 +990,7 @@ export function HomeUI({
               이 자리에서 따로 걷는다. */}
           {onboarding && !pendingSchedule ? (
             <div className="flex flex-wrap gap-2">
-              {[...examples, ...EXAMPLES].map((q) => (
+              {[...examples, ...EXAMPLE_KEYS.map((k) => t(k))].map((q) => (
                 // **제출하지 않는다**(§24): ① 한 질문이 프로세스 하나고 상한이 5분이다 — 클릭 한 번에
                 // 5분짜리를 시작시키지 않는다. ② 예시는 문장을 고쳐 쓰라고 있다(이름은 이제 이 큐의
                 // 진짜 워커지만 페이지를 연 뒤 그 워커가 지워지면 낡는다). 채워진 뒤 손잡이의
@@ -1025,9 +1027,10 @@ export function HomeUI({
  *  = 읽는 산문 폭이었다).
  *  `// ponytail: 상한이 필요해지면 여기 `max-w-[70ch]` 한 클래스다.` */
 function Prose({ text, refs }: { text: string; refs?: RefIndex }) {
+  const t = useT();
   return (
     <div className="px-3">
-      <span className="sr-only">답</span>
+      <span className="sr-only">{t("home.answerLabel")}</span>
       <Markdown text={text} refs={refs} />
     </div>
   );
@@ -1070,6 +1073,7 @@ function Band({ children }: { children: React.ReactNode }) {
  *  아니다 — `Tab`이 못 닿으면 키보드로 못 닿는다는 옛 규칙이 안 갚아진다. 드러나는 조건은
  *  `group-hover/answer` OR `group-focus-within/answer`(어느 쪽도 대체가 아니다). */
 function CopyAnswer({ text }: { text: string }) {
+  const t = useT();
   const [copied, setCopied] = useState(false);
   return (
     <Button
@@ -1083,7 +1087,7 @@ function CopyAnswer({ text }: { text: string }) {
       }}
     >
       {copied ? <Check aria-hidden /> : <Copy aria-hidden />}
-      복사
+      {t("home.answer.copy")}
     </Button>
   );
 }
@@ -1112,7 +1116,8 @@ function markStopped(turns: Turn[]): Turn[] {
 
 /** 실패 한 장 (§비주얼 §24 실패 5종 · §6 3요소). */
 function Failure({ fail }: { fail: Answer }) {
-  const f = FAIL[fail.reason ?? "other"];
+  const t = useT();
+  const f = FAIL_KEYS[fail.reason ?? "other"];
   // §24 실패 표의 `원인 원문` 열. ③은 `exit <코드>`/`signal <신호>` + stderr 꼬리(`lib/home-agent.ts`의
   // `judge`가 이미 그 모양으로 낸다)에 세션을 붙인다 — ④는 실행층이 이미 `session <id>` 한 줄로
   // 만들어 보내고, 나머지는 CLI 원문이다.
@@ -1123,12 +1128,12 @@ function Failure({ fail }: { fail: Answer }) {
   return (
     <Alert variant="destructive">
       <TriangleAlert aria-hidden />
-      <AlertTitle>{f.title}</AlertTitle>
+      <AlertTitle>{t(f.title)}</AlertTitle>
       <AlertDescription>
         {/* `whitespace-pre-wrap` — ③의 stderr 꼬리는 여러 줄이다(§24 "같은 mono 블록 ·
             whitespace-pre-wrap"). 안 붙이면 그 개행이 공백으로 뭉친다. */}
         <span className="block font-mono text-xs break-all whitespace-pre-wrap">{detail}</span>
-        {f.next && <span className="block text-xs">{f.next}</span>}
+        {f.next && <span className="block text-xs">{t(f.next)}</span>}
         {f.cmd && <CopyCommand cmd={f.cmd} />}
       </AlertDescription>
     </Alert>
@@ -1152,16 +1157,17 @@ function Failure({ fail }: { fail: Answer }) {
  *  관용구. 이 레포에는 그 컴포넌트가 없고 6개 화면이 같은 세 클래스를 인라인한다). 목적지는
  *  `stem`이고 글자는 `hash`다(§식별자). `min-w-0 truncate`는 §21 텍스트 잘림 그대로다. */
 function WorkerNote({ project, worker }: { project: string; worker: WorkerSession }) {
+  const t = useT();
   return (
     <span className="min-w-0 truncate text-xs text-muted-foreground">
-      {worker.running ? "도는 세션에는 여기서 말을 걸 수 없습니다 · 참견은 " : "워커 권한 없이 이 세션에 이어 묻습니다 · "}
+      {worker.running ? t("home.workerNote.running") : t("home.workerNote.done")}
       <Link
         href={`/p/${project}/tickets/${encodeURIComponent(worker.stem)}`}
         className="rounded-sm font-mono underline"
       >
         {worker.hash}
       </Link>
-      {worker.running && " 상세에서"}
+      {worker.running && t("home.workerNote.runningSuffix")}
     </span>
   );
 }
@@ -1205,7 +1211,6 @@ const ROW = "h-auto cursor-pointer";
  *  `group`을 하나 더 얹는 길도 있지만 스코프가 둘이 되어 다음 세션이 어느 쪽이 도는지 못 읽는다. */
 const MARK =
   "shrink-0 text-xs text-muted-foreground tabular-nums group-hover/menu-button:text-foreground";
-const RUNNING = "답하는 중";
 
 /** `스케줄` 줄의 아랫줄(§비주얼 §62 (2) — 워커 세션 아랫줄과 같은 승격 짝이되 `shrink-0`이
  *  없다: 이 줄은 시각 하나가 통째로 차지하는 **한 줄**이지, `MARK`처럼 제목 옆 오른쪽 끝에
@@ -1263,6 +1268,8 @@ function SidePanel({
   onPickSchedule: (s: ScheduleView) => void;
   onSchedulesChange: (schedules: ScheduleView[]) => void;
 }) {
+  const t = useT();
+  const RUNNING = t("home.answering");
   // 연 줄 수(§7 §`대화` 목록은 3줄부터) — 저장 안 한다. `SidePanel`이 대화 0건에서만
   // 언마운트되므로(위 §0건) 폴링·전환·새 대화로는 이 값이 안 되돌아간다.
   const [openCount, setOpenCount] = useState(3);
@@ -1326,7 +1333,7 @@ function SidePanel({
               **머리가 24px 행이 됐다**(`f1941cab`) — 이 머리가 `새 대화`를 오른쪽에 들어서다.
               두 머리를 다르게 두지 않으므로 `워커 세션`도 같은 `h-6`이다(§24 §그릇·자리 표). */}
           <SidebarGroupLabel className="h-6 text-muted-foreground">
-            대화
+            {t("home.conversationsLabel")}
             {/* `새 대화` (§24 §`새 대화` — 요구 `6f9dce32`로 `h1` 행에서 여기로 내려왔다).
               **도는 중 잠금이 걷혔다**(요구 `4e9e54c5` — 답이 도는 동안 다른 대화로 옮겨 거기서
               묻는 것이 그 요구의 전부이고, 새 줄을 여는 것이 곧 그 일이다). 남은 잠금은 0건
@@ -1349,18 +1356,18 @@ function SidePanel({
               size="xs"
               className="ml-auto text-foreground aria-disabled:opacity-50"
               aria-disabled={noTurns || undefined}
-              title={noTurns ? NO_TURNS : undefined}
+              title={noTurns ? t(NO_TURNS_KEY) : undefined}
               onClick={() => {
                 if (noTurns) return;
                 onNew();
               }}
             >
-              새 대화
+              {t("home.newConversation")}
             </Button>
           </SidebarGroupLabel>
           {/* 줄 사이 간격이 0이다 — 줄이 자기 `p-2`로 리듬을 만든다(§3 테이블 행과 같은 처리).
               부품 기본 `gap-0`이 그 값이라 덮을 것이 없다. */}
-          <SidebarMenu aria-label="대화">
+          <SidebarMenu aria-label={t("home.conversationsLabel")}>
             {rows.map((r) => (
               // **도는 동안에도 눌린다**(§24 §잠금 한 자리 — ①이 걷혔다. 요구 `4e9e54c5`):
               // 옮겨 간 대화에서 묻는 것까지 열렸고 흐르던 글도 안 사라진다. 이 줄에 남은 값은
@@ -1402,7 +1409,9 @@ function SidePanel({
             {showMore && (
               <SidebarMenuItem>
                 <SidebarMenuButton className={ROW} onClick={() => setOpenCount((c) => c + 3)}>
-                  <span className="min-w-0 grow truncate text-sm text-muted-foreground">더보기</span>
+                  <span className="min-w-0 grow truncate text-sm text-muted-foreground">
+                    {t("home.showMore")}
+                  </span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             )}
@@ -1414,11 +1423,11 @@ function SidePanel({
           예외다: 저 둘은 목록 밖에 입구가 있지만 스케줄의 입구는 이 머리 행 하나뿐이다). */}
       <SidebarGroup className="p-0">
         <SidebarGroupLabel className="h-6 text-muted-foreground">
-          스케줄
+          {t("home.schedulesLabel")}
           <ScheduleCreateDialog project={project} onCreated={onSchedulesChange} />
         </SidebarGroupLabel>
         {home.schedules.length > 0 && (
-          <SidebarMenu aria-label="스케줄">
+          <SidebarMenu aria-label={t("home.schedulesLabel")}>
             {scheduleRowsVisible.map((r) => {
               const sched = home.schedules.find((s) => s.id === r.id);
               if (!sched) return null;
@@ -1462,7 +1471,9 @@ function SidePanel({
             {showMoreSchedules && (
               <SidebarMenuItem>
                 <SidebarMenuButton className={ROW} onClick={() => setScheduleOpenCount((c) => c + 3)}>
-                  <span className="min-w-0 grow truncate text-sm text-muted-foreground">더보기</span>
+                  <span className="min-w-0 grow truncate text-sm text-muted-foreground">
+                    {t("home.showMore")}
+                  </span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             )}
@@ -1480,9 +1491,9 @@ function SidePanel({
         <SidebarGroup className="p-0">
           {/* `대화` 머리와 같은 `h-6`이다 — 머리 높이는 그룹의 성질이 아니라 패널의 눈금이다(§24). */}
           <SidebarGroupLabel className="h-6 text-muted-foreground">
-            워커 세션
+            {t("home.workerSessionsLabel")}
           </SidebarGroupLabel>
-          <SidebarMenu aria-label="워커 세션">
+          <SidebarMenu aria-label={t("home.workerSessionsLabel")}>
           {home.workers.map((w) => (
             <SidebarMenuItem key={w.id}>
             <SidebarMenuButton
@@ -1540,16 +1551,21 @@ type ScheduleKind = "once" | "daily" | "weekly" | "monthly";
 /** `SelectValue`는 `items`를 안 준 Root에서 값 문자열 그대로를 그린다(`ticket-ui.tsx`의 같은
  *  주석) — `once`·`daily` 같은 내부 값이 트리거에 그대로 나온다. 렌더 프롭으로 라벨을 덮는다
  *  (`personas-ui.tsx`의 엔진 select와 같은 처방). */
-const KIND_LABEL: Record<ScheduleKind, string> = { once: "한 번만", daily: "매일", weekly: "매주", monthly: "매월" };
+const KIND_LABEL_KEY: Record<ScheduleKind, string> = {
+  once: "home.schedule.kind.once",
+  daily: "home.schedule.kind.daily",
+  weekly: "home.schedule.kind.weekly",
+  monthly: "home.schedule.kind.monthly",
+};
 
-const WEEKDAYS = [
-  { label: "월", value: "1" },
-  { label: "화", value: "2" },
-  { label: "수", value: "3" },
-  { label: "목", value: "4" },
-  { label: "금", value: "5" },
-  { label: "토", value: "6" },
-  { label: "일", value: "0" },
+const WEEKDAY_KEYS = [
+  { key: "home.weekday.mon", value: "1" },
+  { key: "home.weekday.tue", value: "2" },
+  { key: "home.weekday.wed", value: "3" },
+  { key: "home.weekday.thu", value: "4" },
+  { key: "home.weekday.fri", value: "5" },
+  { key: "home.weekday.sat", value: "6" },
+  { key: "home.weekday.sun", value: "0" },
 ];
 
 /** `매월`의 일 — **1~28뿐이다**(§7-2 §단발과 주기가 한 칸에 담긴다 §매월의 일이 28까지인
@@ -1571,10 +1587,11 @@ function buildWhen(kind: ScheduleKind, date: string, time: string, weekday: stri
 
 /** §6 에러 3요소 중 1·2번 — `epic-sidebar-create.tsx`의 `Failure`와 같은 값이다. */
 function ScheduleFailure({ message }: { message: string }) {
+  const t = useT();
   return (
     <Alert variant="destructive">
       <TriangleAlert aria-hidden />
-      <AlertTitle>스케줄을 만들지 못했습니다</AlertTitle>
+      <AlertTitle>{t("home.schedule.createFailTitle")}</AlertTitle>
       <AlertDescription>
         <span className="font-mono text-xs break-all">{message}</span>
       </AlertDescription>
@@ -1597,6 +1614,8 @@ function ScheduleCreateDialog({
   project: string;
   onCreated: (schedules: ScheduleView[]) => void;
 }) {
+  const t = useT();
+  const locale = useLocale();
   const [open, setOpen] = useState(false);
   const [kind, setKind] = useState<ScheduleKind>("once");
   const [date, setDate] = useState("");
@@ -1633,38 +1652,38 @@ function ScheduleCreateDialog({
       }}
     >
       <DialogTrigger render={<Button variant="ghost" size="xs" className="ml-auto text-foreground" />}>
-        새 스케줄
+        {t("home.schedule.new")}
       </DialogTrigger>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>새 스케줄</DialogTitle>
+          <DialogTitle>{t("home.schedule.new")}</DialogTitle>
           {/* 화면이 알려야 하는 사실 — 자리 (1/2)(§62 (7)). 회차 0건 판정 문장의 `action`과
               **한 글자까지 같다**. */}
           <DialogDescription>
-            정한 시각에 홈 에이전트가 이 문장을 수행합니다.{" "}
-            스케줄은 이 앱이 떠 있는 동안에만 돕니다 — 앱을 꺼도 큐의 티켓은 계속 디스패치됩니다.{" "}
-            꺼져 있던 사이의 회차는 앱을 켤 때 한 번만 늦게 돕니다.
+            {t("home.schedule.desc1")} {t("home.schedule.liveNote")}.{" "}
+            {t("home.schedule.desc3")}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="schedule-kind">반복</Label>
+            <Label htmlFor="schedule-kind">{t("home.schedule.kindLabel")}</Label>
             <Select value={kind} onValueChange={(v) => setKind(v as ScheduleKind)}>
               {/* 여는 초점 — 첫 칸이 나머지 칸의 모양을 정한다(§62 (5), 에픽 다이얼로그의 첫
                   `Input`과 같은 자리). */}
               <SelectTrigger id="schedule-kind" autoFocus className="w-full">
-                <SelectValue>{KIND_LABEL[kind]}</SelectValue>
+                <SelectValue>{t(KIND_LABEL_KEY[kind])}</SelectValue>
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="once">한 번만</SelectItem>
-                <SelectItem value="daily">매일</SelectItem>
-                <SelectItem value="weekly">매주</SelectItem>
-                <SelectItem value="monthly">매월</SelectItem>
+                {(Object.keys(KIND_LABEL_KEY) as ScheduleKind[]).map((k) => (
+                  <SelectItem key={k} value={k}>
+                    {t(KIND_LABEL_KEY[k])}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="schedule-time">시각</Label>
+            <Label htmlFor="schedule-time">{t("home.schedule.timeLabel")}</Label>
             {/* 갈래마다 컨트롤이 하나 또는 둘로 갈린다(§62 (5) §갈래 넷) — 라벨은 `시각` 하나로
                 안 갈린다. **네이티브 입력이다 — 캘린더 라이브러리 0개**(§1-4와 같은 판정). */}
             {kind === "once" && (
@@ -1682,12 +1701,17 @@ function ScheduleCreateDialog({
               <div className="flex gap-2">
                 <Select value={weekday} onValueChange={(v) => setWeekday(v ?? "1")}>
                   <SelectTrigger className="w-24">
-                    <SelectValue>{WEEKDAYS.find((w) => w.value === weekday)?.label}</SelectValue>
+                    <SelectValue>
+                      {(() => {
+                        const key = WEEKDAY_KEYS.find((w) => w.value === weekday)?.key;
+                        return key ? t(key) : undefined;
+                      })()}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
-                    {WEEKDAYS.map((w) => (
+                    {WEEKDAY_KEYS.map((w) => (
                       <SelectItem key={w.value} value={w.value}>
-                        {w.label}
+                        {t(w.key)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -1706,12 +1730,16 @@ function ScheduleCreateDialog({
                 <div className="flex gap-2">
                   <Select value={day} onValueChange={(v) => setDay(v ?? "1")}>
                     <SelectTrigger className="w-24">
-                      <SelectValue>{day}일</SelectValue>
+                      <SelectValue>
+                        {day}
+                        {t("common.unit.day")}
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       {MONTH_DAYS.map((d) => (
                         <SelectItem key={d} value={d}>
-                          {d}일
+                          {d}
+                          {t("common.unit.day")}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -1726,18 +1754,16 @@ function ScheduleCreateDialog({
                 </div>
                 {/* 없는 항목은 사람이 고장으로 읽는다(§62 (5)) — 28로 닫은 근거를 화면이
                     한 번 알려 준다. `말일`이라는 값을 발명하지 않는다. */}
-                <p className="text-xs text-muted-foreground">
-                  29일부터 31일까지는 없는 달이 있어서 고를 수 없습니다.
-                </p>
+                <p className="text-xs text-muted-foreground">{t("home.schedule.dayLimitNote")}</p>
               </div>
             )}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="schedule-prompt">문장</Label>
+            <Label htmlFor="schedule-prompt">{t("home.schedule.promptLabel")}</Label>
             <Textarea
               id="schedule-prompt"
               rows={4}
-              placeholder="답변 대기 티켓을 훑고 사람이 답할 것이 있으면 요구사항으로 올려라."
+              placeholder={t("home.schedule.promptPlaceholder")}
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
             />
@@ -1745,13 +1771,13 @@ function ScheduleCreateDialog({
           {error && <ScheduleFailure message={error} />}
         </div>
         <DialogFooter>
-          <DialogClose render={<Button variant="outline" />}>취소</DialogClose>
+          <DialogClose render={<Button variant="outline" />}>{t("common.cancel")}</DialogClose>
           <Button
             disabled={pending || !prompt.trim() || !timeFilled}
             onClick={() =>
               start(async () => {
                 const when = buildWhen(kind, date, time, weekday, day);
-                const r = await createSchedule(project, when, prompt);
+                const r = await createSchedule(project, when, prompt, locale);
                 if (r.ok) {
                   onCreated(r.schedules);
                   setOpen(false);
@@ -1762,7 +1788,7 @@ function ScheduleCreateDialog({
               })
             }
           >
-            {pending ? "만드는 중…" : "만들기"}
+            {pending ? t("common.creating") : t("common.create")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -1783,24 +1809,25 @@ function ScheduleDeleteAction({
   schedule: ScheduleView;
   onDeleted: (schedules: ScheduleView[]) => void;
 }) {
+  const t = useT();
   const [pending, start] = useTransition();
   return (
     <AlertDialog>
       <AlertDialogTrigger render={<SidebarMenuAction className="size-6" />}>
         <Trash2 aria-hidden />
-        <span className="sr-only">스케줄 삭제</span>
+        <span className="sr-only">{t("home.schedule.deleteTrigger")}</span>
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>스케줄을 지웁니다</AlertDialogTitle>
+          <AlertDialogTitle>{t("home.schedule.deleteTitle")}</AlertDialogTitle>
           <AlertDialogDescription>
             {schedule.prompt.split("\n")[0] || schedule.prompt}
             <br />
-            지난 회차의 대화를 화면에서 다시 열 수 없습니다.
+            {t("home.schedule.deleteNote")}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel autoFocus>취소</AlertDialogCancel>
+          <AlertDialogCancel autoFocus>{t("common.cancel")}</AlertDialogCancel>
           <AlertDialogAction
             variant="destructive"
             disabled={pending}
@@ -1810,7 +1837,7 @@ function ScheduleDeleteAction({
               })
             }
           >
-            삭제
+            {t("home.schedule.deleteConfirm")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

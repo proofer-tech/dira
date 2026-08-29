@@ -13,6 +13,7 @@
  *  모르는 것이라 폴링이 직접 읽는다. 티켓도 레지스트리도 안 바뀌므로 다시 그릴 화면이 없다. */
 import { verifyAttachments, withAttachments } from "@/lib/attachments";
 import { listEpics, refreshKnownRefs } from "@/lib/epics";
+import { DEFAULT_LOCALE, t, type Locale } from "@/lib/i18n";
 import type { RefIndex } from "@/lib/markdown-refs";
 import { listTickets } from "@/lib/queue";
 import {
@@ -34,9 +35,9 @@ import { getProject, resolveConfig } from "@/lib/projects";
 /** 등록된 프로젝트인가. **클라이언트가 준 id는 신뢰 경계 밖이다** — 여기서 걸러야 등록 안 된
  *  값이 `home-sessions.json`의 키가 되지 않는다(경로가 되는 값은 그 파일의 **값**이고 그쪽
  *  관문은 `sessionIdOf` 하나다 — §7). */
-async function required(projectId: string) {
+async function required(projectId: string, locale: Locale = DEFAULT_LOCALE) {
   const project = await getProject(projectId);
-  if (!project) throw new Error(`등록되지 않은 프로젝트입니다: ${projectId}`);
+  if (!project) throw new Error(`${t(locale, "home.action.unknownProjectPrefix")} ${projectId}`);
   return project;
 }
 
@@ -49,11 +50,12 @@ export async function askHome(
    *  `attachments/` 아래인지는 서버가 다시 본다(신뢰 경계). 조립은 `withAttachments` 하나이고,
    *  그 경로는 홈 에이전트 cwd(`dirname(root)`) 아래라 `Read`가 그대로 연다(§7 · §8 표). */
   attachments: string[] = [],
+  locale: Locale = DEFAULT_LOCALE,
 ): Promise<Answer | null> {
   try {
-    const project = await required(projectId);
+    const project = await required(projectId, locale);
     const attached = await verifyAttachments(project, attachments);
-    return await startAsk(project, withAttachments(question, attached));
+    return await startAsk(project, withAttachments(question, attached), locale);
   } catch (e) {
     // 여기 오는 건 프로젝트 조회와 첨부 경로 판정이 던진 것뿐이다(§24 표에 항이 없다) — `other`다.
     return { ok: false, reason: "other", output: (e as Error).message, sessionId: "", resumed: false };
@@ -172,11 +174,12 @@ export async function createSchedule(
   projectId: string,
   when: string,
   prompt: string,
+  locale: Locale = DEFAULT_LOCALE,
 ): Promise<{ ok: true; schedules: ScheduleView[] } | { ok: false; error: string }> {
   try {
-    const project = await required(projectId);
+    const project = await required(projectId, locale);
     const row = await createScheduleRow(project.id, when, prompt);
-    if (!row) return { ok: false, error: "시각 또는 문장을 확인하세요." };
+    if (!row) return { ok: false, error: t(locale, "home.schedule.invalidWhenOrPrompt") };
     return { ok: true, schedules: await readScheduleViews(project.id) };
   } catch (e) {
     return { ok: false, error: (e as Error).message };

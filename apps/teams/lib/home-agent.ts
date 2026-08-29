@@ -84,7 +84,7 @@ import path from "node:path";
 import { findClaude, tokenPath } from "./auth.ts";
 import type { Run } from "./engine.ts";
 import { listEpics, resolveMarkdownRefs } from "./epics.ts";
-import type { Locale } from "./i18n.ts";
+import { DEFAULT_LOCALE, t, type Locale } from "./i18n.ts";
 import { mayHaveRefs, type RefIndex } from "./markdown-refs.ts";
 import {
   getProject,
@@ -895,8 +895,20 @@ export async function ask(
    *  이 함수를 그대로 부르는 자리(테스트)가 종전과 같이 돈다. */
   turn?: { sessionId: string; resumed: boolean },
 ): Promise<Answer> {
+  // **동기로 판정한다** — `readLanguage()`(fs 읽기)를 아직 안 문다: 실패 ①(spawn)은 이 자리에서
+  // 즉시 끝나야 하는 계약이다(`home-agent.test.ts` "한 대화에 한 질문" — 폴링 없이 그 자리에서
+  // `isAsking() === false`). 이 두 문구는 그래서 `DEFAULT_LOCALE`로 고정한다(원래도 로케일이
+  // 없던 자리다) — 실제 로케일은 아래 시스템 프롬프트 자리에서만 읽는다.
   const q = question.trim();
-  if (!q) return { ok: false, reason: "other", output: "질문이 비어 있습니다.", sessionId: "", resumed: false };
+  if (!q) {
+    return {
+      ok: false,
+      reason: "other",
+      output: t(DEFAULT_LOCALE, "home.errors.emptyQuestion"),
+      sessionId: "",
+      resumed: false,
+    };
+  }
 
   // `claude`를 우리가 PATH에서 찾는다 — 셸에 맡기면 손에 남는 게 rc 127뿐이다(§0-4 `bcf66f01`).
   const bin = findClaude();
@@ -904,7 +916,7 @@ export async function ask(
     return {
       ok: false,
       reason: "spawn",
-      output: `PATH에서 claude를 찾지 못했습니다. (PATH=${process.env.PATH ?? ""})`,
+      output: `${t(DEFAULT_LOCALE, "home.errors.claudeNotFoundPrefix")}${process.env.PATH ?? ""})`,
       sessionId: "",
       resumed: false,
     };
@@ -1099,6 +1111,7 @@ function judge(
   live: Live,
   stderr: string,
   exit: { code: number | null; signal: NodeJS.Signals | null },
+  locale: Locale,
 ): Run & { reason?: AnswerReason } {
   if (!result) {
     const where = exit.code !== null ? `exit ${exit.code}` : `signal ${exit.signal}`;
@@ -1121,7 +1134,7 @@ function judge(
       output:
         [text, result.subtype === "success" ? "" : String(result.subtype ?? ""), stderr.trim()]
           .filter(Boolean)
-          .join("\n") || "엔진이 빈 답을 냈습니다.",
+          .join("\n") || t(locale, "home.errors.emptyAnswer"),
     };
   }
   return { ok: true, output: text };
@@ -1306,7 +1319,7 @@ async function runClaude(
       // **시계는 여기 없다**(§7 §천장이 없다) — 나머지 경우는 결과 객체가 있나 없나 하나로
       // 갈린다. 결과 객체가 없으면 `judge`가 종료 코드·신호·stderr 꼬리로 실패 ③을 짓는다.
       if (live.stopping) settle({ ok: true, stopped: true, output: live.partial });
-      else settle(judge(result, live, stderr, { code, signal }));
+      else settle(judge(result, live, stderr, { code, signal }, locale));
     });
   });
 }
@@ -1466,10 +1479,11 @@ export function stopAsk(sessionId: string): boolean {
 export async function startAsk(
   project: Pick<Project, "id" | "name" | "root">,
   question: string,
+  locale: Locale = DEFAULT_LOCALE,
 ): Promise<Answer | null> {
   const q = question.trim();
   if (!q) {
-    return { ok: false, reason: "other", output: "질문이 비어 있습니다.", sessionId: "", resumed: false };
+    return { ok: false, reason: "other", output: t(locale, "home.errors.emptyQuestion"), sessionId: "", resumed: false };
   }
   // **도는 워커 세션에는 이어 묻지 못한다**(§7 §이어 묻는 것은 홈 에이전트다). 화면이 이미
   // `보내기`를 잠그지만(§비주얼 §24 §잠금 두 자리 ②) 여기서 한 번 더 본다 — 그 절이 든 근거는
@@ -1482,7 +1496,7 @@ export async function startAsk(
     return {
       ok: false,
       reason: "other",
-      output: `도는 워커 세션에는 여기서 말을 걸 수 없습니다 · 참견은 ${held.hash} 상세에서`,
+      output: `${t(locale, "home.errors.workerRunningPrefix")}${held.hash}${t(locale, "home.workerNote.runningSuffix")}`,
       sessionId: held.id,
       resumed: true,
     };

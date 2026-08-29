@@ -14,7 +14,8 @@
 import { notFound } from "next/navigation";
 import { HomeUI } from "@/components/home-ui";
 import { pollHome } from "@/lib/home-agent";
-import { getProject } from "@/lib/projects";
+import { t } from "@/lib/i18n";
+import { getProject, readLanguage } from "@/lib/projects";
 import { exampleWorkers, listWorkers } from "@/lib/workers";
 
 export const dynamic = "force-dynamic";
@@ -25,6 +26,7 @@ export default async function Home({ params }: { params: Promise<{ project: stri
   // 등록 안 된 id가 `home-sessions.json`의 키로 흘러가는 자리를 하나도 안 남긴다(actions와 같은 선).
   const project = await getProject(id);
   if (!project) notFound();
+  const locale = await readLanguage();
 
   // 온보딩 예시 앞의 둘(§비주얼 §24) — **이 서버 렌더 한 번**이 그 이름들을 정한다.
   // 폴링에 안 싣는 이유와 `HomeChunk.workers`가 출처가 아닌 이유는 `exampleWorkers` 머리 주석.
@@ -37,7 +39,12 @@ export default async function Home({ params }: { params: Promise<{ project: stri
       project={id}
       initial={await pollHome(id, null, 0)}
       examples={
-        active ? [`${active} 워커는 지금 무슨 일을 하고 있나`, `${other} 워커는 어떤 엔진으로 도나`] : []
+        active
+          ? [
+              `${active}${t(locale, "home.example.workerActivitySuffix")}`,
+              `${other}${t(locale, "home.example.workerEngineSuffix")}`,
+            ]
+          : []
       }
     />
   );

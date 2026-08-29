@@ -1228,6 +1228,99 @@ export const ko: Record<string, string> = {
   "findBar.prev": "이전",
   "findBar.next": "다음",
   "findBar.close": "닫기",
+
+  // 홈 화면(§0-16 §발행 §묶음 표 행 6, `f40e29e7`) — home-ui.tsx · lib/home-agent.ts(화면
+  // 문구뿐 — 프롬프트 조립 문자열은 사전 밖이다, 판정은 티켓 `## 결과`) · home/page.tsx ·
+  // home/actions.ts. en은 `c357313f`가 채운다.
+  "home.title": "홈",
+  "home.conversationsLabel": "대화",
+  "home.questionLabel": "질문",
+  "home.answerLabel": "답",
+  "home.newConversation": "새 대화",
+  "home.newConversationLocked": "지금 대화가 이미 비어 있습니다 — 여기에 물어보세요",
+  "home.showMore": "더보기",
+  "home.schedulesLabel": "스케줄",
+  "home.workerSessionsLabel": "워커 세션",
+  "home.stop": "중지",
+  "home.stopped": "중지됨",
+  "home.answering": "답하는 중",
+  "home.activity.thinking": "생각 중",
+  "home.scrollToLatest": "최신으로",
+  "home.askPlaceholder": "이 프로젝트에 대해 묻기",
+  "home.sending": "보내는 중…",
+  "home.send": "보내기",
+  "home.answer.retry": "다시 답하기",
+  "home.answer.copy": "복사",
+
+  "home.onboarding.title": "이 프로젝트에 대해 묻는다",
+  "home.onboarding.body":
+    "티켓과 프로젝트 자원(페르소나 · 프로토콜 · 워커)들을 읽고 답합니다. 프로젝트 자원을 수정하도록 할 수도 있습니다.",
+  "home.example.ticketsWhy": "답변 대기 티켓이 왜 안 도나",
+  "home.example.summarizeProtocols": "이 프로젝트의 프로토콜을 요약해 달라",
+  // page.tsx §온보딩 예시 앞의 둘 — 이름 뒤에 공백 없이 붙는 접미(`${워커이름}${이 키}`).
+  "home.example.workerActivitySuffix": " 워커는 지금 무슨 일을 하고 있나",
+  "home.example.workerEngineSuffix": " 워커는 어떤 엔진으로 도나",
+
+  "home.fail.spawn.title": "답을 받지 못했습니다 — 세션을 띄우지 못했습니다",
+  "home.fail.spawn.next": "엔진 CLI가 PATH에 있는지 확인하세요",
+  "home.fail.auth.title": "답을 받지 못했습니다 — claude 인증이 없습니다",
+  "home.fail.auth.next": "헤더 오른쪽 설정에서 장기 토큰을 넣고 다시 물어보세요.",
+  "home.fail.timeout.title": "답을 받지 못했습니다 — 세션이 답 없이 끝났습니다",
+  "home.fail.timeout.next": "다시 보내 보세요. 쓴 글은 그대로 남아 있습니다.",
+  "home.fail.busy.title": "보내지 못했습니다 — 답이 아직 도는 중입니다",
+  "home.fail.busy.next": "끝나면 이 칸이 다시 열립니다. 새로고침하지 않아도 됩니다.",
+  "home.fail.noTranscript.title": "답을 찾지 못했습니다 — 트랜스크립트가 없습니다",
+  "home.fail.noTranscript.next": "새 대화로 다시 물어보세요.",
+  "home.fail.other.title": "답을 받지 못했습니다",
+
+  // `lib/home-agent.ts`가 짓는 `Answer.output`(§24 §실패 5종) — CLI 원문·프롬프트 조립과
+  // 다르다: 이 문장은 화면 Failure 카드에 그대로 뜬다.
+  "home.errors.emptyQuestion": "질문이 비어 있습니다.",
+  "home.errors.claudeNotFoundPrefix": "PATH에서 claude를 찾지 못했습니다. (PATH=",
+  "home.errors.emptyAnswer": "엔진이 빈 답을 냈습니다.",
+  "home.errors.workerRunningPrefix": "도는 워커 세션에는 여기서 말을 걸 수 없습니다 · 참견은 ",
+
+  "home.workerNote.running": "도는 세션에는 여기서 말을 걸 수 없습니다 · 참견은 ",
+  "home.workerNote.done": "워커 권한 없이 이 세션에 이어 묻습니다 · ",
+  // 위 `home.errors.workerRunningPrefix`와 이 파일의 `<WorkerNote>` 둘이 같이 쓰는 접미.
+  "home.workerNote.runningSuffix": " 상세에서",
+
+  "home.schedule.new": "새 스케줄",
+  "home.schedule.emptyTitle": "회차 없음",
+  "home.schedule.overdueNote": "예정 시각이 지나 이 스케줄은 돌지 않습니다 — 지우고 다시 만듭니다",
+  // 다이얼로그 설명 둘째 문장과 **한 글자까지 같다**(회차 0건 판정 문장, 위 overdueNote 옆자리) —
+  // 마침표는 이 값에 안 넣는다: 회차 0건 자리는 뒤에 붙는 문장이 없어 마침표가 없다.
+  "home.schedule.liveNote":
+    "스케줄은 이 앱이 떠 있는 동안에만 돕니다 — 앱을 꺼도 큐의 티켓은 계속 디스패치됩니다",
+  "home.schedule.dueAtSuffix": "에 첫 회차가 돕니다.",
+  "home.schedule.locked": "첫 회차가 돌기 전에는 이 스케줄에 말을 걸 수 없습니다",
+  "home.schedule.kind.once": "한 번만",
+  "home.schedule.kind.daily": "매일",
+  "home.schedule.kind.weekly": "매주",
+  "home.schedule.kind.monthly": "매월",
+  "home.schedule.kindLabel": "반복",
+  "home.schedule.timeLabel": "시각",
+  "home.schedule.promptLabel": "문장",
+  "home.schedule.promptPlaceholder": "답변 대기 티켓을 훑고 사람이 답할 것이 있으면 요구사항으로 올려라.",
+  "home.schedule.dayLimitNote": "29일부터 31일까지는 없는 달이 있어서 고를 수 없습니다.",
+  "home.schedule.createFailTitle": "스케줄을 만들지 못했습니다",
+  "home.schedule.invalidWhenOrPrompt": "시각 또는 문장을 확인하세요.",
+  "home.schedule.desc1": "정한 시각에 홈 에이전트가 이 문장을 수행합니다.",
+  "home.schedule.desc3": "꺼져 있던 사이의 회차는 앱을 켤 때 한 번만 늦게 돕니다.",
+  "home.schedule.deleteTrigger": "스케줄 삭제",
+  "home.schedule.deleteTitle": "스케줄을 지웁니다",
+  "home.schedule.deleteNote": "지난 회차의 대화를 화면에서 다시 열 수 없습니다.",
+  "home.schedule.deleteConfirm": "삭제",
+
+  "home.weekday.mon": "월",
+  "home.weekday.tue": "화",
+  "home.weekday.wed": "수",
+  "home.weekday.thu": "목",
+  "home.weekday.fri": "금",
+  "home.weekday.sat": "토",
+  "home.weekday.sun": "일",
+
+  "home.action.unknownProjectPrefix": "등록되지 않은 프로젝트입니다:",
 };
 
 /** 제품 낱말의 영어 대응 — **여기가 한자리다**(621c7a97). 다음 묶음이 같은 것을 다르게 부르지
