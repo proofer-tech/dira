@@ -190,6 +190,21 @@ Section groups, in the table of contents and in the sidebar:
 | 운영 | Operating |
 | 부록 | Appendix |
 
+## Section titles quoted across chapters
+
+One chapter naming a section of another has to use the same words that chapter's own English
+heading uses. Every row below is copied from the heading in that chapter's English file. When a
+chapter you need to quote has no English file yet, decide the wording, add the row, and the
+session that writes that chapter follows it.
+
+| Chapter | Korean | English |
+|---|---|---|
+| `install.md` | 앱 없이 엔진만 쓰기 | Running the engine without the app |
+| `auth.md` | 앱 없이 - 엔진만 쓸 때 | Without the app - using the engine alone |
+| `personas.md` | 디스패치 정책 - 상한과 엔진 | Dispatch policy - the cap and the engine |
+| `troubleshooting.md` | 티켓이 보드에 안 보인다 | A ticket is not on the board |
+| `troubleshooting.md` | 대기인데 아무도 안 집는다 | It is Open and nobody claims it |
+
 ## Screen labels the manual quotes
 
 The manual tells the reader which button to press, so a label quoted here has to be the
@@ -361,6 +376,10 @@ label the screen actually shows. These rows are copied from the English dictiona
 | 통합 게이트 적용 | Apply dispatch gate |
 | 마지막 폴링 | Last polled |
 | 마지막 출력 | Last output |
+| 의견 보내기 | Send feedback |
+| GitHub 이슈로 보내기 | Open a GitHub issue |
+| 펼치기 (frontmatter 읽기 전용 표) | Expand |
+| 평문으로 | Switch to plain text |
 
 Four more for the same reason, all macOS wording rather than ours: `허용` is `Allow`, `앱 관리` is
 `App Management`, `개인정보 보호 및 보안` is `Privacy & Security`, and `전체 디스크 접근 권한` is
@@ -400,6 +419,15 @@ brackets stays byte for byte.
 | `<종류>` | `<kind>` |
 | `<폴더 이름>` | `<folder name>` |
 | `P숫자` | `P<number>` |
+| `<설명>` | `<description>` |
+| `<티켓경로>` | `<ticket path>` |
+| `<inbox경로>` | `<inbox path>` |
+| `<진행중접미사>` | `<in-progress suffix>` |
+| `<스크립트 파일명>` | `<script filename>` |
+| `<상한>` | `<cap>` |
+| `<페르소나 디렉터리>` | `<persona directory>` |
+| `<페르소나 또는 agent>` | `<persona or agent>` |
+| `<sid 앞8자리>` | `<first 8 of the sid>` |
 
 ## Screen sentences the manual quotes
 
