@@ -10,26 +10,31 @@
 import { homedir } from "node:os";
 import { readAuth, readOtherEngineAuth } from "@/lib/auth";
 import { type AuthView } from "@/components/settings-dialog";
-import { LanguageProvider } from "@/components/language-provider";
 import { ProjectRows, type ProjectRow } from "@/components/projects-ui";
 import { UpdateToast } from "@/components/update-toast";
 import { isLandingOnly } from "@/lib/flags";
-import { DEFAULT_LOCALE } from "@/lib/i18n";
-import { readLanguage, readProjects, readSummary, registryPath } from "@/lib/projects";
+import { readProjects, readSummary, registryPath } from "@/lib/projects";
 import { tildePath } from "@/lib/urls";
 import { engineName, workerGroups } from "@/lib/workers";
 import { diraVersion } from "../../../version";
 import Landing from "../landing";
 import { pageMetadata } from "../meta";
+import { siteLocale } from "../request-locale";
 // 홈은 랜딩 전역 CSS(`../landing.tsx`가 이미 무는 `fonts.css`, `globals.css`가 싣는 `landing.css`)와
 // tailwind 리셋을 **둘 다 문다**(§한 코드베이스 §부딪히는 것 ②) — 목록 표가 shadcn(tailwind)이라서다.
 // 다른 사이트 페이지(`/docs/**`·`/privacy`·`/terms`)는 이 리셋이 필요 없어 여기서만 문다.
 import "../../globals.css";
 
 // `index.md`가 `titleTemplate: false`였던 유일한 장이라 `<title>`에 사이트 이름이 안 붙는다.
-export const metadata = pageMetadata("/", "dira - 로컬 멀티 에이전트 매니지먼트 시스템", {
-  suffix: false,
-});
+// 문구(213건)는 이 티켓 범위 밖이라 한국어 그대로다 — 갈리는 것은 `og:locale` 하나뿐이다
+// (§0-24 §SEO, P340-3이 이 제목도 사전으로 옮긴다).
+export async function generateMetadata() {
+  const locale = await siteLocale();
+  return pageMetadata("/", "dira - 로컬 멀티 에이전트 매니지먼트 시스템", {
+    suffix: false,
+    locale,
+  });
+}
 
 // 레지스트리·큐는 GUI 밖에서(사람·cron이) 바뀐다. 프리렌더하면 빌드 시점 목록이 굳는다.
 export const dynamic = "force-dynamic";
@@ -41,16 +46,12 @@ export default async function Page() {
   let rows: ProjectRow[] = [];
   let registryError: { message: string; openCmd: string } | null = null;
   let auth: AuthView | null = null;
-  // §0-16 §설정 노드 — 헤더 `설정`(트리거 `text`)이 여기서만 뜬다(fullMode). 랜딩-only는
-  // 그 다이얼로그 자체가 없으니 읽을 이유가 없다 — 위 §플래그 fs 요건과 같은 선이다.
-  let locale = DEFAULT_LOCALE;
 
   if (fullMode) {
     // 인증은 머신당 하나다(§0-4 자리 표) — 레지스트리 성패와 무관하게 읽는다. 헤더 `설정`이
     // 등록된 프로젝트가 0건이거나 레지스트리가 깨져도 그대로 동작해야 해서다.
     const rawAuth = await readAuth();
     const otherEngines = await readOtherEngineAuth();
-    locale = await readLanguage();
 
     // 레지스트리가 깨졌으면 GUI가 고쳐 쓰려 들지 않는다 — 원문 + 여는 명령을 보여주고
     // 사람이 연다. 랜딩 절 전부는 그대로 뜬다(§비주얼 §46 ⑤ 레지스트리 오류 상태).
@@ -95,7 +96,7 @@ export default async function Page() {
   }
 
   return (
-    <LanguageProvider locale={locale}>
+    <>
       <Landing
         version={diraVersion}
         fullMode={fullMode}
@@ -111,6 +112,6 @@ export default async function Page() {
           `useIsDesktop()`이 `false`라 이 컴포넌트가 그 자리에서 바로 `null`이다 - 새로 뜨는 것도
           fs 읽기도 늘지 않는다. */}
       <UpdateToast />
-    </LanguageProvider>
+    </>
   );
 }

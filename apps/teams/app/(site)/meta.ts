@@ -1,6 +1,10 @@
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import type { Metadata } from "next";
+// `@/lib/i18n` 별칭이 아니라 상대경로 `.ts`다 — `meta.test.ts`가 `node --test`로 이 파일을
+// 직접 부르는데, 네이티브 TS 로더가 tsconfig `paths` 별칭을 못 읽는다(`lib/projects.ts`가
+// `./i18n.ts`를 쓰는 그 판정과 같다).
+import { DEFAULT_LOCALE, type Locale } from "../../lib/i18n.ts";
 
 /** 굽는 라우트 목록과 그 라우트의 메타데이터가 한 자리에 있다 — 사이트맵·canonical·
  *  `generateStaticParams`가 **같은 목록**을 봐야 어긋날 자리가 통째로 없어진다.
@@ -36,6 +40,11 @@ export const pageUrls = ["/", ...rootNames.map((n) => `/${n}`), ...docNames.map(
 export const titleOf = (source: string) =>
   /^# +(.+)$/m.exec(source)?.[1].trim() ?? SITE_TITLE;
 
+/** §0-24 §SEO — `og:locale`이 상수에서 함수가 된 자리. `<html lang>`과 같은 값을 받는다
+ *  (`app/(site)/request-locale.ts`의 `siteLocale()`). `canonical`·`sitemap.xml`·`robots.txt`는
+ *  주소가 안 갈리므로 이 표 밖이다. */
+const OG_LOCALE: Record<Locale, "ko_KR" | "en_US"> = { ko: "ko_KR", en: "en_US" };
+
 /** `path`는 위 `docPath`가 내는 그 경로(`/` · `/docs/` · `/docs/install` · `/privacy`).
  *  `title`은 og:title로 그대로 나가고 `<title>`에는 사이트 이름을 뒤에 붙인다 — 종전
  *  `titleTemplate` 기본값이다. 랜딩만 `index.md`가 `titleTemplate: false`였으므로
@@ -48,7 +57,11 @@ export const titleOf = (source: string) =>
 export function pageMetadata(
   path: string,
   title: string,
-  { suffix = true, description = "" } = {},
+  { suffix = true, description = "", locale = DEFAULT_LOCALE }: {
+    suffix?: boolean;
+    description?: string;
+    locale?: Locale;
+  } = {},
 ): Metadata {
   const url = `${ORIGIN}${path}`;
   const desc = description || SITE_DESCRIPTION;
@@ -59,7 +72,7 @@ export function pageMetadata(
     openGraph: {
       type: "website",
       siteName: SITE_TITLE,
-      locale: "ko_KR",
+      locale: OG_LOCALE[locale],
       url,
       title,
       description: desc,

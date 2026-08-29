@@ -1,8 +1,9 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { notFound } from "next/navigation";
 import { Shell } from "../../doc";
 import { docNames, docPath, pageMetadata, titleOf } from "../../meta";
+import { siteLocale } from "../../request-locale";
+import { pickManuscript } from "@/lib/site-locale";
+import type { Locale } from "@/lib/i18n";
 
 // 매뉴얼 27장. 셸과 마크다운 렌더는 `app/doc.tsx` 한 벌이고 루트 산문 2장(`privacy`·`terms`)이
 // 같은 것을 쓴다 — 이 파일에 남는 것은 **`themeConfig.sidebar` 배열에서 나오는 것**뿐이다
@@ -10,8 +11,8 @@ import { docNames, docPath, pageMetadata, titleOf } from "../../meta";
 // 라우트가 하나인 것은 `docs/index.md`가 나머지 26장과 같은 마크다운이라서다 — optional
 // catch-all이 `/docs/`와 `/docs/<이름>`을 같은 파일로 받는다.
 // 굽는 이름 목록은 `app/meta.ts`가 진다.
-const DOCS = join(process.cwd(), "docs");
-const source = (name: string) => readFileSync(join(DOCS, `${name}.md`), "utf8");
+// §0-24 §원고를 두는 자리 — `en/docs/<name>.md`가 있으면 그것, 없으면 한국어 원본이다.
+const source = (name: string, locale: Locale) => pickManuscript(locale, `docs/${name}.md`);
 
 // `.vitepress/config.ts:81-135`의 6묶음 28항목(그룹 6 + 링크 22)을 데이터로 옮긴 것이다.
 // 그 뒤 `epics.md`·`squads.md`·`webhook.md`·`schedules.md`가 한 장씩 들어와 지금은
@@ -98,17 +99,19 @@ type Params = { params: Promise<{ slug?: string[] }> };
 // 제목은 그 훅이 읽던 `pageData.title`과 같은 값이다 — 첫 `# ` 헤딩의 글자다.
 export async function generateMetadata({ params }: Params) {
   const name = nameOf((await params).slug);
-  return pageMetadata(docPath(name), titleOf(source(name)));
+  const locale = await siteLocale();
+  return pageMetadata(docPath(name), titleOf(source(name, locale)), { locale });
 }
 
 export default async function Page({ params }: Params) {
   const name = nameOf((await params).slug);
+  const locale = await siteLocale();
   const here = docPath(name);
   const at = FLAT.findIndex((i) => i.link === here);
 
   return (
     <Shell
-      source={source(name)}
+      source={source(name, locale)}
       path={here}
       editPath={`docs/${name}.md`}
       sidebar={SIDEBAR}
