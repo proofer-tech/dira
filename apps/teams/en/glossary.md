@@ -110,6 +110,19 @@ Never translate, never re-spell:
 | 받는 트리 | receiving tree | The original the workers' worktrees branched off - the project folder itself. |
 | 사용 통계 | usage analytics | The chapter word. The settings node reads `Usage stats`. |
 | 폴링 스크립트 | polling script | The file under `polls/` a scheduled ticket runs to judge its condition. |
+| 카드 | card | One file in the ontology. Never a node or an entry. A kanban card is also a card, so say ontology card where both could be meant. |
+| 지도 | map | `_ontology/SCHEMA.md`. Never a schema in prose - `Schema violations` is a screen label and stays as it is. |
+| 종류 | kind | What a card is. The screen calls the definition an `object type`, and prose says kind because that is what the manual asks the reader to pick. |
+| 관계 | relation | The line between two cards. Never an edge. `숨은 간선` is the one exception: the metric is `Hidden edges` and `간선` is edge there. |
+| 아카이빙 | archiving | The loop a done ticket sets off. The three card lines share `Archiving` as their head. |
+| 아카이브 티켓 | archive ticket | The one ticket that loop issues. Its target is `archives:` in frontmatter. |
+| 정리 티켓 | cleanup ticket | What `Fix violations` issues. The link on the screen reads `Cleanup ticket`. |
+| 마이그레이션 | migration | Re-applying the latest conventions to an ontology. Never an upgrade. |
+| 가져오기 | import | Pulling a folder from outside into cards. The button reads `Import`. |
+| 빈손 | empty-handed | A round that left nothing behind. The metric is `Empty-handed rate`. |
+| 스윔레인 | swimlane | `?lane=epic`. One horizontal band per epic. |
+| 띠 | band | One swimlane row. It holds cards, so it appears only once a card is in it. |
+| 에픽 메모리 | epic memory | The `memory/` folder under one epic. Personas have their own memory, so name the owner. |
 
 ## States and badges
 
@@ -200,7 +213,7 @@ label the screen actually shows. These rows are copied from the English dictiona
 | 프로젝트 폴더 | Project folder |
 | 통합 브랜치 | Integration branch |
 | 스펙 문서 | Spec document |
-| 접수한 요구 보기 | View the request |
+| 접수한 요구 보기 | See the request you submitted |
 | 복제 | Duplicate |
 | 할당 해제 | Unassign |
 | 답변 쓰기 | Write an answer |
@@ -267,7 +280,7 @@ label the screen actually shows. These rows are copied from the English dictiona
 | 인증 필요 | Authentication needed |
 | 파일 목록 접기 | Collapse the file list |
 | 파일 목록 펴기 | Expand the file list |
-| 기본값 가정 | Assumed default |
+| 기본값 가정 | assumed default |
 | 원문으로 | Show the source |
 | 위지윅으로 | Back to WYSIWYG |
 | 전원 프롬프트에 인라인 | Inlined in every prompt |
@@ -380,6 +393,13 @@ brackets stays byte for byte.
 | `<받는 트리>` | `<receiving tree>` |
 | `<시각>` | `<time>` |
 | `<워커>` | `<worker>` |
+| `<번호>` | `<number>` |
+| `<키>` | `<key>` |
+| `<제목>` | `<title>` |
+| `<에픽 제목>` | `<epic title>` |
+| `<종류>` | `<kind>` |
+| `<폴더 이름>` | `<folder name>` |
+| `P숫자` | `P<number>` |
 
 ## Screen sentences the manual quotes
 
