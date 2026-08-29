@@ -1151,6 +1151,131 @@ export const ko: Record<string, string> = {
   "ontology.location.notAbsolute": "절대경로여야 합니다:",
   "ontology.location.notDirectory": "실재하는 디렉터리가 아닙니다:",
 
+  // 온톨로지 화면 나머지(§0-16 §발행 §묶음 표 행 12 갈래, `2ef7a4e9`) — ontology-seed.ts ·
+  // ontology-ui.tsx · ontology/page.tsx · ontology/actions.ts · lib/ontology.ts.
+  // `protocols-ui.tsx`의 판박이 자리(새 파일 · 편집기 · 삭제)는 `protocols.*`와 같은 문구지만
+  // 화면이 갈리므로 키는 따로 연다(`boardPage.*`가 `board.*`와 갈린 것과 같은 판단) — 공통 동작
+  // (저장 · 취소 · 만들기)만 `common.*`을 그대로 쓴다.
+  "ontology.import.folderLabel": "가져올 폴더",
+  "ontology.publishing": "발행하는 중…",
+  "ontology.import.title": "가져오기",
+  "ontology.import.hint": "폴더를 골라야 누를 수 있습니다 — 폴더 이름이 출처가 됩니다",
+  "ontology.import.failTitle": "가져오기 티켓을 만들지 못했습니다",
+
+  "ontology.new.trigger": "새 파일",
+  "ontology.new.descPrefix": "온톨로지 디렉터리 기준 상대경로입니다.",
+  "ontology.new.descSuffix": "를 넣으면 하위 디렉터리도 같이 만듭니다. 빈 파일로 만들고 바로 편집기가 열립니다.",
+  "ontology.new.pathLabel": "경로",
+  "ontology.new.pathHintPrefix": "디렉터리 밖으로 나가는 경로(",
+  "ontology.new.pathHintSuffix": "· 절대경로)는 서버가 거부합니다.",
+  "ontology.new.failTitle": "파일을 만들지 못했습니다",
+
+  "ontology.fix.failTitle": "정리 티켓을 만들지 못했습니다",
+  "ontology.fix.trigger": "문제해결",
+
+  "ontology.editor.saveFailTitle": "저장하지 못했습니다",
+  "ontology.charSuffix": "자",
+  "ontology.editor.revert": "되돌리기",
+  "ontology.editor.saved": "저장됐습니다.",
+
+  "ontology.rename.trigger": "이름변경",
+  "ontology.rename.desc":
+    "상대경로를 바꾸면 하위 디렉터리로 옮기는 것도 됩니다. 같은 이름의 파일이 이미 있으면 거부합니다 — 조용히 덮어쓰지 않습니다.",
+  "ontology.rename.newPathLabel": "새 경로",
+  "ontology.rename.failTitle": "이름을 바꾸지 못했습니다",
+  "ontology.rename.working": "바꾸는 중…",
+
+  "ontology.delete.trigger": "삭제",
+  "ontology.delete.dialogTitle": "파일 삭제",
+  "ontology.delete.descSuffix": "를 지웁니다. 되돌릴 수 없습니다.",
+  "ontology.delete.failTitle": "지우지 못했습니다",
+  "ontology.delete.working": "삭제 중…",
+
+  // 생성 설문 4문항(§5-3 §생성) — 실제 문구는 `lib/ontology-seed.ts`의 `QUESTIONS`·
+  // `Q1_OPTIONS` 등이 이 키를 가리킨다(`labelKey`). 응답 원문(`value`)은 산출물에 박히므로
+  // 로케일 무관 한국어 고정이고, 이 키들은 화면 표시에만 쓰인다.
+  "ontology.survey.q1.question": "이 프로젝트는 주로 무엇을 다루나요?",
+  "ontology.survey.q1.option.product": "제품이나 코드를 만듭니다",
+  "ontology.survey.q1.option.content": "글이나 콘텐츠를 만듭니다",
+  "ontology.survey.q1.option.people": "사람을 상대합니다 (고객·파트너·팀)",
+  "ontology.survey.q1.option.data": "자료를 모으고 정리합니다",
+  "ontology.survey.q2.question": "일하다 보면 자주 이름을 불러 부르게 될 대상은 무엇인가요?",
+  "ontology.survey.q2.chip.customer": "고객",
+  "ontology.survey.q2.chip.project": "프로젝트",
+  "ontology.survey.q2.chip.doc": "문서",
+  "ontology.survey.q2.chip.task": "작업",
+  "ontology.survey.q2.chip.product": "제품",
+  "ontology.survey.q2.customPlaceholder": "직접 입력 (쉼표로 여러 개)",
+  "ontology.survey.q3.question": "나중에 이런 걸 물어보게 될 것 같나요?",
+  "ontology.survey.q3.option.connect": "이게 무엇과 연결되나요?",
+  "ontology.survey.q3.option.owner": "누가 관여했나요?",
+  "ontology.survey.q3.option.cause": "무엇 때문에 이렇게 됐나요?",
+  "ontology.survey.q3.option.next": "다음에 무엇으로 이어지나요?",
+  "ontology.survey.q4.question": "다음 중 프로젝트 자체가 아니라 작업 흔적이라 정리 대상이 아닌 것을 골라주세요",
+  "ontology.survey.q4.option.tool": "이 프로젝트를 굴리는 관리 도구 자체(예: 지금 쓰는 이 화면)",
+  "ontology.survey.q4.option.memo": "임시 메모나 낙서",
+  "ontology.survey.q4.option.chatlog": "지나간 대화 로그",
+  "ontology.survey.q4.option.testfile": "테스트로 남긴 파일",
+  // 제출 뒤 대기 문장 — `보드`는 `shell.nav.board`를 그대로 재사용한다(같은 낱말, 새 문구
+  // 0). prefix/suffix 사이에 그 링크가 낀다: `${prefix} <Link>보드</Link>${suffix}`.
+  "ontology.survey.pendingPrefix": "답을 바탕으로 만드는 중입니다… 이어지는 첫 채움은",
+  "ontology.survey.pendingSuffix": "의 티켓 한 장으로 돕니다.",
+  "ontology.survey.failTitle": "만들지 못했습니다",
+
+  // `lib/ontology.ts`의 `schemaViolations` — 화면에 전문이 뜨는 유일한 진단 배열이다
+  // (`OntologyMetricsPanel`). 나머지 지표(`hiddenEdges` 등)의 `.items`는 화면에 카운트만
+  // 뜨고 문자열 자체는 `ontology.test.ts`만 읽어서 사전에 안 옮긴다(`## 결과`에 판정 근거).
+  "ontology.violation.unknownTypePrefix": "미정의 타입:",
+  "ontology.violation.unknownTypeMiddle": "(타입 '",
+  "ontology.violation.unknownTypeSuffix": "' 이 SCHEMA.md 에 없음)",
+  "ontology.violation.sectionUsed": "## 절 사용:",
+  "ontology.violation.unknownRelationPrefix": "미정의 관계:",
+  "ontology.violation.ofQuote": "의 '",
+  "ontology.violation.unknownRelationSuffix": "' (SCHEMA.md 관계 표에 없음)",
+  "ontology.violation.domainRangePrefix": "정의역·치역 위반:",
+  "ontology.violation.domainRangeMid": "' (",
+  "ontology.violation.domainRangeSuffix": ") 인데 스키마는 [",
+  "ontology.violation.danglingPrefix": "댕글링:",
+  "ontology.violation.missingRequiredPrefix": "필수 속성 누락:",
+
+  // ontology/page.tsx 나머지(사이드바 · 위반 판 라벨 · 빈 트리 설문 안내).
+  "ontology.sidebar.collapse": "파일 목록 접기",
+  "ontology.sidebar.expand": "파일 목록 펴기",
+  "ontology.usingDefault": "기본값 가정",
+  "ontology.sidebar.ariaLabel": "온톨로지 파일",
+  "ontology.rejected.title": "이 경로는 열 수 없습니다",
+  "ontology.picker.expanded": "파일을 고르세요.",
+  "ontology.picker.collapsed": "파일 목록을 펴서 고르세요.",
+  "ontology.metrics.objectRelation": "객체 · 관계",
+  "ontology.metrics.hiddenEdges": "숨은 간선",
+  "ontology.metrics.normativeSentences": "규범 문장",
+  "ontology.metrics.singleSentenceProse": "서술 한 문장",
+  "ontology.metrics.shells": "껍데기",
+  "ontology.metrics.isolated": "고립",
+  "ontology.metrics.hierarchyCycles": "계층 순환",
+  "ontology.metrics.polysemousElements": "다의적 요소",
+  "ontology.metrics.redundantClasses": "잉여 클래스",
+  "ontology.metrics.emptyHandedRatio": "빈손 비율",
+  "ontology.metrics.schemaStability": "스키마 개정(누적)",
+  "ontology.metrics.lastUpdated": "마지막 반영",
+  "ontology.metrics.noRecord": "기록 없음",
+  "ontology.unit.count": "건",
+  "ontology.metrics.violationsPrefix": "스키마 위반",
+  "ontology.metrics.moreCountPrefix": "외",
+  "ontology.metrics.fixTicketPrefix": "정리 티켓",
+  "ontology.empty.heading": "몇 가지만 답하면 시작할 자료를 만들어 드립니다",
+  "ontology.empty.bodyPrefix": "건너뛰어도 이 프로젝트는 그대로 돕니다 —",
+  "ontology.empty.bodyMiddle": "는",
+  "ontology.empty.bodySuffix": "가 비어 있으면 그냥 넘어갑니다.",
+  "ontology.empty.skipHint": "답할 게 마땅치 않다면 건너뛰고 빈 파일부터 시작해도 됩니다.",
+
+  // ontology/actions.ts — 발행 서버 액션. `등록되지 않은 프로젝트입니다:`는
+  // `boardPage.action.unknownProjectPrefix`·`protocols.action.unknownProjectPrefix`와 같은
+  // 문장이지만 화면마다 각자 키를 든다(§0-16, `f3a8794e`와 같은 판단). 디렉터리 거절은 이미 있는
+  // `ontology.location.notDirectory`를 그대로 재사용한다(같은 화면 안이라 새 키를 안 연다).
+  "ontology.action.unknownProjectPrefix": "등록되지 않은 프로젝트입니다:",
+  "ontology.action.hashExhausted": "해시를 10번 뽑았는데 전부 이미 쓰이고 있습니다 — 큐 디렉터리를 확인하세요.",
+
   // 보드 화면(§0-16 §발행 §묶음 표 행 3, `f3a8794e`) — page.tsx · board-ui.tsx · actions.ts.
   // `board.*`는 §에픽 묶음이 이미 en을 채워 잠갔다(`FILLED`, i18n.test.ts) — 그 접두에 새 키를
   // 못 넣으므로 이 갈래는 `boardPage.*`로 새로 연다. en은 `6d818d48`가 채운다.

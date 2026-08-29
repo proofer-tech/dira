@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert";
+import { ko } from "./i18n.ts";
 import {
   buildOntologySeedFiles,
   buildSeed,
@@ -12,10 +13,10 @@ import {
 } from "./ontology-seed.ts";
 
 const FULL = {
-  q1: Q1_OPTIONS[0],
+  q1: Q1_OPTIONS[0].value,
   q2: ["고객사", "계약서", "프로젝트"],
   q3: [Q3_OPTIONS[0].relation, Q3_OPTIONS[1].relation],
-  q4: [Q4_OPTIONS[0]],
+  q4: [Q4_OPTIONS[0].value],
 };
 
 test("buildSeed — 객체 타입 3~5 · 관계 타입 2~4, 직접 입력 그대로 채택", () => {
@@ -88,11 +89,11 @@ test("buildOntologySeedFiles — 지도 + 타입마다 정의·템플릿, 관계
 test("문항 4개(질문 문구 + 선택지)에는 금지어가 없다 — 산출물(SCHEMA.md 용어)에는 걸지 않는다", () => {
   const bannedInQuestions = ["객체", "타입", "관계", "온톨로지"];
   const allQuestionText = [
-    ...Object.values(QUESTIONS),
-    ...Q1_OPTIONS,
-    ...Q2_CHIPS,
-    ...Q3_OPTIONS.map((o) => o.label),
-    ...Q4_OPTIONS,
+    ...Object.values(QUESTIONS).map((k) => ko[k]),
+    ...Q1_OPTIONS.map((o) => ko[o.labelKey]),
+    ...Q2_CHIPS.map((o) => ko[o.labelKey]),
+    ...Q3_OPTIONS.map((o) => ko[o.labelKey]),
+    ...Q4_OPTIONS.map((o) => ko[o.labelKey]),
   ];
   for (const label of allQuestionText) {
     for (const w of bannedInQuestions) assert.ok(!label.includes(w), `${label} 안에 "${w}"`);

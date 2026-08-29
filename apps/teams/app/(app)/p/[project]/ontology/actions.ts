@@ -12,9 +12,10 @@ import { loadMetrics } from "@/app/(app)/p/[project]/ontology/page";
 import { track } from "@/lib/analytics";
 import { kickIdleWorker } from "@/lib/kick";
 import { buildOntologySeedFiles, type OntologySurveyAnswers } from "@/lib/ontology-seed";
+import { DEFAULT_LOCALE, t, type Locale } from "@/lib/i18n";
 import { isRealDirectory, openWithinApp, type OpenResult } from "@/lib/paths";
 import { createFile, deleteFile, listTree, renameFile, saveFile } from "@/lib/protocols";
-import { getProject, resolveConfig } from "@/lib/projects";
+import { getProject, readLanguage, resolveConfig } from "@/lib/projects";
 import {
   ONTOLOGY_FIX_MARKER,
   ONTOLOGY_MIGRATION_MARKER,
@@ -34,7 +35,9 @@ export type OntologyResult = {
 
 async function baseOf(projectId: string): Promise<string> {
   const project = await getProject(projectId);
-  if (!project) throw new Error(`등록되지 않은 프로젝트입니다: ${projectId}`);
+  if (!project) {
+    throw new Error(`${t(await readLanguage(), "ontology.action.unknownProjectPrefix")} ${projectId}`);
+  }
   return (await resolveConfig(project)).ontology;
 }
 
@@ -164,6 +167,7 @@ async function writeQueueTicket(
   sfx: Suffixes,
   frontmatter: (hash: string) => string,
   body: string,
+  locale: Locale = DEFAULT_LOCALE,
 ): Promise<string> {
   const dir = path.join(root, "tickets");
   const names = (await readdir(dir)).filter((n) => n.endsWith(".md") && !n.startsWith("."));
@@ -184,10 +188,10 @@ async function writeQueueTicket(
     }
     return h;
   }
-  throw new Error("해시를 10번 뽑았는데 전부 이미 쓰이고 있습니다 — 큐 디렉터리를 확인하세요.");
+  throw new Error(t(locale, "ontology.action.hashExhausted"));
 }
 
-function writeFixTicket(root: string, sfx: Suffixes, violations: string[]): Promise<string> {
+function writeFixTicket(root: string, sfx: Suffixes, violations: string[], locale: Locale): Promise<string> {
   const n = violations.length;
   const body = [
     "## Goal",
@@ -218,6 +222,7 @@ function writeFixTicket(root: string, sfx: Suffixes, violations: string[]): Prom
         "---",
       ].join("\n"),
     body,
+    locale,
   );
 }
 
@@ -227,8 +232,11 @@ function writeFixTicket(root: string, sfx: Suffixes, violations: string[]): Prom
  *  탭이 둘이거나 요청을 손으로 만들어도 이 재확인을 지날 수 없다. */
 export async function fixOntologySchemaAction(projectId: string): Promise<FixTicketResult> {
   try {
+    const locale = await readLanguage();
     const project = await getProject(projectId);
-    if (!project) throw new Error(`등록되지 않은 프로젝트입니다: ${projectId}`);
+    if (!project) {
+      throw new Error(`${t(locale, "ontology.action.unknownProjectPrefix")} ${projectId}`);
+    }
     const config = await resolveConfig(project);
 
     const tickets = await listTickets(project.root, config);
@@ -237,9 +245,11 @@ export async function fixOntologySchemaAction(projectId: string): Promise<FixTic
 
     const base = config.ontology;
     const tree = await listTree(base);
-    const metrics = tree.length > 0 ? await loadMetrics(base, tree) : null;
+    // 위반 문장은 화면이 아니라 정리 티켓 본문(§P230)에 박힌다 — 산출물은 로케일 무관 한국어
+    // 고정이다(§0-16 §장치 §사전의 범위, `ontology-seed.ts`와 같은 판단, `2ef7a4e9`).
+    const metrics = tree.length > 0 ? await loadMetrics(base, tree, DEFAULT_LOCALE) : null;
 
-    const stem = await writeFixTicket(project.root, config, metrics?.schemaViolations ?? []);
+    const stem = await writeFixTicket(project.root, config, metrics?.schemaViolations ?? [], locale);
     void track("ticket_create", { kind: "work" });
     await kickIdleWorker(project.root);
     revalidatePath(`/p/${projectId}/ontology`);
@@ -303,8 +313,11 @@ const markerTicketFm = (h: string, marker: string, title: string) =>
  *  아니다). 마커는 프로젝트당 한 장이라 `마이그레이션 시작`과 첫 채움이 같은 티켓을 가리킨다. */
 export async function publishOntologyMigrationAction(projectId: string): Promise<PublishTicketResult> {
   try {
+    const locale = await readLanguage();
     const project = await getProject(projectId);
-    if (!project) throw new Error(`등록되지 않은 프로젝트입니다: ${projectId}`);
+    if (!project) {
+      throw new Error(`${t(locale, "ontology.action.unknownProjectPrefix")} ${projectId}`);
+    }
     const config = await resolveConfig(project);
 
     const tickets = await listTickets(project.root, config);
@@ -316,6 +329,7 @@ export async function publishOntologyMigrationAction(projectId: string): Promise
       config,
       (h) => markerTicketFm(h, ONTOLOGY_MIGRATION_MARKER, "온톨로지 마이그레이션"),
       publishBody(MIGRATION_GOAL),
+      locale,
     );
     void track("ticket_create", { kind: "work" });
     await kickIdleWorker(project.root);
@@ -336,11 +350,14 @@ export async function publishOntologyImportAction(
   folder: string,
 ): Promise<PublishTicketResult> {
   try {
+    const locale = await readLanguage();
     if (!(await isRealDirectory(folder))) {
-      return { ok: false, message: `실재하는 디렉터리가 아닙니다: ${folder}` };
+      // 같은 문장을 온톨로지 자리 편집 폼도 던진다 — 새 키를 안 만들고 그대로 재사용한다
+      // (§0-16, `2ef7a4e9`).
+      return { ok: false, message: `${t(locale, "ontology.location.notDirectory")} ${folder}` };
     }
     const project = await getProject(projectId);
-    if (!project) throw new Error(`등록되지 않은 프로젝트입니다: ${projectId}`);
+    if (!project) throw new Error(`${t(locale, "ontology.action.unknownProjectPrefix")} ${projectId}`);
     const config = await resolveConfig(project);
 
     const tickets = await listTickets(project.root, config);
@@ -353,6 +370,7 @@ export async function publishOntologyImportAction(
       config,
       (h) => markerTicketFm(h, marker, `온톨로지 import - ${path.basename(folder)}`),
       publishBody(importGoal(folder)),
+      locale,
     );
     void track("ticket_create", { kind: "work" });
     await kickIdleWorker(project.root);

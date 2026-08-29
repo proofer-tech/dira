@@ -11,45 +11,59 @@
  *  파싱해 타입·관계를 뽑아낼 필요가 없다 — 답 자체가 후보다. 나중에 코퍼스 스캔으로 보강하는
  *  갈래(§5-3 §생성)가 붙어도 이 빌더의 계약(입력 → 파일 목록)은 안 갈린다. */
 
-/** 문항 4개의 질문 문구 — 화면이 그대로 쓴다. 여기 상수로 두는 이유는 테스트가 "문항에 금지어가
- *  없다"를 이 파일 하나로 확인하기 위해서다(화면 문자열을 따로 베끼면 둘이 갈릴 수 있다). */
+/** 문항 4개의 질문 문구 — 화면이 그대로 쓴다. 값은 `lib/i18n.ts`의 `ko` 키다(§0-16, `2ef7a4e9`) —
+ *  여기 상수로 두는 이유는 테스트가 "문항에 금지어가 없다"를 이 파일 하나로 확인하기 위해서다
+ *  (화면 문자열을 따로 베끼면 둘이 갈릴 수 있다). 실제 문구는 `ontology-seed.test.ts`가
+ *  `lib/i18n.ts`의 `ko`에서 찾아본다. */
 export const QUESTIONS = {
-  q1: "이 프로젝트는 주로 무엇을 다루나요?",
-  q2: "일하다 보면 자주 이름을 불러 부르게 될 대상은 무엇인가요?",
-  q3: "나중에 이런 걸 물어보게 될 것 같나요?",
-  q4: "다음 중 프로젝트 자체가 아니라 작업 흔적이라 정리 대상이 아닌 것을 골라주세요",
+  q1: "ontology.survey.q1.question",
+  q2: "ontology.survey.q2.question",
+  q3: "ontology.survey.q3.question",
+  q4: "ontology.survey.q4.question",
 } as const;
 
 /** Q1 — 유도 프롬프트의 관점. 아키타입 팩이 아니다(타입은 Q2~Q4로 만든다) — 시드 머리말에
- *  한 줄로만 남는다. */
+ *  한 줄로만 남는다. `value`는 시드 문서에 그대로 박히는 응답 원문이라 로케일과 무관하게
+ *  한국어로 고정한다(§0-16 §장치 §사전의 범위 "산출물은 한국어 고정") — `labelKey`만 화면
+ *  표시용 `ko` 키다. */
 export const Q1_OPTIONS = [
-  "제품이나 코드를 만듭니다",
-  "글이나 콘텐츠를 만듭니다",
-  "사람을 상대합니다 (고객·파트너·팀)",
-  "자료를 모으고 정리합니다",
+  { value: "제품이나 코드를 만듭니다", labelKey: "ontology.survey.q1.option.product" },
+  { value: "글이나 콘텐츠를 만듭니다", labelKey: "ontology.survey.q1.option.content" },
+  { value: "사람을 상대합니다 (고객·파트너·팀)", labelKey: "ontology.survey.q1.option.people" },
+  { value: "자료를 모으고 정리합니다", labelKey: "ontology.survey.q1.option.data" },
 ] as const;
 
 /** Q2 — 객체 타입 1차 후보. 직접 입력은 화면이 `custom` 배열로 따로 받아 앞에 붙인다
- *  (설계: "직접 적은 것은 확신도가 높아 우선 채택"). */
-export const Q2_CHIPS = ["고객", "프로젝트", "문서", "작업", "제품"] as const;
+ *  (설계: "직접 적은 것은 확신도가 높아 우선 채택"). `value`가 그대로 객체 타입 이름이 되어
+ *  산출물 파일 이름에 박히므로 Q1과 같은 이유로 한국어 고정이다. */
+export const Q2_CHIPS = [
+  { value: "고객", labelKey: "ontology.survey.q2.chip.customer" },
+  { value: "프로젝트", labelKey: "ontology.survey.q2.chip.project" },
+  { value: "문서", labelKey: "ontology.survey.q2.chip.doc" },
+  { value: "작업", labelKey: "ontology.survey.q2.chip.task" },
+  { value: "제품", labelKey: "ontology.survey.q2.chip.product" },
+] as const;
 
 /** Q3 — 관계 타입 후보. 문항은 질문 문장이고 값은 그 질문이 묻는 관계 이름 하나다(질문의
- *  명사·동사를 미리 관계 이름으로 굳혀 자유 서술 파싱을 피한다). */
+ *  명사·동사를 미리 관계 이름으로 굳혀 자유 서술 파싱을 피한다). `relation`은 이미 화면
+ *  표시와 분리된 값이라(체크 판정·산출물 파일 이름에 쓰인다) 종전처럼 한국어 리터럴 그대로
+ *  둔다 — `labelKey`만 새로 더한다. */
 export const Q3_OPTIONS = [
-  { label: "이게 무엇과 연결되나요?", relation: "연결한다" },
-  { label: "누가 관여했나요?", relation: "담당한다" },
-  { label: "무엇 때문에 이렇게 됐나요?", relation: "원인이다" },
-  { label: "다음에 무엇으로 이어지나요?", relation: "이어진다" },
+  { labelKey: "ontology.survey.q3.option.connect", relation: "연결한다" },
+  { labelKey: "ontology.survey.q3.option.owner", relation: "담당한다" },
+  { labelKey: "ontology.survey.q3.option.cause", relation: "원인이다" },
+  { labelKey: "ontology.survey.q3.option.next", relation: "이어진다" },
 ] as const;
 
 /** Q4 — 경계(정리 대상이 아닌 것). 화면이 첫 항목을 기본 체크로 보여준다(설계: "dira 큐 자신은
  *  기본 제외로 제시한다"). 값은 시드 하단 주석에만 남는다 — 이 티켓 범위는 코퍼스 스캔 자체를
- *  안 건드린다(§5-3 §생성 "깊이 파지 않는다"). */
+ *  안 건드린다(§5-3 §생성 "깊이 파지 않는다"). `value`는 그 주석에 박히므로 Q1과 같은 이유로
+ *  한국어 고정이다. */
 export const Q4_OPTIONS = [
-  "이 프로젝트를 굴리는 관리 도구 자체(예: 지금 쓰는 이 화면)",
-  "임시 메모나 낙서",
-  "지나간 대화 로그",
-  "테스트로 남긴 파일",
+  { value: "이 프로젝트를 굴리는 관리 도구 자체(예: 지금 쓰는 이 화면)", labelKey: "ontology.survey.q4.option.tool" },
+  { value: "임시 메모나 낙서", labelKey: "ontology.survey.q4.option.memo" },
+  { value: "지나간 대화 로그", labelKey: "ontology.survey.q4.option.chatlog" },
+  { value: "테스트로 남긴 파일", labelKey: "ontology.survey.q4.option.testfile" },
 ] as const;
 
 export type OntologySurveyAnswers = {

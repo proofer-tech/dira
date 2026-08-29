@@ -153,6 +153,7 @@ export function OntologyImport({
   projectId: string;
   tickets: { stem: string; hash: string; status: string; folder: string }[];
 }) {
+  const t = useT();
   const router = useTrackedRouter();
   const [folder, setFolder] = useState("");
   const [pending, setPending] = useState(false);
@@ -177,7 +178,7 @@ export function OntologyImport({
         });
       }}
     >
-      <Label htmlFor={`import-dir-${projectId}`}>가져올 폴더</Label>
+      <Label htmlFor={`import-dir-${projectId}`}>{t("ontology.import.folderLabel")}</Label>
       <div className="flex items-center gap-2">
         <Input
           id={`import-dir-${projectId}`}
@@ -187,7 +188,7 @@ export function OntologyImport({
           onChange={(e) => setFolder(e.target.value)}
           aria-describedby={helpId}
         />
-        <PickPath mode="directory" label="가져올 폴더" onPick={setFolder} />
+        <PickPath mode="directory" label={t("ontology.import.folderLabel")} onPick={setFolder} />
         <Button
           type="submit"
           variant="outline"
@@ -195,22 +196,23 @@ export function OntologyImport({
           aria-describedby={helpId}
           className="aria-disabled:opacity-50"
         >
-          {pending ? "발행하는 중…" : "가져오기"}
+          {pending ? t("ontology.publishing") : t("ontology.import.title")}
         </Button>
       </div>
       <p id={helpId} className="text-xs text-muted-foreground">
-        폴더를 골라야 누를 수 있습니다 — 폴더 이름이 출처가 됩니다
+        {t("ontology.import.hint")}
       </p>
 
-      {error && <Failure title="가져오기 티켓을 만들지 못했습니다" message={error} />}
+      {error && <Failure title={t("ontology.import.failTitle")} message={error} />}
 
-      {tickets.map((t) => (
-        <p key={t.stem} className="text-xs text-muted-foreground">
+      {tickets.map((ticket) => (
+        <p key={ticket.stem} className="text-xs text-muted-foreground">
           <Link
-            href={`/p/${projectId}/tickets/${encodeURIComponent(t.stem)}`}
+            href={`/p/${projectId}/tickets/${encodeURIComponent(ticket.stem)}`}
             className="rounded-sm underline hover:text-foreground"
           >
-            가져오기 <span className="font-mono">{t.hash}</span> {t.folder} {t.status}
+            {t("ontology.import.title")} <span className="font-mono">{ticket.hash}</span> {ticket.folder}{" "}
+            {ticket.status}
           </Link>
         </p>
       ))}
@@ -227,6 +229,7 @@ export function NewOntologyFileButton({
   projectId: string;
   variant?: "default" | "outline";
 }) {
+  const t = useT();
   const router = useTrackedRouter();
   const sidebarOff = useSearchParams().get("sidebar") === "off";
   const [open, setOpen] = useState(false);
@@ -247,18 +250,18 @@ export function NewOntologyFileButton({
     >
       <DialogTrigger render={<Button size="sm" variant={variant} />}>
         <FilePlus2 aria-hidden />
-        새 파일
+        {t("ontology.new.trigger")}
       </DialogTrigger>
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle>새 파일</DialogTitle>
+          <DialogTitle>{t("ontology.new.trigger")}</DialogTitle>
           <DialogDescription>
-            온톨로지 디렉터리 기준 상대경로입니다. <span className="font-mono text-xs">/</span>를
-            넣으면 하위 디렉터리도 같이 만듭니다. 빈 파일로 만들고 바로 편집기가 열립니다.
+            {t("ontology.new.descPrefix")} <span className="font-mono text-xs">/</span>
+            {t("ontology.new.descSuffix")}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-2">
-          <Label htmlFor="new-ontology">경로</Label>
+          <Label htmlFor="new-ontology">{t("ontology.new.pathLabel")}</Label>
           <Input
             id="new-ontology"
             className="font-mono"
@@ -267,15 +270,15 @@ export function NewOntologyFileButton({
             onChange={(e) => setName(e.target.value)}
           />
           <p className="text-xs text-muted-foreground">
-            디렉터리 밖으로 나가는 경로(<span className="font-mono">../</span> · 절대경로)는 서버가
-            거부합니다.
+            {t("ontology.new.pathHintPrefix")}
+            <span className="font-mono">../</span> {t("ontology.new.pathHintSuffix")}
           </p>
           {result && !result.ok && (
-            <Failure title="파일을 만들지 못했습니다" message={result.message ?? ""} />
+            <Failure title={t("ontology.new.failTitle")} message={result.message ?? ""} />
           )}
         </div>
         <DialogFooter>
-          <DialogClose render={<Button variant="outline" />}>취소</DialogClose>
+          <DialogClose render={<Button variant="outline" />}>{t("common.cancel")}</DialogClose>
           <Button
             disabled={pending || !name.trim()}
             onClick={() =>
@@ -289,7 +292,7 @@ export function NewOntologyFileButton({
               })
             }
           >
-            {pending ? "만드는 중…" : "만들기"}
+            {pending ? t("common.creating") : t("common.create")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -303,13 +306,14 @@ export function NewOntologyFileButton({
  *  있으면 클라이언트 상태가 필요 없다). 발행되면 그 티켓 상세로 이동한다 — `NewOntologyFileButton`이
  *  새 파일 만들고 그 파일로 이동하는 것과 같은 결이다. */
 export function FixSchemaViolationsButton({ projectId }: { projectId: string }) {
+  const t = useT();
   const router = useTrackedRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
   return (
     <div className="mt-2 space-y-1">
-      {error && <Failure title="정리 티켓을 만들지 못했습니다" message={error} />}
+      {error && <Failure title={t("ontology.fix.failTitle")} message={error} />}
       <Button
         size="sm"
         variant="outline"
@@ -322,7 +326,7 @@ export function FixSchemaViolationsButton({ projectId }: { projectId: string }) 
           })
         }
       >
-        {pending ? "발행하는 중…" : "문제해결"}
+        {pending ? t("ontology.publishing") : t("ontology.fix.trigger")}
       </Button>
     </div>
   );
@@ -352,6 +356,7 @@ export function OntologyEditor({
    *  내려준다 */
   candidates?: FrontmatterCandidates | null;
 }) {
+  const t = useT();
   const router = useRouter();
   const [text, setText] = useState(initial);
   const [result, setResult] = useState<OntologyResult | null>(null);
@@ -383,12 +388,13 @@ export function OntologyEditor({
         candidates={candidates}
       />
 
-      {result && !result.ok && <Failure title="저장하지 못했습니다" message={result.message ?? ""} />}
+      {result && !result.ok && <Failure title={t("ontology.editor.saveFailTitle")} message={result.message ?? ""} />}
 
       {/* 부가 정보 → 보조 → 1차 순으로 오른쪽 정렬(§비주얼 §4-3) */}
       <div className="flex items-center justify-end gap-3">
         <span className="text-xs text-muted-foreground tabular-nums">
-          {[...text].length.toLocaleString()}자
+          {[...text].length.toLocaleString()}
+          {t("ontology.charSuffix")}
         </span>
         {dirty ? (
           <Button
@@ -400,10 +406,10 @@ export function OntologyEditor({
               setResetNonce((n) => n + 1);
             }}
           >
-            되돌리기
+            {t("ontology.editor.revert")}
           </Button>
         ) : (
-          result?.ok && <span className="text-sm text-muted-foreground">저장됐습니다.</span>
+          result?.ok && <span className="text-sm text-muted-foreground">{t("ontology.editor.saved")}</span>
         )}
         <Button
           size="sm"
@@ -416,7 +422,7 @@ export function OntologyEditor({
             })
           }
         >
-          {pending ? "저장 중…" : "저장"}
+          {pending ? t("common.saving") : t("common.save")}
         </Button>
       </div>
     </div>
@@ -466,6 +472,7 @@ function OpenInAppButton({ action }: { action: () => Promise<{ ok: boolean; mess
 // ── 이름변경 ────────────────────────────────────────────────────────────────
 
 function RenameOntologyButton({ projectId, rel }: { projectId: string; rel: string }) {
+  const t = useT();
   const router = useTrackedRouter();
   const sidebarOff = useSearchParams().get("sidebar") === "off";
   const [open, setOpen] = useState(false);
@@ -486,18 +493,17 @@ function RenameOntologyButton({ projectId, rel }: { projectId: string; rel: stri
     >
       <DialogTrigger render={<Button variant="ghost" size="sm" />}>
         <PencilLine aria-hidden />
-        이름변경
+        {t("ontology.rename.trigger")}
       </DialogTrigger>
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle>이름변경 — {rel}</DialogTitle>
-          <DialogDescription>
-            상대경로를 바꾸면 하위 디렉터리로 옮기는 것도 됩니다. 같은 이름의 파일이 이미 있으면
-            거부합니다 — 조용히 덮어쓰지 않습니다.
-          </DialogDescription>
+          <DialogTitle>
+            {t("ontology.rename.trigger")} — {rel}
+          </DialogTitle>
+          <DialogDescription>{t("ontology.rename.desc")}</DialogDescription>
         </DialogHeader>
         <div className="space-y-2">
-          <Label htmlFor="rename-ontology">새 경로</Label>
+          <Label htmlFor="rename-ontology">{t("ontology.rename.newPathLabel")}</Label>
           <Input
             id="rename-ontology"
             className="font-mono"
@@ -505,11 +511,11 @@ function RenameOntologyButton({ projectId, rel }: { projectId: string; rel: stri
             onChange={(e) => setTo(e.target.value)}
           />
           {result && !result.ok && (
-            <Failure title="이름을 바꾸지 못했습니다" message={result.message ?? ""} />
+            <Failure title={t("ontology.rename.failTitle")} message={result.message ?? ""} />
           )}
         </div>
         <DialogFooter>
-          <DialogClose render={<Button variant="outline" />}>취소</DialogClose>
+          <DialogClose render={<Button variant="outline" />}>{t("common.cancel")}</DialogClose>
           <Button
             disabled={pending || !to.trim() || to.trim() === rel}
             onClick={() =>
@@ -523,7 +529,7 @@ function RenameOntologyButton({ projectId, rel }: { projectId: string; rel: stri
               })
             }
           >
-            {pending ? "바꾸는 중…" : "이름변경"}
+            {pending ? t("ontology.rename.working") : t("ontology.rename.trigger")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -534,6 +540,7 @@ function RenameOntologyButton({ projectId, rel }: { projectId: string; rel: stri
 // ── 삭제 ────────────────────────────────────────────────────────────────────
 
 function DeleteOntologyButton({ projectId, rel }: { projectId: string; rel: string }) {
+  const t = useT();
   const router = useTrackedRouter();
   const sidebarOff = useSearchParams().get("sidebar") === "off";
   const [open, setOpen] = useState(false);
@@ -550,18 +557,19 @@ function DeleteOntologyButton({ projectId, rel }: { projectId: string; rel: stri
     >
       <DialogTrigger render={<Button variant="ghost" size="sm" />}>
         <Trash2 aria-hidden />
-        삭제
+        {t("ontology.delete.trigger")}
       </DialogTrigger>
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle>파일 삭제</DialogTitle>
+          <DialogTitle>{t("ontology.delete.dialogTitle")}</DialogTitle>
           <DialogDescription>
-            <span className="font-mono break-all">{rel}</span>를 지웁니다. 되돌릴 수 없습니다.
+            <span className="font-mono break-all">{rel}</span>
+            {t("ontology.delete.descSuffix")}
           </DialogDescription>
         </DialogHeader>
-        {result && !result.ok && <Failure title="지우지 못했습니다" message={result.message ?? ""} />}
+        {result && !result.ok && <Failure title={t("ontology.delete.failTitle")} message={result.message ?? ""} />}
         <DialogFooter>
-          <DialogClose render={<Button variant="outline" autoFocus />}>취소</DialogClose>
+          <DialogClose render={<Button variant="outline" autoFocus />}>{t("common.cancel")}</DialogClose>
           <Button
             variant="destructive"
             disabled={pending}
@@ -576,7 +584,7 @@ function DeleteOntologyButton({ projectId, rel }: { projectId: string; rel: stri
               })
             }
           >
-            {pending ? "삭제 중…" : "삭제"}
+            {pending ? t("ontology.delete.working") : t("ontology.delete.trigger")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -616,12 +624,13 @@ function CheckRow({
  *  제출 시점엔 stem을 모른다. 그래서 이 화면은 보드로 가리키는 줄 하나만 보여준다(폴링이
  *  지켜보는 것은 여전히 시드 파일뿐이다). */
 export function OntologySurveyForm({ projectId }: { projectId: string }) {
+  const t = useT();
   const router = useRouter();
   const [q1, setQ1] = useState("");
   const [q2Checked, setQ2Checked] = useState<string[]>([]);
   const [q2Custom, setQ2Custom] = useState("");
   const [q3, setQ3] = useState<string[]>([]);
-  const [q4, setQ4] = useState<string[]>([Q4_OPTIONS[0]]);
+  const [q4, setQ4] = useState<string[]>([Q4_OPTIONS[0].value]);
   const [pending, start] = useTransition();
   const [submitted, setSubmitted] = useState(false);
   const [result, setResult] = useState<OntologyResult | null>(null);
@@ -639,11 +648,11 @@ export function OntologySurveyForm({ projectId }: { projectId: string }) {
   if (submitted) {
     return (
       <p className="text-sm text-muted-foreground">
-        답을 바탕으로 만드는 중입니다… 이어지는 첫 채움은{" "}
+        {t("ontology.survey.pendingPrefix")}{" "}
         <Link href={`/p/${projectId}`} className="underline">
-          보드
+          {t("shell.nav.board")}
         </Link>
-        의 티켓 한 장으로 돕니다.
+        {t("ontology.survey.pendingSuffix")}
       </p>
     );
   }
@@ -654,43 +663,49 @@ export function OntologySurveyForm({ projectId }: { projectId: string }) {
   return (
     <div className="space-y-6">
       <fieldset className="space-y-2">
-        <Label>{QUESTIONS.q1}</Label>
+        <Label>{t(QUESTIONS.q1)}</Label>
         <div className="space-y-1">
           {Q1_OPTIONS.map((opt) => (
-            <label key={opt} className="flex items-center gap-2 text-sm">
-              <input type="radio" name="q1" className="size-4" checked={q1 === opt} onChange={() => setQ1(opt)} />
-              {opt}
+            <label key={opt.value} className="flex items-center gap-2 text-sm">
+              <input
+                type="radio"
+                name="q1"
+                className="size-4"
+                checked={q1 === opt.value}
+                onChange={() => setQ1(opt.value)}
+              />
+              {t(opt.labelKey)}
             </label>
           ))}
         </div>
       </fieldset>
 
       <fieldset className="space-y-2">
-        <Label>{QUESTIONS.q2}</Label>
+        <Label>{t(QUESTIONS.q2)}</Label>
         <div className="flex flex-wrap gap-x-4 gap-y-1">
           {Q2_CHIPS.map((chip) => (
             <CheckRow
-              key={chip}
-              label={chip}
-              checked={q2Checked.includes(chip)}
-              onChange={() => toggle(q2Checked, setQ2Checked, chip)}
+              key={chip.value}
+              label={t(chip.labelKey)}
+              checked={q2Checked.includes(chip.value)}
+              onChange={() => toggle(q2Checked, setQ2Checked, chip.value)}
             />
           ))}
         </div>
         <Input
-          placeholder="직접 입력 (쉼표로 여러 개)"
+          placeholder={t("ontology.survey.q2.customPlaceholder")}
           value={q2Custom}
           onChange={(e) => setQ2Custom(e.target.value)}
         />
       </fieldset>
 
       <fieldset className="space-y-2">
-        <Label>{QUESTIONS.q3}</Label>
+        <Label>{t(QUESTIONS.q3)}</Label>
         <div className="space-y-1">
           {Q3_OPTIONS.map((opt) => (
             <CheckRow
               key={opt.relation}
-              label={opt.label}
+              label={t(opt.labelKey)}
               checked={q3.includes(opt.relation)}
               onChange={() => toggle(q3, setQ3, opt.relation)}
             />
@@ -699,15 +714,20 @@ export function OntologySurveyForm({ projectId }: { projectId: string }) {
       </fieldset>
 
       <fieldset className="space-y-2">
-        <Label>{QUESTIONS.q4}</Label>
+        <Label>{t(QUESTIONS.q4)}</Label>
         <div className="space-y-1">
           {Q4_OPTIONS.map((opt) => (
-            <CheckRow key={opt} label={opt} checked={q4.includes(opt)} onChange={() => toggle(q4, setQ4, opt)} />
+            <CheckRow
+              key={opt.value}
+              label={t(opt.labelKey)}
+              checked={q4.includes(opt.value)}
+              onChange={() => toggle(q4, setQ4, opt.value)}
+            />
           ))}
         </div>
       </fieldset>
 
-      {result && !result.ok && <Failure title="만들지 못했습니다" message={result.message ?? ""} />}
+      {result && !result.ok && <Failure title={t("ontology.survey.failTitle")} message={result.message ?? ""} />}
 
       <Button
         disabled={pending || !q1}
@@ -725,7 +745,7 @@ export function OntologySurveyForm({ projectId }: { projectId: string }) {
           });
         }}
       >
-        {pending ? "만드는 중…" : "만들기"}
+        {pending ? t("common.creating") : t("common.create")}
       </Button>
     </div>
   );

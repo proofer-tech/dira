@@ -5,7 +5,14 @@
  *  wikilink 하나인 줄»만 관계 줄로 인정하는 판정(`parseObject`)이 재측정 수치의 전제다.
  *
  *  fs 모듈을 import하지 않는다 — 읽기는 호출자가 `lib/protocols.ts`로 하고, 여기는 이미 읽은
- *  텍스트만 받는다. 그래야 `node --test`로 이 판정 하나만 떼어 검증할 수 있다. */
+ *  텍스트만 받는다. 그래야 `node --test`로 이 판정 하나만 떼어 검증할 수 있다.
+ *
+ *  `schemaViolations`만 화면에 그려진다(`page.tsx`의 `OntologyMetricsPanel`, 항목 전문이
+ *  뜨는 자리는 그 배열 하나뿐이다) — 그래서 그 배열을 쌓는 문구만 `locale`을 받는다(§0-16,
+ *  `2ef7a4e9`). `hiddenEdges`·`normativeSentences`·`hierarchyCycles` 등 나머지 `.items`는
+ *  카운트·비율만 화면에 뜨고 문자열 자체는 `ontology.test.ts` 말고는 아무도 안 읽는다 —
+ *  화면 문구가 아니라서 그대로 한국어 리터럴로 둔다. */
+import { DEFAULT_LOCALE, t, wrap, type Locale } from "./i18n.ts";
 
 /** dira 형식 판정(§5-3 §온톨로지 자리를 워커가 재정의한다 §결정 3) — `_ontology/SCHEMA.md`와
  *  `objects/` 둘 다 없으면 형식이 아니다. 하나라도 있으면 선 것이고, 그 뒤는 종전 지표-검사
@@ -417,18 +424,19 @@ function findRedundantClasses(types: Set<string>, parsed: Pick<Parsed, "type">[]
     .map((t) => `잉여 클래스: '${t}' (인스턴스 0건)`);
 }
 
-function checkViewLinks(views: ObjectInput[], knownNames: Set<string>): string[] {
+function checkViewLinks(views: ObjectInput[], knownNames: Set<string>, locale: Locale): string[] {
   const violations: string[] = [];
+  const prefix = t(locale, "ontology.violation.danglingPrefix");
   for (const v of views) {
     const targets = new Set([...v.text.matchAll(LINK)].map((m) => m[1].split("|")[0].trim()));
     for (const target of [...targets].sort()) {
-      if (!knownNames.has(target)) violations.push(`댕글링: ${v.rel} -> [[${target}]]`);
+      if (!knownNames.has(target)) violations.push(`${prefix} ${v.rel} -> [[${target}]]`);
     }
   }
   return violations;
 }
 
-export function computeOntologyMetrics(input: OntologyInput): OntologyMetrics {
+export function computeOntologyMetrics(input: OntologyInput, locale: Locale = DEFAULT_LOCALE): OntologyMetrics {
   const { types, relTypes } = parseSchema(input.schemaText);
   const required = parseRequiredProps(input.typeFiles ?? []);
 
@@ -456,11 +464,15 @@ export function computeOntologyMetrics(input: OntologyInput): OntologyMetrics {
   let relationCount = 0;
   let proseLinkCount = 0;
 
+  const ofQuote = t(locale, "ontology.violation.ofQuote");
+  const danglingPrefix = t(locale, "ontology.violation.danglingPrefix");
   for (const p of parsed) {
     if (types.size > 0 && !types.has(p.type)) {
-      violations.push(`미정의 타입: ${p.rel} (타입 '${p.type}' 이 SCHEMA.md 에 없음)`);
+      violations.push(
+        `${t(locale, "ontology.violation.unknownTypePrefix")} ${p.rel} ${t(locale, "ontology.violation.unknownTypeMiddle")}${p.type}${t(locale, "ontology.violation.unknownTypeSuffix")}`,
+      );
     }
-    if (p.hasSection) violations.push(`## 절 사용: ${p.rel}`);
+    if (p.hasSection) violations.push(wrap(t(locale, "ontology.violation.sectionUsed"), p.rel, ""));
 
     const relTargets = new Set<string>();
     for (const [rname, target] of p.rels) {
@@ -468,7 +480,9 @@ export function computeOntologyMetrics(input: OntologyInput): OntologyMetrics {
       relTargets.add(target);
       const sig = relTypes.get(rname);
       if (relTypes.size > 0 && !relTypes.has(rname)) {
-        violations.push(`미정의 관계: ${p.rel} 의 '${rname}' (SCHEMA.md 관계 표에 없음)`);
+        violations.push(
+          `${t(locale, "ontology.violation.unknownRelationPrefix")} ${p.rel} ${ofQuote}${rname}${t(locale, "ontology.violation.unknownRelationSuffix")}`,
+        );
       } else if (sig && sig.length > 0) {
         const targetType = typeOf.get(target);
         const ok = sig.some((pair) => pair.from.has(p.type) && (targetType === undefined || pair.to.has(targetType)));
@@ -477,11 +491,11 @@ export function computeOntologyMetrics(input: OntologyInput): OntologyMetrics {
             .map((pair) => `${[...pair.from].sort().join("·")} -> ${[...pair.to].sort().join("·")}`)
             .join(" / ");
           violations.push(
-            `정의역·치역 위반: ${p.rel} 의 '${rname}' (${p.type} -> ${targetType ?? "?"}) 인데 스키마는 [${sigStr}]`,
+            `${t(locale, "ontology.violation.domainRangePrefix")} ${p.rel} ${ofQuote}${rname}${t(locale, "ontology.violation.domainRangeMid")}${p.type} -> ${targetType ?? "?"}${t(locale, "ontology.violation.domainRangeSuffix")}${sigStr}]`,
           );
         }
       }
-      if (!names.has(target)) violations.push(`댕글링: ${p.rel} -> [[${target}]]`);
+      if (!names.has(target)) violations.push(`${danglingPrefix} ${p.rel} -> [[${target}]]`);
     }
 
     const proseText = p.prose.join("\n");
@@ -505,7 +519,11 @@ export function computeOntologyMetrics(input: OntologyInput): OntologyMetrics {
 
     const have = [...p.props, ...p.rels.map(([r]) => r)];
     const miss = (required.get(p.type) ?? []).filter((r) => !have.some((h) => h === r || h.startsWith(r)));
-    if (miss.length > 0) violations.push(`필수 속성 누락: ${p.rel} (${p.type}) -> ${miss.join(", ")}`);
+    if (miss.length > 0) {
+      violations.push(
+        `${t(locale, "ontology.violation.missingRequiredPrefix")} ${p.rel} (${p.type}) -> ${miss.join(", ")}`,
+      );
+    }
 
     if (p.props.length < 2) shellItems.push(`껍데기(속성 ${p.props.length}개): ${p.rel}`);
     if (p.rels.length === 0 && myIncoming.size === 0) isolatedItems.push(`고립(들고나는 관계 0개): ${p.rel}`);
@@ -513,7 +531,7 @@ export function computeOntologyMetrics(input: OntologyInput): OntologyMetrics {
 
   const views = input.views ?? [];
   const viewNames = new Set(views.map((v) => typeAndName(v.rel).name));
-  violations.push(...checkViewLinks(views, new Set([...names, ...viewNames])));
+  violations.push(...checkViewLinks(views, new Set([...names, ...viewNames]), locale));
 
   const hierarchyCycleItems = findHierarchyCycles(parsed);
   const polysemousItems = findPolysemousElements(parsed);

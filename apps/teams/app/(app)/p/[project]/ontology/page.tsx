@@ -32,7 +32,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { statusLabel } from "@/components/status-badge";
-import { t } from "@/lib/i18n";
+import { t, type Locale } from "@/lib/i18n";
 import { buildVault } from "@/lib/markdown-wikilinks";
 import type { FrontmatterCandidates } from "@/lib/markdown-frontmatter-rows";
 import { computeOntologyMetrics, isDiraFormat, parseTypeProperties, type OntologyMetrics } from "@/lib/ontology";
@@ -70,7 +70,7 @@ import { cn } from "@/lib/utils";
  *
  *  `ontology/actions.ts`의 `문제해결` 액션도 같은 위반 목록이 필요해 이 함수를 그대로 가져다
  *  쓴다(§P230) — 새 실행층 없이 export만 늘렸다. */
-export async function loadMetrics(base: string, tree: ProtocolEntry[]): Promise<OntologyMetrics> {
+export async function loadMetrics(base: string, tree: ProtocolEntry[], locale: Locale): Promise<OntologyMetrics> {
   const basename = (rel: string) => rel.split("/").at(-1) ?? rel;
   const text = async (rel: string) => (await readTextFile(base, rel)).text ?? "";
 
@@ -92,7 +92,7 @@ export async function loadMetrics(base: string, tree: ProtocolEntry[]): Promise<
     Promise.all(typeFileEntries.map(async (e) => ({ rel: e.rel, text: await text(e.rel) }))),
   ]);
 
-  return computeOntologyMetrics({ schemaText, objects, views, actionLogs, typeFiles });
+  return computeOntologyMetrics({ schemaText, objects, views, actionLogs, typeFiles }, locale);
 }
 
 // 온톨로지도 세션이 GUI 밖에서 고친다 — 프리렌더하면 빌드 시점 내용이 굳는다.
@@ -114,7 +114,8 @@ export default async function Ontology({
   const expanded = sidebar !== "off";
   // 트리 링크가 나르는 값 — 접힌 상태가 파일 고르기를 지나 유지된다(계약).
   const sidebarQuery = expanded ? "" : "&sidebar=off";
-  const toggleLabel = expanded ? "파일 목록 접기" : "파일 목록 펴기";
+  const locale = await readLanguage();
+  const toggleLabel = expanded ? t(locale, "ontology.sidebar.collapse") : t(locale, "ontology.sidebar.expand");
   // 지금 URL에서 `sidebar`만 뒤집는다 — `?file=`은 한 개도 안 잃는다(계약).
   const toggleHref = (() => {
     const usp = new URLSearchParams();
@@ -144,7 +145,6 @@ export default async function Ontology({
     </Tooltip>
   );
 
-  const locale = await readLanguage();
   const config = await resolveConfig(project);
   const base = config.ontology;
   const ontologyAssumed = usingDefault(config, "ontology");
@@ -155,7 +155,7 @@ export default async function Ontology({
   const tree = await listTree(base);
   // §5-3 §온톨로지 자리를 워커가 재정의한다 §결정 3 — 형식이 아닌 폴더는 지표를 아예 안 낸다.
   const diraFormat = isDiraFormat(tree);
-  const metrics = tree.length > 0 && diraFormat ? await loadMetrics(base, tree) : null;
+  const metrics = tree.length > 0 && diraFormat ? await loadMetrics(base, tree, locale) : null;
   // 위지윅 면의 `[[이름]]` -> 링크(§비주얼 §10 §위키링크) — 이름 집합은 여기서 한 번 읽는다.
   const vault = buildVault(tree, (rel) => `/p/${id}/ontology?file=${encodeURIComponent(rel)}`);
 
@@ -225,7 +225,7 @@ export default async function Ontology({
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-lg font-semibold">온톨로지</h1>
+          <h1 className="text-lg font-semibold">{t(locale, "shell.nav.ontology")}</h1>
           {/* 이 경로 줄이 편집 표면이다(§5-3 §편집 표면이 있는 화면, 티켓 c5d51522) — 파일트리가
               0장인 프로젝트에서도 이 조건문 밖이라 그대로 뜬다. */}
           <OntologyLocationEditor
@@ -239,7 +239,7 @@ export default async function Ontology({
           />
           <div className="mt-1 font-mono text-xs break-all text-muted-foreground">
             {base}
-            {ontologyAssumed && <span className="ml-2 font-sans">기본값 가정</span>}
+            {ontologyAssumed && <span className="ml-2 font-sans">{t(locale, "ontology.usingDefault")}</span>}
             {ontologyWarn && (
               <span className="ml-2 inline-flex items-center gap-1 font-sans text-status-stale">
                 <TriangleAlert aria-hidden className="size-3.5" />
@@ -251,7 +251,9 @@ export default async function Ontology({
         {tree.length > 0 && <NewOntologyFileButton projectId={id} />}
       </div>
 
-      {metrics && <OntologyMetricsPanel metrics={metrics} projectId={id} fixTicket={fixTicket} />}
+      {metrics && (
+        <OntologyMetricsPanel metrics={metrics} projectId={id} fixTicket={fixTicket} locale={locale} />
+      )}
 
       {tree.length > 0 && !diraFormat && (
         <Alert>
@@ -266,15 +268,17 @@ export default async function Ontology({
         // 설문은 **선택**이다 — 건너뛰고 `직접 만들기`로 빈 파일을 열 수도 있다.
         <div className="max-w-2xl space-y-6">
           <div className="space-y-1">
-            <h2 className="text-sm font-medium">몇 가지만 답하면 시작할 자료를 만들어 드립니다</h2>
+            <h2 className="text-sm font-medium">{t(locale, "ontology.empty.heading")}</h2>
             <p className="text-sm text-muted-foreground">
-              건너뛰어도 이 프로젝트는 그대로 돕니다 — <span className="font-mono text-xs">tick.sh</span>는{" "}
-              <span className="font-mono text-xs">ontology/</span>가 비어 있으면 그냥 넘어갑니다.
+              {t(locale, "ontology.empty.bodyPrefix")} <span className="font-mono text-xs">tick.sh</span>
+              {t(locale, "ontology.empty.bodyMiddle")}{" "}
+              <span className="font-mono text-xs">ontology/</span>
+              {t(locale, "ontology.empty.bodySuffix")}
             </p>
           </div>
           <OntologySurveyForm projectId={id} />
           <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-            <span>답할 게 마땅치 않다면 건너뛰고 빈 파일부터 시작해도 됩니다.</span>
+            <span>{t(locale, "ontology.empty.skipHint")}</span>
             <NewOntologyFileButton projectId={id} variant="outline" />
           </div>
         </div>
@@ -294,7 +298,7 @@ export default async function Ontology({
           <Sidebar
             collapsible="none"
             role="navigation"
-            aria-label="온톨로지 파일"
+            aria-label={t(locale, "ontology.sidebar.ariaLabel")}
             className={`w-full shrink-0 rounded-lg border bg-surface ${expanded ? "lg:w-80" : "lg:w-10"}`}
           >
             <SidebarContent className="py-2">
@@ -316,14 +320,14 @@ export default async function Ontology({
             {rejected ? (
               <Alert variant="destructive">
                 <TriangleAlert aria-hidden />
-                <AlertTitle>이 경로는 열 수 없습니다</AlertTitle>
+                <AlertTitle>{t(locale, "ontology.rejected.title")}</AlertTitle>
                 <AlertDescription>
                   <span className="font-mono text-xs break-all">{rejected}</span>
                 </AlertDescription>
               </Alert>
             ) : !selected ? (
               <p className="text-sm text-muted-foreground">
-                {expanded ? "파일을 고르세요." : "파일 목록을 펴서 고르세요."}
+                {expanded ? t(locale, "ontology.picker.expanded") : t(locale, "ontology.picker.collapsed")}
               </p>
             ) : selected.text === null ? (
               <Alert>
@@ -416,63 +420,70 @@ function OntologyMetricsPanel({
   metrics: m,
   projectId,
   fixTicket,
+  locale,
 }: {
   metrics: OntologyMetrics;
   projectId: string;
   fixTicket: Ticket | null;
+  locale: Locale;
 }) {
   const pct = (r: number) => `${Math.round(r * 100)}%`;
+  const count = t(locale, "ontology.unit.count");
+  const noRecord = t(locale, "ontology.metrics.noRecord");
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-2 gap-4 rounded-lg border bg-surface p-4 sm:grid-cols-4">
-        <MetricStat label="객체 · 관계" value={`${m.objectCount} · ${m.relationCount}`} />
+        <MetricStat label={t(locale, "ontology.metrics.objectRelation")} value={`${m.objectCount} · ${m.relationCount}`} />
         <MetricStat
-          label="숨은 간선"
-          value={`${m.hiddenEdges.count}건 (${pct(m.hiddenEdges.ratio)})`}
+          label={t(locale, "ontology.metrics.hiddenEdges")}
+          value={`${m.hiddenEdges.count}${count} (${pct(m.hiddenEdges.ratio)})`}
           alert={m.hiddenEdges.count > 0}
         />
         <MetricStat
-          label="규범 문장"
-          value={`${m.normativeSentences.count}건`}
+          label={t(locale, "ontology.metrics.normativeSentences")}
+          value={`${m.normativeSentences.count}${count}`}
           alert={m.normativeSentences.count > 0}
         />
         <MetricStat
-          label="서술 한 문장"
-          value={`${m.singleSentenceProse.count}건 (${pct(m.singleSentenceProse.ratio)})`}
+          label={t(locale, "ontology.metrics.singleSentenceProse")}
+          value={`${m.singleSentenceProse.count}${count} (${pct(m.singleSentenceProse.ratio)})`}
         />
-        <MetricStat label="껍데기" value={`${m.shells.count}건 (${pct(m.shells.ratio)})`} />
-        <MetricStat label="고립" value={`${m.isolated.count}건 (${pct(m.isolated.ratio)})`} />
+        <MetricStat label={t(locale, "ontology.metrics.shells")} value={`${m.shells.count}${count} (${pct(m.shells.ratio)})`} />
+        <MetricStat label={t(locale, "ontology.metrics.isolated")} value={`${m.isolated.count}${count} (${pct(m.isolated.ratio)})`} />
         <MetricStat
-          label="계층 순환"
-          value={`${m.hierarchyCycles.count}건`}
+          label={t(locale, "ontology.metrics.hierarchyCycles")}
+          value={`${m.hierarchyCycles.count}${count}`}
           alert={m.hierarchyCycles.count > 0}
         />
         <MetricStat
-          label="다의적 요소"
-          value={`${m.polysemousElements.count}건`}
+          label={t(locale, "ontology.metrics.polysemousElements")}
+          value={`${m.polysemousElements.count}${count}`}
           alert={m.polysemousElements.count > 0}
         />
         <MetricStat
-          label="잉여 클래스"
-          value={`${m.redundantClasses.count}건`}
+          label={t(locale, "ontology.metrics.redundantClasses")}
+          value={`${m.redundantClasses.count}${count}`}
           alert={m.redundantClasses.count > 0}
         />
         <MetricStat
-          label="빈손 비율"
-          value={m.emptyHanded.total > 0 ? pct(m.emptyHanded.ratio) : "기록 없음"}
+          label={t(locale, "ontology.metrics.emptyHandedRatio")}
+          value={m.emptyHanded.total > 0 ? pct(m.emptyHanded.ratio) : noRecord}
           alert={m.emptyHanded.total > 0 && m.emptyHanded.ratio < 0.1}
         />
         <MetricStat
-          label="스키마 개정(누적)"
-          value={`${m.schemaStability.reduce((n, d) => n + d.count, 0)}건`}
+          label={t(locale, "ontology.metrics.schemaStability")}
+          value={`${m.schemaStability.reduce((n, d) => n + d.count, 0)}${count}`}
         />
-        <MetricStat label="마지막 반영" value={m.lastUpdated ?? "기록 없음"} />
+        <MetricStat label={t(locale, "ontology.metrics.lastUpdated")} value={m.lastUpdated ?? noRecord} />
       </div>
 
       {m.schemaViolations.length > 0 && (
         <Alert variant="destructive">
           <TriangleAlert aria-hidden />
-          <AlertTitle>스키마 위반 {m.schemaViolations.length}건</AlertTitle>
+          <AlertTitle>
+            {t(locale, "ontology.metrics.violationsPrefix")} {m.schemaViolations.length}
+            {count}
+          </AlertTitle>
           <AlertDescription>
             <ul className="mt-1 space-y-1 font-mono text-xs">
               {m.schemaViolations.slice(0, 10).map((v, i) => (
@@ -482,7 +493,10 @@ function OntologyMetricsPanel({
               ))}
             </ul>
             {m.schemaViolations.length > 10 && (
-              <p className="mt-1 text-xs">외 {m.schemaViolations.length - 10}건</p>
+              <p className="mt-1 text-xs">
+                {t(locale, "ontology.metrics.moreCountPrefix")} {m.schemaViolations.length - 10}
+                {count}
+              </p>
             )}
             {fixTicket ? (
               <p className="mt-2 text-xs">
@@ -490,7 +504,7 @@ function OntologyMetricsPanel({
                   href={`/p/${projectId}/tickets/${fixTicket.stem}`}
                   className="underline underline-offset-2"
                 >
-                  정리 티켓 {fixTicket.stem} {statusLabel(statusOf(fixTicket))}
+                  {t(locale, "ontology.metrics.fixTicketPrefix")} {fixTicket.stem} {statusLabel(statusOf(fixTicket))}
                 </Link>
               </p>
             ) : (
