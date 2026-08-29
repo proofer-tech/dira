@@ -119,6 +119,7 @@ const FILLED = [
   "boardPage.", // 6d818d48이 en을 채우고 여기 더했다(묶음 표 행 3의 보드 갈래)
   "findBar.", // 같은 티켓 — 찾기 바는 화면 접두가 아니라 파일 접두다(묶음 11과 같은 판단)
   "home.", // c357313f가 en을 채우고 여기 더했다(묶음 표 행 6의 홈 갈래)
+  "ontology.", // 024ec871이 en을 채우고 여기 더했다(묶음 표 행 12의 온톨로지 갈래)
 ];
 
 test("이미 찬 묶음(설정·마감·셸)의 ko 키는 en에 하나도 안 빠졌다", () => {
@@ -959,6 +960,83 @@ test("c357313f — 홈 화면의 조립 문구가 영어에서도 문장이 된�
   assert.strictEqual(
     t(l, "home.action.unknownProjectPrefix"),
     t(l, "projectActions.unknownProjectPrefix"),
+  );
+});
+
+// 024ec871 — 온톨로지 화면(묶음 표 행 12 갈래). 값이 끼는 자리가 아홉이고, 그중 셋은
+// **변수가 접두라** 어순을 못 뒤집는다(글자 수 · 삭제할 경로 · 지표의 수). 조립식은 화면 파일과
+// `lib/ontology.ts` 그대로 두고 결과만 여기서 고정한다.
+test("024ec871 — 온톨로지 화면의 조립 문구가 영어에서도 문장이 된다(en)", () => {
+  const l = "en" as const;
+
+  // ontology-ui.tsx 새 파일 다이얼로그 — `/`와 `../`가 각각 가운데에 낀다.
+  assert.strictEqual(
+    `${t(l, "ontology.new.descPrefix")} /${t(l, "ontology.new.descSuffix")}`,
+    "A path relative to the ontology directory. / creates any subdirectories along the way. The file starts empty and the editor opens on it right away.",
+  );
+  assert.strictEqual(
+    `${t(l, "ontology.new.pathHintPrefix")}../ ${t(l, "ontology.new.pathHintSuffix")}`,
+    "The server rejects paths that leave the directory (../ · absolute).",
+  );
+
+  // 편집기 꼬리와 삭제 다이얼로그 — 앞에 수와 경로가 공백 없이 붙는다.
+  assert.strictEqual(`1,024${t(l, "ontology.charSuffix")}`, "1,024 chars");
+  assert.strictEqual(
+    `SCHEMA.md${t(l, "ontology.delete.descSuffix")}`,
+    "SCHEMA.md will be deleted. This can't be undone.",
+  );
+  // 이름변경 다이얼로그 제목 — em dash는 JSX가 찍는다.
+  assert.strictEqual(`${t(l, "ontology.rename.trigger")} — SCHEMA.md`, "Rename — SCHEMA.md");
+
+  // 설문 제출 뒤 대기 문장 — 가운데 `Board`가 셸의 키를 그대로 재사용한다.
+  assert.strictEqual(
+    `${t(l, "ontology.survey.pendingPrefix")} ${t(l, "shell.nav.board")}${t(l, "ontology.survey.pendingSuffix")}`,
+    "Building from your answers… the first pass runs as one ticket on the Board.",
+  );
+
+  // page.tsx 빈 트리 안내 — `tick.sh`와 `ontology/`가 차례로 낀다.
+  assert.strictEqual(
+    `${t(l, "ontology.empty.bodyPrefix")} tick.sh${t(l, "ontology.empty.bodyMiddle")} ontology/${t(l, "ontology.empty.bodySuffix")}`,
+    "This project runs even if you skip this — tick.sh just moves on when ontology/ is empty.",
+  );
+
+  // 지표 판 — 꼬리 하나(`ontology.unit.count`)를 열두 칸과 위반 카드 둘이 같이 문다.
+  const count = t(l, "ontology.unit.count");
+  assert.strictEqual(`3${count} (12%)`, "3 found (12%)");
+  assert.strictEqual(`1${count}`, "1 found"); // 1이 실제로 뜨는 자리다 — 복수형 명사를 못 쓴다
+  assert.strictEqual(`${t(l, "ontology.metrics.violationsPrefix")} 12${count}`, "Schema violations — 12 found");
+  assert.strictEqual(`${t(l, "ontology.metrics.moreCountPrefix")} 2${count}`, "Another 2 found");
+  assert.strictEqual(
+    `${t(l, "ontology.metrics.fixTicketPrefix")} 1a2b3c4d.wip`,
+    "Cleanup ticket 1a2b3c4d.wip",
+  );
+
+  // lib/ontology.ts 위반 문장 — `ofQuote`를 미정의 관계와 정의역·치역 위반이 같이 쓴다.
+  assert.strictEqual(
+    `${t(l, "ontology.violation.unknownTypePrefix")} objects/a.md ${t(l, "ontology.violation.unknownTypeMiddle")}Customer${t(l, "ontology.violation.unknownTypeSuffix")}`,
+    "Undefined type: objects/a.md (type 'Customer' is not in SCHEMA.md)",
+  );
+  assert.strictEqual(
+    `${t(l, "ontology.violation.unknownRelationPrefix")} objects/a.md ${t(l, "ontology.violation.ofQuote")}owns${t(l, "ontology.violation.unknownRelationSuffix")}`,
+    "Undefined relation: objects/a.md — 'owns' (not in the SCHEMA.md relation table)",
+  );
+  assert.strictEqual(
+    `${t(l, "ontology.violation.domainRangePrefix")} objects/a.md ${t(l, "ontology.violation.ofQuote")}owns${t(l, "ontology.violation.domainRangeMid")}Customer -> Doc${t(l, "ontology.violation.domainRangeSuffix")}Customer -> Order]`,
+    "Domain/range violation: objects/a.md — 'owns' (Customer -> Doc) but the schema says [Customer -> Order]",
+  );
+  assert.strictEqual(
+    `${t(l, "ontology.violation.danglingPrefix")} objects/a.md -> [[Foo]]`,
+    "Dangling link: objects/a.md -> [[Foo]]",
+  );
+
+  // 세 화면이 같은 거절을 말하는 자리라 글자가 갈리면 여기서 깨진다.
+  assert.strictEqual(
+    t(l, "ontology.action.unknownProjectPrefix"),
+    t(l, "boardPage.action.unknownProjectPrefix"),
+  );
+  assert.strictEqual(
+    t(l, "ontology.action.hashExhausted"),
+    t(l, "boardPage.action.hashExhausted"),
   );
 });
 

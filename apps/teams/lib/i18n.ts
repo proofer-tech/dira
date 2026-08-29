@@ -1504,6 +1504,12 @@ export const ko: Record<string, string> = {
  *  | 담당 · 생성일(표 컬럼) | Owner · Created | 둘 다 frontmatter 키 이름과 같은 낱말이라 갈릴 자리가 없다 |
  *  | 아카이빙 | archiving | 완료 티켓이 무는 아카이브 티켓이 도는 동안이다. 카드 한 줄 셋이 `Archiving`을 머리로 나눠 갖는다 |
  *  | 찾기(찾기 바) | Find | 지금 보는 화면 안에서 글자를 짚는 일이다 — 큐를 거르는 `Search`와 다른 동작이라 낱말을 가른다 |
+ *  | 객체 · 관계 · 액션 | object · relation · action | `024ec871`(온톨로지 묶음)가 더한 줄부터 아래. 스키마가 정한 개념 이름이라 `entity`·`edge`·`event`로 안 푼다. `액션`은 위 키설정 줄의 `action`과 같은 낱말이다 |
+ *  | 객체 타입 · 관계 타입 | object type · relation type | 설문 4문항만 이 낱말을 피한다(`ontology-seed.ts` 머리 주석) — 처음 여는 사람에게 아직 낱말이 아니다 |
+ *  | 간선 · 댕글링 · 정의역 · 치역 | edge · dangling · domain · range | 위반 문장과 지표 이름의 낱말이다. `숨은 간선`만 `edge`를 쓰고, 관계 자체는 늘 `relation`이다 |
+ *  | 빈손(회차 기록) | empty-handed | 아무것도 안 채운 회차다. 지표 이름은 `Empty-handed rate` |
+ *  | 가져오기 · 정리 티켓 · 문제해결 | Import · Cleanup ticket · Fix violations | 끝엣것은 버튼이라 무엇을 고치는지까지 적는다 — 한국어가 카드 안에서 자명하던 자리다 |
+ *  | 건(지표 단위) | found | 숫자 뒤 꼬리다(`3 found`). 이 자리는 1도 뜨는데 복수형 장치가 없어, 수를 세는 명사 대신 수가 몇이든 같은 꼴인 낱말을 쓴다 |
  *
  *  **어순이 뒤집히는 자리는 접두·접미 두 키로 쪼갠다.** 한국어는 이름 뒤에 다 붙지만(`<이름>
  *  삭제`) 영어는 동사가 앞에 뜬다(`Delete <name>`) — 한쪽이 비는 것이 정상이고, 조립은
@@ -2602,6 +2608,144 @@ export const en: Record<string, string> = {
 
   // `projectActions.unknownProjectPrefix`와 **같은 글자다** — 같은 거절을 액션 파일들이 각자 든다.
   "home.action.unknownProjectPrefix": "Not a registered project:",
+
+  // 온톨로지 화면(§0-16 §발행 §묶음 표 행 12 갈래) — `ko`는 `2ef7a4e9`가 뽑았다.
+  // **`protocols-ui.tsx`와 판박이인 자리(새 파일 · 편집기 · 이름변경 · 삭제 · 사이드바)는
+  // `protocols.*`의 영어를 글자 그대로 가져다 쓴다** — 화면이 갈려 키가 둘일 뿐 같은 동작이라,
+  // 여기서 낱말을 새로 고르면 두 화면이 다른 말을 하게 된다.
+  "ontology.import.folderLabel": "Folder to import",
+  "ontology.publishing": "Publishing…",
+  "ontology.import.title": "Import",
+  // 버튼 아래 도움말. 뒤에 이 문구를 `aria-describedby`로 무는 버튼이 있어 문장으로 끝낸다.
+  "ontology.import.hint": "Pick a folder first — its name becomes the source.",
+  "ontology.import.failTitle": "Couldn't create the import ticket",
+
+  "ontology.new.trigger": "New file",
+  // `/`가 가운데 끼고 접미가 공백 없이 그 뒤를 잇는다(`… directory. / creates any …`).
+  "ontology.new.descPrefix": "A path relative to the ontology directory.",
+  "ontology.new.descSuffix":
+    " creates any subdirectories along the way. The file starts empty and the editor opens on it right away.",
+  "ontology.new.pathLabel": "Path",
+  // 가운데에 `../`가 낀다(`… directory (../ · absolute).`).
+  "ontology.new.pathHintPrefix": "The server rejects paths that leave the directory (",
+  "ontology.new.pathHintSuffix": "· absolute).",
+  "ontology.new.failTitle": "Couldn't create the file",
+
+  // 위반 카드 안의 버튼이라 무엇을 고치는지까지 적는다 — 한국어 `문제해결`이 카드 안에서
+  // 자명하던 자리다. 누르는 동안은 위 `ontology.publishing`이 뜬다.
+  "ontology.fix.failTitle": "Couldn't create the cleanup ticket",
+  "ontology.fix.trigger": "Fix violations",
+
+  "ontology.editor.saveFailTitle": "Couldn't save",
+  // 글자 수 뒤에 붙는다 — 한국어는 공백이 없고(`123자`) 영어는 하나 있다(`123 chars`).
+  "ontology.charSuffix": " chars",
+  "ontology.editor.revert": "Revert",
+  "ontology.editor.saved": "Saved.",
+
+  // 다이얼로그 제목이 `Rename — <경로>`로 조립된다(`protocols.rename.dialogTitlePrefix`가
+  // 세운 그 벌인데, 이 화면은 em dash를 JSX가 찍어 접두 키가 따로 없다).
+  "ontology.rename.trigger": "Rename",
+  "ontology.rename.desc":
+    "Change the relative path and the file moves into a subdirectory too. If that name already exists the rename is refused — nothing gets overwritten quietly.",
+  "ontology.rename.newPathLabel": "New path",
+  "ontology.rename.failTitle": "Couldn't rename",
+  "ontology.rename.working": "Renaming…",
+
+  "ontology.delete.trigger": "Delete",
+  "ontology.delete.dialogTitle": "Delete file",
+  // 앞에 경로가 붙는다(`SCHEMA.md will be deleted. …`) — 한국어는 조사가, 영어는 동사가 온다.
+  "ontology.delete.descSuffix": " will be deleted. This can't be undone.",
+  "ontology.delete.failTitle": "Couldn't delete",
+  "ontology.delete.working": "Deleting…",
+
+  // 생성 설문 4문항 — **«object» · «type» · «relation» · «ontology»를 안 쓴다**. 한국어 문항이
+  // «객체»·«타입»·«관계»·«온톨로지»를 피한 것과 같은 이유다(`ontology-seed.ts` 머리 주석):
+  // 처음 여는 사람에게 아직 낱말이 아니다. 산출물(`SCHEMA.md`)은 그 용어를 그대로 쓴다.
+  "ontology.survey.q1.question": "What does this project mostly deal with?",
+  "ontology.survey.q1.option.product": "We build a product or write code",
+  "ontology.survey.q1.option.content": "We produce writing and content",
+  "ontology.survey.q1.option.people": "We deal with people (customers, partners, teams)",
+  "ontology.survey.q1.option.data": "We collect material and keep it in order",
+  "ontology.survey.q2.question": "What will you end up naming over and over as you work?",
+  "ontology.survey.q2.chip.customer": "Customer",
+  "ontology.survey.q2.chip.project": "Project",
+  "ontology.survey.q2.chip.doc": "Document",
+  "ontology.survey.q2.chip.task": "Task",
+  "ontology.survey.q2.chip.product": "Product",
+  "ontology.survey.q2.customPlaceholder": "Type your own (comma-separated)",
+  "ontology.survey.q3.question": "Will you want to ask things like these later?",
+  "ontology.survey.q3.option.connect": "What is this connected to?",
+  "ontology.survey.q3.option.owner": "Who was involved?",
+  "ontology.survey.q3.option.cause": "What made this turn out this way?",
+  "ontology.survey.q3.option.next": "What does this lead to next?",
+  "ontology.survey.q4.question":
+    "Pick anything that is a trace of the work rather than the project itself — those stay out",
+  "ontology.survey.q4.option.tool": "The tool that runs this project (this screen, for one)",
+  "ontology.survey.q4.option.memo": "Scratch notes and doodles",
+  "ontology.survey.q4.option.chatlog": "Old chat logs",
+  "ontology.survey.q4.option.testfile": "Files left over from testing",
+  // 제출 뒤 대기 문장 — 가운데에 `shell.nav.board`(`Board`) 링크가 낀다. 접미는 마침표뿐이다.
+  "ontology.survey.pendingPrefix":
+    "Building from your answers… the first pass runs as one ticket on the",
+  "ontology.survey.pendingSuffix": ".",
+  "ontology.survey.failTitle": "Couldn't create it",
+
+  // 스키마 위반 문장(`lib/ontology.ts`) — 조각 사이에 파일 경로 · 타입 이름 · 관계 이름이
+  // 낀다. `ontology.violation.ofQuote`는 미정의 관계와 정의역·치역 위반 **둘이 같이 쓴다**.
+  "ontology.violation.unknownTypePrefix": "Undefined type:",
+  "ontology.violation.unknownTypeMiddle": "(type '",
+  "ontology.violation.unknownTypeSuffix": "' is not in SCHEMA.md)",
+  "ontology.violation.sectionUsed": "## section used:",
+  "ontology.violation.unknownRelationPrefix": "Undefined relation:",
+  "ontology.violation.ofQuote": "— '",
+  "ontology.violation.unknownRelationSuffix": "' (not in the SCHEMA.md relation table)",
+  "ontology.violation.domainRangePrefix": "Domain/range violation:",
+  "ontology.violation.domainRangeMid": "' (",
+  "ontology.violation.domainRangeSuffix": ") but the schema says [",
+  "ontology.violation.danglingPrefix": "Dangling link:",
+  "ontology.violation.missingRequiredPrefix": "Missing required property:",
+
+  "ontology.sidebar.collapse": "Collapse the file list",
+  "ontology.sidebar.expand": "Expand the file list",
+  "ontology.usingDefault": "assumed default",
+  "ontology.sidebar.ariaLabel": "Ontology files",
+  "ontology.rejected.title": "Can't open this path",
+  "ontology.picker.expanded": "Pick a file.",
+  "ontology.picker.collapsed": "Expand the file list and pick a file.",
+  "ontology.metrics.objectRelation": "Objects · relations",
+  "ontology.metrics.hiddenEdges": "Hidden edges",
+  "ontology.metrics.normativeSentences": "Normative sentences",
+  "ontology.metrics.singleSentenceProse": "One-sentence prose",
+  "ontology.metrics.shells": "Shells",
+  "ontology.metrics.isolated": "Isolated",
+  "ontology.metrics.hierarchyCycles": "Hierarchy cycles",
+  "ontology.metrics.polysemousElements": "Polysemous elements",
+  "ontology.metrics.redundantClasses": "Redundant classes",
+  "ontology.metrics.emptyHandedRatio": "Empty-handed rate",
+  "ontology.metrics.schemaStability": "Schema revisions (cumulative)",
+  "ontology.metrics.lastUpdated": "Last update",
+  "ontology.metrics.noRecord": "No record",
+  // 수 뒤에 공백 없이 붙는다(`3 found`) — 한국어 `건`이 선 자리다. 복수형 장치가 없는데
+  // **이 자리는 1이 실제로 뜬다**(`잉여 클래스 1건`을 화면에서 봤다) — 그래서 `items`처럼
+  // 수를 세는 명사를 안 쓰고 수가 몇이든 같은 꼴인 낱말을 골랐다. 아래 두 접두는 그 꼬리를
+  // 물고 문장이 되게 맞췄다.
+  "ontology.unit.count": " found",
+  "ontology.metrics.violationsPrefix": "Schema violations —",
+  "ontology.metrics.moreCountPrefix": "Another",
+  "ontology.metrics.fixTicketPrefix": "Cleanup ticket",
+  "ontology.empty.heading": "Answer a few questions and you get files to start from",
+  // 가운데에 `tick.sh`와 `ontology/`가 차례로 낀다(`… — tick.sh just moves on when
+  // ontology/ is empty.`) — `protocols.empty.*`가 선 그 벌이다.
+  "ontology.empty.bodyPrefix": "This project runs even if you skip this —",
+  "ontology.empty.bodyMiddle": " just moves on when",
+  "ontology.empty.bodySuffix": " is empty.",
+  "ontology.empty.skipHint": "Nothing worth answering? Skip it and start from an empty file.",
+
+  // `boardPage.action.*`와 **같은 문장 둘이다** — 같은 거절을 화면마다 각자 말하는 자리라
+  // 낱말이 갈리면 안 된다(`f3a8794e`가 선 그 벌).
+  "ontology.action.unknownProjectPrefix": "Not a registered project:",
+  "ontology.action.hashExhausted":
+    "Drew 10 hashes and every one is already taken — check the queue directory.",
 };
 
 const DICTS: Record<Locale, Record<string, string>> = { ko, en };

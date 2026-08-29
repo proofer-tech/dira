@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { ko } from "./i18n.ts";
+import { en, ko } from "./i18n.ts";
 import {
   buildOntologySeedFiles,
   buildSeed,
@@ -87,15 +87,23 @@ test("buildOntologySeedFiles — 지도 + 타입마다 정의·템플릿, 관계
 });
 
 test("문항 4개(질문 문구 + 선택지)에는 금지어가 없다 — 산출물(SCHEMA.md 용어)에는 걸지 않는다", () => {
-  const bannedInQuestions = ["객체", "타입", "관계", "온톨로지"];
-  const allQuestionText = [
-    ...Object.values(QUESTIONS).map((k) => ko[k]),
-    ...Q1_OPTIONS.map((o) => ko[o.labelKey]),
-    ...Q2_CHIPS.map((o) => ko[o.labelKey]),
-    ...Q3_OPTIONS.map((o) => ko[o.labelKey]),
-    ...Q4_OPTIONS.map((o) => ko[o.labelKey]),
+  const labelKeys = [
+    ...Object.values(QUESTIONS),
+    ...Q1_OPTIONS.map((o) => o.labelKey),
+    ...Q2_CHIPS.map((o) => o.labelKey),
+    ...Q3_OPTIONS.map((o) => o.labelKey),
+    ...Q4_OPTIONS.map((o) => o.labelKey),
   ];
-  for (const label of allQuestionText) {
-    for (const w of bannedInQuestions) assert.ok(!label.includes(w), `${label} 안에 "${w}"`);
+  // 금지는 로케일이 아니라 **사용자가 보는 질문**에 건다 — 영어로 놓은 사람도 같은 문항을
+  // 읽으므로 두 사전을 같이 잰다(`024ec871`이 en을 채우며 더했다).
+  const banned = { ko: ["객체", "타입", "관계", "온톨로지"], en: ["object", "type", "relation", "ontology"] };
+  for (const [locale, dict] of [["ko", ko] as const, ["en", en] as const]) {
+    for (const key of labelKeys) {
+      const label = dict[key];
+      assert.ok(label, `${locale}에 ${key}가 없다`);
+      for (const w of banned[locale]) {
+        assert.ok(!label.toLowerCase().includes(w), `${locale} "${label}" 안에 "${w}"`);
+      }
+    }
   }
 });
