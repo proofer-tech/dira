@@ -1,6 +1,7 @@
 import { strict as assert } from "node:assert";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { ko } from "./lib/i18n.ts";
 
 // `session-stream.tsx`는 next/CSS를 끌고 오는 클라이언트 컴포넌트라 import를 못 댄다
 // (선례 `sidebar.test.ts` · `workers-ui.test.ts`) — 그래서 소스 글자를 댄다.
@@ -8,6 +9,9 @@ import test from "node:test";
 // 그 안 §9 묶음 줄과 같은 수를 두 번 세던 자리를 닫는다. 여기서 고정하는 것은 그 꼬리가 다시
 // 서지 않는다는 것과, 겹치지 않는 안쪽 묶음 줄(§9)은 한 글자도 안 갈린다는 것 — 눈으로 보면
 // 지나치기 쉬운 회귀라 소스 검사로 고정한다.
+//
+// 티켓 33563f49(§0-16 §묶음 표 행 5 갈래)가 이 파일의 리터럴 한국어를 `lib/i18n.ts` `ko` 키로
+// 옮겼다 — 소스 검사는 이제 사전 키 호출을 보고, 문구 자체는 `ko`를 직접 읽어 맞댄다.
 const s = readFileSync("components/session-stream.tsx", "utf8");
 
 test("계획 꼬리 문구가 없다 — `기록 n건`을 두 번 세는 줄이 화면에 없다(§59 ③-1)", () => {
@@ -42,9 +46,11 @@ test("계획 손잡이가 `ml-auto`를 받는다 — 꼬리가 죽으며 옮겨 
 test("안쪽 §9 묶음 줄은 한 글자도 안 갈린다 — 겹치지 않는 갈래(§59 ③-1 §갈리지 않는 것)", () => {
   assert.match(
     s,
-    /<MarkerContent className="tabular-nums">기록 \{events\.length\}건<\/MarkerContent>/,
+    /<MarkerContent className="tabular-nums">\s*\{t\("sessionStream\.recordCount\.label"\)\} \{events\.length\}\s*\{t\("sessionStream\.recordCount\.unit"\)\}\s*<\/MarkerContent>/,
     "§9 묶음 줄의 `기록 n건`이 갈렸다",
   );
+  assert.equal(ko["sessionStream.recordCount.label"], "기록", "묶음 줄의 `기록` 낱말이 갈렸다");
+  assert.equal(ko["sessionStream.recordCount.unit"], "건", "묶음 줄의 `건` 단위가 갈렸다");
 });
 
 // 티켓 311b537a(§비주얼 §59 §안쪽 겹 개정, 요구 `7b87494f`): 계획 아코디언과 `배정`·`마무리`
@@ -93,8 +99,13 @@ test("계획 밖 틈(계획 사이)의 ProgressItems는 여전히 flat이 아니
 test("참견 칸 placeholder가 목적지를 칸 안에서 알려 준다 — `도는 세션에 말 걸기`(§Done when 1)", () => {
   assert.match(
     s,
-    /placeholder=\{followup \? "이어서 무엇을 할지 쓰기" : "도는 세션에 말 걸기"\}/,
-    "참견 placeholder가 `도는 세션에 말 걸기`가 아니다 — 참견 칸이 도는 세션에 간다는 것을 안 알려 준다",
+    /placeholder=\{\s*followup \? t\("sessionStream\.followupPlaceholder"\) : t\("sessionStream\.interjectPlaceholder"\)\s*\}/,
+    "참견 placeholder가 사전 키 호출로 안 갈린다",
+  );
+  assert.equal(
+    ko["sessionStream.interjectPlaceholder"],
+    "도는 세션에 말 걸기",
+    "참견 placeholder 문구가 `도는 세션에 말 걸기`가 아니다 — 참견 칸이 도는 세션에 간다는 것을 안 알려 준다",
   );
 });
 
@@ -146,10 +157,11 @@ test("답변 대기면 참견 폼이 안 뜨고 목적지 문장과 함께 답�
     answerBranch >= 0 && formBuilt >= 0 && answerBranch < formBuilt,
     "답변 분기가 참견 폼보다 먼저 return하지 않는다",
   );
-  assert.match(
-    s,
-    /답변을 달면 이 티켓이 다시 큐에 뜨고 담당 세션이 이어서 봅니다\./,
-    "답변 모드가 무엇을 하는지 가리키는 문장이 없다",
+  assert.match(s, /\{t\("sessionStream\.answerHint"\)\}/, "답변 모드가 무엇을 하는지 가리키는 문장이 없다");
+  assert.equal(
+    ko["sessionStream.answerHint"],
+    "답변을 달면 이 티켓이 다시 큐에 뜨고 담당 세션이 이어서 봅니다.",
+    "답변 힌트 문구가 갈렸다",
   );
 });
 

@@ -527,12 +527,15 @@ export function SessionStream({
                   </button>
                 );
               })}
-              <span className="ml-auto text-xs text-muted-foreground tabular-nums">기록 {merged.length}건</span>
-              {!live && <p className="text-xs text-muted-foreground">끝난 세션 · 갱신 없음</p>}
+              <span className="ml-auto text-xs text-muted-foreground tabular-nums">
+                {t("sessionStream.recordCount.label")} {merged.length}
+                {t("sessionStream.recordCount.unit")}
+              </span>
+              {!live && <p className="text-xs text-muted-foreground">{t("sessionStream.closedNoUpdate")}</p>}
               {detached && (
                 <Button variant="ghost" size="sm" onClick={() => setDetached(false)}>
                   <ArrowDown aria-hidden className="size-3.5" />
-                  맨 아래로
+                  {t("sessionStream.scrollToBottom")}
                 </Button>
               )}
             </div>
@@ -541,7 +544,7 @@ export function SessionStream({
       ) : (
         <div className="flex h-8 items-center justify-between gap-2">
           <div className="flex min-w-0 items-baseline gap-2">
-            <h2 className="text-sm font-medium">진행 기록</h2>
+            <h2 className="text-sm font-medium">{t("sessionStream.heading")}</h2>
             {costChunk && (
               <span className="text-xs text-muted-foreground" title={costChunk.title}>
                 {costChunk.text}
@@ -553,11 +556,13 @@ export function SessionStream({
               상자가 뜨는 조건과 같다(`stream || merged.length > 0`, 자리는 `맨 아래로` 다음). */}
           {(stream || merged.length > 0) && (
             <div className="flex items-center gap-2">
-              {stream && !live && <p className="text-xs text-muted-foreground">끝난 세션 · 갱신 없음</p>}
+              {stream && !live && (
+                <p className="text-xs text-muted-foreground">{t("sessionStream.closedNoUpdate")}</p>
+              )}
               {stream && detached && (
                 <Button variant="ghost" size="sm" onClick={() => setDetached(false)}>
                   <ArrowDown aria-hidden className="size-3.5" />
-                  맨 아래로
+                  {t("sessionStream.scrollToBottom")}
                 </Button>
               )}
               <Button variant="ghost" size="sm" onClick={() => setExpanded(true)}>
@@ -578,10 +583,11 @@ export function SessionStream({
            둘이라 그 문장이 틀렸다(신고 `3d0a5585`). 이 자리가 답할 것은 "왜 비었나"뿐이라
            집합을 세지 않는 문장으로 족하다. */
         <EmptyState
-          text={`이 워커의 엔진은 ${engine}입니다`}
+          text={`${t("sessionStream.engineIsPrefix")} ${engine}${t("sessionStream.engineIsSuffix")}`}
           action={
             <span className="text-xs text-muted-foreground">
-              {engine}는 트랜스크립트를 남기지 않습니다
+              {engine}
+              {t("sessionStream.noTranscriptSuffix")}
             </span>
           }
         />
@@ -738,7 +744,7 @@ export function SessionStream({
         <Dialog open={expanded} onOpenChange={setExpanded}>
           <DialogContent className="flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden sm:max-w-[75rem]">
             <DialogHeader>
-              <DialogTitle>진행 기록</DialogTitle>
+              <DialogTitle>{t("sessionStream.heading")}</DialogTitle>
               <DialogDescription className="font-mono text-xs break-all">{stem}</DialogDescription>
             </DialogHeader>
             <SessionStream
@@ -978,13 +984,14 @@ function ThreadRow({
   /** 산문 속 해시-P번호 표식의 값(§9) */
   refs?: RefIndex;
 }) {
+  const t = useT();
   if (item.role === "question") {
     return (
       <div className="px-3 py-2">
         {/* 헤더가 자기 본문 첫 글자와 같은 x(12)에 뜬다(§9) — `px-0`은 항목 껍데기의 `px-3`과
             겹치지 않게 하는 한 클래스다. */}
         <MessageHeader className="px-0">
-          {item.heading || "질문"}
+          {item.heading || t("sessionStream.question")}
           {item.hash && <span className="ml-2 font-mono">{item.hash}</span>}
         </MessageHeader>
         {/* 질문은 PM이 감은 절이라 줄바꿈을 안 그린다(§10 면제 — §9와 같은 판정) */}
@@ -1001,7 +1008,7 @@ function ThreadRow({
               아니라 `--background`라 `--muted-foreground`가 4.73 / 7.63이다(§29 ① — 병합으로
               한 칸 좋아지는 유일한 자리고, 새로 잰 것이 아니라 §9 표의 1행이다) */}
           <MessageHeader>
-            {item.heading || "답변"}
+            {item.heading || t("sessionStream.answer")}
             {item.hash && <span className="ml-2 font-mono">{item.hash}</span>}
           </MessageHeader>
           <Bubble variant="outline" align="end">
@@ -1018,40 +1025,40 @@ function ThreadRow({
 
 /** §비주얼 §21 실패 4종. **`reason` 코드로 갈린다** — `error` 문장을 되짚으면 문구를 한 자
  *  고치는 날 화면이 조용히 뭉친다. `other`는 §21에 항이 없는 나머지고 제목 한 줄 + 원문이다. */
-const FAIL: Record<InterjectReason, { title: string; next?: string }> = {
+const FAIL = (t: (key: string) => string): Record<InterjectReason, { title: string; next?: string }> => ({
   ENXIO: {
-    title: "보내지 못했습니다 — 세션이 끝났습니다",
-    next: "이 티켓엔 더 이상 도는 세션이 없습니다. 위 글을 복사해 새 티켓으로 지시하세요.",
+    title: t("sessionStream.fail.enxio.title"),
+    next: t("sessionStream.fail.enxio.next"),
   },
   ENOENT: {
-    title: "보내지 못했습니다 — 입구가 없습니다",
-    next: "세션이 방금 끝났거나 엔진이 입구를 못 만들었습니다. 한 번 더 보내 보고, 그래도 안 되면 새 티켓으로 지시하세요.",
+    title: t("sessionStream.fail.enoent.title"),
+    next: t("sessionStream.fail.enoent.next"),
   },
   "not-wip": {
-    title: "보내지 못했습니다 — 진행중이 아닙니다",
-    next: "참견은 도는 세션에만 닿습니다. 새 티켓으로 지시하세요.",
+    title: t("sessionStream.fail.notWip.title"),
+    next: t("sessionStream.fail.notWip.next"),
   },
   "no-inbox": {
-    title: "보내지 못했습니다 — 참견을 받지 못하는 세션입니다",
-    next: "옛 세션이거나 입구를 만들지 않는 엔진입니다. 새 티켓으로 지시하세요.",
+    title: t("sessionStream.fail.noInbox.title"),
+    next: t("sessionStream.fail.noInbox.next"),
   },
-  other: { title: "보내지 못했습니다" },
-};
+  other: { title: t("sessionStream.fail.other.title") },
+});
 
 /** 완료 모드(이어받기)의 실패 2종 — §비주얼 §21 `완료 모드` 실패 표.
  *  **`보내지 못했습니다`로 시작하지 않는다**: 두 모드의 Alert가 같은 문장이면 스크린샷 한 장으로
  *  어느 칸에서 난 실패인지 가리지 못한다. 모드 어긋남에 `새로고침`을 적는 이유는 완료 티켓의
  *  폴링이 1회에 멈춰서다(§2-1) — 화면이 스스로 모드를 고쳐 잡지 않는다. */
-const FAIL_DONE: Record<FollowupReason, { title: string; next?: string }> = {
+const FAIL_DONE = (t: (key: string) => string): Record<FollowupReason, { title: string; next?: string }> => ({
   "not-done": {
-    title: "발행하지 못했습니다 — 완료 티켓이 아닙니다",
-    next: "이어받기는 완료 티켓의 것입니다. 새로고침하고 다시 보세요 — 도는 세션이면 이 칸이 참견으로 바뀝니다.",
+    title: t("sessionStream.failDone.notDone.title"),
+    next: t("sessionStream.failDone.notDone.next"),
   },
   other: {
-    title: "발행하지 못했습니다",
-    next: "위 글을 복사해 보드에서 발행하세요.",
+    title: t("sessionStream.failDone.other.title"),
+    next: t("sessionStream.failDone.other.next"),
   },
-};
+});
 
 /** 진행 기록의 입력칸 — **하나고 모드가 셋이다**(DESIGN.md §2-3 ③ · §2-2 · §비주얼 §21).
  *
@@ -1115,6 +1122,7 @@ function ProgressForm({
   /** 산문 속 해시-P번호 표식의 값(§9) — 답변 모드의 `AnswerForm`에 그대로 흘려보낸다 */
   refs?: RefIndex;
 }) {
+  const t = useT();
   const router = useTrackedRouter();
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
@@ -1159,7 +1167,7 @@ function ProgressForm({
     return answerFile ? (
       <div className="space-y-2">
         <p className="text-xs text-muted-foreground">
-          답변을 달면 이 티켓이 다시 큐에 뜨고 담당 세션이 이어서 봅니다.
+          {t("sessionStream.answerHint")}
         </p>
         <AnswerForm
           project={project}
@@ -1211,7 +1219,7 @@ function ProgressForm({
         return;
       }
       setSending(false);
-      setFail({ mode, ...FAIL_DONE[r.reason], detail: r.detail });
+      setFail({ mode, ...FAIL_DONE(t)[r.reason], detail: r.detail });
     } else {
       const r = await sendInterject(project, stem, text, att.paths);
       setSending(false);
@@ -1220,7 +1228,7 @@ function ProgressForm({
         att.reset(); // 칩은 글과 **같은 타이밍**에 빈다. 올라간 파일은 안 지운다(§8 수명)
         setSent(true);
       } else {
-        setFail({ mode, ...FAIL[r.reason], detail: r.detail });
+        setFail({ mode, ...FAIL(t)[r.reason], detail: r.detail });
       }
     }
     input.current?.focus(); // 참견은 연달아 하게 되고, 실패는 두 모드 다 이 칸으로 돌아온다(§21)
@@ -1239,9 +1247,11 @@ function ProgressForm({
           ref={input}
           // 이름 셋이 보내기 **전에** 두 모드를 가른다(§21 완료 모드) — `참견`·`보내기`만으로는
           // 파일 한 장이 생긴다는 것을 감춘다.
-          aria-label={followup ? "이어받기" : "참견"}
+          aria-label={followup ? t("sessionStream.followupAria") : t("sessionStream.interjectAria")}
           aria-describedby={off ? offId : undefined}
-          placeholder={followup ? "이어서 무엇을 할지 쓰기" : "도는 세션에 말 걸기"}
+          placeholder={
+            followup ? t("sessionStream.followupPlaceholder") : t("sessionStream.interjectPlaceholder")
+          }
           className="max-h-32"
           value={text}
           // 세션이 끝난 뒤 남은 폼은 `readOnly`다. `disabled`면 사람이 쓴 글을 선택·복사할 수 없다
@@ -1281,11 +1291,9 @@ function ProgressForm({
                 무엇이 몇 장 생기는지. 완료 모드에는 성공 문구가 없어서(페이지가 이동한다)
                 비어 있는 자리를 쓰는 것이고 요소가 늘지 않는다 — 절 높이 692가 그대로다. */}
             {followup ? (
-              <span className="min-w-0 truncate text-xs">새 열린 티켓 1장이 생깁니다</span>
+              <span className="min-w-0 truncate text-xs">{t("sessionStream.followupHint")}</span>
             ) : (
-              sent && (
-                <span className="min-w-0 truncate text-xs">보냈습니다 · 아래 스트림에 뜹니다</span>
-              )
+              sent && <span className="min-w-0 truncate text-xs">{t("sessionStream.sentHint")}</span>
             )}
             {/* `bg-muted`를 깔지 않는다 — `--muted-foreground`가 라이트 4.34로 AA 미달이다(§21 · §1
                 함정). 반경은 addon이 이미 준다(`[&>kbd]:rounded-…`). `ml-auto`가 여기 걸려서
@@ -1311,11 +1319,11 @@ function ProgressForm({
               {followup ? <FilePlus2 aria-hidden /> : <Send aria-hidden />}
               {followup
                 ? sending
-                  ? "발행 중…"
-                  : "이어서 발행"
+                  ? t("sessionStream.publishing")
+                  : t("sessionStream.publishAction")
                 : sending
-                  ? "보내는 중…"
-                  : "보내기"}
+                  ? t("sessionStream.sending")
+                  : t("sessionStream.sendAction")}
             </InputGroupButton>
           </InputGroupAddon>
         )}
@@ -1334,8 +1342,8 @@ function ProgressForm({
               이 워커는 그런 워커다. **엔진 이름을 알려 준다**: 이 자리에 뜨는 엔진이 codex
               하나가 아니게 됐고(grok도 온다), 이름이 없으면 사람이 어느 쪽인지 모른다. */}
           {noInterject
-            ? `이 워커의 엔진은 ${engine}입니다 — 참견은 claude 엔진에서만 됩니다`
-            : "이 세션은 참견을 받지 못합니다 — 티켓에 inbox가 없습니다"}
+            ? `${t("sessionStream.engineIsPrefix")} ${engine}${t("sessionStream.claudeOnlySuffix")}`
+            : t("sessionStream.noInboxStatic")}
         </p>
       )}
 
@@ -1397,7 +1405,7 @@ function Row({
   // 순서가 `서브 · 오류 · <요약>`이다(§60 ⑤). 표식 낱말만 `text-foreground`, 나머지는 Marker
   // 기본값 `text-muted-foreground` 그대로 — 색이 아니라 밝기로 갈린다(§60 ②).
   const errorLabel = e.error ? t("progress.stream.error") : null;
-  const summary = [e.sidechain ? "서브" : null, errorLabel, e.summary]
+  const summary = [e.sidechain ? t("sessionStream.sub") : null, errorLabel, e.summary]
     .filter((s) => s !== null)
     .join(" · ");
   // 워커 다이얼로그의 소요 칸(§2-15 ⑦) — `tool_use` 줄에만, 짝이 없으면 칸이 빈다.
@@ -1425,7 +1433,7 @@ function Row({
       <MarkerContent className={cn("truncate", e.summaryMono && "font-mono")} title={summary}>
         {errorLabel ? (
           <>
-            {e.sidechain ? "서브 · " : null}
+            {e.sidechain ? `${t("sessionStream.sub")} · ` : null}
             <span className="text-foreground">{errorLabel}</span>
             {` · ${e.summary}`}
           </>
@@ -1510,7 +1518,7 @@ function Row({
             줄과 같은 잉크라 내용으로 읽힌다. */}
         {e.replaceAll && (
           <p className="ml-6 text-xs text-muted-foreground">
-            <span className="font-mono">replace_all</span> · 일치하는 곳 전부
+            <span className="font-mono">replace_all</span> · {t("sessionStream.matchAllSuffix")}
           </p>
         )}
         <pre className="mt-1 mb-2 ml-6 max-h-96 overflow-auto rounded-md bg-muted p-3 font-mono text-xs break-words whitespace-pre-wrap text-foreground">
@@ -1550,6 +1558,7 @@ export function Bundle({
    *  줄 자체는 여전히 `<details>`다(§2-15 ② — 얹는 것은 펼친 뒤의 줄과 상자 바깥뿐이다). */
   ctx?: WorkerRowCtx;
 }) {
+  const t = useT();
   return (
     <details
       className="open:[&>summary>span>svg:first-child]:rotate-90"
@@ -1566,7 +1575,10 @@ export function Bundle({
         <MarkerIcon>
           <ChevronRight />
         </MarkerIcon>
-        <MarkerContent className="tabular-nums">기록 {events.length}건</MarkerContent>
+        <MarkerContent className="tabular-nums">
+          {t("sessionStream.recordCount.label")} {events.length}
+          {t("sessionStream.recordCount.unit")}
+        </MarkerContent>
       </Marker>
       {events.map((e) => (
         <Row key={e.key} e={e} onToggle={onToggle} ctx={ctx} />
@@ -1743,7 +1755,7 @@ function DetailPanel({
         <DetailSection label={t("progress.stream.input")} copyText={event.body}>
           {event.replaceAll && (
             <p className="text-xs text-muted-foreground">
-              <span className="font-mono">replace_all</span> · 일치하는 곳 전부
+              <span className="font-mono">replace_all</span> · {t("sessionStream.matchAllSuffix")}
             </p>
           )}
           <pre className={PANEL_PRE}>{diffOrBody(event)}</pre>
@@ -1765,9 +1777,10 @@ function DetailPanel({
  *  그것뿐이다. 줄바꿈은 §10 면제와 같은 판정이다: 세션은 파일에 쓰듯 쓴 글이라 `breaks` 없이,
  *  사람은 입력칸에 친 글이라 `breaks="all"`로 친 줄바꿈이 정본이다. */
 function StreamBubble({ e, refs }: { e: StreamEvent; refs?: RefIndex }) {
+  const t = useT();
   const session = e.kind === "text";
-  const who = session ? "세션" : "사람";
-  const header = e.sidechain ? `서브 · ${who}` : who;
+  const who = session ? t("sessionStream.session") : t("sessionStream.person");
+  const header = e.sidechain ? `${t("sessionStream.sub")} · ${who}` : who;
 
   if (session) {
     return (

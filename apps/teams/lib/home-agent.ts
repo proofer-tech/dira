@@ -1753,6 +1753,7 @@ export async function pollHome(
 ): Promise<HomeChunk> {
   /** 나가는 문 셋이 **같은 판정 하나**를 지난다 — 둘이 예외 경로라 잊기 쉬운 자리다 */
   const chunk = (c: Omit<HomeChunk, "done">): HomeChunk => ({ ...c, done: pollDone(c) });
+  const locale = await readLanguage();
   // 목록과 `current`를 **한 번에** 읽는다 — 화면이 둘 다 이 응답에서 받는다(위 `conversations`).
   const { conversations, current, schedules } = await readHome(projectId);
   const workers = await workerSessionsById(projectId);
@@ -1826,7 +1827,7 @@ export async function pollHome(
   const activity = running
     ? (entry?.live.activity ?? null)
     : workerLive && file
-      ? activityFromEvent(await lastEvent(file))
+      ? activityFromEvent(await lastEvent(file, false, locale))
       : null;
   if (!file) {
     return chunk({
@@ -1853,7 +1854,7 @@ export async function pollHome(
       refs: NO_REFS,
     });
   }
-  const r = await tailEvents(file, at);
+  const r = await tailEvents(file, at, false, locale);
   const turns = toTurns(r.events);
   // **겹침 판정**(§7 §누적기를 비우는 자리 — 요구 `3dc948ac` · 실측 `c5d287ac`, 이 머신).
   // 누적기는 `message_start`에서만 비므로(`eatLine` 무수정) 도구가 도는 동안은 그대로 있다.

@@ -1446,6 +1446,92 @@ export const ko: Record<string, string> = {
   "home.weekday.sun": "일",
 
   "home.action.unknownProjectPrefix": "등록되지 않은 프로젝트입니다:",
+
+  // 세션 스트림(§0-16 §묶음 표 행 5 갈래, `33563f49`) — `components/session-stream.tsx` ·
+  // `lib/interject.ts`. `lib/transcript.ts`는 화면 껍데기가 아니라 사건 데이터를 만드는 자리라
+  // `transcriptLib.*`로 접두를 가른다(daf72662의 파일 접두 판단과 같다). en은 후속 티켓이 채운다.
+  "sessionStream.recordCount.label": "기록",
+  "sessionStream.recordCount.unit": "건",
+  "sessionStream.closedNoUpdate": "끝난 세션 · 갱신 없음",
+  "sessionStream.scrollToBottom": "맨 아래로",
+  "sessionStream.heading": "진행 기록",
+  // `이 워커의 엔진은 ${engine}입니다` · `${engine}는 트랜스크립트를 남기지 않습니다` ·
+  // `이 워커의 엔진은 ${engine}입니다 — 참견은 claude 엔진에서만 됩니다` — 엔진 이름이 중간에
+  // 공백 없이 낀다.
+  "sessionStream.engineIsPrefix": "이 워커의 엔진은",
+  "sessionStream.engineIsSuffix": "입니다",
+  "sessionStream.noTranscriptSuffix": "는 트랜스크립트를 남기지 않습니다",
+  "sessionStream.claudeOnlySuffix": "입니다 — 참견은 claude 엔진에서만 됩니다",
+  "sessionStream.noInboxStatic": "이 세션은 참견을 받지 못합니다 — 티켓에 inbox가 없습니다",
+  "sessionStream.question": "질문",
+  "sessionStream.answer": "답변",
+  // §비주얼 §21 실패 4종(`FAIL`) — `error` 문장을 되짚어 갈리면 문구 한 자를 고치는 날 화면이
+  // 조용히 뭉친다(`lib/interject.ts`의 같은 경고와 짝).
+  "sessionStream.fail.enxio.title": "보내지 못했습니다 — 세션이 끝났습니다",
+  "sessionStream.fail.enxio.next": "이 티켓엔 더 이상 도는 세션이 없습니다. 위 글을 복사해 새 티켓으로 지시하세요.",
+  "sessionStream.fail.enoent.title": "보내지 못했습니다 — 입구가 없습니다",
+  "sessionStream.fail.enoent.next":
+    "세션이 방금 끝났거나 엔진이 입구를 못 만들었습니다. 한 번 더 보내 보고, 그래도 안 되면 새 티켓으로 지시하세요.",
+  "sessionStream.fail.notWip.title": "보내지 못했습니다 — 진행중이 아닙니다",
+  "sessionStream.fail.notWip.next": "참견은 도는 세션에만 닿습니다. 새 티켓으로 지시하세요.",
+  "sessionStream.fail.noInbox.title": "보내지 못했습니다 — 참견을 받지 못하는 세션입니다",
+  "sessionStream.fail.noInbox.next": "옛 세션이거나 입구를 만들지 않는 엔진입니다. 새 티켓으로 지시하세요.",
+  "sessionStream.fail.other.title": "보내지 못했습니다",
+  // 완료 모드(이어받기) 실패 2종(`FAIL_DONE`) — `보내지 못했습니다`로 시작하지 않는다(§21).
+  "sessionStream.failDone.notDone.title": "발행하지 못했습니다 — 완료 티켓이 아닙니다",
+  "sessionStream.failDone.notDone.next":
+    "이어받기는 완료 티켓의 것입니다. 새로고침하고 다시 보세요 — 도는 세션이면 이 칸이 참견으로 바뀝니다.",
+  "sessionStream.failDone.other.title": "발행하지 못했습니다",
+  "sessionStream.failDone.other.next": "위 글을 복사해 보드에서 발행하세요.",
+  "sessionStream.answerHint": "답변을 달면 이 티켓이 다시 큐에 뜨고 담당 세션이 이어서 봅니다.",
+  "sessionStream.followupAria": "이어받기",
+  "sessionStream.interjectAria": "참견",
+  "sessionStream.followupPlaceholder": "이어서 무엇을 할지 쓰기",
+  "sessionStream.interjectPlaceholder": "도는 세션에 말 걸기",
+  "sessionStream.followupHint": "새 열린 티켓 1장이 생깁니다",
+  "sessionStream.sentHint": "보냈습니다 · 아래 스트림에 뜹니다",
+  "sessionStream.publishing": "발행 중…",
+  "sessionStream.publishAction": "이어서 발행",
+  "sessionStream.sending": "보내는 중…",
+  "sessionStream.sendAction": "보내기",
+  "sessionStream.sub": "서브",
+  "sessionStream.matchAllSuffix": "일치하는 곳 전부",
+  "sessionStream.session": "세션",
+  "sessionStream.person": "사람",
+
+  // `lib/interject.ts`(§2-2) — 화면이 §비주얼 §21의 문구 넷(제목·다음 행동)을 가르는 근거가
+  // 이 사유들이다. en은 후속 티켓이 채운다.
+  "interjectLib.state.open": "열림",
+  "interjectLib.state.wip": "진행중",
+  "interjectLib.state.done": "완료",
+  "interjectLib.emptyContent": "보낼 내용을 입력하세요.",
+  "interjectLib.unknownTicketPrefix": "큐에 없는 티켓입니다:",
+  "interjectLib.notWipError": "진행중 티켓이 아닙니다 — 도는 세션이 없어 참견이 닿을 곳이 없습니다.",
+  "interjectLib.statePrefix": "상태:",
+  "interjectLib.noInboxError":
+    "이 세션에는 참견 입구가 없습니다(frontmatter `inbox` 없음) — 스트리밍 입력으로 띄운 세션에만 말을 걸 수 있습니다.",
+  "interjectLib.noInboxDetail": "frontmatter에 inbox 없음",
+  "interjectLib.relativeInboxPrefix": "참견 입구 경로가 절대경로가 아닙니다:",
+  "interjectLib.enxioError": "세션이 이미 끝났습니다 — 입구는 남아 있는데 읽는 쪽이 없습니다.",
+  "interjectLib.enoentError": "참견 입구가 없습니다 — 세션이 끝나면서 지워졌습니다.",
+  "interjectLib.openFailedPrefix": "참견 입구를 열 수 없습니다(",
+  "interjectLib.openFailedMid": "):",
+  "interjectLib.notFifoPrefix": "참견 입구가 FIFO가 아닙니다:",
+  "interjectLib.eagainError": "참견 입구가 가득 찼습니다 — 세션이 읽어갈 때까지 기다렸다 다시 보내세요.",
+  "interjectLib.epipeError": "세션이 이미 끝났습니다 — 쓰는 중에 입구가 닫혔습니다.",
+  "interjectLib.writeFailedPrefix": "참견을 쓰지 못했습니다(",
+  "interjectLib.writeFailedMid": "):",
+
+  // `lib/transcript.ts`(§2-1) — 사건 라벨·단위. 여러 화면(§2-1 §home §board)이 `StreamEvent`를
+  // 공유해 쓰므로 화면 접두가 아니라 파일 접두다(daf72662와 같은 판단).
+  "transcriptLib.assigned": "배정",
+  "transcriptLib.charsUnit": "자",
+  "transcriptLib.sessionPromptFirst": "세션 프롬프트",
+  "transcriptLib.prompt": "프롬프트",
+  "transcriptLib.thinking": "생각",
+  "transcriptLib.tool": "도구",
+  "transcriptLib.result": "결과",
+  "transcriptLib.linesUnit": "줄",
 };
 
 /** 제품 낱말의 영어 대응 — **여기가 한자리다**(621c7a97). 다음 묶음이 같은 것을 다르게 부르지

@@ -44,7 +44,7 @@ import {
   writeTicket,
   type TicketState,
 } from "@/lib/queue";
-import { getProject, resolveConfig } from "@/lib/projects";
+import { getProject, readLanguage, resolveConfig } from "@/lib/projects";
 
 export type SaveState = { ok?: boolean; error?: string };
 
@@ -146,7 +146,7 @@ export async function tailSession(
     // 목록을 읽지 않는 이유다. 2초마다 새로 무는 fs는 종전 그대로 티켓 하나 + 글롭이다.
     const s = await findStream(t.sessionId);
     if (!s) return { events: [], offset: at, live, inbox, done, refs: NO_REFS };
-    const chunk = await tailEvents(s.file, at, s.grok);
+    const chunk = await tailEvents(s.file, at, s.grok, await readLanguage());
     // 이 회차의 새 글만 훑는다 — `mayHaveRefs`가 그 모양을 못 찾으면 `listTickets`를 안 돈다
     // (대부분의 회차, §성능 예산). 걸리면 그때만 큐 전체를 다시 읽는다 — 다른 폴링(보드 5초)도
     // 이미 매 회차 fs를 새로 문다, 여기는 걸리는 회차만이라 더 싸다.
@@ -211,7 +211,7 @@ export async function sendInterject(
     if (!project) throw new Error(`등록되지 않은 프로젝트입니다: ${projectId}`);
     const config = await resolveConfig(project);
     const attached = await verifyAttachments(project, attachments);
-    return await interject(project.root, config, stem, withAttachments(text, attached));
+    return await interject(project.root, config, stem, withAttachments(text, attached), await readLanguage());
   } catch (e) {
     // 여기 오는 건 프로젝트 조회·설정 해석이 던진 것뿐이다(§21 실패 4종에 없다) — `other`다.
     const error = (e as Error).message;

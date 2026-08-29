@@ -16,6 +16,7 @@ import { access, open, readdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import { lineDiff, type DiffLine } from "./edit-diff.ts";
+import { DEFAULT_LOCALE, t, type Locale } from "./i18n.ts";
 import { engineRepo } from "./scaffold.ts";
 
 /** 사건 한 줄. `label`이 비면 접지 않고 `body`를 그대로 보여준다(assistant text · 사용자 프롬프트).
@@ -183,6 +184,7 @@ export async function tailEvents(
   file: string,
   offset: number,
   grok = false,
+  locale: Locale = DEFAULT_LOCALE,
 ): Promise<{ events: StreamEvent[]; offset: number }> {
   let fh;
   try {
@@ -227,7 +229,7 @@ export async function tailEvents(
         enqueueSeen = true;
         if (first) continue;
       }
-      const evs = recordToEvents(rec, !promptSeen);
+      const evs = recordToEvents(rec, !promptSeen, locale);
       if (evs.some((e) => e.kind === "prompt")) promptSeen = true;
       events.push(...evs);
     }
@@ -263,10 +265,14 @@ export async function tailEvents(
  *  스캔 자체(파일 전문을 뒤에서부터 레코드 단위로 훑는 것)는 `recordsBackward`가 하고, 여기는
  *  레코드마다 "세울 글자가 있는 tool_use·text"만 고르는 판정만 얹는다. `lastEvent`(홈 §7 활동
  *  3종)가 같은 스캔에 다른 판정(필터 없음)을 얹는 둘째 소비자다. */
-export async function lastActivity(file: string, grok = false): Promise<StreamEvent | null> {
+export async function lastActivity(
+  file: string,
+  grok = false,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<StreamEvent | null> {
   for await (const rec of recordsBackward(file, grok)) {
     // 같은 레코드 안에서는 뒤 블록이 더 나중이다(assistant 한 장이 thinking+text+tool_use를 담는다)
-    const hit = recordToEvents(rec)
+    const hit = recordToEvents(rec, false, locale)
       .filter(
         (e) =>
           (e.kind === "tool_use" || e.kind === "text") &&
@@ -285,9 +291,13 @@ export async function lastActivity(file: string, grok = false): Promise<StreamEv
  *  `lastActivity`와 달리 `tool_result`·`thinking`·`prompt`도 히트다: 홈의 활동 3종 매핑
  *  (`activityFromEvent`, `lib/home-agent.ts`)이 그 갈래까지 셋으로 접으므로 여기서 먼저 걸러내면
  *  안 된다. 같은 이유로 "요약이 빈 tool_use"도 그대로 돌려준다 — 도구 이름 자체가 활동 문구다. */
-export async function lastEvent(file: string, grok = false): Promise<StreamEvent | null> {
+export async function lastEvent(
+  file: string,
+  grok = false,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<StreamEvent | null> {
   for await (const rec of recordsBackward(file, grok)) {
-    const events = recordToEvents(rec);
+    const events = recordToEvents(rec, false, locale);
     if (events.length) return events.at(-1) ?? null;
   }
   return null;
@@ -500,7 +510,11 @@ type Block = {
  *  `message`가 없으면(`attachment`·`last-prompt`) 빈 배열이다 — **`queue-operation` 하나만 예외**고
  *  `timestamp`가 없으면 그것도 빈 배열이다.
  *  `collapseFirstPrompt`가 참이면 이 레코드의 첫 사용자 프롬프트를 `세션 프롬프트 n자`로 접는다. */
-export function recordToEvents(rec: unknown, collapseFirstPrompt = false): StreamEvent[] {
+export function recordToEvents(
+  rec: unknown,
+  collapseFirstPrompt = false,
+  locale: Locale = DEFAULT_LOCALE,
+): StreamEvent[] {
   if (!rec || typeof rec !== "object") return [];
   const r = rec as {
     type?: unknown;
@@ -534,8 +548,8 @@ export function recordToEvents(rec: unknown, collapseFirstPrompt = false): Strea
         key: `${uid}:q`, // 이 레코드에는 `uuid`가 없다(실측 키 5개) — `ts`가 키가 된다
         ts,
         kind: "interject",
-        label: assigned ? "배정" : "", // 비면 화면이 전문 줄(말풍선)로, 있으면 접힌 줄로 그린다
-        summary: assigned ? `${chars(text)}자` : "",
+        label: assigned ? t(locale, "transcriptLib.assigned") : "", // 비면 화면이 전문 줄(말풍선)로, 있으면 접힌 줄로 그린다
+        summary: assigned ? `${chars(text)}${t(locale, "transcriptLib.charsUnit")}` : "",
         summaryMono: false,
         body: text,
         sidechain: false,
@@ -571,8 +585,8 @@ export function recordToEvents(rec: unknown, collapseFirstPrompt = false): Strea
     // 하나 더 만들 때마다 조용히 다시 샌다). 판정은 **자리**(첫이 아니다) 하나다.
     push(i, {
       kind: "prompt",
-      label: first ? "세션 프롬프트" : "프롬프트",
-      summary: `${chars(text)}자`,
+      label: first ? t(locale, "transcriptLib.sessionPromptFirst") : t(locale, "transcriptLib.prompt"),
+      summary: `${chars(text)}${t(locale, "transcriptLib.charsUnit")}`,
       body: text,
     });
   };
@@ -596,12 +610,17 @@ export function recordToEvents(rec: unknown, collapseFirstPrompt = false): Strea
         // `--thinking-display summarized` 없이). 암호화되는 건 `signature` 필드뿐이다.
         // 그래도 **줄은 흘린다** — 빼면 생각하는 동안 화면이 조용해져서 "멈춘 것"과
         // 구별되지 않는다(§2-1이 서브에이전트 줄을 빼지 않는 것과 같은 이유). 크기만 감춘다.
-        const t = b.thinking ?? "";
-        push(i, { kind: "thinking", label: "생각", summary: t ? `${chars(t)}자` : "", body: t });
+        const thinking = b.thinking ?? "";
+        push(i, {
+          kind: "thinking",
+          label: t(locale, "transcriptLib.thinking"),
+          summary: thinking ? `${chars(thinking)}${t(locale, "transcriptLib.charsUnit")}` : "",
+          body: thinking,
+        });
         break;
       }
       case "tool_use": {
-        const name = typeof b.name === "string" ? b.name : "도구";
+        const name = typeof b.name === "string" ? b.name : t(locale, "transcriptLib.tool");
         const s = toolSummary(name, b.input, cwd);
         const edit = editShape(b.input);
         push(i, {
@@ -619,8 +638,8 @@ export function recordToEvents(rec: unknown, collapseFirstPrompt = false): Strea
         const body = resultText(b.content);
         push(i, {
           kind: "tool_result",
-          label: "결과",
-          summary: `${lines(body)}줄`,
+          label: t(locale, "transcriptLib.result"),
+          summary: `${lines(body)}${t(locale, "transcriptLib.linesUnit")}`,
           body,
           ...(typeof b.tool_use_id === "string" ? { toolId: b.tool_use_id } : {}),
           ...(b.is_error === true ? { error: true } : {}),

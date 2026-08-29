@@ -530,7 +530,7 @@ export default async function Board({
               .map(async (t) => {
                 const sid = sessionIdOf(t.fm);
                 const s = sid ? await findStream(sid) : null;
-                return [t.path, wipLine(s ? await lastActivity(s.file, s.grok) : null)] as const;
+                return [t.path, wipLine(s ? await lastActivity(s.file, s.grok, locale) : null)] as const;
               }),
           ),
         )
