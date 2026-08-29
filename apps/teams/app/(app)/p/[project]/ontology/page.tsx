@@ -179,7 +179,7 @@ export default async function Ontology({
       importTickets = openImportTickets(tickets).map((t) => ({
         stem: t.stem,
         hash: t.hash,
-        status: statusLabel(statusOf(t)),
+        status: statusLabel(statusOf(t), locale),
         folder: importFolderOf(t),
       }));
 
@@ -504,7 +504,7 @@ function OntologyMetricsPanel({
                   href={`/p/${projectId}/tickets/${fixTicket.stem}`}
                   className="underline underline-offset-2"
                 >
-                  {t(locale, "ontology.metrics.fixTicketPrefix")} {fixTicket.stem} {statusLabel(statusOf(fixTicket))}
+                  {t(locale, "ontology.metrics.fixTicketPrefix")} {fixTicket.stem} {statusLabel(statusOf(fixTicket), locale)}
                 </Link>
               </p>
             ) : (

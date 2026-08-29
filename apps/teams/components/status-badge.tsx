@@ -9,8 +9,9 @@
  *  **`locale`을 프롭으로 받는다**(§0-16 §발행 §묶음 표 2, `dd97c69c`) — `"use client"`를 안
  *  붙인다. 이 컴포넌트는 서버(셸·보드·상세·워커)와 클라이언트(`project-switcher.tsx`) 양쪽에서
  *  쓰이므로 `useLocale()`로 고정하지 않는다(developer memory "i18n 서버 문자열은 로케일이
- *  없다" — 한쪽은 `readLanguage()`, 한쪽은 `useLocale()`로 호출부가 채운다). 아직 이 프롭을 안
- *  넘기는 자리(다음 묶음 몫인 화면들)는 `ko` 기본값으로 떨어져 종전과 같은 화면이 뜬다. */
+ *  없다" — 한쪽은 `readLanguage()`, 한쪽은 `useLocale()`로 호출부가 채운다). **`locale`은 필수다**
+ *  (§0-16 §개정 - 배지 셋의 `locale` 기본값을 없앤다, `81c31001`) — 기본값이 있으면 배선 누락을
+ *  `tsc`가 못 잡아 화면을 눈으로 훑기 전에는 안 드러난다. */
 import Link from "@/components/link";
 import {
   Check,
@@ -31,7 +32,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import type { DepKind } from "@/lib/queue";
-import { DEFAULT_LOCALE, t, type Locale } from "@/lib/i18n";
+import { t, type Locale } from "@/lib/i18n";
 import { elapsedSuffix } from "@/lib/urls";
 import { cn } from "@/lib/utils";
 
@@ -125,9 +126,8 @@ const STATUS: Record<Status, Spec> = {
 };
 
 /** 상태 라벨 문자열이 필요한 곳(보드 필터 선택지) — 배지 없이도 **같은 말**을 쓰게 한다.
- *  훅을 못 쓰는 자리(서버 컴포넌트 · 상수 목록)를 위해 `locale`을 인자로 받는다 — 안 주면 `ko`. */
-export const statusLabel = (status: Status, locale: Locale = DEFAULT_LOCALE) =>
-  t(locale, STATUS[status].labelKey);
+ *  훅을 못 쓰는 자리(서버 컴포넌트 · 상수 목록)를 위해 `locale`을 인자로 받는다 — 필수다. */
+export const statusLabel = (status: Status, locale: Locale) => t(locale, STATUS[status].labelKey);
 
 /** `kind:` → 화면 문구(§1 보드 §보드가 `kind`를 한글로 알려 준다). 선택지 목록이 아니라 라벨
  *  대응표다 — `kind`는 프로젝트마다 다르므로 표에 없는 값은 파일에 적힌 그대로 그린다
@@ -161,7 +161,7 @@ export function StatusBadge({
   days,
   suffix,
   className,
-  locale = DEFAULT_LOCALE,
+  locale,
   continued = false,
   href,
 }: {
@@ -171,7 +171,7 @@ export function StatusBadge({
    *  등)을 호출부가 이미 조립해 넘긴다. 있으면 `days` 계산보다 앞선다(둘을 같이 안 쓴다). */
   suffix?: string;
   className?: string;
-  locale?: Locale;
+  locale: Locale;
   continued?: boolean;
   href?: string;
 }) {
@@ -201,14 +201,14 @@ export function DepBadge({
   kind,
   href,
   hint,
-  locale = DEFAULT_LOCALE,
+  locale,
 }: {
   hash: string;
   kind: DepKind;
   href?: string;
   /** 사유 문구 덮어쓰기. `req:`(출처)는 잠금이 아니라서 "영구 대기"가 거짓말이다 — 그 자리용. */
   hint?: string;
-  locale?: Locale;
+  locale: Locale;
 }) {
   const spec = {
     met: { icon: Check, tint: undefined, hintKey: "dep.hint.met" },

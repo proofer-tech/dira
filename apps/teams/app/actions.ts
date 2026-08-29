@@ -236,13 +236,13 @@ function toView(
       ? {
           stem: ontologyMigrationTicket.stem,
           hash: ontologyMigrationTicket.hash,
-          status: statusLabel(statusOf(ontologyMigrationTicket)),
+          status: statusLabel(statusOf(ontologyMigrationTicket), locale),
         }
       : null,
     ontologyImportTickets: ontologyImportTickets.map((t) => ({
       stem: t.stem,
       hash: t.hash,
-      status: statusLabel(statusOf(t)),
+      status: statusLabel(statusOf(t), locale),
       folder: importFolderOf(t),
     })),
   };

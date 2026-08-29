@@ -1442,6 +1442,7 @@ function DepsPicker({
   setPicked: (next: string[]) => void;
 }) {
   const t = useT();
+  const locale = useLocale();
   const [open, setOpen] = useState(false);
   const byHash = new Map(options.map((o) => [o.hash, o]));
 
@@ -1452,7 +1453,7 @@ function DepsPicker({
         {/* 선택된 것은 배지로 남는다 — 팝오버를 닫아도 무엇을 골랐는지 보여야 한다 */}
         {picked.map((h) => (
           <span key={h} className="flex items-center gap-1">
-            <DepBadge hash={h} kind={byHash.get(h)?.met ? "met" : "unmet"} />
+            <DepBadge hash={h} kind={byHash.get(h)?.met ? "met" : "unmet"} locale={locale} />
             <button
               type="button"
               aria-label={`deps ${h} ${t("ticketDetail.depsRemoveSuffix")}`}

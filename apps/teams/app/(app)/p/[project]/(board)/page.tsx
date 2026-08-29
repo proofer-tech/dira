@@ -491,7 +491,7 @@ export default async function Board({
       return {
         param: "status",
         value: v,
-        text: `${t(locale, "boardPage.column.status")}: ${known ? statusLabel(known) : v}`,
+        text: `${t(locale, "boardPage.column.status")}: ${known ? statusLabel(known, locale) : v}`,
       };
     }),
     // 에픽도 같은 필터 그릇이라 0건 화면에서 같은 방식으로 풀린다(§에픽 결정 5).
@@ -686,7 +686,7 @@ export default async function Board({
           </Link>
         </span>
         {isAwaiting(t) ? (
-          <StatusBadge status="awaiting" days={daysSince(t.mtime)} />
+          <StatusBadge status="awaiting" days={daysSince(t.mtime)} locale={locale} />
         ) : (
           isPolling(t) && <PollingBadge ticket={t} now={now} locale={locale} />
         )}
@@ -727,7 +727,7 @@ export default async function Board({
         <span className="relative z-10 flex flex-wrap items-center gap-1">
           <span className="text-xs text-muted-foreground">deps</span>
           {depBadges(tickets, t, config).map((d) => (
-            <DepBadge key={d.hash} hash={d.hash} kind={d.kind} href={d.hit ? href(d.hit) : undefined} />
+            <DepBadge key={d.hash} hash={d.hash} kind={d.kind} href={d.hit ? href(d.hit) : undefined} locale={locale} />
           ))}
         </span>
       )}
@@ -864,7 +864,7 @@ export default async function Board({
             <BoardFilter
               param="status"
               label={t(locale, "boardPage.column.status")}
-              options={STATUS_OPTIONS.map((s) => ({ value: s, label: statusLabel(s) }))}
+              options={STATUS_OPTIONS.map((s) => ({ value: s, label: statusLabel(s, locale) }))}
               // 기본이 6개 전부이므로 1클릭으로 접을 값어치가 있는 쪽은 `완료 숨기기`다
               // (슬롯은 1개 그대로다). `defaults`는 팝오버 체크·트리거 라벨이 **실효값**을
               // 그리게 한다: 파라미터가 없어도 6개가 전부 체크된다.
@@ -958,7 +958,7 @@ export default async function Board({
                     <div className="flex gap-4">
                       {STATUSES.map((s) => (
                         <div key={s} className="flex flex-1 min-w-72 items-center justify-between gap-2">
-                          <StatusBadge status={s} />
+                          <StatusBadge status={s} locale={locale} />
                           <span className="text-xs tabular-nums text-muted-foreground">
                             {
                               rows.filter((t) => (statusOf(t) === "blocked" ? "open" : statusOf(t)) === s)
@@ -1077,7 +1077,7 @@ export default async function Board({
                         // 카드에 가로 여백이 없어서다(홈 패널은 줄이 이미 내므로 안 준다).
                         <div key={s} className="flex min-w-72 flex-1 flex-col gap-2 rounded-lg border bg-surface p-2">
                           <div className="flex items-center justify-between gap-2">
-                            <StatusBadge status={s} />
+                            <StatusBadge status={s} locale={locale} />
                             <span className="text-xs tabular-nums text-muted-foreground">
                               {group.length}
                               {t(locale, "boardPage.unit.count")}
@@ -1190,7 +1190,7 @@ export default async function Board({
                           <TableRow key={t.path} className="relative h-9 focus-within:bg-muted/50">
                             <TableCell className="px-3 py-0">
                               {isAwaiting(t) ? (
-                                <StatusBadge status="awaiting" days={daysSince(t.mtime)} />
+                                <StatusBadge status="awaiting" days={daysSince(t.mtime)} locale={locale} />
                               ) : (
                                 // 이어받기 링크는 늘어난 행 링크 위에 뜨게 둔다(위 deps 배지와 같은 이유)
                                 <span className="relative z-10">
@@ -1198,6 +1198,7 @@ export default async function Board({
                                     status={statusOf(t)}
                                     continued={!!cont}
                                     href={contTarget ? href(contTarget) : undefined}
+                                    locale={locale}
                                   />
                                 </span>
                               )}
@@ -1263,6 +1264,7 @@ export default async function Board({
                                       hash={d.hash}
                                       kind={d.kind}
                                       href={d.hit ? href(d.hit) : undefined}
+                                      locale={locale}
                                     />
                                   ))}
                                 </span>

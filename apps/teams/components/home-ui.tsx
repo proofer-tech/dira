@@ -1269,6 +1269,7 @@ function SidePanel({
   onSchedulesChange: (schedules: ScheduleView[]) => void;
 }) {
   const t = useT();
+  const locale = useLocale();
   const RUNNING = t("home.answering");
   // 연 줄 수(§7 §`대화` 목록은 3줄부터) — 저장 안 한다. `SidePanel`이 대화 0건에서만
   // 언마운트되므로(위 §0건) 폴링·전환·새 대화로는 이 값이 안 되돌아간다.
@@ -1529,7 +1530,7 @@ function SidePanel({
                   {/* 값이 둘뿐인 것은 이 절의 선택이 아니라 **목록의 성질**이다(출처가 `.wip` +
                       `.done`이라 나머지 넷은 파일 상태로 이미 빠진다). 모든 줄에 붙인다 —
                       도는 것에만 붙이면 나머지 줄의 빈 자리가 *모른다*로 읽힌다(§4-3 슬롯 규칙) */}
-                  <StatusBadge status={w.running ? "wip" : "done"} className="shrink-0" />
+                  <StatusBadge status={w.running ? "wip" : "done"} className="shrink-0" locale={locale} />
                 </div>
               </div>
             </SidebarMenuButton>

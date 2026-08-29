@@ -248,7 +248,7 @@ export default async function Workers({ params }: { params: Promise<{ project: s
                 <WorkerNameCell row={w} />
                 <TableCell className="px-3 py-0">
                   <div className="flex items-center gap-2">
-                    <StatusBadge status={w.status} />
+                    <StatusBadge status={w.status} locale={locale} />
                     {/* `status` 배지를 대체하지 않고 나란히 뜬다(§비주얼 §57 §2) — claude가
                         eligible 0장이고 이 워커가 실제로 `idle`(락 없음)일 때만 뜬다. */}
                     {w.status === "idle" && w.engineName === "claude" && limitUntil != null && (

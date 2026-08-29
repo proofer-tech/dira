@@ -30,7 +30,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { findTicket } from "@/lib/engine";
 import { listEpics, resolveMarkdownRefs } from "@/lib/epics";
-import { t } from "@/lib/i18n";
+import { t, type Locale } from "@/lib/i18n";
 import type { FrontmatterCandidates } from "@/lib/markdown-frontmatter-rows";
 import { buildVault } from "@/lib/markdown-wikilinks";
 import { listTree } from "@/lib/protocols";
@@ -76,10 +76,10 @@ import { dispatchRound, holderEngine, lastDispatchSid, listWorkers, reassignCoun
 export const dynamic = "force-dynamic";
 
 /** 관계 절의 티켓 한 줄 — 상태 배지 + stem 링크. 세 목록(막는 것 · 요구사항 · 나온 티켓)이 같은 모양이다. */
-function TicketLine({ t, href }: { t: Ticket; href: string }) {
+function TicketLine({ t, href, locale }: { t: Ticket; href: string; locale: Locale }) {
   return (
     <div className="flex items-center gap-2">
-      <StatusBadge status={statusOf(t)} />
+      <StatusBadge status={statusOf(t)} locale={locale} />
       {/* 오른쪽 단(352px)에서 title에 남는 폭이 ≈200px(≈14자)다 — 잘린 문장을 툴팁이 받는다
           (§6 "title은 truncate + 툴팁 전문"). 해시는 자르지 않는다 */}
       <Link href={href} title={t.title} className="truncate text-sm hover:underline">
@@ -403,12 +403,13 @@ export default async function TicketDetail({
           {/* 보드와 **같은 말**을 쓴다 — 같은 티켓이 한쪽에서 `deps 대기`, 다른 쪽에서
               `답변 대기`로 보이면 배지가 상태 표현의 유일한 출처인 의미가 없다(§1 보드) */}
           {isAwaiting(ticket) ? (
-            <StatusBadge status="awaiting" days={daysSince(ticket.mtime)} />
+            <StatusBadge status="awaiting" days={daysSince(ticket.mtime)} locale={locale} />
           ) : (
             <StatusBadge
               status={statusOf(ticket)}
               continued={!!continued}
               href={continuedTarget ? href(continuedTarget) : undefined}
+              locale={locale}
             />
           )}
           <span className="font-mono text-xs text-muted-foreground">{ticket.hash}</span>
@@ -737,6 +738,7 @@ export default async function TicketDetail({
                   hash={d.hash}
                   kind={d.kind}
                   href={d.hit ? href(d.hit) : undefined}
+                  locale={locale}
                 />
               ))}
               {deps.length > 0 && (
@@ -756,6 +758,7 @@ export default async function TicketDetail({
                   hash={t.hash}
                   kind={t.state === "done" ? "met" : "unmet"}
                   href={href(t)}
+                  locale={locale}
                 />
               ))}
             </div>
@@ -771,7 +774,7 @@ export default async function TicketDetail({
                       {t(locale, "ticketDetail.requirementLabel")}
                     </p>
                     {reqTicket ? (
-                      <TicketLine t={reqTicket} href={href(reqTicket)} />
+                      <TicketLine t={reqTicket} href={href(reqTicket)} locale={locale} />
                     ) : (
                       // 큐에 없는 stem — deps `missing` 배지와 같은 처리다. 사유만 바꾼다:
                       // `req`는 엔진 잠금이 아니라서 이 티켓이 굶지는 않는다(출처를 잃을 뿐이다).
@@ -779,6 +782,7 @@ export default async function TicketDetail({
                         hash={req}
                         kind="missing"
                         hint={t(locale, "ticketDetail.missingReqHint")}
+                        locale={locale}
                       />
                     )}
                   </div>
@@ -793,7 +797,7 @@ export default async function TicketDetail({
                     ) : (
                       <div className="space-y-1">
                         {derived.map((t) => (
-                          <TicketLine key={t.path} t={t} href={href(t)} />
+                          <TicketLine key={t.path} t={t} href={href(t)} locale={locale} />
                         ))}
                       </div>
                     )}
@@ -813,7 +817,7 @@ export default async function TicketDetail({
                       {t(locale, "ticketDetail.archiveTargetLabel")}
                     </p>
                     {archiveTarget ? (
-                      <TicketLine t={archiveTarget} href={href(archiveTarget)} />
+                      <TicketLine t={archiveTarget} href={href(archiveTarget)} locale={locale} />
                     ) : (
                       // 큐에 없는 stem — `req:`와 같은 처리다. 사유만 바꾼다: 아카이브 키도
                       // 엔진 잠금이 아니라서 이 티켓이 굶지는 않는다(대상을 잃을 뿐이다).
@@ -821,6 +825,7 @@ export default async function TicketDetail({
                         hash={archives}
                         kind="missing"
                         hint={t(locale, "ticketDetail.missingArchiveHint")}
+                        locale={locale}
                       />
                     )}
                   </div>
@@ -832,7 +837,7 @@ export default async function TicketDetail({
                     </p>
                     <div className="space-y-1">
                       {archivers.map((t) => (
-                        <TicketLine key={t.path} t={t} href={href(t)} />
+                        <TicketLine key={t.path} t={t} href={href(t)} locale={locale} />
                       ))}
                     </div>
                   </div>
