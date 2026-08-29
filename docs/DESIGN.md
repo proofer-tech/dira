@@ -8431,23 +8431,24 @@ n  = len([s for s in re.findall(r'"[^"\n]*"|\'[^\'\n]*\'|`[^`]*`', src) if re.se
 n += len(re.findall(r">\s*([^<>{}]*[가-힣][^<>{}]*?)\s*<", src))
 ```
 
-| # | 묶음 | 범위 | 08-08 | 08-20 | 상태 |
-|---|---|---|---|---|---|
-| 1 | 설정 다이얼로그 | `settings-dialog.tsx` - `priority-meter.tsx` | - | **0** | **완료** (`30a8f5c3` / `ko`, `621c7a97` / `en`) |
-| 2 | **셸** | `p/[project]/layout.tsx`(헤더 - 알림 팝오버 일곱 - status bar - 배너) - `project-switcher.tsx` - `status-badge.tsx` - 셸이 그리는 `usage.ts`-`urls.ts` 파생 문구 | ≈63 | 17 (실 **12**) | **완료** (`dd97c69c` / `ko`, `90be3eeb` / `en`). **잔여는 재유입이다** - 아래 행 10 |
-| 3 | 보드 | `(board)/page.tsx` - `board-ui.tsx` - `(board)/actions.ts` - `find-bar.tsx` | ≈52 | 57 | 미발행 |
-| 4 | 티켓 상세-발행 | `ticket-ui.tsx` - `tickets/[hash]/{page,actions}.ts*` - `followup.ts` - `attachment-field.tsx` - `attachments.ts` | ≈172 | 173 | 미발행 |
-| 5 | 워커-세션 스트림 | `workers-ui.tsx` - `workers/{page,actions}.ts*` - `session-stream.tsx` - `transcript.ts` - `interject.ts` | ≈222 | 240 | 미발행 |
-| 6 | 홈 | `home-ui.tsx` - `home-agent.ts` - `home/{page,actions}.ts*` | ≈91 | 94 | 미발행 |
-| 7 | 페르소나-프로토콜 | `personas-ui.tsx` - `protocols-ui.tsx` - 두 화면의 `page`-`actions` - `protocols.ts` - `skills.ts` | ≈185 | **271** | **P307이 낸다** (피드백 `0bd6abc8`) |
-| 8 | 프로젝트 관리(루트 셸) | `projects-ui.tsx` - `projects.ts` - `app/actions.ts` - `scaffold.ts` - `feedback-dialog.tsx` - `not-found` 셋 | ≈130 | 136 | 미발행 |
-| 9 | 나머지 `lib` 실패 사유 | `workers.ts` - `auth.ts` - `engine.ts` - `queue.ts` - `keymap.ts` 등 | ≈97 | 93 | 미발행 - `personaEngineHint` 한 건은 `50fd4b34`가 앞당겨 문다 |
-| 10 | **재유입 회수** | 이행을 끝낸 묶음에 그 뒤 다시 든 한글. 지금은 묶음 2의 12(`project-switcher.tsx` 3 - `urls.ts` 6 - `usage.ts` 3) | - | 12 | 미발행 - **마지막 묶음 뒤에 한 번**. `urls.ts`의 기능 이름 둘은 `50fd4b34`가 앞당겨 문다 |
-| 11 | **공용 컴포넌트-순수 유틸** | 화면이 둘 이상 무는 파일. `markdown-editor.tsx` - `update-toast.tsx` - `worker-mark.tsx` - `path-picker.tsx` - `markdown.tsx` - `copy-command.tsx` - `budgets.ts` - `attachment-limit.ts` - `skill-upload-limit.ts` - `markdown-roundtrip.ts` - `markdown-wikilinks.ts` - `machine-state.ts` - `webhook.ts` - `paths.ts` - `feedback.ts` - `p/[project]/actions.ts` - `(app)/layout.tsx` | - | 42 | **P308이 낸다** (지적 `ef4f3e62`) |
-| 12 | 온톨로지-에픽 | `ontology-ui.tsx` - `ontology/{page,actions}.ts*` - `ontology.ts` - `ontology-seed.ts` - `epics-ui.tsx` - `epic-sidebar.tsx` - `epics/{page,actions}.ts*` - `epics.ts` - `epic.ts` | - | 218 | 미발행 |
+| # | 묶음 | 범위 | 08-08 | 08-20 | 08-29 | 상태 |
+|---|---|---|---|---|---|---|
+| 1 | 설정 다이얼로그 | `settings-dialog.tsx` - `priority-meter.tsx` | - | **0** | 0 | **완료** (`30a8f5c3` / `ko`, `621c7a97` / `en`) |
+| 2 | **셸** | `p/[project]/layout.tsx`(헤더 - 알림 팝오버 일곱 - status bar - 배너) - `project-switcher.tsx` - `status-badge.tsx` - 셸이 그리는 `usage.ts`-`urls.ts` 파생 문구 | ≈63 | 17 (실 **12**) | 22 | **완료** (`dd97c69c` / `ko`, `90be3eeb` / `en`). **잔여는 재유입이다** - 아래 행 10 |
+| 3 | 보드 | `(board)/page.tsx` - `board-ui.tsx` - `(board)/actions.ts` - `find-bar.tsx` | ≈52 | 57 | 52 | **P338이 낸다** |
+| 4 | 티켓 상세-발행 | `ticket-ui.tsx` - `tickets/[hash]/{page,actions}.ts*` - `followup.ts` - `attachment-field.tsx` - `attachments.ts` | ≈172 | 173 | 172 | **P338이 낸다** - 사람이 지목한 `요구 접수 다이얼로그`가 여기다(`ticket-ui.tsx`) |
+| 5 | 워커-세션 스트림 | `workers-ui.tsx` - `workers/{page,actions}.ts*` - `session-stream.tsx` - `transcript.ts` - `interject.ts` | ≈222 | 240 | 251 | **P338이 낸다** - 갈래 둘(워커 화면 176 - 세션 스트림 75) |
+| 6 | 홈 | `home-ui.tsx` - `home-agent.ts` - `home/{page,actions}.ts*` | ≈91 | 94 | 135 | **P338이 낸다** |
+| 7 | 페르소나-프로토콜 | `personas-ui.tsx` - `protocols-ui.tsx` - 두 화면의 `page`-`actions` - `protocols.ts` - `skills.ts` | ≈185 | **271** | 1 | **완료** (`93c106b3`-`204be4da` / `ko`, `7a86fd5c`-`b5d9735d` / `en`). 잔여 1은 재유입이다 - 행 10 |
+| 8 | 프로젝트 관리(루트 셸) | `projects-ui.tsx` - `projects.ts` - `app/actions.ts` - `scaffold.ts` - `feedback-dialog.tsx` - 오류-부재 경계 넷(`app/not-found.tsx` - `(app)/not-found.tsx` - `(app)/error.tsx` - `global-error.tsx`) | ≈130 | 136 | 155 | **P338이 낸다** |
+| 9 | 나머지 `lib` 실패 사유 | `workers.ts` - `auth.ts` - `engine.ts` - `queue.ts` - `keymap.ts` - `pool.ts` - `queue-ref.tsx` 등 | ≈97 | 93 | 109 | **P338이 낸다**. `personaEngineHint` 한 건은 `50fd4b34`가 앞당겨 물었다 |
+| 10 | **재유입 회수** | 이행을 끝낸 묶음에 그 뒤 다시 든 한글. 08-29에 40 - 행 2가 22(`project-switcher.tsx` 3 - `status-badge.tsx` 4 - `urls.ts` 6 - `usage.ts` 9) - 행 7이 1(`skills.ts`) - 행 11이 17(`markdown-roundtrip.ts` 8 - `webhook.ts` 3 - `budgets.ts` 3 - `machine-state.ts` 1 - `worker-mark.tsx` 1 - `paths.ts` 1) | - | 12 | 40 | 미발행 - **마지막 묶음 뒤에 한 번**. `urls.ts`의 기능 이름 둘은 `50fd4b34`가 앞당겨 문다 |
+| 11 | **공용 컴포넌트-순수 유틸** | 화면이 둘 이상 무는 파일. `markdown-editor.tsx` - `update-toast.tsx` - `worker-mark.tsx` - `path-picker.tsx` - `markdown.tsx` - `copy-command.tsx` - `budgets.ts` - `attachment-limit.ts` - `skill-upload-limit.ts` - `markdown-roundtrip.ts` - `markdown-wikilinks.ts` - `machine-state.ts` - `webhook.ts` - `paths.ts` - `feedback.ts` - `p/[project]/actions.ts` - `(app)/layout.tsx` | - | 42 | 17 | **완료** (`c9f2eec5` / `ko`, `90db2822` / `en`). 잔여는 재유입이다 - 행 10 |
+| 12 | 온톨로지-에픽 | `ontology-ui.tsx` - `ontology/{page,actions}.ts*` - `ontology.ts` - `ontology-seed.ts` - `epics-ui.tsx` - `epic-sidebar.tsx` - `epics/{page,actions}.ts*` - `epics.ts` - `epic.ts` | - | 218 | 220 | **P338이 낸다** - 갈래 둘(온톨로지 192 - 에픽 28) |
 
-**남은 합 - 08-08에 ≈1,012, 08-20에 1,336**(묶음 3-9의 1,064 + 행 10의 12 + 행 11의 42 +
-행 12의 218). 밖에 있는 것 둘은 세지 않았다 - `app/(site)/**`(랜딩-매뉴얼, ≈182)는 **답이
+**남은 합 - 08-08에 ≈1,012, 08-20에 1,336, 08-29에 1,134**(08-29는 행 3의 52 + 행 4의 172 +
+행 5의 251 + 행 6의 135 + 행 8의 155 + 행 9의 109 + 행 12의 220 + 행 10의 40이다. 행 1-2-7-11은
+이행이 끝났고 그 잔여는 행 10이 센다). 밖에 있는 것 둘은 세지 않았다 - `app/(site)/**`(랜딩-매뉴얼, ≈182)는 **답이
 `(c)`가 아니라 `(b)`라 이 절 밖이고**(위 첫 표), `lib/i18n.ts`(≈117)는 사전 자신이다.
 
 **행 11-12는 08-20에 뒤늦게 났다**(지적 `ef4f3e62`). 08-08 칸이 빈 것은 0이었다는 뜻이 아니라
@@ -8499,6 +8500,46 @@ when이 `사전을 안 타는 한글 0자`인데, 실제로 훑으면 **범위 �
   여기가 정본이다. 묶음을 끝내면 이 표의 `상태` 칸을 그 티켓 해시로 바꾼다.
 - **≈1,012는 사람이 범위를 줄일 근거이기도 하다.** 줄이려면 답 `5c85bfb4`(= `(b)`)를 뒤집는
   것이라 사람 판정이고, 그때 갈리는 것은 이 표의 행이지 장치가 아니다.
+
+##### 개정 - 08-29 재측정. 남은 행을 한 번에 다 낸다 (요구 `3a7303f2`)
+
+사람 문장: *"지금 언어 적용이 미비합니다. 시스템 문구중 번역이 적용되어있지 않은 곳들을 찾아서
+적용해주세요. 예를들어 지금 요구 접수하는 요구 접수 다이얼로그는 언어가 english인데도 죄다
+한글입니다"*(2026-08-29). **되묻지 않았다** - 이 표가 이미 남은 목록의 정본이고, 요구가 지목한
+자리는 그 목록 안에 있다. 사람이 든 예(요구 접수 다이얼로그)를 그리는 파일은
+`components/ticket-ui.tsx`이고 행 4다.
+
+**세 번째 재측정이다**(같은 스크립트, 위 §묶음 표의 그 여덟 줄). 남은 합이 08-20의 1,336에서
+**1,134**로 줄었다 - 행 7(271)과 행 11(42)이 닫혔고, 그 사이에 새로 든 한글이 그 감소분의
+일부를 되돌렸다.
+
+| 무엇 | 값 |
+|---|---|
+| 닫힌 행 | 행 7(`204be4da`-`93c106b3`-`7a86fd5c`-`b5d9735d`) - 행 11(`c9f2eec5`-`90db2822`) |
+| 남은 행 | 3 - 4 - 5 - 6 - 8 - 9 - 12, 합 **1,094**. 행 10이 그 위에 40 |
+| 다시 든 곳 | 행 6이 94 -> 135, 행 5가 240 -> 251, 행 9가 93 -> 109, 행 12가 218 -> 220 |
+| 표가 못 보던 파일 다섯 | `lib/pool.ts`(9) - `components/queue-ref.tsx`(1) - `app/not-found.tsx`(2) - `app/(app)/error.tsx`(3) - `app/global-error.tsx`(3) |
+
+**다섯을 새 행으로 안 세우고 있는 행에 넣었다.** 행 11이 닫힌 뒤라 `공용 파일` 행이 더 없고,
+행을 새로 그으면 그 행 하나를 위해 티켓 둘이 더 뜬다(합 16건이다). 판정선(`grep -rl`)이 가리키는
+자리를 그대로 따랐다 - 오류-부재 경계 넷은 루트 셸이 그리는 화면이라 행 8이고, `pool.ts`와
+`queue-ref.tsx`는 무는 화면이 둘 이상이라 원래 행 11인데 그 행이 닫혀서 행 9로 내렸다.
+**행 9는 어느 화면도 단독으로 안 무는 서버-유틸의 행이고**, 그 성질이 행 11과 같다.
+
+**행 5와 행 12를 갈래 둘로 가른다.** 행 7이 271을 갈래 둘로 가른 그 판단과 같은 자리다 -
+행 5가 251, 행 12가 220이라 한 세션에 안 든다. **파일이 안 겹치는 선에서** 가른다(같은 파일을
+두 티켓이 물면 하드 `deps`가 생겨 이득이 0이다).
+
+| 행 | 갈래 | 파일 | 08-29 |
+|---|---|---|---|
+| 5 | 워커 화면 | `workers-ui.tsx` - `workers/{page,actions}.ts*` | 176 |
+| 5 | 세션 스트림 | `session-stream.tsx` - `transcript.ts` - `interject.ts` | 75 |
+| 12 | 온톨로지 | `ontology-ui.tsx` - `ontology/{page,actions}.ts*` - `ontology.ts` - `ontology-seed.ts` | 192 |
+| 12 | 에픽 | `epics-ui.tsx` - `epic-sidebar.tsx` - `epics/{page,actions}.ts*` - `epics.ts` - `epic.ts` | 28 |
+
+**행 10은 이번에 안 낸다.** 정의가 *마지막 묶음 뒤에 한 번*이고(위 불릿), 지금 내면 P338이
+닫히기 전에 같은 자리를 두 번 걷는다. 남은 행이 이번에 전부 나가므로 **행 10이 마지막 한 장으로
+남는다** - 그 회차에서 `en` 화면이 통째로 완전해진다.
 
 ##### 이행 안 된 화면에 기능을 얹을 때 - 그 티켓 Done when에 두 언어를 안 적는다 (피드백 `0bd6abc8`)
 
@@ -48310,6 +48351,66 @@ build` 0개인데 로드 평균이 455다(실측 (5)). CPU를 쓰는 것이 Chro
 **deps가 여전히 0줄이다.** 새 세 장이 만지는 파일도 안 겹친다 - `tickets.py`, 훅 한 장,
 `templates/hooks/cold-boot.sh`다. P337-7이 P337-4가 낸 코드를 고치지만 그것은 이미 master에 있어
 (`3d335597`) 기다릴 것이 없다.
+
+
+### P338. 남은 화면 일곱이 두 언어가 된다. 화면 이행의 마지막 묶음들 (요구 `3a7303f2` - `b529d083`, 왕복 0회)
+
+계약은 **§0-16 §묶음 표**이고, 이 블록은 그 표에 남아 있던 행 3-4-5-6-8-9-12를 한 번에 내는
+자리다. 절이 이미 정한 값(장치 - `ko` 폴백 - 영어의 정본은 `en` 사전 하나 - 묶음 안에서 문장을
+안 다듬는다)을 여기서 다시 안 적는다. 08-29 재측정과 갈래 판정은 §묶음 표 §개정에 있다.
+
+사람 문장: *"지금 언어 적용이 미비합니다. ... 예를들어 지금 요구 접수하는 요구 접수
+다이얼로그는 언어가 english인데도 죄다 한글입니다"*. 지목한 자리는 `components/ticket-ui.tsx`가
+그리는 `RequestDialog`이고 행 4다.
+
+| | 무엇 | 왜 |
+|---|---|---|
+| 갈리는 것 | 남은 일곱 행의 파일이 그리는 한국어가 `lib/i18n.ts` `ko` 키를 타고 나온다 - 같은 키에 `en`이 찬다 | 표의 범위 그대로다 |
+| 안 건드리는 것 | 화면 배치 - 자르기 - 잉크 - 서버 액션의 판정 - 편집칸 동작 - 엔진이 프롬프트에 쓰는 리터럴 | **문장을 다듬지 않고 자리를 옮기는 일이다**(`30a8f5c3` §Goal이 정한 규칙) |
+| 없는 것 | 새 의존성 - 새 장치 - 엔진 수정 - 새 라우트 - 새 shadcn-색 - 새 문구 | 장치는 `ec7cd2c1`이 세웠고 묶음 넷이 그 벌을 돌렸다 |
+
+#### 발행 - 아홉 갈래, 티켓 열여덟
+
+**스펙을 push한 뒤에 낸다.** 전부 `req: 3a7303f2`. 묶음의 벌 그대로 **한 갈래 = 티켓 둘**이다 -
+`developer`가 `ko` 키를 뽑고 `writer`가 `en`을 채운다.
+
+| ID | 무엇 | 페르소나 | deps | 상태 |
+|---|---|---|---|---|
+| P338-1 | 이행 - 보드(행 3, 52)의 한국어를 `ko` 사전 키로 | developer | - | 발행 |
+| P338-2 | 그 키들의 **영어 문구** | writer | P338-1 | 발행 |
+| P338-3 | 이행 - 티켓 상세-발행(행 4, 172) | developer | - | 발행 |
+| P338-4 | 그 키들의 **영어 문구** | writer | P338-3 | 발행 |
+| P338-5 | 이행 - 워커 화면(행 5 갈래, 176) | developer | - | 발행 |
+| P338-6 | 그 키들의 **영어 문구** | writer | P338-5 | 발행 |
+| P338-7 | 이행 - 세션 스트림(행 5 갈래, 75) | developer | - | 발행 |
+| P338-8 | 그 키들의 **영어 문구** | writer | P338-7 | 발행 |
+| P338-9 | 이행 - 홈(행 6, 135) | developer | - | 발행 |
+| P338-10 | 그 키들의 **영어 문구** | writer | P338-9 | 발행 |
+| P338-11 | 이행 - 프로젝트 관리(행 8, 155) | developer | - | 발행 |
+| P338-12 | 그 키들의 **영어 문구** | writer | P338-11 | 발행 |
+| P338-13 | 이행 - 나머지 `lib` 실패 사유(행 9, 109) | developer | - | 발행 |
+| P338-14 | 그 키들의 **영어 문구** | writer | P338-13 | 발행 |
+| P338-15 | 이행 - 온톨로지(행 12 갈래, 192) | developer | - | 발행 |
+| P338-16 | 그 키들의 **영어 문구** | writer | P338-15 | 발행 |
+| P338-17 | 이행 - 에픽(행 12 갈래, 28) | developer | - | 발행 |
+| P338-18 | 그 키들의 **영어 문구** | writer | P338-17 | 발행 |
+
+**갈래끼리 `deps`가 0줄이다.** 아홉 갈래가 파일을 하나도 안 겹치도록 그었다 - 한 파일이 두 행에
+걸치면 같은 hunk를 두 티켓이 문다. 아홉이 전부 `lib/i18n.ts`를 늘리지만 그것은 서로 다른 줄이고,
+`ko` 폴백이 있어 어느 순서로 붙어도 화면이 안 깨진다(행 7의 갈래 둘이 이미 그렇게 났다).
+
+**`writer` 티켓이 `developer`를 기다리는 것은 하드다** - 채울 키가 사전에 없으면 착수가
+불가능하다. 묶음 넷이 선 그 벌 그대로다.
+
+**QA를 따로 안 낸다.** 재는 것이 *`en`으로 놓고 그 갈래의 파일이 그리는 자리를 훑으면 사전을 안
+타는 한글이 0자인가* 하나고, 판정이 렌더된 마크업 grep이라 각 티켓 안에서 끝난다(P307-P308과
+같은 근거).
+
+**엔진 행이 0장이다.** `apps/teams/` 안에만 있다. 엔진이 프롬프트에 쓰는 리터럴은 사전에 안
+든다(§0-16 §장치 §사전의 범위, 피드백 `98f9c2ad`).
+
+**행 10(재유입 회수)은 이 에픽에 안 들어온다.** 정의가 마지막 묶음 뒤에 한 번이고, 열여덟 장이
+다 붙으면 그 한 장이 화면 전체를 `0자`로 닫는다.
 
 
 ## 수용조건 (전체)
