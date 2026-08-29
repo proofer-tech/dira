@@ -8,6 +8,7 @@
  *  이름은 파일 stem(`$0`)에서 그때그때 읽는다. */
 import { chmod, mkdir, readFile, readdir, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { DEFAULT_LOCALE, t, type Locale } from "./i18n.ts";
 import { NAME_RE, localDir } from "./paths.ts";
 import { readProjects } from "./projects.ts";
 import {
@@ -23,9 +24,11 @@ import {
   type WorkerStatus,
 } from "./workers.ts";
 
-function validPoolName(name: string): void {
+function validPoolName(name: string, locale: Locale = DEFAULT_LOCALE): void {
   if (!NAME_RE.test(name)) {
-    throw new Error(`공통 워커 이름은 영문·숫자·_·- 만 됩니다: ${name || "(비어 있음)"}`);
+    throw new Error(
+      `${t(locale, "pool.name.invalidPrefix")} ${name || t(locale, "workers.create.emptyName")}`,
+    );
   }
 }
 
@@ -178,8 +181,11 @@ bash "$_pool_root/workers/$_pool_name.sh"
 
 /** 등록. **파일 이름 목록이 풀이다** — 있는 공통 워커를 덮지 않는다(`O_EXCL`, 다른 shim
  *  생성·삭제와 같은 규칙). */
-export async function createPoolWorker(name: string): Promise<{ path: string }> {
-  validPoolName(name);
+export async function createPoolWorker(
+  name: string,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<{ path: string }> {
+  validPoolName(name, locale);
   const dir = poolDir();
   await mkdir(dir, { recursive: true });
   const file = path.join(dir, `${name}.sh`);
@@ -217,14 +223,14 @@ export async function poolWorkerFullStatus(name: string): Promise<WorkerStatus> 
 
 /** 등록 = crontab 줄만 넣는다(DESIGN.md §비주얼 §68 ② `재등록`). 풀 파일도 cron 진입점이라
  *  `registerCron`을 그대로 쓴다 — 프로젝트 워커의 `startWorker`와 같은 함수다. */
-export async function startPoolWorker(name: string): Promise<boolean> {
-  return registerCron(path.join(poolDir(), `${name}.sh`));
+export async function startPoolWorker(name: string, locale: Locale = DEFAULT_LOCALE): Promise<boolean> {
+  return registerCron(path.join(poolDir(), `${name}.sh`), locale);
 }
 
 /** 중단 = crontab 줄만 뺀다. 파일도 슬롯 잠금도 안 건드린다 — 물고 있는 프로젝트는 끝까지 간다
  *  (§4 중단과 같은 판정, `stopWorker`와 같은 함수). */
-export async function stopPoolWorker(name: string): Promise<boolean> {
-  return unregisterCron(path.join(poolDir(), `${name}.sh`));
+export async function stopPoolWorker(name: string, locale: Locale = DEFAULT_LOCALE): Promise<boolean> {
+  return unregisterCron(path.join(poolDir(), `${name}.sh`), locale);
 }
 
 /** 삭제. **crontab 줄부터 뺀 뒤에 파일을 지운다** — 뒤집으면 그 사이 1분에 cron이 없는 파일을
@@ -232,24 +238,26 @@ export async function stopPoolWorker(name: string): Promise<boolean> {
  *  `running` 판정과 같은 이유다(락과 도는 세션이 붕 뜬다). **빌리는 프로젝트 전부의 shim을 걷는
  *  것은 이 함수의 몫이 아니다** — 등록 프로젝트를 전부 훑어야 하는 화면 쪽 오케스트레이션이고,
  *  이 티켓은 그 화면이 부를 원자 함수(`returnPoolWorker`)까지만 낸다. */
-export async function deletePoolWorker(name: string): Promise<void> {
-  validPoolName(name);
+export async function deletePoolWorker(name: string, locale: Locale = DEFAULT_LOCALE): Promise<void> {
+  validPoolName(name, locale);
   const file = path.join(poolDir(), `${name}.sh`);
   const exists = await stat(file).then(
     () => true,
     () => false,
   );
-  if (!exists) throw new Error(`없는 공통 워커입니다: ${name}`);
+  if (!exists) throw new Error(`${t(locale, "pool.notFoundPrefix")} ${name}`);
   const holder = await poolSlotHolder(name);
   if (holder) {
     throw new Error(
-      `${name}이(가) 지금 ${holder.project} 프로젝트를 물고 있습니다(pid ${holder.pid}). 끝난 뒤 삭제하세요.`,
+      `${name}${t(locale, "pool.busyMid1")}${holder.project} ${t(locale, "pool.busyMid2")}${holder.pid}${t(locale, "pool.busySuffix")}`,
     );
   }
   // `cronFailed`는 화면이 해제 명령어를 이 실패에만 보여주려고 본다 — `deleteWorker`와 같은 신호.
-  await unregisterCron(file).catch((e: Error) => {
+  await unregisterCron(file, locale).catch((e: Error) => {
     throw Object.assign(
-      new Error(`crontab에서 ${name} 줄을 빼지 못했습니다: ${e.message} 파일은 지우지 않았습니다.`),
+      new Error(
+        `${t(locale, "pool.cronRemoveFailPrefix")} ${name} ${t(locale, "pool.cronRemoveFailMid")} ${e.message} ${t(locale, "pool.cronRemoveFailSuffix")}`,
+      ),
       { cronFailed: true },
     );
   });
@@ -275,17 +283,21 @@ function poolMarkerLine(name: string): string {
  *  **워크트리는 미리 안 만든다**(§4-16 결정 2) — `createWorker`도 `prepareWorktree`를 안 부르니
  *  그 계약을 그대로 잇는다. `<루트>/worktrees/<이름>`은 첫 디스패치 때 통합 게이트가 만든다
  *  (shim이 그 프로젝트의 `dispatch-gate.sh` source 줄을 템플릿에서 그대로 물려받았기 때문이다). */
-export async function borrowPoolWorker(root: string, name: string): Promise<{ path: string }> {
-  validPoolName(name);
+export async function borrowPoolWorker(
+  root: string,
+  name: string,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<{ path: string }> {
+  validPoolName(name, locale);
   const file = path.join(root, "workers", `${name}.sh`);
   const existing = await readFile(file, "utf8").catch(() => null);
   if (existing !== null) {
     if (poolShimNameOf(existing) === name) return { path: file }; // 이미 빌렸다 — no-op
     throw new Error(
-      `이미 같은 이름의 프로젝트 워커가 있습니다: ${name} — 공통 워커 이름은 이 프로젝트의 워커 이름과 겹칠 수 없습니다.`,
+      `${t(locale, "pool.nameCollisionMid")} ${name} ${t(locale, "pool.nameCollisionSuffix")}`,
     );
   }
-  const created = await createWorker(root, name);
+  const created = await createWorker(root, name, "claude", undefined, locale);
   const text = await readFile(created.path, "utf8");
   const lines = text.split("\n");
   lines.splice(1, 0, poolMarkerLine(name));
@@ -295,14 +307,18 @@ export async function borrowPoolWorker(root: string, name: string): Promise<{ pa
 
 /** 반납. shim이 아닌 파일(프로젝트 자신의 워커)은 이 경로로 안 지운다 — `deleteWorker`가 그대로
  *  `running`(티켓을 물고 있다) 판정을 하므로 그 체크는 다시 짜지 않는다. */
-export async function returnPoolWorker(root: string, name: string): Promise<void> {
+export async function returnPoolWorker(
+  root: string,
+  name: string,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<void> {
   const file = path.join(root, "workers", `${name}.sh`);
   const text = await readFile(file, "utf8").catch(() => null);
   if (text === null) return; // 이미 없다 — no-op
   if (poolShimNameOf(text) !== name) {
-    throw new Error(`${name}은(는) 공통 워커 shim이 아닙니다 — 이 함수로 지우지 않습니다.`);
+    throw new Error(`${name}${t(locale, "pool.notShimSuffix")}`);
   }
-  await deleteWorker(root, name);
+  await deleteWorker(root, name, locale);
 }
 
 // ── 빌리기 상한 (`<루트>/pool-limit`, §4-16 결정 3) ─────────────────────────
@@ -327,9 +343,13 @@ export async function readPoolLimit(root: string): Promise<PoolLimit> {
 
 /** 저장. `writePersonaLimit`과 같은 검증(정수·0 이상)이지만 `null` 삭제 규약은 없다 — 상한이
  *  없다는 상태 자체가 곧 `0`과 같은 효과라서(§4-16 결정 3), 값 하나만 받는다. */
-export async function writePoolLimit(root: string, limit: number): Promise<void> {
+export async function writePoolLimit(
+  root: string,
+  limit: number,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<void> {
   if (!Number.isInteger(limit) || limit < 0) {
-    throw new Error(`정수(0 이상)만 됩니다: ${limit}`);
+    throw new Error(`${t(locale, "pool.limit.invalidPrefix")} ${limit}`);
   }
   await mkdir(root, { recursive: true });
   await writeFile(path.join(root, "pool-limit"), `${limit}\n`, "utf8");

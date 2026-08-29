@@ -6,6 +6,7 @@
  *  YAML 파서를 쓰지 않는 이유도 같다 — 엔진이 정규식이라 파서를 쓰면 판정이 갈린다. */
 import { readFile, readdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { DEFAULT_LOCALE, t, type Locale } from "./i18n.ts";
 import { resolveWithin } from "./paths.ts";
 import type { ProjectConfig } from "./projects.ts";
 
@@ -1259,10 +1260,9 @@ export function relationEdges(
  *  있고(제약 5), `.done`은 이 큐의 불변 기록이다. `[hash]/actions.ts`의 `saveTicket`과
  *  `epic.ts`의 `writeEpic`(§에픽 §결정 8 - 카드를 에픽에 끌어다 놓는 쓰기)이 같은 문장을 쓴다 -
  *  한쪽이 새 문장을 짓거나 두 벌로 갈리지 않게 여기 하나만 둔다. */
-export const LOCKED: Record<"wip" | "done", string> = {
-  wip: "진행중 티켓은 편집할 수 없습니다 — 세션이 그 파일로 일하고 있습니다.",
-  done: "완료 티켓은 편집할 수 없습니다 — 완료는 이 큐의 불변 기록입니다.",
-};
+export function lockedReason(state: "wip" | "done", locale: Locale = DEFAULT_LOCALE): string {
+  return t(locale, state === "wip" ? "queue.locked.wip" : "queue.locked.done");
+}
 
 /** §프론트매터 행 편집기 결정 9 — 티켓 상세 편집 폼이 이미 정본으로 삼는 다섯 키. 행 편집기
  *  칸에서 안 뜬다(두 자리에서 같은 키를 고치면 나중에 저장한 쪽이 조용히 이긴다). */
@@ -1298,6 +1298,7 @@ const TICKET_ENGINE_KEYS = new Set([
 export function ticketFrontmatterUpdates(
   currentFm: Record<string, string>,
   rows: { key: string | null; value: string | null }[],
+  locale: Locale = DEFAULT_LOCALE,
 ): Record<string, string | undefined> {
   const updates: Record<string, string | undefined> = {};
   const seen = new Set<string>();
@@ -1306,7 +1307,7 @@ export function ticketFrontmatterUpdates(
     if (!key || seen.has(key)) continue; // 빈 키·중복 키는 무시(결정 3과 같은 관용 — 문법 검증 없음)
     seen.add(key);
     if (TICKET_FORM_FIELD_KEYS.has(key) || isTicketEngineKey(key)) {
-      throw new Error(`프론트매터 칸에서 고칠 수 없는 키입니다: ${key}`);
+      throw new Error(`${t(locale, "queue.frontmatter.uneditableKeyPrefix")} ${key}`);
     }
     const value = row.value ?? "";
     if (currentFm[key] !== value) updates[key] = value;
@@ -1335,10 +1336,11 @@ export async function writeTicket(
   // undefined로 주면 아무 일도 안 한다(splice 대상이 없다).
   updates: Record<string, string | undefined>,
   body: string,
+  locale: Locale = DEFAULT_LOCALE,
 ): Promise<void> {
   const text = await readFile(p, "utf8");
   const { lines, end } = readFm(text);
-  if (end < 0) throw new Error(`frontmatter 없음: ${p}`);
+  if (end < 0) throw new Error(`${t(locale, "queue.frontmatter.missingPrefix")} ${p}`);
 
   const fmLines = lines.slice(0, end + 1);
   for (const [key, raw] of Object.entries(updates)) {

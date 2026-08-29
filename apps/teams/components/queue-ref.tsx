@@ -36,7 +36,9 @@ function TicketCard({ value, locale }: { value: TicketRefValue; locale: Locale }
         <StatusBadge status={value.status} days={value.days} locale={locale} />
         <span className="font-mono text-xs text-muted-foreground">{value.stem}</span>
       </div>
-      <p className="text-sm font-medium text-foreground break-words">{value.title || "(제목 없음)"}</p>
+      <p className="text-sm font-medium text-foreground break-words">
+        {value.title || t(locale, "boardPage.title.empty")}
+      </p>
       {value.bodyPreview && <p className="text-xs text-muted-foreground line-clamp-3">{value.bodyPreview}</p>}
       {value.assignee.name &&
         (value.assignee.squad ? (

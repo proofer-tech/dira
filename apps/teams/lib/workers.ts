@@ -292,44 +292,55 @@ type ArrayBlock =
  *
  *  뜻은 부르는 쪽이 붙인다: 컨텍스트는 `경로|설명`으로 가르고(`splitEntry`), 엔진(§4-3)은
  *  argv 토큰이라 가르지 않는다. 같은 규약을 두 벌 적지 않으려고 여기서 갈렸다. */
-function parseArrayBlock(text: string, arr: string): ArrayBlock {
+function parseArrayBlock(text: string, arr: string, locale: Locale = DEFAULT_LOCALE): ArrayBlock {
   const opens = [...text.matchAll(contextOpen(arr))];
   // `missing`은 **없음**만 표시한다 — 모양이 다른 블록과 갈려야 엔진(§4-3)이 없을 때만 삽입한다.
-  if (opens.length === 0) return { ok: false, reason: `${arr}=( … ) 블록이 없습니다`, missing: true };
+  if (opens.length === 0) {
+    return { ok: false, reason: `${arr}${t(locale, "workers.context.blockMissingSuffix")}`, missing: true };
+  }
   if (opens.length > 1) {
     return {
       ok: false,
-      reason: `${arr} 할당이 ${opens.length}개입니다 — 어느 쪽이 실효인지 GUI가 정하지 않습니다`,
+      reason: `${arr} ${t(locale, "workers.context.multiAssignMid")}${opens.length}${t(locale, "workers.context.multiAssignSuffix")}`,
     };
   }
   const m = opens[0];
-  if (m[1]) return { ok: false, reason: "`+=` 추가 할당입니다" };
+  if (m[1]) return { ok: false, reason: t(locale, "workers.context.appendAssign") };
 
   const start = m.index;
   const entries: string[] = [];
   let i = start + m[0].length;
   for (;;) {
     while (i < text.length && " \t\r\n".includes(text[i])) i++;
-    if (i >= text.length) return { ok: false, reason: "닫는 `)`가 없습니다" };
+    if (i >= text.length) return { ok: false, reason: t(locale, "workers.context.noClosingParen") };
     if (text[i] === ")") return { ok: true, entries, start, end: i + 1 };
     if (text[i] === "#") {
       // 블록 전체를 치환하므로 안의 주석은 사라진다. 지우는 대신 거부한다.
-      return { ok: false, reason: "블록 안에 주석이 있습니다" };
+      return { ok: false, reason: t(locale, "workers.context.commentInBlock") };
     }
     const e = contextEntry.exec(text.slice(i));
     const after = e ? text[i + e[0].length] : undefined;
     // 이어붙이기(`"$X"/y`)도 예상 밖이다 — 항목 하나는 공백이나 `)`로 끝나야 한다.
     if (!e || (after !== undefined && !" \t\r\n)".includes(after))) {
       const snippet = text.slice(i, i + 30).split("\n")[0];
-      return { ok: false, reason: `항목으로 읽을 수 없는 부분이 있습니다: ${snippet}` };
+      return {
+        ok: false,
+        reason: `${t(locale, "workers.context.unreadableEntryPrefix")} ${snippet}`,
+      };
     }
     // 큰따옴표 안에서도 `$( )`는 셸이 실행한다. 실행되는 것을 GUI가 다시 쓰지 않는다.
     if (e[0].includes("$(")) {
-      return { ok: false, reason: `항목에 명령 치환 $( ) 가 있습니다: ${e[0]}` };
+      return {
+        ok: false,
+        reason: `${t(locale, "workers.context.commandSubInEntryPrefix")} ${e[0]}`,
+      };
     }
     // 작은따옴표 안의 `$`는 셸이 펴지 않는데 GUI는 큰따옴표로 다시 쓴다 = 의미가 바뀐다.
     if (e[2] !== undefined && e[2].includes("$")) {
-      return { ok: false, reason: `작은따옴표 안에 $ 가 있습니다: ${e[0]}` };
+      return {
+        ok: false,
+        reason: `${t(locale, "workers.context.dollarInSingleQuotePrefix")} ${e[0]}`,
+      };
     }
     entries.push(e[1] ?? e[2] ?? e[3]);
     i += e[0].length;
@@ -338,8 +349,12 @@ function parseArrayBlock(text: string, arr: string): ArrayBlock {
 
 /** 워커 파일 텍스트에서 `TICKET_CONTEXT=( … )` 블록을 찾아 항목과 **치환 구간**을 돌려준다.
  *  모양이 조금이라도 예상과 다르면 `ok: false` — 반쪽만 고치는 것보다 거부가 낫다. */
-export function parseContextBlock(text: string, arr = "TICKET_CONTEXT"): ContextBlock {
-  const b = parseArrayBlock(text, arr);
+export function parseContextBlock(
+  text: string,
+  arr = "TICKET_CONTEXT",
+  locale: Locale = DEFAULT_LOCALE,
+): ContextBlock {
+  const b = parseArrayBlock(text, arr, locale);
   return b.ok ? { ok: true, items: b.entries.map(splitEntry), start: b.start, end: b.end } : b;
 }
 
@@ -356,19 +371,23 @@ export function renderContextBlock(
 /** 사용자 입력이 **셸 스크립트 안의 큰따옴표 문자열**이 된다. 여기가 그 신뢰 경계다:
  *  큰따옴표 안에서 특별한 건 `"`·`` ` ``·`\`·`$`뿐이고, `$`만 살려 두고(그게 용도다)
  *  명령 치환 `$( )`는 막는다. 클라이언트 검증은 검증이 아니다 — 이 함수가 서버에서 돈다. */
-function cleanItem(raw: { path: string; desc: string }): { path: string; desc: string } {
+function cleanItem(
+  raw: { path: string; desc: string },
+  locale: Locale = DEFAULT_LOCALE,
+): { path: string; desc: string } {
   const path = raw.path.trim();
   const desc = raw.desc.trim();
-  if (!path) throw new Error("경로가 비어 있는 항목이 있습니다.");
+  if (!path) throw new Error(t(locale, "workers.context.emptyPath"));
   if (path.includes("|")) {
-    throw new Error(`경로에 | 는 쓸 수 없습니다(엔진이 첫 | 를 설명 구분자로 씁니다): ${path}`);
+    throw new Error(`${t(locale, "workers.context.pipeInPathPrefix")} ${path}`);
   }
-  for (const [what, s] of [
-    ["경로", path],
-    ["설명", desc],
+  for (const [whatKey, s] of [
+    ["workers.context.pathLabel", path],
+    ["workers.context.descLabel", desc],
   ] as const) {
-    if (/["`\\\r\n]/.test(s)) throw new Error(`${what}에 " \` \\ 개행은 쓸 수 없습니다: ${s}`);
-    if (s.includes("$(")) throw new Error(`${what}에 명령 치환 $( ) 는 쓸 수 없습니다: ${s}`);
+    const what = t(locale, whatKey);
+    if (/["`\\\r\n]/.test(s)) throw new Error(`${what}${t(locale, "workers.context.forbiddenCharsSuffix")} ${s}`);
+    if (s.includes("$(")) throw new Error(`${what}${t(locale, "workers.context.commandSubFieldSuffix")} ${s}`);
   }
   return { path, desc };
 }
@@ -446,13 +465,15 @@ async function writeBlock(
   clean: { path: string; desc: string }[],
   arr: string,
   mode: number,
+  locale: Locale = DEFAULT_LOCALE,
 ): Promise<string> {
   const next = text.slice(0, span.start) + renderContextBlock(clean, arr) + text.slice(span.end);
   // 자기 검증: 쓴 것을 다시 읽어 같은 항목이 나오는지 본다. 이스케이프가 틀리면 여기서 멈춘다.
-  const back = parseContextBlock(next, arr);
+  const back = parseContextBlock(next, arr, locale);
   if (!back.ok || JSON.stringify(back.items) !== JSON.stringify(clean)) {
+    const reason = back.ok ? t(locale, "workers.context.rewriteMismatchContentDiff") : back.reason;
     throw new Error(
-      `쓴 블록을 다시 읽었을 때 항목이 달라집니다(${back.ok ? "내용 불일치" : back.reason}). 쓰지 않았습니다.`,
+      `${t(locale, "workers.context.rewriteMismatchPrefix")}${reason}${t(locale, "workers.context.rewriteMismatchSuffix")}`,
     );
   }
   await atomicWrite(file, next, mode);
@@ -464,16 +485,17 @@ export async function writeContext(
   root: string,
   name: string,
   items: { path: string; desc: string }[],
+  locale: Locale = DEFAULT_LOCALE,
 ): Promise<WorkerContext> {
-  const file = await workerFile(root, name);
+  const file = await workerFile(root, name, locale);
   const text = await readFile(file, "utf8");
-  const b = parseContextBlock(text);
+  const b = parseContextBlock(text, "TICKET_CONTEXT", locale);
   if (!b.ok) {
     throw new Error(
-      `${name}.sh의 TICKET_CONTEXT 블록을 GUI가 안전하게 고칠 수 없습니다: ${b.reason}. 파일을 손으로 편집하세요.`,
+      `${name}.sh${t(locale, "workers.context.cantSafelyEditMid")} ${b.reason}${t(locale, "workers.context.editByHandSuffix")}`,
     );
   }
-  const clean = items.map(cleanItem);
+  const clean = items.map((it) => cleanItem(it, locale));
   const next = await writeBlock(
     file,
     text,
@@ -481,6 +503,7 @@ export async function writeContext(
     clean,
     "TICKET_CONTEXT",
     (await stat(file)).mode & 0o777,
+    locale,
   );
   const { cwd } = parseWorkerFile(next);
   return { ok: true, items: await withExistence(clean, [cwd ?? path.dirname(root)]) };
@@ -488,14 +511,19 @@ export async function writeContext(
 
 /** 워커 간 복사. 갈라진 컨텍스트는 티켓 결과를 워커에 따라 달라지게 만든다.
  *  `$TICKET_CWD`를 펴지 않고 문자열째로 옮기므로 받는 워커는 자기 워크트리를 가리킨다. */
-export async function copyContext(root: string, from: string, to: string): Promise<WorkerContext> {
-  if (from === to) throw new Error("같은 워커입니다.");
-  const src = await readFile(await workerFile(root, from), "utf8");
-  const b = parseContextBlock(src);
+export async function copyContext(
+  root: string,
+  from: string,
+  to: string,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<WorkerContext> {
+  if (from === to) throw new Error(t(locale, "workers.context.sameWorker"));
+  const src = await readFile(await workerFile(root, from, locale), "utf8");
+  const b = parseContextBlock(src, "TICKET_CONTEXT", locale);
   if (!b.ok) {
-    throw new Error(`${from}.sh의 TICKET_CONTEXT 블록을 읽을 수 없습니다: ${b.reason}`);
+    throw new Error(`${from}.sh${t(locale, "workers.context.copyReadFailMid")} ${b.reason}`);
   }
-  return writeContext(root, to, b.items);
+  return writeContext(root, to, b.items, locale);
 }
 
 // ── 공통 컨텍스트 `<루트>/context.sh` (DESIGN.md §4-1) ──────────────────────
@@ -548,7 +576,10 @@ async function commonCwds(root: string): Promise<string[]> {
 }
 
 /** `<루트>/context.sh`의 공통 항목. **파일이 없으면 0개다 — 오류가 아니다**(§4-1). */
-export async function readCommonContext(root: string): Promise<WorkerContext> {
+export async function readCommonContext(
+  root: string,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<WorkerContext> {
   const file = path.join(root, COMMON_FILE);
   let text: string | null = null;
   try {
@@ -557,11 +588,14 @@ export async function readCommonContext(root: string): Promise<WorkerContext> {
     const err = e as NodeJS.ErrnoException;
     // 없음 = 공통 0개(빈 상태 카드). 권한·EISDIR은 사유를 넘긴다 — 0개라고 우기지 않는다.
     if (err.code !== "ENOENT") {
-      return { ok: false, reason: `${COMMON_FILE}를 읽을 수 없습니다: ${err.message}` };
+      return {
+        ok: false,
+        reason: `${COMMON_FILE}${t(locale, "workers.context.commonReadFailMid")} ${err.message}`,
+      };
     }
   }
   if (text === null) return { ok: true, items: [] };
-  const b = parseContextBlock(text, COMMON_ARR);
+  const b = parseContextBlock(text, COMMON_ARR, locale);
   if (!b.ok) return b;
   // 기준 cwd는 **공통을 받는 워커 전원의 `TICKET_CWD`**다. 루트의 부모(tick.sh 39행 기본값)로
   // 단정하면 워커가 그 값을 덮어쓴 큐에서 있는 파일을 `없음`으로 그린다(`6e3dcd79`).
@@ -573,6 +607,7 @@ export async function readCommonContext(root: string): Promise<WorkerContext> {
 export async function writeCommonContext(
   root: string,
   items: { path: string; desc: string }[],
+  locale: Locale = DEFAULT_LOCALE,
 ): Promise<WorkerContext> {
   const file = path.join(root, COMMON_FILE);
   let text: string | null = null;
@@ -583,30 +618,34 @@ export async function writeCommonContext(
   }
   // 있는 파일은 블록만 갈린다 — 병합 2줄은 처음 쓸 때 넣은 뒤 다시 만지지 않는 고정 문구다.
   const base = text ?? COMMON_TEMPLATE;
-  const b = parseContextBlock(base, COMMON_ARR);
+  const b = parseContextBlock(base, COMMON_ARR, locale);
   if (!b.ok) {
     throw new Error(
-      `${COMMON_FILE}의 ${COMMON_ARR} 블록을 GUI가 안전하게 고칠 수 없습니다: ${b.reason}. 파일을 손으로 편집하세요.`,
+      `${COMMON_FILE}${t(locale, "workers.context.commonEditMid1")}${COMMON_ARR}${t(locale, "workers.context.commonEditMid2")} ${b.reason}${t(locale, "workers.context.editByHandSuffix")}`,
     );
   }
-  const clean = items.map(cleanItem);
+  const clean = items.map((it) => cleanItem(it, locale));
   // 실행 파일이 아니다(워커가 `.` 한다). 있던 파일의 mode는 사람이 정한 것이니 잃지 않는다.
   const mode = text === null ? 0o644 : (await stat(file)).mode & 0o777;
-  await writeBlock(file, base, b, clean, COMMON_ARR, mode);
+  await writeBlock(file, base, b, clean, COMMON_ARR, mode, locale);
   return { ok: true, items: await withExistence(clean, await commonCwds(root)) };
 }
 
 /** `source` 줄을 워커 파일에 넣는다. 삽입 위치는 추측하지 않는다 —
  *  `parseContextBlock`이 주는 `end`(닫는 `)`) **바로 다음 줄**이다.
  *  이미 있으면 `false`(no-op), 넣었으면 `true`. */
-export async function applyCommonSource(root: string, name: string): Promise<boolean> {
-  const file = await workerFile(root, name);
+export async function applyCommonSource(
+  root: string,
+  name: string,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<boolean> {
+  const file = await workerFile(root, name, locale);
   const text = await readFile(file, "utf8");
   if (commonSourceRe.test(text)) return false;
-  const b = parseContextBlock(text);
+  const b = parseContextBlock(text, "TICKET_CONTEXT", locale);
   if (!b.ok) {
     throw new Error(
-      `${name}.sh에 source 줄을 넣을 자리를 GUI가 짚을 수 없습니다: ${b.reason}. 파일을 손으로 편집하세요.`,
+      `${name}.sh${t(locale, "workers.context.sourceLineCantPlaceMid")} ${b.reason}${t(locale, "workers.context.editByHandSuffix")}`,
     );
   }
   const rest = text.slice(b.end);
@@ -616,13 +655,13 @@ export async function applyCommonSource(root: string, name: string): Promise<boo
     commonSourceLine(root) +
     (rest.startsWith("\n") ? rest : "\n" + rest);
   // 자기 검증: 줄을 넣었는데 블록 항목이 달라지면 엉뚱한 라인을 밟은 것이다.
-  const back = parseContextBlock(next);
+  const back = parseContextBlock(next, "TICKET_CONTEXT", locale);
   if (
     !back.ok ||
     JSON.stringify(back.items) !== JSON.stringify(b.items) ||
     !commonSourceRe.test(next)
   ) {
-    throw new Error("줄을 넣은 뒤 파일이 예상과 달라집니다. 쓰지 않았습니다.");
+    throw new Error(t(locale, "workers.context.lineChangedAfterInsert"));
   }
   await atomicWrite(file, next, (await stat(file)).mode & 0o777); // 755를 잃지 않는다
   return true;
@@ -770,13 +809,17 @@ export const ENGINES: readonly {
 export const MODEL_RE = /^[A-Za-z0-9._:/-]+$/;
 
 /** 고른 값 → argv 토큰. 템플릿은 고정이고 모델 자리만 끼운다. */
-export function engineArgv(id: EngineId, model: string = NO_MODEL): string[] {
+export function engineArgv(
+  id: EngineId,
+  model: string = NO_MODEL,
+  locale: Locale = DEFAULT_LOCALE,
+): string[] {
   const e = ENGINES.find((x) => x.id === id);
-  if (!e) throw new Error(`모르는 엔진입니다: ${id}`);
+  if (!e) throw new Error(`${t(locale, "workers.engine.unknownEnginePrefix")} ${id}`);
   if (model !== NO_MODEL && !MODEL_RE.test(model)) {
-    throw new Error(`모델 이름에 쓸 수 없는 문자가 있습니다(영문·숫자·. _ : / - 만): ${model}`);
+    throw new Error(`${t(locale, "workers.engine.invalidModelCharsPrefix")} ${model}`);
   }
-  return e.argv.flatMap((t) => (t === MODEL_SLOT ? (model ? [e.flag, model] : []) : [t]));
+  return e.argv.flatMap((tok) => (tok === MODEL_SLOT ? (model ? [e.flag, model] : []) : [tok]));
 }
 
 /** `tick.sh:51-53`. 워커가 덮어쓰지 않으면 실제로 이게 돈다 — "기본값"이라고 얼버무리지 않는다.
@@ -869,15 +912,20 @@ export function personaEngineHint(
  *  엔진은 그 논리가 안 뜬다: 지금 이 큐의 워커 전부에 `TICKET_ENGINE` 대입이 없어서 거부하면
  *  기능이 **모든 기존 워커에서 안 열린다**(§4-3). 대입 하나뿐이라 `source` 줄 위 어디에 놓든
  *  결과가 같으므로 고를 것이 없다 — 추측이 아니다. */
-function applyEngineBlock(text: string, id: EngineId, model: string): string {
+function applyEngineBlock(
+  text: string,
+  id: EngineId,
+  model: string,
+  locale: Locale = DEFAULT_LOCALE,
+): string {
   const block = renderEngineBlock(id, model);
-  const b = parseArrayBlock(text, ENGINE_ARR);
+  const b = parseArrayBlock(text, ENGINE_ARR, locale);
   if (b.ok) return text.slice(0, b.start) + block + text.slice(b.end);
   // 모양이 다른 블록(`+=`·2개·주석·안 닫힘)은 종전대로 거부다. 없는 것만 삽입이다.
-  if (!b.missing) throw new Error(`${b.reason}. 파일을 손으로 편집하세요.`);
+  if (!b.missing) throw new Error(`${b.reason}${t(locale, "workers.context.editByHandSuffix")}`);
   const m = text.match(sourceTick); // `/m` 앵커라 index가 그 줄 처음이다
   if (!m || m.index === undefined) {
-    throw new Error("`. <레포>/tick.sh` 줄이 없습니다 — 이 파일은 워커가 아닙니다.");
+    throw new Error(t(locale, "workers.engine.noWorkerFileLine"));
   }
   return text.slice(0, m.index) + block + "\n" + text.slice(m.index);
 }
@@ -1665,14 +1713,14 @@ export function cronRegister(text: string, workerPath: string): string {
 /** 쓰기 직전의 읽기. `crontabText()`와 달리 **모든 실패를 빈 crontab으로 보지 않는다** —
  *  읽기 실패를 "비었다"로 오해하고 그 위에 쓰면 남의 줄이 전부 사라진다. 진짜로 비어 있는
  *  경우(`crontab: no crontab for <user>`)만 빈 문자열이다. */
-async function crontabForWrite(): Promise<string> {
+async function crontabForWrite(locale: Locale = DEFAULT_LOCALE): Promise<string> {
   try {
     return (await promisify(execFile)("crontab", ["-l"], { timeout: CRONTAB_READ_TIMEOUT })).stdout;
   } catch (e) {
     const err = e as { stdout?: string; stderr?: string; message: string; killed?: boolean };
-    if (err.killed) throw new Error(readTimedOut);
+    if (err.killed) throw new Error(readTimedOut(locale));
     if (!err.stdout && /no crontab for/i.test(err.stderr ?? "")) return "";
-    throw new Error(`crontab -l 실패: ${(err.stderr || err.message).trim()}`);
+    throw new Error(`${t(locale, "workers.crontab.readFailPrefix")} ${(err.stderr || err.message).trim()}`);
   }
 }
 
@@ -1696,17 +1744,15 @@ async function crontabForWrite(): Promise<string> {
 const CRONTAB_READ_TIMEOUT = 10_000;
 const CRONTAB_WRITE_TIMEOUT = 180_000;
 
-const readTimedOut =
-  "crontab -l이 10초 안에 응답하지 않아 중단했습니다. 셸에서 직접 실행해 보세요.";
-const writeTimedOut =
-  "crontab -가 3분 안에 응답하지 않아 중단했습니다. macOS의 권한 창이 답을 기다리는 중일 수 있습니다 — 화면에 ‘…에서 사용자의 컴퓨터를 관리하려고 합니다’ 창이 떠 있으면 [허용]을 누르고 다시 시도하세요. 시스템 설정 > 개인정보 보호 및 보안 > 앱 관리에서 미리 켜 둘 수도 있습니다.";
+const readTimedOut = (locale: Locale = DEFAULT_LOCALE) => t(locale, "workers.crontab.readTimedOut");
+const writeTimedOut = (locale: Locale = DEFAULT_LOCALE) => t(locale, "workers.crontab.writeTimedOut");
 
 /** 승인 거부는 **기다림이 아니라 사유**다. TCC가 거부하면 crontab은 블록되지 않고 바로 죽는데,
  *  그 stderr만으로는 무엇을 켜야 하는지 사람이 알 수 없다(`Operation not permitted`). 사유를 붙인다. */
-export const cronWriteError = (stderr: string) =>
+export const cronWriteError = (stderr: string, locale: Locale = DEFAULT_LOCALE) =>
   /not permitted|permission denied|not allowed/i.test(stderr)
-    ? `‘앱 관리’ 권한이 없어 crontab에 쓰지 못했습니다 — 승인 창에서 [허용 안 함]을 눌렀거나 이전에 거부한 상태입니다. 시스템 설정 > 개인정보 보호 및 보안 > 앱 관리에서 이 앱(dira, 또는 GUI를 띄운 터미널)을 켜고 다시 시도하세요. (crontab -: ${stderr})`
-    : `crontab - 실패: ${stderr}`;
+    ? `${t(locale, "workers.crontab.permissionDenied")} (crontab -: ${stderr})`
+    : `${t(locale, "workers.crontab.otherFailPrefix")} ${stderr}`;
 
 /** **읽기는 쓰기 직전에 한다.** 렌더 때 읽은 값을 재사용하면 그 사이 남의 변경을 되돌린다
  *  (§결정 기록 실측 — 스펙 쓰는 20분 사이에 남의 줄이 하나 줄었다). 창은 좁힐 수 있을 뿐
@@ -1717,35 +1763,42 @@ export const cronWriteError = (stderr: string) =>
  *
  *  돌려주는 값은 **crontab이 실제로 바뀌었는가**다. false = 이미 그 상태였다(no-op) — 중단이
  *  "이미 미등록입니다"를 에러가 아니라 사실로 말할 수 있는 근거가 이것뿐이다. */
-async function applyCrontab(workerPath: string, want: boolean): Promise<boolean> {
-  const before = await crontabForWrite();
+async function applyCrontab(
+  workerPath: string,
+  want: boolean,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<boolean> {
+  const before = await crontabForWrite(locale);
   const next = want ? cronRegister(before, workerPath) : cronUnregister(before, workerPath);
   const changed = next !== before;
   if (changed) {
     await new Promise<void>((resolve, reject) => {
       const child = execFile("crontab", ["-"], { timeout: CRONTAB_WRITE_TIMEOUT }, (err, _out, stderr) => {
         const killed = (err as { killed?: boolean } | null)?.killed;
-        if (err) reject(new Error(killed ? writeTimedOut : cronWriteError((stderr || err.message).trim())));
-        else resolve();
+        if (err) {
+          reject(new Error(killed ? writeTimedOut(locale) : cronWriteError((stderr || err.message).trim(), locale)));
+        } else resolve();
       });
       child.stdin!.end(next);
     });
   }
-  const after = await crontabForWrite();
+  const after = await crontabForWrite(locale);
   if (after.split("\n").some((l) => isWorkerLine(l, workerPath)) !== want) {
     throw new Error(
       want
-        ? "crontab에 썼는데 다시 읽으니 그 줄이 없습니다(쓰기가 조용히 막힌 환경일 수 있습니다)."
-        : "crontab에서 뺐는데 다시 읽으니 그 줄이 남아 있습니다.",
+        ? t(locale, "workers.crontab.registerMismatch")
+        : t(locale, "workers.crontab.unregisterMismatch"),
     );
   }
   return changed;
 }
 
 /** 이 워커 줄 하나를 crontab에 넣는다(이미 있으면 그 줄을 새로 쓴다). */
-export const registerCron = (workerPath: string) => applyCrontab(workerPath, true);
+export const registerCron = (workerPath: string, locale: Locale = DEFAULT_LOCALE) =>
+  applyCrontab(workerPath, true, locale);
 /** 이 워커 줄을 뺀다. 없으면 아무것도 쓰지 않는다. */
-export const unregisterCron = (workerPath: string) => applyCrontab(workerPath, false);
+export const unregisterCron = (workerPath: string, locale: Locale = DEFAULT_LOCALE) =>
+  applyCrontab(workerPath, false, locale);
 
 /** 워커가 0개인 큐의 **첫 워커**를 손으로 만드는 명령. `<dira 레포>`는 채워지지 않는다 —
  *  엔진 코드 위치는 워커 파일에만 적혀 있고, 워커가 없으면 GUI가 알 방법이 없다(→ createWorker). */
@@ -1808,7 +1861,11 @@ export function rewriteOntology(text: string, value: string | null): string {
  *  자기 검증은 `writeContext`와 같은 관용구다: **쓰기 전에** 계산한 `next`를 다시 파싱해 원하는
  *  값이 나오는지 확인하고, 워커 하나라도 다르면 **어느 파일도 쓰지 않는다** — 절반만 바뀐 큐를
  *  만들지 않는다. */
-export async function writeOntology(root: string, value: string | null): Promise<void> {
+export async function writeOntology(
+  root: string,
+  value: string | null,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<void> {
   const dir = path.join(root, "workers");
   const names = (await readdir(dir).catch(() => [] as string[])).filter((n) => n.endsWith(".sh"));
   const writes: { file: string; next: string; mode: number }[] = [];
@@ -1819,7 +1876,7 @@ export async function writeOntology(root: string, value: string | null): Promise
     const m = [...next.matchAll(ontologyAssign)][0];
     const got = m ? shellPath(m[1]) : null;
     if (got !== value) {
-      throw new Error(`${n}에 쓴 뒤 값을 다시 읽으면 달라집니다. 어느 파일도 쓰지 않았습니다.`);
+      throw new Error(`${n}${t(locale, "workers.ontology.mismatchMid")}`);
     }
     writes.push({ file, next, mode: (await stat(file)).mode & 0o777 });
   }
@@ -1940,8 +1997,12 @@ unset _dira_engine _dira_gone _dira_tab _dira_cut
  *
  *  ponytail: 줄이 있는데 `self-heal.sh`가 없는 상태(사람이 파일만 지웠다)는 카드가 경고하지
  *  않는다 — 판정이 §4-1 `commonSource`와 같은 축(줄 하나)이다. 그 상태가 생기면 그때 잰다. */
-export async function applySelfHeal(root: string, name: string): Promise<boolean> {
-  const file = await workerFile(root, name);
+export async function applySelfHeal(
+  root: string,
+  name: string,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<boolean> {
+  const file = await workerFile(root, name, locale);
   const text = await readFile(file, "utf8");
 
   // 실행 파일이 아니다(워커가 `.` 한다) — `context.sh`·`dispatch-gate.sh`와 같은 644.
@@ -1956,14 +2017,12 @@ export async function applySelfHeal(root: string, name: string): Promise<boolean
 
   const m = text.match(sourceTick); // `/m` 앵커라 index가 그 줄 처음이다
   if (!m || m.index === undefined) {
-    throw new Error(
-      `${name}.sh에 \`. <레포>/tick.sh\` 줄이 없습니다 — 자가 정리를 넣을 자리를 GUI가 짚을 수 없습니다. 파일을 손으로 편집하세요.`,
-    );
+    throw new Error(`${name}.sh${t(locale, "workers.selfHeal.noSourceLineMid")}`);
   }
   const tick = shellValue(m[1]);
   if (tick === null || !path.isAbsolute(expandHome(tick))) {
     throw new Error(
-      `${name}.sh의 엔진 경로를 셸 없이 펼 수 없습니다: ${m[1].trim()}. 파일을 손으로 편집하세요.`,
+      `${name}.sh${t(locale, "workers.selfHeal.enginePathMid")} ${m[1].trim()}${t(locale, "workers.context.editByHandSuffix")}`,
     );
   }
   const line = selfHealSourceLine(root, path.dirname(expandHome(tick)));
@@ -1976,7 +2035,7 @@ export async function applySelfHeal(root: string, name: string): Promise<boolean
     back.index !== m.index + line.length + 1 ||
     !selfHealSourceRe.test(next)
   ) {
-    throw new Error("줄을 넣은 뒤 파일이 예상과 달라집니다. 쓰지 않았습니다.");
+    throw new Error(t(locale, "workers.context.lineChangedAfterInsert"));
   }
   await atomicWrite(file, next, (await stat(file)).mode & 0o777); // 755를 잃지 않는다
   return true;
@@ -2200,15 +2259,17 @@ async function integrationBranchOf(root: string): Promise<string | null> {
 
 /** 소급 (§4-14 §소급): `<루트>/dispatch-gate.sh`를 **없으면 만들고**, 워커 파일의 `. tick.sh`
  *  **바로 위**에 `source` 줄을 끼운다. 줄이 이미 있으면 `false`(no-op) — 자가 정리와 같은 계약. */
-export async function applyDispatchGate(root: string, name: string): Promise<boolean> {
-  const file = await workerFile(root, name);
+export async function applyDispatchGate(
+  root: string,
+  name: string,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<boolean> {
+  const file = await workerFile(root, name, locale);
   const text = await readFile(file, "utf8");
 
   const branch = await integrationBranchOf(root);
   if (branch === null) {
-    throw new Error(
-      "이 프로젝트의 통합 브랜치를 protocols/AGENTS.md에서 읽을 수 없습니다 — 파일을 손으로 편집하세요.",
-    );
+    throw new Error(t(locale, "workers.dispatchGate.branchUnreadable"));
   }
 
   const gate = path.join(root, DISPATCH_GATE_FILE);
@@ -2219,9 +2280,7 @@ export async function applyDispatchGate(root: string, name: string): Promise<boo
 
   const m = text.match(sourceTick); // `/m` 앵커라 index가 그 줄 처음이다
   if (!m || m.index === undefined) {
-    throw new Error(
-      `${name}.sh에 \`. <레포>/tick.sh\` 줄이 없습니다 — 통합 게이트를 넣을 자리를 GUI가 짚을 수 없습니다. 파일을 손으로 편집하세요.`,
-    );
+    throw new Error(`${name}.sh${t(locale, "workers.dispatchGate.noSourceLineMid")}`);
   }
   const line = dispatchGateSourceLine(root);
   const next = text.slice(0, m.index) + line + "\n" + text.slice(m.index);
@@ -2233,7 +2292,7 @@ export async function applyDispatchGate(root: string, name: string): Promise<boo
     back.index !== m.index + line.length + 1 ||
     !dispatchGateSourceRe.test(next)
   ) {
-    throw new Error("줄을 넣은 뒤 파일이 예상과 달라집니다. 쓰지 않았습니다.");
+    throw new Error(t(locale, "workers.context.lineChangedAfterInsert"));
   }
   await atomicWrite(file, next, (await stat(file)).mode & 0o777); // 755를 잃지 않는다
   return true;
@@ -2281,8 +2340,12 @@ export function ticketCwdLineCmd(root: string, name: string, file: string): stri
  *  경로를 좁혀서 다른 워커 파일은 안 건드린다. 값은 `createWorker`(1995행)가 생성 때 주는
  *  0o755로 고정한다 — 잃은 실행 비트 셋만 켜는 게 아니라 이 앱이 만드는 워커 파일의 정상
  *  모드로 되돌린다. 권한·소유자가 다르면 `chmod`가 던지고 화면이 `execBitCmd`로 되돌아간다. */
-export async function applyExecBit(root: string, name: string): Promise<void> {
-  const file = await workerFile(root, name);
+export async function applyExecBit(
+  root: string,
+  name: string,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<void> {
+  const file = await workerFile(root, name, locale);
   await chmod(file, 0o755);
 }
 
@@ -2331,7 +2394,11 @@ async function listWorktreeEntries(
  *
  *  ponytail: 의존성 설치는 하지 않는다(§4 생성 4항 — 이게 이 기능의 천장이다). 필요해지면
  *  `<루트>/worktree-setup.sh`가 다음 단계고 `context.sh`와 같은 선례를 따른다. */
-export async function prepareWorktree(root: string, name: string): Promise<WorktreePrep> {
+export async function prepareWorktree(
+  root: string,
+  name: string,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<WorktreePrep> {
   const cmds = worktreeCmds(root, name);
   const dir = worktreePath(root, name);
   const stop = (done: number, reason: string): WorktreePrep => ({ dir, done, reason, rest: cmds.slice(done) });
@@ -2348,7 +2415,7 @@ export async function prepareWorktree(root: string, name: string): Promise<Workt
     return {
       dir,
       done: 0,
-      reason: `${repo} 는 git 레포가 아닙니다. 워크트리를 쓰지 않는 배치라면 정상입니다.`,
+      reason: `${repo} ${t(locale, "workers.worktree.notGitRepoSuffix")}`,
       rest: [],
       skipped: true,
     };
@@ -2394,7 +2461,7 @@ export async function prepareWorktree(root: string, name: string): Promise<Workt
     try {
       await git("worktree", "add", dir, ...(has ? [branch] : ["-b", branch]));
     } catch (e) {
-      return stop(0, `git worktree add 실패: ${why(e)}`);
+      return stop(0, `${t(locale, "workers.worktree.addFailedPrefix")} ${why(e)}`);
     }
   }
   try {
@@ -2409,14 +2476,17 @@ export async function prepareWorktree(root: string, name: string): Promise<Workt
       return stop(
         1,
         eexist
-          ? `${link} 가 이미 있습니다. 지우지 않았습니다 — 그 안에 사람의 작업이 있을 수 있습니다.`
-          : `심링크를 만들지 못했습니다: ${why(e)}`,
+          ? `${link} ${t(locale, "workers.worktree.symlinkExistsSuffix")}`
+          : `${t(locale, "workers.worktree.symlinkFailedPrefix")} ${why(e)}`,
       );
     }
   }
   const to = await realpath(link).then(nfc, () => null);
   if (to !== queue) {
-    return stop(2, `${link} 가 큐 루트(${queue})가 아니라 ${to ?? "(못 풀림)"} 로 풀립니다.`);
+    return stop(
+      2,
+      `${link} ${t(locale, "workers.worktree.wrongResolveMid1")}${queue}${t(locale, "workers.worktree.wrongResolveMid2")} ${to ?? t(locale, "workers.worktree.unresolved")} ${t(locale, "workers.worktree.wrongResolveSuffix")}`,
+    );
   }
   return { dir, done: 3, rest: [] };
 }
@@ -2425,9 +2495,15 @@ export async function prepareWorktree(root: string, name: string): Promise<Workt
 
 /** 이름 검증 + 경로 조립은 **서버에서만** 한다(신뢰 경계). 이름이 규칙을 통과해도 경로를
  *  문자열로 믿지 않고 `resolveWithin`으로 workers/ 안인지 확인한다. */
-async function workerFile(root: string, name: string): Promise<string> {
+async function workerFile(
+  root: string,
+  name: string,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<string> {
   if (!NAME_RE.test(name)) {
-    throw new Error(`워커 이름은 영문·숫자·_·- 만 됩니다: ${name || "(비어 있음)"}`);
+    throw new Error(
+      `${t(locale, "workers.create.invalidNamePrefix")} ${name || t(locale, "workers.create.emptyName")}`,
+    );
   }
   return resolveWithin(path.join(root, "workers"), `${name}.sh`);
 }
@@ -2450,25 +2526,26 @@ export async function createWorker(
   name: string,
   engine: EngineId = "claude",
   model: string = NO_MODEL,
+  locale: Locale = DEFAULT_LOCALE,
 ): Promise<{ path: string; template: string }> {
   // 템플릿 확인이 먼저다 — workers/가 아예 없는 큐에서 `resolveWithin`의 ENOENT를 먼저 만나면
   // 사용자가 받는 문장이 "경로 없음"이 되어 진짜 이유(템플릿 없음)를 가린다.
   if (!NAME_RE.test(name)) {
-    throw new Error(`워커 이름은 영문·숫자·_·- 만 됩니다: ${name || "(비어 있음)"}`);
+    throw new Error(
+      `${t(locale, "workers.create.invalidNamePrefix")} ${name || t(locale, "workers.create.emptyName")}`,
+    );
   }
   const dir = path.join(root, "workers");
   const existing = (await readdir(dir).catch(() => [] as string[])).filter((n) => n.endsWith(".sh")).sort();
   if (existing.length === 0) {
-    throw new Error(
-      "템플릿으로 쓸 워커가 없습니다. 첫 워커는 엔진 레포의 worker.sh.example을 복사해 만듭니다.",
-    );
+    throw new Error(t(locale, "workers.create.noTemplate"));
   }
-  const file = await workerFile(root, name);
+  const file = await workerFile(root, name, locale);
   const template = existing[0];
   const text = await readFile(path.join(dir, template), "utf8");
   // 값 검증(모르는 엔진 · 셸 메타문자가 든 모델)은 `engineArgv`가 한다 — 이 경로도 신뢰
   // 경계고, 던지면 **파일을 만들기 전에** 멈춘다.
-  const next = applyEngineBlock(rewriteCwd(text, root, name), engine, model);
+  const next = applyEngineBlock(rewriteCwd(text, root, name), engine, model, locale);
   // O_EXCL. 있는 워커를 덮어쓰면 돌고 있는 cron 줄의 내용이 바뀐다.
   await writeFile(file, next, { flag: "wx" });
   await chmod(file, 0o755);
@@ -2482,10 +2559,14 @@ export async function createWorker(
  *  false = 이미 미등록이었다(no-op이지 에러가 아니다).
  *
  *  이름은 경로로 조립하지 않는다 — `readdir`가 준 실제 워커 목록에서 찾는다. */
-export async function stopWorker(root: string, name: string): Promise<boolean> {
+export async function stopWorker(
+  root: string,
+  name: string,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<boolean> {
   const w = (await listWorkers(root)).find((x) => x.name === name);
-  if (!w) throw new Error(`없는 워커입니다: ${name}`);
-  return unregisterCron(w.path);
+  if (!w) throw new Error(`${t(locale, "workers.manage.noSuchWorkerPrefix")} ${name}`);
+  return unregisterCron(w.path, locale);
 }
 
 /** 재등록 = **crontab 줄만 다시 넣는다** (DESIGN.md §4 재등록). `중단`의 역방향이고 그것뿐이다 —
@@ -2496,31 +2577,41 @@ export async function stopWorker(root: string, name: string): Promise<boolean> {
  *  아니라 **등록 전의 `cron`**인 이유: `cronRegister`는 있던 줄을 지우고 맨 뒤에 다시 넣으므로
  *  줄 뒤에 남의 잡이 있으면 텍스트는 바뀐다(`changed = true`). 그건 "등록돼 있지 않았다"가
  *  아니다 — 화면이 알려야 하는 사실은 `중단`과 대칭인 이쪽이다. */
-export async function startWorker(root: string, name: string): Promise<boolean> {
+export async function startWorker(
+  root: string,
+  name: string,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<boolean> {
   const w = (await listWorkers(root)).find((x) => x.name === name);
-  if (!w) throw new Error(`없는 워커입니다: ${name}`);
-  await registerCron(w.path);
+  if (!w) throw new Error(`${t(locale, "workers.manage.noSuchWorkerPrefix")} ${name}`);
+  await registerCron(w.path, locale);
   return !w.cron;
 }
 
 /** crontab 줄을 빼고 파일을 지운다 — **순서가 그렇다**(DESIGN.md §4 삭제). 뒤집으면 그 사이
  *  1분에 cron이 없는 파일을 실행한다. 해제가 실패하면 파일을 남기고 멈춘다: 절반 지워진
  *  상태(파일은 없는데 cron 줄은 남은)를 만들지 않는다. */
-export async function deleteWorker(root: string, name: string): Promise<void> {
-  const file = await workerFile(root, name);
+export async function deleteWorker(
+  root: string,
+  name: string,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<void> {
+  const file = await workerFile(root, name, locale);
   const w = (await listWorkers(root)).find((x) => x.name === name);
-  if (!w) throw new Error(`없는 워커입니다: ${name}`);
+  if (!w) throw new Error(`${t(locale, "workers.manage.noSuchWorkerPrefix")} ${name}`);
   // running을 지우면 락과 돌고 있는 세션이 붕 뜬다 — 락은 남고 티켓은 .wip에 갇힌다.
   if (w.status === "running") {
     throw new Error(
-      `${name}이(가) 지금 티켓을 물고 있습니다(pid ${w.lockPid ?? "?"}). 끝난 뒤 삭제하세요.`,
+      `${name}${t(locale, "workers.manage.busyMid1")}${w.lockPid ?? "?"}${t(locale, "workers.manage.busySuffix")}`,
     );
   }
   // `cronFailed`는 화면이 해제 명령어를 **이 실패에만** 보여주려고 본다. unlink가 실패한
   // 경우에 같은 명령을 권하면 이미 빠진 줄을 다시 빼라는 거짓 안내가 된다.
-  await unregisterCron(w.path).catch((e: Error) => {
+  await unregisterCron(w.path, locale).catch((e: Error) => {
     throw Object.assign(
-      new Error(`crontab에서 ${name} 줄을 빼지 못했습니다: ${e.message} 파일은 지우지 않았습니다.`),
+      new Error(
+        `${t(locale, "workers.manage.cronRemoveFailPrefix")} ${name} ${t(locale, "workers.manage.cronRemoveFailMid")} ${e.message} ${t(locale, "workers.manage.cronRemoveFailSuffix")}`,
+      ),
       { cronFailed: true },
     );
   });

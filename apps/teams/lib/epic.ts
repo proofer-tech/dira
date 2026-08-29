@@ -11,7 +11,7 @@ import path from "node:path";
 import { findTicket } from "./engine.ts";
 import { DEFAULT_LOCALE, t, type Locale } from "./i18n.ts";
 import {
-  LOCKED,
+  lockedReason,
   readFm,
   stateOf,
   stemOf,
@@ -50,7 +50,7 @@ export async function writeEpic(
   if (!file) return { ok: false, reason: "missing", error: `${t(locale, "epicLib.notFoundPrefix")} ${hash}` };
 
   const state = stateOf(path.basename(file), sfx);
-  if (state !== "open") return { ok: false, reason: "locked", error: LOCKED[state] };
+  if (state !== "open") return { ok: false, reason: "locked", error: lockedReason(state) };
 
   let value: string;
   try {

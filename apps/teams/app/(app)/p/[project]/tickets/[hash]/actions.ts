@@ -31,7 +31,7 @@ import {
   awaitingOf,
   isAwaiting,
   listTickets,
-  LOCKED,
+  lockedReason,
   PRIORITY_DEFAULT,
   PRIORITY_MAX,
   PRIORITY_MIN,
@@ -283,7 +283,7 @@ export async function saveTicket(_prev: SaveState, form: FormData): Promise<Save
   const hash = String(form.get("hash") ?? "");
   try {
     const t = await target(projectId, hash);
-    if (t.state !== "open") return { error: LOCKED[t.state] };
+    if (t.state !== "open") return { error: lockedReason(t.state) };
 
     const title = fmValue("제목", String(form.get("title") ?? ""));
     if (!title) return { error: "제목을 입력하세요." };
@@ -352,7 +352,7 @@ export async function saveTicketFrontmatter(_prev: SaveState, form: FormData): P
   const head = String(form.get("head") ?? "");
   try {
     const t = await target(projectId, hash);
-    if (t.state !== "open") return { error: LOCKED[t.state] };
+    if (t.state !== "open") return { error: lockedReason(t.state) };
 
     const text = await readFile(t.path, "utf8");
     const { fm, lines, end } = readFm(text);

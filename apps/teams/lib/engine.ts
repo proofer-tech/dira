@@ -10,6 +10,7 @@
 import { execFile } from "node:child_process";
 import path from "node:path";
 import { promisify } from "node:util";
+import { DEFAULT_LOCALE, t, type Locale } from "./i18n.ts";
 import { NAME_RE, isHash, resolveWithin } from "./paths.ts";
 import { findPath, listTickets, type Suffixes } from "./queue.ts";
 import { listWorkers } from "./workers.ts";
@@ -30,8 +31,15 @@ export type Run = { ok: boolean; output: string; code?: number };
  *  unexpected file in NFT list` 경고를 낸다 — 서브프로세스 경로가 런타임 값이라 트레이서가
  *  포기하는 것이고, 경고일 뿐 빌드는 통과한다. `turbopackIgnore` 주석으로도 안 사라진다(실측).
  *  워커 스크립트 경로가 프로젝트마다 다른 건 제약 2가 요구하는 설계다. */
-export async function runWorker(root: string, name: string, args: string[]): Promise<Run> {
-  if (!NAME_RE.test(name)) return { ok: false, output: `워커 이름 형식이 아닙니다: ${name}` };
+export async function runWorker(
+  root: string,
+  name: string,
+  args: string[],
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<Run> {
+  if (!NAME_RE.test(name)) {
+    return { ok: false, output: `${t(locale, "engine.invalidWorkerNamePrefix")} ${name}` };
+  }
   let file: string;
   try {
     file = await resolveWithin(path.join(root, "workers"), `${name}.sh`);
@@ -71,19 +79,26 @@ export type UnassignRun = Run & { worker: string | null };
  *  `force`면 `--force`가 붙는다(§2-5). 산 세션을 만나면 엔진이 그 세션을 끊고 푼다 — **죽이는
  *  것도 푸는 것도 엔진 안이다**(제약 2·3: GUI는 `process.kill`도 생존 판정도 하지 않는다).
  *  플래그가 갈라 놓는 자리는 거부하던 그 한 곳뿐이라 죽은 세션에는 붙어도 아무 일이 없다. */
-export async function unassign(root: string, hash: string, force = false): Promise<UnassignRun> {
-  if (!isHash(hash)) return { ok: false, output: `해시 형식이 아닙니다: ${hash}`, worker: null };
+export async function unassign(
+  root: string,
+  hash: string,
+  force = false,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<UnassignRun> {
+  if (!isHash(hash)) {
+    return { ok: false, output: `${t(locale, "engine.invalidHashPrefix")} ${hash}`, worker: null };
+  }
   const workers = await listWorkers(root);
   if (workers.length === 0) {
     return {
       ok: false,
-      output: "이 프로젝트에 워커가 없습니다 — 할당 해제를 호출할 스크립트가 없습니다.",
+      output: t(locale, "engine.noWorkerToUnassign"),
       worker: null,
     };
   }
   const name = workers[0].name;
   const args = force ? ["unassign", hash, "--force"] : ["unassign", hash];
-  return { ...(await runWorker(root, name, args)), worker: name };
+  return { ...(await runWorker(root, name, args, locale)), worker: name };
 }
 
 /** 해시 → 실제 티켓 경로. 없으면 null(404의 근거).

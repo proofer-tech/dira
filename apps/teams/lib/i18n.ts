@@ -1122,6 +1122,127 @@ export const ko: Record<string, string> = {
   "workers.engineHint.prefix": "미지정 — 티켓을 집는 워커의 엔진을 씁니다",
   "workers.engineHint.allPrefix": "지금 전부 ",
   "workers.engineHint.nowPrefix": "지금 ",
+
+  // lib/workers.ts — 화면 접두가 아니라 파일 스코프 접두다(§묶음 표 행 9, 티켓 daf72662).
+  // 이 파일을 무는 화면(워커 목록·설정 다이얼로그)이 서버 함수의 reason·에러 메시지를 그대로
+  // 옮겨 보여준다. en은 이 티켓에서 채우지 않는다(선례 93c106b3).
+  "workers.context.blockMissingSuffix": "=( … ) 블록이 없습니다",
+  "workers.context.multiAssignMid": "할당이 ",
+  "workers.context.multiAssignSuffix": "개입니다 — 어느 쪽이 실효인지 GUI가 정하지 않습니다",
+  "workers.context.appendAssign": "`+=` 추가 할당입니다",
+  "workers.context.noClosingParen": "닫는 `)`가 없습니다",
+  "workers.context.commentInBlock": "블록 안에 주석이 있습니다",
+  "workers.context.unreadableEntryPrefix": "항목으로 읽을 수 없는 부분이 있습니다:",
+  "workers.context.commandSubInEntryPrefix": "항목에 명령 치환 $( ) 가 있습니다:",
+  "workers.context.dollarInSingleQuotePrefix": "작은따옴표 안에 $ 가 있습니다:",
+  "workers.context.emptyPath": "경로가 비어 있는 항목이 있습니다.",
+  "workers.context.pipeInPathPrefix": "경로에 | 는 쓸 수 없습니다(엔진이 첫 | 를 설명 구분자로 씁니다):",
+  "workers.context.pathLabel": "경로",
+  "workers.context.descLabel": "설명",
+  "workers.context.forbiddenCharsSuffix": '에 " ` \\ 개행은 쓸 수 없습니다:',
+  "workers.context.commandSubFieldSuffix": "에 명령 치환 $( ) 는 쓸 수 없습니다:",
+  "workers.context.sameWorker": "같은 워커입니다.",
+  "workers.context.copyReadFailMid": "의 TICKET_CONTEXT 블록을 읽을 수 없습니다:",
+  "workers.context.rewriteMismatchPrefix": "쓴 블록을 다시 읽었을 때 항목이 달라집니다(",
+  "workers.context.rewriteMismatchContentDiff": "내용 불일치",
+  "workers.context.rewriteMismatchSuffix": "). 쓰지 않았습니다.",
+  "workers.context.cantSafelyEditMid": "의 TICKET_CONTEXT 블록을 GUI가 안전하게 고칠 수 없습니다:",
+  "workers.context.editByHandSuffix": ". 파일을 손으로 편집하세요.",
+  "workers.context.commonReadFailMid": "를 읽을 수 없습니다:",
+  "workers.context.commonEditMid1": "의 ",
+  "workers.context.commonEditMid2": " 블록을 GUI가 안전하게 고칠 수 없습니다:",
+  "workers.context.sourceLineCantPlaceMid": "에 source 줄을 넣을 자리를 GUI가 짚을 수 없습니다:",
+  "workers.context.lineChangedAfterInsert": "줄을 넣은 뒤 파일이 예상과 달라집니다. 쓰지 않았습니다.",
+
+  "workers.engine.unknownEnginePrefix": "모르는 엔진입니다:",
+  "workers.engine.invalidModelCharsPrefix": "모델 이름에 쓸 수 없는 문자가 있습니다(영문·숫자·. _ : / - 만):",
+  "workers.engine.noWorkerFileLine": "`. <레포>/tick.sh` 줄이 없습니다 — 이 파일은 워커가 아닙니다.",
+
+  "workers.crontab.readTimedOut": "crontab -l이 10초 안에 응답하지 않아 중단했습니다. 셸에서 직접 실행해 보세요.",
+  "workers.crontab.writeTimedOut":
+    "crontab -가 3분 안에 응답하지 않아 중단했습니다. macOS의 권한 창이 답을 기다리는 중일 수 있습니다 — 화면에 '…에서 사용자의 컴퓨터를 관리하려고 합니다' 창이 떠 있으면 [허용]을 누르고 다시 시도하세요. 시스템 설정 > 개인정보 보호 및 보안 > 앱 관리에서 미리 켜 둘 수도 있습니다.",
+  "workers.crontab.readFailPrefix": "crontab -l 실패:",
+  "workers.crontab.permissionDenied":
+    "'앱 관리' 권한이 없어 crontab에 쓰지 못했습니다 — 승인 창에서 [허용 안 함]을 눌렀거나 이전에 거부한 상태입니다. 시스템 설정 > 개인정보 보호 및 보안 > 앱 관리에서 이 앱(dira, 또는 GUI를 띄운 터미널)을 켜고 다시 시도하세요.",
+  "workers.crontab.otherFailPrefix": "crontab - 실패:",
+  "workers.crontab.registerMismatch":
+    "crontab에 썼는데 다시 읽으니 그 줄이 없습니다(쓰기가 조용히 막힌 환경일 수 있습니다).",
+  "workers.crontab.unregisterMismatch": "crontab에서 뺐는데 다시 읽으니 그 줄이 남아 있습니다.",
+
+  "workers.dispatchGate.branchUnreadable":
+    "이 프로젝트의 통합 브랜치를 protocols/AGENTS.md에서 읽을 수 없습니다 — 파일을 손으로 편집하세요.",
+  "workers.dispatchGate.noSourceLineMid":
+    "에 `. <레포>/tick.sh` 줄이 없습니다 — 통합 게이트를 넣을 자리를 GUI가 짚을 수 없습니다. 파일을 손으로 편집하세요.",
+
+  "workers.selfHeal.noSourceLineMid":
+    "에 `. <레포>/tick.sh` 줄이 없습니다 — 자가 정리를 넣을 자리를 GUI가 짚을 수 없습니다. 파일을 손으로 편집하세요.",
+  "workers.selfHeal.enginePathMid": "의 엔진 경로를 셸 없이 펼 수 없습니다:",
+
+  "workers.worktree.notGitRepoSuffix": "는 git 레포가 아닙니다. 워크트리를 쓰지 않는 배치라면 정상입니다.",
+  "workers.worktree.addFailedPrefix": "git worktree add 실패:",
+  "workers.worktree.symlinkExistsSuffix": "가 이미 있습니다. 지우지 않았습니다 — 그 안에 사람의 작업이 있을 수 있습니다.",
+  "workers.worktree.symlinkFailedPrefix": "심링크를 만들지 못했습니다:",
+  "workers.worktree.wrongResolveMid1": "가 큐 루트(",
+  "workers.worktree.wrongResolveMid2": ")가 아니라",
+  "workers.worktree.wrongResolveSuffix": "로 풀립니다.",
+  "workers.worktree.unresolved": "(못 풀림)",
+
+  "workers.create.invalidNamePrefix": "워커 이름은 영문·숫자·_·- 만 됩니다:",
+  "workers.create.emptyName": "(비어 있음)",
+  "workers.create.noTemplate":
+    "템플릿으로 쓸 워커가 없습니다. 첫 워커는 엔진 레포의 worker.sh.example을 복사해 만듭니다.",
+
+  "workers.ontology.mismatchMid": "에 쓴 뒤 값을 다시 읽으면 달라집니다. 어느 파일도 쓰지 않았습니다.",
+
+  "workers.manage.noSuchWorkerPrefix": "없는 워커입니다:",
+  "workers.manage.busyMid1": "이(가) 지금 티켓을 물고 있습니다(pid ",
+  "workers.manage.busySuffix": "). 끝난 뒤 삭제하세요.",
+  "workers.manage.cronRemoveFailPrefix": "crontab에서",
+  "workers.manage.cronRemoveFailMid": "줄을 빼지 못했습니다:",
+  "workers.manage.cronRemoveFailSuffix": "파일은 지우지 않았습니다.",
+
+  // lib/auth.ts — 파일 스코프 접두(§묶음 표 행 9, 티켓 daf72662). settings 다이얼로그의
+  // claude 인증 섹션(붙여넣기·브라우저 인증 둘 다)이 이 파일의 에러를 그대로 보여준다.
+  "auth.token.empty": "토큰이 비어 있습니다.",
+  "auth.token.hasWhitespace": "토큰 안에 공백·줄바꿈이 있습니다. 한 줄만 붙여 넣어 주세요.",
+  "auth.verify.notAuthenticated": "CLI 화면에서 집은 값이 인증되지 않습니다. 다시 시도해 주세요.",
+  "auth.setup.pathNotFoundPrefix": "PATH에서 claude를 찾지 못했습니다. (PATH=",
+  "auth.setup.pathNotFoundSuffix": ")",
+  "auth.setup.timeoutSuffix": "초 안에 토큰을 받지 못했습니다.",
+  "auth.setup.endedWithCodeMid": "토큰을 받지 못한 채 끝났습니다 (종료 코드 ",
+  "auth.setup.endedWithCodeSuffix": ").",
+  "auth.setup.saveFailedPrefix": "토큰을 잡았지만 저장하지 못했습니다:",
+  "auth.setup.execFailedPrefix": "실행하지 못했습니다:",
+  "auth.setup.endedNoToken": "토큰을 받지 못한 채 끝났습니다.",
+
+  // lib/pool.ts — 파일 스코프 접두(§묶음 표 행 9, 티켓 daf72662). 화면은 이 파일에 없다
+  // (§4-16) — settings 다이얼로그의 "공통 워커 빌리기" 섹션이 이 에러를 그대로 보여준다.
+  "pool.name.invalidPrefix": "공통 워커 이름은 영문·숫자·_·- 만 됩니다:",
+  "pool.notFoundPrefix": "없는 공통 워커입니다:",
+  "pool.busyMid1": "이(가) 지금 ",
+  "pool.busyMid2": "프로젝트를 물고 있습니다(pid ",
+  "pool.busySuffix": "). 끝난 뒤 삭제하세요.",
+  "pool.cronRemoveFailPrefix": "crontab에서",
+  "pool.cronRemoveFailMid": "줄을 빼지 못했습니다:",
+  "pool.cronRemoveFailSuffix": "파일은 지우지 않았습니다.",
+  "pool.nameCollisionMid": "이미 같은 이름의 프로젝트 워커가 있습니다:",
+  "pool.nameCollisionSuffix": "— 공통 워커 이름은 이 프로젝트의 워커 이름과 겹칠 수 없습니다.",
+  "pool.notShimSuffix": "은(는) 공통 워커 shim이 아닙니다 — 이 함수로 지우지 않습니다.",
+  "pool.limit.invalidPrefix": "정수(0 이상)만 됩니다:",
+
+  // lib/queue.ts — 파일 스코프 접두(§묶음 표 행 9, 티켓 daf72662). 티켓 상세 편집 폼·에픽
+  // 드래그 등 여러 화면이 이 파일의 판정과 에러 메시지를 그대로 쓴다.
+  "queue.locked.wip": "진행중 티켓은 편집할 수 없습니다 — 세션이 그 파일로 일하고 있습니다.",
+  "queue.locked.done": "완료 티켓은 편집할 수 없습니다 — 완료는 이 큐의 불변 기록입니다.",
+  "queue.frontmatter.uneditableKeyPrefix": "프론트매터 칸에서 고칠 수 없는 키입니다:",
+  "queue.frontmatter.missingPrefix": "frontmatter 없음:",
+
+  // lib/engine.ts — 파일 스코프 접두(§묶음 표 행 9, 티켓 daf72662). `unassign.*`(화면 스코프,
+  // 아직 병합 전인 다른 갈래)와 이름이 겹쳐도 이 접두는 새로 잡는다 — 그 갈래를 앞서 발명하지
+  // 않는다.
+  "engine.invalidWorkerNamePrefix": "워커 이름 형식이 아닙니다:",
+  "engine.invalidHashPrefix": "해시 형식이 아닙니다:",
+  "engine.noWorkerToUnassign": "이 프로젝트에 워커가 없습니다 — 할당 해제를 호출할 스크립트가 없습니다.",
   // 워커 설정 다이얼로그 트리거(§4-15 결정 2 - §비주얼 §35 개정 ①, 티켓 ec2791db). 다이얼로그
   // 제목이 같은 낱말을 재사용해 새 문구는 이 하나로 끝난다.
   "workers.settingsDialog.trigger": "워커 설정",

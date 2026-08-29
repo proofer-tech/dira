@@ -94,10 +94,10 @@ export async function readOtherEngineAuth(home = homedir()): Promise<OtherEngine
  *  **검증은 "비어 있지 않다 · 공백과 개행이 없다"까지다.** 접두사(`sk-ant-oat…`)로 거르지
  *  않는다 — 그 형식은 우리 것이 아니고 바뀌면 멀쩡한 토큰을 GUI가 거부한다(§0-4).
  *  바깥 공백은 떨어낸다: 복사하면 줄바꿈이 딸려 오고 엔진도 `tr -d '\r\n'`으로 지운다. */
-export function normalizeToken(raw: string): string {
+export function normalizeToken(raw: string, locale: Locale = DEFAULT_LOCALE): string {
   const t = raw.trim();
-  if (!t) throw new Error("토큰이 비어 있습니다.");
-  if (/\s/.test(t)) throw new Error("토큰 안에 공백·줄바꿈이 있습니다. 한 줄만 붙여 넣어 주세요.");
+  if (!t) throw new Error(translate(locale, "auth.token.empty"));
+  if (/\s/.test(t)) throw new Error(translate(locale, "auth.token.hasWhitespace"));
   return t;
 }
 
@@ -260,8 +260,12 @@ export async function readTokens(): Promise<TokensFile> {
  *  그 자리를 그대로 활성으로 삼고(항목 0개 변화), 새 토큰이면 지금 `active`가 놓인 인덱스를
  *  새 항목으로 갈아 끼운다 — 배열 길이가 안 늘어난다. 다른 인덱스의 항목(계약 ③이 지키는
  *  대상)은 안 건드린다. */
-export async function addToken(raw: string, label?: string): Promise<TokenEntry> {
-  const token = normalizeToken(raw);
+export async function addToken(
+  raw: string,
+  label?: string,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<TokenEntry> {
+  const token = normalizeToken(raw, locale);
   const id = tokenId(token);
   const file = await readTokens();
   const tokens = file.claude?.tokens ?? [];
@@ -749,7 +753,10 @@ function extractToken(raw: string): string | null {
  *  판정은 `200`이 아니라 **`401이 아니다`**다: 한도에 닿은 계정은 멀쩡한 토큰으로도 `429`를
  *  준다. 네트워크가 끊겨 한 번도 못 물어봤으면 잡은 값을 그대로 돌려준다 — 인증을 연결
  *  상태에 걸지 않는다(틀렸으면 워커가 401로 알려 준다). */
-export async function verifiedToken(cand: string): Promise<{ token: string } | { error: string }> {
+export async function verifiedToken(
+  cand: string,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<{ token: string } | { error: string }> {
   let asked = false;
   for (let n = cand.length; n >= MIN_TOKEN_LEN && cand.length - n <= MAX_TRIM; n--) {
     let res: Response;
@@ -763,7 +770,7 @@ export async function verifiedToken(cand: string): Promise<{ token: string } | {
     if (res.status !== 401) return { token: cand.slice(0, n) };
   }
   return asked
-    ? { error: "CLI 화면에서 집은 값이 인증되지 않습니다. 다시 시도해 주세요." }
+    ? { error: translate(locale, "auth.verify.notAuthenticated") }
     : { token: cand };
 }
 
@@ -862,7 +869,7 @@ export function findClaude(): string | null {
 }
 
 /** 층 ②를 시작한다. 앞선 시도가 남아 있으면 먼저 죽인다 — pty를 두 번 물 수 없다. */
-export function startSetup(): SetupState {
+export function startSetup(locale: Locale = DEFAULT_LOCALE): SetupState {
   stopSetup();
   const bin = findClaude();
   // 세션을 만들지 않고 그 자리에서 끝낸다 — 몰 대상이 없다. 다음 행동(층 ③)은 화면이 붙인다
@@ -870,7 +877,7 @@ export function startSetup(): SetupState {
     return {
       running: false,
       lines: [],
-      error: `PATH에서 claude를 찾지 못했습니다. (PATH=${process.env.PATH ?? ""})`,
+      error: `${translate(locale, "auth.setup.pathNotFoundPrefix")}${process.env.PATH ?? ""}${translate(locale, "auth.setup.pathNotFoundSuffix")}`,
     };
   }
   const child = spawn("sh", ["-c", setupCmd(bin)], {
@@ -882,7 +889,7 @@ export function startSetup(): SetupState {
     raw: "",
     settled: false,
     timer: setTimeout(
-      () => settle(s, `${SETUP_TIMEOUT_MS / 1000}초 안에 토큰을 받지 못했습니다.`),
+      () => settle(s, `${SETUP_TIMEOUT_MS / 1000}${translate(locale, "auth.setup.timeoutSuffix")}`),
       SETUP_TIMEOUT_MS,
     ),
   };
@@ -897,7 +904,12 @@ export function startSetup(): SetupState {
     if (!token) {
       // 토큰이 먼저다 — 잡았으면 종료 표식이 같은 청크에 있어도 성공이다
       const bye = s.raw.match(new RegExp(`${EXIT_MARK}(\\d+)`));
-      if (bye) settle(s, `토큰을 받지 못한 채 끝났습니다 (종료 코드 ${bye[1]}).`);
+      if (bye) {
+        settle(
+          s,
+          `${translate(locale, "auth.setup.endedWithCodeMid")}${bye[1]}${translate(locale, "auth.setup.endedWithCodeSuffix")}`,
+        );
+      }
       return;
     }
     s.settled = true; // 저장은 비동기다 — 다음 청크가 두 번 저장하지 않게 여기서 잠근다
@@ -905,27 +917,27 @@ export function startSetup(): SetupState {
     // 덮어쓰기가 아니라 목록 append다 — 활성은 `addToken`의 `reconcileActive` 판정을 그대로
     // 따른다(§0-13 §화면, P179). eligible한 활성이 이미 있으면 대기로 들어간다
     // 잡은 값을 그대로 안 담는다 — `verifiedToken`이 재그리기 잔여물을 떼어 낸다(위 주석)
-    verifiedToken(token)
+    verifiedToken(token, locale)
       .then(async (v) => {
         if ("error" in v) {
           s.error = v.error;
           return;
         }
-        await addToken(v.token);
+        await addToken(v.token, undefined, locale);
         s.savedAt = (await readAuth()).savedAt ?? undefined;
       })
       .catch((e: Error) => {
-        s.error = `토큰을 잡았지만 저장하지 못했습니다: ${e.message}`;
+        s.error = `${translate(locale, "auth.setup.saveFailedPrefix")} ${e.message}`;
       });
   };
   child.stdout?.on("data", feed);
   child.stderr?.on("data", feed); // 같은 로그에 섞는다 — 사람이 볼 곳이 하나다
-  child.on("error", (e) => settle(s, `실행하지 못했습니다: ${e.message}`));
+  child.on("error", (e) => settle(s, `${translate(locale, "auth.setup.execFailedPrefix")} ${e.message}`));
 
   /** 그물이지 주 경로가 아니다. **CLI의 종료는 위 `EXIT_MARK`가 알린다** — 즉시 죽는 스텁으로
    *  재 보니 `close`도 stdout `end`도 15초 동안 오지 않았다: `sh`가 `cat`을 기다리느라 살아
    *  있고, 그 `sh`가 stdout 파이프도 같이 쥐고 있다. 이 둘은 `sh`까지 죽었을 때만 온다. */
-  const ended = () => settle(s, "토큰을 받지 못한 채 끝났습니다.");
+  const ended = () => settle(s, translate(locale, "auth.setup.endedNoToken"));
   child.stdout?.on("end", ended);
   child.on("close", ended); // stdout이 어떤 이유로 안 끝났을 때의 그물
   return view(s);
