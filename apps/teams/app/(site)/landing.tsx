@@ -68,6 +68,7 @@ export default function Landing({
   children?: React.ReactNode;
 }) {
   const t = useT();
+  const heroTitle = t("landing.hero.title");
   // 초기값은 빌드 시점의 `apps/desktop/package.json`. 비우면 hydration이 어긋난다.
   const [version, setVersion] = useState(initialVersion);
   // 초기값 = 실패값. SSR·fetch 실패·`.dmg` 없음 셋 다 지금 동작(릴리스 페이지)으로 떨어진다.
@@ -270,21 +271,24 @@ export default function Landing({
     if (!h1) return;
     // 완성 문장이 390에서만 두 줄이라 타이핑 중 짧은 문자열이 한 줄로 접혀 아래 전부가
     // 튄다 — 최종 높이(정지 텍스트 기준)로 고정하고 끝나면 지운다.
-    const text = h1.textContent ?? "";
     h1.style.minHeight = `${h1.offsetHeight}px`;
     // typed.js는 그릇에 이미 있는 글자를 "이미 친 문자열"로 재활용해 smartBackspace로
     // 한 글자만 건드리고 끝낸다(같은 문자열끼리는 그 최적화가 통째로 스킵돼 버린다) —
     // 16자를 한 자씩 치는 모션이 서려면 여기서 비우고 넘겨야 한다.
     h1.textContent = "";
     const typed = new Typed(h1, {
-      strings: [text],
+      strings: [heroTitle],
       typeSpeed: 26,
       startDelay: 0,
       showCursor: false,
       onComplete: () => { h1.style.minHeight = ""; },
     });
+    // `heroTitle`이 deps다(§0-24 §토글) — 언어 토글이 이 문자열을 갈면 옛 인스턴스가
+    // (destroy로) 멎고 새 인스턴스가 새 언어로 다시 친다. `[]`였을 때는 마운트 시점 문자열을
+    // 그대로 쥔 타이머가 리프레시 뒤에도 h1을 계속 그 옛 문자열로 덮어써 `<html lang>`·
+    // `og:locale`은 갈려도 h1만 안 갈리는 결함이 났다(재현은 티켓 `74ca6fcd`).
     return () => typed.destroy();
-  }, []);
+  }, [heroTitle]);
 
   useEffect(() => {
     // 스크롤 진입 등장(DESIGN §랜딩 §모션 §판정표 ⑥). JS로 움직이므로 전역
@@ -508,7 +512,7 @@ export default function Landing({
 
 <div className="hero wrap">
   <p className="eyebrow">{t("landing.hero.eyebrow")}</p>
-  <h1>{t("landing.hero.title")}</h1>
+  <h1>{heroTitle}</h1>
   <p className="body">
     {t("landing.hero.body")}
   </p>
