@@ -48764,8 +48764,8 @@ build` 0개인데 로드 평균이 455다(실측 (5)). CPU를 쓰는 것이 Chro
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
 | P339-1 | 스펙 - §0-16 §주입 §개정 5 신설 + §안 물은 축에 뒤집힘 표시 + 이 블록 + 에픽 README | pm | - | 완료 - 왕복 0회, 발행 2장 |
-| P339-2 | 엔진 - `tick.sh`의 문장 ②가 로케일을 따르고 `FLUENTKO` 히어독이 `ko`에서만 실린다 | developer | - | 발행 |
-| P339-3 | 홈 - `lib/home-agent.ts`의 같은 두 층이 워커와 같은 규칙으로 갈린다 | developer | - | 발행 |
+| P339-2 | 엔진 - `tick.sh`의 문장 ②가 로케일을 따르고 `FLUENTKO` 히어독이 `ko`에서만 실린다 | developer | - | 발행 `37a7d130` |
+| P339-3 | 홈 - `lib/home-agent.ts`의 같은 두 층이 워커와 같은 규칙으로 갈린다 | developer | - | 발행 `54b60c7a` |
 
 **`deps`가 0줄이다.** 두 티켓이 파일을 하나도 안 겹친다 - 한쪽은 `tick.sh`와 `test_language.py`
 - `test_cache_control.py`, 다른 쪽은 `apps/teams/lib/` 안이다. `home-agent.test.ts`가 두 사본을
