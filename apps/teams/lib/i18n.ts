@@ -3065,7 +3065,7 @@ export const en: Record<string, string> = {
   "workers.dispatchGate.branchUnreadable":
     "Couldn't read this project's integration branch from protocols/AGENTS.md — edit the file by hand.",
   "workers.dispatchGate.noSourceLineMid":
-    " has no `. <repo>/tick.sh` line, so the GUI can't tell where the integration gate goes. Edit the file by hand.",
+    " has no `. <repo>/tick.sh` line, so the GUI can't tell where the dispatch gate goes. Edit the file by hand.",
 
   "workers.selfHeal.noSourceLineMid":
     " has no `. <repo>/tick.sh` line, so the GUI can't tell where the self-heal step goes. Edit the file by hand.",
