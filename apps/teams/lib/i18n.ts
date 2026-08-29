@@ -1445,7 +1445,7 @@ export const ko: Record<string, string> = {
   "workers.pool.badgeTitle": "이 워커는 공통 워커 풀의 슬롯입니다 — cron 줄은 풀에 있고 이 파일에는 없습니다",
 
   // §0-16 §발행 §묶음 표 행 5 갈래(워커 화면, 티켓 610dc0c0) — `components/workers-ui.tsx` ·
-  // `workers/page.tsx` · `workers/actions.ts`. en은 P338-6이 채운다. `workers.pool.*` ·
+  // `workers/page.tsx` · `workers/actions.ts`. `en`은 P338-6(`e3d3b255`)이 채웠다. `workers.pool.*` ·
   // `workers.settingsDialog.trigger` · `workers.reap.sectionTitle` · `worker.defect.noExec.*`는
   // 이 화면이 이미 쓰던 키라 그대로 둔다(중복 안 만든다).
   "workers.crontabApprovalHint": "권한 창이 뜨면 [허용]을 누르세요 — crontab 등록이 그 대답을 기다립니다.",
@@ -2169,6 +2169,14 @@ export const ko: Record<string, string> = {
  *  | 배정 · 생각 · 도구 · 결과(사건 라벨) | Assignment · Thinking · Tool · Result | `progress.stream.*`·`progress.segment.*`가 이미 쓰는 낱말 그대로다 — 같은 것을 두 이름으로 안 부른다 |
  *  | 에픽 | epic | `96327123`(에픽 묶음)가 더한 줄부터 아래. 소문자다 — 화면 제목 자리에서만 첫 글자를 올린다. frontmatter 키 이름(`epic:`)과 같은 낱말이라 갈릴 자리가 없다 |
  *  | 건(에픽 사이드바의 티켓 수) | tickets | 숫자 뒤 꼬리다(`12 tickets`). 지표의 `건`(`found`)과 다른 자리라 낱말을 가른다 — 여기서 세는 것이 티켓이라고 적어야 무엇의 수인지 안다 |
+ *  | 실행 비트 · 자가 정리 | exec bit · self-heal | `e3d3b255`(워커 화면 묶음)가 더한 줄부터 아래 |
+ *  | 통합 게이트 | dispatch gate | 파일 이름이 `dispatch-gate.sh`다 — 위 `통합 브랜치`(integration branch)와 다른 낱말이니 `integration gate`로 안 부른다 |
+ *  | 공통 컨텍스트 · 공통 항목 | common context · common item | 워커 전원이 `source` 하는 그 파일과 그 안의 항목이다 |
+ *  | 중단 · 재등록 | Stop · Re-register | crontab 줄 하나를 빼고 넣는 한 쌍이라 낱말도 쌍으로 둔다 |
+ *  | crontab 미등록 · 리밋 대기 | not in the crontab · Waiting on limit | 앞엣것은 배지 옆 꼬리라 소문자다(`기본값 가정` 줄이 선 그 벌) |
+ *  | 준비 명령 · 결함 | prep commands · defect | 뒤엣것은 표가 워커 하나를 두고 세는 이름이다 |
+ *  | 개(항목 수) | listed | 숫자 뒤 꼬리다(`3 listed`). 위 `건`(found) 줄과 같은 사정 — 1도 뜨는데 복수형 장치가 없다 |
+ *  | 번째 경로(피커 접근가능 이름) | path | 수가 앞에 오는 자리라 `path 1`로 못 뒤집는다 — `1 path Browse`로 읽힌다 |
  *
  *  **어순이 뒤집히는 자리는 접두·접미 두 키로 쪼갠다.** 한국어는 이름 뒤에 다 붙지만(`<이름>
  *  삭제`) 영어는 동사가 앞에 뜬다(`Delete <name>`) — 한쪽이 비는 것이 정상이고, 조립은
@@ -3122,6 +3130,243 @@ export const en: Record<string, string> = {
   "workers.reap.sectionTitle": "Stale collection",
   "workers.pool.badge": "Shared",
   "workers.pool.badgeTitle": "This worker is a slot in the shared worker pool — the cron line lives in the pool, not this file",
+
+  // §0-16 §발행 §묶음 표 행 5 갈래(워커 화면) — `ko`는 610dc0c0, `en`은 e3d3b255.
+  // `lib/workers.ts`가 만드는 실패 사유(`workers.crontab.*` · `workers.worktree.*` ·
+  // `workers.context.*`의 나머지)는 행 9라 여기 없다.
+  "workers.crontabApprovalHint": "Hit [Allow] when the permission window opens — registering the crontab line waits on that answer.",
+  "workers.notRunningYetHint": "It isn't running yet — run this command in your shell",
+  "workers.cronRegisterFailedTitle": "Couldn't register the crontab line",
+
+  // `no-exec` 복구 버튼(`ExecBitFix`, §0-21 결정 3).
+  "workers.execFix.failedDefaultMessage": "Couldn't set the exec bit.",
+  "workers.execFix.successSentence": "Exec bit set",
+  "workers.execFix.pending": "Setting…",
+  "workers.execFix.button": "Set the exec bit",
+  "workers.execFix.failedTitle": "Couldn't set the exec bit",
+
+  // 생성 다이얼로그(`CreateWorkerButton`, §4 생성).
+  "workers.create.worktreeStep0": "Couldn't create the worktree",
+  "workers.create.worktreeStep1": "Couldn't create the .dira symlink",
+  "workers.create.worktreeStep2": "The .dira symlink doesn't point at this project",
+  "workers.create.trigger": "New worker",
+  "workers.create.dialogTitle": "New worker",
+  "workers.create.dialogDescription":
+    "One worker is one cron job, and one run finishes one ticket. Concurrency = how many workers you have.",
+  "workers.create.noTemplateBody1":
+    "This project has no worker to copy from. The GUI only makes one by copying an existing worker — where the engine code (tick.sh) sits is written in the worker file and nowhere else. Make the first worker by hand.",
+  "workers.create.noTemplateConfirmPrefix": "Once it's made, check values like",
+  "workers.create.noTemplateConfirmSuffix": "and refresh this screen — the GUI makes the rest.",
+  "workers.create.templateCopiedMiddle": " was copied to",
+  "workers.create.templateCopiedSuffix": ", left at 755. Look it over and fix it by hand if you need to.",
+  "workers.create.cronRegisteredMessage": "Registered in the crontab — it starts claiming tickets in 30 seconds.",
+  "workers.create.worktreeSkippedPrefix": "No worktree was made —",
+  "workers.create.worktreeSkippedSuffix": "The worker file and the crontab line stay as they are.",
+  "workers.create.worktreeDoneLabel": "Working directory",
+  "workers.create.worktreeDoneMiddle": " is created, and the",
+  "workers.create.worktreeDoneSuffix": " inside it points at this project — checked.",
+  "workers.create.worktreeFailedHint":
+    "Without a working directory this worker claims a ticket and puts it right back — run the rest of the commands in your shell",
+  "workers.create.nameLabel": "Name",
+  "workers.create.nameHint": "Letters, digits, _ and -. The file becomes workers/<name>.sh",
+  "workers.create.failedTitle": "Couldn't create the worker",
+
+  // 행 액션 셋(스트림 · 중단/재등록 · 삭제, `WorkerRowActions`, §4).
+  "workers.row.streamButton": "Stream",
+  "workers.row.stopButton": "Stop",
+  "workers.row.registerButton": "Re-register",
+  "workers.row.deleteButton": "Delete",
+  "workers.row.streamDialogTitlePrefix": "Session stream —",
+  "workers.row.stopDialogTitlePrefix": "Stop worker —",
+  "workers.row.stopDialogDescription":
+    "This takes the worker's line out of the crontab. The file stays — register it again and it comes right back.",
+  "workers.row.stopFailedTitle": "Couldn't take it out of the crontab",
+  "workers.row.runInShellHint": "Run this command in your shell",
+  "workers.row.stopRunningAlertTitle": "It's holding a ticket right now",
+  "workers.row.stopRunningAlertBody":
+    "The running session isn't killed. Out of the crontab it still stops only after the ticket it holds is finished.",
+  "workers.row.stoppingPending": "Stopping…",
+  "workers.row.registerDialogTitlePrefix": "Re-register worker —",
+  "workers.row.registerDialogDescription":
+    "This puts the worker's line back in the crontab. The file is already there, so that one line is all that changes.",
+  "workers.row.registeringPending": "Registering…",
+  "workers.row.deleteDialogTitlePrefix": "Delete worker —",
+  "workers.row.deleteBlockedTitle": "It can't be deleted right now",
+  "workers.row.deleteBlockedPidPrefix": "This worker is holding a ticket (pid",
+  "workers.row.deleteBlockedPidSuffix":
+    "). Delete it now and the lock and the running session are left dangling. Stop it first, then delete once the ticket it holds is finished.",
+  "workers.row.deleteBodyText": "This deletes the file. Tickets in this project are not deleted.",
+  "workers.row.deleteCronPrefix": "The crontab line goes with it —",
+  "workers.row.deleteCronBold": "crontab first, file second",
+  "workers.row.deleteCronSuffix":
+    ". Leave it and cron runs a file that isn't there every minute, piling errors into cron.log.",
+  "workers.row.deleteFailedTitlePrefix": "Worker",
+  "workers.row.deleteFailedTitleSuffix": "— delete failed",
+  "workers.row.deleteCronFailedHint":
+    "The file is untouched — take the crontab line out with this command, then try again",
+  "workers.row.deleteFailedDefaultMessage": "Couldn't delete it.",
+  "workers.row.deletingPending": "Deleting…",
+
+  // 컨텍스트 편집기 공유 부분(`ExistsMark` · `ContextRejection` · `ContextEditor`).
+  "workers.context.existsYes": "Present",
+  "workers.context.existsNo": "Missing — the engine skips it and only logs WARN",
+  "workers.context.existsAmbiguous": "The path couldn't be pinned to one value",
+  "workers.context.existsUnsaved": "Checked once you save",
+  "workers.context.rejectionTitleMiddle": ":",
+  "workers.context.rejectionTitleSuffix": "block can't be edited from the GUI",
+  "workers.context.rejectionBodyPrefix":
+    "The GUI doesn't guess — step on the wrong line and the worker dies while cron fails quietly. Edit",
+  "workers.context.rejectionBodySuffix": " by hand, then refresh this screen.",
+  "workers.context.missingLinePrefix": "Just one line to add — the required",
+  "workers.context.missingLineMiddle": "line marks the spot: paste it",
+  "workers.context.missingLineBold": "above",
+  "workers.context.missingLineSuffix":
+    "that line, anywhere, and it opens. The GUI won't add it for you (there's no anchor to place it against).",
+  "workers.context.pathAriaLabel": "Path",
+  "workers.context.descAriaLabel": "Description",
+  "workers.context.descPlaceholder": "Description (optional) — why the session reads it",
+  "workers.context.pickPathLabelSuffix": " path",
+  "workers.context.moveUp": "Move up",
+  "workers.context.moveDown": "Move down",
+  "workers.context.removeRow": "Remove",
+  "workers.context.saveFailedTitleSuffix": " — couldn't save",
+  "workers.context.overwriteHintPrefix": "Saving rewrites",
+  "workers.context.overwriteHintMiddle": "'s",
+  "workers.context.overwriteHintSuffix": "block in full",
+  "workers.context.revertButton": "Revert",
+  "workers.context.countSuffix": " listed",
+  "workers.context.commonReadFailed": "Couldn't read it",
+
+  // 공통 컨텍스트 카드(`CommonContextCard`, §4-1).
+  "workers.commonCard.emptyText": "No common items — each worker reads only its own.",
+  "workers.commonCard.addLabel": "Add a common item",
+
+  // 워커 설정 다이얼로그 나머지(`WorkerSettingsDialog`, §4-15).
+  "workers.settingsDialog.commonContextHeading": "Common context",
+  "workers.settingsDialog.commonContextIntro1": "One file every worker",
+  "workers.settingsDialog.commonContextIntro2": "s —",
+  "workers.settingsDialog.commonContextIntro3": ". Items here go at the",
+  "workers.settingsDialog.commonContextIntro4":
+    " of each worker's context list and can't be removed from the per-worker list. Fix one line and every worker gets it. ",
+  "workers.settingsDialog.commonContextIntro5": " differs per worker, so it counts as present",
+  "workers.settingsDialog.commonContextIntro6":
+    "— when workers differ the GUI doesn't decide either way (it couldn't check).",
+  "workers.settingsDialog.commonContextTopLabel": "top",
+  "workers.settingsDialog.commonContextEveryoneLabel": "only when every worker has it",
+  "workers.settingsDialog.readonlyHeading": "The rest of the worker settings (read-only)",
+  "workers.settingsDialog.readonlyDescription":
+    "These values aren't edited here — edit the worker file by hand.",
+  "workers.settingsDialog.divergentTitle": "Workers disagree on this value",
+  "workers.settingsDialog.divergentBody":
+    "The engine uses the value of the worker that dispatched the ticket — which worker claims the same ticket changes the result.",
+  "workers.settingsDialog.reapDescription":
+    "Puts a ticket back in the backlog when the session died but the ticket stayed in progress.",
+  "workers.settingsDialog.reapFailedTitleSuffix": ".sh reap failed",
+
+  // 워커 행의 둘째 행 경고 다섯(`WorkerContextRow`, §비주얼 §35).
+  "workers.contextRow.fileSuffixPrefix": ".sh has no line that sources",
+  "workers.contextRow.fileSuffixGlue": " with",
+  "workers.contextRow.lineNotAddedDefault": "Couldn't add the line.",
+  "workers.contextRow.applyingPending": "Applying…",
+  "workers.contextRow.noCommonSourceTitle": "This worker doesn't get the common context",
+  "workers.contextRow.noCommonSourceBodyMiddle": "— the",
+  "workers.contextRow.noCommonSourceBodySuffix": " common items above never reach this worker's sessions.",
+  "workers.contextRow.applyCommonButton": "Apply common",
+  "workers.contextRow.commonAppliedSentence": "Common context applied",
+  "workers.contextRow.applyCommonFailedTitle": "Couldn't apply the common context",
+  "workers.contextRow.noSelfHealTitle": "Deleting this worker leaves its cron lines behind",
+  "workers.contextRow.selfHealMissingMiddle":
+    "— delete dira and nothing runs to take this worker's two crontab lines out, so cron calls a file that isn't there every minute. Applying adds one line right above",
+  "workers.contextRow.selfHealMissingSuffix":
+    "(the engine path is read from that line in this file).",
+  "workers.contextRow.applySelfHealButton": "Apply self-heal",
+  "workers.contextRow.selfHealAppliedSentence": "Self-heal applied",
+  "workers.contextRow.applySelfHealFailedTitle": "Couldn't apply self-heal",
+  "workers.contextRow.gateStaleTitle": "This worker's dispatch gate is stale",
+  "workers.contextRow.gateMissingTitle": "This worker dispatches even when the receiving tree is dirty",
+  "workers.contextRow.gateStaleBody":
+    " in this worker differs from the current version — it still runs the old dispatch gate. Applying overwrites the file with the current version.",
+  "workers.contextRow.gateMissingMiddle":
+    "— dispatch a dirty receiving tree and the session finishes all the work, then gets refused at push and nowhere earlier. Applying adds one line right above",
+  "workers.contextRow.gateMissingSuffix":
+    "(the integration branch is read from protocols/AGENTS.md).",
+  "workers.contextRow.applyGateButton": "Apply dispatch gate",
+  "workers.contextRow.gateAppliedSentence": "Dispatch gate applied",
+  "workers.contextRow.applyGateFailedTitle": "Couldn't apply the dispatch gate",
+  "workers.contextRow.expandedIntroPrefix": "This worker's own",
+  "workers.contextRow.expandedIntroMid1":
+    "— each item's path and description are appended to the end of the session prompt.",
+  "workers.contextRow.expandedIntroBold": "A missing item is not an error",
+  "workers.contextRow.expandedIntroMid2": "— the engine skips it and leaves only",
+  "workers.contextRow.expandedIntroMid3":
+    " in runner.log (so a session doesn't flail while a cloud mount isn't attached). The",
+  "workers.contextRow.expandedIntroSuffix":
+    "badge rows at the top of the list are the common context below and can't be edited here — those items aren't in the worker file.",
+  "workers.contextRow.copyThisLabel": "Copy this setup to:",
+  "workers.contextRow.emptyWithCommon":
+    "This worker has no items of its own — it only gets the common items above.",
+  "workers.contextRow.emptyNoCommon": "No items — this worker's sessions start with no reference context.",
+  "workers.contextRow.addItemLabel": "Add an item",
+  "workers.contextRow.copyDialogTitlePrefix": "Copy context —",
+  "workers.contextRow.copyDescMid1": ".sh's TICKET_CONTEXT block is replaced with",
+  "workers.contextRow.copyDescMid2": "'s",
+  "workers.contextRow.copyDescMid3": " items.",
+  "workers.contextRow.copyDescSuffix": "'s own items don't survive.",
+  "workers.contextRow.copyBodySuffix":
+    " isn't expanded — it moves across as the literal string, so the receiving worker points at its own working directory. When the context differs per worker, which worker claims the same ticket changes the result.",
+  "workers.contextRow.copyFailedTitle": "Couldn't copy it",
+  "workers.contextRow.copyingPending": "Copying…",
+  "workers.contextRow.copyButton": "Copy",
+  "workers.contextRow.copyFailedDefaultMessage": "Couldn't copy it.",
+
+  // `workers/page.tsx` — 표시 전용 설정 라벨 · 결함 사전 · 표 머리 · 빈 상태 · 배지.
+  "workers.status.stoppedNote": "not in the crontab",
+  "workers.status.staleNote": "the next tick collects it",
+  "workers.defect.missingCwd.title": "No working directory",
+  "workers.defect.missingCwd.why":
+    "tick.sh logs an ERROR that the cwd is missing, releases the lock, and puts the ticket back — it claims and drops, nothing more.",
+  "workers.defect.missingLink.title": "No .dira symlink",
+  "workers.defect.missingLink.why":
+    "The session sees a decoy .dira and can't find its own ticket — it can't report done either, and reap only bumps attempts.",
+  "workers.defect.sharedCwd.title": "Shared working directory",
+  "workers.defect.sharedCwd.why":
+    "Two sessions step on one branch in one tree — dispatch-gate.sh blocks the dispatch.",
+  "workers.defect.noTicketCwd.title": "No TICKET_CWD",
+  "workers.defect.noTicketCwd.why":
+    "It commits in the receiving tree as it is — leave an uncommitted trace and the dispatch gate holds every worker in the queue.",
+  "workers.tokenSummary.label": "Tokens, last 5 hours",
+  "workers.tokenSummary.unaccountedPrefix": "· outside this total:",
+  "workers.tokenSummary.unaccountedSuffix": " session(s)",
+  "workers.empty.text": "No workers",
+  "workers.empty.noWorkerBodyPrefix": "With no workers, tickets never get dispatched — and neither",
+  "workers.empty.noWorkerBodyMid": " (stale collection) nor",
+  "workers.empty.noWorkerBodySuffix":
+    " can run: the engine does both through a worker script (constraint 2).",
+  "workers.empty.engineRepoHint":
+    "The engine repo path stays blank — it's written only in the worker file, so the GUI can't know it.",
+  "workers.table.holdingHeader": "Holding",
+  "workers.table.contextHeader": "Context",
+  "workers.table.activityHeader": "Last activity",
+  "workers.table.tokensHeader": "Tokens (5h)",
+  "workers.limitBadge.title":
+    "No Claude account is usable right now — once this time passes, the next tick opens a session",
+  "workers.limitBadge.labelPrefix": "Waiting on limit ·",
+  "workers.defectAlert.worktreeHintPrefix": "The prep commands create",
+  "workers.defectAlert.worktreeHintMid": "— this project's layout (§4-2). If",
+  "workers.defectAlert.worktreeHintSuffix":
+    " isn't that path, fix that line by hand too. The GUI doesn't run the checkout.",
+  "workers.defectAlert.cwdFixPrefix": "This command adds just one line —",
+  "workers.defectAlert.cwdFixSuffix":
+    "— to the worker file. The gate creates the tree on the next tick.",
+  "workers.lastFailure.title": "The session failed immediately",
+
+  // `workers/actions.ts` — 서버 액션 결과 메시지(§4 · §4-16 · §4-17).
+  "workers.stop.removedMessage": "Taken out of the crontab — this worker claims no new tickets.",
+  "workers.stop.noopMessage": "It wasn't in the crontab already — nothing changed.",
+  "workers.register.addedMessage": "Put in the crontab — it starts claiming tickets in 30 seconds.",
+  "workers.register.noopMessage": "It was already in the crontab — nothing changed.",
+  "workers.pool.limitInvalidPrefix": "The limit must be an integer of 0 or more:",
+  "workers.reap.noStaleOutput": "No stale tickets to collect.",
   "ontology.location.inWorktree": "Inside this project's git working tree",
   // Ticket cd662a73, moved to this namespace by c5d51522 — see the ko block for why the third
   // rejection reuses `ontology.location.inWorktree`.
