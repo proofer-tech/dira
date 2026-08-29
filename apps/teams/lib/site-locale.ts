@@ -12,9 +12,6 @@ import { isLandingOnly } from "./flags.ts";
 import { DEFAULT_LOCALE, type Locale } from "./i18n.ts";
 import { readLanguage } from "./projects.ts";
 
-/** 토글(P340-3)이 쓸 쿠키 이름. 이 티켓은 판정 체인만 만든다 — 누르는 손잡이는 없다. */
-export const LOCALE_COOKIE = "dira-locale";
-
 /** `Accept-Language`에서 `ko`·`en`만 고른다. `ko-KR`처럼 지역이 붙은 값은 앞 두 글자로 본다.
  *  둘 중 어느 것도 없으면 `undefined`다(다음 순위로 떨어진다). */
 export function acceptLanguageLocale(header: string | null | undefined): Locale | undefined {

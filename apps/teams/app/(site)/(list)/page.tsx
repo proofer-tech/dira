@@ -20,17 +20,18 @@ import { diraVersion } from "../../../version";
 import Landing from "../landing";
 import { pageMetadata } from "../meta";
 import { siteLocale } from "../request-locale";
+import { t } from "@/lib/i18n";
 // 홈은 랜딩 전역 CSS(`../landing.tsx`가 이미 무는 `fonts.css`, `globals.css`가 싣는 `landing.css`)와
 // tailwind 리셋을 **둘 다 문다**(§한 코드베이스 §부딪히는 것 ②) — 목록 표가 shadcn(tailwind)이라서다.
 // 다른 사이트 페이지(`/docs/**`·`/privacy`·`/terms`)는 이 리셋이 필요 없어 여기서만 문다.
 import "../../globals.css";
 
 // `index.md`가 `titleTemplate: false`였던 유일한 장이라 `<title>`에 사이트 이름이 안 붙는다.
-// 문구(213건)는 이 티켓 범위 밖이라 한국어 그대로다 — 갈리는 것은 `og:locale` 하나뿐이다
-// (§0-24 §SEO, P340-3이 이 제목도 사전으로 옮긴다).
+// 문구는 `landing.hero.eyebrow`를 그대로 쓴다(P340-3, 티켓 76b659fd) — 히어로 eyebrow와
+// 같은 문장이라 값을 두 번 안 든다.
 export async function generateMetadata() {
   const locale = await siteLocale();
-  return pageMetadata("/", "dira - 로컬 멀티 에이전트 매니지먼트 시스템", {
+  return pageMetadata("/", `dira - ${t(locale, "landing.hero.eyebrow")}`, {
     suffix: false,
     locale,
   });

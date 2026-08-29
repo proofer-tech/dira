@@ -175,6 +175,17 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
 .dira-landing .brand svg { width: 20px; height: 20px; fill: currentColor; }
 .dira-landing header nav { margin-left: auto; display: flex; align-items: center; gap: 8px; }
 
+/* 언어 토글(§0-24 §토글) — 매뉴얼 셸의 `.appearance`(다크 토글)와 자리·크기가 같다
+   (`manual.css`의 그 규칙을 그대로 옮겼다, 아이콘 svg 대신 글자를 세운다는 것만 다르다). */
+.dira-landing .appearance {
+  display: flex; align-items: center; justify-content: center;
+  width: 36px; height: 36px; border-radius: 8px;
+  border: 0; background: none; color: var(--muted-fg);
+  font-size: 13px; font-weight: 500; cursor: pointer;
+}
+.dira-landing .appearance:hover,
+.dira-landing .appearance:focus-visible { background: var(--panel); }
+
 .dira-landing .btn {
   display: inline-flex; align-items: center; gap: 8px;
   height: 34px; padding: 0 16px;

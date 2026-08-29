@@ -16,6 +16,11 @@ export type Locale = "ko" | "en";
 /** §0-16 §설정 노드 — "안 고른 사람의 화면이 갈리면 회귀다." */
 export const DEFAULT_LOCALE: Locale = "ko";
 
+/** 공개 사이트 언어 토글(§0-24 §토글)이 쓰는 쿠키 이름. `lib/site-locale.ts`가 아니라 여기
+ *  두는 이유는 클라이언트 토글(`components/language-toggle.tsx`)이 `node:fs`를 문 그 파일을
+ *  못 물어서다 — 이 파일은 `node:*`가 없다(위 머리 주석). */
+export const LOCALE_COOKIE = "dira-locale";
+
 /** 키 이름 규약(30a8f5c3 첫 묶음) — `<화면>.<노드나 영역>.<요소>`. 트리 노드 5개와 같은 이름을
  *  공유하는 문구는 `settings.tree.<node>`로 한 번만 두고 여러 자리가 재사용한다(중복 값 0).
  *  화면·노드를 안 가리는 낱말(저장·저장 중…·추가 등)은 `common.*`.
@@ -215,6 +220,13 @@ export const ko: Record<string, string> = {
   "common.cancel": "취소",
   "common.create": "만들기",
   "common.creating": "만드는 중…",
+
+  // 공개 사이트 언어 토글(`components/language-toggle.tsx`, §0-24 §토글)의 버튼 글자 — 지금
+  // 안 고른, 눌러서 건너갈 언어의 짧은 이름이다(`settings.language.ko`/`.en`은 풀 자리라 이
+  // 36×36 버튼엔 길다). `common.*`이 아닌 것은 그 접두가 이미 en이 다 찬 묶음이라서다
+  // (`i18n.test.ts`의 `FILLED`) — 이 토글은 새 컴포넌트라 en을 아직 안 채운다.
+  "languageToggle.shortKo": "한",
+  "languageToggle.shortEn": "EN",
 
   // 파일을 OS 기본 앱으로 여는 아이콘 버튼(DESIGN.md §10) — 자리 다섯(온톨로지·프로토콜·
   // 페르소나·에픽·티켓 상세)이 이 두 키를 그대로 같이 쓴다.
@@ -2121,6 +2133,254 @@ export const ko: Record<string, string> = {
   "usageLib.title.noExitRecordPrefix": "이 해시의 로그 ",
   "usageLib.title.noExitRecordSuffix": "개에 종료 기록이 없습니다",
   "usageLib.title.noLogsSuffix": "가 이 머신에 0개입니다",
+
+  // ── 공개 사이트(§0-24, 티켓 76b659fd·P340-3) ──────────────────────────
+  // 랜딩(`app/(site)/landing.tsx`) — en은 이 티켓이 안 채운다(writer가 채운다, §0-24 §원고).
+  "landing.register.nameLabel": "이름",
+  "landing.register.namePlaceholder": "dira 자체",
+  "landing.register.idLabel": "URL 조각",
+  "landing.register.idHint": "이름에서 URL 조각을 만들 수 없습니다. 직접 정해 주세요 (영문 소문자·숫자·하이픈).",
+  "landing.register.rootLabel": "경로",
+  "landing.register.rootPickerLabel": "큐 경로",
+  "landing.register.rootHint": "절대경로. ~는 확장됩니다",
+  "landing.register.errorTitle": "등록하지 못했습니다",
+  "landing.register.dupOpenSuffix": "열기",
+  "landing.register.pendingLabel": "등록 확인 중…",
+  "landing.register.title": "프로젝트 등록",
+
+  "landing.result.createdLabel": "만들었습니다",
+  "landing.result.registeredLabel": "등록됨",
+  "landing.result.openBoardLabel": "보드 열기",
+  "landing.result.filesWrittenPrefix": "파일",
+  "landing.result.filesWrittenSuffix": "개를 만들었습니다.",
+  "landing.result.skippedPrefix": "이미 있어 건너뜀:",
+  "landing.result.engineRepoLabel": "엔진 레포",
+  "landing.result.cronRegistered": "crontab에 등록됨 — 30초 뒤부터 티켓을 물어갑니다",
+  "landing.result.cronFailedTitle": "crontab에 등록하지 못했습니다",
+  "landing.result.ontologyFailedTitle": "온톨로지 자리를 정하지 못했습니다",
+  "landing.result.ontologyFailedLink": "온톨로지 화면에서 다시 정하세요",
+
+  // `{count}`는 실제 JS 보간이 아니라 검사기가 읽는 자리표시자 문자열이다 — `landing.tsx`가
+  // `.replace("{count}", version)`으로 값을 채운다(§0-16 §장치가 정한 `wrap`은 앞뒤에 공백을
+  // 끼워 넣어서 "v1.2.3)의"처럼 붙어야 하는 이 자리엔 못 쓴다).
+  "landing.banner.text": "자동 업데이트를 켜고 최신 버전(v{count})의 dira를 써보세요!",
+  "landing.banner.releasesLink": "릴리스 보기",
+
+  "landing.nav.manualLink": "매뉴얼",
+  "landing.nav.createLabel": "새로 만들기",
+  "landing.nav.downloadAppLabel": "앱 다운로드",
+  "landing.nav.installGuide": "설치 가이드",
+
+  "landing.projects.registryErrorTitle": "프로젝트 레지스트리를 읽지 못했습니다",
+  "landing.projects.emptyHint": "등록된 프로젝트가 없습니다. 하나 만들면 시작합니다.",
+  "landing.projects.registerHint": "이미 만들어 둔 .dira가 있다면 등록합니다.",
+  "landing.projects.newProjectTitle": "새 프로젝트",
+
+  "landing.hero.eyebrow": "로컬 멀티 에이전트 매니지먼트 시스템",
+  "landing.hero.title": "나만의 AI 팀을 만들어보세요",
+  "landing.hero.body":
+    "요구사항을 정말 아무렇게나 던져도 찰떡같이 알아듣습니다. 티켓을 나누고 에이전트끼리 협업해 끝내는 과정은 jira처럼 실시간으로 지켜볼 수 있습니다. PC에 나만의 멀티 에이전트 시스템을 아주 쉽게 만들어보세요.",
+  "landing.hero.downloadCta": "macOS 앱 다운로드",
+  "landing.hero.shotAlt":
+    "dira 보드 화면. 대기·진행중·완료 세 레인에 티켓 카드가 놓여 있고, 그중 한 장이 다음 레인으로 건너갑니다.",
+  "landing.hero.shotCaption": "놀라운 사실: dira 앱 또한 dira로 만들어졌습니다.",
+
+  "landing.steps.title": "말하면 이루어집니다",
+  "landing.steps.step1Title": "① 요구사항을 접수하세요",
+  "landing.steps.step1Body": "대화하듯 자연스럽게 무엇을 원하는지 적어주시면 끝입니다. 귀찮고 복잡한 나머지 일은 에이전트가 알아서 합니다.",
+  "landing.steps.step2Title": "② 일사불란하게 움직입니다",
+  "landing.steps.step2Body":
+    "요구사항을 받은 에이전트가 그걸 구체화해 작업 단위 티켓으로 나눕니다. 티켓마다 맞는 페르소나의 워커가 알아서 붙고 서로 협업해 주신 요구사항을 끝냅니다.",
+  "landing.steps.step3Title": "③ 끝이에요. 쉽죠?",
+  "landing.steps.step3Body":
+    "워커들이 뭘 읽고 어떻게 고치는지 실시간으로 보입니다. 진행 중에 막히면 사용자에게 물어도 봅니다. 그저 사람과 일하듯 자연스럽게 요구하고 대답하다 보면 원하던 기능이 완성됩니다!",
+
+  "landing.archiving.title": "끝난 일은 기록으로 남습니다",
+  "landing.archiving.item1BoldPrefix": "티켓이",
+  "landing.archiving.item1BoldSuffix": "이 되면 아카이빙 티켓이 한 장 따라 붙습니다.",
+  "landing.archiving.item1Prefix": "완료 카드 아래에",
+  "landing.archiving.item1Suffix": "한 줄이 뜨고 이것도 워커가 받아서 하는 일이라 어디까지 갔는지 그대로 보입니다",
+  "landing.archiving.item2Bold": "남는 것은 마크다운 한 장과 티켓 맨 아래 한 절입니다.",
+  "landing.archiving.item2Prefix": "아카이빙을 맡은 워커가 방금 끝난 일에서 사실을 추려 프로젝트 폴더의",
+  "landing.archiving.item2Mid": "에 적고 그 티켓 본문에는",
+  "landing.archiving.item2Suffix": "절을 붙입니다",
+  "landing.archiving.item3Bold": "다음 세션은 그 자리를 알고 시작합니다.",
+  "landing.archiving.item3Body": "온톨로지가 어디에 있고 어떻게 찾는지가 워커에게 나가는 프롬프트마다 실립니다",
+  "landing.archiving.item4Bold": "파일은 그냥 마크다운입니다.",
+  "landing.archiving.item4Body": "로 서로 이어져 있어 Obsidian 같은 도구로 폴더째 열립니다. 프로젝트를 옮기면 기록도 같이 따라갑니다",
+  "landing.archiving.promiseBody":
+    "일을 시킬수록 워커는 이 프로젝트에 능숙해집니다. 어제 누가 무엇을 정했는지 읽고 시작하니, 같은 이야기를 두 번 하지 않아도 됩니다.",
+  "landing.archiving.shotAlt":
+    "dira 보드의 진행중·완료 두 레인. 완료 레인 둘째 카드 a732ce19의 아래 칸에 서류함 아이콘과 «아카이빙중» 한 줄이 붙어 있고, 그 위 카드에는 그 줄이 없습니다.",
+  "landing.archiving.shotCaption": "이 한 줄은 링크입니다. 누르면 아카이빙을 맡은 티켓으로 건너가, 그 워커가 지금 어디까지 갔는지가 보입니다.",
+  "landing.archiving.arrowLink": "아카이빙과 온톨로지",
+
+  "landing.gallery.openOriginal": "원본 크기로 열기",
+  "landing.gallery.bargeAlt":
+    "세션 스트림이 도구 호출을 한 줄씩 늘려 가는 동안, 아래 입력창에 문장을 넣고 보내기를 누르자 그 문장이 참견 줄로 스트림에 나타나고 세션이 이어서 방향을 바꿉니다.",
+  "landing.gallery.bargeCaption":
+    '"그럴 수 있죠 이해해요, 어떻게 사람이 완벽할까요?" 반드시 완벽한 요구사항을 줄 필요가 없습니다. 가볍게 요구하고 작업 중에도 참견할 수 있습니다.',
+  "landing.gallery.bargeArrowLink": "도는 세션에 말 걸기",
+  "landing.gallery.qaAlt": "요구 티켓의 질문·답변 스레드. 질문 아래에 답변 말풍선이 오른쪽으로 붙어 있고, frontmatter에 awaiting 해시가 있습니다.",
+  "landing.gallery.qaCaption": "어련히 모르면 물어보지 않겠어요? 에이전트들도 일하다 모르는 게 생기면 물어봅니다. 질문에 대답해주세요. 그럼 또 알아서 하러 갑니다.",
+  "landing.gallery.qaArrowLink": "문의 · 답변",
+  "landing.gallery.runningAlt": "진행중 티켓 상세. 왼쪽에 본문과 Done when 체크리스트, 오른쪽에 frontmatter 표와 관계.",
+  "landing.gallery.runningCaption":
+    "일이 어떻게 흘러가는지 티켓 단위로 들여다볼 수 있습니다. 생각과 다른 방향으로 가고 있으면 티켓을 할당 해제해 중단시킵니다. 아직 시작하지 않은 티켓은 본문을 고쳐 원하는 방향을 자세히 적어 둘 수도 있습니다.",
+  "landing.gallery.runningArrowLink": "업무 투명성",
+  "landing.gallery.ontologyAlt":
+    "온톨로지 화면. 제목 아래에 카드가 든 폴더 경로가 있고, 그 밑 지표 판에 객체 · 관계 96 · 184를 비롯한 칸이 열두 개 있습니다. 아래는 왼쪽이 카드 파일트리, 오른쪽이 고른 파일 _ontology/SCHEMA.md를 위지윅으로 연 편집기입니다.",
+  "landing.gallery.ontologyCaption": "티켓이 끝날 때마다 그 일에서 추린 사실이 한 장씩 여기 쌓입니다. 프로젝트 폴더 안에 마크다운으로 남아서 다음 세션도 사람도 같은 자리를 열어 봅니다.",
+
+  "landing.noAccount.title": "계정을 만들 필요가 없습니다",
+  "landing.noAccount.item1Bold": "dira에는 서버가 없습니다.",
+  "landing.noAccount.item1Body": "가입도 로그인도 없습니다. 내려받아 열면 그게 전부이고 만든 프로젝트가 어딘가로 올라가지 않습니다",
+  "landing.noAccount.item2Bold": "티켓도 기록도 프로젝트 폴더 안에 있습니다.",
+  "landing.noAccount.item2Prefix": "큐는",
+  "landing.noAccount.projectPlaceholder": "프로젝트",
+  "landing.noAccount.item2Suffix": "디렉터리 하나이고 담긴 것은 마크다운 파일입니다. 따로 권한을 설정하는 자리가 없어서 그 폴더를 열 수 있으면 그것이 곧 권한입니다",
+  "landing.noAccount.item3Bold": "모델에는 일감이 나갑니다.",
+  "landing.noAccount.item3Body": "워커가 세션을 띄울 때 티켓 본문과 필요한 코드가 고르신 엔진을 거쳐 모델로 갑니다. 그 통로 밖으로 작업한 내용을 dira가 따로 가져가지는 않습니다",
+  "landing.noAccount.item4Bold": "사용 통계는 끄면 그만입니다.",
+  "landing.noAccount.item4Prefix":
+    "화면에서 무엇을 눌렀는지 여덟 가지만 셉니다. 티켓 제목·본문·파일 경로·프롬프트는 실리지 않습니다. 설정에서 끄면 그때부터 아무것도 나가지 않고 남은 것까지 지우시려면",
+  "landing.noAccount.item4Suffix": "한 개를 지우면 됩니다",
+  "landing.noAccount.shotAlt":
+    "프로젝트가 0건일 때의 첫 화면. 등록된 프로젝트가 없다는 한 줄 아래에 새 프로젝트 카드가 펼쳐져 있고, 이름·프로젝트 폴더·통합 브랜치·스펙 문서 칸과 프로젝트 만들기 버튼이 있습니다.",
+  "landing.noAccount.shotCaption": "설치하고 처음 열면 이 화면입니다. 적는 것은 이름과 프로젝트 폴더뿐이고 계정을 넣는 칸이 없습니다.",
+  "landing.noAccount.arrowLink": "사용 통계와 끄는 법",
+
+  "landing.stats.dependenciesLabel": "엔진 의존성",
+  "landing.stats.dependenciesValue": "bash + python3 표준 라이브러리",
+  "landing.stats.concurrentWorkersLabel": "이 레포에서 동시에 도는 워커",
+  "landing.stats.ticketsLabel": "자기 큐가 받은 티켓",
+  "landing.stats.ticketsValue": "완료 1762",
+  "landing.stats.hoursBig": "62시간",
+  "landing.stats.hoursLabel": "첫 커밋에서 첫 릴리스까지",
+  "landing.stats.hoursCommitsValue": "커밋 351",
+  "landing.stats.note": "2026-08-12 기준",
+
+  "landing.install.eyebrow": "설치",
+  "landing.install.title": "다운로드해서 설치하면 끝",
+  "landing.install.body": "받아서 열기만 하면 되고 터미널을 켤 일이 없습니다.",
+  "landing.install.step1BoldSuffix": "를 열고 끌어다 놓습니다.",
+  "landing.install.step1AppSuffix": "을",
+  "landing.install.applicationsFolder": "응용 프로그램",
+  "landing.install.step1Body": "으로 옮기면 그것으로 설치가 끝납니다. 서명·공증된 빌드라 처음 열 때 맥이 낯선 앱이라며 막지 않습니다",
+  "landing.install.step2Bold": "② 앱을 처음 열면 폼이 펼쳐져 있습니다.",
+  "landing.install.step2Prefix": "이름과 프로젝트 폴더를 넣고",
+  "landing.install.step2Suffix": "를 누릅니다",
+  "landing.install.step3Bold": "③ 30초 뒤부터 워커가 큐를 훑습니다.",
+  "landing.install.step3Body": "티켓을 써 두면 그때부터 물어 갑니다",
+  "landing.install.item1BoldPrefix": "엔진은",
+  "landing.install.item1BoldMid": "와",
+  "landing.install.item1BoldSuffix": ", grok과 agy 넷 중에 고릅니다.",
+  "landing.install.item1Prefix": "워커를 만들 때 모델까지 같이 정하고 목록에 없는 이름은 직접 적어 넣습니다. 만든 뒤에도 워커 화면의",
+  "landing.install.item1Mid": "열을 눌러 바꿉니다. 참견은",
+  "landing.install.item1Suffix": "에만 있고 세션 스트림은 claude와 grok에 있습니다. 앱은 Apple Silicon 맥에서만 돕니다",
+  "landing.install.item2Bold": "화면 없이 엔진만 돌릴 수도 있습니다.",
+  "landing.install.item2Prefix": "Linux에서 굴리거나 화면이 필요 없으면 레포를 직접 받는",
+  "landing.install.item2LinkText": "그 갈래",
+  "landing.install.item2Suffix": "로 가세요",
+  "landing.install.fullGuideLink": "전체 설치 가이드",
+  "landing.install.firstTicketLink": "첫 프로젝트 만들기",
+  "landing.install.cronOnlyLink": "엔진만으로 돌리기",
+
+  "landing.plan.eyebrow": "플랜",
+  "landing.plan.cycleResumeAriaLabel": "플랜 카드 순환 다시 돌리기",
+  "landing.plan.cyclePauseAriaLabel": "플랜 카드 순환 멈추기",
+  "landing.plan.title": "내 PC에서 무료로 시작해보세요",
+  "landing.plan.freeItem1": "로컬 앱과 엔진을 직접 설치해 쓰기",
+  "landing.plan.freeItem2": "동료들과 P2P 협업",
+  "landing.plan.freeItem3": "엔진 MCP",
+  "landing.plan.soon": "준비중",
+  "landing.plan.freeBody": "로컬 엔진과 앱은 영원히 무료로 제공합니다. dira는 빌더들의 멀티 에이전트 생태계를 응원합니다.",
+  "landing.plan.proItem1": "클라우드 프로젝트",
+  "landing.plan.proItem2": "dira 자체 클라우드 LLM 사용",
+  "landing.plan.proItem3": "결과물 웹 호스팅",
+  "landing.plan.proItem4": "클라우드 워커",
+  "landing.plan.enterpriseItem1": "엔터프라이즈 전용 커스텀",
+  "landing.plan.enterpriseItem2": "사내툴과 연동",
+  "landing.plan.personaMarket": "페르소나 마켓",
+  "landing.plan.personaMarketItem": "생태계도 같이 만듭니다",
+  "landing.plan.ctaBody": "가입도 결제도 없습니다. 안 맞으면 지우면 그만이니 일단 깔아보세요.",
+
+  "landing.footer.productHeading": "제품",
+  "landing.footer.downloadLink": "다운로드",
+  "landing.footer.releasesLink": "릴리스",
+  "landing.footer.engineLink": "엔진",
+  "landing.footer.docsHeading": "문서",
+  "landing.footer.templatesLink": "템플릿",
+  "landing.footer.repoHeading": "레포",
+  "landing.footer.issuesLink": "이슈",
+  "landing.footer.licenseLink": "MIT 라이선스",
+  "landing.footer.copyright": "© 2026 프루퍼 주식회사. MIT.",
+  "landing.footer.termsLink": "이용약관",
+  "landing.footer.privacyLink": "개인정보처리방침",
+
+  "landing.registerDialog.description": "이미 있는 .dira를 목록에 올립니다. 파일은 만들지 않습니다.",
+
+  // 매뉴얼 사이드바(`app/(site)/docs/[[...slug]]/page.tsx`의 `SIDEBAR`) — 그룹 6 + 링크 26.
+  // 순서·링크는 `sidebar.test.ts`가 지킨다. en은 이 티켓이 안 채운다.
+  "manualSidebar.group.gettingStarted": "시작하기",
+  "manualSidebar.group.watching": "지켜보기",
+  "manualSidebar.group.writing": "직접 쓰기",
+  "manualSidebar.group.extending": "늘리기",
+  "manualSidebar.group.operating": "운영",
+  "manualSidebar.group.appendix": "부록",
+  "manualSidebar.item.whatIsDira": "dira에 대하여",
+  "manualSidebar.item.install": "설치",
+  "manualSidebar.item.firstTicket": "첫 프로젝트 만들기",
+  "manualSidebar.item.requirements": "요구사항 접수하기",
+  "manualSidebar.item.screens": "화면 소개",
+  "manualSidebar.item.bargeIn": "도는 세션에 말 걸기",
+  "manualSidebar.item.ticketWriting": "티켓 직접 발행하기",
+  "manualSidebar.item.states": "티켓이 지나는 상태",
+  "manualSidebar.item.worker": "워커",
+  "manualSidebar.item.concurrency": "동시에 몇 개 돌릴까",
+  "manualSidebar.item.personas": "페르소나",
+  "manualSidebar.item.squads": "스쿼드",
+  "manualSidebar.item.protocols": "프로토콜",
+  "manualSidebar.item.ontology": "아카이빙과 온톨로지",
+  "manualSidebar.item.epics": "에픽",
+  "manualSidebar.item.auth": "인증",
+  "manualSidebar.item.troubleshooting": "트러블슈팅",
+  "manualSidebar.item.logs": "로그 읽는 법",
+  "manualSidebar.item.analytics": "사용 통계와 끄는 법",
+  "manualSidebar.item.schedules": "스케줄",
+  "manualSidebar.item.webhook": "답변 대기를 밖으로 보내기",
+  "manualSidebar.item.closing": "마치면서",
+  "manualSidebar.item.cron": "엔진만으로 돌리기",
+  "manualSidebar.item.refEnv": "워커 환경변수",
+  "manualSidebar.item.refCli": "CLI",
+  "manualSidebar.item.refFrontmatter": "frontmatter 필드",
+
+  // 매뉴얼 셸(`app/(site)/shell.tsx`·`doc.tsx`) — 루트 산문 2장(`/terms`·`/privacy`)도 같은
+  // 셸을 쓴다(§사이트 기반 §루트 산문 2장의 셸). en은 이 티켓이 안 채운다.
+  "manualShell.darkToggleAriaLabel": "다크 모드",
+  "manualShell.navToggleAriaLabel": "메뉴 열기",
+  "manualShell.menuToggleAriaLabel": "사이드바 열기",
+  "manualShell.menuLabel": "메뉴",
+  "manualShell.copiedLabel": "됨",
+  "manualShell.copyLabel": "복사",
+  "manualShell.copyCodeAriaLabel": "코드 복사",
+  "manualShell.skipLink": "본문으로 건너뛰기",
+  "manualShell.projectsLink": "프로젝트 관리",
+  "manualShell.sidebarAriaLabel": "매뉴얼 목차",
+  "manualShell.editPageLink": "이 페이지 고치기",
+  "manualShell.prevNextAriaLabel": "이전 다음 문서",
+  "manualShell.prevLabel": "이전",
+  "manualShell.nextLabel": "다음",
+  "manualShell.onThisPageLabel": "이 페이지",
+
+  // 공개 사이트 오류·부재·메타(§0-24, 티켓 76b659fd) — `error.tsx`·`not-found.tsx`·`meta.ts`.
+  // en은 이 티켓이 안 채운다.
+  "siteError.title": "화면을 표시하지 못했습니다",
+  "siteError.noReason": "원인 정보 없음",
+  "siteError.retry": "다시 시도",
+  "siteNotFound.body": "이 주소에는 페이지가 없습니다.",
+  "siteNotFound.homeLink": "홈으로",
+  "siteMeta.description": "티켓을 큐에 넣으면 cron에 물린 워커가 claude 세션에 넘깁니다. 파일시스템이 곧 큐인 티켓 디스패처.",
 };
 
 /** 제품 낱말의 영어 대응 — **여기가 한자리다**(621c7a97). 다음 묶음이 같은 것을 다르게 부르지

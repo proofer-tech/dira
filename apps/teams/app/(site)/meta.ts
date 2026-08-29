@@ -4,7 +4,7 @@ import type { Metadata } from "next";
 // `@/lib/i18n` 별칭이 아니라 상대경로 `.ts`다 — `meta.test.ts`가 `node --test`로 이 파일을
 // 직접 부르는데, 네이티브 TS 로더가 tsconfig `paths` 별칭을 못 읽는다(`lib/projects.ts`가
 // `./i18n.ts`를 쓰는 그 판정과 같다).
-import { DEFAULT_LOCALE, type Locale } from "../../lib/i18n.ts";
+import { DEFAULT_LOCALE, t, type Locale } from "../../lib/i18n.ts";
 
 /** 굽는 라우트 목록과 그 라우트의 메타데이터가 한 자리에 있다 — 사이트맵·canonical·
  *  `generateStaticParams`가 **같은 목록**을 봐야 어긋날 자리가 통째로 없어진다.
@@ -12,9 +12,6 @@ import { DEFAULT_LOCALE, type Locale } from "../../lib/i18n.ts";
  *  `sitemap: { hostname }` 한 줄이고, 값은 한 개도 안 갈렸다(§SEO ② 태그 · §사이트 기반). */
 export const ORIGIN = "https://dira.proofer.tech";
 const SITE_TITLE = "dira";
-/** `config.ts:28`의 그 문장. */
-const SITE_DESCRIPTION =
-  "티켓을 큐에 넣으면 cron에 물린 워커가 claude 세션에 넘깁니다. 파일시스템이 곧 큐인 티켓 디스패처.";
 
 /** 매뉴얼 27장(`docs/*.md` — 26장 + 목차). `docs/[[...slug]]`가 이 목록으로 굽는다. */
 export const docNames = readdirSync(join(process.cwd(), "docs"))
@@ -64,7 +61,7 @@ export function pageMetadata(
   } = {},
 ): Metadata {
   const url = `${ORIGIN}${path}`;
-  const desc = description || SITE_DESCRIPTION;
+  const desc = description || t(locale, "siteMeta.description");
   return {
     title: suffix ? `${title} | ${SITE_TITLE}` : title,
     description: desc,

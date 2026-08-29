@@ -22,5 +22,5 @@ export async function generateMetadata() {
 
 export default async function Page() {
   const locale = await siteLocale();
-  return <Shell source={source(locale)} path="/terms" editPath="terms.md" />;
+  return <Shell source={source(locale)} path="/terms" editPath="terms.md" locale={locale} />;
 }

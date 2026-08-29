@@ -8,6 +8,8 @@ import "./fonts.css";
 import "./manual.css";
 import { isLandingOnly } from "@/lib/flags";
 import { Behaviors, DarkToggle, MenuToggle, NavToggle, NO_FLASH } from "./shell";
+import { LanguageToggle } from "@/components/language-toggle";
+import { t, type Locale } from "@/lib/i18n";
 
 // 마크다운 한 장을 셸에 담아 굽는다. 소비자는 셋이고(매뉴얼 22장 `app/docs/[[...slug]]` ·
 // 루트 산문 2장 `privacy`·`terms`) **한 벌**을 쓴다 — 렌더가 같아야 앵커 `id`·코드 토큰·표가
@@ -79,10 +81,12 @@ async function Doc({
   source,
   id,
   className,
+  locale,
 }: {
   source: string;
   id?: string;
   className?: string;
+  locale: Locale;
 }) {
   const hl = await highlighting;
 
@@ -108,8 +112,8 @@ async function Doc({
           />
           <span className="lang">{lang}</span>
           {/* ⑦① 기본 테마의 이 버튼은 탭 정거장인데 포커스에서도 안 보였다. CSS가 고친다. */}
-          <button type="button" className="copy" aria-label="코드 복사">
-            복사
+          <button type="button" className="copy" aria-label={t(locale, "manualShell.copyCodeAriaLabel")}>
+            {t(locale, "manualShell.copyLabel")}
           </button>
         </div>
       );
@@ -196,6 +200,7 @@ export function Shell({
   source,
   path,
   editPath,
+  locale,
   sidebar,
   prev,
   next,
@@ -203,6 +208,7 @@ export function Shell({
   source: string;
   path: string;
   editPath: string;
+  locale: Locale;
   sidebar?: { text: string; items: Item[] }[];
   prev?: Item;
   next?: Item;
@@ -213,7 +219,7 @@ export function Shell({
     <>
       <script dangerouslySetInnerHTML={{ __html: NO_FLASH }} />
       <a className="skip" href="#main">
-        본문으로 건너뛰기
+        {t(locale, "manualShell.skipLink")}
       </a>
 
       <header className="nav">
@@ -227,13 +233,13 @@ export function Shell({
           {/* 매뉴얼 밖(`/privacy`·`/terms`)에서는 켜지지 않는다 — 기본 테마의 `activeMatch`가
               그 링크의 경로(`/docs/`)라 두 장에서 활성 항목이 0이었다. */}
           <a className={path.startsWith("/docs") ? "on" : undefined} href="/docs/">
-            매뉴얼
+            {t(locale, "landing.nav.manualLink")}
           </a>
           {/* 매뉴얼 → 기능(§상호 링크). 22장 + privacy + terms가 같은 셸이라 여기 한 곳에
               넣으면 25장에 뜬다. 랜딩-only에는 이 자리가 없다 — §홈의 히어로 목록 절과
               같은 버튼이라 href도 그 앵커와 같다. */}
-          {!isLandingOnly() && <a href="/#projects">프로젝트 관리</a>}
-          <a href={`${REPO}/releases/latest`}>다운로드</a>
+          {!isLandingOnly() && <a href="/#projects">{t(locale, "manualShell.projectsLink")}</a>}
+          <a href={`${REPO}/releases/latest`}>{t(locale, "landing.footer.downloadLink")}</a>
         </nav>
         <a className="social" href={REPO} aria-label="github" target="_blank" rel="noopener">
           <svg viewBox="0 0 16 16" aria-hidden="true">
@@ -241,6 +247,8 @@ export function Shell({
           </svg>
         </a>
         <DarkToggle />
+        {/* §0-24 §토글 — 풀 모드는 설정 다이얼로그의 `언어`가 정본이라 여기 안 세운다. */}
+        {isLandingOnly() && <LanguageToggle />}
         <NavToggle />
       </header>
 
@@ -255,7 +263,7 @@ export function Shell({
       <div className={sidebar ? "shell" : "shell noside"}>
         {sidebar && (
           <>
-            <aside className="sidebar" aria-label="매뉴얼 목차">
+            <aside className="sidebar" aria-label={t(locale, "manualShell.sidebarAriaLabel")}>
               {sidebar.map((g) => (
                 <section key={g.text}>
                   <h2>{g.text}</h2>
@@ -272,23 +280,23 @@ export function Shell({
         )}
 
         <div className="content">
-          <Doc source={source} id="main" className="doc" />
+          <Doc source={source} id="main" className="doc" locale={locale} />
 
           <footer className="docfooter">
             <div className="edit">
-              <a href={`${REPO}/edit/master/apps/teams/${editPath}`}>이 페이지 고치기</a>
+              <a href={`${REPO}/edit/master/apps/teams/${editPath}`}>{t(locale, "manualShell.editPageLink")}</a>
             </div>
             {(prev || next) && (
-              <nav className="prevnext" aria-label="이전 다음 문서">
+              <nav className="prevnext" aria-label={t(locale, "manualShell.prevNextAriaLabel")}>
                 {prev && (
                   <a className="prev" href={prev.link}>
-                    <span className="side">이전</span>
+                    <span className="side">{t(locale, "manualShell.prevLabel")}</span>
                     <span className="title">{prev.text}</span>
                   </a>
                 )}
                 {next && (
                   <a className="next" href={next.link}>
-                    <span className="side">다음</span>
+                    <span className="side">{t(locale, "manualShell.nextLabel")}</span>
                     <span className="title">{next.text}</span>
                   </a>
                 )}
@@ -297,8 +305,8 @@ export function Shell({
           </footer>
         </div>
 
-        <aside className="outline" aria-label="이 페이지">
-          <h2>이 페이지</h2>
+        <aside className="outline" aria-label={t(locale, "manualShell.onThisPageLabel")}>
+          <h2>{t(locale, "manualShell.onThisPageLabel")}</h2>
           {outline.map((h) => (
             <a key={h.id} href={`#${h.id}`}>
               {h.text}

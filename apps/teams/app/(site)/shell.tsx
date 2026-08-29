@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useT } from "@/components/language-provider";
 
 // 셸에서 실제로 손이 닿는 곳만 여기 있다. 나머지(사이드바·아웃라인·이전/다음·코드블록)는
 // 전부 서버가 굽는다 — 이 파일이 클라이언트로 나가는 전부다.
@@ -17,6 +18,7 @@ if(t==="dark"||(!t&&matchMedia("(prefers-color-scheme: dark)").matches))
 document.documentElement.classList.add("dark")}catch(e){}`;
 
 export function DarkToggle() {
+  const t = useT();
   // 서버는 어느 모드인지 모른다. 아이콘은 CSS가 고르므로 화면은 안 깜빡이고, `aria-checked`만
   // 붙고 나서 맞춘다.
   const [dark, setDark] = useState(false);
@@ -27,7 +29,7 @@ export function DarkToggle() {
       className="appearance"
       role="switch"
       aria-checked={dark}
-      aria-label="다크 모드"
+      aria-label={t("manualShell.darkToggleAriaLabel")}
       onClick={() => {
         const on = flip("dark");
         setDark(on);
@@ -51,11 +53,12 @@ export function DarkToggle() {
 
 /** `<768`에서 네브 메뉴 둘을 접었다 편다. */
 export function NavToggle() {
+  const t = useT();
   return (
     <button
       type="button"
       className="hamburger"
-      aria-label="메뉴 열기"
+      aria-label={t("manualShell.navToggleAriaLabel")}
       onClick={() => flip("nav-open")}
     >
       <svg viewBox="0 0 16 16" aria-hidden="true">
@@ -67,35 +70,37 @@ export function NavToggle() {
 
 /** `<960`에서 사이드바 서랍을 여는 유일한 손잡이다. */
 export function MenuToggle() {
+  const t = useT();
   return (
     <button
       type="button"
       className="menu-btn"
-      aria-label="사이드바 열기"
+      aria-label={t("manualShell.menuToggleAriaLabel")}
       onClick={() => flip("sidebar-open")}
     >
       <svg viewBox="0 0 16 16" aria-hidden="true">
         <path d="M1 4h14M1 8h14M1 12h14" />
       </svg>
-      메뉴
+      {t("manualShell.menuLabel")}
     </button>
   );
 }
 
 /** 그리는 것이 없다. 위임 클릭(복사)과 아웃라인 현재 항목 둘만 건다. */
 export function Behaviors() {
+  const t = useT();
   useEffect(() => {
     const onClick = (e: MouseEvent) => {
-      const t = e.target as HTMLElement;
-      const backdrop = t.closest(".backdrop");
+      const target = e.target as HTMLElement;
+      const backdrop = target.closest(".backdrop");
       if (backdrop) return void flip("sidebar-open");
-      const btn = t.closest<HTMLButtonElement>("button.copy");
+      const btn = target.closest<HTMLButtonElement>("button.copy");
       if (!btn) return;
       const pre = btn.parentElement?.querySelector("pre");
       if (!pre) return;
       navigator.clipboard.writeText(pre.textContent ?? "").then(() => {
-        btn.textContent = "됨";
-        setTimeout(() => (btn.textContent = "복사"), 1500);
+        btn.textContent = t("manualShell.copiedLabel");
+        setTimeout(() => (btn.textContent = t("manualShell.copyLabel")), 1500);
       });
     };
     document.addEventListener("click", onClick);
@@ -123,6 +128,6 @@ export function Behaviors() {
       document.removeEventListener("click", onClick);
       io.disconnect();
     };
-  }, []);
+  }, [t]);
   return null;
 }

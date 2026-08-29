@@ -1,5 +1,6 @@
 import { cookies, headers } from "next/headers";
-import { LOCALE_COOKIE, resolvePublicLocale } from "@/lib/site-locale";
+import { LOCALE_COOKIE } from "@/lib/i18n";
+import { resolvePublicLocale } from "@/lib/site-locale";
 
 /** 요청 쿠키·헤더를 실제로 꺼내는 자리 하나 — 순수 판정(`resolvePublicLocale`)은
  *  `lib/site-locale.ts`에 있다. 그 파일이 `next/headers`를 못 무는 이유(`node --test`가 그

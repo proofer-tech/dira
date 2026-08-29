@@ -24,5 +24,5 @@ export async function generateMetadata() {
 
 export default async function Page() {
   const locale = await siteLocale();
-  return <Shell source={source(locale)} path="/privacy" editPath="privacy.md" />;
+  return <Shell source={source(locale)} path="/privacy" editPath="privacy.md" locale={locale} />;
 }
