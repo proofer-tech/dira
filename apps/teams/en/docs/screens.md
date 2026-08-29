@@ -392,7 +392,7 @@ You need this marker when a ticket has been running a while with no visible prog
 you go looking for where it went wrong yourself. Press a line with `Error` on it and what the tool
 said back comes out in full.
 
-![Two result lines inside an unfolded stage. The upper one reads `Result Error · 2 lines` with only the word `Error` in heavy type; right below it the same tool succeeded and reads `Result 1 line` with no word marker.](/shots/13-error-marker.png)
+![Two result lines inside an unfolded stage. The upper one reads `Result Error · 2 lines` with only the word `Error` in heavy type; right below it the same tool succeeded and its `Result` row carries no word marker.](/shots/13-error-marker.png)
 
 There is no switch for showing errors only. There is no place counting them either. Sweep the box
 and look for `Error`. An error inside a folded stage shows only when you unfold that stage. The
@@ -415,7 +415,7 @@ it, so question and answer are next to each other.
 ### The token figure on the heading — how much of the limit this ticket burned
 
 Right beside the `Progress record` title, `This ticket 48M tokens` comes up in gray, with
-`1 session` after it. Those are the tokens the sessions that held this ticket exchanged. We add up,
+`Sessions 1` after it. Those are the tokens the sessions that held this ticket exchanged. We add up,
 as they are, the four numbers the engine writes into its own accounting when a session ends. Input,
 output, what was written to cache, and what was read from cache. It is not a figure we estimated by
 multiplying a unit price. `This ticket`, in front of the number, says whose it is.
@@ -438,9 +438,9 @@ from session logs, and there are three branches where that log is missing.
 
 | Why `Unknown` is there | Put the mouse on the word |
 |---|---|
-| The session is still running. Tokens get written once, the moment a session ends | `None of the 3 logs for this hash has an exit record` |
+| The session is still running. Tokens get written once, the moment a session ends | `No exit record in 3 log(s) for this hash` |
 | The session died without leaving a result. Those tokens are never coming | The same sentence. The screen cannot tell these two apart |
-| The ticket is old enough that the logs are gone. A session that ran on another machine is not here either | `There are 0 workers/logs/*-<hash>.log files on this machine` |
+| The ticket is old enough that the logs are gone. A session that ran on another machine is not here either | `workers/logs/*-<hash>.log: no matches on this machine` |
 
 Logs live only on this machine, and the engine does not delete them. How much is left is decided by
 your disk and by you (see [Reading the logs](/docs/logs)). So the older the ticket, the more common

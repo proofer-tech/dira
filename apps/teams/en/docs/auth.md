@@ -109,7 +109,7 @@ This applies only when the queue root is on a mount such as Google Drive. When a
 by cron tries to read a file in a protected location, macOS **blocks it silently, with no error.**
 It looks as though the file is not there.
 
-Open `Settings › Privacy & Security › Full Disk Access`. `cron` itself does not appear in the
+Open `System Settings › Privacy & Security › Full Disk Access`. `cron` itself does not appear in the
 list, so press `+`, then `Cmd+Shift+G`, and type `/usr/sbin/cron` in directly to add it. What
 actually reads the file is not the worker script but the cron daemon that starts it. It may not
 take effect right away even after you turn it on, so run a worker once by hand from the workers
@@ -122,7 +122,7 @@ permission at that moment. Registration stops until you answer, and pressing `Al
 through to the end. The trouble is that this approval does not survive to the next registration.
 The same window comes up again every time you make one more worker ([How many to run at
 once](/docs/concurrency)). The place to turn it on ahead of time, or to check it, is
-`Settings › Privacy & Security › App Management`.
+`System Settings › Privacy & Security › App Management`.
 
 ## Without the app - using the engine alone
 

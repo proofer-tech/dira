@@ -385,9 +385,10 @@ label the screen actually shows. These rows are copied from the English dictiona
 | 펼치기 (frontmatter 읽기 전용 표) | Expand |
 | 평문으로 | Switch to plain text |
 
-Four more for the same reason, all macOS wording rather than ours: `허용` is `Allow`, `앱 관리` is
-`App Management`, `개인정보 보호 및 보안` is `Privacy & Security`, and `전체 디스크 접근 권한` is
-`Full Disk Access`.
+Five more for the same reason, all macOS wording rather than ours: `허용` is `Allow`, `앱 관리` is
+`App Management`, `개인정보 보호 및 보안` is `Privacy & Security`, `전체 디스크 접근 권한` is
+`Full Disk Access`, and `설정` is `System Settings`. The Korean shortens that last one; English
+writes out the app's full name every time.
 
 The app screens have their own English dictionary in `lib/i18n.ts` already, so labels on the
 board, the ticket detail, and the Personas and Squads screens are not copied into this table.
@@ -476,15 +477,15 @@ these rows copy the English dictionary, and when the two disagree the dictionary
 | `스케줄을 지웁니다` | `This deletes the schedule` |
 | `이름을 바꾸면 프롬프트에서 빠집니다` | `Rename it and it drops out of the prompt` |
 | `모든 세션이 협업 프로토콜 없이 시작합니다` | `Every session will start with no collaboration protocol` |
-| `이 티켓 48M 토큰 · 세션 1개` | `This ticket 48M tokens · 1 session` |
+| `이 티켓 48M 토큰 · 세션 1개` | `This ticket 48M tokens · Sessions 1` |
 | `· 이 합계에 없는 세션 3개` | `· outside this total: 3 session(s)` | The count carries the ` session(s)` suffix from the dictionary. |
-| `이 해시의 로그 3개에 종료 기록이 없습니다` | `None of the 3 logs for this hash has an exit record` |
-| `workers/logs/*-<해시>.log가 이 머신에 0개입니다` | `There are 0 workers/logs/*-<hash>.log files on this machine` |
+| `이 해시의 로그 3개에 종료 기록이 없습니다` | `No exit record in 3 log(s) for this hash` |
+| `workers/logs/*-<해시>.log가 이 머신에 0개입니다` | `workers/logs/*-<hash>.log: no matches on this machine` |
 | `기록 145건` | `Records 145` |
 
 The em dash in those sentences is the app's, not ours. Keep it where the Korean has it.
 
 The last five rows are the token figure and the record count. Korean puts the number in the middle
-of the phrase and English puts it after the label, so the pieces are cut differently. The token
-sentences are still Korean in `lib/usage.ts`; the English above is what they take when they move
-into the dictionary.
+of the phrase and English puts it after the label, so the pieces are cut differently. `lib/usage.ts`
+and the session stream build every one of them out of the dictionary, so what stands above is the
+sentence the English screen shows, not a translation still waiting to land.
