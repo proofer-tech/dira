@@ -276,7 +276,7 @@ a project worker is the `Shared` badge next to `Name`, and pressing that badge o
 | Where you make it | `New worker` at the top right of the workers screen | `New worker` in `Settings` › `Workers` |
 | Queue it runs | This one project | One at a time, taking turns across the projects with borrowing on |
 | Worktree | Created along with it | Created the first time it takes a ticket in this queue |
-| Shared context, integration gate, account rules | It gets this project's | The same - it gets those of whichever project it took |
+| Common context, integration gate, account rules | It gets this project's | The same - it gets those of whichever project it took |
 | Engine and model | The ticket's persona decides | The same. So one slot can run on a different engine per project |
 | `Stream` on the row | You press it | You press it just the same |
 | `Stop` · `Re-register` · `Delete` on the row | You press them | Dimmed and blocked |

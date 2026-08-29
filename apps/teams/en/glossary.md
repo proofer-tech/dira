@@ -289,7 +289,7 @@ label the screen actually shows. These rows are copied from the English dictiona
 | 비활성화 | Disable |
 | 사용 | Use |
 | 활성 | Active |
-| 비활성 | Disabled |
+| 비활성 | Disabled | The token badge. The heading over switched-off skills is `Off`. |
 | 소진 | Exhausted |
 | 토큰 저장 | Save a token |
 | 인증 필요 | Needs auth |
@@ -473,7 +473,7 @@ these rows copy the English dictionary, and when the two disagree the dictionary
 | `이름을 바꾸면 프롬프트에서 빠집니다` | `Rename it and it drops out of the prompt` |
 | `모든 세션이 협업 프로토콜 없이 시작합니다` | `Every session will start with no collaboration protocol` |
 | `이 티켓 48M 토큰 · 세션 1개` | `This ticket 48M tokens · 1 session` |
-| `· 이 합계에 없는 세션 3개` | `· outside this total: 3` |
+| `· 이 합계에 없는 세션 3개` | `· outside this total: 3 session(s)` | The count carries the ` session(s)` suffix from the dictionary. |
 | `이 해시의 로그 3개에 종료 기록이 없습니다` | `None of the 3 logs for this hash has an exit record` |
 | `workers/logs/*-<해시>.log가 이 머신에 0개입니다` | `There are 0 workers/logs/*-<hash>.log files on this machine` |
 | `기록 145건` | `Records 145` |
