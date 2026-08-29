@@ -11,13 +11,18 @@ import { t } from "@/lib/i18n";
  *  세그먼트 위, 그 그룹의 `not-found.tsx`가 받는다(`(app)/not-found.tsx`). 이 파일은
  *  세그먼트 매칭 자체가 실패한 경로 전용이라, 매뉴얼·랜딩과 같은 문구를 쓴다
  *  (`(site)/not-found.tsx`와 같은 값 — §자리 표 "없는 주소"). 그 파일과 한 파일로 못 합친 건
- *  그쪽은 `(site)` 레이아웃 아래서 렌더돼 `<html>`을 또 낼 수 없어서다. */
+ *  그쪽은 `(site)` 레이아웃 아래서 렌더돼 `<html>`을 또 낼 수 없어서다.
+ *
+ *  Next가 이 파일(`_not-found`)을 빌드 시점에 정적으로 미리 굽는다 — `readLanguage()`가
+ *  그 시점의 로케일로 고정돼 실행 시점 값을 못 읽는다. 다른 동적 페이지들과 같게 강제한다. */
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = { title: "404 | dira" };
 
 export default async function NotFound() {
   const locale = await readLanguage();
   return (
-    <html lang="ko-KR">
+    <html lang={locale}>
       <body>
         <main>
           <h1>{t(locale, "notFound.root.title")}</h1>

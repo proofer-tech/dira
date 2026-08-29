@@ -23,7 +23,7 @@ import {
   type ResolvedView,
 } from "@/app/actions";
 import { publishOntologyMigrationAction } from "@/app/(app)/p/[project]/ontology/actions";
-import { useT } from "@/components/language-provider";
+import { useLocale, useT } from "@/components/language-provider";
 import { OntologyImport } from "@/components/ontology-ui";
 import { PickPath } from "@/components/path-picker";
 import { PersonaBadge } from "@/components/persona-badge";
@@ -447,6 +447,7 @@ const EMPTY = "text-xs leading-5 text-muted-foreground";
  *  ponytail: 이 화면은 수십 행이다. 수천 행이 되면 그때 가상화를 고민한다. */
 export function ProjectRows({ rows }: { rows: ProjectRow[] }) {
   const t = useT();
+  const locale = useLocale();
   return (
     <Table>
       <TableHeader>
@@ -482,7 +483,7 @@ export function ProjectRows({ rows }: { rows: ProjectRow[] }) {
                       건수는 상태가 아니라 이 행의 사실이다. 0건인 행에는 아무것도 없다 */}
                   {row.assigned > 0 && (
                     <span className="flex items-center gap-1">
-                      <StatusBadge status="assigned" />
+                      <StatusBadge status="assigned" locale={locale} />
                       <span className="text-xs tabular-nums text-status-stale">{row.assigned}</span>
                     </span>
                   )}
@@ -513,7 +514,7 @@ export function ProjectRows({ rows }: { rows: ProjectRow[] }) {
                 {row.connected ? row.done : ""}
               </TableCell>
               <TableCell className="px-3 py-0">
-                <StatusBadge status={row.connected ? "connected" : "disconnected"} />
+                <StatusBadge status={row.connected ? "connected" : "disconnected"} locale={locale} />
               </TableCell>
               <TableCell className="px-3 py-0">
                 <ProjectRowActions
@@ -556,7 +557,7 @@ export function ProjectRows({ rows }: { rows: ProjectRow[] }) {
                       <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
                         {row.workers.map((g) => (
                           <span key={g.status} className="flex items-center gap-1 whitespace-nowrap">
-                            <StatusBadge status={g.status} />
+                            <StatusBadge status={g.status} locale={locale} />
                             <span className="font-mono text-xs">{g.names.join(" ")}</span>
                           </span>
                         ))}
