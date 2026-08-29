@@ -24,7 +24,7 @@ when it takes a ticket, so without it a ticket never moves out of `Open`. The de
 Open the `dira.app` you just moved and press `Settings` at the far right of the header. Look at
 the top line of `Authentication` › `claude`. If the engine is installed, `claude CLI —` is
 followed by the path the app found. If it is not, the line reads
-`claude CLI not found — workers cannot start sessions`.
+`No claude CLI here — workers can't start a session`.
 
 Once you have installed the engine, quit the app, open it again, and look at the same line. The
 list of paths the app searches for programs is decided once, at launch. When that line has

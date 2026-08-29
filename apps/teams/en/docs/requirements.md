@@ -19,10 +19,10 @@ you want in whatever sentences you want; the splitting is the next section's job
   fill in a skeleton.
 - `⌘/` opens this field from anywhere inside the project. The button lives on the board only,
   but a request can occur to you while you are looking at a worker or reading a ticket.
-- Once it is in, `Your request has been submitted. pm will review it shortly.` appears in the same
-  spot. The screen does not drag you anywhere; press the `View the request` link below it to go
-  to that request in detail. If you had an epic selected when you submitted, this sentence names
-  that epic instead ([Epics](/docs/epics)).
+- Once it is in, `Request received. The PM will review it shortly.` appears in the same spot.
+  The screen does not drag you anywhere; press the `See the request you submitted` link
+  below it to go to that request in detail. If you had an epic selected when you submitted, this
+  sentence names that epic instead ([Epics](/docs/epics)).
 
 ## What happens after you submit
 

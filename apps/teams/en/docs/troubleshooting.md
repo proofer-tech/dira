@@ -182,7 +182,7 @@ The bell still shows it in this case.
 ## Workers run but nothing gets done
 
 **Screen**: look at the **settings button** at the top right of the header. When there is no
-authentication, `Authentication needed` attaches to the button itself. The `No Claude token` item
+authentication, `Needs auth` attaches to the button itself. The `No Claude token` item
 in the notification bell says the same thing, and the link inside that item opens settings
 directly. Pick `Authentication` › `claude` in the left-hand tree and you can issue one right
 there ([Authentication](/docs/auth)).

@@ -448,11 +448,11 @@ your disk and by you (see [Reading the logs](/docs/logs)). So the older the tick
 do not know, we write that we do not know. The other way around, when a session ended and all four
 are zero, `0 tokens` comes up as it is. That one is true.
 
-**If `· outside this total: 3` is attached, more was actually used.** It means those sessions'
-tokens are missing from the number in front. Sessions whose log survived but has no exit record in
-it get caught here. A session killed by a signal is one, and its value is never coming. So this
-sentence does not say it will fill in shortly. It means the same as the sentence beside the tokens
-on the workers screen.
+**If `· outside this total: 3 session(s)` is attached, more was actually used.** It means those
+sessions' tokens are missing from the number in front. Sessions whose log survived but has no
+exit record in it get caught here. A session killed by a signal is one, and its value is never
+coming. So this sentence does not say it will fill in shortly. It means the same as the sentence
+beside the tokens on the workers screen.
 
 **Per-epic totals are on the epic screen.** It is the tokens of the tickets in that epic added up,
 and it says how many of them we know as well (see [Epics](/docs/epics)).
@@ -649,8 +649,8 @@ use. Keeping you from leaving the app to check how many tokens are left is all t
   bar and per-worker consumption is on the workers screen.
 - A consumption total is only caught once the session ends. A 90-minute session reads zero for 90
   minutes, and the tokens of a session killed by a signal never arrive. That is why
-  `· outside this total: n` appears beside `Tokens, last 5 hours` on the workers screen. Stay silent
-  and people read it as "used less".
+  `· outside this total: n session(s)` appears beside `Tokens, last 5 hours` on the workers
+  screen. Stay silent and people read it as "used less".
 
 ## The settings dialog
 

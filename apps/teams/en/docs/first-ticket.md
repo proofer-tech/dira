@@ -26,7 +26,7 @@ For now, just fill in the form.
 
 One line sits under the card title. Everything this form does is in that sentence.
 
-> `Creates .dira and puts one worker on crontab — it starts taking tickets 30 seconds later.`
+> `Creates .dira and puts one worker in crontab — it starts picking up tickets 30 seconds later.`
 
 crontab is the schedule cron reads. Once a line goes in there, your Mac calls the worker every
 30 seconds on its own.
@@ -34,7 +34,7 @@ crontab is the schedule cron reads. Once a line goes in there, your Mac calls th
 | Field | What goes in |
 |---|---|
 | `Name` | The name you will see on screen. Below it, the name used in the URL (the slug) shows up as a preview |
-| `Project folder` | **The parent of `.dira`**. Write something like `~/Projects/myproject` and `.dira` gets made under it. The help text below the field says the same (`.dira goes here. ~ is expanded`). If the folder is missing, it gets made |
+| `Project folder` | **The parent of `.dira`**. Write something like `~/Projects/myproject` and `.dira` gets made under it. The help text below the field says the same (`.dira goes in here. ~ is expanded`). If the folder is missing, it gets made |
 | `Integration branch` | The branch sessions push results to. The default is `main` |
 | `Spec document` | Optional. The path to your project spec (`docs/DESIGN.md`, say). A file that does not exist yet is fine to write in advance |
 
@@ -91,7 +91,7 @@ close it. This is where you catch a path you typed wrong.
 ## Permission dialogs, failed registration, an existing `.dira`
 
 macOS raises a permission dialog. Writing to crontab needs the `App Management` permission.
-While it is working, `If a permission dialog appears, press [Allow] — crontab registration is waiting on that answer.`
+While it is working, `Press [Allow] if a permission window opens — registering the crontab line waits on that answer.`
 sits below the form. Press `Allow` and the registration carries straight on. Leave the dialog
 alone and only the registration falls over, three minutes later.
 
@@ -101,7 +101,7 @@ terminal and it is finished right there. That side road only appears when the re
 failed.
 
 If the folder you picked already holds a `.dira`, nothing is made. When there is a `tickets/` or
-`workers/` inside it, you get `<path>/.dira is already a dira project. Register it instead of creating one.`
+`workers/` inside it, you get `<path>/.dira is already a dira project. Register it instead of creating it.`
 and a button that opens the register dialog. This app has no path that writes over a file that
 is already there.
 
