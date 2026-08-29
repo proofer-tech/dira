@@ -8580,7 +8580,7 @@ n += len(re.findall(r">\s*([^<>{}]*[가-힣][^<>{}]*?)\s*<", src))
 | 7 | 페르소나-프로토콜 | `personas-ui.tsx` - `protocols-ui.tsx` - 두 화면의 `page`-`actions` - `protocols.ts` - `skills.ts` | ≈185 | **271** | 1 | **완료** (`93c106b3`-`204be4da` / `ko`, `7a86fd5c`-`b5d9735d` / `en`). 잔여 1은 재유입이다 - 행 10 |
 | 8 | 프로젝트 관리(루트 셸) | `projects-ui.tsx` - `projects.ts` - `app/actions.ts` - `scaffold.ts` - `feedback-dialog.tsx` - 오류-부재 경계 넷(`app/not-found.tsx` - `(app)/not-found.tsx` - `(app)/error.tsx` - `global-error.tsx`) | ≈130 | 136 | 155 | **P338이 낸다** |
 | 9 | 나머지 `lib` 실패 사유 | `workers.ts` - `auth.ts` - `engine.ts` - `queue.ts` - `keymap.ts` - `pool.ts` - `queue-ref.tsx` 등 | ≈97 | 93 | 109 | **완료** (`daf72662` / `ko`, `4c195255` / `en`). `personaEngineHint` 한 건은 `50fd4b34`가 앞당겨 물었다. `4c195255`가 못 물었던 8(`cwdDefects` 결함 문장 6 + `firstWorkerCmd`의 `<dira 레포>` + `worktreeCmds`의 꼬리 주석 하나)은 `c7c284f6`이 `ko` 키로 옮기고 `locale` 배선을 마쳤다 - `en`은 아직 안 찼다 |
-| 10 | **재유입 회수** | 이행을 끝낸 묶음에 그 뒤 다시 든 한글. 08-29에 40 - 행 2가 22(`project-switcher.tsx` 3 - `status-badge.tsx` 4 - `urls.ts` 6 - `usage.ts` 9) - 행 7이 1(`skills.ts`) - 행 11이 17(`markdown-roundtrip.ts` 8 - `webhook.ts` 3 - `budgets.ts` 3 - `machine-state.ts` 1 - `worker-mark.tsx` 1 - `paths.ts` 1) | - | 12 | 40 | 미발행 - **마지막 묶음 뒤에 한 번**. `urls.ts`의 기능 이름 둘은 `50fd4b34`가 앞당겨 문다 |
+| 10 | **재유입 회수** | 이행을 끝낸 묶음에 그 뒤 다시 든 한글. 08-29에 40 - 행 2가 22(`project-switcher.tsx` 3 - `status-badge.tsx` 4 - `urls.ts` 6 - `usage.ts` 9) - 행 7이 1(`skills.ts`) - 행 11이 17(`markdown-roundtrip.ts` 8 - `webhook.ts` 3 - `budgets.ts` 3 - `machine-state.ts` 1 - `worker-mark.tsx` 1 - `paths.ts` 1) | - | 12 | 40 | 미발행 - **마지막 묶음 뒤에 한 번**. `urls.ts`의 기능 이름 둘은 `50fd4b34`가 앞당겨 문다. `status-badge.tsx`의 4(`KIND_LABELS`)도 `30f6fafd`가 앞당겨 문다 - 영문 매뉴얼이 그 넉 자를 인용해야 해서 행 10을 못 기다린다(피드백 `0ca66a7f`, 로드맵 P340-15) |
 | 11 | **공용 컴포넌트-순수 유틸** | 화면이 둘 이상 무는 파일. `markdown-editor.tsx` - `update-toast.tsx` - `worker-mark.tsx` - `path-picker.tsx` - `markdown.tsx` - `copy-command.tsx` - `budgets.ts` - `attachment-limit.ts` - `skill-upload-limit.ts` - `markdown-roundtrip.ts` - `markdown-wikilinks.ts` - `machine-state.ts` - `webhook.ts` - `paths.ts` - `feedback.ts` - `p/[project]/actions.ts` - `(app)/layout.tsx` | - | 42 | 17 | **완료** (`c9f2eec5` / `ko`, `90db2822` / `en`). 잔여는 재유입이다 - 행 10 |
 | 12 | 온톨로지-에픽 | `ontology-ui.tsx` - `ontology/{page,actions}.ts*` - `ontology.ts` - `ontology-seed.ts` - `epics-ui.tsx` - `epic-sidebar.tsx` - `epics/{page,actions}.ts*` - `epics.ts` - `epic.ts` | - | 218 | 220 | **P338이 낸다** - 갈래 둘(온톨로지 192 - 에픽 28) |
 
@@ -48937,6 +48937,8 @@ build` 0개인데 로드 평균이 455다(실측 (5)). CPU를 쓰는 것이 Chro
 | P340-12 | 영문 원고 - 부록 5장 | writer | `73394f66` | 발행 `3e452b38` |
 | P340-13 | 영문 원고 - `terms` + `privacy` + 정본 문장 | writer | `73394f66` | 발행 `75d222ff` |
 | P340-14 | QA - 두 언어로 공개 라우트 넷과 폴백 세 단을 본다 | qa | `00ba786b` | 발행 `3f94184c` |
+| P340-15 | 장치 - `KIND_LABELS` 넉 자를 사전으로 옮기고 호출부 여섯 자리에 `locale`을 배선한다 | developer | - | 발행 `30f6fafd` |
+| P340-16 | 영문 원고 - `personas` - `first-ticket` 두 장의 화면 라벨 인용을 확정된 `en` 값에 맞춘다 | writer | `30f6fafd`, `00ba786b` | 발행 `11cd11f6` |
 
 **원고를 여덟으로 가른 축은 사이드바 묶음과 분량이다.** 337 KB를 한 세션에 못 옮긴다.
 `screens` 한 장이 50.9 KB라 혼자 서고, 나머지는 사이드바 여섯 묶음을 30~53 KB 단위로 나눴다 -
@@ -48950,6 +48952,16 @@ build` 0개인데 로드 평균이 455다(실측 (5)). CPU를 쓰는 것이 Chro
 **`deps` 사슬이 가장 긴 자리는 화면 문구다** - P340-2 -> P340-3 -> P340-4 -> P340-14. 셋 다
 하드 선후다. 토글은 P340-2가 만든 판정 체인에 쿠키를 쓰고, `en` 사전은 P340-3이 넣은 키 이름을
 모르면 못 채우며, QA는 영어가 없으면 두 언어를 못 견준다.
+
+**P340-15는 §0-16 §묶음 표 행 10에서 넷만 앞당긴 것이다**(피드백 `0ca66a7f`). 그 표는
+`status-badge.tsx` 4를 재유입으로 이미 세고 있고 행 10의 발행 시점은 `마지막 묶음 뒤에 한 번`인데,
+그때까지 기다리면 매뉴얼 27장이 화면에 없는 영어를 계속 인용한다 - `50fd4b34`가 `urls.ts`의 기능
+이름 둘을 앞당겨 문 것과 같은 처분이다. **묶음을 앞당기는 것이 아니라 넷을 빼 오는 것이고, 행 10의
+남은 수는 그만큼 줄어든다.**
+
+**같은 피드백이 지목한 둘째 자리(`app/(site)/landing.tsx`)는 새 티켓이 없다** - P340-3이 그릇을
+이미 냈고(`76b659fd`, `ko` 154건) P340-4가 그 자리의 영어를 채운다. 원고 `first-ticket.md`가
+인용하는 랜딩 라벨은 P340-4가 확정하는 값이라 P340-16이 그 뒤를 따른다.
 
 **designer 0장이다.** §0-24 §토글의 그 근거다 - 답 3-(a)가 자리와 방식을 이미 정했다.
 
