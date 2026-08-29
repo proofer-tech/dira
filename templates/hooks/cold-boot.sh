@@ -85,7 +85,7 @@ if [ "${1:-tick}" = tick ] || [ "${1:-tick}" = dryrun ]; then
     # worktrees/ 아래만 도므로 본체 체크아웃의 next dev(사람이 쓰는 GUI, 포트 7331)와 사람의
     # 크롬은 이 루프 밖이라 대상이 아니다.
     _cb_reap "next dev"
-    _cb_reap "Google Chrome.*--headless"
+    _cb_reap "chrome-headless-shell"
     unset -f _cb_reap
     unset _cb_pattern _cb_rpid _cb_rcwd _cb_rargs _cb_rmatch _cb_rpgid
 
