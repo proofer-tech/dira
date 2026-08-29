@@ -14,20 +14,20 @@ with a `Shared` badge (see §Shared workers - slots that move between projects b
 ![Eight workers all standing at running, each holding one ticket hash. Next to the title is 165M tokens over the last five hours, and the right end of each row is four actions: reap, stream, stop, delete.](/shots/03-workers.png)
 
 `Workers` in the left nav. One row is one worker, and that row alone tells you what is going on
-right now. The columns, left to right, are `Name` · `State` · `Ticket held` · `Context` ·
+right now. The columns, left to right, are `Name` · `Status` · `Holding` · `Context` ·
 `Last activity` · `pid` · `Tokens (5h)` · `Actions`.
 
-- **State** is one of four. `running` means a session has been started and the worker is waiting
+- **Status** is one of four. `running` means a session has been started and the worker is waiting
   for it to finish. `idle` means the worker is on cron and is holding nothing at the moment.
-  `stopped` means it is out of crontab and never wakes up at all (`Not on crontab` sits next to
+  `stopped` means it is out of crontab and never wakes up at all (`not in the crontab` sits next to
   the badge - a shared worker row does not get that phrase), and `stale` means the session
   process died and only the claim is left behind.
-- **Ticket held** is the hash of the ticket it has right now. Press it to go to that ticket in
+- **Holding** is the hash of the ticket it has right now. Press it to go to that ticket in
   detail.
 - **Context** is the number of reference documents this worker sends along with every session.
   Press the number and the row expands so you can edit the entries right there. The list every
   worker gets is not in the table. Press `Worker settings` at the top right and the first section
-  is `Shared context`; a line you put there goes to the top of every worker's own list.
+  is `Common context`; a line you put there goes to the top of every worker's own list.
 - **Last activity** is the last line `runner.log` printed under this worker's name, verbatim.
   `DISPATCH` means it just handed a ticket to a session. `SKIP` means it woke up, found the
   previous session still going, and went back. Press it and the last 20 lines expand.
@@ -37,19 +37,19 @@ right now. The columns, left to right, are `Name` · `State` · `Ticket held` ·
   is attached to one account rather than to each worker, so this column shows you who has been
   drinking how much out of the one tank.
 
-The `Worker settings` dialog has four sections. The first is the `Shared context` above, and the
+The `Worker settings` dialog has four sections. The first is the `Common context` above, and the
 second, `Borrow shared workers`, is covered further down under shared workers. The third,
-`Other worker settings (read-only)`, shows five values: the persona, protocol, and ontology
-directories, and the in-progress and done suffixes, as they are actually set for this project
-right now. Where workers disagree, it writes them out side by side. To change them, edit the
+`The rest of the worker settings (read-only)`, shows five values: the persona, protocol, and
+ontology directories, and the in-progress and done suffixes, as they are actually set for this
+project right now. Where workers disagree, it writes them out side by side. To change them, edit the
 worker file by hand ([Worker environment variables](/docs/ref-env)).
 
-The last section is `Reclaim stale`. It holds one `reap` button, and pressing it puts any
+The last section is `Stale collection`. It holds one `reap` button, and pressing it puts any
 ticket left in progress whose session has died back into `Open`. It is a button for doing right now
 what a worker does on its own every 30 seconds. `reap` scans **the whole queue**, not one
 worker, which is why there is one button no matter how many workers are in the table. The output
 appears inside that section, and if there is nothing to collect you get the single line
-`No stale tickets to reclaim.` A project with no workers has no `Worker settings` at all, so it
+`No stale tickets to collect.` A project with no workers has no `Worker settings` at all, so it
 has no such button either.
 
 ## The 30-second cycle - a script that wakes up and dies
@@ -137,7 +137,7 @@ in §The persona decides the engine and the model below.
 
 The whole point of this flow is that the success screen has no registration command on it. You
 get a sentence saying it was created and
-`Registered on crontab — it starts taking tickets 30 seconds later.`, and that worker shows up
+`Registered in the crontab — it starts claiming tickets in 30 seconds.`, and that worker shows up
 in the list as `idle` rather than `stopped`. There is no reason to open a shell.
 
 ### Five things that come with a new worker
@@ -162,7 +162,7 @@ feature. The first time a new worker's working directory takes a frontend ticket
 ## The three buttons at the right of a row
 
 Every row carries `Stream` · `Stop` (or `Re-register`) · `Delete`. The `reap` that used to sit
-with them is now in `Reclaim stale`, the last section of the `Worker settings` dialog at the top
+with them is now in `Stale collection`, the last section of the `Worker settings` dialog at the top
 right. It is an operation that scans the whole queue, so it gives the same result from any row,
 and there is no reason to keep one per row.
 
@@ -204,14 +204,14 @@ it held is finished. The next round it may go to a different project.
 ### Where you make them - `Settings` › `Workers`
 
 Open `Settings` with the gear at the far right of the header and pick `Workers`, at the bottom of
-the `Settings categories` group in the left tree. The top of the panel is three filters, and the
-first section under them is `Shared worker pool`. Press `New worker` on the right and the only
+the `Setting categories` group in the left tree. The top of the panel is three filters, and the
+first section under them is `Common worker pool`. Press `Create worker` on the right and the only
 thing to decide is a name; the rule is the same as for a project worker, so letters, digits, `_`,
 and `-` only. Saving finishes crontab registration in the same go, so that row comes up `idle`
 right away.
 
 While the pool is empty, the list reads
-`No shared workers — create one and it joins every project that has borrowing on.`
+`No common workers — creating one adds it to every project that borrows.`
 
 Once you have made one, that row in the list tells you four things.
 
@@ -220,7 +220,7 @@ Once you have made one, that row in the list tells you four things.
 | Name | The name of that shared worker, and its filename |
 | State badge | The same four as a project worker (`running` · `idle` · `stopped` · `stale`) |
 | `<n> projects` | How many projects are borrowing from this pool right now. `0 projects` is a slot nobody borrows |
-| `Stop` / `Re-register` · `Delete` | The same three as in the worker table |
+| `Stop` / `Register` · `Delete` | The same three as in the worker table |
 
 **This panel is the only place the pool is operated from.** `Delete` refuses while that slot
 holds a project, and names the project and the pid as the reason. Press it again once the session
@@ -229,7 +229,7 @@ has ended.
 The section below, `All workers`, gathers the workers of every registered project into one place.
 Rows are grouped per project with the worker count on the right, and a project that has lost its
 connection is not dropped from the list but shown with the reason. The three filters at the top,
-`Project` · `Kind` · `State`, narrow both sections together, and `Reset filters` puts them back.
+`Project` · `Kind` · `Status`, narrow both sections together, and `Clear filters` puts them back.
 This panel reads once, when you open the dialog. It does not refresh while it is open, so close
 it and open it again.
 
@@ -249,10 +249,10 @@ this project is still using 0 shared workers at any moment when the pool is empt
 projects hold the slots. Nor, in the other direction, are those 3 sitting idle for this project.
 
 Save `1` or more and every shared worker appears in this project's worker table. The line under
-the section becomes `<n> shared workers are in this project`, and with none it reads
-`No shared workers are in`. Set it back to `0` and they all leave. A slot holding a ticket at
-that moment cannot be pulled, and its name is listed after
-`Shared workers held by a ticket and not removed: `.
+the section becomes `<n> shared worker(s) are in this project`, and with none it reads
+`No shared workers are in this project`. Set it back to `0` and they all leave. A slot holding a
+ticket at that moment cannot be pulled, and its name is listed after
+`Still holding a ticket, couldn't remove: `.
 
 Three things can keep a save from doing what you meant.
 
@@ -260,7 +260,7 @@ Three things can keep a save from doing what you meant.
   project worker of the same name. It would overwrite that worker file, and the reason names it
   outright.
 - **A value it cannot read is read as no borrowing.** In that case
-  `Could not read pool-limit — reading it as no borrowing.` appears under the limit.
+  `Couldn't read pool-limit — reading it as not borrowing.` appears under the limit.
 - **After creating a new shared worker, save the limit once more in every project that borrows.**
   Adding a worker to the pool does not grow the table of a project that is already borrowing on
   its own. Save the same value again and it joins on the spot.
@@ -285,7 +285,7 @@ That last row is blocked because those three act on the whole pool. Stopping fro
 could never halt a slot that is running in another one. So the controls were left in the one
 place, over in `Settings`.
 
-It is the same reason a shared worker row at `stopped` does not get `Not on crontab`. A shared
+It is the same reason a shared worker row at `stopped` does not get `not in the crontab`. A shared
 worker's cron line is in the pool, not in this project's file, so the `Re-register` that phrase
 points at is a blocked operation on this row. The `Shared` badge in the same row tells you why
 instead.
@@ -313,7 +313,7 @@ urgent project.
 There is no `Engine` column in the worker table. Which CLI starts the session is decided by that
 ticket's `persona:`, and the place to change it is [Personas](/docs/personas) §Dispatch policy.
 Press the `Engine` value and you pick one of `claude` · `codex` · `grok` · `agy` and a model
-within it. A model name not on the list goes in through `Enter manually`. Leave it at `Unset` and
+within it. A model name not on the list goes in through `Type one in…`. Leave it at `Not set` and
 it uses the engine of whichever worker took the ticket.
 
 `Limit` in the same section is how many in-progress tickets that persona may hold at once. Add

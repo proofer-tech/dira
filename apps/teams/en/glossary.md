@@ -80,7 +80,7 @@ Never translate, never re-spell:
 | 코어 | the core | `코어 프로토콜` is the core protocol. |
 | 예산 | budget | The byte budget on a file that is inlined into every prompt. |
 | 알림 종 | notification bell | |
-| 위지윅 | WYSIWYG | |
+| 위지윅 | rich text | The editor mode. The toggle reads `Switch to rich text`. |
 | 표식 | marker | A hash or epic number in the writing that you can press. Manual-only word; nothing on screen is called this. |
 | 사건 | event | One line in the progress record. |
 | 단계 | stage | One line of the plan a session writes, and the accordion panel it becomes. |
@@ -211,8 +211,8 @@ The manual tells the reader which button to press, so a label quoted here has to
 label the screen actually shows. These rows are copied from the English dictionary in
 `lib/i18n.ts`. When the two disagree, the dictionary is right and this table gets fixed.
 
-| Korean | English |
-|---|---|
+| Korean | English | Notes |
+|---|---|---|
 | 요구 접수 | New request |
 | 티켓 발행 | New ticket |
 | 프로젝트 만들기 | Create project |
@@ -242,64 +242,64 @@ label the screen actually shows. These rows are copied from the English dictiona
 | 워커 | Workers |
 | 프로토콜 | Protocols |
 | 워커 설정 | Worker settings |
-| 워커 생성 | New worker |
-| 공통 컨텍스트 | Shared context |
+| 워커 생성 | New worker | The button on the workers screen. The one in `Settings` › `Workers` is `Create worker`. |
+| 공통 컨텍스트 | Common context |
 | 공통 워커 빌리기 | Borrow shared workers |
-| 나머지 워커 설정 (표시만) | Other worker settings (read-only) |
-| 스테일 수거 | Reclaim stale |
+| 나머지 워커 설정 (표시만) | The rest of the worker settings (read-only) |
+| 스테일 수거 | Stale collection |
 | 공통 워커 풀 | Common worker pool |
 | 전체 워커 | All workers |
-| 설정 분류 | Settings categories |
+| 설정 분류 | Setting categories |
 | 공통 | Shared |
-| crontab 미등록 | Not on crontab |
+| crontab 미등록 | not in the crontab | Lowercase - it is a tail next to the badge. |
 | `<n>곳` | `<n> projects` |
-| 필터 초기화 | Reset filters |
+| 필터 초기화 | Clear filters |
 | 상한 | Limit |
 | 동시 빌리기 상한 | Concurrent borrow limit |
 | 저장 | Save |
 | 되돌리기 | Revert |
 | 스트림 | Stream |
 | 중단 | Stop |
-| 재등록 | Re-register |
+| 재등록 | Re-register | The row button. The one in `Settings` › `Workers` is `Register`. |
 | 삭제 | Delete |
 | 이름변경 | Rename |
 | 새 파일 | New file |
 | 엔진 | Engine |
-| 지정 없음 | Unset |
-| 직접 입력 | Enter manually |
+| 지정 없음 | Not set |
+| 직접 입력 | Type one in… |
 | 준비물 | What you need |
 | 계정 | Accounts |
 | 추가 | Add |
 | 변경 | Change |
-| 브라우저로 인증하기 | Authenticate in the browser |
+| 브라우저로 인증하기 | Start sign-in |
 | 브라우저에서 받은 코드 | Code from the browser |
-| 코드 보내기 | Send the code |
+| 코드 보내기 | Send code |
 | 토큰 | Token |
 | 라벨(선택) | Label (optional) |
 | 계정 1 | Account 1 |
 | 멀티플레잉 | Multiplaying |
-| 다중계정 | Multiple accounts |
-| 다중계정 허용 | Allow multiple accounts |
-| 다중계정 동시사용 | Use multiple accounts at once |
+| 다중계정 | multi-account |
+| 다중계정 허용 | Allow multi-account |
+| 다중계정 동시사용 | Simultaneous multi-account use |
 | 허용되어 있습니다 | Allowed |
 | 허용되지 않았습니다 | Not allowed |
 | 켜기 | Turn on |
 | 끄기 | Turn off |
-| 활성화 | Activate |
-| 비활성화 | Deactivate |
+| 활성화 | Enable |
+| 비활성화 | Disable |
 | 사용 | Use |
 | 활성 | Active |
-| 비활성 | Inactive |
+| 비활성 | Disabled |
 | 소진 | Exhausted |
-| 토큰 저장 | Save token |
-| 인증 필요 | Authentication needed |
+| 토큰 저장 | Save a token |
+| 인증 필요 | Needs auth |
 | 파일 목록 접기 | Collapse the file list |
 | 파일 목록 펴기 | Expand the file list |
-| 기본값 가정 | assumed default |
-| 원문으로 | Show the source |
-| 위지윅으로 | Back to WYSIWYG |
+| 기본값 가정 | assumed default | Lowercase - it is a tail next to the path. |
+| 원문으로 | Switch to source |
+| 위지윅으로 | Switch to rich text |
 | 전원 프롬프트에 인라인 | Inlined in every prompt |
-| 세션이 필요할 때 읽음 | Read by the session when needed |
+| 세션이 필요할 때 읽음 | Read when a session needs it |
 | 초과 | over |
 | 상태 | Status |
 | 물고 있는 티켓 | Holding |
@@ -432,35 +432,35 @@ brackets stays byte for byte.
 ## Screen sentences the manual quotes
 
 Full sentences the app puts on screen, quoted inside the manual. Same rule as the labels above:
-the English dictionary takes its wording from here.
+these rows copy the English dictionary, and when the two disagree the dictionary is right.
 
-| Korean | English |
-|---|---|
+| Korean | English | Notes |
+|---|---|---|
 | `등록된 프로젝트가 없습니다. 하나 만들면 시작합니다.` | `No projects yet. Create one to get started.` |
 | `이미 만들어 둔 .dira가 있다면 등록합니다.` | `Already made a .dira? Register it.` |
-| `.dira를 만들고 워커 하나를 crontab에 올립니다 — 30초 뒤부터 티켓을 물어갑니다.` | `Creates .dira and puts one worker on crontab — it starts taking tickets 30 seconds later.` |
-| `여기에 .dira를 만듭니다. ~는 확장됩니다` | `.dira goes here. ~ is expanded` |
+| `.dira를 만들고 워커 하나를 crontab에 올립니다 — 30초 뒤부터 티켓을 물어갑니다.` | `Creates .dira and puts one worker in crontab — it starts picking up tickets 30 seconds later.` |
+| `여기에 .dira를 만듭니다. ~는 확장됩니다` | `.dira goes in here. ~ is expanded` |
 | `crontab에 등록됨 — 30초 뒤부터 티켓을 물어갑니다` | `Registered on crontab — it starts taking tickets 30 seconds later` |
-| `권한 창이 뜨면 [허용]을 누르세요 — crontab 등록이 그 대답을 기다립니다.` | `If a permission dialog appears, press [Allow] — crontab registration is waiting on that answer.` |
-| `<경로>/.dira는 이미 dira 프로젝트입니다. 만들지 않고 등록하세요.` | `<path>/.dira is already a dira project. Register it instead of creating one.` |
-| `claude CLI를 찾지 못했습니다 — 워커가 세션을 띄우지 못합니다` | `claude CLI not found — workers cannot start sessions` |
-| `요구사항이 접수되었습니다. 곧 PM이 검토할 예정입니다.` | `Your request has been submitted. pm will review it shortly.` |
+| `권한 창이 뜨면 [허용]을 누르세요 — crontab 등록이 그 대답을 기다립니다.` | `Press [Allow] if a permission window opens — registering the crontab line waits on that answer.` | The project creation screen. The one under `Worker settings` opens with `Hit [Allow] when` instead. |
+| `<경로>/.dira는 이미 dira 프로젝트입니다. 만들지 않고 등록하세요.` | `<path>/.dira is already a dira project. Register it instead of creating it.` |
+| `claude CLI를 찾지 못했습니다 — 워커가 세션을 띄우지 못합니다` | `No claude CLI here — workers can't start a session` |
+| `요구사항이 접수되었습니다. 곧 PM이 검토할 예정입니다.` | `Request received. The PM will review it shortly.` |
 | `쓰던 내용이 있습니다` | `You have unsaved text` |
 | `아무도 집지 않는 티켓 <n>건` | `Tickets no one will claim: <n>` |
 | `(디스패치되지 않는 N건은 상단 알림)` | `(Not dispatched: N — see notifications)` |
-| `수거할 스테일 티켓이 없습니다.` | `No stale tickets to reclaim.` |
-| `crontab에 등록했습니다 — 30초 뒤부터 티켓을 물어갑니다.` | `Registered on crontab — it starts taking tickets 30 seconds later.` |
-| `공통 워커가 없습니다 — 만들면 빌리기를 켠 프로젝트마다 들어갑니다.` | `No shared workers — create one and it joins every project that has borrowing on.` |
+| `수거할 스테일 티켓이 없습니다.` | `No stale tickets to collect.` |
+| `crontab에 등록했습니다 — 30초 뒤부터 티켓을 물어갑니다.` | `Registered in the crontab — it starts claiming tickets in 30 seconds.` |
+| `공통 워커가 없습니다 — 만들면 빌리기를 켠 프로젝트마다 들어갑니다.` | `No common workers — creating one adds it to every project that borrows.` |
 | `0이거나 비우면 안 빌립니다 — 상한은 동시에 도는 수이고 예약이 아닙니다.` | `0 or empty means no borrowing — the limit is how many run at once, not a reservation.` |
-| `공통 워커 <n>명이 이 프로젝트에 들어와 있습니다` | `<n> shared workers are in this project` |
-| `들어와 있는 공통 워커가 없습니다` | `No shared workers are in` |
-| `pool-limit을 읽지 못했습니다 — 안 빌리는 것으로 읽습니다.` | `Could not read pool-limit — reading it as no borrowing.` |
-| `티켓을 물고 있어 못 뺀 공통 워커: ` | `Shared workers held by a ticket and not removed: ` |
+| `공통 워커 <n>명이 이 프로젝트에 들어와 있습니다` | `<n> shared worker(s) are in this project` |
+| `들어와 있는 공통 워커가 없습니다` | `No shared workers are in this project` |
+| `pool-limit을 읽지 못했습니다 — 안 빌리는 것으로 읽습니다.` | `Couldn't read pool-limit — reading it as not borrowing.` |
+| `티켓을 물고 있어 못 뺀 공통 워커: ` | `Still holding a ticket, couldn't remove: ` |
 | `등록된 토큰이 없습니다.` | `No tokens yet.` |
-| `<날짜> 추가` | `Added <date>` |
-| `저장했습니다. 유효한지는 다음 디스패치에서 드러납니다.` | `Saved. Whether it is valid shows at the next dispatch.` |
+| `<날짜> 추가` | `<date> added` |
+| `저장했습니다. 유효한지는 다음 디스패치에서 드러납니다.` | `Saved. Whether it works shows up on the next dispatch.` |
 | `Claude 토큰이 없습니다` | `No Claude token` |
-| `워커가 티켓을 집어도 세션을 못 열고 그대로 끝냅니다.` | `Workers will pick up a ticket, fail to open a session, and end there.` |
+| `워커가 티켓을 집어도 세션을 못 열고 그대로 끝냅니다.` | `Workers still claim tickets, but they can't open a session and end right there.` |
 | `세션이 열리자마자 죽는 워커` | `Workers that die the moment a session opens:` |
 | `답변을 기다리는 티켓` | `Tickets waiting on an answer:` |
 | `커밋 안 된 변경이 디스패치를 막고 있습니다` | `Uncommitted changes are blocking dispatch` |
@@ -470,7 +470,7 @@ the English dictionary takes its wording from here.
 | `스크립트 파일 없음` | `Script file not found` |
 | `https 주소만 받습니다` | `Only https addresses are accepted` |
 | `스케줄을 지웁니다` | `This deletes the schedule` |
-| `이름을 바꾸면 프롬프트에서 빠집니다` | `Renaming it takes it out of the prompt` |
+| `이름을 바꾸면 프롬프트에서 빠집니다` | `Rename it and it drops out of the prompt` |
 | `모든 세션이 협업 프로토콜 없이 시작합니다` | `Every session will start with no collaboration protocol` |
 | `이 티켓 48M 토큰 · 세션 1개` | `This ticket 48M tokens · 1 session` |
 | `· 이 합계에 없는 세션 3개` | `· outside this total: 3` |

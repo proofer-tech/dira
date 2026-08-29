@@ -32,19 +32,19 @@ without the parameter opens expanded.
 
 The grey text under the title is the real path of the directory you are looking at. If that path
 cannot be read from the worker file, it goes by the engine default (`<root>/protocols`) and
-writes `Assumed default` beside it.
+writes `assumed default` beside it.
 
-The editor has two modes. It opens in WYSIWYG. Headings are heading-sized and tables are tables
+The editor has two modes. It opens in rich text. Headings are heading-sized and tables are tables
 with cells, and you edit what you see. To look at the markdown in the file directly, press the
-icon button in the top right corner of the pane. Hover it and it reads `Show the source`. Coming
-back is `Back to WYSIWYG`, in the same place. The mode you pick stays on this computer. Every
+icon button in the top right corner of the pane. Hover it and it reads `Switch to source`. Coming
+back is `Switch to rich text`, in the same place. The mode you pick stays on this computer. Every
 markdown field in this app opens in the same mode, whether it is a ticket body, the ontology, or
 a profile. Switching modes does not lose unsaved edits.
 
-Editing in WYSIWYG does not rewrite the whole file. Save and only what you changed changes; every
+Editing in rich text does not rewrite the whole file. Save and only what you changed changes; every
 other line is identical down to the byte. These files are not read by people alone, they are read
 by sessions. If table alignment shifted on its own or a notation like `<hash>` came out
-different, the text a session reads would be different. Editing in WYSIWYG does not do that.
+different, the text a session reads would be different. Editing in rich text does not do that.
 
 Change one character and `Save` lights up at the bottom right. To go back to before you saved,
 press `Revert` beside it. Files that are not `.md` open in the same editor. What does not open is
@@ -82,7 +82,7 @@ itself, at the moment `CORE.md` points at them. Ticket frontmatter syntax is in
 ## The `Inlined in every prompt` badge
 
 Two files in the whole tree carry the badge: `CORE.md` at the top and `AGENTS.md` in the project
-layer. Everything else reads `Read by the session when needed`. This is the most important
+layer. Everything else reads `Read when a session needs it`. This is the most important
 distinction on this screen.
 
 - The badge reads like `3,496 / 3,500 B`. The first number is this file's size right now, the
@@ -129,7 +129,7 @@ into the ontology and how. All of it is needed only while doing that particular 
 
 Moving it changes two things. The prompt every session takes shrinks by that much, and the
 session actually doing that job still reads the whole thing. In the tree, that file reads
-`Read by the session when needed`.
+`Read when a session needs it`.
 
 The criterion is one sentence. **If every session has to know it, `AGENTS.md`. If it is needed
 only for some particular job, a neighboring file.** Nesting directories is fine.
@@ -146,7 +146,7 @@ changes the path, so it is also how you move something into a subdirectory. An e
 refused. Nothing is overwritten quietly. Deleting cannot be undone.
 
 **`AGENTS.md` shows you a warning first, for both.** Try to rename it and
-`Renaming it takes it out of the prompt` appears in the dialog; try to delete it and
+`Rename it and it drops out of the prompt` appears in the dialog; try to delete it and
 `Every session will start with no collaboration protocol` does. It is because the engine reads
 one name. The moment the name differs, that file becomes just another neighboring file and
 sessions start without the rules. No error is raised, so there is nowhere to find out except the

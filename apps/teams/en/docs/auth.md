@@ -11,9 +11,9 @@ Press the gear at the far right of the header and `Settings` opens. `Authenticat
 in the left tree is this chapter's screen. From the top down, it looks like this.
 
 1. **What you need** - the path of the executable the app found, after `claude CLI —`. If it did
-   not find one, `claude CLI not found — workers cannot start sessions`.
+   not find one, `No claude CLI here — workers can't start a session`.
 2. **Accounts** - registered tokens, one per line. A name you can recognize, a state badge, the
-   value masked except for its head and tail, and `Added <date>` make up one row. Rename with the
+   value masked except for its head and tail, and `<date> added` make up one row. Rename with the
    pencil on the right, delete with the trash can. With nothing entered yet, there is only the
    line `No tokens yet.`
 3. **The `Add` button** - one button under the list. With a token already there, the label becomes
@@ -24,13 +24,13 @@ session when a worker takes a ticket are both jobs for that executable. If it is
 still not found, quit the app and open it again. If that leaves it as it was, go back to
 [Install](/docs/install).
 
-Press `Authenticate in the browser` at the top of the popover and the app walks through the
+Press `Start sign-in` at the top of the popover and the app walks through the
 official CLI's issuing procedure (`claude setup-token`) for you. There is nothing for you to type
 in a terminal. The CLI opens a new tab, and progress appears line by line in the log under the
 button.
 
 - When the browser shows you a code, paste that code into the `Code from the browser` field and
-  press `Send the code`. Sometimes approval alone finishes it. If that context is already logged
+  press `Send code`. Sometimes approval alone finishes it. If that context is already logged
   in and consented at claude.com, it flows through without a code. The field is there for
   answering when you are asked.
 - The app stores the token where it belongs. There is nothing for you to copy over, so the
@@ -51,31 +51,31 @@ Validation checks two things only: that it is not empty, and that there is no wh
 newline inside the value. Line breaks that came along with the copy are stripped by the app. It
 does not filter by prefix format. That format is not ours, and if it changes we would start
 rejecting perfectly good tokens. So the screen tells you no more than
-`Saved. Whether it is valid shows at the next dispatch.`
+`Saved. Whether it works shows up on the next dispatch.`
 
 ## Multiplaying - the switches for keeping several accounts
 
 Before the account list can hold two rows, there is a switch you have to turn on. That panel is
 inside the same dialog, but the left tree has no row for it. **You have to type `Multiplaying`
 into the search field to find it.** Pick any of the three results and the panel opens. If you
-know the name of the switch, `Multiple accounts` brings up the lower two rows as well. Scanning
+know the name of the switch, `multi-account` brings up the lower two rows as well. Scanning
 the tree will never find this panel.
 
 There is one line of explanation at the top of the panel and two switches under it. A switch row
 carries the name and its current state, with a button at the right end. The state reads either
 `Allowed` or `Not allowed`, and the button is either `Turn on` or `Turn off`.
 
-- **Allow multiple accounts** - decides how many accounts you may register. Off, the list holds
+- **Allow multi-account** - decides how many accounts you may register. Off, the list holds
   one row and the button below reads `Change` rather than `Add`. Saving a new token has the app
-  swap that one row out. On, the list grows to several rows and each carries `Activate` or
-  `Deactivate`. Rows other than the one in use get a `Use` button too. This is when the rotation
+  swap that one row out. On, the list grows to several rows and each carries `Enable` or
+  `Disable`. Rows other than the one in use get a `Use` button too. This is when the rotation
   that leaves an account that hit its limit and moves to the next one starts running.
-- **Use multiple accounts at once** - decides whether workers share one account or split across
+- **Simultaneous multi-account use** - decides whether workers share one account or split across
   them. Off, every worker attaches to the one `Active` account. On, a worker's account is its
   index modulo the number of usable accounts. Three accounts and eight workers splits 3-3-2 with
   no worker left idle. In this mode every usable account carries an `Active` badge in the list.
 
-A usable account is a row in the list carrying neither an `Inactive` nor an `Exhausted` badge.
+A usable account is a row in the list carrying neither a `Disabled` nor an `Exhausted` badge.
 Rows with either of those two drop out of the count, and come back into it once the exhaustion
 cooldown lifts. So while you have only one account, turning on using them at once changes
 nothing.
@@ -89,19 +89,19 @@ once](/docs/concurrency) §Tokens and collisions.
 
 Before you get to live through "the workers are running and nothing is happening," the screen
 tells you first. It comes up as the first item in the notification bell in the project screen
-header: `No Claude token` · `Workers will pick up a ticket, fail to open a session, and end
-there.` The `Save token` button on that item opens the dialog above, right where you are. There
-is no screen to move to.
+header: `No Claude token` · `Workers still claim tickets, but they can't open a session and end
+right there.` The `Save a token` button on that item opens the dialog above, right where you
+are. There is no screen to move to.
 
-- On the project screen the gear button itself changes too. `Authentication needed` appears next
-  to the icon.
+- On the project screen the gear button itself changes too. `Needs auth` appears next to the
+  icon.
 - It does not appear in a project with no claude workers. It does appear if the workers could not
   be read, though. Turning "cannot tell" into "it is fine" would bring back exactly the silence
   this chapter is trying to close.
 - There is no button to dismiss it. Put a token in place and the check turns itself off.
 - Expiry cannot be announced in advance. The expiry time is not written in the file and the CLI
   does not tell us. What breaks the silence after an expiry instead is the next item in the bell
-  (`Workers that die the moment a session opens`). See [The screens](/docs/screens).
+  (`Workers that die the moment a session opens:`). See [The screens](/docs/screens).
 
 ## Cloud mounts - Full Disk Access
 
