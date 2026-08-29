@@ -5,18 +5,22 @@
  *  레이아웃이 던진 것은 자기 세그먼트의 not-found로 못 잡는다(경계가 위에 있어야 한다).
  *  `app/p/[project]/not-found.tsx`를 두면 Next 기본 404가 뜬다 — 실제로 확인했다. */
 import Link from "@/components/link";
+import { readLanguage } from "@/lib/projects";
+import { t } from "@/lib/i18n";
 
-export default function NotFound() {
+export default async function NotFound() {
+  const locale = await readLanguage();
   return (
     // 스크롤러는 `main`이다(§비주얼 §4 · app/layout.tsx) — 문서는 스크롤하지 않는다
     <main className="min-h-0 w-full max-w-3xl flex-1 space-y-2 overflow-y-auto px-6 py-6">
-      <h1 className="text-lg font-semibold">찾을 수 없습니다</h1>
+      <h1 className="text-lg font-semibold">{t(locale, "notFound.project.title")}</h1>
       <p className="text-sm text-muted-foreground">
-        이 URL에 해당하는 화면이 없습니다. <span className="font-mono text-xs">/p/&lt;프로젝트&gt;</span>
-        였다면 그 URL 조각이 레지스트리에 없습니다.
+        {t(locale, "notFound.project.bodyPrefix")}{" "}
+        <span className="font-mono text-xs">{t(locale, "notFound.project.urlExample")}</span>
+        {t(locale, "notFound.project.bodySuffix")}
       </p>
       <Link href="/" className="text-sm underline">
-        프로젝트 목록
+        {t(locale, "notFound.project.link")}
       </Link>
     </main>
   );

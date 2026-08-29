@@ -66,7 +66,7 @@ import {
   type Project,
   type ProjectConfig,
 } from "@/lib/projects";
-import { t, type Locale } from "@/lib/i18n";
+import { DEFAULT_LOCALE, t, type Locale } from "@/lib/i18n";
 import { statusLabel } from "@/components/status-badge";
 import {
   importFolderOf,
@@ -111,9 +111,10 @@ export type ConfigRow = {
   key: string;
   value: string;
   mono: boolean;
-  /** `기본값 가정` = 워커에 값이 없음, `해석 실패` = 값은 있는데 못 읽음(색+아이콘 있는 경고),
-   *  `루트 밖` = 틀린 게 아니라 알아야 할 사실. */
-  badges: ("기본값 가정" | "해석 실패" | "루트 밖")[];
+  /** `assumedDefault` = 워커에 값이 없음, `resolveFailed` = 값은 있는데 못 읽음(색+아이콘 있는
+   *  경고), `outsideRoot` = 틀린 게 아니라 알아야 할 사실. 라벨·힌트는 `resolve.badge*`
+   *  사전 키다(§0-16 §발행 §묶음 표 행 8, 티켓 95749c14) — 클라이언트가 로케일로 옮긴다. */
+  badges: ("assumedDefault" | "resolveFailed" | "outsideRoot")[];
   /** 워커 간 값이 갈렸을 때만. 그 행은 워커별로 나눠 적고 경고한다. */
   byWorker?: Record<string, string>;
   /** `작업 디렉터리` 행만. 워커별 나열이고 **경고가 아니다**(DESIGN.md §0-0 그 행 표기). */
@@ -154,22 +155,24 @@ function toView(
   workers: string[],
   ontologyMigrationTicket: Ticket | null,
   ontologyImportTickets: Ticket[],
+  locale: Locale = DEFAULT_LOCALE,
 ): ResolvedView {
   const home = homedir();
   const short = (p: string) => tildePath(p, home);
-  const outside = (p: string) => (p === project.root || p.startsWith(project.root + path.sep) ? [] : (["루트 밖"] as const));
+  const outside = (p: string) =>
+    p === project.root || p.startsWith(project.root + path.sep) ? [] : (["outsideRoot"] as const);
   const conflictOf = (key: string) => config.conflicts.find((c) => c.key === key)?.byWorker;
-  const assumed = (key: string) => (config.assumed.includes(key) ? (["기본값 가정"] as const) : []);
-  // 해석 실패는 `기본값 가정`과 배타적이다(resolveConfig가 갈라 담는다) — 배지도 하나만 뜬다.
+  const assumed = (key: string) => (config.assumed.includes(key) ? (["assumedDefault"] as const) : []);
+  // 해석 실패는 `assumedDefault`와 배타적이다(resolveConfig가 갈라 담는다) — 배지도 하나만 뜬다.
   const rawOf = (key: string) => {
     const bad = config.unresolved.filter((u) => u.key === key);
     return bad.length ? bad.map(({ worker, raw }) => ({ worker, raw })) : undefined;
   };
-  const failed = (key: string) => (rawOf(key) ? (["해석 실패"] as const) : []);
+  const failed = (key: string) => (rawOf(key) ? (["resolveFailed"] as const) : []);
 
   const rows: ConfigRow[] = [
     {
-      key: "진행중 접미사",
+      key: t(locale, "resolve.key.inProgress"),
       value: config.inProgress,
       mono: true,
       badges: [...assumed("inProgress"), ...failed("inProgress")],
@@ -177,7 +180,7 @@ function toView(
       unresolved: rawOf("inProgress"),
     },
     {
-      key: "완료 접미사",
+      key: t(locale, "resolve.key.done"),
       value: config.done,
       mono: true,
       badges: [...assumed("done"), ...failed("done")],
@@ -185,7 +188,7 @@ function toView(
       unresolved: rawOf("done"),
     },
     {
-      key: "페르소나",
+      key: t(locale, "resolve.key.personas"),
       value: short(config.personas),
       mono: true,
       badges: [...assumed("personas"), ...failed("personas"), ...outside(config.personas)],
@@ -193,7 +196,7 @@ function toView(
       unresolved: rawOf("personas"),
     },
     {
-      key: "프로토콜",
+      key: t(locale, "resolve.key.protocols"),
       value: short(config.protocols),
       mono: true,
       badges: [...assumed("protocols"), ...failed("protocols"), ...outside(config.protocols)],
@@ -201,7 +204,7 @@ function toView(
       unresolved: rawOf("protocols"),
     },
     {
-      key: "작업 디렉터리",
+      key: t(locale, "resolve.key.cwd"),
       value: short(config.cwd),
       mono: true,
       badges: [...assumed("cwd"), ...failed("cwd")],
@@ -216,8 +219,13 @@ function toView(
           : undefined,
     },
     workers.length
-      ? { key: "워커", value: `${workers.join(" ")} (${workers.length}개)`, mono: true, badges: [] }
-      : { key: "워커", value: "없음 — 이 프로젝트는 돌지 않습니다", mono: false, badges: [] },
+      ? {
+          key: t(locale, "resolve.key.workers"),
+          value: `${workers.join(" ")} (${workers.length}${t(locale, "resolve.workers.countSuffix")})`,
+          mono: true,
+          badges: [],
+        }
+      : { key: t(locale, "resolve.key.workers"), value: t(locale, "resolve.workers.empty"), mono: false, badges: [] },
   ];
 
   return {
@@ -240,7 +248,7 @@ function toView(
   };
 }
 
-async function viewOf(project: Project): Promise<ResolvedView> {
+async function viewOf(project: Project, locale: Locale = DEFAULT_LOCALE): Promise<ResolvedView> {
   const [config, workers] = await Promise.all([resolveConfig(project), listWorkers(project.root)]);
   const tickets = await listTickets(project.root, config);
   return toView(
@@ -249,6 +257,7 @@ async function viewOf(project: Project): Promise<ResolvedView> {
     workers.map((w) => w.name),
     openFixTicket(tickets, ONTOLOGY_MIGRATION_MARKER),
     openImportTickets(tickets),
+    locale,
   );
 }
 
@@ -274,11 +283,12 @@ export async function registerProject(
   const name = String(form.get("name") ?? "");
   const root = String(form.get("root") ?? "");
   const id = String(form.get("id") ?? "").trim();
+  const locale = await readLanguage();
   try {
-    const project = await addProject(name, root, id || undefined);
+    const project = await addProject(name, root, id || undefined, locale);
     void track("project_add", { method: "register" }); // §0-11 — 성공 경로에서만 (이름·경로는 안 간다)
     revalidatePath("/", "layout"); // 목록 + 모든 프로젝트 화면의 전환기
-    return { done: await viewOf(project) };
+    return { done: await viewOf(project, locale) };
   } catch (e) {
     return fail(e);
   }
@@ -321,18 +331,23 @@ export async function createProject(
   id?: string,
 ): Promise<CreateState> {
   let created: CreateState["created"] | undefined;
+  const locale = await readLanguage();
   try {
     if (!branch.trim()) {
       // 비면 push 절차가 자리표시자로 남아 세션이 추측한다(§0-3 자리표시자 표).
-      return { error: { code: "branch", message: "통합 브랜치를 입력하세요." } };
+      return { error: { code: "branch", message: t(locale, "project.branchRequired") } };
     }
-    const pre = await preflight(projectDir);
+    const pre = await preflight(projectDir, locale);
     if (!pre.ok) return { exists: { queue: pre.queue, root: pre.root, message: pre.message } };
 
-    const made = await scaffold(projectDir, {
-      branch: branch.trim(),
-      specDoc: specDoc.trim() || undefined,
-    });
+    const made = await scaffold(
+      projectDir,
+      {
+        branch: branch.trim(),
+        specDoc: specDoc.trim() || undefined,
+      },
+      locale,
+    );
 
     // 온톨로지 자리 (§0-3 §온톨로지 자리를 만들 때 정한다) — scaffold 다음, registerCron 앞.
     // 비면 아무것도 안 쓴다(0바이트). 거절돼도 만들기를 안 되돌린다 — cronError와 같은 규약으로
@@ -341,7 +356,7 @@ export async function createProject(
     const ontologyInput = ontology?.trim();
     if (ontologyInput) {
       try {
-        const resolved = await validateOntologyInput(made.root, ontologyInput, await readLanguage());
+        const resolved = await validateOntologyInput(made.root, ontologyInput, locale);
         await writeOntology(made.root, resolved);
       } catch (e) {
         ontologyError = (e as Error).message;
@@ -364,17 +379,17 @@ export async function createProject(
       registerCmd: cronRegisterCmd({ path: workerPath }),
     };
 
-    const project = await addProject(name, made.root, id?.trim() || undefined);
+    const project = await addProject(name, made.root, id?.trim() || undefined, locale);
     // 스캐폴딩만 되고 등록이 실패하면 여기 안 온다 — 프로젝트가 하나 는 것이 이 이벤트다(§0-11).
     void track("project_add", { method: "create" });
     revalidatePath("/", "layout");
-    return { created, done: await viewOf(project) };
+    return { created, done: await viewOf(project, locale) };
   } catch (e) {
     const state: CreateState = { ...fail(e), created };
     // 파일은 이미 놓였는데 레지스트리 등록만 실패한 경우(이름 없음·id 중복 …). 만든 것을 지우지
     // 않으므로 다음 행동은 "다시 만들기"가 아니라 "그 경로를 등록하기"다.
     if (created && state.error) {
-      state.error.message += ` — .dira는 ${created.root}에 만들어졌습니다. 등록 카드에서 그 경로를 등록하세요.`;
+      state.error.message += ` ${t(locale, "project.createdRegisterFailedPrefix")} ${created.root}${t(locale, "project.createdRegisterFailedSuffix")}`;
     }
     return state;
   }
@@ -385,7 +400,7 @@ export type ActionResult = { ok: boolean; message?: string };
 
 export async function renameProjectAction(id: string, name: string): Promise<ActionResult> {
   try {
-    await renameProject(id, name);
+    await renameProject(id, name, await readLanguage());
     revalidatePath("/", "layout");
     return { ok: true };
   } catch (e) {
@@ -396,10 +411,12 @@ export async function renameProjectAction(id: string, name: string): Promise<Act
 /** 표시 순서 = 레지스트리 배열 순서. `↑`/`↓`는 이웃과 자리를 바꾼다. */
 export async function moveProjectAction(id: string, dir: -1 | 1): Promise<ActionResult> {
   try {
-    const ids = (await readProjects()).map((t) => t.id);
+    const ids = (await readProjects()).map((p) => p.id);
     const i = ids.indexOf(id);
     const j = i + dir;
-    if (i < 0 || j < 0 || j >= ids.length) return { ok: false, message: "더 옮길 자리가 없습니다." };
+    if (i < 0 || j < 0 || j >= ids.length) {
+      return { ok: false, message: t(await readLanguage(), "project.moveNoRoom") };
+    }
     [ids[i], ids[j]] = [ids[j], ids[i]];
     await reorderProjects(ids);
     revalidatePath("/", "layout");
@@ -831,10 +848,11 @@ export async function feedbackMetaAction(): Promise<FeedbackMeta> {
 
 /** 설정 다이얼로그의 `다시 읽기` — 워커 파일이 바뀌었을 수 있다. */
 export async function resolveProjectAction(id: string): Promise<ResolvedView | { message: string }> {
+  const locale = await readLanguage();
   const project = await getProject(id);
-  if (!project) return { message: `등록되지 않은 프로젝트입니다: ${id}` };
+  if (!project) return { message: `${t(locale, "resolve.unknownProjectPrefix")} ${id}` };
   try {
-    return await viewOf(project);
+    return await viewOf(project, locale);
   } catch (e) {
     return { message: (e as Error).message };
   }

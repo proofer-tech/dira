@@ -9,6 +9,7 @@ import { existsSync } from "node:fs";
 import { chmod, mkdir, readFile, readdir, realpath, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { expandHome } from "./paths.ts";
+import { DEFAULT_LOCALE, t, type Locale } from "./i18n.ts";
 import {
   DISPATCH_GATE_FILE,
   SELF_HEAL_FILE,
@@ -52,13 +53,13 @@ const TEMPLATE_FILES = [
  *  **`tick.sh` 존재 확인은 어느 쪽이든 그대로다.** 없으면 **거부한다. 폼 필드로 되묻지 않는다** —
  *  GUI가 엔진 레포 밖에 있다는 건 설치가 깨진 것이고 폼 하나로 고칠 문제가 아니다. 본 경로를
  *  사유에 그대로 담아 사람이 무엇을 봐야 하는지 알게 한다(어느 쪽에서 나온 값인지도 같이). */
-export function engineRepo(): { path: string } | { error: string } {
+export function engineRepo(locale: Locale = DEFAULT_LOCALE): { path: string } | { error: string } {
   const env = process.env.DIRA_ENGINE?.trim();
   const repo = env ? path.resolve(env) : path.resolve(process.cwd(), "..", "..");
   if (existsSync(path.join(repo, "tick.sh"))) return { path: repo };
   return {
-    error: `엔진 레포를 찾지 못했습니다 — ${repo}에 tick.sh가 없습니다. ${
-      env ? "DIRA_ENGINE이 가리키는 자리입니다." : "GUI는 <엔진 레포>/apps/teams/에서 돌아야 합니다."
+    error: `${t(locale, "scaffold.engineNotFoundPrefix")} ${repo}${t(locale, "scaffold.engineNotFoundMid")} ${
+      env ? t(locale, "scaffold.engineNotFoundEnvHint") : t(locale, "scaffold.engineNotFoundDefaultHint")
     }`,
   };
 }
@@ -79,10 +80,12 @@ export function fillPlaceholders(
 
 /** 사람이 손으로 친 경로가 fs 경로가 되는 지점 — 서버에서 편다. 상대경로는 서버 cwd
  *  (`apps/teams/`) 기준으로 풀려서 엉뚱한 자리에 `.dira`를 만든다. */
-function queueRoot(projectDir: string): { project: string; root: string } {
+function queueRoot(projectDir: string, locale: Locale = DEFAULT_LOCALE): { project: string; root: string } {
   const project = expandHome(projectDir.trim());
   if (!path.isAbsolute(project)) {
-    throw new Error(`절대경로여야 합니다: ${projectDir.trim() || "(비어 있음)"}`);
+    throw new Error(
+      `${t(locale, "scaffold.notAbsolutePrefix")} ${projectDir.trim() || t(locale, "scaffold.emptyPlaceholder")}`,
+    );
   }
   return { project, root: path.join(project, ".dira") };
 }
@@ -112,8 +115,8 @@ export type Preflight =
 /** `.dira`가 이미 있으면 **만들지 않는다**(§0-3 답변 4(b)). 안의 상태로 문구만 갈린다 —
  *  큐면 등록으로 보내고, 큐가 아니면 고치거나 지우라고 알려 준다. 빈 `.dira`를 스캐폴딩으로
  *  채우지 않는 이유는 사람이 무엇을 지우는지 알고 지우는 편이 낫기 때문이다. */
-export async function preflight(projectDir: string): Promise<Preflight> {
-  const { root } = queueRoot(projectDir);
+export async function preflight(projectDir: string, locale: Locale = DEFAULT_LOCALE): Promise<Preflight> {
+  const { root } = queueRoot(projectDir, locale);
   const st = await stat(root).catch(() => null);
   if (st === null) return { ok: true };
   // 큐 판정은 등록(`addProject`)과 같은 규칙이다 — 규칙이 갈리면 여기를 통과한 경로가 등록에서
@@ -126,8 +129,8 @@ export async function preflight(projectDir: string): Promise<Preflight> {
     // 화면이 이 값을 등록 카드의 `경로`에 그대로 넣는다(큐면 "만들지 말고 등록하세요"의 다음 행동).
     root,
     message: queue
-      ? `${root}는 이미 dira 프로젝트입니다. 만들지 않고 등록하세요.`
-      : `${root}가 이미 있지만 dira 프로젝트가 아닙니다. 안에 tickets/ 와 workers/ 를 만들거나, 지우고 다시 만드세요.`,
+      ? `${root}${t(locale, "scaffold.alreadyQueueSuffix")}`
+      : `${root}${t(locale, "scaffold.notQueueSuffix")}`,
   };
 }
 
@@ -141,10 +144,11 @@ export async function preflight(projectDir: string): Promise<Preflight> {
 export async function scaffold(
   projectDir: string,
   opts: { branch: string; specDoc?: string },
+  locale: Locale = DEFAULT_LOCALE,
 ): Promise<{ root: string; repo: string; written: string[]; skipped: string[] }> {
-  const repo = engineRepo();
+  const repo = engineRepo(locale);
   if ("error" in repo) throw new Error(repo.error);
-  const { project, root: given } = queueRoot(projectDir);
+  const { project, root: given } = queueRoot(projectDir, locale);
 
   // **realpath를 여기서 한 번 태운다**(751e3004). 레지스트리는 root를 realpath로 저장하는데
   // (`addProject` · DESIGN.md:272) 이 함수가 사람이 친 경로를 그대로 돌려주면, 같은 큐가

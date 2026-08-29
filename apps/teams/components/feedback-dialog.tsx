@@ -21,7 +21,7 @@
  *  기존 파일 어디에 얹어도 나머지 셸이 그 파일을 import한다 — `keymap-provider.tsx`와 같은 축. */
 import { useEffect, useState } from "react";
 import { feedbackMetaAction, trackEvent } from "@/app/actions";
-import { useLocale } from "@/components/language-provider";
+import { useLocale, useT } from "@/components/language-provider";
 import { issueUrl, type FeedbackMeta } from "@/lib/feedback";
 import { Button } from "@/components/ui/button";
 import {
@@ -36,6 +36,7 @@ import { Textarea } from "@/components/ui/textarea";
 
 export function FeedbackDialog() {
   const locale = useLocale();
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   const [meta, setMeta] = useState<FeedbackMeta | null>(null);
@@ -61,10 +62,8 @@ export function FeedbackDialog() {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle>의견 보내기</DialogTitle>
-          <DialogDescription>
-            GitHub 이슈로 열립니다. 내용이 채워진 채 열리고 마지막 등록은 직접 누르시면 됩니다.
-          </DialogDescription>
+          <DialogTitle>{t("feedbackDialog.title")}</DialogTitle>
+          <DialogDescription>{t("feedbackDialog.description")}</DialogDescription>
         </DialogHeader>
 
         {/* `min-w-0` — 답변 다이얼로그와 같은 결함이다(§비주얼 §3 간격 관용구 · §로드맵 §P167).
@@ -90,8 +89,8 @@ export function FeedbackDialog() {
               말하기로 한 자리가 정작 긴 글에서만 안 보인다(실측 3,000자, 900 높이) */}
           <Textarea
             className="max-h-64"
-            aria-label="의견"
-            placeholder={"무엇이 불편했는지, 무엇이 필요한지 그냥 쓰세요.\n첫 줄이 이슈 제목이 됩니다."}
+            aria-label={t("feedbackDialog.textareaLabel")}
+            placeholder={t("feedbackDialog.placeholder")}
             value={text}
             onChange={(e) => setText(e.target.value)}
           />
@@ -99,24 +98,23 @@ export function FeedbackDialog() {
           {/* 무엇이 같이 나가는지 모르고 누르는 자리를 만들지 않는다(§0-12) — 이슈 본문에
               들어갈 두 줄 **그대로**다. 아직 안 왔으면 자리만 비어 있고 보내기도 잠겨 있다 */}
           <div className="rounded-md border bg-muted/40 p-2 text-xs text-muted-foreground">
-            <p>이슈에 아래 두 줄이 함께 실립니다.</p>
-            <p className="font-mono break-all">- 버전: {meta?.version ?? "…"}</p>
-            <p className="font-mono break-all">- 세션: {meta?.session ?? "…"}</p>
+            <p>{t("feedbackDialog.metaNote")}</p>
+            <p className="font-mono break-all">
+              - {t("feedback.versionLabel")}: {meta?.version ?? "…"}
+            </p>
+            <p className="font-mono break-all">
+              - {t("feedback.sessionLabel")}: {meta?.session ?? "…"}
+            </p>
           </div>
 
           {/* 자른 사실을 폼이 알려 준다(§0-12 URL 길이). 자르고 나서가 아니라 **누르기 전**이다 */}
-          {built?.truncated && (
-            <p className="text-xs text-destructive">
-              내용이 길어 뒷부분은 이슈에 실리지 않습니다. URL로 보내는 방식의 한계입니다 — 나눠
-              보내시거나, 열린 이슈에 나머지를 붙여 넣으신 뒤 등록하세요.
-            </p>
-          )}
+          {built?.truncated && <p className="text-xs text-destructive">{t("feedbackDialog.truncated")}</p>}
 
           {/* CTA는 행의 오른쪽 끝이다(§비주얼 §4-3 — `DialogFooter`가 이미 `sm:justify-end`).
               빈 채로는 못 보낸다: 빈 이슈가 열리는 것이 이 폼의 유일한 오작동이다(§0-12) */}
           <DialogFooter>
             <Button type="submit" disabled={!built}>
-              GitHub 이슈로 보내기
+              {t("feedbackDialog.submit")}
             </Button>
           </DialogFooter>
         </form>

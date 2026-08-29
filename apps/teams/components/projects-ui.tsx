@@ -23,6 +23,7 @@ import {
   type ResolvedView,
 } from "@/app/actions";
 import { publishOntologyMigrationAction } from "@/app/(app)/p/[project]/ontology/actions";
+import { useT } from "@/components/language-provider";
 import { OntologyImport } from "@/components/ontology-ui";
 import { PickPath } from "@/components/path-picker";
 import { PersonaBadge } from "@/components/persona-badge";
@@ -62,15 +63,10 @@ function Hint({ text, children }: { text: string; children: React.ReactNode }) {
   );
 }
 
-const BADGE_HINT: Record<string, string> = {
-  "기본값 가정": "워커 파일에서 이 값을 찾지 못해 기본값을 씁니다",
-  "해석 실패": "$HOME 외 변수가 남아 값을 읽지 못했습니다 — 화면은 기본값을 씁니다",
-  "루트 밖": "프로젝트 루트 밖을 가리킵니다",
-};
-
 // ── 해석 결과 표 ────────────────────────────────────────────────────────────
 
 export function ConfigTable({ view }: { view: ResolvedView }) {
+  const t = useT();
   return (
     <div className="space-y-2">
       <Table>
@@ -111,7 +107,7 @@ export function ConfigTable({ view }: { view: ResolvedView }) {
                         className="text-status-stale bg-status-stale/10 border-status-stale/30"
                       >
                         <TriangleAlert aria-hidden className="size-3.5" />
-                        워커마다 다름
+                        {t("resolve.conflictBadge")}
                       </Badge>
                     </>
                   ) : (
@@ -120,18 +116,18 @@ export function ConfigTable({ view }: { view: ResolvedView }) {
                     </span>
                   )}
                   {row.badges.map((b) => (
-                    <Hint key={b} text={BADGE_HINT[b]}>
-                      {/* `해석 실패`만 색+아이콘이다 — 나머지는 경고가 아니라 사실이다(§0) */}
+                    <Hint key={b} text={t(`resolve.badgeHint.${b}`)}>
+                      {/* `resolveFailed`만 색+아이콘이다 — 나머지는 경고가 아니라 사실이다(§0) */}
                       <Badge
                         variant="outline"
                         className={
-                          b === "해석 실패"
+                          b === "resolveFailed"
                             ? "text-status-stale bg-status-stale/10 border-status-stale/30"
                             : undefined
                         }
                       >
-                        {b === "해석 실패" && <TriangleAlert aria-hidden className="size-3.5" />}
-                        {b}
+                        {b === "resolveFailed" && <TriangleAlert aria-hidden className="size-3.5" />}
+                        {t(`resolve.badge.${b}`)}
                       </Badge>
                     </Hint>
                   ))}
@@ -155,10 +151,8 @@ export function ConfigTable({ view }: { view: ResolvedView }) {
       {view.hasConflict && (
         <Alert>
           <TriangleAlert aria-hidden className="text-status-stale" />
-          <AlertTitle>워커 간 설정이 다릅니다</AlertTitle>
-          <AlertDescription>
-            티켓이 어느 워커에 물리느냐에 따라 결과가 달라집니다.
-          </AlertDescription>
+          <AlertTitle>{t("resolve.conflictAlert.title")}</AlertTitle>
+          <AlertDescription>{t("resolve.conflictAlert.body")}</AlertDescription>
         </Alert>
       )}
     </div>
@@ -200,6 +194,7 @@ export function CreateForm({
   /** 피커가 고른 절대경로를 `프로젝트 폴더`(사람이 `~`로 칠 수 있다) 상대로 환산할 때 쓴다 */
   home: string;
 }) {
+  const t = useT();
   const [pending, start] = useTransition();
   const [state, setState] = useState<CreateState>({});
   const [name, setName] = useState("");
@@ -213,7 +208,7 @@ export function CreateForm({
 
   const submit = (
     <Button type="submit" disabled={pending}>
-      {pending ? "만드는 중…" : "프로젝트 만들기"}
+      {pending ? t("project.create.submitPending") : t("project.create.submit")}
     </Button>
   );
 
@@ -239,10 +234,10 @@ export function CreateForm({
       }}
     >
       <div className="space-y-2">
-        <Label htmlFor="create-name">이름</Label>
+        <Label htmlFor="create-name">{t("project.create.nameLabel")}</Label>
         <Input
           id="create-name"
-          placeholder="dira 자체"
+          placeholder={t("project.create.namePlaceholder")}
           value={name}
           onChange={(e) => setName(e.target.value)}
         />
@@ -252,18 +247,18 @@ export function CreateForm({
 
       {showId && (
         <div className="space-y-2">
-          <Label htmlFor="create-id">URL 조각</Label>
+          <Label htmlFor="create-id">{t("project.create.idLabel")}</Label>
           <Input id="create-id" name="id" className="font-mono" placeholder="dira" />
           <p className="text-xs text-muted-foreground">
             {err && (err.code === "needId" || err.code === "badId" || err.code === "dupId")
               ? err.message
-              : "이름에서 URL 조각을 만들 수 없습니다. 직접 정해 주세요 (영문 소문자·숫자·하이픈)."}
+              : t("project.create.idHint")}
           </p>
         </div>
       )}
 
       <div className="space-y-2">
-        <Label htmlFor="create-dir">프로젝트 폴더</Label>
+        <Label htmlFor="create-dir">{t("project.create.dirLabel")}</Label>
         {/* 데스크톱이 아니면 `<PickPath>`가 아무것도 안 그린다 — 그때 이 줄은 입력 하나다 */}
         <div className="flex items-center gap-2">
           <Input
@@ -274,20 +269,20 @@ export function CreateForm({
             value={dir}
             onChange={(e) => setDir(e.target.value)}
           />
-          <PickPath mode="directory" label="프로젝트 폴더" onPick={setDir} />
+          <PickPath mode="directory" label={t("project.create.dirLabel")} onPick={setDir} />
         </div>
         {/* `.dira`가 아니라 그 부모다 — 등록 폼과 갈리는 지점이라 도움말로 고정한다 */}
-        <p className="text-xs text-muted-foreground">여기에 .dira를 만듭니다. ~는 확장됩니다</p>
+        <p className="text-xs text-muted-foreground">{t("project.create.dirHelp")}</p>
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="create-branch">통합 브랜치</Label>
+        <Label htmlFor="create-branch">{t("project.create.branchLabel")}</Label>
         <Input id="create-branch" name="branch" defaultValue="main" />
         {err?.code === "branch" && <p className="text-xs text-destructive">{err.message}</p>}
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="create-spec">스펙 문서</Label>
+        <Label htmlFor="create-spec">{t("project.create.specLabel")}</Label>
         <div className="flex items-center gap-2">
           <Input
             id="create-spec"
@@ -302,17 +297,15 @@ export function CreateForm({
               기준이 없어 역시 절대경로다 */}
           <PickPath
             mode="file"
-            label="스펙 문서"
+            label={t("project.create.specLabel")}
             onPick={(p) => setSpec(relativeUnder(p, expandTilde(dir, home)))}
           />
         </div>
-        <p className="text-xs text-muted-foreground">
-          선택. 비우면 그 줄(AGENTS.md 지도 표 한 행)을 자리표시자 그대로 둡니다
-        </p>
+        <p className="text-xs text-muted-foreground">{t("project.create.specHelp")}</p>
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="create-ontology">온톨로지 자리</Label>
+        <Label htmlFor="create-ontology">{t("project.create.ontologyLabel")}</Label>
         {/* 고른 절대경로를 그대로 채운다 — 스펙 문서 칸과 달리 상대경로 환산이 없다
             (§0-3 §온톨로지 자리를 만들 때 정한다). 비우면 아무것도 안 쓴다(선택) */}
         <div className="flex items-center gap-2">
@@ -320,22 +313,20 @@ export function CreateForm({
             id="create-ontology"
             name="ontology"
             className="font-mono"
-            placeholder="<프로젝트 폴더>/.dira/ontology"
+            placeholder={t("project.create.ontologyPlaceholder")}
             value={ontology}
             onChange={(e) => setOntology(e.target.value)}
           />
-          <PickPath mode="directory" label="온톨로지 자리" onPick={setOntology} />
+          <PickPath mode="directory" label={t("project.create.ontologyLabel")} onPick={setOntology} />
         </div>
-        <p className="text-xs text-muted-foreground">
-          선택. 비우면 기본값(&lt;프로젝트 폴더&gt;/.dira/ontology)을 씁니다
-        </p>
+        <p className="text-xs text-muted-foreground">{t("project.create.ontologyHelp")}</p>
       </div>
 
       {/* `.dira`가 이미 있다 — 만들지 않았다. 큐면 등록으로 보낸다(§0-3 표) */}
       {state.exists && (
         <Alert>
           <TriangleAlert aria-hidden />
-          <AlertTitle>만들지 않았습니다</AlertTitle>
+          <AlertTitle>{t("project.create.existsTitle")}</AlertTitle>
           <AlertDescription className="grid gap-2">
             <span className="break-all">{state.exists.message}</span>
             {state.exists.queue && (
@@ -345,7 +336,7 @@ export function CreateForm({
                 className="justify-self-start"
                 onClick={() => onRegister(state.exists!.root)}
               >
-                등록으로
+                {t("project.create.existsRegisterButton")}
               </Button>
             )}
           </AlertDescription>
@@ -355,7 +346,7 @@ export function CreateForm({
       {err && err.code !== "name" && err.code !== "branch" && !showId && (
         <Alert variant="destructive">
           <TriangleAlert aria-hidden />
-          <AlertTitle>만들지 못했습니다</AlertTitle>
+          <AlertTitle>{t("project.create.failedTitle")}</AlertTitle>
           <AlertDescription>
             <span className="break-all">{err.message}</span>
           </AlertDescription>
@@ -364,15 +355,11 @@ export function CreateForm({
 
       {/* 첫 등록은 macOS `앱 관리` 승인 창을 지난다(§제약 4) — 그동안 crontab이 블록되고
           여기는 `만드는 중…`으로 떠 있다. 창을 못 알아보면 3분 뒤 등록만 실패한다. */}
-      {pending && (
-        <p className="text-xs text-muted-foreground">
-          권한 창이 뜨면 [허용]을 누르세요 — crontab 등록이 그 대답을 기다립니다.
-        </p>
-      )}
+      {pending && <p className="text-xs text-muted-foreground">{t("project.create.permissionHint")}</p>}
 
       {dialog ? (
         <DialogFooter>
-          <DialogClose render={<Button variant="outline" />}>취소</DialogClose>
+          <DialogClose render={<Button variant="outline" />}>{t("project.create.cancel")}</DialogClose>
           {submit}
         </DialogFooter>
       ) : (
@@ -397,12 +384,13 @@ export function CreateDialog({
   onRegister: (root: string) => void;
   home: string;
 }) {
+  const t = useT();
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>새 프로젝트</DialogTitle>
-          <DialogDescription>{CREATE_BLURB}</DialogDescription>
+          <DialogTitle>{t("project.create.dialogTitle")}</DialogTitle>
+          <DialogDescription>{t("project.create.blurb")}</DialogDescription>
         </DialogHeader>
         <CreateForm
           dialog
@@ -458,46 +446,44 @@ const EMPTY = "text-xs leading-5 text-muted-foreground";
  *  outline 자체가 없고 재정렬은 평범한 클라이언트 렌더다.
  *  ponytail: 이 화면은 수십 행이다. 수천 행이 되면 그때 가상화를 고민한다. */
 export function ProjectRows({ rows }: { rows: ProjectRow[] }) {
+  const t = useT();
   return (
     <Table>
       <TableHeader>
         <TableRow className="h-9">
-          <TableHead className="h-9 px-3 text-xs">이름</TableHead>
-          <TableHead className="h-9 px-3 text-xs">경로</TableHead>
+          <TableHead className="h-9 px-3 text-xs">{t("project.list.nameHeader")}</TableHead>
+          <TableHead className="h-9 px-3 text-xs">{t("project.list.pathHeader")}</TableHead>
           {/* 칸반 레인 3개(§1)와 수가 안 맞는 이유는 이 한 문장뿐이다 */}
-          <TableHead
-            className="h-9 px-3 text-right text-xs"
-            title="파일이 열려 있는 티켓 — 대기·deps 대기·할당됨을 포함합니다"
-          >
-            열림
+          <TableHead className="h-9 px-3 text-right text-xs" title={t("project.list.openHeaderTitle")}>
+            {t("project.list.openHeader")}
           </TableHead>
-          <TableHead className="h-9 px-3 text-right text-xs">진행중</TableHead>
-          <TableHead className="h-9 px-3 text-right text-xs">완료</TableHead>
-          <TableHead className="h-9 px-3 text-xs">연결</TableHead>
-          <TableHead className="h-9 px-3 text-right text-xs">액션</TableHead>
+          <TableHead className="h-9 px-3 text-right text-xs">{t("project.list.inProgressHeader")}</TableHead>
+          <TableHead className="h-9 px-3 text-right text-xs">{t("project.list.doneHeader")}</TableHead>
+          <TableHead className="h-9 px-3 text-xs">{t("project.list.connectedHeader")}</TableHead>
+          <TableHead className="h-9 px-3 text-right text-xs">{t("project.list.actionsHeader")}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
-        {rows.map((t, i) => (
+        {rows.map((row, i) => (
           // 한 프로젝트가 `TableRow` 2개다(§비주얼 §7). hover를 끄는 이유: 두 줄 중 한 줄만
           // 밝아지면 블록이 반으로 갈려 보이고, 이 행에는 행 단위 클릭 대상이 없다.
           // 블록의 경계는 hover가 아니라 **마지막 줄의 `border-b`**가 짓는다.
-          <Fragment key={t.id}>
-            <TableRow className={`h-9 hover:bg-transparent ${t.connected ? "border-b-0" : ""}`}>
+          <Fragment key={row.id}>
+            <TableRow className={`h-9 hover:bg-transparent ${row.connected ? "border-b-0" : ""}`}>
               {/* 이 셀만 링크다 — 행 전체를 링크로 만들면 액션 버튼과 겹친다 */}
               <TableCell className="px-3 py-0 text-sm">
                 <span className="flex items-center gap-2">
-                  <Link href={`/p/${t.id}`} className="hover:underline">
-                    {t.name}
+                  <Link href={`/p/${row.id}`} className="hover:underline">
+                    {row.name}
                   </Link>
                   {/* 프로젝트에 들어가기 전에 정체를 알린다(§0). 배너는 여기 두지 않는다 —
                       이 화면은 프로젝트 스코프가 아니고 이 배지가 목적지를 이미 가리킨다.
                       건수는 배지 밖 숫자다: 라벨(`할당됨`)은 <StatusBadge> 하나가 정하고
                       건수는 상태가 아니라 이 행의 사실이다. 0건인 행에는 아무것도 없다 */}
-                  {t.assigned > 0 && (
+                  {row.assigned > 0 && (
                     <span className="flex items-center gap-1">
                       <StatusBadge status="assigned" />
-                      <span className="text-xs tabular-nums text-status-stale">{t.assigned}</span>
+                      <span className="text-xs tabular-nums text-status-stale">{row.assigned}</span>
                     </span>
                   )}
                 </span>
@@ -511,29 +497,29 @@ export function ProjectRows({ rows }: { rows: ProjectRow[] }) {
                   이름·액션이 가져간다. 1px은 최소값이고 실제 폭은 내용이 정한다 */}
               <TableCell
                 className="w-px px-3 py-0 font-mono text-xs text-muted-foreground"
-                title={t.root}
+                title={row.root}
               >
-                <span className="block max-w-[16rem] truncate">{t.shortRoot}</span>
+                <span className="block max-w-[16rem] truncate">{row.shortRoot}</span>
               </TableCell>
               {/* 연결 안 됨이면 세 자리를 전부 비운다. 0이 아니다 — 못 읽은 것과 0건은
                   다른 사실이다(§0). 세 수를 서로 다르게 칠하지 않는다(§비주얼 §7) */}
               <TableCell className="px-3 py-0 text-right text-xs tabular-nums">
-                {t.connected ? t.open : ""}
+                {row.connected ? row.open : ""}
               </TableCell>
               <TableCell className="px-3 py-0 text-right text-xs tabular-nums">
-                {t.connected ? t.wip : ""}
+                {row.connected ? row.wip : ""}
               </TableCell>
               <TableCell className="px-3 py-0 text-right text-xs tabular-nums">
-                {t.connected ? t.done : ""}
+                {row.connected ? row.done : ""}
               </TableCell>
               <TableCell className="px-3 py-0">
-                <StatusBadge status={t.connected ? "connected" : "disconnected"} />
+                <StatusBadge status={row.connected ? "connected" : "disconnected"} />
               </TableCell>
               <TableCell className="px-3 py-0">
                 <ProjectRowActions
-                  id={t.id}
-                  name={t.name}
-                  shortRoot={t.shortRoot}
+                  id={row.id}
+                  name={row.name}
+                  shortRoot={row.shortRoot}
                   first={i === 0}
                   last={i === rows.length - 1}
                 />
@@ -544,31 +530,31 @@ export function ProjectRows({ rows }: { rows: ProjectRow[] }) {
                 주장인데 큐를 못 읽었으므로 셀 수가 없다(첫 줄의 수 3칸과 같은 규칙).
                 정렬이 필요한 것은 위 셀에 남기고 길이가 흔들리는 것만 여기로 내렸다.
                 링크도 버튼도 없다 — 이 화면의 클릭 목적지는 이름 링크 하나다. */}
-            {t.connected && (
+            {row.connected && (
               <TableRow className="hover:bg-transparent">
                 <TableCell colSpan={7} className="space-y-1 px-3 pt-0 pb-2 whitespace-normal">
                   <div className="flex items-start gap-2">
-                    <span className={LABEL}>페르소나</span>
-                    {t.personas.length > 0 ? (
+                    <span className={LABEL}>{t("project.list.personasLabel")}</span>
+                    {row.personas.length > 0 ? (
                       // 자르지 않는다 — `외 3개`로 접으면 무엇을 갖고 있는지를 못 본다(§0).
                       // 점만 쓰지 않는다: 프로젝트마다 페르소나 집합이 달라 같은 색이
                       // 행마다 다른 사람을 뜻한다(§12).
                       <span className="flex flex-wrap gap-1">
-                        {t.personas.map((p) => (
+                        {row.personas.map((p) => (
                           <PersonaBadge key={p.name} name={p.name} color={p.color} />
                         ))}
                       </span>
                     ) : (
-                      <span className={EMPTY}>없음</span>
+                      <span className={EMPTY}>{t("project.list.personasEmpty")}</span>
                     )}
                   </div>
                   <div className="flex items-start gap-2">
-                    <span className={LABEL}>워커</span>
-                    {t.workers.length > 0 ? (
+                    <span className={LABEL}>{t("project.list.workersLabel")}</span>
+                    {row.workers.length > 0 ? (
                       // 워커 수만큼 배지를 만들지 않는다 — 라벨이 대부분 같은 글자라
                       // 반복이 이 줄에서 제일 넓은 요소가 된다. 상태별로 묶고 이름을 뒤에.
                       <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                        {t.workers.map((g) => (
+                        {row.workers.map((g) => (
                           <span key={g.status} className="flex items-center gap-1 whitespace-nowrap">
                             <StatusBadge status={g.status} />
                             <span className="font-mono text-xs">{g.names.join(" ")}</span>
@@ -578,7 +564,7 @@ export function ProjectRows({ rows }: { rows: ProjectRow[] }) {
                     ) : (
                       // 해석 결과 표가 쓰는 문구 그대로 — 같은 사실을 두 자리에서 다른
                       // 말로 하지 않는다(app/actions.ts 워커 행)
-                      <span className={EMPTY}>없음 — 이 프로젝트는 돌지 않습니다</span>
+                      <span className={EMPTY}>{t("resolve.workers.empty")}</span>
                     )}
                   </div>
                 </TableCell>
@@ -606,6 +592,7 @@ export function ProjectRowActions({
   first: boolean;
   last: boolean;
 }) {
+  const t = useT();
   const [pending, start] = useTransition();
   const [open, setOpen] = useState(false);
 
@@ -613,22 +600,22 @@ export function ProjectRowActions({
 
   return (
     <div className="flex items-center justify-end gap-1">
-      <Hint text="위로">
+      <Hint text={t("project.row.up")}>
         <Button
           variant="ghost"
           size="icon-sm"
-          aria-label={`${name} 위로`}
+          aria-label={`${name} ${t("project.row.up")}`}
           disabled={first || pending}
           onClick={() => move(-1)}
         >
           <ChevronUp aria-hidden />
         </Button>
       </Hint>
-      <Hint text="아래로">
+      <Hint text={t("project.row.down")}>
         <Button
           variant="ghost"
           size="icon-sm"
-          aria-label={`${name} 아래로`}
+          aria-label={`${name} ${t("project.row.down")}`}
           disabled={last || pending}
           onClick={() => move(1)}
         >
@@ -640,7 +627,7 @@ export function ProjectRowActions({
         size="icon-sm"
         aria-haspopup="dialog"
         aria-expanded={open}
-        aria-label={`${name} 설정`}
+        aria-label={`${name} ${t("project.row.settings")}`}
         onClick={() => setOpen(true)}
       >
         <Settings2 aria-hidden />
@@ -679,6 +666,7 @@ export function ProjectSettingsDialog({
    *  호출부(전환기)가 안다. 이 컴포넌트는 "지금 어디 있나"를 모른다. */
   onUnregistered?: () => void;
 }) {
+  const t = useT();
   const [pending, start] = useTransition();
   const [view, setView] = useState<ResolvedView | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -713,18 +701,17 @@ export function ProjectSettingsDialog({
         {confirming ? (
           <>
             <DialogHeader>
-              <DialogTitle>프로젝트 등록 해제</DialogTitle>
+              <DialogTitle>{t("project.settings.confirmTitle")}</DialogTitle>
               <DialogDescription>
-                &quot;{name}&quot;을 목록에서 제거합니다. 이 프로젝트의 티켓은 삭제되지 않습니다 —
-                레지스트리에서만 빠집니다.
+                &quot;{name}&quot;{t("project.settings.confirmDescSuffix")}
               </DialogDescription>
             </DialogHeader>
             <p className="font-mono text-xs break-all">{shortRoot}</p>
-            <p className="text-sm text-muted-foreground">
-              같은 경로로 다시 등록하면 그대로 돌아옵니다.
-            </p>
+            <p className="text-sm text-muted-foreground">{t("project.settings.confirmNote")}</p>
             <DialogFooter>
-              <DialogClose render={<Button variant="outline" autoFocus />}>취소</DialogClose>
+              <DialogClose render={<Button variant="outline" autoFocus />}>
+                {t("project.settings.cancel")}
+              </DialogClose>
               <Button
                 disabled={pending}
                 onClick={() =>
@@ -733,11 +720,11 @@ export function ProjectSettingsDialog({
                     if (r.ok) {
                       onOpenChange(false);
                       onUnregistered?.();
-                    } else setError(r.message ?? "등록 해제에 실패했습니다.");
+                    } else setError(r.message ?? t("project.settings.unregisterFailed"));
                   })
                 }
               >
-                등록 해제
+                {t("project.settings.unregisterButton")}
               </Button>
             </DialogFooter>
           </>
@@ -753,7 +740,7 @@ export function ProjectSettingsDialog({
             {error && (
               <Alert variant="destructive">
                 <TriangleAlert aria-hidden />
-                <AlertTitle>설정을 읽지 못했습니다</AlertTitle>
+                <AlertTitle>{t("project.settings.readFailedTitle")}</AlertTitle>
                 <AlertDescription>
                   <span className="font-mono text-xs break-all">{error}</span>
                 </AlertDescription>
@@ -761,9 +748,9 @@ export function ProjectSettingsDialog({
             )}
 
             <div className="flex items-center justify-between gap-4">
-              <h3 className="text-sm font-medium">해석 결과</h3>
+              <h3 className="text-sm font-medium">{t("project.settings.resolveResultsHeading")}</h3>
               <Button variant="outline" size="sm" disabled={pending} onClick={load}>
-                {pending ? "읽는 중…" : "다시 읽기"}
+                {pending ? t("project.settings.loading") : t("project.settings.reload")}
               </Button>
             </div>
             {view ? (
@@ -775,11 +762,11 @@ export function ProjectSettingsDialog({
                 </div>
               </>
             ) : (
-              <p className="text-sm text-muted-foreground">읽는 중…</p>
+              <p className="text-sm text-muted-foreground">{t("project.settings.loading")}</p>
             )}
 
             <div className="space-y-2 border-t pt-4">
-              <Label htmlFor={`rename-${id}`}>이름</Label>
+              <Label htmlFor={`rename-${id}`}>{t("project.settings.renameLabel")}</Label>
               <div className="flex items-center gap-2">
                 <Input
                   id={`rename-${id}`}
@@ -793,16 +780,16 @@ export function ProjectSettingsDialog({
                     start(async () => {
                       const r = await renameProjectAction(id, newName);
                       if (r.ok) onOpenChange(false);
-                      else setError(r.message ?? "이름을 바꾸지 못했습니다.");
+                      else setError(r.message ?? t("project.settings.renameFailed"));
                     })
                   }
                 >
-                  저장
+                  {t("project.settings.save")}
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
-                URL 조각 <span className="font-mono">{id}</span>는 바뀌지 않습니다 — 열어 둔 링크와
-                북마크가 깨집니다.
+                {t("project.settings.slugNotePrefix")} <span className="font-mono">{id}</span>
+                {t("project.settings.slugNoteSuffix")}
               </p>
             </div>
 
@@ -810,7 +797,7 @@ export function ProjectSettingsDialog({
               {/* 빨강을 쓰지 않는다: 파일을 지우지 않고 다시 등록하면 돌아온다(§8). */}
               <Button variant="outline" onClick={() => setConfirming(true)}>
                 <Unlink aria-hidden />
-                등록 해제
+                {t("project.settings.unregisterButton")}
               </Button>
             </div>
           </>
@@ -837,6 +824,7 @@ function OntologyMigration({
   projectId: string;
   ticket: { stem: string; hash: string; status: string } | null;
 }) {
+  const t = useT();
   const router = useTrackedRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -857,10 +845,8 @@ function OntologyMigration({
     <div className="space-y-2 border-t pt-4">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h3 className="text-sm font-medium">온톨로지 마이그레이션</h3>
-          <p className="text-xs text-muted-foreground">
-            없으면 새로 세우고, 있으면 최신 규약으로 다시 올립니다. 다시 돌려도 안전합니다.
-          </p>
+          <h3 className="text-sm font-medium">{t("project.ontologyMigration.title")}</h3>
+          <p className="text-xs text-muted-foreground">{t("project.ontologyMigration.description")}</p>
         </div>
         {ticket ? (
           <p className="text-xs text-muted-foreground">
@@ -868,12 +854,13 @@ function OntologyMigration({
               href={`/p/${projectId}/tickets/${encodeURIComponent(ticket.stem)}`}
               className="rounded-sm underline hover:text-foreground"
             >
-              마이그레이션 <span className="font-mono">{ticket.hash}</span> {ticket.status}
+              {t("project.ontologyMigration.linkPrefix")} <span className="font-mono">{ticket.hash}</span>{" "}
+              {ticket.status}
             </Link>
           </p>
         ) : (
           <Button variant="outline" size="sm" disabled={pending} onClick={start}>
-            {pending ? "발행하는 중…" : "마이그레이션 시작"}
+            {pending ? t("project.ontologyMigration.startPending") : t("project.ontologyMigration.start")}
           </Button>
         )}
       </div>
@@ -881,7 +868,7 @@ function OntologyMigration({
       {error && (
         <Alert variant="destructive">
           <TriangleAlert aria-hidden />
-          <AlertTitle>마이그레이션 티켓을 만들지 못했습니다</AlertTitle>
+          <AlertTitle>{t("project.ontologyMigration.failedTitle")}</AlertTitle>
           <AlertDescription>
             <span className="font-mono text-xs break-all">{error}</span>
           </AlertDescription>

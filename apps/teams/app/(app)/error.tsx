@@ -9,6 +9,7 @@ import { useEffect } from "react";
 import { TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { useT } from "@/components/language-provider";
 
 export default function Error({
   error,
@@ -17,6 +18,7 @@ export default function Error({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  const t = useT();
   useEffect(() => {
     console.error(error);
   }, [error]);
@@ -25,14 +27,14 @@ export default function Error({
     <main className="flex min-h-full flex-col items-center justify-center gap-4 p-8">
       <Alert variant="destructive" className="max-w-lg">
         <TriangleAlert aria-hidden />
-        <AlertTitle>화면을 표시하지 못했습니다</AlertTitle>
+        <AlertTitle>{t("errorBoundary.title")}</AlertTitle>
         <AlertDescription>
           <span className="block font-mono text-xs break-all whitespace-pre-wrap">
-            {error.message || error.digest || "원인 정보 없음"}
+            {error.message || error.digest || t("errorBoundary.noReason")}
           </span>
         </AlertDescription>
       </Alert>
-      <Button onClick={reset}>다시 시도</Button>
+      <Button onClick={reset}>{t("errorBoundary.retry")}</Button>
     </main>
   );
 }

@@ -454,6 +454,154 @@ export const ko: Record<string, string> = {
   // 티켓 상세 진행 기록 절에서 워커 갈래 다이얼로그를 여는 문(§2-15 ⑮).
   "progress.stream.expand": "자세히 보기",
 
+  // §0-16 §발행 §묶음 표 행 8(프로젝트 관리 루트 셸, 티켓 95749c14) — 오류·부재 경계 넷
+  // (`(app)/not-found.tsx` · `(app)/error.tsx` · `global-error.tsx` · `not-found.tsx`).
+  // en은 P338-12가 채운다. `errorBoundary.*`는 두 error 경계가 같은 문구라 하나로 공유한다.
+  "errorBoundary.title": "화면을 표시하지 못했습니다",
+  "errorBoundary.noReason": "원인 정보 없음",
+  "errorBoundary.retry": "다시 시도",
+  "notFound.project.title": "찾을 수 없습니다",
+  "notFound.project.bodyPrefix": "이 URL에 해당하는 화면이 없습니다.",
+  "notFound.project.urlExample": "/p/<프로젝트>",
+  "notFound.project.bodySuffix": "였다면 그 URL 조각이 레지스트리에 없습니다.",
+  "notFound.project.link": "프로젝트 목록",
+  "notFound.root.title": "404",
+  "notFound.root.body": "이 주소에는 페이지가 없습니다.",
+  "notFound.root.homeLink": "홈으로",
+
+  // `lib/scaffold.ts` — 새 프로젝트 스캐폴딩 실패 사유(§0-16 §발행 §묶음 표 행 8, 티켓 95749c14).
+  // 파일에 쓰는 템플릿 본문(TEMPLATE_FILES)은 사전에 안 든다(§0-16 §장치 §사전의 범위).
+  "scaffold.engineNotFoundPrefix": "엔진 레포를 찾지 못했습니다 —",
+  "scaffold.engineNotFoundMid": "에 tick.sh가 없습니다.",
+  "scaffold.engineNotFoundEnvHint": "DIRA_ENGINE이 가리키는 자리입니다.",
+  "scaffold.engineNotFoundDefaultHint": "GUI는 <엔진 레포>/apps/teams/에서 돌아야 합니다.",
+  "scaffold.notAbsolutePrefix": "절대경로여야 합니다:",
+  "scaffold.emptyPlaceholder": "(비어 있음)",
+  "scaffold.alreadyQueueSuffix": "는 이미 dira 프로젝트입니다. 만들지 않고 등록하세요.",
+  "scaffold.notQueueSuffix":
+    "가 이미 있지만 dira 프로젝트가 아닙니다. 안에 tickets/ 와 workers/ 를 만들거나, 지우고 다시 만드세요.",
+
+  // `lib/projects.ts` — 레지스트리·설정 해석·페르소나/스쿼드 검증 실패 사유(같은 티켓, 파일
+  // 스코프 접두 — `paths.ts`의 선례와 같다). en은 P338-12가 채운다.
+  "projects.keymapNotObject": "최상위가 객체가 아닙니다",
+  "projects.registryShapePrefix": "레지스트리 형식이 이상하다(projects 배열 없음):",
+  "projects.nameRequired": "이름을 입력하세요.",
+  "projects.notAbsolutePrefix": "절대경로여야 합니다:",
+  "projects.emptyPlaceholder": "(비어 있음)",
+  "projects.mountNotFoundSuffix": "가 없습니다. 절대경로가 맞는지, 마운트가 연결돼 있는지 확인하세요.",
+  "projects.notDirectorySuffix": "는 디렉터리가 아닙니다.",
+  "projects.notAQueueBody":
+    "이 디렉터리에 tickets/도 workers/도 없습니다 — dira 프로젝트가 아닙니다. 안에 tickets/ 와 workers/ 를 만들거나, 지우고 [새로 만들기]로 다시 만드세요.",
+  "projects.alreadyRegisteredPrefix": "이미",
+  "projects.alreadyRegisteredSuffix": "으로 등록돼 있습니다.",
+  "projects.badIdFormatPrefix": "URL 조각 형식이 틀렸습니다 — 영문 소문자·숫자·하이픈 1~40자:",
+  "projects.needIdMessage": "이름에서 URL 조각을 만들 수 없습니다. 직접 정해 주세요 (영문 소문자·숫자·하이픈).",
+  "projects.dupIdPrefix": "URL 조각",
+  "projects.dupIdSuffix": "가 이미 쓰이고 있습니다. 다른 이름을 쓰거나 조각을 직접 정하세요.",
+  "projects.unknownProjectIdPrefix": "없는 프로젝트:",
+  "projects.notAPersonaNamePrefix": "페르소나 이름이 아닙니다:",
+  "projects.notInPalettePrefix": "팔레트에 없는 색입니다:",
+  "projects.personaNameRulePrefix": "페르소나 이름은 영문·숫자·_·- 만 됩니다:",
+  "projects.personaNameRuleMiddle": "— 엔진이 이 이름으로 <personas>/<이름>/",
+  "projects.personaNameRuleSuffix": "경로를 만듭니다.",
+  "projects.squadNameRulePrefix": "스쿼드 이름은 영문·숫자·_·- 만 됩니다:",
+  "projects.squadNameRuleSuffix": "— 엔진이 이 이름으로 <squads>/<이름>/members 경로를 만듭니다.",
+
+  // `app/actions.ts` §7 해석 결과 표(같은 티켓) — `ConfigRow.badges`는 내부 코드로 바뀌고
+  // 이 라벨·힌트가 화면 값이다. `projects-ui.tsx`의 `ConfigTable`이 같은 세 키를 쓴다.
+  "resolve.badge.assumedDefault": "기본값 가정",
+  "resolve.badge.resolveFailed": "해석 실패",
+  "resolve.badge.outsideRoot": "루트 밖",
+  "resolve.badgeHint.assumedDefault": "워커 파일에서 이 값을 찾지 못해 기본값을 씁니다",
+  "resolve.badgeHint.resolveFailed": "$HOME 외 변수가 남아 값을 읽지 못했습니다 — 화면은 기본값을 씁니다",
+  "resolve.badgeHint.outsideRoot": "프로젝트 루트 밖을 가리킵니다",
+  "resolve.conflictBadge": "워커마다 다름",
+  "resolve.conflictAlert.title": "워커 간 설정이 다릅니다",
+  "resolve.conflictAlert.body": "티켓이 어느 워커에 물리느냐에 따라 결과가 달라집니다.",
+  "resolve.key.inProgress": "진행중 접미사",
+  "resolve.key.done": "완료 접미사",
+  "resolve.key.personas": "페르소나",
+  "resolve.key.protocols": "프로토콜",
+  "resolve.key.cwd": "작업 디렉터리",
+  "resolve.key.workers": "워커",
+  "resolve.workers.countSuffix": "개",
+  // `projects-ui.tsx`의 목록 표 자원 줄(워커 0개)도 같은 문구를 쓴다(코드 주석 — 같은 사실을
+  // 두 자리에서 다른 말로 하지 않는다).
+  "resolve.workers.empty": "없음 — 이 프로젝트는 돌지 않습니다",
+  "resolve.unknownProjectPrefix": "등록되지 않은 프로젝트입니다:",
+
+  "project.branchRequired": "통합 브랜치를 입력하세요.",
+  "project.createdRegisterFailedPrefix": "— .dira는",
+  "project.createdRegisterFailedSuffix": "에 만들어졌습니다. 등록 카드에서 그 경로를 등록하세요.",
+  "project.moveNoRoom": "더 옮길 자리가 없습니다.",
+
+  // `components/projects-ui.tsx` — 생성 폼·다이얼로그(§7 생성). en은 P338-12가 채운다.
+  "project.create.blurb": ".dira를 만들고 워커 하나를 crontab에 올립니다 — 30초 뒤부터 티켓을 물어갑니다.",
+  "project.create.submitPending": "만드는 중…",
+  "project.create.submit": "프로젝트 만들기",
+  "project.create.nameLabel": "이름",
+  "project.create.namePlaceholder": "dira 자체",
+  "project.create.idLabel": "URL 조각",
+  "project.create.idHint": "이름에서 URL 조각을 만들 수 없습니다. 직접 정해 주세요 (영문 소문자·숫자·하이픈).",
+  "project.create.dirLabel": "프로젝트 폴더",
+  "project.create.dirHelp": "여기에 .dira를 만듭니다. ~는 확장됩니다",
+  "project.create.branchLabel": "통합 브랜치",
+  "project.create.specLabel": "스펙 문서",
+  "project.create.specHelp": "선택. 비우면 그 줄(AGENTS.md 지도 표 한 행)을 자리표시자 그대로 둡니다",
+  "project.create.ontologyLabel": "온톨로지 자리",
+  "project.create.ontologyPlaceholder": "<프로젝트 폴더>/.dira/ontology",
+  "project.create.ontologyHelp": "선택. 비우면 기본값(<프로젝트 폴더>/.dira/ontology)을 씁니다",
+  "project.create.existsTitle": "만들지 않았습니다",
+  "project.create.existsRegisterButton": "등록으로",
+  "project.create.failedTitle": "만들지 못했습니다",
+  "project.create.permissionHint": "권한 창이 뜨면 [허용]을 누르세요 — crontab 등록이 그 대답을 기다립니다.",
+  "project.create.cancel": "취소",
+  "project.create.dialogTitle": "새 프로젝트",
+
+  // `components/projects-ui.tsx` — 목록 표(§비주얼 §7).
+  "project.list.nameHeader": "이름",
+  "project.list.pathHeader": "경로",
+  "project.list.openHeaderTitle": "파일이 열려 있는 티켓 — 대기·deps 대기·할당됨을 포함합니다",
+  "project.list.openHeader": "열림",
+  "project.list.inProgressHeader": "진행중",
+  "project.list.doneHeader": "완료",
+  "project.list.connectedHeader": "연결",
+  "project.list.actionsHeader": "액션",
+  "project.list.personasLabel": "페르소나",
+  "project.list.personasEmpty": "없음",
+  "project.list.workersLabel": "워커",
+
+  // `components/projects-ui.tsx` — 행 액션(순서 변경·설정).
+  "project.row.up": "위로",
+  "project.row.down": "아래로",
+  "project.row.settings": "설정",
+
+  // `components/projects-ui.tsx` — 설정 다이얼로그(이름 변경·등록 해제·해석 결과).
+  "project.settings.confirmTitle": "프로젝트 등록 해제",
+  "project.settings.confirmDescSuffix":
+    "을 목록에서 제거합니다. 이 프로젝트의 티켓은 삭제되지 않습니다 — 레지스트리에서만 빠집니다.",
+  "project.settings.confirmNote": "같은 경로로 다시 등록하면 그대로 돌아옵니다.",
+  "project.settings.cancel": "취소",
+  "project.settings.unregisterFailed": "등록 해제에 실패했습니다.",
+  "project.settings.unregisterButton": "등록 해제",
+  "project.settings.readFailedTitle": "설정을 읽지 못했습니다",
+  "project.settings.resolveResultsHeading": "해석 결과",
+  "project.settings.loading": "읽는 중…",
+  "project.settings.reload": "다시 읽기",
+  "project.settings.renameLabel": "이름",
+  "project.settings.save": "저장",
+  "project.settings.renameFailed": "이름을 바꾸지 못했습니다.",
+  "project.settings.slugNotePrefix": "URL 조각",
+  "project.settings.slugNoteSuffix": "는 바뀌지 않습니다 — 열어 둔 링크와 북마크가 깨집니다.",
+
+  // `components/projects-ui.tsx` — 온톨로지 마이그레이션 섹션.
+  "project.ontologyMigration.title": "온톨로지 마이그레이션",
+  "project.ontologyMigration.description":
+    "없으면 새로 세우고, 있으면 최신 규약으로 다시 올립니다. 다시 돌려도 안전합니다.",
+  "project.ontologyMigration.linkPrefix": "마이그레이션",
+  "project.ontologyMigration.startPending": "발행하는 중…",
+  "project.ontologyMigration.start": "마이그레이션 시작",
+  "project.ontologyMigration.failedTitle": "마이그레이션 티켓을 만들지 못했습니다",
   "board.epic.label": "에픽",
   "board.epic.all": "전체",
   "board.epic.none": "(에픽 없음)",
@@ -932,6 +1080,17 @@ export const ko: Record<string, string> = {
   "feedback.versionLabel": "버전",
   "feedback.sessionLabel": "세션",
 
+  // `feedback-dialog.tsx` 화면 자체(§0-16 §발행 §묶음 표 행 8, 티켓 95749c14). en은 P338-12가
+  // 채운다. `versionLabel`·`sessionLabel`은 위 GitHub 이슈 본문 조립과 같은 낱말이라 재사용한다.
+  "feedbackDialog.title": "의견 보내기",
+  "feedbackDialog.description":
+    "GitHub 이슈로 열립니다. 내용이 채워진 채 열리고 마지막 등록은 직접 누르시면 됩니다.",
+  "feedbackDialog.textareaLabel": "의견",
+  "feedbackDialog.placeholder": "무엇이 불편했는지, 무엇이 필요한지 그냥 쓰세요.\n첫 줄이 이슈 제목이 됩니다.",
+  "feedbackDialog.metaNote": "이슈에 아래 두 줄이 함께 실립니다.",
+  "feedbackDialog.truncated":
+    "내용이 길어 뒷부분은 이슈에 실리지 않습니다. URL로 보내는 방식의 한계입니다 — 나눠 보내시거나, 열린 이슈에 나머지를 붙여 넣으신 뒤 등록하세요.",
+  "feedbackDialog.submit": "GitHub 이슈로 보내기",
   "projectActions.unknownProjectPrefix": "등록되지 않은 프로젝트입니다:",
   "projectActions.fileMissing": "파일이 오지 않았습니다 — 다시 고르세요.",
 

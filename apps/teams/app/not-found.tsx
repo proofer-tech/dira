@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import Link from "@/components/link";
+import { readLanguage } from "@/lib/projects";
+import { t } from "@/lib/i18n";
 
 /** 루트 레이아웃이 둘이라(`(app)` · `(site)`, §한 코드베이스 §부딪히는 것 ①) 이 파일이
  *  **셋째 자리**다 — 어느 그룹의 라우트에도 안 걸리는 진짜 미확인 URL(예: `/asdf`)만 여기로
@@ -12,14 +14,15 @@ import Link from "@/components/link";
  *  그쪽은 `(site)` 레이아웃 아래서 렌더돼 `<html>`을 또 낼 수 없어서다. */
 export const metadata: Metadata = { title: "404 | dira" };
 
-export default function NotFound() {
+export default async function NotFound() {
+  const locale = await readLanguage();
   return (
     <html lang="ko-KR">
       <body>
         <main>
-          <h1>404</h1>
-          <p>이 주소에는 페이지가 없습니다.</p>
-          <Link href="/">홈으로</Link>
+          <h1>{t(locale, "notFound.root.title")}</h1>
+          <p>{t(locale, "notFound.root.body")}</p>
+          <Link href="/">{t(locale, "notFound.root.homeLink")}</Link>
         </main>
       </body>
     </html>

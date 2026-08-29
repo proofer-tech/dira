@@ -87,7 +87,9 @@ export function keymapPath(): string {
 
 /** 파일을 **손댄 그대로** 준다(모르는 id 포함). 쓰기가 이 객체 위에 덮어쓴다.
  *  `error`가 사유 원문이다 — 화면이 그대로 그리므로(§비주얼 §22) 문구를 지어내지 않는다. */
-async function readRawKeymap(): Promise<{ obj: Record<string, unknown>; error: string | null }> {
+async function readRawKeymap(
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<{ obj: Record<string, unknown>; error: string | null }> {
   let raw: string;
   try {
     raw = await readFile(keymapPath(), "utf8");
@@ -100,7 +102,7 @@ async function readRawKeymap(): Promise<{ obj: Record<string, unknown>; error: s
   try {
     const o: unknown = JSON.parse(raw);
     if (!o || typeof o !== "object" || Array.isArray(o)) {
-      return { obj: {}, error: "최상위가 객체가 아닙니다" };
+      return { obj: {}, error: t(locale, "projects.keymapNotObject") };
     }
     return { obj: o as Record<string, unknown>, error: null };
   } catch (e) {
@@ -110,8 +112,8 @@ async function readRawKeymap(): Promise<{ obj: Record<string, unknown>; error: s
 
 /** 기본값 위에 파일을 얹는다. **던지지 않는다** — 파일 없음 · JSON 깨짐 · 모르는 액션 id
  *  셋 다 완전한 키맵으로 흡수한다(모르는 id는 안 읽고, 쓰기가 보존한다). */
-export async function readKeymap(): Promise<Keymap> {
-  const { obj, error } = await readRawKeymap();
+export async function readKeymap(locale: Locale = DEFAULT_LOCALE): Promise<Keymap> {
+  const { obj, error } = await readRawKeymap(locale);
   const bindings = defaultBindings();
   for (const a of DEFAULT_KEYMAP) {
     const v = obj[a.id];
@@ -225,7 +227,7 @@ export async function setMultitoken(enabled: boolean): Promise<void> {
   await writeFile(p, enabled ? "1" : "0");
 }
 
-export async function readProjects(): Promise<Project[]> {
+export async function readProjects(locale: Locale = DEFAULT_LOCALE): Promise<Project[]> {
   let raw: string;
   try {
     raw = await readFile(registryPath(), "utf8");
@@ -238,7 +240,7 @@ export async function readProjects(): Promise<Project[]> {
   const parsed = JSON.parse(raw) as { projects?: unknown; tenants?: unknown };
   const list = parsed.projects ?? parsed.tenants; // 옛 파일은 `tenants` 키다
   if (!Array.isArray(list)) {
-    throw new Error(`레지스트리 형식이 이상하다(projects 배열 없음): ${registryPath()}`);
+    throw new Error(`${t(locale, "projects.registryShapePrefix")} ${registryPath()}`);
   }
   return list as Project[];
 }
@@ -335,24 +337,29 @@ export class ProjectError extends Error {
 }
 
 /** 등록. 검증 4종을 서버에서 통과해야 저장한다 — 실패하면 무엇이 틀렸는지 문장으로 던진다. */
-export async function addProject(name: string, rootInput: string, id?: string): Promise<Project> {
-  if (!name.trim()) throw new ProjectError("name", "이름을 입력하세요.");
+export async function addProject(
+  name: string,
+  rootInput: string,
+  id?: string,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<Project> {
+  if (!name.trim()) throw new ProjectError("name", t(locale, "projects.nameRequired"));
   const given = expandHome(rootInput.trim());
   if (!path.isAbsolute(given)) {
-    throw new ProjectError("root", `절대경로여야 합니다: ${rootInput.trim() || "(비어 있음)"}`);
+    throw new ProjectError(
+      "root",
+      `${t(locale, "projects.notAbsolutePrefix")} ${rootInput.trim() || t(locale, "projects.emptyPlaceholder")}`,
+    );
   }
 
   let root: string;
   try {
     root = await realpath(given);
   } catch {
-    throw new ProjectError(
-      "root",
-      `${given}가 없습니다. 절대경로가 맞는지, 마운트가 연결돼 있는지 확인하세요.`,
-    );
+    throw new ProjectError("root", `${given}${t(locale, "projects.mountNotFoundSuffix")}`);
   }
   if (!(await stat(root)).isDirectory()) {
-    throw new ProjectError("root", `${root}는 디렉터리가 아닙니다.`);
+    throw new ProjectError("root", `${root}${t(locale, "projects.notDirectorySuffix")}`);
   }
   const inside = await readdir(root).catch(() => [] as string[]);
   if (!inside.includes("tickets") && !inside.includes("workers")) {
@@ -360,36 +367,35 @@ export async function addProject(name: string, rootInput: string, id?: string): 
       "root",
       // 다음 행동을 준다(§비주얼 §7 문구 표). 이 경로에는 빈 `.dira`도 들어오는데, 스캐폴딩으로
       // 채우지 않는 것이 §0-3의 결정이다 — 사람이 무엇을 지우는지 알고 지우는 편이 낫다.
-      "이 디렉터리에 tickets/도 workers/도 없습니다 — dira 프로젝트가 아닙니다. 안에 tickets/ 와 workers/ 를 만들거나, 지우고 [새로 만들기]로 다시 만드세요.",
+      t(locale, "projects.notAQueueBody"),
     );
   }
   // §0-19 — `.dira`의 형제 `<프로젝트>/.gitignore`에 `.dira` 한 줄. 등록이 받는 경로는 `.dira`
   // 자신이므로 그 부모다. 생성 경로(`scaffold`)도 같은 함수를 부르므로 여기서는 대개 skipped다.
   await ensureGitignoreLine(path.dirname(root));
 
-  const projects = await readProjects();
+  const projects = await readProjects(locale);
   const dup = projects.find((t) => t.root === root);
-  if (dup) throw new ProjectError("dupRoot", `이미 ${dup.name}으로 등록돼 있습니다.`, dup);
+  if (dup)
+    throw new ProjectError(
+      "dupRoot",
+      `${t(locale, "projects.alreadyRegisteredPrefix")} ${dup.name}${t(locale, "projects.alreadyRegisteredSuffix")}`,
+      dup,
+    );
 
   // id는 이름에서 만들되, 비거나 겹치면 자동으로 지어내지 않는다 — `project-1` 같은 값은 URL이
   // 의미를 잃는다. 등록 폼이 그때만 `URL 조각` 입력을 노출하고 사용자가 정한다.
   const tid = id ?? slugify(name);
   if (!PROJECT_ID_RE.test(tid) || tid.length > 40) {
     if (id) {
-      throw new ProjectError(
-        "badId",
-        `URL 조각 형식이 틀렸습니다 — 영문 소문자·숫자·하이픈 1~40자: ${id}`,
-      );
+      throw new ProjectError("badId", `${t(locale, "projects.badIdFormatPrefix")} ${id}`);
     }
-    throw new ProjectError(
-      "needId",
-      "이름에서 URL 조각을 만들 수 없습니다. 직접 정해 주세요 (영문 소문자·숫자·하이픈).",
-    );
+    throw new ProjectError("needId", t(locale, "projects.needIdMessage"));
   }
   if (projects.some((t) => t.id === tid)) {
     throw new ProjectError(
       "dupId",
-      `URL 조각 ${tid}가 이미 쓰이고 있습니다. 다른 이름을 쓰거나 조각을 직접 정하세요.`,
+      `${t(locale, "projects.dupIdPrefix")} ${tid}${t(locale, "projects.dupIdSuffix")}`,
     );
   }
 
@@ -400,12 +406,12 @@ export async function addProject(name: string, rootInput: string, id?: string): 
   return project;
 }
 
-export async function renameProject(id: string, name: string): Promise<void> {
-  if (!name.trim()) throw new ProjectError("name", "이름을 입력하세요.");
-  const projects = await readProjects();
-  const t = projects.find((x) => x.id === id);
-  if (!t) throw new Error(`없는 프로젝트: ${id}`);
-  t.name = name.trim();
+export async function renameProject(id: string, name: string, locale: Locale = DEFAULT_LOCALE): Promise<void> {
+  if (!name.trim()) throw new ProjectError("name", t(locale, "projects.nameRequired"));
+  const projects = await readProjects(locale);
+  const t2 = projects.find((x) => x.id === id);
+  if (!t2) throw new Error(`${t(locale, "projects.unknownProjectIdPrefix")} ${id}`);
+  t2.name = name.trim();
   await writeProjects(projects);
 }
 
@@ -426,20 +432,21 @@ export async function setPersonaColor(
   id: string,
   persona: string,
   color: string | null,
+  locale: Locale = DEFAULT_LOCALE,
 ): Promise<void> {
-  if (!NAME_RE.test(persona)) throw new Error(`페르소나 이름이 아닙니다: ${persona}`);
+  if (!NAME_RE.test(persona)) throw new Error(`${t(locale, "projects.notAPersonaNamePrefix")} ${persona}`);
   if (color !== null && !(PERSONA_COLORS as readonly string[]).includes(color)) {
-    throw new Error(`팔레트에 없는 색입니다: ${color}`);
+    throw new Error(`${t(locale, "projects.notInPalettePrefix")} ${color}`);
   }
-  const projects = await readProjects();
-  const t = projects.find((x) => x.id === id);
-  if (!t) throw new Error(`없는 프로젝트: ${id}`);
-  const colors = { ...t.personaColors };
+  const projects = await readProjects(locale);
+  const found = projects.find((x) => x.id === id);
+  if (!found) throw new Error(`${t(locale, "projects.unknownProjectIdPrefix")} ${id}`);
+  const colors = { ...found.personaColors };
   if (color === null) delete colors[persona];
   else colors[persona] = color;
   // 빈 맵은 키째 지운다 — 색을 한 번도 안 고른 프로젝트와 전부 지운 프로젝트가 같아야 한다.
-  if (Object.keys(colors).length === 0) delete t.personaColors;
-  else t.personaColors = colors;
+  if (Object.keys(colors).length === 0) delete found.personaColors;
+  else found.personaColors = colors;
   await writeProjects(projects);
 }
 
@@ -724,10 +731,15 @@ export type Persona = {
  *
  *  파일명을 인자로 받는 이유: 페르소나 디렉터리에 있는 파일이 `PROFILE.md` 하나가 아니다
  *  (`skills.md` — §5-1, `lib/skills.ts`). 방어가 두 벌이 되면 한쪽만 고쳐지는 날이 온다. */
-export async function personaFilePath(dir: string, name: string, file: string): Promise<string> {
+export async function personaFilePath(
+  dir: string,
+  name: string,
+  file: string,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<string> {
   if (!NAME_RE.test(name)) {
     throw new Error(
-      `페르소나 이름은 영문·숫자·_·- 만 됩니다: ${name || "(비어 있음)"} — 엔진이 이 이름으로 <personas>/<이름>/${file} 경로를 만듭니다.`,
+      `${t(locale, "projects.personaNameRulePrefix")} ${name || t(locale, "projects.emptyPlaceholder")} ${t(locale, "projects.personaNameRuleMiddle")}${file} ${t(locale, "projects.personaNameRuleSuffix")}`,
     );
   }
   return resolveWithin(dir, path.join(name, file));
@@ -818,10 +830,10 @@ export function squadsDir(project: Pick<Project, "root">): string {
 /** 이름 검증 + 경로 조립은 페르소나와 같은 규칙이다(`NAME_RE` — 엔진이 이 값으로 경로를 만든다).
  *  이름공간이 페르소나와 겹치는지는 여기서 안 본다 — 호출부(Server Action)가 양쪽 디렉터리를
  *  같이 들고 있어야 판정할 수 있다. */
-async function squadDirPath(dir: string, name: string): Promise<string> {
+async function squadDirPath(dir: string, name: string, locale: Locale = DEFAULT_LOCALE): Promise<string> {
   if (!NAME_RE.test(name)) {
     throw new Error(
-      `스쿼드 이름은 영문·숫자·_·- 만 됩니다: ${name || "(비어 있음)"} — 엔진이 이 이름으로 <squads>/<이름>/members 경로를 만듭니다.`,
+      `${t(locale, "projects.squadNameRulePrefix")} ${name || t(locale, "projects.emptyPlaceholder")} ${t(locale, "projects.squadNameRuleSuffix")}`,
     );
   }
   return resolveWithin(dir, name);
