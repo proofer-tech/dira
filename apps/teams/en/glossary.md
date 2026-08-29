@@ -23,6 +23,8 @@ Never translate, never re-spell:
   `awaiting:`, `attempts:`, `owner:`.
 - Filename suffixes: `.wip`, `.done`, `.md`.
 - Log tags: `REAP`, `ASK`, `SUSPECT`, `WARN`.
+- Whole log lines the engine prints. They are Korean in the file whatever language the site is
+  in, so quote them as they are and put the English meaning in the sentence around them.
 - Section headings the engine or the screen reads. `## Goal` and `## Done when` are
   already English. `## 블록`, `## 질문 n`, `## 결과`, `## 진행 계획` are Korean tokens, and
   they stay Korean because the parser matches those letters. Gloss them once on first
@@ -69,6 +71,16 @@ Never translate, never re-spell:
 | 마감 | due date | The field label is `Due date`. |
 | 첨부 | attachment | The button and the chip group read `Attachments`. |
 | 트랜스크립트 | transcript | The file the engine leaves. Never a log. |
+| 프로젝트 워커 | project worker | The worker that belongs to one project. |
+| 공통 워커 | shared worker | The machine-wide slot several projects take turns using. `공통 워커 풀` is the shared worker pool. |
+| 워커 락 | worker lock | What keeps one worker from starting a second session. |
+| 후보 | candidate | A ticket a worker may take this round. |
+| 상한 | cap | The ceiling in prose. The screen label is `Limit`. |
+| 워크트리 | worktree | git's own word. `git 워크트리` is a git worktree. |
+| 코어 | the core | `코어 프로토콜` is the core protocol. |
+| 예산 | budget | The byte budget on a file that is inlined into every prompt. |
+| 알림 종 | notification bell | |
+| 위지윅 | WYSIWYG | |
 
 ## States and badges
 
@@ -170,9 +182,80 @@ label the screen actually shows. These rows are copied from the English dictiona
 | 마감 | Due date |
 | 없음 | None |
 | 스쿼드 default | Squad default |
+| 워커 | Workers |
+| 프로토콜 | Protocols |
+| 워커 설정 | Worker settings |
+| 워커 생성 | New worker |
+| 공통 컨텍스트 | Shared context |
+| 공통 워커 빌리기 | Borrow shared workers |
+| 나머지 워커 설정 (표시만) | Other worker settings (read-only) |
+| 스테일 수거 | Reclaim stale |
+| 공통 워커 풀 | Shared worker pool |
+| 전체 워커 | All workers |
+| 설정 분류 | Settings categories |
+| 공통 | Shared |
+| crontab 미등록 | Not on crontab |
+| `<n>곳` | `<n> projects` |
+| 필터 초기화 | Reset filters |
+| 상한 | Limit |
+| 동시 빌리기 상한 | Concurrent borrow limit |
+| 저장 | Save |
+| 되돌리기 | Revert |
+| 스트림 | Stream |
+| 중단 | Stop |
+| 재등록 | Re-register |
+| 삭제 | Delete |
+| 이름변경 | Rename |
+| 새 파일 | New file |
+| 엔진 | Engine |
+| 지정 없음 | Unset |
+| 직접 입력 | Enter manually |
+| 준비물 | What you need |
+| 계정 | Accounts |
+| 추가 | Add |
+| 변경 | Change |
+| 브라우저로 인증하기 | Authenticate in the browser |
+| 브라우저에서 받은 코드 | Code from the browser |
+| 코드 보내기 | Send the code |
+| 토큰 | Token |
+| 라벨(선택) | Label (optional) |
+| 계정 1 | Account 1 |
+| 멀티플레잉 | Multiplaying |
+| 다중계정 | Multiple accounts |
+| 다중계정 허용 | Allow multiple accounts |
+| 다중계정 동시사용 | Use multiple accounts at once |
+| 허용되어 있습니다 | Allowed |
+| 허용되지 않았습니다 | Not allowed |
+| 켜기 | Turn on |
+| 끄기 | Turn off |
+| 활성화 | Activate |
+| 비활성화 | Deactivate |
+| 사용 | Use |
+| 활성 | Active |
+| 비활성 | Inactive |
+| 소진 | Exhausted |
+| 토큰 저장 | Save token |
+| 인증 필요 | Authentication needed |
+| 파일 목록 접기 | Collapse the file list |
+| 파일 목록 펴기 | Expand the file list |
+| 기본값 가정 | Assumed default |
+| 원문으로 | Show the source |
+| 위지윅으로 | Back to WYSIWYG |
+| 전원 프롬프트에 인라인 | Inlined in every prompt |
+| 세션이 필요할 때 읽음 | Read by the session when needed |
+| 초과 | over |
+| 상태 | State |
+| 물고 있는 티켓 | Ticket held |
+| 컨텍스트 | Context |
+| 마지막 활동 | Last activity |
+| 토큰(5시간) | Tokens (5h) |
+| 액션 | Actions |
+| 프로젝트 | Project |
+| 종류 | Kind |
 
-Two more rows for the same reason, both macOS wording rather than ours: `허용` is `Allow` and
-`앱 관리` is `App Management`.
+Four more for the same reason, all macOS wording rather than ours: `허용` is `Allow`, `앱 관리` is
+`App Management`, `개인정보 보호 및 보안` is `Privacy & Security`, and `전체 디스크 접근 권한` is
+`Full Disk Access`.
 
 ## Placeholders
 
@@ -186,6 +269,9 @@ brackets stays byte for byte.
 | `<해시>` | `<hash>` |
 | `<사용자 이름>` | `<your name>` |
 | `<루트>` | `<root>` |
+| `<이름>` | `<name>` |
+| `<날짜>` | `<date>` |
+| `<토큰>` | `<token>` |
 
 ## Screen sentences the manual quotes
 
@@ -206,5 +292,21 @@ the English dictionary takes its wording from here.
 | `쓰던 내용이 있습니다` | `You have unsaved text` |
 | `아무도 집지 않는 티켓 <n>건` | `Tickets no one will claim: <n>` |
 | `(디스패치되지 않는 N건은 상단 알림)` | `(Not dispatched: N — see notifications)` |
+| `수거할 스테일 티켓이 없습니다.` | `No stale tickets to reclaim.` |
+| `crontab에 등록했습니다 — 30초 뒤부터 티켓을 물어갑니다.` | `Registered on crontab — it starts taking tickets 30 seconds later.` |
+| `공통 워커가 없습니다 — 만들면 빌리기를 켠 프로젝트마다 들어갑니다.` | `No shared workers — create one and it joins every project that has borrowing on.` |
+| `0이거나 비우면 안 빌립니다 — 상한은 동시에 도는 수이고 예약이 아닙니다.` | `0 or empty means no borrowing — the limit is how many run at once, not a reservation.` |
+| `공통 워커 <n>명이 이 프로젝트에 들어와 있습니다` | `<n> shared workers are in this project` |
+| `들어와 있는 공통 워커가 없습니다` | `No shared workers are in` |
+| `pool-limit을 읽지 못했습니다 — 안 빌리는 것으로 읽습니다.` | `Could not read pool-limit — reading it as no borrowing.` |
+| `티켓을 물고 있어 못 뺀 공통 워커: ` | `Shared workers held by a ticket and not removed: ` |
+| `등록된 토큰이 없습니다.` | `No tokens yet.` |
+| `<날짜> 추가` | `Added <date>` |
+| `저장했습니다. 유효한지는 다음 디스패치에서 드러납니다.` | `Saved. Whether it is valid shows at the next dispatch.` |
+| `Claude 토큰이 없습니다` | `No Claude token` |
+| `워커가 티켓을 집어도 세션을 못 열고 그대로 끝냅니다.` | `Workers will pick up a ticket, fail to open a session, and end there.` |
+| `세션이 열리자마자 죽는 워커` | `workers whose sessions die the moment they open` |
+| `이름을 바꾸면 프롬프트에서 빠집니다` | `Renaming it takes it out of the prompt` |
+| `모든 세션이 협업 프로토콜 없이 시작합니다` | `Every session will start with no collaboration protocol` |
 
 The em dash in those sentences is the app's, not ours. Keep it where the Korean has it.
