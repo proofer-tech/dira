@@ -72,7 +72,7 @@ Never translate, never re-spell:
 | 첨부 | attachment | The button and the chip group read `Attachments`. |
 | 트랜스크립트 | transcript | The file the engine leaves. Never a log. |
 | 프로젝트 워커 | project worker | The worker that belongs to one project. |
-| 공통 워커 | shared worker | The machine-wide slot several projects take turns using. In prose it is a shared worker; the screen label for the pool is `Common worker pool`. |
+| 공통 워커 | common worker | The machine-wide slot several projects take turns using. Prose and the screen now share one word - the pool is `Common worker pool` and a borrowed row wears the `Common` badge. |
 | 워커 락 | worker lock | What keeps one worker from starting a second session. |
 | 후보 | candidate | A ticket a worker may take this round. |
 | 상한 | cap | The ceiling in prose. The screen label is `Limit`. |
@@ -244,13 +244,13 @@ label the screen actually shows. These rows are copied from the English dictiona
 | 워커 설정 | Worker settings |
 | 워커 생성 | New worker | The button on the workers screen. The one in `Settings` › `Workers` is `Create worker`. |
 | 공통 컨텍스트 | Common context |
-| 공통 워커 빌리기 | Borrow shared workers |
+| 공통 워커 빌리기 | Borrow common workers |
 | 나머지 워커 설정 (표시만) | The rest of the worker settings (read-only) |
 | 스테일 수거 | Stale collection |
 | 공통 워커 풀 | Common worker pool |
 | 전체 워커 | All workers |
 | 설정 분류 | Setting categories |
-| 공통 | Shared |
+| 공통 | Common |
 | crontab 미등록 | not in the crontab | Lowercase - it is a tail next to the badge. |
 | `<n>곳` | `<n> projects` |
 | 필터 초기화 | Clear filters |
@@ -441,7 +441,7 @@ these rows copy the English dictionary, and when the two disagree the dictionary
 | `.dira를 만들고 워커 하나를 crontab에 올립니다 — 30초 뒤부터 티켓을 물어갑니다.` | `Creates .dira and puts one worker in crontab — it starts picking up tickets 30 seconds later.` |
 | `여기에 .dira를 만듭니다. ~는 확장됩니다` | `.dira goes in here. ~ is expanded` |
 | `crontab에 등록됨 — 30초 뒤부터 티켓을 물어갑니다` | `Registered on crontab — it starts taking tickets 30 seconds later` |
-| `권한 창이 뜨면 [허용]을 누르세요 — crontab 등록이 그 대답을 기다립니다.` | `Press [Allow] if a permission window opens — registering the crontab line waits on that answer.` | The project creation screen. The one under `Worker settings` opens with `Hit [Allow] when` instead. |
+| `권한 창이 뜨면 [허용]을 누르세요 — crontab 등록이 그 대답을 기다립니다.` | `Press [Allow] if a permission window opens — registering the crontab line waits on that answer.` | The project creation screen and the one under `Worker settings` say this in the same words. |
 | `<경로>/.dira는 이미 dira 프로젝트입니다. 만들지 않고 등록하세요.` | `<path>/.dira is already a dira project. Register it instead of creating it.` |
 | `claude CLI를 찾지 못했습니다 — 워커가 세션을 띄우지 못합니다` | `No claude CLI here — workers can't start a session` |
 | `요구사항이 접수되었습니다. 곧 PM이 검토할 예정입니다.` | `Request received. The PM will review it shortly.` |
@@ -452,8 +452,8 @@ these rows copy the English dictionary, and when the two disagree the dictionary
 | `crontab에 등록했습니다 — 30초 뒤부터 티켓을 물어갑니다.` | `Registered in the crontab — it starts claiming tickets in 30 seconds.` |
 | `공통 워커가 없습니다 — 만들면 빌리기를 켠 프로젝트마다 들어갑니다.` | `No common workers — creating one adds it to every project that borrows.` |
 | `0이거나 비우면 안 빌립니다 — 상한은 동시에 도는 수이고 예약이 아닙니다.` | `0 or empty means no borrowing — the limit is how many run at once, not a reservation.` |
-| `공통 워커 <n>명이 이 프로젝트에 들어와 있습니다` | `<n> shared worker(s) are in this project` |
-| `들어와 있는 공통 워커가 없습니다` | `No shared workers are in this project` |
+| `공통 워커 <n>명이 이 프로젝트에 들어와 있습니다` | `<n> common worker(s) are in this project` |
+| `들어와 있는 공통 워커가 없습니다` | `No common workers are in this project` |
 | `pool-limit을 읽지 못했습니다 — 안 빌리는 것으로 읽습니다.` | `Couldn't read pool-limit — reading it as not borrowing.` |
 | `티켓을 물고 있어 못 뺀 공통 워커: ` | `Still holding a ticket, couldn't remove: ` |
 | `등록된 토큰이 없습니다.` | `No tokens yet.` |

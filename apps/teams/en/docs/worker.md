@@ -5,9 +5,9 @@ ticket, and starts a session.** One file is one worker (`<root>/workers/<name>.s
 already there when you create your first project.
 
 There are two kinds. A **project worker** runs inside this project only, and the file rule just
-described is that worker. A **shared worker** is a slot you create once on the machine and
+described is that worker. A **common worker** is a slot you create once on the machine and
 several projects take turns using; in the table of a project that borrows it, it appears as a row
-with a `Shared` badge (see §Shared workers - slots that move between projects below).
+with a `Common` badge (see §Common workers - slots that move between projects below).
 
 ## The workers screen - what one row tells you
 
@@ -20,7 +20,7 @@ right now. The columns, left to right, are `Name` · `Status` · `Holding` · `C
 - **Status** is one of four. `running` means a session has been started and the worker is waiting
   for it to finish. `idle` means the worker is on cron and is holding nothing at the moment.
   `stopped` means it is out of crontab and never wakes up at all (`not in the crontab` sits next to
-  the badge - a shared worker row does not get that phrase), and `stale` means the session
+  the badge - a common worker row does not get that phrase), and `stale` means the session
   process died and only the claim is left behind.
 - **Holding** is the hash of the ticket it has right now. Press it to go to that ticket in
   detail.
@@ -38,7 +38,7 @@ right now. The columns, left to right, are `Name` · `Status` · `Holding` · `C
   drinking how much out of the one tank.
 
 The `Worker settings` dialog has four sections. The first is the `Common context` above, and the
-second, `Borrow shared workers`, is covered further down under shared workers. The third,
+second, `Borrow common workers`, is covered further down under common workers. The third,
 `The rest of the worker settings (read-only)`, shows five values: the persona, protocol, and
 ontology directories, and the in-progress and done suffixes, as they are actually set for this
 project right now. Where workers disagree, it writes them out side by side. To change them, edit the
@@ -123,8 +123,8 @@ worker file and the crontab entry are still valid. A setup with one worker does 
 
 One worker takes one ticket at a time. So when the `Open` lane keeps piling up while the
 `In progress` lane always holds a single card, that worker has become too few. There are two ways
-to add: make another one for this project only (this section), or borrow a shared worker (see
-§Shared workers - slots that move between projects below). How many is right is in [How many to
+to add: make another one for this project only (this section), or borrow a common worker (see
+§Common workers - slots that move between projects below). How many is right is in [How many to
 run at once](/docs/concurrency).
 
 Press `New worker` at the top right and the only thing the dialog asks for is a **name**. Keep it
@@ -191,13 +191,13 @@ The other three touch different things.
 - A `running` worker cannot be deleted. The running session and the claim it holds would be left
   hanging. Stop it first, and delete it once the ticket it holds is finished.
 
-## Shared workers - slots that move between projects
+## Common workers - slots that move between projects
 
 As projects multiply, so does the work of making and minding workers, one set per project. A
-shared worker gathers that into one place. You create workers once on the machine, and each
+common worker gathers that into one place. You create workers once on the machine, and each
 project only decides how many it will borrow.
 
-**One shared worker is one concurrently running session.** It is the same unit as a project
+**One common worker is one concurrently running session.** It is the same unit as a project
 worker, and it is not cloned. That slot holds one project at a time and lets go when the ticket
 it held is finished. The next round it may go to a different project.
 
@@ -217,7 +217,7 @@ Once you have made one, that row in the list tells you four things.
 
 | Place | What |
 |---|---|
-| Name | The name of that shared worker, and its filename |
+| Name | The name of that common worker, and its filename |
 | State badge | The same four as a project worker (`running` · `idle` · `stopped` · `stale`) |
 | `<n> projects` | How many projects are borrowing from this pool right now. `0 projects` is a slot nobody borrows |
 | `Stop` / `Register` · `Delete` | The same three as in the worker table |
@@ -236,7 +236,7 @@ it and open it again.
 ### Where you borrow them - the project's `Worker settings`
 
 Whether to borrow is decided per project. Press `Worker settings` at the top right of the workers
-screen and the second section is `Borrow shared workers`. Press the value next to `Limit` and a
+screen and the second section is `Borrow common workers`. Press the value next to `Limit` and a
 popover opens; put a number into `Concurrent borrow limit` and press `Save`. If you have never
 set one, the value reads `None`.
 
@@ -245,33 +245,33 @@ This one line sits under that popover.
 > `0 or empty means no borrowing — the limit is how many run at once, not a reservation.`
 
 **The number you put here means "at most this many."** Write that you will borrow up to 3 and
-this project is still using 0 shared workers at any moment when the pool is empty or other
+this project is still using 0 common workers at any moment when the pool is empty or other
 projects hold the slots. Nor, in the other direction, are those 3 sitting idle for this project.
 
-Save `1` or more and every shared worker appears in this project's worker table. The line under
-the section becomes `<n> shared worker(s) are in this project`, and with none it reads
-`No shared workers are in this project`. Set it back to `0` and they all leave. A slot holding a
+Save `1` or more and every common worker appears in this project's worker table. The line under
+the section becomes `<n> common worker(s) are in this project`, and with none it reads
+`No common workers are in this project`. Set it back to `0` and they all leave. A slot holding a
 ticket at that moment cannot be pulled, and its name is listed after
 `Still holding a ticket, couldn't remove: `.
 
 Three things can keep a save from doing what you meant.
 
-- **A name collision is refused.** A shared worker cannot go into a queue that already has a
+- **A name collision is refused.** A common worker cannot go into a queue that already has a
   project worker of the same name. It would overwrite that worker file, and the reason names it
   outright.
 - **A value it cannot read is read as no borrowing.** In that case
   `Couldn't read pool-limit — reading it as not borrowing.` appears under the limit.
-- **After creating a new shared worker, save the limit once more in every project that borrows.**
+- **After creating a new common worker, save the limit once more in every project that borrows.**
   Adding a worker to the pool does not grow the table of a project that is already borrowing on
   its own. Save the same value again and it joins on the spot.
 
 ### How to spot one in the table
 
-A borrowed shared worker appears as one row in the worker table. The one mark that tells it from
-a project worker is the `Shared` badge next to `Name`, and pressing that badge opens the
+A borrowed common worker appears as one row in the worker table. The one mark that tells it from
+a project worker is the `Common` badge next to `Name`, and pressing that badge opens the
 `Workers` node of `Settings` directly.
 
-| | Project worker | Shared worker |
+| | Project worker | Common worker |
 |---|---|---|
 | Where you make it | `New worker` at the top right of the workers screen | `New worker` in `Settings` › `Workers` |
 | Queue it runs | This one project | One at a time, taking turns across the projects with borrowing on |
@@ -285,17 +285,17 @@ That last row is blocked because those three act on the whole pool. Stopping fro
 could never halt a slot that is running in another one. So the controls were left in the one
 place, over in `Settings`.
 
-It is the same reason a shared worker row at `stopped` does not get `not in the crontab`. A shared
+It is the same reason a common worker row at `stopped` does not get `not in the crontab`. A common
 worker's cron line is in the pool, not in this project's file, so the `Re-register` that phrase
-points at is a blocked operation on this row. The `Shared` badge in the same row tells you why
+points at is a blocked operation on this row. The `Common` badge in the same row tells you why
 instead.
 
 ### The rule that decides whose turn it is
 
-A shared worker that has woken up picks its project in four steps.
+A common worker that has woken up picks its project in four steps.
 
 1. Only projects with a borrow limit of `1` or more are candidates.
-2. Drop any project whose current count of held shared workers has reached its own limit.
+2. Drop any project whose current count of held common workers has reached its own limit.
 3. Drop any project with no open tickets at all.
 4. Among what is left, pick the project that has **gone longest without being taken**.
 

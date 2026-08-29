@@ -7,21 +7,21 @@ sessions running at the same time is the number of workers in this project's wor
 one worker, no matter how many tickets pile up in the queue, it is one session at a time; with
 two, it is two.
 
-That table has two kinds mixed in: project workers this project made, and shared workers it
-borrowed. The first kind belongs to this project, so the arithmetic holds as written. Shared
+That table has two kinds mixed in: project workers this project made, and common workers it
+borrowed. The first kind belongs to this project, so the arithmetic holds as written. Common
 workers are slots that several projects take turns using, which changes things. **Three rows in
 the table does not mean those three are running in this project at once.**
 
-The `Limit` under `Borrow shared workers` means "at most this many." Set it to 3, and at any
-moment when the pool is empty or other projects hold the slots, this project is using 0 shared
+The `Limit` under `Borrow common workers` means "at most this many." Set it to 3, and at any
+moment when the pool is empty or other projects hold the slots, this project is using 0 common
 workers. So the ceiling has to be read this way to be accurate.
 
 > The ceiling is the number of project workers plus the `Limit`, and that `Limit` share drops as
 > low as 0 at any given moment.
 
 There are two ways to add. For project workers it is [Workers](/docs/worker) §One press of
-`New worker`, and for shared workers it is §Shared workers - slots that move between projects in
-the same chapter. To make this one project go faster for certain, make a project worker. Shared
+`New worker`, and for common workers it is §Common workers - slots that move between projects in
+the same chapter. To make this one project go faster for certain, make a project worker. Common
 workers are the way to spend fewer slots when you have several projects.
 
 ## The worker lock - one ticket at a time
@@ -53,7 +53,7 @@ the three below has caught them.
 - **Priority 1.** A ticket whose effective priority is 1 is a candidate only while nothing is in
   progress. It means "pick this up only when it is quiet and nothing else is running," so keeping
   several workers on makes it run later, not sooner. Do not use 1 for something urgent.
-- **A borrowed slot is off elsewhere.** A row with the `Shared` badge is not tied to this project.
+- **A borrowed slot is off elsewhere.** A row with the `Common` badge is not tied to this project.
   While that slot holds another project's ticket, it does nothing here. The rule for when its
   turn comes around is in [Workers](/docs/worker) §The rule that decides whose turn it is.
 
@@ -72,7 +72,7 @@ Adding workers does not grow throughput alone.
   a per-worker limit anywhere. Register several accounts and turn on using them at once, and
   workers are divided among the accounts and the tanks divide with them
   ([Authentication](/docs/auth) §Multiplaying - the switches for keeping several accounts). If
-  you use shared workers, sessions running in other projects drink from the same tank too. How
+  you use common workers, sessions running in other projects drink from the same tank too. How
   much has been used and how much is left is in the token status bar at the bottom of the screen
   (see [The screens](/docs/screens)).
 - **The risk of touching the same file at once.** Two different tickets can still step on the same
