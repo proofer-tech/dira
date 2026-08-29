@@ -92,6 +92,16 @@ Never translate, never re-spell:
 | 칩 | chip | The tool-name-and-count pills under the stream dialog's head. |
 | 창 (5시간 - 7일) | window | The stretch a usage percentage covers. |
 | 복귀 알림 | return notification | The bell item for stretches the queue sat stopped. |
+| 프로필 | profile | The `PROFILE.md` body. A persona has one profile. |
+| 스킬 | skill | |
+| 메모리 | memory | Uncountable in prose. One file is a memory file, and the count on screen is `Memory n`. |
+| 회고 | retrospective | What a session leaves in memory at the end of a ticket. |
+| 디스패치 정책 | dispatch policy | |
+| 리더 | leader | The first line of a squad's `members`. |
+| 멤버 | member | Plural members. |
+| 역할 | role | The one line describing what a member does in a squad. |
+| 규칙 | rules | Say the `rules` file, never the rules, so it does not read as the protocol. |
+| 되돌아옴 | reassigned | The same word as `다시 할당` below. A ticket dispatched again after a session was cut off. |
 
 ## States and badges
 
@@ -312,6 +322,11 @@ Four more for the same reason, all macOS wording rather than ours: `허용` is `
 `App Management`, `개인정보 보호 및 보안` is `Privacy & Security`, and `전체 디스크 접근 권한` is
 `Full Disk Access`.
 
+The app screens have their own English dictionary in `lib/i18n.ts` already, so labels on the
+board, the ticket detail, and the Personas and Squads screens are not copied into this table.
+Read the label out of that file and quote it letter for letter. This table stays what it is for:
+the manual's prose, which has no dictionary.
+
 ## Placeholders
 
 Angle-bracket placeholders are prose, not paths, so they get translated. Anything outside the
@@ -327,6 +342,8 @@ brackets stays byte for byte.
 | `<이름>` | `<name>` |
 | `<날짜>` | `<date>` |
 | `<토큰>` | `<token>` |
+| `<브랜치>` | `<branch>` |
+| `<큐 폴더>` | `<queue folder>` |
 
 ## Screen sentences the manual quotes
 
