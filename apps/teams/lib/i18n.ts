@@ -1122,6 +1122,11 @@ export const ko: Record<string, string> = {
  *  | 상한(거절 제목) | limit | 예산 꼬리의 `초과`(위 줄)와 같은 낱말이 상한 거절 제목에도 뜬다 |
  *  | 의견(깃허브 이슈 제목) | Feedback | 제품이 그 화면을 부르는 이름이 `의견`이다 — `Report`가 아니다 |
  *  | 업데이트 | update | 데스크톱 앱이 받아 다는 그것. `upgrade`로 안 부른다 |
+ *  | 테이블 · 칸반(보드 뷰 둘) | Table · Kanban | `6d818d48`(보드 묶음)가 더한 줄부터 아래 |
+ *  | 의존성(표 컬럼) | Prerequisites | 위 `선행` 줄의 낱말 그대로다 — `Deps`는 frontmatter 키 이름이라 컬럼 머리에 안 쓴다 |
+ *  | 담당 · 생성일(표 컬럼) | Owner · Created | 둘 다 frontmatter 키 이름과 같은 낱말이라 갈릴 자리가 없다 |
+ *  | 아카이빙 | archiving | 완료 티켓이 무는 아카이브 티켓이 도는 동안이다. 카드 한 줄 셋이 `Archiving`을 머리로 나눠 갖는다 |
+ *  | 찾기(찾기 바) | Find | 지금 보는 화면 안에서 글자를 짚는 일이다 — 큐를 거르는 `Search`와 다른 동작이라 낱말을 가른다 |
  *
  *  **어순이 뒤집히는 자리는 접두·접미 두 키로 쪼갠다.** 한국어는 이름 뒤에 다 붙지만(`<이름>
  *  삭제`) 영어는 동사가 앞에 뜬다(`Delete <name>`) — 한쪽이 비는 것이 정상이고, 조립은
@@ -2040,6 +2045,91 @@ export const en: Record<string, string> = {
   "ontology.notDira.title": "Not dira format",
   "ontology.notDira.body":
     "No _ontology/SCHEMA.md or objects/ here — this folder just hasn't been moved into dira format yet. Use import below to bring it in.",
+
+  // 보드 화면(§0-16 §발행 §묶음 표 행 3) — `ko`는 `f3a8794e`, 이 영어가 `6d818d48`다. 이 앱에서
+  // 사람이 제일 오래 보는 화면이라 낱말은 셸(`90be3eeb`)에서 그대로 내려받았고, 새 낱말만 위
+  // 표에 올렸다. 어순이 뒤집혀 조각의 몫이 갈린 자리는 그 자리마다 주석을 달았다.
+  "boardPage.view.table": "Table",
+  "boardPage.view.kanban": "Kanban",
+  // 표 컬럼 라벨 8개 — 필터 팝오버 라벨 · 필터 칩 · 정렬 헤더가 같은 키를 재사용한다.
+  "boardPage.column.status": "Status",
+  "boardPage.column.hash": "Hash",
+  "boardPage.column.title": "Title",
+  "boardPage.column.kind": "Kind",
+  "boardPage.column.persona": "Persona",
+  // 위 표의 `선행` 줄에서 그대로 내려받는다 — `Deps`는 frontmatter 키 이름이지 사람 말이 아니다.
+  "boardPage.column.deps": "Prerequisites",
+  "boardPage.column.created": "Created",
+  "boardPage.column.owner": "Owner",
+  // 완료 카드 하단 아카이브 한 줄 — 셋이 `Archiving`을 머리로 나눠 갖는다. 이 줄은 `truncate`라
+  // 좁은 카드에서 꼬리부터 잘리는데, 머리가 같으면 잘려도 무슨 줄인지는 남는다.
+  "boardPage.archive.awaitingAnswer": "Archiving — awaiting answer",
+  "boardPage.archive.inProgress": "Archiving",
+  "boardPage.archive.pending": "Archiving — queued",
+  // 앞에 `"질의"`가 공백 없이 붙는다 — 쌍따옴표를 콜론으로 받는다(`settings.search.emptySuffix`가
+  // 연 그 수). 조립 결과는 `i18n.test.ts`가 두 언어 다 고정한다.
+  "boardPage.noMatch.querySuffix": ": no matching tickets",
+  "boardPage.noMatch.generic": "No tickets match these filters",
+  "boardPage.filter.reset": "Reset filters",
+  "boardPage.filter.hideDone": "Hide done",
+  // 앞에 필터 라벨이 공백 하나로 붙는다(`Status search`). 라벨이 **변수**라 영어도 어순을 못
+  // 뒤집는다 — 접두·접미로 쪼개는 수가 안 통하는 자리다(위 `wrap` 자리들과 갈리는 지점).
+  "boardPage.filter.searchSuffix": "search",
+  // `{접두} {라벨} {count.zero}` — `No matching Status 0`. 꼬리의 `0`을 문장 안으로 못 들인다:
+  // `count.zero`는 칸반 레인의 빈 자리에서 **혼자** 뜨는 값이라 낱말을 붙이면 그 자리가 깨진다.
+  "boardPage.filter.noMatchPrefix": "No matching",
+  "boardPage.title.empty": "(No title)",
+  "boardPage.empty.noTickets": "No open tickets",
+  // 건수 줄 — `Tickets: 12` · `Tickets: 5 / 12`. **숫자를 뒤로 보내고 콜론으로 받는다**
+  // (`bell.due.titlePrefix`가 연 수). 영어에는 `건`에 해당하는 조각이 없어 단위는 빈다 —
+  // 칸반 레인 머리의 건수도 그래서 숫자만 뜬다(`t`는 `""`를 그대로 돌려준다).
+  "boardPage.count.label": "Tickets:",
+  "boardPage.unit.count": "",
+  "boardPage.count.zero": "0",
+  // `Hiding 3 done` — 접두가 동사를 지고 꼬리가 상태 낱말을 든다(위 표의 `완료 = Done`).
+  "boardPage.count.hiddenPrefix": "Hiding",
+  "boardPage.count.hiddenSuffix": "done",
+  // `(Not dispatched: 2 — see notifications)` — 꼬리가 숫자에 **공백 없이** 붙으므로 값이
+  // 공백으로 연다. 접두는 위 건수 줄과 같은 콜론 수다.
+  "boardPage.undispatched.prefix": "Not dispatched:",
+  "boardPage.undispatched.suffix": " — see notifications",
+  // 정렬 헤더의 aria-label — 앞에 컬럼 라벨이 공백 하나로 붙는다(`Status sort`).
+  "boardPage.sort.ariaSuffix": "sort",
+  // `title`·`frontmatter`는 무엇을 뒤지는지 가리키는 필드 이름이라 번역하지 않는다(`ko`도 같다).
+  "boardPage.search.placeholder": "Search title · body · frontmatter",
+  "boardPage.search.ariaLabel": "Search tickets",
+  "boardPage.epicDrag.missingTitle": "Couldn't find the ticket file — it left the queue, or its state changed",
+  // 실패한 것은 티켓을 에픽으로 옮기는 일이다 — 드래그 문구(`board.epic.dropOnEpic`)가 `move`로
+  // 열었으므로 실패 제목도 그 동사를 든다.
+  "boardPage.epicDrag.failTitle": "Couldn't move the ticket",
+
+  // 발행 서버 액션(`(board)/actions.ts`).
+  // 앞에 필드 이름이 공백 없이 붙으므로 값이 공백으로 연다(`Title can't…` · `kind can't…`).
+  "boardPage.action.noNewlineSuffix": " can't contain a line break.",
+  "boardPage.action.acceptedDefault": "Request received. The PM will review it shortly.",
+  // `projectActions.unknownProjectPrefix`와 **같은 글자다** — 같은 거절을 두 액션 파일이 각자
+  // 말하는 자리라 낱말이 갈리면 안 된다.
+  "boardPage.action.unknownProjectPrefix": "Not a registered project:",
+  "boardPage.action.reqBodyRequired": "Enter the request.",
+  "boardPage.action.titleRequired": "Enter a title.",
+  // `kind must be one of work · request · feedback — got: xyz`. `kind`는 frontmatter 키 이름이라
+  // 번역하지 않는다(`ko`와 같은 판단).
+  "boardPage.action.kindPrefix": "kind must be one of",
+  "boardPage.action.kindMiddle": "— got:",
+  "boardPage.action.unknownDepsPrefix": "No such deps hash in the queue:",
+  "boardPage.action.hashExhausted":
+    "Drew 10 hashes and every one is already taken — check the queue directory.",
+  // `Request received in the P338 (p338) epic.` — 라벨·해시가 가운데 끼는 자리라 접두가 문장을
+  // 열고 접미가 마침표를 찍는다.
+  "boardPage.action.epicAcceptedPrefix": "Request received in the",
+  "boardPage.action.epicAcceptedSuffix": "epic.",
+
+  // 찾기 바(`find-bar.tsx`) — placeholder 하나와 아이콘 버튼 낭독 이름 셋. `Close`는
+  // `common.close`와 같은 낱말이다(같은 동작이라 갈리면 안 된다).
+  "findBar.placeholder": "Find",
+  "findBar.prev": "Previous",
+  "findBar.next": "Next",
+  "findBar.close": "Close",
 };
 
 const DICTS: Record<Locale, Record<string, string>> = { ko, en };

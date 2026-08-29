@@ -116,6 +116,8 @@ const FILLED = [
   "projectActions.",
   "appLayout.",
   "frontmatterRows.", // 9ff6dec3가 ko·en을 같이 채웠다(§비주얼 §50 §프론트매터 행 편집기)
+  "boardPage.", // 6d818d48이 en을 채우고 여기 더했다(묶음 표 행 3의 보드 갈래)
+  "findBar.", // 같은 티켓 — 찾기 바는 화면 접두가 아니라 파일 접두다(묶음 11과 같은 판단)
 ];
 
 test("이미 찬 묶음(설정·마감·셸)의 ko 키는 en에 하나도 안 빠졌다", () => {
@@ -845,6 +847,67 @@ test("f3a8794e — 보드 화면의 조립 문구가 원문과 바이트 단위�
   assert.strictEqual(
     `${t(l, "boardPage.action.epicAcceptedPrefix")} ${t(l, "board.epic.noTitle")} (P123) ${t(l, "boardPage.action.epicAcceptedSuffix")}`,
     "요구사항이 제목 없음 (P123) 에픽으로 접수되었습니다.",
+  );
+});
+
+// 6d818d48 — 위 ko 테스트의 짝. **조립식은 한 글자도 안 갈린다** — 갈리는 것은 조각의 몫뿐이라,
+// 같은 식에 `en`을 넣어 문장이 되는지만 본다. 숫자를 뒤로 보내고 콜론으로 받는 자리 셋
+// (건수 · 숨김 · 각주)과 라벨이 가운데 박혀 어순을 못 뒤집는 자리 셋(정렬 · 필터 검색 ·
+// 필터 0건)이 여기서 갈린다.
+test("6d818d48 — 보드 화면의 조립 문구가 영어에서도 문장이 된다(en)", () => {
+  const l = "en" as const;
+
+  // page.tsx `noMatch` — 쌍따옴표를 콜론이 받는다.
+  assert.strictEqual(`"query"${t(l, "boardPage.noMatch.querySuffix")}`, '"query": no matching tickets');
+  assert.strictEqual(t(l, "boardPage.noMatch.generic"), "No tickets match these filters");
+
+  // page.tsx 건수 줄 — 단위가 비어 숫자가 그대로 끝난다.
+  assert.strictEqual(
+    `${t(l, "boardPage.count.label")} ${5}${t(l, "boardPage.unit.count")}`,
+    "Tickets: 5",
+  );
+  assert.strictEqual(
+    `${t(l, "boardPage.count.label")} ${3} / ${5}${t(l, "boardPage.unit.count")}`,
+    "Tickets: 3 / 5",
+  );
+  assert.strictEqual(
+    `${t(l, "boardPage.count.hiddenPrefix")} ${12}${t(l, "boardPage.unit.count")} ${t(l, "boardPage.count.hiddenSuffix")}`,
+    "Hiding 12 done",
+  );
+  assert.strictEqual(
+    `(${t(l, "boardPage.undispatched.prefix")} ${3}${t(l, "boardPage.undispatched.suffix")})`,
+    "(Not dispatched: 3 — see notifications)",
+  );
+
+  // 라벨이 앞에 오는 셋 — 변수가 접두라 어순을 못 뒤집는다.
+  assert.strictEqual(`${t(l, "boardPage.column.status")} ${t(l, "boardPage.sort.ariaSuffix")}`, "Status sort");
+  assert.strictEqual(`${t(l, "boardPage.column.owner")} ${t(l, "boardPage.filter.searchSuffix")}`, "Owner search");
+  assert.strictEqual(
+    `${t(l, "boardPage.filter.noMatchPrefix")} ${t(l, "boardPage.column.owner")} ${t(l, "boardPage.count.zero")}`,
+    "No matching Owner 0",
+  );
+
+  // actions.ts — 필드 이름이 문장을 열므로 조각이 공백으로 연다.
+  assert.strictEqual(
+    `${t(l, "boardPage.column.title")}${t(l, "boardPage.action.noNewlineSuffix")}`,
+    "Title can't contain a line break.",
+  );
+  assert.strictEqual(
+    `${t(l, "boardPage.action.kindPrefix")} work · request · feedback ${t(l, "boardPage.action.kindMiddle")} bogus`,
+    "kind must be one of work · request · feedback — got: bogus",
+  );
+  assert.strictEqual(
+    `${t(l, "boardPage.action.unknownDepsPrefix")} abc123`,
+    "No such deps hash in the queue: abc123",
+  );
+  // 두 액션 파일이 같은 거절을 말하는 자리 — 글자가 갈리면 여기서 깨진다.
+  assert.strictEqual(
+    t(l, "boardPage.action.unknownProjectPrefix"),
+    t(l, "projectActions.unknownProjectPrefix"),
+  );
+  assert.strictEqual(
+    `${t(l, "boardPage.action.epicAcceptedPrefix")} ${t(l, "board.epic.noTitle")} (P123) ${t(l, "boardPage.action.epicAcceptedSuffix")}`,
+    "Request received in the No title (P123) epic.",
   );
 });
 
