@@ -8578,17 +8578,17 @@ when이 `사전을 안 타는 한글 0자`인데, 실제로 훑으면 **범위 �
 `usage.ts` 9로 세고 있다(새 적립이 아니다). 그 회차가 `epicCostChunk`에 `locale`을 얹으면
 **에픽 화면도 같이 부르는 쪽**이라는 것만 여기 적어 둔다.
 
-**다섯째는 반대 방향이다 - `en`을 채우면 그때 깨진다**(`e3d3b255`, 행 5 워커 화면 갈래).
+**다섯째는 반대 방향이다 - `en`을 채우니 그 자리가 깨졌다**(`e3d3b255`, 행 5 워커 화면 갈래).
 `components/workers-ui.tsx:667`이 `parseContextBlock`의 사유를 한국어 리터럴과 문자열로 맞대
 `블록이 없습니다`인지 판정하는데(`` reason === `${arr}=( … ) 블록이 없습니다` ``), 그 사유를
-만드는 `lib/workers.ts:299`는 이미 `t(locale, "workers.context.blockMissingSuffix")`를 탄다.
-지금은 그 키의 `en`이 비어 `ko` 폴백이 걸려 우연히 맞는다 - **행 9가 그 키의 `en`을 채우는
-순간** 영어에서 비교가 어긋나 `넣을 줄은 이것 하나입니다` 안내와 그 `CopyCommand`가 통째로
-사라진다. 서버가 이미 `missing: true`를 같이 내는데 화면 쪽 타입(`{ ok: false; reason: string }`)이
-그 자리에서 그것을 버리는 것이 원인이라, 고칠 자리는 사전이 아니라 그 프롭 타입이다 - **행 9의
-티켓이 같이 문다.** 같은 파일 목록에서 본 둘째는 `workers/page.tsx:251`의
-`<StatusBadge status={w.status} />`가 `locale`을 안 넘겨 `ko`로 떨어지는 것인데, 워커 넉 자
-(`running`-`idle`-`stopped`-`stale`)는 두 언어가 같은 글자라 지금은 화면에 안 드러난다.
+만드는 `lib/workers.ts:299`는 `t(locale, "workers.context.blockMissingSuffix")`를 탄다. 행 9
+(`4c195255`)가 그 키의 `en`을 `=( … ) block not found`로 채운 뒤부터 영어에서 비교가 어긋나
+`Just one line to add` 안내와 그 `CopyCommand`가 통째로 안 뜬다 - **지금 깨져 있다.** 서버가
+이미 `missing: true`를 같이 내는데 화면 쪽 타입(`{ ok: false; reason: string }`)이 그 자리에서
+그것을 버리는 것이 원인이라, 고칠 자리는 사전이 아니라 그 프롭 타입이다. 같은 파일 목록에서
+본 둘째는 `workers/page.tsx:251`의 `<StatusBadge status={w.status} />`가 `locale`을 안 넘겨
+`ko`로 떨어지는 것인데, 워커 넉 자(`running`-`idle`-`stopped`-`stale`)는 두 언어가 같은 글자라
+지금은 화면에 안 드러난다.
 
 - **행을 앞당기지 않는다.** 행 10은 정의 자체가 `마지막 묶음 뒤에 한 번`이라 앞당기면 그 회차를
   다시 해야 하고, 행 9는 93건이라 Done when 한 줄을 참으로 만들려고 묶음 순서를 뒤집을 값이
