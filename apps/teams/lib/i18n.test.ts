@@ -118,6 +118,7 @@ const FILLED = [
   "frontmatterRows.", // 9ff6dec3가 ko·en을 같이 채웠다(§비주얼 §50 §프론트매터 행 편집기)
   "boardPage.", // 6d818d48이 en을 채우고 여기 더했다(묶음 표 행 3의 보드 갈래)
   "findBar.", // 같은 티켓 — 찾기 바는 화면 접두가 아니라 파일 접두다(묶음 11과 같은 판단)
+  "home.", // c357313f가 en을 채우고 여기 더했다(묶음 표 행 6의 홈 갈래)
 ];
 
 test("이미 찬 묶음(설정·마감·셸)의 ko 키는 en에 하나도 안 빠졌다", () => {
@@ -908,6 +909,56 @@ test("6d818d48 — 보드 화면의 조립 문구가 영어에서도 문장이 �
   assert.strictEqual(
     `${t(l, "boardPage.action.epicAcceptedPrefix")} ${t(l, "board.epic.noTitle")} (P123) ${t(l, "boardPage.action.epicAcceptedSuffix")}`,
     "Request received in the No title (P123) epic.",
+  );
+});
+
+// c357313f — 홈 화면 갈래(§묶음 표 행 6). 조각 사이에 값이 끼는 자리가 다섯이고 영어는 어순이
+// 갈린다(이름이 조사를 안 받는다 · 시각이 주어가 된다) — 조립 결과를 여기서 문장으로 고정한다.
+test("c357313f — 홈 화면의 조립 문구가 영어에서도 문장이 된다(en)", () => {
+  const l = "en" as const;
+
+  // home/page.tsx 온보딩 예시 둘 — 워커 이름이 공백 없이 앞에 붙는다.
+  assert.strictEqual(
+    `w1${t(l, "home.example.workerActivitySuffix")}`,
+    "w1 — what is this worker working on right now?",
+  );
+  assert.strictEqual(
+    `w2${t(l, "home.example.workerEngineSuffix")}`,
+    "w2 — which engine does this worker run on?",
+  );
+
+  // home-ui.tsx 회차 0건 판정 문장 — 시각이 공백 없이 앞에 붙어 그 문장의 주어가 된다.
+  assert.strictEqual(
+    `8/30 09:00${t(l, "home.schedule.dueAtSuffix")} ${t(l, "home.schedule.liveNote")}`,
+    "8/30 09:00 is when the first run happens. Schedules only run while this app is open — tickets in the queue keep getting dispatched even when it is closed",
+  );
+  // 새 스케줄 다이얼로그 설명 — 가운데 조각이 위 판정 문장과 한 글자까지 같다.
+  assert.strictEqual(
+    `${t(l, "home.schedule.desc1")} ${t(l, "home.schedule.liveNote")}. ${t(l, "home.schedule.desc3")}`,
+    "At the time you set, the home agent carries out this prompt. Schedules only run while this app is open — tickets in the queue keep getting dispatched even when it is closed. Runs missed while the app was closed happen once, late, when you open it.",
+  );
+
+  // <WorkerNote>와 home-agent.ts의 busy 거절이 같은 접미를 나눠 쓴다 — 앞 조각만 갈린다.
+  assert.strictEqual(
+    `${t(l, "home.workerNote.running")}high0002${t(l, "home.workerNote.runningSuffix")}`,
+    "A running session takes no questions here · interrupt it from the high0002 detail page",
+  );
+  assert.strictEqual(
+    `${t(l, "home.errors.workerRunningPrefix")}high0002${t(l, "home.workerNote.runningSuffix")}`,
+    "A running worker session takes no questions here · interrupt it from the high0002 detail page",
+  );
+  assert.strictEqual(`${t(l, "home.workerNote.done")}high0002`, "Asks on in this session without worker permissions · high0002");
+
+  // home-agent.ts ask()의 이른 실패 — 괄호를 이 값이 열고 코드가 닫는다.
+  assert.strictEqual(
+    `${t(l, "home.errors.claudeNotFoundPrefix")}/usr/bin)`,
+    "Couldn't find claude on PATH. (PATH=/usr/bin)",
+  );
+
+  // home/actions.ts의 거절 — 같은 거절을 액션 파일들이 각자 든다.
+  assert.strictEqual(
+    t(l, "home.action.unknownProjectPrefix"),
+    t(l, "projectActions.unknownProjectPrefix"),
   );
 });
 

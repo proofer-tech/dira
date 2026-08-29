@@ -2507,6 +2507,101 @@ export const en: Record<string, string> = {
   "findBar.prev": "Previous",
   "findBar.next": "Next",
   "findBar.close": "Close",
+
+  // 홈 화면(§0-16 §발행 §묶음 표 행 6) — `f40e29e7`가 뽑은 `home.*` 74키의 영어다. 자리
+  // 설명은 위 `ko` 쪽 주석에 있고, 여기서는 **어순이 갈리는 조립 자리**만 다시 적는다.
+  "home.title": "Home",
+  "home.conversationsLabel": "Conversations",
+  "home.questionLabel": "Question",
+  "home.answerLabel": "Answer",
+  "home.newConversation": "New conversation",
+  "home.newConversationLocked": "This conversation is already empty — ask here",
+  "home.showMore": "Show more",
+  "home.schedulesLabel": "Schedules",
+  "home.workerSessionsLabel": "Worker sessions",
+  "home.stop": "Stop",
+  "home.stopped": "Stopped",
+  "home.answering": "Answering",
+  "home.activity.thinking": "Thinking",
+  "home.scrollToLatest": "Jump to latest",
+  "home.askPlaceholder": "Ask anything about this project",
+  "home.sending": "Sending…",
+  "home.send": "Send",
+  "home.answer.retry": "Answer again",
+  "home.answer.copy": "Copy",
+
+  "home.onboarding.title": "Ask about this project",
+  "home.onboarding.body":
+    "It reads the tickets and the project resources — personas, protocols, workers — and answers. You can also have it change those resources.",
+  "home.example.ticketsWhy": "Why aren't the tickets awaiting an answer moving?",
+  "home.example.summarizeProtocols": "Summarize the protocols in this project",
+  // 워커 이름 뒤에 공백 없이 붙는 접미(`${워커이름}${이 키}`) — 한국어는 이름 뒤에 `워커는`이
+  // 조사를 받지만 영어는 이름이 그대로 주어라, 줄표로 끊고 `this worker`로 되받는다.
+  "home.example.workerActivitySuffix": " — what is this worker working on right now?",
+  "home.example.workerEngineSuffix": " — which engine does this worker run on?",
+
+  "home.fail.spawn.title": "Couldn't get an answer — the session didn't start",
+  "home.fail.spawn.next": "Check that the engine CLI is on PATH",
+  "home.fail.auth.title": "Couldn't get an answer — claude has no auth",
+  "home.fail.auth.next": "Put a long-lived token in Settings, at the right of the header, and ask again.",
+  "home.fail.timeout.title": "Couldn't get an answer — the session ended without one",
+  "home.fail.timeout.next": "Send it again. What you wrote is still there.",
+  "home.fail.busy.title": "Couldn't send — an answer is still running",
+  "home.fail.busy.next": "This field opens again when it finishes. No refresh needed.",
+  "home.fail.noTranscript.title": "Couldn't find the answer — there is no transcript",
+  "home.fail.noTranscript.next": "Ask again in a new conversation.",
+  "home.fail.other.title": "Couldn't get an answer",
+
+  "home.errors.emptyQuestion": "The question is empty.",
+  "home.errors.claudeNotFoundPrefix": "Couldn't find claude on PATH. (PATH=",
+  "home.errors.emptyAnswer": "The engine gave back an empty answer.",
+  // 해시가 뒤에 붙고 `home.workerNote.runningSuffix`가 그 뒤를 닫는다 — 세 조각이 한 문장이라
+  // 이 값은 `the `까지 열어 두고 끝낸다(`<WorkerNote>`의 짝과 글자를 맞춘다).
+  "home.errors.workerRunningPrefix": "A running worker session takes no questions here · interrupt it from the ",
+
+  "home.workerNote.running": "A running session takes no questions here · interrupt it from the ",
+  "home.workerNote.done": "Asks on in this session without worker permissions · ",
+  "home.workerNote.runningSuffix": " detail page",
+
+  "home.schedule.new": "New schedule",
+  "home.schedule.emptyTitle": "No runs yet",
+  "home.schedule.overdueNote": "The time has passed, so this schedule won't run — delete it and make a new one",
+  // 다이얼로그 설명 둘째 문장과 **한 글자까지 같다** — 마침표는 이 값에 안 넣는다(`ko`와 같다).
+  "home.schedule.liveNote":
+    "Schedules only run while this app is open — tickets in the queue keep getting dispatched even when it is closed",
+  // 앞에 `8/30 09:00` 같은 시각이 공백 없이 붙어 한 문장이 된다.
+  "home.schedule.dueAtSuffix": " is when the first run happens.",
+  "home.schedule.locked": "You can't talk to this schedule before its first run",
+  "home.schedule.kind.once": "Once",
+  "home.schedule.kind.daily": "Daily",
+  "home.schedule.kind.weekly": "Weekly",
+  "home.schedule.kind.monthly": "Monthly",
+  "home.schedule.kindLabel": "Repeat",
+  "home.schedule.timeLabel": "Time",
+  "home.schedule.promptLabel": "Prompt",
+  "home.schedule.promptPlaceholder":
+    "Sweep the tickets awaiting an answer and file a request for anything a human has to answer.",
+  "home.schedule.dayLimitNote": "Some months have no 29th to 31st, so you can't pick those days.",
+  "home.schedule.createFailTitle": "Couldn't create the schedule",
+  "home.schedule.invalidWhenOrPrompt": "Check the time or the prompt.",
+  "home.schedule.desc1": "At the time you set, the home agent carries out this prompt.",
+  "home.schedule.desc3": "Runs missed while the app was closed happen once, late, when you open it.",
+  "home.schedule.deleteTrigger": "Delete schedule",
+  "home.schedule.deleteTitle": "This deletes the schedule",
+  "home.schedule.deleteNote": "You won't be able to reopen past runs on this screen.",
+  "home.schedule.deleteConfirm": "Delete",
+
+  // 요일 칩 일곱 — 좁은 칸이라 세 글자 약어로 맞춘다(`bell.due`의 약어와 같은 판단).
+  "home.weekday.mon": "Mon",
+  "home.weekday.tue": "Tue",
+  "home.weekday.wed": "Wed",
+  "home.weekday.thu": "Thu",
+  "home.weekday.fri": "Fri",
+  "home.weekday.sat": "Sat",
+  "home.weekday.sun": "Sun",
+
+  // `projectActions.unknownProjectPrefix`와 **같은 글자다** — 같은 거절을 액션 파일들이 각자 든다.
+  "home.action.unknownProjectPrefix": "Not a registered project:",
 };
 
 const DICTS: Record<Locale, Record<string, string>> = { ko, en };
