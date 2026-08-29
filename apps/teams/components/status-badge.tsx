@@ -131,14 +131,20 @@ export const statusLabel = (status: Status, locale: Locale) => t(locale, STATUS[
 
 /** `kind:` → 화면 문구(§1 보드 §보드가 `kind`를 한글로 알려 준다). 선택지 목록이 아니라 라벨
  *  대응표다 — `kind`는 프로젝트마다 다르므로 표에 없는 값은 파일에 적힌 그대로 그린다
- *  (`KIND_LABELS[v] ?? v`). 원래 보드(`(board)/page.tsx`)의 지역 상수였다가 여기로 옮겼다 —
+ *  (`kindLabel(v, locale)`). 원래 보드(`(board)/page.tsx`)의 지역 상수였다가 여기로 옮겼다 —
  *  페르소나 상세 활동 탭(§비주얼 §66 ⑧)이 "같은 사실은 한 자리"(§0-9) 원칙으로 같은 표를
- *  쓴다. 로케일을 안 타는 이유도 위 `STATUS`와 같다 — 이 넷은 아직 en 사전이 없다. */
-export const KIND_LABELS: Record<string, string> = {
-  work: "작업",
-  request: "요구사항",
-  feedback: "피드백",
-  answer: "답변",
+ *  쓴다. `lib/i18n.ts`의 `kind.label.*` 사전이 값의 정본이다(§0-16 §장치) — `locale`은
+ *  필수다(위 `StatusBadge`의 같은 규칙과 같은 근거). */
+const KIND_LABEL_KEYS: Record<string, string> = {
+  work: "kind.label.work",
+  request: "kind.label.request",
+  feedback: "kind.label.feedback",
+  answer: "kind.label.answer",
+};
+
+export const kindLabel = (kind: string, locale: Locale) => {
+  const key = KIND_LABEL_KEYS[kind];
+  return key ? t(locale, key) : kind;
 };
 
 /** `답변 대기 · <n>일`의 경과일. 기준은 `birth`가 아니라 `mtime`이다 — PM이 `awaiting`을 걸며

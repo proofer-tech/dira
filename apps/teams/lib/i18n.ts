@@ -430,6 +430,13 @@ export const ko: Record<string, string> = {
   "status.label.polling": "대기중",
   "status.label.pollingOverdue": "상한 지남",
 
+  // `kind:` 넉 자(§0-16 §장치, `status-badge.tsx`의 `KIND_LABELS`) — 보드 분류 칸과 페르소나
+  // 상세 활동 탭이 같은 표를 쓴다. 표에 없는 값은 호출부가 원문 그대로 그린다.
+  "kind.label.work": "작업",
+  "kind.label.request": "요구사항",
+  "kind.label.feedback": "피드백",
+  "kind.label.answer": "답변",
+
   // 진행 기록 안 계획 아코디언(§비주얼 §59 ⑩) — 왼쪽 칸 상태 글리프의 `sr-only` 낱말 넷.
   // `기록 n건`은 §9 묶음 줄과 같은 문자열이라 여기 안 올린다(그 절의 범위 판정).
   "progress.plan.pending": "미착수",
@@ -2850,6 +2857,12 @@ export const en: Record<string, string> = {
   "status.label.disconnected": "Disconnected",
   "status.label.polling": "Polling",
   "status.label.pollingOverdue": "Deadline passed",
+
+  // `kind:` 넉 자 — ko와 같은 자리(위 참고).
+  "kind.label.work": "Work",
+  "kind.label.request": "Request",
+  "kind.label.feedback": "Feedback",
+  "kind.label.answer": "Answer",
 
   "progress.plan.pending": "Not started",
   "progress.plan.cancelled": "Cancelled",

@@ -103,7 +103,7 @@ import { skillUploadError } from "@/lib/skill-upload-limit";
 import type { Memory, Skill } from "@/lib/skills";
 import { applyLeaderOverride, orderedSquadMembers, sameSquadMembers } from "@/lib/squads";
 import { agoLabel, decodeHash, engineMissing, PERSONA_COLORS, personaDotClass } from "@/lib/urls";
-import { daysSince, KIND_LABELS } from "@/components/status-badge";
+import { daysSince, kindLabel } from "@/components/status-badge";
 import type {
   PersonaActivity,
   PersonaNowItem,
@@ -1294,7 +1294,7 @@ function ActivityNowSection({
       ) : (
         items.map((item) => (
           <ActivityRow key={item.hash} projectId={projectId} hash={item.hash} title={item.title}>
-            <span className="shrink-0">{KIND_LABELS[item.kind] ?? item.kind}</span>
+            <span className="shrink-0">{kindLabel(item.kind, locale)}</span>
             {item.blocked && <span className="shrink-0">{t("persona.activity.blocked")}</span>}
             {item.worker && <span className="shrink-0 font-mono">{item.worker}</span>}
             {item.assignedAt && (
@@ -1375,7 +1375,7 @@ function ActivityRecentSection({
       ) : (
         items.map((item) => (
           <ActivityRow key={item.hash} projectId={projectId} hash={item.hash} title={item.title}>
-            <span className="shrink-0">{KIND_LABELS[item.kind] ?? item.kind}</span>
+            <span className="shrink-0">{kindLabel(item.kind, locale)}</span>
             <span className="shrink-0">{agoLabel(nowMs - item.closedAt, locale)}</span>
             {item.durationMin !== null && (
               <span className="shrink-0 font-mono">{Math.round(item.durationMin)}m</span>

@@ -46,7 +46,7 @@ import { EpicSidebar } from "@/components/epic-sidebar";
 import { PersonaBadge, SquadBadge } from "@/components/persona-badge";
 import { PriorityMeter } from "@/components/priority-meter";
 import { TitleRefs } from "@/components/queue-ref";
-import { DepBadge, KIND_LABELS, StatusBadge, daysSince, statusLabel } from "@/components/status-badge";
+import { DepBadge, StatusBadge, daysSince, kindLabel, statusLabel } from "@/components/status-badge";
 import { AnswerDialog, NewTicketDialog, RequestDialog } from "@/components/ticket-ui";
 import { WipWorker, WorkerChips } from "@/components/worker-mark";
 import { Badge } from "@/components/ui/badge";
@@ -477,7 +477,7 @@ export default async function Board({
     ...query.kind.map((v) => ({
       param: "kind",
       value: v,
-      text: `${t(locale, "boardPage.column.kind")}: ${KIND_LABELS[v] ?? v}`,
+      text: `${t(locale, "boardPage.column.kind")}: ${kindLabel(v, locale)}`,
     })),
     ...query.persona.map((v) => ({
       param: "persona",
@@ -707,7 +707,7 @@ export default async function Board({
           `flex-wrap`은 워커 마크 몫이다(§비주얼 §19 잘림): 워커 이름은
           식별자라 안 자르고, 길면 카드가 한 줄 자라며 배지를 안 민다 */}
       <span className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
-        {t.kind ? (KIND_LABELS[t.kind] ?? t.kind) : "—"} ·
+        {t.kind ? kindLabel(t.kind, locale) : "—"} ·
         {(() => {
           const assignee = assigneeOf(t);
           if (!assignee.name) return "—";
@@ -853,7 +853,7 @@ export default async function Board({
             <BoardFilter
               param="kind"
               label={t(locale, "boardPage.column.kind")}
-              options={kinds.map((k) => ({ value: k, label: KIND_LABELS[k] ?? k }))}
+              options={kinds.map((k) => ({ value: k, label: kindLabel(k, locale) }))}
             />
             <BoardFilter
               param="persona"
@@ -1231,7 +1231,7 @@ export default async function Board({
                               </span>
                             </TableCell>
                             <TableCell className="px-3 py-0 text-sm">
-                              {t.kind ? (KIND_LABELS[t.kind] ?? t.kind) : "—"}
+                              {t.kind ? kindLabel(t.kind, locale) : "—"}
                             </TableCell>
                             {/* 배지가 셀의 `text-sm`을 대체한다(§비주얼 §12) — 셀에 남은 `text-sm`은
                                 배지가 없는 `—`(담당 없음) 한 글자용이다. Badge는 제 `text-xs`를 갖는다 */}
