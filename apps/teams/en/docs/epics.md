@@ -296,16 +296,14 @@ unfolded, none dropped. Where you go to unfold the names the sidebar hid behind 
 Below that again is the body of `README.md` after its first line.
 
 **At the very end of that line, after the worker names, comes this epic's token count.** It is two
-pieces, `이 에픽 737M 토큰` ("this epic, 737M tokens") followed by
-`토큰량을 아는 티켓 58 / 64` ("tickets whose token count is known, 58 of 64"). Those strings are
-Korean whatever language the site is in. The first number is the tokens of this epic's tickets
-added up. The fraction after it tells you how many of them are actually known. **When the numerator
-is smaller than the denominator, this epic really burned more.** The remaining tickets have no
-session log, so they did not even enter the sum as zero. If no fraction shows at all, every one is
-known, and an epic with no tickets does not get the piece at all. If not one ticket is known, the
-number's place reads `모름` ("unknown"). What this number counted, what it does not say, and why
-`모름` appears are in [The screens](/docs/screens), in the passage about the token count in the
-header.
+pieces, `This epic 737M tokens` and then `· known token count for 58 of 64 tickets`. Both follow the
+language the site is in. The first number is the tokens of this epic's tickets added up. The
+fraction after it tells you how many of them are actually known. **When the numerator is smaller
+than the denominator, this epic really burned more.** The remaining tickets have no session log, so
+they did not even enter the sum as zero. If no fraction shows at all, every one is known, and an
+epic with no tickets does not get the piece at all. If not one ticket is known, the number's place
+reads `Unknown`. What this number counted, what it does not say, and why `Unknown` appears are in
+[The screens](/docs/screens), in the passage about the token count in the header.
 
 **Drag a card to another epic and the token count follows it.** The only thing that changes is one
 `epic:` line, but the two epics' totals shift by that ticket's tokens right then. The value before
