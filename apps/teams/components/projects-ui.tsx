@@ -4,8 +4,8 @@
  *  해석 결과 표(`ConfigTable`) · 목록 표(`ProjectRows`) · 행 액션(설정 다이얼로그).
  *
  *  헤더·등록 폼·레지스트리 오류 배너는 여기 없다 — 홈(`app/(site)/landing.tsx`)이 랜딩 헤더의
- *  그 자리에 직접 조립한다(§한 코드베이스 §홈 · §비주얼 §46). `CreateForm`·`CreateDialog`·
- *  `CREATE_BLURB`를 export하는 이유가 그 재사용이다.
+ *  그 자리에 직접 조립한다(§한 코드베이스 §홈 · §비주얼 §46). `CreateForm`·`CreateDialog`를
+ *  export하는 이유가 그 재사용이다.
  *
  *  한 파일에 있는 이유: 해석 결과 표를 생성 직후와 행 액션의 설정 다이얼로그가 **같은 표**로
  *  쓴다(DESIGN.md §7). 파일을 쪼개면 두 자리가 갈린다. fs 접근은 전부 서버 액션 뒤에 있다. */
@@ -160,12 +160,6 @@ export function ConfigTable({ view }: { view: ResolvedView }) {
 }
 
 // ── 생성 폼 (DESIGN.md §0-3) ────────────────────────────────────────────────
-
-/** 생성이 무엇을 하는지 한 줄. 다이얼로그에서는 `DialogDescription`, 0건 인라인 카드에서는
- *  `h2` 아래 `text-xs text-muted-foreground`다 — 같은 문장이 두 그릇에서 같아야 한다(§비주얼 §7).
- *  홈(`landing.tsx`)의 0건 온보딩도 같은 자리에 같은 문장을 쓴다 — export해 재타이핑하지 않는다. */
-export const CREATE_BLURB =
-  ".dira를 만들고 워커 하나를 crontab에 올립니다 — 30초 뒤부터 티켓을 물어갑니다.";
 
 /** 없는 큐를 만든다. **새 컴포넌트·새 색 토큰 0개** — 필드 사양은 §0-3 표 그대로고
  *  결과는 등록과 같은 해석 결과 표다(§비주얼 §7 생성 다이얼로그 항).

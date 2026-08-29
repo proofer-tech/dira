@@ -5,7 +5,7 @@ import Link from "@/components/link";
 import Typed from "typed.js";
 import { Pause, Play, TriangleAlert } from "lucide-react";
 import { registerProject, type CreateState, type RegisterState } from "@/app/actions";
-import { CREATE_BLURB, ConfigTable, CreateDialog, CreateForm } from "@/components/projects-ui";
+import { ConfigTable, CreateDialog, CreateForm } from "@/components/projects-ui";
 import { CopyCommand } from "@/components/copy-command";
 import { PickPath } from "@/components/path-picker";
 import { SettingsDialog, type AuthView } from "@/components/settings-dialog";
@@ -494,7 +494,7 @@ export default function Landing({
               <Card className="mt-4 max-w-3xl gap-4 p-4">
                 <div className="space-y-1">
                   <h2 className="text-sm font-medium">{t("landing.projects.newProjectTitle")}</h2>
-                  <p className="text-xs text-muted-foreground">{CREATE_BLURB}</p>
+                  <p className="text-xs text-muted-foreground">{t("project.create.blurb")}</p>
                 </div>
                 <CreateForm home={home ?? ""} onCreated={handleCreated} onRegister={openRegister} />
               </Card>
