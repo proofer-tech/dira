@@ -16,6 +16,7 @@ import { accessSync, constants, cpSync, existsSync, readFileSync, rmSync, statSy
 import { createServer } from "node:net";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { classifyLink } from "./link.ts";
 import { cachedNotes, cacheNotes, newNotesCache, releaseNotes } from "./release-notes.ts";
 import { decideRevive, isExternalDeath } from "./revive.ts";
 
@@ -273,18 +274,19 @@ function openWindow(origin: string): BrowserWindow {
   win.webContents.on("unresponsive", () => console.log("[dira] 렌더러가 응답하지 않습니다 — 되살리기는 걸지 않습니다"));
   win.webContents.on("responsive", () => console.log("[dira] 렌더러가 다시 응답합니다"));
 
-  const external = (url: string) => {
-    const u = URL.parse(url);
-    if (u && (u.protocol === "http:" || u.protocol === "https:")) shell.openExternal(url);
-  };
-
+  // 고정하는 것 4 개정 — `origin`(창을 만들 때 받은 값)이 아니라 부를 때마다 지금
+  // `readyOrigin`을 `classifyLink`에 넘긴다. 되살리기로 포트가 바뀐 뒤에도 이 창을 그대로
+  // 재사용하므로(`showWindow()`), 여기서 옛 오리진을 클로저에 담아두면 그 뒤로는 앱 안의
+  // 주소가 전부 밖으로 갈린다.
   win.webContents.on("will-navigate", (e, url) => {
-    if (url === origin || url.startsWith(`${origin}/`)) return;
+    const action = classifyLink(url, readyOrigin!);
+    if (action === "internal") return;
     e.preventDefault();
-    external(url);
+    if (action === "external") shell.openExternal(url);
   });
   win.webContents.setWindowOpenHandler(({ url }) => {
-    external(url); // 새 창은 무조건 거부한다. 밖으로 가는 것만 기본 브라우저로 보낸다
+    // 새 창은 무조건 거부한다. 밖으로 가는 것만 기본 브라우저로 보낸다
+    if (classifyLink(url, readyOrigin!) === "external") shell.openExternal(url);
     return { action: "deny" };
   });
 
@@ -321,14 +323,15 @@ type GateItem = { project: string; tree: string; count: number; at: string };
  *  0건인 큐에서 두 번째 응답의 새 티켓을 놓치거나, 반대로 첫 응답을 통째로 알린다. */
 let seen: Set<string> | null = null;
 
-function notify(item: Awaiting, origin: string) {
+function notify(item: Awaiting) {
   const n = new Notification({
     title: "답변 대기",
     body: `${item.title || item.hash} — ${item.projectName}`,
   });
+  // 클릭은 나중에 온다 — 만들 때가 아니라 그 시점의 `readyOrigin`을 읽는다(고정하는 것 4 개정)
   n.on("click", () => {
-    const url = `${origin}/p/${encodeURIComponent(item.project)}/tickets/${encodeURIComponent(item.stem)}`;
-    if (!win || win.isDestroyed()) win = openWindow(origin);
+    const url = `${readyOrigin}/p/${encodeURIComponent(item.project)}/tickets/${encodeURIComponent(item.stem)}`;
+    if (!win || win.isDestroyed()) win = openWindow(readyOrigin!);
     win.loadURL(url);
     win.show();
     win.focus();
@@ -339,9 +342,9 @@ function notify(item: Awaiting, origin: string) {
 
 /** 폴링 실패는 삼키되 로그로 남긴다 — 서버가 죽었거나 응답이 깨져도 앱은 계속 돈다.
  *  `Array.isArray`까지가 신뢰 경계다: 응답이 배열이 아니면 아래 루프가 던져 앱이 죽는다. */
-async function pollAwaiting(origin: string) {
+async function pollAwaiting() {
   try {
-    const res = await fetch(`${origin}/api/awaiting`, { signal: AbortSignal.timeout(10_000) });
+    const res = await fetch(`${readyOrigin}/api/awaiting`, { signal: AbortSignal.timeout(10_000) });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const items: unknown = await res.json();
     if (!Array.isArray(items)) throw new Error(`배열이 아닌 응답: ${JSON.stringify(items).slice(0, 200)}`);
@@ -352,7 +355,7 @@ async function pollAwaiting(origin: string) {
       }
     }
     const first = seen === null;
-    if (!first) for (const [key, item] of now) if (!seen!.has(key)) notify(item, origin);
+    if (!first) for (const [key, item] of now) if (!seen!.has(key)) notify(item);
     seen = new Set(now.keys());
     if (first) console.log(`[dira] 답변 대기 ${now.size}건으로 씨를 뿌렸습니다 (알리지 않음)`);
   } catch (e) {
@@ -364,14 +367,15 @@ async function pollAwaiting(origin: string) {
  *  (§4-14 §표식 파일) 키가 `project` 하나다. */
 let seenGate: Set<string> | null = null;
 
-function notifyGate(item: GateItem, origin: string) {
+function notifyGate(item: GateItem) {
   const n = new Notification({
     title: "디스패치 보류",
     body: `${item.project} — 커밋 안 된 변경 ${item.count}건`,
   });
+  // 클릭은 나중에 온다 — 만들 때가 아니라 그 시점의 `readyOrigin`을 읽는다(고정하는 것 4 개정)
   n.on("click", () => {
-    const url = `${origin}/p/${encodeURIComponent(item.project)}`;
-    if (!win || win.isDestroyed()) win = openWindow(origin);
+    const url = `${readyOrigin}/p/${encodeURIComponent(item.project)}`;
+    if (!win || win.isDestroyed()) win = openWindow(readyOrigin!);
     win.loadURL(url);
     win.show();
     win.focus();
@@ -381,9 +385,9 @@ function notifyGate(item: GateItem, origin: string) {
 }
 
 /** `pollAwaiting`과 같은 신뢰 경계·차집합·씨뿌리기 규칙이다. */
-async function pollGate(origin: string) {
+async function pollGate() {
   try {
-    const res = await fetch(`${origin}/api/gate`, { signal: AbortSignal.timeout(10_000) });
+    const res = await fetch(`${readyOrigin}/api/gate`, { signal: AbortSignal.timeout(10_000) });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const items: unknown = await res.json();
     if (!Array.isArray(items)) throw new Error(`배열이 아닌 응답: ${JSON.stringify(items).slice(0, 200)}`);
@@ -392,7 +396,7 @@ async function pollGate(origin: string) {
       if (i && typeof i.project === "string") now.set(i.project, i);
     }
     const first = seenGate === null;
-    if (!first) for (const [key, item] of now) if (!seenGate!.has(key)) notifyGate(item, origin);
+    if (!first) for (const [key, item] of now) if (!seenGate!.has(key)) notifyGate(item);
     seenGate = new Set(now.keys());
     if (first) console.log(`[dira] 디스패치 보류 ${now.size}건으로 씨를 뿌렸습니다 (알리지 않음)`);
   } catch (e) {
@@ -437,10 +441,10 @@ function holdSleep(on: boolean) {
 /** 폴링 실패는 **놓는다**(N6). 잡은 채로 두면 서버가 죽은 뒤에도 맥이 영영 안 자는데 그 상태는
  *  화면이 없어서 아무도 못 본다 — 놓으면 큐가 멈추고 **그건 아침에 보인다.**
  *  토글이 꺼져 있으면 서버에 묻지도 않는다(30초마다 도는 fetch가 30초마다 도는 로그가 된다). */
-async function pollWork(origin: string) {
+async function pollWork() {
   if (!existsSync(noSleepFlag())) return holdSleep(false);
   try {
-    const res = await fetch(`${origin}/api/work`, { signal: AbortSignal.timeout(10_000) });
+    const res = await fetch(`${readyOrigin}/api/work`, { signal: AbortSignal.timeout(10_000) });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const body: unknown = await res.json();
     // 신뢰 경계. `busy`가 boolean이 아니면 판정이 아니라 사고다 — truthy로 읽지 않는다.
@@ -456,12 +460,12 @@ async function pollWork(origin: string) {
 
 /** N6 토글. 켜면 30초를 안 기다리고 그 자리에서 한 번 묻는다(U2가 켠 직후 한 번 검사하는 그
  *  관용구다). 끄면 `pollWork`의 첫 줄이 바로 놓는다. */
-function setNoSleep(on: boolean, origin: string) {
+function setNoSleep(on: boolean) {
   const flag = noSleepFlag();
   if (on) writeFileSync(flag, "");
   else rmSync(flag, { force: true });
   console.log(`[dira] 남은 일이 있으면 잠자기 방지 ${on ? "켬" : "끔"} — ${flag} ${on ? "만듦" : "지움"}`);
-  pollWork(origin);
+  pollWork();
 }
 
 /** N3 경로 피커. main이 하는 일은 다이얼로그를 띄우고 **고른 절대경로 하나**를 돌려주는 것뿐이다
@@ -778,9 +782,9 @@ function trayMenu(): Menu {
       label: "남은 일이 있으면 잠자기 방지",
       type: "checkbox",
       checked: existsSync(noSleepFlag()),
-      // 고정하는 것 9 되살리기 뒤에도 지금 오리진(`readyOrigin`)을 본다 — 열 때마다 새로
-      // 만드는 메뉴라 트레이가 뜬 뒤 자식이 재시작됐어도 옛 오리진을 들고 있지 않는다.
-      click: (item) => setNoSleep(item.checked, readyOrigin!),
+      // `pollWork()`가 부를 때마다 지금 `readyOrigin`을 본다 — 되살리기 뒤 자식이
+      // 재시작됐어도 옛 오리진을 들고 있지 않는다(고정하는 것 4 개정).
+      click: (item) => setNoSleep(item.checked),
     },
     {
       // U2 (R5·R8). N4 옆이고 상태의 원본은 마커 파일이라 여기도 열 때마다 읽는다.
@@ -1002,13 +1006,15 @@ async function boot() {
     }, UPDATE_POLL_MS);
   }
 
-  await pollAwaiting(origin); // 첫 응답 = 씨 뿌리기
-  await pollGate(origin); // 마찬가지로 첫 응답은 씨 뿌리기
-  // 타이머는 하나다 (N6 · N2 둘째 사건) — 같은 30초를 나눠 쓴다.
+  await pollAwaiting(); // 첫 응답 = 씨 뿌리기
+  await pollGate(); // 마찬가지로 첫 응답은 씨 뿌리기
+  // 타이머는 하나다 (N6 · N2 둘째 사건) — 같은 30초를 나눠 쓴다. 셋 다 부를 때마다 지금
+  // `readyOrigin`을 읽으므로(고정하는 것 4 개정) 되살리기로 포트가 바뀐 뒤에도 죽은 포트만
+  // 물어보지 않는다.
   setInterval(() => {
-    pollAwaiting(origin);
-    pollGate(origin);
-    pollWork(origin);
+    pollAwaiting();
+    pollGate();
+    pollWork();
   }, POLL_MS);
 }
 

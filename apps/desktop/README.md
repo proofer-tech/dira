@@ -278,7 +278,11 @@ SVG에서 직접 래스터하는 것이 그 절이 넘긴 실측이다.
    `before-quit`이 세운 `quitting` 플래그만 그 가로채기를 푼다. ⌘Q·트레이 `종료`가 같은 문으로 간다.
 4. **창은 자기가 띄운 오리진만 연다.** `contextIsolation: true`·`nodeIntegration: false`,
    `will-navigate`·`setWindowOpenHandler`가 밖을 전부 거부하고 http(s)만 `shell.openExternal`로
-   내보낸다.
+   내보낸다. **"자기가 띄운"은 창을 만든 시점이 아니라 지금이다**(개정 `3d52b6ef`) — 대조하는
+   오리진은 `classifyLink()`에 부를 때마다 지금 `readyOrigin`을 넘긴 값이다. 규칙 9의 되살리기가
+   포트를 바꾼 뒤에도 되살아난 오리진의 주소가 안으로, 옛 오리진의 주소가 밖으로 갈린다. 같은
+   자리로 30초 폴링 셋(`답변 대기`·`디스패치 보류`·`작업 중`)과 알림 클릭이 여는 주소도 지금
+   `readyOrigin`을 읽는다.
 5. **판정을 main에서 다시 구현하지 않는다.** 알림이 쓰는 `답변 대기`는 서버가 `lib/queue.ts`로
    판정한다 — main은 `GET /api/awaiting`을 물어본다.
 7. **자식 서버는 독에 타일을 갖지 않는다.** 서버를 `process.execPath`(`Contents/MacOS/dira`)로
