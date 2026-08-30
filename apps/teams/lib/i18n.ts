@@ -2982,6 +2982,9 @@ export const en: Record<string, string> = {
   "worker.defect.noExec.title": "No exec bit",
   "worker.defect.noExec.why":
     "cron can't start it — Permission denied. tick.sh never runs, so runner.log never gains a line and open tickets just sit there.",
+  // `cwdDefects`의 `detail`(티켓 `d64fa06f`) — 조립은 `${file} ${detailSuffix}`라 영어도 파일
+  // 경로가 먼저 온다. 조각 하나로 충분한 자리다.
+  "worker.defect.noExec.detailSuffix": "has no exec bit.",
 
   // 프로토콜 화면(§0-16 §발행 §묶음 표 7, `7a86fd5c`) — `ko`는 `93c106b3`이 넣었다. 어순이
   // 뒤집혀 조각의 몫이 갈린 자리는 그 자리마다 주석을 달았고, 조립 결과는 `i18n.test.ts`가
@@ -3664,6 +3667,18 @@ export const en: Record<string, string> = {
   "workers.defect.noTicketCwd.title": "No TICKET_CWD",
   "workers.defect.noTicketCwd.why":
     "It commits in the receiving tree as it is — leave an uncommitted trace and the dispatch gate holds every worker in the queue.",
+  // `cwdDefects`가 조립하는 `WorkerDefect.detail` 넷(티켓 `d64fa06f`) — 가운데가 실제 경로다.
+  // 한국어는 경로 뒤에 조사가 붙고 영어는 경로가 주어로 먼저 서는 자리라 조각의 몫이 갈린다.
+  // `sharedCwd.detailMid`가 공백으로 시작하는 것은 워커 이름 목록에 바로 이어 붙기 때문이고
+  // (`${others.join("·")}${detailMid} ${cwd}`), 한국어는 조사라 그 공백이 없다.
+  "workers.defect.noTicketCwd.detailPrefix": "No TICKET_CWD line, so this worker works in",
+  "workers.defect.noTicketCwd.detailSuffix": "instead of a worktree of its own.",
+  "workers.defect.missingCwd.detailSuffix": "doesn't exist, or isn't a directory.",
+  "workers.defect.missingLink.detailMissingSuffix":
+    "is missing. It has to be a symlink to the queue root.",
+  "workers.defect.missingLink.detailWrongMid": "resolves to",
+  "workers.defect.missingLink.detailWrongSuffix": "instead of the queue root.",
+  "workers.defect.sharedCwd.detailMid": " and this worker share one working directory:",
   "workers.tokenSummary.label": "Tokens, last 5 hours",
   "workers.tokenSummary.unaccountedPrefix": "· outside this total:",
   "workers.tokenSummary.unaccountedSuffix": " session(s)",
@@ -3679,6 +3694,11 @@ export const en: Record<string, string> = {
   "workers.limitBadge.title":
     "No Claude account is usable right now — once this time passes, the next tick opens a session",
   "workers.limitBadge.labelPrefix": "Waiting on limit ·",
+  // `firstWorkerCmd`의 자리표시자(`cp <...>/worker.sh.example`)와 `worktreeCmds` 셋째 줄의 꼬리
+  // 주석(티켓 `d64fa06f`). 뒤엣것은 ``# `l` ``에 바로 이어 붙어 공백으로 시작한다 — 한국어는
+  // 조사라 그 공백이 없다.
+  "workers.firstWorkerCmd.repoPlaceholder": "path to the dira repo",
+  "workers.worktreeCmds.lsHintSuffix": " has to be the first character",
   "workers.defectAlert.worktreeHintPrefix": "The prep commands create",
   "workers.defectAlert.worktreeHintMid": "— this project's layout (§4-2). If",
   "workers.defectAlert.worktreeHintSuffix":

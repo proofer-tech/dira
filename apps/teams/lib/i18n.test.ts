@@ -175,6 +175,14 @@ const FILLED = [
   // (`siteError.`·`siteNotFound.`), 그리고 부품 하나(`languageToggle.`)라 줄이 일곱이다.
   // `siteError.`·`siteNotFound.`가 이미 찬 `errorBoundary.`·`notFound.`와 따로 서는 것은
   // 공개 사이트와 앱 화면이 다른 파일이어서다(§0-24 §범위 표).
+  // d64fa06f가 en을 채우고 여기 더했다(묶음 표 행 9의 남은 열 개 - 워커 결함 조각 여덟 개와
+  // 첫 워커 명령의 자리표시자, 워크트리 검증 줄의 꼬리 주석). `workers.`를 통째로 안 적는 것은
+  // 아직 안 찬 워커 화면 묶음이 같은 접두를 쓰기 때문이고, 그래서 하위 접두 셋만 적는다.
+  // `worker.defect.`가 따로 서는 것은 접두가 단수인 키 하나(`noExec.*`)가 있어서다.
+  "worker.defect.",
+  "workers.defect.",
+  "workers.firstWorkerCmd.",
+  "workers.worktreeCmds.",
   "landing.",
   "manualSidebar.",
   "manualShell.",

@@ -555,6 +555,14 @@ test("작업 디렉터리 결함 — 3종을 판정하고 정상 워커에는 �
   assert.strictEqual(by("ok").cwd, tree("ok"));
   assert.match(by("bait").defects[0].detail, /큐 루트가 아니라/);
   assert.deepStrictEqual(by("s1").defects[0].detail, `s2와 같은 경로입니다: ${tree("shared")}`);
+  // 같은 줄의 영어(티켓 `d64fa06f`) — `sharedCwd.detailMid`는 워커 이름에 바로 이어 붙어서
+  // **공백으로 시작한다**. 눈에 안 보이는 조각이라 지워지면 `s2and this worker`가 되므로 여기서
+  // 잠근다. 다른 조각은 경로 사이에 공백이 이미 있어 이 위험이 없다.
+  const en = await listWorkers(root, [], "en");
+  assert.deepStrictEqual(
+    en.find((w) => w.name === "s1")!.defects[0].detail,
+    `s2 and this worker share one working directory: ${tree("shared")}`,
+  );
   // 준비 명령은 §4 생성의 3줄과 **같은 함수**에서 나온다. 화면 두 곳이 다른 문자열을 보여주면 안 된다.
   assert.deepStrictEqual(by("gone").worktree, worktreeCmds(root, "gone"));
   // `git -C`는 프로젝트(`dirname(root)`)다. 워커가 source하는 엔진 레포가 아니다.
