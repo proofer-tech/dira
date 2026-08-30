@@ -171,8 +171,11 @@ export default async function Workers({ params }: { params: Promise<{ project: s
             </p>
           )}
         </div>
-        {rows.length > 0 && (
-          <div className="flex items-center gap-2 shrink-0">
+        {/* CreateWorkerButton은 rows.length가 갈려도 이 자리 하나에서만 산다(요구 8803c3ba) —
+            워커 0개용/1개 이상용을 따로 두면 첫 워커 생성이 성공한 순간 이 조건부 렌더링 갈래가
+            바뀌어 React가 다이얼로그의 result 상태를 그대로 폐기한다. */}
+        <div className="flex items-center gap-2 shrink-0">
+          {rows.length > 0 && (
             <WorkerSettingsDialog
               projectId={id}
               filePath={`${project.root}/context.sh`}
@@ -189,27 +192,18 @@ export default async function Workers({ params }: { params: Promise<{ project: s
               }))}
               firstWorkerName={rows[0].name}
             />
-            <CreateWorkerButton
-              projectId={id}
-              firstCmd={firstWorkerCmd(project.root, undefined, locale)}
-              defaultName={nextWorkerName(workers.map((w) => w.name))}
-            />
-          </div>
-        )}
+          )}
+          <CreateWorkerButton
+            projectId={id}
+            firstCmd={firstWorkerCmd(project.root, undefined, locale)}
+            defaultName={nextWorkerName(workers.map((w) => w.name))}
+          />
+        </div>
       </div>
 
       {rows.length === 0 ? (
         <div className="max-w-3xl space-y-4">
-          <EmptyState
-            text={t(locale, "workers.empty.text")}
-            action={
-              <CreateWorkerButton
-                projectId={id}
-                firstCmd={firstWorkerCmd(project.root, undefined, locale)}
-                defaultName={nextWorkerName([])}
-              />
-            }
-          />
+          <EmptyState text={t(locale, "workers.empty.text")} />
           <div className="space-y-2">
             <p className="text-sm text-muted-foreground">
               {t(locale, "workers.empty.noWorkerBodyPrefix")} <span className="font-mono text-xs">reap</span>
