@@ -42,6 +42,9 @@ import { useT } from "@/components/language-provider";
 
 const INDENT_STEP_PX = 16;
 const INDENT_MAX_LEVEL = 4; // §비주얼 §50 §층 - 여백은 4단(64px)에서 멈춘다(행 모델은 안 갈린다)
+// §비주얼 §개정 2(결정 13) - 행 열의 왼쪽 눈금 5px. 12(읽기 전용 표의 px-3)에서 칸의 안쪽
+// 오프셋 7(테두리 1 + px-1.5 6)을 뺀 나머지라 층 0 쌍 행의 키 글자가 표와 같은 12px에서 시작한다.
+const INDENT_BASE_PX = 5;
 
 // §비주얼 §프론트매터 행 편집기 §개정(결정 11) - 프론트매터 전용 칸 한 벌. `Input`/`InputGroup`
 // 기본 벌(h-8 - 정지 border-input - px-2.5 py-1 - rounded-lg - text-base md:text-sm)을 뜯어
@@ -60,7 +63,7 @@ const FM_KEY_LAYOUT = "w-36 min-w-14 shrink";
 const FM_VALUE_LAYOUT = "basis-0 grow min-w-16";
 
 function indentStyle(level: number) {
-  const px = Math.min(level, INDENT_MAX_LEVEL) * INDENT_STEP_PX;
+  const px = INDENT_BASE_PX + Math.min(level, INDENT_MAX_LEVEL) * INDENT_STEP_PX;
   return { "--fm-indent": `${px}px` } as React.CSSProperties;
 }
 
@@ -273,7 +276,7 @@ export function FrontmatterRowsEditor({
 
   if (doc.rows.length === 0) {
     return (
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 ps-3">
         <p className="text-sm text-muted-foreground">{t("frontmatterRows.empty")}</p>
         <Button
           type="button"
@@ -286,6 +289,10 @@ export function FrontmatterRowsEditor({
       </div>
     );
   }
+
+  // §비주얼 §개정 2(결정 14) - 표식 칸은 행 열에 목록 항목 행이 하나도 없으면 안 잡는다. 판정은
+  // 파일 하나 단위다 - 행마다 갈리면 열 정렬이 깨진다(결정 13의 문 1).
+  const hasListItemRow = doc.rows.some((row) => row.shape === "list-item");
 
   return (
     <div>
@@ -308,9 +315,11 @@ export function FrontmatterRowsEditor({
             className="group flex items-start gap-x-2 ps-(--fm-indent)"
             style={indentStyle(row.level)}
           >
-            <div className="w-4 shrink-0 text-center font-mono text-sm opacity-60" aria-hidden>
-              {row.shape === "list-item" ? "-" : null}
-            </div>
+            {hasListItemRow && (
+              <div className="w-4 shrink-0 text-center font-mono text-sm opacity-60" aria-hidden>
+                {row.shape === "list-item" ? "-" : null}
+              </div>
+            )}
             {showKey &&
               (keyOptions.length > 0 ? (
                 <CandidateCombobox
