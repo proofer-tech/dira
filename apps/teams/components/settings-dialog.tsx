@@ -1428,6 +1428,7 @@ function ProjectSection({
 
   // 다른 노드로 옮기거나 다이얼로그가 닫히면 확인 화면이 남아 있지 않는다(⑫(3) 수명)
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 되돌리는 한 갈래뿐이라 연쇄 렌더가 안 난다(위 주석)
     if (!active || !open) setConfirming(false);
   }, [active, open]);
 
@@ -1843,11 +1844,12 @@ export function SettingsDialog({
   // 같은 행 톱니를 다시 눌러 재마운트 없이 다시 열어도 `activeNode`가 매번 `"project"`로 돌아온다.
   useEffect(() => {
     if (!controlled || !open) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Radix가 안 부르는 전이라 여는 부수효과를 잡을 자리가 여기뿐이다(위 주석)
     setAddOpen(needsAuth);
     setActiveNode(initialNode);
     void readMultitokenAction().then(setMultiToken);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- initialNode·needsAuth는 이 여닫음 한
-    // 판의 초기값이지 재실행 트리거가 아니다(`controlled`·`open`만 전이를 잰다)
+    // initialNode·needsAuth는 이 여닫음 한 판의 초기값이지 재실행 트리거가 아니다(`controlled`·`open`만 전이를 잰다)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 위 한 줄
   }, [controlled, open]);
 
   // 진행 로그는 폴링으로 받는다 — 이 앱에 소켓은 없다(세션 스트림과 같은 방식).
