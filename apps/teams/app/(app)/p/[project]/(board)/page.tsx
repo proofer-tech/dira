@@ -82,6 +82,7 @@ import {
   lastQuestionOptions,
   listTickets,
   depBadges,
+  pollingReasonOf,
   pollingRemainingMs,
   relationEdges,
   resolveDep,
@@ -691,6 +692,16 @@ export default async function Board({
           isPolling(t) && <PollingBadge ticket={t} now={now} locale={locale} />
         )}
       </div>
+      {/* 대기 사유(§폴링 대기 개정 2) — 배지 아래 한 줄, 없으면 이 줄 자체가 없다(종전 화면).
+          조건(스크립트 본문)이 아니라 세션이 `## 결과` 첫 줄에 적은 사유다 — 결정 9가 이미
+          "조건을 카드에 요약해 적지 않는다"고 그은 선은 그대로 둔다. */}
+      {isPolling(t) &&
+        (() => {
+          const reason = pollingReasonOf(t.body);
+          return (
+            reason && <span className="truncate text-xs text-muted-foreground">{reason}</span>
+          );
+        })()}
       {/* 카드 title은 2줄까지(§6). 전문은 `title` 속성으로 본다. `layered`가 표식 앵커에만
           `relative z-10`을 준다(§9 뒤쪽 절반 · §비주얼 §31 §층) — 카드 전체가 위 해시 앵커의
           `after:absolute after:inset-0`로 늘어난 링크라, 표식만 올리지 않으면 눌리는 것이

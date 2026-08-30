@@ -676,6 +676,14 @@ export default async function TicketDetail({
             <section className="space-y-2">
               <h2 className="text-sm font-medium">{t(locale, "polling.section.title")}</h2>
               <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+                {/* 사유 행(§폴링 대기 개정 2) — 빈 문자열이면 행 자체가 없다(세션이 규약을 안
+                    지킨 티켓도 화면이 안 깨진다). */}
+                {polling.reason && (
+                  <>
+                    <dt className="text-muted-foreground">{t(locale, "polling.field.reason")}</dt>
+                    <dd>{polling.reason}</dd>
+                  </>
+                )}
                 <dt className="text-muted-foreground">{t(locale, "polling.field.script")}</dt>
                 <dd className="font-mono text-xs break-all">{polling.script}</dd>
                 <dt className="text-muted-foreground">{t(locale, "polling.field.interval")}</dt>

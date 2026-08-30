@@ -427,7 +427,7 @@ export const ko: Record<string, string> = {
   "status.label.disconnected": "연결 안 됨",
   // 폴링 대기(§폴링 대기 결정 9) — `blocked`의 하위 종류가 아니다(`isPolling`이 별도 판정),
   // 그래도 배지 표 한 자리를 같이 쓴다(`isAwaiting`과 같은 자리 — 5상태를 안 늘린다).
-  "status.label.polling": "대기중",
+  "status.label.polling": "폴링 대기",
   "status.label.pollingOverdue": "상한 지남",
 
   // `kind:` 넉 자(§0-16 §장치, `status-badge.tsx`의 `KIND_LABELS`) — 보드 분류 칸과 페르소나
@@ -679,6 +679,7 @@ export const ko: Record<string, string> = {
   // 티켓 상세 "폴링 대기" 절(§폴링 대기 결정 9 표 §티켓 상세) — 스크립트 파일명·본문·주기·
   // 상한과 남은 시간·마지막 폴링 시각·마지막 출력 꼬리.
   "polling.section.title": "폴링 대기",
+  "polling.field.reason": "사유",
   "polling.field.script": "스크립트",
   "polling.field.scriptBody": "스크립트 본문",
   "polling.field.interval": "주기",
@@ -2949,6 +2950,7 @@ export const en: Record<string, string> = {
 
   // Ticket detail "Polling" section (§폴링 대기 결정 9).
   "polling.section.title": "Polling",
+  "polling.field.reason": "Reason",
   "polling.field.script": "Script",
   "polling.field.scriptBody": "Script body",
   "polling.field.interval": "Interval",

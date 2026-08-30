@@ -38,6 +38,7 @@ import {
   pollingDetailOf,
   pollingIntervalOf,
   pollingLogTail,
+  pollingReasonOf,
   pollingRemainingMs,
   pollingScriptBody,
   pollingScriptOf,
@@ -1417,6 +1418,25 @@ test("pollingScriptBody·pollingLogTail·pollingDetailOf — 폴 파일 읽기(�
 
   const escape = await pollingDetailOf(r, at("p0000010"), now);
   assert.strictEqual(escape.scriptBody, null);
+});
+
+test("pollingReasonOf — 마지막 `## 결과` 절의 첫 비어 있지 않은 줄(§폴링 대기 개정 2)", () => {
+  // 절 없음
+  assert.strictEqual(pollingReasonOf("## Goal\n\n하나.\n"), "");
+  // 절이 비어 있음
+  assert.strictEqual(pollingReasonOf("## Goal\n\n하나.\n\n## 결과\n"), "");
+  // 첫 줄이 빈 줄로 시작 — 그다음 비어 있지 않은 줄을 낸다
+  assert.strictEqual(
+    pollingReasonOf("## Goal\n\n하나.\n\n## 결과\n\n외부 빌드가 끝나기를 기다린다.\n"),
+    "외부 빌드가 끝나기를 기다린다.",
+  );
+  // `## 결과`가 두 번 — 마지막 것을 읽는다
+  assert.strictEqual(
+    pollingReasonOf(
+      "## Goal\n\n하나.\n\n## 결과\n\n첫 회차 사유.\n\n## 결과\n\n둘째 회차 사유.\n",
+    ),
+    "둘째 회차 사유.",
+  );
 });
 
 // ── §2-11①§요구 86921371 — planOf (DESIGN.md §2-11①) ──────────────────────────

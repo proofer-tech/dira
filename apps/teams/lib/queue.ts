@@ -562,6 +562,23 @@ export const pollingScriptBody = (root: string, script: string): Promise<string 
 export const pollingLogTail = (root: string, hash: string): Promise<string | null> =>
   readPollFile(root, `${hash}.log`);
 
+/** 대기 사유 — 본문 마지막 `## 결과` 절의 첫 비어 있지 않은 줄(§폴링 대기 개정 2). 절이
+ *  없거나 비면 빈 문자열이다. 라운드가 여러 번이면 마지막 절만 본다 — `planOf`·`questionsOf`와
+ *  같은 절 훑기 관용구(h1·h2 제목에서만 절이 갈린다)다, 새 파서를 안 만든다. */
+export function pollingReasonOf(body: string): string {
+  let lines: string[] = [];
+  let inSection = false;
+  for (const line of body.split("\n")) {
+    if (/^#{1,2}\s/.test(line)) {
+      inSection = /^##\s*결과/.test(line);
+      if (inSection) lines = [];
+      continue;
+    }
+    if (inSection) lines.push(line);
+  }
+  return lines.find((l) => l.trim() !== "")?.trim() ?? "";
+}
+
 /** 상세 "폴링 대기" 절의 재료 한 번에(결정 9 표 §티켓 상세) — 스크립트·로그 두 파일 읽기를
  *  병렬로 묶는다. 호출부(상세 페이지)는 `isPolling`이 참인 티켓에만 부른다 — 지운 뒤에도 남는
  *  `polling_until`·`polled_at`(결정 7)을 이 회차는 안 보여준다("지금 대기 중"만이 범위다). */
@@ -573,6 +590,7 @@ export type PollingDetail = {
   remainingMs: number | null;
   polledAt: Date | null;
   logTail: string | null;
+  reason: string;
 };
 
 export async function pollingDetailOf(root: string, t: Ticket, now: Date): Promise<PollingDetail> {
@@ -589,6 +607,7 @@ export async function pollingDetailOf(root: string, t: Ticket, now: Date): Promi
     remainingMs: pollingRemainingMs(t, now),
     polledAt: polledAtOf(t),
     logTail,
+    reason: pollingReasonOf(t.body),
   };
 }
 
