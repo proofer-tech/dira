@@ -8587,7 +8587,7 @@ n += len(re.findall(r">\s*([^<>{}]*[가-힣][^<>{}]*?)\s*<", src))
 | 6 | 홈 | `home-ui.tsx` - `home-agent.ts` - `home/{page,actions}.ts*` | ≈91 | 94 | 135 | **P338이 낸다** |
 | 7 | 페르소나-프로토콜 | `personas-ui.tsx` - `protocols-ui.tsx` - 두 화면의 `page`-`actions` - `protocols.ts` - `skills.ts` | ≈185 | **271** | 1 | **완료** (`93c106b3`-`204be4da` / `ko`, `7a86fd5c`-`b5d9735d` / `en`). 잔여 1은 재유입이다 - 행 10 |
 | 8 | 프로젝트 관리(루트 셸) | `projects-ui.tsx` - `projects.ts` - `app/actions.ts` - `scaffold.ts` - `feedback-dialog.tsx` - 오류-부재 경계 넷(`app/not-found.tsx` - `(app)/not-found.tsx` - `(app)/error.tsx` - `global-error.tsx`) | ≈130 | 136 | 155 | **P338이 낸다** |
-| 9 | 나머지 `lib` 실패 사유 | `workers.ts` - `auth.ts` - `engine.ts` - `queue.ts` - `keymap.ts` - `pool.ts` - `queue-ref.tsx` 등 | ≈97 | 93 | 109 | **완료** (`daf72662` / `ko`, `4c195255` / `en`). `personaEngineHint` 한 건은 `50fd4b34`가 앞당겨 물었다. `4c195255`가 못 물었던 8(`cwdDefects` 결함 문장 6 + `firstWorkerCmd`의 `<dira 레포>` + `worktreeCmds`의 꼬리 주석 하나)은 `c7c284f6`이 `ko` 키로 옮기고 `locale` 배선을 마쳤다 - `en`은 아직 안 찼다 |
+| 9 | 나머지 `lib` 실패 사유 | `workers.ts` - `auth.ts` - `engine.ts` - `queue.ts` - `keymap.ts` - `pool.ts` - `queue-ref.tsx` 등 | ≈97 | 93 | 109 | **완료** (`daf72662` / `ko`, `4c195255` / `en`). `personaEngineHint` 한 건은 `50fd4b34`가 앞당겨 물었다. `4c195255`가 못 물었던 8(`cwdDefects` 결함 문장 6 + `firstWorkerCmd`의 `<dira 레포>` + `worktreeCmds`의 꼬리 주석 하나)은 `c7c284f6`이 `ko` 키로 옮기고 `locale` 배선을 마쳤다 - `en`은 **`d64fa06f`가 채운다**(08-31 재측정에 10건 - 아래 §개정 `4f9734b4`) |
 | 10 | **재유입 회수** | 이행을 끝낸 묶음에 그 뒤 다시 든 한글. 08-29에 40 - 행 2가 22(`project-switcher.tsx` 3 - `status-badge.tsx` 4 - `urls.ts` 6 - `usage.ts` 9) - 행 7이 1(`skills.ts`) - 행 11이 17(`markdown-roundtrip.ts` 8 - `webhook.ts` 3 - `budgets.ts` 3 - `machine-state.ts` 1 - `worker-mark.tsx` 1 - `paths.ts` 1) | - | 12 | 40 | 미발행 - **마지막 묶음 뒤에 한 번**. `urls.ts`의 기능 이름 둘은 `50fd4b34`가 앞당겨 문다. `status-badge.tsx`의 4(`KIND_LABELS`)도 `30f6fafd`가 앞당겨 문다 - 영문 매뉴얼이 그 넉 자를 인용해야 해서 행 10을 못 기다린다(피드백 `0ca66a7f`, 로드맵 P340-15) |
 | 11 | **공용 컴포넌트-순수 유틸** | 화면이 둘 이상 무는 파일. `markdown-editor.tsx` - `update-toast.tsx` - `worker-mark.tsx` - `path-picker.tsx` - `markdown.tsx` - `copy-command.tsx` - `budgets.ts` - `attachment-limit.ts` - `skill-upload-limit.ts` - `markdown-roundtrip.ts` - `markdown-wikilinks.ts` - `machine-state.ts` - `webhook.ts` - `paths.ts` - `feedback.ts` - `p/[project]/actions.ts` - `(app)/layout.tsx` | - | 42 | 17 | **완료** (`c9f2eec5` / `ko`, `90db2822` / `en`). 잔여는 재유입이다 - 행 10 |
 | 12 | 온톨로지-에픽 | `ontology-ui.tsx` - `ontology/{page,actions}.ts*` - `ontology.ts` - `ontology-seed.ts` - `epics-ui.tsx` - `epic-sidebar.tsx` - `epics/{page,actions}.ts*` - `epics.ts` - `epic.ts` | - | 218 | 220 | **P338이 낸다** - 갈래 둘(온톨로지 192 - 에픽 28) |
@@ -8796,6 +8796,38 @@ when이 `사전을 안 타는 한글 0자`인데, 실제로 훑으면 **범위 �
 티켓 상세 - 워커 - 홈 - 프로젝트 목록(`연결됨` -> `Connected`) 다섯 화면에서 상태 배지와 낱말이
 전부 영어로 바뀐 것을 눈으로 봤다. 온톨로지 화면은 이 큐의 현재 데이터에 트리거되는 상태
 배지(가져오기 티켓·스키마 위반 수정 티켓)가 없어 코드·타입 경로로만 확인했다.
+
+##### 개정 - 같은 지적이 한 번 더 왔다. 배선은 이미 닫혔고 남은 것은 사전의 빈 값 열이다 (요구 `4f9734b4`)
+
+사람 문장: *"상태 텍스트 지금 언어 영어인데 한글로 보입니다"*(2026-08-31). 첨부한 화면은
+보드 칸반이고, 필터 라벨 셋(`Kind` - `Persona` - `Status`)과 폴링 배지(`Polling - 9h left`)가
+영어인데 그 옆 상태 배지 셋(`대기` - `진행중` - `완료`)과 필터 값 요약만 한국어다. **되묻지
+않았다** - 바로 위 §개정(요구 `81c31001`)이 적어 둔 결함과 자리도 모양도 같다.
+
+**이 결함은 이미 닫혀 있다.** 티켓 `32c9f2a4`(커밋 `39800648`, 2026-08-30 04:03)가 배지 셋의
+`locale` 기본값을 걷고 호출부 23곳에 로케일을 넘겼고, 그 커밋은 릴리스 `v1.0.37`(08-30 15:29)에
+실려 나갔다. 칸반 열 머리도 필터 선택지도 지금 트리에서는 `locale`을 받는다. 그래서 **첨부
+화면은 그 커밋 전의 빌드**이고, 이 요구가 새로 여는 자리는 배선이 아니다.
+
+**남은 자리는 하나다 - `en` 사전에 값이 없는 키 10개.** 08-31에 `ko`의 1,769개와 `en`의 1,759개를
+대조해서 잰 수이고, 열 개가 전부 §묶음 표 행 9(`lib/workers.ts`)의 것이다. 값이 없으니 `ko`
+폴백이 걸려 `en`으로 놓은 화면에 한국어가 그대로 뜬다 - 사람이 지적한 것과 증상이 같고 원인만
+다른 자리다.
+
+| 갈래 | 수 | 무엇 |
+|---|---|---|
+| 워커 결함 문장 | 8 | `worker.defect.noExec.*` - `workers.defect.{noTicketCwd,missingCwd,missingLink,sharedCwd}.*`의 조각들 |
+| 첫 워커 명령 | 1 | `workers.firstWorkerCmd.repoPlaceholder` |
+| 워크트리 검증 명령의 꼬리 주석 | 1 | `workers.worktreeCmds.lsHintSuffix` |
+
+행 9가 적어 둔 8이 10으로 늘었다 - 결함 문장이 그 뒤 둘 더 났다(재 보고 적는다).
+
+| 규칙 | 값 | 근거 |
+|---|---|---|
+| **발행은 티켓 한 장이다** | `d64fa06f`, `req: 4f9734b4`, `persona: writer`, `epic: P338`(로드맵 P338-20) | 채우는 것이 `en` 값뿐이라 한 세션이다. 영어를 쓰는 것은 `writer`다(§장치 §영어 문구) |
+| **`deps`가 없다** | `ko` 키가 `c7c284f6`으로 이미 트리에 있다 | 기다릴 선행이 없다. 행 9의 `developer` 갈래는 닫혔다 |
+| **행 5(워커 화면 묶음)를 앞당기는 것이 아니다** | 열 개가 전부 `lib/workers.ts`고, 행 5는 `workers-ui.tsx` - `workers/{page,actions}.ts*`다 | 행을 파일로 그은 그대로다. `i18n.test.ts`의 `FILLED`에 `workers.`를 통째로 못 적는 이유도 같다 - 이번에 더하는 것은 이 열 개를 덮는 하위 접두뿐이다 |
+| **묶음 표의 남은 합은 안 갈린다** | 행 3-5-6-8-12의 수가 그대로다 | 계수 스크립트가 세는 것은 화면 파일에 남은 한글이고, 이 열 개는 이미 사전 키다 |
 
 ##### 이행 안 된 화면에 기능을 얹을 때 - 그 티켓 Done when에 두 언어를 안 적는다 (피드백 `0bd6abc8`)
 
@@ -49371,6 +49403,7 @@ build` 0개인데 로드 평균이 455다(실측 (5)). CPU를 쓰는 것이 Chro
 | P338-17 | 이행 - 에픽(행 12 갈래, 28) | developer | - | 발행 `c6b995d6` |
 | P338-18 | 그 키들의 **영어 문구** | writer | P338-17 | 발행 `96327123` |
 | P338-19 | 배선 - 배지 셋의 `locale` 기본값을 걷어내고 호출부 23곳에 넘긴다(이행이 아니다, 요구 `81c31001`) | developer | - | 완료 `32c9f2a4` |
+| P338-20 | 행 9의 남은 **영어 문구** 10건(`en`에 값이 없어 `ko` 폴백이 걸리는 자리, 요구 `4f9734b4`) | writer | - | 발행 `d64fa06f` |
 
 **갈래끼리 `deps`가 0줄이다.** 아홉 갈래가 파일을 하나도 안 겹치도록 그었다 - 한 파일이 두 행에
 걸치면 같은 hunk를 두 티켓이 문다. 아홉이 전부 `lib/i18n.ts`를 늘리지만 그것은 서로 다른 줄이고,
