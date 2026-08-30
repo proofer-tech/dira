@@ -131,9 +131,10 @@ Press `New worker` at the top right and the only thing the dialog asks for is a 
 short, like `w2`. Letters, digits, `_`, and `-` only, and this name becomes the filename and the
 working directory name as-is.
 
-There is no field here for the engine or the model. A new worker is made by copying an existing
-one, so it inherits the engine setting too. The place to change which CLI starts the session is
-in §The persona decides the engine and the model below.
+There is no field here for the engine or the model. A new worker is made by copying a worker that
+already exists, so it inherits the engine setting too. A project with no worker to copy is covered
+separately in §With no workers at all, the button is the same below. The place to change which CLI
+starts the session is in §The persona decides the engine and the model below.
 
 The whole point of this flow is that the success screen has no registration command on it. You
 get a sentence saying it was created and
@@ -142,8 +143,9 @@ in the list as `idle` rather than `stopped`. There is no reason to open a shell.
 
 ### Five things that come with a new worker
 
-1. **The worker file** `<root>/workers/<name>.sh`. An existing worker is copied as the template
-   and left at 755.
+1. **The worker file** `<root>/workers/<name>.sh`. A worker that already exists is copied as the
+   template and left at 755. The first line of the success screen names the file it was copied
+   from.
 2. **Two crontab lines** - `:00` and `:30`. Cron is the built-in macOS facility that runs a
    command for you at times you set, and crontab is that schedule. One worker takes two lines
    because the finest unit cron can handle is the minute.
@@ -158,6 +160,27 @@ in the list as `idle` rather than `stopped`. There is no reason to open a shell.
 It does not install dependencies (nothing like `npm install`). That is the ceiling of this
 feature. The first time a new worker's working directory takes a frontend ticket, there is no
 `node_modules`. The command differs per project, so the app has no way to know it.
+
+### With no workers at all, the button is the same
+
+When the table is empty, all that is left in its place is the line `No workers` and the
+`New worker` button. You see this screen after registering a `.dira` someone else was using, or
+after deleting every worker you had. What you press here is that same `New worker`. Open the
+dialog and `Name` already holds `w1`, so you can create it just like that, without touching
+anything.
+
+With no worker to copy, the engine repo's `worker.sh.example` stands in as the template. Writing
+the file, putting two lines on the crontab, then making the worktree and the `.dira` symlink and
+following it back - §Five things that come with a new worker above repeats exactly. One word is
+all that changes. When the first line of the success screen shows `worker.sh.example` as the
+source, this is the path that made the worker.
+
+Only one case still sends you to a shell. If the app cannot find the engine repo it does not
+create the file at all: you get `Couldn't create the worker`, the paths it looked in as the
+reason, and then a copy button with the command that makes the first worker by hand. The
+`<dira 레포>` inside that command comes out unfilled. The app not knowing that value is exactly
+what this failure is, so you have to type in the path of the repo you cloned yourself. Getting to this screen means the installation is
+broken, not the worker settings, so it is not something filling the form in again will fix.
 
 ## The three buttons at the right of a row
 
