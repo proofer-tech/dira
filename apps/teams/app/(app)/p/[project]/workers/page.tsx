@@ -365,7 +365,7 @@ export default async function Workers({ params }: { params: Promise<{ project: s
                                   <p>
                                     {t(locale, "workers.defectAlert.cwdFixPrefix")}{" "}
                                     <span className="font-mono text-xs break-all">
-                                      TICKET_CWD="{project.root}/worktrees/{w.name}"
+                                      {`TICKET_CWD="${project.root}/worktrees/${w.name}"`}
                                     </span>{" "}
                                     {t(locale, "workers.defectAlert.cwdFixSuffix")}
                                   </p>
