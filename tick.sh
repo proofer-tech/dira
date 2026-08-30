@@ -743,6 +743,9 @@ while IFS='|' read -r c_path c_hash c_kind c_persona c_prio c_base c_eff c_squad
   # 잡기 = 원자적 rename. 이게 진짜 락 - 다른 세션·다른 tick도 이걸 보고 피한다.
   if CPATH=$(python3 "$PY" claim "$c_path" 2>/dev/null); then
     TPATH="$CPATH"; THASH="$c_hash"; TKIND="$c_kind"; TPERSONA="$c_persona"; TPRIO="$c_prio"; TBASE="$c_base"; TEFF="$c_eff"; TSQUAD="$c_squadp"
+    # 스쿼드 리더 이름을 SLOCK 반환 전에 persona:로 남긴다 - 여기서 늦추면 persona_wip()이
+    # 이 임계구역이 지키려는 상한(§27 setpersona 위치 개정)을 뒤늦게 세어 다음 워커가 통과한다.
+    [ -n "$TSQUAD" ] && python3 "$PY" setpersona "$TPATH" "$TSQUAD"
     break
   fi
 done <<EOF
@@ -1103,9 +1106,6 @@ fi
 # 세션키 선발급 -> 즉시 frontmatter 기록(디스패치 순간부터 '할당됨'으로 큐에서 제외)
 python3 "$PY" assign "$TPATH" "$SID" "${TPERSONA:-agent} / ${TICKET_NAME}-${SID:0:8}" || {
   log "ERROR assign 실패 $THASH"; python3 "$PY" release "$TPATH" >/dev/null; exit 1; }
-# 스쿼드 티켓이면 풀린 리더 이름을 persona:로 남긴다(§5-5 §상한) - claim이 이미 정한 값이고
-# 여기는 그 기록 자리다. 해제-회수 뒤에도 이 값은 안 지운다(`clear`-`release` 무수정 그대로).
-[ -n "$TSQUAD" ] && python3 "$PY" setpersona "$TPATH" "$TSQUAD"
 LOGF="$LOGDIR/$(date '+%Y%m%d-%H%M%S')-${TICKET_NAME}-${THASH}.log"
 PRIOLOG=$(prio_log "$TPRIO" "$TBASE" "$TEFF")
 log "DISPATCH $THASH kind=${TKIND:--} persona=${TPERSONA:-none} sid=$SID log=$(basename "$LOGF") $PRIOLOG"
