@@ -13,6 +13,7 @@ import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 import { findTicket, runWorker, unassign } from "./engine.ts";
 import { listTickets, type Suffixes } from "./queue.ts";
+import { commonSourceLine } from "./workers.ts";
 
 const DEFAULT: Suffixes = { inProgress: ".wip", done: ".done" };
 const KO: Suffixes = { inProgress: "-진행중", done: "-완료" };
@@ -200,4 +201,27 @@ test("unassign — 코드가 갈래를 가른다(2는 사용법이라 확인이 
   const run = await runWorker(r, "w1", ["unassign", "cccc7777", "--forse"]);
   assert.strictEqual(run.ok, false);
   assert.strictEqual(run.code, 2);
+});
+
+/** bcac177c — `context.sh` 없이 `source` 줄만 심긴 워커(옛 `공통 적용`)를 `/workers` 화면을
+ *  한 번도 거치지 않고 티켓 상세의 `할당 해제`·`수거`(둘 다 `runWorker`)로 바로 부른 경로.
+ *  `readCommonContext`(워커 화면 전용)만 낫히면 이 경로는 여전히 `No such file`을 낸다 —
+ *  `runWorker` 자신이 낫혀야 한다. */
+test("runWorker — context.sh 없이 source 줄만 있어도 낫힌 뒤 부른다(워커 화면을 거치지 않고)", async () => {
+  const r = scratch([]);
+  writeFileSync(
+    path.join(r, "workers", "w1.sh"),
+    `#!/bin/bash\n${commonSourceLine(r)}\n. "${TICK}"\n`,
+    { mode: 0o755 },
+  );
+  process.env.TICKET_LOCAL = path.join(r, "local");
+  assert.strictEqual(existsSync(path.join(r, "context.sh")), false);
+
+  const run = await runWorker(r, "w1", ["list"]);
+  assert.strictEqual(run.ok, true, run.output);
+  assert.doesNotMatch(run.output, /No such file or directory/);
+  assert.strictEqual(existsSync(path.join(r, "context.sh")), true); // 낫힌 자국
+
+  const un = await unassign(r, "gggg1111");
+  assert.doesNotMatch(un.output, /No such file or directory/);
 });

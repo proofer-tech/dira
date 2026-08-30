@@ -595,13 +595,26 @@ async function anyWorkerSourcesCommon(root: string): Promise<boolean> {
   return false;
 }
 
-/** `<루트>/context.sh`의 공통 항목. **파일이 없으면 0개다 — 오류가 아니다**(§4-1).
+/** 공통 파일이 없는데 이미 어느 워커가 그 줄을 `source`하고 있으면(옛 `공통 적용` — 공통 항목을
+ *  한 번도 안 넣은 큐에서도 줄만 먼저 심을 수 있었다) 빈 고정 문구로 채워 낫게 한다 — 아무도 안
+ *  불렀으면(그런 워커가 없으면) 만들 이유가 없다.
  *
- *  §개정(2026-08-31, 요구 `421f440d`): 파일이 없는데 이미 어느 워커가 그 파일을 `source`하고
- *  있으면(옛 `공통 적용` — 공통 항목을 한 번도 안 넣은 큐에서도 줄만 먼저 심을 수 있었다) 그
- *  워커의 `list`-`unassign`-`reap`이 매 호출마다 stderr에 `No such file`을 낸다. 이 자리(워커
- *  화면이 열릴 때마다 도는 자리)에서 빈 고정 문구로 채워 낫게 한다 — 아무도 안 불렀으면(그런
- *  워커가 없으면) 만들 이유가 없어 그대로 0개다. */
+ *  §복(2026-08-31, 티켓 `bcac177c`): `readCommonContext`(워커 화면이 열릴 때) 하나에서만 부르면
+ *  그 화면을 거치지 않는 `unassign`-`reap`(티켓 상세의 `할당 해제`-`수거` 버튼, `lib/engine.ts`
+ *  `runWorker`가 워커 셸을 직접 부르는 경로)은 낫지 않는다 — 그래서 `runWorker`도 이 함수를
+ *  부른다. 이미 있으면 `stat` 한 번으로 끝난다. */
+export async function healCommonContextFile(root: string): Promise<void> {
+  const file = path.join(root, COMMON_FILE);
+  const exists = await stat(file).then(
+    () => true,
+    () => false,
+  );
+  if (!exists && (await anyWorkerSourcesCommon(root))) {
+    await atomicWrite(file, COMMON_TEMPLATE, 0o644);
+  }
+}
+
+/** `<루트>/context.sh`의 공통 항목. **파일이 없으면 0개다 — 오류가 아니다**(§4-1). */
 export async function readCommonContext(
   root: string,
   locale: Locale = DEFAULT_LOCALE,
@@ -619,10 +632,8 @@ export async function readCommonContext(
         reason: `${COMMON_FILE}${t(locale, "workers.context.commonReadFailMid")} ${err.message}`,
       };
     }
-    if (await anyWorkerSourcesCommon(root)) {
-      await atomicWrite(file, COMMON_TEMPLATE, 0o644);
-      text = COMMON_TEMPLATE;
-    }
+    await healCommonContextFile(root);
+    text = await readFile(file, "utf8").catch(() => null);
   }
   if (text === null) return { ok: true, items: [] };
   const b = parseContextBlock(text, COMMON_ARR, locale);

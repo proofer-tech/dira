@@ -13,7 +13,7 @@ import { promisify } from "node:util";
 import { DEFAULT_LOCALE, t, type Locale } from "./i18n.ts";
 import { NAME_RE, isHash, resolveWithin } from "./paths.ts";
 import { findPath, listTickets, type Suffixes } from "./queue.ts";
-import { listWorkers } from "./workers.ts";
+import { healCommonContextFile, listWorkers } from "./workers.ts";
 
 /** rc와 출력을 그대로 넘긴다. 실패해도 삼키지 않는다 — 화면이 원문을 보여준다(§6 에러 3요소).
  *
@@ -46,6 +46,9 @@ export async function runWorker(
   } catch (e) {
     return { ok: false, output: (e as Error).message };
   }
+  // 워커 화면(`readCommonContext`)을 거치지 않고도 여기로 바로 오는 호출(`unassign`·`reap`)이
+  // 있다(bcac177c) — 셸을 부르기 전에 여기서도 낫힌다. 이미 있으면 `stat` 한 번으로 끝난다.
+  await healCommonContextFile(root);
   try {
     // ponytail: reap은 python 스캔 한 번이라 초 단위로 끝난다. 60초면 매달린 걸 알아채기 충분하다.
     const { stdout, stderr } = await promisify(execFile)(file, args, {
