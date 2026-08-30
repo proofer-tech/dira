@@ -339,9 +339,17 @@ case "$CMD" in
     # **grep 자신을 문다** — grep의 명령줄에 그 문자열이 그대로 들어 있고 ps가 그걸 본다.
     # 그러면 세션이 죽어도 항상 살아 있다고 판정해 unassign이 영영 거부된다(CI 실측
     # 2026-08-01: `거부: ... (session=dead-sid)`). 파이프를 없애면 매칭 시점에 grep이 없다.
+    # §개정(421f440d) 결정 1 - pid= 필드를 같이 받아 매칭된 행의 pid를 $UPID에 되찾는다.
+    # 헤어스트링은 이미 담긴 $PSOUT을 읽을 뿐 새 프로세스를 안 띄운다 - 함정은 그대로 닫혀 있다.
     if [ -z "$ALIVE" ] && [ -n "$USID" ]; then
-      PSOUT=$(ps -eo command= 2>/dev/null)
-      case "$PSOUT" in *"--session-id $USID"*) ALIVE="session=$USID" ;; esac
+      PSOUT=$(ps -eo pid=,command= 2>/dev/null)
+      while IFS= read -r LINE; do
+        case "$LINE" in *"--session-id $USID"*)
+          set -- $LINE
+          case "$1" in ''|*[!0-9]*) ;; *) UPID="$1"; ALIVE="session=$USID" ;; esac
+          break ;;
+        esac
+      done <<< "$PSOUT"
     fi
     # 주인 세션이 자기 손으로 푸는 것은 통과다. 왕복 절차(PM PROFILE §요구사항 왕복 3단계)가
     # 부르는 자리가 바로 여기이고, 거기서 산 pid는 **부르는 세션 자신**이다(티켓 828dc247).
@@ -354,15 +362,9 @@ case "$CMD" in
       done
     fi
     if [ -n "$ALIVE" ]; then
-      # 죽일 수 있는 것은 pid 갈래뿐이다. session= 갈래(handclaim이 조상 pid를 못 찾은 티켓)는
-      # 강제도 대상이 없다 - 종전 문구를 재사용하지 않는다. 이미 강제를 시도한 사람에게
-      # "죽인 뒤 다시 시도하세요"는 할 말이 아니다.
-      case "$ALIVE" in
-        session=*)
-          echo "거부: $H 의 세션이 살아 있는데 티켓에 pid가 없다($ALIVE). 강제로 끊을 대상이 없으니 그 세션을 직접 끝내야 한다." >&2
-          log "UNASSIGN-DENY $H $ALIVE pid 없음"
-          exit 1 ;;
-      esac
+      # §개정(421f440d) 결정 2 - session= 갈래도 이제 $UPID를 들고 있어 --force로 풀 수 있다.
+      # 종전엔 여기서 거부하고 끝(exit 1)이었지만, 그 판정이 죽일 프로세스를 이미 찾아 놓고도
+      # pid 열을 버렸을 뿐이었다 - 아래 공통 경로로 그대로 흘려보낸다.
       if [ -z "$FORCE" ]; then
         echo "거부: $H 의 세션이 아직 살아 있다($ALIVE). 먼저 끝내거나 죽인 뒤 다시 시도하세요." >&2
         log "UNASSIGN-DENY $H $ALIVE 생존"

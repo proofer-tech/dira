@@ -4,7 +4,8 @@
 계약은 docs/DESIGN.md §2-5다. 여기서 고정하는 것 넷:
   1. 산 세션은 플래그 없이는 종전대로 거부하되 **종료 코드가 3**이다(화면이 이 코드로 확인을 띄운다).
   2. `--force`는 그 pid를 죽이고 티켓을 열림으로 되돌린다. 죽은 세션에는 아무 일도 안 한다.
-  3. `pid:`가 없는 산 세션(`session=` 갈래)은 강제도 거부한다 - 죽일 대상이 없다. 종전 문구를 안 쓴다.
+  3. `pid:`가 없는 산 세션(`session=` 갈래)도 `ps`에서 pid를 되찾아, 플래그 없이는 거부(3)하고
+     `--force`로는 그 pid를 죽여서 푼다(§개정, 요구 `421f440d`) - 종전의 "강제도 거부" 문구는 무효다.
   4. 상한 미만에 죽은 세션은 `TIMEOUT`이 아니라 `KILLED <해시> <경과>s`로 남는다.
 
 개정(§2-5 §개정)이 더한 것 셋:
@@ -175,7 +176,7 @@ try:
     body = open(os.path.join(tickets, "cccc0013.md"), encoding="utf-8").read()
     assert "awaiting:" not in body, "플래그 없는 unassign이 잠갔다 - 요구사항 왕복이 깨진다\n" + body
 
-    # --- 5) pid 없는 산 세션(session= 갈래): --force도 거부하고 문구가 다르다 ---
+    # --- 5) pid 없는 산 세션(session= 갈래): 이제 ps에서 되찾은 pid로 강제가 통한다(§개정 421f440d) ---
     sid = "dddd0004-sid"
     ghost = subprocess.Popen([sys.executable, "-c", "import time;time.sleep(60)",
                               "--session-id", sid])
@@ -184,13 +185,17 @@ try:
         ["ps", "-eo", "command="], capture_output=True, text=True).stdout, 10)
     mkfile(os.path.join(tickets, "dddd0004.wip.md"),
            WIP.format(h="dddd0004", sid=sid, pid=""))
-    r = run(w1, "unassign", "dddd0004", "--force", env=env)
-    assert r.returncode == 1, "pid 없는 산 세션이 1이 아니다: {}\n{}".format(r.returncode, r.stderr)
-    assert "먼저 끝내거나 죽인 뒤 다시 시도하세요" not in r.stderr, \
-        "종전 문구를 재사용했다(이미 강제를 시도한 사람에게 할 말이 아니다)\n" + r.stderr
-    assert "pid" in r.stderr, r.stderr
+    r = run(w1, "unassign", "dddd0004", env=env)
+    assert r.returncode == 3, "pid 없는 산 세션 거부가 3이 아니다: {}\n{}".format(r.returncode, r.stderr)
+    assert "강제로 끊을 대상이 없으니" not in r.stderr, "무효가 된 문구를 아직 쓴다\n" + r.stderr
     assert os.path.exists(os.path.join(tickets, "dddd0004.wip.md")), "거부했는데 티켓이 풀렸다"
-    ghost.kill(); ghost.wait()
+
+    r = run(w1, "unassign", "dddd0004", "--force", env=env)
+    assert r.returncode == 0, "되찾은 pid로도 강제가 실패했다: {}\n{}{}".format(
+        r.returncode, r.stdout, r.stderr)
+    assert wait_for(lambda: ghost.poll() is not None, 5), "되찾은 pid를 안 죽였다"
+    assert os.path.exists(os.path.join(tickets, "dddd0004.md")), \
+        "강제 뒤 백로그로 안 돌아왔다: " + str(os.listdir(tickets))
 
     # --- 6) 진짜 디스패치 한 바퀴: 강제로 끊으면 부모가 풀고 로그는 KILLED다 ---
     # 앞 케이스가 남긴 열린 티켓을 치운다 - 선정은 최고참 1건이라 그게 먼저 뽑힌다.
