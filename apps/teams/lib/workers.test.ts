@@ -44,6 +44,7 @@ const {
   cronUnregisterCmd,
   cronWriteError,
   deleteWorker,
+  engineRepo,
   execBitCmd,
   DISPATCH_GATE_FILE,
   dispatchGateSh,
@@ -1569,8 +1570,46 @@ test("createWorker — 기존 워커를 템플릿으로 755 생성, 덮어쓰기
   // O_EXCL: 돌고 있는 워커를 덮어쓰지 않는다
   await assert.rejects(createWorker(root, "w2"), /EEXIST/);
   await assert.rejects(createWorker(root, "../evil"), /영문·숫자/);
-  // 워커 0개면 템플릿이 없다 — 엔진 코드 위치를 GUI가 모른다
-  await assert.rejects(createWorker(makeRoot({}), "w1"), /템플릿으로 쓸 워커가 없습니다/);
+});
+
+test("createWorker — 워커 0개 (§4-18 폴백) — worker.sh.example로 만든다, 자가 정리는 붙고 게이트는 AGENTS.md가 없어 안 붙는다", async () => {
+  const repo = engineRepo();
+  assert.ok("path" in repo, `엔진 레포를 못 찾았다: ${JSON.stringify(repo)}`);
+
+  const zero = makeRoot({});
+  const made = await createWorker(zero, "w1");
+  assert.strictEqual(made.template, "worker.sh.example");
+  assert.strictEqual(statSync(made.path).mode & 0o777, 0o755);
+
+  const sh = readFileSync(made.path, "utf8");
+  // §4-18 결정 3 — TICKET_CWD는 §4 생성 1항 그대로다(`<루트>/worktrees/<이름>`), §0-3과 다르다.
+  assert.match(sh, new RegExp(`^TICKET_CWD="${zero}/worktrees/w1"$`, "m"));
+  // 실효 TICKET_CONTEXT=( 한 줄 + 마지막 줄은 `. "<엔진 레포>/tick.sh"`
+  const b = parseContextBlock(sh);
+  assert.ok(b.ok, `블록을 못 짚었다: ${JSON.stringify(b)}`);
+  assert.equal(b.items.length, 0);
+  assert.ok(sh.includes(`. "${path.join(repo.path, "tick.sh")}"`), sh.slice(-200));
+  execFileSync("bash", ["-n", made.path]);
+  // 자가 정리는 언제나 붙는다(§4-18 결정 4) — makeRoot에는 protocols/AGENTS.md가 없다.
+  const healLine = `. "${path.join(zero, SELF_HEAL_FILE)}" "${path.join(repo.path, "tick.sh")}"`;
+  assert.ok(sh.includes(healLine), `자가 정리 줄이 없다: ${sh.slice(-300)}`);
+  assert.strictEqual(existsSync(path.join(zero, SELF_HEAL_FILE)), true);
+  // 게이트는 `protocols/AGENTS.md`를 못 읽는 큐라 안 붙는다 — 그래도 생성은 성공했다.
+  assert.strictEqual(sh.includes("dispatch-gate"), false);
+  assert.strictEqual(existsSync(path.join(zero, DISPATCH_GATE_FILE)), false);
+});
+
+test("createWorker — 워커 0개, engineRepo()가 error면 만들지 않고 사유를 그대로 던진다 (§4-18 결정 2)", async () => {
+  const prevEngine = process.env.DIRA_ENGINE;
+  process.env.DIRA_ENGINE = mkdtempSync(path.join(tmpdir(), "no-engine-"));
+  try {
+    const zero = makeRoot({});
+    await assert.rejects(createWorker(zero, "w1"), /DIRA_ENGINE/);
+    assert.strictEqual(existsSync(path.join(zero, "workers/w1.sh")), false);
+  } finally {
+    if (prevEngine === undefined) delete process.env.DIRA_ENGINE;
+    else process.env.DIRA_ENGINE = prevEngine;
+  }
 });
 
 // ── TICKET_CWD 유도 (§4-2) ──────────────────────────────────────────────────

@@ -5,7 +5,6 @@
  *  뿐이고, 파일 목록은 아래 상수로 고정이며, 있는 파일은 `wx`로 절대 덮지 않는다.
  *  실패해도 되돌리지 않는다 — 그 경로에 사람의 파일이 있을 수 있고, 덮지 않기로 한 것이 이
  *  기능의 유일한 방어다. */
-import { existsSync } from "node:fs";
 import { chmod, mkdir, readFile, readdir, realpath, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { expandHome } from "./paths.ts";
@@ -15,12 +14,13 @@ import {
   SELF_HEAL_FILE,
   SELF_HEAL_SH,
   dispatchGateSh,
-  dispatchGateSourceLine,
-  renderContextBlock,
-  selfHealSourceLine,
-  sourceTick,
-  tickSourceLine,
+  engineRepo,
+  firstWorkerBody,
 } from "./workers.ts";
+
+/** 재수출 — 다른 모듈은 여기서 그대로 가져온다(정의는 `lib/workers.ts`로 옮겼다: `createWorker`의
+ *  §4-18 폴백도 이 함수를 불러야 하는데 `workers.ts`가 `scaffold.ts`를 부르면 순환 임포트다). */
+export { engineRepo };
 
 /** `templates/` 아래 경로가 곧 `.dira/` 아래 경로다(1:1). §0-3 스캐폴딩 집합 중 복사본들. */
 const TEMPLATE_FILES = [
@@ -44,25 +44,6 @@ const TEMPLATE_FILES = [
   "personas/archive-manager/PROFILE.md",
   "squads/default/members",
 ];
-
-/** 엔진 레포 경로. **`DIRA_ENGINE`이 있으면 그것이고**(패키징된 `.app`이 번들의 엔진을 userData로
- *  꺼내 넘긴다 — §데스크톱 앱 고정하는 것 8), 없으면 **GUI 자기 위치에서 유도한다**(§0-3 답변 2(a)).
- *  GUI는 `<엔진 레포>/apps/teams/`에 있다 — 상위 2단계가 레포다. `.app`에서는 서버가
- *  `Contents/Resources/server/`에서 돌아 그 유도가 `Contents`를 가리키므로 env가 먼저다.
- *
- *  **`tick.sh` 존재 확인은 어느 쪽이든 그대로다.** 없으면 **거부한다. 폼 필드로 되묻지 않는다** —
- *  GUI가 엔진 레포 밖에 있다는 건 설치가 깨진 것이고 폼 하나로 고칠 문제가 아니다. 본 경로를
- *  사유에 그대로 담아 사람이 무엇을 봐야 하는지 알게 한다(어느 쪽에서 나온 값인지도 같이). */
-export function engineRepo(locale: Locale = DEFAULT_LOCALE): { path: string } | { error: string } {
-  const env = process.env.DIRA_ENGINE?.trim();
-  const repo = env ? path.resolve(env) : path.resolve(process.cwd(), "..", "..");
-  if (existsSync(path.join(repo, "tick.sh"))) return { path: repo };
-  return {
-    error: `${t(locale, "scaffold.engineNotFoundPrefix")} ${repo}${t(locale, "scaffold.engineNotFoundMid")} ${
-      env ? t(locale, "scaffold.engineNotFoundEnvHint") : t(locale, "scaffold.engineNotFoundDefaultHint")
-    }`,
-  };
-}
 
 /** 자리표시자 3종 치환(§0-3 표). **문자열을 그대로 바꾼다** — 정규식도 템플릿 엔진도 안 쓴다.
  *  `specDoc`이 비면 `<프로젝트 스펙 문서>`는 **손대지 않는다**(선택 필드다. 프로젝트 시작 시점에
@@ -211,17 +192,9 @@ export async function scaffold(
   await put(SELF_HEAL_FILE, SELF_HEAL_SH);
   await put(DISPATCH_GATE_FILE, dispatchGateSh(opts.branch));
   const example = await readFile(path.join(repo.path, "worker.sh.example"), "utf8");
-  // 치환값은 함수로 준다 — 경로에 `$&`·`$1`이 들어 있으면 문자열 치환은 그걸 해석한다.
-  const w1 = example.replace(
-    sourceTick,
-    // 한 줄 설명을 붙인다 — 이 자리가 `# --- 필수: …` 제목 아래라서, 없으면 빈 블록이
-    // 엔진의 요구로 읽힌다(아니다. 엔진은 미정의 배열을 그대로 받는다 — tick.sh 147행).
-    () =>
-      `# 컨텍스트(선택). GUI 워커 화면이 이 블록을 고친다 — 항목 문법은 위 주석 예시.\n` +
-      `${renderContextBlock([])}\n\n` +
-      // `. tick.sh` **바로 위**다. 아래면 엔진이 없을 때 이 줄에 닿기 전에 워커가 죽는다(§4-4·§4-14).
-      `${dispatchGateSourceLine(root)}\n${selfHealSourceLine(root, repo.path)}\n${tickSourceLine(repo.path)}`,
-  );
+  // 조립은 `firstWorkerBody`(`lib/workers.ts`) 하나다 — §4-18 생성 버튼 폴백도 같은 함수를
+  // 부른다. 두 벌로 갈리면 스캐폴딩으로 태어난 첫 워커와 버튼으로 태어난 첫 워커가 다른 모양이 된다.
+  const w1 = firstWorkerBody(example, root, repo.path, opts.branch);
   await put("workers/w1.sh", w1, 0o755);
 
   // §0-19 — `.dira`의 형제 `.gitignore`에 `.dira` 한 줄. 실패해도 스캐폴딩 성공을 막지 않는다.

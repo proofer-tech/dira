@@ -191,7 +191,6 @@ export default async function Workers({ params }: { params: Promise<{ project: s
             />
             <CreateWorkerButton
               projectId={id}
-              canTemplate
               firstCmd={firstWorkerCmd(project.root, undefined, locale)}
               defaultName={nextWorkerName(workers.map((w) => w.name))}
             />
@@ -206,8 +205,8 @@ export default async function Workers({ params }: { params: Promise<{ project: s
             action={
               <CreateWorkerButton
                 projectId={id}
-                canTemplate={false}
                 firstCmd={firstWorkerCmd(project.root, undefined, locale)}
+                defaultName={nextWorkerName([])}
               />
             }
           />
@@ -217,8 +216,6 @@ export default async function Workers({ params }: { params: Promise<{ project: s
               {t(locale, "workers.empty.noWorkerBodyMid")} <span className="font-mono text-xs">unassign</span>
               {t(locale, "workers.empty.noWorkerBodySuffix")}
             </p>
-            <CopyCommand cmd={firstWorkerCmd(project.root, undefined, locale)} />
-            <p className="text-xs text-muted-foreground">{t(locale, "workers.empty.engineRepoHint")}</p>
           </div>
         </div>
       ) : (

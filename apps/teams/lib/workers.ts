@@ -6,6 +6,7 @@
  *  되돌아간다 — 그래서 그 둘은 남아 있다.
  *  상태 전이(reap·unassign)는 여기서 다시 구현하지 않는다 — `lib/engine.ts`가 워커를 부른다. */
 import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
 import {
   chmod,
   mkdir,
@@ -2277,7 +2278,7 @@ export async function dispatchGateState(root: string, branch: string): Promise<D
 /** 이미 스캐폴딩된 프로젝트의 통합 브랜치를 `protocols/AGENTS.md`에서 읽는다 — scaffold가 이미
  *  `<통합 브랜치>`를 치환해 둔 그 파일 하나가, 소급 적용이 새 입력 없이 값을 구하는 유일한 자리다
  *  (§4-14 — "통합 브랜치 값은 이미 손에 있다"). 못 찾으면 null이다. */
-async function integrationBranchOf(root: string): Promise<string | null> {
+export async function integrationBranchOf(root: string): Promise<string | null> {
   const text = await readFile(path.join(root, "protocols/AGENTS.md"), "utf8").catch(() => null);
   if (text === null) return null;
   const m = text.match(/git push \. HEAD:([^\s`]+)/);
@@ -2518,6 +2519,49 @@ export async function prepareWorktree(
   return { dir, done: 3, rest: [] };
 }
 
+/** 엔진 레포 경로. **`DIRA_ENGINE`이 있으면 그것이고**(패키징된 `.app`이 번들의 엔진을 userData로
+ *  꺼내 넘긴다 — §데스크톱 앱 고정하는 것 8), 없으면 **GUI 자기 위치에서 유도한다**(§0-3 답변 2(a)).
+ *  GUI는 `<엔진 레포>/apps/teams/`에 있다 — 상위 2단계가 레포다. `.app`에서는 서버가
+ *  `Contents/Resources/server/`에서 돌아 그 유도가 `Contents`를 가리키므로 env가 먼저다.
+ *
+ *  **`tick.sh` 존재 확인은 어느 쪽이든 그대로다.** 없으면 **거부한다. 폼 필드로 되묻지 않는다** —
+ *  GUI가 엔진 레포 밖에 있다는 건 설치가 깨진 것이고 폼 하나로 고칠 문제가 아니다. 본 경로를
+ *  사유에 그대로 담아 사람이 무엇을 봐야 하는지 알게 한다(어느 쪽에서 나온 값인지도 같이).
+ *
+ *  **§0-3 스캐폴딩과 §4-18 생성 버튼 폴백이 같이 부른다** — 두 벌로 갈리면 새 프로젝트와 워커
+ *  0개인 큐의 첫 워커가 서로 다른 판정을 받는다. */
+export function engineRepo(locale: Locale = DEFAULT_LOCALE): { path: string } | { error: string } {
+  const env = process.env.DIRA_ENGINE?.trim();
+  const repo = env ? path.resolve(env) : path.resolve(process.cwd(), "..", "..");
+  if (existsSync(path.join(repo, "tick.sh"))) return { path: repo };
+  return {
+    error: `${t(locale, "scaffold.engineNotFoundPrefix")} ${repo}${t(locale, "scaffold.engineNotFoundMid")} ${
+      env ? t(locale, "scaffold.engineNotFoundEnvHint") : t(locale, "scaffold.engineNotFoundDefaultHint")
+    }`,
+  };
+}
+
+/** 첫 워커 몸통 조립 — `worker.sh.example`의 `. tick.sh` 줄을, 실효 컨텍스트 블록 + (게이트
+ *  브랜치를 알면) 게이트 source 줄 + 자가 정리 source 줄 + 그 줄 자신으로 바꾼다. **§0-3
+ *  스캐폴딩과 §4-18 생성 버튼 폴백이 이 함수 하나를 같이 부른다** — 조립이 두 벌로 갈리면
+ *  스캐폴딩으로 태어난 큐와 버튼으로 태어난 큐의 첫 워커가 서로 다른 모양이 되고, 그 차이는 몇
+ *  달 뒤 "이 워커만 왜 게이트가 없나"로 돌아온다(§4-18 결정 1). `gateBranch`가 `null`이면 게이트
+ *  줄을 안 넣는다(§4-18 결정 4 — `protocols/AGENTS.md`를 못 읽는 큐). */
+export function firstWorkerBody(
+  example: string,
+  root: string,
+  repo: string,
+  gateBranch: string | null,
+): string {
+  return example.replace(
+    sourceTick,
+    () =>
+      `# 컨텍스트(선택). GUI 워커 화면이 이 블록을 고친다 — 항목 문법은 위 주석 예시.\n` +
+      `${renderContextBlock([])}\n\n` +
+      `${gateBranch !== null ? `${dispatchGateSourceLine(root)}\n` : ""}${selfHealSourceLine(root, repo)}\n${tickSourceLine(repo)}`,
+  );
+}
+
 // ── 생성 · 중단 · 삭제 ──────────────────────────────────────────────────────
 
 /** 이름 검증 + 경로 조립은 **서버에서만** 한다(신뢰 경계). 이름이 규칙을 통과해도 경로를
@@ -2538,8 +2582,10 @@ async function workerFile(
 /** 기존 워커를 템플릿으로 새 워커를 만든다 (DESIGN.md §4 생성).
  *
  *  템플릿이 필요한 이유는 마지막 `. <엔진레포>/tick.sh` 한 줄이다 — 엔진 코드가 어디 있는지는
- *  워커 파일에만 적혀 있고 GUI가 알 방법이 없다. 그래서 **워커 0개인 큐에서는 만들 수 없고**,
- *  화면이 그 사실과 손으로 만드는 법을 알린다.
+ *  워커 파일에만 적혀 있고 GUI가 알 방법이 없다. **워커 0개인 큐에서는 §4-18 폴백이 대신
+ *  `<엔진 레포>/worker.sh.example`을 템플릿으로 쓴다**(§0-3이 첫 워커에 쓰는 그 조립과
+ *  `firstWorkerBody` 하나를 같이 부른다) — 거부가 남는 자리는 `engineRepo()`가 실패할 때뿐이다
+ *  (결정 2, 폼 필드로 되묻지 않고 그 사유를 그대로 던진다).
  *
  *  복사한 뒤 **`TICKET_CWD` 줄과 `TICKET_ENGINE` 블록만** 새 값으로 다시 쓴다(§4-2 · §4-3).
  *  나머지 줄은 손대지 않는다 — 엔진 경로·게이트·컨텍스트가 템플릿에서 와야 하는 이유는 그대로다.
@@ -2564,12 +2610,33 @@ export async function createWorker(
   }
   const dir = path.join(root, "workers");
   const existing = (await readdir(dir).catch(() => [] as string[])).filter((n) => n.endsWith(".sh")).sort();
+  let template: string;
+  let text: string;
   if (existing.length === 0) {
-    throw new Error(t(locale, "workers.create.noTemplate"));
+    // §4-18 폴백. `engineRepo()`가 error면 파일 하나 만들기 전에 멈춘다(결정 2).
+    const repo = engineRepo(locale);
+    if ("error" in repo) throw new Error(repo.error);
+    template = "worker.sh.example";
+    const example = await readFile(path.join(repo.path, "worker.sh.example"), "utf8");
+    // 게이트는 `protocols/AGENTS.md`를 읽을 수 있을 때만 붙는다 — 못 읽어도 생성은 성공한다
+    // (결정 4). 자가 정리는 언제나 붙는다(입력이 경로 둘뿐이라 — firstWorkerBody가 그 줄은
+    // 무조건 넣는다).
+    const branch = await integrationBranchOf(root);
+    text = firstWorkerBody(example, root, repo.path, branch);
+    // 자가 정리·게이트 파일 자신도 §0-3과 같은 자리에 눕는다 — **있으면 덮지 않는다**
+    // (`scaffold`의 `put`과 같은 O_EXCL 계약). 실행 파일이 아니라 source되는 파일이라 모드는
+    // 기본값이다.
+    const putShared = (rel: string, body: string) =>
+      writeFile(path.join(root, rel), body, { flag: "wx" }).catch((e) => {
+        if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
+      });
+    await putShared(SELF_HEAL_FILE, SELF_HEAL_SH);
+    if (branch !== null) await putShared(DISPATCH_GATE_FILE, dispatchGateSh(branch));
+  } else {
+    template = existing[0];
+    text = await readFile(path.join(dir, template), "utf8");
   }
   const file = await workerFile(root, name, locale);
-  const template = existing[0];
-  const text = await readFile(path.join(dir, template), "utf8");
   // 값 검증(모르는 엔진 · 셸 메타문자가 든 모델)은 `engineArgv`가 한다 — 이 경로도 신뢰
   // 경계고, 던지면 **파일을 만들기 전에** 멈춘다.
   const next = applyEngineBlock(rewriteCwd(text, root, name), engine, model, locale);

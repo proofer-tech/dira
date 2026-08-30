@@ -204,18 +204,16 @@ const WORKTREE_STEP_KEYS = [
 ];
 
 /** 워커 생성. **한 동작으로 끝난다** — 파일을 만들고 crontab 두 줄까지 서버가 등록한다(제약 4).
- *  등록이 실패했을 때만 성공 화면이 종전의 등록 명령어로 되돌아간다. */
+ *  등록이 실패했을 때만 성공 화면이 종전의 등록 명령어로 되돌아간다. 워커 0개인 큐에서도 그대로
+ *  연다 — `createWorker`가 §4-18 폴백으로 만든다(`engineRepo()`를 못 찾을 때만 실패한다). */
 export function CreateWorkerButton({
   projectId,
-  canTemplate,
   firstCmd,
   variant,
   defaultName = "",
 }: {
   projectId: string;
-  /** 템플릿으로 쓸 기존 워커가 있는가. 없으면 GUI가 만들 수 없다(엔진 코드 위치를 모른다) */
-  canTemplate: boolean;
-  /** 워커 0개일 때 손으로 첫 워커를 만드는 명령 */
+  /** 손으로 첫 워커를 만드는 명령 — `engineRepo()` 실패로 생성이 막혔을 때만 뜬다(§4-18 결정 2) */
   firstCmd: string;
   variant?: "default" | "outline";
   /** `이름` 칸의 기본값 — `nextWorkerName`이 계산한 값(DESIGN.md §4-13). 제안이지 예약이 아니라
@@ -248,18 +246,7 @@ export function CreateWorkerButton({
           <DialogDescription>{t("workers.create.dialogDescription")}</DialogDescription>
         </DialogHeader>
 
-        {!canTemplate ? (
-          // 마지막 `. <엔진레포>/tick.sh` 한 줄을 GUI가 알 방법이 없다 — 추측해서 만들면
-          // 돌지 않는 워커 파일이 생기고, 사람은 왜 안 도는지 모른다.
-          <div className="space-y-3">
-            <p className="text-sm text-muted-foreground">{t("workers.create.noTemplateBody1")}</p>
-            <CopyCommand cmd={firstCmd} />
-            <p className="text-sm text-muted-foreground">
-              {t("workers.create.noTemplateConfirmPrefix")} <span className="font-mono text-xs">TICKET_CWD</span>{" "}
-              {t("workers.create.noTemplateConfirmSuffix")}
-            </p>
-          </div>
-        ) : created ? (
+        {created ? (
           <div className="space-y-3">
             <p className="text-sm">
               <span className="font-mono text-xs">{created.template}</span>
@@ -322,7 +309,14 @@ export function CreateWorkerButton({
               />
               <p className="text-xs text-muted-foreground">{t("workers.create.nameHint")}</p>
             </div>
-            {result?.message && <Failure title={t("workers.create.failedTitle")} message={result.message} />}
+            {result?.message && (
+              <div className="space-y-2">
+                <Failure title={t("workers.create.failedTitle")} message={result.message} />
+                {/* §4-18 결정 2 — 손으로 첫 워커를 만드는 명령이 사는 자리가 여기 하나로 줄었다.
+                    `engineRepo()`가 실패했을 때만 사람에게 남은 유일한 길이라 그대로 둔다. */}
+                <CopyCommand cmd={firstCmd} />
+              </div>
+            )}
           </div>
         )}
 
@@ -330,9 +324,9 @@ export function CreateWorkerButton({
 
         <DialogFooter>
           <DialogClose render={<Button variant="outline" />}>
-            {created || !canTemplate ? t("common.close") : t("common.cancel")}
+            {created ? t("common.close") : t("common.cancel")}
           </DialogClose>
-          {canTemplate && !created && (
+          {!created && (
             <Button
               disabled={pending || !name.trim()}
               onClick={() =>

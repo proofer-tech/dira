@@ -1402,8 +1402,6 @@ export const ko: Record<string, string> = {
 
   "workers.create.invalidNamePrefix": "워커 이름은 영문·숫자·_·- 만 됩니다:",
   "workers.create.emptyName": "(비어 있음)",
-  "workers.create.noTemplate":
-    "템플릿으로 쓸 워커가 없습니다. 첫 워커는 엔진 레포의 worker.sh.example을 복사해 만듭니다.",
 
   "workers.ontology.mismatchMid": "에 쓴 뒤 값을 다시 읽으면 달라집니다. 어느 파일도 쓰지 않았습니다.",
 
@@ -1503,10 +1501,6 @@ export const ko: Record<string, string> = {
   "workers.create.dialogTitle": "워커 생성",
   "workers.create.dialogDescription":
     "워커 하나가 크론잡 하나고, 한 번 실행에 티켓 1건을 끝냅니다. 동시성 = 워커 개수입니다.",
-  "workers.create.noTemplateBody1":
-    "이 프로젝트에는 템플릿으로 쓸 워커가 없습니다. GUI는 기존 워커를 복사해서만 만들 수 있습니다 — 엔진 코드(tick.sh)가 어디 있는지는 워커 파일에만 적혀 있습니다. 첫 워커는 손으로 만듭니다.",
-  "workers.create.noTemplateConfirmPrefix": "만든 뒤",
-  "workers.create.noTemplateConfirmSuffix": "등 값을 확인하고, 이 화면을 새로고침하면 나머지는 GUI에서 만들 수 있습니다.",
   "workers.create.templateCopiedMiddle": "을 복사해",
   "workers.create.templateCopiedSuffix": "를 만들고 755로 두었습니다. 내용을 확인하고 필요하면 손으로 고치세요.",
   "workers.create.cronRegisteredMessage": "crontab에 등록했습니다 — 30초 뒤부터 티켓을 물어갑니다.",
@@ -1691,7 +1685,6 @@ export const ko: Record<string, string> = {
   "workers.empty.noWorkerBodyMid": "(스테일 수거)과",
   "workers.empty.noWorkerBodySuffix":
     "(할당 해제)도 할 수 없습니다 — 둘 다 워커 스크립트를 통해 엔진이 하는 일입니다(제약 2).",
-  "workers.empty.engineRepoHint": "엔진 레포 경로는 채워지지 않습니다 — 워커 파일에만 적혀 있어서 GUI가 알 수 없습니다.",
   // `firstWorkerCmd`의 자리표시자·`worktreeCmds`의 준비 명령 꼬리 주석(티켓 c7c284f6, §0-16
   // §묶음 표 행 9의 잔여). `en`은 후속 티켓이 채운다.
   "workers.firstWorkerCmd.repoPlaceholder": "dira 레포",
@@ -3404,8 +3397,6 @@ export const en: Record<string, string> = {
 
   "workers.create.invalidNamePrefix": "Worker names take letters, digits, _ and - only:",
   "workers.create.emptyName": "(empty)",
-  "workers.create.noTemplate":
-    "There's no worker to copy as a template. Make the first one by copying worker.sh.example from the engine repo.",
 
   "workers.ontology.mismatchMid": ": the value reads back differently after writing. No file was written.",
 
@@ -3496,10 +3487,6 @@ export const en: Record<string, string> = {
   "workers.create.dialogTitle": "New worker",
   "workers.create.dialogDescription":
     "One worker is one cron job, and one run finishes one ticket. Concurrency = how many workers you have.",
-  "workers.create.noTemplateBody1":
-    "This project has no worker to copy from. The GUI only makes one by copying an existing worker — where the engine code (tick.sh) sits is written in the worker file and nowhere else. Make the first worker by hand.",
-  "workers.create.noTemplateConfirmPrefix": "Once it's made, check values like",
-  "workers.create.noTemplateConfirmSuffix": "and refresh this screen — the GUI makes the rest.",
   "workers.create.templateCopiedMiddle": " was copied to",
   "workers.create.templateCopiedSuffix": ", left at 755. Look it over and fix it by hand if you need to.",
   "workers.create.cronRegisteredMessage": "Registered in the crontab — it starts claiming tickets in 30 seconds.",
@@ -3685,8 +3672,6 @@ export const en: Record<string, string> = {
   "workers.empty.noWorkerBodyMid": " (stale collection) nor",
   "workers.empty.noWorkerBodySuffix":
     " can run: the engine does both through a worker script (constraint 2).",
-  "workers.empty.engineRepoHint":
-    "The engine repo path stays blank — it's written only in the worker file, so the GUI can't know it.",
   "workers.table.holdingHeader": "Holding",
   "workers.table.contextHeader": "Context",
   "workers.table.activityHeader": "Last activity",
