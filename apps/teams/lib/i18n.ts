@@ -1668,6 +1668,8 @@ export const ko: Record<string, string> = {
   "workers.defect.noTicketCwd.title": "TICKET_CWD 없음",
   "workers.defect.noTicketCwd.why":
     "받는 트리에서 그대로 커밋합니다 — 미커밋 흔적이 남으면 통합 게이트가 큐의 워커 전부를 보류시킵니다.",
+  // §4-19 결정 3 · §비주얼 §69 — 결함이 아니라 표기다. 경고 색·아이콘·조작이 없다.
+  "workers.defect.cwdPending": "첫 디스패치에 통합 게이트가 만듭니다",
   // 이 넷은 `cwdDefects`의 `WorkerDefect.detail`(§0-16 §묶음 표 행 9의 잔여, 티켓 c7c284f6) —
   // 판정이 조립하는 문장의 고정 조각이고 가운데는 실제 경로다. `en`은 후속 티켓이 채운다.
   "workers.defect.noTicketCwd.detailPrefix": "TICKET_CWD 줄이 없어",
@@ -3679,6 +3681,7 @@ export const en: Record<string, string> = {
   "workers.defect.missingLink.detailWrongMid": "resolves to",
   "workers.defect.missingLink.detailWrongSuffix": "instead of the queue root.",
   "workers.defect.sharedCwd.detailMid": " and this worker share one working directory:",
+  "workers.defect.cwdPending": "The integration gate creates it on the first dispatch",
   "workers.tokenSummary.label": "Tokens, last 5 hours",
   "workers.tokenSummary.unaccountedPrefix": "· outside this total:",
   "workers.tokenSummary.unaccountedSuffix": " session(s)",

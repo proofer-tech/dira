@@ -122,6 +122,9 @@ export type WorkerRow = {
   /** `no-ticket-cwd`가 있을 때만 온다 — 워커 파일에 `TICKET_CWD=` 한 줄만 더하는 명령(§977419d7
    *  결정 3). `worktree`(3단계)가 아니다 — 트리는 다음 tick에 게이트가 만든다 */
   cwdFix?: string;
+  /** §4-19 결정 3 · §비주얼 §69 — 결함이 아니라 표기 한 줄. 있으면 경고 색·아이콘·조작 없이
+   *  스택 마지막에 `<p>`로 뜬다. `undefined` = 뜰 자리가 아니다 */
+  cwdPending?: string;
 };
 
 /** §6 에러 3요소 중 1·2번. 3번(다음 행동)은 부르는 쪽이 다이얼로그 안에 붙인다. */
@@ -1401,7 +1404,8 @@ export function WorkerContextRow({
   // 통합 게이트 경고는 `source` 줄이 없거나(§4-14) 있어도 파일 내용이 낡았으면 뜬다(§4-14 §소급).
   const gateWarn = !row.dispatchGateSource || row.dispatchGateStale;
   // 접혀 있어도 이 행이 뜨는 조건 — 경고 여섯 중 하나라도 있으면이다(§35 #4).
-  const warned = !!warnings || !row.commonSource || !row.selfHealSource || gateWarn || !row.context.ok;
+  const warned =
+    !!warnings || !row.commonSource || !row.selfHealSource || gateWarn || !row.context.ok || !!row.cwdPending;
   // 활동 펼침도 이 행이 받는다(§4-7) — 조건을 안 넓히면 셀을 눌러도 받을 행이 없다.
   if (!warned && !expanded && !activity) return null;
 
@@ -1568,6 +1572,11 @@ export function WorkerContextRow({
               missing={row.context.missing}
             />
           )}
+
+          {/* 일곱째 — 결함이 아니라 표기 한 줄(§4-19 결정 3, §비주얼 §69). 그릇·아이콘·색·조작
+              0개. 경고 여섯의 아래, 스택의 마지막이다 — 사람이 할 일이 있는 쪽이 위라는 축을
+              그대로 따른다(위 여섯은 전부 조작을 하나씩 갖고 있고 이 줄은 0개다). */}
+          {row.cwdPending && <p className="text-xs text-muted-foreground">{row.cwdPending}</p>}
 
           {/* 펼친 자리 — 산문 한 덩이(화면에 최대 한 번이다. 한 번에 한 행이라) + 복사 + 편집기.
               ponytail: 접으면 편집기가 언마운트돼 저장 안 한 편집이 사라진다. 한 번에 한 행이

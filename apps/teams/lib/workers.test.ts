@@ -573,6 +573,86 @@ test("작업 디렉터리 결함 — 3종을 판정하고 정상 워커에는 �
   ]);
 });
 
+test("작업 디렉터리 결함 — 조건 (a)(b)(c)가 다 참이면 없는 트리가 missing-cwd 대신 표기 한 줄이다 (§4-19 결정 1·2·3)", async () => {
+  const base = mkdtempSync(path.join(tmpdir(), "fst-base-"));
+  tmps.push(base);
+  const root = path.join(base, ".dira");
+  mkdirSync(path.join(root, "workers"), { recursive: true });
+  const gate = path.join(root, DISPATCH_GATE_FILE);
+  writeFileSync(gate, dispatchGateSh("main")); // (c) — §4-14 블록이 있다(`_gate_standard` 표식)
+
+  const wk = (cwd: string, sourced: boolean) =>
+    `#!/bin/bash\nTICKET_CWD="${cwd}"\nTICKET_CONTEXT=()\n` +
+    (sourced ? `${dispatchGateSourceLine(root)}\n` : "") +
+    `. tick.sh\n`;
+  const put = (name: string, text: string) => {
+    const file = path.join(root, "workers", `${name}.sh`);
+    writeFileSync(file, text);
+    chmodSync(file, 0o755);
+    return file;
+  };
+
+  const std = (n: string) => path.join(root, "worktrees", n);
+  // 셋 다 참 — 표준 자리(a) + source 줄(b) + 표준 게이트(c). 트리는 안 만든다.
+  put("covered", wk(std("covered"), true));
+  // (a) 거짓 — 비표준 자리(워크트리 디렉터리 밖 임의 경로).
+  put("nonstd", wk(path.join(base, "elsewhere"), true));
+  // (b) 거짓 — 표준 자리인데 게이트를 source하지 않는다.
+  put("nosource", wk(std("nosource"), false));
+
+  const ws = await listWorkers(root);
+  const by = (n: string) => ws.find((w) => w.name === n)!;
+
+  // 결정 1·2 — 셋 다 참이면 missing-cwd도 missing-link도 0개다.
+  assert.deepStrictEqual(by("covered").defects, []);
+  assert.strictEqual(by("covered").worktree, undefined);
+  // 결정 3 — 대신 경고가 아닌 표기 한 줄이 뜬다(한국어).
+  assert.strictEqual(by("covered").cwdPending, "첫 디스패치에 통합 게이트가 만듭니다");
+
+  // 결정 4 — (a) 또는 (b)가 거짓이면 종전 그대로: missing-cwd + CopyCommand, 표기는 0줄.
+  for (const n of ["nonstd", "nosource"]) {
+    assert.deepStrictEqual(
+      by(n).defects.map((d) => d.kind),
+      ["missing-cwd"],
+      n,
+    );
+    assert.strictEqual(by(n).cwdPending, undefined, n);
+    assert.ok(by(n).worktree, n);
+  }
+
+  // 디렉터리가 실재하면 결정 1이 아무것도 안 바꾼다 — 배지 0개, 표기도 0줄이다.
+  mkdirSync(std("covered"), { recursive: true });
+  symlinkSync("../..", path.join(std("covered"), ".dira"));
+  const ws2 = await listWorkers(root);
+  const covered2 = ws2.find((w) => w.name === "covered")!;
+  assert.deepStrictEqual(covered2.defects, []);
+  assert.strictEqual(covered2.cwdPending, undefined);
+});
+
+test("작업 디렉터리 결함 — (c) 거짓(게이트에 §4-14 블록이 없음)이면 missing-cwd가 종전 그대로다 (§4-19 결정 1)", async () => {
+  const base = mkdtempSync(path.join(tmpdir(), "fst-base-"));
+  tmps.push(base);
+  const root = path.join(base, ".dira");
+  mkdirSync(path.join(root, "workers"), { recursive: true });
+  // §4-14보다 먼저 깔린 게이트 — 파일은 있지만 `_gate_standard`가 없다.
+  writeFileSync(path.join(root, DISPATCH_GATE_FILE), "#!/bin/bash\n# GUI가 만들고 관리한다\necho legacy\n");
+  const cwd = path.join(root, "worktrees", "w1");
+  const file = path.join(root, "workers", "w1.sh");
+  writeFileSync(
+    file,
+    `#!/bin/bash\nTICKET_CWD="${cwd}"\nTICKET_CONTEXT=()\n${dispatchGateSourceLine(root)}\n. tick.sh\n`,
+  );
+  chmodSync(file, 0o755);
+
+  const [w] = await listWorkers(root);
+  assert.deepStrictEqual(
+    w.defects.map((d) => d.kind),
+    ["missing-cwd"],
+  );
+  assert.strictEqual(w.cwdPending, undefined);
+  assert.ok(w.worktree);
+});
+
 test("작업 디렉터리 결함 — TICKET_CWD 줄이 없으면 엔진 기본값(루트의 부모)으로 판정한다 · 워커 하나뿐이면 결함 0개(요구 977419d7 결정 1)", async () => {
   // tick.sh 39행. 이 기본값은 큐가 있는 디렉터리라 `<부모>/.dira`가 곧 큐 루트다 = 정상.
   const base = mkdtempSync(path.join(tmpdir(), "fst-base-"));

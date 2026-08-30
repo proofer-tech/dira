@@ -110,6 +110,10 @@ export type Worker = {
   cwd: string | null;
   /** 작업 디렉터리 결함 (§4). **0개가 정상이고 그때 화면은 아무것도 늘지 않는다** */
   defects: WorkerDefect[];
+  /** §4-19 결정 1·3 — 표준 자리(조건 a)를 §4-14 게이트(조건 b·c)가 지키고 있어 `missing-cwd`를
+   *  안 낸 자리. 결함이 아니라 표기 한 줄이라 `defects`에 안 넣는다(§비주얼 §69) — 화면이 이
+   *  값이 있을 때만 경고 없는 `<p>`를 스택 마지막에 그린다. `undefined` = 뜰 자리가 아니다 */
+  cwdPending?: string;
   /** 사람이 결함을 고치는 준비 명령. `missing-cwd`·`missing-link`·`shared-cwd` 중 하나라도 있을
    *  때만 채운다 — §4 생성의 3줄과 같은 함수다 */
   worktree?: string[];
@@ -1427,22 +1431,36 @@ export function holderEngine(workers: Worker[], stem: string): string | null {
  *  - `TICKET_CWD` 줄 누락 판정(§977419d7 결정 1)은 `rawCwd`가 `null`이고 워커 파일이 둘 이상일
  *    때만 선다 — 실효 cwd가 실재하는지, `.dira`가 큐 루트로 풀리는지는 안 본다(둘 다 통과하는
  *    것이 이 결함의 모양이다). 워커 하나뿐인 큐에서는 §0-3 그대로 정상이다.
+ *  - `missing-cwd` 판정(§4-19 결정 1)은 디렉터리가 없어도 조건 (a)(b)(c)가 다 참이면 안 선다 —
+ *    (a) `rawCwd`가 `worktreePath(root, name)`과 **문자열로** 같다(정규화 없음, 게이트의
+ *    `_gate_standard` 비교와 같은 선). (b) 워커 파일이 `dispatch-gate.sh`를 `source`한다.
+ *    (c) 그 게이트 본문에 `_gate_standard`가 있다(§4-14 블록의 표식). 셋 다 참이면 `missing-cwd`
+ *    대신 `cwdPending`을 세우고, **`missing-link` 검사로 안 내려간다**(결정 2) — `else` 갈래
+ *    자체를 안 타므로 없는 트리 안 `.dira`를 realpath로 못 풀어 딴 이름으로 되살아나는 함정을
+ *    피한다.
  *
- *  ponytail: 워커 수만큼 stat·realpath 3번이다(한 자릿수). 목록이 커지면 요청 단위 캐시. */
+ *  ponytail: 워커 수만큼 stat·realpath 3번 + 조건이 걸리는 워커만 readFile 2번 추가. 목록이
+ *  커지면 요청 단위 캐시. */
 async function cwdDefects(
   root: string,
   ws: { name: string; cwd: string; rawCwd: string | null; path: string }[],
   locale: Locale = DEFAULT_LOCALE,
-): Promise<WorkerDefect[][]> {
+): Promise<{ defects: WorkerDefect[]; cwdPending: boolean }[]> {
   const queue = nfc(await realpath(root).catch(() => root));
   // 못 풀리는 경로(없는 디렉터리)는 문자열로 비교한다 — 없는 트리를 둘이 공유하는 것도 공유다.
   const keys = await Promise.all(ws.map((w) => realpath(w.cwd).then(nfc, () => nfc(w.cwd))));
   const byKey = new Map<string, string[]>();
   keys.forEach((k, i) => byKey.set(k, [...(byKey.get(k) ?? []), ws[i].name]));
+  // 조건 (c) — 게이트 하나를 프로젝트당 한 번만 읽는다(워커마다 같은 값).
+  const gateHasStandardBlock = await readFile(path.join(root, DISPATCH_GATE_FILE), "utf8").then(
+    (text) => text.includes("_gate_standard"),
+    () => false,
+  );
 
   return Promise.all(
     ws.map(async ({ name, cwd, rawCwd, path: file }, i) => {
       const out: WorkerDefect[] = [];
+      let cwdPending = false;
       if (rawCwd === null && ws.length > 1) {
         out.push({
           kind: "no-ticket-cwd",
@@ -1451,10 +1469,20 @@ async function cwdDefects(
       }
       const isDir = await stat(cwd).then((s) => s.isDirectory(), () => false);
       if (!isDir) {
-        out.push({
-          kind: "missing-cwd",
-          detail: `${cwd} ${t(locale, "workers.defect.missingCwd.detailSuffix")}`,
-        });
+        // 조건 (a) — 문자열 비교, realpath 정규화 없음(게이트의 `_gate_standard` 비교와 같은 선).
+        const standard = rawCwd === worktreePath(root, name);
+        const sourced =
+          standard &&
+          gateHasStandardBlock &&
+          dispatchGateSourceRe.test(await readFile(file, "utf8").catch(() => ""));
+        if (sourced) {
+          cwdPending = true;
+        } else {
+          out.push({
+            kind: "missing-cwd",
+            detail: `${cwd} ${t(locale, "workers.defect.missingCwd.detailSuffix")}`,
+          });
+        }
       } else {
         // 트리 자체가 없으면 심링크를 따로 말하지 않는다 — 원인은 하나고 명령도 같다.
         const link = path.join(cwd, ".dira");
@@ -1485,7 +1513,7 @@ async function cwdDefects(
           detail: `${file} ${t(locale, "worker.defect.noExec.detailSuffix")}`,
         });
       }
-      return out;
+      return { defects: out, cwdPending };
     }),
   );
 }
@@ -1612,8 +1640,10 @@ export async function listWorkers(
 
   // tick.sh 39행: TICKET_CWD 줄이 없는 워커의 실효 cwd는 루트의 부모다(contextOf와 같은 기준).
   const eff = out.map((w) => ({ name: w.name, cwd: w.cwd ?? path.dirname(root), rawCwd: w.cwd, path: w.path }));
-  const defects = await cwdDefects(root, eff, locale);
-  defects.forEach((d, i) => {
+  const cwdResults = await cwdDefects(root, eff, locale);
+  cwdResults.forEach(({ defects: d, cwdPending }, i) => {
+    // §4-19 결정 3 — 결함 0개라도 표기 한 줄은 뜰 수 있다(defects와 다른 축).
+    if (cwdPending) out[i].cwdPending = t(locale, "workers.defect.cwdPending");
     if (d.length === 0) return; // 결함 0개인 워커는 아무것도 늘지 않는다
     out[i].defects = d;
     // 명령 문자열은 §4 생성과 **같은 함수**에서 나온다 — 두 자리가 다른 걸 보여주면 안 된다.
