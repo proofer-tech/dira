@@ -583,7 +583,25 @@ async function commonCwds(root: string): Promise<string[]> {
   return out.size ? [...out] : [path.dirname(root)];
 }
 
-/** `<루트>/context.sh`의 공통 항목. **파일이 없으면 0개다 — 오류가 아니다**(§4-1). */
+/** 워커 중 하나라도 공통 파일을 `source`하는 줄을 이미 갖고 있는가 — `commonCwds`와 같은
+ *  스캔이지만 존재 여부만 본다(§개정 2026-08-31, 요구 `421f440d` §소급). */
+async function anyWorkerSourcesCommon(root: string): Promise<boolean> {
+  const dir = path.join(root, "workers");
+  const names = (await readdir(dir).catch(() => [] as string[])).filter((n) => n.endsWith(".sh"));
+  for (const n of names) {
+    const text = await readFile(path.join(dir, n), "utf8").catch(() => "");
+    if (commonSourceRe.test(text)) return true;
+  }
+  return false;
+}
+
+/** `<루트>/context.sh`의 공통 항목. **파일이 없으면 0개다 — 오류가 아니다**(§4-1).
+ *
+ *  §개정(2026-08-31, 요구 `421f440d`): 파일이 없는데 이미 어느 워커가 그 파일을 `source`하고
+ *  있으면(옛 `공통 적용` — 공통 항목을 한 번도 안 넣은 큐에서도 줄만 먼저 심을 수 있었다) 그
+ *  워커의 `list`-`unassign`-`reap`이 매 호출마다 stderr에 `No such file`을 낸다. 이 자리(워커
+ *  화면이 열릴 때마다 도는 자리)에서 빈 고정 문구로 채워 낫게 한다 — 아무도 안 불렀으면(그런
+ *  워커가 없으면) 만들 이유가 없어 그대로 0개다. */
 export async function readCommonContext(
   root: string,
   locale: Locale = DEFAULT_LOCALE,
@@ -600,6 +618,10 @@ export async function readCommonContext(
         ok: false,
         reason: `${COMMON_FILE}${t(locale, "workers.context.commonReadFailMid")} ${err.message}`,
       };
+    }
+    if (await anyWorkerSourcesCommon(root)) {
+      await atomicWrite(file, COMMON_TEMPLATE, 0o644);
+      text = COMMON_TEMPLATE;
     }
   }
   if (text === null) return { ok: true, items: [] };
@@ -641,7 +663,12 @@ export async function writeCommonContext(
 
 /** `source` 줄을 워커 파일에 넣는다. 삽입 위치는 추측하지 않는다 —
  *  `parseContextBlock`이 주는 `end`(닫는 `)`) **바로 다음 줄**이다.
- *  이미 있으면 `false`(no-op), 넣었으면 `true`. */
+ *  이미 있으면 `false`(no-op), 넣었으면 `true`.
+ *
+ *  §개정(2026-08-31, 요구 `421f440d`): 공통 파일이 없으면 **여기서 먼저 만든다** —
+ *  `applySelfHeal`이 `self-heal.sh`를 없으면 만드는 것과 같은 자리다. 이 삽입이 §4-1에서 그
+ *  줄이 생기는 유일한 경로라, 여기서 안 만들면 방금 심은 줄이 가리키는 파일이 없어 이 워커의
+ *  `list`-`unassign`-`reap`이 매 호출마다 stderr에 `No such file`을 낸다. 있으면 안 덮는다. */
 export async function applyCommonSource(
   root: string,
   name: string,
@@ -649,6 +676,12 @@ export async function applyCommonSource(
 ): Promise<boolean> {
   const file = await workerFile(root, name, locale);
   const text = await readFile(file, "utf8");
+  const common = path.join(root, COMMON_FILE);
+  const commonExists = await stat(common).then(
+    () => true,
+    () => false,
+  );
+  if (!commonExists) await atomicWrite(common, COMMON_TEMPLATE, 0o644);
   if (commonSourceRe.test(text)) return false;
   const b = parseContextBlock(text, "TICKET_CONTEXT", locale);
   if (!b.ok) {

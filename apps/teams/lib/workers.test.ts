@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
@@ -2150,6 +2150,47 @@ test("readCommonContext — 파일이 없으면 0개다(오류가 아니다) · 
   assert.strictEqual(bad.ok, false);
   assert.match((bad as { reason: string }).reason, /주석이 있습니다/);
   await assert.rejects(writeCommonContext(root, []), /손으로 편집하세요/);
+});
+
+test("readCommonContext — 공통 항목을 한 번도 넣은 적 없는 큐에서도, 이미 있는 source 줄은 stderr 없이 낫는다 (§개정 421f440d)", async () => {
+  // "공통 적용"이 이 고침 이전에(옛 코드로) 눌린 큐를 흉내낸다 — 줄은 있는데 writeCommonContext는
+  // 한 번도 안 불렸다(파일이 없다) — 요구 본문이 실측한 그 모양(pofol 큐)이다. 지금 코드의
+  // `applyCommonSource`는 그 자리에서 파일도 같이 만드니(전진 수), 옛 상태는 파일을 직접 심어야
+  // 재현된다.
+  const root = makeRoot({});
+  const workerFile = path.join(root, "workers", "w1.sh");
+  writeFileSync(
+    workerFile,
+    CTX_SH.replace(
+      'TICKET_CONTEXT=(\n  "$TICKET_CWD/docs/DESIGN.md|GUI 제품 스펙"\n  "$TICKET_CWD/dira/AGENTS.md|코드 규약"\n)\n',
+      (m) => m + "\n" + commonSourceLine(root) + "\n",
+    ),
+  );
+  chmodSync(workerFile, 0o755);
+  const file = path.join(root, "context.sh");
+  assert.strictEqual(existsSync(file), false); // 아직은 진짜로 없다
+
+  // 낫기 전: 진짜 bash로 돌리면 stderr에 "No such file"이 실제로 난다(이 티켓이 고치는 그 버그)
+  const body = readFileSync(path.join(root, "workers", "w1.sh"), "utf8").replace(
+    /\. .*tick\.sh.*\n/,
+    "",
+  );
+  const before = spawnSync("/bin/bash", ["-c", body], { encoding: "utf8" });
+  assert.match(before.stderr, /context\.sh: No such file or directory/);
+
+  // 화면이 열릴 때(readCommonContext)마다 도는 그 자리에서 빈 고정 문구로 낫는다
+  const ctx = await readCommonContext(root);
+  assert.deepStrictEqual(ctx, { ok: true, items: [] });
+  assert.strictEqual(existsSync(file), true);
+
+  // 낫고 나면 stderr가 빈 문자열이다 — 이 티켓의 수용조건 그 자체
+  const after = spawnSync("/bin/bash", ["-c", body], { encoding: "utf8" });
+  assert.strictEqual(after.stderr, "");
+
+  // 공통 항목을 한 번도 안 넣은 큐에서 아무도 안 불렀으면(줄이 없으면) 여전히 안 만든다
+  const root2 = makeRoot({ "w1.sh": "#!/bin/bash\n. tick.sh\n" });
+  await readCommonContext(root2);
+  assert.strictEqual(existsSync(path.join(root2, "context.sh")), false);
 });
 
 test("writeCommonContext — 처음엔 고정 문구까지 만들고, 그 뒤엔 블록만 갈린다", async () => {
