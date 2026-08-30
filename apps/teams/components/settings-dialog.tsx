@@ -14,7 +14,7 @@
  *  URL 파라미터도 만들지 않는다 — 동시에 열릴 수 없고, 상태는 어느 쪽이든 서버가 준 같은
  *  props에서 온다(§0-4). 트리거를 JSX로 받지 않고 두 값 중 하나로 받는 이유는 부르는 쪽이
  *  **서버 컴포넌트**라서다: 넘길 수 있는 것은 값이고, 모양은 두 가지뿐이다. */
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { flushSync } from "react-dom";
 import { useRouter } from "next/navigation";
 import {
@@ -29,6 +29,7 @@ import {
   Settings,
   Trash2,
   TriangleAlert,
+  Unlink,
 } from "lucide-react";
 import {
   captureEngineProfileAction,
@@ -44,7 +45,9 @@ import {
   readWebhookAction,
   readWorkersPanelAction,
   registerPoolWorkerAction,
+  renameProjectAction,
   resetKeymapAction,
+  resolveProjectAction,
   saveTokenAction,
   sendSetupCodeAction,
   setActiveEngineProfileAction,
@@ -64,6 +67,8 @@ import {
   stopSetupAction,
   setActiveTokenAction,
   testWebhookAction,
+  unregisterProjectAction,
+  type ResolvedView,
 } from "@/app/actions";
 import type {
   OtherEngine,
@@ -77,6 +82,8 @@ import type {
 import { useHotkey, useKeymap } from "@/components/keymap-provider";
 import { useLocale, useT } from "@/components/language-provider";
 import Link from "@/components/link";
+import { OntologyImport } from "@/components/ontology-ui";
+import { ConfigTable, OntologyMigration } from "@/components/projects-ui";
 import { StatusBadge, statusLabel } from "@/components/status-badge";
 import type { Locale } from "@/lib/i18n";
 import { DEFAULT_KEYMAP, MODIFIER_KEYS, actionName, formatCombo, type ActionId } from "@/lib/keymap";
@@ -129,7 +136,19 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 /** `workers` — 열째 노드(§4-16 결정 5, 티켓 `757c4d04`). 그 티켓이 트리 줄과 패널을 낸다 —
  *  이 유니온에 이름만 먼저 얹는 것은 §4-16 결정 6(이 파일이 아니라 프로젝트 워커 표의 `공통`
  *  배지)이 이 노드로 여는 문을 열어야 해서다(`openWorkerSettingsNode` 아래). */
-type SettingsNode = "claude" | OtherEngine | "keymap" | "stats" | "language" | "webhook" | "multiplay" | "workers";
+/** `project` — §설정이 프로젝트와 공통으로 갈린다 결정 1의 첫 그룹 노드. `SettingsDialog`이
+ *  `project` prop을 받은 자리에서만 존재한다(아래 §트리 §첫 그룹) — 트리에 노드가 없으면
+ *  `activeNode`가 이 값이 될 길이 없다. */
+type SettingsNode =
+  | "claude"
+  | OtherEngine
+  | "keymap"
+  | "stats"
+  | "language"
+  | "webhook"
+  | "multiplay"
+  | "workers"
+  | "project";
 
 /** 다른 화면(프로젝트 워커 표의 `공통` 배지, §4-16 결정 6)이 이 다이얼로그를 `workers` 노드로
  *  연다. **아이콘 트리거 인스턴스만 듣는다** — 두 셸 어디서나 하나뿐인 헤더 버튼이 기준이다
@@ -1361,17 +1380,198 @@ function Kbd({ className, children }: { className?: string; children: React.Reac
   );
 }
 
+/** §설정이 프로젝트와 공통으로 갈린다 — 트리 첫 그룹의 유일한 노드가 여는 패널(§비주얼 §45 ⑫).
+ *  다섯 자리(해석 결과 · 온톨로지 마이그레이션 · 온톨로지 가져오기 · 이름 · 등록 해제)는 옛
+ *  `ProjectSettingsDialog`에서 그대로 옮겨 온 것이다 — 조작도 문구도 안 바뀐다(결정 1 · 3).
+ *  `active`가 꺼지거나(다른 노드 선택) `open`이 닫히면 확인 화면을 되돌린다(⑫(3) 수명). */
+function ProjectSection({
+  id,
+  name,
+  shortRoot,
+  className,
+  active,
+  open,
+  closeDialog,
+  onUnregistered,
+}: {
+  id: string;
+  name: string;
+  shortRoot: string;
+  className?: string;
+  active: boolean;
+  open: boolean;
+  closeDialog: () => void;
+  /** 레지스트리에서 뺀 뒤 호출된다 — 지금 보던 화면이 그 프로젝트였으면 어디로 보낼지는
+   *  호출부(전환기)가 안다. 이 컴포넌트는 "지금 어디 있나"를 모른다. */
+  onUnregistered?: () => void;
+}) {
+  const t = useT();
+  const [pending, start] = useTransition();
+  const [view, setView] = useState<ResolvedView | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const [newName, setNewName] = useState(name);
+
+  const load = useCallback(() => {
+    start(async () => {
+      setError(null);
+      const r = await resolveProjectAction(id);
+      if ("rows" in r) setView(r);
+      else setError(r.message);
+    });
+  }, [id]);
+
+  // 옛 `ProjectSettingsDialog`과 같은 자리 — 열릴 때마다 다시 읽는다(`5e7d0faf`)
+  useEffect(() => {
+    if (open) load();
+  }, [open, load]);
+
+  // 다른 노드로 옮기거나 다이얼로그가 닫히면 확인 화면이 남아 있지 않는다(⑫(3) 수명)
+  useEffect(() => {
+    if (!active || !open) setConfirming(false);
+  }, [active, open]);
+
+  return (
+    <section className={cn("space-y-2 border-t pt-4 md:border-t-0 md:pt-0", className)}>
+      <h3 data-setting="project" className="text-sm font-medium">
+        {name}
+      </h3>
+      <p className="font-mono text-xs break-all text-muted-foreground">{shortRoot}</p>
+
+      {error && (
+        <Alert variant="destructive">
+          <TriangleAlert aria-hidden />
+          <AlertTitle>{t("project.settings.readFailedTitle")}</AlertTitle>
+          <AlertDescription>
+            <span className="font-mono text-xs break-all">{error}</span>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      <div className="flex items-center justify-between gap-4">
+        <h3 data-setting="project.resolve" className="text-sm font-medium">
+          {t("project.settings.resolveResultsHeading")}
+        </h3>
+        <Button variant="outline" size="sm" disabled={pending} onClick={load}>
+          {pending ? t("project.settings.loading") : t("project.settings.reload")}
+        </Button>
+      </div>
+      {view ? (
+        <>
+          <ConfigTable view={view} />
+          <div data-setting="project.migration">
+            <OntologyMigration projectId={id} ticket={view.ontologyMigrationTicket} />
+          </div>
+          <div data-setting="project.import" className="space-y-2 border-t pt-4">
+            <OntologyImport projectId={id} tickets={view.ontologyImportTickets} />
+          </div>
+        </>
+      ) : (
+        <p className="text-sm text-muted-foreground">{t("project.settings.loading")}</p>
+      )}
+
+      <div data-setting="project.rename" className="space-y-2 border-t pt-4">
+        <Label htmlFor={`rename-${id}`}>{t("project.settings.renameLabel")}</Label>
+        <div className="flex items-center gap-2">
+          <Input
+            id={`rename-${id}`}
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+          />
+          <Button
+            variant="outline"
+            disabled={pending}
+            onClick={() =>
+              start(async () => {
+                const r = await renameProjectAction(id, newName);
+                if (r.ok) closeDialog();
+                else setError(r.message ?? t("project.settings.renameFailed"));
+              })
+            }
+          >
+            {t("project.settings.save")}
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          {t("project.settings.slugNotePrefix")} <span className="font-mono">{id}</span>
+          {t("project.settings.slugNoteSuffix")}
+        </p>
+      </div>
+
+      {/* 자리 5 — 등록 해제. 확인은 이 자리 안에서 뜬다(결정 4) — 다이얼로그 머리도 트리도
+          안 갈린다 */}
+      <div data-setting="project.unregister" className="border-t pt-4">
+        {confirming ? (
+          <div className="space-y-2">
+            <p className="text-sm font-medium">{t("project.settings.confirmTitle")}</p>
+            <p className="text-sm text-muted-foreground">
+              &quot;{name}&quot;{t("project.settings.confirmDescSuffix")}
+            </p>
+            <p className="font-mono text-xs break-all">{shortRoot}</p>
+            <p className="text-sm text-muted-foreground">{t("project.settings.confirmNote")}</p>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" autoFocus onClick={() => setConfirming(false)}>
+                {t("project.settings.cancel")}
+              </Button>
+              <Button
+                disabled={pending}
+                onClick={() =>
+                  start(async () => {
+                    const r = await unregisterProjectAction(id);
+                    if (r.ok) {
+                      closeDialog();
+                      onUnregistered?.();
+                    } else setError(r.message ?? t("project.settings.unregisterFailed"));
+                  })
+                }
+              >
+                {t("project.settings.unregisterButton")}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          // 빨강을 쓰지 않는다: 파일을 지우지 않고 다시 등록하면 돌아온다(§8)
+          <Button variant="outline" onClick={() => setConfirming(true)}>
+            <Unlink aria-hidden />
+            {t("project.settings.unregisterButton")}
+          </Button>
+        )}
+      </div>
+    </section>
+  );
+}
+
 export function SettingsDialog({
   auth,
   trigger = "icon",
+  project = null,
+  initialNode = "claude",
+  open: openProp,
+  onOpenChange: onOpenChangeProp,
+  onUnregistered,
 }: {
   auth: AuthView;
   /** `icon` = 두 셸 헤더 우측 끝. `link` = 셸 알림 종 ① 항목의 `토큰 저장`(§0-10 문구 표 ①).
-   *  라벨이 `인증하기`에서 갈린 것은 자리가 배너에서 종으로 옮겨 가면서다(§0-4 개정).
-   *  `text` = 홈 헤더(랜딩 `.btn`, §비주얼 §46 ③ — 아이콘 0개·글자만·`인증 필요` 확장 없음). */
-  trigger?: "icon" | "link" | "text";
+   *  `text` = 홈 헤더(랜딩 `.btn`, §비주얼 §46 ③ — 아이콘 0개·글자만·`인증 필요` 확장 없음).
+   *  `none` = 여는 손잡이를 안 그린다 — `open`·`onOpenChange`를 호출부가 쥔다(§설정이 프로젝트와
+   *  공통으로 갈린다 결정 3 — 목록 행 톱니·전환기 레일 톱니가 이 벌로 연다). */
+  trigger?: "icon" | "link" | "text" | "none";
+  /** 트리 첫 그룹 `프로젝트`의 유일한 노드(결정 1). 없으면 그 그룹이 통째로 안 뜬다(결정 2). */
+  project?: { id: string; name: string; shortRoot: string } | null;
+  /** 다이얼로그가 열릴 때 트리에서 처음 선택되는 노드 — 안 주면 `claude`다(§0-15 §첫 선택).
+   *  톱니 둘(`trigger="none"`)만 `"project"`를 준다(결정 3). */
+  initialNode?: SettingsNode;
+  /** `trigger="none"`일 때만 쓴다 — 호출부가 쥔 열림 상태. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  /** 프로젝트 등록 해제 뒤 호출된다 — 지금 보던 화면이 그 프로젝트였으면 어디로 보낼지는
+   *  호출부(전환기)가 안다. `trigger="none"`에서만 의미가 있다. */
+  onUnregistered?: () => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const controlled = trigger === "none";
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlled ? (openProp ?? false) : internalOpen;
+  const setOpen = controlled ? (onOpenChangeProp ?? (() => {})) : setInternalOpen;
   const [pending, start] = useTransition();
   const [token, setToken] = useState("");
   const [label, setLabel] = useState(""); // 층 ③ 라벨 칸(선택, P180-1 · §0-13 §라벨)
@@ -1392,8 +1592,11 @@ export function SettingsDialog({
   // 콜백과 같은 벌) — 그래야 `다중계정 허용`을 켠 순간 셋 다 재시작 없이 같은 값을 본다
   // (§0-18 §검증 2). `null`(로딩 중)은 잠김 쪽으로 그린다.
   const [multiToken, setMultiToken] = useState<boolean | null>(null);
-  // §0-15 트리 선택 — 첫 선택은 항상 `claude`다(§45 ③), 종 CTA로 열려도 같다
-  const [activeNode, setActiveNode] = useState<SettingsNode>("claude");
+  // §0-15 트리 선택 — 첫 선택은 `claude`다(§45 ③), 종 CTA로 열려도 같다. 톱니 둘로 열렸을 때만
+  // `initialNode`가 `"project"`다(결정 3) — `controlled` 인스턴스는 대상이 바뀔 때마다 호출부가
+  // `key`로 이 컴포넌트를 다시 마운트하므로(`projects-ui.tsx`·`project-switcher.tsx`) 이 초기값이
+  // 그때마다 다시 먹는다.
+  const [activeNode, setActiveNode] = useState<SettingsNode>(initialNode);
   // 저장 직후엔 서버 프롭이 아직 옛 값이다 — 방금 쓴 것이 이긴다(층 ②·③ 어느 쪽이든)
   const savedAt = setup?.savedAt ?? result.savedAt ?? auth.savedAt;
   // 토큰이 없어도 **claude 워커가 하나도 없으면** 이 컴퓨터는 이 토큰을 안 쓴다 — 안 알려 준다(§0-4)
@@ -1405,6 +1608,7 @@ export function SettingsDialog({
 
   // §0-15 §검색 — 항목 열 전부 + 트리 노드 이름 자신(§45 ④). 키설정 8줄은 `DEFAULT_KEYMAP`에서
   // 유도한다(레지스트리에 문자열 복사 0) — 이름을 옮기면 검색도 저절로 따라온다(§0-6).
+  const projectGroupCrumb = t("settings.tree.projectGroup");
   const authCrumb = t("settings.tree.authGroup");
   // §0-17 — 이름은 §4-3 카탈로그의 엔진 id 그대로다. 사전 키가 아니다(id는 번역이 없다).
   const claudeCrumb = "claude";
@@ -1414,6 +1618,44 @@ export function SettingsDialog({
   const workersCrumb = t("settings.tree.workers");
   const multiplayCrumb = t("settings.tree.multiplay");
   const searchIndex: SearchEntry[] = [
+    // §설정이 프로젝트와 공통으로 갈린다 결정 1 §검색 인덱스 — 노드 자신 + 자리 다섯(§비주얼 §45
+    // ⑫(5)). `claude`가 `인증` 그룹 안에서 crumbs=authCrumb를 쓰는 것과 같은 벌이다 — 홈에서 연
+    // 자리(`project`가 없다)에는 이 여섯이 하나도 안 실린다(결정 2).
+    ...(project
+      ? ([
+          { node: "project", crumbs: projectGroupCrumb, name: project.name, anchor: "project" },
+          {
+            node: "project",
+            crumbs: `${projectGroupCrumb} › ${project.name}`,
+            name: t("project.settings.resolveResultsHeading"),
+            anchor: "project.resolve",
+          },
+          {
+            node: "project",
+            crumbs: `${projectGroupCrumb} › ${project.name}`,
+            name: t("project.ontologyMigration.title"),
+            anchor: "project.migration",
+          },
+          {
+            node: "project",
+            crumbs: `${projectGroupCrumb} › ${project.name}`,
+            name: t("ontology.import.folderLabel"),
+            anchor: "project.import",
+          },
+          {
+            node: "project",
+            crumbs: `${projectGroupCrumb} › ${project.name}`,
+            name: t("project.settings.renameLabel"),
+            anchor: "project.rename",
+          },
+          {
+            node: "project",
+            crumbs: `${projectGroupCrumb} › ${project.name}`,
+            name: t("project.settings.unregisterButton"),
+            anchor: "project.unregister",
+          },
+        ] satisfies SearchEntry[])
+      : []),
     { node: "claude", crumbs: authCrumb, name: claudeCrumb, anchor: "claude" },
     {
       node: "claude",
@@ -1594,6 +1836,20 @@ export function SettingsDialog({
     return () => window.removeEventListener(OPEN_WORKERS_NODE_EVENT, onOpen);
   }, [trigger, needsAuth]);
 
+  // `controlled`(트리거 `none`, 톱니 둘)는 이 컴포넌트에 `DialogTrigger`가 없어 `open` prop이
+  // 호출부에서 바로 바뀐다 — Radix의 `onOpenChange`는 **사용자 상호작용 전용**이라 prop이 밖에서
+  // `true`로 바뀌는 전이에는 안 불린다(`ProjectSettingsDialog`의 옛 주석·`5e7d0faf`와 같은 함정).
+  // 그래서 열림 부수효과(§0-13 §추가 자동 펼침 · §0-18 §읽는 쪽)를 여기서 `open` 자체로 잡는다 —
+  // 같은 행 톱니를 다시 눌러 재마운트 없이 다시 열어도 `activeNode`가 매번 `"project"`로 돌아온다.
+  useEffect(() => {
+    if (!controlled || !open) return;
+    setAddOpen(needsAuth);
+    setActiveNode(initialNode);
+    void readMultitokenAction().then(setMultiToken);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- initialNode·needsAuth는 이 여닫음 한
+    // 판의 초기값이지 재실행 트리거가 아니다(`controlled`·`open`만 전이를 잰다)
+  }, [controlled, open]);
+
   // 진행 로그는 폴링으로 받는다 — 이 앱에 소켓은 없다(세션 스트림과 같은 방식).
   // 돌고 있을 때만 돈다: `running`이 꺼지면 effect가 정리되고 폴링이 멈춘다.
   // 층 ②가 코드 입력 없이 끝나는 길도 여기서 닫는다 — `savedAt`이 폴링으로 늦게 도착하고, 층
@@ -1622,12 +1878,27 @@ export function SettingsDialog({
     setSetup(null);
   };
 
+  // 닫는 손 하나 — Radix가 부르는 `onOpenChange(false)`(오버레이·`Esc`)와 `ProjectSection`의
+  // `closeDialog`(이름 저장·등록 해제 성공)가 같이 쓴다. 두 자리 다 이 다이얼로그를 닫으면서
+  // 옆의 인증 층 상태(추가 폼·하이라이트·`setup-token` pty)까지 같이 정리해야 해서다 — 프로젝트
+  // 노드 하나만 닫고 나머지는 그대로 두면 다음에 열었을 때 지난 추가 시도가 남아 있다.
+  const closeSettings = () => {
+    setOpen(false);
+    resetAddAttempt();
+    setAddOpen(false);
+    setQuery("");
+    setMultiToken(null);
+    clearHighlight(); // §45 ⑥ 수명 ④ — 다이얼로그가 닫히면 하이라이트도 죽는다
+    // 닫으면 죽인다 — 살아남은 `setup-token`은 pty를 물고 다음 시도를 막는다(§0-4)
+    void stopSetupAction();
+  };
+
   return (
     <Dialog
       open={open}
       onOpenChange={(o) => {
-        setOpen(o);
         if (o) {
+          setOpen(true);
           // 토큰이 없어 인증이 필요하면 열자마자 그 경로가 보인다 — 클릭을 더 요구하지 않는다.
           setAddOpen(needsAuth);
           setActiveNode("claude");
@@ -1635,47 +1906,45 @@ export function SettingsDialog({
           // `TokensSection`은 자기 몫을 자기가 읽는다(위 그 컴포넌트의 effect).
           void readMultitokenAction().then(setMultiToken);
         } else {
-          resetAddAttempt();
-          setAddOpen(false);
-          setQuery("");
-          setMultiToken(null);
-          clearHighlight(); // §45 ⑥ 수명 ④ — 다이얼로그가 닫히면 하이라이트도 죽는다
-          // 닫으면 죽인다 — 살아남은 `setup-token`은 pty를 물고 다음 시도를 막는다(§0-4)
-          void stopSetupAction();
+          closeSettings();
         }
       }}
     >
       {/* 인증이 필요하면 **이 버튼이** 알려 준다 — 배지를 따로 세우지 않는다(§0-4 · §비주얼 §4).
           그때만 아이콘 칸(size-9 정사각)을 풀어 글자를 들인다. 접근가능 이름은 두 경우 다
-          `t("settings.dialog.title")`로 같다 */}
-      <DialogTrigger
-        render={
-          trigger === "icon" ? (
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label={t("settings.dialog.title")}
-              className={needsAuth ? "w-auto gap-1 px-2" : undefined}
-            >
-              <Settings aria-hidden />
-              {needsAuth && (
-                <>
-                  <TriangleAlert aria-hidden className="text-status-stale" />
-                  <span className="text-sm">{t("settings.dialog.needsAuth")}</span>
-                </>
-              )}
-            </Button>
-          ) : trigger === "text" ? (
-            <button type="button" className="btn">
-              {t("settings.dialog.title")}
-            </button>
-          ) : (
-            <button type="button" className="text-sm underline">
-              {t("settings.dialog.triggerLink")}
-            </button>
-          )
-        }
-      />
+          `t("settings.dialog.title")`로 같다. `trigger="none"`은 여는 손잡이를 안 그린다 —
+          호출부가 이미 자기 버튼(행 톱니 · 레일 톱니)으로 `open`을 쥔다(§설정이 프로젝트와
+          공통으로 갈린다 결정 3). */}
+      {trigger !== "none" && (
+        <DialogTrigger
+          render={
+            trigger === "icon" ? (
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label={t("settings.dialog.title")}
+                className={needsAuth ? "w-auto gap-1 px-2" : undefined}
+              >
+                <Settings aria-hidden />
+                {needsAuth && (
+                  <>
+                    <TriangleAlert aria-hidden className="text-status-stale" />
+                    <span className="text-sm">{t("settings.dialog.needsAuth")}</span>
+                  </>
+                )}
+              </Button>
+            ) : trigger === "text" ? (
+              <button type="button" className="btn">
+                {t("settings.dialog.title")}
+              </button>
+            ) : (
+              <button type="button" className="text-sm underline">
+                {t("settings.dialog.triggerLink")}
+              </button>
+            )
+          }
+        />
+      )}
       {/* 폭·높이는 §비주얼 §45(요구 `6793ecb7`)가 고정한 값이다 — 패널 내용폭 480 정박에서
           역산된다. `md:overflow-hidden`이 다이얼로그 쪽 스크롤을 닫는다 — md+에서는 패널만
           스크롤한다(아래 SidebarProvider). md 미만은 종전처럼 다이얼로그 하나가 스크롤한다. */}
@@ -1726,6 +1995,26 @@ export function SettingsDialog({
                 `bg-transparent`는 다크에서 필요하다(`--sidebar` 0.205 ≠ `--surface` 0.18, ③). */}
             <Sidebar collapsible="none" className="hidden min-h-0 w-full flex-1 bg-transparent md:flex">
               <SidebarContent className="gap-4 px-1 pb-1">
+              {/* 첫 그룹 — 프로젝트를 받은 자리에서만 뜬다(결정 2). 노드는 하나, 이름은
+                  그 프로젝트의 이름 — sans, 표식 칸 없음(§비주얼 §45 §프로젝트 노드). */}
+              {project && (
+                <SidebarGroup className="p-0">
+                  <SidebarGroupLabel className="text-muted-foreground">
+                    {projectGroupCrumb}
+                  </SidebarGroupLabel>
+                  <SidebarMenu aria-label={projectGroupCrumb}>
+                    <SidebarMenuItem>
+                      <SidebarMenuButton
+                        isActive={activeNode === "project"}
+                        aria-current={activeNode === "project" ? "true" : undefined}
+                        onClick={() => selectNode("project")}
+                      >
+                        <span className="truncate">{project.name}</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  </SidebarMenu>
+                </SidebarGroup>
+              )}
               <SidebarGroup className="p-0">
                 <SidebarGroupLabel className="text-muted-foreground">{authCrumb}</SidebarGroupLabel>
                 <SidebarMenu aria-label={authCrumb}>
@@ -1844,6 +2133,21 @@ export function SettingsDialog({
                   </CommandItem>
                 ))}
               </CommandList>
+            )}
+
+            {/* 트리 첫 그룹의 패널 — 프로젝트를 받은 자리에서만 마운트한다. `project`가 없으면
+                노드도 없어 `activeNode`가 `"project"`가 될 길이 없다(결정 2). */}
+            {project && (
+              <ProjectSection
+                id={project.id}
+                name={project.name}
+                shortRoot={project.shortRoot}
+                className={cn(activeNode !== "project" && "md:hidden")}
+                active={activeNode === "project"}
+                open={open}
+                closeDialog={closeSettings}
+                onUnregistered={onUnregistered}
+              />
             )}
 
             <section className={cn("space-y-2", activeNode !== "claude" && "md:hidden")}>

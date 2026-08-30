@@ -280,8 +280,11 @@ export default async function ProjectLayout({
               />
             </PopoverContent>
           </NotificationPopover>
-          <ProjectSwitcher projects={items} currentId={id} />
-          <SettingsDialog auth={auth} />
+          <ProjectSwitcher projects={items} currentId={id} auth={auth} />
+          <SettingsDialog
+            auth={auth}
+            project={{ id: current.id, name: current.name, shortRoot: current.shortRoot }}
+          />
         </div>
       </header>
 

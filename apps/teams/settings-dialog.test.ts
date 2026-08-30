@@ -90,3 +90,31 @@ test("WorkersSection이 패널에 마운트된다", () => {
     "WorkersSection이 패널에 마운트되지 않는다",
   );
 });
+
+// §설정이 프로젝트와 공통으로 갈린다(티켓 2f6139db) — 옛 `ProjectSettingsDialog`(projects-ui.tsx)가
+// 트리 첫 그룹의 패널 `ProjectSection`으로 옮겨 왔다. 버그 5e7d0faf가 잡은 함정(`open` prop이
+// 외부에서 바로 바뀌면 Dialog의 `onOpenChange`가 안 불린다)은 이 컴포넌트에도 그대로 걸린다 —
+// `trigger="none"` 인스턴스는 톱니 클릭이 `open` prop을 밖에서 바로 바꾼다(옛 테스트
+// `projects-ui.test.ts`를 이 파일로 옮긴다).
+function projectSectionBody(): string {
+  const start = s.indexOf("function ProjectSection({");
+  assert.ok(start > 0, "ProjectSection을 못 찾았다");
+  const end = s.indexOf("\n  return (", start);
+  assert.ok(end > start, "ProjectSection 뒤 return (을 못 찾았다");
+  return s.slice(start, end);
+}
+
+test("ProjectSection이 열림 자체(useEffect)로 읽는다 — Dialog의 onOpenChange에만 안 얹는다", () => {
+  const body = projectSectionBody();
+  assert.match(
+    body,
+    /useEffect\(\(\) => \{\s*if \(open\) load\(\);\s*\}, \[open, load\]\);/,
+    "open을 직접 보는 useEffect가 없다 — 톱니 클릭(외부 setOpen)에서 load()가 안 불린다",
+  );
+});
+
+test("ProjectSection의 load()는 그 useEffect 하나만 부른다 — 열림 감지가 두 군데로 안 갈린다", () => {
+  const body = projectSectionBody();
+  const calls = body.match(/\bload\(\)/g) ?? [];
+  assert.equal(calls.length, 1, `load() 호출이 useEffect 하나여야 하는데 ${calls.length}곳이다`);
+});

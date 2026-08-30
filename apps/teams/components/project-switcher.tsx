@@ -25,7 +25,7 @@ import {
   CommandShortcut,
 } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { ProjectSettingsDialog } from "@/components/projects-ui";
+import { SettingsDialog, type AuthView } from "@/components/settings-dialog";
 import { parentPath, projectPath, screenOf } from "@/lib/urls";
 import {
   markFailuresReadAction,
@@ -337,9 +337,11 @@ function SwitcherActionRail({
 export function ProjectSwitcher({
   projects,
   currentId,
+  auth,
 }: {
   projects: SwitcherProject[];
   currentId: string;
+  auth: AuthView;
 }) {
   const router = useRouter();
   // §비주얼 §65 ④ 전용 — `/`(프로젝트 관리 · 등록 해제 뒤)로 나가는 길은 셸이 통째로 갈려
@@ -499,11 +501,12 @@ export function ProjectSwitcher({
       </Popover>
       {/* 팔레트(Popover) 밖이다 — 안에 두면 닫히는 팔레트가 다이얼로그를 같이 걷어 간다(§4-1) */}
       {settingsProject && (
-        <ProjectSettingsDialog
+        <SettingsDialog
           key={settingsProject.id}
-          id={settingsProject.id}
-          name={settingsProject.name}
-          shortRoot={settingsProject.shortRoot}
+          auth={auth}
+          trigger="none"
+          project={settingsProject}
+          initialNode="project"
           open={settingsOpen}
           onOpenChange={setSettingsOpen}
           onUnregistered={() => {

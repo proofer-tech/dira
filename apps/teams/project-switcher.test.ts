@@ -11,14 +11,16 @@ const s = readFileSync("components/project-switcher.tsx", "utf8");
 
 test("설정 다이얼로그를 Popover 밖에서 연다 — 닫히는 팔레트가 다이얼로그를 같이 안 걷어간다", () => {
   const popoverEnd = s.indexOf("</Popover>");
-  const dialogStart = s.indexOf("<ProjectSettingsDialog");
+  // §설정이 프로젝트와 공통으로 갈린다 결정 3 — `ProjectSettingsDialog`가 없어지고
+  // `SettingsDialog`(trigger="none")가 그 자리를 받는다(티켓 2f6139db)
+  const dialogStart = s.indexOf("<SettingsDialog");
   assert.ok(popoverEnd > 0, "</Popover>를 못 찾았다");
-  assert.ok(dialogStart > popoverEnd, "ProjectSettingsDialog가 Popover 안에 있다");
+  assert.ok(dialogStart > popoverEnd, "SettingsDialog가 Popover 안에 있다");
 });
 
-test("설정 다이얼로그 마크업을 다시 안 만든다 — projects-ui.tsx의 한 벌을 그대로 쓴다", () => {
+test("설정 다이얼로그 마크업을 다시 안 만든다 — settings-dialog.tsx의 한 벌을 그대로 쓴다", () => {
   assert.ok(
-    s.includes('import { ProjectSettingsDialog } from "@/components/projects-ui";'),
+    s.includes('import { SettingsDialog, type AuthView } from "@/components/settings-dialog";'),
     "공유 다이얼로그를 안 불러온다",
   );
   assert.ok(!s.includes("프로젝트 등록 해제"), "등록 해제 확인 문구가 이 파일에 또 있다");

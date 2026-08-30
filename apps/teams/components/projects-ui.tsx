@@ -9,16 +9,13 @@
  *
  *  한 파일에 있는 이유: 해석 결과 표를 생성 직후와 행 액션의 설정 다이얼로그가 **같은 표**로
  *  쓴다(DESIGN.md §7). 파일을 쪼개면 두 자리가 갈린다. fs 접근은 전부 서버 액션 뒤에 있다. */
-import { Fragment, useCallback, useEffect, useState, useTransition } from "react";
+import { Fragment, useState, useTransition } from "react";
 import Link from "@/components/link";
 import { useTrackedRouter } from "@/lib/route-pending";
-import { ChevronDown, ChevronUp, Settings2, TriangleAlert, Unlink } from "lucide-react";
+import { ChevronDown, ChevronUp, Settings2, TriangleAlert } from "lucide-react";
 import {
   createProject,
   moveProjectAction,
-  renameProjectAction,
-  resolveProjectAction,
-  unregisterProjectAction,
   type CreateState,
   type ResolvedView,
 } from "@/app/actions";
@@ -27,6 +24,7 @@ import { useLocale, useT } from "@/components/language-provider";
 import { OntologyImport } from "@/components/ontology-ui";
 import { PickPath } from "@/components/path-picker";
 import { PersonaBadge } from "@/components/persona-badge";
+import { SettingsDialog, type AuthView } from "@/components/settings-dialog";
 import { StatusBadge, type Status } from "@/components/status-badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -439,10 +437,20 @@ const EMPTY = "text-xs leading-5 text-muted-foreground";
  *  전부 안 통했다. **행을 값으로 넘기고 여기서 `map`하면** 페이로드에 행 엘리먼트가 없으므로
  *  outline 자체가 없고 재정렬은 평범한 클라이언트 렌더다.
  *  ponytail: 이 화면은 수십 행이다. 수천 행이 되면 그때 가상화를 고민한다. */
-export function ProjectRows({ rows }: { rows: ProjectRow[] }) {
+export function ProjectRows({ rows, auth }: { rows: ProjectRow[]; auth: AuthView }) {
   const t = useT();
   const locale = useLocale();
+  // 행 톱니의 `설정` — 그릇 하나만 마운트한다(전환기 레일의 `settingsProject` 벌과 같다,
+  // `project-switcher.tsx`). 행마다 다이얼로그를 하나씩 두면 트리·검색 인덱스·인증 섹션들까지
+  // 행 수만큼 마운트된다 — 톱니를 누른 행 하나만 살아 있으면 된다.
+  const [settingsProject, setSettingsProject] = useState<{
+    id: string;
+    name: string;
+    shortRoot: string;
+  } | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   return (
+    <>
     <Table>
       <TableHeader>
         <TableRow className="h-9">
@@ -517,6 +525,11 @@ export function ProjectRows({ rows }: { rows: ProjectRow[] }) {
                   shortRoot={row.shortRoot}
                   first={i === 0}
                   last={i === rows.length - 1}
+                  settingsOpen={settingsOpen && settingsProject?.id === row.id}
+                  onOpenSettings={(p) => {
+                    setSettingsProject(p);
+                    setSettingsOpen(true);
+                  }}
                 />
               </TableCell>
             </TableRow>
@@ -569,6 +582,19 @@ export function ProjectRows({ rows }: { rows: ProjectRow[] }) {
         ))}
       </TableBody>
     </Table>
+    {/* 팔레트 밖이다 — `project-switcher.tsx`의 `settingsProject` 벌과 같다. */}
+    {settingsProject && (
+      <SettingsDialog
+        key={settingsProject.id}
+        auth={auth}
+        trigger="none"
+        project={settingsProject}
+        initialNode="project"
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+      />
+    )}
+    </>
   );
 }
 
@@ -580,16 +606,21 @@ export function ProjectRowActions({
   shortRoot,
   first,
   last,
+  settingsOpen,
+  onOpenSettings,
 }: {
   id: string;
   name: string;
   shortRoot: string;
   first: boolean;
   last: boolean;
+  /** 이 행이 지금 여는 중인 `설정` 다이얼로그의 열림 상태 — 그릇은 `ProjectRows`가 하나만 쥔다
+   *  (§설정이 프로젝트와 공통으로 갈린다 결정 3). */
+  settingsOpen: boolean;
+  onOpenSettings: (project: { id: string; name: string; shortRoot: string }) => void;
 }) {
   const t = useT();
   const [pending, start] = useTransition();
-  const [open, setOpen] = useState(false);
 
   const move = (dir: -1 | 1) => start(async () => void (await moveProjectAction(id, dir)));
 
@@ -621,184 +652,13 @@ export function ProjectRowActions({
         variant="ghost"
         size="icon-sm"
         aria-haspopup="dialog"
-        aria-expanded={open}
+        aria-expanded={settingsOpen}
         aria-label={`${name} ${t("project.row.settings")}`}
-        onClick={() => setOpen(true)}
+        onClick={() => onOpenSettings({ id, name, shortRoot })}
       >
         <Settings2 aria-hidden />
       </Button>
-      <ProjectSettingsDialog
-        id={id}
-        name={name}
-        shortRoot={shortRoot}
-        open={open}
-        onOpenChange={setOpen}
-      />
     </div>
-  );
-}
-
-// ── 설정 다이얼로그 (한 벌 — `/`의 행 액션과 전환기 항목의 레일이 같이 연다) ──────────
-
-/** 이름 변경 · 온톨로지 마이그레이션 · 레지스트리에서 빼기. **여는 손잡이를 안 든다** — `open`·
- *  `onOpenChange`는 호출부가 쥔다. 전환기 레일은 팔레트(Popover)를 먼저 닫고 이 다이얼로그를
- *  띄워야 해서(DESIGN.md §비주얼 §4-1 §액션 레일 — 닫히는 Popover가 안의 다이얼로그를 같이
- *  걷어 간다) `DialogTrigger`로 여는 벌을 못 쓴다 — `/`도 같은 벌을 쓰려고 여기서 맞춘다. */
-export function ProjectSettingsDialog({
-  id,
-  name,
-  shortRoot,
-  open,
-  onOpenChange,
-  onUnregistered,
-}: {
-  id: string;
-  name: string;
-  shortRoot: string;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  /** 레지스트리에서 뺀 뒤 호출된다 — 지금 보던 화면이 그 프로젝트였으면 어디로 보낼지는
-   *  호출부(전환기)가 안다. 이 컴포넌트는 "지금 어디 있나"를 모른다. */
-  onUnregistered?: () => void;
-}) {
-  const t = useT();
-  const [pending, start] = useTransition();
-  const [view, setView] = useState<ResolvedView | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [confirming, setConfirming] = useState(false);
-  const [newName, setNewName] = useState(name);
-
-  const load = useCallback(() => {
-    start(async () => {
-      setError(null);
-      const r = await resolveProjectAction(id);
-      if ("rows" in r) setView(r);
-      else setError(r.message);
-    });
-  }, [id]);
-
-  // `open`은 부모가 쥔 controlled prop이다 — 톱니 클릭처럼 밖에서 바로 `true`로 바뀌면
-  // Dialog의 `onOpenChange`는 안 불린다(사용자 상호작용 전용 콜백이라 prop 변화 자체엔 안 걸린다).
-  // 그래서 열림은 `open` 자체를 보고 여기서 잡는다(`5e7d0faf`).
-  useEffect(() => {
-    if (open) load();
-  }, [open, load]);
-
-  return (
-    <Dialog
-      open={open}
-      onOpenChange={(o) => {
-        onOpenChange(o);
-        setConfirming(false);
-      }}
-    >
-      <DialogContent className="sm:max-w-2xl">
-        {confirming ? (
-          <>
-            <DialogHeader>
-              <DialogTitle>{t("project.settings.confirmTitle")}</DialogTitle>
-              <DialogDescription>
-                &quot;{name}&quot;{t("project.settings.confirmDescSuffix")}
-              </DialogDescription>
-            </DialogHeader>
-            <p className="font-mono text-xs break-all">{shortRoot}</p>
-            <p className="text-sm text-muted-foreground">{t("project.settings.confirmNote")}</p>
-            <DialogFooter>
-              <DialogClose render={<Button variant="outline" autoFocus />}>
-                {t("project.settings.cancel")}
-              </DialogClose>
-              <Button
-                disabled={pending}
-                onClick={() =>
-                  start(async () => {
-                    const r = await unregisterProjectAction(id);
-                    if (r.ok) {
-                      onOpenChange(false);
-                      onUnregistered?.();
-                    } else setError(r.message ?? t("project.settings.unregisterFailed"));
-                  })
-                }
-              >
-                {t("project.settings.unregisterButton")}
-              </Button>
-            </DialogFooter>
-          </>
-        ) : (
-          <>
-            <DialogHeader>
-              <DialogTitle>{name}</DialogTitle>
-              <DialogDescription className="font-mono text-xs break-all">
-                {shortRoot}
-              </DialogDescription>
-            </DialogHeader>
-
-            {error && (
-              <Alert variant="destructive">
-                <TriangleAlert aria-hidden />
-                <AlertTitle>{t("project.settings.readFailedTitle")}</AlertTitle>
-                <AlertDescription>
-                  <span className="font-mono text-xs break-all">{error}</span>
-                </AlertDescription>
-              </Alert>
-            )}
-
-            <div className="flex items-center justify-between gap-4">
-              <h3 className="text-sm font-medium">{t("project.settings.resolveResultsHeading")}</h3>
-              <Button variant="outline" size="sm" disabled={pending} onClick={load}>
-                {pending ? t("project.settings.loading") : t("project.settings.reload")}
-              </Button>
-            </div>
-            {view ? (
-              <>
-                <ConfigTable view={view} />
-                <OntologyMigration projectId={id} ticket={view.ontologyMigrationTicket} />
-                <div className="space-y-2 border-t pt-4">
-                  <OntologyImport projectId={id} tickets={view.ontologyImportTickets} />
-                </div>
-              </>
-            ) : (
-              <p className="text-sm text-muted-foreground">{t("project.settings.loading")}</p>
-            )}
-
-            <div className="space-y-2 border-t pt-4">
-              <Label htmlFor={`rename-${id}`}>{t("project.settings.renameLabel")}</Label>
-              <div className="flex items-center gap-2">
-                <Input
-                  id={`rename-${id}`}
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                />
-                <Button
-                  variant="outline"
-                  disabled={pending}
-                  onClick={() =>
-                    start(async () => {
-                      const r = await renameProjectAction(id, newName);
-                      if (r.ok) onOpenChange(false);
-                      else setError(r.message ?? t("project.settings.renameFailed"));
-                    })
-                  }
-                >
-                  {t("project.settings.save")}
-                </Button>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {t("project.settings.slugNotePrefix")} <span className="font-mono">{id}</span>
-                {t("project.settings.slugNoteSuffix")}
-              </p>
-            </div>
-
-            <div className="border-t pt-4">
-              {/* 빨강을 쓰지 않는다: 파일을 지우지 않고 다시 등록하면 돌아온다(§8). */}
-              <Button variant="outline" onClick={() => setConfirming(true)}>
-                <Unlink aria-hidden />
-                {t("project.settings.unregisterButton")}
-              </Button>
-            </div>
-          </>
-        )}
-      </DialogContent>
-    </Dialog>
   );
 }
 
@@ -812,7 +672,7 @@ export function ProjectSettingsDialog({
  *  쪽(서버)이 첫 그림에서 판정해 내려준다. 있으면 버튼 대신 그 줄이 뜬다(§56 §세 상태 ③).
  *  `status`는 서버가 이미 `statusLabel(statusOf(t))`로 옮긴 문자열이다 — `statusOf`는
  *  `lib/queue.ts` runtime이라 클라이언트 번들에 못 들어간다(`node:fs/promises` 의존). */
-function OntologyMigration({
+export function OntologyMigration({
   projectId,
   ticket,
 }: {

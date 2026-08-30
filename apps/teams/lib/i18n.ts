@@ -44,6 +44,8 @@ export const ko: Record<string, string> = {
   "settings.search.multitokenToggle": "다중계정 허용",
   "settings.search.multiplayToggle": "다중계정 동시사용",
 
+  // 첫 그룹 — 프로젝트를 받은 자리에서만 뜬다(§설정이 프로젝트와 공통으로 갈린다 결정 1-2)
+  "settings.tree.projectGroup": "프로젝트",
   "settings.tree.authGroup": "인증",
   "settings.tree.keymap": "키설정",
   "settings.tree.stats": "사용 통계",
@@ -2526,6 +2528,7 @@ export const en: Record<string, string> = {
   "settings.search.multitokenToggle": "Allow multi-account",
   "settings.search.multiplayToggle": "Simultaneous multi-account use",
 
+  "settings.tree.projectGroup": "Project",
   "settings.tree.authGroup": "Authentication",
   "settings.tree.keymap": "Keyboard shortcuts",
   "settings.tree.stats": "Usage stats",

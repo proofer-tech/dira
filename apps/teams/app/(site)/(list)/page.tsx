@@ -106,7 +106,8 @@ export default async function Page() {
         auth={auth}
         home={home}
       >
-        {rows.length > 0 && <ProjectRows rows={rows} />}
+        {/* `rows`가 있는 것은 `fullMode`뿐이라 그때 `auth`는 항상 non-null이다(위 조립) */}
+        {rows.length > 0 && <ProjectRows rows={rows} auth={auth!} />}
       </Landing>
       {/* T1(§릴리스 - 자동 업데이트 §표면이 창 안으로 들어온다, 요구 `1c5db160`) - 창이 처음 여는
           화면이 홈이라 `(app)/layout.tsx`와 같은 자리가 여기도 떠야 한다. 브라우저·랜딩-only에서는
