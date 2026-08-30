@@ -48,7 +48,13 @@ import { matchCombo } from "@/lib/keymap";
 import type { Vault } from "@/lib/markdown-wikilinks";
 import type { FrontmatterCandidates } from "@/lib/markdown-frontmatter-rows";
 import { cn } from "@/lib/utils";
-import { blockBreaks, commitEditable, joinBlocks, resolveSplit } from "@/lib/markdown-editor-blocks";
+import {
+  blockBreaks,
+  commitEditable,
+  editSurfaceId,
+  joinBlocks,
+  resolveSplit,
+} from "@/lib/markdown-editor-blocks";
 import { FrontmatterRowsEditor } from "@/components/markdown-frontmatter-rows-editor";
 
 /** 앱 하나짜리 값(규칙 ② — 칸마다 안 갈린다). §0-11 `dira-manual-theme`와 같은 자리의 키다. */
@@ -194,9 +200,26 @@ export function MarkdownEditor({
 
   const split = useMemo(() => resolveSplit(mode, text), [text, mode]);
 
+  // 커밋마다 그 슬롯(`editSurfaceId`)만 다시 그리게 하는 값(사고 `0bd7e3b8` - 마지막 블록 끝에
+  // `Enter`를 치면 브라우저가 그 블록의 contentEditable 안에 React 밖 `<p>`를 만든다. 되읽은
+  // 값이 이 인덱스 슬라이스 그대로면(=쪼개진 뒷부분만 새 블록으로 나가면) 키가 안 갈려 그
+  // 고아 노드가 리렌더에도 안 지워지고, 다음 블러가 그 고아 노드를 또 읽어 내용을 거듭 담는다).
+  // 렌더 중엔 `ref`를 못 읽으므로(react-hooks/refs) state로 둔다 - 커밋은 항상 `setText`를
+  // 동반해 어차피 리렌더 한 번이 나가므로 이 state가 리렌더를 더 만들지 않는다(같은 배치).
+  const [editEpochs, setEditEpochs] = useState<Record<string, number>>({});
+  function bumpEditEpoch(id: string) {
+    setEditEpochs((prev) => ({ ...prev, [id]: (prev[id] ?? 0) + 1 }));
+  }
+  function editEpoch(id: string): number {
+    return editEpochs[id] ?? 0;
+  }
+
   function commitActiveEditable(el: Element) {
     const next = commitEditable(el, split);
-    if (next !== null) setText(next);
+    if (next !== null) {
+      bumpEditEpoch(editSurfaceId(el));
+      setText(next);
+    }
   }
 
   // 폼의 `submit`을 캡처 단계에서 가로챈다(위 파일 top 주석 §제출은 blur를 안 지날 수 있다).
@@ -254,6 +277,7 @@ export function MarkdownEditor({
       if (!root || !(active instanceof HTMLElement) || !active.isContentEditable || !root.contains(active)) return;
       const next = commitEditable(active, split);
       if (next === null) return;
+      bumpEditEpoch(editSurfaceId(active));
       if (hiddenInputRef.current) hiddenInputRef.current.value = next; // state 리렌더 전에 값을 넣는다
       setText(next);
     };
@@ -340,6 +364,9 @@ export function MarkdownEditor({
                     />
                   ) : (
                     <div
+                      // 커밋마다 갈리는 에포크를 키에 실어 재마운트시킨다(위 `editEpochsRef` 문서,
+                      // 사고 `0bd7e3b8`) — 안 고치면 이 칸에 안 걸린다.
+                      key={`head:${editEpoch("head")}`}
                       data-head=""
                       contentEditable
                       suppressContentEditableWarning
@@ -356,6 +383,7 @@ export function MarkdownEditor({
               )}
               {split.blocks.length === 0 ? (
                 <div
+                  key={`empty:${editEpoch("empty")}`}
                   ref={firstEditableRef}
                   contentEditable
                   suppressContentEditableWarning
@@ -378,7 +406,16 @@ export function MarkdownEditor({
                     // 안 남는다. 안 갈린 블록은 키가 그대로라 재마운트가 없다.
                     // `data-block-index`는 제출 가로채기가 `document.activeElement`에서 이 `i`를
                     // 되찾는 자리다(`lib/markdown-editor-blocks.ts`의 `commitEditable`).
-                    key={`${i}:${block}`}
+                    //
+                    // 끝 에포크(`editEpoch`)는 별개 이유로 더한다(사고 `0bd7e3b8`) — 이 블록을 막
+                    // 커밋한 뒤 되읽은 슬라이스가 편집 전과 우연히 같으면(예: 마지막 블록 끝에서
+                    // `Enter`를 쳐 뒤가 새 블록으로 빠지고 이 블록 자신은 안 갈리는 경우) 위 두
+                    // 조각만으로는 키가 그대로라 재마운트가 없다 — 브라우저가 그 커밋 중에
+                    // contentEditable 안에 직접 만든, React가 모르는 DOM(고아 `<p>`)이 안 지워지고
+                    // 남아 다음 블러가 그걸 또 읽어 내용을 거듭 담는다. 커밋마다 이 블록만 갈리는
+                    // 값을 더해 항상 재마운트시켜 지운다 - 안 고친 블록은 에포크가 그대로라 여전히
+                    // 재마운트가 없다(캐럿 보존, 위 주석과 같은 성능 전제 무수정).
+                    key={`${i}:${block}:${editEpoch(`block:${i}`)}`}
                     ref={i === 0 ? firstEditableRef : undefined}
                     data-block-index={i}
                     contentEditable

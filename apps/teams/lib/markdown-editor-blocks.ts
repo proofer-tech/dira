@@ -294,6 +294,16 @@ export function looseTextOf(root: Element): string {
  *  (`split.blocks.length === 0`) 셋 다 받는다 — `active`가 이 컴포넌트의 편집 표면이 아니면
  *  (자리를 못 찾거나 안 바뀌었으면) `null`이라 호출부가 `setText`를 건너뛴다(안 바뀐 값으로
  *  리렌더를 안 만든다). */
+/** 지금 커밋하는 편집 표면이 리렌더 뒤 어느 슬롯에 해당하는지 - `data-head`(머리 줄) ·
+ *  `data-block-index`(블록) · 그 밖(아직 블록 0개인 빈 칸) 셋 중 하나. `components/markdown-editor.tsx`가
+ *  커밋마다 이 id로 그 슬롯 하나만 재마운트시켜(고아 DOM 노드를 씻어낸다 - 아래 함수 문서) 안 고친
+ *  슬롯은 그대로 둔다(캐럿 보존). */
+export function editSurfaceId(active: Element): string {
+  if (active.getAttribute("data-head") !== null) return "head";
+  const indexAttr = active.getAttribute("data-block-index");
+  return indexAttr !== null ? `block:${indexAttr}` : "empty";
+}
+
 export function commitEditable(active: Element, split: SplitResult): string | null {
   if (active.getAttribute("data-head") !== null) {
     // `head`는 (빈 칸과 달리) 개행까지 포함해 그대로 렌더된 문자열이라 되읽은 값에 "\n"을

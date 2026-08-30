@@ -4,6 +4,7 @@ import {
   blockBreaks,
   commitEditable,
   domToMarkdown,
+  editSurfaceId,
   EMPTY_SPLIT,
   joinBlocks,
   replaceBlock,
@@ -208,6 +209,38 @@ test("commitEditable — data-block-index가 없는 원소는 이 컴포넌트 �
   const split = splitBlocks("본문.\n");
   const foreign = new FakeElement("div", [new FakeText("본문.")]); // 인덱스 속성 없음
   assert.equal(commitEditable(el(foreign), split), null);
+});
+
+// 사고 `0bd7e3b8` — 마지막 블록 끝에 `Enter`를 치면 브라우저가 그 블록의 contentEditable 안에
+// React 밖 `<p>`를 만든다. 되읽은 값의 그 블록 슬라이스가 편집 전과 우연히 같으면(뒤가 새 블록으로
+// 빠지고 이 블록 자신은 안 갈리면) React 키가 그대로라 재마운트가 없고, 그 고아 `<p>`가 다음
+// 블러에도 그대로 남아 또 읽힌다 - 담긴 내용이 거듭 붙는다. `commitEditable` 자신은 "그 순간 DOM에
+// 보이는 것"을 있는 그대로 되읽는 함수라 이 성질을 그대로 가진다 - 중복을 막는 것은 이 함수의
+// 일이 아니라, 커밋마다 그 슬롯을 강제 재마운트시켜 이 고아 DOM 자체가 다시 생기지 않게 하는
+// `components/markdown-editor.tsx`(`editSurfaceId` 기반 키)의 일이다.
+test("commitEditable — 재마운트 안 된 고아 <p>가 남으면 다음 커밋이 내용을 거듭 담는다 (회귀 문서화)", () => {
+  const split = splitBlocks("둘째 블록.\n");
+  const contaminated = new FakeElement(
+    "div",
+    [new FakeElement("p", [new FakeText("둘째 블록.")]), new FakeElement("p", [new FakeText("마지막")])],
+    { "data-block-index": "0" },
+  );
+  const first = commitEditable(el(contaminated), split);
+  assert.equal(first, "둘째 블록.\n\n마지막\n");
+
+  // 재마운트가 안 됐다고 가정 - 같은(고아 노드 그대로인) DOM을 새 split에 대고 다시 커밋한다.
+  const resplit = splitBlocks(first);
+  const second = commitEditable(el(contaminated), resplit);
+  assert.equal(second, "둘째 블록.\n\n마지막\n\n마지막\n"); // "마지막"이 한 번 더 - 고아 DOM이 문제다
+});
+
+test("editSurfaceId — data-head/data-block-index/그 밖(빈 칸) 셋을 가른다", () => {
+  const head = new FakeElement("div", [], { "data-head": "" });
+  const block = new FakeElement("div", [], { "data-block-index": "3" });
+  const empty = new FakeElement("div", []);
+  assert.equal(editSurfaceId(el(head)), "head");
+  assert.equal(editSurfaceId(el(block)), "block:3");
+  assert.equal(editSurfaceId(el(empty)), "empty");
 });
 
 // 위키링크 되읽기 — DESIGN.md §비주얼 §50 §되읽기, 요구 `9f2f41ed`(티켓 `40eef885`). `lib/markdown-wikilinks.ts`의
