@@ -275,7 +275,7 @@ a project worker is the `Common` badge next to `Name`, and pressing that badge o
 |---|---|---|
 | Where you make it | `New worker` at the top right of the workers screen | `New worker` in `Settings` › `Workers` |
 | Queue it runs | This one project | One at a time, taking turns across the projects with borrowing on |
-| Worktree | Created along with it | Created the first time it takes a ticket in this queue |
+| Worktree | Created along with it | Created on the round it is first dispatched into this queue |
 | Common context, integration gate, account rules | It gets this project's | The same - it gets those of whichever project it took |
 | Engine and model | The ticket's persona decides | The same. So one slot can run on a different engine per project |
 | `Stream` on the row | You press it | You press it just the same |
@@ -289,6 +289,13 @@ It is the same reason a common worker row at `stopped` does not get `not in the 
 worker's cron line is in the pool, not in this project's file, so the `Re-register` that phrase
 points at is a blocked operation on this row. The `Common` badge in the same row tells you why
 instead.
+
+Turn borrowing on, look under `worktrees/` right away, and the directory for that slot is not
+there. That is the normal state. So that trees never pile up in projects that registered and may
+never use the pool, the only thing that lands in this queue the moment you turn borrowing on is a
+single worker file. The tree is created by the integration gate on the round that slot first picks
+this project, and the worker takes a ticket after that. Until your turn comes around, waiting is
+all there is to do.
 
 ### The rule that decides whose turn it is
 
