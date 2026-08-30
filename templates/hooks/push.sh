@@ -13,9 +13,12 @@
 #              -> push -> 사람 편집 되돌리기. stdout과 종료 코드는 git push 것을 그대로 낸다.
 #   classify <경로>... - 각 경로가 "잔해"인지 "사람 편집"인지 한 줄에 한 낱말로 답한다.
 #              락을 안 쥔다 - 아무것도 안 고치는 조회다.
+#   ship <해시> "<제목>" ["<본문>"] - 커밋(뺄 것 없으면 건너뜀) -> 위 (없음) 경로 -> 거부되면
+#              rebase master 후 1회만 재시도. DESIGN.md §마무리 의례를 헬퍼가 감싼다.
 #
-# rebase는 안 한다 - non-fast-forward 거부는 종전대로 세션의 몫이다. 이 스크립트가 만지는 트리는
-# 받는 트리(git-common-dir의 부모) 하나뿐이다 - 지금 이 스크립트가 도는 워크트리는 안 건드린다.
+# rebase는 기본적으로 안 한다 - non-fast-forward 거부는 종전대로 세션의 몫이다. 이 스크립트가
+# 만지는 트리는 받는 트리(git-common-dir의 부모) 하나뿐이다 - **`ship`만 예외**로 자신이 도는
+# 워크트리에 커밋하고 그 워크트리에서 rebase master를 1회 돌린다(§계약 "경계를 하나 넘는다").
 set -u
 
 _common_dir=$(git rev-parse --git-common-dir 2>/dev/null) || {
@@ -51,7 +54,7 @@ acquire_lock() {
   trap 'rm -rf "$_lock"' EXIT
 }
 
-# 모드만 바뀌었나(삭제-새 파일과 함께 결정 3이 "비교 불성립 -> 사람 편집"으로 고정한 셋째 모양).
+# 모드만 바뀌었나(삭제-새 파일과 함께 결정 3이 "비교 불성립 -> 사람 편집"으로 못박은 셋째 모양).
 # `git diff --raw`는 워크트리 쪽 blob 칸을 항상 0으로 채운다(실제로 안 돌려 본다) - 그래서 그
 # 칸끼리 비교하지 않고, 지금 파일의 실제 blob을 옛 blob(HEAD)과 직접 비교한다.
 mode_only_change() {
@@ -158,13 +161,51 @@ pop_own_autostash() {
   echo "push.sh: pop이 충돌해 사람 편집을 stash@{0}에 남겼다 - git -C $_recv stash list" >&2
 }
 
-main_push() {
+# 락 -> 정리 -> push -> 되돌리기 한 판. 락은 매번 새로 쥐고 반납한다(ship이 이걸 두 번 부를 수
+# 있어서 - rebase 사이에는 안 쥐고 있어야 남의 push가 그 창을 쓴다).
+push_once() {
   acquire_lock
   recover_stale_autostash
   cleanup_dirty_tree
   git push . HEAD:master
   local rc=$?
   pop_own_autostash
+  rm -rf "$_lock"
+  return "$rc"
+}
+
+main_push() {
+  push_once
+  exit "$?"
+}
+
+# 커밋(뺄 것 없으면 건너뜀) -> push_once -> 거부되면 이 워크트리에서 rebase master 후 1회만 재시도.
+do_ship() {
+  local hash="$1" title="$2" body="${3:-}" rc
+  [ -n "$hash" ] && [ -n "$title" ] || {
+    echo 'push.sh: 사용법 - ship <해시> "<제목>" ["<본문>"]' >&2
+    exit 2
+  }
+  if [ -n "$(git status --porcelain)" ]; then
+    git add -A
+  fi
+  if ! git diff --cached --quiet; then
+    if [ -n "$body" ]; then
+      git commit -q -m "$title" -m "$body" -m "Ticket: $hash" || exit $?
+    else
+      git commit -q -m "$title" -m "Ticket: $hash" || exit $?
+    fi
+  fi
+  push_once
+  rc=$?
+  if [ "$rc" -ne 0 ]; then
+    if git rebase master; then
+      push_once
+      rc=$?
+    else
+      rc=$?
+    fi
+  fi
   exit "$rc"
 }
 
@@ -173,11 +214,15 @@ case "${1:-}" in
     shift
     do_classify "$@"
     ;;
+  ship)
+    shift
+    do_ship "$@"
+    ;;
   "")
     main_push
     ;;
   *)
-    echo "push.sh: 알 수 없는 서브커맨드 '$1' (classify | 없음)" >&2
+    echo "push.sh: 알 수 없는 서브커맨드 '$1' (classify | ship | 없음)" >&2
     exit 2
     ;;
 esac
