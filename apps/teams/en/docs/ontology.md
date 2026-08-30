@@ -345,10 +345,12 @@ warning either.
 
 ## Already running a project - migration
 
-The survey is for a new project. A project with tickets already piled up has another door. Press
-the gear on that row in the project list and there is `Ontology migration`. The description sits
-right there: `Sets one up if there's none, and re-applies the latest conventions if there is.
-Safe to run again.`
+The survey is for a new project. A project with tickets already piled up has another door. Open
+`Settings` and press the project's name under the first tree group, `Project`. Below the resolved
+values table in that panel is `Ontology migration`. The gear on that row in the project list takes
+you straight to the same place (see [Screens](/docs/screens), under the settings dialog). The
+description sits right there: `Sets one up if there's none, and re-applies the latest conventions
+if there is. Safe to run again.`
 
 Running it again is normal use. Cards you edited by hand are not overwritten. What already
 matches the conventions is not touched. Old records are not thrown out. Only what counts as fact
@@ -360,8 +362,8 @@ worker's, so you can close the dialog, or the tab.
 
 Where you watch it is that ticket's detail. The address is `/p/<project>/tickets/<hash>`, and
 what the session is reading and changing flows through the [Progress record](/docs/screens). You
-do not have to remember the hash. Open the settings again and where `Start migration` was there
-is a link instead, reading something like `Migration a1b2c3d4 Open`. The button does not come
+do not have to remember the hash. Open `Settings` again, go back to that same node, and where
+`Start migration` was there is a link instead, reading something like `Migration a1b2c3d4 Open`. The button does not come
 back until that ticket finishes. **Press twice and there is still one ticket.**
 
 When it completes, the button returns. That is the signal that one session could not walk all of
@@ -371,7 +373,7 @@ it. Press it once more. This is the place where running it again being normal us
 
 A folder of meeting notes, an old wiki, a pile of material you downloaded. There is a separate
 door for turning what has stacked up outside the project into cards. The same form appears twice,
-once in that dialog just under the migration and once under the metrics panel on the ontology
+once in that panel just under the migration and once under the metrics panel on the ontology
 screen. Put a path in `Folder to import` and press `Import`. The folder's name becomes the source
 name. Put in `Notes` and every card salvaged from there carries `Notes`.
 

@@ -692,6 +692,11 @@ One gear at the top right opens a dialog. A search field and a tree of items on 
 panel for the item you pick on the right. When you cannot remember an item's name, try the search
 field. It takes you there without walking the tree.
 
+- **Project** — the first group in the tree. It only appears when you open settings from inside a
+  project. There is a single line under it, and its name is the name of the project you are looking
+  at. Press it and five things for that one project come up in order — `Resolved values`,
+  `Ontology migration`, `Folder to import`, `Name`, `Unregister`. These are the same five you used
+  to open in a separate `Project settings` dialog.
 - **Authentication** — `claude` is at the top, with `codex` · `grok` · `agy` one line each below it.
   This is where you put in the long-lived token the cron-mounted workers use. The screen runs the
   issuing command for you. The details are in [Authentication](/docs/auth).
@@ -706,13 +711,22 @@ field. It takes you there without walking the tree.
   workers of every registered project. The three filters at the top narrow both sections together.
   Covered in [Workers](/docs/worker), under common workers.
 
+Open settings from the home header and the `Project` group is not there at all. That place points at
+no project, so there is no way to decide whose values to show. Use the gear on a row in the project
+list instead, or open the switcher in a project's header and press the gear inside it. Both buttons
+sit where they always did, with the same icon, and pressing either opens `Settings` with that
+project's node already selected.
+
 One more panel has no line in the tree. You have to type `Multiplaying` into the search field to
 find it. Whether to register several accounts, and whether to split those accounts across workers,
 is decided there (see [Authentication](/docs/auth), under multiplaying — the switch for keeping
 several accounts).
 
-These settings all belong to this computer and apply to every registered project. This is not the
-place to set something per project.
+Everything outside the `Project` group belongs to this computer and applies to every registered
+project. Authentication, language, the common worker pool — none of them are set per project. Values
+that do differ per project sit in two places. One is the five things in the `Project` group you just
+saw; the other is `Worker settings`, opened separately from the top right of the workers screen (see
+[Workers](/docs/worker)).
 
 ## The project list
 
@@ -725,6 +739,10 @@ writing as the page you see on the web. In the app, the list rides on top of it 
   `Connected` · `Actions`. Press the name for that project's board.
 - For a project that is not connected, the three count cells are empty. Not zero. Could not read and
   zero are different facts.
+- The gear in the `Actions` column opens `Settings`. That row's project comes up already selected
+  under the first tree group, `Project`, and the five things from resolved values through unregister
+  are there. No separate `Project settings` dialog opens any more (see [The settings
+  dialog](#the-settings-dialog) above).
 - The right of the header carries `Manual` · `Star` · `New project` · `Settings`.
   `Settings` here is a word, not a gear.
 - With zero registered projects, the creation form unfolds where the table would be, and `New project`
