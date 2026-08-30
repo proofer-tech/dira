@@ -21,6 +21,7 @@ import {
   FrontmatterTable,
   NewTicketDialog,
   OpenTicketFileButton,
+  PollingControls,
   ReassignLine,
   TicketEditForm,
   TicketFrontmatterPanel,
@@ -348,6 +349,16 @@ export default async function TicketDetail({
   // 폴링 대기 절(DESIGN.md §폴링 대기 결정 9) — 지금 대기 중일 때만 부른다. 지운 뒤에도 남는
   // `polling_until`·`polled_at`(결정 7)은 이 회차의 범위 밖이다("지금 대기 중"만 보여준다).
   const polling = isPolling(ticket) ? await pollingDetailOf(project.root, ticket, now) : null;
+  // `상한 늘리기` 입력의 초깃값 — `polling.until`은 오프셋 붙은 절대 시각이라(결정 2)
+  // `datetime-local`에 그대로 못 넣는다. 로컬 시각으로 `YYYY-MM-DDTHH:mm`을 짠다(`lib/auth.ts`
+  // 세션 만료 표시와 같은 관용구, 새 헬퍼를 안 만든다).
+  const untilInputDefault = polling?.until
+    ? (() => {
+        const d = polling.until!;
+        const p = (n: number) => String(n).padStart(2, "0");
+        return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+      })()
+    : "";
 
   // 복사 다이얼로그의 deps 선택지. 보드와 **같은 한 줄**이다(§3 — deps가 가리키는 이름은
   // `ticket:`이 아니라 stem이고, 큐 순서를 뒤집어야 방금 만든 티켓이 맨 위다).
@@ -727,6 +738,8 @@ export default async function TicketDetail({
                   <EmptyState text={t(locale, "polling.logTail.missing")} />
                 )}
               </div>
+              {/* 손잡이 둘(§폴링 대기 §개정 3) — 상한을 넘기기 전에도 사람이 기다림을 끊는다. */}
+              <PollingControls project={id} hash={hash} untilDefault={untilInputDefault} />
             </section>
           )}
 

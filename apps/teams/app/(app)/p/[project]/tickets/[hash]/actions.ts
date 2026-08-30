@@ -26,6 +26,7 @@ import { kickIdleWorker } from "@/lib/kick";
 import { parseFrontmatterHead } from "@/lib/markdown-frontmatter-rows";
 import { mayHaveRefs, type RefIndex } from "@/lib/markdown-refs";
 import { isHash, openInApp, parseAssignment, resolveWithin, type OpenResult } from "@/lib/paths";
+import { dispatchPollingNow, extendPollingUntil } from "@/lib/polling-control";
 import { findStream, sessionIdOf, tailEvents, type StreamEvent } from "@/lib/transcript";
 import { lastDispatchSid } from "@/lib/workers";
 import {
@@ -436,6 +437,45 @@ export async function unassignTicket(
     return r;
   } catch (e) {
     return { ok: false, output: (e as Error).message, worker: null };
+  }
+}
+
+/** `지금 디스패치` — 폴링 대기를 상한 전에 끊는다(DESIGN.md §폴링 대기 §개정 3). 판정·쓰기는
+ *  `lib/polling-control.ts`가 한다(`sendInterject`와 같은 이유 — 두 곳에서 판정하면 화면이
+ *  거짓말을 한다). 성공하면 `kickIdleWorker`를 부른다 — 다음 tick(최대 30초)을 기다리지 않고
+ *  그 티켓이 바로 물린다. */
+export async function dispatchPollingNowAction(projectId: string, hash: string): Promise<SaveState> {
+  try {
+    const locale = await readLanguage();
+    const project = await getProject(projectId);
+    if (!project) throw new Error(`${t(locale, "ticketDetail.unknownProjectPrefix")} ${projectId}`);
+    const config = await resolveConfig(project);
+    const r = await dispatchPollingNow(project.root, config, hash, locale);
+    if (!r.ok) return { error: r.error };
+    revalidatePath(`/p/${projectId}/tickets/${encodeURIComponent(r.stem)}`);
+    revalidatePath(`/p/${projectId}`);
+    await kickIdleWorker(project.root);
+    return { ok: true };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+/** `상한 늘리기` — `polling_until` 하나만 새 시각으로 다시 적는다(§개정 3). 대기가 계속되는
+ *  것이라 `kickIdleWorker`는 안 부른다(디스패치할 것이 없다). */
+export async function extendPollingUntilAction(projectId: string, hash: string, until: string): Promise<SaveState> {
+  try {
+    const locale = await readLanguage();
+    const project = await getProject(projectId);
+    if (!project) throw new Error(`${t(locale, "ticketDetail.unknownProjectPrefix")} ${projectId}`);
+    const config = await resolveConfig(project);
+    const r = await extendPollingUntil(project.root, config, hash, until, new Date(), locale);
+    if (!r.ok) return { error: r.error };
+    revalidatePath(`/p/${projectId}/tickets/${encodeURIComponent(r.stem)}`);
+    revalidatePath(`/p/${projectId}`);
+    return { ok: true };
+  } catch (e) {
+    return { error: (e as Error).message };
   }
 }
 

@@ -145,7 +145,7 @@ function isoOffsetMs(off: string): number {
 /** ISO 8601 + 오프셋 문자열 → 절대 시각. 오프셋 없는 값은 로컬 시각으로 읽는다. `duedate`뿐
  *  아니라 같은 서식인 `polling_until`·`polled_at`(§폴링 대기 결정 2 — `assigned_at`과 같은 서식)도
  *  이 파서 하나를 쓴다. 못 읽으면 `null` — WARN은 호출부가 문맥(어느 키인지)을 알아야 적으므로 여기서 안 낸다. */
-function parseIsoOffset(raw: string): Date | null {
+export function parseIsoOffset(raw: string): Date | null {
   const m = ISO_DATETIME_RE.exec(raw);
   if (!m) return null;
   const [, y, mo, d, hh, mi, ss, off] = m;

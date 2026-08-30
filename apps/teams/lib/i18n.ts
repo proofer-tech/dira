@@ -690,6 +690,15 @@ export const ko: Record<string, string> = {
   "polling.field.logTail": "마지막 출력",
   "polling.scriptBody.missing": "스크립트 파일 없음",
   "polling.logTail.missing": "출력 기록 없음",
+  // 상한 전에도 끊는 손잡이 둘(§폴링 대기 §개정 3) — 확인 다이얼로그는 없다.
+  "polling.action.dispatchNow": "지금 디스패치",
+  "polling.action.dispatching": "디스패치하는 중…",
+  "polling.action.extendUntil": "상한 늘리기",
+  "polling.action.extending": "늘리는 중…",
+  "polling.until.saved": "적용됐습니다.",
+  "polling.control.notPolling": "이 티켓은 지금 폴링 대기 상태가 아닙니다.",
+  "polling.control.badUntil": "상한 값을 읽을 수 없습니다.",
+  "polling.control.pastUntil": "상한은 지금보다 뒤여야 합니다.",
 
   // 표 컬럼(§에픽 결정 7 §표뷰) — 띠 머리 라벨은 `board.epic.noTitle`을 그대로 재사용한다
   // (사이드바와 같은 글자여야 한다, §1 - 한 사실을 두 모양으로 그리지 않는다).
@@ -2961,6 +2970,15 @@ export const en: Record<string, string> = {
   "polling.field.logTail": "Last output",
   "polling.scriptBody.missing": "Script file not found",
   "polling.logTail.missing": "No output yet",
+  // Handles that break the wait before the deadline (§폴링 대기 §개정 3) — no confirm dialog.
+  "polling.action.dispatchNow": "Dispatch now",
+  "polling.action.dispatching": "Dispatching…",
+  "polling.action.extendUntil": "Extend deadline",
+  "polling.action.extending": "Extending…",
+  "polling.until.saved": "Applied.",
+  "polling.control.notPolling": "This ticket isn't currently polling.",
+  "polling.control.badUntil": "Can't read that deadline.",
+  "polling.control.pastUntil": "The deadline must be later than now.",
 
   "board.column.epic": "Epic",
 

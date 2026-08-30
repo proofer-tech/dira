@@ -33,6 +33,8 @@ import {
 import {
   answerRequirement,
   deleteTicket,
+  dispatchPollingNowAction,
+  extendPollingUntilAction,
   openTicketFileAction,
   saveTicket,
   saveTicketFrontmatter,
@@ -802,6 +804,63 @@ export function UnassignButton({
       )}
       {output}
       {confirm}
+    </div>
+  );
+}
+
+// ── 폴링 대기를 끊는 손잡이 둘 ────────────────────────────────────────────────
+
+/** 폴링 대기 절 안의 `지금 디스패치`·`상한 늘리기`(DESIGN.md §폴링 대기 §개정 3) — 상한을
+ *  넘기기 전에도 사람이 기다림을 끊는다. **확인 다이얼로그 0개**다(§개정 3 — 되돌리는 값이
+ *  `workers/<w>.sh poll` 한 번이라 지우는 조작이 아니다).
+ *
+ *  `page.tsx`가 `isPolling(ticket)`일 때만 이 절 자체를 그리므로, 여기는 그 재확인을 안 한다 —
+ *  서버 액션이 한 번 더 하는 재확인(`lib/polling-control.ts`)이 유일한 판정이다(화면 제약은
+ *  검증이 아니다, `UnassignButton`과 같은 근거). */
+export function PollingControls({
+  project,
+  hash,
+  untilDefault,
+}: {
+  project: string;
+  hash: string;
+  /** `polling_until`을 `datetime-local`이 읽는 값으로 미리 채운다 — 상한을 늘리는 것이지 새로
+   *  정하는 것이 아니라, 빈 칸에서 다시 고르게 하지 않는다. */
+  untilDefault: string;
+}) {
+  const t = useT();
+  const [dispatching, startDispatch] = useTransition();
+  const [dispatchError, setDispatchError] = useState<string | null>(null);
+  const [untilState, extendAction, extendPending] = useActionState<SaveState, FormData>(
+    async (_prev, form) =>
+      extendPollingUntilAction(project, hash, String(form.get("until") ?? "")),
+    {},
+  );
+
+  const dispatchNow = () =>
+    startDispatch(async () => {
+      const r = await dispatchPollingNowAction(project, hash);
+      setDispatchError(r.error ?? null);
+    });
+
+  return (
+    <div className="space-y-2 border-t pt-3">
+      <div className="flex flex-wrap items-center gap-3">
+        <Button variant="outline" size="sm" disabled={dispatching} onClick={dispatchNow}>
+          {dispatching ? t("polling.action.dispatching") : t("polling.action.dispatchNow")}
+        </Button>
+        <form action={extendAction} className="flex items-center gap-2">
+          <Input type="datetime-local" name="until" className="w-56" defaultValue={untilDefault} />
+          <Button type="submit" variant="outline" size="sm" disabled={extendPending}>
+            {extendPending ? t("polling.action.extending") : t("polling.action.extendUntil")}
+          </Button>
+        </form>
+      </div>
+      {dispatchError && <Failure title={t("ticketFrontmatter.saveFailedTitle")} message={dispatchError} />}
+      {untilState.error && (
+        <Failure title={t("ticketFrontmatter.saveFailedTitle")} message={untilState.error} />
+      )}
+      {untilState.ok && <span className="text-xs text-muted-foreground">{t("polling.until.saved")}</span>}
     </div>
   );
 }
