@@ -57,6 +57,13 @@ value goes up or down for that moment only. The number in the file stays as it i
 create this file. Born open, it would dispatch to any worker at all as a ticket with no persona,
 and nobody performs this file.
 
+**There is no field in these tables for what the ticket is waiting for.** The reason for a wait
+goes in the body, not the frontmatter. The session that hangs the wait and takes its hands off
+writes it as one sentence in the first line of the `## 결과` (the result section). The line under
+the badge on the board card, and the `Reason` row in the `Polling` section of the ticket detail,
+are that sentence copied over ([The states a ticket passes through](/docs/states)). No need to
+hunt for a key. There isn't one, by design.
+
 `polling` and `polling_until` sit among the fields a person writes, but they are not values you
 open the file and fill in by hand. The session that decided to wait has the worker script write
 them (`workers/<worker>.sh poll <hash> <script filename> <cap>`). The engine then runs five checks
@@ -98,6 +105,12 @@ The keys here are `ticket`, `session_id`, `assigned_at`, `pid`, `owner`, `inbox`
 
 `polling` and `polling_until` are here for the reason written in 'Four rules outside the tables'
 above. Those values go in only after the worker script has passed all five checks.
+
+**The app does edit the three polling keys, but somewhere else.** Not in this table — in the two
+handles in the `Polling` section of the ticket detail (see [The screens](/docs/screens)).
+`Dispatch now` empties `polling` and `polling_fails`; `Extend deadline` writes `polling_until`
+again with a new time. Neither one clears `polled_at`, because how long the ticket waited has to
+stay on the record.
 
 The table shows down to `assigned_at` and you open the rest with `Expand`. A key that is not in
 the file has no line at all. On a ticket that was never claimed, this table does not appear at all.

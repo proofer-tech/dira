@@ -30,6 +30,10 @@ so there is nowhere for you to put a card.
   **worker mark** (`w6`) for whoever is holding the ticket right now sits at the end of the meta
   line, and the bottom of the card carries one line saying what that session just did. A done card
   has none of the three. The `owner` on a finished ticket is a record, not the worker holding it.
+- A ticket waiting on an outside condition sits in the `Open` lane too. Its card carries a
+  `Polling` badge with the time left, and one line under it saying what it is waiting for. Past
+  the deadline the badge turns into `Deadline passed` (see
+  [The states a ticket passes through](/docs/states)).
 - A done card with an archive ticket on it says how far archiving has got, in that same spot.
   There are three: `Archiving — queued` · `Archiving` · `Archiving — awaiting answer`
   (see [Archiving and the ontology](/docs/ontology)).
@@ -82,6 +86,36 @@ other tickets written in it keep up.
 
 A running ticket is read-only. The session is holding the file. Press `Unassign` in the lock card
 and the file goes back to the queue. Only then can you edit it by hand.
+
+### The `Polling` section on a waiting ticket
+
+Only a ticket waiting on an outside condition gets one more section in the right-hand column. It
+comes right under the `frontmatter` table, and it carries the same name as the badge on the card:
+`Polling`. There are five rows.
+
+| Row | Value |
+|---|---|
+| `Reason` | The one line that showed under the badge on the card. It is the first line of the last `## 결과` (the result section) in the ticket body, and with no such section there is no row |
+| `Script` | The name of the file that decides the condition. It lives under `polls/` in the queue root |
+| `Interval` | How often it gets run (`300s`). With nothing written in the script header, `Every tick` |
+| `Deadline` | How long the wait runs and how much is left. Past it, `Deadline passed` takes that spot |
+| `Last polled` | When it last ran. Never run yet reads `Not run yet` |
+
+Under the rows, the `Script body` and the `Last output` open up whole. Why it will not clear is
+usually written in that output. If the file is gone you get `Script file not found`; if it has
+never run, `No output yet`.
+
+**Two handles at the bottom of the section break the wait before the deadline.** `Dispatch now`
+puts the ticket back in the candidate pool regardless of the condition. It wakes a worker on the
+spot instead of waiting for the next tick. `Extend deadline` writes the time in the field beside
+it as the new deadline; the field comes pre-filled with the deadline you have, so you only push it
+as far as you need. There is no confirmation dialog. What it undoes is one worker command, so it
+is not a destructive operation.
+
+Neither one makes an answer file. Nobody asked a question, so there is no answer to write. There
+is exactly one place an answer file is born — after the deadline passes and the ticket locks as
+`Awaiting answer` — and that screen looks like any other question (see
+[The states a ticket passes through](/docs/states)).
 
 ## Hashes and P numbers in the writing
 

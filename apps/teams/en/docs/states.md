@@ -76,7 +76,7 @@ born, the lock comes off and the badge goes back to `Open`.
 The days elapsed ride along on the badge to make neglect visible. Nothing expires and nothing
 cancels on its own. An old `Awaiting answer` is a sign of a stall. That call is a person's.
 
-**`Polling` — a badge and the time left (`Polling · 3h 20m left`).** This ticket is waiting on a
+**`Polling` — a badge and the time left (`Polling · 3h left`).** This ticket is waiting on a
 condition outside the queue. Waiting for a build to end, for another team to fill a value in.
 The session hangs one script that decides the condition on the ticket and takes its hands off.
 After that, every time a worker wakes it runs the script on the ticket's behalf, and when the
@@ -89,6 +89,26 @@ person to write. Whether the condition arrives is something happening outside th
 it does, it comes undone by itself. So when you see this badge there is usually nothing for you
 to do.
 
+The one `Open` lane holds `Blocked` and `Awaiting answer` and `Polling` side by side. What splits
+the three without opening a card is the word on the badge.
+
+**What it is waiting for, and why, is the one line under the badge.** It is one sentence for
+people to read — waiting on an outside build to finish, say — and it gets cut where the card ends.
+Open the ticket and the same sentence sits in the `Reason` row of the `Polling` section.
+
+That line comes out of the ticket body. The screen copies **the first line of the last `## 결과`
+section**, the results section. The session that hangs the wait and takes its hands off writes it
+there in one sentence; that is the protocol. On a ticket that has waited more than once, the
+sentence from the last round is the reason now. On a ticket where the protocol was not followed,
+the line simply does not appear. The card carries only the badge and the detail has no `Reason`
+row.
+
+The condition itself is not written on the card. The reason is a sentence a session wrote; the
+condition is what the script decides, and they are not the same thing. Boiled down to one line,
+it gets confusing which of the script and that line is the real one. The body of the script
+appears whole in the `Polling` section of the ticket detail. The interval and the deadline, the
+last time it ran, and the last output are all there with it.
+
 `Polling` has an end fixed to it instead. The time on the badge tells you how much is left before
 that deadline. Past it, the badge turns into **`Deadline passed`**, and on the next tick the
 engine stops polling. As it does, it moves that ticket to `Awaiting answer`. What it was waiting
@@ -97,16 +117,16 @@ from: extend the deadline and wait longer, dispatch it now regardless of the con
 this ticket. The field for writing your own is underneath, as on any question. Three polling runs
 ending in an error in a row come up in the same place.
 
-The condition itself is not written on the card. Boiled down to one line, it gets confusing which
-of the script and that line is the real one. The body of the script appears whole in the
-`Polling` section of the ticket detail. The interval and the deadline, the last time it ran, and
-the last output are all there with it.
+If you would rather not get that far, break the wait before the deadline. `Dispatch now` and
+`Extend deadline` always sit in the `Polling` section of the ticket detail (see
+[The screens](/docs/screens)). Neither handle makes an answer file. Nobody asked a question, so
+there is no answer to write.
 
 `Blocked` and `Awaiting answer` are options in the board's status filter as well. There are six
 filter options against three lanes, and that is correct. The filter is where you pick a state the
 engine knows about; the lane is where the steps of the flow get drawn. `Polling` is not among the
 six. The engine still counts this ticket as an open one, so the filter catches it under `Open`,
-and what it is waiting on right now is what the badge on the card tells you.
+and what it is waiting on right now is what the badge and the line beneath it tell you.
 
 ## Tickets that never get dispatched
 

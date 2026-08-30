@@ -67,13 +67,18 @@ tail -20 <root>/workers/runner.log | grep ASK   # when it turned into a request 
 
 ## It says `Polling` and the condition never arrives
 
-**Screen**: open that ticket and read the **`Polling` section** in the right-hand column, right
-below the `frontmatter` table. What it is waiting for (the script body), how often it runs
-(the interval), how long it waits (the deadline and the time left), when it last ran, and the
-**last output** are all there. The reason it is stuck is usually written in that last output.
+**Screen**: the one line under the badge on the card answers first. It is the sentence the
+session left about what it is waiting for and why. Then open that ticket and read the
+**`Polling` section** in the right-hand column, right below the `frontmatter` table. The same
+sentence is in the `Reason` row, and below it: what it is waiting for (the script body), how often
+it runs (the interval), how long it waits (the deadline and the time left), when it last ran, and
+the **last output**. The reason it is stuck is usually written in that last output.
 
 **The cause** splits as you read that section from top to bottom.
 
+- **There is no `Reason` row.** The session that hung the wait did not write a reason in the
+  first line of `## 결과` (the result section). The screen does not invent one, so the row is
+  simply absent. Read what it is waiting for from the script body below.
 - **`Last polled` reads `Not run yet`.** No worker has woken since the wait was set. This is not
   a polling problem. Read the next section (§The whole queue is stopped), then §It is on cron but
   never wakes.
@@ -92,15 +97,26 @@ bash <root>/polls/<filename>; echo $?          # run it once by hand. 0=conditio
 If it gives `0` by hand and the card still reads `Polling`, the script is fine. Check whether
 workers are waking at all.
 
-**There are two ways to cut it short.** One is to leave it alone. Once the deadline passes the
-badge turns into `Deadline passed` and at the next tick the engine escalates that ticket to
-Awaiting answer. The question that comes up then quotes the last polling output, and you choose
-between extending the deadline to wait longer, dispatching now regardless of the condition, and
-closing it outright. If you cannot wait for the deadline, open the ticket file and empty the
-value on the `polling:` line. It comes back as an ordinary candidate at the next tick. **The app
-has no button for this** - running a ticket whose condition is not met is a call only someone who
-knows that ticket's situation can make, and the screen goes as far as laying the material out for
-that call.
+**There are three ways to cut it short.** The first two are the handles at the bottom of the
+`Polling` section, and you can press them well before the deadline.
+
+- **`Dispatch now`** - puts the ticket back in the candidate pool with its condition unmet. It
+  wakes a worker on the spot rather than waiting for the next tick, so it gets claimed right away.
+  There is no confirmation dialog.
+- **`Extend deadline`** - writes the time in the field beside it as the new deadline. Use it when
+  the condition looks close but the deadline is closer. The time left on the card follows the new
+  value.
+
+The third is to leave it alone. Once the deadline passes the badge turns into `Deadline passed`
+and at the next tick the engine escalates that ticket to Awaiting answer. The question that comes
+up then quotes the last polling output, and you choose between extending the deadline to wait
+longer, dispatching now regardless of the condition, and closing it outright. That screen is like
+any other question, and it is a different place from the two handles above.
+
+The handles do not make an answer file. Nobody asked a question, so there is no answer to write.
+What changes in the ticket file is only this: `Dispatch now` empties `polling` and
+`polling_fails`, and `Extend deadline` rewrites `polling_until`
+(see [frontmatter fields](/docs/ref-frontmatter)).
 
 ## The whole queue is stopped
 
