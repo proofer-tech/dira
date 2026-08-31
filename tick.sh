@@ -43,6 +43,25 @@ log() { printf '%s [%s] %s\n' "$(date '+%F %T')" "${TICKET_NAME:-?}" "$*" >> "$R
 TICKET_NAME="${TICKET_NAME:-$(basename "$0" .sh)}"
 # 기본 작업 디렉터리 = 루트의 부모(<프로젝트>/.dira/workers/w1.sh -> <프로젝트>)
 TICKET_CWD="${TICKET_CWD:-$(dirname "$TICKET_ROOT")}"
+
+# 프롬프트에 큐 경로를 적을 때, 같은 곳을 가리키는 워크트리 안의 이름이 있으면 그 이름을
+# 쓴다(§워커는 언제나 자기 워크트리에서 일한다 §개정 1). 읽는 파일은 안 갈린다 - 프롬프트
+# 문자열만 바뀐다. $1이 $TICKET_ROOT 밖이거나(TICKET_ONTOLOGY 같은 오버라이드) 후보 디렉터리가
+# 같은 canonical로 안 풀리면(TICKET_CWD 없는 워커) 원래 경로를 그대로 낸다.
+wtpath() {
+  local canonical="$1" rest base candroot
+  case "$canonical" in
+    "$TICKET_ROOT"/*) rest="${canonical#"$TICKET_ROOT"/}" ;;
+    *) printf '%s\n' "$canonical"; return ;;
+  esac
+  base="$(basename "$TICKET_ROOT")"
+  candroot="$TICKET_CWD/$base"
+  if [ -d "$candroot" ] && [ "$(cd "$candroot" 2>/dev/null && pwd -P)" = "$TICKET_ROOT" ]; then
+    printf '%s\n' "$candroot/$rest"
+  else
+    printf '%s\n' "$canonical"
+  fi
+}
 TICKET_MAXRUN="${TICKET_MAXRUN:-5400}"
 # 디스패치가 실제로 섰다고 볼 때까지 기다리는 상한(프롬프트 주입 완료 + 엔진 init).
 # 프롬프트는 파이프 버퍼보다 크므로 엔진이 stdin을 빨아야만 주입이 끝난다 - 기동 중 멎으면 영영 안 끝난다.
@@ -850,7 +869,7 @@ PROTOCOL="${TICKET_PROTOCOLS:-$TICKET_ROOT/protocols}/AGENTS.md"
 if [ -r "$PROTOCOL" ]; then
   PROMPT="아래는 이 프로젝트의 협업 프로토콜입니다. 티켓 수행·핸드오프·보고는 이 규약을 따르세요.
 
-===== AGENTS.md ($PROTOCOL) =====
+===== AGENTS.md ($(wtpath "$PROTOCOL")) =====
 $(cat "$PROTOCOL")
 ===== 프로토콜 끝 =====
 
@@ -865,11 +884,12 @@ fi
 # 정상이다).
 ONTDIR="${TICKET_ONTOLOGY:-$TICKET_ROOT/ontology}"
 if [ -n "$(find "$ONTDIR" -type f -name '*.md' 2>/dev/null)" ]; then
+  ONTDIR_DISP="$(wtpath "$ONTDIR")"
   PROMPT="아래는 이 큐의 온톨로지가 있는 곳입니다.
 
-===== 온톨로지 ($ONTDIR) =====
-$ONTDIR 안의 _ontology/SCHEMA.md가 지도입니다(객체·관계·액션 타입의 진입점). 본문은 안 실립니다 -
-필요한 개념은 티켓의 어휘로 $ONTDIR 를 grep해서 여세요.
+===== 온톨로지 ($ONTDIR_DISP) =====
+$ONTDIR_DISP 안의 _ontology/SCHEMA.md가 지도입니다(객체·관계·액션 타입의 진입점). 본문은 안 실립니다 -
+필요한 개념은 티켓의 어휘로 $ONTDIR_DISP 를 grep해서 여세요.
 ===== 온톨로지 끝 =====
 
 $PROMPT"
@@ -889,7 +909,7 @@ elif [ -r "$PROFILE" ]; then
   SKILLBLOCK=""
   if [ -r "$SKILLS" ] && [ "$ENGINE_NAME" = "claude" ]; then
     SKILLBLOCK="
-===== $TPERSONA 스킬 ($SKILLS) =====
+===== $TPERSONA 스킬 ($(wtpath "$SKILLS")) =====
 $(cat "$SKILLS")
 ===== 스킬 끝 =====
 "
@@ -902,11 +922,12 @@ $(cat "$SKILLS")
   MEMDIR="${TICKET_PERSONAS:-$TICKET_ROOT/personas}/$TPERSONA/memory"
   MEMBLOCK=""
   if [ -n "$(find "$MEMDIR" -maxdepth 1 -type f -name '*.md' 2>/dev/null)" ]; then
+    MEMDIR_DISP="$(wtpath "$MEMDIR")"
     MEMBLOCK="
-===== $TPERSONA 메모리 ($MEMDIR) =====
+===== $TPERSONA 메모리 ($MEMDIR_DISP) =====
 이 큐에서 알아낸 교훈이 파일별로 쌓인 곳입니다(CORE.md §회고가 쓰는 자리). 본문은 안 실립니다 -
-필요한 개념은 티켓의 어휘로 $MEMDIR 를 grep해서 그 파일을 여세요. [[링크]]는
-grep -rl '\[\[<이름>\]\]' $MEMDIR 로 1홉 따라갑니다.
+필요한 개념은 티켓의 어휘로 $MEMDIR_DISP 를 grep해서 그 파일을 여세요. [[링크]]는
+grep -rl '\[\[<이름>\]\]' $MEMDIR_DISP 로 1홉 따라갑니다.
 ===== 메모리 끝 =====
 "
   fi
@@ -914,7 +935,7 @@ grep -rl '\[\[<이름>\]\]' $MEMDIR 로 1홉 따라갑니다.
 티켓을 수행하는 동안 이 페르소나로 일관되게 행동하세요. 프로필과 티켓 지시가 충돌하면 티켓을 따르되
 충돌 사실을 티켓 본문에 남기세요.
 
-===== $TPERSONA PROFILE ($PROFILE) =====
+===== $TPERSONA PROFILE ($(wtpath "$PROFILE")) =====
 $(cat "$PROFILE")
 ===== PROFILE 끝 =====
 $SKILLBLOCK$MEMBLOCK
@@ -965,7 +986,7 @@ $name$TAG - $role"
 "
     if [ "$LEADER" = "$TPERSONA" ] && [ -r "$sqdir/rules" ]; then
       RULESBLOCK="$RULESBLOCK
-===== 스쿼드 $sqname 규칙 ($sqdir/rules) =====
+===== 스쿼드 $sqname 규칙 ($(wtpath "$sqdir/rules")) =====
 $(cat "$sqdir/rules")
 ===== 규칙 끝 =====
 "
@@ -1073,9 +1094,10 @@ fi
 # 결정 8-b) - dmg 배포에는 "엔진 레포"가 없어 새 프로젝트가 코어를 자기 큐에 품는다.
 # 둘 다 없으면 WARN만 남기고 넘어간다 - 디스패치를 세우는 쪽이 더 나쁘다(프로토콜 인라인과 같다).
 CORE="$TICKET_ROOT/protocols/CORE.md"
+[ -r "$CORE" ] || CORE="$TICKET_CWD/protocols/CORE.md"
 [ -r "$CORE" ] || CORE="$CODE/protocols/CORE.md"
 if [ -r "$CORE" ]; then
-  PROMPT="===== CORE.md ($CORE) =====
+  PROMPT="===== CORE.md ($(wtpath "$CORE")) =====
 $(cat "$CORE")
 ===== 코어 프로토콜 끝 =====
 

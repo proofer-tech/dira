@@ -228,6 +228,36 @@ try:
     with open(os.path.join(root3, "workers", "runner.log"), encoding="utf-8") as f:
         assert "아직 티켓을 물고 있다" in f.read(), "워커 락 SKIP 로그가 없다"
 
+    # 프롬프트 경로 치환(§워커는 언제나 자기 워크트리에서 일한다 §개정 1): 워크트리 안에
+    # 큐와 같은 곳을 가리키는 이름이 있으면 그 이름을 프롬프트에 적는다. 성립하는 경우와
+    # 안 하는 경우를 하나씩 단정한다.
+    qroot = os.path.join(tmp, "wtcase", ".dira")
+    os.makedirs(os.path.join(qroot, "protocols"))
+    with open(os.path.join(qroot, "protocols", "AGENTS.md"), "w", encoding="utf-8") as f:
+        f.write("# 규약\n")
+    wtroot = os.path.join(tmp, "wtcase", "worktrees", "w2")
+    os.makedirs(os.path.join(wtroot, "protocols"))
+    os.symlink(qroot, os.path.join(wtroot, ".dira"))
+    with open(os.path.join(wtroot, "protocols", "CORE.md"), "w", encoding="utf-8") as f:
+        f.write("# 코어-워크트리사본\n")
+    mk(qroot, "wtca0001")
+    w2 = mkworker(qroot, "w2", '#!/bin/bash\nTICKET_CWD="{}"\n. "{}"\n'.format(wtroot, TICK))
+    rc, out = run("dryrun", w2, local)
+    assert rc == 0, "wtpath dryrun rc={}\n{}".format(rc, out)
+    wt_protocol = os.path.join(wtroot, ".dira", "protocols", "AGENTS.md")
+    assert "AGENTS.md ({})".format(wt_protocol) in out, \
+        "같은 자리를 가리키는 후보가 있는데 워크트리 경로로 안 바뀌었다\n" + out
+    assert "AGENTS.md ({})".format(os.path.join(qroot, "protocols", "AGENTS.md")) not in out, \
+        "성립하는 후보가 있는데 AGENTS.md 자리가 canonical로 그대로 남았다\n" + out
+    assert "CORE.md ({})".format(os.path.join(wtroot, "protocols", "CORE.md")) in out, \
+        "CORE 폴백이 워크트리 사본으로 안 갔다\n" + out
+
+    # TICKET_CWD를 안 준 워커(=후보가 canonical 자신)는 종전대로 canonical 경로를 낸다.
+    rc, out = run("dryrun", bare, local)
+    assert rc == 0, out
+    assert "CORE.md ({})".format(os.path.join(HERE, "protocols", "CORE.md")) in out, \
+        "TICKET_CWD 없는 워커의 CORE 경로가 개정 전(엔진 사본)과 달라졌다\n" + out
+
     # 기본값 회귀: 접미사 기본은 ASCII다(ls·grep에서 한글이 걸리적거려서 바꿨다).
     # 한글 접미사를 쓰던 설치는 config에서 고정해야 하고, 그 경로는 위 .wip/.done 케이스가 덮는다.
     sys.path.insert(0, HERE)
