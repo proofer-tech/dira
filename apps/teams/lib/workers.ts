@@ -1472,9 +1472,9 @@ export function holderEngine(workers: Worker[], stem: string): string | null {
  *  - 공유 판정도 `realpath` 키로 본다 — 표기·심링크가 달라도 같은 트리면 같은 트리다.
  *  - 실행 비트 판정(§0-21 결정 2)은 워커 `.sh` 자신의 `mode & 0o111`이다 — `cwd`가 아니라
  *    `path`를 본다. 앞의 셋과 별개 축이라 함께 있어도 서로 가리지 않는다.
- *  - `TICKET_CWD` 줄 누락 판정(§977419d7 결정 1)은 `rawCwd`가 `null`이고 워커 파일이 둘 이상일
- *    때만 선다 — 실효 cwd가 실재하는지, `.dira`가 큐 루트로 풀리는지는 안 본다(둘 다 통과하는
- *    것이 이 결함의 모양이다). 워커 하나뿐인 큐에서는 §0-3 그대로 정상이다.
+ *  - `TICKET_CWD` 줄 누락 판정(§977419d7 결정 1, P349-2가 워커 수 예외를 걷었다)은 `rawCwd`가
+ *    `null`이면 워커 파일 수와 무관하게 선다 — 실효 cwd가 실재하는지, `.dira`가 큐 루트로
+ *    풀리는지는 안 본다(둘 다 통과하는 것이 이 결함의 모양이다).
  *  - `missing-cwd` 판정(§4-19 결정 1)은 디렉터리가 없어도 조건 (a)(b)(c)가 다 참이면 안 선다 —
  *    (a) `rawCwd`가 `worktreePath(root, name)`과 **문자열로** 같다(정규화 없음, 게이트의
  *    `_gate_standard` 비교와 같은 선). (b) 워커 파일이 `dispatch-gate.sh`를 `source`한다.
@@ -1505,7 +1505,7 @@ async function cwdDefects(
     ws.map(async ({ name, cwd, rawCwd, path: file }, i) => {
       const out: WorkerDefect[] = [];
       let cwdPending = false;
-      if (rawCwd === null && ws.length > 1) {
+      if (rawCwd === null) {
         out.push({
           kind: "no-ticket-cwd",
           detail: `${t(locale, "workers.defect.noTicketCwd.detailPrefix")} ${cwd} ${t(locale, "workers.defect.noTicketCwd.detailSuffix")}`,
@@ -2178,39 +2178,28 @@ export const DISPATCH_GATE_SH = `#!/bin/bash
 # 체크아웃된 브랜치로 push할 때뿐이라, 다른 브랜치·detached HEAD면 더러워도 막지 않는다. 전용
 # 워크트리 확인(도그푸딩 큐의 선행조건 1 — 남과 공유하나)은 여기 없다 — 이 프로젝트의 첫 워커는
 # TICKET_CWD를 안 받아서, 그 조건을 그대로 옮기면 갓 만든 프로젝트가 첫 tick부터 영구 정지한다.
-# 다만 §4-14 §없는 워크트리를 게이트가 만든다와 아래 §워커가 둘이 되면 그것이 결함이다 둘은
-# 옮긴다 — 워커 파일 수로 갈라서 새 프로젝트의 첫 워커(하나뿐)는 그대로 두고, 워커가 둘 이상인데
-# TICKET_CWD가 빈 워커만 잡는다.
+# 다만 §4-14 §없는 워크트리를 게이트가 만든다는 옮긴다 — TICKET_CWD가 빈 워커는 워커 수와
+# 무관하게 잡는다(P349-2가 §0-3의 "워커가 하나면 워크트리가 필요 없다" 예외를 걷었다).
 
 # list·unassign·reap은 GUI가 부른다. 통합과 무관하므로 막지 않는다
 if [ "\${1:-tick}" = tick ] || [ "\${1:-tick}" = dryrun ]; then
-  # 첫 워커가 통합 체크아웃에서 일한다 — 워커가 둘이 되면 그것이 결함이다(DESIGN.md, 요구
-  # 977419d7). §4-14 §없는 워크트리를 게이트가 만든다보다 앞이다 — 그 블록은 TICKET_CWD가 비면
-  # 안 닿으므로, 뒤에 두면 이 판정에 닿지 않는다. 워커 파일 수는 ls | wc -l로 센다 — 빈 글롭을
-  # 배열로 펼치지 않기 위해서다(set -u, bash 3.2 — 종전 게이트가 인덱스 접근만 쓰는 그 이유와 같다).
+  # 첫 워커도 통합 체크아웃에서 일하지 않는다 — TICKET_CWD가 없으면 워커가 하나뿐이어도 잡는다
+  # (DESIGN.md 결정 2, P349-2). §4-14 §없는 워크트리를 게이트가 만든다보다 앞이다 — 그 블록은
+  # TICKET_CWD가 비면 안 닿으므로, 뒤에 두면 이 판정에 닿지 않는다.
   if [ -z "\${TICKET_CWD:-}" ]; then
     _gate_me=$(basename "$0" .sh)
     _gate_dir=$(dirname "$0")
     _gate_notree="$_gate_dir/.gate-notree-$_gate_me"
-    _gate_count=$(ls -1 "$_gate_dir"/*.sh 2>/dev/null | wc -l | tr -d ' ')
 
-    if [ "$_gate_count" -ge 2 ]; then
-      if [ ! -f "$_gate_notree" ]; then
-        echo "$(date '+%Y-%m-%d %H:%M:%S') GATE 디스패치 보류 — $_gate_me 에 TICKET_CWD가 없다."
-        echo "  워커가 둘 이상인 큐에서 TICKET_CWD 없는 워커는 받는 트리에서 일해 큐 전체를 더럽힌다."
-        echo "  워커 파일에 TICKET_CWD=\\"$(dirname "$_gate_dir")/worktrees/$_gate_me\\" 한 줄을 넣는다."
-        echo "  넣으면 다음 tick에 게이트가 그 트리를 만들고 디스패치가 재개된다. 이 줄은 상태가 바뀔 때만 뜬다."
-        touch "$_gate_notree" 2>/dev/null
-      fi
-      unset _gate_me _gate_dir _gate_notree _gate_count
-      exit 0
+    if [ ! -f "$_gate_notree" ]; then
+      echo "$(date '+%Y-%m-%d %H:%M:%S') GATE 디스패치 보류 — $_gate_me 에 TICKET_CWD가 없다."
+      echo "  TICKET_CWD 없는 워커는 받는 트리에서 일해 큐를 더럽힌다."
+      echo "  워커 파일에 TICKET_CWD=\\"$(dirname "$_gate_dir")/worktrees/$_gate_me\\" 한 줄을 넣는다."
+      echo "  넣으면 다음 tick에 게이트가 그 트리를 만들고 디스패치가 재개된다. 이 줄은 상태가 바뀔 때만 뜬다."
+      touch "$_gate_notree" 2>/dev/null
     fi
-
-    if [ -f "$_gate_notree" ]; then
-      rm -f "$_gate_notree"
-      echo "$(date '+%Y-%m-%d %H:%M:%S') GATE 해제 — $_gate_me 워커가 하나뿐이라 TICKET_CWD 결함이 아니다. 디스패치 재개."
-    fi
-    unset _gate_me _gate_dir _gate_notree _gate_count
+    unset _gate_me _gate_dir _gate_notree
+    exit 0
   fi
 
   # §4-14 §없는 워크트리를 게이트가 만든다 — TICKET_CWD가 표준 자리(<루트>/worktrees/<이름>)인데
@@ -2280,8 +2269,12 @@ if [ "\${1:-tick}" = tick ] || [ "\${1:-tick}" = dryrun ]; then
   _gate_branch="<통합 브랜치>"
   _gate_main=$(git -C "\${TICKET_CWD:-$PWD}" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) &&
     _gate_main=$(dirname "$_gate_main")
+  # <루트>/push.sh가 있으면 그 큐의 세션은 push를 헬퍼로 통합하고, 헬퍼가 push 직전에 받는
+  # 트리를 스스로 치운다(잔해는 버리고 사람 편집은 stash로 옮겼다 되돌린다) — 이 판정이 막을
+  # 실패가 없다(P349-2, DESIGN.md §워커는 언제나 자기 워크트리에서 일한다 결정 3).
+  _gate_root=$(dirname "$(dirname "$0")")
 
-  if [ -n "$_gate_main" ] && [ -d "$_gate_main" ]; then
+  if [ -n "$_gate_main" ] && [ -d "$_gate_main" ] && [ ! -f "$_gate_root/push.sh" ]; then
     # detached HEAD면 빈 문자열이라 아래 비교가 항상 거짓이다 — rebase 중인 받는 트리를 막지 않는다
     _gate_current=$(git -C "$_gate_main" symbolic-ref --short -q HEAD 2>/dev/null)
 
@@ -2316,7 +2309,7 @@ if [ "\${1:-tick}" = tick ] || [ "\${1:-tick}" = dryrun ]; then
     fi
   fi
 fi
-unset _gate_branch _gate_main _gate_current _gate_dir _gate_flag _gate_status _gate_dirty _gate_ts
+unset _gate_branch _gate_main _gate_current _gate_dir _gate_flag _gate_status _gate_dirty _gate_ts _gate_root
 `;
 
 /** `<통합 브랜치>` 하나만 채운다 — `fillPlaceholders`(scaffold.ts)와 같은 치환 방식이지만 이

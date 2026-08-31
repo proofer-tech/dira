@@ -653,8 +653,8 @@ test("작업 디렉터리 결함 — (c) 거짓(게이트에 §4-14 블록이 �
   assert.ok(w.worktree);
 });
 
-test("작업 디렉터리 결함 — TICKET_CWD 줄이 없으면 엔진 기본값(루트의 부모)으로 판정한다 · 워커 하나뿐이면 결함 0개(요구 977419d7 결정 1)", async () => {
-  // tick.sh 39행. 이 기본값은 큐가 있는 디렉터리라 `<부모>/.dira`가 곧 큐 루트다 = 정상.
+test("작업 디렉터리 결함 — TICKET_CWD 줄이 없으면 엔진 기본값(루트의 부모)으로 판정하고, 워커 하나뿐이어도 결함이 선다(P349-2가 워커 수 예외를 걷었다)", async () => {
+  // tick.sh 39행. 이 기본값은 큐가 있는 디렉터리라 `<부모>/.dira`가 곧 큐 루트다.
   const base = mkdtempSync(path.join(tmpdir(), "fst-base-"));
   tmps.push(base);
   const root = path.join(base, ".dira");
@@ -664,12 +664,14 @@ test("작업 디렉터리 결함 — TICKET_CWD 줄이 없으면 엔진 기본�
   chmodSync(file, 0o755); // 이 테스트는 cwd 판정만 본다 — no-exec는 별도 테스트가 덮는다
   const [w] = await listWorkers(root);
   assert.strictEqual(w.cwd, null);
-  // 워커가 하나뿐이면 `no-ticket-cwd`가 안 선다 — §0-3의 그 문장이 그대로 맞는 자리다.
-  assert.deepStrictEqual(w.defects, []);
-  assert.strictEqual(w.cwdFix, undefined);
+  // 워커가 하나뿐이어도 `no-ticket-cwd`가 선다 — §0-3의 그 예외가 P349-2로 걷혔다.
+  assert.deepStrictEqual(w.defects, [
+    { kind: "no-ticket-cwd", detail: `TICKET_CWD 줄이 없어 ${path.dirname(root)} 에서 일합니다.` },
+  ]);
+  assert.strictEqual(w.cwdFix, ticketCwdLineCmd(root, "w1", file));
 });
 
-test("TICKET_CWD 줄 없음 — 워커가 둘 이상이면 결함, CopyCommand 실행은 그 한 줄만 더한다 (요구 977419d7)", async () => {
+test("TICKET_CWD 줄 없음 — 워커 수와 무관하게 결함, CopyCommand 실행은 그 한 줄만 더한다 (요구 977419d7, P349-2)", async () => {
   const base = mkdtempSync(path.join(tmpdir(), "fst-base-"));
   tmps.push(base);
   const root = path.join(base, ".dira");
@@ -2588,43 +2590,93 @@ test("dispatchGateSh — 없는 표준 워크트리를 게이트가 만든다 (�
   assert.match(notStandard, /끝/);
   assert.strictEqual(existsSync(elsewhere), false);
 
-  // 4) TICKET_CWD가 비어 있으면 이 블록에 안 닿는다(새 프로젝트 첫 워커가 영구 정지하지 않는다).
-  // 이 큐엔 워커 파일이 root/workers 아래 0개라(위에서 실제로 쓴 적이 없다) 아래 새 판정도
-  // 워커 수 1 미만이라 안 걸린다 — 둘 다 안 걸린다는 것만 이 단정으로 본다.
+  // 4) TICKET_CWD가 비어 있으면 이 블록(없는 워크트리를 만드는 블록)에 안 닿는다 — 그 앞의
+  // TICKET_CWD 누락 판정(P349-2, 워커 수 무관)이 먼저 걸려 exit 0으로 끊긴다.
   const empty = execFileSync("bash", ["-c", `. ${JSON.stringify(gate)} tick; echo 끝`, worker], {
     encoding: "utf8",
     env: { ...process.env, TICKET_CWD: "" },
   });
-  assert.match(empty, /끝/);
+  assert.match(empty, /GATE 디스패치 보류/);
+  assert.doesNotMatch(empty, /끝/);
 });
 
-/** 첫 워커가 통합 체크아웃에서 일한다 — 워커가 둘이 되면 그것이 결함이다(요구 977419d7). §4-14
- *  §없는 워크트리를 게이트가 만든다보다 앞에서, 워커 파일 수 하나로 잰다 — 워커가 둘 이상인데
- *  TICKET_CWD가 빈 워커만 잡는다. 워커 하나뿐이면 그대로 지나간다(§0-3의 그 문장이 산다).
+/** §4-14 결정 3(P349-2) — `<루트>/push.sh`가 있으면 그 큐는 push를 헬퍼로 통합하므로, 더러운
+ *  받는 트리 판정 블록을 통째로 건너뛴다(`.gate-dirty` 표식도 안 찍는다). 그 뒤 실제로
+ *  `push.sh ship`을 돌려 통합이 성공하고 미커밋 변경(사람 편집)이 살아남는 것까지 잰다 —
+ *  이 판정이 막을 실패가 정말 없다는 것을 눈으로 본다. **진짜 git + 진짜 bash로 돌린다.** */
+test("dispatchGateSh — <루트>/push.sh가 있으면 더러운 받는 트리 판정을 건너뛰고, ship은 성공하며 미커밋 변경은 남는다 (P349-2)", () => {
+  const { base } = makeRepo();
+  execFileSync("git", ["-C", base, "branch", "-m", "master"]); // push.sh가 미는 곳은 HEAD:master 고정이다
+  execFileSync("git", ["-C", base, "config", "receive.denyCurrentBranch", "updateInstead"]); // 게이트가 막는 그 설정
+  const gate = path.join(base, "dispatch-gate.sh");
+  writeFileSync(gate, dispatchGateSh("master"));
+  const workersDir = path.join(base, "workers");
+  mkdirSync(workersDir, { recursive: true });
+  const worker = path.join(workersDir, "w1.sh");
+  const flag = path.join(workersDir, ".gate-dirty");
+  writeFileSync(
+    path.join(base, "push.sh"),
+    readFileSync(path.join(import.meta.dirname, "..", "..", "..", "templates", "hooks", "push.sh"), "utf8"),
+  );
+  chmodSync(path.join(base, "push.sh"), 0o755);
+
+  // 받는 트리(base)를 더럽힌다 — 추적 파일, 원래 커밋과 다른 새 내용이라 push.sh는 사람 편집으로 본다
+  writeFileSync(path.join(base, "README.md"), "더럽힌다\n");
+
+  const run = () =>
+    execFileSync("bash", ["-c", `. ${JSON.stringify(gate)} tick; echo 끝`, worker], {
+      encoding: "utf8",
+      env: { ...process.env, TICKET_CWD: base },
+    });
+
+  const out = run();
+  assert.doesNotMatch(out, /GATE/); // push.sh가 있으니 더러운 받는 트리 판정 자체를 안 탄다
+  assert.match(out, /끝/);
+  assert.strictEqual(existsSync(flag), false); // .gate-dirty 표식도 안 찍는다
+
+  // 세션 워크트리에서 push.sh ship을 실제로 돌린다 — 받는 트리(base)는 여전히 더럽다
+  const worktree = mkdtempSync(path.join(tmpdir(), "fst-ship-wt-"));
+  tmps.push(worktree);
+  rmSync(worktree, { recursive: true, force: true });
+  execFileSync("git", ["-C", base, "worktree", "add", worktree, "-b", "wt/w1"]);
+  writeFileSync(path.join(worktree, "work.txt"), "session work\n");
+
+  execFileSync("bash", [path.join(base, "push.sh"), "ship", "deadbeef", "제목"], { cwd: worktree });
+
+  // ship이 성공했다 — 커밋이 master에 실제로 올라갔다
+  assert.match(
+    execFileSync("git", ["-C", base, "log", "master", "--oneline"], { encoding: "utf8" }),
+    /제목/,
+  );
+  // 미커밋 변경(README.md)은 그대로 남는다 — push.sh가 잔해로 안 지우고 사람 편집으로 옮겼다 되돌린다
+  assert.strictEqual(readFileSync(path.join(base, "README.md"), "utf8"), "더럽힌다\n");
+});
+
+/** 첫 워커도 통합 체크아웃에서 일하지 않는다 — TICKET_CWD가 없으면 워커 수와 무관하게 잡는다
+ *  (요구 977419d7, P349-2가 §0-3 "워커가 하나면 워크트리가 필요 없다" 예외를 걷었다). §4-14
+ *  §없는 워크트리를 게이트가 만든다보다 앞이다.
  *  **진짜 bash로 돌린다** — 값어치가 그 판정이라 모킹하면 검증할 게 안 남는다. */
-test("dispatchGateSh — 워커 둘 이상인 큐에서 TICKET_CWD 없는 워커는 디스패치를 보류한다 (요구 977419d7)", () => {
+test("dispatchGateSh — TICKET_CWD 없는 워커는 워커 수와 무관하게 디스패치를 보류한다 (요구 977419d7, P349-2)", () => {
   const { root } = makeRepo();
   const gate = path.join(root, "dispatch-gate.sh");
   writeFileSync(gate, dispatchGateSh("main"));
   const workersDir = path.join(root, "workers");
-  const w1 = path.join(workersDir, "w1.sh");
-  const w2 = path.join(workersDir, "w2.sh"); // $0 — 보류당하는 그 워커
+  const w1 = path.join(workersDir, "w1.sh"); // 보류당하는 그 워커 — 처음부터 이것 하나뿐이다
   writeFileSync(w1, "#!/bin/bash\n");
-  writeFileSync(w2, "#!/bin/bash\n");
-  const flag = path.join(workersDir, ".gate-notree-w2");
+  const flag = path.join(workersDir, ".gate-notree-w1");
 
   // 받는 트리 판정(하단, ${TICKET_CWD:-$PWD})이 진짜 git이 아닌 곳에서 조용히 no-op하도록
-  // cwd를 통제한다 — 이 테스트가 재는 것은 워커 수 판정이지 그 아래 더러움 판정이 아니다
+  // cwd를 통제한다 — 이 테스트가 재는 것은 TICKET_CWD 누락 판정이지 그 아래 더러움 판정이 아니다
   const bare = mkdtempSync(path.join(tmpdir(), "fst-empty-cwd-"));
   tmps.push(bare);
   const run = () =>
-    execFileSync("bash", ["-c", `. ${JSON.stringify(gate)} tick; echo 끝`, w2], {
+    execFileSync("bash", ["-c", `. ${JSON.stringify(gate)} tick; echo 끝`, w1], {
       encoding: "utf8",
       cwd: bare,
       env: { ...process.env, TICKET_CWD: "" },
     });
 
-  // 1) 워커 파일이 둘(w1·w2)인데 w2에는 TICKET_CWD가 없다 — 보류하고 표식 파일을 남긴다
+  // 1) 워커가 이것 하나뿐인데도 TICKET_CWD가 없으면 보류하고 표식 파일을 남긴다(워커 수 예외 없음)
   const blocked = run();
   assert.match(blocked, /GATE 디스패치 보류/);
   assert.match(blocked, /TICKET_CWD가 없다/);
@@ -2638,10 +2690,15 @@ test("dispatchGateSh — 워커 둘 이상인 큐에서 TICKET_CWD 없는 워커
   assert.doesNotMatch(blockedAgain, /끝/);
   assert.strictEqual(readFileSync(flag, "utf8"), beforeAgain);
 
-  // 3) 워커가 하나로 줄면(w1을 지운다) TICKET_CWD가 여전히 비어도 결함이 아니다(결정 1의 아래쪽
-  // 갈래) — 해제 줄과 함께 표식이 사라지고 디스패치로 넘어간다
-  rmSync(w1);
-  const released = run();
+  // 3) TICKET_CWD 줄을 넣으면(표준 자리) 다음 tick에 게이트가 그 트리를 만들고 해제 줄과 함께
+  // 표식이 사라지며 디스패치로 넘어간다
+  const tree = path.join(root, "worktrees", "w1");
+  const releasedRun = () =>
+    execFileSync("bash", ["-c", `. ${JSON.stringify(gate)} tick; echo 끝`, w1], {
+      encoding: "utf8",
+      env: { ...process.env, TICKET_CWD: tree },
+    });
+  const released = releasedRun();
   assert.match(released, /GATE 해제/);
   assert.match(released, /끝/);
   assert.strictEqual(existsSync(flag), false);
