@@ -2493,12 +2493,15 @@ const SkillsSection = memo(function SkillsSection({
    *  하나까지 같고, 갈리는 것은 `handle`(끄기/켜기) 하나뿐이다. */
   const row = (s: Skill, handle: React.ReactNode, onRemove: () => void) => (
     <li key={s.name} className="flex flex-wrap items-baseline gap-2">
-      {/* 이름은 프롬프트에 그대로 실려 지목이 되는 토큰이다 — 안 자른다(§6 식별자) */}
-      <code className="shrink-0 font-mono text-xs">{s.name}</code>
+      {/* 이름은 프롬프트에 그대로 실려 지목이 되는 토큰이다 — 안 자른다(§6 식별자).
+          `@4xl:shrink` — 사이드바 폭에서 이 코드가 트랙 최소를 밀어 올리지 않도록 줄어들
+          여지를 준다(§비주얼 §66 ⑭ 개정, 요구 `7df39918`) */}
+      <code className="shrink-0 font-mono text-xs @4xl:shrink">{s.name}</code>
       {/* 1/3 칸에서는 넘치는 자리가 가로가 아니라 행이 된다 — 설명이 2행으로 내려가 칸 폭을
-          전부 얻는다(§비주얼 §66 ⑭) */}
+          전부 얻는다(§비주얼 §66 ⑭). `line-clamp-1` — `truncate`(nowrap)의 min-content가
+          트랙 최소를 밀어 올리던 것을 막는다(§66 ⑭ 개정, 요구 `7df39918`) */}
       <span
-        className="min-w-0 grow truncate text-xs text-muted-foreground @4xl:order-last @4xl:basis-full"
+        className="min-w-0 grow line-clamp-1 text-xs text-muted-foreground @4xl:order-last @4xl:basis-full"
         title={s.description}
       >
         {s.description}
@@ -2697,8 +2700,10 @@ const MemorySection = memo(function MemorySection({
                   <code className="font-mono text-xs @4xl:shrink">{m.file.replace(/\.md$/, "")}</code>
                   {/* `title`을 안 붙인다 — 전문을 보는 자리가 이 줄을 누르는 것이다(§32 ③).
                       발췌가 비는 파일(빈 파일·공백뿐)도 파일명으로 목록에 뜬다(§5-2). 1/3 칸에서는
-                      2행으로 내려가 칸 폭을 전부 얻는다(§비주얼 §66 ⑭) */}
-                  <span className="min-w-0 grow truncate text-xs text-muted-foreground @4xl:order-last @4xl:basis-full">
+                      2행으로 내려가 칸 폭을 전부 얻는다(§비주얼 §66 ⑭). `line-clamp-1` —
+                      `truncate`(nowrap)의 min-content가 트랙 최소를 밀어 올리던 것을 막는다
+                      (§66 ⑭ 개정, 요구 `7df39918`) */}
+                  <span className="min-w-0 grow line-clamp-1 text-xs text-muted-foreground @4xl:order-last @4xl:basis-full">
                     {m.excerpt}
                   </span>
                   {/* 줄 자신이 `<summary>`라 클릭이 곧 펼침 토글이다 — **여기만 `preventDefault`가
