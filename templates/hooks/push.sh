@@ -16,6 +16,9 @@
 #              -> push -> 사람 편집 되돌리기. stdout과 종료 코드는 git push 것을 그대로 낸다.
 #   classify <경로>... - 각 경로가 "잔해"인지 "사람 편집"인지 한 줄에 한 낱말로 답한다.
 #              락을 안 쥔다 - 아무것도 안 고치는 조회다.
+#   drift    - 받는 트리 reflog에서 이 체크아웃 안에서 직접 만들어진 세션 커밋(`Ticket:` 있고
+#              `Exception:` 없는 것)을 한 줄씩 낸다(DESIGN.md §워커는 언제나 자기 워크트리에서
+#              일한다 §개정 2). 락을 안 쥔다 - classify와 같은 성질의 조회다.
 #   ship <해시> "<제목>" ["<본문>"] - 커밋(뺄 것 없으면 건너뜀) -> 위 (없음) 경로 -> 거부되면
 #              rebase <통합 브랜치> 후 1회만 재시도. DESIGN.md §마무리 의례를 헬퍼가 감싼다.
 #
@@ -102,6 +105,32 @@ do_classify() {
   for p in "$@"; do
     classify_one "$p" "$hist"
   done
+}
+
+# 세션 드리프트 - 통합 체크아웃에서 통합 브랜치로 직접 들어간 세션 커밋(DESIGN.md §워커는 언제나
+# 자기 워크트리에서 일한다 §개정 2). reflog 머리말이 `commit`인 항목만 대상이다(`push`는 워크트리
+# 것). `Ticket:` 트레일러가 있고 `Exception:` 트레일러가 없으면 한 줄씩 낸다 - 없으면 아무것도
+# 안 내고 exit 0(선행조건 2가 classify를 다루는 방식과 같다). reflog가 최신순이라 출력도 최신순이다.
+do_drift() {
+  local reflog entry hash body ticket title ts
+  reflog=$(git -C "$_recv" reflog show "$_branch" 2>/dev/null) || return 0
+  while IFS= read -r entry; do
+    case "$entry" in
+      *"}: commit"*) ;;
+      *) continue ;;
+    esac
+    hash=${entry%% *}
+    body=$(git -C "$_recv" show -s --format='%B' "$hash" 2>/dev/null) || continue
+    printf '%s\n' "$body" | grep -q '^Exception:' && continue
+    ticket=$(printf '%s\n' "$body" | grep -m1 '^Ticket:')
+    ticket=${ticket#Ticket:}; ticket=${ticket# }
+    [ -n "$ticket" ] || continue
+    title=$(git -C "$_recv" show -s --format='%s' "$hash" 2>/dev/null)
+    ts=$(git -C "$_recv" show -s --format='%cd' --date=format:'%Y-%m-%dT%H:%M' "$hash" 2>/dev/null)
+    echo "$hash $ts $ticket $title"
+  done <<EOF
+$reflog
+EOF
 }
 
 # 앞 실행이 stash push 뒤 pop 전에 죽어서 남긴 표식을 되돌린다(결정 4의 "다음 헬퍼 실행이 락을
@@ -219,6 +248,9 @@ case "${1:-}" in
     shift
     do_classify "$@"
     ;;
+  drift)
+    do_drift
+    ;;
   ship)
     shift
     do_ship "$@"
@@ -227,7 +259,7 @@ case "${1:-}" in
     main_push
     ;;
   *)
-    echo "push.sh: 알 수 없는 서브커맨드 '$1' (classify | ship | 없음)" >&2
+    echo "push.sh: 알 수 없는 서브커맨드 '$1' (classify | drift | ship | 없음)" >&2
     exit 2
     ;;
 esac
