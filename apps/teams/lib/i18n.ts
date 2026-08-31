@@ -2176,6 +2176,7 @@ export const ko: Record<string, string> = {
   "landing.result.cronFailedTitle": "crontab에 등록하지 못했습니다",
   "landing.result.ontologyFailedTitle": "온톨로지 자리를 정하지 못했습니다",
   "landing.result.ontologyFailedLink": "온톨로지 화면에서 다시 정하세요",
+  "landing.result.denyCurrentBranchNotePrefix": "받는 트리의 receive.denyCurrentBranch가 이미 다른 값입니다 — 그대로 두었습니다:",
 
   // `{count}`는 실제 JS 보간이 아니라 검사기가 읽는 자리표시자 문자열이다 — `landing.tsx`가
   // `.replace("{count}", version)`으로 값을 채운다(§0-16 §장치가 정한 `wrap`은 앞뒤에 공백을
@@ -4651,6 +4652,7 @@ export const en: Record<string, string> = {
   "landing.result.cronFailedTitle": "Couldn't register the crontab line",
   "landing.result.ontologyFailedTitle": "Couldn't set the ontology location",
   "landing.result.ontologyFailedLink": "Set it again from the ontology screen",
+  "landing.result.denyCurrentBranchNotePrefix": "receive.denyCurrentBranch on the receiving tree is already a different value — left it alone:",
 
   // `{count}`는 `landing.tsx`가 `.replace()`로 채우는 자리표시자다(ko 쪽 주석 참고).
   "landing.banner.text": "Turn on auto-update and run the newest dira (v{count})!",

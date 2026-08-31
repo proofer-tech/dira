@@ -4,7 +4,14 @@ import { chmod, cp, mkdtemp, mkdir, readdir, readFile, realpath, rm, stat, symli
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
-import { engineRepo, ensureGitignoreLine, fillPlaceholders, preflight, scaffold } from "./scaffold.ts";
+import {
+  engineRepo,
+  ensureDenyCurrentBranch,
+  ensureGitignoreLine,
+  fillPlaceholders,
+  preflight,
+  scaffold,
+} from "./scaffold.ts";
 import { cronLine, parseContextBlock } from "./workers.ts";
 
 /** §0-3 스캐폴딩 집합. **이 목록이 계약이다** — 여기 없는 파일을 쓰면 실패한다. */
@@ -35,6 +42,7 @@ const SET = [
   ".dira/workers/w1.sh",
   ".dira/self-heal.sh",
   ".dira/dispatch-gate.sh",
+  ".dira/push.sh",
 ];
 
 /** 활성 `TICKET_CWD` 대입. `# TICKET_CWD=...`(worker.sh.example의 주석)은 안 걸린다 —
@@ -141,6 +149,16 @@ test("scaffold — §0-3 집합 그대로, 두 번째는 전부 skipped", async 
     `통합 게이트 줄은 자가 정리 줄 바로 위여야 한다: ${sh.slice(-300)}`,
   );
   assert.equal(sh.split("dispatch-gate").length - 1, 1);
+
+  // ⑨ 통합 push 헬퍼(§통합 브랜치가 설정이 된다 결정 4-5) — 브랜치가 치환되고, `master`가 브랜치로
+  // 쓰인 자리가 0줄이며, 실행 모드는 워커와 같다.
+  const push = path.join(first.root, "push.sh");
+  execFileSync("bash", ["-n", push]);
+  const pushText = await readFile(push, "utf8");
+  assert.doesNotMatch(pushText, /<통합 브랜치>/);
+  assert.match(pushText, /_branch="main"/);
+  assert.doesNotMatch(pushText, /master/);
+  assert.equal((await stat(push)).mode & 0o777, 0o755);
 
   // ④ 두 번 돌리면 전부 skipped이고 내용이 안 바뀐다
   const second = await scaffold(project, { branch: "other", specDoc: "docs/S.md" });
@@ -370,4 +388,93 @@ test("engineRepo — DIRA_ENGINE이 먼저다. 값이 없으면 cwd 유도가 �
   }
   delete process.env.DIRA_ENGINE;
   assert.deepEqual(engineRepo(), derived);
+});
+
+// ── receive.denyCurrentBranch (DESIGN.md §통합 브랜치가 설정이 된다 결정 6, 수용조건 4) ──────
+
+const git = (dir: string, ...args: string[]) =>
+  execFileSync("git", ["-C", dir, ...args], { encoding: "utf8" });
+
+function initRepo(dir: string, branch: string): void {
+  git(dir, "init", "-q", "-b", branch);
+  git(dir, "config", "user.email", "t@example.com");
+  git(dir, "config", "user.name", "t");
+}
+
+test("ensureDenyCurrentBranch — 미설정이면 켜고, updateInstead면 skipped, 다른 값이면 안 건드리고 알린다", async (t) => {
+  const dir = await tmp();
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  initRepo(dir, "main");
+
+  assert.deepEqual(await ensureDenyCurrentBranch(dir), { status: "written" });
+  assert.equal(git(dir, "config", "receive.denyCurrentBranch").trim(), "updateInstead");
+
+  // 멱등 — 이미 그 값이면 다시 쓰지 않는다
+  assert.deepEqual(await ensureDenyCurrentBranch(dir), { status: "skipped" });
+
+  // 이미 다른 값이면 안 건드리고 그 값을 그대로 돌려준다
+  git(dir, "config", "receive.denyCurrentBranch", "refuse");
+  assert.deepEqual(await ensureDenyCurrentBranch(dir), { status: "conflict", value: "refuse" });
+  assert.equal(git(dir, "config", "receive.denyCurrentBranch").trim(), "refuse");
+});
+
+test("ensureDenyCurrentBranch — git 레포가 아니면 던지지 않고 failed", async (t) => {
+  const dir = await tmp();
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  assert.deepEqual(await ensureDenyCurrentBranch(dir), { status: "failed" });
+});
+
+test("scaffold — <프로젝트> 레포에 updateInstead를 켠다 (수용조건 4)", async (t) => {
+  const dir = await tmp();
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  initRepo(dir, "main");
+
+  const made = await scaffold(dir, { branch: "main" });
+  assert.equal(made.denyCurrentBranchNote, undefined);
+  assert.equal(git(dir, "config", "receive.denyCurrentBranch").trim(), "updateInstead");
+});
+
+test("scaffold — 이미 다른 값이면 안 건드리고 denyCurrentBranchNote로 알린다 (수용조건 4)", async (t) => {
+  const dir = await tmp();
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  initRepo(dir, "main");
+  git(dir, "config", "receive.denyCurrentBranch", "refuse");
+
+  const made = await scaffold(dir, { branch: "main" });
+  assert.equal(made.denyCurrentBranchNote, "refuse");
+  assert.equal(git(dir, "config", "receive.denyCurrentBranch").trim(), "refuse");
+});
+
+// ── 통합 push 헬퍼가 통합 브랜치로 간다 (DESIGN.md §통합 브랜치가 설정이 된다, 수용조건 3) ────
+//
+// **진짜 git 레포**를 만들어 통합 브랜치 `dev`로 push한다 — `master`도 `main`도 새로 생기지
+// 않는 것이 이 결함(브랜치 고정)이 고쳐졌다는 증거다.
+
+test("push.sh ship — 통합 브랜치 dev로 커밋이 실리고 master·main은 안 생긴다 (수용조건 3)", async (t) => {
+  const project = await tmp();
+  t.after(() => rm(project, { recursive: true, force: true }));
+  initRepo(project, "dev");
+  await writeFile(path.join(project, "README.md"), "# t\n");
+  git(project, "add", "-A");
+  git(project, "commit", "-qm", "init");
+
+  const made = await scaffold(project, { branch: "dev" });
+  assert.equal(git(project, "config", "receive.denyCurrentBranch").trim(), "updateInstead");
+
+  const worktree = path.join(project, "wt1");
+  git(project, "worktree", "add", "-q", worktree, "-b", "sess", "dev");
+  await writeFile(path.join(worktree, "work.txt"), "hello\n");
+
+  const pushSh = path.join(made.root, "push.sh");
+  execFileSync("bash", [pushSh, "ship", "deadbeef", "작업 제목"], { cwd: worktree, encoding: "utf8" });
+
+  const log = git(project, "log", "--oneline", "dev");
+  assert.match(log, /작업 제목/);
+  const branches = git(project, "branch", "--list")
+    .split("\n")
+    .map((l) => l.replace(/^[*+]?\s*/, "").trim())
+    .filter(Boolean);
+  assert.deepEqual(branches.sort(), ["dev", "sess"]); // worktree가 딴 세션 브랜치 하나뿐
+  assert.ok(!branches.includes("master"));
+  assert.ok(!branches.includes("main"));
 });

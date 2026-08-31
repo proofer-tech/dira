@@ -311,6 +311,9 @@ export type CreateState = RegisterState & {
     /** 온톨로지 자리 칸을 채웠는데 거절됐다(§0-3 §온톨로지 자리를 만들 때 정한다). `cronError`와
      *  같은 규약 — 만들기는 되돌리지 않고, 사유와 함께 온톨로지 화면에서 다시 정하라고 안내한다. */
     ontologyError?: string;
+    /** 받는 트리의 `receive.denyCurrentBranch`가 이미 다른 값이라 안 건드렸다(결정 6) — 값을
+     *  그대로 보여준다. 실패는 여기 안 뜬다(`.gitignore`와 같은 처분 — 조용히 넘어간다). */
+    denyCurrentBranchNote?: string;
   };
 };
 
@@ -376,6 +379,7 @@ export async function createProject(
       cron: !cronError,
       cronError,
       ontologyError,
+      denyCurrentBranchNote: made.denyCurrentBranchNote,
       registerCmd: cronRegisterCmd({ path: workerPath }),
     };
 

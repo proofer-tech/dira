@@ -1,12 +1,15 @@
 #!/bin/bash
 # 통합 push 헬퍼 - DESIGN.md §통합 push의 벽 (요구 0146fd70, 답 a4b95659, 결정 1~5).
-# 세션이 `git push . HEAD:master` 대신 이 파일을 부른다(인자 0개). 경쟁 push 잔해로 받는 트리가
-# 더러워도 통합이 통과하고, 사람이 그 트리를 직접 고친 내용은 잃지 않는다.
+# 세션이 `git push . HEAD:<통합 브랜치>` 대신 이 파일을 부른다(인자 0개). 경쟁 push 잔해로 받는
+# 트리가 더러워도 통합이 통과하고, 사람이 그 트리를 직접 고친 내용은 잃지 않는다.
 #
 # 정본은 여기(templates/hooks/push.sh)다. .dira는 gitignore라 추적이 안 되므로 큐마다
 # .dira/push.sh로 복사해 쓴다(dispatch-gate.sh - self-heal.sh - token-rotate.sh - cold-boot.sh와
 # 같은 자리). 큐 배선(세션이 이 파일을 부르게 만드는 것)은 이 티켓 범위가 아니다 - 06d2fc41.
 # 게이트 로그가 같은 판정을 부르는 자리도 이 파일이 아니다 - a1babb18.
+#
+# `<통합 브랜치>`는 dispatch-gate.sh와 같은 방식으로 큐 사본을 만들 때 GUI가 채운다
+# (DESIGN.md §통합 브랜치가 설정이 된다 결정 4) - 정본에는 자리표시자가 그대로 남는다.
 #
 # 서브커맨드:
 #   (없음)   - 락 -> 죽은 실행이 남긴 stash 되돌리기 -> 받는 트리 정리(잔해 버림/사람 편집 옮김)
@@ -14,12 +17,13 @@
 #   classify <경로>... - 각 경로가 "잔해"인지 "사람 편집"인지 한 줄에 한 낱말로 답한다.
 #              락을 안 쥔다 - 아무것도 안 고치는 조회다.
 #   ship <해시> "<제목>" ["<본문>"] - 커밋(뺄 것 없으면 건너뜀) -> 위 (없음) 경로 -> 거부되면
-#              rebase master 후 1회만 재시도. DESIGN.md §마무리 의례를 헬퍼가 감싼다.
+#              rebase <통합 브랜치> 후 1회만 재시도. DESIGN.md §마무리 의례를 헬퍼가 감싼다.
 #
 # rebase는 기본적으로 안 한다 - non-fast-forward 거부는 종전대로 세션의 몫이다. 이 스크립트가
 # 만지는 트리는 받는 트리(git-common-dir의 부모) 하나뿐이다 - **`ship`만 예외**로 자신이 도는
-# 워크트리에 커밋하고 그 워크트리에서 rebase master를 1회 돌린다(§계약 "경계를 하나 넘는다").
+# 워크트리에 커밋하고 그 워크트리에서 rebase <통합 브랜치>를 1회 돌린다(§계약 "경계를 하나 넘는다").
 set -u
+_branch="<통합 브랜치>"
 
 _common_dir=$(git rev-parse --git-common-dir 2>/dev/null) || {
   echo "push.sh: git 레포가 아니다" >&2
@@ -167,7 +171,7 @@ push_once() {
   acquire_lock
   recover_stale_autostash
   cleanup_dirty_tree
-  git push . HEAD:master
+  git push . HEAD:"$_branch"
   local rc=$?
   pop_own_autostash
   rm -rf "$_lock"
@@ -179,7 +183,8 @@ main_push() {
   exit "$?"
 }
 
-# 커밋(뺄 것 없으면 건너뜀) -> push_once -> 거부되면 이 워크트리에서 rebase master 후 1회만 재시도.
+# 커밋(뺄 것 없으면 건너뜀) -> push_once -> 거부되면 이 워크트리에서 rebase <통합 브랜치> 후
+# 1회만 재시도.
 do_ship() {
   local hash="$1" title="$2" body="${3:-}" rc
   [ -n "$hash" ] && [ -n "$title" ] || {
@@ -199,7 +204,7 @@ do_ship() {
   push_once
   rc=$?
   if [ "$rc" -ne 0 ]; then
-    if git rebase master; then
+    if git rebase "$_branch"; then
       push_once
       rc=$?
     else

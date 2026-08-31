@@ -256,6 +256,12 @@ export default function Landing({
               </AlertDescription>
             </Alert>
           )}
+          {createdInfo.denyCurrentBranchNote && (
+            <p className="text-muted-foreground">
+              {t("landing.result.denyCurrentBranchNotePrefix")}{" "}
+              <span className="font-mono text-xs">{createdInfo.denyCurrentBranchNote}</span>
+            </p>
+          )}
         </div>
       )}
       <ConfigTable view={view} />

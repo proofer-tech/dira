@@ -5,18 +5,24 @@
  *  뿐이고, 파일 목록은 아래 상수로 고정이며, 있는 파일은 `wx`로 절대 덮지 않는다.
  *  실패해도 되돌리지 않는다 — 그 경로에 사람의 파일이 있을 수 있고, 덮지 않기로 한 것이 이
  *  기능의 유일한 방어다. */
+import { execFile } from "node:child_process";
 import { chmod, mkdir, readFile, readdir, realpath, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { promisify } from "node:util";
 import { expandHome } from "./paths.ts";
 import { DEFAULT_LOCALE, t, type Locale } from "./i18n.ts";
 import {
   DISPATCH_GATE_FILE,
+  PUSH_SH_FILE,
   SELF_HEAL_FILE,
   SELF_HEAL_SH,
   dispatchGateSh,
   engineRepo,
   firstWorkerBody,
+  pushSh,
 } from "./workers.ts";
+
+const execFileP = promisify(execFile);
 
 /** 재수출 — 다른 모듈은 여기서 그대로 가져온다(정의는 `lib/workers.ts`로 옮겼다: `createWorker`의
  *  §4-18 폴백도 이 함수를 불러야 하는데 `workers.ts`가 `scaffold.ts`를 부르면 순환 임포트다). */
@@ -89,6 +95,28 @@ export async function ensureGitignoreLine(project: string): Promise<"written" | 
   return writeFile(file, prefix + ".dira\n").then(() => "written" as const, () => "failed" as const);
 }
 
+export type DenyCurrentBranchResult =
+  | { status: "written" | "skipped" | "failed" }
+  | { status: "conflict"; value: string };
+
+/** `<프로젝트>` 레포에 `receive.denyCurrentBranch=updateInstead`를 켠다(DESIGN.md §통합 브랜치가
+ *  설정이 된다 결정 6) — `push.sh`가 있어도 이 설정이 없으면 받는 트리가 통합 브랜치를 체크아웃
+ *  중일 때 직접 `git push`가 거부된다. `.gitignore` 한 줄과 같은 처분이다: **실패해도 생성을 막지
+ *  않는다.** 이미 다른 값이 있으면 안 건드리고 그 값을 그대로 돌려준다 — 부르는 쪽이 결과 패널에
+ *  한 줄로 알린다. */
+export async function ensureDenyCurrentBranch(project: string): Promise<DenyCurrentBranchResult> {
+  const current = await execFileP("git", ["-C", project, "config", "receive.denyCurrentBranch"]).then(
+    ({ stdout }) => stdout.trim() || null,
+    () => null, // 미설정(exit 1)도 레포가 아닌 경우(exit 128)도 같은 갈래 — 아래 set 시도가 최종 판정이다
+  );
+  if (current === "updateInstead") return { status: "skipped" };
+  if (current !== null) return { status: "conflict", value: current };
+  return execFileP("git", ["-C", project, "config", "receive.denyCurrentBranch", "updateInstead"]).then(
+    () => ({ status: "written" as const }),
+    () => ({ status: "failed" as const }),
+  );
+}
+
 export type Preflight =
   | { ok: true }
   | { ok: false; queue: boolean; root: string; message: string };
@@ -126,7 +154,15 @@ export async function scaffold(
   projectDir: string,
   opts: { branch: string; specDoc?: string },
   locale: Locale = DEFAULT_LOCALE,
-): Promise<{ root: string; repo: string; written: string[]; skipped: string[] }> {
+): Promise<{
+  root: string;
+  repo: string;
+  written: string[];
+  skipped: string[];
+  /** `receive.denyCurrentBranch`가 이미 다른 값이라 안 건드렸을 때만 든다(결정 6) — 결과 패널이
+   *  한 줄로 보여준다. */
+  denyCurrentBranchNote?: string;
+}> {
   const repo = engineRepo(locale);
   if ("error" in repo) throw new Error(repo.error);
   const { project, root: given } = queueRoot(projectDir, locale);
@@ -191,6 +227,12 @@ export async function scaffold(
   // 실행 파일이 아니라 source되는 파일이라 모드는 기본값이다(`context.sh`·`dispatch-gate.sh`와 같다).
   await put(SELF_HEAL_FILE, SELF_HEAL_SH);
   await put(DISPATCH_GATE_FILE, dispatchGateSh(opts.branch));
+  // 통합 push 헬퍼(DESIGN.md §통합 브랜치가 설정이 된다 결정 5) — `protocols/AGENTS.md`가 이미
+  // `bash .dira/push.sh ship`을 시키므로 이 파일 없이는 세션이 없는 파일을 부른다. 실행 파일이라
+  // `workers/w1.sh`와 같은 모드(0o755) — 세션이 `bash .dira/push.sh`로 부르니 +x가 필수는 아니지만
+  // 이 큐(도그푸딩)의 실제 사본이 이미 0o755라 그 모양을 그대로 따른다.
+  const pushShText = await readFile(path.join(repo.path, "templates/hooks/push.sh"), "utf8");
+  await put(PUSH_SH_FILE, pushSh(pushShText, opts.branch), 0o755);
   const example = await readFile(path.join(repo.path, "worker.sh.example"), "utf8");
   // 조립은 `firstWorkerBody`(`lib/workers.ts`) 하나다 — §4-18 생성 버튼 폴백도 같은 함수를
   // 부른다. 두 벌로 갈리면 스캐폴딩으로 태어난 첫 워커와 버튼으로 태어난 첫 워커가 다른 모양이 된다.
@@ -200,6 +242,10 @@ export async function scaffold(
   // §0-19 — `.dira`의 형제 `.gitignore`에 `.dira` 한 줄. 실패해도 스캐폴딩 성공을 막지 않는다.
   const gitignore = await ensureGitignoreLine(project);
   if (gitignore !== "failed") (gitignore === "written" ? written : skipped).push(".gitignore");
+
+  // `receive.denyCurrentBranch`(결정 6) — `.gitignore`와 같은 처분, 실패해도 던지지 않는다.
+  const deny = await ensureDenyCurrentBranch(project);
+  if (deny.status === "conflict") return { root, repo: repo.path, written, skipped, denyCurrentBranchNote: deny.value };
 
   return { root, repo: repo.path, written, skipped };
 }

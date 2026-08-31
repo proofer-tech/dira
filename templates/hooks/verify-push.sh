@@ -9,7 +9,13 @@
 # 사용법: bash templates/hooks/verify-push.sh   (그린이면 맨 끝에 "전부 PASS")
 set -u
 DIR="$(cd "$(dirname "$0")" && pwd)"
-PUSH="$DIR/push.sh"
+# 정본엔 `<통합 브랜치>` 자리표시자가 그대로 남는다(GUI가 큐 사본을 만들 때 채운다) - 이 검증은
+# 그 GUI 없이 정본을 직접 부르므로, 여기서 한 번 `master`로 채운 사본을 만들어 쓴다. 아래 픽스처가
+# 만드는 받는 트리도 그대로 `master`다(새 브랜치 처리는 이 파일의 범위 밖 - 이 티켓 참고).
+PUSH="$(mktemp)"
+sed 's/<통합 브랜치>/master/g' "$DIR/push.sh" > "$PUSH"
+chmod +x "$PUSH"
+trap 'rm -f "$PUSH"' EXIT
 FAIL=0
 
 pass() { echo "PASS $*"; }

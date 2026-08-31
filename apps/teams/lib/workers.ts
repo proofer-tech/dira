@@ -2326,6 +2326,19 @@ export function dispatchGateSh(branch: string): string {
   return DISPATCH_GATE_SH.replaceAll("<통합 브랜치>", () => branch);
 }
 
+// ── 통합 push 헬퍼 (DESIGN.md §통합 브랜치가 설정이 된다 결정 4-5) ─────────────
+//
+// 정본 텍스트는 여기 없다 — `templates/hooks/push.sh` 한 벌(§통합 push의 벽 결정 1)이고, 그 파일이
+// `_branch="<통합 브랜치>"` 한 줄을 머리에 든다. scaffold가 그 텍스트를 읽어 이 함수에 넘긴다 —
+// `dispatchGateSh`와 같은 치환 방식(`replaceAll`에 함수 인자, 값이 사람이 친 브랜치 이름이라
+// `$&`·`$1` 해석을 막는다)이라 두 경로가 같은 문자열을 만든다.
+
+export const PUSH_SH_FILE = "push.sh";
+
+export function pushSh(text: string, branch: string): string {
+  return text.replaceAll("<통합 브랜치>", () => branch);
+}
+
 /** 워커 파일이 통합 게이트를 부르는 한 줄 (§4-14). `. tick.sh` **바로 위**에 들어간다. */
 export function dispatchGateSourceLine(root: string): string {
   return `. ${dq(path.join(root, DISPATCH_GATE_FILE))}   # 통합 게이트(§4-14)`;
