@@ -875,6 +875,66 @@ def _ask_options(n):
     return "\n### {}. {}".format(n, _ASK_OPTIONS_BODY)
 
 
+# 결정 17 (2)(4) - 죽은 갈래 사유별 문항 - 선택지 - default_answer. `재시도`가 뜻이 통하는
+# 넷(한도 - 요청 오류 - 기동 실패 - 상한 초과)은 선택지를 새로 안 쓰고 `_RETRY_OPTIONS`를
+# 그대로 쓴다(결정 17 - "사유마다 선택지 넷을 새로 쓰지 않는다"). 무종료 마감만 갈린다 -
+# 세션이 끝까지 돌고 안 닫힌 것이라 "다시 시도한다"가 뜻이 안 통한다.
+_RETRY_OPTIONS = ("- (a) 다시 시도한다 - 트리를 안 고치고 그대로 다시 보낸다\n"
+                   "- (b) 내가 손보고 나서 다시 시도한다\n"
+                   "- (c) 그만둔다 - 이 티켓을 닫는다\n"
+                   "- (d) 아래 칸에 직접 쓴다\n")
+
+_STALL_OPTIONS = ("- (a) 남은 `## Done when`을 사람이 판정해서 이 티켓을 닫는다\n"
+                   "- (b) 남은 범위만 새 티켓으로 쪼개서 넘긴다\n"
+                   "- (c) `## Done when`이 한 세션에 안 드는 크기다 - 이 티켓을 쪼갠다\n"
+                   "- (d) 아래 칸에 직접 쓴다\n")
+
+# 사유 -> (정형문에 적을 근거 절 - 결정 (6), `### 1.` 문항 전문 - 결정 표 그대로, 선택지,
+# default_answer - 결정 (4)). `{n}`은 attempts(세션 회수)로 채운다. `dead_reason`이 내는
+# "주입 실패"는 여섯 벌에 없는 내부 갈림이라 호출부가 "기동 실패" 키로 접어 찾는다.
+_DEAD_REASON_INFO = {
+    "무종료 마감": (
+        "세션 {n}회가 전부 끝까지 돌고도 이 티켓을 안 닫았습니다",
+        ". 남은 것을 어떻게 할까요", _STALL_OPTIONS, "1.(a)"),
+    "한도": (
+        "엔진이 한도에 걸려 세션 {n}회가 다 끊겼습니다",
+        ". 이 티켓을 어떻게 할까요", _RETRY_OPTIONS, "1.(a)"),
+    "요청 오류": (
+        "세션 {n}회가 전부 요청 오류로 끝났습니다",
+        ". 같은 자리에서 죽고 있습니다. 무엇을 바꿀까요", _RETRY_OPTIONS, "1.(b)"),
+    "기동 실패": (
+        "세션 {n}회가 프롬프트 주입 단계에서 못 떴습니다",
+        ". 이 티켓을 어떻게 할까요", _RETRY_OPTIONS, "1.(b)"),
+    "상한 초과": (
+        "세션 {n}회가 전부 실행 상한을 넘겨 강제종료됐습니다",
+        ". 범위를 어떻게 할까요", _RETRY_OPTIONS, "1.(c)"),
+}
+
+_DEAD_BOX = re.compile(r"^-\s*\[( |x|X)\]")
+
+
+def _dead_box_note(body):
+    """무종료 마감 문항 뒤에 붙는 `## Done when` 상자 집계 한 줄(결정 17)."""
+    boxes = [l.strip() for l in _section(body, "Done when").split("\n")
+             if _DEAD_BOX.match(l.strip())]
+    total = len(boxes)
+    unchecked = sum(1 for l in boxes if _DEAD_BOX.match(l).group(1) == " ")
+    if total and not unchecked:
+        return "상자는 다 찼고 rename만 안 됐습니다"
+    return "미체크 {}개 / 전체 {}개".format(unchecked, total)
+
+
+def _log_lines(troot):
+    """`<troot>/workers/runner.log`의 줄 전체(있으면). `dead_reason`은 워커에 안 묶인
+    전역 `NOTE 엔진 불능` 줄까지 봐야 하므로 `_log_tail`처럼 해시로 미리 거르지 않는다."""
+    try:
+        with open(os.path.join(troot, "workers", "runner.log"),
+                  encoding="utf-8", errors="replace") as f:
+            return [l.rstrip("\n") for l in f]
+    except OSError:
+        return []
+
+
 # 결정 11 (1)(3) 형식의 문항 머리 - `### <n[-n...]>. <물음>`.
 _Q_HEAD = re.compile(r"^###\s*\d+(?:-\d+)*\.\s")
 
@@ -926,15 +986,34 @@ def ask_human(path, h, attempts, why, blocked=False, killed=False, handoff=False
     # 그 블록은 이미 지난 라운드에서 답한 것이다 - 묵은 물음을 새 라운드의 문항으로 다시 세우지
     # 않는다(요구 4f761c5a).
     q = "" if handoff or not blocked else _block_question(_section(body, "블록"))
+    default_answer = "1.(a)"
     if q:
         # 결정 13 (5) - 물음이 곧 카드 제목이라 가리킬 곳이 없다. 남는 것은 사유 한 줄이다.
         head = "{}. 엔진은 더 시도하지 않습니다.\n\n{}\n".format(cause, q)
         options = _ask_options(2)
+    elif not (killed or handoff or blocked):
+        # 결정 17 - 죽은 갈래(블록도 killed도 handoff도 아니다)는 `runner.log`가 이미 적어
+        # 둔 사유로 문항이 갈린다. `dead_reason`의 "주입 실패"는 표의 여섯 벌에 없는 내부
+        # 갈림이라 "기동 실패" 문항으로 접는다(결정 17 §자리 - 둘 다 STALL 갈래다).
+        reason = dead_reason(_log_lines(troot), h)
+        reason = "기동 실패" if reason == "주입 실패" else reason
+        info = _DEAD_REASON_INFO.get(reason)
+        if info:
+            cause_clause, q_tail, opts, default_answer = info
+            cause_clause = cause_clause.format(n=attempts)
+            note = "\n" + _dead_box_note(body) + "\n" if reason == "무종료 마감" else ""
+            head = "{}. 엔진은 더 시도하지 않습니다.\n\n### 1. {}{}\n\n{}{}".format(
+                cause_clause, cause_clause, q_tail, opts, note)
+            options = ""
+        else:
+            # 결정 17 (3) - 분류가 "알 수 없음"이면 지금의 고정 선택지 넷으로 떨어진다.
+            ask = "세션이 왜 계속 죽는지, 이 티켓을 계속 갈지 답해주세요."
+            head = "{}. 엔진은 더 시도하지 않습니다 — {}\n".format(cause, ask)
+            options = _ask_options(1)
     else:
         ask = ("이 티켓을 계속 갈지, 무엇을 바꿔서 갈지 답해주세요." if killed
                else "남은 범위가 한 세션에 드는지, 이 티켓을 그대로 더 갈지 답해주세요." if handoff
-               else "아래 인용한 `## 블록`에 적힌 결정을 답해주세요." if blocked
-               else "세션이 왜 계속 죽는지, 이 티켓을 계속 갈지 답해주세요.")
+               else "아래 인용한 `## 블록`에 적힌 결정을 답해주세요.")
         # 지시어는 `아래`다 -- 인용(결정 6)은 정형문 다음에 붙고, 화면에선 답변칸이 본문 위에 있다.
         head = "{}. 엔진은 더 시도하지 않습니다 — {}\n".format(cause, ask)
         options = _ask_options(1)
@@ -955,7 +1034,9 @@ def ask_human(path, h, attempts, why, blocked=False, killed=False, handoff=False
         upd.update({k: "" for k in REAP_CLEAR})
         if not q:
             # 결정 12 (4) - 기본 골라 둔 답. killed는 방금 사람이 낸 판단이라 엔진이 다음을 모른다.
-            upd["default_answer"] = "1.(a)"
+            # 결정 17 (4) - 죽은 갈래는 사유가 기본값을 고른다(무종료 마감/한도/알 수 없음 1.(a),
+            # 요청 오류/기동 실패 1.(b), 상한 초과 1.(c)).
+            upd["default_answer"] = default_answer
     set_fm_keys(path, upd)
     return "ASK {} awaiting={} - {}, 답변 요청으로 전환".format(h, a, cause)
 

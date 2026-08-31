@@ -305,7 +305,77 @@ try:
     ]
     assert T.dead_reason(m11, "mmmm0011") == "요청 오류", "M11: 우선순위가 요청 오류를 안 골랐다"
 
-    print("PASS 13/13 + M(dead_reason) 11")
+    # N) 티켓 8adc79a1 - ask_human 죽은 갈래가 dead_reason으로 사유별 문항 - 선택지 -
+    # default_answer를 쓴다(결정 17 (1)(3)(4)(6)). 수용조건 1·2·4·6
+    os.makedirs(os.path.join(ws, "workers"), exist_ok=True)
+
+    def write_log(lines):
+        with open(os.path.join(ws, "workers", "runner.log"), "w", encoding="utf-8") as f:
+            f.write("\n".join(lines) + "\n")
+
+    def n_mk(h, body="## Goal\n작업.\n\n## Done when\n- [x] 하나\n- [ ] 둘\n"):
+        return mk(ws, h, [], body)
+
+    # N1) 무종료 마감 - 수용조건 1 + 6(미체크 집계)
+    write_log([L("2026-08-30 10:00:00", "pw1", "nnnn0001", "DISPATCH {h} kind=work"),
+               L("2026-08-30 10:05:00", "pw1", "nnnn0001", "DONE {h} sid=abc")])
+    pn1 = n_mk("nnnn0001")
+    T.ask_human(pn1, "nnnn0001", 3, "자동 회수", blocked=False)
+    n1 = open(pn1, encoding="utf-8").read()
+    assert "### 1. 세션 3회가 전부 끝까지 돌고도 이 티켓을 안 닫았습니다" in n1, \
+        "N1: 무종료 마감 문항이 안 떴다\n" + n1
+    assert "- (a) 남은 `## Done when`을 사람이 판정해서 이 티켓을 닫는다" in n1, \
+        "N1: 무종료 마감 선택지가 안 떴다\n" + n1
+    assert "미체크 1개 / 전체 2개" in n1, "N1: 미체크 집계 줄이 없다\n" + n1
+    assert T.read_fm(pn1)[0].get("default_answer") == "1.(a)", "N1: default_answer가 안 갈렸다"
+
+    # N1b) 무종료 마감 + 미체크 0개 - "상자는 다 찼고 rename만 안 됐습니다"로 갈린다
+    pn1b = n_mk("nnnn1112", "## Goal\n작업.\n\n## Done when\n- [x] 하나\n- [x] 둘\n")
+    write_log([L("2026-08-30 10:00:00", "pw1", "nnnn1112", "DISPATCH {h} kind=work"),
+               L("2026-08-30 10:05:00", "pw1", "nnnn1112", "DONE {h} sid=abc")])
+    T.ask_human(pn1b, "nnnn1112", 3, "자동 회수", blocked=False)
+    n1b = open(pn1b, encoding="utf-8").read()
+    assert "상자는 다 찼고 rename만 안 됐습니다" in n1b, "N1b: 미체크 0개 문구가 안 떴다\n" + n1b
+
+    # N2) 요청 오류 - 수용조건 2
+    write_log([L("2026-08-30 10:00:00", "pw1", "nnnn0002", "DISPATCH {h} kind=work"),
+               L("2026-08-30 10:01:00", "pw1", "nnnn0002", "FAIL {h} 세션이 result is_error로 끝났다 -> 꼬리")])
+    pn2 = n_mk("nnnn0002")
+    T.ask_human(pn2, "nnnn0002", 3, "자동 회수", blocked=False)
+    n2 = open(pn2, encoding="utf-8").read()
+    assert "요청 오류로 끝났습니다" in n2, "N2: 요청 오류 문항이 안 떴다\n" + n2
+    assert T.read_fm(pn2)[0].get("default_answer") == "1.(b)", "N2: default_answer가 1.(b)가 아니다"
+
+    # N3) 주입 실패 -> "기동 실패" 문항으로 접힌다(표에 없는 내부 갈림)
+    write_log([L("2026-08-30 10:00:00", "pw1", "nnnn0003", "DISPATCH {h} kind=work"),
+               L("2026-08-30 10:01:00", "pw1", "nnnn0003",
+                 "STALL {h} 30s 안에 이어받기 주입 뒤 출력이 안 자랐다 - 기동 실패")])
+    pn3 = n_mk("nnnn0003")
+    T.ask_human(pn3, "nnnn0003", 3, "자동 회수", blocked=False)
+    n3 = open(pn3, encoding="utf-8").read()
+    assert "프롬프트 주입 단계에서 못 떴습니다" in n3, "N3: 주입 실패가 기동 실패 문항으로 안 접혔다\n" + n3
+    assert T.read_fm(pn3)[0].get("default_answer") == "1.(b)", "N3: default_answer가 1.(b)가 아니다"
+
+    # N4) 상한 초과
+    write_log([L("2026-08-30 10:00:00", "pw1", "nnnn0004", "DISPATCH {h} kind=work"),
+               L("2026-08-30 10:05:00", "pw1", "nnnn0004", "TIMEOUT {h} 240s 초과 강제종료 -> 꼬리")])
+    pn4 = n_mk("nnnn0004")
+    T.ask_human(pn4, "nnnn0004", 3, "자동 회수", blocked=False)
+    n4 = open(pn4, encoding="utf-8").read()
+    assert "실행 상한을 넘겨 강제종료됐습니다" in n4, "N4: 상한 초과 문항이 안 떴다\n" + n4
+    assert T.read_fm(pn4)[0].get("default_answer") == "1.(c)", "N4: default_answer가 1.(c)가 아니다"
+
+    # N5) 알 수 없음 - runner.log를 지우면 결정 17 (3)의 고정 선택지 넷으로 그대로 떨어진다
+    os.remove(os.path.join(ws, "workers", "runner.log"))
+    pn5 = n_mk("nnnn0005")
+    T.ask_human(pn5, "nnnn0005", 3, "자동 회수", blocked=False)
+    n5 = open(pn5, encoding="utf-8").read()
+    assert "### 1. 이 티켓을 어떻게 할까요" in n5, "N5: 알 수 없음 갈래가 고정 문항을 안 썼다\n" + n5
+    assert "세션이 왜 계속 죽는지, 이 티켓을 계속 갈지 답해주세요" in n5, \
+        "N5: 알 수 없음 갈래의 정형문이 바뀌었다\n" + n5
+    assert T.read_fm(pn5)[0].get("default_answer") == "1.(a)", "N5: default_answer가 1.(a)가 아니다"
+
+    print("PASS 13/13 + M(dead_reason) 11 + N(ask_human 죽은 갈래) 6")
     print(a[a.index("## 질문 1"):])
 finally:
     if old_home is None:
