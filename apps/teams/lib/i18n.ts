@@ -1384,6 +1384,7 @@ export const ko: Record<string, string> = {
 
   "workers.dispatchGate.branchUnreadable":
     "이 프로젝트의 통합 브랜치를 protocols/AGENTS.md에서 읽을 수 없습니다 — 파일을 손으로 편집하세요.",
+  "workers.integrationBranch.invalidPrefix": "통합 브랜치 이름은 영문·숫자·. _ / - 만 됩니다:",
   "workers.dispatchGate.noSourceLineMid":
     "에 `. <레포>/tick.sh` 줄이 없습니다 — 통합 게이트를 넣을 자리를 GUI가 짚을 수 없습니다. 파일을 손으로 편집하세요.",
 
@@ -3385,6 +3386,7 @@ export const en: Record<string, string> = {
 
   "workers.dispatchGate.branchUnreadable":
     "Couldn't read this project's integration branch from protocols/AGENTS.md — edit the file by hand.",
+  "workers.integrationBranch.invalidPrefix": "Integration branch names take letters, digits, ., _, / and - only:",
   "workers.dispatchGate.noSourceLineMid":
     " has no `. <repo>/tick.sh` line, so the GUI can't tell where the dispatch gate goes. Edit the file by hand.",
 

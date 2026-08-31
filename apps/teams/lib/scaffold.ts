@@ -19,6 +19,7 @@ import {
   dispatchGateSh,
   engineRepo,
   firstWorkerBody,
+  integrationBranchText,
   pushSh,
 } from "./workers.ts";
 
@@ -225,6 +226,9 @@ export async function scaffold(
   // **통합 게이트도 같이 태어난다**(§4-14): `<루트>/dispatch-gate.sh` + 워커의 `source` 한 줄.
   // 2번째 워커부터는 기존 워커 복사(`createWorker`)라 줄이 저절로 승계된다 — 첫 워커에만 쓴다.
   // 실행 파일이 아니라 source되는 파일이라 모드는 기본값이다(`context.sh`·`dispatch-gate.sh`와 같다).
+  // 정본(DESIGN.md §통합 브랜치가 설정이 된다 결정 1) - 만들기 폼이 받은 값을 여기 한 줄로 적는다.
+  // 다른 스캐폴딩 파일과 같은 `put`(O_EXCL) — 있으면 안 덮는다.
+  await put("integration-branch", integrationBranchText(opts.branch));
   await put(SELF_HEAL_FILE, SELF_HEAL_SH);
   await put(DISPATCH_GATE_FILE, dispatchGateSh(opts.branch));
   // 통합 push 헬퍼(DESIGN.md §통합 브랜치가 설정이 된다 결정 5) — `protocols/AGENTS.md`가 이미

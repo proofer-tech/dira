@@ -71,6 +71,8 @@ const {
   nextWorkerName,
   parseContextBlock,
   readCommonContext,
+  readIntegrationBranch,
+  writeIntegrationBranch,
   reassignCount,
   renderContextBlock,
   startWorker,
@@ -2400,7 +2402,7 @@ test("applyDispatchGate — 픽스처 큐 왕복 1회: 브랜치는 AGENTS.md에
 
   // §4-14 — 값은 이미 손에 있다: scaffold가 이미 치환해 둔 AGENTS.md의 그 줄에서 읽는다
   mkdirSync(path.join(root, "protocols"), { recursive: true });
-  writeFileSync(path.join(root, "protocols", "AGENTS.md"), "본문...\n**끝나면**: `git push . HEAD:main`\n");
+  writeFileSync(path.join(root, "protocols", "AGENTS.md"), "본문...\n**끝나면**: `git rebase main`\n");
 
   // ① 경고가 뜬다 = 줄이 없다. 파일도 아직 없다
   assert.strictEqual((await listWorkers(root)).find((w) => w.name === "w1")!.dispatchGateSource, false);
@@ -2464,7 +2466,7 @@ test("applyDispatchGate — 낡음은 갈아 끼우고 손으로 깐 판은 안 
   const root = makeRoot({ "w1.sh": CTX_SH });
   chmodSync(path.join(root, "workers", "w1.sh"), 0o755);
   mkdirSync(path.join(root, "protocols"), { recursive: true });
-  writeFileSync(path.join(root, "protocols", "AGENTS.md"), "본문...\n**끝나면**: `git push . HEAD:main`\n");
+  writeFileSync(path.join(root, "protocols", "AGENTS.md"), "본문...\n**끝나면**: `git rebase main`\n");
   const gate = path.join(root, DISPATCH_GATE_FILE);
 
   // 낡음 — §4-14 §검증 6의 그 실측 그대로(`printf '\n# hand edit\n' >>`) 만든 상태
@@ -2482,6 +2484,37 @@ test("applyDispatchGate — 낡음은 갈아 끼우고 손으로 깐 판은 안 
   assert.strictEqual(readFileSync(gate, "utf8"), before);
   // 손으로 깐 판은 "낡음"이 아니다 — 화면 경고 축이 다르다(§4-14 §소급, 이 티켓의 범위 밖)
   assert.strictEqual((await listWorkers(root)).find((w) => w.name === "w1")!.dispatchGateStale, false);
+});
+
+test("readIntegrationBranch — ①없는 큐는 ②(AGENTS.md의 `git rebase <값>`)로 이관해 파일에 한 번 적는다, 멱등 (DESIGN.md §통합 브랜치가 설정이 된다 결정 2, 수용조건 7)", async () => {
+  const root = mkdtempSync(path.join(tmpdir(), "fst-branch-"));
+  tmps.push(root);
+  mkdirSync(path.join(root, "protocols"), { recursive: true });
+  writeFileSync(path.join(root, "protocols", "AGENTS.md"), "본문...\n**시작하자마자**: `git rebase dev`\n");
+
+  assert.strictEqual(await readIntegrationBranch(root), "dev");
+  assert.strictEqual(readFileSync(path.join(root, "integration-branch"), "utf8"), "dev\n");
+
+  // ①이 생긴 뒤로는 ②를 다시 안 본다 — AGENTS.md를 지워도 값이 그대로다
+  rmSync(path.join(root, "protocols", "AGENTS.md"));
+  assert.strictEqual(await readIntegrationBranch(root), "dev");
+});
+
+test("readIntegrationBranch — ①②③ 셋 다 막힌 큐는 null이다, 추측해서 안 쓴다 (수용조건 7)", async () => {
+  const root = mkdtempSync(path.join(tmpdir(), "fst-branch-none-"));
+  tmps.push(root);
+  // protocols/AGENTS.md도 없고, dirname(root)(tmpdir)도 git 레포가 아니다 — ②·③ 둘 다 막힌다
+  assert.strictEqual(await readIntegrationBranch(root), null);
+  assert.strictEqual(existsSync(path.join(root, "integration-branch")), false);
+});
+
+test("writeIntegrationBranch — 정규식 하나로 검증, 값 한 줄만 쓴다 (DESIGN.md §통합 브랜치가 설정이 된다 결정 1)", async () => {
+  const root = mkdtempSync(path.join(tmpdir(), "fst-branch-write-"));
+  tmps.push(root);
+  await writeIntegrationBranch(root, "release/1.0");
+  assert.strictEqual(readFileSync(path.join(root, "integration-branch"), "utf8"), "release/1.0\n");
+  await assert.rejects(writeIntegrationBranch(root, "has space"), /영문·숫자/);
+  await assert.rejects(writeIntegrationBranch(root, ""), /영문·숫자/);
 });
 
 /** §4-14 §검증 2·3 — 받는 트리가 통합 브랜치를 체크아웃 중일 때만 잰다. **진짜 git + 진짜

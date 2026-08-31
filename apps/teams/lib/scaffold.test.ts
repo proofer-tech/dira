@@ -44,6 +44,7 @@ const SET = [
   ".dira/self-heal.sh",
   ".dira/dispatch-gate.sh",
   ".dira/push.sh",
+  ".dira/integration-branch",
 ];
 
 /** 활성 `TICKET_CWD` 대입. `# TICKET_CWD=...`(worker.sh.example의 주석)은 안 걸린다 —

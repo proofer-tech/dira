@@ -1601,7 +1601,7 @@ export async function listWorkers(
   // 게이트 낡음은 프로젝트 하나에 한 판정이다(§4-14 §소급) — 워커마다 다시 읽지 않는다. 통합
   // 브랜치를 못 읽으면(스캐폴딩 이전 큐) 낡음을 잴 수 없어 조용히 false로 둔다 — 그 프로젝트는
   // 종전대로 `source` 줄 경고만 그대로다.
-  const gateBranch = await integrationBranchOf(root);
+  const gateBranch = await readIntegrationBranch(root);
   const gateStale = gateBranch !== null && (await dispatchGateState(root, gateBranch)) === "stale";
   // 쿨다운은 **엔진마다** 하나이고 머신 전역이다(`tick.sh:62`). 워커마다 열지 않도록 이 패스
   // 안에서 엔진 이름으로 한 번만 읽는다 — 오늘 엔진 종류는 1개다. 실패가 없는 워커는 아예 안
@@ -2355,14 +2355,72 @@ export async function dispatchGateState(root: string, branch: string): Promise<D
   return text.includes(DISPATCH_GATE_MARKER) ? "stale" : "handEdited";
 }
 
-/** 이미 스캐폴딩된 프로젝트의 통합 브랜치를 `protocols/AGENTS.md`에서 읽는다 — scaffold가 이미
- *  `<통합 브랜치>`를 치환해 둔 그 파일 하나가, 소급 적용이 새 입력 없이 값을 구하는 유일한 자리다
- *  (§4-14 — "통합 브랜치 값은 이미 손에 있다"). 못 찾으면 null이다. */
-export async function integrationBranchOf(root: string): Promise<string | null> {
-  const text = await readFile(path.join(root, "protocols/AGENTS.md"), "utf8").catch(() => null);
-  if (text === null) return null;
-  const m = text.match(/git push \. HEAD:([^\s`]+)/);
-  return m ? m[1] : null;
+// ── 통합 브랜치 (`<루트>/integration-branch`, DESIGN.md §통합 브랜치가 설정이 된다 결정 1-2) ──
+
+/** `readPoolLimit`과 같은 모양 — 파일 하나, 값 한 줄, 파서 없이 정규식 하나로 받는다. */
+const INTEGRATION_BRANCH_RE = /^[A-Za-z0-9._/-]+$/;
+
+function integrationBranchFile(root: string): string {
+  return path.join(root, "integration-branch");
+}
+
+/** 정본을 읽는다. 읽기 순서는 셋이다(결정 2) - ① `<루트>/integration-branch` ② 종전 경로
+ *  (`protocols/AGENTS.md`의 `git rebase <브랜치>` 문장) ③ 받는 트리(`dirname(root)`)가 지금
+ *  체크아웃한 브랜치. ②나 ③으로 구하면 그 값을 ①에 한 번 적어 다음부터는 ①만 읽는다(멱등).
+ *  셋 다 실패하면 `null`이다 - 없는 값을 추측해서 쓰지 않는다. */
+export async function readIntegrationBranch(root: string): Promise<string | null> {
+  const text = await readFile(integrationBranchFile(root), "utf8").catch(() => null);
+  if (text !== null) {
+    const trimmed = text.trim();
+    if (INTEGRATION_BRANCH_RE.test(trimmed)) return trimmed;
+  }
+
+  const agents = await readFile(path.join(root, "protocols/AGENTS.md"), "utf8").catch(() => null);
+  const legacy = agents?.match(/git rebase ([^\s`]+)/)?.[1];
+  if (legacy && INTEGRATION_BRANCH_RE.test(legacy)) {
+    await writeIntegrationBranch(root, legacy);
+    return legacy;
+  }
+
+  const current = await promisify(execFile)("git", [
+    "-C",
+    path.dirname(root),
+    "symbolic-ref",
+    "--short",
+    "-q",
+    "HEAD",
+  ]).then(
+    ({ stdout }) => stdout.trim(),
+    () => "",
+  );
+  if (current && INTEGRATION_BRANCH_RE.test(current)) {
+    await writeIntegrationBranch(root, current);
+    return current;
+  }
+
+  return null;
+}
+
+/** 검증 + 파일 본문. `writePoolLimit`과 같은 검증 모양 — scaffold의 `put`(O_EXCL) 쪽도 이 문자열을
+ *  그대로 쓴다. */
+export function integrationBranchText(branch: string, locale: Locale = DEFAULT_LOCALE): string {
+  if (!INTEGRATION_BRANCH_RE.test(branch)) {
+    throw new Error(`${t(locale, "workers.integrationBranch.invalidPrefix")} ${branch}`);
+  }
+  return `${branch}\n`;
+}
+
+/** 저장. 값이 문장 모양에 매여 있던 것이 `integrationBranchOf`의 결함 원인이었다 - 이 함수는
+ *  그 결합을 끊고 파일 하나에 값 한 줄만 쓴다. **덮어쓴다** — 결정 2의 멱등 이관과 결정 3의
+ *  "값을 바꾸면 다시 쓴다"가 이 함수를 부른다(스캐폴딩은 O_EXCL `put`을 대신 쓴다). */
+export async function writeIntegrationBranch(
+  root: string,
+  branch: string,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<void> {
+  const text = integrationBranchText(branch, locale);
+  await mkdir(root, { recursive: true });
+  await writeFile(integrationBranchFile(root), text, "utf8");
 }
 
 /** 소급 (§4-14 §소급): `<루트>/dispatch-gate.sh`를 **없으면 만들고**, 워커 파일의 `. tick.sh`
@@ -2375,7 +2433,7 @@ export async function applyDispatchGate(
   const file = await workerFile(root, name, locale);
   const text = await readFile(file, "utf8");
 
-  const branch = await integrationBranchOf(root);
+  const branch = await readIntegrationBranch(root);
   if (branch === null) {
     throw new Error(t(locale, "workers.dispatchGate.branchUnreadable"));
   }
@@ -2707,7 +2765,7 @@ export async function createWorker(
     // 게이트는 `protocols/AGENTS.md`를 읽을 수 있을 때만 붙는다 — 못 읽어도 생성은 성공한다
     // (결정 4). 자가 정리는 언제나 붙는다(입력이 경로 둘뿐이라 — firstWorkerBody가 그 줄은
     // 무조건 넣는다).
-    const branch = await integrationBranchOf(root);
+    const branch = await readIntegrationBranch(root);
     text = firstWorkerBody(example, root, repo.path, branch, name);
     // 자가 정리·게이트 파일 자신도 §0-3과 같은 자리에 눕는다 — **있으면 덮지 않는다**
     // (`scaffold`의 `put`과 같은 O_EXCL 계약). 실행 파일이 아니라 source되는 파일이라 모드는
