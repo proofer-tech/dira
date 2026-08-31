@@ -85,7 +85,7 @@ test("scaffold — §0-3 집합 그대로, 두 번째는 전부 skipped", async 
   // ② `<프로젝트>`·`<통합 브랜치>`가 하나도 안 남는다
   assert.doesNotMatch(before, /<프로젝트>|<통합 브랜치>/);
   assert.ok(before.includes(project), "치환된 프로젝트 경로가 본문에 있어야 한다");
-  assert.ok(before.includes("git push . HEAD:main"), "브랜치가 치환돼야 한다");
+  assert.ok(before.includes("git rebase main"), "브랜치가 치환돼야 한다");
   // ③ specDoc이 비면 그 자리표시자는 남는다
   assert.match(before, /<프로젝트 스펙 문서>/);
 
