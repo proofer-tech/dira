@@ -73,7 +73,9 @@ const {
   readCommonContext,
   readIntegrationBranch,
   writeIntegrationBranch,
+  rewriteIntegrationBranch,
   pushSh,
+  PUSH_SH_FILE,
   reassignCount,
   renderContextBlock,
   startWorker,
@@ -2516,6 +2518,109 @@ test("writeIntegrationBranch — 정규식 하나로 검증, 값 한 줄만 쓴�
   assert.strictEqual(readFileSync(path.join(root, "integration-branch"), "utf8"), "release/1.0\n");
   await assert.rejects(writeIntegrationBranch(root, "has space"), /영문·숫자/);
   await assert.rejects(writeIntegrationBranch(root, ""), /영문·숫자/);
+});
+
+/** §통합 브랜치가 설정이 된다 결정 3, 수용조건 5-6. `<루트>`에 다섯 자리를 실제 값(main)으로
+ *  깐 뒤 `dev`로 갈아본다. */
+function makeIntegrationRoot(): string {
+  const root = mkdtempSync(path.join(tmpdir(), "fst-rewrite-branch-"));
+  tmps.push(root);
+  mkdirSync(path.join(root, "protocols"), { recursive: true });
+  writeFileSync(path.join(root, DISPATCH_GATE_FILE), dispatchGateSh("main"), { mode: 0o644 });
+  const repo = engineRepo();
+  if ("error" in repo) throw new Error(repo.error);
+  const pushTemplate = readFileSync(path.join(repo.path, "templates/hooks/push.sh"), "utf8");
+  writeFileSync(path.join(root, PUSH_SH_FILE), pushSh(pushTemplate, "main"), { mode: 0o755 });
+  writeFileSync(
+    path.join(root, "protocols", "AGENTS.md"),
+    "- **시작하자마자 `git rebase main`.**\n" +
+      "  `git log --oneline main -- <파일>`로 확인.\n" +
+      "  main은 이 프로젝트의 통합 브랜치를 가리키는 낱말로도 산문에 여러 번 쓰인다 - main.\n",
+  );
+  writeFileSync(
+    path.join(root, "protocols", "push-거부.md"),
+    "받는 트리(`~/proj`, `main` 체크아웃)가 깨끗할 때만. `git push . HEAD:main`을 직접 치지 않는다.\n",
+  );
+  writeFileSync(
+    path.join(root, "protocols", "재디스패치-복구.md"),
+    "`git log --oneline main -- <파일>` 또는 `grep`. 안 하면 `git rebase main`에서 막힌다.\n",
+  );
+  return root;
+}
+
+test("rewriteIntegrationBranch — 생성 둘은 템플릿에서 통째로, 문서 셋은 문장 모양 넷만 (DESIGN.md §통합 브랜치가 설정이 된다 결정 3, 수용조건 5)", async () => {
+  const root = makeIntegrationRoot();
+
+  const changed = await rewriteIntegrationBranch(root, "main", "dev");
+
+  assert.deepStrictEqual(
+    new Set(changed),
+    new Set([DISPATCH_GATE_FILE, PUSH_SH_FILE, "protocols/AGENTS.md", "protocols/push-거부.md", "protocols/재디스패치-복구.md"]),
+  );
+
+  // 생성 둘 — 통째로 다시 만든 판과 바이트가 같다(문자열을 기워 넣지 않는다)
+  assert.strictEqual(readFileSync(path.join(root, DISPATCH_GATE_FILE), "utf8"), dispatchGateSh("dev"));
+  assert.strictEqual(statSync(path.join(root, DISPATCH_GATE_FILE)).mode & 0o777, 0o644);
+  const repo = engineRepo();
+  if ("error" in repo) throw new Error(repo.error);
+  const pushTemplate = readFileSync(path.join(repo.path, "templates/hooks/push.sh"), "utf8");
+  assert.strictEqual(readFileSync(path.join(root, PUSH_SH_FILE), "utf8"), pushSh(pushTemplate, "dev"));
+  assert.strictEqual(statSync(path.join(root, PUSH_SH_FILE)).mode & 0o777, 0o755); // 755를 잃지 않는다
+
+  // 문서 셋 — 문장 모양 넷의 값만 dev로 갈리고, 그 밖의 "main"은 한 글자도 안 바뀐다(수용조건 6)
+  const agents = readFileSync(path.join(root, "protocols", "AGENTS.md"), "utf8");
+  assert.match(agents, /git rebase dev/);
+  assert.match(agents, /git log --oneline dev/);
+  assert.match(agents, /main은 이 프로젝트의 통합 브랜치를 가리키는 낱말로도 산문에 여러 번 쓰인다 - main\./);
+
+  const pushGeobu = readFileSync(path.join(root, "protocols", "push-거부.md"), "utf8");
+  assert.match(pushGeobu, /`dev` 체크아웃/);
+  assert.match(pushGeobu, /git push \. HEAD:dev/);
+
+  const recover = readFileSync(path.join(root, "protocols", "재디스패치-복구.md"), "utf8");
+  assert.match(recover, /git log --oneline dev/);
+  assert.match(recover, /git rebase dev/);
+});
+
+test("rewriteIntegrationBranch — 손으로 깐 dispatch-gate.sh는 안 건드리고, 안 갈린 파일은 목록에 안 든다 (§4-14 §소급과 같은 계약)", async () => {
+  const root = makeIntegrationRoot();
+  writeFileSync(path.join(root, DISPATCH_GATE_FILE), "손으로 처음부터 깐 판\n");
+  const before = readFileSync(path.join(root, DISPATCH_GATE_FILE), "utf8");
+
+  const changed = await rewriteIntegrationBranch(root, "main", "dev");
+
+  assert.strictEqual(readFileSync(path.join(root, DISPATCH_GATE_FILE), "utf8"), before);
+  assert.strictEqual(changed.includes(DISPATCH_GATE_FILE), false);
+  assert.strictEqual(changed.includes(PUSH_SH_FILE), true); // push.sh는 손으로 고친 판 판정이 없다 — 있으면 항상 다시 만든다
+
+  // 없는 파일은 조용히 건너뛴다 — 만들지 않는다
+  rmSync(path.join(root, PUSH_SH_FILE));
+  const changed2 = await rewriteIntegrationBranch(root, "dev", "main");
+  assert.strictEqual(changed2.includes(PUSH_SH_FILE), false);
+  assert.strictEqual(existsSync(path.join(root, PUSH_SH_FILE)), false);
+
+  // 다시 불러도 값이 같으면 아무것도 안 갈린다(멱등) — AGENTS.md는 이미 dev를 문장 모양대로 담고 있다
+  const changed3 = await rewriteIntegrationBranch(root, "dev", "dev");
+  assert.deepStrictEqual(changed3, []);
+});
+
+test("writeIntegrationBranch — 이전 값이 있고 달라지면 다섯 자리를 같이 다시 쓴다, 이관(첫 쓰기)은 안 건드린다 (수용조건 5, 결정 3)", async () => {
+  const root = makeIntegrationRoot();
+
+  // ① 이관 — 아직 <루트>/integration-branch가 없다. 이 첫 쓰기는 "값이 갈린" 것이 아니라
+  //    이미 그 값으로 태어난 문서를 다시 태그만 붙이는 것이라, 다시 쓰기를 안 부른다
+  const first = await writeIntegrationBranch(root, "main");
+  assert.deepStrictEqual(first, []);
+  assert.strictEqual(readFileSync(path.join(root, DISPATCH_GATE_FILE), "utf8"), dispatchGateSh("main"));
+
+  // ② 값을 바꾼다 — 다섯 자리가 같이 갈린다
+  const changed = await writeIntegrationBranch(root, "dev");
+  assert.deepStrictEqual(
+    new Set(changed),
+    new Set([DISPATCH_GATE_FILE, PUSH_SH_FILE, "protocols/AGENTS.md", "protocols/push-거부.md", "protocols/재디스패치-복구.md"]),
+  );
+  assert.strictEqual(readFileSync(path.join(root, "integration-branch"), "utf8"), "dev\n");
+  assert.strictEqual(readFileSync(path.join(root, DISPATCH_GATE_FILE), "utf8"), dispatchGateSh("dev"));
 });
 
 /** §4-14 §검증 2·3 — 받는 트리가 통합 브랜치를 체크아웃 중일 때만 잰다. **진짜 git + 진짜

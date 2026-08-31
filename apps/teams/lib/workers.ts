@@ -2410,17 +2410,104 @@ export function integrationBranchText(branch: string, locale: Locale = DEFAULT_L
   return `${branch}\n`;
 }
 
+/** 문서 셋에서만 치환하는 문장 모양 넷(§통합 브랜치가 설정이 된다 결정 3) - `git rebase <값>`,
+ *  `git push . HEAD:<값>`, `git log --oneline <값>`, `` `<값>` 체크아웃``. **낱말만 보고 바꾸지
+ *  않는다** - `main`-`master`는 산문에도 나오는 낱말이라, 이 문장 모양 안쪽에서만 옛 브랜치
+ *  이름을 찾는다. 앞뒤로 브랜치에 쓰이는 글자(`INTEGRATION_BRANCH_RE`)가 더 안 붙는 자리에서만
+ *  문다 - `master`를 찾을 때 `master-v2`의 앞부분을 집지 않는다. */
+function rewriteIntegrationBranchSentences(text: string, from: string, to: string): string {
+  const esc = from.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const boundary = "(?![A-Za-z0-9._/-])";
+  return text
+    .replace(new RegExp(`(git rebase )${esc}${boundary}`, "g"), `$1${to}`)
+    .replace(new RegExp(`(git push \\. HEAD:)${esc}${boundary}`, "g"), `$1${to}`)
+    .replace(new RegExp(`(git log --oneline )${esc}${boundary}`, "g"), `$1${to}`)
+    .replace(new RegExp("(`)" + esc + boundary + "(` 체크아웃)", "g"), `$1${to}$2`);
+}
+
+/** 문서 셋 목록(§결정 3 표) - 문장 모양 넷에서만 치환한다. */
+const INTEGRATION_BRANCH_DOCS = ["protocols/AGENTS.md", "protocols/push-거부.md", "protocols/재디스패치-복구.md"];
+
+/** 값이 갈리면 쓰인 자리 다섯을 다시 쓴다(§통합 브랜치가 설정이 된다 결정 3, 답 `1-1.(a)`).
+ *  **낱말이 아니라 파일별로 두 방법이 갈린다.**
+ *
+ *  - 생성 둘(`dispatch-gate.sh`-`push.sh`)은 문자열을 기워 넣지 않고 템플릿에서 통째로 다시
+ *    만든다. `dispatch-gate.sh`의 손으로 고친 판(`dispatchGateState`가 `handEdited`)은 그 종전
+ *    판정을 그대로 따라 건드리지 않는다(`applyDispatchGate`와 같은 계약) - `push.sh`는 그런
+ *    판정 장치가 없으니 있으면 항상 다시 만든다.
+ *  - 문서 셋은 `rewriteIntegrationBranchSentences`가 문장 모양 넷에서만 치환한다.
+ *
+ *  실제로 갈린 파일의 `<루트>` 기준 상대경로만 돌려준다 - 안 갈린 파일은 안 든다. */
+export async function rewriteIntegrationBranch(
+  root: string,
+  from: string,
+  to: string,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<string[]> {
+  const changed: string[] = [];
+
+  const gateFile = path.join(root, DISPATCH_GATE_FILE);
+  const gateState = await dispatchGateState(root, from);
+  if (gateState === "latest" || gateState === "stale") {
+    const before = await readFile(gateFile, "utf8");
+    const next = dispatchGateSh(to);
+    if (next !== before) {
+      await atomicWrite(gateFile, next, 0o644);
+      changed.push(DISPATCH_GATE_FILE);
+    }
+  }
+
+  const pushShFile = path.join(root, PUSH_SH_FILE);
+  const pushShBefore = await readFile(pushShFile, "utf8").catch(() => null);
+  if (pushShBefore !== null) {
+    const repo = engineRepo(locale);
+    if ("error" in repo) throw new Error(repo.error);
+    const template = await readFile(path.join(repo.path, "templates/hooks/push.sh"), "utf8");
+    const next = pushSh(template, to);
+    if (next !== pushShBefore) {
+      await atomicWrite(pushShFile, next, (await stat(pushShFile)).mode & 0o777);
+      changed.push(PUSH_SH_FILE);
+    }
+  }
+
+  for (const rel of INTEGRATION_BRANCH_DOCS) {
+    const file = path.join(root, rel);
+    const before = await readFile(file, "utf8").catch(() => null);
+    if (before === null) continue;
+    const next = rewriteIntegrationBranchSentences(before, from, to);
+    if (next !== before) {
+      await atomicWrite(file, next, (await stat(file)).mode & 0o777);
+      changed.push(rel);
+    }
+  }
+
+  return changed;
+}
+
 /** 저장. 값이 문장 모양에 매여 있던 것이 `integrationBranchOf`의 결함 원인이었다 - 이 함수는
  *  그 결합을 끊고 파일 하나에 값 한 줄만 쓴다. **덮어쓴다** — 결정 2의 멱등 이관과 결정 3의
- *  "값을 바꾸면 다시 쓴다"가 이 함수를 부른다(스캐폴딩은 O_EXCL `put`을 대신 쓴다). */
+ *  "값을 바꾸면 다시 쓴다"가 이 함수를 부른다(스캐폴딩은 O_EXCL `put`을 대신 쓴다).
+ *
+ *  **이전 값이 있고 새 값과 다르면 `rewriteIntegrationBranch`를 같이 부른다** - 이 함수를 부르는
+ *  자리가 그 호출을 따로 기억할 필요가 없도록, 값이 갈리는 순간과 쓰인 자리를 다시 쓰는 순간을
+ *  한 함수 안에서 묶는다(§결정 3이 막으려는 "값만 갈리고 파일이 안 갈리는 상태"). 이전 값이
+ *  없으면(파일이 처음 생기는 이관 자리, 결정 2) 다시 쓸 옛 값이 없으니 건너뛴다 - 그 자리의
+ *  문서·스크립트는 이미 그 값으로 태어나 있다. */
 export async function writeIntegrationBranch(
   root: string,
   branch: string,
   locale: Locale = DEFAULT_LOCALE,
-): Promise<void> {
+): Promise<string[]> {
   const text = integrationBranchText(branch, locale);
   await mkdir(root, { recursive: true });
+  const previous = await readFile(integrationBranchFile(root), "utf8")
+    .then((t) => t.trim())
+    .catch(() => null);
   await writeFile(integrationBranchFile(root), text, "utf8");
+  if (previous !== null && previous !== branch && INTEGRATION_BRANCH_RE.test(previous)) {
+    return rewriteIntegrationBranch(root, previous, branch, locale);
+  }
+  return [];
 }
 
 /** 소급 (§4-14 §소급): `<루트>/dispatch-gate.sh`를 **없으면 만들고**, 워커 파일의 `. tick.sh`
