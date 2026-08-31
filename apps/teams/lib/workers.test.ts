@@ -73,6 +73,7 @@ const {
   readCommonContext,
   readIntegrationBranch,
   writeIntegrationBranch,
+  pushSh,
   reassignCount,
   renderContextBlock,
   startWorker,
@@ -2647,10 +2648,11 @@ test("dispatchGateSh — <루트>/push.sh가 있으면 더러운 받는 트리 �
   mkdirSync(workersDir, { recursive: true });
   const worker = path.join(workersDir, "w1.sh");
   const flag = path.join(workersDir, ".gate-dirty");
-  writeFileSync(
-    path.join(base, "push.sh"),
-    readFileSync(path.join(import.meta.dirname, "..", "..", "..", "templates", "hooks", "push.sh"), "utf8"),
+  const pushShTemplate = readFileSync(
+    path.join(import.meta.dirname, "..", "..", "..", "templates", "hooks", "push.sh"),
+    "utf8",
   );
+  writeFileSync(path.join(base, "push.sh"), pushSh(pushShTemplate, "master")); // scaffold와 같은 치환
   chmodSync(path.join(base, "push.sh"), 0o755);
 
   // 받는 트리(base)를 더럽힌다 — 추적 파일, 원래 커밋과 다른 새 내용이라 push.sh는 사람 편집으로 본다
