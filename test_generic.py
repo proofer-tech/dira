@@ -184,13 +184,17 @@ try:
 
     # 워커 락: 같은 워커는 겹쳐 돌지 않고(SKIP), 다른 워커는 같은 큐에서 동시에 돈다
     runs = os.path.join(tmp, "slow-runs.txt")
+    release = os.path.join(tmp, "slow-release")
     slow_eng = os.path.join(tmp, "slow-engine.sh")
     with open(slow_eng, "w", encoding="utf-8") as f:
         # 티켓 프롬프트 줄("slow beef000N")만 뽑는다 - 앞에 붙는 인라인 블록(코어·프로토콜·
         # 페르소나)도 관심사가 아니고, §0-16 §개정 뒤로는 꼬리도 관심사가 아니다(언어 블록이
         # 로케일 무관 항상 붙어 이제 그게 진짜 마지막 줄이다). 이 케이스가 보는 것은 어느
         # 워커가 어느 티켓을 잡았냐이지 프롬프트 조립 순서가 아니다.
-        f.write('#!/bin/bash\nprintf "%s" "$1" | grep -o "slow beef[0-9]*" >> {}\nsleep 4\n'.format(runs))
+        # release 파일이 생길 때까지 버틴다 - sleep 고정값이면 부하 아래서 재진입 확인 전에
+        # 세션이 먼저 끝나 "물고 있다" 판정이 스테일 락 회수로 바뀐다.
+        f.write('#!/bin/bash\nprintf "%s" "$1" | grep -o "slow beef[0-9]*" >> {}\n'
+                'while [ ! -e {} ]; do sleep 0.1; done\n'.format(runs, release))
     os.chmod(slow_eng, 0o755)
     root3 = os.path.join(tmp, "pair", ".dira")
     slow = ('#!/bin/bash\nTICKET_NAME="{name}"\nTICKET_PROMPT_FMT="slow %s"\n'
@@ -217,6 +221,8 @@ try:
         assert sorted(fired) == ["slow beef0001", "slow beef0002"], \
             "두 워커가 같은 티켓을 잡았다: {}".format(fired)
     finally:
+        with open(release, "w", encoding="utf-8") as f:
+            pass
         for p in bg:
             p.wait(timeout=30)
     with open(os.path.join(root3, "workers", "runner.log"), encoding="utf-8") as f:

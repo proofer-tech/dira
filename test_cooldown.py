@@ -209,7 +209,10 @@ try:
     assert added.count("SKIP 엔진 쿨다운") == 1, "SKIP 한 줄이 아니다:\n" + added
     assert "DISPATCH" not in added, "쿨다운 중에 디스패치했다:\n" + added
     assert cooldown() == armed, "게이트가 창을 다시 감았다(재무장은 통과할 때만이다)"
-    assert took < 5, "게이트가 세션을 띄웠다({:.1f}s)".format(took)
+    # ponytail: 가짜 엔진은 스스로 안 끝나므로 실제로 세션을 띄웠으면 180초 타임아웃까지
+    # 간다 - SKIP과 DISPATCH의 시간 차는 30초로 갈라도 안전하다. 5초는 이 큐 자체가 여러
+    # 워커를 동시에 돌리는 부하 아래서 스케줄링 지연만으로도 넘겼다(실측 5.2s·7.7s).
+    assert took < 30, "게이트가 세션을 띄웠다({:.1f}s)".format(took)
 
     # --- ③ 만료 뒤: 딱 한 번 통과하고, 나가면서 창을 now+300으로 다시 감는다 ---
     # 재무장만 따로 보려고 여기서는 api_error가 아닌 실패를 쓴다 - api_error면 ④의 기록과
