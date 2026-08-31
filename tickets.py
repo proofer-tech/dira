@@ -749,6 +749,72 @@ def _log_tail(troot, h, limit=12):
     return hits[-limit:]
 
 
+# 결정 17 (2) - 우선순위 그대로(한도 다음 순서). 값은 tick.sh가 실제로 찍는 문장의 부분
+# 문자열이다 - 동사당 문장 꼴이 세 가지를 안 넘는 닫힌 어휘라(요구 39394728) 이 넷으로 갈린다.
+_DEAD_REASON_NEEDLES = [
+    ("요청 오류", "세션이 result is_error로 끝났다"),
+    ("주입 실패", "주입 뒤 출력이 안 자랐다"),
+    ("기동 실패", "프롬프트 주입+init을 못 봤다"),
+    ("상한 초과", "초과 강제종료"),
+]
+
+# tick.sh의 log() -- `date '+%F %T'`로 찍은 "YYYY-MM-DD HH:MM:SS [워커] 문구".
+_LOG_LINE = re.compile(r"^(\S+ \S+)\s+\[([^\]]*)\]\s?(.*)$")
+_LIMIT_NOTE = re.compile(r"NOTE 엔진 불능 - \d+초 쿨다운")
+
+
+def _parse_log_ts(s):
+    try:
+        return datetime.strptime(s, "%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        return None
+
+
+def dead_reason(lines, h):
+    """`runner.log` 줄 목록과 티켓 해시를 죽은 사유 하나로 가른다 -- 결정 17.
+
+    트랜스크립트는 안 읽는다(결정 17 (5)) - 엔진이 자기 손으로 쓴 판정 기록의 어휘가
+    닫혀 있어(머리말 동사 16종) `runner.log`만으로 전수 분류된다. 창은 이 해시의 마지막
+    `DISPATCH`에서 거슬러 올라간 최대 3개까지다 - 그 밖의 옛 시도는 지금 사유와 무관하다.
+    둘 이상 걸리면 결정 17 (2)의 우선순위(이 함수의 검사 순서)대로 첫 번째만 고른다.
+    """
+    if not h or not lines:
+        return "알 수 없음"
+    parsed = []
+    for l in lines:
+        m = _LOG_LINE.match(l)
+        if m:
+            parsed.append((m.group(1), m.group(2), m.group(3)))
+    pat = re.compile(r"\b" + re.escape(h) + r"\b")
+    hash_idx = [i for i, (_, _, msg) in enumerate(parsed) if pat.search(msg)]
+    if not hash_idx:
+        return "알 수 없음"
+    dispatch_idx = [i for i in hash_idx if parsed[i][2].startswith("DISPATCH ")]
+    start = dispatch_idx[-3] if len(dispatch_idx) >= 3 else (dispatch_idx[0] if dispatch_idx else hash_idx[0])
+    window = parsed[start:]
+    window_hash = [entry for entry in window if pat.search(entry[2])]
+    if not window_hash:
+        return "알 수 없음"
+    # 한도 - 워커에 안 묶인 전역 줄이라, 이 티켓의 마지막 실패 줄과 같은 워커 · 120초 안일
+    # 때만 센다(창 전체에서 세면 사유가 한도로 쏠린다 - 실측: 안 좁히면 18건, 좁히면 5건).
+    last_ts, last_worker, _ = window_hash[-1]
+    last_dt = _parse_log_ts(last_ts)
+    if last_dt is not None:
+        for ts, w, msg in window:
+            if w != last_worker or not _LIMIT_NOTE.search(msg):
+                continue
+            dt = _parse_log_ts(ts)
+            if dt is not None and abs((dt - last_dt).total_seconds()) <= 120:
+                return "한도"
+    for name, needle in _DEAD_REASON_NEEDLES:
+        for _, _, msg in window_hash:
+            if needle in msg:
+                return name
+    if any(msg.startswith("DONE") for _, _, msg in window_hash):
+        return "무종료 마감"
+    return "알 수 없음"
+
+
 def ask_context(fm, body, troot, handoff=False, block_fresh=True, answers=None):
     """자동 상신 질문에 붙일 판단 재료 -- 티켓 Goal · 이미 받은 답변 · 블록 · 엔진 판정 이력 ·
     죽은 세션 로그 꼬리.

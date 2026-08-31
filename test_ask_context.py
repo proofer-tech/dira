@@ -219,7 +219,93 @@ try:
     hist_l = l_.split("### 엔진 판정 이력")[1].split("###")[0]
     assert "(전문 " in hist_l and "자 중 앞 1500자)" in hist_l, "L: 1,500자 잘림 표시가 없다\n" + hist_l
 
-    print("PASS 12/12")
+    # M) 티켓 4ac07d02 - dead_reason: runner.log 줄 목록을 죽은 사유 하나로 가른다(결정 17)
+    def L(t, w, h, msg):
+        return "{} [{}] {}".format(t, w, msg.format(h=h))
+
+    # M1) 한도 - 같은 워커 · 120초 안의 전역 NOTE
+    m1 = [
+        L("2026-08-30 10:00:00", "pw1", "mmmm0001", "DISPATCH {h} kind=work"),
+        L("2026-08-30 10:01:00", "pw1", "mmmm0001", "STALL {h} 30s 안에 프롬프트 주입+init을 못 봤다 - 기동 실패"),
+        L("2026-08-30 10:01:30", "pw1", "", "NOTE 엔진 불능 - 300초 쿨다운(복귀 미상)"),
+    ]
+    assert T.dead_reason(m1, "mmmm0001") == "한도", "M1: 한도가 안 잡혔다"
+
+    # M2) 요청 오류
+    m2 = [
+        L("2026-08-30 10:00:00", "pw1", "mmmm0002", "DISPATCH {h} kind=work"),
+        L("2026-08-30 10:01:00", "pw1", "mmmm0002", "FAIL {h} 세션이 result is_error로 끝났다 -> 꼬리. 로그 x"),
+    ]
+    assert T.dead_reason(m2, "mmmm0002") == "요청 오류", "M2: 요청 오류가 안 잡혔다"
+
+    # M3) 주입 실패 - 이어받기 주입 뒤 출력이 안 자랐다
+    m3 = [
+        L("2026-08-30 10:00:00", "pw1", "mmmm0003", "DISPATCH {h} kind=work"),
+        L("2026-08-30 10:01:00", "pw1", "mmmm0003", "STALL {h} 30s 안에 이어받기 주입 뒤 출력이 안 자랐다 - 기동 실패"),
+    ]
+    assert T.dead_reason(m3, "mmmm0003") == "주입 실패", "M3: 주입 실패가 안 잡혔다"
+
+    # M4) 기동 실패 - 프롬프트 주입+init을 못 봤다
+    m4 = [
+        L("2026-08-30 10:00:00", "pw1", "mmmm0004", "DISPATCH {h} kind=work"),
+        L("2026-08-30 10:01:00", "pw1", "mmmm0004", "STALL {h} 30s 안에 프롬프트 주입+init을 못 봤다 - 기동 실패"),
+    ]
+    assert T.dead_reason(m4, "mmmm0004") == "기동 실패", "M4: 기동 실패가 안 잡혔다"
+
+    # M5) 상한 초과
+    m5 = [
+        L("2026-08-30 10:00:00", "pw1", "mmmm0005", "DISPATCH {h} kind=work"),
+        L("2026-08-30 10:05:00", "pw1", "mmmm0005", "TIMEOUT {h} 240s 초과 강제종료 -> 꼬리. 로그 x"),
+    ]
+    assert T.dead_reason(m5, "mmmm0005") == "상한 초과", "M5: 상한 초과가 안 잡혔다"
+
+    # M6) 무종료 마감 - DONE만 있고 실패 동사가 없다
+    m6 = [
+        L("2026-08-30 10:00:00", "pw1", "mmmm0006", "DISPATCH {h} kind=work"),
+        L("2026-08-30 10:05:00", "pw1", "mmmm0006", "DONE {h} sid=abc"),
+    ]
+    assert T.dead_reason(m6, "mmmm0006") == "무종료 마감", "M6: 무종료 마감이 안 잡혔다"
+
+    # M7) 알 수 없음 - DONE도 실패 동사도 없다 / 줄 목록이 비었거나 해시가 없다
+    m7 = [L("2026-08-30 10:00:00", "pw1", "mmmm0007", "DISPATCH {h} kind=work")]
+    assert T.dead_reason(m7, "mmmm0007") == "알 수 없음", "M7: 알 수 없음이 안 잡혔다"
+    assert T.dead_reason([], "mmmm0008") == "알 수 없음", "M7: 빈 줄 목록이 알 수 없음이 아니다"
+    assert T.dead_reason(m7, "mmmm9999") == "알 수 없음", "M7: 없는 해시가 알 수 없음이 아니다"
+
+    # M8) 다른 워커의 전역 NOTE는 한도로 안 잡힌다
+    m8 = [
+        L("2026-08-30 10:00:00", "pw1", "mmmm0008", "DISPATCH {h} kind=work"),
+        L("2026-08-30 10:01:00", "pw1", "mmmm0008", "FAIL {h} 세션이 result is_error로 끝났다 -> 꼬리. 로그 x"),
+        L("2026-08-30 10:01:10", "pw2", "", "NOTE 엔진 불능 - 300초 쿨다운(복귀 미상)"),
+    ]
+    assert T.dead_reason(m8, "mmmm0008") == "요청 오류", \
+        "M8: 다른 워커의 NOTE가 한도로 잡혔다"
+
+    # M9) 120초를 넘은 전역 NOTE는 한도로 안 잡힌다
+    m9 = [
+        L("2026-08-30 10:00:00", "pw1", "mmmm0009", "DISPATCH {h} kind=work"),
+        L("2026-08-30 10:01:00", "pw1", "mmmm0009", "FAIL {h} 세션이 result is_error로 끝났다 -> 꼬리. 로그 x"),
+        L("2026-08-30 10:05:00", "pw1", "", "NOTE 엔진 불능 - 300초 쿨다운(복귀 미상)"),
+    ]
+    assert T.dead_reason(m9, "mmmm0009") == "요청 오류", \
+        "M9: 120초를 넘은 NOTE가 한도로 잡혔다"
+
+    # M10) 둘 이상 걸리면 결정 17 (2) 우선순위대로 하나만 - 한도가 요청 오류를 이긴다
+    m10 = [
+        L("2026-08-30 10:00:00", "pw1", "mmmm0010", "DISPATCH {h} kind=work"),
+        L("2026-08-30 10:01:00", "pw1", "mmmm0010", "FAIL {h} 세션이 result is_error로 끝났다 -> 꼬리. 로그 x"),
+        L("2026-08-30 10:01:05", "pw1", "", "NOTE 엔진 불능 - 300초 쿨다운(복귀 미상)"),
+    ]
+    assert T.dead_reason(m10, "mmmm0010") == "한도", "M10: 우선순위가 한도를 안 골랐다"
+    # 요청 오류가 상한 초과보다 앞선다
+    m11 = [
+        L("2026-08-30 10:00:00", "pw1", "mmmm0011", "DISPATCH {h} kind=work"),
+        L("2026-08-30 10:01:00", "pw1", "mmmm0011", "FAIL {h} 세션이 result is_error로 끝났다 -> 꼬리. 로그 x"),
+        L("2026-08-30 10:02:00", "pw1", "mmmm0011", "TIMEOUT {h} 240s 초과 강제종료 -> 꼬리. 로그 x"),
+    ]
+    assert T.dead_reason(m11, "mmmm0011") == "요청 오류", "M11: 우선순위가 요청 오류를 안 골랐다"
+
+    print("PASS 13/13 + M(dead_reason) 11")
     print(a[a.index("## 질문 1"):])
 finally:
     if old_home is None:
