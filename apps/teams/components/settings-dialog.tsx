@@ -19,6 +19,7 @@ import { flushSync } from "react-dom";
 import { useRouter } from "next/navigation";
 import {
   Check,
+  ChevronDown,
   ChevronsUpDown,
   CirclePlay,
   Circle as CircleIcon,
@@ -39,6 +40,7 @@ import {
   deleteTokenAction,
   readAnalyticsAction,
   readEngineProfileRowsAction,
+  readIntegrationBranchAction,
   readMultiplayAction,
   readMultitokenAction,
   readTokenRowsAction,
@@ -48,6 +50,7 @@ import {
   renameProjectAction,
   resetKeymapAction,
   resolveProjectAction,
+  saveIntegrationBranchAction,
   saveTokenAction,
   sendSetupCodeAction,
   setActiveEngineProfileAction,
@@ -1380,6 +1383,107 @@ function Kbd({ className, children }: { className?: string; children: React.Reac
   );
 }
 
+/** `통합 브랜치` 칸 — §통합 브랜치가 설정이 된다 결정 7. 행 모양은 `PoolLimitField`(§44 ③)를
+ *  글자 그대로 쓴다(로드맵 P348 — 모양 0장, 새 관용구 0) — 값이 곧 트리거인 팝오버, 저장은
+ *  `saveIntegrationBranchAction` 하나뿐이다. 값이 갈리면 서버(`writeIntegrationBranch`)가 쓰인
+ *  자리 다섯을 같이 다시 쓰고 그 상대경로 목록을 돌려준다(결정 3) — 그 목록을 저장 성공 위에
+ *  얹는 줄로 그대로 보여준다(결정 7). 값이 안 갈렸으면(팝오버가 `ready` 게이트로 막는다) 저장을
+ *  안 부르니 목록도 안 뜬다.
+ *
+ *  값을 구할 길이 셋 다 막힌 큐(`readIntegrationBranchAction`이 `null`)는 트리거가 빈 칸이고
+ *  그 아래 값을 요구하는 한 줄이 `pool-limit`의 `warn` 줄과 같은 자리에 뜬다. */
+function IntegrationBranchField({ projectId, open }: { projectId: string; open: boolean }) {
+  const t = useT();
+  const [branch, setBranch] = useState<string | null>(null);
+  const [openPopover, setOpenPopover] = useState(false);
+  const [value, setValue] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [changed, setChanged] = useState<string[]>([]);
+  const [pending, start] = useTransition();
+
+  // 다이얼로그가 열릴 때마다 다시 읽는다 — `ProjectSection`의 `load()`와 같은 자리(옛 값이 다른
+  // 세션에서 바뀌었을 수 있다).
+  useEffect(() => {
+    if (!open) return;
+    void readIntegrationBranchAction(projectId).then((b) => {
+      setBranch(b);
+      setValue(b ?? "");
+      setChanged([]);
+    });
+  }, [projectId, open]);
+
+  const saved = branch ?? "";
+  const ready = !pending && value.trim() !== saved;
+
+  const save = () =>
+    start(async () => {
+      const r = await saveIntegrationBranchAction(projectId, value);
+      if (r.ok) {
+        setBranch(r.branch ?? "");
+        setValue(r.branch ?? "");
+        setError(null);
+        setChanged(r.changed ?? []);
+        setOpenPopover(false);
+      } else {
+        setError(r.message ?? null);
+      }
+    });
+
+  return (
+    <div data-setting="project.branch" className="space-y-1 border-t pt-4">
+      <span className="flex items-center gap-2">
+        <span className="text-xs text-muted-foreground">{t("project.create.branchLabel")}</span>
+        <Popover
+          open={openPopover}
+          onOpenChange={(o) => {
+            setOpenPopover(o);
+            if (!o) {
+              setValue(saved);
+              setError(null);
+            }
+          }}
+        >
+          <PopoverTrigger render={<Button variant="ghost" size="sm" className="font-normal" />}>
+            <span className={branch ? "font-mono text-xs" : undefined}>{branch ?? ""}</span>
+            <ChevronDown aria-hidden className="size-3" />
+          </PopoverTrigger>
+          <PopoverContent align="start">
+            <div className="space-y-2">
+              <Label htmlFor="project-branch-input">{t("project.create.branchLabel")}</Label>
+              <Input
+                id="project-branch-input"
+                className="w-full font-mono"
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+              />
+            </div>
+            {error && <p className="text-xs text-destructive">{error}</p>}
+            <div className="flex items-center justify-between gap-2">
+              <Button
+                size="sm"
+                className="ml-auto"
+                aria-disabled={!ready}
+                onClick={() => {
+                  if (ready) save();
+                }}
+              >
+                {pending ? t("common.saving") : t("common.save")}
+              </Button>
+            </div>
+          </PopoverContent>
+        </Popover>
+      </span>
+      {branch === null && <p className="text-xs text-status-stale">{t("project.branchRequired")}</p>}
+      {changed.length > 0 && (
+        <p className="text-xs text-muted-foreground">
+          {t("project.settings.branchChangedPrefix")}
+          {changed.join(", ")}
+        </p>
+      )}
+    </div>
+  );
+}
+
 /** §설정이 프로젝트와 공통으로 갈린다 — 트리 첫 그룹의 유일한 노드가 여는 패널(§비주얼 §45 ⑫).
  *  다섯 자리(해석 결과 · 온톨로지 마이그레이션 · 온톨로지 가져오기 · 이름 · 등록 해제)는 옛
  *  `ProjectSettingsDialog`에서 그대로 옮겨 온 것이다 — 조작도 문구도 안 바뀐다(결정 1 · 3).
@@ -1498,6 +1602,8 @@ function ProjectSection({
           {t("project.settings.slugNoteSuffix")}
         </p>
       </div>
+
+      <IntegrationBranchField projectId={id} open={open} />
 
       {/* 자리 5 — 등록 해제. 확인은 이 자리 안에서 뜬다(결정 4) — 다이얼로그 머리도 트리도
           안 갈린다 */}

@@ -82,7 +82,9 @@ import {
   cronRegisterCmd,
   listWorkers,
   markAlertsRead,
+  readIntegrationBranch,
   registerCron,
+  writeIntegrationBranch,
   writeOntology,
 } from "@/lib/workers";
 import { tildePath } from "@/lib/urls";
@@ -859,5 +861,37 @@ export async function resolveProjectAction(id: string): Promise<ResolvedView | {
     return await viewOf(project, locale);
   } catch (e) {
     return { message: (e as Error).message };
+  }
+}
+
+// ── 통합 브랜치 칸 (§통합 브랜치가 설정이 된다 결정 7, 티켓 58957608) ───────────────────
+
+/** 설정 다이얼로그의 `통합 브랜치` 칸이 열릴 때 읽는다 — 읽기 순서 셋(`readIntegrationBranch`)이
+ *  다 막히면 `null`이고, 화면은 그때 빈 칸 + 값을 요구하는 한 줄을 그린다. */
+export async function readIntegrationBranchAction(id: string): Promise<string | null> {
+  const project = await getProject(id);
+  return project ? readIntegrationBranch(project.root) : null;
+}
+
+export type IntegrationBranchResult = { ok: boolean; message?: string; branch?: string; changed?: string[] };
+
+/** 저장. `writeIntegrationBranch`가 값이 갈리면 쓰인 자리 다섯을 같이 다시 쓰고 그 상대경로
+ *  목록을 돌려준다(결정 3) — 화면은 그 목록을 저장 직후 이 자리에서 그대로 보여준다(결정 7).
+ *  빈 칸·정규식 밖 글자는 `writeIntegrationBranch`(→`integrationBranchText`)가 파일을 건드리기
+ *  전에 던진다 — 검증 실패는 쓰기 0바이트다. */
+export async function saveIntegrationBranchAction(
+  id: string,
+  value: string,
+): Promise<IntegrationBranchResult> {
+  const locale = await readLanguage();
+  try {
+    const project = await getProject(id);
+    if (!project) throw new Error(`${t(locale, "resolve.unknownProjectPrefix")} ${id}`);
+    const branch = value.trim();
+    const changed = await writeIntegrationBranch(project.root, branch, locale);
+    revalidatePath(`/p/${id}`, "layout");
+    return { ok: true, branch, changed };
+  } catch (e) {
+    return { ok: false, message: (e as Error).message };
   }
 }

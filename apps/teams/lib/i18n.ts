@@ -616,6 +616,7 @@ export const ko: Record<string, string> = {
   "project.settings.renameFailed": "이름을 바꾸지 못했습니다.",
   "project.settings.slugNotePrefix": "URL 조각",
   "project.settings.slugNoteSuffix": "는 바뀌지 않습니다 — 열어 둔 링크와 북마크가 깨집니다.",
+  "project.settings.branchChangedPrefix": "다시 쓴 파일: ",
 
   // `components/projects-ui.tsx` — 온톨로지 마이그레이션 섹션.
   "project.ontologyMigration.title": "온톨로지 마이그레이션",
@@ -4478,6 +4479,7 @@ export const en: Record<string, string> = {
   "project.settings.renameFailed": "Couldn't rename it.",
   "project.settings.slugNotePrefix": "The URL slug",
   "project.settings.slugNoteSuffix": " doesn't change — open links and bookmarks would break.",
+  "project.settings.branchChangedPrefix": "Rewrote: ",
 
   // `components/projects-ui.tsx` — 온톨로지 마이그레이션 섹션. `linkPrefix` 뒤에 해시와 상태가
   // 차례로 붙는다(`Migration 4c075aa9 done`).
