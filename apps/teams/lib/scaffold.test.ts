@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import { chmod, cp, mkdtemp, mkdir, readdir, readFile, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { existsSync, readlinkSync, realpathSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
@@ -108,10 +109,12 @@ test("scaffold — §0-3 집합 그대로, 두 번째는 전부 skipped", async 
   assert.equal(members, "pm\ndeveloper\nqa\ndesigner\n");
   await assert.rejects(() => stat(path.join(project, ".dira/squads/default/rules")));
 
-  // ⑤ w1.sh — 활성 TICKET_CWD 없음, tick.sh 절대경로, 755
+  // ⑤ w1.sh — TICKET_CWD가 표준 자리(§워커는 언제나 자기 워크트리에서 일한다 결정 1),
+  // tick.sh 절대경로, 755
   const w1 = path.join(project, ".dira/workers/w1.sh");
   const sh = await readFile(w1, "utf8");
-  assert.doesNotMatch(sh, CWD_ASSIGN);
+  assert.match(sh, CWD_ASSIGN);
+  assert.ok(sh.includes(`TICKET_CWD="${path.join(first.root, "worktrees", "w1")}"`), sh.slice(0, 200));
   assert.ok(sh.includes(`. "${path.join(repo.path, "tick.sh")}"`), sh.slice(-200));
   assert.doesNotMatch(sh, /^[ \t]*(?:\.|source)[ \t]+.*\$HOME.*tick\.sh/m);
   assert.equal((await stat(w1)).mode & 0o777, 0o755);
@@ -477,4 +480,41 @@ test("push.sh ship — 통합 브랜치 dev로 커밋이 실리고 master·main�
   assert.deepEqual(branches.sort(), ["dev", "sess"]); // worktree가 딴 세션 브랜치 하나뿐
   assert.ok(!branches.includes("master"));
   assert.ok(!branches.includes("main"));
+});
+
+// ── 첫 워커도 자기 워크트리를 든다 (§워커는 언제나 자기 워크트리에서 일한다 결정 1) ──────
+//
+// **진짜 git 레포 + 진짜 bash**로 게이트를 한 번 태운다 — 값어치가 그 판정이라 모킹하면
+// 검증할 게 안 남는다(§4-14 §없는 워크트리를 게이트가 만든다와 같은 논리).
+
+test("scaffold — w1의 표준 워크트리가 없으면 게이트 첫 tick이 만들고 그 안의 .dira가 큐 루트로 풀린다 (수용조건 1-2)", async (t) => {
+  const project = await tmp();
+  t.after(() => rm(project, { recursive: true, force: true }));
+  initRepo(project, "main");
+  await writeFile(path.join(project, "README.md"), "# t\n");
+  git(project, "add", "-A");
+  git(project, "commit", "-qm", "init"); // worktree add가 HEAD를 못 읽으면 실패한다
+
+  const made = await scaffold(project, { branch: "main" });
+  const w1 = await readFile(path.join(made.root, "workers/w1.sh"), "utf8");
+  const tree = path.join(made.root, "worktrees", "w1");
+  assert.ok(w1.includes(`TICKET_CWD="${tree}"`), w1.slice(0, 200));
+  assert.equal(existsSync(tree), false); // 이 티켓이 디렉터리를 만들지 않는다 — 첫 tick의 몫
+
+  const gate = path.join(made.root, "dispatch-gate.sh");
+  const worker = path.join(made.root, "workers", "w1.sh");
+  const out = execFileSync("bash", ["-c", `. ${JSON.stringify(gate)} tick; echo 끝`, worker], {
+    encoding: "utf8",
+    env: { ...process.env, TICKET_CWD: tree },
+  });
+  assert.match(out, /끝/);
+  assert.doesNotMatch(out, /GATE/); // 보류 없이 곧장 디스패치로 넘어간다
+
+  assert.equal(statSync(tree).isDirectory(), true);
+  assert.equal(readlinkSync(path.join(tree, ".dira")), "../..");
+  assert.equal(realpathSync(path.join(tree, ".dira")), await realpath(made.root));
+  assert.equal(
+    execFileSync("git", ["-C", tree, "rev-parse", "--abbrev-ref", "HEAD"], { encoding: "utf8" }).trim(),
+    "wt/w1",
+  );
 });

@@ -212,10 +212,10 @@ export async function scaffold(
   }
 
   // 첫 워커. 필수는 마지막 source 한 줄뿐이고, 그 줄이 없으면 워커는 아무것도 아니다.
-  // **`TICKET_CWD`는 넣지 않는다**(§0-3): 엔진 기본값(= 큐 루트의 부모 = `<프로젝트>`)이 새
-  // 프로젝트에서 유일하게 실제로 도는 값이다. `<루트>/worktrees/<이름>`은 워커를 **추가할** 때의
-  // 규칙이고 그 트리는 사람이 만든다 — 첫 워커에 쓰면 없는 디렉터리를 가리켜 매 tick마다
-  // `ERROR cwd 없음`이 난다. worker.sh.example의 `# TICKET_CWD=...`는 주석이라 그대로 둔다.
+  // **`TICKET_CWD="<루트>/worktrees/w1"`을 넣는다**(§워커는 언제나 자기 워크트리에서 일한다
+  // 결정 1): 워커가 하나뿐이어도 받는 트리(통합 브랜치를 체크아웃한 `<프로젝트>`)에서 일하면
+  // 미커밋 변경이 그 큐 전체의 디스패치를 세운다. 없는 디렉터리는 §4-14 게이트가 첫 tick에
+  // 만든다(`firstWorkerBody`가 `rewriteCwd`로 표준 자리를 넣는다 — 그 값과 같은 자리다).
   // **실효 `TICKET_CONTEXT=()` 한 줄을 `source` 줄 위에 넣는다**(§0-3, 요구 `b2bdfab6`):
   // example은 모든 값이 주석이라 복사만 하면 살아 있는 `TICKET_CONTEXT=(`가 없고,
   // `parseContextBlock`은 주석 블록에 안 걸리게 줄 처음에 앵커하므로(의도된 동작) 새 프로젝트의
@@ -236,7 +236,7 @@ export async function scaffold(
   const example = await readFile(path.join(repo.path, "worker.sh.example"), "utf8");
   // 조립은 `firstWorkerBody`(`lib/workers.ts`) 하나다 — §4-18 생성 버튼 폴백도 같은 함수를
   // 부른다. 두 벌로 갈리면 스캐폴딩으로 태어난 첫 워커와 버튼으로 태어난 첫 워커가 다른 모양이 된다.
-  const w1 = firstWorkerBody(example, root, repo.path, opts.branch);
+  const w1 = firstWorkerBody(example, root, repo.path, opts.branch, "w1");
   await put("workers/w1.sh", w1, 0o755);
 
   // §0-19 — `.dira`의 형제 `.gitignore`에 `.dira` 한 줄. 실패해도 스캐폴딩 성공을 막지 않는다.

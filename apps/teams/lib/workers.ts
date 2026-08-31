@@ -2626,20 +2626,26 @@ export function engineRepo(locale: Locale = DEFAULT_LOCALE): { path: string } | 
  *  스캐폴딩과 §4-18 생성 버튼 폴백이 이 함수 하나를 같이 부른다** — 조립이 두 벌로 갈리면
  *  스캐폴딩으로 태어난 큐와 버튼으로 태어난 큐의 첫 워커가 서로 다른 모양이 되고, 그 차이는 몇
  *  달 뒤 "이 워커만 왜 게이트가 없나"로 돌아온다(§4-18 결정 1). `gateBranch`가 `null`이면 게이트
- *  줄을 안 넣는다(§4-18 결정 4 — `protocols/AGENTS.md`를 못 읽는 큐). */
+ *  줄을 안 넣는다(§4-18 결정 4 — `protocols/AGENTS.md`를 못 읽는 큐).
+ *
+ *  `TICKET_CWD` 줄은 §워커는 언제나 자기 워크트리에서 일한다 결정 1이 넣으라고 한 값이다 —
+ *  새 파서를 만들지 않고 §4 생성이 이미 쓰는 `rewriteCwd`에 그대로 태운다(같은 표준 자리
+ *  `<루트>/worktrees/<이름>`, 없는 디렉터리는 §4-14 게이트가 첫 tick에 만든다). */
 export function firstWorkerBody(
   example: string,
   root: string,
   repo: string,
   gateBranch: string | null,
+  name: string,
 ): string {
-  return example.replace(
+  const body = example.replace(
     sourceTick,
     () =>
       `# 컨텍스트(선택). GUI 워커 화면이 이 블록을 고친다 — 항목 문법은 위 주석 예시.\n` +
       `${renderContextBlock([])}\n\n` +
       `${gateBranch !== null ? `${dispatchGateSourceLine(root)}\n` : ""}${selfHealSourceLine(root, repo)}\n${tickSourceLine(repo)}`,
   );
+  return rewriteCwd(body, root, name);
 }
 
 // ── 생성 · 중단 · 삭제 ──────────────────────────────────────────────────────
@@ -2702,7 +2708,7 @@ export async function createWorker(
     // (결정 4). 자가 정리는 언제나 붙는다(입력이 경로 둘뿐이라 — firstWorkerBody가 그 줄은
     // 무조건 넣는다).
     const branch = await integrationBranchOf(root);
-    text = firstWorkerBody(example, root, repo.path, branch);
+    text = firstWorkerBody(example, root, repo.path, branch, name);
     // 자가 정리·게이트 파일 자신도 §0-3과 같은 자리에 눕는다 — **있으면 덮지 않는다**
     // (`scaffold`의 `put`과 같은 O_EXCL 계약). 실행 파일이 아니라 source되는 파일이라 모드는
     // 기본값이다.
