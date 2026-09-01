@@ -313,7 +313,7 @@ TICKET_ENGINE=("{tmp}/fake-engine.sh" --input-format stream-json)
 
         # `## 선점` 절 — §1-3 §5 §표대로 시각·민 해시·워커·브랜치·워크트리·회수 안내
         assert "## 선점" in body, body
-        assert "밀어낸 5 | eeee1005" in body, body
+        assert "밀어낸 티켓 | eeee1005" in body, body
         assert "w2 · wt/w2" in body, "워커·브랜치가 없다\n" + body
         assert os.path.join(root, "worktrees", "w2") in body, "워크트리 절대경로가 없다\n" + body
         assert "재디스패치-복구.md" in body, "회수 안내가 없다\n" + body
@@ -343,7 +343,7 @@ TICKET_ENGINE=("{tmp}/fake-engine.sh" --input-format stream-json)
         capture_output=True, text=True, timeout=10)
     assert r.returncode == 0, "git 없을 때 스크립트가 죽었다: " + r.stderr
     assert r.stdout == "[]", "git 없을 때 커밋 항목이 안 비었다: " + r.stdout
-    assert "밀어낸 5 | eeee1005" in body and "| 커밋 |  |" in body, \
+    assert "밀어낸 티켓 | eeee1005" in body and "| 커밋 |  |" in body, \
         "실제 선점에서도 워크트리가 저장소가 아니면 커밋 항목이 빈다는 사실이 안 보인다\n" + body
 
     print("OK - test_priority §1-3 §검증 ⑩")

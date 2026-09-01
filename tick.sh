@@ -11,6 +11,8 @@
 #   <루트>/workers/w1.sh poll H 스크립트파일명 상한   폴링 대기로 전환(§폴링 대기 결정 8).
 #                        <루트>/polls/<스크립트파일명>이 있어야 하고, 검사 다섯을 하나라도
 #                        걸리면 frontmatter를 안 고치고 0이 아닌 코드로 거절한다
+#   <루트>/workers/w1.sh tick H       지목 디스패치(DESIGN.md §1-5 갈래 B) - 후보를 H 하나로 좁힌다
+#   <루트>/workers/w1.sh preempt H [--dryrun]   선점(§1-5 갈래 C) - 피해자를 끊고 H를 지목 디스패치
 # 워커 계약(설정 가능한 값)은 worker.sh.example 참조.
 set -uo pipefail
 
@@ -256,6 +258,30 @@ for p in T.in_progress(sys.argv[2]):
 print(n)' "$CODE" "$TICKET_ROOT" "$1"
 }
 
+# --- §1-5 갈래 C / §1-3 §5 — 피해자 판정은 여기 한 자리뿐이다(엔진 계약 `3acc1a56`) ---
+# `maybe_preempt`(자동, 소유자 필터 있음)와 `preempt`(사람이 부르는 명령, 소유자 필터 없음)가
+# 둘 다 이 함수만 부른다 - 정렬을 두 곳에 안 둔다(§1-5 §갈리는 것 하나). 성공하면 VPATH·VHASH·
+# VEFF·VASSIGN·VPID·VOWNER를 전역에 채우고 0을 반환한다. $1=1이면 "내 티켓만"(소유자 필터).
+pick_victim() {
+  local WROWS
+  VPATH=""; VHASH=""; VEFF=""; VASSIGN=""; VPID=""; VOWNER=""
+  WROWS=$(python3 "$PY" wips "$TICKET_ROOT" 2>/dev/null) || return 1
+  [ -z "$WROWS" ] && return 1
+
+  # 유효 우선순위가 최저인 것, 동률이면 assigned_at이 가장 늦은 것(가장 나중에 시작한 것).
+  # 정렬 키 하나로 둘 다 접는다.
+  IFS='|' read -r VPATH VHASH VEFF VASSIGN VPID VOWNER <<< \
+    "$(printf '%s\n' "$WROWS" | sort -t'|' -k3,3n -k4,4r | head -1)"
+  [ -z "$VPATH" ] && return 1
+  [ "$VEFF" -lt 5 ] || return 1                     # 5끼리는 안 끊는다
+  if [ "$1" = 1 ]; then
+    case "$VOWNER" in *" / $TICKET_NAME-"*) ;; *) return 1 ;; esac   # 내 티켓이 아니면 손대지 않는다
+  fi
+  [ -f "$VPATH" ] || return 1
+  case "$VPID" in ''|*[!0-9]*) return 1 ;; esac
+  return 0
+}
+
 # --- §1-3 §5 — 선점: 바쁜 워커의 즉시 exit 경로가 유일하게 도는 자리다 ---
 # 중앙 스케줄러가 없다. 전원이 바쁘면 아무도 큐를 안 보므로, 워커 락에 막혀 나가는 이 순간이
 # 유일하게 남은 "바쁜 워커가 도는 자리"다(새 프로세스·새 데몬 0개). 새 잠금도 0개다 - claim처럼
@@ -263,21 +289,9 @@ print(n)' "$CODE" "$TICKET_ROOT" "$1"
 # 죽인다. 전원이 같은 파일을 보고 같은 계산을 해도 "내 티켓이 전역 최저다"는 결정적으로 한
 # 워커에서만 참이라 정확히 하나만 죽는다 - 조율이 필요 없다.
 maybe_preempt() {
-  local WROWS VPATH VHASH VEFF VASSIGN VPID VOWNER
   local PUSH5 q_path q_hash q_kind q_persona q_prio q_base q_eff q_squadp PLIM PWIP
   local WT COMMIT
-  WROWS=$(python3 "$PY" wips "$TICKET_ROOT" 2>/dev/null) || return 0
-  [ -z "$WROWS" ] && return 0
-
-  # 조건 2·3 — 도는 `.wip` 전부 중 유효 우선순위가 최저인 것(동률이면 assigned_at이 가장
-  # 늦은 것 = 가장 나중에 시작한 것). 정렬 키 하나로 둘 다 접는다.
-  IFS='|' read -r VPATH VHASH VEFF VASSIGN VPID VOWNER <<< \
-    "$(printf '%s\n' "$WROWS" | sort -t'|' -k3,3n -k4,4r | head -1)"
-  [ -z "$VPATH" ] && return 0
-  [ "$VEFF" -lt 5 ] || return 0                     # 5끼리는 안 끊는다
-  case "$VOWNER" in *" / $TICKET_NAME-"*) ;; *) return 0 ;; esac   # 내 티켓이 아니면 손대지 않는다
-  [ -f "$VPATH" ] || return 0
-  case "$VPID" in ''|*[!0-9]*) return 0 ;; esac
+  pick_victim 1 || return 0
 
   # 조건 1 — 유효 5 후보가 있고 자기 게이트(deps·페르소나 상한)를 다 지난다. `select`가 이미
   # deps 미충족·할당됨을 걸렀으니 여기서는 페르소나 상한만 본다(선정 루프와 같은 판정).
@@ -304,7 +318,7 @@ maybe_preempt() {
     printf '\n## 선점\n\n'
     printf '| | |\n|---|---|\n'
     printf '| 시각 | %s |\n' "$(date '+%F %T')"
-    printf '| 밀어낸 5 | %s |\n' "$PUSH5"
+    printf '| 밀어낸 티켓 | %s |\n' "$PUSH5"
     printf '| 워커 · 브랜치 | %s · wt/%s |\n' "$TICKET_NAME" "$TICKET_NAME"
     printf '| 워크트리 | %s |\n' "$WT"
     printf '| 커밋 | %s |\n' "$COMMIT"
@@ -312,6 +326,29 @@ maybe_preempt() {
   } >> "$VPATH"
   log "PREEMPT $VHASH -> $PUSH5 pid=$VPID"
   kill -TERM "$VPID" 2>/dev/null
+}
+
+# §1-5 갈래 B §검증 (2) — 지목한 해시가 `select` 후보에 없을 때 로그에 남길 사유 한 줄. 새
+# 판정을 만들지 않는다 - `scan()`이 이미 셈한 assigned·polling·unmet 플래그와 `find_any`(상태
+# 무관 검색)를 그대로 읽는다(developer PROFILE §엔진 의미 복제 - 패리티는 부르는 것으로 지킨다).
+target_reason() {
+  python3 -c 'import sys, os
+sys.path.insert(0, sys.argv[1])
+import tickets as T
+troot, want = sys.argv[2], T.nfc(sys.argv[3])
+for r in T.scan(troot):
+    if T.nfc(r["hash"]) != want:
+        continue
+    if r["assigned"]:
+        print("이미 할당됨(session=" + r["session_id"] + ")"); sys.exit()
+    if r["polling"]:
+        print("폴링 대기 중"); sys.exit()
+    if r["unmet"]:
+        print("deps 미충족: " + ",".join(r["unmet"])); sys.exit()
+    print("대기 중인데 못 집었다 - 경합"); sys.exit()
+p = T.find_any(troot, want)
+print(("파일: " + os.path.basename(p)) if p else "티켓을 못 찾음")
+' "$CODE" "$TICKET_ROOT" "$1"
 }
 
 # --- §폴링 대기 결정 4 §실행 상한 30초 — 백그라운드 + kill 관용구(`timeout` 바이너리는
@@ -333,6 +370,10 @@ run_capped() {
 }
 
 CMD="${1:-tick}"
+# §1-5 갈래 B(지목 디스패치, 엔진 계약 `3acc1a56`) — `tick <해시>`일 때만 채운다. 인자 없는
+# `tick` · `dryrun`은 그대로 빈 값이라 아래 선정 루프가 종전과 한 글자도 안 다르게 돈다.
+TARGETHASH=""
+[ "$CMD" = "tick" ] && [ -n "${2:-}" ] && TARGETHASH="$2"
 
 case "$CMD" in
   list)
@@ -507,6 +548,77 @@ except Exception:
     log "POLL-START $H $SCRIPT until=$UNTIL"
     echo "폴링 대기: $H -> $(basename "$RP") (스크립트 $SCRIPT, 상한 $UNTIL)"
     exit 0 ;;
+  preempt)
+    # §1-5 갈래 C(사람이 부르는 선점, 엔진 계약 `3acc1a56`) - 순서 넷이 계약이다.
+    USAGE="사용법: $(basename "$0") preempt <티켓해시> [--dryrun]"
+    H="${2:-}"; [ -z "$H" ] && { echo "$USAGE" >&2; exit 2; }
+    DRYRUN=""; shift 2
+    for a in ${@+"$@"}; do
+      [ "$a" = "--dryrun" ] && { DRYRUN=1; continue; }
+      echo "$USAGE" >&2; exit 2
+    done
+
+    # 1. 피해자를 고른다(위 §피해자 판정 한 자리) - `maybe_preempt`와 달리 소유자 필터가 없다.
+    if ! pick_victim ""; then
+      if [ -z "$DRYRUN" ]; then
+        echo "피해자 없음 - 도는 티켓이 없거나 전부 유효 5" >&2
+        log "PREEMPT-NONE $H 요청 - 피해자 없음"
+      fi
+      exit 1
+    fi
+    VWORKER="${VOWNER#*/ }"; VWORKER="${VWORKER%-*}"   # owner "<페르소나> / <워커>-<SID 8글자>"
+
+    if [ -n "$DRYRUN" ]; then
+      VTITLE=$(sed -n 's/^title:[[:space:]]*//p' "$VPATH" | head -1 | tr -d "\"'")
+      printf '%s - %s - %s\n' "$VHASH" "$VTITLE" "$VWORKER"
+      exit 0
+    fi
+
+    # 2. 피해자 본문에 `## 선점` 절을 붙인다(§1-3 §5 §표와 같은 표, 라벨은 `밀어낸 티켓`).
+    # 워커·워크트리는 **피해자를 물었던 워커**(VWORKER)다 - 부르는 워커($TICKET_NAME)가 아니다.
+    # 소유자 필터가 없어서(§1-5 §갈리는 것 하나) 피해자가 남의 워커에서 돌 수 있고, 회수
+    # 안내가 가리켜야 하는 것은 그 미커밋 변경이 실제로 있는 워크트리다.
+    WT="$TICKET_ROOT/worktrees/$VWORKER"
+    COMMIT=$(git -C "$WT" rev-parse --short HEAD 2>/dev/null)
+    {
+      printf '\n## 선점\n\n'
+      printf '| | |\n|---|---|\n'
+      printf '| 시각 | %s |\n' "$(date '+%F %T')"
+      printf '| 밀어낸 티켓 | %s |\n' "$H"
+      printf '| 워커 · 브랜치 | %s · wt/%s |\n' "$VWORKER" "$VWORKER"
+      printf '| 워크트리 | %s |\n' "$WT"
+      printf '| 커밋 | %s |\n' "$COMMIT"
+      printf '| 회수 | `.dira/protocols/재디스패치-복구.md`를 읽고 그대로 하세요. |\n'
+    } >> "$VPATH"
+    # 3. 그 세션을 끊는다. 피해자를 물었던 워커의 부모 tick.sh가 kill을 보고 clear+release를
+    # 밟는다(위 unassign --force와 같은 경로, `unassign --force`와 달리 답변 대기로 안 잠근다 -
+    # askhuman을 안 부른다) - VPATH가 사라지면 열림으로 돌아온 것이다.
+    log "PREEMPT $VHASH -> $H (사람 요청) pid=$VPID"
+    kill -TERM "$VPID" 2>/dev/null
+    N=0
+    while [ -e "$VPATH" ] && [ "$N" -lt 15 ]; do sleep 1; N=$((N+1)); done
+
+    # 4. 비워진 워커에 갈래 B의 지목 디스패치(`tick <해시>`)를 건다 - 워커 락이 풀릴 때까지
+    # 기다린다. 15·20·30초는 이 파일의 다른 생존 대기(unassign·MAXRUN 감시)와 같은 자릿수다.
+    VWLOCK="$LOCAL/run/$VWORKER-$(python3 -c \
+      'import hashlib,sys;print(hashlib.sha1(sys.argv[1].encode()).hexdigest()[:8])' "$WORKERS/$VWORKER").lock"
+    N=0
+    while [ -d "$VWLOCK" ] && [ "$N" -lt 30 ]; do sleep 1; N=$((N+1)); done
+    if [ -d "$VWLOCK" ]; then
+      log "PREEMPT-TIMEOUT $H 워커 $VWORKER 락이 30초 안에 안 풀렸다 - 다음 cron이 받는다"
+      exit 0
+    fi
+    VWSCRIPT="$WORKERS/$VWORKER.sh"
+    if [ ! -x "$VWSCRIPT" ]; then
+      log "PREEMPT-NOWORKER $H 워커 스크립트 없음: $VWSCRIPT"
+      exit 0
+    fi
+    # 던지고 잊는다(§4-5·§1-5 갈래 B와 같은 계약 - 결과를 안 본다) - 물면 세션이 5~25분을
+    # 붙드는데, 이 명령은 GUI의 `execFile`(60초 상한, engine.ts)로 불린다. fd를 다 떼야
+    # execFile이 자식의 표준출력이 안 닫혀서 60초를 그대로 기다리는 사고가 안 난다.
+    nohup "$VWSCRIPT" tick "$H" </dev/null >/dev/null 2>&1 &
+    disown 2>/dev/null || true
+    exit 0 ;;
   dryrun|tick) ;;
   *) echo "알 수 없는 명령: $CMD"; exit 2 ;;
 esac
@@ -608,6 +720,20 @@ fi
 # select가 이미 `(-effective, birth, path)`로 정렬해 준다(tickets.py scan()) - 여기는
 # 그 순서를 그대로 훑을 뿐이다.
 CANDS=$(python3 "$PY" select "$TICKET_ROOT") || { log "ERROR select 실패"; exit 1; }
+
+# §1-5 갈래 B — 지목 디스패치: 후보 목록을 그 해시 하나로 좁힌다(무수정 tick과 다른 점 전부).
+# 후보가 아니면(이미 할당됨·폴링 대기·deps 미충족·없는 티켓) 사유 한 줄만 로그하고 나간다.
+# 게이트(페르소나 상한·유효 1·엔진 쿨다운)에 걸리는 경우는 후보 목록에는 있으므로 아래 선정
+# 루프가 후보 하나를 그대로 훑다가 종전 SKIP 로그를 남기고 TPATH가 빈 채로 끝난다(§검증 (2)).
+if [ -n "$TARGETHASH" ]; then
+  MCANDS=$(printf '%s\n' "$CANDS" | awk -F'|' -v h="$TARGETHASH" '$2==h')
+  if [ -z "$MCANDS" ]; then
+    log "SKIP 지목 $TARGETHASH — $(target_reason "$TARGETHASH")"
+    exit 0
+  fi
+  CANDS="$MCANDS"
+fi
+
 [ -z "$CANDS" ] && exit 0
 
 # --- 선정·claim 임계구역: 페르소나 상한·1 게이트는 여기 없으면 게이트가 아니다 ---

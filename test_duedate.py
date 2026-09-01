@@ -384,7 +384,7 @@ TICKET_ENGINE=("{tmp}/fake-stream-engine.sh" --input-format stream-json)
         assert wait_for(lambda: os.path.exists(backlog), 10), \
             "끊긴 티켓이 열림으로 안 돌아왔다"
         body = open(backlog, encoding="utf-8").read()
-        assert "밀어낸 5 | bbbb1102" in body, \
+        assert "밀어낸 티켓 | bbbb1102" in body, \
             "`## 선점`의 «누가 밀었나»에 마감 티켓 해시가 없다\n" + body
         os.remove(os.path.join(root, "tickets", "bbbb1102.md"))
         reset(root)
