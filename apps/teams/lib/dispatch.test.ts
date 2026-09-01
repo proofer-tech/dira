@@ -123,6 +123,8 @@ test("dispatchToWip — 피해자가 없으면 이유를 담아 실패한다", a
     const r = await dispatchToWip(root, "abcd1234", false);
     assert.strictEqual(r.ok, false);
     assert.strictEqual((r as { reason: string }).reason, "other");
+    // 워커는 있다(w1) — "워커가 없다"는 문장을 재사용하면 거짓말이 된다.
+    assert.match((r as { error: string }).error, /끊을 것이 없습니다/);
   } finally {
     restore();
   }

@@ -661,6 +661,9 @@ export const ko: Record<string, string> = {
   "board.lane.preemptDesc":
     "그 티켓은 답변 대기로 잠기지 않고 열림으로 돌아가 다시 디스패치됩니다. 워크트리에 커밋하지 않은 변경은 지워지지 않고 그대로 남습니다. 비워진 워커가 방금 놓은 티켓을 집습니다.",
   "board.lane.preemptConfirm": "끊고 시작",
+  // 피해자 없음 — 도는 `.wip`이 0건이거나 전부 유효 우선순위 5라 `--dryrun`이 빈 출력을 낸다.
+  // 두 사유를 한 문장이 다 담는다(화면이 둘을 못 가른다).
+  "board.lane.noVictim": "지금 시작할 수 없습니다 — 도는 티켓이 없거나 전부 유효 우선순위 5라 끊을 것이 없습니다.",
   "epics.empty": "에픽 없음",
   "epics.viewInBoard": "보드에서 보기",
   "epics.readme.missingBadge": "README 없음",
@@ -2956,6 +2959,8 @@ export const en: Record<string, string> = {
   "board.lane.preemptDesc":
     "That ticket won't lock as awaiting answer — it goes back to Open and gets dispatched again. Uncommitted changes in the worktree stay where they are. The freed worker then picks up the ticket you just dropped.",
   "board.lane.preemptConfirm": "Stop and start",
+  "board.lane.noVictim":
+    "Can't start now — there are no running tickets, or all of them are effective priority 5, so there's nothing to interrupt.",
   "epics.empty": "No epics",
   "epics.viewInBoard": "View in board",
   "epics.readme.missingBadge": "No README",
