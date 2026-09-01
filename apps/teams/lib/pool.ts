@@ -71,17 +71,29 @@ _pool_run="$_pool_local/run"
 _pool_lock="$_pool_run/pool-$_pool_name.lock"
 mkdir -p "$_pool_run" 2>/dev/null
 
-# 1) 슬롯 잠금 — mkdir이 원자적 획득이다. 이미 있고 주인 pid가 살아 있으면 한 줄만 남기고 끝낸다.
+# 1) 슬롯 잠금 — mkdir이 원자적 획득이다(§4-16 개정 1 결정 1, 네 갈래).
+#    성공 = 주인이다. 실패 + pid 없음 = 방금 잡은 쪽이 쓰는 중이라 SKIP. 실패 + 산 pid = SKIP.
+#    실패 + 죽은 pid = rm -rf 후 mkdir을 다시 친다 — 그것도 지면 SKIP.
 if ! mkdir "$_pool_lock" 2>/dev/null; then
   _pool_pid=$(cat "$_pool_lock/pid" 2>/dev/null)
-  if [ -n "\${_pool_pid:-}" ] && kill -0 "$_pool_pid" 2>/dev/null; then
-    echo "$(date '+%Y-%m-%d %H:%M:%S') SKIP $_pool_name — 슬롯이 이미 pid \${_pool_pid}에 잡혀 있다."
+  if [ -z "\${_pool_pid:-}" ] || kill -0 "$_pool_pid" 2>/dev/null; then
+    echo "$(date '+%Y-%m-%d %H:%M:%S') SKIP $_pool_name — 슬롯이 이미 pid \${_pool_pid:-?}에 잡혀 있다."
     exit 0
   fi
-  # 죽은 잠금(주인이 없다) — 되찾는다. mkdir은 다시 안 친다(안이 이미 있는 디렉터리다).
+  rm -rf "$_pool_lock"
+  if ! mkdir "$_pool_lock" 2>/dev/null; then
+    echo "$(date '+%Y-%m-%d %H:%M:%S') SKIP $_pool_name — 되찾기 mkdir이 졌다."
+    exit 0
+  fi
 fi
-echo $$ > "$_pool_lock/pid"
-trap 'rm -rf "$_pool_lock"' EXIT
+
+# 2) pid 쓰기가 지면 그 자리에서 끝난다 — shim을 안 실행하고 project도 안 쓴다(결정 2).
+if ! { echo $$ > "$_pool_lock/pid"; } 2>/dev/null; then
+  echo "$(date '+%Y-%m-%d %H:%M:%S') SKIP $_pool_name — pid 쓰기가 졌다."
+  exit 0
+fi
+# 3) trap은 자기가 쓴 pid일 때만 잠금을 지운다 — 남의 값이면 아무것도 안 지운다(결정 3).
+trap 'if [ "$(cat "$_pool_lock/pid" 2>/dev/null)" = "$$" ]; then rm -rf "$_pool_lock"; fi' EXIT
 
 # 2~6) 후보 선정. 골랐으면 1행 id · 2행 root를 낸다. 후보가 없으면 아무것도 안 낸다.
 _pool_pick=$(TICKET_LOCAL="$_pool_local" POOL_LOCK_NAME="$_pool_name" python3 - <<'PY'
@@ -140,6 +152,30 @@ def open_ticket_count(root):
         if n.endswith(".md") and not n.endswith(".wip.md") and not n.endswith(".done.md")
     )
 
+PID_RE = re.compile(r"^pid:\\s*(\\d+)\$", re.MULTILINE)
+
+def has_stale_wip(root):
+    # §4-16 개정 1 결정 5 — 주인 pid가 죽은 .wip도 일거리로 센다(reap이 돌 기회를 얻는다).
+    try:
+        names = os.listdir(os.path.join(root, "tickets"))
+    except OSError:
+        return False
+    for n in names:
+        if not n.endswith(".wip.md"):
+            continue
+        try:
+            text = open(os.path.join(root, "tickets", n), encoding="utf-8").read()
+        except OSError:
+            continue
+        m = PID_RE.search(text)
+        if not m:
+            continue
+        try:
+            os.kill(int(m.group(1)), 0)
+        except OSError:
+            return True  # 죽었다
+    return False
+
 candidates = []
 for p in projects:
     pid, root = p.get("id"), p.get("root")
@@ -149,7 +185,7 @@ for p in projects:
         continue
     if live_holders(pid) >= read_limit(root):
         continue
-    if open_ticket_count(root) == 0:
+    if open_ticket_count(root) == 0 and not has_stale_wip(root):
         continue
     turn_file = os.path.join(run_dir, f"pool-turn-{pid}")
     mtime = os.stat(turn_file).st_mtime if os.path.exists(turn_file) else 0
@@ -175,6 +211,21 @@ fi
 # 7) project 파일에 고른 id를 적고 그 큐의 shim을 실행한다.
 _pool_project=$(printf '%s\\n' "$_pool_pick" | sed -n 1p)
 _pool_root=$(printf '%s\\n' "$_pool_pick" | sed -n 2p)
+
+# 결정 4 — 실행 직전에 project·root·shim 파일을 본다. 하나라도 아니면 사유 한 줄을 남기고 끝낸다.
+if [ -z "\${_pool_project:-}" ]; then
+  echo "$(date '+%Y-%m-%d %H:%M:%S') SKIP $_pool_name — 후보의 project 값이 비었다."
+  exit 0
+fi
+if [ ! -d "\${_pool_root:-}" ]; then
+  echo "$(date '+%Y-%m-%d %H:%M:%S') SKIP $_pool_name — root가 디렉터리가 아니다: \${_pool_root:-}"
+  exit 0
+fi
+if [ ! -f "$_pool_root/workers/$_pool_name.sh" ]; then
+  echo "$(date '+%Y-%m-%d %H:%M:%S') SKIP $_pool_name — shim 파일이 없다: $_pool_root/workers/$_pool_name.sh"
+  exit 0
+fi
+
 printf '%s' "$_pool_project" > "$_pool_lock/project"
 bash "$_pool_root/workers/$_pool_name.sh"
 `;

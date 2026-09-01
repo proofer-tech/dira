@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert";
 import { execFileSync, spawn } from "node:child_process";
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -300,6 +301,145 @@ test("풀 디스패처 — 열린 티켓이 0장인 큐는 후보가 아니다",
   writeFileSync(path.join(empty.root, "pool-limit"), "1\n");
   const marker = path.join(local, "marker.log");
   stubShim(empty.root, "pool-1", marker, "empty");
+
+  const { path: dispatcher } = await createPoolWorker("pool-1");
+  const out = runDispatcher(dispatcher, local);
+  assert.strictEqual(out, "");
+  assert.strictEqual(existsSync(marker), false);
+});
+
+// ── §4-16 개정 1 — 결정 1~5 고정 ─────────────────────────────────────────────
+
+test("풀 디스패처 — 결정 1: mkdir 성공 + pid 미기록 창(탈취 시도)은 SKIP하고 잠금을 건드리지 않는다", async () => {
+  const local = tmp("pool-race-local-");
+  process.env.TICKET_LOCAL = local;
+  const lockDir = path.join(local, "run", "pool-pool-1.lock");
+  mkdirSync(lockDir, { recursive: true }); // mkdir은 이미 성공했고 pid는 아직 안 써진 창
+
+  const { path: dispatcher } = await createPoolWorker("pool-1");
+  const out = runDispatcher(dispatcher, local);
+  assert.match(out, /SKIP pool-1/);
+  assert.strictEqual(existsSync(path.join(lockDir, "pid")), false); // 밀고 들어가 덮어쓰지 않았다
+});
+
+test("풀 디스패처 — 결정 1: 산 pid가 문 잠금은 SKIP, 죽은 pid가 문 잠금은 되찾아 shim이 돈다", async () => {
+  const local = tmp("pool-reclaim-local-");
+  process.env.TICKET_LOCAL = local;
+  const base = tmp("pool-reclaim-proj-");
+  const A = mkQueue(base, "A", 1);
+  writeRegistry(local, [A]);
+  writeFileSync(path.join(A.root, "pool-limit"), "1\n");
+  const marker = path.join(local, "marker.log");
+  stubShim(A.root, "pool-1", marker, "A");
+
+  const lockDir = path.join(local, "run", "pool-pool-1.lock");
+  mkdirSync(lockDir, { recursive: true });
+  writeFileSync(path.join(lockDir, "pid"), String(process.pid)); // 산 pid — 지금 테스트 프로세스
+  const { path: dispatcher } = await createPoolWorker("pool-1");
+  assert.match(runDispatcher(dispatcher, local), /SKIP pool-1/);
+  assert.strictEqual(existsSync(marker), false); // 산 주인을 탈취하지 않았다
+
+  writeFileSync(path.join(lockDir, "pid"), "999999999"); // 죽은 pid — 되찾는다
+  const out = runDispatcher(dispatcher, local);
+  assert.strictEqual(out, "");
+  assert.strictEqual(readFileSync(marker, "utf8"), "DISPATCHED-A\n"); // shim이 돌았다
+});
+
+test("풀 디스패처 — 결정 2: pid 쓰기가 지는 판(umask 0777)에서 shim이 안 돌고 project도 안 써진다", async () => {
+  const local = tmp("pool-pidfail-local-");
+  process.env.TICKET_LOCAL = local;
+  const base = tmp("pool-pidfail-proj-");
+  const A = mkQueue(base, "A", 1);
+  writeRegistry(local, [A]);
+  writeFileSync(path.join(A.root, "pool-limit"), "1\n");
+  const marker = path.join(local, "marker.log");
+  stubShim(A.root, "pool-1", marker, "A");
+  mkdirSync(path.join(local, "run"), { recursive: true }); // run/은 미리 정상 권한으로 둔다
+
+  const { path: dispatcher } = await createPoolWorker("pool-1");
+  const lockDir = path.join(local, "run", "pool-pool-1.lock");
+  try {
+    // umask 0777 — 새로 mkdir하는 잠금 디렉터리가 소유자도 못 쓰는 모드(000)로 생겨 pid 쓰기가 진다.
+    const out = execFileSync("bash", ["-c", `umask 0777; exec bash ${JSON.stringify(dispatcher)}`], {
+      encoding: "utf8",
+      env: { ...process.env, TICKET_LOCAL: local },
+    });
+    assert.match(out, /pid 쓰기가 졌다/);
+    assert.strictEqual(existsSync(marker), false); // shim이 안 돌았다
+    assert.strictEqual(existsSync(path.join(lockDir, "project")), false);
+  } finally {
+    chmodSync(lockDir, 0o755); // 정리(rmSync)가 안의 항목을 지울 수 있게 되돌린다
+  }
+});
+
+test("풀 디스패처 — 결정 3: shim이 중간에 pid를 남의 값으로 갈아치우면 trap이 그 잠금을 안 지운다", async () => {
+  const local = tmp("pool-trap-local-");
+  process.env.TICKET_LOCAL = local;
+  const base = tmp("pool-trap-proj-");
+  const A = mkQueue(base, "A", 1);
+  writeRegistry(local, [A]);
+  writeFileSync(path.join(A.root, "pool-limit"), "1\n");
+  const lockDir = path.join(local, "run", "pool-pool-1.lock");
+  // shim이 도는 동안 잠금의 pid를 남의 값으로 덮어써 "선점당함"을 흉내 낸다.
+  writeFileSync(
+    path.join(A.root, "workers", "pool-1.sh"),
+    `#!/bin/bash\necho 999999999 > ${JSON.stringify(path.join(lockDir, "pid"))}\n`,
+    { mode: 0o755 },
+  );
+
+  const { path: dispatcher } = await createPoolWorker("pool-1");
+  runDispatcher(dispatcher, local);
+  assert.strictEqual(existsSync(lockDir), true); // 자기 pid가 아니라서 trap이 안 지웠다
+  assert.strictEqual(readFileSync(path.join(lockDir, "pid"), "utf8").trim(), "999999999");
+});
+
+test("풀 디스패처 — 결정 4: 후보 큐에 shim 파일이 없으면 project를 안 쓰고 사유를 남기고 끝난다", async () => {
+  const local = tmp("pool-noshim-local-");
+  process.env.TICKET_LOCAL = local;
+  const base = tmp("pool-noshim-proj-");
+  const A = mkQueue(base, "A", 1);
+  writeRegistry(local, [A]);
+  writeFileSync(path.join(A.root, "pool-limit"), "1\n");
+  // stubShim을 안 불러 workers/pool-1.sh를 일부러 안 만든다.
+
+  const { path: dispatcher } = await createPoolWorker("pool-1");
+  const out = runDispatcher(dispatcher, local);
+  assert.match(out, /shim 파일이 없다/);
+  assert.strictEqual(existsSync(path.join(local, "run", "pool-pool-1.lock", "project")), false);
+});
+
+test("풀 디스패처 — 결정 5: 열린 티켓 0장 + 주인 pid가 죽은 .wip 1장인 큐도 후보로 뽑힌다", async () => {
+  const local = tmp("pool-stalewip-local-");
+  process.env.TICKET_LOCAL = local;
+  const base = tmp("pool-stalewip-proj-");
+  const stale = mkQueue(base, "stale", 0); // 열린 티켓 0장
+  writeFileSync(
+    path.join(stale.root, "tickets", "dead.wip.md"),
+    "---\nticket: dead\npid: 999999999\n---\n\n## Goal\nx\n",
+  );
+  writeRegistry(local, [stale]);
+  writeFileSync(path.join(stale.root, "pool-limit"), "1\n");
+  const marker = path.join(local, "marker.log");
+  stubShim(stale.root, "pool-1", marker, "stale");
+
+  const { path: dispatcher } = await createPoolWorker("pool-1");
+  runDispatcher(dispatcher, local);
+  assert.strictEqual(readFileSync(marker, "utf8"), "DISPATCHED-stale\n"); // 스테일 .wip가 후보를 살렸다
+});
+
+test("풀 디스패처 — 결정 5: .wip의 주인 pid가 살아 있으면(예: 지금 프로세스) 후보가 아니다", async () => {
+  const local = tmp("pool-alivewip-local-");
+  process.env.TICKET_LOCAL = local;
+  const base = tmp("pool-alivewip-proj-");
+  const alive_ = mkQueue(base, "alive", 0);
+  writeFileSync(
+    path.join(alive_.root, "tickets", "live.wip.md"),
+    `---\nticket: live\npid: ${process.pid}\n---\n\n## Goal\nx\n`,
+  );
+  writeRegistry(local, [alive_]);
+  writeFileSync(path.join(alive_.root, "pool-limit"), "1\n");
+  const marker = path.join(local, "marker.log");
+  stubShim(alive_.root, "pool-1", marker, "alive");
 
   const { path: dispatcher } = await createPoolWorker("pool-1");
   const out = runDispatcher(dispatcher, local);
