@@ -7,7 +7,15 @@
  *  쓰므로 쪼개면 자리가 갈린다. */
 import { memo, type ReactNode, useCallback, useEffect, useId, useRef, useState, useTransition } from "react";
 import Link from "next/link";
-import { Check, ChevronDown, ChevronRight, ExternalLink, Trash2, TriangleAlert } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ExternalLink,
+  Trash2,
+  TriangleAlert,
+} from "lucide-react";
 import {
   createPersonaAction,
   createSquadAction,
@@ -2633,7 +2641,11 @@ const MemorySection = memo(function MemorySection({
   const t = useT();
   const locale = useLocale();
   const [error, setError] = useState<string | null>(null);
-  const listRef = useRef<HTMLUListElement>(null);
+  // 열려 있는 전문 다이얼로그 — `null`은 닫힘, 문자열은 지금 보는 개념 이름(`.md` 뗀 값).
+  // `history`는 `[[링크]]`로 들어온 경로다(§32 §개정 E) — 목록에서 막 연 다이얼로그는 비어 있어
+  // 뒤로를 안 그린다.
+  const [current, setCurrent] = useState<string | null>(null);
+  const [history, setHistory] = useState<string[]>([]);
 
   // §10 §위키링크 §자리 표 — vault는 이 페르소나의 memory/뿐이다(다른 페르소나 이름은 안 섞인다).
   const vault: Vault = {};
@@ -2642,23 +2654,33 @@ const MemorySection = memo(function MemorySection({
     vault[name] = `#${encodeURIComponent(name)}`;
   }
 
-  // 누르면 URL이 안 바뀐다(§10 §자리 표) — 그래서 실제 `#` 이동(브라우저가 스스로 details를
-  // 여는 갈래)을 안 쓰고 클릭을 잡아 `open`을 손으로 민다. `data-wikilink`는 댕글링 `<span>`에도
-  // 붙어 있지만 그 이름은 이 목록에 없으니 querySelector가 못 찾고 조용히 끝난다(요구한 값).
-  function openWikilink(e: React.MouseEvent<HTMLUListElement>) {
+  function closeDialog() {
+    setCurrent(null);
+    setHistory([]);
+  }
+
+  // `[[링크]]`를 누르면 페이지는 안 떠나고 **같은 다이얼로그의 내용이 대상으로 갈린다**
+  // (§32 §개정 §위키링크가 여는 자리) — 닫고 새로 열지 않는다. 댕글링(목록에 없는 이름)은
+  // vault에 없어 `<span>`으로 뜨고, 여기서도 조용히 끝난다.
+  function openWikilinkInDialog(e: React.MouseEvent<HTMLDivElement>) {
     const a = (e.target as HTMLElement).closest<HTMLElement>("[data-wikilink]");
     if (!a) return;
     e.preventDefault();
     const name = a.dataset.wikilink ?? "";
-    const target = listRef.current?.querySelector<HTMLDetailsElement>(
-      `[data-mem-name="${CSS.escape(name)}"]`,
-    );
-    if (!target) return;
-    target.open = true;
-    // `start`다 — 전문이 길면(§32 실측 최장 2,348px) `center`는 방금 편 요약줄을 화면 밖
-    // 위로 밀어낸다. `start`는 그 줄을 맨 위에 두고 전문을 위에서부터 읽게 한다.
-    target.scrollIntoView({ block: "start" });
+    if (!(name in vault) || current === null) return;
+    setHistory((prev) => [...prev, current]);
+    setCurrent(name);
   }
+
+  function goBack() {
+    setHistory((prev) => {
+      if (prev.length === 0) return prev;
+      setCurrent(prev[prev.length - 1]);
+      return prev.slice(0, -1);
+    });
+  }
+
+  const openMemory = current ? memories.find((m) => m.file.replace(/\.md$/, "") === current) : undefined;
 
   return (
     <section className="space-y-2 border-t pt-3">
@@ -2679,25 +2701,32 @@ const MemorySection = memo(function MemorySection({
         // **누가 채우는가**를 알려 준다. 없으면 버튼 없는 빈 절이 고장으로 읽힌다(§32 ②)
         <p className="text-xs text-muted-foreground">{t("persona.memory.empty")}</p>
       ) : (
-        <ul ref={listRef} onClick={openWikilink} className="space-y-1">
-          {memories.map((m) => (
-            <li key={m.file}>
-              {/* 이 화면에 남은 유일한 `<details>`다 — 2단이 되면서 바깥 카드의 `<details>`는
-                  없어졌다. **그래도 그룹 이름은 그대로 둔다**: 이름 없는 `group-open:`은 조상의
-                  `group`을 물어서 바깥에 `group`이 다시 생기는 날 chevron이 조용히 틀린다.
-                  `accordion`·`collapsible`은 안 깐다 — 이 자리도 같은 값이다(§32 ③).
-                  `data-mem-name`은 위키링크 클릭이 펼칠 대상을 찾는 자리다(§10 §자리 표) */}
-              <details className="group/mem" data-mem-name={m.file.replace(/\.md$/, "")}>
-                <summary className="flex flex-wrap cursor-pointer list-none items-baseline gap-2 [&::-webkit-details-marker]:hidden">
+        <ul className="space-y-1">
+          {memories.map((m) => {
+            // 페르소나 이름(prop `name`)을 가리지 않게 파일명은 따로 이름 짓는다 — 삭제 버튼은
+            // 여전히 프로필 `name`을 받아야 한다.
+            const memName = m.file.replace(/\.md$/, "");
+            return (
+              <li key={m.file} className="flex items-baseline gap-2">
+                {/* 줄 전체가 손잡이다(§32 §개정 §줄이 버튼이 된다) — `삭제`는 이 버튼의
+                    형제로 밖에 남는다. `<details>`가 걷히면서 `preventDefault` 함정도 없어졌다. */}
+                <button
+                  type="button"
+                  className="flex min-w-0 grow cursor-pointer items-baseline gap-2 text-left"
+                  onClick={() => {
+                    setCurrent(memName);
+                    setHistory([]);
+                  }}
+                >
                   <ChevronRight
                     aria-hidden
-                    className="size-4 shrink-0 self-center text-muted-foreground transition-transform group-open/mem:rotate-90"
+                    className="size-4 shrink-0 self-center text-muted-foreground"
                   />
                   {/* 파일명이 곧 개념 이름이고 `[[링크]]`가 가리키는 값이다 — 안 자른다(§6 식별자).
                       `.md`를 떼는 것은 계약이다(§5-2). 확장자가 붙는 자리는 삭제 확인 하나다.
                       한글 문장이라 감기면 낱말 안이 안 갈린다 — `shrink-0`을 스킬 이름과 달리
                       벗는다(§비주얼 §66 ⑭) */}
-                  <code className="font-mono text-xs @4xl:shrink">{m.file.replace(/\.md$/, "")}</code>
+                  <code className="font-mono text-xs @4xl:shrink">{memName}</code>
                   {/* `title`을 안 붙인다 — 전문을 보는 자리가 이 줄을 누르는 것이다(§32 ③).
                       발췌가 비는 파일(빈 파일·공백뿐)도 파일명으로 목록에 뜬다(§5-2). 1/3 칸에서는
                       2행으로 내려가 칸 폭을 전부 얻는다(§비주얼 §66 ⑭). `line-clamp-1` —
@@ -2706,34 +2735,48 @@ const MemorySection = memo(function MemorySection({
                   <span className="min-w-0 grow line-clamp-1 text-xs text-muted-foreground @4xl:order-last @4xl:basis-full">
                     {m.excerpt}
                   </span>
-                  {/* 줄 자신이 `<summary>`라 클릭이 곧 펼침 토글이다 — **여기만 `preventDefault`가
-                      남는다**(§32 ③). 왼쪽 목록 줄과 오른쪽 머리는 `<summary>`가 아니라 없앴다.
-                      `stopPropagation`은 activationTarget이 이미 정해져 안 통한다 */}
-                  <span className="ml-auto self-center" onClick={(e) => e.preventDefault()}>
-                    <DeleteMemoryButton
-                      projectId={projectId}
-                      name={name}
-                      dir={dir}
-                      memory={m}
-                      onDone={(message) => {
-                        setError(message);
-                        if (!message) onDeleted(m.file);
-                      }}
-                    />
-                  </span>
-                </summary>
-                {/* 상한이 없으면 한 줄이 116자다(§32 §폭 실측). `pl-6` = chevron 16 + gap 8이라
-                    전문이 파일명 왼쪽 끝에 맞는다. `<Markdown>` 값은 한 클래스도 안 덮는다(§10) */}
-                <div className="max-w-3xl pt-1 pb-3 pl-6">
-                  <Markdown text={m.text} vault={vault} refs={refs} />
-                </div>
-              </details>
-            </li>
-          ))}
+                </button>
+                <DeleteMemoryButton
+                  projectId={projectId}
+                  name={name}
+                  dir={dir}
+                  memory={m}
+                  onDone={(message) => {
+                    setError(message);
+                    if (!message) onDeleted(m.file);
+                  }}
+                />
+              </li>
+            );
+          })}
         </ul>
       )}
 
-      {/* 실패는 **누른 곳**이다 — 이건 펼쳐야 만질 수 있어서 절 맨 아래다(§32 다섯 상태) */}
+      {/* 전문 다이얼로그(§32 §개정) — 카드-스킬 절과 같은 그릇 벌(`feedback-dialog`
+          `epics-ui` `ticket-ui`가 이미 든 세로 상한 + 스크롤 문자열, §개정 A) */}
+      <Dialog open={current !== null} onOpenChange={(open) => !open && closeDialog()}>
+        <DialogContent
+          className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-3xl"
+          onClick={openWikilinkInDialog}
+        >
+          <DialogHeader>
+            <div className="flex items-center gap-2">
+              {history.length > 0 && (
+                <Button variant="ghost" size="icon" aria-label={t("common.back")} onClick={goBack}>
+                  <ChevronLeft aria-hidden />
+                </Button>
+              )}
+              <DialogTitle className="font-mono text-sm">{current}</DialogTitle>
+            </div>
+            <DialogDescription className="font-mono text-xs break-all">
+              {openMemory ? `${dir}/memory/${openMemory.file}` : ""}
+            </DialogDescription>
+          </DialogHeader>
+          {openMemory && <Markdown text={openMemory.text} vault={vault} refs={refs} />}
+        </DialogContent>
+      </Dialog>
+
+      {/* 실패는 **누른 곳**이다 — 목록 줄의 삭제 버튼 아래가 아니라 절 맨 아래다(§32 다섯 상태) */}
       {error && <Failure title={t("persona.memory.deleteFailedTitle")} message={error} />}
     </section>
   );
@@ -2765,7 +2808,7 @@ function DeleteMemoryButton({
     <AlertDialog>
       <AlertDialogTrigger
         render={
-          <Button variant="ghost" size="sm" disabled={pending}>
+          <Button variant="ghost" size="sm" className="self-center" disabled={pending}>
             <Trash2 aria-hidden />
             {pending ? t("persona.memory.deletingAction") : t("persona.action.delete")}
           </Button>

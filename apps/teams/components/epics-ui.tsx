@@ -4,8 +4,8 @@
  *  §32 ②③④와 같은 규칙: 쓰는 쪽은 세션이다). `personas-ui.tsx`의 `MemorySection`과 같은
  *  골격이지만 그 파일은 페르소나 편집 상태(`edits`)에 깊이 얽혀 있어 그대로 재사용할 수 없다 —
  *  여기는 훨씬 얇다(추가·편집이 아예 없다). */
-import { useRef, useState, useTransition } from "react";
-import { ChevronRight, ExternalLink, Trash2, TriangleAlert } from "lucide-react";
+import { useState, useTransition } from "react";
+import { ChevronLeft, ChevronRight, ExternalLink, Trash2, TriangleAlert } from "lucide-react";
 import {
   deleteEpicMemoryAction,
   openEpicReadmeAction,
@@ -194,30 +194,43 @@ export function EpicMemorySection({
 }) {
   const [items, setItems] = useState(memories);
   const [error, setError] = useState<string | null>(null);
-  const listRef = useRef<HTMLUListElement>(null);
+  // 열려 있는 전문 다이얼로그 — `personas-ui.tsx`의 `MemorySection`과 같은 판정(§32 §개정).
+  const [current, setCurrent] = useState<string | null>(null);
+  const [history, setHistory] = useState<string[]>([]);
 
-  // §10 §위키링크 §자리 표 — vault는 이 에픽의 memory/뿐이다. 클릭 처리는
-  // `personas-ui.tsx`의 `MemorySection`과 같은 판정(URL 안 바꾸는 수동 `open`) — 근거는 그 주석 참고.
+  // §10 §위키링크 §자리 표 — vault는 이 에픽의 memory/뿐이다.
   const vault: Vault = {};
   for (const m of items) {
     const name = m.file.replace(/\.md$/, "");
     vault[name] = `#${encodeURIComponent(name)}`;
   }
 
-  function openWikilink(e: React.MouseEvent<HTMLUListElement>) {
+  function closeDialog() {
+    setCurrent(null);
+    setHistory([]);
+  }
+
+  // `[[링크]]`를 누르면 같은 다이얼로그의 내용이 대상으로 갈린다(§32 §개정 §위키링크가
+  // 여는 자리) — 근거는 `personas-ui.tsx` `MemorySection`의 같은 함수 참고.
+  function openWikilinkInDialog(e: React.MouseEvent<HTMLDivElement>) {
     const a = (e.target as HTMLElement).closest<HTMLElement>("[data-wikilink]");
     if (!a) return;
     e.preventDefault();
     const name = a.dataset.wikilink ?? "";
-    const target = listRef.current?.querySelector<HTMLDetailsElement>(
-      `[data-mem-name="${CSS.escape(name)}"]`,
-    );
-    if (!target) return;
-    target.open = true;
-    // `start`다 — 전문이 길면 `center`는 방금 편 요약줄을 화면 밖 위로 밀어낸다(`personas-ui.tsx`
-    // `MemorySection`과 같은 실측 근거).
-    target.scrollIntoView({ block: "start" });
+    if (!(name in vault) || current === null) return;
+    setHistory((prev) => [...prev, current]);
+    setCurrent(name);
   }
+
+  function goBack() {
+    setHistory((prev) => {
+      if (prev.length === 0) return prev;
+      setCurrent(prev[prev.length - 1]);
+      return prev.slice(0, -1);
+    });
+  }
+
+  const openMemory = current ? items.find((m) => m.file.replace(/\.md$/, "") === current) : undefined;
 
   return (
     <section className="space-y-2 border-t pt-3">
@@ -226,40 +239,72 @@ export function EpicMemorySection({
       {items.length === 0 ? (
         <p className="text-xs text-muted-foreground">{t(locale, "epics.memory.emptyHint")}</p>
       ) : (
-        <ul ref={listRef} onClick={openWikilink} className="space-y-1">
-          {items.map((m) => (
-            <li key={m.file}>
-              <details className="group/mem" data-mem-name={m.file.replace(/\.md$/, "")}>
-                <summary className="flex cursor-pointer list-none items-baseline gap-2 [&::-webkit-details-marker]:hidden">
+        <ul className="space-y-1">
+          {items.map((m) => {
+            const name = m.file.replace(/\.md$/, "");
+            return (
+              <li key={m.file} className="flex items-baseline gap-2">
+                <button
+                  type="button"
+                  className="flex min-w-0 grow cursor-pointer items-baseline gap-2 text-left"
+                  onClick={() => {
+                    setCurrent(name);
+                    setHistory([]);
+                  }}
+                >
                   <ChevronRight
                     aria-hidden
-                    className="size-4 shrink-0 self-center text-muted-foreground transition-transform group-open/mem:rotate-90"
+                    className="size-4 shrink-0 self-center text-muted-foreground"
                   />
-                  <code className="shrink-0 font-mono text-xs">{m.file.replace(/\.md$/, "")}</code>
+                  <code className="shrink-0 font-mono text-xs">{name}</code>
                   <span className="min-w-0 grow truncate text-xs text-muted-foreground">
                     {m.excerpt}
                   </span>
-                  <span className="ml-auto self-center" onClick={(e) => e.preventDefault()}>
-                    <DeleteMemoryButton
-                      projectId={projectId}
-                      epic={epic}
-                      memory={m}
-                      locale={locale}
-                      onDone={(message) => {
-                        setError(message);
-                        if (!message) setItems((prev) => prev.filter((x) => x.file !== m.file));
-                      }}
-                    />
-                  </span>
-                </summary>
-                <div className="max-w-3xl pt-1 pb-3 pl-6">
-                  <Markdown text={m.text} vault={vault} locale={locale} />
-                </div>
-              </details>
-            </li>
-          ))}
+                </button>
+                <DeleteMemoryButton
+                  projectId={projectId}
+                  epic={epic}
+                  memory={m}
+                  locale={locale}
+                  onDone={(message) => {
+                    setError(message);
+                    if (!message) setItems((prev) => prev.filter((x) => x.file !== m.file));
+                  }}
+                />
+              </li>
+            );
+          })}
         </ul>
       )}
+
+      {/* 두 화면이 같은 다이얼로그를 쓴다(§32 §개정 D) — 머리 아래 경로 줄이 지금 보는 글이
+          어느 vault의 것인지 알려 준다 */}
+      <Dialog open={current !== null} onOpenChange={(open) => !open && closeDialog()}>
+        <DialogContent
+          className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-3xl"
+          onClick={openWikilinkInDialog}
+        >
+          <DialogHeader>
+            <div className="flex items-center gap-2">
+              {history.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label={t(locale, "common.back")}
+                  onClick={goBack}
+                >
+                  <ChevronLeft aria-hidden />
+                </Button>
+              )}
+              <DialogTitle className="font-mono text-sm">{current}</DialogTitle>
+            </div>
+            <DialogDescription className="font-mono text-xs break-all">
+              {openMemory ? `epics/${epic}/memory/${openMemory.file}` : ""}
+            </DialogDescription>
+          </DialogHeader>
+          {openMemory && <Markdown text={openMemory.text} vault={vault} locale={locale} />}
+        </DialogContent>
+      </Dialog>
 
       {error && <Failure title={t(locale, "epics.memory.deleteFailedTitle")} message={error} />}
     </section>
@@ -286,7 +331,7 @@ function DeleteMemoryButton({
     <AlertDialog>
       <AlertDialogTrigger
         render={
-          <Button variant="ghost" size="sm" disabled={pending}>
+          <Button variant="ghost" size="sm" className="self-center" disabled={pending}>
             <Trash2 aria-hidden />
             {pending ? t(locale, "epics.memory.deleting") : t(locale, "epics.memory.delete")}
           </Button>

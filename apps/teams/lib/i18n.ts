@@ -220,6 +220,7 @@ export const ko: Record<string, string> = {
   "common.add": "추가",
   "common.close": "닫기",
   "common.cancel": "취소",
+  "common.back": "뒤로",
   "common.create": "만들기",
   "common.creating": "만드는 중…",
 
@@ -2687,6 +2688,7 @@ export const en: Record<string, string> = {
   "common.add": "Add",
   "common.close": "Close",
   "common.cancel": "Cancel",
+  "common.back": "Back",
   "common.create": "Create",
   "common.creating": "Creating…",
 
