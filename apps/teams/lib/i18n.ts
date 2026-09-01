@@ -2936,9 +2936,11 @@ export const en: Record<string, string> = {
   "board.epic.createFailed": "Couldn't create the epic",
   "board.lane.dropToStart": "Drop to start now",
   "board.lane.dropToUnassign": "Drop to unassign",
-  "board.lane.preemptTitle": "This stops a running session to start now",
+  // 커밋 안 한 변경을 다루는 가운데 문장은 `ticketDetail.forceStopDescSuffix`와 글자까지 같다 —
+  // ko가 같은 문장이라 en도 갈리면 안 된다. `awaiting answer`도 그 선례의 낱말 그대로다.
+  "board.lane.preemptTitle": "This stops one running session and starts the ticket you dropped",
   "board.lane.preemptDesc":
-    "That ticket won't lock as awaiting an answer — it returns to open and gets redispatched. Uncommitted changes in that worktree stay, they aren't deleted. The freed worker picks up the ticket you just dropped.",
+    "That ticket won't lock as awaiting answer — it goes back to Open and gets dispatched again. Uncommitted changes in the worktree stay where they are. The freed worker then picks up the ticket you just dropped.",
   "board.lane.preemptConfirm": "Stop and start",
   "epics.empty": "No epics",
   "epics.viewInBoard": "View in board",
@@ -4113,9 +4115,10 @@ export const en: Record<string, string> = {
   // 열고 접미가 마침표를 찍는다.
   "boardPage.action.epicAcceptedPrefix": "Request received in the",
   "boardPage.action.epicAcceptedSuffix": "epic.",
-  // 레인 드롭(§1-5). ko 초벌 — `288c86b8`이 다듬는다.
+  // 레인 드롭(§1-5). ko 두 줄이 `ticketDetail.ticketNotFoundPrefix`("큐에 없는 티켓입니다")와
+  // 다른 문장이라 en도 그쪽 낱말을 안 빌린다.
   "boardPage.action.ticketNotFoundPrefix": "Ticket not found:",
-  "boardPage.action.notOpen": "This ticket already moved to another state.",
+  "boardPage.action.notOpen": "This ticket has already moved to another state.",
 
   // 찾기 바(`find-bar.tsx`) — placeholder 하나와 아이콘 버튼 낭독 이름 셋. `Close`는
   // `common.close`와 같은 낱말이다(같은 동작이라 갈리면 안 된다).
