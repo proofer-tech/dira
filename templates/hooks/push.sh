@@ -21,6 +21,9 @@
 #              일한다 §개정 2). 락을 안 쥔다 - classify와 같은 성질의 조회다.
 #   ship <해시> "<제목>" ["<본문>"] - 커밋(뺄 것 없으면 건너뜀) -> 위 (없음) 경로 -> 거부되면
 #              rebase <통합 브랜치> 후 1회만 재시도. DESIGN.md §마무리 의례를 헬퍼가 감싼다.
+#   discard  - 받는 트리 추적 파일 전부를 다시 판정하고, 전부 잔해일 때만 버린다(DESIGN.md
+#              §전부 잔해일 때만 버튼 하나가 뜬다 결정 4). 하나라도 사람 편집이면 아무것도 안
+#              버리고 0이 아닌 코드로 끝난다. 락을 쥔다. 커밋을 안 만들고 stash를 안 건드린다.
 #
 # rebase는 기본적으로 안 한다 - non-fast-forward 거부는 종전대로 세션의 몫이다. 이 스크립트가
 # 만지는 트리는 받는 트리(git-common-dir의 부모) 하나뿐이다 - **`ship`만 예외**로 자신이 도는
@@ -105,6 +108,36 @@ do_classify() {
   for p in "$@"; do
     classify_one "$p" "$hist"
   done
+}
+
+# 받는 트리 추적 파일 전부를 판정하고, 전부 잔해일 때만 버린다(DESIGN.md §전부 잔해일 때만
+# 버튼 하나가 뜬다 결정 4) - 사람이 누르는 버튼이 부르는 자리라 cleanup_dirty_tree와 다르다:
+# 사람 편집을 stash로 옮기지 않는다, 하나라도 사람 편집이면 아무것도 안 버리고 0이 아닌 코드로
+# 끝난다. 커밋을 안 만들고 stash를 안 건드린다.
+do_discard() {
+  local status_out line paths=() trash=() hist p verdict
+  acquire_lock
+  status_out=$(git -C "$_recv" status --porcelain -uno)
+  if [ -z "$status_out" ]; then
+    echo "push.sh: 받는 트리가 이미 깨끗하다" >&2
+    return 0
+  fi
+  while IFS= read -r line; do
+    [ -n "$line" ] && paths+=("${line:3}")
+  done <<EOF
+$status_out
+EOF
+  hist=$(git -C "$_recv" log --all --raw --no-abbrev --format= -- "${paths[@]}" 2>/dev/null)
+  for p in "${paths[@]}"; do
+    verdict=$(classify_one "$p" "$hist")
+    if [ "$verdict" != "잔해" ]; then
+      echo "push.sh: 사람 편집이 섞여 있다 - $p - 아무것도 안 버렸다" >&2
+      return 1
+    fi
+    trash+=("$p")
+  done
+  git -C "$_recv" restore --staged --worktree -- "${trash[@]}"
+  echo "push.sh: 잔해 버림 - ${trash[*]}" >&2
 }
 
 # 세션 드리프트 - 통합 체크아웃에서 통합 브랜치로 직접 들어간 세션 커밋(DESIGN.md §워커는 언제나
@@ -255,11 +288,15 @@ case "${1:-}" in
     shift
     do_ship "$@"
     ;;
+  discard)
+    do_discard
+    exit $?
+    ;;
   "")
     main_push
     ;;
   *)
-    echo "push.sh: 알 수 없는 서브커맨드 '$1' (classify | drift | ship | 없음)" >&2
+    echo "push.sh: 알 수 없는 서브커맨드 '$1' (classify | drift | ship | discard | 없음)" >&2
     exit 2
     ;;
 esac

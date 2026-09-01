@@ -2294,10 +2294,37 @@ if [ "\${1:-tick}" = tick ] || [ "\${1:-tick}" = dryrun ]; then
           echo "  받는 트리가 $_gate_branch를 체크아웃 중이고 더러우면 push가 전부 거부된다(updateInstead)."
           echo "  당신 것이면 커밋하거나 워크트리로 옮긴다. 다음 tick부터 저절로 풀린다. 이 줄은 상태가 바뀔 때만 뜬다."
 
+          # 판정 칸(DESIGN.md §전부 잔해일 때만 버튼 하나가 뜬다 결정 1) — 판정 코드는 여기 안
+          # 둔다. \$_gate_root/push.sh의 classify를 부른다. 없거나 죽으면(이 if는 \$_gate_root에
+          # push.sh가 없을 때만 닿으므로 사실상 늘) 판정 칸 없이 종전 모양으로 적는다.
+          # ponytail: bash 3.2 set -u가 빈 배열 통짜 펼치기에서 죽으므로 인덱스 접근만 쓴다.
+          _gate_lines=()
+          _gate_only_paths=()
+          while IFS= read -r _gate_l; do
+            [ -n "$_gate_l" ] && _gate_lines+=("$_gate_l") && _gate_only_paths+=("\${_gate_l:3}")
+          done <<< "$_gate_status"
+          _gate_push_sh="$_gate_root/push.sh"
+          _gate_verdicts=()
+          if [ -f "$_gate_push_sh" ] && [ "\${#_gate_only_paths[@]}" -gt 0 ]; then
+            while IFS= read -r _gate_v; do
+              _gate_verdicts+=("$_gate_v")
+            done < <(cd "$_gate_main" && bash "$_gate_push_sh" classify "\${_gate_only_paths[@]}" 2>/dev/null)
+          fi
+          _gate_out=()
+          for ((_gate_i = 0; _gate_i < \${#_gate_lines[@]}; _gate_i++)); do
+            _gate_v="\${_gate_verdicts[$_gate_i]:-}"
+            if [ -n "$_gate_v" ]; then
+              _gate_out+=("$(printf '%s\\t%s' "\${_gate_lines[$_gate_i]}" "$_gate_v")")
+            else
+              _gate_out+=("\${_gate_lines[$_gate_i]}")
+            fi
+          done
+
           # 화면이 읽을 사실 한 덩이 — 첫 줄 머리(ISO 8601 + 오프셋 공백 받는 트리 절대경로),
-          # 둘째 줄부터 git status --porcelain -uno의 그 줄 그대로(상한 없음)
+          # 둘째 줄부터 <git status --porcelain -uno 줄><탭><잔해|사람편집>(판정 없으면 탭 없이
+          # 종전 모양, 상한 없음)
           _gate_ts=$(date +%Y-%m-%dT%H:%M:%S%z); _gate_ts="\${_gate_ts:0:22}:\${_gate_ts:22}"
-          { printf '%s %s\\n' "$_gate_ts" "$_gate_main"; printf '%s\\n' "$_gate_status"; } > "$_gate_flag" 2>/dev/null
+          { printf '%s %s\\n' "$_gate_ts" "$_gate_main"; printf '%s\\n' "\${_gate_out[@]}"; } > "$_gate_flag" 2>/dev/null
         fi
         exit 0
       fi
@@ -2310,6 +2337,7 @@ if [ "\${1:-tick}" = tick ] || [ "\${1:-tick}" = dryrun ]; then
   fi
 fi
 unset _gate_branch _gate_main _gate_current _gate_dir _gate_flag _gate_status _gate_dirty _gate_ts _gate_root
+unset _gate_lines _gate_l _gate_only_paths _gate_push_sh _gate_verdicts _gate_v _gate_out _gate_i
 `;
 
 /** `<통합 브랜치>` 하나만 채운다 — `fillPlaceholders`(scaffold.ts)와 같은 치환 방식이지만 이
