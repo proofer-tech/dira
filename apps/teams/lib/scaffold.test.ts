@@ -13,7 +13,7 @@ import {
   preflight,
   scaffold,
 } from "./scaffold.ts";
-import { cronLine, parseContextBlock } from "./workers.ts";
+import { cronLine, dispatchGateSourceLine, parseContextBlock, selfHealSourceLine } from "./workers.ts";
 
 /** §0-3 스캐폴딩 집합. **이 목록이 계약이다** — 여기 없는 파일을 쓰면 실패한다. */
 const SET = [
@@ -132,9 +132,11 @@ test("scaffold — §0-3 집합 그대로, 두 번째는 전부 skipped", async 
   // 워커에 정해지는 경로는 스캐폴딩이 돌려준 root 기준이다(= realpath, 751e3004).
   const heal = path.join(first.root, "self-heal.sh");
   execFileSync("bash", ["-n", heal]);
-  const healLine = `. "${heal}" "${path.join(repo.path, "tick.sh")}"`;
+  // `[ -f ] &&`로 감싼다(§4-16 개정 1 결정 6) — 사이드카는 선택 항목이라 없는 큐에서 이 줄이
+  // `No such file`을 쌓는 것이 계약인 적이 없다.
+  const healLine = selfHealSourceLine(first.root, repo.path);
   const lines = sh.split("\n");
-  const at = lines.findIndex((l) => l.startsWith(healLine));
+  const at = lines.findIndex((l) => l === healLine);
   assert.ok(at >= 0, `자가 정리 줄이 없다: ${sh.slice(-300)}`);
   assert.equal(lines[at + 1], `. "${path.join(repo.path, "tick.sh")}"`);
 
@@ -145,14 +147,12 @@ test("scaffold — §0-3 집합 그대로, 두 번째는 전부 skipped", async 
   const gateText = await readFile(gate, "utf8");
   assert.doesNotMatch(gateText, /<통합 브랜치>/);
   assert.doesNotMatch(gateText, /TICKET_CWD가 비어 있다/);
-  const gateLine = `. "${gate}"`;
-  const gateAt = lines.findIndex((l) => l.startsWith(gateLine));
+  const gateLine = dispatchGateSourceLine(first.root);
+  const gateAt = lines.findIndex((l) => l === gateLine);
   assert.ok(gateAt >= 0, `통합 게이트 줄이 없다: ${sh.slice(-300)}`);
-  assert.ok(
-    lines[gateAt + 1].startsWith(healLine),
-    `통합 게이트 줄은 자가 정리 줄 바로 위여야 한다: ${sh.slice(-300)}`,
-  );
-  assert.equal(sh.split("dispatch-gate").length - 1, 1);
+  assert.equal(lines[gateAt + 1], healLine, `통합 게이트 줄은 자가 정리 줄 바로 위여야 한다: ${sh.slice(-300)}`);
+  // 감싼 줄은 경로를 두 번 담는다(`[ -f <p> ] && . <p>`) — 줄 자신이 한 번만 있는지로 잰다
+  assert.equal(sh.split(gateLine).length - 1, 1);
 
   // ⑨ 통합 push 헬퍼(§통합 브랜치가 설정이 된다 결정 4-5) — 브랜치가 치환되고, `master`가 브랜치로
   // 쓰인 자리가 0줄이며, 실행 모드는 워커와 같다.

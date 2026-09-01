@@ -558,15 +558,19 @@ TICKET_CONTEXT=(
 `;
 
 /** 워커 파일이 공통 파일을 `.` 하는 한 줄 (§4-1). 블록 **아래**에 들어간다 —
- *  위에 두면 워커의 `TICKET_CONTEXT=(`가 공통을 덮어쓴다(`=`는 대입이다). */
+ *  위에 두면 워커의 `TICKET_CONTEXT=(`가 공통을 덮어쓴다(`=`는 대입이다).
+ *  `[ -f ] &&`로 감싼다(§4-16 개정 1 결정 6) — 사이드카는 선택 항목이라, 없는 큐에서 이 줄이
+ *  매 tick `No such file` 하나를 stderr에 쌓는 것이 계약인 적이 없다. */
 export function commonSourceLine(root: string): string {
-  return `. ${dq(path.join(root, COMMON_FILE))}   # 공통 컨텍스트를 최상단에 끼운다`;
+  const p = dq(path.join(root, COMMON_FILE));
+  return `[ -f ${p} ] && . ${p}   # 공통 컨텍스트를 최상단에 끼운다`;
 }
 
 /** ponytail: `context.sh`를 `.` 하는 줄이면 무엇이든 있는 것으로 본다(경로 비교를 안 한다).
  *  다른 큐의 `context.sh`를 가리키는 줄까지 통과시키는 것이 천장이다 — 그런 워커가 생기면
- *  경로까지 비교한다(그때는 NFC 정규화와 `$HOME` 전개가 같이 필요하다). */
-const commonSourceRe = /^[ \t]*(?:\.|source)[ \t]+[^\n]*context\.sh/m;
+ *  경로까지 비교한다(그때는 NFC 정규화와 `$HOME` 전개가 같이 필요하다).
+ *  `[ -f ... ] &&` 접두는 있어도 없어도 매치한다 — 감싼 줄도 안 감싼 옛 줄도 같은 판정을 받는다. */
+const commonSourceRe = /^[ \t]*(?:\[ -f [^\n]*?\] && )?(?:\.|source)[ \t]+[^\n]*context\.sh/m;
 
 /** 공통 항목의 `$TICKET_CWD`를 펼 후보들. **공통을 실제로 `source`하는 워커의 값만** 본다 —
  *  못 받는 워커의 cwd로 판정하면 카드가 남의 사실을 알려 준다. 하나도 없으면 tick.sh 39행 기본값.
@@ -2002,15 +2006,19 @@ export const tickSourceLine = (repo: string) => `. ${dq(path.join(repo, "tick.sh
 export const SELF_HEAL_FILE = "self-heal.sh";
 
 /** 워커 파일이 자가 정리를 부르는 한 줄 (§4-4). `. tick.sh` **바로 위**에 들어간다 —
- *  아래에 두면 엔진이 없을 때 이 줄에 닿기 전에 워커가 죽는다. */
+ *  아래에 두면 엔진이 없을 때 이 줄에 닿기 전에 워커가 죽는다.
+ *  `[ -f ] &&`로 감싼다(§4-16 개정 1 결정 6) — 사이드카는 선택 항목이라, 없는 큐에서 이 줄이
+ *  매 tick `No such file` 하나를 stderr에 쌓는 것이 계약인 적이 없다. */
 export function selfHealSourceLine(root: string, repo: string): string {
-  return `. ${dq(path.join(root, SELF_HEAL_FILE))} ${dq(path.join(repo, "tick.sh"))}   # 제거 자기치유(§4-4)`;
+  const p = dq(path.join(root, SELF_HEAL_FILE));
+  return `[ -f ${p} ] && . ${p} ${dq(path.join(repo, "tick.sh"))}   # 제거 자기치유(§4-4)`;
 }
 
 /** ponytail: `self-heal.sh`를 `.` 하는 줄이면 무엇이든 있는 것으로 본다(경로 비교를 안 한다) —
  *  `commonSourceRe`와 같은 천장이고 같은 이유다(경로 비교엔 NFC 정규화 + `$HOME` 전개가 같이
- *  필요하다). 다른 큐의 `self-heal.sh`를 가리키는 줄까지 통과시키는 것이 대가다. */
-const selfHealSourceRe = /^[ \t]*(?:\.|source)[ \t]+[^\n]*self-heal\.sh/m;
+ *  필요하다). 다른 큐의 `self-heal.sh`를 가리키는 줄까지 통과시키는 것이 대가다.
+ *  `[ -f ... ] &&` 접두는 있어도 없어도 매치한다 — 감싼 줄도 안 감싼 옛 줄도 같은 판정을 받는다. */
+const selfHealSourceRe = /^[ \t]*(?:\[ -f [^\n]*?\] && )?(?:\.|source)[ \t]+[^\n]*self-heal\.sh/m;
 
 /** `<루트>/self-heal.sh`의 전문. GUI가 만들고 관리한다(선례: `context.sh`·`dispatch-gate.sh`).
  *  **엔진이 아니다** — `tick.sh`·`tickets.py`는 이 기능으로 한 줄도 안 바뀐다(불변식 1).
@@ -2360,14 +2368,18 @@ export function pushSh(text: string, branch: string): string {
   return text.replaceAll("<통합 브랜치>", () => branch);
 }
 
-/** 워커 파일이 통합 게이트를 부르는 한 줄 (§4-14). `. tick.sh` **바로 위**에 들어간다. */
+/** 워커 파일이 통합 게이트를 부르는 한 줄 (§4-14). `. tick.sh` **바로 위**에 들어간다.
+ *  `[ -f ] &&`로 감싼다(§4-16 개정 1 결정 6) — 사이드카는 선택 항목이라, 없는 큐에서 이 줄이
+ *  매 tick `No such file` 하나를 stderr에 쌓는 것이 계약인 적이 없다. */
 export function dispatchGateSourceLine(root: string): string {
-  return `. ${dq(path.join(root, DISPATCH_GATE_FILE))}   # 통합 게이트(§4-14)`;
+  const p = dq(path.join(root, DISPATCH_GATE_FILE));
+  return `[ -f ${p} ] && . ${p}   # 통합 게이트(§4-14)`;
 }
 
 /** ponytail: `dispatch-gate.sh`를 `.` 하는 줄이면 무엇이든 있는 것으로 본다(경로 비교를 안
- *  한다) — `selfHealSourceRe`와 같은 천장이고 같은 이유다. */
-const dispatchGateSourceRe = /^[ \t]*(?:\.|source)[ \t]+[^\n]*dispatch-gate\.sh/m;
+ *  한다) — `selfHealSourceRe`와 같은 천장이고 같은 이유다.
+ *  `[ -f ... ] &&` 접두는 있어도 없어도 매치한다 — 감싼 줄도 안 감싼 옛 줄도 같은 판정을 받는다. */
+const dispatchGateSourceRe = /^[ \t]*(?:\[ -f [^\n]*?\] && )?(?:\.|source)[ \t]+[^\n]*dispatch-gate\.sh/m;
 
 /** 템플릿 셋째 줄 — 관리 표식(§4-14 §소급). 새로 만들지 않는다, 이미 있는 문장을 그대로 쓴다. */
 const DISPATCH_GATE_MARKER = "GUI가 만들고 관리한다";
@@ -2838,6 +2850,22 @@ async function workerFile(
   return resolveWithin(path.join(root, "workers"), `${name}.sh`);
 }
 
+/** 사이드카 source 줄(`context.sh` · `self-heal.sh` · `dispatch-gate.sh`)을 감싸지 않은 옛
+ *  모양이면 `[ -f <경로> ] && `를 접두한다(§4-16 개정 1 결정 6). 이미 감싼 줄은 `.`/`source`로
+ *  시작하지 않아 다시 안 걸린다 — 멱등이다.
+ *
+ *  `createWorker`가 기존 템플릿을 그대로 복사하는 갈래(`existing.length > 0`)에 필요하다 —
+ *  그 템플릿이 감싸기 전에 태어났으면(옛 프로젝트) 복사한 텍스트에 무조건 source 줄이 그대로
+ *  실려 새 워커(그리고 `pool.ts`의 shim)가 같은 구멍을 물려받는다. **원본 템플릿 파일은 안
+ *  건드린다** — 지금 만드는 새 파일의 텍스트만 감싼다. */
+function guardSidecarLines(text: string): string {
+  const bare =
+    /^([ \t]*)(\.|source)([ \t]+)("(?:[^"\\]|\\.)*?(?:context|self-heal|dispatch-gate)\.sh")/gm;
+  return text.replace(bare, (_m, indent: string, cmd: string, sp: string, quoted: string) =>
+    `${indent}[ -f ${quoted} ] && ${cmd}${sp}${quoted}`,
+  );
+}
+
 /** 기존 워커를 템플릿으로 새 워커를 만든다 (DESIGN.md §4 생성).
  *
  *  템플릿이 필요한 이유는 마지막 `. <엔진레포>/tick.sh` 한 줄이다 — 엔진 코드가 어디 있는지는
@@ -2893,7 +2921,7 @@ export async function createWorker(
     if (branch !== null) await putShared(DISPATCH_GATE_FILE, dispatchGateSh(branch));
   } else {
     template = existing[0];
-    text = await readFile(path.join(dir, template), "utf8");
+    text = guardSidecarLines(await readFile(path.join(dir, template), "utf8"));
   }
   const file = await workerFile(root, name, locale);
   // 값 검증(모르는 엔진 · 셸 메타문자가 든 모델)은 `engineArgv`가 한다 — 이 경로도 신뢰

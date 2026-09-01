@@ -1762,7 +1762,7 @@ test("createWorker — TICKET_CWD를 템플릿에서 물려받지 않는다 (w4�
   );
 });
 
-test("createWorker — TICKET_CWD·TICKET_ENGINE 말고는 한 줄도 안 바뀐다 (게이트·source·컨텍스트가 그대로다)", async () => {
+test("createWorker — TICKET_CWD·TICKET_ENGINE·사이드카 감싸기 말고는 한 줄도 안 바뀐다 (컨텍스트는 그대로다)", async () => {
   const root = makeRoot({ "w1.sh": WT_SH });
   const { path: file } = await createWorker(root, "w4");
   const before = WT_SH.split("\n");
@@ -1773,8 +1773,48 @@ test("createWorker — TICKET_CWD·TICKET_ENGINE 말고는 한 줄도 안 바뀐
   assert.strictEqual(after[at + 1], '. "$HOME/Projects/dira/tick.sh"');
   const rest = after.filter((_, i) => i !== at);
   const diff = before.map((l, i) => [i, l, rest[i]] as const).filter(([, l, r]) => l !== r);
-  assert.strictEqual(diff.length, 1, `바뀐 줄: ${JSON.stringify(diff)}`);
+  // 둘만 바뀐다 — TICKET_CWD 재작성과, 옛 템플릿의 감싸지 않은 게이트 줄이 이 새 파일에서는
+  // 감싸진 모양으로 나가는 것(§4-16 개정 1 결정 6). **템플릿 파일 자신은 안 건드린다** —
+  // `WT_SH` 원본은 그대로 감싸지 않은 채고, 이 새 워커의 텍스트만 감싼다.
+  assert.strictEqual(diff.length, 2, `바뀐 줄: ${JSON.stringify(diff)}`);
   assert.strictEqual(diff[0][1].startsWith("TICKET_CWD="), true);
+  assert.strictEqual(
+    diff[1][2],
+    '[ -f "$HOME/Projects/dira/.dira/dispatch-gate.sh" ] && . "$HOME/Projects/dira/.dira/dispatch-gate.sh"',
+  );
+});
+
+test("createWorker — 사이드카가 없는 큐에서 만든 워커는 그 경로를 조건 없이 source하지 않는다 (§4-16 개정 1 결정 6)", async () => {
+  // pofol 실측: context.sh가 없는 큐에서 워커(shim 포함)를 만들면 그 줄이 매 tick
+  // `No such file`을 stderr에 남겼다 — 템플릿엔 감싸지 않은 옛 공통·게이트 줄이 있고, 그
+  // 사이드카 둘 다 실제로는 없는 큐에서 검증한다(`createWorker`가 기존 템플릿을 복사하는 갈래).
+  const bare = `#!/bin/bash
+TICKET_CWD="$HOME/wt/w1"
+TICKET_CONTEXT=()
+. "$HOME/nonexistent-sidecar/context.sh"
+
+. "$HOME/nonexistent-sidecar/dispatch-gate.sh"
+
+. "$HOME/Projects/dira/tick.sh"
+`;
+  const root = makeRoot({ "w1.sh": bare });
+  assert.strictEqual(existsSync(path.join(homedir(), "nonexistent-sidecar")), false);
+
+  const made = await createWorker(root, "w2");
+  const text = readFileSync(made.path, "utf8");
+  assert.ok(
+    text.includes(
+      '[ -f "$HOME/nonexistent-sidecar/context.sh" ] && . "$HOME/nonexistent-sidecar/context.sh"',
+    ),
+    text,
+  );
+  assert.ok(
+    text.includes(
+      '[ -f "$HOME/nonexistent-sidecar/dispatch-gate.sh" ] && . "$HOME/nonexistent-sidecar/dispatch-gate.sh"',
+    ),
+    text,
+  );
+  execFileSync("bash", ["-n", made.path]); // 문법도 유효하다 — 감싼 줄이 실제로 bash가 읽는다
 });
 
 test("createWorker — 엔진은 고른 값이다. 템플릿에서 딸려 오지 않는다 (§4-3 생성 폼)", async () => {
@@ -2163,14 +2203,16 @@ test("readCommonContext — 공통 항목을 한 번도 넣은 적 없는 큐에
   // "공통 적용"이 이 고침 이전에(옛 코드로) 눌린 큐를 흉내낸다 — 줄은 있는데 writeCommonContext는
   // 한 번도 안 불렸다(파일이 없다) — 요구 본문이 실측한 그 모양(pofol 큐)이다. 지금 코드의
   // `applyCommonSource`는 그 자리에서 파일도 같이 만드니(전진 수), 옛 상태는 파일을 직접 심어야
-  // 재현된다.
+  // 재현된다. **줄은 감싸지 않은 옛 모양이다** — §4-16 개정 1 결정 6 이전에 심긴 줄이라
+  // `commonSourceLine`(지금은 `[ -f ] &&`로 감싼다)이 아니라 그 옛 모양을 그대로 적는다.
   const root = makeRoot({});
+  const bareCommonLine = `. "${path.join(root, "context.sh")}"   # 공통 컨텍스트를 최상단에 끼운다`;
   const workerFile = path.join(root, "workers", "w1.sh");
   writeFileSync(
     workerFile,
     CTX_SH.replace(
       'TICKET_CONTEXT=(\n  "$TICKET_CWD/docs/DESIGN.md|GUI 제품 스펙"\n  "$TICKET_CWD/dira/AGENTS.md|코드 규약"\n)\n',
-      (m) => m + "\n" + commonSourceLine(root) + "\n",
+      (m) => m + "\n" + bareCommonLine + "\n",
     ),
   );
   chmodSync(workerFile, 0o755);
@@ -2312,8 +2354,9 @@ test("applyCommonSource — 삽입 위치는 닫는 `)` 다음 줄, 두 번째�
 
   assert.strictEqual(await applyCommonSource(root, "w1"), true);
   const text = readFileSync(file, "utf8");
-  // `)` 바로 다음 줄이다 — 위에 들어가면 워커의 `TICKET_CONTEXT=(`가 공통을 덮어쓴다
-  assert.match(text, /\)\n\. .+\/context\.sh"   # 공통 컨텍스트를 최상단에 끼운다\n\n\. "\$HOME/);
+  // `)` 바로 다음 줄이다 — 위에 들어가면 워커의 `TICKET_CONTEXT=(`가 공통을 덮어쓴다.
+  // `[ -f ] &&`로 감싼다(§4-16 개정 1 결정 6).
+  assert.match(text, /\)\n\[ -f .+\/context\.sh" \] && \. .+\/context\.sh"   # 공통 컨텍스트를 최상단에 끼운다\n\n\. "\$HOME/);
   assert.strictEqual(text.includes(commonSourceLine(root)), true);
   // 블록과 나머지 줄은 그대로다
   assert.strictEqual(text.replace(commonSourceLine(root) + "\n", ""), CTX_SH);
@@ -2379,7 +2422,8 @@ test("applySelfHeal — 픽스처 큐 왕복 1회: 경고 뜸 → 적용 → 경
   // ⑤ 두 번째는 no-op — 줄도 파일도 두 벌이 안 된다
   assert.strictEqual(await applySelfHeal(root, "w1"), false);
   assert.strictEqual(readFileSync(file, "utf8"), text);
-  assert.strictEqual(text.split("self-heal.sh").length - 1, 1);
+  // 감싼 줄은 경로를 두 번 담는다(`[ -f <p> ] && . <p> ...`) — 줄 자신이 한 번만 있는지로 잰다
+  assert.strictEqual(text.split(line).length - 1, 1);
   writeFileSync(heal, "손으로 고친 자국\n"); // 있는 파일은 안 덮는다
   assert.strictEqual(await applySelfHeal(root, "w1"), false);
   assert.strictEqual(readFileSync(heal, "utf8"), "손으로 고친 자국\n");
@@ -2433,7 +2477,8 @@ test("applyDispatchGate — 픽스처 큐 왕복 1회: 브랜치는 AGENTS.md에
   // ⑤ 두 번째는 no-op — 줄도 파일도 두 벌이 안 된다. 있는 파일은 안 덮는다
   assert.strictEqual(await applyDispatchGate(root, "w1"), false);
   assert.strictEqual(readFileSync(file, "utf8"), text);
-  assert.strictEqual(text.split("dispatch-gate.sh").length - 1, 1);
+  // 감싼 줄은 경로를 두 번 담는다(`[ -f <p> ] && . <p>`) — 줄 자신이 한 번만 있는지로 잰다
+  assert.strictEqual(text.split(line).length - 1, 1);
   writeFileSync(gate, "손으로 고친 자국\n");
   assert.strictEqual(await applyDispatchGate(root, "w1"), false);
   assert.strictEqual(readFileSync(gate, "utf8"), "손으로 고친 자국\n");
