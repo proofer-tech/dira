@@ -883,8 +883,6 @@ function installAppMenu() {
       label: app.name,
       submenu: [
         { label: `About ${app.name}`, click: showAbout },
-        // U1 — `About dira` **바로 아래**가 맥 관례다 (R5).
-        { label: "업데이트 확인…", click: () => checkForUpdate(true) },
         { type: "separator" },
         { role: "services" },
         { type: "separator" },
@@ -899,10 +897,19 @@ function installAppMenu() {
     { role: "editMenu" },
     { role: "viewMenu" },
     { role: "windowMenu" },
-    // §0-12 — `Window` 다음이고 **항목은 하나다**. `About dira`는 위 앱 메뉴 첫 항목 그대로다
-    // (여기로 안 옮긴다). 메뉴 이름이 영어인 것은 옆의 role 라벨이 영어로 적혀 있어서고,
-    // 우리가 만든 **항목**은 앱 안의 다른 항목들처럼 한글이다(트레이 `열기`·`종료`와 같은 벌).
-    { label: "Help", submenu: [{ label: "의견 보내기", click: openFeedback }] },
+    // §0-12 — `Window` 다음이다. `About dira`는 위 앱 메뉴 첫 항목 그대로다(여기로 안
+    // 옮긴다). 메뉴 이름이 영어인 것은 옆의 role 라벨이 영어로 적혀 있어서고, 우리가 만든
+    // **항목**은 앱 안의 다른 항목들처럼 한글이다(트레이 `열기`·`종료`와 같은 벌).
+    // U1 — `업데이트 확인...`이 위, `의견 보내기`가 아래다(R5, §0-12, 요구 `4c882263`).
+    // 앱 안에서 끝나는 항목을 위에, 밖으로 나가는 항목을 아래에 둔다. 구분선은 안 넣는다 -
+    // 항목 둘에 줄 하나는 과하다.
+    {
+      label: "Help",
+      submenu: [
+        { label: "업데이트 확인…", click: () => checkForUpdate(true) },
+        { label: "의견 보내기", click: openFeedback },
+      ],
+    },
   ]);
 
   // N5 — `Edit`은 **매크로 그대로 두고 빌드된 서브메뉴에 항목만 붙인다.** 위 주석의 그 자리다:
