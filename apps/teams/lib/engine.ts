@@ -33,12 +33,13 @@ export type Run = { ok: boolean; output: string; code?: number };
  *  워커 스크립트 경로가 프로젝트마다 다른 건 제약 2가 요구하는 설계다. */
 /** `runWorker`·`discardGateDirty`가 같이 쓰는 실행 한 벌 — 성공/실패 모양(`Run`)을 여기 한
  *  곳에서만 만든다. */
-async function execScript(cmd: string, args: string[]): Promise<Run> {
+async function execScript(cmd: string, args: string[], cwd?: string): Promise<Run> {
   try {
     // ponytail: reap은 python 스캔 한 번이라 초 단위로 끝난다. 60초면 매달린 걸 알아채기 충분하다.
     const { stdout, stderr } = await promisify(execFile)(cmd, args, {
       timeout: 60_000,
       maxBuffer: 4 << 20,
+      ...(cwd ? { cwd } : {}),
     });
     return { ok: true, output: (stdout + stderr).trim(), code: 0 };
   } catch (e) {
@@ -141,9 +142,16 @@ export async function preempt(
  *  판정을 여기서 다시 안 한다 — `push.sh discard`가 락을 쥐고 추적 파일 전부를 다시 재서,
  *  전부 잔해일 때만 버리고 하나라도 사람 편집이면 0이 아닌 코드로 끝난다(§판정을 두 벌로
  *  만들지 않는다). `bash`를 명시하는 이유는 `push.sh`의 실행 비트가 게이트 결정 3의 존재
- *  검사(`hasPushSh`)와 별개라서다 — 스캐폴딩이 0o755로 넣지만 손으로 고친 큐는 보장이 없다. */
+ *  검사(`hasPushSh`)와 별개라서다 — 스캐폴딩이 0o755로 넣지만 손으로 고친 큐는 보장이 없다.
+ *
+ *  `push.sh`의 받는 트리 계산(`_recv`)은 **호출 시점 프로세스 cwd 기준**이지 인자 기준이 아니다
+ *  (`push.sh:26-34`, `git rev-parse --git-common-dir`에 `-C` 없음). `cwd`를 안 넘기면 Next.js
+ *  서버 프로세스 자신의 cwd가 속한 레포에서 discard가 돈다 — 등록된 프로젝트와 무관하게(P354-5
+ *  QA). 다른 모든 호출자(`dispatch-gate.sh:173`, `resolveConfig`의 `cwd` 기본값)와 같이 받는
+ *  트리로 먼저 옮긴다 — `root`는 언제나 `<받는 트리>/.dira`이므로(`projects.ts:32`)
+ *  `path.dirname(root)`가 그 받는 트리다. */
 export async function discardGateDirty(root: string): Promise<Run> {
-  return execScript("bash", [path.join(root, "push.sh"), "discard"]);
+  return execScript("bash", [path.join(root, "push.sh"), "discard"], path.dirname(root));
 }
 
 /** 해시 → 실제 티켓 경로. 없으면 null(404의 근거).

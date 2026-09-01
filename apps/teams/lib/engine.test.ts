@@ -10,10 +10,11 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { discardGateDirty, findTicket, preempt, runWorker, unassign } from "./engine.ts";
 import { listTickets, type Suffixes } from "./queue.ts";
 import { commonSourceLine } from "./workers.ts";
+import { scaffold } from "./scaffold.ts";
 
 const DEFAULT: Suffixes = { inProgress: ".wip", done: ".done" };
 const KO: Suffixes = { inProgress: "-진행중", done: "-완료" };
@@ -211,6 +212,57 @@ test("discardGateDirty — push.sh가 0이 아닌 코드로 끝나면 실패로 
   assert.strictEqual(run.ok, false);
   assert.strictEqual(run.code, 1);
   assert.match(run.output, /사람 편집이 섞여 있습니다/);
+});
+
+// P354-5 QA — 서버 프로세스의 cwd가 등록된 프로젝트와 무관한 레포에 있어도 `root`가 가리키는
+// 받는 트리에서 discard가 돌아야 한다(가짜 스텁이 아니라 진짜 `push.sh`를 문다 — 스텁은 cwd
+// 불일치를 못 잡는다는 것이 이 결함의 근본 원인이었다).
+test("discardGateDirty — 서버 cwd가 딴 레포여도 `root`가 가리키는 받는 트리에서 discard가 돈다", async () => {
+  const git = (dir: string, ...args: string[]) =>
+    execFileSync("git", ["-C", dir, ...args], { encoding: "utf8" });
+  const initRepo = (dir: string, branch: string) => {
+    git(dir, "init", "-q", "-b", branch);
+    git(dir, "config", "user.email", "t@example.com");
+    git(dir, "config", "user.name", "t");
+  };
+
+  const project = mkdtempSync(path.join(tmpdir(), "fst-discard-recv-"));
+  const other = mkdtempSync(path.join(tmpdir(), "fst-discard-other-"));
+  process.on("exit", () => {
+    rmSync(project, { recursive: true, force: true });
+    rmSync(other, { recursive: true, force: true });
+  });
+
+  initRepo(project, "main");
+  writeFileSync(path.join(project, "foo.txt"), "A\n");
+  git(project, "add", "-A");
+  git(project, "commit", "-qm", "c1"); // foo.txt=A가 역사에 있다
+  writeFileSync(path.join(project, "foo.txt"), "B\n");
+  git(project, "add", "-A");
+  git(project, "commit", "-qm", "c2"); // HEAD는 B
+  writeFileSync(path.join(project, "foo.txt"), "A\n"); // 워킹트리만 도로 A — 잔해(과거 커밋과 blob 일치)
+
+  initRepo(other, "main"); // 무관한 레포. 딴 방식으로 더럽혀 discard가 안 건드렸는지 잰다
+  writeFileSync(path.join(other, "bar.txt"), "무관\n");
+  git(other, "add", "-A");
+  git(other, "commit", "-qm", "c1");
+  writeFileSync(path.join(other, "bar.txt"), "더러움\n");
+
+  const made = await scaffold(project, { branch: "main" });
+
+  const cwdBefore = process.cwd();
+  process.chdir(other); // 서버 프로세스가 등록된 프로젝트와 무관한 레포에 떠 있는 상황을 흉내
+  let run: Awaited<ReturnType<typeof discardGateDirty>>;
+  try {
+    run = await discardGateDirty(made.root);
+  } finally {
+    process.chdir(cwdBefore);
+  }
+
+  assert.strictEqual(run.ok, true, run.output);
+  assert.strictEqual(git(project, "status", "--porcelain", "-uno").trim(), ""); // project 쪽 잔해가 버려졌다
+  assert.strictEqual(git(project, "show", "HEAD:foo.txt"), "B\n"); // 되돌아간 게 아니라 버려진 것
+  assert.strictEqual(readFileSync(path.join(other, "bar.txt"), "utf8"), "더러움\n"); // other는 안 건드렸다
 });
 
 test("unassign — 산 세션은 코드 3으로 거부하고 --force면 끊고 푼다", async () => {
