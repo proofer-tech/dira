@@ -104,6 +104,29 @@ export async function unassign(
   return { ...(await runWorker(root, name, args, locale)), worker: name };
 }
 
+/** `workers/<w>.sh preempt <해시> [--dryrun]` — 선점(DESIGN.md §1-5 갈래 C, 엔진 계약 `3acc1a56`).
+ *
+ *  워커 이름을 인자로 안 받는 이유는 `unassign`과 같다 — 이 명령은 큐 전체에서 피해자를 고르므로
+ *  같은 루트의 어느 워커로 불러도 같다. `--dryrun`은 피해자만 한 줄로 답하고 아무것도 안 끊는다 —
+ *  확인 다이얼로그가 그 줄로 문장을 만든다(화면은 이 문구를 파싱하지 않고 그대로 보여준다). */
+export async function preempt(
+  root: string,
+  hash: string,
+  dryrun: boolean,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<UnassignRun> {
+  if (!isHash(hash)) {
+    return { ok: false, output: `${t(locale, "engine.invalidHashPrefix")} ${hash}`, worker: null };
+  }
+  const workers = await listWorkers(root);
+  if (workers.length === 0) {
+    return { ok: false, output: t(locale, "engine.noWorkerToPreempt"), worker: null };
+  }
+  const name = workers[0].name;
+  const args = dryrun ? ["preempt", hash, "--dryrun"] : ["preempt", hash];
+  return { ...(await runWorker(root, name, args, locale)), worker: name };
+}
+
 /** 해시 → 실제 티켓 경로. 없으면 null(404의 근거).
  *
  *  **경로를 조립하지 않는다.** 형식 검증을 통과한 해시를 큐 스캔(`findPath`)에 물어 실제 파일을

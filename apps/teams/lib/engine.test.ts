@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
-import { findTicket, runWorker, unassign } from "./engine.ts";
+import { findTicket, preempt, runWorker, unassign } from "./engine.ts";
 import { listTickets, type Suffixes } from "./queue.ts";
 import { commonSourceLine } from "./workers.ts";
 
@@ -130,6 +130,48 @@ test("unassign — 워커 0개면 부를 스크립트가 없다(화면은 이 �
   assert.match(run.output, /워커가 없습니다/);
   // 형식 밖 해시는 스크립트를 부르지도 않는다
   assert.strictEqual((await unassign(scratch(["w1"]), "../../x")).ok, false);
+});
+
+// ── 선점 ───────────────────────────────────────────────────────────────────
+// `preempt <해시> [--dryrun]`은 엔진 계약(`3acc1a56`)이 아직 안 들어와 있다(DESIGN.md §1-5
+// 갈래 C, 이 티켓의 착수 근거) — 그래서 `unassign`처럼 real tick.sh를 물지 않고 스텁 워커
+// 스크립트로 **인자 전달과 워커 선택**만 고정한다. 판정 자체(피해자 셋)는 엔진 쪽 테스트다.
+
+function preemptStub(r: string, name: string, out: string) {
+  writeFileSync(
+    path.join(r, "workers", `${name}.sh`),
+    `#!/bin/sh\necho "$@" >> "$(dirname "$0")/../ran.txt"\nprintf '%s' ${JSON.stringify(out)}\n`,
+    { mode: 0o755 },
+  );
+}
+
+test("preempt — dryrun이면 `preempt <해시> --dryrun`을, 아니면 `preempt <해시>`를 부른다", async () => {
+  const r = scratch([]);
+  preemptStub(r, "w1", "victim1234 - 제목 - w1");
+
+  const dry = await preempt(r, "abcd1234", true);
+  assert.strictEqual(dry.ok, true, dry.output);
+  assert.strictEqual(dry.worker, "w1");
+  assert.strictEqual(dry.output, "victim1234 - 제목 - w1");
+  assert.strictEqual(readFileSync(path.join(r, "ran.txt"), "utf8").trim(), "preempt abcd1234 --dryrun");
+
+  rmSync(path.join(r, "ran.txt"));
+  const real = await preempt(r, "abcd1234", false);
+  assert.strictEqual(real.ok, true, real.output);
+  assert.strictEqual(readFileSync(path.join(r, "ran.txt"), "utf8").trim(), "preempt abcd1234");
+});
+
+test("preempt — 워커 0개면 부를 스크립트가 없고, 형식 밖 해시는 스크립트를 부르지도 않는다", async () => {
+  const r = scratch([]);
+  const run = await preempt(r, "abcd1234", true);
+  assert.strictEqual(run.ok, false);
+  assert.strictEqual(run.worker, null);
+  assert.match(run.output, /워커가 없습니다/);
+
+  const r2 = scratch(["w1"]);
+  preemptStub(r2, "w1", "안 불려야 한다");
+  assert.strictEqual((await preempt(r2, "../../x", true)).ok, false);
+  assert.strictEqual(existsSync(path.join(r2, "ran.txt")), false);
 });
 
 /** §2-5 — 산 세션은 종료 코드 `3`으로 거부되고, `--force`면 그 세션을 끊고 풀린다.

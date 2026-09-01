@@ -18,9 +18,11 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { track } from "@/lib/analytics";
 import { verifyAttachments, withAttachments } from "@/lib/attachments";
+import { dispatchToWip, type DispatchToWipResult } from "@/lib/dispatch";
+import { findTicket } from "@/lib/engine";
 import { kickIdleWorker } from "@/lib/kick";
 import { isHash, parseAssignment } from "@/lib/paths";
-import { PRIORITY_DEFAULT, PRIORITY_MAX, PRIORITY_MIN, reqTitle, stemOf } from "@/lib/queue";
+import { PRIORITY_DEFAULT, PRIORITY_MAX, PRIORITY_MIN, reqTitle, stateOf, stemOf } from "@/lib/queue";
 import { epicTitle } from "@/lib/epics";
 import { t, type Locale } from "@/lib/i18n";
 import { getProject, readLanguage, resolveConfig } from "@/lib/projects";
@@ -209,4 +211,37 @@ export async function createTicket(
   // 발행은 종전대로 상세로 간다: 그쪽은 kind·persona·deps를 직접 고른 운영자의 동작이다.
   if (req) return { ok: true, hash, message };
   redirect(`/p/${projectId}/tickets/${hash}`);
+}
+
+/** 대기 -> 진행중 레인 드롭 (DESIGN.md §1-5 갈래 B·C). **진행중 -> 대기 갈래는 여기 없다** —
+ *  티켓 상세의 `할당 해제`와 같은 액션(`[hash]/actions.ts`의 `unassignTicket`)을 보드 드래그
+ *  배선(`40b435b6`)이 그대로 부른다. 새 판정 자리를 만들지 않는다.
+ *
+ *  **판정은 `lib/dispatch.ts`가 한다**(`sendInterject`와 같은 이유 — 두 곳에서 판정하면 화면이
+ *  거짓말을 한다). 여기서 하는 일은 신뢰 경계 재확인 하나 — 티켓이 지금 이 순간 `open`이 아니면
+ *  거부한다. `완료`·`진행중` 카드는 화면에서 이 과녁이 안 켜지지만(§소스가 과녁을 정한다), 요청은
+ *  손으로도 만들 수 있으므로 클라이언트 제약은 검증이 아니다. */
+export async function dropTicketToWip(
+  projectId: string,
+  hash: string,
+  confirmed = false,
+): Promise<DispatchToWipResult> {
+  try {
+    const locale = await readLanguage();
+    const project = await getProject(projectId);
+    if (!project) throw new Error(`${t(locale, "boardPage.action.unknownProjectPrefix")} ${projectId}`);
+    const config = await resolveConfig(project);
+    const p = await findTicket(project.root, hash, config);
+    if (!p) throw new Error(`${t(locale, "boardPage.action.ticketNotFoundPrefix")} ${hash}`);
+    if (stateOf(path.basename(p), config) !== "open") {
+      throw new Error(t(locale, "boardPage.action.notOpen"));
+    }
+    const stem = stemOf(p, config);
+
+    const r = await dispatchToWip(project.root, stem, confirmed, locale);
+    if (r.ok) revalidatePath(`/p/${projectId}`);
+    return r;
+  } catch (e) {
+    return { ok: false, reason: "other", error: (e as Error).message };
+  }
 }

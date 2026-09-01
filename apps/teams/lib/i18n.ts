@@ -1457,6 +1457,7 @@ export const ko: Record<string, string> = {
   "engine.invalidWorkerNamePrefix": "워커 이름 형식이 아닙니다:",
   "engine.invalidHashPrefix": "해시 형식이 아닙니다:",
   "engine.noWorkerToUnassign": "이 프로젝트에 워커가 없습니다 — 할당 해제를 호출할 스크립트가 없습니다.",
+  "engine.noWorkerToPreempt": "이 프로젝트에 워커가 없습니다 — 선점을 호출할 스크립트가 없습니다.",
   // 워커 설정 다이얼로그 트리거(§4-15 결정 2 - §비주얼 §35 개정 ①, 티켓 ec2791db). 다이얼로그
   // 제목이 같은 낱말을 재사용해 새 문구는 이 하나로 끝난다.
   "workers.settingsDialog.trigger": "워커 설정",
@@ -1933,6 +1934,9 @@ export const ko: Record<string, string> = {
   // 그대로 재사용한다(사이드바·이 문장이 같은 글자여야 한다).
   "boardPage.action.epicAcceptedPrefix": "요구사항이",
   "boardPage.action.epicAcceptedSuffix": "에픽으로 접수되었습니다.",
+  // 레인 드롭(§1-5) — `ticketDetail.ticketNotFoundPrefix`와 같은 문장이다(보드 카드도 같은 조회를 쓴다).
+  "boardPage.action.ticketNotFoundPrefix": "티켓을 찾을 수 없습니다:",
+  "boardPage.action.notOpen": "이미 다른 상태로 옮겨진 티켓입니다.",
 
   // 찾기 바(`find-bar.tsx`, `f3a8794e`) — 보드 화면 전용이 아니라 여러 화면이 무는 공용
   // 컴포넌트라(레이아웃·홈·업데이트 토스트·경로 피커) 화면 접두가 아니라 파일 접두다
@@ -3459,6 +3463,7 @@ export const en: Record<string, string> = {
   "engine.invalidWorkerNamePrefix": "Not a worker name:",
   "engine.invalidHashPrefix": "Not a hash:",
   "engine.noWorkerToUnassign": "This project has no workers — there's no script to call for unassign.",
+  "engine.noWorkerToPreempt": "This project has no workers — there's no script to call for preempt.",
   "workers.settingsDialog.trigger": "Worker settings",
   "workers.pool.sectionTitle": "Borrow common workers",
   "workers.pool.limitLabel": "Limit",
@@ -4094,6 +4099,9 @@ export const en: Record<string, string> = {
   // 열고 접미가 마침표를 찍는다.
   "boardPage.action.epicAcceptedPrefix": "Request received in the",
   "boardPage.action.epicAcceptedSuffix": "epic.",
+  // 레인 드롭(§1-5). ko 초벌 — `288c86b8`이 다듬는다.
+  "boardPage.action.ticketNotFoundPrefix": "Ticket not found:",
+  "boardPage.action.notOpen": "This ticket already moved to another state.",
 
   // 찾기 바(`find-bar.tsx`) — placeholder 하나와 아이콘 버튼 낭독 이름 셋. `Close`는
   // `common.close`와 같은 낱말이다(같은 동작이라 갈리면 안 된다).

@@ -12,7 +12,7 @@
  *  그래서 호출자는 결과를 보지 않고 화면에도 성공·실패를 그리는 자리가 없다. */
 import { spawn } from "node:child_process";
 import path from "node:path";
-import { NAME_RE, resolveWithin } from "./paths.ts";
+import { isHash, NAME_RE, resolveWithin } from "./paths.ts";
 import { listWorkers } from "./workers.ts";
 
 /** 띄운 워커 이름. 안 띄웠으면 null(idle 0개 · 경로 방어 실패 · spawn 실패) — **테스트용 값이고
@@ -30,6 +30,26 @@ export async function kickIdleWorker(root: string): Promise<string | null> {
     if (!idle || !NAME_RE.test(idle.name)) return null;
     const file = await resolveWithin(path.join(root, "workers"), `${idle.name}.sh`);
     spawn(file, [], { detached: true, stdio: "ignore" }).unref();
+    return idle.name;
+  } catch {
+    return null; // 액션은 kick 실패로 실패하지 않는다
+  }
+}
+
+/** 지목 디스패치 (DESIGN.md §1-5 갈래 B). 인자 없는 `tick`은 큐 맨 앞을 집는다 — 사람이 대기
+ *  레인의 특정 카드를 진행중으로 끌어도 큐에 다른 후보가 먼저 있으면 그게 집힌다. 이 함수는
+ *  후보 목록을 그 해시 하나로 좁히는 `tick <해시>`로 띄운다(엔진 계약, `3acc1a56`).
+ *
+ *  고르는 규칙 - 띄우는 방식 - 결과를 안 보는 것 - 던지지 않는 것은 `kickIdleWorker`와 똑같다.
+ *  갈리는 건 인자 하나(`hash`)뿐이라 새 함수로 두되 몸통은 그대로 베낀다 — 조건 하나로 갈래를
+ *  나누면 "인자 없음"과 "해시 지목"이 한 함수 안에서 서로 다른 계약을 진다. */
+export async function kickTicket(root: string, hash: string): Promise<string | null> {
+  try {
+    if (!isHash(hash)) return null;
+    const idle = (await listWorkers(root)).find((w) => w.status === "idle");
+    if (!idle || !NAME_RE.test(idle.name)) return null;
+    const file = await resolveWithin(path.join(root, "workers"), `${idle.name}.sh`);
+    spawn(file, ["tick", hash], { detached: true, stdio: "ignore" }).unref();
     return idle.name;
   } catch {
     return null; // 액션은 kick 실패로 실패하지 않는다

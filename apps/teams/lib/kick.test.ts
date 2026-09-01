@@ -9,7 +9,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 const LOCAL = mkdtempSync(path.join(tmpdir(), "kick-local-"));
 process.env.TICKET_LOCAL = LOCAL;
 
-const { kickIdleWorker } = await import("./kick.ts");
+const { kickIdleWorker, kickTicket } = await import("./kick.ts");
 const { lockPath } = await import("./workers.ts");
 
 const tmps: string[] = [LOCAL];
@@ -93,4 +93,59 @@ test("kickIdleWorker — 워커가 없는 큐에서도 던지지 않는다(액�
   const root = mkdtempSync(path.join(tmpdir(), "kick-root-"));
   tmps.push(root);
   assert.strictEqual(await kickIdleWorker(root), null);
+});
+
+test("kickTicket — idle 워커를 골라 `tick <해시>`로 지목 디스패치한다", async () => {
+  const { root, dir, ran } = fixture();
+  putLock(dir, "w1", process.pid); // running
+  const restore = withFakeCrontab(`* * * * * "${path.join(dir, "w2.sh")}" >> /dev/null 2>&1\n`);
+  try {
+    assert.strictEqual(await kickTicket(root, "abcd1234"), "w2");
+    // 인자 없는 kickIdleWorker의 스텁은 이름만 적지만, 이 스텁은 args도 적는다 — 넘긴 args가
+    // `["tick", hash]`인지는 아래 args 전용 스텁으로 따로 본다(이 스텁은 이름만 검증).
+    assert.strictEqual(await waitFor(ran), "w2");
+  } finally {
+    restore();
+  }
+});
+
+test("kickTicket — 넘기는 args가 정확히 `tick <해시>`다", async () => {
+  const root = mkdtempSync(path.join(tmpdir(), "kick-root-"));
+  tmps.push(root);
+  const dir = path.join(root, "workers");
+  mkdirSync(dir, { recursive: true });
+  const ran = path.join(root, "ran.txt");
+  writeFileSync(path.join(dir, "w1.sh"), `#!/bin/sh\necho "$@" >> ${JSON.stringify(ran)}\n`, {
+    mode: 0o755,
+  });
+  const restore = withFakeCrontab(`* * * * * "${path.join(dir, "w1.sh")}" >> /dev/null 2>&1\n`);
+  try {
+    assert.strictEqual(await kickTicket(root, "abcd1234"), "w1");
+    assert.strictEqual(await waitFor(ran), "tick abcd1234");
+  } finally {
+    restore();
+  }
+});
+
+test("kickTicket — idle이 0개면 아무것도 안 띄운다", async () => {
+  const { root, dir, ran } = fixture();
+  putLock(dir, "w1", process.pid);
+  const restore = withFakeCrontab("");
+  try {
+    assert.strictEqual(await kickTicket(root, "abcd1234"), null);
+    await sleep(300);
+    assert.strictEqual(existsSync(ran), false);
+  } finally {
+    restore();
+  }
+});
+
+test("kickTicket — 경로가 될 수 있는 해시는 워커를 보지도 않는다(신뢰 경계)", async () => {
+  const { root } = fixture();
+  const restore = withFakeCrontab("");
+  try {
+    assert.strictEqual(await kickTicket(root, "../../etc/passwd"), null);
+  } finally {
+    restore();
+  }
 });
