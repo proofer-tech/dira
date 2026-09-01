@@ -81,7 +81,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdir, readdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { findClaude, tokenPath } from "./auth.ts";
+import { execClaude, tokenPath } from "./auth.ts";
 import type { Run } from "./engine.ts";
 import { listEpics, resolveMarkdownRefs } from "./epics.ts";
 import { DEFAULT_LOCALE, t, type Locale } from "./i18n.ts";
@@ -910,8 +910,10 @@ export async function ask(
     };
   }
 
-  // `claude`를 우리가 PATH에서 찾는다 — 셸에 맡기면 손에 남는 게 rc 127뿐이다(§0-4 `bcf66f01`).
-  const bin = findClaude();
+  // `claude`를 우리가 찾는다 — 셸에 맡기면 손에 남는 게 rc 127뿐이다(§0-4 `bcf66f01`).
+  // exec용 판정(`execClaude()`)은 고정 경로 우선이다(§24 §개정 <exec 자리 셋>) — 화면이 보여주는
+  // `findClaude()`와 다른 함수다.
+  const bin = execClaude();
   if (!bin) {
     return {
       ok: false,

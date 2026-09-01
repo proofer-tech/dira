@@ -14,6 +14,7 @@ import updater from "electron-updater";
 import { execFile, execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { accessSync, constants, cpSync, existsSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
+import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { classifyLink } from "./link.ts";
@@ -577,8 +578,19 @@ autoUpdater.on("download-progress", (p) => {
 /** `claude`를 **우리가** PATH에서 찾는다 — 셸에게 맡기면 못 찾았을 때 손에 남는 것이 종료 코드
  *  `127`뿐이고 사람은 그 숫자에서 원인을 못 읽는다. `apps/teams/lib/auth.ts:161`이 §0-4에서
  *  같은 판단을 적어 놨다(**import하지 않는다 — 앱 경계를 넘는다**). `.app`에는 PATH가 아예
- *  없어서 물려받은 값이 아니라 `userPath()`를 본다. */
+ *  없어서 물려받은 값이 아니라 `userPath()`를 본다.
+ *
+ *  exec 대상은 고정 경로가 먼저다(DESIGN.md §24 §개정 <exec 자리 셋> 계약 1 — TCC가 버전
+ *  번호 대신 이 이름 하나로 항목을 모은다). 고정 경로가 없거나 실행 불가면 종전대로 PATH를
+ *  훑는다 — teams 쪽 `execClaude()`와 같은 순서를 이 파일은 앱 경계 때문에 사본으로 든다. */
 function findClaude(): string | null {
+  const fixed = join(process.env.TICKET_LOCAL || join(homedir(), ".config", "dira"), "bin", "dira");
+  try {
+    accessSync(fixed, constants.X_OK);
+    return fixed;
+  } catch {
+    // 없거나 실행 권한이 없다 — PATH 훑기로 떨어진다
+  }
   for (const dir of userPath().split(":")) {
     const p = join(dir, "claude");
     try {

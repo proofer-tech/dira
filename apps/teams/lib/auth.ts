@@ -11,6 +11,7 @@ import { chmod, cp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promise
 import { homedir } from "node:os";
 import path from "node:path";
 import { DEFAULT_LOCALE, t as translate, type Locale } from "./i18n.ts";
+import { localDir } from "./paths.ts";
 import { isMultiTokenAllowed, readMultiplay, registryPath } from "./projects.ts";
 import { ENGINES, type EngineId } from "./workers.ts";
 
@@ -868,10 +869,26 @@ export function findClaude(): string | null {
   return findExecutable(engineBin("claude"));
 }
 
+/** exec 대상 판정 — `findClaude()`와 **다른 뜻**이다(DESIGN.md §24 §개정 <exec 자리 셋>).
+ *  `findClaude()`는 <원본 CLI가 설치돼 있나>를 답해 화면(`readAuth().cli`)에 그대로 뜨고,
+ *  이 함수는 <무엇을 몰 것인가>를 답해 실제 spawn/exec 소비자만 쓴다. 고정 경로
+ *  (`$TICKET_LOCAL/bin/dira`, §24 계약 3의 별도 inode 사본)가 실행 가능하면 그것을, 아니면
+ *  종전대로 PATH의 `claude`로 떨어진다 — TCC가 보는 이름을 하나로 모으는 것이 이 함수의
+ *  존재 이유다. 한 함수에 두 뜻을 담으면 인증 화면이 고정 사본 경로를 설치 경로라고 보여준다. */
+export function execClaude(): string | null {
+  const fixed = path.join(localDir(), "bin", "dira");
+  try {
+    accessSync(fixed, constants.X_OK);
+    return fixed;
+  } catch {
+    return findClaude();
+  }
+}
+
 /** 층 ②를 시작한다. 앞선 시도가 남아 있으면 먼저 죽인다 — pty를 두 번 물 수 없다. */
 export function startSetup(locale: Locale = DEFAULT_LOCALE): SetupState {
   stopSetup();
-  const bin = findClaude();
+  const bin = execClaude();
   // 세션을 만들지 않고 그 자리에서 끝낸다 — 몰 대상이 없다. 다음 행동(층 ③)은 화면이 붙인다
   if (!bin) {
     return {

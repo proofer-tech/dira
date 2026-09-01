@@ -29,6 +29,7 @@ const {
   captureEngineProfile,
   deleteEngineProfile,
   deleteToken,
+  execClaude,
   findClaude,
   findExecutable,
   hasRegisteredToken,
@@ -779,6 +780,44 @@ test("findExecutable — 일반화한 탐색이 findClaude와 같은 경로를 �
   // BIN에는 이미 위에서 만든 `claude` 스텁이 있다 — 이름만 바꿔 부르면 같은 값이어야 한다
   assert.strictEqual(findExecutable("claude"), findClaude());
   assert.strictEqual(findExecutable("생전-없는-실행파일"), null);
+});
+
+// ── execClaude — exec 대상 판정, findClaude(표시용)와 따로 (DESIGN.md §24 §개정) ────────
+
+test("execClaude — 고정 경로($TICKET_LOCAL/bin/dira)가 실행 가능하면 findClaude보다 그것을 우선한다", () => {
+  // 앞선 테스트 구획들이 process.env.TICKET_LOCAL을 각자 갈아 끼워 놨다 — 이 테스트만의 값으로 격리한다
+  const local = mkdtempSync(path.join(tmpdir(), "fst-auth-exec-"));
+  const realLocal = process.env.TICKET_LOCAL;
+  process.env.TICKET_LOCAL = local;
+  const fixed = path.join(local, "bin", "dira");
+  mkdirSync(path.dirname(fixed), { recursive: true });
+  writeFileSync(fixed, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+  try {
+    stubClaude("exit 0"); // PATH에도 있지만 고정 경로가 이긴다
+    assert.strictEqual(execClaude(), fixed);
+    assert.notStrictEqual(execClaude(), findClaude());
+  } finally {
+    process.env.TICKET_LOCAL = realLocal;
+    rmSync(local, { recursive: true, force: true });
+  }
+});
+
+test("execClaude — 고정 경로가 없거나 실행 불가면 findClaude()로 떨어진다", () => {
+  const local = mkdtempSync(path.join(tmpdir(), "fst-auth-exec-"));
+  const realLocal = process.env.TICKET_LOCAL;
+  process.env.TICKET_LOCAL = local;
+  const fixed = path.join(local, "bin", "dira");
+  try {
+    stubClaude("exit 0");
+    assert.strictEqual(execClaude(), findClaude()); // 고정 경로가 아예 없다
+
+    mkdirSync(path.dirname(fixed), { recursive: true });
+    writeFileSync(fixed, "#!/bin/sh\nexit 0\n", { mode: 0o644 }); // 있지만 실행 권한 없음
+    assert.strictEqual(execClaude(), findClaude());
+  } finally {
+    process.env.TICKET_LOCAL = realLocal;
+    rmSync(local, { recursive: true, force: true });
+  }
 });
 
 test("readOtherEngineAuth — codex·grok은 파일 유무로 문구가 갈리고, agy는 상시 문구다", async () => {
