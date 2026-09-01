@@ -251,6 +251,23 @@ export async function listPoolWorkers(): Promise<{ name: string; path: string }[
   return names.map((n) => ({ name: n.slice(0, -3), path: path.join(dir, n) }));
 }
 
+/** 배포된 디스패처를 `POOL_DISPATCHER_SH`에 맞춘다(§4-16 개정 1 결정 7) — `createPoolWorker`가
+ *  `wx`로 써서 있는 파일을 안 덮으므로, 템플릿을 고쳐도 이 미러링 없이는 도는 판이 안 갈린다.
+ *  `mirrorCore`(protocols.ts)와 같은 모양이다: `pool/`이 없거나 비어 있으면 아무것도 안 만든다
+ *  (미러링은 있는 파일을 맞추는 것이지 슬롯을 만드는 것이 아니다). **잠금을 물고 있는 슬롯도
+ *  덮는다** — 도는 것은 bash가 이미 읽어 들인 판이고, 갈린 판은 다음 tick부터 돈다. */
+export async function mirrorPoolWorkers(): Promise<void> {
+  const dir = poolDir();
+  const names = (await readdir(dir).catch(() => [] as string[])).filter((n) => n.endsWith(".sh"));
+  for (const name of names) {
+    const file = path.join(dir, name);
+    const text = await readFile(file, "utf8").catch(() => null);
+    if (text === POOL_DISPATCHER_SH) continue;
+    await writeFile(file, POOL_DISPATCHER_SH, "utf8");
+    await chmod(file, 0o755);
+  }
+}
+
 /** 슬롯 잠금(`run/pool-<이름>.lock`)의 `pid`·`project`. `null` = 지금 아무 프로젝트도 안 물고
  *  있다(잠금이 없거나, 있어도 주인이 죽었다). 판정은 `workers.ts`의 `lockOf`+`alive` 그대로
  *  재사용한다 — 잠금 이름 규칙만 다르다(sha1 해시가 아니라 `pool-<이름>` 그대로). */

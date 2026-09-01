@@ -29,6 +29,7 @@ const {
   deletePoolWorker,
   listBorrowedPoolWorkers,
   listPoolWorkers,
+  mirrorPoolWorkers,
   poolDir,
   poolWorkerFullStatus,
   propagatePoolWorkerCreate,
@@ -182,6 +183,32 @@ test("createPoolWorker·listPoolWorkers·deletePoolWorker — 파일 목록이 �
   }
   assert.deepStrictEqual(await listPoolWorkers(), []);
   await assert.rejects(deletePoolWorker("pool-1"), /없는 공통 워커/);
+});
+
+test("mirrorPoolWorkers — 배포된 디스패처가 템플릿과 달라도 덮고 실행 권한이 남는다 (§4-16 개정 1 결정 7)", async () => {
+  const local = tmp("pool-mirror-");
+  process.env.TICKET_LOCAL = local;
+
+  const { path: file } = await createPoolWorker("pool-1");
+  writeFileSync(file, `${POOL_DISPATCHER_SH}\n# 손패치 한 글자`, { mode: 0o644 });
+  assert.notStrictEqual(readFileSync(file, "utf8"), POOL_DISPATCHER_SH);
+
+  await mirrorPoolWorkers();
+
+  assert.strictEqual(readFileSync(file, "utf8"), POOL_DISPATCHER_SH);
+  assert.strictEqual(statSync(file).mode & 0o777, 0o755);
+});
+
+test("mirrorPoolWorkers — pool/가 없거나 비어 있으면 아무것도 안 만든다", async () => {
+  const local = tmp("pool-mirror-empty-");
+  process.env.TICKET_LOCAL = local;
+
+  await mirrorPoolWorkers(); // pool/ 디렉터리 자체가 없다
+  assert.strictEqual(existsSync(poolDir()), false);
+
+  mkdirSync(poolDir(), { recursive: true }); // 있지만 비어 있다
+  await mirrorPoolWorkers();
+  assert.deepStrictEqual(await listPoolWorkers(), []);
 });
 
 test("readPoolLimit·writePoolLimit — §4-16 결정 3: 0/없음 = 안 빌린다, 못 읽는 값은 경고", async () => {
