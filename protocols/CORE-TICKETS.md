@@ -101,6 +101,23 @@ well. Never delete `awaiting:` after an answer lands - it is history.
 
 Procedures for `req:` are in project docs (persona profiles, design doc).
 
+## Waiting on a ticket
+
+Referenced from [CORE.md](CORE.md) §When blocked - the fix for a session that's
+only waiting on another ticket in this same queue going `.done`. A human has
+nothing to decide here, so this is **not `## 블록`**: the last section a session
+leaves being `## 블록` is exactly what makes `reap` call `ask_human` (fresh-block
+check in `tickets.py`) - that's the wrong door, since nobody can answer.
+
+1. Mint the ticket you're waiting on if it doesn't exist yet (handoff -
+   `CORE.md` §Handoff). If it already exists, reuse its stem.
+2. **Append** that stem to your own `deps:` (keep the existing deps). Don't set
+   `awaiting:` - there's no question for the GUI to show as "awaiting answer".
+3. Append `## 진행 기록` with how far you got and what you're waiting on, then
+   `<queue>/workers/<my worker>.sh unassign <my hash>` and exit. Don't `.done` it -
+   the ticket reopens on its own once the dep lands (`select` already excludes
+   unmet deps).
+
 ## Pitfalls
 
 - **First line not `---`** -> read as having no frontmatter, excluded from the queue.
