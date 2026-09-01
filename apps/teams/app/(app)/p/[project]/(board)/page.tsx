@@ -658,11 +658,13 @@ export default async function Board({
       // 관계선이 상대를 찾는 이름이다(§1: 못 찾으면 안 그린다). 링크·엔진과
       // 같은 `stem`이라 `relationEdges`가 준 간선과 그냥 맞는다
       data-stem={t.stem}
-      // 에픽으로 끄는 소스는 `open` 카드뿐이다(§에픽 결정 8). 명시적 `false`가
-      // 필요하다 — 카드 안 해시가 `<a>`라 안 두면 브라우저 기본 드래그(링크 고스트)가
-      // 그대로 남는다(§비주얼 §52 ⑤ (4)). `cursor-grab`은 안 붙인다 — 카드 전체가 링크라
-      // 커서가 이미 그 사실을 알려 준다(같은 절).
-      draggable={t.state === "open"}
+      // 에픽으로 끄는 소스는 `open` 카드뿐이다(§에픽 결정 8). `wip` 카드는 레인 드래그의
+      // 소스다(§1-5 §소스의 상태가 과녁 집합을 정한다) — 단 스윔레인(`?lane=epic`)에서는
+      // 레인 과녁이 0이라 그 모드의 `.wip` 카드는 여전히 못 든다(§비주얼 §70 ②). 명시적
+      // `false`가 필요하다 — 카드 안 해시가 `<a>`라 안 두면 브라우저 기본 드래그(링크
+      // 고스트)가 그대로 남는다(§비주얼 §52 ⑤ (4)). `cursor-grab`은 안 붙인다 — 카드 전체가
+      // 링크라 커서가 이미 그 사실을 알려 준다(같은 절).
+      draggable={t.state === "open" || (t.state === "wip" && !laneMode)}
       className="card-tint relative gap-2 px-4"
     >
       {/* 칸반 카드는 레인이 상태를 말하므로 배지를 달지 않는다 — 예외가
@@ -1086,10 +1088,15 @@ export default async function Board({
                         // 패딩이 상자 안이라 `flex-1 min-w-72` 폭 배분·레인 피치(304)는 안 바뀌고,
                         // 카드만 18px(테두리 2 + 패딩 16) 좁아진다. 그 8px을 여기서 내는 이유는
                         // 카드에 가로 여백이 없어서다(홈 패널은 줄이 이미 내므로 안 준다).
-                        <div key={s} className="flex min-w-72 flex-1 flex-col gap-2 rounded-lg border bg-surface p-2">
+                        // `data-lane-state`는 <이 레인이 무슨 레인인가>를 적는 표식이지 <과녁이다>가
+                        // 아니다(§비주얼 §70 ②) — 소스 카드의 `closest()`가 이 값으로 자기 출신
+                        // 레인을 읽는다. 스윔레인에서는 안 붙인다(레인 과녁이 0이므로).
+                        <div key={s} data-lane-state={s} className="flex min-w-72 flex-1 flex-col gap-2 rounded-lg border bg-surface p-2">
                           <div className="flex items-center justify-between gap-2">
                             <StatusBadge status={s} locale={locale} />
-                            <span className="text-xs tabular-nums text-muted-foreground">
+                            {/* 드래그 중 "놓으면 지금 시작합니다"/"놓으면 할당을 풉니다"가 이
+                                슬롯에 대신 든다(§비주얼 §70 ②③, `EpicDrag`의 `[data-lane-line]` 갈래) */}
+                            <span data-lane-line className="text-xs tabular-nums text-muted-foreground">
                               {group.length}
                               {t(locale, "boardPage.unit.count")}
                             </span>

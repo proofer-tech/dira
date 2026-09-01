@@ -8,16 +8,27 @@
  *
  *  필터 UI를 `command`로 하는 것은 DESIGN.md §5가 정한 것이다(검색·키보드 이동을 직접 쓰면
  *  수백 줄이고, 전환기가 이미 같은 컴포넌트를 쓴다). */
-import { Children, useEffect, useRef, useState } from "react";
+import { Children, useEffect, useRef, useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTrackedRouter } from "@/lib/route-pending";
 import { Check, ChevronsUpDown, ListFilter, Search, TriangleAlert } from "lucide-react";
-import { setTicketEpic } from "@/app/(app)/p/[project]/tickets/[hash]/actions";
+import { dropTicketToWip } from "@/app/(app)/p/[project]/(board)/actions";
+import { setTicketEpic, unassignTicket } from "@/app/(app)/p/[project]/tickets/[hash]/actions";
 import { EarlyRefreshPolling } from "@/components/early-refresh";
 import { useHotkey } from "@/components/keymap-provider";
 import { useT } from "@/components/language-provider";
 import { PersonaDot } from "@/components/persona-badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -590,21 +601,35 @@ function Failure({ title, message }: { title: string; message: string }) {
   );
 }
 
-/** 카드를 에픽에 끌어다 놓는다 (DESIGN.md §에픽 결정 8 · §비주얼 §52 ⑤). 사이드바(`epic-sidebar.tsx`)
- *  도 스윔레인 띠(`page.tsx`)도 서버 컴포넌트다 — 새 client 컴포넌트로 뒤집지 않고 **이미 client인
- *  이 파일**이 `window` 레벨 델리게이션으로 두 자리를 같이 받는다(결정 8 "이벤트 위임 자리가
- *  거기 있다"). 과녁은 `[data-epic-drop]`(사이드바 `SidebarMenuItem` · 스윔레인 띠 블록)이고
- *  링은 `[data-epic-ring]`(없으면 과녁 자신)에, 문장은 `[data-epic-line]`에 얹는다.
+/** 카드를 에픽 또는 레인에 끌어다 놓는다 (DESIGN.md §에픽 결정 8 · §1-5 · §비주얼 §52 ⑤ · §70).
+ *  사이드바(`epic-sidebar.tsx`)도 스윔레인 띠도 레인 컬럼(`page.tsx`)도 서버 컴포넌트다 — 새
+ *  client 컴포넌트로 뒤집지 않고 **이미 client인 이 파일**이 `window` 레벨 델리게이션 한 자리로
+ *  셋을 같이 받는다(결정 8 "이벤트 위임 자리가 거기 있다" · §1-5 §소스의 상태가 과녁 집합을
+ *  정한다). 에픽 과녁은 `[data-epic-drop]`(사이드바 `SidebarMenuItem` · 스윔레인 띠 블록)이고
+ *  링은 `[data-epic-ring]`(없으면 과녁 자신)에, 문장은 `[data-epic-line]`에 얹는다. 레인 과녁은
+ *  `[data-lane-state]`(레인 컬럼 자신 — 별도 링 표식이 없다) · 문장은 `[data-lane-line]`이다.
+ *
+ *  **소스 상태가 과녁 집합을 정한다**(§1-5) — `open`이면 에픽 과녁 + `[data-lane-state="wip"]`,
+ *  `wip`이면 `[data-lane-state="open"]` 하나뿐이다. 카드에 새 표식을 안 더한다 — 출신 레인은
+ *  `card.closest('[data-lane-state="wip"]')`로 읽는다(스윔레인은 그 표식이 없어 소스가 항상
+ *  `open`이다, §비주얼 §70 ②).
  *
  *  **`dragenter`/`dragleave` 카운터가 없다.** `dragover`마다 `closest()`로 지금 과녁을 다시
  *  찾고 이전 과녁과 다르면만 갈아 끼운다 — §함정 2(자식 경계마다 뜨는 `dragleave`가 표식을
  *  떨게 하는 것)를 애초에 만들지 않는 길이다. */
 export function EpicDrag({ project }: { project: string }) {
   const t = useT();
+  const [pending, startTransition] = useTransition();
   const [failure, setFailure] = useState<{ title: string; message: string } | null>(null);
+  // 여섯 번째 `AlertDialog` 그대로다(§비주얼 §70 ④ 1번) — 엔진이 코드 `3`으로 거부한 뒤에만
+  // 연다(`UnassignButton`과 같은 모양). 새 문자열 0.
+  const [forceAsk, setForceAsk] = useState<{ hash: string } | null>(null);
+  // 여덟 번째 `AlertDialog`다(§비주얼 §70 ④ 2번) — `preempt --dryrun`이 낸 피해자 한 줄을 그대로 든다.
+  const [preemptAsk, setPreemptAsk] = useState<{ hash: string; victim: string } | null>(null);
 
   useEffect(() => {
     let stem: string | null = null;
+    let sourceWip = false;
     let target: HTMLElement | null = null;
     // 원래 마크업을 되돌릴 값을 들고 있는다(innerHTML — 겨눈 줄의 2행에는 `진행중 n` 배지가
     // 중첩 `<span>`으로 들어 있어 textContent로 되돌리면 그 구조가 납작해진다).
@@ -617,6 +642,8 @@ export function EpicDrag({ project }: { project: string }) {
       if (!target) return;
       const ring = target.querySelector<HTMLElement>("[data-epic-ring]") ?? target;
       ring.classList.remove("inset-ring-2", "inset-ring-primary");
+      // 겨눔 층에서 문장이 갈리는 것은 에픽 과녁뿐이다(§비주얼 §70 ②) — 레인 과녁의 문장은
+      // 후보 층에서 이미 정해졌고 여기서 되돌릴 것이 없다.
       const line = target.querySelector<HTMLElement>("[data-epic-line]");
       if (line && saved.has(line)) {
         line.innerHTML = saved.get(line)!;
@@ -626,45 +653,66 @@ export function EpicDrag({ project }: { project: string }) {
     };
 
     // §함정 3 — `drop`과 `dragend` 둘 다 이걸 부른다. 이미 꺼진 상태에서 다시 불러도 안전하다.
+    // 후보 층에서 저장해 둔 것 전부(에픽 그룹 머리 · 레인 건수 줄)를 여기서 한 번에 되돌린다.
     const finish = () => {
       clearTarget();
-      groupLabels().forEach((el) => {
-        if (saved.has(el)) {
-          el.innerHTML = saved.get(el)!;
-          saved.delete(el);
-        }
+      saved.forEach((html, el) => {
+        el.innerHTML = html;
       });
+      saved.clear();
       stem = null;
     };
 
     const onDragStart = (e: DragEvent) => {
-      // `open` 카드만 `draggable="true"`를 든다(결정 8 · page.tsx `renderCard`) — 잠긴 카드는
-      // 손을 대도 이 셀렉터에 안 걸려 고스트가 안 뜬다.
+      // `open`·`wip` 카드가 `draggable="true"`를 든다(§1-5 · page.tsx `renderCard`) — 잠긴
+      // 카드와 스윔레인의 `.wip` 카드는 이 셀렉터에 안 걸려 고스트가 안 뜬다.
       const card = (e.target as Element)?.closest?.('[data-stem][draggable="true"]');
       if (!card) return;
       stem = card.getAttribute("data-stem");
+      sourceWip = card.closest('[data-lane-state="wip"]') !== null;
       setFailure(null);
       e.dataTransfer!.effectAllowed = "move"; // §함정 4 — 소스가 링크라 브라우저가 안 정해준다
-      groupLabels().forEach((el) => {
-        saved.set(el, el.innerHTML);
-        el.textContent = t("board.epic.dropPrompt");
-      });
+      if (!sourceWip) {
+        groupLabels().forEach((el) => {
+          saved.set(el, el.innerHTML);
+          el.textContent = t("board.epic.dropPrompt");
+        });
+      }
+      // 레인은 후보가 정확히 하나다(§1-5 표 · §비주얼 §70 ②) — 손을 든 순간 그 레인 머리에
+      // 문장이 바로 든다. 스윔레인은 `[data-lane-state]`가 아예 없어 아무 일도 안 난다.
+      const laneTarget = document.querySelector<HTMLElement>(
+        `[data-lane-state="${sourceWip ? "open" : "wip"}"]`,
+      );
+      const line = laneTarget?.querySelector<HTMLElement>("[data-lane-line]");
+      if (line) {
+        saved.set(line, line.innerHTML);
+        line.textContent = t(sourceWip ? "board.lane.dropToUnassign" : "board.lane.dropToStart");
+      }
     };
 
     const onDragOver = (e: DragEvent) => {
       if (!stem) return;
       e.preventDefault(); // §함정 1 — 없으면 브라우저가 놓은 것을 열어 화면이 떠난다
-      const hit = (e.target as Element)?.closest?.("[data-epic-drop]") as HTMLElement | null;
+      const el = e.target as Element;
+      // 과녁은 소스 상태가 정한다(§1-5) — `open`은 에픽 + `진행중` 레인, `wip`은 `대기` 레인
+      // 하나. 두 과녁이 동시에 후보인 적이 없다.
+      const epicHit = sourceWip ? null : (el?.closest?.("[data-epic-drop]") as HTMLElement | null);
+      const laneHit = el?.closest?.(
+        `[data-lane-state="${sourceWip ? "open" : "wip"}"]`,
+      ) as HTMLElement | null;
+      const hit = epicHit ?? laneHit;
       if (hit !== target) {
         clearTarget();
         if (hit) {
           const ring = hit.querySelector<HTMLElement>("[data-epic-ring]") ?? hit;
           ring.classList.add("inset-ring-2", "inset-ring-primary");
-          const line = hit.querySelector<HTMLElement>("[data-epic-line]");
-          if (line) {
-            saved.set(line, line.innerHTML);
-            line.textContent =
-              hit.dataset.epicDrop === "" ? t("board.epic.dropRemove") : t("board.epic.dropOnEpic");
+          if (hit.hasAttribute("data-epic-drop")) {
+            const line = hit.querySelector<HTMLElement>("[data-epic-line]");
+            if (line) {
+              saved.set(line, line.innerHTML);
+              line.textContent =
+                hit.dataset.epicDrop === "" ? t("board.epic.dropRemove") : t("board.epic.dropOnEpic");
+            }
           }
           target = hit;
         }
@@ -675,25 +723,52 @@ export function EpicDrag({ project }: { project: string }) {
     const onDrop = async (e: DragEvent) => {
       if (!stem) return;
       e.preventDefault();
-      const hit = (e.target as Element)?.closest?.("[data-epic-drop]") as HTMLElement | null;
+      const el = e.target as Element;
+      const epicHit = sourceWip ? null : (el?.closest?.("[data-epic-drop]") as HTMLElement | null);
+      const laneHit = el?.closest?.(
+        `[data-lane-state="${sourceWip ? "open" : "wip"}"]`,
+      ) as HTMLElement | null;
       const dragged = stem;
+      const wasWip = sourceWip;
       finish();
-      if (!hit) return;
-      const epic = hit.dataset.epicDrop ?? "";
-      const r = await setTicketEpic(project, dragged, epic);
-      // 실패 갈래 셋(§비주얼 §52 ⑤) — 문구는 화면 어휘, `locked`만 서버의 `LOCKED[state]` 그대로다.
-      setFailure(
-        r.ok
-          ? null
-          : r.reason === "locked"
-            ? { title: r.error, message: dragged }
-            : r.reason === "missing"
-              ? {
-                  title: t("boardPage.epicDrag.missingTitle"),
-                  message: dragged,
-                }
-              : { title: t("boardPage.epicDrag.failTitle"), message: r.error },
-      );
+
+      if (epicHit) {
+        const epic = epicHit.dataset.epicDrop ?? "";
+        const r = await setTicketEpic(project, dragged, epic);
+        // 실패 갈래 셋(§비주얼 §52 ⑤) — 문구는 화면 어휘, `locked`만 서버의 `LOCKED[state]` 그대로다.
+        setFailure(
+          r.ok
+            ? null
+            : r.reason === "locked"
+              ? { title: r.error, message: dragged }
+              : r.reason === "missing"
+                ? { title: t("boardPage.epicDrag.missingTitle"), message: dragged }
+                : { title: t("boardPage.epicDrag.failTitle"), message: r.error },
+        );
+        return;
+      }
+      if (!laneHit) return;
+
+      // 갈래 A — `진행중` -> `대기`(§1-5). 티켓 상세와 **같은 액션**을 그대로 부른다(새 판정
+      // 자리를 안 만든다). 코드 `3`(산 세션)은 확인 다이얼로그가 받는다 — 이 자리에서 실패로
+      // 안 그린다(§비주얼 §70 ⑤ §안 뜨는 것).
+      if (wasWip) {
+        const r = await unassignTicket(project, dragged);
+        if (r.code === 3) {
+          setForceAsk({ hash: dragged });
+          return;
+        }
+        if (!r.ok) setFailure({ title: r.output, message: dragged });
+        return;
+      }
+
+      // 갈래 B·C — `대기` -> `진행중`(§1-5). 판정은 `dispatchToWip`(서버) 한 자리다 — 화면이
+      // idle 워커 유무를 다시 안 잰다(제약 3).
+      const r = await dropTicketToWip(project, dragged);
+      if (!r.ok) {
+        if (r.reason === "confirm") setPreemptAsk({ hash: dragged, victim: r.victim });
+        else setFailure({ title: r.error, message: dragged });
+      }
     };
 
     const onDragEnd = () => finish();
@@ -710,5 +785,68 @@ export function EpicDrag({ project }: { project: string }) {
     };
   }, [project, t]);
 
-  return failure ? <Failure title={failure.title} message={failure.message} /> : null;
+  // 확인 뒤 재호출(§비주얼 §70 ④) — `--force`도 확정 `preempt`도 pending 동안 버튼을 잠근다
+  // (여섯 번째 다이얼로그와 같은 규칙).
+  const callForce = (hash: string) =>
+    startTransition(async () => {
+      const r = await unassignTicket(project, hash, true);
+      setForceAsk(null);
+      if (!r.ok) setFailure({ title: r.output, message: hash });
+    });
+
+  const callPreempt = (hash: string) =>
+    startTransition(async () => {
+      const r = await dropTicketToWip(project, hash, true);
+      setPreemptAsk(null);
+      if (!r.ok) setFailure({ title: r.reason === "confirm" ? r.victim : r.error, message: hash });
+    });
+
+  return (
+    <>
+      {failure && <Failure title={failure.title} message={failure.message} />}
+      <AlertDialog open={!!forceAsk} onOpenChange={(next) => !next && setForceAsk(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("ticketDetail.forceStopTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              <span className="font-mono">{forceAsk?.hash}</span>
+              {t("ticketDetail.forceStopDescSuffix")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel autoFocus>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={pending}
+              onClick={() => forceAsk && callForce(forceAsk.hash)}
+            >
+              {t("ticketDetail.forceStop")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog open={!!preemptAsk} onOpenChange={(next) => !next && setPreemptAsk(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("board.lane.preemptTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              <span className="font-mono text-xs break-words">{preemptAsk?.victim}</span>
+              <br />
+              {t("board.lane.preemptDesc")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel autoFocus>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={pending}
+              onClick={() => preemptAsk && callPreempt(preemptAsk.hash)}
+            >
+              {t("board.lane.preemptConfirm")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  );
 }

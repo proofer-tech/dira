@@ -645,6 +645,14 @@ export const ko: Record<string, string> = {
   "board.epic.createTitleLabel": "제목",
   "board.epic.createKeyLabel": "키",
   "board.epic.createFailed": "에픽을 만들지 못했습니다",
+  // 레인 드래그(§1-5 · §비주얼 §70) — 후보 층의 문장 둘(②)과 선점 확인 다이얼로그(④)다.
+  // 산 세션 끊기 다이얼로그는 새 문자열이 없다 — `ticketDetail.forceStop*`를 그대로 쓴다.
+  "board.lane.dropToStart": "놓으면 지금 시작합니다",
+  "board.lane.dropToUnassign": "놓으면 할당을 풉니다",
+  "board.lane.preemptTitle": "도는 세션 하나를 끊고 시작합니다",
+  "board.lane.preemptDesc":
+    "그 티켓은 답변 대기로 잠기지 않고 열림으로 돌아가 다시 디스패치됩니다. 워크트리에 커밋하지 않은 변경은 지워지지 않고 그대로 남습니다. 비워진 워커가 방금 놓은 티켓을 집습니다.",
+  "board.lane.preemptConfirm": "끊고 시작",
   "epics.empty": "에픽 없음",
   "epics.viewInBoard": "보드에서 보기",
   "epics.readme.missingBadge": "README 없음",
@@ -2926,6 +2934,12 @@ export const en: Record<string, string> = {
   "board.epic.createTitleLabel": "Title",
   "board.epic.createKeyLabel": "Key",
   "board.epic.createFailed": "Couldn't create the epic",
+  "board.lane.dropToStart": "Drop to start now",
+  "board.lane.dropToUnassign": "Drop to unassign",
+  "board.lane.preemptTitle": "This stops a running session to start now",
+  "board.lane.preemptDesc":
+    "That ticket won't lock as awaiting an answer — it returns to open and gets redispatched. Uncommitted changes in that worktree stay, they aren't deleted. The freed worker picks up the ticket you just dropped.",
+  "board.lane.preemptConfirm": "Stop and start",
   "epics.empty": "No epics",
   "epics.viewInBoard": "View in board",
   "epics.readme.missingBadge": "No README",
