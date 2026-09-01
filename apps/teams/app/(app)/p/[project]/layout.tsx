@@ -21,6 +21,7 @@ import { EmptyState } from "@/components/empty-state";
 import {
   ArchiveToggle,
   BrandMark,
+  DiscardGateDirtyButton,
   MarkFailuresReadButton,
   MarkResumeReadButton,
   NotificationPopover,
@@ -39,7 +40,16 @@ import { hasRegisteredToken, readAuth, readOtherEngineAuth, readTokenRows, readT
 import { DEFAULT_LOCALE, t, type Locale } from "@/lib/i18n";
 import { buildVault } from "@/lib/markdown-wikilinks";
 import { listTree } from "@/lib/protocols";
-import { readGateDirty, readSummary, readProjects, readLanguage, resolveConfig, type GateDirty } from "@/lib/projects";
+import {
+  gateAllDebris,
+  hasPushSh,
+  readGateDirty,
+  readSummary,
+  readProjects,
+  readLanguage,
+  resolveConfig,
+  type GateDirty,
+} from "@/lib/projects";
 import type { DueAlert } from "@/lib/queue";
 import { engineLimits, formatTokens, listUsage, parseLogName, usageRates, type EngineLimit } from "@/lib/usage";
 import {
@@ -164,6 +174,10 @@ export default async function ProjectLayout({
   // 두 벌로 만들지 않는다). 새 fs 읽기 1(다른 여섯은 `readSummary`가 이미 읽어 둔 것을 접는데,
   // 이 값은 그 함수가 안 읽는 자리다).
   const gate: GateDirty | null = await readGateDirty(root);
+  // 버튼이 뜨는 조건 셋(§0-10 §전부 잔해일 때만 버튼 하나가 뜬다 결정 3, 요구 `cd1673fd`) —
+  // 판정 자체는 `lib/projects.ts`의 `gateAllDebris`(테스트가 잡는 자리) 하나다. 여기서는
+  // `push.sh` 존재만 새로 읽는다.
+  const showDiscardButton = gateAllDebris(gate, await hasPushSh(root));
 
   // 셸 알림 종이 세는 여덟 (§0-10). **판정식은 §0-14 · §0-4 · §0-5 · §0-2 · 결정 5 · §1-4 · §4-14가
   // 그대로 갖는다** — 아래 여덟은 그 절들이 쓰던 조건 그대로이고 바뀐 것은 그리는 자리와 문구뿐이다.
@@ -268,6 +282,7 @@ export default async function ProjectLayout({
                     authRegistered={authRegistered}
                     resumes={resumes}
                     gate={gate}
+                    gateAllDebris={showDiscardButton}
                     failures={failures}
                     assigned={current.assigned}
                     awaiting={current.awaiting}
@@ -394,6 +409,7 @@ function NotificationItems({
   authRegistered,
   resumes,
   gate,
+  gateAllDebris,
   failures,
   assigned,
   awaiting,
@@ -416,6 +432,8 @@ function NotificationItems({
   authRegistered: boolean;
   resumes: UnarchivedResume[];
   gate: GateDirty | null;
+  /** 결정 3(§0-10) — `push.sh`가 있고, 나열이 1개 이상이고, 전부 `잔해`다. */
+  gateAllDebris: boolean;
   failures: { name: string; reason: string; log: string; at: string }[];
   assigned: { hash: string; stem: string }[];
   awaiting: { hash: string; stem: string; mtime: number }[];
@@ -474,8 +492,9 @@ function NotificationItems({
     // 표식 파일 하나만 읽어 옮긴다(§판정을 두 벌로 만들지 않는다). 나열은 `git status
     // --porcelain -uno` 줄 그대로다 — 앞 두 글자가 상태 코드, 셋째 글자부터 경로다(코드는
     // 항상 두 글자라 첫 공백이 아니라 고정 폭 3에서 가른다 — 경로 자체가 공백을 가질 수 있다).
-    // 버튼도 링크도 0개다(⑤와 같은 모양) — 남의 작업 트리를 앱이 대신 커밋하거나 지우지 않는다
-    // (§0-10 §⑧에 버튼이 없는 이유).
+    // 줄 끝에 판정 낱말(`잔해`/`사람편집`)이 붙는다 — 판정 칸이 없는 줄(`null`)은 종전
+    // 모양 그대로다(결정 2·6, 요구 `cd1673fd`). **나열이 전부 `잔해`일 때만** 버튼이 뜬다
+    // (결정 3) — 그 밖엔 ⑤와 같은 모양(문장 하나, 버튼 0개)이다(§0-10 §⑧에 버튼이 없는 이유).
     alerts.gate && gate && (
       <>
         <FileDiff aria-hidden className="mt-0.5 size-4 text-status-stale" />
@@ -489,10 +508,22 @@ function NotificationItems({
             <span key={i} className="flex items-baseline gap-2">
               <span className="shrink-0 font-mono text-xs whitespace-pre">{line.slice(0, 2)}</span>
               <span className="min-w-0 break-words font-mono text-xs">{line.slice(3)}</span>
+              {gate.verdicts[i] && (
+                <span className="shrink-0 text-xs text-muted-foreground">
+                  {t(locale, gate.verdicts[i] === "잔해" ? "bell.gate.verdictDebris" : "bell.gate.verdictHandEdited")}
+                </span>
+              )}
             </span>
           ))}
         </div>
-        <p className="col-start-2 text-sm text-foreground">{t(locale, "bell.gate.action")}</p>
+        {gateAllDebris ? (
+          <>
+            <p className="col-start-2 text-sm text-foreground">{t(locale, "bell.gate.actionAllDebris")}</p>
+            <DiscardGateDirtyButton project={id} />
+          </>
+        ) : (
+          <p className="col-start-2 text-sm text-foreground">{t(locale, "bell.gate.action")}</p>
+        )}
       </>
     ),
     // ① 인증 (§0-4). 토큰 파일이 없으면 `tick.sh:61`이 매 tick마다 조용히 `exit 0`한다 —

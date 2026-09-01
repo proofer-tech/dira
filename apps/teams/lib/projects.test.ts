@@ -20,6 +20,7 @@ const {
   listSquads,
   multiplayPath,
   multitokenPath,
+  hasPushSh,
   ontologyInWorktree,
   readGateDirty,
   readMultiplay,
@@ -892,6 +893,7 @@ test("readGateDirty — 정상 표식을 읽는다: 머리 + 나열 줄 = 건수
     count: 2,
     at: "2026-08-20T06:15:00+09:00",
     paths: ["M  apps/teams/lib/projects.ts", "?? apps/teams/lib/gate.ts"],
+    verdicts: [null, null],
   });
 });
 
@@ -903,6 +905,41 @@ test("readGateDirty — 경로에 공백이 든 줄이 안 깨진다(첫 공백�
     count: 1,
     at: "2026-08-20T06:15:00+09:00",
     paths: ["M  a b.txt"],
+    verdicts: [null],
+  });
+});
+
+test("readGateDirty — 마지막 탭 뒤가 판정 두 낱말 중 하나면 그 줄을 판정으로 받고 경로에서 뗀다(결정 1-2)", async () => {
+  const root = newQueue(null);
+  writeGateFlag(
+    root,
+    "2026-08-20T06:15:00+09:00 /tree\n" +
+      "M  apps/teams/lib/projects.ts\t잔해\n" +
+      "?? apps/teams/lib/gate.ts\t사람편집\n" +
+      "M  apps/teams/lib/legacy.ts\n", // 판정 칸이 없는 옛 모양 줄도 같이 섞인다
+  );
+  assert.deepEqual(await readGateDirty(root), {
+    tree: "/tree",
+    count: 3,
+    at: "2026-08-20T06:15:00+09:00",
+    paths: [
+      "M  apps/teams/lib/projects.ts",
+      "?? apps/teams/lib/gate.ts",
+      "M  apps/teams/lib/legacy.ts",
+    ],
+    verdicts: ["잔해", "사람편집", null],
+  });
+});
+
+test("readGateDirty — 탭은 있는데 뒤가 판정 두 낱말이 아니면 판정 없음이고 줄 전체가 경로다", async () => {
+  const root = newQueue(null);
+  writeGateFlag(root, "2026-08-20T06:15:00+09:00 /tree\n" + "M  path\twith\ttab\n");
+  assert.deepEqual(await readGateDirty(root), {
+    tree: "/tree",
+    count: 1,
+    at: "2026-08-20T06:15:00+09:00",
+    paths: ["M  path\twith\ttab"],
+    verdicts: [null],
   });
 });
 
@@ -917,4 +954,13 @@ test("readGateDirty — 반쯤 쓴 파일은 null이다: 빈 파일 · 머리뿐
 
   writeGateFlag(root, "그냥어제 /tree\nM  a.txt\n");
   assert.equal(await readGateDirty(root), null);
+});
+
+// ── hasPushSh (DESIGN.md §0-10 §전부 잔해일 때만 버튼 하나가 뜬다 결정 3) ───────
+
+test("hasPushSh — <root>/push.sh가 있으면 true, 없으면 false", async () => {
+  const root = newQueue(null);
+  assert.equal(await hasPushSh(root), false);
+  writeFileSync(path.join(root, "push.sh"), "#!/usr/bin/env bash\n");
+  assert.equal(await hasPushSh(root), true);
 });

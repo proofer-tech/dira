@@ -41,6 +41,7 @@ import {
   type EventName,
   type Events,
 } from "@/lib/analytics";
+import { discardGateDirty } from "@/lib/engine";
 import type { FeedbackMeta } from "@/lib/feedback";
 import { DEFAULT_KEYMAP, comboOf, validateBinding, type KeyLike } from "@/lib/keymap";
 import { markResumeRead } from "@/lib/machine-state";
@@ -648,6 +649,18 @@ export async function markFailuresReadAction(
   if (!root) return;
   await markAlertsRead(root, failures);
   revalidatePath("/", "layout");
+}
+
+/** 알림 ⑧의 `잔해 버리기`(§0-10 §전부 잔해일 때만 버튼 하나가 뜬다 결정 4, 요구 `cd1673fd`).
+ *  `push.sh discard` 한 번을 부르고 결과를 그대로 돌려준다 — 화면은 `git`을 직접 안 부르고
+ *  판정을 다시 안 한다(§판정을 두 벌로 만들지 않는다). **표식 파일은 여기서 안 지운다** — 지우는
+ *  것은 게이트고(다음 tick), 성공 문장이 그것을 알려 준다(결정 7). 그래서 `revalidatePath`도 안
+ *  부른다 — 5초 폴링이 다음 tick 뒤에 저절로 항목을 내린다. */
+export async function discardGateDirtyAction(id: string): Promise<{ ok: boolean; output: string }> {
+  const root = (await readProjects()).find((t) => t.id === id)?.root;
+  if (!root) return { ok: false, output: `${t(await readLanguage(), "projects.unknownProjectIdPrefix")} ${id}` };
+  const run = await discardGateDirty(root);
+  return { ok: run.ok, output: run.output };
 }
 
 /** 알림 ⑥의 `보관`(§0-10 §보관 = 읽음이다). 화면이 그 순간 나열한 사건 전부의 `to`를 한 번에

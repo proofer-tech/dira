@@ -10,10 +10,11 @@ import { useEffect, useState, useTransition } from "react";
 import Link from "@/components/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCommandState } from "cmdk";
-import { Check, ChevronDown, ChevronsUpDown, ChevronUp, List, Settings2 } from "lucide-react";
+import { Check, ChevronDown, ChevronsUpDown, ChevronUp, List, Settings2, TriangleAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { StatusBadge } from "@/components/status-badge";
 import { useLocale, useT } from "@/components/language-provider";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -28,6 +29,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { SettingsDialog, type AuthView } from "@/components/settings-dialog";
 import { parentPath, projectPath, screenOf } from "@/lib/urls";
 import {
+  discardGateDirtyAction,
   markFailuresReadAction,
   markResumeReadAction,
   moveProjectAction,
@@ -209,6 +211,51 @@ export function MarkResumeReadButton({ toMsList }: { toMsList: number[] }) {
     >
       {t("bell.markRead")}
     </Button>
+  );
+}
+
+/** ⑧ `커밋 안 된 변경`의 `잔해 버리기` (§0-10 §전부 잔해일 때만 버튼 하나가 뜬다 결정 4-7,
+ *  요구 `cd1673fd`). 자리는 ⑥의 버튼 행 그대로 물려받는다(결정 5) — 초점을 먼저 그릇으로
+ *  옮기고 오른쪽 끝에 선다.
+ *
+ *  **②⑥과 다른 자리 하나** — 성공해도 항목이 안 사라진다. 표식 파일을 지우는 것은 게이트고
+ *  다음 tick에야 항목이 저절로 걷힌다(결정 7) — 그래서 이 버튼은 결과가 남는다:
+ *  `UnassignButton`의 `output`처럼 성공/실패를 버튼 아래 한 줄 더 그린다. */
+export function DiscardGateDirtyButton({ project }: { project: string }) {
+  const [pending, start] = useTransition();
+  const [run, setRun] = useState<{ ok: boolean; output: string } | null>(null);
+  const t = useT();
+  return (
+    <>
+      <span className="col-start-2 flex justify-end">
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={pending}
+          onClick={() => {
+            // ②⑥과 다른 자리 — 성공해도 이 버튼의 노드가 안 사라진다(결정 7), 그래서 초점을
+            // `PopoverContent`로 미리 옮기지 않는다. 옮기면 아직 눈앞에 있는 버튼에서 초점만
+            // 빼앗는 꼴이다 — 그 두 항목의 `.focus()` 선점은 노드가 사라져 초점이 `body`로
+            // 떨어지는 사고를 막는 대비책이었다(§비주얼 §28 ⑤ 초점).
+            start(async () => setRun(await discardGateDirtyAction(project)));
+          }}
+        >
+          {t("bell.gate.discardButton")}
+        </Button>
+      </span>
+      {run &&
+        (run.ok ? (
+          <p className="col-start-2 text-sm text-foreground">{t("bell.gate.discardDoneBody")}</p>
+        ) : (
+          <Alert variant="destructive" className="col-start-2">
+            <TriangleAlert aria-hidden />
+            <AlertTitle>{t("bell.gate.discardFailedTitle")}</AlertTitle>
+            <AlertDescription>
+              <span className="font-mono text-xs break-all">{run.output}</span>
+            </AlertDescription>
+          </Alert>
+        ))}
+    </>
   );
 }
 

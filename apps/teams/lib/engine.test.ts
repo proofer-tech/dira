@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
-import { findTicket, preempt, runWorker, unassign } from "./engine.ts";
+import { discardGateDirty, findTicket, preempt, runWorker, unassign } from "./engine.ts";
 import { listTickets, type Suffixes } from "./queue.ts";
 import { commonSourceLine } from "./workers.ts";
 
@@ -185,6 +185,34 @@ test("preempt — 워커 0개면 부를 스크립트가 없고, 형식 밖 해�
  *
  *  **16초쯤 걸린다** — 강제 경로가 부모의 release를 15초까지 기다린 뒤 자기가 푼다(`tick.sh:136`).
  *  줄일 방법은 엔진의 유예를 건드리는 것뿐인데 그건 읽기 전용이고, 그 기다림 자체가 이 경로다. */
+// ── discardGateDirty (DESIGN.md §0-10 §전부 잔해일 때만 버튼 하나가 뜬다 결정 4, 요구 `cd1673fd`) ──
+
+test("discardGateDirty — `bash <root>/push.sh discard` 한 번을 부르고 결과를 그대로 돌려준다", async () => {
+  const r = mkdtempSync(path.join(tmpdir(), "fst-discard-"));
+  process.on("exit", () => rmSync(r, { recursive: true, force: true }));
+  writeFileSync(
+    path.join(r, "push.sh"),
+    `#!/bin/sh\necho "$@" >> "${path.join(r, "ran.txt")}"\nprintf 'discarded'\n`,
+    { mode: 0o755 },
+  );
+  const run = await discardGateDirty(r);
+  assert.strictEqual(run.ok, true, run.output);
+  assert.strictEqual(run.output, "discarded");
+  assert.strictEqual(readFileSync(path.join(r, "ran.txt"), "utf8").trim(), "discard");
+});
+
+test("discardGateDirty — push.sh가 0이 아닌 코드로 끝나면 실패로 옮긴다(사람 편집이 섞였을 때)", async () => {
+  const r = mkdtempSync(path.join(tmpdir(), "fst-discard-fail-"));
+  process.on("exit", () => rmSync(r, { recursive: true, force: true }));
+  writeFileSync(path.join(r, "push.sh"), `#!/bin/sh\necho "사람 편집이 섞여 있습니다" >&2\nexit 1\n`, {
+    mode: 0o755,
+  });
+  const run = await discardGateDirty(r);
+  assert.strictEqual(run.ok, false);
+  assert.strictEqual(run.code, 1);
+  assert.match(run.output, /사람 편집이 섞여 있습니다/);
+});
+
 test("unassign — 산 세션은 코드 3으로 거부하고 --force면 끊고 푼다", async () => {
   const r = scratch(["w1"]);
   process.env.TICKET_LOCAL = path.join(r, "local");

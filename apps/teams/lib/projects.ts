@@ -279,12 +279,39 @@ export async function listAwaiting(): Promise<AwaitingItem[]> {
 // (§판정을 두 벌로 만들지 않는다). `app/(app)/api/gate/route.ts`가 등록된 프로젝트마다
 // 이 함수를 부른다(§4-14가 "새 판정식도 게이트 쪽엔 0개" — 여기도 마찬가지다).
 
-export type GateDirty = { tree: string; count: number; at: string; paths: string[] };
+/** 나열 줄 끝에 붙는 판정 두 낱말 (§0-10 §전부 잔해일 때만 버튼 하나가 뜬다 결정 1, 요구
+ *  `cd1673fd`). `push.sh classify`가 없거나 죽으면 게이트가 이 칸 없이 종전 모양으로 적으므로
+ *  `paths`쪽 값은 그때 그대로 `null`이다. */
+export type GateVerdict = "잔해" | "사람편집";
+const GATE_VERDICT_WORDS: readonly GateVerdict[] = ["잔해", "사람편집"];
+
+export type GateDirty = {
+  tree: string;
+  count: number;
+  at: string;
+  paths: string[];
+  /** `paths`와 같은 길이 · 같은 순서. 판정 칸이 없는 줄은 `null`이다. */
+  verdicts: (GateVerdict | null)[];
+};
 
 /** 표식 머리(첫 줄)의 시각 자리. 이 파일은 `dispatch-gate.sh`의 `date +%Y-%m-%dT%H:%M:%S%z`
  *  (콜론을 끼워 넣은 것)가 쓰므로 항상 오프셋을 갖는다 — `queue.ts`의 `ISO_DATETIME_RE`(마감
  *  입력용, 오프셋 선택)보다 좁게 잡는다. */
 const GATE_AT_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/;
+
+/** 나열 줄 하나를 경로와 판정으로 가른다 — **마지막 탭에서만** 가른다(결정 1·2). 가르개가
+ *  탭인 이유는 `git status`가 탭을 품은 경로를 따옴표로 감싸서 내보내기 때문이다(그래서 판정이
+ *  없는 원본 줄에는 탭이 안 남는다). 뒤쪽이 두 낱말 중 하나가 아니면 옛 표식 파일이 쓴 줄로 보고
+ *  판정 없음으로 되돌린다. */
+function splitGateLine(line: string): { path: string; verdict: GateVerdict | null } {
+  const tab = line.lastIndexOf("\t");
+  if (tab < 0) return { path: line, verdict: null };
+  const word = line.slice(tab + 1);
+  if ((GATE_VERDICT_WORDS as readonly string[]).includes(word)) {
+    return { path: line.slice(0, tab), verdict: word as GateVerdict };
+  }
+  return { path: line, verdict: null };
+}
 
 /** `<root>/workers/.gate-dirty` 하나를 읽는다(§4-14 §표식 파일). 파일이 없으면 `null` —
  *  존재가 판정이다. **못 읽거나 첫 줄이 계약 모양이 아니면 `null`이다**(반쯤 쓴 파일로 종을
@@ -302,8 +329,24 @@ export async function readGateDirty(root: string): Promise<GateDirty | null> {
   const at = lines[0].slice(0, sp);
   const tree = lines[0].slice(sp + 1);
   if (!GATE_AT_RE.test(at) || !tree) return null;
-  const paths = lines.slice(1);
-  return { tree, count: paths.length, at, paths };
+  const split = lines.slice(1).map(splitGateLine);
+  return { tree, count: split.length, at, paths: split.map((s) => s.path), verdicts: split.map((s) => s.verdict) };
+}
+
+/** `<root>/push.sh`가 있는가 (§0-10 §전부 잔해일 때만 버튼 하나가 뜬다 결정 3). 새 큐는 scaffold가
+ *  항상 넣지만, 손으로 고친 옛 게이트를 쓰는 큐는 없을 수 있다(§이 항목이 뜨는 판이 좁다). */
+export async function hasPushSh(root: string): Promise<boolean> {
+  return stat(path.join(root, "push.sh"))
+    .then(() => true)
+    .catch(() => false);
+}
+
+/** 버튼이 뜨는 조건 셋(결정 3) — `push.sh`가 있다 · 나열 줄이 1개 이상이다 · **모든 줄의 판정이
+ *  `잔해`다**. 하나라도 `사람편집`이거나 판정 칸이 없으면(`null`) `false`다. `pnpm test` 글롭이
+ *  `app/**`을 안 훑으므로(`package.json`) 판정을 여기 둬야 테스트가 잡는다(`ad3fe545`가 이미
+ *  세운 그 이유). */
+export function gateAllDebris(gate: GateDirty | null, pushSh: boolean): boolean {
+  return gate !== null && gate.count > 0 && pushSh && gate.verdicts.every((v) => v === "잔해");
 }
 
 async function writeProjects(projects: Project[]): Promise<void> {

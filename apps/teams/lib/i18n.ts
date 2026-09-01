@@ -367,6 +367,14 @@ export const ko: Record<string, string> = {
   "bell.gate.bodySuffix":
     "가 깨끗해질 때까지 워커가 티켓을 아예 안 집습니다. 고장난 것은 없습니다 - 커밋하거나 되돌리면 다음 tick부터 저절로 재개됩니다.",
   "bell.gate.action": "그 트리에서 커밋하거나, 지울 것이면 지우세요.",
+  // §0-10 §전부 잔해일 때만 버튼 하나가 뜬다 결정 5-6 (요구 `cd1673fd`). 나열이 전부 `잔해`일
+  // 때만 뜨는 갈래 — `bell.gate.action`을 대체한다(결정 3).
+  "bell.gate.actionAllDebris": "이 변경은 전부 경쟁 push가 남긴 잔해입니다 - 버려도 잃는 것이 없습니다.",
+  "bell.gate.discardButton": "잔해 버리기",
+  "bell.gate.discardDoneBody": "버렸습니다. 다음 tick에 게이트가 확인하면 이 항목이 사라집니다.",
+  "bell.gate.discardFailedTitle": "잔해를 못 버렸습니다",
+  "bell.gate.verdictDebris": "잔해",
+  "bell.gate.verdictHandEdited": "사람편집",
   "bell.auth.title": "Claude 토큰이 없습니다",
   "bell.auth.body": "워커가 티켓을 집어도 세션을 못 열고 그대로 끝냅니다.",
   // §0-10 ①의 두 번째 갈래(요구 `6455b43a`) — 등록은 있는데 eligible이 0일 때다.
@@ -2822,6 +2830,12 @@ export const en: Record<string, string> = {
   "bell.gate.bodySuffix":
     " must be clean before workers pick up any ticket. Nothing is broken - commit or discard the changes and it resumes automatically on the next tick.",
   "bell.gate.action": "Commit in that tree, or delete the changes if you meant to discard them.",
+  "bell.gate.actionAllDebris": "This change is all leftovers from a competing push - discarding it loses nothing.",
+  "bell.gate.discardButton": "Discard leftovers",
+  "bell.gate.discardDoneBody": "Discarded. This item clears once the gate confirms it on the next tick.",
+  "bell.gate.discardFailedTitle": "Couldn't discard the leftovers",
+  "bell.gate.verdictDebris": "leftover",
+  "bell.gate.verdictHandEdited": "hand-edited",
   "bell.auth.title": "No Claude token",
   "bell.auth.body": "Workers still claim tickets, but they can't open a session and end right there.",
   "bell.auth.titleExhausted": "No Claude account is available right now",

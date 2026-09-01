@@ -31,6 +31,26 @@ export type Run = { ok: boolean; output: string; code?: number };
  *  unexpected file in NFT list` 경고를 낸다 — 서브프로세스 경로가 런타임 값이라 트레이서가
  *  포기하는 것이고, 경고일 뿐 빌드는 통과한다. `turbopackIgnore` 주석으로도 안 사라진다(실측).
  *  워커 스크립트 경로가 프로젝트마다 다른 건 제약 2가 요구하는 설계다. */
+/** `runWorker`·`discardGateDirty`가 같이 쓰는 실행 한 벌 — 성공/실패 모양(`Run`)을 여기 한
+ *  곳에서만 만든다. */
+async function execScript(cmd: string, args: string[]): Promise<Run> {
+  try {
+    // ponytail: reap은 python 스캔 한 번이라 초 단위로 끝난다. 60초면 매달린 걸 알아채기 충분하다.
+    const { stdout, stderr } = await promisify(execFile)(cmd, args, {
+      timeout: 60_000,
+      maxBuffer: 4 << 20,
+    });
+    return { ok: true, output: (stdout + stderr).trim(), code: 0 };
+  } catch (e) {
+    const err = e as NodeJS.ErrnoException & { stdout?: string; stderr?: string };
+    const out = ((err.stdout ?? "") + (err.stderr ?? "")).trim();
+    // `err.code`는 종료 코드(수)이거나 스폰 실패의 문자열(`ENOENT`)이다 — 수일 때만 싣는다.
+    // 신호로 죽으면(`killed`) 코드가 아예 없다. 어느 쪽이든 `undefined`가 "코드가 없다"다.
+    const code = typeof err.code === "number" ? err.code : undefined;
+    return { ok: false, output: out || err.message, code };
+  }
+}
+
 export async function runWorker(
   root: string,
   name: string,
@@ -49,21 +69,7 @@ export async function runWorker(
   // 워커 화면(`readCommonContext`)을 거치지 않고도 여기로 바로 오는 호출(`unassign`·`reap`)이
   // 있다(bcac177c) — 셸을 부르기 전에 여기서도 낫힌다. 이미 있으면 `stat` 한 번으로 끝난다.
   await healCommonContextFile(root);
-  try {
-    // ponytail: reap은 python 스캔 한 번이라 초 단위로 끝난다. 60초면 매달린 걸 알아채기 충분하다.
-    const { stdout, stderr } = await promisify(execFile)(file, args, {
-      timeout: 60_000,
-      maxBuffer: 4 << 20,
-    });
-    return { ok: true, output: (stdout + stderr).trim(), code: 0 };
-  } catch (e) {
-    const err = e as NodeJS.ErrnoException & { stdout?: string; stderr?: string };
-    const out = ((err.stdout ?? "") + (err.stderr ?? "")).trim();
-    // `err.code`는 종료 코드(수)이거나 스폰 실패의 문자열(`ENOENT`)이다 — 수일 때만 싣는다.
-    // 신호로 죽으면(`killed`) 코드가 아예 없다. 어느 쪽이든 `undefined`가 "코드가 없다"다.
-    const code = typeof err.code === "number" ? err.code : undefined;
-    return { ok: false, output: out || err.message, code };
-  }
+  return execScript(file, args);
 }
 
 /** 어느 워커가 불렸는지 — 화면이 `w1.sh unassign <해시>`라고 적어야 한다. */
@@ -125,6 +131,19 @@ export async function preempt(
   const name = workers[0].name;
   const args = dryrun ? ["preempt", hash, "--dryrun"] : ["preempt", hash];
   return { ...(await runWorker(root, name, args, locale)), worker: name };
+}
+
+/** `bash <root>/push.sh discard` — 종 항목 ⑧의 `잔해 버리기` (§0-10 §전부 잔해일 때만 버튼
+ *  하나가 뜬다 결정 4, 요구 `cd1673fd`). `<root>/workers/<w>.sh`가 아니라 큐 루트에 바로 있는
+ *  스크립트라 `runWorker`(workers/ 안으로 `resolveWithin`)를 안 거친다 — 워커가 0개여도 부를 수
+ *  있어야 한다.
+ *
+ *  판정을 여기서 다시 안 한다 — `push.sh discard`가 락을 쥐고 추적 파일 전부를 다시 재서,
+ *  전부 잔해일 때만 버리고 하나라도 사람 편집이면 0이 아닌 코드로 끝난다(§판정을 두 벌로
+ *  만들지 않는다). `bash`를 명시하는 이유는 `push.sh`의 실행 비트가 게이트 결정 3의 존재
+ *  검사(`hasPushSh`)와 별개라서다 — 스캐폴딩이 0o755로 넣지만 손으로 고친 큐는 보장이 없다. */
+export async function discardGateDirty(root: string): Promise<Run> {
+  return execScript("bash", [path.join(root, "push.sh"), "discard"]);
 }
 
 /** 해시 → 실제 티켓 경로. 없으면 null(404의 근거).
