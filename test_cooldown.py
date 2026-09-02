@@ -15,10 +15,12 @@
 실패하면 assert로 죽는다.
 """
 import os
+import re
 import shutil
 import subprocess
 import tempfile
 import time
+from datetime import datetime
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 TICK = os.path.join(HERE, "tick.sh")
@@ -153,15 +155,39 @@ try:
     def mode(m):
         mkfile(os.path.join(tmp, "mode"), m + "\n")
 
+    def _refresh_wip():
+        # ④에서 DONE된 aaaa0001·bbbb0002는 가짜 엔진이 .done으로 안 닫아 .wip 잔해로 남는다
+        # (§89-91 - 그건 세션의 몫이다) - ⑧까지 decoy로 일부러 살려 둔다. 이 파일 자체의 실행이
+        # 부하 아래 REAP_GRACE_SEC(180s)를 넘기면, 다음 tick()의 reap()이 죽은 세션으로 보고
+        # 되살려 새 티켓의 디스패치 자리를 가로챈다(2026-09-03 load 242 실측: ⑧·⑬에서 각각
+        # "DONE dddd0004"·"DONE 3333c003" 대신 aaaa0001의 REAP+DISPATCH+DONE을 봤다). 이 파일은
+        # 쿨다운 게이트만 검증하고 reap 자체의 유예 판정은 다른 파일(test_generic.py)이 검증하니,
+        # 매 tick 앞에서 남아있는 .wip 전부의 assigned_at을 지금으로 되돌려도 안전하다 - 그 순간
+        # 실제로 도는 세션은 없다(직전 tick()이 이미 동기로 끝난 뒤라서).
+        now = datetime.now().astimezone().isoformat(timespec="seconds")
+        for f_ in os.listdir(tickets):
+            if not f_.endswith(".wip.md"):
+                continue
+            p = os.path.join(tickets, f_)
+            with open(p, encoding="utf-8") as fh:
+                body = fh.read()
+            new_body = re.sub(r"(?m)^assigned_at:.*$", "assigned_at: " + now, body, count=1)
+            if new_body != body:
+                with open(p, "w", encoding="utf-8") as fh:
+                    fh.write(new_body)
+
     def tick(**over):
+        _refresh_wip()
         return subprocess.run([w1, "tick"], capture_output=True, text=True,
                               env=dict(env, **over), timeout=180)
 
     def tick2(**over):
+        _refresh_wip()
         return subprocess.run([w2, "tick"], capture_output=True, text=True,
                               env=dict(env, **over), timeout=180)
 
     def tick3(**over):
+        _refresh_wip()
         return subprocess.run([w3, "tick"], capture_output=True, text=True,
                               env=dict(env, **over), timeout=180)
 
@@ -306,6 +332,16 @@ try:
     assert "Traceback" not in (r.stderr or ""), "clear의 traceback이 stderr에 남았다:\n" + r.stderr
     assert r.returncode == 0, "rc가 정상이 아니다: {}".format(r.returncode)
     assert "dddd0004.done.md" in ls(), "티켓이 .done으로 안 남았다: " + str(ls())
+
+    # ④에서 DONE된 aaaa0001·bbbb0002는 가짜 엔진이 .done으로 안 닫아 .wip 잔해로 남는다(§자리
+    # 표 ④ 주석, §72-92 - 그건 세션의 몫이다). ⑧의 "최근 claim" 선택 decoy로 쓸모를 다했다 -
+    # 안 치우면 REAP_GRACE_SEC(180s)를 넘긴 뒤 tick()의 reap()이 되살려, 부하로 전체 실행이
+    # 길어질 때 뒤 절의 새 티켓 디스패치 자리를 가로챈다(2026-09-03 실측: load 242에서 ⑬가
+    # "DONE 3333c003" 대신 REAP+DISPATCH+DONE aaaa0001을 봤다).
+    for h in ("aaaa0001", "bbbb0002"):
+        for f_ in os.listdir(tickets):
+            if f_.startswith(h):
+                os.remove(os.path.join(tickets, f_))
 
     # --- ⑨ grok 모양: result.is_error + errors에 한도 낱말, terminal_reason 키 없음 -> 쿨다운 ---
     mkfile(os.path.join(tickets, "zzzz0005.md"),
