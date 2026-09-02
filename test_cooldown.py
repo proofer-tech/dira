@@ -89,10 +89,13 @@ case "$(cat "{tmp}/mode")" in
     # CORE.md §티켓 수명). 그래서 이름이 아니라 **가장 최근에 claim된**(mtime 최신) 것을 고른다.
     # tick.sh의 setinbox도 init 직후에 같은 파일을 쓰므로, 그 기록(`inbox:`)이 보일 때까지
     # 기다린 뒤에 rename한다 - 안 그러면 이 테스트가 §4-10과 무관한 setinbox 경합을 만든다
-    # (실사고는 세션이 한참 뒤에 죽는 모양이라 이 간극이 실제로는 항상 넓다).
+    # (실사고는 세션이 한참 뒤에 죽는 모양이라 이 간극이 실제로는 항상 넓다). 5초(25*0.2)는
+    # 부하 아래서 setpid+setinbox의 python3 기동 자체가 못 따라온다(2026-09-02: 이 창을
+    # 놓쳐 tick.sh의 setpid/setinbox가 이미 지워진 파일에 쓰다 FileNotFoundError를 냈다) -
+    # 60초(300*0.2)로 넉넉히 잡는다.
     wip=$(ls -t "{tmp}/dira/tickets"/*.wip.md 2>/dev/null | head -1)
     i=0
-    while [ "$i" -lt 25 ] && ! grep -q '^inbox: ' "$wip" 2>/dev/null; do
+    while [ "$i" -lt 300 ] && ! grep -q '^inbox: ' "$wip" 2>/dev/null; do
       sleep 0.2; i=$((i+1))
     done
     mv "$wip" "${{wip%.wip.md}}.done.md"
@@ -210,9 +213,11 @@ try:
     assert "DISPATCH" not in added, "쿨다운 중에 디스패치했다:\n" + added
     assert cooldown() == armed, "게이트가 창을 다시 감았다(재무장은 통과할 때만이다)"
     # ponytail: 가짜 엔진은 스스로 안 끝나므로 실제로 세션을 띄웠으면 180초 타임아웃까지
-    # 간다 - SKIP과 DISPATCH의 시간 차는 30초로 갈라도 안전하다. 5초는 이 큐 자체가 여러
-    # 워커를 동시에 돌리는 부하 아래서 스케줄링 지연만으로도 넘겼다(실측 5.2s·7.7s).
-    assert took < 30, "게이트가 세션을 띄웠다({:.1f}s)".format(took)
+    # 간다 - SKIP과 DISPATCH의 시간 차는 120초로 갈라도 안전하다. 30초는 이 큐 자체가 여러
+    # 워커를 동시에 돌리는 부하 아래서 스케줄링 지연만으로도 넘겼다(2026-09-02 실측 31.6s·
+    # 34.6s - 이 tick() 자체가 python3 기동 하나뿐인데도 그 시간이 걸렸다. 5초짜리 옛 값의
+    # 실측 5.2s·7.7s는 남겨 둔다).
+    assert took < 120, "게이트가 세션을 띄웠다({:.1f}s)".format(took)
 
     # --- ③ 만료 뒤: 딱 한 번 통과하고, 나가면서 창을 now+300으로 다시 감는다 ---
     # 재무장만 따로 보려고 여기서는 api_error가 아닌 실패를 쓴다 - api_error면 ④의 기록과

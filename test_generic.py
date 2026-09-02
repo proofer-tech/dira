@@ -208,7 +208,10 @@ try:
                            stderr=subprocess.DEVNULL, env=env2) for w in (wa, wb)]
     try:
         fired = []
-        for _ in range(60):                             # 디스패치(python 호출 여러 번)를 기다린다
+        # 부하 아래서는 python3 기동 자체가 여러 초씩 걸린다(2026-09-02 실측: 같은 큐에서
+        # 순수 SKIP 판정 하나가 30초를 넘었다) - 15초 창은 워커가 둘뿐인 조용한 기계에서만
+        # 안전하다. 240회(60초)로 넉넉히 잡는다.
+        for _ in range(240):                            # 디스패치(python 호출 여러 번)를 기다린다
             if os.path.exists(runs):
                 with open(runs, encoding="utf-8") as f:
                     fired = [l for l in f.read().split("\n") if l.strip()]

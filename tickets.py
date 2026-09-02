@@ -678,7 +678,10 @@ def in_progress(troot):
 
 
 # 회수할 때 비우는 할당·생존 신호. 남겨 두면 열린 티켓이 '할당됨'으로 보여 select가 영구 제외한다.
-REAP_CLEAR = ("session_id", "assigned_at", "owner", "pid", "claimed_at", "transcript")
+# inbox도 여기 있어야 한다 - 죽은 세션의 FIFO 경로라 재클레임 뒤에도 그대로 남으면, 다음
+# 디스패치가 실제로 setinbox를 부르기 전인데도 frontmatter만 보면 이미 참견 입구가 열려
+# 있는 것처럼 보인다(§4-10 테스트가 이 값을 살아있는 신호로 읽어 검증한다 - 2026-09-02 재현).
+REAP_CLEAR = ("session_id", "assigned_at", "owner", "pid", "claimed_at", "transcript", "inbox")
 
 
 def _section(body, pat):
