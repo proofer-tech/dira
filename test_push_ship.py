@@ -5,6 +5,7 @@
 도그푸딩으로 쓰지 않는다(수용조건 5). 정상 경로 - non-ff 1회 재시도 - 두 번째 거부 - 커밋할
 것 없음 넷과, 인자 없는 기존 경로 - `classify`가 안 갈렸다는 것까지 잰다(수용조건 1-4).
 """
+import atexit
 import os
 import shutil
 import subprocess
@@ -12,7 +13,16 @@ import sys
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-PUSH_SH = os.path.join(HERE, "templates", "hooks", "push.sh")
+_ORIG_PUSH_SH = os.path.join(HERE, "templates", "hooks", "push.sh")
+
+# 정본엔 `<통합 브랜치>` 자리표시자가 그대로 남는다(GUI가 큐 사본을 만들 때 채운다) - 이 검증은
+# verify-push.sh와 같은 방식으로 `master`를 채운 사본을 만들어 쓴다(각 케이스가 이미 master를 씀).
+with open(_ORIG_PUSH_SH, encoding="utf-8") as _f:
+    _filled = _f.read().replace("<통합 브랜치>", "master")
+_tmp_fd, PUSH_SH = tempfile.mkstemp(prefix="dira-push-sh-", suffix=".sh")
+with os.fdopen(_tmp_fd, "w", encoding="utf-8") as _f:
+    _f.write(_filled)
+atexit.register(lambda: os.path.exists(PUSH_SH) and os.remove(PUSH_SH))
 
 
 def run(cwd, *args, env=None):
