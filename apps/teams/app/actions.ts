@@ -99,11 +99,8 @@ import {
 import {
   createPoolWorker,
   deletePoolWorker,
-  listPoolWorkers,
-  poolWorkerFullStatus,
   propagatePoolWorkerCreate,
   propagatePoolWorkerDelete,
-  readPoolLimit,
   startPoolWorker,
   stopPoolWorker,
 } from "@/lib/pool";
@@ -736,24 +733,17 @@ export async function setMultitokenAction(enabled: boolean): Promise<boolean> {
   return isMultiTokenAllowed();
 }
 
-/** 설정 트리 열째 노드 `워커` (DESIGN.md §4-16 결정 5 · §비주얼 §68) — 다이얼로그가 열릴 때
- *  한 번 읽는다(상시 폴링에 안 붙는다 — §4-16 결정 5 §읽는 시점). 등록 프로젝트 전부의
- *  `workers/*.sh`를 훑으므로(`readSummary`가 이미 하는 `listWorkers`) 새 순회를 안 만들고,
- *  풀 쪽만 `listPoolWorkers`·`poolWorkerFullStatus`·`readPoolLimit`으로 더한다. 조립은
- *  `buildWorkersPanel`(fs 의존 0) 하나가 진다 — 여기는 I/O만 진다. */
+/** 설정 트리 열째 노드 `워커` (DESIGN.md §4-16 결정 5 · §비주얼 §68 · §롤백) — 다이얼로그가 열릴
+ *  때 한 번 읽는다(상시 폴링에 안 붙는다 — §4-16 결정 5 §읽는 시점). 등록 프로젝트 전부의
+ *  `workers/*.sh`를 훑는다(`readSummary`가 이미 하는 `listWorkers`). 조립은 `buildWorkersPanel`
+ *  (fs 의존 0) 하나가 진다 — 여기는 I/O만 진다. */
 export async function readWorkersPanelAction(): Promise<WorkersPanelView> {
   const projects = await readProjects();
-  const [poolNames, summaries, limits, sessionCap] = await Promise.all([
-    listPoolWorkers(),
+  const [summaries, sessionCap] = await Promise.all([
     Promise.all(projects.map((p) => readSummary(p))),
-    Promise.all(projects.map((p) => readPoolLimit(p.root).then((l) => l.limit ?? 0))),
     sessionCapOf(projects),
   ]);
-  const pool = await Promise.all(
-    poolNames.map(async (w) => ({ name: w.name, status: await poolWorkerFullStatus(w.name) })),
-  );
   return buildWorkersPanel(
-    pool,
     projects.map((p, i) => ({
       id: p.id,
       name: p.name,
@@ -761,7 +751,6 @@ export async function readWorkersPanelAction(): Promise<WorkersPanelView> {
       error: summaries[i].error,
       workers: summaries[i].workers,
     })),
-    limits,
     sessionCap,
   );
 }

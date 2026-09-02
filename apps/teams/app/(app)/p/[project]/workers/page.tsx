@@ -40,7 +40,6 @@ import { formatTokens, listUsage } from "@/lib/usage";
 import { dateTimeLabel } from "@/lib/urls";
 import { getProject, readLanguage, readProjects, resolveConfig, usingDefault } from "@/lib/projects";
 import { sessionCapOf } from "@/app/actions";
-import { listBorrowedPoolWorkers, readPoolLimit } from "@/lib/pool";
 import {
   cronUnregisterCmd,
   cronRegisterCmd,
@@ -109,9 +108,6 @@ export default async function Workers({ params }: { params: Promise<{ project: s
   // 파일이 없으면 항목 0개다 — 오류가 아니다(§4-1). 카드는 빈 상태 + `공통 항목 추가`로 뜬다.
   const common = await readCommonContext(project.root);
   const commonItems = common.ok ? common.items : [];
-  // 다이얼로그 셋째 섹션의 상한 + 현황(§4-16 결정 6). 다이얼로그를 열 때뿐이라 폴링에는 안 붙는다.
-  const poolLimit = await readPoolLimit(project.root);
-  const poolWorkerCount = (await listBorrowedPoolWorkers(project.root)).length;
   // 창 안(기본 5시간)에 끝난 세션들의 워커별 토큰 (§0-8 판정 1). 창 밖 로그는 열지도 않는다.
   const usage = await listUsage(project.root);
   // `tokens.json` 파일 읽기 1회, 워커 수와 무관하다(§비주얼 §57 §로딩). `null`이면 `리밋 대기`가
@@ -186,8 +182,6 @@ export default async function Workers({ params }: { params: Promise<{ project: s
               filePath={`${project.root}/context.sh`}
               context={common}
               cwds={rows.map((w) => w.cwd).filter((c): c is string => !!c)}
-              poolLimit={poolLimit}
-              poolWorkerCount={poolWorkerCount}
               settings={settings}
               divergent={divergent.map((c) => ({
                 key: LABEL[c.key] ?? c.key,

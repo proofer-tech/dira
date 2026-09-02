@@ -28,18 +28,15 @@ import {
   deleteWorkerAction,
   reapWorkerAction,
   registerWorkerAction,
-  savePoolLimitAction,
   saveCommonContextAction,
   saveContextAction,
   stopWorkerAction,
   type ContextResult,
-  type PoolLimitResult,
   type WorkerActionResult,
 } from "@/app/(app)/p/[project]/workers/actions";
 import { CopyCommand } from "@/components/copy-command";
 import { PickPath } from "@/components/path-picker";
 import { SessionStream } from "@/components/session-stream";
-import { openWorkerSettingsNode } from "@/components/settings-dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -60,7 +57,6 @@ import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 import { useLocale, useT } from "@/components/language-provider";
 import { relativeUnderAny } from "@/lib/urls";
 import { cn } from "@/lib/utils";
-import type { PoolLimit } from "@/lib/pool";
 import type { WorkersPanelSessionCap } from "@/lib/workers-panel";
 
 /** 서버가 읽어 넘긴 컨텍스트 한 항목. `path`는 워커 파일에 든 셸 문자열이라 `$TICKET_CWD`가
@@ -400,16 +396,11 @@ export function WorkerRowActions({ projectId, row }: { projectId: string; row: W
           미등록인 워커에도 `재등록`이 뜬다(락과 crontab은 직교한다 — §워커 상태 판정).
           배타 토글은 한 슬롯이고 **넓은 쪽(`재등록` 55.2px) 폭으로 고정**한다(§비주얼 §4-3) —
           안 하면 자수가 갈리는 만큼 왼쪽 버튼들이 행마다 다른 x에 뜬다(실측 11.1px) */}
-      {/* 공통 워커 shim 행은 이 토글과 삭제가 비활성이다(§4-16 결정 6 · §비주얼 §68 §거짓 한 칸) —
-          중단·재등록·삭제는 풀의 조작이고 설정 화면의 몫이다. 지우지 않고 비활성으로 남기는
-          것은 §4-3 §행 액션의 슬롯 규칙 그대로다. 사유 툴팁은 안 붙인다 — 같은 행의 `공통`
-          배지가 이미 알려 준다. */}
       {row.cron ? (
         <Button
           variant="ghost"
           size="sm"
           className="min-w-14"
-          disabled={row.commonWorker}
           onClick={() => setStopping(true)}
         >
           {t("workers.row.stopButton")}
@@ -419,13 +410,12 @@ export function WorkerRowActions({ projectId, row }: { projectId: string; row: W
           variant="ghost"
           size="sm"
           className="min-w-14"
-          disabled={row.commonWorker}
           onClick={() => setRegistering(true)}
         >
           {t("workers.row.registerButton")}
         </Button>
       )}
-      <Button variant="ghost" size="sm" disabled={row.commonWorker} onClick={() => setDeleting(true)}>
+      <Button variant="ghost" size="sm" onClick={() => setDeleting(true)}>
         {t("workers.row.deleteButton")}
       </Button>
 
@@ -936,20 +926,8 @@ export function WorkerNameCell({ row }: { row: WorkerRow }) {
       onBlur={() => clearSuccess(row.name)}
       className="px-3 py-0 text-xs outline-none focus-visible:inset-ring-3 focus-visible:inset-ring-ring/50"
     >
-      {/* §비주얼 §68 ⑤ — font-mono를 셀에서 떼어 이름 span으로 내린다(배지 글자가 mono를
-          물려받지 않게). 이 배지가 설정 다이얼로그 `워커` 노드를 여는 문이다(§4-16 결정 6) */}
       <div className="flex items-center gap-2">
         <span className="font-mono">{row.name}</span>
-        {row.commonWorker && (
-          <Badge
-            variant="outline"
-            className="shrink-0 font-sans"
-            title={t("workers.pool.badgeTitle")}
-            render={<button type="button" onClick={openWorkerSettingsNode} />}
-          >
-            {t("workers.pool.badge")}
-          </Badge>
-        )}
       </div>
       {sentence && <span className="sr-only">{sentence}</span>}
     </TableCell>
@@ -1107,8 +1085,6 @@ export function WorkerSettingsDialog({
   filePath,
   context,
   cwds,
-  poolLimit,
-  poolWorkerCount,
   settings,
   divergent,
   firstWorkerName,
@@ -1118,11 +1094,6 @@ export function WorkerSettingsDialog({
   filePath: string;
   context: { ok: true; items: ContextRow[] } | { ok: false; reason: string; missing?: true };
   cwds: string[];
-  /** `<루트>/pool-limit`의 지금 값(§4-16 결정 3). `limit: null` = 파일 없음(`없음`), `warn: true` =
-   *  파일은 있는데 못 읽었다(안 빌리는 것으로 읽고 경고를 낸다) */
-  poolLimit: PoolLimit;
-  /** 지금 이 프로젝트에 들어와 있는 공통 워커 수(shim 개수) — 표의 `공통` 배지 행 수와 같다 */
-  poolWorkerCount: number;
   /** 표시 전용 다섯 행. `key`는 이미 사람이 읽을 라벨이다(`page.tsx`의 `LABEL`이 붙여 넘긴다) */
   settings: { key: string; value: string; assumed: boolean }[];
   /** 갈린 설정. `key`도 라벨이 붙어서 온다 — `LABEL`은 페이지 쪽 상수라 여기서 다시 안 찾는다 */
@@ -1134,10 +1105,6 @@ export function WorkerSettingsDialog({
   const t = useT();
   const locale = useLocale();
   const label = t("workers.settingsDialog.trigger");
-  // §35 ③의 그 관용구 — 저장 직후 서버 재검증(`revalidatePath`)이 오기 전에도 트리거 값과
-  // 현황 문구가 즉시 맞아야 한다(`LimitField`의 `onSaved`와 같은 자리, `personas-ui.tsx`).
-  const [limit, setLimit] = useState(poolLimit);
-  const [count, setCount] = useState(poolWorkerCount);
   const [reapPending, startReap] = useTransition();
   const [reap, setReap] = useState<WorkerActionResult | null>(null);
   return (
@@ -1164,22 +1131,7 @@ export function WorkerSettingsDialog({
           </div>
           <CommonContextCard projectId={projectId} filePath={filePath} context={context} cwds={cwds} />
         </section>
-        {/* 셋째 섹션 — 공통 워커 빌리기(§4-16 결정 6 · §비주얼 §68 ④). 편집할 수 있는 것 뒤,
-            표시 전용(다음 섹션) 앞이다 — 순서는 공통 컨텍스트 -> 공통 워커 빌리기 -> 나머지
-            워커 설정. 껍데기는 둘째 섹션과 글자 하나까지 같은 벌이다. */}
-        <section className="space-y-2 border-t pt-4">
-          <h2 className="text-sm font-semibold">{t("workers.pool.sectionTitle")}</h2>
-          <PoolLimitField
-            projectId={projectId}
-            limit={limit}
-            count={count}
-            onSaved={(nextLimit, nextCount) => {
-              setLimit(nextLimit);
-              setCount(nextCount);
-            }}
-          />
-        </section>
-        {/* 셋째 섹션 — 표시 전용. 경계는 여기만(§비주얼 §35 개정 ③ "첫 섹션에는 경계가 없다") */}
+        {/* 둘째 섹션 — 표시 전용. 경계는 여기만(§비주얼 §35 개정 ③ "첫 섹션에는 경계가 없다") */}
         <section className="space-y-2 border-t pt-4">
           <div>
             <h2 className="text-sm font-semibold">{t("workers.settingsDialog.readonlyHeading")}</h2>
@@ -1258,114 +1210,6 @@ export function WorkerSettingsDialog({
         </section>
       </DialogContent>
     </Dialog>
-  );
-}
-
-/** 값이 곧 트리거인 팝오버 — `personas-ui.tsx`의 `LimitField`와 같은 관용구(§35 ③). 저장은
- *  `savePoolLimitAction` 하나뿐이고, 빈 값은 `0`과 같은 효과다(§4-16 결정 3 — `PoolLimit.limit`이
- *  `null`인 것은 파일이 아예 없는 최초 상태뿐, 한 번 저장하면 그 뒤로는 항상 숫자다).
- *  `blocked`(0으로 되돌릴 때 티켓을 물고 있어 못 뺀 shim)는 저장 성공 위에 얹는 경고 한 줄이다 —
- *  저장 자체는 그래도 성공이다(`pool-limit`은 `0`으로 쓰인다). */
-function PoolLimitField({
-  projectId,
-  limit,
-  count,
-  onSaved,
-}: {
-  projectId: string;
-  limit: PoolLimit;
-  count: number;
-  onSaved: (limit: PoolLimit, count: number) => void;
-}) {
-  const t = useT();
-  const locale = useLocale();
-  const saved = limit.limit === null ? "" : String(limit.limit);
-  const [open, setOpen] = useState(false);
-  const [value, setValue] = useState(saved);
-  const [error, setError] = useState<string | null>(null);
-  const [blocked, setBlocked] = useState<{ name: string; reason: string }[]>([]);
-  const [pending, start] = useTransition();
-  const ready = !pending && value.trim() !== saved;
-
-  const save = () =>
-    start(async () => {
-      const r = await savePoolLimitAction(projectId, value, locale);
-      if (r.ok) {
-        const nextLimit = { limit: r.limit ?? 0, warn: false };
-        onSaved(nextLimit, r.count ?? 0);
-        setValue(String(r.limit ?? 0));
-        setError(null);
-        setBlocked(r.blocked ?? []);
-        setOpen(false);
-      } else {
-        setError(r.message ?? t("workers.pool.saveFailed"));
-      }
-    });
-
-  return (
-    <div className="space-y-1">
-      <span className="flex items-center gap-2">
-        <span className="text-xs text-muted-foreground">{t("workers.pool.limitLabel")}</span>
-        <Popover
-          open={open}
-          onOpenChange={(o) => {
-            setOpen(o);
-            if (!o) {
-              setValue(saved);
-              setError(null);
-            }
-          }}
-        >
-          <PopoverTrigger render={<Button variant="ghost" size="sm" className="font-normal" />}>
-            <span className={limit.limit !== null ? "font-mono text-xs" : undefined}>
-              {limit.limit === null ? t("workers.pool.limitNone") : limit.limit}
-            </span>
-            <ChevronDown aria-hidden className="size-3" />
-          </PopoverTrigger>
-          <PopoverContent align="start">
-            <div className="space-y-2">
-              <Label htmlFor="pool-limit-input">{t("workers.pool.limitPopoverLabel")}</Label>
-              <Input
-                id="pool-limit-input"
-                type="number"
-                min={0}
-                step={1}
-                placeholder={t("workers.pool.limitNone")}
-                className="w-full font-mono"
-                value={value}
-                onChange={(e) => setValue(e.target.value)}
-              />
-            </div>
-            <p className="text-xs text-muted-foreground">{t("workers.pool.limitPopoverHint")}</p>
-            {error && <Failure title={t("workers.pool.saveFailedTitle")} message={error} />}
-            <div className="flex items-center justify-between gap-2">
-              <Button
-                size="sm"
-                className="ml-auto"
-                aria-disabled={!ready}
-                onClick={() => {
-                  if (ready) save();
-                }}
-              >
-                {pending ? t("common.saving") : t("common.save")}
-              </Button>
-            </div>
-          </PopoverContent>
-        </Popover>
-      </span>
-      <p className="text-xs text-muted-foreground">
-        {count === 0
-          ? t("workers.pool.countZero")
-          : `${t("workers.pool.countPrefix")}${count}${t("workers.pool.countSuffix")}`}
-      </p>
-      {limit.warn && <p className="text-xs text-status-stale">{t("workers.pool.warnUnreadable")}</p>}
-      {blocked.length > 0 && (
-        <p className="text-xs text-status-stale">
-          {t("workers.pool.blockedPrefix")}
-          {blocked.map((b) => b.name).join(", ")}
-        </p>
-      )}
-    </div>
   );
 }
 

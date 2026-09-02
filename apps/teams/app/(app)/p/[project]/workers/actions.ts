@@ -11,7 +11,6 @@ import { revalidatePath } from "next/cache";
 import { track } from "@/lib/analytics";
 import { runWorker } from "@/lib/engine";
 import { DEFAULT_LOCALE, t, type Locale } from "@/lib/i18n";
-import { applyPoolLimit, listBorrowedPoolWorkers } from "@/lib/pool";
 import { getProject, validateOntologyInput } from "@/lib/projects";
 import {
   applyCommonSource,
@@ -288,44 +287,6 @@ export async function copyContextAction(
     const context = await copyContext(await rootOf(projectId, locale), from, to);
     revalidatePath(`/p/${projectId}`, "layout");
     return { ok: true, context };
-  } catch (e) {
-    return fail(e);
-  }
-}
-
-// ── 공통 워커 빌리기 상한 (§4-16 결정 3·6, 티켓 28c4d25f) ───────────────────
-
-export type PoolLimitResult = {
-  ok: boolean;
-  message?: string;
-  /** 성공 시 실제로 저장된 값 */
-  limit?: number;
-  /** 저장 직후 이 프로젝트에 들어와 있는 공통 워커 수 — 클라이언트가 직접 세지 않는다
-   *  (`blocked`만으로는 1 이상으로 저장한 쪽의 개수를 못 셈) */
-  count?: number;
-  /** 0으로 되돌릴 때 티켓을 물고 있어 못 뺀 shim들(§4의 삭제와 같은 판정) — 저장 자체는
-   *  성공이다(`pool-limit`은 그래도 0으로 쓰인다). 빈 배열이면 전부 빠졌다 */
-  blocked?: { name: string; reason: string }[];
-};
-
-/** 빈 값도 `0`과 같은 효과다(§4-16 결정 3 "0이거나 파일이 없으면 안 빌린다") — `personaLimit`과
- *  달리 `null` 삭제 규약이 없어서 `writePoolLimit`이 값 하나만 받는다(`lib/pool.ts` 참고). */
-export async function savePoolLimitAction(
-  projectId: string,
-  value: string,
-  locale: Locale = DEFAULT_LOCALE,
-): Promise<PoolLimitResult> {
-  try {
-    const text = value.trim();
-    if (text !== "" && !/^\d+$/.test(text)) {
-      throw new Error(`${t(locale, "workers.pool.limitInvalidPrefix")} ${value}`);
-    }
-    const limit = text === "" ? 0 : Number(text);
-    const root = await rootOf(projectId, locale);
-    const { blocked } = await applyPoolLimit(root, limit);
-    const count = (await listBorrowedPoolWorkers(root)).length;
-    revalidatePath(`/p/${projectId}`, "layout");
-    return { ok: true, limit, count, blocked };
   } catch (e) {
     return fail(e);
   }

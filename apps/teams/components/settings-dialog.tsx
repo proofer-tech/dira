@@ -34,9 +34,7 @@ import {
 } from "lucide-react";
 import {
   captureEngineProfileAction,
-  createPoolWorkerAction,
   deleteEngineProfileAction,
-  deletePoolWorkerAction,
   deleteTokenAction,
   readAnalyticsAction,
   readEngineProfileRowsAction,
@@ -46,7 +44,6 @@ import {
   readTokenRowsAction,
   readWebhookAction,
   readWorkersPanelAction,
-  registerPoolWorkerAction,
   renameProjectAction,
   resetKeymapAction,
   resolveProjectAction,
@@ -67,7 +64,6 @@ import {
   setWebhookAction,
   startSetupAction,
   pollSetupAction,
-  stopPoolWorkerAction,
   stopSetupAction,
   setActiveTokenAction,
   testWebhookAction,
@@ -95,12 +91,9 @@ import { wrap } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import {
   EMPTY_WORKERS_FILTERS,
-  POOL_PROJECT_VALUE,
   filteredGroups,
-  filteredPool,
   type SessionCapProjectRow,
   type WorkersFilters,
-  type WorkersKind,
   type WorkersPanelSessionCap,
   type WorkersPanelView,
 } from "@/lib/workers-panel";
@@ -743,101 +736,9 @@ function WorkersFilterAxis({
   );
 }
 
-type PoolOpKind = "stop" | "register" | "delete";
-
-/** 풀 줄 하나(§비주얼 §68 ②) — 조작이 붙는 유일한 줄. 이 줄 자신의 조작 중에만 버튼을 잠근다
- *  (다른 줄의 조작이 이 줄을 안 막는다 — 워커 표의 행별 `useTransition`과 같은 결). 성공하면
- *  부르는 쪽(`WorkersSection`)의 `onDone`이 패널을 다시 읽는다 — 실패하면 이 줄에서만 안다. */
-function PoolRow({
-  name,
-  status,
-  borrowedBy,
-  t,
-  onOp,
-  onDone,
-}: {
-  name: string;
-  status: WorkerStatus;
-  borrowedBy: number;
-  t: (key: string) => string;
-  onOp: (kind: PoolOpKind, name: string) => Promise<{ error?: string; blocked?: string[] }>;
-  onDone: () => void;
-}) {
-  const locale = useLocale();
-  const [pending, start] = useTransition();
-  const [error, setError] = useState<string | null>(null);
-  const [blocked, setBlocked] = useState<string[]>([]);
-  const run = (kind: PoolOpKind) =>
-    start(async () => {
-      const r = await onOp(kind, name);
-      if (r.error) {
-        setError(r.error);
-        setBlocked([]);
-      } else {
-        setError(null);
-        setBlocked(r.blocked ?? []);
-        onDone();
-      }
-    });
-
-  return (
-    <div className="space-y-1">
-      <div className="flex h-8 items-center gap-2 rounded-md px-2">
-        <span className="min-w-0 flex-1 truncate font-mono text-xs">{name}</span>
-        <StatusBadge status={status} locale={locale} />
-        <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-          {borrowedBy}
-          {t("settings.workers.borrowedBySuffix")}
-        </span>
-        <div className="flex shrink-0 items-center gap-1">
-          {status === "idle" || status === "running" || status === "stale" ? (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="min-w-14"
-              disabled={pending}
-              onClick={() => run("stop")}
-            >
-              {t("settings.workers.stop")}
-            </Button>
-          ) : (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="min-w-14"
-              disabled={pending}
-              onClick={() => run("register")}
-            >
-              {t("settings.workers.register")}
-            </Button>
-          )}
-          <Button variant="ghost" size="sm" disabled={pending} onClick={() => run("delete")}>
-            {t("settings.workers.delete")}
-          </Button>
-        </div>
-      </div>
-      {error && (
-        <Alert variant="destructive">
-          <TriangleAlert aria-hidden />
-          <AlertTitle>{name}</AlertTitle>
-          <AlertDescription>
-            <span className="font-mono text-xs break-all">{error}</span>
-          </AlertDescription>
-        </Alert>
-      )}
-      {blocked.length > 0 && (
-        <p className="px-2 text-xs text-status-stale">
-          {t("workers.pool.blockedPrefix")}
-          {blocked.join(", ")}
-        </p>
-      )}
-    </div>
-  );
-}
-
-/** 머신 전체 세션 상한 칸(§세션이 120초 안에 못 뜬다 §개정 결정 2-3) — 관용구는 `PoolLimitField`
- *  (`workers-ui.tsx`)와 글자 하나까지 같다(값이 곧 트리거, 팝오버 안 세로 스택, 닫는 것이 취소).
- *  빈 값 저장은 `pool-limit`과 달리 `0`이 아니라 **파일 삭제**다(결정 2) — `saved`가 빈 문자열이면
+/** 머신 전체 세션 상한 칸(§세션이 120초 안에 못 뜬다 §개정 결정 2-3) — 관용구는 값이 곧 트리거,
+ *  팝오버 안 세로 스택, 닫는 것이 취소다. 빈 값 저장은 `0`이 아니라 **파일 삭제**다(결정 2) —
+ *  `saved`가 빈 문자열이면
  *  트리거가 `없음`이고, 그 값 그대로 저장해도(`ready`가 `false`라 버튼이 막힌다) 없음 유지다.
  *  합계·분포·상한 도달 문구는 그 아래 표시 전용 줄들이다(결정 2-3, `runner.log`를 안 읽는다). */
 function SessionCapField({
@@ -954,33 +855,14 @@ function WorkersSection({ className, closeDialog }: { className?: string; closeD
   const locale = useLocale();
   const [view, setView] = useState<WorkersPanelView | null>(null);
   const [filters, setFilters] = useState<WorkersFilters>(EMPTY_WORKERS_FILTERS);
-  const [createOpen, setCreateOpen] = useState(false);
-  const [createName, setCreateName] = useState("");
-  const [createError, setCreateError] = useState<string | null>(null);
-  const [createPending, startCreate] = useTransition();
 
   const load = () => void readWorkersPanelAction().then(setView);
   useEffect(load, []);
 
-  const poolOp = (kind: PoolOpKind, name: string) =>
-    kind === "stop"
-      ? stopPoolWorkerAction(name)
-      : kind === "register"
-        ? registerPoolWorkerAction(name)
-        : deletePoolWorkerAction(name);
-
-  const hasFilters = filters.project.length > 0 || filters.kind.length > 0 || filters.status.length > 0;
-  const pool = view ? filteredPool(view, filters) : [];
+  const hasFilters = filters.project.length > 0 || filters.status.length > 0;
   const groups = view ? filteredGroups(view, filters) : [];
 
-  const projectOptions = [
-    { value: POOL_PROJECT_VALUE, label: t("settings.workers.commonBadge") },
-    ...(view?.projects.map((p) => ({ value: p.id, label: p.name })) ?? []),
-  ];
-  const kindOptions: { value: WorkersKind; label: string }[] = [
-    { value: "pool", label: t("settings.workers.commonBadge") },
-    { value: "project", label: t("settings.workers.filterProject") },
-  ];
+  const projectOptions = view?.projects.map((p) => ({ value: p.id, label: p.name })) ?? [];
   const statusOptions: { value: WorkerStatus; label: string }[] = (
     ["running", "idle", "stopped", "stale"] as const
   ).map((s) => ({ value: s, label: statusLabel(s, locale) }));
@@ -1011,12 +893,6 @@ function WorkersSection({ className, closeDialog }: { className?: string; closeD
           onChange={(project) => setFilters((f) => ({ ...f, project }))}
         />
         <WorkersFilterAxis
-          label={t("settings.workers.filterKind")}
-          options={kindOptions}
-          selected={filters.kind}
-          onChange={(kind) => setFilters((f) => ({ ...f, kind: kind as WorkersKind[] }))}
-        />
-        <WorkersFilterAxis
           label={t("settings.workers.filterStatus")}
           options={statusOptions}
           selected={filters.status}
@@ -1035,79 +911,6 @@ function WorkersSection({ className, closeDialog }: { className?: string; closeD
       </div>
 
       <div className="space-y-4">
-        <div className="space-y-1">
-          <div data-setting="workers.pool" className="flex items-center justify-between gap-2">
-            <h4 className="text-sm font-medium">{t("settings.workers.poolHeading")}</h4>
-            <Dialog
-              open={createOpen}
-              onOpenChange={(o) => {
-                setCreateOpen(o);
-                if (!o) {
-                  setCreateName("");
-                  setCreateError(null);
-                }
-              }}
-            >
-              <DialogTrigger render={<Button size="sm" />}>{t("settings.workers.create")}</DialogTrigger>
-              <DialogContent className="sm:max-w-md">
-                <DialogHeader>
-                  <DialogTitle>{t("settings.workers.create")}</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-2">
-                  <Label htmlFor="pool-worker-name">{t("settings.workers.create")}</Label>
-                  <Input
-                    id="pool-worker-name"
-                    className="font-mono"
-                    value={createName}
-                    onChange={(e) => setCreateName(e.target.value)}
-                  />
-                  {createError && (
-                    <Alert variant="destructive">
-                      <TriangleAlert aria-hidden />
-                      <AlertDescription>
-                        <span className="font-mono text-xs break-all">{createError}</span>
-                      </AlertDescription>
-                    </Alert>
-                  )}
-                </div>
-                <DialogFooter>
-                  <DialogClose render={<Button variant="outline" />}>{t("common.cancel")}</DialogClose>
-                  <Button
-                    disabled={createPending || !createName.trim()}
-                    onClick={() =>
-                      startCreate(async () => {
-                        const r = await createPoolWorkerAction(createName);
-                        if (r.error) return setCreateError(r.error);
-                        setCreateOpen(false);
-                        load();
-                      })
-                    }
-                  >
-                    {createPending ? t("common.saving") : t("common.save")}
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-          </div>
-          {!view || view.pool.length === 0 ? (
-            <p className="text-sm text-muted-foreground">{t("settings.workers.poolEmpty")}</p>
-          ) : pool.length === 0 ? (
-            <p className="text-sm text-muted-foreground">{t("settings.workers.filteredEmpty")}</p>
-          ) : (
-            pool.map((p) => (
-              <PoolRow
-                key={p.name}
-                name={p.name}
-                status={p.status}
-                borrowedBy={p.borrowedBy}
-                t={t}
-                onOp={poolOp}
-                onDone={load}
-              />
-            ))
-          )}
-        </div>
-
         <div className="space-y-1">
           <div data-setting="workers.all">
             <h4 className="text-sm font-medium">{t("settings.workers.allHeading")}</h4>
@@ -1508,8 +1311,8 @@ function Kbd({ className, children }: { className?: string; children: React.Reac
   );
 }
 
-/** `통합 브랜치` 칸 — §통합 브랜치가 설정이 된다 결정 7. 행 모양은 `PoolLimitField`(§44 ③)를
- *  글자 그대로 쓴다(로드맵 P348 — 모양 0장, 새 관용구 0) — 값이 곧 트리거인 팝오버, 저장은
+/** `통합 브랜치` 칸 — §통합 브랜치가 설정이 된다 결정 7. 행 모양은 값이 곧 트리거인 팝오버 관용구를
+ *  그대로 쓴다(로드맵 P348 — 모양 0장, 새 관용구 0) — 저장은
  *  `saveIntegrationBranchAction` 하나뿐이다. 값이 갈리면 서버(`writeIntegrationBranch`)가 쓰인
  *  자리 다섯을 같이 다시 쓰고 그 상대경로 목록을 돌려준다(결정 3) — 그 목록을 저장 성공 위에
  *  얹는 줄로 그대로 보여준다(결정 7). 값이 안 갈렸으면(팝오버가 `ready` 게이트로 막는다) 저장을
