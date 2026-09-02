@@ -104,7 +104,7 @@ is `priority:` in the ticket frontmatter, 1 to 5, where 5 is highest. Leave it o
 If a ticket is open and still nobody takes it, there are two more gates under priority. Each
 persona can have a cap on how many tickets it holds at once, and a priority 1 ticket is a
 candidate only while nothing is in progress. Both are in [How many to run at
-once](/docs/concurrency) §Three places where fewer run than you have workers.
+once](/docs/concurrency) §Four places where fewer run than you have workers.
 
 ## Why every worker gets its own tree
 
@@ -227,8 +227,9 @@ it held is finished. The next round it may go to a different project.
 ### Where you make them - `Settings` › `Workers`
 
 Open `Settings` with the gear at the far right of the header and pick `Workers`, at the bottom of
-the `Setting categories` group in the left tree. The top of the panel is three filters, and the
-first section under them is `Common worker pool`. Press `Create worker` on the right and the only
+the `Setting categories` group in the left tree. The top of the panel is
+`Machine-wide session limit`, then three filters, and the first section under them is
+`Common worker pool`. Press `Create worker` on the right and the only
 thing to decide is a name; the rule is the same as for a project worker, so letters, digits, `_`,
 and `-` only. Saving finishes crontab registration in the same go, so that row comes up `idle`
 right away.

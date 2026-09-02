@@ -1,11 +1,12 @@
 # How many to run at once
 
-## Why there is no concurrency setting
+## This project's ceiling - the number of workers
 
-If you are looking for a field that says "up to 3 at once," there is none. **The ceiling on
-sessions running at the same time is the number of workers in this project's worker table.** With
-one worker, no matter how many tickets pile up in the queue, it is one session at a time; with
-two, it is two.
+If you are looking through the project settings for a field that says "up to 3 at once," there is
+none. **The ceiling on sessions running at the same time in this project is the number of workers
+in its worker table.** With one worker, no matter how many tickets pile up in the queue, it is one
+session at a time; with two, it is two. There is one more limit that applies to this whole
+computer, separate from that arithmetic.
 
 That table has two kinds mixed in: project workers this project made, and common workers it
 borrowed. The first kind belongs to this project, so the arithmetic holds as written. Common
@@ -24,6 +25,125 @@ There are two ways to add. For project workers it is [Workers](/docs/worker) §O
 the same chapter. To make this one project go faster for certain, make a project worker. Common
 workers are the way to spend fewer slots when you have several projects.
 
+## This computer's ceiling - the machine-wide session limit
+
+Register several projects and the worker counts, added up, pass ten in a hurry. One session is one
+copy of claude, so six of them up at once take six copies' worth of CPU and memory. That is why
+one more limit sits above the project ceiling. **It is how many sessions can be up at once on this
+computer, and every registered project shares that one value.** The default is 6.
+
+What this limit counts is the sessions alive right now. It does not look at the number of workers.
+However many workers you have, if only four of them are holding tickets, four sessions are alive.
+
+### How many are up right now - `Settings` › `Workers`
+
+Open `Settings` with the gear at the far right of the header and pick `Workers`, at the bottom of
+the `Setting categories` group in the left tree. The top section of the panel is
+`Machine-wide session limit`. It sits above the three filters and `Common worker pool`.
+
+Three things are there.
+
+- **The value next to `Limit`.** The limit in force right now. If you have never set one, `None`
+  shows.
+- **The total line.** `Machine-wide 4/6` puts the number of live sessions and the limit together.
+  With the limit at `None`, only the session count shows, with no denominator.
+- **One line per queue.** Every registered project gets a line, and one using none of them
+  reads `0`. The total alone cannot tell you whether all six landed in one project or spread
+  across three. This list is where you check that.
+
+Once the total reaches the limit, one more line appears below it.
+
+> `At the limit — no new sessions can start right now.`
+
+If the value cannot be read, it is taken as no limit, and
+`Couldn't read session-limit — reading it as no limit.` shows under `Limit`.
+
+This panel reads once, when the dialog opens. The numbers do not move while it is open, so close
+it and open it again.
+
+### Where you change it - `Limit` in that same section
+
+Press the value next to `Limit` and a popover opens. Put an integer into
+`Concurrent session limit` and press `Save`. It is the same idiom as the limit under
+`Borrow common workers`, so there is nothing new to learn.
+
+> `Empty removes the limit — caps how many claude sessions run at once on this machine.`
+
+**Save it empty and the limit itself goes away.** That differs from `0`. `0` blocks every session
+from starting; empty puts no limit on at all.
+
+The default of 6 was not measured on your computer. It came off the machine this was built on, so
+raise it if you have more cores and memory to spare. Lower it if you run other work alongside it,
+and lower it again if the machine gets sluggish after you raise it.
+
+### When you make a worker - the number shows under the name field
+
+Press `New worker` and two helper lines appear under the name field. The upper one is the number
+right now (`Machine-wide 4/6`), or `No machine-wide limit` if you have never set one. The lower
+one is what that number means.
+
+> `Running many sessions at once strains this machine, so there's a limit on how many can run concurrently.`
+
+**`Create` does not lock even with the number sitting at the limit.** Making one more worker and
+starting one more session are different things. A worker is a spot that claims a ticket; a session
+is the claude actually up in that spot.
+
+Blocking by worker count would cause a different problem right away. Add up the workers across
+every registered project and it passes twenty while the limit is 6, so the moment you block on
+worker count, `Create` would be unpressable in every project. What you need when the limit is
+reached is to know how many are up right now, which is why this form shows you the number instead
+of blocking.
+
+The other direction holds too: while you are stuck at the limit, more workers will not make this
+project run faster. It is not running because there is no spot, and adding hands to claim tickets
+does not add spots.
+
+### Telling whether the limit is what is starving you
+
+When tickets are piling up in the queue and nothing is running, two places will tell you in turn
+whether this limit is the cause.
+
+Look at the total in `Settings` › `Workers` first.
+
+- **The total has reached the limit.** This computer is full. Who is using those spots is in the
+  per-queue list right below it. It is usually another project, so wait, raise the limit, or stop
+  that project's workers.
+- **The total is under the limit and still nothing runs.** The limit itself still has room. One
+  more line of the log has to be read.
+
+Two different sentences get written to `<root>/workers/runner.log` (see [Logs](/docs/logs)). They
+come from the engine and are in Korean whichever language you read the site in.
+
+| Log line | What it says |
+|---|---|
+| `상한 - 머신 전체 산 세션 6/6, 이번 tick을 건너뜀` | The machine is full, so this round did not run |
+| `몫 - 이 큐가 2벌로 몫 2를 채웠고 굶는 큐가 있어 이번 tick을 양보함` | The limit has room, but this project had already filled its share, so it handed the spot to a project that has none up |
+
+With neither of them there, this limit is not the cause. Look at the first three of
+§Four places where fewer run than you have workers below. Those two lines skip only that round
+without touching the ticket. The ticket stays in `Open` and is a candidate again next round.
+
+### The share - so one project cannot eat the whole limit
+
+If the limit were first-come only, the project with more workers would keep taking each free spot
+back and the project with fewer would starve with its tickets piled up. That happened. Five of the
+six live sessions belonged to one project, and the project sitting on five open tickets had none.
+
+So the limit is divided into shares. **A share is the limit divided by the number of projects that
+have work right now, and never less than 1.** With a limit of 6 and three projects holding work,
+the share is 2; with seven, it is 1. A project that has already filled its share skips the round
+whenever another project has work and nothing up.
+
+- **With nobody starving, the leftover spots stay first-come.** With a limit of 6 and four
+  projects holding work, the share is 1 and the remaining two spots go to whoever gets there
+  first. The division never leaves spots empty.
+- **Two conditions make a project count as holding work.** It has at least one open ticket or one
+  in-progress ticket whose owner has died, and its workers actually ran within the last two
+  minutes. A project sitting on tickets with its workers switched off does not count. Counting it
+  would leave the spot reserved for its share with nobody to take it.
+- **Each project's own workers make this call.** No table of turns is kept anywhere, so adding or
+  removing a project leaves nothing to reconcile.
+
 ## The worker lock - one ticket at a time
 
 A worker is a synchronous process. That means it does one thing at a time, so it does not claim
@@ -41,10 +161,10 @@ A session holding on forever is blocked too. Past 5400 seconds by default, the s
 the ticket goes back to `Open`. The next call picks it up again, by the same worker or another.
 The value to change is `TICKET_MAXRUN` in [Worker environment variables](/docs/ref-env).
 
-## Three places where fewer run than you have workers
+## Four places where fewer run than you have workers
 
 If you have five workers and only three are running, either the queue has no candidates or one of
-the three below has caught them.
+the four below has caught them.
 
 - **The persona cap.** That is `Limit` in [Personas](/docs/personas) §Dispatch policy. Set it to
   `2` and only two of that persona's tickets run at once even with ten backed up. A worker caught
@@ -56,6 +176,10 @@ the three below has caught them.
 - **A borrowed slot is off elsewhere.** A row with the `Common` badge is not tied to this project.
   While that slot holds another project's ticket, it does nothing here. The rule for when its
   turn comes around is in [Workers](/docs/worker) §The rule that decides whose turn it is.
+- **The machine-wide session limit.** This one catches you because of other projects, which makes
+  it unlike the first three. Either this computer is already full, or the limit has room and this
+  project has spent its whole share. How to tell them apart is in
+  §Telling whether the limit is what is starving you above.
 
 The first two leave one `SKIP` line in the log. The reason is written out, as in
 `SKIP 페르소나 상한 <name> 2/2` and `SKIP 우선순위 1 <hash> — 진행중 3건`. Those lines come
@@ -94,6 +218,8 @@ Here is the size of it. Seven workers driven flat out without a break averaged 2
 minute. We have never measured doing it yourself, so the multiple is not written down.
 
 Start at two, and add one at a time while the `Open` lane refuses to shrink. Five workers on an
-empty queue gains you nothing and runs cron five times over.
+empty queue gains you nothing and runs cron five times over. If you are running several projects,
+look at the total in `Settings` › `Workers` once before you add. Already at the limit, more
+workers have no spot to come up in.
 
 Next is [Personas](/docs/personas).

@@ -210,6 +210,11 @@ candidate on an engine other than `claude` dispatches as usual. It is the `claud
 alone that starve. If the token is there but has expired, dispatch does happen and the session
 ends immediately on an authentication error, leaving a `FAIL`.
 
+If authentication is fine and you still see this, look at the machine-wide session limit. With
+this computer at the limit, or this project having spent its whole share, the workers do wake up
+but claim no ticket. How to tell is in [How many to run at once](/docs/concurrency)
+§Telling whether the limit is what is starving you.
+
 ```bash
 ls -la ~/.config/dira/oauth-token             # is the file there, and when was it made
 grep 'AUTH 대기' <root>/workers/runner.log    # SKIP AUTH 대기 ... the line left only the first time
