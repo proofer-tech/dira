@@ -1100,9 +1100,18 @@ def fresh_block(path):
 
 
 def reclaim(path, fm, why):
-    """attempts 상한까지 백로그로 복귀. 상한을 넘거나 신선한 블록이 있으면 답변 요청으로 올린다."""
+    """attempts 상한까지 백로그로 복귀. 상한을 넘거나 신선한 블록이 있으면 답변 요청으로 올린다.
+
+    한도로 죽은 회차는 attempts를 안 쓴다(P360-4) - 한도는 계정의 문제지 티켓의 문제가
+    아니다. 부모 워커의 사후처리(`reap_release`)가 사유와 무관하게 attempts를 안 건드리는
+    것과 값을 맞춘다 - 종전엔 같은 한도 사망이 부모가 먼저 보면 예산을 안 쓰고 남의 리퍼가
+    먼저 보면 썼다(실측 86a26ad2)."""
     h = ticket_hash(path, fm)
-    attempts = int((fm.get("attempts") or "0").strip() or 0) + 1
+    troot = os.path.dirname(os.path.dirname(path))
+    limited = dead_reason(_log_lines(troot), h) == "한도"
+    attempts = int((fm.get("attempts") or "0").strip() or 0)
+    if not limited:
+        attempts += 1
     # 되돌리기(rename)를 먼저 이긴다. frontmatter를 먼저 쓰면 리퍼 둘이 겹칠 때 진 쪽의
     # open(w)이 **이미 사라진 `.wip`을 되살려** 주인 없는 유령이 영구 잔류한다
     # (2026-07-31 5f0498c9 실사고: w6이 이기고 w1·w2가 되살렸다. 그 파일은 pid도 session_id도
@@ -1112,12 +1121,14 @@ def reclaim(path, fm, why):
     except (SystemExit, OSError) as e:
         return "REAP-FAIL {} {}".format(h, e)
     blocked = fresh_block(path)
-    if attempts > REAP_MAX_ATTEMPTS or blocked:
+    if blocked or (attempts > REAP_MAX_ATTEMPTS and not limited):
         return ask_human(path, h, attempts, why, blocked)
     upd = {"attempts": attempts}
     upd.update({k: "" for k in REAP_CLEAR})
     set_fm_keys(path, upd)
-    return "REAP {} attempts={} - {}, 백로그 복귀".format(h, attempts, why)
+    tag = "attempts={}(한도라 예산 안 씀)".format(attempts) if limited \
+        else "attempts={}".format(attempts)
+    return "REAP {} {} - {}, 백로그 복귀".format(h, tag, why)
 
 
 def reap_release(path):
