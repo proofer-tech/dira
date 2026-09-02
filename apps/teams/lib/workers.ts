@@ -1442,12 +1442,16 @@ export function workerOf(owner: string): string | null {
  *  **stem이다** (표시값 `hash`가 아니다): 이 값은 워커 화면이 티켓 상세로 거는 링크가 된다
  *  (DESIGN.md §식별자). 물고 있는 티켓은 항상 `.wip`이라 표시값에 접미사가 붙어 있어
  *  (`<이름>.wip`) 그대로 보여주면 파일 이름도 아니고 URL도 아닌 값이 화면에 남는다. */
-function holdingOf(tickets: Ticket[], effName: string): string | null {
+function holdingTicketOf(tickets: Ticket[], effName: string): Ticket | null {
   for (const t of tickets) {
     if (t.state !== "wip") continue;
-    if (workerOf(t.fm.owner ?? "") === effName) return t.stem;
+    if (workerOf(t.fm.owner ?? "") === effName) return t;
   }
   return null;
+}
+
+function holdingOf(tickets: Ticket[], effName: string): string | null {
+  return holdingTicketOf(tickets, effName)?.stem ?? null;
 }
 
 /** 이 티켓을 물고 있는 워커의 **엔진 이름**. 아무도 안 물고 있으면 `null`
@@ -1582,8 +1586,8 @@ export function poolShimNameOf(text: string): string | null {
  *
  *  | status | 판정 |
  *  |---|---|
- *  | running | 락 있음 + pid 생존 |
- *  | stale | 락 있음 + pid 죽음(또는 pid 파일이 없다 — tick.sh도 이걸 회수 대상으로 본다) |
+ *  | running | 락 있음 + 락 pid 생존 + (물고 있는 티켓이 있으면) 그 티켓 `pid:` 도 생존 |
+ *  | stale | 락 있음 + (락 pid 죽음 또는 pid 파일 없음) 또는 물고 있는 티켓의 `pid:` 죽음 |
  *  | idle | 락 없음 + crontab 등록됨 |
  *  | stopped | 락 없음 + crontab 미등록 |
  *
@@ -1630,14 +1634,30 @@ export async function listWorkers(
     // `full`은 정규화하지 **않고** 저장한다 — cron 줄에 들어가 셸이 실제로 실행하는 문자열이라
     // 파일시스템이 준 바이트 그대로여야 한다. 정규화는 비교에만 쓴다.
     const inCron = cron.includes(nfc(full));
+    const holdingTicket = holdingTicketOf(tickets, eff);
+    // 워커 락의 pid(709행 `$$`)는 tick.sh 자신이다 - 그 티켓을 돌리는 세션의 pid는 따로
+    // 티켓 프론트매터 `pid:`(1342행 `setpid`)에 있다. tick.sh의 unassign과 session-cap.sh는
+    // 세션 생존을 이 pid + kill -0으로 잰다(티켓 57e50b20) - 화면도 같은 pid로 다시 확인해야
+    // 락만 살아 있고 세션은 죽은 경우를 running으로 잘못 세지 않는다.
+    const sessionPidRaw = Number.parseInt(holdingTicket?.fm.pid ?? "", 10);
+    const sessionPid = Number.isInteger(sessionPidRaw) && sessionPidRaw > 0 ? sessionPidRaw : null;
+    const sessionDead = sessionPid !== null && !alive(sessionPid);
     out.push({
       name,
       effName: eff,
       path: full,
-      status: held ? (pid && alive(pid) ? "running" : "stale") : inCron ? "idle" : "stopped",
+      status: held
+        ? sessionDead
+          ? "stale"
+          : pid && alive(pid)
+            ? "running"
+            : "stale"
+        : inCron
+          ? "idle"
+          : "stopped",
       cron: inCron,
       lockPid: pid,
-      holding: holdingOf(tickets, eff),
+      holding: holdingTicket?.stem ?? null,
       engine: parsed.engine, // null = 대입 없음. 여기서 기본값으로 덮으면 화면이 둘을 못 가른다
       recentLog: logs.byWorker[eff]?.recent ?? [],
       // 파일을 여는 것은 **마지막 결과가 `FAIL`인 워커뿐**이다 — 정상 상태에서는 0회다(§0-5 비용).

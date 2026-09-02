@@ -197,6 +197,31 @@ test("listWorkers — running · stale · stopped 판정", async () => {
   assert.deepStrictEqual(workerGroups([]), []);
 });
 
+test("listWorkers — 락 pid는 살아 있어도 물고 있는 티켓의 pid:가 죽었으면 stale (티켓 57e50b20)", async () => {
+  // 재현: pw1이 티켓을 디스패치했지만 그 세션(pid:)이 죽었다. 워커 락의 pid(tick.sh 자신,
+  // 709행 `$$`)는 이 테스트 프로세스라 살아 있다 — 락만 보면 running으로 잘못 뜬다.
+  const root = makeRoot(
+    { "pw1.sh": "#!/bin/bash\n" },
+    { "11e1897b.wip.md": `---\nticket: 11e1897b\nowner: developer / pw1-97c0e457\npid: ${0x7ffffff0}\n---\n본문\n` },
+  );
+  const dir = path.join(root, "workers");
+  putLock(dir, "pw1", process.pid); // 락 pid는 살아 있다
+
+  const tickets = await listTickets(root, SFX);
+  const ws = await listWorkers(root, tickets);
+  assert.strictEqual(ws[0].status, "stale"); // running으로 뜨면 회귀
+  assert.strictEqual(ws[0].holding, "11e1897b"); // 물고 있는 티켓은 여전히 되짚는다
+
+  // 대조: 같은 락 모양이라도 pid:가 살아 있으면 running 그대로다(과교정 방지)
+  const root2 = makeRoot(
+    { "pw2.sh": "#!/bin/bash\n" },
+    { "aaa1.wip.md": `---\nticket: aaa1\nowner: developer / pw2-1a2b3c4d\npid: ${process.pid}\n---\n본문\n` },
+  );
+  putLock(path.join(root2, "workers"), "pw2", process.pid);
+  const ws2 = await listWorkers(root2, await listTickets(root2, SFX));
+  assert.strictEqual(ws2[0].status, "running");
+});
+
 test("exampleWorkers — 온보딩 예시 앞의 둘 (§비주얼 §24)", () => {
   const w = (name: string, status: string) => ({ name, status }) as Parameters<typeof exampleWorkers>[0][number];
 
