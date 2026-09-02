@@ -814,8 +814,10 @@ live_other() {                     # 파일이 있고 · 내 것이 아니고 ·
 # 조용한 실패 회수 자리 넷(§4-10 §개정) 공용 헬퍼 - `clear`+`release` 두 줄을 `tickets.py`의
 # `reapclear`(엔진 `reap_release`) 한 번으로 묶는다. release를 clear보다 먼저 돌려 reclaim과
 # 순서를 맞추고(5f0498c9), 실패하면 REAP-FAIL 한 줄을 표준출력으로 돌려준다(빈 값 = 성공).
-# 호출자가 그 줄을 그대로 log에 남긴다.
-reap_silent() { python3 "$PY" reapclear "$1"; }
+# 호출자가 그 줄을 그대로 log에 남긴다. 2번째 인자(사유)는 §4-13의 메인 FAIL 경로만 준다
+# (P362-2) - 나머지 셋(assign 실패·cwd 없음·이어받기 기동 실패)은 생략해 종전대로 attempts를
+# 안 건드린다.
+reap_silent() { python3 "$PY" reapclear "$1" "${2:-}"; }
 
 SID=$(python3 -c 'import uuid;print(uuid.uuid4())')
 TPATH=""; THASH=""; TKIND=""; TPERSONA=""; TPRIO=""; TBASE=""; TEFF=""; TSQUAD=""
@@ -1638,6 +1640,22 @@ else
   [ $RC -ne 0 ] && FAILED=1
 fi
 if [ -n "${FAILED:-}" ]; then
+  # P362-2(§엔진 수정 서른세 번째 승인) - 이 세션 자신의 판정(REASON·VERDICT·RC)에서 사유를
+  # 미리 가른다 - reap_release가 runner.log를 다시 파싱하지 않고 그대로 쓴다. api_error(한도)
+  # 와 killed(밖에서 끊김 - 선점 포함)는 그 세션의 실패가 아니라 attempts를 안 쓴다. 그 밖은
+  # bad_request와 나머지(FAIL·TIMEOUT)로 갈려 각자 다른 예산을 문다(아래 REASON 게이트와
+  # 순서가 같다 - api_error 우선, 그다음 bad_request).
+  DEATH_KIND="other"
+  EL=$((SECONDS - T0))
+  if [ "$REASON" = "api_error" ]; then
+    DEATH_KIND="api_error"
+  elif [ "$REASON" = "bad_request" ]; then
+    DEATH_KIND="bad_request"
+  elif [ "$VERDICT" != "err" ]; then
+    case $RC in
+      143|137) [ "$EL" -lt "$TICKET_MAXRUN" ] && DEATH_KIND="killed" ;;
+    esac
+  fi
   # 실행 실패(또는 상한 초과 강제종료) -> 할당 회수해서 다음 tick이 다시 집도록. 단 세션이
   # 이미 .done으로 닫은 뒤 죽었으면 $TPATH가 없다 - 되돌릴 할당이 없으므로 안 부른다
   # (§4-10 §자리 표 ①, 승인 04bd819d=(b)). 안 부르면 clear의 FileNotFoundError traceback도 안 난다.
@@ -1651,13 +1669,23 @@ if [ -n "${FAILED:-}" ]; then
     OSID=$(sid_of "$TPATH")
     TAIL="할당 회수 안 함 · 지금 claim은 남의 산 세션 것이다(sid=${OSID:0:8})"
   elif [ -f "$TPATH" ]; then
-    OUT=$(reap_silent "$TPATH")
-    if [ -n "$OUT" ]; then
-      log "$OUT"
-      TAIL="할당 회수 실패 - .wip 그대로(REAP-FAIL 참고)"
-    else
-      TAIL="할당 회수 + 백로그 복귀"
-    fi
+    # P362-2 - reap_release가 이제 성공해도(REAP·ASK) 설명 문자열을 돌려준다(reclaim과 같은
+    # 관례) - 빈 문자열만 성공으로 읽던 종전 게이트를 접두어로 가른다. REAP-FAIL만 진짜 실패다.
+    OUT=$(reap_silent "$TPATH" "$DEATH_KIND")
+    case "$OUT" in
+      REAP-FAIL*)
+        log "$OUT"
+        TAIL="할당 회수 실패 - .wip 그대로(REAP-FAIL 참고)"
+        ;;
+      ASK*)
+        log "$OUT"
+        TAIL="할당 회수 + 답변 대기로 전환"
+        ;;
+      *)
+        [ -n "$OUT" ] && log "$OUT"
+        TAIL="할당 회수 + 백로그 복귀"
+        ;;
+    esac
   else
     DONE_SUFFIX="${TICKET_DONE:-.done}.md"     # 티켓 파일은 항상 `.md`로 끝난다
     if RP=$(python3 "$PY" find "$TICKET_ROOT" "$THASH" 2>/dev/null); then

@@ -520,6 +520,18 @@ REAP_MAX_ATTEMPTS = 2       # 이 횟수까지만 자동 회수. 넘으면 사�
 # 대기 금지).
 REAP_POST_GRACE_SEC = 60
 
+# P362-2 (§엔진 수정 서른세 번째 승인) - `tick.sh`의 FAIL 경로(`reap_release`) 전용 예산 둘.
+# `REAP_MAX_ATTEMPTS`(리퍼 `reclaim`의 몫)와는 다른 값이다 - 사유가 갈리는 자리도 다르다.
+REAP_FAIL_BUDGET_BAD_REQUEST = 2    # 짧다 - bad_request는 재시도해도 같은 자리에서 죽는 것이
+# 이미 증명된 사인이다(실측 218건 중 197건이 티켓 다섯 장, 최다 49회 - 승인 표 1행). 리퍼와
+# 같은 상한에서 바로 사람에게 올린다.
+REAP_FAIL_BUDGET_OTHER = 10         # 길다 - 실측(승인 표): 예산을 10으로 걸어도 넘긴 티켓 49장
+# 전부가 사람 개입 없이 재디스패치만으로 완료됐다(100%). 사람에게 안 올리고 백오프로 돌린다.
+REAP_BACKOFF_SEC = 600              # 백오프 창 - 엔진 쿨다운(`tick.sh` CDOWN_W=300)의 두 배.
+# 다른 엔진 불능 없이 이 티켓 하나만 쉬게 하면서 다른 티켓엔 방해가 안 되는 만큼만 기다린다.
+REAP_BACKOFF_CAP = 5                # 이 횟수를 넘기면 백오프를 안 걸고 종전대로(즉시) 다시 뜬다
+# - 무한 대기(원칙 ②의 방치)를 막는 상한(<뒤집는 조건>, REAP_POST_GRACE_SEC 위 주석과 같은 값).
+
 # 손 클레임(대화형 세션) 판정용. 디스패처 세션과 달리 ps에 --session-id가 안 뜨므로
 # session_id로는 생존을 볼 수 없다(실측 2026-07-29). pid + 트랜스크립트로 대신 본다.
 # 시간은 판정이 아니라 점검 트리거다 — 경과만으로 회수하면 오래 걸리는 정상 세션을 죽인다
@@ -1131,12 +1143,66 @@ def reclaim(path, fm, why):
     return "REAP {} {} - {}, 백로그 복귀".format(h, tag, why)
 
 
-def reap_release(path):
-    """`tick.sh`의 조용한 실패 회수 자리(넷) 전용 - `reclaim`과 같은 순서·같은 낱말을 쓴다.
+def _backoff_path(local, h):
+    return os.path.join(local, "run", "backoff-" + h)
+
+
+def backoff_active(local, h, now=None):
+    """이 티켓이 지금 백오프 창 안인가(P362-2, 답 `1-3.(d)` - 표식은 frontmatter 밖에 있다).
+    자리·줄 모양: `<local>/run/backoff-<해시>`에 두 줄 - `<만료 epoch>\\n<누적 횟수>`.
+    `tick.sh`의 `$CDOWN`(엔진 쿨다운) 파일과 같은 부류이고 파일이 없으면 백오프가 아니다."""
+    now = now if now is not None else datetime.now(timezone.utc).timestamp()
+    try:
+        with open(_backoff_path(local, h)) as f:
+            until = float(f.readline().strip())
+    except (OSError, ValueError):
+        return False
+    return now < until
+
+
+def _arm_backoff(local, h):
+    """백오프 창을 걸고 누적 횟수를 반환한다. `REAP_BACKOFF_CAP`을 넘기면 표식을 지우고
+    `None`을 반환한다 - 그 뒤로는 <뒤집는 조건>대로 종전처럼 백오프 없이 다시 큐에 뜬다."""
+    path = _backoff_path(local, h)
+    try:
+        with open(path) as f:
+            f.readline()
+            count = int(f.readline().strip() or 0)
+    except (OSError, ValueError):
+        count = 0
+    count += 1
+    if count > REAP_BACKOFF_CAP:
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+        return None
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    until = datetime.now(timezone.utc).timestamp() + REAP_BACKOFF_SEC
+    with open(path, "w") as f:
+        f.write("{}\n{}\n".format(until, count))
+    return count
+
+
+def reap_release(path, reason=None, local=None):
+    """`tick.sh`의 조용한 실패 회수 자리 전용 - `reclaim`과 같은 순서·같은 낱말을 쓴다.
     `release`를 먼저 돌려 리퍼 경합에서 진 쪽이 이미 사라진 `.wip`을 되살리지 않게 하고
     (2026-07-31 5f0498c9), 성공하면 `REAP_CLEAR` 여섯 키(owner 포함)를 비워 `reap_manual`의
     그물에 걸리게 한다. 실패하면 frontmatter를 안 건드리고 `REAP-FAIL <해시> <사유>`를
-    반환한다(빈 문자열 = 성공)."""
+    반환한다(빈 문자열 = 성공).
+
+    `reason`은 `tick.sh`가 **이 세션 자신의 판정**(`VERDICT`-`REASON`-`RC`)에서 이미 가른 값이다
+    -- `dead_reason`처럼 `runner.log`를 다시 읽지 않는다, 지금 죽는 이 세션이 그 판정의
+    당사자다(P362-2, §엔진 수정 서른세 번째 승인). `None`(기존 호출 셋 - assign 실패·cwd
+    없음·이어받기 기동 실패)이면 세션이 애초에 안 돌았거나 이 표의 판정 밖이라 종전대로
+    attempts를 안 건드린다.
+
+    | `reason` | attempts | 넘겼을 때 |
+    |---|---|---|
+    | `None` / `"api_error"`(한도) / `"killed"`(밖에서 끊김 - 선점 포함) | 안 쓴다 | - |
+    | `"bad_request"` | 쓴다 | `REAP_FAIL_BUDGET_BAD_REQUEST` 넘으면 답변 대기(`ask_human`) |
+    | `"other"`(그 밖의 FAIL·TIMEOUT) | 쓴다 | `REAP_FAIL_BUDGET_OTHER` 넘으면 백오프(`_arm_backoff`) |
+    """
     try:
         fm, _, _ = read_fm(path)
     except (OSError, UnicodeDecodeError):
@@ -1146,8 +1212,22 @@ def reap_release(path):
         newpath = release(path)
     except (SystemExit, OSError) as e:
         return "REAP-FAIL {} {}".format(h, e)
-    set_fm_keys(newpath, {k: "" for k in REAP_CLEAR})
-    return ""
+    if reason not in ("bad_request", "other"):
+        set_fm_keys(newpath, {k: "" for k in REAP_CLEAR})
+        return ""
+    attempts = int((fm.get("attempts") or "0").strip() or 0) + 1
+    if reason == "bad_request" and attempts > REAP_FAIL_BUDGET_BAD_REQUEST:
+        return ask_human(newpath, h, attempts, "요청 오류 예산 초과")
+    upd = {"attempts": attempts}
+    upd.update({k: "" for k in REAP_CLEAR})
+    set_fm_keys(newpath, upd)
+    if reason == "other" and attempts > REAP_FAIL_BUDGET_OTHER:
+        local = local or os.environ.get("TICKET_LOCAL") or os.path.expanduser("~/.config/dira")
+        count = _arm_backoff(local, h)
+        if count is not None:
+            return "REAP {} attempts={} - {}, 백오프 {}초(누적 {}회째)".format(
+                h, attempts, reason, REAP_BACKOFF_SEC, count)
+    return "REAP {} attempts={} - {}, 백로그 복귀".format(h, attempts, reason)
 
 
 def reap_manual(path, fm, now):
@@ -1295,9 +1375,12 @@ def main():
     if cmd == "select":
         # 미할당 열린 티켓을 유효 우선순위 높은 순(§1-3)으로 전부. 호출자가 위에서부터 claim 시도.
         # 폴링 대기(§폴링 대기 결정 3)도 assigned·unmet과 같은 자리에서 뺀다 - 표시만 있고
-        # 잠금이 없는 상태를 만들지 않는다.
+        # 잠금이 없는 상태를 만들지 않는다. 백오프(P362-2)도 같은 자리에서 뺀다 - 티켓은
+        # 열림 그대로고(잠그지 않는다) 이 후보 목록에서만 잠시 빠진다.
+        local = os.environ.get("TICKET_LOCAL") or os.path.expanduser("~/.config/dira")
         for r in scan(sys.argv[2]):
-            if not r["assigned"] and not r["unmet"] and not r["polling"]:
+            if (not r["assigned"] and not r["unmet"] and not r["polling"]
+                    and not backoff_active(local, r["hash"])):
                 print("{}|{}|{}|{}|{}|{}|{}|{}".format(
                     r["path"], r["hash"], r["kind"], r["persona"],
                     r["priority"], r["baseline"], r["effective"], r["squad_persona"]))
@@ -1387,9 +1470,11 @@ def main():
         return
 
     if cmd == "reapclear":
-        # tick.sh 실패 회수 자리 넷 전용(`reap_release` 참고). 실패하면 REAP-FAIL 한 줄을
-        # 찍는다 - 비어 있으면 성공이다.
-        out = reap_release(sys.argv[2])
+        # tick.sh 실패 회수 자리 전용(`reap_release` 참고). 실패하면 REAP-FAIL 한 줄을
+        # 찍는다 - 비어 있으면 성공이다. 3번째 인자(사유)는 없거나 빈 문자열이면 None -
+        # 종전대로(assign 실패·cwd 없음·이어받기 기동 실패) attempts를 안 건드린다.
+        reason = sys.argv[3] if len(sys.argv) > 3 and sys.argv[3] else None
+        out = reap_release(sys.argv[2], reason)
         if out:
             print(out)
         return
