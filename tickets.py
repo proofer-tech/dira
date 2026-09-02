@@ -807,16 +807,23 @@ def dead_reason(lines, h):
     window_hash = [entry for entry in window if pat.search(entry[2])]
     if not window_hash:
         return "알 수 없음"
-    # 한도 - 워커에 안 묶인 전역 줄이라, 이 티켓의 마지막 실패 줄과 같은 워커 · 120초 안일
-    # 때만 센다(창 전체에서 세면 사유가 한도로 쏠린다 - 실측: 안 좁히면 18건, 좁히면 5건).
-    last_ts, last_worker, _ = window_hash[-1]
-    last_dt = _parse_log_ts(last_ts)
-    if last_dt is not None:
-        for ts, w, msg in window:
-            if w != last_worker or not _LIMIT_NOTE.search(msg):
+    # 한도 - 워커에 안 묶인 전역 줄이라, 이 티켓이 걸린 줄과 같은 워커 · 120초 안일 때만
+    # 센다(창 전체에서 세면 사유가 한도로 쏠린다 - 실측: 안 좁히면 18건, 좁히면 5건). 이 검사만
+    # 창을 이 해시의 첫 등장까지 넓힌다 - 마지막 회차가 죽은 직후라 자기 쿨다운 노트를 부모가
+    # 아직 못 적었어도, 앞선 회차가 이미 적어 둔 노트가 창 안에 있으면 잡힌다. 마지막 줄
+    # 하나가 아니라 걸린 줄마다 검사해야 옛 회차의 노트도 그 회차의 실패 시각과 맞춰 잡힌다.
+    # 다른 사유 판정은 위 window/window_hash(마지막 3회차)를 그대로 쓴다.
+    full_window = parsed[hash_idx[0]:]
+    full_window_hash = [entry for entry in full_window if pat.search(entry[2])]
+    for ts, w, _ in full_window_hash:
+        dt = _parse_log_ts(ts)
+        if dt is None:
+            continue
+        for nts, nw, nmsg in full_window:
+            if nw != w or not _LIMIT_NOTE.search(nmsg):
                 continue
-            dt = _parse_log_ts(ts)
-            if dt is not None and abs((dt - last_dt).total_seconds()) <= 120:
+            ndt = _parse_log_ts(nts)
+            if ndt is not None and abs((ndt - dt).total_seconds()) <= 120:
                 return "한도"
     for name, needle in _DEAD_REASON_NEEDLES:
         for _, _, msg in window_hash:

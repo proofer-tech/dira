@@ -305,6 +305,22 @@ try:
     ]
     assert T.dead_reason(m11, "mmmm0011") == "요청 오류", "M11: 우선순위가 요청 오류를 안 골랐다"
 
+    # M12) 티켓 8c15e172 - 4회차, 1회차의 한도 노트가 창 밖(dispatch_idx[-3])으로 밀렸었고
+    # 4회차 자신의 쿨다운 노트는 부모가 아직 못 적은 시점(상신 시각)이라 창에 없다. 남는
+    # 것이 2·3회차의 DONE뿐이면 종전엔 무종료 마감으로 잘못 떨어졌다 - 이제는 한도가 잡힌다.
+    m12 = [
+        L("2026-08-30 20:03:00", "pw3", "mmmm0012", "DISPATCH {h} kind=work"),
+        L("2026-08-30 20:03:30", "pw3", "mmmm0012", "STALL {h} 30s 안에 프롬프트 주입+init을 못 봤다 - 기동 실패"),
+        L("2026-08-30 20:03:37", "pw3", "", "NOTE 엔진 불능 - 300초 쿨다운(복귀 미상)"),
+        L("2026-08-30 21:00:00", "pw3", "mmmm0012", "DISPATCH {h} kind=work"),
+        L("2026-08-30 21:05:00", "pw3", "mmmm0012", "DONE {h} sid=abc"),
+        L("2026-08-30 22:00:00", "pw3", "mmmm0012", "DISPATCH {h} kind=work"),
+        L("2026-08-30 22:05:00", "pw3", "mmmm0012", "DONE {h} sid=def"),
+        L("2026-08-30 23:07:35", "pw3", "mmmm0012", "DISPATCH {h} kind=work"),
+    ]
+    assert T.dead_reason(m12, "mmmm0012") == "한도", \
+        "M12: 넓힌 창에서 1회차 한도 노트를 못 찾았다"
+
     # N) 티켓 8adc79a1 - ask_human 죽은 갈래가 dead_reason으로 사유별 문항 - 선택지 -
     # default_answer를 쓴다(결정 17 (1)(3)(4)(6)). 수용조건 1·2·4·6
     os.makedirs(os.path.join(ws, "workers"), exist_ok=True)
@@ -375,7 +391,7 @@ try:
         "N5: 알 수 없음 갈래의 정형문이 바뀌었다\n" + n5
     assert T.read_fm(pn5)[0].get("default_answer") == "1.(a)", "N5: default_answer가 1.(a)가 아니다"
 
-    print("PASS 13/13 + M(dead_reason) 11 + N(ask_human 죽은 갈래) 6")
+    print("PASS 13/13 + M(dead_reason) 12 + N(ask_human 죽은 갈래) 6")
     print(a[a.index("## 질문 1"):])
 finally:
     if old_home is None:
