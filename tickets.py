@@ -1101,6 +1101,25 @@ def reclaim(path, fm, why):
     return "REAP {} attempts={} - {}, 백로그 복귀".format(h, attempts, why)
 
 
+def reap_release(path):
+    """`tick.sh`의 조용한 실패 회수 자리(넷) 전용 - `reclaim`과 같은 순서·같은 낱말을 쓴다.
+    `release`를 먼저 돌려 리퍼 경합에서 진 쪽이 이미 사라진 `.wip`을 되살리지 않게 하고
+    (2026-07-31 5f0498c9), 성공하면 `REAP_CLEAR` 여섯 키(owner 포함)를 비워 `reap_manual`의
+    그물에 걸리게 한다. 실패하면 frontmatter를 안 건드리고 `REAP-FAIL <해시> <사유>`를
+    반환한다(빈 문자열 = 성공)."""
+    try:
+        fm, _, _ = read_fm(path)
+    except (OSError, UnicodeDecodeError):
+        fm = {}
+    h = ticket_hash(path, fm)
+    try:
+        newpath = release(path)
+    except (SystemExit, OSError) as e:
+        return "REAP-FAIL {} {}".format(h, e)
+    set_fm_keys(newpath, {k: "" for k in REAP_CLEAR})
+    return ""
+
+
 def reap_manual(path, fm, now):
     """손으로 잡은 진행중 티켓(session_id 없음) 판정. 메시지 리스트 반환.
 
@@ -1300,6 +1319,14 @@ def main():
 
     if cmd == "release":
         print(release(sys.argv[2]))
+        return
+
+    if cmd == "reapclear":
+        # tick.sh 실패 회수 자리 넷 전용(`reap_release` 참고). 실패하면 REAP-FAIL 한 줄을
+        # 찍는다 - 비어 있으면 성공이다.
+        out = reap_release(sys.argv[2])
+        if out:
+            print(out)
         return
 
     if cmd == "assign":

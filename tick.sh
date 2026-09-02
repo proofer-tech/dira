@@ -811,6 +811,12 @@ live_other() {                     # 파일이 있고 · 내 것이 아니고 ·
   return 1
 }
 
+# 조용한 실패 회수 자리 넷(§4-10 §개정) 공용 헬퍼 - `clear`+`release` 두 줄을 `tickets.py`의
+# `reapclear`(엔진 `reap_release`) 한 번으로 묶는다. release를 clear보다 먼저 돌려 reclaim과
+# 순서를 맞추고(5f0498c9), 실패하면 REAP-FAIL 한 줄을 표준출력으로 돌려준다(빈 값 = 성공).
+# 호출자가 그 줄을 그대로 log에 남긴다.
+reap_silent() { python3 "$PY" reapclear "$1"; }
+
 SID=$(python3 -c 'import uuid;print(uuid.uuid4())')
 TPATH=""; THASH=""; TKIND=""; TPERSONA=""; TPRIO=""; TBASE=""; TEFF=""; TSQUAD=""
 OVER=""    # 이 판에서 이미 상한이던 페르소나들. 후보가 여럿이어도 SKIP은 페르소나당 한 줄이다
@@ -1255,12 +1261,12 @@ fi
 
 # 세션키 선발급 -> 즉시 frontmatter 기록(디스패치 순간부터 '할당됨'으로 큐에서 제외)
 python3 "$PY" assign "$TPATH" "$SID" "${TPERSONA:-agent} / ${TICKET_NAME}-${SID:0:8}" || {
-  log "ERROR assign 실패 $THASH"; python3 "$PY" release "$TPATH" >/dev/null; exit 1; }
+  log "ERROR assign 실패 $THASH"; OUT=$(reap_silent "$TPATH"); [ -n "$OUT" ] && log "$OUT"; exit 1; }
 LOGF="$LOGDIR/$(date '+%Y%m%d-%H%M%S')-${TICKET_NAME}-${THASH}.log"
 PRIOLOG=$(prio_log "$TPRIO" "$TBASE" "$TEFF")
 log "DISPATCH $THASH kind=${TKIND:--} persona=${TPERSONA:-none} sid=$SID log=$(basename "$LOGF") $PRIOLOG"
 
-cd "$TICKET_CWD" || { log "ERROR cwd 없음 $TICKET_CWD"; python3 "$PY" clear "$TPATH"; python3 "$PY" release "$TPATH" >/dev/null 2>&1; exit 1; }
+cd "$TICKET_CWD" || { log "ERROR cwd 없음 $TICKET_CWD"; OUT=$(reap_silent "$TPATH"); [ -n "$OUT" ] && log "$OUT"; exit 1; }
 
 # 실행 상한(기본 90분). 매달린 세션이 티켓을 무한정 쥐고 있는 걸 막는다.
 # 관측치: 정상 티켓은 5~25분, 죽은 세션 하나가 2시간14분을 쥐고 있었다(2026-07-28 스트림 9b3e5c08).
@@ -1549,7 +1555,7 @@ sys.stdout.write(json.dumps({"type":"user","message":{"role":"user","content":sy
         log "STALL $RTHASH ${TICKET_FEED_TIMEOUT}s 안에 이어받기 주입 뒤 출력이 안 자랐다 - 기동 실패"
         # §4-12 §개정 — ①과 같은 조건. 이 창(자기 assign 뒤 TICKET_FEED_TIMEOUT) 안에 reap이
         # 먼저 풀고 다른 세션이 재할당했으면 그 산 claim은 안 건드린다.
-        live_other "$RTPATH" || { python3 "$PY" clear "$RTPATH"; python3 "$PY" release "$RTPATH" >/dev/null 2>&1; }
+        live_other "$RTPATH" || { OUT=$(reap_silent "$RTPATH"); [ -n "$OUT" ] && log "$OUT"; }
         kill "$WPID" 2>/dev/null; wait "$WPID" 2>/dev/null
         exec 9>&-; wait "$CPID" 2>/dev/null
         OUT=$(cat "$OUTF" 2>/dev/null); rm -f "$OUTF"
@@ -1643,9 +1649,13 @@ if [ -n "${FAILED:-}" ]; then
     OSID=$(sid_of "$TPATH")
     TAIL="할당 회수 안 함 · 지금 claim은 남의 산 세션 것이다(sid=${OSID:0:8})"
   elif [ -f "$TPATH" ]; then
-    python3 "$PY" clear "$TPATH"
-    python3 "$PY" release "$TPATH" >/dev/null 2>&1
-    TAIL="할당 회수 + 백로그 복귀"
+    OUT=$(reap_silent "$TPATH")
+    if [ -n "$OUT" ]; then
+      log "$OUT"
+      TAIL="할당 회수 실패 - .wip 그대로(REAP-FAIL 참고)"
+    else
+      TAIL="할당 회수 + 백로그 복귀"
+    fi
   else
     CLOSED=1
   fi

@@ -202,7 +202,28 @@ try:
     assert out == "", "K3: 미충족 dep인데 잠갔다: " + out
     assert not T.read_fm(pk3)[0].get("awaiting", "").strip(), "K3: awaiting이 생겼다"
 
-    print("PASS 16/16")
+    # O) afd21f07 회귀 - `tick.sh` 실패 회수 자리가 쓰는 `reap_release`: release가 지면
+    #    frontmatter를 안 건드린다(session_id·pid·owner가 그대로 남는다) - 옛 결함처럼
+    #    clear가 먼저 돌아 필드를 지워 owner만 남기지 않는다. 그런데도 다음 reap은 죽은 pid
+    #    경로(owner를 안 보는 디스패처 경로)로 정상 회수한다 - 2820116e 실사고 재발 방지.
+    po = mk(ws, "oooo4444", ["session_id: nosuchsession-oooo", "pid: " + DEAD_PID,
+                             "owner: developer / w9-oooo4444",
+                             "assigned_at: " + iso(-T.REAP_GRACE_SEC - 60)])
+    oopen = os.path.join(ws, "tickets", "oooo4444.md")
+    open(oopen, "w", encoding="utf-8").close()   # 복귀 대상을 선점해 release를 강제로 지운다
+    out = T.reap_release(po)
+    assert out.startswith("REAP-FAIL oooo4444"), "O: release 실패인데 REAP-FAIL이 아니다: " + out
+    assert os.path.exists(po), "O: 실패했는데 .wip이 사라졌다"
+    ofm = T.read_fm(po)[0]
+    assert ofm.get("owner", "").strip() and ofm.get("pid", "").strip() == DEAD_PID, \
+        "O: 실패했는데 필드가 지워졌다(옛 결함 재발) " + repr(ofm)
+    os.remove(oopen)                             # 선점 해제 - 다음 reap이 정상 경로를 타게
+    msgs2 = T.reap(ws)
+    joined2 = "\n".join(msgs2)
+    assert not os.path.exists(po), "O: owner가 남았다는 이유로 다음 reap도 못 잡았다"
+    assert "REAP oooo4444" in joined2, "O: 다음 reap 메시지에 해시가 없다\n" + joined2
+
+    print("PASS 17/17")
     for m in msgs:
         print("  " + m)
 finally:
