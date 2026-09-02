@@ -769,7 +769,7 @@ export async function readWorkersPanelAction(): Promise<WorkersPanelView> {
 /** 머신 전체 세션 상한의 값 + 큐별 분포(§세션이 120초 안에 못 뜬다 §개정 결정 2-3). `session-cap.sh`가
  *  세는 것과 같은 수를 화면 쪽에서 다시 센다 — 훅과 화면이 서로 다른 프로세스라 계산을 나눠 갖는 것
  *  자체는 새 I/O가 아니다(둘 다 `gui-projects.json` + `tickets/*.wip.md`를 각자 읽는다, 결정 2). */
-async function sessionCapOf(projects: Project[]): Promise<WorkersPanelSessionCap> {
+export async function sessionCapOf(projects: Project[]): Promise<WorkersPanelSessionCap> {
   const [limit, counts] = await Promise.all([
     readSessionLimit(),
     Promise.all(projects.map((p) => liveSessionCount(p))),

@@ -1553,6 +1553,9 @@ export const ko: Record<string, string> = {
     "작업 디렉터리가 없으면 이 워커는 티켓을 물었다 되돌립니다 — 남은 명령을 셸에서 실행하세요",
   "workers.create.nameLabel": "이름",
   "workers.create.nameHint": "영문·숫자·_·-. 파일은 workers/<이름>.sh 가 됩니다",
+  "workers.create.sessionCapNoLimit": "머신 전체 상한 없음",
+  "workers.create.sessionCapHint":
+    "세션을 한꺼번에 여러 벌 띄우면 이 컴퓨터의 성능에 영향을 주기 때문에, 동시에 뜨는 세션 수에 상한을 둡니다.",
   "workers.create.failedTitle": "워커를 만들지 못했습니다",
 
   // 행 액션 셋(스트림 · 중단/재등록 · 삭제, `WorkerRowActions`, §4).
@@ -3581,6 +3584,9 @@ export const en: Record<string, string> = {
     "Without a working directory this worker claims a ticket and puts it right back — run the rest of the commands in your shell",
   "workers.create.nameLabel": "Name",
   "workers.create.nameHint": "Letters, digits, _ and -. The file becomes workers/<name>.sh",
+  "workers.create.sessionCapNoLimit": "No machine-wide limit",
+  "workers.create.sessionCapHint":
+    "Running many sessions at once strains this machine, so there's a limit on how many can run concurrently.",
   "workers.create.failedTitle": "Couldn't create the worker",
 
   // 행 액션 셋(스트림 · 중단/재등록 · 삭제, `WorkerRowActions`, §4).

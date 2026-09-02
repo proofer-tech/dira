@@ -38,7 +38,8 @@ import {
 import { listTickets } from "@/lib/queue";
 import { formatTokens, listUsage } from "@/lib/usage";
 import { dateTimeLabel } from "@/lib/urls";
-import { getProject, readLanguage, resolveConfig, usingDefault } from "@/lib/projects";
+import { getProject, readLanguage, readProjects, resolveConfig, usingDefault } from "@/lib/projects";
+import { sessionCapOf } from "@/app/actions";
 import { listBorrowedPoolWorkers, readPoolLimit } from "@/lib/pool";
 import {
   cronUnregisterCmd,
@@ -116,6 +117,10 @@ export default async function Workers({ params }: { params: Promise<{ project: s
   // `tokens.json` 파일 읽기 1회, 워커 수와 무관하다(§비주얼 §57 §로딩). `null`이면 `리밋 대기`가
   // 행 전체에 안 뜬다 — eligible이 1장이라도 있거나 tokens.json이 없다.
   const limitUntil = await limitWaitUntil();
+  // 만들기 다이얼로그의 두 줄(수 + 뜻) — 새 셈을 안 만든다, P357-3이 낸 `sessionCapOf` 그대로
+  // 부른다(정본 절 결정 1). 큐 하나가 상한을 독점하지 않는다는 것을 보여주려면 이 프로젝트 하나가
+  // 아니라 등록된 큐 전부를 훑어야 한다.
+  const sessionCap = await sessionCapOf(await readProjects(locale));
   // 소비의 키는 로그 파일명에서 온 **실효 `TICKET_NAME`**이고 표의 행은 파일 stem이다 — 그 둘이
   // 갈린 워커만 조용히 `0`으로 뜨지 않게 여기서 한 번 옮긴다. NFC로 맞추는 것은 `parseLogName`이
   // readdir이 준 NFD를 정규화하기 때문이다(같은 이유로 `queue.ts`도 정규화한다).
@@ -197,6 +202,7 @@ export default async function Workers({ params }: { params: Promise<{ project: s
             projectId={id}
             firstCmd={firstWorkerCmd(project.root, undefined, locale)}
             defaultName={nextWorkerName(workers.map((w) => w.name))}
+            sessionCap={sessionCap}
           />
         </div>
       </div>

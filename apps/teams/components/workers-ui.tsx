@@ -61,6 +61,7 @@ import { useLocale, useT } from "@/components/language-provider";
 import { relativeUnderAny } from "@/lib/urls";
 import { cn } from "@/lib/utils";
 import type { PoolLimit } from "@/lib/pool";
+import type { WorkersPanelSessionCap } from "@/lib/workers-panel";
 
 /** 서버가 읽어 넘긴 컨텍스트 한 항목. `path`는 워커 파일에 든 셸 문자열이라 `$TICKET_CWD`가
  *  살아 있고, `resolved`·`exists`는 그걸 편 결과다(파일에는 안 들어간다). */
@@ -214,6 +215,7 @@ export function CreateWorkerButton({
   firstCmd,
   variant,
   defaultName = "",
+  sessionCap,
 }: {
   projectId: string;
   /** 손으로 첫 워커를 만드는 명령 — `engineRepo()` 실패로 생성이 막혔을 때만 뜬다(§4-18 결정 2) */
@@ -222,6 +224,9 @@ export function CreateWorkerButton({
   /** `이름` 칸의 기본값 — `nextWorkerName`이 계산한 값(DESIGN.md §4-13). 제안이지 예약이 아니라
    *  읽기 전용이 아니다 — 지우고 다시 쓸 수 있고, 닫으면 이 값으로 돌아간다. */
   defaultName?: string;
+  /** 머신 전체 세션 상한(P357-3 `sessionCapOf`가 낸 값 그대로 — 새 셈을 안 만든다, P357-4
+   *  정본 절 결정 1). 만들기를 막지 않는다 — 워커 수와 동시 세션 수는 다른 값이다. */
+  sessionCap: WorkersPanelSessionCap;
 }) {
   const t = useT();
   const locale = useLocale();
@@ -311,6 +316,17 @@ export function CreateWorkerButton({
                 onChange={(e) => setName(e.target.value)}
               />
               <p className="text-xs text-muted-foreground">{t("workers.create.nameHint")}</p>
+            </div>
+            {/* 정본 절 결정 1 — 워커 만들기는 세션 만들기가 아니라서 상한을 안 막지만, 그 상한이
+                뭘 재는지는 여기서 처음 보는 사람도 알아야 한다. 수 한 줄 + 뜻 한 줄, `nameHint`와
+                같은 보조 줄 자리(`text-xs text-muted-foreground`). */}
+            <div className="space-y-1">
+              <p className="text-xs tabular-nums text-muted-foreground">
+                {sessionCap.limit === null
+                  ? t("workers.create.sessionCapNoLimit")
+                  : `${t("settings.workers.sessionCapTotalPrefix")}${sessionCap.total}${t("settings.workers.sessionCapTotalSep")}${sessionCap.limit}`}
+              </p>
+              <p className="text-xs text-muted-foreground">{t("workers.create.sessionCapHint")}</p>
             </div>
             {result?.message && (
               <div className="space-y-2">
