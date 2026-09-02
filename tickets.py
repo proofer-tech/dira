@@ -10,7 +10,9 @@ setpersona <path> <이름>  frontmatter의 persona: 기록 (claim 뒤 스쿼드 
 clear  <path>          frontmatter의 session_id/assigned_at 비우기 (할당 취소)
 list   <루트>          열린 티켓 전체 상태 표
 find   <루트> <hash>   해시로 티켓 경로 찾기
-reap   <루트>          세션이 죽은 진행중 티켓을 백로그로 회수 (스테일 수거)
+reap   <루트> [로컬]    세션이 죽은 진행중 티켓을 백로그로 회수 (스테일 수거). [로컬]은
+                       `tick.sh`의 `$LOCAL`(생략 시 `$TICKET_LOCAL` -> `~/.config/dira`) -
+                       그 티켓 소유 워커가 사후처리 중인지(P360-2) 잴 때만 쓴다
 handclaim <path> [owner]  대화형 세션이 손으로 잡기. claim + pid/claimed_at/transcript 기록
 askhuman <path> [--if-blocked]  답변 대기로 잠그기 (deps + awaiting + `## 질문 n`).
                        --if-blocked면 신선한 블록 + 미충족 dep 0일 때만 잠그고, 아니면 조용히 끝남
@@ -34,6 +36,7 @@ import glob
 import json
 import uuid
 import errno
+import hashlib
 import subprocess
 import unicodedata
 from datetime import datetime, timezone, timedelta
@@ -510,6 +513,12 @@ def release(path):
 
 REAP_GRACE_SEC = 180        # 디스패치 직후 프로세스 등록 지연을 피하는 유예
 REAP_MAX_ATTEMPTS = 2       # 이 횟수까지만 자동 회수. 넘으면 사람 개입 대기(-진행중 유지)
+# P360-2: REAP_GRACE_SEC을 넘긴 뒤에도, 그 티켓의 부모 워커가 `tick.sh`의 사후처리
+# (kill -TERM -> sleep 5 -> kill -KILL -> wait -> 판정, 실측 약 30초)를 도는 동안은 리퍼가
+# 앞지르지 않는다. 상한은 이 값 하나뿐이다 - 부모 락이 죽은 pid를 쥔 채 안 풀려도 그 즉시
+# 리퍼가 가져가고, 살아있어도 이 상한을 넘으면 종전대로 가져간다(<뒤집는 조건>, 상한 없는
+# 대기 금지).
+REAP_POST_GRACE_SEC = 60
 
 # 손 클레임(대화형 세션) 판정용. 디스패처 세션과 달리 ps에 --session-id가 안 뜨므로
 # session_id로는 생존을 볼 수 없다(실측 2026-07-29). pid + 트랜스크립트로 대신 본다.
@@ -1166,16 +1175,43 @@ def reap_manual(path, fm, now):
         h, pid, int(idle // 60), kind)]
 
 
-def reap(troot):
+def _worker_lock_live(troot, local, owner):
+    """`owner`(`"<페르소나> / <워커>-<sid 8글자>"`) 워커가 `tick.sh` 696행과 같은 락을 지금
+    살아있는 pid로 쥐고 있는가(P360-2). 그 워커의 tick 한 번(선정 -> 실행 -> 사후처리, EXIT
+    트랩까지)이 통째로 이 락 하나로 감싸여 있으므로, 이 락이 살아있다는 것이 곧 "사후처리 중일
+    수 있다"는 유일한 관측 가능 신호다 - 티켓 쪽 frontmatter에는 그 창을 적는 필드가 없다.
+    해시 규칙은 `tick.sh`와 반드시 같아야 한다(다르면 이 가드가 있으나 마나다)."""
+    owner = (owner or "").strip()
+    parts = owner.split("/ ", 1)
+    if len(parts) != 2:
+        return False
+    worker = parts[1].strip().rsplit("-", 1)[0]
+    if not worker:
+        return False
+    h = hashlib.sha1("{}/workers/{}".format(troot, worker).encode()).hexdigest()[:8]
+    try:
+        with open(os.path.join(local, "run", "{}-{}.lock".format(worker, h), "pid")) as f:
+            pid = f.read().strip()
+    except OSError:
+        return False
+    return pid.isdigit() and bool(pid_alive(pid))
+
+
+def reap(troot, local=None):
     """세션이 죽었는데 진행중으로 남은 티켓을 백로그로 되돌린다.
 
     죽는 방식 두 가지를 다 덮는다: (a) 프로세스가 0으로 끝났지만 세션이 사람에게 질문만 하고
     티켓 상태를 안 바꾼 경우(tick.sh의 FAIL 경로가 못 잡는다), (b) 머신 재부팅·tick 강제종료로
     FAIL 경로 자체가 안 돈 경우. 무한 재시도를 막으려고 attempts를 세고 상한을 넘으면 사람 대기.
+
+    `local`은 `tick.sh`의 `$LOCAL`(워커 락이 사는 자리) - P360-2 가드가 그 티켓 소유 워커의
+    사후처리 창을 잴 때만 쓴다. 생략하면 `tick.sh`와 같은 기본값으로 떨어진다.
     """
     live = live_session_ids()
     if live is None:
         return ["SKIP ps 조회 실패 - 회수 판단 보류"]
+    if local is None:
+        local = os.environ.get("TICKET_LOCAL") or os.path.expanduser("~/.config/dira")
     now = datetime.now(timezone.utc)
     msgs = []
     for p in in_progress(troot):
@@ -1197,11 +1233,18 @@ def reap(troot):
         if sid in live:
             continue                     # 살아있는 디스패처 세션
         at = (fm.get("assigned_at") or "").strip()
+        skip = False
         try:
-            if (now - datetime.fromisoformat(at)).total_seconds() < REAP_GRACE_SEC:
-                continue
+            elapsed = (now - datetime.fromisoformat(at)).total_seconds()
+            if elapsed < REAP_GRACE_SEC:
+                skip = True
+            elif elapsed < REAP_GRACE_SEC + REAP_POST_GRACE_SEC and \
+                    _worker_lock_live(troot, local, fm.get("owner")):
+                skip = True             # 부모가 사후처리 중 - 상한 안에서 양보(P360-2)
         except ValueError:
             pass                         # assigned_at이 깨졌으면 유예 없이 회수 대상
+        if skip:
+            continue
         msgs.append(reclaim(p, fm, "세션 {} 사망".format(sid[:8])))
     return msgs
 
@@ -1286,7 +1329,8 @@ def main():
         return
 
     if cmd == "reap":
-        for m in reap(sys.argv[2]):
+        local = sys.argv[3] if len(sys.argv) > 3 else None
+        for m in reap(sys.argv[2], local):
             print(m)
         return
 

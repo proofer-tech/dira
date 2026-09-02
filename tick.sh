@@ -471,7 +471,7 @@ case "$CMD" in
     log "UNASSIGN $H"; echo "할당 해제: $H"
     exit 0 ;;
   reap)
-    python3 "$PY" reap "$TICKET_ROOT" | while IFS= read -r line; do
+    python3 "$PY" reap "$TICKET_ROOT" "$LOCAL" | while IFS= read -r line; do
       [ -n "$line" ] && { log "$line"; echo "$line"; }
     done
     exit 0 ;;
@@ -628,7 +628,7 @@ esac
 # §폴링 대기 결정 5와 같은 이유로 아래 워커 락(SKIP)보다 앞이다 - reap은 이 워커의 바쁨과
 # 무관한 큐 전체의 스테일 수거라, 원래도 워커 락 성패에 기댈 이유가 없었다.
 if [ "$CMD" = "tick" ]; then
-  python3 "$PY" reap "$TICKET_ROOT" 2>/dev/null | while IFS= read -r line; do
+  python3 "$PY" reap "$TICKET_ROOT" "$LOCAL" 2>/dev/null | while IFS= read -r line; do
     [ -n "$line" ] && log "$line"
   done
 fi
@@ -1644,7 +1644,9 @@ if [ -n "${FAILED:-}" ]; then
   # 존재 여부는 release() 호출 **전에** 한 번만 잰다 - release가 성공하면 그 자체가 파일을
   # 열림 이름으로 rename해 지워버려서, 나중에 다시 재면 정상 케이스도 항상 "없다"로 읽힌다.
   # §4-12 §개정 — 남의 「산」 세션이 물고 있으면 손대지 않는다(그 부모나 TICKET_MAXRUN 감시가
-  # 푼다). 죽었으면 종전대로 회수한다. 파일이 없으면 종전 CLOSED=1(§4-10 ③, 무수정).
+  # 푼다). 죽었으면 종전대로 회수한다. 파일이 없으면 §4-10 ③이지만 무조건 CLOSED=1이 아니다
+  # (P360-2) - 남의 리퍼가 부모보다 먼저 가져가도 파일이 똑같이 사라지므로, 해시로 다시 찾아
+  # 지금 접미사를 봐야 "세션이 스스로 닫았다"와 "경합에서 졌다"가 갈린다.
   if [ -f "$TPATH" ] && live_other "$TPATH"; then
     OSID=$(sid_of "$TPATH")
     TAIL="할당 회수 안 함 · 지금 claim은 남의 산 세션 것이다(sid=${OSID:0:8})"
@@ -1657,7 +1659,15 @@ if [ -n "${FAILED:-}" ]; then
       TAIL="할당 회수 + 백로그 복귀"
     fi
   else
-    CLOSED=1
+    DONE_SUFFIX="${TICKET_DONE:-.done}.md"     # 티켓 파일은 항상 `.md`로 끝난다
+    if RP=$(python3 "$PY" find "$TICKET_ROOT" "$THASH" 2>/dev/null); then
+      case "$RP" in
+        *"$DONE_SUFFIX") CLOSED=1 ;;
+        *) TAIL="할당 회수 안 함 · 리퍼가 먼저 가져갔다(경합 패배, P360-2)" ;;
+      esac
+    else
+      TAIL="할당 회수 안 함 · 원본을 다시 못 찾음(P360-2)"
+    fi
   fi
   # 엔진 불능이면 창을 건다. 티켓은 종전대로 백로그로 돌아가고, 다음 tick들이 게이트에서 멈춘다.
   # 리밋이 복귀 시각을 줬으면(실측 api_error의 80%, 앞으로 최대 4.2시간) 임의의 5분이 아니라
