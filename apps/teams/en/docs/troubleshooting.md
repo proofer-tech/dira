@@ -325,4 +325,51 @@ If they are not, look at the mount first. If the mount is attached and the rows 
 `runner.log` does not grow, the shebang or the execute bit is broken, and that is left only in
 `cron.log` ([Reading the logs](/docs/logs) §`cron.log`).
 
+## A common worker you made earlier is still there
+
+**Screen**: the worker table has a row this project never made. The name looks like `pw1` and the
+status is `stopped`. Open `Settings` › `Workers` and there is no place that made that worker.
+
+**Cause**: there used to be a feature where you made workers once on the machine and each project
+decided how many of them to borrow. That feature has been taken out, so there is no place left to
+make them and none to borrow them. The code that deleted them went out with it, so updating the
+app leaves whatever you made earlier sitting on this computer. Three places hold what is left, and
+the order matters.
+
+**Take the lines out of crontab first.** Each slot has two lines on it, so it is still waking up
+every 30 seconds. Delete the files first and cron will run a file that is not there for the next
+minute, piling errors into the log.
+
+```bash
+crontab -l | grep 'dira/pool'                  # see how many lines are on it first
+crontab -l | grep -v 'dira/pool' | crontab -   # drops those lines and keeps the rest as-is
+```
+
+The second command rewrites the whole crontab. Your worker lines and comments do not contain
+`dira/pool`, so they stay, but it is safer to run the first command and see which lines are going
+before you run it.
+
+**Then delete the pool on this computer.** The script those cron lines were calling, its log, and
+the lock the slots used are all here.
+
+```bash
+rm -rf ~/.config/dira/pool
+rm -rf ~/.config/dira/run/pool-*.lock
+rm -f ~/.config/dira/run/pool-turn-*
+```
+
+**Last, clear two files out of each queue.** A queue that borrowed has one worker file and one
+borrow-limit file in it. You do not have to remember which projects were borrowing; walk your
+registered projects once. The paths are in the `Path` column of the project list.
+
+```bash
+grep -l 'dira-pool:' <root>/workers/*.sh   # the worker file that came in; none means this queue never borrowed
+rm -f <root>/pool-limit                    # the borrow limit. The app has no place that reads this value
+```
+
+**You can keep the worker file and just use it.** Its shape is the same as a worker this project
+made, so pressing `Re-register` on that row runs it as a worker of this project. To change the
+name, delete the row with `Delete` and make it again with `New worker`. Both of those are done
+from the table, so no shell is needed.
+
 Next is [Reading the logs](/docs/logs).

@@ -5,25 +5,15 @@
 If you are looking through the project settings for a field that says "up to 3 at once," there is
 none. **The ceiling on sessions running at the same time in this project is the number of workers
 in its worker table.** With one worker, no matter how many tickets pile up in the queue, it is one
-session at a time; with two, it is two. There is one more limit that applies to this whole
-computer, separate from that arithmetic.
+session at a time; with two, it is two. Every worker in that table belongs to this project, so
+the arithmetic holds as written.
 
-That table has two kinds mixed in: project workers this project made, and common workers it
-borrowed. The first kind belongs to this project, so the arithmetic holds as written. Common
-workers are slots that several projects take turns using, which changes things. **Three rows in
-the table does not mean those three are running in this project at once.**
+There is one more ceiling. **It applies to this whole computer**, and every project you have
+registered shares that single value. It is counted separately from the worker count, so the next
+section takes it on its own.
 
-The `Limit` under `Borrow common workers` means "at most this many." Set it to 3, and at any
-moment when the pool is empty or other projects hold the slots, this project is using 0 common
-workers. So the ceiling has to be read this way to be accurate.
-
-> The ceiling is the number of project workers plus the `Limit`, and that `Limit` share drops as
-> low as 0 at any given moment.
-
-There are two ways to add. For project workers it is [Workers](/docs/worker) §One press of
-`New worker`, and for common workers it is §Common workers - slots that move between projects in
-the same chapter. To make this one project go faster for certain, make a project worker. Common
-workers are the way to spend fewer slots when you have several projects.
+To make this project go faster, make a worker. The place is [Workers](/docs/worker) §One press of
+`New worker`.
 
 ## This computer's ceiling - the machine-wide session limit
 
@@ -39,7 +29,7 @@ However many workers you have, if only four of them are holding tickets, four se
 
 Open `Settings` with the gear at the far right of the header and pick `Workers`, at the bottom of
 the `Setting categories` group in the left tree. The top section of the panel is
-`Machine-wide session limit`. It sits above the three filters and `Common worker pool`.
+`Machine-wide session limit`. It sits above the two filters and the `All workers` list.
 
 Three things are there.
 
@@ -64,8 +54,7 @@ it and open it again.
 ### Where you change it - `Limit` in that same section
 
 Press the value next to `Limit` and a popover opens. Put an integer into
-`Concurrent session limit` and press `Save`. It is the same idiom as the limit under
-`Borrow common workers`, so there is nothing new to learn.
+`Concurrent session limit` and press `Save`.
 
 > `Empty removes the limit — caps how many claude sessions run at once on this machine.`
 
@@ -120,7 +109,7 @@ come from the engine and are in Korean whichever language you read the site in.
 | `몫 - 이 큐가 2벌로 몫 2를 채웠고 굶는 큐가 있어 이번 tick을 양보함` | The limit has room, but this project had already filled its share, so it handed the spot to a project that has none up |
 
 With neither of them there, this limit is not the cause. Look at the first three of
-§Four places where fewer run than you have workers below. Those two lines skip only that round
+§Three places where fewer run than you have workers below. Those two lines skip only that round
 without touching the ticket. The ticket stays in `Open` and is a candidate again next round.
 
 ### The share - so one project cannot eat the whole limit
@@ -161,10 +150,10 @@ A session holding on forever is blocked too. Past 5400 seconds by default, the s
 the ticket goes back to `Open`. The next call picks it up again, by the same worker or another.
 The value to change is `TICKET_MAXRUN` in [Worker environment variables](/docs/ref-env).
 
-## Four places where fewer run than you have workers
+## Three places where fewer run than you have workers
 
 If you have five workers and only three are running, either the queue has no candidates or one of
-the four below has caught them.
+the three below has caught them.
 
 - **The persona cap.** That is `Limit` in [Personas](/docs/personas) §Dispatch policy. Set it to
   `2` and only two of that persona's tickets run at once even with ten backed up. A worker caught
@@ -173,11 +162,8 @@ the four below has caught them.
 - **Priority 1.** A ticket whose effective priority is 1 is a candidate only while nothing is in
   progress. It means "pick this up only when it is quiet and nothing else is running," so keeping
   several workers on makes it run later, not sooner. Do not use 1 for something urgent.
-- **A borrowed slot is off elsewhere.** A row with the `Common` badge is not tied to this project.
-  While that slot holds another project's ticket, it does nothing here. The rule for when its
-  turn comes around is in [Workers](/docs/worker) §The rule that decides whose turn it is.
 - **The machine-wide session limit.** This one catches you because of other projects, which makes
-  it unlike the first three. Either this computer is already full, or the limit has room and this
+  it unlike the first two. Either this computer is already full, or the limit has room and this
   project has spent its whole share. How to tell them apart is in
   §Telling whether the limit is what is starving you above.
 
@@ -195,9 +181,9 @@ Adding workers does not grow throughput alone.
   machine and per account, so every worker drinks out of that one tank. There is no such thing as
   a per-worker limit anywhere. Register several accounts and turn on using them at once, and
   workers are divided among the accounts and the tanks divide with them
-  ([Authentication](/docs/auth) §Multiplaying - the switches for keeping several accounts). If
-  you use common workers, sessions running in other projects drink from the same tank too. How
-  much has been used and how much is left is in the token status bar at the bottom of the screen
+  ([Authentication](/docs/auth) §Multiplaying - the switches for keeping several accounts).
+  Sessions running in other projects drink from the same tank too. How much has been used and how
+  much is left is in the token status bar at the bottom of the screen
   (see [The screens](/docs/screens)).
 - **The risk of touching the same file at once.** Two different tickets can still step on the same
   source file or a shared dev database (four concurrent sessions once dropped a column). A

@@ -4,11 +4,6 @@
 ticket, and starts a session.** One file is one worker (`<root>/workers/<name>.sh`), and `w1` is
 already there when you create your first project.
 
-There are two kinds. A **project worker** runs inside this project only, and the file rule just
-described is that worker. A **common worker** is a slot you create once on the machine and
-several projects take turns using; in the table of a project that borrows it, it appears as a row
-with a `Common` badge (see §Common workers - slots that move between projects below).
-
 ## The workers screen - what one row tells you
 
 ![Eight workers all standing at running, each holding one ticket hash. Next to the title is 165M tokens over the last five hours, and the right end of each row is four actions: reap, stream, stop, delete.](/shots/03-workers.png)
@@ -20,8 +15,7 @@ right now. The columns, left to right, are `Name` · `Status` · `Holding` · `C
 - **Status** is one of four. `running` means a session has been started and the worker is waiting
   for it to finish. `idle` means the worker is on cron and is holding nothing at the moment.
   `stopped` means it is out of crontab and never wakes up at all (`not in the crontab` sits next to
-  the badge - a common worker row does not get that phrase), and `stale` means the session
-  process died and only the claim is left behind.
+  the badge), and `stale` means the session process died and only the claim is left behind.
 - **Holding** is the hash of the ticket it has right now. Press it to go to that ticket in
   detail.
 - **Context** is the number of reference documents this worker sends along with every session.
@@ -37,9 +31,8 @@ right now. The columns, left to right, are `Name` · `Status` · `Holding` · `C
   is attached to one account rather than to each worker, so this column shows you who has been
   drinking how much out of the one tank.
 
-The `Worker settings` dialog has four sections. The first is the `Common context` above, and the
-second, `Borrow common workers`, is covered further down under common workers. The third,
-`The rest of the worker settings (read-only)`, shows five values: the persona, protocol, and
+The `Worker settings` dialog has three sections. The first is the `Common context` above. The
+second, `The rest of the worker settings (read-only)`, shows five values: the persona, protocol, and
 ontology directories, and the in-progress and done suffixes, as they are actually set for this
 project right now. Where workers disagree, it writes them out side by side. To change them, edit the
 worker file by hand ([Worker environment variables](/docs/ref-env)).
@@ -122,10 +115,9 @@ worker file and the crontab entry are still valid. A setup with one worker does 
 ## One press of `New worker`
 
 One worker takes one ticket at a time. So when the `Open` lane keeps piling up while the
-`In progress` lane always holds a single card, that worker has become too few. There are two ways
-to add: make another one for this project only (this section), or borrow a common worker (see
-§Common workers - slots that move between projects below). How many is right is in [How many to
-run at once](/docs/concurrency).
+`In progress` lane always holds a single card, that worker has become too few. There is one way
+to add, and it is this section: make another one. How many is right is in [How many to run at
+once](/docs/concurrency).
 
 Press `New worker` at the top right and the only thing the dialog asks for is a **name**. Keep it
 short, like `w2`. Letters, digits, `_`, and `-` only, and this name becomes the filename and the
@@ -213,131 +205,6 @@ The other three touch different things.
   stops without deleting the file.
 - A `running` worker cannot be deleted. The running session and the claim it holds would be left
   hanging. Stop it first, and delete it once the ticket it holds is finished.
-
-## Common workers - slots that move between projects
-
-As projects multiply, so does the work of making and minding workers, one set per project. A
-common worker gathers that into one place. You create workers once on the machine, and each
-project only decides how many it will borrow.
-
-**One common worker is one concurrently running session.** It is the same unit as a project
-worker, and it is not cloned. That slot holds one project at a time and lets go when the ticket
-it held is finished. The next round it may go to a different project.
-
-### Where you make them - `Settings` › `Workers`
-
-Open `Settings` with the gear at the far right of the header and pick `Workers`, at the bottom of
-the `Setting categories` group in the left tree. The top of the panel is
-`Machine-wide session limit`, then three filters, and the first section under them is
-`Common worker pool`. Press `Create worker` on the right and the only
-thing to decide is a name; the rule is the same as for a project worker, so letters, digits, `_`,
-and `-` only. Saving finishes crontab registration in the same go, so that row comes up `idle`
-right away.
-
-While the pool is empty, the list reads
-`No common workers — creating one adds it to every project that borrows.`
-
-Once you have made one, that row in the list tells you four things.
-
-| Place | What |
-|---|---|
-| Name | The name of that common worker, and its filename |
-| State badge | The same four as a project worker (`running` · `idle` · `stopped` · `stale`) |
-| `<n> projects` | How many projects are borrowing from this pool right now. `0 projects` is a slot nobody borrows |
-| `Stop` / `Register` · `Delete` | The same three as in the worker table |
-
-**This panel is the only place the pool is operated from.** `Delete` refuses while that slot
-holds a project, and names the project and the pid as the reason. Press it again once the session
-has ended.
-
-The section below, `All workers`, gathers the workers of every registered project into one place.
-Rows are grouped per project with the worker count on the right, and a project that has lost its
-connection is not dropped from the list but shown with the reason. The three filters at the top,
-`Project` · `Kind` · `Status`, narrow both sections together, and `Clear filters` puts them back.
-This panel reads once, when you open the dialog. It does not refresh while it is open, so close
-it and open it again.
-
-### Where you borrow them - the project's `Worker settings`
-
-Whether to borrow is decided per project. Press `Worker settings` at the top right of the workers
-screen and the second section is `Borrow common workers`. Press the value next to `Limit` and a
-popover opens; put a number into `Concurrent borrow limit` and press `Save`. If you have never
-set one, the value reads `None`.
-
-This one line sits under that popover.
-
-> `0 or empty means no borrowing — the limit is how many run at once, not a reservation.`
-
-**The number you put here means "at most this many."** Write that you will borrow up to 3 and
-this project is still using 0 common workers at any moment when the pool is empty or other
-projects hold the slots. Nor, in the other direction, are those 3 sitting idle for this project.
-
-Save `1` or more and every common worker appears in this project's worker table. The line under
-the section becomes `<n> common worker(s) are in this project`, and with none it reads
-`No common workers are in this project`. Set it back to `0` and they all leave. A slot holding a
-ticket at that moment cannot be pulled, and its name is listed after
-`Still holding a ticket, couldn't remove: `.
-
-Three things can keep a save from doing what you meant.
-
-- **A name collision is refused.** A common worker cannot go into a queue that already has a
-  project worker of the same name. It would overwrite that worker file, and the reason names it
-  outright.
-- **A value it cannot read is read as no borrowing.** In that case
-  `Couldn't read pool-limit — reading it as not borrowing.` appears under the limit.
-- **After creating a new common worker, save the limit once more in every project that borrows.**
-  Adding a worker to the pool does not grow the table of a project that is already borrowing on
-  its own. Save the same value again and it joins on the spot.
-
-### How to spot one in the table
-
-A borrowed common worker appears as one row in the worker table. The one mark that tells it from
-a project worker is the `Common` badge next to `Name`, and pressing that badge opens the
-`Workers` node of `Settings` directly.
-
-| | Project worker | Common worker |
-|---|---|---|
-| Where you make it | `New worker` at the top right of the workers screen | `New worker` in `Settings` › `Workers` |
-| Queue it runs | This one project | One at a time, taking turns across the projects with borrowing on |
-| Worktree | Created along with it | Created on the round it is first dispatched into this queue |
-| Common context, integration gate, account rules | It gets this project's | The same - it gets those of whichever project it took |
-| Engine and model | The ticket's persona decides | The same. So one slot can run on a different engine per project |
-| `Stream` on the row | You press it | You press it just the same |
-| `Stop` · `Re-register` · `Delete` on the row | You press them | Dimmed and blocked |
-
-That last row is blocked because those three act on the whole pool. Stopping from this project
-could never halt a slot that is running in another one. So the controls were left in the one
-place, over in `Settings`.
-
-It is the same reason a common worker row at `stopped` does not get `not in the crontab`. A common
-worker's cron line is in the pool, not in this project's file, so the `Re-register` that phrase
-points at is a blocked operation on this row. The `Common` badge in the same row tells you why
-instead.
-
-Turn borrowing on, look under `worktrees/` right away, and the directory for that slot is not
-there. That is the normal state. So that trees never pile up in projects that registered and may
-never use the pool, the only thing that lands in this queue the moment you turn borrowing on is a
-single worker file. The tree is created by the integration gate on the round that slot first picks
-this project, and the worker takes a ticket after that. Until your turn comes around, waiting is
-all there is to do.
-
-### The rule that decides whose turn it is
-
-A common worker that has woken up picks its project in four steps.
-
-1. Only projects with a borrow limit of `1` or more are candidates.
-2. Drop any project whose current count of held common workers has reached its own limit.
-3. Drop any project with no open tickets at all.
-4. Among what is left, pick the project that has **gone longest without being taken**.
-
-Step 4 is why one project cannot monopolize the pool. Priorities are never compared across
-projects. `priority` means something only inside one queue, and picking a project is a matter of
-turn-taking. Inside the queue, which ticket gets taken first does not differ by a single
-character from a project worker.
-
-If the project it picked turns out to offer no ticket, that round ends quietly and the next round
-picks the next candidate 30 seconds later. A running session is never cut short to move to a more
-urgent project.
 
 ## The persona decides the engine and the model
 

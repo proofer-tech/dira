@@ -706,10 +706,11 @@ field. It takes you there without walking the tree.
 - **Language** — picks the screen's wording between Korean and English.
 - **Webhook** — when a ticket newly starts waiting on an answer, it sends just that fact outside as
   one line. Covered in [Sending Awaiting answer somewhere else](/docs/webhook).
-- **Workers** — the bottom line of the tree. This is where you make the `Common worker pool` that
-  lives on one machine and gets borrowed by every project, and below it `All workers` gathers the
-  workers of every registered project. The three filters at the top narrow both sections together.
-  Covered in [Workers](/docs/worker), under common workers.
+- **Workers** — the bottom line of the tree. At the top is `Machine-wide session limit`, which sets
+  how many sessions can be up at once on this computer, and below it `All workers` gathers the
+  workers of every registered project. The `Project` and `Status` filters narrow that list, and
+  `Clear filters` puts it back (see [How many to run at once](/docs/concurrency), under this
+  computer's ceiling).
 
 Open settings from the home header and the `Project` group is not there at all. That place points at
 no project, so there is no way to decide whose values to show. Use the gear on a row in the project
@@ -723,7 +724,7 @@ is decided there (see [Authentication](/docs/auth), under multiplaying — the s
 several accounts).
 
 Everything outside the `Project` group belongs to this computer and applies to every registered
-project. Authentication, language, the common worker pool — none of them are set per project. Values
+project. Authentication, language, the session limit — none of them are set per project. Values
 that do differ per project sit in two places. One is the five things in the `Project` group you just
 saw; the other is `Worker settings`, opened separately from the top right of the workers screen (see
 [Workers](/docs/worker)).

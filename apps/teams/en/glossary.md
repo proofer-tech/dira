@@ -72,7 +72,6 @@ Never translate, never re-spell:
 | 첨부 | attachment | The button and the chip group read `Attachments`. |
 | 트랜스크립트 | transcript | The file the engine leaves. Never a log. |
 | 프로젝트 워커 | project worker | The worker that belongs to one project. |
-| 공통 워커 | common worker | The machine-wide slot several projects take turns using. Prose and the screen now share one word - the pool is `Common worker pool` and a borrowed row wears the `Common` badge. |
 | 워커 락 | worker lock | What keeps one worker from starting a second session. |
 | 후보 | candidate | A ticket a worker may take this round. |
 | 상한 | cap | The ceiling in prose. The screen label is `Limit`. |
@@ -246,25 +245,20 @@ label the screen actually shows. These rows are copied from the English dictiona
 | 워커 | Workers |
 | 프로토콜 | Protocols |
 | 워커 설정 | Worker settings |
-| 워커 생성 | New worker | The button on the workers screen. The one in `Settings` › `Workers` is `Create worker`. |
+| 워커 생성 | New worker |
 | 공통 컨텍스트 | Common context |
-| 공통 워커 빌리기 | Borrow common workers |
 | 나머지 워커 설정 (표시만) | The rest of the worker settings (read-only) |
 | 스테일 수거 | Stale collection |
-| 공통 워커 풀 | Common worker pool |
 | 전체 워커 | All workers |
 | 설정 분류 | Setting categories |
-| 공통 | Common |
 | crontab 미등록 | not in the crontab | Lowercase - it is a tail next to the badge. |
-| `<n>곳` | `<n> projects` |
 | 필터 초기화 | Clear filters |
 | 상한 | Limit |
-| 동시 빌리기 상한 | Concurrent borrow limit |
 | 저장 | Save |
 | 되돌리기 | Revert |
 | 스트림 | Stream |
 | 중단 | Stop |
-| 재등록 | Re-register | The row button. The one in `Settings` › `Workers` is `Register`. |
+| 재등록 | Re-register |
 | 삭제 | Delete |
 | 이름변경 | Rename |
 | 새 파일 | New file |
@@ -455,12 +449,6 @@ these rows copy the English dictionary, and when the two disagree the dictionary
 | `(디스패치되지 않는 N건은 상단 알림)` | `(Not dispatched: N — see notifications)` |
 | `수거할 스테일 티켓이 없습니다.` | `No stale tickets to collect.` |
 | `crontab에 등록했습니다 — 30초 뒤부터 티켓을 물어갑니다.` | `Registered in the crontab — it starts claiming tickets in 30 seconds.` |
-| `공통 워커가 없습니다 — 만들면 빌리기를 켠 프로젝트마다 들어갑니다.` | `No common workers — creating one adds it to every project that borrows.` |
-| `0이거나 비우면 안 빌립니다 — 상한은 동시에 도는 수이고 예약이 아닙니다.` | `0 or empty means no borrowing — the limit is how many run at once, not a reservation.` |
-| `공통 워커 <n>명이 이 프로젝트에 들어와 있습니다` | `<n> common worker(s) are in this project` |
-| `들어와 있는 공통 워커가 없습니다` | `No common workers are in this project` |
-| `pool-limit을 읽지 못했습니다 — 안 빌리는 것으로 읽습니다.` | `Couldn't read pool-limit — reading it as not borrowing.` |
-| `티켓을 물고 있어 못 뺀 공통 워커: ` | `Still holding a ticket, couldn't remove: ` |
 | `등록된 토큰이 없습니다.` | `No tokens yet.` |
 | `<날짜> 추가` | `<date> added` |
 | `저장했습니다. 유효한지는 다음 디스패치에서 드러납니다.` | `Saved. Whether it works shows up on the next dispatch.` |
