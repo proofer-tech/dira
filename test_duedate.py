@@ -40,7 +40,8 @@ def due(delta):
 # ⑭ 큐 무수정: 이 티켓이 새로 쓰는 frontmatter 키는 `duedate` 하나뿐이고, 그것도 사람이
 # 적은 값이라 안 쓴다(계산값은 파일에 안 남는다). 아래 픽스처가 손으로 심는 키만 허용한다.
 ALLOWED_FM = {"ticket", "title", "priority", "duedate", "deps",
-              "session_id", "assigned_at", "owner", "pid", "inbox"}
+              "session_id", "assigned_at", "owner", "pid", "inbox",
+              "claimed_at", "transcript"}
 
 
 def mk(root, h, fm=""):
