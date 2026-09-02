@@ -193,18 +193,11 @@ export const ko: Record<string, string> = {
   "settings.webhook.off": "보내지 않습니다",
   "settings.webhook.rejectHttps": "https 주소만 받습니다",
 
-  // 설정 `워커` 패널(§4-16 §롤백 · §비주얼 §68). 재사용 낱말(생성·중단·재등록·삭제)도 이
-  // 패널은 t()로만 문구를 그리므로 키가 새로 난다 — 값은 워커 표(`workers-ui.tsx`)와 같다.
+  // 설정 `워커` 패널(§4-16 §롤백 · §비주얼 §68). 이 패널은 t()로만 문구를 그리므로 키가
+  // 새로 난다 — 값은 워커 표(`workers-ui.tsx`)와 같다.
   "settings.workers.allHeading": "전체 워커",
   "settings.workers.filterCrumb": "필터",
-  "settings.workers.create": "워커 생성",
-  "settings.workers.stop": "중단",
-  "settings.workers.register": "재등록",
-  "settings.workers.delete": "삭제",
-  // "<n>곳" — 숫자 뒤에 바로 붙는다(`settings.search.emptySuffix`와 같은 접미 관용구, 공백 없음)
-  "settings.workers.borrowedBySuffix": "곳",
   "settings.workers.filterProject": "프로젝트",
-  "settings.workers.filterKind": "종류",
   "settings.workers.filterStatus": "상태",
   "settings.workers.filterReset": "필터 초기화",
   "settings.workers.filteredEmpty": "조건에 맞는 워커 0건",
@@ -2672,14 +2665,7 @@ export const en: Record<string, string> = {
 
   "settings.workers.allHeading": "All workers",
   "settings.workers.filterCrumb": "Filter",
-  "settings.workers.create": "Create worker",
-  "settings.workers.stop": "Stop",
-  "settings.workers.register": "Register",
-  "settings.workers.delete": "Delete",
-  // "<n> projects" — a space precedes it (English reads naturally with one, unlike the Korean suffix)
-  "settings.workers.borrowedBySuffix": " projects",
   "settings.workers.filterProject": "Project",
-  "settings.workers.filterKind": "Kind",
   "settings.workers.filterStatus": "Status",
   "settings.workers.filterReset": "Clear filters",
   "settings.workers.filteredEmpty": "0 workers match the filter",
@@ -4599,8 +4585,8 @@ export const en: Record<string, string> = {
   "interjectLib.writeFailedMid": "):",
 
   // `lib/transcript.ts`(§2-1) — 사건 라벨과 단위 둘. 라벨은 `progress.stream.*`가 이미 세운
-  // 대문자 한 낱말 꼴이고, 단위는 수 뒤에 바로 붙어서 앞 공백을 값이 든다
-  // (`settings.workers.borrowedBySuffix`가 선 그 벌). 복수형 장치가 없어 늘 복수다.
+  // 대문자 한 낱말 꼴이고, 단위는 수 뒤에 바로 붙어서 앞 공백을 값이 든다.
+  // 복수형 장치가 없어 늘 복수다.
   "transcriptLib.assigned": "Assignment",
   "transcriptLib.charsUnit": " chars",
   "transcriptLib.sessionPromptFirst": "Session prompt",
