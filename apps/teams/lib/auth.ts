@@ -638,6 +638,12 @@ const setupCmd = (bin: string) =>
   // 디렉터리라 실현되기 어렵지만, 셸 문자열을 조립하는 자리라 값싸게 막아 둔다
   `'stty cols 200 rows 50; ${bin.replace(/'/g, "'\\''")} setup-token; echo "${EXIT_MARK}$?"'`;
 const SETUP_TIMEOUT_MS = 120_000;
+/** 매치가 원문 끝에 닿아 대기 중일 때, 새 청크가 더 안 오면 포기하고 지금까지 잡은 값으로
+ *  확정하는 창(§0-4 §개정 `8f4712a6`). 같은 청크 안에서 이어 온 토막은 이 창을 안 쓴다 — 이건
+ *  <그 뒤로 정말 더 안 온다>를 재는 마지막 그물이다. 픽스처 재현(`443dd1fa`)에서 갈린 두
+ *  토막의 실제 간격은 한 자릿수 ms였다 — 500ms면 실물 pty 스케줄링 지연을 넉넉히 덮고도
+ *  사람이 못 느낄 창이다(발급 전체가 이미 브라우저 승인을 낀 수 초~수십 초다). */
+const TOKEN_IDLE_MS = 500;
 /** 남의 TUI를 긁는 일이라 접두사에 묶인다 — 저장 검증(`normalizeToken`)이 접두사로 거르지
  *  **않는** 것과 축이 다르다. 여기선 화면 잡음 속에서 토큰을 골라낼 표식이 이것뿐이다. */
 const TOKEN_RE = /sk-ant-[A-Za-z0-9._-]{20,}/;
@@ -752,6 +758,18 @@ function extractToken(raw: string): string | null {
   return TOKEN_RE.exec(foldRaw(raw).text)?.[0] ?? null;
 }
 
+/** 두 번째 축 — 매치가 나왔다는 것과 <머리를 다 봤다>는 것은 다르다(§0-4 §개정 `8f4712a6`).
+ *  매치의 끝이 그때까지 쌓인 원문(escape 걷어낸 텍스트)의 끝에 닿아 있으면, 다음 청크가 같은
+ *  토큰의 나머지 토막을 데려올 수 있다 — 아직 다 본 것이 아니다. 매치 뒤에 원문이 더 있으면
+ *  (=끝에 안 닿아 있으면) 그 매치는 더 안 자란다는 뜻이라 그 자리에서 확정해도 된다.
+ *  `feed()`가 이 값이 `null`이면(매치가 없거나 원문 끝에 닿아 있으면) idle 타이머로 미룬다. */
+function tokenMatchClosed(raw: string): string | null {
+  const { text } = foldRaw(raw);
+  const m = TOKEN_RE.exec(text);
+  if (!m || m.index + m[0].length === text.length) return null;
+  return m[0];
+}
+
 /** `feed()`가 부른다 — 집은 토큰 구간 **안에서** 낱말 간격(`foldRaw`의 `gapAt`)이 있던 자리를
  *  전부 찾아 그 앞까지의 길이를 후보로 돌려준다(짧은 순).
  *
@@ -848,6 +866,8 @@ let setup: {
   child: ChildProcess;
   raw: string;
   timer: NodeJS.Timeout;
+  /** 매치가 원문 끝에 닿은 채로 대기 중일 때만 돈다 — 새 청크가 오면 지우고 다시 잰다. */
+  idleTimer?: NodeJS.Timeout;
   settled: boolean;
   savedAt?: string;
   error?: string;
@@ -887,6 +907,7 @@ function settle(s: NonNullable<typeof setup>, error?: string): void {
   if (s.settled) return;
   s.settled = true;
   s.error = error;
+  clearTimeout(s.idleTimer);
   kill(s);
 }
 
@@ -961,24 +982,10 @@ export function startSetup(locale: Locale = DEFAULT_LOCALE): SetupState {
   };
   setup = s;
 
-  const feed = (d: Buffer) => {
-    if (s.settled) return;
-    s.raw = (s.raw + d.toString()).slice(-256_000);
-    // raw가 아니라 escape를 걷어낸 텍스트에서 집는다(§0-4 §개정 `443dd1fa`) — 토막 사이에
-    // 커서 이동 escape가 있거나 줄바꿈으로 접혀 있어도 `extractToken`이 이어서 잡는다
-    const token = extractToken(s.raw);
-    if (!token) {
-      // 토큰이 먼저다 — 잡았으면 종료 표식이 같은 청크에 있어도 성공이다
-      const bye = s.raw.match(new RegExp(`${EXIT_MARK}(\\d+)`));
-      if (bye) {
-        settle(
-          s,
-          `${translate(locale, "auth.setup.endedWithCodeMid")}${bye[1]}${translate(locale, "auth.setup.endedWithCodeSuffix")}`,
-        );
-      }
-      return;
-    }
+  // 매치를 확정한다 — `feed()`의 두 갈래(닿지 않은 매치 · idle 타임아웃)가 같은 마무리를 쓴다.
+  const finalize = (token: string) => {
     s.settled = true; // 저장은 비동기다 — 다음 청크가 두 번 저장하지 않게 여기서 잠근다
+    clearTimeout(s.idleTimer);
     kill(s);
     // 덮어쓰기가 아니라 목록 append다 — 활성은 `addToken`의 `reconcileActive` 판정을 그대로
     // 따른다(§0-13 §화면, P179). eligible한 활성이 이미 있으면 대기로 들어간다
@@ -995,6 +1002,41 @@ export function startSetup(locale: Locale = DEFAULT_LOCALE): SetupState {
       .catch((e: Error) => {
         s.error = `${translate(locale, "auth.setup.saveFailedPrefix")} ${e.message}`;
       });
+  };
+
+  const feed = (d: Buffer) => {
+    if (s.settled) return;
+    s.raw = (s.raw + d.toString()).slice(-256_000);
+    clearTimeout(s.idleTimer); // 새 바이트가 왔다 — idle 그물을 다시 건다
+    // raw가 아니라 escape를 걷어낸 텍스트에서 집는다(§0-4 §개정 `443dd1fa`) — 토막 사이에
+    // 커서 이동 escape가 있거나 줄바꿈으로 접혀 있어도 `extractToken`이 이어서 잡는다
+    //
+    // 매치가 나왔다는 것만으로 확정하지 않는다(§0-4 §개정 `8f4712a6`) — `TOKEN_RE`의 하한이
+    // `sk-ant-` 뒤 20자라 토막 하나만으로도 이미 매치가 성립한다. `tokenMatchClosed`는 매치
+    // 뒤에 원문이 더 있을 때만(=다음 청크가 그 토큰의 나머지를 데려올 수 없을 때만) 값을
+    // 준다 — 아직 원문 끝에 닿아 있으면 `null`이라 아래 idle 그물로 미룬다.
+    const closed = tokenMatchClosed(s.raw);
+    if (closed) {
+      finalize(closed);
+      return;
+    }
+    // 토큰이 먼저다 — 닿지 않은 매치가 없어도(=아직 못 잡았어도) 종료 표식이 왔으면 실패다
+    const bye = s.raw.match(new RegExp(`${EXIT_MARK}(\\d+)`));
+    if (bye) {
+      settle(
+        s,
+        `${translate(locale, "auth.setup.endedWithCodeMid")}${bye[1]}${translate(locale, "auth.setup.endedWithCodeSuffix")}`,
+      );
+      return;
+    }
+    // 매치가 원문 끝에 닿은 채 대기 중이면(또는 아직 매치가 없으면) 새 바이트를 기다린다 —
+    // 그러다 한동안 안 오면(§0-4 §셋째 근거) 지금까지 잡은 값으로 확정한다
+    const pending = extractToken(s.raw);
+    if (pending) {
+      s.idleTimer = setTimeout(() => {
+        if (!s.settled) finalize(pending);
+      }, TOKEN_IDLE_MS);
+    }
   };
   child.stdout?.on("data", feed);
   child.stderr?.on("data", feed); // 같은 로그에 섞는다 — 사람이 볼 곳이 하나다

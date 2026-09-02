@@ -218,6 +218,36 @@ test("startSetup — 토막난 토큰(커서 이동 escape·줄바꿈으로 갈�
   stopSetup();
 });
 
+test("startSetup — 토막난 토큰이 서로 다른 청크로 갈려 와도(스케줄링에 안 기댄다) 머리를 다 볼 때까지 잠그지 않는다 (§0-4 §개정 `8f4712a6`)", async () => {
+  process.env.TICKET_LOCAL = mkdtempSync(path.join(tmpdir(), "fst-auth-split-"));
+  // 위 `443dd1fa` 픽스처와 같은 세 토막이지만, 두 `printf` 사이에 실제 간격(`sleep 0.3`)을
+  // 끼워 **두 쓰기가 한 번의 read로 붙을 가능성을 없앤다** — PM 세션(2026-09-03)이 이 값으로
+  // 로컬·GitHub Actions 러너 양쪽에서 갈린 청크를 재현했다. 첫 청크(FRAG1+FRAG2)는 그 자체로
+  // `\r\n`에서 끝나 원문 끝에 닿는다 — 고친 `feed()`가 여기서 확정하면(옛 코드처럼) 44자만
+  // 남고 뒤 61자(FRAG3)가 도착할 기회를 잃는다.
+  const FRAG1 = "sk-ant-oa";
+  const FRAG2 = "D".repeat(35);
+  const FRAG3 = "E".repeat(61);
+  const TOKEN = FRAG1 + FRAG2 + FRAG3;
+  stubClaude(
+    `printf '${FRAG1}\\033[46G${FRAG2}\\r\\n'\nsleep 0.3\nprintf '${FRAG3}\\r\\n'\nsleep 60`,
+  );
+  armPidfile();
+  startSetup();
+  await until(() => !!pollSetup().savedAt);
+
+  const s = pollSetup();
+  assert.strictEqual(s.error, undefined);
+  const saved = await import("node:fs/promises").then((fs) => fs.readFile(tokenPath(), "utf8"));
+  // 44자(FRAG1+FRAG2)가 아니라 세 토막을 다 이은 값이다 — 고치기 전 이 자리에서 44자가 났다
+  // (본문 `## 결과`에 실측 기록)
+  assert.strictEqual(saved, TOKEN);
+  assert.ok(!s.lines.some((l) => l.includes(FRAG2)), s.lines.join("|"));
+  assert.ok(!s.lines.some((l) => l.includes(FRAG3)), s.lines.join("|"));
+
+  stopSetup();
+});
+
 test("startSetup — 발급 성공 뒤 CLI 안내문이 낱말 사이 공백 없이 커서 이동 escape로 이어져도 저장이 막히지 않는다 (§0-4 §개정 P359-2)", async () => {
   process.env.TICKET_LOCAL = mkdtempSync(path.join(tmpdir(), "fst-auth-tail-"));
   const TOKEN = "sk-ant-oat01-" + "x".repeat(40); // 53자
