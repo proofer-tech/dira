@@ -82,6 +82,9 @@ import {
   lastQuestionOptions,
   listTickets,
   depBadges,
+  planOf,
+  planProgress,
+  type PlanProgress,
   pollingReasonOf,
   pollingRemainingMs,
   relationEdges,
@@ -197,12 +200,18 @@ function when(ms: number): string {
  *  구분자 ` · `는 **둘 다 있을 때만** 넣는다. assistant `text`는 `label`·`summary`가 둘 다
  *  비므로(실측 히트의 13.9%) §2-1과 같은 처방으로 `body`의 첫 줄을 만든다 — 리더도 §2-1도
  *  안 고치고 **소비자가 정하는 판정 한 줄**이다(§36). */
-function wipLine(e: StreamEvent | null) {
+function wipLine(e: StreamEvent | null, progress: PlanProgress | null) {
   if (!e) return null;
   const summary = e.label ? e.summary : e.body.split("\n")[0];
   if (!e.label && !summary.trim()) return null; // 세울 글자가 없으면 줄도 없다(§1-1 §없을 때)
   return (
-    <div aria-hidden className="-mx-4 -mb-2 border-t px-4 pt-2">
+    <div aria-hidden className="relative -mx-4 -mb-2 border-t px-4 pt-2">
+      {progress && (
+        <div
+          className="absolute -top-px left-0 h-px bg-primary"
+          style={{ width: `${(progress.done / progress.total) * 100}%` }}
+        />
+      )}
       <div className="h-3.5 truncate text-2xs wip-shimmer">
         {e.label && <span className="font-mono">{e.label}</span>}
         {e.label && summary ? " · " : null}
@@ -541,7 +550,11 @@ export default async function Board({
               .map(async (t) => {
                 const sid = sessionIdOf(t.fm);
                 const s = sid ? await findStream(sid) : null;
-                return [t.path, wipLine(s ? await lastActivity(s.file, s.grok, locale) : null)] as const;
+                const progress = planProgress(planOf(t.body));
+                return [
+                  t.path,
+                  wipLine(s ? await lastActivity(s.file, s.grok, locale) : null, progress),
+                ] as const;
               }),
           ),
         )

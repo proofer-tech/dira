@@ -51,6 +51,7 @@ import {
   lastQuestionOptions,
   optionsOf,
   planOf,
+  planProgress,
   questionsOf,
   quotesOf,
   withoutQuotes,
@@ -1525,6 +1526,32 @@ test("planOf — 괄호 뒤 꼬리말은 문장의 일부로 남는다(§2-11①
       end: "2026-08-18T09:40:11+09:00",
     },
   ]);
+});
+
+// ── §2-11⑩ §요구 f91a7b21 — planProgress (DESIGN.md §2-11⑩ 판정 1, 수용조건 1) ──────
+
+test("planProgress — 계획 절이 없는 본문(빈 배열)은 진행도가 없다", () => {
+  assert.strictEqual(planProgress(planOf("## Goal\n\n하나.\n")), null);
+});
+
+test("planProgress — 전부 미착수면 0/n", () => {
+  const body = "## 진행 계획\n\n- [ ] 하나\n- [ ] 둘\n- [ ] 셋\n";
+  assert.deepStrictEqual(planProgress(planOf(body)), { done: 0, total: 3 });
+});
+
+test("planProgress — 완료와 취소가 섞이면 취소가 분모에서 빠진다", () => {
+  const body = "## 진행 계획\n\n- [x] 하나\n- [ ] ~~둘~~\n- [ ] 셋\n- [x] 넷\n";
+  assert.deepStrictEqual(planProgress(planOf(body)), { done: 2, total: 3 });
+});
+
+test("planProgress — 전부 취소면 진행도가 없다", () => {
+  const body = "## 진행 계획\n\n- [ ] ~~하나~~\n- [ ] ~~둘~~\n";
+  assert.strictEqual(planProgress(planOf(body)), null);
+});
+
+test("planProgress — 전부 완료면 꽉 찬다", () => {
+  const body = "## 진행 계획\n\n- [x] 하나\n- [x] 둘\n";
+  assert.deepStrictEqual(planProgress(planOf(body)), { done: 2, total: 2 });
 });
 
 test("bodyWithoutQuestions — `## 진행 계획`도 `## 질문 n`과 같이 빠진다(§2-11⑤)", () => {

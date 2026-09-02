@@ -51,6 +51,7 @@ import {
   lastQuestionOptions,
   listTickets,
   planOf,
+  planProgress,
   pollingDetailOf,
   referrers,
   reqOf,
@@ -244,6 +245,9 @@ export default async function TicketDetail({
   // 진행 계획(§2-11① · §비주얼 §59) — `## 진행 계획` 절이 없으면 빈 배열이고 그때 진행 기록은
   // 개정 전 화면 그대로다(`<SessionStream>` 기본값과 같은 판정).
   const plans = planOf(ticket.body);
+  // 진행 기록 머리 줄의 진행도 덩이(§비주얼 §71 ⑥⑦) — `SessionStream`이 뜨는 갈래에서는 그
+  // 컴포넌트가 같은 `plans`로 이 값을 직접 구한다. 여기는 스트림이 아예 없는 갈래(아래) 몫이다.
+  const planProgressValue = planProgress(plans);
 
   // 편집 폼의 persona select 선택지. **보드의 발행 다이얼로그와 같은 규칙**이다(§2 편집 항):
   // `listPersonas` 결과 중 `body !== null`(= PROFILE.md가 있다). 여기서 `readdir`을 다시 하면
@@ -293,6 +297,7 @@ export default async function TicketDetail({
             engine={engine}
             thread={thread}
             plans={plans}
+            planProgress={planProgressValue}
             answerOptions={answerOptions}
             defaultAnswer={defaultAnswerOf(ticket)}
             body={bodyRead}
@@ -317,6 +322,14 @@ export default async function TicketDetail({
                 토큰량 덩이도 h2 옆에 같이 뜬다(§비주얼 §63 ④ — 조건이 h2와 같다). */}
             <div className="flex min-w-0 items-baseline gap-2">
               <h2 className="text-sm font-medium">{t(locale, "ticketDetail.progressHeading")}</h2>
+              {planProgressValue && (
+                <span className="text-xs text-muted-foreground">
+                  {t(locale, "progress.plan.ratioLabel")}{" "}
+                  <span className="font-mono">
+                    {planProgressValue.done}/{planProgressValue.total}
+                  </span>
+                </span>
+              )}
               {costChunk && (
                 <span className="text-xs text-muted-foreground" title={costChunk.title}>
                   {costChunk.text}

@@ -6,7 +6,7 @@
  *  부른다 — `dispatchByHash`가 이미 손에 있으니 되돌아옴 합은 `reassignCount`를 또 부르지
  *  않고 그 자리에서 직접 계산한다(공식은 같다). */
 import path from "node:path";
-import { derivedFrom, isAwaiting, planOf, type Suffixes, type Ticket } from "./queue.ts";
+import { derivedFrom, isAwaiting, planOf, planProgress, type Suffixes, type Ticket } from "./queue.ts";
 import { lastLogByWorker, workerOf } from "./workers.ts";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -99,14 +99,13 @@ export async function personaActivity(
   const nowItems: PersonaNowItem[] = mine
     .filter((t) => t.state === "wip")
     .map((t) => {
-      const plan = planOf(t.body);
       return {
         hash: t.hash,
         title: t.title,
         kind: t.kind,
         worker: t.fm.owner ? workerOf(t.fm.owner) : null,
         assignedAt: t.fm.assigned_at ?? null,
-        plan: plan.length ? { done: plan.filter((p) => p.state === "done").length, total: plan.length } : null,
+        plan: planProgress(planOf(t.body)),
         blocked: BLOCKED_HEADING_RE.test(t.body),
       };
     });

@@ -83,7 +83,7 @@ import { formatCombo, matchCombo } from "@/lib/keymap";
 import type { FollowupReason } from "@/lib/followup";
 import type { InterjectReason } from "@/lib/interject";
 // 스레드를 엮는 쪽은 서버(`lib/queue.ts threadOf`)다 — 여기 오는 건 타입뿐이라 `node:*`를 안 끈다
-import type { OptionGroup, PlanItem, ThreadItem } from "@/lib/queue";
+import type { OptionGroup, PlanItem, PlanProgress, ThreadItem } from "@/lib/queue";
 import type { StreamEvent } from "@/lib/transcript";
 import {
   engineCan,
@@ -151,6 +151,7 @@ export function SessionStream({
   engine,
   thread = [],
   plans = [],
+  planProgress = null,
   answerOptions = [],
   defaultAnswer = "",
   body = "",
@@ -178,6 +179,10 @@ export function SessionStream({
    *  배열(계획 절이 없는 티켓 · 워커 다이얼로그처럼 body를 안 읽는 자리)이면 이 상자는 개정
    *  전과 한 클래스도 안 갈린다(§2-11④ 계약 그대로). */
   plans?: PlanItem[];
+  /** 계획 진행도(§2-11⑩ 판정 1 · §비주얼 §71 ⑥⑦) — 서버가 `planProgress(plans)`로 미리 구해
+   *  내려준다(`lib/queue.ts`가 `node:fs`를 타서 이 클라이언트 컴포넌트가 직접 못 부른다).
+   *  `null`이면 진행도가 없다는 뜻이라 머리 줄에 그 덩이가 안 뜬다. */
+  planProgress?: PlanProgress | null;
   /** 마지막 질문 라운드의 선택 카드(결정 10) — 서버가 `lastQuestionOptions(thread)`로 미리 재
    *  `AnswerForm`에 그대로 내린다. 0개면 그 라운드에 선택지가 없다(58/100) — 카드 0장, 종전 화면. */
   answerOptions?: OptionGroup[];
@@ -545,6 +550,14 @@ export function SessionStream({
         <div className="flex h-8 items-center justify-between gap-2">
           <div className="flex min-w-0 items-baseline gap-2">
             <h2 className="text-sm font-medium">{t("sessionStream.heading")}</h2>
+            {planProgress && (
+              <span className="text-xs text-muted-foreground">
+                {t("progress.plan.ratioLabel")}{" "}
+                <span className="font-mono">
+                  {planProgress.done}/{planProgress.total}
+                </span>
+              </span>
+            )}
             {costChunk && (
               <span className="text-xs text-muted-foreground" title={costChunk.title}>
                 {costChunk.text}

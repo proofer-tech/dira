@@ -455,6 +455,9 @@ export const ko: Record<string, string> = {
   "progress.plan.doing": "진행중",
   "progress.plan.done": "완료",
 
+  // 진행 기록 머리 줄 진행도 덩이(§비주얼 §71 ⑫) — `계획 <완료>/<분모>`의 라벨 한 낱말.
+  "progress.plan.ratioLabel": "계획",
+
   // 배치 개정(§비주얼 §59 ⑦-1) — 계획 목록을 앞뒤로 감싸는 칸 둘의 제목 줄 낱말.
   "progress.segment.assign": "배정",
   "progress.segment.wrapup": "마무리",
@@ -2910,6 +2913,8 @@ export const en: Record<string, string> = {
   "progress.plan.cancelled": "Cancelled",
   "progress.plan.doing": "In progress",
   "progress.plan.done": "Done",
+
+  "progress.plan.ratioLabel": "Plan",
 
   "progress.segment.assign": "Assignment",
   "progress.segment.wrapup": "Wrap-up",

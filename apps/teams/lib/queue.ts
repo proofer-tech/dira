@@ -837,6 +837,16 @@ export function planOf(body: string): PlanItem[] {
   });
 }
 
+/** 계획 진행도(§2-11⑩ 판정 1) — 완료 수 / (전체 수 - 취소 수). 분모가 0이면(계획 절이 없거나
+ *  전부 취소) 진행도가 없다는 뜻으로 `null`을 돌려준다 — 보드 카드·티켓 상세·페르소나 화면
+ *  셋이 이 함수 하나를 부른다(판정 2). */
+export type PlanProgress = { done: number; total: number };
+export function planProgress(items: PlanItem[]): PlanProgress | null {
+  const total = items.filter((p) => p.state !== "cancelled").length;
+  if (total === 0) return null;
+  return { done: items.filter((p) => p.state === "done").length, total };
+}
+
 /** `questionsOf`가 데려간 절과 `## 진행 계획`(§2-11⑤)을 뺀 본문 — **읽기 전용 렌더(`<Markdown>`)만**
  *  이걸 쓴다(§2 왕복). 질문은 스레드가, 계획은 진행 기록이 유일한 출처가 되는 자리고, 같은 절이
  *  본문에 두 벌 뜨지 않게 하는 자리다.
