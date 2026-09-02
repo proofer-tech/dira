@@ -17,7 +17,7 @@ export type SessionCapProjectRow = { id: string; name: string; count: number };
 
 /** 머신 전체 동시 세션 상한(§세션이 120초 안에 못 뜬다 §개정 결정 2-3). I/O(`readSessionLimit`·
  *  `liveSessionCount`)는 `session-cap.ts` + `readWorkersPanelAction`이 지고, 이 조각은 그 결과를
- *  그대로 옮겨 담는다 — `pool`과 달리 여기서 유도할 값이 없다(합계·분포 둘 다 이미 계산돼 온다). */
+ *  그대로 옮겨 담는다 — 여기서 유도할 값이 없다(합계·분포 둘 다 이미 계산돼 온다). */
 export type WorkersPanelSessionCap = {
   limit: number | null;
   warn: boolean;

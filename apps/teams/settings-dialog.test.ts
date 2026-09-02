@@ -59,16 +59,17 @@ test("다이얼로그가 닫힐 때는 여전히 stopSetupAction()을 부른다"
   assert.ok(dialogClose.includes("void stopSetupAction();"));
 });
 
-// §4-16 결정 5 — 설정 트리 열째 노드 `워커`. 화면을 못 띄우니(next/CSS) 소스 글자로 잰다
-// (위 블록과 같은 전제).
+// §4-16 §롤백 §검색 인덱스 — 설정 트리 열째 노드 `워커`. 화면을 못 띄우니(next/CSS) 소스
+// 글자로 잰다(위 블록과 같은 전제). `workers.pool` 항목은 공통 워커 풀 롤백으로 빠졌다.
 
-test("검색 인덱스에 워커 항목 넷(노드 자신 · 공통 워커 풀 · 전체 워커 · 필터)이 있다", () => {
-  for (const anchor of ["workers", "workers.pool", "workers.all", "workers.filter"]) {
+test("검색 인덱스에 워커 항목 셋(노드 자신 · 전체 워커 · 필터)이 있다", () => {
+  for (const anchor of ["workers", "workers.all", "workers.filter"]) {
     assert.ok(
       s.includes(`anchor: "${anchor}"`),
       `검색 인덱스에 anchor: "${anchor}" 항목이 없다`,
     );
   }
+  assert.ok(!s.includes('anchor: "workers.pool"'), "검색 인덱스에 workers.pool 항목이 남아 있다");
 });
 
 test("트리 노드가 SettingsNode 유니온에 있고 `설정 분류` 그룹의 마지막(웹훅 다음)이다", () => {

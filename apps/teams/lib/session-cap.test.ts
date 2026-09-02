@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-// 진짜 `~/.config/dira`를 밟지 않는다 — `pool.test.ts`와 같은 관용구, import 전에 건다.
+// 진짜 `~/.config/dira`를 밟지 않는다 — `i18n.test.ts`와 같은 관용구, import 전에 건다.
 const LOCAL = mkdtempSync(path.join(tmpdir(), "session-cap-local-"));
 process.env.TICKET_LOCAL = LOCAL;
 

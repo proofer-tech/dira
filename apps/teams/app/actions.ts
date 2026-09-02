@@ -96,14 +96,6 @@ import {
   testSendWebhook,
   type WebhookTestResult,
 } from "@/lib/webhook";
-import {
-  createPoolWorker,
-  deletePoolWorker,
-  propagatePoolWorkerCreate,
-  propagatePoolWorkerDelete,
-  startPoolWorker,
-  stopPoolWorker,
-} from "@/lib/pool";
 import { liveSessionCount, readSessionLimit, writeSessionLimit } from "@/lib/session-cap";
 import {
   buildWorkersPanel,
@@ -776,9 +768,9 @@ export type SessionLimitResult = {
   byProject?: SessionCapProjectRow[];
 };
 
-/** 설정 `워커` 노드의 상한 컨트롤 저장 — `pool-limit` 관용구와 같되(§4-16 결정 3), 빈 값은 `0`이
- *  아니라 파일 삭제다(결정 2 "비우고 저장하면 파일이 없어지고 트리거가 `없음`이 된다" — 머신 전체
- *  상한이 없다는 것과 0이라는 것은 다른 사실이다). */
+/** 설정 `워커` 노드의 상한 컨트롤 저장 — 빈 값은 `0`이 아니라 파일 삭제다(결정 2 "비우고
+ *  저장하면 파일이 없어지고 트리거가 `없음`이 된다" — 머신 전체 상한이 없다는 것과 0이라는
+ *  것은 다른 사실이다). */
 export async function saveSessionLimitAction(
   value: string,
   locale: Locale = DEFAULT_LOCALE,
@@ -794,60 +786,6 @@ export async function saveSessionLimitAction(
   }
   const cap = await sessionCapOf(await readProjects());
   return { ok: true, limit: cap.limit, total: cap.total, byProject: cap.byProject };
-}
-
-/** `공통 워커 풀` 덩이의 `워커 생성`. **만든 직후 crontab까지 등록한다** — 풀 파일은 cron
- *  진입점이라(§4-16 결정 2) 등록 없이는 `stopped`로 뜬다, `## Done when`이 요구하는 "만든 직후
- *  idle"은 파일 생성 + 등록 두 단계를 합쳐야 성립한다(`createWorkerAction`이 `createWorker` 뒤에
- *  바로 `registerCron`을 부르는 것과 같은 자리). **등록 직후 `pool-limit`이 1 이상인 프로젝트
- *  전부에 shim을 넣는다**(§4-16 결정 3 셋째 항목) — 사람이 그 프로젝트마다 상한을 다시 저장할
- *  필요가 없다. */
-export async function createPoolWorkerAction(name: string): Promise<{ error?: string }> {
-  try {
-    const trimmed = name.trim();
-    await createPoolWorker(trimmed);
-    await startPoolWorker(trimmed);
-    await propagatePoolWorkerCreate(trimmed);
-  } catch (e) {
-    return { error: (e as Error).message };
-  }
-  return {};
-}
-
-/** 풀 줄의 `중단` — crontab 줄만 뺀다. 도는 세션은 끝까지 간다(§4 중단과 같은 판정). */
-export async function stopPoolWorkerAction(name: string): Promise<{ error?: string }> {
-  try {
-    await stopPoolWorker(name);
-  } catch (e) {
-    return { error: (e as Error).message };
-  }
-  return {};
-}
-
-/** 풀 줄의 `재등록` — `중단`의 역방향. crontab 줄만 다시 넣는다. */
-export async function registerPoolWorkerAction(name: string): Promise<{ error?: string }> {
-  try {
-    await startPoolWorker(name);
-  } catch (e) {
-    return { error: (e as Error).message };
-  }
-  return {};
-}
-
-/** 풀 줄의 `삭제` — 공통 워커 자신을 지금 어느 프로젝트가 물고 있으면 거절한다(`deletePoolWorker`가
- *  던지는 사유 그대로, 무수정). 지운 뒤에는 빌리던 프로젝트 전부에서 그 shim을 같은 요청 안에서
- *  뺀다(§4-16 결정 3 셋째 항목) — 프로젝트 하나가 티켓을 물고 있어 못 빼면 그 이름만 `blocked`에
- *  담아 돌려주고 나머지는 마저 뺀다(`applyPoolLimit`의 부분 실패와 같은 모양). */
-export async function deletePoolWorkerAction(
-  name: string,
-): Promise<{ error?: string; blocked?: string[] }> {
-  try {
-    await deletePoolWorker(name);
-  } catch (e) {
-    return { error: (e as Error).message };
-  }
-  const { blocked } = await propagatePoolWorkerDelete(name);
-  return { blocked: blocked.map((b) => b.project) };
 }
 
 /** 사용 통계 섹션 층 ① (DESIGN.md §0-11 §끄는 자리) — 다이얼로그가 열릴 때 한 줄이 읽는다.

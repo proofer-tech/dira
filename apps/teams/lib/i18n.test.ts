@@ -151,7 +151,6 @@ const FILLED = [
   // 그래서 이 티켓이 채운 하위 접두만 적고, 같은 이유로 `workers.context.`·`workers.create.`는
   // 여기 없다(둘 다 워커 화면 묶음의 키가 섞여 있다 — 그 묶음이 찰 때 두 줄이 더해진다).
   "auth.",
-  "pool.",
   "queue.",
   "engine.",
   "workers.crontab.",

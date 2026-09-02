@@ -133,7 +133,7 @@ export default async function ProjectLayout({
   // `running`이 하나라도 있을 때만 참이다 — `crontab -l`이 실패하면 전원 `stopped`가 되고
   // 그때는 아는 것만 알려 준다(`없음`).
   const idle = current.groups.find((g) => g.status === "idle");
-  const idlePool =
+  const idleNames =
     idle?.names.join(" ") ??
     (current.groups.some((g) => g.status === "running")
       ? t(locale, "statusbar.idle.allRunning")
@@ -386,8 +386,8 @@ export default async function ProjectLayout({
                 사라진다(§1-2 §자르기 개정). `truncate`는 값 `<span>`에만 걸고(풀에 걸면 `…`가
                 안 뜬다) 부모의 `min-w-0`이 그것을 실제로 걸리게 한다. `max-w-*`는 없다 —
                 바의 마지막 요소라 뒤에 밀 것이 없고, 상한을 얹으면 넓은 화면에서 이유 없이 자른다 */}
-            <span className="truncate font-mono" title={idlePool}>
-              {idlePool}
+            <span className="truncate font-mono" title={idleNames}>
+              {idleNames}
             </span>
           </div>
         </footer>

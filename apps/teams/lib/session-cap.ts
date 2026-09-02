@@ -19,8 +19,8 @@ function sessionLimitPath(): string {
   return path.join(localDir(), "session-limit");
 }
 
-/** `PoolLimit`(pool.ts)과 같은 모양 — `null` = 파일 없음(`없음`), `warn` = 파일은 있는데
- *  못 읽은 값(문자·음수·빈 파일)이었다는 뜻이고 그때 `limit`은 `0`이다. */
+/** `null` = 파일 없음(`없음`), `warn` = 파일은 있는데 못 읽은 값(문자·음수·빈 파일)이었다는
+ *  뜻이고 그때 `limit`은 `0`이다. */
 export type SessionLimit = { limit: number | null; warn: boolean };
 
 export async function readSessionLimit(): Promise<SessionLimit> {
@@ -34,9 +34,8 @@ export async function readSessionLimit(): Promise<SessionLimit> {
 }
 
 /** `limit === null`이면 파일을 지운다(트리거가 `없음`이 된다, 결정 2 "비우고 저장하면 파일이
- *  없어진다"). `pool.ts`의 `writePoolLimit`과 달리 삭제 규약이 있는 이유: 저 파일은 상한 `0`이
- *  "안 빌린다"는 실효값과 같아서 삭제가 필요 없지만, 이 파일은 없음이 "상한 없음"이라는 별개
- *  상태라 값 하나로는 못 나타낸다. */
+ *  없어진다"). 없음이 "상한 없음"이라는 상태라 값 하나로는 못 나타내서, 다른 상한류처럼
+ *  `0`으로 뭉치지 않고 삭제 규약을 따로 둔다. */
 export async function writeSessionLimit(
   limit: number | null,
   locale: Locale = DEFAULT_LOCALE,

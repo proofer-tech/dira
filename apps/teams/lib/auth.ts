@@ -702,10 +702,17 @@ const OSC_Y = /\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/y;
  *  바꾸지 않고 **지운다** — 토큰 토막 사이의 커서 이동은 사람이 보는 진짜 공백이 아니다.
  *  줄바꿈(`\r`·`\n`)도 같이 접는다 — 폭이 좁아 토큰이 줄바꿈으로 쪼개져도 이어 잡는다.
  *  `rawIndex[i]`는 `text[i]`가 raw의 어느 인덱스에서 왔는지다 — 마스킹이 원문 구간을
- *  되찾는 데 쓴다. */
-function foldRaw(raw: string): { text: string; rawIndex: number[] } {
+ *  되찾는 데 쓴다.
+ *
+ *  `gapAt[i]`는 `text[i]` 바로 앞이 **낱말 사이 간격**(CHA·CUF — `ptyLines`가 공백 한 칸으로
+ *  바꾸는 그 escape)이었는지다. 토막 사이 재그리기도 같은 종류의 escape를 쓰므로(§개정
+ *  `443dd1fa`) 이것만으로 "진짜 낱말 경계"와 "토큰 재그리기 이음매"를 가르지 않는다 — 이 값은
+ *  `tokenGapCuts`가 후보 절삭 길이를 좁히는 데만 쓴다, 접기 자체는 안 바뀐다(§P359-2). */
+function foldRaw(raw: string): { text: string; rawIndex: number[]; gapAt: boolean[] } {
   let text = "";
   const rawIndex: number[] = [];
+  const gapAt: boolean[] = [];
+  let pendingGap = false;
   let i = 0;
   while (i < raw.length) {
     OSC_Y.lastIndex = i;
@@ -717,6 +724,7 @@ function foldRaw(raw: string): { text: string; rawIndex: number[] } {
     CSI_Y.lastIndex = i;
     const csi = CSI_Y.exec(raw);
     if (csi) {
+      if (/[GC]$/.test(csi[0])) pendingGap = true; // ptyLines와 같은 판정(CHA·CUF)
       i += csi[0].length;
       continue;
     }
@@ -731,15 +739,37 @@ function foldRaw(raw: string): { text: string; rawIndex: number[] } {
     }
     text += ch;
     rawIndex.push(i);
+    gapAt.push(pendingGap);
+    pendingGap = false;
     i += 1;
   }
-  return { text, rawIndex };
+  return { text, rawIndex, gapAt };
 }
 
 /** `feed()`가 부른다 — escape 없는 이어붙인 텍스트에서 첫 토큰을 집는다. 토막 사이에 escape가
  *  있든 줄바꿈이 있든 `foldRaw`가 이미 이어 놨으므로 `TOKEN_RE`를 그대로 쓴다. */
 function extractToken(raw: string): string | null {
   return TOKEN_RE.exec(foldRaw(raw).text)?.[0] ?? null;
+}
+
+/** `feed()`가 부른다 — 집은 토큰 구간 **안에서** 낱말 간격(`foldRaw`의 `gapAt`)이 있던 자리를
+ *  전부 찾아 그 앞까지의 길이를 후보로 돌려준다(짧은 순).
+ *
+ *  CLI가 발급 성공 뒤에 붙이는 안내문(`Make sure to copy it now as you won't be able to see
+ *  it again.` 류)이 Ink 레이아웃에서 낱말 사이 공백 없이 커서 이동 escape로만 이어지면(실측
+ *  신고 `eabc009b`), `TOKEN_RE`의 탐욕 매치가 그 안내문까지 통째로 삼킨다 — 그 꼬리 길이는
+ *  안내문 글자 수만큼이라 CLI 문구가 바뀌면 같이 는다(§0-4, 상수로 안 정한다). 그래서
+ *  `verifiedToken`이 글자 하나씩 트림하는 대신 **낱말 경계**부터 확인하게 후보를 준다 —
+ *  안내문이 몇 자든 낱말 수만큼의 요청으로 끝난다. */
+function tokenGapCuts(raw: string): number[] {
+  const { text, gapAt } = foldRaw(raw);
+  const m = TOKEN_RE.exec(text);
+  if (!m) return [];
+  const cuts: number[] = [];
+  for (let i = m.index + 1; i < m.index + m[0].length; i++) {
+    if (gapAt[i]) cuts.push(i - m.index);
+  }
+  return cuts;
 }
 
 /** 집은 값을 저장 전에 한 번 찔러 본다 — **`foldRaw`가 이어 붙인 값은 토큰보다 길 수 있다.**
@@ -749,7 +779,13 @@ function extractToken(raw: string): string | null {
  *  떨어지면 `sk-ant-oa01-`이 나온다(2026-08-28 여섯 건, 전부 401).
  *
  *  **형식을 하드코딩하지 않는다**(§0-4) — 길이도 문자셋도 우리 것이 아니라 바뀌면 멀쩡한
- *  토큰을 거부하게 된다. 뒤에서 한 자씩 줄여 가며 **인증되는 첫 값**을 고른다.
+ *  토큰을 거부하게 된다.
+ *
+ *  `gapCuts`(비어 있어도 된다, 기본값 `[]`)를 먼저 확인한다 — `tokenGapCuts`가 낱말 경계로
+ *  좁혀 준 후보다. 원문 그대로가 통하면(보통 경우) 거기서 끝나 요청이 하나다. 거기서도 안
+ *  통하면 남는 것은 재그리기의 작은 잔여물(실측 5자)이라 뒤에서 한 자씩 줄여 가며
+ *  **인증되는 첫 값**을 고른다 — 이 상한(`MAX_TRIM`)은 그대로 둔다, 늘리는 것은 CLI 안내문
+ *  길이에 맞춰 계속 손대야 하는 값이라 이 티켓이 닫으려는 것이다(§P359-2).
  *
  *  판정은 `200`이 아니라 **`401이 아니다`**다: 한도에 닿은 계정은 멀쩡한 토큰으로도 `429`를
  *  준다. 네트워크가 끊겨 한 번도 못 물어봤으면 잡은 값을 그대로 돌려준다 — 인증을 연결
@@ -757,18 +793,31 @@ function extractToken(raw: string): string | null {
 export async function verifiedToken(
   cand: string,
   locale: Locale = DEFAULT_LOCALE,
+  gapCuts: number[] = [],
 ): Promise<{ token: string } | { error: string }> {
   let asked = false;
-  for (let n = cand.length; n >= MIN_TOKEN_LEN && cand.length - n <= MAX_TRIM; n--) {
+  const seen = new Set<number>();
+  const tryLen = async (n: number): Promise<string | undefined> => {
+    if (n < MIN_TOKEN_LEN || n > cand.length || seen.has(n)) return undefined;
+    seen.add(n);
     let res: Response;
     try {
       res = await probeClaudeToken(cand.slice(0, n));
     } catch {
-      continue; // 타임아웃·단절 — 이 길이는 판정한 것이 아니다
+      return undefined; // 타임아웃·단절 — 이 길이는 판정한 것이 아니다
     }
     asked = true;
     await res.arrayBuffer().catch(() => {}); // 헤더만 쓴다 — 본문은 읽어 버린다(소켓을 안 붙든다)
-    if (res.status !== 401) return { token: cand.slice(0, n) };
+    return res.status !== 401 ? cand.slice(0, n) : undefined;
+  };
+
+  for (const n of [cand.length, ...gapCuts]) {
+    const hit = await tryLen(n);
+    if (hit !== undefined) return { token: hit };
+  }
+  for (let n = cand.length - 1; n >= MIN_TOKEN_LEN && cand.length - n <= MAX_TRIM; n--) {
+    const hit = await tryLen(n);
+    if (hit !== undefined) return { token: hit };
   }
   return asked
     ? { error: translate(locale, "auth.verify.notAuthenticated") }
@@ -934,7 +983,7 @@ export function startSetup(locale: Locale = DEFAULT_LOCALE): SetupState {
     // 덮어쓰기가 아니라 목록 append다 — 활성은 `addToken`의 `reconcileActive` 판정을 그대로
     // 따른다(§0-13 §화면, P179). eligible한 활성이 이미 있으면 대기로 들어간다
     // 잡은 값을 그대로 안 담는다 — `verifiedToken`이 재그리기 잔여물을 떼어 낸다(위 주석)
-    verifiedToken(token, locale)
+    verifiedToken(token, locale, tokenGapCuts(s.raw))
       .then(async (v) => {
         if ("error" in v) {
           s.error = v.error;

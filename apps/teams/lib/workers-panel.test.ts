@@ -11,7 +11,7 @@ import type { Worker, WorkerStatus } from "./workers.ts";
 
 /** 최소 픽스처 — 이 모듈이 실제로 보는 필드(`status`)만 채우면 되지만, 타입은 `Worker`
  *  전체를 요구하므로 나머지는 무해한 기본값이다. */
-function mkWorker(name: string, status: WorkerStatus, pool = false): Worker {
+function mkWorker(name: string, status: WorkerStatus): Worker {
   return {
     name,
     effName: name,
@@ -25,13 +25,11 @@ function mkWorker(name: string, status: WorkerStatus, pool = false): Worker {
     lastFailure: null,
     context: { ok: true, items: [] },
     commonSource: true,
-    commonWorker: pool,
     selfHealSource: true,
     dispatchGateSource: true,
     dispatchGateStale: false,
     cwd: null,
     defects: [],
-    pool,
   };
 }
 

@@ -89,9 +89,6 @@ export type WorkerRow = {
   context: { ok: true; items: ContextRow[] } | { ok: false; reason: string; missing?: true };
   /** 공통 컨텍스트 `source` 줄이 있는가. false면 이 워커는 공통을 못 받는다 (§4-1) */
   commonSource: boolean;
-  /** 공통 워커 풀의 shim인가(§4-16 결정 2·6) — 참이면 이름 셀에 `공통` 배지가 붙고, 행의
-   *  중단/재등록·삭제가 비활성이다 */
-  commonWorker: boolean;
   /** 자가 정리 `source` 줄이 있는가. false면 dira를 지워도 이 워커의 cron 줄이 남는다 (§4-4) */
   selfHealSource: boolean;
   /** 통합 게이트 `source` 줄이 있는가. false면 받는 트리가 더러워도 그냥 디스패치돼 push에서만
@@ -759,7 +756,7 @@ function ContextEditor({
           // 편집 행이 아님을 먼저 읽히게 한다.
           <div key={`common-${i}`} className="flex min-h-9 items-center gap-2 rounded-md bg-muted/50 px-2">
             <Badge variant="outline" className="shrink-0">
-              {t("workers.pool.badge")}
+              {t("workers.context.badge")}
             </Badge>
             <span className="flex-[2] truncate font-mono text-xs" title={r.path}>
               {r.path}
@@ -1054,7 +1051,7 @@ export function CommonContextCard({
   return (
     <div className="space-y-3 rounded-md border p-3">
       <div className="flex items-center gap-2">
-        <Badge variant="outline">{t("workers.pool.badge")}</Badge>
+        <Badge variant="outline">{t("workers.context.badge")}</Badge>
         <span className="font-mono text-sm">context.sh</span>
         <span className="text-xs text-muted-foreground">
           {context.ok
@@ -1450,7 +1447,7 @@ export function WorkerContextRow({
                 <strong className="font-medium">{t("workers.contextRow.expandedIntroBold")}</strong>{" "}
                 {t("workers.contextRow.expandedIntroMid2")} <span className="font-mono text-xs">WARN</span>
                 {t("workers.contextRow.expandedIntroMid3")}{" "}
-                <span className="font-mono text-xs">{t("workers.pool.badge")}</span>{" "}
+                <span className="font-mono text-xs">{t("workers.context.badge")}</span>{" "}
                 {t("workers.contextRow.expandedIntroSuffix")}
               </p>
               {others.length > 0 && (

@@ -252,10 +252,7 @@ export default async function Workers({ params }: { params: Promise<{ project: s
                         {t(locale, "workers.limitBadge.labelPrefix")} {dateTimeLabel(limitUntil * 1000)}
                       </Badge>
                     )}
-                    {/* shim은 cron 줄이 원래 없다(§4-16 결정 2) — `stopped` 배지 자체는 참이지만
-                        "crontab 미등록"은 다음 행동으로 `재등록`을 가리키는데 이 행에서는 막힌
-                        조작이다. 대신 같은 행의 `공통` 배지가 사유를 답한다(§비주얼 §68 §거짓 한 칸). */}
-                    {NOTE_KEY[w.status] && !w.commonWorker && (
+                    {NOTE_KEY[w.status] && (
                       <span className="text-xs text-muted-foreground">{t(locale, NOTE_KEY[w.status]!)}</span>
                     )}
                   </div>

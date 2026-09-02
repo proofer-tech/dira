@@ -193,18 +193,14 @@ export const ko: Record<string, string> = {
   "settings.webhook.off": "보내지 않습니다",
   "settings.webhook.rejectHttps": "https 주소만 받습니다",
 
-  // 설정 `워커` 패널(§4-16 결정 5 · §비주얼 §68). 재사용 낱말(생성·중단·재등록·삭제·공통 배지)도
-  // 이 패널은 t()로만 문구를 그리므로 키가 새로 난다 — 값은 워커 표(`workers-ui.tsx`)와 같다.
-  "settings.workers.poolHeading": "공통 워커 풀",
+  // 설정 `워커` 패널(§4-16 §롤백 · §비주얼 §68). 재사용 낱말(생성·중단·재등록·삭제)도 이
+  // 패널은 t()로만 문구를 그리므로 키가 새로 난다 — 값은 워커 표(`workers-ui.tsx`)와 같다.
   "settings.workers.allHeading": "전체 워커",
   "settings.workers.filterCrumb": "필터",
   "settings.workers.create": "워커 생성",
   "settings.workers.stop": "중단",
   "settings.workers.register": "재등록",
   "settings.workers.delete": "삭제",
-  "settings.workers.commonBadge": "공통",
-  "settings.workers.commonBadgeTitle":
-    "이 워커는 공통 워커 풀의 슬롯입니다 — cron 줄은 풀에 있고 이 파일에는 없습니다",
   // "<n>곳" — 숫자 뒤에 바로 붙는다(`settings.search.emptySuffix`와 같은 접미 관용구, 공백 없음)
   "settings.workers.borrowedBySuffix": "곳",
   "settings.workers.filterProject": "프로젝트",
@@ -212,11 +208,9 @@ export const ko: Record<string, string> = {
   "settings.workers.filterStatus": "상태",
   "settings.workers.filterReset": "필터 초기화",
   "settings.workers.filteredEmpty": "조건에 맞는 워커 0건",
-  "settings.workers.poolEmpty": "공통 워커가 없습니다 — 만들면 빌리기를 켠 프로젝트마다 들어갑니다.",
   "settings.workers.projectsEmpty": "등록된 프로젝트가 없습니다.",
 
-  // 머신 전체 세션 상한(§세션이 120초 안에 못 뜬다 §개정 결정 2-3). 컨트롤 관용구는
-  // `workers.pool.*`와 글자 하나까지 같다(§4-16 결정 3) — 새 관용구 0.
+  // 머신 전체 세션 상한(§세션이 120초 안에 못 뜬다 §개정 결정 2-3).
   "sessionCap.limit.invalidPrefix": "정수(0 이상)만 됩니다:",
   "settings.workers.sessionCapHeading": "머신 전체 세션 상한",
   "settings.workers.sessionCapLimitLabel": "상한",
@@ -1465,21 +1459,6 @@ export const ko: Record<string, string> = {
   "auth.setup.execFailedPrefix": "실행하지 못했습니다:",
   "auth.setup.endedNoToken": "토큰을 받지 못한 채 끝났습니다.",
 
-  // lib/pool.ts — 파일 스코프 접두(§묶음 표 행 9, 티켓 daf72662). 화면은 이 파일에 없다
-  // (§4-16) — settings 다이얼로그의 "공통 워커 빌리기" 섹션이 이 에러를 그대로 보여준다.
-  "pool.name.invalidPrefix": "공통 워커 이름은 영문·숫자·_·- 만 됩니다:",
-  "pool.notFoundPrefix": "없는 공통 워커입니다:",
-  "pool.busyMid1": "이(가) 지금 ",
-  "pool.busyMid2": "프로젝트를 물고 있습니다(pid ",
-  "pool.busySuffix": "). 끝난 뒤 삭제하세요.",
-  "pool.cronRemoveFailPrefix": "crontab에서",
-  "pool.cronRemoveFailMid": "줄을 빼지 못했습니다:",
-  "pool.cronRemoveFailSuffix": "파일은 지우지 않았습니다.",
-  "pool.nameCollisionMid": "이미 같은 이름의 프로젝트 워커가 있습니다:",
-  "pool.nameCollisionSuffix": "— 공통 워커 이름은 이 프로젝트의 워커 이름과 겹칠 수 없습니다.",
-  "pool.notShimSuffix": "은(는) 공통 워커 shim이 아닙니다 — 이 함수로 지우지 않습니다.",
-  "pool.limit.invalidPrefix": "정수(0 이상)만 됩니다:",
-
   // lib/queue.ts — 파일 스코프 접두(§묶음 표 행 9, 티켓 daf72662). 티켓 상세 편집 폼·에픽
   // 드래그 등 여러 화면이 이 파일의 판정과 에러 메시지를 그대로 쓴다.
   "queue.locked.wip": "진행중 티켓은 편집할 수 없습니다 — 세션이 그 파일로 일하고 있습니다.",
@@ -1497,29 +1476,15 @@ export const ko: Record<string, string> = {
   // 워커 설정 다이얼로그 트리거(§4-15 결정 2 - §비주얼 §35 개정 ①, 티켓 ec2791db). 다이얼로그
   // 제목이 같은 낱말을 재사용해 새 문구는 이 하나로 끝난다.
   "workers.settingsDialog.trigger": "워커 설정",
-  // 다이얼로그 셋째 섹션 — 공통 워커 빌리기(§4-16 결정 6 - §비주얼 §68 ④, 티켓 28c4d25f).
-  "workers.pool.sectionTitle": "공통 워커 빌리기",
-  "workers.pool.limitLabel": "상한",
-  "workers.pool.limitNone": "없음",
-  "workers.pool.limitPopoverLabel": "동시 빌리기 상한",
-  "workers.pool.limitPopoverHint": "0이거나 비우면 안 빌립니다 — 상한은 동시에 도는 수이고 예약이 아닙니다.",
-  "workers.pool.saveFailed": "상한을 저장하지 못했습니다.",
-  "workers.pool.saveFailedTitle": "상한을 저장하지 못했습니다",
-  "workers.pool.countPrefix": "공통 워커 ",
-  "workers.pool.countSuffix": "명이 이 프로젝트에 들어와 있습니다",
-  "workers.pool.countZero": "들어와 있는 공통 워커가 없습니다",
-  "workers.pool.warnUnreadable": "pool-limit을 읽지 못했습니다 — 안 빌리는 것으로 읽습니다.",
-  "workers.pool.blockedPrefix": "티켓을 물고 있어 못 뺀 공통 워커: ",
-  // 다이얼로그 넷째(마지막) 섹션 — 스테일 수거(§4-17 결정 1, 티켓 642dd26f). 행의 `reap`
+  // 다이얼로그 셋째(마지막) 섹션 — 스테일 수거(§4-17 결정 1, 티켓 642dd26f). 행의 `reap`
   // 버튼이 이 섹션 머리 하나로 옮겨온다 — 새로 짓지 않고 §4가 이미 쓰는 이름을 그대로 쓴다.
   "workers.reap.sectionTitle": "스테일 수거",
-  // 프로젝트 워커 표 · 설정 워커 패널이 공유하는 배지(§4-16 결정 6 §68 ⑤ — 낱말은 §4-1의
-  // `공통` 배지와 같다). 이 화면의 새 배지가 처음 i18n을 타는 자리다.
-  "workers.pool.badge": "공통",
-  "workers.pool.badgeTitle": "이 워커는 공통 워커 풀의 슬롯입니다 — cron 줄은 풀에 있고 이 파일에는 없습니다",
+  // 공통 컨텍스트 행이 다는 `공통` 배지(§데스크톱 앱 N3). 걷힌 공유 워커 배지와 낱말은
+  // 같되 가리키는 개념이 다르다 — §4-16 §롤백으로 그 배지가 빠지면서 이 이름으로 옮겨온다.
+  "workers.context.badge": "공통",
 
   // §0-16 §발행 §묶음 표 행 5 갈래(워커 화면, 티켓 610dc0c0) — `components/workers-ui.tsx` ·
-  // `workers/page.tsx` · `workers/actions.ts`. `en`은 P338-6(`e3d3b255`)이 채웠다. `workers.pool.*` ·
+  // `workers/page.tsx` · `workers/actions.ts`. `en`은 P338-6(`e3d3b255`)이 채웠다.
   // `workers.settingsDialog.trigger` · `workers.reap.sectionTitle` · `worker.defect.noExec.*`는
   // 이 화면이 이미 쓰던 키라 그대로 둔다(중복 안 만든다).
   "workers.crontabApprovalHint": "권한 창이 뜨면 [허용]을 누르세요 — crontab 등록이 그 대답을 기다립니다.",
@@ -1753,7 +1718,6 @@ export const ko: Record<string, string> = {
   "workers.stop.noopMessage": "이미 crontab에 없었습니다 — 바꾼 것이 없습니다.",
   "workers.register.addedMessage": "crontab에 넣었습니다 — 30초 뒤부터 티켓을 물어갑니다.",
   "workers.register.noopMessage": "이미 crontab에 있었습니다 — 바꾼 것이 없습니다.",
-  "workers.pool.limitInvalidPrefix": "상한은 0 이상의 정수여야 합니다:",
   "workers.reap.noStaleOutput": "수거할 스테일 티켓이 없습니다.",
 
   // §5-3 §편집 표면이 있는 화면 §결정 2 — 사람이 워커 `.sh`를 손으로 고쳐 경계를
@@ -2706,16 +2670,12 @@ export const en: Record<string, string> = {
   "settings.webhook.off": "Not sending",
   "settings.webhook.rejectHttps": "Only https addresses are accepted",
 
-  "settings.workers.poolHeading": "Common worker pool",
   "settings.workers.allHeading": "All workers",
   "settings.workers.filterCrumb": "Filter",
   "settings.workers.create": "Create worker",
   "settings.workers.stop": "Stop",
   "settings.workers.register": "Register",
   "settings.workers.delete": "Delete",
-  "settings.workers.commonBadge": "Common",
-  "settings.workers.commonBadgeTitle":
-    "This worker is a slot in the common worker pool — the cron line lives in the pool, not this file",
   // "<n> projects" — a space precedes it (English reads naturally with one, unlike the Korean suffix)
   "settings.workers.borrowedBySuffix": " projects",
   "settings.workers.filterProject": "Project",
@@ -2723,7 +2683,6 @@ export const en: Record<string, string> = {
   "settings.workers.filterStatus": "Status",
   "settings.workers.filterReset": "Clear filters",
   "settings.workers.filteredEmpty": "0 workers match the filter",
-  "settings.workers.poolEmpty": "No common workers — creating one adds it to every project that borrows.",
   "settings.workers.projectsEmpty": "No registered projects.",
 
   "sessionCap.limit.invalidPrefix": "Takes an integer of 0 or more:",
@@ -3506,21 +3465,6 @@ export const en: Record<string, string> = {
   "auth.setup.execFailedPrefix": "Couldn't run it:",
   "auth.setup.endedNoToken": "It ended without a token.",
 
-  // lib/pool.ts — 파일 스코프 접두(§묶음 표 행 9, 티켓 4c195255). 이 문구가 뜨는 자리는
-  // settings 다이얼로그의 `Borrow common workers` 섹션이라 낱말을 그 제목에 맞춘다.
-  "pool.name.invalidPrefix": "Common worker names take letters, digits, _ and - only:",
-  "pool.notFoundPrefix": "No such common worker:",
-  "pool.busyMid1": " is holding the ",
-  "pool.busyMid2": "project right now (pid ",
-  "pool.busySuffix": "). Delete it once that finishes.",
-  "pool.cronRemoveFailPrefix": "Couldn't take the",
-  "pool.cronRemoveFailMid": "line out of crontab:",
-  "pool.cronRemoveFailSuffix": "— the file was left in place.",
-  "pool.nameCollisionMid": "A project worker already has that name:",
-  "pool.nameCollisionSuffix": "— a common worker can't take the same name as a worker in this project.",
-  "pool.notShimSuffix": " isn't a common worker shim — this function won't delete it.",
-  "pool.limit.invalidPrefix": "Takes an integer of 0 or more:",
-
   // lib/queue.ts — 파일 스코프 접두(§묶음 표 행 9, 티켓 4c195255). 티켓 상세 편집 폼과 에픽
   // 드래그가 같은 판정을 나눠 쓴다.
   "queue.locked.wip": "A ticket in progress can't be edited — a session is working in that file.",
@@ -3534,21 +3478,8 @@ export const en: Record<string, string> = {
   "engine.noWorkerToUnassign": "This project has no workers — there's no script to call for unassign.",
   "engine.noWorkerToPreempt": "This project has no workers — there's no script to call for preempt.",
   "workers.settingsDialog.trigger": "Worker settings",
-  "workers.pool.sectionTitle": "Borrow common workers",
-  "workers.pool.limitLabel": "Limit",
-  "workers.pool.limitNone": "None",
-  "workers.pool.limitPopoverLabel": "Concurrent borrow limit",
-  "workers.pool.limitPopoverHint": "0 or empty means no borrowing — the limit is how many run at once, not a reservation.",
-  "workers.pool.saveFailed": "Couldn't save the limit.",
-  "workers.pool.saveFailedTitle": "Couldn't save the limit",
-  "workers.pool.countPrefix": "",
-  "workers.pool.countSuffix": " common worker(s) are in this project",
-  "workers.pool.countZero": "No common workers are in this project",
-  "workers.pool.warnUnreadable": "Couldn't read pool-limit — reading it as not borrowing.",
-  "workers.pool.blockedPrefix": "Still holding a ticket, couldn't remove: ",
   "workers.reap.sectionTitle": "Stale collection",
-  "workers.pool.badge": "Common",
-  "workers.pool.badgeTitle": "This worker is a slot in the common worker pool — the cron line lives in the pool, not this file",
+  "workers.context.badge": "Common",
 
   // §0-16 §발행 §묶음 표 행 5 갈래(워커 화면) — `ko`는 610dc0c0, `en`은 e3d3b255.
   // `lib/workers.ts`가 만드는 실패 사유(`workers.crontab.*` · `workers.worktree.*` ·
@@ -3799,7 +3730,6 @@ export const en: Record<string, string> = {
   "workers.stop.noopMessage": "It wasn't in the crontab already — nothing changed.",
   "workers.register.addedMessage": "Put in the crontab — it starts claiming tickets in 30 seconds.",
   "workers.register.noopMessage": "It was already in the crontab — nothing changed.",
-  "workers.pool.limitInvalidPrefix": "The limit must be an integer of 0 or more:",
   "workers.reap.noStaleOutput": "No stale tickets to collect.",
   "ontology.location.inWorktree": "Inside this project's git working tree",
   // Ticket cd662a73, moved to this namespace by c5d51522 — see the ko block for why the third

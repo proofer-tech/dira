@@ -93,11 +93,6 @@ export type Worker = {
   context: WorkerContext;
   /** 공통 컨텍스트 `source` 줄이 있는가. false면 이 워커는 공통을 못 받는다 (§4-1) */
   commonSource: boolean;
-  /** 공통 워커 풀의 shim인가 — 둘째 줄 표식 `# dira-pool: <이름>`이 있으면 참이다(§4-16 결정 2·6).
-   *  판정을 두 벌로 안 적는다: `lib/pool.ts`의 `poolWorkerNameOf`와 같은 정규식이다(순환 import를
-   *  피하려고 여기서 다시 적는다 — `pool.ts`가 이미 `createWorker`·`deleteWorker`를 이 파일에서
-   *  가져간다). */
-  commonWorker: boolean;
   /** 자가 정리 `source` 줄이 있는가. false면 dira를 지워도 이 워커의 cron 줄이 남는다 (§4-4) */
   selfHealSource: boolean;
   /** 통합 게이트 `source` 줄이 있는가. false면 받는 트리가 더러워도 그냥 디스패치돼 push에서만
@@ -124,11 +119,6 @@ export type Worker = {
    *  더한다. `worktree`(3단계)가 아니다: 트리는 다음 tick에 게이트가 만든다. `no-ticket-cwd`가
    *  없으면 없다 */
   cwdFix?: string;
-  /** 공통 워커 풀의 shim인가(§4-16 결정 2 — 둘째 줄 `# dira-pool: <이름>` 표식, `poolShimNameOf`로
-   *  판정한다). shim도 이 파일 목록에 그대로 섞여 있어서(`createWorker`가 만든 같은 모양의 파일이라)
-   *  `listWorkers`가 굳이 걸러내지 않고 이 필드 하나로 알려 준다 — 설정 `워커` 패널의 `공통` 배지·
-   *  종류 필터가 이 값을 읽는다(§비주얼 §68) */
-  pool: boolean;
 };
 
 /** 엔진 이름 = **첫 토큰의 basename**. `tick.sh:52`의 `basename "${TICKET_ENGINE[0]}"`와 같은
@@ -158,9 +148,7 @@ export function lockPath(workersDir: string, name: string): string {
   return path.join(localDir(), "run", `${name}-${h}.lock`);
 }
 
-/** 락은 디렉터리다(`mkdir`가 원자적 획득). 안의 `pid` 파일이 소유 프로세스다.
- *  **`export`다** — `pool.ts`의 `poolWorkerFullStatus`가 같은 판정을 슬롯 잠금(`pool-<이름>.lock`)에
- *  다시 쓴다(§4-16 티켓 열째 노드). 락 디렉터리 이름 규칙만 다르고 판정은 한 벌이어야 한다. */
+/** 락은 디렉터리다(`mkdir`가 원자적 획득). 안의 `pid` 파일이 소유 프로세스다. */
 export async function lockOf(dir: string): Promise<{ held: boolean; pid: number | null }> {
   const held = await stat(dir).then(
     (s) => s.isDirectory(),
@@ -172,8 +160,7 @@ export async function lockOf(dir: string): Promise<{ held: boolean; pid: number 
   return { held: true, pid: Number.isInteger(pid) && pid > 0 ? pid : null };
 }
 
-/** `kill -0`. EPERM은 남의 프로세스지만 **살아 있다**는 뜻이다. `export`는 위 `lockOf`와 같은 이유
- *  (`pool.ts`의 `poolWorkerFullStatus`가 재사용한다). */
+/** `kill -0`. EPERM은 남의 프로세스지만 **살아 있다**는 뜻이다. */
 export function alive(pid: number): boolean {
   try {
     process.kill(pid, 0);
@@ -187,8 +174,7 @@ export function alive(pid: number): boolean {
  *  macOS `crontab -l`은 사람이 넣은 줄을 NFC로 그대로 주는데 `realpath()`는 같은 경로를
  *  NFD(자모 분해)로 돌려주는 파일시스템이 있다(구글 드라이브 마운트). 정규화 없이 비교하면
  *  cron에 등록돼 도는 워커가 `stopped` + `미등록`으로 뜨고, 화면이 권하는 등록 명령을 실행하면
- *  **중복 cron 줄**이 생긴다. `export`는 `pool.ts`가 풀 파일의 crontab 부분일치를 같은 함수로 재는
- *  이유다(판정이 두 벌로 갈리면 화면이 거짓말을 한다). */
+ *  **중복 cron 줄**이 생긴다. */
 export const nfc = (s: string) => s.normalize("NFC");
 
 /** **요청당 1회**. 셸이 전환기 카운트를 위해 등록된 프로젝트 전부에 `listWorkers`를 돌리므로
@@ -200,10 +186,7 @@ export const nfc = (s: string) => s.normalize("NFC");
  *  워커 화면이 계속 거짓말을 한다 — 그게 원래 캐시를 안 넣었던 이유고, 그 조건이 여기서 지켜진다.
  *
  *  쓰기 경로는 `crontabForWrite`가 따로 읽는다(캐시 대상이 아니다) — 렌더 때 읽은 값 위에 쓰면
- *  그 사이 남의 변경을 되돌린다.
- *
- *  `export`는 `pool.ts`의 `poolWorkerFullStatus`가 같은 요청 안에서 재사용하는 이유다 — 풀 줄도
- *  crontab 진입점이라(§4-16 결정 2) 같은 캐시를 한 번 더 쓰지 두 번째 `crontab -l`을 안 띄운다. */
+ *  그 사이 남의 변경을 되돌린다. */
 export const crontabText = cache(async (): Promise<string> => {
   try {
     const { stdout } = await promisify(execFile)("crontab", ["-l"]);
@@ -1570,16 +1553,6 @@ async function cwdDefects(
   );
 }
 
-/** 공통 워커 shim 여부(§4-16 결정 2). 표식은 **파일의 둘째 줄**이어야 한다 — 아무 데나 있는 주석과
- *  가르기 위해서다. `pool.ts`(`borrowPoolWorker`)가 쓰는 것과 같은 정규식을 여기로 옮겼다 —
- *  `listWorkers`가 `Worker.pool`을 채우려면 이 판정이 있어야 하는데, 두 파일에 각자 있으면 갈릴
- *  위험이 있다(제약: shim은 프로젝트 워커와 파일 목록을 공유하므로 `listWorkers`가 먼저 안다). */
-export function poolShimNameOf(text: string): string | null {
-  const line = text.split("\n")[1] ?? "";
-  const m = /^# dira-pool: (\S+)$/.exec(line);
-  return m ? m[1] : null;
-}
-
 // ── 목록 ────────────────────────────────────────────────────────────────────
 
 /** 프로젝트의 워커 전부. 이름 순.
@@ -1669,9 +1642,6 @@ export async function listWorkers(
       context: await contextOf(root, text, parsed.cwd),
       // 이 줄이 없는 워커는 공통을 못 받는다 — 화면이 경고 + `공통 적용`을 띄운다(§4-1).
       commonSource: commonSourceRe.test(text),
-      // 표식은 파일의 **둘째 줄**이어야 한다(`pool.ts`의 `poolWorkerNameOf`와 같은 기준) — 아무
-      // 데나 있는 주석과 가르기 위해서다.
-      commonWorker: /^# dira-pool: \S+$/.test(text.split("\n")[1] ?? ""),
       // 이 줄이 없는 워커는 자기 cron 줄을 못 뺀다 — 화면이 경고 + `자가 정리 적용`(§4-4 §소급).
       selfHealSource: selfHealSourceRe.test(text),
       // 이 줄이 없는 워커는 받는 트리가 더러워도 디스패치된다 — 화면이 경고 + `통합 게이트 적용`
@@ -1680,8 +1650,6 @@ export async function listWorkers(
       dispatchGateStale: gateStale,
       cwd: parsed.cwd,
       defects: [], // 공유 판정이 목록 전체를 봐야 하므로 행을 다 만든 뒤에 채운다
-      // 표식의 이름이 이 파일의 stem과 같아야 한다 — 안 맞으면 손으로 붙인 낯선 주석이지 shim이 아니다.
-      pool: poolShimNameOf(text) === name,
     });
   }
 
@@ -2417,7 +2385,7 @@ export async function dispatchGateState(root: string, branch: string): Promise<D
 
 // ── 통합 브랜치 (`<루트>/integration-branch`, DESIGN.md §통합 브랜치가 설정이 된다 결정 1-2) ──
 
-/** `readPoolLimit`과 같은 모양 — 파일 하나, 값 한 줄, 파서 없이 정규식 하나로 받는다. */
+/** 파일 하나, 값 한 줄, 파서 없이 정규식 하나로 받는다. */
 const INTEGRATION_BRANCH_RE = /^[A-Za-z0-9._/-]+$/;
 
 function integrationBranchFile(root: string): string {
@@ -2461,8 +2429,7 @@ export async function readIntegrationBranch(root: string): Promise<string | null
   return null;
 }
 
-/** 검증 + 파일 본문. `writePoolLimit`과 같은 검증 모양 — scaffold의 `put`(O_EXCL) 쪽도 이 문자열을
- *  그대로 쓴다. */
+/** 검증 + 파일 본문. scaffold의 `put`(O_EXCL) 쪽도 이 문자열을 그대로 쓴다. */
 export function integrationBranchText(branch: string, locale: Locale = DEFAULT_LOCALE): string {
   if (!INTEGRATION_BRANCH_RE.test(branch)) {
     throw new Error(`${t(locale, "workers.integrationBranch.invalidPrefix")} ${branch}`);
@@ -2876,8 +2843,8 @@ async function workerFile(
  *
  *  `createWorker`가 기존 템플릿을 그대로 복사하는 갈래(`existing.length > 0`)에 필요하다 —
  *  그 템플릿이 감싸기 전에 태어났으면(옛 프로젝트) 복사한 텍스트에 무조건 source 줄이 그대로
- *  실려 새 워커(그리고 `pool.ts`의 shim)가 같은 구멍을 물려받는다. **원본 템플릿 파일은 안
- *  건드린다** — 지금 만드는 새 파일의 텍스트만 감싼다. */
+ *  실려 새 워커가 같은 구멍을 물려받는다. **원본 템플릿 파일은 안 건드린다** — 지금 만드는
+ *  새 파일의 텍스트만 감싼다. */
 function guardSidecarLines(text: string): string {
   const bare =
     /^([ \t]*)(\.|source)([ \t]+)("(?:[^"\\]|\\.)*?(?:context|self-heal|dispatch-gate)\.sh")/gm;

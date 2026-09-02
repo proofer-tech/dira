@@ -941,11 +941,6 @@ function WorkersSection({ className, closeDialog }: { className?: string; closeD
                     className="flex h-8 items-center gap-2 rounded-md px-2 pl-4 hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     <span className="min-w-0 flex-1 truncate font-mono text-xs">{w.name}</span>
-                    {w.pool && (
-                      <Badge variant="outline" className="shrink-0 font-sans" title={t("settings.workers.commonBadgeTitle")}>
-                        {t("settings.workers.commonBadge")}
-                      </Badge>
-                    )}
                     <StatusBadge status={w.status} locale={locale} />
                   </Link>
                 ))}
@@ -1319,7 +1314,7 @@ function Kbd({ className, children }: { className?: string; children: React.Reac
  *  안 부르니 목록도 안 뜬다.
  *
  *  값을 구할 길이 셋 다 막힌 큐(`readIntegrationBranchAction`이 `null`)는 트리거가 빈 칸이고
- *  그 아래 값을 요구하는 한 줄이 `pool-limit`의 `warn` 줄과 같은 자리에 뜬다. */
+ *  그 아래 값을 요구하는 한 줄이 `session-cap`의 `warn` 줄과 같은 자리에 뜬다. */
 function IntegrationBranchField({ projectId, open }: { projectId: string; open: boolean }) {
   const t = useT();
   const [branch, setBranch] = useState<string | null>(null);
@@ -1771,14 +1766,9 @@ export function SettingsDialog({
       name: t("settings.webhook.test"),
       anchor: "webhook.test",
     },
-    // §4-16 결정 5 §검색 인덱스 — 노드 자신 + 항목 셋(공통 워커 풀 · 전체 워커 · 필터).
+    // §4-16 §롤백 §검색 인덱스 — 노드 자신 + 항목 둘(전체 워커 · 필터). `공통 워커 풀` 항목은
+    // 롤백으로 빠졌다.
     { node: "workers", crumbs: "", name: workersCrumb, anchor: "workers" },
-    {
-      node: "workers",
-      crumbs: workersCrumb,
-      name: t("settings.workers.poolHeading"),
-      anchor: "workers.pool",
-    },
     {
       node: "workers",
       crumbs: workersCrumb,

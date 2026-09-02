@@ -218,6 +218,43 @@ test("startSetup — 토막난 토큰(커서 이동 escape·줄바꿈으로 갈�
   stopSetup();
 });
 
+test("startSetup — 발급 성공 뒤 CLI 안내문이 낱말 사이 공백 없이 커서 이동 escape로 이어져도 저장이 막히지 않는다 (§0-4 §개정 P359-2)", async () => {
+  process.env.TICKET_LOCAL = mkdtempSync(path.join(tmpdir(), "fst-auth-tail-"));
+  const TOKEN = "sk-ant-oat01-" + "x".repeat(40); // 53자
+  // 신고(`eabc009b`, CLI 2.1.258)의 화면을 재구성한다 — 값은 지어낸 것이다. CLI가 발급 성공
+  // 뒤에 붙이는 안내문이 Ink 레이아웃(낱말마다 절대 컬럼 배치)에서 낱말 사이 공백 없이 커서
+  // 이동 escape(CHA)로만 이어진다. 붙는 꼬리(27자)가 지금 `MAX_TRIM`(24자)보다 길다.
+  const TAIL_WORDS = ["Make", "sure", "to", "copy", "it", "now", "as", "you", "won"];
+  const GLUED_TAIL = TAIL_WORDS.map((w) => `\\033[1G${w}`).join("");
+  stubClaude(
+    `printf 'Long-lived authentication token created successfully!\\r\\n'\n` +
+      `printf 'Your OAuth token (valid for 1 year): ${TOKEN}${GLUED_TAIL}\\r\\n'\nsleep 60`,
+  );
+  armPidfile();
+
+  // 401이 아니라 진짜 토큰 길이(53)에서만 성공을 준다 — 안내문까지 삼킨 값은 전부 401이다
+  const { lens } = await withFetch(
+    (n) => (n === TOKEN.length ? 200 : 401),
+    async () => {
+      startSetup();
+      await until(() => !!pollSetup().savedAt || !!pollSetup().error);
+    },
+  );
+
+  const s = pollSetup();
+  assert.strictEqual(s.error, undefined, s.error);
+  const saved = await import("node:fs/promises").then((fs) => fs.readFile(tokenPath(), "utf8"));
+  assert.strictEqual(saved, TOKEN); // 앞도 뒤도 CLI 문구가 한 자도 안 붙는다
+  assert.ok(
+    !s.lines.some((l) => l.includes("Makesuretocopyitnowasyouwon")),
+    s.lines.join("|"),
+  ); // 진행 로그에도 토큰 조각이 안 남는다
+  assert.ok(s.lines.some((l) => l.includes("sk-ant-…")), s.lines.join("|"));
+  assert.deepStrictEqual(lens, [TOKEN.length + 27, TOKEN.length]); // 낱말 경계 하나만 더 물어 끝난다
+
+  stopSetup();
+});
+
 test("startSetup — 토큰을 잡고 저장이 기록되기 전에 폴링이 끼어도 running:false+savedAt 없음+error 없음인 순간이 없다 (§0-13 §저장이 끝나면)", async () => {
   process.env.TICKET_LOCAL = mkdtempSync(path.join(tmpdir(), "fst-auth-window-"));
   stubClaude(`printf 'sk-ant-oat01-${"y".repeat(40)}\\r\\n'\nsleep 60`);
@@ -1061,6 +1098,17 @@ test("verifiedToken — 어느 길이도 인증이 안 되면 사유를 돌려�
     () => verifiedToken("sk-ant-oa01-" + "x".repeat(122)),
   );
   assert.ok("error" in result, "error를 돌려줘야 한다");
+});
+
+test("verifiedToken — gapCuts를 주면 그 경계부터 확인해 MAX_TRIM 상한 밖의 잔여물도 뗀다", async () => {
+  const real = "sk-ant-oat01-" + "x".repeat(95); // 108자
+  const glued = real + "y".repeat(40); // 40자 잔여물 — MAX_TRIM(24자)보다 길어 gapCuts 없인 못 뗀다
+  const { result, lens } = await withFetch(
+    (n) => (n === real.length ? 200 : 401),
+    () => verifiedToken(glued, undefined, [real.length]),
+  );
+  assert.deepStrictEqual(result, { token: real });
+  assert.deepStrictEqual(lens, [glued.length, real.length]); // 경계 하나만 더 물어 끝난다
 });
 
 test("verifiedToken — 한 번도 못 물어봤으면(네트워크 단절) 잡은 값을 그대로 둔다", async () => {
