@@ -22,6 +22,7 @@ const {
   multitokenPath,
   hasPushSh,
   ontologyInWorktree,
+  readBackoff,
   readGateDirty,
   readMultiplay,
   readSummary,
@@ -963,4 +964,54 @@ test("hasPushSh — <root>/push.sh가 있으면 true, 없으면 false", async ()
   assert.equal(await hasPushSh(root), false);
   writeFileSync(path.join(root, "push.sh"), "#!/usr/bin/env bash\n");
   assert.equal(await hasPushSh(root), true);
+});
+
+// ── readBackoff (종 항목 ⑨, P362-3 — `tickets.py` `_backoff_path`가 쓰는 자리·줄 모양) ─────
+
+/** `<local>/run/backoff-<hash>`를 직접 쓴다 — `tickets.py`의 `_arm_backoff`가 쓰는 그 줄 모양
+ *  (`<만료 epoch>\n<누적 횟수>\n`) 그대로다. */
+function writeBackoff(local: string, hash: string, until: number, count: number): void {
+  mkdirSync(path.join(local, "run"), { recursive: true });
+  writeFileSync(path.join(local, "run", `backoff-${hash}`), `${until}\n${count}\n`);
+}
+
+test("readBackoff — 표식이 없으면 null", async () => {
+  assert.equal(await readBackoff(LOCAL, "없는해시"), null);
+});
+
+test("readBackoff — 정상 표식을 읽는다: 만료 epoch(float) + 누적 횟수(int)", async () => {
+  writeBackoff(LOCAL, "aaaa1111", 1799999999.5, 3);
+  assert.deepStrictEqual(await readBackoff(LOCAL, "aaaa1111"), { until: 1799999999.5, count: 3 });
+});
+
+test("readBackoff — 못 읽거나 줄 모양이 안 맞으면 null (반쯤 쓴 파일로 종을 안 켠다)", async () => {
+  mkdirSync(path.join(LOCAL, "run"), { recursive: true });
+  writeFileSync(path.join(LOCAL, "run", "backoff-bbbb2222"), ""); // 빈 파일
+  assert.equal(await readBackoff(LOCAL, "bbbb2222"), null);
+  writeFileSync(path.join(LOCAL, "run", "backoff-cccc3333"), "그냥어제\n3\n"); // until이 숫자가 아니다
+  assert.equal(await readBackoff(LOCAL, "cccc3333"), null);
+});
+
+test("readSummary — ⑨ 백오프 창이 열린 티켓만 나열에 든다 (P362-3)", async () => {
+  const root = newQueue({ "w1.sh": "" });
+  // 백오프 창 안 — 열린 티켓
+  writeFileSync(path.join(root, "tickets", "aaaa1111.md"), "---\nticket: aaaa1111\n---\n");
+  writeBackoff(LOCAL, "aaaa1111", Date.now() / 1000 + 600, 2);
+  // 백오프 창이 이미 지났다 — 만료된 표식은 안 든다(만료 여부는 `readSummary`가 가른다)
+  writeFileSync(path.join(root, "tickets", "bbbb2222.md"), "---\nticket: bbbb2222\n---\n");
+  writeBackoff(LOCAL, "bbbb2222", Date.now() / 1000 - 600, 5);
+  // 표식은 있는데 티켓이 다시 잠겼다(.wip) — 열린 티켓 후보가 아니므로 안 든다
+  writeFileSync(path.join(root, "tickets", "cccc3333.wip.md"), "---\nticket: cccc3333\n---\n");
+  writeBackoff(LOCAL, "cccc3333", Date.now() / 1000 + 600, 1);
+  // 표식이 아예 없는 열린 티켓 — 나열에 없다
+  writeFileSync(path.join(root, "tickets", "dddd4444.md"), "---\nticket: dddd4444\n---\n");
+
+  const ok = await readSummary({ root });
+  assert.deepStrictEqual(
+    ok.backoff.map((b) => [b.hash, b.stem, b.count]),
+    [["aaaa1111", "aaaa1111", 2]],
+  );
+
+  const gone = await readSummary({ root: path.join(root, "없는디렉터리") });
+  assert.deepStrictEqual(gone.backoff, []); // 판정 불가 = 배너·배지가 없다(§0-2와 같은 규칙)
 });

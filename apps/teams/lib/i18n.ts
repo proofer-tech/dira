@@ -395,6 +395,18 @@ export const ko: Record<string, string> = {
   "bell.awaiting.body": "사람이 답을 써야 이 티켓들이 다시 큐에 뜹니다. 고장난 것은 없습니다.",
   "bell.awaiting.answerLink": "답변 쓰기",
 
+  // 종 ⑨(P362-3, §0-10 §결정 기록 §엔진 수정 서른세 번째 승인). 판정이 GUI 밖에 있는 두 번째
+  // 항목 — 나열은 엔진이 표식에 적어 둔 죽은 횟수·다시 집는 시각 그대로다. `보관`이 없다(②·⑥과
+  // 달리 지나간 사건이 아니라 지금 걸려 있는 상태다).
+  "bell.backoff.titlePrefix": "되풀이해 죽어서 쉬는 티켓",
+  "bell.backoff.titleSuffix": "건",
+  "bell.backoff.body": "같은 자리에서 여러 번 죽어서, 이 티켓들은 잠시 쉬었다가 다시 디스패치됩니다. 잃는 것은 없습니다.",
+  "bell.backoff.countPrefix": "죽은 횟수",
+  "bell.backoff.countSuffix": "회",
+  "bell.backoff.retryPrefix": "다시 집는 시각",
+  "bell.backoff.footer": "기다리면 저절로 다시 돕니다 — 고칠 일은 없습니다.",
+  "bell.backoff.openTicket": "티켓 열기",
+
   // 웹훅(§0-10 §답변 대기가 앱 밖으로 나간다) — 본문 `text` 칸 하나. 담는 값은 세 자리뿐이라
   // `wrap`(하나짜리 자리표시자)로 안 맞고, 여기서만 쓰는 일회성 조립이라 범용 치환기를 새로
   // 안 만든다(`webhook.ts`의 `webhookText`가 이 셋을 갈아 끼운다).
@@ -2835,6 +2847,16 @@ export const en: Record<string, string> = {
   "bell.awaiting.body":
     "These come back to the queue once a person writes an answer. Nothing is broken.",
   "bell.awaiting.answerLink": "Write an answer",
+
+  "bell.backoff.titlePrefix": "Tickets resting after repeated deaths:",
+  "bell.backoff.titleSuffix": "",
+  "bell.backoff.body":
+    "These died in the same place too many times, so they rest for a while before being dispatched again. Nothing is lost.",
+  "bell.backoff.countPrefix": "Deaths:",
+  "bell.backoff.countSuffix": "",
+  "bell.backoff.retryPrefix": "Retries at",
+  "bell.backoff.footer": "Wait and it resumes on its own - nothing to fix.",
+  "bell.backoff.openTicket": "Open ticket",
 
   "webhook.text": "Awaiting answer: {title} - {project} ({hash})",
 

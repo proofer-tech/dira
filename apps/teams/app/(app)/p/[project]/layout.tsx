@@ -14,6 +14,7 @@ import {
   FileDiff,
   MessageSquareReply,
   RotateCcw,
+  TimerReset,
   TriangleAlert,
   Unplug,
 } from "lucide-react";
@@ -97,6 +98,9 @@ export default async function ProjectLayout({
         awaiting: s.awaiting,
         // §0-10 ⑦ 알림용(§1-4). 판정은 `readSummary`가 `dueAlertOf`로 이미 했다 — 새 fs 읽기 0
         due: s.due,
+        // §0-10 ⑨ 알림용(P362-3). 판정은 `readSummary`가 `readBackoff`로 이미 했다 —
+        // 여기서 새 fs 읽기 0
+        backoff: s.backoff,
         // §0-10 ⑤⑥ 알림용(§0-14). 프로젝트마다 값이 같다(머신 스코프) — 전환기는 이 필드를 쓰지 않는다
         machine: s.machine,
         // §0-10 ③의 `할당 해제`가 부를 워커. 티켓 상세와 **같은 규칙**이다(`workers[0]`) —
@@ -200,14 +204,17 @@ export default async function ProjectLayout({
     failures: current.connected && queueFailures.length > 0,
     assigned: current.connected && current.assigned.length > 0,
     awaiting: current.connected && current.awaiting.length > 0,
+    // ⑨도 큐를 못 읽으면 꺼진다 — 판정은 `readSummary`가 이미 열린 티켓만 걸러 냈다(§0-10 ⑨).
+    backoff: current.connected && current.backoff.length > 0,
     due: current.connected && current.due.length > 0,
   };
   // §0-10 ①의 제목-본문 갈래(요구 `6455b43a`) — 등록 0개(a)와 등록은 있는데 eligible 0(b)은
   // 다른 문장이다. `alerts.auth`가 참일 때만 읽는다 — 정상 상태에서 `tokens.json`을 여는
   // 횟수는 0이다.
   const authRegistered = alerts.auth ? hasRegisteredToken(await readTokens()) : false;
-  // 배지는 **켜진 알림의 개수 0~8**이다 — 건수를 합치지 않는다(⑤⑥이 들어와 4에서 6이 됐고,
-  // ⑦이 들어와 7이, ⑧이 들어와 8이 됐다 — §0-14 · §1-4 · §4-14).
+  // 배지는 **켜진 알림의 개수 0~9**이다 — 건수를 합치지 않는다(⑤⑥이 들어와 4에서 6이 됐고,
+  // ⑦이 들어와 7이, ⑧이 들어와 8이, ⑨가 들어와 9가 됐다 — §0-14 · §1-4 · §4-14 · §0-10 §결정
+  // 기록 §엔진 수정 서른세 번째 승인).
   const alertCount = Object.values(alerts).filter(Boolean).length;
   const alertLabel =
     alertCount > 0
@@ -287,6 +294,7 @@ export default async function ProjectLayout({
                     assigned={current.assigned}
                     awaiting={current.awaiting}
                     worker={current.worker}
+                    backoff={current.backoff}
                     due={current.due}
                     locale={locale}
                   />
@@ -414,6 +422,7 @@ function NotificationItems({
   assigned,
   awaiting,
   worker,
+  backoff,
   due,
   locale,
 }: {
@@ -427,6 +436,7 @@ function NotificationItems({
     failures: boolean;
     assigned: boolean;
     awaiting: boolean;
+    backoff: boolean;
     due: boolean;
   };
   authRegistered: boolean;
@@ -438,6 +448,7 @@ function NotificationItems({
   assigned: { hash: string; stem: string }[];
   awaiting: { hash: string; stem: string; mtime: number }[];
   worker: string | null;
+  backoff: { hash: string; stem: string; until: number; count: number }[];
   due: { hash: string; stem: string; alert: DueAlert }[];
   locale: Locale;
 }) {
@@ -675,6 +686,49 @@ function NotificationItems({
             </span>
           ))}
         </div>
+      </>
+    ),
+    // ⑨ 자동 회수 예산을 넘겨 잠시 쉬는 티켓 (§0-10 §결정 기록 §엔진 수정 서른세 번째 승인 ·
+    // §0-10 ⑨). **판정이 GUI 밖에 있는 두 번째 항목이다**(⑧과 같은 자리) — 나열은 엔진이
+    // 표식(`readBackoff`)에 적어 둔 죽은 횟수·다시 집는 시각 그대로다. 화면은 예산 상한도
+    // 백오프 길이도 다시 안 잰다. `보관`이 없다 — ②·⑥과 달리 지나간 사건이 아니라 지금 걸려
+    // 있는 상태라 보관해도 다음 tick에 그대로 다시 뜬다(§0-10 문구 표 ⑨).
+    alerts.backoff && (
+      <>
+        <TimerReset aria-hidden className="mt-0.5 size-4 text-status-blocked" />
+        <p className="col-start-2 text-sm font-medium">
+          {t(locale, "bell.backoff.titlePrefix")} {backoff.length}
+          {t(locale, "bell.backoff.titleSuffix")}
+        </p>
+        <p className="col-start-2 text-sm text-foreground">{t(locale, "bell.backoff.body")}</p>
+        {/* 한 행 = 한 티켓, ⑦과 같은 해부(Hash + 문구 + `ml-auto` 링크). 죽은 횟수·다시 집는
+            시각은 엔진이 표식(`readBackoff`)에 적어 둔 값 그대로다 — 상한값(`REAP_BACKOFF_CAP`)도
+            창 길이(`REAP_BACKOFF_SEC`)도 화면 코드에 없다(§0-10 ⑨). 시각 표기는 ⑥과 같은
+            `dateTimeLabel`(같은 날이면 `HH:MM`, 아니면 `M/D HH:MM`). */}
+        <div className="col-start-2 grid gap-2">
+          {backoff.map((b) => (
+            <span key={b.stem} className="flex items-center gap-1">
+              <Link
+                href={`/p/${id}/tickets/${encodeURIComponent(b.stem)}`}
+                className="rounded-sm font-mono text-xs text-muted-foreground underline"
+              >
+                {b.hash}
+              </Link>
+              <span className="text-sm text-foreground">
+                {t(locale, "bell.backoff.countPrefix")} {b.count}
+                {t(locale, "bell.backoff.countSuffix")} · {t(locale, "bell.backoff.retryPrefix")}{" "}
+                {dateTimeLabel(b.until * 1000)}
+              </span>
+              <Link
+                href={`/p/${id}/tickets/${encodeURIComponent(b.stem)}`}
+                className="ml-auto rounded-sm text-sm underline"
+              >
+                {t(locale, "bell.backoff.openTicket")}
+              </Link>
+            </span>
+          ))}
+        </div>
+        <p className="col-start-2 text-sm text-foreground">{t(locale, "bell.backoff.footer")}</p>
       </>
     ),
     // ⑦ 마감을 못 지킬 티켓 (§1-4 §종 항목 ⑦ · §0-10 ⑦). 판정 둘(지난 마감 · 5시간 안에 dep

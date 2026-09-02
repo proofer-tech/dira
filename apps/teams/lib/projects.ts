@@ -349,6 +349,23 @@ export function gateAllDebris(gate: GateDirty | null, pushSh: boolean): boolean 
   return gate !== null && gate.count > 0 && pushSh && gate.verdicts.every((v) => v === "잔해");
 }
 
+/** 종 항목 ⑨(P362-3, §0-10 §⑧은 왜 여기 드나와 같은 자리) — `tickets.py` `_backoff_path`가 쓰는
+ *  자리·줄 모양 그대로 읽는다: `<local>/run/backoff-<hash>`에 두 줄, `<만료 epoch(float)>\n<누적
+ *  횟수(int)>`. **판정을 다시 안 잰다** — 만료 여부(`until`이 지금보다 미래인가)는 부르는 쪽이
+ *  가른다, 이 함수는 파일 값을 그대로 옮길 뿐이다. 못 읽거나 줄 모양이 안 맞으면 `null`이다
+ *  (`tickets.py`의 `backoff_active`가 같은 경우 `False`로 읽는 것과 같은 보수적 자리). */
+export type BackoffMark = { until: number; count: number };
+
+export async function readBackoff(local: string, hash: string): Promise<BackoffMark | null> {
+  const text = await readFile(path.join(local, "run", "backoff-" + hash), "utf8").catch(() => null);
+  if (text === null) return null;
+  const lines = text.split("\n");
+  const until = Number(lines[0]);
+  const count = Number.parseInt(lines[1] ?? "", 10);
+  if (!Number.isFinite(until) || !Number.isFinite(count)) return null;
+  return { until, count };
+}
+
 async function writeProjects(projects: Project[]): Promise<void> {
   const p = registryPath();
   await mkdir(path.dirname(p), { recursive: true });
@@ -692,6 +709,12 @@ export type ProjectSummary = {
    *  판정은 `dueAlertOf` 하나뿐이고 그 값이 이미 보는 `effectiveDue`·`unmet`도 이 `listTickets`
    *  호출이 준 것이라 **새 fs 읽기 0**이다. 못 읽은 프로젝트는 빈 배열이다(`assigned`의 그 규칙). */
   due: { hash: string; stem: string; alert: DueAlert }[];
+  /** 자동 회수 예산을 넘겨 잠시 쉬는 티켓(종 항목 ⑨, P362-3 — §0-10 §결정 기록 §엔진 수정
+   *  서른세 번째 승인). 판정이 GUI 밖에 있는 두 번째 항목이다(⑧과 같은 자리) — `readBackoff`가
+   *  표식을 읽고, 여기서 만료(`until`)만 지금과 비교한다. 새 fs 읽기는 열린 티켓 수만큼이다
+   *  (⑧의 표식 하나와 달리 티켓마다 파일이 갈린다 — 후보가 몇 안 되므로 §성능 예산 밖이다).
+   *  못 읽은 프로젝트는 빈 배열이다(`assigned`의 그 규칙). */
+  backoff: { hash: string; stem: string; until: number; count: number }[];
   /** 머신 상태(§0-14 — 셸 알림 종 ⑤·⑥). 프로젝트를 못 읽어도 값이 있다 — 머신이 큐보다 넓다.
    *  `machineState()`는 모듈 스코프 값을 읽기만 하므로 여기서 새 I/O가 0이다. */
   machine: MachineState;
@@ -732,6 +755,7 @@ export async function readSummary(project: Pick<Project, "root">): Promise<Proje
         const alert = dueAlertOf(t, now);
         return alert ? [{ hash: t.hash, stem: t.stem, alert }] : [];
       }),
+      backoff: await backoffOf(tickets, now),
       machine,
     };
   } catch (e) {
@@ -746,9 +770,29 @@ export async function readSummary(project: Pick<Project, "root">): Promise<Proje
       assigned: [],
       awaiting: [],
       due: [],
+      backoff: [],
       machine,
     };
   }
+}
+
+/** 종 항목 ⑨용 나열(P362-3) — 열린 티켓만 후보다(`select`가 백오프 표식을 거르는 자리와 같은
+ *  풀 — 잠긴 티켓엔 이 표식이 안 남는다). 티켓마다 `readBackoff` 한 번씩 — ⑧의 표식 한 장과
+ *  달리 티켓 수만큼 파일을 연다(§성능 예산 밖: 후보가 몇 안 된다). */
+async function backoffOf(
+  tickets: Ticket[],
+  now: Date,
+): Promise<{ hash: string; stem: string; until: number; count: number }[]> {
+  const local = localDir();
+  const nowMs = now.getTime();
+  const checked = await Promise.all(
+    tickets
+      .filter((t) => t.state === "open")
+      .map(async (t) => ({ t, mark: await readBackoff(local, t.hash) })),
+  );
+  return checked
+    .filter((c): c is { t: Ticket; mark: BackoffMark } => c.mark !== null && c.mark.until * 1000 > nowMs)
+    .map(({ t, mark }) => ({ hash: t.hash, stem: t.stem, until: mark.until, count: mark.count }));
 }
 
 // ── 페르소나 (DESIGN.md §5) ─────────────────────────────────────────────────
