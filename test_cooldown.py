@@ -76,6 +76,32 @@ ENGINE = """\
 IFS= read -r _first
 printf '{{"type":"system","subtype":"init"}}\\n'
 ERR='{{"is_error":true,"session_id":"%s","type":"result","subtype":"error_during_execution"'
+
+# 실제 세션은 일을 마친 마지막 동작으로 자기 티켓을 .wip에서 .done으로 스스로 닫고, 그 다음에야
+# `result` 줄을 낸다 - tick.sh는 그 rename에 관여하지 않는다(§자리 표 ④, CORE.md §티켓 수명).
+# `donedeath`(닫고 죽는 모양)와 보통 성공(`*`) 둘 다 이 동작이 필요해서 함수 하나로 묶는다 -
+# 실패 갈래(`api_error`-`limit`-`other`-`grok`-`fp_rotate` 등)는 일을 못 마쳤으니 안 부른다.
+# **이름이 아니라 가장 최근에 claim된**(mtime 최신) `.wip.md`를 고른다 - 이 큐엔 이미 self-close한
+# 앞선 티켓들의 `.done.md`가 쌓여 있다. tick.sh의 setinbox도 init 직후에 같은 파일에 쓰므로,
+# 그 기록(`inbox:`)이 보일 때까지 기다린 뒤에 rename한다 - 안 그러면 setinbox 경합이 생긴다
+# (실사고는 세션이 한참 뒤에 죽는 모양이라 이 간극이 실제로는 항상 넓다). 5초(25*0.2)는 부하
+# 아래서 setpid+setinbox의 python3 기동 자체가 못 따라온다(2026-09-02: 이 창을 놓쳐 tick.sh의
+# setpid/setinbox가 이미 지워진 파일에 쓰다 FileNotFoundError를 냈다) - 60초(300*0.2)로 잡는다.
+#
+# 이걸 안 부르면(옛 동작) 성공한 티켓의 `.wip.md`가 죽은 세션의 claim인 채로 큐에 남아, 나중
+# tick이 그걸 REAP - 재디스패치해 버려서 그 시점에 의도한 다른 티켓(zzzz0005 등)을 밀어낸다 -
+# 부하가 낮을 땐 그 전에 테스트가 끝나 안 보이다가, 큐가 바쁠수록(예: load 290대) tick() 한
+# 번의 벽시계 시간이 늘어나며 그 REAP 창을 스스로 여는 레이스였다(실측 §⑨·§⑫ 둘 다 이 모양으로
+# 죽었다 - 티켓 1d0120f3).
+close_self() {{
+  wip=$(ls -t "{tmp}/dira/tickets"/*.wip.md 2>/dev/null | head -1)
+  i=0
+  while [ "$i" -lt 300 ] && ! grep -q '^inbox: ' "$wip" 2>/dev/null; do
+    sleep 0.2; i=$((i+1))
+  done
+  mv "$wip" "${{wip%.wip.md}}.done.md"
+}}
+
 case "$(cat "{tmp}/mode")" in
   api_error) printf "$ERR"',"terminal_reason":"api_error","api_error_status":429}}\\n' "$1" ;;
   limit)
@@ -85,22 +111,8 @@ case "$(cat "{tmp}/mode")" in
   bad_request) printf "$ERR"',"terminal_reason":"api_error","api_error_status":400}}\\n' "$1" ;;
   other) printf "$ERR"',"terminal_reason":"aborted_streaming"}}\\n' "$1" ;;
   donedeath)
-    # 세션이 자기 손으로 .done rename까지 마친 뒤 죽는 모양(§4-10). tick.sh는 이 순간
-    # $TPATH를 다시 안 보므로 claim된 .wip.md를 찾아 직접 닫는다. 이 큐엔 성공한 앞선 티켓들의
-    # .wip.md도 그대로 남아 있다(가짜 엔진은 성공해도 .done으로 안 바꾼다 - 그건 세션의 몫이다,
-    # CORE.md §티켓 수명). 그래서 이름이 아니라 **가장 최근에 claim된**(mtime 최신) 것을 고른다.
-    # tick.sh의 setinbox도 init 직후에 같은 파일을 쓰므로, 그 기록(`inbox:`)이 보일 때까지
-    # 기다린 뒤에 rename한다 - 안 그러면 이 테스트가 §4-10과 무관한 setinbox 경합을 만든다
-    # (실사고는 세션이 한참 뒤에 죽는 모양이라 이 간극이 실제로는 항상 넓다). 5초(25*0.2)는
-    # 부하 아래서 setpid+setinbox의 python3 기동 자체가 못 따라온다(2026-09-02: 이 창을
-    # 놓쳐 tick.sh의 setpid/setinbox가 이미 지워진 파일에 쓰다 FileNotFoundError를 냈다) -
-    # 60초(300*0.2)로 넉넉히 잡는다.
-    wip=$(ls -t "{tmp}/dira/tickets"/*.wip.md 2>/dev/null | head -1)
-    i=0
-    while [ "$i" -lt 300 ] && ! grep -q '^inbox: ' "$wip" 2>/dev/null; do
-      sleep 0.2; i=$((i+1))
-    done
-    mv "$wip" "${{wip%.wip.md}}.done.md"
+    # 세션이 자기 손으로 .done rename까지 마친 뒤 죽는 모양(§4-10).
+    close_self
     printf "$ERR"',"terminal_reason":"aborted_streaming"}}\\n' "$1" ;;
   grok)
     # grok 모양: is_error true · terminal_reason 키 없음 · errors에 한도 낱말(§4-9 §개정).
@@ -111,7 +123,8 @@ case "$(cat "{tmp}/mode")" in
     # api_error result가 나가고, arm_cdown은 그 뒤에야 불린다 - 순서가 보장된다.
     printf '%s' "$(cat "{tmp}/rotate_to")" > "{tmp}/local/oauth-token"
     printf "$ERR"',"terminal_reason":"api_error","api_error_status":429}}\\n' "$1" ;;
-  *)     printf '{{"is_error":false,"num_turns":1,"session_id":"%s","type":"result","subtype":"success"}}\\n' "$1" ;;
+  *)     close_self
+         printf '{{"is_error":false,"num_turns":1,"session_id":"%s","type":"result","subtype":"success"}}\\n' "$1" ;;
 esac
 exec sleep 60
 """
