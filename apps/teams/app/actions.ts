@@ -107,7 +107,13 @@ import {
   startPoolWorker,
   stopPoolWorker,
 } from "@/lib/pool";
-import { buildWorkersPanel, type WorkersPanelView } from "@/lib/workers-panel";
+import { liveSessionCount, readSessionLimit, writeSessionLimit } from "@/lib/session-cap";
+import {
+  buildWorkersPanel,
+  type SessionCapProjectRow,
+  type WorkersPanelSessionCap,
+  type WorkersPanelView,
+} from "@/lib/workers-panel";
 
 /** 해석 결과 표 한 행. 서버가 배지까지 정해서 넘긴다 — 클라이언트는 그리기만 한다. */
 export type ConfigRow = {
@@ -737,10 +743,11 @@ export async function setMultitokenAction(enabled: boolean): Promise<boolean> {
  *  `buildWorkersPanel`(fs 의존 0) 하나가 진다 — 여기는 I/O만 진다. */
 export async function readWorkersPanelAction(): Promise<WorkersPanelView> {
   const projects = await readProjects();
-  const [poolNames, summaries, limits] = await Promise.all([
+  const [poolNames, summaries, limits, sessionCap] = await Promise.all([
     listPoolWorkers(),
     Promise.all(projects.map((p) => readSummary(p))),
     Promise.all(projects.map((p) => readPoolLimit(p.root).then((l) => l.limit ?? 0))),
+    sessionCapOf(projects),
   ]);
   const pool = await Promise.all(
     poolNames.map(async (w) => ({ name: w.name, status: await poolWorkerFullStatus(w.name) })),
@@ -755,7 +762,49 @@ export async function readWorkersPanelAction(): Promise<WorkersPanelView> {
       workers: summaries[i].workers,
     })),
     limits,
+    sessionCap,
   );
+}
+
+/** 머신 전체 세션 상한의 값 + 큐별 분포(§세션이 120초 안에 못 뜬다 §개정 결정 2-3). `session-cap.sh`가
+ *  세는 것과 같은 수를 화면 쪽에서 다시 센다 — 훅과 화면이 서로 다른 프로세스라 계산을 나눠 갖는 것
+ *  자체는 새 I/O가 아니다(둘 다 `gui-projects.json` + `tickets/*.wip.md`를 각자 읽는다, 결정 2). */
+async function sessionCapOf(projects: Project[]): Promise<WorkersPanelSessionCap> {
+  const [limit, counts] = await Promise.all([
+    readSessionLimit(),
+    Promise.all(projects.map((p) => liveSessionCount(p))),
+  ]);
+  const byProject: SessionCapProjectRow[] = projects.map((p, i) => ({ id: p.id, name: p.name, count: counts[i] }));
+  return { limit: limit.limit, warn: limit.warn, total: counts.reduce((a, b) => a + b, 0), byProject };
+}
+
+export type SessionLimitResult = {
+  ok: boolean;
+  message?: string;
+  /** 성공 시 실제로 저장된 값. `null` = 파일이 없어졌다(트리거가 `없음`이 된다, 결정 2) */
+  limit?: number | null;
+  total?: number;
+  byProject?: SessionCapProjectRow[];
+};
+
+/** 설정 `워커` 노드의 상한 컨트롤 저장 — `pool-limit` 관용구와 같되(§4-16 결정 3), 빈 값은 `0`이
+ *  아니라 파일 삭제다(결정 2 "비우고 저장하면 파일이 없어지고 트리거가 `없음`이 된다" — 머신 전체
+ *  상한이 없다는 것과 0이라는 것은 다른 사실이다). */
+export async function saveSessionLimitAction(
+  value: string,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<SessionLimitResult> {
+  const text = value.trim();
+  if (text !== "" && !/^\d+$/.test(text)) {
+    return { ok: false, message: `${t(locale, "sessionCap.limit.invalidPrefix")} ${value}` };
+  }
+  try {
+    await writeSessionLimit(text === "" ? null : Number(text), locale);
+  } catch (e) {
+    return { ok: false, message: (e as Error).message };
+  }
+  const cap = await sessionCapOf(await readProjects());
+  return { ok: true, limit: cap.limit, total: cap.total, byProject: cap.byProject };
 }
 
 /** `공통 워커 풀` 덩이의 `워커 생성`. **만든 직후 crontab까지 등록한다** — 풀 파일은 cron

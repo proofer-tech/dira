@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert";
 import {
   buildWorkersPanel,
+  EMPTY_SESSION_CAP,
   filteredGroups,
   filteredPool,
   POOL_PROJECT_VALUE,
@@ -61,6 +62,7 @@ test("filteredPool — 종류=project면 0건, 프로젝트=dira 하나만 골�
       { name: "pool-2", status: "idle", borrowedBy: 0 },
     ],
     projects: [],
+    sessionCap: EMPTY_SESSION_CAP,
   };
   assert.strictEqual(filteredPool(view, { project: [], kind: [], status: [] }).length, 2);
   assert.deepStrictEqual(filteredPool(view, { project: [], kind: ["project"], status: [] }), []);
@@ -80,6 +82,7 @@ test("filteredGroups — 상태 필터로 프로젝트가 0건이 되면 그 묶
       mkProject("dira", [mkWorker("w1", "running"), mkWorker("w2", "idle")]),
       mkProject("stream", [mkWorker("s1", "stopped")]),
     ],
+    sessionCap: EMPTY_SESSION_CAP,
   };
   const stale = filteredGroups(view, { project: [], kind: [], status: ["stale"] });
   assert.deepStrictEqual(stale, []); // 아무도 stale이 아니라 두 묶음 다 사라진다
@@ -97,6 +100,7 @@ test("filteredGroups — 연결 안 된 프로젝트는 필터로도 안 빠진�
       mkProject("dira", [mkWorker("w1", "running")]),
       mkProject("archive", [], false, "ENOENT: no such file"),
     ],
+    sessionCap: EMPTY_SESSION_CAP,
   };
   const running = filteredGroups(view, { project: [], kind: [], status: ["running"] });
   assert.strictEqual(running.length, 2);
@@ -117,6 +121,7 @@ test("filteredGroups — 종류=공통은 shim 행만, 상태=idle은 shim 행�
         mkWorker("pool-2", "stopped", true), // shim은 cron 줄이 없어 idle이 될 수 없다
       ]),
     ],
+    sessionCap: EMPTY_SESSION_CAP,
   };
   const poolKind = filteredGroups(view, { project: [], kind: ["pool"], status: [] });
   assert.deepStrictEqual(poolKind[0].workers.map((w) => w.name), ["pool-1", "pool-2"]);
@@ -135,6 +140,7 @@ test("행 총합 — §4-16 §수용조건 (12): 전체 목록 + 공통 워커 �
       mkProject("dira", [mkWorker("w1", "running"), mkWorker("w2", "idle"), mkWorker("pool-1", "running", true)]),
       mkProject("stream", [mkWorker("s1", "stopped")]),
     ],
+    sessionCap: EMPTY_SESSION_CAP,
   };
   const filters = { project: [], kind: [], status: [] };
   const total = filteredPool(view, filters).length + filteredGroups(view, filters).reduce((n, p) => n + p.workers.length, 0);

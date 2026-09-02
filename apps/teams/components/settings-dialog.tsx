@@ -51,6 +51,7 @@ import {
   resetKeymapAction,
   resolveProjectAction,
   saveIntegrationBranchAction,
+  saveSessionLimitAction,
   saveTokenAction,
   sendSetupCodeAction,
   setActiveEngineProfileAction,
@@ -97,8 +98,10 @@ import {
   POOL_PROJECT_VALUE,
   filteredGroups,
   filteredPool,
+  type SessionCapProjectRow,
   type WorkersFilters,
   type WorkersKind,
+  type WorkersPanelSessionCap,
   type WorkersPanelView,
 } from "@/lib/workers-panel";
 import type { WorkerStatus } from "@/lib/workers";
@@ -832,6 +835,116 @@ function PoolRow({
   );
 }
 
+/** 머신 전체 세션 상한 칸(§세션이 120초 안에 못 뜬다 §개정 결정 2-3) — 관용구는 `PoolLimitField`
+ *  (`workers-ui.tsx`)와 글자 하나까지 같다(값이 곧 트리거, 팝오버 안 세로 스택, 닫는 것이 취소).
+ *  빈 값 저장은 `pool-limit`과 달리 `0`이 아니라 **파일 삭제**다(결정 2) — `saved`가 빈 문자열이면
+ *  트리거가 `없음`이고, 그 값 그대로 저장해도(`ready`가 `false`라 버튼이 막힌다) 없음 유지다.
+ *  합계·분포·상한 도달 문구는 그 아래 표시 전용 줄들이다(결정 2-3, `runner.log`를 안 읽는다). */
+function SessionCapField({
+  cap,
+  onSaved,
+}: {
+  cap: WorkersPanelSessionCap;
+  onSaved: (next: { limit: number | null; total: number; byProject: SessionCapProjectRow[] }) => void;
+}) {
+  const t = useT();
+  const locale = useLocale();
+  const saved = cap.limit === null ? "" : String(cap.limit);
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState(saved);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+  const ready = !pending && value.trim() !== saved;
+
+  const save = () =>
+    start(async () => {
+      const r = await saveSessionLimitAction(value, locale);
+      if (r.ok) {
+        onSaved({ limit: r.limit ?? null, total: r.total ?? 0, byProject: r.byProject ?? [] });
+        setValue(r.limit === null || r.limit === undefined ? "" : String(r.limit));
+        setError(null);
+        setOpen(false);
+      } else {
+        setError(r.message ?? t("settings.workers.sessionCapSaveFailedTitle"));
+      }
+    });
+
+  const atCap = cap.limit !== null && cap.total >= cap.limit;
+
+  return (
+    <div data-setting="workers.sessionCap" className="space-y-1">
+      <span className="flex items-center gap-2">
+        <span className="text-xs text-muted-foreground">{t("settings.workers.sessionCapLimitLabel")}</span>
+        <Popover
+          open={open}
+          onOpenChange={(o) => {
+            setOpen(o);
+            if (!o) {
+              setValue(saved);
+              setError(null);
+            }
+          }}
+        >
+          <PopoverTrigger render={<Button variant="ghost" size="sm" className="font-normal" />}>
+            <span className={cap.limit !== null ? "font-mono text-xs" : undefined}>
+              {cap.limit === null ? t("settings.workers.sessionCapLimitNone") : cap.limit}
+            </span>
+            <ChevronDown aria-hidden className="size-3" />
+          </PopoverTrigger>
+          <PopoverContent align="start">
+            <div className="space-y-2">
+              <Label htmlFor="session-cap-input">{t("settings.workers.sessionCapPopoverLabel")}</Label>
+              <Input
+                id="session-cap-input"
+                type="number"
+                min={0}
+                step={1}
+                placeholder={t("settings.workers.sessionCapLimitNone")}
+                className="w-full font-mono"
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">{t("settings.workers.sessionCapPopoverHint")}</p>
+            {error && <p className="text-xs text-destructive">{error}</p>}
+            <div className="flex items-center justify-between gap-2">
+              <Button
+                size="sm"
+                className="ml-auto"
+                aria-disabled={!ready}
+                onClick={() => {
+                  if (ready) save();
+                }}
+              >
+                {pending ? t("common.saving") : t("common.save")}
+              </Button>
+            </div>
+          </PopoverContent>
+        </Popover>
+        {cap.warn && (
+          <span className="text-xs text-status-stale">{t("settings.workers.sessionCapWarnUnreadable")}</span>
+        )}
+      </span>
+      <p className="text-xs tabular-nums text-muted-foreground">
+        {t("settings.workers.sessionCapTotalPrefix")}
+        {cap.total}
+        {cap.limit !== null && `${t("settings.workers.sessionCapTotalSep")}${cap.limit}`}
+      </p>
+      {cap.byProject.length > 0 && (
+        <ul className="space-y-0.5">
+          {cap.byProject.map((p) => (
+            <li key={p.id} className="flex h-6 items-center gap-2 px-2 text-xs text-muted-foreground">
+              <span className="min-w-0 flex-1 truncate">{p.name}</span>
+              <span className="shrink-0 tabular-nums">{p.count}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {atCap && <p className="text-xs text-status-stale">{t("settings.workers.sessionCapAtCap")}</p>}
+    </div>
+  );
+}
+
 /** 설정 트리 열째 노드 `워커` (DESIGN.md §4-16 결정 5 · §비주얼 §68). 읽는 시점은 이 컴포넌트가
  *  마운트될 때뿐이다 — 다른 패널(`WebhookSection` 등)과 같은 결로 `useEffect(() => {...}, [])`
  *  하나가 전부이고, 상시 폴링에 안 붙는다(§4-16 결정 5 §읽는 시점). `closeDialog`는 전체 목록 줄이
@@ -877,6 +990,18 @@ function WorkersSection({ className, closeDialog }: { className?: string; closeD
       <h3 data-setting="workers" className="text-sm font-medium">
         {t("settings.tree.workers")}
       </h3>
+
+      {view && (
+        <div className="space-y-1">
+          <h4 className="text-sm font-medium">{t("settings.workers.sessionCapHeading")}</h4>
+          <SessionCapField
+            cap={view.sessionCap}
+            onSaved={(next) =>
+              setView((v) => (v ? { ...v, sessionCap: { ...next, warn: false } } : v))
+            }
+          />
+        </div>
+      )}
 
       <div data-setting="workers.filter" className="flex flex-wrap items-center gap-2">
         <WorkersFilterAxis

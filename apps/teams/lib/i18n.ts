@@ -215,6 +215,20 @@ export const ko: Record<string, string> = {
   "settings.workers.poolEmpty": "공통 워커가 없습니다 — 만들면 빌리기를 켠 프로젝트마다 들어갑니다.",
   "settings.workers.projectsEmpty": "등록된 프로젝트가 없습니다.",
 
+  // 머신 전체 세션 상한(§세션이 120초 안에 못 뜬다 §개정 결정 2-3). 컨트롤 관용구는
+  // `workers.pool.*`와 글자 하나까지 같다(§4-16 결정 3) — 새 관용구 0.
+  "sessionCap.limit.invalidPrefix": "정수(0 이상)만 됩니다:",
+  "settings.workers.sessionCapHeading": "머신 전체 세션 상한",
+  "settings.workers.sessionCapLimitLabel": "상한",
+  "settings.workers.sessionCapLimitNone": "없음",
+  "settings.workers.sessionCapPopoverLabel": "동시 세션 상한",
+  "settings.workers.sessionCapPopoverHint": "비우면 상한이 없어집니다 — 이 컴퓨터에서 한꺼번에 도는 claude 세션 수를 막는 값입니다.",
+  "settings.workers.sessionCapSaveFailedTitle": "상한을 저장하지 못했습니다",
+  "settings.workers.sessionCapWarnUnreadable": "session-limit을 읽지 못했습니다 — 상한 없음으로 읽습니다.",
+  "settings.workers.sessionCapTotalPrefix": "머신 전체 ",
+  "settings.workers.sessionCapTotalSep": "/",
+  "settings.workers.sessionCapAtCap": "지금 상한에 차 있어 새 세션이 안 뜹니다.",
+
   "common.save": "저장",
   "common.saving": "저장 중…",
   "common.add": "추가",
@@ -2708,6 +2722,18 @@ export const en: Record<string, string> = {
   "settings.workers.filteredEmpty": "0 workers match the filter",
   "settings.workers.poolEmpty": "No common workers — creating one adds it to every project that borrows.",
   "settings.workers.projectsEmpty": "No registered projects.",
+
+  "sessionCap.limit.invalidPrefix": "Takes an integer of 0 or more:",
+  "settings.workers.sessionCapHeading": "Machine-wide session limit",
+  "settings.workers.sessionCapLimitLabel": "Limit",
+  "settings.workers.sessionCapLimitNone": "None",
+  "settings.workers.sessionCapPopoverLabel": "Concurrent session limit",
+  "settings.workers.sessionCapPopoverHint": "Empty removes the limit — caps how many claude sessions run at once on this machine.",
+  "settings.workers.sessionCapSaveFailedTitle": "Couldn't save the limit",
+  "settings.workers.sessionCapWarnUnreadable": "Couldn't read session-limit — reading it as no limit.",
+  "settings.workers.sessionCapTotalPrefix": "Machine-wide ",
+  "settings.workers.sessionCapTotalSep": "/",
+  "settings.workers.sessionCapAtCap": "At the limit — no new sessions can start right now.",
 
   "common.save": "Save",
   "common.saving": "Saving…",
