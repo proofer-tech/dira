@@ -31,6 +31,7 @@ const {
   readHome,
   newConversation,
   switchConversation,
+  closeHomeTab,
   createSchedule,
   deleteSchedule,
   workerSessions,
@@ -521,7 +522,7 @@ const uuid = (n: number) => `021f80d9-294c-4bea-948b-3b6f0c4501${String(n).padSt
 
 test("대화 목록 — 새 대화 · 전환 · 경로 관문. UUID가 아닌 줄은 없는 것과 같다", async () => {
   assert.strictEqual(sessionsPath(), path.join(LOCAL, "home-sessions.json"));
-  assert.deepStrictEqual(await readHome("p1"), { conversations: [], current: null, schedules: [] }); // 파일이 없다
+  assert.deepStrictEqual(await readHome("p1"), { conversations: [], current: null, schedules: [], tabs: [], activeTab: null }); // 파일이 없다
   assert.strictEqual(await readSessionId("p1"), null);
 
   // 이미 대화가 하나 있는 프로젝트(= 첫 질문이 끝난 상태)
@@ -569,7 +570,67 @@ test("대화 목록 — 새 대화 · 전환 · 경로 관문. UUID가 아닌 �
 
   // 깨진 JSON은 빈 맵이다 — 홈 화면이 500이 되는 것보다 대화 하나를 새로 시작하는 게 낫다
   writeFileSync(sessionsPath(), "{ not json");
-  assert.deepStrictEqual(await readHome("p1"), { conversations: [], current: null, schedules: [] });
+  assert.deepStrictEqual(await readHome("p1"), { conversations: [], current: null, schedules: [], tabs: [], activeTab: null });
+});
+
+test("탭 줄 — 새 대화·전환이 탭을 열고, 닫으면 activeTab·current가 다음 탭으로 넘어간다", async () => {
+  const p = "tabsproj";
+  const a = uuid(1);
+  const b = uuid(2);
+  const c = uuid(3);
+  writeFileSync(
+    sessionsPath(),
+    JSON.stringify({
+      [p]: {
+        conversations: [
+          { id: a, title: "A", created: "2026-01-01T00:00:00.000Z" },
+          { id: b, title: "B", created: "2026-01-01T00:00:01.000Z" },
+          { id: c, title: "C", created: "2026-01-01T00:00:02.000Z" },
+        ],
+        current: null,
+      },
+    }),
+  );
+
+  // 전환마다 탭이 열린다 — 이미 열려 있으면 새 줄이 아니라 lastViewed만 올린다(중복 안 생긴다)
+  assert.strictEqual(await switchConversation(p, a), true);
+  assert.strictEqual(await switchConversation(p, b), true);
+  assert.strictEqual(await switchConversation(p, a), true); // a로 되돌아옴 — 중복 안 생긴다
+  const afterSwitch = await readHome(p);
+  // 목록 순서는 연 순서(a, b) 그대로다 — `openTab`은 이미 열린 탭을 다시 열면 자리를 안 옮기고
+  // `lastViewed`만 올린다(정본은 그 값이지 배열 순서가 아니다).
+  assert.deepStrictEqual(
+    afterSwitch.tabs.map((t) => t.id),
+    [a, b],
+  );
+  assert.strictEqual(afterSwitch.activeTab, a);
+  assert.strictEqual(afterSwitch.current, a);
+
+  // 활성 탭(a)을 닫으면 남은 탭(b) — 유일한 후보 — 으로 activeTab·current가 같이 넘어간다
+  const closed = await closeHomeTab(p, a);
+  assert.deepStrictEqual(
+    closed.tabs.map((t) => t.id),
+    [b],
+  );
+  assert.strictEqual(closed.activeTab, b);
+  assert.strictEqual(closed.current, b);
+  // 대화 자체는 안 지워진다 — 탭 목록에서만 빠진다(§11 결정 1 §닫기)
+  assert.deepStrictEqual(
+    closed.conversations.map((cv) => cv.id),
+    [a, b, c],
+  );
+
+  // 활성이 아닌 탭을 닫아도 activeTab·current는 그대로다
+  await switchConversation(p, c); // c가 지금 activeTab
+  const stillC = await closeHomeTab(p, b);
+  assert.strictEqual(stillC.activeTab, c);
+  assert.strictEqual(stillC.current, c);
+
+  // 마지막 탭을 닫으면 activeTab·current가 null이다
+  const empty = await closeHomeTab(p, c);
+  assert.deepStrictEqual(empty.tabs, []);
+  assert.strictEqual(empty.activeTab, null);
+  assert.strictEqual(empty.current, null);
 });
 
 test("옛 형식(문자열 한 줄)은 대화 한 개짜리 목록으로 읽힌다 — 사람 머신에 이미 있는 파일이다", async () => {
@@ -580,9 +641,11 @@ test("옛 형식(문자열 한 줄)은 대화 한 개짜리 목록으로 읽힌�
     conversations: [{ id: sid, title: "", created: "" }], // 첫 질문도 만든 시각도 그 형식에 없다
     current: sid, // 돌던 대화가 그대로 열린다 — 못 읽으면 그 사람은 그걸 잃는다
     schedules: [],
+    tabs: [],
+    activeTab: null,
   });
   assert.strictEqual(await readSessionId("old"), sid);
-  assert.deepStrictEqual(await readHome("broken"), { conversations: [], current: null, schedules: [] });
+  assert.deepStrictEqual(await readHome("broken"), { conversations: [], current: null, schedules: [], tabs: [], activeTab: null });
 
   // 그 위에 `새 대화`를 열면 옛 대화가 목록에 남는다(종전은 지우는 것이었다)
   const next = await newConversation("old");

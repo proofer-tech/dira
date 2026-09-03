@@ -17,6 +17,7 @@ import { DEFAULT_LOCALE, t, type Locale } from "@/lib/i18n";
 import type { RefIndex } from "@/lib/markdown-refs";
 import { listTickets } from "@/lib/queue";
 import {
+  closeHomeTab,
   createSchedule as createScheduleRow,
   deleteSchedule as deleteScheduleRow,
   newConversation,
@@ -79,6 +80,8 @@ export async function pollHomeAnswer(
       conversations: [], // 못 읽는 큐 = 열 목록도 없다. 패널이 안 그려진다(§24 0건)
       workers: [], // 〃 — 워커 세션은 그 큐에서 파생된다(§7 좌측 패널)
       schedules: [], // 〃 — 스케줄도 같은 파일에서 파생된다(§7-2)
+      tabs: [], // 〃 — 탭 목록도 같은 파일에서 온다(§11 결정 2)
+      activeTab: null,
       turns: [],
       offset: 0,
       reset: true,
@@ -165,6 +168,19 @@ export async function switchHome(projectId: string, sessionId: string): Promise<
     await switchConversation((await required(projectId)).id, sessionId);
   } catch {
     // 등록이 풀린 프로젝트 — 갈아 끼울 것이 없다. 아래 폴링이 빈 대화로 물러난다(위와 같은 선)
+  }
+  return pollHomeAnswer(projectId, null, 0);
+}
+
+/** 우측 탭 줄에서 탭 하나를 닫는다(§11 결정 1). **`switchHome`과 같은 모양이다** — 닫은 뒤
+ *  남는 `current`(닫은 탭이 활성이었으면 그다음 탭으로 넘어간 값)를 이 폴링 한 번으로 화면에
+ *  돌려준다. `tabId`도 `sessionId`와 같은 신뢰 경계 밖 값이라 관문은 `closeHomeTab` 안의
+ *  `sessionIdOf`(파일 읽기 쪽 `parseHome`) 하나다 — 실재 안 하는 값은 조용히 무시된다. */
+export async function closeTab(projectId: string, tabId: string): Promise<HomeChunk> {
+  try {
+    await closeHomeTab((await required(projectId)).id, tabId);
+  } catch {
+    // 등록이 풀린 프로젝트 — 위 switchHome과 같은 물러남
   }
   return pollHomeAnswer(projectId, null, 0);
 }

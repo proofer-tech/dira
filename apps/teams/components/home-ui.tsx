@@ -48,10 +48,23 @@ import Link from "@/components/link";
 // `Check`은 **패널에서 빠졌다**(§비주얼 §34 ③). import는 남는다 — 같은 파일의 `복사` 버튼이
 // 눌린 뒤 1.2초 동안 그 글리프를 든다(§24 §띠). §34가 *lucide `Check`이 빠진다*고 적은 것은
 // 좌측 패널 얘기다.
-import { ArrowDown, Check, Copy, Send, Trash2, TriangleAlert } from "lucide-react";
+import {
+  ArrowDown,
+  Check,
+  Copy,
+  FolderTree,
+  GitBranch,
+  MessageSquare,
+  Send,
+  SquareTerminal,
+  Trash2,
+  TriangleAlert,
+  X,
+} from "lucide-react";
 import {
   askHome,
   clearHome,
+  closeTab as closeTabAction,
   createSchedule,
   deleteSchedule,
   pollHomeAnswer,
@@ -121,13 +134,16 @@ import {
   SidebarContent,
   SidebarGroup,
   SidebarGroupLabel,
+  SidebarHeader,
   SidebarMenu,
   SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarProvider,
 } from "@/components/ui/sidebar";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type {
   Activity,
   Answer,
@@ -135,6 +151,7 @@ import type {
   Home,
   HomeChunk,
   ScheduleView,
+  Tab,
   Turn,
   WorkerSession,
 } from "@/lib/home-agent";
@@ -174,10 +191,21 @@ const DEFAULT_PERSONA = "archive-manager";
  *  **`Home`의 `schedules`는 원본이 아니라 `ScheduleView[]`다**(§비주얼 §62) — 화면용 값
  *  (`at`·`overdue`)을 서버가 이미 얹어 보낸다(`nextScheduleDue`가 `node:fs`가 섞인 파일에 있어
  *  클라이언트가 직접 못 잰다). */
-type Panel = Pick<Home, "conversations" | "current"> & {
+type Panel = Pick<Home, "conversations" | "current" | "tabs" | "activeTab"> & {
   workers: WorkerSession[];
   schedules: ScheduleView[];
 };
+
+/** 좌측 2단의 위 단 — 표면 넷(§11 결정 1 · §비주얼 §72 ①). 이 티켓이 붙이는 것은 셸과 고르는
+ *  손잡이뿐이고, 셋(`terminal` · `scm` · `explorer`)의 내용은 P366-5 · P366-6 · P366-8이 채운다. */
+type Surface = "agent" | "terminal" | "scm" | "explorer";
+
+const SURFACES: { id: Surface; labelKey: string; icon: typeof MessageSquare }[] = [
+  { id: "agent", labelKey: "home.surface.agent", icon: MessageSquare },
+  { id: "terminal", labelKey: "home.surface.terminal", icon: SquareTerminal },
+  { id: "scm", labelKey: "home.surface.scm", icon: GitBranch },
+  { id: "explorer", labelKey: "home.surface.explorer", icon: FolderTree },
+];
 
 /** 폴링 주기 둘(§7 §답은 흐른다 · §폴링은 서버가 잊어도 안 끊긴다). 자세한 근거는 아래
  *  `useEffect` 머리 주석. **천장은 없다**(§7 §천장이 없다 — 요구 `8db4d0f6`이 서버의
@@ -273,11 +301,19 @@ export function HomeUI({
     workers: initial.workers,
     schedules: initial.schedules,
     current: initial.sessionId,
+    tabs: initial.tabs,
+    activeTab: initial.activeTab,
   });
   // **회차 0건인 스케줄을 보는 동안만 뜬다**(§비주얼 §62 (6)) — 그 줄은 `session_id`가 비어
   // 있어 `current`가 될 수 없다(서버의 `switchConversation`이 빈 값을 안 받는다). 그래서 선택을
   // 로컬로만 기억한다. 값이 있으면 대화 컬럼이 스레드 대신 그 스케줄의 빈 상태를 그린다.
   const [pendingSchedule, setPendingSchedule] = useState<ScheduleView | null>(null);
+  // **표면 고르기**(§11 결정 1 · §비주얼 §72 ①) — `home-sessions.json`에 안 산다(URL도 안
+  // 갈린다는 결정과 같은 축: 이 값은 화면이 들고 있는 수 하나다). 새로고침하면 언제나
+  // `홈 에이전트`로 돌아온다 — 종전 화면과 같은 첫 인상이다. 우측 탭 줄은 이 값과 무관하게
+  // 그대로다(§11 결정 1 §우측 탭은 표면을 가로지른다) — 탭에 들어가는 내용은 지금 `chat`뿐이라
+  // 표면을 갈아도 스레드가 안 바뀐다.
+  const [surface, setSurface] = useState<Surface>("agent");
   // 폴링이 들고 다니는 두 값. 렌더에 안 쓰므로 상태가 아니다(바뀔 때마다 그릴 것이 없다).
   const session = useRef(initial.sessionId);
   const offset = useRef(initial.offset);
@@ -374,6 +410,8 @@ export function HomeUI({
           workers: r.workers,
           schedules: r.schedules,
           current: r.sessionId,
+          tabs: r.tabs,
+          activeTab: r.activeTab,
         });
         setRunningIds(r.runningSessions);
         // `turns`와 같은 축이다 — `reset`이면 갈아 끼우고, 아니면 누적한다(키가 같으면 최신이 이긴다).
@@ -567,7 +605,14 @@ export function HomeUI({
   const apply = (c: HomeChunk) => {
     session.current = c.sessionId;
     offset.current = c.offset;
-    setHome({ conversations: c.conversations, workers: c.workers, schedules: c.schedules, current: c.sessionId });
+    setHome({
+      conversations: c.conversations,
+      workers: c.workers,
+      schedules: c.schedules,
+      current: c.sessionId,
+      tabs: c.tabs,
+      activeTab: c.activeTab,
+    });
     setTurns(c.stopped ? markStopped(c.turns) : c.turns);
     setLiveRefs(c.refs); // 대화를 통째로 갈아 끼운다 — 옛 대화의 표식 값을 안 섞는다
     setRunning(c.running);
@@ -578,6 +623,14 @@ export function HomeUI({
     setFail(c.failed);
     setEcho(null); // 갈아탄 대화의 것이 아니다 — 앞 대화에서 보낸 에코를 여기로 안 옮긴다
     setPendingSchedule(null); // 실제 세션으로 갈아탔다 — 회차 0건 스케줄 화면은 이 자리가 아니다
+  };
+
+  /** 우측 탭 줄에서 X를 누른다(§11 결정 1 · §비주얼 §72 ②). **`switchHome`과 같은 자리다** —
+   *  서버가 탭 목록·`current`를 갈아 끼우고 그 폴링 한 번을 `apply`가 통째로 화면에 반영한다.
+   *  닫은 탭이 지금 보던 것이었으면 스레드도 그 자리에서 다음 탭으로 넘어간다. */
+  const closeTab = async (tabId: string) => {
+    setPendingSchedule(null);
+    apply(await closeTabAction(project, tabId));
   };
 
   /** 접힌 줄을 열고 닫는다(§비주얼 §24 ⑦ §자동 스크롤). `<Bundle>`이 요구하는 자리지만
@@ -645,6 +698,8 @@ export function HomeUI({
             project={project}
             home={home}
             personas={personas}
+            surface={surface}
+            onSurfaceChange={setSurface}
             runningIds={runningIds}
             // 세 그룹을 통틀어 지금 떠 있는 표식 하나(§비주얼 §62 (2) §선택 표식 — "표식은 세
             // 그룹을 통틀어 한 줄에만 든다"). 회차 0건 스케줄을 보는 동안은 `home.current`가
@@ -690,23 +745,42 @@ export function HomeUI({
           />
         )}
 
-        {/* 대화 컬럼 — 남은 폭·높이 전부다. **자식이 언제나 셋이고 순서가 안 바뀐다**(§24):
-            [0건: 인사 | 그 외: 스레드] · [폼] · [0건: 예시 4개 | 그 외: null].
-            조건이 거짓인 자리를 배열에서 빼지 않는 이유는 폼이다 — 같은 인덱스에 남아야 React가
-            다시 마운트하지 않고, 그래야 첫 질문을 보낸 순간 포커스와 IME 상태가 안 날아간다(§21).
-            0건일 때 `justify-center` 한 클래스가 그 묶음을 세로 가운데로 올린다(§24 온보딩 항) —
-            자리 이동은 이 클래스가 사라지는 것으로 끝난다. **`min-w-0`이 없으면** flex 자식
-            기본값(`min-width:auto`)이라 답 안의 펜스·표 한 줄이 이 단을 밀어 패널을 찌그러뜨린다
-            (세로에서 `min-h-0`이 하는 일을 가로에서 이 클래스가 한다). */}
-        <div
-          className={cn(
-            "flex min-h-0 min-w-0 flex-1 flex-col gap-2",
-            onboarding && "justify-center",
+        {/* 우측 칸 — 탭 줄(§11 결정 1 · §비주얼 §72 ②) + 대화 컬럼. 탭 줄이 **표면을 가로지른다**
+            (§11 결정 1) — 왼쪽에서 표면을 갈아도 이 줄과 그 아래 컬럼은 그대로다(지금은 탭
+            종류가 `chat` 하나뿐이라 표면이 바뀌어도 스레드가 안 바뀐다). `min-w-0`은 아래
+            대화 컬럼과 같은 이유 — flex 자식 기본값을 덮는다. */}
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          {home.conversations.length > 0 && (
+            <TabBar
+              tabs={home.tabs}
+              activeTab={home.activeTab}
+              conversations={home.conversations}
+              onSelect={async (id) => {
+                if (id === home.current) return;
+                setPendingSchedule(null);
+                setHome((now) => ({ ...now, current: id }));
+                apply(await switchHome(project, id));
+              }}
+              onClose={closeTab}
+            />
           )}
-        >
-          {/* 페르소나 선택 칸(§7-4 결정 1·2) — **넷째 자식이지만 상시 렌더라 위 §자식이 언제나
-              셋 계약을 안 건드린다**(조건부로 빠지는 자리가 아니다). 잠기는 것은 셀렉트 하나뿐
-              이고(`disabled`) 대화·스레드·폼·예시는 이 칸과 무관하게 그대로 돈다. */}
+          {/* 대화 컬럼 — 남은 폭·높이 전부다. **자식이 언제나 넷이고 순서가 안 바뀐다**(§24 · §7-4):
+              [페르소나 선택 칸] · [0건: 인사 | 그 외: 스레드] · [폼] · [0건: 예시 4개 | 그 외: null].
+              조건이 거짓인 자리를 배열에서 빼지 않는 이유는 폼이다 — 같은 인덱스에 남아야 React가
+              다시 마운트하지 않고, 그래야 첫 질문을 보낸 순간 포커스와 IME 상태가 안 날아간다(§21).
+              0건일 때 `justify-center` 한 클래스가 그 묶음을 세로 가운데로 올린다(§24 온보딩 항) —
+              자리 이동은 이 클래스가 사라지는 것으로 끝난다. **`min-w-0`이 없으면** flex 자식
+              기본값(`min-width:auto`)이라 답 안의 펜스·표 한 줄이 이 단을 밀어 패널을 찌그러뜨린다
+              (세로에서 `min-h-0`이 하는 일을 가로에서 이 클래스가 한다). */}
+          <div
+            className={cn(
+              "flex min-h-0 min-w-0 flex-1 flex-col gap-2",
+              onboarding && "justify-center",
+            )}
+          >
+          {/* 페르소나 선택 칸(§7-4 결정 1·2) — **상시 렌더라 위 §자식이 언제나 셋 계약을 안
+              건드린다**(조건부로 빠지는 자리가 아니다). 잠기는 것은 셀렉트 하나뿐이고(`disabled`)
+              대화·스레드·폼·예시는 이 칸과 무관하게 그대로 돈다. */}
           <div className="flex shrink-0 items-center gap-2">
             <Label htmlFor="home-persona" className="text-xs text-muted-foreground">
               {t("home.personaLabel")}
@@ -1056,6 +1130,7 @@ export function HomeUI({
               ))}
             </div>
           ) : null}
+          </div>
         </div>
       </SidebarProvider>
 
@@ -1264,6 +1339,64 @@ const MARK =
  *  붙는 조각이 아니다. `font-mono`가 없는 이유도 그 절과 같다 — 이 값은 리터럴이 아니라 시각이다. */
 const SCHEDULE_TIME = "text-xs text-muted-foreground tabular-nums group-hover/menu-button:text-foreground";
 
+/** 우측 탭 줄(§11 결정 1 · §비주얼 §72 ②) — 그릇은 §66 ⑤(페르소나 상세의 `tabs` `variant="line"`)를
+ *  그대로 인용한다. **`TabsContent`가 없다** — 지금 탭 종류가 `chat` 하나뿐이고 그 내용은 이미
+ *  아래 대화 컬럼이 `home.current`로 그린다(단일 스레드 상태). 탭 줄은 그 상태를 향한 **또 하나의
+ *  전환 입구**다(좌측 패널 줄과 같은 일을 한다) — 터미널·파일 탭이 붙어 각자 자기 내용을
+ *  들면(`TabsContent keepMounted`) 그때 진짜 패널 전환이 필요해진다(P366-5·6).
+ *  탭 0개(옛 `home-sessions.json` 또는 닫아서 빈 목록)는 **아무것도 안 그린다** — 대화 컬럼이
+ *  이미 스레드나 온보딩으로 그 자리를 채우고 있어 빈 탭 줄을 더 그리면 같은 사실을 두 번 말한다. */
+function TabBar({
+  tabs,
+  activeTab,
+  conversations,
+  onSelect,
+  onClose,
+}: {
+  tabs: Tab[];
+  activeTab: string | null;
+  conversations: Home["conversations"];
+  onSelect: (id: string) => void;
+  onClose: (id: string) => void;
+}) {
+  const t = useT();
+  if (tabs.length === 0) return null;
+  return (
+    // §72 ② §자리 표 §스크롤 그릇 — `pb-1`이 없으면 활성 표식(`after:h-0.5`)이 세로로 클리핑된다.
+    <div className="overflow-x-auto border-b pb-1">
+      <Tabs value={activeTab ?? undefined} onValueChange={(v) => onSelect(String(v))}>
+        <TabsList variant="line" className="w-fit">
+          {tabs.map((tab) => {
+            const title = conversations.find((c) => c.id === tab.id)?.title || t("home.title");
+            const isActive = tab.id === activeTab;
+            return (
+              <TabsTrigger key={tab.id} value={tab.id} render={<div />} className="max-w-40 flex-none gap-1.5">
+                <MessageSquare aria-hidden className="size-3.5 shrink-0" />
+                <Tooltip>
+                  <TooltipTrigger render={<span className="min-w-0 truncate">{title}</span>} />
+                  <TooltipContent>{title}</TooltipContent>
+                </Tooltip>
+                <button
+                  type="button"
+                  aria-label={`${t("home.tabs.close")} - ${title}`}
+                  tabIndex={isActive ? 0 : -1}
+                  className="flex size-6 shrink-0 items-center justify-center rounded hover:bg-muted"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onClose(tab.id);
+                  }}
+                >
+                  <X aria-hidden className="size-3.5 text-muted-foreground" />
+                </button>
+              </TabsTrigger>
+            );
+          })}
+        </TabsList>
+      </Tabs>
+    </div>
+  );
+}
+
 /** 좌측 패널 (§비주얼 §24 §좌측 패널 · §7 §좌측 패널 · §비주얼 §34) — **shadcn `sidebar`**다.
  *
  *  **팝오버가 걷혔다**(`01e5293b`, 요구 `48b13597`). 걷힌 것은 **자리와 그릇 둘뿐**이고 줄의
@@ -1291,6 +1424,8 @@ function SidePanel({
   project,
   home,
   personas,
+  surface,
+  onSurfaceChange,
   runningIds,
   selected,
   noTurns,
@@ -1303,6 +1438,9 @@ function SidePanel({
   home: Panel;
   /** `새 스케줄` 다이얼로그의 페르소나 선택지(§7-4 결정 2) — `HomeUI`가 받은 값을 그대로 내린다. */
   personas: string[];
+  /** 좌측 2단의 위 단이 고른 표면(§11 결정 1 · §비주얼 §72 ①). */
+  surface: Surface;
+  onSurfaceChange: (s: Surface) => void;
   /** 지금 도는 session id 전부 — **줄의 오른쪽 끝을 정하는 값 하나다**(§24 §도는 대화의 표식).
    *  세 그룹이 같은 목록을 본다: 대화·스케줄 줄은 시각이 자리를 내주고, 워커 줄은 비어 있던 자리다. */
   runningIds: string[];
@@ -1369,11 +1507,42 @@ function SidePanel({
       collapsible="none"
       className="-my-6 -ml-6 h-auto w-64 shrink-0 border-r bg-surface"
     >
+      {/* 위 단 — 표면 넷(§11 결정 1 · §비주얼 §72 ①). **스크롤러 밖이다** — `SidebarContent`
+          안에 두면 아래 그룹이 길어질 때 이 넷이 화면에서 밀려 사라진다. 헤더 패딩은
+          `SidebarContent px-4`와 같은 열이 되도록 `px-4 py-2`로 부품 기본을 덮는다 - 안 덮으면
+          위 단 글자가 24, 아래 단 글자가 16으로 두 열이 된다. `gap-0`은 안에 든 것이
+          `SidebarMenu` 하나뿐이라 부품 기본(블록 사이 8px)이 필요 없어서다 - 줄 사이는
+          `SidebarMenu`의 `gap-0.5`가 이미 낸다. */}
+      <SidebarHeader className="gap-0 border-b px-4 py-2">
+        <SidebarMenu aria-label={t("home.title")}>
+          {SURFACES.map(({ id, labelKey, icon: Icon }) => (
+            <SidebarMenuItem key={id}>
+              <SidebarMenuButton
+                isActive={id === surface}
+                aria-current={id === surface ? "true" : undefined}
+                onClick={() => onSurfaceChange(id)}
+              >
+                <Icon aria-hidden />
+                <span>{t(labelKey)}</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          ))}
+        </SidebarMenu>
+      </SidebarHeader>
       {/* `gap-4`가 두 그룹 사이 간격(종전 flex 상자의 값 그대로), `py-2`가 면의 세로 패딩.
           부품 기본 `min-h-0 flex-1 overflow-auto`가 스크롤을 든다 — 종전 `overflow-y-auto`
           자리다. `no-scrollbar`도 같이 오는데 `globals.css`에 그 유틸이 없어(실측 0건)
-          생성되지 않는다: 스크롤바가 종전대로 보인다. */}
+          생성되지 않는다: 스크롤바가 종전대로 보인다.
+          **아래 단은 고른 표면의 목록 하나만 뜬다**(§11 §셸 §자리 표) — `홈 에이전트`면 종전
+          세 그룹 그대로다. 나머지 셋의 내용은 P366-5·6·8이 채운다 - 지금은 빈 상태 한 줄이다. */}
       <SidebarContent className="gap-4 px-4 py-2">
+        {surface !== "agent" && (
+          <SidebarGroup className="p-0">
+            <EmptyState text={t(`home.surface.${surface}.empty`)} />
+          </SidebarGroup>
+        )}
+        {surface === "agent" && (
+          <>
         <SidebarGroup className="p-0">
           {/* 그룹 머리 — §3 테이블 헤더 행의 세 값 그대로(`text-xs` · `font-medium` ·
               `--muted-foreground`). 부품 기본은 `h-8` + `text-sidebar-foreground/70`이고
@@ -1589,6 +1758,8 @@ function SidePanel({
           </SidebarMenu>
         </SidebarGroup>
       )}
+          </>
+        )}
       </SidebarContent>
     </Sidebar>
   );

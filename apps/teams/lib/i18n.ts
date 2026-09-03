@@ -2049,6 +2049,18 @@ export const ko: Record<string, string> = {
 
   "home.action.unknownProjectPrefix": "등록되지 않은 프로젝트입니다:",
 
+  // IDE 셸(§11 · §비주얼 §72) — 좌측 2단의 표면 넷 + 우측 탭 줄. 표면 셋(터미널·소스 컨트롤·
+  // 탐색기)의 내용은 P366-5·6·8이 채운다 — 이 회차는 자리와 빈 상태 문구뿐이다.
+  "home.surface.agent": "홈 에이전트",
+  "home.surface.terminal": "터미널",
+  "home.surface.scm": "소스 컨트롤",
+  "home.surface.explorer": "탐색기",
+  "home.surface.terminal.empty": "터미널 없음",
+  "home.surface.scm.empty": "변경 없음",
+  "home.surface.explorer.empty": "빈 디렉터리",
+  "home.tabs.empty": "열린 탭 없음",
+  "home.tabs.close": "닫기",
+
   // 세션 스트림(§0-16 §묶음 표 행 5 갈래, `33563f49`) — `components/session-stream.tsx` ·
   // `lib/interject.ts`. `lib/transcript.ts`는 화면 껍데기가 아니라 사건 데이터를 만드는 자리라
   // `transcriptLib.*`로 접두를 가른다(daf72662의 파일 접두 판단과 같다). en은 후속 티켓이 채운다.
@@ -4218,6 +4230,16 @@ export const en: Record<string, string> = {
 
   // `projectActions.unknownProjectPrefix`와 **같은 글자다** — 같은 거절을 액션 파일들이 각자 든다.
   "home.action.unknownProjectPrefix": "Not a registered project:",
+
+  "home.surface.agent": "Home agent",
+  "home.surface.terminal": "Terminal",
+  "home.surface.scm": "Source control",
+  "home.surface.explorer": "Explorer",
+  "home.surface.terminal.empty": "No terminals",
+  "home.surface.scm.empty": "No changes",
+  "home.surface.explorer.empty": "Empty directory",
+  "home.tabs.empty": "No open tabs",
+  "home.tabs.close": "Close",
 
   // 온톨로지 화면(§0-16 §발행 §묶음 표 행 12 갈래) — `ko`는 `2ef7a4e9`가 뽑았다.
   // **`protocols-ui.tsx`와 판박이인 자리(새 파일 · 편집기 · 이름변경 · 삭제 · 사이드바)는

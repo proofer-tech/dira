@@ -96,6 +96,7 @@ import {
   type ProjectConfig,
 } from "./projects.ts";
 import { isAwaiting, listTickets, reqTitle, statusOf, type Ticket } from "./queue.ts";
+import { mostRecentTab, openTab, closeTab as closeTabPure, type Tab } from "./tabs.ts";
 import { findTranscript, lastEvent, sessionIdOf, tailEvents, type StreamEvent } from "./transcript.ts";
 import { engineCell, listWorkers, workerOf, type Worker } from "./workers.ts";
 
@@ -348,7 +349,19 @@ function parseSchedule(v: unknown): Schedule | null {
  *  좌측 패널의 워커 세션을 고르면 그 session id가 여기 들어오고 `conversations`에는 줄이
  *  안 생긴다(§7 §고르면 홈 대화 스레드에 열린다 — 워커 세션이 사람 대화 20을 밀어내면 안 된다).
  *  `schedules`는 §7-2 — 화면·엔진 둘 다 안 읽는 프로젝트는 언제나 빈 배열이다. */
-export type Home = { conversations: Conversation[]; current: string | null; schedules: Schedule[] };
+/** 우측 탭 줄(§11 결정 1-2 · §비주얼 §72 ②) - 지금은 `chat` 탭뿐이다(터미널·파일·체크아웃은
+ *  P366-5·6·8이 늘린다). `lib/tabs.ts`가 재는 `Tab`을 그대로 다시 낸다 - 여기가 fs로 읽고 쓰는
+ *  자리다. */
+export type { Tab };
+
+export type Home = {
+  conversations: Conversation[];
+  current: string | null;
+  schedules: Schedule[];
+  /** §11 결정 2 - 옛 파일에는 이 칸이 없다(`parseHome`이 빈 배열로 흡수한다). */
+  tabs: Tab[];
+  activeTab: string | null;
+};
 
 /** §7: **프로젝트당 최근 20개.** 넘으면 오래된 줄이 이 파일에서 빠진다 —
  *  **트랜스크립트는 안 지운다**(`~/.claude`는 남의 디렉터리다). */
@@ -385,8 +398,8 @@ function parseHome(v: unknown): Home {
   if (typeof v === "string") {
     const id = uuid(v);
     return id
-      ? { conversations: [{ id, title: "", created: "" }], current: id, schedules: [] }
-      : { conversations: [], current: null, schedules: [] };
+      ? { conversations: [{ id, title: "", created: "" }], current: id, schedules: [], tabs: [], activeTab: null }
+      : { conversations: [], current: null, schedules: [], tabs: [], activeTab: null };
   }
   const o = (v && typeof v === "object" && !Array.isArray(v) ? v : {}) as Record<string, unknown>;
   const conversations = (Array.isArray(o.conversations) ? o.conversations : []).flatMap((r): Conversation[] => {
@@ -414,7 +427,23 @@ function parseHome(v: unknown): Home {
   // *"목록에 있는 줄만 가리킨다"*에서 넓혔다). 워커 세션을 고르면 대화 목록에 없는 값이 여기
   // 들어오기 때문이다. **무엇을 가리키는지는 읽는 쪽이 판정한다**(`pollHome`) — 대화도 워커
   // 세션도 아니면 화면은 대화 0건과 같이 뜬다(온보딩). 경로가 되는 값의 방어는 그대로 이 한 줄이다.
-  return { conversations, current: uuid(o.current) || null, schedules };
+  // **`tabs`·`activeTab`의 관문도 같다**(§11 결정 2) — 옛 파일에는 이 칸이 없고, 그때는 빈
+  // 목록·`null`로 물러난다(화면이 500을 안 낸다). `id`가 `sessionIdOf`를 못 지나면 그 탭은
+  // 없는 것으로 친다 — 사람이 파일을 손으로 고칠 수 있다는 전제가 대화·`current`와 같다.
+  const tabs = (Array.isArray(o.tabs) ? o.tabs : []).flatMap((r): Tab[] => {
+    const x = (r && typeof r === "object" ? r : {}) as Record<string, unknown>;
+    const id = uuid(x.id);
+    if (!id || x.kind !== "chat") return []; // 다른 kind는 아직 아무 티켓도 안 낸다(P366-5·6·8)
+    return [
+      {
+        id,
+        kind: "chat",
+        lastViewed: typeof x.lastViewed === "string" ? x.lastViewed : "",
+        ...(x.unsaved === true ? { unsaved: true as const } : {}),
+      },
+    ];
+  });
+  return { conversations, current: uuid(o.current) || null, schedules, tabs, activeTab: uuid(o.activeTab) || null };
 }
 
 /** 목록 읽기 — 화면이 대화 목록을 그리는 출처(§비주얼 §24). */
@@ -448,7 +477,14 @@ export async function readSessionId(projectId: string): Promise<string | null> {
 /** 목록 끝에 줄 하나를 붙이고 **오래된 쪽을 상한에서 자른다**(§7 상한 20). 새 줄은 항상 끝이라
  *  앞에서 자르는 것이 곧 "가장 오래된 줄이 빠진다"이고, 방금 연 대화는 잘릴 수 없다. */
 function append(home: Home, row: Conversation): Home {
-  return { ...home, conversations: [...home.conversations, row].slice(-LIMIT), current: row.id };
+  const now = new Date().toISOString();
+  return {
+    ...home,
+    conversations: [...home.conversations, row].slice(-LIMIT),
+    current: row.id,
+    tabs: openTab(home.tabs, row.id, "chat", now),
+    activeTab: row.id,
+  };
 }
 
 const openRow = (): Conversation => ({
@@ -497,8 +533,30 @@ export async function switchConversation(projectId: string, sessionId: string): 
     home.schedules.some((s) => s.session_id === sessionId) ||
     (await workerSessionsById(projectId)).some((w) => w.id === sessionId);
   if (!known) return false;
-  await writeHome(projectId, { ...home, current: sessionId });
+  const now = new Date().toISOString();
+  await writeHome(projectId, {
+    ...home,
+    current: sessionId,
+    tabs: openTab(home.tabs, sessionId, "chat", now),
+    activeTab: sessionId,
+  });
   return true;
+}
+
+/** 우측 탭 줄에서 탭 하나를 닫는다(§11 결정 1 - 탭 닫기). **대화 자체는 안 지운다** — 목록에서
+ *  빠질 뿐이고 옛 트랜스크립트·`conversations` 줄은 그대로 남는다(탭은 "지금 열어 둔 것"이고
+ *  대화 목록은 최근 20개의 이력이다 - 서로 다른 개념이다). 닫은 탭이 `activeTab`이면 남은 탭
+ *  중 가장 최근 본 것으로 넘어간다 - **지금은 탭 종류가 `chat` 하나뿐이라 `current`도 같이
+ *  옮긴다**(터미널·파일 탭이 붙으면 이 동기화가 갈릴 수 있다 - 그건 그 표면을 만드는 티켓의 몫). */
+export async function closeHomeTab(projectId: string, tabId: string): Promise<Home> {
+  const home = await readHome(projectId);
+  const tabs = closeTabPure(home.tabs, tabId);
+  const stillActive = home.activeTab !== tabId;
+  const activeTab = stillActive ? home.activeTab : mostRecentTab(tabs);
+  const current = stillActive ? home.current : activeTab;
+  const next: Home = { ...home, tabs, activeTab, current };
+  await writeHome(projectId, next);
+  return next;
 }
 
 // ── 워커 세션 목록 (§7 좌측 패널 — 요구 `48b13597` 답 3=(c)) ────────────────
@@ -1718,6 +1776,10 @@ export type HomeChunk = {
    *  이유도 같다 — `readHome`이 이미 `schedules`를 들고 있다(공짜다). `at`·`overdue`는
    *  `scheduleViews`가 이 폴링 시각 기준으로 얹는 값이라 화면은 시계를 다시 안 잰다. */
   schedules: ScheduleView[];
+  /** **우측 탭 줄**(§11 결정 1-2 · §비주얼 §72 ②). `readHome`이 이미 들고 있으므로 대화·스케줄과
+   *  같은 이유로 같은 응답에 담는다 - 화면이 아는 전부가 이 응답 하나라는 계약이 여기도 그대로다. */
+  tabs: Tab[];
+  activeTab: string | null;
   turns: Turn[];
   offset: number;
   /** 세션이 갈렸다(`새 대화` 뒤 첫 질문 · 첫 질문 실패 뒤 재시도) — 화면은 **갈아 끼운다** */
@@ -1814,7 +1876,7 @@ export async function pollHome(
   const chunk = (c: Omit<HomeChunk, "done">): HomeChunk => ({ ...c, done: pollDone(c) });
   const locale = await readLanguage();
   // 목록과 `current`를 **한 번에** 읽는다 — 화면이 둘 다 이 응답에서 받는다(위 `conversations`).
-  const { conversations, current, schedules } = await readHome(projectId);
+  const { conversations, current, schedules, tabs, activeTab } = await readHome(projectId);
   const workers = await workerSessionsById(projectId);
   const scheduleList = scheduleViews(schedules);
   // **`current`가 아무것도 안 가리킬 수 있다.** 보던 워커 세션의 티켓이 큐에서 사라지면 이름도
@@ -1866,6 +1928,8 @@ export async function pollHome(
       conversations,
       workers,
       schedules: scheduleList,
+      tabs,
+      activeTab,
       turns: [],
       offset: 0,
       reset,
@@ -1894,6 +1958,8 @@ export async function pollHome(
       conversations,
       workers,
       schedules: scheduleList,
+      tabs,
+      activeTab,
       turns: [],
       offset: at,
       reset,
@@ -1957,6 +2023,8 @@ export async function pollHome(
     conversations,
     workers,
     schedules: scheduleList,
+    tabs,
+    activeTab,
     turns,
     offset: r.offset,
     reset,
