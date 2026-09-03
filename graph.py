@@ -246,13 +246,13 @@ def extract_ontology(path, text, title_index):
             "excerpt": excerpt_of(strip_quotes(fm.get("description")) or first_body_line(lines, end))}
     nodes = [node]
     links = []
-    for h in block_list(lines, end, "근거"):
-        links.append({"source": name, "target": nfc(h), "rel": "근거"})
-    for item in block_list(lines, end, "구현"):
+    for h in block_list(lines, end, "evidence"):
+        links.append({"source": name, "target": nfc(h), "rel": "evidence"})
+    for item in block_list(lines, end, "impl"):
         src_path, _, desc = item.partition(" ")
         src_path = nfc(src_path)
         nodes.append({"id": src_path, "type": "소스 파일", "path": src_path, "excerpt": excerpt_of(desc)})
-        links.append({"source": name, "target": src_path, "rel": "구현"})
+        links.append({"source": name, "target": src_path, "rel": "impl"})
     for rel, target in ontology_links(lines, end):
         links.append({"source": name, "target": target, "rel": rel})
     links += [{"source": src, "target": tgt, "rel": rel} for src, tgt, rel in generic_edges(name, text, title_index)]

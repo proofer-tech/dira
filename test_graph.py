@@ -77,8 +77,8 @@ try:
     write(os.path.join(root, "ontology", "objects", "기능", "샘플기능.md"),
           "---\ntype: 기능\nname: 샘플기능\naliases: []\ntags: []\n"
           "description: 샘플 온톨로지 객체\n"
-          "근거:\n  - aaaaaaaa\n"
-          "구현:\n  - lib/sample.ts (설명)\n"
+          "evidence:\n  - aaaaaaaa\n"
+          "impl:\n  - lib/sample.ts (설명)\n"
           "links:\n  돌린다:\n    - 다른개념: \"[[다른개념]]\"\n---\n\n"
           "# 샘플기능\n본문에서 [[다른개념]]을 또 참조하고 `bbbbbbbb`도 인용한다\n")
     write(os.path.join(root, "personas", "dev", "memory", "개념.md"),
@@ -105,8 +105,8 @@ try:
     assert any(e["source"] == "11111111" and e["target"] == "bbbbbbbb" for e in rels.get("인용", [])), rels
     assert any(e["source"] == "11111111" and e["target"] == "샘플기능" for e in rels.get("위키링크", [])), rels
     assert any(e["source"] == "11111111" and e["target"] == "DESIGN#그래프 규칙" for e in rels.get("절참조", [])), rels
-    assert any(e["source"] == "샘플기능" and e["target"] == "aaaaaaaa" for e in rels.get("근거", [])), rels
-    assert any(e["source"] == "샘플기능" and e["target"] == "lib/sample.ts" for e in rels.get("구현", [])), rels
+    assert any(e["source"] == "샘플기능" and e["target"] == "aaaaaaaa" for e in rels.get("evidence", [])), rels
+    assert any(e["source"] == "샘플기능" and e["target"] == "lib/sample.ts" for e in rels.get("impl", [])), rels
     assert any(e["source"] == "샘플기능" and e["target"] == "다른개념" for e in rels.get("돌린다", [])), rels
     assert any(n["id"] == "lib/sample.ts" and n["type"] == "소스 파일" for n in g["nodes"]), g["nodes"]
     # 중복 제목 -> 뒤엣것은 #2로 갈린다(§노드와 간선 - 같은 제목 54쌍 실측과 같은 처리)
@@ -290,7 +290,7 @@ try:
     assert not any(n["id"] == "밖개념" for n in og2["nodes"]), \
         "TICKET_ONTOLOGY 없이도 밖 온톨로지 객체가 남았다: {}".format(og2["nodes"])
 
-    print("PASS 노드6종-간선(deps-req-archives-awaiting-인용-위키링크-절참조-근거-구현-links)-"
+    print("PASS 노드6종-간선(deps-req-archives-awaiting-인용-위키링크-절참조-evidence-impl-links)-"
           "중복제목#N-검증①(표준라이브러리)-검증⑦(큐 무수정)-증분(무변경 0-1장 수정 1-삭제 반영)-"
           "검증⑧(graph.json 없어도 tick.sh 무WARN)-시드매칭(exact우선-무관어배제-빈결과)-"
           "예산절단(안넘김-먼노드부터자름)-query/path/explain CLI-"
