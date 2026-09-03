@@ -15,7 +15,8 @@ import { notFound } from "next/navigation";
 import { HomeUI } from "@/components/home-ui";
 import { pollHome } from "@/lib/home-agent";
 import { t } from "@/lib/i18n";
-import { getProject, readLanguage } from "@/lib/projects";
+import { getProject, listPersonas, readLanguage, resolveConfig } from "@/lib/projects";
+import { listTickets } from "@/lib/queue";
 import { exampleWorkers, listWorkers } from "@/lib/workers";
 
 export const dynamic = "force-dynamic";
@@ -34,10 +35,19 @@ export default async function Home({ params }: { params: Promise<{ project: stri
   // 갈리고, 워커 이름은 `NAME_RE`라 코드가 그걸 맞힐 수 없다(§24).
   const [active, other] = exampleWorkers(await listWorkers(project.root));
 
+  // 홈이 고르는 페르소나 선택지(§7-4 결정 1) — **보드의 발행 다이얼로그·티켓 상세 편집 폼과
+  // 같은 규칙**이다: `listPersonas` 결과 중 `body !== null`(= `PROFILE.md`가 있다).
+  const config = await resolveConfig(project);
+  const tickets = await listTickets(project.root, config);
+  const personas = (await listPersonas(config.personas, tickets))
+    .filter((p) => p.body !== null)
+    .map((p) => p.name);
+
   return (
     <HomeUI
       project={id}
       initial={await pollHome(id, null, 0)}
+      personas={personas}
       examples={
         active
           ? [

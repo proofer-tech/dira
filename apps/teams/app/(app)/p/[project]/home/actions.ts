@@ -141,9 +141,13 @@ export async function stopHome(projectId: string): Promise<boolean> {
  *  `중지`의 일이고(§7), 이 함수가 하는 일은 다음 질문이 새 세션이 되게 하는 것뿐이다.
  *
  *  **돌려주는 것은 폴링 한 번**이다(아래 `switchHome`과 같은 모양) — 화면이 새 목록과 빈 스레드를
- *  이 응답 하나로 갈아 끼운다. 새 대화에는 트랜스크립트가 아직 없으므로 `turns`가 0건이다. */
-export async function clearHome(projectId: string): Promise<HomeChunk> {
-  await newConversation((await required(projectId)).id);
+ *  이 응답 하나로 갈아 끼운다. 새 대화에는 트랜스크립트가 아직 없으므로 `turns`가 0건이다.
+ *
+ *  **페르소나 선택도 이 길을 탄다**(§7-4 결정 2). 사람이 `새 대화`를 누르면 기본값 그대로 열리고,
+ *  아직 잠기지 않은(턴 0건) 빈 대화에서 셀렉트가 값을 바꾸면 이 함수를 다시 불러 같은 줄의
+ *  페르소나만 갈아 끼운다 — `newConversation`이 두 경우를 한 판정으로 묶는다. */
+export async function clearHome(projectId: string, persona?: string): Promise<HomeChunk> {
+  await newConversation((await required(projectId)).id, persona);
   return pollHomeAnswer(projectId, null, 0);
 }
 
@@ -175,10 +179,11 @@ export async function createSchedule(
   when: string,
   prompt: string,
   locale: Locale = DEFAULT_LOCALE,
+  persona?: string,
 ): Promise<{ ok: true; schedules: ScheduleView[] } | { ok: false; error: string }> {
   try {
     const project = await required(projectId, locale);
-    const row = await createScheduleRow(project.id, when, prompt);
+    const row = await createScheduleRow(project.id, when, prompt, persona);
     if (!row) return { ok: false, error: t(locale, "home.schedule.invalidWhenOrPrompt") };
     return { ok: true, schedules: await readScheduleViews(project.id) };
   } catch (e) {

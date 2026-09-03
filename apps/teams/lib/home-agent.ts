@@ -187,6 +187,9 @@ export type Conversation = {
   /** 세션이 스스로 말한 모델(§7 §세션 정보 한 줄 — 요구 `8db4d0f6`). 첫 성공한 턴이 적고
    *  그 뒤로는 안 바뀐다(모델 지정이 없어 세션 내내 고정이다). 아직 성공한 턴이 없으면 없다 */
   model?: string;
+  /** 이 대화가 도는 페르소나 이름(§7-4). **대화 단위로 고정된다** — 첫 질문이 정하고 그 뒤로는
+   *  안 갈린다(결정 2). 없으면 `HOME_PERSONA`다(옛 줄·옛 형식이 archive-manager로 뜨는 근거) */
+  persona?: string;
 };
 
 // ── 스케줄 (§7-2) — 좌측 패널 둘째 그룹이 시각에 홈 에이전트를 깨운다 ───────────
@@ -301,6 +304,9 @@ export type Schedule = {
   session_id: string;
   /** 마지막으로 판정한 예정 시각과 그때의 실제 시각 — <돌았나>를 담지 않는다(§7-2) */
   last?: { due: string; at: string };
+  /** 이 스케줄이 깨울 때 도는 페르소나(§7-4 결정 2 §스케줄에도 같은 칸이 붙는다). 없으면
+   *  `HOME_PERSONA`다 */
+  persona?: string;
 };
 
 /** 패널 줄이 그리는 값 — `Schedule`에 `nextScheduleDue`의 결과를 얹는다. 화면(client)은
@@ -334,6 +340,7 @@ function parseSchedule(v: unknown): Schedule | null {
     prompt: o.prompt,
     session_id: sessionIdOf({ session_id: typeof o.session_id === "string" ? o.session_id : "" }) ?? "",
     ...(last ? { last } : {}),
+    ...(typeof o.persona === "string" && o.persona ? { persona: o.persona } : {}),
   };
 }
 
@@ -393,6 +400,7 @@ function parseHome(v: unknown): Home {
         created: typeof c.created === "string" ? c.created : "",
         ...(c.fresh === true ? { fresh: true as const } : {}),
         ...(typeof c.model === "string" ? { model: c.model } : {}),
+        ...(typeof c.persona === "string" && c.persona ? { persona: c.persona } : {}),
       },
     ];
   });
@@ -452,13 +460,24 @@ const openRow = (): Conversation => ({
 
 /** 화면의 `새 대화` — **지우는 것이 아니라 여는 것이다**(§7 — 요구 `c5d22429`로 뒤집혔다).
  *  옛 대화는 목록에 남고 옛 트랜스크립트도 그대로다. 세션은 아직 안 뜬다(`fresh`) —
- *  뜨는 것은 이 대화의 첫 질문이다. */
-export async function newConversation(projectId: string): Promise<string> {
+ *  뜨는 것은 이 대화의 첫 질문이다.
+ *
+ *  **`persona`는 §7-4 결정 2의 선택 칸이 부르는 자리이기도 하다.** 같은 빈 줄이 이미 있으면
+ *  (아직 첫 질문 전) 새 줄을 또 안 열고 그 줄의 페르소나만 갈아 끼운다 — 셀렉트가 값을 바꿀
+ *  때마다 이 함수를 다시 부르는 것이 곧 "잠기기 전까지는 다시 고를 수 있다"의 구현이다. */
+export async function newConversation(projectId: string, persona: string = HOME_PERSONA): Promise<string> {
   const home = await readHome(projectId);
   // 아직 아무것도 안 물은 대화를 또 열지 않는다 — 두 번 누르면 빈 줄이 둘이고, 상한 20이 그걸로 찬다
   const empty = home.conversations.find((c) => c.id === home.current && c.fresh && !c.title);
-  if (empty) return empty.id;
-  const row = openRow();
+  if (empty) {
+    if ((empty.persona ?? HOME_PERSONA) === persona) return empty.id;
+    await writeHome(projectId, {
+      ...home,
+      conversations: home.conversations.map((c) => (c.id === empty.id ? { ...c, persona } : c)),
+    });
+    return empty.id;
+  }
+  const row: Conversation = { ...openRow(), persona };
   await writeHome(projectId, append(home, row));
   return row.id;
 }
@@ -677,7 +696,7 @@ const QUESTION_MARK = "\n## 질문\n\n";
 /** 홈 에이전트가 도는 페르소나(§5-3). **큐가 고르는 값이 아니다** — 워커 쪽은 티켓 fm의
  *  `persona:`가 고르고 여기는 하나로 고정이다(§5-3 §입구가 둘이고 PROFILE은 한 벌이다:
  *  두 입구가 **같은 세 파일**을 읽고 갈리는 것은 도구와 커밋 권한뿐이다). */
-const HOME_PERSONA = "archive-manager";
+export const HOME_PERSONA = "archive-manager";
 
 /** 페르소나 세 조각을 **`tick.sh:265`와 같은 순서**로 읽어 한 블록으로 만든다 —
  *  `PROFILE.md` → `skills.md` → `memory/*.md`(**한 단계** 글롭 · 이름 오름차순).
@@ -892,8 +911,9 @@ export async function ask(
   live: Live = newLive(),
   /** 질문이 들어갈 세션을 **밖에서 정해 온다.** `startAsk`가 `runs`에 등록할 키가 이 값이라
    *  그쪽이 `beginTurn`을 먼저 부른다(§7 §서버가 갈리는 자리 넷 ②). 안 주면 여기서 정한다 —
-   *  이 함수를 그대로 부르는 자리(테스트)가 종전과 같이 돈다. */
-  turn?: { sessionId: string; resumed: boolean },
+   *  이 함수를 그대로 부르는 자리(테스트)가 종전과 같이 돈다. `persona`가 없으면(옛 호출부·
+   *  테스트) `HOME_PERSONA`다 — §7-4 결정 1의 기본값이 이 자리에서도 정본이다. */
+  turn?: { sessionId: string; resumed: boolean; persona?: string },
 ): Promise<Answer> {
   // **동기로 판정한다** — `readLanguage()`(fs 읽기)를 아직 안 문다: 실패 ①(spawn)은 이 자리에서
   // 즉시 끝나야 하는 계약이다(`home-agent.test.ts` "한 대화에 한 질문" — 폴링 없이 그 자리에서
@@ -924,18 +944,19 @@ export async function ask(
     };
   }
 
-  const { sessionId, resumed } = turn ?? (await beginTurn(project.id, q));
-  // 페르소나·온톨로지 둘 다 워커 스크립트가 옮길 수 있다(`TICKET_PERSONAS`·`TICKET_ONTOLOGY`) —
-  // 기본값을 여기 다시 쓰지 않고 `resolveConfig`가 해석한 값을 그대로 쓴다(고정 함수를 안 둔다 —
-  // DESIGN.md §5-3). 못 읽으면 페르소나 없이, 온톨로지는 기본 자리(`<root>/ontology`)로 간다
-  // (§7: WARN 없다 — 큐를 못 읽는 사건은 `snapshotOf`가 이미 사유를 담아 알려 준다).
+  const { sessionId, resumed, persona } = turn ?? (await beginTurn(project.id, q));
+  // 페르소나 디렉터리·온톨로지 둘 다 워커 스크립트가 옮길 수 있다(`TICKET_PERSONAS`·
+  // `TICKET_ONTOLOGY`) — 기본값을 여기 다시 쓰지 않고 `resolveConfig`가 해석한 값을 그대로
+  // 쓴다(고정 함수를 안 둔다 — DESIGN.md §5-3). 못 읽으면 페르소나 없이, 온톨로지는 기본 자리
+  // (`<root>/ontology`)로 간다(§7: WARN 없다 — 큐를 못 읽는 사건은 `snapshotOf`가 이미 사유를
+  // 담아 알려 준다). **이 대화가 고른 페르소나 이름**(§7-4 결정 1)은 `persona`가 든다.
   const config = await resolveConfig(project).catch(() => null);
   const ontology = config?.ontology ?? path.join(project.root, "ontology");
   const prompt = buildPrompt(
     await snapshotOf(project),
     q,
     ontology,
-    config?.personas ? await personaBlock(config.personas) : "",
+    config?.personas ? await personaBlock(config.personas, persona ?? HOME_PERSONA) : "",
   );
   const locale = await readLanguage(); // 위 §언어 층 둘 — 못 읽으면 `ko`로 흡수한다(같은 판정)
 
@@ -965,23 +986,32 @@ export async function ask(
  *  `current`가 없으면(첫 질문 · 파일이 빈 상태) 여기서 줄을 연다 — 사람이 `새 대화`를 누르지
  *  않고 그냥 물었을 때의 경로다. **제목은 첫 질문의 첫 줄**이고(`reqTitle` — 요구 접수 모드와
  *  같은 자, 80자에서 `…`) 이미 제목이 있는 대화는 안 건드린다: 제목은 그 대화의 첫 질문이지
- *  마지막 질문이 아니다. */
-async function beginTurn(projectId: string, question: string): Promise<{ sessionId: string; resumed: boolean }> {
+ *  마지막 질문이 아니다.
+ *
+ *  **`persona`는 이 줄이 아직 없을 때만 쓰인다**(§7-4 결정 2 — 대화 단위로 고정된다). 이미 있는
+ *  줄(`row.persona`)이 이기고, 인자는 `newConversation`을 거치지 않고 곧장 물은 첫 질문(빈
+ *  파일 · `새 대화` 없이 바로 물은 자리)의 기본값이다. */
+async function beginTurn(
+  projectId: string,
+  question: string,
+  persona: string = HOME_PERSONA,
+): Promise<{ sessionId: string; resumed: boolean; persona: string }> {
   const home = await readHome(projectId);
   const cur = home.conversations.find((c) => c.id === home.current);
   // **대화 목록에 없는 `current` = 워커 세션이다**(§7 좌측 패널 — 답 1(b)·2(c)). 그 sid를 그대로
   // 이어붙이고 **파일을 한 바이트도 안 건드린다**: `conversations`에 줄이 생기면 워커 세션이
   // 사람 대화 20을 밀어낸다. 제목도 안 쓴다 — 이 줄의 이름은 큐에 있다(티켓 제목).
-  if (!cur && home.current) return { sessionId: home.current, resumed: true };
+  if (!cur && home.current) return { sessionId: home.current, resumed: true, persona: HOME_PERSONA };
   const row = cur ?? openRow();
-  const next: Conversation = { ...row, title: row.title || reqTitle(question) };
+  const chosen = row.persona ?? persona;
+  const next: Conversation = { ...row, title: row.title || reqTitle(question), persona: chosen };
   await writeHome(
     projectId,
     cur
       ? { ...home, conversations: home.conversations.map((c) => (c.id === cur.id ? next : c)) }
       : append(home, next),
   );
-  return { sessionId: next.id, resumed: !next.fresh };
+  return { sessionId: next.id, resumed: !next.fresh, persona: chosen };
 }
 
 /** 세션을 **여는** 질문이 끝난 뒤. 성공이면 그 줄은 이제 열린 세션이다(다음 질문은 `--resume`).
@@ -995,7 +1025,7 @@ async function settleFirstTurn(projectId: string, sessionId: string, ok: boolean
   const row = home.conversations.find((c) => c.id === sessionId);
   if (!row) return; // 도는 사이에 `새 대화`·전환이 있었다 — 남의 줄을 고치지 않는다
   const next: Conversation = ok
-    ? { id: row.id, title: row.title, created: row.created }
+    ? { id: row.id, title: row.title, created: row.created, ...(row.persona ? { persona: row.persona } : {}) }
     : { ...row, id: randomUUID() };
   // **`runs`의 키가 그 줄을 따라간다**(§7 §서버가 갈리는 자리 넷 ①: 키가 session id다).
   // 실패한 첫 턴은 여기서 id를 갈므로, 안 걸어 두면 그 대화를 여는 폴링이 `runs.get(<새 id>)`에서
@@ -1492,6 +1522,10 @@ export async function startAsk(
   project: Pick<Project, "id" | "name" | "root">,
   question: string,
   locale: Locale = DEFAULT_LOCALE,
+  /** §7-4 결정 2 — **첫 질문에서 이 대화의 줄이 아직 없을 때만** 쓰인다(`beginTurn`이
+   *  이미 있는 줄의 `persona`를 이긴다). 화면은 `newConversation`으로 먼저 골라 두는 것이
+   *  보통 경로이고, 이 인자는 그 걸음 없이 바로 물은 첫 질문의 기본값이다. */
+  persona: string = HOME_PERSONA,
 ): Promise<Answer | null> {
   const q = question.trim();
   if (!q) {
@@ -1514,7 +1548,7 @@ export async function startAsk(
     };
   }
   // 여기까지가 마지막 `await`다 — 아래 **검사와 등록 사이에는 없다**(머리 주석).
-  const turn = await beginTurn(project.id, q);
+  const turn = await beginTurn(project.id, q, persona);
   if (runs.has(turn.sessionId)) {
     // **같은 대화의 둘째 질문만** 실패 ④다(§24 문구 무수정 — 다른 대화는 여기까지 안 온다).
     // `running`(= `result`가 비었나)이 아니라 **맵에 있나**로 보는 것이 여기서는 맞다: 끝났는데
@@ -1543,11 +1577,24 @@ export async function startAsk(
  *  §단발과 주기가 한 칸에 담긴다). 빈 문장이나 못 읽는 `when`은 **줄을 안 만들고 `null`을 낸다** —
  *  빈 문장은 아무 말도 안 하는 회차를 영영 반복하고, 못 읽는 `when`은 `parseSchedule`의 관문에
  *  걸려 다음 읽기부터 없는 줄이 된다(사람이 방금 만든 줄이 새로고침하면 사라지는 유령이 된다). */
-export async function createSchedule(projectId: string, when: string, prompt: string): Promise<Schedule | null> {
+export async function createSchedule(
+  projectId: string,
+  when: string,
+  prompt: string,
+  /** §7-4 결정 2 §스케줄에도 같은 칸이 붙는다 — 없으면 기본값이다. */
+  persona: string = HOME_PERSONA,
+): Promise<Schedule | null> {
   const p = prompt.trim();
   if (!p || !isValidWhen(when)) return null;
   const home = await readHome(projectId);
-  const row: Schedule = { id: randomUUID(), created: new Date().toISOString(), when, prompt: p, session_id: "" };
+  const row: Schedule = {
+    id: randomUUID(),
+    created: new Date().toISOString(),
+    when,
+    prompt: p,
+    session_id: "",
+    persona,
+  };
   await writeHome(projectId, { ...home, schedules: [...home.schedules, row] });
   return row;
 }
@@ -1618,7 +1665,7 @@ async function runScheduleTurn(
   // §7-2 §회차의 질문 — `prompt`는 고쳐 쓰지 않는다. 붙는 것은 한 줄뿐이고 시각 둘 다 인자로
   // 왔다(`buildPrompt`는 이 문자열을 그대로 `question`으로 받아 여전히 순수하다).
   const q = `${schedule.prompt}\n\n스케줄이 깨웠다 - 예정 시각 ${due} - 실제 시각 ${at}`;
-  void ask(project, q, entry.live, { sessionId, resumed }).then(
+  void ask(project, q, entry.live, { sessionId, resumed, persona: schedule.persona }).then(
     (a) => (entry.result = a),
     (e: Error) => (entry.result = { ok: false, reason: "other", output: e.message, sessionId: "", resumed: false }),
   );

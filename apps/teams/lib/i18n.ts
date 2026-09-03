@@ -1959,6 +1959,8 @@ export const ko: Record<string, string> = {
   // home/actions.ts. en은 `c357313f`가 채운다.
   "home.title": "홈",
   "home.conversationsLabel": "대화",
+  // 페르소나 선택 칸의 라벨(§7-4) — 대화 스레드 위와 `새 스케줄` 다이얼로그 둘 다 이 키를 쓴다.
+  "home.personaLabel": "페르소나",
   "home.questionLabel": "질문",
   "home.answerLabel": "답",
   "home.newConversation": "새 대화",
@@ -4125,6 +4127,7 @@ export const en: Record<string, string> = {
   // 설명은 위 `ko` 쪽 주석에 있고, 여기서는 **어순이 갈리는 조립 자리**만 다시 적는다.
   "home.title": "Home",
   "home.conversationsLabel": "Conversations",
+  "home.personaLabel": "Persona",
   "home.questionLabel": "Question",
   "home.answerLabel": "Answer",
   "home.newConversation": "New conversation",

@@ -388,6 +388,13 @@ test("toolFlags — 네 조각과 경로 스코프 여섯 (89962e56 · 7e35d300 
   assert.ok(!scope.includes("Write") && !scope.includes("Edit"));
   // ⑥ `--dangerously-skip-permissions`(스코프를 통째로 끈다)는 §7이 여전히 안 쓰는 것이다 — §7-3도 안 뒤집었다
   assert.ok(!flags.some((f) => f.includes("dangerously")));
+  // ⑦ §7-4 결정 3 — `toolFlags`는 이름 두 개(`root` · `ontologyDir`)만 받는다. 고른 페르소나가
+  // 섞일 자리 자체가 없다는 것을 함수 길이로도 고정하고(호출부에 셋째 인자가 없다), 흔한
+  // 페르소나 이름이 반환값 어디에도 안 나오는 것으로 한 번 더 잰다.
+  assert.strictEqual(toolFlags.length, 2);
+  for (const name of ["pm", "developer", "qa", "archive-manager"]) {
+    assert.ok(!flags.some((f) => f.includes(name)), `페르소나 이름 '${name}'이 toolFlags 반환값에 섞였다`);
+  }
 });
 
 test("toolFlags — 재정의된 온톨로지는 큐 밖 절대경로가 스코프에 뜨고 나머지 다섯은 그대로다 (요구 `85114387` §결정 4)", () => {
@@ -830,6 +837,79 @@ echo '{"type":"result","is_error":false,"result":"답"}'
     delete process.env.LANG_LOG;
     await setLanguage("ko"); // 기본값으로 되돌린다 — 다음 테스트가 이 로케일을 물려받지 않게
   }
+});
+
+test("ask — 대화가 고른 페르소나가 프롬프트에 실리고 대화 단위로 고정된다 (§7-4)", async () => {
+  const root = path.join(mkdtempSync(path.join(tmpdir(), "ha-persona-")), ".dira");
+  tmps.push(path.dirname(root));
+  mkdirSync(path.join(root, "workers"), { recursive: true });
+  const personas = path.join(root, "personas");
+  mkdirSync(path.join(personas, "pm"), { recursive: true });
+  writeFileSync(path.join(personas, "pm", "PROFILE.md"), "나는 pm이다.\n");
+  mkdirSync(path.join(personas, "archive-manager"), { recursive: true });
+  writeFileSync(path.join(personas, "archive-manager", "PROFILE.md"), "나는 아카이브 담당이다.\n");
+
+  const bin = mkdtempSync(path.join(tmpdir(), "ha-bin-"));
+  tmps.push(bin);
+  const log = path.join(LOCAL, "persona-argv.log");
+  writeFileSync(
+    path.join(bin, "claude"),
+    `#!/bin/sh\nprintf '%s\\n' "$*" >> "${log}"\necho '{"type":"result","is_error":false,"result":"답"}'\n`,
+    { mode: 0o755 },
+  );
+
+  const project = { id: "persona-test", name: "큐", root };
+  const path0 = process.env.PATH;
+  process.env.PATH = `${bin}:${path0 ?? ""}`;
+  try {
+    // ① `pm`을 고르고 새 대화를 연 뒤 물으면 그 프로필이 실린다 — archive-manager는 안 실린다
+    await newConversation(project.id, "pm");
+    const first = await ask(project, "첫 질문");
+    assert.strictEqual(first.ok, true, first.output);
+    const argv1 = readFileSync(log, "utf8");
+    assert.match(argv1, /당신은 이 프로젝트의 'pm'입니다/);
+    assert.ok(argv1.includes("나는 pm이다."));
+    assert.ok(!argv1.includes("나는 아카이브 담당이다."));
+
+    // ② **대화 단위로 고정된다** — 둘째 질문(같은 대화)도 여전히 pm이고, 저장된 줄도 안 갈린다
+    writeFileSync(log, "");
+    const second = await ask(project, "둘째 질문");
+    assert.strictEqual(second.resumed, true);
+    const argv2 = readFileSync(log, "utf8");
+    assert.match(argv2, /당신은 이 프로젝트의 'pm'입니다/);
+    assert.strictEqual((await readHome(project.id)).conversations[0]?.persona, "pm");
+
+    // ③ `새 대화`를 고르지 않고 페르소나도 안 고르면 기본값(`archive-manager`)이다
+    writeFileSync(log, "");
+    await newConversation(project.id);
+    const third = await ask(project, "셋째 질문");
+    assert.strictEqual(third.ok, true, third.output);
+    const argv3 = readFileSync(log, "utf8");
+    assert.match(argv3, /당신은 이 프로젝트의 'archive-manager'입니다/);
+
+    // ④ 페르소나 없이 저장된 옛 줄(형식 이전)도 archive-manager로 돈다 — 던지지 않는다
+    const home = await readHome(project.id);
+    const raw = JSON.parse(readFileSync(sessionsPath(), "utf8"));
+    const oldId = home.conversations[0]!.id;
+    delete raw[project.id].conversations.find((c: { id: string }) => c.id === oldId).persona;
+    raw[project.id].current = oldId;
+    writeFileSync(sessionsPath(), JSON.stringify(raw));
+    writeFileSync(log, "");
+    const fourth = await ask(project, "넷째 질문");
+    assert.strictEqual(fourth.ok, true, fourth.output);
+    const argv4 = readFileSync(log, "utf8");
+    assert.match(argv4, /당신은 이 프로젝트의 'archive-manager'입니다/);
+  } finally {
+    process.env.PATH = path0;
+  }
+});
+
+test("createSchedule — 페르소나를 저장하고 없으면 기본값이다 (§7-4 결정 2)", async () => {
+  await newConversation("sched-persona"); // 파일을 만든다
+  const withPersona = await createSchedule("sched-persona", "0 9 * * *", "매일 점검", "pm");
+  assert.strictEqual(withPersona?.persona, "pm");
+  const withDefault = await createSchedule("sched-persona", "0 10 * * *", "매일 점검 둘");
+  assert.strictEqual(withDefault?.persona, "archive-manager");
 });
 
 test("FLUENT_KO — tick.sh의 FLUENTKO 히어독 본문과 바이트로 같다 (엔진 레포를 못 찾으면 건너뛴다)", (t) => {

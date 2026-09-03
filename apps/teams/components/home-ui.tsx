@@ -161,6 +161,11 @@ const EXAMPLE_KEYS = ["home.example.ticketsWhy", "home.example.summarizeProtocol
  *  종전에는 걷힌 ①이 이겨서 그 창을 가려 줬고, 그것만 걷으면 화면이 거짓말을 한다. */
 const NO_TURNS_KEY = "home.newConversationLocked";
 
+/** `home-agent.ts`의 `HOME_PERSONA`와 같은 값 — 그 상수를 이 파일로 못 가져온다(그 모듈은
+ *  `node:fs`가 섞인 서버 파일이라 클라이언트 번들이 안 된다 — `Panel` 타입 주석과 같은 근거).
+ *  대화·스케줄이 저장한 `persona`가 없을 때 화면이 보여줄 기본값이 이 문자열이다(§7-4 결정 1). */
+const DEFAULT_PERSONA = "archive-manager";
+
 /** 좌측 패널이 그리는 것 전부 — **`home-sessions.json`의 형식(`Home`) + 큐에서 파생된 워커 세션**
  *  (§7 좌측 패널). 파일 쪽 타입에 워커 목록을 얹지 않는 이유는 저장하지 않기 때문이다: 저건
  *  우리가 쓰는 파일의 모양이고 이 목록은 매 응답 큐에서 다시 파생된다. `current` 한 칸이
@@ -215,12 +220,17 @@ export function HomeUI({
   project,
   initial,
   examples,
+  personas,
 }: {
   project: string;
   /** 온보딩 예시 **앞의 둘**(§24) — 서버가 `listWorkers`로 만든 문장이고, 워커 0개면 빈 배열이다.
    *  `initial`(폴링 응답)에 안 얹혀 있는 것이 요점이다: 이 값은 페이지를 연 시점에 굳는다. */
   examples: string[];
   initial: HomeChunk;
+  /** 홈이 고를 수 있는 페르소나 이름 전부(§7-4 결정 1) — `PROFILE.md`를 든 이름만이다.
+   *  `examples`와 같은 이유로 서버 렌더 한 번이 굳힌다(폴링에 안 실린다 — 목록이 바뀌는 것은
+   *  사람이 `personas/` 화면에서 파일을 고칠 때뿐이라 새로고침이면 충분하다). */
+  personas: string[];
 }) {
   const t = useT();
   const locale = useLocale();
@@ -483,6 +493,15 @@ export function HomeUI({
   // 그 칸을 뺀다.
   const conv = home.conversations.find((c) => c.id === home.current);
 
+  // **홈이 도는 페르소나**(§7-4 결정 1·2). 회차 0건인 스케줄을 보는 동안은 그 스케줄의 값을
+  // 그대로 보여준다(그 줄의 페르소나는 만들 때 정해지고 여기서 못 바꾼다 — 스케줄 다이얼로그가
+  // 그 선택 칸을 따로 든다). 그 밖에는 지금 보는 대화의 값이고, 둘 다 없으면 기본값이다.
+  const personaChoice = pendingSchedule?.persona ?? conv?.persona ?? DEFAULT_PERSONA;
+  // **잠기는 조건은 `새 대화`를 잠그는 조건과 같다** — 턴이 있거나(첫 질문 뒤로는 대화 단위로
+  // 고정된다) 도는 중이면 다시 못 고른다. 회차 0건 스케줄을 보는 동안도 잠긴다: 그 값은 이
+  // 셀렉트가 아니라 스케줄을 만들 때 정해진 것이다.
+  const personaLocked = pendingSchedule !== null || turns.length > 0 || busy;
+
   /** 질문 하나를 띄운다. **입력칸과 `다시 답하기`가 같은 경로다**(§24 — 후자가 하는 일이
    *  "옛 질문을 입력칸에 넣고 보내는 것"과 같다). 갈리는 것은 칸을 비우느냐뿐이라 그쪽은 밖에 둔다. */
   const run = async (question: string, paths: string[] = []) => {
@@ -625,6 +644,7 @@ export function HomeUI({
           <SidePanel
             project={project}
             home={home}
+            personas={personas}
             runningIds={runningIds}
             // 세 그룹을 통틀어 지금 떠 있는 표식 하나(§비주얼 §62 (2) §선택 표식 — "표식은 세
             // 그룹을 통틀어 한 줄에만 든다"). 회차 0건 스케줄을 보는 동안은 `home.current`가
@@ -684,6 +704,33 @@ export function HomeUI({
             onboarding && "justify-center",
           )}
         >
+          {/* 페르소나 선택 칸(§7-4 결정 1·2) — **넷째 자식이지만 상시 렌더라 위 §자식이 언제나
+              셋 계약을 안 건드린다**(조건부로 빠지는 자리가 아니다). 잠기는 것은 셀렉트 하나뿐
+              이고(`disabled`) 대화·스레드·폼·예시는 이 칸과 무관하게 그대로 돈다. */}
+          <div className="flex shrink-0 items-center gap-2">
+            <Label htmlFor="home-persona" className="text-xs text-muted-foreground">
+              {t("home.personaLabel")}
+            </Label>
+            <Select
+              value={personaChoice}
+              disabled={personaLocked}
+              onValueChange={(v) => {
+                if (typeof v === "string" && v) void (async () => apply(await clearHome(project, v)))();
+              }}
+            >
+              <SelectTrigger id="home-persona" size="sm" className="w-44 text-xs">
+                <SelectValue>{personaChoice}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {personas.map((p) => (
+                  <SelectItem key={p} value={p}>
+                    {p}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           {pendingSchedule ? (
             /* 회차 0건인 스케줄(§비주얼 §62 (6)) — 대화 0건과 **자리는 같고 그릇은 다르다**:
                `<EmptyState>`를 쓴다(§24의 셋째 예외 — "한 줄로는 무엇을 물어볼 수 있는지를 못
@@ -1243,6 +1290,7 @@ const SCHEDULE_TIME = "text-xs text-muted-foreground tabular-nums group-hover/me
 function SidePanel({
   project,
   home,
+  personas,
   runningIds,
   selected,
   noTurns,
@@ -1253,6 +1301,8 @@ function SidePanel({
 }: {
   project: string;
   home: Panel;
+  /** `새 스케줄` 다이얼로그의 페르소나 선택지(§7-4 결정 2) — `HomeUI`가 받은 값을 그대로 내린다. */
+  personas: string[];
   /** 지금 도는 session id 전부 — **줄의 오른쪽 끝을 정하는 값 하나다**(§24 §도는 대화의 표식).
    *  세 그룹이 같은 목록을 본다: 대화·스케줄 줄은 시각이 자리를 내주고, 워커 줄은 비어 있던 자리다. */
   runningIds: string[];
@@ -1425,7 +1475,7 @@ function SidePanel({
       <SidebarGroup className="p-0">
         <SidebarGroupLabel className="h-6 text-muted-foreground">
           {t("home.schedulesLabel")}
-          <ScheduleCreateDialog project={project} onCreated={onSchedulesChange} />
+          <ScheduleCreateDialog project={project} personas={personas} onCreated={onSchedulesChange} />
         </SidebarGroupLabel>
         {home.schedules.length > 0 && (
           <SidebarMenu aria-label={t("home.schedulesLabel")}>
@@ -1610,9 +1660,12 @@ function ScheduleFailure({ message }: { message: string }) {
  *  닫고 부모가 받은 `onCreated`가 목록을 갈아 끼운다. */
 function ScheduleCreateDialog({
   project,
+  personas,
   onCreated,
 }: {
   project: string;
+  /** §7-4 결정 2 §스케줄에도 같은 칸이 붙는다 — `SidePanel`이 `HomeUI`에서 그대로 내린 목록. */
+  personas: string[];
   onCreated: (schedules: ScheduleView[]) => void;
 }) {
   const t = useT();
@@ -1624,6 +1677,7 @@ function ScheduleCreateDialog({
   const [weekday, setWeekday] = useState("1");
   const [day, setDay] = useState("1");
   const [prompt, setPrompt] = useState("");
+  const [persona, setPersona] = useState(DEFAULT_PERSONA);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
@@ -1636,6 +1690,7 @@ function ScheduleCreateDialog({
     setWeekday("1");
     setDay("1");
     setPrompt("");
+    setPersona(DEFAULT_PERSONA);
     setError(null);
   };
 
@@ -1769,6 +1824,21 @@ function ScheduleCreateDialog({
               onChange={(e) => setPrompt(e.target.value)}
             />
           </div>
+          <div className="space-y-2">
+            <Label htmlFor="schedule-persona">{t("home.personaLabel")}</Label>
+            <Select value={persona} onValueChange={(v) => setPersona(typeof v === "string" && v ? v : DEFAULT_PERSONA)}>
+              <SelectTrigger id="schedule-persona" className="w-full">
+                <SelectValue>{persona}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {personas.map((p) => (
+                  <SelectItem key={p} value={p}>
+                    {p}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           {error && <ScheduleFailure message={error} />}
         </div>
         <DialogFooter>
@@ -1778,7 +1848,7 @@ function ScheduleCreateDialog({
             onClick={() =>
               start(async () => {
                 const when = buildWhen(kind, date, time, weekday, day);
-                const r = await createSchedule(project, when, prompt, locale);
+                const r = await createSchedule(project, when, prompt, locale, persona);
                 if (r.ok) {
                   onCreated(r.schedules);
                   setOpen(false);
