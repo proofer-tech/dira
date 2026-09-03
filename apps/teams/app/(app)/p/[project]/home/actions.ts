@@ -11,10 +11,20 @@
  *
  *  **`revalidatePath`를 부르지 않는다.** 대화의 출처는 트랜스크립트 파일이고 그건 Next 캐시가
  *  모르는 것이라 폴링이 직접 읽는다. 티켓도 레지스트리도 안 바뀌므로 다시 그릴 화면이 없다. */
+import path from "node:path";
 import { verifyAttachments, withAttachments } from "@/lib/attachments";
 import { listEpics, refreshKnownRefs } from "@/lib/epics";
+import {
+  listExplorerDir,
+  openExplorerFile,
+  saveExplorerFile,
+  type ExplorerFile,
+  type ExplorerListing,
+  type SaveResult,
+} from "@/lib/explorer";
 import { DEFAULT_LOCALE, t, type Locale } from "@/lib/i18n";
 import type { RefIndex } from "@/lib/markdown-refs";
+import { openWithinApp, type OpenResult } from "@/lib/paths";
 import { listTickets } from "@/lib/queue";
 import {
   closeHomeTab,
@@ -31,7 +41,7 @@ import {
   type HomeChunk,
   type ScheduleView,
 } from "@/lib/home-agent";
-import { getProject, resolveConfig } from "@/lib/projects";
+import { getProject, resolveConfig, type Project } from "@/lib/projects";
 import {
   commitStaged,
   listCheckouts,
@@ -47,7 +57,6 @@ import {
   type Checkout,
   type GitStatus,
 } from "@/lib/source-control";
-import path from "node:path";
 
 /** 등록된 프로젝트인가. **클라이언트가 준 id는 신뢰 경계 밖이다** — 여기서 걸러야 등록 안 된
  *  값이 `home-sessions.json`의 키가 되지 않는다(경로가 되는 값은 그 파일의 **값**이고 그쪽
@@ -382,5 +391,80 @@ export async function scmPull(projectId: string, checkoutId: string): Promise<Sc
     return { status: await readStatus(checkout.path), error: r.error };
   } catch (e) {
     return { status: null, error: (e as Error).message };
+  }
+}
+
+// ── 탐색기 · 편집기(§11-2 결정 1 · 2 · 4, P366-6) ──────────────────────────
+//
+// 뿌리는 `resolveConfig(project).cwd`(§11 결정 3 — 프로젝트 루트, 기본값 `dirname(project.root)`).
+// 판정은 전부 `lib/explorer.ts`다 — 이 파일이 하는 일은 위 액션들과 같은 분담(프로젝트 id →
+// 해석된 디렉터리, Error를 직렬화 가능한 결과로).
+
+/** `.md` 리다이렉트 대상 디렉터리 셋 — 티켓은 `<project.root>/tickets`(`lib/queue.ts`와 같은
+ *  조립), 페르소나 · 프로토콜은 `resolveConfig`가 해석한 값이다. */
+async function explorerDirs(project: Project) {
+  const config = await resolveConfig(project);
+  return {
+    cwd: config.cwd,
+    ticketsDir: path.join(project.root, "tickets"),
+    personasDir: config.personas,
+    protocolsDir: config.protocols,
+  };
+}
+
+export async function listExplorerDirAction(
+  projectId: string,
+  rel: string,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<ExplorerListing> {
+  try {
+    const { cwd } = await explorerDirs(await required(projectId, locale));
+    return await listExplorerDir(cwd, rel, locale);
+  } catch (e) {
+    return { ok: false, reason: (e as Error).message };
+  }
+}
+
+export async function openExplorerFileAction(
+  projectId: string,
+  rel: string,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<ExplorerFile> {
+  try {
+    const { cwd, ticketsDir, personasDir, protocolsDir } = await explorerDirs(await required(projectId, locale));
+    return await openExplorerFile(cwd, rel, { projectId, ticketsDir, personasDir, protocolsDir }, locale);
+  } catch (e) {
+    return { kind: "unreadable", reason: (e as Error).message };
+  }
+}
+
+export async function saveExplorerFileAction(
+  projectId: string,
+  rel: string,
+  text: string,
+  expectedMtimeMs: number,
+  expectedSize: number,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<SaveResult> {
+  try {
+    const { cwd, ticketsDir } = await explorerDirs(await required(projectId, locale));
+    return await saveExplorerFile(cwd, rel, text, expectedMtimeMs, expectedSize, ticketsDir, locale);
+  } catch (e) {
+    return { ok: false, reason: (e as Error).message };
+  }
+}
+
+/** "바깥 앱으로 열기"(§11-2 결정 2 · §10 §자리 다섯 — `protocols/actions.ts openProtocolFileAction`과
+ *  같은 모양). 1MB 넘는 파일 · 바이너리에서 뜨는 버튼 하나가 이 액션을 부른다. */
+export async function openExplorerFileExternallyAction(
+  projectId: string,
+  rel: string,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<OpenResult> {
+  try {
+    const { cwd } = await explorerDirs(await required(projectId, locale));
+    return await openWithinApp(cwd, rel, locale);
+  } catch (e) {
+    return { ok: false, message: (e as Error).message };
   }
 }

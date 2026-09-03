@@ -91,6 +91,7 @@ import {
 } from "@/components/attachment-field";
 import { CopyCommand } from "@/components/copy-command";
 import { EmptyState } from "@/components/empty-state";
+import { ExplorerTree, FileEditorPane, useExplorerOpen } from "@/components/explorer-ui";
 import { FindBar } from "@/components/find-bar";
 import { useKeymap } from "@/components/keymap-provider";
 import { useLocale, useT } from "@/components/language-provider";
@@ -330,6 +331,12 @@ export function HomeUI({
   // 그대로다(§11 결정 1 §우측 탭은 표면을 가로지른다) — 탭에 들어가는 내용은 지금 `chat`뿐이라
   // 표면을 갈아도 스레드가 안 바뀐다.
   const [surface, setSurface] = useState<Surface>("agent");
+  // **탐색기가 지금 연 파일**(§11-2 결정 2, P366-6). 우측 탭 줄(`home.tabs`)에는 안 산다 —
+  // 지금 탭 종류가 `chat` 하나뿐인 것은 위 주석 그대로다. 표면을 `탐색기`에서 다른 표면으로
+  // 갈면 이 상태는 그대로 남지만 아래 우측 칸은 `surface === "explorer"`일 때만 이 값을 그린다.
+  // ponytail: 표면을 가로지르는 탭으로 승격하는 것은 이 값이 `home.tabs`에 들어가는 다음 티켓의
+  //           몫이다 — 지금은 파일 탭 0장이라 승격할 것이 없다.
+  const explorer = useExplorerOpen(project);
   // 폴링이 들고 다니는 두 값. 렌더에 안 쓰므로 상태가 아니다(바뀔 때마다 그릴 것이 없다).
   const session = useRef(initial.sessionId);
   const offset = useRef(initial.offset);
@@ -717,6 +724,7 @@ export function HomeUI({
             personas={personas}
             surface={surface}
             onSurfaceChange={setSurface}
+            onOpenExplorerFile={explorer.onOpenFile}
             runningIds={runningIds}
             // 세 그룹을 통틀어 지금 떠 있는 표식 하나(§비주얼 §62 (2) §선택 표식 — "표식은 세
             // 그룹을 통틀어 한 줄에만 든다"). 회차 0건 스케줄을 보는 동안은 `home.current`가
@@ -767,6 +775,24 @@ export function HomeUI({
             종류가 `chat` 하나뿐이라 표면이 바뀌어도 스레드가 안 바뀐다). `min-w-0`은 아래
             대화 컬럼과 같은 이유 — flex 자식 기본값을 덮는다. */}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          {/* `탐색기` 표면(§11-2 결정 2, P366-6)은 대화 컬럼과 자리를 바꿔 쓴다 — 열린 파일이
+              있으면 편집기, 없으면 안내 한 줄이다. 채팅 탭 줄·컬럼(아래 `else`)은 그대로 두고
+              끼워 넣지 않는다: 지금 탭 종류가 `chat` 하나뿐이라 파일이 그 줄에 안 서기 때문이다
+              (위 `explorer` 선언 주석 · `TabBar` 머리 주석과 같은 경계). */}
+          {surface === "explorer" ? (
+            explorer.open ? (
+              <FileEditorPane
+                key={explorer.open.relPath}
+                projectId={project}
+                relPath={explorer.open.relPath}
+                file={explorer.open.file}
+                onClose={explorer.onClose}
+              />
+            ) : (
+              <EmptyState text={t("explorer.noFileOpen")} />
+            )
+          ) : (
+            <>
           {home.conversations.length > 0 && (
             <TabBar
               tabs={home.tabs}
@@ -1148,6 +1174,8 @@ export function HomeUI({
             </div>
           ) : null}
           </div>
+            </>
+          )}
         </div>
       </SidebarProvider>
 
@@ -1764,6 +1792,7 @@ function SidePanel({
   personas,
   surface,
   onSurfaceChange,
+  onOpenExplorerFile,
   runningIds,
   selected,
   noTurns,
@@ -1781,6 +1810,8 @@ function SidePanel({
   /** 좌측 2단의 위 단이 고른 표면(§11 결정 1 · §비주얼 §72 ①). */
   surface: Surface;
   onSurfaceChange: (s: Surface) => void;
+  /** `탐색기` 표면에서 파일 하나를 골랐다(§11-2 결정 2, P366-6) — 우측 칸이 그 결과를 그린다. */
+  onOpenExplorerFile: (relPath: string) => void;
   /** 지금 도는 session id 전부 — **줄의 오른쪽 끝을 정하는 값 하나다**(§24 §도는 대화의 표식).
    *  세 그룹이 같은 목록을 본다: 대화·스케줄 줄은 시각이 자리를 내주고, 워커 줄은 비어 있던 자리다. */
   runningIds: string[];
@@ -1878,7 +1909,12 @@ function SidePanel({
           채운다 - 지금은 빈 상태 한 줄이다. */}
       <SidebarContent className="gap-4 px-4 py-2">
         {surface === "scm" && <ScmSurface project={project} projectName={projectName} />}
-        {(surface === "terminal" || surface === "explorer") && (
+        {surface === "explorer" && (
+          <SidebarGroup className="p-0">
+            <ExplorerTree projectId={project} onOpenFile={onOpenExplorerFile} />
+          </SidebarGroup>
+        )}
+        {surface === "terminal" && (
           <SidebarGroup className="p-0">
             <EmptyState text={t(`home.surface.${surface}.empty`)} />
           </SidebarGroup>

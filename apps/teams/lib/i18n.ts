@@ -218,6 +218,7 @@ export const ko: Record<string, string> = {
 
   "common.save": "저장",
   "common.saving": "저장 중…",
+  "common.loading": "불러오는 중…",
   "common.add": "추가",
   "common.close": "닫기",
   "common.cancel": "취소",
@@ -2088,6 +2089,22 @@ export const ko: Record<string, string> = {
   "home.scm.pull": "풀",
   "home.scm.noPushSh": "이 프로젝트에는 push.sh가 없다",
 
+  // 탐색기 · 편집기(§11-2 결정 1 · 2 · 4, P366-6) — `lib/explorer.ts`가 던지는 사유 문구.
+  "explorer.cycleReason": "이미 위쪽에 펼쳐진 디렉터리를 가리킵니다 — 순환이라 안 펼칩니다.",
+  "explorer.notAFile": "파일이 아닙니다.",
+  "explorer.tooLargeSuffix": "바이트 — 1MB가 넘어 편집기로 열지 않습니다.",
+  "explorer.binary": "텍스트 파일이 아닙니다(NUL 바이트) — 편집기로 열지 않습니다.",
+  "explorer.missing": "파일이 없습니다(지워졌을 수 있습니다).",
+  "explorer.staleConflict": "다른 곳에서 그 사이 이 파일을 고쳤습니다 — 다시 열어 확인한 뒤 저장하세요.",
+  "explorer.ticketWipReadonly": "지금 도는 세션이 쓰는 티켓입니다 — 여기서는 저장할 수 없습니다.",
+  "explorer.showHidden": "숨은 파일 보기",
+  "explorer.moreCountPrefix": "개 중",
+  "explorer.moreCountSuffix": "개",
+  "explorer.save": "저장",
+  "explorer.saveFailed": "저장하지 못했습니다:",
+  "explorer.unsaved": "저장하지 않은 변경이 있습니다.",
+  "explorer.noFileOpen": "왼쪽 트리에서 파일을 고르세요.",
+
   // 세션 스트림(§0-16 §묶음 표 행 5 갈래, `33563f49`) — `components/session-stream.tsx` ·
   // `lib/interject.ts`. `lib/transcript.ts`는 화면 껍데기가 아니라 사건 데이터를 만드는 자리라
   // `transcriptLib.*`로 접두를 가른다(daf72662의 파일 접두 판단과 같다). en은 후속 티켓이 채운다.
@@ -2738,6 +2755,7 @@ export const en: Record<string, string> = {
 
   "common.save": "Save",
   "common.saving": "Saving…",
+  "common.loading": "Loading…",
   "common.add": "Add",
   "common.close": "Close",
   "common.cancel": "Cancel",
@@ -4291,6 +4309,21 @@ export const en: Record<string, string> = {
   "home.scm.push": "Push",
   "home.scm.pull": "Pull",
   "home.scm.noPushSh": "This project has no push.sh",
+
+  "explorer.cycleReason": "This points back to a directory already open above it — not expanding (cycle).",
+  "explorer.notAFile": "Not a file.",
+  "explorer.tooLargeSuffix": " bytes — over 1MB, so the editor won't open it.",
+  "explorer.binary": "Not a text file (NUL bytes) — the editor won't open it.",
+  "explorer.missing": "No such file (it may have been deleted).",
+  "explorer.staleConflict": "Something else changed this file in the meantime — reopen it, then save again.",
+  "explorer.ticketWipReadonly": "A running session owns this ticket — you can't save here.",
+  "explorer.showHidden": "Show hidden files",
+  "explorer.moreCountPrefix": "of",
+  "explorer.moreCountSuffix": "",
+  "explorer.save": "Save",
+  "explorer.saveFailed": "Couldn't save:",
+  "explorer.unsaved": "You have unsaved changes.",
+  "explorer.noFileOpen": "Pick a file from the tree on the left.",
 
   // 온톨로지 화면(§0-16 §발행 §묶음 표 행 12 갈래) — `ko`는 `2ef7a4e9`가 뽑았다.
   // **`protocols-ui.tsx`와 판박이인 자리(새 파일 · 편집기 · 이름변경 · 삭제 · 사이드바)는

@@ -1,0 +1,388 @@
+"use client";
+
+/** 홈 셸의 `탐색기` 표면(DESIGN.md §11-2 결정 1 · 2 · 4, P366-6).
+ *
+ *  **트리는 한 단계씩 읽는다**(결정 1) — 디렉터리 노드 하나가 곧 컴포넌트 인스턴스 하나이고,
+ *  펼칠 때 그 인스턴스가 자기 자식 한 단계만 서버에 묻는다. 부모가 자식 목록을 미리 들고
+ *  있지 않으므로 순환 검사(§11 결정 3 — 실경로가 이미 조상에 있으면 안 펼친다)도 클라이언트가
+ *  조상을 따로 들고 다닐 필요가 없다: `listExplorerDirAction`에 넘기는 `relPath`가 이미 뿌리부터의
+ *  전체 경로라 서버가 그 경로의 조상 전부를 한 번에 realpath해서 판정한다(`lib/explorer.ts`).
+ *
+ *  **편집기는 `shiki` + `textarea`다**(결정 2) — LSP도 자동완성도 없다. 문법 색은 배경의
+ *  읽기 전용 `<pre>`가 그리고, 그 위에 투명한 `textarea`가 캐럿과 타이핑을 받는다(스크롤 위치를
+ *  `onScroll`로 맞춘다 — 흔한 "코드 하이라이트 오버레이" 관용구, 새 의존성 없이 `shiki` 하나로
+ *  된다). 하이라이트는 타이핑마다 다시 안 긋는다 — 값이 바뀔 때(로드 직후 · blur)만 다시 그린다:
+ *  타이핑 중엔 옛 색 그대로 보여도 캐럿·값은 항상 최신이라 편집이 막히지 않는다.
+ *  // ponytail: 토큰 단위 실시간 하이라이트는 안 한다 — 다음 줄바꿈이면 늦어도 되는 장식이다.
+ *  //           타이핑마다 다시 긋고 싶어지면 `blur`가 아니라 디바운스로 바꾼다. */
+import { useEffect, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { ChevronRight, ExternalLink, File, Folder, TriangleAlert } from "lucide-react";
+import {
+  listExplorerDirAction,
+  openExplorerFileAction,
+  openExplorerFileExternallyAction,
+  saveExplorerFileAction,
+} from "@/app/(app)/p/[project]/home/actions";
+import { useT } from "@/components/language-provider";
+import { EmptyState } from "@/components/empty-state";
+import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import type { ExplorerFile, ExplorerListing } from "@/lib/explorer";
+import { cn } from "@/lib/utils";
+
+/** `protocols-ui.tsx` · `ticket-ui.tsx` 등에 이미 있는 "OS 기본 앱으로 열기" 버튼과 같은
+ *  모양(§10 §자리 다섯) — 값으로 못 무는 클라이언트 조각이라 각 화면이 자기 액션만 바꿔 하나씩
+ *  둔다(그 파일들의 관용 그대로). */
+function OpenInAppButton({ action }: { action: () => Promise<{ ok: boolean; message?: string }> }) {
+  const t = useT();
+  const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <span className="inline-flex flex-col items-center gap-2">
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={pending}
+              onClick={() => {
+                if (pending) return;
+                start(async () => {
+                  setError(null);
+                  const r = await action();
+                  if (!r.ok) setError(r.message || t("common.openInApp.failed"));
+                });
+              }}
+            >
+              <ExternalLink aria-hidden />
+              {t("common.openInApp")}
+            </Button>
+          }
+        />
+        <TooltipContent>{t("common.openInApp")}</TooltipContent>
+      </Tooltip>
+      {error && <span className="text-xs text-destructive">{error}</span>}
+    </span>
+  );
+}
+
+/** 확장자 → shiki 언어 id. 모르는 확장자는 `"text"`(하이라이트 없이도 그대로 연다 — 결정 2
+ *  "`.md`가 아닌 파일도 연다"와 같은 관용, `lib/protocols.ts`가 이미 그렇게 한다). */
+const LANG_BY_EXT: Record<string, string> = {
+  ts: "typescript", tsx: "tsx", js: "javascript", jsx: "jsx", mjs: "javascript",
+  json: "json", md: "markdown", py: "python", sh: "bash", bash: "bash",
+  css: "css", html: "html", yml: "yaml", yaml: "yaml", toml: "toml",
+  rs: "rust", go: "go", rb: "ruby", php: "php", sql: "sql", graphql: "graphql",
+  txt: "text", env: "bash", gitignore: "bash",
+};
+function langOf(name: string): string {
+  const ext = name.includes(".") ? name.slice(name.lastIndexOf(".") + 1).toLowerCase() : "";
+  return LANG_BY_EXT[ext] ?? "text";
+}
+
+const SHIKI_THEMES = { light: "github-light-default", dark: "github-dark-default" } as const;
+
+/** 트리 노드 하나(디렉터리 또는 파일). 펼치기·자식 로딩은 이 인스턴스 자신의 상태다. */
+function TreeNode({
+  projectId,
+  name,
+  relPath,
+  isDir,
+  depth,
+  showHidden,
+  onOpenFile,
+}: {
+  projectId: string;
+  name: string;
+  relPath: string;
+  isDir: boolean;
+  depth: number;
+  showHidden: boolean;
+  onOpenFile: (relPath: string) => void;
+}) {
+  const t = useT();
+  const [expanded, setExpanded] = useState(false);
+  const [listing, setListing] = useState<ExplorerListing | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  async function toggle() {
+    if (!isDir) {
+      onOpenFile(relPath);
+      return;
+    }
+    if (expanded) {
+      setExpanded(false);
+      return;
+    }
+    setExpanded(true);
+    if (listing) return; // 이미 한 번 읽었다 — 다시 안 묻는다(§11 결정 4 §펼칠 때만 읽는다)
+    setLoading(true);
+    setListing(await listExplorerDirAction(projectId, relPath));
+    setLoading(false);
+  }
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={toggle}
+        className="flex w-full items-center gap-1 rounded px-1 py-0.5 text-left text-sm hover:bg-muted"
+        style={{ paddingLeft: `${depth * 14 + 4}px` }}
+      >
+        {isDir ? (
+          <ChevronRight aria-hidden className={cn("size-3.5 shrink-0 transition-transform", expanded && "rotate-90")} />
+        ) : (
+          <span className="size-3.5 shrink-0" />
+        )}
+        {isDir ? <Folder aria-hidden className="size-3.5 shrink-0" /> : <File aria-hidden className="size-3.5 shrink-0" />}
+        <span className="truncate">{name}</span>
+      </button>
+      {expanded && isDir && (
+        <div>
+          {loading && <div className="px-2 py-1 text-xs text-muted-foreground">{t("common.loading")}</div>}
+          {!loading && listing && !listing.ok && (
+            <div className="flex items-center gap-1 px-2 py-1 text-xs text-muted-foreground">
+              <TriangleAlert aria-hidden className="size-3 shrink-0" />
+              {listing.reason}
+            </div>
+          )}
+          {!loading &&
+            listing?.ok &&
+            listing.entries
+              .filter((e) => showHidden || !e.name.startsWith("."))
+              .map((e) => (
+                <TreeNode
+                  key={e.name}
+                  projectId={projectId}
+                  name={e.name}
+                  relPath={relPath ? `${relPath}/${e.name}` : e.name}
+                  isDir={e.isDir}
+                  depth={depth + 1}
+                  showHidden={showHidden}
+                  onOpenFile={onOpenFile}
+                />
+              ))}
+          {!loading && listing?.ok && listing.capped && (
+            <div className="px-2 py-1 text-xs text-muted-foreground" style={{ paddingLeft: `${(depth + 1) * 14 + 4}px` }}>
+              {listing.total} {t("explorer.moreCountPrefix")} {LIST_CAP_LABEL}
+              {t("explorer.moreCountSuffix")}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const LIST_CAP_LABEL = "2,000";
+
+/** 좌측 패널의 `탐색기` 표면(§11-2 결정 1) — 뿌리(`resolveConfig(project).cwd`)의 목록을 마운트
+ *  때 한 번 읽는다. 숨은 파일 토글 기본값은 켬이다(`.dira`가 그 안쪽이라). */
+export function ExplorerTree({ projectId, onOpenFile }: { projectId: string; onOpenFile: (relPath: string) => void }) {
+  const t = useT();
+  const [showHidden, setShowHidden] = useState(true);
+  const [listing, setListing] = useState<ExplorerListing | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    void listExplorerDirAction(projectId, "").then((r) => {
+      if (live) setListing(r);
+    });
+    return () => {
+      live = false;
+    };
+  }, [projectId]);
+
+  if (!listing) return <div className="px-2 py-1 text-xs text-muted-foreground">{t("common.loading")}</div>;
+  if (!listing.ok) {
+    return (
+      <div className="flex items-center gap-1 px-2 py-1 text-xs text-muted-foreground">
+        <TriangleAlert aria-hidden className="size-3 shrink-0" />
+        {listing.reason}
+      </div>
+    );
+  }
+  const entries = listing.entries.filter((e) => showHidden || !e.name.startsWith("."));
+  return (
+    <div className="space-y-1">
+      <label className="flex items-center gap-1.5 px-1 text-xs text-muted-foreground">
+        <input type="checkbox" checked={showHidden} onChange={(e) => setShowHidden(e.target.checked)} />
+        {t("explorer.showHidden")}
+      </label>
+      {entries.length === 0 ? (
+        <EmptyState text={t("home.surface.explorer.empty")} />
+      ) : (
+        entries.map((e) => (
+          <TreeNode
+            key={e.name}
+            projectId={projectId}
+            name={e.name}
+            relPath={e.name}
+            isDir={e.isDir}
+            depth={0}
+            showHidden={showHidden}
+            onOpenFile={onOpenFile}
+          />
+        ))
+      )}
+      {listing.capped && (
+        <div className="px-1 text-xs text-muted-foreground">
+          {listing.total} {t("explorer.moreCountPrefix")} {LIST_CAP_LABEL}
+          {t("explorer.moreCountSuffix")}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** 트리에서 파일 하나를 골랐을 때의 왕복(§11-2 결정 2) — 리다이렉트면 그 화면으로 넘어가고,
+ *  아니면 이 편집기가 열 내용을 들고 온다. `ExplorerTree`(트리)와 `HomeUI`(우측 칸) 둘 다
+ *  이 함수 하나만 부른다 — 같은 판정이 두 곳에 안 흩어진다. */
+type OpenableFile = Exclude<ExplorerFile, { kind: "redirect" }>;
+
+export function useExplorerOpen(projectId: string) {
+  const router = useRouter();
+  const [open, setOpen] = useState<{ relPath: string; file: OpenableFile } | null>(null);
+  async function onOpenFile(relPath: string) {
+    const file = await openExplorerFileAction(projectId, relPath);
+    if (file.kind === "redirect") {
+      router.push(file.to);
+      return;
+    }
+    setOpen({ relPath, file });
+  }
+  return { open, onOpenFile, onClose: () => setOpen(null) };
+}
+
+/** 우측 칸의 편집기 본문(§11-2 결정 2 · 4). `relPath`가 바뀌면(다른 파일을 열면) `key`로
+ *  다시 마운트시켜 이 컴포넌트 안의 상태(글자 · 저장 기준선)를 새로 시작한다 — 옛 파일의
+ *  되돌리기 상태가 새 파일에 섞이지 않는다(`markdown-editor.tsx` 되돌리기와 같은 관용구). */
+export function FileEditorPane({
+  projectId,
+  relPath,
+  file,
+  onClose,
+}: {
+  projectId: string;
+  relPath: string;
+  file: OpenableFile;
+  onClose: () => void;
+}) {
+  if (file.kind === "unreadable") {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
+        <TriangleAlert aria-hidden className="size-6 text-muted-foreground" />
+        <p className="text-sm text-muted-foreground">{relPath}</p>
+        <p className="text-sm text-muted-foreground">{file.reason}</p>
+        <OpenInAppButton action={() => openExplorerFileExternallyAction(projectId, relPath)} />
+      </div>
+    );
+  }
+  return <CodeEditor projectId={projectId} relPath={relPath} initial={file} onClose={onClose} />;
+}
+
+function CodeEditor({
+  projectId,
+  relPath,
+  initial,
+  onClose,
+}: {
+  projectId: string;
+  relPath: string;
+  initial: Extract<ExplorerFile, { kind: "text" }>;
+  onClose: () => void;
+}) {
+  const t = useT();
+  const [text, setText] = useState(initial.text);
+  const [baseline, setBaseline] = useState({ mtimeMs: initial.mtimeMs, size: initial.size });
+  const [savedText, setSavedText] = useState(initial.text);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [html, setHtml] = useState<string | null>(null);
+  const preRef = useRef<HTMLPreElement>(null);
+  const dirty = text !== savedText;
+  const lang = langOf(relPath);
+
+  async function highlight(source: string) {
+    const { codeToHtml } = await import("shiki");
+    setHtml(await codeToHtml(source, { lang, themes: SHIKI_THEMES, defaultColor: false }));
+  }
+
+  // 마운트 한 번 — 이후 다시 그리는 자리는 `blur`(아래)다(파일 top 주석 §타이핑마다 안 긋는다).
+  // `ignore` 플래그가 있는 이 모양은 리액트 문서의 표준 effect-fetch 관용구다(react-hooks의
+  // `set-state-in-effect`가 이 모양은 잡지 않는다 — `highlight`를 effect 밖에서 부르면 잡는다).
+  useEffect(() => {
+    let ignore = false;
+    (async () => {
+      const { codeToHtml } = await import("shiki");
+      const out = await codeToHtml(initial.text, { lang, themes: SHIKI_THEMES, defaultColor: false });
+      if (!ignore) setHtml(out);
+    })();
+    return () => {
+      ignore = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function save() {
+    setSaving(true);
+    setError(null);
+    const r = await saveExplorerFileAction(projectId, relPath, text, baseline.mtimeMs, baseline.size);
+    setSaving(false);
+    if (!r.ok) {
+      setError(r.reason);
+      return;
+    }
+    setBaseline({ mtimeMs: r.mtimeMs, size: r.size });
+    setSavedText(text);
+  }
+
+  return (
+    <div className="code-editor flex min-h-0 min-w-0 flex-1 flex-col gap-2">
+      <div className="flex shrink-0 items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-1.5 text-sm">
+          <File aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
+          <span className="truncate font-mono">{relPath}</span>
+          {dirty && <span className="text-xs text-muted-foreground">{t("explorer.unsaved")}</span>}
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {error && <span className="text-xs text-destructive">{t("explorer.saveFailed")} {error}</span>}
+          <Button size="sm" onClick={() => void save()} disabled={saving || !dirty}>
+            {saving ? t("common.saving") : t("explorer.save")}
+          </Button>
+        </div>
+      </div>
+      {/* 결정 2 §editor — 배경의 읽기 전용 `<pre>`(shiki)가 색을 내고, 위에 겹친 투명 `textarea`가
+          캐럿·타이핑을 받는다. 폰트·줄높이·패딩이 두 층에서 한 자도 안 갈려야 겹친다
+          (`font-mono text-sm leading-6 p-3`을 양쪽에 그대로 준다). */}
+      <div className="relative min-h-0 flex-1 overflow-hidden rounded-md border">
+        <pre
+          ref={preRef}
+          aria-hidden
+          className="pointer-events-none absolute inset-0 overflow-auto whitespace-pre-wrap break-words p-3 font-mono text-sm leading-6 [&_pre]:!bg-transparent [&_pre]:!p-0 [&_code]:whitespace-pre-wrap [&_code]:break-words"
+          dangerouslySetInnerHTML={{ __html: html ?? "" }}
+        />
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onBlur={() => void highlight(text)}
+          onScroll={(e) => {
+            if (preRef.current) {
+              preRef.current.scrollTop = e.currentTarget.scrollTop;
+              preRef.current.scrollLeft = e.currentTarget.scrollLeft;
+            }
+          }}
+          spellCheck={false}
+          className="relative h-full w-full resize-none overflow-auto whitespace-pre-wrap break-words bg-transparent p-3 font-mono text-sm leading-6 text-transparent caret-foreground outline-none"
+          aria-label={relPath}
+        />
+      </div>
+      <Button variant="ghost" size="sm" className="w-fit" onClick={onClose}>
+        {t("common.close")}
+      </Button>
+    </div>
+  );
+}

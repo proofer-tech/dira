@@ -437,6 +437,15 @@
   outline-color: revert;
 }
 
+/* 탐색기 편집기(§11-2 결정 2) — `app/(site)/doc.tsx`의 shiki 이중 테마와 같은 관용구.
+   `--shiki-light`/`--shiki-dark` 두 변수만 나가고 어느 쪽을 칠할지는 이 클래스가 정한다. */
+.code-editor .shiki span {
+  color: var(--shiki-light);
+}
+.dark .code-editor .shiki span {
+  color: var(--shiki-dark);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
