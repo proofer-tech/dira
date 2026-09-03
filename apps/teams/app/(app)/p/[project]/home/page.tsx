@@ -46,6 +46,7 @@ export default async function Home({ params }: { params: Promise<{ project: stri
   return (
     <HomeUI
       project={id}
+      projectName={project.name}
       initial={await pollHome(id, null, 0)}
       personas={personas}
       examples={

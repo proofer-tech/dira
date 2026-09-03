@@ -69,6 +69,13 @@ import {
   deleteSchedule,
   pollHomeAnswer,
   refreshRefs,
+  scmCheckouts,
+  scmRemoteBranches,
+  scmSetUpstream,
+  scmStage,
+  scmStageAll,
+  scmStatus,
+  scmUnstage,
   stopHome,
   switchHome,
 } from "@/app/(app)/p/[project]/home/actions";
@@ -156,6 +163,7 @@ import type {
   WorkerSession,
 } from "@/lib/home-agent";
 import { formatCombo, matchCombo } from "@/lib/keymap";
+import type { Checkout, GitStatus, StatusFile } from "@/lib/source-control";
 import { chatRows, dateTimeLabel, groupProgress, scheduleRows, visibleChatRows } from "@/lib/urls";
 import { cn } from "@/lib/utils";
 
@@ -246,11 +254,15 @@ const FAIL_KEYS: Record<AnswerReason, { title: string; next?: string; cmd?: stri
 
 export function HomeUI({
   project,
+  projectName,
   initial,
   examples,
   personas,
 }: {
   project: string;
+  /** 소스 컨트롤 표면 루트 줄의 이름(§비주얼 §72 ⑤) — 루트는 **프로젝트 이름**, 워크트리는
+   *  워커 이름이다. `project`(URL 조각)와 다른 값이라 따로 받는다. */
+  projectName: string;
   /** 온보딩 예시 **앞의 둘**(§24) — 서버가 `listWorkers`로 만든 문장이고, 워커 0개면 빈 배열이다.
    *  `initial`(폴링 응답)에 안 얹혀 있는 것이 요점이다: 이 값은 페이지를 연 시점에 굳는다. */
   examples: string[];
@@ -696,6 +708,7 @@ export function HomeUI({
         {home.conversations.length > 0 && (
           <SidePanel
             project={project}
+            projectName={projectName}
             home={home}
             personas={personas}
             surface={surface}
@@ -1397,6 +1410,255 @@ function TabBar({
   );
 }
 
+/** 파일 상태 낱말(§비주얼 §72 ④) — 아는 코드 넷은 사전 키로, 모르는 코드(충돌 `u` 등)는
+ *  화면이 알아서 `font-mono`로 그대로 낸다. `useT`를 안 받는 것은 `t`가 이미 순수 함수라서다. */
+function scmWordLabel(t: (key: string) => string, f: StatusFile): { text: string; mono: boolean } {
+  return f.word ? { text: t(`home.scm.word.${f.word}`), mono: false } : { text: f.code, mono: true };
+}
+
+/** 소스 컨트롤 파일 한 줄(§11-3 결정 2 · §비주얼 §72 ④) — 누르면 스테이지 - 해제가 토글된다.
+ *  **아이콘 0개** — 낱말이 이미 텍스트로 뜬다. 경로는 `font-mono break-all`(§3 경로 계열),
+ *  `지움`은 그 경로에 `line-through`가 더 붙는다(그 줄을 눌러도 열 파일이 없다는 신호). */
+function ScmFileRow({ file, title, onClick }: { file: StatusFile; title: string; onClick: () => void }) {
+  const t = useT();
+  const label = scmWordLabel(t, file);
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton className={ROW} title={title} onClick={onClick}>
+        <span
+          className={cn(
+            "min-w-0 grow truncate break-all font-mono text-sm",
+            file.word === "deleted" && "text-muted-foreground line-through",
+          )}
+        >
+          {file.path}
+        </span>
+        <span className={cn("ml-auto shrink-0 text-xs text-muted-foreground", label.mono && "font-mono")}>
+          {label.text}
+        </span>
+      </SidebarMenuButton>
+    </SidebarMenuItem>
+  );
+}
+
+/** 체크아웃 한 줄(§비주얼 §72 ⑤) — 2행. 첫 줄은 이름(루트=프로젝트 이름 · 워크트리=워커 이름),
+ *  둘째 줄은 브랜치(`font-mono` — 경로 계열, §3). 색도 아이콘도 배지도 안 쓴다 — 그룹(루트 -
+ *  워크트리) 자체가 이미 종류를 알려 준다. */
+function CheckoutRow({
+  checkout,
+  name,
+  selected,
+  onPick,
+}: {
+  checkout: Checkout;
+  name: string;
+  selected: boolean;
+  onPick: (id: string) => void;
+}) {
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton
+        className={cn(ROW, "items-start")}
+        isActive={selected}
+        aria-current={selected ? "true" : undefined}
+        onClick={() => {
+          if (!selected) onPick(checkout.id);
+        }}
+      >
+        <div className="flex min-w-0 grow flex-col gap-0.5">
+          <span className="min-w-0 truncate text-sm">{name}</span>
+          <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">{checkout.branch}</span>
+        </div>
+      </SidebarMenuButton>
+    </SidebarMenuItem>
+  );
+}
+
+/** 소스 컨트롤 표면(§11-3 결정 1-2-3 · §비주얼 §72 ④⑤, P366-8) — 체크아웃 목록 + status +
+ *  파일 두 목록 + 업스트림. 커밋 - push - pull은 P366-9의 몫이라 여기 없다.
+ *
+ *  **읽는 시점이 다른 표면과 다르다**(§11 결정 4 — 5초 폴링에 안 얹는다). 표면을 열 때(마운트)와
+ *  `다시 읽기`를 누를 때만 서버를 부른다 — 열어 둔 채 시간이 가도 `git` 프로세스가 새로 안 뜬다. */
+function ScmSurface({ project, projectName }: { project: string; projectName: string }) {
+  const t = useT();
+  const [checkouts, setCheckouts] = useState<Checkout[] | null>(null);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [status, setStatus] = useState<GitStatus | null>(null);
+  const [remotes, setRemotes] = useState<string[]>([]);
+  const [failed, setFailed] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const loadStatus = async (id: string) => {
+    setFailed(false);
+    const [s, r] = await Promise.all([scmStatus(project, id), scmRemoteBranches(project, id)]);
+    setStatus(s);
+    setRemotes(r);
+    if (!s) setFailed(true);
+  };
+
+  // 표면을 여는 순간 한 번(§11 결정 4) — `project`가 갈리는 것은 이 컴포넌트가 다시 마운트되는
+  // 것과 같은 자리라(부모가 `surface === "scm"`으로 조건부 렌더한다) 매 마운트가 "열 때"다.
+  useEffect(() => {
+    let stop = false;
+    void (async () => {
+      const list = await scmCheckouts(project);
+      if (stop) return;
+      setCheckouts(list);
+      const id = list.find((c) => c.isRoot)?.id ?? list[0]?.id ?? null;
+      setSelected(id);
+      if (id) await loadStatus(id);
+    })();
+    return () => {
+      stop = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project]);
+
+  const refresh = async () => {
+    const list = await scmCheckouts(project);
+    setCheckouts(list);
+    const id = selected && list.some((c) => c.id === selected) ? selected : (list.find((c) => c.isRoot)?.id ?? list[0]?.id ?? null);
+    setSelected(id);
+    if (id) await loadStatus(id);
+    else setStatus(null);
+  };
+
+  const pick = (id: string) => {
+    setSelected(id);
+    void loadStatus(id);
+  };
+
+  // 스테이지 - 해제 - 전부 스테이지 - 업스트림 넷이 같은 모양이다: 서버가 최신 status를 그대로
+  // 돌려주므로 화면은 그 값 하나로 갈아 끼운다(폴링 응답과 같은 왕복 한 벌). `busy`는 겹쳐 누르는
+  // 클릭을 막는다 — git 프로세스 둘이 같은 인덱스를 동시에 건드리는 자리를 안 만든다.
+  const run = (fn: () => Promise<GitStatus | null>) => {
+    if (!selected || busy) return;
+    setBusy(true);
+    void fn()
+      .then((next) => next && setStatus(next))
+      .finally(() => setBusy(false));
+  };
+
+  if (!checkouts) return null;
+  const root = checkouts.filter((c) => c.isRoot);
+  const worktrees = checkouts.filter((c) => !c.isRoot);
+
+  return (
+    <>
+      <SidebarGroup className="p-0">
+        <SidebarGroupLabel className="h-6 text-muted-foreground">{t("home.scm.root")}</SidebarGroupLabel>
+        <SidebarMenu>
+          {root.map((c) => (
+            <CheckoutRow key={c.id} checkout={c} name={projectName} selected={c.id === selected} onPick={pick} />
+          ))}
+        </SidebarMenu>
+      </SidebarGroup>
+      {worktrees.length > 0 && (
+        <SidebarGroup className="p-0">
+          <SidebarGroupLabel className="h-6 text-muted-foreground">
+            {t("home.scm.worktreesPrefix")}
+            {worktrees.length}
+          </SidebarGroupLabel>
+          <SidebarMenu>
+            {worktrees.map((c) => (
+              <CheckoutRow key={c.id} checkout={c} name={c.id} selected={c.id === selected} onPick={pick} />
+            ))}
+          </SidebarMenu>
+        </SidebarGroup>
+      )}
+
+      {selected && (
+        <SidebarGroup className="gap-2 p-0">
+          <div className="flex items-center justify-between gap-2 px-2">
+            <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">{status?.branch}</span>
+            <Button variant="ghost" size="xs" className="shrink-0" onClick={() => void refresh()}>
+              {t("home.scm.refresh")}
+            </Button>
+          </div>
+          {failed && <p className="px-2 text-xs text-destructive">{t("home.scm.loadFailed")}</p>}
+          {status && (
+            <>
+              <div className="flex items-center gap-3 px-2 text-xs text-muted-foreground">
+                <span>
+                  {t("home.scm.aheadPrefix")}
+                  {status.ahead}
+                </span>
+                <span>
+                  {t("home.scm.behindPrefix")}
+                  {status.behind}
+                </span>
+              </div>
+              <div className="px-2">
+                <Select
+                  value={status.upstream ?? ""}
+                  onValueChange={(branch) => branch && run(() => scmSetUpstream(project, selected!, branch))}
+                >
+                  <SelectTrigger size="sm" className="w-full">
+                    <SelectValue placeholder={t("home.scm.noUpstream")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {remotes.map((r) => (
+                      <SelectItem key={r} value={r}>
+                        {r}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="px-2">
+                <Button
+                  variant="outline"
+                  size="xs"
+                  className="w-full"
+                  aria-disabled={busy || status.unstaged.length === 0 || undefined}
+                  onClick={() => {
+                    if (status.unstaged.length === 0) return;
+                    run(() => scmStageAll(project, selected));
+                  }}
+                >
+                  {t("home.scm.stageAll")}
+                </Button>
+              </div>
+              <SidebarGroup className="p-0">
+                <SidebarGroupLabel className="h-6 text-muted-foreground">
+                  {t("home.scm.stagedPrefix")}
+                  {status.staged.length}
+                </SidebarGroupLabel>
+                <SidebarMenu>
+                  {status.staged.map((f) => (
+                    <ScmFileRow
+                      key={`s-${f.path}`}
+                      file={f}
+                      title={t("home.scm.unstageTitle")}
+                      onClick={() => run(() => scmUnstage(project, selected, f.path))}
+                    />
+                  ))}
+                </SidebarMenu>
+              </SidebarGroup>
+              <SidebarGroup className="p-0">
+                <SidebarGroupLabel className="h-6 text-muted-foreground">
+                  {t("home.scm.unstagedPrefix")}
+                  {status.unstaged.length}
+                </SidebarGroupLabel>
+                <SidebarMenu>
+                  {status.unstaged.map((f) => (
+                    <ScmFileRow
+                      key={`u-${f.path}`}
+                      file={f}
+                      title={t("home.scm.stageTitle")}
+                      onClick={() => run(() => scmStage(project, selected, f.path))}
+                    />
+                  ))}
+                </SidebarMenu>
+              </SidebarGroup>
+            </>
+          )}
+        </SidebarGroup>
+      )}
+    </>
+  );
+}
+
 /** 좌측 패널 (§비주얼 §24 §좌측 패널 · §7 §좌측 패널 · §비주얼 §34) — **shadcn `sidebar`**다.
  *
  *  **팝오버가 걷혔다**(`01e5293b`, 요구 `48b13597`). 걷힌 것은 **자리와 그릇 둘뿐**이고 줄의
@@ -1422,6 +1684,7 @@ function TabBar({
  *  `session id`는 안 그린다: UUID 36자이고 사람이 이 화면에서 그 값을 쓸 일이 없다(§6과 같은 자). */
 function SidePanel({
   project,
+  projectName,
   home,
   personas,
   surface,
@@ -1435,6 +1698,8 @@ function SidePanel({
   onSchedulesChange,
 }: {
   project: string;
+  /** 소스 컨트롤 표면 루트 줄의 이름(§비주얼 §72 ⑤) — `<ScmSurface>`로 그대로 내린다. */
+  projectName: string;
   home: Panel;
   /** `새 스케줄` 다이얼로그의 페르소나 선택지(§7-4 결정 2) — `HomeUI`가 받은 값을 그대로 내린다. */
   personas: string[];
@@ -1534,9 +1799,11 @@ function SidePanel({
           자리다. `no-scrollbar`도 같이 오는데 `globals.css`에 그 유틸이 없어(실측 0건)
           생성되지 않는다: 스크롤바가 종전대로 보인다.
           **아래 단은 고른 표면의 목록 하나만 뜬다**(§11 §셸 §자리 표) — `홈 에이전트`면 종전
-          세 그룹 그대로다. 나머지 셋의 내용은 P366-5·6·8이 채운다 - 지금은 빈 상태 한 줄이다. */}
+          세 그룹 그대로다. `소스 컨트롤`은 이 티켓(P366-8)이 채운다 - 나머지 둘은 P366-5·6이
+          채운다 - 지금은 빈 상태 한 줄이다. */}
       <SidebarContent className="gap-4 px-4 py-2">
-        {surface !== "agent" && (
+        {surface === "scm" && <ScmSurface project={project} projectName={projectName} />}
+        {(surface === "terminal" || surface === "explorer") && (
           <SidebarGroup className="p-0">
             <EmptyState text={t(`home.surface.${surface}.empty`)} />
           </SidebarGroup>

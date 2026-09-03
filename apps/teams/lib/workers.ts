@@ -2644,11 +2644,13 @@ export type WorktreePrep = {
   skipped?: true;
 };
 
+export type WorktreeEntry = { worktree: string; branch: string | null; prunable: boolean };
+
 /** `git worktree list --porcelain`을 파싱한다 — 트리·등록 선존재 판정(§4 생성 4항 갈래표)의
- *  입력. 블록은 빈 줄로 갈린다. `worktree` 줄이 없는 블록(트레일링 개행)은 버린다. */
-async function listWorktreeEntries(
-  repo: string,
-): Promise<{ worktree: string; branch: string | null; prunable: boolean }[]> {
+ *  입력. 블록은 빈 줄로 갈린다. `worktree` 줄이 없는 블록(트레일링 개행)은 버린다.
+ *  **export한다**(§11-3 결정 1) — `lib/source-control.ts`의 체크아웃 목록이 이 함수를 그대로
+ *  쓴다. 새로 파싱하지 않는다. */
+export async function listWorktreeEntries(repo: string): Promise<WorktreeEntry[]> {
   const { stdout } = await promisify(execFile)("git", ["-C", repo, "worktree", "list", "--porcelain"]);
   return stdout
     .split("\n\n")

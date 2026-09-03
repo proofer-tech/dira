@@ -2061,6 +2061,27 @@ export const ko: Record<string, string> = {
   "home.tabs.empty": "열린 탭 없음",
   "home.tabs.close": "닫기",
 
+  // 소스 컨트롤(§11-3 결정 1-2-3, P366-8) — 체크아웃 목록·status·업스트림. 커밋·push·pull은
+  // P366-9. `word.*` 넷은 `--porcelain=v2`의 아는 코드 넷의 낱말이고, 모르는 코드는 이 사전을
+  // 안 거친다(§비주얼 §72 ④ — 화면이 코드를 그대로 `font-mono`로 보여준다).
+  "home.scm.root": "루트",
+  "home.scm.worktreesPrefix": "워크트리 ",
+  "home.scm.stagedPrefix": "스테이지 ",
+  "home.scm.unstagedPrefix": "작업 트리 ",
+  "home.scm.stageAll": "전부 스테이지",
+  "home.scm.refresh": "다시 읽기",
+  "home.scm.loading": "읽는 중",
+  "home.scm.loadFailed": "읽기 실패",
+  "home.scm.noUpstream": "업스트림 없음",
+  "home.scm.aheadPrefix": "앞선 커밋 ",
+  "home.scm.behindPrefix": "뒤처진 커밋 ",
+  "home.scm.stageTitle": "스테이지",
+  "home.scm.unstageTitle": "스테이지 취소",
+  "home.scm.word.modified": "고침",
+  "home.scm.word.new": "새 파일",
+  "home.scm.word.deleted": "지움",
+  "home.scm.word.renamed": "이름 바뀜",
+
   // 세션 스트림(§0-16 §묶음 표 행 5 갈래, `33563f49`) — `components/session-stream.tsx` ·
   // `lib/interject.ts`. `lib/transcript.ts`는 화면 껍데기가 아니라 사건 데이터를 만드는 자리라
   // `transcriptLib.*`로 접두를 가른다(daf72662의 파일 접두 판단과 같다). en은 후속 티켓이 채운다.
@@ -4240,6 +4261,24 @@ export const en: Record<string, string> = {
   "home.surface.explorer.empty": "Empty directory",
   "home.tabs.empty": "No open tabs",
   "home.tabs.close": "Close",
+
+  "home.scm.root": "Root",
+  "home.scm.worktreesPrefix": "Worktrees ",
+  "home.scm.stagedPrefix": "Staged ",
+  "home.scm.unstagedPrefix": "Working tree ",
+  "home.scm.stageAll": "Stage all",
+  "home.scm.refresh": "Refresh",
+  "home.scm.loading": "Loading",
+  "home.scm.loadFailed": "Failed to load",
+  "home.scm.noUpstream": "No upstream",
+  "home.scm.aheadPrefix": "Ahead ",
+  "home.scm.behindPrefix": "Behind ",
+  "home.scm.stageTitle": "Stage",
+  "home.scm.unstageTitle": "Unstage",
+  "home.scm.word.modified": "Modified",
+  "home.scm.word.new": "New",
+  "home.scm.word.deleted": "Deleted",
+  "home.scm.word.renamed": "Renamed",
 
   // 온톨로지 화면(§0-16 §발행 §묶음 표 행 12 갈래) — `ko`는 `2ef7a4e9`가 뽑았다.
   // **`protocols-ui.tsx`와 판박이인 자리(새 파일 · 편집기 · 이름변경 · 삭제 · 사이드바)는

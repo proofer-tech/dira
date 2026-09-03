@@ -32,6 +32,19 @@ import {
   type ScheduleView,
 } from "@/lib/home-agent";
 import { getProject, resolveConfig } from "@/lib/projects";
+import {
+  listCheckouts,
+  listRemoteBranches,
+  readStatus,
+  resolveCheckout,
+  setUpstream,
+  stageAll,
+  stageFile,
+  unstageFile,
+  type Checkout,
+  type GitStatus,
+} from "@/lib/source-control";
+import path from "node:path";
 
 /** 등록된 프로젝트인가. **클라이언트가 준 id는 신뢰 경계 밖이다** — 여기서 걸러야 등록 안 된
  *  값이 `home-sessions.json`의 키가 되지 않는다(경로가 되는 값은 그 파일의 **값**이고 그쪽
@@ -216,5 +229,105 @@ export async function deleteSchedule(projectId: string, id: string): Promise<Sch
     return await readScheduleViews(project.id);
   } catch {
     return [];
+  }
+}
+
+/** 소스 컨트롤 표면(§11-3). **`repo`는 `project.root`가 아니라 그 부모다** — `root`는
+ *  `<프로젝트>/.dira`이고 워크트리는 `<root>/worktrees/<이름>`에 있으므로, `git`이 알아야
+ *  하는 프로젝트 루트는 그 부모 디렉터리다(`lib/workers.ts`의 `prepareWorktree`와 같은 계산). */
+function repoOf(root: string): string {
+  return path.dirname(root);
+}
+
+/** 체크아웃 목록(§11-3 결정 1) — 표면을 열 때와 `다시 읽기`를 누를 때만 부른다(§11 결정 4).
+ *  못 읽는 프로젝트는 빈 배열로 물러난다 — 폴링 화면들과 같은 물러남 규칙이다. */
+export async function scmCheckouts(projectId: string): Promise<Checkout[]> {
+  try {
+    return await listCheckouts(repoOf((await required(projectId)).root));
+  } catch {
+    return [];
+  }
+}
+
+/** `checkoutId`가 신뢰 경계 밖 값이다(클라이언트가 고른 목록 줄) — `resolveCheckout`이 그 값을
+ *  실재하는 체크아웃의 절대경로로 바꾼 뒤에만 그 경로에서 git을 부른다. 없으면 `null`. */
+export async function scmStatus(projectId: string, checkoutId: string): Promise<GitStatus | null> {
+  try {
+    const project = await required(projectId);
+    const checkout = await resolveCheckout(repoOf(project.root), checkoutId);
+    return checkout ? await readStatus(checkout.path) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** 파일 하나를 스테이지 - 해제한다(§11-3 결정 2). 성공 여부와 무관하게 최신 status를 다시
+ *  읽어 낸다 — 화면이 그 값 하나로 목록을 갈아 끼운다(폴링 응답들과 같은 왕복 한 벌). */
+export async function scmStage(projectId: string, checkoutId: string, filePath: string): Promise<GitStatus | null> {
+  try {
+    const project = await required(projectId);
+    const checkout = await resolveCheckout(repoOf(project.root), checkoutId);
+    if (!checkout) return null;
+    await stageFile(checkout.path, filePath);
+    return await readStatus(checkout.path);
+  } catch {
+    return null;
+  }
+}
+
+export async function scmUnstage(
+  projectId: string,
+  checkoutId: string,
+  filePath: string,
+): Promise<GitStatus | null> {
+  try {
+    const project = await required(projectId);
+    const checkout = await resolveCheckout(repoOf(project.root), checkoutId);
+    if (!checkout) return null;
+    await unstageFile(checkout.path, filePath);
+    return await readStatus(checkout.path);
+  } catch {
+    return null;
+  }
+}
+
+export async function scmStageAll(projectId: string, checkoutId: string): Promise<GitStatus | null> {
+  try {
+    const project = await required(projectId);
+    const checkout = await resolveCheckout(repoOf(project.root), checkoutId);
+    if (!checkout) return null;
+    await stageAll(checkout.path);
+    return await readStatus(checkout.path);
+  } catch {
+    return null;
+  }
+}
+
+/** 업스트림 후보(§11-3 결정 3) — 셀렉트가 고를 목록. */
+export async function scmRemoteBranches(projectId: string, checkoutId: string): Promise<string[]> {
+  try {
+    const project = await required(projectId);
+    const checkout = await resolveCheckout(repoOf(project.root), checkoutId);
+    return checkout ? await listRemoteBranches(checkout.path) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** 업스트림을 바꾼다. `setUpstream`이 `branch`를 그 체크아웃의 원격 추적 브랜치 목록에서 다시
+ *  확인한다 — 화면이 준 값을 그대로 믿지 않는다(신뢰 경계). */
+export async function scmSetUpstream(
+  projectId: string,
+  checkoutId: string,
+  branch: string,
+): Promise<GitStatus | null> {
+  try {
+    const project = await required(projectId);
+    const checkout = await resolveCheckout(repoOf(project.root), checkoutId);
+    if (!checkout) return null;
+    await setUpstream(checkout.path, branch);
+    return await readStatus(checkout.path);
+  } catch {
+    return null;
   }
 }
