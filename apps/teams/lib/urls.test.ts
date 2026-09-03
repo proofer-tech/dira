@@ -6,6 +6,8 @@ import {
   dateTimeLabel,
   doneLimit,
   DONE_LANE_LIMIT,
+  epicLimit,
+  EPIC_SIDEBAR_PAGE,
   engineCan,
   engineMissing,
   findMatches,
@@ -198,6 +200,18 @@ test("doneLimit — 정본 URL도 쓰레기 값도 20건으로 떨어진다(§1 
 test("doneLimit — 20보다 큰 값은 그대로 남는다(내려 읽던 자리가 폴링에 안 되감긴다)", () => {
   assert.equal(doneLimit("40"), 40);
   assert.equal(doneLimit("206"), 206);
+});
+
+/** `?epics=`는 에픽 사이드바 무한스크롤 몫이다(§에픽 결정 22) — `rowLimit`·`doneLimit`과 같은
+ *  유도(서버가 자르는 수와 감시행이 만드는 다음 URL이 어긋나면 20줄씩 밀리거나 영영 안 이어진다). */
+test("epicLimit — 정본 URL도 쓰레기 값도 20줄로 떨어진다(§에픽 결정 22)", () => {
+  assert.equal(EPIC_SIDEBAR_PAGE, 20);
+  for (const v of [null, "", "0", "abc", "-5", "10", "20"]) assert.equal(epicLimit(v), 20);
+});
+
+test("epicLimit — 20보다 큰 값은 그대로 남는다(내려 읽던 자리가 폴링에 안 되감긴다)", () => {
+  assert.equal(epicLimit("40"), 40);
+  assert.equal(epicLimit("49"), 49);
 });
 
 test("relationPath — 이웃 레인은 거터(24) 안에서 끝난다", () => {

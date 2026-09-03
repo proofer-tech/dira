@@ -19,6 +19,7 @@ import {
   refreshKnownRefs,
   resolveMarkdownRefs,
   saveEpicReadme,
+  sortEpicsForSidebar,
   suggestEpicKey,
 } from "./epics.ts";
 
@@ -234,6 +235,31 @@ test("README 저장 — 빈 제목·빈 내용을 막는다, 있는 파일은 �
   if (!emptyBody.ok) assert.strictEqual(emptyBody.reason, "empty");
 
   assert.strictEqual(readFileSync(path.join(root, "epics", "P273", "README.md"), "utf8"), before);
+});
+
+test("사이드바 정렬 — 대기·진행중 티켓을 든 에픽이 앞, 같은 무리 안에서는 P번호 오름차순(§에픽 결정 22)", () => {
+  const mk = (epic: string, counts: { open: number; wip: number; done: number }) => ({
+    epic,
+    counts,
+    workers: [],
+  });
+  const epics = [
+    mk("P10", { open: 0, wip: 0, done: 3 }), // 비활성
+    mk("P2", { open: 1, wip: 0, done: 0 }), // 활성
+    mk("P3", { open: 0, wip: 0, done: 1 }), // 비활성
+    mk("P1", { open: 0, wip: 1, done: 0 }), // 활성
+  ];
+  assert.deepStrictEqual(
+    sortEpicsForSidebar(epics).map((e) => e.epic),
+    ["P2", "P1", "P10", "P3"],
+  );
+});
+
+test("사이드바 정렬 — 원본 배열을 안 바꾼다(스윔레인·에픽 화면 첫 선택은 이 함수를 안 거친다)", () => {
+  const mk = (epic: string) => ({ epic, counts: { open: 0, wip: 0, done: 0 }, workers: [] });
+  const epics = [mk("P2"), mk("P1")];
+  sortEpicsForSidebar(epics);
+  assert.deepStrictEqual(epics.map((e) => e.epic), ["P2", "P1"]);
 });
 
 test("키 제안 — P<숫자> 꼴의 최댓값 + 1, P273-2처럼 접미가 붙은 값은 안 센다", () => {

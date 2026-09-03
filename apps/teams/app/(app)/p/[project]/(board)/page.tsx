@@ -61,7 +61,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { boardRevision } from "@/lib/board-revision";
-import { NO_EPIC, epicTitle, epicsFromTickets, listEpics, resolveMarkdownRefs } from "@/lib/epics";
+import {
+  NO_EPIC,
+  epicTitle,
+  epicsFromTickets,
+  listEpics,
+  resolveMarkdownRefs,
+  sortEpicsForSidebar,
+} from "@/lib/epics";
 import { t, type Locale } from "@/lib/i18n";
 import { mayHaveRefs } from "@/lib/markdown-refs";
 import {
@@ -107,7 +114,7 @@ import {
   squadsDir,
 } from "@/lib/projects";
 import { findStream, lastActivity, sessionIdOf, type StreamEvent } from "@/lib/transcript";
-import { doneLimit, formatRemaining, rowLimit } from "@/lib/urls";
+import { doneLimit, epicLimit, formatRemaining, rowLimit } from "@/lib/urls";
 
 // 큐는 GUI 밖에서(cron·세션이) 바뀐다. 프리렌더하면 빌드 시점 내용이 굳는다.
 export const dynamic = "force-dynamic";
@@ -378,11 +385,18 @@ export default async function Board({
   // persona 필터가 걸려도 안 줄어든다). `total`이 `kind`-`persona`만 반영하고 `status`는 안 보는
   // 것과 같은 이유: 사이드바는 구조적 분류지 그때그때의 필터 결과가 아니다.
   const epics = await listEpics(project.root, tickets);
+  // 사이드바 정렬·자르기(§에픽 결정 22) — `전체` 줄·워커 칩·스윔레인은 안 거친다: `NO_EPIC`은
+  // 사이드바에 안 뜨는 값이라(결정 18) 자르기 전에 뺀다, 안 그러면 자른 20자리 중 하나를 먹는다.
+  const sidebarEpics = sortEpicsForSidebar(epics.filter((e) => e.epic !== NO_EPIC));
+  // 창을 뚫는다(§자를 수 없는 것 셋) — 지금 걸린 `?epic=` 값이 첫 페이지 밖이면 그 줄까지 그린다
+  // (홈 대화 목록의 `visibleChatRows`와 같은 규칙).
+  const activeSidebarIdx = query.epic === null ? -1 : sidebarEpics.findIndex((e) => e.epic === query.epic);
+  const epicsShown = Math.min(sidebarEpics.length, Math.max(epicLimit(sp.get("epics")), activeSidebarIdx + 1));
+  const sidebarEpicsWindow = sidebarEpics.slice(0, epicsShown);
+  // 제목을 그리는 줄만큼만 읽는다(§딸려 오는 것) — 49번이 아니라 창 크기(20)번.
   const titles = Object.fromEntries(
     await Promise.all(
-      epics
-        .filter((e) => e.epic !== NO_EPIC)
-        .map(async (e) => [e.epic, await epicTitle(project.root, e.epic)] as const),
+      sidebarEpicsWindow.map(async (e) => [e.epic, await epicTitle(project.root, e.epic)] as const),
     ),
   );
 
@@ -955,7 +969,9 @@ export default async function Board({
           <div className="flex min-h-0 flex-1 gap-6">
             <EpicSidebar
               projectId={id}
-              epics={epics}
+              epics={sidebarEpicsWindow}
+              allEpics={epics}
+              more={epicsShown < sidebarEpics.length}
               titles={titles}
               active={query.epic}
               hrefFor={epicHref}

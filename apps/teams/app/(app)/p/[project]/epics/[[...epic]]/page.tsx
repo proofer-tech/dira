@@ -29,12 +29,13 @@ import {
   listEpics,
   NO_EPIC,
   resolveMarkdownRefs,
+  sortEpicsForSidebar,
   type EpicMemory,
 } from "@/lib/epics";
 import { t } from "@/lib/i18n";
 import { epicOf, listTickets } from "@/lib/queue";
 import { epicCostChunk } from "@/lib/usage";
-import { decodeHash } from "@/lib/urls";
+import { decodeHash, epicLimit } from "@/lib/urls";
 import { getProject, readLanguage, resolveConfig } from "@/lib/projects";
 
 // 큐는 GUI 밖에서도 바뀐다(디스패처 · 세션의 회고) — 굳히지 않는다(personas 화면과 같은 이유).
@@ -45,10 +46,10 @@ export default async function Epics({
   searchParams,
 }: {
   params: Promise<{ project: string; epic?: string[] }>;
-  searchParams: Promise<{ sidebar?: string }>;
+  searchParams: Promise<{ sidebar?: string; epics?: string }>;
 }) {
   const { project: id, epic: epicSegs } = await params;
-  const { sidebar } = await searchParams;
+  const { sidebar, epics: epicsParam } = await searchParams;
   // `?sidebar=off`(§에픽 결정 13 · §비주얼 §52 ⑦) — 없거나 모르는 값이면 펼침. 이 화면은
   // 세그먼트마다 **다른 경로**라(catch-all) 각 링크가 이 값을 직접 실어야 접힌 채로 남는다
   // (보드는 `sp` 통째 복사로 저절로지만 여기는 그 그릇이 없다).
@@ -64,17 +65,27 @@ export default async function Epics({
   // `(에픽 없음)`은 고를 대상이 아니다 — 메모리 사이드카가 없는 값이다(§결정 6).
   const realEpics = epics.filter((e) => e.epic !== NO_EPIC);
 
-  const titles = Object.fromEntries(
-    await Promise.all(
-      realEpics.map(async (e) => [e.epic, await epicTitle(project.root, e.epic)] as const),
-    ),
-  );
-
-  // 세그먼트가 없으면 목록 첫 실제 에픽이다(§5 §선택이 경로에 담긴다 ①과 같은 규약).
+  // 세그먼트가 없으면 목록 첫 실제 에픽이다(§5 §선택이 경로에 담긴다 ①과 같은 규약) — **P번호
+  // 순서 그대로**(`realEpics`), 사이드바 정렬(활성 먼저)을 안 거친다(§무수정 — 결정 6은 이 화면이
+  // 늘 에픽 하나를 골라 둔다고만 정하지, 그 하나를 사이드바 순서로 고르라고 하지 않는다).
   // 있는데 목록에 없으면(가짜 값 · 닫혀서 티켓이 하나도 안 남은 값) 아래 Alert로 갈린다.
   const requested = epicSegs?.map(decodeHash).join("/") ?? null;
   const selected = requested ?? realEpics[0]?.epic ?? null;
   const current = selected === null ? undefined : realEpics.find((e) => e.epic === selected);
+
+  // 사이드바 정렬·자르기(§에픽 결정 22) — `EpicSidebar`가 두 화면에서 같은 컴포넌트라(§결정 6)
+  // 보드와 같은 처방이다. 창을 뚫는다(§자를 수 없는 것 셋) — 이 화면은 늘 에픽 하나를 골라 두므로
+  // 이 규칙이 매번 걸린다.
+  const sidebarEpics = sortEpicsForSidebar(realEpics);
+  const activeSidebarIdx = selected === null ? -1 : sidebarEpics.findIndex((e) => e.epic === selected);
+  const epicsShown = Math.min(sidebarEpics.length, Math.max(epicLimit(epicsParam ?? null), activeSidebarIdx + 1));
+  const sidebarEpicsWindow = sidebarEpics.slice(0, epicsShown);
+  // 제목을 그리는 줄만큼만 읽는다(§딸려 오는 것).
+  const titles = Object.fromEntries(
+    await Promise.all(
+      sidebarEpicsWindow.map(async (e) => [e.epic, await epicTitle(project.root, e.epic)] as const),
+    ),
+  );
 
   // `EpicSidebar`의 값 규약과 같다 — `""`는 `(에픽 없음)`(board.ts `epicHref`와 같은 값).
   // board는 `?epic=`, 이 화면은 경로 — 줄의 목적지가 갈리는 그 prop 하나(§결정 6).
@@ -120,7 +131,9 @@ export default async function Epics({
 
       <EpicSidebar
         projectId={id}
-        epics={epics}
+        epics={sidebarEpicsWindow}
+        allEpics={epics}
+        more={epicsShown < sidebarEpics.length}
         titles={titles}
         active={current?.epic ?? null}
         hrefFor={hrefFor}

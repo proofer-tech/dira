@@ -155,6 +155,12 @@ export const rowLimit = (rows: string | null) => Math.max(ROW_PAGE, Number(rows)
 export const DONE_LANE_LIMIT = 20;
 export const doneLimit = (done: string | null) => Math.max(DONE_LANE_LIMIT, Number(done) || 0);
 
+/** 에픽 사이드바가 그리는 에픽 줄 수(§에픽 결정 22) — `?epics=` 하나가 정한다. `doneLimit`과
+ *  나란한 값이다: 서버는 이 수만큼 자르고 감시행은 이 수에 20을 더해 다음 URL을 만든다.
+ *  하한도 같은 이유로 `EPIC_SIDEBAR_PAGE`이고 상한은 없다(`rowLimit` 주석과 같다). */
+export const EPIC_SIDEBAR_PAGE = 20;
+export const epicLimit = (epics: string | null) => Math.max(EPIC_SIDEBAR_PAGE, Number(epics) || 0);
+
 /** 시각 한 칸 (DESIGN.md §비주얼 §26 ④) — **오늘 안이면 `HH:MM`, 다른 날이면 `M/D`.**
  *
  *  **24시간제**고 `toLocaleTimeString`을 안 쓴다: 로케일에 따라 `오후 5:40`이 나와 폭이 흔들린다

@@ -73,6 +73,16 @@ export async function listEpics(root: string, tickets: Ticket[]): Promise<Epic[]
   return sortEpics(epics);
 }
 
+/** 사이드바가 그리는 순서(§에픽 결정 22) — 1차 키는 **대기 또는 진행중 티켓이 하나라도 있는가**
+ *  (`counts.open + counts.wip > 0`), 활성이 앞이다. 2차 키는 `listEpics`가 이미 낸 P번호 문자열
+ *  오름차순이라 여기서 다시 정렬하지 않고 **안정 정렬에 기댄다**(`Array.prototype.sort`는
+ *  ES2019부터 표준으로 안정적이다) — 스윔레인 띠(`epicsFromTickets`)·에픽 화면 첫 선택은
+ *  이 함수를 안 거치는 그 P번호 순서 그대로다(§무수정). */
+export function sortEpicsForSidebar(epics: Epic[]): Epic[] {
+  const active = (e: Epic) => e.counts.open + e.counts.wip > 0;
+  return [...epics].sort((a, b) => Number(active(b)) - Number(active(a)));
+}
+
 /** `epic` 값은 URL에서 온다 — `../`가 큐(`root`) 밖으로 못 나간다(§경로 방어).
  *  벗어나면 null(존재하지 않는 것과 같게 떨어진다 — 던지지 않는다: 이 값은 필터·표시용이지
  *  이 경로에 쓰기가 걸리지 않는다). */

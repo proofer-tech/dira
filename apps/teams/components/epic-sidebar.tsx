@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { EpicCreateButton } from "@/components/epic-sidebar-create";
+import { EpicSidebarMore } from "@/components/epic-sidebar-more";
 import { EpicRowPanel } from "@/components/epic-sidebar-panel";
 import { NO_EPIC, suggestEpicKey, type Epic } from "@/lib/epics";
 import { t, type Locale } from "@/lib/i18n";
@@ -32,6 +33,8 @@ const WORKER_CHIP_CAP = 3;
 export function EpicSidebar({
   projectId,
   epics,
+  allEpics,
+  more,
   titles,
   active,
   hrefFor,
@@ -44,7 +47,14 @@ export function EpicSidebar({
 }: {
   /** 만들기 입구가 부르는 서버 액션에 넘긴다(§에픽 결정 17) — 사이드바에 새로 느는 프롭 하나 */
   projectId: string;
+  /** **자른 뒤**(§에픽 결정 22) — 정렬(활성 먼저)까지 끝난 목록 중 지금 그릴 줄만. 제목은
+   *  호출부가 이 배열만큼만 읽어 둔다(§딸려 오는 것). */
   epics: Epic[];
+  /** **자르기 전** 전체 목록(NO_EPIC 포함) — `전체` 줄 건수와 만들기 키 제안은 여기서 낸다
+   *  (§자를 수 없는 것 셋: 자른 20개의 합·최댓값을 그리면 큐 전체를 가리켜야 하는 수가 거짓말한다) */
+  allEpics: Epic[];
+  /** 자른 뒤에 남은 줄이 있는가 — 있으면 목록 끝에 감시행이 붙는다(§비주얼 §52 ⑪) */
+  more: boolean;
   /** P번호 → `README.md` 첫 줄. 없거나 못 읽으면 `null`(§결정 5 §제목 없음). `NO_EPIC`은 키에 없다 */
   titles: Record<string, string | null>;
   /** 지금 걸린 `?epic=` 값. `null`이면 필터 없음(어느 줄도 선택되지 않는다) */
@@ -70,8 +80,10 @@ export function EpicSidebar({
 }) {
   // `전체`(§결정 12) 건수 — 에픽 축 필터가 걸리기 전 큐 전체다. `listEpics`에 항목을 안 더하므로
   // 아래 줄들(NO_EPIC 포함)의 합으로 낸다 — 그래서 수용조건 2가 저절로 참이다.
-  const allTotal = epics.reduce((n, e) => n + e.counts.open + e.counts.wip + e.counts.done, 0);
-  const allWip = epics.reduce((n, e) => n + e.counts.wip, 0);
+  // **`allEpics`에서 낸다** — 사이드바가 그리는 `epics`는 이미 20줄로 잘려 있어서, 자른 뒤의
+  // 합을 그리면 큐 전체를 가리켜야 하는 이 수가 첫 페이지 몫으로 준다(§에픽 결정 22 §자를 수 없는 것).
+  const allTotal = allEpics.reduce((n, e) => n + e.counts.open + e.counts.wip + e.counts.done, 0);
+  const allWip = allEpics.reduce((n, e) => n + e.counts.wip, 0);
   // 접힌 컨트롤(펴기)과 펼친 컨트롤(접기)은 글리프 하나가 두 방향을 다 낸다(§52 ⑦) — 자리도
   // 같다: `SidebarGroupLabel`이 뜨는 그 행(`h-6`·`px-2`). `ml-auto`는 결정 17이 만들기로
   // 옮긴다(§52 ⑩) — 둘째 컨트롤이 뜨면서 그 자리가 만들기·접기 **쌍**의 앞쪽으로 간다.
@@ -89,7 +101,8 @@ export function EpicSidebar({
     </Button>
   );
   // 만들기 입구의 키 제안(§에픽 결정 17 §키 제안) — 목록의 `P<숫자>` 최댓값 + 1.
-  const suggestedKey = suggestEpicKey(epics);
+  // **`allEpics`에서 낸다** — 자른 20개에서 내면 이미 있는 키를 제안한다(§에픽 결정 22).
+  const suggestedKey = suggestEpicKey(allEpics);
   return (
     // `w-full`·`min-h-svh` 기본값을 덮는다(personas-ui.tsx와 같은 처방) — 여기는 형제 열
     // 하나(칸반 또는 표)와 나란한 **한 칸**이지 2단 전체가 아니다.
@@ -244,6 +257,7 @@ export function EpicSidebar({
                     </SidebarMenuItem>
                   );
                 })}
+                <EpicSidebarMore more={more} shown={epics.length} />
               </SidebarMenu>
             </SidebarGroup>
           )}
