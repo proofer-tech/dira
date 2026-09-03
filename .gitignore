@@ -42,3 +42,7 @@ apps/site/
 
 # Spotlight 인덱싱 제외 마커 (로컬)
 .metadata_never_index
+
+# QA 세션이 만드는 CDP 스크래치(사고 `6bad8fd3`). 세션이 지우지 않고 끝나면 몇 시간 뒤
+# 같은 워크트리에 들어온 다른 세션의 `push.sh ship`이 부르는 `git add -A`가 담아 push한다.
+apps/teams/.qa-tmp/
