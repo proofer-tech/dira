@@ -245,6 +245,32 @@ fi
 rm -rf "$T"
 
 echo
+echo "== ⑨ drift가 Ticket 커밋만 최신순으로 내고 Exception은 뺀다 =="
+T=$(mktemp -d)
+new_fixture "$T" 0
+# 수: Ticket 트레일러만 있다 / 음: Exception도 같이 있다 / 무: 트레일러가 없다.
+git -C "$T/main" commit -q --allow-empty -m "수" -m "Ticket: aaaa1111"
+git -C "$T/main" commit -q --allow-empty -m "음" -m "Ticket: bbbb2222"$'\n'"Exception: 사람이 허락"
+git -C "$T/main" commit -q --allow-empty -m "무"
+OUT=$(cd "$T/main" && bash "$PUSH" drift 2>&1)
+echo "$OUT"
+if [ "$(printf '%s\n' "$OUT" | grep -c .)" = "1" ] && printf '%s\n' "$OUT" | grep -q ' aaaa1111 수$'; then
+  pass "drift가 Ticket 커밋 1건만 냈다(Exception·무트레일러 제외)"
+else
+  fail "drift 출력이 다르다: $OUT"
+fi
+# 제목에 공백이 있어도 통째로 남는다 - 배치 파서가 제목을 마지막 칸으로 묶는지.
+git -C "$T/main" commit -q --allow-empty -m "제목 안에 공백 세 칸" -m "Ticket: cccc3333"
+OUT=$(cd "$T/main" && bash "$PUSH" drift 2>&1 | head -1)
+if [ "$(printf '%s\n' "$OUT" | awk '{print $3}')" = "cccc3333" ] && \
+   [ "$(printf '%s\n' "$OUT" | cut -d" " -f4-)" = "제목 안에 공백 세 칸" ]; then
+  pass "공백 든 제목이 안 잘렸고 최신이 먼저다"
+else
+  fail "제목 묶음이 깨졌다: $OUT"
+fi
+rm -rf "$T"
+
+echo
 echo "== 엔진 무수정 - tick.sh/tickets.py는 0줄 =="
 cd "$DIR/../.."
 STAT=$(git diff --stat master -- tick.sh tickets.py)

@@ -145,25 +145,35 @@ EOF
 # 것). `Ticket:` 트레일러가 있고 `Exception:` 트레일러가 없으면 한 줄씩 낸다 - 없으면 아무것도
 # 안 내고 exit 0(선행조건 2가 classify를 다루는 방식과 같다). reflog가 최신순이라 출력도 최신순이다.
 do_drift() {
-  local reflog entry hash body ticket title ts
-  reflog=$(git -C "$_recv" reflog show "$_branch" 2>/dev/null) || return 0
-  while IFS= read -r entry; do
-    case "$entry" in
-      *"}: commit"*) ;;
-      *) continue ;;
-    esac
-    hash=${entry%% *}
-    body=$(git -C "$_recv" show -s --format='%B' "$hash" 2>/dev/null) || continue
-    printf '%s\n' "$body" | grep -q '^Exception:' && continue
-    ticket=$(printf '%s\n' "$body" | grep -m1 '^Ticket:')
-    ticket=${ticket#Ticket:}; ticket=${ticket# }
-    [ -n "$ticket" ] || continue
-    title=$(git -C "$_recv" show -s --format='%s' "$hash" 2>/dev/null)
-    ts=$(git -C "$_recv" show -s --format='%cd' --date=format:'%Y-%m-%dT%H:%M' "$hash" 2>/dev/null)
-    echo "$hash $ts $ticket $title"
-  done <<EOF
-$reflog
-EOF
+  local hashes
+  # `git show`는 커밋마다가 아니라 **전부 한 번에** 부른다. 항목마다 부르면 커밋 하나가
+  # fork 3개(body·subject·date)라 reflog에 commit 55건이면 165 fork = 1.5초다. 이 함수는
+  # dispatch-gate.sh가 tick마다 지나는 자리고 워커 9개가 30초마다 깨니 분당 18번 그 값을 문다 -
+  # 실측(2026-09-03): 락 앞 구간이 30초를 넘겨 같은 워커의 tick이 4겹씩 쌓였다(프로세스 68개).
+  # ponytail: 해시를 인자로 한 줄에 넘긴다 - reflog의 commit 항목이 2만 건을 넘으면 ARG_MAX에
+  # 걸린다. 그때는 `reflog show -n <N>`으로 자른다(reflog는 최신순이라 자른 쪽이 옛것이다).
+  hashes=$(git -C "$_recv" reflog show "$_branch" 2>/dev/null | awk '/}: commit/{print $1}')
+  [ -n "$hashes" ] || return 0
+  git -C "$_recv" show -s --format='%x1e%h %cd %s%n%B' \
+      --date=format:'%Y-%m-%dT%H:%M' $hashes 2>/dev/null |
+  awk 'BEGIN { RS = "\036" }
+    $0 == "" { next }
+    {
+      nl = index($0, "\n"); head = substr($0, 1, nl - 1)
+      ticket = ""
+      n = split(substr($0, nl + 1), lines, "\n")
+      for (i = 1; i <= n; i++) {
+        if (lines[i] ~ /^Exception:/) { ticket = ""; break }
+        if (ticket == "" && lines[i] ~ /^Ticket:/) {
+          ticket = lines[i]; sub(/^Ticket:[ \t]*/, "", ticket)
+        }
+      }
+      if (ticket == "") next
+      sp = index(head, " "); h = substr(head, 1, sp - 1); rest = substr(head, sp + 1)
+      sp = index(rest, " ")
+      if (sp == 0) { ts = rest; title = "" } else { ts = substr(rest, 1, sp - 1); title = substr(rest, sp + 1) }
+      print h " " ts " " ticket " " title
+    }'
 }
 
 # 앞 실행이 stash push 뒤 pop 전에 죽어서 남긴 표식을 되돌린다(결정 4의 "다음 헬퍼 실행이 락을
