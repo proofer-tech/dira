@@ -70,6 +70,9 @@ import {
   pollHomeAnswer,
   refreshRefs,
   scmCheckouts,
+  scmCommit,
+  scmPull,
+  scmPush,
   scmRemoteBranches,
   scmSetUpstream,
   scmStage,
@@ -78,6 +81,7 @@ import {
   scmUnstage,
   stopHome,
   switchHome,
+  type ScmResult,
 } from "@/app/(app)/p/[project]/home/actions";
 import {
   AttachmentButton,
@@ -1474,11 +1478,16 @@ function CheckoutRow({
   );
 }
 
-/** 소스 컨트롤 표면(§11-3 결정 1-2-3 · §비주얼 §72 ④⑤, P366-8) — 체크아웃 목록 + status +
- *  파일 두 목록 + 업스트림. 커밋 - push - pull은 P366-9의 몫이라 여기 없다.
+/** 소스 컨트롤 표면(§11-3 결정 1-2-3-4 · §비주얼 §72 ④⑤, P366-8 · P366-9) — 체크아웃 목록 +
+ *  status + 파일 두 목록 + 업스트림 + 커밋 - push - pull.
  *
  *  **읽는 시점이 다른 표면과 다르다**(§11 결정 4 — 5초 폴링에 안 얹는다). 표면을 열 때(마운트)와
- *  `다시 읽기`를 누를 때만 서버를 부른다 — 열어 둔 채 시간이 가도 `git` 프로세스가 새로 안 뜬다. */
+ *  `다시 읽기`를 누를 때, 그리고 커밋 - push - pull 직후에만 서버를 부른다 — 열어 둔 채 시간이
+ *  가도 `git` 프로세스가 새로 안 뜬다.
+ *
+ *  **push 버튼은 향하는 곳을 라벨에 안 적는다**(§비주얼 §72 — 그룹 머리 두 낱말이 이미 그
+ *  채널이다, 같은 사실을 두 자리에 안 둔다). 워크트리인데 `checkout.pushSh`가 거짓이면 버튼
+ *  자리에 사유 문구가 뜬다 — 헬퍼를 화면이 만들어 넣지 않는다(§11-3 결정 4). */
 function ScmSurface({ project, projectName }: { project: string; projectName: string }) {
   const t = useT();
   const [checkouts, setCheckouts] = useState<Checkout[] | null>(null);
@@ -1487,6 +1496,8 @@ function ScmSurface({ project, projectName }: { project: string; projectName: st
   const [remotes, setRemotes] = useState<string[]>([]);
   const [failed, setFailed] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const loadStatus = async (id: string) => {
     setFailed(false);
@@ -1525,6 +1536,8 @@ function ScmSurface({ project, projectName }: { project: string; projectName: st
 
   const pick = (id: string) => {
     setSelected(id);
+    setActionError(null);
+    setMessage("");
     void loadStatus(id);
   };
 
@@ -1533,15 +1546,31 @@ function ScmSurface({ project, projectName }: { project: string; projectName: st
   // 클릭을 막는다 — git 프로세스 둘이 같은 인덱스를 동시에 건드리는 자리를 안 만든다.
   const run = (fn: () => Promise<GitStatus | null>) => {
     if (!selected || busy) return;
+    setActionError(null);
     setBusy(true);
     void fn()
       .then((next) => next && setStatus(next))
       .finally(() => setBusy(false));
   };
 
+  // 커밋 - push - pull 셋이 같은 모양이다: `status`를 실행 직후 값으로 갈고 `error`를 그대로
+  // 낸다(§11-3 결정 4 — "실패 사유가 그대로 뜬다"). `NO_PUSH_SH`만 화면 낱말로 옮긴다.
+  const runResult = (fn: () => Promise<ScmResult>) => {
+    if (!selected || busy) return;
+    setActionError(null);
+    setBusy(true);
+    void fn()
+      .then((r) => {
+        if (r.status) setStatus(r.status);
+        if (r.error) setActionError(r.error === "EMPTY_MESSAGE" ? t("home.scm.commitEmpty") : r.error);
+      })
+      .finally(() => setBusy(false));
+  };
+
   if (!checkouts) return null;
   const root = checkouts.filter((c) => c.isRoot);
   const worktrees = checkouts.filter((c) => !c.isRoot);
+  const selectedCheckout = checkouts.find((c) => c.id === selected) ?? null;
 
   return (
     <>
@@ -1587,6 +1616,31 @@ function ScmSurface({ project, projectName }: { project: string; projectName: st
                   {t("home.scm.behindPrefix")}
                   {status.behind}
                 </span>
+              </div>
+              {actionError && <p className="px-2 text-xs text-destructive">{actionError}</p>}
+              <div className="flex gap-2 px-2">
+                {selectedCheckout && (selectedCheckout.isRoot || selectedCheckout.pushSh) ? (
+                  <Button
+                    variant="outline"
+                    size="xs"
+                    className="flex-1"
+                    aria-disabled={busy || undefined}
+                    onClick={() => runResult(() => scmPush(project, selected))}
+                  >
+                    {t("home.scm.push")}
+                  </Button>
+                ) : (
+                  <p className="flex-1 self-center text-xs text-muted-foreground">{t("home.scm.noPushSh")}</p>
+                )}
+                <Button
+                  variant="outline"
+                  size="xs"
+                  className="flex-1"
+                  aria-disabled={busy || undefined}
+                  onClick={() => runResult(() => scmPull(project, selected))}
+                >
+                  {t("home.scm.pull")}
+                </Button>
               </div>
               <div className="px-2">
                 <Select
@@ -1651,6 +1705,27 @@ function ScmSurface({ project, projectName }: { project: string; projectName: st
                   ))}
                 </SidebarMenu>
               </SidebarGroup>
+              <div className="flex flex-col gap-2 px-2">
+                <Textarea
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  placeholder={t("home.scm.commitPlaceholder")}
+                  className="min-h-16 text-xs"
+                />
+                <Button
+                  variant="default"
+                  size="xs"
+                  className="w-full"
+                  aria-disabled={busy || status.staged.length === 0 || !message.trim() || undefined}
+                  onClick={() => {
+                    if (busy || status.staged.length === 0 || !message.trim()) return;
+                    runResult(() => scmCommit(project, selected, message));
+                    setMessage("");
+                  }}
+                >
+                  {t("home.scm.commit")}
+                </Button>
+              </div>
             </>
           )}
         </SidebarGroup>

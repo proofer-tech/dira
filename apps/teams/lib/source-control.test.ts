@@ -3,19 +3,23 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
+  commitStaged,
   listCheckouts,
   listRemoteBranches,
   parseStatus,
+  pullCheckout,
+  pushCheckout,
   readStatus,
   resolveCheckout,
   setUpstream,
   stageAll,
   stageFile,
   unstageFile,
+  type Checkout,
 } from "./source-control.ts";
 
 const tmps: string[] = [];
@@ -166,4 +170,110 @@ test("listRemoteBranches · setUpstream — origin/HEAD은 후보에서 빠지�
   // origin 리모트의 URL은 안 바뀐다(§11-3 결정 3).
   const url = execFileSync("git", ["-C", repo, "remote", "get-url", "origin"], { encoding: "utf8" }).trim();
   assert.strictEqual(url, upstream);
+});
+
+// ── commitStaged · pushCheckout · pullCheckout (§11-3 결정 4) ──────────────────
+
+test("commitStaged — 스테이지된 것만 들어가고 트레일러가 안 붙는다", async () => {
+  const repo = makeRepo();
+  writeFileSync(path.join(repo, "a.txt"), "two\n");
+  writeFileSync(path.join(repo, "b.txt"), "untracked\n");
+  await stageFile(repo, "a.txt"); // b.txt는 스테이지 안 함
+  const r = await commitStaged(repo, "고침 하나");
+  assert.deepStrictEqual(r, { ok: true, error: null });
+  const log = execFileSync("git", ["-C", repo, "log", "-1", "--format=%B"], { encoding: "utf8" });
+  assert.strictEqual(log.trim(), "고침 하나"); // Ticket: 트레일러 없음
+  const s = await readStatus(repo);
+  assert.deepStrictEqual(s.staged, []);
+  assert.deepStrictEqual(s.unstaged, [{ path: "b.txt", code: "?", word: "new" }]); // 안 들어감
+});
+
+test("commitStaged — 스테이지가 비어 있으면 실패 사유를 낸다", async () => {
+  const repo = makeRepo();
+  const r = await commitStaged(repo, "빈 커밋");
+  assert.strictEqual(r.ok, false);
+  assert.ok(r.error && r.error.length > 0);
+});
+
+test("pullCheckout — --ff-only 하나. fast-forward면 성공하고 머지 커밋이 안 생긴다", async () => {
+  const upstream = makeRepo();
+  const repo = mkdtempSync(path.join(tmpdir(), "scm-clone2-"));
+  tmps.push(repo);
+  rmSync(repo, { recursive: true, force: true });
+  execFileSync("git", ["clone", "-q", upstream, repo], { encoding: "utf8" });
+  writeFileSync(path.join(upstream, "a.txt"), "upstream change\n");
+  execFileSync("git", ["-C", upstream, "commit", "-qam", "upstream"], { encoding: "utf8" });
+
+  const r = await pullCheckout(repo);
+  assert.deepStrictEqual(r, { ok: true, error: null });
+  const log = execFileSync("git", ["-C", repo, "log", "-1", "--format=%s"], { encoding: "utf8" }).trim();
+  assert.strictEqual(log, "upstream"); // ff로 그대로 따라감, 새 머지 커밋 없음
+});
+
+test("pullCheckout — ff가 안 되면 실패 사유가 그대로 나오고 머지 커밋이 안 생긴다", async () => {
+  const upstream = makeRepo();
+  const repo = mkdtempSync(path.join(tmpdir(), "scm-clone3-"));
+  tmps.push(repo);
+  rmSync(repo, { recursive: true, force: true });
+  execFileSync("git", ["clone", "-q", upstream, repo], { encoding: "utf8" });
+  writeFileSync(path.join(upstream, "a.txt"), "upstream change\n");
+  execFileSync("git", ["-C", upstream, "commit", "-qam", "upstream"], { encoding: "utf8" });
+  writeFileSync(path.join(repo, "a.txt"), "local change\n");
+  execFileSync("git", ["-C", repo, "commit", "-qam", "local"], { encoding: "utf8" });
+
+  const before = execFileSync("git", ["-C", repo, "rev-parse", "HEAD"], { encoding: "utf8" });
+  const r = await pullCheckout(repo);
+  assert.strictEqual(r.ok, false);
+  assert.ok(r.error && r.error.length > 0);
+  const after = execFileSync("git", ["-C", repo, "rev-parse", "HEAD"], { encoding: "utf8" });
+  assert.strictEqual(before, after); // 머지 커밋이 안 생겼다
+});
+
+test("pushCheckout — 루트는 git push다", async () => {
+  // upstream이 bare가 아니면 `main`이 거기서도 체크아웃된 채라 git 자신이 push를 거절한다
+  // (denyCurrentBranch) — 그 방어는 애플리케이션 로직과 무관해 bare 리모트로 피한다.
+  const source = makeRepo();
+  const upstream = mkdtempSync(path.join(tmpdir(), "scm-bare-"));
+  tmps.push(upstream);
+  rmSync(upstream, { recursive: true, force: true });
+  execFileSync("git", ["clone", "-q", "--bare", source, upstream], { encoding: "utf8" });
+  const repo = mkdtempSync(path.join(tmpdir(), "scm-clone4-"));
+  tmps.push(repo);
+  rmSync(repo, { recursive: true, force: true });
+  execFileSync("git", ["clone", "-q", upstream, repo], { encoding: "utf8" });
+  writeFileSync(path.join(repo, "a.txt"), "local\n");
+  execFileSync("git", ["-C", repo, "commit", "-qam", "local"], { encoding: "utf8" });
+
+  const checkout: Checkout = { id: "root", path: repo, branch: "main", isRoot: true, pushSh: null };
+  const r = await pushCheckout(checkout);
+  assert.deepStrictEqual(r, { ok: true, error: null });
+  const upstreamLog = execFileSync("git", ["-C", upstream, "log", "-1", "--format=%s"], { encoding: "utf8" }).trim();
+  assert.strictEqual(upstreamLog, "local");
+});
+
+test("pushCheckout — 워크트리는 .dira/push.sh를 인자 없이 부른다", async () => {
+  const repo = makeRepo();
+  const wt = path.join(repo, "..", "wt-push");
+  execFileSync("git", ["-C", repo, "worktree", "add", "-b", "feature", wt], { encoding: "utf8" });
+  tmps.push(wt);
+  mkdirSync(path.join(wt, ".dira"));
+  // 가짜 push.sh — 진짜 헬퍼의 인자 없는 모드를 흉내만 낸다(락·non-ff 재시도는 그 파일의 몫이라
+  // 여기서 검증하지 않는다 — 이 테스트가 보는 것은 "그 파일을 부르는가" 하나다).
+  writeFileSync(
+    path.join(wt, ".dira", "push.sh"),
+    "#!/bin/bash\necho called > \"$(dirname \"$0\")/../called\"\n",
+  );
+  const checkout: Checkout = { id: "wt-push", path: wt, branch: "feature", isRoot: false, pushSh: true };
+  const r = await pushCheckout(checkout);
+  assert.deepStrictEqual(r, { ok: true, error: null });
+  const called = readFileSync(path.join(wt, "called"), "utf8");
+  assert.strictEqual(called.trim(), "called");
+});
+
+test("pushCheckout — push.sh가 없으면 헬퍼를 만들지 않고 사유만 낸다", async () => {
+  const repo = makeRepo();
+  const checkout: Checkout = { id: "root", path: repo, branch: "main", isRoot: false, pushSh: false };
+  const r = await pushCheckout(checkout);
+  assert.strictEqual(r.ok, false);
+  assert.strictEqual(r.error, "NO_PUSH_SH");
 });

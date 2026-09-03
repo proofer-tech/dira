@@ -1,10 +1,8 @@
-/** 소스 컨트롤 표면의 서버 쪽 git 호출 (DESIGN.md §11-3 결정 1-2-3). 커밋 - push - pull은
- *  P366-9의 몫이라 여기 없다.
- *
- *  **체크아웃 목록은 새로 파싱하지 않는다**(§11-3 결정 1) — 출처는 `lib/workers.ts`가 이미
- *  `prepareWorktree`에서 쓰는 `listWorktreeEntries`(`git worktree list --porcelain`)다. */
+/** 소스 컨트롤 표면의 서버 쪽 git 호출 (DESIGN.md §11-3 결정 1-2-3-4). 체크아웃 목록은 새로
+ *  파싱하지 않는다(§11-3 결정 1) — 출처는 `lib/workers.ts`가 이미 `prepareWorktree`에서 쓰는
+ *  `listWorktreeEntries`(`git worktree list --porcelain`)다. */
 import { execFile } from "node:child_process";
-import { realpath } from "node:fs/promises";
+import { access, realpath } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { listWorktreeEntries, nfc } from "./workers.ts";
@@ -12,11 +10,23 @@ import { listWorktreeEntries, nfc } from "./workers.ts";
 const git = (cwd: string, args: string[]) =>
   promisify(execFile)("git", ["-C", cwd, ...args], { maxBuffer: 16 * 1024 * 1024 });
 
+/** `execFile`이 던지는 에러에서 사람이 읽을 사유를 뽑는다 — `stderr`가 있으면 그것, 없으면
+ *  `message`(예: ENOENT). 화면은 이 문자열을 그대로 보여준다(§11-3 결정 4 — "실패 사유가
+ *  그대로 뜬다"). */
+function reasonOf(e: unknown): string {
+  const err = e as { stderr?: string; message?: string };
+  return (err.stderr?.trim() || err.message || String(e)).trim();
+}
+
+export type ScmOutcome = { ok: boolean; error: string | null };
+
 /** 체크아웃 하나 — 루트 또는 워크트리 하나(§11-3 결정 1 · §비주얼 §72 ⑤). `id`가 `"root"`이면
  *  루트다. 워크트리의 `id`는 디렉터리 이름(= 워커 이름, §4-2가 워크트리 하나에 워커 하나를
  *  묶었다)이고, 그 값이 사람이 읽는 화면에서도 그대로 쓰인다(§비주얼 §72 ⑤ §고른 체크아웃의
- *  표기는 한 벌이다). */
-export type Checkout = { id: string; path: string; branch: string; isRoot: boolean };
+ *  표기는 한 벌이다). `pushSh`는 워크트리에서만 뜻이 있다 — `<체크아웃>/.dira/push.sh`가
+ *  있는가(§11-3 결정 4 "push.sh가 없는 프로젝트도 있다"). 루트는 `origin`으로 가므로 이 값이
+ *  필요 없어 `null`이다. */
+export type Checkout = { id: string; path: string; branch: string; isRoot: boolean; pushSh: boolean | null };
 
 /** `repo`(git 프로젝트 루트, `path.dirname(project.root)`)의 체크아웃 전부. **워크트리가
  *  0개인 프로젝트에서도 루트 하나는 언제나 있다**(§4-2 — `git worktree list`가 루트 하나만
@@ -29,11 +39,17 @@ export async function listCheckouts(repo: string): Promise<Checkout[]> {
   for (const e of entries) {
     const key = nfc(await realpath(e.worktree).catch(() => e.worktree));
     const isRoot = key === repoKey;
+    const pushSh = isRoot
+      ? null
+      : await access(path.join(e.worktree, ".dira", "push.sh"))
+          .then(() => true)
+          .catch(() => false);
     out.push({
       id: isRoot ? "root" : path.basename(e.worktree),
       path: e.worktree,
       branch: e.branch?.replace(/^refs\/heads\//, "") ?? "",
       isRoot,
+      pushSh,
     });
   }
   return out;
@@ -157,4 +173,53 @@ export async function setUpstream(cwd: string, branch: string): Promise<boolean>
   if (!remotes.includes(branch)) return false;
   await git(cwd, ["branch", `--set-upstream-to=${branch}`]);
   return true;
+}
+
+/** 스테이지된 것만 커밋한다(§11-3 결정 4) — `-a`를 안 쓴다, 그래서 스테이지 안 된 것은 안
+ *  들어간다. 트레일러를 안 붙인다 - `-m` 하나뿐이다(`Ticket:`은 `push.sh ship`이 세션의
+ *  마무리 의례에서 붙이는 것이라 사람이 화면에서 하는 커밋에는 없다). 스테이지가 비어 있으면
+ *  git 자신이 거절하고 그 사유가 그대로 나간다. */
+export async function commitStaged(cwd: string, message: string): Promise<ScmOutcome> {
+  try {
+    await git(cwd, ["commit", "-m", message]);
+    return { ok: true, error: null };
+  } catch (e) {
+    return { ok: false, error: reasonOf(e) };
+  }
+}
+
+/** push — 자리마다 향하는 곳이 하나로 정해진다(§11-3 결정 4, 답 `4-2.(c)`). 루트는 `git push`
+ *  (= `origin`), 워크트리는 `.dira/push.sh`를 인자 없이 부른다(= 통합 브랜치 - 락과 non-ff
+ *  재시도의 정본이 그 파일이다). **`push.sh`를 고치지 않는다 - 부르기만 한다.** 그 파일이
+ *  없으면(`pushSh === false`) 헬퍼를 만들어 넣지 않고 사유만 낸다. */
+export async function pushCheckout(checkout: Checkout): Promise<ScmOutcome> {
+  if (checkout.isRoot) {
+    try {
+      await git(checkout.path, ["push"]);
+      return { ok: true, error: null };
+    } catch (e) {
+      return { ok: false, error: reasonOf(e) };
+    }
+  }
+  if (!checkout.pushSh) return { ok: false, error: "NO_PUSH_SH" };
+  try {
+    await promisify(execFile)("bash", [path.join(checkout.path, ".dira", "push.sh")], {
+      cwd: checkout.path,
+      maxBuffer: 16 * 1024 * 1024,
+    });
+    return { ok: true, error: null };
+  } catch (e) {
+    return { ok: false, error: reasonOf(e) };
+  }
+}
+
+/** pull은 `git pull --ff-only` 하나다(§11-3 결정 4) — 머지 커밋도 리베이스도 안 만든다. ff가
+ *  안 되면 git 자신의 거절 사유를 그대로 낸다. */
+export async function pullCheckout(cwd: string): Promise<ScmOutcome> {
+  try {
+    await git(cwd, ["pull", "--ff-only"]);
+    return { ok: true, error: null };
+  } catch (e) {
+    return { ok: false, error: reasonOf(e) };
+  }
 }

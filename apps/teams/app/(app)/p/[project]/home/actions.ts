@@ -33,8 +33,11 @@ import {
 } from "@/lib/home-agent";
 import { getProject, resolveConfig } from "@/lib/projects";
 import {
+  commitStaged,
   listCheckouts,
   listRemoteBranches,
+  pullCheckout,
+  pushCheckout,
   readStatus,
   resolveCheckout,
   setUpstream,
@@ -329,5 +332,55 @@ export async function scmSetUpstream(
     return await readStatus(checkout.path);
   } catch {
     return null;
+  }
+}
+
+/** 커밋 - push - pull 셋의 공통 응답 모양(§11-3 결정 4) — `status`는 실행 직후 다시 읽은 값
+ *  (성공이든 실패든, 화면이 항상 최신을 본다), `error`는 실패 사유 그대로다(git 자신의 문구 —
+ *  화면이 다시 번역하지 않는다). `NO_PUSH_SH`만 예외 — 사유가 아니라 sentinel이라 화면이
+ *  자기 낱말로 보여준다(아래 `scmPush`). */
+export type ScmResult = { status: GitStatus | null; error: string | null };
+
+/** 커밋(§11-3 결정 4) — 스테이지된 것만, 트레일러 없이 `-m` 하나. 빈 메시지는 git에 보내지
+ *  않는다(git도 거절하지만 그 사유는 영문이라 여기서 먼저 거른다). */
+export async function scmCommit(projectId: string, checkoutId: string, message: string): Promise<ScmResult> {
+  try {
+    const project = await required(projectId);
+    const checkout = await resolveCheckout(repoOf(project.root), checkoutId);
+    if (!checkout) return { status: null, error: null };
+    const trimmed = message.trim();
+    if (!trimmed) return { status: await readStatus(checkout.path), error: "EMPTY_MESSAGE" };
+    const r = await commitStaged(checkout.path, trimmed);
+    return { status: await readStatus(checkout.path), error: r.error };
+  } catch (e) {
+    return { status: null, error: (e as Error).message };
+  }
+}
+
+/** push(§11-3 결정 4) — `checkout.isRoot`가 향하는 곳을 가른다(루트 `origin` - 워크트리
+ *  통합 브랜치). `pushCheckout`이 `Checkout` 전체를 받는 이유는 `pushSh` 판정이 그 안에 이미
+ *  있어서다 — 여기서 파일 존재를 다시 안 본다. */
+export async function scmPush(projectId: string, checkoutId: string): Promise<ScmResult> {
+  try {
+    const project = await required(projectId);
+    const checkout = await resolveCheckout(repoOf(project.root), checkoutId);
+    if (!checkout) return { status: null, error: null };
+    const r = await pushCheckout(checkout);
+    return { status: await readStatus(checkout.path), error: r.error };
+  } catch (e) {
+    return { status: null, error: (e as Error).message };
+  }
+}
+
+/** pull(§11-3 결정 4) — `--ff-only` 하나, 실패 사유를 그대로 낸다. */
+export async function scmPull(projectId: string, checkoutId: string): Promise<ScmResult> {
+  try {
+    const project = await required(projectId);
+    const checkout = await resolveCheckout(repoOf(project.root), checkoutId);
+    if (!checkout) return { status: null, error: null };
+    const r = await pullCheckout(checkout.path);
+    return { status: await readStatus(checkout.path), error: r.error };
+  } catch (e) {
+    return { status: null, error: (e as Error).message };
   }
 }

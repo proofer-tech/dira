@@ -2061,9 +2061,9 @@ export const ko: Record<string, string> = {
   "home.tabs.empty": "열린 탭 없음",
   "home.tabs.close": "닫기",
 
-  // 소스 컨트롤(§11-3 결정 1-2-3, P366-8) — 체크아웃 목록·status·업스트림. 커밋·push·pull은
-  // P366-9. `word.*` 넷은 `--porcelain=v2`의 아는 코드 넷의 낱말이고, 모르는 코드는 이 사전을
-  // 안 거친다(§비주얼 §72 ④ — 화면이 코드를 그대로 `font-mono`로 보여준다).
+  // 소스 컨트롤(§11-3 결정 1-2-3-4, P366-8 · P366-9) — 체크아웃 목록·status·업스트림·커밋·
+  // push·pull. `word.*` 넷은 `--porcelain=v2`의 아는 코드 넷의 낱말이고, 모르는 코드는 이
+  // 사전을 안 거친다(§비주얼 §72 ④ — 화면이 코드를 그대로 `font-mono`로 보여준다).
   "home.scm.root": "루트",
   "home.scm.worktreesPrefix": "워크트리 ",
   "home.scm.stagedPrefix": "스테이지 ",
@@ -2081,6 +2081,12 @@ export const ko: Record<string, string> = {
   "home.scm.word.new": "새 파일",
   "home.scm.word.deleted": "지움",
   "home.scm.word.renamed": "이름 바뀜",
+  "home.scm.commitPlaceholder": "커밋 메시지",
+  "home.scm.commit": "커밋",
+  "home.scm.commitEmpty": "커밋 메시지를 적어야 한다",
+  "home.scm.push": "푸시",
+  "home.scm.pull": "풀",
+  "home.scm.noPushSh": "이 프로젝트에는 push.sh가 없다",
 
   // 세션 스트림(§0-16 §묶음 표 행 5 갈래, `33563f49`) — `components/session-stream.tsx` ·
   // `lib/interject.ts`. `lib/transcript.ts`는 화면 껍데기가 아니라 사건 데이터를 만드는 자리라
@@ -4279,6 +4285,12 @@ export const en: Record<string, string> = {
   "home.scm.word.new": "New",
   "home.scm.word.deleted": "Deleted",
   "home.scm.word.renamed": "Renamed",
+  "home.scm.commitPlaceholder": "Commit message",
+  "home.scm.commit": "Commit",
+  "home.scm.commitEmpty": "Commit message required",
+  "home.scm.push": "Push",
+  "home.scm.pull": "Pull",
+  "home.scm.noPushSh": "This project has no push.sh",
 
   // 온톨로지 화면(§0-16 §발행 §묶음 표 행 12 갈래) — `ko`는 `2ef7a4e9`가 뽑았다.
   // **`protocols-ui.tsx`와 판박이인 자리(새 파일 · 편집기 · 이름변경 · 삭제 · 사이드바)는
