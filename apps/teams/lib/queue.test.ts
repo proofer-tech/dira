@@ -1514,6 +1514,18 @@ test("planOf — 끝이 괄호 밖에 붙어도 종전 정본 모양과 같은 s
   ]);
 });
 
+test("planOf — 오프셋이 콜론 없는 기본형(+0900)이어도 확장형과 같은 값으로 읽는다(§2-11① 요구 8974ff5e)", () => {
+  const basic = "## 진행 계획\n\n- [ ] 진행중 항목 (2026-09-03T15:47:53+0900)\n";
+  const extended = "## 진행 계획\n\n- [ ] 진행중 항목 (2026-09-03T15:47:53+09:00)\n";
+  assert.deepStrictEqual(planOf(basic), [
+    { text: "진행중 항목", state: "doing", start: "2026-09-03T15:47:53+0900", end: null },
+  ]);
+  const [basicItem] = planOf(basic);
+  const [extendedItem] = planOf(extended);
+  assert.strictEqual(basicItem.state, extendedItem.state);
+  assert.strictEqual(basicItem.text, extendedItem.text);
+});
+
 test("planOf — 괄호 뒤 꼬리말은 문장의 일부로 남는다(§2-11① 요구 29a9f060)", () => {
   const body =
     "## 진행 계획\n\n" +
