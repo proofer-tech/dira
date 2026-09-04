@@ -50,6 +50,7 @@ import Link from "@/components/link";
 // 좌측 패널 얘기다.
 import {
   ArrowDown,
+  CalendarClock,
   Check,
   Copy,
   File,
@@ -225,10 +226,11 @@ type Panel = Pick<Home, "conversations" | "current" | "tabs" | "activeTab"> & {
 
 /** 좌측 2단의 위 단 — 표면 넷(§11 결정 1 · §비주얼 §72 ①). 이 티켓이 붙이는 것은 셸과 고르는
  *  손잡이뿐이고, 셋(`terminal` · `scm` · `explorer`)의 내용은 P366-5 · P366-6 · P366-8이 채운다. */
-type Surface = "agent" | "terminal" | "scm" | "explorer";
+type Surface = "agent" | "schedules" | "terminal" | "scm" | "explorer";
 
 const SURFACES: { id: Surface; labelKey: string; icon: typeof MessageSquare }[] = [
   { id: "agent", labelKey: "home.surface.agent", icon: MessageSquare },
+  { id: "schedules", labelKey: "home.schedulesLabel", icon: CalendarClock },
   { id: "terminal", labelKey: "home.surface.terminal", icon: SquareTerminal },
   { id: "scm", labelKey: "home.surface.scm", icon: GitBranch },
   { id: "explorer", labelKey: "home.surface.explorer", icon: FolderTree },
@@ -2009,15 +2011,9 @@ function SidePanel({
   // 언마운트되므로(위 §0건) 폴링·전환·새 대화로는 이 값이 안 되돌아간다.
   const [openCount, setOpenCount] = useState(3);
   const { rows, showMore } = visibleChatRows(chatRows(home.conversations), openCount, selected);
-  // **스케줄 그룹의 열린 줄 수 — `대화`와 같은 관용구, 별도 상태다**(§비주얼 §62 (1) `더보기` —
-  // "3줄부터 · `더보기`가 3줄씩 연다 · `대화` 그룹과 같은 자"). 두 그룹의 `더보기`가 서로 안
-  // 얽힌다 — 스케줄을 열어도 대화 줄 수는 그대로다.
-  const [scheduleOpenCount, setScheduleOpenCount] = useState(3);
-  const { rows: scheduleRowsVisible, showMore: showMoreSchedules } = visibleChatRows(
-    scheduleRows(home.schedules, undefined, locale),
-    scheduleOpenCount,
-    selected,
-  );
+  // **`스케줄` 표면 아래 단 — 상한이 없다**(§11-4 결정 3). `scheduleRows`가 만드는 순서
+  // 그대로 전부 그린다 — `더보기`도 열린 줄 수 상태도 없다.
+  const scheduleRowsVisible = scheduleRows(home.schedules, undefined, locale);
   return (
     // 표면 층(§비주얼 §33) — **가르는 쌍에서 드는 것은 목록 쪽 하나다.** 대화 스레드는
     // 무수정이고(산문은 페이지 폭을 그대로 쓴다), 둘 다 얹으면 남는 경계가 `gap-8`뿐이라
@@ -2188,69 +2184,6 @@ function SidePanel({
           </SidebarMenu>
         </SidebarGroup>
 
-      {/* `스케줄` (§7-2 §화면 · §비주얼 §62) — **셋째 그릇이지만 둘째 자리다**(`대화`와
-          `워커 세션` 사이). 머리 행은 스케줄이 0개여도 뜬다(§62 (1) §0건 — 이 그룹이 §24 §0건의
-          예외다: 저 둘은 목록 밖에 입구가 있지만 스케줄의 입구는 이 머리 행 하나뿐이다). */}
-      <SidebarGroup className="p-0">
-        <SidebarGroupLabel className="h-6 text-muted-foreground">
-          {t("home.schedulesLabel")}
-          <ScheduleCreateDialog project={project} personas={personas} onCreated={onSchedulesChange} />
-        </SidebarGroupLabel>
-        {home.schedules.length > 0 && (
-          <SidebarMenu aria-label={t("home.schedulesLabel")}>
-            {scheduleRowsVisible.map((r) => {
-              const sched = home.schedules.find((s) => s.id === r.id);
-              if (!sched) return null;
-              return (
-                <SidebarMenuItem key={r.id}>
-                  {/* **`워커 세션` 줄과 같은 문자열이다**(§62 (2)) — 갈리는 클래스가
-                      `items-start` 하나. 삭제가 뜨면서 이 줄만 `pr-8`이 붙어 오른쪽 끝이
-                      다른 두 그룹보다 24px 왼쪽이다(부품의 `group-has-data-*` 자동 패딩 —
-                      덮을 클래스 0). */}
-                  <SidebarMenuButton
-                    className={cn(ROW, "items-start")}
-                    isActive={r.id === selected}
-                    aria-current={r.id === selected ? "true" : undefined}
-                    onClick={() => {
-                      if (r.id !== selected) onPickSchedule(sched);
-                    }}
-                  >
-                    <div className="flex min-w-0 grow flex-col gap-0.5">
-                      <div className="flex items-center gap-2">
-                        {/* **제목 전문이 `title`로 뜬다 — 이 줄에만 그렇다**(§62 (2)): 회차
-                            0건인 스케줄에는 전문을 볼 다른 자리(첫 말풍선 · 상세)가 없다. */}
-                        <span className="min-w-0 grow truncate text-sm" title={sched.prompt}>
-                          {r.title}
-                        </span>
-                        {sched.session_id !== "" && runningIds.includes(sched.session_id) && (
-                          <span className={MARK}>{RUNNING}</span>
-                        )}
-                      </div>
-                      {/* 아랫줄 = 다음 예정 시각 하나(§62 (3)) — 갈래를 낱말로 같이 안 적는다.
-                          `<StatusBadge>`도 안 쓴다: 그 배지는 이 패널에서 이미 *티켓이 `.wip`*을
-                          말하고 스케줄에는 티켓이 없다. */}
-                      <span className={SCHEDULE_TIME}>{r.time}</span>
-                    </div>
-                  </SidebarMenuButton>
-                  <ScheduleDeleteAction project={project} schedule={sched} onDeleted={onSchedulesChange} />
-                </SidebarMenuItem>
-              );
-            })}
-            {/* `더보기` — `대화` 그룹의 그것과 같은 벌이다(§62 (1)). 삭제도 시각도 안 든다:
-                패널 자신의 컨트롤이지 스케줄이 아니다. */}
-            {showMoreSchedules && (
-              <SidebarMenuItem>
-                <SidebarMenuButton className={ROW} onClick={() => setScheduleOpenCount((c) => c + 3)}>
-                  <span className="min-w-0 grow truncate text-sm text-muted-foreground">
-                    {t("home.showMore")}
-                  </span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            )}
-          </SidebarMenu>
-        )}
-      </SidebarGroup>
-
       {/* `워커 세션` (§24 §좌측 패널 · §7 §워커 세션 목록) — 0건이면 **그룹째** 안 그린다.
           한 줄이 **2행**인 것은 담는 사실이 다섯이라서다(워커 · 제목 · 해시 · 도는지 · 지금 것):
           256px 한 줄에 넣으면 제목이 5자에서 잘려 식별이 안 된다. 시각을 안 그린다 — 이 그룹의
@@ -2309,6 +2242,61 @@ function SidePanel({
         </SidebarGroup>
       )}
           </>
+        )}
+        {/* `스케줄` 표면(§11-4) — 아래 단 전부를 이 그룹 하나가 쓴다. 머리 행은 스케줄이
+            0개여도 뜬다(§72 ⑧ §0건 — `새 스케줄`의 그릇이 이 머리 행이다). 상한이 없다
+            (§11-4 결정 3) — `더보기`도 열린 줄 수 상태도 없이 전부 그린다. */}
+        {surface === "schedules" && (
+          <SidebarGroup className="p-0">
+            <SidebarGroupLabel className="h-6 text-muted-foreground">
+              {t("home.schedulesLabel")}
+              <ScheduleCreateDialog project={project} personas={personas} onCreated={onSchedulesChange} />
+            </SidebarGroupLabel>
+            {home.schedules.length === 0 ? (
+              <EmptyState text={t("home.surface.schedules.empty")} />
+            ) : (
+              <SidebarMenu aria-label={t("home.schedulesLabel")}>
+                {scheduleRowsVisible.map((r) => {
+                  const sched = home.schedules.find((s) => s.id === r.id);
+                  if (!sched) return null;
+                  return (
+                    <SidebarMenuItem key={r.id}>
+                      {/* **`워커 세션` 줄과 같은 문자열이다**(§62 (2)) — 갈리는 클래스가
+                          `items-start` 하나. 삭제가 뜨면서 이 줄만 `pr-8`이 붙어 오른쪽 끝이
+                          다른 두 그룹보다 24px 왼쪽이다(부품의 `group-has-data-*` 자동 패딩 —
+                          덮을 클래스 0). */}
+                      <SidebarMenuButton
+                        className={cn(ROW, "items-start")}
+                        isActive={r.id === selected}
+                        aria-current={r.id === selected ? "true" : undefined}
+                        onClick={() => {
+                          if (r.id !== selected) onPickSchedule(sched);
+                        }}
+                      >
+                        <div className="flex min-w-0 grow flex-col gap-0.5">
+                          <div className="flex items-center gap-2">
+                            {/* **제목 전문이 `title`로 뜬다 — 이 줄에만 그렇다**(§62 (2)): 회차
+                                0건인 스케줄에는 전문을 볼 다른 자리(첫 말풍선 · 상세)가 없다. */}
+                            <span className="min-w-0 grow truncate text-sm" title={sched.prompt}>
+                              {r.title}
+                            </span>
+                            {sched.session_id !== "" && runningIds.includes(sched.session_id) && (
+                              <span className={MARK}>{RUNNING}</span>
+                            )}
+                          </div>
+                          {/* 아랫줄 = 다음 예정 시각 하나(§62 (3)) — 갈래를 낱말로 같이 안 적는다.
+                              `<StatusBadge>`도 안 쓴다: 그 배지는 이 패널에서 이미 *티켓이 `.wip`*을
+                              말하고 스케줄에는 티켓이 없다. */}
+                          <span className={SCHEDULE_TIME}>{r.time}</span>
+                        </div>
+                      </SidebarMenuButton>
+                      <ScheduleDeleteAction project={project} schedule={sched} onDeleted={onSchedulesChange} />
+                    </SidebarMenuItem>
+                  );
+                })}
+              </SidebarMenu>
+            )}
+          </SidebarGroup>
         )}
       </SidebarContent>
     </Sidebar>

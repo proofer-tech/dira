@@ -2065,6 +2065,7 @@ export const ko: Record<string, string> = {
   "home.surface.terminal.empty": "터미널 없음",
   "home.surface.scm.empty": "변경 없음",
   "home.surface.explorer.empty": "빈 디렉터리",
+  "home.surface.schedules.empty": "스케줄 없음",
   "home.tabs.empty": "열린 탭 없음",
   "home.tabs.close": "닫기",
 
@@ -4318,6 +4319,7 @@ export const en: Record<string, string> = {
   "home.surface.terminal.empty": "No terminals",
   "home.surface.scm.empty": "No changes",
   "home.surface.explorer.empty": "Empty directory",
+  "home.surface.schedules.empty": "No schedules",
   "home.tabs.empty": "No open tabs",
   "home.tabs.close": "Close",
 
