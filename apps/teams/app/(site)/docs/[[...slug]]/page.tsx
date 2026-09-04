@@ -5,10 +5,10 @@ import { siteLocale } from "../../request-locale";
 import { pickManuscript } from "@/lib/site-locale";
 import { t, type Locale } from "@/lib/i18n";
 
-// 매뉴얼 27장. 셸과 마크다운 렌더는 `app/doc.tsx` 한 벌이고 루트 산문 2장(`privacy`·`terms`)이
+// 매뉴얼 28장. 셸과 마크다운 렌더는 `app/doc.tsx` 한 벌이고 루트 산문 2장(`privacy`·`terms`)이
 // 같은 것을 쓴다 — 이 파일에 남는 것은 **`themeConfig.sidebar` 배열에서 나오는 것**뿐이다
-// (사이드바 32항목과 그 순서가 내는 이전/다음. §루트 산문 2장의 셸이 가른 그 성질이다).
-// 라우트가 하나인 것은 `docs/index.md`가 나머지 26장과 같은 마크다운이라서다 — optional
+// (사이드바 33항목과 그 순서가 내는 이전/다음. §루트 산문 2장의 셸이 가른 그 성질이다).
+// 라우트가 하나인 것은 `docs/index.md`가 나머지 27장과 같은 마크다운이라서다 — optional
 // catch-all이 `/docs/`와 `/docs/<이름>`을 같은 파일로 받는다.
 // 굽는 이름 목록은 `app/meta.ts`가 진다.
 // §0-24 §원고를 두는 자리 — `en/docs/<name>.md`가 있으면 그것, 없으면 한국어 원본이다.
@@ -93,7 +93,7 @@ const localizedItem = (locale: Locale, i: (typeof FLAT)[number]) => ({
 
 // `Shell`이 요청마다 `isLandingOnly()`를 다시 봐야 한다(§상호 링크) — 정적 굽기(SSG)는 그 값을
 // 빌드 시점에 굳혀서, 빌드 뒤 플래그만 바꿔 띄우는 두 서버(§검증) 중 하나가 거짓말을 하게 된다.
-// `generateStaticParams`는 그래서 걷는다: 27장 정적 HTML보다 이 한 자리의 정확성이 우선이다.
+// `generateStaticParams`는 그래서 걷는다: 28장 정적 HTML보다 이 한 자리의 정확성이 우선이다.
 export const dynamic = "force-dynamic";
 
 /** `slug`는 URL에서 온다. 목록에 없는 이름으로 파일을 읽지 않는다 — 정적 산출에는 안 뜨는

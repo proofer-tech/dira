@@ -13,7 +13,7 @@ import { DEFAULT_LOCALE, t, type Locale } from "../../lib/i18n.ts";
 export const ORIGIN = "https://dira.proofer.tech";
 const SITE_TITLE = "dira";
 
-/** 매뉴얼 27장(`docs/*.md` — 26장 + 목차). `docs/[[...slug]]`가 이 목록으로 굽는다. */
+/** 매뉴얼 28장(`docs/*.md` — 27장 + 목차). `docs/[[...slug]]`가 이 목록으로 굽는다. */
 export const docNames = readdirSync(join(process.cwd(), "docs"))
   .filter((f) => f.endsWith(".md"))
   .map((f) => f.slice(0, -3));
