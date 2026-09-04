@@ -10,8 +10,10 @@ left-hand panel.
 ## The five surfaces
 
 `Home agent` · `Schedules` · `Terminal` · `Source control` · `Explorer`. These five are the
-surfaces. The first time you open it, `Home agent` is the one picked, and below it are two
-groups: `Conversations` and `Worker sessions`.
+surfaces. The row carries icons only, with no names written out, so if you cannot tell which
+icon is which surface, hover over it. The name comes up as a tooltip. Those are the names this
+chapter uses below. The first time you open it, `Home agent` is the one picked, and below it are
+two groups: `Conversations` and `Worker sessions`.
 
 Changing surfaces does not change the address. The screen list on the header stays where it is.
 What changes is the lower half of the left-hand panel and the column on the right, and nothing
