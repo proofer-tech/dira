@@ -1416,7 +1416,7 @@ function TabBar({
             const title = conversations.find((c) => c.id === tab.id)?.title || t("home.title");
             const isActive = tab.id === activeTab;
             return (
-              <TabsTrigger key={tab.id} value={tab.id} render={<div />} className="max-w-40 flex-none gap-1.5">
+              <TabsTrigger key={tab.id} value={tab.id} nativeButton={false} render={<div />} className="max-w-40 flex-none gap-1.5">
                 <MessageSquare aria-hidden className="size-3.5 shrink-0" />
                 <Tooltip>
                   <TooltipTrigger render={<span className="min-w-0 truncate">{title}</span>} />
