@@ -4,25 +4,29 @@ There comes a point where you want to open the file a worker changed and look at
 Running the tests once, or checking the commits a worker has piled up and taking them to the
 integration branch, is the same kind of thing. None of it means leaving for another app.
 
-Press the logo in the header and you are home. Four icons sit in a row at the top of the
+Press the logo in the header and you are home. Five icons sit in a row at the top of the
 left-hand panel.
 
-## The four surfaces
+## The five surfaces
 
-`Home agent` · `Terminal` · `Source control` · `Explorer`. These four are the surfaces. The
-first time you open it, `Home agent` is the one picked, and below it are the same three groups
-as before: `Conversations` · `Schedules` · `Worker sessions`.
+`Home agent` · `Schedules` · `Terminal` · `Source control` · `Explorer`. These five are the
+surfaces. The first time you open it, `Home agent` is the one picked, and below it are two
+groups: `Conversations` and `Worker sessions`.
 
-Changing surfaces does not change the address. The five screens on the header stay where they
-are. What changes is the lower half of the left-hand panel and the column on the right, and
-nothing else.
+Changing surfaces does not change the address. The screen list on the header stays where it is.
+What changes is the lower half of the left-hand panel and the column on the right, and nothing
+else.
 
 | Surface picked | Lower half of the left panel | The column on the right |
 |---|---|---|
-| `Home agent` | `Conversations` · `Schedules` · `Worker sessions` | The conversation tab strip and the thread |
+| `Home agent` | `Conversations` · `Worker sessions` | The conversation tab strip and the thread |
+| `Schedules` | The schedule list and the way in to `New schedule` | The conversation thread of the schedule you picked |
 | `Terminal` | Nothing | The `Working directory` picker, the terminal tab strip, and the shell |
 | `Source control` | The root and the worktrees, and `git status` for whichever one you picked | The conversation tab strip and thread, unchanged |
 | `Explorer` | The file tree and find | The one file you have open |
+
+What you do on the `Schedules` surface is covered in a chapter of its own,
+[Schedules](/docs/schedules). What is left for this one is the other four.
 
 Two things become tabs: conversations and terminals. A file you open in the explorer does not go
 into a tab, so only one is up at a time. Twelve tabs open in all. Past that, the one you have

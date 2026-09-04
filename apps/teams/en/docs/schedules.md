@@ -9,14 +9,16 @@ time.
 
 ## Making one
 
-Press the logo in the header and you are home. The second group in the left-hand panel is
-`Schedules`.
+Press the logo in the header and you are home. Five icons sit in a row at the top of the
+left-hand panel, and the second from the left is `Schedules`. That row spells no names out, so
+hover over an icon if you are not sure which one it is: the name comes up as a tooltip. Press it
+and the lower half of the panel becomes the schedule list.
 
 If you have not asked anything yet on this project's home, the left-hand panel is not there at
 all, because the first screen is onboarding. Ask anything once and the panel appears, and from
 then on it stays.
 
-1. Press `New schedule` to the right of the `Schedules` heading. A dialog opens.
+1. Press `New schedule` to the right of the heading on that lower half. A dialog opens.
 2. Pick `Repeat`. It opens on `Once`, and the rest are `Daily`, `Weekly`, `Monthly` and `cron`.
 3. Fill in `Time`. The shape of this field changes with the option you picked (see the table
    below). It opens empty, so you have to put a value in.
@@ -24,7 +26,7 @@ then on it stays.
    `Enter` in this field is a line break, not submit.
 5. Press `Create`. It becomes pressable once both the time and the prompt are filled in.
 
-The row shows up in the group right away. The upper line is the first line of the prompt and the
+The row shows up in the list right away. The upper line is the first line of the prompt and the
 lower line is the next scheduled time.
 
 ### The five options
@@ -164,9 +166,13 @@ schedule is only a time and a sentence, making it again is not hard.
 
 ## When the list gets long
 
-The `Schedules` group also starts at three rows, and `Show more` opens three at a time. It is the
-same as the `Conversations` group. The order is the order you made them in, and there is no
-control for changing the sort.
+There is no cap. However many you have made, all of them show, and the half scrolls once they
+run past it. There is no `Show more` row. The lower half of the `Schedules` surface holds this
+one list and nothing else, so it never has to share the height with another list. The
+`Conversations` group under `Home agent` still starts at three rows, and its `Show more` is
+still there.
+
+The order is the order you made them in, and there is no control for changing the sort.
 
 ## This belongs to this Mac
 
