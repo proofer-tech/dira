@@ -678,11 +678,19 @@ export function HomeUI({
   /** 우측 탭 줄에서 탭 하나를 고른다(§11 결정 1) — **표면을 가로지르는 그 한 줄**의 유일한
    *  전환 입구다. 종류마다 왕복이 다르다: `chat`은 스레드까지 옮기는 `switchHome`, 나머지 둘은
    *  `current`도 새 탭도 안 만드는 `focusTabAction`(§11-1 §focusTab 주석과 같다). **표면도 같이
-   *  맞춘다** — 탭을 눌러 고른 것이 화면에 안 보이면 탭 줄만 있고 내용이 없는 판이 된다. */
+   *  맞춘다** — 탭을 눌러 고른 것이 화면에 안 보이면 탭 줄만 있고 내용이 없는 판이 된다.
+   *  `current`(로드된 대화)와 `activeTab`(탭 줄 표식)은 다른 값이다 — 파일·터미널 탭으로 옮겨간
+   *  뒤 **이미 로드돼 있던 그 대화 탭**을 다시 누르면 `tab.id === home.current`가 참이라
+   *  스레드를 새로 읽을 이유는 없지만, `activeTab`은 여전히 옛 탭을 가리키고 있으므로
+   *  `focusTabAction`으로 표식만 옮긴다(요구 `9cbb775d`) — 여기서 그냥 `return`하면 표식이
+   *  안 따라온다. */
   const selectTab = async (tab: Tab) => {
     if (tab.kind === "chat") {
       setSurface("agent");
-      if (tab.id === home.current) return;
+      if (tab.id === home.current) {
+        apply(await focusTabAction(project, tab.id));
+        return;
+      }
       setPendingSchedule(null);
       setHome((now) => ({ ...now, current: tab.id }));
       apply(await switchHome(project, tab.id));
