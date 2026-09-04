@@ -1791,6 +1791,72 @@ test("§7-2 §관문 — 못 읽는 when(필드 수 틀림 · 파싱 불가)은 
   assert.strictEqual(isValidWhen("0 9 mon * *"), false); // 정수·`*` 아닌 자리
 });
 
+test("§7-2 §손으로 쓰는 cron 칸 — 리스트·범위·스텝을 받고, 이름·매크로·6필드·범위 밖 값은 문다", () => {
+  assert.strictEqual(isValidWhen("*/10 9-18 * * 1-5"), true);
+  assert.strictEqual(isValidWhen("0,30 9 * * *"), true); // 목록
+  assert.strictEqual(isValidWhen("0 9 1-5,10 * *"), true); // 범위+목록 섞임
+  assert.strictEqual(isValidWhen("0 */2 * * *"), true); // 시 스텝
+  assert.strictEqual(isValidWhen("*/5 * * * *"), true); // §매 N분
+
+  assert.strictEqual(isValidWhen("0 9 * * MON"), false); // 요일 이름
+  assert.strictEqual(isValidWhen("0 9 * JAN *"), false); // 월 이름
+  assert.strictEqual(isValidWhen("@daily"), false); // 매크로
+  assert.strictEqual(isValidWhen("0 0 * * * *"), false); // 6필드(초)
+  assert.strictEqual(isValidWhen("60 9 * * *"), false); // 분 범위 밖(0-59)
+  assert.strictEqual(isValidWhen("0 24 * * *"), false); // 시 범위 밖(0-23)
+  assert.strictEqual(isValidWhen("0 9 0 * *"), false); // 일 범위 밖(1-31)
+  assert.strictEqual(isValidWhen("0 9 * 13 *"), false); // 월 범위 밖(1-12)
+  assert.strictEqual(isValidWhen("0 9 * * 7"), false); // 요일 범위 밖(0-6, 7 안 받는다)
+  assert.strictEqual(isValidWhen("0 9 30 2 *"), true); // 문법은 유효 — 실제 회차 없음은 nextScheduleDue의 몫
+});
+
+test("§7-2 §일과 요일이 둘 다 `*`가 아니면 AND — vixie의 OR을 안 들인다", () => {
+  const dow = new Date(2026, 7, 24).getDay(); // 2026-08-24의 실제 요일
+  const otherDow = (dow + 1) % 7;
+  // dom=24 AND dow=otherDow(24일의 실제 요일이 아님) → OR이면 dom=24라 맞지만 AND라 안 맞아야 한다
+  const due = judgeSchedule({
+    when: `0 9 24 * ${otherDow}`,
+    lastDueMs: null,
+    createdMs: local(2026, 8, 1, 0, 0),
+    nowMs: local(2026, 8, 24, 9, 30),
+  });
+  assert.strictEqual(due, null);
+  const dueBoth = judgeSchedule({
+    when: `0 9 24 * ${dow}`,
+    lastDueMs: null,
+    createdMs: local(2026, 8, 1, 0, 0),
+    nowMs: local(2026, 8, 24, 9, 30),
+  });
+  assert.strictEqual(dueBoth, local(2026, 8, 24, 9, 0));
+});
+
+test("§7-2 §스텝 — `*/10 9-18 * * 1-5`가 평일 09:00·09:10을 맞고 09:15는 스텝 밖이다", () => {
+  const when = "*/10 9-18 * * 1-5";
+  const due1 = judgeSchedule({
+    when,
+    lastDueMs: null,
+    createdMs: local(2026, 8, 24, 0, 0),
+    nowMs: local(2026, 8, 24, 9, 10),
+  });
+  assert.strictEqual(due1, local(2026, 8, 24, 9, 10));
+  const dueMiss = judgeSchedule({
+    when,
+    lastDueMs: local(2026, 8, 24, 9, 10),
+    createdMs: local(2026, 8, 24, 0, 0),
+    nowMs: local(2026, 8, 24, 9, 15),
+  });
+  assert.strictEqual(dueMiss, null); // 09:15는 스텝(0,10,20,...)에 안 낀다
+});
+
+test("nextScheduleDue — 31일 안에 맞는 분이 없으면 null이다(방어값 없음, §7-2)", () => {
+  // 2월엔 30일이 없다 — dom=30 AND month=2는 31일 캡 안에서 영영 안 맞는다
+  const r = nextScheduleDue(
+    { when: "0 0 30 2 *", created: new Date(local(2026, 8, 17, 0, 0)).toISOString() },
+    local(2026, 8, 17, 0, 0),
+  );
+  assert.strictEqual(r, null);
+});
+
 /** §비주얼 §62 (3) §다음 예정 시각 — `judgeSchedule`과 짝인 순수 함수. 저건 "지금 돌아야
  *  하나"(트리거)를 묻고 이건 "다음엔 언제 돌 것 같나"(화면 값)를 묻는다 — 같은 `windowStart`
  *  셈이 `overdue`의 경계가 된다는 것이 이 절이 지키는 계약이다. */

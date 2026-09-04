@@ -204,25 +204,71 @@ export function isOnceWhen(when: string): boolean {
   return when.includes("T");
 }
 
-/** 화면이 만드는 넷뿐이라 각 자리는 `*` 아니면 정수 하나다(리스트·범위 문법이 없다). **못 읽는
- *  `when`은 없는 것으로 친다**(§7-2 — `parseHome`의 관문과 같은 선) — 이 판정이 그 관문이다. */
+/** 5필드 각각의 범위(§7-2 §손으로 쓰는 cron 칸 표). 요일 `7`은 안 받는다 — 일요일을 적는
+ *  값이 `0` 하나뿐이게 닫는다. */
+const CRON_FIELD_RANGES = [
+  { min: 0, max: 59 }, // 분
+  { min: 0, max: 23 }, // 시
+  { min: 1, max: 31 }, // 일
+  { min: 1, max: 12 }, // 월
+  { min: 0, max: 6 }, // 요일
+] as const;
+
+/** 한 필드 안의 `,`로 나눈 조각 하나 — `*` · 정수 · 범위 `a-b` · 스텝(`*` 슬래시 n)과 범위 스텝(`a-b` 슬래시 n).
+ *  이름(`MON`)·매크로(`@daily`)는 이 정규식이 물린다(§7-2 표 §안 받는 것). */
+const CRON_PART = /^(\*|\d+|\d+-\d+)(?:\/(\d+))?$/;
+
+function isValidCronPart(part: string, range: { min: number; max: number }): boolean {
+  const m = CRON_PART.exec(part);
+  if (!m) return false;
+  const [, base, stepStr] = m;
+  if (stepStr !== undefined && Number(stepStr) < 1) return false;
+  if (base === "*") return true;
+  if (base!.includes("-")) {
+    const [a, b] = base!.split("-").map(Number);
+    return Number.isInteger(a) && Number.isInteger(b) && a! >= range.min && b! <= range.max && a! <= b!;
+  }
+  const n = Number(base);
+  return n >= range.min && n <= range.max;
+}
+
+/** 필드 하나가 어떤 값과 맞는가 — `isValidCronPart`와 같은 문법을 **판정이 아니라 매칭**으로 쓴다.
+ *  스텝의 시작은 범위(또는 `a`)이다(vixie와 같은 자리). */
+function cronPartMatches(part: string, v: number, range: { min: number; max: number }): boolean {
+  const m = CRON_PART.exec(part);
+  if (!m) return false;
+  const [, base, stepStr] = m;
+  const [lo, hi] = base === "*" ? [range.min, range.max] : base!.split("-").map(Number);
+  if (stepStr !== undefined) return v >= lo! && v <= (hi ?? lo)! && (v - lo!) % Number(stepStr) === 0;
+  if (base === "*") return true;
+  return v >= lo! && v <= (hi ?? lo)!;
+}
+
+/** 화면의 갈래 넷 + 사람이 손으로 쓰는 `cron` 갈래(§7-2 §손으로 쓰는 cron 칸) 다섯째가 받는
+ *  문법 전부. **못 읽는 `when`은 없는 것으로 친다**(§7-2 — `parseHome`의 관문과 같은 선) —
+ *  이 판정이 그 관문이다. */
 export function isValidWhen(when: string): boolean {
   if (isOnceWhen(when)) return Number.isFinite(Date.parse(when));
   const fields = when.trim().split(/\s+/);
-  return fields.length === 5 && fields.every((f) => f === "*" || /^\d+$/.test(f));
+  return (
+    fields.length === 5 &&
+    fields.every((f, i) => f.split(",").every((part) => isValidCronPart(part, CRON_FIELD_RANGES[i]!)))
+  );
 }
 
 /** 5필드 cron 한 분을 **머신 로컬 시각**과 맞춘다(§7-2 §시간대 — `Date` getter가 이미 로컬이고,
- *  지금 crontab이 워커를 깨우는 판정과 같은 자다). */
+ *  지금 crontab이 워커를 깨우는 판정과 같은 자다). 일·요일이 둘 다 `*`가 아니어도 **AND**다
+ *  (vixie의 OR을 안 들인다 — §7-2 §일과 요일이 둘 다 `*`가 아니면). */
 function matchesCronMinute(cron: string, d: Date): boolean {
   const [min, hour, dom, month, dow] = cron.trim().split(/\s+/);
-  const eq = (f: string, v: number) => f === "*" || Number(f) === v;
+  const fieldMatches = (f: string, v: number, range: { min: number; max: number }) =>
+    f.split(",").some((part) => cronPartMatches(part, v, range));
   return (
-    eq(min!, d.getMinutes()) &&
-    eq(hour!, d.getHours()) &&
-    eq(dom!, d.getDate()) &&
-    eq(month!, d.getMonth() + 1) &&
-    eq(dow!, d.getDay())
+    fieldMatches(min!, d.getMinutes(), CRON_FIELD_RANGES[0]) &&
+    fieldMatches(hour!, d.getHours(), CRON_FIELD_RANGES[1]) &&
+    fieldMatches(dom!, d.getDate(), CRON_FIELD_RANGES[2]) &&
+    fieldMatches(month!, d.getMonth() + 1, CRON_FIELD_RANGES[3]) &&
+    fieldMatches(dow!, d.getDay(), CRON_FIELD_RANGES[4])
   );
 }
 
@@ -271,7 +317,7 @@ export function judgeSchedule({ when, lastDueMs, createdMs, nowMs }: ScheduleJud
 export function nextScheduleDue(
   { when, created, last }: Pick<Schedule, "when" | "created" | "last">,
   nowMs: number = Date.now(),
-): { at: number; overdue: boolean } {
+): { at: number; overdue: boolean } | null {
   if (isOnceWhen(when)) {
     const at = Date.parse(when);
     if (last) return { at, overdue: true };
@@ -280,14 +326,16 @@ export function nextScheduleDue(
     return { at, overdue: at <= windowStart };
   }
   // 다음 맞는 분을 앞으로 훑는다 — 최악(매월 28일)도 31일 = 44,640분이라 `judgeSchedule`의 같은
-  // 셈으로 트리비얼하다. 화면의 갈래 넷이 `dom`을 1~28로 닫아 두므로 이 창 안에 반드시 있다.
+  // 셈으로 트리비얼하다. 화면의 갈래 넷은 `dom`을 1~28로 닫아 두어 항상 창 안에 있지만, 손으로
+  // 쓰는 `cron` 칸(§7-2)은 `0 0 30 2 *`처럼 **31일 안에 영영 안 맞는 분**을 담을 수 있다 —
+  // 그때는 `null`이다(지금 시각을 방어값으로 내지 않는다 — §7-2 §손으로 쓰는 cron 칸).
   const start = Math.floor(nowMs / 60_000) + 1;
   const end = start + SCHEDULE_LOOKBACK_MS / 60_000;
   for (let m = start; m <= end; m++) {
     const t = m * 60_000;
     if (matchesCronMinute(when, new Date(t))) return { at: t, overdue: false };
   }
-  return { at: nowMs, overdue: false }; // 못 찾을 리 없다 — 위 문단이 근거다(방어값)
+  return null;
 }
 
 /** 저장 형식(§7-2 §저장) 그대로. `home-sessions.json`의 그 프로젝트 값에 `schedules` 배열 한
@@ -314,11 +362,16 @@ export type Schedule = {
  *  `isOnceWhen`·`matchesCronMinute` 같은 값 함수를 이 파일에서 못 가져온다(`node:fs` import가
  *  섞여 있어 클라이언트 번들이 안 된다 — `lib/urls.ts` 머리 주석과 같은 선) — 그래서 서버가
  *  이미 계산해 데이터로 내려보낸다. `lib/urls.ts`의 `scheduleRows`가 이 값을 문자열로만 접는다. */
-export type ScheduleView = Schedule & { at: number; overdue: boolean };
+/** `at`이 `null`이면 <다음 회차 없음>이다(§7-2 §손으로 쓰는 cron 칸 — 31일 안에 맞는 분이
+ *  없는 손짜기 cron). 그 값을 그리는 것은 화면(부르는 쪽)의 몫이다. */
+export type ScheduleView = Schedule & { at: number | null; overdue: boolean };
 
 /** 폴링·서버 액션 응답에 실어 보낼 스케줄 목록 — `readHome`이 주는 원본에 화면용 값을 얹는다. */
 export function scheduleViews(schedules: Schedule[], nowMs: number = Date.now()): ScheduleView[] {
-  return schedules.map((s) => ({ ...s, ...nextScheduleDue(s, nowMs) }));
+  return schedules.map((s) => {
+    const next = nextScheduleDue(s, nowMs);
+    return { ...s, at: next?.at ?? null, overdue: next?.overdue ?? false };
+  });
 }
 
 /** 한 줄의 관문. **못 읽는 `when`은 없는 것으로 친다**(`parseHome`의 대화 관문과 같은 선) —
