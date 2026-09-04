@@ -150,10 +150,15 @@ did not touch stay.
   ticket is calling for, right there.
 
 Press the color dot and a palette opens. The one place to pick is the head of the right column;
-the dots on list rows are read-only. The color you pick follows the persona to board cards and
-the table, the persona filter, and the ticket form. The color is stored on this computer only
-and does not go into the project. Open it on another machine and the dot is neutral. Color
-never carries meaning by itself, so the name text comes with the dot everywhere.
+the dots on list rows are read-only. A project you made with `Create project` already has all
+five dots filled the first time you open this screen. At the moment you create it, the app draws
+a palette color for each persona, no two the same. If you do not like the one it drew, pick
+again at the head of the right column, exactly as before. Bring an existing queue in with
+`Register project` and it opens with neutral dots as it always has; there, a color appears only
+once you pick one. The color you pick follows the persona to board cards and the table, the
+persona filter, and the ticket form. The color is stored on this computer only and does not go
+into the project. Open it on another machine and the dot is neutral. Color never carries meaning
+by itself, so the name text comes with the dot everywhere.
 
 ## The Activity tab - what it is doing and what it has been doing
 
