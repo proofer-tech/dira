@@ -2049,26 +2049,43 @@ function SidePanel({
       collapsible="none"
       className="-my-6 -ml-6 h-auto w-64 shrink-0 border-r bg-surface"
     >
-      {/* 위 단 — 표면 넷(§11 결정 1 · §비주얼 §72 ①). **스크롤러 밖이다** — `SidebarContent`
-          안에 두면 아래 그룹이 길어질 때 이 넷이 화면에서 밀려 사라진다. 헤더 패딩은
+      {/* 위 단 — 표면 줄(§11 결정 7 · §비주얼 §72 ① 개정). **스크롤러 밖이다** — `SidebarContent`
+          안에 두면 아래 그룹이 길어질 때 이 줄이 화면에서 밀려 사라진다. 헤더 패딩은
           `SidebarContent px-4`와 같은 열이 되도록 `px-4 py-2`로 부품 기본을 덮는다 - 안 덮으면
-          위 단 글자가 24, 아래 단 글자가 16으로 두 열이 된다. `gap-0`은 안에 든 것이
-          `SidebarMenu` 하나뿐이라 부품 기본(블록 사이 8px)이 필요 없어서다 - 줄 사이는
-          `SidebarMenu`의 `gap-0.5`가 이미 낸다. */}
+          아이콘 x가 24, 아래 단 글자가 16으로 두 열이 된다. `gap-0`은 안에 든 것이
+          `SidebarMenu` 하나뿐이라 부품 기본(블록 사이 8px)이 필요 없어서다 - 버튼 사이 간격은
+          `SidebarMenu`의 `gap-1`이 낸다. 보이는 글자는 0이고 이름은 `sr-only` + 툴팁(`side="bottom"`)이
+          든다. 고른 표면의 표식은 면(hover와 공유)이 아니라 `SidebarMenuItem` 아래의 2px 줄
+          하나뿐이다 - 두 상태가 서로 다른 채널을 쓴다. */}
       <SidebarHeader className="gap-0 border-b px-4 py-2">
-        <SidebarMenu aria-label={t("home.title")}>
-          {SURFACES.map(({ id, labelKey, icon: Icon }) => (
-            <SidebarMenuItem key={id}>
-              <SidebarMenuButton
-                isActive={id === surface}
-                aria-current={id === surface ? "true" : undefined}
-                onClick={() => onSurfaceChange(id)}
+        <SidebarMenu aria-label={t("home.title")} className="flex-row gap-1">
+          {SURFACES.map(({ id, labelKey, icon: Icon }) => {
+            const isActive = id === surface;
+            const label = t(labelKey);
+            return (
+              <SidebarMenuItem
+                key={id}
+                className={cn(isActive && "after:absolute after:inset-x-0 after:-bottom-0.5 after:h-0.5 after:bg-foreground")}
               >
-                <Icon aria-hidden />
-                <span>{t(labelKey)}</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          ))}
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <SidebarMenuButton
+                        className="size-8 justify-center"
+                        isActive={isActive}
+                        aria-current={isActive ? "true" : undefined}
+                        onClick={() => onSurfaceChange(id)}
+                      >
+                        <Icon aria-hidden />
+                        <span className="sr-only">{label}</span>
+                      </SidebarMenuButton>
+                    }
+                  />
+                  <TooltipContent side="bottom">{label}</TooltipContent>
+                </Tooltip>
+              </SidebarMenuItem>
+            );
+          })}
         </SidebarMenu>
       </SidebarHeader>
       {/* `gap-4`가 두 그룹 사이 간격(종전 flex 상자의 값 그대로), `py-2`가 면의 세로 패딩.
