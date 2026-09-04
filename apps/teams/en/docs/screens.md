@@ -533,11 +533,13 @@ project. It is not a summary dashboard. Just write questions like `what is w2 wo
 or `why is this protocol the way it is`. An agent reads this project's queue, repo and protocols,
 and answers.
 
-- The left panel has three groups. `Conversations` starts at three lines and opens three more each
-  time you press `Show more`. `Schedules` holds the lines that wake this agent at times you set, and
-  how to make one is in [Schedules](/docs/schedules). `Worker sessions` are the sessions this
-  queue's workers held. Pick a finished one and you can ask on from inside that context. You cannot
-  talk to a running session from here. That is `Interject`, on the ticket page.
+- The lower half of the left panel has two groups. `Conversations` starts at three lines and opens
+  three more each time you press `Show more`. `Worker sessions` are the sessions this queue's
+  workers held. Pick a finished one and you can ask on from inside that context. You cannot talk to
+  a running session from here. That is `Interject`, on the ticket page.
+- `Schedules`, which wakes this agent at times you set, is not in that lower half. It is on the
+  surface row at the top of the panel, second icon from the left. How to make one and everything
+  else about it is in [Schedules](/docs/schedules).
 - The answer flows in as the characters arrive. If it takes too long, cut it with `Stop`.
 - **It mostly reads, but it writes too.** It has five tools: `Read` · `Glob` · `Grep` · `Write` ·
   `Edit`. Where writing can reach is fixed, inside the queue. Persona profiles, protocols, worker
