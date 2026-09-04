@@ -101,4 +101,4 @@ returned body is `## 블록`, first attempt or second, it goes up as the same re
 that instant (`reclaim` in `tickets.py`). Until the answer file exists, `deps` is unmet, so no
 worker picks that ticket up. Once an answer is there, `attempts` counts again from zero.
 
-Next is [Writing a ticket yourself](/docs/ticket-writing).
+Next is [Terminal, files, and source control](/docs/ide).

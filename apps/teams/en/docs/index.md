@@ -20,6 +20,7 @@ New here? Read the four below in order. By the time you finish them, dira is alr
 
 - [The screens](/docs/screens)
 - [Talking to a running session](/docs/barge-in)
+- [Terminal, files, and source control](/docs/ide)
 
 ## Writing your own
 

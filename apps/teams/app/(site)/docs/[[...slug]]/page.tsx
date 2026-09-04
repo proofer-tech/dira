@@ -15,8 +15,8 @@ import { t, type Locale } from "@/lib/i18n";
 const source = (name: string, locale: Locale) => pickManuscript(locale, `docs/${name}.md`);
 
 // `.vitepress/config.ts:81-135`의 6묶음 28항목(그룹 6 + 링크 22)을 데이터로 옮긴 것이다.
-// 그 뒤 `epics.md`·`squads.md`·`webhook.md`·`schedules.md`가 한 장씩 들어와 지금은
-// 6묶음 32항목(그룹 6 + 링크 26)이다.
+// 그 뒤 `epics.md`·`squads.md`·`webhook.md`·`schedules.md`·`ide.md`가 한 장씩 들어와 지금은
+// 6묶음 33항목(그룹 6 + 링크 27)이다.
 // 라벨은 `lib/i18n.ts`의 `manualSidebar.*` 키다(§0-24, 티켓 76b659fd) — 순서·링크는 한 자도
 // 안 다르다. 판정은 `sidebar.test.ts`가 그 파일에서 다시 읽어 전수로 댄다(`text:` 리터럴이
 // `textKey:`로 갈려서 그 테스트의 정규식도 같이 갈았다). 이전/다음도 이 평면 순서가 낸다
@@ -36,6 +36,7 @@ const SIDEBAR: { textKey: string; items: { textKey: string; link: string }[] }[]
     items: [
       { textKey: "manualSidebar.item.screens", link: "/docs/screens" },
       { textKey: "manualSidebar.item.bargeIn", link: "/docs/barge-in" },
+      { textKey: "manualSidebar.item.ide", link: "/docs/ide" },
     ],
   },
   {
