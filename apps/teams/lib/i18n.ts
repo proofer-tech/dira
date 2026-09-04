@@ -2016,6 +2016,8 @@ export const ko: Record<string, string> = {
   "home.schedule.new": "새 스케줄",
   "home.schedule.emptyTitle": "회차 없음",
   "home.schedule.overdueNote": "예정 시각이 지나 이 스케줄은 돌지 않습니다 — 지우고 다시 만듭니다",
+  "home.schedule.noNextRunNote": "31일 안에 도는 회차가 없어 이 스케줄은 돌지 않습니다 — 지우고 다시 만듭니다",
+  "home.schedule.noNextRun": "다음 회차 없음",
   // 다이얼로그 설명 둘째 문장과 **한 글자까지 같다**(회차 0건 판정 문장, 위 overdueNote 옆자리) —
   // 마침표는 이 값에 안 넣는다: 회차 0건 자리는 뒤에 붙는 문장이 없어 마침표가 없다.
   "home.schedule.liveNote":
@@ -2026,11 +2028,15 @@ export const ko: Record<string, string> = {
   "home.schedule.kind.daily": "매일",
   "home.schedule.kind.weekly": "매주",
   "home.schedule.kind.monthly": "매월",
+  "home.schedule.kind.cron": "cron",
   "home.schedule.kindLabel": "반복",
   "home.schedule.timeLabel": "시각",
   "home.schedule.promptLabel": "문장",
   "home.schedule.promptPlaceholder": "답변 대기 티켓을 훑고 사람이 답할 것이 있으면 요구사항으로 올려라.",
   "home.schedule.dayLimitNote": "29일부터 31일까지는 없는 달이 있어서 고를 수 없습니다.",
+  "home.schedule.cronInvalid": "분 시 일 월 요일 다섯 필드만 받습니다 — *, 정수, 범위(a-b), 스텝(*/n)만 됩니다.",
+  "home.schedule.cronNextRunSuffix": "에 다음 회차가 돕니다.",
+  "home.schedule.cronNoNextRun": "31일 안에 도는 회차가 없습니다.",
   "home.schedule.createFailTitle": "스케줄을 만들지 못했습니다",
   "home.schedule.invalidWhenOrPrompt": "시각 또는 문장을 확인하세요.",
   "home.schedule.desc1": "정한 시각에 홈 에이전트가 이 문장을 수행합니다.",
@@ -4251,6 +4257,9 @@ export const en: Record<string, string> = {
   "home.schedule.new": "New schedule",
   "home.schedule.emptyTitle": "No runs yet",
   "home.schedule.overdueNote": "The time has passed, so this schedule won't run — delete it and make a new one",
+  "home.schedule.noNextRunNote":
+    "No run falls within the next 31 days, so this schedule won't run — delete it and make a new one",
+  "home.schedule.noNextRun": "No next run",
   // 다이얼로그 설명 둘째 문장과 **한 글자까지 같다** — 마침표는 이 값에 안 넣는다(`ko`와 같다).
   "home.schedule.liveNote":
     "Schedules only run while this app is open — tickets in the queue keep getting dispatched even when it is closed",
@@ -4261,12 +4270,17 @@ export const en: Record<string, string> = {
   "home.schedule.kind.daily": "Daily",
   "home.schedule.kind.weekly": "Weekly",
   "home.schedule.kind.monthly": "Monthly",
+  "home.schedule.kind.cron": "cron",
   "home.schedule.kindLabel": "Repeat",
   "home.schedule.timeLabel": "Time",
   "home.schedule.promptLabel": "Prompt",
   "home.schedule.promptPlaceholder":
     "Sweep the tickets awaiting an answer and file a request for anything a human has to answer.",
   "home.schedule.dayLimitNote": "Some months have no 29th to 31st, so you can't pick those days.",
+  "home.schedule.cronInvalid":
+    "Only five fields (minute hour day month weekday) are accepted — *, an integer, a range (a-b), or a step (*/n).",
+  "home.schedule.cronNextRunSuffix": " is when the next run happens.",
+  "home.schedule.cronNoNextRun": "No run falls within the next 31 days.",
   "home.schedule.createFailTitle": "Couldn't create the schedule",
   "home.schedule.invalidWhenOrPrompt": "Check the time or the prompt.",
   "home.schedule.desc1": "At the time you set, the home agent carries out this prompt.",

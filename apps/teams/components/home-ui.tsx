@@ -169,7 +169,15 @@ import type {
 } from "@/lib/home-agent";
 import { formatCombo, matchCombo } from "@/lib/keymap";
 import type { Checkout, GitStatus, StatusFile } from "@/lib/source-control";
-import { chatRows, dateTimeLabel, groupProgress, scheduleRows, visibleChatRows } from "@/lib/urls";
+import {
+  chatRows,
+  dateTimeLabel,
+  groupProgress,
+  isValidWhen,
+  nextScheduleDue,
+  scheduleRows,
+  visibleChatRows,
+} from "@/lib/urls";
 import { cn } from "@/lib/utils";
 
 /** 화면이 답할 수 있다고 약속하는 범위가 곧 온보딩 예시 넷이다(§24 — 요구 원문의 예시 +
@@ -859,9 +867,11 @@ export function HomeUI({
               text={t("home.schedule.emptyTitle")}
               action={
                 <span className="text-xs text-muted-foreground">
-                  {pendingSchedule.overdue
-                    ? t("home.schedule.overdueNote")
-                    : `${dateTimeLabel(pendingSchedule.at)}${t("home.schedule.dueAtSuffix")} ${t("home.schedule.liveNote")}`}
+                  {pendingSchedule.at === null
+                    ? t("home.schedule.noNextRunNote")
+                    : pendingSchedule.overdue
+                      ? t("home.schedule.overdueNote")
+                      : `${dateTimeLabel(pendingSchedule.at)}${t("home.schedule.dueAtSuffix")} ${t("home.schedule.liveNote")}`}
                 </span>
               }
             />
@@ -2145,10 +2155,11 @@ function SidePanel({
   );
 }
 
-/** 화면의 갈래 넷(§비주얼 §62 (5)) — `when`에 저장되는 값은 §7-2 §단발과 주기가 한 칸에
+/** 화면의 갈래 다섯(§비주얼 §62 (5)) — `when`에 저장되는 값은 §7-2 §단발과 주기가 한 칸에
  *  담긴다의 형식 그대로다. 낱말이 `단발`이 아니라 `한 번만`인 이유는 §0-9다 — 화면의 말은
- *  사람의 말이고 `단발`은 이 문서의 어휘다. */
-type ScheduleKind = "once" | "daily" | "weekly" | "monthly";
+ *  사람의 말이고 `단발`은 이 문서의 어휘다. **다섯째 `cron`은 안 옮긴다** — §0-9라도 이 갈래를
+ *  고르는 사람의 말이 `cron`이다(요구 `81397aae`, §7-2 §손으로 쓰는 cron 칸). */
+type ScheduleKind = "once" | "daily" | "weekly" | "monthly" | "cron";
 
 /** `SelectValue`는 `items`를 안 준 Root에서 값 문자열 그대로를 그린다(`ticket-ui.tsx`의 같은
  *  주석) — `once`·`daily` 같은 내부 값이 트리거에 그대로 나온다. 렌더 프롭으로 라벨을 덮는다
@@ -2158,6 +2169,7 @@ const KIND_LABEL_KEY: Record<ScheduleKind, string> = {
   daily: "home.schedule.kind.daily",
   weekly: "home.schedule.kind.weekly",
   monthly: "home.schedule.kind.monthly",
+  cron: "home.schedule.kind.cron",
 };
 
 const WEEKDAY_KEYS = [
@@ -2174,12 +2186,15 @@ const WEEKDAY_KEYS = [
  *  이유 — 29~31을 허용하면 그 날이 없는 달에 회차가 조용히 없어진다). */
 const MONTH_DAYS = Array.from({ length: 28 }, (_, i) => String(i + 1));
 
-/** 갈래 넷 → `when`(§7-2 §단발과 주기가 한 칸에 담긴다). cron 필드 순서는 `home-agent.ts`의
- *  `matchesCronMinute`과 같다(분 · 시 · 일 · 월 · 요일) — 이 순서가 갈리면 화면이 만든 스케줄이
+/** 갈래 다섯 → `when`(§7-2 §단발과 주기가 한 칸에 담긴다). cron 필드 순서는 `lib/urls.ts`의
+ *  `isValidWhen`과 같다(분 · 시 · 일 · 월 · 요일) — 이 순서가 갈리면 화면이 만든 스케줄이
  *  서버에서 다른 요일 · 다른 날에 돈다. `date`·`time`이 아직 비어 있으면 빈 문자열을 낸다 —
- *  호출부의 `disabled`가 이미 그 창을 막으므로 여기서 값을 지어내지 않는다. */
-function buildWhen(kind: ScheduleKind, date: string, time: string, weekday: string, day: string): string {
+ *  호출부의 `disabled`가 이미 그 창을 막으므로 여기서 값을 지어내지 않는다. **`cron`은 사람이
+ *  넣은 문자열을 손대지 않고 그대로 낸다**(§비주얼 §62 (5) — `when`에 저장되는 것: 사람이 넣은
+ *  5필드 문자열 그대로). */
+function buildWhen(kind: ScheduleKind, date: string, time: string, weekday: string, day: string, cron: string): string {
   if (kind === "once") return date ? new Date(date).toISOString() : "";
+  if (kind === "cron") return cron;
   if (!time) return "";
   const [h, m] = time.split(":");
   if (kind === "daily") return `${Number(m)} ${Number(h)} * * *`;
@@ -2227,6 +2242,7 @@ function ScheduleCreateDialog({
   const [time, setTime] = useState("");
   const [weekday, setWeekday] = useState("1");
   const [day, setDay] = useState("1");
+  const [cron, setCron] = useState("");
   const [prompt, setPrompt] = useState("");
   const [persona, setPersona] = useState(DEFAULT_PERSONA);
   const [error, setError] = useState<string | null>(null);
@@ -2240,15 +2256,18 @@ function ScheduleCreateDialog({
     setTime("");
     setWeekday("1");
     setDay("1");
+    setCron("");
     setPrompt("");
     setPersona(DEFAULT_PERSONA);
     setError(null);
   };
 
   // `만들기` 잠금(§62 (5)) — "시각과 문장이 둘 다 비어 있지 않을 때만 열린다". 시각 칸은
-  // 갈래마다 다른 컨트롤이라 판정도 갈래를 본다 — `once`는 `date`, 나머지는 `time`이다
-  // (요일 · 일은 select라 기본값이 있어 늘 채워져 있다).
-  const timeFilled = kind === "once" ? date !== "" : time !== "";
+  // 갈래마다 다른 컨트롤이라 판정도 갈래를 본다 — `once`는 `date`, `cron`은 그 문자열, 나머지는
+  // `time`이다(요일 · 일은 select라 기본값이 있어 늘 채워져 있다). **`cron`은 채워져도 유효하지
+  // 않으면 잠긴다** — 위 §`만들기` 잠금이 낸 조건의 셋째 항(§62 (5)).
+  const timeFilled = kind === "once" ? date !== "" : kind === "cron" ? cron !== "" : time !== "";
+  const cronValid = kind !== "cron" || isValidWhen(cron);
 
   return (
     <Dialog
@@ -2364,6 +2383,34 @@ function ScheduleCreateDialog({
                 <p className="text-xs text-muted-foreground">{t("home.schedule.dayLimitNote")}</p>
               </div>
             )}
+            {kind === "cron" && (
+              <div className="space-y-1">
+                {/* 새 그릇 0개(§62 (5) §다섯째 갈래) — 이 다이얼로그가 이미 쓰는 `Input` 하나뿐이다.
+                    `font-mono`·placeholder는 그 절의 슬롯 표 그대로다. */}
+                <Input
+                  id="schedule-time"
+                  className="font-mono"
+                  placeholder="0 9 * * 1"
+                  value={cron}
+                  onChange={(e) => setCron(e.target.value)}
+                />
+                {/* 칸 아래 한 줄 — 세 갈래(§62 (5) 슬롯 표): 유효하면 다음 회차, 31일 안에 없으면
+                    없다는 말, 유효하지 않으면 무엇이 틀렸는지. 비어 있을 때는 아무 말도 안 한다
+                    (§비주얼 §62 (5) §칸이 비어서 열리는 것). */}
+                {cron !== "" &&
+                  (() => {
+                    if (!isValidWhen(cron)) {
+                      return <p className="text-xs text-destructive">{t("home.schedule.cronInvalid")}</p>;
+                    }
+                    const next = nextScheduleDue({ when: cron, created: new Date().toISOString() });
+                    return (
+                      <p className="text-xs text-muted-foreground">
+                        {next ? `${dateTimeLabel(next.at)}${t("home.schedule.cronNextRunSuffix")}` : t("home.schedule.cronNoNextRun")}
+                      </p>
+                    );
+                  })()}
+              </div>
+            )}
           </div>
           <div className="space-y-2">
             <Label htmlFor="schedule-prompt">{t("home.schedule.promptLabel")}</Label>
@@ -2395,10 +2442,10 @@ function ScheduleCreateDialog({
         <DialogFooter>
           <DialogClose render={<Button variant="outline" />}>{t("common.cancel")}</DialogClose>
           <Button
-            disabled={pending || !prompt.trim() || !timeFilled}
+            disabled={pending || !prompt.trim() || !timeFilled || !cronValid}
             onClick={() =>
               start(async () => {
-                const when = buildWhen(kind, date, time, weekday, day);
+                const when = buildWhen(kind, date, time, weekday, day, cron);
                 const r = await createSchedule(project, when, prompt, locale, persona);
                 if (r.ok) {
                   onCreated(r.schedules);

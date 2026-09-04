@@ -289,14 +289,22 @@ export function visibleChatRows<T extends { id: string }>(
  *  cron을 다시 읽지 않는다: 그 판정 함수는 `node:fs`가 섞인 파일에 있어 클라이언트 번들에
  *  못 들어온다(이 파일 머리 주석과 같은 선). */
 export function scheduleRows(
-  schedules: { id: string; prompt: string; at: number; overdue: boolean }[],
+  schedules: { id: string; prompt: string; at: number | null; overdue: boolean }[],
   now = Date.now(),
   locale: Locale = DEFAULT_LOCALE,
 ): { id: string; title: string; time: string }[] {
   return schedules.map((s) => {
-    const label = dateTimeLabel(s.at, now);
-    const overdueSuffix = t(locale, "common.suffix.overdue");
-    return { id: s.id, title: s.prompt.split("\n")[0] || s.prompt, time: s.overdue ? `${label} ${overdueSuffix}` : label };
+    // `at`이 `null`이면 <다음 회차 없음>이다(§7-2 §손으로 쓰는 cron 칸) — 지금 시각을 방어값으로
+    // 안 그린다. `dateTimeLabel`을 안 부르는 이유가 이것이다.
+    const time =
+      s.at === null
+        ? t(locale, "home.schedule.noNextRun")
+        : (() => {
+            const label = dateTimeLabel(s.at!, now);
+            const overdueSuffix = t(locale, "common.suffix.overdue");
+            return s.overdue ? `${label} ${overdueSuffix}` : label;
+          })();
+    return { id: s.id, title: s.prompt.split("\n")[0] || s.prompt, time };
   });
 }
 
@@ -892,3 +900,151 @@ export function defaultPicks(groups: OptionGroup[], defaultAnswer: string): Answ
  *  머리와 같다** — 둘 다 클라이언트 컴포넌트라 `node:fs`를 타는 `queue.ts`에서 값을 못 부른다.
  *  폼은 안 감춘다 — 사람이 산문으로 답할 길은 그대로 남는다. */
 export const NO_QUESTION_SECTION_NOTICE = "질문 절 없음 — 산문으로 아래에 답을 남길 수 있습니다";
+
+// ── 스케줄의 `when` 판정 (§7-2) — 이 파일에 있는 이유는 파일 머리와 같다 ─────────
+//
+// `home-agent.ts`가 이 함수들의 정본이었으나(node:fs가 섞인 파일), `새 스케줄` 다이얼로그의
+// `cron` 갈래(§비주얼 §62 (5) — 요구 `81397aae`)가 **타이핑하는 동안** 유효성과 다음 회차를
+// 그려야 해서 클라이언트가 같은 판정을 불러야 한다. 그래서 여기로 옮기고 `home-agent.ts`는
+// 재수출한다(엔진 의미 복제 — 같은 판정이 두 곳에 있으면 GUI가 거짓말을 하는 자리가 생긴다).
+
+/** `when`의 갈래를 가르는 것은 **`T` 하나다**(§7-2 §단발과 주기가 한 칸에 담긴다). 단발은
+ *  ISO 8601 + 오프셋, 나머지 넷(매일·매주·매월·cron)은 5필드 cron이다. */
+export function isOnceWhen(when: string): boolean {
+  return when.includes("T");
+}
+
+/** 5필드 각각의 범위(§7-2 §손으로 쓰는 cron 칸 표). 요일 `7`은 안 받는다 — 일요일을 적는
+ *  값이 `0` 하나뿐이게 닫는다. */
+const CRON_FIELD_RANGES = [
+  { min: 0, max: 59 }, // 분
+  { min: 0, max: 23 }, // 시
+  { min: 1, max: 31 }, // 일
+  { min: 1, max: 12 }, // 월
+  { min: 0, max: 6 }, // 요일
+] as const;
+
+/** 한 필드 안의 `,`로 나눈 조각 하나 — `*` · 정수 · 범위 `a-b` · 스텝(`*` 슬래시 n)과 범위
+ *  스텝(`a-b` 슬래시 n). 이름(`MON`)·매크로(`@daily`)는 이 정규식이 물린다(§7-2 표 §안 받는 것). */
+const CRON_PART = /^(\*|\d+|\d+-\d+)(?:\/(\d+))?$/;
+
+function isValidCronPart(part: string, range: { min: number; max: number }): boolean {
+  const m = CRON_PART.exec(part);
+  if (!m) return false;
+  const [, base, stepStr] = m;
+  if (stepStr !== undefined && Number(stepStr) < 1) return false;
+  if (base === "*") return true;
+  if (base!.includes("-")) {
+    const [a, b] = base!.split("-").map(Number);
+    return Number.isInteger(a) && Number.isInteger(b) && a! >= range.min && b! <= range.max && a! <= b!;
+  }
+  const n = Number(base);
+  return n >= range.min && n <= range.max;
+}
+
+/** 필드 하나가 어떤 값과 맞는가 — `isValidCronPart`와 같은 문법을 **판정이 아니라 매칭**으로 쓴다.
+ *  스텝의 시작은 범위(또는 `a`)이다(vixie와 같은 자리). */
+function cronPartMatches(part: string, v: number, range: { min: number; max: number }): boolean {
+  const m = CRON_PART.exec(part);
+  if (!m) return false;
+  const [, base, stepStr] = m;
+  const [lo, hi] = base === "*" ? [range.min, range.max] : base!.split("-").map(Number);
+  if (stepStr !== undefined) return v >= lo! && v <= (hi ?? lo)! && (v - lo!) % Number(stepStr) === 0;
+  if (base === "*") return true;
+  return v >= lo! && v <= (hi ?? lo)!;
+}
+
+/** 화면의 갈래 넷 + 사람이 손으로 쓰는 `cron` 갈래(§7-2 §손으로 쓰는 cron 칸) 다섯째가 받는
+ *  문법 전부. **못 읽는 `when`은 없는 것으로 친다**(§7-2 — `parseHome`의 관문과 같은 선) —
+ *  이 판정이 그 관문이다. */
+export function isValidWhen(when: string): boolean {
+  if (isOnceWhen(when)) return Number.isFinite(Date.parse(when));
+  const fields = when.trim().split(/\s+/);
+  return (
+    fields.length === 5 &&
+    fields.every((f, i) => f.split(",").every((part) => isValidCronPart(part, CRON_FIELD_RANGES[i]!)))
+  );
+}
+
+/** 5필드 cron 한 분을 **머신 로컬 시각**과 맞춘다(§7-2 §시간대 — `Date` getter가 이미 로컬이고,
+ *  지금 crontab이 워커를 깨우는 판정과 같은 자다). 일·요일이 둘 다 `*`가 아니어도 **AND**다
+ *  (vixie의 OR을 안 들인다 — §7-2 §일과 요일이 둘 다 `*`가 아니면). */
+function matchesCronMinute(cron: string, d: Date): boolean {
+  const [min, hour, dom, month, dow] = cron.trim().split(/\s+/);
+  const fieldMatches = (f: string, v: number, range: { min: number; max: number }) =>
+    f.split(",").some((part) => cronPartMatches(part, v, range));
+  return (
+    fieldMatches(min!, d.getMinutes(), CRON_FIELD_RANGES[0]) &&
+    fieldMatches(hour!, d.getHours(), CRON_FIELD_RANGES[1]) &&
+    fieldMatches(dom!, d.getDate(), CRON_FIELD_RANGES[2]) &&
+    fieldMatches(month!, d.getMonth() + 1, CRON_FIELD_RANGES[3]) &&
+    fieldMatches(dow!, d.getDay(), CRON_FIELD_RANGES[4])
+  );
+}
+
+/** §7-2 §되짚는 창 — 그보다 오래 앱이 꺼져 있었으면 놓친 회차는 없는 것으로 하고 다음 맞는
+ *  분부터 돈다. 새 수를 발명한 게 아니다 — 갈래 넷의 가장 긴 주기(매월)가 한 주기다. */
+export const SCHEDULE_LOOKBACK_MS = 31 * 24 * 60 * 60 * 1000;
+
+/** §7-2 §판정의 입력. **시계도 인자다** — `judgeSchedule`이 순수 함수로 뜨는 이유가 이것이다
+ *  (`pnpm test`가 시계를 주입해 판정한다). `lastDueMs`가 없으면(`null`) 창의 시작은 `createdMs`다
+ *  ("오늘 만든 스케줄이 어제 회차를 돌지 않는다"). */
+export type ScheduleJudgeInput = { when: string; lastDueMs: number | null; createdMs: number; nowMs: number };
+
+/** §7-2 §판정 — `(마지막 예정 시각, 지금]`에 맞는 분이 하나라도 있으면 그 회차의 예정 시각(ms)을
+ *  낸다. 없으면 `null`. 맞는 분이 여럿이면 **마지막** 것 하나 — 몰아 돌리지 않는다. 단발은
+ *  `lastDueMs`가 있으면(=이미 돌았으면) 다시 안 돈다. 못 읽는 `when`은 없는 것으로 친다.
+ *
+ *  **31일 캡이 `once`에도 그냥 적용된다** — 창의 시작을 뒤로 못 미는 것 하나로 "31일보다 오래
+ *  지난 단발은 안 돈다"가 따로 분기 없이 뜬다(§7-2 수용조건). */
+export function judgeSchedule({ when, lastDueMs, createdMs, nowMs }: ScheduleJudgeInput): number | null {
+  if (!isValidWhen(when)) return null;
+  const windowStart = Math.max(lastDueMs ?? createdMs, nowMs - SCHEDULE_LOOKBACK_MS);
+  if (isOnceWhen(when)) {
+    if (lastDueMs !== null) return null;
+    const at = Date.parse(when);
+    return at > windowStart && at <= nowMs ? at : null;
+  }
+  // 분 단위로 훑는다 — 최악(31일 공백)도 44,640회라 값이 트리비얼하다(핫패스가 아니다: 15초마다
+  // 한 번, 보통 창은 1~2분이다).
+  const startMinute = Math.floor(windowStart / 60_000) + 1;
+  const endMinute = Math.floor(nowMs / 60_000);
+  let due: number | null = null;
+  for (let m = startMinute; m <= endMinute; m++) {
+    const t = m * 60_000;
+    if (matchesCronMinute(when, new Date(t))) due = t;
+  }
+  return due;
+}
+
+/** §비주얼 §62 (3) §다음 예정 시각 — `judgeSchedule`과 짝인 순수 함수다. 저건 "지금 돌아야
+ *  하나"를 묻는 트리거고 이건 "다음엔 언제 돌 것 같나"를 묻는 화면의 값이다 — 트리거가 아니라서
+ *  결과를 저장하지 않는다(호출마다 다시 잰다). **단발**은 자기 시각이 유일한 값이라 `last`가
+ *  있으면(이미 돌았다) `overdue`이고, 없어도 `judgeSchedule`이 다시 못 돌릴 만큼 지났으면
+ *  (`at <= windowStart`, `judgeSchedule`과 같은 셈) 역시 `overdue`다. **반복**은 정의상 항상
+ *  다음 맞는 미래 분이라 `overdue`가 설 자리가 없다 — 그래서 갈래 두 함수가 아니라 한 함수의
+ *  두 분기다. `Schedule`을 여기서 import하지 않는다 — 이 파일이 `home-agent.ts`를 부르면
+ *  순환 import가 된다. 형은 그 타입이 쓰는 세 칸만 인라인으로 편다. */
+export function nextScheduleDue(
+  { when, created, last }: { when: string; created: string; last?: { due: string; at: string } },
+  nowMs: number = Date.now(),
+): { at: number; overdue: boolean } | null {
+  if (isOnceWhen(when)) {
+    const at = Date.parse(when);
+    if (last) return { at, overdue: true };
+    const createdMs = Date.parse(created);
+    const windowStart = Math.max(Number.isFinite(createdMs) ? createdMs : nowMs, nowMs - SCHEDULE_LOOKBACK_MS);
+    return { at, overdue: at <= windowStart };
+  }
+  // 다음 맞는 분을 앞으로 훑는다 — 최악(매월 28일)도 31일 = 44,640분이라 `judgeSchedule`의 같은
+  // 셈으로 트리비얼하다. 화면의 갈래 넷은 `dom`을 1~28로 닫아 두어 항상 창 안에 있지만, 손으로
+  // 쓰는 `cron` 칸(§7-2)은 `0 0 30 2 *`처럼 **31일 안에 영영 안 맞는 분**을 담을 수 있다 —
+  // 그때는 `null`이다(지금 시각을 방어값으로 내지 않는다 — §7-2 §손으로 쓰는 cron 칸).
+  const start = Math.floor(nowMs / 60_000) + 1;
+  const end = start + SCHEDULE_LOOKBACK_MS / 60_000;
+  for (let m = start; m <= end; m++) {
+    const t = m * 60_000;
+    if (matchesCronMinute(when, new Date(t))) return { at: t, overdue: false };
+  }
+  return null;
+}
