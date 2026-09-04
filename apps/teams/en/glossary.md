@@ -104,6 +104,7 @@ Never translate, never re-spell:
 | 스케줄 | schedule | The row on the home screen. The group label is `Schedules`. |
 | 회차 | run | One firing of a schedule: one question and one answer. Never an iteration or a cycle. |
 | 홈 에이전트 | home agent | The session that answers on the home screen, and the one a schedule wakes. |
+| 표면 | surface | One of the four the icons at the top of the home screen's left panel switch between. The labels are `Home agent`, `Terminal`, `Source control`, and `Explorer`; the word surface itself is manual prose and appears on no screen. |
 | 웹훅 | webhook | The settings node is `Webhook`. |
 | 통합 게이트 | dispatch gate | The screen calls it that (`Apply dispatch gate`), so prose does too, even though the branch it guards is the integration branch. |
 | 받는 트리 | receiving tree | The original the workers' worktrees branched off - the project folder itself. |
@@ -156,6 +157,7 @@ table of contents use the same words. `meta.ts` reads the heading for `<title>` 
 | `requirements.md` | 요구사항 접수하기 | Submitting a request |
 | `screens.md` | 화면 소개 | The screens |
 | `barge-in.md` | 도는 세션에 말 걸기 | Talking to a running session |
+| `ide.md` | 터미널과 파일과 소스 컨트롤 | Terminal, files, and source control |
 | `ticket-writing.md` | 티켓 직접 발행하기 | Writing a ticket yourself |
 | `states.md` | 티켓이 지나는 상태 | The states a ticket passes through |
 | `worker.md` | 워커 | Workers |
