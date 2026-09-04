@@ -400,6 +400,24 @@ async function writeHome(projectId: string, home: Home): Promise<void> {
   await rename(tmp, p);
 }
 
+/** `readHome` -> 고치기 -> `writeHome` 사이가 통째로 겹치면 나중 쓰기가 앞선 쓰기를 지운다
+ *  (f27f7ef9 — 스케줄의 15초 하트비트가 사람의 `새 스케줄`과 같은 프로세스 안에서 이 창을
+ *  나눠 쓴다). 파일 하나를 프로젝트 전부가 나눠 쓰므로 락도 프로젝트 하나가 아니라 파일 하나
+ *  몫이다. 이 프로세스 안의 순서만 다투므로 프로미스 체인 하나로 충분하다 — 다른 인스턴스가
+ *  같은 파일을 쓰는 경합(워크트리마다 뜬 여러 서버)까지는 안 잡는다, 그건 실사용 시나리오가
+ *  아니라고 판단했다(티켓 본문 §왜 이 QA 세션 특유의 상황이 아닐 수 있는가).
+ *  // ponytail: 이 프로세스 안의 순서 보장뿐이다. 여러 인스턴스가 한 파일을 쓰는 경합까지
+ *  //           막으려면 파일 락(예: `flock`)이나 CAS(mtime 대조)로 올린다. */
+let homeLockChain: Promise<unknown> = Promise.resolve();
+function withHomeLock<T>(fn: () => Promise<T>): Promise<T> {
+  const run = homeLockChain.then(fn, fn);
+  homeLockChain = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
+
 /** 지금 보는 대화의 session id. 없으면 null(= 다음 질문이 새 줄을 연다). */
 export async function readSessionId(projectId: string): Promise<string | null> {
   return (await readHome(projectId)).current;
@@ -433,20 +451,22 @@ const openRow = (): Conversation => ({
  *  (아직 첫 질문 전) 새 줄을 또 안 열고 그 줄의 페르소나만 갈아 끼운다 — 셀렉트가 값을 바꿀
  *  때마다 이 함수를 다시 부르는 것이 곧 "잠기기 전까지는 다시 고를 수 있다"의 구현이다. */
 export async function newConversation(projectId: string, persona: string = HOME_PERSONA): Promise<string> {
-  const home = await readHome(projectId);
-  // 아직 아무것도 안 물은 대화를 또 열지 않는다 — 두 번 누르면 빈 줄이 둘이고, 상한 20이 그걸로 찬다
-  const empty = home.conversations.find((c) => c.id === home.current && c.fresh && !c.title);
-  if (empty) {
-    if ((empty.persona ?? HOME_PERSONA) === persona) return empty.id;
-    await writeHome(projectId, {
-      ...home,
-      conversations: home.conversations.map((c) => (c.id === empty.id ? { ...c, persona } : c)),
-    });
-    return empty.id;
-  }
-  const row: Conversation = { ...openRow(), persona };
-  await writeHome(projectId, append(home, row));
-  return row.id;
+  return withHomeLock(async () => {
+    const home = await readHome(projectId);
+    // 아직 아무것도 안 물은 대화를 또 열지 않는다 — 두 번 누르면 빈 줄이 둘이고, 상한 20이 그걸로 찬다
+    const empty = home.conversations.find((c) => c.id === home.current && c.fresh && !c.title);
+    if (empty) {
+      if ((empty.persona ?? HOME_PERSONA) === persona) return empty.id;
+      await writeHome(projectId, {
+        ...home,
+        conversations: home.conversations.map((c) => (c.id === empty.id ? { ...c, persona } : c)),
+      });
+      return empty.id;
+    }
+    const row: Conversation = { ...openRow(), persona };
+    await writeHome(projectId, append(home, row));
+    return row.id;
+  });
 }
 
 /** 좌측 패널에서 한 줄을 고른다 — `current` 교체가 전부다. **실재하지 않는 값은 안 받는다**:
@@ -455,23 +475,25 @@ export async function newConversation(projectId: string, persona: string = HOME_
  *  (§7 좌측 패널). 워커 세션이어도 `conversations`에는 줄을 안 만든다: 파일에 갈리는 것은
  *  `current` 한 칸이다. */
 export async function switchConversation(projectId: string, sessionId: string): Promise<boolean> {
-  const home = await readHome(projectId);
-  const known =
-    home.conversations.some((c) => c.id === sessionId) ||
-    // 회차가 있는 스케줄 줄(§7-2 §고르면 무엇이 서나 — 워커 세션 줄과 같은 자다: `current`가
-    // 그 `session_id`가 된다). 아직 한 번도 안 돈 스케줄은 `session_id`가 빈 문자열이라 여기
-    // 걸리지 않는다 — 그 줄을 고르는 것은 화면이 로컬로 처리한다(§비주얼 §62 (6)).
-    home.schedules.some((s) => s.session_id === sessionId) ||
-    (await workerSessionsById(projectId)).some((w) => w.id === sessionId);
-  if (!known) return false;
-  const now = new Date().toISOString();
-  await writeHome(projectId, {
-    ...home,
-    current: sessionId,
-    tabs: openTab(home.tabs, sessionId, "chat", now),
-    activeTab: sessionId,
+  return withHomeLock(async () => {
+    const home = await readHome(projectId);
+    const known =
+      home.conversations.some((c) => c.id === sessionId) ||
+      // 회차가 있는 스케줄 줄(§7-2 §고르면 무엇이 서나 — 워커 세션 줄과 같은 자다: `current`가
+      // 그 `session_id`가 된다). 아직 한 번도 안 돈 스케줄은 `session_id`가 빈 문자열이라 여기
+      // 걸리지 않는다 — 그 줄을 고르는 것은 화면이 로컬로 처리한다(§비주얼 §62 (6)).
+      home.schedules.some((s) => s.session_id === sessionId) ||
+      (await workerSessionsById(projectId)).some((w) => w.id === sessionId);
+    if (!known) return false;
+    const now = new Date().toISOString();
+    await writeHome(projectId, {
+      ...home,
+      current: sessionId,
+      tabs: openTab(home.tabs, sessionId, "chat", now),
+      activeTab: sessionId,
+    });
+    return true;
   });
-  return true;
 }
 
 /** 우측 탭 줄에서 탭 하나를 닫는다(§11 결정 1 - 탭 닫기). **대화 자체는 안 지운다** — 목록에서
@@ -481,49 +503,55 @@ export async function switchConversation(projectId: string, sessionId: string): 
  *  따라간다**(§11-1, P366-4). 터미널 탭으로 넘어가도 대화 스레드는 그대로다 - 터미널 표면은
  *  `current`를 안 쓴다(§11-1 결정 - 폴링·스레드는 홈 에이전트 표면 전용). */
 export async function closeHomeTab(projectId: string, tabId: string): Promise<Home> {
-  const home = await readHome(projectId);
-  const tabs = closeTabPure(home.tabs, tabId);
-  const stillActive = home.activeTab !== tabId;
-  const activeTab = stillActive ? home.activeTab : mostRecentTab(tabs);
-  // 닫은 탭이 활성이 아니었으면 `current`는 그대로다. 활성이었으면: 넘어갈 탭이 없으면(전부
-  // 닫았다) `null`로 물러난다 — 옛(모두 `chat`이던) 동작 그대로다. 넘어갈 탭이 있으면 그 탭이
-  // `chat`일 때만 따라간다 - 터미널로 넘어가도 대화 스레드는 그대로 둔다.
-  const landed = stillActive ? null : tabs.find((tb) => tb.id === activeTab);
-  const current = stillActive
-    ? home.current
-    : activeTab === null
-      ? null
-      : landed?.kind === "chat"
-        ? activeTab
-        : home.current;
-  const next: Home = { ...home, tabs, activeTab, current };
-  await writeHome(projectId, next);
-  return next;
+  return withHomeLock(async () => {
+    const home = await readHome(projectId);
+    const tabs = closeTabPure(home.tabs, tabId);
+    const stillActive = home.activeTab !== tabId;
+    const activeTab = stillActive ? home.activeTab : mostRecentTab(tabs);
+    // 닫은 탭이 활성이 아니었으면 `current`는 그대로다. 활성이었으면: 넘어갈 탭이 없으면(전부
+    // 닫았다) `null`로 물러난다 — 옛(모두 `chat`이던) 동작 그대로다. 넘어갈 탭이 있으면 그 탭이
+    // `chat`일 때만 따라간다 - 터미널로 넘어가도 대화 스레드는 그대로 둔다.
+    const landed = stillActive ? null : tabs.find((tb) => tb.id === activeTab);
+    const current = stillActive
+      ? home.current
+      : activeTab === null
+        ? null
+        : landed?.kind === "chat"
+          ? activeTab
+          : home.current;
+    const next: Home = { ...home, tabs, activeTab, current };
+    await writeHome(projectId, next);
+    return next;
+  });
 }
 
 /** 터미널 탭 하나를 연다(§11-1 결정 1·3) — cwd는 만든 뒤 안 갈린다. `chat` 탭의 `switchConversation`과
  *  같은 모양이지만 `current`(대화 스레드)는 안 건드린다 - 터미널은 그 칸을 안 쓴다. */
 export async function openTerminalTab(projectId: string, ptyId: string, cwd: string): Promise<Home> {
-  const home = await readHome(projectId);
-  const now = new Date().toISOString();
-  const next: Home = { ...home, tabs: openTab(home.tabs, ptyId, "terminal", now, cwd), activeTab: ptyId };
-  await writeHome(projectId, next);
-  return next;
+  return withHomeLock(async () => {
+    const home = await readHome(projectId);
+    const now = new Date().toISOString();
+    const next: Home = { ...home, tabs: openTab(home.tabs, ptyId, "terminal", now, cwd), activeTab: ptyId };
+    await writeHome(projectId, next);
+    return next;
+  });
 }
 
 /** 탭 줄에서 탭 하나에 포커스만 옮긴다 - 대화 전환(`switchConversation`)과 달리 `current`도
  *  탭 생성도 없다. 터미널 표면에서 이미 열린 탭 사이를 오갈 때 쓴다. 실재하지 않는 탭은 무시한다. */
 export async function focusTab(projectId: string, tabId: string): Promise<Home> {
-  const home = await readHome(projectId);
-  if (!home.tabs.some((t) => t.id === tabId)) return home;
-  const now = new Date().toISOString();
-  const next: Home = {
-    ...home,
-    tabs: home.tabs.map((t) => (t.id === tabId ? { ...t, lastViewed: now } : t)),
-    activeTab: tabId,
-  };
-  await writeHome(projectId, next);
-  return next;
+  return withHomeLock(async () => {
+    const home = await readHome(projectId);
+    if (!home.tabs.some((t) => t.id === tabId)) return home;
+    const now = new Date().toISOString();
+    const next: Home = {
+      ...home,
+      tabs: home.tabs.map((t) => (t.id === tabId ? { ...t, lastViewed: now } : t)),
+      activeTab: tabId,
+    };
+    await writeHome(projectId, next);
+    return next;
+  });
 }
 
 // ── 워커 세션 목록 (§7 좌측 패널 — 요구 `48b13597` 답 3=(c)) ────────────────
@@ -1021,22 +1049,24 @@ async function beginTurn(
   question: string,
   persona: string = HOME_PERSONA,
 ): Promise<{ sessionId: string; resumed: boolean; persona: string }> {
-  const home = await readHome(projectId);
-  const cur = home.conversations.find((c) => c.id === home.current);
-  // **대화 목록에 없는 `current` = 워커 세션이다**(§7 좌측 패널 — 답 1(b)·2(c)). 그 sid를 그대로
-  // 이어붙이고 **파일을 한 바이트도 안 건드린다**: `conversations`에 줄이 생기면 워커 세션이
-  // 사람 대화 20을 밀어낸다. 제목도 안 쓴다 — 이 줄의 이름은 큐에 있다(티켓 제목).
-  if (!cur && home.current) return { sessionId: home.current, resumed: true, persona: HOME_PERSONA };
-  const row = cur ?? openRow();
-  const chosen = row.persona ?? persona;
-  const next: Conversation = { ...row, title: row.title || reqTitle(question), persona: chosen };
-  await writeHome(
-    projectId,
-    cur
-      ? { ...home, conversations: home.conversations.map((c) => (c.id === cur.id ? next : c)) }
-      : append(home, next),
-  );
-  return { sessionId: next.id, resumed: !next.fresh, persona: chosen };
+  return withHomeLock(async () => {
+    const home = await readHome(projectId);
+    const cur = home.conversations.find((c) => c.id === home.current);
+    // **대화 목록에 없는 `current` = 워커 세션이다**(§7 좌측 패널 — 답 1(b)·2(c)). 그 sid를 그대로
+    // 이어붙이고 **파일을 한 바이트도 안 건드린다**: `conversations`에 줄이 생기면 워커 세션이
+    // 사람 대화 20을 밀어낸다. 제목도 안 쓴다 — 이 줄의 이름은 큐에 있다(티켓 제목).
+    if (!cur && home.current) return { sessionId: home.current, resumed: true, persona: HOME_PERSONA };
+    const row = cur ?? openRow();
+    const chosen = row.persona ?? persona;
+    const next: Conversation = { ...row, title: row.title || reqTitle(question), persona: chosen };
+    await writeHome(
+      projectId,
+      cur
+        ? { ...home, conversations: home.conversations.map((c) => (c.id === cur.id ? next : c)) }
+        : append(home, next),
+    );
+    return { sessionId: next.id, resumed: !next.fresh, persona: chosen };
+  });
 }
 
 /** 세션을 **여는** 질문이 끝난 뒤. 성공이면 그 줄은 이제 열린 세션이다(다음 질문은 `--resume`).
@@ -1046,43 +1076,47 @@ async function beginTurn(
  *  `--session-id`를 다시 거는 경우(타임아웃·인증 실패는 세션이 먼저 생긴다)가 남는다. 새 uuid는
  *  둘 다 아니다. 사람이 연 줄과 제목은 그대로 남는다 — 다음 질문이 그 자리에서 다시 연다. */
 async function settleFirstTurn(projectId: string, sessionId: string, ok: boolean): Promise<void> {
-  const home = await readHome(projectId);
-  const row = home.conversations.find((c) => c.id === sessionId);
-  if (!row) return; // 도는 사이에 `새 대화`·전환이 있었다 — 남의 줄을 고치지 않는다
-  const next: Conversation = ok
-    ? { id: row.id, title: row.title, created: row.created, ...(row.persona ? { persona: row.persona } : {}) }
-    : { ...row, id: randomUUID() };
-  // **`runs`의 키가 그 줄을 따라간다**(§7 §서버가 갈리는 자리 넷 ①: 키가 session id다).
-  // 실패한 첫 턴은 여기서 id를 갈므로, 안 걸어 두면 그 대화를 여는 폴링이 `runs.get(<새 id>)`에서
-  // 아무것도 못 찾고 **실패 5종이 사람에게 한 번도 안 보인다.** 객체를 그대로 걸므로
-  // `startAsk`의 `.then`이 채우는 `result`는 새 키 아래에도 들어간다(같은 객체다).
-  //
-  // **옛 키를 여기서 떼지 않는다**(플레이크 `083fb571`). 폴링은 **파일을 읽고 맵을 읽으므로**
-  // 둘이 어긋나는 순간이 있으면 그 틈의 폴링이 `entry === undefined`를 보고 `running: false`를
-  // **실패 없이** 돌려준다 — 화면이 `pollDone`(= `!running && turns.length > 0`)으로 폴링을 끊는
-  // 자리라, 트랜스크립트가 이미 있는 첫 턴 실패(가령 답 없이 죽은 세션 — §7 §천장이 없다 실패 ③)면
-  // 그 실패가 영영 안 뜨고 다음 질문이 실패 ④로 막힌다. 떼는 쪽을 뒤로 미뤄도 창은 반대편에 그대로
-  // 생긴다(파일이 새 id인데 맵은 옛 id다). 그래서 **두 키가 동시에 같은 객체를 가리키게 두고**,
-  // 결과를 집어 가는 폴링이 그 객체를 가진 키를 전부 지운다(`dropRun`). 옛 키는 그 줄이 파일에서
-  // 이미 갈려 다시 안 잡힌다.
-  const entry = runs.get(sessionId);
-  if (entry && next.id !== sessionId) runs.set(next.id, entry);
-  await writeHome(projectId, {
-    ...home,
-    conversations: home.conversations.map((c) => (c.id === sessionId ? next : c)),
-    current: home.current === sessionId ? next.id : home.current,
+  return withHomeLock(async () => {
+    const home = await readHome(projectId);
+    const row = home.conversations.find((c) => c.id === sessionId);
+    if (!row) return; // 도는 사이에 `새 대화`·전환이 있었다 — 남의 줄을 고치지 않는다
+    const next: Conversation = ok
+      ? { id: row.id, title: row.title, created: row.created, ...(row.persona ? { persona: row.persona } : {}) }
+      : { ...row, id: randomUUID() };
+    // **`runs`의 키가 그 줄을 따라간다**(§7 §서버가 갈리는 자리 넷 ①: 키가 session id다).
+    // 실패한 첫 턴은 여기서 id를 갈므로, 안 걸어 두면 그 대화를 여는 폴링이 `runs.get(<새 id>)`에서
+    // 아무것도 못 찾고 **실패 5종이 사람에게 한 번도 안 보인다.** 객체를 그대로 걸므로
+    // `startAsk`의 `.then`이 채우는 `result`는 새 키 아래에도 들어간다(같은 객체다).
+    //
+    // **옛 키를 여기서 떼지 않는다**(플레이크 `083fb571`). 폴링은 **파일을 읽고 맵을 읽으므로**
+    // 둘이 어긋나는 순간이 있으면 그 틈의 폴링이 `entry === undefined`를 보고 `running: false`를
+    // **실패 없이** 돌려준다 — 화면이 `pollDone`(= `!running && turns.length > 0`)으로 폴링을 끊는
+    // 자리라, 트랜스크립트가 이미 있는 첫 턴 실패(가령 답 없이 죽은 세션 — §7 §천장이 없다 실패 ③)면
+    // 그 실패가 영영 안 뜨고 다음 질문이 실패 ④로 막힌다. 떼는 쪽을 뒤로 미뤄도 창은 반대편에 그대로
+    // 생긴다(파일이 새 id인데 맵은 옛 id다). 그래서 **두 키가 동시에 같은 객체를 가리키게 두고**,
+    // 결과를 집어 가는 폴링이 그 객체를 가진 키를 전부 지운다(`dropRun`). 옛 키는 그 줄이 파일에서
+    // 이미 갈려 다시 안 잡힌다.
+    const entry = runs.get(sessionId);
+    if (entry && next.id !== sessionId) runs.set(next.id, entry);
+    await writeHome(projectId, {
+      ...home,
+      conversations: home.conversations.map((c) => (c.id === sessionId ? next : c)),
+      current: home.current === sessionId ? next.id : home.current,
+    });
   });
 }
 
 /** 세션이 스스로 말한 모델을 그 대화 줄에 한 번 적는다(§7 §세션 정보 한 줄). 이미 같은 값이
  *  적혀 있으면 다시 안 쓴다 — 모델은 세션 내내 고정이라 매 턴 갈아 끼울 이유가 없다. */
 async function saveModel(projectId: string, sessionId: string, model: string): Promise<void> {
-  const home = await readHome(projectId);
-  const row = home.conversations.find((c) => c.id === sessionId);
-  if (!row || row.model === model) return;
-  await writeHome(projectId, {
-    ...home,
-    conversations: home.conversations.map((c) => (c.id === sessionId ? { ...c, model } : c)),
+  return withHomeLock(async () => {
+    const home = await readHome(projectId);
+    const row = home.conversations.find((c) => c.id === sessionId);
+    if (!row || row.model === model) return;
+    await writeHome(projectId, {
+      ...home,
+      conversations: home.conversations.map((c) => (c.id === sessionId ? { ...c, model } : c)),
+    });
   });
 }
 
@@ -1611,25 +1645,29 @@ export async function createSchedule(
 ): Promise<Schedule | null> {
   const p = prompt.trim();
   if (!p || !isValidWhen(when)) return null;
-  const home = await readHome(projectId);
-  const row: Schedule = {
-    id: randomUUID(),
-    created: new Date().toISOString(),
-    when,
-    prompt: p,
-    session_id: "",
-    persona,
-  };
-  await writeHome(projectId, { ...home, schedules: [...home.schedules, row] });
-  return row;
+  return withHomeLock(async () => {
+    const home = await readHome(projectId);
+    const row: Schedule = {
+      id: randomUUID(),
+      created: new Date().toISOString(),
+      when,
+      prompt: p,
+      session_id: "",
+      persona,
+    };
+    await writeHome(projectId, { ...home, schedules: [...home.schedules, row] });
+    return row;
+  });
 }
 
 /** `스케줄 삭제`(§7-2 §안 하는 것 — 켜고 끄기 대신 이 자리가 받는다). **트랜스크립트는 안
  *  지운다**(`~/.claude`는 남의 디렉터리다) — 지우는 것은 이 배열의 줄 하나뿐이라 그 스레드로
  *  가는 길이 화면에서 사라질 뿐이다(§비주얼 §62 (4) §확인을 끼우는 이유). */
 export async function deleteSchedule(projectId: string, id: string): Promise<void> {
-  const home = await readHome(projectId);
-  await writeHome(projectId, { ...home, schedules: home.schedules.filter((s) => s.id !== id) });
+  return withHomeLock(async () => {
+    const home = await readHome(projectId);
+    await writeHome(projectId, { ...home, schedules: home.schedules.filter((s) => s.id !== id) });
+  });
 }
 
 /** 만들기·삭제 뒤 화면이 즉시 받아 갈 최신 목록(§비주얼 §24 로딩 항 — 다음 5초/폴링을 안
@@ -1647,8 +1685,13 @@ export async function readScheduleViews(projectId: string, nowMs: number = Date.
 
 /** 한 줄만 갈아 끼운다 — `writeHome`을 그대로 타므로 새 쓰기 경로가 없다(§7-2 새 파일 0개). */
 async function patchSchedule(projectId: string, id: string, patch: Partial<Schedule>): Promise<void> {
-  const home = await readHome(projectId);
-  await writeHome(projectId, { ...home, schedules: home.schedules.map((s) => (s.id === id ? { ...s, ...patch } : s)) });
+  return withHomeLock(async () => {
+    const home = await readHome(projectId);
+    await writeHome(projectId, {
+      ...home,
+      schedules: home.schedules.map((s) => (s.id === id ? { ...s, ...patch } : s)),
+    });
+  });
 }
 
 /** 한 스케줄의 회차 하나. **`current`를 안 본다** — `beginTurn`을 안 거치고 `ask`에 세션을

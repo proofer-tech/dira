@@ -1952,6 +1952,24 @@ test("deleteSchedule — 그 줄만 빠지고 나머지는 그대로다", async 
   );
 });
 
+/** f27f7ef9 — `readHome` → 고치기 → `writeHome`이 겹치면 나중 쓰기가 앞선 쓰기를 통째로
+ *  지운다(실측: 사람의 `새 스케줄`과 스케줄 하트비트가 같은 프로세스 안에서 이 창을 나눠
+ *  썼다). `Promise.all`로 같은 프로젝트에 다섯 줄을 동시에 만들어 겹치는 창을 강제로 만든다 —
+ *  락이 없으면 일부가 사라진다. */
+test("createSchedule 동시 호출 — 겹쳐 쓴 줄이 하나도 안 사라진다 (f27f7ef9 lost update)", async () => {
+  const rows = await Promise.all(
+    Array.from({ length: 5 }, (_, i) => createSchedule("racetest", "0 9 * * *", `회차 ${i}`)),
+  );
+  assert.strictEqual(
+    rows.every((r) => r !== null),
+    true,
+  );
+  assert.deepStrictEqual(
+    (await readHome("racetest")).schedules.map((s) => s.id).sort(),
+    rows.map((r) => r!.id).sort(),
+  );
+});
+
 /** §7-2 §고르면 무엇이 서나 — 회차가 있는 스케줄은 **워커 세션 줄과 같은 자다**: `current`가
  *  그 `session_id`가 되고(`switchConversation`), 폴링의 `sid` 판정도 그 값을 안다(`pollHome`).
  *  회차 0건(`session_id` 빈 문자열)은 이 관문에 안 걸린다 — 화면이 로컬로 처리하는 자리다
