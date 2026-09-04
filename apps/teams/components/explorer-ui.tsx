@@ -24,13 +24,16 @@ import {
   listExplorerDirAction,
   openExplorerFileAction,
   openExplorerFileExternallyAction,
+  openExplorerFileTab,
   saveExplorerFileAction,
+  setExplorerTabUnsaved,
 } from "@/app/(app)/p/[project]/home/actions";
 import { useT } from "@/components/language-provider";
 import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { ExplorerFile, ExplorerListing, FindContentResult, FindNameResult } from "@/lib/explorer";
+import type { HomeChunk, Tab } from "@/lib/home-agent";
 import { cn } from "@/lib/utils";
 
 /** `protocols-ui.tsx` · `ticket-ui.tsx` 등에 이미 있는 "OS 기본 앱으로 열기" 버튼과 같은
@@ -458,35 +461,79 @@ export function ExplorerTree({
  *  이 함수 하나만 부른다 — 같은 판정이 두 곳에 안 흩어진다. */
 type OpenableFile = Exclude<ExplorerFile, { kind: "redirect" }>;
 
-export function useExplorerOpen(projectId: string) {
+/** 열어 둔 파일 탭 각각의 내용(§11 결정 1 §파일 탭이 표면을 가로지르는 탭 줄에 선다, P366-6).
+ *  정본 탭 목록(id · 순서 · `activeTab`)은 `home.tabs`다 — 이 맵은 그 목록의 각 `id`(relPath)가
+ *  가리키는 **내용**만 든다(`useState` 로컬 하나에 최근 파일 하나만 덮어쓰던 종전 모델을
+ *  대체한다). 탭이 둘 이상이어도 여기 다 실린다 — `home-ui.tsx`가 탭마다 `hidden`으로만 접어
+ *  둔 컴포넌트 인스턴스를 그려서(`TerminalSurface`와 같은 관용구) 안 보이는 탭도 캐럿·되돌리기
+ *  상태를 잃지 않는다. */
+export type ExplorerOpenFiles = Record<string, { file: OpenableFile; line?: number }>;
+
+export function useExplorerOpen(projectId: string, tabs: Tab[], activeTab: string | null, apply: (c: HomeChunk) => void) {
   const router = useRouter();
-  const [open, setOpen] = useState<{ relPath: string; file: OpenableFile; line?: number } | null>(null);
+  const [filesById, setFilesById] = useState<ExplorerOpenFiles>({});
+
   async function onOpenFile(relPath: string, line?: number) {
     const file = await openExplorerFileAction(projectId, relPath);
     if (file.kind === "redirect") {
       router.push(file.to);
       return;
     }
-    setOpen({ relPath, file, line });
+    setFilesById((now) => ({ ...now, [relPath]: { file, line } }));
+    apply(await openExplorerFileTab(projectId, relPath));
   }
-  return { open, onOpenFile, onClose: () => setOpen(null) };
+
+  // 새로고침 직후처럼 탭은 있는데 내용을 아직 안 읽었으면(§11 셸 수용조건 §새로고침해도 탭
+  // 줄이 그대로 뜬다) 그 탭이 활성이 되는 순간 한 번 읽는다 — §11 결정 4 "파일을 열 때"에
+  // 탭을 눌러 보는 것도 든다(펼칠 때 · 파일을 열 때 말고는 안 읽는다는 결정은 안 깬다).
+  useEffect(() => {
+    const active = tabs.find((tb) => tb.id === activeTab);
+    if (!active || active.kind !== "file" || filesById[active.id]) return;
+    let live = true;
+    void openExplorerFileAction(projectId, active.id).then((file) => {
+      if (!live || file.kind === "redirect") return; // 리다이렉트 대상이 탭으로 열려 있을 일은 없다
+      setFilesById((now) => ({ ...now, [active.id]: { file } }));
+    });
+    return () => {
+      live = false;
+    };
+  }, [projectId, activeTab, tabs, filesById]);
+
+  /** `CodeEditor`의 깨끗함 <-> 더러움 전환에서만 부른다(§11 수용조건 4 — 저장 안 한 파일 탭은
+   *  상한 계산에서 빠진다). 타이핑마다가 아니다. */
+  function onUnsavedChange(relPath: string, unsaved: boolean) {
+    void setExplorerTabUnsaved(projectId, relPath, unsaved).then(apply);
+  }
+
+  /** 탭을 닫을 때 로컬 캐시에서도 뗀다 — 탭 목록(`home.tabs`)에서 빼는 것은 부르는 쪽(`closeTab`
+   *  서버 액션)의 일이고, 여기는 그 relPath의 내용을 다시 열 때까지 안 들고 있는 것만 맡는다. */
+  function dropFile(relPath: string) {
+    setFilesById((now) => {
+      const { [relPath]: _drop, ...rest } = now;
+      return rest;
+    });
+  }
+
+  return { filesById, onOpenFile, onUnsavedChange, dropFile };
 }
 
-/** 우측 칸의 편집기 본문(§11-2 결정 2 · 4). `relPath`가 바뀌면(다른 파일을 열면) `key`로
- *  다시 마운트시켜 이 컴포넌트 안의 상태(글자 · 저장 기준선)를 새로 시작한다 — 옛 파일의
- *  되돌리기 상태가 새 파일에 섞이지 않는다(`markdown-editor.tsx` 되돌리기와 같은 관용구). */
+/** 우측 칸의 편집기 본문(§11-2 결정 2 · 4). **더는 `relPath`로 remount하지 않는다** — 탭마다
+ *  자기 인스턴스를 계속 마운트해 둔 채 `hidden`으로만 접는 쪽(`ExplorerPane`)이 그 자리를
+ *  대신한다(글자 · 저장 기준선이 탭을 오가도 안 날아간다). */
 export function FileEditorPane({
   projectId,
   relPath,
   file,
   line,
   onClose,
+  onDirtyChange,
 }: {
   projectId: string;
   relPath: string;
   file: OpenableFile;
   line?: number;
   onClose: () => void;
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
   if (file.kind === "unreadable") {
     return (
@@ -498,7 +545,64 @@ export function FileEditorPane({
       </div>
     );
   }
-  return <CodeEditor projectId={projectId} relPath={relPath} initial={file} line={line} onClose={onClose} />;
+  return (
+    <CodeEditor
+      projectId={projectId}
+      relPath={relPath}
+      initial={file}
+      line={line}
+      onClose={onClose}
+      onDirtyChange={onDirtyChange}
+    />
+  );
+}
+
+/** 탐색기 표면 본문 — 열린 파일 탭 전부를 그리고 활성 탭만 보인다(§11 결정 1 §표면을 가로지르는
+ *  탭 — `TerminalSurface`와 같은 관용구: 안 보이는 탭도 `hidden`으로만 접어서 되돌리기 상태를
+ *  잃지 않는다. 내용을 아직 못 읽은 탭(새로고침 직후, `useExplorerOpen`이 활성이 되는 순간
+ *  읽는 중)은 로딩 한 줄을 대신 그린다. */
+export function ExplorerPane({
+  projectId,
+  tabs,
+  activeTab,
+  filesById,
+  onUnsavedChange,
+  onClose,
+}: {
+  projectId: string;
+  tabs: Tab[];
+  activeTab: string | null;
+  filesById: ExplorerOpenFiles;
+  onUnsavedChange: (relPath: string, unsaved: boolean) => void;
+  onClose: (relPath: string) => void;
+}) {
+  const t = useT();
+  if (tabs.length === 0) return <EmptyState text={t("explorer.noFileOpen")} />;
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      {tabs.map((tab) => {
+        const entry = filesById[tab.id];
+        return (
+          <div key={tab.id} hidden={tab.id !== activeTab} className="flex min-h-0 flex-1 flex-col">
+            {entry ? (
+              <FileEditorPane
+                projectId={projectId}
+                relPath={tab.id}
+                file={entry.file}
+                line={entry.line}
+                onClose={() => onClose(tab.id)}
+                onDirtyChange={(dirty) => onUnsavedChange(tab.id, dirty)}
+              />
+            ) : (
+              <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+                {t("common.loading")}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 /** 편집기 CSS의 `leading-6`과 같은 값(px) — 내용 찾기 결과를 눌렀을 때 그 줄로 스크롤하는 계산에 쓴다. */
@@ -510,12 +614,14 @@ function CodeEditor({
   initial,
   line,
   onClose,
+  onDirtyChange,
 }: {
   projectId: string;
   relPath: string;
   initial: Extract<ExplorerFile, { kind: "text" }>;
   line?: number;
   onClose: () => void;
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
   const t = useT();
   const [text, setText] = useState(initial.text);
@@ -528,6 +634,19 @@ function CodeEditor({
   const taRef = useRef<HTMLTextAreaElement>(null);
   const dirty = text !== savedText;
   const lang = langOf(relPath);
+
+  // 서버(탭의 `unsaved`)에는 깨끗함 <-> 더러움이 **갈릴 때만** 알린다 — 마운트 때 한 번 뜨는
+  // `false`는 이미 서버 쪽 기본값이라 안 보낸다(§11 수용조건 4, `home-agent.ts setFileTabUnsaved`
+  // 머리 주석과 같은 경계).
+  const dirtyMounted = useRef(false);
+  useEffect(() => {
+    if (!dirtyMounted.current) {
+      dirtyMounted.current = true;
+      return;
+    }
+    onDirtyChange?.(dirty);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dirty]);
 
   async function highlight(source: string) {
     const { codeToHtml } = await import("shiki");

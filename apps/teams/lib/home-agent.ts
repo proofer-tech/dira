@@ -275,8 +275,8 @@ function parseSchedule(v: unknown): Schedule | null {
  *  좌측 패널의 워커 세션을 고르면 그 session id가 여기 들어오고 `conversations`에는 줄이
  *  안 생긴다(§7 §고르면 홈 대화 스레드에 열린다 — 워커 세션이 사람 대화 20을 밀어내면 안 된다).
  *  `schedules`는 §7-2 — 화면·엔진 둘 다 안 읽는 프로젝트는 언제나 빈 배열이다. */
-/** 우측 탭 줄(§11 결정 1-2 · §비주얼 §72 ②) - 지금은 `chat` 탭뿐이다(터미널·파일·체크아웃은
- *  P366-5·6·8이 늘린다). `lib/tabs.ts`가 재는 `Tab`을 그대로 다시 낸다 - 여기가 fs로 읽고 쓰는
+/** 우측 탭 줄(§11 결정 1-2 · §비주얼 §72 ②) - `chat`·`terminal`·`file` 셋이다(체크아웃은
+ *  P366-8이 늘린다). `lib/tabs.ts`가 재는 `Tab`을 그대로 다시 낸다 - 여기가 fs로 읽고 쓰는
  *  자리다. */
 export type { Tab };
 
@@ -353,13 +353,27 @@ function parseHome(v: unknown): Home {
   // *"목록에 있는 줄만 가리킨다"*에서 넓혔다). 워커 세션을 고르면 대화 목록에 없는 값이 여기
   // 들어오기 때문이다. **무엇을 가리키는지는 읽는 쪽이 판정한다**(`pollHome`) — 대화도 워커
   // 세션도 아니면 화면은 대화 0건과 같이 뜬다(온보딩). 경로가 되는 값의 방어는 그대로 이 한 줄이다.
-  // **`tabs`·`activeTab`의 관문도 같다**(§11 결정 2) — 옛 파일에는 이 칸이 없고, 그때는 빈
-  // 목록·`null`로 물러난다(화면이 500을 안 낸다). `id`가 `sessionIdOf`를 못 지나면 그 탭은
-  // 없는 것으로 친다 — 사람이 파일을 손으로 고칠 수 있다는 전제가 대화·`current`와 같다.
+  // **`tabs`의 관문도 같다**(§11 결정 2) — 옛 파일에는 이 칸이 없고, 그때는 빈 목록으로
+  // 물러난다(화면이 500을 안 낸다). `id`가 `sessionIdOf`를 못 지나면 그 탭은 없는 것으로 친다 —
+  // 사람이 파일을 손으로 고칠 수 있다는 전제가 대화·`current`와 같다.
+  // **`file` 탭은 이 uuid 관문 밖이다** — `id`가 relPath라 세션 id 모양이 아니다. 빈 문자열만
+  // 거른다(실제 경로 방어는 열 때 `resolveWithin`이 하고, 여기는 탭 목록을 복원할 뿐이다).
   const tabs = (Array.isArray(o.tabs) ? o.tabs : []).flatMap((r): Tab[] => {
     const x = (r && typeof r === "object" ? r : {}) as Record<string, unknown>;
+    if (x.kind === "file") {
+      const id = typeof x.id === "string" ? x.id : "";
+      if (!id) return [];
+      return [
+        {
+          id,
+          kind: "file",
+          lastViewed: typeof x.lastViewed === "string" ? x.lastViewed : "",
+          ...(x.unsaved === true ? { unsaved: true as const } : {}),
+        },
+      ];
+    }
     const id = uuid(x.id);
-    if (!id || (x.kind !== "chat" && x.kind !== "terminal")) return []; // 파일 탭은 아직 없다(P366-6)
+    if (!id || (x.kind !== "chat" && x.kind !== "terminal")) return [];
     if (x.kind === "terminal") {
       // §11-1 결정 3 — cwd 없는 터미널 탭은 못 열므로(만든 뒤 안 갈린다) 없는 탭으로 친다.
       if (typeof x.cwd !== "string" || !x.cwd) return [];
@@ -374,7 +388,13 @@ function parseHome(v: unknown): Home {
       },
     ];
   });
-  return { conversations, current: uuid(o.current) || null, schedules, tabs, activeTab: uuid(o.activeTab) || null };
+  // **`activeTab`의 관문은 uuid가 아니라 "그 목록에 실재하는 탭인가"다** — `file` 탭 id가
+  // relPath라 uuid 관문을 안 타므로(위), `activeTab`도 같은 관문을 쓰면 파일 탭이 활성이어도
+  // 매번 `null`로 물러난다. 탭 목록 자체가 이미 위에서 관문(uuid 또는 실재하는 relPath)을
+  // 지났으므로 "그 목록에 있는 id인가"가 그대로 더 정확한 판정이다.
+  const activeTabRaw = typeof o.activeTab === "string" ? o.activeTab : "";
+  const activeTab = tabs.some((tb) => tb.id === activeTabRaw) ? activeTabRaw : null;
+  return { conversations, current: uuid(o.current) || null, schedules, tabs, activeTab };
 }
 
 /** 목록 읽기 — 화면이 대화 목록을 그리는 출처(§비주얼 §24). */
@@ -535,6 +555,35 @@ export async function openTerminalTab(projectId: string, ptyId: string, cwd: str
     await writeHome(projectId, next);
     return next;
   });
+}
+
+/** 탐색기에서 파일 하나를 연다(§11-2 결정 2, P366-6) — `openTerminalTab`과 같은 모양이지만
+ *  `cwd`가 없고 `current`(대화 스레드)도 안 건드린다. 같은 `relPath`를 다시 열면 `openTab`이
+ *  중복 대신 그 탭의 `lastViewed`만 올린다(§11-2 결정 2 §다시 열면 그 탭으로 이동한다). */
+export async function openFileTab(projectId: string, relPath: string): Promise<Home> {
+  const home = await readHome(projectId);
+  const now = new Date().toISOString();
+  const next: Home = { ...home, tabs: openTab(home.tabs, relPath, "file", now), activeTab: relPath };
+  await writeHome(projectId, next);
+  return next;
+}
+
+/** 편집기의 저장 안 한 표식을 탭에 싣는다(§11 수용조건 4) — `evictionCandidate`(`lib/tabs.ts`)가
+ *  이 값을 보고 자동 닫기 후보에서 뺀다. 타이핑마다가 아니라 **깨끗함 <-> 더러움이 갈리는
+ *  전환에서만** 부르는 자리다(`explorer-ui.tsx` `CodeEditor`) — 매 키 입력마다 이 파일을
+ *  다시 쓰면 크기가 안 맞는다. 실재하지 않는 탭은 무시한다. */
+export async function setFileTabUnsaved(projectId: string, tabId: string, unsaved: boolean): Promise<Home> {
+  const home = await readHome(projectId);
+  if (!home.tabs.some((t) => t.id === tabId)) return home;
+  const tabs = home.tabs.map((t) => {
+    if (t.id !== tabId) return t;
+    if (unsaved) return { ...t, unsaved: true as const };
+    const { unsaved: _drop, ...rest } = t;
+    return rest;
+  });
+  const next: Home = { ...home, tabs };
+  await writeHome(projectId, next);
+  return next;
 }
 
 /** 탭 줄에서 탭 하나에 포커스만 옮긴다 - 대화 전환(`switchConversation`)과 달리 `current`도

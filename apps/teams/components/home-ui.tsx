@@ -52,6 +52,7 @@ import {
   ArrowDown,
   Check,
   Copy,
+  File,
   FolderTree,
   GitBranch,
   MessageSquare,
@@ -68,7 +69,7 @@ import {
   closeTerminalTab,
   createSchedule,
   deleteSchedule,
-  focusTerminalTab,
+  focusTabAction,
   openTerminal,
   pollHomeAnswer,
   refreshRefs,
@@ -95,7 +96,7 @@ import {
 } from "@/components/attachment-field";
 import { CopyCommand } from "@/components/copy-command";
 import { EmptyState } from "@/components/empty-state";
-import { ExplorerTree, FileEditorPane, useExplorerOpen } from "@/components/explorer-ui";
+import { ExplorerPane, ExplorerTree, useExplorerOpen } from "@/components/explorer-ui";
 import { FindBar } from "@/components/find-bar";
 import { TerminalPanel } from "@/components/terminal-panel";
 import { useKeymap } from "@/components/keymap-provider";
@@ -340,16 +341,11 @@ export function HomeUI({
   const [pendingSchedule, setPendingSchedule] = useState<ScheduleView | null>(null);
   // **표면 고르기**(§11 결정 1 · §비주얼 §72 ①) — `home-sessions.json`에 안 산다(URL도 안
   // 갈린다는 결정과 같은 축: 이 값은 화면이 들고 있는 수 하나다). 새로고침하면 언제나
-  // `홈 에이전트`로 돌아온다 — 종전 화면과 같은 첫 인상이다. 우측 탭 줄은 이 값과 무관하게
-  // 그대로다(§11 결정 1 §우측 탭은 표면을 가로지른다) — 탭에 들어가는 내용은 지금 `chat`뿐이라
-  // 표면을 갈아도 스레드가 안 바뀐다.
+  // `홈 에이전트`로 돌아온다 — 종전 화면과 같은 첫 인상이다. **우측 탭 줄은 이 값과 무관하게
+  // 그대로다**(§11 결정 1 §우측 탭은 표면을 가로지른다) — 탭을 눌러 그 탭의 종류가 지금 표면과
+  // 다르면 아래 통합 탭 줄의 `onSelect`가 이 값도 같이 맞춰 준다(그래야 고른 탭의 내용이
+  // 바로 보인다).
   const [surface, setSurface] = useState<Surface>("agent");
-  // **탐색기가 지금 연 파일**(§11-2 결정 2, P366-6). 우측 탭 줄(`home.tabs`)에는 안 산다 —
-  // 지금 탭 종류가 `chat` 하나뿐인 것은 위 주석 그대로다. 표면을 `탐색기`에서 다른 표면으로
-  // 갈면 이 상태는 그대로 남지만 아래 우측 칸은 `surface === "explorer"`일 때만 이 값을 그린다.
-  // ponytail: 표면을 가로지르는 탭으로 승격하는 것은 이 값이 `home.tabs`에 들어가는 다음 티켓의
-  //           몫이다 — 지금은 파일 탭 0장이라 승격할 것이 없다.
-  const explorer = useExplorerOpen(project);
   // 폴링이 들고 다니는 두 값. 렌더에 안 쓰므로 상태가 아니다(바뀔 때마다 그릴 것이 없다).
   const session = useRef(initial.sessionId);
   const offset = useRef(initial.offset);
@@ -661,12 +657,39 @@ export function HomeUI({
     setPendingSchedule(null); // 실제 세션으로 갈아탔다 — 회차 0건 스케줄 화면은 이 자리가 아니다
   };
 
-  /** 우측 탭 줄에서 X를 누른다(§11 결정 1 · §비주얼 §72 ②). **`switchHome`과 같은 자리다** —
-   *  서버가 탭 목록·`current`를 갈아 끼우고 그 폴링 한 번을 `apply`가 통째로 화면에 반영한다.
-   *  닫은 탭이 지금 보던 것이었으면 스레드도 그 자리에서 다음 탭으로 넘어간다. */
-  const closeTab = async (tabId: string) => {
+  // **탐색기가 지금 연 파일 전부**(§11-2 결정 2, P366-6). 탭 자체(id · 순서 · `activeTab`)는
+  // `home.tabs`에 산다(§11 결정 1·2) — 이 훅은 그 탭들이 가리키는 relPath마다의 **내용**만
+  // 로컬로 캐싱한다(위 `apply`를 그대로 넘겨 탭 붙이기·`unsaved` 갱신도 폴링 한 번으로 화면에
+  // 반영한다). `apply`보다 뒤에 있어야 한다 — 초기화 순서상 위 `const apply`를 먼저 타야 한다.
+  const explorer = useExplorerOpen(project, home.tabs, home.activeTab, apply);
+
+  /** 우측 탭 줄에서 X를 누른다(§11 결정 1 · §비주얼 §72 ②) — 종류를 안 가리는 **한 함수**다.
+   *  `switchHome`과 같은 자리다: 서버가 탭 목록·`current`를 갈아 끼우고 그 폴링 한 번을 `apply`가
+   *  통째로 화면에 반영한다. 닫은 탭이 지금 보던 것이었으면 스레드도 그 자리에서 다음 탭으로
+   *  넘어간다. **터미널 탭만 pty를 죽이는 갈래가 따로다**(`closeTerminalTab`) — 나머지 둘(`chat`·
+   *  `file`)은 `closeTabAction` 하나를 그대로 쓴다(§11 결정 1 §닫기, 파일 쪽은 두 벌로 안 적는다는
+   *  종전 `closeTerminalTab` 주석과 같은 결). */
+  const closeTab = async (tab: Tab) => {
     setPendingSchedule(null);
-    apply(await closeTabAction(project, tabId));
+    apply(tab.kind === "terminal" ? await closeTerminalTab(project, tab.id) : await closeTabAction(project, tab.id));
+    if (tab.kind === "file") explorer.dropFile(tab.id);
+  };
+
+  /** 우측 탭 줄에서 탭 하나를 고른다(§11 결정 1) — **표면을 가로지르는 그 한 줄**의 유일한
+   *  전환 입구다. 종류마다 왕복이 다르다: `chat`은 스레드까지 옮기는 `switchHome`, 나머지 둘은
+   *  `current`도 새 탭도 안 만드는 `focusTabAction`(§11-1 §focusTab 주석과 같다). **표면도 같이
+   *  맞춘다** — 탭을 눌러 고른 것이 화면에 안 보이면 탭 줄만 있고 내용이 없는 판이 된다. */
+  const selectTab = async (tab: Tab) => {
+    if (tab.kind === "chat") {
+      setSurface("agent");
+      if (tab.id === home.current) return;
+      setPendingSchedule(null);
+      setHome((now) => ({ ...now, current: tab.id }));
+      apply(await switchHome(project, tab.id));
+      return;
+    }
+    setSurface(tab.kind === "terminal" ? "terminal" : "explorer");
+    apply(await focusTabAction(project, tab.id));
   };
 
   /** 접힌 줄을 열고 닫는다(§비주얼 §24 ⑦ §자동 스크롤). `<Bundle>`이 요구하는 자리지만
@@ -783,53 +806,48 @@ export function HomeUI({
           />
         )}
 
-        {/* 우측 칸 — 탭 줄(§11 결정 1 · §비주얼 §72 ②) + 대화 컬럼. 탭 줄이 **표면을 가로지른다**
-            (§11 결정 1) — 왼쪽에서 표면을 갈아도 이 줄과 그 아래 컬럼은 그대로다(지금은 탭
-            종류가 `chat` 하나뿐이라 표면이 바뀌어도 스레드가 안 바뀐다). `min-w-0`은 아래
-            대화 컬럼과 같은 이유 — flex 자식 기본값을 덮는다. */}
+        {/* 우측 칸 — 탭 줄(§11 결정 1 · §비주얼 §72 ②) + 대화 컬럼. **탭 줄이 표면을 가로지른다**
+            (§11 결정 1) — 왼쪽에서 표면을 갈아도(`홈 에이전트` <-> `터미널` <-> `탐색기`) 이 줄은
+            그대로다: `chat`·`terminal`·`file` 셋을 한 목록으로 그린다(체크아웃은 P366-8).
+            `min-w-0`은 아래 대화 컬럼과 같은 이유 — flex 자식 기본값을 덮는다. */}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          {/* `탐색기`(§11-2 결정 2, P366-6)와 `터미널`(§11-1)은 대화 컬럼과 자리를 바꿔 쓴다.
-              채팅 탭 줄·컬럼(아래 `else`)은 그대로 두고 끼워 넣지 않는다: 지금 `chat` 탭 줄에는
-              `chat` 탭만 선다 — 터미널 탭은 `TerminalSurface`가 스스로의 탭 줄을 그린다
-              (위 `explorer` 선언 주석 · `TabBar` 머리 주석과 같은 경계). */}
+          <TabBar
+            tabs={home.tabs}
+            activeTab={home.activeTab}
+            conversations={home.conversations}
+            onSelect={(id) => {
+              const tab = home.tabs.find((tb) => tb.id === id);
+              if (tab) void selectTab(tab);
+            }}
+            onClose={(id) => {
+              const tab = home.tabs.find((tb) => tb.id === id);
+              if (tab) void closeTab(tab);
+            }}
+          />
+          {/* `탐색기`(§11-2 결정 2, P366-6)와 `터미널`(§11-1)은 대화 컬럼과 자리를 바꿔 쓴다 —
+              위 탭 줄은 그대로 두고 아래 몸통만 갈아 끼운다. */}
           {surface === "explorer" ? (
-            explorer.open ? (
-              <FileEditorPane
-                key={`${explorer.open.relPath}:${explorer.open.line ?? ""}`}
-                projectId={project}
-                relPath={explorer.open.relPath}
-                file={explorer.open.file}
-                line={explorer.open.line}
-                onClose={explorer.onClose}
-              />
-            ) : (
-              <EmptyState text={t("explorer.noFileOpen")} />
-            )
+            <ExplorerPane
+              projectId={project}
+              tabs={home.tabs.filter((tb) => tb.kind === "file")}
+              activeTab={home.activeTab}
+              filesById={explorer.filesById}
+              onUnsavedChange={explorer.onUnsavedChange}
+              onClose={(relPath) => {
+                const tab = home.tabs.find((tb) => tb.id === relPath);
+                if (tab) void closeTab(tab);
+              }}
+            />
           ) : surface === "terminal" ? (
             <TerminalSurface
               project={project}
               tabs={home.tabs.filter((tb) => tb.kind === "terminal")}
               activeTab={home.activeTab}
               apply={apply}
-              onFocus={async (id) => apply(await focusTerminalTab(project, id))}
-              onClose={async (id) => apply(await closeTerminalTab(project, id))}
+              onFocus={async (id) => apply(await focusTabAction(project, id))}
             />
           ) : (
             <>
-          {home.conversations.length > 0 && (
-            <TabBar
-              tabs={home.tabs.filter((tb) => tb.kind === "chat")}
-              activeTab={home.activeTab}
-              conversations={home.conversations}
-              onSelect={async (id) => {
-                if (id === home.current) return;
-                setPendingSchedule(null);
-                setHome((now) => ({ ...now, current: id }));
-                apply(await switchHome(project, id));
-              }}
-              onClose={closeTab}
-            />
-          )}
           {/* 대화 컬럼 — 남은 폭·높이 전부다. **자식이 언제나 넷이고 순서가 안 바뀐다**(§24 · §7-4):
               [페르소나 선택 칸] · [0건: 인사 | 그 외: 스레드] · [폼] · [0건: 예시 4개 | 그 외: null].
               조건이 거짓인 자리를 배열에서 빼지 않는 이유는 폼이다 — 같은 인덱스에 남아야 React가
@@ -1410,12 +1428,11 @@ const MARK =
 const SCHEDULE_TIME = "text-xs text-muted-foreground tabular-nums group-hover/menu-button:text-foreground";
 
 /** 우측 탭 줄(§11 결정 1 · §비주얼 §72 ②) — 그릇은 §66 ⑤(페르소나 상세의 `tabs` `variant="line"`)를
- *  그대로 인용한다. **`TabsContent`가 없다** — 지금 탭 종류가 `chat` 하나뿐이고 그 내용은 이미
- *  아래 대화 컬럼이 `home.current`로 그린다(단일 스레드 상태). 탭 줄은 그 상태를 향한 **또 하나의
- *  전환 입구**다(좌측 패널 줄과 같은 일을 한다) — 터미널·파일 탭이 붙어 각자 자기 내용을
- *  들면(`TabsContent keepMounted`) 그때 진짜 패널 전환이 필요해진다(P366-5·6).
- *  탭 0개(옛 `home-sessions.json` 또는 닫아서 빈 목록)는 **아무것도 안 그린다** — 대화 컬럼이
- *  이미 스레드나 온보딩으로 그 자리를 채우고 있어 빈 탭 줄을 더 그리면 같은 사실을 두 번 말한다. */
+ *  그대로 인용한다. **표면을 가로지르는 한 줄이다**(§11 결정 1) — `chat`·`terminal`·`file` 셋을
+ *  한 목록으로 그린다(체크아웃은 P366-8). `TabsContent`가 없다 — 어느 탭을 고르느냐에 따라
+ *  무엇을 그릴지는 `HomeUI`가 `surface` + `activeTab`으로 따로 판정한다(왼쪽 패널 줄과 같은
+ *  일을 하는 **또 하나의 전환 입구**일 뿐이다). 탭 0개(옛 `home-sessions.json` 또는 닫아서
+ *  빈 목록)는 **아무것도 안 그린다** — 아래 칸이 이미 그 표면의 빈 상태를 그리고 있다. */
 function TabBar({
   tabs,
   activeTab,
@@ -1431,17 +1448,25 @@ function TabBar({
 }) {
   const t = useT();
   if (tabs.length === 0) return null;
+  const TAB_ICON = { chat: MessageSquare, terminal: SquareTerminal, file: File } as const;
+  const titleOf = (tab: Tab) =>
+    tab.kind === "chat"
+      ? conversations.find((c) => c.id === tab.id)?.title || t("home.title")
+      : tab.kind === "terminal"
+        ? (tab.cwd ?? tab.id)
+        : tab.id;
   return (
     // §72 ② §자리 표 §스크롤 그릇 — `pb-1`이 없으면 활성 표식(`after:h-0.5`)이 세로로 클리핑된다.
     <div className="overflow-x-auto border-b pb-1">
       <Tabs value={activeTab ?? undefined} onValueChange={(v) => onSelect(String(v))}>
         <TabsList variant="line" className="w-fit">
           {tabs.map((tab) => {
-            const title = conversations.find((c) => c.id === tab.id)?.title || t("home.title");
+            const title = titleOf(tab);
+            const Icon = TAB_ICON[tab.kind];
             const isActive = tab.id === activeTab;
             return (
               <TabsTrigger key={tab.id} value={tab.id} nativeButton={false} render={<div />} className="max-w-40 flex-none gap-1.5">
-                <MessageSquare aria-hidden className="size-3.5 shrink-0" />
+                <Icon aria-hidden className="size-3.5 shrink-0" />
                 <Tooltip>
                   <TooltipTrigger render={<span className="min-w-0 truncate">{title}</span>} />
                   <TooltipContent>{title}</TooltipContent>
@@ -1787,9 +1812,10 @@ function ScmSurface({ project, projectName }: { project: string; projectName: st
   );
 }
 
-/** 터미널 표면(§11-1, P366-4) — 우측 칸을 통째로 갈아 끼운다(`탐색기`와 같은 자리 — 채팅 탭 줄과
- *  대화 컬럼은 그 아래 `else` 갈래에만 있다). cwd 후보는 소스 컨트롤과 **같은 목록**이다(결정 3 —
- *  `scmCheckouts`를 새로 안 부른다, 이미 이 컴포넌트가 마운트될 때 한 번 읽는다).
+/** 터미널 표면(§11-1, P366-4) — 우측 칸의 몸통만 갈아 끼운다(탭 줄 자신은 표면을 가로지르는
+ *  `HomeUI`의 통합 `TabBar` 하나다 — §11 결정 1, 탭 닫기도 그쪽에서 왕복한다). cwd 후보는
+ *  소스 컨트롤과 **같은 목록**이다(결정 3 — `scmCheckouts`를 새로 안 부른다, 이미 이 컴포넌트가
+ *  마운트될 때 한 번 읽는다).
  *
  *  **탭마다 연결 여부를 이 컴포넌트 자신이 든다**(`connected` — 서버 파일에 없는 값이다).
  *  마운트 직후는 전부 `끊김`이다 — 새로고침이든 표면을 다시 연 것이든 구별하지 않는다
@@ -1802,14 +1828,12 @@ function TerminalSurface({
   activeTab,
   apply,
   onFocus,
-  onClose,
 }: {
   project: string;
   tabs: Tab[];
   activeTab: string | null;
   apply: (c: HomeChunk) => void;
   onFocus: (id: string) => void;
-  onClose: (id: string) => void;
 }) {
   const t = useT();
   const [checkouts, setCheckouts] = useState<Checkout[]>([]);
@@ -1861,15 +1885,6 @@ function TerminalSurface({
     onFocus(tab.id);
   };
 
-  const close = (id: string) => {
-    setConnected((now) => {
-      const next = new Set(now);
-      next.delete(id);
-      return next;
-    });
-    onClose(id);
-  };
-
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-center gap-2 border-b p-2">
@@ -1891,36 +1906,7 @@ function TerminalSurface({
         {error && <p className="text-xs text-destructive">{error}</p>}
       </div>
 
-      {tabs.length === 0 ? (
-        <EmptyState text={t("home.surface.terminal.empty")} />
-      ) : (
-        <div className="overflow-x-auto border-b pb-1">
-          <Tabs value={activeTab ?? undefined} onValueChange={(v) => onFocus(String(v))}>
-            <TabsList variant="line" className="w-fit">
-              {tabs.map((tab) => (
-                <TabsTrigger key={tab.id} value={tab.id} render={<div />} className="max-w-40 flex-none gap-1.5">
-                  <SquareTerminal aria-hidden className="size-3.5 shrink-0" />
-                  <Tooltip>
-                    <TooltipTrigger render={<span className="min-w-0 truncate">{tab.cwd}</span>} />
-                    <TooltipContent>{tab.cwd}</TooltipContent>
-                  </Tooltip>
-                  <button
-                    type="button"
-                    aria-label={`${t("home.tabs.close")} - ${tab.cwd}`}
-                    className="flex size-6 shrink-0 items-center justify-center rounded hover:bg-muted"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      close(tab.id);
-                    }}
-                  >
-                    <X aria-hidden className="size-3.5 text-muted-foreground" />
-                  </button>
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </Tabs>
-        </div>
-      )}
+      {tabs.length === 0 && <EmptyState text={t("home.surface.terminal.empty")} />}
 
       <div className="min-h-0 flex-1">
         {tabs.map((tab) =>

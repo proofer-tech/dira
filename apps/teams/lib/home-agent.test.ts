@@ -32,6 +32,8 @@ const {
   newConversation,
   switchConversation,
   closeHomeTab,
+  openFileTab,
+  setFileTabUnsaved,
   createSchedule,
   deleteSchedule,
   workerSessions,
@@ -47,6 +49,7 @@ const {
   FLUENT_KO,
 } = await import("./home-agent.ts");
 type HomeChunk = Awaited<ReturnType<typeof pollHome>>;
+const { TAB_LIMIT } = await import("./tabs.ts");
 const { tailEvents } = await import("./transcript.ts");
 type StreamEvent = Awaited<ReturnType<typeof tailEvents>>["events"][number];
 const { registryPath, resolveConfig, addProject, setLanguage } = await import("./projects.ts");
@@ -631,6 +634,53 @@ test("탭 줄 — 새 대화·전환이 탭을 열고, 닫으면 activeTab·curr
   assert.deepStrictEqual(empty.tabs, []);
   assert.strictEqual(empty.activeTab, null);
   assert.strictEqual(empty.current, null);
+});
+
+test("파일 탭 — relPath가 uuid 관문 밖에서 산다. 다시 열면 안 늘고, unsaved가 상한 계산에서 뺀다", async () => {
+  const p = "filetabsproj";
+  writeFileSync(sessionsPath(), JSON.stringify({ [p]: { conversations: [], current: null } }));
+
+  await openFileTab(p, "a.ts");
+  await openFileTab(p, "b.ts");
+  const opened = await readHome(p);
+  // relPath는 uuid가 아니다 — `chat`·`terminal`의 uuid 관문(`parseHome`)을 안 탄다는 것이
+  // 살아 있는 탭 목록으로 실제로 증명된다(관문을 탔으면 이 둘은 파싱에서 빠져 목록이 비었을 거다).
+  assert.deepStrictEqual(
+    opened.tabs.map((t) => ({ id: t.id, kind: t.kind })),
+    [
+      { id: "a.ts", kind: "file" },
+      { id: "b.ts", kind: "file" },
+    ],
+  );
+  assert.strictEqual(opened.activeTab, "b.ts");
+  // `current`(대화 스레드)는 파일 탭이 안 건드린다
+  assert.strictEqual(opened.current, null);
+
+  // 같은 relPath를 다시 열면 중복이 아니라 그 탭으로 옮겨 간다(§11-2 결정 2)
+  await openFileTab(p, "a.ts");
+  const reopened = await readHome(p);
+  assert.strictEqual(reopened.tabs.length, 2);
+  assert.strictEqual(reopened.activeTab, "a.ts");
+
+  // 편집 중(unsaved)으로 실으면 그 탭이 상한 계산에서 빠진다(§11 수용조건 4).
+  // TAB_LIMIT(12)을 채우고 하나 더 열면 가장 오래 안 본 탭이 빠지되, `a.ts`가 unsaved면 대신
+  // 그다음으로 오래 안 본 탭이 빠진다 — `lib/tabs.ts evictionCandidate`를 실제 파일 탭으로 잰다.
+  await setFileTabUnsaved(p, "a.ts", true);
+  const marked = await readHome(p);
+  const markedA = marked.tabs.find((t) => t.id === "a.ts");
+  assert.strictEqual(markedA?.kind, "file");
+  assert.strictEqual(markedA?.unsaved, true);
+  for (let i = 0; i < 10; i++) await openFileTab(p, `f${i}.ts`); // a, b, f0..f9 = 12장, 상한에 닿는다
+  await openFileTab(p, "new.ts"); // 13번째 — 상한을 넘긴다
+  const evicted = await readHome(p);
+  assert.strictEqual(evicted.tabs.length, TAB_LIMIT);
+  assert.ok(evicted.tabs.some((t) => t.id === "a.ts")); // unsaved라 안 빠진다
+  assert.ok(!evicted.tabs.some((t) => t.id === "b.ts")); // 다음으로 오래 안 본 탭이 대신 빠진다
+  assert.ok(evicted.tabs.some((t) => t.id === "new.ts"));
+
+  // unsaved를 걷으면(저장 완료) 다시 상한 계산에 낀다 — `false`는 키 자체를 지운다.
+  await setFileTabUnsaved(p, "a.ts", false);
+  assert.ok(!("unsaved" in (await readHome(p)).tabs.find((t) => t.id === "a.ts")!));
 });
 
 test("옛 형식(문자열 한 줄)은 대화 한 개짜리 목록으로 읽힌다 — 사람 머신에 이미 있는 파일이다", async () => {

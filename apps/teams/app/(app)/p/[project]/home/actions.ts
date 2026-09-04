@@ -36,10 +36,12 @@ import {
   deleteSchedule as deleteScheduleRow,
   focusTab as focusHomeTab,
   newConversation,
+  openFileTab,
   openTerminalTab,
   pollHome,
   readScheduleViews,
   readSessionId,
+  setFileTabUnsaved,
   startAsk,
   stopAsk,
   switchConversation,
@@ -266,8 +268,10 @@ export async function restartTerminal(
   }
 }
 
-/** 터미널 탭 사이를 오간다 — `switchHome`과 달리 `current`(대화 스레드)도 새 탭도 안 만든다. */
-export async function focusTerminalTab(projectId: string, tabId: string): Promise<HomeChunk> {
+/** 탭 줄에서 탭 하나로 포커스만 옮긴다 — `switchHome`과 달리 `current`(대화 스레드)도 새 탭도
+ *  안 만든다. 터미널 표면 안의 탭 전환과, 표면을 가로지르는 우측 탭 줄에서 터미널·파일 탭을
+ *  누르는 것 둘 다 이 액션 하나를 쓴다(`chat` 탭은 스레드도 같이 옮겨야 해서 `switchHome`이다). */
+export async function focusTabAction(projectId: string, tabId: string): Promise<HomeChunk> {
   try {
     await focusHomeTab((await required(projectId)).id, tabId);
   } catch {
@@ -509,6 +513,30 @@ export async function openExplorerFileAction(
   } catch (e) {
     return { kind: "unreadable", reason: (e as Error).message };
   }
+}
+
+/** 파일을 열면 표면을 가로지르는 우측 탭 줄에도 탭 하나가 선다(§11 결정 1, P366-6). 내용을
+ *  받아 오는 `openExplorerFileAction`과 별개다 — 저건 fs 한 번, 이건 `home-sessions.json` 한 번
+ *  (`openTerminal`이 pty 열기와 탭 붙이기를 나누는 것과 같은 결이다). */
+export async function openExplorerFileTab(projectId: string, relPath: string): Promise<HomeChunk> {
+  try {
+    await openFileTab((await required(projectId)).id, relPath);
+  } catch {
+    // 등록이 풀린 프로젝트 — 위 switchHome과 같은 물러남
+  }
+  return pollHomeAnswer(projectId, null, 0);
+}
+
+/** 편집기의 깨끗함 <-> 더러움 전환에서만 부른다(§11 수용조건 4) — `CodeEditor`의 `dirty` 값이
+ *  갈릴 때 그 탭의 `unsaved`를 싣는다. 타이핑마다가 아니다(`lib/home-agent.ts setFileTabUnsaved`
+ *  머리 주석과 같은 경계). */
+export async function setExplorerTabUnsaved(projectId: string, relPath: string, unsaved: boolean): Promise<HomeChunk> {
+  try {
+    await setFileTabUnsaved((await required(projectId)).id, relPath, unsaved);
+  } catch {
+    // 등록이 풀린 프로젝트 — 위 switchHome과 같은 물러남
+  }
+  return pollHomeAnswer(projectId, null, 0);
 }
 
 export async function saveExplorerFileAction(
