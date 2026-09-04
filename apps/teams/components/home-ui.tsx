@@ -65,10 +65,14 @@ import {
   askHome,
   clearHome,
   closeTab as closeTabAction,
+  closeTerminalTab,
   createSchedule,
   deleteSchedule,
+  focusTerminalTab,
+  openTerminal,
   pollHomeAnswer,
   refreshRefs,
+  restartTerminal,
   scmCheckouts,
   scmCommit,
   scmPull,
@@ -93,6 +97,7 @@ import { CopyCommand } from "@/components/copy-command";
 import { EmptyState } from "@/components/empty-state";
 import { ExplorerTree, FileEditorPane, useExplorerOpen } from "@/components/explorer-ui";
 import { FindBar } from "@/components/find-bar";
+import { TerminalPanel } from "@/components/terminal-panel";
 import { useKeymap } from "@/components/keymap-provider";
 import { useLocale, useT } from "@/components/language-provider";
 import { Markdown } from "@/components/markdown";
@@ -783,9 +788,9 @@ export function HomeUI({
             종류가 `chat` 하나뿐이라 표면이 바뀌어도 스레드가 안 바뀐다). `min-w-0`은 아래
             대화 컬럼과 같은 이유 — flex 자식 기본값을 덮는다. */}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          {/* `탐색기` 표면(§11-2 결정 2, P366-6)은 대화 컬럼과 자리를 바꿔 쓴다 — 열린 파일이
-              있으면 편집기, 없으면 안내 한 줄이다. 채팅 탭 줄·컬럼(아래 `else`)은 그대로 두고
-              끼워 넣지 않는다: 지금 탭 종류가 `chat` 하나뿐이라 파일이 그 줄에 안 서기 때문이다
+          {/* `탐색기`(§11-2 결정 2, P366-6)와 `터미널`(§11-1)은 대화 컬럼과 자리를 바꿔 쓴다.
+              채팅 탭 줄·컬럼(아래 `else`)은 그대로 두고 끼워 넣지 않는다: 지금 `chat` 탭 줄에는
+              `chat` 탭만 선다 — 터미널 탭은 `TerminalSurface`가 스스로의 탭 줄을 그린다
               (위 `explorer` 선언 주석 · `TabBar` 머리 주석과 같은 경계). */}
           {surface === "explorer" ? (
             explorer.open ? (
@@ -800,11 +805,20 @@ export function HomeUI({
             ) : (
               <EmptyState text={t("explorer.noFileOpen")} />
             )
+          ) : surface === "terminal" ? (
+            <TerminalSurface
+              project={project}
+              tabs={home.tabs.filter((tb) => tb.kind === "terminal")}
+              activeTab={home.activeTab}
+              apply={apply}
+              onFocus={async (id) => apply(await focusTerminalTab(project, id))}
+              onClose={async (id) => apply(await closeTerminalTab(project, id))}
+            />
           ) : (
             <>
           {home.conversations.length > 0 && (
             <TabBar
-              tabs={home.tabs}
+              tabs={home.tabs.filter((tb) => tb.kind === "chat")}
               activeTab={home.activeTab}
               conversations={home.conversations}
               onSelect={async (id) => {
@@ -1773,6 +1787,161 @@ function ScmSurface({ project, projectName }: { project: string; projectName: st
   );
 }
 
+/** 터미널 표면(§11-1, P366-4) — 우측 칸을 통째로 갈아 끼운다(`탐색기`와 같은 자리 — 채팅 탭 줄과
+ *  대화 컬럼은 그 아래 `else` 갈래에만 있다). cwd 후보는 소스 컨트롤과 **같은 목록**이다(결정 3 —
+ *  `scmCheckouts`를 새로 안 부른다, 이미 이 컴포넌트가 마운트될 때 한 번 읽는다).
+ *
+ *  **탭마다 연결 여부를 이 컴포넌트 자신이 든다**(`connected` — 서버 파일에 없는 값이다).
+ *  마운트 직후는 전부 `끊김`이다 — 새로고침이든 표면을 다시 연 것이든 구별하지 않는다
+ *  (§11 결정 2, ponytail: 표면을 나갔다 돌아오면 다시 `열기`를 눌러야 한다 — 표면을 넘나들어도
+ *  이어지게 하려면 이 상태를 부모(`HomeUi`)로 끌어올린다, 지금 수용조건은 새로고침 하나뿐이다).
+ *  이미 연결한 탭은 안 보이게만(`hidden`) 해서 스크롤백이 언마운트로 안 날아가게 한다. */
+function TerminalSurface({
+  project,
+  tabs,
+  activeTab,
+  apply,
+  onFocus,
+  onClose,
+}: {
+  project: string;
+  tabs: Tab[];
+  activeTab: string | null;
+  apply: (c: HomeChunk) => void;
+  onFocus: (id: string) => void;
+  onClose: (id: string) => void;
+}) {
+  const t = useT();
+  const [checkouts, setCheckouts] = useState<Checkout[]>([]);
+  const [cwd, setCwd] = useState<string>("");
+  const [connected, setConnected] = useState<Set<string>>(new Set());
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let stop = false;
+    void (async () => {
+      const list = await scmCheckouts(project);
+      if (stop) return;
+      setCheckouts(list);
+      setCwd((now) => now || (list.find((c) => c.isRoot)?.path ?? list[0]?.path ?? ""));
+    })();
+    return () => {
+      stop = true;
+    };
+  }, [project]);
+
+  const open = async () => {
+    if (!cwd || busy) return;
+    setBusy(true);
+    setError(null);
+    const r = await openTerminal(project, cwd);
+    setBusy(false);
+    if ("error" in r) {
+      setError(r.error);
+      return;
+    }
+    apply(r);
+    // `openTerminal`이 새 탭을 `activeTab`으로 심었다 — 그 id로 바로 연결 표시한다.
+    if (r.activeTab) setConnected((now) => new Set(now).add(r.activeTab!));
+  };
+
+  const reopen = async (tab: Tab) => {
+    if (busy || !tab.cwd) return;
+    setBusy(true);
+    setError(null);
+    const r = await restartTerminal(project, tab.id, tab.cwd);
+    setBusy(false);
+    if ("error" in r) {
+      setError(r.error);
+      return;
+    }
+    apply(r);
+    setConnected((now) => new Set(now).add(tab.id));
+    onFocus(tab.id);
+  };
+
+  const close = (id: string) => {
+    setConnected((now) => {
+      const next = new Set(now);
+      next.delete(id);
+      return next;
+    });
+    onClose(id);
+  };
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex items-center gap-2 border-b p-2">
+        <Select value={cwd} onValueChange={(v) => setCwd(v ?? "")}>
+          <SelectTrigger size="sm" className="w-56">
+            <SelectValue placeholder={t("terminal.pickCwd")} />
+          </SelectTrigger>
+          <SelectContent>
+            {checkouts.map((c) => (
+              <SelectItem key={c.id} value={c.path}>
+                {c.isRoot ? t("home.scm.root") : c.id}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button size="sm" variant="outline" aria-disabled={busy || !cwd || undefined} onClick={() => void open()}>
+          {t("terminal.newTab")}
+        </Button>
+        {error && <p className="text-xs text-destructive">{error}</p>}
+      </div>
+
+      {tabs.length === 0 ? (
+        <EmptyState text={t("home.surface.terminal.empty")} />
+      ) : (
+        <div className="overflow-x-auto border-b pb-1">
+          <Tabs value={activeTab ?? undefined} onValueChange={(v) => onFocus(String(v))}>
+            <TabsList variant="line" className="w-fit">
+              {tabs.map((tab) => (
+                <TabsTrigger key={tab.id} value={tab.id} render={<div />} className="max-w-40 flex-none gap-1.5">
+                  <SquareTerminal aria-hidden className="size-3.5 shrink-0" />
+                  <Tooltip>
+                    <TooltipTrigger render={<span className="min-w-0 truncate">{tab.cwd}</span>} />
+                    <TooltipContent>{tab.cwd}</TooltipContent>
+                  </Tooltip>
+                  <button
+                    type="button"
+                    aria-label={`${t("home.tabs.close")} - ${tab.cwd}`}
+                    className="flex size-6 shrink-0 items-center justify-center rounded hover:bg-muted"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      close(tab.id);
+                    }}
+                  >
+                    <X aria-hidden className="size-3.5 text-muted-foreground" />
+                  </button>
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+        </div>
+      )}
+
+      <div className="min-h-0 flex-1">
+        {tabs.map((tab) =>
+          connected.has(tab.id) ? (
+            <div key={tab.id} hidden={tab.id !== activeTab} className="h-full">
+              <TerminalPanel projectId={project} id={tab.id} />
+            </div>
+          ) : tab.id === activeTab ? (
+            <div key={tab.id} className="flex h-full flex-col items-center justify-center gap-2">
+              <p className="text-sm text-muted-foreground">{t("terminal.disconnected")}</p>
+              <Button size="sm" variant="outline" aria-disabled={busy || undefined} onClick={() => void reopen(tab)}>
+                {t("terminal.reopen")}
+              </Button>
+            </div>
+          ) : null,
+        )}
+      </div>
+    </div>
+  );
+}
+
 /** 좌측 패널 (§비주얼 §24 §좌측 패널 · §7 §좌측 패널 · §비주얼 §34) — **shadcn `sidebar`**다.
  *
  *  **팝오버가 걷혔다**(`01e5293b`, 요구 `48b13597`). 걷힌 것은 **자리와 그릇 둘뿐**이고 줄의
@@ -1926,11 +2095,8 @@ function SidePanel({
             <ExplorerTree projectId={project} onOpenFile={onOpenExplorerFile} />
           </SidebarGroup>
         )}
-        {surface === "terminal" && (
-          <SidebarGroup className="p-0">
-            <EmptyState text={t(`home.surface.${surface}.empty`)} />
-          </SidebarGroup>
-        )}
+        {/* `터미널`은 왼쪽 패널에 목록이 없다(§11-1) — cwd 고르기·탭 줄·화면이 전부 오른쪽 칸
+            (`TerminalSurface`)에 있다. `소스 컨트롤`·`탐색기`와 달리 여기서 채울 목록이 없다. */}
         {surface === "agent" && (
           <>
         <SidebarGroup className="p-0">

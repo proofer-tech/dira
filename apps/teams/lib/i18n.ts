@@ -2068,6 +2068,14 @@ export const ko: Record<string, string> = {
   "home.tabs.empty": "열린 탭 없음",
   "home.tabs.close": "닫기",
 
+  // 터미널 표면(§11-1, P366-4) — `script`가 pty를 주는 셸 탭.
+  "terminal.pickCwd": "작업 디렉터리",
+  "terminal.newTab": "새 터미널",
+  "terminal.disconnected": "끊긴 터미널입니다",
+  "terminal.reopen": "다시 열기",
+  "terminal.invalidCwd": "등록되지 않은 작업 디렉터리입니다.",
+  "terminal.limitReached": "동시에 열 수 있는 터미널은 8개까지입니다.",
+
   // 소스 컨트롤(§11-3 결정 1-2-3-4, P366-8 · P366-9) — 체크아웃 목록·status·업스트림·커밋·
   // push·pull. `word.*` 넷은 `--porcelain=v2`의 아는 코드 넷의 낱말이고, 모르는 코드는 이
   // 사전을 안 거친다(§비주얼 §72 ④ — 화면이 코드를 그대로 `font-mono`로 보여준다).
@@ -4311,6 +4319,13 @@ export const en: Record<string, string> = {
   "home.surface.explorer.empty": "Empty directory",
   "home.tabs.empty": "No open tabs",
   "home.tabs.close": "Close",
+
+  "terminal.pickCwd": "Working directory",
+  "terminal.newTab": "New terminal",
+  "terminal.disconnected": "Terminal disconnected",
+  "terminal.reopen": "Reopen",
+  "terminal.invalidCwd": "Not a registered working directory.",
+  "terminal.limitReached": "Up to 8 terminals can be open at once.",
 
   "home.scm.root": "Root",
   "home.scm.worktreesPrefix": "Worktrees ",

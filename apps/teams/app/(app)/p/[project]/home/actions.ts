@@ -34,7 +34,9 @@ import {
   closeHomeTab,
   createSchedule as createScheduleRow,
   deleteSchedule as deleteScheduleRow,
+  focusTab as focusHomeTab,
   newConversation,
+  openTerminalTab,
   pollHome,
   readScheduleViews,
   readSessionId,
@@ -46,6 +48,7 @@ import {
   type ScheduleView,
 } from "@/lib/home-agent";
 import { getProject, resolveConfig, type Project } from "@/lib/projects";
+import { killPty, openPty, restartPty } from "@/lib/pty";
 import {
   commitStaged,
   listCheckouts,
@@ -212,6 +215,72 @@ export async function closeTab(projectId: string, tabId: string): Promise<HomeCh
     // 등록이 풀린 프로젝트 — 위 switchHome과 같은 물러남
   }
   return pollHomeAnswer(projectId, null, 0);
+}
+
+// ── 터미널 표면 (§11-1, P366-4) ──────────────────────────────────────────────
+//
+// cwd 후보는 소스 컨트롤과 같은 목록이다(§11-1 결정 3 — "§11-3의 그 목록과 같다") — 새 액션을
+// 안 늘리고 위 `scmCheckouts`를 그대로 재사용한다. pty 자체(`lib/pty.ts`)는 파일이 아니라
+// 서버 메모리라 여기 세 함수가 하는 일은 그 모듈을 부르고 탭 목록(`home-sessions.json`)을
+// 맞추는 것뿐이다 — 입출력은 스트리밍이 필요해 `home/pty/[id]/route.ts`가 대신 진다.
+
+/** `새 터미널` — cwd는 `scmCheckouts`가 낸 체크아웃 하나의 절대경로여야 한다(신뢰 경계:
+ *  클라이언트가 고른 값이 임의 경로면 그 디렉터리에서 셸이 뜬다 — `resolveWithin`과 같은 이유로
+ *  등록된 체크아웃 목록에 있는 값인지 여기서 다시 잰다). 셸은 사람의 `$SHELL`, 없으면 `/bin/sh`
+ *  (§11-1 결정 3 — 우리가 고르지 않는다). */
+export async function openTerminal(
+  projectId: string,
+  cwd: string,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<HomeChunk | { error: string }> {
+  try {
+    const project = await required(projectId, locale);
+    const checkouts = await listCheckouts(repoOf(project.root));
+    if (!checkouts.some((c) => c.path === cwd)) return { error: t(locale, "terminal.invalidCwd") };
+    const spawned = openPty(cwd, process.env.SHELL || "/bin/sh");
+    if ("error" in spawned) return { error: t(locale, "terminal.limitReached") };
+    await openTerminalTab(project.id, spawned.id, cwd);
+    return pollHomeAnswer(projectId, null, 0);
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+/** `끊긴` 터미널 탭의 `다시 열기`(§11 결정 2) — **죽은 pty를 되살리는 재접속을 안 만든다**:
+ *  남아 있어도 먼저 죽이고 같은 탭 자리에 새 pty를 심는다. `cwd`는 그 탭이 이미 가진 값
+ *  그대로 화면이 들고 온다(만든 뒤 안 갈리므로 여기서 다시 검증할 신뢰 경계가 아니다 —
+ *  `home-sessions.json`에 그 값을 쓴 것은 위 `openTerminal`이 이미 검증한 뒤였다). */
+export async function restartTerminal(
+  projectId: string,
+  tabId: string,
+  cwd: string,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<HomeChunk | { error: string }> {
+  try {
+    await required(projectId, locale);
+    const spawned = restartPty(tabId, cwd, process.env.SHELL || "/bin/sh");
+    if ("error" in spawned) return { error: t(locale, "terminal.limitReached") };
+    return pollHomeAnswer(projectId, null, 0);
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+/** 터미널 탭 사이를 오간다 — `switchHome`과 달리 `current`(대화 스레드)도 새 탭도 안 만든다. */
+export async function focusTerminalTab(projectId: string, tabId: string): Promise<HomeChunk> {
+  try {
+    await focusHomeTab((await required(projectId)).id, tabId);
+  } catch {
+    // 등록이 풀린 프로젝트 — 위 switchHome과 같은 물러남
+  }
+  return pollHomeAnswer(projectId, null, 0);
+}
+
+/** 터미널 탭을 닫는다 — pty를 `SIGTERM`으로 죽이고(§11-1 결정 4) 탭 목록에서 뺀다.
+ *  파일 쪽 처리는 `chat`과 같은 함수(`closeTab`)를 그대로 쓴다 — 두 벌로 안 적는다. */
+export async function closeTerminalTab(projectId: string, tabId: string): Promise<HomeChunk> {
+  killPty(tabId);
+  return closeTab(projectId, tabId);
 }
 
 /** `새 스케줄` 다이얼로그의 `만들기`(§비주얼 §62 (5)). **대화·스레드는 안 건드린다** — 그래서

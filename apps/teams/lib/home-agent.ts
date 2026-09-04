@@ -359,7 +359,12 @@ function parseHome(v: unknown): Home {
   const tabs = (Array.isArray(o.tabs) ? o.tabs : []).flatMap((r): Tab[] => {
     const x = (r && typeof r === "object" ? r : {}) as Record<string, unknown>;
     const id = uuid(x.id);
-    if (!id || x.kind !== "chat") return []; // 다른 kind는 아직 아무 티켓도 안 낸다(P366-5·6·8)
+    if (!id || (x.kind !== "chat" && x.kind !== "terminal")) return []; // 파일 탭은 아직 없다(P366-6)
+    if (x.kind === "terminal") {
+      // §11-1 결정 3 — cwd 없는 터미널 탭은 못 열므로(만든 뒤 안 갈린다) 없는 탭으로 친다.
+      if (typeof x.cwd !== "string" || !x.cwd) return [];
+      return [{ id, kind: "terminal", lastViewed: typeof x.lastViewed === "string" ? x.lastViewed : "", cwd: x.cwd }];
+    }
     return [
       {
         id,
@@ -472,15 +477,51 @@ export async function switchConversation(projectId: string, sessionId: string): 
 /** 우측 탭 줄에서 탭 하나를 닫는다(§11 결정 1 - 탭 닫기). **대화 자체는 안 지운다** — 목록에서
  *  빠질 뿐이고 옛 트랜스크립트·`conversations` 줄은 그대로 남는다(탭은 "지금 열어 둔 것"이고
  *  대화 목록은 최근 20개의 이력이다 - 서로 다른 개념이다). 닫은 탭이 `activeTab`이면 남은 탭
- *  중 가장 최근 본 것으로 넘어간다 - **지금은 탭 종류가 `chat` 하나뿐이라 `current`도 같이
- *  옮긴다**(터미널·파일 탭이 붙으면 이 동기화가 갈릴 수 있다 - 그건 그 표면을 만드는 티켓의 몫). */
+ *  중 가장 최근 본 것으로 넘어간다 - **`current`(대화 스레드)는 넘어간 탭이 `chat`일 때만
+ *  따라간다**(§11-1, P366-4). 터미널 탭으로 넘어가도 대화 스레드는 그대로다 - 터미널 표면은
+ *  `current`를 안 쓴다(§11-1 결정 - 폴링·스레드는 홈 에이전트 표면 전용). */
 export async function closeHomeTab(projectId: string, tabId: string): Promise<Home> {
   const home = await readHome(projectId);
   const tabs = closeTabPure(home.tabs, tabId);
   const stillActive = home.activeTab !== tabId;
   const activeTab = stillActive ? home.activeTab : mostRecentTab(tabs);
-  const current = stillActive ? home.current : activeTab;
+  // 닫은 탭이 활성이 아니었으면 `current`는 그대로다. 활성이었으면: 넘어갈 탭이 없으면(전부
+  // 닫았다) `null`로 물러난다 — 옛(모두 `chat`이던) 동작 그대로다. 넘어갈 탭이 있으면 그 탭이
+  // `chat`일 때만 따라간다 - 터미널로 넘어가도 대화 스레드는 그대로 둔다.
+  const landed = stillActive ? null : tabs.find((tb) => tb.id === activeTab);
+  const current = stillActive
+    ? home.current
+    : activeTab === null
+      ? null
+      : landed?.kind === "chat"
+        ? activeTab
+        : home.current;
   const next: Home = { ...home, tabs, activeTab, current };
+  await writeHome(projectId, next);
+  return next;
+}
+
+/** 터미널 탭 하나를 연다(§11-1 결정 1·3) — cwd는 만든 뒤 안 갈린다. `chat` 탭의 `switchConversation`과
+ *  같은 모양이지만 `current`(대화 스레드)는 안 건드린다 - 터미널은 그 칸을 안 쓴다. */
+export async function openTerminalTab(projectId: string, ptyId: string, cwd: string): Promise<Home> {
+  const home = await readHome(projectId);
+  const now = new Date().toISOString();
+  const next: Home = { ...home, tabs: openTab(home.tabs, ptyId, "terminal", now, cwd), activeTab: ptyId };
+  await writeHome(projectId, next);
+  return next;
+}
+
+/** 탭 줄에서 탭 하나에 포커스만 옮긴다 - 대화 전환(`switchConversation`)과 달리 `current`도
+ *  탭 생성도 없다. 터미널 표면에서 이미 열린 탭 사이를 오갈 때 쓴다. 실재하지 않는 탭은 무시한다. */
+export async function focusTab(projectId: string, tabId: string): Promise<Home> {
+  const home = await readHome(projectId);
+  if (!home.tabs.some((t) => t.id === tabId)) return home;
+  const now = new Date().toISOString();
+  const next: Home = {
+    ...home,
+    tabs: home.tabs.map((t) => (t.id === tabId ? { ...t, lastViewed: now } : t)),
+    activeTab: tabId,
+  };
   await writeHome(projectId, next);
   return next;
 }

@@ -4,9 +4,10 @@
  *  목록에 적용되는 상한 · LRU 닫기 · 저장 안 한 탭 예외를 fs 없이 재는 순수 함수로 낸다 —
  *  `lib/home-agent.ts`(fs를 타는 쪽)가 이 함수들을 부른다. */
 
-/** 탭 한 줄. `kind`는 지금 `chat`뿐이다 — 터미널·파일·체크아웃은 P366-5·6·8이 늘린다.
- *  `unsaved`는 편집 중인 파일 탭이 상한 계산에서 빠지는 자리다(§11 수용조건). */
-export type Tab = { id: string; kind: "chat"; lastViewed: string; unsaved?: true };
+/** 탭 한 줄. `kind`는 `chat`·`terminal`이다 — 파일·체크아웃은 P366-6·8이 늘린다.
+ *  `unsaved`는 편집 중인 파일 탭이 상한 계산에서 빠지는 자리다(§11 수용조건).
+ *  `cwd`는 `terminal` 탭에만 있다(§11-1 결정 3 — 만든 뒤에는 안 갈린다). */
+export type Tab = { id: string; kind: "chat" | "terminal"; lastViewed: string; unsaved?: true; cwd?: string };
 
 /** §11 결정 1 — 탭 상한. 넘으면 가장 오래 안 본 탭이 닫힌다. */
 export const TAB_LIMIT = 12;
@@ -27,10 +28,10 @@ export function evictionCandidate(tabs: Tab[]): Tab | null {
  *  가장 크지만 저장 안 한 탭들 사이에서는 유일한 닫을 수 있는 후보가 되어 버린다).
  *  후보가 없으면(전부 저장 안 함) 상한을 그대로 넘긴 채 낸다 — 자동으로 안 닫는 것이 §11
  *  수용조건의 *저장 안 한 파일 탭은 안 닫는다*다. */
-export function openTab(tabs: Tab[], id: string, kind: Tab["kind"], now: string): Tab[] {
+export function openTab(tabs: Tab[], id: string, kind: Tab["kind"], now: string, cwd?: string): Tab[] {
   const next = tabs.some((t) => t.id === id)
     ? tabs.map((t) => (t.id === id ? { ...t, lastViewed: now } : t))
-    : [...tabs, { id, kind, lastViewed: now }];
+    : [...tabs, { id, kind, lastViewed: now, ...(cwd ? { cwd } : {}) }];
   if (next.length <= TAB_LIMIT) return next;
   const closable = next.filter((t) => !t.unsaved && t.id !== id);
   if (closable.length === 0) return next;
