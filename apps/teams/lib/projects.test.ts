@@ -38,6 +38,7 @@ const {
   slugify,
   squadNames,
   squadsDir,
+  explorerRoot,
   renameProject,
   reorderProjects,
   resolveConfig,
@@ -209,6 +210,18 @@ test("resolveConfig — 워커 하나뿐이어도 cwdByWorker에 담는다", asy
   const root = newQueue({ "w1.sh": 'TICKET_CWD="$HOME/wt/w1"\n' });
   const c = await resolveConfig({ root });
   assert.deepStrictEqual(c.cwdByWorker, { w1: path.join(homedir(), "wt/w1") });
+});
+
+test("explorerRoot — 워커마다 TICKET_CWD가 갈려도 항상 프로젝트 루트다 (dcd44a41)", async () => {
+  const root = newQueue({
+    "w1.sh": 'TICKET_CWD="$HOME/wt/w1"\n',
+    "w2.sh": 'TICKET_CWD="$HOME/wt/w2"\n',
+  });
+  const c = await resolveConfig({ root });
+  // config.cwd는 "첫 워커 값" 대표값이라 탐색기 뿌리로 못 쓴다 — 이 값과 달라야 한다.
+  assert.strictEqual(c.cwd, path.join(homedir(), "wt/w1"));
+  assert.strictEqual(explorerRoot({ root }), path.dirname(root));
+  assert.notStrictEqual(explorerRoot({ root }), c.cwd);
 });
 
 // ── TICKET_ONTOLOGY (DESIGN.md §5-3 §온톨로지 자리를 워커가 재정의한다) ────────

@@ -914,6 +914,13 @@ export function squadsDir(project: Pick<Project, "root">): string {
   return path.join(project.root, "squads");
 }
 
+/** 탐색기 뿌리(DESIGN.md §11-2 결정 3) — 프로젝트 루트 고정, 워커별 `TICKET_CWD` 오버라이드와
+ *  무관하다. `resolveConfig(project).cwd`는 워커마다 값이 갈리면 그중 첫 워커 값으로 바뀌는
+ *  필드라서(위 `cwd` 필드 주석) 탐색기가 그걸 쓰면 뿌리가 어느 한 워커의 개인 워크트리로 뜬다. */
+export function explorerRoot(project: Pick<Project, "root">): string {
+  return path.dirname(project.root);
+}
+
 /** 이름 검증 + 경로 조립은 페르소나와 같은 규칙이다(`NAME_RE` — 엔진이 이 값으로 경로를 만든다).
  *  이름공간이 페르소나와 겹치는지는 여기서 안 본다 — 호출부(Server Action)가 양쪽 디렉터리를
  *  같이 들고 있어야 판정할 수 있다. */

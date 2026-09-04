@@ -1,6 +1,8 @@
 /** 탐색기 · 편집기 코어 (DESIGN.md §11-2 결정 1 · 2 · 4).
  *
- *  뿌리는 `resolveConfig(project).cwd`다(§11 결정 3 — 프로젝트 루트, 기본값 `dirname(project.root)`).
+ *  뿌리는 항상 `projects.ts`의 `explorerRoot(project)`(= `dirname(project.root)`)다(§11 결정 3 —
+ *  프로젝트 루트. `resolveConfig(project).cwd`는 워커마다 `TICKET_CWD`가 갈리면 그중 하나로
+ *  바뀌는 값이라 안 쓴다).
  *  **경로 방어는 `lib/paths.ts`의 `resolveWithin` 하나다** — 새 검사를 안 만든다(신뢰 경계가
  *  둘이 되는 것을 결정 1이 막는다).
  *

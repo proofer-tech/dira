@@ -47,7 +47,7 @@ import {
   type HomeChunk,
   type ScheduleView,
 } from "@/lib/home-agent";
-import { getProject, resolveConfig, type Project } from "@/lib/projects";
+import { explorerRoot, getProject, resolveConfig, type Project } from "@/lib/projects";
 import { killPty, openPty, restartPty } from "@/lib/pty";
 import {
   commitStaged,
@@ -478,7 +478,7 @@ export async function scmPull(projectId: string, checkoutId: string): Promise<Sc
 async function explorerDirs(project: Project) {
   const config = await resolveConfig(project);
   return {
-    cwd: config.cwd,
+    cwd: explorerRoot(project),
     ticketsDir: path.join(project.root, "tickets"),
     personasDir: config.personas,
     protocolsDir: config.protocols,
