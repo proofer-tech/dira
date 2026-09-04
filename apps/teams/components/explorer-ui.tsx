@@ -17,8 +17,10 @@
  *  //           타이핑마다 다시 긋고 싶어지면 `blur`가 아니라 디바운스로 바꾼다. */
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronRight, ExternalLink, File, Folder, TriangleAlert } from "lucide-react";
+import { ChevronRight, ExternalLink, File, Folder, Search, TriangleAlert } from "lucide-react";
 import {
+  findByContentAction,
+  findByNameAction,
   listExplorerDirAction,
   openExplorerFileAction,
   openExplorerFileExternallyAction,
@@ -28,7 +30,7 @@ import { useT } from "@/components/language-provider";
 import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import type { ExplorerFile, ExplorerListing } from "@/lib/explorer";
+import type { ExplorerFile, ExplorerListing, FindContentResult, FindNameResult } from "@/lib/explorer";
 import { cn } from "@/lib/utils";
 
 /** `protocols-ui.tsx` · `ticket-ui.tsx` 등에 이미 있는 "OS 기본 앱으로 열기" 버튼과 같은
@@ -101,7 +103,7 @@ function TreeNode({
   isDir: boolean;
   depth: number;
   showHidden: boolean;
-  onOpenFile: (relPath: string) => void;
+  onOpenFile: (relPath: string, line?: number) => void;
 }) {
   const t = useT();
   const [expanded, setExpanded] = useState(false);
@@ -178,12 +180,168 @@ function TreeNode({
 }
 
 const LIST_CAP_LABEL = "2,000";
+const NAME_CAP_LABEL = "50,000";
 
-/** 좌측 패널의 `탐색기` 표면(§11-2 결정 1) — 뿌리(`resolveConfig(project).cwd`)의 목록을 마운트
- *  때 한 번 읽는다. 숨은 파일 토글 기본값은 켬이다(`.dira`가 그 안쪽이라). */
-export function ExplorerTree({ projectId, onOpenFile }: { projectId: string; onOpenFile: (relPath: string) => void }) {
+/** 워크트리 사본 체크박스(§결정 3) — 이름·내용 찾기 둘이 같은 모양을 쓴다. */
+function IncludeWorktreesToggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
   const t = useT();
+  return (
+    <label className="flex items-center gap-1.5 px-1 text-xs text-muted-foreground">
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+      {t("explorer.find.includeWorktrees")}
+    </label>
+  );
+}
+
+/** 이름 찾기(§결정 3) — 칸에 치면 그 즉시 서버가 캐시한 파일 목록을 걸러 flat 목록으로 낸다.
+ *  트리 구조는 안 그린다(어느 디렉터리 밑인지는 `relPath`가 이미 보여준다). */
+function NameFindResults({
+  projectId,
+  query,
+  includeWorktrees,
+  onOpenFile,
+}: {
+  projectId: string;
+  query: string;
+  includeWorktrees: boolean;
+  onOpenFile: (relPath: string) => void;
+}) {
+  const t = useT();
+  const [result, setResult] = useState<FindNameResult | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    void findByNameAction(projectId, query, includeWorktrees).then((r) => {
+      if (live) setResult(r);
+    });
+    return () => {
+      live = false;
+    };
+  }, [projectId, query, includeWorktrees]);
+
+  if (!result) return <div className="px-2 py-1 text-xs text-muted-foreground">{t("common.loading")}</div>;
+  if (!result.ok) {
+    return (
+      <div className="flex items-center gap-1 px-2 py-1 text-xs text-muted-foreground">
+        <TriangleAlert aria-hidden className="size-3 shrink-0" />
+        {result.reason}
+      </div>
+    );
+  }
+  if (result.matches.length === 0) return <EmptyState text={t("explorer.find.noMatches")} />;
+  return (
+    <div className="space-y-0.5">
+      {result.matches.map((m) => (
+        <button
+          key={m}
+          type="button"
+          onClick={() => onOpenFile(m)}
+          className="flex w-full items-center gap-1 rounded px-1 py-0.5 text-left text-sm hover:bg-muted"
+        >
+          <File aria-hidden className="size-3.5 shrink-0" />
+          <span className="truncate font-mono text-xs">{m}</span>
+        </button>
+      ))}
+      {result.capped && (
+        <div className="px-1 py-1 text-xs text-muted-foreground">
+          {t("explorer.find.capped")} ({NAME_CAP_LABEL})
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** 내용 찾기(§결정 3) — `트리` 옆 별 탭. 타이핑마다 안 돌고 `찾기`를 눌러야 돈다(`grep`
+ *  서브프로세스라 값이 크다 — actions.ts `findByContentAction` 주석과 같은 경계). */
+function ContentFindPanel({
+  projectId,
+  includeWorktrees,
+  onIncludeWorktreesChange,
+  onOpenFile,
+}: {
+  projectId: string;
+  includeWorktrees: boolean;
+  onIncludeWorktreesChange: (v: boolean) => void;
+  onOpenFile: (relPath: string, line?: number) => void;
+}) {
+  const t = useT();
+  const [query, setQuery] = useState("");
+  const [result, setResult] = useState<FindContentResult | null>(null);
+  const [pending, start] = useTransition();
+
+  function search() {
+    if (!query.trim() || pending) return;
+    start(async () => {
+      setResult(await findByContentAction(projectId, query, includeWorktrees));
+    });
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-1">
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && search()}
+          placeholder={t("explorer.find.contentPlaceholder")}
+          className="h-8 flex-1 rounded-md border bg-transparent px-2 text-sm outline-none"
+        />
+        <Button type="button" size="sm" variant="outline" disabled={pending || !query.trim()} onClick={search}>
+          <Search aria-hidden className="size-3.5" />
+          {t("explorer.find.search")}
+        </Button>
+      </div>
+      <IncludeWorktreesToggle checked={includeWorktrees} onChange={onIncludeWorktreesChange} />
+      {pending && <div className="px-1 py-1 text-xs text-muted-foreground">{t("explorer.find.searching")}</div>}
+      {!pending && result && !result.ok && (
+        <div className="flex items-center gap-1 px-1 py-1 text-xs text-muted-foreground">
+          <TriangleAlert aria-hidden className="size-3 shrink-0" />
+          {result.reason}
+        </div>
+      )}
+      {!pending && result?.ok && result.hits.length === 0 && <EmptyState text={t("explorer.find.noMatches")} />}
+      {!pending && result?.ok && result.hits.length > 0 && (
+        <div className="space-y-0.5">
+          {result.hits.map((h, i) => (
+            <button
+              key={`${h.file}:${h.line}:${i}`}
+              type="button"
+              onClick={() => onOpenFile(h.file, h.line)}
+              className="flex w-full flex-col items-start gap-0.5 rounded px-1 py-1 text-left hover:bg-muted"
+            >
+              <span className="truncate font-mono text-xs text-muted-foreground">
+                {h.file}:{h.line}
+              </span>
+              <span className="w-full truncate font-mono text-xs">{h.text}</span>
+            </button>
+          ))}
+          {result.truncated && (
+            <div className="px-1 py-1 text-xs text-muted-foreground">{t("explorer.find.truncated")}</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** 좌측 패널의 `탐색기` 표면(§11-2 결정 1 · 3) — 뿌리(`resolveConfig(project).cwd`)의 목록을
+ *  마운트 때 한 번 읽는다. 숨은 파일 토글 기본값은 켬이다(`.dira`가 그 안쪽이라).
+ *
+ *  **찾기는 `트리` 탭 안의 이름 칸 하나 + `내용 찾기` 탭 하나다**(§결정 3) — 워크트리 사본
+ *  체크박스는 둘이 상태를 나눠 갖지 않고 이 컴포넌트가 하나만 들고 공유한다(사람이 한 번 켜면
+ *  두 찾기 다 그 값을 쓴다). */
+export function ExplorerTree({
+  projectId,
+  onOpenFile,
+}: {
+  projectId: string;
+  onOpenFile: (relPath: string, line?: number) => void;
+}) {
+  const t = useT();
+  const [tab, setTab] = useState<"tree" | "content">("tree");
   const [showHidden, setShowHidden] = useState(true);
+  const [nameQuery, setNameQuery] = useState("");
+  const [includeWorktrees, setIncludeWorktrees] = useState(false);
   const [listing, setListing] = useState<ExplorerListing | null>(null);
 
   useEffect(() => {
@@ -196,42 +354,99 @@ export function ExplorerTree({ projectId, onOpenFile }: { projectId: string; onO
     };
   }, [projectId]);
 
-  if (!listing) return <div className="px-2 py-1 text-xs text-muted-foreground">{t("common.loading")}</div>;
-  if (!listing.ok) {
-    return (
-      <div className="flex items-center gap-1 px-2 py-1 text-xs text-muted-foreground">
-        <TriangleAlert aria-hidden className="size-3 shrink-0" />
-        {listing.reason}
-      </div>
-    );
-  }
-  const entries = listing.entries.filter((e) => showHidden || !e.name.startsWith("."));
+  const tabs: { id: "tree" | "content"; labelKey: string }[] = [
+    { id: "tree", labelKey: "explorer.find.treeTab" },
+    { id: "content", labelKey: "explorer.find.contentTab" },
+  ];
+
   return (
-    <div className="space-y-1">
-      <label className="flex items-center gap-1.5 px-1 text-xs text-muted-foreground">
-        <input type="checkbox" checked={showHidden} onChange={(e) => setShowHidden(e.target.checked)} />
-        {t("explorer.showHidden")}
-      </label>
-      {entries.length === 0 ? (
-        <EmptyState text={t("home.surface.explorer.empty")} />
+    <div className="space-y-2">
+      <div className="flex gap-1 border-b pb-1">
+        {tabs.map((tb) => (
+          <button
+            key={tb.id}
+            type="button"
+            onClick={() => setTab(tb.id)}
+            className={cn(
+              "rounded px-2 py-1 text-xs",
+              tab === tb.id ? "bg-muted font-medium" : "text-muted-foreground hover:bg-muted/50",
+            )}
+          >
+            {t(tb.labelKey)}
+          </button>
+        ))}
+      </div>
+      {tab === "content" ? (
+        <ContentFindPanel
+          projectId={projectId}
+          includeWorktrees={includeWorktrees}
+          onIncludeWorktreesChange={setIncludeWorktrees}
+          onOpenFile={onOpenFile}
+        />
       ) : (
-        entries.map((e) => (
-          <TreeNode
-            key={e.name}
-            projectId={projectId}
-            name={e.name}
-            relPath={e.name}
-            isDir={e.isDir}
-            depth={0}
-            showHidden={showHidden}
-            onOpenFile={onOpenFile}
-          />
-        ))
-      )}
-      {listing.capped && (
-        <div className="px-1 text-xs text-muted-foreground">
-          {listing.total} {t("explorer.moreCountPrefix")} {LIST_CAP_LABEL}
-          {t("explorer.moreCountSuffix")}
+        <div className="space-y-1">
+          <div className="flex items-center gap-1 px-1">
+            <Search aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
+            <input
+              value={nameQuery}
+              onChange={(e) => setNameQuery(e.target.value)}
+              placeholder={t("explorer.find.namePlaceholder")}
+              className="h-7 flex-1 rounded-md border bg-transparent px-2 text-xs outline-none"
+            />
+          </div>
+          {nameQuery.trim() ? (
+            <>
+              <IncludeWorktreesToggle checked={includeWorktrees} onChange={setIncludeWorktrees} />
+              <NameFindResults
+                projectId={projectId}
+                query={nameQuery}
+                includeWorktrees={includeWorktrees}
+                onOpenFile={onOpenFile}
+              />
+            </>
+          ) : (
+            <>
+              <label className="flex items-center gap-1.5 px-1 text-xs text-muted-foreground">
+                <input type="checkbox" checked={showHidden} onChange={(e) => setShowHidden(e.target.checked)} />
+                {t("explorer.showHidden")}
+              </label>
+              {!listing && <div className="px-2 py-1 text-xs text-muted-foreground">{t("common.loading")}</div>}
+              {listing && !listing.ok && (
+                <div className="flex items-center gap-1 px-2 py-1 text-xs text-muted-foreground">
+                  <TriangleAlert aria-hidden className="size-3 shrink-0" />
+                  {listing.reason}
+                </div>
+              )}
+              {listing?.ok && (
+                <>
+                  {listing.entries.filter((e) => showHidden || !e.name.startsWith(".")).length === 0 ? (
+                    <EmptyState text={t("home.surface.explorer.empty")} />
+                  ) : (
+                    listing.entries
+                      .filter((e) => showHidden || !e.name.startsWith("."))
+                      .map((e) => (
+                        <TreeNode
+                          key={e.name}
+                          projectId={projectId}
+                          name={e.name}
+                          relPath={e.name}
+                          isDir={e.isDir}
+                          depth={0}
+                          showHidden={showHidden}
+                          onOpenFile={onOpenFile}
+                        />
+                      ))
+                  )}
+                  {listing.capped && (
+                    <div className="px-1 text-xs text-muted-foreground">
+                      {listing.total} {t("explorer.moreCountPrefix")} {LIST_CAP_LABEL}
+                      {t("explorer.moreCountSuffix")}
+                    </div>
+                  )}
+                </>
+              )}
+            </>
+          )}
         </div>
       )}
     </div>
@@ -245,14 +460,14 @@ type OpenableFile = Exclude<ExplorerFile, { kind: "redirect" }>;
 
 export function useExplorerOpen(projectId: string) {
   const router = useRouter();
-  const [open, setOpen] = useState<{ relPath: string; file: OpenableFile } | null>(null);
-  async function onOpenFile(relPath: string) {
+  const [open, setOpen] = useState<{ relPath: string; file: OpenableFile; line?: number } | null>(null);
+  async function onOpenFile(relPath: string, line?: number) {
     const file = await openExplorerFileAction(projectId, relPath);
     if (file.kind === "redirect") {
       router.push(file.to);
       return;
     }
-    setOpen({ relPath, file });
+    setOpen({ relPath, file, line });
   }
   return { open, onOpenFile, onClose: () => setOpen(null) };
 }
@@ -264,11 +479,13 @@ export function FileEditorPane({
   projectId,
   relPath,
   file,
+  line,
   onClose,
 }: {
   projectId: string;
   relPath: string;
   file: OpenableFile;
+  line?: number;
   onClose: () => void;
 }) {
   if (file.kind === "unreadable") {
@@ -281,18 +498,23 @@ export function FileEditorPane({
       </div>
     );
   }
-  return <CodeEditor projectId={projectId} relPath={relPath} initial={file} onClose={onClose} />;
+  return <CodeEditor projectId={projectId} relPath={relPath} initial={file} line={line} onClose={onClose} />;
 }
+
+/** 편집기 CSS의 `leading-6`과 같은 값(px) — 내용 찾기 결과를 눌렀을 때 그 줄로 스크롤하는 계산에 쓴다. */
+const LINE_HEIGHT_PX = 24;
 
 function CodeEditor({
   projectId,
   relPath,
   initial,
+  line,
   onClose,
 }: {
   projectId: string;
   relPath: string;
   initial: Extract<ExplorerFile, { kind: "text" }>;
+  line?: number;
   onClose: () => void;
 }) {
   const t = useT();
@@ -303,6 +525,7 @@ function CodeEditor({
   const [error, setError] = useState<string | null>(null);
   const [html, setHtml] = useState<string | null>(null);
   const preRef = useRef<HTMLPreElement>(null);
+  const taRef = useRef<HTMLTextAreaElement>(null);
   const dirty = text !== savedText;
   const lang = langOf(relPath);
 
@@ -324,6 +547,18 @@ function CodeEditor({
     return () => {
       ignore = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 내용 찾기 결과 줄을 누르고 왔을 때만(§11-2 결정 3) — 캐럿을 그 줄 앞에 두고 스크롤한다.
+  useEffect(() => {
+    if (!line) return;
+    const ta = taRef.current;
+    if (!ta) return;
+    const idx = initial.text.split("\n").slice(0, line - 1).join("\n").length + (line > 1 ? 1 : 0);
+    ta.focus();
+    ta.setSelectionRange(idx, idx);
+    ta.scrollTop = Math.max(0, (line - 1) * LINE_HEIGHT_PX - ta.clientHeight / 2);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -366,6 +601,7 @@ function CodeEditor({
           dangerouslySetInnerHTML={{ __html: html ?? "" }}
         />
         <textarea
+          ref={taRef}
           value={text}
           onChange={(e) => setText(e.target.value)}
           onBlur={() => void highlight(text)}

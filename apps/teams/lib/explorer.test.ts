@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSyn
 import { stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { listExplorerDir, openExplorerFile, redirectTarget, saveExplorerFile } from "./explorer.ts";
+import { findByContent, findByName, listExplorerDir, openExplorerFile, redirectTarget, saveExplorerFile } from "./explorer.ts";
 
 /** DESIGN.md §11-2 결정 1 · 2 · 4 픽스처.
  *
@@ -167,4 +167,44 @@ test("티켓 .wip.md는 이 함수도 한 번 더 막는다(§11-2 결정 4 방�
   const st = await stat(path.join(root, rel));
   const r = await saveExplorerFile(root, rel, "고친다\n", st.mtimeMs, st.size, ticketsDir);
   assert.ok(!r.ok);
+});
+
+// ── 찾기(결정 3) ─────────────────────────────────────────────────────────
+
+mkdirSync(path.join(root, "worktrees", "w9", "src"), { recursive: true });
+writeFileSync(path.join(root, "worktrees", "w9", "src", "urls.ts"), "export const A = 1;\n");
+writeFileSync(path.join(root, "src", "home-agent.ts"), "export const HOME_PERSONA = 1;\n");
+
+test("이름 찾기 — 파일명이 query를 담으면 걸린다", async () => {
+  const r = await findByName(root, "urls", false);
+  assert.ok(r.ok);
+  assert.deepStrictEqual(r.matches, ["src/urls.ts"]);
+});
+
+test("이름 찾기 — 워크트리 사본은 기본으로 빠진다, 체크박스를 켜면 뜬다", async () => {
+  const off = await findByName(root, "urls", false);
+  assert.ok(off.ok);
+  assert.strictEqual(off.matches.length, 1);
+  const on = await findByName(root, "urls", true);
+  assert.ok(on.ok);
+  assert.strictEqual(on.matches.length, 2);
+});
+
+test("내용 찾기 — HOME_PERSONA가 그 줄과 함께 걸린다", async () => {
+  const r = await findByContent(root, "HOME_PERSONA", false);
+  assert.ok(r.ok);
+  assert.strictEqual(r.hits.length, 1);
+  assert.strictEqual(r.hits[0]?.file, "src/home-agent.ts");
+  assert.strictEqual(r.hits[0]?.line, 1);
+  assert.ok(!r.truncated);
+});
+
+test("내용 찾기 — 워크트리 사본은 기본으로 빠진다", async () => {
+  writeFileSync(path.join(root, "worktrees", "w9", "src", "home-agent.ts"), "export const HOME_PERSONA = 1;\n");
+  const off = await findByContent(root, "HOME_PERSONA", false);
+  assert.ok(off.ok);
+  assert.strictEqual(off.hits.length, 1);
+  const on = await findByContent(root, "HOME_PERSONA", true);
+  assert.ok(on.ok);
+  assert.strictEqual(on.hits.length, 2);
 });

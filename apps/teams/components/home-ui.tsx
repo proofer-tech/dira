@@ -782,10 +782,11 @@ export function HomeUI({
           {surface === "explorer" ? (
             explorer.open ? (
               <FileEditorPane
-                key={explorer.open.relPath}
+                key={`${explorer.open.relPath}:${explorer.open.line ?? ""}`}
                 projectId={project}
                 relPath={explorer.open.relPath}
                 file={explorer.open.file}
+                line={explorer.open.line}
                 onClose={explorer.onClose}
               />
             ) : (
@@ -1810,8 +1811,9 @@ function SidePanel({
   /** 좌측 2단의 위 단이 고른 표면(§11 결정 1 · §비주얼 §72 ①). */
   surface: Surface;
   onSurfaceChange: (s: Surface) => void;
-  /** `탐색기` 표면에서 파일 하나를 골랐다(§11-2 결정 2, P366-6) — 우측 칸이 그 결과를 그린다. */
-  onOpenExplorerFile: (relPath: string) => void;
+  /** `탐색기` 표면에서 파일 하나를 골랐다(§11-2 결정 2, P366-6) — 우측 칸이 그 결과를 그린다.
+   *  `line`은 내용 찾기 결과 줄을 눌렀을 때만 온다(§11-2 결정 3) — 편집기가 그 줄로 스크롤한다. */
+  onOpenExplorerFile: (relPath: string, line?: number) => void;
   /** 지금 도는 session id 전부 — **줄의 오른쪽 끝을 정하는 값 하나다**(§24 §도는 대화의 표식).
    *  세 그룹이 같은 목록을 본다: 대화·스케줄 줄은 시각이 자리를 내주고, 워커 줄은 비어 있던 자리다. */
   runningIds: string[];

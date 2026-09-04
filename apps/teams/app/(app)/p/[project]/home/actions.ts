@@ -15,11 +15,15 @@ import path from "node:path";
 import { verifyAttachments, withAttachments } from "@/lib/attachments";
 import { listEpics, refreshKnownRefs } from "@/lib/epics";
 import {
+  findByContent,
+  findByName,
   listExplorerDir,
   openExplorerFile,
   saveExplorerFile,
   type ExplorerFile,
   type ExplorerListing,
+  type FindContentResult,
+  type FindNameResult,
   type SaveResult,
 } from "@/lib/explorer";
 import { DEFAULT_LOCALE, t, type Locale } from "@/lib/i18n";
@@ -449,6 +453,37 @@ export async function saveExplorerFileAction(
   try {
     const { cwd, ticketsDir } = await explorerDirs(await required(projectId, locale));
     return await saveExplorerFile(cwd, rel, text, expectedMtimeMs, expectedSize, ticketsDir, locale);
+  } catch (e) {
+    return { ok: false, reason: (e as Error).message };
+  }
+}
+
+/** 이름 찾기(§11-2 결정 3) — 트리 위 칸이 치는 쪽지 매 글자마다 이 액션을 부른다. */
+export async function findByNameAction(
+  projectId: string,
+  query: string,
+  includeWorktrees: boolean,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<FindNameResult> {
+  try {
+    const { cwd } = await explorerDirs(await required(projectId, locale));
+    return await findByName(cwd, query, includeWorktrees);
+  } catch (e) {
+    return { ok: false, reason: (e as Error).message };
+  }
+}
+
+/** 내용 찾기(§11-2 결정 3) — 별 탭에서 찾기를 누를 때만 이 액션을 부른다(§11 결정 4 — 폴링에
+ *  안 든다). */
+export async function findByContentAction(
+  projectId: string,
+  query: string,
+  includeWorktrees: boolean,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<FindContentResult> {
+  try {
+    const { cwd } = await explorerDirs(await required(projectId, locale));
+    return await findByContent(cwd, query, includeWorktrees);
   } catch (e) {
     return { ok: false, reason: (e as Error).message };
   }

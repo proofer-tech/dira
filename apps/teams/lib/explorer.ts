@@ -7,9 +7,11 @@
  *  `.md`는 이 편집기가 열지 않는다(결정 2) — 티켓 · 페르소나 · 프로토콜 디렉터리 밑이면
  *  `redirectTarget`이 그 화면 URL을 주고, 화면은 `router.push`로 넘어간다. 같은 파일을 두
  *  편집기로 여는 자리를 만들지 않는다는 계약이 여기 한 함수에 있다. */
+import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { lstat, readdir, readFile, realpath, rename, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
+import readline from "node:readline";
 import { DEFAULT_LOCALE, t, type Locale } from "./i18n.ts";
 import { resolveWithin } from "./paths.ts";
 
@@ -182,4 +184,143 @@ export async function saveExplorerFile(
   } catch (e) {
     return { ok: false, reason: (e as Error).message };
   }
+}
+
+// ── 찾기(§11-2 결정 3) ───────────────────────────────────────────────────
+//
+// 이름과 내용, 자리 둘이다. 워크트리 사본(`worktrees/<이름>` 디렉터리)은 두 찾기 다 기본으로
+// 뺀다 — 같은 파일이 워커마다 여러 벌이라 결과가 8배로 뜬다.
+
+const FIND_EXCLUDE_DIRS = new Set([".git", "node_modules", ".next"]);
+const WORKTREES_DIR = "worktrees";
+
+/** §결정 3 — 이름 찾기 상한. 뿌리 아래를 한 번 걸어 이 안에서 캐시한다. */
+const NAME_WALK_CAP = 50_000;
+/** ponytail: 프로세스 메모리 캐시 하나, TTL 30초. 파일 트리가 몇 분 안에 자주 안 바뀌는
+ *  탐색기 용도라 무효화를 따로 안 만든다 — 더 정확해야 하면 저장 액션에서 캐시를 지운다. */
+const NAME_WALK_TTL_MS = 30_000;
+
+type NameWalk = { at: number; files: string[]; capped: boolean };
+const nameWalkCache = new Map<string, NameWalk>();
+
+async function walkNames(baseDir: string, includeWorktrees: boolean): Promise<NameWalk> {
+  const key = `${baseDir}\0${includeWorktrees}`;
+  const cached = nameWalkCache.get(key);
+  if (cached && Date.now() - cached.at < NAME_WALK_TTL_MS) return cached;
+  const files: string[] = [];
+  let capped = false;
+  async function walk(dir: string, rel: string) {
+    if (capped) return;
+    // 못 읽는 디렉터리는 조용히 뺀다(권한 등) — 찾기가 멎지 않는다.
+    const dirents = await readdir(dir, { withFileTypes: true }).catch(() => null);
+    if (!dirents) return;
+    for (const d of dirents) {
+      if (files.length >= NAME_WALK_CAP) {
+        capped = true;
+        return;
+      }
+      const childRel = rel ? `${rel}/${d.name}` : d.name;
+      if (d.isDirectory()) {
+        if (FIND_EXCLUDE_DIRS.has(d.name)) continue;
+        if (!includeWorktrees && d.name === WORKTREES_DIR) continue;
+        await walk(path.join(dir, d.name), childRel);
+      } else if (d.isFile()) {
+        files.push(childRel);
+      }
+    }
+  }
+  await walk(baseDir, "");
+  const result: NameWalk = { at: Date.now(), files, capped };
+  nameWalkCache.set(key, result);
+  return result;
+}
+
+export type FindNameResult =
+  | { ok: true; matches: string[]; capped: boolean }
+  | { ok: false; reason: string };
+
+/** §결정 3 — 이름 찾기. 파일명(경로 마지막 조각)이 `query`를 담으면 일치다(대소문자 안 가림). */
+export async function findByName(
+  baseDir: string,
+  query: string,
+  includeWorktrees: boolean,
+): Promise<FindNameResult> {
+  const q = query.trim().toLowerCase();
+  if (!q) return { ok: true, matches: [], capped: false };
+  try {
+    const { files, capped } = await walkNames(baseDir, includeWorktrees);
+    return { ok: true, matches: files.filter((f) => path.basename(f).toLowerCase().includes(q)), capped };
+  } catch (e) {
+    return { ok: false, reason: (e as Error).message };
+  }
+}
+
+/** §결정 3 — 내용 찾기 상한 · 타임아웃. */
+const CONTENT_LINE_CAP = 200;
+const CONTENT_TIMEOUT_MS = 10_000;
+
+export type FindContentHit = { file: string; line: number; text: string };
+export type FindContentResult =
+  | { ok: true; hits: FindContentHit[]; truncated: boolean }
+  | { ok: false; reason: string };
+
+/** `grep -rn`이 내는 한 줄을 판정한다 — `path:line:text`(경로에 콜론이 든 드문 경우는 못
+ *  가른다. ponytail: 이 화면이 찾는 것은 코드 경로라 실무에서 안 걸린다). */
+const GREP_LINE = /^(.*?):(\d+):(.*)$/;
+
+/** §결정 3 — 내용 찾기. `grep -rn --binary-files=without-match` 서브프로세스 하나이고,
+ *  결과가 상한(200줄)에 닿거나 타임아웃(10초)에 걸리면 그 자리에서 죽이고 그때까지의 결과와
+ *  `truncated: true`를 낸다 — 화면이 빈 채로 안 남는다. */
+export async function findByContent(
+  baseDir: string,
+  query: string,
+  includeWorktrees: boolean,
+): Promise<FindContentResult> {
+  if (!query.trim()) return { ok: true, hits: [], truncated: false };
+  const args = ["-rn", "--binary-files=without-match"];
+  for (const d of FIND_EXCLUDE_DIRS) args.push(`--exclude-dir=${d}`);
+  if (!includeWorktrees) args.push(`--exclude-dir=${WORKTREES_DIR}`);
+  args.push("-F", "--", query, ".");
+  return new Promise((resolve) => {
+    let child: ReturnType<typeof spawn>;
+    try {
+      child = spawn("grep", args, { cwd: baseDir });
+    } catch (e) {
+      resolve({ ok: false, reason: (e as Error).message });
+      return;
+    }
+    const hits: FindContentHit[] = [];
+    let truncated = false;
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      child.kill();
+      resolve({ ok: true, hits, truncated });
+    };
+    const timer = setTimeout(() => {
+      truncated = true;
+      finish();
+    }, CONTENT_TIMEOUT_MS);
+    const rl = readline.createInterface({ input: child.stdout! });
+    rl.on("line", (line) => {
+      if (settled) return;
+      if (hits.length >= CONTENT_LINE_CAP) {
+        truncated = true;
+        finish();
+        return;
+      }
+      const m = GREP_LINE.exec(line);
+      if (m) hits.push({ file: m[1].replace(/^\.\//, ""), line: Number(m[2]), text: m[3] });
+    });
+    child.on("error", (e) => {
+      if (!settled) {
+        settled = true;
+        clearTimeout(timer);
+        resolve({ ok: false, reason: (e as Error).message });
+      }
+    });
+    child.on("close", () => finish());
+  });
 }

@@ -2105,6 +2105,18 @@ export const ko: Record<string, string> = {
   "explorer.unsaved": "저장하지 않은 변경이 있습니다.",
   "explorer.noFileOpen": "왼쪽 트리에서 파일을 고르세요.",
 
+  // 찾기(§11-2 결정 3) — 이름은 트리 위 칸, 내용은 별 탭.
+  "explorer.find.treeTab": "트리",
+  "explorer.find.contentTab": "내용 찾기",
+  "explorer.find.namePlaceholder": "이름으로 찾기",
+  "explorer.find.contentPlaceholder": "내용으로 찾기",
+  "explorer.find.search": "찾기",
+  "explorer.find.includeWorktrees": "워크트리 사본도 보기",
+  "explorer.find.noMatches": "일치하는 것이 없습니다.",
+  "explorer.find.searching": "찾는 중…",
+  "explorer.find.truncated": "결과가 상한(200줄) 또는 시간(10초)에 걸려 잘렸습니다.",
+  "explorer.find.capped": "이름 목록이 50,000개에서 잘렸습니다 — 더 좁혀서 찾으세요.",
+
   // 세션 스트림(§0-16 §묶음 표 행 5 갈래, `33563f49`) — `components/session-stream.tsx` ·
   // `lib/interject.ts`. `lib/transcript.ts`는 화면 껍데기가 아니라 사건 데이터를 만드는 자리라
   // `transcriptLib.*`로 접두를 가른다(daf72662의 파일 접두 판단과 같다). en은 후속 티켓이 채운다.
@@ -4324,6 +4336,17 @@ export const en: Record<string, string> = {
   "explorer.saveFailed": "Couldn't save:",
   "explorer.unsaved": "You have unsaved changes.",
   "explorer.noFileOpen": "Pick a file from the tree on the left.",
+
+  "explorer.find.treeTab": "Tree",
+  "explorer.find.contentTab": "Find in files",
+  "explorer.find.namePlaceholder": "Find by name",
+  "explorer.find.contentPlaceholder": "Find by content",
+  "explorer.find.search": "Find",
+  "explorer.find.includeWorktrees": "Include worktree copies",
+  "explorer.find.noMatches": "No matches.",
+  "explorer.find.searching": "Searching…",
+  "explorer.find.truncated": "Results were cut off (200-line cap or 10s timeout).",
+  "explorer.find.capped": "The name list was cut off at 50,000 — narrow your search.",
 
   // 온톨로지 화면(§0-16 §발행 §묶음 표 행 12 갈래) — `ko`는 `2ef7a4e9`가 뽑았다.
   // **`protocols-ui.tsx`와 판박이인 자리(새 파일 · 편집기 · 이름변경 · 삭제 · 사이드바)는
