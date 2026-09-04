@@ -49,6 +49,7 @@ import {
   ProjectError,
   addProject,
   getProject,
+  personaNames,
   removeProject,
   renameProject,
   reorderProjects,
@@ -56,6 +57,7 @@ import {
   readKeymap,
   readProjects,
   readSummary,
+  setPersonaColor,
   writeKeymap,
   readLanguage,
   setLanguage,
@@ -67,6 +69,7 @@ import {
   type Project,
   type ProjectConfig,
 } from "@/lib/projects";
+import { assignPersonaColors } from "@/lib/persona-colors";
 import { DEFAULT_LOCALE, t, type Locale } from "@/lib/i18n";
 import { statusLabel } from "@/components/status-badge";
 import {
@@ -384,6 +387,19 @@ export async function createProject(
     const project = await addProject(name, made.root, id?.trim() || undefined, locale);
     // 스캐폴딩만 되고 등록이 실패하면 여기 안 온다 — 프로젝트가 하나 는 것이 이 이벤트다(§0-11).
     void track("project_add", { method: "create" });
+
+    // 새 프로젝트는 페르소나 색을 갖고 태어난다(§새 프로젝트의 페르소나가 색을 갖고 태어난다,
+    // 결정 5) — 실패해도 생성 자체는 막지 않는다. `.gitignore` 한 줄과 같은 처분이다.
+    try {
+      const names = await personaNames(path.join(made.root, "personas"));
+      const colors = assignPersonaColors(names);
+      for (const [persona, color] of Object.entries(colors)) {
+        await setPersonaColor(project.id, persona, color, locale);
+      }
+    } catch {
+      // 색 없이 태어난 프로젝트는 종전 모습 그대로다 — 사람이 눌러서 고르면 된다.
+    }
+
     revalidatePath("/", "layout");
     return { created, done: await viewOf(project, locale) };
   } catch (e) {
