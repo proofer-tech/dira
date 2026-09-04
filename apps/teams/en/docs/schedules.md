@@ -17,7 +17,7 @@ all, because the first screen is onboarding. Ask anything once and the panel app
 then on it stays.
 
 1. Press `New schedule` to the right of the `Schedules` heading. A dialog opens.
-2. Pick `Repeat`. It opens on `Once`, and the rest are `Daily`, `Weekly` and `Monthly`.
+2. Pick `Repeat`. It opens on `Once`, and the rest are `Daily`, `Weekly`, `Monthly` and `cron`.
 3. Fill in `Time`. The shape of this field changes with the option you picked (see the table
    below). It opens empty, so you have to put a value in.
 4. Write what you want done in `Prompt`. It is the same sentence you would type asking at home.
@@ -27,7 +27,7 @@ then on it stays.
 The row shows up in the group right away. The upper line is the first line of the prompt and the
 lower line is the next scheduled time.
 
-### The four options
+### The five options
 
 | `Repeat` | The `Time` field | When it runs |
 |---|---|---|
@@ -35,15 +35,61 @@ lower line is the next scheduled time.
 | `Daily` | one time | that time every day |
 | `Weekly` | one weekday and a time | that time on that weekday |
 | `Monthly` | one day from the 1st to the 28th, and a time | that time on that day |
+| `cron` | five fields you write by hand | every minute that string matches |
 
 - **`Monthly` stops at the 28th.** From the 29th on there are months without that day. In such a
   month the run would quietly disappear. The screen says so in a line under that field. There is
   no `last day of the month` value.
 - Times are read in this computer's time zone. There is no field for picking a zone.
-- There is no `every 30 minutes` or `every 3 hours`. These four are the options.
-- **No cron string appears anywhere.** You never write `0 9 * * 1` by hand. The screen builds it.
+- **No cron string appears in the first four.** Nobody picking Monday at 9 has to write
+  `0 9 * * 1` by hand. The screen builds it. If you want to write one yourself, the fifth option
+  is that field.
+- There is no `every 30 minutes` or `every 3 hours` wording. You write those in the `cron` field
+  as well. Every 30 minutes is `*/30 * * * *`.
 - **There is nowhere to edit one.** The two operations are making and deleting. To change the
   time or the prompt, delete it and make it again.
+
+### The `cron` field
+
+Write five fields in order: minute, hour, day, month, weekday, separated by spaces.
+
+| Field | The numbers it takes |
+|---|---|
+| minute | `0` to `59` |
+| hour | `0` to `23` |
+| day | `1` to `31` |
+| month | `1` to `12` |
+| weekday | `0` to `6`, where `0` is Sunday |
+
+A field takes four shapes. `*` means every value the field allows. A single integer means that
+one value. `1-5` is a range, and a range takes a step too, so `9-18/2` picks every second hour
+from 9 to 18. `*/10` is every tenth one. Join those with `,` to put several in one field, as in
+`1,3,5`.
+
+- `*/10 9-18 * * 1-5` - every 10 minutes from 9 to 18 on weekdays
+- `0 9 * * 1,3,5` - 9 o'clock on Monday, Wednesday and Friday
+- `30 2 1 * *` - 2:30 on the 1st of every month
+
+**Four things it does not take.**
+
+- **Names.** `MON` and `JAN` are out. Write weekdays and months as numbers.
+- **Macros.** Lines starting with `@daily` or `@hourly` are out.
+- **A sixth field.** You cannot put seconds in. The app checks every 15 seconds, so it cannot
+  measure anything finer than a minute.
+- **Weekday `7`.** Sunday is written `0`, and only `0`.
+
+**Put numbers in both the day and the weekday and it runs only on days where both match.**
+`0 9 13 * 5` means 9 o'clock on a 13th that is also a Friday. crontab reads that place as either
+one; this does not.
+
+Put a value in the field and a line appears under it. If the syntax is good, that line tells you
+**when the next run happens**. If it is wrong, it tells you what is wrong, and `Create` stays
+unpressable until you fix it.
+
+**Good syntax does not always mean there is a run.** `0 9 30 2 *` has five valid fields, but
+February has no 30th, so it never runs. The screen looks 31 days ahead and says in that line
+that there is no run. You can still create it. The row in the list then keeps saying
+`No next run`.
 
 ## When it runs
 
