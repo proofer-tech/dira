@@ -376,6 +376,30 @@
   }
 }
 
+/* §비주얼 §71 §개정 ④ — 보드 카드 진행도 바의 빛. `wip-shimmer` 키프레임을 그대로 재사용하고
+   (정지점 45%-50%-55% · 그릇 250% · `3s linear infinite` · 왼쪽에서 오른쪽으로 같은 값), 잉크만
+   `--muted-foreground` -> `--primary` -> `--muted-foreground`로 둔다(designer 실측 `da5e976e`).
+   `motion-reduce`의 정본은 단색 `--primary`다 — 그라디언트를 걷고 `background-color`로
+   되돌린다(위 `wip-shimmer`가 세 줄을 한 블록에 둔 것과 같은 이유). */
+@utility bar-shimmer {
+  background-image: linear-gradient(
+    90deg,
+    var(--muted-foreground) 45%,
+    var(--primary) 50%,
+    var(--muted-foreground) 55%
+  );
+  background-size: 250% 100%;
+  background-position-x: 100%;
+  background-repeat: no-repeat;
+  animation: wip-shimmer 3s linear infinite;
+
+  @media (prefers-reduced-motion: reduce) {
+    background-image: none; /* 주차된 그라디언트를 남기지 않는다 */
+    background-color: var(--primary); /* 꺼진 상태의 정본 */
+    animation: none;
+  }
+}
+
 /* §비주얼 §67 ③ — 헤더 브랜드 마크가 진행중 티켓이 있을 때 도는 빛. `wip-shimmer`를
    `BrandMark`에 그대로 못 거는 이유는 위 절 본문에 있다(`path`의 `fill`이 `currentColor`만
    읽고 `background-image`를 안 읽는다) — 그래서 오버레이 한 겹을 SVG 안의 `<g>`로 들여놓고
@@ -444,6 +468,19 @@
 }
 .dark .code-editor .shiki span {
   color: var(--shiki-dark);
+}
+
+/* §비주얼 §73 팔레트 여백 여섯(②) — `Command`의 `p-1` 4px을 8px(ⓐⓓ)로, 검색 칸 감싸개는
+   아래만 8px(ⓑ)이고 나머지 세 변은 0으로 넣는다. 레이어 밖에 두는 이유는 ⑦ — 레이어 안
+   `@layer utilities`의 유틸리티는 특정도와 무관하게 레이어 밖 규칙에 지므로, 선택자를
+   `[data-slot=popover-content]` 아래로 가둬 대상이 아닌 두 자리(설정 검색칸의 일부러 고른
+   `p-0`, 스킬 추가의 `DialogContent`)가 안 걸리게 한다. ⓒⓔⓕ는 `command.tsx` 기본값 그대로라
+   여기 없다. */
+[data-slot="popover-content"] [data-slot="command"] {
+  padding: 8px;
+}
+[data-slot="popover-content"] [data-slot="command-input-wrapper"] {
+  padding: 0 0 8px;
 }
 
 @layer base {

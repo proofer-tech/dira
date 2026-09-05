@@ -215,7 +215,7 @@ function wipLine(e: StreamEvent | null, progress: PlanProgress | null) {
     <div aria-hidden className="relative -mx-4 -mb-2 border-t px-4 pt-2">
       {progress && (
         <div
-          className="absolute -top-px left-0 h-px bg-primary"
+          className="absolute -top-px left-0 h-px bar-shimmer"
           style={{ width: `${(progress.done / progress.total) * 100}%` }}
         />
       )}
