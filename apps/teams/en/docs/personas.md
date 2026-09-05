@@ -316,7 +316,7 @@ that pm gets `brainstorming`, developer `ponytail`, qa `systematic-debugging`, a
 already installed here, the copy you have been using stays untouched. Nothing is overwritten,
 and nothing is installed a second time under another name. That persona still gets the row.
 Create a project with the internet cut off and the creation itself still succeeds, with zero
-skills. Once you are back online, look up those five names on GitHub and paste the addresses into
+skills. Once you are back online, look up those five names on GitHub and paste the addresses into the
 address field in `Add skills` below; you end up in the same place. A project you brought in with
 `Register project` gets none of the five. Your existing queue's taste in skills is not the app's
 call, so that project stays at zero until you pick something.
