@@ -308,6 +308,18 @@ advance.
 The `Skills` section of the `Profile` tab. Press `Add skills` and you can search the skills
 installed on this computer and pick several. What you pick is saved to
 `personas/<name>/skills.md` and rides in that persona's prompt right after the profile block.
+In a project you just made, this section is already filled in though you never picked anything.
+The moment you press `Create project`, the app pulls five skills from GitHub, installs them on
+this computer, and writes them out per persona. All five personas get `stop-slop`. On top of
+that pm gets `brainstorming`, developer `ponytail`, qa `systematic-debugging`, and designer
+`frontend-design`; archive-manager ends at that one `stop-slop` row. If a skill of that name was
+already installed here, the copy you have been using stays untouched. Nothing is overwritten,
+and nothing is installed a second time under another name. That persona still gets the row.
+Create a project with the internet cut off and the creation itself still succeeds, with zero
+skills. Once you are back online, look up those five names on GitHub and paste the addresses into
+address field in `Add skills` below; you end up in the same place. A project you brought in with
+`Register project` gets none of the five. Your existing queue's taste in skills is not the app's
+call, so that project stays at zero until you pick something.
 
 **The session already has the list of installed skills.** What you put in here is not a tool
 but a pointer. It means "for this work, you use this one first."
