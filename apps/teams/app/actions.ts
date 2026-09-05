@@ -70,6 +70,15 @@ import {
   type ProjectConfig,
 } from "@/lib/projects";
 import { assignPersonaColors } from "@/lib/persona-colors";
+import {
+  DEFAULT_SKILLS,
+  SkillInstallError,
+  defaultSkillsFor,
+  fetchSkillFromAddress,
+  installSkill,
+  listInstalledSkills,
+  writePersonaSkills,
+} from "@/lib/skills";
 import { DEFAULT_LOCALE, t, type Locale } from "@/lib/i18n";
 import { statusLabel } from "@/components/status-badge";
 import {
@@ -315,6 +324,10 @@ export type CreateState = RegisterState & {
     /** 받는 트리의 `receive.denyCurrentBranch`가 이미 다른 값이라 안 건드렸다(결정 6) — 값을
      *  그대로 보여준다. 실패는 여기 안 뜬다(`.gitignore`와 같은 처분 — 조용히 넘어간다). */
     denyCurrentBranchNote?: string;
+    /** 새 프로젝트가 스킬 다섯을 받아서 태어난 결과(§새 프로젝트가 스킬을 갖고 태어난다, 결정 9)
+     *  — 깐 수 · 이미 있어 건너뛴 수 · 실패한 수. 등록 경로(`registerProject`)는 이 자리 자체가
+     *  없다(스킬을 하나도 안 깐다, 결정 1). */
+    skills: { installed: number; skipped: number; failed: number };
   };
 };
 
@@ -382,6 +395,7 @@ export async function createProject(
       ontologyError,
       denyCurrentBranchNote: made.denyCurrentBranchNote,
       registerCmd: cronRegisterCmd({ path: workerPath }),
+      skills: { installed: 0, skipped: 0, failed: 0 },
     };
 
     const project = await addProject(name, made.root, id?.trim() || undefined, locale);
@@ -398,6 +412,34 @@ export async function createProject(
       }
     } catch {
       // 색 없이 태어난 프로젝트는 종전 모습 그대로다 — 사람이 눌러서 고르면 된다.
+    }
+
+    // 새 프로젝트는 스킬 다섯을 받아서 태어난다(§새 프로젝트가 스킬을 갖고 태어난다, 결정 8-9)
+    // — 실패해도 생성 자체는 막지 않는다. `.gitignore` 한 줄과 같은 처분이다. 다섯을 동시에
+    // 받는다(결정 8) — 직렬이면 최악이 §5-1 타임아웃 곱하기 다섯이다.
+    try {
+      const results = await Promise.allSettled(
+        DEFAULT_SKILLS.map(async (s) => installSkill(await fetchSkillFromAddress(s.address, locale), undefined, locale)),
+      );
+      const conflictMessage = t("ko", "persona.skill.installNameConflict");
+      let installedN = 0;
+      let skippedN = 0;
+      let failedN = 0;
+      for (const r of results) {
+        if (r.status === "fulfilled") installedN++;
+        // 이름이 이미 있어 나는 mkdir EEXIST(installSkill의 SkillInstallError)는 실패가 아니라
+        // 건너뜀이다(답 2-1(a)) — 사람이 쓰던 것이 이긴다.
+        else if (r.reason instanceof SkillInstallError && r.reason.message === conflictMessage) skippedN++;
+        else failedN++;
+      }
+      created.skills = { installed: installedN, skipped: skippedN, failed: failedN };
+      const installed = await listInstalledSkills();
+      const skillPersonas = await personaNames(path.join(made.root, "personas"));
+      for (const persona of skillPersonas) {
+        await writePersonaSkills(path.join(made.root, "personas"), persona, defaultSkillsFor(persona, installed));
+      }
+    } catch {
+      // 스킬 없이 태어난 프로젝트는 종전 모습 그대로다 — `skills.md`가 0장일 뿐이다.
     }
 
     revalidatePath("/", "layout");

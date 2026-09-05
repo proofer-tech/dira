@@ -262,6 +262,12 @@ export default function Landing({
               <span className="font-mono text-xs">{createdInfo.denyCurrentBranchNote}</span>
             </p>
           )}
+          <p className="text-muted-foreground">
+            {t("landing.result.skillsLabel")}{" "}
+            <span className="font-mono text-xs">
+              {createdInfo.skills.installed} · {createdInfo.skills.skipped} · {createdInfo.skills.failed}
+            </span>
+          </p>
         </div>
       )}
       <ConfigTable view={view} />

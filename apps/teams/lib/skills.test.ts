@@ -5,6 +5,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import zlib from "node:zlib";
 import {
+  DEFAULT_SKILLS,
+  defaultSkillsFor,
   deletePersonaMemory,
   extractSkillArchive,
   fetchSkillFromAddress,
@@ -25,6 +27,7 @@ import {
   writePersonaLimit,
   writePersonaOffSkills,
   writePersonaSkills,
+  type Skill,
 } from "./skills.ts";
 import { skillUploadError } from "./skill-upload-limit.ts";
 import { renderEngineBlock } from "./workers.ts";
@@ -966,4 +969,33 @@ test("엔진 — 이름이 신뢰 경계다", async () => {
     await assert.rejects(() => writePersonaEngine(personas, bad, "claude"), /페르소나 이름은/);
   }
   assert.equal(existsSync(path.join(tmp, "escape")), false);
+});
+
+// ── defaultSkillsFor — 새 프로젝트가 스킬 다섯을 받아서 태어난다 (네트워크 0) ─────────────
+
+const ALL_INSTALLED: Skill[] = DEFAULT_SKILLS.map((e) => ({ name: e.name, description: `${e.name} 설명` }));
+
+test("defaultSkillsFor — 다섯 다 깔린 상태면 pm 2 · developer 2 · qa 2 · designer 2 · archive-manager 1", () => {
+  const counts: Record<string, number> = {};
+  for (const persona of ["pm", "developer", "qa", "designer", "archive-manager"]) {
+    counts[persona] = defaultSkillsFor(persona, ALL_INSTALLED).length;
+  }
+  assert.deepEqual(counts, { pm: 2, developer: 2, qa: 2, designer: 2, "archive-manager": 1 });
+});
+
+test("defaultSkillsFor — 표에 있어도 머신에 없는 이름은 그 이름을 받던 페르소나 줄에서만 빠진다", () => {
+  const withoutPonytail = ALL_INSTALLED.filter((s) => s.name !== "ponytail");
+  assert.deepEqual(
+    defaultSkillsFor("developer", withoutPonytail).map((s) => s.name),
+    ["stop-slop"],
+  );
+  // 다른 페르소나 줄은 안 줄어든다
+  assert.equal(defaultSkillsFor("pm", withoutPonytail).length, 2);
+  assert.equal(defaultSkillsFor("qa", withoutPonytail).length, 2);
+});
+
+test("defaultSkillsFor — 이미 있어 건너뛴 이름도 목록에 있으면 그대로 줄이 든다", () => {
+  // 건너뜀은 설치 카운트일 뿐 listInstalledSkills()엔 그 이름이 여전히 있다 — 구별할 수 없고 안 한다
+  const skipped: Skill[] = [{ name: "stop-slop", description: "이미 있던 사본" }];
+  assert.deepEqual(defaultSkillsFor("pm", skipped).map((s) => s.name), ["stop-slop"]);
 });

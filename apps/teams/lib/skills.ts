@@ -787,3 +787,49 @@ async function memoryFiles(dir: string, name: string): Promise<{ dir: string; na
     // LC_COLLATE에 달렸으므로 비ASCII 파일명에서 주입 순서와 갈릴 수 있다 — 실제로 갈리면 그때.
     .sort((a, b) => a.name.localeCompare(b.name));
 }
+
+// ── 새 프로젝트가 스킬 다섯을 받아서 태어난다 (DESIGN.md §새 프로젝트가 스킬을 갖고 태어난다) ──
+
+/** 기본 스킬 표 — 주소가 계약이다(§기본 스킬 표). `personas`는 그 스킬을 받는 페르소나 이름.
+ *  `obra/superpowers`를 두 번 받는 것(brainstorming · systematic-debugging)이 의도다 —
+ *  `ref`가 `HEAD`라 API를 안 부르고, `fetchUrl`을 묶는 것은 만들기 시간이 실제로 문제가 되면
+ *  그때 한다(ponytail). */
+export type DefaultSkillEntry = { name: string; address: string; personas: readonly string[] };
+
+export const DEFAULT_SKILLS: readonly DefaultSkillEntry[] = [
+  {
+    name: "stop-slop",
+    address: "https://github.com/hardikpandya/stop-slop",
+    personas: ["pm", "developer", "qa", "designer", "archive-manager"],
+  },
+  {
+    name: "brainstorming",
+    address: "https://github.com/obra/superpowers/tree/HEAD/skills/brainstorming",
+    personas: ["pm"],
+  },
+  {
+    name: "ponytail",
+    address: "https://github.com/dietrichgebert/ponytail/tree/HEAD/skills/ponytail",
+    personas: ["developer"],
+  },
+  {
+    name: "systematic-debugging",
+    address: "https://github.com/obra/superpowers/tree/HEAD/skills/systematic-debugging",
+    personas: ["qa"],
+  },
+  {
+    name: "frontend-design",
+    address: "https://github.com/anthropics/skills/tree/HEAD/skills/frontend-design",
+    personas: ["designer"],
+  },
+];
+
+/** 순수 함수 — 네트워크도 fs도 안 탄다. `installed`는 이 머신에 실제로 있는 스킬 목록
+ *  (`listInstalledSkills()`가 낸 값)이고, `DEFAULT_SKILLS` 표에 있어도 그 목록에 없는 이름은
+ *  빠진다(§결정 6 — 오프라인이면 다섯 줄이 아니라 0줄). 순서는 표의 순서 그대로다. */
+export function defaultSkillsFor(persona: string, installed: Skill[]): Skill[] {
+  const byName = new Map(installed.map((s) => [s.name, s]));
+  return DEFAULT_SKILLS.filter((e) => e.personas.includes(persona))
+    .map((e) => byName.get(e.name))
+    .filter((s): s is Skill => s !== undefined);
+}
