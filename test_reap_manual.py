@@ -223,7 +223,21 @@ try:
     assert not os.path.exists(po), "O: owner가 남았다는 이유로 다음 reap도 못 잡았다"
     assert "REAP oooo4444" in joined2, "O: 다음 reap 메시지에 해시가 없다\n" + joined2
 
-    print("PASS 17/17")
+    # P) 8785c425 회귀 - claim의 하드링크가 백로그 mtime을 그대로 물려받으면 유예가 0초다.
+    #    수정 전 코드는 pp_wip의 mtime이 여전히 옛 백로그 시각이라 이 assert가 실패해야 한다.
+    from datetime import datetime as _dt, timezone as _tz
+    pp_backlog = os.path.join(ws, "tickets", "pppp5555.md")
+    with open(pp_backlog, "w", encoding="utf-8") as f:
+        f.write("---\nticket: pppp5555\n---\n\n## 목표\n테스트\n")
+    stale = time.time() - T.REAP_GRACE_SEC - 3600
+    os.utime(pp_backlog, (stale, stale))
+    pp_wip = T.claim(pp_backlog)
+    pp_fm = T.read_fm(pp_wip)[0]
+    p_msgs = T.reap_manual(pp_wip, pp_fm, _dt.now(_tz.utc))
+    assert p_msgs == [], "P: claim 직후인데 하드링크 mtime 재상속으로 회수됐다\n" + str(p_msgs)
+    assert os.path.exists(pp_wip), "P: claim 직후 티켓이 사라졌다"
+
+    print("PASS 18/18")
     for m in msgs:
         print("  " + m)
 finally:

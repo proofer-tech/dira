@@ -470,6 +470,7 @@ def claim(path):
     dst = os.path.join(d, stem + IN_PROGRESS + ".md")
     try:
         os.link(path, dst)          # dst가 이미 있으면 EEXIST -> 잡기 실패(락)
+        os.utime(dst, None)         # 하드링크는 원본 mtime을 물려받는다 - claim 시각으로 되찍는다
         os.unlink(path)
         _check_handoff_cap(dst)
         return dst
