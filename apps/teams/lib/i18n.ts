@@ -2080,6 +2080,7 @@ export const ko: Record<string, string> = {
   // 소스 컨트롤(§11-3 결정 1-2-3-4, P366-8 · P366-9) — 체크아웃 목록·status·업스트림·커밋·
   // push·pull. `word.*` 넷은 `--porcelain=v2`의 아는 코드 넷의 낱말이고, 모르는 코드는 이
   // 사전을 안 거친다(§비주얼 §72 ④ — 화면이 코드를 그대로 `font-mono`로 보여준다).
+  "home.scm.checkout": "체크아웃",
   "home.scm.root": "루트",
   "home.scm.worktreesPrefix": "워크트리 ",
   "home.scm.stagedPrefix": "스테이지 ",
@@ -4330,6 +4331,7 @@ export const en: Record<string, string> = {
   "terminal.invalidCwd": "Not a registered working directory.",
   "terminal.limitReached": "Up to 8 terminals can be open at once.",
 
+  "home.scm.checkout": "Checkout",
   "home.scm.root": "Root",
   "home.scm.worktreesPrefix": "Worktrees ",
   "home.scm.stagedPrefix": "Staged ",

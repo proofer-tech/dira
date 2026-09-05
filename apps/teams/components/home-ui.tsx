@@ -147,7 +147,15 @@ import {
   MessageScrollerProvider,
   MessageScrollerViewport,
 } from "@/components/ui/message-scroller";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Sidebar,
   SidebarContent,
@@ -1533,39 +1541,6 @@ function ScmFileRow({ file, title, onClick }: { file: StatusFile; title: string;
   );
 }
 
-/** 체크아웃 한 줄(§비주얼 §72 ⑤) — 2행. 첫 줄은 이름(루트=프로젝트 이름 · 워크트리=워커 이름),
- *  둘째 줄은 브랜치(`font-mono` — 경로 계열, §3). 색도 아이콘도 배지도 안 쓴다 — 그룹(루트 -
- *  워크트리) 자체가 이미 종류를 알려 준다. */
-function CheckoutRow({
-  checkout,
-  name,
-  selected,
-  onPick,
-}: {
-  checkout: Checkout;
-  name: string;
-  selected: boolean;
-  onPick: (id: string) => void;
-}) {
-  return (
-    <SidebarMenuItem>
-      <SidebarMenuButton
-        className={cn(ROW, "items-start")}
-        isActive={selected}
-        aria-current={selected ? "true" : undefined}
-        onClick={() => {
-          if (!selected) onPick(checkout.id);
-        }}
-      >
-        <div className="flex min-w-0 grow flex-col gap-0.5">
-          <span className="min-w-0 truncate text-sm">{name}</span>
-          <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">{checkout.branch}</span>
-        </div>
-      </SidebarMenuButton>
-    </SidebarMenuItem>
-  );
-}
-
 /** 소스 컨트롤 표면(§11-3 결정 1-2-3-4 · §비주얼 §72 ④⑤, P366-8 · P366-9) — 체크아웃 목록 +
  *  status + 파일 두 목록 + 업스트림 + 커밋 - push - pull.
  *
@@ -1663,26 +1638,41 @@ function ScmSurface({ project, projectName }: { project: string; projectName: st
   return (
     <>
       <SidebarGroup className="p-0">
-        <SidebarGroupLabel className="h-6 text-muted-foreground">{t("home.scm.root")}</SidebarGroupLabel>
-        <SidebarMenu>
-          {root.map((c) => (
-            <CheckoutRow key={c.id} checkout={c} name={projectName} selected={c.id === selected} onPick={pick} />
-          ))}
-        </SidebarMenu>
+        <SidebarGroupLabel
+          className="h-6 text-muted-foreground"
+          render={<label htmlFor="scm-checkout" />}
+        >
+          {t("home.scm.checkout")}
+        </SidebarGroupLabel>
+        <Select value={selected ?? ""} onValueChange={(v) => v && pick(v)}>
+          <SelectTrigger id="scm-checkout" size="sm" className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectLabel>{t("home.scm.root")}</SelectLabel>
+              {root.map((c) => (
+                <SelectItem key={c.id} value={c.id}>
+                  {projectName}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+            {worktrees.length > 0 && (
+              <SelectGroup>
+                <SelectLabel>
+                  {t("home.scm.worktreesPrefix")}
+                  {worktrees.length}
+                </SelectLabel>
+                {worktrees.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.id}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            )}
+          </SelectContent>
+        </Select>
       </SidebarGroup>
-      {worktrees.length > 0 && (
-        <SidebarGroup className="p-0">
-          <SidebarGroupLabel className="h-6 text-muted-foreground">
-            {t("home.scm.worktreesPrefix")}
-            {worktrees.length}
-          </SidebarGroupLabel>
-          <SidebarMenu>
-            {worktrees.map((c) => (
-              <CheckoutRow key={c.id} checkout={c} name={c.id} selected={c.id === selected} onPick={pick} />
-            ))}
-          </SidebarMenu>
-        </SidebarGroup>
-      )}
 
       {selected && (
         <SidebarGroup className="gap-2 p-0">
