@@ -23,7 +23,7 @@ else.
 |---|---|---|
 | `Home agent` | `Conversations` · `Worker sessions` | The conversation tab strip and the thread |
 | `Schedules` | The schedule list and the way in to `New schedule` | The conversation thread of the schedule you picked |
-| `Terminal` | Nothing | The `Working directory` picker, the terminal tab strip, and the shell |
+| `Terminal` | The list of terminals you have open, the `Working directory` picker, and the way in to `New terminal` | The terminal tab strip and the shell |
 | `Source control` | The root and the worktrees, and `git status` for whichever one you picked | The conversation tab strip and thread, unchanged |
 | `Explorer` | The file tree and find | The one file you have open |
 
@@ -35,9 +35,10 @@ into a tab, so only one is up at a time. Twelve tabs open in all. Past that, the
 looked at least recently closes on its own.
 
 Refresh the browser, or leave a surface and come back, and the terminal tab reads
-`Terminal disconnected`. The shell is only in memory for as long as the app runs, so redrawing
-the screen breaks the connection. Press `Reopen` and a new shell comes up in the same directory.
-What you typed before, and what it printed, do not come back.
+`Terminal disconnected`, while its row in the list on the left reads `Disconnected`. The shell is
+only in memory for as long as the app runs, so redrawing the screen breaks the connection. Press
+`Reopen` and a new shell comes up in the same directory. What you typed before, and what it
+printed, do not come back.
 
 ## The home agent's persona
 
@@ -65,18 +66,41 @@ request, or file it from the board yourself (see
 
 ## The terminal
 
-Pick `Terminal` and a `Working directory` select and a `New terminal` button appear at the top
-right.
+Pick `Terminal` and the lower half of the left-hand panel becomes a list of terminals. `New
+terminal` sits at the right of that list's header row, with the `Working directory` picker just
+below it. Opening a new one and seeing the ones you already have open happen in the same place.
 
 1. In `Working directory`, pick where the shell should start. The project root and every
    worker's worktree are all in the list.
-2. Press `New terminal`. A tab opens and a prompt is drawn.
+2. Press `New terminal`. A row is added to the list on the left and a prompt is drawn in the
+   column on the right.
 3. Type your command. Colored output comes through as it is, and programs that draw the whole
    screen, like `vim` or `top`, run too.
 
-The working directory is set when the tab is made and does not change after that. To move, type
-`cd` yourself. The shell is the one you normally use on this Mac. The app does not pick one for
-you.
+What is left in the column on the right is the terminal tab strip and the shell.
+
+### One row in the list
+
+A row is one terminal you have open. The top line, on the left, is the last command you pressed
+enter on in that terminal, written out as you typed it. Before you have pressed enter even once,
+that spot reads `No command yet`.
+
+The right of the top line is where a mark goes. While the command you typed is still running it
+reads `Running`. Once the shell has been cut off it reads `Disconnected`. When the shell is back
+at the prompt waiting for the next command, no mark is there at all.
+
+The bottom line is the working directory the shell runs in. You picked it when you pressed `New
+terminal`, and it does not change afterwards. To move, type `cd` yourself.
+
+The app re-reads this list every five seconds for as long as you are looking at the `Terminal`
+surface. Set something slow like `sleep 30` going, do something else, come back, and the list
+alone tells you which terminal is still busy. Switch the surface to `Source control` or anywhere
+else and the app stops reading it while you are away.
+
+Press a row and the column on the right switches to that terminal, the same as pressing its tab
+in the strip. Closing happens in the tab strip alone: the rows on the left carry no close button.
+
+The shell is the one you normally use on this Mac. The app does not pick one for you.
 
 There is no allowlist on commands. Anything you can type in a terminal app you can type here.
 Eight open at once. Try for a ninth and `Up to 8 terminals can be open at once.` comes up. Close
