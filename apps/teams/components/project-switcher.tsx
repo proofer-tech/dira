@@ -73,6 +73,9 @@ export function ScreenView() {
 }
 
 export function BrandMark({ href, wip = 0 }: { href: string; wip?: number }) {
+  // §비주얼 §74 §남는 규칙 2 — 홈에서 마크가 0개다. 빈자리를 다른 것으로 안 채운다(마크 자체가
+  // 없다 — 텍스트도 툴팁도 안 세운다). 루트 셸(`/`)과 나머지 다섯 화면은 이 판정에 안 걸린다.
+  if (screenOf(usePathname()) === "home") return null;
   return (
     <Link
       href={href}
@@ -619,8 +622,12 @@ export function ProjectNav({ id }: { id: string }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [browserRouter]);
 
+  // §비주얼 §74 §새로 정하는 것 ④ — 홈에서 내비가 우측 묶음(`매뉴얼` - `[종] [전환기] [설정]`)
+  // 왼쪽에 붙는다. auto 마진 하나가 그 묶음에서 이 nav로 옮겨 오는 것 — 헤더 안 auto 마진의
+  // 개수는 1 그대로다(§74 판정표 헤더 행 ①).
+  const home = screenOf(pathname) === "home";
   return (
-    <nav className="flex items-center gap-4">
+    <nav className={cn("flex items-center gap-4", home && "ml-auto")}>
       {NAV.map(({ seg, labelKey }) => {
         // 보드는 티켓 화면(발행·상세)·에픽 화면까지 자기 구역으로 본다 — 둘 다 이 화면에서
         // 들어가는 화면이고 상단탭을 안 늘린다(§에픽 §결정 5·6).
@@ -644,6 +651,56 @@ export function ProjectNav({ id }: { id: string }) {
         );
       })}
     </nav>
+  );
+}
+
+/** 프로젝트 셸 헤더 그릇(§비주얼 §74 §새로 정하는 것 ①). 서버 레이아웃은 pathname을 모르므로
+ *  홈 판정이 필요한 패딩만 여기서 갈린다 — `screenOf`가 이미 셸의 클라이언트 조각(`ProjectNav` -
+ *  `BrandMark`)이 쓰는 그 함수라 **새 판정 함수가 0개다**.
+ *
+ *  홈에서 `px-6` → `pl-64 pr-6`: 패널이 헤더 위에 `relative z-50`으로 덮이므로(`home-ui.tsx`
+ *  §Sidebar) 이 패딩은 1440-1024 두 폭 다 안 닿는다 — 좁은 창(965 미만)에서만 효력이 생기는
+ *  상시 패딩이다(브레이크포인트가 아니다). `h-12` - `sticky top-0 z-50` - `bg-background` -
+ *  `border-b` - `gap-6`은 화면 여섯이 같이 쓰는 값이라 무수정이다. */
+export function ShellHeader({ children }: { children: React.ReactNode }) {
+  const home = screenOf(usePathname()) === "home";
+  return (
+    <header
+      className={cn(
+        "sticky top-0 z-50 flex h-12 items-center gap-6 border-b bg-background",
+        home ? "pl-64 pr-6" : "px-6",
+      )}
+    >
+      {children}
+    </header>
+  );
+}
+
+/** 헤더 우측 묶음 — `매뉴얼` - `[종] [전환기] [설정]`(§비주얼 §74 §남는 규칙 3). 홈이 아니면
+ *  이 그릇이 `ml-auto`로 헤더 오른쪽에 붙고, 홈에서는 그 auto 마진이 `ProjectNav`로 옮겨 가서
+ *  이 그릇은 내비 바로 오른쪽에 `gap-6`으로만 붙는다 — 묶음 안의 `gap-2`와 순서는 안 갈린다. */
+export function ShellHeaderRight({ children }: { children: React.ReactNode }) {
+  const home = screenOf(usePathname()) === "home";
+  return <div className={cn("flex items-center gap-2", !home && "ml-auto")}>{children}</div>;
+}
+
+/** 프로젝트 셸 `main`(§비주얼 §74 §새로 정하는 것 ①). 홈에서만 `py-6` → `-mt-12 pt-18 pb-6`:
+ *  위 마진 `-mt-12`(헤더 `h-12`의 48 인용)로 패딩 상자가 y 0에서 시작하고, `pt-18`(72 =
+ *  헤더 48 + 종전 `py-6` 24)이 패널의 `-mt-18`이 닿을 자리를 정확히 남긴다. `main`이
+ *  `overflow-y-auto`를 그대로 들고, 대화 컬럼(x 288 - 폭 1128)은 이 뺄셈에서 한 픽셀도
+ *  안 움직인다(패딩 안쪽 상자가 y 72부터 그대로다). `px-6`과 `gap-6`은 다섯 화면과 같이
+ *  써서 무수정이다. */
+export function ShellMain({ children }: { children: React.ReactNode }) {
+  const home = screenOf(usePathname()) === "home";
+  return (
+    <main
+      className={cn(
+        "flex min-h-0 w-full flex-1 flex-col gap-6 overflow-y-auto px-6",
+        home ? "-mt-12 pt-18 pb-6" : "py-6",
+      )}
+    >
+      {children}
+    </main>
   );
 }
 

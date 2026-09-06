@@ -2030,6 +2030,10 @@ function SidePanel({
     //    덮으면 flex stretch가 마진을 빼고 824(48–872 = 헤더 밑에서 footer 위까지)를 준다.
     //  · `border`(네 변) → **`border-r` 하나**, 반경 유틸 제거(반경 0). 나머지 세 변은 새 값이
     //    필요 없다: 왼쪽은 창 끝, 위는 헤더의 `border-b`, 아래는 footer의 `border-t`다.
+    //
+    // **§74가 위 한 변을 마저 올렸다** — `-my-6` → `-mt-18 -mb-6`(셸 `main`이 홈에서
+    // `-mt-12 pt-18 pb-6`을 들어 위 마진 72가 그 패딩에 정확히 닿는다), 상자 48-872 →
+    // 0-872, `relative z-50`이 늘어 헤더(`sticky z-50`) 위로 패널이 이긴다(§비주얼 §74 ①).
     // **면 `bg-surface`와 폭 `w-64 shrink-0`은 안 갈린다** — 요구가 뒤집은 것은 *떠 있는
     // 카드*이지 *자기 몸을 갖는 면*이 아니다. 면까지 걷으면 패널이 페이지와 같은 몸이 되고
     // 요구가 시킨 *왼쪽 영역을 차지한다*가 화면에서 사라진다(§39 §남는 규칙 1).
@@ -2037,7 +2041,7 @@ function SidePanel({
     // 결과이고 지켜야 할 것은 `gap-8`이라 거터도 컬럼 클래스도 무수정이다.
     <Sidebar
       collapsible="none"
-      className="-my-6 -ml-6 h-auto w-64 shrink-0 border-r bg-surface"
+      className="relative z-50 -mt-18 -mb-6 -ml-6 h-auto w-64 shrink-0 border-r bg-surface"
     >
       {/* 위 단 — 표면 줄(§11 결정 7 · §비주얼 §72 ① 개정). **스크롤러 밖이다** — `SidebarContent`
           안에 두면 아래 그룹이 길어질 때 이 줄이 화면에서 밀려 사라진다. 헤더 패딩은
@@ -2047,7 +2051,7 @@ function SidePanel({
           `SidebarMenu`의 `gap-1`이 낸다. 보이는 글자는 0이고 이름은 `sr-only` + 툴팁(`side="bottom"`)이
           든다. 고른 표면의 표식은 면(hover와 공유)이 아니라 `SidebarMenuItem` 아래의 2px 줄
           하나뿐이다 - 두 상태가 서로 다른 채널을 쓴다. */}
-      <SidebarHeader className="gap-0 border-b px-4 py-2">
+      <SidebarHeader className="h-12 justify-center gap-0 border-b px-4 py-2">
         <SidebarMenu aria-label={t("home.title")} className="flex-row gap-1">
           {SURFACES.map(({ id, labelKey, icon: Icon }) => {
             const isActive = id === surface;

@@ -29,6 +29,9 @@ import {
   RefreshButton,
   ProjectNav,
   ProjectSwitcher,
+  ShellHeader,
+  ShellHeaderRight,
+  ShellMain,
 } from "@/components/project-switcher";
 import { SettingsDialog, type AuthView } from "@/components/settings-dialog";
 import { StatusBadge, daysSince, statusLabel } from "@/components/status-badge";
@@ -223,15 +226,17 @@ export default async function ProjectLayout({
 
   return (
     <>
-      <header className="sticky top-0 z-50 flex h-12 items-center gap-6 border-b bg-background px-6">
+      <ShellHeader>
         {/* href는 그 프로젝트의 첫 화면 = **홈**이다(§7 · §비주얼 §4가 예고한 이동). 보드의 URL은
             안 움직인다 — `/p/<project>/`는 그대로다. `/`(프로젝트 관리)로 가는 길은 전환기 하단
-            항목 하나로 남는다(§4). 나머지 값은 루트 셸과 같다(§14 · BrandMark). */}
+            항목 하나로 남는다(§4). 나머지 값은 루트 셸과 같다(§14 · BrandMark).
+            **홈에서는 이 자리가 0개다**(§비주얼 §74 §남는 규칙 2) — 판정은 `BrandMark` 자신이 한다. */}
         <BrandMark href={`/p/${id}/home`} wip={current.wip ?? 0} />
         <ProjectNav id={id} />
         {/* 우측 끝은 전환기 오른쪽의 `설정`이다 — 두 셸이 같은 자리에 같은 것을 갖는다
-            (§비주얼 §4). 헤더의 `gap-6`이 아니라 이 둘 사이는 `gap-2`라 묶어서 오른쪽으로 민다 */}
-        <div className="ml-auto flex items-center gap-2">
+            (§비주얼 §4). 헤더의 `gap-6`이 아니라 이 둘 사이는 `gap-2`라 묶어서 오른쪽으로 민다.
+            홈에서는 `ml-auto`가 `ProjectNav`로 옮겨 가고 이 그릇은 `gap-6`만 받는다(§74 ④). */}
+        <ShellHeaderRight>
           {/* 기능 → 매뉴얼(§상호 링크). `[종] [전환기] [설정]`(§0-10 · §비주얼 §28 ①) 앞에 붙여
               그 셋의 순서·`설정`이 우측 맨 끝이라는 규칙은 안 건드린다. 랜딩-only는 `/p/**` 자체가
               404라 이 자리를 따로 안 가린다. */}
@@ -308,14 +313,15 @@ export default async function ProjectLayout({
             auth={auth}
             project={{ id: current.id, name: current.name, shortRoot: current.shortRoot }}
           />
-        </div>
-      </header>
+        </ShellHeaderRight>
+      </ShellHeader>
 
       {/* 스크롤하는 것은 이 `main`이다(§비주얼 §4). `min-h-0`이 없으면 flex 자식 기본값
           (`min-height: auto`)이 내용만큼 늘어나 문서가 도로 길어진다.
           **배너 자리는 비었다**(§0-10) — `Alert` 셋이 헤더의 알림 종으로 갔고 본문이 그만큼
-          위로 올라온다. 알림 유무로 보드 높이가 흔들리던 것이 없어진다 */}
-      <main className="flex min-h-0 w-full flex-1 flex-col gap-6 overflow-y-auto px-6 py-6">
+          위로 올라온다. 알림 유무로 보드 높이가 흔들리던 것이 없어진다.
+          홈에서만 위아래 패딩이 갈린다(§비주얼 §74 ①) — 판정은 `ShellMain` 자신이 한다. */}
+      <ShellMain>
         {current.connected ? (
           <>
             {/* 요구 접수 다이얼로그 — **버튼 없이 `r`만 듣는다**(§3 · §0-6 `board.request`).
@@ -346,7 +352,7 @@ export default async function ProjectLayout({
             </AlertDescription>
           </Alert>
         )}
-      </main>
+      </ShellMain>
 
       {/* 토큰 status bar (§0-8 그릇 · §비주얼 §26). `sticky`도 `fixed`도 아니다 — 스크롤이
           `main` 안에 갇혀 있어(§비주얼 §4) 헤더 다음 형제로 서기만 하면 뷰포트 바닥에 붙는다.
