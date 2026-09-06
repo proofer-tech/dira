@@ -7,14 +7,10 @@ on conflict. Worker dir: `<root>/worktrees/<worker>`.
 
 1. Read `.dira/tickets/<hash>.wip.md`. `## Goal` + `## Done when` are the
    contract.
-2. Before anything else, append `## 진행 계획`: handoff-size steps in plain words,
-   one checkbox per line - `- [ ] step (<start> -> <end>)`, ISO 8601 + offset like
-   `assigned_at`, stamped `(<start>)` on start and `-> <end>` on check, read live -
-   never pre-filled, never backfilled in a batch.
-   **Locked once written** - no edits, no new items; plan goes wrong -> `~~strike~~`
-   the rest unchecked and hand off a new ticket (`## 결과`: `-> <new hash>`).
-   **Push, retrospective, `## 결과`, `.done` rename aren't plan items** - they repeat
-   every ticket; the list is this ticket's own work.
+2. Before anything else, append `## 진행 계획` per `계획-규약.md` (format, lock,
+   strike-and-append, inherited plan, unknown-steps rule).
+   **Push, retrospective, `## 결과`, `.done` rename aren't plan items** - they
+   repeat every ticket; the list is this ticket's own work.
 3. Do the work. Nothing outside `## Done when`. Flip each box `- [ ]` -> `- [x]`
    the moment it is actually true - not in a batch at the end, not before.
 4. Append `## 결과` - what changed, how verified (one-line summary, not full
