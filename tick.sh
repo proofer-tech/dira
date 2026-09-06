@@ -1016,8 +1016,12 @@ fi
 # 절 수와 무관하게 크기가 고정된다. _ontology/SCHEMA.md가 타입 지도(객체·관계·액션)라 그게
 # 진입점이고, 나머지 개념에 닿는 길은 세션의 grep이다. 없거나 비면 안 붙고 WARN도 없다(없는 것이
 # 정상이다).
+# TICKET_ONTOLOGY가 값을 들고 있으면(워커가 재정의한 자리) find를 안 건다 - 존재 판정은
+# 쓰는 쪽(GUI, 결정 2 §받는 자리의 경계)이 이미 했다. 매 디스패치 재검사는 재정의한 자리가
+# 남의 앱 데이터 도메인(예: Google Drive 파일 프로바이더)일 때 티켓마다 macOS 권한 창을 새로
+# 띄운다(51c730de). 미설정(기본값 <큐 루트>/ontology)은 종전 그대로 find로 존재를 잰다.
 ONTDIR="${TICKET_ONTOLOGY:-$TICKET_ROOT/ontology}"
-if [ -n "$(find "$ONTDIR" -type f -name '*.md' 2>/dev/null)" ]; then
+if [ -n "$TICKET_ONTOLOGY" ] || [ -n "$(find "$ONTDIR" -type f -name '*.md' 2>/dev/null)" ]; then
   ONTDIR_DISP="$(wtpath "$ONTDIR")"
   PROMPT="아래는 이 큐의 온톨로지가 있는 곳입니다.
 

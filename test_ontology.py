@@ -57,6 +57,7 @@ def write(path, body):
 
 def dryrun(worker, local, ontology=None):
     env = dict(os.environ, TICKET_LOCAL=local)
+    env.pop("TICKET_ONTOLOGY", None)  # 이 세션 자신의 재정의 값을 물려받지 않는다(test_graph.py와 같은 격리)
     if ontology is not None:
         env["TICKET_ONTOLOGY"] = ontology
     r = subprocess.run([worker, "dryrun"], capture_output=True, text=True, env=env, timeout=60)
@@ -156,8 +157,33 @@ try:
     assert ("===== 온톨로지 (" + bigdir + ") =====") in big, \
         "md 500장 · 두 층 재정의 자리에서 온톨로지 블록이 안 붙었다(141 회귀)\n" + big
 
+    # 7) TICKET_ONTOLOGY에 없는 절대경로를 주면 - find는 빈손이지만(종전이면 안 붙었을 자리)
+    #    재정의한 자리는 존재를 재지 않고 그대로 블록을 붙인다(51c730de). WARN도 없다 -
+    #    존재 판정은 쓰는 쪽(GUI)의 몫이지 엔진의 몫이 아니다.
+    missingdir = os.path.join(tmp, "없는-온톨로지")
+    assert not os.path.exists(missingdir)
+    missing = dryrun(w, local, ontology=missingdir)
+    assert ("===== 온톨로지 (" + missingdir + ") =====") in missing, \
+        "TICKET_ONTOLOGY가 없는 자리를 가리켜도 블록이 붙어야 한다\n" + missing
+    assert warns(root) == [], \
+        "TICKET_ONTOLOGY가 없는 자리인데 WARN이 났다: {}".format(warns(root))
+
+    # 8) TICKET_ONTOLOGY 미설정 - 종전 그대로다(위 1~4의 기준선과 동일, 이번 개정의 대상이 아니다).
+    #    없거나 빈 <큐 루트>/ontology에서는 여전히 안 붙고 WARN도 0줄이다.
+    shutil.rmtree(ontdir)
+    unset_missing = dryrun(w, local)
+    assert "온톨로지" not in unset_missing, \
+        "TICKET_ONTOLOGY 미설정 + ontology/ 없음인데 블록이 붙었다\n" + unset_missing
+    assert warns(root) == [], "미설정 + 없음인데 WARN이 났다: {}".format(warns(root))
+    os.makedirs(ontdir)
+    unset_empty = dryrun(w, local)
+    assert "온톨로지" not in unset_empty, \
+        "TICKET_ONTOLOGY 미설정 + 빈 ontology/인데 블록이 붙었다\n" + unset_empty
+    assert warns(root) == [], "미설정 + 빈 폴더인데 WARN이 났다: {}".format(warns(root))
+
     print("PASS 위치+검색 방법 상수 블록·본문/목차 미주입·재귀·공백 파일명·"
           "파일 늘어도 불변·페르소나 무관·없으면 WARN 0줄·TICKET_ONTOLOGY 재정의·"
-          "md 500장 두 층에서도 붙음(P313-9)")
+          "md 500장 두 층에서도 붙음(P313-9)·재정의 자리가 없어도 안 재고 붙음(51c730de)·"
+          "미설정은 종전 그대로")
 finally:
     shutil.rmtree(tmp, ignore_errors=True)
