@@ -2077,6 +2077,11 @@ export const ko: Record<string, string> = {
   "terminal.invalidCwd": "등록되지 않은 작업 디렉터리입니다.",
   "terminal.limitReached": "동시에 열 수 있는 터미널은 8개까지입니다.",
 
+  // 좌측 목록 한 줄(§11-6 결정 6) — 작업중 표식 · 끊김 표식 · 명령 없음 자리.
+  "terminal.row.running": "작업 중",
+  "terminal.row.disconnected": "끊김",
+  "terminal.row.noCommand": "아직 친 명령이 없습니다",
+
   // 소스 컨트롤(§11-3 결정 1-2-3-4, P366-8 · P366-9) — 체크아웃 목록·status·업스트림·커밋·
   // push·pull. `word.*` 넷은 `--porcelain=v2`의 아는 코드 넷의 낱말이고, 모르는 코드는 이
   // 사전을 안 거친다(§비주얼 §72 ④ — 화면이 코드를 그대로 `font-mono`로 보여준다).
@@ -4331,6 +4336,10 @@ export const en: Record<string, string> = {
   "terminal.reopen": "Reopen",
   "terminal.invalidCwd": "Not a registered working directory.",
   "terminal.limitReached": "Up to 8 terminals can be open at once.",
+
+  "terminal.row.running": "Running",
+  "terminal.row.disconnected": "Disconnected",
+  "terminal.row.noCommand": "No command yet",
 
   "home.scm.checkout": "Checkout",
   "home.scm.root": "Root",

@@ -6,7 +6,18 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { PTY_LIMIT, killPty, openPty, pidOf, ptyAlive, restartPty, subscribePty, writePty } from "./pty.ts";
+import {
+  PTY_LIMIT,
+  extractLastCommand,
+  killPty,
+  openPty,
+  pidOf,
+  ptyAlive,
+  ptyStatuses,
+  restartPty,
+  subscribePty,
+  writePty,
+} from "./pty.ts";
 
 const tmps: string[] = [];
 process.on("exit", () => tmps.forEach((p) => rmSync(p, { recursive: true, force: true })));
@@ -102,4 +113,66 @@ test("restartPty never reconnects a live pty — it replaces it with a fresh pro
   await waitFor(() => secondOut.includes("second"));
   assert.ok(!secondOut.includes("first-")); // 새 프로세스 — 옛 화면이 안 이어진다
   killPty(id);
+});
+
+// §11-6 결정 2 — extractLastCommand 단위 테스트. 프롬프트 셋 - 없음 - ANSI - 200자 초과.
+test("extractLastCommand picks the text after the last $ prompt", () => {
+  assert.equal(extractLastCommand("user@host:~$ pwd"), "pwd");
+});
+
+test("extractLastCommand picks the text after the last % prompt", () => {
+  assert.equal(extractLastCommand("host% ls -la"), "ls -la");
+});
+
+test("extractLastCommand picks the text after the last # prompt", () => {
+  assert.equal(extractLastCommand("root@host:~# whoami"), "whoami");
+});
+
+test("extractLastCommand returns the whole line when no prompt marker is present", () => {
+  assert.equal(extractLastCommand("just some echoed text"), "just some echoed text");
+});
+
+test("extractLastCommand strips ANSI escapes before picking the command", () => {
+  assert.equal(extractLastCommand("\x1b[32muser@host\x1b[0m$ \x1b[1mls\x1b[0m"), "ls");
+});
+
+test("extractLastCommand caps the result at 200 characters", () => {
+  const long = "a".repeat(250);
+  const picked = extractLastCommand(`$ ${long}`);
+  assert.equal(picked.length, 200);
+  assert.equal(picked, long.slice(0, 200));
+});
+
+test("writePty records the last command the moment Enter is seen, including recalled history", async () => {
+  const cwd = tmpDir();
+  const { id } = openPty(cwd, "/bin/sh") as { id: string };
+  let out = "";
+  subscribePty(id, (s) => (out += s));
+  // 한 번에 몰아 쓰지 않는다 — xterm이 키 하나마다 `writePty`를 부르는 실제 흐름과 같다.
+  // 엔터가 별도 호출로 와야 그 순간 `backlog`에 이미 에코된 "echo hi"가 들어 있다(§11-6 결정 2).
+  writePty(id, "echo hi");
+  await waitFor(() => out.includes("echo hi"));
+  writePty(id, "\r");
+  // pty 출력은 `\r\n`이다 — echo의 결과 줄 "hi\r\n"을 기다린다("hi\n"은 영영 안 나온다).
+  await waitFor(() => out.includes("hi\r\n"));
+  assert.equal(ptyStatuses([id])[id].lastCommand, "echo hi");
+  killPty(id);
+});
+
+test("ptyStatuses reports working while a foreground job runs and idle once it ends", async () => {
+  const cwd = tmpDir();
+  const { id } = openPty(cwd, "/bin/sh") as { id: string };
+  await waitFor(() => ptyAlive(id));
+  await waitFor(() => !ptyStatuses([id])[id].working, 3000); // 프롬프트만 뜬 직후는 유휴다
+  writePty(id, "sleep 2\r");
+  await waitFor(() => ptyStatuses([id])[id].working, 3000);
+  await waitFor(() => !ptyStatuses([id])[id].working, 5000);
+  killPty(id);
+});
+
+test("ptyStatuses reports alive: false for a closed pty", () => {
+  const cwd = tmpDir();
+  const { id } = openPty(cwd, "/bin/sh") as { id: string };
+  killPty(id);
+  assert.deepEqual(ptyStatuses([id])[id], { lastCommand: "", working: false, alive: false });
 });

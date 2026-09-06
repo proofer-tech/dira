@@ -11,7 +11,7 @@
  *
  *  **raw는 escape를 안 걷어낸다** — 화면(`@xterm/xterm`)이 ANSI를 직접 그리므로 `auth.ts`의
  *  `ptyLines`(Ink TUI 로그 한 줄용) 같은 후처리가 필요 없다. */
-import { spawn, type ChildProcess } from "node:child_process";
+import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 
 /** §11-1 결정 3 — 탭 상한 12(`tabs.ts`)와 갈리는 값. 서버 프로세스 전체에서 하나다(프로젝트별이
@@ -29,6 +29,8 @@ type PtyEntry = {
   backlog: string;
   listeners: Set<(chunk: string) => void>;
   exited: boolean;
+  /** §11-6 결정 2 — 사람이 마지막으로 엔터를 친 명령. 빈 문자열 = 아직 한 번도 안 쳤다. */
+  lastCommand: string;
 };
 
 /** **`globalThis`에 심는다 — 모듈 top-level 변수로는 안 된다.** Next가 Server Action과
@@ -64,7 +66,7 @@ function spawnInto(id: string, cwd: string, shell: string): void {
     // 모드를 거부하고 `ls --color`가 색을 죽인다. `@xterm/xterm`이 아는 값을 준다.
     env: { ...process.env, TERM: "xterm-256color" },
   });
-  const entry: PtyEntry = { child, cwd, backlog: "", listeners: new Set(), exited: false };
+  const entry: PtyEntry = { child, cwd, backlog: "", listeners: new Set(), exited: false, lastCommand: "" };
   ptys.set(id, entry);
 
   const feed = (d: Buffer) => {
@@ -133,13 +135,107 @@ export function pidOf(id: string): number | undefined {
   return ptys.get(id)?.child.pid;
 }
 
+/** 마지막 명령 200자 상한 — 서버 메모리에 무한정 긴 줄이 안 남는다(§11-6 결정 2). */
+const LAST_COMMAND_CAP = 200;
+
+// eslint-disable-next-line no-control-regex
+const ANSI_ESCAPE = /\x1b\[[0-9;]*[a-zA-Z]/g;
+
+/** 화면 기록 한 줄에서 사람이 친 명령을 집는다(§11-6 결정 2) — 단위 테스트가 이 함수 하나를
+ *  잰다. ANSI를 걷어낸 뒤 마지막 `$ ` - `% ` - `# ` 뒤를 집고, 셋 중 하나도 없으면 줄 전체다. */
+export function extractLastCommand(rawLine: string): string {
+  const clean = rawLine.replace(ANSI_ESCAPE, "");
+  let cut = -1;
+  for (const marker of ["$ ", "% ", "# "]) {
+    const idx = clean.lastIndexOf(marker);
+    if (idx > cut) cut = idx + marker.length;
+  }
+  const picked = cut >= 0 ? clean.slice(cut) : clean;
+  return picked.length > LAST_COMMAND_CAP ? picked.slice(0, LAST_COMMAND_CAP) : picked;
+}
+
 /** 사람의 입력 — xterm의 `onData`가 준 문자열을 그대로 stdin에 흘린다(엔터·화살표 등은
- *  xterm이 이미 셸이 기대하는 이스케이프로 바꿔 준다). */
+ *  xterm이 이미 셸이 기대하는 이스케이프로 바꿔 준다).
+ *
+ *  **엔터(`\r`)를 보는 순간 `backlog`의 마지막 줄을 <마지막 명령>으로 적는다**(§11-6 결정 2) —
+ *  화면 전체를 뒤지지 않는다. 히스토리 화살표·탭 완성으로 채운 명령도 셸이 화면에 에코해 두므로
+ *  같은 자리에서 잡힌다. */
 export function writePty(id: string, data: string): boolean {
   const entry = ptys.get(id);
   if (!entry || entry.exited) return false;
+  if (data.includes("\r")) {
+    const lines = entry.backlog.split("\n");
+    entry.lastCommand = extractLastCommand(lines[lines.length - 1] ?? "");
+  }
   entry.child.stdin?.write(data);
   return true;
+}
+
+type ProcRow = { pid: number; ppid: number; comm: string };
+
+const SHELL_NAMES = new Set(["sh", "bash", "zsh", "fish", "dash", "ksh", "tcsh", "csh"]);
+
+/** 프로세스 표를 한 번 읽는다 — `ptyStatuses`가 폴링 한 번에 이 함수를 한 번만 부른다
+ *  (§11-6 결정 3 — "`ps`는 폴링 한 번에 한 번이다"). */
+function readProcessTable(): ProcRow[] {
+  try {
+    const out = execFileSync("ps", ["-Ao", "pid=,ppid=,comm="], { encoding: "utf8" });
+    const rows: ProcRow[] = [];
+    for (const line of out.split("\n")) {
+      const m = line.trim().match(/^(\d+)\s+(\d+)\s+(.*)$/);
+      if (m) rows.push({ pid: Number(m[1]), ppid: Number(m[2]), comm: m[3] });
+    }
+    return rows;
+  } catch {
+    return [];
+  }
+}
+
+/** §11-6 결정 3 — <작업중>은 "그 pty의 로그인 셸이 자식 프로세스를 물고 있는가"다. `rootPid`
+ *  (`spawnInto`가 연 최상위 `sh`) 아래로 단일 사슬(`sh → cat`·`script` → 로그인 셸)을 훑어
+ *  셸류 프로세스를 찾고, 그 셸이 자식을 물고 있으면 참이다. 출력이 온 시각으로 재지 않는다 —
+ *  `sleep 30`이 도는 동안에도 이 판정은 그대로 참이다. */
+function isWorking(rootPid: number, rows: ProcRow[]): boolean {
+  const childrenOf = new Map<number, ProcRow[]>();
+  for (const r of rows) {
+    const list = childrenOf.get(r.ppid);
+    if (list) list.push(r);
+    else childrenOf.set(r.ppid, [r]);
+  }
+  let shellPid: number | null = null;
+  const visited = new Set<number>([rootPid]);
+  let frontier = childrenOf.get(rootPid) ?? [];
+  while (frontier.length > 0) {
+    const next: ProcRow[] = [];
+    for (const proc of frontier) {
+      if (visited.has(proc.pid)) continue;
+      visited.add(proc.pid);
+      // macOS `ps comm=`은 절대경로를 낸다(`/opt/homebrew/bin/zsh`) — 마지막 조각만 비교한다.
+      if (SHELL_NAMES.has(proc.comm.split("/").pop() ?? proc.comm)) shellPid = proc.pid;
+      next.push(...(childrenOf.get(proc.pid) ?? []));
+    }
+    frontier = next;
+  }
+  if (shellPid === null) return false;
+  return (childrenOf.get(shellPid) ?? []).length > 0;
+}
+
+export type PtyStatus = { lastCommand: string; working: boolean; alive: boolean };
+
+/** 좌측 목록 한 벌 — 마지막 명령 - 작업중 - 끊김을 `ps` 한 번으로 같이 낸다(§11-6 결정 3 · 4).
+ *  없는 id는 `alive: false`로 낸다(이미 닫힌 탭). */
+export function ptyStatuses(ids: string[]): Record<string, PtyStatus> {
+  const rows = readProcessTable();
+  const result: Record<string, PtyStatus> = {};
+  for (const id of ids) {
+    const entry = ptys.get(id);
+    if (!entry || entry.exited || !entry.child.pid) {
+      result[id] = { lastCommand: entry?.lastCommand ?? "", working: false, alive: false };
+      continue;
+    }
+    result[id] = { lastCommand: entry.lastCommand, working: isWorking(entry.child.pid, rows), alive: true };
+  }
+  return result;
 }
 
 /** 스트림 구독 — GET 라우트가 `ReadableStream.start()` 안에서 부른다. 없는 id면 `null`.

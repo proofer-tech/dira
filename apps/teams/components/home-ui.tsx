@@ -87,6 +87,7 @@ import {
   scmUnstage,
   stopHome,
   switchHome,
+  terminalStatuses,
   type ScmResult,
 } from "@/app/(app)/p/[project]/home/actions";
 import {
@@ -104,6 +105,7 @@ import { useKeymap } from "@/components/keymap-provider";
 import { useLocale, useT } from "@/components/language-provider";
 import { Markdown } from "@/components/markdown";
 import type { RefIndex } from "@/lib/markdown-refs";
+import type { PtyStatus } from "@/lib/pty";
 import { Bundle } from "@/components/session-stream";
 import { StatusBadge } from "@/components/status-badge";
 import {
@@ -356,6 +358,14 @@ export function HomeUI({
   // 다르면 아래 통합 탭 줄의 `onSelect`가 이 값도 같이 맞춰 준다(그래야 고른 탭의 내용이
   // 바로 보인다).
   const [surface, setSurface] = useState<Surface>("session");
+  // **터미널 탭마다 연결 여부**(§11 결정 2) — 서버 파일에 없는 값이다. 마운트 직후는 전부
+  // `끊김`이다(새로고침이든 표면을 다시 연 것이든 구별 안 한다) — 그래서 `터미널` 표면을
+  // 벗어나는 순간 아래 effect가 비운다. 좌측 목록(연 줄)과 우측 칸(`끊긴 터미널입니다` -
+  // `다시 열기`)이 같은 값을 봐야 해서 `HomeUI` 자신이 든다.
+  const [terminalConnected, setTerminalConnected] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    if (surface !== "terminal") setTerminalConnected(new Set());
+  }, [surface]);
   // 폴링이 들고 다니는 두 값. 렌더에 안 쓰므로 상태가 아니다(바뀔 때마다 그릴 것이 없다).
   const session = useRef(initial.sessionId);
   const offset = useRef(initial.offset);
@@ -780,6 +790,8 @@ export function HomeUI({
             onSurfaceChange={setSurface}
             onOpenExplorerFile={explorer.onOpenFile}
             runningIds={runningIds}
+            apply={apply}
+            onTerminalConnect={(id) => setTerminalConnected((now) => new Set(now).add(id))}
             // 세 그룹을 통틀어 지금 떠 있는 표식 하나(§비주얼 §62 (2) §선택 표식 — "표식은 세
             // 그룹을 통틀어 한 줄에만 든다"). 회차 0건 스케줄을 보는 동안은 `home.current`가
             // 못 갈리므로(위 `pendingSchedule` 주석) 그 스케줄의 `id`가 대신 뜬다.
@@ -861,8 +873,9 @@ export function HomeUI({
               project={project}
               tabs={home.tabs.filter((tb) => tb.kind === "terminal")}
               activeTab={home.activeTab}
+              connected={terminalConnected}
+              onConnect={(id) => setTerminalConnected((now) => new Set(now).add(id))}
               apply={apply}
-              onFocus={async (id) => apply(await focusTabAction(project, id))}
             />
           ) : (
             <>
@@ -1812,35 +1825,103 @@ function ScmSurface({ project, projectName }: { project: string; projectName: st
   );
 }
 
-/** 터미널 표면(§11-1, P366-4) — 우측 칸의 몸통만 갈아 끼운다(탭 줄 자신은 표면을 가로지르는
- *  `HomeUI`의 통합 `TabBar` 하나다 — §11 결정 1, 탭 닫기도 그쪽에서 왕복한다). cwd 후보는
- *  소스 컨트롤과 **같은 목록**이다(결정 3 — `scmCheckouts`를 새로 안 부른다, 이미 이 컴포넌트가
- *  마운트될 때 한 번 읽는다).
+/** 터미널 표면(§11-1, P366-4 · §11-6 결정 1) — 우측 칸의 몸통만 갈아 끼운다(탭 줄 자신은
+ *  표면을 가로지르는 `HomeUI`의 통합 `TabBar` 하나다 — §11 결정 1, 탭 닫기도 그쪽에서 왕복한다).
+ *  **`작업 디렉터리` 고르기 - `새 터미널` - 상한 사유는 좌측 목록(`TerminalLeftPanel`)의 머리로
+ *  옮겨 갔다** — 여기 남는 것은 셸 화면과 `끊긴 터미널입니다` - `다시 열기` 한 쌍뿐이다(§11-6
+ *  결정 1). 그 쌍이 여기 남는 이유는 **고른 탭 하나에 붙는 것**이라서다 — 좌측 목록의 성질이
+ *  아니라 화면 자리의 성질이다.
  *
- *  **탭마다 연결 여부를 이 컴포넌트 자신이 든다**(`connected` — 서버 파일에 없는 값이다).
- *  마운트 직후는 전부 `끊김`이다 — 새로고침이든 표면을 다시 연 것이든 구별하지 않는다
- *  (§11 결정 2, ponytail: 표면을 나갔다 돌아오면 다시 `열기`를 눌러야 한다 — 표면을 넘나들어도
- *  이어지게 하려면 이 상태를 부모(`HomeUi`)로 끌어올린다, 지금 수용조건은 새로고침 하나뿐이다).
- *  이미 연결한 탭은 안 보이게만(`hidden`) 해서 스크롤백이 언마운트로 안 날아가게 한다. */
+ *  **탭마다 연결 여부는 `HomeUI`가 든다**(`connected` 프롭 — 서버 파일에 없는 값이다). 마운트
+ *  직후는 전부 `끊김`이다 — 새로고침이든 표면을 다시 연 것이든 구별하지 않는다(§11 결정 2,
+ *  `HomeUI`의 `surface !== "terminal"` effect가 표면을 나가는 순간 그 값을 비운다). 이미 연결한
+ *  탭은 안 보이게만(`hidden`) 해서 스크롤백이 언마운트로 안 날아간다. */
 function TerminalSurface({
+  project,
+  tabs,
+  activeTab,
+  connected,
+  onConnect,
+  apply,
+}: {
+  project: string;
+  tabs: Tab[];
+  activeTab: string | null;
+  connected: Set<string>;
+  onConnect: (id: string) => void;
+  apply: (c: HomeChunk) => void;
+}) {
+  const t = useT();
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const reopen = async (tab: Tab) => {
+    if (busy || !tab.cwd) return;
+    setBusy(true);
+    setError(null);
+    const r = await restartTerminal(project, tab.id, tab.cwd);
+    setBusy(false);
+    if ("error" in r) {
+      setError(r.error);
+      return;
+    }
+    apply(r);
+    onConnect(tab.id);
+  };
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      {tabs.length === 0 && <EmptyState text={t("home.surface.terminal.empty")} />}
+
+      <div className="min-h-0 flex-1">
+        {tabs.map((tab) =>
+          connected.has(tab.id) ? (
+            <div key={tab.id} hidden={tab.id !== activeTab} className="h-full">
+              <TerminalPanel projectId={project} id={tab.id} />
+            </div>
+          ) : tab.id === activeTab ? (
+            <div key={tab.id} className="flex h-full flex-col items-center justify-center gap-2">
+              <p className="text-sm text-muted-foreground">{t("terminal.disconnected")}</p>
+              {error && <p className="text-xs text-destructive">{error}</p>}
+              <Button size="sm" variant="outline" aria-disabled={busy || undefined} onClick={() => void reopen(tab)}>
+                {t("terminal.reopen")}
+              </Button>
+            </div>
+          ) : null,
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** 좌측 아래 단(§11-6) — `소스 컨트롤` · `탐색기`와 같은 모양이다: 머리 행(라벨 + `새 터미널`) +
+ *  `작업 디렉터리` 고르기 + 줄 목록. cwd 후보는 소스 컨트롤과 **같은 목록**이다(결정 3 —
+ *  `scmCheckouts`를 새로 안 부른다).
+ *
+ *  **줄 목록은 이 컴포넌트가 5초마다 `terminalStatuses`로 다시 읽는다**(§11-6 결정 4) — 표면을
+ *  나가면 이 컴포넌트가 언마운트되어 그 효과가 함께 멎는다(다른 폴링 주기를 새로 안 만든다).
+ *  `ps`는 그 서버 액션 안에서 열린 pty 전부를 한 번에 잰다. */
+function TerminalLeftPanel({
   project,
   tabs,
   activeTab,
   apply,
   onFocus,
+  onConnect,
 }: {
   project: string;
   tabs: Tab[];
   activeTab: string | null;
   apply: (c: HomeChunk) => void;
   onFocus: (id: string) => void;
+  onConnect: (id: string) => void;
 }) {
   const t = useT();
   const [checkouts, setCheckouts] = useState<Checkout[]>([]);
   const [cwd, setCwd] = useState<string>("");
-  const [connected, setConnected] = useState<Set<string>>(new Set());
-  const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [rows, setRows] = useState<Record<string, PtyStatus>>({});
 
   useEffect(() => {
     let stop = false;
@@ -1855,6 +1936,27 @@ function TerminalSurface({
     };
   }, [project]);
 
+  // §11-6 결정 4 — 표면이 열려 있는 동안 5초마다. 언마운트(표면 이탈)가 곧 정지다.
+  const ids = tabs.map((tb) => tb.id).join(",");
+  useEffect(() => {
+    if (!ids) {
+      setRows({});
+      return;
+    }
+    let stop = false;
+    const poll = () => {
+      void terminalStatuses(project, ids.split(",")).then((r) => {
+        if (!stop) setRows(r);
+      });
+    };
+    poll();
+    const timer = setInterval(poll, 5000);
+    return () => {
+      stop = true;
+      clearInterval(timer);
+    };
+  }, [project, ids]);
+
   const open = async () => {
     if (!cwd || busy) return;
     setBusy(true);
@@ -1866,30 +1968,32 @@ function TerminalSurface({
       return;
     }
     apply(r);
-    // `openTerminal`이 새 탭을 `activeTab`으로 심었다 — 그 id로 바로 연결 표시한다.
-    if (r.activeTab) setConnected((now) => new Set(now).add(r.activeTab!));
+    if (r.activeTab) onConnect(r.activeTab);
   };
 
-  const reopen = async (tab: Tab) => {
-    if (busy || !tab.cwd) return;
-    setBusy(true);
-    setError(null);
-    const r = await restartTerminal(project, tab.id, tab.cwd);
-    setBusy(false);
-    if ("error" in r) {
-      setError(r.error);
-      return;
-    }
-    apply(r);
-    setConnected((now) => new Set(now).add(tab.id));
-    onFocus(tab.id);
+  const cwdLabel = (path: string | undefined) => {
+    if (!path) return "";
+    const c = checkouts.find((c) => c.path === path);
+    return c ? (c.isRoot ? t("home.scm.root") : c.id) : path;
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex items-center gap-2 border-b p-2">
+    <SidebarGroup className="p-0">
+      <SidebarGroupLabel className="h-6 text-muted-foreground">
+        {t("home.surface.terminal")}
+        <Button
+          variant="ghost"
+          size="xs"
+          className="ml-auto text-foreground"
+          aria-disabled={busy || !cwd || undefined}
+          onClick={() => void open()}
+        >
+          {t("terminal.newTab")}
+        </Button>
+      </SidebarGroupLabel>
+      <div className="flex flex-col gap-1 px-2 pb-2">
         <Select value={cwd} onValueChange={(v) => setCwd(v ?? "")}>
-          <SelectTrigger size="sm" className="w-56">
+          <SelectTrigger size="sm" className="w-full">
             <SelectValue placeholder={t("terminal.pickCwd")} />
           </SelectTrigger>
           <SelectContent>
@@ -1900,31 +2004,42 @@ function TerminalSurface({
             ))}
           </SelectContent>
         </Select>
-        <Button size="sm" variant="outline" aria-disabled={busy || !cwd || undefined} onClick={() => void open()}>
-          {t("terminal.newTab")}
-        </Button>
         {error && <p className="text-xs text-destructive">{error}</p>}
       </div>
 
-      {tabs.length === 0 && <EmptyState text={t("home.surface.terminal.empty")} />}
-
-      <div className="min-h-0 flex-1">
-        {tabs.map((tab) =>
-          connected.has(tab.id) ? (
-            <div key={tab.id} hidden={tab.id !== activeTab} className="h-full">
-              <TerminalPanel projectId={project} id={tab.id} />
-            </div>
-          ) : tab.id === activeTab ? (
-            <div key={tab.id} className="flex h-full flex-col items-center justify-center gap-2">
-              <p className="text-sm text-muted-foreground">{t("terminal.disconnected")}</p>
-              <Button size="sm" variant="outline" aria-disabled={busy || undefined} onClick={() => void reopen(tab)}>
-                {t("terminal.reopen")}
-              </Button>
-            </div>
-          ) : null,
-        )}
-      </div>
-    </div>
+      {tabs.length === 0 ? (
+        <EmptyState text={t("home.surface.terminal.empty")} />
+      ) : (
+        <SidebarMenu aria-label={t("home.surface.terminal")}>
+          {tabs.map((tab) => {
+            const row = rows[tab.id];
+            return (
+              <SidebarMenuItem key={tab.id}>
+                <SidebarMenuButton
+                  className={cn(ROW, "items-start")}
+                  isActive={tab.id === activeTab}
+                  aria-current={tab.id === activeTab ? "true" : undefined}
+                  onClick={() => onFocus(tab.id)}
+                >
+                  <div className="flex min-w-0 grow flex-col gap-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className="min-w-0 grow truncate text-sm">
+                        {row?.lastCommand || t("terminal.row.noCommand")}
+                      </span>
+                      {row && !row.alive && <span className={MARK}>{t("terminal.row.disconnected")}</span>}
+                      {row && row.alive && row.working && <span className={MARK}>{t("terminal.row.running")}</span>}
+                    </div>
+                    <div className="font-mono text-xs text-muted-foreground group-hover/menu-button:text-foreground">
+                      {cwdLabel(tab.cwd)}
+                    </div>
+                  </div>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            );
+          })}
+        </SidebarMenu>
+      )}
+    </SidebarGroup>
   );
 }
 
@@ -1966,6 +2081,8 @@ function SidePanel({
   onPick,
   onPickSchedule,
   onSchedulesChange,
+  apply,
+  onTerminalConnect,
 }: {
   project: string;
   /** 소스 컨트롤 표면 루트 줄의 이름(§비주얼 §72 ⑤) — `<ScmSurface>`로 그대로 내린다. */
@@ -1993,6 +2110,12 @@ function SidePanel({
   onPick: (id: string) => void;
   onPickSchedule: (s: ScheduleView) => void;
   onSchedulesChange: (schedules: ScheduleView[]) => void;
+  /** `터미널` 좌측 목록의 `새 터미널` · `다시 열기`가 서버 액션 결과를 반영하는 통로 —
+   *  `HomeUI`가 든 것을 그대로 내린다(§11-6 결정 1). */
+  apply: (c: HomeChunk) => void;
+  /** `터미널` 좌측 목록이 `새 터미널` · `다시 열기`로 연 탭을 연결됨으로 적는다 — `HomeUI`가
+   *  든 `terminalConnected`에 반영한다(우측 칸과 같은 값을 봐야 한다). */
+  onTerminalConnect: (id: string) => void;
 }) {
   const t = useT();
   const locale = useLocale();
@@ -2096,8 +2219,18 @@ function SidePanel({
             <ExplorerTree projectId={project} onOpenFile={onOpenExplorerFile} />
           </SidebarGroup>
         )}
-        {/* `터미널`은 왼쪽 패널에 목록이 없다(§11-1) — cwd 고르기·탭 줄·화면이 전부 오른쪽 칸
-            (`TerminalSurface`)에 있다. `소스 컨트롤`·`탐색기`와 달리 여기서 채울 목록이 없다. */}
+        {/* `터미널`(§11-6) — 열린 셸이 한 줄씩 뜬다. 머리 행(`새 터미널`)과 `작업 디렉터리`
+            고르기도 여기 있다(§11-6 결정 1) — 오른쪽 칸에는 셸 화면만 남는다. */}
+        {surface === "terminal" && (
+          <TerminalLeftPanel
+            project={project}
+            tabs={home.tabs.filter((tb) => tb.kind === "terminal")}
+            activeTab={home.activeTab}
+            apply={apply}
+            onFocus={(id) => void (async () => apply(await focusTabAction(project, id)))()}
+            onConnect={onTerminalConnect}
+          />
+        )}
         {surface === "session" && (
           <>
         <SidebarGroup className="p-0">

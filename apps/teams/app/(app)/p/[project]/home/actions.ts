@@ -50,7 +50,7 @@ import {
   type ScheduleView,
 } from "@/lib/home-session";
 import { explorerRoot, getProject, resolveConfig, type Project } from "@/lib/projects";
-import { killPty, openPty, restartPty } from "@/lib/pty";
+import { killPty, openPty, ptyStatuses, restartPty, type PtyStatus } from "@/lib/pty";
 import {
   commitStaged,
   listCheckouts,
@@ -285,6 +285,17 @@ export async function focusTabAction(projectId: string, tabId: string): Promise<
 export async function closeTerminalTab(projectId: string, tabId: string): Promise<HomeChunk> {
   killPty(tabId);
   return closeTab(projectId, tabId);
+}
+
+/** 좌측 목록의 마지막 명령 - 작업중 - 끊김(§11-6 결정 3 · 4) — `터미널` 표면이 열려 있는 동안
+ *  5초마다 부른다. `lib/pty.ts`가 `ps`를 한 번만 불러 `ids` 전부를 같이 판정한다. */
+export async function terminalStatuses(projectId: string, ids: string[]): Promise<Record<string, PtyStatus>> {
+  try {
+    await required(projectId);
+  } catch {
+    return {};
+  }
+  return ptyStatuses(ids);
 }
 
 /** `새 스케줄` 다이얼로그의 `만들기`(§비주얼 §62 (5)). **대화·스레드는 안 건드린다** — 그래서
