@@ -20,7 +20,6 @@ import {
   matchesStreamFilter,
   mergeProgress,
   pairTool,
-  parentPath,
   planBlocks,
   progressFilterKindOf,
   progressMarkerText,
@@ -49,39 +48,6 @@ test("projectPath — 홈 → 홈이다(§7)", () => {
   assert.equal(projectPath("/p/a/workers", "b"), "/p/b/workers");
   assert.equal(projectPath("/p/a", "b"), "/p/b"); // 보드
   assert.equal(projectPath("/p/a/tickets/fff28e90", "b"), "/p/b"); // 해시는 큐마다 독립이다
-});
-
-/** 화면 부모 표 (DESIGN.md §0-7). `Esc`의 목적지가 이 함수 하나에서 나온다 — 표가 코드와
- *  갈리면 `Esc`가 선언에 없는 곳으로 가거나(더 나쁘게) 보드에서 화면이 흔들린다. */
-test("parentPath — 부모가 없는 화면은 `null`이다(§0-7 표 1·2행)", () => {
-  assert.equal(parentPath("/"), null);
-  assert.equal(parentPath("/p/a"), null);
-  assert.equal(parentPath("/p/a/"), null); // 보드의 정본 URL과 같은 화면이다
-  assert.equal(parentPath("/p/a/home"), null); // 홈도 부모가 없다 — `Esc`는 무동작이다(§7)
-});
-
-test("parentPath — 프로젝트 화면 여섯의 부모는 보드다(§0-7 표 3~7행)", () => {
-  assert.equal(parentPath("/p/a/workers"), "/p/a");
-  assert.equal(parentPath("/p/a/personas"), "/p/a");
-  assert.equal(parentPath("/p/a/protocols"), "/p/a");
-  assert.equal(parentPath("/p/a/ontology"), "/p/a");
-  assert.equal(parentPath("/p/a/tickets/fff28e90"), "/p/a");
-  assert.equal(parentPath("/p/a/tickets/new"), "/p/a"); // 발행도 보드에서 들어간다(§비주얼 §4)
-  assert.equal(parentPath("/p/a/epics"), "/p/a");
-  assert.equal(parentPath("/p/a/epics/P273"), "/p/a"); // 에픽 화면(§에픽 §결정 6)
-});
-
-test("parentPath — 한글 stem은 인코딩돼도 같은 부모다", () => {
-  // Next는 세그먼트를 퍼센트 인코딩된 원문으로 넘긴다(`decodeHash`) — 목적지가 프로젝트
-  // id뿐이라 풀지 않는다. 두 표기가 갈리면 한글 티켓에서만 `Esc`가 죽는다.
-  assert.equal(parentPath("/p/a/tickets/한글제목"), "/p/a");
-  assert.equal(parentPath("/p/a/tickets/%ED%95%9C%EA%B8%80%EC%A0%9C%EB%AA%A9"), "/p/a");
-});
-
-test("parentPath — 표에 없는 경로에 부모를 지어내지 않는다", () => {
-  assert.equal(parentPath("/settings"), null);
-  assert.equal(parentPath("/p/a/bogus"), null);
-  assert.equal(parentPath("/p/a/ticketsss"), null); // 접두만 같은 것에 안 걸린다
 });
 
 test("activeEpicFrom — 보드의 `?epic=`이 우선이고, 값 그대로 돌려준다(§에픽 §결정 10)", () => {
@@ -135,7 +101,6 @@ test("페르소나 이름이 경로에 붙어도 같은 화면이다(§5 ①②)
   assert.equal(screenOf("/p/a/personas/designer"), "personas"); // 이름은 값에 안 남는다(§0-11)
   assert.equal(screenOf("/p/a/personas"), "personas"); // 세그먼트 없는 정본 URL도 종전대로
   assert.equal(hasFindBar("/p/a/personas/designer"), true); // ①을 고치면 저절로 뜬다 — N5
-  assert.equal(parentPath("/p/a/personas/designer"), "/p/a"); // 안 고쳤다. 정규식이 이미 문다
 });
 
 test("projectPath — 페르소나 이름은 옮겨 붙이지 않는다(§5 ④)", () => {

@@ -66,23 +66,6 @@ export function projectPath(pathname: string, id: string): string {
   return `/p/${id}${rest === "/" ? "" : rest}`;
 }
 
-/** 화면의 **부모** — DESIGN.md §0-7 선언 표 6줄의 단일 출처. `Esc`가 여기로 올린다.
- *  `/`와 보드는 부모가 없다(`null`) — 보드의 부모는 `/`가 아니다. 프로젝트 밖으로 나가는 것은
- *  이 화면을 닫는 일이 아니라 다른 큐로 옮기는 일이고, 그 길은 전환기 하단 한 곳이다(§0-7).
- *  표에 없는 경로도 `null`이다 — 선언에 없는 화면에 부모를 지어내지 않는다.
- *
- *  **`projectPath()`와 합치지 않는다**(§0-7): 저쪽은 "프로젝트를 바꾸면 어느 화면인가"(같은
- *  화면 종류를 유지한다)이고 이쪽은 "위가 어디인가"다. 합치면 워커에서 프로젝트를 바꿀 때
- *  보드로 떨어져 §0-1이 깨진다. 겹치는 줄은 티켓 상세 하나뿐이다.
- *
- *  티켓 stem은 퍼센트 인코딩된 채로 온다(`decodeHash` 주석) — 목적지가 프로젝트 id뿐이라
- *  풀 필요가 없다. */
-export function parentPath(pathname: string): string | null {
-  const [, id, rest = ""] = /^\/p\/([^/]+)(\/.*)?$/.exec(pathname) ?? [];
-  if (!id) return null; // `/` · 모르는 경로
-  return /^\/(tickets|workers|personas|protocols|ontology|epics)(\/|$)/.test(rest) ? `/p/${id}` : null;
-}
-
 /** 사용 통계의 화면 enum (DESIGN.md §0-11 이벤트 표 `screen_view`). **`lib/analytics.ts`가
  *  이 타입을 가져다 쓴다** — 정의가 여기 있는 이유는 매핑(`screenOf`)이 `usePathname()`을 받는
  *  클라이언트 코드라서다(저 파일은 `node:fs`를 탄다). */
@@ -101,7 +84,7 @@ export type Screen =
  *  이 함수가 접은 enum 하나만 나간다.
  *
  *  **표에 없는 경로는 `null`이고 아무것도 안 보낸다** — 404·모르는 경로에 화면 이름을
- *  지어내면 통계에 없는 화면이 뜬다(`parentPath`가 표 밖을 `null`로 두는 것과 같은 규칙). */
+ *  지어내면 통계에 없는 화면이 뜬다. */
 export function screenOf(pathname: string): Screen | null {
   if (pathname === "/") return "root";
   const [, id, rest = ""] = /^\/p\/([^/]+)(\/.*)?$/.exec(pathname) ?? [];

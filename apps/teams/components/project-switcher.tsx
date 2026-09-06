@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { SettingsDialog, type AuthView } from "@/components/settings-dialog";
-import { parentPath, projectPath, screenOf } from "@/lib/urls";
+import { projectPath, screenOf } from "@/lib/urls";
 import {
   discardGateDirtyAction,
   markFailuresReadAction,
@@ -583,8 +583,10 @@ const NAV = [
 export function ProjectNav({ id }: { id: string }) {
   const t = useT();
   const pathname = usePathname();
-  // 셸 안에서 끝나는 이동뿐이다(핫키 - `Esc`) — 셸 표식이 그대로 붙는다(§0-22 결정 2).
+  // 셸 안에서 끝나는 이동뿐이다(핫키) — 셸 표식이 그대로 붙는다(§0-22 결정 2).
   const router = useTrackedRouter();
+  // `Esc`(이력 되짚기)만 이 raw 라우터를 쓴다 — `back()`은 `useTrackedRouter()`가 안 감싼다.
+  const browserRouter = useRouter();
   const base = `/p/${id}`;
   const rest = pathname.startsWith(base) ? pathname.slice(base.length) : "";
 
@@ -598,23 +600,24 @@ export function ProjectNav({ id }: { id: string }) {
   useHotkey("nav.board", () => router.push(base));
   useHotkey("nav.workers", () => router.push(`${base}/workers`));
 
-  // `Esc`가 부모로 올린다(§0-7). **키맵에 없는 고정 키**라 `useHotkey`를 못 쓴다(그 훅은
-  // `ActionId`를 받는다) — 대신 같은 두 가드를 손으로 댄다. 위 `b`·`w`와 같은 이유로
-  // 이 컴포넌트가 있는 프로젝트 셸에서만 걸린다.
+  // `Esc`는 직전에 보던 화면으로 돌아간다(§0-7 개정 — 목적지는 선언이 아니라 이력이다).
+  // **키맵에 없는 고정 키**라 `useHotkey`를 못 쓴다(그 훅은 `ActionId`를 받는다) — 대신 같은
+  // 두 가드를 손으로 댄다. 위 `b`·`w`와 같은 이유로 이 컴포넌트가 있는 프로젝트 셸에서만 걸린다.
   // - **bubble 단계**여야 한다: Radix `DismissableLayer`가 capture로 먼저 받아 닫으면서
   //   `preventDefault()`를 부른다 — 열린 것이 있으면 `defaultPrevented`로 알아채고 물러난다.
   //   겹침 목록을 우리가 들지 않는 이유가 이것이다(§0-7 거동).
   // - `isTyping`이면 통과시킨다. 데이터 손실 표면이 여기와 바로 위 두 줄이다(참견·티켓 편집기).
   // `preventDefault`는 안 한다 — `Esc`에 뺏을 브라우저 기본이 없다.
+  // `browserRouter.back()`을 쓴다 — `useTrackedRouter()`는 `push`·`replace`만 감싸고 `back`이
+  // 없다(목적지를 계산하지 않으니 헬퍼도 안 둔다, §0-7 §어디 사나).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || e.defaultPrevented || isTyping(e.target)) return;
-      const parent = parentPath(pathname);
-      if (parent) router.push(parent);
+      browserRouter.back();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [pathname, router]);
+  }, [browserRouter]);
 
   return (
     <nav className="flex items-center gap-4">
