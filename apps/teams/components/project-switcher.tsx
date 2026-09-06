@@ -576,7 +576,7 @@ export function ProjectSwitcher({
  *  되살리기 전에 §7 뒤집기 항을 읽는다: 종전 근거는 거기 보존돼 있고 요구가 그것을 알고도
  *  로고 하나만 남기라고 했다. 툴팁·라벨로 대신하지도 않는다("그냥 로고 클릭"이 요구다). */
 const NAV = [
-  { seg: "", labelKey: "shell.nav.board" },
+  { seg: "/board", labelKey: "shell.nav.board" },
   { seg: "/personas", labelKey: "persona.word.squad" },
   { seg: "/protocols", labelKey: "shell.nav.protocols" },
   { seg: "/ontology", labelKey: "shell.nav.ontology" },
@@ -600,7 +600,7 @@ export function ProjectNav({ id }: { id: string }) {
   // **글 쓰는 중 가드는 `useHotkey`가 든다 — 이 둘은 화면을 떠나는 액션이라 `Mod` 조합인데도
   // 안 듣는다**(그래야 참견 칸에 쓰던 글이 `⌘B` 한 번에 안 사라진다). 키 지정 중에는 캡처
   // 상자의 `stopPropagation`이 이벤트를 window까지 안 보낸다(§0-6 `언제 안 듣는가`).
-  useHotkey("nav.board", () => router.push(base));
+  useHotkey("nav.board", () => router.push(`${base}/board`));
   useHotkey("nav.workers", () => router.push(`${base}/workers`));
 
   // `Esc`는 직전에 보던 화면으로 돌아간다(§0-7 개정 — 목적지는 선언이 아니라 이력이다).
@@ -632,8 +632,8 @@ export function ProjectNav({ id }: { id: string }) {
         // 보드는 티켓 화면(발행·상세)·에픽 화면까지 자기 구역으로 본다 — 둘 다 이 화면에서
         // 들어가는 화면이고 상단탭을 안 늘린다(§에픽 §결정 5·6).
         const active =
-          seg === ""
-            ? rest === "" || rest.startsWith("/tickets") || rest.startsWith("/epics")
+          seg === "/board"
+            ? rest.startsWith("/board") || rest.startsWith("/tickets") || rest.startsWith("/epics")
             : rest.startsWith(seg);
         return (
           <Link

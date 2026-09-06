@@ -41,7 +41,7 @@ import {
   unassignTicket,
   type SaveState,
 } from "@/app/(app)/p/[project]/tickets/[hash]/actions";
-import { createTicket, type NewTicketState } from "@/app/(app)/p/[project]/(board)/actions";
+import { createTicket, type NewTicketState } from "@/app/(app)/p/[project]/board/actions";
 import type { UnassignRun } from "@/lib/engine";
 import { matchCombo } from "@/lib/keymap";
 // `composeAnswer`(§비주얼 §29 방향 — 체크박스마다 다시 돈다)는 여기 있다: node:*가 없는
@@ -1406,7 +1406,7 @@ export function DeleteTicketButton({
               onClick={() =>
                 start(async () => {
                   const r = await deleteTicket(project, hash);
-                  if (r.ok) router.push(`/p/${project}`);
+                  if (r.ok) router.push(`/p/${project}/board`);
                   else setError(r.message ?? t("ticketDetail.deleteFailedFallback"));
                 })
               }

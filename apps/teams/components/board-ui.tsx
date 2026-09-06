@@ -12,7 +12,7 @@ import { Children, useEffect, useRef, useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTrackedRouter } from "@/lib/route-pending";
 import { Check, ChevronsUpDown, ListFilter, Search, TriangleAlert } from "lucide-react";
-import { dropTicketToWip } from "@/app/(app)/p/[project]/(board)/actions";
+import { dropTicketToWip } from "@/app/(app)/p/[project]/board/actions";
 import { setTicketEpic, unassignTicket } from "@/app/(app)/p/[project]/tickets/[hash]/actions";
 import { EarlyRefreshPolling } from "@/components/early-refresh";
 import { useHotkey } from "@/components/keymap-provider";

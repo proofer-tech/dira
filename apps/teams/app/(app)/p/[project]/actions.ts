@@ -52,7 +52,7 @@ export async function createEpic(
     };
   const r = await writeEpic(project.root, key, title);
   if (r.ok) {
-    revalidatePath(`/p/${projectId}`);
+    revalidatePath(`/p/${projectId}/board`);
     revalidatePath(`/p/${projectId}/epics`);
   }
   return r;

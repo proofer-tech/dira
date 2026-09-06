@@ -61,7 +61,7 @@ export function activeEpicFrom(pathname: string, search: string): string {
  *  보드가 아니라 **`/personas`(선택 없음)로** 떨어진다 — 세그먼트는 명시 선택만 담는다. */
 export function projectPath(pathname: string, id: string): string {
   const rest = /^\/p\/[^/]+(\/.*)?$/.exec(pathname)?.[1] ?? "";
-  if (/^\/tickets\/(?!new(\/|$))./.test(rest)) return `/p/${id}`;
+  if (/^\/tickets\/(?!new(\/|$))./.test(rest)) return `/p/${id}/board`;
   if (/^\/personas\/./.test(rest)) return `/p/${id}/personas`;
   return `/p/${id}${rest === "/" ? "" : rest}`;
 }
@@ -89,14 +89,14 @@ export function screenOf(pathname: string): Screen | null {
   if (pathname === "/") return "root";
   const [, id, rest = ""] = /^\/p\/([^/]+)(\/.*)?$/.exec(pathname) ?? [];
   if (!id) return null;
-  if (rest === "" || rest === "/") return "board";
+  if (rest === "" || rest === "/") return "home";
   // 없는 해시는 404로 떨어지지만 그 판정은 서버에 있다 — 클라이언트가 아는 것은 자리뿐이다.
   if (/^\/tickets\/./.test(rest)) return "ticket";
   // 페르소나는 선택이 경로에 담긴다(§5 §선택이 경로에 담긴다 ①) — 세그먼트가 더 붙어도 같은
   // 화면이다. **이름은 통계로 안 나간다**(§0-11 익명 규칙): 접힌 enum 하나가 그대로 나간다.
   if (/^\/personas(\/|$)/.test(rest)) return "personas";
   const seg = rest.slice(1);
-  return seg === "workers" || seg === "protocols" || seg === "ontology" || seg === "home"
+  return seg === "workers" || seg === "protocols" || seg === "ontology" || seg === "board"
     ? seg
     : null;
 }

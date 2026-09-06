@@ -1,4 +1,4 @@
-/** 보드 `/p/<project>/` — 테이블 · 칸반 · 필터 · 검색 (DESIGN.md §1 보드 · §비주얼 디렉션 §3 밀도).
+/** 보드 `/p/<project>/board` — 테이블 · 칸반 · 필터 · 검색 (DESIGN.md §1 보드 · §비주얼 디렉션 §3 밀도).
  *
  *  읽기의 기본 순서는 **손대지 않은 큐 순서**(birth 오름차순)다. 그래서 열린 티켓의 집합·순서가
  *  그 프로젝트의 `workers/<w>.sh list`와 같게 보인다 — 다르면 GUI가 큐를 거짓으로 그린다.
@@ -451,7 +451,7 @@ export default async function Board({
   const qs = (next: URLSearchParams) => {
     next.delete("rows");
     next.delete("done");
-    return next.toString() ? `?${next}` : `/p/${id}`;
+    return next.toString() ? `?${next}` : `/p/${id}/board`;
   };
 
   // 표 컬럼 9개 — 8개는 위 `COLUMNS`의 키를 여기서 채우고, 9번째(에픽)만 이 자리에서 짓는다
@@ -623,7 +623,7 @@ export default async function Board({
     const next = new URLSearchParams(sp);
     if (sidebarOff) next.delete("sidebar");
     else next.set("sidebar", "off");
-    return next.toString() ? `?${next}` : `/p/${id}`;
+    return next.toString() ? `?${next}` : `/p/${id}/board`;
   })();
 
   /** 필터 0건 — 두 뷰가 **같은 문구·같은 해제 배지**를 쓴다. 빈 큐와 문구가 다른 이유는 §6이다
@@ -654,7 +654,7 @@ export default async function Board({
         variant="outline"
         size="sm"
         nativeButton={false}
-        render={<Link href={view === "table" ? `/p/${id}?view=table` : `/p/${id}`} />}
+        render={<Link href={view === "table" ? `/p/${id}/board?view=table` : `/p/${id}/board`} />}
       >
         {t(locale, "boardPage.filter.reset")}
       </Button>

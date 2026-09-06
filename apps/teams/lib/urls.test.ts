@@ -44,10 +44,10 @@ import {
 /** 전환기는 **같은 화면 종류를 유지한다**(DESIGN.md §0-1). 홈이 그 규칙의 다섯 번째 줄이다 —
  *  홈에서 프로젝트를 바꾸면 보드가 아니라 그쪽 홈이다. 티켓 상세만 예외로 보드로 떨어진다. */
 test("projectPath — 홈 → 홈이다(§7)", () => {
-  assert.equal(projectPath("/p/a/home", "b"), "/p/b/home");
+  assert.equal(projectPath("/p/a", "b"), "/p/b"); // 홈
+  assert.equal(projectPath("/p/a/board", "b"), "/p/b/board");
   assert.equal(projectPath("/p/a/workers", "b"), "/p/b/workers");
-  assert.equal(projectPath("/p/a", "b"), "/p/b"); // 보드
-  assert.equal(projectPath("/p/a/tickets/fff28e90", "b"), "/p/b"); // 해시는 큐마다 독립이다
+  assert.equal(projectPath("/p/a/tickets/fff28e90", "b"), "/p/b/board"); // 해시는 큐마다 독립이다
 });
 
 test("activeEpicFrom — 보드의 `?epic=`이 우선이고, 값 그대로 돌려준다(§에픽 §결정 10)", () => {
@@ -70,14 +70,14 @@ test("activeEpicFrom — 필터도 세그먼트도 없으면 빈 문자열이다
  *  아니라 잘못된 화면 이름**이 쌓이고, 표 밖 경로에 이름을 지어내면 없는 화면이 뜬다. */
 test("screenOf — 화면 8종이 표 그대로 나온다(§0-11 `screen_view`)", () => {
   assert.equal(screenOf("/"), "root");
-  assert.equal(screenOf("/p/dira"), "board");
-  assert.equal(screenOf("/p/dira/"), "board"); // 보드의 정본 URL과 같은 화면이다
+  assert.equal(screenOf("/p/dira"), "home");
+  assert.equal(screenOf("/p/dira/"), "home"); // 홈의 정본 URL과 같은 화면이다
+  assert.equal(screenOf("/p/dira/board"), "board");
   assert.equal(screenOf("/p/dira/tickets/fff28e90"), "ticket");
   assert.equal(screenOf("/p/dira/workers"), "workers");
   assert.equal(screenOf("/p/dira/personas"), "personas");
   assert.equal(screenOf("/p/dira/protocols"), "protocols");
   assert.equal(screenOf("/p/dira/ontology"), "ontology");
-  assert.equal(screenOf("/p/dira/home"), "home");
 });
 
 test("screenOf — 프로젝트 이름도 티켓 해시도 값에 안 남는다(익명 규칙)", () => {
@@ -114,9 +114,9 @@ test("projectPath — 페르소나 이름은 옮겨 붙이지 않는다(§5 ④)
  *  두 벌이 된다** — 그 두 화면은 §0-6의 자기 갈래가 같은 키를 먹고 있어서 `preventDefault`가
  *  둘 다 걸리고 사람이 누른 키가 검색창 포커스와 이 바 열기를 동시에 한다. */
 test("hasFindBar — 보드·홈만 빼고 여섯 화면에 뜬다(§데스크톱 앱 N5)", () => {
-  assert.equal(hasFindBar("/p/dira"), false); // 보드 — `board-ui.tsx`가 먹는다
-  assert.equal(hasFindBar("/p/dira/"), false); // 보드의 정본 URL과 같은 화면이다
-  assert.equal(hasFindBar("/p/dira/home"), false); // 홈 — 자기 `<FindBar>`가 이미 있다(§7)
+  assert.equal(hasFindBar("/p/dira"), false); // 홈 — 자기 `<FindBar>`가 이미 있다(§7)
+  assert.equal(hasFindBar("/p/dira/"), false); // 홈의 정본 URL과 같은 화면이다
+  assert.equal(hasFindBar("/p/dira/board"), false); // 보드 — `board-ui.tsx`가 먹는다
   for (const p of [
     "/",
     "/p/dira/workers",

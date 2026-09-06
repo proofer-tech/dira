@@ -249,7 +249,7 @@ export async function sendFollowup(
     const attached = await verifyAttachments(project, attachments, locale);
     const r = await followup(project.root, config, stem, withAttachments(text, attached), locale);
     if (r.ok) {
-      revalidatePath(`/p/${projectId}`);
+      revalidatePath(`/p/${projectId}/board`);
       await kickIdleWorker(project.root); // §4-5 — 이어받기는 **새 열린 티켓 한 장**이다
     }
     return r;
@@ -331,7 +331,7 @@ export async function saveTicket(_prev: SaveState, form: FormData): Promise<Save
       body,
     );
     revalidatePath(`/p/${projectId}/tickets/${encodeURIComponent(t2.stem)}`);
-    revalidatePath(`/p/${projectId}`); // 보드의 title·kind·persona 컬럼
+    revalidatePath(`/p/${projectId}/board`); // 보드의 title·kind·persona 컬럼
     // §4-5 — 편집으로 persona가 붙거나 deps 한 줄이 빠지면 그 순간 디스패치 가능해진다.
     // "정말 가능해졌나"는 판정하지 않는다(그러면 §큐 판정이 두 벌이다) — 그냥 tick 한 번이다.
     await kickIdleWorker(t2.root);
@@ -363,7 +363,7 @@ export async function saveTicketFrontmatter(_prev: SaveState, form: FormData): P
     await writeTicket(t.path, updates, body);
 
     revalidatePath(`/p/${projectId}/tickets/${encodeURIComponent(t.stem)}`);
-    revalidatePath(`/p/${projectId}`);
+    revalidatePath(`/p/${projectId}/board`);
     await kickIdleWorker(t.root);
     return { ok: true };
   } catch (e) {
@@ -397,7 +397,7 @@ export async function setTicketEpic(
     const r = await writeEpic(project.root, config, hash, epic);
     if (!r.ok) return r;
     revalidatePath(`/p/${projectId}/tickets/${encodeURIComponent(r.stem)}`);
-    revalidatePath(`/p/${projectId}`);
+    revalidatePath(`/p/${projectId}/board`);
     return { ok: true };
   } catch (e) {
     return { ok: false, reason: "other", error: (e as Error).message };
@@ -432,7 +432,7 @@ export async function unassignTicket(
     // URL 문자열이 아니라 **찾아낸 파일의 stem**을 넘긴다 — 엔진 `find`는 파일명만 본다.
     const r = await unassign(t2.root, t2.stem, force);
     revalidatePath(`/p/${projectId}/tickets/${encodeURIComponent(t2.stem)}`);
-    revalidatePath(`/p/${projectId}`);
+    revalidatePath(`/p/${projectId}/board`);
     if (r.ok) await kickIdleWorker(t2.root); // §4-5 — `.wip` → 열림. 되돌린 티켓이 바로 다시 물린다
     return r;
   } catch (e) {
@@ -453,7 +453,7 @@ export async function dispatchPollingNowAction(projectId: string, hash: string):
     const r = await dispatchPollingNow(project.root, config, hash, locale);
     if (!r.ok) return { error: r.error };
     revalidatePath(`/p/${projectId}/tickets/${encodeURIComponent(r.stem)}`);
-    revalidatePath(`/p/${projectId}`);
+    revalidatePath(`/p/${projectId}/board`);
     await kickIdleWorker(project.root);
     return { ok: true };
   } catch (e) {
@@ -472,7 +472,7 @@ export async function extendPollingUntilAction(projectId: string, hash: string, 
     const r = await extendPollingUntil(project.root, config, hash, until, new Date(), locale);
     if (!r.ok) return { error: r.error };
     revalidatePath(`/p/${projectId}/tickets/${encodeURIComponent(r.stem)}`);
-    revalidatePath(`/p/${projectId}`);
+    revalidatePath(`/p/${projectId}/board`);
     return { ok: true };
   } catch (e) {
     return { error: (e as Error).message };
@@ -576,7 +576,7 @@ export async function answerRequirement(_prev: SaveState, form: FormData): Promi
     void track("answer_submit", {});
 
     revalidatePath(`/p/${projectId}/tickets/${encodeURIComponent(tk.stem)}`);
-    revalidatePath(`/p/${projectId}`); // 배지가 `deps 대기` → `대기`로 바뀐다 = 재큐의 증거
+    revalidatePath(`/p/${projectId}/board`); // 배지가 `deps 대기` → `대기`로 바뀐다 = 재큐의 증거
     // §4-5 — 답변 파일이 태어나 `<R>`의 deps가 충족됐다. 그 재큐를 cron이 아니라 지금 문다.
     await kickIdleWorker(project.root);
     return { ok: true };
@@ -597,7 +597,7 @@ export async function deleteTicket(projectId: string, hash: string): Promise<Del
       return { ok: false, message: deleteLockedMessage(await readLanguage(), t.state) };
     }
     await unlink(t.path);
-    revalidatePath(`/p/${projectId}`);
+    revalidatePath(`/p/${projectId}/board`);
     return { ok: true };
   } catch (e) {
     return { ok: false, message: (e as Error).message };

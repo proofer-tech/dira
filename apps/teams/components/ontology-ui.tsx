@@ -649,7 +649,7 @@ export function OntologySurveyForm({ projectId }: { projectId: string }) {
     return (
       <p className="text-sm text-muted-foreground">
         {t("ontology.survey.pendingPrefix")}{" "}
-        <Link href={`/p/${projectId}`} className="underline">
+        <Link href={`/p/${projectId}/board`} className="underline">
           {t("shell.nav.board")}
         </Link>
         {t("ontology.survey.pendingSuffix")}

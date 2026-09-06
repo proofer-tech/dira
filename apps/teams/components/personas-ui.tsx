@@ -1372,7 +1372,7 @@ function ActivityRecentSection({
       <h3 className="flex items-center gap-2 text-sm font-medium">
         {t("persona.activity.recentHeading")}
         <Link
-          href={`/p/${projectId}?persona=${encodeURIComponent(personaName)}`}
+          href={`/p/${projectId}/board?persona=${encodeURIComponent(personaName)}`}
           className="ml-auto text-xs font-normal text-muted-foreground hover:underline"
         >
           {t("persona.activity.recentBoardLink")}

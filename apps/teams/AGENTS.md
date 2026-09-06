@@ -31,20 +31,18 @@ apps/teams/
       api/work/         같은 성격의 둘째 창구 — `{busy}` 하나다(N6 `남은 일이 있으면 잠자기 방지`).
                         판정은 `statusOf`가 `open`|`wip`인 티켓의 유무 하나다
       p/[project]/         프로젝트 스코프. layout.tsx가 셸(헤더·내비·전환기)
-      p/[project]/(board)/ 보드(`/p/<project>`). 라우트 그룹이라 URL은 그대로다.
-                        loading.tsx(테이블 스켈레톤)를 **보드에만** 걸려고 감쌌다 —
-                        `p/[project]/loading.tsx`면 워커·페르소나·프로토콜에도 표가 뜬다.
-                        **이 그룹의 loading.tsx는 notFound() 경로에 영향이 없다**(A/B 실측 —
-                        아래 §notFound()와 빈 SSR). 404가 백지면 여기를 의심하지 않는다
+      p/[project]/board/  보드(`/p/<project>/board`, §7 `라우트가 갈렸다`로 프로젝트 루트에서
+                        옮겨 왔다 — 옛 이름은 라우트 그룹 `(board)/`, 지금은 실제 세그먼트다).
                         큐 파일을 건드리는 Server Action은 그 화면 폴더에 둔다
-                        (`workers/actions.ts`·`tickets/[hash]/actions.ts`·`(board)/actions.ts`·
+                        (`workers/actions.ts`·`tickets/[hash]/actions.ts`·`board/actions.ts`·
                         `protocols/actions.ts`). 발행·요구 접수는 **라우트가 아니라 보드의
-                        다이얼로그**라 `createTicket`이 `(board)/`에 있다(DESIGN.md §3).
+                        다이얼로그**라 `createTicket`이 `board/`에 있다(DESIGN.md §3).
                         클라이언트에서 `@/app/p/[project]/…/actions`로 그냥 import된다
-      p/[project]/home/   프로젝트 홈 — 질의 에이전트(§7). `actions.ts`가 넷(묻기·폴링·중지·새 대화)이고
-                        **큐 파일을 하나도 안 건드리는 유일한 화면 액션**이다 — 질문이 티켓으로
-                        들어가지 않고 답이 티켓으로 나오지 않는다. 나가는 쓰기는
-                        `$TICKET_LOCAL/home-sessions.json`의 대화 목록뿐이다
+      p/[project]/page.tsx  프로젝트 홈(`/p/<project>`, §7) — 질의 에이전트. `home/actions.ts`가
+                        넷(묻기·폴링·중지·새 대화)이고 **큐 파일을 하나도 안 건드리는 유일한
+                        화면 액션**이다 — 질문이 티켓으로 들어가지 않고 답이 티켓으로 나오지
+                        않는다. 나가는 쓰기는 `$TICKET_LOCAL/home-sessions.json`의 대화 목록뿐이다.
+                        `home/`은 라우트가 아니라 이 액션·`pty/`의 공동 배치 폴더로 남는다
     actions.ts          Server Action (프로젝트 등록·이름·순서·해제·재해석). 큐 파일은 안 건드린다
                         + **사용 통계 액션 셋**(§0-11): `trackEvent`(화면에서 GA로 나가는
                         **유일한 길** — 새 API 라우트를 안 만든다. `app/api/`는 Electron main

@@ -93,10 +93,10 @@ export default async function Epics({
   // 셋 다 `sidebarSuffix`를 싣는다 — 접힌 채로 줄을 눌러도 접힌 채로 남는다(§비주얼 §52 ⑦).
   const hrefFor = (value: string) =>
     value === ""
-      ? `/p/${id}/?epic=${encodeURIComponent(value)}${sidebarOff ? "&sidebar=off" : ""}`
+      ? `/p/${id}/board?epic=${encodeURIComponent(value)}${sidebarOff ? "&sidebar=off" : ""}`
       : `/p/${id}/epics/${encodeURIComponent(value)}${sidebarSuffix}`;
   const boardHrefFor = (epic: string) =>
-    `/p/${id}/?epic=${encodeURIComponent(epic)}${sidebarOff ? "&sidebar=off" : ""}`;
+    `/p/${id}/board?epic=${encodeURIComponent(epic)}${sidebarOff ? "&sidebar=off" : ""}`;
   // 지금 경로(세그먼트 그대로) — 토글 링크가 목록 선택은 안 건드리고 `sidebar` 하나만 뒤집는다.
   const epicPath = `/p/${id}/epics${epicSegs?.length ? `/${epicSegs.map(encodeURIComponent).join("/")}` : ""}`;
   const sidebarToggleHref = sidebarOff ? epicPath : `${epicPath}?sidebar=off`;
@@ -137,7 +137,7 @@ export default async function Epics({
         titles={titles}
         active={current?.epic ?? null}
         hrefFor={hrefFor}
-        allHref={`/p/${id}${sidebarSuffix}`}
+        allHref={`/p/${id}/board${sidebarSuffix}`}
         allActive={false}
         collapsed={sidebarOff}
         toggleHref={sidebarToggleHref}

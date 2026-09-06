@@ -204,7 +204,7 @@ export async function createTicket(
     return { error: (e as Error).message };
   }
 
-  revalidatePath(`/p/${projectId}`); // 보드에 새 티켓이 뜬다 — 두 경로 공통이다
+  revalidatePath(`/p/${projectId}/board`); // 보드에 새 티켓이 뜬다 — 두 경로 공통이다
   // 요구 접수는 **이동하지 않는다**: 상세는 frontmatter 표·deps·세션 스트림이 있는 운영 화면이라
   // "당신이 티켓을 만들었다"고 알려 준다. 실제로 일어난 일은 큐가 요구를 접수했고 해석은 PM이
   // 한다는 것이다 — 접수 확인은 다이얼로그 안에 남고 상세는 링크가 된다(사람 지적 `fb0d309c`).
@@ -239,7 +239,7 @@ export async function dropTicketToWip(
     const stem = stemOf(p, config);
 
     const r = await dispatchToWip(project.root, stem, confirmed, locale);
-    if (r.ok) revalidatePath(`/p/${projectId}`);
+    if (r.ok) revalidatePath(`/p/${projectId}/board`);
     return r;
   } catch (e) {
     return { ok: false, reason: "other", error: (e as Error).message };
