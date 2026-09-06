@@ -9,11 +9,13 @@ left-hand panel.
 
 ## The five surfaces
 
-`Home agent` · `Schedules` · `Terminal` · `Source control` · `Explorer`. These five are the
+`Sessions` · `Schedules` · `Terminal` · `Source control` · `Explorer`. These five are the
 surfaces. The row carries icons only, with no names written out, so if you cannot tell which
 icon is which surface, hover over it. The name comes up as a tooltip. Those are the names this
-chapter uses below. The first time you open it, `Home agent` is the one picked, and below it are
-two groups: `Conversations` and `Worker sessions`.
+chapter uses below. The first time you open it, `Sessions` is the one picked, and below it are
+two groups: `Conversations` and `Worker sessions`. The word repeats, but the two are on
+different layers. `Sessions` is the surface name that covers both groups, and `Worker sessions`
+is one of the lists that surface opens.
 
 Changing surfaces does not change the address. The screen list on the header stays where it is.
 What changes is the lower half of the left-hand panel and the column on the right, and nothing
@@ -21,7 +23,7 @@ else.
 
 | Surface picked | Lower half of the left panel | The column on the right |
 |---|---|---|
-| `Home agent` | `Conversations` · `Worker sessions` | The conversation tab strip and the thread |
+| `Sessions` | `Conversations` · `Worker sessions` | The conversation tab strip and the thread |
 | `Schedules` | The schedule list and the way in to `New schedule` | The conversation thread of the schedule you picked |
 | `Terminal` | The list of terminals you have open, the `Working directory` picker, and the way in to `New terminal` | The terminal tab strip and the shell |
 | `Source control` | The root and the worktrees, and `git status` for whichever one you picked | The conversation tab strip and thread, unchanged |
@@ -40,7 +42,7 @@ only in memory for as long as the app runs, so redrawing the screen breaks the c
 `Reopen` and a new shell comes up in the same directory. What you typed before, and what it
 printed, do not come back.
 
-## The home agent's persona
+## The persona on `Sessions`
 
 One `Persona` select sits at the top of the conversation column. Every persona in this project
 that has a profile shows up in it. It starts on `archive-manager`. Pick pm and ask, and the
@@ -50,11 +52,11 @@ that profile is.
 - **One run in and the select locks.** When two personas speak in one conversation, nobody can
   work out later what any given answer was based on. To ask as a different persona, press
   `New conversation`.
-- The schedule dialog has the same field. What wakes at the time you set is the home agent, so
-  which one to wake is written on that row too (see [Schedules](/docs/schedules)).
+- The schedule dialog has the same field. What wakes at the time you set is that same session,
+  so which one to wake is written on that row as well (see [Schedules](/docs/schedules)).
 
 **Changing the persona does not widen what it may do.** Pick developer and it still cannot edit
-under `apps/`; pick pm and it still cannot commit or push from here. The tools the home agent
+under `apps/`; pick pm and it still cannot commit or push from here. The tools the session
 carries, and the places its writing reaches, are one set whichever name you picked (see
 [The screens](/docs/screens)). The only thing that changes is the one profile that goes into the
 prompt.

@@ -1,8 +1,9 @@
 # Schedules
 
-At a time you set, the home agent wakes up and carries out one sentence you wrote in advance. If
-the job is sweeping tickets that await an answer every Monday morning, nobody has to be sitting
-there at that hour.
+At a time you set, the session wakes up and carries out one sentence you wrote in advance. It is
+the same session that answers when you ask at home, the first item on the surface row at the top
+left. If the job is sweeping tickets that await an answer every Monday morning, nobody has to be
+sitting there at that hour.
 
 **It runs only while this app is open.** Set a time and close the app and nothing happens at that
 time.
@@ -141,7 +142,7 @@ no separate execution log.
 
 ## Having it file requests
 
-**It files one only when the sentence told it to.** A run is a home agent session, so it can
+**It files one only when the sentence told it to.** A run is that same session, so it can
 already submit a request ([Submitting a request](/docs/requirements)). Write that into the
 schedule's sentence and that sentence is the instruction, written ahead of time.
 
@@ -169,7 +170,7 @@ schedule is only a time and a sentence, making it again is not hard.
 There is no cap. However many you have made, all of them show, and the half scrolls once they
 run past it. There is no `Show more` row. The lower half of the `Schedules` surface holds this
 one list and nothing else, so it never has to share the height with another list. The
-`Conversations` group under `Home agent` still starts at three rows, and its `Show more` is
+`Conversations` group under `Sessions` still starts at three rows, and its `Show more` is
 still there.
 
 The order is the order you made them in, and there is no control for changing the sort.
@@ -184,17 +185,17 @@ appears in the queue (`.dira`).
   on the same row.
 - You will never need to edit that file by hand. A line the app cannot read is treated as not
   being there, and it does not tell you where the mistake is either.
-- **A run cannot change its own schedule.** The only place the home agent's writing reaches is
+- **A run cannot change its own schedule.** The only place the session's writing reaches is
   inside the queue.
 
 ## What you cannot do
 
 - You cannot make a schedule through conversation. Say `do this every day at nine` at home and
-  the agent points you at this screen. No file changes. The time is a value a person sets.
+  the session points you at this screen. No file changes. The time is a value a person sets.
 - Nothing outside can wake one. A webhook goes one way, outward ([Sending Awaiting answer
   somewhere else](/docs/webhook)). This app has no port that listens, so there is no way to start
   a run from Slack.
-- It cannot wake a worker. What this schedule wakes is one home agent session. It is not a place
+- It cannot wake a worker. What this schedule wakes is one session. It is not a place
   for scheduling ticket dispatch.
 - There is no run now. To send the sentence without waiting for the time, just ask at home.
 - There is no preview of the next runs. It does not say how many runs there have been, either.

@@ -38,7 +38,7 @@ Never translate, never re-spell:
 | 티켓 | ticket | Never issue, card, or task. |
 | 큐 | queue | The directory. `큐 루트` is the queue root. |
 | 워커 | worker | The shell script. Plural workers. |
-| 세션 | session | The agent process a worker starts. |
+| 세션 | session | The agent process a worker starts, and the one that answers on the home screen or a schedule wakes. The home surface label is plural `Sessions`; the group under it stays `Worker sessions`. |
 | 페르소나 | persona | Plural personas. |
 | 스쿼드 | squad | |
 | 에픽 | epic | |
@@ -103,8 +103,7 @@ Never translate, never re-spell:
 | 되돌아옴 | reassigned | The same word as `다시 할당` below. A ticket dispatched again after a session was cut off. |
 | 스케줄 | schedule | The row on the home screen. The group label is `Schedules`. |
 | 회차 | run | One firing of a schedule: one question and one answer. Never an iteration or a cycle. |
-| 홈 에이전트 | home agent | The session that answers on the home screen, and the one a schedule wakes. |
-| 표면 | surface | One of the four the icons at the top of the home screen's left panel switch between. The labels are `Home agent`, `Terminal`, `Source control`, and `Explorer`; the word surface itself is manual prose and appears on no screen. |
+| 표면 | surface | One of the five the icons at the top of the home screen's left panel switch between. The labels are `Sessions`, `Schedules`, `Terminal`, `Source control`, and `Explorer`; the word surface itself is manual prose and appears on no screen. |
 | 웹훅 | webhook | The settings node is `Webhook`. |
 | 통합 게이트 | dispatch gate | The screen calls it that (`Apply dispatch gate`), so prose does too, even though the branch it guards is the integration branch. |
 | 받는 트리 | receiving tree | The original the workers' worktrees branched off - the project folder itself. |
