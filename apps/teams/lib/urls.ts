@@ -268,7 +268,7 @@ export function visibleChatRows<T extends { id: string }>(
  *  `title`은 `prompt`의 첫 줄(§7-2 §저장 — 스케줄에는 `title` 칸이 없다). `time`은
  *  `dateTimeLabel`(대화 목록과 다른 자리에 이미 있는 그 서식 — §62 (3)이 "새 서식이 아니라
  *  같은 어휘 두 칸을 이어 붙인 것"이라 적은 값)에 지난 단발이면 `지남` 한 낱말을 붙인다.
- *  `at`·`overdue`는 **서버**(`home-agent.ts`의 `nextScheduleDue`)가 이미 잰 값이다 — 여기서
+ *  `at`·`overdue`는 **서버**(`home-session.ts`의 `nextScheduleDue`)가 이미 잰 값이다 — 여기서
  *  cron을 다시 읽지 않는다: 그 판정 함수는 `node:fs`가 섞인 파일에 있어 클라이언트 번들에
  *  못 들어온다(이 파일 머리 주석과 같은 선). */
 export function scheduleRows(
@@ -886,9 +886,9 @@ export const NO_QUESTION_SECTION_NOTICE = "질문 절 없음 — 산문으로 �
 
 // ── 스케줄의 `when` 판정 (§7-2) — 이 파일에 있는 이유는 파일 머리와 같다 ─────────
 //
-// `home-agent.ts`가 이 함수들의 정본이었으나(node:fs가 섞인 파일), `새 스케줄` 다이얼로그의
+// `home-session.ts`가 이 함수들의 정본이었으나(node:fs가 섞인 파일), `새 스케줄` 다이얼로그의
 // `cron` 갈래(§비주얼 §62 (5) — 요구 `81397aae`)가 **타이핑하는 동안** 유효성과 다음 회차를
-// 그려야 해서 클라이언트가 같은 판정을 불러야 한다. 그래서 여기로 옮기고 `home-agent.ts`는
+// 그려야 해서 클라이언트가 같은 판정을 불러야 한다. 그래서 여기로 옮기고 `home-session.ts`는
 // 재수출한다(엔진 의미 복제 — 같은 판정이 두 곳에 있으면 GUI가 거짓말을 하는 자리가 생긴다).
 
 /** `when`의 갈래를 가르는 것은 **`T` 하나다**(§7-2 §단발과 주기가 한 칸에 담긴다). 단발은
@@ -1006,7 +1006,7 @@ export function judgeSchedule({ when, lastDueMs, createdMs, nowMs }: ScheduleJud
  *  있으면(이미 돌았다) `overdue`이고, 없어도 `judgeSchedule`이 다시 못 돌릴 만큼 지났으면
  *  (`at <= windowStart`, `judgeSchedule`과 같은 셈) 역시 `overdue`다. **반복**은 정의상 항상
  *  다음 맞는 미래 분이라 `overdue`가 설 자리가 없다 — 그래서 갈래 두 함수가 아니라 한 함수의
- *  두 분기다. `Schedule`을 여기서 import하지 않는다 — 이 파일이 `home-agent.ts`를 부르면
+ *  두 분기다. `Schedule`을 여기서 import하지 않는다 — 이 파일이 `home-session.ts`를 부르면
  *  순환 import가 된다. 형은 그 타입이 쓰는 세 칸만 인라인으로 편다. */
 export function nextScheduleDue(
   { when, created, last }: { when: string; created: string; last?: { due: string; at: string } },

@@ -3,7 +3,7 @@
  *  절대경로를 프롬프트 끝에 적는 것**이다. 이 파일이 그 둘을 한다 — 저장(`saveAttachment`)과
  *  표기(`withAttachments`).
  *
- *  **자리는 `<큐 루트>/attachments/` 하나다**(§8 표). 홈 에이전트 cwd는 `dirname(root)`이고 워커
+ *  **자리는 `<큐 루트>/attachments/` 하나다**(§8 표). 홈 세션 cwd는 `dirname(root)`이고 워커
  *  cwd는 워크트리인데 거기 `.dira`가 이 큐를 가리킨다 — 양쪽 다 이 경로가 cwd 아래로 떨어진다.
  *  `tickets/` 아래가 아니므로 불변식 4(큐는 평면)를 건드리지 않고 **엔진은 이 디렉터리를 모른다.**
  *

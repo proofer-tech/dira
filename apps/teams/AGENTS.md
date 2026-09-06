@@ -113,7 +113,7 @@ apps/teams/
                         개행 없는 한 줄 · 0600). `.authwarn`은 안 건드린다. 드라이버는 `script`로
                         pty를 주고(네이티브 모듈 0) 세션이 하나뿐인 모듈 상태다 — 왜 `cat |`이고
                         왜 종료를 pty 안 표식으로 아는지는 그 파일 주석에 실측과 함께 있다
-    home-agent.ts       홈 에이전트(DESIGN.md §7) 실행층. 상태 스냅샷 조립 · `claude` 세션 spawn ·
+    home-session.ts     홈 세션(DESIGN.md §7) 실행층. 상태 스냅샷 조립 · `claude` 세션 spawn ·
                         프로젝트 → session id 목록(`$TICKET_LOCAL/home-sessions.json` — §대화가 여럿이다.
                         상한 20을 자르는 것도 여기고 화면은 받은 줄을 그대로 그린다).
                         **GUI가 큐를 안 거치고 세션을 소유하는 유일한 곳** — `engine.ts`와 짝이
@@ -262,7 +262,7 @@ apps/teams/
                         그 둘과 스레드를 같이 받는다(`HomeChunk.conversations`) — 라우트가 안 는다.
                         **`session-stream.tsx`를 안 쓴다**(§7이 그렇게 적었다 — 저건 티켓 `stem`에
                         묶여 있고 참견·이어받기 폼을 달고 있다). 재사용하는 것은 화면이 아니라
-                        읽기 코어(`lib/transcript.ts`)이고 그건 `lib/home-agent.ts`가 부른다.
+                        읽기 코어(`lib/transcript.ts`)이고 그건 `lib/home-session.ts`가 부른다.
                         **폴링은 답이 도는 동안만 돈다**(§7 — 홈은 5초 폴링을 하지 않는다).
                         낙관적 에코가 없다: 방금 보낸 질문도 트랜스크립트에서 읽어 온다 —
                         화면의 출처가 그 파일 하나여야 새로고침 전후가 같다.

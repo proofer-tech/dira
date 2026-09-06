@@ -173,7 +173,7 @@ test("티켓 .wip.md는 이 함수도 한 번 더 막는다(§11-2 결정 4 방�
 
 mkdirSync(path.join(root, "worktrees", "w9", "src"), { recursive: true });
 writeFileSync(path.join(root, "worktrees", "w9", "src", "urls.ts"), "export const A = 1;\n");
-writeFileSync(path.join(root, "src", "home-agent.ts"), "export const HOME_PERSONA = 1;\n");
+writeFileSync(path.join(root, "src", "sample-agent.ts"), "export const HOME_PERSONA = 1;\n");
 
 test("이름 찾기 — 파일명이 query를 담으면 걸린다", async () => {
   const r = await findByName(root, "urls", false);
@@ -194,13 +194,13 @@ test("내용 찾기 — HOME_PERSONA가 그 줄과 함께 걸린다", async () =
   const r = await findByContent(root, "HOME_PERSONA", false);
   assert.ok(r.ok);
   assert.strictEqual(r.hits.length, 1);
-  assert.strictEqual(r.hits[0]?.file, "src/home-agent.ts");
+  assert.strictEqual(r.hits[0]?.file, "src/sample-agent.ts");
   assert.strictEqual(r.hits[0]?.line, 1);
   assert.ok(!r.truncated);
 });
 
 test("내용 찾기 — 워크트리 사본은 기본으로 빠진다", async () => {
-  writeFileSync(path.join(root, "worktrees", "w9", "src", "home-agent.ts"), "export const HOME_PERSONA = 1;\n");
+  writeFileSync(path.join(root, "worktrees", "w9", "src", "sample-agent.ts"), "export const HOME_PERSONA = 1;\n");
   const off = await findByContent(root, "HOME_PERSONA", false);
   assert.ok(off.ok);
   assert.strictEqual(off.hits.length, 1);

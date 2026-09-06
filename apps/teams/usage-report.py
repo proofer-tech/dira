@@ -92,7 +92,7 @@ def load_dispatch_index(runner_log: Path):
 
 def ticket_of(idx, sid, epoch):
     """이 sid·이 시각에 물려 있던 (티켓해시, 페르소나). epoch 이하 DISPATCH 중 가장 늦은 것 -
-    이 sid가 색인에 아예 없으면 None(tick.sh를 거치지 않은 세션 - home-agent 등)."""
+    이 sid가 색인에 아예 없으면 None(tick.sh를 거치지 않은 세션 - home-session 등)."""
     entries = idx.get(sid)
     if not entries:
         return None

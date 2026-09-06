@@ -289,7 +289,7 @@ export async function lastActivity(
 
 /** 이 세션의 **마지막 사건 하나** — 필터가 없다(§7 §도는 워커 세션은 스레드에서도 돈다).
  *  `lastActivity`와 달리 `tool_result`·`thinking`·`prompt`도 히트다: 홈의 활동 3종 매핑
- *  (`activityFromEvent`, `lib/home-agent.ts`)이 그 갈래까지 셋으로 접으므로 여기서 먼저 걸러내면
+ *  (`activityFromEvent`, `lib/home-session.ts`)이 그 갈래까지 셋으로 접으므로 여기서 먼저 걸러내면
  *  안 된다. 같은 이유로 "요약이 빈 tool_use"도 그대로 돌려준다 — 도구 이름 자체가 활동 문구다. */
 export async function lastEvent(
   file: string,

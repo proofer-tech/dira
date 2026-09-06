@@ -1,4 +1,4 @@
-/** §0-14 — 머신 상태: 잠자기 · 꺼짐 · 오프라인. 서버 모듈 스코프(선례: `home-agent.ts`의
+/** §0-14 — 머신 상태: 잠자기 · 꺼짐 · 오프라인. 서버 모듈 스코프(선례: `home-session.ts`의
  *  `runs` 맵)에서 15초 하트비트를 돌려 `{ offline, resume }`를 낸다. 화면 배선(종 항목 ⑤·⑥,
  *  시각 문자열 포맷)은 별도 티켓(`1087db4d`)이 한다 — 여기가 내는 `from`·`to`는 epoch ms다. */
 import { execFile } from "node:child_process";
@@ -6,7 +6,7 @@ import { randomUUID } from "node:crypto";
 import { readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
-import { runSchedules } from "./home-agent.ts";
+import { runSchedules } from "./home-session.ts";
 import { localDir } from "./paths.ts";
 import { webhookTick } from "./webhook.ts";
 import { readAlerts, writeAlerts } from "./workers.ts";
@@ -147,7 +147,7 @@ async function readHeartbeatMark(): Promise<HeartbeatMark | null> {
 }
 
 // §개정 §결정 — 원자적 쓰기가 이제 필요하다. 읽는 자가 자기 자신뿐이 아니게 됐다(서버 둘이
-// 같은 파일을 본다). tmp + rename은 `writeHome`(home-agent.ts)과 같은 선례다.
+// 같은 파일을 본다). tmp + rename은 `writeHome`(home-session.ts)과 같은 선례다.
 async function writeHeartbeatMark(nowMs: number): Promise<void> {
   const file = heartbeatPath();
   const tmp = `${file}.${randomUUID()}.tmp`;

@@ -6,7 +6,7 @@
  *  자리인 것과 반대다(§7 — 질문이 티켓으로 들어가지 않고 답이 티켓으로 나오지 않는다).
  *  여기서 나가는 쓰기는 `$TICKET_LOCAL/home-sessions.json`의 **대화 목록**뿐이다(§대화가 여럿이다).
  *
- *  판정과 실행은 전부 `lib/home-agent.ts`다 — 이 파일은 프로젝트 검증 + 위임이 전부다
+ *  판정과 실행은 전부 `lib/home-session.ts`다 — 이 파일은 프로젝트 검증 + 위임이 전부다
  *  (`sendInterject`가 `lib/interject.ts`에 대해 갖는 관계와 같다).
  *
  *  **`revalidatePath`를 부르지 않는다.** 대화의 출처는 트랜스크립트 파일이고 그건 Next 캐시가
@@ -48,7 +48,7 @@ import {
   type Answer,
   type HomeChunk,
   type ScheduleView,
-} from "@/lib/home-agent";
+} from "@/lib/home-session";
 import { explorerRoot, getProject, resolveConfig, type Project } from "@/lib/projects";
 import { killPty, openPty, restartPty } from "@/lib/pty";
 import {
@@ -83,7 +83,7 @@ export async function askHome(
   question: string,
   /** 첨부(§8) — 화면이 이미 올려 둔 **경로**만 온다(바이트는 이 액션을 안 지난다). 돌아온 경로가
    *  `attachments/` 아래인지는 서버가 다시 본다(신뢰 경계). 조립은 `withAttachments` 하나이고,
-   *  그 경로는 홈 에이전트 cwd(`dirname(root)`) 아래라 `Read`가 그대로 연다(§7 · §8 표). */
+   *  그 경로는 홈 세션 cwd(`dirname(root)`) 아래라 `Read`가 그대로 연다(§7 · §8 표). */
   attachments: string[] = [],
   locale: Locale = DEFAULT_LOCALE,
 ): Promise<Answer | null> {
@@ -528,7 +528,7 @@ export async function openExplorerFileTab(projectId: string, relPath: string): P
 }
 
 /** 편집기의 깨끗함 <-> 더러움 전환에서만 부른다(§11 수용조건 4) — `CodeEditor`의 `dirty` 값이
- *  갈릴 때 그 탭의 `unsaved`를 싣는다. 타이핑마다가 아니다(`lib/home-agent.ts setFileTabUnsaved`
+ *  갈릴 때 그 탭의 `unsaved`를 싣는다. 타이핑마다가 아니다(`lib/home-session.ts setFileTabUnsaved`
  *  머리 주석과 같은 경계). */
 export async function setExplorerTabUnsaved(projectId: string, relPath: string, unsaved: boolean): Promise<HomeChunk> {
   try {

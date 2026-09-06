@@ -1060,10 +1060,10 @@ test("c357313f — 홈 화면의 조립 문구가 영어에서도 문장이 된�
   // 새 스케줄 다이얼로그 설명 — 가운데 조각이 위 판정 문장과 한 글자까지 같다.
   assert.strictEqual(
     `${t(l, "home.schedule.desc1")} ${t(l, "home.schedule.liveNote")}. ${t(l, "home.schedule.desc3")}`,
-    "At the time you set, the home agent carries out this prompt. Schedules only run while this app is open — tickets in the queue keep getting dispatched even when it is closed. Runs missed while the app was closed happen once, late, when you open it.",
+    "At the time you set, the session carries out this prompt. Schedules only run while this app is open — tickets in the queue keep getting dispatched even when it is closed. Runs missed while the app was closed happen once, late, when you open it.",
   );
 
-  // <WorkerNote>와 home-agent.ts의 busy 거절이 같은 접미를 나눠 쓴다 — 앞 조각만 갈린다.
+  // <WorkerNote>와 home-session.ts의 busy 거절이 같은 접미를 나눠 쓴다 — 앞 조각만 갈린다.
   assert.strictEqual(
     `${t(l, "home.workerNote.running")}high0002${t(l, "home.workerNote.runningSuffix")}`,
     "A running session takes no questions here · interrupt it from the high0002 detail page",
@@ -1074,7 +1074,7 @@ test("c357313f — 홈 화면의 조립 문구가 영어에서도 문장이 된�
   );
   assert.strictEqual(`${t(l, "home.workerNote.done")}high0002`, "Asks on in this session without worker permissions · high0002");
 
-  // home-agent.ts ask()의 이른 실패 — 괄호를 이 값이 열고 코드가 닫는다.
+  // home-session.ts ask()의 이른 실패 — 괄호를 이 값이 열고 코드가 닫는다.
   assert.strictEqual(
     `${t(l, "home.errors.claudeNotFoundPrefix")}/usr/bin)`,
     "Couldn't find claude on PATH. (PATH=/usr/bin)",

@@ -2,11 +2,11 @@
  *
  *  탭 목록의 정본은 `home-sessions.json`의 `tabs`/`activeTab`이고(§11 결정 2), 이 파일은 그
  *  목록에 적용되는 상한 · LRU 닫기 · 저장 안 한 탭 예외를 fs 없이 재는 순수 함수로 낸다 —
- *  `lib/home-agent.ts`(fs를 타는 쪽)가 이 함수들을 부른다. */
+ *  `lib/home-session.ts`(fs를 타는 쪽)가 이 함수들을 부른다. */
 
 /** 탭 한 줄. `kind`는 `chat`·`terminal`·`file`이다 — 체크아웃은 P366-8이 늘린다.
  *  `unsaved`는 편집 중인 파일 탭이 상한 계산에서 빠지는 자리다(§11 수용조건). `file` 탭의
- *  `id`는 relPath라 `chat`·`terminal`의 uuid 관문(`home-agent.ts parseHome`)을 안 탄다.
+ *  `id`는 relPath라 `chat`·`terminal`의 uuid 관문(`home-session.ts parseHome`)을 안 탄다.
  *  `cwd`는 `terminal` 탭에만 있다(§11-1 결정 3 — 만든 뒤에는 안 갈린다). */
 export type Tab = { id: string; kind: "chat" | "terminal" | "file"; lastViewed: string; unsaved?: true; cwd?: string };
 

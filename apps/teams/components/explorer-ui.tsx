@@ -33,7 +33,7 @@ import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { ExplorerFile, ExplorerListing, FindContentResult, FindNameResult } from "@/lib/explorer";
-import type { HomeChunk, Tab } from "@/lib/home-agent";
+import type { HomeChunk, Tab } from "@/lib/home-session";
 import { cn } from "@/lib/utils";
 
 /** `protocols-ui.tsx` · `ticket-ui.tsx` 등에 이미 있는 "OS 기본 앱으로 열기" 버튼과 같은
@@ -636,7 +636,7 @@ function CodeEditor({
   const lang = langOf(relPath);
 
   // 서버(탭의 `unsaved`)에는 깨끗함 <-> 더러움이 **갈릴 때만** 알린다 — 마운트 때 한 번 뜨는
-  // `false`는 이미 서버 쪽 기본값이라 안 보낸다(§11 수용조건 4, `home-agent.ts setFileTabUnsaved`
+  // `false`는 이미 서버 쪽 기본값이라 안 보낸다(§11 수용조건 4, `home-session.ts setFileTabUnsaved`
   // 머리 주석과 같은 경계).
   const dirtyMounted = useRef(false);
   useEffect(() => {

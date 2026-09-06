@@ -13,7 +13,7 @@
  *  세션이 GUI 밖에서 append한다. 프리렌더하면 빌드 시점 대화가 굳는다. */
 import { notFound } from "next/navigation";
 import { HomeUI } from "@/components/home-ui";
-import { pollHome } from "@/lib/home-agent";
+import { pollHome } from "@/lib/home-session";
 import { t } from "@/lib/i18n";
 import { getProject, listPersonas, readLanguage, resolveConfig } from "@/lib/projects";
 import { listTickets } from "@/lib/queue";

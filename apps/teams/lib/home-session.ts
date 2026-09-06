@@ -1,4 +1,4 @@
-/** 홈 에이전트(DESIGN.md §7)의 실행층 — **화면이 없는 서버 층**이다.
+/** 홈 세션(DESIGN.md §7)의 실행층 — **화면이 없는 서버 층**이다.
  *
  *  이 파일이 `lib/`에서 유일하게 하는 일: GUI가 **큐를 안 거치고** `claude` 세션을 하나 띄운다.
  *  질문이 티켓으로 들어가지 않고 답이 티켓으로 나오지 않는다(요구 `feb754bf`: "요구사항을
@@ -148,7 +148,7 @@ const WRITABLE = ["personas/**", "protocols/**", "workers/*.sh", "AGENTS.md", "t
  *  그냥 돌고, 이 목록을 빼면 `manual`이 다 물어보다 턴이 끝난다. **둘 중 하나를 빼는 변경은
  *  경계를 통째로 없앤다.**
  *
- *  **`home-agent.test.ts`가 이 반환값을 검증한다.** `--allowed-tools`만 남기는 회귀가 `89962e56`
+ *  **`home-session.test.ts`가 이 반환값을 검증한다.** `--allowed-tools`만 남기는 회귀가 `89962e56`
  *  그 사건이었고, 그건 코드를 봐서는 안 틀려 보인다 — 플래그 이름이 하는 일을 알려 주지 않는다. */
 /** `ontologyDir`은 **해석된 값**(`resolveConfig(project).ontology`)이다 — 기본값 큐에서는
  *  `<root>/ontology`와 글자로 같고, `TICKET_ONTOLOGY`가 재정의한 큐에서는 큐 밖 절대경로일 수
@@ -194,7 +194,7 @@ export type Conversation = {
   persona?: string;
 };
 
-// ── 스케줄 (§7-2) — 좌측 패널 둘째 그룹이 시각에 홈 에이전트를 깨운다 ───────────
+// ── 스케줄 (§7-2) — 좌측 패널 둘째 그룹이 시각에 홈 세션을 깨운다 ───────────
 //
 // **엔진이 한 번도 안 읽는다** — 읽는 쪽도 쓰는 쪽도 이 GUI 서버 하나다. 그래서 저장 자리는
 // 대화 목록과 같은 파일(`home-sessions.json`)이고 새 파일은 0개다(§7-2 §저장).
@@ -521,7 +521,7 @@ export async function switchConversation(projectId: string, sessionId: string): 
  *  대화 목록은 최근 20개의 이력이다 - 서로 다른 개념이다). 닫은 탭이 `activeTab`이면 남은 탭
  *  중 가장 최근 본 것으로 넘어간다 - **`current`(대화 스레드)는 넘어간 탭이 `chat`일 때만
  *  따라간다**(§11-1, P366-4). 터미널 탭으로 넘어가도 대화 스레드는 그대로다 - 터미널 표면은
- *  `current`를 안 쓴다(§11-1 결정 - 폴링·스레드는 홈 에이전트 표면 전용). */
+ *  `current`를 안 쓴다(§11-1 결정 - 폴링·스레드는 홈 세션 표면 전용). */
 export async function closeHomeTab(projectId: string, tabId: string): Promise<Home> {
   return withHomeLock(async () => {
     const home = await readHome(projectId);
@@ -700,7 +700,7 @@ export type SnapshotInput = {
   newTicketHash: string;
 };
 
-/** 스냅샷 문자열. **순수 함수다**(fs를 안 탄다) — `home-agent.test.ts`가 이걸 검증한다.
+/** 스냅샷 문자열. **순수 함수다**(fs를 안 탄다) — `home-session.test.ts`가 이걸 검증한다.
  *
  *  `readSummary`를 부르지 않고 같은 판정 함수를 직접 부른다: 저건 `listWorkers`를 **티켓 없이**
  *  불러서 `holding`이 항상 null이고(§7 표가 요구하는 "물고 있는 티켓"이 통째로 빈다), 여기서
@@ -795,7 +795,7 @@ const QUESTION_MARK = "\n## 질문\n\n";
 
 // ── 페르소나 (§5-3 · §7 §페르소나가 실린다) ─────────────────────────────────
 
-/** 홈 에이전트가 도는 페르소나(§5-3). **큐가 고르는 값이 아니다** — 워커 쪽은 티켓 fm의
+/** 홈 세션이 도는 페르소나(§5-3). **큐가 고르는 값이 아니다** — 워커 쪽은 티켓 fm의
  *  `persona:`가 고르고 여기는 하나로 고정이다(§5-3 §입구가 둘이고 PROFILE은 한 벌이다:
  *  두 입구가 **같은 세 파일**을 읽고 갈리는 것은 도구와 커밋 권한뿐이다). */
 export const HOME_PERSONA = "archive-manager";
@@ -803,7 +803,7 @@ export const HOME_PERSONA = "archive-manager";
 /** 페르소나 세 조각을 **`tick.sh:265`와 같은 순서**로 읽어 한 블록으로 만든다 —
  *  `PROFILE.md` → `skills.md` → `memory/*.md`(**한 단계** 글롭 · 이름 오름차순).
  *
- *  **`buildPrompt` 밖에서 읽는다.** 저 함수는 순수로 남아야 하고(`home-agent.test.ts`가 그걸
+ *  **`buildPrompt` 밖에서 읽는다.** 저 함수는 순수로 남아야 하고(`home-session.test.ts`가 그걸
  *  검증한다) fs를 들이는 순간 그 테스트가 죽는다 — 그래서 조립된 문자열을 인자로 넘긴다.
  *
  *  **파일이 없으면 빈 문자열이고 WARN도 없다**(§7). `PROFILE.md`가 없으면 사이드카도 안 싣는다 —
@@ -1018,7 +1018,7 @@ export async function ask(
   turn?: { sessionId: string; resumed: boolean; persona?: string },
 ): Promise<Answer> {
   // **동기로 판정한다** — `readLanguage()`(fs 읽기)를 아직 안 문다: 실패 ①(spawn)은 이 자리에서
-  // 즉시 끝나야 하는 계약이다(`home-agent.test.ts` "한 대화에 한 질문" — 폴링 없이 그 자리에서
+  // 즉시 끝나야 하는 계약이다(`home-session.test.ts` "한 대화에 한 질문" — 폴링 없이 그 자리에서
   // `isAsking() === false`). 이 두 문구는 그래서 `DEFAULT_LOCALE`로 고정한다(원래도 로케일이
   // 없던 자리다) — 실제 로케일은 아래 시스템 프롬프트 자리에서만 읽는다.
   const q = question.trim();
@@ -1302,7 +1302,7 @@ function judge(
 // 하나 붙는다 — 그 이름이 없으면 엔진(`tickets.py`)과 화면(`lib/queue.ts`)이 문자열로 찾는
 // 표식이 영어 세션에서 안 뜬다.
 //
-// `FLUENT_KO`는 `tick.sh`의 `FLUENTKO` 히어독 본문과 **바이트로 같아야 한다**(`home-agent.test.ts`가
+// `FLUENT_KO`는 `tick.sh`의 `FLUENTKO` 히어독 본문과 **바이트로 같아야 한다**(`home-session.test.ts`가
 // 지킨다). 파일이 아니라 인라인 상수인 이유 · 부분 손질 금지 근거는 그 히어독 머리 주석과 같다 —
 // 사본을 큐에 두면 사람이 지울 수 있고 dmg 배포에는 폴백할 엔진 레포가 없다. 갱신은 그 히어독을
 // 통째로 갈아 끼울 때 이 상수도 같이 간다.
@@ -1639,7 +1639,7 @@ export async function startAsk(
   if (!q) {
     return { ok: false, reason: "other", output: t(locale, "home.errors.emptyQuestion"), sessionId: "", resumed: false };
   }
-  // **도는 워커 세션에는 이어 묻지 못한다**(§7 §이어 묻는 것은 홈 에이전트다). 화면이 이미
+  // **도는 워커 세션에는 이어 묻지 못한다**(§7 §이어 묻는 것은 홈 세션이다). 화면이 이미
   // `보내기`를 잠그지만(§비주얼 §24 §잠금 두 자리 ②) 여기서 한 번 더 본다 — 그 절이 든 근거는
   // 자리가 아니라 **파일**이다: 홈이 같은 트랜스크립트에 `--resume`으로 붙으면 한 파일에 두
   // 프로세스가 쓴다. 화면의 잠금은 폼 상태라 새로고침·낡은 탭이면 없는 것과 같다.

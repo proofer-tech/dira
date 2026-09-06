@@ -47,7 +47,7 @@ const {
   SCHEDULE_LOOKBACK_MS,
   runSchedules,
   FLUENT_KO,
-} = await import("./home-agent.ts");
+} = await import("./home-session.ts");
 type HomeChunk = Awaited<ReturnType<typeof pollHome>>;
 const { TAB_LIMIT } = await import("./tabs.ts");
 const { tailEvents } = await import("./transcript.ts");
@@ -91,7 +91,7 @@ function fixture() {
     writeFileSync(path.join(tickets, name), `---\n${fm}---\n\n${body}\n`);
   put(
     "aaaa0001.wip.md",
-    "ticket: aaaa0001\ntitle: 홈 에이전트 실행층\nkind: work\npersona: developer\nowner: developer / w1-deadbeef\n",
+    "ticket: aaaa0001\ntitle: 홈 세션 실행층\nkind: work\npersona: developer\nowner: developer / w1-deadbeef\n",
     "본문\n",
   );
   put("aaaa0002.md", "ticket: aaaa0002\ntitle: 열린 티켓\nkind: work\npersona: qa\n", "본문\n");
@@ -122,7 +122,7 @@ test("renderSnapshot — 임시 큐 픽스처의 워커 이름·상태·엔진·
   assert.match(s, /\| claude · opus \|/);
   assert.match(s, /\| claude \(기본값 가정\) \|/);
   // ④ 물고 있는 티켓 — 해시와 제목 둘 다
-  assert.match(s, /aaaa0001 — 홈 에이전트 실행층/);
+  assert.match(s, /aaaa0001 — 홈 세션 실행층/);
   // ⑤ 티켓 3수 + 파생 2수
   assert.match(s, /열림 2 · 진행중 1 · 완료 1/);
   assert.match(s, /답변 대기 1건/);
@@ -340,7 +340,7 @@ test("toolFlags — 네 조각과 경로 스코프 여섯 (89962e56 · 7e35d300 
 
   // ① 네 조각이 다 있다. `--allowed-tools`는 **도구를 빼지 않고**(권한 목록이다) 나머지 셋 중
   // 하나라도 빠지면 세션에 `Bash`가 살아난다 — 그게 `89962e56` 그 사건이다. 지금은 넷째가
-  // 경로 스코프까지 지므로 그것도 **존재**로 고정한다. 실측은 `home-agent.ts` 머리 주석에 있다.
+  // 경로 스코프까지 지므로 그것도 **존재**로 고정한다. 실측은 `home-session.ts` 머리 주석에 있다.
   for (const flag of ["--tools", "--strict-mcp-config", "--permission-mode", "--allowed-tools"]) {
     assert.ok(flags.includes(flag), `${flag}가 빠졌다 — 도구 표면이 §7 표보다 넓어진다`);
   }

@@ -15,11 +15,11 @@
  *
  *  **`<SessionStream>`을 가져오지 않는다**(§7 · §24). 저건 티켓 `stem`에 묶여 있고 참견·이어받기
  *  폼을 달고 있다 — 끌어오면 그 안에 티켓 없는 경로가 하나 더 생긴다. 재사용하는 것은 화면이
- *  아니라 **읽기 코어**(`lib/transcript.ts`)이고, 그건 `lib/home-agent.ts`의 `pollHome`이 부른다.
+ *  아니라 **읽기 코어**(`lib/transcript.ts`)이고, 그건 `lib/home-session.ts`의 `pollHome`이 부른다.
  *
  *  **접힌 줄(§9 · §2-6 ②)은 렌더러 한 벌을 그대로 부른다**(§7 §스레드가 트랜스크립트 전부를
  *  그린다, 티켓 `08345f02`). `toTurns`가 도구·생각·`tool_result`·서브 줄을 전부 `role: "line"`
- *  으로 낸 뒤(그 판정은 `lib/home-agent.ts`가 든다 — 이 파일은 종을 고르지 않는다), 아래
+ *  으로 낸 뒤(그 판정은 `lib/home-session.ts`가 든다 — 이 파일은 종을 고르지 않는다), 아래
  *  `grouped`가 말풍선 사이 연속 `line`을 한 묶음으로 접고 `session-stream.tsx`의 `<Bundle>`이
  *  그 묶음을 그린다 — 그 파일이 export하는 유일한 이유가 이 재사용이다. 두 화면이 같은
  *  사건을 다른 모양으로 그리면 어느 쪽이 정본인지 화면이 말을 못 하므로, 컴포넌트 통째(폼까지
@@ -181,7 +181,7 @@ import type {
   Tab,
   Turn,
   WorkerSession,
-} from "@/lib/home-agent";
+} from "@/lib/home-session";
 import { formatCombo, matchCombo } from "@/lib/keymap";
 import type { Checkout, GitStatus, StatusFile } from "@/lib/source-control";
 import {
@@ -214,7 +214,7 @@ const EXAMPLE_KEYS = ["home.example.ticketsWhy", "home.example.summarizeProtocol
  *  종전에는 걷힌 ①이 이겨서 그 창을 가려 줬고, 그것만 걷으면 화면이 거짓말을 한다. */
 const NO_TURNS_KEY = "home.newConversationLocked";
 
-/** `home-agent.ts`의 `HOME_PERSONA`와 같은 값 — 그 상수를 이 파일로 못 가져온다(그 모듈은
+/** `home-session.ts`의 `HOME_PERSONA`와 같은 값 — 그 상수를 이 파일로 못 가져온다(그 모듈은
  *  `node:fs`가 섞인 서버 파일이라 클라이언트 번들이 안 된다 — `Panel` 타입 주석과 같은 근거).
  *  대화·스케줄이 저장한 `persona`가 없을 때 화면이 보여줄 기본값이 이 문자열이다(§7-4 결정 1). */
 const DEFAULT_PERSONA = "archive-manager";
@@ -234,10 +234,10 @@ type Panel = Pick<Home, "conversations" | "current" | "tabs" | "activeTab"> & {
 
 /** 좌측 2단의 위 단 — 표면 넷(§11 결정 1 · §비주얼 §72 ①). 이 티켓이 붙이는 것은 셸과 고르는
  *  손잡이뿐이고, 셋(`terminal` · `scm` · `explorer`)의 내용은 P366-5 · P366-6 · P366-8이 채운다. */
-type Surface = "agent" | "schedules" | "terminal" | "scm" | "explorer";
+type Surface = "session" | "schedules" | "terminal" | "scm" | "explorer";
 
 const SURFACES: { id: Surface; labelKey: string; icon: typeof MessageSquare }[] = [
-  { id: "agent", labelKey: "home.surface.agent", icon: MessageSquare },
+  { id: "session", labelKey: "home.surface.agent", icon: MessageSquare },
   { id: "schedules", labelKey: "home.schedulesLabel", icon: CalendarClock },
   { id: "terminal", labelKey: "home.surface.terminal", icon: SquareTerminal },
   { id: "scm", labelKey: "home.surface.scm", icon: GitBranch },
@@ -265,7 +265,7 @@ const FAIL_KEYS: Record<AnswerReason, { title: string; next?: string; cmd?: stri
     next: "home.fail.auth.next",
   },
   timeout: {
-    // 이름은 낡았다 — 값의 뜻이 §7 §천장이 없다(`8db4d0f6`)로 죽음 기반이 됐다(`lib/home-agent.ts`의
+    // 이름은 낡았다 — 값의 뜻이 §7 §천장이 없다(`8db4d0f6`)로 죽음 기반이 됐다(`lib/home-session.ts`의
     // `AnswerReason` 주석 참조). `output`은 `exit <코드>`/`signal <신호>` + stderr 꼬리다.
     title: "home.fail.timeout.title",
     next: "home.fail.timeout.next",
@@ -351,11 +351,11 @@ export function HomeUI({
   const [pendingSchedule, setPendingSchedule] = useState<ScheduleView | null>(null);
   // **표면 고르기**(§11 결정 1 · §비주얼 §72 ①) — `home-sessions.json`에 안 산다(URL도 안
   // 갈린다는 결정과 같은 축: 이 값은 화면이 들고 있는 수 하나다). 새로고침하면 언제나
-  // `홈 에이전트`로 돌아온다 — 종전 화면과 같은 첫 인상이다. **우측 탭 줄은 이 값과 무관하게
+  // `세션`으로 돌아온다 — 종전 화면과 같은 첫 인상이다. **우측 탭 줄은 이 값과 무관하게
   // 그대로다**(§11 결정 1 §우측 탭은 표면을 가로지른다) — 탭을 눌러 그 탭의 종류가 지금 표면과
   // 다르면 아래 통합 탭 줄의 `onSelect`가 이 값도 같이 맞춰 준다(그래야 고른 탭의 내용이
   // 바로 보인다).
-  const [surface, setSurface] = useState<Surface>("agent");
+  const [surface, setSurface] = useState<Surface>("session");
   // 폴링이 들고 다니는 두 값. 렌더에 안 쓰므로 상태가 아니다(바뀔 때마다 그릴 것이 없다).
   const session = useRef(initial.sessionId);
   const offset = useRef(initial.offset);
@@ -365,7 +365,7 @@ export function HomeUI({
   // 이면 스크롤러 자체가 안 떠서 `null`이고, 그래서 그 화면의 결과가 `0/0`이다(§30 ⑥).
   const thread = useRef<HTMLDivElement>(null);
   // 첨부(§8) — 나가는 곳이 `claude`의 argv다. 조립은 서버의 `withAttachments` 하나이고
-  // (§8 §표기는 하나다) 파일은 홈 에이전트 cwd 아래라 `Read`가 그대로 연다(§7 도구 셋).
+  // (§8 §표기는 하나다) 파일은 홈 세션 cwd 아래라 `Read`가 그대로 연다(§7 도구 셋).
   const att = useAttachments(project);
   // 보내는 키와 손잡이의 `<kbd>`가 **같은 값 하나**에서 나온다(§0-6: 표기를 하드코딩하지 않는다).
   // §24가 이 폼을 §21의 **세 번째 모드**로 고정했으므로 액션도 그 하나를 같이 쓴다 —
@@ -696,7 +696,7 @@ export function HomeUI({
    *  안 따라온다. */
   const selectTab = async (tab: Tab) => {
     if (tab.kind === "chat") {
-      setSurface("agent");
+      setSurface("session");
       if (tab.id === home.current) {
         apply(await focusTabAction(project, tab.id));
         return;
@@ -796,7 +796,7 @@ export function HomeUI({
             onPickSchedule={async (s) => {
               // **회차가 있으면 워커 세션 줄과 같은 자다**(§7-2 §고르면 무엇이 서나) — `current`가
               // 그 `session_id`가 되고 트랜스크립트가 열린다. `switchConversation`이 스케줄의
-              // `session_id`도 이제 안다(위 `home-agent.ts` 개정).
+              // `session_id`도 이제 안다(위 `home-session.ts` 개정).
               if (s.session_id) {
                 setPendingSchedule(null);
                 setHome((now) => ({ ...now, current: s.session_id }));
@@ -825,7 +825,7 @@ export function HomeUI({
         )}
 
         {/* 우측 칸 — 탭 줄(§11 결정 1 · §비주얼 §72 ②) + 대화 컬럼. **탭 줄이 표면을 가로지른다**
-            (§11 결정 1) — 왼쪽에서 표면을 갈아도(`홈 에이전트` <-> `터미널` <-> `탐색기`) 이 줄은
+            (§11 결정 1) — 왼쪽에서 표면을 갈아도(`세션` <-> `터미널` <-> `탐색기`) 이 줄은
             그대로다: `chat`·`terminal`·`file` 셋을 한 목록으로 그린다(체크아웃은 P366-8).
             `min-w-0`은 아래 대화 컬럼과 같은 이유 — flex 자식 기본값을 덮는다. */}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -1067,7 +1067,7 @@ export function HomeUI({
                           />
                           {/* 활동 3종(§7 §천장이 없다 §안심 장치 · §비주얼 §24 §활동 3종) —
                               문구 칸 하나가 세 값 중 하나만 든다. 액션 한 줄은 도구명뿐이다
-                              (요약 계산에 필요한 도구 인자가 `Activity`에 없다 — `lib/home-agent.ts`
+                              (요약 계산에 필요한 도구 인자가 `Activity`에 없다 — `lib/home-session.ts`
                               `## 블록` 참조: §9 판정의 "요약이 비면 도구명 하나다" 갈래 그대로다). */}
                           {activity?.kind === "thinking" ? (
                             t("home.activity.thinking")
@@ -1346,7 +1346,7 @@ function markStopped(turns: Turn[]): Turn[] {
 function Failure({ fail }: { fail: Answer }) {
   const t = useT();
   const f = FAIL_KEYS[fail.reason ?? "other"];
-  // §24 실패 표의 `원인 원문` 열. ③은 `exit <코드>`/`signal <신호>` + stderr 꼬리(`lib/home-agent.ts`의
+  // §24 실패 표의 `원인 원문` 열. ③은 `exit <코드>`/`signal <신호>` + stderr 꼬리(`lib/home-session.ts`의
   // `judge`가 이미 그 모양으로 낸다)에 세션을 붙인다 — ④는 실행층이 이미 `session <id>` 한 줄로
   // 만들어 보내고, 나머지는 CLI 원문이다.
   const detail =
@@ -1378,7 +1378,7 @@ function Failure({ fail }: { fail: Answer }) {
  *
  *  **끝난 세션에도 한 줄이 뜨는 이유는 권한이 눈에 안 보이기 때문이다**(§24): 화면이 `w4`의
  *  세션을 열어 두고 있으면 그 세션의 힘(워크트리 cwd에서 뭐든 고치는 쓰기)이 있다고 읽히는데,
- *  이어 묻는 것은 **홈 에이전트이고 그 힘은 홈의 것**이다(§7 답 1(b) — 실측으로 `--resume`이
+ *  이어 묻는 것은 **홈 세션이고 그 힘은 홈의 것**이다(§7 답 1(b) — 실측으로 `--resume`이
  *  이어 묻는 쪽의 플래그를 쓴다). **이 줄은 도구를 안 센다**(§7 §화면 표기): 종전
  *  `읽기 도구 셋으로 …`는 요구 `20e4a6f4`가 쓰기를 열자 한 번에 거짓이 됐다 — 개수를 세는 문구는
  *  홈의 집합이 갈릴 때마다 죽고, 이 자리가 말할 사실은 *누구의 힘이냐* 하나다. 해시는 **링크다**(mono + 링크 — §5 `<Hash>`의
@@ -2086,7 +2086,7 @@ function SidePanel({
           부품 기본 `min-h-0 flex-1 overflow-auto`가 스크롤을 든다 — 종전 `overflow-y-auto`
           자리다. `no-scrollbar`도 같이 오는데 `globals.css`에 그 유틸이 없어(실측 0건)
           생성되지 않는다: 스크롤바가 종전대로 보인다.
-          **아래 단은 고른 표면의 목록 하나만 뜬다**(§11 §셸 §자리 표) — `홈 에이전트`면 종전
+          **아래 단은 고른 표면의 목록 하나만 뜬다**(§11 §셸 §자리 표) — `세션`이면 종전
           세 그룹 그대로다. `소스 컨트롤`은 이 티켓(P366-8)이 채운다 - 나머지 둘은 P366-5·6이
           채운다 - 지금은 빈 상태 한 줄이다. */}
       <SidebarContent className="gap-4 px-4 py-2">
@@ -2098,7 +2098,7 @@ function SidePanel({
         )}
         {/* `터미널`은 왼쪽 패널에 목록이 없다(§11-1) — cwd 고르기·탭 줄·화면이 전부 오른쪽 칸
             (`TerminalSurface`)에 있다. `소스 컨트롤`·`탐색기`와 달리 여기서 채울 목록이 없다. */}
-        {surface === "agent" && (
+        {surface === "session" && (
           <>
         <SidebarGroup className="p-0">
           {/* 그룹 머리 — §3 테이블 헤더 행의 세 값 그대로(`text-xs` · `font-medium` ·

@@ -106,7 +106,7 @@ export async function renameOntologyAction(
 /** 생성 — 설문 4문항 응답 → `SCHEMA.md` 시드(§5-3 §생성 — 설문 4문항). **폼은 여기서 바로
  *  끝난다.** 실제 쓰기(`writeSeed`)를 기다리지 않고 반환한다 — 지금은 결정적 빌더
  *  (`buildOntologySeed`)라 사실상 즉시 끝나지만, 응답 수집과 시드 생성을 구조적으로 가르는
- *  것 자체가 계약이다("폼이 LLM을 안 기다린다"). `home-agent.ts`의 `startAsk`가 같은 결로
+ *  것 자체가 계약이다("폼이 LLM을 안 기다린다"). `home-session.ts`의 `startAsk`가 같은 결로
  *  "띄우고 바로 돌아온다"를 쓴다.
  *
  *  시드가 뜨면 첫 채움(§5-3 §첫 채움)을 잇는다 — `publishOntologyMigrationAction`이 마이그레이션

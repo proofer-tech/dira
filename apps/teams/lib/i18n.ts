@@ -1955,7 +1955,7 @@ export const ko: Record<string, string> = {
   "findBar.next": "다음",
   "findBar.close": "닫기",
 
-  // 홈 화면(§0-16 §발행 §묶음 표 행 6, `f40e29e7`) — home-ui.tsx · lib/home-agent.ts(화면
+  // 홈 화면(§0-16 §발행 §묶음 표 행 6, `f40e29e7`) — home-ui.tsx · lib/home-session.ts(화면
   // 문구뿐 — 프롬프트 조립 문자열은 사전 밖이다, 판정은 티켓 `## 결과`) · home/page.tsx ·
   // home/actions.ts. en은 `c357313f`가 채운다.
   "home.title": "홈",
@@ -2001,7 +2001,7 @@ export const ko: Record<string, string> = {
   "home.fail.noTranscript.next": "새 대화로 다시 물어보세요.",
   "home.fail.other.title": "답을 받지 못했습니다",
 
-  // `lib/home-agent.ts`가 짓는 `Answer.output`(§24 §실패 5종) — CLI 원문·프롬프트 조립과
+  // `lib/home-session.ts`가 짓는 `Answer.output`(§24 §실패 5종) — CLI 원문·프롬프트 조립과
   // 다르다: 이 문장은 화면 Failure 카드에 그대로 뜬다.
   "home.errors.emptyQuestion": "질문이 비어 있습니다.",
   "home.errors.claudeNotFoundPrefix": "PATH에서 claude를 찾지 못했습니다. (PATH=",
@@ -2039,7 +2039,7 @@ export const ko: Record<string, string> = {
   "home.schedule.cronNoNextRun": "31일 안에 도는 회차가 없습니다.",
   "home.schedule.createFailTitle": "스케줄을 만들지 못했습니다",
   "home.schedule.invalidWhenOrPrompt": "시각 또는 문장을 확인하세요.",
-  "home.schedule.desc1": "정한 시각에 홈 에이전트가 이 문장을 수행합니다.",
+  "home.schedule.desc1": "정한 시각에 세션이 이 문장을 수행합니다.",
   "home.schedule.desc3": "꺼져 있던 사이의 회차는 앱을 켤 때 한 번만 늦게 돕니다.",
   "home.schedule.deleteTrigger": "스케줄 삭제",
   "home.schedule.deleteTitle": "스케줄을 지웁니다",
@@ -2058,7 +2058,7 @@ export const ko: Record<string, string> = {
 
   // IDE 셸(§11 · §비주얼 §72) — 좌측 2단의 표면 넷 + 우측 탭 줄. 표면 셋(터미널·소스 컨트롤·
   // 탐색기)의 내용은 P366-5·6·8이 채운다 — 이 회차는 자리와 빈 상태 문구뿐이다.
-  "home.surface.agent": "홈 에이전트",
+  "home.surface.agent": "세션",
   "home.surface.terminal": "터미널",
   "home.surface.scm": "소스 컨트롤",
   "home.surface.explorer": "탐색기",
@@ -4295,7 +4295,7 @@ export const en: Record<string, string> = {
   "home.schedule.cronNoNextRun": "No run falls within the next 31 days.",
   "home.schedule.createFailTitle": "Couldn't create the schedule",
   "home.schedule.invalidWhenOrPrompt": "Check the time or the prompt.",
-  "home.schedule.desc1": "At the time you set, the home agent carries out this prompt.",
+  "home.schedule.desc1": "At the time you set, the session carries out this prompt.",
   "home.schedule.desc3": "Runs missed while the app was closed happen once, late, when you open it.",
   "home.schedule.deleteTrigger": "Delete schedule",
   "home.schedule.deleteTitle": "This deletes the schedule",
@@ -4314,7 +4314,7 @@ export const en: Record<string, string> = {
   // `projectActions.unknownProjectPrefix`와 **같은 글자다** — 같은 거절을 액션 파일들이 각자 든다.
   "home.action.unknownProjectPrefix": "Not a registered project:",
 
-  "home.surface.agent": "Home agent",
+  "home.surface.agent": "Sessions",
   "home.surface.terminal": "Terminal",
   "home.surface.scm": "Source control",
   "home.surface.explorer": "Explorer",
