@@ -54238,8 +54238,8 @@ P372-P369-P367이 같은 자리를 같은 순서로 갈랐다.
 
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
-| P376-1 | 구현 - `templates/hooks/browser.sh` 한 장(`acquire` - `release` - 죽은 슬롯 회수 - 상한 300초 - `BROWSER` 로그 다섯 줄)과 큐 사본 `.dira/browser.sh`. 수용조건 (1)~(6)(8)을 그 자리에서 돌려 `## 결과`에 적는다 | developer | - | 발행 |
-| P376-2 | 규약 - `.dira/protocols/cdp.md`에서 바이너리 명령줄을 걷고 `acquire`/`release` 두 줄로 바꾼다. 인라인 예산(§프롬프트 층)을 재서 앞뒤 바이트를 `## 결과`에 적는다 | developer | P376-1 | 발행 |
+| P376-1 | 구현 - `templates/hooks/browser.sh` 한 장(`acquire` - `release` - 죽은 슬롯 회수 - 상한 300초 - `BROWSER` 로그 다섯 줄)과 큐 사본 `.dira/browser.sh`. 수용조건 (1)~(6)(8)을 그 자리에서 돌려 `## 결과`에 적는다 `fb1130c3` | developer | - | 발행 |
+| P376-2 | 규약 - `.dira/protocols/cdp.md`에서 바이너리 명령줄을 걷고 `acquire`/`release` 두 줄로 바꾼다. 인라인 예산(§프롬프트 층)을 재서 앞뒤 바이트를 `## 결과`에 적는다 `5fcc2ede` | developer | P376-1 | 발행 |
 
 **deps 한 줄이 진짜다.** 규약이 먼저 바뀌면 세션들이 아직 없는 스크립트를 부르고 그 자리에서
 브라우저를 못 띄운다. 스크립트가 먼저 생기고 규약이 뒤따른다.
