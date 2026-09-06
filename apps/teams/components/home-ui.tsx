@@ -879,10 +879,11 @@ export function HomeUI({
             />
           ) : (
             <>
-          {/* 대화 컬럼 — 남은 폭·높이 전부다. **자식이 언제나 넷이고 순서가 안 바뀐다**(§24 · §7-4):
-              [페르소나 선택 칸] · [0건: 인사 | 그 외: 스레드] · [폼] · [0건: 예시 4개 | 그 외: null].
-              조건이 거짓인 자리를 배열에서 빼지 않는 이유는 폼이다 — 같은 인덱스에 남아야 React가
-              다시 마운트하지 않고, 그래야 첫 질문을 보낸 순간 포커스와 IME 상태가 안 날아간다(§21).
+          {/* 대화 컬럼 — 남은 폭·높이 전부다. **자식이 언제나 셋이고 순서가 안 바뀐다**(§24 · §7-4
+              결정 4): [0건: 인사 | 그 외: 스레드] · [폼] · [0건: 예시 4개 | 그 외: null]. 페르소나
+              선택 칸은 이 컬럼에서 빠져 폼 손잡이 줄로 내려갔다(§비주얼 §75). 조건이 거짓인 자리를
+              배열에서 빼지 않는 이유는 폼이다 — 같은 인덱스에 남아야 React가 다시 마운트하지 않고,
+              그래야 첫 질문을 보낸 순간 포커스와 IME 상태가 안 날아간다(§21).
               0건일 때 `justify-center` 한 클래스가 그 묶음을 세로 가운데로 올린다(§24 온보딩 항) —
               자리 이동은 이 클래스가 사라지는 것으로 끝난다. **`min-w-0`이 없으면** flex 자식
               기본값(`min-width:auto`)이라 답 안의 펜스·표 한 줄이 이 단을 밀어 패널을 찌그러뜨린다
@@ -893,33 +894,6 @@ export function HomeUI({
               onboarding && "justify-center",
             )}
           >
-          {/* 페르소나 선택 칸(§7-4 결정 1·2) — **상시 렌더라 위 §자식이 언제나 셋 계약을 안
-              건드린다**(조건부로 빠지는 자리가 아니다). 잠기는 것은 셀렉트 하나뿐이고(`disabled`)
-              대화·스레드·폼·예시는 이 칸과 무관하게 그대로 돈다. */}
-          <div className="flex shrink-0 items-center gap-2">
-            <Label htmlFor="home-persona" className="text-xs text-muted-foreground">
-              {t("home.personaLabel")}
-            </Label>
-            <Select
-              value={personaChoice}
-              disabled={personaLocked}
-              onValueChange={(v) => {
-                if (typeof v === "string" && v) void (async () => apply(await clearHome(project, v)))();
-              }}
-            >
-              <SelectTrigger id="home-persona" size="sm" className="w-44 text-xs">
-                <SelectValue>{personaChoice}</SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {personas.map((p) => (
-                  <SelectItem key={p} value={p}>
-                    {p}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
           {pendingSchedule ? (
             /* 회차 0건인 스케줄(§비주얼 §62 (6)) — 대화 0건과 **자리는 같고 그릇은 다르다**:
                `<EmptyState>`를 쓴다(§24의 셋째 예외 — "한 줄로는 무엇을 물어볼 수 있는지를 못
@@ -1007,6 +981,14 @@ export function HomeUI({
                             <>
                               <Prose text={turn.text} refs={liveRefs} />
                               <Band>
+                                {/* 회차 페르소나(§7-4 결정 4 · §비주얼 §75) — 값이 대화 단위라
+                                    회차마다 같은 이름이 반복된다. `persona` 없는 옛 대화는
+                                    기본값이다. 새 클래스 0개 — 띠가 이미 든 `text-xs
+                                    text-muted-foreground`를 상속한다. */}
+                                <span>
+                                  <span className="sr-only">{t("home.personaLabel")}</span>
+                                  {conv?.persona ?? DEFAULT_PERSONA}
+                                </span>
                                 {/* 중지된 답 — **실패가 아니다**(§7). `<StatusBadge>`도 색도 없다:
                                     이건 큐의 상태가 아니라 답 하나가 끝난 방식이라 13번째 상태를
                                     만들지 않는다(§24). 자리는 진행 표식 문구가 앉던 그 자리다. */}
@@ -1074,6 +1056,11 @@ export function HomeUI({
                             (`running`이 아니다) 이 산문 자체가 안 뜬다. */}
                         {partial !== "" && <Prose text={partial} refs={liveRefs} />}
                         <Band>
+                          {/* 회차 페르소나 — 끝난 답과 같은 값·같은 이유(위 §회차 페르소나 주석). */}
+                          <span>
+                            <span className="sr-only">{t("home.personaLabel")}</span>
+                            {conv?.persona ?? DEFAULT_PERSONA}
+                          </span>
                           <span
                             aria-hidden
                             className="mx-1 size-2 shrink-0 animate-wip-pulse rounded-full bg-muted-foreground motion-reduce:animate-none"
@@ -1179,6 +1166,40 @@ export function HomeUI({
                     `첨부 → ml-auto ⌘↵ → 보내기`. 도는 동안에도 안 잠근다 — 입력칸과 같은
                     판단이다(§24: 다음 질문을 미리 쓸 수 있다). */}
                 <AttachmentButton att={att} />
+                {/* 페르소나(§7-4 결정 4 · §비주얼 §75) — 손잡이 줄의 둘째 자식, `첨부` 다음 ·
+                    보조 문구 앞이다. 회차 0건일 때는 셀렉트, 잠기면(`personaLocked`) 셀렉트를
+                    안 그리고 고른 이름을 글자로만 보여준다 — 흐린 셀렉트는 눌릴 것처럼 보인다는
+                    이유로 답 `1.(a-2)`가 걷어냈다. `Label` 낱말은 화면에서 빠지고 `sr-only`
+                    하나로 남는다(새 i18n 키 0개 — 기존 `home.personaLabel`을 그대로 쓴다). */}
+                {personaLocked ? (
+                  <span className="text-xs text-muted-foreground">
+                    <span className="sr-only">{t("home.personaLabel")}</span>
+                    {personaChoice}
+                  </span>
+                ) : (
+                  <>
+                    <Label htmlFor="home-persona" className="sr-only">
+                      {t("home.personaLabel")}
+                    </Label>
+                    <Select
+                      value={personaChoice}
+                      onValueChange={(v) => {
+                        if (typeof v === "string" && v) void (async () => apply(await clearHome(project, v)))();
+                      }}
+                    >
+                      <SelectTrigger id="home-persona" size="sm" className="text-xs">
+                        <SelectValue>{personaChoice}</SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {personas.map((p) => (
+                          <SelectItem key={p} value={p}>
+                            {p}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </>
+                )}
                 {/* 보조 문구 — `첨부` 다음 · `ml-auto` 앞이 2차 자리다(§27 손잡이 줄 순서).
                     **넷 다 배타적이라 한 자리를 다투지 않는다**(§비주얼 §24 §손잡이 줄 왼쪽
                     문구 · §62 §손잡이 줄 왼쪽 문구 — 다섯째 행): 회차 0건 스케줄 · 워커 세션 ·
