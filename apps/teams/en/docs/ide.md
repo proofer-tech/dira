@@ -91,8 +91,11 @@ The right of the top line is where a mark goes. While the command you typed is s
 reads `Running`. Once the shell has been cut off it reads `Disconnected`. When the shell is back
 at the prompt waiting for the next command, no mark is there at all.
 
-The bottom line is the working directory the shell runs in. You picked it when you pressed `New
-terminal`, and it does not change afterwards. To move, type `cd` yourself.
+The bottom line is the working directory the shell runs in. Open the terminal on the root and it
+reads `Root`. Open it on a worktree and the id of the worker who uses that worktree shows there
+instead. Those are the same words you see under [Source control](#source-control) below, so a row
+reading `Root` points at the same folder on either screen. Either way you picked the directory
+when you pressed `New terminal`, and it does not change afterwards. To move, type `cd` yourself.
 
 The app re-reads this list every five seconds for as long as you are looking at the `Terminal`
 surface. Set something slow like `sleep 30` going, do something else, come back, and the list
