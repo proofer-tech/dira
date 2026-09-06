@@ -791,6 +791,7 @@ export function HomeUI({
             onOpenExplorerFile={explorer.onOpenFile}
             runningIds={runningIds}
             apply={apply}
+            terminalConnected={terminalConnected}
             onTerminalConnect={(id) => setTerminalConnected((now) => new Set(now).add(id))}
             // 세 그룹을 통틀어 지금 떠 있는 표식 하나(§비주얼 §62 (2) §선택 표식 — "표식은 세
             // 그룹을 통틀어 한 줄에만 든다"). 회차 0건 스케줄을 보는 동안은 `home.current`가
@@ -1926,6 +1927,7 @@ function TerminalLeftPanel({
   project,
   tabs,
   activeTab,
+  connected,
   apply,
   onFocus,
   onConnect,
@@ -1933,6 +1935,11 @@ function TerminalLeftPanel({
   project: string;
   tabs: Tab[];
   activeTab: string | null;
+  /** 우측 칸(`TerminalSurface`)과 같은 값 — `HomeUI`가 든 `terminalConnected`(§11-6 결정 6
+   *  `끊김` 배지). 마운트 직후(새로고침 포함)는 늘 비어 있다 — 그래서 이 값 하나로 세 줄이 다
+   *  `끊김`으로 뜬다(수용조건). 죽은 pty(`row.alive === false`)도 같이 `끊김`이다 —
+   *  `다시 열기`를 눌러 이미 이 표면 안에서 연 뒤 서버 쪽에서 죽은 경우까지 잡는다. */
+  connected: Set<string>;
   apply: (c: HomeChunk) => void;
   onFocus: (id: string) => void;
   onConnect: (id: string) => void;
@@ -2034,6 +2041,10 @@ function TerminalLeftPanel({
         <SidebarMenu aria-label={t("home.surface.terminal")}>
           {tabs.map((tab) => {
             const row = rows[tab.id];
+            // §11-6 결정 6 — 우측 칸과 같은 값(`connected`)을 봐야 새로고침 뒤 셋 다 `끊김`이
+            // 뜬다(수용조건). `row.alive`만 보면 서버 pty는 새로고침에 안 죽으므로(GET 라우트
+            // 머리 주석) 배지가 영영 안 뜬다 — 그게 버그 2다.
+            const disconnected = !connected.has(tab.id) || row?.alive === false;
             return (
               <SidebarMenuItem key={tab.id}>
                 <SidebarMenuButton
@@ -2047,8 +2058,8 @@ function TerminalLeftPanel({
                       <span className="min-w-0 grow truncate text-sm">
                         {row?.lastCommand || t("terminal.row.noCommand")}
                       </span>
-                      {row && !row.alive && <span className={MARK}>{t("terminal.row.disconnected")}</span>}
-                      {row && row.alive && row.working && <span className={MARK}>{t("terminal.row.running")}</span>}
+                      {disconnected && <span className={MARK}>{t("terminal.row.disconnected")}</span>}
+                      {!disconnected && row?.working && <span className={MARK}>{t("terminal.row.running")}</span>}
                     </div>
                     <div className="font-mono text-xs text-muted-foreground group-hover/menu-button:text-foreground">
                       {cwdLabel(tab.cwd)}
@@ -2103,6 +2114,7 @@ function SidePanel({
   onPickSchedule,
   onSchedulesChange,
   apply,
+  terminalConnected,
   onTerminalConnect,
 }: {
   project: string;
@@ -2137,6 +2149,9 @@ function SidePanel({
   /** `터미널` 좌측 목록이 `새 터미널` · `다시 열기`로 연 탭을 연결됨으로 적는다 — `HomeUI`가
    *  든 `terminalConnected`에 반영한다(우측 칸과 같은 값을 봐야 한다). */
   onTerminalConnect: (id: string) => void;
+  /** `HomeUI`가 든 `terminalConnected` 그 값 — `TerminalLeftPanel`의 `끊김` 배지가 우측 칸과
+   *  같은 것을 보게 그대로 내린다(§11-6 결정 6, 버그 2 고침). */
+  terminalConnected: Set<string>;
 }) {
   const t = useT();
   const locale = useLocale();
@@ -2247,6 +2262,7 @@ function SidePanel({
             project={project}
             tabs={home.tabs.filter((tb) => tb.kind === "terminal")}
             activeTab={home.activeTab}
+            connected={terminalConnected}
             apply={apply}
             onFocus={(id) => void (async () => apply(await focusTabAction(project, id)))()}
             onConnect={onTerminalConnect}

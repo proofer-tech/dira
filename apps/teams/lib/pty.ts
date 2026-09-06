@@ -139,12 +139,19 @@ export function pidOf(id: string): number | undefined {
 const LAST_COMMAND_CAP = 200;
 
 // eslint-disable-next-line no-control-regex
-const ANSI_ESCAPE = /\x1b\[[0-9;]*[a-zA-Z]/g;
+const ANSI_ESCAPE = /\x1b\[[0-9;?]*[a-zA-Z]/g;
+
+/** OSC(제목·cwd 알림 등) 이스케이프 — `\x1b]...`가 BEL(`\x07`) 또는 `ST`(`\x1b\\`)로 끝난다.
+ *  `ANSI_ESCAPE`(CSI, `\x1b[...`)가 이 모양을 안 잡는다 — 커스텀 프롬프트가 매 줄 이걸 찍으면
+ *  (실측 - 버그 1) 걷어내지 않은 원문이 그대로 <마지막 명령>에 남아 절대 안 갈린다. */
+// eslint-disable-next-line no-control-regex
+const OSC_ESCAPE = /\x1b\][^\x07]*(?:\x07|\x1b\\)/g;
 
 /** 화면 기록 한 줄에서 사람이 친 명령을 집는다(§11-6 결정 2) — 단위 테스트가 이 함수 하나를
- *  잰다. ANSI를 걷어낸 뒤 마지막 `$ ` - `% ` - `# ` 뒤를 집고, 셋 중 하나도 없으면 줄 전체다. */
+ *  잰다. ANSI·OSC를 걷어낸 뒤 마지막 `$ ` - `% ` - `# ` 뒤를 집고, 셋 중 하나도 없으면 줄
+ *  전체다. */
 export function extractLastCommand(rawLine: string): string {
-  const clean = rawLine.replace(ANSI_ESCAPE, "");
+  const clean = rawLine.replace(OSC_ESCAPE, "").replace(ANSI_ESCAPE, "");
   let cut = -1;
   for (const marker of ["$ ", "% ", "# "]) {
     const idx = clean.lastIndexOf(marker);

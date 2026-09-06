@@ -136,6 +136,25 @@ test("extractLastCommand strips ANSI escapes before picking the command", () => 
   assert.equal(extractLastCommand("\x1b[32muser@host\x1b[0m$ \x1b[1mls\x1b[0m"), "ls");
 });
 
+// zsh의 bracketed paste 모드 토글(`\x1b[?2004h`)처럼 `?`가 낀 CSI — 실측(zsh 실제 pty)에서
+// 이 자리를 안 걷어내면 <마지막 명령>에 그 원문이 그대로 남는다.
+test("extractLastCommand strips CSI escapes with a private-mode `?` parameter", () => {
+  assert.equal(extractLastCommand("\x1b[?2004hhost% pwd"), "pwd");
+});
+
+// 버그 1 (0268315f) — OSC(창 제목·cwd 알림) 이스케이프가 매 프롬프트마다 붙는 커스텀 셸
+// (이 머신의 zsh + starship류)에서 <마지막 명령>이 그 원문에 멈춰 다시 안 갈리던 사례.
+test("extractLastCommand strips OSC title/cwd escapes before picking the command", () => {
+  assert.equal(
+    extractLastCommand("\x1b]0;user@host: ~/dir\x07\x1b]7;file:///dir\x07host% pwd"),
+    "pwd",
+  );
+});
+
+test("extractLastCommand strips OSC escapes even without a $/%/# marker", () => {
+  assert.equal(extractLastCommand("\x1b]2;title\x07\x1b]1;dir\x07pwd"), "pwd");
+});
+
 test("extractLastCommand caps the result at 200 characters", () => {
   const long = "a".repeat(250);
   const picked = extractLastCommand(`$ ${long}`);
