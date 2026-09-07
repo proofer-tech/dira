@@ -608,6 +608,14 @@ export function ExplorerPane({
 /** 편집기 CSS의 `leading-6`과 같은 값(px) — 내용 찾기 결과를 눌렀을 때 그 줄로 스크롤하는 계산에 쓴다. */
 const LINE_HEIGHT_PX = 24;
 
+// `white-space: pre-wrap` 블록은 트레일링 개행이 만드는 마지막 빈 줄을 렌더링에서 버린다
+// (네이티브 textarea는 안 그런다) — 소스가 `\n`으로 끝나면 shiki가 낸 마지막 빈 줄 span에
+// `&nbsp;`를 채워 "빈 트레일링 줄"이 아니게 만들어 `pre`와 `textarea`의 scrollHeight를 맞춘다.
+function padTrailingLine(html: string, source: string): string {
+  if (!source.endsWith("\n")) return html;
+  return html.replace(/<span class="line"><\/span><\/code>/, '<span class="line">&nbsp;</span></code>');
+}
+
 function CodeEditor({
   projectId,
   relPath,
@@ -650,7 +658,8 @@ function CodeEditor({
 
   async function highlight(source: string) {
     const { codeToHtml } = await import("shiki");
-    setHtml(await codeToHtml(source, { lang, themes: SHIKI_THEMES, defaultColor: false }));
+    const out = await codeToHtml(source, { lang, themes: SHIKI_THEMES, defaultColor: false });
+    setHtml(padTrailingLine(out, source));
   }
 
   // 마운트 한 번 — 이후 다시 그리는 자리는 `blur`(아래)다(파일 top 주석 §타이핑마다 안 긋는다).
@@ -661,7 +670,7 @@ function CodeEditor({
     (async () => {
       const { codeToHtml } = await import("shiki");
       const out = await codeToHtml(initial.text, { lang, themes: SHIKI_THEMES, defaultColor: false });
-      if (!ignore) setHtml(out);
+      if (!ignore) setHtml(padTrailingLine(out, initial.text));
     })();
     return () => {
       ignore = true;
