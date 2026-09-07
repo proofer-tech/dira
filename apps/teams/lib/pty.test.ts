@@ -155,6 +155,13 @@ test("extractLastCommand strips OSC escapes even without a $/%/# marker", () => 
   assert.equal(extractLastCommand("\x1b]2;title\x07\x1b]1;dir\x07pwd"), "pwd");
 });
 
+// 이 티켓 — DECKPAM/DECKPNM(`\x1b=` · `\x1b>`)처럼 대괄호 없는 2바이트 이스케이프는
+// ANSI_ESCAPE(CSI)·OSC_ESCAPE 둘 다 못 잡아 그대로 남았다(8b1d625c 실측).
+test("extractLastCommand strips a bare DECKPAM/DECKPNM escape with no bracket", () => {
+  assert.equal(extractLastCommand("\x1b=host% pwd"), "pwd");
+  assert.equal(extractLastCommand("\x1b>pwd"), "pwd");
+});
+
 test("extractLastCommand caps the result at 200 characters, keeping the tail", () => {
   const long = "b".repeat(50) + "a".repeat(250); // 앞뒤가 다른 문자라야 방향을 실측한다
   const picked = extractLastCommand(`$ ${long}`);

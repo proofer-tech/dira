@@ -147,14 +147,20 @@ const ANSI_ESCAPE = /\x1b\[[0-9;?]*[a-zA-Z]/g;
 // eslint-disable-next-line no-control-regex
 const OSC_ESCAPE = /\x1b\][^\x07]*(?:\x07|\x1b\\)/g;
 
+/** 대괄호가 없는 2바이트 이스케이프 — DECKPAM/DECKPNM(`\x1b=` · `\x1b>`) 류. `ANSI_ESCAPE`(CSI,
+ *  `\x1b[...`)·`OSC_ESCAPE`(`\x1b]...`) 둘 다 `[`나 `]`를 요구해 이 모양은 못 잡는다(8b1d625c
+ *  실측 - 이 머신 프롬프트 원문에 `\x1b=`가 그대로 남아 있었다). */
+// eslint-disable-next-line no-control-regex
+const SHORT_ESCAPE = /\x1b[=>]/g;
+
 /** 화면 기록 한 줄에서 사람이 친 명령을 집는다(§11-6 결정 2) — 단위 테스트가 이 함수 하나를
- *  잰다. ANSI·OSC를 걷어낸 뒤, 줄 안에 `\r`(개행 없이 커서만 처음으로 되돌리는 재그리기 —
- *  zsh 라인 에디터가 키 하나마다 프롬프트째 다시 찍는 셸에서 나온다)이 있으면 **마지막 `\r`
- *  다음만** 남긴다 — 그 앞은 이전 키 입력의 재그리기라 이미 덮어써진 화면이다(버그 2, 이
- *  티켓 — 이걸 안 자르면 재그리기가 누적돼 200자 상한이 최신 내용 도달 전에 걸린다). 그 뒤
- *  마지막 `$ ` - `% ` - `# ` 뒤를 집고, 셋 중 하나도 없으면 줄 전체다. */
+ *  잰다. ANSI·OSC·짧은 이스케이프를 걷어낸 뒤, 줄 안에 `\r`(개행 없이 커서만 처음으로 되돌리는
+ *  재그리기 — zsh 라인 에디터가 키 하나마다 프롬프트째 다시 찍는 셸에서 나온다)이 있으면
+ *  **마지막 `\r` 다음만** 남긴다 — 그 앞은 이전 키 입력의 재그리기라 이미 덮어써진 화면이다
+ *  (버그 2, 이 티켓 — 이걸 안 자르면 재그리기가 누적돼 200자 상한이 최신 내용 도달 전에
+ *  걸린다). 그 뒤 마지막 `$ ` - `% ` - `# ` 뒤를 집고, 셋 중 하나도 없으면 줄 전체다. */
 export function extractLastCommand(rawLine: string): string {
-  const clean = rawLine.replace(OSC_ESCAPE, "").replace(ANSI_ESCAPE, "");
+  const clean = rawLine.replace(OSC_ESCAPE, "").replace(ANSI_ESCAPE, "").replace(SHORT_ESCAPE, "");
   const redrawn = clean.lastIndexOf("\r") >= 0 ? clean.slice(clean.lastIndexOf("\r") + 1) : clean;
   let cut = -1;
   for (const marker of ["$ ", "% ", "# "]) {
