@@ -187,7 +187,7 @@ import type {
 } from "@/lib/home-session";
 import { formatCombo, matchCombo } from "@/lib/keymap";
 import type { Checkout, GitStatus, StatusFile } from "@/lib/source-control";
-import { tabsOnSide } from "@/lib/tabs";
+import { tabsOnSide, tabsToCloseOthers } from "@/lib/tabs";
 import {
   chatRows,
   dateTimeLabel,
@@ -719,6 +719,14 @@ export function HomeUI({
     }
   };
 
+  /** `다른 탭 닫기`(§11-7 §개정) — 좌우 합집합을 같은 방법(`closeTab` 반복)으로 닫는다. */
+  const closeOtherTabs = async (id: string) => {
+    for (const targetId of tabsToCloseOthers(home.tabs, id)) {
+      const target = home.tabs.find((tb) => tb.id === targetId);
+      if (target) await closeTab(target);
+    }
+  };
+
   /** 우측 탭 줄에서 탭 하나를 고른다(§11 결정 1) — **표면을 가로지르는 그 한 줄**의 유일한
    *  전환 입구다. 종류마다 왕복이 다르다: `chat`은 스레드까지 옮기는 `switchHome`, 나머지 둘은
    *  `current`도 새 탭도 안 만드는 `focusTabAction`(§11-1 §focusTab 주석과 같다). **표면도 같이
@@ -880,6 +888,7 @@ export function HomeUI({
             }}
             onCloseLeft={(id) => void closeTabsOnSide(id, "left")}
             onCloseRight={(id) => void closeTabsOnSide(id, "right")}
+            onCloseOthers={(id) => void closeOtherTabs(id)}
           />
           {/* `탐색기`(§11-2 결정 2, P366-6)와 `터미널`(§11-1)은 대화 컬럼과 자리를 바꿔 쓴다 —
               위 탭 줄은 그대로 두고 아래 몸통만 갈아 끼운다. */}
@@ -1520,6 +1529,7 @@ function TabBar({
   onClose,
   onCloseLeft,
   onCloseRight,
+  onCloseOthers,
 }: {
   tabs: Tab[];
   activeTab: string | null;
@@ -1528,6 +1538,7 @@ function TabBar({
   onClose: (id: string) => void;
   onCloseLeft: (id: string) => void;
   onCloseRight: (id: string) => void;
+  onCloseOthers: (id: string) => void;
 }) {
   const t = useT();
   if (tabs.length === 0) return null;
@@ -1551,6 +1562,7 @@ function TabBar({
             // 순서에서 우클릭한 탭이 맨 끝이면(또는 그쪽에 `unsaved` 탭 하나만 있으면) 0개다.
             const hasLeft = tabsOnSide(tabs, tab.id, "left").length > 0;
             const hasRight = tabsOnSide(tabs, tab.id, "right").length > 0;
+            const hasOthers = tabsToCloseOthers(tabs, tab.id).length > 0;
             return (
               <ContextMenu key={tab.id}>
                 <ContextMenuTrigger render={<div />}>
@@ -1581,6 +1593,9 @@ function TabBar({
                   <ContextMenuItem onClick={() => onClose(tab.id)}>{t("home.tabs.close")}</ContextMenuItem>
                   <ContextMenuItem disabled={!hasRight} onClick={() => onCloseRight(tab.id)}>
                     {t("home.tabs.closeRight")}
+                  </ContextMenuItem>
+                  <ContextMenuItem disabled={!hasOthers} onClick={() => onCloseOthers(tab.id)}>
+                    {t("home.tabs.closeOthers")}
                   </ContextMenuItem>
                 </ContextMenuContent>
               </ContextMenu>

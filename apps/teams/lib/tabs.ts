@@ -61,3 +61,9 @@ export function tabsOnSide(tabs: Tab[], id: string, side: "left" | "right"): str
   const slice = side === "left" ? tabs.slice(0, at) : tabs.slice(at + 1);
   return slice.filter((t) => !t.unsaved).map((t) => t.id);
 }
+
+/** 우클릭한 `id` 하나만 남기고 닫을 id 목록 — 좌우 합집합이다(§11-7 §개정). `tabsOnSide`가 이미
+ *  우클릭한 탭 자신과 `unsaved` 탭을 뺀 목록을 내므로 그 결과를 양쪽에서 이어 붙인 것과 같다. */
+export function tabsToCloseOthers(tabs: Tab[], id: string): string[] {
+  return [...tabsOnSide(tabs, id, "left"), ...tabsOnSide(tabs, id, "right")];
+}

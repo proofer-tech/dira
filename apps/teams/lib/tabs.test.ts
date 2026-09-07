@@ -1,6 +1,15 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { closeTab, evictionCandidate, mostRecentTab, openTab, tabsOnSide, TAB_LIMIT, type Tab } from "./tabs.ts";
+import {
+  closeTab,
+  evictionCandidate,
+  mostRecentTab,
+  openTab,
+  tabsOnSide,
+  tabsToCloseOthers,
+  TAB_LIMIT,
+  type Tab,
+} from "./tabs.ts";
 
 function tab(id: string, lastViewed: string, unsaved?: true): Tab {
   return unsaved ? { id, kind: "chat", lastViewed, unsaved } : { id, kind: "chat", lastViewed };
@@ -76,4 +85,18 @@ test("tabsOnSide is empty when the clicked tab is at that end", () => {
 test("tabsOnSide drops unsaved file tabs from the range", () => {
   const tabs = [tab("a", "0"), tab("unsaved-b", "1", true), tab("c", "2"), tab("d", "3")];
   assert.deepEqual(tabsOnSide(tabs, "d", "left"), ["a", "c"]); // unsaved-b는 범위에서 빠지고 그 탭만 남는다
+});
+
+test("tabsToCloseOthers is empty when only one tab is open", () => {
+  assert.deepEqual(tabsToCloseOthers([tab("a", "0")], "a"), []);
+});
+
+test("tabsToCloseOthers unions left and right when the clicked tab is at an end", () => {
+  const tabs = [tab("a", "0"), tab("b", "1"), tab("c", "2")];
+  assert.deepEqual(tabsToCloseOthers(tabs, "c"), ["a", "b"]);
+});
+
+test("tabsToCloseOthers drops unsaved tabs from both sides", () => {
+  const tabs = [tab("a", "0"), tab("unsaved-b", "1", true), tab("c", "2"), tab("d", "3")];
+  assert.deepEqual(tabsToCloseOthers(tabs, "c"), ["a", "d"]);
 });

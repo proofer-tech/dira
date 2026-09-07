@@ -2070,6 +2070,7 @@ export const ko: Record<string, string> = {
   "home.tabs.close": "닫기",
   "home.tabs.closeLeft": "좌측 탭 모두 닫기",
   "home.tabs.closeRight": "우측 탭 모두 닫기",
+  "home.tabs.closeOthers": "다른 탭 닫기",
 
   // 터미널 표면(§11-1, P366-4) — `script`가 pty를 주는 셸 탭.
   "terminal.pickCwd": "작업 디렉터리",
@@ -4333,6 +4334,7 @@ export const en: Record<string, string> = {
   "home.tabs.close": "Close",
   "home.tabs.closeLeft": "Close Tabs to the Left",
   "home.tabs.closeRight": "Close Tabs to the Right",
+  "home.tabs.closeOthers": "Close Other Tabs",
 
   "terminal.pickCwd": "Working directory",
   "terminal.newTab": "New terminal",
