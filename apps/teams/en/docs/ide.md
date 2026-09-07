@@ -45,27 +45,37 @@ printed, do not come back.
 
 Every tab has an X on its right edge. Press it to close that one. You do not have to press it
 ten times to clear a strip of twelve, though. Right-click a tab and a menu comes up. It holds
-three items.
+four items.
 
 | Item | What it closes |
 |---|---|
 | `Close Tabs to the Left` | Every tab to the left of the one you right-clicked |
-| `Close Tab` | The one tab you right-clicked. Same as pressing its X |
+| `Close` | The one tab you right-clicked. Same as pressing its X |
 | `Close Tabs to the Right` | Every tab to the right of the one you right-clicked |
+| `Close Other Tabs` | Every tab but the one you right-clicked |
 
 Left and right mean the order the tabs sit in on screen. Neither the tab you looked at most
 recently nor the one you have selected changes that. The tab you right-clicked is on neither
 side. Press `Close Tabs to the Left` and that tab stays where it is.
 
-Right-click the leftmost tab and `Close Tabs to the Left` comes up greyed out and takes no click,
-because there is nothing on that side to close. The item does not disappear, so what you reach for
-is in the same place on every tab. Right-click empty space in the tab strip and this
-menu does not come up. With no tab under the pointer, there is no left or right to work out.
+The bottom item, `Close Other Tabs`, takes no side. Press it and the tab you right-clicked stays
+while every other one closes. That is where the left item followed by the right one would leave
+you, in one press instead of two.
 
-**A file tab you have edited and not saved does not close when you close either side.** If you
-close five tabs on the left and one of them is still there, that is the one. The app will not throw away
-an edit in progress without saying so. Save the file, right-click again, and it closes with the
-rest. Naming that one tab with `Close Tab` is another matter. It closes then and there, the same as
+Right-click the leftmost tab and `Close Tabs to the Left` comes up greyed out and takes no click,
+because there is nothing on that side to close. Open one tab on its own and `Close Other Tabs`
+greys out for the same reason. The item does not disappear, so what you reach for is in the same
+place on every tab. Right-click empty space in the tab strip and this menu does not come up. With
+no tab under the pointer, there is no left or right to work out.
+
+**A file tab you have edited and not saved stays open under all three items that close more than
+one tab.** If you close five tabs on the left and one of them is still there, that is the one.
+`Close Other Tabs` leaves it open alongside the tab you right-clicked. When every tab but the one
+you right-clicked is a file tab like that, `Close Other Tabs` greys out and takes no click. The app
+will not throw away an edit in progress without saying so. Save the file, right-click again, and it
+closes with the rest.
+
+Naming that one tab with `Close` is another matter. It closes then and there, the same as
 pressing its X, and the unsaved edit is gone.
 
 ## The persona on `Sessions`
