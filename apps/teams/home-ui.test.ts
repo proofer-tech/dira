@@ -23,3 +23,33 @@ test("selectTab — chat 탭이 이미 home.current여도 activeTab을 옮기는
   const focusCall = alreadyCurrent.indexOf("focusTabAction");
   assert.ok(focusCall >= 0 && focusCall < nextReturn, "이미 로드된 대화 탭을 다시 눌러도 focusTabAction 없이 return한다");
 });
+
+// 티켓 8e9a8736(요구 `52062bc6`): closeTab이 setSurface를 안 불러서, 탭은 닫혀도
+// 몸통(surface)이 옛 자리에 남던 문제 — closeTab이 **닫은 탭이 활성 탭이었을 때만**
+// 서버 응답의 activeTab을 selectTab과 같은 표(chat -> session, terminal -> terminal,
+// file -> explorer)로 맞추는지 소스로 고정한다. 배경 탭을 닫을 때는 안 건드린다
+// (§11-7 결정 4 — scm·schedules처럼 탭이 없는 표면을 보던 중 배경 탭을 닫아도 안 밀린다).
+const closeA = s.indexOf("const closeTab = async (tab: Tab) => {");
+const closeB = s.indexOf("\n  };", closeA);
+assert.ok(closeA >= 0 && closeB > closeA, "home-ui.tsx: closeTab 구간을 못 찾았다");
+const closeBody = s.slice(closeA, closeB);
+
+test("closeTab — wasActive(닫은 탭이 활성 탭)를 닫기 응답 받기 전에 잰다", () => {
+  const wasActiveIdx = closeBody.indexOf("const wasActive = tab.id === home.activeTab;");
+  const applyIdx = closeBody.indexOf("apply(c)");
+  assert.ok(wasActiveIdx >= 0 && wasActiveIdx < applyIdx, "wasActive를 apply(닫기 반영) 전에 안 재면 activeTab이 이미 옮겨간 뒤라 항상 거짓이 된다");
+});
+
+test("closeTab — wasActive일 때만 남은 탭 종류로 setSurface를 selectTab과 같은 표로 맞춘다", () => {
+  const guardIdx = closeBody.indexOf("if (wasActive) {");
+  assert.ok(guardIdx >= 0, "wasActive 가드 없이 매번 표면을 옮기면 배경 탭을 닫아도 지금 보던 표면이 밀린다");
+  const guarded = closeBody.slice(guardIdx);
+  assert.ok(guarded.includes('c.tabs.find((tb) => tb.id === c.activeTab)'), "남은 탭 중 activeTab을 찾는 조회가 없다");
+  assert.ok(/if\s*\(landed\)\s*setSurface\(landed\.kind === "terminal" \? "terminal" : landed\.kind === "file" \? "explorer" : "session"\)/.test(guarded), "landed 종류 -> surface 매핑이 selectTab과 같은 표가 아니다");
+});
+
+test("closeTab — 남은 탭이 0개(activeTab이 없어 landed가 undefined)면 setSurface를 안 부른다", () => {
+  const landedGuard = closeBody.slice(closeBody.indexOf("const landed ="));
+  const ifIdx = landedGuard.indexOf("if (landed)");
+  assert.ok(ifIdx >= 0, "landed 가드 없이 setSurface를 바로 부르면 탭이 0개일 때도 표면을 옮긴다");
+});
