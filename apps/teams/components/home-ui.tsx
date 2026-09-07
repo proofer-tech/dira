@@ -122,6 +122,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { Button } from "@/components/ui/button";
+import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "@/components/ui/context-menu";
 import {
   Dialog,
   DialogClose,
@@ -186,6 +187,7 @@ import type {
 } from "@/lib/home-session";
 import { formatCombo, matchCombo } from "@/lib/keymap";
 import type { Checkout, GitStatus, StatusFile } from "@/lib/source-control";
+import { tabsOnSide } from "@/lib/tabs";
 import {
   chatRows,
   dateTimeLabel,
@@ -691,8 +693,30 @@ export function HomeUI({
    *  종전 `closeTerminalTab` 주석과 같은 결). */
   const closeTab = async (tab: Tab) => {
     setPendingSchedule(null);
-    apply(tab.kind === "terminal" ? await closeTerminalTab(project, tab.id) : await closeTabAction(project, tab.id));
+    const wasActive = tab.id === home.activeTab;
+    const c = tab.kind === "terminal" ? await closeTerminalTab(project, tab.id) : await closeTabAction(project, tab.id);
+    apply(c);
     if (tab.kind === "file") explorer.dropFile(tab.id);
+    // **닫은 탭이 활성 탭이었을 때만** 표면을 따라간다(§11-7 결정 4 §표면은 활성 탭을 따라간다) —
+    // 배경 탭 하나를 닫아도 지금 보던 표면(예: `scm` - `schedules`처럼 탭이 없는 표면)은 그대로다.
+    // 서버가 이미 `mostRecentTab`으로 옮겨 둔 곳을 `c.activeTab`에서 읽는다. 옮길 곳이 없으면
+    // (남은 탭 0개) 표면 그대로 두고 그 표면의 빈 상태가 뜬다(§11-7 수용조건 마지막 줄).
+    if (wasActive) {
+      const landed = c.tabs.find((tb) => tb.id === c.activeTab);
+      if (landed) setSurface(landed.kind === "terminal" ? "terminal" : landed.kind === "file" ? "explorer" : "session");
+    }
+  };
+
+  /** 탭 우클릭 메뉴의 `좌측 탭 모두 닫기`·`우측 탭 모두 닫기`(§11-7 결정 2). `tabsOnSide`가 이미
+   *  우클릭한 탭 자신과 `unsaved` 파일 탭을 뺀 id 목록을 내므로, 그 목록을 **닫는 방법은 `closeTab`
+   *  하나의 반복이다**(§11-7 결정 4 — 새 닫기 경로가 0개다). 순서대로 `await`하는 이유는 `apply`가
+   *  매번 `home.tabs`를 통째로 갈아 끼워서다 — 병렬로 쏘면 뒤에 도착한 응답이 앞선 응답의 결과를
+   *  덮어써 절반만 닫힌 목록이 화면에 남는다. */
+  const closeTabsOnSide = async (id: string, side: "left" | "right") => {
+    for (const targetId of tabsOnSide(home.tabs, id, side)) {
+      const target = home.tabs.find((tb) => tb.id === targetId);
+      if (target) await closeTab(target);
+    }
   };
 
   /** 우측 탭 줄에서 탭 하나를 고른다(§11 결정 1) — **표면을 가로지르는 그 한 줄**의 유일한
@@ -854,6 +878,8 @@ export function HomeUI({
               const tab = home.tabs.find((tb) => tb.id === id);
               if (tab) void closeTab(tab);
             }}
+            onCloseLeft={(id) => void closeTabsOnSide(id, "left")}
+            onCloseRight={(id) => void closeTabsOnSide(id, "right")}
           />
           {/* `탐색기`(§11-2 결정 2, P366-6)와 `터미널`(§11-1)은 대화 컬럼과 자리를 바꿔 쓴다 —
               위 탭 줄은 그대로 두고 아래 몸통만 갈아 끼운다. */}
@@ -1492,12 +1518,16 @@ function TabBar({
   conversations,
   onSelect,
   onClose,
+  onCloseLeft,
+  onCloseRight,
 }: {
   tabs: Tab[];
   activeTab: string | null;
   conversations: Home["conversations"];
   onSelect: (id: string) => void;
   onClose: (id: string) => void;
+  onCloseLeft: (id: string) => void;
+  onCloseRight: (id: string) => void;
 }) {
   const t = useT();
   if (tabs.length === 0) return null;
@@ -1517,26 +1547,43 @@ function TabBar({
             const title = titleOf(tab);
             const Icon = TAB_ICON[tab.kind];
             const isActive = tab.id === activeTab;
+            // 좌우 모두 닫기가 흐리게 뜨는 판정(§11-7 결정 2 §닫을 것이 0개인 항목) — 배열
+            // 순서에서 우클릭한 탭이 맨 끝이면(또는 그쪽에 `unsaved` 탭 하나만 있으면) 0개다.
+            const hasLeft = tabsOnSide(tabs, tab.id, "left").length > 0;
+            const hasRight = tabsOnSide(tabs, tab.id, "right").length > 0;
             return (
-              <TabsTrigger key={tab.id} value={tab.id} nativeButton={false} render={<div />} className="max-w-40 flex-none gap-1.5">
-                <Icon aria-hidden className="size-3.5 shrink-0" />
-                <Tooltip>
-                  <TooltipTrigger render={<span className="min-w-0 truncate">{title}</span>} />
-                  <TooltipContent>{title}</TooltipContent>
-                </Tooltip>
-                <button
-                  type="button"
-                  aria-label={`${t("home.tabs.close")} - ${title}`}
-                  tabIndex={isActive ? 0 : -1}
-                  className="flex size-6 shrink-0 items-center justify-center rounded hover:bg-muted"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onClose(tab.id);
-                  }}
-                >
-                  <X aria-hidden className="size-3.5 text-muted-foreground" />
-                </button>
-              </TabsTrigger>
+              <ContextMenu key={tab.id}>
+                <ContextMenuTrigger render={<div />}>
+                  <TabsTrigger value={tab.id} nativeButton={false} render={<div />} className="max-w-40 flex-none gap-1.5">
+                    <Icon aria-hidden className="size-3.5 shrink-0" />
+                    <Tooltip>
+                      <TooltipTrigger render={<span className="min-w-0 truncate">{title}</span>} />
+                      <TooltipContent>{title}</TooltipContent>
+                    </Tooltip>
+                    <button
+                      type="button"
+                      aria-label={`${t("home.tabs.close")} - ${title}`}
+                      tabIndex={isActive ? 0 : -1}
+                      className="flex size-6 shrink-0 items-center justify-center rounded hover:bg-muted"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onClose(tab.id);
+                      }}
+                    >
+                      <X aria-hidden className="size-3.5 text-muted-foreground" />
+                    </button>
+                  </TabsTrigger>
+                </ContextMenuTrigger>
+                <ContextMenuContent>
+                  <ContextMenuItem disabled={!hasLeft} onClick={() => onCloseLeft(tab.id)}>
+                    {t("home.tabs.closeLeft")}
+                  </ContextMenuItem>
+                  <ContextMenuItem onClick={() => onClose(tab.id)}>{t("home.tabs.close")}</ContextMenuItem>
+                  <ContextMenuItem disabled={!hasRight} onClick={() => onCloseRight(tab.id)}>
+                    {t("home.tabs.closeRight")}
+                  </ContextMenuItem>
+                </ContextMenuContent>
+              </ContextMenu>
             );
           })}
         </TabsList>

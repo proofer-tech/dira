@@ -51,3 +51,13 @@ export function mostRecentTab(tabs: Tab[]): string | null {
   if (tabs.length === 0) return null;
   return tabs.reduce((a, b) => (a.lastViewed > b.lastViewed ? a : b)).id;
 }
+
+/** 우클릭한 `id` 기준으로 한쪽(`side`)에 그려진 탭들의 id — `home.tabs` 배열 순서가 좌우
+ *  기준이다(§11-7 결정 2). 우클릭한 탭 자신과 `unsaved` 파일 탭은 어느 쪽 결과에도 안 든다
+ *  (§11-7 결정 3 — 모두 닫기가 저장 안 한 탭은 건너뛴다). */
+export function tabsOnSide(tabs: Tab[], id: string, side: "left" | "right"): string[] {
+  const at = tabs.findIndex((t) => t.id === id);
+  if (at === -1) return [];
+  const slice = side === "left" ? tabs.slice(0, at) : tabs.slice(at + 1);
+  return slice.filter((t) => !t.unsaved).map((t) => t.id);
+}

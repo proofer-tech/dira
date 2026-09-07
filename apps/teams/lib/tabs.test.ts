@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { closeTab, evictionCandidate, mostRecentTab, openTab, TAB_LIMIT, type Tab } from "./tabs.ts";
+import { closeTab, evictionCandidate, mostRecentTab, openTab, tabsOnSide, TAB_LIMIT, type Tab } from "./tabs.ts";
 
 function tab(id: string, lastViewed: string, unsaved?: true): Tab {
   return unsaved ? { id, kind: "chat", lastViewed, unsaved } : { id, kind: "chat", lastViewed };
@@ -59,4 +59,21 @@ test("closeTab removes only the given tab", () => {
 test("mostRecentTab picks the highest lastViewed, null when empty", () => {
   assert.equal(mostRecentTab([]), null);
   assert.equal(mostRecentTab([tab("a", "005"), tab("b", "009"), tab("c", "001")]), "b");
+});
+
+test("tabsOnSide splits by array order, excluding the clicked tab itself", () => {
+  const tabs = [tab("a", "0"), tab("b", "1"), tab("c", "2"), tab("d", "3"), tab("e", "4")];
+  assert.deepEqual(tabsOnSide(tabs, "c", "left"), ["a", "b"]);
+  assert.deepEqual(tabsOnSide(tabs, "c", "right"), ["d", "e"]);
+});
+
+test("tabsOnSide is empty when the clicked tab is at that end", () => {
+  const tabs = [tab("a", "0"), tab("b", "1"), tab("c", "2")];
+  assert.deepEqual(tabsOnSide(tabs, "a", "left"), []);
+  assert.deepEqual(tabsOnSide(tabs, "c", "right"), []);
+});
+
+test("tabsOnSide drops unsaved file tabs from the range", () => {
+  const tabs = [tab("a", "0"), tab("unsaved-b", "1", true), tab("c", "2"), tab("d", "3")];
+  assert.deepEqual(tabsOnSide(tabs, "d", "left"), ["a", "c"]); // unsaved-b는 범위에서 빠지고 그 탭만 남는다
 });
