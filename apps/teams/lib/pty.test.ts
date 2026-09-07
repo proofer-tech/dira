@@ -155,11 +155,32 @@ test("extractLastCommand strips OSC escapes even without a $/%/# marker", () => 
   assert.equal(extractLastCommand("\x1b]2;title\x07\x1b]1;dir\x07pwd"), "pwd");
 });
 
-test("extractLastCommand caps the result at 200 characters", () => {
-  const long = "a".repeat(250);
+test("extractLastCommand caps the result at 200 characters, keeping the tail", () => {
+  const long = "b".repeat(50) + "a".repeat(250); // 앞뒤가 다른 문자라야 방향을 실측한다
   const picked = extractLastCommand(`$ ${long}`);
   assert.equal(picked.length, 200);
-  assert.equal(picked, long.slice(0, 200));
+  assert.equal(picked, long.slice(-200)); // 최신(뒤)이 남아야 한다 — 앞이 남으면 회귀
+});
+
+// 버그 2 (8b1d625c) — zsh 라인 에디터가 키 하나마다 "공백으로 지우기 - \r - 프롬프트 -
+// 지금까지 친 글자"째 다시 찍는 실제 로그인 셸(AWS 프로필 + git 화살표 한 줄, $/%/# 로
+// 안 끝난다). backlog 마지막 줄에 이 재그리기가 키 입력 수만큼 이어 붙는데, `\r` 뒤만
+// 남기지 않으면 200자 상한이 맨 앞(첫 키 재그리기)에서 걸려 실제로 친 명령이 절대 안
+// 드러난다(실측 원문은 8b1d625c.wip.md 참고).
+function zshRedraw(typed: string): string {
+  return `${" ".repeat(118)}\r \r\r AWS: Backend_Developer-282059277666  🔑   ~/Projects/dira  ↱ master  \x1b=${typed}`;
+}
+
+test("extractLastCommand follows a zsh full-line redraw prompt through every keystroke, not just the first", () => {
+  // "sleep 20"을 한 글자씩 친 재그리기가 이어 붙은 모양 — 실제 backlog가 이렇게 쌓인다.
+  const partials = ["s", "sl", "sle", "slee", "sleep", "sleep ", "sleep 2", "sleep 20"];
+  const backlogLine = partials.map(zshRedraw).join("");
+  assert.ok(extractLastCommand(backlogLine).endsWith("sleep 20"));
+
+  // 다음 명령을 이어 쳐도(누적된 옛 재그리기 위에 새로 쌓여도) 최신 값으로 갈린다.
+  const nextLine = backlogLine + ["e", "ec", "ech", "echo", "echo ", "echo z"].map(zshRedraw).join("");
+  assert.ok(extractLastCommand(nextLine).endsWith("echo z"));
+  assert.ok(!extractLastCommand(nextLine).endsWith("sleep 20")); // 첫 글자에 안 멈춘다
 });
 
 test("writePty records the last command the moment Enter is seen, including recalled history", async () => {

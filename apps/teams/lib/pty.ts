@@ -148,17 +148,22 @@ const ANSI_ESCAPE = /\x1b\[[0-9;?]*[a-zA-Z]/g;
 const OSC_ESCAPE = /\x1b\][^\x07]*(?:\x07|\x1b\\)/g;
 
 /** 화면 기록 한 줄에서 사람이 친 명령을 집는다(§11-6 결정 2) — 단위 테스트가 이 함수 하나를
- *  잰다. ANSI·OSC를 걷어낸 뒤 마지막 `$ ` - `% ` - `# ` 뒤를 집고, 셋 중 하나도 없으면 줄
- *  전체다. */
+ *  잰다. ANSI·OSC를 걷어낸 뒤, 줄 안에 `\r`(개행 없이 커서만 처음으로 되돌리는 재그리기 —
+ *  zsh 라인 에디터가 키 하나마다 프롬프트째 다시 찍는 셸에서 나온다)이 있으면 **마지막 `\r`
+ *  다음만** 남긴다 — 그 앞은 이전 키 입력의 재그리기라 이미 덮어써진 화면이다(버그 2, 이
+ *  티켓 — 이걸 안 자르면 재그리기가 누적돼 200자 상한이 최신 내용 도달 전에 걸린다). 그 뒤
+ *  마지막 `$ ` - `% ` - `# ` 뒤를 집고, 셋 중 하나도 없으면 줄 전체다. */
 export function extractLastCommand(rawLine: string): string {
   const clean = rawLine.replace(OSC_ESCAPE, "").replace(ANSI_ESCAPE, "");
+  const redrawn = clean.lastIndexOf("\r") >= 0 ? clean.slice(clean.lastIndexOf("\r") + 1) : clean;
   let cut = -1;
   for (const marker of ["$ ", "% ", "# "]) {
-    const idx = clean.lastIndexOf(marker);
+    const idx = redrawn.lastIndexOf(marker);
     if (idx > cut) cut = idx + marker.length;
   }
-  const picked = cut >= 0 ? clean.slice(cut) : clean;
-  return picked.length > LAST_COMMAND_CAP ? picked.slice(0, LAST_COMMAND_CAP) : picked;
+  const picked = cut >= 0 ? redrawn.slice(cut) : redrawn;
+  // 상한을 넘으면 **뒤(최신 쪽)를 남긴다** — 사람이 방금 친 글자는 줄 끝에 있다.
+  return picked.length > LAST_COMMAND_CAP ? picked.slice(-LAST_COMMAND_CAP) : picked;
 }
 
 /** 사람의 입력 — xterm의 `onData`가 준 문자열을 그대로 stdin에 흘린다(엔터·화살표 등은
