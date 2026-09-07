@@ -9,11 +9,13 @@ import path from "node:path";
 import {
   PTY_LIMIT,
   extractLastCommand,
+  killAllPtys,
   killPty,
   openPty,
   pidOf,
   ptyAlive,
   ptyStatuses,
+  registerShutdownHandlers,
   restartPty,
   subscribePty,
   writePty,
@@ -215,6 +217,47 @@ test("ptyStatuses reports working while a foreground job runs and idle once it e
   await waitFor(() => ptyStatuses([id])[id].working, 3000);
   await waitFor(() => !ptyStatuses([id])[id].working, 5000);
   killPty(id);
+});
+
+// 이 티켓 — §11-1 §개정. 서버가 정상 종료할 때 `kill <pid>`(SIGTERM)만 받고, 열려 있던 pty가
+// 죽은 부모 밑에서 `ppid 1`로 재입양되지 않고 죽는지를 잰다.
+test("killAllPtys terminates every open pty's process group", async () => {
+  const cwd = tmpDir();
+  const a = openPty(cwd, "/bin/sh") as { id: string };
+  const b = openPty(cwd, "/bin/sh") as { id: string };
+  await waitFor(() => ptyAlive(a.id) && ptyAlive(b.id));
+  const gpidA = pidOf(a.id)!;
+  const gpidB = pidOf(b.id)!;
+  killAllPtys();
+  assert.equal(ptyAlive(a.id), false);
+  assert.equal(ptyAlive(b.id), false);
+  for (const gpid of [gpidA, gpidB]) {
+    await waitFor(() => {
+      try {
+        process.kill(-gpid, 0);
+        return false; // 아직 있다 — ppid 1로 남았으면 이 자리가 영영 안 풀린다
+      } catch {
+        return true; // ESRCH — 그룹이 없다
+      }
+    }, 2000);
+  }
+});
+
+// 이 파일이 Server Action 번들·라우트 핸들러 번들 두 벌로 로드돼도(머리 주석의 `globalThis`
+// 실측과 같은 원인) 종료 훅은 한 번만 걸려야 한다 — 안 그러면 종료 한 번에 killAllPtys가
+// 여러 번 돈다.
+test("registerShutdownHandlers attaches SIGTERM/SIGINT/exit listeners only once", () => {
+  const before = {
+    term: process.listenerCount("SIGTERM"),
+    int: process.listenerCount("SIGINT"),
+    exit: process.listenerCount("exit"),
+  };
+  registerShutdownHandlers();
+  registerShutdownHandlers();
+  registerShutdownHandlers();
+  assert.equal(process.listenerCount("SIGTERM"), before.term + 1);
+  assert.equal(process.listenerCount("SIGINT"), before.int + 1);
+  assert.equal(process.listenerCount("exit"), before.exit + 1);
 });
 
 test("ptyStatuses reports alive: false for a closed pty", () => {

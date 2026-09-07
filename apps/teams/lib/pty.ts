@@ -124,6 +124,30 @@ export function killPty(id: string): boolean {
   return true;
 }
 
+/** 서버 정상 종료 시 열려 있는 pty를 전부 죽인다(§11-1 §개정 — "서버가 죽으면 자식이라 같이
+ *  죽는다"는 사실이 아니다. POSIX는 죽은 부모의 자식을 `ppid 1`로 재입양시킬 뿐 안 죽인다). */
+export function killAllPtys(): void {
+  for (const entry of ptys.values()) killEntry(entry);
+}
+
+/** `SIGTERM` · `SIGINT` · 정상 `exit` 셋에서 `killAllPtys`를 부르도록 한 번만 건다. **모듈
+ *  top-level이 아니라 이 함수를 통해서만 등록한다** — 이 파일은 Server Action과 라우트 핸들러가
+ *  각각 다른 번들로 실어 두 벌 로드된다(위 `ptys` 맵의 실측과 같은 원인). 등록도 `globalThis`
+ *  플래그로 지켜야 두 벌이 각각 `process.on`을 걸어 종료 한 번에 `killAllPtys`가 두 번 도는
+ *  일이 없다. `SIGKILL`은 핸들러가 돌 기회 자체가 없어 못 덮는다 — 스펙도 덮는다고 안 적는다. */
+export function registerShutdownHandlers(): void {
+  const gh = globalThis as unknown as { __diraPtyShutdownRegistered?: boolean };
+  if (gh.__diraPtyShutdownRegistered) return;
+  gh.__diraPtyShutdownRegistered = true;
+  const shutdown = () => {
+    killAllPtys();
+    process.exit(0);
+  };
+  process.on("SIGTERM", shutdown);
+  process.on("SIGINT", shutdown);
+  process.on("exit", killAllPtys); // 동기 전용 — killAllPtys는 이미 동기다
+}
+
 export function ptyAlive(id: string): boolean {
   const e = ptys.get(id);
   return !!e && !e.exited;

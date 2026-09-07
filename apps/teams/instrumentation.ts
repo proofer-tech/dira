@@ -9,6 +9,8 @@ import { isLandingOnly } from "./lib/flags.ts";
 // Runtime" 경고가 났다(실측 — proxy.ts 11행과 같은 부류의 문제).
 export async function register() {
   if (process.env.NEXT_RUNTIME === "edge") return; // fs 없음 — node 런타임에서만 돈다
+  const { registerShutdownHandlers } = await import("./lib/pty.ts");
+  registerShutdownHandlers(); // §11-1 §개정 — SIGTERM·SIGINT·정상 exit에서 열린 pty를 전부 죽인다
   if (isLandingOnly()) return; // 공개 배포는 등록된 프로젝트가 없다 — 레지스트리 읽기 0회
   const { readProjects, resolveConfig } = await import("./lib/projects.ts");
   const { mirrorCore } = await import("./lib/protocols.ts");
