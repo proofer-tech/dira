@@ -3,6 +3,7 @@ import assert from "node:assert";
 import {
   activeEpicFrom,
   chatRows,
+  chatTabTitle,
   dateTimeLabel,
   doneLimit,
   DONE_LANE_LIMIT,
@@ -853,6 +854,29 @@ test("scheduleRows — 제목은 prompt 첫 줄 · 시각은 dateTimeLabel · �
     "en",
   );
   assert.deepEqual(rowsEn, [{ id: "s3", title: "릴리스 노트 초안", time: "8/18 09:00 past" }]);
+});
+
+/** 대화 탭 라벨(§비주얼 §72 ② §대화 탭의 이름 표 다섯 행) — `conversations`·`workers`·
+ *  `schedules` 세 목록에서 순서대로 찾고, 다 없으면 `세션`(`sessionStream.session`)이다. */
+test("chatTabTitle — 표 다섯 행", () => {
+  const conversations = [{ id: "c1", title: "대화 제목" }, { id: "c2", title: "" }];
+  const workers = [{ id: "w1", title: "티켓 제목" }];
+  const schedules = [
+    { session_id: "s1", prompt: "매일 아침 보드를 훑어라\n두 번째 줄" },
+    { session_id: "", prompt: "회차 없음" }, // 아직 안 돈 스케줄 — 탭이 안 생기므로 안 걸린다
+  ];
+
+  // 1행 — 대화 제목
+  assert.equal(chatTabTitle("c1", conversations, workers, schedules), "대화 제목");
+  // 2행 — 제목 없는 대화는 `새 대화`(§11-8 결정 2 인용)
+  assert.equal(chatTabTitle("c2", conversations, workers, schedules), "새 대화");
+  // 3행 — 워커 세션 목록의 티켓 제목
+  assert.equal(chatTabTitle("w1", conversations, workers, schedules), "티켓 제목");
+  // 4행 — 회차 있는 스케줄의 이름(prompt 첫 줄)
+  assert.equal(chatTabTitle("s1", conversations, workers, schedules), "매일 아침 보드를 훑어라");
+  // 5행 — 세 목록에 다 없으면 `세션`(새 i18n 키 0개)
+  assert.equal(chatTabTitle("없는id", conversations, workers, schedules), "세션");
+  assert.equal(chatTabTitle("없는id", conversations, workers, schedules, "en"), "Session");
 });
 
 /** 찾기 바가 훑는 자 (DESIGN.md §7 §대화 안에서 찾기 · §비주얼 §30) — **대소문자 무시

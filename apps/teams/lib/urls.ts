@@ -304,6 +304,33 @@ export function scheduleRows(
   });
 }
 
+/** 대화 탭(`chat` 탭 줄)의 라벨(§비주얼 §72 ② §대화 탭의 이름 표 다섯 행) — 탭 id가 가리킬 수
+ *  있는 좌측 패널 목록은 셋이고, `conversations`에는 워커 세션 · 스케줄이 줄을 안 만든다(§7).
+ *  그래서 화면 이름(`홈`)으로 물러나는 대신 이 함수가 세 목록을 순서대로 찾는다.
+ *
+ *  - **대화** — 제목이 있으면 그대로, 없으면 `새 대화`(§11-8 결정 2가 정한 값 — 여기서 다시
+ *    정하지 않고 인용만 한다).
+ *  - **워커 세션** — `home.workers`의 그 줄과 같은 문자열(`w.title` = 티켓 제목).
+ *  - **스케줄** — 회차가 있어야(`session_id !== ""`) 탭이 생기므로(`switchConversation`)
+ *    `session_id`로 찾는다. 제목은 `scheduleRows`와 같은 식(`prompt`의 첫 줄)이다.
+ *  - **셋에 다 없으면** `세션`(`sessionStream.session` 인용 — 새 키를 안 만든다. §72 ②가
+ *    `home.surface.agent`를 거절한 이유도 같은 절에 있다: 그쪽은 표면 이름이라 영어가 복수다). */
+export function chatTabTitle(
+  id: string,
+  conversations: { id: string; title: string }[],
+  workers: { id: string; title: string }[],
+  schedules: { session_id: string; prompt: string }[],
+  locale: Locale = DEFAULT_LOCALE,
+): string {
+  const conv = conversations.find((c) => c.id === id);
+  if (conv) return conv.title || t(locale, "home.newConversation");
+  const worker = workers.find((w) => w.id === id);
+  if (worker) return worker.title;
+  const sched = schedules.find((s) => s.session_id !== "" && s.session_id === id);
+  if (sched) return sched.prompt.split("\n")[0] || sched.prompt;
+  return t(locale, "sessionStream.session");
+}
+
 /** 세션 스트림(§2-1)의 사건 줄을 **펼칠 수 있나** — 셰브런·`<details>`를 거는 유일한 판정.
  *  본문이 없으면 펼쳐도 빈 상자라 어포던스를 주지 않는다: `display: "omitted"`인 디스패치는
  *  `thinking` 본문을 빈 문자열로 준다(실측 75/75, `--thinking-display summarized` 없이). 암호화돼
