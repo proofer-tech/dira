@@ -12,6 +12,18 @@ comes up on its own. It ships on. The other two have their own chapters as well
 ([Protocols](/docs/protocols) · [Archiving and the ontology](/docs/ontology)). Here we look at
 the board, the workers, and the things hanging off either end of the header.
 
+Press `Esc` on a ticket detail or the epic screen and you come out to the board. Pasting the
+address straight into a new tab makes no difference. There is no history to walk back, and the
+destination is the board either way. If a dialog or the switcher is up over the screen, that
+closes first and the screen underneath stays where it was.
+
+Anywhere else, pressing it does nothing. That is true of the board, `Squads`, `Protocols`,
+`Ontology`, `Workers` and the project home, and of a file you opened in the ontology, a persona
+you picked in `Squads`, the sort and filter you set on the board, and the surface and tabs you
+have open on the home. Nothing is broken. The two screens above are the only ones with a
+destination set. And while you are typing in the interject box or a ticket editor, pressing it
+moves nothing. What you were writing should not go away on one `Esc`.
+
 ## The board
 
 ![The dira board. Ticket cards sit in three lanes: Open, In progress, Done.](/shots/02-board.png)

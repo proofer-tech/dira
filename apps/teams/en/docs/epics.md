@@ -286,8 +286,8 @@ gained is one header line. Turn it on once two or three groups are standing.
 
 Rest the cursor on a sidebar row to open the panel and press the `P273 memory` button at the
 bottom, and you go to `/p/<project>/epics/<number>`. Typing the address gets you the same screen.
-The top tabs do not grow. On this screen the active tab is still `Board`, and `Esc` takes you back
-to the board.
+The top tabs do not grow. On this screen the active tab is still `Board`, and `Esc` takes you to
+the board.
 
 The left is the same epic list as the board's. On the right, the header carries the title and the
 number, with `Edit` and `View in board` beside it. Under that, one line reads
