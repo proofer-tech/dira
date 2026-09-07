@@ -5,6 +5,7 @@
 import { mkdir, readFile, readdir, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
+import { cache } from "react";
 import { isMultiToken } from "./flags.ts";
 import { DEFAULT_LOCALE, t, type Locale } from "./i18n.ts";
 import { DEFAULT_KEYMAP, defaultBindings, type Bindings, type Keymap } from "./keymap.ts";
@@ -563,9 +564,12 @@ function parseWorker(text: string): Parsed {
 
 /** 프로젝트의 실효 설정. `<루트>/personas`·`.wip`·`.done`을 가정하지 않고 워커 파일에서 읽는다.
  *  워커가 여러 개인데 값이 갈리면 첫 워커 값을 쓰고 conflicts에 양쪽을 담는다 —
- *  `TICKET_CWD`만 예외로 `cwdByWorker` 목록에 담고 충돌로 보지 않는다. */
-export async function resolveConfig(project: Pick<Project, "root">): Promise<ProjectConfig> {
-  const root = project.root;
+ *  `TICKET_CWD`만 예외로 `cwdByWorker` 목록에 담고 충돌로 보지 않는다.
+ *
+ *  **`resolveConfigCached`(root 하나로 키를 건다)를 얇게 감싼 것뿐이다** — 공개 시그니처는
+ *  그대로 두고 `project` 객체를 안 받게 해 여러 호출자가 서로 다른 객체 참조를 넘겨도
+ *  같은 root면 캐시가 맞물린다(`08a94bc3`, `ticketsCached`가 이 캐시에 얹힌다). */
+async function resolveConfigUncached(root: string): Promise<ProjectConfig> {
   const defaults: Record<Field, string> = {
     personas: path.join(root, "personas"),
     protocols: path.join(root, "protocols"),
@@ -616,6 +620,29 @@ export async function resolveConfig(project: Pick<Project, "root">): Promise<Pro
   }
   return config;
 }
+
+const resolveConfigCached = cache(resolveConfigUncached);
+
+export async function resolveConfig(project: Pick<Project, "root">): Promise<ProjectConfig> {
+  return resolveConfigCached(project.root);
+}
+
+/** 요청 하나 안에서 `listTickets` 풀 스캔을 한 번만(`08a94bc3` 실측 — `/p/dira`처럼 티켓
+ *  수천 건 규모 큐에서는 파일별 `stat` 자체가 수 초 걸린다). `readSummary`(레이아웃의 전환기
+ *  카운트) · `/p/[project]` 페이지 · `pollHome`(워커 세션 패널·참조 해석)이 같은 요청/서버
+ *  렌더 안에서 각자 이 root를 불러도, `cache()`가 React 렌더 하나의 수명 동안 결과를 나눠
+ *  준다(`resolveConfigCached`와 같은 경계). **폴링(500ms 간격의 별도 서버 액션 호출)은 각자
+ *  새 요청이라 매번 새로 스캔한다** — 오래된 값이 굳어 남는 문제가 없다. `queue.ts`의
+ *  `inFlight` 코얼레싱(동시 호출 전용)과는 다른 층이다 — 이건 순차 호출도 묶는다. */
+export const ticketsCached = cache(
+  async (root: string): Promise<{ config: ProjectConfig; tickets: Ticket[]; now: Date }> => {
+    const config = await resolveConfigCached(root);
+    // §1-4 §계산 시점 — `listTickets`의 유효마감과 `dueAlertOf`의 "남은"이 같은 순간을 봐야 한다.
+    const now = new Date();
+    const tickets = await listTickets(root, config, now);
+    return { config, tickets, now };
+  },
+);
 
 /** 워커 값을 못 쓴 모든 경우(값이 없음 + 해석 실패). §7 해석 결과 표만 둘을 구분해 그리고,
  *  나머지 화면은 "화면이 쓰는 값이 기본값이다"라는 같은 사실만 필요하다. */
@@ -730,11 +757,8 @@ export async function readSummary(project: Pick<Project, "root">): Promise<Proje
   try {
     const st = await stat(project.root);
     if (!st.isDirectory()) throw new Error(`디렉터리가 아니다: ${project.root}`);
-    const config = await resolveConfig(project);
-    // §1-4 §계산 시점 — `listTickets`의 유효마감과 `dueAlertOf`의 "남은"이 같은 순간을 봐야 한다.
-    const now = new Date();
-    const [tickets, workers] = await Promise.all([
-      listTickets(project.root, config, now),
+    const [{ config, tickets, now }, workers] = await Promise.all([
+      ticketsCached(project.root),
       listWorkers(project.root),
     ]);
     return {
@@ -777,17 +801,27 @@ export async function readSummary(project: Pick<Project, "root">): Promise<Proje
 }
 
 /** 종 항목 ⑨용 나열(P362-3) — 열린 티켓만 후보다(`select`가 백오프 표식을 거르는 자리와 같은
- *  풀 — 잠긴 티켓엔 이 표식이 안 남는다). 티켓마다 `readBackoff` 한 번씩 — ⑧의 표식 한 장과
- *  달리 티켓 수만큼 파일을 연다(§성능 예산 밖: 후보가 몇 안 된다). */
+ *  풀 — 잠긴 티켓엔 이 표식이 안 남는다).
+ *
+ *  **`run/` 목록을 먼저 한 번 훑는다**(`08a94bc3`) — 예전에는 후보 티켓마다 `readBackoff`를
+ *  하나씩 불렀는데, "후보가 몇 안 된다"는 전제가 티켓 수천 건 규모(열린 티켓만 수천)에서는
+ *  안 맞아 대부분 ENOENT로 끝나는 개별 `readFile` 수천 번이 4개뿐인 libuv 스레드풀을 다퉜다
+ *  (`/p/dira` 첫 GET이 분 단위로 걸리던 원인 중 하나). `readdir` 한 번으로 실제로 존재하는
+ *  `backoff-*` 파일 이름만 추리면, 그 다음은 진짜 백오프가 걸린 티켓 수만큼만 연다 — 보통
+ *  후보 전체가 아니라 정말 몇 안 된다. */
 async function backoffOf(
   tickets: Ticket[],
   now: Date,
 ): Promise<{ hash: string; stem: string; until: number; count: number }[]> {
   const local = localDir();
   const nowMs = now.getTime();
+  const names = await readdir(path.join(local, "run")).catch(() => [] as string[]);
+  const marked = new Set(
+    names.filter((n) => n.startsWith("backoff-")).map((n) => n.slice("backoff-".length)),
+  );
   const checked = await Promise.all(
     tickets
-      .filter((t) => t.state === "open")
+      .filter((t) => t.state === "open" && marked.has(t.hash))
       .map(async (t) => ({ t, mark: await readBackoff(local, t.hash) })),
   );
   return checked

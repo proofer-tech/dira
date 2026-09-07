@@ -15,8 +15,7 @@ import { notFound } from "next/navigation";
 import { HomeUI } from "@/components/home-ui";
 import { pollHome } from "@/lib/home-session";
 import { t } from "@/lib/i18n";
-import { getProject, listPersonas, readLanguage, resolveConfig } from "@/lib/projects";
-import { listTickets } from "@/lib/queue";
+import { getProject, listPersonas, readLanguage, ticketsCached } from "@/lib/projects";
 import { exampleWorkers, listWorkers } from "@/lib/workers";
 
 export const dynamic = "force-dynamic";
@@ -37,8 +36,7 @@ export default async function Home({ params }: { params: Promise<{ project: stri
 
   // 홈이 고르는 페르소나 선택지(§7-4 결정 1) — **보드의 발행 다이얼로그·티켓 상세 편집 폼과
   // 같은 규칙**이다: `listPersonas` 결과 중 `body !== null`(= `PROFILE.md`가 있다).
-  const config = await resolveConfig(project);
-  const tickets = await listTickets(project.root, config);
+  const { config, tickets } = await ticketsCached(project.root);
   const personas = (await listPersonas(config.personas, tickets))
     .filter((p) => p.body !== null)
     .map((p) => p.name);

@@ -57,6 +57,19 @@ test("findTranscript — 매치 1개면 경로, 0개·2개 이상이면 null", a
   assert.equal(await findTranscript(UUID, path.join(tmp, "없는디렉터리")), null);
 });
 
+// 회귀 — `08a94bc3`/`80460d52`: 양성 캐시(`globCache`)가 음성까지 굳히면 안 된다 — 도는 세션은
+// 트랜스크립트 파일이 막 생기는 중일 수 있다. 못 찾은 뒤 파일이 생기면 다음 호출이 바로 찾아야
+// 한다(음성은 캐시에 안 남는다는 뜻).
+test("findTranscript — 못 찾은 결과는 캐시에 안 남는다, 파일이 생기면 다음 호출이 바로 찾는다 (08a94bc3)", async () => {
+  const freshRoot = path.join(tmp, "found-later");
+  const dir = path.join(freshRoot, "-Users-hsol-c");
+  mkdirSync(dir, { recursive: true });
+  const sid = "11112222-3333-4444-5555-666677778888";
+  assert.equal(await findTranscript(sid, freshRoot), null); // 아직 없다
+  writeFileSync(path.join(dir, `${sid}.jsonl`), "");
+  assert.equal(await findTranscript(sid, freshRoot), path.join(dir, `${sid}.jsonl`)); // 이제 찾는다
+});
+
 test("findTranscript — UUID 정규식을 통과 못 하면 글롭하기 전에 null (§경로 방어)", async () => {
   for (const bad of [
     "",

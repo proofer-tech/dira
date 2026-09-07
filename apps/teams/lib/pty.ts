@@ -11,8 +11,11 @@
  *
  *  **raw는 escape를 안 걷어낸다** — 화면(`@xterm/xterm`)이 ANSI를 직접 그리므로 `auth.ts`의
  *  `ptyLines`(Ink TUI 로그 한 줄용) 같은 후처리가 필요 없다. */
-import { execFileSync, spawn, type ChildProcess } from "node:child_process";
+import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { promisify } from "node:util";
+
+const execFileAsync = promisify(execFile);
 
 /** §11-1 결정 3 — 탭 상한 12(`tabs.ts`)와 갈리는 값. 서버 프로세스 전체에서 하나다(프로젝트별이
  *  아니다) — 화면 여러 개를 열어도 이 머신이 무는 셸 프로세스 수는 하나로 잰다. */
@@ -218,12 +221,18 @@ type ProcRow = { pid: number; ppid: number; comm: string };
 const SHELL_NAMES = new Set(["sh", "bash", "zsh", "fish", "dash", "ksh", "tcsh", "csh"]);
 
 /** 프로세스 표를 한 번 읽는다 — `ptyStatuses`가 폴링 한 번에 이 함수를 한 번만 부른다
- *  (§11-6 결정 3 — "`ps`는 폴링 한 번에 한 번이다"). */
-function readProcessTable(): ProcRow[] {
+ *  (§11-6 결정 3 — "`ps`는 폴링 한 번에 한 번이다").
+ *
+ *  **비동기다** — `execFileSync`는 Node의 이벤트 루프 하나를 그 자식이 끝날 때까지 통째로
+ *  막는다(`08a94bc3` 실측: 이 서버는 프로세스 하나라 그 순간 도는 다른 요청 전부 —
+ *  `pollHome`·`refreshRefs`·CDP의 `Page.enable`까지 — 같이 멎는다. CPU 0%로 보이는 것도
+ *  스핀이 아니라 이 블로킹 대기라서다). `execFile`(비동기)로 자식을 기다려도 이 함수를 부르는
+ *  요청 자신은 그만큼 늦지만 다른 요청은 안 막힌다. */
+async function readProcessTable(): Promise<ProcRow[]> {
   try {
-    const out = execFileSync("ps", ["-Ao", "pid=,ppid=,comm="], { encoding: "utf8" });
+    const { stdout } = await execFileAsync("ps", ["-Ao", "pid=,ppid=,comm="], { encoding: "utf8" });
     const rows: ProcRow[] = [];
-    for (const line of out.split("\n")) {
+    for (const line of stdout.split("\n")) {
       const m = line.trim().match(/^(\d+)\s+(\d+)\s+(.*)$/);
       if (m) rows.push({ pid: Number(m[1]), ppid: Number(m[2]), comm: m[3] });
     }
@@ -266,8 +275,8 @@ export type PtyStatus = { lastCommand: string; working: boolean; alive: boolean 
 
 /** 좌측 목록 한 벌 — 마지막 명령 - 작업중 - 끊김을 `ps` 한 번으로 같이 낸다(§11-6 결정 3 · 4).
  *  없는 id는 `alive: false`로 낸다(이미 닫힌 탭). */
-export function ptyStatuses(ids: string[]): Record<string, PtyStatus> {
-  const rows = readProcessTable();
+export async function ptyStatuses(ids: string[]): Promise<Record<string, PtyStatus>> {
+  const rows = await readProcessTable();
   const result: Record<string, PtyStatus> = {};
   for (const id of ids) {
     const entry = ptys.get(id);

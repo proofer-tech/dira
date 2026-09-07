@@ -30,10 +30,11 @@ function tmpDir(): string {
   return dir;
 }
 
-/** 조건이 참이 될 때까지 짧게 폴링한다 — pty 출력은 비동기다. 5초 안에 안 되면 실패로 던진다. */
-async function waitFor(pred: () => boolean, ms = 5000): Promise<void> {
+/** 조건이 참이 될 때까지 짧게 폴링한다 — pty 출력은 비동기다. 5초 안에 안 되면 실패로 던진다.
+ *  술어 자신도 `ptyStatuses`처럼 비동기일 수 있다 — awaited 값이 참이 될 때까지 돈다. */
+async function waitFor(pred: () => boolean | Promise<boolean>, ms = 5000): Promise<void> {
   const start = Date.now();
-  while (!pred()) {
+  while (!(await pred())) {
     if (Date.now() - start > ms) throw new Error("timeout waiting for condition");
     await new Promise((r) => setTimeout(r, 50));
   }
@@ -204,7 +205,7 @@ test("writePty records the last command the moment Enter is seen, including reca
   writePty(id, "\r");
   // pty 출력은 `\r\n`이다 — echo의 결과 줄 "hi\r\n"을 기다린다("hi\n"은 영영 안 나온다).
   await waitFor(() => out.includes("hi\r\n"));
-  assert.equal(ptyStatuses([id])[id].lastCommand, "echo hi");
+  assert.equal((await ptyStatuses([id]))[id].lastCommand, "echo hi");
   killPty(id);
 });
 
@@ -212,10 +213,10 @@ test("ptyStatuses reports working while a foreground job runs and idle once it e
   const cwd = tmpDir();
   const { id } = openPty(cwd, "/bin/sh") as { id: string };
   await waitFor(() => ptyAlive(id));
-  await waitFor(() => !ptyStatuses([id])[id].working, 3000); // 프롬프트만 뜬 직후는 유휴다
+  await waitFor(async () => !(await ptyStatuses([id]))[id].working, 3000); // 프롬프트만 뜬 직후는 유휴다
   writePty(id, "sleep 2\r");
-  await waitFor(() => ptyStatuses([id])[id].working, 3000);
-  await waitFor(() => !ptyStatuses([id])[id].working, 5000);
+  await waitFor(async () => (await ptyStatuses([id]))[id].working, 3000);
+  await waitFor(async () => !(await ptyStatuses([id]))[id].working, 5000);
   killPty(id);
 });
 
@@ -260,9 +261,31 @@ test("registerShutdownHandlers attaches SIGTERM/SIGINT/exit listeners only once"
   assert.equal(process.listenerCount("exit"), before.exit + 1);
 });
 
-test("ptyStatuses reports alive: false for a closed pty", () => {
+test("ptyStatuses reports alive: false for a closed pty", async () => {
   const cwd = tmpDir();
   const { id } = openPty(cwd, "/bin/sh") as { id: string };
   killPty(id);
-  assert.deepEqual(ptyStatuses([id])[id], { lastCommand: "", working: false, alive: false });
+  assert.deepEqual((await ptyStatuses([id]))[id], { lastCommand: "", working: false, alive: false });
+});
+
+// 회귀 — `08a94bc3`: `ps`가 동기 호출(`execFileSync`)이던 시절엔 이 함수가 이벤트 루프를
+// 끝날 때까지 막아, 도는 중인 다른 타이머·프라미스가 그동안 전혀 못 돌았다. 비동기 자식
+// 프로세스(`execFile`)는 그 사이 이벤트 루프가 다른 일을 계속 처리한다 — `setTimeout(0)`이
+// `ptyStatuses`보다 먼저 도는 것으로 그 자유를 확인한다(막혀 있었다면 이 순서가 못 뒤집힌다).
+test("ptyStatuses awaits ps without blocking the event loop (08a94bc3)", async () => {
+  const cwd = tmpDir();
+  const { id } = openPty(cwd, "/bin/sh") as { id: string };
+  const order: string[] = [];
+  const timerFired = new Promise<void>((resolve) =>
+    setTimeout(() => {
+      order.push("timer");
+      resolve();
+    }, 0),
+  );
+  const statuses = ptyStatuses([id]).then(() => {
+    order.push("ptyStatuses");
+  });
+  await Promise.all([timerFired, statuses]);
+  assert.deepEqual(order, ["timer", "ptyStatuses"]);
+  killPty(id);
 });

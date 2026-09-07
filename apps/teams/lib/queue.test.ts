@@ -843,6 +843,23 @@ test("캐시 무효화 — 같은 크기로 제자리 수정해도 새 내용이
   assert.strictEqual(after.body, "본문 BBB");
 });
 
+// 회귀 — `08a94bc3`: 겹치는 호출(예 — `pollHome` 500ms 폴과 `refreshRefs`가 같은 root를 거의
+// 동시에 스캔)이 각자 전체 스캔을 새로 띄우면 티켓 수천 건 큐에서 파일당 `stat`이 겹쳐 쌓인다.
+// 코얼레싱이 됐으면 동시에 부른 두 호출이 **같은 배열 참조**를 받는다(스캔이 하나였다는
+// 뜻이다) — 코얼레싱이 없으면 내용은 같아도 매번 새 배열이라 `strictEqual`이 깨진다.
+test("listTickets 동시 호출 코얼레싱 — 겹치는 호출은 스캔 하나를 같이 기다린다", async () => {
+  const root = newRoot();
+  await write(root, "coal0001.md", fm({ ticket: "coal0001", title: "동시 호출" }));
+
+  const [a, b] = await Promise.all([listTickets(root, DEFAULT), listTickets(root, DEFAULT)]);
+  assert.strictEqual(a, b); // 같은 스캔의 같은 배열
+
+  // 코얼레싱은 **그 순간 겹치는 호출까지만**이다 — 먼저 것이 끝난 뒤 부른 호출은 새로 스캔한다.
+  const c = await listTickets(root, DEFAULT);
+  assert.notStrictEqual(a, c); // 새 배열(스캔이 다시 돌았다)
+  assert.strictEqual(c[0].title, "동시 호출"); // 내용은 여전히 맞다
+});
+
 // ── 쓰기 ────────────────────────────────────────────────────────────────────
 
 test("writeTicket — 남의 frontmatter 키는 그대로, 파싱은 엔진과 계속 같다", async () => {

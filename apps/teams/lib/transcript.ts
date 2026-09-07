@@ -67,7 +67,19 @@ export function sessionIdOf(fm: Record<string, string>): string | null {
  *  ponytail: 디렉터리 수만큼 access(**디렉터리** 실측 이 머신 75개 · 2026-08-04. 그 아래 트랜스크립트
  *  파일은 1900개대이고 §2-1 본문의 `864개`가 세는 것이 그 축이다). `fs.glob`이 하는 일과 같고
  *  @types/node@20에 없는 API를 안 쓴다. 느려지면 <session_id> → 경로를 프로세스 캐시에 둔다. */
+/** `<root>\0<leaf>` → 찾은 경로. **양성(찾음)만 담는다** — 이 자리(`08a94bc3`의 다른 원인 조사
+ *  `80460d52`가 지목: `findTranscript`가 `pollHome`마다 이 머신의 세션 디렉터리 전부(수백 개,
+ *  이 프로젝트의 티켓 수와 무관)를 훑어 폴링마다 그 팬아웃이 쌓인다). 음성(0개·2개 이상)은
+ *  안 담는다 — 도는 세션은 트랜스크립트가 아직 없다가 방금 막 생기는 순간이 있어서다(빈
+ *  상태를 굳히면 그 세션의 스트림이 영영 안 뜬다). 한 번 찾은 파일은 자리를 안 옮기므로
+ *  양성 캐시는 안전하다 — 주석이 이미 예고한 방향("느려지면 <session_id> → 경로를 프로세스
+ *  캐시에 둔다")이다. */
+const globCache = new Map<string, string>();
+
 async function globOne(root: string, leaf: string): Promise<string | null> {
+  const key = `${root}\0${leaf}`;
+  const hit = globCache.get(key);
+  if (hit) return hit;
   let dirs;
   try {
     dirs = await readdir(root, { withFileTypes: true });
@@ -86,7 +98,9 @@ async function globOne(root: string, leaf: string): Promise<string | null> {
       }),
     )
   ).filter((p) => p !== null);
-  return hits.length === 1 ? hits[0] : null; // 0개·2개 이상은 빈 상태
+  if (hits.length !== 1) return null; // 0개·2개 이상은 빈 상태
+  globCache.set(key, hits[0]);
+  return hits[0];
 }
 
 /** `~/.claude/projects/*​/<session_id>.jsonl`.

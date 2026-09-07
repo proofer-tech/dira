@@ -2047,6 +2047,11 @@ function TerminalLeftPanel({
   }, [project]);
 
   // §11-6 결정 4 — 표면이 열려 있는 동안 5초마다. 언마운트(표면 이탈)가 곧 정지다.
+  //
+  // **앞 왕복이 끝난 뒤에 다음을 예약한다 — `setInterval`이 아니다**(위 `pollHome` 루프 주석
+  // `bcfcdda4`와 같은 이유, `08a94bc3` 실측). `setInterval`은 왕복 시간을 안 보고 5초마다
+  // 또 쏘므로, 서버가 늦어지는 순간(티켓 수천 건 규모 큐의 전체 스캔과 겹칠 때) 응답 없는
+  // 왕복이 계속 쌓여 요청이 눈덩이처럼 불어난다.
   const ids = tabs.map((tb) => tb.id).join(",");
   useEffect(() => {
     if (!ids) {
@@ -2054,16 +2059,23 @@ function TerminalLeftPanel({
       return;
     }
     let stop = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const poll = () => {
-      void terminalStatuses(project, ids.split(",")).then((r) => {
-        if (!stop) setRows(r);
-      });
+      void terminalStatuses(project, ids.split(",")).then(
+        (r) => {
+          if (stop) return;
+          setRows(r);
+          timer = setTimeout(poll, 5000);
+        },
+        () => {
+          if (!stop) timer = setTimeout(poll, 5000);
+        },
+      );
     };
     poll();
-    const timer = setInterval(poll, 5000);
     return () => {
       stop = true;
-      clearInterval(timer);
+      clearTimeout(timer);
     };
   }, [project, ids]);
 

@@ -347,6 +347,19 @@ type Parsed = { mtime: number; size: number; fm: Record<string, string>; deps: s
  *  수정이다. 이게 문제가 되면 캐시를 지우지 말고 키에 `st.ino`를 더한다. */
 const parseCache = new Map<string, Parsed>();
 
+/** `listTickets` 동시 호출 코얼레싱(`08a94bc3`) — root 하나를 향한 전체 스캔이 이미 도는 중이면
+ *  새 스캔을 또 안 띄우고 그 프라미스를 같이 기다린다. `pollHome`(도는 동안 500ms)과 `refreshRefs`
+ *  (revision 갱신마다, 별도 타이머)가 서로 조율 없이 각자 전체 스캔을 돌리면 티켓 수천 건 큐에서
+ *  파일별 `stat` 수천 개가 겹쳐 쌓인다 — 그 겹침이 "갈수록 심해진다"의 근거다(실측: 겹치는 폴링이
+ *  많을수록 완료까지 걸리는 시간이 늘어난다, 4개뿐인 libuv 스레드풀을 같이 다툰다).
+ *
+ *  **정확성 손실이 없다**: 같이 기다리는 호출들은 코얼레싱이 없었어도 서로 몇 ms 안에 있었을
+ *  것이므로, 합쳐진 한 번의 스캔이 준 스냅샷은 각자 순서대로 스캔했을 때보다 더 늦지 않다
+ *  (더 이르지도 않다 — 가장 먼저 온 호출이 스캔을 시작한 시점 그대로다). `now`(계산 시점)가
+ *  호출마다 조금씩 다를 수 있지만 그 차는 같은 이유로 밀리초 단위라 `duedate` 판정에 안 걸린다.
+ *  `parseCache`(파일당 mtime·size 무효화)는 안 건드린다 — 그 계약은 그대로다. */
+const inFlight = new Map<string, Promise<Ticket[]>>();
+
 /** 프로젝트 큐의 티켓 전부(open·wip·done). 순서는 birth 오름차순, 동률이면 path — CLI `list`와 같다.
  *
  *  frontmatter가 없거나 닫는 `---`이 없는 파일은 **제외한다**: tickets.py scan()이 그렇게 하므로
@@ -356,6 +369,14 @@ const parseCache = new Map<string, Parsed>();
  *  쓴다(엔진의 `scan(troot, now=None)`과 같은 자리). GUI는 렌더마다 새로 부르므로 그때마다
  *  다시 잰다 — tickets.py와 같은 계약, 새 폴링 규칙 0개. */
 export async function listTickets(root: string, config: Suffixes, now: Date = new Date()): Promise<Ticket[]> {
+  const hit = inFlight.get(root);
+  if (hit) return hit;
+  const p = listTicketsUncached(root, config, now).finally(() => inFlight.delete(root));
+  inFlight.set(root, p);
+  return p;
+}
+
+async function listTicketsUncached(root: string, config: Suffixes, now: Date): Promise<Ticket[]> {
   const files = await ticketFiles(root);
   const ix = stemIndex(files);
   // 파일별 I/O는 서로 독립이다 — 순차로 기다리면 큐 크기에 그대로 비례한다(158건 200ms).

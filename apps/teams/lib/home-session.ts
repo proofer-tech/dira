@@ -92,6 +92,7 @@ import {
   readProjects,
   registryPath,
   resolveConfig,
+  ticketsCached,
   type Project,
   type ProjectConfig,
 } from "./projects.ts";
@@ -665,10 +666,14 @@ export function workerSessions(tickets: Ticket[]): WorkerSession[] {
  *
  *  // ponytail: 폴링(500ms)마다 큐를 다시 읽는다. `listTickets`가 mtime+size 캐시를 들고 있어
  *  //           두 번째부터는 파일당 `stat` 하나이고, 그 대가로 `.wip` → `.done`이 답이 도는
- *  //           중에도 목록에 붙는다. 무거워지면 첫 응답과 전환 응답에만 담는다. */
+ *  //           중에도 목록에 붙는다. 무거워지면 첫 응답과 전환 응답에만 담는다.
+ *
+ *  `ticketsCached`(요청 하나당 한 번, `08a94bc3`)를 쓴다 — 첫 GET에서는 `/p/[project]`
+ *  페이지의 `listTickets`·`layout.tsx`의 `readSummary`와 같은 스캔을 나눠 쓰고, 500ms 폴링
+ *  (별도 서버 액션 호출)에서는 매번 새로 스캔한다 — 위 ponytail 주석이 말하는 그 자리다. */
 async function listWorkerSessions(project: Pick<Project, "root">): Promise<WorkerSession[]> {
   try {
-    return workerSessions(await listTickets(project.root, await resolveConfig(project)));
+    return workerSessions((await ticketsCached(project.root)).tickets);
   } catch {
     return [];
   }
@@ -2071,8 +2076,7 @@ export async function pollHome(
     ? await (async () => {
         const project = await getProject(projectId);
         if (!project) return NO_REFS;
-        const config = await resolveConfig(project);
-        const homeTickets = await listTickets(project.root, config);
+        const { tickets: homeTickets } = await ticketsCached(project.root);
         const epics = await listEpics(project.root, homeTickets);
         return resolveMarkdownRefs(project.root, projectId, [newText], homeTickets, epics);
       })()
