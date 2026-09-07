@@ -131,6 +131,8 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
      `--mono`는 무수정이다(P149 규칙 ⑧ — 등폭 Geist Mono에 워드마크와 앱 캡처가 걸려 있다). */
   --sans: "Wanted Sans Variable", -apple-system, BlinkMacSystemFont, "Pretendard", "Apple SD Gothic Neo", "Segoe UI", sans-serif;
   --maxw: 1080px;
+  /* 앱 셸 헤더(`ShellHeader`의 `h-12`)와 값을 맞춘다 — P382-1, §비주얼 §77 §바꾸는 값 ①. */
+  --nav: 48px;
 }
 .dira-landing {
   background: var(--bg); color: var(--fg);
@@ -167,10 +169,10 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
 /* ── header ─────────────────────────────────────── */
 .dira-landing header {
   position: sticky; top: 0; z-index: 10;
-  height: 60px; display: flex; align-items: center;
+  height: var(--nav); display: flex; align-items: center;
   background: var(--bg); border-bottom: 1px solid var(--border);
 }
-.dira-landing header .wrap { display: flex; align-items: center; gap: 12px; width: 100%; padding-inline: max(24px, calc((100% - var(--maxw)) / 2)); }
+.dira-landing header .wrap { display: flex; align-items: center; gap: 24px; width: 100%; padding-inline: max(24px, calc((100% - var(--maxw)) / 2)); }
 .dira-landing .brand { display: flex; align-items: center; gap: 8px; text-decoration: none; font-family: var(--mono); font-weight: 600; font-size: 16px; letter-spacing: -0.03em; }
 .dira-landing .brand svg { width: 20px; height: 20px; fill: currentColor; }
 .dira-landing header nav { margin-left: auto; display: flex; align-items: center; gap: 8px; }
@@ -179,7 +181,7 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
    (`manual.css`의 그 규칙을 그대로 옮겼다, 아이콘 svg 대신 글자를 세운다는 것만 다르다). */
 .dira-landing .appearance {
   display: flex; align-items: center; justify-content: center;
-  width: 36px; height: 36px; border-radius: 8px;
+  width: 32px; height: 32px; border-radius: 8px;
   border: 0; background: none; color: var(--muted-fg);
   font-size: 13px; font-weight: 500; cursor: pointer;
 }
@@ -203,6 +205,18 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
 .dira-landing .btn-primary:hover,
 .dira-landing .btn-primary:focus-visible { background: #262626; }
 .dira-landing .btn-lg { height: 44px; padding: 0 24px; font-size: 15px; }
+/* 헤더 안 `.btn`만 앱 셸 버튼 값을 따른다(P382-1) — 히어로 CTA(`.btn-lg`)·갤러리·footer의
+   `.btn`은 이 선택자 밖이라 안 갈린다. `.btn-primary`는 특정도가 더 높은 아래
+   `header .btn-primary`가 면·글자를 원래 값으로 되돌린다(크기만 이 규칙을 따른다). */
+.dira-landing header .btn {
+  height: 28px; padding: 0 10px; font-size: 12.8px;
+  border: none; background: none; color: var(--muted-fg);
+}
+.dira-landing header .btn:hover,
+.dira-landing header .btn:focus-visible { background: var(--panel); color: var(--fg); }
+.dira-landing header .btn-primary { background: var(--fg); color: var(--bg); }
+.dira-landing header .btn-primary:hover,
+.dira-landing header .btn-primary:focus-visible { background: #262626; }
 /* 별 개수 칸(DESIGN §별 버튼을 우리 버튼으로 §개수 칸의 모양 A안). 새 색 0 · 새 토큰 0.
    .btn이 inline-flex라 stretch가 구분선을 버튼 높이만큼 끌어 준다. 오른쪽 여백은 .btn의
    padding 16px을 음수 마진으로 이어받는다 — .btn의 padding 선언은 버튼 넷이 같이 쓴다.
@@ -212,7 +226,7 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
    높아져서(0,4,0) 480에서 display:none이 지고 개수가 그대로 보인다(실측으로 한 번 그랬다). */
 .dira-landing .star-count {
   align-self: stretch; display: flex; align-items: center;
-  margin-right: -16px; padding: 0 16px;
+  margin-right: -10px; padding: 0 16px;
   border-left: 1px solid var(--border);
   color: var(--faint); font-variant-numeric: tabular-nums;
 }
@@ -260,13 +274,13 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
    이제 포인터). 위·아래 96/48은 새 수가 아니라 걷힌 `.hero { padding-top }`(240줄) 값을
    슬롯이 위·아래로 그대로 든 것이다 — 헤더 밑 간격과 옛 히어로 위 간격이 같은 리듬이라
    갈리지 않는다. 경계는 하이라인 한 줄, 다음 블록(`.hero`)이 갖는다.
-   `scroll-margin-top` = sticky `header` 60 + `.travel` 밴드 46(실측) — `프로젝트 관리`
+   `scroll-margin-top` = sticky `header` `--nav`(48) + `.travel` 밴드 46(실측) — `프로젝트 관리`
    (`/#projects`)가 그 자리로 올 때 헤더 밑에서 멈춘다. 390에서 `.tk`가 두 줄이 되어 밴드가
    54라 114다(§11 `top-18`과 같은 유도). */
-#projects { scroll-margin-top: 106px; padding-block: 96px; }
+#projects { scroll-margin-top: 94px; padding-block: 96px; }
 #projects + .hero { border-top: 1px solid var(--border); }
 @media (max-width: 480px) {
-  #projects { scroll-margin-top: 114px; }
+  #projects { scroll-margin-top: 102px; }
 }
 .dira-landing .cta-note { margin: 16px 0 0; font-size: 12.5px; color: var(--faint); font-family: var(--mono); }
 
@@ -368,7 +382,7 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
    §reduce 참고) — 겹만 죽이면 `sticky` + 음수 `margin-top`이 남아 절들이 포개진다. */
 @supports (animation-timeline: view()) {
   @media (min-width: 901px) and (prefers-reduced-motion: no-preference) {
-    /* 장면이 둘 → 셋이라 `200vh`를 그대로 못 쓴다 — 고정 구간이 `(N-1)·100vh + 60px`라
+    /* 장면이 둘 → 셋이라 `200vh`를 그대로 못 쓴다 — 고정 구간이 `(N-1)·100vh + --nav(48px)`라
        `300vh`면 `2.07 뷰포트`로 상한(«뷰포트 둘»)을 넘는다. `250vh`는 장면당 거리를
        지금(`480px`)과 같은 자리(`468px`)에 두면서 실측 `1405px` = `1.56 뷰포트`로 상한 안에
        든다. */
@@ -376,7 +390,7 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
     /* `.wrap`의 3트랙 full-bleed 격자(위 94행)는 안 덮는다 — 바깥 여백 `minmax(24px,1fr)`은
        그대로 두고 `content` 트랙만 반으로 갈라 글(왼쪽)·`<figure>`(오른쪽)를 나눈다. */
     .dira-landing .stage > .wrap {
-      position: sticky; top: 60px; height: calc(100vh - 60px);
+      position: sticky; top: var(--nav); height: calc(100vh - var(--nav));
       /* 자리 ④ 회귀(`3774014a` · `bb65e25b`) — 행이 전부 암시 `auto`라 `align-content: normal`
          (=`stretch`)이면 남는 세로 공간이 행 사이 사이에 갈려 타이틀·본문 여백이 벌어진다.
          `center`는 행을 늘리지 않고 남는 공간을 블록 위·아래로만 보낸다 — `<figure>`의
@@ -389,7 +403,7 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
         [mid-end] minmax(0, calc((var(--maxw) - 48px) / 2)) [content-end]
         minmax(24px, 1fr) [full-end];
     }
-    .dira-landing .stage > .wrap:nth-child(n+2) { margin-top: calc(-1 * (100vh - 60px)); }
+    .dira-landing .stage > .wrap:nth-child(n+2) { margin-top: calc(-1 * (100vh - var(--nav))); }
     .dira-landing .stage > .wrap > *:not(figure) { grid-column: content-start / mid-start; }
     /* 그림 없는 첫 패널의 오른쪽 칸(§자리 ④ 확장 판정 ③, `e0701973`) — 그 패널만 `content`
        열을 통째로 쓴다. 특이도 `(0,4,0)`이 바로 위 `*:not(figure)`(`(0,3,1)`)를 이긴다.
@@ -744,12 +758,12 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
 /* ── 여행하는 티켓 ──────────────────────────────── */
 /* §랜딩 §개편 §움직이는 티켓(ⓕ). 카드 한 장이 <main> 안에서 sticky로 붙어 페이지를 끝까지
    따라가며 레인 셋을 건넌다. 조상에 overflow 계열이 하나도 없다(MAIN → HTML 여덟 단계
-   전부 `visible`, 실측) — sticky가 조용히 죽는 자리가 없다. `top: 60px`은 header 높이다.
+   전부 `visible`, 실측) — sticky가 조용히 죽는 자리가 없다. `top: var(--nav)`는 header 높이다.
    z-index는 header(10)보다 낮다: 둘이 겹치는 순간이 없지만 순서를 고정해 둔다.
    밴드는 `.wrap`이라 위·아래 룰이 화면 끝까지 가고(«하이라인» 여덟에 흡수) 레인은
    `content` 열에 뜬다. 세로 padding은 밴드가 갖는다 — 안의 격자는 세로를 안 갖는다. */
 .dira-landing .travel {
-  position: sticky; top: 60px; z-index: 5;
+  position: sticky; top: var(--nav); z-index: 5;
   background: var(--bg);
   border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
   padding: 8px 0;
