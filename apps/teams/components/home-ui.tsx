@@ -187,7 +187,7 @@ import type {
 } from "@/lib/home-session";
 import { formatCombo, matchCombo } from "@/lib/keymap";
 import type { Checkout, GitStatus, StatusFile } from "@/lib/source-control";
-import { chatTabTitle, tabsOnSide, tabsToCloseOthers } from "@/lib/tabs";
+import { tabsOnSide, tabsToCloseOthers } from "@/lib/tabs";
 import {
   chatRows,
   dateTimeLabel,
@@ -878,8 +878,6 @@ export function HomeUI({
             tabs={home.tabs}
             activeTab={home.activeTab}
             conversations={home.conversations}
-            workers={home.workers}
-            schedules={home.schedules}
             onSelect={(id) => {
               const tab = home.tabs.find((tb) => tb.id === id);
               if (tab) void selectTab(tab);
@@ -1527,8 +1525,6 @@ function TabBar({
   tabs,
   activeTab,
   conversations,
-  workers,
-  schedules,
   onSelect,
   onClose,
   onCloseLeft,
@@ -1538,8 +1534,6 @@ function TabBar({
   tabs: Tab[];
   activeTab: string | null;
   conversations: Home["conversations"];
-  workers: Home["workers"];
-  schedules: Home["schedules"];
   onSelect: (id: string) => void;
   onClose: (id: string) => void;
   onCloseLeft: (id: string) => void;
@@ -1547,12 +1541,11 @@ function TabBar({
   onCloseOthers: (id: string) => void;
 }) {
   const t = useT();
-  const locale = useLocale();
   if (tabs.length === 0) return null;
   const TAB_ICON = { chat: MessageSquare, terminal: SquareTerminal, file: File } as const;
   const titleOf = (tab: Tab) =>
     tab.kind === "chat"
-      ? chatTabTitle(tab.id, conversations, workers, schedules, locale)
+      ? conversations.find((c) => c.id === tab.id)?.title || t("home.newConversation")
       : tab.kind === "terminal"
         ? (tab.cwd ?? tab.id)
         : tab.id;
