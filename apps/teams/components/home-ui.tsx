@@ -1534,7 +1534,7 @@ function TabBar({
   const TAB_ICON = { chat: MessageSquare, terminal: SquareTerminal, file: File } as const;
   const titleOf = (tab: Tab) =>
     tab.kind === "chat"
-      ? conversations.find((c) => c.id === tab.id)?.title || t("home.title")
+      ? conversations.find((c) => c.id === tab.id)?.title || t("home.newConversation")
       : tab.kind === "terminal"
         ? (tab.cwd ?? tab.id)
         : tab.id;
