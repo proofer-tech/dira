@@ -914,6 +914,14 @@ export function HomeUI({
               activeTab={home.activeTab}
               connected={terminalConnected}
               onConnect={(id) => setTerminalConnected((now) => new Set(now).add(id))}
+              onDisconnect={(id) =>
+                setTerminalConnected((now) => {
+                  if (!now.has(id)) return now;
+                  const next = new Set(now);
+                  next.delete(id);
+                  return next;
+                })
+              }
               apply={apply}
             />
           ) : (
@@ -1934,6 +1942,7 @@ function TerminalSurface({
   activeTab,
   connected,
   onConnect,
+  onDisconnect,
   apply,
 }: {
   project: string;
@@ -1941,6 +1950,9 @@ function TerminalSurface({
   activeTab: string | null;
   connected: Set<string>;
   onConnect: (id: string) => void;
+  /** 200이 아닌 응답 - 빈 스트림으로 판정된 탭을 `끊긴 터미널입니다` 화면으로 되돌린다
+   *  (§11-1 §개정) - `HomeUI`가 든 `terminalConnected`에서 그 id를 뺀다. */
+  onDisconnect: (id: string) => void;
   apply: (c: HomeChunk) => void;
 }) {
   const t = useT();
@@ -1969,7 +1981,7 @@ function TerminalSurface({
         {tabs.map((tab) =>
           connected.has(tab.id) ? (
             <div key={tab.id} hidden={tab.id !== activeTab} className="h-full">
-              <TerminalPanel projectId={project} id={tab.id} />
+              <TerminalPanel projectId={project} id={tab.id} onDisconnect={() => onDisconnect(tab.id)} />
             </div>
           ) : tab.id === activeTab ? (
             <div key={tab.id} className="flex h-full flex-col items-center justify-center gap-2">

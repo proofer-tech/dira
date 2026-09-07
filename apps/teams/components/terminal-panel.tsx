@@ -14,13 +14,25 @@
 import { useEffect, useRef } from "react";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
+import { readPtyStream } from "@/lib/pty-stream";
 
 /** `lib/pty.ts`의 `stty cols 120 rows 32`와 같은 값 — 서버가 그 크기로 셸을 열었으므로 화면도
  *  같은 크기로 맞춘다. ponytail: 고정 크기, 창 크기 반영은 다음 티켓(§11-1 수용조건 밖). */
 const COLS = 120;
 const ROWS = 32;
 
-export function TerminalPanel({ projectId, id }: { projectId: string; id: string }) {
+export function TerminalPanel({
+  projectId,
+  id,
+  onDisconnect,
+}: {
+  projectId: string;
+  id: string;
+  /** 200이 아닌 응답이거나 한 바이트도 못 받고 끝난 스트림 — 부모가 이 탭을 `끊긴 터미널입니다`
+   *  화면으로 되돌린다(§11-1 §개정). 언마운트가 낸 abort는 이 콜백을 안 부른다(`readPtyStream`이
+   *  `"aborted"`로 갈라낸다) — 다른 탭으로 옮겼다 돌아와도 정상 화면이 그대로 떠야 해서다. */
+  onDisconnect?: () => void;
+}) {
   const hostRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -40,14 +52,8 @@ export function TerminalPanel({ projectId, id }: { projectId: string; id: string
       } catch {
         return; // abort(언마운트) — 조용히 물러난다
       }
-      const reader = res.body?.getReader();
-      if (!reader) return;
-      const decoder = new TextDecoder();
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        term.write(decoder.decode(value, { stream: true }));
-      }
+      const outcome = await readPtyStream(res, (text) => term.write(text), ac.signal);
+      if (outcome === "disconnected") onDisconnect?.();
     })();
 
     return () => {
