@@ -622,12 +622,11 @@ export function ProjectNav({ id }: { id: string }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [browserRouter]);
 
-  // §비주얼 §74 §새로 정하는 것 ④ — 홈에서 내비가 우측 묶음(`매뉴얼` - `[종] [전환기] [설정]`)
-  // 왼쪽에 붙는다. auto 마진 하나가 그 묶음에서 이 nav로 옮겨 오는 것 — 헤더 안 auto 마진의
-  // 개수는 1 그대로다(§74 판정표 헤더 행 ①).
-  const home = screenOf(pathname) === "home";
+  // §비주얼 §76 — 내비가 여섯 화면 전부에서 우측 묶음(`매뉴얼` - `[종] [전환기] [설정]`) 왼쪽에
+  // 붙는다. `ml-auto`가 상시라 화면을 옮겨도 자리가 안 바뀐다 — 헤더 안 auto 마진의 개수는
+  // 1 그대로다(§74 판정표 헤더 행 ①).
   return (
-    <nav className={cn("flex items-center gap-4", home && "ml-auto")}>
+    <nav className="flex items-center gap-4 ml-auto">
       {NAV.map(({ seg, labelKey }) => {
         // 보드는 티켓 화면(발행·상세)·에픽 화면까지 자기 구역으로 본다 — 둘 다 이 화면에서
         // 들어가는 화면이고 상단탭을 안 늘린다(§에픽 §결정 5·6).
@@ -676,12 +675,11 @@ export function ShellHeader({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** 헤더 우측 묶음 — `매뉴얼` - `[종] [전환기] [설정]`(§비주얼 §74 §남는 규칙 3). 홈이 아니면
- *  이 그릇이 `ml-auto`로 헤더 오른쪽에 붙고, 홈에서는 그 auto 마진이 `ProjectNav`로 옮겨 가서
- *  이 그릇은 내비 바로 오른쪽에 `gap-6`으로만 붙는다 — 묶음 안의 `gap-2`와 순서는 안 갈린다. */
+/** 헤더 우측 묶음 — `매뉴얼` - `[종] [전환기] [설정]`(§비주얼 §74 §남는 규칙 3). auto 마진이
+ *  `ProjectNav`로 상시 옮겨 가 있어(§76) 이 그릇은 여섯 화면 전부에서 내비 바로 오른쪽에
+ *  `gap-6`으로만 붙는다 — 묶음 안의 `gap-2`와 순서는 안 갈린다. */
 export function ShellHeaderRight({ children }: { children: React.ReactNode }) {
-  const home = screenOf(usePathname()) === "home";
-  return <div className={cn("flex items-center gap-2", !home && "ml-auto")}>{children}</div>;
+  return <div className="flex items-center gap-2">{children}</div>;
 }
 
 /** 프로젝트 셸 `main`(§비주얼 §74 §새로 정하는 것 ①). 홈에서만 `py-6` → `-mt-12 pt-18 pb-6`:
