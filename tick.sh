@@ -258,6 +258,15 @@ for p in T.in_progress(sys.argv[2]):
 print(n)' "$CODE" "$TICKET_ROOT" "$1"
 }
 
+# 엔진 수정 서른네 번째 승인 §판정 2 - `tickets.py`의 `fresh_block`을 그대로 불러 쓴다(NFC ·
+# 상태 접미사 판정을 두 곳에 두지 않는다, persona_wip과 같은 이유). exit 0 = 신선한 블록이다.
+fresh_block_sh() {
+  python3 -c 'import sys
+sys.path.insert(0, sys.argv[1])
+import tickets as T
+sys.exit(0 if T.fresh_block(sys.argv[2]) else 1)' "$CODE" "$1"
+}
+
 # --- §1-5 갈래 C / §1-3 §5 — 피해자 판정은 여기 한 자리뿐이다(엔진 계약 `3acc1a56`) ---
 # `maybe_preempt`(자동, 소유자 필터 있음)와 `preempt`(사람이 부르는 명령, 소유자 필터 없음)가
 # 둘 다 이 함수만 부른다 - 정렬을 두 곳에 안 둔다(§1-5 §갈리는 것 하나). 성공하면 VPATH·VHASH·
@@ -1747,5 +1756,13 @@ if [ -n "$REAL" ] && [ "$REAL" != "$SID" ] && owns "$TPATH"; then
   log "NOTE $THASH 세션키 정정 $SID -> $REAL"
 fi
 rm -f "$CDOWN"          # 세션이 끝까지 갔다 = 엔진이 멀쩡하다. 창이 남아 있으면 여기서 푼다.
+# 엔진 수정 서른네 번째 승인 §판정 2 - `result ok`가 곧 완료를 뜻하지 않는다. 티켓이 아직
+# `.wip`이면 신선한 `## 블록`이 있는 경우만 종전대로 DONE이고, 그 밖은 턴을 닫고 죽은 것과
+# 다르지 않다 - FAIL로 남긴다(새 로그 낱말 0, §0-5 판정 1 화이트리스트를 그대로 재사용).
+# 종료코드는 안 건드린다 - 이 승인이 뒤집는 것은 로그 낱말 하나지 세션 종료 판정 자체가 아니다.
+if [ -f "$TPATH" ] && ! fresh_block_sh "$TPATH"; then
+  log "FAIL $THASH 세션이 ok로 끝났는데 .wip을 남겼다(신선한 블록 없음) sid=${REAL:-$SID}"
+  exit 0
+fi
 log "DONE $THASH sid=${REAL:-$SID}"
 exit 0
