@@ -66,6 +66,19 @@ export function projectPath(pathname: string, id: string): string {
   return `/p/${id}${rest === "/" ? "" : rest}`;
 }
 
+/** `Esc` 목적지 (DESIGN.md §0-7 §목적지 표). 얹힌 것(티켓 상세 · 에픽 화면) 위에서만
+ *  `/p/<id>/board`를 돌려주고, 나머지 여섯 화면은 `null`("대상 아님")이다.
+ *
+ *  **`screenOf()`를 재활용하지 않는다** — 그 함수는 에픽 경로에 `null`을 돌려주므로
+ *  (자기 화면 목록에 `/epics/`가 없다) 여기서 그대로 쓰면 에픽 화면이 조용히 빠진다. */
+export function escDestination(pathname: string): string | null {
+  const [, id, rest = ""] = /^\/p\/([^/]+)(\/.*)?$/.exec(pathname) ?? [];
+  if (!id) return null;
+  if (/^\/tickets\/./.test(rest)) return `/p/${id}/board`;
+  if (/^\/epics(\/.*)?$/.test(rest)) return `/p/${id}/board`;
+  return null;
+}
+
 /** 사용 통계의 화면 enum (DESIGN.md §0-11 이벤트 표 `screen_view`). **`lib/analytics.ts`가
  *  이 타입을 가져다 쓴다** — 정의가 여기 있는 이유는 매핑(`screenOf`)이 `usePathname()`을 받는
  *  클라이언트 코드라서다(저 파일은 `node:fs`를 탄다). */

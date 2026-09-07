@@ -10,6 +10,7 @@ import {
   EPIC_SIDEBAR_PAGE,
   engineCan,
   engineMissing,
+  escDestination,
   findMatches,
   formatElapsed,
   formatRemaining,
@@ -92,6 +93,31 @@ test("screenOf — 표에 없는 경로는 `null`이라 아무것도 안 보낸�
   assert.equal(screenOf("/p/dira/ticketsss"), null); // 접두만 같은 것에 안 걸린다
   assert.equal(screenOf("/p/dira/tickets"), null); // 해시 없는 자리에는 화면이 없다
   assert.equal(screenOf("/p/dira/workers/x"), null);
+});
+
+/** `Esc` 목적지 (DESIGN.md §0-7 §목적지 표) — 얹힌 것 둘만 보드로 보내고 나머지는 무동작이다. */
+test("escDestination — 티켓 상세 · 에픽 화면은 보드로 보낸다(§0-7 §목적지 표)", () => {
+  assert.equal(escDestination("/p/dira/tickets/fff28e90"), "/p/dira/board");
+  assert.equal(escDestination("/p/dira/epics"), "/p/dira/board"); // 세그먼트 없는 에픽
+  assert.equal(escDestination("/p/dira/epics/P42"), "/p/dira/board"); // 세그먼트 붙은 에픽
+  assert.equal(escDestination("/p/dira/epics/P42/2"), "/p/dira/board"); // 여러 세그먼트인 에픽
+});
+
+test("escDestination — 나머지 화면은 `null`이라 아무 일도 안 한다(§0-7 §목적지 표)", () => {
+  assert.equal(escDestination("/p/dira/board"), null);
+  assert.equal(escDestination("/p/dira"), null); // 홈
+  assert.equal(escDestination("/p/dira/"), null); // 홈의 정본 URL
+  assert.equal(escDestination("/p/dira/personas"), null); // 스쿼드
+  assert.equal(escDestination("/p/dira/personas/designer"), null); // 페르소나 세그먼트 붙은 자리
+  assert.equal(escDestination("/p/dira/protocols"), null);
+  assert.equal(escDestination("/p/dira/ontology"), null);
+  assert.equal(escDestination("/p/dira/workers"), null);
+  assert.equal(escDestination("/"), null); // 루트
+});
+
+test("escDestination — 프로젝트 id에 한글 · 퍼센트 인코딩이 들어도 그대로 돌려준다(익명 규칙)", () => {
+  assert.equal(escDestination("/p/비밀프로젝트/tickets/%ED%95%9C%EA%B8%80"), "/p/비밀프로젝트/board");
+  assert.equal(escDestination("/p/%EB%B9%84%EB%B0%80/epics/P1"), "/p/%EB%B9%84%EB%B0%80/board");
 });
 
 /** 페르소나 선택이 경로에 담긴다 (DESIGN.md §5 §선택이 경로에 담긴다 — 깨지는 자리 표 ①②④).

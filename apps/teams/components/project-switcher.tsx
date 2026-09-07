@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { SettingsDialog, type AuthView } from "@/components/settings-dialog";
-import { projectPath, screenOf } from "@/lib/urls";
+import { escDestination, projectPath, screenOf } from "@/lib/urls";
 import {
   discardGateDirtyAction,
   markFailuresReadAction,
@@ -586,10 +586,8 @@ const NAV = [
 export function ProjectNav({ id }: { id: string }) {
   const t = useT();
   const pathname = usePathname();
-  // 셸 안에서 끝나는 이동뿐이다(핫키) — 셸 표식이 그대로 붙는다(§0-22 결정 2).
+  // 셸 안에서 끝나는 이동뿐이다(핫키 · `Esc`) — 셸 표식이 그대로 붙는다(§0-22 결정 2).
   const router = useTrackedRouter();
-  // `Esc`(이력 되짚기)만 이 raw 라우터를 쓴다 — `back()`은 `useTrackedRouter()`가 안 감싼다.
-  const browserRouter = useRouter();
   const base = `/p/${id}`;
   const rest = pathname.startsWith(base) ? pathname.slice(base.length) : "";
 
@@ -603,7 +601,7 @@ export function ProjectNav({ id }: { id: string }) {
   useHotkey("nav.board", () => router.push(`${base}/board`));
   useHotkey("nav.workers", () => router.push(`${base}/workers`));
 
-  // `Esc`는 직전에 보던 화면으로 돌아간다(§0-7 개정 — 목적지는 선언이 아니라 이력이다).
+  // `Esc`는 얹힌 것을 걷는다 — 대상은 티켓 상세 · 에픽 화면 둘뿐이다(§0-7 §선언).
   // **키맵에 없는 고정 키**라 `useHotkey`를 못 쓴다(그 훅은 `ActionId`를 받는다) — 대신 같은
   // 두 가드를 손으로 댄다. 위 `b`·`w`와 같은 이유로 이 컴포넌트가 있는 프로젝트 셸에서만 걸린다.
   // - **bubble 단계**여야 한다: Radix `DismissableLayer`가 capture로 먼저 받아 닫으면서
@@ -611,16 +609,16 @@ export function ProjectNav({ id }: { id: string }) {
   //   겹침 목록을 우리가 들지 않는 이유가 이것이다(§0-7 거동).
   // - `isTyping`이면 통과시킨다. 데이터 손실 표면이 여기와 바로 위 두 줄이다(참견·티켓 편집기).
   // `preventDefault`는 안 한다 — `Esc`에 뺏을 브라우저 기본이 없다.
-  // `browserRouter.back()`을 쓴다 — `useTrackedRouter()`는 `push`·`replace`만 감싸고 `back`이
-  // 없다(목적지를 계산하지 않으니 헬퍼도 안 둔다, §0-7 §어디 사나).
+  // 목적지가 없으면(여섯 화면) 아무 일도 안 한다 — `push`도 `replace`도 안 부른다.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || e.defaultPrevented || isTyping(e.target)) return;
-      browserRouter.back();
+      const dest = escDestination(pathname);
+      if (dest) router.push(dest);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [browserRouter]);
+  }, [pathname, router]);
 
   // §비주얼 §76 — 내비가 여섯 화면 전부에서 우측 묶음(`매뉴얼` - `[종] [전환기] [설정]`) 왼쪽에
   // 붙는다. `ml-auto`가 상시라 화면을 옮겨도 자리가 안 바뀐다 — 헤더 안 auto 마진의 개수는
