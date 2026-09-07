@@ -32,15 +32,41 @@ else.
 What you do on the `Schedules` surface is covered in a chapter of its own,
 [Schedules](/docs/schedules). What is left for this one is the other four.
 
-Two things become tabs: conversations and terminals. A file you open in the explorer does not go
-into a tab, so only one is up at a time. Twelve tabs open in all. Past that, the one you have
-looked at least recently closes on its own.
+Three things become tabs: conversations, terminals, and files you open in the explorer. Twelve
+tabs open in all. Past that, the one you have looked at least recently closes on its own.
 
 Refresh the browser, or leave a surface and come back, and the terminal tab reads
 `Terminal disconnected`, while its row in the list on the left reads `Disconnected`. The shell is
 only in memory for as long as the app runs, so redrawing the screen breaks the connection. Press
 `Reopen` and a new shell comes up in the same directory. What you typed before, and what it
 printed, do not come back.
+
+### Where tabs close
+
+Every tab has an X on its right edge. Press it to close that one. You do not have to press it
+ten times to clear a strip of twelve, though. Right-click a tab and a menu comes up. It holds
+three items.
+
+| Item | What it closes |
+|---|---|
+| `Close Tabs to the Left` | Every tab to the left of the one you right-clicked |
+| `Close Tab` | The one tab you right-clicked. Same as pressing its X |
+| `Close Tabs to the Right` | Every tab to the right of the one you right-clicked |
+
+Left and right mean the order the tabs sit in on screen. Neither the tab you looked at most
+recently nor the one you have selected changes that. The tab you right-clicked is on neither
+side. Press `Close Tabs to the Left` and that tab stays where it is.
+
+Right-click the leftmost tab and `Close Tabs to the Left` comes up greyed out and takes no click,
+because there is nothing on that side to close. The item does not disappear, so what you reach for
+is in the same place on every tab. Right-click empty space in the tab strip and this
+menu does not come up. With no tab under the pointer, there is no left or right to work out.
+
+**A file tab you have edited and not saved does not close when you close either side.** If you
+close five tabs on the left and one of them is still there, that is the one. The app will not throw away
+an edit in progress without saying so. Save the file, right-click again, and it closes with the
+rest. Naming that one tab with `Close Tab` is another matter. It closes then and there, the same as
+pressing its X, and the unsaved edit is gone.
 
 ## The persona on `Sessions`
 
