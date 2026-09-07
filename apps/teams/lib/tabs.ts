@@ -4,6 +4,8 @@
  *  목록에 적용되는 상한 · LRU 닫기 · 저장 안 한 탭 예외를 fs 없이 재는 순수 함수로 낸다 —
  *  `lib/home-session.ts`(fs를 타는 쪽)가 이 함수들을 부른다. */
 
+import { t, DEFAULT_LOCALE, type Locale } from "./i18n.ts";
+
 /** 탭 한 줄. `kind`는 `chat`·`terminal`·`file`이다 — 체크아웃은 P366-8이 늘린다.
  *  `unsaved`는 편집 중인 파일 탭이 상한 계산에서 빠지는 자리다(§11 수용조건). `file` 탭의
  *  `id`는 relPath라 `chat`·`terminal`의 uuid 관문(`home-session.ts parseHome`)을 안 탄다.
@@ -21,6 +23,31 @@ export function evictionCandidate(tabs: Tab[]): Tab | null {
   const closable = tabs.filter((t) => !t.unsaved);
   if (closable.length === 0) return null;
   return closable.reduce((oldest, t) => (t.lastViewed < oldest.lastViewed ? t : oldest));
+}
+
+/** `chat` 탭 하나의 라벨(§비주얼 §72 ② §대화 탭의 이름, 요구 `ee5b04f1`) — 탭이 가리키는 좌측
+ *  패널 줄을 `대화` · `워커 세션` · 회차 있는 `스케줄` 순서로 찾아 그 줄과 같은 문자열을 낸다.
+ *  뒤 둘은 `conversations`에 줄이 없다(§7 — 결함이 아니라 설계). 셋에 다 없으면(§7 — `.wip`
+ *  전부 + `.done` 10건 상한을 넘겨 `워커 세션` 목록에서 빠진 세션) `세션`이다 — 새 i18n 키가
+ *  아니라 `sessionStream.session`을 인용한다(`home.surface.agent`는 표면 이름이라 안 쓴다).
+ *  제목 없는 대화의 `새 대화`는 §11-8 결정 2가 정한 값을 인용만 한다(그 줄은 이 함수가 새로
+ *  정하지 않는다). `title`은 `chat` 탭에만 물으므로 `terminal`·`file` 탭은 부르는 쪽이 따로 푼다.
+ *  탭 id가 가리키는 스케줄 줄은 `session_id`로 찾는다 — 회차가 있는 스케줄을 고르면 탭이 그
+ *  `session_id`를 연다(`home-ui.tsx` `onPickSchedule`), 스케줄의 `id` 자체가 아니다. */
+export function chatTabTitle(
+  id: string,
+  conversations: { id: string; title: string }[],
+  workers: { id: string; title: string }[],
+  schedules: { session_id: string; prompt: string }[],
+  locale: Locale = DEFAULT_LOCALE,
+): string {
+  const conv = conversations.find((c) => c.id === id);
+  if (conv) return conv.title || t(locale, "home.newConversation");
+  const worker = workers.find((w) => w.id === id);
+  if (worker) return worker.title;
+  const sched = schedules.find((s) => s.session_id === id);
+  if (sched) return sched.prompt.split("\n")[0] || sched.prompt;
+  return t(locale, "sessionStream.session");
 }
 
 /** 탭을 열거나(이미 있으면) 지금 본 것으로 올린다. 상한을 넘기면 **방금 연 탭 자신은 후보에서

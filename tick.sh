@@ -75,6 +75,11 @@ TICKET_PROMPT_FMT="${TICKET_PROMPT_FMT:-%s 티켓을 확인해 주세요. (해�
 TICKET_REUSE="${TICKET_REUSE:-1}"
 TICKET_REUSE_CTX="${TICKET_REUSE_CTX:-100000}"
 
+# 엔진 수정 서른네 번째 승인 §판정 1. `## 진행 계획`이 이 초(기본 1200 = 20분) 동안 안 갈리면
+# 감시 루프가 세션 inbox에 참견 한 줄을 넣는다. 0이면 장치가 꺼진다. 값의 근거는 임계값
+# 실측표(정상 간격의 5.1%만 넘고, 반례 세션의 34분 생존은 잡는다) - docs/DESIGN.md 그 절.
+TICKET_PLAN_NUDGE="${TICKET_PLAN_NUDGE:-1200}"
+
 # 엔진 수정 스물네·스물일곱 번째 계약: 워커가 부르는 실행 파일의 자리를 고정 경로로 모은다.
 # claude 실행 파일은 심링크고 실체가 업데이트마다 새 버전 디렉터리로 옮겨간다(이 머신 버전
 # 디렉터리 32개) - macOS TCC는 허용을 절대경로로 적어서 매 업데이트가 새 TCC 항목이 된다.
@@ -1487,6 +1492,62 @@ EOF
   [ -n "$RTPATH" ]
 }
 
+# 엔진 수정 서른네 번째 승인 §판정 1 - 조건 1·2(계획 절이 있다 / 완료·취소가 아닌 항목이
+# 하나 있다)의 판정. `## 진행 계획` 다음 `## ` 절 앞까지가 그 절이다 - 항목은 `- [ ]`/`- [x]`
+# 줄 하나(중첩 없음, §2-11 ①). 취소는 문장이 `~~`로 감싸였다(같은 절 상태 표) - 상자 뒤
+# 첫 비공백이 `~~`면 취소로 본다. 켠 상자(`x`/`X`)도 취소도 아닌 줄이 하나면 참견 대상이다.
+# exit 0 = 참견 대상 있음, exit 1 = 없음(절이 없거나 다 끝났거나 다 취소됐다).
+plan_needs_nudge() {
+  python3 -c '
+import re, sys
+try:
+    text = open(sys.argv[1], encoding="utf-8").read()
+except OSError:
+    sys.exit(1)
+m = re.search(r"^## 진행 계획[ \t]*$", text, re.M)
+if not m:
+    sys.exit(1)
+rest = text[m.end():]
+m2 = re.search(r"^## ", rest, re.M)
+section = rest[:m2.start()] if m2 else rest
+for line in section.splitlines():
+    lm = re.match(r"^-\s*\[([ xX])\]\s*(.*)$", line)
+    if not lm:
+        continue
+    box, tail = lm.groups()
+    if box.lower() == "x":
+        continue
+    if tail.strip().startswith("~~"):
+        continue
+    sys.exit(0)
+sys.exit(1)
+' "$1"
+}
+
+# 참견 무장 상태 - 셋이 한 벌이다. PN_MTIME은 마지막으로 본 티켓 파일 mtime(정수 초),
+# PN_SINCE는 그 mtime이 안 갈린 채로 시작된 시각(에폭), PN_ARMED=1이면 이번 정체에서
+# 아직 참견을 안 넣었다(조건 4). TPATH가 바뀌면(§4-11 재활용) 호출부가 PN_MTIME을 비워
+# 다시 무장시킨다 - 새 티켓의 mtime을 옛 티켓의 것과 우연히 비교하지 않는다.
+PN_MTIME=""; PN_SINCE=0; PN_ARMED=1
+
+# 감시 루프가 매 POLL(스트리밍이면 1초)마다 부른다. `TICKET_PLAN_NUDGE=0`이면 장치가 꺼진다
+# (조건 6). 파일이 갈리면(mtime 변화) 다시 무장하고 시계를 되감는다(조건 3·4) - 세션의 손이
+# 계획이든 다른 무엇이든 그 티켓 파일에 한 글자라도 쓰면 이 mtime이 움직인다.
+check_plan_nudge() {
+  [ "$TICKET_PLAN_NUDGE" = "0" ] && return 1
+  [ -f "$TPATH" ] || return 1
+  local mtime now
+  mtime=$(python3 -c 'import os,sys; print(int(os.path.getmtime(sys.argv[1])))' "$TPATH" 2>/dev/null) || return 1
+  now=$(date +%s)
+  if [ "$mtime" != "$PN_MTIME" ]; then
+    PN_MTIME="$mtime"; PN_SINCE="$now"; PN_ARMED=1
+    return 1
+  fi
+  [ "$PN_ARMED" = 1 ] || return 1
+  [ $(( now - PN_SINCE )) -ge "$TICKET_PLAN_NUDGE" ] || return 1
+  plan_needs_nudge "$TPATH"
+}
+
 # MAXRUN 감시. 매달린 세션을 죽이는 것이 이 감시의 뜻이지 체인 길이를 재는 게 아니라서
 # §4-11 재활용마다 죽이고 다시 세운다("티켓마다 새로 잰다"). is_result에 의한 종료는 이제
 # 여기 없다 - main 루프가 먼저 봐야 재활용 여부를 결정할 수 있어서 그 판정을 main으로 옮겼다.
@@ -1512,6 +1573,17 @@ start_watchdog
 if [ -n "$INBOX" ]; then
   while :; do
     while kill -0 "$CPID" 2>/dev/null && ! is_result "$OUTF" "$OUTOFFSET"; do
+      if check_plan_nudge; then
+        # 참견 한 줄 - 최초 프롬프트·이어받기 프롬프트와 같은 FIFO, 같은 JSON 한 줄 모양이다.
+        # 무엇을 켜야 하는지는 안 담는다(§판정 1 §뒤집는 조건 - 엔진이 계획을 읽고 진행을
+        # 추론하면 이 승인 밖이다) - "이미 참이 된 항목의 상자를 지금 켜라"는 지시 하나뿐이다.
+        python3 -c 'import json,sys
+sys.stdout.write(json.dumps({"type":"user","message":{"role":"user","content":sys.argv[1]}},
+                            ensure_ascii=False, separators=(",", ":")) + "\n")' \
+          "## 진행 계획 상자 중 이미 끝난 항목이 있으면 지금 켜 주세요." >&9
+        PN_ARMED=0
+        log "NUDGE $THASH plan"
+      fi
       sleep "$POLL"
     done
     kill -0 "$CPID" 2>/dev/null || break     # 스스로 끝났다(MAXRUN 강제종료 포함) - 재활용 없이 종료 경로
@@ -1571,6 +1643,7 @@ sys.stdout.write(json.dumps({"type":"user","message":{"role":"user","content":sy
 
       OUTOFFSET="$INJOFFSET"
       TPATH="$RTPATH"; THASH="$RTHASH"; TKIND="$RTKIND"
+      PN_MTIME=""; PN_SINCE=0; PN_ARMED=1  # 새 티켓 - 참견 무장을 새로 잰다(옛 mtime과 안 겹친다)
       kill "$WPID" 2>/dev/null; wait "$WPID" 2>/dev/null
       start_watchdog
       continue

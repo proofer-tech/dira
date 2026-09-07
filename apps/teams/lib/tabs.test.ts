@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import {
+  chatTabTitle,
   closeTab,
   evictionCandidate,
   mostRecentTab,
@@ -99,4 +100,29 @@ test("tabsToCloseOthers unions left and right when the clicked tab is at an end"
 test("tabsToCloseOthers drops unsaved tabs from both sides", () => {
   const tabs = [tab("a", "0"), tab("unsaved-b", "1", true), tab("c", "2"), tab("d", "3")];
   assert.deepEqual(tabsToCloseOthers(tabs, "c"), ["a", "d"]);
+});
+
+// §비주얼 §72 ② §대화 탭의 이름 — 표 다섯 행 (요구 `ee5b04f1`)
+test("chatTabTitle row 1 — 대화 제목", () => {
+  const conversations = [{ id: "conv-1", title: "배포 스크립트 손보기" }];
+  assert.equal(chatTabTitle("conv-1", conversations, [], []), "배포 스크립트 손보기");
+});
+
+test("chatTabTitle row 2 — 제목 없는 대화는 `새 대화`(§11-8 결정 2 인용)", () => {
+  const conversations = [{ id: "conv-2", title: "" }];
+  assert.equal(chatTabTitle("conv-2", conversations, [], []), "새 대화");
+});
+
+test("chatTabTitle row 3 — 워커 세션의 티켓 제목", () => {
+  const workers = [{ id: "worker-1", title: "고침 - 대화 탭 이름" }];
+  assert.equal(chatTabTitle("worker-1", [], workers, []), "고침 - 대화 탭 이름");
+});
+
+test("chatTabTitle row 4 — 회차 있는 스케줄 이름(session_id로 찾는다)", () => {
+  const schedules = [{ session_id: "sched-session-1", prompt: "매일 아침 로그 정리\n세부 지시" }];
+  assert.equal(chatTabTitle("sched-session-1", [], [], schedules), "매일 아침 로그 정리");
+});
+
+test("chatTabTitle row 5 — 세 목록에 다 없는 id는 `세션`", () => {
+  assert.equal(chatTabTitle("gone", [], [], []), "세션");
 });
