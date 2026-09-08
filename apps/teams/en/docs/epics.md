@@ -128,9 +128,11 @@ Press it and a two-field dialog opens. `Title` and `Key`, with the caret in the 
   does not paint over a title somebody else wrote.
 
 Once it is made, only the dialog closes. The screen stays where it was, and a `<title> (<key>)`
-row slots into the sidebar in number order. Its lower line reads `0 tickets` and its right end is
-empty, since no ticket points at this epic yet. No filter gets applied on its own. **From the
-moment it stands, that row is a drop target.** Drag an `Open` card onto it and the count starts
+row slots into the sidebar. It lands just under the epics that hold running tickets, and at the
+front of everything below them, since its number is the largest there (see The board's left
+sidebar below). Its lower line reads `0 tickets` and its right end is empty, since no ticket
+points at this epic yet. No filter gets applied on its own. **From the moment it stands, that
+row is a drop target.** Drag an `Open` card onto it and the count starts
 climbing. There is no swimlane band yet. A band is a container for cards, so it appears once a
 card goes in.
 
@@ -171,9 +173,17 @@ and this screen mean the same thing.
 ## The board's left sidebar - looking at one epic
 
 Open the board and the `Epics` list appears at the left, under the toolbar. `All` is the top row,
-and under it the epics one per row in number order. An epic row carries the title on the upper
+and under it the epics one per row. **The top of the list is where the running epics are.** An
+epic holding even one open or in-progress ticket comes first, and an epic whose tickets are all
+done goes behind them. Within either group the larger number is higher, so the epic you
+opened most recently sits at the top of its own group. An epic row carries the title on the upper
 line with the number after it, small, in parentheses. The lower line is that epic's ticket count,
 and the right end of that line is where the running sessions go.
+
+**The order shifts while you are looking at it.** The screen rereads the queue every five seconds
+and works out the order again each time. Close the last open ticket and that row drops to the
+lower group. There is no divider between the groups and no label, so the order itself is the only
+clue that a row has moved.
 
 **What appears there is worker names.** The workers holding this epic's tickets right now line up
 as the [worker marks](/docs/screens) that go on kanban cards - `w2 w3 w4`. If even one name shows,
