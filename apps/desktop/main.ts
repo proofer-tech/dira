@@ -17,6 +17,7 @@ import { createServer } from "node:net";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { badgeText, nextCount, type DockCounts } from "./dock-badge.ts";
 import { classifyLink } from "./link.ts";
 import { cachedNotes, cacheNotes, newNotesCache, releaseNotes } from "./release-notes.ts";
 import { decideRevive, isExternalDeath } from "./revive.ts";
@@ -341,6 +342,15 @@ function notify(item: Awaiting) {
   n.show();
 }
 
+/** §N7 독 아이콘 배지 — 두 폴링이 자기 층의 수를 적은 뒤 이 한 곳만 부른다.
+ *  `app.dock`이 없는 플랫폼(macOS 외)에서는 아무것도 안 한다. */
+const dockCounts: DockCounts = { awaiting: 0, gate: 0 };
+
+function updateDockBadge() {
+  if (!app.dock) return;
+  app.dock.setBadge(badgeText(dockCounts));
+}
+
 /** 폴링 실패는 삼키되 로그로 남긴다 — 서버가 죽었거나 응답이 깨져도 앱은 계속 돈다.
  *  `Array.isArray`까지가 신뢰 경계다: 응답이 배열이 아니면 아래 루프가 던져 앱이 죽는다. */
 async function pollAwaiting() {
@@ -359,6 +369,8 @@ async function pollAwaiting() {
     if (!first) for (const [key, item] of now) if (!seen!.has(key)) notify(item);
     seen = new Set(now.keys());
     if (first) console.log(`[dira] 답변 대기 ${now.size}건으로 씨를 뿌렸습니다 (알리지 않음)`);
+    dockCounts.awaiting = nextCount(dockCounts.awaiting, now.size);
+    updateDockBadge();
   } catch (e) {
     console.error(`[dira] 답변 대기 폴링 실패: ${(e as Error).message}`);
   }
@@ -400,6 +412,8 @@ async function pollGate() {
     if (!first) for (const [key, item] of now) if (!seenGate!.has(key)) notifyGate(item);
     seenGate = new Set(now.keys());
     if (first) console.log(`[dira] 디스패치 보류 ${now.size}건으로 씨를 뿌렸습니다 (알리지 않음)`);
+    dockCounts.gate = nextCount(dockCounts.gate, now.size);
+    updateDockBadge();
   } catch (e) {
     console.error(`[dira] 디스패치 보류 폴링 실패: ${(e as Error).message}`);
   }
