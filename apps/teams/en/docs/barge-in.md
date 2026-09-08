@@ -59,6 +59,13 @@ and appends the absolute path to the end of the prompt.
 That note line is Korean because the app writes it that way, in one hardcoded string, whatever
 language the screen is in.
 
+What the session reads is that block, exactly as shown. But when you read the message back on screen
+after sending it, the note line and the path lines are gone and the attachment shows up as a preview
+instead. Image files (`png`, `jpg`, `jpeg`, `gif`, `webp`, `avif`) come out as thumbnails.
+Everything else, `svg` included, is a filename chip with a clip on it. Either one opens the original
+in a new tab. The exception is a box where you edit the text. There the block still reads as raw
+text, and **deleting those lines is how you take an attachment back off.**
+
 - Files land in `<queue root>/attachments/`. Eight hex characters go in front of the filename, so
   attaching the same name twice never overwrites. **Nothing is deleted automatically.** Ticket
   bodies and transcripts reference these paths forever, so deleting one turns history into a
