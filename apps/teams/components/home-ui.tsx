@@ -1585,7 +1585,7 @@ function TabBar({
   return (
     // §72 ② §자리 표 §스크롤 그릇 — `pb-1`이 없으면 활성 표식(`after:h-0.5`)이 세로로 클리핑된다.
     <div className="overflow-x-auto border-b pb-1">
-      <Tabs value={activeTab ?? undefined} onValueChange={(v) => onSelect(String(v))}>
+      <Tabs value={activeTab} onValueChange={(v) => onSelect(String(v))}>
         <TabsList variant="line" className="w-fit">
           {tabs.map((tab) => {
             const title = titleOf(tab);
