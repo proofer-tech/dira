@@ -44,7 +44,7 @@ NOREUSE_WORKER = """\
 TICKET_NAME="w1"
 TICKET_CWD="{root_parent}"
 TICKET_PROMPT_FMT="please pick up %s"
-TICKET_ENGINE=("{engine}" "{{sid}}")
+TICKET_ENGINE=("{engine}" "{{sid}}" "{wip}")
 {extra_env}
 . "{tick}"
 """
@@ -108,9 +108,17 @@ time.sleep(60)
 """
 
 # 비스트리밍 가짜 엔진(⑧b 회귀) - test_persona_engine.py와 같은 모양. sid를 받아 즉시 성공
-# result를 낸다(codex류와 같은 갈래 - FIFO 없이 rc로 판정된다).
+# result를 낸다(codex류와 같은 갈래 - FIFO 없이 rc로 판정된다). $2가 있으면 실제 세션이
+# 손으로 티켓을 닫는 것의 대체로 .wip -> .done rename까지 흉내낸다 - FAKE_ENGINE의 "close"와
+# 같은 관례(P386-2 재검토, 4ba59104: 판정 2는 세션이 닫았다는 증거를 요구하므로 흉내도
+# 그래야 한다).
 NOREUSE_ENGINE = """\
 #!/bin/bash
+# 0.3초 지연 - tick.sh가 백그라운드로 띄운 직후 `setpid`로 같은 파일을 여는 자리(1368줄)와
+# 겹치면 파일이 이미 rename돼 없어 그 호출이 FileNotFoundError로 죽는다(경합, 관찰됨).
+# 실제 세션은 렌더 시간이 있어 안 겹치는 자리를 가짜 엔진에서도 재현한다.
+sleep 0.3
+[ -n "$2" ] && mv "$2" "${2%.wip.md}.done.md"
 printf '{"session_id":"%s","type":"result","is_error":false,"subtype":"success"}\\n' "$1"
 exit 0
 """
@@ -337,7 +345,7 @@ try:
     eng = mkfile(os.path.join(tmp, "scn_h", "engine.sh"), NOREUSE_ENGINE, 0o755)
     w8 = mkfile(os.path.join(root8, "workers", "w1.sh"),
                 NOREUSE_WORKER.format(root_parent=os.path.dirname(root8), engine=eng,
-                                      tick=TICK, extra_env=""), 0o755)
+                                      tick=TICK, extra_env="", wip=wip_of(tickets8, h14)), 0o755)
     env8 = dict(os.environ, TICKET_LOCAL=local8)
     r8 = subprocess.run([w8, "tick"], capture_output=True, text=True, env=env8, timeout=30)
     assert r8.returncode == 0, "⑧b rc={}\n{}".format(r8.returncode, r8.stderr)
@@ -345,6 +353,7 @@ try:
         runlog8 = f.read()
     assert runlog8.count("DISPATCH " + h14) == 1 and "DONE " + h14 in runlog8, \
         "⑧b: 비스트리밍 정상 완료가 안 됐다\n" + runlog8
+    assert os.path.exists(done_of(tickets8, h14)), "⑧b: t1이 .done으로 안 닫혔다"
     assert runlog8.count("DISPATCH " + h15) == 0, "⑧b: 비스트리밍인데 재활용이 일어났다\n" + runlog8
     assert os.path.exists(open_of(tickets8, h15)), "⑧b: t2가 claim됐다"
     print("PASS ⑧b 비스트리밍 엔진 -> 재활용 없이 종전 경로(회귀)")

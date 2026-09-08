@@ -29,8 +29,11 @@ TICKET_ENGINE=("{tmp}/fake-stream.sh" "{{sid}}" "--input-format" "stream-json")
 """
 
 # 가짜 스트림 엔진: 최초 프롬프트를 받아 적고 -> result가 아닌 줄을 마지막에 세운 채 참견을
-# 기다리고 -> 진짜 result를 뱉고 -> 스스로는 안 끝난다(sleep 60). 진짜 엔진의 행동이 이렇다.
+# 기다리고 -> 자기 손으로 .wip을 .done으로 닫고 -> 진짜 result를 뱉고 -> 스스로는 안 끝난다
+# (sleep 60). 진짜 엔진의 행동이 이렇다.
 #   기다리는 4초 = 스트림이 멎었다고 죽이면 참견을 못 받고 잘린다(아래 2줄 단언이 깨진다).
+#   닫는 자리 = 엔진 수정 서른네 번째 승인 §판정 2(4ba59104) - 세션이 끝까지 갔는데 .wip을
+#   안 닫으면 이제 무조건 FAIL이다. 진짜 세션도 마지막 턴에서 스스로 이 mv를 한다.
 #   result 줄 = 실측된 키 순서(`is_error`가 먼저). 접두사 매치로는 안 잡힌다.
 ENGINE = """\
 #!/bin/bash
@@ -40,6 +43,8 @@ printf '{{"type":"system","subtype":"init"}}\\n'
 cat "{tmp}/decoy.jsonl"
 sleep 4
 IFS= read -r -t 20 more && printf '%s\\n' "$more" >> "{tmp}/engine-stdin.jsonl"
+wip=$(ls "{tmp}/dira/tickets"/*.wip.md 2>/dev/null | head -1)
+[ -n "$wip" ] && mv "$wip" "${{wip%.wip.md}}.done.md"
 printf '{{"is_error":false,"num_turns":3,"session_id":"%s","type":"result","subtype":"success"}}\\n' "$1"
 sleep 60
 """
@@ -121,17 +126,20 @@ try:
     # 3) 세션이 끝나면 FIFO는 남지 않는다
     assert not os.path.exists(inbox), "세션 뒤에 FIFO가 남았다: " + inbox
 
-    # 4) result가 성공이면 RC(우리가 죽여서 143)와 무관하게 성공 처리다 -- 할당이 안 풀린다
+    # 4) result가 성공이면 RC(우리가 죽여서 143)와 무관하게 성공 처리다 -- 세션이 스스로 닫은
+    #    티켓이라 할당(session_id)이 회수되지 않고 그대로 .done에 남는다(§판정 2, 4ba59104).
     with open(os.path.join(root, "workers", "runner.log"), encoding="utf-8") as f:
         rlog = f.read()
     assert "DISPATCH feed0001" in rlog and "DONE feed0001" in rlog, \
         "result 줄로 성공 판정을 못 했다\n" + rlog
-    assert fm_get(wip, "session_id"), "성공했는데 할당이 회수됐다"
+    done = wip[:-len(".wip.md")] + ".done.md"
+    assert os.path.exists(done), "세션이 스스로 닫은 티켓이 .done으로 안 남았다"
+    assert fm_get(done, "session_id"), "성공했는데 할당이 회수됐다"
 
     # 5) clear는 session_id·pid와 함께 inbox도 비운다
-    subprocess.run([sys.executable, PY, "clear", wip], check=True, timeout=30)
-    assert fm_get(wip, "inbox") == "", "clear가 inbox를 안 비웠다"
-    assert fm_get(wip, "session_id") == "", "clear가 session_id를 안 비웠다"
+    subprocess.run([sys.executable, PY, "clear", done], check=True, timeout=30)
+    assert fm_get(done, "inbox") == "", "clear가 inbox를 안 비웠다"
+    assert fm_get(done, "session_id") == "", "clear가 session_id를 안 비웠다"
 
     print("PASS 참견 입구(FIFO)·최초 프롬프트 JSONL·result 종료·clear")
 finally:

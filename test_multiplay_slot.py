@@ -24,7 +24,9 @@ TICKET_ENGINE=("{tmp}/claude" "{{sid}}" "--input-format" "stream-json")
 . "{tick}"
 """
 
-# mode 파일이 갈래를 정한다: ok = 정상 완료 | api_error = 복귀 시각 없는 불능(쿨다운 무장)
+# mode 파일이 갈래를 정한다: ok = 정상 완료 | api_error = 복귀 시각 없는 불능(쿨다운 무장).
+# ok는 실제 세션이 끝에 하는 것과 같이 자기 .wip을 .done으로 닫고 나서 result를 낸다
+# (엔진 수정 서른네 번째 승인 §판정 2, 4ba59104 - 안 닫으면 이제 무조건 FAIL이다).
 ENGINE = """\
 #!/bin/bash
 IFS= read -r _first
@@ -33,6 +35,8 @@ case "$(cat "{tmp}/mode")" in
   api_error)
     printf '{{"is_error":true,"session_id":"%s","type":"result","subtype":"error_during_execution","terminal_reason":"api_error","api_error_status":429}}\\n' "$1" ;;
   *)
+    wip=$(ls "{tmp}/dira/tickets"/*.wip.md 2>/dev/null | head -1)
+    [ -n "$wip" ] && mv "$wip" "${{wip%.wip.md}}.done.md"
     printf '{{"is_error":false,"num_turns":1,"session_id":"%s","type":"result","subtype":"success"}}\\n' "$1" ;;
 esac
 exec sleep 60
