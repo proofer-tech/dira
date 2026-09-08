@@ -278,10 +278,18 @@ toolbar button yet.
 The columns are still the three. `Open` · `In progress` · `Done` appear once at the top, and
 under them one band per epic. The band header reads like the sidebar item, with that band's count
 beside it and worker names after that. Names do not fold here - as many as there are, that many
-show. The order matches the sidebar, and at the very bottom one more band is laid down for
-`(No epic)`. The sidebar has no such place - a band is a container for cards rather than a filter,
-so leaving it out would make every card without `epic:` vanish from this screen entirely. That band
-is a target too, and dropping a card on it takes the card out of its epic.
+show. At the very bottom one more band is laid down for `(No epic)`. The sidebar has no such
+place - a band is a container for cards rather than a filter, so leaving it out would make every
+card without `epic:` vanish from this screen entirely. That band is a target too, and dropping a
+card on it takes the card out of its epic.
+
+**The band order is not the sidebar order.** The smaller the number the higher the band, so the
+epic you opened first is the first band. An epic with work running stays at its own number here
+(above, §The board's left sidebar). Put the list on the left beside these bands and you find the
+same epic in two different places. **A band does not move** - if the target shifted while you were
+dragging a card, you would have to aim for it a second time. Even at
+the moment a last open ticket closes and the sidebar row drops to the lower group, the band stays
+right where it was.
 
 - The `Done` column draws 20 at most, and that cut applies **per band**. The first band never eats
   all 20 and leaves the ones below it empty.
