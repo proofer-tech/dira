@@ -7,10 +7,11 @@
  *  그대로 읽는다(청크마다 `term.write`). 언마운트(탭을 접거나 표면을 벗어나면)하면 스트림을
  *  끊는다 — 서버 쪽 pty 자체는 안 죽는다(`lib/pty.ts`의 backlog가 다음 구독자를 위해 남는다).
  *
- *  **이 컴포넌트 자신은 "다시 연결"을 하지 않는다** — 마운트되면 무조건 연다. 새로고침 뒤
- *  `끊김`으로 보이는 것은 부모(`TerminalSurface`, `home-ui.tsx`)가 이 컴포넌트를 아예 마운트하지
- *  않는 것으로 만든다(§11 결정 2 — 사람이 `다시 열기`를 눌러야 `restartTerminal` 액션이 새
- *  pty를 심고, 그 뒤에야 이 컴포넌트가 뜬다). */
+ *  **이 컴포넌트 자신은 "다시 연결"을 하지 않는다** — 마운트되면 무조건 연다. `끊긴
+ *  터미널입니다`로 보이는 것은 부모(`TerminalSurface`, `home-ui.tsx`)가 죽었다고 확인한
+ *  탭만 이 컴포넌트를 아예 마운트하지 않는 것으로 만든다(§11-1 §개정 — 살아 있으면 새로고침
+ *  이든 표면 이탈/복귀든 곧장 마운트한다. 죽은 탭만 사람이 `다시 열기`를 눌러야
+ *  `restartTerminal` 액션이 새 pty를 심고, 그 뒤에야 이 컴포넌트가 뜬다). */
 import { useEffect, useRef } from "react";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";

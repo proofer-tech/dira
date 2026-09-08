@@ -361,14 +361,13 @@ export function HomeUI({
   // 다르면 아래 통합 탭 줄의 `onSelect`가 이 값도 같이 맞춰 준다(그래야 고른 탭의 내용이
   // 바로 보인다).
   const [surface, setSurface] = useState<Surface>("session");
-  // **터미널 탭마다 연결 여부**(§11 결정 2) — 서버 파일에 없는 값이다. 마운트 직후는 전부
-  // `끊김`이다(새로고침이든 표면을 다시 연 것이든 구별 안 한다) — 그래서 `터미널` 표면을
-  // 벗어나는 순간 아래 effect가 비운다. 좌측 목록(연 줄)과 우측 칸(`끊긴 터미널입니다` -
-  // `다시 열기`)이 같은 값을 봐야 해서 `HomeUI` 자신이 든다.
-  const [terminalConnected, setTerminalConnected] = useState<Set<string>>(new Set());
-  useEffect(() => {
-    if (surface !== "terminal") setTerminalConnected(new Set());
-  }, [surface]);
+  // **터미널 탭마다 끊김 확인 여부**(§11-1 §개정 — 살아 있는 pty는 `끊김`이 아니다). 서버
+  // 파일에 없는 값이지만 정본은 서버의 `alive`다 — 이 값은 그 판정이 한 번 죽었다고 확인해 준
+  // id만 담는 캐시다. 마운트 직후(새로고침 - 표면을 다시 연 것 - 라우트 이탈/복귀 전부)는
+  // 빈 집합이라 **전부 살아 있다고 가정**하고 곧장 이어 붙인다 — 표면을 나가도 비우지 않는다
+  // (예전에는 그 반대였다: 빈 집합 = 전부 끊김이라 표면 이탈마다 다시 비웠다). 좌측 목록(연
+  // 줄)과 우측 칸(`끊긴 터미널입니다` - `다시 열기`)이 같은 값을 봐야 해서 `HomeUI` 자신이 든다.
+  const [terminalDisconnected, setTerminalDisconnected] = useState<Set<string>>(new Set());
   // 폴링이 들고 다니는 두 값. 렌더에 안 쓰므로 상태가 아니다(바뀔 때마다 그릴 것이 없다).
   const session = useRef(initial.sessionId);
   const offset = useRef(initial.offset);
@@ -824,8 +823,15 @@ export function HomeUI({
             onOpenExplorerFile={explorer.onOpenFile}
             runningIds={runningIds}
             apply={apply}
-            terminalConnected={terminalConnected}
-            onTerminalConnect={(id) => setTerminalConnected((now) => new Set(now).add(id))}
+            terminalDisconnected={terminalDisconnected}
+            onTerminalReconnect={(id) =>
+              setTerminalDisconnected((now) => {
+                if (!now.has(id)) return now;
+                const next = new Set(now);
+                next.delete(id);
+                return next;
+              })
+            }
             // 세 그룹을 통틀어 지금 떠 있는 표식 하나(§비주얼 §62 (2) §선택 표식 — "표식은 세
             // 그룹을 통틀어 한 줄에만 든다"). 회차 0건 스케줄을 보는 동안은 `home.current`가
             // 못 갈리므로(위 `pendingSchedule` 주석) 그 스케줄의 `id`가 대신 뜬다.
@@ -912,16 +918,16 @@ export function HomeUI({
               project={project}
               tabs={home.tabs.filter((tb) => tb.kind === "terminal")}
               activeTab={home.activeTab}
-              connected={terminalConnected}
-              onConnect={(id) => setTerminalConnected((now) => new Set(now).add(id))}
-              onDisconnect={(id) =>
-                setTerminalConnected((now) => {
+              disconnected={terminalDisconnected}
+              onReconnect={(id) =>
+                setTerminalDisconnected((now) => {
                   if (!now.has(id)) return now;
                   const next = new Set(now);
                   next.delete(id);
                   return next;
                 })
               }
+              onDisconnect={(id) => setTerminalDisconnected((now) => new Set(now).add(id))}
               apply={apply}
             />
           ) : (
@@ -1932,26 +1938,27 @@ function ScmSurface({ project, projectName }: { project: string; projectName: st
  *  결정 1). 그 쌍이 여기 남는 이유는 **고른 탭 하나에 붙는 것**이라서다 — 좌측 목록의 성질이
  *  아니라 화면 자리의 성질이다.
  *
- *  **탭마다 연결 여부는 `HomeUI`가 든다**(`connected` 프롭 — 서버 파일에 없는 값이다). 마운트
- *  직후는 전부 `끊김`이다 — 새로고침이든 표면을 다시 연 것이든 구별하지 않는다(§11 결정 2,
- *  `HomeUI`의 `surface !== "terminal"` effect가 표면을 나가는 순간 그 값을 비운다). 이미 연결한
- *  탭은 안 보이게만(`hidden`) 해서 스크롤백이 언마운트로 안 날아간다. */
+ *  **탭마다 죽었다고 확인된 것만 `HomeUI`가 든다**(`disconnected` 프롭 — 서버 파일에 없는
+ *  값이다). 마운트 직후(새로고침이든 표면을 다시 연 것이든)는 빈 집합이라 **모든 탭이 곧장
+ *  이어 붙는다**(§11-1 §개정 — 판정의 출처는 서버의 `alive`이고 이 집합은 그 값이 죽었다고
+ *  확인해 준 것의 캐시일 뿐이다). 이미 이어 붙은 탭은 안 보이게만(`hidden`) 해서 스크롤백이
+ *  언마운트로 안 날아간다. */
 function TerminalSurface({
   project,
   tabs,
   activeTab,
-  connected,
-  onConnect,
+  disconnected,
+  onReconnect,
   onDisconnect,
   apply,
 }: {
   project: string;
   tabs: Tab[];
   activeTab: string | null;
-  connected: Set<string>;
-  onConnect: (id: string) => void;
+  disconnected: Set<string>;
+  onReconnect: (id: string) => void;
   /** 200이 아닌 응답 - 빈 스트림으로 판정된 탭을 `끊긴 터미널입니다` 화면으로 되돌린다
-   *  (§11-1 §개정) - `HomeUI`가 든 `terminalConnected`에서 그 id를 뺀다. */
+   *  (§11-1 §개정) - `HomeUI`가 든 `terminalDisconnected`에 그 id를 더한다. */
   onDisconnect: (id: string) => void;
   apply: (c: HomeChunk) => void;
 }) {
@@ -1970,7 +1977,7 @@ function TerminalSurface({
       return;
     }
     apply(r);
-    onConnect(tab.id);
+    onReconnect(tab.id);
   };
 
   return (
@@ -1979,7 +1986,7 @@ function TerminalSurface({
 
       <div className="min-h-0 flex-1">
         {tabs.map((tab) =>
-          connected.has(tab.id) ? (
+          !disconnected.has(tab.id) ? (
             <div key={tab.id} hidden={tab.id !== activeTab} className="h-full">
               <TerminalPanel projectId={project} id={tab.id} onDisconnect={() => onDisconnect(tab.id)} />
             </div>
@@ -2009,22 +2016,22 @@ function TerminalLeftPanel({
   project,
   tabs,
   activeTab,
-  connected,
+  disconnected,
   apply,
   onFocus,
-  onConnect,
+  onReconnect,
 }: {
   project: string;
   tabs: Tab[];
   activeTab: string | null;
-  /** 우측 칸(`TerminalSurface`)과 같은 값 — `HomeUI`가 든 `terminalConnected`(§11-6 결정 6
-   *  `끊김` 배지). 마운트 직후(새로고침 포함)는 늘 비어 있다 — 그래서 이 값 하나로 세 줄이 다
-   *  `끊김`으로 뜬다(수용조건). 죽은 pty(`row.alive === false`)도 같이 `끊김`이다 —
-   *  `다시 열기`를 눌러 이미 이 표면 안에서 연 뒤 서버 쪽에서 죽은 경우까지 잡는다. */
-  connected: Set<string>;
+  /** 우측 칸(`TerminalSurface`)과 같은 값 — `HomeUI`가 든 `terminalDisconnected`(§11-1
+   *  §개정, §11-6 결정 6 `끊김` 배지). 마운트 직후(새로고침 포함)는 늘 비어 있다 — 그래서
+   *  전부 살아 있다고 가정하고 곧장 이어 붙는다(수용조건). 죽은 pty(`row.alive === false`)는
+   *  이 집합에 없어도 같이 `끊김`이다 — 아직 죽었다고 확인 못 받은 탭까지 서버 값으로 잡는다. */
+  disconnected: Set<string>;
   apply: (c: HomeChunk) => void;
   onFocus: (id: string) => void;
-  onConnect: (id: string) => void;
+  onReconnect: (id: string) => void;
 }) {
   const t = useT();
   const [checkouts, setCheckouts] = useState<Checkout[]>([]);
@@ -2090,7 +2097,7 @@ function TerminalLeftPanel({
       return;
     }
     apply(r);
-    if (r.activeTab) onConnect(r.activeTab);
+    if (r.activeTab) onReconnect(r.activeTab);
   };
 
   const cwdLabel = (path: string | undefined) => {
@@ -2135,10 +2142,10 @@ function TerminalLeftPanel({
         <SidebarMenu aria-label={t("home.surface.terminal")}>
           {tabs.map((tab) => {
             const row = rows[tab.id];
-            // §11-6 결정 6 — 우측 칸과 같은 값(`connected`)을 봐야 새로고침 뒤 셋 다 `끊김`이
-            // 뜬다(수용조건). `row.alive`만 보면 서버 pty는 새로고침에 안 죽으므로(GET 라우트
-            // 머리 주석) 배지가 영영 안 뜬다 — 그게 버그 2다.
-            const disconnected = !connected.has(tab.id) || row?.alive === false;
+            // §11-1 §개정 — 우측 칸과 같은 값(`disconnected`)을 봐야 배지와 칸이 안 어긋난다.
+            // `row.alive`도 같이 본다 — 아직 이 집합에 안 들어온(폴링이 안 닿은) 탭이 서버에서
+            // 이미 죽어 있는 경우까지 잡는다(§11-6 결정 6, 버그 2 고침).
+            const isDisconnected = disconnected.has(tab.id) || row?.alive === false;
             return (
               <SidebarMenuItem key={tab.id}>
                 <SidebarMenuButton
@@ -2152,8 +2159,8 @@ function TerminalLeftPanel({
                       <span className="min-w-0 grow truncate text-sm">
                         {row?.lastCommand || t("terminal.row.noCommand")}
                       </span>
-                      {disconnected && <span className={MARK}>{t("terminal.row.disconnected")}</span>}
-                      {!disconnected && row?.working && <span className={MARK}>{t("terminal.row.running")}</span>}
+                      {isDisconnected && <span className={MARK}>{t("terminal.row.disconnected")}</span>}
+                      {!isDisconnected && row?.working && <span className={MARK}>{t("terminal.row.running")}</span>}
                     </div>
                     <div className="font-mono text-xs text-muted-foreground group-hover/menu-button:text-foreground">
                       {cwdLabel(tab.cwd)}
@@ -2208,8 +2215,8 @@ function SidePanel({
   onPickSchedule,
   onSchedulesChange,
   apply,
-  terminalConnected,
-  onTerminalConnect,
+  terminalDisconnected,
+  onTerminalReconnect,
 }: {
   project: string;
   /** 소스 컨트롤 표면 루트 줄의 이름(§비주얼 §72 ⑤) — `<ScmSurface>`로 그대로 내린다. */
@@ -2240,12 +2247,12 @@ function SidePanel({
   /** `터미널` 좌측 목록의 `새 터미널` · `다시 열기`가 서버 액션 결과를 반영하는 통로 —
    *  `HomeUI`가 든 것을 그대로 내린다(§11-6 결정 1). */
   apply: (c: HomeChunk) => void;
-  /** `터미널` 좌측 목록이 `새 터미널` · `다시 열기`로 연 탭을 연결됨으로 적는다 — `HomeUI`가
-   *  든 `terminalConnected`에 반영한다(우측 칸과 같은 값을 봐야 한다). */
-  onTerminalConnect: (id: string) => void;
-  /** `HomeUI`가 든 `terminalConnected` 그 값 — `TerminalLeftPanel`의 `끊김` 배지가 우측 칸과
-   *  같은 것을 보게 그대로 내린다(§11-6 결정 6, 버그 2 고침). */
-  terminalConnected: Set<string>;
+  /** `터미널` 좌측 목록이 `새 터미널` · `다시 열기`로 연 탭을 죽은 집합에서 뺀다 — `HomeUI`가
+   *  든 `terminalDisconnected`에 반영한다(우측 칸과 같은 값을 봐야 한다). */
+  onTerminalReconnect: (id: string) => void;
+  /** `HomeUI`가 든 `terminalDisconnected` 그 값 — `TerminalLeftPanel`의 `끊김` 배지가 우측 칸과
+   *  같은 것을 보게 그대로 내린다(§11-1 §개정, §11-6 결정 6, 버그 2 고침). */
+  terminalDisconnected: Set<string>;
 }) {
   const t = useT();
   const locale = useLocale();
@@ -2356,10 +2363,10 @@ function SidePanel({
             project={project}
             tabs={home.tabs.filter((tb) => tb.kind === "terminal")}
             activeTab={home.activeTab}
-            connected={terminalConnected}
+            disconnected={terminalDisconnected}
             apply={apply}
             onFocus={(id) => void (async () => apply(await focusTabAction(project, id)))()}
-            onConnect={onTerminalConnect}
+            onReconnect={onTerminalReconnect}
           />
         )}
         {surface === "session" && (

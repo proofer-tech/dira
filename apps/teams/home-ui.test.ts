@@ -53,3 +53,31 @@ test("closeTab — 남은 탭이 0개(activeTab이 없어 landed가 undefined)�
   const ifIdx = landedGuard.indexOf("if (landed)");
   assert.ok(ifIdx >= 0, "landed 가드 없이 setSurface를 바로 부르면 탭이 0개일 때도 표면을 옮긴다");
 });
+
+// 티켓 b9c31c83(요구 `aa7e914a`, DESIGN.md §11-1 §개정): 살아 있는 pty는 `끊김`이 아니다.
+// 표면을 떠났다 돌아오거나 라우트를 이탈/복귀하거나 새로고침해도, 죽었다고 확인 안 된 탭은
+// 곧장 이어 붙어야 한다 — 종전에는 `surface !== "terminal"` effect가 `terminalConnected`를
+// 매번 비워 "마운트 직후는 전부 끊김"으로 가정했다. 그 effect가 없다는 것과, 렌더 조건이
+// "연결된 것만 이어 붙인다"에서 "죽은 것만 안내 화면"으로 뒤집힌 것을 소스로 고정한다.
+
+test("표면을 나가도 터미널 연결 상태를 비우는 effect가 없다", () => {
+  assert.ok(!s.includes('if (surface !== "terminal")'), '"살아 있는 pty는 끊김이 아니다"가 지기 전 effect가 다시 들어왔다 — 표면 이탈마다 전부 끊김으로 리셋한다');
+});
+
+const terminalSurfaceA = s.indexOf("function TerminalSurface(");
+const terminalSurfaceB = s.indexOf("\n}\n", terminalSurfaceA);
+assert.ok(terminalSurfaceA >= 0 && terminalSurfaceB > terminalSurfaceA, "home-ui.tsx: TerminalSurface 구간을 못 찾았다");
+const terminalSurfaceBody = s.slice(terminalSurfaceA, terminalSurfaceB);
+
+test("TerminalSurface — 렌더 조건이 죽은 집합에 없으면(기본 마운트) 이어 붙인다", () => {
+  assert.ok(terminalSurfaceBody.includes("!disconnected.has(tab.id) ?"), "connected.has로 되돌아가면 마운트 직후(빈 집합)에 모든 탭이 끊김으로 뜬다 — §11-1 §개정이 뒤집은 렌더 조건이 아니다");
+});
+
+const terminalLeftPanelA = s.indexOf("function TerminalLeftPanel(");
+const terminalLeftPanelB = s.indexOf("\n}\n", terminalLeftPanelA);
+assert.ok(terminalLeftPanelA >= 0 && terminalLeftPanelB > terminalLeftPanelA, "home-ui.tsx: TerminalLeftPanel 구간을 못 찾았다");
+const terminalLeftPanelBody = s.slice(terminalLeftPanelA, terminalLeftPanelB);
+
+test("TerminalLeftPanel — 배지 판정이 죽은 집합(disconnected)과 서버 alive를 같이 본다", () => {
+  assert.ok(/const isDisconnected = disconnected\.has\(tab\.id\) \|\| row\?\.\alive === false;/.test(terminalLeftPanelBody), "배지 판정이 우측 칸(TerminalSurface)과 같은 disconnected 집합을 안 쓰면 배지와 칸이 어긋난다");
+});

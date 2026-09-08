@@ -21,8 +21,9 @@ async function validId(params: Promise<{ id: string }>): Promise<string | null> 
 /** 출력 스트림 — 연결 즉시 지금까지의 화면(backlog)을 흘려보내고, 그 뒤로는 실시간 청크다.
  *  pty가 없으면(다른 서버 프로세스에서 열렸다 — 재시작 등) 빈 스트림으로 바로 닫는다.
  *  **재접속을 안 만든다**(§11 결정 2) — 이 GET은 pty가 있으면 무조건 잇는다, 화면이 그걸
- *  "다시 연결"로 쓰지 않는 것은 클라이언트 쪽 규칙이다(`restartTerminal` 액션이 새로고침 뒤
- *  재개 버튼의 유일한 경로다 — TerminalPanel이 마운트 즉시 이 GET을 열지 않는다). */
+ *  "다시 연결"로 쓰지 않는 것은 클라이언트 쪽 규칙이다(`restartTerminal` 액션이 죽은 탭을
+ *  살리는 유일한 경로다 — §11-1 §개정 뒤로는 TerminalPanel이 살아 있는 탭이면 마운트 즉시
+ *  이 GET을 연다, 죽은 탭만 `다시 열기`를 거친다). */
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const id = await validId(params);
   if (!id) return new Response("bad id", { status: 400 });
