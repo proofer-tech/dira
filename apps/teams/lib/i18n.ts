@@ -2219,6 +2219,7 @@ export const ko: Record<string, string> = {
   // `lib/transcript.ts`(§2-1) — 사건 라벨·단위. 여러 화면(§2-1 §home §board)이 `StreamEvent`를
   // 공유해 쓰므로 화면 접두가 아니라 파일 접두다(daf72662와 같은 판단).
   "transcriptLib.assigned": "배정",
+  "transcriptLib.nudge": "재촉",
   "transcriptLib.charsUnit": "자",
   "transcriptLib.sessionPromptFirst": "세션 프롬프트",
   "transcriptLib.prompt": "프롬프트",
@@ -4792,6 +4793,7 @@ export const en: Record<string, string> = {
   // 대문자 한 낱말 꼴이고, 단위는 수 뒤에 바로 붙어서 앞 공백을 값이 든다.
   // 복수형 장치가 없어 늘 복수다.
   "transcriptLib.assigned": "Assignment",
+  "transcriptLib.nudge": "Nudge",
   "transcriptLib.charsUnit": " chars",
   "transcriptLib.sessionPromptFirst": "Session prompt",
   "transcriptLib.prompt": "Prompt",

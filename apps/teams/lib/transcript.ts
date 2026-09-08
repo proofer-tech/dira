@@ -397,6 +397,34 @@ function ticketAssignmentPattern(): RegExp | null {
 /** 참견 문구가 **엔진의 티켓 배정**인가(§2-9 ②) — 참인 것은 말풍선이 아니라 기록으로 간다. */
 const isTicketAssignment = (text: string): boolean => ticketAssignmentPattern()?.test(text) ?? false;
 
+/** `tick.sh`의 계획 재촉 리터럴로 만든 정규식(§2-9 §개정) — `ticketAssignmentPattern()`과 같은
+ *  수법이다: 문구를 이 파일에 베끼지 않는다. `tick.sh:1592`가 fd 9에 쓰는 문장은 변수 보간이
+ *  없는 리터럴 한 줄이라(재활용 프롬프트 줄과 달리 `$`가 없다), `>&9`로 닫는 줄 중 따옴표
+ *  안에 `$`가 없는 것으로 골라낸다. 엔진 레포를 못 찾으면 `null`. */
+let nudgePattern: RegExp | null | undefined;
+
+function planNudgePattern(): RegExp | null {
+  if (nudgePattern !== undefined) return nudgePattern;
+  nudgePattern = null;
+  try {
+    const repo = engineRepo();
+    if ("path" in repo) {
+      const sh = readFileSync(path.join(repo.path, "tick.sh"), "utf8");
+      const m = sh.match(/^\s+"([^"$]+)"\s*>&9\s*$/m);
+      if (m) {
+        const escaped = m[1].replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        nudgePattern = new RegExp(`^${escaped}`);
+      }
+    }
+  } catch {
+    // 읽기 실패 — null 그대로, 판정을 건너뛴다
+  }
+  return nudgePattern;
+}
+
+/** 참견 문구가 **엔진의 계획 재촉**인가(§2-9 §개정) — 참인 것은 말풍선이 아니라 기록으로 간다. */
+const isPlanNudge = (text: string): boolean => planNudgePattern()?.test(text) ?? false;
+
 /** 참견을 나르는 레코드인가(§2-2). **`content`가 있느냐와 무관하다** — 첫 `enqueue`를 안 흘리는
  *  판정이 레코드 단위라서(§2-1) `content` 없는 `enqueue`(실측 있다)도 그 한 장을 쓴다.
  *  안 그러면 그 뒤에 온 **진짜 참견**이 대신 사라진다. */
@@ -555,15 +583,21 @@ export function recordToEvents(
     if (!isEnqueue(r) || !text.trim() || HARNESS_ENVELOPE.test(text)) return [];
     // §9의 **전문 줄**이다(§2-1 표: 펼칠 것이 없다 — 한 줄이 이미 전문이다). 사용자 프롬프트와
     // 같은 모양을 받는 이유는 같은 것이라서다: 밖에서 들어온 사람의 말.
-    // **엔진 배정 문구는 예외다**(§2-9 ②) — 세션 프롬프트와 같은 성질이라 기록(접힌 줄)으로 간다.
-    const assigned = isTicketAssignment(text);
+    // **엔진 배정 - 계획 재촉 문구는 예외다**(§2-9 ②, §2-9 §개정) — 세션 프롬프트와 같은
+    // 성질이라 기록(접힌 줄)으로 간다. 머리글이 갈리는 이유는 사람이 읽는 뜻이 달라서다
+    // (배정 = 어느 티켓을 집었나, 재촉 = 계획 상자를 안 켰다).
+    const recordLabel = isTicketAssignment(text)
+      ? t(locale, "transcriptLib.assigned")
+      : isPlanNudge(text)
+        ? t(locale, "transcriptLib.nudge")
+        : "";
     return [
       {
         key: `${uid}:q`, // 이 레코드에는 `uuid`가 없다(실측 키 5개) — `ts`가 키가 된다
         ts,
         kind: "interject",
-        label: assigned ? t(locale, "transcriptLib.assigned") : "", // 비면 화면이 전문 줄(말풍선)로, 있으면 접힌 줄로 그린다
-        summary: assigned ? `${chars(text)}${t(locale, "transcriptLib.charsUnit")}` : "",
+        label: recordLabel, // 비면 화면이 전문 줄(말풍선)로, 있으면 접힌 줄로 그린다
+        summary: recordLabel ? `${chars(text)}${t(locale, "transcriptLib.charsUnit")}` : "",
         summaryMono: false,
         body: text,
         sidechain: false,
