@@ -67,3 +67,21 @@ export function tabsOnSide(tabs: Tab[], id: string, side: "left" | "right"): str
 export function tabsToCloseOthers(tabs: Tab[], id: string): string[] {
   return [...tabsOnSide(tabs, id, "left"), ...tabsOnSide(tabs, id, "right")];
 }
+
+/** 좌측 표면 줄의 값 — 몸통이 그리는 셋(§11-9 결정 2 표)보다 표면 자체는 다섯이다. */
+export type Surface = "session" | "schedules" | "terminal" | "scm" | "explorer";
+
+/** 표면을 갈 때 활성 표식이 옮겨 갈 탭 id(§11-9 결정 2·3). 없으면 `null` — 그 표면의 몸통이
+ *  빈 상태로 뜨고 탭 줄의 어느 탭에도 표식이 없다(결정 3, 옛 자리에 안 남긴다). `terminal`·
+ *  `explorer`는 몸통이 그 종류의 탭 하나뿐이라, 활성 탭이 이미 그 종류면 그대로 두고 아니면
+ *  `mostRecentTab`으로 고른다. 나머지 셋(`session`·`scm`·`schedules`)은 몸통이 똑같이 대화
+ *  컬럼이라 `current`와 id가 같은 `chat` 탭 하나로 모인다. */
+export function tabForSurface(tabs: Tab[], surface: Surface, current: string | null, activeTab: string | null): string | null {
+  if (surface === "terminal" || surface === "explorer") {
+    const kind = surface === "terminal" ? "terminal" : "file";
+    if (tabs.some((t) => t.id === activeTab && t.kind === kind)) return activeTab;
+    return mostRecentTab(tabs.filter((t) => t.kind === kind));
+  }
+  const chat = tabs.find((t) => t.id === current && t.kind === "chat");
+  return chat ? chat.id : null;
+}

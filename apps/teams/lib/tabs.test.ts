@@ -5,6 +5,7 @@ import {
   evictionCandidate,
   mostRecentTab,
   openTab,
+  tabForSurface,
   tabsOnSide,
   tabsToCloseOthers,
   TAB_LIMIT,
@@ -13,6 +14,10 @@ import {
 
 function tab(id: string, lastViewed: string, unsaved?: true): Tab {
   return unsaved ? { id, kind: "chat", lastViewed, unsaved } : { id, kind: "chat", lastViewed };
+}
+
+function kindTab(id: string, kind: Tab["kind"], lastViewed: string): Tab {
+  return { id, kind, lastViewed };
 }
 
 test("openTab appends a new tab and sets it active", () => {
@@ -99,4 +104,42 @@ test("tabsToCloseOthers unions left and right when the clicked tab is at an end"
 test("tabsToCloseOthers drops unsaved tabs from both sides", () => {
   const tabs = [tab("a", "0"), tab("unsaved-b", "1", true), tab("c", "2"), tab("d", "3")];
   assert.deepEqual(tabsToCloseOthers(tabs, "c"), ["a", "d"]);
+});
+
+// §11-9 결정 2 표 다섯 줄 + 결정 3(갈 탭이 없으면 표식이 사라진다).
+test("tabForSurface: session goes to the chat tab whose id matches current", () => {
+  const tabs = [kindTab("chat-1", "chat", "0"), kindTab("term-1", "terminal", "1")];
+  assert.equal(tabForSurface(tabs, "session", "chat-1", "term-1"), "chat-1");
+});
+
+test("tabForSurface: scm goes to the same chat tab as session (no exception)", () => {
+  const tabs = [kindTab("chat-1", "chat", "0"), kindTab("term-1", "terminal", "1")];
+  assert.equal(tabForSurface(tabs, "scm", "chat-1", "term-1"), "chat-1");
+});
+
+test("tabForSurface: schedules goes to the same chat tab as session (no exception)", () => {
+  const tabs = [kindTab("chat-1", "chat", "0"), kindTab("term-1", "terminal", "1")];
+  assert.equal(tabForSurface(tabs, "schedules", "chat-1", "term-1"), "chat-1");
+});
+
+test("tabForSurface: terminal keeps the active tab when it's already a terminal tab", () => {
+  const tabs = [kindTab("term-1", "terminal", "0"), kindTab("term-2", "terminal", "1")];
+  assert.equal(tabForSurface(tabs, "terminal", null, "term-1"), "term-1");
+});
+
+test("tabForSurface: terminal falls back to the most recently viewed terminal tab", () => {
+  const tabs = [kindTab("chat-1", "chat", "0"), kindTab("term-1", "terminal", "1"), kindTab("term-2", "terminal", "2")];
+  assert.equal(tabForSurface(tabs, "terminal", "chat-1", "chat-1"), "term-2");
+});
+
+test("tabForSurface: explorer falls back to the most recently viewed file tab", () => {
+  const tabs = [kindTab("chat-1", "chat", "0"), kindTab("a.ts", "file", "1"), kindTab("b.ts", "file", "2")];
+  assert.equal(tabForSurface(tabs, "explorer", "chat-1", "chat-1"), "b.ts");
+});
+
+test("tabForSurface: null when there's no tab of that kind to land on (decision 3)", () => {
+  const tabs = [kindTab("chat-1", "chat", "0")];
+  assert.equal(tabForSurface(tabs, "terminal", "chat-1", "chat-1"), null);
+  assert.equal(tabForSurface(tabs, "explorer", "chat-1", "chat-1"), null);
+  assert.equal(tabForSurface([], "session", null, null), null);
 });

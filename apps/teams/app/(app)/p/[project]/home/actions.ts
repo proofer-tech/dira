@@ -270,8 +270,9 @@ export async function restartTerminal(
 
 /** 탭 줄에서 탭 하나로 포커스만 옮긴다 — `switchHome`과 달리 `current`(대화 스레드)도 새 탭도
  *  안 만든다. 터미널 표면 안의 탭 전환과, 표면을 가로지르는 우측 탭 줄에서 터미널·파일 탭을
- *  누르는 것 둘 다 이 액션 하나를 쓴다(`chat` 탭은 스레드도 같이 옮겨야 해서 `switchHome`이다). */
-export async function focusTabAction(projectId: string, tabId: string): Promise<HomeChunk> {
+ *  누르는 것 둘 다 이 액션 하나를 쓴다(`chat` 탭은 스레드도 같이 옮겨야 해서 `switchHome`이다).
+ *  `tabId`가 `null`이면 표식을 비운다(§11-9 결정 3 — `tabForSurface`가 갈 탭을 못 고른 경우). */
+export async function focusTabAction(projectId: string, tabId: string | null): Promise<HomeChunk> {
   try {
     await focusHomeTab((await required(projectId)).id, tabId);
   } catch {

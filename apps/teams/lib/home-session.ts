@@ -588,10 +588,17 @@ export async function setFileTabUnsaved(projectId: string, tabId: string, unsave
 }
 
 /** 탭 줄에서 탭 하나에 포커스만 옮긴다 - 대화 전환(`switchConversation`)과 달리 `current`도
- *  탭 생성도 없다. 터미널 표면에서 이미 열린 탭 사이를 오갈 때 쓴다. 실재하지 않는 탭은 무시한다. */
-export async function focusTab(projectId: string, tabId: string): Promise<Home> {
+ *  탭 생성도 없다. 터미널 표면에서 이미 열린 탭 사이를 오갈 때 쓴다. 실재하지 않는 탭은 무시한다.
+ *  `tabId`가 `null`이면 표식을 그대로 비운다(§11-9 결정 3 — 갈 탭이 없을 때 옛 자리에 안 남긴다). */
+export async function focusTab(projectId: string, tabId: string | null): Promise<Home> {
   return withHomeLock(async () => {
     const home = await readHome(projectId);
+    if (tabId === null) {
+      if (home.activeTab === null) return home;
+      const next: Home = { ...home, activeTab: null };
+      await writeHome(projectId, next);
+      return next;
+    }
     if (!home.tabs.some((t) => t.id === tabId)) return home;
     const now = new Date().toISOString();
     const next: Home = {

@@ -187,7 +187,7 @@ import type {
 } from "@/lib/home-session";
 import { formatCombo, matchCombo } from "@/lib/keymap";
 import type { Checkout, GitStatus, StatusFile } from "@/lib/source-control";
-import { tabsOnSide, tabsToCloseOthers } from "@/lib/tabs";
+import { tabForSurface, tabsOnSide, tabsToCloseOthers, type Surface } from "@/lib/tabs";
 import {
   chatRows,
   chatTabTitle,
@@ -238,9 +238,8 @@ type Panel = Pick<Home, "conversations" | "current" | "tabs" | "activeTab"> & {
 };
 
 /** 좌측 2단의 위 단 — 표면 넷(§11 결정 1 · §비주얼 §72 ①). 이 티켓이 붙이는 것은 셸과 고르는
- *  손잡이뿐이고, 셋(`terminal` · `scm` · `explorer`)의 내용은 P366-5 · P366-6 · P366-8이 채운다. */
-type Surface = "session" | "schedules" | "terminal" | "scm" | "explorer";
-
+ *  손잡이뿐이고, 셋(`terminal` · `scm` · `explorer`)의 내용은 P366-5 · P366-6 · P366-8이 채운다.
+ *  `Surface` 자체는 `lib/tabs.ts`가 정본이다(§11-9 결정 2 — `tabForSurface`와 같은 값을 쓴다). */
 const SURFACES: { id: Surface; labelKey: string; icon: typeof MessageSquare }[] = [
   { id: "session", labelKey: "home.surface.agent", icon: MessageSquare },
   { id: "schedules", labelKey: "home.schedulesLabel", icon: CalendarClock },
@@ -727,6 +726,18 @@ export function HomeUI({
     }
   };
 
+  /** 좌측 표면 줄에서 표면을 간다(§11-9 결정 1) — `selectTab`·`closeTab`이 이미 다는 반대
+   *  방향(표면은 활성 탭을 따라간다, §11-7 결정 4 · §11-8 결정 1)의 짝이다. `tabForSurface`
+   *  (`lib/tabs.ts`, §11-9 결정 2)가 이 표면에서 몸통에 뜰 탭을 고르고, 그 id가 지금 활성
+   *  탭과 다를 때만 `focusTabAction`으로 표식을 옮긴다 — 갈 탭이 없으면(결정 3) `null`을
+   *  넘겨 표식을 비운다. `current`를 안 건드리므로 스레드를 다시 읽는 왕복은 0회다. */
+  const changeSurface = (s: Surface) => {
+    setSurface(s);
+    const target = tabForSurface(home.tabs, s, home.current, home.activeTab);
+    if (target === home.activeTab) return;
+    void (async () => apply(await focusTabAction(project, target)))();
+  };
+
   /** 우측 탭 줄에서 탭 하나를 고른다(§11 결정 1) — **표면을 가로지르는 그 한 줄**의 유일한
    *  전환 입구다. 종류마다 왕복이 다르다: `chat`은 스레드까지 옮기는 `switchHome`, 나머지 둘은
    *  `current`도 새 탭도 안 만드는 `focusTabAction`(§11-1 §focusTab 주석과 같다). **표면도 같이
@@ -819,7 +830,7 @@ export function HomeUI({
             home={home}
             personas={personas}
             surface={surface}
-            onSurfaceChange={setSurface}
+            onSurfaceChange={changeSurface}
             onOpenExplorerFile={explorer.onOpenFile}
             runningIds={runningIds}
             apply={apply}
