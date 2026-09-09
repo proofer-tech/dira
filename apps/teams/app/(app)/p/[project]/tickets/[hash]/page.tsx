@@ -9,9 +9,11 @@ import Link from "@/components/link";
 import { notFound } from "next/navigation";
 import { Lock, TriangleAlert } from "lucide-react";
 import { boardRevision } from "@/lib/board-revision";
+import { AttachmentPreview } from "@/components/attachment-preview";
 import { EarlyRefreshPolling } from "@/components/early-refresh";
 import { EmptyState } from "@/components/empty-state";
 import { Markdown } from "@/components/markdown";
+import { splitAttachments } from "@/lib/attachment-format";
 import { TitleRefs } from "@/components/queue-ref";
 import { SessionStream } from "@/components/session-stream";
 import { DepBadge, StatusBadge, daysSince } from "@/components/status-badge";
@@ -620,13 +622,24 @@ export default async function TicketDetail({
               // **같은 본문 안에서 갈린다**: 첫 `heading`에서 멈추는 변환이라 블록은 하나다
               // (쪼개면 루트의 `[&>:first-child]:mt-0`이 뒤쪽에도 걸려 `mt-6`이 죽는다).
               bodyRead ? (
-                <Markdown
-                  text={bodyRead}
-                  breaks={ticket.fm.kind === "request" ? "untilHeading" : undefined}
-                  vault={vault}
-                  refs={refs}
-                  locale={locale}
-                />
+                // 사람이 다시 읽는 면 — 첨부 안내 줄 대신 미리보기다(§8 §개정 · §비주얼 §27 §개정).
+                (() => {
+                  const { body, paths } = splitAttachments(bodyRead);
+                  return (
+                    <>
+                      {body.trim() !== "" && (
+                        <Markdown
+                          text={body}
+                          breaks={ticket.fm.kind === "request" ? "untilHeading" : undefined}
+                          vault={vault}
+                          refs={refs}
+                          locale={locale}
+                        />
+                      )}
+                      <AttachmentPreview project={id} paths={paths} />
+                    </>
+                  );
+                })()
               ) : (
                 <EmptyState text={t(locale, "ticketDetail.emptyBody")} />
               )

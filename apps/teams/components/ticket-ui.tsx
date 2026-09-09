@@ -58,9 +58,11 @@ import {
 // 스레드를 엮는 쪽은 서버(`lib/queue.ts threadOf`)다 — 여기 오는 건 타입뿐이라 `node:*`를 안 끈다
 import type { Option, OptionGroup, QuoteSection, ThreadItem } from "@/lib/queue";
 import { AttachmentField, useAttachments } from "@/components/attachment-field";
+import { AttachmentPreview } from "@/components/attachment-preview";
 import { useHotkey, useKeymap } from "@/components/keymap-provider";
 import { useLocale, useT } from "@/components/language-provider";
 import { Markdown } from "@/components/markdown";
+import { splitAttachments } from "@/lib/attachment-format";
 import { MarkdownEditor } from "@/components/markdown-editor";
 import { FrontmatterRowsEditor } from "@/components/markdown-frontmatter-rows-editor";
 import type { FrontmatterCandidates } from "@/lib/markdown-frontmatter-rows";
@@ -1200,7 +1202,16 @@ export function AnswerForm({
             {t("ticketDetail.bodyLabel")}
           </summary>
           <div className="ml-[1.125rem]">
-            <Markdown text={ticketBody} vault={vault} refs={refs} />
+            {/* 사람이 다시 읽는 면 — 첨부 안내 줄 대신 미리보기다(§8 §개정 · §비주얼 §27 §개정). */}
+            {(() => {
+              const { body, paths } = splitAttachments(ticketBody);
+              return (
+                <>
+                  {body.trim() !== "" && <Markdown text={body} vault={vault} refs={refs} />}
+                  <AttachmentPreview project={project} paths={paths} />
+                </>
+              );
+            })()}
           </div>
         </details>
       )}

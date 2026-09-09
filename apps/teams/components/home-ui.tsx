@@ -96,6 +96,7 @@ import {
   AttachmentProblems,
   useAttachments,
 } from "@/components/attachment-field";
+import { AttachmentPreview } from "@/components/attachment-preview";
 import { CopyCommand } from "@/components/copy-command";
 import { EmptyState } from "@/components/empty-state";
 import { ExplorerPane, ExplorerTree, useExplorerOpen } from "@/components/explorer-ui";
@@ -104,6 +105,7 @@ import { TerminalPanel } from "@/components/terminal-panel";
 import { useKeymap } from "@/components/keymap-provider";
 import { useLocale, useT } from "@/components/language-provider";
 import { Markdown } from "@/components/markdown";
+import { splitAttachments } from "@/lib/attachment-format";
 import type { RefIndex } from "@/lib/markdown-refs";
 import type { PtyStatus } from "@/lib/pty";
 import { Bundle } from "@/components/session-stream";
@@ -1031,8 +1033,19 @@ export function HomeUI({
                                   <BubbleContent>
                                     {/* 이 자리에 오는 문자열은 **전부 입력칸에서 왔다** — 사람이
                                         친 줄바꿈을 그대로 그린다(§10 면제). 아래 에이전트 답의
-                                        `Prose`는 안 켠다: 그건 감아서 쓰는 쪽의 글이다 */}
-                                    <Markdown text={turn.text} breaks="all" refs={liveRefs} />
+                                        `Prose`는 안 켠다: 그건 감아서 쓰는 쪽의 글이다.
+                                        첨부 안내 줄 대신 미리보기다(§8 §개정 · §비주얼 §27 §개정). */}
+                                    {(() => {
+                                      const { body, paths } = splitAttachments(turn.text);
+                                      return (
+                                        <>
+                                          {body.trim() !== "" && (
+                                            <Markdown text={body} breaks="all" refs={liveRefs} />
+                                          )}
+                                          <AttachmentPreview project={project} paths={paths} />
+                                        </>
+                                      );
+                                    })()}
                                   </BubbleContent>
                                 </Bubble>
                               </MessageContent>
@@ -1091,7 +1104,18 @@ export function HomeUI({
                             <MessageHeader className="sr-only m-0">{t("home.questionLabel")}</MessageHeader>
                             <Bubble variant="outline" align="end">
                               <BubbleContent>
-                                <Markdown text={echo} breaks="all" refs={liveRefs} />
+                                {/* 첨부 안내 줄 대신 미리보기다(§8 §개정 · §비주얼 §27 §개정). */}
+                                {(() => {
+                                  const { body, paths } = splitAttachments(echo);
+                                  return (
+                                    <>
+                                      {body.trim() !== "" && (
+                                        <Markdown text={body} breaks="all" refs={liveRefs} />
+                                      )}
+                                      <AttachmentPreview project={project} paths={paths} />
+                                    </>
+                                  );
+                                })()}
                               </BubbleContent>
                             </Bubble>
                           </MessageContent>

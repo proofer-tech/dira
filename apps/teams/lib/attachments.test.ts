@@ -15,6 +15,7 @@ import path from "node:path";
 import {
   safeName,
   saveAttachment,
+  splitAttachments,
   verifyAttachments,
   withAttachments,
 } from "./attachments.ts";
@@ -150,4 +151,52 @@ test("withAttachments — 빈 줄 하나 + 안내 한 줄 + 경로 n줄", () => 
   );
   // 본문이 비어도 안내가 맨 앞이다(빈 줄로 시작하지 않는다).
   assert.ok(withAttachments("", ["/q/attachments/ab12cd34-a.png"]).startsWith("첨부 파일"));
+});
+
+test("splitAttachments — 첨부 없음은 원문 그대로, paths 빈 배열", () => {
+  const t = "본문입니다\n마지막 줄";
+  assert.deepStrictEqual(splitAttachments(t), { body: t, paths: [] });
+  assert.deepStrictEqual(splitAttachments(""), { body: "", paths: [] });
+});
+
+test("splitAttachments — withAttachments 왕복 (한 장 · 여러 장 · 빈 본문)", () => {
+  const one = withAttachments("본문\n", ["/q/attachments/ab12cd34-a.png"]);
+  assert.deepStrictEqual(splitAttachments(one), {
+    body: "본문",
+    paths: ["/q/attachments/ab12cd34-a.png"],
+  });
+
+  const many = withAttachments("본문\n", [
+    "/q/attachments/ab12cd34-a.png",
+    "/q/attachments/7f0e91c2-b.txt",
+  ]);
+  assert.deepStrictEqual(splitAttachments(many), {
+    body: "본문",
+    paths: ["/q/attachments/ab12cd34-a.png", "/q/attachments/7f0e91c2-b.txt"],
+  });
+
+  const noBody = withAttachments("", ["/q/attachments/ab12cd34-a.png"]);
+  assert.deepStrictEqual(splitAttachments(noBody), {
+    body: "",
+    paths: ["/q/attachments/ab12cd34-a.png"],
+  });
+});
+
+test("splitAttachments — 비슷하지만 아닌 문단은 삼키지 않는다", () => {
+  // 안내 줄 글자가 같아도 뒤에 이어지는 줄이 attachments/를 지나는 절대경로가 아니면 원문 그대로.
+  const notAPath = "본문\n\n첨부 파일 — 아래 경로를 Read로 읽어라:\n그냥 적은 문장";
+  assert.deepStrictEqual(splitAttachments(notAPath), { body: notAPath, paths: [] });
+
+  // 상대경로 — attachments/ 문자열은 있어도 절대경로가 아니다.
+  const relative = "본문\n\n첨부 파일 — 아래 경로를 Read로 읽어라:\nattachments/ab12cd34-a.png";
+  assert.deepStrictEqual(splitAttachments(relative), { body: relative, paths: [] });
+
+  // 안내 줄 앞에 빈 줄이 없다 — withAttachments가 절대 안 만드는 모양이다.
+  const noBlank = "본문\n첨부 파일 — 아래 경로를 Read로 읽어라:\n/q/attachments/ab12cd34-a.png";
+  assert.deepStrictEqual(splitAttachments(noBlank), { body: noBlank, paths: [] });
+
+  // attachments/를 지나긴 하되 그 뒤로 한 줄이 아니다(꼬리 중간에 낀 일반 문장).
+  const brokenTail =
+    "본문\n\n첨부 파일 — 아래 경로를 Read로 읽어라:\n/q/attachments/ab12cd34-a.png\n그 다음 한 줄 더";
+  assert.deepStrictEqual(splitAttachments(brokenTail), { body: brokenTail, paths: [] });
 });

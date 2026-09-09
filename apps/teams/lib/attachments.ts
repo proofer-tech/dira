@@ -18,8 +18,11 @@ import { DEFAULT_LOCALE, t, type Locale } from "./i18n.ts";
 import { resolveWithin } from "./paths.ts";
 import type { Project } from "./projects.ts";
 
-/** 프롬프트에 붙는 안내 한 줄(§8 §프롬프트에 붙는 모양). 네 자리가 이 문자열을 같이 쓴다. */
-const NOTE = "첨부 파일 — 아래 경로를 Read로 읽어라:";
+/** 조립(`withAttachments`)·해체(`splitAttachments`)는 순수 함수라 fs 없는 형제 파일에 있다
+ *  (클라이언트 컴포넌트가 이 파일 대신 그 파일에서 직접 import한다 — `attachment-format.ts` 머리
+ *  주석). 여기서는 서버 쪽 호출자(서버 액션)가 종전처럼 `./attachments.ts`에서 마저 가져가도록
+ *  재수출만 한다. */
+export { withAttachments, splitAttachments } from "./attachment-format.ts";
 
 export type SaveResult = { ok: true; path: string } | { ok: false; error: string };
 
@@ -116,14 +119,4 @@ export async function verifyAttachments(
       `${t(locale, "attachmentsLib.outsidePathPrefix")} ${(e as Error).message}`,
     );
   }
-}
-
-/** 본문 + 첨부 경로 → 프롬프트에 실릴 문자열(§8 §프롬프트에 붙는 모양).
- *
- *  **첨부가 없으면 `text` 그대로다** — 빈 줄 하나도 붙이지 않는다. 네 자리 중 셋이 이 결과를
- *  파일이나 argv에 그대로 싣는다. */
-export function withAttachments(text: string, paths: string[]): string {
-  if (paths.length === 0) return text;
-  const body = text.trimEnd();
-  return (body ? body + "\n\n" : "") + NOTE + "\n" + paths.join("\n");
 }

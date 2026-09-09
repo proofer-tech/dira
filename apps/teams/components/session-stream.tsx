@@ -51,8 +51,10 @@ import {
   AttachmentProblems,
   useAttachments,
 } from "@/components/attachment-field";
+import { AttachmentPreview } from "@/components/attachment-preview";
 import { EmptyState } from "@/components/empty-state";
 import { Markdown } from "@/components/markdown";
+import { splitAttachments } from "@/lib/attachment-format";
 import type { RefIndex } from "@/lib/markdown-refs";
 import type { Vault } from "@/lib/markdown-wikilinks";
 import { AnswerForm } from "@/components/ticket-ui";
@@ -622,6 +624,7 @@ export function SessionStream({
                   isPlanEdgeSegment(bi, blocks.length, plans.length > 0) ? (
                     <SegmentBlock
                       key={`o${bi}`}
+                      project={project}
                       label={t(bi === 0 ? "progress.segment.assign" : "progress.segment.wrapup")}
                       items={groupProgress(
                         block.events.map((w) => w.it),
@@ -637,6 +640,7 @@ export function SessionStream({
                   ) : (
                     <ProgressItems
                       key={`o${bi}`}
+                      project={project}
                       items={groupProgress(
                         block.events.map((w) => w.it),
                         isBubble,
@@ -652,6 +656,7 @@ export function SessionStream({
                 ) : (
                   <PlanBlock
                     key={`p${block.index}`}
+                    project={project}
                     plan={effectivePlans[block.index]}
                     items={groupProgress(
                       block.events.map((w) => w.it),
@@ -789,6 +794,7 @@ export function SessionStream({
  *  세 문법(사건 · 스레드 항목 · 묶음)이다. `SessionStream`의 종전 인라인 `.map`을 그대로
  *  옮긴 것뿐이라 클래스 0줄 차이다 — 계획 아코디언 안에서도 재사용하려고 뺐다. */
 function ProgressItems({
+  project,
   items,
   threadKey,
   onToggle,
@@ -798,6 +804,8 @@ function ProgressItems({
   ctx,
   flat,
 }: {
+  /** 첨부 미리보기 href 조립(§8 §개정) — 사람 쪽 `StreamBubble`에 그대로 흘려보낸다. */
+  project: string;
   items: GroupedItem<StreamEvent, ThreadItem>[];
   threadKey: Map<ThreadItem, string>;
   onToggle: (e: React.SyntheticEvent<HTMLDetailsElement>) => void;
@@ -817,7 +825,8 @@ function ProgressItems({
   return (
     <>
       {items.map((g) => {
-        if (g.kind === "event") return <StreamBubble key={g.event.key} e={g.event} refs={refs} />;
+        if (g.kind === "event")
+          return <StreamBubble key={g.event.key} project={project} e={g.event} refs={refs} />;
         if (g.kind === "thread")
           return <ThreadRow key={threadKey.get(g.thread)} item={g.thread} vault={vault} refs={refs} />;
         if (flat) return g.events.map((e) => <Row key={e.key} e={e} onToggle={onToggle} ctx={ctx} />);
@@ -846,6 +855,7 @@ function ProgressItems({
  *  셀렉터는 자식 결합자의 마지막 자식(`svg:last-child`)을 짚는다 — 왼쪽 첫 자리는 상태
  *  글리프가 쓴다(§59 ④). */
 function PlanBlock({
+  project,
   plan,
   items,
   onToggle,
@@ -855,6 +865,8 @@ function PlanBlock({
   forceOpen,
   ctx,
 }: {
+  /** `ProgressItems`에 그대로 흘려보낸다(§8 §개정 — `StreamBubble`의 첨부 미리보기 href). */
+  project: string;
   plan: PlanItem;
   items: GroupedItem<StreamEvent, ThreadItem>[];
   onToggle: (e: React.SyntheticEvent<HTMLDetailsElement>) => void;
@@ -924,6 +936,7 @@ function PlanBlock({
         <ChevronRight aria-hidden className="ml-auto size-4 shrink-0 text-muted-foreground" />
       </summary>
       <ProgressItems
+        project={project}
         items={items}
         threadKey={threadKey}
         onToggle={onToggle}
@@ -942,6 +955,7 @@ function PlanBlock({
  *  글리프 대신 빈 칸(계획 항목이 아니라 그 밖 구간이라 켤 상태가 없다). `sr-only`가 없다 —
  *  낱말 자신이 화면에도 낭독에도 뜨는 유일한 글자다. */
 function SegmentBlock({
+  project,
   label,
   items,
   onToggle,
@@ -951,6 +965,8 @@ function SegmentBlock({
   forceOpen,
   ctx,
 }: {
+  /** `ProgressItems`에 그대로 흘려보낸다(§8 §개정 — `StreamBubble`의 첨부 미리보기 href). */
+  project: string;
   label: string;
   items: GroupedItem<StreamEvent, ThreadItem>[];
   onToggle: (e: React.SyntheticEvent<HTMLDetailsElement>) => void;
@@ -972,7 +988,7 @@ function SegmentBlock({
         <span className="truncate text-sm font-medium text-foreground">{label}</span>
         <ChevronRight aria-hidden className="ml-auto size-4 shrink-0 text-muted-foreground" />
       </summary>
-      <ProgressItems items={items} threadKey={threadKey} onToggle={onToggle} vault={vault} refs={refs} forceOpen={forceOpen} ctx={ctx} flat />
+      <ProgressItems project={project} items={items} threadKey={threadKey} onToggle={onToggle} vault={vault} refs={refs} forceOpen={forceOpen} ctx={ctx} flat />
     </details>
   );
 }
@@ -1789,7 +1805,17 @@ function DetailPanel({
  *  좌 = `세션`(assistant `text`) · 우 = `사람`(첫 아닌 사용자 프롬프트 · 참견) — 파싱이 아는 것이
  *  그것뿐이다. 줄바꿈은 §10 면제와 같은 판정이다: 세션은 파일에 쓰듯 쓴 글이라 `breaks` 없이,
  *  사람은 입력칸에 친 글이라 `breaks="all"`로 친 줄바꿈이 정본이다. */
-function StreamBubble({ e, refs }: { e: StreamEvent; refs?: RefIndex }) {
+function StreamBubble({
+  project,
+  e,
+  refs,
+}: {
+  /** 첨부 미리보기 href 조립(§8 §개정) — 사람 쪽(`e.kind !== "text"`)만 쓴다, 세션 쪽 산문에는
+   *  첨부가 안 붙는다. */
+  project: string;
+  e: StreamEvent;
+  refs?: RefIndex;
+}) {
   const t = useT();
   const session = e.kind === "text";
   const who = session ? t("sessionStream.session") : t("sessionStream.person");
@@ -1805,6 +1831,8 @@ function StreamBubble({ e, refs }: { e: StreamEvent; refs?: RefIndex }) {
       </div>
     );
   }
+  // 첨부 안내 줄 대신 미리보기다(§8 §개정 · §비주얼 §27 §개정) — 참견·이어받기의 첨부가 여기로 온다.
+  const { body, paths } = splitAttachments(e.body);
   return (
     <div className="px-3 py-2">
       <Message align="end">
@@ -1812,7 +1840,8 @@ function StreamBubble({ e, refs }: { e: StreamEvent; refs?: RefIndex }) {
           <MessageHeader>{header}</MessageHeader>
           <Bubble variant="outline" align="end">
             <BubbleContent>
-              <Markdown text={e.body} breaks="all" refs={refs} />
+              {body.trim() !== "" && <Markdown text={body} breaks="all" refs={refs} />}
+              <AttachmentPreview project={project} paths={paths} />
             </BubbleContent>
           </Bubble>
         </MessageContent>

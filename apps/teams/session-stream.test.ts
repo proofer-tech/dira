@@ -80,7 +80,7 @@ test("`배정`·`마무리`(SegmentBlock) 안의 ProgressItems도 `flat`이다 �
   assert.ok(segmentBlockStart >= 0, "SegmentBlock을 못 찾았다");
   assert.match(
     body,
-    /<ProgressItems items=\{items\} threadKey=\{threadKey\} onToggle=\{onToggle\} vault=\{vault\} refs=\{refs\} forceOpen=\{forceOpen\} ctx=\{ctx\} flat \/>/,
+    /<ProgressItems project=\{project\} items=\{items\} threadKey=\{threadKey\} onToggle=\{onToggle\} vault=\{vault\} refs=\{refs\} forceOpen=\{forceOpen\} ctx=\{ctx\} flat \/>/,
     "SegmentBlock의 ProgressItems가 flat을 안 받는다",
   );
 });
