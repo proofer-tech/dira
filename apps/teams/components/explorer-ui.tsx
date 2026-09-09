@@ -34,6 +34,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { ExplorerFile, ExplorerListing, FindContentResult, FindNameResult } from "@/lib/explorer";
 import type { HomeChunk, Tab } from "@/lib/home-session";
+import { snapScrollTopToLineGrid } from "@/lib/scroll-grid";
 import { cn } from "@/lib/utils";
 
 /** `protocols-ui.tsx` · `ticket-ui.tsx` 등에 이미 있는 "OS 기본 앱으로 열기" 버튼과 같은
@@ -682,12 +683,33 @@ function CodeEditor({
   useEffect(() => {
     if (!line) return;
     const ta = taRef.current;
+    const pre = preRef.current;
     if (!ta) return;
     const idx = initial.text.split("\n").slice(0, line - 1).join("\n").length + (line > 1 ? 1 : 0);
     ta.focus();
     ta.setSelectionRange(idx, idx);
-    ta.scrollTop = Math.max(0, (line - 1) * LINE_HEIGHT_PX - ta.clientHeight / 2);
+    const target = Math.max(0, (line - 1) * LINE_HEIGHT_PX - ta.clientHeight / 2);
+    const max = Math.min(ta.scrollHeight - ta.clientHeight, (pre?.scrollHeight ?? Infinity) - (pre?.clientHeight ?? 0));
+    const snapped = snapScrollTopToLineGrid(target, max);
+    ta.scrollTop = snapped;
+    if (pre) pre.scrollTop = snapped;
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 스크롤이 멎는 순간(`scrollend`)에 두 층의 `scrollTop`을 줄 격자로 올린다(§72 ② §개정 몫 ③).
+  // `onScroll`에 안 건다 — 도는 동안 덮어쓰면 관성이 끊긴다.
+  useEffect(() => {
+    const ta = taRef.current;
+    const pre = preRef.current;
+    if (!ta || !pre) return;
+    const onScrollEnd = () => {
+      const max = Math.min(ta.scrollHeight - ta.clientHeight, pre.scrollHeight - pre.clientHeight);
+      const snapped = snapScrollTopToLineGrid(ta.scrollTop, max);
+      ta.scrollTop = snapped;
+      pre.scrollTop = snapped;
+    };
+    ta.addEventListener("scrollend", onScrollEnd);
+    return () => ta.removeEventListener("scrollend", onScrollEnd);
   }, []);
 
   async function save() {
