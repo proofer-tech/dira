@@ -394,6 +394,20 @@ catch가 무조건 그 경로라 파일 배치로는 못 고친다(위 둘째 �
 - **띄운 세션이 죽인다.** 자기가 시작한 pid를 자기 턴 안에서 끝낸다.
 - **같은 트리에 둘째를 안 띄운다.** 띄우기 전에 그 트리에 이미 도는 `next dev`가 있으면 그것을 쓴다.
 
+**뜨는 것을 기다리는 예.** 로그의 `Ready in`은 291ms~29.5초 사이였다(실측) - 고정
+`sleep 90`은 관측 최댓값의 3배다. 상한을 두고 `until`로 로그를 기다린다:
+
+```bash
+LOG=/tmp/w4-dev.log
+DEADLINE=$(( $(date +%s) + 90 ))
+until grep -q "Ready in" "$LOG" 2>/dev/null || [ "$(date +%s)" -ge "$DEADLINE" ]; do
+  sleep 3
+done
+if ! grep -q "Ready in" "$LOG" 2>/dev/null; then
+  echo "dev 서버가 90초 안에 안 떴다 - 로그를 붙여 이어받기로 넘긴다" >&2
+fi
+```
+
 이미 도는 서버는 포트가 아니라 트리 경로로 찾는다 - 포트는 겹치고 남의 프로젝트도 같은 값을 쓴다:
 
 ```bash
