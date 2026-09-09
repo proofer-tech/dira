@@ -36,6 +36,7 @@ import {
   dispatchPollingNowAction,
   extendPollingUntilAction,
   openTicketFileAction,
+  retryBackoffNowAction,
   saveTicket,
   saveTicketFrontmatter,
   unassignTicket,
@@ -861,6 +862,30 @@ export function PollingControls({
         <Failure title={t("ticketFrontmatter.saveFailedTitle")} message={untilState.error} />
       )}
       {untilState.ok && <span className="text-xs text-muted-foreground">{t("polling.until.saved")}</span>}
+    </div>
+  );
+}
+
+/** `지금 다시 보내기` 하나뿐(DESIGN.md §답변 대기는 사람이 답을 쓰는 자리 하나다 결정 4, P395-3) —
+ *  답을 쓰는 칸은 안 만든다(이 상태에는 물음이 없다). `PollingControls`의 `dispatchNow`와 같은
+ *  모양이고, 확인 다이얼로그는 없다(폴링 쪽과 같은 근거 — 되돌릴 수 없는 파괴적 동작이 아니다). */
+export function RetryControls({ project, hash }: { project: string; hash: string }) {
+  const t = useT();
+  const [retrying, startRetry] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  const retryNow = () =>
+    startRetry(async () => {
+      const r = await retryBackoffNowAction(project, hash);
+      setError(r.error ?? null);
+    });
+
+  return (
+    <div className="space-y-2 border-t pt-3">
+      <Button variant="outline" size="sm" disabled={retrying} onClick={retryNow}>
+        {retrying ? t("backoff.action.retrying") : t("backoff.action.retryNow")}
+      </Button>
+      {error && <Failure title={t("ticketFrontmatter.saveFailedTitle")} message={error} />}
     </div>
   );
 }

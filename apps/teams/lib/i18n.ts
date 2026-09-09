@@ -454,6 +454,9 @@ export const ko: Record<string, string> = {
   // 그래도 배지 표 한 자리를 같이 쓴다(`isAwaiting`과 같은 자리 — 5상태를 안 늘린다).
   "status.label.polling": "폴링 대기",
   "status.label.pollingOverdue": "상한 지남",
+  // 재시도 대기(§답변 대기는 사람이 답을 쓰는 자리 하나다 결정 2, P395-3) — `폴링 대기`와 같은
+  // 층의 오버레이다. 이상 상태가 아니라 `blocked`·`awaiting`의 막힘 색을 안 쓴다.
+  "status.label.retrying": "재시도 대기",
 
   // `kind:` 넉 자(§0-16 §장치, `status-badge.tsx`의 `KIND_LABELS`) — 보드 분류 칸과 페르소나
   // 상세 활동 탭이 같은 표를 쓴다. 표에 없는 값은 호출부가 원문 그대로 그린다.
@@ -739,6 +742,15 @@ export const ko: Record<string, string> = {
   "polling.control.notPolling": "이 티켓은 지금 폴링 대기 상태가 아닙니다.",
   "polling.control.badUntil": "상한 값을 읽을 수 없습니다.",
   "polling.control.pastUntil": "상한은 지금보다 뒤여야 합니다.",
+
+  // 티켓 상세 "재시도 대기" 절(§답변 대기는 사람이 답을 쓰는 자리 하나다 결정 4, P395-3) —
+  // 누적 횟수·다음 시각과 `지금 다시 보내기` 하나뿐이다. 답을 쓰는 칸은 없다(이 상태에는 물음이 없다).
+  "backoff.section.title": "재시도 대기",
+  "backoff.field.count": "누적 횟수",
+  "backoff.field.until": "다음 시각",
+  "backoff.action.retryNow": "지금 다시 보내기",
+  "backoff.action.retrying": "다시 보내는 중…",
+  "backoff.control.notRetrying": "이 티켓은 지금 재시도 대기 상태가 아닙니다.",
 
   // 표 컬럼(§에픽 결정 7 §표뷰) — 띠 머리 라벨은 `board.epic.noTitle`을 그대로 재사용한다
   // (사이드바와 같은 글자여야 한다, §1 - 한 사실을 두 모양으로 그리지 않는다).
@@ -2996,6 +3008,7 @@ export const en: Record<string, string> = {
   "status.label.disconnected": "Disconnected",
   "status.label.polling": "Polling",
   "status.label.pollingOverdue": "Deadline passed",
+  "status.label.retrying": "Retrying",
 
   // `kind:` 넉 자 — ko와 같은 자리(위 참고).
   "kind.label.work": "Work",
@@ -3120,6 +3133,13 @@ export const en: Record<string, string> = {
   "polling.control.notPolling": "This ticket isn't currently polling.",
   "polling.control.badUntil": "Can't read that deadline.",
   "polling.control.pastUntil": "The deadline must be later than now.",
+
+  "backoff.section.title": "Retrying",
+  "backoff.field.count": "Attempts so far",
+  "backoff.field.until": "Next attempt",
+  "backoff.action.retryNow": "Retry now",
+  "backoff.action.retrying": "Retrying…",
+  "backoff.control.notRetrying": "This ticket isn't currently in retry backoff.",
 
   "board.column.epic": "Epic",
 

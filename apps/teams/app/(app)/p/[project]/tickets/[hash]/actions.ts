@@ -19,6 +19,7 @@ import { verifyAttachments, withAttachments } from "@/lib/attachments";
 import { writeEpic } from "@/lib/epic";
 import { listEpics, refreshKnownRefs, resolveMarkdownRefs } from "@/lib/epics";
 import { findTicket, unassign, type UnassignRun } from "@/lib/engine";
+import { retryBackoffNow } from "@/lib/backoff-control";
 import { followup, type FollowupResult } from "@/lib/followup";
 import { t, type Locale } from "@/lib/i18n";
 import { interject, type InterjectResult } from "@/lib/interject";
@@ -473,6 +474,27 @@ export async function extendPollingUntilAction(projectId: string, hash: string, 
     if (!r.ok) return { error: r.error };
     revalidatePath(`/p/${projectId}/tickets/${encodeURIComponent(r.stem)}`);
     revalidatePath(`/p/${projectId}/board`);
+    return { ok: true };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+/** `지금 다시 보내기` — 재시도 대기 표식을 지운다(DESIGN.md §답변 대기는 사람이 답을 쓰는 자리
+ *  하나다 결정 4, P395-3). 판정·쓰기는 `lib/backoff-control.ts`가 한다(`dispatchPollingNowAction`과
+ *  같은 이유). 성공하면 `kickIdleWorker`를 부른다 — 다음 tick(최대 30초)을 기다리지 않고 그
+ *  티켓이 바로 `select`에 다시 든다. */
+export async function retryBackoffNowAction(projectId: string, hash: string): Promise<SaveState> {
+  try {
+    const locale = await readLanguage();
+    const project = await getProject(projectId);
+    if (!project) throw new Error(`${t(locale, "ticketDetail.unknownProjectPrefix")} ${projectId}`);
+    const config = await resolveConfig(project);
+    const r = await retryBackoffNow(project.root, config, hash, locale);
+    if (!r.ok) return { error: r.error };
+    revalidatePath(`/p/${projectId}/tickets/${encodeURIComponent(r.stem)}`);
+    revalidatePath(`/p/${projectId}/board`);
+    await kickIdleWorker(project.root);
     return { ok: true };
   } catch (e) {
     return { error: (e as Error).message };

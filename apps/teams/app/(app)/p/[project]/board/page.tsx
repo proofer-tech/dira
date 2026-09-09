@@ -106,12 +106,14 @@ import {
 import { buildVault } from "@/lib/markdown-wikilinks";
 import { listTree } from "@/lib/protocols";
 import {
+  backoffOf,
   getProject,
   listPersonas,
   readLanguage,
   resolveConfig,
   squadNames,
   squadsDir,
+  type BackoffCandidate,
 } from "@/lib/projects";
 import { findStream, lastActivity, sessionIdOf, type StreamEvent } from "@/lib/transcript";
 import { doneLimit, epicLimit, formatRemaining, rowLimit } from "@/lib/urls";
@@ -137,7 +139,7 @@ const STATUSES = ["open", "wip", "done"] as const;
  *  **레인 3개와 개수가 다르고 그게 정상이다** — 필터는 엔진의 상태를 고르는 것이고(CLI `list`
  *  패리티) 레인은 흐름의 단계를 그린다. `deps 대기`·`답변 대기`는 `대기` 레인에 앉고
  *  `assigned`는 필터에만 남는다. */
-const STATUS_OPTIONS = ["open", "blocked", "awaiting", "assigned", "wip", "done"] as const;
+const STATUS_OPTIONS = ["open", "blocked", "awaiting", "assigned", "wip", "done", "retrying"] as const;
 
 /** 뷰 전환은 `<Link>` 2개다 — `tabs`를 설치하지 않은 이유가 이것이다(DESIGN.md §5). */
 const VIEWS = [
@@ -294,6 +296,15 @@ function PollingBadge({ ticket, now, locale }: { ticket: Ticket; now: Date; loca
   return <StatusBadge status="polling" suffix={suffix} locale={locale} />;
 }
 
+/** 재시도 대기 카드 배지(§답변 대기는 사람이 답을 쓰는 자리 하나다 결정 2, P395-3) — `PollingBadge`와
+ *  같은 자리·같은 모양이다. 남은 시간은 `readBackoff`가 이미 재 둔 `until`(epoch초)과 지금을
+ *  빼는 것뿐 — 다시 안 잰다. */
+function RetryingBadge({ mark, now, locale }: { mark: BackoffCandidate; now: Date; locale: Locale }) {
+  const remainingMs = Math.max(0, mark.until * 1000 - now.getTime());
+  const suffix = ` · ${formatRemaining(remainingMs, locale)} ${t(locale, "common.suffix.remaining")}`;
+  return <StatusBadge status="retrying" suffix={suffix} locale={locale} />;
+}
+
 export default async function Board({
   params,
   searchParams,
@@ -341,7 +352,14 @@ export default async function Board({
   const sortParam = sp.get("sort");
   const sortKey = SORT_KEYS.find((k) => k === sortParam) ?? null; // 모르는 값은 큐 순서로 떨어진다
   const desc = sp.get("dir") === "desc";
-  const rows = sortTickets(filterTickets(tickets, query), sortKey, desc);
+  // 재시도 대기(P395-3) — ⑨와 같은 함수로 한 번만 훑는다(§성능 예산, 새 판정 0). 카드·행·필터가
+  // 전부 이 맵 하나를 쓴다.
+  const backoffByHash = new Map((await backoffOf(tickets, now)).map((b) => [b.hash, b]));
+  const rows = sortTickets(
+    filterTickets(tickets, query, new Set(backoffByHash.keys())),
+    sortKey,
+    desc,
+  );
   // 테이블만 기본 순서가 다르다 — 생성일 내림차순(§1 보드 §테이블 기본 순서). 뒤집는 자리가
   // 여기(테이블 렌더 직전)인 이유: 아래 칸반·건수·관계선은 전부 `rows`(큐 순서)를 그대로 쓴다.
   // 파라미터가 실려 있으면 `rows`와 같은 순서다(같은 키·같은 방향이라 결과가 같다).
@@ -717,8 +735,12 @@ export default async function Board({
         </span>
         {isAwaiting(t) ? (
           <StatusBadge status="awaiting" days={daysSince(t.mtime)} locale={locale} />
+        ) : isPolling(t) ? (
+          <PollingBadge ticket={t} now={now} locale={locale} />
         ) : (
-          isPolling(t) && <PollingBadge ticket={t} now={now} locale={locale} />
+          backoffByHash.has(t.hash) && (
+            <RetryingBadge mark={backoffByHash.get(t.hash)!} now={now} locale={locale} />
+          )
         )}
       </div>
       {/* 대기 사유(§폴링 대기 개정 2) — 배지 아래 한 줄, 없으면 이 줄 자체가 없다(종전 화면).
@@ -1238,6 +1260,8 @@ export default async function Board({
                             <TableCell className="px-3 py-0">
                               {isAwaiting(t) ? (
                                 <StatusBadge status="awaiting" days={daysSince(t.mtime)} locale={locale} />
+                              ) : backoffByHash.has(t.hash) ? (
+                                <RetryingBadge mark={backoffByHash.get(t.hash)!} now={now} locale={locale} />
                               ) : (
                                 // 이어받기 링크는 늘어난 행 링크 위에 뜨게 둔다(위 deps 배지와 같은 이유)
                                 <span className="relative z-10">

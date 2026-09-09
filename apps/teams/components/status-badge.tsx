@@ -26,6 +26,7 @@ import {
   Play,
   Plug,
   Power,
+  RotateCw,
   TriangleAlert,
   Unplug,
   type LucideIcon,
@@ -49,6 +50,9 @@ export type Status =
   // `blocked`의 하위 종류가 아니다: `isPolling`은 `deps`·`unmet`을 안 본다(queue.ts isPolling)
   | "polling"
   | "pollingOverdue"
+  // 재시도 대기(§답변 대기는 사람이 답을 쓰는 자리 하나다 결정 2, P395-3) — `polling`과 같은
+  // 층의 또 다른 오버레이다. `readBackoff`가 읽는 표식이 있고 아직 만료 전일 때만 뜬다.
+  | "retrying"
   // 워커 4상태
   | "running"
   | "idle"
@@ -114,6 +118,9 @@ const STATUS: Record<Status, Spec> = {
   disconnected: { labelKey: "status.label.disconnected", icon: Unplug, variant: "outline", tint: STALE },
   // 정상 흐름의 사정이다(`idle`과 같은 중립) — 세션이 방금 적어 둔 상한을 기다리는 중일 뿐이다.
   polling: { labelKey: "status.label.polling", icon: Clock, variant: "secondary" },
+  // 정상 흐름의 사정이다(폴링과 같은 중립) — 아무것도 안 잃고 저절로 다시 도는 자리라
+  // `답변 대기`의 막힘 색(BLOCKED)을 안 쓴다. 아이콘도 갈려 실루엣이 안 겹친다.
+  retrying: { labelKey: "status.label.retrying", icon: RotateCw, variant: "secondary" },
   // 상한이 지났다 — 다음 tick이 답변 대기로 잠근다(§폴링 대기 결정 7). `assigned`와 같은
   // "고장은 아니지만 사람이 봐야 함" 색이다.
   pollingOverdue: {

@@ -1009,19 +1009,27 @@ export const inDefaultList = (t: Ticket, kind: string[], persona: string[]) =>
   (t.kind !== "answer" || kind.includes("answer")) &&
   (!archivesOf(t) || persona.includes(t.persona));
 
-export function filterTickets(tickets: Ticket[], query: BoardQuery): Ticket[] {
+export function filterTickets(
+  tickets: Ticket[],
+  query: BoardQuery,
+  /** 재시도 대기 해시 집합(P395-3) — 판정이 파일시스템(`readBackoff`)에 있어 이 함수(순수) 밖에서
+   *  구해 온다. `awaiting`과 같은 하위 종류 규칙: `open`을 고르면 재시도 대기도 딸려 오고,
+   *  `retrying`만 고르면 그것만 남는다. */
+  retryingHashes: ReadonlySet<string> = new Set(),
+): Ticket[] {
   const needle = norm(query.q.trim());
   return tickets.filter((t) => {
     if (!inDefaultList(t, query.kind, query.persona)) return false;
     if (query.kind.length && !query.kind.includes(t.kind)) return false;
     if (query.persona.length && !query.persona.includes(t.persona)) return false;
     if (query.epic !== null && epicOf(t) !== query.epic) return false;
-    // `답변 대기`는 `deps 대기`의 하위 종류다 — `blocked`를 고르면 답변 대기도 들어오고,
-    // `awaiting`을 고르면 그것만 남는다(statusOf는 여전히 `blocked`를 준다).
+    // `답변 대기`·`재시도 대기`는 `deps 대기`·`open`의 하위 종류다 — 부모 상태를 고르면 같이
+    // 들어오고, 그 이름만 고르면 그것만 남는다(statusOf는 여전히 부모 값을 준다).
     if (
       query.status.length &&
       !query.status.includes(statusOf(t)) &&
-      !(query.status.includes("awaiting") && isAwaiting(t))
+      !(query.status.includes("awaiting") && isAwaiting(t)) &&
+      !(query.status.includes("retrying") && retryingHashes.has(t.hash))
     )
       return false;
     if (!needle) return true;
@@ -1040,7 +1048,7 @@ export function filterTickets(tickets: Ticket[], query: BoardQuery): Ticket[] {
  *  대기까지 숨긴다고 읽힌다(사람 요청 `4578d715`).
  *  `assigned`가 있는 이유: 빼면 디스패치되지 않는 티켓이 테이블에서 사라진다 — GUI가 유일하게
  *  보여주는 고장 신호다(§0-2). */
-export const HIDE_DONE_STATUSES = ["open", "blocked", "awaiting", "assigned", "wip"];
+export const HIDE_DONE_STATUSES = ["open", "blocked", "awaiting", "assigned", "wip", "retrying"];
 
 /** 정렬 가능한 컬럼 = 테이블 컬럼 9개(§에픽 결정 7 — `epic` 컬럼이 스윔레인을 대신한다).
  *  URL의 `sort` 값은 이 목록으로 검증한다. */

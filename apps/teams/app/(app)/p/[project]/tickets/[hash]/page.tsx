@@ -23,6 +23,7 @@ import {
   OpenTicketFileButton,
   PollingControls,
   ReassignLine,
+  RetryControls,
   TicketEditForm,
   TicketFrontmatterPanel,
   UnassignButton,
@@ -61,9 +62,11 @@ import {
   TICKET_FORM_FIELD_KEYS,
   type Ticket,
 } from "@/lib/queue";
+import { localDir } from "@/lib/paths";
 import {
   getProject,
   listPersonas,
+  readBackoff,
   readLanguage,
   resolveConfig,
   squadNames,
@@ -362,6 +365,11 @@ export default async function TicketDetail({
   // 폴링 대기 절(DESIGN.md §폴링 대기 결정 9) — 지금 대기 중일 때만 부른다. 지운 뒤에도 남는
   // `polling_until`·`polled_at`(결정 7)은 이 회차의 범위 밖이다("지금 대기 중"만 보여준다).
   const polling = isPolling(ticket) ? await pollingDetailOf(project.root, ticket, now) : null;
+  // 재시도 대기 절(§답변 대기는 사람이 답을 쓰는 자리 하나다 결정 2·4, P395-3) — 열린 티켓만
+  // 후보다(`backoffOf`와 같은 풀). 만료 여부(`until`이 지금보다 미래인가)만 여기서 가르고,
+  // 표식 값 자체는 `readBackoff`가 이미 파일에서 읽은 것을 그대로 쓴다(다시 안 잰다).
+  const backoffMark = ticket.state === "open" ? await readBackoff(localDir(), ticket.hash) : null;
+  const backoff = backoffMark && backoffMark.until * 1000 > now.getTime() ? backoffMark : null;
   // `상한 늘리기` 입력의 초깃값 — `polling.until`은 오프셋 붙은 절대 시각이라(결정 2)
   // `datetime-local`에 그대로 못 넣는다. 로컬 시각으로 `YYYY-MM-DDTHH:mm`을 짠다(`lib/auth.ts`
   // 세션 만료 표시와 같은 관용구, 새 헬퍼를 안 만든다).
@@ -428,6 +436,12 @@ export default async function TicketDetail({
               `답변 대기`로 보이면 배지가 상태 표현의 유일한 출처인 의미가 없다(§1 보드) */}
           {isAwaiting(ticket) ? (
             <StatusBadge status="awaiting" days={daysSince(ticket.mtime)} locale={locale} />
+          ) : backoff ? (
+            <StatusBadge
+              status="retrying"
+              suffix={` · ${formatRemaining(backoff.until * 1000 - now.getTime(), locale)} ${t(locale, "common.suffix.remaining")}`}
+              locale={locale}
+            />
           ) : (
             <StatusBadge
               status={statusOf(ticket)}
@@ -753,6 +767,24 @@ export default async function TicketDetail({
               </div>
               {/* 손잡이 둘(§폴링 대기 §개정 3) — 상한을 넘기기 전에도 사람이 기다림을 끊는다. */}
               <PollingControls project={id} hash={hash} untilDefault={untilInputDefault} />
+            </section>
+          )}
+
+          {/* 재시도 대기 절(§답변 대기는 사람이 답을 쓰는 자리 하나다 결정 2·4, P395-3) — 답을
+              쓰는 칸은 없다(이 상태에는 물음이 없다). 사람이 하는 것은 `지금 다시 보내기` 하나뿐이다. */}
+          {backoff && (
+            <section className="space-y-2">
+              <h2 className="text-sm font-medium">{t(locale, "backoff.section.title")}</h2>
+              <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+                <dt className="text-muted-foreground">{t(locale, "backoff.field.count")}</dt>
+                <dd>{backoff.count}</dd>
+                <dt className="text-muted-foreground">{t(locale, "backoff.field.until")}</dt>
+                <dd>
+                  {dateTimeLabel(backoff.until * 1000, now.getTime())}
+                  {` · ${formatRemaining(backoff.until * 1000 - now.getTime(), locale)} ${t(locale, "common.suffix.remaining")}`}
+                </dd>
+              </dl>
+              <RetryControls project={id} hash={hash} />
             </section>
           )}
 

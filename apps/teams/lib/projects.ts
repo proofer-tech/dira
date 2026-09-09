@@ -741,7 +741,7 @@ export type ProjectSummary = {
    *  표식을 읽고, 여기서 만료(`until`)만 지금과 비교한다. 새 fs 읽기는 열린 티켓 수만큼이다
    *  (⑧의 표식 하나와 달리 티켓마다 파일이 갈린다 — 후보가 몇 안 되므로 §성능 예산 밖이다).
    *  못 읽은 프로젝트는 빈 배열이다(`assigned`의 그 규칙). */
-  backoff: { hash: string; stem: string; until: number; count: number }[];
+  backoff: BackoffCandidate[];
   /** 머신 상태(§0-14 — 셸 알림 종 ⑤·⑥). 프로젝트를 못 읽어도 값이 있다 — 머신이 큐보다 넓다.
    *  `machineState()`는 모듈 스코프 값을 읽기만 하므로 여기서 새 I/O가 0이다. */
   machine: MachineState;
@@ -809,10 +809,13 @@ export async function readSummary(project: Pick<Project, "root">): Promise<Proje
  *  (`/p/dira` 첫 GET이 분 단위로 걸리던 원인 중 하나). `readdir` 한 번으로 실제로 존재하는
  *  `backoff-*` 파일 이름만 추리면, 그 다음은 진짜 백오프가 걸린 티켓 수만큼만 연다 — 보통
  *  후보 전체가 아니라 정말 몇 안 된다. */
-async function backoffOf(
+/** 보드·티켓 상세가 재시도 대기 배지에 쓰는 값 하나(P395-3) — ⑨의 그 항목과 같은 모양이다. */
+export type BackoffCandidate = { hash: string; stem: string; until: number; count: number };
+
+export async function backoffOf(
   tickets: Ticket[],
   now: Date,
-): Promise<{ hash: string; stem: string; until: number; count: number }[]> {
+): Promise<BackoffCandidate[]> {
   const local = localDir();
   const nowMs = now.getTime();
   const names = await readdir(path.join(local, "run")).catch(() => [] as string[]);
