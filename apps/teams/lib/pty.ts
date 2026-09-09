@@ -180,12 +180,23 @@ const OSC_ESCAPE = /\x1b\][^\x07]*(?:\x07|\x1b\\)/g;
 // eslint-disable-next-line no-control-regex
 const SHORT_ESCAPE = /\x1b[=>]/g;
 
+/** PUA(사용자 정의 영역) — Powerline 글꼴(agnoster 등)이 구분자로 찍는 U+E0B0류가 여기 산다.
+ *  원티드산스는 이 영역에 글자가 없어 브라우저가 대체 글꼴을 못 골라 두부로 그린다
+ *  (§11-6 결정 2 §개정 — Powerline·Nerd 글꼴 자산은 안 들인다, 걷어낸다). */
+const PUA_CHAR = /[\u{E000}-\u{F8FF}\u{F0000}-\u{FFFFD}\u{100000}-\u{10FFFD}]/gu;
+
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHAR = /[\u{0}-\u{1F}\u{7F}-\u{9F}]/gu;
+
 /** 화면 기록 한 줄에서 사람이 친 명령을 집는다(§11-6 결정 2) — 단위 테스트가 이 함수 하나를
  *  잰다. ANSI·OSC·짧은 이스케이프를 걷어낸 뒤, 줄 안에 `\r`(개행 없이 커서만 처음으로 되돌리는
  *  재그리기 — zsh 라인 에디터가 키 하나마다 프롬프트째 다시 찍는 셸에서 나온다)이 있으면
  *  **마지막 `\r` 다음만** 남긴다 — 그 앞은 이전 키 입력의 재그리기라 이미 덮어써진 화면이다
- *  (버그 2, 이 티켓 — 이걸 안 자르면 재그리기가 누적돼 200자 상한이 최신 내용 도달 전에
- *  걸린다). 그 뒤 마지막 `$ ` - `% ` - `# ` 뒤를 집고, 셋 중 하나도 없으면 줄 전체다. */
+ *  (버그 2 — 이걸 안 자르면 재그리기가 누적돼 200자 상한이 최신 내용 도달 전에 걸린다). 그 뒤
+ *  `$ ` - `% ` - `# ` - **마지막 PUA 문자** 넷 중 가장 뒤에 있는 것 다음을 집고, 넷 다 없으면
+ *  줄 전체다(§개정 — agnoster류 Powerline 프롬프트는 `$ `로 안 끝나고 PUA 구분자 + 공백으로
+ *  끝나 이 표식이 없으면 줄 전체가 그대로 남는다). 마지막으로 남은 PUA와 C0/C1 제어문자를
+ *  지운다 — `\r` 자르기 **뒤**라야 마지막 `\r` 자체가 먼저 사라지는 일이 없다. */
 export function extractLastCommand(rawLine: string): string {
   const clean = rawLine.replace(OSC_ESCAPE, "").replace(ANSI_ESCAPE, "").replace(SHORT_ESCAPE, "");
   const redrawn = clean.lastIndexOf("\r") >= 0 ? clean.slice(clean.lastIndexOf("\r") + 1) : clean;
@@ -194,7 +205,12 @@ export function extractLastCommand(rawLine: string): string {
     const idx = redrawn.lastIndexOf(marker);
     if (idx > cut) cut = idx + marker.length;
   }
-  const picked = cut >= 0 ? redrawn.slice(cut) : redrawn;
+  for (const match of redrawn.matchAll(PUA_CHAR)) {
+    let idx = match.index + match[0].length;
+    if (redrawn[idx] === " ") idx += 1; // 기존 마커처럼 구분자 뒤 공백 한 칸까지 표식이다
+    if (idx > cut) cut = idx;
+  }
+  const picked = (cut >= 0 ? redrawn.slice(cut) : redrawn).replace(PUA_CHAR, "").replace(CONTROL_CHAR, "");
   // 상한을 넘으면 **뒤(최신 쪽)를 남긴다** — 사람이 방금 친 글자는 줄 끝에 있다.
   return picked.length > LAST_COMMAND_CAP ? picked.slice(-LAST_COMMAND_CAP) : picked;
 }

@@ -193,6 +193,41 @@ test("extractLastCommand follows a zsh full-line redraw prompt through every key
   assert.ok(!extractLastCommand(nextLine).endsWith("sleep 20")); // 첫 글자에 안 멈춘다
 });
 
+// 1908a719 — oh-my-zsh agnoster 프롬프트는 Powerline 구분자 U+E0B0을 세 번 찍고 `$ `/`% `/`# `
+// 중 어느 것으로도 안 끝난다(마지막 구분자 + 공백으로 끝난다). 실측 바이트는 아래 재현 명령의
+// 산출물(od -An -tx1)과 같다:
+//   cd /tmp && cat > agn.zsh <<'EOF'
+//   export AWS_PROFILE=Backend_Developer-282059277666
+//   source ~/.oh-my-zsh/themes/agnoster.zsh-theme
+//   out=$(build_prompt)
+//   print -rn -- "${(%)out} git status" | od -An -tx1
+//   EOF
+//   zsh -f agn.zsh
+function agnosterLine(typed: string): string {
+  const sep = String.fromCodePoint(0xe0b0);
+  return (
+    `\x1b[42m\x1b[30m AWS: Backend_Developer-282059277666 \x1b[40m\x1b[32m${sep}\x1b[39m` +
+    ` hsol@hsol \x1b[44m\x1b[30m${sep}\x1b[30m /tmp \x1b[49m\x1b[34m${sep}\x1b[39m ${typed}`
+  );
+}
+
+test("extractLastCommand picks the command after an agnoster Powerline prompt (PUA separator, no $/%/# tail)", () => {
+  assert.equal(extractLastCommand(agnosterLine("git status")), "git status");
+});
+
+test("extractLastCommand strips every PUA and C0/C1 control character from the picked command", () => {
+  const picked = extractLastCommand(agnosterLine("git status"));
+  for (const ch of picked) {
+    const cp = ch.codePointAt(0)!;
+    const isPua =
+      (cp >= 0xe000 && cp <= 0xf8ff) ||
+      (cp >= 0xf0000 && cp <= 0xffffd) ||
+      (cp >= 0x100000 && cp <= 0x10fffd);
+    const isControl = (cp >= 0x00 && cp <= 0x1f) || (cp >= 0x7f && cp <= 0x9f);
+    assert.ok(!isPua && !isControl, `unexpected PUA/control codepoint 0x${cp.toString(16)} in ${JSON.stringify(picked)}`);
+  }
+});
+
 test("writePty records the last command the moment Enter is seen, including recalled history", async () => {
   const cwd = tmpDir();
   const { id } = openPty(cwd, "/bin/sh") as { id: string };
