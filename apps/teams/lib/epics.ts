@@ -73,14 +73,33 @@ export async function listEpics(root: string, tickets: Ticket[]): Promise<Epic[]
   return sortEpics(epics);
 }
 
-/** 사이드바가 그리는 순서(§에픽 결정 22) — 1차 키는 **대기 또는 진행중 티켓이 하나라도 있는가**
- *  (`counts.open + counts.wip > 0`), 활성이 앞이다. 2차 키는 `listEpics`가 이미 낸 P번호 문자열
- *  오름차순이라 여기서 다시 정렬하지 않고 **안정 정렬에 기댄다**(`Array.prototype.sort`는
- *  ES2019부터 표준으로 안정적이다) — 스윔레인 띠(`epicsFromTickets`)·에픽 화면 첫 선택은
- *  이 함수를 안 거치는 그 P번호 순서 그대로다(§무수정). */
+/** `epic` 값에서 `P<숫자>` 꼴의 숫자만 뽑는다(§에픽 결정 17 §키 제안, §결정 22 §개정) — 이
+ *  정규식을 `suggestEpicKey`·`sortEpicsForSidebar` 둘이 나눠 쓰는 한 벌이다. */
+function epicPNumber(epic: string): number | null {
+  const m = /^P(\d+)$/.exec(epic);
+  return m ? Number(m[1]) : null;
+}
+
+/** 사이드바가 그리는 순서(§에픽 결정 22 §개정) — 1차 키는 **대기 또는 진행중 티켓이 하나라도
+ *  있는가**(`counts.open + counts.wip > 0`), 활성이 앞이다. 2차 키는 **P번호 숫자 내림차순**을
+ *  이 함수가 직접 낸다 — `listEpics`의 문자열 오름차순에 기대면 `P9`가 `P100`보다 위로 온다.
+ *  `P<숫자>` 꼴이 아닌 키는 자기 무리의 아래, 그런 키끼리는 문자열 오름차순, `(에픽 없음)`은
+ *  그 안에서도 맨 뒤다(결정 5가 그대로 통과한다). 스윔레인 띠(`epicsFromTickets`)·에픽 화면
+ *  첫 선택은 이 함수를 안 거치는 그 P번호 오름차순 그대로다(§무수정). */
 export function sortEpicsForSidebar(epics: Epic[]): Epic[] {
   const active = (e: Epic) => e.counts.open + e.counts.wip > 0;
-  return [...epics].sort((a, b) => Number(active(b)) - Number(active(a)));
+  return [...epics].sort((a, b) => {
+    const activeDiff = Number(active(b)) - Number(active(a));
+    if (activeDiff !== 0) return activeDiff;
+    const na = epicPNumber(a.epic);
+    const nb = epicPNumber(b.epic);
+    if (na !== null && nb !== null) return nb - na;
+    if (na !== null) return -1;
+    if (nb !== null) return 1;
+    if (a.epic === NO_EPIC) return 1;
+    if (b.epic === NO_EPIC) return -1;
+    return a.epic.localeCompare(b.epic);
+  });
 }
 
 /** `epic` 값은 URL에서 온다 — `../`가 큐(`root`) 밖으로 못 나간다(§경로 방어).
@@ -136,10 +155,7 @@ export async function epicReadmePath(root: string, epic: string): Promise<string
 /** 사이드바 입구의 키 칸 제안값(§에픽 결정 17 §키 제안) — 목록의 키 중 `P<숫자>` 꼴의 최댓값 + 1.
  *  그 꼴이 하나도 없으면 빈 문자열 — 규칙이 아니라 제안값 하나다(값 검증-정규화는 안 한다). */
 export function suggestEpicKey(epics: Epic[]): string {
-  const nums = epics
-    .map((e) => /^P(\d+)$/.exec(e.epic)?.[1])
-    .filter((n): n is string => n !== undefined)
-    .map(Number);
+  const nums = epics.map((e) => epicPNumber(e.epic)).filter((n): n is number => n !== null);
   return nums.length === 0 ? "" : `P${Math.max(...nums) + 1}`;
 }
 

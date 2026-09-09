@@ -237,7 +237,7 @@ test("README 저장 — 빈 제목·빈 내용을 막는다, 있는 파일은 �
   assert.strictEqual(readFileSync(path.join(root, "epics", "P273", "README.md"), "utf8"), before);
 });
 
-test("사이드바 정렬 — 대기·진행중 티켓을 든 에픽이 앞, 같은 무리 안에서는 P번호 오름차순(§에픽 결정 22)", () => {
+test("사이드바 정렬 — 대기·진행중 티켓을 든 에픽이 앞, 같은 무리 안에서는 P번호 숫자 내림차순(§에픽 결정 22 §개정)", () => {
   const mk = (epic: string, counts: { open: number; wip: number; done: number }) => ({
     epic,
     counts,
@@ -252,6 +252,30 @@ test("사이드바 정렬 — 대기·진행중 티켓을 든 에픽이 앞, 같
   assert.deepStrictEqual(
     sortEpicsForSidebar(epics).map((e) => e.epic),
     ["P2", "P1", "P10", "P3"],
+  );
+});
+
+test("사이드바 정렬 — 자릿수가 갈려도 숫자로 비교한다, P<숫자> 아닌 키는 자기 무리 아래·문자열 오름차순·(에픽 없음)이 맨 뒤(§개정)", () => {
+  const mk = (epic: string, counts: { open: number; wip: number; done: number }) => ({
+    epic,
+    counts,
+    workers: [],
+  });
+  const inactive = { open: 0, wip: 0, done: 1 };
+  const active = { open: 1, wip: 0, done: 0 };
+  const epics = [
+    mk("P9", inactive),
+    mk(NO_EPIC, inactive),
+    mk("Q1", inactive),
+    mk("P100", inactive),
+    mk("P99", active),
+    mk(NO_EPIC, active),
+    mk("Q1", active),
+    mk("P9", active),
+  ];
+  assert.deepStrictEqual(
+    sortEpicsForSidebar(epics).map((e) => e.epic),
+    ["P99", "P9", "Q1", NO_EPIC, "P100", "P9", "Q1", NO_EPIC],
   );
 });
 
