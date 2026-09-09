@@ -580,7 +580,9 @@ export function ExplorerPane({
   const t = useT();
   if (tabs.length === 0) return <EmptyState text={t("explorer.noFileOpen")} />;
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    // `pl-8 pr-6 pb-6 pt-2`(§비주얼 §78) — 셸 `main`의 종전 좌우-아래 패딩과 탭 줄의 규칙선
+    // 아래 여백이 여기로 옮겨 왔다. 픽셀은 그대로다.
+    <div className="flex min-h-0 flex-1 flex-col pl-8 pr-6 pb-6 pt-2">
       {tabs.map((tab) => {
         const entry = filesById[tab.id];
         return (

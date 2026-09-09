@@ -680,19 +680,19 @@ export function ShellHeaderRight({ children }: { children: React.ReactNode }) {
   return <div className="flex items-center gap-2">{children}</div>;
 }
 
-/** 프로젝트 셸 `main`(§비주얼 §74 §새로 정하는 것 ①). 홈에서만 `py-6` → `-mt-12 pt-18 pb-6`:
- *  위 마진 `-mt-12`(헤더 `h-12`의 48 인용)로 패딩 상자가 y 0에서 시작하고, `pt-18`(72 =
- *  헤더 48 + 종전 `py-6` 24)이 패널의 `-mt-18`이 닿을 자리를 정확히 남긴다. `main`이
- *  `overflow-y-auto`를 그대로 들고, 대화 컬럼(x 288 - 폭 1128)은 이 뺄셈에서 한 픽셀도
- *  안 움직인다(패딩 안쪽 상자가 y 72부터 그대로다). `px-6`과 `gap-6`은 다섯 화면과 같이
- *  써서 무수정이다. */
+/** 프로젝트 셸 `main`(§비주얼 §78 §바꾸는 값). 홈에서만 `px-6` 걷고 `py-6` → `-mt-12 pt-12`:
+ *  바깥 여백 넷이 0이 되어 몸통 셋(대화 컬럼 - 탐색기 - 터미널)이 각자 자기 안쪽 여백을
+ *  든다. 위 마진 `-mt-12`(헤더 `h-12`의 48 인용)로 패딩 상자가 y 0에서 시작하고, `pt-12`가
+ *  패널이 앞뒤로 안 움직이게 헤더 48을 지킨다. `main`이 `overflow-y-auto`를 그대로 들고,
+ *  대화 컬럼(x 288 - 폭 1128)은 이 뺄셈에서 한 픽셀도 안 움직인다. `px-6`-`py-6`-`gap-6`은
+ *  다섯 화면과 같이 써서 무수정이다. */
 export function ShellMain({ children }: { children: React.ReactNode }) {
   const home = screenOf(usePathname()) === "home";
   return (
     <main
       className={cn(
-        "flex min-h-0 w-full flex-1 flex-col gap-6 overflow-y-auto px-6",
-        home ? "-mt-12 pt-18 pb-6" : "py-6",
+        "flex min-h-0 w-full flex-1 flex-col gap-6 overflow-y-auto",
+        home ? "-mt-12 pt-12" : "px-6 py-6",
       )}
     >
       {children}

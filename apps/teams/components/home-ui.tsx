@@ -808,8 +808,8 @@ export function HomeUI({
 
       {/* 2단 행(§24 세로 배치 표 · §좌측 패널) — 페이지 루트의 **유일한 flex 항목**이라
           `main`의 패딩 안 남은 높이를 통째로 받는다.
-          `gap-8`(32)이 세로 리듬 `gap-6`(24)보다 큰 것이 두 단을 한 격자로 안 읽히게 하고,
-          그래서 §11처럼 구분선을 안 넣는다.
+          `gap-0`(§비주얼 §78) — 두 단을 가르는 것은 패널의 `border-r` 하나다. 종전 `gap-8`이
+          맡던 32는 우측 칸 몸통 안쪽 여백으로 옮겨 갔다.
           **이 행 자신이 `SidebarProvider`다**(§비주얼 §34 ①) — `Sidebar`가 `collapsible="none"`
           에서도 `useSidebar()`를 무조건 부르므로 Provider가 있어야 하는데, Provider가 내는 것도
           `flex` `div` 하나라 **새 요소가 0개다.** `layout.tsx`에 세우지 않는 이유는 2단이 없는
@@ -819,7 +819,7 @@ export function HomeUI({
           **0건이어도 이 행은 그대로 뜬다.** 안 그리는 것은 `Sidebar` 쪽이고(아래 조건문),
           그릇을 조건부로 갈아 끼우면 첫 질문을 보내는 순간 대화 컬럼이 통째로 remount돼
           폼의 포커스·IME가 날아간다(아래 §자식이 언제나 셋과 같은 근거). */}
-      <SidebarProvider className="min-h-0 flex-1 gap-8">
+      <SidebarProvider className="min-h-0 flex-1 gap-0">
         {/* 좌측 패널 — 그룹이 둘이다(`대화` · `워커 세션`). **대화 0건이면 패널째 안 그린다**
             (§24 §0건 갈래 ① — 워커 세션이 있어도 같이 빠진다: 첫 화면의 정본은 온보딩이고 그
             옆에 세션 목록이 뜨면 시선이 갈린다. 워커가 무엇을 했는지 보는 자리는 그 전에도 티켓
@@ -953,10 +953,12 @@ export function HomeUI({
               0건일 때 `justify-center` 한 클래스가 그 묶음을 세로 가운데로 올린다(§24 온보딩 항) —
               자리 이동은 이 클래스가 사라지는 것으로 끝난다. **`min-w-0`이 없으면** flex 자식
               기본값(`min-width:auto`)이라 답 안의 펜스·표 한 줄이 이 단을 밀어 패널을 찌그러뜨린다
-              (세로에서 `min-h-0`이 하는 일을 가로에서 이 클래스가 한다). */}
+              (세로에서 `min-h-0`이 하는 일을 가로에서 이 클래스가 한다).
+              **`pl-8 pr-6 pb-6 pt-2`**(§비주얼 §78) — 종전 셸 `main`의 좌우-아래 패딩과 탭 줄의
+              `mb-2`가 여기로 옮겨 왔다. 픽셀은 그대로다(x 288 - 오른쪽 변 1416 - 아래 872). */}
           <div
             className={cn(
-              "flex min-h-0 min-w-0 flex-1 flex-col gap-2",
+              "flex min-h-0 min-w-0 flex-1 flex-col gap-2 pl-8 pr-6 pb-6 pt-2",
               onboarding && "justify-center",
             )}
           >
@@ -1608,8 +1610,10 @@ function TabBar({
         : tab.id;
   return (
     // §72 ② §자리 표 §스크롤 그릇 — `pb-1.5`가 없으면 활성 표식(`after:h-0.5`)이 세로로 클리핑된다.
-    // §72 ② §재개정 — `-mt-6`이 헤더 `border-b`와 탭 줄 사이 24를 걷는다, `mb-2`가 규칙선 아래 8이다.
-    <div className="-mt-6 mb-2 overflow-x-auto border-b pb-1.5">
+    // §비주얼 §78 — 벗을 위 여백이 0이라 `-mt-6 mb-2`가 걷혔다. `pl-8`이 종전 거터 32를 들어
+    // 첫 탭의 왼쪽 변이 x 288 그대로다(패널 `border-r`과 헤더 `border-b`에 이어 붙는다).
+    // 규칙선 아래 8은 몸통 셋의 `pt-2`로 옮겨 갔다.
+    <div className="overflow-x-auto border-b pb-1.5 pl-8">
       <Tabs value={activeTab} onValueChange={(v) => onSelect(String(v))}>
         <TabsList variant="line" className="w-fit">
           {tabs.map((tab) => {
@@ -2023,7 +2027,11 @@ function TerminalSurface({
       <div className="min-h-0 flex-1">
         {tabs.map((tab) =>
           !disconnected.has(tab.id) ? (
-            <div key={tab.id} hidden={tab.id !== activeTab} className="h-full">
+            // ponytail: `bg-black`은 `@xterm/xterm` 기본 테마 `background`(`#000`)를 인용한
+            // 값이다 - `terminal-panel.tsx`가 `theme`을 안 넘겨 라이브러리 기본을 그대로 쓴다.
+            // xterm에 `theme`을 넘기기 시작하면 두 값이 어긋나 이음선이 보인다 - 그때 한
+            // 자리에서 읽게 고친다.
+            <div key={tab.id} hidden={tab.id !== activeTab} className="h-full bg-black">
               <TerminalPanel projectId={project} id={tab.id} onDisconnect={() => onDisconnect(tab.id)} />
             </div>
           ) : tab.id === activeTab ? (
@@ -2327,17 +2335,18 @@ function SidePanel({
     //  · `border`(네 변) → **`border-r` 하나**, 반경 유틸 제거(반경 0). 나머지 세 변은 새 값이
     //    필요 없다: 왼쪽은 창 끝, 위는 헤더의 `border-b`, 아래는 footer의 `border-t`다.
     //
-    // **§74가 위 한 변을 마저 올렸다** — `-my-6` → `-mt-18 -mb-6`(셸 `main`이 홈에서
-    // `-mt-12 pt-18 pb-6`을 들어 위 마진 72가 그 패딩에 정확히 닿는다), 상자 48-872 →
-    // 0-872, `relative z-50`이 늘어 헤더(`sticky z-50`) 위로 패널이 이긴다(§비주얼 §74 ①).
+    // **§비주얼 §78** — 벗을 여백이 아래·왼쪽에 0이라 `-mb-6 -ml-6`이 걷혔다. 위 한 변만
+    // 남는다: `-mt-12`(셸 `main`이 홈에서 `-mt-12 pt-12`를 들어 위 마진 48이 헤더 높이에
+    // 정확히 닿는다), 상자는 앞뒤로 x 0 - y 0 - 256x872 그대로다. `relative z-50`이 늘어
+    // 헤더(`sticky z-50`) 위로 패널이 이긴다(§비주얼 §74 ①).
     // **면 `bg-surface`와 폭 `w-64 shrink-0`은 안 갈린다** — 요구가 뒤집은 것은 *떠 있는
     // 카드*이지 *자기 몸을 갖는 면*이 아니다. 면까지 걷으면 패널이 페이지와 같은 몸이 되고
     // 요구가 시킨 *왼쪽 영역을 차지한다*가 화면에서 사라진다(§39 §남는 규칙 1).
-    // 대화 컬럼은 312 → 288로 **같이 옮겨 간다**(§39 ②). 312는 아무도 고른 적 없는 산술
-    // 결과이고 지켜야 할 것은 `gap-8`이라 거터도 컬럼 클래스도 무수정이다.
+    // 대화 컬럼 x 288은 그대로다 — `SidebarProvider`의 `gap-0`이 §78에서 갈렸어도 패널
+    // 폭 256이 그 자리를 이미 정한다.
     <Sidebar
       collapsible="none"
-      className="relative z-50 -mt-18 -mb-6 -ml-6 h-auto w-64 shrink-0 border-r bg-surface"
+      className="relative z-50 -mt-12 h-auto w-64 shrink-0 border-r bg-surface"
     >
       {/* 위 단 — 표면 줄(§11 결정 7 · §비주얼 §72 ① 개정). **스크롤러 밖이다** — `SidebarContent`
           안에 두면 아래 그룹이 길어질 때 이 줄이 화면에서 밀려 사라진다. 헤더 패딩은
