@@ -1583,8 +1583,9 @@ function TabBar({
         ? (tab.cwd ?? tab.id)
         : tab.id;
   return (
-    // §72 ② §자리 표 §스크롤 그릇 — `pb-1`이 없으면 활성 표식(`after:h-0.5`)이 세로로 클리핑된다.
-    <div className="overflow-x-auto border-b pb-1">
+    // §72 ② §자리 표 §스크롤 그릇 — `pb-1.5`가 없으면 활성 표식(`after:h-0.5`)이 세로로 클리핑된다.
+    // §72 ② §재개정 — `-mt-6`이 헤더 `border-b`와 탭 줄 사이 24를 걷는다, `mb-2`가 규칙선 아래 8이다.
+    <div className="-mt-6 mb-2 overflow-x-auto border-b pb-1.5">
       <Tabs value={activeTab} onValueChange={(v) => onSelect(String(v))}>
         <TabsList variant="line" className="w-fit">
           {tabs.map((tab) => {
