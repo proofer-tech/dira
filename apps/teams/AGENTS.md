@@ -384,9 +384,19 @@ catch가 무조건 그 경로라 파일 배치로는 못 고친다(위 둘째 �
 | | |
 |---|---|
 | `pnpm dev` | 개발 서버 (localhost:7331, `PORT=...`로 덮어쓴다) |
-| `pnpm build` | 프로덕션 빌드 + 타입체크. **티켓 완료 전에 반드시 통과** |
+| `pnpm build` | 프로덕션 빌드 + 타입체크. **티켓 완료 전에 반드시 통과 - 단, 아래 조건부 규칙을 먼저 본다** |
 | `pnpm test` | `node --test "lib/**/*.test.ts"` |
 | `pnpm lint` | eslint |
+
+**`pnpm build`는 조건부다.** `git diff --stat`이 `apps/teams/**`를 한 줄도 안 짚으면
+`pnpm build`를 안 부른다 - 그 diff는 `next build`의 입력이 아니다.
+
+```bash
+git diff --stat master -- apps/teams   # 빈 출력이면 안 부른다. 한 줄이라도 있으면 부른다
+```
+
+- 걸리는 예 - `docs/DESIGN.md`나 `.dira/protocols/`만 고친 스펙 티켓. `pnpm build` 생략.
+- 안 걸리는 예 - `apps/teams/components/home-ui.tsx`를 한 줄이라도 고친 티켓. `pnpm build` 필수.
 
 **`pnpm dev`를 끄는 규칙.** `.dira/protocols/cdp.md`가 브라우저를 끝나면 죽이라고 정한 것과
 같은 규칙을 dev 서버에도 적용한다.
