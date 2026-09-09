@@ -1139,6 +1139,12 @@ export const ko: Record<string, string> = {
   "frontmatterRows.searchPlaceholder": "검색",
   "frontmatterRows.searchEmpty": "일치하는 항목 0건",
 
+  // 요구 `065319b7` — 값 전체가 위키링크인 칸의 태그(§비주얼 §개정 3, 결정 18)
+  "frontmatterRows.tagNavigatePrefix": "",
+  "frontmatterRows.tagNavigateSuffix": " 문서로 이동",
+  "frontmatterRows.clearValuePrefix": "",
+  "frontmatterRows.clearValueSuffix": " 값 지우기",
+
   "ticketFrontmatter.saveFailedTitle": "저장하지 못했습니다",
   "ticketFrontmatter.saved": "저장됐습니다.",
 
@@ -3899,6 +3905,11 @@ export const en: Record<string, string> = {
   "frontmatterRows.pickValueLabel": "Pick from value candidates",
   "frontmatterRows.searchPlaceholder": "Search",
   "frontmatterRows.searchEmpty": "No matching items",
+
+  "frontmatterRows.tagNavigatePrefix": "Go to document ",
+  "frontmatterRows.tagNavigateSuffix": "",
+  "frontmatterRows.clearValuePrefix": "Clear value for ",
+  "frontmatterRows.clearValueSuffix": "",
 
   "ticketFrontmatter.saveFailedTitle": "Couldn't save",
   "ticketFrontmatter.saved": "Saved.",

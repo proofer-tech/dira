@@ -17,11 +17,13 @@
  *  안 탄다) - 매 키 입력이 곧 커밋이라 마지막 편집이 버려질 자리가 없다. */
 import { useState } from "react";
 import { ChevronDown, Plus, X } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Input } from "@/components/ui/input";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import type { Vault } from "@/lib/markdown-wikilinks";
 import { cn } from "@/lib/utils";
 import {
   type FrontmatterCandidates,
@@ -65,6 +67,76 @@ const FM_VALUE_LAYOUT = "basis-0 grow min-w-16";
 function indentStyle(level: number) {
   const px = INDENT_BASE_PX + Math.min(level, INDENT_MAX_LEVEL) * INDENT_STEP_PX;
   return { "--fm-indent": `${px}px` } as React.CSSProperties;
+}
+
+/** 값 칸 §개정 3(결정 17) - 앞뒤 공백과 감싼 따옴표를 뗀 나머지가 `[[...]]` 하나인가만 본다.
+ *  키로 안 가르고, `[[`를 품었는지도 안 본다 - `.../epics/[[...epic]]/page.tsx` 같은 Next.js
+ *  catch-all 경로는 값 전체가 위키링크가 아니라 이미 걸러진다. `markdown-wikilinks.ts`의 낱개
+ *  판정(문장 안 다건)과 갈라 이 칸 전용으로 둔다 - 그 파일은 무수정이다(결정 18). */
+function parseWikilinkValue(value: string): { name: string; display: string } | null {
+  let s = value.trim();
+  if (s.length >= 2) {
+    const first = s[0];
+    const last = s[s.length - 1];
+    if ((first === '"' && last === '"') || (first === "'" && last === "'")) s = s.slice(1, -1).trim();
+  }
+  const m = /^\[\[([^\]]+)\]\]$/.exec(s);
+  if (!m) return null;
+  const inner = m[1];
+  const bar = inner.indexOf("|");
+  const namePart = (bar === -1 ? inner : inner.slice(0, bar)).trim();
+  const display = (bar === -1 ? inner : inner.slice(bar + 1)).trim();
+  return { name: namePart.replace(/\.md$/, ""), display };
+}
+
+/** 태그 한 벌(§비주얼 §개정 3, 결정 16-18) - `Badge variant="secondary"`에 이름과 x 손잡이
+ *  하나. `vault`에 이름이 있으면 `<a>`(누르면 그 문서로), 없으면 댕글링 `<span>`(점선 밑줄 +
+ *  네이티브 `title`)이다. x는 값만 지운다(행 삭제 X와 별개, 접근명도 다르다). */
+function WikilinkTag({
+  name,
+  display,
+  href,
+  removeAriaLabel,
+  onRemove,
+}: {
+  name: string;
+  display: string;
+  href?: string;
+  removeAriaLabel: string;
+  onRemove: () => void;
+}) {
+  const t = useT();
+  const navBase = `${t("frontmatterRows.tagNavigatePrefix")}${name}${t("frontmatterRows.tagNavigateSuffix")}`;
+  const navLabel = href ? navBase : `${navBase}, ${t("markdownWikilinks.noTarget")}`;
+  return (
+    <Badge
+      variant="secondary"
+      className="max-w-full font-mono has-[a:focus-visible]:ring-3 has-[a:focus-visible]:ring-ring/50"
+    >
+      {href ? (
+        <a href={href} aria-label={navLabel} className="min-w-0 truncate outline-none hover:underline underline-offset-2">
+          {display}
+        </a>
+      ) : (
+        <span
+          aria-label={navLabel}
+          title={t("markdownWikilinks.noTarget")}
+          className="min-w-0 truncate underline decoration-dotted underline-offset-2"
+        >
+          {display}
+        </span>
+      )}
+      <button
+        type="button"
+        data-icon="inline-end"
+        aria-label={removeAriaLabel}
+        className="size-5 shrink-0 rounded-4xl outline-none hover:bg-secondary-foreground/15 focus-visible:ring-3 focus-visible:ring-ring/50"
+        onClick={onRemove}
+      >
+        <X aria-hidden className="size-3" />
+      </button>
+    </Badge>
+  );
 }
 
 /** 새로 더할 행의 갈래 - 클릭한 행의 갈래를 물려받는다(부모 행 아래는 쌍으로 - 그 밖은 클릭한
@@ -162,6 +234,7 @@ function BracketListValue({
   onPaste,
   onKeyDown,
   candidateOptions,
+  vault,
 }: {
   className?: string;
   rowKey: string | null;
@@ -172,6 +245,9 @@ function BracketListValue({
   /** 값 검색 후보(결정 7·9, 티켓 `dc6364a4`) - 있으면 항목마다 `CandidateCombobox`, 없으면
    *  종전 그대로 평범한 `Input`(`aliases: [...]`처럼 후보가 없는 목록형 값이 이 갈래다). */
   candidateOptions?: string[] | null;
+  /** §개정 3(결정 17) - 항목마다 판정해 위키링크인 항목만 태그로 뒤집는다(`relatedViews` -
+   *  `viewOf`). 그 항목의 x는 §목록형 값의 항목 제거와 같은 일이라 줄 끝 손잡이를 안 그린다. */
+  vault?: Vault | null;
 }) {
   const t = useT();
   const items = splitListValue(value);
@@ -194,50 +270,70 @@ function BracketListValue({
   return (
     <div className={className}>
       <div className="flex flex-col gap-1">
-        {displayItems.map((item, idx) => (
-          <div key={idx} className="flex items-center gap-1">
-            {candidateOptions ? (
-              <CandidateCombobox
-                className="min-w-0 grow"
-                ariaLabel={`${label} ${idx + 1}`}
-                pickAriaLabel={t("frontmatterRows.pickValueLabel")}
-                value={item}
-                onValueChange={(v) => {
+        {displayItems.map((item, idx) => {
+          const wiki = parseWikilinkValue(item);
+          const removeLabel = `${t("frontmatterRows.removeListItemPrefix")}${label} ${idx + 1}${t("frontmatterRows.removeListItemSuffix")}`;
+          if (wiki) {
+            return (
+              <div key={idx} className="flex items-center">
+                <WikilinkTag
+                  name={wiki.name}
+                  display={wiki.display}
+                  href={vault?.[wiki.name]}
+                  removeAriaLabel={removeLabel}
+                  onRemove={() => {
+                    setPendingEmpty(false);
+                    setItems(items.filter((_, j) => j !== idx));
+                  }}
+                />
+              </div>
+            );
+          }
+          return (
+            <div key={idx} className="flex items-center gap-1">
+              {candidateOptions ? (
+                <CandidateCombobox
+                  className="min-w-0 grow"
+                  ariaLabel={`${label} ${idx + 1}`}
+                  pickAriaLabel={t("frontmatterRows.pickValueLabel")}
+                  value={item}
+                  onValueChange={(v) => {
+                    setPendingEmpty(false);
+                    setItems(displayItems.map((val, j) => (j === idx ? v : val)));
+                  }}
+                  options={candidateOptions}
+                  onPaste={onPaste}
+                  onKeyDown={onKeyDown}
+                />
+              ) : (
+                <Input
+                  aria-label={`${label} ${idx + 1}`}
+                  className="min-w-0 grow font-mono"
+                  value={item}
+                  onChange={(e) => {
+                    setPendingEmpty(false);
+                    setItems(displayItems.map((v, j) => (j === idx ? e.target.value : v)));
+                  }}
+                  onPaste={onPaste}
+                  onKeyDown={onKeyDown}
+                />
+              )}
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                aria-label={removeLabel}
+                className="shrink-0 opacity-60 hover:opacity-100"
+                onClick={() => {
                   setPendingEmpty(false);
-                  setItems(displayItems.map((val, j) => (j === idx ? v : val)));
+                  setItems(items.filter((_, j) => j !== idx));
                 }}
-                options={candidateOptions}
-                onPaste={onPaste}
-                onKeyDown={onKeyDown}
-              />
-            ) : (
-              <Input
-                aria-label={`${label} ${idx + 1}`}
-                className="min-w-0 grow font-mono"
-                value={item}
-                onChange={(e) => {
-                  setPendingEmpty(false);
-                  setItems(displayItems.map((v, j) => (j === idx ? e.target.value : v)));
-                }}
-                onPaste={onPaste}
-                onKeyDown={onKeyDown}
-              />
-            )}
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-xs"
-              aria-label={`${t("frontmatterRows.removeListItemPrefix")}${label} ${idx + 1}${t("frontmatterRows.removeListItemSuffix")}`}
-              className="shrink-0 opacity-60 hover:opacity-100"
-              onClick={() => {
-                setPendingEmpty(false);
-                setItems(items.filter((_, j) => j !== idx));
-              }}
-            >
-              <X aria-hidden />
-            </Button>
-          </div>
-        ))}
+              >
+                <X aria-hidden />
+              </Button>
+            </div>
+          );
+        })}
         <Button
           type="button"
           variant="ghost"
@@ -258,6 +354,7 @@ export function FrontmatterRowsEditor({
   onPaste,
   onKeyDown,
   candidates,
+  vault,
 }: {
   head: string;
   onHeadChange: (head: string) => void;
@@ -266,6 +363,10 @@ export function FrontmatterRowsEditor({
   /** 후보 원천 여섯(결정 8) - 없으면 모든 칸이 종전대로 평범한 입력 칸이다(§10 §키 추천/값
    *  검색이 없는 호출부, 예: `?` 미만 옵션). */
   candidates?: FrontmatterCandidates | null;
+  /** §개정 3(결정 17-18) - 값 전체가 위키링크인 칸을 태그로 그릴 때 이동 대상을 찾는 사상.
+   *  `buildVault`가 내는 <이름 -> 파일> 벌 그대로다. 판정 자체(태그인가 아닌가)는 이 값과
+   *  무관하다 - 없으면 이동 대상이 안 잡혀 모든 태그가 댕글링(`<span>`)으로 뜬다. */
+  vault?: Vault | null;
 }) {
   const t = useT();
   const doc = parseFrontmatterHead(head);
@@ -309,6 +410,7 @@ export function FrontmatterRowsEditor({
             : `${t("frontmatterRows.removeKeyPrefix")}${row.key ?? ""}${t("frontmatterRows.removeKeySuffix")}`;
         const keyOptions = candidates ? keyCandidates(doc.rows, i, candidates) : [];
         const valueOptions = candidates ? valueCandidates(doc.rows, i, candidates) : null;
+        const wikilinkValue = parseWikilinkValue(row.value ?? "");
         return (
           <div
             key={i}
@@ -352,7 +454,18 @@ export function FrontmatterRowsEditor({
                   onPaste={onPaste}
                   onKeyDown={onKeyDown}
                   candidateOptions={valueOptions}
+                  vault={vault}
                 />
+              ) : wikilinkValue ? (
+                <div className={FM_VALUE_LAYOUT}>
+                  <WikilinkTag
+                    name={wikilinkValue.name}
+                    display={wikilinkValue.display}
+                    href={vault?.[wikilinkValue.name]}
+                    removeAriaLabel={`${t("frontmatterRows.clearValuePrefix")}${row.key ?? ""}${t("frontmatterRows.clearValueSuffix")}`}
+                    onRemove={() => commit(updateRow(doc.rows, i, { key: row.key, value: "" }))}
+                  />
+                </div>
               ) : valueOptions ? (
                 <CandidateCombobox
                   className={FM_VALUE_LAYOUT}

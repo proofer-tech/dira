@@ -361,6 +361,7 @@ export function MarkdownEditor({
                       onPaste={onPaste}
                       onKeyDown={onKeyDown}
                       candidates={candidates}
+                      vault={vault}
                     />
                   ) : (
                     <div
