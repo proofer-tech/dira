@@ -2709,32 +2709,21 @@ const MemorySection = memo(function MemorySection({
             return (
               <li key={m.file} className="flex items-baseline gap-2">
                 {/* 줄 전체가 손잡이다(§32 §개정 §줄이 버튼이 된다) — `삭제`는 이 버튼의
-                    형제로 밖에 남는다. `<details>`가 걷히면서 `preventDefault` 함정도 없어졌다. */}
+                    형제로 밖에 남는다. `<details>`가 걷히면서 `preventDefault` 함정도 없어졌다.
+                    chevron과 발췌 슬롯이 걷혀 손잡이 표식은 호버 면 하나가 든다(§32 §개정 2
+                    §designer가 고른 값 넷 — 이 앱에 <다른 면으로 가는 chevron>이 0개였다) */}
                 <button
                   type="button"
-                  className="flex min-w-0 grow cursor-pointer items-baseline gap-2 text-left"
+                  className="grow cursor-pointer rounded px-1 -mx-1 text-left hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring"
                   onClick={() => {
                     setCurrent(memName);
                     setHistory([]);
                   }}
                 >
-                  <ChevronRight
-                    aria-hidden
-                    className="size-4 shrink-0 self-center text-muted-foreground"
-                  />
                   {/* 파일명이 곧 개념 이름이고 `[[링크]]`가 가리키는 값이다 — 안 자른다(§6 식별자).
                       `.md`를 떼는 것은 계약이다(§5-2). 확장자가 붙는 자리는 삭제 확인 하나다.
-                      한글 문장이라 감기면 낱말 안이 안 갈린다 — `shrink-0`을 스킬 이름과 달리
-                      벗는다(§비주얼 §66 ⑭) */}
-                  <code className="font-mono text-xs @4xl:shrink">{memName}</code>
-                  {/* `title`을 안 붙인다 — 전문을 보는 자리가 이 줄을 누르는 것이다(§32 ③).
-                      발췌가 비는 파일(빈 파일·공백뿐)도 파일명으로 목록에 뜬다(§5-2). 1/3 칸에서는
-                      2행으로 내려가 칸 폭을 전부 얻는다(§비주얼 §66 ⑭). `line-clamp-1` —
-                      `truncate`(nowrap)의 min-content가 트랙 최소를 밀어 올리던 것을 막는다
-                      (§66 ⑭ 개정, 요구 `7df39918`) */}
-                  <span className="min-w-0 grow line-clamp-1 text-xs text-muted-foreground @4xl:order-last @4xl:basis-full">
-                    {m.excerpt}
-                  </span>
+                      발췌 슬롯이 죽어 이 칸이 폭을 다 얻는다(§32 §개정 2 값 2) */}
+                  <code className="font-mono text-xs">{memName}</code>
                 </button>
                 <DeleteMemoryButton
                   projectId={projectId}

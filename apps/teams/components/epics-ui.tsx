@@ -5,7 +5,7 @@
  *  골격이지만 그 파일은 페르소나 편집 상태(`edits`)에 깊이 얽혀 있어 그대로 재사용할 수 없다 —
  *  여기는 훨씬 얇다(추가·편집이 아예 없다). */
 import { useState, useTransition } from "react";
-import { ChevronLeft, ChevronRight, ExternalLink, Trash2, TriangleAlert } from "lucide-react";
+import { ChevronLeft, ExternalLink, Trash2, TriangleAlert } from "lucide-react";
 import {
   deleteEpicMemoryAction,
   openEpicReadmeAction,
@@ -244,22 +244,18 @@ export function EpicMemorySection({
             const name = m.file.replace(/\.md$/, "");
             return (
               <li key={m.file} className="flex items-baseline gap-2">
+                {/* §32 §개정 2 §designer가 고른 값 넷 — chevron과 발췌 슬롯이 걷히고
+                    호버 면 하나가 손잡이 표식을 든다. personas-ui.tsx의 메모리 줄과
+                    글자까지 같은 벌이다(상속, §비주얼 에픽 화면 2단) */}
                 <button
                   type="button"
-                  className="flex min-w-0 grow cursor-pointer items-baseline gap-2 text-left"
+                  className="grow cursor-pointer rounded px-1 -mx-1 text-left hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring"
                   onClick={() => {
                     setCurrent(name);
                     setHistory([]);
                   }}
                 >
-                  <ChevronRight
-                    aria-hidden
-                    className="size-4 shrink-0 self-center text-muted-foreground"
-                  />
-                  <code className="shrink-0 font-mono text-xs">{name}</code>
-                  <span className="min-w-0 grow truncate text-xs text-muted-foreground">
-                    {m.excerpt}
-                  </span>
+                  <code className="font-mono text-xs">{name}</code>
                 </button>
                 <DeleteMemoryButton
                   projectId={projectId}
