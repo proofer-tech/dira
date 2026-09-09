@@ -353,33 +353,35 @@ try:
     n1b = open(pn1b, encoding="utf-8").read()
     assert "상자는 다 찼고 rename만 안 됐습니다" in n1b, "N1b: 미체크 0개 문구가 안 떴다\n" + n1b
 
-    # N2) 요청 오류 - 수용조건 2
+    # N2) 요청 오류 - §답변 대기 결정 1 뒤로 `_DEAD_REASON_INFO`에서 빠졌다(사람이 쓸 답이
+    # 없어 `reclaim`이 이 자리에 닿기 전에 백오프로 접는다, P395-2). `ask_human`을 직접 불러도
+    # 이제는 알 수 없음 갈래(고정 선택지 넷)로 떨어진다 - N5와 같은 모양이 되는 것이 계약이다.
     write_log([L("2026-08-30 10:00:00", "pw1", "nnnn0002", "DISPATCH {h} kind=work"),
                L("2026-08-30 10:01:00", "pw1", "nnnn0002", "FAIL {h} 세션이 result is_error로 끝났다 -> 꼬리")])
     pn2 = n_mk("nnnn0002")
     T.ask_human(pn2, "nnnn0002", 3, "자동 회수", blocked=False)
     n2 = open(pn2, encoding="utf-8").read()
-    assert "요청 오류로 끝났습니다" in n2, "N2: 요청 오류 문항이 안 떴다\n" + n2
-    assert T.read_fm(pn2)[0].get("default_answer") == "1.(b)", "N2: default_answer가 1.(b)가 아니다"
+    assert "### 1. 이 티켓을 어떻게 할까요" in n2, "N2: 요청 오류가 알 수 없음 갈래로 안 접혔다\n" + n2
+    assert T.read_fm(pn2)[0].get("default_answer") == "1.(a)", "N2: default_answer가 1.(a)가 아니다"
 
-    # N3) 주입 실패 -> "기동 실패" 문항으로 접힌다(표에 없는 내부 갈림)
+    # N3) 기동 실패도 같은 이유로 알 수 없음 갈래로 접힌다.
     write_log([L("2026-08-30 10:00:00", "pw1", "nnnn0003", "DISPATCH {h} kind=work"),
                L("2026-08-30 10:01:00", "pw1", "nnnn0003",
                  "STALL {h} 30s 안에 이어받기 주입 뒤 출력이 안 자랐다 - 기동 실패")])
     pn3 = n_mk("nnnn0003")
     T.ask_human(pn3, "nnnn0003", 3, "자동 회수", blocked=False)
     n3 = open(pn3, encoding="utf-8").read()
-    assert "프롬프트 주입 단계에서 못 떴습니다" in n3, "N3: 주입 실패가 기동 실패 문항으로 안 접혔다\n" + n3
-    assert T.read_fm(pn3)[0].get("default_answer") == "1.(b)", "N3: default_answer가 1.(b)가 아니다"
+    assert "### 1. 이 티켓을 어떻게 할까요" in n3, "N3: 기동 실패가 알 수 없음 갈래로 안 접혔다\n" + n3
+    assert T.read_fm(pn3)[0].get("default_answer") == "1.(a)", "N3: default_answer가 1.(a)가 아니다"
 
-    # N4) 상한 초과
+    # N4) 상한 초과도 같은 이유로 알 수 없음 갈래로 접힌다.
     write_log([L("2026-08-30 10:00:00", "pw1", "nnnn0004", "DISPATCH {h} kind=work"),
                L("2026-08-30 10:05:00", "pw1", "nnnn0004", "TIMEOUT {h} 240s 초과 강제종료 -> 꼬리")])
     pn4 = n_mk("nnnn0004")
     T.ask_human(pn4, "nnnn0004", 3, "자동 회수", blocked=False)
     n4 = open(pn4, encoding="utf-8").read()
-    assert "실행 상한을 넘겨 강제종료됐습니다" in n4, "N4: 상한 초과 문항이 안 떴다\n" + n4
-    assert T.read_fm(pn4)[0].get("default_answer") == "1.(c)", "N4: default_answer가 1.(c)가 아니다"
+    assert "### 1. 이 티켓을 어떻게 할까요" in n4, "N4: 상한 초과가 알 수 없음 갈래로 안 접혔다\n" + n4
+    assert T.read_fm(pn4)[0].get("default_answer") == "1.(a)", "N4: default_answer가 1.(a)가 아니다"
 
     # N5) 알 수 없음 - runner.log를 지우면 결정 17 (3)의 고정 선택지 넷으로 그대로 떨어진다
     os.remove(os.path.join(ws, "workers", "runner.log"))

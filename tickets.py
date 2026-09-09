@@ -528,10 +528,12 @@ REAP_FAIL_BUDGET_BAD_REQUEST = 2    # 짧다 - bad_request는 재시도해도 �
 # 같은 상한에서 바로 사람에게 올린다.
 REAP_FAIL_BUDGET_OTHER = 10         # 길다 - 실측(승인 표): 예산을 10으로 걸어도 넘긴 티켓 49장
 # 전부가 사람 개입 없이 재디스패치만으로 완료됐다(100%). 사람에게 안 올리고 백오프로 돌린다.
-REAP_BACKOFF_SEC = 600              # 백오프 창 - 엔진 쿨다운(`tick.sh` CDOWN_W=300)의 두 배.
-# 다른 엔진 불능 없이 이 티켓 하나만 쉬게 하면서 다른 티켓엔 방해가 안 되는 만큼만 기다린다.
-REAP_BACKOFF_CAP = 5                # 이 횟수를 넘기면 백오프를 안 걸고 종전대로(즉시) 다시 뜬다
-# - 무한 대기(원칙 ②의 방치)를 막는 상한(<뒤집는 조건>, REAP_POST_GRACE_SEC 위 주석과 같은 값).
+REAP_BACKOFF_SEC = 600              # 백오프 첫 항(누적 1회째) - 엔진 쿨다운(`tick.sh`
+# CDOWN_W=300)의 두 배. 다른 엔진 불능 없이 이 티켓 하나만 쉬게 하면서 다른 티켓엔 방해가
+# 안 되는 만큼만 기다린다. 둘째 항부터는 피보나치 배수로 자란다(§답변 대기 결정 3, P395-2) -
+# 서른세 번째 승인이 걸었던 누적 5회 상한은 그 승인이 뒤집혀 없앤다. 상한 없는 대기가
+# 방치인 것은 아무도 안 집을 때뿐인데, 피보나치 재시도는 대기가 얼마나 길어져도 티켓이
+# 반드시 다시 뜬다.
 
 # 손 클레임(대화형 세션) 판정용. 디스패처 세션과 달리 ps에 --session-id가 안 뜨므로
 # session_id로는 생존을 볼 수 없다(실측 2026-07-29). pid + 트랜스크립트로 대신 본다.
@@ -907,39 +909,19 @@ def _ask_options(n):
     return "\n### {}. {}".format(n, _ASK_OPTIONS_BODY)
 
 
-# 결정 17 (2)(4) - 죽은 갈래 사유별 문항 - 선택지 - default_answer. `재시도`가 뜻이 통하는
-# 넷(한도 - 요청 오류 - 기동 실패 - 상한 초과)은 선택지를 새로 안 쓰고 `_RETRY_OPTIONS`를
-# 그대로 쓴다(결정 17 - "사유마다 선택지 넷을 새로 쓰지 않는다"). 무종료 마감만 갈린다 -
-# 세션이 끝까지 돌고 안 닫힌 것이라 "다시 시도한다"가 뜻이 안 통한다.
-_RETRY_OPTIONS = ("- (a) 다시 시도한다 - 트리를 안 고치고 그대로 다시 보낸다\n"
-                   "- (b) 내가 손보고 나서 다시 시도한다\n"
-                   "- (c) 그만둔다 - 이 티켓을 닫는다\n"
-                   "- (d) 아래 칸에 직접 쓴다\n")
-
 _STALL_OPTIONS = ("- (a) 남은 `## Done when`을 사람이 판정해서 이 티켓을 닫는다\n"
                    "- (b) 남은 범위만 새 티켓으로 쪼개서 넘긴다\n"
                    "- (c) `## Done when`이 한 세션에 안 드는 크기다 - 이 티켓을 쪼갠다\n"
                    "- (d) 아래 칸에 직접 쓴다\n")
 
 # 사유 -> (정형문에 적을 근거 절 - 결정 (6), `### 1.` 문항 전문 - 결정 표 그대로, 선택지,
-# default_answer - 결정 (4)). `{n}`은 attempts(세션 회수)로 채운다. `dead_reason`이 내는
-# "주입 실패"는 여섯 벌에 없는 내부 갈림이라 호출부가 "기동 실패" 키로 접어 찾는다.
+# default_answer - 결정 (4)). `{n}`은 attempts(세션 회수)로 채운다.
+# §답변 대기 결정 1 - 한도-요청 오류-기동 실패-상한 초과 넷은 사람이 쓸 답이 없어 `reclaim`이
+# 이 사전에 닿기 전에 백오프로 접는다(P395-2) - 무종료 마감만 여기 남는다.
 _DEAD_REASON_INFO = {
     "무종료 마감": (
         "세션 {n}회가 전부 끝까지 돌고도 이 티켓을 안 닫았습니다",
         ". 남은 것을 어떻게 할까요", _STALL_OPTIONS, "1.(a)"),
-    "한도": (
-        "엔진이 한도에 걸려 세션 {n}회가 다 끊겼습니다",
-        ". 이 티켓을 어떻게 할까요", _RETRY_OPTIONS, "1.(a)"),
-    "요청 오류": (
-        "세션 {n}회가 전부 요청 오류로 끝났습니다",
-        ". 같은 자리에서 죽고 있습니다. 무엇을 바꿀까요", _RETRY_OPTIONS, "1.(b)"),
-    "기동 실패": (
-        "세션 {n}회가 프롬프트 주입 단계에서 못 떴습니다",
-        ". 이 티켓을 어떻게 할까요", _RETRY_OPTIONS, "1.(b)"),
-    "상한 초과": (
-        "세션 {n}회가 전부 실행 상한을 넘겨 강제종료됐습니다",
-        ". 범위를 어떻게 할까요", _RETRY_OPTIONS, "1.(c)"),
 }
 
 _DEAD_BOX = re.compile(r"^-\s*\[( |x|X)\]")
@@ -1112,8 +1094,12 @@ def fresh_block(path):
     return bool(heads) and bool(re.match(r"^##\s*블록", nfc(heads[-1])))
 
 
-def reclaim(path, fm, why):
-    """attempts 상한까지 백로그로 복귀. 상한을 넘거나 신선한 블록이 있으면 답변 요청으로 올린다.
+def reclaim(path, fm, why, local=None):
+    """attempts 상한까지 백로그로 복귀. 신선한 블록이 있으면 답변 요청으로 올린다.
+
+    상한을 넘겼을 때 사유가 무종료 마감이면 종전대로 답변 요청이지만, 그 밖(한도-요청
+    오류-기동 실패-상한 초과)은 넷 다 세션이 죽은 사건이라 사람이 쓸 답이 없다 - 백오프로
+    돌린다(§답변 대기 결정 1, P395-2).
 
     한도로 죽은 회차는 attempts를 안 쓴다(P360-4) - 한도는 계정의 문제지 티켓의 문제가
     아니다. 부모 워커의 사후처리(`reap_release`)가 사유와 무관하게 attempts를 안 건드리는
@@ -1121,7 +1107,9 @@ def reclaim(path, fm, why):
     먼저 보면 썼다(실측 86a26ad2)."""
     h = ticket_hash(path, fm)
     troot = os.path.dirname(os.path.dirname(path))
-    limited = dead_reason(_log_lines(troot), h) == "한도"
+    reason = dead_reason(_log_lines(troot), h)
+    reason = "기동 실패" if reason == "주입 실패" else reason
+    limited = reason == "한도"
     attempts = int((fm.get("attempts") or "0").strip() or 0)
     if not limited:
         attempts += 1
@@ -1134,7 +1122,20 @@ def reclaim(path, fm, why):
     except (SystemExit, OSError) as e:
         return "REAP-FAIL {} {}".format(h, e)
     blocked = fresh_block(path)
-    if blocked or (attempts > REAP_MAX_ATTEMPTS and not limited):
+    if blocked:
+        return ask_human(path, h, attempts, why, blocked)
+    if attempts > REAP_MAX_ATTEMPTS and not limited:
+        # 사람이 쓸 답이 있다고 확인된 넷(한도-요청 오류-기동 실패-상한 초과)만 백오프로
+        # 돌린다. 무종료 마감과 "알 수 없음"(로그가 없거나 못 가른 사유)은 종전대로
+        # 답변 대기다 - 갈리지 않은 사유를 추측으로 백오프에 태우지 않는다.
+        if reason in ("한도", "요청 오류", "기동 실패", "상한 초과"):
+            upd = {"attempts": attempts}
+            upd.update({k: "" for k in REAP_CLEAR})
+            set_fm_keys(path, upd)
+            local = local or os.environ.get("TICKET_LOCAL") or os.path.expanduser("~/.config/dira")
+            count = _arm_backoff(local, h)
+            return "REAP {} attempts={} - {}, 백오프 {}초(누적 {}회째)".format(
+                h, attempts, why, _fibonacci(count) * REAP_BACKOFF_SEC, count)
         return ask_human(path, h, attempts, why, blocked)
     upd = {"attempts": attempts}
     upd.update({k: "" for k in REAP_CLEAR})
@@ -1161,9 +1162,18 @@ def backoff_active(local, h, now=None):
     return now < until
 
 
+def _fibonacci(n):
+    """n번째(1부터) 피보나치 수 - 1, 1, 2, 3, 5, 8, ... (§답변 대기 결정 3)."""
+    a, b = 1, 1
+    for _ in range(n - 1):
+        a, b = b, a + b
+    return a
+
+
 def _arm_backoff(local, h):
-    """백오프 창을 걸고 누적 횟수를 반환한다. `REAP_BACKOFF_CAP`을 넘기면 표식을 지우고
-    `None`을 반환한다 - 그 뒤로는 <뒤집는 조건>대로 종전처럼 백오프 없이 다시 큐에 뜬다."""
+    """백오프 창을 걸고 누적 횟수를 반환한다. 창은 `REAP_BACKOFF_SEC`의 피보나치 배수로
+    자라고 상한이 없다 - 누적 횟수가 몇이 되든 표식을 지우지 않고 다음 창을 건다(§답변 대기
+    결정 3, 누적 상한 제거)."""
     path = _backoff_path(local, h)
     try:
         with open(path) as f:
@@ -1172,14 +1182,8 @@ def _arm_backoff(local, h):
     except (OSError, ValueError):
         count = 0
     count += 1
-    if count > REAP_BACKOFF_CAP:
-        try:
-            os.remove(path)
-        except OSError:
-            pass
-        return None
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    until = datetime.now(timezone.utc).timestamp() + REAP_BACKOFF_SEC
+    until = datetime.now(timezone.utc).timestamp() + _fibonacci(count) * REAP_BACKOFF_SEC
     with open(path, "w") as f:
         f.write("{}\n{}\n".format(until, count))
     return count
@@ -1201,8 +1205,11 @@ def reap_release(path, reason=None, local=None):
     | `reason` | attempts | 넘겼을 때 |
     |---|---|---|
     | `None` / `"api_error"`(한도) / `"killed"`(밖에서 끊김 - 선점 포함) | 안 쓴다 | - |
-    | `"bad_request"` | 쓴다 | `REAP_FAIL_BUDGET_BAD_REQUEST` 넘으면 답변 대기(`ask_human`) |
+    | `"bad_request"` | 쓴다 | `REAP_FAIL_BUDGET_BAD_REQUEST` 넘으면 백오프(`_arm_backoff`) |
     | `"other"`(그 밖의 FAIL·TIMEOUT) | 쓴다 | `REAP_FAIL_BUDGET_OTHER` 넘으면 백오프(`_arm_backoff`) |
+
+    둘 다 세션이 죽은 사건이라 사람이 쓸 답이 없다(§답변 대기 결정 1, P395-2) - 예산을
+    넘겨도 `ask_human`으로 안 올라간다.
     """
     try:
         fm, _, _ = read_fm(path)
@@ -1217,17 +1224,15 @@ def reap_release(path, reason=None, local=None):
         set_fm_keys(newpath, {k: "" for k in REAP_CLEAR})
         return ""
     attempts = int((fm.get("attempts") or "0").strip() or 0) + 1
-    if reason == "bad_request" and attempts > REAP_FAIL_BUDGET_BAD_REQUEST:
-        return ask_human(newpath, h, attempts, "요청 오류 예산 초과")
     upd = {"attempts": attempts}
     upd.update({k: "" for k in REAP_CLEAR})
     set_fm_keys(newpath, upd)
-    if reason == "other" and attempts > REAP_FAIL_BUDGET_OTHER:
+    budget = REAP_FAIL_BUDGET_BAD_REQUEST if reason == "bad_request" else REAP_FAIL_BUDGET_OTHER
+    if attempts > budget:
         local = local or os.environ.get("TICKET_LOCAL") or os.path.expanduser("~/.config/dira")
         count = _arm_backoff(local, h)
-        if count is not None:
-            return "REAP {} attempts={} - {}, 백오프 {}초(누적 {}회째)".format(
-                h, attempts, reason, REAP_BACKOFF_SEC, count)
+        return "REAP {} attempts={} - {}, 백오프 {}초(누적 {}회째)".format(
+            h, attempts, reason, _fibonacci(count) * REAP_BACKOFF_SEC, count)
     return "REAP {} attempts={} - {}, 백로그 복귀".format(h, attempts, reason)
 
 
@@ -1615,9 +1620,9 @@ def main():
         return
 
     if cmd == "pollresult":
-        # 결정 4의 종료 코드 셋 판정. $4(로그 파일)는 3연속 오류로 답변 대기에 올릴 때만 읽는다.
+        # 결정 4의 종료 코드 셋 판정. $4(로그 파일)는 이제 안 읽는다 - 3연속 오류가 답변
+        # 대기가 아니라 백오프로 가면서 마지막 폴링 출력을 인용할 자리가 없어졌다(P395-2).
         path, rc = sys.argv[2], sys.argv[3]
-        logfile = sys.argv[4] if len(sys.argv) > 4 else ""
         fm = read_fm(path)[0]
         h = ticket_hash(path, fm)
         now_iso = datetime.now().astimezone().isoformat(timespec="seconds")
@@ -1636,14 +1641,13 @@ def main():
             set_fm_keys(path, {"polled_at": now_iso, "polling_fails": str(fails)})
             print("POLL {} 오류(rc={}) - 실패 {}/3".format(h, rc, fails))
             if fails >= 3:
-                tail = ""
-                if logfile:
-                    try:
-                        with open(logfile, "r", encoding="utf-8", errors="replace") as f:
-                            tail = f.read()
-                    except OSError:
-                        pass
-                print(ask_human_polling(path, "폴링 스크립트가 연속 3회 오류를 냈습니다", tail))
+                # §답변 대기 결정 1 - 스크립트가 깨진 것이고 고치는 것은 세션이다. 사람이
+                # 답해도 스크립트는 그대로라 답변 대기가 아니라 백오프로 돌린다(P395-2).
+                set_fm_keys(path, {"polling": ""})
+                local = os.environ.get("TICKET_LOCAL") or os.path.expanduser("~/.config/dira")
+                count = _arm_backoff(local, h)
+                print("REAP {} - 폴링 스크립트가 연속 3회 오류를 냈습니다, 백오프 {}초(누적 {}회째)".format(
+                    h, _fibonacci(count) * REAP_BACKOFF_SEC, count))
         return
 
     if cmd == "clear":

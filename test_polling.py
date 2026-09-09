@@ -207,7 +207,8 @@ try:
     assert "빌드가 아직 안 끝났다" in body7, "7: 마지막 폴링 출력이 인용에 없다\n" + body7
     passed += 1
 
-    # ---- 8. polling_fails가 3에 닿으면 같은 자리로 올라간다 -----------------------------
+    # ---- 8. polling_fails가 3에 닿으면 답변 대기가 아니라 백오프로 간다 (§답변 대기 결정
+    # 1, P395-2 - 스크립트가 깨진 것이고 고치는 것은 세션이다) --------------------------
     e8 = newenv("fails3")
     h8 = "gggg0008"
     p8 = mk(e8.root, h8,
@@ -216,12 +217,12 @@ try:
     mkfile(os.path.join(e8.root, "polls", "err.sh"), "#!/bin/bash\nexit 2\n", 0o755)
     r = e8.run("tick")
     assert r.returncode == 0, "8: tick 실패\n" + r.stderr
-    fm8, lines8, end8 = T.read_fm(p8)
+    fm8 = T.read_fm(p8)[0]
     assert fm8["polling_fails"].strip() == "3", "8: polling_fails가 3이 아니다 " + repr(fm8.get("polling_fails"))
     assert not fm8["polling"].strip(), "8: polling이 안 지워졌다"
-    assert len(fm8["awaiting"].strip()) == 8, "8: awaiting 미기록"
-    body8 = "\n".join(lines8[end8:])
-    assert "3회 오류" in body8, "8: 3연속 오류 사유가 없다\n" + body8
+    assert not (fm8.get("awaiting") or "").strip(), "8: 백오프로 가야 하는데 awaiting이 걸렸다"
+    assert T.backoff_active(e8.local, h8), "8: 백오프 표식이 안 걸렸다"
+    assert "3회 오류" in e8.runner_log(), "8: 3연속 오류 사유가 로그에 없다\n" + e8.runner_log()
     passed += 1
 
     # ---- 9. 30초 넘게 매달리는 스크립트도 tick이 60초 안에 끝나고 오류로 세어진다 --------

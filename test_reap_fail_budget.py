@@ -61,14 +61,17 @@ try:
     assert T.read_fm(os.path.join(ws, "tickets/dddd4444.md"))[0]["attempts"].strip() == "1", \
         "C2: killed가 attempts를 건드렸다"
 
-    # D) bad_request 예산(REAP_FAIL_BUDGET_BAD_REQUEST)을 넘기면 답변 대기로 올린다.
+    # D) bad_request 예산(REAP_FAIL_BUDGET_BAD_REQUEST)을 넘기면 4xx도 세션이 죽은 사건이라
+    #    사람이 쓸 답이 없다 - 답변 대기가 아니라 백오프다(§답변 대기 결정 1, P395-2).
     pd = mk(ws, "eeee5555", ["attempts: " + str(T.REAP_FAIL_BUDGET_BAD_REQUEST)])
     out = T.reap_release(pd, "bad_request", local=local)
-    assert out.startswith("ASK eeee5555"), "D: bad_request 예산 초과인데 상신 안 함\n" + out
+    assert "백오프" in out, "D: bad_request 예산 초과인데 백오프를 안 걸었다\n" + out
+    assert "ASK" not in out, "D: bad_request 예산 초과인데 여전히 상신한다\n" + out
     edir = os.path.join(ws, "tickets")
-    assert os.path.exists(os.path.join(edir, "eeee5555.md")), "D: 답변 요청 티켓이 안 열렸다"
+    assert os.path.exists(os.path.join(edir, "eeee5555.md")), "D: 백로그 복귀 안 됨"
     efm = T.read_fm(os.path.join(edir, "eeee5555.md"))[0]
-    assert (efm.get("awaiting") or "").strip(), "D: awaiting이 안 걸렸다"
+    assert not (efm.get("awaiting") or "").strip(), "D: bad_request인데 awaiting이 걸렸다"
+    assert T.backoff_active(local, "eeee5555"), "D: 백오프 표식이 안 걸렸다"
 
     # bad_request가 예산 밑이면 종전처럼 백로그 복귀만 한다(상신 없음) - 회귀 방지.
     pd2 = mk(ws, "ffff6666", ["attempts: 0"])
@@ -95,20 +98,17 @@ try:
     assert "hhhh8888" in out, "E: 정상 티켓이 select 후보에서 빠졌다\n" + out
     assert "gggg7777" not in out, "E: 백오프 걸린 티켓이 select 후보에 그대로 나온다\n" + out
 
-    # 백오프 상한(REAP_BACKOFF_CAP)을 넘기면 표식이 지워지고, 종전대로(백오프 없이) 다시 뜬다.
-    for _ in range(T.REAP_BACKOFF_CAP - 1):
+    # 누적 횟수가 늘어도(6을 넘어도) 표식이 안 지워진다 - 상한 없음(§답변 대기 결정 3, P395-2).
+    # E에서 이미 1회 걸렸으니 6회 더 걸면 누적 7회다.
+    for _ in range(6):
         T._arm_backoff(local, "gggg7777")
-    assert T.backoff_active(local, "gggg7777"), "E: 상한 전인데 이미 풀렸다"
-    assert T._arm_backoff(local, "gggg7777") is None, "E: 상한을 넘겼는데 다시 백오프를 걸었다"
-    assert not T.backoff_active(local, "gggg7777"), \
-        "E: 상한을 넘겼는데 여전히 백오프 상태다 - 종전대로 안 돌아왔다"
-    out = subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                          "tickets.py"), "select", ws],
-                         capture_output=True, text=True, env=env, timeout=30).stdout
-    assert "gggg7777" in out, "E: 상한을 넘겼는데도 select 후보에 안 돌아왔다\n" + out
+    assert T.backoff_active(local, "gggg7777"), "E: 누적 6회를 넘겼는데 표식이 지워졌다"
+    with open(os.path.join(local, "run", "backoff-gggg7777")) as f:
+        _, count_line = f.read().splitlines()[:2]
+    assert int(count_line) == 7, "E: 누적 횟수가 안 늘었다 - " + count_line
 
     print("PASS 5/5 - A(FAIL attempts+1) B(TIMEOUT attempts+1) C(api_error/killed 무변) "
-          "D(bad_request 예산 초과 -> ASK) E(other 예산 초과 -> 백오프, select 제외, 상한 넘으면 복귀)")
+          "D(bad_request 예산 초과 -> 백오프) E(other 예산 초과 -> 백오프, select 제외, 상한 없음)")
 finally:
     shutil.rmtree(ws, ignore_errors=True)
     shutil.rmtree(local, ignore_errors=True)

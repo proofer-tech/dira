@@ -41,6 +41,7 @@ def write_log(troot, lines):
 
 
 ws = tempfile.mkdtemp()
+local = tempfile.mkdtemp()
 try:
     # A) 한도 사망(attempts=0) - reclaim이 attempts를 그대로 둔다, ASK로 안 올라간다
     write_log(ws, [
@@ -106,6 +107,8 @@ try:
     dopen = os.path.join(ws, "tickets/dddd4444.md")
     assert T.read_fm(dopen)[0]["attempts"].strip() == "1", "D: attempts 기록이 다르다"
 
+    # E) 요청 오류가 상한을 넘기면 사람이 쓸 답이 없으므로 이제 상신이 아니라 백오프다
+    #    (§답변 대기 결정 1, P395-2) - 티켓은 `awaiting:` 없이 열린 채 남는다.
     pe = mk(ws, "eeee5555", ["attempts: " + str(T.REAP_MAX_ATTEMPTS)],
             body="## Goal\n테스트\n\n## Done when\n- [ ] 하나\n")
     write_log(ws, [
@@ -113,11 +116,16 @@ try:
         L("2026-09-02 23:11:00", "w2", "eeee5555", "FAIL {h} 세션이 result is_error로 끝났다 -> 꼬리. 로그 x"),
     ])
     efm = T.read_fm(pe)[0]
-    out = T.reclaim(pe, efm, "세션 죽음")
-    assert out.startswith("ASK eeee5555"), "E: 요청 오류가 상한을 넘겼는데 상신 안 함\n" + out
+    out = T.reclaim(pe, efm, "세션 죽음", local=local)
+    assert "백오프" in out, "E: 요청 오류가 상한을 넘겼는데 백오프를 안 걸었다\n" + out
+    assert "ASK" not in out, "E: 요청 오류인데 여전히 상신한다\n" + out
     eopen = os.path.join(ws, "tickets/eeee5555.md")
-    assert os.path.exists(eopen), "E: 답변 요청 티켓이 안 열렸다"
+    assert os.path.exists(eopen), "E: 백로그 복귀 안 됨(백오프도 열린 티켓이어야 한다)"
+    efm2 = T.read_fm(eopen)[0]
+    assert not (efm2.get("awaiting") or "").strip(), "E: 요청 오류인데 awaiting이 걸렸다"
+    assert T.backoff_active(local, "eeee5555"), "E: 백오프 표식이 안 걸렸다"
 
     print("PASS 5/5")
 finally:
     shutil.rmtree(ws, ignore_errors=True)
+    shutil.rmtree(local, ignore_errors=True)
