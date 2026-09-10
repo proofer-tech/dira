@@ -799,6 +799,11 @@ _DEAD_REASON_NEEDLES = [
 _LOG_LINE = re.compile(r"^(\S+ \S+)\s+\[([^\]]*)\]\s?(.*)$")
 _LIMIT_NOTE = re.compile(r"NOTE 엔진 불능 - \d+초 쿨다운")
 
+# P400-1(§엔진 수정 서른여섯 번째 승인 §판정 1) - tick.sh가 FAIL 줄에 자기 손으로 가른
+# DEATH_KIND를 `reason=`으로 찍는다(`tick.sh` 1806줄 부근). 있으면 아래 NOTE 상관 추정 없이
+# 이 값으로 바로 한도를 가른다 - 옛 로그(마커 없음)만 상관 추정으로 떨어진다.
+_REASON_TAG = re.compile(r"\breason=(\S+)")
+
 
 def _parse_log_ts(s):
     try:
@@ -832,6 +837,16 @@ def dead_reason(lines, h):
     window_hash = [entry for entry in window if pat.search(entry[2])]
     if not window_hash:
         return "알 수 없음"
+    # 새 형식 - FAIL 줄 자신이 reason=을 들고 있으면 그 값을 바로 쓴다. api_error가 한도고,
+    # bad_request·other는 아래 needle과 같은 "요청 오류"로 떨어진다(판정 1 - 그 갈래 처분은
+    # 안 건드린다). 마커가 하나라도 있으면 이 로그는 새 형식이니 옛 NOTE 상관은 안 돈다.
+    # 한도가 최우선이니(결정 17 (2)) 창 전체를 먼저 훑어 api_error부터 찾는다.
+    tags = [_REASON_TAG.search(msg) for _, _, msg in window_hash]
+    tags = [t.group(1) for t in tags if t]
+    if "api_error" in tags:
+        return "한도"
+    if tags:
+        return "요청 오류"
     # 한도 - 워커에 안 묶인 전역 줄이라, 이 티켓이 걸린 줄과 같은 워커 · 120초 안일 때만
     # 센다(창 전체에서 세면 사유가 한도로 쏠린다 - 실측: 안 좁히면 18건, 좁히면 5건). 이 검사만
     # 창을 이 해시의 첫 등장까지 넓힌다 - 마지막 회차가 죽은 직후라 자기 쿨다운 노트를 부모가

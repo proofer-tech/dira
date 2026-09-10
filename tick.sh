@@ -1850,7 +1850,10 @@ if [ -n "${FAILED:-}" ]; then
     exit 0
   fi
   if [ "$VERDICT" = "err" ]; then
-    log "FAIL $THASH 세션이 result is_error로 끝났다 -> $TAIL. 로그 $(basename "$LOGF")"
+    # P400-1(§엔진 수정 서른여섯 번째 승인 §판정 1) - 위에서 이미 가른 DEATH_KIND를 그 줄에
+    # 같이 적는다. `dead_reason`이 NOTE 상관 추정 없이 이 값을 바로 읽는다. 머리말은 그대로
+    # FAIL이다 - 갈리는 것은 문장 안의 사유 한 칸뿐이다.
+    log "FAIL $THASH 세션이 result is_error로 끝났다 reason=$DEATH_KIND -> $TAIL. 로그 $(basename "$LOGF")"
   else
     case $RC in
       143|137)

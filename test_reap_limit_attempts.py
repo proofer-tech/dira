@@ -125,7 +125,37 @@ try:
     assert not (efm2.get("awaiting") or "").strip(), "E: 요청 오류인데 awaiting이 걸렸다"
     assert T.backoff_active(local, "eeee5555"), "E: 백오프 표식이 안 걸렸다"
 
-    print("PASS 5/5")
+    # F) 티켓 fb5865a4(§서른여섯 번째 승인 §판정 1) - FAIL 줄 자신이 reason=api_error를
+    #    적으면 NOTE 엔진 불능 상관 없이도 한도로 잡혀 attempts를 안 쓴다.
+    write_log(ws, [
+        L("2026-09-10 10:00:00", "w2", "ffff6666", "DISPATCH {h} kind=work"),
+        L("2026-09-10 10:01:00", "w2", "ffff6666",
+          "FAIL {h} 세션이 result is_error로 끝났다 reason=api_error -> 꼬리. 로그 x"),
+    ])
+    pf = mk(ws, "ffff6666", ["attempts: 0"])
+    ffm = T.read_fm(pf)[0]
+    out = T.reclaim(pf, ffm, "세션 죽음")
+    assert out.startswith("REAP ffff6666"), "F: reason=api_error인데 REAP이 아니다\n" + out
+    assert "ASK" not in out, "F: reason=api_error 1회인데 상신했다\n" + out
+    fopen = os.path.join(ws, "tickets/ffff6666.md")
+    assert os.path.exists(fopen), "F: 백로그 복귀 안 됨"
+    assert int(T.read_fm(fopen)[0].get("attempts", "").strip() or 0) == 0, \
+        "F: reason=api_error 직독인데 attempts를 올렸다 - " + out
+
+    # G) reason=bad_request는 종전 "요청 오류" 처분 그대로다 - attempts를 올린다(회귀 방지).
+    write_log(ws, [
+        L("2026-09-10 10:10:00", "w2", "gggg7777", "DISPATCH {h} kind=work"),
+        L("2026-09-10 10:11:00", "w2", "gggg7777",
+          "FAIL {h} 세션이 result is_error로 끝났다 reason=bad_request -> 꼬리. 로그 x"),
+    ])
+    pg = mk(ws, "gggg7777", ["attempts: 0"])
+    gfm = T.read_fm(pg)[0]
+    out = T.reclaim(pg, gfm, "세션 죽음")
+    assert "REAP gggg7777 attempts=1" in out, "G: reason=bad_request 처분이 갈렸다\n" + out
+    gopen = os.path.join(ws, "tickets/gggg7777.md")
+    assert T.read_fm(gopen)[0]["attempts"].strip() == "1", "G: attempts 기록이 다르다"
+
+    print("PASS 7/7")
 finally:
     shutil.rmtree(ws, ignore_errors=True)
     shutil.rmtree(local, ignore_errors=True)

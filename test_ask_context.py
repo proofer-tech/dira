@@ -321,6 +321,45 @@ try:
     assert T.dead_reason(m12, "mmmm0012") == "한도", \
         "M12: 넓힌 창에서 1회차 한도 노트를 못 찾았다"
 
+    # M13) 티켓 fb5865a4(§서른여섯 번째 승인 §판정 1) - tick.sh가 이제 FAIL 줄에 reason=을
+    # 직접 적는다. NOTE 엔진 불능 없이도 reason=api_error 하나로 한도가 바로 잡혀야 한다.
+    m13 = [
+        L("2026-09-10 10:00:00", "pw1", "mmmm0013", "DISPATCH {h} kind=work"),
+        L("2026-09-10 10:01:00", "pw1", "mmmm0013",
+          "FAIL {h} 세션이 result is_error로 끝났다 reason=api_error -> 꼬리. 로그 x"),
+    ]
+    assert T.dead_reason(m13, "mmmm0013") == "한도", \
+        "M13: reason=api_error 직독으로 한도가 안 잡혔다(NOTE 없이)"
+
+    # M14) reason=bad_request는 종전 어휘 그대로 "요청 오류"로 떨어진다(처분·이름 불변).
+    m14 = [
+        L("2026-09-10 10:00:00", "pw1", "mmmm0014", "DISPATCH {h} kind=work"),
+        L("2026-09-10 10:01:00", "pw1", "mmmm0014",
+          "FAIL {h} 세션이 result is_error로 끝났다 reason=bad_request -> 꼬리. 로그 x"),
+    ]
+    assert T.dead_reason(m14, "mmmm0014") == "요청 오류", \
+        "M14: reason=bad_request가 요청 오류로 안 떨어졌다"
+
+    # M15) reason=other도 요청 오류다(그 밖 갈래 - 새 어휘를 안 만든다).
+    m15 = [
+        L("2026-09-10 10:00:00", "pw1", "mmmm0015", "DISPATCH {h} kind=work"),
+        L("2026-09-10 10:01:00", "pw1", "mmmm0015",
+          "FAIL {h} 세션이 result is_error로 끝났다 reason=other -> 꼬리. 로그 x"),
+    ]
+    assert T.dead_reason(m15, "mmmm0015") == "요청 오류", "M15: reason=other가 요청 오류로 안 떨어졌다"
+
+    # M16) 창 안에 reason=bad_request(먼저)와 reason=api_error(나중, 재시도)가 섞여도
+    # 한도가 최우선이다 - 등장 순서가 아니라 값으로 가른다.
+    m16 = [
+        L("2026-09-10 10:00:00", "pw1", "mmmm0016", "DISPATCH {h} kind=work"),
+        L("2026-09-10 10:01:00", "pw1", "mmmm0016",
+          "FAIL {h} 세션이 result is_error로 끝났다 reason=bad_request -> 꼬리. 로그 x"),
+        L("2026-09-10 10:02:00", "pw1", "mmmm0016", "DISPATCH {h} kind=work"),
+        L("2026-09-10 10:03:00", "pw1", "mmmm0016",
+          "FAIL {h} 세션이 result is_error로 끝났다 reason=api_error -> 꼬리. 로그 x"),
+    ]
+    assert T.dead_reason(m16, "mmmm0016") == "한도", "M16: 뒤에 온 api_error가 안 이겼다"
+
     # N) 티켓 8adc79a1 - ask_human 죽은 갈래가 dead_reason으로 사유별 문항 - 선택지 -
     # default_answer를 쓴다(결정 17 (1)(3)(4)(6)). 수용조건 1·2·4·6
     os.makedirs(os.path.join(ws, "workers"), exist_ok=True)
@@ -393,7 +432,7 @@ try:
         "N5: 알 수 없음 갈래의 정형문이 바뀌었다\n" + n5
     assert T.read_fm(pn5)[0].get("default_answer") == "1.(a)", "N5: default_answer가 1.(a)가 아니다"
 
-    print("PASS 13/13 + M(dead_reason) 12 + N(ask_human 죽은 갈래) 6")
+    print("PASS 13/13 + M(dead_reason) 16 + N(ask_human 죽은 갈래) 6")
     print(a[a.index("## 질문 1"):])
 finally:
     if old_home is None:
