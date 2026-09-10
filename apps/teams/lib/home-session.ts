@@ -11,11 +11,17 @@
  *  <claude> -p  --session-id <uuid> | --resume <uuid>
  *               --tools Read,Glob,Grep,Write,Edit,Bash
  *               --strict-mcp-config
- *               --permission-mode manual
- *               --allowed-tools Read Glob Grep 'Bash(ls:*)' … (열하나) 'Write(//<큐 루트>/personas/**)' 'Edit(…)' …
+ *               --dangerously-skip-permissions
  *               --output-format stream-json --include-partial-messages --verbose
  *               "<프롬프트>"
  *  ```
+ *
+ *  **§7-5(요구 `ea5e6f4d`)가 `--permission-mode manual`과 `--allowed-tools`를 걷어내고
+ *  `--dangerously-skip-permissions`로 바꿨다** — 사람의 결정 하나가 근거이지 새 실측이 아니다
+ *  (DESIGN.md §7-5 머리말). 아래 실측 절 중 `--permission-mode`·`--allowed-tools`를 다루는
+ *  두 항목은 **그 뒤집기 전, 경로 스코프가 경계이던 시절의 기록**이라 지금은 계약이 아니다 —
+ *  왜 그 둘이 있었는지(무엇을 막았는지)를 남겨 두는 것이 다음에 다시 스코프를 여는 논의가
+ *  생겼을 때 근거가 된다.
  *
  *  근거는 전부 실측이다(이 머신, 2026-08-01 · 티켓 `89962e56`):
  *
@@ -37,17 +43,15 @@
  *    샌드박스 실행 도구를 스스로 후보로 꼽았다). 붙이면 도구가 셋으로 떨어진다:
  *    "현재 제게 실제로 주어진 도구는 3개입니다: Glob · Grep · Read. **MCP 도구: 없습니다.**"
  *    GUI 서버는 사람 셸의 설정을 물려받으므로 이 표면은 우리 코드가 아니라 그 머신이 정한다.
- *  - **`--permission-mode manual`은 위 둘이 놓친 것의 마지막 관문이다.** 이 머신의
- *    `~/.claude/settings.json`이 `"defaultMode":"bypassPermissions"`라, 이걸 안 덮으면 도구 목록에
- *    남은 것은 무엇이든 그냥 통과한다(§7: `--dangerously-skip-permissions`를 쓰지 않는다).
- *  - **`--allowed-tools`는 그 `manual` 위에서 물어보지 않을 것을 적는다 — 그리고 거기 쓴 경로가
- *    실제로 경계다**(`7e35d300` 실측 · §7 §경계를 지는 것). 여전히 **도구 집합의 가드는 아니다**
- *    (그 일은 `--tools`가 한다) — 바뀐 것은 `Write(//<경로>/**)` 꼴의 스코프가 먹는다는 것 하나다.
- *    그래서 이 옵션 값은 **argv 여러 토큰**이다(실측이 그 모양으로 쟀다). variadic(`<tools...>`)
- *    함정은 그대로 있으므로 **바로 뒤에 `--output-format`이 오는 자리를 지킨다**: 마지막에 두면
- *    `--allowed-tools … "<질문>"`이 되어 질문까지 도구 이름으로 먹고 `Input must be provided
- *    either through stdin or as a prompt argument`로 죽는다. `--tools` 값은 그와 별개로 **쉼표로
- *    붙인 한 토큰**이다.
+ *  - **(§7-5 전, 지금은 안 쓴다) `--permission-mode manual`은 위 둘이 놓친 것의 마지막
+ *    관문이었다.** 이 머신의 `~/.claude/settings.json`이 `"defaultMode":"bypassPermissions"`라,
+ *    이걸 안 덮으면 도구 목록에 남은 것은 무엇이든 그냥 통과했다.
+ *  - **(§7-5 전, 지금은 안 쓴다) `--allowed-tools`는 그 `manual` 위에서 물어보지 않을 것을
+ *    적고, 거기 쓴 경로가 실제로 경계였다**(`7e35d300` 실측 · §7 §경계를 지는 것 — 옛 계약).
+ *    사람이 §7-5에서 *앞으로 필요할 것 같아 미리 연다*를 골라 이 경계를
+ *    `--dangerously-skip-permissions`로 통째로 뺐다(근거는 새 실측이 아니라 사람의 결정
+ *    하나다 — DESIGN.md §7-5 머리말). variadic(`<tools...>`) 함정이 있던 옵션이라 마지막에
+ *    두지 않으면 질문까지 도구 이름으로 먹혔다는 사실만 기록으로 남긴다.
  *  - **모델 플래그가 없다.** §7이 `claude` 고정 · `모델 지정 안 함`으로 정했다(codex는 트랜스크립트를
  *    안 남겨서 고를 수 있게 하는 순간 이 화면이 빈다 — §4-3 표).
  *  - **`--output-format stream-json --include-partial-messages --verbose`** (`88ff08f8` 실측 ·
@@ -72,11 +76,10 @@
  *  먹고 버린다). **시계 타이머는 없다**(요구 `8db4d0f6` — §7 §천장이 없다). 끝의 근거는 결과
  *  객체 · 프로세스의 죽음(`close`에 결과 줄이 없으면 실패 ③) · `stopAsk`의 `SIGTERM` 셋뿐이다.
  *
- *  **`Bash`가 빠져 있던 근거(위 A/B)는 안 죽었다 — 그 위에 §7-3이 한 층을 더 얹었다**(요구
- *  `b100a3aa`). 셸이 경로 스코프를 못 지는 것은 그대로 참이라 열리는 것은 `Bash` 전체가
- *  아니라 **허용목록에 든 읽기 전용 명령 열하나**(`TOOLS`·`toolFlags` 주석)이고, 그 목록이
- *  `;`·`&&`·`$( )`·`>` 우회를 실제로 막는지는 실측(`ef1e8c89`, DESIGN.md §7-3)이 쟀다 — 갈래는
- *  (가) 세그먼트별: 허용 명령 단독·허용 명령만의 파이프라인은 돌고 비허용이 섞이면 전부 거부된다. */
+ *  **`Bash`가 빠져 있던 근거(위 A/B)는 §7-5가 걷어냈다.** §7-3은 셸을 읽기 전용 명령
+ *  허용목록(`ef1e8c89` 실측)으로만 열었지만, §7-5(요구 `ea5e6f4d`)가 그 목록과 경로 스코프를
+ *  통째로 없애고 `--dangerously-skip-permissions`로 바꿨다 — 셸에 쓰기 제한이 없다(`TOOLS`
+ *  주석). */
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdir, readdir, readFile, rename, writeFile } from "node:fs/promises";
@@ -102,73 +105,26 @@ import { findTranscript, lastEvent, sessionIdOf, tailEvents, type StreamEvent } 
 import { judgeSchedule, isValidWhen, nextScheduleDue } from "./urls.ts";
 import { engineCell, listWorkers, workerOf, type Worker } from "./workers.ts";
 
-/** 세션에 존재하는 도구 전부. **쉼표 한 토큰**이다(머리 주석의 variadic 함정). `Bash`가 들어간
- *  것은 §7-3(요구 `b100a3aa`)의 승격이다 — 셸이 경로 스코프를 못 넘는 것은 그대로 참이라
- *  `--allowed-tools`의 프리픽스 허용목록(`BASH_ALLOWED`)이 그 자리를 진다. `Write`·`Edit`의
- *  경로 스코프는 한 글자도 안 갈렸다(§7-3 결정 1). */
+/** 세션에 존재하는 도구 전부. **쉼표 한 토큰**이다(머리 주석의 variadic 함정). §7-5(요구
+ *  `ea5e6f4d`)가 `Bash`의 쓰기 제한(옛 `BASH_ALLOWED`)을 걷어냈지만 이 상수 자체는 그대로다 —
+ *  답이 연 것은 *쓰기*이지 도구 집합이 아니라서(§7-5 결정 2 마지막 항), 세션에 존재하는
+ *  built-in 도구는 여전히 `Read`-`Glob`-`Grep`-`Write`-`Edit`-`Bash` 여섯이다. */
 const TOOLS = "Read,Glob,Grep,Write,Edit,Bash";
 
-/** §7-3 결정 4 — `--allowed-tools`에 여는 읽기 전용 명령 열하나. `Bash(<명령>:*)` 꼴로 붙는다.
- *  실측(`ef1e8c89`)이 갈래 (가) 세그먼트별을 확정했다 — 허용 명령 단독·허용 명령만의
- *  파이프라인은 돌고, `;`·`&&`·`$( )`·`>`·비허용 단독이 섞이면 전부 거부된다. **목록이 계약이고
- *  여기 없는 것은 세션에 없다**(자동 거부) — `awk`·`sed`(이름은 읽기 같지만 쓴다),
- *  `python3`·`sh`·`bash`·`xargs`·`find`(임의 실행/삭제)는 뺐다. `git`은 **두 낱말 프리픽스로만**
- *  든다(`Bash(git log:*)`) — 통째로 열면 `commit`·`checkout`·`push`가 같은 이름 아래 들어온다
- *  (두 낱말 프리픽스가 먹는 것도 실측이 쟀다). `cat`은 파이프의 앞자리일 뿐 — 파일 한 장을
- *  읽을 때 쓰는 것은 여전히 `Read`다(결정 1). */
-const BASH_ALLOWED = ["ls", "cat", "head", "tail", "wc", "sort", "uniq", "cut", "grep", "jq", "git log"];
-
-/** 쓰기가 닿는 곳 중 **큐 루트 기준** 다섯(§7 §쓰기가 닿는 곳이 **다섯**이 된다 — 요구
- *  `bd3cd201`) + `tickets/**`. **상대 글롭**이라 값이 프로젝트마다 다르다 — 아래가 상수 배열
- *  (`TOOL_FLAGS`)이 아니라 함수인 이유가 이 한 줄이다. 여기 없는 것은 밖이다: `worktrees/**`
- *  (아래에 실제 프로젝트 코드가 있다) · repo의 나머지 전부(소스 · `docs/**` · 엔진) · 큐 밖 전부.
+/** 도구 표면을 정하는 플래그. §7-5 전에는 `--permission-mode manual` + `--allowed-tools`의
+ *  경로 스코프 여섯(`WRITABLE` + 온톨로지) + `Bash` 허용목록(`BASH_ALLOWED`)이 셋을 겸해
+ *  진 경계였다 — 그 상수 셋과 이 함수의 스코프 조립 로직이 §7-5 결정 1·2로 전부 없어졌다.
+ *  대신 `--dangerously-skip-permissions`를 쓴다(§7 에이전트 표와 §7-3 결정 1이 두 번
+ *  *안 쓴다*고 적었던 그 플래그 — 뒤집는 근거는 새 실측이 아니라 사람의 결정 하나다,
+ *  DESIGN.md §7-5 머리말). `--tools`와 `--strict-mcp-config`는 그대로 둔다 — 답이 연 것은
+ *  쓰기이지 도구 집합이 아니다(§7-5 결정 2 마지막 항).
  *
- *  `ontology/**`는 여기 없다 — **해석된 온톨로지 기준**이라 큐 루트에 얹을 수 없고
- *  `toolFlags`가 따로 받는다(요구 `85114387` §결정 4 — `TICKET_ONTOLOGY`가 큐 밖을 가리키면
- *  이 자리도 큐 밖이 된다). AGENTS.md가 아카이빙 산출물의 나머지 한 자리다(§5-3 산출물 ②).
- *  **종전엔 그 둘 다 repo(`dirname(root)`) 기준이었다** — 큐는 git에 안 들어가는 것이 불변식이라
- *  (CORE §큐의 불변식 3) 온톨로지를 큐 안에 두면 clone한 사람에게 0장이라는 근거였다. 그 값은
- *  뒤집힌 것이 아니라 **대가로 지불됐다**(§5-3 §아카이빙 산출물은 큐 안에 있다 §파는 것). 대신
- *  repo 쪽 예외가 **0**이 되어 요구 `20e4a6f4`(실제 프로젝트는 못 고친다)가 예외 없이 뜬다 —
- *  개정 `22a803de`. `AGENTS.md`는 아직 그 자리에 파일이 없을 수 있어 `Write`가 필요하다.
- *
- *  **`tickets/**`는 종전에 `Write`가 안 붙는 자리였다**(별도 상수 `EDIT_ONLY` — 시킨 일이
- *  *티켓 본문에 링크를 추가*(산출물 ③)이지 티켓 발행이 아니었다). 요구 `64b45d3c`가 그 결정을
- *  뒤집었다(§7 §홈 대화에서 요구사항이 접수된다) — 열린 것은 `kind: request` 하나뿐이고,
- *  플래그는 파일 내용을 못 봐서 그 제약은 여기서 안 지고 `buildPrompt`의 경계 문단이 진다. */
-const WRITABLE = ["personas/**", "protocols/**", "workers/*.sh", "AGENTS.md", "tickets/**"];
-
-/** 도구 표면을 정하는 플래그 **전부**. **네 조각이 각자 다른 층을 막으므로** 하나라도 빠지면
- *  표면이 넓어진다(머리 주석의 A/B): `--tools`가 built-in 목록을 다섯으로 만들고,
- *  `--strict-mcp-config`가 사람 머신의 MCP 도구를 빼고, `--permission-mode manual`이 남은 것의
- *  관문이고, **`--allowed-tools`가 그 관문 위에서 경로 스코프를 건다.**
- *
- *  넷째가 종전에는 "읽기 셋을 물어보지 않게 하는 조각"이었다. 지금은 **권한 목록이면서 동시에
- *  경계 그 자체**다(`7e35d300` 실측: `..`도 심링크도 못 뚫는다 — 양방향 보수적 교집합).
- *  그래도 **혼자서는 도구 가드가 아니다**(`89962e56` 그대로) — `manual`을 빼면 이 목록 밖 도구가
- *  그냥 돌고, 이 목록을 빼면 `manual`이 다 물어보다 턴이 끝난다. **둘 중 하나를 빼는 변경은
- *  경계를 통째로 없앤다.**
- *
- *  **`home-session.test.ts`가 이 반환값을 검증한다.** `--allowed-tools`만 남기는 회귀가 `89962e56`
- *  그 사건이었고, 그건 코드를 봐서는 안 틀려 보인다 — 플래그 이름이 하는 일을 알려 주지 않는다. */
-/** `ontologyDir`은 **해석된 값**(`resolveConfig(project).ontology`)이다 — 기본값 큐에서는
- *  `<root>/ontology`와 글자로 같고, `TICKET_ONTOLOGY`가 재정의한 큐에서는 큐 밖 절대경로일 수
- *  있다(요구 `85114387` §결정 4). 이 함수는 그 값을 그대로 스코프에 얹을 뿐 해석하지 않는다 —
- *  고정 함수(`ontologyDir(project)`)를 여기 두지 않는다(DESIGN.md §5-3: 고정 함수가 남으면
- *  그 하나가 옛 자리를 판다). */
+ *  **`home-session.test.ts`가 이 반환값을 검증한다.** `root`·`ontologyDir`는 더 이상 스코프에
+ *  안 쓰이지만 §7-4 결정 3(페르소나가 안 섞인다)이 고정한 인자 개수(둘)는 유지한다. */
 export function toolFlags(root: string, ontologyDir: string): string[] {
-  // 절대경로는 **슬래시 둘로 시작한다**(`Write(//<절대경로>/**)` — 실측 `7e35d300`. `**`는 깊이 무제한).
-  const abs = (base: string, glob: string) => `//${path.join(base, glob)}`;
-  // 다섯은 큐 루트 아래다 — repo(`dirname(root)`) 기준 항이 **0**이다(개정 `22a803de`).
-  // `tickets/**`가 `Write`까지 받는 것은 요구 `64b45d3c`가 뒤집은 자리다(위 `WRITABLE` 주석).
-  // 여섯째(온톨로지)만 `ontologyDir` 기준이다 — 재정의한 큐에서는 그게 큐 밖이다(§결정 4).
-  const scope = [...WRITABLE.map((g) => abs(root, g)), abs(ontologyDir, "**")].flatMap((p) => [
-    `Write(${p})`,
-    `Edit(${p})`,
-  ]);
-  // `--allowed-tools`의 값은 여기서 **토큰 여러 개**다 — 뒤에 `--output-format`이 와야 한다(머리 주석).
-  const bash = BASH_ALLOWED.map((cmd) => `Bash(${cmd}:*)`);
-  return ["--tools", TOOLS, "--strict-mcp-config", "--permission-mode", "manual", "--allowed-tools", "Read", "Glob", "Grep", ...bash, ...scope];
+  void root;
+  void ontologyDir;
+  return ["--tools", TOOLS, "--strict-mcp-config", "--dangerously-skip-permissions"];
 }
 
 // ── 프로젝트 → 대화 목록 (§7 §대화가 여럿이다) ──────────────────────────────
@@ -860,36 +816,26 @@ export async function personaBlock(personasDir: string, name: string = HOME_PERS
  *  실린다). PROFILE과 정면으로 부딪쳐서다 — 저 문단은 *티켓을 고치지 않는다*고 적었고 이 페르소나가
  *  하는 일이 **티켓 본문에 링크를 다는 것**이다(§5-3 산출물 ③). 누구인지는 이제 PROFILE이 알려 준다.
  *
- *  **경계 문장은 살아 있다.** 플래그가 막는 것과 별개로 글이 필요한 이유는 종전과 같다: **막힌 것을
- *  두드리다 답을 못 하고 끝나는 턴**은 사람에게 그냥 고장으로 보인다. 그 자리가 `worktrees/**`와
- *  repo 전부다(개정 `22a803de`로 repo 쪽 예외가 0이 됐다).
- *
- *  **§7-3(요구 `b100a3aa`)이 셸 문단을 하나 더 얹는다.** `Bash`가 열려도 읽고 세는 것만
- *  되고(`BASH_ALLOWED`) 쓰는 명령은 거부되는 것을 글로도 적는다 — 근거는 위와 같다. 목록을
- *  전재하지 않는다(정본은 플래그다) — 글이 지는 것은 *우회하지 않는다* 하나뿐이라 기존 문장을
- *  그대로 재사용한다.
+ *  **경계 문단 둘(§7-3까지의 `고칠 수 있는 것은 이것뿐이다`·`셸로는 읽고 세는 것만 된다`)은
+ *  §7-5 결정 4가 지웠다.** 도구 앞의 경계(`--allowed-tools`·`BASH_ALLOWED`)가 사라져서 두
+ *  문단이 거짓말이 됐기 때문이다(`toolFlags` 주석). 대신 한 문단이 들어간다 — 경계가 도구에
+ *  없으니 사람이 시키지 않은 것을 고치지 않는 책임이 글에 있다는 것.
  *
  *  **`tickets/**`에 `Write`가 붙은 자리는 종전과 다르게 진다**(요구 `64b45d3c` — §7 §홈 대화에서
- *  요구사항이 접수된다). 플래그의 경로 스코프는 파일 내용을 못 보므로 *`kind: request`만 만든다*는
- *  제약을 여기 프롬프트 글이 진다 — §7 §`kind`를 지는 것이 글이다가 정한 그 자리다. 경로를
- *  절대경로로 안 쓰는 것은 스냅샷이 이미 큐 루트를 적어 주기 때문이다.
+ *  요구사항이 접수된다). 도구가 더 이상 경로 스코프를 안 지므로 *`kind: request`만 만든다*는
+ *  제약을 여기 프롬프트 글이 온전히 진다 — §7 §`kind`를 지는 것이 글이다가 정한 그 자리고,
+ *  §7-5 결정 4 마지막 항이 그대로 남긴 문단이다.
  *
- *  **`ontologyDir`은 예외 — 절대경로 그대로 적는다.** 나머지 다섯은 큐 루트 기준이라 상대
- *  글롭으로 충분하지만, 온톨로지는 재정의한 큐에서 큐 밖을 가리킬 수 있어(요구 `85114387`
- *  §결정 4) 상대 표기로 못 박으면 에이전트가 큐 루트 아래 옛 자리를 판다. */
+ *  **`ontologyDir`은 이제 본문에 안 쓰인다** — 경로 나열 문단이 죽으면서 유일한 쓰임이
+ *  없어졌다. 인자는 그대로 둔다(시그니처를 바꾸면 모든 호출부·테스트가 갈린다). */
 export function buildPrompt(snapshot: string, question: string, ontologyDir: string, persona = ""): string {
+  void ontologyDir;
   return `${persona ? `${persona}\n\n` : ""}${snapshot}
 
 ---
 
-**고칠 수 있는 것은 이것뿐이다** — 큐 루트 아래 \`personas/**\` · \`protocols/**\` ·
-\`workers/*.sh\` · \`AGENTS.md\`, 그리고 온톨로지 \`${ontologyDir}/**\`. 그 밖(\`worktrees/**\` 아래
-프로젝트 코드 · repo 나머지 · 여기 없는 자리 전부)은 도구가 거부한다. 거부되면 우회하지 말고
-무엇이 왜 막혔는지 그대로 알려 준다.
-
-**셸로는 읽고 세는 것만 된다.** 로그를 자르고 세고 줄 세우는 읽기 전용 명령만 돌고, 쓰는
-명령(파일을 만들거나 덮어쓰거나 리다이렉트하는 것)은 거부된다. 거부되면 우회하지 말고 무엇이
-왜 막혔는지 그대로 알려 준다.
+**경계는 도구가 아니라 이 글이 진다.** 큐 밖이든 안이든, 사람이 시키지 않은 것은 고치지
+않는다. 무엇을 왜 고치는지 확신이 안 서면 고치기 전에 먼저 물어본다.
 
 **\`tickets/**\`에는 새 파일도 쓸 수 있다 — 사람이 그 턴에 요구사항으로 올려 달라고 했을
 때만.** 그때 만드는 것은 \`kind: request\` 티켓 하나뿐이다(\`work\`·\`feedback\`·\`answer\`는

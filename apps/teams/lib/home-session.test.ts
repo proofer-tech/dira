@@ -238,31 +238,22 @@ test("workerSessions — `.wip` 전부가 먼저, `.done`은 최근 10개. sessi
   assert.deepStrictEqual([...new Set(rows.map((r) => r.worker))], ["w1", "w3"]);
 });
 
-test("buildPrompt — 스냅샷이 질문 앞에 오고 경계가 글로 들어간다", () => {
+test("buildPrompt — 스냅샷이 질문 앞에 오고 경계 문단 둘이 §7-5로 사라진다", () => {
   const p = buildPrompt("SNAP", "w1이 지금 무슨 일을 하고 있나?", "/Users/x/proj/.dira/ontology");
   assert.ok(p.indexOf("SNAP") < p.indexOf("w1이 지금"));
-  // 종전 `(쓰기 도구는 애초에 막혀 있다)`가 거짓이 된 자리 — 새 경계가 다 글로 뜨고
-  // 막힌 쪽도 이름으로 뜬다(막힌 것을 두드리다 끝나는 턴이 사람에게는 고장으로 보인다)
-  for (const s of [
-    "personas/**",
-    "protocols/**",
-    "workers/*.sh",
-    "AGENTS.md",
-    "/Users/x/proj/.dira/ontology/**",
-    "worktrees/**",
-    "tickets/**",
-  ]) {
-    assert.ok(p.includes(s), `프롬프트에 ${s}가 없다 — §7 §쓰기가 닿는 곳이 다섯이 된다`);
+  // §7-5 결정 4가 지운 경로 나열·셸 제한 문단 — 도구가 더 이상 그 경계를 안 지므로 글도 안 진다
+  assert.ok(!p.includes("고칠 수 있는 것은 이것뿐이다"));
+  assert.ok(!p.includes("셸로는 읽고 세는 것만 된다"));
+  for (const s of ["personas/**", "protocols/**", "workers/*.sh", "worktrees/**"]) {
+    assert.ok(!p.includes(s), `프롬프트에 ${s}가 남아 있다 — §7-5가 경로 나열 문단을 지웠다`);
   }
   assert.ok(!p.includes("쓰기 도구는 애초에 막혀"));
   // **고정 지시문이 죽었다**(§7 §페르소나가 실린다) — PROFILE이 누구인지를 말하고, *티켓을
   // 고치지 않는다*는 이 페르소나가 하는 일(본문에 링크를 단다)과 정면으로 부딪쳤다.
   assert.ok(!p.includes("질의응답 에이전트"));
   assert.ok(!p.includes("고치지도 않는다"));
-  assert.match(p, /거부되면\s+우회하지\s+말고\s+무엇이\s+왜\s+막혔는지\s+그대로\s+알려 준다/);
-  // §7-3(요구 `b100a3aa`) — 셸 문단이 붙는다. 읽고 세는 것만 되고 쓰는 명령은 거부된다는
-  // 문장이 있고, 우회 금지는 기존 문장을 재사용한다(글이 두 번 서므로 위 정규식도 여전히 맞는다).
-  assert.match(p, /셸로는\s+읽고\s+세는\s+것만\s+된다/);
+  // 대신 §7-5 결정 4가 넣은 한 문단 — 사람이 시키지 않은 것을 고치지 않는 책임이 글에 있다
+  assert.match(p, /경계는\s+도구가\s+아니라\s+이\s+글이\s+진다/);
   assert.ok(!p.match(/Bash\(/), "허용목록을 프롬프트에 전재하지 않는다 — 정본은 플래그다");
   // **`새 티켓을 만들지 않는다`는 §7 §홈 대화에서 요구사항이 접수된다가 뒤집은 문장이다** —
   // 이제 프롬프트에 없어야 한다. 대신 여섯 가지가 뜬다(§7 §`kind`를 지는 것이 글이다 · §본문은 두 층이다).
@@ -285,13 +276,9 @@ test("buildPrompt — 페르소나 블록이 스냅샷 앞에 뜬다 (§7 §페�
   assert.strictEqual(questionOf(p), "질문");
 });
 
-test("buildPrompt — 재정의된 온톨로지는 큐 밖 절대경로 그대로 문장에 뜬다 (요구 `85114387` §결정 4)", () => {
+test("buildPrompt — ontologyDir은 §7-5 이후 본문에 안 실린다(인자는 시그니처 보존용으로 남는다)", () => {
   const p = buildPrompt("SNAP", "질문", "/Users/x/vault/ontology");
-  assert.ok(p.includes("/Users/x/vault/ontology/**"));
-  // 나머지 다섯은 여전히 큐 루트 아래 상대 글롭이다 — 옮기는 것은 온톨로지 하나뿐이다
-  for (const s of ["personas/**", "protocols/**", "workers/*.sh", "AGENTS.md", "tickets/**"]) {
-    assert.ok(p.includes(s));
-  }
+  assert.ok(!p.includes("/Users/x/vault/ontology"));
 });
 
 test("personaBlock — 세 조각이 tick.sh:265와 같은 순서로 · 없으면 빈 문자열", async () => {
@@ -334,88 +321,39 @@ test("personaBlock — 세 조각이 tick.sh:265와 같은 순서로 · 없으�
   assert.strictEqual(await personaBlock(personas, "pm"), "");
 });
 
-test("toolFlags — 네 조각과 경로 스코프 여섯 (89962e56 · 7e35d300 · bd3cd201 · 64b45d3c · 85114387)", () => {
-  // 기본값 큐 — 온톨로지도 큐 루트 아래다(`resolveConfig`가 기본값으로 주는 그 값)
+test("toolFlags — §7-5: 경로 스코프가 통째로 없고 --dangerously-skip-permissions가 있다 (요구 `ea5e6f4d`)", () => {
   const flags = toolFlags("/Users/x/proj/.dira", "/Users/x/proj/.dira/ontology");
 
-  // ① 네 조각이 다 있다. `--allowed-tools`는 **도구를 빼지 않고**(권한 목록이다) 나머지 셋 중
-  // 하나라도 빠지면 세션에 `Bash`가 살아난다 — 그게 `89962e56` 그 사건이다. 지금은 넷째가
-  // 경로 스코프까지 지므로 그것도 **존재**로 고정한다. 실측은 `home-session.ts` 머리 주석에 있다.
-  for (const flag of ["--tools", "--strict-mcp-config", "--permission-mode", "--allowed-tools"]) {
-    assert.ok(flags.includes(flag), `${flag}가 빠졌다 — 도구 표면이 §7 표보다 넓어진다`);
+  // ① `--tools`·`--strict-mcp-config`는 그대로 있다 — 답이 연 것은 쓰기이지 도구 집합이 아니다
+  // (§7-5 결정 2 마지막 항).
+  for (const flag of ["--tools", "--strict-mcp-config"]) {
+    assert.ok(flags.includes(flag), `${flag}가 빠졌다 — §7-5 결정 2가 남긴 것이다`);
   }
-  // ② `--tools` 값은 variadic 함정 때문에 **쉼표 한 토큰**이다(공백으로 나누면 질문까지 도구로 먹는다).
-  // `Bash`가 §7-3(요구 `b100a3aa`)의 승격이다 — 열리는 것은 도구가 아니라 아래 허용목록 열하나뿐이다.
+  // ② `--tools` 값은 여전히 쉼표 한 토큰이다(variadic 함정 · 머리 주석)
   assert.strictEqual(flags[flags.indexOf("--tools") + 1], "Read,Glob,Grep,Write,Edit,Bash");
-
-  const scope = flags.slice(flags.indexOf("--allowed-tools") + 1);
-  // ①' §7-3 결정 4의 열하나가 `Bash(<명령>:*)` 꼴로 글자까지 같다. `git`은 두 낱말 프리픽스뿐이다.
-  for (const cmd of ["ls", "cat", "head", "tail", "wc", "sort", "uniq", "cut", "grep", "jq", "git log"]) {
-    assert.ok(scope.includes(`Bash(${cmd}:*)`), `Bash(${cmd}:*)가 없다 — §7-3 결정 4`);
+  // ③ 경로 스코프·읽기 전용 명령 허용목록의 계약이던 조각이 전부 없다(§7-5 결정 1·2)
+  for (const gone of ["--permission-mode", "manual", "--allowed-tools"]) {
+    assert.ok(!flags.includes(gone), `${gone}이 남아 있다 — §7-5가 걷어낸 조각이다`);
   }
-  // 목록 밖 이름은 **`Bash(...)` 프리픽스 어디에도** 안 나온다 — 쓰는 명령(awk·sed·rm)과 임의
-  // 실행(python3)과 git의 위험한 하위명령(commit)이 프리픽스로도 안 들어온다. 다른 플래그(예:
-  // `--permission-mode`)의 부분 문자열 오탐을 피하려 `Bash(...)` 토큰만 본다.
-  const bashTokens = flags.filter((f) => f.startsWith("Bash("));
-  for (const outside of ["awk", "sed", "python3", "rm", "git commit"]) {
-    assert.ok(!bashTokens.includes(`Bash(${outside}:*)`), `Bash(${outside}:*)가 있다 — §7-3 결정 4 밖이다`);
+  for (const token of flags) {
+    assert.ok(!token.startsWith("Write("), `${token} — 경로 스코프가 §7-5로 없어졌다`);
+    assert.ok(!token.startsWith("Edit("), `${token} — 경로 스코프가 §7-5로 없어졌다`);
+    assert.ok(!token.startsWith("Bash("), `${token} — Bash 허용목록이 §7-5로 없어졌다`);
   }
-  // ③ 쓰기가 닿는 곳 **여섯**이 다 있다. `Write`·`Edit` 양쪽에 붙어야 한다 — 한쪽만 스코프면
-  // 다른 쪽이 큐 전체를 연다(절대경로는 `//` 접두다 — 실측 문법). **여섯이 다 큐 루트 아래다**
-  // — 종전 뒤 둘이 repo(`dirname(root)`) 기준이던 것이 개정 `22a803de`로 큐 안으로 왔고,
-  // `tickets/**`는 요구 `64b45d3c`가 `Edit`만이던 자리에 `Write`를 더했다(§7 §홈 대화에서
-  // 요구사항이 접수된다) — 종전 `EDIT_ONLY` 상수는 이제 없다.
-  for (const p of [
-    "/Users/x/proj/.dira/personas/**",
-    "/Users/x/proj/.dira/protocols/**",
-    "/Users/x/proj/.dira/workers/*.sh",
-    "/Users/x/proj/.dira/ontology/**",
-    "/Users/x/proj/.dira/AGENTS.md",
-    "/Users/x/proj/.dira/tickets/**",
-  ]) {
-    for (const tool of ["Write", "Edit"]) {
-      assert.ok(scope.includes(`${tool}(//${p})`), `${tool}(//${p})가 없다 — §7 §쓰기가 닿는 곳이 여섯이 된다`);
-    }
-  }
-  // ④ 밖이어야 하는 것들이 **어느 스코프에도 안 나온다**. `worktrees/` 아래는 실제 프로젝트
-  // 코드고, repo 쪽 예외가 **0**이라 소스·`docs/`·엔진은 그대로 막혀 있다
-  for (const out of ["worktrees", "docs", "apps", "tick.sh"]) {
-    assert.ok(!scope.some((s) => s.includes(out)), `${out}가 스코프에 들었다 — 요구가 막으라고 한 것이다`);
-  }
-  // repo(`dirname(root)`) 기준 항이 **0**이다 — 경로 스코프 전부가 큐 루트 아래로 시작한다
-  // (개정 `22a803de`. 이 한 줄이 요구 `20e4a6f4`를 예외 없이 세우는 자리다). `Bash(...)`는
-  // 경로 스코프가 아니라 명령 프리픽스라 이 검사 밖이다(§7-3 결정 4).
-  for (const s of scope.filter((s) => s.startsWith("Write(") || s.startsWith("Edit("))) {
-    assert.match(s, /^(Write|Edit)\(\/\/\/Users\/x\/proj\/\.dira\//, `${s}가 큐 루트 밖이다`);
-  }
-  // ⑤ 스코프 없는 맨 `Write`·`Edit`는 큐 전체를 연다 — 그것도 없어야 한다
-  assert.ok(!scope.includes("Write") && !scope.includes("Edit"));
-  // ⑥ `--dangerously-skip-permissions`(스코프를 통째로 끈다)는 §7이 여전히 안 쓰는 것이다 — §7-3도 안 뒤집었다
-  assert.ok(!flags.some((f) => f.includes("dangerously")));
-  // ⑦ §7-4 결정 3 — `toolFlags`는 이름 두 개(`root` · `ontologyDir`)만 받는다. 고른 페르소나가
-  // 섞일 자리 자체가 없다는 것을 함수 길이로도 고정하고(호출부에 셋째 인자가 없다), 흔한
-  // 페르소나 이름이 반환값 어디에도 안 나오는 것으로 한 번 더 잰다.
+  // ④ `--dangerously-skip-permissions`가 있다 — §7-5 결정 2가 세운 그 자리
+  assert.ok(flags.includes("--dangerously-skip-permissions"));
+  // ⑤ §7-4 결정 3 — `toolFlags`는 여전히 이름 두 개(`root` · `ontologyDir`)만 받는다. 값을
+  // 안 써도 시그니처는 보존한다(호출부·§7-4 계약을 안 건드린다).
   assert.strictEqual(toolFlags.length, 2);
   for (const name of ["pm", "developer", "qa", "archive-manager"]) {
     assert.ok(!flags.some((f) => f.includes(name)), `페르소나 이름 '${name}'이 toolFlags 반환값에 섞였다`);
   }
 });
 
-test("toolFlags — 재정의된 온톨로지는 큐 밖 절대경로가 스코프에 뜨고 나머지 다섯은 그대로다 (요구 `85114387` §결정 4)", () => {
-  const flags = toolFlags("/Users/x/proj/.dira", "/Users/x/vault/ontology");
-  const scope = flags.slice(flags.indexOf("--allowed-tools") + 1);
-  // 옮긴 자리 — 큐 밖 절대경로 그대로
-  for (const tool of ["Write", "Edit"]) {
-    assert.ok(scope.includes(`${tool}(///Users/x/vault/ontology/**)`));
-  }
-  // 옛 자리(큐 루트 아래 `ontology/**`)는 더 이상 없다 — 재정의했으면 옛 자리는 못 쓴다
-  assert.ok(!scope.some((s) => s.includes("/Users/x/proj/.dira/ontology")));
-  // 나머지 다섯은 여전히 큐 루트 아래다 — 옮기는 것은 온톨로지 하나뿐이다(§결정 4)
-  for (const p of ["personas/**", "protocols/**", "workers/*.sh", "AGENTS.md", "tickets/**"]) {
-    for (const tool of ["Write", "Edit"]) {
-      assert.ok(scope.includes(`${tool}(///Users/x/proj/.dira/${p})`));
-    }
-  }
+test("toolFlags — root·ontologyDir 값이 달라도 반환값은 안 갈린다(§7-5 이후 스코프에 안 쓰인다)", () => {
+  const a = toolFlags("/Users/x/proj/.dira", "/Users/x/proj/.dira/ontology");
+  const b = toolFlags("/Users/y/other/.dira", "/Users/x/vault/ontology");
+  assert.deepStrictEqual(a, b);
 });
 
 test("questionOf — 스냅샷·지시문을 떼고 사람이 쓴 질문만 남는다 (§비주얼 §24 말풍선)", () => {
@@ -855,7 +793,7 @@ test("첫 질문이 실패한 대화 — 줄과 제목은 남고 session id만 �
   }
 });
 
-test("ask — TICKET_ONTOLOGY 재정의 큐에서 --allowed-tools가 옮긴 자리를 쓴다 (요구 `85114387` §결정 4)", async () => {
+test("ask — TICKET_ONTOLOGY 재정의 큐에서도 §7-5 인자는 안 갈린다(경로 스코프가 없어졌다)", async () => {
   const root = path.join(mkdtempSync(path.join(tmpdir(), "ha-ont-")), ".dira");
   tmps.push(path.dirname(root));
   const workers = path.join(root, "workers");
@@ -883,13 +821,11 @@ test("ask — TICKET_ONTOLOGY 재정의 큐에서 --allowed-tools가 옮긴 자�
     const r = await ask(project, "질문");
     assert.strictEqual(r.ok, true, r.output);
     const argv = readFileSync(log, "utf8").trim();
-    // 옮긴 자리 — 큐 밖 절대경로가 스코프에 뜬다
-    assert.ok(argv.includes(`Edit(//${vault}/**)`));
-    assert.ok(argv.includes(`Write(//${vault}/**)`));
-    // 옛 자리(큐 루트 아래 `ontology/`)는 더 이상 스코프에 없다
+    // §7-5 이후 온톨로지 재정의는 argv에 아무 흔적도 안 남긴다 — 경로 스코프가 통째로 없다
+    assert.ok(!argv.includes(vault));
     assert.ok(!argv.includes(`${root}/ontology`));
-    // 나머지 다섯은 여전히 큐 루트 아래다 — 옮기는 것은 온톨로지 하나뿐이다(§결정 4)
-    assert.ok(argv.includes(`Edit(//${root}/personas/**)`));
+    assert.ok(!argv.match(/Write\(|Edit\(/));
+    assert.ok(argv.includes("--dangerously-skip-permissions"));
     // cwd(스냅샷 읽기 근거)는 안 갈린다 — 그대로 큐의 부모다
     assert.match(argv, new RegExp(`작업 디렉터리\\(= 이 세션의 cwd\\): ${path.dirname(root).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
   } finally {
@@ -1588,17 +1524,9 @@ test("워커 세션 — 사라진 `current`는 대화 0건과 같고, 고르면 
   });
   const argv = readFileSync(ARGV, "utf8").trim().split("\n");
   assert.match(argv.at(-1) ?? "", new RegExp(`^-p --resume ${done} `));
-  assert.match(argv.at(-1) ?? "", /--tools Read,Glob,Grep,Write,Edit,Bash --strict-mcp-config --permission-mode manual/);
-  // 경로 스코프가 **이 프로젝트의 큐 루트**로 떠 있다(`toolFlags(root)` — 상수 배열이면 못 하는 일이다)
-  assert.ok((argv.at(-1) ?? "").includes(`Edit(//${root}/personas/**)`));
-  // 아카이빙 산출물 둘도 **큐 루트 아래**다 — repo 기준 항이 0이다(개정 `22a803de`)
-  assert.ok((argv.at(-1) ?? "").includes(`Write(//${root}/AGENTS.md)`));
-  // 재정의를 안 한 큐 — 온톨로지도 여전히 큐 루트 아래다(회귀 0, 요구 `85114387` §결정 4)
-  assert.ok((argv.at(-1) ?? "").includes(`Edit(//${root}/ontology/**)`));
-  assert.ok(!(argv.at(-1) ?? "").includes(`//${path.dirname(root)}/DIRA.md`));
-  // `tickets/**`는 이제 `Write`도 받는다(요구 `64b45d3c` — §7 §홈 대화에서 요구사항이 접수된다)
-  assert.ok((argv.at(-1) ?? "").includes(`Edit(//${root}/tickets/**)`));
-  assert.ok((argv.at(-1) ?? "").includes(`Write(//${root}/tickets/**)`));
+  assert.match(argv.at(-1) ?? "", /--tools Read,Glob,Grep,Write,Edit,Bash --strict-mcp-config --dangerously-skip-permissions/);
+  // §7-5 이후 경로 스코프가 통째로 없다 — `Write(`·`Edit(` 토큰이 argv 어디에도 없다
+  assert.ok(!(argv.at(-1) ?? "").match(/Write\(|Edit\(/));
   // **`--verbose` 바로 뒤는 이제 언어 층 둘이다**(§0-16 §주입 §개정 3-4 — `--append-system-prompt`).
   // 그 값이 여러 줄이라 `head -1`이 지침 블록의 머리에서 끊는다 — 이 큐에 `personas/`가 없어도
   // 프롬프트가 스냅샷으로 시작하는 것 자체는 argv로는 더 안 보인다(`buildPrompt` 단위 테스트가
