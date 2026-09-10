@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""계획 상자 참견(§결정 기록 §엔진 수정 서른네 번째 승인 §판정 1) 자체검증.
-수용조건 1~7을 덮는다 - 8~12(판정 2 - 공통)는 이 회차 밖이다.
+"""계획 상자 참견(§결정 기록 §엔진 수정 서른네 번째 승인 §판정 1, 서른일곱 번째 승인 §판정 1이
+조건 1을 가른 뒤의 모습) 자체검증. 수용조건 1~7을 덮는다 - 8~12(판정 2 - 공통)는 이 회차 밖이다.
+조건 5는 서른일곱 번째 승인이 뒤집었다 - 절이 없으면 0개가 아니라 다른 문장으로 참견한다.
 
 진짜 claude를 부르지 않는다 - stdin JSONL을 받아 적고 스스로는 오래 안 끝나는 가짜 스트림
 엔진으로 판정한다(§제약 1, test_inbox.py와 같은 관용구). 임계값을 짧게(2초) 걸어 재는 시간을
@@ -193,11 +194,17 @@ with Case(
     assert c.lines() == [], "취소된 계획인데 참견이 왔다: {}".format(c.lines())
 print("PASS 조건 4확장 - 취소된 항목만 있으면 참견 0개")
 
-# 5 - `## 진행 계획` 절이 없으면 줄이 0개다.
+# 5 - `## 진행 계획` 절이 아예 없어도(엔진 수정 서른일곱 번째 승인 §판정 1이 서른네 번째
+# 승인 수용조건 5를 가른다) 같은 시계로 참견 한 줄이 오되, 문장은 "계획을 세워라"로 다르다.
+NUDGE_TEXT_SECTION = "## 진행 계획을 지금 세워 주세요."
 with Case("", nudge=2) as c:
-    time.sleep(10)
-    assert c.lines() == [], "계획 절이 없는데 참견이 왔다: {}".format(c.lines())
-print("PASS 조건 5 - 계획 절이 없으면 참견 0개(수용조건 5)")
+    assert wait_for(lambda: len(c.lines()) >= 1, 40), \
+        "계획 절이 없는데 임계값이 지나도 참견이 안 왔다: {}".format(c.lines())
+    assert len(c.lines()) == 1 and NUDGE_TEXT_SECTION in c.lines()[0], \
+        "절 없음 갈래의 참견 문장이 다르다: {}".format(c.lines())
+    assert wait_for(lambda: "NUDGE plan0001" in c.log(), 10), \
+        "runner.log에 NUDGE 로그가 없다\n" + c.log()
+print("PASS 조건 5 - 계획 절이 없어도 '계획을 세워라' 참견이 온다(엔진 수정 서른일곱 번째 승인 판정 1)")
 
 # 6 - TICKET_PLAN_NUDGE=0이면 장치가 꺼진다(참견이 오래 걸려도 안 온다).
 with Case("\n## 진행 계획\n- [ ] 아직 안 끝난 항목\n", nudge=0) as c:

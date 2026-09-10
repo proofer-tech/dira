@@ -1537,11 +1537,25 @@ sys.exit(1)
 ' "$1"
 }
 
-# 참견 무장 상태 - 셋이 한 벌이다. PN_MTIME은 마지막으로 본 티켓 파일 mtime(정수 초),
+# 엔진 수정 서른일곱 번째 승인 §판정 1 - 조건 1의 둘째 갈래(절이 아예 없다). exit 0 = 절이
+# 없다(참견 대상), exit 1 = 절이 있다(첫째 갈래로 넘긴다 - plan_needs_nudge가 그 안을 본다).
+plan_section_missing() {
+  python3 -c '
+import re, sys
+try:
+    text = open(sys.argv[1], encoding="utf-8").read()
+except OSError:
+    sys.exit(1)
+sys.exit(1 if re.search(r"^## 진행 계획[ \t]*$", text, re.M) else 0)
+' "$1"
+}
+
+# 참견 무장 상태 - 넷이 한 벌이다. PN_MTIME은 마지막으로 본 티켓 파일 mtime(정수 초),
 # PN_SINCE는 그 mtime이 안 갈린 채로 시작된 시각(에폭), PN_ARMED=1이면 이번 정체에서
 # 아직 참견을 안 넣었다(조건 4). TPATH가 바뀌면(§4-11 재활용) 호출부가 PN_MTIME을 비워
-# 다시 무장시킨다 - 새 티켓의 mtime을 옛 티켓의 것과 우연히 비교하지 않는다.
-PN_MTIME=""; PN_SINCE=0; PN_ARMED=1
+# 다시 무장시킨다 - 새 티켓의 mtime을 옛 티켓의 것과 우연히 비교하지 않는다. PN_KIND는
+# check_plan_nudge가 exit 0으로 돌아온 뒤 호출부가 참견 문장을 고르는 갈래 표식이다.
+PN_MTIME=""; PN_SINCE=0; PN_ARMED=1; PN_KIND=""
 
 # 감시 루프가 매 POLL(스트리밍이면 1초)마다 부른다. `TICKET_PLAN_NUDGE=0`이면 장치가 꺼진다
 # (조건 6). 파일이 갈리면(mtime 변화) 다시 무장하고 시계를 되감는다(조건 3·4) - 세션의 손이
@@ -1558,7 +1572,13 @@ check_plan_nudge() {
   fi
   [ "$PN_ARMED" = 1 ] || return 1
   [ $(( now - PN_SINCE )) -ge "$TICKET_PLAN_NUDGE" ] || return 1
-  plan_needs_nudge "$TPATH"
+  if plan_section_missing "$TPATH"; then
+    PN_KIND="section"; return 0
+  fi
+  if plan_needs_nudge "$TPATH"; then
+    PN_KIND="box"; return 0
+  fi
+  return 1
 }
 
 # 사람 참견 표식(엔진 수정 서른여섯 번째 승인 §판정 2 §경계 셋) - 자리는 `$INBOX.human`,
@@ -1618,11 +1638,17 @@ if [ -n "$INBOX" ]; then
       if check_plan_nudge; then
         # 참견 한 줄 - 최초 프롬프트·이어받기 프롬프트와 같은 FIFO, 같은 JSON 한 줄 모양이다.
         # 무엇을 켜야 하는지는 안 담는다(§판정 1 §뒤집는 조건 - 엔진이 계획을 읽고 진행을
-        # 추론하면 이 승인 밖이다) - "이미 참이 된 항목의 상자를 지금 켜라"는 지시 하나뿐이다.
+        # 추론하면 이 승인 밖이다) - 갈래마다 지시 하나뿐이다(엔진 수정 서른일곱 번째 승인
+        # §판정 1 - 절이 없으면 계획을 세우라는 문장, 있으면 종전 문장 그대로).
+        if [ "$PN_KIND" = "section" ]; then
+          PN_MSG="## 진행 계획을 지금 세워 주세요."
+        else
+          PN_MSG="## 진행 계획 상자 중 이미 끝난 항목이 있으면 지금 켜 주세요."
+        fi
         python3 -c 'import json,sys
 sys.stdout.write(json.dumps({"type":"user","message":{"role":"user","content":sys.argv[1]}},
                             ensure_ascii=False, separators=(",", ":")) + "\n")' \
-          "## 진행 계획 상자 중 이미 끝난 항목이 있으면 지금 켜 주세요." >&9
+          "$PN_MSG" >&9
         PN_ARMED=0
         PN_NUDGE_AT=$(date +%s)
         log "NUDGE $THASH plan"
