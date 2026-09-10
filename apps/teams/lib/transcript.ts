@@ -398,9 +398,10 @@ function ticketAssignmentPattern(): RegExp | null {
 const isTicketAssignment = (text: string): boolean => ticketAssignmentPattern()?.test(text) ?? false;
 
 /** `tick.sh`의 계획 재촉 리터럴로 만든 정규식(§2-9 §개정) — `ticketAssignmentPattern()`과 같은
- *  수법이다: 문구를 이 파일에 베끼지 않는다. `tick.sh:1592`가 fd 9에 쓰는 문장은 변수 보간이
- *  없는 리터럴 한 줄이라(재활용 프롬프트 줄과 달리 `$`가 없다), `>&9`로 닫는 줄 중 따옴표
- *  안에 `$`가 없는 것으로 골라낸다. 엔진 레포를 못 찾으면 `null`. */
+ *  수법이다: 문구를 이 파일에 베끼지 않는다. `tick.sh`가 fd 9에 보내는 문장은 `PN_KIND`에 따라
+ *  `if`/`else` 두 갈래로 나뉜 `PN_MSG` 대입인데, 여기서는 `else` 갈래(`PN_KIND`가 `section`이
+ *  아닌 통상 경로)의 리터럴 하나만 골라낸다. 변수 보간이 없는 리터럴이라 따옴표 안에 `$`가
+ *  없는 것으로 걸러진다. 엔진 레포를 못 찾으면 `null`. */
 let nudgePattern: RegExp | null | undefined;
 
 function planNudgePattern(): RegExp | null {
@@ -410,7 +411,7 @@ function planNudgePattern(): RegExp | null {
     const repo = engineRepo();
     if ("path" in repo) {
       const sh = readFileSync(path.join(repo.path, "tick.sh"), "utf8");
-      const m = sh.match(/^\s+"([^"$]+)"\s*>&9\s*$/m);
+      const m = sh.match(/^\s*else\s*\n\s*PN_MSG="([^"$]+)"\s*$/m);
       if (m) {
         const escaped = m[1].replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
         nudgePattern = new RegExp(`^${escaped}`);
