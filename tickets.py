@@ -499,27 +499,31 @@ def claim(path):
     return dst
 
 
-def release(path, report=False):
-    """<hash><진행중>.md -> <hash>.md 되돌리기(백로그 복귀). 멱등이다(§엔진 수정 서른여섯
-    번째 승인 판정 3) - 열린 이름이 이미 있는데 이 `.wip`이 이미 사라졌다면 남이 먼저
-    되돌린 자리이므로 성공으로 끝난다. 열린 이름과 `.wip`이 둘 다 있으면(진짜 사본 둘)
-    종전대로 실패한다.
+def _release_suffix(path, suffix, report=False):
+    """<hash><suffix>.md -> <hash>.md 되돌리기. 멱등이다(§엔진 수정 서른여섯 번째 승인
+    판정 3) - 열린 이름이 이미 있는데 이 파일이 이미 사라졌다면 남이 먼저 되돌린 자리이므로
+    성공으로 끝난다. 열린 이름과 이 파일이 둘 다 있으면(진짜 사본 둘) 종전대로 실패한다.
 
     `report=True`면 `(dst, did_work)` 튜플을 반환한다 - `did_work=False`는 이 호출이
     아무것도 안 썼다는 뜻이라, 호출자는 그 뒤 frontmatter를 쓰면 안 된다(진 쪽의 쓰기가
-    이긴 쪽의 결과를 덮으면 안 된다, 2026-07-31 `5f0498c9`). 기본은 `dst` 문자열 하나 -
-    기존 호출부(CLI 서브커맨드 - `_check_handoff_cap` - 테스트)와 호환한다."""
+    이긴 쪽의 결과를 덮으면 안 된다, 2026-07-31 `5f0498c9`)."""
     d, base = os.path.split(path)
     stem = nfc(base)[:-3]
-    if not stem.endswith(nfc(IN_PROGRESS)):
+    if not stem.endswith(nfc(suffix)):
         return (path, True) if report else path
-    dst = os.path.join(d, stem[:-len(nfc(IN_PROGRESS))] + ".md")
+    dst = os.path.join(d, stem[:-len(nfc(suffix))] + ".md")
     if os.path.exists(dst):
         if not os.path.exists(path):
             return (dst, False) if report else dst
         raise SystemExit("복귀 대상이 이미 존재: " + dst)
     os.rename(path, dst)
     return (dst, True) if report else dst
+
+
+def release(path, report=False):
+    """<hash><진행중>.md -> <hash>.md 되돌리기(백로그 복귀). 기존 호출부(CLI 서브커맨드 -
+    `_check_handoff_cap` - 테스트)와 호환하는 `.wip` 전용 얇은 래퍼다."""
+    return _release_suffix(path, IN_PROGRESS, report)
 
 
 REAP_GRACE_SEC = 180        # 디스패치 직후 프로세스 등록 지연을 피하는 유예
@@ -1235,23 +1239,28 @@ def reap_release(path, reason=None, local=None):
     | `None` / `"api_error"`(한도) / `"killed"`(밖에서 끊김 - 선점 포함) | 안 쓴다 | - |
     | `"bad_request"` | 쓴다 | `REAP_FAIL_BUDGET_BAD_REQUEST` 넘으면 백오프(`_arm_backoff`) |
     | `"other"`(그 밖의 FAIL·TIMEOUT) | 쓴다 | `REAP_FAIL_BUDGET_OTHER` 넘으면 백오프(`_arm_backoff`) |
+    | `"plan"`(§엔진 수정 서른일곱 번째 승인 §판정 2 - 안 켠 계획 상자를 남긴 `.done`) | 쓴다 | `REAP_FAIL_BUDGET_OTHER` 넘으면 백오프(`_arm_backoff`) |
 
     둘 다 세션이 죽은 사건이라 사람이 쓸 답이 없다(§답변 대기 결정 1, P395-2) - 예산을
-    넘겨도 `ask_human`으로 안 올라간다.
+    넘겨도 `ask_human`으로 안 올라간다. `path`가 `.done` 이름이면 `release`(`.wip` 전용)
+    대신 `_release_suffix`를 `DONE` 접미사로 직접 불러 되돌린다 - 새 서브커맨드 없이 같은
+    함수 하나가 갈래 둘을 다 받는다.
     """
     try:
         fm, _, _ = read_fm(path)
     except (OSError, UnicodeDecodeError):
         fm = {}
     h = ticket_hash(path, fm)
+    stem = nfc(os.path.basename(path))[:-3]
+    suffix = DONE if stem.endswith(nfc(DONE)) else IN_PROGRESS
     try:
-        newpath, did_release = release(path, report=True)
+        newpath, did_release = _release_suffix(path, suffix, report=True)
     except (SystemExit, OSError) as e:
         return "REAP-FAIL {} {}".format(h, e)
     if not did_release:
         # 남이 먼저 되돌렸다(판정 3) - 이 손은 attempts도 안 올리고 아무것도 안 쓴다.
         return "REAP {} - 남이 먼저 되돌렸다, attempts 안 씀".format(h)
-    if reason not in ("bad_request", "other"):
+    if reason not in ("bad_request", "other", "plan"):
         set_fm_keys(newpath, {k: "" for k in REAP_CLEAR})
         return ""
     attempts = int((fm.get("attempts") or "0").strip() or 0) + 1

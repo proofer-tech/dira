@@ -1912,5 +1912,24 @@ if [ -f "$TPATH" ] && ! fresh_block_sh "$TPATH"; then
   log "FAIL $THASH 세션이 ok로 끝났는데 .wip을 남겼다(신선한 블록 없음) sid=${REAL:-$SID}"
   exit 0
 fi
+# 엔진 수정 서른일곱 번째 승인 §판정 2 - `.wip`이 이미 없으면(위 갈래를 지나 여기 왔으니
+# `.done`으로 닫힌 것이다) 계획 상자까지 본다. `plan_needs_nudge`는 파일 하나를 받아 그
+# 안의 `## 진행 계획` 절에서 완료도 취소도 아닌 항목을 찾는 함수라 접미사를 안 가린다 -
+# 판정 1 조건 2와 같은 함수 하나를 그대로 재사용한다(수용조건 5). 되돌리기는 `reap_silent`
+# (엔진 `reap_release`)를 사유 `plan`으로 부른다 - 새 서브커맨드를 안 더한다(수용조건 13).
+if [ ! -f "$TPATH" ]; then
+  DONE_SUFFIX="${TICKET_DONE:-.done}.md"
+  if RP=$(python3 "$PY" find "$TICKET_ROOT" "$THASH" 2>/dev/null); then
+    case "$RP" in
+      *"$DONE_SUFFIX")
+        if plan_needs_nudge "$RP"; then
+          OUT=$(reap_silent "$RP" "plan")
+          log "FAIL $THASH 세션이 계획 상자를 안 켠 채 .done으로 닫았다 -> $OUT"
+          exit 0
+        fi
+        ;;
+    esac
+  fi
+fi
 log "DONE $THASH sid=${REAL:-$SID}"
 exit 0
