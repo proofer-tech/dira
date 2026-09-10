@@ -9,12 +9,13 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import type { PluggableList } from "unified";
 import { closeEmphasis } from "./markdown-emphasis.ts";
 import { softBreaks } from "./markdown-breaks.ts";
 import { wikilinks } from "./markdown-wikilinks.ts";
 import { refMarkers, type RefIndex } from "./markdown-refs.ts";
 
-function html(text: string, plugins: unknown[] = [closeEmphasis]) {
+function html(text: string, plugins: PluggableList = [closeEmphasis]) {
   return renderToStaticMarkup(createElement(Markdown, { remarkPlugins: plugins }, text));
 }
 
