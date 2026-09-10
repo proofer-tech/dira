@@ -631,7 +631,12 @@ export function windowEvents<E extends { ts?: string }>(
  *  경계는 사건의 스트림 순서에서 얻고, `windowEvents`가 이미 정한 창 값을 다시 비교하지 않는다.
  *
  *  계획은 언제나 **파일 순서**로 뜬다(§59 ①: "목록이 목록으로 읽힌다") — 창이 없는 계획(미착수 ·
- *  기록 0건)도 다음으로 사건을 문 계획 직전에, 남으면 맨 끝에 뜬다. */
+ *  기록 0건)도 다음으로 사건을 문 계획 직전에, 남으면 맨 끝에 뜬다.
+ *
+ *  **⑪ 판정1** — 구간을 나눠 가질 후보 중 시작 시각이 적힌 계획이 하나라도 있으면 그들만
+ *  나눠 갖고 미착수(시작 없는) 계획은 0건이다. 그 구간의 후보 전부가 미착수면(대안이 없으면)
+ *  종전대로 전부가 나눠 갖는다 — ⑨-15의 네 테스트(닻 0개 · 닻 사이 비닻 등)가 바로 이 전부
+ *  미착수 자리라 무수정으로 통과한다. */
 export type ProgressBlock<E> = { kind: "outside"; events: E[] } | { kind: "plan"; index: number; events: E[] };
 
 export function planBlocks<E extends { ts?: string }>(
@@ -665,10 +670,15 @@ export function planBlocks<E extends { ts?: string }>(
       if (gapPlans.length === 0) {
         blocks.push({ kind: "outside", events: gapEvents });
       } else {
-        const shares = splitEvenly(gapEvents, gapPlans.length);
-        gapPlans.forEach((p, k) => {
+        // ⑪ 판정1 — 시작 시각이 적힌 계획이 하나라도 있으면 그들만 나눠 갖고 미착수(시작
+        // 없는) 계획은 0건이다. 전부 미착수면(대안이 없으면) 종전대로 전부가 나눠 갖는다.
+        const started = gapPlans.filter((p) => plans[p].start);
+        const recipients = started.length > 0 ? started : gapPlans;
+        const shares = splitEvenly(gapEvents, recipients.length);
+        const shareOf = new Map(recipients.map((p, k) => [p, shares[k]]));
+        gapPlans.forEach((p) => {
           pending.delete(p);
-          blocks.push({ kind: "plan", index: p, events: shares[k] });
+          blocks.push({ kind: "plan", index: p, events: shareOf.get(p) ?? [] });
         });
       }
     } else if (pending.delete(o)) {

@@ -604,6 +604,50 @@ test("planBlocks — 닻 사이의 비닻 계획 둘은 그 구간 사건을 파
   assert.deepEqual(wKeys(blocks[3].events), ["in2"]);
 });
 
+/** 오류 방지 개정(DESIGN.md §2-11⑪ 판정1, 요구 `6b656a43`, 답 `b510d53e` 2.(a)) — 미착수(시작
+ *  없는) 계획은 구간 배분에서 빠진다. 대안(시작 있는 나머지)이 있을 때만 빠지고, 구간의 후보
+ *  전부가 미착수면 위 ⑨-15 테스트들처럼 종전대로 전부가 나눠 갖는다(그 넷은 무수정으로
+ *  통과한다 — DESIGN 수용조건 21). */
+test("planBlocks — 혼합 구간에서 미착수 계획은 0건, 시작이 적힌 나머지가 균등하게 나눠 갖는다(§2-11⑪ 판정1)", () => {
+  const plans = [
+    plan("anchor1", "done", "2026-08-01T01:00:00Z", "2026-08-01T02:00:00Z"),
+    plan("midTodo", "todo", null),
+    plan("midStarted", "done", "2026-08-01T02:30:00Z", "2026-08-01T03:00:00Z"),
+    plan("anchor2", "done", "2026-08-01T04:00:00Z", "2026-08-01T05:00:00Z"),
+  ];
+  const events = [
+    we("in1", "2026-08-01T01:30:00Z"),
+    we("g1", "2026-08-01T02:15:00Z"), // midStarted 자신의 창 [02:30,03:00) 밖 — 닻이 아니다
+    we("g2", "2026-08-01T03:15:00Z"),
+    we("in2", "2026-08-01T04:30:00Z"),
+  ];
+  const blocks = planBlocks(plans, events, 0);
+  assert.deepEqual(planKinds(blocks), ["plan0", "plan1", "plan2", "plan3"]);
+  assert.deepEqual(wKeys(blocks[0].events), ["in1"]);
+  assert.deepEqual(wKeys(blocks[1].events), []); // midTodo — 미착수라 0건
+  assert.deepEqual(wKeys(blocks[2].events), ["g1", "g2"]); // midStarted가 둘 다 갖는다
+  assert.deepEqual(wKeys(blocks[3].events), ["in2"]);
+});
+
+test("planBlocks — 구간 후보 전부가 미착수면 대안이 없어 종전대로 전부가 나눠 갖는다(§2-11⑪ 판정1)", () => {
+  const plans = [
+    plan("anchor1", "done", "2026-08-01T01:00:00Z", "2026-08-01T02:00:00Z"),
+    plan("mid1", "todo", null),
+    plan("mid2", "todo", null),
+    plan("anchor2", "done", "2026-08-01T04:00:00Z", "2026-08-01T05:00:00Z"),
+  ];
+  const events = [
+    we("in1", "2026-08-01T01:30:00Z"),
+    we("g1", "2026-08-01T02:30:00Z"),
+    we("g2", "2026-08-01T03:00:00Z"),
+    we("in2", "2026-08-01T04:30:00Z"),
+  ];
+  const blocks = planBlocks(plans, events, 0);
+  assert.deepEqual(planKinds(blocks), ["plan0", "plan1", "plan2", "plan3"]);
+  assert.deepEqual(wKeys(blocks[1].events), ["g1"]);
+  assert.deepEqual(wKeys(blocks[2].events), ["g2"]);
+});
+
 /** 안쪽 겹 개정(DESIGN.md §비주얼 §59 ③-2, 요구 `7b87494f`) — `planBlocks`의 `outside` 블록 중
  *  접는 그릇(§59 ⑦-1 `배정`·`마무리`)인 것을 가르는 판정. 이 값이 `ProgressItems`의 `flat`
  *  프롭으로 흘러 §9 묶음 겹의 유무를 가른다(session-stream.test.ts가 그 배선을 고정한다). */
