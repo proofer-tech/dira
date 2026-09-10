@@ -152,13 +152,21 @@ try:
     assert os.path.exists(pn), "N: 유예 이내인데 회수했다"
     assert "nnnn3333" not in joined, "N: 유예 이내인데 보고했다\n" + joined
 
-    # H) 유령 회귀(5f0498c9): 리퍼 둘이 겹쳐도 사라진 .wip을 되살리지 않는다
+    # H) 판정 3(§엔진 수정 서른여섯 번째 승인) - 리퍼 둘이 겹치면 진 쪽도 REAP-FAIL 없이
+    #    성공으로 끝나고, .wip을 되살리지 않으며, attempts는 이긴 쪽 한 번만 오른다.
     ph = mk(ws, "hhhh8888", ["session_id: nosuchsession-zzzz",
                              "assigned_at: " + iso(-T.REAP_GRACE_SEC - 60)])
     hfm = T.read_fm(ph)[0]
+    hopen = os.path.join(ws, "tickets", "hhhh8888.md")
     assert "REAP hhhh8888" in T.reclaim(ph, hfm, "이긴 쪽")
-    assert "REAP-FAIL hhhh8888" in T.reclaim(ph, hfm, "진 쪽"), "H: 진 쪽이 조용히 성공했다"
+    win_attempts = int((T.read_fm(hopen)[0].get("attempts") or "0").strip() or 0)
+    out_h2 = T.reclaim(ph, hfm, "진 쪽")
+    assert "REAP-FAIL" not in out_h2, "H: 진 쪽이 REAP-FAIL로 실패했다(멱등 안 됨): " + out_h2
+    assert "hhhh8888" in out_h2, "H: 진 쪽 결과에 해시가 없다: " + out_h2
     assert not os.path.exists(ph), "H: 진 쪽이 .wip을 되살렸다 - 주인 없는 유령이 남는다"
+    lose_attempts = int((T.read_fm(hopen)[0].get("attempts") or "0").strip() or 0)
+    assert lose_attempts == win_attempts, \
+        "H: 진 쪽이 attempts를 또 올렸다(두 번 오름): {} -> {}".format(win_attempts, lose_attempts)
 
     # K) 결정 9 - `askhuman <path> --if-blocked`: 신선한 블록 ∧ deps_unmet==[]일 때만 잠근다.
     #    `unassign`의 플래그 없는 종료 경로가 clear+release **앞에서** 부르는 바로 그 CLI다.
@@ -237,7 +245,23 @@ try:
     assert p_msgs == [], "P: claim 직후인데 하드링크 mtime 재상속으로 회수됐다\n" + str(p_msgs)
     assert os.path.exists(pp_wip), "P: claim 직후 티켓이 사라졌다"
 
-    print("PASS 18/18")
+    # Q) 판정 3 - `tick.sh`의 조용한 실패 회수 자리(`reap_release`)도 같은 티켓을 두 번
+    #    부르면(부모의 사후처리와 리퍼가 겹치는 모양) 둘째 호출이 REAP-FAIL 없이 성공하고
+    #    attempts는 첫 호출 한 번만 오른다.
+    pq = mk(ws, "qqqq6666", ["session_id: nosuchsession-zzzz",
+                             "assigned_at: " + iso(-T.REAP_GRACE_SEC - 60)])
+    qopen = os.path.join(ws, "tickets", "qqqq6666.md")
+    out_q1 = T.reap_release(pq, "other")
+    assert "REAP-FAIL" not in out_q1, "Q: 첫 호출이 실패했다: " + out_q1
+    assert os.path.exists(qopen), "Q: 첫 호출 뒤 열린 이름이 없다"
+    q_attempts = int((T.read_fm(qopen)[0].get("attempts") or "0").strip() or 0)
+    out_q2 = T.reap_release(pq, "other")
+    assert "REAP-FAIL" not in out_q2, "Q: 둘째 호출이 REAP-FAIL로 실패했다(멱등 안 됨): " + out_q2
+    q_attempts2 = int((T.read_fm(qopen)[0].get("attempts") or "0").strip() or 0)
+    assert q_attempts2 == q_attempts, \
+        "Q: 둘째 호출이 attempts를 또 올렸다: {} -> {}".format(q_attempts, q_attempts2)
+
+    print("PASS 20/20")
     for m in msgs:
         print("  " + m)
 finally:
