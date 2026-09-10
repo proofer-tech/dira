@@ -79,6 +79,10 @@ TICKET_REUSE_CTX="${TICKET_REUSE_CTX:-100000}"
 # 감시 루프가 세션 inbox에 참견 한 줄을 넣는다. 0이면 장치가 꺼진다. 값의 근거는 임계값
 # 실측표(정상 간격의 5.1%만 넘고, 반례 세션의 34분 생존은 잡는다) - docs/DESIGN.md 그 절.
 TICKET_PLAN_NUDGE="${TICKET_PLAN_NUDGE:-1200}"
+# 엔진 수정 서른여섯 번째 승인 §판정 2. 참견을 넣은 뒤 이 초 동안도 티켓 파일이 안 갈리면
+# 그 세션을 끊고 티켓을 되돌린다. 0이면 장치가 꺼진다(기본값) - 반례가 4.8%뿐인 실측표라
+# 켜는 값은 운영이 관측하며 고른다. 사람 참견이 그 사이 들어왔으면 안 끊는다(check_plan_kill).
+TICKET_PLAN_KILL="${TICKET_PLAN_KILL:-0}"
 
 # 엔진 수정 스물네·스물일곱 번째 계약: 워커가 부르는 실행 파일의 자리를 고정 경로로 모은다.
 # claude 실행 파일은 심링크고 실체가 업데이트마다 새 버전 디렉터리로 옮겨간다(이 머신 버전
@@ -722,7 +726,7 @@ if [ "$CMD" = "tick" ]; then
   fi
   printf %s "$$" > "$LOCK/pid"
   # 빈 값이면 rm -f ""가 되고 아무 일도 안 한다 -- 어떻게 죽든 FIFO가 남지 않게 여기 한 번만 건다.
-  trap 'rm -rf "$LOCK" "$SLOCK"; rm -f "$INBOX" "$PRIMEF" "${PRIMEF:+$PRIMEF.fed}"' EXIT
+  trap 'rm -rf "$LOCK" "$SLOCK"; rm -f "$INBOX" "$PRIMEF" "${PRIMEF:+$PRIMEF.fed}" "${INBOX:+$INBOX.human}"' EXIT
 fi
 
 # 엔진 쿨다운 게이트·claude 인증 게이트는 여기 없다 - 페르소나가 엔진을 정하므로 어느
@@ -1557,6 +1561,35 @@ check_plan_nudge() {
   plan_needs_nudge "$TPATH"
 }
 
+# 사람 참견 표식(엔진 수정 서른여섯 번째 승인 §판정 2 §경계 셋) - 자리는 `$INBOX.human`,
+# `lib/interject.ts`가 FIFO에 쓴 뒤 같은 자리를 건드리는 사이드카 파일이다. 새 frontmatter
+# 키 0(파일이 티켓 밖에 있다) - 엔진은 시각만 읽고 이 파일에 안 쓴다(mkfifo 자리 옆의 다른
+# 런타임 파일과 같은 신분, `$PRIMEF.fed`처럼) - 사람이 보는 문구 0(내용을 안 읽고 mtime만
+# 본다). PN_SINCE(이번 무장 정체가 시작된 시각) 뒤에 표식이 갈렸으면 그 정체 동안 사람
+# 참견이 들어온 것이다 - 계약 2.
+human_since_arm() {
+  [ -n "$INBOX" ] && [ -f "$INBOX.human" ] || return 1
+  local hm
+  hm=$(python3 -c 'import os,sys; print(int(os.path.getmtime(sys.argv[1])))' "$INBOX.human" 2>/dev/null) || return 1
+  [ "$hm" -ge "$PN_SINCE" ]
+}
+
+# 엔진 수정 서른여섯 번째 승인 §판정 2 - 참견을 넣은 뒤(PN_NUDGE_AT) TICKET_PLAN_KILL초
+# 동안도 티켓 파일이 안 갈리면(PN_ARMED가 그 사실을 쥔다 - 갈렸으면 check_plan_nudge가 이미
+# 재무장해 0으로 안 남는다) 참을 대상이다. 계약 1 - 이 판정이 세는 것은 엔진이 넣은 참견
+# 하나이고, 사람이 넣은 줄은 여기 입력이 아니다(사람 표식은 아래 한 줄에서만 본다).
+# 계약 2 - 사람 참견이 이번 정체에서 들어왔으면 끊지 않는다.
+PN_NUDGE_AT=0
+check_plan_kill() {
+  [ "$TICKET_PLAN_KILL" = "0" ] && return 1
+  [ "$PN_ARMED" = 0 ] || return 1
+  [ -f "$TPATH" ] || return 1
+  local now
+  now=$(date +%s)
+  [ $(( now - PN_NUDGE_AT )) -ge "$TICKET_PLAN_KILL" ] || return 1
+  ! human_since_arm
+}
+
 # MAXRUN 감시. 매달린 세션을 죽이는 것이 이 감시의 뜻이지 체인 길이를 재는 게 아니라서
 # §4-11 재활용마다 죽이고 다시 세운다("티켓마다 새로 잰다"). is_result에 의한 종료는 이제
 # 여기 없다 - main 루프가 먼저 봐야 재활용 여부를 결정할 수 있어서 그 판정을 main으로 옮겼다.
@@ -1591,7 +1624,16 @@ sys.stdout.write(json.dumps({"type":"user","message":{"role":"user","content":sy
                             ensure_ascii=False, separators=(",", ":")) + "\n")' \
           "## 진행 계획 상자 중 이미 끝난 항목이 있으면 지금 켜 주세요." >&9
         PN_ARMED=0
+        PN_NUDGE_AT=$(date +%s)
         log "NUDGE $THASH plan"
+      fi
+      if check_plan_kill; then
+        # 참견을 넣은 뒤에도 정체가 안 풀렸다 - 끊는다. 로그 줄은 새로 안 만든다(§경계 -
+        # 새 로그 머리말 0), 아래 통일 판정부가 이 경로도 rc=143 · EL<MAXRUN이라 종전
+        # "KILLED" 줄을 그대로 낸다. PN_KILL_FIRED만 남겨 DEATH_KIND를 killed가 아니라
+        # other로 돌린다(그래야 attempts가 오르고 예산이 문다 - §판정 2 수용조건 10).
+        PN_KILL_FIRED=1
+        kill -TERM "$CPID" 2>/dev/null; sleep 5; kill -KILL "$CPID" 2>/dev/null
       fi
       sleep "$POLL"
     done
@@ -1652,7 +1694,7 @@ sys.stdout.write(json.dumps({"type":"user","message":{"role":"user","content":sy
 
       OUTOFFSET="$INJOFFSET"
       TPATH="$RTPATH"; THASH="$RTHASH"; TKIND="$RTKIND"
-      PN_MTIME=""; PN_SINCE=0; PN_ARMED=1  # 새 티켓 - 참견 무장을 새로 잰다(옛 mtime과 안 겹친다)
+      PN_MTIME=""; PN_SINCE=0; PN_ARMED=1; PN_NUDGE_AT=0  # 새 티켓 - 참견 무장을 새로 잰다(옛 mtime과 안 겹친다)
       kill "$WPID" 2>/dev/null; wait "$WPID" 2>/dev/null
       start_watchdog
       continue
@@ -1665,7 +1707,7 @@ sys.stdout.write(json.dumps({"type":"user","message":{"role":"user","content":sy
 fi
 wait "$CPID"; RC=$?
 kill "$WPID" 2>/dev/null; wait "$WPID" 2>/dev/null
-[ -n "$INBOX" ] && rm -f "$INBOX" "$PRIMEF" "${PRIMEF:+$PRIMEF.fed}"
+[ -n "$INBOX" ] && rm -f "$INBOX" "$PRIMEF" "${PRIMEF:+$PRIMEF.fed}" "$INBOX.human"
 OUT=$(cat "$OUTF" 2>/dev/null); rm -f "$OUTF"
 printf '%s\n' "$OUT" >> "$LOGF"
 
@@ -1737,11 +1779,15 @@ if [ -n "${FAILED:-}" ]; then
     DEATH_KIND="api_error"
   elif [ "$REASON" = "bad_request" ]; then
     DEATH_KIND="bad_request"
-  elif [ "$VERDICT" != "err" ]; then
+  elif [ -z "${PN_KILL_FIRED:-}" ] && [ "$VERDICT" != "err" ]; then
     case $RC in
       143|137) [ "$EL" -lt "$TICKET_MAXRUN" ] && DEATH_KIND="killed" ;;
     esac
   fi
+  # §판정 2 수용조건 10 - 참견을 무시해 우리가 끊은 세션은 "밖에서 끊김"(killed, attempts
+  # 면제)이 아니라 other다. rc는 killed와 똑같이 143/137로 나오므로 위 case로는 못 가르고,
+  # 끊은 그 자리(check_plan_kill)가 남긴 PN_KILL_FIRED로 가른다 - DEATH_KIND는 이미
+  # "other"(맨 위 기본값)라 여기서 더 할 일이 없다.
   # 실행 실패(또는 상한 초과 강제종료) -> 할당 회수해서 다음 tick이 다시 집도록. 단 세션이
   # 이미 .done으로 닫은 뒤 죽었으면 $TPATH가 없다 - 되돌릴 할당이 없으므로 안 부른다
   # (§4-10 §자리 표 ①, 승인 04bd819d=(b)). 안 부르면 clear의 FileNotFoundError traceback도 안 난다.

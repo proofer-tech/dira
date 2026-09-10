@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import { execFileSync } from "node:child_process";
-import { constants, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { constants, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { open } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -52,6 +52,25 @@ test("읽는 쪽이 있으면 한 줄이 FIFO에 도착한다", async () => {
       type: "user",
       message: { role: "user", content: "참견입니다\n두 줄" },
     });
+  } finally {
+    await reader.close();
+  }
+});
+
+test("성공하면 inbox 옆에 사람 표식(.human)을 남기고 mtime을 다시 움직인다 (서른여섯 번째 승인 §판정 2)", async () => {
+  const fifo = mkfifo("inbox-human");
+  const reader = await open(fifo, constants.O_RDONLY | constants.O_NONBLOCK);
+  try {
+    const stem = ticket("aaaa9999", ".wip", fifo);
+    assert.deepEqual(await interject(root, SFX, stem, "방향 전환"), { ok: true });
+    const marker = `${fifo}.human`;
+    const first = statSync(marker).mtimeMs;
+    // 두 번째 참견도 같은 표식의 mtime을 다시 움직인다 - tick.sh가 "이번 정체에서 참견이
+    // 들어왔나"를 mtime 하나로만 재기 때문에, 재작성이 아니라 touch만 하면 첫 참견 이후로는
+    // 감지가 멈춘다.
+    await new Promise((r) => setTimeout(r, 10));
+    assert.deepEqual(await interject(root, SFX, stem, "다시 한번"), { ok: true });
+    assert.ok(statSync(marker).mtimeMs >= first, "두 번째 참견이 표식 mtime을 안 움직였다");
   } finally {
     await reader.close();
   }

@@ -116,6 +116,19 @@ export async function interject(
     // 문장으로 실패한다. 사람이 손으로 치는 글이라 천장에 안 닿는다 — 닿으면 나눠 쓴다.
     const line = JSON.stringify({ type: "user", message: { role: "user", content } }) + "\n";
     await fh.write(line);
+    // 서른여섯 번째 승인 §판정 2 §경계 셋 - 참견을 무시한 세션을 끊는 tick.sh 감시 루프가
+    // "사람이 방금 방향을 돌렸다"를 보는 유일한 창. inbox 옆 사이드카 파일(새 frontmatter
+    // 키 0, 티켓 파일 0, 사람이 보는 문구 0)을 그냥 touch한다 - 엔진은 이 mtime만 읽는다.
+    // 실패해도 참견 자체는 이미 나갔으니 삼킨다(끊김 방지는 최선 노력이지 참견의 성공 조건이 아니다).
+    await open(`${inbox}.human`, constants.O_WRONLY | constants.O_CREAT, 0o600)
+      .then(async (mh) => {
+        try {
+          await mh.write(`${Date.now()}\n`); // write가 mtime을 반드시 움직인다 - touch뿐이면 기존 파일에서 안 움직인다
+        } finally {
+          await mh.close();
+        }
+      })
+      .catch(() => {});
   } catch (e) {
     const code = (e as NodeJS.ErrnoException).code;
     if (code === "EAGAIN") {
