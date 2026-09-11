@@ -75,6 +75,14 @@ request-roundtrip form of "answers go in a new file, never appended to the origi
 `inbox:` are **written by the dispatcher - never set them yourself.** A new ticket
 carrying `session_id:` looks assigned and is never dispatched.
 
+## Question format (결정 11) - `## 질문 n`과 `## 블록`이 같이 쓴다
+
+The engine (`tickets.py` `_block_question`/`optionsOf`) reads this shape directly to
+build the card's question - it is not a project convention a screen merely happens
+to parse. A question is `### <n>.` (sub-question `1-1.`), each followed by options
+as `- (a)` bullets (sub-option `(a-1)`). No format, no card - the engine falls back
+to a fixed four-choice card and a human can't tell what was actually asked.
+
 ## Asking back on a `kind: request`
 
 Referenced from [CORE.md](CORE.md) §Ticket kinds - the four steps a session runs
@@ -83,10 +91,9 @@ is the answer stem's `.done` file, and a fresh `## 블록` parks the ticket inst
 Stopping halfway leaves the requirement stuck with nobody waiting on it.
 
 1. Append `## 질문 n` to the request body (`n` = the round) - what you don't know,
-   and what the answer decides. **Setting `awaiting:` without this section is
-   banned** - the screen then says "awaiting answer" without showing the question.
-   How options are written is the project's business (persona profiles, design
-   doc) and a screen may parse that shape.
+   and what the answer decides, in the format above (§Question format). **Setting
+   `awaiting:` without this section is banned** - the screen then says "awaiting
+   answer" without showing the question.
 2. Mint the answer stem and edit the frontmatter twice: `awaiting: <new 8-hex>`
    (overwrite if already there) and **append** that stem to `deps:`, keeping the
    existing deps. Both - `deps` is the actual lock, `awaiting:` is what the GUI

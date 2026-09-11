@@ -7,11 +7,10 @@ on conflict. Worker dir: `<root>/worktrees/<worker>`.
 
 1. Read `.dira/tickets/<hash>.wip.md`. `## Goal` + `## Done when` are the
    contract.
-2. Before anything else, append `## 진행 계획`: handoff-size steps in plain words,
-   one checkbox per line - `- [ ] step (<start> -> <end>)`, ISO 8601 + offset like
-   `assigned_at`, stamped `(<start>)` on start and `-> <end>` on check, read live -
-   never pre-filled, never backfilled in a batch. Lock, strike-and-append,
-   inherited plan, unknown-steps rule: `protocols/계획-규약.md`.
+2. Before anything else, append `## 진행 계획`: handoff-size steps, one
+   checkbox per line - `- [ ] step (<start> -> <end>)`, ISO 8601 + offset like
+   `assigned_at`, stamped `(<start>)` on start and `-> <end>` on check, read
+   live, never pre-filled or backfilled. Full rules: `protocols/계획-규약.md`.
    **Push, retrospective, `## 결과`, `.done` rename aren't plan items** - they
    repeat every ticket; the list is this ticket's own work.
 3. Do the work. Nothing outside `## Done when`. Flip each box `- [ ]` -> `- [x]`
@@ -21,8 +20,7 @@ on conflict. Worker dir: `<root>/worktrees/<worker>`.
 5. Confirm push succeeded **and every `## Done when` box is `- [x]`** - one left
    `- [ ]` means the item isn't done or the flip was missed; settle it in `## 결과`
    first. **Then** rename to `<hash>.done.md`; skip it and the ticket stays
-   incomplete. `.done` before push records unintegrated work as done. Only `mv`
-   allowed: `.wip` -> `.done`.
+   incomplete. Only `mv` allowed: `.wip` -> `.done`.
 
 ### Retrospective (회고)
 
@@ -47,14 +45,16 @@ Syntax: `CORE-TICKETS.md`.
 
 ## When blocked
 
-No guessing forward. Append `## 블록` - what's unknown, the options, the
-decision needed - and **exit leaving the file `.wip`**, not `.done`.
+No guessing forward. Append `## 블록` - one-line summary, then a question in
+`CORE-TICKETS.md` §Question format (`### <n>.` + `- (a)`) - no format means a
+fixed four-choice fallback card. Exit leaving the file `.wip`, not `.done`.
 `reap` escalates it (`CORE-TICKETS.md` - Asking back); re-dispatched -> read the
 `awaiting` stem's `.done.md`, not the original.
 
 Human calls: contradictory spec, read-only area, a new external dep, push 3x
-failed. Waiting on a queue ticket -> not a block, `deps:` append + `unassign`
-(`CORE-TICKETS.md` - Waiting on a ticket).
+failed. Only a command to run, nothing to decide -> polling wait
+(`workers/<w>.sh poll`), not a block. Waiting on a queue ticket -> `deps:`
+append + `unassign` (`CORE-TICKETS.md` - Waiting on a ticket), not a block.
 
 ## Characters (특수문자)
 
