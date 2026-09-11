@@ -51,6 +51,7 @@ import {
 } from "@/lib/home-session";
 import { explorerRoot, getProject, resolveConfig, type Project } from "@/lib/projects";
 import { killPty, openPty, ptyStatuses, restartPty, type PtyStatus } from "@/lib/pty";
+import { selfHeal } from "@/lib/self-heal";
 import {
   commitStaged,
   listCheckouts,
@@ -470,13 +471,25 @@ export async function scmPush(projectId: string, checkoutId: string): Promise<Sc
   }
 }
 
-/** pull(§11-3 결정 4) — `--ff-only` 하나, 실패 사유를 그대로 낸다. */
+/** pull(§11-3 결정 4·결정 6) — `--ff-only` 하나. 실패하면 §0-25의 A/S 모듈이 한 번 지나간다 —
+ *  제품 결함으로 갈렸으면(`ticketed`) 재시도 없이 그 사유를 그대로 내고, 그 밖(`attempted`·
+ *  `noop`)이면 pull을 한 번 더 불러 그 결과(성공이든 실패든)를 낸다. 시도는 오류 하나당 한
+ *  번이다 — A/S가 실패해도 A/S를 다시 안 부른다(결정 5). */
 export async function scmPull(projectId: string, checkoutId: string): Promise<ScmResult> {
   try {
     const project = await required(projectId);
     const checkout = await resolveCheckout(repoOf(project.root), checkoutId);
     if (!checkout) return { status: null, error: null };
-    const r = await pullCheckout(checkout.path);
+    const first = await pullCheckout(checkout.path);
+    if (first.ok) return { status: await readStatus(checkout.path), error: null };
+
+    const outcome = await selfHeal({
+      error: first.error ?? "",
+      surface: "home.sourceControl.pull",
+      cwd: checkout.path,
+      project,
+    });
+    const r = outcome === "ticketed" ? first : await pullCheckout(checkout.path);
     return { status: await readStatus(checkout.path), error: r.error };
   } catch (e) {
     return { status: null, error: (e as Error).message };

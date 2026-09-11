@@ -1720,6 +1720,9 @@ function ScmSurface({ project, projectName }: { project: string; projectName: st
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
+  // pull이 §0-25의 A/S 모듈을 지나는 동안 오류 줄 자리를 이 표식이 대신 채운다(결정 4) — 시계가
+  // 없다(§7 §천장이 없다와 같은 판정), 끝나는 조건은 `scmPull`의 프로미스가 정착하는 것 하나다.
+  const [fixing, setFixing] = useState(false);
 
   const loadStatus = async (id: string) => {
     setFailed(false);
@@ -1789,6 +1792,24 @@ function ScmSurface({ project, projectName }: { project: string; projectName: st
       .finally(() => setBusy(false));
   };
 
+  // pull만 따로 둔다 - 실패하면 서버(`scmPull`)가 그 자리에서 §0-25의 A/S를 한 번 지나고 나서야
+  // 응답한다. 그 왕복 동안 오류 줄 자리에 `fixing`이 뜬다(결정 4).
+  const runPull = () => {
+    if (!selected || busy) return;
+    setActionError(null);
+    setBusy(true);
+    setFixing(true);
+    void scmPull(project, selected)
+      .then((r) => {
+        if (r.status) setStatus(r.status);
+        setActionError(r.error);
+      })
+      .finally(() => {
+        setBusy(false);
+        setFixing(false);
+      });
+  };
+
   if (!checkouts) return null;
   const root = checkouts.filter((c) => c.isRoot);
   const worktrees = checkouts.filter((c) => !c.isRoot);
@@ -1854,7 +1875,11 @@ function ScmSurface({ project, projectName }: { project: string; projectName: st
                   {status.behind}
                 </span>
               </div>
-              {actionError && <p className="px-2 text-xs text-destructive">{actionError}</p>}
+              {fixing ? (
+                <p className="px-2 text-xs text-muted-foreground">{t("home.scm.fixing")}</p>
+              ) : (
+                actionError && <p className="px-2 text-xs text-destructive">{actionError}</p>
+              )}
               <div className="flex gap-2 px-2">
                 {selectedCheckout && (selectedCheckout.isRoot || selectedCheckout.pushSh) ? (
                   <Button
@@ -1874,7 +1899,7 @@ function ScmSurface({ project, projectName }: { project: string; projectName: st
                   size="xs"
                   className="flex-1"
                   aria-disabled={busy || undefined}
-                  onClick={() => runResult(() => scmPull(project, selected))}
+                  onClick={runPull}
                 >
                   {t("home.scm.pull")}
                 </Button>

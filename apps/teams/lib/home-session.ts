@@ -927,7 +927,7 @@ export const activityFromEvent = (event: StreamEvent | null): Activity | null =>
 
 /** 도는 질문 하나가 서버에 남기는 것 전부 — **부분 텍스트 · 활동 · 모델 · 자식 핸들 · 중지 요청**.
  *  다섯이 한 객체인 이유는 다 `runs` 맵의 수명과 같아서다(§7: 도는 동안만 있는 것). */
-type Live = {
+export type Live = {
   /** 지금까지 받은 글(`text_delta` 누적). 도는 동안만 화면이 받는다 — 끝나면 정본은 트랜스크립트다 */
   partial: string;
   /** 지금 하는 일 하나(§7 §안심 장치). 아무 신호도 안 왔으면 `null` */
@@ -949,7 +949,7 @@ type Live = {
   lastAnswer: string | null;
 };
 
-const newLive = (): Live => ({
+export const newLive = (): Live => ({
   partial: "",
   activity: null,
   model: null,
@@ -1020,9 +1020,9 @@ export async function ask(
   );
   const locale = await readLanguage(); // 위 §언어 층 둘 — 못 읽으면 `ko`로 흡수한다(같은 판정)
 
-  const run = await runClaude(
+  const run = await runClaudeAt(
     bin,
-    project.root, // 큐 루트 하나로 cwd(그 부모)와 경로 스코프 다섯이 같이 나온다 — 둘이 갈릴 자리가 없다
+    path.dirname(project.root), // 큐 루트의 부모(repo) — `runClaudeAt` 머리 주석
     ontology,
     prompt,
     [...(resumed ? ["--resume", sessionId] : ["--session-id", sessionId])],
@@ -1356,12 +1356,14 @@ function systemPromptLayers(locale: Locale): string {
   return locale === "en" ? languageNote(locale) : `${FLUENT_KO}\n\n${languageNote(locale)}`;
 }
 
-/** `root`는 **큐 루트**다. cwd(그 부모 — 머리 주석)와 경로 스코프 다섯이 **한 값에서 나온다** —
- *  둘을 따로 받으면 스코프가 다른 큐를 가리키는 조합이 만들어질 수 있다. `ontologyDir`은
- *  따로 받는다 — 재정의한 큐에서는 그 값이 `root` 밖이라 같은 값에서 못 나온다(`toolFlags` 주석). */
-async function runClaude(
+/** `cwd`는 자식 프로세스가 실제로 도는 디렉터리다 — 부르는 쪽이 그대로 정한다. `ask()`는 큐
+ *  루트의 부모(repo)를 넘기고(§7 — cwd(그 부모)와 경로 스코프 다섯이 한 값에서 나온다),
+ *  `self-heal.ts`는 오류가 난 프로젝트의 git 루트를 넘긴다(§0-25 결정 3) — 둘이 갈릴 수 있어
+ *  이 함수는 그 관계를 안 짓는다(호출자가 이미 계산한 값을 그대로 받는다). `ontologyDir`은
+ *  따로 받는다 — 재정의한 큐에서는 그 값이 `cwd` 밖이라 같은 값에서 못 나온다(`toolFlags` 주석). */
+export async function runClaudeAt(
   bin: string,
-  root: string,
+  cwd: string,
   ontologyDir: string,
   prompt: string,
   session: string[],
@@ -1371,7 +1373,7 @@ async function runClaude(
   const args = [
     "-p",
     ...session,
-    ...toolFlags(root, ontologyDir),
+    ...toolFlags(cwd, ontologyDir),
     "--output-format",
     "stream-json",
     "--include-partial-messages",
@@ -1388,7 +1390,7 @@ async function runClaude(
   if (tok?.trim()) env.CLAUDE_CODE_OAUTH_TOKEN = tok.replace(/[\r\n]/g, "");
 
   return await new Promise((resolve) => {
-    const child = spawn(bin, args, { cwd: path.dirname(root), env });
+    const child = spawn(bin, args, { cwd, env });
     live.child = child;
     // `중지`가 spawn보다 먼저 왔다(스냅샷 조립 중에 눌렀다) — 뜨자마자 죽인다.
     // 그래서 중지의 근거가 핸들이 아니라 `stopping` 플래그다.
