@@ -736,7 +736,13 @@ function CodeEditor({
           {dirty && <span className="text-xs text-muted-foreground">{t("explorer.unsaved")}</span>}
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          {error && <span className="text-xs text-destructive">{t("explorer.saveFailed")} {error}</span>}
+          {/* 실패하면 §0-25의 A/S가 이 왕복 안에서 한 번 지나간다(P404-2) — `saving`이 그
+              요청 전체를 덮으므로 오류 줄 자리를 대신 채운다. */}
+          {saving ? (
+            <span className="text-xs text-muted-foreground">{t("common.fixing")}</span>
+          ) : (
+            error && <span className="text-xs text-destructive">{t("explorer.saveFailed")} {error}</span>
+          )}
           <Button size="sm" onClick={() => void save()} disabled={saving || !dirty}>
             {saving ? t("common.saving") : t("explorer.save")}
           </Button>

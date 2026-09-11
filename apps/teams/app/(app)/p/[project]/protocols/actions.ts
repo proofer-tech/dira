@@ -10,6 +10,7 @@ import { DEFAULT_LOCALE, t, type Locale } from "@/lib/i18n";
 import { openWithinApp, type OpenResult } from "@/lib/paths";
 import { createFile, deleteFile, renameFile, saveFile } from "@/lib/protocols";
 import { getProject, resolveConfig } from "@/lib/projects";
+import { selfHeal } from "@/lib/self-heal";
 
 export type ProtocolResult = {
   ok: boolean;
@@ -29,6 +30,7 @@ function fail(e: unknown): ProtocolResult {
   return { ok: false, message: (e as Error).message };
 }
 
+/** 실패하면 §0-25의 A/S 모듈이 한 번 지나간다(P404-2, `scmPull`과 같은 왕복). */
 export async function saveProtocolAction(
   projectId: string,
   rel: string,
@@ -36,13 +38,28 @@ export async function saveProtocolAction(
   expectedMtimeMs?: number,
   locale: Locale = DEFAULT_LOCALE,
 ): Promise<ProtocolResult> {
-  try {
-    await saveFile(await baseOf(projectId, locale), rel, text, expectedMtimeMs, locale);
-    revalidatePath(`/p/${projectId}/protocols`);
-    return { ok: true, rel };
-  } catch (e) {
-    return fail(e);
-  }
+  const attempt = async (): Promise<ProtocolResult> => {
+    try {
+      await saveFile(await baseOf(projectId, locale), rel, text, expectedMtimeMs, locale);
+      revalidatePath(`/p/${projectId}/protocols`);
+      return { ok: true, rel };
+    } catch (e) {
+      return fail(e);
+    }
+  };
+
+  const first = await attempt();
+  if (first.ok) return first;
+
+  const project = await getProject(projectId);
+  if (!project) return first;
+  const outcome = await selfHeal({
+    error: first.message ?? "",
+    surface: "protocols.editor.save",
+    cwd: project.root,
+    project,
+  });
+  return outcome === "ticketed" ? first : await attempt();
 }
 
 export async function createProtocolAction(

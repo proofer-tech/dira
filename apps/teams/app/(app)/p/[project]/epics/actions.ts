@@ -12,6 +12,7 @@ import { deleteEpicMemory, epicReadmePath, saveEpicReadme, type CreateEpicResult
 import { DEFAULT_LOCALE, t, type Locale } from "@/lib/i18n";
 import { openInApp, type OpenResult } from "@/lib/paths";
 import { getProject } from "@/lib/projects";
+import { selfHeal } from "@/lib/self-heal";
 
 export type EpicResult = { ok: boolean; message?: string };
 
@@ -21,6 +22,7 @@ async function projectRoot(projectId: string, locale: Locale): Promise<string> {
   return project.root;
 }
 
+/** 실패하면 §0-25의 A/S 모듈이 한 번 지나간다(P404-2, `scmPull`과 같은 왕복). */
 export async function saveEpicReadmeAction(
   projectId: string,
   epic: string,
@@ -31,9 +33,24 @@ export async function saveEpicReadmeAction(
   const project = await getProject(projectId);
   if (!project)
     return { ok: false, reason: "other", error: `${t(locale, "home.action.unknownProjectPrefix")} ${projectId}` };
-  const r = await saveEpicReadme(project.root, epic, title, body, locale);
-  if (r.ok) revalidatePath(`/p/${projectId}/epics/${encodeURIComponent(epic)}`);
-  return r;
+
+  const attempt = () => saveEpicReadme(project.root, epic, title, body, locale);
+  const first = await attempt();
+  if (first.ok) {
+    revalidatePath(`/p/${projectId}/epics/${encodeURIComponent(epic)}`);
+    return first;
+  }
+
+  const outcome = await selfHeal({
+    error: first.error ?? "",
+    surface: "epics.readme.save",
+    cwd: project.root,
+    project,
+  });
+  if (outcome === "ticketed") return first;
+  const second = await attempt();
+  if (second.ok) revalidatePath(`/p/${projectId}/epics/${encodeURIComponent(epic)}`);
+  return second;
 }
 
 /** "OS 기본 앱으로 열기" 버튼(§10 §자리 다섯) — `epicReadmePath`가 README.md 없으면 null을

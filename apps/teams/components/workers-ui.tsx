@@ -176,7 +176,13 @@ export function ExecBitFix({
       >
         {pending ? t("workers.execFix.pending") : t("workers.execFix.button")}
       </Button>
-      {error && <Failure title={t("workers.execFix.failedTitle")} message={error} />}
+      {/* 실패하면 §0-25의 A/S가 이 왕복 안에서 한 번 지나간다(P404-2) — 그동안 `pending`이
+          오류 줄 자리를 대신 채운다, 시계 없이 그 요청이 정착하는 것 하나가 끝 조건이다. */}
+      {pending ? (
+        <p className="text-xs text-muted-foreground">{t("common.fixing")}</p>
+      ) : (
+        error && <Failure title={t("workers.execFix.failedTitle")} message={error} />
+      )}
       <CopyCommand cmd={cmd} />
     </>
   );

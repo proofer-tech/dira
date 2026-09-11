@@ -720,14 +720,20 @@ export function OntologyMigration({
         )}
       </div>
 
-      {error && (
-        <Alert variant="destructive">
-          <TriangleAlert aria-hidden />
-          <AlertTitle>{t("project.ontologyMigration.failedTitle")}</AlertTitle>
-          <AlertDescription>
-            <span className="font-mono text-xs break-all">{error}</span>
-          </AlertDescription>
-        </Alert>
+      {/* 실패하면 §0-25의 A/S가 이 왕복 안에서 한 번 지나간다(P404-2) — `pending`이 그 요청
+          전체를 덮으므로 오류 줄 자리를 대신 채운다. */}
+      {pending ? (
+        <p className="text-xs text-muted-foreground">{t("common.fixing")}</p>
+      ) : (
+        error && (
+          <Alert variant="destructive">
+            <TriangleAlert aria-hidden />
+            <AlertTitle>{t("project.ontologyMigration.failedTitle")}</AlertTitle>
+            <AlertDescription>
+              <span className="font-mono text-xs break-all">{error}</span>
+            </AlertDescription>
+          </Alert>
+        )
       )}
     </div>
   );

@@ -110,7 +110,13 @@ export function EpicReadmeEditButton({
             rows={12}
             className="font-mono"
           />
-          {error && <Failure title={t(locale, "epics.readme.saveFailed")} message={error} />}
+          {/* 실패하면 §0-25의 A/S가 이 왕복 안에서 한 번 지나간다(P404-2) — `pending`이 그
+              요청 전체를 덮으므로 오류 줄 자리를 대신 채운다. */}
+          {pending ? (
+            <p className="text-xs text-muted-foreground">{t(locale, "common.fixing")}</p>
+          ) : (
+            error && <Failure title={t(locale, "epics.readme.saveFailed")} message={error} />
+          )}
         </div>
         <DialogFooter>
           <DialogClose render={<Button variant="outline" />}>{t(locale, "common.cancel")}</DialogClose>

@@ -2108,7 +2108,14 @@ function LimitField({
           </div>
           <p className="text-xs text-muted-foreground">{t("persona.limit.popoverHint")}</p>
           <p className="text-xs text-muted-foreground">{t("persona.policy.nextTicketHint")}</p>
-          {error && <Failure title={t("persona.limit.saveFailedTitle")} message={error} />}
+          {/* 저장이 도는 동안(§0-25 결정 4, P404-2) — 실패하면 그 자리에서 A/S가 한 번 지나가고
+              끝나면 성공(에러 없음) 또는 종전 오류로 정착한다. 시계가 없다 — `pending`이 끝나는
+              것이 유일한 끝 조건. */}
+          {pending ? (
+            <p className="text-xs text-muted-foreground">{t("common.fixing")}</p>
+          ) : (
+            error && <Failure title={t("persona.limit.saveFailedTitle")} message={error} />
+          )}
           {/* 상한에는 왼쪽 보조 버튼이 없다(§44 ③) — `저장`만 `ml-auto`로 오른쪽 끝 */}
           <div className="flex items-center justify-between gap-2">
             <Button

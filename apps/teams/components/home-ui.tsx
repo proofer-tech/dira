@@ -2937,7 +2937,13 @@ function ScheduleCreateDialog({
               </SelectContent>
             </Select>
           </div>
-          {error && <ScheduleFailure message={error} />}
+          {/* 실패하면 §0-25의 A/S가 이 왕복 안에서 한 번 지나간다(P404-2) — `pending`이 그
+              요청 전체를 덮으므로 오류 줄 자리를 대신 채운다. */}
+          {pending ? (
+            <p className="text-xs text-muted-foreground">{t("common.fixing")}</p>
+          ) : (
+            error && <ScheduleFailure message={error} />
+          )}
         </div>
         <DialogFooter>
           <DialogClose render={<Button variant="outline" />}>{t("common.cancel")}</DialogClose>

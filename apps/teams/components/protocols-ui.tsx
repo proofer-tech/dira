@@ -218,8 +218,13 @@ export function ProtocolEditor({
         onChange={setText}
       />
 
-      {result && !result.ok && (
-        <Failure title={t("protocols.editor.saveFailTitle")} message={result.message ?? ""} />
+      {/* 실패하면 §0-25의 A/S가 이 왕복 안에서 한 번 지나간다(P404-2) — `pending`이 그 요청
+          전체를 덮으므로 오류 줄 자리를 대신 채운다. */}
+      {pending ? (
+        <p className="text-xs text-muted-foreground">{t("common.fixing")}</p>
+      ) : (
+        result &&
+        !result.ok && <Failure title={t("protocols.editor.saveFailTitle")} message={result.message ?? ""} />
       )}
 
       {/* 부가 정보 → 보조 → 1차 순으로 오른쪽 정렬(§비주얼 §4-3) */}

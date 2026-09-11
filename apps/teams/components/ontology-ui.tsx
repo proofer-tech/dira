@@ -203,7 +203,13 @@ export function OntologyImport({
         {t("ontology.import.hint")}
       </p>
 
-      {error && <Failure title={t("ontology.import.failTitle")} message={error} />}
+      {/* 실패하면 §0-25의 A/S가 이 왕복 안에서 한 번 지나간다(P404-2) — `pending`이 그 요청
+          전체를 덮으므로 여기서도 오류 줄 자리를 대신 채운다. */}
+      {pending ? (
+        <p className="text-xs text-muted-foreground">{t("common.fixing")}</p>
+      ) : (
+        error && <Failure title={t("ontology.import.failTitle")} message={error} />
+      )}
 
       {tickets.map((ticket) => (
         <p key={ticket.stem} className="text-xs text-muted-foreground">

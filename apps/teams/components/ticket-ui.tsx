@@ -887,7 +887,13 @@ export function RetryControls({ project, hash }: { project: string; hash: string
       <Button variant="outline" size="sm" disabled={retrying} onClick={retryNow}>
         {retrying ? t("backoff.action.retrying") : t("backoff.action.retryNow")}
       </Button>
-      {error && <Failure title={t("ticketFrontmatter.saveFailedTitle")} message={error} />}
+      {/* 실패하면 §0-25의 A/S가 이 왕복 안에서 한 번 지나간다(P404-2) — `retrying`이 그 요청
+          전체를 덮으므로 오류 줄 자리를 대신 채운다. */}
+      {retrying ? (
+        <p className="text-xs text-muted-foreground">{t("common.fixing")}</p>
+      ) : (
+        error && <Failure title={t("ticketFrontmatter.saveFailedTitle")} message={error} />
+      )}
     </div>
   );
 }

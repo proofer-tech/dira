@@ -12,6 +12,7 @@ import { track } from "@/lib/analytics";
 import { runWorker } from "@/lib/engine";
 import { DEFAULT_LOCALE, t, type Locale } from "@/lib/i18n";
 import { getProject, validateOntologyInput } from "@/lib/projects";
+import { selfHeal } from "@/lib/self-heal";
 import {
   applyCommonSource,
   applyDispatchGate,
@@ -262,18 +263,35 @@ export async function applyDispatchGateAction(
 
 /** `no-exec` 결함(§0-21 결정 3)의 복구 버튼. `applyExecBit`가 이 워커 파일 하나만 `chmod`한다 —
  *  다른 워커 파일의 모드는 이 액션이 손대지 않는다. */
+/** 실패하면 §0-25의 A/S 모듈이 한 번 지나간다(P404-2, `scmPull`과 같은 왕복) — 실행 비트가
+ *  없는 것은 전형적인 "사용자 환경의 상태"라 이 자리가 그 첫 적용지다. */
 export async function applyExecBitAction(
   projectId: string,
   name: string,
   locale: Locale = DEFAULT_LOCALE,
 ): Promise<WorkerActionResult> {
-  try {
-    await applyExecBit(await rootOf(projectId, locale), name);
-    revalidatePath(`/p/${projectId}`, "layout");
-    return { ok: true };
-  } catch (e) {
-    return fail(e);
-  }
+  const attempt = async (): Promise<WorkerActionResult> => {
+    try {
+      await applyExecBit(await rootOf(projectId, locale), name);
+      revalidatePath(`/p/${projectId}`, "layout");
+      return { ok: true };
+    } catch (e) {
+      return fail(e);
+    }
+  };
+
+  const first = await attempt();
+  if (first.ok) return first;
+
+  const project = await getProject(projectId);
+  if (!project) return first;
+  const outcome = await selfHeal({
+    error: first.message ?? "",
+    surface: "workers.execFix",
+    cwd: project.root,
+    project,
+  });
+  return outcome === "ticketed" ? first : await attempt();
 }
 
 /** 워커 간 복사. 받는 워커의 블록을 **통째로** 바꾼다 — 화면이 그 사실을 먼저 알린다. */

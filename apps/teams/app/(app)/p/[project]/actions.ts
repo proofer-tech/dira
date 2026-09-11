@@ -16,6 +16,7 @@ import { revalidatePath } from "next/cache";
 import { saveAttachment } from "@/lib/attachments";
 import { createEpic as writeEpic, type CreateEpicResult } from "@/lib/epics";
 import { getProject } from "@/lib/projects";
+import { selfHeal } from "@/lib/self-heal";
 import type { SaveResult } from "@/lib/attachments";
 import { DEFAULT_LOCALE, t, type Locale } from "@/lib/i18n";
 
@@ -37,6 +38,7 @@ export async function uploadAttachment(
 /** 사이드바 그룹 머리의 새 에픽 입구 (DESIGN.md §에픽 결정 17) — 판정·쓰기는 전부
  *  `lib/epics.ts`의 `createEpic`이 한다(`setTicketEpic`이 `lib/epic.ts`에 위임하는 것과 같은 짝).
  *  여기가 하는 일은 프로젝트 id를 실물로 바꾸고 성공 시 보드·에픽 화면을 다시 그리는 것뿐이다. */
+/** 실패하면 §0-25의 A/S 모듈이 한 번 지나간다(P404-2, `scmPull`과 같은 왕복). */
 export async function createEpic(
   projectId: string,
   key: string,
@@ -50,10 +52,26 @@ export async function createEpic(
       reason: "other",
       error: `${t(locale, "projectActions.unknownProjectPrefix")} ${projectId}`,
     };
-  const r = await writeEpic(project.root, key, title);
-  if (r.ok) {
+
+  const attempt = () => writeEpic(project.root, key, title);
+  const first = await attempt();
+  if (first.ok) {
+    revalidatePath(`/p/${projectId}/board`);
+    revalidatePath(`/p/${projectId}/epics`);
+    return first;
+  }
+
+  const outcome = await selfHeal({
+    error: first.error ?? "",
+    surface: "board.epic.create",
+    cwd: project.root,
+    project,
+  });
+  if (outcome === "ticketed") return first;
+  const second = await attempt();
+  if (second.ok) {
     revalidatePath(`/p/${projectId}/board`);
     revalidatePath(`/p/${projectId}/epics`);
   }
-  return r;
+  return second;
 }

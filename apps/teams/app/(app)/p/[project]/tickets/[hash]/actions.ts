@@ -48,6 +48,7 @@ import {
   type TicketState,
 } from "@/lib/queue";
 import { getProject, readLanguage, resolveConfig } from "@/lib/projects";
+import { selfHeal } from "@/lib/self-heal";
 
 export type SaveState = { ok?: boolean; error?: string };
 
@@ -484,21 +485,37 @@ export async function extendPollingUntilAction(projectId: string, hash: string, 
  *  하나다 결정 4, P395-3). 판정·쓰기는 `lib/backoff-control.ts`가 한다(`dispatchPollingNowAction`과
  *  같은 이유). 성공하면 `kickIdleWorker`를 부른다 — 다음 tick(최대 30초)을 기다리지 않고 그
  *  티켓이 바로 `select`에 다시 든다. */
+/** 실패하면 §0-25의 A/S 모듈이 한 번 지나간다(P404-2, `scmPull`과 같은 왕복). */
 export async function retryBackoffNowAction(projectId: string, hash: string): Promise<SaveState> {
-  try {
-    const locale = await readLanguage();
-    const project = await getProject(projectId);
-    if (!project) throw new Error(`${t(locale, "ticketDetail.unknownProjectPrefix")} ${projectId}`);
-    const config = await resolveConfig(project);
-    const r = await retryBackoffNow(project.root, config, hash, locale);
-    if (!r.ok) return { error: r.error };
-    revalidatePath(`/p/${projectId}/tickets/${encodeURIComponent(r.stem)}`);
-    revalidatePath(`/p/${projectId}/board`);
-    await kickIdleWorker(project.root);
-    return { ok: true };
-  } catch (e) {
-    return { error: (e as Error).message };
-  }
+  const attempt = async (): Promise<SaveState> => {
+    try {
+      const locale = await readLanguage();
+      const project = await getProject(projectId);
+      if (!project) throw new Error(`${t(locale, "ticketDetail.unknownProjectPrefix")} ${projectId}`);
+      const config = await resolveConfig(project);
+      const r = await retryBackoffNow(project.root, config, hash, locale);
+      if (!r.ok) return { error: r.error };
+      revalidatePath(`/p/${projectId}/tickets/${encodeURIComponent(r.stem)}`);
+      revalidatePath(`/p/${projectId}/board`);
+      await kickIdleWorker(project.root);
+      return { ok: true };
+    } catch (e) {
+      return { error: (e as Error).message };
+    }
+  };
+
+  const first = await attempt();
+  if (!first.error) return first;
+
+  const project = await getProject(projectId);
+  if (!project) return first;
+  const outcome = await selfHeal({
+    error: first.error,
+    surface: "ticketDetail.retryBackoff",
+    cwd: project.root,
+    project,
+  });
+  return outcome === "ticketed" ? first : await attempt();
 }
 
 /** 요구사항 답변 — `tickets/<awaiting><done>.md`를 **새로** 만든다 (DESIGN.md §요구사항 레이어).
