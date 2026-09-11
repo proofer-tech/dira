@@ -2131,7 +2131,8 @@ export const ko: Record<string, string> = {
   "home.scm.push": "푸시",
   "home.scm.pull": "풀",
   "home.scm.noPushSh": "이 프로젝트에는 push.sh가 없다",
-  "home.scm.fixing": "고치는 중",
+  "home.scm.pullFailedTitle": "pull 실패",
+  "home.scm.pullFixing": "pull 오류를 고치는 중",
 
   // 탐색기 · 편집기(§11-2 결정 1 · 2 · 4, P366-6) — `lib/explorer.ts`가 던지는 사유 문구.
   "explorer.cycleReason": "이미 위쪽에 펼쳐진 디렉터리를 가리킵니다 — 순환이라 안 펼칩니다.",
@@ -4406,7 +4407,8 @@ export const en: Record<string, string> = {
   "home.scm.push": "Push",
   "home.scm.pull": "Pull",
   "home.scm.noPushSh": "This project has no push.sh",
-  "home.scm.fixing": "Fixing",
+  "home.scm.pullFailedTitle": "Pull failed",
+  "home.scm.pullFixing": "Fixing the pull error",
 
   "explorer.cycleReason": "This points back to a directory already open above it — not expanding (cycle).",
   "explorer.notAFile": "Not a file.",

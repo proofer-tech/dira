@@ -488,25 +488,15 @@ export async function scmPush(projectId: string, checkoutId: string): Promise<Sc
   }
 }
 
-/** pull(§11-3 결정 4·결정 6) — `--ff-only` 하나. 실패하면 §0-25의 A/S 모듈이 한 번 지나간다 —
- *  제품 결함으로 갈렸으면(`ticketed`) 재시도 없이 그 사유를 그대로 내고, 그 밖(`attempted`·
- *  `noop`)이면 pull을 한 번 더 불러 그 결과(성공이든 실패든)를 낸다. 시도는 오류 하나당 한
- *  번이다 — A/S가 실패해도 A/S를 다시 안 부른다(결정 5). */
+/** pull(§11-3 결정 4·결정 6) — `--ff-only` 하나. **A/S를 안 부른다**(§0-25 결정 8) — 자기 조작
+ *  한 번을 하고 결과를 그대로 돌려준다. 오류 카드를 먼저 그리고 그 위에서 A/S를 돌려 재시도하는
+ *  순서는 화면(`ScmSurface`)이 `components/self-heal.tsx`의 `useSelfHealRetry`로 쥔다. */
 export async function scmPull(projectId: string, checkoutId: string): Promise<ScmResult> {
   try {
     const project = await required(projectId);
     const checkout = await resolveCheckout(repoOf(project.root), checkoutId);
     if (!checkout) return { status: null, error: null };
-    const first = await pullCheckout(checkout.path);
-    if (first.ok) return { status: await readStatus(checkout.path), error: null };
-
-    const outcome = await selfHeal({
-      error: first.error ?? "",
-      surface: "home.sourceControl.pull",
-      cwd: checkout.path,
-      project,
-    });
-    const r = outcome === "ticketed" ? first : await pullCheckout(checkout.path);
+    const r = await pullCheckout(checkout.path);
     return { status: await readStatus(checkout.path), error: r.error };
   } catch (e) {
     return { status: null, error: (e as Error).message };

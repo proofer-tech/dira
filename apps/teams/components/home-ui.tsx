@@ -105,6 +105,7 @@ import { TerminalPanel } from "@/components/terminal-panel";
 import { useKeymap } from "@/components/keymap-provider";
 import { useLocale, useT } from "@/components/language-provider";
 import { Markdown } from "@/components/markdown";
+import { SelfHealAlert, useSelfHealRetry } from "@/components/self-heal";
 import { splitAttachments } from "@/lib/attachment-format";
 import type { RefIndex } from "@/lib/markdown-refs";
 import type { PtyStatus } from "@/lib/pty";
@@ -1720,9 +1721,9 @@ function ScmSurface({ project, projectName }: { project: string; projectName: st
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
-  // pull이 §0-25의 A/S 모듈을 지나는 동안 오류 줄 자리를 이 표식이 대신 채운다(결정 4) — 시계가
-  // 없다(§7 §천장이 없다와 같은 판정), 끝나는 조건은 `scmPull`의 프로미스가 정착하는 것 하나다.
-  const [fixing, setFixing] = useState(false);
+  // pull만 §0-25의 A/S를 지난다(결정 7-8) — 오류 카드를 먼저 그리고 그 위에서 A/S가 도는 순서를
+  // 이 훅이 쥔다. `pullError`가 곧 그 카드의 내용이고 `fixing`이 뜨는 동안 카드는 안 사라진다.
+  const { error: pullError, fixing, setError: setPullError, run: runSelfHealRetry } = useSelfHealRetry();
 
   const loadStatus = async (id: string) => {
     setFailed(false);
@@ -1762,6 +1763,7 @@ function ScmSurface({ project, projectName }: { project: string; projectName: st
   const pick = (id: string) => {
     setSelected(id);
     setActionError(null);
+    setPullError(null);
     setMessage("");
     void loadStatus(id);
   };
@@ -1792,22 +1794,23 @@ function ScmSurface({ project, projectName }: { project: string; projectName: st
       .finally(() => setBusy(false));
   };
 
-  // pull만 따로 둔다 - 실패하면 서버(`scmPull`)가 그 자리에서 §0-25의 A/S를 한 번 지나고 나서야
-  // 응답한다. 그 왕복 동안 오류 줄 자리에 `fixing`이 뜬다(결정 4).
+  // pull만 따로 둔다 - 실패하면 오류 카드가 먼저 뜨고, 그 카드 위에서 A/S가 한 번 돈다(결정 7-8).
+  // 왕복이 둘이다: `scmPull` 첫 시도가 실패로 정착한 뒤에야 `runSelfHeal`을 부르고, `ticketed`가
+  // 아니면 `scmPull`을 한 번 더 부른다 - 그 순서를 `useSelfHealRetry`가 쥔다.
   const runPull = () => {
     if (!selected || busy) return;
+    const checkoutId = selected;
     setActionError(null);
     setBusy(true);
-    setFixing(true);
-    void scmPull(project, selected)
+    void runSelfHealRetry(
+      () => scmPull(project, checkoutId),
+      (r) => r.error,
+      { projectId: project, surface: "home.sourceControl.pull", checkoutId },
+    )
       .then((r) => {
         if (r.status) setStatus(r.status);
-        setActionError(r.error);
       })
-      .finally(() => {
-        setBusy(false);
-        setFixing(false);
-      });
+      .finally(() => setBusy(false));
   };
 
   if (!checkouts) return null;
@@ -1875,8 +1878,15 @@ function ScmSurface({ project, projectName }: { project: string; projectName: st
                   {status.behind}
                 </span>
               </div>
-              {fixing ? (
-                <p className="px-2 text-xs text-muted-foreground">{t("home.scm.fixing")}</p>
+              {pullError ? (
+                <div className="px-2">
+                  <SelfHealAlert
+                    title={t("home.scm.pullFailedTitle")}
+                    error={pullError}
+                    fixing={fixing}
+                    fixingText={t("home.scm.pullFixing")}
+                  />
+                </div>
               ) : (
                 actionError && <p className="px-2 text-xs text-destructive">{actionError}</p>
               )}

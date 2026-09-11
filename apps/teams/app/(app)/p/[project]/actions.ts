@@ -12,13 +12,39 @@
  *
  *  얇다 — 저장·정규화·경로 방어는 전부 `lib/attachments.ts`가 한다. 여기가 하는 일은
  *  프로젝트 id를 실물로 바꾸고 `File`이 실제로 왔는지 보는 것뿐이다. */
+import path from "node:path";
 import { revalidatePath } from "next/cache";
 import { saveAttachment } from "@/lib/attachments";
 import { createEpic as writeEpic, type CreateEpicResult } from "@/lib/epics";
 import { getProject } from "@/lib/projects";
-import { selfHeal } from "@/lib/self-heal";
+import { selfHeal, type SelfHealOutcome } from "@/lib/self-heal";
+import { resolveCheckout } from "@/lib/source-control";
 import type { SaveResult } from "@/lib/attachments";
 import { DEFAULT_LOCALE, t, type Locale } from "@/lib/i18n";
+
+/** §0-25 결정 8 - A/S 자신이 서버 액션 하나가 된다. 오류를 그리는 11곳(결정 1)이 이 액션 하나를
+ *  공유한다 - `components/self-heal.tsx`의 `useSelfHealRetry`가 부르는 쪽이다.
+ *
+ *  받는 것은 결정 1이 정한 셋 그대로다(오류 문구 - 표면 - 프로젝트). `checkoutId`는 소스 컨트롤
+ *  표면만 넘긴다 - 그 표면의 cwd가 `project.root`가 아니라 체크아웃 경로라서다(`home/actions.ts`의
+ *  `repoOf`와 같은 계산). 클라이언트가 고른 값이라 `resolveCheckout`이 다시 실재를 확인한다
+ *  (신뢰 경계) - 없으면 `project.root`다. */
+export async function runSelfHeal(
+  projectId: string,
+  error: string,
+  surface: string,
+  checkoutId?: string,
+): Promise<SelfHealOutcome> {
+  const project = await getProject(projectId);
+  if (!project) return "noop";
+  let cwd = project.root;
+  if (checkoutId) {
+    const checkout = await resolveCheckout(path.dirname(project.root), checkoutId);
+    if (!checkout) return "noop";
+    cwd = checkout.path;
+  }
+  return selfHeal({ error, surface, cwd, project });
+}
 
 export async function uploadAttachment(
   projectId: string,
