@@ -20,6 +20,7 @@ import {
 } from "@/app/(app)/p/[project]/protocols/actions";
 import { useLocale, useT } from "@/components/language-provider";
 import { MarkdownEditor } from "@/components/markdown-editor";
+import { SelfHealAlert, useSelfHealRetry } from "@/components/self-heal";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -178,6 +179,7 @@ export function ProtocolEditor({
   const locale = useLocale();
   const [text, setText] = useState(initial);
   const [result, setResult] = useState<ProtocolResult | null>(null);
+  const { error, fixing, run } = useSelfHealRetry();
   const [pending, start] = useTransition();
   // 아래 버튼은 값을 안 밀어 넣는다(`<MarkdownEditor>`는 uncontrolled다) — `key`를 바꿔 다시
   // 마운트시켜 `defaultValue`(=initial)로 돌아가게 한다.
@@ -218,13 +220,15 @@ export function ProtocolEditor({
         onChange={setText}
       />
 
-      {/* 실패하면 §0-25의 A/S가 이 왕복 안에서 한 번 지나간다(P404-2) — `pending`이 그 요청
-          전체를 덮으므로 오류 줄 자리를 대신 채운다. */}
-      {pending ? (
-        <p className="text-xs text-muted-foreground">{t("common.fixing")}</p>
-      ) : (
-        result &&
-        !result.ok && <Failure title={t("protocols.editor.saveFailTitle")} message={result.message ?? ""} />
+      {/* 실패하면 오류 카드가 먼저 뜨고, 그 카드 위에서 §0-25의 A/S가 돈다(결정 7-8) —
+          `useSelfHealRetry`가 그 왕복 순서를 쥔다. */}
+      {error && (
+        <SelfHealAlert
+          title={t("protocols.editor.saveFailTitle")}
+          error={error}
+          fixing={fixing}
+          fixingText={t("protocols.editor.saveFixing")}
+        />
       )}
 
       {/* 부가 정보 → 보조 → 1차 순으로 오른쪽 정렬(§비주얼 §4-3) */}
@@ -255,7 +259,11 @@ export function ProtocolEditor({
           disabled={pending || !dirty}
           onClick={() =>
             start(async () => {
-              const r = await saveProtocolAction(projectId, rel, text, initialMtimeMs, locale);
+              const r = await run(
+                () => saveProtocolAction(projectId, rel, text, initialMtimeMs, locale),
+                (res) => (res.ok ? null : (res.message ?? t("protocols.editor.saveFailedDefaultMessage"))),
+                { projectId, surface: "protocols.editor.save" },
+              );
               setResult(r);
               if (r.ok) router.refresh(); // 트리의 AGENTS.md 문자 수도 다시 읽는다
             })

@@ -42,6 +42,7 @@ import { useLocale, useT } from "@/components/language-provider";
 import { wrap } from "@/lib/i18n";
 // 왼쪽 목록 줄의 점도 보드·칸반·필터와 **같은 컴포넌트**다(§5) — 색 조회의 출처는 하나다
 import { PersonaDot } from "@/components/persona-badge";
+import { SelfHealAlert, useSelfHealRetry } from "@/components/self-heal";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   AlertDialog,
@@ -2046,7 +2047,7 @@ function LimitField({
   const saved = limit === null ? "" : String(limit);
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState(saved);
-  const [error, setError] = useState<string | null>(null);
+  const { error, fixing, run, setError } = useSelfHealRetry();
   const [pending, start] = useTransition();
   const ready = !pending && value.trim() !== saved;
   const labelId = `persona-limit-${name}-label`;
@@ -2054,14 +2055,15 @@ function LimitField({
 
   const save = () =>
     start(async () => {
-      const r = await savePersonaLimitAction(projectId, name, value);
+      const r = await run(
+        () => savePersonaLimitAction(projectId, name, value),
+        (res) => (res.ok ? null : (res.message ?? t("persona.limit.saveFailed"))),
+        { projectId, surface: "persona.limit.save" },
+      );
       if (r.ok) {
         onSaved(r.limit ?? null);
         setValue(r.limit === null || r.limit === undefined ? "" : String(r.limit));
-        setError(null);
         setOpen(false);
-      } else {
-        setError(r.message ?? t("persona.limit.saveFailed"));
       }
     });
 
@@ -2108,13 +2110,15 @@ function LimitField({
           </div>
           <p className="text-xs text-muted-foreground">{t("persona.limit.popoverHint")}</p>
           <p className="text-xs text-muted-foreground">{t("persona.policy.nextTicketHint")}</p>
-          {/* 저장이 도는 동안(§0-25 결정 4, P404-2) — 실패하면 그 자리에서 A/S가 한 번 지나가고
-              끝나면 성공(에러 없음) 또는 종전 오류로 정착한다. 시계가 없다 — `pending`이 끝나는
-              것이 유일한 끝 조건. */}
-          {pending ? (
-            <p className="text-xs text-muted-foreground">{t("common.fixing")}</p>
-          ) : (
-            error && <Failure title={t("persona.limit.saveFailedTitle")} message={error} />
+          {/* 실패하면 오류 카드가 먼저 뜨고, 그 카드 위에서 §0-25의 A/S가 돈다(결정 7-8) —
+              `useSelfHealRetry`가 그 왕복 순서를 쥔다. */}
+          {error && (
+            <SelfHealAlert
+              title={t("persona.limit.saveFailedTitle")}
+              error={error}
+              fixing={fixing}
+              fixingText={t("persona.limit.saveFixing")}
+            />
           )}
           {/* 상한에는 왼쪽 보조 버튼이 없다(§44 ③) — `저장`만 `ml-auto`로 오른쪽 끝 */}
           <div className="flex items-center justify-between gap-2">

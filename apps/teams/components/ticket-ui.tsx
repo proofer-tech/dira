@@ -70,6 +70,7 @@ import type { RefIndex } from "@/lib/markdown-refs";
 import type { Vault } from "@/lib/markdown-wikilinks";
 import { PersonaDot } from "@/components/persona-badge";
 import { PriorityMeter } from "@/components/priority-meter";
+import { SelfHealAlert, useSelfHealRetry } from "@/components/self-heal";
 import { DepBadge } from "@/components/status-badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
@@ -874,12 +875,15 @@ export function PollingControls({
 export function RetryControls({ project, hash }: { project: string; hash: string }) {
   const t = useT();
   const [retrying, startRetry] = useTransition();
-  const [error, setError] = useState<string | null>(null);
+  const { error, fixing, run } = useSelfHealRetry();
 
   const retryNow = () =>
     startRetry(async () => {
-      const r = await retryBackoffNowAction(project, hash);
-      setError(r.error ?? null);
+      await run(
+        () => retryBackoffNowAction(project, hash),
+        (res) => res.error ?? null,
+        { projectId: project, surface: "ticketDetail.retryBackoff" },
+      );
     });
 
   return (
@@ -887,12 +891,15 @@ export function RetryControls({ project, hash }: { project: string; hash: string
       <Button variant="outline" size="sm" disabled={retrying} onClick={retryNow}>
         {retrying ? t("backoff.action.retrying") : t("backoff.action.retryNow")}
       </Button>
-      {/* 실패하면 §0-25의 A/S가 이 왕복 안에서 한 번 지나간다(P404-2) — `retrying`이 그 요청
-          전체를 덮으므로 오류 줄 자리를 대신 채운다. */}
-      {retrying ? (
-        <p className="text-xs text-muted-foreground">{t("common.fixing")}</p>
-      ) : (
-        error && <Failure title={t("ticketFrontmatter.saveFailedTitle")} message={error} />
+      {/* 실패하면 오류 카드가 먼저 뜨고, 그 카드 위에서 §0-25의 A/S가 돈다(결정 7-8) —
+          `useSelfHealRetry`가 그 왕복 순서를 쥔다. */}
+      {error && (
+        <SelfHealAlert
+          title={t("ticketFrontmatter.saveFailedTitle")}
+          error={error}
+          fixing={fixing}
+          fixingText={t("backoff.action.fixing")}
+        />
       )}
     </div>
   );

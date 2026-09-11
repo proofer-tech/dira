@@ -28,6 +28,7 @@ import { useT } from "@/components/language-provider";
 import { saveOntologyAction as saveOntologyLocationAction } from "@/app/(app)/p/[project]/workers/actions";
 import { MarkdownEditor } from "@/components/markdown-editor";
 import { PickPath } from "@/components/path-picker";
+import { SelfHealAlert, useSelfHealRetry } from "@/components/self-heal";
 import type { Vault } from "@/lib/markdown-wikilinks";
 import type { FrontmatterCandidates } from "@/lib/markdown-frontmatter-rows";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -157,7 +158,7 @@ export function OntologyImport({
   const router = useTrackedRouter();
   const [folder, setFolder] = useState("");
   const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { error, fixing, run } = useSelfHealRetry();
 
   const helpId = `import-help-${projectId}`;
 
@@ -167,14 +168,14 @@ export function OntologyImport({
       onSubmit={(e) => {
         e.preventDefault();
         if (!folder.trim() || pending) return;
-        setError(null);
         setPending(true);
-        void publishOntologyImportAction(projectId, folder).then((r) => {
+        void run(
+          () => publishOntologyImportAction(projectId, folder),
+          (res) => (res.ok ? null : res.message),
+          { projectId, surface: "ontology.import" },
+        ).then((r) => {
+          setPending(false);
           if (r.ok) router.push(`/p/${projectId}/tickets/${r.stem}`);
-          else {
-            setPending(false);
-            setError(r.message);
-          }
         });
       }}
     >
@@ -203,12 +204,15 @@ export function OntologyImport({
         {t("ontology.import.hint")}
       </p>
 
-      {/* 실패하면 §0-25의 A/S가 이 왕복 안에서 한 번 지나간다(P404-2) — `pending`이 그 요청
-          전체를 덮으므로 여기서도 오류 줄 자리를 대신 채운다. */}
-      {pending ? (
-        <p className="text-xs text-muted-foreground">{t("common.fixing")}</p>
-      ) : (
-        error && <Failure title={t("ontology.import.failTitle")} message={error} />
+      {/* 실패하면 오류 카드가 먼저 뜨고, 그 카드 위에서 §0-25의 A/S가 돈다(결정 7-8) —
+          `useSelfHealRetry`가 그 왕복 순서를 쥔다. */}
+      {error && (
+        <SelfHealAlert
+          title={t("ontology.import.failTitle")}
+          error={error}
+          fixing={fixing}
+          fixingText={t("ontology.import.fixing")}
+        />
       )}
 
       {tickets.map((ticket) => (

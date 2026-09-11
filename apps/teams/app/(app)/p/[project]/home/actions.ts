@@ -51,7 +51,6 @@ import {
 } from "@/lib/home-session";
 import { explorerRoot, getProject, resolveConfig, type Project } from "@/lib/projects";
 import { killPty, openPty, ptyStatuses, restartPty, type PtyStatus } from "@/lib/pty";
-import { selfHeal } from "@/lib/self-heal";
 import {
   commitStaged,
   listCheckouts,
@@ -305,8 +304,8 @@ export async function terminalStatuses(projectId: string, ids: string[]): Promis
  *  `null`로 강제되어 지금 보던 대화·워커 세션이 튄다(§24 로딩 항이 막으려는 그 점프).
  *  실패(빈 문장·못 읽는 `when`)는 `ok: false`로 낸다 — `epic-sidebar-create.tsx`의 `Failure`와
  *  같은 모양이다. */
-/** 실패하면 §0-25의 A/S 모듈이 한 번 지나간다(P404-2 — 나머지 10곳 중 하나, `scmPull`과 같은
- *  왕복). */
+/** 실패하면 §0-25의 A/S가 화면 쪽(`home-ui.tsx`)에서 한 번 돈다(결정 7-8) — 이 액션은 자기
+ *  조작 한 번만 하고 결과를 그대로 돌려준다. */
 export async function createSchedule(
   projectId: string,
   when: string,
@@ -317,26 +316,13 @@ export async function createSchedule(
   const project = await required(projectId, locale).catch((e) => ({ error: (e as Error).message }) as const);
   if ("error" in project) return { ok: false, error: project.error };
 
-  const attempt = async (): Promise<{ ok: true; schedules: ScheduleView[] } | { ok: false; error: string }> => {
-    try {
-      const row = await createScheduleRow(project.id, when, prompt, persona);
-      if (!row) return { ok: false, error: t(locale, "home.schedule.invalidWhenOrPrompt") };
-      return { ok: true, schedules: await readScheduleViews(project.id) };
-    } catch (e) {
-      return { ok: false, error: (e as Error).message };
-    }
-  };
-
-  const first = await attempt();
-  if (first.ok) return first;
-
-  const outcome = await selfHeal({
-    error: first.error,
-    surface: "home.schedule.create",
-    cwd: project.root,
-    project,
-  });
-  return outcome === "ticketed" ? first : await attempt();
+  try {
+    const row = await createScheduleRow(project.id, when, prompt, persona);
+    if (!row) return { ok: false, error: t(locale, "home.schedule.invalidWhenOrPrompt") };
+    return { ok: true, schedules: await readScheduleViews(project.id) };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
 }
 
 /** `스케줄 삭제`(§비주얼 §62 (4)) — 위와 같은 이유로 스케줄 목록만 돌려준다. `alert-dialog`
@@ -571,8 +557,8 @@ export async function setExplorerTabUnsaved(projectId: string, relPath: string, 
   return pollHomeAnswer(projectId, null, 0);
 }
 
-/** 실패하면 §0-25의 A/S 모듈이 한 번 지나간다(P404-2 — 나머지 10곳 중 하나, `scmPull`과 같은
- *  왕복). */
+/** 실패하면 §0-25의 A/S가 화면 쪽(`explorer-ui.tsx`)에서 한 번 돈다(결정 7-8) — 이 액션은
+ *  자기 조작 한 번만 하고 결과를 그대로 돌려준다. */
 export async function saveExplorerFileAction(
   projectId: string,
   rel: string,
@@ -584,25 +570,12 @@ export async function saveExplorerFileAction(
   const project = await required(projectId, locale).catch(() => null);
   if (!project) return { ok: false, reason: `${t(locale, "home.action.unknownProjectPrefix")} ${projectId}` };
 
-  const attempt = async (): Promise<SaveResult> => {
-    try {
-      const { cwd, ticketsDir } = await explorerDirs(project);
-      return await saveExplorerFile(cwd, rel, text, expectedMtimeMs, expectedSize, ticketsDir, locale);
-    } catch (e) {
-      return { ok: false, reason: (e as Error).message };
-    }
-  };
-
-  const first = await attempt();
-  if (first.ok) return first;
-
-  const outcome = await selfHeal({
-    error: first.reason,
-    surface: "explorer.save",
-    cwd: project.root,
-    project,
-  });
-  return outcome === "ticketed" ? first : await attempt();
+  try {
+    const { cwd, ticketsDir } = await explorerDirs(project);
+    return await saveExplorerFile(cwd, rel, text, expectedMtimeMs, expectedSize, ticketsDir, locale);
+  } catch (e) {
+    return { ok: false, reason: (e as Error).message };
+  }
 }
 
 /** 이름 찾기(§11-2 결정 3) — 트리 위 칸이 치는 쪽지 매 글자마다 이 액션을 부른다. */

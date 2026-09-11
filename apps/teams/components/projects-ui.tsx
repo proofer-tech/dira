@@ -24,6 +24,7 @@ import { useLocale, useT } from "@/components/language-provider";
 import { OntologyImport } from "@/components/ontology-ui";
 import { PickPath } from "@/components/path-picker";
 import { PersonaBadge } from "@/components/persona-badge";
+import { SelfHealAlert, useSelfHealRetry } from "@/components/self-heal";
 import { SettingsDialog, type AuthView } from "@/components/settings-dialog";
 import { StatusBadge, type Status } from "@/components/status-badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -682,17 +683,17 @@ export function OntologyMigration({
   const t = useT();
   const router = useTrackedRouter();
   const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { error, fixing, run } = useSelfHealRetry();
 
   const start = () => {
-    setError(null);
     setPending(true);
-    void publishOntologyMigrationAction(projectId).then((r) => {
+    void run(
+      () => publishOntologyMigrationAction(projectId),
+      (res) => (res.ok ? null : res.message),
+      { projectId, surface: "project.ontologyMigration" },
+    ).then((r) => {
+      setPending(false);
       if (r.ok) router.push(`/p/${projectId}/tickets/${r.stem}`);
-      else {
-        setPending(false);
-        setError(r.message);
-      }
     });
   };
 
@@ -720,20 +721,15 @@ export function OntologyMigration({
         )}
       </div>
 
-      {/* 실패하면 §0-25의 A/S가 이 왕복 안에서 한 번 지나간다(P404-2) — `pending`이 그 요청
-          전체를 덮으므로 오류 줄 자리를 대신 채운다. */}
-      {pending ? (
-        <p className="text-xs text-muted-foreground">{t("common.fixing")}</p>
-      ) : (
-        error && (
-          <Alert variant="destructive">
-            <TriangleAlert aria-hidden />
-            <AlertTitle>{t("project.ontologyMigration.failedTitle")}</AlertTitle>
-            <AlertDescription>
-              <span className="font-mono text-xs break-all">{error}</span>
-            </AlertDescription>
-          </Alert>
-        )
+      {/* 실패하면 오류 카드가 먼저 뜨고, 그 카드 위에서 §0-25의 A/S가 돈다(결정 7-8) —
+          `useSelfHealRetry`가 그 왕복 순서를 쥔다. */}
+      {error && (
+        <SelfHealAlert
+          title={t("project.ontologyMigration.failedTitle")}
+          error={error}
+          fixing={fixing}
+          fixingText={t("project.ontologyMigration.fixing")}
+        />
       )}
     </div>
   );

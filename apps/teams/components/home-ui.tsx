@@ -2712,20 +2712,6 @@ function buildWhen(kind: ScheduleKind, date: string, time: string, weekday: stri
   return `${Number(m)} ${Number(h)} ${day} * *`;
 }
 
-/** §6 에러 3요소 중 1·2번 — `epic-sidebar-create.tsx`의 `Failure`와 같은 값이다. */
-function ScheduleFailure({ message }: { message: string }) {
-  const t = useT();
-  return (
-    <Alert variant="destructive">
-      <TriangleAlert aria-hidden />
-      <AlertTitle>{t("home.schedule.createFailTitle")}</AlertTitle>
-      <AlertDescription>
-        <span className="font-mono text-xs break-all">{message}</span>
-      </AlertDescription>
-    </Alert>
-  );
-}
-
 /** `스케줄` 머리 행의 `새 스케줄`(§비주얼 §62 (4)(5)) — 조립은 `epic-sidebar-create.tsx`가
  *  이미 선 그것이다(그 파일 머리 주석 — "사이드바 그룹 머리의 버튼이 다이얼로그를 여는 화면이
  *  이 앱에 이미 있다"). **cron 문자열은 한 자도 화면에 안 보인다** — 갈래 넷이 `when` 한 칸으로
@@ -2755,7 +2741,7 @@ function ScheduleCreateDialog({
   const [cron, setCron] = useState("");
   const [prompt, setPrompt] = useState("");
   const [persona, setPersona] = useState(DEFAULT_PERSONA);
-  const [error, setError] = useState<string | null>(null);
+  const { error, fixing, setError, run } = useSelfHealRetry();
   const [pending, start] = useTransition();
 
   // 열 때도 닫을 때도 초기화한다(`epic-sidebar-create.tsx`와 같은 값) — 취소 · `Esc` ·
@@ -2947,12 +2933,15 @@ function ScheduleCreateDialog({
               </SelectContent>
             </Select>
           </div>
-          {/* 실패하면 §0-25의 A/S가 이 왕복 안에서 한 번 지나간다(P404-2) — `pending`이 그
-              요청 전체를 덮으므로 오류 줄 자리를 대신 채운다. */}
-          {pending ? (
-            <p className="text-xs text-muted-foreground">{t("common.fixing")}</p>
-          ) : (
-            error && <ScheduleFailure message={error} />
+          {/* 실패하면 오류 카드가 먼저 뜨고, 그 카드 위에서 §0-25의 A/S가 돈다(결정 7-8) —
+              `useSelfHealRetry`가 그 왕복 순서를 쥔다. */}
+          {error && (
+            <SelfHealAlert
+              title={t("home.schedule.createFailTitle")}
+              error={error}
+              fixing={fixing}
+              fixingText={t("home.schedule.createFixing")}
+            />
           )}
         </div>
         <DialogFooter>
@@ -2962,13 +2951,15 @@ function ScheduleCreateDialog({
             onClick={() =>
               start(async () => {
                 const when = buildWhen(kind, date, time, weekday, day, cron);
-                const r = await createSchedule(project, when, prompt, locale, persona);
+                const r = await run(
+                  () => createSchedule(project, when, prompt, locale, persona),
+                  (res) => (res.ok ? null : res.error),
+                  { projectId: project, surface: "home.schedule.create" },
+                );
                 if (r.ok) {
                   onCreated(r.schedules);
                   setOpen(false);
                   reset();
-                } else {
-                  setError(r.error);
                 }
               })
             }

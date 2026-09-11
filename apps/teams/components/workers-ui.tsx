@@ -36,6 +36,7 @@ import {
 } from "@/app/(app)/p/[project]/workers/actions";
 import { CopyCommand } from "@/components/copy-command";
 import { PickPath } from "@/components/path-picker";
+import { SelfHealAlert, useSelfHealRetry } from "@/components/self-heal";
 import { SessionStream } from "@/components/session-stream";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -150,7 +151,7 @@ export function ExecBitFix({
 }) {
   const t = useT();
   const locale = useLocale();
-  const [error, setError] = useState<string | null>(null);
+  const { error, fixing, run } = useSelfHealRetry();
   const [pending, start] = useTransition();
   // §비주얼 §58 — 성공하면 그 순간 초점을 든 버튼일 때만 `이름` 셀로 낭독을 넘긴다.
   const [, , , announceSuccess] = useContext(ExpandCtx);
@@ -166,8 +167,11 @@ export function ExecBitFix({
         onClick={() => {
           if (pending) return; // §58 §못 누르는 실효 — aria-disabled에는 pointer-events-none이 없다
           start(async () => {
-            const r = await applyExecBitAction(projectId, name, locale);
-            setError(r.ok ? null : (r.message ?? t("workers.execFix.failedDefaultMessage")));
+            const r = await run(
+              () => applyExecBitAction(projectId, name, locale),
+              (res) => (res.ok ? null : (res.message ?? t("workers.execFix.failedDefaultMessage"))),
+              { projectId, surface: "workers.execFix" },
+            );
             if (r.ok && document.activeElement === btnRef.current) {
               announceSuccess(name, t("workers.execFix.successSentence"));
             }
@@ -176,12 +180,15 @@ export function ExecBitFix({
       >
         {pending ? t("workers.execFix.pending") : t("workers.execFix.button")}
       </Button>
-      {/* 실패하면 §0-25의 A/S가 이 왕복 안에서 한 번 지나간다(P404-2) — 그동안 `pending`이
-          오류 줄 자리를 대신 채운다, 시계 없이 그 요청이 정착하는 것 하나가 끝 조건이다. */}
-      {pending ? (
-        <p className="text-xs text-muted-foreground">{t("common.fixing")}</p>
-      ) : (
-        error && <Failure title={t("workers.execFix.failedTitle")} message={error} />
+      {/* 실패하면 오류 카드가 먼저 뜨고, 그 카드 위에서 §0-25의 A/S가 돈다(결정 7-8) —
+          `useSelfHealRetry`가 그 왕복 순서를 쥔다. */}
+      {error && (
+        <SelfHealAlert
+          title={t("workers.execFix.failedTitle")}
+          error={error}
+          fixing={fixing}
+          fixingText={t("workers.execFix.fixing")}
+        />
       )}
       <CopyCommand cmd={cmd} />
     </>

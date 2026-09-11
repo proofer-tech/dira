@@ -28,7 +28,6 @@ import {
   type SquadMember,
 } from "@/lib/projects";
 import { openInApp, type OpenResult } from "@/lib/paths";
-import { selfHeal } from "@/lib/self-heal";
 import {
   deletePersonaMemory,
   extractSkillArchive,
@@ -302,40 +301,25 @@ export async function installSkillAction(
  *  클라이언트 검증은 검증이 아니고, `<input type="number">`도 사람이 아무거나 칠 수 있다.
  *  `0`은 유효한 값이다(그 페르소나 일시 정지 — §5-4 표).
  *
- *  실패하면 §0-25의 A/S 모듈이 한 번 지나간다(P404-2) — `scmPull`(`home/actions.ts`)과 같은
- *  왕복: 제품 결함(`ticketed`)이면 재시도 없이 그 사유를 그대로 내고, 그 밖이면 한 번 더 시도한다. */
+ *  실패하면 §0-25의 A/S가 화면 쪽(`personas-ui.tsx`)에서 한 번 돈다(결정 7-8) — 이 액션은
+ *  자기 조작 한 번만 하고 결과를 그대로 돌려준다. */
 export async function savePersonaLimitAction(
   projectId: string,
   name: string,
   value: string,
 ): Promise<PersonaResult & { limit?: number | null }> {
-  const attempt = async (): Promise<PersonaResult & { limit?: number | null }> => {
-    try {
-      const text = value.trim();
-      if (text !== "" && !/^\d+$/.test(text)) {
-        throw new Error(wrap(t("ko", "persona.limit.invalidPrefix"), value, ""));
-      }
-      const limit = text === "" ? null : Number(text);
-      await writePersonaLimit(await personasDir(projectId), name, limit);
-      revalidatePath(`/p/${projectId}/personas`);
-      return { ok: true, limit };
-    } catch (e) {
-      return fail(e);
+  try {
+    const text = value.trim();
+    if (text !== "" && !/^\d+$/.test(text)) {
+      throw new Error(wrap(t("ko", "persona.limit.invalidPrefix"), value, ""));
     }
-  };
-
-  const first = await attempt();
-  if (first.ok) return first;
-
-  const project = await getProject(projectId);
-  if (!project) return first;
-  const outcome = await selfHeal({
-    error: first.message ?? "",
-    surface: "personas.limit.save",
-    cwd: project.root,
-    project,
-  });
-  return outcome === "ticketed" ? first : await attempt();
+    const limit = text === "" ? null : Number(text);
+    await writePersonaLimit(await personasDir(projectId), name, limit);
+    revalidatePath(`/p/${projectId}/personas`);
+    return { ok: true, limit };
+  } catch (e) {
+    return fail(e);
+  }
 }
 
 /** 페르소나별 실행 엔진 저장(§제약 1 §결정 기록 §열한 번째 · §23 컨트롤 재사용).

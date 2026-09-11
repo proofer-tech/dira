@@ -30,6 +30,7 @@ import {
 } from "@/app/(app)/p/[project]/home/actions";
 import { useT } from "@/components/language-provider";
 import { EmptyState } from "@/components/empty-state";
+import { SelfHealAlert, useSelfHealRetry } from "@/components/self-heal";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { ExplorerFile, ExplorerListing, FindContentResult, FindNameResult } from "@/lib/explorer";
@@ -639,7 +640,7 @@ function CodeEditor({
   const [baseline, setBaseline] = useState({ mtimeMs: initial.mtimeMs, size: initial.size });
   const [savedText, setSavedText] = useState(initial.text);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { error, fixing, run } = useSelfHealRetry();
   const [html, setHtml] = useState<string | null>(null);
   const preRef = useRef<HTMLPreElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
@@ -716,13 +717,13 @@ function CodeEditor({
 
   async function save() {
     setSaving(true);
-    setError(null);
-    const r = await saveExplorerFileAction(projectId, relPath, text, baseline.mtimeMs, baseline.size);
+    const r = await run(
+      () => saveExplorerFileAction(projectId, relPath, text, baseline.mtimeMs, baseline.size),
+      (res) => (res.ok ? null : res.reason),
+      { projectId, surface: "explorer.save" },
+    );
     setSaving(false);
-    if (!r.ok) {
-      setError(r.reason);
-      return;
-    }
+    if (!r.ok) return;
     setBaseline({ mtimeMs: r.mtimeMs, size: r.size });
     setSavedText(text);
   }
@@ -736,18 +737,21 @@ function CodeEditor({
           {dirty && <span className="text-xs text-muted-foreground">{t("explorer.unsaved")}</span>}
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          {/* 실패하면 §0-25의 A/S가 이 왕복 안에서 한 번 지나간다(P404-2) — `saving`이 그
-              요청 전체를 덮으므로 오류 줄 자리를 대신 채운다. */}
-          {saving ? (
-            <span className="text-xs text-muted-foreground">{t("common.fixing")}</span>
-          ) : (
-            error && <span className="text-xs text-destructive">{t("explorer.saveFailed")} {error}</span>
-          )}
           <Button size="sm" onClick={() => void save()} disabled={saving || !dirty}>
             {saving ? t("common.saving") : t("explorer.save")}
           </Button>
         </div>
       </div>
+      {/* 실패하면 오류 카드가 먼저 뜨고, 그 카드 위에서 §0-25의 A/S가 돈다(결정 7-8) —
+          `useSelfHealRetry`가 그 왕복 순서를 쥔다. */}
+      {error && (
+        <SelfHealAlert
+          title={t("explorer.saveFailed")}
+          error={error}
+          fixing={fixing}
+          fixingText={t("explorer.saveFixing")}
+        />
+      )}
       {/* 결정 2 §editor — 배경의 읽기 전용 `<pre>`(shiki)가 색을 내고, 위에 겹친 투명 `textarea`가
           캐럿·타이핑을 받는다. 폰트·줄높이·패딩이 두 층에서 한 자도 안 갈려야 겹친다
           (`font-mono text-sm leading-6 p-3`을 양쪽에 그대로 준다). */}

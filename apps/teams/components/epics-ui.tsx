@@ -12,6 +12,7 @@ import {
   saveEpicReadmeAction,
 } from "@/app/(app)/p/[project]/epics/actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { SelfHealAlert, useSelfHealRetry } from "@/components/self-heal";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -76,8 +77,8 @@ export function EpicReadmeEditButton({
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState(initialTitle);
   const [body, setBody] = useState(initialBody);
-  const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  const { error, fixing, run } = useSelfHealRetry();
   const dirty = title !== initialTitle || body !== initialBody;
 
   return (
@@ -110,12 +111,15 @@ export function EpicReadmeEditButton({
             rows={12}
             className="font-mono"
           />
-          {/* 실패하면 §0-25의 A/S가 이 왕복 안에서 한 번 지나간다(P404-2) — `pending`이 그
-              요청 전체를 덮으므로 오류 줄 자리를 대신 채운다. */}
-          {pending ? (
-            <p className="text-xs text-muted-foreground">{t(locale, "common.fixing")}</p>
-          ) : (
-            error && <Failure title={t(locale, "epics.readme.saveFailed")} message={error} />
+          {/* 실패하면 오류 카드가 먼저 뜨고, 그 카드 위에서 §0-25의 A/S가 돈다(결정 7-8) —
+              `useSelfHealRetry`가 그 왕복 순서를 쥔다. */}
+          {error && (
+            <SelfHealAlert
+              title={t(locale, "epics.readme.saveFailed")}
+              error={error}
+              fixing={fixing}
+              fixingText={t(locale, "epics.readme.saveFixing")}
+            />
           )}
         </div>
         <DialogFooter>
@@ -124,13 +128,12 @@ export function EpicReadmeEditButton({
             disabled={pending || !title.trim() || !body.trim() || !dirty}
             onClick={() =>
               start(async () => {
-                const r = await saveEpicReadmeAction(projectId, epic, title, body, locale);
-                if (r.ok) {
-                  setOpen(false);
-                  setError(null);
-                } else {
-                  setError(r.error);
-                }
+                const r = await run(
+                  () => saveEpicReadmeAction(projectId, epic, title, body, locale),
+                  (res) => (res.ok ? null : res.error),
+                  { projectId, surface: "epics.readme.save" },
+                );
+                if (r.ok) setOpen(false);
               })
             }
           >

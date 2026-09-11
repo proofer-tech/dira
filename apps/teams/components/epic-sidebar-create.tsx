@@ -6,9 +6,9 @@
  *  갈리는 것은 칸이 하나(경로)에서 둘(제목 · 키)이 되는 것 하나뿐이다. 화면은 안 옮긴다
  *  (§안 하는 것) — 성공하면 다이얼로그만 닫고 목록은 서버 액션의 `revalidatePath`가 새로 그린다. */
 import { useState, useTransition } from "react";
-import { FilePlus2, TriangleAlert } from "lucide-react";
+import { FilePlus2 } from "lucide-react";
 import { createEpic } from "@/app/(app)/p/[project]/actions";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { SelfHealAlert, useSelfHealRetry } from "@/components/self-heal";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -24,19 +24,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { t, type Locale } from "@/lib/i18n";
 
-/** §6 에러 3요소 중 1·2번 — `protocols-ui.tsx`의 `Failure`와 같은 값이다. */
-function Failure({ title, message }: { title: string; message: string }) {
-  return (
-    <Alert variant="destructive">
-      <TriangleAlert aria-hidden />
-      <AlertTitle>{title}</AlertTitle>
-      <AlertDescription>
-        <span className="font-mono text-xs break-all">{message}</span>
-      </AlertDescription>
-    </Alert>
-  );
-}
-
 export function EpicCreateButton({
   projectId,
   locale,
@@ -50,8 +37,8 @@ export function EpicCreateButton({
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [key, setKey] = useState(suggestedKey);
-  const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  const { error, fixing, setError, run } = useSelfHealRetry();
   const label = t(locale, "board.epic.create");
 
   return (
@@ -103,12 +90,15 @@ export function EpicCreateButton({
               onChange={(e) => setKey(e.target.value)}
             />
           </div>
-          {/* 실패하면 §0-25의 A/S가 이 왕복 안에서 한 번 지나간다(P404-2) — `pending`이 그
-              요청 전체를 덮으므로 오류 줄 자리를 대신 채운다. */}
-          {pending ? (
-            <p className="text-xs text-muted-foreground">{t(locale, "common.fixing")}</p>
-          ) : (
-            error && <Failure title={t(locale, "board.epic.createFailed")} message={error} />
+          {/* 실패하면 오류 카드가 먼저 뜨고, 그 카드 위에서 §0-25의 A/S가 돈다(결정 7-8) —
+              `useSelfHealRetry`가 그 왕복 순서를 쥔다. */}
+          {error && (
+            <SelfHealAlert
+              title={t(locale, "board.epic.createFailed")}
+              error={error}
+              fixing={fixing}
+              fixingText={t(locale, "board.epic.createFixing")}
+            />
           )}
         </div>
         <DialogFooter>
@@ -117,14 +107,15 @@ export function EpicCreateButton({
             disabled={pending || !key.trim() || !title.trim()}
             onClick={() =>
               start(async () => {
-                const r = await createEpic(projectId, key, title);
+                const r = await run(
+                  () => createEpic(projectId, key, title),
+                  (res) => (res.ok ? null : res.error),
+                  { projectId, surface: "board.epic.create" },
+                );
                 if (r.ok) {
                   setOpen(false);
                   setTitle("");
                   setKey(suggestedKey);
-                  setError(null);
-                } else {
-                  setError(r.error);
                 }
               })
             }

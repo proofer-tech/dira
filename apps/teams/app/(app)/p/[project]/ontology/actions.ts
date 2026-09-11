@@ -16,7 +16,6 @@ import { DEFAULT_LOCALE, t, type Locale } from "@/lib/i18n";
 import { isRealDirectory, openWithinApp, type OpenResult } from "@/lib/paths";
 import { createFile, deleteFile, listTree, renameFile, saveFile } from "@/lib/protocols";
 import { getProject, readLanguage, resolveConfig } from "@/lib/projects";
-import { selfHeal } from "@/lib/self-heal";
 import {
   ONTOLOGY_FIX_MARKER,
   ONTOLOGY_MIGRATION_MARKER,
@@ -312,50 +311,35 @@ const markerTicketFm = (h: string, marker: string, title: string) =>
  *  판정은 `fixOntologySchemaAction`과 같은 함수(`openFixTicket`) — 발행 직전에 큐를 다시
  *  훑어 이미 열려있는 마이그레이션 티켓이 있으면 새로 만들지 않고 그 stem을 돌려준다(실패가
  *  아니다). 마커는 프로젝트당 한 장이라 `마이그레이션 시작`과 첫 채움이 같은 티켓을 가리킨다. */
-/** 실패하면 §0-25의 A/S 모듈이 한 번 지나간다(P404-2, `scmPull`과 같은 왕복) — `projects-ui`의
- *  온톨로지 마이그레이션 시작 버튼이 이 자리를 부른다. */
+/** 실패하면 §0-25의 A/S가 화면 쪽(`projects-ui.tsx`)에서 한 번 돈다(결정 7-8) — 이 액션은
+ *  자기 조작 한 번만 하고 결과를 그대로 돌려준다. */
 export async function publishOntologyMigrationAction(projectId: string): Promise<PublishTicketResult> {
-  const attempt = async (): Promise<PublishTicketResult> => {
-    try {
-      const locale = await readLanguage();
-      const project = await getProject(projectId);
-      if (!project) {
-        throw new Error(`${t(locale, "ontology.action.unknownProjectPrefix")} ${projectId}`);
-      }
-      const config = await resolveConfig(project);
-
-      const tickets = await listTickets(project.root, config);
-      const existing = openFixTicket(tickets, ONTOLOGY_MIGRATION_MARKER);
-      if (existing) return { ok: true, stem: existing.stem };
-
-      const stem = await writeQueueTicket(
-        project.root,
-        config,
-        (h) => markerTicketFm(h, ONTOLOGY_MIGRATION_MARKER, "온톨로지 마이그레이션"),
-        publishBody(MIGRATION_GOAL),
-        locale,
-      );
-      void track("ticket_create", { kind: "work" });
-      await kickIdleWorker(project.root);
-      revalidatePath(`/p/${projectId}/ontology`);
-      return { ok: true, stem };
-    } catch (e) {
-      return { ok: false, message: (e as Error).message };
+  try {
+    const locale = await readLanguage();
+    const project = await getProject(projectId);
+    if (!project) {
+      throw new Error(`${t(locale, "ontology.action.unknownProjectPrefix")} ${projectId}`);
     }
-  };
+    const config = await resolveConfig(project);
 
-  const first = await attempt();
-  if (first.ok) return first;
+    const tickets = await listTickets(project.root, config);
+    const existing = openFixTicket(tickets, ONTOLOGY_MIGRATION_MARKER);
+    if (existing) return { ok: true, stem: existing.stem };
 
-  const project = await getProject(projectId);
-  if (!project) return first;
-  const outcome = await selfHeal({
-    error: first.message ?? "",
-    surface: "project.ontologyMigration",
-    cwd: project.root,
-    project,
-  });
-  return outcome === "ticketed" ? first : await attempt();
+    const stem = await writeQueueTicket(
+      project.root,
+      config,
+      (h) => markerTicketFm(h, ONTOLOGY_MIGRATION_MARKER, "온톨로지 마이그레이션"),
+      publishBody(MIGRATION_GOAL),
+      locale,
+    );
+    void track("ticket_create", { kind: "work" });
+    await kickIdleWorker(project.root);
+    revalidatePath(`/p/${projectId}/ontology`);
+    return { ok: true, stem };
+  } catch (e) {
+    return { ok: false, message: (e as Error).message };
+  }
 }
 
 /** 온톨로지 화면 설정 다이얼로그·`/p/<project>/ontology`의 `가져오기`가 부르는 발행(§5-3 표).
@@ -363,55 +347,40 @@ export async function publishOntologyMigrationAction(projectId: string): Promise
  *  디렉터리인지 서버가 본다(옛 `startImport`가 하던 검사 그대로, §import §실행층). 같은
  *  폴더로 다시 부르면 열린 티켓을 그대로 돌려준다 — 마커가 폴더 절대경로를 그대로 담기 때문에
  *  다른 폴더는 서로를 안 막는다. */
-/** 실패하면 §0-25의 A/S 모듈이 한 번 지나간다(P404-2, `scmPull`과 같은 왕복) — 제품 결함
- *  (`ticketed`)이면 재시도 없이 그 사유를 그대로 내고, 그 밖이면 한 번 더 시도한다. */
+/** 실패하면 §0-25의 A/S가 화면 쪽(`ontology-ui.tsx`)에서 한 번 돈다(결정 7-8) — 이 액션은
+ *  자기 조작 한 번만 하고 결과를 그대로 돌려준다. */
 export async function publishOntologyImportAction(
   projectId: string,
   folder: string,
 ): Promise<PublishTicketResult> {
-  const attempt = async (): Promise<PublishTicketResult> => {
-    try {
-      const locale = await readLanguage();
-      if (!(await isRealDirectory(folder))) {
-        // 같은 문장을 온톨로지 자리 편집 폼도 던진다 — 새 키를 안 만들고 그대로 재사용한다
-        // (§0-16, `2ef7a4e9`).
-        return { ok: false, message: `${t(locale, "ontology.location.notDirectory")} ${folder}` };
-      }
-      const project = await getProject(projectId);
-      if (!project) throw new Error(`${t(locale, "ontology.action.unknownProjectPrefix")} ${projectId}`);
-      const config = await resolveConfig(project);
-
-      const tickets = await listTickets(project.root, config);
-      const marker = ontologyImportMarker(folder);
-      const existing = openFixTicket(tickets, marker);
-      if (existing) return { ok: true, stem: existing.stem };
-
-      const stem = await writeQueueTicket(
-        project.root,
-        config,
-        (h) => markerTicketFm(h, marker, `온톨로지 import - ${path.basename(folder)}`),
-        publishBody(importGoal(folder)),
-        locale,
-      );
-      void track("ticket_create", { kind: "work" });
-      await kickIdleWorker(project.root);
-      revalidatePath(`/p/${projectId}/ontology`);
-      return { ok: true, stem };
-    } catch (e) {
-      return { ok: false, message: (e as Error).message };
+  try {
+    const locale = await readLanguage();
+    if (!(await isRealDirectory(folder))) {
+      // 같은 문장을 온톨로지 자리 편집 폼도 던진다 — 새 키를 안 만들고 그대로 재사용한다
+      // (§0-16, `2ef7a4e9`).
+      return { ok: false, message: `${t(locale, "ontology.location.notDirectory")} ${folder}` };
     }
-  };
+    const project = await getProject(projectId);
+    if (!project) throw new Error(`${t(locale, "ontology.action.unknownProjectPrefix")} ${projectId}`);
+    const config = await resolveConfig(project);
 
-  const first = await attempt();
-  if (first.ok) return first;
+    const tickets = await listTickets(project.root, config);
+    const marker = ontologyImportMarker(folder);
+    const existing = openFixTicket(tickets, marker);
+    if (existing) return { ok: true, stem: existing.stem };
 
-  const project = await getProject(projectId);
-  if (!project) return first;
-  const outcome = await selfHeal({
-    error: first.message ?? "",
-    surface: "ontology.import",
-    cwd: project.root,
-    project,
-  });
-  return outcome === "ticketed" ? first : await attempt();
+    const stem = await writeQueueTicket(
+      project.root,
+      config,
+      (h) => markerTicketFm(h, marker, `온톨로지 import - ${path.basename(folder)}`),
+      publishBody(importGoal(folder)),
+      locale,
+    );
+    void track("ticket_create", { kind: "work" });
+    await kickIdleWorker(project.root);
+    revalidatePath(`/p/${projectId}/ontology`);
+    return { ok: true, stem };
+  } catch (e) {
+    return { ok: false, message: (e as Error).message };
+  }
 }

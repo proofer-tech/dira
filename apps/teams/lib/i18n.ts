@@ -219,7 +219,6 @@ export const ko: Record<string, string> = {
   "common.save": "저장",
   "common.saving": "저장 중…",
   "common.loading": "불러오는 중…",
-  "common.fixing": "고치는 중",
   "common.add": "추가",
   "common.close": "닫기",
   "common.cancel": "취소",
@@ -656,6 +655,7 @@ export const ko: Record<string, string> = {
   "project.ontologyMigration.startPending": "발행하는 중…",
   "project.ontologyMigration.start": "마이그레이션 시작",
   "project.ontologyMigration.failedTitle": "마이그레이션 티켓을 만들지 못했습니다",
+  "project.ontologyMigration.fixing": "마이그레이션 티켓 발행 오류를 고치는 중",
   "board.epic.label": "에픽",
   "board.epic.all": "전체",
   "board.epic.none": "(에픽 없음)",
@@ -674,6 +674,7 @@ export const ko: Record<string, string> = {
   "board.epic.createTitleLabel": "제목",
   "board.epic.createKeyLabel": "키",
   "board.epic.createFailed": "에픽을 만들지 못했습니다",
+  "board.epic.createFixing": "에픽 만들기 오류를 고치는 중",
   // 레인 드래그(§1-5 · §비주얼 §70) — 후보 층의 문장 둘(②)과 선점 확인 다이얼로그(④)다.
   // 산 세션 끊기 다이얼로그는 새 문자열이 없다 — `ticketDetail.forceStop*`를 그대로 쓴다.
   "board.lane.dropToStart": "놓으면 지금 시작합니다",
@@ -693,6 +694,7 @@ export const ko: Record<string, string> = {
   "epics.readme.editDesc": "제목은 README.md 첫 줄, 내용은 그 뒤 본문입니다. 저장하면 파일을 덮어씁니다.",
   "epics.readme.bodyLabel": "내용",
   "epics.readme.saveFailed": "저장하지 못했습니다",
+  "epics.readme.saveFixing": "README 저장 오류를 고치는 중",
   // 에픽 화면(§에픽 §결정 6, `c6b995d6`) — 잘못된 P번호로 들어온 자리(페르소나 화면과 같은
   // Alert, `persona.route.notFound`와 같은 문장이지만 화면마다 자기 키를 든다).
   "epics.route.notFound": "이 경로는 열 수 없습니다",
@@ -751,6 +753,7 @@ export const ko: Record<string, string> = {
   "backoff.field.until": "다음 시각",
   "backoff.action.retryNow": "지금 다시 보내기",
   "backoff.action.retrying": "다시 보내는 중…",
+  "backoff.action.fixing": "다시 보내기 오류를 고치는 중",
   "backoff.control.notRetrying": "이 티켓은 지금 재시도 대기 상태가 아닙니다.",
 
   // 표 컬럼(§에픽 결정 7 §표뷰) — 띠 머리 라벨은 `board.epic.noTitle`을 그대로 재사용한다
@@ -790,6 +793,8 @@ export const ko: Record<string, string> = {
   "protocols.editor.inlinedHintSuffix":
     "가 전문을 모든 세션 프롬프트 머리에 붙입니다 — 길이가 곧 매 세션의 비용입니다. 세부 규약은 같은 디렉터리의 다른 문서로 빼고 여기서 가리키면, 세션이 필요할 때만 읽습니다.",
   "protocols.editor.saveFailTitle": "저장하지 못했습니다",
+  "protocols.editor.saveFailedDefaultMessage": "저장하지 못했습니다.",
+  "protocols.editor.saveFixing": "저장 오류를 고치는 중",
   "protocols.editor.revert": "되돌리기",
   "protocols.editor.saved": "저장됐습니다.",
 
@@ -1036,6 +1041,7 @@ export const ko: Record<string, string> = {
   "persona.policy.nextTicketHint": "다음 티켓 선정부터 적용됩니다.",
   "persona.limit.saveFailed": "상한을 저장하지 못했습니다.",
   "persona.limit.saveFailedTitle": "상한을 저장하지 못했습니다",
+  "persona.limit.saveFixing": "상한 저장 오류를 고치는 중",
   "persona.limit.none": "없음",
   "persona.limit.popoverLabel": "동시 워커 상한",
   "persona.limit.popoverHint": "비우면 상한 없음 · 0이면 디스패치 정지",
@@ -1522,6 +1528,7 @@ export const ko: Record<string, string> = {
   "workers.execFix.pending": "켜는 중…",
   "workers.execFix.button": "실행 비트 켜기",
   "workers.execFix.failedTitle": "실행 비트를 켜지 못했습니다",
+  "workers.execFix.fixing": "실행 비트 켜기 오류를 고치는 중",
 
   // 생성 다이얼로그(`CreateWorkerButton`, §4 생성).
   "workers.create.worktreeStep0": "워크트리를 만들지 못했습니다",
@@ -1778,6 +1785,7 @@ export const ko: Record<string, string> = {
   "ontology.import.title": "가져오기",
   "ontology.import.hint": "폴더를 골라야 누를 수 있습니다 — 폴더 이름이 출처가 됩니다",
   "ontology.import.failTitle": "가져오기 티켓을 만들지 못했습니다",
+  "ontology.import.fixing": "가져오기 티켓 발행 오류를 고치는 중",
 
   "ontology.new.trigger": "새 파일",
   "ontology.new.descPrefix": "온톨로지 디렉터리 기준 상대경로입니다.",
@@ -2057,6 +2065,7 @@ export const ko: Record<string, string> = {
   "home.schedule.cronNextRunSuffix": "에 다음 회차가 돕니다.",
   "home.schedule.cronNoNextRun": "31일 안에 도는 회차가 없습니다.",
   "home.schedule.createFailTitle": "스케줄을 만들지 못했습니다",
+  "home.schedule.createFixing": "스케줄 만들기 오류를 고치는 중",
   "home.schedule.invalidWhenOrPrompt": "시각 또는 문장을 확인하세요.",
   "home.schedule.desc1": "정한 시각에 세션이 이 문장을 수행합니다.",
   "home.schedule.desc3": "꺼져 있던 사이의 회차는 앱을 켤 때 한 번만 늦게 돕니다.",
@@ -2146,7 +2155,8 @@ export const ko: Record<string, string> = {
   "explorer.moreCountPrefix": "개 중",
   "explorer.moreCountSuffix": "개",
   "explorer.save": "저장",
-  "explorer.saveFailed": "저장하지 못했습니다:",
+  "explorer.saveFailed": "저장하지 못했습니다",
+  "explorer.saveFixing": "저장 오류를 고치는 중",
   "explorer.unsaved": "저장하지 않은 변경이 있습니다.",
   "explorer.noFileOpen": "왼쪽 트리에서 파일을 고르세요.",
 
@@ -2816,7 +2826,6 @@ export const en: Record<string, string> = {
   "common.save": "Save",
   "common.saving": "Saving…",
   "common.loading": "Loading…",
-  "common.fixing": "Fixing",
   "common.add": "Add",
   "common.close": "Close",
   "common.cancel": "Cancel",
@@ -3073,6 +3082,7 @@ export const en: Record<string, string> = {
   "board.epic.createTitleLabel": "Title",
   "board.epic.createKeyLabel": "Key",
   "board.epic.createFailed": "Couldn't create the epic",
+  "board.epic.createFixing": "Fixing the epic-create error",
   "board.lane.dropToStart": "Drop to start now",
   "board.lane.dropToUnassign": "Drop to unassign",
   // 커밋 안 한 변경을 다루는 가운데 문장은 `ticketDetail.forceStopDescSuffix`와 글자까지 같다 —
@@ -3091,6 +3101,7 @@ export const en: Record<string, string> = {
   "epics.readme.editDesc": "The title is the first line of README.md and the body is what follows; saving overwrites the file.",
   "epics.readme.bodyLabel": "Body",
   "epics.readme.saveFailed": "Couldn't save",
+  "epics.readme.saveFixing": "Fixing the README save error",
   // 에픽 화면(§에픽 §결정 6) - 잘못된 P번호로 들어온 자리라 페르소나 화면과 같은 Alert고,
   // 문장도 `persona.route.notFound`와 같다(화면마다 자기 키를 들 뿐이다). 메모리 절도 같은
   // 부품의 두 벌이라 `persona.memory.*`의 문장을 그대로 쓴다 - 같은 것을 두 이름으로 안 부른다.
@@ -3149,6 +3160,7 @@ export const en: Record<string, string> = {
   "backoff.field.until": "Next attempt",
   "backoff.action.retryNow": "Retry now",
   "backoff.action.retrying": "Retrying…",
+  "backoff.action.fixing": "Fixing the retry error",
   "backoff.control.notRetrying": "This ticket isn't currently in retry backoff.",
 
   "board.column.epic": "Epic",
@@ -3186,6 +3198,8 @@ export const en: Record<string, string> = {
   "protocols.editor.inlinedHintSuffix":
     " pastes it at the top. Length is what every session costs. Move the detailed rules into another file in the same directory and point at it here, and a session reads them only when it needs them.",
   "protocols.editor.saveFailTitle": "Couldn't save",
+  "protocols.editor.saveFailedDefaultMessage": "Couldn't save.",
+  "protocols.editor.saveFixing": "Fixing the save error",
   "protocols.editor.revert": "Revert",
   "protocols.editor.saved": "Saved.",
 
@@ -3419,6 +3433,7 @@ export const en: Record<string, string> = {
   "persona.policy.nextTicketHint": "This takes effect from the next ticket picked.",
   "persona.limit.saveFailed": "Couldn't save the limit.",
   "persona.limit.saveFailedTitle": "Couldn't save the limit",
+  "persona.limit.saveFixing": "Fixing the limit-save error",
   "persona.limit.none": "None",
   "persona.limit.popoverLabel": "Concurrent worker limit",
   "persona.limit.popoverHint": "Empty means no limit · 0 stops dispatch",
@@ -3630,6 +3645,7 @@ export const en: Record<string, string> = {
   "workers.execFix.pending": "Setting…",
   "workers.execFix.button": "Set the exec bit",
   "workers.execFix.failedTitle": "Couldn't set the exec bit",
+  "workers.execFix.fixing": "Fixing the exec-bit error",
 
   // 생성 다이얼로그(`CreateWorkerButton`, §4 생성).
   "workers.create.worktreeStep0": "Couldn't create the worktree",
@@ -4338,6 +4354,7 @@ export const en: Record<string, string> = {
   "home.schedule.cronNextRunSuffix": " is when the next run happens.",
   "home.schedule.cronNoNextRun": "No run falls within the next 31 days.",
   "home.schedule.createFailTitle": "Couldn't create the schedule",
+  "home.schedule.createFixing": "Fixing the schedule-create error",
   "home.schedule.invalidWhenOrPrompt": "Check the time or the prompt.",
   "home.schedule.desc1": "At the time you set, the session carries out this prompt.",
   "home.schedule.desc3": "Runs missed while the app was closed happen once, late, when you open it.",
@@ -4421,7 +4438,8 @@ export const en: Record<string, string> = {
   "explorer.moreCountPrefix": "of",
   "explorer.moreCountSuffix": "",
   "explorer.save": "Save",
-  "explorer.saveFailed": "Couldn't save:",
+  "explorer.saveFailed": "Couldn't save",
+  "explorer.saveFixing": "Fixing the save error",
   "explorer.unsaved": "You have unsaved changes.",
   "explorer.noFileOpen": "Pick a file from the tree on the left.",
 
@@ -4446,6 +4464,7 @@ export const en: Record<string, string> = {
   // 버튼 아래 도움말. 뒤에 이 문구를 `aria-describedby`로 무는 버튼이 있어 문장으로 끝낸다.
   "ontology.import.hint": "Pick a folder first — its name becomes the source.",
   "ontology.import.failTitle": "Couldn't create the import ticket",
+  "ontology.import.fixing": "Fixing the import-ticket publish error",
 
   "ontology.new.trigger": "New file",
   // `/`가 가운데 끼고 접미가 공백 없이 그 뒤를 잇는다(`… directory. / creates any …`).
@@ -4731,6 +4750,7 @@ export const en: Record<string, string> = {
   "project.ontologyMigration.startPending": "Publishing…",
   "project.ontologyMigration.start": "Start migration",
   "project.ontologyMigration.failedTitle": "Couldn't create the migration ticket",
+  "project.ontologyMigration.fixing": "Fixing the migration-ticket publish error",
 
   // `components/feedback-dialog.tsx` — `feedback.versionLabel`·`feedback.sessionLabel`은 이미
   // 찬 키를 그대로 쓴다(P338-11이 그렇게 갈랐다).
