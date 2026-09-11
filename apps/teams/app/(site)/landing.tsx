@@ -630,8 +630,8 @@ export default function Landing({
   {/* `stats-list`는 §모션 §판정표 ①이 격자 그릇을 대상에서 빼는 자리다 — 텍스트는 0자 안 갈렸다. */}
   <ul className="stats-list">
     <li><b>0</b><span>{t("landing.stats.dependenciesLabel")}<br/>{t("landing.stats.dependenciesValue")}</span></li>
-    <li><b>8</b><span>{t("landing.stats.concurrentWorkersLabel")}</span></li>
-    <li><b>1775</b><span>{t("landing.stats.ticketsLabel")}<br/>{t("landing.stats.ticketsValue")}</span></li>
+    <li><b>14</b><span>{t("landing.stats.concurrentWorkersLabel")}</span></li>
+    <li><b>4237</b><span>{t("landing.stats.ticketsLabel")}<br/>{t("landing.stats.ticketsValue")}</span></li>
     <li><b>{t("landing.stats.hoursBig")}</b><span>{t("landing.stats.hoursLabel")}<br/>{t("landing.stats.hoursCommitsValue")}</span></li>
   </ul>
   <p className="stats-note">{t("landing.stats.note")}</p>
