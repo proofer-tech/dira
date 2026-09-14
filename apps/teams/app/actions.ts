@@ -152,6 +152,10 @@ export type ResolvedView = {
   ontologyMigrationTicket: MarkerTicketLine | null;
   /** 설정 다이얼로그의 `OntologyImport` — 폴더당 한 장이라 목록이다(§비주얼 §56 ⑤). */
   ontologyImportTickets: (MarkerTicketLine & { folder: string })[];
+  /** 설정 다이얼로그의 `OntologyLocationEditor` 초기값 — `resolveConfig`가 이미 이 왕복 안에서
+   *  읽은 값이라 따로 왕복을 안 연다(P406-2, DESIGN.md §온톨로지 화면의 설정성 표면 셋이 설정
+   *  다이얼로그로 간다). `assumed`면 칸을 비워 화면이 종전대로 placeholder를 보인다. */
+  ontologyLocation: { value: string; assumed: boolean };
 };
 
 export type RegisterState = {
@@ -258,6 +262,7 @@ function toView(
       status: statusLabel(statusOf(t), locale),
       folder: importFolderOf(t),
     })),
+    ontologyLocation: { value: config.ontology, assumed: config.assumed.includes("ontology") },
   };
 }
 

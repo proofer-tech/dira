@@ -15,8 +15,6 @@ import {
   FixSchemaViolationsButton,
   NewOntologyFileButton,
   OntologyEditor,
-  OntologyImport,
-  OntologyLocationEditor,
   OntologySurveyForm,
 } from "@/components/ontology-ui";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -37,15 +35,7 @@ import { buildVault } from "@/lib/markdown-wikilinks";
 import type { FrontmatterCandidates } from "@/lib/markdown-frontmatter-rows";
 import { isDiraFormat, parseTypeProperties, type OntologyMetrics } from "@/lib/ontology";
 import { loadMetrics } from "@/lib/ontology-load";
-import {
-  ONTOLOGY_FIX_MARKER,
-  importFolderOf,
-  listTickets,
-  openFixTicket,
-  openImportTickets,
-  statusOf,
-  type Ticket,
-} from "@/lib/queue";
+import { ONTOLOGY_FIX_MARKER, listTickets, openFixTicket, statusOf, type Ticket } from "@/lib/queue";
 import {
   listTree,
   nestTree,
@@ -132,10 +122,6 @@ export default async function Ontology({
   // 비용을 안 낸다. 판정(openFixTicket)은 `문제해결` 액션과 같은 함수다 — 갈리면 화면이
   // 거짓말을 한다(§P230 — §비주얼 §56 ⑤가 import에 같은 판정을 요구한다).
   let fixTicket: Ticket | null = null;
-  // `Ticket` 전체가 아니라 이미 판정된 문자열만 클라이언트로 내려간다 — `statusOf`·
-  // `importFolderOf`는 `lib/queue.ts` runtime이라(`node:fs/promises` 의존) 클라이언트
-  // 컴포넌트(`OntologyImport`)의 번들에 못 들어간다.
-  let importTickets: { stem: string; hash: string; status: string; folder: string }[] = [];
   // 프론트매터 행 편집기의 후보 원천 여섯(DESIGN.md §프론트매터 행 편집기 결정 8, 티켓
   // `7e02b1ac`) — 새 캐시 파일이나 색인 없이 이 화면·큐가 이미 읽는 값만 묶는다.
   let candidates: FrontmatterCandidates | null = null;
@@ -145,13 +131,6 @@ export default async function Ontology({
       fixTicket = openFixTicket(tickets, ONTOLOGY_FIX_MARKER);
     }
     if (tree.length > 0) {
-      importTickets = openImportTickets(tickets).map((t) => ({
-        stem: t.stem,
-        hash: t.hash,
-        status: statusLabel(statusOf(t), locale),
-        folder: importFolderOf(t),
-      }));
-
       const basename = (rel: string) => rel.split("/").at(-1) ?? rel;
       const typeFileEntries = tree.filter(
         (e) => !e.isDir && e.rel.startsWith("_ontology/object-types/") && e.rel.endsWith(".md"),
@@ -195,18 +174,9 @@ export default async function Ontology({
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-lg font-semibold">{t(locale, "shell.nav.ontology")}</h1>
-          {/* 이 경로 줄이 편집 표면이다(§5-3 §편집 표면이 있는 화면, 티켓 c5d51522) — 파일트리가
-              0장인 프로젝트에서도 이 조건문 밖이라 그대로 뜬다. */}
-          <OntologyLocationEditor
-            projectId={id}
-            initialValue={ontologyAssumed ? "" : base}
-            locale={locale}
-            placeholder={t(locale, "ontology.location.placeholder")}
-            saveLabel={t(locale, "ontology.location.save")}
-            failureTitle={t(locale, "ontology.location.saveFailed")}
-            browseLabel={t(locale, "ontology.location.browse")}
-          />
-          <div className="mt-1 font-mono text-xs break-all text-muted-foreground">
+          {/* 값을 정하는 자리가 아니라 지금 보는 폴더를 알려 주는 줄이다 — 칸은 설정 > 프로젝트
+              노드로 옮겼다(§온톨로지 화면의 설정성 표면 셋이 설정 다이얼로그로 간다 결정 1). */}
+          <div className="font-mono text-xs break-all text-muted-foreground">
             {base}
             {ontologyAssumed && <span className="ml-2 font-sans">{t(locale, "ontology.usingDefault")}</span>}
             {ontologyWarn && (
@@ -250,13 +220,6 @@ export default async function Ontology({
             <span>{t(locale, "ontology.empty.skipHint")}</span>
             <NewOntologyFileButton projectId={id} variant="outline" />
           </div>
-        </div>
-      )}
-
-      {tree.length > 0 && (
-        // §비주얼 §56 ③ — 지표 판 뒤, 2단 행 앞. 테두리도 면도 안 준다(행동 한 줄일 뿐이다).
-        <div className="max-w-2xl">
-          <OntologyImport projectId={id} tickets={importTickets} />
         </div>
       )}
 

@@ -82,7 +82,7 @@ import type {
 import { useHotkey, useKeymap } from "@/components/keymap-provider";
 import { useLocale, useT } from "@/components/language-provider";
 import Link from "@/components/link";
-import { OntologyImport } from "@/components/ontology-ui";
+import { OntologyImport, OntologyLocationEditor } from "@/components/ontology-ui";
 import { ConfigTable, OntologyMetricsField, OntologyMigration } from "@/components/projects-ui";
 import { StatusBadge, statusLabel } from "@/components/status-badge";
 import type { Locale } from "@/lib/i18n";
@@ -1433,6 +1433,7 @@ function ProjectSection({
   onUnregistered?: () => void;
 }) {
   const t = useT();
+  const locale = useLocale();
   const [pending, start] = useTransition();
   const [view, setView] = useState<ResolvedView | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -1492,6 +1493,18 @@ function ProjectSection({
           </div>
           <div data-setting="project.import" className="space-y-2 border-t pt-4">
             <OntologyImport projectId={id} tickets={view.ontologyImportTickets} />
+          </div>
+          <div data-setting="project.ontologyLocation" className="space-y-2 border-t pt-4">
+            <h3 className="text-sm font-medium">{t("ontology.location.edit")}</h3>
+            <OntologyLocationEditor
+              projectId={id}
+              initialValue={view.ontologyLocation.assumed ? "" : view.ontologyLocation.value}
+              locale={locale}
+              placeholder={t("ontology.location.placeholder")}
+              saveLabel={t("ontology.location.save")}
+              failureTitle={t("ontology.location.saveFailed")}
+              browseLabel={t("ontology.location.browse")}
+            />
           </div>
           <OntologyMetricsField projectId={id} open={open} />
         </>
