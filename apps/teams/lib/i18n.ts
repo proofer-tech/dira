@@ -464,6 +464,7 @@ export const ko: Record<string, string> = {
   "kind.label.request": "요구사항",
   "kind.label.feedback": "피드백",
   "kind.label.answer": "답변",
+  "kind.label.tc": "TC",
 
   // 진행 기록 안 계획 아코디언(§비주얼 §59 ⑩) — 왼쪽 칸 상태 글리프의 `sr-only` 낱말 넷.
   // `기록 n건`은 §9 묶음 줄과 같은 문자열이라 여기 안 올린다(그 절의 범위 판정).
@@ -3035,6 +3036,7 @@ export const en: Record<string, string> = {
   "kind.label.request": "Request",
   "kind.label.feedback": "Feedback",
   "kind.label.answer": "Answer",
+  "kind.label.tc": "TC",
 
   "progress.plan.pending": "Not started",
   "progress.plan.cancelled": "Cancelled",

@@ -147,6 +147,7 @@ const KIND_LABEL_KEYS: Record<string, string> = {
   request: "kind.label.request",
   feedback: "kind.label.feedback",
   answer: "kind.label.answer",
+  tc: "kind.label.tc",
 };
 
 export const kindLabel = (kind: string, locale: Locale) => {
