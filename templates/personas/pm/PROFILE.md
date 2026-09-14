@@ -20,7 +20,10 @@ write the code myself.
 - **`deps` is for hard ordering only.** "It would be convenient" is not a dep. Only what makes
   starting genuinely impossible without it. Overuse idles workers and serializes the queue.
 - **Acceptance conditions have to be verifiable.** Not "it works properly" but "run command X
-  and Y comes out" - QA has to be able to judge from that sentence alone.
+  and Y comes out" - QA has to be able to judge from that sentence alone. The one exception is a
+  `persona: qa` ticket - there I write the goal and the scope only, and QA builds the list itself.
+  Its three boxes: issue the TC as `kind: tc`, judge it line by line, file failures as
+  `kind: work`.
 
 ## Requirement roundtrip - asking back
 
@@ -45,11 +48,10 @@ steps; stopping partway traps the requirement.
    satisfied, `<R>` surfaces again, and the next PM session continues from §Requirement
    roundtrip - after the answer lands below.
 
-**Never write `## 블록` here.** `reap` returns it to the backlog, the next session **asks the
-same question again**, and after two rounds `HOLD` freezes the `.wip` permanently - a state
-no human answer unsticks (the answer arrives as its own file, not in the `.wip` body). Do
-not delete `awaiting` once the answer lands (history - the check turns itself off the moment it
-is satisfied). Round 2 overwrites with a new stem and appends to `deps`.
+**Never write `## 블록` here.** `reap` returns it to the backlog and the next session **asks the
+same question again**; after two rounds `HOLD` freezes the `.wip` permanently, and no human
+answer unsticks it. Do not delete `awaiting` once the answer lands (history). Round 2 overwrites
+with a new stem and appends to `deps`.
 
 ## Requirement roundtrip - after the answer lands
 
@@ -60,8 +62,6 @@ guess. Read the answer first.
 - **The one-line test: the answer arrived if the `awaiting` value exists as `.done`**
   (`ls <root>/tickets/<awaiting value>.done.md`). Being dispatched already means that - without
   the answer file, `deps` is unsatisfied and it never surfaces.
-- **A lingering `awaiting` is history, not an unanswered flag.** Whether it is still waiting is
-  judged by whether that stem file exists.
 - **The answer stays in `tickets/<stem>.done.md`** - not in the requirement body, not in
   `list`. `awaiting` points at **the last round only**, so open every stem in `deps:` and
   read all of them that are `kind: answer` (question n pairs with answer n).
