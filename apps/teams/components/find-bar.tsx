@@ -261,6 +261,68 @@ export function FindBar({
   const idle = hits.length === 0;
 
   return (
+    <FindBarChrome
+      inputRef={input}
+      query={query}
+      onQueryChange={(v) => {
+        jump.current = true;
+        setIdx(0);
+        setQuery(v);
+      }}
+      onSubmit={() => go(1)}
+      onEscape={close}
+      onShiftEnter={() => go(-1)}
+      label={label}
+      idle={idle}
+      onPrev={() => go(-1)}
+      onNext={() => go(1)}
+      onClose={close}
+      placeholder={t("findBar.placeholder")}
+      prevLabel={t("findBar.prev")}
+      nextLabel={t("findBar.next")}
+      closeLabel={t("findBar.close")}
+    />
+  );
+}
+
+/** 그릇 — 건수 · 이전 · 다음 · 닫기(§30 ②), 두 엔진(DOM `Range`와 터미널의
+ *  `@xterm/addon-search`, P405-2 `0eaf0c50`)이 함께 쓰는 **한 벌**이다. "그릇을 안 고친다"(§7
+ *  §터미널만 엔진이 갈린다)는 요구를 코드로 지키는 자리 — 모양이 갈릴 길을 아예 없앤다.
+ *  갈리는 것은 상태를 쥐는 쪽(hooks)뿐이고 여기는 순수 렌더 + 콜백이다. */
+export function FindBarChrome({
+  inputRef,
+  query,
+  onQueryChange,
+  onSubmit,
+  onEscape,
+  onShiftEnter,
+  label,
+  idle,
+  onPrev,
+  onNext,
+  onClose,
+  placeholder,
+  prevLabel,
+  nextLabel,
+  closeLabel,
+}: {
+  inputRef: RefObject<HTMLInputElement | null>;
+  query: string;
+  onQueryChange: (value: string) => void;
+  onSubmit: () => void;
+  onEscape: () => void;
+  onShiftEnter: () => void;
+  label: string;
+  idle: boolean;
+  onPrev: () => void;
+  onNext: () => void;
+  onClose: () => void;
+  placeholder: string;
+  prevLabel: string;
+  nextLabel: string;
+  closeLabel: string;
+}) {
+  return (
     // 떠 있는 층 하나(§30 ①) — `fixed`라 어느 화면의 세로 계산에도 안 든다(§24의 뺄셈 무수정).
     // `bg-background`가 여기 있는 이유는 `InputGroup`이 라이트에서 배경 없이 살기 때문이다:
     // 그 밑으로 산문이 비치면 글자가 겹친다. `shadow-md`는 `popover.tsx`가 이미 쓰는 값이다.
@@ -269,27 +331,23 @@ export function FindBar({
         {CSS_RULES}
       </style>
       {/* 그릇이 `<form>`이라 **`Enter`는 다음이 0줄이다**(§30 ⑤). `⇧Enter`만 아래에서 가로챈다 */}
-      <form onSubmit={(e) => { e.preventDefault(); go(1); }}>
+      <form onSubmit={(e) => { e.preventDefault(); onSubmit(); }}>
         <InputGroup className="h-9 w-80">
           {/* 앞머리 아이콘이 없다(§30 ②) — `⌘F`로 불러낸 바라 *이것이 검색 칸이다*가 이미
               끝나 있다. placeholder는 라벨이 아니라 `aria-label`을 같이 준다(§21과 같은 처리) */}
           <InputGroupInput
-            ref={input}
-            aria-label={t("findBar.placeholder")}
-            placeholder={t("findBar.placeholder")}
+            ref={inputRef}
+            aria-label={placeholder}
+            placeholder={placeholder}
             value={query}
-            onChange={(e) => {
-              jump.current = true;
-              setIdx(0);
-              setQuery(e.target.value);
-            }}
+            onChange={(e) => onQueryChange(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Escape") {
                 e.preventDefault();
-                close();
+                onEscape();
               } else if (e.key === "Enter" && e.shiftKey) {
                 e.preventDefault();
-                go(-1);
+                onShiftEnter();
               }
             }}
           />
@@ -302,23 +360,23 @@ export function FindBar({
             </InputGroupText>
             <InputGroupButton
               size="icon-xs"
-              aria-label={t("findBar.prev")}
+              aria-label={prevLabel}
               aria-disabled={idle}
               className="aria-disabled:opacity-50"
-              onClick={() => go(-1)}
+              onClick={onPrev}
             >
               <ChevronUp aria-hidden className="size-3.5" />
             </InputGroupButton>
             <InputGroupButton
               size="icon-xs"
-              aria-label={t("findBar.next")}
+              aria-label={nextLabel}
               aria-disabled={idle}
               className="aria-disabled:opacity-50"
-              onClick={() => go(1)}
+              onClick={onNext}
             >
               <ChevronDown aria-hidden className="size-3.5" />
             </InputGroupButton>
-            <InputGroupButton size="icon-xs" aria-label={t("findBar.close")} onClick={close}>
+            <InputGroupButton size="icon-xs" aria-label={closeLabel} onClick={onClose}>
               <X aria-hidden className="size-3.5" />
             </InputGroupButton>
           </InputGroupAddon>

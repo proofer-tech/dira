@@ -12,15 +12,27 @@
  *  탭만 이 컴포넌트를 아예 마운트하지 않는 것으로 만든다(§11-1 §개정 — 살아 있으면 새로고침
  *  이든 표면 이탈/복귀든 곧장 마운트한다. 죽은 탭만 사람이 `다시 열기`를 눌러야
  *  `restartTerminal` 액션이 새 pty를 심고, 그 뒤에야 이 컴포넌트가 뜬다). */
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Terminal } from "@xterm/xterm";
+import { SearchAddon, type ISearchOptions } from "@xterm/addon-search";
 import "@xterm/xterm/css/xterm.css";
+import { useHotkey } from "@/components/keymap-provider";
+import { useT } from "@/components/language-provider";
 import { readPtyStream } from "@/lib/pty-stream";
+import { FindBarChrome } from "@/components/find-bar";
+import { isShellBoundCtrlF, resultLabel, searchDecorations } from "@/lib/terminal-search";
 
 /** `lib/pty.ts`의 `stty cols 120 rows 32`와 같은 값 — 서버가 그 크기로 셸을 열었으므로 화면도
  *  같은 크기로 맞춘다. ponytail: 고정 크기, 창 크기 반영은 다음 티켓(§11-1 수용조건 밖). */
 const COLS = 120;
 const ROWS = 32;
+
+/** 탭 id -> 그 탭이 연 `Terminal`·`SearchAddon` 한 쌍(P405-2, §7 §터미널만 엔진이 갈린다).
+ *  DOM `Range`를 쓰는 다른 표면은 `find-bar.tsx`의 `MAIN`·`EXPLORER_MAIN`처럼
+ *  `document.querySelector` getter로 "활성 탭의 지금 것"을 집지만, 터미널은 DOM에 없는 값
+ *  (라이브러리 인스턴스)이라 그 관용구가 안 통한다 — 탭이 마운트·언마운트될 때 이 맵 하나에
+ *  등록·해제하는 것이 그 자리를 대신한다. `TerminalFindBar`가 활성 탭 id로 이 맵을 읽는다. */
+const registry = new Map<string, { term: Terminal; search: SearchAddon }>();
 
 export function TerminalPanel({
   projectId,
@@ -41,6 +53,14 @@ export function TerminalPanel({
     const term = new Terminal({ cols: COLS, rows: ROWS, cursorBlink: true, scrollback: 5000 });
     if (hostRef.current) term.open(hostRef.current);
 
+    // **`Ctrl+F`가 셸로 안 샌다**(P405-2, §7 §`Ctrl+F`가 셸로 새면 안 된다) — 판정은
+    // `lib/terminal-search.ts`의 `isShellBoundCtrlF`(패리티 검증은 `terminal-search.test.ts`).
+    term.attachCustomKeyEventHandler((e) => !isShellBoundCtrlF(e));
+
+    const search = new SearchAddon();
+    term.loadAddon(search);
+    registry.set(id, { term, search });
+
     const dataSub = term.onData((data) => {
       fetch(url, { method: "POST", body: data }).catch(() => {});
     });
@@ -60,9 +80,125 @@ export function TerminalPanel({
     return () => {
       ac.abort();
       dataSub.dispose();
+      registry.delete(id);
+      search.dispose();
       term.dispose();
     };
   }, [projectId, id]);
 
   return <div ref={hostRef} className="h-full min-h-0 w-full overflow-hidden p-2" />;
+}
+
+/** `--primary`가 지금 앉힌 값 — 애드온 데코레이션은 canvas에 그려서 `::highlight()`처럼 CSS
+ *  변수를 못 읽으므로(§7 §하이라이트도 ... `--primary` 계열을 그대로 옮긴다), 부를 때마다
+ *  `getComputedStyle`로 떠 읽어 문자열로 넘긴다 — 라이트·다크 전환에도 새 값을 따라간다. */
+function primaryColor(): string {
+  return getComputedStyle(document.documentElement).getPropertyValue("--primary").trim();
+}
+
+/** **터미널 표면의 찾기 바** (P405-2, §7 §터미널은 활성 탭의 화면 32줄과 스크롤백 5,000줄).
+ *  그릇은 `find-bar.tsx`의 `FindBarChrome` 그대로다 — 갈리는 것은 훑는 엔진뿐이다: DOM
+ *  `Range` 대신 `registry`에서 활성 탭의 `SearchAddon`을 집어 `findNext`·`findPrevious`를
+ *  부르고, 건수는 그 애드온의 `onDidChangeResults`로 받는다(새 API 0 — `home-ui.tsx`가 이미
+ *  아는 `activeTab` id 하나만 받는다). */
+export function TerminalFindBar({ activeTab }: { activeTab: string | null }) {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [result, setResult] = useState<{ index: number; count: number } | null>(null);
+  const input = useRef<HTMLInputElement>(null);
+
+  useHotkey("board.search", (e) => {
+    e.preventDefault();
+    setOpen(true);
+    input.current?.focus();
+    input.current?.select();
+  });
+
+  useEffect(() => {
+    if (!open) return;
+    input.current?.focus();
+    input.current?.select();
+  }, [open]);
+
+  // **탭을 갈면 바가 닫힌다**(§7 §표면을 갈면 바가 닫힌다와 같은 이유, 탭 단위) — 훑을 자리가
+  // 탭마다 다른 `SearchAddon` 인스턴스라, 열어 둔 채 넘기면 옛 탭에서 센 건수가 새 탭 위에
+  // 남는다. 마운트 첫 렌더는 건너뛴다 — 그때는 아직 전환이 아니다.
+  const mounted = useRef(false);
+  useEffect(() => {
+    if (!mounted.current) {
+      mounted.current = true;
+      return;
+    }
+    setOpen(false);
+    setQuery("");
+    setResult(null);
+  }, [activeTab]);
+
+  const entry = activeTab ? registry.get(activeTab) : undefined;
+
+  useEffect(() => {
+    if (!open || !entry) return;
+    const sub = entry.search.onDidChangeResults((e) => setResult({ index: e.resultIndex, count: e.resultCount }));
+    return () => sub.dispose();
+  }, [open, entry]);
+
+  // 질의가 바뀌면 처음부터 다시 찾는다(`incremental` — 타이핑 중 선택을 그 질의가 맞는 동안
+  // 넓힌다). 빈 질의면 데코레이션을 걷고 0건이다 — DOM판(`find-bar.tsx`)의 `collect()` 빈
+  // 훑기와 같은 처리다.
+  useEffect(() => {
+    if (!open || !entry) return;
+    // `scan`으로 감싸 부른다 — `find-bar.tsx`의 `scan()`과 같은 이유(§30 주석) — 직접 이 자리에
+    // `setResult`를 적으면 `react-hooks/set-state-in-effect`가 잡는다.
+    const scan = () => {
+      if (!query) {
+        entry.search.clearDecorations();
+        setResult(null);
+        return;
+      }
+      entry.search.findNext(query, { decorations: searchDecorations(primaryColor()), incremental: true });
+    };
+    scan();
+  }, [open, entry, query]);
+
+  const go = (dir: 1 | -1) => {
+    if (!entry || !query) return;
+    const opts: ISearchOptions = { decorations: searchDecorations(primaryColor()) };
+    if (dir === 1) entry.search.findNext(query, opts);
+    else entry.search.findPrevious(query, opts);
+  };
+
+  /** `Esc` 또는 닫기 버튼 — 데코레이션이 걷히고 **포커스가 그 터미널로 돌아간다**(§7 §닫을 때
+   *  포커스가 가는 곳: 그 터미널) — 곧바로 타이핑이 들어간다. */
+  const close = () => {
+    entry?.search.clearDecorations();
+    setOpen(false);
+    setQuery("");
+    setResult(null);
+    entry?.term.focus();
+  };
+
+  if (!open) return null;
+
+  const { label, idle } = resultLabel(query, result);
+
+  return (
+    <FindBarChrome
+      inputRef={input}
+      query={query}
+      onQueryChange={setQuery}
+      onSubmit={() => go(1)}
+      onEscape={close}
+      onShiftEnter={() => go(-1)}
+      label={label}
+      idle={idle}
+      onPrev={() => go(-1)}
+      onNext={() => go(1)}
+      onClose={close}
+      placeholder={t("findBar.placeholder")}
+      prevLabel={t("findBar.prev")}
+      nextLabel={t("findBar.next")}
+      closeLabel={t("findBar.close")}
+    />
+  );
 }

@@ -101,7 +101,7 @@ import { CopyCommand } from "@/components/copy-command";
 import { EmptyState } from "@/components/empty-state";
 import { ExplorerPane, ExplorerTree, useExplorerOpen } from "@/components/explorer-ui";
 import { FindBar } from "@/components/find-bar";
-import { TerminalPanel } from "@/components/terminal-panel";
+import { TerminalFindBar, TerminalPanel } from "@/components/terminal-panel";
 import { useKeymap } from "@/components/keymap-provider";
 import { useLocale, useT } from "@/components/language-provider";
 import { Markdown } from "@/components/markdown";
@@ -1393,13 +1393,20 @@ export function HomeUI({
           포털을 안 쓴다: `fixed`가 뷰포트에 붙는 조건은 조상 사슬에 `transform`·`filter`·
           `contain`이 없는 것 하나이고 이 사슬에는 없다. 열림 상태도 `⌘F`도 바가 자기가 든다 —
           **홈에만 있는 컴포넌트라 §0-6 `board.search`의 홈 갈래가 저절로 맞는다**. */}
-      {/* 훑을 자리 - 돌아갈 포커스는 표면 따라 갈린다(P405-1) — 탐색기만 다르고 나머지
-          (대화 - 소스 컨트롤 - 스케줄)는 종전대로 스레드 - 프롬프트 칸이다(§7 표). 터미널은
-          이 회차에서 안 갈린다(`0eaf0c50`의 몫) — 스레드가 언마운트돼 있어 종전처럼 `0/0`이다. */}
-      <FindBar
-        scope={surface === "explorer" ? EXPLORER_MAIN : thread}
-        restore={surface === "explorer" ? EXPLORER_RESTORE : input}
-      />
+      {/* 훑을 자리 - 돌아갈 포커스는 표면 따라 갈린다(P405-1 · P405-2) — 탐색기는 활성 탭의
+          `<pre>`, 나머지(대화 - 소스 컨트롤 - 스케줄)는 스레드 - 프롬프트 칸이다(§7 표).
+          **터미널은 그릇만 같고 엔진이 통째로 갈려서**(§7 §터미널만 엔진이 갈린다 - DOM
+          `Range`가 아니라 `@xterm/addon-search`) `FindBar`가 아니라 `TerminalFindBar`를
+          대신 그린다 - 표면이 하나만 뜨는 자리라 렌더가 갈리는 것이 곧 `표면을 갈면 바가
+          닫힌다`(둘이 동시에 안 뜨니 언마운트가 그 닫힘이다). */}
+      {surface === "terminal" ? (
+        <TerminalFindBar activeTab={home.activeTab} />
+      ) : (
+        <FindBar
+          scope={surface === "explorer" ? EXPLORER_MAIN : thread}
+          restore={surface === "explorer" ? EXPLORER_RESTORE : input}
+        />
+      )}
     </div>
   );
 }
