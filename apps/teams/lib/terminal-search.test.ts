@@ -20,12 +20,12 @@ test("isShellBoundCtrlF — 다른 글자(Ctrl+G)나 keyup은 안 걸린다", ()
   assert.equal(isShellBoundCtrlF({ type: "keyup", ctrlKey: true, metaKey: false, key: "f" }), false);
 });
 
-test("searchDecorations — --primary 하나로 넷 다 채운다, 전체 강조만 25% 섞는다", () => {
-  const d = searchDecorations("oklch(0.205 0 0)");
-  assert.equal(d.matchBackground, "color-mix(in oklab, oklch(0.205 0 0) 25%, transparent)");
-  assert.equal(d.activeMatchBackground, "oklch(0.205 0 0)");
-  assert.equal(d.matchOverviewRuler, "oklch(0.205 0 0)");
-  assert.equal(d.activeMatchColorOverviewRuler, "oklch(0.205 0 0)");
+test("searchDecorations — hex 둘을 넷에 나눠 채운다, 전체 강조는 옅은 쪽이다", () => {
+  const d = searchDecorations("#334455", "#8899aa");
+  assert.equal(d.matchBackground, "#8899aa");
+  assert.equal(d.activeMatchBackground, "#334455");
+  assert.equal(d.matchOverviewRuler, "#334455");
+  assert.equal(d.activeMatchColorOverviewRuler, "#334455");
 });
 
 test("resultLabel — 질의가 비면 빈칸이다(안 찾은 것과 0건은 다른 사실이다, §30 ③)", () => {

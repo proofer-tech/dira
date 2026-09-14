@@ -13,16 +13,21 @@ export type SearchDecorations = {
   activeMatchColorOverviewRuler: string;
 };
 
-/** `--primary`가 지금 앉힌 값 하나로 데코레이션 넷을 채운다 — `find-bar.tsx`의 `CSS_RULES`
- *  두 규칙(옅은 전체 강조 25% + 진한 현재 강조)과 같은 값이다(§7 §하이라이트도 ... `--primary`
- *  계열을 그대로 옮긴다). 애드온에 글자색 자리가 없어 DOM판의 `--primary-foreground`는
- *  못 옮긴다 — ponytail: 배경만 갈린다, 애드온이 글자색을 받으면 그때 더한다. */
-export function searchDecorations(primary: string): SearchDecorations {
+/** `--primary`가 지금 앉힌 값 둘(옅은 전체 강조 · 진한 현재 강조)로 데코레이션 넷을 채운다 —
+ *  `find-bar.tsx`의 `CSS_RULES` 두 규칙과 같은 값이다(§7 §하이라이트도 ... `--primary` 계열을
+ *  그대로 옮긴다). **`ISearchOptions["decorations"]`는 `#RRGGBB` 6자리만 받는다** - `oklch()`나
+ *  `color-mix()`를 넘기면 애드온이 조용히 자기 기본 회색으로 물러난다(실측: 헤드리스 CDP로
+ *  `Mod+f` 뒤 데코레이션 `<span>`의 `style`을 읽어 잡았다 - 예외도 없이 그냥 다른 색이 뜬다).
+ *  그래서 두 값 다 **호출자가 이미 hex로 바꿔 넘긴다**(`terminal-panel.tsx`의 `toHex` - canvas로
+ *  구우면 `oklch`·`lab`·`color-mix` 전부 브라우저가 대신 풀어 준다). 애드온에 글자색 자리가
+ *  없어 DOM판의 `--primary-foreground`는 못 옮긴다 - ponytail: 배경만 갈린다, 애드온이 글자색을
+ *  받으면 그때 더한다. */
+export function searchDecorations(primaryHex: string, mutedHex: string): SearchDecorations {
   return {
-    matchBackground: `color-mix(in oklab, ${primary} 25%, transparent)`,
-    activeMatchBackground: primary,
-    matchOverviewRuler: primary,
-    activeMatchColorOverviewRuler: primary,
+    matchBackground: mutedHex,
+    activeMatchBackground: primaryHex,
+    matchOverviewRuler: primaryHex,
+    activeMatchColorOverviewRuler: primaryHex,
   };
 }
 

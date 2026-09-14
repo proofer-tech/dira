@@ -50,7 +50,10 @@ export function TerminalPanel({
 
   useEffect(() => {
     const url = `/p/${projectId}/home/pty/${id}`;
-    const term = new Terminal({ cols: COLS, rows: ROWS, cursorBlink: true, scrollback: 5000 });
+    // `allowProposedApi` — `SearchAddon`의 데코레이션(`registerDecoration`)이 제안 API라, 이
+    // 값 없이 `searchDecorations`를 넘기면 "You must set the allowProposedApi option" 예외로
+    // `TerminalFindBar`가 통째로 죽는다(실측 - 헤드리스 CDP로 `Mod+f` 뒤 콘솔에서 잡았다).
+    const term = new Terminal({ cols: COLS, rows: ROWS, cursorBlink: true, scrollback: 5000, allowProposedApi: true });
     if (hostRef.current) term.open(hostRef.current);
 
     // **`Ctrl+F`가 셸로 안 샌다**(P405-2, §7 §`Ctrl+F`가 셸로 새면 안 된다) — 판정은
@@ -89,11 +92,31 @@ export function TerminalPanel({
   return <div ref={hostRef} className="h-full min-h-0 w-full overflow-hidden p-2" />;
 }
 
-/** `--primary`가 지금 앉힌 값 — 애드온 데코레이션은 canvas에 그려서 `::highlight()`처럼 CSS
- *  변수를 못 읽으므로(§7 §하이라이트도 ... `--primary` 계열을 그대로 옮긴다), 부를 때마다
- *  `getComputedStyle`로 떠 읽어 문자열로 넘긴다 — 라이트·다크 전환에도 새 값을 따라간다. */
-function primaryColor(): string {
-  return getComputedStyle(document.documentElement).getPropertyValue("--primary").trim();
+/** 임의 CSS 색(`oklch()`·`lab()`·`color-mix()`도)을 `#rrggbb`로 굽는다 - `lib/terminal-search.ts`의
+ *  `searchDecorations`가 왜 이 값을 요구하는지는 그 파일 주석에 있다. 1x1 canvas에 검은 바탕
+ *  위로 그 색을 `alpha`만큼 얹고 합성된 픽셀을 읽는다 - 브라우저의 색 공간 변환을 그대로 빌려
+ *  쓰는 자리라 여기서 손으로 안 짠다. 검은 바탕인 이유는 터미널 배경이 실제로 검정이라서다
+ *  (`terminal-panel.tsx` 위 ponytail 주석 - xterm 기본 테마 `#000`). */
+function toHex(color: string, alpha = 1): string {
+  const c = document.createElement("canvas");
+  c.width = c.height = 1;
+  const ctx = c.getContext("2d", { willReadFrequently: true })!;
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, 1, 1);
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = color;
+  ctx.fillRect(0, 0, 1, 1);
+  const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
+  return `#${[r, g, b].map((v) => v.toString(16).padStart(2, "0")).join("")}`;
+}
+
+/** `--primary`가 지금 앉힌 값을 hex 둘로 굽는다(§7 §하이라이트도 ... `--primary` 계열을 그대로
+ *  옮긴다) — 진한 현재 강조는 그 색 그대로, 옅은 전체 강조는 `find-bar.tsx`의 `CSS_RULES`와
+ *  같은 25%다. 부를 때마다 `getComputedStyle`로 떠 읽는다 — 라이트·다크 전환에도 새 값을
+ *  따라간다. */
+function primaryHexPair(): { primary: string; muted: string } {
+  const primary = getComputedStyle(document.documentElement).getPropertyValue("--primary").trim();
+  return { primary: toHex(primary), muted: toHex(primary, 0.25) };
 }
 
 /** **터미널 표면의 찾기 바** (P405-2, §7 §터미널은 활성 탭의 화면 32줄과 스크롤백 5,000줄).
@@ -156,14 +179,16 @@ export function TerminalFindBar({ activeTab }: { activeTab: string | null }) {
         setResult(null);
         return;
       }
-      entry.search.findNext(query, { decorations: searchDecorations(primaryColor()), incremental: true });
+      const { primary, muted } = primaryHexPair();
+      entry.search.findNext(query, { decorations: searchDecorations(primary, muted), incremental: true });
     };
     scan();
   }, [open, entry, query]);
 
   const go = (dir: 1 | -1) => {
     if (!entry || !query) return;
-    const opts: ISearchOptions = { decorations: searchDecorations(primaryColor()) };
+    const { primary, muted } = primaryHexPair();
+    const opts: ISearchOptions = { decorations: searchDecorations(primary, muted) };
     if (dir === 1) entry.search.findNext(query, opts);
     else entry.search.findPrevious(query, opts);
   };
