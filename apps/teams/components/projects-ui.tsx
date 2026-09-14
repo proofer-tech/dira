@@ -9,12 +9,13 @@
  *
  *  한 파일에 있는 이유: 해석 결과 표를 생성 직후와 행 액션의 설정 다이얼로그가 **같은 표**로
  *  쓴다(DESIGN.md §7). 파일을 쪼개면 두 자리가 갈린다. fs 접근은 전부 서버 액션 뒤에 있다. */
-import { Fragment, useState, useTransition } from "react";
+import { Fragment, useEffect, useState, useTransition } from "react";
 import Link from "@/components/link";
 import { useTrackedRouter } from "@/lib/route-pending";
 import { ChevronDown, ChevronUp, Settings2, TriangleAlert } from "lucide-react";
 import {
   createProject,
+  loadOntologyMetricsAction,
   moveProjectAction,
   type CreateState,
   type ResolvedView,
@@ -27,6 +28,8 @@ import { PersonaBadge } from "@/components/persona-badge";
 import { SelfHealAlert, useSelfHealRetry } from "@/components/self-heal";
 import { SettingsDialog, type AuthView } from "@/components/settings-dialog";
 import { StatusBadge, type Status } from "@/components/status-badge";
+import type { OntologyMetrics } from "@/lib/ontology";
+import { cn } from "@/lib/utils";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -731,6 +734,118 @@ export function OntologyMigration({
           fixingText={t("project.ontologyMigration.fixing")}
         />
       )}
+    </div>
+  );
+}
+
+// ── 설정 다이얼로그: 온톨로지 지표 (§온톨로지 화면의 설정성 표면 셋이 설정 다이얼로그로
+// 간다 결정 1·2) ─────────────────────────────────────────────────────────────
+
+/** 지표 12칸 — 온톨로지 화면 제목 밑에 있던 그 그리드가 옮겨 온 자리(결정 1, 화면 쪽은
+ *  걷힌다). 읽는 왕복은 `resolveProjectAction`(`ProjectSection`의 `load()`)과 **따로**다(결정
+ *  2) — 지표는 온톨로지 폴더의 카드 전량을 여는 계산이라 해석 결과 표에 얹으면 그 표까지 늦게
+ *  뜬다. `open`이 다시 켜질 때마다 다시 읽는다 — `ProjectSection`의 `load()`와 같은 이유(옛
+ *  값이 다른 세션에서 바뀌었을 수 있다).
+ *
+ *  `metrics`가 `null`이면(온톨로지가 없거나 `dira` 형식이 아니다) 이 컴포넌트가 아무것도 안
+ *  그린다 — 지표 자리 자체가 없는 것이 정상 상태다(실패가 아니다). */
+export function OntologyMetricsField({ projectId, open }: { projectId: string; open: boolean }) {
+  const t = useT();
+  const [metrics, setMetrics] = useState<OntologyMetrics | null>(null);
+  const { error, fixing, run } = useSelfHealRetry();
+
+  useEffect(() => {
+    if (!open) return;
+    void run(
+      () => loadOntologyMetricsAction(projectId),
+      (res) => (res.ok ? null : res.message),
+      { projectId, surface: "project.ontologyMetrics" },
+    ).then((r) => setMetrics(r.ok ? r.metrics : null));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId, open]);
+
+  if (error) {
+    return (
+      <div className="border-t pt-4">
+        <SelfHealAlert
+          title={t("project.settings.readFailedTitle")}
+          error={error}
+          fixing={fixing}
+          fixingText={t("ontology.metrics.loadFixing")}
+        />
+      </div>
+    );
+  }
+  if (!metrics) return null;
+
+  const pct = (r: number) => `${Math.round(r * 100)}%`;
+  const count = t("ontology.unit.count");
+  const noRecord = t("ontology.metrics.noRecord");
+
+  return (
+    <div className="border-t pt-4">
+      <div
+        data-setting="project.metrics"
+        className="grid grid-cols-2 gap-4 rounded-lg border bg-surface p-4 sm:grid-cols-4"
+      >
+        <MetricStat label={t("ontology.metrics.objectRelation")} value={`${metrics.objectCount} · ${metrics.relationCount}`} />
+        <MetricStat
+          label={t("ontology.metrics.hiddenEdges")}
+          value={`${metrics.hiddenEdges.count}${count} (${pct(metrics.hiddenEdges.ratio)})`}
+          alert={metrics.hiddenEdges.count > 0}
+        />
+        <MetricStat
+          label={t("ontology.metrics.normativeSentences")}
+          value={`${metrics.normativeSentences.count}${count}`}
+          alert={metrics.normativeSentences.count > 0}
+        />
+        <MetricStat
+          label={t("ontology.metrics.singleSentenceProse")}
+          value={`${metrics.singleSentenceProse.count}${count} (${pct(metrics.singleSentenceProse.ratio)})`}
+        />
+        <MetricStat
+          label={t("ontology.metrics.shells")}
+          value={`${metrics.shells.count}${count} (${pct(metrics.shells.ratio)})`}
+        />
+        <MetricStat
+          label={t("ontology.metrics.isolated")}
+          value={`${metrics.isolated.count}${count} (${pct(metrics.isolated.ratio)})`}
+        />
+        <MetricStat
+          label={t("ontology.metrics.hierarchyCycles")}
+          value={`${metrics.hierarchyCycles.count}${count}`}
+          alert={metrics.hierarchyCycles.count > 0}
+        />
+        <MetricStat
+          label={t("ontology.metrics.polysemousElements")}
+          value={`${metrics.polysemousElements.count}${count}`}
+          alert={metrics.polysemousElements.count > 0}
+        />
+        <MetricStat
+          label={t("ontology.metrics.redundantClasses")}
+          value={`${metrics.redundantClasses.count}${count}`}
+          alert={metrics.redundantClasses.count > 0}
+        />
+        <MetricStat
+          label={t("ontology.metrics.emptyHandedRatio")}
+          value={metrics.emptyHanded.total > 0 ? pct(metrics.emptyHanded.ratio) : noRecord}
+          alert={metrics.emptyHanded.total > 0 && metrics.emptyHanded.ratio < 0.1}
+        />
+        <MetricStat
+          label={t("ontology.metrics.schemaStability")}
+          value={`${metrics.schemaStability.reduce((n, d) => n + d.count, 0)}${count}`}
+        />
+        <MetricStat label={t("ontology.metrics.lastUpdated")} value={metrics.lastUpdated ?? noRecord} />
+      </div>
+    </div>
+  );
+}
+
+function MetricStat({ label, value, alert }: { label: string; value: string; alert?: boolean }) {
+  return (
+    <div className="space-y-0.5">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className={cn("font-mono text-sm tabular-nums", alert && "text-status-stale")}>{value}</p>
     </div>
   );
 }

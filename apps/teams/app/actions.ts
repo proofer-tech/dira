@@ -70,6 +70,9 @@ import {
   type ProjectConfig,
 } from "@/lib/projects";
 import { assignPersonaColors } from "@/lib/persona-colors";
+import { isDiraFormat, type OntologyMetrics } from "@/lib/ontology";
+import { loadMetrics } from "@/lib/ontology-load";
+import { listTree } from "@/lib/protocols";
 import {
   DEFAULT_SKILLS,
   SkillInstallError,
@@ -908,6 +911,30 @@ export async function resolveProjectAction(id: string): Promise<ResolvedView | {
     return await viewOf(project, locale);
   } catch (e) {
     return { message: (e as Error).message };
+  }
+}
+
+/** 설정 > 프로젝트 노드의 지표 칸(§온톨로지 화면의 설정성 표면 셋이 설정 다이얼로그로 간다
+ *  결정 2) — `resolveProjectAction`과 **다른 왕복**이다. 지표는 온톨로지 폴더의 카드 전량을
+ *  여는 계산이라 해석 결과 표와 같이 얹으면 그 표까지 그만큼 늦게 뜬다. `metrics: null`은
+ *  실패가 아니라 온톨로지가 없거나(빈 폴더) `dira` 형식이 아닌 정상 상태 — 그 두 경우 화면은
+ *  지표 자리 자체를 안 그린다(§결정 2). */
+export type OntologyMetricsResult =
+  | { ok: true; metrics: OntologyMetrics | null }
+  | { ok: false; message: string };
+
+export async function loadOntologyMetricsAction(id: string): Promise<OntologyMetricsResult> {
+  const locale = await readLanguage();
+  const project = await getProject(id);
+  if (!project) return { ok: false, message: `${t(locale, "resolve.unknownProjectPrefix")} ${id}` };
+  try {
+    const config = await resolveConfig(project);
+    const base = config.ontology;
+    const tree = await listTree(base);
+    if (tree.length === 0 || !isDiraFormat(tree)) return { ok: true, metrics: null };
+    return { ok: true, metrics: await loadMetrics(base, tree, locale) };
+  } catch (e) {
+    return { ok: false, message: (e as Error).message };
   }
 }
 

@@ -1888,6 +1888,7 @@ export const ko: Record<string, string> = {
   "ontology.metrics.violationsPrefix": "스키마 위반",
   "ontology.metrics.moreCountPrefix": "외",
   "ontology.metrics.fixTicketPrefix": "정리 티켓",
+  "ontology.metrics.loadFixing": "지표 읽기 오류를 고치는 중",
   "ontology.empty.heading": "몇 가지만 답하면 시작할 자료를 만들어 드립니다",
   "ontology.empty.bodyPrefix": "건너뛰어도 이 프로젝트는 그대로 돕니다 —",
   "ontology.empty.bodyMiddle": "는",
@@ -4579,6 +4580,7 @@ export const en: Record<string, string> = {
   "ontology.metrics.violationsPrefix": "Schema violations —",
   "ontology.metrics.moreCountPrefix": "Another",
   "ontology.metrics.fixTicketPrefix": "Cleanup ticket",
+  "ontology.metrics.loadFixing": "Fixing the metrics-read error",
   "ontology.empty.heading": "Answer a few questions and you get files to start from",
   // 가운데에 `tick.sh`와 `ontology/`가 차례로 낀다(`… — tick.sh just moves on when
   // ontology/ is empty.`) — `protocols.empty.*`가 선 그 벌이다.

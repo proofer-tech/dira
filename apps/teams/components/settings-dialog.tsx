@@ -83,7 +83,7 @@ import { useHotkey, useKeymap } from "@/components/keymap-provider";
 import { useLocale, useT } from "@/components/language-provider";
 import Link from "@/components/link";
 import { OntologyImport } from "@/components/ontology-ui";
-import { ConfigTable, OntologyMigration } from "@/components/projects-ui";
+import { ConfigTable, OntologyMetricsField, OntologyMigration } from "@/components/projects-ui";
 import { StatusBadge, statusLabel } from "@/components/status-badge";
 import type { Locale } from "@/lib/i18n";
 import { DEFAULT_KEYMAP, MODIFIER_KEYS, actionName, formatCombo, type ActionId } from "@/lib/keymap";
@@ -1493,6 +1493,7 @@ function ProjectSection({
           <div data-setting="project.import" className="space-y-2 border-t pt-4">
             <OntologyImport projectId={id} tickets={view.ontologyImportTickets} />
           </div>
+          <OntologyMetricsField projectId={id} open={open} />
         </>
       ) : (
         <p className="text-sm text-muted-foreground">{t("project.settings.loading")}</p>

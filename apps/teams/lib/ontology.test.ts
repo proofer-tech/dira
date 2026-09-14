@@ -1,18 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { mkdtemp, mkdir, writeFile, rm, readFile } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { computeOntologyMetrics, isDiraFormat, parseTypeProperties } from "./ontology.ts";
-import { listTree, readTextFile } from "./protocols.ts";
-
-// JSX가 있는 page.tsx는 node --test로 통째로 import할 수 없다 — 여기선 실제 소스에서
-// loadMetrics의 스키마 셀렉터 줄만 떼어 검사한다. page.tsx가 다시 "SCHEMA.md"로 되돌아가면
-// (P219-10 이전으로 회귀) 이 테스트가 문자열 불일치로 먼저 잡는다.
-const ONTOLOGY_PAGE_TSX = fileURLToPath(
-  new URL("../app/(app)/p/[project]/ontology/page.tsx", import.meta.url),
-);
+import { listTree } from "./protocols.ts";
+import { loadMetrics } from "./ontology-load.ts";
 
 const SCHEMA = `## 객체 타입
 
@@ -450,12 +443,7 @@ test("잉여 클래스(OOPS!) — 스키마의 모든 타입에 인스턴스가 
   assert.equal(m.redundantClasses.count, 0);
 });
 
-test("스키마 파일 경로 — page.tsx의 loadMetrics가 찾는 rel은 _ontology/SCHEMA.md다(P219-10 이후)", async () => {
-  const pageSource = await readFile(ONTOLOGY_PAGE_TSX, "utf8");
-  const m = pageSource.match(/schemaEntry = tree\.find\(\(e\) => !e\.isDir && e\.rel === "([^"]+)"\)/);
-  assert.ok(m, "loadMetrics의 schemaEntry 셀렉터 줄을 못 찾았다 — page.tsx가 바뀌었나?");
-  assert.equal(m[1], "_ontology/SCHEMA.md");
-
+test("스키마 파일 경로 — lib/ontology-load.ts의 loadMetrics가 찾는 rel은 _ontology/SCHEMA.md다(P219-10 이후, P406-1 이후 lib/로 이관)", async () => {
   const base = await mkdtemp(path.join(tmpdir(), "ontology-schema-path-"));
   try {
     await mkdir(path.join(base, "_ontology"), { recursive: true });
@@ -467,18 +455,15 @@ test("스키마 파일 경로 — page.tsx의 loadMetrics가 찾는 rel은 _onto
 
     // 옛 경로("SCHEMA.md")로는 못 찾는다 — 고치기 전 증상 재현.
     assert.equal(tree.find((e) => !e.isDir && e.rel === "SCHEMA.md"), undefined);
-
-    // 지금 page.tsx의 loadMetrics가 쓰는 경로.
-    const schemaEntry = tree.find((e) => !e.isDir && e.rel === "_ontology/SCHEMA.md");
-    assert.ok(schemaEntry, "_ontology/SCHEMA.md를 트리에서 찾아야 한다");
-    const schemaText = (await readTextFile(base, schemaEntry.rel)).text ?? "";
-    assert.notEqual(schemaText, "");
-
-    const objectEntries = tree.filter((e) => !e.isDir && e.rel.startsWith("objects/"));
-    const objects = await Promise.all(
-      objectEntries.map(async (e) => ({ rel: e.rel, text: (await readTextFile(base, e.rel)).text ?? "" })),
+    assert.ok(
+      tree.find((e) => !e.isDir && e.rel === "_ontology/SCHEMA.md"),
+      "_ontology/SCHEMA.md를 트리에서 찾아야 한다",
     );
-    const m = computeOntologyMetrics({ schemaText, objects, actionLogs: [] });
+
+    // 온톨로지 화면 · 설정 > 프로젝트 노드의 지표 칸 · 위반 정리 티켓이 셋 다 이 함수 하나를
+    // 부른다(§온톨로지 화면의 설정성 표면 셋이 설정 다이얼로그로 간다 결정 3) — 실제 함수를
+    // 직접 불러서 잰다.
+    const m = await loadMetrics(base, tree, "ko");
     assert.match(m.schemaViolations.join("\n"), /미정의 타입.*유령/);
   } finally {
     await rm(base, { recursive: true, force: true });

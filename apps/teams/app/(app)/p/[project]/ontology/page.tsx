@@ -35,7 +35,8 @@ import { statusLabel } from "@/components/status-badge";
 import { t, type Locale } from "@/lib/i18n";
 import { buildVault } from "@/lib/markdown-wikilinks";
 import type { FrontmatterCandidates } from "@/lib/markdown-frontmatter-rows";
-import { computeOntologyMetrics, isDiraFormat, parseTypeProperties, type OntologyMetrics } from "@/lib/ontology";
+import { isDiraFormat, parseTypeProperties, type OntologyMetrics } from "@/lib/ontology";
+import { loadMetrics } from "@/lib/ontology-load";
 import {
   ONTOLOGY_FIX_MARKER,
   importFolderOf,
@@ -50,7 +51,6 @@ import {
   nestTree,
   readTextFile,
   type NestedEntry,
-  type ProtocolEntry,
   type ProtocolFile,
 } from "@/lib/protocols";
 import {
@@ -63,37 +63,6 @@ import {
   squadsDir,
   usingDefault,
 } from "@/lib/projects";
-import { cn } from "@/lib/utils";
-
-/** `tree`에서 지표 계산에 필요한 텍스트를 모아 순수 함수(`computeOntologyMetrics`)에 넘긴다.
- *  fs는 여기(Server Component)까지만 — `lib/ontology.ts`는 이 결과물만 받는다.
- *
- *  `ontology/actions.ts`의 `문제해결` 액션도 같은 위반 목록이 필요해 이 함수를 그대로 가져다
- *  쓴다(§P230) — 새 실행층 없이 export만 늘렸다. */
-export async function loadMetrics(base: string, tree: ProtocolEntry[], locale: Locale): Promise<OntologyMetrics> {
-  const basename = (rel: string) => rel.split("/").at(-1) ?? rel;
-  const text = async (rel: string) => (await readTextFile(base, rel)).text ?? "";
-
-  const schemaEntry = tree.find((e) => !e.isDir && e.rel === "_ontology/SCHEMA.md");
-  const objectEntries = tree.filter((e) => !e.isDir && e.rel.startsWith("objects/") && e.rel.endsWith(".md"));
-  const viewEntries = tree.filter((e) => !e.isDir && e.rel.startsWith("object-views/") && e.rel.endsWith(".md"));
-  const logEntries = tree.filter((e) => !e.isDir && e.rel.startsWith("action-log/") && e.rel.endsWith(".md"));
-  const typeFileEntries = tree.filter(
-    (e) => !e.isDir && e.rel.startsWith("_ontology/object-types/") && e.rel.endsWith(".md"),
-  );
-
-  const [schemaText, objects, views, actionLogs, typeFiles] = await Promise.all([
-    schemaEntry ? text(schemaEntry.rel) : Promise.resolve(""),
-    Promise.all(objectEntries.map(async (e) => ({ rel: e.rel, text: await text(e.rel) }))),
-    Promise.all(viewEntries.map(async (e) => ({ rel: e.rel, text: await text(e.rel) }))),
-    Promise.all(
-      logEntries.map(async (e) => ({ date: basename(e.rel).replace(/\.md$/, ""), text: await text(e.rel) })),
-    ),
-    Promise.all(typeFileEntries.map(async (e) => ({ rel: e.rel, text: await text(e.rel) }))),
-  ]);
-
-  return computeOntologyMetrics({ schemaText, objects, views, actionLogs, typeFiles }, locale);
-}
 
 // 온톨로지도 세션이 GUI 밖에서 고친다 — 프리렌더하면 빌드 시점 내용이 굳는다.
 export const dynamic = "force-dynamic";
@@ -251,8 +220,8 @@ export default async function Ontology({
         {tree.length > 0 && <NewOntologyFileButton projectId={id} />}
       </div>
 
-      {metrics && (
-        <OntologyMetricsPanel metrics={metrics} projectId={id} fixTicket={fixTicket} locale={locale} />
+      {metrics && metrics.schemaViolations.length > 0 && (
+        <OntologyViolationsAlert metrics={metrics} projectId={id} fixTicket={fixTicket} locale={locale} />
       )}
 
       {tree.length > 0 && !diraFormat && (
@@ -415,8 +384,11 @@ function TreeRow({
   );
 }
 
-/** DESIGN.md §5-3 §지표. 판정은 `lib/ontology.ts`가 다 하고 여기는 표시만 한다. */
-function OntologyMetricsPanel({
+/** DESIGN.md §온톨로지 화면의 설정성 표면 셋이 설정 다이얼로그로 간다 결정 1 — 지표 12칸
+ *  그리드는 설정 > 프로젝트 노드로 옮겨 갔다(`components/projects-ui.tsx`의
+ *  `OntologyMetricsField`). 이 화면에 남는 것은 통계가 아니라 경보인 이 카드 하나뿐이다 —
+ *  판정은 여전히 `lib/ontology.ts`가 다 하고 여기는 표시만 한다. */
+function OntologyViolationsAlert({
   metrics: m,
   projectId,
   fixTicket,
@@ -427,101 +399,38 @@ function OntologyMetricsPanel({
   fixTicket: Ticket | null;
   locale: Locale;
 }) {
-  const pct = (r: number) => `${Math.round(r * 100)}%`;
   const count = t(locale, "ontology.unit.count");
-  const noRecord = t(locale, "ontology.metrics.noRecord");
   return (
-    <div className="space-y-3">
-      <div className="grid grid-cols-2 gap-4 rounded-lg border bg-surface p-4 sm:grid-cols-4">
-        <MetricStat label={t(locale, "ontology.metrics.objectRelation")} value={`${m.objectCount} · ${m.relationCount}`} />
-        <MetricStat
-          label={t(locale, "ontology.metrics.hiddenEdges")}
-          value={`${m.hiddenEdges.count}${count} (${pct(m.hiddenEdges.ratio)})`}
-          alert={m.hiddenEdges.count > 0}
-        />
-        <MetricStat
-          label={t(locale, "ontology.metrics.normativeSentences")}
-          value={`${m.normativeSentences.count}${count}`}
-          alert={m.normativeSentences.count > 0}
-        />
-        <MetricStat
-          label={t(locale, "ontology.metrics.singleSentenceProse")}
-          value={`${m.singleSentenceProse.count}${count} (${pct(m.singleSentenceProse.ratio)})`}
-        />
-        <MetricStat label={t(locale, "ontology.metrics.shells")} value={`${m.shells.count}${count} (${pct(m.shells.ratio)})`} />
-        <MetricStat label={t(locale, "ontology.metrics.isolated")} value={`${m.isolated.count}${count} (${pct(m.isolated.ratio)})`} />
-        <MetricStat
-          label={t(locale, "ontology.metrics.hierarchyCycles")}
-          value={`${m.hierarchyCycles.count}${count}`}
-          alert={m.hierarchyCycles.count > 0}
-        />
-        <MetricStat
-          label={t(locale, "ontology.metrics.polysemousElements")}
-          value={`${m.polysemousElements.count}${count}`}
-          alert={m.polysemousElements.count > 0}
-        />
-        <MetricStat
-          label={t(locale, "ontology.metrics.redundantClasses")}
-          value={`${m.redundantClasses.count}${count}`}
-          alert={m.redundantClasses.count > 0}
-        />
-        <MetricStat
-          label={t(locale, "ontology.metrics.emptyHandedRatio")}
-          value={m.emptyHanded.total > 0 ? pct(m.emptyHanded.ratio) : noRecord}
-          alert={m.emptyHanded.total > 0 && m.emptyHanded.ratio < 0.1}
-        />
-        <MetricStat
-          label={t(locale, "ontology.metrics.schemaStability")}
-          value={`${m.schemaStability.reduce((n, d) => n + d.count, 0)}${count}`}
-        />
-        <MetricStat label={t(locale, "ontology.metrics.lastUpdated")} value={m.lastUpdated ?? noRecord} />
-      </div>
-
-      {m.schemaViolations.length > 0 && (
-        <Alert variant="destructive">
-          <TriangleAlert aria-hidden />
-          <AlertTitle>
-            {t(locale, "ontology.metrics.violationsPrefix")} {m.schemaViolations.length}
+    <Alert variant="destructive">
+      <TriangleAlert aria-hidden />
+      <AlertTitle>
+        {t(locale, "ontology.metrics.violationsPrefix")} {m.schemaViolations.length}
+        {count}
+      </AlertTitle>
+      <AlertDescription>
+        <ul className="mt-1 space-y-1 font-mono text-xs">
+          {m.schemaViolations.slice(0, 10).map((v, i) => (
+            <li key={i} className="break-all">
+              {v}
+            </li>
+          ))}
+        </ul>
+        {m.schemaViolations.length > 10 && (
+          <p className="mt-1 text-xs">
+            {t(locale, "ontology.metrics.moreCountPrefix")} {m.schemaViolations.length - 10}
             {count}
-          </AlertTitle>
-          <AlertDescription>
-            <ul className="mt-1 space-y-1 font-mono text-xs">
-              {m.schemaViolations.slice(0, 10).map((v, i) => (
-                <li key={i} className="break-all">
-                  {v}
-                </li>
-              ))}
-            </ul>
-            {m.schemaViolations.length > 10 && (
-              <p className="mt-1 text-xs">
-                {t(locale, "ontology.metrics.moreCountPrefix")} {m.schemaViolations.length - 10}
-                {count}
-              </p>
-            )}
-            {fixTicket ? (
-              <p className="mt-2 text-xs">
-                <Link
-                  href={`/p/${projectId}/tickets/${fixTicket.stem}`}
-                  className="underline underline-offset-2"
-                >
-                  {t(locale, "ontology.metrics.fixTicketPrefix")} {fixTicket.stem} {statusLabel(statusOf(fixTicket), locale)}
-                </Link>
-              </p>
-            ) : (
-              <FixSchemaViolationsButton projectId={projectId} />
-            )}
-          </AlertDescription>
-        </Alert>
-      )}
-    </div>
-  );
-}
-
-function MetricStat({ label, value, alert }: { label: string; value: string; alert?: boolean }) {
-  return (
-    <div className="space-y-0.5">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className={cn("font-mono text-sm tabular-nums", alert && "text-status-stale")}>{value}</p>
-    </div>
+          </p>
+        )}
+        {fixTicket ? (
+          <p className="mt-2 text-xs">
+            <Link href={`/p/${projectId}/tickets/${fixTicket.stem}`} className="underline underline-offset-2">
+              {t(locale, "ontology.metrics.fixTicketPrefix")} {fixTicket.stem} {statusLabel(statusOf(fixTicket), locale)}
+            </Link>
+          </p>
+        ) : (
+          <FixSchemaViolationsButton projectId={projectId} />
+        )}
+      </AlertDescription>
+    </Alert>
   );
 }
