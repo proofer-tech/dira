@@ -163,6 +163,24 @@ export function FindBar({
     input.current?.select();
   }, [open]);
 
+  // **표면을 갈면 바가 닫힌다**(P405-1, §7 §훑을 자리는 지금 우측 몸통에 떠 있는 것이다) — 훑을
+  // 자리와 하이라이트 엔진이 같이 갈리는 자리라, 열어 둔 채 넘기면 앞 표면에서 센 건수가 새
+  // 표면 위에 남는다. `scope`(getter 자체의 identity)가 홈에서는 표면마다 다른 상수라 그 전환을
+  // 이 값 하나로 잡는다. 마운트 첫 렌더는 건너뛴다 — 그때는 아직 전환이 아니다. 포커스는 안
+  // 돌린다: 표면이 이미 바뀐 뒤라 새 표면이 포커스를 가져야지 옛 자리로 끌어올 이유가 없다.
+  const mounted = useRef(false);
+  useEffect(() => {
+    if (!mounted.current) {
+      mounted.current = true;
+      return;
+    }
+    setOpen(false);
+    setQuery("");
+    setHits([]);
+    setIdx(0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scope]);
+
   // **훑기.** 질의가 바뀌면 다시 걷고, **스레드가 다시 그려질 때마다도 다시 걷는다**(§7 §답은
   // 흐른다): 토큰이 붙으면 React가 텍스트 노드를 갈아 끼우고 우리가 들고 있던 `Range`는 그
   // 순간 아무 데도 안 가리킨다. 이 옵저버 하나가 "토큰이 붙을 때마다 지워지지 않는다"의 전부다.

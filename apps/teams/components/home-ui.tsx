@@ -43,7 +43,7 @@
  *  한 마디가 더 뜬다. 상태마다 띠를 따로 세우지 않는 이유는 **답이 끝나는 순간 높이가 안
  *  튀어야** 해서다 — 자동 스크롤이 바닥을 물고 있는 화면에서 24px 점프가 가장 나쁘다(§13). */
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition, type RefObject } from "react";
 import Link from "@/components/link";
 // `Check`은 **패널에서 빠졌다**(§비주얼 §34 ③). import는 남는다 — 같은 파일의 `복사` 버튼이
 // 눌린 뒤 1.2초 동안 그 글리프를 든다(§24 §띠). §34가 *lucide `Check`이 빠진다*고 적은 것은
@@ -251,6 +251,25 @@ const SURFACES: { id: Surface; labelKey: string; icon: typeof MessageSquare }[] 
   { id: "explorer", labelKey: "home.surface.explorer", icon: FolderTree },
 ];
 
+/** 탐색기 표면의 훑을 자리 — **활성 탭의 `<pre>`** (P405-1, §7 §훑을 자리는 지금 우측 몸통에
+ *  떠 있는 것이다). `find-bar.tsx`의 `MAIN` getter와 같은 관용구다: ref로 안 꿰는 이유가 같다 —
+ *  탭을 여닫을 때마다 활성 편집기가 바뀌는데 그때마다 이 ref를 다시 잇는 배선을 늘리는 대신
+ *  **바가 열리는 순간**(= 읽는 순간) `document.querySelector`로 지금 것을 집는다. 표식은
+ *  `explorer-ui.tsx`의 `data-explorer-active`이고, 파일을 한 개도 안 열었으면 `null`이라
+ *  그대로 `0/0`이다(위 소절 온보딩과 같은 처리). */
+const EXPLORER_MAIN: RefObject<HTMLElement | null> = {
+  get current() {
+    return document.querySelector<HTMLElement>("[data-explorer-active] pre");
+  },
+};
+/** 탐색기 표면에서 바를 닫을 때 돌아갈 포커스 — **활성 탭의 `textarea`**(§7 표 §닫을 때
+ *  포커스가 가는 곳). 나머지 표면은 프롬프트 칸(`input`)이다. */
+const EXPLORER_RESTORE: RefObject<HTMLElement | null> = {
+  get current() {
+    return document.querySelector<HTMLElement>("[data-explorer-active] textarea");
+  },
+};
+
 /** 폴링 주기 둘(§7 §답은 흐른다 · §폴링은 서버가 잊어도 안 끊긴다). 자세한 근거는 아래
  *  `useEffect` 머리 주석. **천장은 없다**(§7 §천장이 없다 — 요구 `8db4d0f6`이 서버의
  *  `TIMEOUT_MS`와 여기 있던 `CEILING_MS`를 둘 다 걷었다). 끝의 근거는 결과 객체 · 프로세스의
@@ -378,6 +397,11 @@ export function HomeUI({
   // 입력칸 · 셸 헤더가 이 밖이라 *무엇을 안 훑나*가 이 ref 하나로 참이 된다. 대화 0건(온보딩)
   // 이면 스크롤러 자체가 안 떠서 `null`이고, 그래서 그 화면의 결과가 `0/0`이다(§30 ⑥).
   const thread = useRef<HTMLDivElement>(null);
+  // **탐색기 표면일 때는 훑을 자리가 활성 탭의 `<pre>`다**(P405-1, §7 §훑을 자리는 지금 우측
+  // 몸통에 떠 있는 것이다). `MAIN`(`find-bar.tsx`)과 같은 getter 관용구 — 탭이 갈릴 때마다
+  // ref를 다시 꿰지 않고 **바가 열리는 순간** `document.querySelector`로 지금 활성 탭을 찾는다.
+  // 표식은 `explorer-ui.tsx`의 `data-explorer-active`이고 파일을 한 개도 안 열었으면 `null`이라
+  // 그대로 `0/0`이다.
   // 첨부(§8) — 나가는 곳이 `claude`의 argv다. 조립은 서버의 `withAttachments` 하나이고
   // (§8 §표기는 하나다) 파일은 홈 세션 cwd 아래라 `Read`가 그대로 연다(§7 도구 셋).
   const att = useAttachments(project);
@@ -1369,7 +1393,13 @@ export function HomeUI({
           포털을 안 쓴다: `fixed`가 뷰포트에 붙는 조건은 조상 사슬에 `transform`·`filter`·
           `contain`이 없는 것 하나이고 이 사슬에는 없다. 열림 상태도 `⌘F`도 바가 자기가 든다 —
           **홈에만 있는 컴포넌트라 §0-6 `board.search`의 홈 갈래가 저절로 맞는다**. */}
-      <FindBar scope={thread} restore={input} />
+      {/* 훑을 자리 - 돌아갈 포커스는 표면 따라 갈린다(P405-1) — 탐색기만 다르고 나머지
+          (대화 - 소스 컨트롤 - 스케줄)는 종전대로 스레드 - 프롬프트 칸이다(§7 표). 터미널은
+          이 회차에서 안 갈린다(`0eaf0c50`의 몫) — 스레드가 언마운트돼 있어 종전처럼 `0/0`이다. */}
+      <FindBar
+        scope={surface === "explorer" ? EXPLORER_MAIN : thread}
+        restore={surface === "explorer" ? EXPLORER_RESTORE : input}
+      />
     </div>
   );
 }

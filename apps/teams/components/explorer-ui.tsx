@@ -586,8 +586,16 @@ export function ExplorerPane({
     <div className="flex min-h-0 flex-1 flex-col pl-8 pr-6 pb-6 pt-2">
       {tabs.map((tab) => {
         const entry = filesById[tab.id];
+        // `data-explorer-active`가 P405-1이 훑을 자리로 삼는 표식이다(`home-ui.tsx`의
+        // `EXPLORER_MAIN`-`EXPLORER_RESTORE` getter) — 안 보이는 탭은 `hidden`이 이미
+        // `checkVisibility()`로 걸러 주므로(`find-bar.tsx` `collect()`) 새 API가 없다.
         return (
-          <div key={tab.id} hidden={tab.id !== activeTab} className="flex min-h-0 flex-1 flex-col">
+          <div
+            key={tab.id}
+            hidden={tab.id !== activeTab}
+            data-explorer-active={tab.id === activeTab || undefined}
+            className="flex min-h-0 flex-1 flex-col"
+          >
             {entry ? (
               <FileEditorPane
                 projectId={projectId}
@@ -759,6 +767,15 @@ function CodeEditor({
         <pre
           ref={preRef}
           aria-hidden
+          onScroll={(e) => {
+            // 반대 방향 — `find-bar.tsx`의 `center()`가 일치한 곳을 끌어올 때 스크롤하는
+            // 조상이 이 `<pre>`다(P405-1, §7 §끌어올 때 두 층을 같이 옮긴다). 종전엔
+            // `textarea` -> `pre` 한 방향만 있어 캐럿과 글자가 어긋났다.
+            if (taRef.current) {
+              taRef.current.scrollTop = e.currentTarget.scrollTop;
+              taRef.current.scrollLeft = e.currentTarget.scrollLeft;
+            }
+          }}
           className="pointer-events-none absolute inset-0 overflow-auto whitespace-pre-wrap break-words p-3 font-mono text-sm leading-6 [&_pre]:!bg-transparent [&_pre]:!p-0 [&_code]:whitespace-pre-wrap [&_code]:break-words"
           dangerouslySetInnerHTML={{ __html: html ?? "" }}
         />
