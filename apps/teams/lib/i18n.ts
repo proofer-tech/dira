@@ -1761,7 +1761,7 @@ export const ko: Record<string, string> = {
   // 없는 폴더를 가리켰을 때. 지표-검사 표 대신 이 한 장이 뜬다.
   "ontology.notDira.title": "dira 형식이 아닙니다",
   "ontology.notDira.body":
-    "_ontology/SCHEMA.md도 objects/도 없습니다 — 아직 이 폴더를 dira 형식으로 옮기지 않은 것뿐입니다. 아래 가져오기로 옮겨오세요.",
+    "_ontology/SCHEMA.md도 objects/도 없습니다 — 아직 이 폴더를 dira 형식으로 옮기지 않은 것뿐입니다. 설정의 가져올 폴더로 옮겨오세요.",
   // 티켓 cd662a73이 만들고 c5d51522가 온톨로지 화면으로 옮긴 폼 — 화면에서 TICKET_ONTOLOGY를
   // 편집한다(§결정 1 (b)). 거절 사유 둘은 여기서 prefix로 쓰고 값이 뒤에 붙는다
   // (`projectActions.unknownProjectPrefix`와 같은 관용구) — 셋째 거절(워크트리 안)은 위
@@ -4182,7 +4182,7 @@ export const en: Record<string, string> = {
 
   "ontology.notDira.title": "Not dira format",
   "ontology.notDira.body":
-    "No _ontology/SCHEMA.md or objects/ here — this folder just hasn't been moved into dira format yet. Use import below to bring it in.",
+    "No _ontology/SCHEMA.md or objects/ here — this folder just hasn't been moved into dira format yet. Use the folder-to-import field in Settings to bring it in.",
 
   // 보드 화면(§0-16 §발행 §묶음 표 행 3) — `ko`는 `f3a8794e`, 이 영어가 `6d818d48`다. 이 앱에서
   // 사람이 제일 오래 보는 화면이라 낱말은 셸(`90be3eeb`)에서 그대로 내려받았고, 새 낱말만 위
