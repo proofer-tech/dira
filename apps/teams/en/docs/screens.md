@@ -708,9 +708,13 @@ field. It takes you there without walking the tree.
 
 - **Project** — the first group in the tree. It only appears when you open settings from inside a
   project. There is a single line under it, and its name is the name of the project you are looking
-  at. Press it and five things for that one project come up in order — `Resolved values`,
-  `Ontology migration`, `Folder to import`, `Name`, `Unregister`. These are the same five you used
-  to open in a separate `Project settings` dialog.
+  at. Press it and eight things for that one project come up in this order — `Resolved values`,
+  `Ontology migration`, `Folder to import`, `Edit ontology location`, the twelve metric cells,
+  `Name`, `Integration branch`, `Unregister`. The four in the middle all deal with the ontology, so
+  they stand together. Two of those four moved here from the ontology screen: `Edit ontology
+  location` and the twelve metric cells (see [Archiving and the ontology](/docs/ontology)).
+  `Integration branch` is the branch sessions push to, the one you set when you created the project
+  (see [Your first project](/docs/first-ticket)).
 - **Authentication** — `claude` is at the top, with `codex` · `grok` · `agy` one line each below it.
   This is where you put in the long-lived token the cron-mounted workers use. The screen runs the
   issuing command for you. The details are in [Authentication](/docs/auth).
@@ -739,8 +743,8 @@ several accounts).
 
 Everything outside the `Project` group belongs to this computer and applies to every registered
 project. Authentication, language, the session limit — none of them are set per project. Values
-that do differ per project sit in two places. One is the five things in the `Project` group you just
-saw; the other is `Worker settings`, opened separately from the top right of the workers screen (see
+that do differ per project sit in two places. One is the eight things in the `Project` group you
+just saw; the other is `Worker settings`, opened separately from the top right of the workers screen (see
 [Workers](/docs/worker)).
 
 ## The project list
@@ -755,8 +759,8 @@ writing as the page you see on the web. In the app, the list rides on top of it 
 - For a project that is not connected, the three count cells are empty. Not zero. Could not read and
   zero are different facts.
 - The gear in the `Actions` column opens `Settings`. That row's project comes up already selected
-  under the first tree group, `Project`, and the five things from resolved values through unregister
-  are there. No separate `Project settings` dialog opens any more (see [The settings
+  under the first tree group, `Project`, and the eight things from resolved values through
+  unregister are there. No separate `Project settings` dialog opens any more (see [The settings
   dialog](#the-settings-dialog) above).
 - The right of the header carries `Manual` · `Star` · `New project` · `Settings`.
   `Settings` here is a word, not a gear.

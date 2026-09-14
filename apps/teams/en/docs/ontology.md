@@ -1,6 +1,6 @@
 # Archiving and the ontology
 
-![The ontology screen. Under the title there is a field for changing where the cards are kept and a save button, and below that, in grey, the folder path the cards are in right now. Under that, a metrics panel with twelve cells starting with objects and relations. Below is the card file tree on the left and, on the right, the selected file _ontology/SCHEMA.md open in the WYSIWYG editor. In the tree only the _ontology directory holding that file is open; every other directory is folded.](/shots/09-ontology.png)
+![The ontology screen. Under the title, one grey line gives the folder path the cards are in right now. Below it is the card file tree on the left and, on the right, the selected file _ontology/SCHEMA.md open in the WYSIWYG editor. In the tree only the _ontology directory holding that file is open; every other directory is folded.](/shots/09-ontology.png)
 
 When a ticket finishes, the context of that work stays in one ticket body. What was done and
 how, and which command confirmed it, are written in `## 결과` (the result section). The problem
@@ -12,12 +12,19 @@ The session that takes that one picks out only the **facts that are true right n
 work just finished and copies them onto a card. What it moved goes at the bottom of the target
 ticket's body. The place the cards pile up is the ontology, and the app has a screen for it.
 
-## The ontology screen - the file tree and the metrics
+## The ontology screen - one path line and the file tree
 
 `Ontology` in the left nav. The grey text under the title is where this project's cards
 actually are. The default is `ontology/` inside the queue folder, next to the personas and the
-protocols, and the field above it changes that to another folder ([Moving where the cards are
+protocols. That line is there to read; you cannot edit it here. The field that changes it to
+another folder is in `Settings` ([Moving where the cards are
 kept](#moving-where-the-cards-are-kept)).
+
+This screen is for reading and editing cards. The three things that set a value for the whole
+project - the ontology location, the metrics panel, the folder to import - are gathered in the
+`Project` node of `Settings` (see [The screens](/docs/screens), under the settings dialog). What
+stays on the screen is that path line and two alerts about the folder you are looking at right
+now: `Schema violations` and `Not dira format`.
 
 It looks like the [Protocols](/docs/protocols) screen. Tree on the left, editor on the right.
 The icon for collapsing the list is in the same place with the same words (`Collapse the file
@@ -28,10 +35,9 @@ straight to it. Change one character and `Save` lights up. `New file` is in the 
 corner too.
 
 Two things differ from Protocols. First, this screen opens nothing for you. You come in to
-`Pick a file.` sitting where the editor would be, and what there is to read meanwhile is the
-metrics panel above. With the list collapsed, that line reads `Expand the file list and pick a
-file.` Second, directories in the tree fold and unfold. This is the only tree in the app that
-does that.
+`Pick a file.` sitting where the editor would be. With the list collapsed, that line reads
+`Expand the file list and pick a file.` Second, directories in the tree fold and unfold. This is
+the only tree in the app that does that.
 
 Here is what the tree holds.
 
@@ -52,13 +58,16 @@ and all, and the links between cards do not break, because a link is by name and
 ### Moving where the cards are kept
 
 If you already have a folder of these somewhere else, you do not have to move it into the queue.
-The field just above the grey line is where that goes. Put in a path, press `Save`, and every
-worker on this project looks at that folder. The ontology belongs to one queue, so there is no
-place to give each worker a different value.
+The field is in `Settings`. Press the gear at the top right, then
+pick the project name under `Project`, the first group in the tree. `Edit ontology location`
+comes right after `Folder to import`. Put in a path, press `Save`, and every worker on this
+project looks at that folder. The ontology belongs to one queue, so there is no place to give each
+worker a different value.
 
 What it takes is **an absolute path outside this project's git working tree**. The hint in the
 empty field says exactly that. `~/Notes` and its tilde are fine. On save it goes in as the real
-path with symlinks resolved.
+path with symlinks resolved. In the desktop app, `Browse` beside the field picks the folder for
+you.
 
 There are three refusals. A red box appears under the field, and the value you typed is printed
 after the reason.
@@ -71,22 +80,22 @@ after the reason.
   `worktrees/`. Put it there and every worker gets its own copy, and nobody can tell which one
   is the real one. The queue folder itself is not in git, so that one is accepted.
 
-To undo it, empty the field and press `Save`. That line comes out of the worker file and the
-grey line goes back to the default - `ontology/` inside the queue folder, with `assumed default`
-on the end. If you are on the default now, the field opens empty. There is no separate revert
-button.
+To undo it, empty the field and press `Save`. That line comes out of the worker file and the grey
+line on the ontology screen goes back to the default - `ontology/` inside the queue folder, with
+`assumed default` on the end. If you are on the default now, the field opens empty. There is no
+separate revert button.
 
 Open a worker file yourself and write a path inside the working tree and the engine will use it.
-What happens instead is that the grey line shows the value with `Inside this project's git
-working tree` beside it. The ontology row on the workers screen only tells you what the worker
-file says. The one place that decides is this screen.
+What happens instead is that the grey line on the ontology screen shows the value with `Inside this
+project's git working tree` beside it. The ontology row on the workers screen only tells you what
+the worker file says. The one place that decides is this field in `Settings`.
 
 The folder you point at connects even if it is not in dira format. The check looks at two places
-only - `_ontology/SCHEMA.md` and `objects/`. With neither there, `Not dira format` takes the
-metrics panel's place and the form under it tells you how to bring the folder over ([Pulling in
-a folder from outside](#pulling-in-a-folder-from-outside)). You do not get hundreds of lines of
-violations. The folder is not broken. It just has not been moved yet. Point at a folder that is
-altogether empty and you get the survey below.
+only - `_ontology/SCHEMA.md` and `objects/`. With neither there, `Not dira format` comes up under
+the title on the ontology screen. The form that brings the folder over is `Folder to import` in
+`Settings` ([Pulling in a folder from outside](#pulling-in-a-folder-from-outside)). You do not get
+hundreds of lines of violations. The folder is not broken. It just has not been moved yet. Point at
+a folder that is altogether empty and the screen gives you the survey below.
 
 ### Directories open one at a time
 
@@ -170,8 +179,8 @@ cell, so typing a name that is not among the candidates is not blocked.
 ### The screen does not check your frontmatter
 
 Nothing tells you a required property is missing or that a kind name is misspelled. Write it
-wrong and it saves wrong. What catches the mismatch is the `Schema violations` box in the
-metrics panel above.
+wrong and it saves wrong. What catches the mismatch is the `Schema violations` box under the
+title.
 
 ### `Switch to plain text` - when you need the file as it is
 
@@ -193,10 +202,13 @@ Protocol documents and persona profiles have no `---` block, so this area never 
 The two screens where the row editor shows up are the ontology and the ticket detail
 ([frontmatter fields](/docs/ref-frontmatter)).
 
-## The twelve numbers up top - a bad pile shows here first
+## The twelve numbers in Settings - a bad pile shows here first
 
-A metrics panel sits above the tree. Twelve cells. All of them are counted from the files right
-then and there. You do not have to memorize them. The ones you end up looking at are these.
+The metrics panel is in the `Project` node of `Settings`, right under `Edit ontology location`.
+Twelve cells, all of them counted from the files right then and there. Counting opens every card,
+so it can come up later than the rest of the panel. On a project with no ontology, or one not in
+dira format, the whole thing stays away. You do not have to memorize the twelve. The ones you end
+up looking at are these.
 
 | Cell | What it tells you |
 |---|---|
@@ -210,12 +222,13 @@ tangles in the kind definitions, like hierarchy cycles, polysemous elements and 
 classes. `Last update` is the date of the most recent record. When that value sits still for a
 long time, archiving itself has stopped running.
 
-When a card uses a kind or a relation the map does not have, a `Schema violations` box appears
-under the panel. Up to ten offending files and lines are printed as they are, and past that it
-folds into `Another N found`.
+When a card uses a kind or a relation the map does not have, a `Schema violations` box appears. Up
+to ten offending files and lines are printed as they are, and past that it folds into
+`Another N found`.
 
-The `Folder to import` line between the panel and the tree does not belong to this section.
-[Pulling in a folder from outside](#pulling-in-a-folder-from-outside) covers it.
+**This box alone stays out of Settings, under the title on the ontology screen.** The other twelve
+cells are statistics; this one is an alarm. It carries the button you press to go and fix things,
+and behind a dialog nobody would see it.
 
 ## `Fix violations` - handing the violations to one ticket
 
@@ -372,10 +385,9 @@ it. Press it once more. This is the place where running it again being normal us
 ### Pulling in a folder from outside
 
 A folder of meeting notes, an old wiki, a pile of material you downloaded. There is a separate
-door for turning what has stacked up outside the project into cards. The same form appears twice,
-once in that panel just under the migration and once under the metrics panel on the ontology
-screen. Put a path in `Folder to import` and press `Import`. The folder's name becomes the source
-name. Put in `Notes` and every card salvaged from there carries `Notes`.
+door for turning what has stacked up outside the project into cards. It is in that same panel, just
+under the migration. Put a path in `Folder to import` and press `Import`. The folder's name
+becomes the source name. Put in `Notes` and every card salvaged from there carries `Notes`.
 
 What this makes is one ticket as well. Its title is `온톨로지 import - <folder name>` ("ontology
 import" - Korean whatever language the site is in), and the screen moves to that detail. What
