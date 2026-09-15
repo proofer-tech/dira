@@ -657,6 +657,27 @@ if [ "$CMD" = "tick" ]; then
   done
 fi
 
+# --- 로그 보존: workers/logs·workers/health 아래 오래된 파일을 지운다 ---
+# 실측(P409-2, 2026-09-15): 3,014개 3.8GB, 세션 로그 하나가 119MB까지 간다 - 그 위에서 큐
+# 탐색이 느려진다. 하루 한 번만 훑는다 - 매 tick(1분 주기)마다 3,000개를 훑으면 이 손이 스스로
+# 탐색 지연을 보탠다. 실패해도 디스패치를 막지 않는다(reap과 같은 이유).
+if [ "$CMD" = "tick" ]; then
+  LOGKEEPDAYS="${TICKET_LOG_KEEP_DAYS:-14}"
+  LOGRETMARK="$LOCAL/run/log-retention-date"
+  LOGRETTODAY="$(date +%F)"
+  if [ "$(cat "$LOGRETMARK" 2>/dev/null)" != "$LOGRETTODAY" ]; then
+    if [ "$LOGKEEPDAYS" != "0" ]; then
+      for d in "$WORKERS/logs" "$WORKERS/health"; do
+        [ -d "$d" ] && find "$d" -type f -mtime "+$LOGKEEPDAYS" \
+          ! -name 'runner.log' ! -name 'cron.log' -delete 2>/dev/null
+      done
+    fi
+    mkdir -p "$LOCAL/run" 2>/dev/null
+    printf %s "$LOGRETTODAY" > "$LOGRETMARK" 2>/dev/null
+  fi
+  true
+fi
+
 # --- §폴링 대기 결정 3·5·6 — 폴링 단계: reap 다음, `select` 앞이고, 이 워커가 바빠서 아래
 # 워커 락에 걸려 SKIP하는 자리보다도 앞이다 - 대기는 워커 슬롯과 무관한 큐 전체의 상태라서다.
 # 새 cron 줄 0개, 새 프로세스 0개 - 이미 깨어난 이 tick에 얹는다. 대기 티켓이 0건이면 파일
