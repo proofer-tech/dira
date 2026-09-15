@@ -3245,6 +3245,8 @@ grep -c 'kind.label.tc' apps/teams/lib/i18n.ts apps/teams/components/status-badg
    "`PROFILE.md` - `skills.md` 12벌"은 큐 사본에만 해당하는 수이고, 스캐폴딩이 복사하는
    템플릿에는 `skills.md`가 없다. 그래서 이 회차에서 템플릿 사본이 실제로 걸린 파일은
    `templates/protocols/AGENTS.md` 한 장이며, `25edde4b`가 고쳐서 커밋 `e8fcb989`에 담았다.
+   이것은 결함이 아니다 - `tick.sh:1070`이 스킬 사이드카를 읽을 때 파일이 없는 경우를 정상으로
+   처리하고 경고도 남기지 않으므로, 새 프로젝트는 `skills.md` 없이 그대로 디스패치된다.
 
    **영문 원고의 문체는 이 결정이 다루지 않는다.** 결정 17이 고치려는 것은 한국어 지침 뒤에
    오는 한국어 본보기이고, 기준선 262.2/MB도 한국어 표현의 빈도다. 영문 원고를 손봐도 그 수치는
