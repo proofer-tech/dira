@@ -84,6 +84,12 @@ TICKET_PLAN_NUDGE="${TICKET_PLAN_NUDGE:-1200}"
 # 켜는 값은 운영이 관측하며 고른다. 사람 참견이 그 사이 들어왔으면 안 끊는다(check_plan_kill).
 TICKET_PLAN_KILL="${TICKET_PLAN_KILL:-0}"
 
+# 엔진 수정 서른아홉 번째 승인 §판정 1. MAXRUN 감시 루프가 이 초(기본 60)마다
+# `workers/health/YYYYMMDD.log`에 바깥 상태 한 줄을 적는다. 부모 셸까지 함께 죽는 세션은 종료
+# 줄을 남길 손이 없으므로, 죽기 직전 상태를 남기려면 종료 시점이 아니라 도는 동안 적어야 한다.
+# 0이면 장치가 꺼지고 파일도 디렉터리도 안 생긴다.
+TICKET_HEALTH_INTERVAL="${TICKET_HEALTH_INTERVAL:-60}"
+
 # 엔진 수정 스물네·스물일곱 번째 계약: 워커가 부르는 실행 파일의 자리를 고정 경로로 모은다.
 # claude 실행 파일은 심링크고 실체가 업데이트마다 새 버전 디렉터리로 옮겨간다(이 머신 버전
 # 디렉터리 32개) - macOS TCC는 허용을 절대경로로 적어서 매 업데이트가 새 TCC 항목이 된다.
@@ -1610,15 +1616,72 @@ check_plan_kill() {
   ! human_since_arm
 }
 
+# 엔진 수정 서른아홉 번째 승인 §판정 1 - 로드 평균과 네트워크 도달 여부를 한 번에 잰다.
+# 대상은 이름이 아니라 **IP 리터럴**(1.1.1.1:443)이다 - 호스트명이면 `socket.create_connection`
+# 앞의 DNS 조회(getaddrinfo)가 블로킹 C 호출이라 `signal.alarm`이 못 끊는다(실측: 망이 없는
+# 샌드박스에서 리졸버가 알아서 물러날 때까지 9~11초가 걸렸다 - 수용조건 5의 2초 상한을
+# 넘긴다). IP로 접속을 열면 DNS가 아예 안 걸려 `connect(timeout=2)` 하나로 상한이 실측대로
+# 닫힌다. `signal.alarm(2)`는 남겨서 혹시 다른 경로로 이름 조회가 들어와도 이중으로 막는다.
+# 실패는 "fail"만 남기고 세션에는 아무것도 안 한다(수용조건 4). 새 바이너리 의존성 0 -
+# python3는 이미 이 파일 전역의 의존성이다.
+health_probe() {
+  python3 - <<'PY' 2>/dev/null
+import os, signal, socket
+
+def _timeout(*_a):
+    raise TimeoutError
+
+try:
+    load = "%.2f" % os.getloadavg()[0]
+except (AttributeError, OSError):
+    load = "?"
+
+signal.signal(signal.SIGALRM, _timeout)
+signal.alarm(2)
+try:
+    socket.create_connection(("1.1.1.1", 443), timeout=2).close()
+    net = "ok"
+except Exception:
+    net = "fail"
+finally:
+    signal.alarm(0)
+
+print(load + "|" + net)
+PY
+}
+
+# 한 줄 = 시각 - 워커 - 세션 id - 티켓 해시 - 1분 로드 평균 - 네트워크 도달 여부 - 자식 pid
+# 생존(수용조건 2). `runner.log`에는 안 섞는다(§1798 주석 - reap_release가 그 파일을 다시
+# 파싱해서, 섞으면 그 판정을 흔들 위험이 있다). 날짜마다 파일을 가르면 보존 기간 삭제(P409-2)가
+# 파일 단위로 그대로 걸린다.
+health_line() {
+  local hdir hfile probe load net alive
+  hdir="$WORKERS/health"
+  mkdir -p "$hdir" 2>/dev/null || return
+  hfile="$hdir/$(date '+%Y%m%d').log"
+  probe=$(health_probe); probe="${probe:-?|fail}"
+  IFS='|' read -r load net <<< "$probe"
+  kill -0 "$CPID" 2>/dev/null && alive=alive || alive=dead
+  printf '%s [%s] sid=%s hash=%s load1=%s net=%s pid=%s\n' \
+    "$(date '+%F %T')" "$TICKET_NAME" "$SID" "$THASH" "$load" "$net" "$alive" >> "$hfile"
+}
+
 # MAXRUN 감시. 매달린 세션을 죽이는 것이 이 감시의 뜻이지 체인 길이를 재는 게 아니라서
 # §4-11 재활용마다 죽이고 다시 세운다("티켓마다 새로 잰다"). is_result에 의한 종료는 이제
 # 여기 없다 - main 루프가 먼저 봐야 재활용 여부를 결정할 수 있어서 그 판정을 main으로 옮겼다.
 # TIMEOUT과 KILLED를 가르는 값은 경과다(§2-5 §로그) - T0가 그 시계다.
+# 서른아홉 번째 승인 §판정 1 - 이 루프가 이미 POLL 간격으로 돌므로 새 프로세스·새 감시자 없이
+# HSECONDS 분기 하나로 건강 로그를 얹는다.
 start_watchdog() {
   T0=$SECONDS
   ( SECONDS=0
+    HSECONDS=0
     while [ "$SECONDS" -lt "$TICKET_MAXRUN" ]; do
       kill -0 "$CPID" 2>/dev/null || exit 0
+      if [ "$TICKET_HEALTH_INTERVAL" != 0 ] && [ $(( SECONDS - HSECONDS )) -ge "$TICKET_HEALTH_INTERVAL" ]; then
+        health_line
+        HSECONDS=$SECONDS
+      fi
       sleep "$POLL"
     done
     kill -TERM "$CPID" 2>/dev/null; sleep 20; kill -KILL "$CPID" 2>/dev/null ) &
