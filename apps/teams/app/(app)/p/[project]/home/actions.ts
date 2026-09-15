@@ -41,6 +41,7 @@ import {
   pollHome,
   readScheduleViews,
   readSessionId,
+  sayAsk,
   setFileTabUnsaved,
   startAsk,
   stopAsk,
@@ -94,6 +95,30 @@ export async function askHome(
   } catch (e) {
     // 여기 오는 건 프로젝트 조회와 첨부 경로 판정이 던진 것뿐이다(§24 표에 항이 없다) — `other`다.
     return { ok: false, reason: "other", output: (e as Error).message, sessionId: "", resumed: false };
+  }
+}
+
+/** 참견(§7 §도는 답에 말을 건다) — 도는 대화의 자식 stdin에 한 줄을 민다. 돌려주는 것은 밀렸나
+ *  하나다 — `false`면 그 사이 답이 이미 끝났거나(대화가 안 돈다) 남이 `중지`를 눌렀다는 뜻이고,
+ *  화면은 그 글을 입력칸에 되돌린다(§21 실패 규칙과 같은 처리).
+ *
+ *  **첨부 조립은 `askHome`과 같다**(`withAttachments`) — 참견에서도 첨부가 절대경로 한 줄로
+ *  글 끝에 붙는다(§8 무수정). 이어붙일 자식을 찾는 것은 **지금 보는 대화의 세션**(`readSessionId`)
+ *  하나다 — 남의 대화에 못 넣는다(`sayAsk`의 계약과 같다). */
+export async function interjectHome(
+  projectId: string,
+  text: string,
+  attachments: string[] = [],
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<boolean> {
+  try {
+    const project = await required(projectId, locale);
+    const sessionId = await readSessionId(project.id);
+    if (!sessionId) return false;
+    const attached = await verifyAttachments(project, attachments);
+    return sayAsk(sessionId, withAttachments(text, attached));
+  } catch {
+    return false; // 등록이 풀린 프로젝트 · 첨부 경로 판정 실패 — 밀 것이 없다
   }
 }
 

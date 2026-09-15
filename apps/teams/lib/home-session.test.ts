@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert";
+import { randomUUID } from "node:crypto";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -22,6 +23,7 @@ const {
   ask,
   startAsk,
   stopAsk,
+  sayAsk,
   pollHome,
   pollDone,
   activityFromEvent,
@@ -810,7 +812,9 @@ test("ask — TICKET_ONTOLOGY 재정의 큐에서도 §7-5 인자는 안 갈린�
   const log = path.join(LOCAL, "ontology-argv.log");
   writeFileSync(
     path.join(bin, "claude"),
-    `#!/bin/sh\nprintf '%s\\n' "$*" >> "${log}"\necho '{"type":"result","is_error":false,"result":"답"}'\n`,
+    // 프롬프트는 이제 argv가 아니라 stdin 한 줄이다(실측 ①) — `read -r`로 그 한 줄을 같이 받는다
+    // (`cat`은 EOF까지 블록해 실행층이 아직 안 닫은 stdin에서 죽는다).
+    `#!/bin/sh\nprintf '%s\\n' "$*" >> "${log}"\nread -r p\nprintf '%s\\n' "$p" >> "${log}"\necho '{"type":"result","is_error":false,"result":"답"}'\n`,
     { mode: 0o755 },
   );
 
@@ -903,7 +907,8 @@ test("ask — 대화가 고른 페르소나가 프롬프트에 실리고 대화 
   const log = path.join(LOCAL, "persona-argv.log");
   writeFileSync(
     path.join(bin, "claude"),
-    `#!/bin/sh\nprintf '%s\\n' "$*" >> "${log}"\necho '{"type":"result","is_error":false,"result":"답"}'\n`,
+    // 페르소나 블록은 프롬프트 안이고 프롬프트는 이제 stdin 한 줄이다(실측 ①) — 같이 받는다.
+    `#!/bin/sh\nprintf '%s\\n' "$*" >> "${log}"\nread -r p\nprintf '%s\\n' "$p" >> "${log}"\necho '{"type":"result","is_error":false,"result":"답"}'\n`,
     { mode: 0o755 },
   );
 
@@ -1095,6 +1100,23 @@ case "$FAKE_MODE" in
     say '{"type":"stream_event","event":{"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"toolu_1","name":"Read"}},"parent_tool_use_id":null}'
     sleep 2
     say '{"type":"result","is_error":false,"subtype":"success","api_error_status":null,"result":"답"}' ;;
+  interject)  # 참견 실측 재현(§7 §도는 답에 말을 건다) — stdin에서 최초 프롬프트 한 줄을 읽고,
+              # 첫 턴이 끝난 뒤 stdin에 둘째 줄이 있으면(=참견) 그것으로 둘째 턴을 돈다.
+    read -r _first
+    say '{"type":"stream_event","event":{"type":"message_start"},"parent_tool_use_id":null}'
+    delta "첫 답"
+    keep "첫 답"
+    sleep 1   # 참견 창 — 테스트가 이 사이에 sayAsk를 부른다
+    say '{"type":"result","is_error":false,"subtype":"success","api_error_status":null,"result":"첫 답"}'
+    if read -r _second; then
+      say '{"type":"stream_event","event":{"type":"message_start"},"parent_tool_use_id":null}'
+      delta "참견 답"
+      # keep()은 uuid로 pid($$)를 쓴다 — 같은 스크립트 안에서 두 번 부르면 첫 턴의 줄과
+      # uuid가 겹쳐 트랜스크립트가 둘을 하나로 합친다. 둘째 턴은 접미사를 달아 갈라 쓴다
+      printf '{"type":"user","uuid":"u2%s","timestamp":"2026-08-01T05:00:10.000Z","message":{"role":"user","content":"참견"}}\n' "$$" >> "$tr"
+      printf '{"type":"assistant","uuid":"a2%s","timestamp":"2026-08-01T05:00:19.000Z","message":{"role":"assistant","content":[{"type":"text","text":"참견 답"}]}}\n' "$$" >> "$tr"
+      say '{"type":"result","is_error":false,"subtype":"success","api_error_status":null,"result":"참견 답"}'
+    fi ;;
   activity)  # §7 §안심 장치 실측 — 생각 · 도구 · 글자 사이에 잠을 둬 폴링이 셋을 따로 잡을 창을 연다
     say '{"type":"system","subtype":"init","model":"claude-test-model"}'
     say '{"type":"stream_event","event":{"type":"message_start"},"parent_tool_use_id":null}'
@@ -1276,6 +1298,50 @@ test("실패 ③ 재정의 — 자식이 결과 객체 없이 죽으면 종료 �
   }
 });
 
+test("sayAsk — 도는 자식에게만 가고 다음 턴으로 선다, 참견 1개 = result 2개, runs 항목은 안 는다", async () => {
+  const project = { id: "interject-test", name: "큐", root: CWD };
+  await withFake("interject", async () => {
+    const p = poller(project.id);
+    assert.strictEqual(await startAsk(project, "질문"), null);
+
+    const sid = await readSessionId(project.id);
+    assert.ok(sid);
+
+    // 첫 턴의 답은 이미 트랜스크립트에 있어도 **자식은 아직 산다**(픽스처의 `sleep 1` 안 —
+    // `result`가 아직 안 왔다). 참견을 그 창에 민다 — 도는 턴 안으로 닿지 않는다는 것은
+    // 아래 `result 2개`로 확인한다(닿았으면 result 하나에 두 답이 섞였을 것이다).
+    const mid = await p.until((c) => c.turns.some((t) => t.text === "첫 답"));
+    assert.strictEqual(mid.running, true);
+    assert.deepStrictEqual(mid.runningSessions, [sid]);
+    assert.strictEqual(sayAsk(sid, "참견"), true);
+    // 새 `runs` 항목이 안 생겼다 — 도는 세션은 여전히 그 하나다(§안 갈리는 것 — 큐잉 층 0줄)
+    const after = await p.next();
+    assert.deepStrictEqual(after.runningSessions, [sid]);
+
+    // **참견 1개 = result 2개** — 첫 턴이 끝나도 stdin이 안 닫혀 둘째 턴이 돌고, 둘 다 실린다
+    const end = await p.until((c) => !c.running);
+    assert.deepStrictEqual(p.turns, ["물음", "첫 답", "참견", "참견 답"]);
+    assert.strictEqual(end.failed, null);
+    // 왕복 전체가 **한 프로세스**다(§안 갈리는 것) — 다음 질문도 같은 대화(--resume)로 잇는다
+    assert.strictEqual(isAsking(project.id), false);
+  });
+});
+
+test("sayAsk — 도는 자식이 없거나 이미 끝난 대화에는 false다", async () => {
+  // 아무 것도 안 도는 임의 session id — 자식이 없다
+  assert.strictEqual(sayAsk(randomUUID(), "아무 말"), false);
+
+  const project = { id: "interject-done-test", name: "큐", root: CWD };
+  await withFake("", async () => {
+    assert.strictEqual(await startAsk(project, "질문"), null);
+    await poller(project.id).until((c) => !c.running); // 끝날 때까지 기다린다
+  });
+  const sid = await readSessionId(project.id);
+  assert.ok(sid);
+  // 끝난 대화 — `runs`에서 이미 걷혔다(폴링이 집어 갔다)
+  assert.strictEqual(sayAsk(sid, "이미 끝났다"), false);
+});
+
 test("§7 §안심 장치 — 생각 · 도구 · 글자가 흐르는 동안 활동 값이 각각 다르게 잡힌다", async () => {
   const project = { id: "activity-test", name: "큐", root: CWD };
   await withFake("activity", async () => {
@@ -1395,11 +1461,12 @@ test("한 대화에 한 질문 — 둘째는 기다리지 않고 거절되고, �
  *  세션으로 갈린 결과여서다 — 따로 재면 A가 도는 동안이라는 조건을 다섯 번 다시 만들어야 한다.
  *
  *  1. A가 도는 동안 **B의 질문이 받아들여진다**(종전에는 `busy`였다).
- *  2. **같은 대화의** 둘째 질문은 종전대로 실패 ④다.
+ *  2. **같은 대화의** 둘째 질문은 이제 실패가 아니라 참견이다(§7 §도는 답에 말을 건다 —
+ *     이 티켓이 종전 실패 ④를 걷었다. 도는 자식의 stdin에 그대로 민다).
  *  3. `runningSessions`에 **둘 다** 든다. `running`은 보고 있는 대화(B)의 것이다.
  *  4. `중지`가 **그 대화의 자식만** 죽인다 — B는 그대로 돈다.
  *  5. **끝난 A의 결과 객체가 그 대화를 여는 폴링까지 남고**, `running`은 그 사이 false다. */
-test("대화마다 따로 돈다 — A가 도는 중 B가 받아들여지고, 같은 대화 둘째만 `busy`다", async () => {
+test("대화마다 따로 돈다 — A가 도는 중 B가 받아들여지고, 같은 대화 둘째는 참견이다", async () => {
   const id = "concurrent";
   const project = { id, name: "큐", root: CWD };
   await withFake("hang", async () => {
@@ -1407,11 +1474,8 @@ test("대화마다 따로 돈다 — A가 도는 중 B가 받아들여지고, �
     assert.strictEqual(await startAsk(project, "A 질문"), null);
     await poller(id).until((c) => c.partial !== ""); // A가 실제로 떴다
 
-    // ② 같은 대화의 둘째 — 문구도 코드도 무수정이다
-    const again = await startAsk(project, "A 둘째");
-    assert.strictEqual(again?.ok, false);
-    assert.strictEqual(again?.reason, "busy");
-    assert.strictEqual(again?.sessionId, a);
+    // ② 같은 대화의 둘째 — **거절이 아니라 참견**이다(§7 §도는 답에 말을 건다)
+    assert.strictEqual(await startAsk(project, "A 둘째"), null);
 
     // ① 다른 대화는 받는다 — 잠긴 단위가 프로젝트가 아니라 대화다
     const b = await newConversation(id);

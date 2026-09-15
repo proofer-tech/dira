@@ -49,15 +49,16 @@ function fixture(): { root: string } {
   return { root };
 }
 
-/** PATH에 놓는 가짜 `claude`. `body`가 프롬프트(마지막 argv — home-session.ts 머리 주석과 같은
- *  variadic 함정 회피 규칙)를 받아 결정한다 — 그 문자열 안에서 `<root>/tickets/<8-hex>.md` 경로를
- *  찾으면(제품 결함 갈래를 흉내내는 테스트에서만) 그 파일을 만들어 둔다. */
+/** PATH에 놓는 가짜 `claude`. `body`가 프롬프트(이제 argv 마지막이 아니라 stdin 한 줄 —
+ *  `runClaudeAt`이 참견 실측 뒤로 `--input-format stream-json`을 붙이고 stdin으로 먹인다)를
+ *  받아 결정한다 — 그 문자열 안에서 `<root>/tickets/<8-hex>.md` 경로를 찾으면(제품 결함 갈래를
+ *  흉내내는 테스트에서만) 그 파일을 만들어 둔다. */
 function fakeClaude(root: string, opts: { ok: boolean; fileTicket: boolean }): string {
   const dir = mkdtempSync(path.join(tmpdir(), "self-heal-bin2-"));
   tmps.push(dir);
   const escapedRoot = root.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const body = opts.ok
-    ? `last="\${@: -1}"
+    ? `read -r last
 if ${opts.fileTicket ? "true" : "false"}; then
   hit=$(echo "$last" | grep -oE "${escapedRoot}/tickets/[0-9a-f]{8}\\.md" | head -1)
   if [ -n "$hit" ]; then

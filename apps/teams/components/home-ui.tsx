@@ -71,6 +71,7 @@ import {
   createSchedule,
   deleteSchedule,
   focusTabAction,
+  interjectHome,
   openTerminal,
   pollHomeAnswer,
   refreshRefs,
@@ -643,12 +644,23 @@ export function HomeUI({
     return r;
   };
 
+  /** 참견(§7 §도는 답에 말을 건다) — **자리는 스레드의 새 항목**(질문의 낙관 에코와 같은 자리,
+   *  §화면이 두 번째 result를 그리는 법). `echo`를 그대로 재사용한다: 첫 턴이 `turns`로 실리는
+   *  순간 이미 비므로(위 poll 효과) 참견을 보낼 때는 늘 비어 있는 칸에 다시 세우는 것과 같다 -
+   *  그 답의 트랜스크립트 줄이 도착하면 같은 poll 효과가 다시 걷는다. */
+  const interject = async (text: string, paths: string[] = []) => {
+    setEcho(text);
+    const ok = await interjectHome(project, text, paths, locale);
+    if (!ok) setEcho(null);
+    input.current?.focus();
+    return ok;
+  };
+
   const send = async () => {
-    // `readOnly`가 여기 있는 것이 실효 잠금이다(§24 ② — `보내기`의 `aria-disabled`는 표시다).
-    // 서버도 같은 판정을 한 번 더 한다: 이 폼 상태는 새로고침에 풀린다(`startAsk`).
-    // **`pendingSchedule`이 잠금 (3)이다**(§비주얼 §62 (7) — 회차 0건인 스케줄을 보는 동안).
-    // 걸 세션이 없다 — 여기서 보내면 사람 턴이 그 스케줄의 실행 이력 첫 줄이 된다.
-    if (busy || empty || readOnly || pendingSchedule) return;
+    // **`busy`는 이제 거절이 아니다** — 도는 중이면 참견이다(§7 §갈리는 줄은 하나다 — 아래
+    // `interject`로 간다). `readOnly`(남의 워커 세션)·`pendingSchedule`(회차 0건 스케줄)은
+    // 무수정: 걸 자식도 세션도 없다.
+    if (empty || readOnly || pendingSchedule) return;
     // 보낸 글을 칸에서 비운다 — **다음 질문을 미리 쓸 수 있다는 것이 §24가 입력칸을 안 잠근
     // 이유**다. 실패하면 그 글을 도로 넣는다(§21 실패 규칙: 쓴 글은 남는다). 그 사이에 사람이
     // 다음 질문을 쓰기 시작했으면 **그쪽이 이긴다** — 사람이 방금 친 글을 덮지 않는다.
@@ -656,8 +668,10 @@ export function HomeUI({
     const paths = att.paths;
     setText("");
     // **칩은 성공에만 빈다** — 실패하면 쓴 글이 돌아오듯 붙인 파일도 그대로 있어야 다시
-    // 보낼 수 있다(§21 실패 규칙). 올라간 파일은 어느 쪽이든 안 지운다(§8 수명).
-    if (await run(sent, paths)) setText((now) => now || sent);
+    // 보낼 수 있다(§21 실패 규칙). 올라간 파일은 어느 쪽이든 안 지운다(§8 수명). `run`은 실패
+    // 객체를 돌려주고(truthy) `interject`는 실패를 `false`로 돌려준다 — 그래서 후자만 뒤집는다.
+    const failed = busy ? !(await interject(sent, paths)) : Boolean(await run(sent, paths));
+    if (failed) setText((now) => now || sent);
     else att.reset();
   };
 
@@ -1339,11 +1353,13 @@ export function HomeUI({
                   type="submit"
                   variant="default"
                   size="xs"
-                  aria-disabled={busy || empty || readOnly || pendingSchedule !== null}
+                  // **`busy`는 이제 막지 않는다**(§7 §도는 답에 말을 건다 — 입력칸은 두 모드다).
+                  // `readOnly`(워커 세션)·`pendingSchedule`은 무수정 — 걸 자식이 없다.
+                  aria-disabled={empty || readOnly || pendingSchedule !== null}
                   className="aria-disabled:opacity-50"
                 >
                   <Send aria-hidden />
-                  {busy ? t("home.sending") : t("home.send")}
+                  {busy ? t("home.interject") : t("home.send")}
                 </InputGroupButton>
               </InputGroupAddon>
             </InputGroup>

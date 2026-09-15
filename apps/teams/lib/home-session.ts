@@ -947,6 +947,12 @@ export type Live = {
    *  이 창을 못 잡는다. `message_start`에서 `partial`과 함께 비운다(새 라운드가 시작되면 옛 값과
    *  더는 비교하지 않는다). */
   lastAnswer: string | null;
+  /** 참견 창(§7 §도는 답에 말을 건다 §안 갈리는 것) — 자식이 떠 있고 stdin이 아직 안 닫혔다.
+   *  `sayAsk`가 줄을 밀 수 있는 조건이 이 값 하나다. */
+  stdinOpen: boolean;
+  /** 아직 안 온 `result` 수(§안 갈리는 것 — 민 줄 수만큼 본 순간 닫는다). spawn 직후 1(최초
+   *  질문)이고, `sayAsk`가 한 줄 밀 때마다 1씩 는다. 0이 되는 순간 실행층이 stdin을 닫는다. */
+  pendingResults: number;
 };
 
 export const newLive = (): Live => ({
@@ -956,6 +962,8 @@ export const newLive = (): Live => ({
   child: null,
   stopping: false,
   lastAnswer: null,
+  stdinOpen: false,
+  pendingResults: 0,
 });
 
 /** 질문 하나 = 프로세스 하나(§7). 첫 질문이 세션을 열고 다음 질문이 그것을 잇는다.
@@ -1374,13 +1382,14 @@ export async function runClaudeAt(
     "-p",
     ...session,
     ...toolFlags(cwd, ontologyDir),
+    "--input-format",
+    "stream-json", // 참견 실측 ① — 붙으면 argv 프롬프트는 통째로 무시된다. 아래 stdin 한 줄로 먹인다
     "--output-format",
     "stream-json",
     "--include-partial-messages",
     "--verbose", // 빼면 stdout 0바이트 + stderr 한 줄로 죽는다(머리 주석)
     "--append-system-prompt", // 위 §언어 층 둘 — 단일 값이라 variadic 함정이 없다
     systemPromptLayers(locale),
-    prompt, // variadic 옵션 뒤에 오면 먹힌다 — 위 플래그들이 사이를 끊어 준다
   ];
 
   // tick.sh 57~59행과 **같은 한 줄**: claude 엔진일 때만 헤드리스 OAuth 토큰을 넣는다.
@@ -1392,6 +1401,8 @@ export async function runClaudeAt(
   return await new Promise((resolve) => {
     const child = spawn(bin, args, { cwd, env });
     live.child = child;
+    live.pendingResults = 1; // 최초 질문 하나 — 참견마다 `sayAsk`가 이 값을 올린다
+    live.stdinOpen = true;
     // `중지`가 spawn보다 먼저 왔다(스냅샷 조립 중에 눌렀다) — 뜨자마자 죽인다.
     // 그래서 중지의 근거가 핸들이 아니라 `stopping` 플래그다.
     if (live.stopping) child.kill("SIGTERM");
@@ -1401,19 +1412,43 @@ export async function runClaudeAt(
     let result: ResultLine | null = null;
     let settled = false;
 
+    // 실행층이 stdin을 쥐고 있는 동안(참견 창) 자식이 먼저 죽으면 다음 write가 EPIPE를 던진다 —
+    // unhandled error로 프로세스를 죽이지 않는다(`close`가 이미 판정을 낸다).
+    child.stdin.on("error", () => {});
+
+    // **닫는 자리를 여기로 옮긴다**(실측 ④ — 참견 §안 갈리는 것). 민 줄 수만큼 `result`를 본
+    // 순간(참견 0이면 첫 `result`)에 닫는다 — 그 전까지는 자식이 다음 줄을 기다리며 산다.
+    const closeStdinIfDone = () => {
+      if (live.pendingResults <= 0 && live.stdinOpen) {
+        live.stdinOpen = false;
+        child.stdin.end();
+      }
+    };
     child.stdout.setEncoding("utf8");
     child.stdout.on("data", (chunk: string) => {
       const lines = (rest + chunk).split("\n");
       rest = lines.pop() ?? ""; // 마지막 조각은 아직 한 줄이 아니다 — 다음 chunk가 마저 준다
-      for (const line of lines) result = eatLine(line, live) ?? result;
+      for (const line of lines) {
+        const r = eatLine(line, live);
+        if (r) {
+          result = r;
+          live.pendingResults -= 1;
+        }
+      }
+      closeStdinIfDone();
     });
     child.stderr.setEncoding("utf8");
     child.stderr.on("data", (chunk: string) => (stderr += chunk));
-    child.stdin.end(); // 머리 주석: 안 닫으면 3초를 버린다
+    // 최초 프롬프트는 argv가 아니라 stdin 한 줄이다(실측 ① — `tick.sh`와 같은 형태).
+    // stdin은 안 닫는다 — 참견 창이 위 `closeStdinIfDone`에서 닫힐 때까지 열려 있어야 한다.
+    child.stdin.write(
+      `${JSON.stringify({ type: "user", message: { role: "user", content: [{ type: "text", text: prompt }] } })}\n`,
+    );
 
     const settle = (r: Run & { reason?: AnswerReason; stopped?: boolean }) => {
       if (settled) return; // `error` 뒤에 `close`가 따라온다 — 먼저 온 것 하나만 답이다
       settled = true;
+      live.stdinOpen = false;
       live.child = null;
       resolve(r);
     };
@@ -1423,7 +1458,13 @@ export async function runClaudeAt(
     //           `도는 중`이다). `--strict-mcp-config`라 지금 손자가 없다 — 생기는 날 `exit` +
     //           유예 타이머로 내린다.
     child.on("close", (code, signal) => {
-      if (rest.trim()) result = eatLine(rest, live) ?? result; // 개행 없이 끝난 마지막 줄
+      if (rest.trim()) {
+        const r = eatLine(rest, live); // 개행 없이 끝난 마지막 줄
+        if (r) {
+          result = r;
+          live.pendingResults -= 1;
+        }
+      }
       // **사람이 멈춘 것이 먼저다.** `SIGTERM`을 받은 `claude`는 스스로 rc 143으로 나가면서
       // 받은 데까지를 트랜스크립트에 남긴다(실측 ⑴⑵) — 그래서 여기서 실패로 만들 것이 없다.
       // **시계는 여기 없다**(§7 §천장이 없다) — 나머지 경우는 결과 객체가 있나 없나 하나로
@@ -1571,7 +1612,26 @@ export function stopAsk(sessionId: string): boolean {
   const live = runs.get(sessionId)?.live;
   if (!live || live.stopping) return false;
   live.stopping = true; // 아직 spawn 전이면 `runClaude`가 뜨자마자 이걸 보고 죽인다
+  live.stdinOpen = false; // 죽는 자식에는 더 밀 것이 없다(`sayAsk`가 이 값을 본다)
   live.child?.kill("SIGTERM");
+  return true;
+}
+
+/** 참견(§7 §도는 답에 말을 건다) — **도는 자식의 stdin에 한 줄을 민다.** `stopAsk`와 같은 자리 -
+ *  같은 `runs` 맵 - 같은 반환 모양(`boolean`, 죽일 것/밀 것이 있었나). 도는 턴에 안 닿고
+ *  `queue-operation enqueue`로 큐에 떴다가 앞 턴이 끝나면 다음 턴이 된다(실측 ②) — 그래서
+ *  `runClaudeAt`의 `pendingResults`를 먼저 올려 둬야 그 턴의 `result`를 실행층이 기다린다.
+ *
+ *  **그 대화의 자식 하나뿐이다** — 남의 대화에 못 넣는다(키가 `sessionId`다, `stopAsk`와 같은 자).
+ *  자식이 없거나(대화가 안 돈다) stdin이 이미 닫혔으면(마지막 `result`를 봐서 실행층이 막
+ *  닫았거나 `중지`가 걸렸다) `false`다. */
+export function sayAsk(sessionId: string, text: string): boolean {
+  const live = runs.get(sessionId)?.live;
+  if (!live || !live.child?.stdin || !live.stdinOpen || live.stopping) return false;
+  live.pendingResults += 1; // 이 줄의 `result`도 실행층이 기다려야 stdin이 안 일찍 닫힌다
+  live.child.stdin.write(
+    `${JSON.stringify({ type: "user", message: { role: "user", content: [{ type: "text", text }] } })}\n`,
+  );
   return true;
 }
 
@@ -1617,12 +1677,26 @@ export async function startAsk(
   }
   // 여기까지가 마지막 `await`다 — 아래 **검사와 등록 사이에는 없다**(머리 주석).
   const turn = await beginTurn(project.id, q, persona);
-  if (runs.has(turn.sessionId)) {
-    // **같은 대화의 둘째 질문만** 실패 ④다(§24 문구 무수정 — 다른 대화는 여기까지 안 온다).
-    // `running`(= `result`가 비었나)이 아니라 **맵에 있나**로 보는 것이 여기서는 맞다: 끝났는데
-    // 아직 아무도 안 집어 간 결과 객체를 덮으면 그 실패가 사람에게 한 번도 안 보인다. 화면이
-    // 입력칸을 여는 것은 그 객체를 집어 간 폴링 뒤이고, 집어 가면서 이 줄이 지워진다.
-    return { ok: false, reason: "busy", output: `session ${turn.sessionId}`, sessionId: turn.sessionId, resumed: true };
+  const existing = runs.get(turn.sessionId);
+  if (existing) {
+    if (existing.result === null) {
+      // **서버가 거절하지 않는다**(§7 §도는 답에 말을 건다 — 종전 실패 ④를 이 절이 걷었다). 같은
+      // 대화에 **도는** 질문이 있으면 새 프로세스를 안 띄우고 **도는 자식의 stdin**에 그대로 민다
+      // - `sayAsk`와 같은 길이다(큐잉 층은 여전히 0줄이다 — 기다리는 자리가 자식 안).
+      sayAsk(turn.sessionId, q);
+      return null;
+    }
+    // **끝났는데 아직 아무도 안 집어 간 결과 객체가 있으면 그건 참견이 아니라 실패 ④다**
+    // (§7 §끝난 답을 아무도 안 집어 가는 창 — 무수정). 도는 자식이 없어 밀 stdin도 없다 -
+    // 덮으면 그 실패가 사람에게 한 번도 안 보인다. 화면이 입력칸을 여는 것은 폴링이 그 객체를
+    // 집어 간 뒤이고, 집어 가면서 이 줄이 지워진다.
+    return {
+      ok: false,
+      reason: "busy",
+      output: `session ${turn.sessionId}`,
+      sessionId: turn.sessionId,
+      resumed: true,
+    };
   }
   const entry = { projectId: project.id, result: null as Answer | null, live: newLive() };
   runs.set(turn.sessionId, entry);

@@ -2006,6 +2006,7 @@ export const ko: Record<string, string> = {
   "home.askPlaceholder": "이 프로젝트에 대해 묻기",
   "home.sending": "보내는 중…",
   "home.send": "보내기",
+  "home.interject": "참견",
   "home.answer.retry": "다시 답하기",
   "home.answer.copy": "복사",
 
@@ -4293,6 +4294,7 @@ export const en: Record<string, string> = {
   "home.askPlaceholder": "Ask anything about this project",
   "home.sending": "Sending…",
   "home.send": "Send",
+  "home.interject": "Interject",
   "home.answer.retry": "Answer again",
   "home.answer.copy": "Copy",
 
