@@ -289,8 +289,26 @@ and the search lies to you. Clear the search term and only what you unfolded by 
 
 To its right are four filters. `Messages` · `Tools` · `Thinking` · `Prompts` toggle on and off. All
 four ship on, and that state is the screen with nothing filtered out. When you only want to see
-where a command went wrong, leave `Tools`. `Records 128` at the far right of the row is what is left
-after filtering. Type a search term and this number drops with it.
+where a command went wrong, leave `Tools`.
+
+One more chip sits to the right of the filters: `Group by step`. It ships on, and that is when the
+list is divided into the stages of the plan. Turn it off and the grouping comes apart. The stage
+headings go, and events and bubbles run from beginning to end as one stream in time order. Press it
+when you want to read what the session did and in what order, rather than how far the plan has
+come. Press it again and the accordion is back. The state is kept nowhere. Close the dialog and
+open it again and the chip is on.
+
+**Turning it off hides no record.** This is where the chip parts from the four filters on its left.
+The filters take events away; this chip only undoes the grouping. `Records 128` at the far right of
+the row is what is left after filtering, so a search term or a filter you switch off makes it drop.
+Pressing this chip never does.
+
+**The chip is only on the dialog you opened with `Expand`, and only on a ticket that has a plan.**
+With nothing grouped there is nothing to ungroup. The one you open with `Stream` from the workers
+screen does not read the ticket body, so it knows nothing about stages. Two doors open the same
+dialog, as written above, and this chip is the one place they part. Without it the search field,
+the four filters and the record count are all still there. The picture above was opened with
+`Stream`, which is why there is no chip in it.
 
 When search and filters leave nothing, one line remains in the list: `No matching records`. The head
 and the chip row stay as they were. What you filtered is the list, not the work the session did.
