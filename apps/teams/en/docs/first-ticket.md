@@ -37,6 +37,7 @@ crontab is the schedule cron reads. Once a line goes in there, your Mac calls th
 | `Project folder` | **The parent of `.dira`**. Write something like `~/Projects/myproject` and `.dira` gets made under it. The help text below the field says the same (`.dira goes in here. ~ is expanded`). If the folder is missing, it gets made |
 | `Integration branch` | The branch sessions push results to. The default is `main` |
 | `Spec document` | Optional. The path to your project spec (`docs/DESIGN.md`, say). A file that does not exist yet is fine to write in advance |
+| `Project works in Korean` | A checkbox, not a field. Leave it on and all five personas also get the three skills for writing and fixing Korean prose. It comes up checked when the app is in Korean and unchecked when it is in English, so either leave it or click once. [Personas](/docs/personas) spells out what gets added |
 
 The `~` in that help text is shorthand for your home folder. Writing `~/Projects/myproject`
 means the same place as `/Users/<your name>/Projects/myproject`.
