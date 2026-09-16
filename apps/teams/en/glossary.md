@@ -82,7 +82,7 @@ Never translate, never re-spell:
 | 위지윅 | rich text | The editor mode. The toggle reads `Switch to rich text`. |
 | 표식 | marker | A hash or epic number in the writing that you can press. Manual-only word; nothing on screen is called this. |
 | 사건 | event | One line in the progress record. |
-| 단계 | stage | One line of the plan a session writes, and the accordion panel it becomes. |
+| 단계 | step | One line of the plan a session writes, and the accordion panel it becomes. |
 | 도구 | tool | What a session uses to read a file or run a command. |
 | 워커 마크 | worker mark | The `w6` at the end of the meta line on an in-progress card. |
 | 인라인 상자 | inline box | The progress record as it sits in the ticket page column, as opposed to the dialog. |

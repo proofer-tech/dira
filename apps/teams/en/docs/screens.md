@@ -37,7 +37,7 @@ so there is nowhere for you to put a card.
 
 - A blocked ticket sits in the `Open` lane with the rest. The only difference is the orange
   `deps` tag on its card, and the `Blocked` badge beside it. Being blocked is a matter internal
-  to that stage, so it clears itself once the prerequisite finishes. Nobody has to touch it.
+  to that lane, so it clears itself once the prerequisite finishes. Nobody has to touch it.
 - An in-progress card tells you three more things. A dot in the persona's color moves, the
   **worker mark** (`w6`) for whoever is holding the ticket right now sits at the end of the meta
   line, and the bottom of the card carries one line saying what that session just did. A done card
@@ -251,7 +251,7 @@ the `Done when` checklist, and the questions and answers. The dialog covers the 
 it is open, so there is room for a search field and a right-hand column. That extra room is where
 a panel for looking closely at one event goes, and that is why the door is called `Expand`.
 
-Opening with `Expand` loses nothing you had in the box. The plan-stage accordion, the question and
+Opening with `Expand` loses nothing you had in the box. The plan-step accordion, the question and
 answer bubbles, and the field for talking to the session are all in the dialog too, with search and
 the right-hand column laid on top. The one thing that does not follow you in is the token figure on
 the heading line. Close it and the box behind is exactly as you left it.
@@ -283,7 +283,7 @@ right even when you have unfolded nothing.
 Under the chips is the toolbar. It stays put while the list scrolls. On the left is the search
 field, with `Search this record` as its placeholder. It sweeps tool names and one-line summaries,
 and also the raw text you would otherwise only see in the right-hand column, and it ignores case.
-While you are searching, anything folded opens. That means the bubble groups, and also plan stages
+While you are searching, anything folded opens. That means the bubble groups, and also plan steps
 that are finished or cancelled. Filter with things left folded and a matching line hides inside,
 and the search lies to you. Clear the search term and only what you unfolded by hand stays open.
 
@@ -292,7 +292,7 @@ four ship on, and that state is the screen with nothing filtered out. When you o
 where a command went wrong, leave `Tools`.
 
 One more chip sits to the right of the filters: `Group by step`. It ships on, and that is when the
-list is divided into the stages of the plan. Turn it off and the grouping comes apart. The stage
+list is divided into the steps of the plan. Turn it off and the grouping comes apart. The step
 headings go, and events and bubbles run from beginning to end as one stream in time order. Press it
 when you want to read what the session did and in what order, rather than how far the plan has
 come. Press it again and the accordion is back. The state is kept nowhere. Close the dialog and
@@ -305,7 +305,7 @@ Pressing this chip never does.
 
 **The chip is only on the dialog you opened with `Expand`, and only on a ticket that has a plan.**
 With nothing grouped there is nothing to ungroup. The one you open with `Stream` from the workers
-screen does not read the ticket body, so it knows nothing about stages. Two doors open the same
+screen does not read the ticket body, so it knows nothing about steps. Two doors open the same
 dialog, as written above, and this chip is the one place they part. Without it the search field,
 the four filters and the record count are all still there. The picture above was opened with
 `Stream`, which is why there is no chip in it.
@@ -367,26 +367,26 @@ Stream lines and question-and-answer bubbles sit in one box in time order. That 
 is called `Progress record`. This place answers one question. What has happened to this ticket so
 far.
 
-Open a running ticket and the box is divided into stages. Before it starts work, the session
+Open a running ticket and the box is divided into steps. Before it starts work, the session
 holding the ticket writes down for itself what it will do and in what order. It is not a list a
-person hands over. Each line it writes becomes one stage in the box, and unfolding that line shows
-what happened while it was on that stage. Read top to bottom and you see at once how far the ticket
+person hands over. Each line it writes becomes one step in the box, and unfolding that line shows
+what happened while it was on that step. Read top to bottom and you see at once how far the ticket
 has come and what is left.
 
-![The progress record box on a running ticket. From the top: one folded stage, one open stage with the field for talking to the session inside it, a not-started stage showing only its title, and a cancelled stage with a line through it.](/shots/12-plan-accordion.png)
+![The progress record box on a running ticket. From the top: one folded step, one open step with the field for talking to the session inside it, a not-started step showing only its title, and a cancelled step with a line through it.](/shots/12-plan-accordion.png)
 
-A stage comes up in one of four shapes.
+A step comes up in one of four shapes.
 
-| Stage | Shape in the box |
+| Step | Shape in the box |
 |---|---|
-| Finished | Folded. The end of the line carries the count piled up on that stage, like `Records 12`, and pressing it unfolds it |
+| Finished | Folded. The end of the line carries the count piled up on that step, like `Records 12`, and pressing it unfolds it |
 | Running now | Open. Events attach inside it live |
 | Not started yet | Only the title. The end of the line reads `Not started`, and with nothing to unfold there is no handle |
 | Abandoned | A line through the title, and `Cancelled` at the end of the line |
 
-**The field for talking to the session is inside the running stage.** The bottom of that stage is
+**The field for talking to the session is inside the running step.** The bottom of that step is
 where you push one line into a running session (see
-[Talking to a running session](/docs/barge-in)). With no running stage it goes at the bottom of the
+[Talking to a running session](/docs/barge-in)). With no running step it goes at the bottom of the
 box, as before.
 
 A session does not revise a list once it has set it. It does not delete lines, reorder them, or add
@@ -395,42 +395,42 @@ the rest of the scope to one new ticket. People read that list and guess when so
 finish, and a list that moves quietly voids that guess every time.
 
 One more panel attaches above the plan list and one below. `Assignment` and `Wrap-up`. They are
-folded in the same shape as a stage and open when pressed, but no count sits at the end of the line.
+folded in the same shape as a step and open when pressed, but no count sits at the end of the line.
 A word and a handle, and that is all.
 
 | Panel | The stretch it holds |
 |---|---|
-| `Assignment` | Up to the moment the first stage catches an event. The session taking the ticket, reading the body and working out what to do in what order goes in here |
-| `Wrap-up` | From the moment the last stage caught its event. Pushing the commit, leaving a retrospective, writing `## 결과`, and renaming the file to `.done` |
+| `Assignment` | Up to the moment the first step catches an event. The session taking the ticket, reading the body and working out what to do in what order goes in here |
+| `Wrap-up` | From the moment the last step caught its event. Pushing the commit, leaving a retrospective, writing `## 결과`, and renaming the file to `.done` |
 
-The two are not stages. They repeat the same way on every ticket, so the session does not write them
+The two are not steps. They repeat the same way on every ticket, so the session does not write them
 into the plan. That is why they wrap the list from outside it. When there is nothing inside, the
 panel does not appear either. That is why you do not see `Wrap-up` on a running ticket. The running
-stage is holding events right up to this moment, so there is nothing after it. This panel first
+step is holding events right up to this moment, so there is nothing after it. This panel first
 appears the moment the session ends and later events pile up. A ticket with no plan written yet, and
-a ticket that finished before this list existed, have neither stages nor the two panels. That box is
+a ticket that finished before this list existed, have neither steps nor the two panels. That box is
 one event per line, the way it used to be.
 
-The screen looks at the times the session wrote down and attaches events to stages. Each line in the
-list has the time that stage started and the time it ended, and events that happened between the two
-go inside that stage. When several stages carry the same start time, the events in that stretch get
+The screen looks at the times the session wrote down and attaches events to steps. Each line in the
+list has the time that step started and the time it ended, and events that happened between the two
+go inside that step. When several steps carry the same start time, the events in that stretch get
 shared out in the order the list gives.
 
 **Some tickets have written times that do not match reality.** When a session writes times by eye
 instead of reading the clock, that range does not overlap the time the session actually ran. Then
-only a few stages catch events by their own times, or none do. Where a stage caught nothing, the
+only a few steps catch events by their own times, or none do. Where a step caught nothing, the
 screen falls back to order. It cuts the flow of events into a few blocks in the order they happened,
-and the stages sitting there take one each from the top.
+and the steps sitting there take one each from the top.
 
-**Dividing it that way is a guess.** Which stage an event actually happened in is not written in the
+**Dividing it that way is a guess.** Which step an event actually happened in is not written in the
 ticket file. On a ticket with times that do not match, there is no ground for believing the events
-inside a stage really belong to it. On a ticket whose times were read off a clock, this guess never
+inside a step really belong to it. On a ticket whose times were read off a clock, this guess never
 gets in.
 
-Events left between two stages are as they were. There is no named panel for them. They just appear
-in time order, in that space between the two stages.
+Events left between two steps are as they were. There is no named panel for them. They just appear
+in time order, in that space between the two steps.
 
-Unfold a stage and several lines come out. One line is one event. The time it happened comes first.
+Unfold a step and several lines come out. One line is one event. The time it happened comes first.
 The next cell is the kind of event, and after that a one-line summary.
 
 A session works by reading files and running commands. Each of those means is a tool. On a line
@@ -456,11 +456,11 @@ You need this marker when a ticket has been running a while with no visible prog
 you go looking for where it went wrong yourself. Press a line with `Error` on it and what the tool
 said back comes out in full.
 
-![Two result lines inside an unfolded stage. The upper one reads `Result Error · 2 line(s)` with only the word `Error` in heavy type; right below it the same tool succeeded and reads `Result 1 line(s)` with no word marker.](/shots/13-error-marker.png)
+![Two result lines inside an unfolded step. The upper one reads `Result Error · 2 line(s)` with only the word `Error` in heavy type; right below it the same tool succeeded and reads `Result 1 line(s)` with no word marker.](/shots/13-error-marker.png)
 
 There is no switch for showing errors only. There is no place counting them either. Sweep the box
-and look for `Error`. An error inside a folded stage shows only when you unfold that stage. The
-running stage is always open, so an error a live session just made is visible without opening
+and look for `Error`. An error inside a folded step shows only when you unfold that step. The
+running step is always open, so an error a live session just made is visible without opening
 anything.
 
 The round trip where a session gets stuck, posts a question, and a person writes an answer belongs
