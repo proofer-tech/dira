@@ -85,3 +85,13 @@ export function tabForSurface(tabs: Tab[], surface: Surface, current: string | n
   const chat = tabs.find((t) => t.id === current && t.kind === "chat");
   return chat ? chat.id : null;
 }
+
+/** `tabForSurface`를 뒤집은 방향(§11-10 결정 1) — 활성 탭의 종류에서 표면을 계산한다.
+ *  새로고침 뒤 몸통이 활성 탭을 따라가려면 표면을 저장하는 대신 이 함수로 매 마운트에 다시
+ *  구한다. 활성 탭이 없으면(창을 처음 열었을 때) `session`이다. */
+export function surfaceForTab(tab: Tab | null): Surface {
+  if (tab === null) return "session";
+  if (tab.kind === "terminal") return "terminal";
+  if (tab.kind === "file") return "explorer";
+  return "session";
+}

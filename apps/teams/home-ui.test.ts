@@ -4,54 +4,53 @@ import test from "node:test";
 
 // `home-ui.tsx`는 next/CSS를 끌고 오는 클라이언트 컴포넌트라 import를 못 댄다
 // (선례 `sidebar.test.ts` · `workers-ui.test.ts`) — 그래서 소스 글자를 댄다.
-//
-// 티켓 ba589e61(요구 `9cbb775d`): 우측 탭 줄에서 탭을 눌러도 활성 표식이 안 옮겨 가던
-// 원인은 `selectTab`의 `chat` 분기다 — `current`(로드된 대화)와 `activeTab`(탭 줄 표식)이
-// 다른 값인데, 파일·터미널 탭으로 옮겨간 뒤 **이미 로드돼 있던 그 대화 탭**을 다시 누르면
-// `tab.id === home.current`가 참이라 그냥 `return`했고, `activeTab`을 옮기는 왕복
-// (`focusTabAction`)을 아예 안 타서 표식이 옛 탭에 그대로 남았다. 여기서 고정하는 것은
-// 그 갈래가 `return`하기 전에 `focusTabAction`을 반드시 거친다는 것 하나다.
 const s = readFileSync("components/home-ui.tsx", "utf8");
-const a = s.indexOf("const selectTab = async (tab: Tab) => {");
-const b = s.indexOf("\n  };", a);
-assert.ok(a >= 0 && b > a, "home-ui.tsx: selectTab 구간을 못 찾았다");
-const body = s.slice(a, b);
 
-test("selectTab — chat 탭이 이미 home.current여도 activeTab을 옮기는 focusTabAction을 거친다", () => {
-  const alreadyCurrent = body.slice(body.indexOf("tab.id === home.current"));
-  const nextReturn = alreadyCurrent.indexOf("return;");
-  const focusCall = alreadyCurrent.indexOf("focusTabAction");
-  assert.ok(focusCall >= 0 && focusCall < nextReturn, "이미 로드된 대화 탭을 다시 눌러도 focusTabAction 없이 return한다");
+// §11-10 결정 2: 활성 탭이 창의 값이 되고 `home-sessions.json`에서 빠졌다 — 표식을 옮기는
+// 왕복(`focusTabAction`)이 통째로 걷혔다. `selectTab`은 이제 로컬 `setActiveTab` 하나로
+// 표식을 옮긴다(서버 왕복 없이).
+const selA = s.indexOf("const selectTab = async (tab: Tab) => {");
+const selB = s.indexOf("\n  };", selA);
+assert.ok(selA >= 0 && selB > selA, "home-ui.tsx: selectTab 구간을 못 찾았다");
+const selBody = s.slice(selA, selB);
+
+test("selectTab — focusTabAction 없이 setActiveTab(tab.id)로 표식을 옮긴다", () => {
+  assert.ok(!s.includes("focusTabAction"), "focusTabAction이 걷혔어야 한다(§11-10 결정 2 — 서버 왕복 0회)");
+  assert.ok(selBody.startsWith("const selectTab = async (tab: Tab) => {\n    setActiveTab(tab.id);"), "selectTab 진입 즉시 로컬로 표식부터 옮겨야 한다");
 });
 
-// 티켓 8e9a8736(요구 `52062bc6`): closeTab이 setSurface를 안 불러서, 탭은 닫혀도
-// 몸통(surface)이 옛 자리에 남던 문제 — closeTab이 **닫은 탭이 활성 탭이었을 때만**
-// 서버 응답의 activeTab을 selectTab과 같은 표(chat -> session, terminal -> terminal,
-// file -> explorer)로 맞추는지 소스로 고정한다. 배경 탭을 닫을 때는 안 건드린다
-// (§11-7 결정 4 — scm·schedules처럼 탭이 없는 표면을 보던 중 배경 탭을 닫아도 안 밀린다).
+test("selectTab — chat 탭이 이미 home.current이면 스레드 왕복(switchHome) 없이 return한다", () => {
+  const alreadyCurrent = selBody.slice(selBody.indexOf("tab.id === home.current"));
+  const nextReturn = alreadyCurrent.indexOf("return;");
+  const switchCall = alreadyCurrent.indexOf("switchHome");
+  assert.ok(nextReturn >= 0 && (switchCall === -1 || switchCall > nextReturn), "이미 로드된 대화 탭을 다시 눌러도 switchHome 없이 return해야 한다 — 표식은 위에서 이미 옮겼다");
+});
+
+// §11-10 결정 3: 탭을 닫은 뒤의 이월도 창이 계산한다 — closeTab 자신은 표식·표면을 더 안
+// 만지고, `home.tabs`가 바뀔 때마다 도는 탭 이월 이펙트 하나가 이 창이 닫았든 다른 창이
+// 닫았든 같은 통로로 mostRecentTab + surfaceForTab을 적용한다.
 const closeA = s.indexOf("const closeTab = async (tab: Tab) => {");
 const closeB = s.indexOf("\n  };", closeA);
 assert.ok(closeA >= 0 && closeB > closeA, "home-ui.tsx: closeTab 구간을 못 찾았다");
 const closeBody = s.slice(closeA, closeB);
 
-test("closeTab — wasActive(닫은 탭이 활성 탭)를 닫기 응답 받기 전에 잰다", () => {
-  const wasActiveIdx = closeBody.indexOf("const wasActive = tab.id === home.activeTab;");
-  const applyIdx = closeBody.indexOf("apply(c)");
-  assert.ok(wasActiveIdx >= 0 && wasActiveIdx < applyIdx, "wasActive를 apply(닫기 반영) 전에 안 재면 activeTab이 이미 옮겨간 뒤라 항상 거짓이 된다");
+test("closeTab — activeTab·surface를 직접 안 건드린다(이월은 이펙트가 맡는다)", () => {
+  assert.ok(!closeBody.includes("setActiveTab") && !closeBody.includes("setSurface"), "closeTab이 표식·표면을 직접 옮기면 다른 창이 닫은 탭과 다른 통로가 생긴다");
 });
 
-test("closeTab — wasActive일 때만 남은 탭 종류로 setSurface를 selectTab과 같은 표로 맞춘다", () => {
-  const guardIdx = closeBody.indexOf("if (wasActive) {");
-  assert.ok(guardIdx >= 0, "wasActive 가드 없이 매번 표면을 옮기면 배경 탭을 닫아도 지금 보던 표면이 밀린다");
-  const guarded = closeBody.slice(guardIdx);
-  assert.ok(guarded.includes('c.tabs.find((tb) => tb.id === c.activeTab)'), "남은 탭 중 activeTab을 찾는 조회가 없다");
-  assert.ok(/if\s*\(landed\)\s*setSurface\(landed\.kind === "terminal" \? "terminal" : landed\.kind === "file" \? "explorer" : "session"\)/.test(guarded), "landed 종류 -> surface 매핑이 selectTab과 같은 표가 아니다");
+const carryA = s.indexOf("useEffect(() => {\n    if (activeTab !== null && home.tabs.some((t) => t.id === activeTab)) return;");
+assert.ok(carryA >= 0, "home-ui.tsx: 탭 이월 이펙트를 못 찾았다");
+const carryB = s.indexOf("}, [home.tabs]);", carryA);
+const carryBody = s.slice(carryA, carryB);
+
+test("탭 이월 이펙트 — 활성 탭이 목록에 남아 있으면(안 닫혔다) 그대로 둔다", () => {
+  assert.ok(carryBody.includes("home.tabs.some((t) => t.id === activeTab)) return;"), "활성 탭이 살아 있는데도 매번 이월하면 배경 탭 변화에 표식이 흔들린다");
 });
 
-test("closeTab — 남은 탭이 0개(activeTab이 없어 landed가 undefined)면 setSurface를 안 부른다", () => {
-  const landedGuard = closeBody.slice(closeBody.indexOf("const landed ="));
-  const ifIdx = landedGuard.indexOf("if (landed)");
-  assert.ok(ifIdx >= 0, "landed 가드 없이 setSurface를 바로 부르면 탭이 0개일 때도 표면을 옮긴다");
+test("탭 이월 이펙트 — mostRecentTab + surfaceForTab으로 옮기고, landed가 chat이면 switchHome도 잇는다", () => {
+  assert.ok(carryBody.includes("mostRecentTab(home.tabs)"), "남은 탭 중 가장 최근 본 것으로 이월해야 한다(§11-8 결정 1)");
+  assert.ok(carryBody.includes("setSurface(surfaceForTab(landed))"), "표면도 이월한 탭 종류로 맞춰야 한다");
+  assert.ok(carryBody.includes('landed?.kind === "chat"') && carryBody.includes("switchHome(project, landed.id)"), "이월한 탭이 chat이면 몸통도 그 대화로 이어야 한다(§11-9 계약)");
 });
 
 // 티켓 b9c31c83(요구 `aa7e914a`, DESIGN.md §11-1 §개정): 살아 있는 pty는 `끊김`이 아니다.

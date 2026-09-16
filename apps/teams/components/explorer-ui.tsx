@@ -471,7 +471,13 @@ type OpenableFile = Exclude<ExplorerFile, { kind: "redirect" }>;
  *  상태를 잃지 않는다. */
 export type ExplorerOpenFiles = Record<string, { file: OpenableFile; line?: number }>;
 
-export function useExplorerOpen(projectId: string, tabs: Tab[], activeTab: string | null, apply: (c: HomeChunk) => void) {
+export function useExplorerOpen(
+  projectId: string,
+  tabs: Tab[],
+  activeTab: string | null,
+  apply: (c: HomeChunk) => void,
+  onFocusTab: (tabId: string) => void,
+) {
   const router = useRouter();
   const [filesById, setFilesById] = useState<ExplorerOpenFiles>({});
 
@@ -483,6 +489,9 @@ export function useExplorerOpen(projectId: string, tabs: Tab[], activeTab: strin
     }
     setFilesById((now) => ({ ...now, [relPath]: { file, line } }));
     apply(await openExplorerFileTab(projectId, relPath));
+    // **활성 탭이 창의 값이 된 뒤로**(§11-10 결정 2) 파일을 여는 서버 응답에는 표식이 안 실린다 —
+    // 이 창이 직접 그 relPath로 옮긴다.
+    onFocusTab(relPath);
   }
 
   // 새로고침 직후처럼 탭은 있는데 내용을 아직 안 읽었으면(§11 셸 수용조건 §새로고침해도 탭

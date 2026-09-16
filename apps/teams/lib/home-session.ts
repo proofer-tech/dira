@@ -100,7 +100,7 @@ import {
   type ProjectConfig,
 } from "./projects.ts";
 import { isAwaiting, listTickets, reqTitle, statusOf, type Ticket } from "./queue.ts";
-import { mostRecentTab, openTab, closeTab as closeTabPure, type Tab } from "./tabs.ts";
+import { openTab, closeTab as closeTabPure, type Tab } from "./tabs.ts";
 import { findTranscript, lastEvent, sessionIdOf, tailEvents, type StreamEvent } from "./transcript.ts";
 import { judgeSchedule, isValidWhen, nextScheduleDue } from "./urls.ts";
 import { engineCell, listWorkers, workerOf, type Worker } from "./workers.ts";
@@ -243,7 +243,6 @@ export type Home = {
   schedules: Schedule[];
   /** §11 결정 2 - 옛 파일에는 이 칸이 없다(`parseHome`이 빈 배열로 흡수한다). */
   tabs: Tab[];
-  activeTab: string | null;
 };
 
 /** §7: **프로젝트당 최근 20개.** 넘으면 오래된 줄이 이 파일에서 빠진다 —
@@ -281,8 +280,8 @@ function parseHome(v: unknown): Home {
   if (typeof v === "string") {
     const id = uuid(v);
     return id
-      ? { conversations: [{ id, title: "", created: "" }], current: id, schedules: [], tabs: [], activeTab: null }
-      : { conversations: [], current: null, schedules: [], tabs: [], activeTab: null };
+      ? { conversations: [{ id, title: "", created: "" }], current: id, schedules: [], tabs: [] }
+      : { conversations: [], current: null, schedules: [], tabs: [] };
   }
   const o = (v && typeof v === "object" && !Array.isArray(v) ? v : {}) as Record<string, unknown>;
   const conversations = (Array.isArray(o.conversations) ? o.conversations : []).flatMap((r): Conversation[] => {
@@ -345,13 +344,7 @@ function parseHome(v: unknown): Home {
       },
     ];
   });
-  // **`activeTab`의 관문은 uuid가 아니라 "그 목록에 실재하는 탭인가"다** — `file` 탭 id가
-  // relPath라 uuid 관문을 안 타므로(위), `activeTab`도 같은 관문을 쓰면 파일 탭이 활성이어도
-  // 매번 `null`로 물러난다. 탭 목록 자체가 이미 위에서 관문(uuid 또는 실재하는 relPath)을
-  // 지났으므로 "그 목록에 있는 id인가"가 그대로 더 정확한 판정이다.
-  const activeTabRaw = typeof o.activeTab === "string" ? o.activeTab : "";
-  const activeTab = tabs.some((tb) => tb.id === activeTabRaw) ? activeTabRaw : null;
-  return { conversations, current: uuid(o.current) || null, schedules, tabs, activeTab };
+  return { conversations, current: uuid(o.current) || null, schedules, tabs };
 }
 
 /** 목록 읽기 — 화면이 대화 목록을 그리는 출처(§비주얼 §24). */
@@ -409,7 +402,6 @@ function append(home: Home, row: Conversation): Home {
     conversations: [...home.conversations, row].slice(-LIMIT),
     current: row.id,
     tabs: openTab(home.tabs, row.id, "chat", now),
-    activeTab: row.id,
   };
 }
 
@@ -467,7 +459,6 @@ export async function switchConversation(projectId: string, sessionId: string): 
       ...home,
       current: sessionId,
       tabs: openTab(home.tabs, sessionId, "chat", now),
-      activeTab: sessionId,
     });
     return true;
   });
@@ -475,28 +466,14 @@ export async function switchConversation(projectId: string, sessionId: string): 
 
 /** 우측 탭 줄에서 탭 하나를 닫는다(§11 결정 1 - 탭 닫기). **대화 자체는 안 지운다** — 목록에서
  *  빠질 뿐이고 옛 트랜스크립트·`conversations` 줄은 그대로 남는다(탭은 "지금 열어 둔 것"이고
- *  대화 목록은 최근 20개의 이력이다 - 서로 다른 개념이다). 닫은 탭이 `activeTab`이면 남은 탭
- *  중 가장 최근 본 것으로 넘어간다 - **`current`(대화 스레드)는 넘어간 탭이 `chat`일 때만
- *  따라간다**(§11-1, P366-4). 터미널 탭으로 넘어가도 대화 스레드는 그대로다 - 터미널 표면은
- *  `current`를 안 쓴다(§11-1 결정 - 폴링·스레드는 홈 세션 표면 전용). */
+ *  대화 목록은 최근 20개의 이력이다 - 서로 다른 개념이다). **활성 탭·`current`의 이월은 여기서
+ *  안 한다**(§11-10 결정 3) - 활성 탭이 창마다 다르므로 어느 창이 이 탭을 보고 있었는지 서버는
+ *  모른다. 각 창이 폴링으로 이 탭이 목록에서 빠진 것을 보고 스스로 `mostRecentTab`으로 이월한다
+ *  (`home-ui.tsx`). */
 export async function closeHomeTab(projectId: string, tabId: string): Promise<Home> {
   return withHomeLock(async () => {
     const home = await readHome(projectId);
-    const tabs = closeTabPure(home.tabs, tabId);
-    const stillActive = home.activeTab !== tabId;
-    const activeTab = stillActive ? home.activeTab : mostRecentTab(tabs);
-    // 닫은 탭이 활성이 아니었으면 `current`는 그대로다. 활성이었으면: 넘어갈 탭이 없으면(전부
-    // 닫았다) `null`로 물러난다 — 옛(모두 `chat`이던) 동작 그대로다. 넘어갈 탭이 있으면 그 탭이
-    // `chat`일 때만 따라간다 - 터미널로 넘어가도 대화 스레드는 그대로 둔다.
-    const landed = stillActive ? null : tabs.find((tb) => tb.id === activeTab);
-    const current = stillActive
-      ? home.current
-      : activeTab === null
-        ? null
-        : landed?.kind === "chat"
-          ? activeTab
-          : home.current;
-    const next: Home = { ...home, tabs, activeTab, current };
+    const next: Home = { ...home, tabs: closeTabPure(home.tabs, tabId) };
     await writeHome(projectId, next);
     return next;
   });
@@ -508,7 +485,7 @@ export async function openTerminalTab(projectId: string, ptyId: string, cwd: str
   return withHomeLock(async () => {
     const home = await readHome(projectId);
     const now = new Date().toISOString();
-    const next: Home = { ...home, tabs: openTab(home.tabs, ptyId, "terminal", now, cwd), activeTab: ptyId };
+    const next: Home = { ...home, tabs: openTab(home.tabs, ptyId, "terminal", now, cwd) };
     await writeHome(projectId, next);
     return next;
   });
@@ -520,7 +497,7 @@ export async function openTerminalTab(projectId: string, ptyId: string, cwd: str
 export async function openFileTab(projectId: string, relPath: string): Promise<Home> {
   const home = await readHome(projectId);
   const now = new Date().toISOString();
-  const next: Home = { ...home, tabs: openTab(home.tabs, relPath, "file", now), activeTab: relPath };
+  const next: Home = { ...home, tabs: openTab(home.tabs, relPath, "file", now) };
   await writeHome(projectId, next);
   return next;
 }
@@ -541,30 +518,6 @@ export async function setFileTabUnsaved(projectId: string, tabId: string, unsave
   const next: Home = { ...home, tabs };
   await writeHome(projectId, next);
   return next;
-}
-
-/** 탭 줄에서 탭 하나에 포커스만 옮긴다 - 대화 전환(`switchConversation`)과 달리 `current`도
- *  탭 생성도 없다. 터미널 표면에서 이미 열린 탭 사이를 오갈 때 쓴다. 실재하지 않는 탭은 무시한다.
- *  `tabId`가 `null`이면 표식을 그대로 비운다(§11-9 결정 3 — 갈 탭이 없을 때 옛 자리에 안 남긴다). */
-export async function focusTab(projectId: string, tabId: string | null): Promise<Home> {
-  return withHomeLock(async () => {
-    const home = await readHome(projectId);
-    if (tabId === null) {
-      if (home.activeTab === null) return home;
-      const next: Home = { ...home, activeTab: null };
-      await writeHome(projectId, next);
-      return next;
-    }
-    if (!home.tabs.some((t) => t.id === tabId)) return home;
-    const now = new Date().toISOString();
-    const next: Home = {
-      ...home,
-      tabs: home.tabs.map((t) => (t.id === tabId ? { ...t, lastViewed: now } : t)),
-      activeTab: tabId,
-    };
-    await writeHome(projectId, next);
-    return next;
-  });
 }
 
 // ── 워커 세션 목록 (§7 좌측 패널 — 요구 `48b13597` 답 3=(c)) ────────────────
@@ -1872,7 +1825,6 @@ export type HomeChunk = {
   /** **우측 탭 줄**(§11 결정 1-2 · §비주얼 §72 ②). `readHome`이 이미 들고 있으므로 대화·스케줄과
    *  같은 이유로 같은 응답에 담는다 - 화면이 아는 전부가 이 응답 하나라는 계약이 여기도 그대로다. */
   tabs: Tab[];
-  activeTab: string | null;
   turns: Turn[];
   offset: number;
   /** 세션이 갈렸다(`새 대화` 뒤 첫 질문 · 첫 질문 실패 뒤 재시도) — 화면은 **갈아 끼운다** */
@@ -1969,7 +1921,7 @@ export async function pollHome(
   const chunk = (c: Omit<HomeChunk, "done">): HomeChunk => ({ ...c, done: pollDone(c) });
   const locale = await readLanguage();
   // 목록과 `current`를 **한 번에** 읽는다 — 화면이 둘 다 이 응답에서 받는다(위 `conversations`).
-  const { conversations, current, schedules, tabs, activeTab } = await readHome(projectId);
+  const { conversations, current, schedules, tabs } = await readHome(projectId);
   const workers = await workerSessionsById(projectId);
   const scheduleList = scheduleViews(schedules);
   // **`current`가 아무것도 안 가리킬 수 있다.** 보던 워커 세션의 티켓이 큐에서 사라지면 이름도
@@ -2022,7 +1974,6 @@ export async function pollHome(
       workers,
       schedules: scheduleList,
       tabs,
-      activeTab,
       turns: [],
       offset: 0,
       reset,
@@ -2052,7 +2003,6 @@ export async function pollHome(
       workers,
       schedules: scheduleList,
       tabs,
-      activeTab,
       turns: [],
       offset: at,
       reset,
@@ -2116,7 +2066,6 @@ export async function pollHome(
     workers,
     schedules: scheduleList,
     tabs,
-    activeTab,
     turns,
     offset: r.offset,
     reset,

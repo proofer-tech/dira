@@ -70,7 +70,6 @@ import {
   closeTerminalTab,
   createSchedule,
   deleteSchedule,
-  focusTabAction,
   interjectHome,
   openTerminal,
   pollHomeAnswer,
@@ -191,7 +190,7 @@ import type {
 } from "@/lib/home-session";
 import { formatCombo, matchCombo } from "@/lib/keymap";
 import type { Checkout, GitStatus, StatusFile } from "@/lib/source-control";
-import { tabForSurface, tabsOnSide, tabsToCloseOthers, type Surface } from "@/lib/tabs";
+import { mostRecentTab, surfaceForTab, tabForSurface, tabsOnSide, tabsToCloseOthers, type Surface } from "@/lib/tabs";
 import {
   chatRows,
   chatTabTitle,
@@ -236,10 +235,43 @@ const DEFAULT_PERSONA = "archive-manager";
  *  **`Home`의 `schedules`는 원본이 아니라 `ScheduleView[]`다**(§비주얼 §62) — 화면용 값
  *  (`at`·`overdue`)을 서버가 이미 얹어 보낸다(`nextScheduleDue`가 `node:fs`가 섞인 파일에 있어
  *  클라이언트가 직접 못 잰다). */
-type Panel = Pick<Home, "conversations" | "current" | "tabs" | "activeTab"> & {
+type Panel = Pick<Home, "conversations" | "current" | "tabs"> & {
   workers: WorkerSession[];
   schedules: ScheduleView[];
 };
+
+/** 활성 탭이 창의 값이 된다(§11-10 결정 2) — `home-sessions.json`이 아니라 `sessionStorage`에
+ *  둔다. 브라우저 탭 하나가 창 하나이고 새로고침에는 남으면서 다른 창과는 안 섞이는 자리가
+ *  그것뿐이다(`localStorage`는 창끼리 공유돼 두 번째 성질을 못 지킨다). 키에 프로젝트 id를
+ *  넣어 프로젝트끼리 안 섞는다. */
+const activeTabKey = (project: string) => `dira:home-active-tab:${project}`;
+
+function readStoredActiveTab(project: string): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.sessionStorage.getItem(activeTabKey(project));
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredActiveTab(project: string, tabId: string | null): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (tabId === null) window.sessionStorage.removeItem(activeTabKey(project));
+    else window.sessionStorage.setItem(activeTabKey(project), tabId);
+  } catch {
+    // 프라이빗 모드 등 저장이 막힌 자리 — 표식이 창별로 안 남을 뿐, 화면은 그대로 돈다.
+  }
+}
+
+/** 마운트 시 창의 활성 탭 초기값 — 저장된 값이 지금 탭 목록에 실재할 때만 채택한다(§11-10
+ *  결정 1 §첫 인상을 지키던 근거는 활성 탭이 대신 받는다). 다른 창이 그 사이 탭을 닫았으면
+ *  실재하지 않으므로 `null`로 물러난다 — 처음 여는 창과 같은 값이다. */
+function initialActiveTab(project: string, tabs: Tab[]): string | null {
+  const stored = readStoredActiveTab(project);
+  return stored !== null && tabs.some((t) => t.id === stored) ? stored : null;
+}
 
 /** 좌측 2단의 위 단 — 표면 넷(§11 결정 1 · §비주얼 §72 ①). 이 티켓이 붙이는 것은 셸과 고르는
  *  손잡이뿐이고, 셋(`terminal` · `scm` · `explorer`)의 내용은 P366-5 · P366-6 · P366-8이 채운다.
@@ -374,19 +406,29 @@ export function HomeUI({
     schedules: initial.schedules,
     current: initial.sessionId,
     tabs: initial.tabs,
-    activeTab: initial.activeTab,
   });
   // **회차 0건인 스케줄을 보는 동안만 뜬다**(§비주얼 §62 (6)) — 그 줄은 `session_id`가 비어
   // 있어 `current`가 될 수 없다(서버의 `switchConversation`이 빈 값을 안 받는다). 그래서 선택을
   // 로컬로만 기억한다. 값이 있으면 대화 컬럼이 스레드 대신 그 스케줄의 빈 상태를 그린다.
   const [pendingSchedule, setPendingSchedule] = useState<ScheduleView | null>(null);
-  // **표면 고르기**(§11 결정 1 · §비주얼 §72 ①) — `home-sessions.json`에 안 산다(URL도 안
-  // 갈린다는 결정과 같은 축: 이 값은 화면이 들고 있는 수 하나다). 새로고침하면 언제나
-  // `세션`으로 돌아온다 — 종전 화면과 같은 첫 인상이다. **우측 탭 줄은 이 값과 무관하게
+  // **활성 탭 — 창의 값이다**(§11-10 결정 2). `home-sessions.json`에서 빠졌고 `sessionStorage`가
+  // 대신 창마다 따로 들면서 새로고침에는 남는다. 다른 창의 조작(탭을 열고 닫는 것)은 `home.tabs`
+  // 목록에는 실려 오지만 이 값은 안 따라간다 — 아래 탭 이월 이펙트가 유일하게 이 값을 서버
+  // 응답(정확히는 `home.tabs`의 변화)을 보고 고치는 자리다.
+  const [activeTab, setActiveTabRaw] = useState<string | null>(() => initialActiveTab(project, initial.tabs));
+  const setActiveTab = (tabId: string | null) => {
+    setActiveTabRaw(tabId);
+    writeStoredActiveTab(project, tabId);
+  };
+  // **표면 고르기**(§11-10 결정 1) — `home-sessions.json`에도 URL에도 안 산다. **새로고침한
+  // 뒤에는 활성 탭에서 계산한다**(`surfaceForTab`, `lib/tabs.ts`) — 활성 탭이 없으면(창을 처음
+  // 여는 순간) `세션`이고 그게 종전과 같은 첫 인상이다. **우측 탭 줄은 이 값과 무관하게
   // 그대로다**(§11 결정 1 §우측 탭은 표면을 가로지른다) — 탭을 눌러 그 탭의 종류가 지금 표면과
   // 다르면 아래 통합 탭 줄의 `onSelect`가 이 값도 같이 맞춰 준다(그래야 고른 탭의 내용이
   // 바로 보인다).
-  const [surface, setSurface] = useState<Surface>("session");
+  const [surface, setSurface] = useState<Surface>(() =>
+    surfaceForTab(initial.tabs.find((t) => t.id === initialActiveTab(project, initial.tabs)) ?? null),
+  );
   // **터미널 탭마다 끊김 확인 여부**(§11-1 §개정 — 살아 있는 pty는 `끊김`이 아니다). 서버
   // 파일에 없는 값이지만 정본은 서버의 `alive`다 — 이 값은 그 판정이 한 번 죽었다고 확인해 준
   // id만 담는 캐시다. 마운트 직후(새로고침 - 표면을 다시 연 것 - 라우트 이탈/복귀 전부)는
@@ -496,7 +538,6 @@ export function HomeUI({
           schedules: r.schedules,
           current: r.sessionId,
           tabs: r.tabs,
-          activeTab: r.activeTab,
         });
         setRunningIds(r.runningSessions);
         // `turns`와 같은 축이다 — `reset`이면 갈아 끼우고, 아니면 누적한다(키가 같으면 최신이 이긴다).
@@ -715,7 +756,6 @@ export function HomeUI({
       schedules: c.schedules,
       current: c.sessionId,
       tabs: c.tabs,
-      activeTab: c.activeTab,
     });
     setTurns(c.stopped ? markStopped(c.turns) : c.turns);
     setLiveRefs(c.refs); // 대화를 통째로 갈아 끼운다 — 옛 대화의 표식 값을 안 섞는다
@@ -729,32 +769,44 @@ export function HomeUI({
     setPendingSchedule(null); // 실제 세션으로 갈아탔다 — 회차 0건 스케줄 화면은 이 자리가 아니다
   };
 
-  // **탐색기가 지금 연 파일 전부**(§11-2 결정 2, P366-6). 탭 자체(id · 순서 · `activeTab`)는
-  // `home.tabs`에 산다(§11 결정 1·2) — 이 훅은 그 탭들이 가리키는 relPath마다의 **내용**만
-  // 로컬로 캐싱한다(위 `apply`를 그대로 넘겨 탭 붙이기·`unsaved` 갱신도 폴링 한 번으로 화면에
-  // 반영한다). `apply`보다 뒤에 있어야 한다 — 초기화 순서상 위 `const apply`를 먼저 타야 한다.
-  const explorer = useExplorerOpen(project, home.tabs, home.activeTab, apply);
+  /** **탭 이월도 창이 계산한다**(§11-10 결정 3). `home.tabs`가 갈릴 때마다 돈다 — 이 창이 방금
+   *  닫은 탭이든 다른 창이 닫아 폴링으로 넘어온 탭이든 같은 통로다: 지금 이 창의 활성 탭이 그
+   *  목록에 없으면(닫혔다) `mostRecentTab`으로 옮기고 `surfaceForTab`으로 표면도 맞춘다. 옮겨
+   *  간 탭이 `chat`이면 몸통도 그 대화로 잇는다(§11-10 결정 1 §첫 인상 — 표식이 붙은 탭의 내용은
+   *  반드시 몸통에 떠 있어야 한다는 §11-9 계약을 여기서도 지킨다). 남은 탭이 없으면(전부 닫힘)
+   *  `null`로 물러난다 — 표식이 빈 채로 안 남는 것은 "갈 곳이 있을 때"의 얘기고, 여기는 갈 곳이
+   *  없는 경우라 처음 여는 창과 같은 값(`session`)이 된다. */
+  useEffect(() => {
+    if (activeTab !== null && home.tabs.some((t) => t.id === activeTab)) return;
+    if (activeTab === null && home.tabs.length === 0) return;
+    const landedId = mostRecentTab(home.tabs);
+    const landed = home.tabs.find((t) => t.id === landedId) ?? null;
+    setActiveTab(landedId);
+    setSurface(surfaceForTab(landed));
+    if (landed?.kind === "chat" && landed.id !== home.current) {
+      void (async () => apply(await switchHome(project, landed.id)))();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- activeTab·home.current는 이 안에서 읽는 스냅샷이다(재실행 조건이 아니다)
+  }, [home.tabs]);
+
+  // **탐색기가 지금 연 파일 전부**(§11-2 결정 2, P366-6). 탭 자체(id · 순서)는 `home.tabs`에
+  // 산다(§11 결정 1·2) — 이 훅은 그 탭들이 가리키는 relPath마다의 **내용**만 로컬로 캐싱한다
+  // (위 `apply`를 그대로 넘겨 탭 붙이기·`unsaved` 갱신도 폴링 한 번으로 화면에 반영한다).
+  // `apply`보다 뒤에 있어야 한다 — 초기화 순서상 위 `const apply`를 먼저 타야 한다. **활성 탭이
+  // 창의 값이 된 뒤로**(§11-10 결정 2) `onFocusTab`이 파일을 열 때 그 표식도 로컬로 옮긴다.
+  const explorer = useExplorerOpen(project, home.tabs, activeTab, apply, setActiveTab);
 
   /** 우측 탭 줄에서 X를 누른다(§11 결정 1 · §비주얼 §72 ②) — 종류를 안 가리는 **한 함수**다.
-   *  `switchHome`과 같은 자리다: 서버가 탭 목록·`current`를 갈아 끼우고 그 폴링 한 번을 `apply`가
-   *  통째로 화면에 반영한다. 닫은 탭이 지금 보던 것이었으면 스레드도 그 자리에서 다음 탭으로
-   *  넘어간다. **터미널 탭만 pty를 죽이는 갈래가 따로다**(`closeTerminalTab`) — 나머지 둘(`chat`·
-   *  `file`)은 `closeTabAction` 하나를 그대로 쓴다(§11 결정 1 §닫기, 파일 쪽은 두 벌로 안 적는다는
-   *  종전 `closeTerminalTab` 주석과 같은 결). */
+   *  **표식·표면의 이월은 여기서 안 한다**(§11-10 결정 3) — 서버는 탭 목록만 갈아 끼우고, 이
+   *  창의 활성 탭이 방금 빠졌으면 위 탭 이월 이펙트가 `home.tabs` 변화를 보고 그 자리에서 옮긴다
+   *  (다른 창이 닫은 경우와 같은 통로다). **터미널 탭만 pty를 죽이는 갈래가 따로다**
+   *  (`closeTerminalTab`) — 나머지 둘(`chat`·`file`)은 `closeTabAction` 하나를 그대로 쓴다
+   *  (§11 결정 1 §닫기, 파일 쪽은 두 벌로 안 적는다는 종전 `closeTerminalTab` 주석과 같은 결). */
   const closeTab = async (tab: Tab) => {
     setPendingSchedule(null);
-    const wasActive = tab.id === home.activeTab;
     const c = tab.kind === "terminal" ? await closeTerminalTab(project, tab.id) : await closeTabAction(project, tab.id);
     apply(c);
     if (tab.kind === "file") explorer.dropFile(tab.id);
-    // **닫은 탭이 활성 탭이었을 때만** 표면을 따라간다(§11-7 결정 4 §표면은 활성 탭을 따라간다) —
-    // 배경 탭 하나를 닫아도 지금 보던 표면(예: `scm` - `schedules`처럼 탭이 없는 표면)은 그대로다.
-    // 서버가 이미 `mostRecentTab`으로 옮겨 둔 곳을 `c.activeTab`에서 읽는다. 옮길 곳이 없으면
-    // (남은 탭 0개) 표면 그대로 두고 그 표면의 빈 상태가 뜬다(§11-7 수용조건 마지막 줄).
-    if (wasActive) {
-      const landed = c.tabs.find((tb) => tb.id === c.activeTab);
-      if (landed) setSurface(landed.kind === "terminal" ? "terminal" : landed.kind === "file" ? "explorer" : "session");
-    }
   };
 
   /** 탭 우클릭 메뉴의 `좌측 탭 모두 닫기`·`우측 탭 모두 닫기`(§11-7 결정 2). `tabsOnSide`가 이미
@@ -780,38 +832,30 @@ export function HomeUI({
   /** 좌측 표면 줄에서 표면을 간다(§11-9 결정 1) — `selectTab`·`closeTab`이 이미 다는 반대
    *  방향(표면은 활성 탭을 따라간다, §11-7 결정 4 · §11-8 결정 1)의 짝이다. `tabForSurface`
    *  (`lib/tabs.ts`, §11-9 결정 2)가 이 표면에서 몸통에 뜰 탭을 고르고, 그 id가 지금 활성
-   *  탭과 다를 때만 `focusTabAction`으로 표식을 옮긴다 — 갈 탭이 없으면(결정 3) `null`을
-   *  넘겨 표식을 비운다. `current`를 안 건드리므로 스레드를 다시 읽는 왕복은 0회다. */
+   *  탭과 다를 때만 로컬로 표식을 옮긴다 — 갈 탭이 없으면(결정 3) `null`을 준다. **서버 왕복이
+   *  0회다**(§11-10 결정 2 §표식을 옮기는 데 서버 왕복이 한 번도 안 든다) — `current`도
+   *  안 건드리므로 스레드를 다시 읽을 이유가 없다. */
   const changeSurface = (s: Surface) => {
     setSurface(s);
-    const target = tabForSurface(home.tabs, s, home.current, home.activeTab);
-    if (target === home.activeTab) return;
-    void (async () => apply(await focusTabAction(project, target)))();
+    const target = tabForSurface(home.tabs, s, home.current, activeTab);
+    if (target !== activeTab) setActiveTab(target);
   };
 
   /** 우측 탭 줄에서 탭 하나를 고른다(§11 결정 1) — **표면을 가로지르는 그 한 줄**의 유일한
-   *  전환 입구다. 종류마다 왕복이 다르다: `chat`은 스레드까지 옮기는 `switchHome`, 나머지 둘은
-   *  `current`도 새 탭도 안 만드는 `focusTabAction`(§11-1 §focusTab 주석과 같다). **표면도 같이
-   *  맞춘다** — 탭을 눌러 고른 것이 화면에 안 보이면 탭 줄만 있고 내용이 없는 판이 된다.
-   *  `current`(로드된 대화)와 `activeTab`(탭 줄 표식)은 다른 값이다 — 파일·터미널 탭으로 옮겨간
-   *  뒤 **이미 로드돼 있던 그 대화 탭**을 다시 누르면 `tab.id === home.current`가 참이라
-   *  스레드를 새로 읽을 이유는 없지만, `activeTab`은 여전히 옛 탭을 가리키고 있으므로
-   *  `focusTabAction`으로 표식만 옮긴다(요구 `9cbb775d`) — 여기서 그냥 `return`하면 표식이
-   *  안 따라온다. */
+   *  전환 입구다. **`chat`만 서버 왕복이 남는다**(`switchHome`, 스레드까지 옮겨야 해서) — 나머지
+   *  둘(`terminal`·`file`)은 이미 열려 있는 탭이라 로컬로 표식만 옮긴다(§11-10 결정 2). **표면도
+   *  같이 맞춘다** — 탭을 눌러 고른 것이 화면에 안 보이면 탭 줄만 있고 내용이 없는 판이 된다. */
   const selectTab = async (tab: Tab) => {
+    setActiveTab(tab.id);
     if (tab.kind === "chat") {
       setSurface("session");
-      if (tab.id === home.current) {
-        apply(await focusTabAction(project, tab.id));
-        return;
-      }
+      if (tab.id === home.current) return;
       setPendingSchedule(null);
       setHome((now) => ({ ...now, current: tab.id }));
       apply(await switchHome(project, tab.id));
       return;
     }
     setSurface(tab.kind === "terminal" ? "terminal" : "explorer");
-    apply(await focusTabAction(project, tab.id));
   };
 
   /** 접힌 줄을 열고 닫는다(§비주얼 §24 ⑦ §자동 스크롤). `<Bundle>`이 요구하는 자리지만
@@ -885,6 +929,8 @@ export function HomeUI({
             onOpenExplorerFile={explorer.onOpenFile}
             runningIds={runningIds}
             apply={apply}
+            activeTab={activeTab}
+            onFocusTab={setActiveTab}
             terminalDisconnected={terminalDisconnected}
             onTerminalReconnect={(id) =>
               setTerminalDisconnected((now) => {
@@ -945,7 +991,7 @@ export function HomeUI({
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <TabBar
             tabs={home.tabs}
-            activeTab={home.activeTab}
+            activeTab={activeTab}
             conversations={home.conversations}
             workers={home.workers}
             schedules={home.schedules}
@@ -967,7 +1013,7 @@ export function HomeUI({
             <ExplorerPane
               projectId={project}
               tabs={home.tabs.filter((tb) => tb.kind === "file")}
-              activeTab={home.activeTab}
+              activeTab={activeTab}
               filesById={explorer.filesById}
               onUnsavedChange={explorer.onUnsavedChange}
               onClose={(relPath) => {
@@ -979,7 +1025,7 @@ export function HomeUI({
             <TerminalSurface
               project={project}
               tabs={home.tabs.filter((tb) => tb.kind === "terminal")}
-              activeTab={home.activeTab}
+              activeTab={activeTab}
               disconnected={terminalDisconnected}
               onReconnect={(id) =>
                 setTerminalDisconnected((now) => {
@@ -1432,7 +1478,7 @@ export function HomeUI({
           대신 그린다 - 표면이 하나만 뜨는 자리라 렌더가 갈리는 것이 곧 `표면을 갈면 바가
           닫힌다`(둘이 동시에 안 뜨니 언마운트가 그 닫힘이다). */}
       {surface === "terminal" ? (
-        <TerminalFindBar activeTab={home.activeTab} />
+        <TerminalFindBar activeTab={activeTab} />
       ) : (
         <FindBar
           scope={surface === "explorer" ? EXPLORER_MAIN : thread}
@@ -2245,7 +2291,8 @@ function TerminalLeftPanel({
       return;
     }
     apply(r);
-    if (r.activeTab) onReconnect(r.activeTab);
+    onReconnect(r.tabId);
+    onFocus(r.tabId);
   };
 
   const cwdLabel = (path: string | undefined) => {
@@ -2363,6 +2410,8 @@ function SidePanel({
   onPickSchedule,
   onSchedulesChange,
   apply,
+  activeTab,
+  onFocusTab,
   terminalDisconnected,
   onTerminalReconnect,
 }: {
@@ -2395,6 +2444,10 @@ function SidePanel({
   /** `터미널` 좌측 목록의 `새 터미널` · `다시 열기`가 서버 액션 결과를 반영하는 통로 —
    *  `HomeUI`가 든 것을 그대로 내린다(§11-6 결정 1). */
   apply: (c: HomeChunk) => void;
+  /** 지금 표식이 붙은 탭 — `터미널` 좌측 목록이 어느 줄에 표식을 그릴지 정한다(§11-10). */
+  activeTab: string | null;
+  /** `터미널` 좌측 목록에서 탭을 고르면 표식을 그 탭으로 옮긴다(§11-10 — 서버 왕복 없이 로컬). */
+  onFocusTab: (tabId: string) => void;
   /** `터미널` 좌측 목록이 `새 터미널` · `다시 열기`로 연 탭을 죽은 집합에서 뺀다 — `HomeUI`가
    *  든 `terminalDisconnected`에 반영한다(우측 칸과 같은 값을 봐야 한다). */
   onTerminalReconnect: (id: string) => void;
@@ -2511,10 +2564,10 @@ function SidePanel({
           <TerminalLeftPanel
             project={project}
             tabs={home.tabs.filter((tb) => tb.kind === "terminal")}
-            activeTab={home.activeTab}
+            activeTab={activeTab}
             disconnected={terminalDisconnected}
             apply={apply}
-            onFocus={(id) => void (async () => apply(await focusTabAction(project, id)))()}
+            onFocus={onFocusTab}
             onReconnect={onTerminalReconnect}
           />
         )}

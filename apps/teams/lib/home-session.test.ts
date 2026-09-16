@@ -465,7 +465,7 @@ const uuid = (n: number) => `021f80d9-294c-4bea-948b-3b6f0c4501${String(n).padSt
 
 test("대화 목록 — 새 대화 · 전환 · 경로 관문. UUID가 아닌 줄은 없는 것과 같다", async () => {
   assert.strictEqual(sessionsPath(), path.join(LOCAL, "home-sessions.json"));
-  assert.deepStrictEqual(await readHome("p1"), { conversations: [], current: null, schedules: [], tabs: [], activeTab: null }); // 파일이 없다
+  assert.deepStrictEqual(await readHome("p1"), { conversations: [], current: null, schedules: [], tabs: [] }); // 파일이 없다
   assert.strictEqual(await readSessionId("p1"), null);
 
   // 이미 대화가 하나 있는 프로젝트(= 첫 질문이 끝난 상태)
@@ -513,10 +513,10 @@ test("대화 목록 — 새 대화 · 전환 · 경로 관문. UUID가 아닌 �
 
   // 깨진 JSON은 빈 맵이다 — 홈 화면이 500이 되는 것보다 대화 하나를 새로 시작하는 게 낫다
   writeFileSync(sessionsPath(), "{ not json");
-  assert.deepStrictEqual(await readHome("p1"), { conversations: [], current: null, schedules: [], tabs: [], activeTab: null });
+  assert.deepStrictEqual(await readHome("p1"), { conversations: [], current: null, schedules: [], tabs: [] });
 });
 
-test("탭 줄 — 새 대화·전환이 탭을 열고, 닫으면 activeTab·current가 다음 탭으로 넘어간다", async () => {
+test("탭 줄 — 새 대화·전환이 탭을 열고, closeHomeTab은 탭만 지우고 current는 안 건드린다(§11-10 결정 3)", async () => {
   const p = "tabsproj";
   const a = uuid(1);
   const b = uuid(2);
@@ -546,34 +546,27 @@ test("탭 줄 — 새 대화·전환이 탭을 열고, 닫으면 activeTab·curr
     afterSwitch.tabs.map((t) => t.id),
     [a, b],
   );
-  assert.strictEqual(afterSwitch.activeTab, a);
   assert.strictEqual(afterSwitch.current, a);
 
-  // 활성 탭(a)을 닫으면 남은 탭(b) — 유일한 후보 — 으로 activeTab·current가 같이 넘어간다
+  // 활성 탭이 창마다 다르므로(§11-10 결정 2) 서버는 어느 탭이 활성이었는지 모른다 — 닫힌 탭이
+  // 지금 이 창의 활성 탭이었으면 이월은 클라이언트 몫이다(`home-ui.tsx`). closeHomeTab은
+  // `current`(대화 스레드)도 안 건드린다 — 탭을 닫아도 보던 대화는 그대로다.
   const closed = await closeHomeTab(p, a);
   assert.deepStrictEqual(
     closed.tabs.map((t) => t.id),
     [b],
   );
-  assert.strictEqual(closed.activeTab, b);
-  assert.strictEqual(closed.current, b);
+  assert.strictEqual(closed.current, a);
   // 대화 자체는 안 지워진다 — 탭 목록에서만 빠진다(§11 결정 1 §닫기)
   assert.deepStrictEqual(
     closed.conversations.map((cv) => cv.id),
     [a, b, c],
   );
 
-  // 활성이 아닌 탭을 닫아도 activeTab·current는 그대로다
-  await switchConversation(p, c); // c가 지금 activeTab
-  const stillC = await closeHomeTab(p, b);
-  assert.strictEqual(stillC.activeTab, c);
-  assert.strictEqual(stillC.current, c);
-
-  // 마지막 탭을 닫으면 activeTab·current가 null이다
-  const empty = await closeHomeTab(p, c);
+  // 마지막 탭을 닫아도 current는 그대로다 — 그 칸은 이 함수가 안 쓴다
+  const empty = await closeHomeTab(p, b);
   assert.deepStrictEqual(empty.tabs, []);
-  assert.strictEqual(empty.activeTab, null);
-  assert.strictEqual(empty.current, null);
+  assert.strictEqual(empty.current, a);
 });
 
 test("파일 탭 — relPath가 uuid 관문 밖에서 산다. 다시 열면 안 늘고, unsaved가 상한 계산에서 뺀다", async () => {
@@ -592,15 +585,13 @@ test("파일 탭 — relPath가 uuid 관문 밖에서 산다. 다시 열면 안 
       { id: "b.ts", kind: "file" },
     ],
   );
-  assert.strictEqual(opened.activeTab, "b.ts");
   // `current`(대화 스레드)는 파일 탭이 안 건드린다
   assert.strictEqual(opened.current, null);
 
-  // 같은 relPath를 다시 열면 중복이 아니라 그 탭으로 옮겨 간다(§11-2 결정 2)
+  // 같은 relPath를 다시 열면 중복이 아니라 그 탭의 `lastViewed`만 올린다(§11-2 결정 2)
   await openFileTab(p, "a.ts");
   const reopened = await readHome(p);
   assert.strictEqual(reopened.tabs.length, 2);
-  assert.strictEqual(reopened.activeTab, "a.ts");
 
   // 편집 중(unsaved)으로 실으면 그 탭이 상한 계산에서 빠진다(§11 수용조건 4).
   // TAB_LIMIT(12)을 채우고 하나 더 열면 가장 오래 안 본 탭이 빠지되, `a.ts`가 unsaved면 대신
@@ -632,10 +623,9 @@ test("옛 형식(문자열 한 줄)은 대화 한 개짜리 목록으로 읽힌�
     current: sid, // 돌던 대화가 그대로 열린다 — 못 읽으면 그 사람은 그걸 잃는다
     schedules: [],
     tabs: [],
-    activeTab: null,
   });
   assert.strictEqual(await readSessionId("old"), sid);
-  assert.deepStrictEqual(await readHome("broken"), { conversations: [], current: null, schedules: [], tabs: [], activeTab: null });
+  assert.deepStrictEqual(await readHome("broken"), { conversations: [], current: null, schedules: [], tabs: [] });
 
   // 그 위에 `새 대화`를 열면 옛 대화가 목록에 남는다(종전은 지우는 것이었다)
   const next = await newConversation("old");

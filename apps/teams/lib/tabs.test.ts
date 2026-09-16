@@ -5,6 +5,7 @@ import {
   evictionCandidate,
   mostRecentTab,
   openTab,
+  surfaceForTab,
   tabForSurface,
   tabsOnSide,
   tabsToCloseOthers,
@@ -142,4 +143,21 @@ test("tabForSurface: null when there's no tab of that kind to land on (decision 
   assert.equal(tabForSurface(tabs, "terminal", "chat-1", "chat-1"), null);
   assert.equal(tabForSurface(tabs, "explorer", "chat-1", "chat-1"), null);
   assert.equal(tabForSurface([], "session", null, null), null);
+});
+
+// §11-10 결정 1 — surfaceForTab은 tabForSurface를 뒤집은 방향이다(활성 탭 -> 표면).
+test("surfaceForTab: chat tab lands on session", () => {
+  assert.equal(surfaceForTab(kindTab("chat-1", "chat", "0")), "session");
+});
+
+test("surfaceForTab: terminal tab lands on terminal", () => {
+  assert.equal(surfaceForTab(kindTab("term-1", "terminal", "0")), "terminal");
+});
+
+test("surfaceForTab: file tab lands on explorer", () => {
+  assert.equal(surfaceForTab(kindTab("a.ts", "file", "0")), "explorer");
+});
+
+test("surfaceForTab: no active tab lands on session", () => {
+  assert.equal(surfaceForTab(null), "session");
 });
