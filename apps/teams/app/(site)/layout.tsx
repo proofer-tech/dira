@@ -1,6 +1,8 @@
+import { Analytics } from "@vercel/analytics/next";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { LanguageProvider } from "@/components/language-provider";
+import { isLandingOnly } from "@/lib/flags";
 import { siteLocale } from "./request-locale";
 
 // 셸이 지는 것은 `lang`과 `LanguageProvider` 배선 둘이다. `lang`은 종전 `config.ts`의
@@ -30,6 +32,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
     <html lang={locale === "en" ? "en-US" : "ko-KR"}>
       <body>
         <LanguageProvider locale={locale}>{children}</LanguageProvider>
+        {isLandingOnly() ? <Analytics /> : null}
       </body>
     </html>
   );
