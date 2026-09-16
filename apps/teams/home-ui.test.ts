@@ -81,3 +81,36 @@ const terminalLeftPanelBody = s.slice(terminalLeftPanelA, terminalLeftPanelB);
 test("TerminalLeftPanel — 배지 판정이 죽은 집합(disconnected)과 서버 alive를 같이 본다", () => {
   assert.ok(/const isDisconnected = disconnected\.has\(tab\.id\) \|\| row\?\.\alive === false;/.test(terminalLeftPanelBody), "배지 판정이 우측 칸(TerminalSurface)과 같은 disconnected 집합을 안 쓰면 배지와 칸이 어긋난다");
 });
+
+// 티켓 89edaf95(요구 `9566dcda`, DESIGN.md 로드맵 P214 §어긋난 세 자리 — 스펙이 이긴다):
+// `991bf4fe`가 홈 참견을 세우며 화면 문구 세 자리가 스펙과 어긋난 채로 닫혔다 — placeholder·
+// `aria-label`이 `running`으로 안 갈리고, 기다리는 줄이 없고, 제출 버튼 낱말이 도는 동안
+// `참견`으로 바뀌었다. 아래 넷이 그 자리를 스펙으로 되돌린 것을 고정한다.
+
+test("placeholder·aria-label이 이 대화의 running(interjecting)으로 갈린다 — anyRunning이 아니다", () => {
+  assert.ok(s.includes("const interjecting = running && !readOnly;"), "네 번째 모드의 출처가 running && !readOnly가 아니다");
+  assert.ok(s.includes('aria-label={t(interjecting ? "home.interject" : "home.questionLabel")}'), "aria-label이 두 모드로 안 갈린다");
+  assert.ok(s.includes('placeholder={t(interjecting ? "home.interjectPlaceholder" : "home.askPlaceholder")}'), "placeholder가 두 모드로 안 갈린다");
+});
+
+test("제출 버튼 낱말이 도는 동안에도 `보내기`다 — `starting`일 때만 `보내는 중`이 뜬다", () => {
+  assert.ok(s.includes('{starting ? t("home.sending") : t("home.send")}'), "버튼 낱말이 busy(도는 동안)가 아니라 starting(자기 요청 in-flight)으로 갈려야 한다");
+  assert.ok(!/\{busy \? t\("home\.interject"\)/.test(s), "버튼 낱말이 여전히 busy일 때 home.interject로 바뀐다 — §24가 무수정으로 정한 낱말이 아니다");
+  assert.ok(s.includes("aria-disabled={empty || readOnly || pendingSchedule !== null || starting}"), "aria-disabled 셋째 문이 starting(자기 요청 in-flight)이 아니다");
+});
+
+test("기다리는 줄 — echoIsInterject && running일 때만 뜨고, 답 항목이 붙거나 중지되면(running이 거짓) 걷힌다", () => {
+  assert.ok(s.includes("setEchoIsInterject(true);"), "interject()가 echoIsInterject를 안 세운다");
+  assert.ok(s.includes("setEchoIsInterject(false);"), "run()이 echoIsInterject를 안 내린다 — 첫 질문의 echo가 참견으로 오인된다");
+  assert.ok(
+    s.includes('{echoIsInterject && running && <MessageFooter>{t("home.waitingTurn")}</MessageFooter>}'),
+    "기다리는 줄 조건이 echoIsInterject && running 하나가 아니다",
+  );
+});
+
+test("run()이 echoIsInterject를 false로 세우는 자리가 anyRunning만 참인 경우와 안 갈린다", () => {
+  const runA = s.indexOf("const run = async (question: string, paths: string[] = []) => {");
+  const runB = s.indexOf("\n  };", runA);
+  const runBody = s.slice(runA, runB);
+  assert.ok(runBody.includes("setEcho(question);\n    setEchoIsInterject(false);"), "run()의 echo 다음 줄이 setEchoIsInterject(false)가 아니다 — anyRunning만 참이고 이 대화가 놀 때(run 경로) 기다리는 줄이 켜진다");
+});

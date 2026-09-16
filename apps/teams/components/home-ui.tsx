@@ -145,7 +145,7 @@ import {
 } from "@/components/ui/input-group";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Message, MessageContent, MessageHeader } from "@/components/ui/message";
+import { Message, MessageContent, MessageFooter, MessageHeader } from "@/components/ui/message";
 import {
   MessageScroller,
   MessageScrollerButton,
@@ -348,6 +348,10 @@ export function HomeUI({
   // **보낸 질문의 낙관적 말풍선**(§7 §천장이 없다 ③). 정본은 트랜스크립트다 — 첫 폴링이 그 줄을
   // 데려오면(`turns`가 늘어나면) 내린다. 실패하면 즉시 내리고 글이 입력칸으로 돌아온다.
   const [echo, setEcho] = useState<string | null>(null);
+  // **그 echo가 참견에서 왔는가**(§비주얼 §기다리는 창). 보통 질문의 echo는 running이 아직
+  // 거짓인 동안 뜨고(§24 그쪽엔 답 띠가 바로 붙는다), 참견의 echo는 running이 이미 참인 동안
+  // 뜬다 — 그래서 이 값이 없으면 기다리는 줄이 첫 질문에도 켜진다.
+  const [echoIsInterject, setEchoIsInterject] = useState(false);
   // **도는 동안 받은 글**(§7 §답은 흐른다). 출처가 `turns`와 다르다 — 이건 자식의 stdout이고
   // 저건 트랜스크립트다. 끝나는 순간 서버가 빈 문자열을 주고 같은 응답의 `turns`가 그 답을
   // 진짜 줄로 데려온다. **한 답이 두 벌로 안 그려지는 자리가 그 교대다** — 여기서 다시 안 막는다.
@@ -603,6 +607,10 @@ export function HomeUI({
 
   const empty = !text.trim();
   const busy = running || starting;
+  // **입력칸의 네 번째 모드**(§비주얼 §24 §입력 form 표 — 요구 `9566dcda`). 출처는 이 대화의
+  // `running` 하나다 — `anyRunning`(그 프로젝트, 위)은 다른 대화가 도는 것이라 이 자리가 아니다.
+  // 워커 세션(`readOnly`)은 이 모드 밖이다(§24 — placeholder가 그대로다).
+  const interjecting = running && !readOnly;
   // `worker`·`readOnly`는 위 폴링 효과 앞으로 옮겼다(그 효과의 gate·deps가 본다) — 이 한 값이
   // 화면에서 셋을 더 정한다: 패널의 체크가 어느 그룹에 뜨는지 · 손잡이 줄 왼쪽 문구 ·
   // `보내기`가 잠기는지. 큐에서 사라진 세션이면 서버가 이미 `sessionId: null`로 물러나므로
@@ -632,6 +640,7 @@ export function HomeUI({
     // **보내는 순간 사람 말풍선을 만든다**(§7 §천장이 없다 ③) — 정본은 여전히 트랜스크립트다,
     // 첫 폴링이 그 줄을 데려오면 위 poll 효과가 이 값을 내린다.
     setEcho(question);
+    setEchoIsInterject(false);
     // `다시 답하기`는 첨부 없이 부른다(§24 — 그 버튼이 다시 보내는 것은 **옛 질문 한 줄**이고,
     // 그 글에 첨부 경로가 필요했으면 이미 그 안에 적혀 있다).
     const r = await askHome(project, question, paths, locale);
@@ -650,6 +659,7 @@ export function HomeUI({
    *  그 답의 트랜스크립트 줄이 도착하면 같은 poll 효과가 다시 걷는다. */
   const interject = async (text: string, paths: string[] = []) => {
     setEcho(text);
+    setEchoIsInterject(true);
     const ok = await interjectHome(project, text, paths, locale);
     if (!ok) setEcho(null);
     input.current?.focus();
@@ -1159,6 +1169,11 @@ export function HomeUI({
                                 })()}
                               </BubbleContent>
                             </Bubble>
+                            {/* §비주얼 §기다리는 창 — 참견 말풍선 10px 아래(`MessageContent`의
+                                `gap-2.5`, 새 값이 아니다). 조건은 이 echo가 참견에서 왔고 그
+                                대화가 아직 도는 중일 때만 — 답 항목이 뜨거나(echo가 내려간다)
+                                `중지`로 죽으면(`running`이 거짓이 된다) 같이 걷힌다. */}
+                            {echoIsInterject && running && <MessageFooter>{t("home.waitingTurn")}</MessageFooter>}
                           </MessageContent>
                         </Message>
                       </MessageScrollerItem>
@@ -1255,8 +1270,8 @@ export function HomeUI({
             <InputGroup>
               <InputGroupTextarea
                 ref={input}
-                aria-label={t("home.questionLabel")}
-                placeholder={t("home.askPlaceholder")}
+                aria-label={t(interjecting ? "home.interject" : "home.questionLabel")}
+                placeholder={t(interjecting ? "home.interjectPlaceholder" : "home.askPlaceholder")}
                 className="max-h-32"
                 value={text}
                 // **도는 동안에도 편집 가능한 채로 둔다**(§24): `disabled`면 `:has(:disabled)`가
@@ -1353,13 +1368,14 @@ export function HomeUI({
                   type="submit"
                   variant="default"
                   size="xs"
-                  // **`busy`는 이제 막지 않는다**(§7 §도는 답에 말을 건다 — 입력칸은 두 모드다).
-                  // `readOnly`(워커 세션)·`pendingSchedule`은 무수정 — 걸 자식이 없다.
-                  aria-disabled={empty || readOnly || pendingSchedule !== null}
+                  // **`running`은 이제 막지 않는다**(§7 §도는 답에 말을 건다 — 입력칸은 두 모드다).
+                  // `readOnly`(워커 세션)·`pendingSchedule`은 무수정 — 걸 자식이 없다. 잠기는
+                  // 셋째 문은 `starting`(자기 요청이 나가 있는 동안)이다 — §24 §입력 form 표.
+                  aria-disabled={empty || readOnly || pendingSchedule !== null || starting}
                   className="aria-disabled:opacity-50"
                 >
                   <Send aria-hidden />
-                  {busy ? t("home.interject") : t("home.send")}
+                  {starting ? t("home.sending") : t("home.send")}
                 </InputGroupButton>
               </InputGroupAddon>
             </InputGroup>
