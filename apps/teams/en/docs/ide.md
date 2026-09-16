@@ -12,7 +12,7 @@ left-hand panel.
 `Sessions` · `Schedules` · `Terminal` · `Source control` · `Explorer`. These five are the
 surfaces. The row carries icons only, with no names written out, so if you cannot tell which
 icon is which surface, hover over it. The name comes up as a tooltip. Those are the names this
-chapter uses below. The first time you open it, `Sessions` is the one picked, and below it are
+chapter uses below. Until you have a tab open, `Sessions` is the one picked, and below it are
 two groups: `Conversations` and `Worker sessions`. The word repeats, but the two are on
 different layers. `Sessions` is the surface name that covers both groups, and `Worker sessions`
 is one of the lists that surface opens.
@@ -35,11 +35,47 @@ What you do on the `Schedules` surface is covered in a chapter of its own,
 Three things become tabs: conversations, terminals, and files you open in the explorer. Twelve
 tabs open in all. Past that, the one you have looked at least recently closes on its own.
 
-Refresh the browser, or leave a surface and come back, and the terminal tab reads
-`Terminal disconnected`, while its row in the list on the left reads `Disconnected`. The shell is
-only in memory for as long as the app runs, so redrawing the screen breaks the connection. Press
-`Reopen` and a new shell comes up in the same directory. What you typed before, and what it
-printed, do not come back.
+### A refresh keeps you where you were
+
+Refresh the browser and the tab you were on comes back still picked. If you were on a file tab,
+that file is in the column on the right; if you were on a terminal tab, that terminal tab; if you
+were on a conversation, that conversation. The marker on the tab strip sits on the same tab too.
+
+The left panel follows that tab. A file tab picks `Explorer`, a terminal tab picks `Terminal`,
+and a conversation tab picks `Sessions`. Only a project with no tabs open starts on `Sessions`.
+
+`Source control` and `Schedules` are the two exceptions. Both put the same conversation column
+on the right that `Sessions` does, so nothing on the screen after a refresh tells the three
+apart. The conversation you were reading comes back in the column on the right, but the left
+panel goes to `Sessions`. Press the icon once more to get your surface back.
+
+The shell does not come back with it, though. Refresh the browser, or leave a surface and come
+back, and the terminal tab reads `Terminal disconnected`, while its row in the list on the left
+reads `Disconnected`. The shell is only in memory for as long as the app runs, so redrawing the
+screen breaks the connection. Press `Reopen` and a new shell comes up in the same directory.
+What you typed before, and what it printed, do not come back.
+
+### One project in two windows
+
+You can keep one project open in two browser windows at once. Some of it the two windows share,
+and the rest each window keeps to itself.
+
+| Both windows see it | Each window keeps its own |
+|---|---|
+| The tabs laid out on the tab strip | Which of them is picked, and the marker on the strip |
+| What you saved to a file, and the commits piled up | The conversation in the column on the right |
+
+Open a file in the other window and that tab shows up on this window's strip soon after.
+Nothing on this screen moves for it. The marker stays on the tab you were on, and so does the
+column on the right. Switching conversations over there is the same. Refresh over here and you
+come back to what this window was on.
+
+One thing does follow. When the other window closes the tab this one was on, that tab goes from
+this strip as well. The marker does not stay on an empty spot: it moves to whichever open tab you
+looked at most recently, and the left panel follows that tab.
+
+Open a new window and the tabs are laid out as they were, since both windows see the same ones,
+with the most recently looked at among them picked.
 
 ### Where tabs close
 
