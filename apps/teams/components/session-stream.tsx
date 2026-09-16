@@ -53,6 +53,8 @@ import {
 } from "@/components/attachment-field";
 import { AttachmentPreview } from "@/components/attachment-preview";
 import { readCdpFrameStream } from "@/lib/cdp-relay";
+import { writeStoredActiveTab } from "@/lib/tabs";
+import { openBrowserTabAction } from "@/app/(app)/p/[project]/home/actions";
 import { EmptyState } from "@/components/empty-state";
 import { Markdown } from "@/components/markdown";
 import { splitAttachments } from "@/lib/attachment-format";
@@ -1594,7 +1596,17 @@ function Row({
  *  (Done when 2). */
 function BrowserMirrorRow({ project, stem }: { project: string; stem: string }) {
   const t = useT();
+  const router = useTrackedRouter();
   const [open, setOpen] = useState(false);
+  // 홈의 `browser` 표면에서 같은 탭을 연다(§11-11 결정 4 §마지막 줄) — 탭을 먼저 만들고
+  // (`home-sessions.json`에 없으면 `HomeUI`가 못 찾는다), 이 창의 활성 탭 자리(`lib/tabs.ts`
+  // §`writeStoredActiveTab`)에 적은 뒤 홈으로 옮긴다. `HomeUI` 마운트가 그 값을 읽어
+  // `browser` 표면을 바로 연다(`initialActiveTab`).
+  const openInHomeTab = async () => {
+    await openBrowserTabAction(project, stem);
+    writeStoredActiveTab(project, stem);
+    router.push(`/p/${project}`);
+  };
   return (
     <details
       className="open:[&>summary>span>svg:first-child]:rotate-90"
@@ -1616,6 +1628,19 @@ function BrowserMirrorRow({ project, stem }: { project: string; stem: string }) 
        *  (`TerminalPanel`과 같은 정리 규칙, `cleanup: ac.abort()`). */}
       {open && (
         <div className="px-3">
+          <div className="mb-1 flex justify-end">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={(e) => {
+                e.preventDefault();
+                void openInHomeTab();
+              }}
+            >
+              {t("sessionStream.openInHomeTab")}
+            </Button>
+          </div>
           <BrowserMirror project={project} hash={stem} />
         </div>
       )}

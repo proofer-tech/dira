@@ -194,7 +194,16 @@ import type {
 } from "@/lib/home-session";
 import { formatCombo, matchCombo } from "@/lib/keymap";
 import type { Checkout, GitStatus, StatusFile } from "@/lib/source-control";
-import { mostRecentTab, surfaceForTab, tabForSurface, tabsOnSide, tabsToCloseOthers, type Surface } from "@/lib/tabs";
+import {
+  activeTabKey,
+  mostRecentTab,
+  surfaceForTab,
+  tabForSurface,
+  tabsOnSide,
+  tabsToCloseOthers,
+  writeStoredActiveTab,
+  type Surface,
+} from "@/lib/tabs";
 import {
   chatRows,
   chatTabTitle,
@@ -244,28 +253,14 @@ type Panel = Pick<Home, "conversations" | "current" | "tabs"> & {
   schedules: ScheduleView[];
 };
 
-/** 활성 탭이 창의 값이 된다(§11-10 결정 2) — `home-sessions.json`이 아니라 `sessionStorage`에
- *  둔다. 브라우저 탭 하나가 창 하나이고 새로고침에는 남으면서 다른 창과는 안 섞이는 자리가
- *  그것뿐이다(`localStorage`는 창끼리 공유돼 두 번째 성질을 못 지킨다). 키에 프로젝트 id를
- *  넣어 프로젝트끼리 안 섞는다. */
-const activeTabKey = (project: string) => `dira:home-active-tab:${project}`;
-
+/** `activeTabKey`·`writeStoredActiveTab`은 `lib/tabs.ts`가 정본이다 — 티켓 상세의
+ *  `홈 탭에서 열기`(`session-stream.tsx`)도 같은 키를 써야 하기 때문이다(§11-11 결정 4). */
 function readStoredActiveTab(project: string): string | null {
   if (typeof window === "undefined") return null;
   try {
     return window.sessionStorage.getItem(activeTabKey(project));
   } catch {
     return null;
-  }
-}
-
-function writeStoredActiveTab(project: string, tabId: string | null): void {
-  if (typeof window === "undefined") return;
-  try {
-    if (tabId === null) window.sessionStorage.removeItem(activeTabKey(project));
-    else window.sessionStorage.setItem(activeTabKey(project), tabId);
-  } catch {
-    // 프라이빗 모드 등 저장이 막힌 자리 — 표식이 창별로 안 남을 뿐, 화면은 그대로 돈다.
   }
 }
 

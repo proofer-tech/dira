@@ -98,3 +98,19 @@ export function surfaceForTab(tab: Tab | null): Surface {
   if (tab.kind === "browser") return "browser";
   return "session";
 }
+
+/** 활성 탭이 창의 값이 된다(§11-10 결정 2) — `home-sessions.json`이 아니라 `sessionStorage`에
+ *  둔다(`HomeUI`가 마운트 시 읽고 탭을 바꿀 때마다 쓴다). `session-stream.tsx`의 티켓 상세
+ *  `홈 탭에서 열기`도 같은 키를 써야 새로고침 없이 홈이 그 탭으로 뜬다(§11-11 결정 4) — 그래서
+ *  `HomeUI`(`components/home-ui.tsx`)의 로컬 정의를 여기로 옮겨 두 자리가 공유한다. */
+export const activeTabKey = (project: string) => `dira:home-active-tab:${project}`;
+
+export function writeStoredActiveTab(project: string, tabId: string | null): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (tabId === null) window.sessionStorage.removeItem(activeTabKey(project));
+    else window.sessionStorage.setItem(activeTabKey(project), tabId);
+  } catch {
+    // 프라이빗 모드 등 저장이 막힌 자리 — 표식이 창별로 안 남을 뿐, 화면은 그대로 돈다.
+  }
+}
