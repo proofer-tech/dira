@@ -2099,10 +2099,12 @@ export const ko: Record<string, string> = {
   "home.surface.terminal": "터미널",
   "home.surface.scm": "소스 컨트롤",
   "home.surface.explorer": "탐색기",
+  "home.surface.browser": "브라우저",
   "home.surface.terminal.empty": "터미널 없음",
   "home.surface.scm.empty": "변경 없음",
   "home.surface.explorer.empty": "빈 디렉터리",
   "home.surface.schedules.empty": "스케줄 없음",
+  "home.surface.browser.empty": "지금 도는 브라우저가 없습니다",
   "home.tabs.empty": "열린 탭 없음",
   "home.tabs.close": "닫기",
   "home.tabs.closeLeft": "좌측 탭 모두 닫기",
@@ -2121,6 +2123,11 @@ export const ko: Record<string, string> = {
   "terminal.row.running": "작업 중",
   "terminal.row.disconnected": "끊김",
   "terminal.row.noCommand": "아직 친 명령이 없습니다",
+
+  // 브라우저 표면(§11-11 결정 5-6, P417-3) — 풀 슬롯 목록과 랩 레이어 세 상태.
+  "browser.wrap.confirm": "지금 이 브라우저로 세션이 일하는 중입니다. 만지면 그 회차의 실측이 튈 수 있습니다. 계속하시겠습니까?",
+  "browser.wrap.unlocked": "입력 열림",
+  "browser.wrap.lock": "다시 잠그기",
 
   // 소스 컨트롤(§11-3 결정 1-2-3-4, P366-8 · P366-9) — 체크아웃 목록·status·업스트림·커밋·
   // push·pull. `word.*` 넷은 `--porcelain=v2`의 아는 코드 넷의 낱말이고, 모르는 코드는 이
@@ -2189,6 +2196,8 @@ export const ko: Record<string, string> = {
   "sessionStream.closedNoUpdate": "끝난 세션 · 갱신 없음",
   "sessionStream.scrollToBottom": "맨 아래로",
   "sessionStream.heading": "진행 기록",
+  "sessionStream.browserActive": "브라우저에서 작업중",
+  "sessionStream.openInHomeTab": "홈 탭에서 열기",
   // `이 워커의 엔진은 ${engine}입니다` · `${engine}는 트랜스크립트를 남기지 않습니다` ·
   // `이 워커의 엔진은 ${engine}입니다 — 참견은 claude 엔진에서만 됩니다` — 엔진 이름이 중간에
   // 공백 없이 낀다.
@@ -4397,10 +4406,12 @@ export const en: Record<string, string> = {
   "home.surface.terminal": "Terminal",
   "home.surface.scm": "Source control",
   "home.surface.explorer": "Explorer",
+  "home.surface.browser": "Browser",
   "home.surface.terminal.empty": "No terminals",
   "home.surface.scm.empty": "No changes",
   "home.surface.explorer.empty": "Empty directory",
   "home.surface.schedules.empty": "No schedules",
+  "home.surface.browser.empty": "No browsers running right now",
   "home.tabs.empty": "No open tabs",
   "home.tabs.close": "Close",
   "home.tabs.closeLeft": "Close Tabs to the Left",
@@ -4417,6 +4428,10 @@ export const en: Record<string, string> = {
   "terminal.row.running": "Running",
   "terminal.row.disconnected": "Disconnected",
   "terminal.row.noCommand": "No command yet",
+
+  "browser.wrap.confirm": "A session is working in this browser right now. Touching it may throw off that run's measurements. Continue anyway?",
+  "browser.wrap.unlocked": "Input unlocked",
+  "browser.wrap.lock": "Lock again",
 
   "home.scm.checkout": "Checkout",
   "home.scm.root": "Root",
@@ -4796,6 +4811,8 @@ export const en: Record<string, string> = {
   "sessionStream.closedNoUpdate": "Session ended · no more updates",
   "sessionStream.scrollToBottom": "Jump to the bottom",
   "sessionStream.heading": "Progress record",
+  "sessionStream.browserActive": "Working in browser",
+  "sessionStream.openInHomeTab": "Open in home tab",
   // 엔진 이름이 접두와 접미 사이에 낀다. 한국어는 `<엔진>입니다`로 끝나지만 영어는 이름이
   // 명사구 가운데로 들어가서, 접미가 `engine`을 들고 문장을 닫는다
   // (`This worker runs the codex engine`). 이름 앞 공백은 JSX가 주고 뒤 공백은 접미가 든다.

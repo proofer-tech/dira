@@ -3,13 +3,14 @@
  *
  *  **해시로 경로를 조립하지 않는다.** 형식 검증을 통과한 해시를 `tickets.py find`에 물어
  *  실제 파일을 받고, 못 찾으면 404다(§경로 방어). */
-import { stat } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import Link from "@/components/link";
 import { notFound } from "next/navigation";
 import { Lock, TriangleAlert } from "lucide-react";
 import { boardRevision } from "@/lib/board-revision";
 import { AttachmentPreview } from "@/components/attachment-preview";
+import { browserPortPath, portFromDevToolsFile } from "@/lib/cdp-relay";
 import { EarlyRefreshPolling } from "@/components/early-refresh";
 import { EmptyState } from "@/components/empty-state";
 import { Markdown } from "@/components/markdown";
@@ -222,6 +223,12 @@ export default async function TicketDetail({
   // 있어 `null`이고, 그때는 종전 빈 상태 그대로다(추측해서 문구를 고르지 않는다).
   const engine = holderEngine(workers, ticket.stem);
 
+  // 이 티켓이 지금 CDP 브라우저를 쥐고 있나(§11-11 결정 1·4) — 판정은 `DevToolsActivePort`
+  // 파일 하나다. 새 상태 파일은 없다 - `browser.sh`의 `_existing_port()`가 읽는 같은 경로를
+  // `cdp/[hash]` 라우트와 공유하는 순수 함수(`lib/cdp-relay.ts`)로 재는 것뿐이다.
+  const browserPortRaw = await readFile(browserPortPath(ticket.stem), "utf8").catch(() => null);
+  const browserActive = portFromDevToolsFile(browserPortRaw) !== null;
+
   // 요구사항 왕복 스레드 — 보드 카드의 답변 다이얼로그와 **같은 함수**가 엮는다(§1 · §2).
   const thread = threadOf(tickets, ticket, config);
   const answerOptions = lastQuestionOptions(thread);
@@ -277,7 +284,7 @@ export default async function TicketDetail({
   // 사라진다**(보드에서 접수한 요구가 정확히 그 모양이다). 넷째가 없으면 **회수된 열림 티켓**
   // (reap이 `session_id`를 지운다 — `tickets.py` `REAP_CLEAR`)이 남긴 계획도 같이 사라진다 —
   // 그 화면이 가리키는 것이 정확히 "어디까지 갔나"다.
-  const hasProgress = !!(sessionId || thread.length > 0 || awaiting || plans.length > 0);
+  const hasProgress = !!(sessionId || thread.length > 0 || awaiting || plans.length > 0 || browserActive);
   // 토큰량 덩이(§비주얼 §63 ①④) — **h2가 뜨면 뜬다**, 즉 이 절이 뜨는 조건과 같다. 창이 없다
   // (§2-13 판정 1) — 이 해시를 든 로그 전부를 매 렌더마다 다시 훑되, 끝난 로그는 `usage.ts`의
   // 캐시가 잡는다(§0-8과 같은 Map).
@@ -294,7 +301,7 @@ export default async function TicketDetail({
             조각을 그린다(§비주얼 §23 ⑤). 스레드·답변 대기·계획만 있는 경우(극단 A — 세션이
             붙은 적 없는 요구사항 · 회수된 열림 티켓)도 여기로 온다: 상자는 `max-h`가 되고
             **스트림이 없다는 말을 하지 않는다**(§29 ④ — `대기` 배지가 이미 알려 준다). */}
-        {transcript || engineCan("stream", engine) === false || thread.length > 0 || awaiting || plans.length > 0 ? (
+        {transcript || engineCan("stream", engine) === false || thread.length > 0 || awaiting || plans.length > 0 || browserActive ? (
           <SessionStream
             project={id}
             stem={ticket.stem}
@@ -315,6 +322,7 @@ export default async function TicketDetail({
             vault={vault}
             refs={refs}
             costChunk={costChunk}
+            browserActive={browserActive}
             rev={rev}
           />
         ) : (

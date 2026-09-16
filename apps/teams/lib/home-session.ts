@@ -101,6 +101,7 @@ import {
 } from "./projects.ts";
 import { isAwaiting, listTickets, reqTitle, statusOf, type Ticket } from "./queue.ts";
 import { openTab, closeTab as closeTabPure, type Tab } from "./tabs.ts";
+import { isValidCdpHash } from "./cdp-relay.ts";
 import { findTranscript, lastEvent, sessionIdOf, tailEvents, type StreamEvent } from "./transcript.ts";
 import { judgeSchedule, isValidWhen, nextScheduleDue } from "./urls.ts";
 import { engineCell, listWorkers, workerOf, type Worker } from "./workers.ts";
@@ -314,6 +315,9 @@ function parseHome(v: unknown): Home {
   // 사람이 파일을 손으로 고칠 수 있다는 전제가 대화·`current`와 같다.
   // **`file` 탭은 이 uuid 관문 밖이다** — `id`가 relPath라 세션 id 모양이 아니다. 빈 문자열만
   // 거른다(실제 경로 방어는 열 때 `resolveWithin`이 하고, 여기는 탭 목록을 복원할 뿐이다).
+  // **`browser` 탭도 같은 결이다** — `id`가 티켓 해시라 uuid 관문 밖이고, 관문은
+  // `isValidCdpHash`(§11-11 결정 1의 `^[0-9a-f]{8}$`) 하나다. 실제 경로 방어는 `cdp/[hash]/route.ts`가
+  // 다시 재고, 여기는 탭 목록을 복원할 뿐이다.
   const tabs = (Array.isArray(o.tabs) ? o.tabs : []).flatMap((r): Tab[] => {
     const x = (r && typeof r === "object" ? r : {}) as Record<string, unknown>;
     if (x.kind === "file") {
@@ -327,6 +331,11 @@ function parseHome(v: unknown): Home {
           ...(x.unsaved === true ? { unsaved: true as const } : {}),
         },
       ];
+    }
+    if (x.kind === "browser") {
+      const id = typeof x.id === "string" ? x.id : "";
+      if (!isValidCdpHash(id)) return [];
+      return [{ id, kind: "browser", lastViewed: typeof x.lastViewed === "string" ? x.lastViewed : "" }];
     }
     const id = uuid(x.id);
     if (!id || (x.kind !== "chat" && x.kind !== "terminal")) return [];
@@ -500,6 +509,23 @@ export async function openFileTab(projectId: string, relPath: string): Promise<H
   const next: Home = { ...home, tabs: openTab(home.tabs, relPath, "file", now) };
   await writeHome(projectId, next);
   return next;
+}
+
+/** 브라우저 탭 하나를 연다(§11-11 결정 5) — 탭 id가 티켓 해시 그대로다. **여기서 브라우저를
+ *  띄우거나 빌리지 않는다**(§11-11 결정 7 §안 하는 것) — 그 슬롯의 주인은 티켓을 도는 세션이고,
+ *  이 함수는 이미 도는 브라우저를 화면 탭 하나로 잇는 것뿐이다. `hash`가 신뢰 경계 밖 값이라
+ *  `isValidCdpHash`를 다시 잰다 — 통과 못 하면 조용히 물러난다(탭이 안 늘어난다). 같은 해시를
+ *  두 번 열어도 `openTab`이 중복 대신 `lastViewed`만 올린다(§11-11 수용조건 §같은 티켓을 두 번
+ *  열어도 탭이 하나다). */
+export async function openBrowserTab(projectId: string, hash: string): Promise<Home> {
+  return withHomeLock(async () => {
+    const home = await readHome(projectId);
+    if (!isValidCdpHash(hash)) return home;
+    const now = new Date().toISOString();
+    const next: Home = { ...home, tabs: openTab(home.tabs, hash, "browser", now) };
+    await writeHome(projectId, next);
+    return next;
+  });
 }
 
 /** 편집기의 저장 안 한 표식을 탭에 싣는다(§11 수용조건 4) — `evictionCandidate`(`lib/tabs.ts`)가

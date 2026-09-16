@@ -4,11 +4,12 @@
  *  목록에 적용되는 상한 · LRU 닫기 · 저장 안 한 탭 예외를 fs 없이 재는 순수 함수로 낸다 —
  *  `lib/home-session.ts`(fs를 타는 쪽)가 이 함수들을 부른다. */
 
-/** 탭 한 줄. `kind`는 `chat`·`terminal`·`file`이다 — 체크아웃은 P366-8이 늘린다.
- *  `unsaved`는 편집 중인 파일 탭이 상한 계산에서 빠지는 자리다(§11 수용조건). `file` 탭의
- *  `id`는 relPath라 `chat`·`terminal`의 uuid 관문(`home-session.ts parseHome`)을 안 탄다.
- *  `cwd`는 `terminal` 탭에만 있다(§11-1 결정 3 — 만든 뒤에는 안 갈린다). */
-export type Tab = { id: string; kind: "chat" | "terminal" | "file"; lastViewed: string; unsaved?: true; cwd?: string };
+/** 탭 한 줄. `kind`는 `chat`·`terminal`·`file`·`browser`다 — 체크아웃은 P366-8이 늘렸고
+ *  `browser`는 §11-11 결정 5가 늘렸다. `unsaved`는 편집 중인 파일 탭이 상한 계산에서 빠지는
+ *  자리다(§11 수용조건). `file`·`browser` 탭의 `id`는 각각 relPath·티켓 해시라 `chat`·
+ *  `terminal`의 uuid 관문(`home-session.ts parseHome`)을 안 탄다. `cwd`는 `terminal` 탭에만
+ *  있다(§11-1 결정 3 — 만든 뒤에는 안 갈린다). */
+export type Tab = { id: string; kind: "chat" | "terminal" | "file" | "browser"; lastViewed: string; unsaved?: true; cwd?: string };
 
 /** §11 결정 1 — 탭 상한. 넘으면 가장 오래 안 본 탭이 닫힌다. */
 export const TAB_LIMIT = 12;
@@ -68,8 +69,9 @@ export function tabsToCloseOthers(tabs: Tab[], id: string): string[] {
   return [...tabsOnSide(tabs, id, "left"), ...tabsOnSide(tabs, id, "right")];
 }
 
-/** 좌측 표면 줄의 값 — 몸통이 그리는 셋(§11-9 결정 2 표)보다 표면 자체는 다섯이다. */
-export type Surface = "session" | "schedules" | "terminal" | "scm" | "explorer";
+/** 좌측 표면 줄의 값 — 몸통이 그리는 셋(§11-9 결정 2 표)보다 표면 자체는 다섯이었고, `browser`가
+ *  여섯째로 늘었다(§11-11 결정 5). */
+export type Surface = "session" | "schedules" | "terminal" | "scm" | "explorer" | "browser";
 
 /** 표면을 갈 때 활성 표식이 옮겨 갈 탭 id(§11-9 결정 2·3). 없으면 `null` — 그 표면의 몸통이
  *  빈 상태로 뜨고 탭 줄의 어느 탭에도 표식이 없다(결정 3, 옛 자리에 안 남긴다). `terminal`·
@@ -77,8 +79,8 @@ export type Surface = "session" | "schedules" | "terminal" | "scm" | "explorer";
  *  `mostRecentTab`으로 고른다. 나머지 셋(`session`·`scm`·`schedules`)은 몸통이 똑같이 대화
  *  컬럼이라 `current`와 id가 같은 `chat` 탭 하나로 모인다. */
 export function tabForSurface(tabs: Tab[], surface: Surface, current: string | null, activeTab: string | null): string | null {
-  if (surface === "terminal" || surface === "explorer") {
-    const kind = surface === "terminal" ? "terminal" : "file";
+  if (surface === "terminal" || surface === "explorer" || surface === "browser") {
+    const kind = surface === "terminal" ? "terminal" : surface === "explorer" ? "file" : "browser";
     if (tabs.some((t) => t.id === activeTab && t.kind === kind)) return activeTab;
     return mostRecentTab(tabs.filter((t) => t.kind === kind));
   }
@@ -93,5 +95,6 @@ export function surfaceForTab(tab: Tab | null): Surface {
   if (tab === null) return "session";
   if (tab.kind === "terminal") return "terminal";
   if (tab.kind === "file") return "explorer";
+  if (tab.kind === "browser") return "browser";
   return "session";
 }

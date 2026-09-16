@@ -35,6 +35,7 @@ import {
   createSchedule as createScheduleRow,
   deleteSchedule as deleteScheduleRow,
   newConversation,
+  openBrowserTab,
   openFileTab,
   openTerminalTab,
   pollHome,
@@ -49,6 +50,7 @@ import {
   type HomeChunk,
   type ScheduleView,
 } from "@/lib/home-session";
+import { listBrowserPoolHashes } from "@/lib/browser-pool";
 import { explorerRoot, getProject, resolveConfig, type Project } from "@/lib/projects";
 import { killPty, openPty, ptyStatuses, restartPty, type PtyStatus } from "@/lib/pty";
 import {
@@ -375,6 +377,36 @@ export async function scmStatus(projectId: string, checkoutId: string): Promise<
   } catch {
     return null;
   }
+}
+
+// ── 브라우저 표면 (§11-11, P417-3) ──────────────────────────────────────────
+//
+// **여기서 브라우저를 띄우거나 `release`하지 않는다**(§11-11 결정 7 §안 하는 것) — 슬롯의
+// 주인은 티켓을 도는 세션이고, 이 표면은 이미 도는 브라우저를 탭 하나로 잇는 것뿐이다.
+// 화면 스트림·입력은 `cdp/[hash]/route.ts`(9aef55ab)가 진다 — 여기 두 함수는 탭 목록과
+// 좌측 풀 목록 읽기뿐이다.
+
+/** 홈 `browser` 탭 하나를 연다(§11-11 결정 5) — `openExplorerFileTab`과 같은 모양이다.
+ *  `hash`는 신뢰 경계 밖 값이라 `openBrowserTab` 안에서 다시 `isValidCdpHash`를 잰다. */
+export async function openBrowserTabAction(projectId: string, hash: string): Promise<HomeChunk> {
+  try {
+    await openBrowserTab((await required(projectId)).id, hash);
+  } catch {
+    // 등록이 풀린 프로젝트 — 위 switchHome과 같은 물러남
+  }
+  return pollHomeAnswer(projectId, null, 0);
+}
+
+/** 좌측 `브라우저` 패널의 줄 목록(§11-11 수용조건 §`ls browser-pool | wc -l`의 값과 같다) —
+ *  `ptyStatuses`처럼 머신 전역 값이라 프로젝트 스코프가 아니다. 등록 안 된 프로젝트에서 불러도
+ *  조용히 빈 배열로 물러난다(`terminalStatuses`와 같은 규칙). */
+export async function browserPoolTickets(projectId: string): Promise<string[]> {
+  try {
+    await required(projectId);
+  } catch {
+    return [];
+  }
+  return listBrowserPoolHashes();
 }
 
 /** 파일 하나를 스테이지 - 해제한다(§11-3 결정 2). 성공 여부와 무관하게 최신 status를 다시

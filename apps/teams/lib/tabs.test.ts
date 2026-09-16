@@ -138,6 +138,12 @@ test("tabForSurface: explorer falls back to the most recently viewed file tab", 
   assert.equal(tabForSurface(tabs, "explorer", "chat-1", "chat-1"), "b.ts");
 });
 
+// §11-11 결정 5 — browser 표면도 terminal·explorer와 같은 단일 kind 규칙을 탄다.
+test("tabForSurface: browser falls back to the most recently viewed browser tab", () => {
+  const tabs = [kindTab("chat-1", "chat", "0"), kindTab("aabbccdd", "browser", "1"), kindTab("11223344", "browser", "2")];
+  assert.equal(tabForSurface(tabs, "browser", "chat-1", "chat-1"), "11223344");
+});
+
 test("tabForSurface: null when there's no tab of that kind to land on (decision 3)", () => {
   const tabs = [kindTab("chat-1", "chat", "0")];
   assert.equal(tabForSurface(tabs, "terminal", "chat-1", "chat-1"), null);
@@ -160,4 +166,8 @@ test("surfaceForTab: file tab lands on explorer", () => {
 
 test("surfaceForTab: no active tab lands on session", () => {
   assert.equal(surfaceForTab(null), "session");
+});
+
+test("surfaceForTab: browser tab lands on browser", () => {
+  assert.equal(surfaceForTab(kindTab("aabbccdd", "browser", "0")), "browser");
 });

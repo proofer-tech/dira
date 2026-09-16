@@ -56,6 +56,7 @@ import {
   File,
   FolderTree,
   GitBranch,
+  Globe,
   MessageSquare,
   Send,
   SquareTerminal,
@@ -65,12 +66,14 @@ import {
 } from "lucide-react";
 import {
   askHome,
+  browserPoolTickets,
   clearHome,
   closeTab as closeTabAction,
   closeTerminalTab,
   createSchedule,
   deleteSchedule,
   interjectHome,
+  openBrowserTabAction,
   openTerminal,
   pollHomeAnswer,
   refreshRefs,
@@ -97,6 +100,7 @@ import {
   useAttachments,
 } from "@/components/attachment-field";
 import { AttachmentPreview } from "@/components/attachment-preview";
+import { BrowserMirror } from "@/components/browser-panel";
 import { CopyCommand } from "@/components/copy-command";
 import { EmptyState } from "@/components/empty-state";
 import { ExplorerPane, ExplorerTree, useExplorerOpen } from "@/components/explorer-ui";
@@ -273,15 +277,16 @@ function initialActiveTab(project: string, tabs: Tab[]): string | null {
   return stored !== null && tabs.some((t) => t.id === stored) ? stored : null;
 }
 
-/** 좌측 2단의 위 단 — 표면 넷(§11 결정 1 · §비주얼 §72 ①). 이 티켓이 붙이는 것은 셸과 고르는
- *  손잡이뿐이고, 셋(`terminal` · `scm` · `explorer`)의 내용은 P366-5 · P366-6 · P366-8이 채운다.
- *  `Surface` 자체는 `lib/tabs.ts`가 정본이다(§11-9 결정 2 — `tabForSurface`와 같은 값을 쓴다). */
+/** 좌측 2단의 위 단 — 표면 여섯(§11 결정 1 · §11-11 결정 5 · §비주얼 §72 ①). `browser`는
+ *  §11-11(P417-3)이 늘렸다. `Surface` 자체는 `lib/tabs.ts`가 정본이다(§11-9 결정 2 —
+ *  `tabForSurface`와 같은 값을 쓴다). */
 const SURFACES: { id: Surface; labelKey: string; icon: typeof MessageSquare }[] = [
   { id: "session", labelKey: "home.surface.agent", icon: MessageSquare },
   { id: "schedules", labelKey: "home.schedulesLabel", icon: CalendarClock },
   { id: "terminal", labelKey: "home.surface.terminal", icon: SquareTerminal },
   { id: "scm", labelKey: "home.surface.scm", icon: GitBranch },
   { id: "explorer", labelKey: "home.surface.explorer", icon: FolderTree },
+  { id: "browser", labelKey: "home.surface.browser", icon: Globe },
 ];
 
 /** 탐색기 표면의 훑을 자리 — **활성 탭의 `<pre>`** (P405-1, §7 §훑을 자리는 지금 우측 몸통에
@@ -855,7 +860,7 @@ export function HomeUI({
       apply(await switchHome(project, tab.id));
       return;
     }
-    setSurface(tab.kind === "terminal" ? "terminal" : "explorer");
+    setSurface(surfaceForTab(tab));
   };
 
   /** 접힌 줄을 열고 닫는다(§비주얼 §24 ⑦ §자동 스크롤). `<Bundle>`이 요구하는 자리지만
@@ -1038,6 +1043,8 @@ export function HomeUI({
               onDisconnect={(id) => setTerminalDisconnected((now) => new Set(now).add(id))}
               apply={apply}
             />
+          ) : surface === "browser" ? (
+            <BrowserSurface project={project} tabs={home.tabs.filter((tb) => tb.kind === "browser")} activeTab={activeTab} />
           ) : (
             <>
           {/* 대화 컬럼 — 남은 폭·높이 전부다. **자식이 언제나 셋이고 순서가 안 바뀐다**(§24 · §7-4
@@ -1717,7 +1724,7 @@ function TabBar({
   const t = useT();
   const locale = useLocale();
   if (tabs.length === 0) return null;
-  const TAB_ICON = { chat: MessageSquare, terminal: SquareTerminal, file: File } as const;
+  const TAB_ICON = { chat: MessageSquare, terminal: SquareTerminal, file: File, browser: Globe } as const;
   const titleOf = (tab: Tab) =>
     tab.kind === "chat"
       ? chatTabTitle(tab.id, conversations, workers, schedules, locale)
@@ -2371,6 +2378,101 @@ function TerminalLeftPanel({
   );
 }
 
+/** 우측 칸 — `browser` 탭마다 `BrowserMirror`(`components/browser-panel.tsx`) 하나를 마운트하고
+ *  활성 탭만 보인다(§11-11 결정 5 · `TerminalSurface`와 같은 관용구 — 안 보이는 탭도 `hidden`
+ *  으로만 접어서 랩 레이어의 걷힌 상태가 표면을 오가는 동안은 안 날아간다). */
+function BrowserSurface({ project, tabs, activeTab }: { project: string; tabs: Tab[]; activeTab: string | null }) {
+  const t = useT();
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      {tabs.length === 0 && <EmptyState text={t("home.surface.browser.empty")} />}
+      <div className="min-h-0 flex-1">
+        {tabs.map((tab) => (
+          <div key={tab.id} hidden={tab.id !== activeTab} className="h-full">
+            <BrowserMirror projectId={project} hash={tab.id} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** 좌측 아래 단(§11-11 결정 5) — 풀 슬롯 줄이 한 줄씩 뜬다. **여기서 브라우저를 띄우거나
+ *  `release`하지 않는다**(결정 7 §안 하는 것) — 목록은 이미 도는 슬롯을 5초마다 다시 읽을
+ *  뿐이고(`TerminalLeftPanel`의 `terminalStatuses` 폴링과 같은 결), 누르면 그 해시로 탭을
+ *  열거나(`openBrowserTabAction`) 이미 열려 있으면 그 탭으로 옮긴다(로컬 `onFocus`만). */
+function BrowserLeftPanel({
+  project,
+  tabs,
+  activeTab,
+  apply,
+  onFocus,
+}: {
+  project: string;
+  tabs: Tab[];
+  activeTab: string | null;
+  apply: (c: HomeChunk) => void;
+  onFocus: (id: string) => void;
+}) {
+  const t = useT();
+  const [hashes, setHashes] = useState<string[]>([]);
+
+  useEffect(() => {
+    let stop = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const poll = () => {
+      void browserPoolTickets(project).then(
+        (r) => {
+          if (stop) return;
+          setHashes(r);
+          timer = setTimeout(poll, 5000);
+        },
+        () => {
+          if (!stop) timer = setTimeout(poll, 5000);
+        },
+      );
+    };
+    poll();
+    return () => {
+      stop = true;
+      clearTimeout(timer);
+    };
+  }, [project]);
+
+  const open = async (hash: string) => {
+    if (tabs.some((tb) => tb.id === hash)) {
+      onFocus(hash);
+      return;
+    }
+    apply(await openBrowserTabAction(project, hash));
+    onFocus(hash);
+  };
+
+  return (
+    <SidebarGroup className="p-0">
+      <SidebarGroupLabel className="h-6 text-muted-foreground">{t("home.surface.browser")}</SidebarGroupLabel>
+      {hashes.length === 0 ? (
+        <EmptyState text={t("home.surface.browser.empty")} />
+      ) : (
+        <SidebarMenu aria-label={t("home.surface.browser")}>
+          {hashes.map((hash) => (
+            <SidebarMenuItem key={hash}>
+              <SidebarMenuButton
+                className={ROW}
+                isActive={hash === activeTab}
+                aria-current={hash === activeTab ? "true" : undefined}
+                onClick={() => void open(hash)}
+              >
+                <span className="min-w-0 grow truncate font-mono text-sm">{hash}</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          ))}
+        </SidebarMenu>
+      )}
+    </SidebarGroup>
+  );
+}
+
 /** 좌측 패널 (§비주얼 §24 §좌측 패널 · §7 §좌측 패널 · §비주얼 §34) — **shadcn `sidebar`**다.
  *
  *  **팝오버가 걷혔다**(`01e5293b`, 요구 `48b13597`). 걷힌 것은 **자리와 그릇 둘뿐**이고 줄의
@@ -2570,6 +2672,11 @@ function SidePanel({
             onFocus={onFocusTab}
             onReconnect={onTerminalReconnect}
           />
+        )}
+        {/* `브라우저`(§11-11 결정 5) — 풀 슬롯 줄이 한 줄씩 뜬다. 누르면 그 해시의 탭을 열거나
+            (이미 있으면) 그 탭으로 옮긴다. */}
+        {surface === "browser" && (
+          <BrowserLeftPanel project={project} tabs={home.tabs.filter((tb) => tb.kind === "browser")} activeTab={activeTab} apply={apply} onFocus={onFocusTab} />
         )}
         {surface === "session" && (
           <>

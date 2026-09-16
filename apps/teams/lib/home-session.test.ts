@@ -35,6 +35,7 @@ const {
   switchConversation,
   closeHomeTab,
   openFileTab,
+  openBrowserTab,
   setFileTabUnsaved,
   createSchedule,
   deleteSchedule,
@@ -612,6 +613,27 @@ test("파일 탭 — relPath가 uuid 관문 밖에서 산다. 다시 열면 안 
   // unsaved를 걷으면(저장 완료) 다시 상한 계산에 낀다 — `false`는 키 자체를 지운다.
   await setFileTabUnsaved(p, "a.ts", false);
   assert.ok(!("unsaved" in (await readHome(p)).tabs.find((t) => t.id === "a.ts")!));
+});
+
+test("브라우저 탭 — 해시가 uuid 관문 밖에서 산다. 다시 열면 안 늘고, 관문 밖 해시는 물러난다", async () => {
+  const p = "browsertabsproj";
+  writeFileSync(sessionsPath(), JSON.stringify({ [p]: { conversations: [], current: null } }));
+
+  await openBrowserTab(p, "aabbccdd");
+  const opened = await readHome(p);
+  assert.deepStrictEqual(
+    opened.tabs.map((t) => ({ id: t.id, kind: t.kind })),
+    [{ id: "aabbccdd", kind: "browser" }],
+  );
+  assert.strictEqual(opened.current, null); // 대화 스레드는 안 건드린다
+
+  // 같은 해시를 다시 열면 중복이 아니라 그 탭의 `lastViewed`만 올린다(§11-11 수용조건)
+  await openBrowserTab(p, "aabbccdd");
+  assert.strictEqual((await readHome(p)).tabs.length, 1);
+
+  // 관문(`^[0-9a-f]{8}$`) 밖 값은 조용히 물러난다 — 탭이 안 늘어난다(신뢰 경계, §11-11 결정 1)
+  await openBrowserTab(p, "../etc/passwd");
+  assert.strictEqual((await readHome(p)).tabs.length, 1);
 });
 
 test("옛 형식(문자열 한 줄)은 대화 한 개짜리 목록으로 읽힌다 — 사람 머신에 이미 있는 파일이다", async () => {
