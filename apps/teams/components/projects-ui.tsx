@@ -191,6 +191,7 @@ export function CreateForm({
   home: string;
 }) {
   const t = useT();
+  const locale = useLocale();
   const [pending, start] = useTransition();
   const [state, setState] = useState<CreateState>({});
   const [name, setName] = useState("");
@@ -198,6 +199,9 @@ export function CreateForm({
   const [dir, setDir] = useState("");
   const [spec, setSpec] = useState("");
   const [ontology, setOntology] = useState("");
+  // 기본값은 화면 언어가 정한다(§새 프로젝트가 한국어 갈래를 고르면 noslop 셋을 같이 받는다
+  // §결정 6) — 새 설정이 아니라 이미 있는 값이다.
+  const [korean, setKorean] = useState(locale === "ko");
   const slug = slugify(name);
   const showId = (name.trim() !== "" && slug === "") || !!state.needId;
   const err = state.error;
@@ -223,6 +227,7 @@ export function CreateForm({
             get("spec"),
             get("ontology"),
             get("id") || undefined,
+            korean,
           );
           setState(r);
           if (r.done) onCreated(r);
@@ -317,6 +322,13 @@ export function CreateForm({
         </div>
         <p className="text-xs text-muted-foreground">{t("project.create.ontologyHelp")}</p>
       </div>
+
+      {/* §새 프로젝트가 한국어 갈래를 고르면 noslop 셋을 같이 받는다 §결정 8 — 네이티브
+          체크박스다, 새 shadcn 부품을 안 더한다. 기본값은 화면 언어(useState 초기값)다. */}
+      <label className="flex items-center gap-1.5 text-sm">
+        <input type="checkbox" checked={korean} onChange={(e) => setKorean(e.target.checked)} />
+        {t("project.create.koreanLabel")}
+      </label>
 
       {/* `.dira`가 이미 있다 — 만들지 않았다. 큐면 등록으로 보낸다(§0-3 표) */}
       {state.exists && (

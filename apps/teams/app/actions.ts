@@ -78,6 +78,7 @@ import {
   SkillInstallError,
   defaultSkillsFor,
   fetchSkillFromAddress,
+  hasNoslopLinter,
   installSkill,
   listInstalledSkills,
   writePersonaSkills,
@@ -354,6 +355,7 @@ export async function createProject(
   specDoc: string,
   ontology?: string,
   id?: string,
+  korean?: boolean,
 ): Promise<CreateState> {
   let created: CreateState["created"] | undefined;
   const locale = await readLanguage();
@@ -422,12 +424,16 @@ export async function createProject(
       // 색 없이 태어난 프로젝트는 종전 모습 그대로다 — 사람이 눌러서 고르면 된다.
     }
 
-    // 새 프로젝트는 스킬 다섯을 받아서 태어난다(§새 프로젝트가 스킬을 갖고 태어난다, 결정 8-9)
-    // — 실패해도 생성 자체는 막지 않는다. `.gitignore` 한 줄과 같은 처분이다. 다섯을 동시에
-    // 받는다(결정 8) — 직렬이면 최악이 §5-1 타임아웃 곱하기 다섯이다.
+    // 새 프로젝트는 스킬을 받아서 태어난다(§새 프로젝트가 스킬을 갖고 태어난다, 결정 8-9 +
+    // §새 프로젝트가 한국어 갈래를 고르면 noslop 셋을 같이 받는다, 결정 3-4) — 실패해도 생성
+    // 자체는 막지 않는다. `.gitignore` 한 줄과 같은 처분이다. 동시에 받는다(결정 8) — 직렬이면
+    // 최악이 §5-1 타임아웃 곱하기 행 수다.
     try {
+      // 한국어 갈래가 꺼졌으면 린터를 물을 이유가 없다 — 켜졌을 때만 한 번 확인한다(§결정 3-4).
+      const linterOk = korean ? await hasNoslopLinter() : false;
+      const targets = DEFAULT_SKILLS.filter((s) => !s.requiresKorean || (korean && linterOk));
       const results = await Promise.allSettled(
-        DEFAULT_SKILLS.map(async (s) => installSkill(await fetchSkillFromAddress(s.address, locale), undefined, locale)),
+        targets.map(async (s) => installSkill(await fetchSkillFromAddress(s.address, locale), undefined, locale)),
       );
       const conflictMessage = t("ko", "persona.skill.installNameConflict");
       let installedN = 0;
@@ -444,7 +450,11 @@ export async function createProject(
       const installed = await listInstalledSkills();
       const skillPersonas = await personaNames(path.join(made.root, "personas"));
       for (const persona of skillPersonas) {
-        await writePersonaSkills(path.join(made.root, "personas"), persona, defaultSkillsFor(persona, installed));
+        await writePersonaSkills(
+          path.join(made.root, "personas"),
+          persona,
+          defaultSkillsFor(persona, installed, !!korean),
+        );
       }
     } catch {
       // 스킬 없이 태어난 프로젝트는 종전 모습 그대로다 — `skills.md`가 0장일 뿐이다.

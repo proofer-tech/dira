@@ -987,31 +987,61 @@ test("엔진 — 이름이 신뢰 경계다", async () => {
   assert.equal(existsSync(path.join(tmp, "escape")), false);
 });
 
-// ── defaultSkillsFor — 새 프로젝트가 스킬 다섯을 받아서 태어난다 (네트워크 0) ─────────────
+// ── defaultSkillsFor — 새 프로젝트가 스킬을 받아서 태어난다 (네트워크 0) ─────────────
 
 const ALL_INSTALLED: Skill[] = DEFAULT_SKILLS.map((e) => ({ name: e.name, description: `${e.name} 설명` }));
 
-test("defaultSkillsFor — 다섯 다 깔린 상태면 pm 2 · developer 2 · qa 2 · designer 2 · archive-manager 1", () => {
+test("defaultSkillsFor — 한국어 갈래 꺼짐 — 아홉 다 깔려도 pm 3 · developer 3 · qa 3 · designer 3 · archive-manager 2", () => {
   const counts: Record<string, number> = {};
   for (const persona of ["pm", "developer", "qa", "designer", "archive-manager"]) {
-    counts[persona] = defaultSkillsFor(persona, ALL_INSTALLED).length;
+    counts[persona] = defaultSkillsFor(persona, ALL_INSTALLED, false).length;
   }
-  assert.deepEqual(counts, { pm: 2, developer: 2, qa: 2, designer: 2, "archive-manager": 1 });
+  assert.deepEqual(counts, { pm: 3, developer: 3, qa: 3, designer: 3, "archive-manager": 2 });
+});
+
+test("defaultSkillsFor — 한국어 갈래 켜짐(§수용조건 3) — pm 6 · developer 6 · qa 6 · designer 6 · archive-manager 5", () => {
+  const counts: Record<string, number> = {};
+  for (const persona of ["pm", "developer", "qa", "designer", "archive-manager"]) {
+    counts[persona] = defaultSkillsFor(persona, ALL_INSTALLED, true).length;
+  }
+  assert.deepEqual(counts, { pm: 6, developer: 6, qa: 6, designer: 6, "archive-manager": 5 });
+});
+
+test("defaultSkillsFor — 한국어 갈래가 꺼지면 noslop 세 이름이 설치 목록에 있어도 다섯 줄에서 다 빠진다", () => {
+  for (const persona of ["pm", "developer", "qa", "designer", "archive-manager"]) {
+    const names = defaultSkillsFor(persona, ALL_INSTALLED, false).map((s) => s.name);
+    assert.ok(!names.some((n) => n.startsWith("noslop")), `${persona}: ${names}`);
+  }
+});
+
+test("defaultSkillsFor — 린터가 없어 noslop 셋을 못 깐 것과 같은 결과(설치 목록에서 그냥 빠짐)에서도 다섯 줄에서 다 빠진다", () => {
+  // 린터 판정은 actions.ts가 하지, 이 순수 함수가 하지 않는다 — 여기선 설치 목록에 그 셋이
+  // 아예 없는 상태(린터 없어 install을 안 시도한 결과)만 흉내 낸다.
+  const withoutNoslop = ALL_INSTALLED.filter((s) => !s.name.startsWith("noslop"));
+  for (const persona of ["pm", "developer", "qa", "designer", "archive-manager"]) {
+    const names = defaultSkillsFor(persona, withoutNoslop, true).map((s) => s.name);
+    assert.ok(!names.some((n) => n.startsWith("noslop")), `${persona}: ${names}`);
+  }
+  assert.deepEqual(defaultSkillsFor("pm", withoutNoslop, true).map((s) => s.name), [
+    "stop-slop",
+    "brainstorming",
+    "find-skills",
+  ]);
 });
 
 test("defaultSkillsFor — 표에 있어도 머신에 없는 이름은 그 이름을 받던 페르소나 줄에서만 빠진다", () => {
   const withoutPonytail = ALL_INSTALLED.filter((s) => s.name !== "ponytail");
   assert.deepEqual(
-    defaultSkillsFor("developer", withoutPonytail).map((s) => s.name),
-    ["stop-slop"],
+    defaultSkillsFor("developer", withoutPonytail, false).map((s) => s.name),
+    ["stop-slop", "find-skills"],
   );
   // 다른 페르소나 줄은 안 줄어든다
-  assert.equal(defaultSkillsFor("pm", withoutPonytail).length, 2);
-  assert.equal(defaultSkillsFor("qa", withoutPonytail).length, 2);
+  assert.equal(defaultSkillsFor("pm", withoutPonytail, false).length, 3);
+  assert.equal(defaultSkillsFor("qa", withoutPonytail, false).length, 3);
 });
 
 test("defaultSkillsFor — 이미 있어 건너뛴 이름도 목록에 있으면 그대로 줄이 든다", () => {
   // 건너뜀은 설치 카운트일 뿐 listInstalledSkills()엔 그 이름이 여전히 있다 — 구별할 수 없고 안 한다
   const skipped: Skill[] = [{ name: "stop-slop", description: "이미 있던 사본" }];
-  assert.deepEqual(defaultSkillsFor("pm", skipped).map((s) => s.name), ["stop-slop"]);
+  assert.deepEqual(defaultSkillsFor("pm", skipped, false).map((s) => s.name), ["stop-slop"]);
 });

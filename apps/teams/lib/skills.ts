@@ -796,7 +796,14 @@ async function memoryFiles(dir: string, name: string): Promise<{ dir: string; na
  *  `obra/superpowers`를 두 번 받는 것(brainstorming · systematic-debugging)이 의도다 —
  *  `ref`가 `HEAD`라 API를 안 부르고, `fetchUrl`을 묶는 것은 만들기 시간이 실제로 문제가 되면
  *  그때 한다(ponytail). */
-export type DefaultSkillEntry = { name: string; address: string; personas: readonly string[] };
+export type DefaultSkillEntry = {
+  name: string;
+  address: string;
+  personas: readonly string[];
+  /** 한국어로 일하는 프로젝트에만 붙는다(§새 프로젝트가 한국어 갈래를 고르면 noslop 셋을
+   *  같이 받는다 §결정 1·7). 없으면 조건 없이(§결정 4의 빈 행) 다섯 다 받는다. */
+  requiresKorean?: boolean;
+};
 
 export const DEFAULT_SKILLS: readonly DefaultSkillEntry[] = [
   {
@@ -824,14 +831,50 @@ export const DEFAULT_SKILLS: readonly DefaultSkillEntry[] = [
     address: "https://github.com/anthropics/skills/tree/HEAD/skills/frontend-design",
     personas: ["designer"],
   },
+  {
+    name: "find-skills",
+    address: "https://github.com/vercel-labs/skills/tree/HEAD/skills/find-skills",
+    personas: ["pm", "developer", "qa", "designer", "archive-manager"],
+  },
+  {
+    name: "noslop-write",
+    address: "https://github.com/hsol/noslop/tree/HEAD/skills/noslop-write",
+    personas: ["pm", "developer", "qa", "designer", "archive-manager"],
+    requiresKorean: true,
+  },
+  {
+    name: "noslop-review",
+    address: "https://github.com/hsol/noslop/tree/HEAD/skills/noslop-review",
+    personas: ["pm", "developer", "qa", "designer", "archive-manager"],
+    requiresKorean: true,
+  },
+  {
+    name: "noslop-fix",
+    address: "https://github.com/hsol/noslop/tree/HEAD/skills/noslop-fix",
+    personas: ["pm", "developer", "qa", "designer", "archive-manager"],
+    requiresKorean: true,
+  },
 ];
 
 /** 순수 함수 — 네트워크도 fs도 안 탄다. `installed`는 이 머신에 실제로 있는 스킬 목록
  *  (`listInstalledSkills()`가 낸 값)이고, `DEFAULT_SKILLS` 표에 있어도 그 목록에 없는 이름은
- *  빠진다(§결정 6 — 오프라인이면 다섯 줄이 아니라 0줄). 순서는 표의 순서 그대로다. */
-export function defaultSkillsFor(persona: string, installed: Skill[]): Skill[] {
+ *  빠진다(§결정 6 — 오프라인이면 다섯 줄이 아니라 0줄). `korean`이 꺼지면 `requiresKorean`인
+ *  행은 그 이름이 이 머신에 이미 깔려 있어도 빠진다(§결정 7 — 다른 프로젝트가 깔아 둔 것이라도
+ *  이 갈래에서는 아니다). 순서는 표의 순서 그대로다. */
+export function defaultSkillsFor(persona: string, installed: Skill[], korean: boolean): Skill[] {
   const byName = new Map(installed.map((s) => [s.name, s]));
-  return DEFAULT_SKILLS.filter((e) => e.personas.includes(persona))
+  return DEFAULT_SKILLS.filter((e) => e.personas.includes(persona) && (!e.requiresKorean || korean))
     .map((e) => byName.get(e.name))
     .filter((s): s is Skill => s !== undefined);
+}
+
+/** 린터 판정 하나 — `python3 -m noslop --help`의 종료 코드(§계약 §린터 판정). 명령이 없거나
+ *  0이 아니면 "없다"로 읽는다 — 이 판정 때문에 만들기가 죽으면 안 된다(§참고). */
+export async function hasNoslopLinter(): Promise<boolean> {
+  try {
+    await execFileP("python3", ["-m", "noslop", "--help"], { timeout: 5_000 });
+    return true;
+  } catch {
+    return false;
+  }
 }
