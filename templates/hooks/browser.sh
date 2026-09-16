@@ -28,11 +28,12 @@ _chrome="${DIRA_CHROME_HEADLESS:-$HOME/.cache/dira/chrome-headless-shell/mac_arm
 
 mkdir -p "$_pool" 2>/dev/null
 
-# 상한값 - browser-limit이 없거나 정수가 아니면 결정 2의 기본값 3(session-limit과 같은 모양).
+# 상한값 - browser-limit이 없거나 정수가 아니면 결정 2의 기본값 6(2026-09-16 재조정, 요구
+# cc2e4f22 - 동시 세션 상한(session-limit)과 같은 수).
 _limit() {
   local n
   n=$(sed -n '1p' "$_limit_file" 2>/dev/null | tr -d ' \t\r\n')
-  case "$n" in ''|*[!0-9]*) n=3 ;; esac
+  case "$n" in ''|*[!0-9]*) n=6 ;; esac
   echo "$n"
 }
 
@@ -74,14 +75,21 @@ _reclaim() {
   done
 }
 
-# 이미 이 해시가 쥔 슬롯이 있으면 그 포트를 낸다. 없으면 빈 문자열 + 실패 종료.
+# 이미 이 해시가 쥔 슬롯, 또는 지금 부르는 세션(pid)이 다른 해시로 쥔 슬롯이 있으면 그
+# 포트를 낸다(결정 1 - 2026-09-16 재조정, 요구 cc2e4f22). pid가 같으면 해시가 달라도 같은
+# 세션이 <해시>-A/<해시>-B 접미사로 두 번 부른 것이라 새로 안 띄운다. 없으면 빈 문자열 +
+# 실패 종료.
 _existing_port() {
-  local slot
+  local slot slot_hash slot_pid session_pid
+  session_pid=$(_session_pid)
   for slot in "$_pool"/*/; do
     [ -d "$slot" ] || continue
-    [ "$(cat "${slot}hash" 2>/dev/null)" = "$1" ] || continue
-    head -1 "/tmp/qa-$1/chrome-profile/DevToolsActivePort" 2>/dev/null
-    return 0
+    slot_hash=$(cat "${slot}hash" 2>/dev/null)
+    slot_pid=$(cat "${slot}pid" 2>/dev/null)
+    if [ "$slot_hash" = "$1" ] || { [ -n "$slot_pid" ] && [ "$slot_pid" = "$session_pid" ]; }; then
+      head -1 "/tmp/qa-$slot_hash/chrome-profile/DevToolsActivePort" 2>/dev/null
+      return 0
+    fi
   done
   return 1
 }
