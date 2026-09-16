@@ -568,7 +568,23 @@ test("왕복 — 쓰고 읽으면 같다", async () => {
 
   const text = readFileSync(path.join(personas, "developer", "skills.md"), "utf8");
   assert.match(text, /^## 스킬\n/);
-  assert.match(text, /^- `ponytail` — Forces the laziest solution that actually works\.$/m);
+  assert.match(text, /^- `ponytail` - Forces the laziest solution that actually works\.$/m);
+});
+
+test("엠대시로 쓰인 옛 사이드카(v1.1.0~v1.1.4)도 읽고, 다시 쓰면 하이픈으로 갈린다", async () => {
+  const file = path.join(personas, "developer", "skills.md");
+  writeFileSync(file, "## 스킬\n\n- `ponytail` — 엠대시로 쓰인 옛 줄이다.\n손으로 적은 산문.\n");
+
+  assert.deepEqual(await readPersonaSkills(personas, "developer"), [
+    { name: "ponytail", description: "엠대시로 쓰인 옛 줄이다." },
+  ]);
+
+  await writePersonaSkills(personas, "developer", [{ name: "shadcn", description: "컴포넌트" }]);
+
+  const text = readFileSync(file, "utf8");
+  assert.match(text, /손으로 적은 산문\./); // 산문은 그대로
+  assert.doesNotMatch(text, /—/); // 목록 줄은 전부 하이픈으로 다시 쓰였다
+  assert.match(text, /^- `shadcn` - 컴포넌트$/m);
 });
 
 test("사람이 덧붙인 산문 — 목록에서 빠지되 파일에서 지워지지 않는다", async () => {

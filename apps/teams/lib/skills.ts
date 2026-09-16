@@ -472,9 +472,11 @@ export async function fetchSkillFromAddress(
 
 // ── 페르소나가 고른 스킬 (`<personas>/<이름>/skills.md`) ─────────────────────
 
-/** 목록 줄 문법은 이것 하나다(§5-1). **안 맞는 줄은 목록에서 빠지지만 파일에서 지워지지 않는다** —
- *  사람이 손으로 문장을 덧붙일 수 있고 그 글도 프롬프트에 실린다. 파일이 원본이라는 말의 내용이다. */
-const ITEM_RE = /^- `([^`\n]+)` — ?(.*)$/;
+/** 목록 줄 문법은 이것 하나다(§5-1) — 구분자는 ASCII 하이픈이지만, `v1.1.0`~`v1.1.4`가 엠대시로
+ *  쓴 기존 사이드카(`4f837935`)도 그대로 읽는다. **안 맞는 줄은 목록에서 빠지지만 파일에서
+ *  지워지지 않는다** — 사람이 손으로 문장을 덧붙일 수 있고 그 글도 프롬프트에 실린다. 파일이
+ *  원본이라는 말의 내용이다. */
+const ITEM_RE = /^- `([^`\n]+)` [-—] ?(.*)$/;
 
 const HEADER = `## 스킬
 
@@ -573,7 +575,7 @@ async function writeSkillsSidecar(
     // 백틱·줄바꿈이 들어가면 우리가 쓴 파일을 우리가 못 읽는다(ITEM_RE). 설명은 접고, 이름은 거절.
     if (!n || /[`\n]/.test(n))
       throw new Error(wrap(t("ko", "persona.skill.badNamePrefix"), JSON.stringify(s.name), ""));
-    return `- \`${n}\` — ${s.description.replace(/\s+/g, " ").trim()}`;
+    return `- \`${n}\` - ${s.description.replace(/\s+/g, " ").trim()}`;
   });
 
   const old = await readFile(filePath, "utf8").catch(() => null);
