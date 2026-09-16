@@ -88,7 +88,7 @@ test("`배정`·`마무리`(SegmentBlock) 안의 ProgressItems도 `flat`이다 �
 test("계획 밖 틈(계획 사이)의 ProgressItems는 여전히 flat이 아니다 — §9 묶음이 그대로다(§59 ⑦)", () => {
   assert.match(
     s,
-    /isPlanEdgeSegment\(bi, blocks\.length, plans\.length > 0\) \? \(/,
+    /isPlanEdgeSegment\(bi, blocks\.length, grouping\) \? \(/,
     "outside 블록의 접는 그릇 판정이 isPlanEdgeSegment를 안 쓴다",
   );
 });
@@ -190,5 +190,47 @@ test("`rev` prop이 `EarlyRefreshPolling`과 같은 값으로 재귀 `<SessionSt
     s,
     /<SessionStream\n[\s\S]*?variant="worker"\n\s*rev=\{rev\}\n\s*\/>/,
     "`크게 보기`가 여는 재귀 `<SessionStream>`이 `rev`를 안 물려받는다",
+  );
+});
+
+// 티켓 2e4864e0(§2-15 ⑯, 요구 `d305a1fb`): 워커 다이얼로그 툴바에 `단계로 묶기` 칩이 붙는다.
+// 켜짐이 기본이고(S23) 끄면 `plans`가 빈 배열인 화면과 같은 갈래로 간다(S24). 계획 절이 없는
+// 티켓에는 칩 자체가 안 뜬다(S25). 컴포넌트를 못 렌더해(위 import 주석) 셋 다 소스 검사로 고정한다.
+test("단계로 묶기 켜짐이 기본값이다 — 그 상태에서 계획 블록으로 간다(§2-15 ⑯ S23)", () => {
+  assert.match(
+    s,
+    /const \[groupByPlan, setGroupByPlan\] = useState\(true\);/,
+    "groupByPlan 기본값이 참이 아니다 — ⑮ 2 화면으로 안 시작한다",
+  );
+  assert.match(
+    s,
+    /const grouping = plans\.length > 0 && \(variant !== "worker" \|\| groupByPlan\);/,
+    "grouping 판정이 없다 — 켜짐 상태에서 계획 블록으로 갈리는 근거가 없다",
+  );
+});
+
+test("끄면 `outside` 블록 하나로 간다 — 단계 제목 · `배정` - `마무리` 칸이 안 뜬다(S24)", () => {
+  assert.match(
+    s,
+    /const blocks = grouping\s*\n\s*\? planBlocks\(plans, timedMerged, now\)\s*\n\s*: \[\{ kind: "outside" as const, events: timedMerged \}\];/,
+    "blocks가 groupByPlan을 안 본다 — 꺼도 계획 아코디언 그대로다",
+  );
+  assert.match(
+    s,
+    /isPlanEdgeSegment\(bi, blocks\.length, grouping\)/,
+    "`배정` - `마무리` 접는 그릇 판정이 grouping을 안 본다 — 꺼도 그 칸이 뜬다",
+  );
+});
+
+test("계획 절이 없는 티켓에는 칩이 안 뜬다 — `plans.length > 0` 벽 뒤다(S25)", () => {
+  assert.match(
+    s,
+    /\{plans\.length > 0 && \(\s*<button\s*type="button"\s*aria-pressed=\{groupByPlan\}/,
+    "단계로 묶기 칩이 `plans.length > 0` 조건 없이 뜬다",
+  );
+  assert.match(
+    s,
+    /\{t\("progress\.stream\.groupByPlan"\)\}/,
+    "단계로 묶기 칩이 사전 키를 안 쓴다",
   );
 });

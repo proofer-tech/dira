@@ -241,6 +241,9 @@ export function SessionStream({
   // 워커 다이얼로그 툴바(§2-15 ⑥) — 티켓 상세에서는 안 읽는 값이라 그 화면 렌더는 안 갈린다.
   const [query, setQuery] = useState("");
   const [kindFilter, setKindFilter] = useState(STREAM_FILTER_DEFAULT);
+  // 워커 다이얼로그 툴바의 `단계로 묶기`(§2-15 ⑯) — 켜짐이 기본이라 ⑮ 2 화면 그대로 시작한다.
+  // 저장 자리가 없다(⑯ 3 표) - 다이얼로그를 닫았다 열면 이 state 자체가 새로 마운트돼 다시 참이다.
+  const [groupByPlan, setGroupByPlan] = useState(true);
   // 2단 상세(§2-15 ⑧) — 고른 사건의 key 하나가 상태다. `<details>`가 아니다: 같은 것을 두
   // 자리에 안 그린다. 티켓 상세에서는 안 읽는다(아래 `workerCtx`가 그 화면에서 `undefined`다).
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
@@ -424,7 +427,11 @@ export function SessionStream({
   // §비주얼 §59 ⑦ — 계획이 있으면 상자 안이 계획 블록 단위로 갈린다. 계획이 없으면(§2-11④
   // "계획 절이 없는 티켓") 상자 하나가 곧 "계획 밖" 블록 하나다 — 그 갈래에서 아래가 그리는 것은
   // `groupProgress(merged, isBubble)`을 그대로 도는 개정 전 화면과 클래스 0 차이다.
-  const blocks = plans.length
+  // 워커 다이얼로그의 `단계로 묶기`(§2-15 ⑯)를 끄면 계획이 있어도 이 둘째 갈래로 간다 — 새 렌더
+  // 갈래가 아니라 계획 절이 없는 티켓이 이미 타는 그 자리다. `isPlanEdgeSegment`의 `hasPlans`도
+  // 이 값을 받는다 — 꺼진 채로는 `배정`·`마무리` 접는 그릇도 안 뜬다(단계 절이 없는 화면 그대로).
+  const grouping = plans.length > 0 && (variant !== "worker" || groupByPlan);
+  const blocks = grouping
     ? planBlocks(plans, timedMerged, now)
     : [{ kind: "outside" as const, events: timedMerged }];
   // 진행중 모양이 둘 이상이면 파일 순서상 마지막 하나만 진짜다(§2-11④) — 앞의 것들은 완료처럼
@@ -534,6 +541,19 @@ export function SessionStream({
                   </button>
                 );
               })}
+              {/* `단계로 묶기`(§2-15 ⑯) — 계획 절이 없는 티켓에는 묶을 것이 없어 안 뜬다
+                  (도구 칩 줄의 `toolChips.length > 0`와 같은 판정). 필터 넷과 같은 벌이다. */}
+              {plans.length > 0 && (
+                <button
+                  type="button"
+                  aria-pressed={groupByPlan}
+                  onClick={() => setGroupByPlan((prev) => !prev)}
+                >
+                  <Badge variant={groupByPlan ? "secondary" : "outline"} className={groupByPlan ? undefined : "text-muted-foreground"}>
+                    {t("progress.stream.groupByPlan")}
+                  </Badge>
+                </button>
+              )}
               <span className="ml-auto text-xs text-muted-foreground tabular-nums">
                 {t("sessionStream.recordCount.label")} {merged.length}
                 {t("sessionStream.recordCount.unit")}
@@ -621,7 +641,7 @@ export function SessionStream({
                 block.kind === "outside" ? (
                   // §2-11⑨ 결정2 — 계획 목록이 있는 상자에서 맨 앞·맨 뒤 `outside`만 `배정`·
                   // `마무리` 칸이다. 사이 틈(§59 ⑦)은 표식 없이 종전대로 흐른다.
-                  isPlanEdgeSegment(bi, blocks.length, plans.length > 0) ? (
+                  isPlanEdgeSegment(bi, blocks.length, grouping) ? (
                     <SegmentBlock
                       key={`o${bi}`}
                       project={project}
