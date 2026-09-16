@@ -4,13 +4,13 @@ There comes a point where you want to open the file a worker changed and look at
 Running the tests once, or checking the commits a worker has piled up and taking them to the
 integration branch, is the same kind of thing. None of it means leaving for another app.
 
-Press the logo in the header and you are home. Five icons sit in a row at the top of the
+Press the logo in the header and you are home. Six icons sit in a row at the top of the
 left-hand panel.
 
-## The five surfaces
+## The six surfaces
 
-`Sessions` · `Schedules` · `Terminal` · `Source control` · `Explorer`. These five are the
-surfaces. The row carries icons only, with no names written out, so if you cannot tell which
+`Sessions` · `Schedules` · `Terminal` · `Source control` · `Explorer` · `Browser`. These six are
+the surfaces. The row carries icons only, with no names written out, so if you cannot tell which
 icon is which surface, hover over it. The name comes up as a tooltip. Those are the names this
 chapter uses below. Until you have a tab open, `Sessions` is the one picked, and below it are
 two groups: `Conversations` and `Worker sessions`. The word repeats, but the two are on
@@ -28,12 +28,13 @@ else.
 | `Terminal` | The list of terminals you have open, the `Working directory` picker, and the way in to `New terminal` | The terminal tab strip and the shell |
 | `Source control` | The root and the worktrees, and `git status` for whichever one you picked | The conversation tab strip and thread, unchanged |
 | `Explorer` | The file tree and find | The one file you have open |
+| `Browser` | The browsers workers are holding right now | The screen of the one you picked |
 
 What you do on the `Schedules` surface is covered in a chapter of its own,
-[Schedules](/docs/schedules). What is left for this one is the other four.
+[Schedules](/docs/schedules). What is left for this one is the other five.
 
-Three things become tabs: conversations, terminals, and files you open in the explorer. Twelve
-tabs open in all. Past that, the one you have looked at least recently closes on its own.
+Four things become tabs: conversations, terminals, files you open in the explorer, and browsers.
+Twelve tabs open in all. Past that, the one you have looked at least recently closes on its own.
 
 ### A refresh keeps you where you were
 
@@ -41,8 +42,9 @@ Refresh the browser and the tab you were on comes back still picked. If you were
 that file is in the column on the right; if you were on a terminal tab, that terminal tab; if you
 were on a conversation, that conversation. The marker on the tab strip sits on the same tab too.
 
-The left panel follows that tab. A file tab picks `Explorer`, a terminal tab picks `Terminal`,
-and a conversation tab picks `Sessions`. Only a project with no tabs open starts on `Sessions`.
+The left panel follows that tab. A file tab picks `Explorer`, a terminal tab picks `Terminal`, a
+browser tab picks `Browser`, and a conversation tab picks `Sessions`. Only a project with no
+tabs open starts on `Sessions`.
 
 `Source control` and `Schedules` are the two exceptions. Both put the same conversation column
 on the right that `Sessions` does, so nothing on the screen after a refresh tells the three
@@ -321,6 +323,51 @@ app does not write one in for you.
 `Pull` only pulls when it can attach straight on. It makes no merge commit and no rebase. When
 the state does not allow that, it shows you the reason `git` gave, verbatim, and stops there.
 From there it is a terminal tab and your own hands.
+
+## Browser
+
+Some tickets need a worker to look at a screen. QA opening the deployed site, a designer
+checking the page they just changed. The worker brings up a browser with no window for that, so
+nothing appears on your screen and there is no way to tell what page it is on.
+
+The `Browser` surface shows you. One row stands in the left panel per browser a worker is
+holding, and what the row carries is that ticket's eight-character hash. When no worker is
+holding one, the panel reads `No browsers running right now`. The list rereads itself every
+five seconds.
+
+Press a row and a tab opens on that hash. If the tab is already open, nothing new is made and
+you move to it. That makes four kinds of tab, and the limit of twelve is shared among all four.
+
+**Nothing in the app turns a browser on or off.** Opening it and handing it back are the work
+of the worker running that ticket. Close the tab and the browser keeps going. What closes is
+the one pipe carrying the picture. The row leaves the list on the left once the worker finishes
+and hands the browser back.
+
+If you had that tab open at the time, the screen turns into `The browser was released and the
+screen went dark`. The tab does not close itself, so close it by hand.
+
+### Touching it takes one approval
+
+A browser tab opens locked. Press on the screen and the press never reaches the worker's page.
+What comes up instead is a confirmation:
+
+> A session is working in this browser right now. Touching it may throw off that run's
+> measurements. Continue anyway?
+
+Cancel and it stays locked. Approve and your mouse and keyboard go through from then on.
+`Input unlocked` appears at the head of the screen with `Lock again` to its right - a marker
+put there so you do not forget it is open and keep clicking. Press `Lock again` and it locks
+straight away.
+
+The reason for asking is that you are touching the same page as the worker. There is only one
+page, so scrolling moves what the worker was looking at too. If the worker was measuring the
+screen, the numbers for that run are off. Press if you need to, but press knowing the ticket's
+result is shaken once by it.
+
+The approval is not kept. Close the tab or refresh and it starts locked again.
+
+If all you want is to watch a running ticket's screen, you never have to come this far. It
+unfolds on the ticket page itself (see [The screens](/docs/screens)).
 
 ## What is not here
 

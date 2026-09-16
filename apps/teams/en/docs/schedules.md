@@ -10,7 +10,7 @@ time.
 
 ## Making one
 
-Press the logo in the header and you are home. Five icons sit in a row at the top of the
+Press the logo in the header and you are home. Six icons sit in a row at the top of the
 left-hand panel, and the second from the left is `Schedules`. That row spells no names out, so
 hover over an icon if you are not sure which one it is: the name comes up as a tooltip. Press it
 and the lower half of the panel becomes the schedule list.
