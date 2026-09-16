@@ -2128,6 +2128,7 @@ export const ko: Record<string, string> = {
   "browser.wrap.confirm": "지금 이 브라우저로 세션이 일하는 중입니다. 만지면 그 회차의 실측이 튈 수 있습니다. 계속하시겠습니까?",
   "browser.wrap.unlocked": "입력 열림",
   "browser.wrap.lock": "다시 잠그기",
+  "browser.disconnected": "브라우저가 반납되어 화면이 끊겼습니다",
 
   // 소스 컨트롤(§11-3 결정 1-2-3-4, P366-8 · P366-9) — 체크아웃 목록·status·업스트림·커밋·
   // push·pull. `word.*` 넷은 `--porcelain=v2`의 아는 코드 넷의 낱말이고, 모르는 코드는 이
@@ -4432,6 +4433,7 @@ export const en: Record<string, string> = {
   "browser.wrap.confirm": "A session is working in this browser right now. Touching it may throw off that run's measurements. Continue anyway?",
   "browser.wrap.unlocked": "Input unlocked",
   "browser.wrap.lock": "Lock again",
+  "browser.disconnected": "The browser was released and the screen went dark",
 
   "home.scm.checkout": "Checkout",
   "home.scm.root": "Root",

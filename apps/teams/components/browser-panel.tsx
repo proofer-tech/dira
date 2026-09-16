@@ -59,7 +59,7 @@ export function BrowserMirror({ projectId, hash }: { projectId: string; hash: st
   };
 
   if (lost) {
-    return <div className="flex h-full flex-1 items-center justify-center text-sm text-muted-foreground">{t("terminal.disconnected")}</div>;
+    return <div className="flex h-full flex-1 items-center justify-center text-sm text-muted-foreground">{t("browser.disconnected")}</div>;
   }
 
   return (
