@@ -964,7 +964,7 @@ test("FLUENT_KO — tick.sh의 FLUENTKO 히어독 본문과 바이트로 같다 
   }
   const tickSh = readFileSync(path.join(repo.path, "tick.sh"), "utf8");
   const startMarker = "===== 한국어 문장 지침 (fluent-korean, MIT (c) 2026 snflkd) =====";
-  const endMarker = "===== 추가 끝 =====";
+  const endMarker = "===== 지침 끝 =====";
   const start = tickSh.indexOf(startMarker);
   const end = tickSh.indexOf(endMarker, start);
   assert.ok(start >= 0 && end >= 0, "tick.sh에서 FLUENTKO 마커를 못 찾았다");
