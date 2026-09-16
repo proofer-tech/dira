@@ -253,6 +253,28 @@ Both finds **leave worktree copies out by default.** With eight workers, the sam
 nine copies and the results come back nine times over. Turn on `Include worktree copies` and
 those copies come in too.
 
+### `⌘F` finds inside what you are looking at
+
+Press `⌘F` and a find bar comes up over the top of the right-hand column. A count attaches as
+you type, reading something like `1/3`. To the right of the count are two arrows and an X. The up
+arrow is previous and the down arrow is next, and pressing enter also takes you to the next one.
+Close it with `Esc` or the X and the highlighting goes away. That key is the default and you
+change it in the keymap under settings.
+
+What the bar sweeps depends on the surface.
+
+- **On the `Explorer` surface it is the one file you are looking at.** Other files in the tree do
+  not count. Characters you have not saved yet are found too. If you have not opened a single
+  file, all you get is `0/0`. Close the bar and the cursor goes back to the editor.
+- **On the `Terminal` surface it is the one terminal tab you picked.** It does not stop at the 32
+  rows on the screen. It searches the rows scrolling has carried above them as well, and it goes
+  back 5,000 rows. When the hit is a row off the screen, pressing the down arrow brings that row
+  into view. Close the bar and you carry straight on typing your command.
+- On the rest of the surfaces it sweeps the conversation thread still sitting on the right.
+
+Change the surface or change the terminal tab and the bar closes. The count from before does not
+carry over to the new place.
+
 ## Source control
 
 Pick `Source control` and the left panel fills with every working folder in this project. `Root`
