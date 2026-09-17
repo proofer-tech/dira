@@ -59335,8 +59335,8 @@ import 한 줄과 분기 한 줄이라 쪼갤 면이 없다.
 
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
-| P419-1 | `home-session.ts` - 온톨로지 블록을 싣고(`ask()`가 존재 판정) 메모리를 포인터로 바꾸고, `home-session.test.ts` 단언 둘을 새로 세운다 | developer | - | 발행 |
-| P419-2 | `archive-manager` PROFILE 입구 표를 실물과 맞춘다 - 큐 사본과 템플릿 두 벌, 바이트 안 늘림 | developer | - | 발행 |
+| P419-1 | `home-session.ts` - 온톨로지 블록을 싣고(`ask()`가 존재 판정) 메모리를 포인터로 바꾸고, `home-session.test.ts` 단언 둘을 새로 세운다 `de20c37c` | developer | - | 발행 |
+| P419-2 | `archive-manager` PROFILE 입구 표를 실물과 맞춘다 - 큐 사본과 템플릿 두 벌, 바이트 안 늘림 `01a49efe` | developer | - | 발행 |
 
 **두 장으로 가른 이유는 파일과 판정이 안 겹치기 때문이다.** P419-1은 `apps/teams/lib/` 두 파일이고
 판정이 `pnpm test`다. P419-2는 페르소나 글 두 벌이고 판정이 `grep`과 `wc -c`다. 한 장으로 묶으면
