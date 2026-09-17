@@ -482,7 +482,7 @@ test("93c106b3 — 프로토콜 화면의 조립 문구가 원문과 바이트 �
   );
   assert.strictEqual(
     `${t(l, "protocols.editor.inlinedHintPrefix")} tick.sh${t(l, "protocols.editor.inlinedHintSuffix")}`,
-    "이 파일은 tick.sh가 전문을 모든 세션 프롬프트 머리에 붙입니다 — 길이가 곧 매 세션의 비용입니다. 세부 규약은 같은 디렉터리의 다른 문서로 빼고 여기서 가리키면, 세션이 필요할 때만 읽습니다.",
+    "이 파일은 tick.sh가 전문을 모든 세션 프롬프트 맨 앞에 붙입니다 — 길이가 곧 매 세션의 비용입니다. 세부 규약은 같은 디렉터리의 다른 문서로 빼고 여기서 가리키면, 세션이 필요할 때만 읽습니다.",
   );
   assert.strictEqual(
     `${t(l, "protocols.rename.dialogTitlePrefix")} handoff.md`,
@@ -727,12 +727,12 @@ test("204be4da — 생성 다이얼로그(설명 · 이름 힌트)가 원문 그
   const personaDesc = `${t("ko", "persona.create.personaDescPrefix")} persona: ${t("ko", "persona.create.personaDescSuffix")}`;
   assert.strictEqual(
     personaDesc,
-    "티켓의 persona: 값이 곧 디렉터리 이름입니다. 프로필 본문은 세션 프롬프트 머리에 인라인됩니다.",
+    "티켓의 persona: 값이 곧 디렉터리 이름입니다. 프로필 본문은 세션 프롬프트 맨 앞에 인라인됩니다.",
   );
   const squadDesc = `${t("ko", "persona.create.squadDescPrefix")} squad: ${t("ko", "persona.create.squadDescSuffix")}`;
   assert.strictEqual(
     squadDesc,
-    "프로필이 있는 페르소나를 묶습니다. 스쿼드를 문 티켓은 members 파일의 첫 줄 한 사람에게만 가는데, 그 사람은 일을 직접 하지 않고 누가 할지 정해서 멤버 앞으로 새 티켓을 냅니다. 이 이름이 티켓의 squad: 값이 됩니다.",
+    "프로필이 있는 페르소나를 묶습니다. 스쿼드를 지정한 티켓은 members 파일의 첫 줄 한 사람에게만 가는데, 그 사람은 일을 직접 하지 않고 누가 할지 정해서 멤버 앞으로 새 티켓을 냅니다. 이 이름이 티켓의 squad: 값이 됩니다.",
   );
   const nameHint = `${t("ko", "persona.create.nameHintPrefix")} ${t("ko", "persona.create.nameHintPersonaFile")}${t("ko", "persona.create.nameHintSuffix")}`;
   assert.strictEqual(
@@ -1217,7 +1217,7 @@ test("03753945 — 티켓 상세 화면의 조립 문구가 원문과 바이트 
   // UnassignButton — 강제 중단 확인 문구(hash + suffix), wip 잠금 설명(볼드 낀 두 조각)
   assert.strictEqual(
     `high0002${t(l, "ticketDetail.forceStopDescSuffix")}`,
-    "high0002를 물고 있는 세션이 아직 살아 있습니다. 강제로 중단하면 그 세션이 죽고, 티켓은 답변 대기로 잠깁니다 — 답변칸에 답을 쓰기 전에는 아무 워커도 다시 가져가지 않습니다. 워크트리에 커밋하지 않은 변경은 지워지지 않고 그대로 남습니다.",
+    "high0002를 맡고 있는 세션이 아직 살아 있습니다. 강제로 중단하면 그 세션이 죽고, 티켓은 답변 대기로 잠깁니다 — 답변칸에 답을 쓰기 전에는 아무 워커도 다시 가져가지 않습니다. 워크트리에 커밋하지 않은 변경은 지워지지 않고 그대로 남습니다.",
   );
   assert.strictEqual(
     `${t(l, "ticketDetail.wipLockDescPrefix")} ${t(l, "ticketDetail.unassign")}${t(l, "ticketDetail.wipLockDescSuffix")}`,
@@ -1264,7 +1264,7 @@ test("03753945 — 티켓 상세 화면의 조립 문구가 원문과 바이트 
   );
   assert.strictEqual(
     `high0002 ${t(l, "ticketDetail.stemClashMiddle")} high0002.md${t(l, "ticketDetail.stemClashSuffix")}`,
-    "high0002 이름의 티켓이 이미 큐에 있습니다: high0002.md. 그 파일이 있는 한 답변 파일을 만들어도 엔진이 그쪽을 먼저 집어 요구사항이 영구 대기합니다. 그 파일을 확인해 정리하거나, PM에게 다른 awaiting 해시를 받으세요.",
+    "high0002 이름의 티켓이 이미 큐에 있습니다: high0002.md. 그 파일이 있는 한 답변 파일을 만들어도 엔진이 그쪽을 먼저 가져가 요구사항이 영구 대기합니다. 그 파일을 확인해 정리하거나, PM에게 다른 awaiting 해시를 받으세요.",
   );
   assert.strictEqual(
     `${t(l, "ticketDetail.answerFileExistsPrefix")} high0002.done.md${t(l, "ticketDetail.answerFileExistsSuffix")}`,

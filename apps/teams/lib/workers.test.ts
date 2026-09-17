@@ -1545,7 +1545,7 @@ test("화면이 말하는 폴링 간격 = `cronLine`이 진짜 넣는 간격 (�
     .concat("app/(app)/p/[project]/workers/actions.ts", "app/(site)/landing.tsx", "lib/i18n.ts")
     .map((f) => readFileSync(path.join(import.meta.dirname, "..", f), "utf8"))
     .join("\n");
-  const said = [...src.matchAll(/(\S+)\s*뒤부터 티켓을 물어갑니다/g)].map((m) => m[1]);
+  const said = [...src.matchAll(/(\S+)\s*뒤부터 티켓을 (?:가져갑니다|물어갑니다)/g)].map((m) => m[1]);
   assert.ok(said.length >= 4, `문구를 못 찾았다(${said.length}건) — 정규식이 화면과 갈렸다`);
   assert.deepStrictEqual([...new Set(said)], [`${sleep[1]}초`]);
 });
@@ -2996,7 +2996,7 @@ test("deleteWorker — running은 막는다(락과 세션이 붕 뜬다) · cron
   const other = "0 3 * * * /Users/x/bin/backup.sh\n";
   const c = withLiveCrontab(`${other}${cronLine({ path: w2 })}\n`);
   try {
-    await assert.rejects(deleteWorker(root, "w1"), /티켓을 물고 있습니다/);
+    await assert.rejects(deleteWorker(root, "w1"), /티켓을 맡고 있습니다/);
     await deleteWorker(root, "w2");
     assert.deepStrictEqual((await listWorkers(root)).map((w) => w.name), ["w1"]);
     assert.strictEqual(c.tab(), other); // 그 줄만 빠지고 남의 줄은 그대로
@@ -3250,7 +3250,7 @@ test("personaEngineHint — 미지정 힌트 (§비주얼 §23 §개정 · 요�
   // 전부 같은 실효 엔진(대입 없음도 `claude`로 같이 셈된다 — engineCell이 기본값을 편다)
   assert.strictEqual(
     personaEngineHint([null, null, engineArgv("claude").join(" ")]),
-    "미지정 — 티켓을 집는 워커의 엔진을 씁니다 (지금 전부 claude)",
+    "미지정 — 티켓을 가져가는 워커의 엔진을 씁니다 (지금 전부 claude)",
   );
 
   // 워커별로 다름 — 수 내림차순, 구분자 ` / `. 동률(1건씩)은 처음 나온 순서를 지킨다(안정 정렬).
@@ -3261,7 +3261,7 @@ test("personaEngineHint — 미지정 힌트 (§비주얼 §23 §개정 · 요�
       engineArgv("codex").join(" "),
       engineArgv("claude", "opus").join(" "),
     ]),
-    "미지정 — 티켓을 집는 워커의 엔진을 씁니다 (지금 claude ×2 / codex ×1 / claude · opus ×1)",
+    "미지정 — 티켓을 가져가는 워커의 엔진을 씁니다 (지금 claude ×2 / codex ×1 / claude · opus ×1)",
   );
 });
 

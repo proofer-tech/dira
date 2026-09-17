@@ -367,7 +367,7 @@ export const ko: Record<string, string> = {
   // 앞에 붙는 꼬리다(`<tree>가 …` — `bell.assigned.titlePrefix`와 같은 앞·뒤 조립 방식, 요구 `90b7d019`).
   "bell.gate.title": "커밋 안 된 변경이 디스패치를 막고 있습니다",
   "bell.gate.bodySuffix":
-    "가 깨끗해질 때까지 워커가 티켓을 아예 안 집습니다. 고장난 것은 없습니다 - 커밋하거나 되돌리면 다음 tick부터 저절로 재개됩니다.",
+    "가 깨끗해질 때까지 워커가 티켓을 아예 안 가져갑니다. 고장난 것은 없습니다 - 커밋하거나 되돌리면 다음 tick부터 저절로 재개됩니다.",
   "bell.gate.action": "그 트리에서 커밋하거나, 지울 것이면 지우세요.",
   // §0-10 §전부 잔해일 때만 버튼 하나가 뜬다 결정 5-6 (요구 `cd1673fd`). 나열이 전부 `잔해`일
   // 때만 뜨는 갈래 — `bell.gate.action`을 대체한다(결정 3).
@@ -378,7 +378,7 @@ export const ko: Record<string, string> = {
   "bell.gate.verdictDebris": "잔해",
   "bell.gate.verdictHandEdited": "사람편집",
   "bell.auth.title": "Claude 토큰이 없습니다",
-  "bell.auth.body": "워커가 티켓을 집어도 세션을 못 열고 그대로 끝냅니다.",
+  "bell.auth.body": "워커가 티켓을 가져가도 세션을 못 열고 그대로 끝냅니다.",
   // §0-10 ①의 두 번째 갈래(요구 `6455b43a`) — 등록은 있는데 eligible이 0일 때다.
   // `없습니다`가 아니다 — 지운 것은 파생 파일 하나뿐이고 등록 항목은 그대로다.
   "bell.auth.titleExhausted": "지금 쓸 수 있는 Claude 계정이 없습니다",
@@ -387,7 +387,7 @@ export const ko: Record<string, string> = {
   "bell.failures.titlePrefix": "세션이 열리자마자 죽는 워커",
   "bell.failures.titleSuffix": "개",
   "bell.failures.body": "티켓은 그때마다 대기로 정확히 돌아옵니다. 잃는 것은 없습니다.",
-  "bell.failures.footer": "사유에 적힌 시각이 지나면 저절로 다시 집습니다 — 고칠 일은 없습니다.",
+  "bell.failures.footer": "사유에 적힌 시각이 지나면 저절로 다시 가져갑니다 — 고칠 일은 없습니다.",
   "bell.assigned.titlePrefix": "아무도 집지 않는 티켓",
   "bell.assigned.titleSuffix": "건",
   "bell.assigned.body": "워커가 할당한 채 반환하지 않아서, 이 티켓들은 순서가 와도 넘어갑니다.",
@@ -404,7 +404,7 @@ export const ko: Record<string, string> = {
   "bell.backoff.body": "같은 자리에서 여러 번 죽어서, 이 티켓들은 잠시 쉬었다가 다시 디스패치됩니다. 잃는 것은 없습니다.",
   "bell.backoff.countPrefix": "죽은 횟수",
   "bell.backoff.countSuffix": "회",
-  "bell.backoff.retryPrefix": "다시 집는 시각",
+  "bell.backoff.retryPrefix": "다시 가져가는 시각",
   "bell.backoff.footer": "기다리면 저절로 다시 실행됩니다 — 고칠 일은 없습니다.",
   "bell.backoff.openTicket": "티켓 열기",
 
@@ -571,7 +571,7 @@ export const ko: Record<string, string> = {
   "resolve.badgeHint.outsideRoot": "프로젝트 루트 밖을 가리킵니다",
   "resolve.conflictBadge": "워커마다 다름",
   "resolve.conflictAlert.title": "워커 간 설정이 다릅니다",
-  "resolve.conflictAlert.body": "티켓이 어느 워커에 물리느냐에 따라 결과가 달라집니다.",
+  "resolve.conflictAlert.body": "티켓이 어느 워커에 배정되느냐에 따라 결과가 달라집니다.",
   "resolve.key.inProgress": "진행중 접미사",
   "resolve.key.done": "완료 접미사",
   "resolve.key.personas": "페르소나",
@@ -590,7 +590,7 @@ export const ko: Record<string, string> = {
   "project.moveNoRoom": "더 옮길 자리가 없습니다.",
 
   // `components/projects-ui.tsx` — 생성 폼·다이얼로그(§7 생성). en은 P338-12가 채운다.
-  "project.create.blurb": ".dira를 만들고 워커 하나를 crontab에 올립니다 — 30초 뒤부터 티켓을 물어갑니다.",
+  "project.create.blurb": ".dira를 만들고 워커 하나를 crontab에 올립니다 — 30초 뒤부터 티켓을 가져갑니다.",
   "project.create.submitPending": "만드는 중…",
   "project.create.submit": "프로젝트 만들기",
   "project.create.nameLabel": "이름",
@@ -684,7 +684,7 @@ export const ko: Record<string, string> = {
   "board.lane.dropToUnassign": "놓으면 할당을 풉니다",
   "board.lane.preemptTitle": "도는 세션 하나를 끊고 시작합니다",
   "board.lane.preemptDesc":
-    "그 티켓은 답변 대기로 잠기지 않고 열림으로 돌아가 다시 디스패치됩니다. 워크트리에 커밋하지 않은 변경은 지워지지 않고 그대로 남습니다. 비워진 워커가 방금 놓은 티켓을 집습니다.",
+    "그 티켓은 답변 대기로 잠기지 않고 열림으로 돌아가 다시 디스패치됩니다. 워크트리에 커밋하지 않은 변경은 지워지지 않고 그대로 남습니다. 비워진 워커가 방금 놓은 티켓을 가져갑니다.",
   "board.lane.preemptConfirm": "끊고 시작",
   // 피해자 없음 — 도는 `.wip`이 0건이거나 전부 유효 우선순위 5라 `--dryrun`이 빈 출력을 낸다.
   // 두 사유를 한 문장이 다 담는다(화면이 둘을 못 가른다).
@@ -774,7 +774,7 @@ export const ko: Record<string, string> = {
 
   // 프로토콜 화면(§0-16 §발행 §묶음 표 7, `93c106b3`) — protocols-ui.tsx · protocols/page.tsx ·
   // protocols/actions.ts · lib/protocols.ts. en은 `7a86fd5c`가 채운다.
-  "protocols.inline.tooltip": "tick.sh가 이 파일 전문을 모든 세션 프롬프트 머리에 붙입니다",
+  "protocols.inline.tooltip": "tick.sh가 이 파일 전문을 모든 세션 프롬프트 맨 앞에 붙입니다",
   // 배지 글자 — 뒤에 `{budgetLabel(...)}`가 공백 하나를 사이에 두고 붙는다. 표현식과 섞여
   // 실측 스크립트가 못 센다(`## Done when` 여섯째 줄, 아래 같은 사정 셋도 마찬가지).
   "protocols.inline.badge": "전원 프롬프트에 인라인 ·",
@@ -794,7 +794,7 @@ export const ko: Record<string, string> = {
   "protocols.charSuffix": "자",
   "protocols.editor.inlinedHintPrefix": "이 파일은",
   "protocols.editor.inlinedHintSuffix":
-    "가 전문을 모든 세션 프롬프트 머리에 붙입니다 — 길이가 곧 매 세션의 비용입니다. 세부 규약은 같은 디렉터리의 다른 문서로 빼고 여기서 가리키면, 세션이 필요할 때만 읽습니다.",
+    "가 전문을 모든 세션 프롬프트 맨 앞에 붙입니다 — 길이가 곧 매 세션의 비용입니다. 세부 규약은 같은 디렉터리의 다른 문서로 빼고 여기서 가리키면, 세션이 필요할 때만 읽습니다.",
   "protocols.editor.saveFailTitle": "저장하지 못했습니다",
   "protocols.editor.saveFailedDefaultMessage": "저장하지 못했습니다.",
   "protocols.editor.saveFixing": "저장 오류를 고치는 중",
@@ -953,9 +953,9 @@ export const ko: Record<string, string> = {
   "persona.create.squadTitle": "스쿼드 생성",
   "persona.create.personaDescPrefix": "티켓의",
   "persona.create.personaDescSuffix":
-    "값이 곧 디렉터리 이름입니다. 프로필 본문은 세션 프롬프트 머리에 인라인됩니다.",
+    "값이 곧 디렉터리 이름입니다. 프로필 본문은 세션 프롬프트 맨 앞에 인라인됩니다.",
   "persona.create.squadDescPrefix":
-    "프로필이 있는 페르소나를 묶습니다. 스쿼드를 문 티켓은 members 파일의 첫 줄 한 사람에게만 가는데, 그 사람은 일을 직접 하지 않고 누가 할지 정해서 멤버 앞으로 새 티켓을 냅니다. 이 이름이 티켓의",
+    "프로필이 있는 페르소나를 묶습니다. 스쿼드를 지정한 티켓은 members 파일의 첫 줄 한 사람에게만 가는데, 그 사람은 일을 직접 하지 않고 누가 할지 정해서 멤버 앞으로 새 티켓을 냅니다. 이 이름이 티켓의",
   "persona.create.squadDescSuffix": "값이 됩니다.",
   "persona.create.kindLabel": "종류",
   "persona.create.nameLabel": "이름",
@@ -1180,7 +1180,7 @@ export const ko: Record<string, string> = {
   "ticketDetail.unassigning": "할당 해제 중…",
   "ticketDetail.forceStopTitle": "도는 세션을 끊습니다",
   "ticketDetail.forceStopDescSuffix":
-    "를 물고 있는 세션이 아직 살아 있습니다. 강제로 중단하면 그 세션이 죽고, 티켓은 답변 대기로 잠깁니다 — 답변칸에 답을 쓰기 전에는 아무 워커도 다시 가져가지 않습니다. 워크트리에 커밋하지 않은 변경은 지워지지 않고 그대로 남습니다.",
+    "를 맡고 있는 세션이 아직 살아 있습니다. 강제로 중단하면 그 세션이 죽고, 티켓은 답변 대기로 잠깁니다 — 답변칸에 답을 쓰기 전에는 아무 워커도 다시 가져가지 않습니다. 워크트리에 커밋하지 않은 변경은 지워지지 않고 그대로 남습니다.",
   "ticketDetail.forceStop": "강제 중단",
   "ticketDetail.unassignCallSuffix": "를 호출합니다",
   "ticketDetail.noWorkerScript": "이 프로젝트에 워커가 없습니다 — 할당 해제를 호출할 스크립트가 없습니다.",
@@ -1301,7 +1301,7 @@ export const ko: Record<string, string> = {
     ". 경로 구분자·제어문자가 없는 이름이어야 합니다 — 요구사항의 frontmatter를 고치세요.",
   "ticketDetail.stemClashMiddle": "이름의 티켓이 이미 큐에 있습니다:",
   "ticketDetail.stemClashSuffix":
-    ". 그 파일이 있는 한 답변 파일을 만들어도 엔진이 그쪽을 먼저 집어 요구사항이 영구 대기합니다. 그 파일을 확인해 정리하거나, PM에게 다른 awaiting 해시를 받으세요.",
+    ". 그 파일이 있는 한 답변 파일을 만들어도 엔진이 그쪽을 먼저 가져가 요구사항이 영구 대기합니다. 그 파일을 확인해 정리하거나, PM에게 다른 awaiting 해시를 받으세요.",
   "ticketDetail.answerRequired": "답변 내용을 입력하세요.",
   "ticketDetail.answerFileExistsPrefix": "답변 파일이 이미 있습니다:",
   "ticketDetail.answerFileExistsSuffix":
@@ -1398,7 +1398,7 @@ export const ko: Record<string, string> = {
   // 엔진에 로케일이 없어 늘 한국어라, `squadBlockBytes`(`lib/budgets.ts`)가 리터럴로 직접 센다.
   "urls.feature.interject": "참견",
   "urls.feature.stream": "세션 스트림",
-  "workers.engineHint.prefix": "미지정 — 티켓을 집는 워커의 엔진을 씁니다",
+  "workers.engineHint.prefix": "미지정 — 티켓을 가져가는 워커의 엔진을 씁니다",
   "workers.engineHint.allPrefix": "지금 전부 ",
   "workers.engineHint.nowPrefix": "지금 ",
 
@@ -1473,7 +1473,7 @@ export const ko: Record<string, string> = {
   "workers.ontology.mismatchMid": "에 쓴 뒤 값을 다시 읽으면 달라집니다. 어느 파일도 쓰지 않았습니다.",
 
   "workers.manage.noSuchWorkerPrefix": "없는 워커입니다:",
-  "workers.manage.busyMid1": "이(가) 지금 티켓을 물고 있습니다(pid ",
+  "workers.manage.busyMid1": "이(가) 지금 티켓을 맡고 있습니다(pid ",
   "workers.manage.busySuffix": "). 끝난 뒤 삭제하세요.",
   "workers.manage.cronRemoveFailPrefix": "crontab에서",
   "workers.manage.cronRemoveFailMid": "줄을 빼지 못했습니다:",
@@ -1543,7 +1543,7 @@ export const ko: Record<string, string> = {
     "워커 하나가 크론잡 하나고, 한 번 실행에 티켓 1건을 끝냅니다. 동시성 = 워커 개수입니다.",
   "workers.create.templateCopiedMiddle": "을 복사해",
   "workers.create.templateCopiedSuffix": "를 만들고 755로 두었습니다. 내용을 확인하고 필요하면 손으로 고치세요.",
-  "workers.create.cronRegisteredMessage": "crontab에 등록했습니다 — 30초 뒤부터 티켓을 물어갑니다.",
+  "workers.create.cronRegisteredMessage": "crontab에 등록했습니다 — 30초 뒤부터 티켓을 가져갑니다.",
   "workers.create.worktreeSkippedPrefix": "워크트리는 만들지 않았습니다 —",
   "workers.create.worktreeSkippedSuffix": "워커 파일과 crontab 등록은 그대로입니다.",
   "workers.create.worktreeDoneLabel": "작업 디렉터리",
@@ -1569,9 +1569,9 @@ export const ko: Record<string, string> = {
     "crontab에서 이 워커 줄을 뺍니다. 파일은 지우지 않습니다 — 다시 등록하면 그대로 돌아옵니다.",
   "workers.row.stopFailedTitle": "crontab에서 빼지 못했습니다",
   "workers.row.runInShellHint": "이 명령을 셸에서 실행하세요",
-  "workers.row.stopRunningAlertTitle": "지금 티켓을 물고 있습니다",
+  "workers.row.stopRunningAlertTitle": "지금 티켓을 맡고 있습니다",
   "workers.row.stopRunningAlertBody":
-    "진행중인 세션은 죽이지 않습니다. crontab에서 빼도 지금 물고 있는 티켓이 끝난 뒤에 멈춥니다.",
+    "진행중인 세션은 죽이지 않습니다. crontab에서 빼도 지금 맡고 있는 티켓이 끝난 뒤에 멈춥니다.",
   "workers.row.stoppingPending": "중단하는 중…",
   "workers.row.registerDialogTitlePrefix": "워커 재등록 —",
   "workers.row.registerDialogDescription":
@@ -1579,9 +1579,9 @@ export const ko: Record<string, string> = {
   "workers.row.registeringPending": "등록하는 중…",
   "workers.row.deleteDialogTitlePrefix": "워커 삭제 —",
   "workers.row.deleteBlockedTitle": "지금은 삭제할 수 없습니다",
-  "workers.row.deleteBlockedPidPrefix": "이 워커가 티켓을 물고 있습니다(pid",
+  "workers.row.deleteBlockedPidPrefix": "이 워커가 티켓을 맡고 있습니다(pid",
   "workers.row.deleteBlockedPidSuffix":
-    "). 지금 지우면 락과 실행 중인 세션이 정리되지 않고 남습니다. 먼저 중단하고, 물고 있는 티켓이 끝난 뒤 지우세요.",
+    "). 지금 지우면 락과 실행 중인 세션이 정리되지 않고 남습니다. 먼저 중단하고, 맡고 있는 티켓이 끝난 뒤 지우세요.",
   "workers.row.deleteBodyText": "파일을 지웁니다. 이 프로젝트의 티켓은 삭제되지 않습니다.",
   "workers.row.deleteCronPrefix": "crontab 줄도 같이 뺍니다 —",
   "workers.row.deleteCronBold": "crontab 먼저, 파일 나중",
@@ -1642,7 +1642,7 @@ export const ko: Record<string, string> = {
   "workers.settingsDialog.readonlyDescription": "이 값들은 이 화면에서 고치지 않습니다 — 워커 파일을 손으로 편집합니다.",
   "workers.settingsDialog.divergentTitle": "워커마다 값이 다릅니다",
   "workers.settingsDialog.divergentBody":
-    "엔진은 티켓을 디스패치한 워커의 값을 씁니다 — 같은 티켓이 어느 워커에 물리느냐로 결과가 달라집니다.",
+    "엔진은 티켓을 디스패치한 워커의 값을 씁니다 — 같은 티켓이 어느 워커에 배정되느냐로 결과가 달라집니다.",
   "workers.settingsDialog.reapDescription": "세션이 죽었는데 진행중으로 남은 티켓을 백로그로 되돌립니다.",
   "workers.settingsDialog.reapFailedTitleSuffix": ".sh reap 실패",
 
@@ -1692,7 +1692,7 @@ export const ko: Record<string, string> = {
   "workers.contextRow.copyDescMid3": "개로 바꿉니다.",
   "workers.contextRow.copyDescSuffix": "의 기존 항목은 남지 않습니다.",
   "workers.contextRow.copyBodySuffix":
-    "는 펴지 않고 문자열째로 옮깁니다 — 받는 워커는 자기 작업 디렉터리를 가리킵니다. 컨텍스트가 워커마다 다르면 같은 티켓이 어느 워커에 물리느냐로 결과가 달라집니다.",
+    "는 펴지 않고 문자열째로 옮깁니다 — 받는 워커는 자기 작업 디렉터리를 가리킵니다. 컨텍스트가 워커마다 다르면 같은 티켓이 어느 워커에 배정되느냐로 결과가 달라집니다.",
   "workers.contextRow.copyFailedTitle": "복사하지 못했습니다",
   "workers.contextRow.copyingPending": "복사 중…",
   "workers.contextRow.copyButton": "복사",
@@ -1734,7 +1734,7 @@ export const ko: Record<string, string> = {
   // §묶음 표 행 9의 잔여). `en`은 후속 티켓이 채운다.
   "workers.firstWorkerCmd.repoPlaceholder": "dira 레포",
   "workers.worktreeCmds.lsHintSuffix": "로 시작해야 한다",
-  "workers.table.holdingHeader": "물고 있는 티켓",
+  "workers.table.holdingHeader": "맡고 있는 티켓",
   "workers.table.contextHeader": "컨텍스트",
   "workers.table.activityHeader": "마지막 활동",
   "workers.table.tokensHeader": "토큰(5시간)",
@@ -1751,7 +1751,7 @@ export const ko: Record<string, string> = {
   // `resolve.unknownProjectPrefix`를 그대로 재사용한다(같은 거절을 액션 파일마다 각자 말한다).
   "workers.stop.removedMessage": "crontab에서 뺐습니다 — 이 워커는 더 이상 새 티켓을 물지 않습니다.",
   "workers.stop.noopMessage": "이미 crontab에 없었습니다 — 바꾼 것이 없습니다.",
-  "workers.register.addedMessage": "crontab에 넣었습니다 — 30초 뒤부터 티켓을 물어갑니다.",
+  "workers.register.addedMessage": "crontab에 넣었습니다 — 30초 뒤부터 티켓을 가져갑니다.",
   "workers.register.noopMessage": "이미 crontab에 있었습니다 — 바꾼 것이 없습니다.",
   "workers.reap.noStaleOutput": "수거할 스테일 티켓이 없습니다.",
 
@@ -2598,7 +2598,7 @@ export const ko: Record<string, string> = {
  *  | 한도 · 사용률 · 리셋 · 소모 속도 | limit · used · reset · tokens/min | status bar의 넷. 피드백 `fe25d40e`가 *사전 밖에서 지어낸 낱말*로 잡은 그 자리라, 여기가 정본이다 |
  *  | 열림(전환기의 티켓 수) | open | 파일이 열려 있는 티켓 전부라 배지 `Open`보다 넓지만, 엔진이 그 파일 상태를 부르는 이름이 `open` 하나다 — 셋째 낱말을 만들지 않는다 |
  *  | 프로토콜 파일 · 코어 프로토콜 | protocol file · core protocol | `7a86fd5c`(프로토콜 묶음)가 더한 줄부터 아래 |
- *  | 인라인(프롬프트에) | inline(d) | tick.sh가 전문을 프롬프트 머리에 붙이는 그 동작. `embed`로 풀지 않는다 — 스펙·매뉴얼이 쓰는 낱말이 이것 하나다 |
+ *  | 인라인(프롬프트에) | inline(d) | tick.sh가 전문을 프롬프트 맨 앞에 붙이는 그 동작. `embed`로 풀지 않는다 — 스펙·매뉴얼이 쓰는 낱말이 이것 하나다 |
  *  | vendored | vendored | 코어 사본이 큐 안에 있는 상태. 한국어 화면도 이 낱말을 그대로 쓴다(결정 8-d) |
  *  | 되돌리기(편집기) | Revert | 저장 안 한 편집을 버리는 자리다. **`기본값으로 되돌리기`(Reset to default)와 다른 낱말이다** — 돌아가는 곳이 기본값이 아니라 마지막 저장본이다 |
  *  | 이름변경 · 기본값 가정 | Rename · assumed default | 뒤엣것은 경로 옆 꼬리라 소문자다(`settings.tokens.addedSuffix`가 선 그 벌) |
