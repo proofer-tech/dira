@@ -1409,6 +1409,9 @@ export async function runClaudeAt(
   const env = { ...process.env };
   const tok = await readFile(tokenPath(), "utf8").catch(() => null);
   if (tok?.trim()) env.CLAUDE_CODE_OAUTH_TOKEN = tok.replace(/[\r\n]/g, "");
+  // §11-13 결정 1 — 브라우저 슬롯의 owner 판정 셋 중 홈 세션을 가르는 유일한 값.
+  // browse.sh가 이 한 줄만 보고 owner를 home으로 적는다.
+  env.DIRA_SESSION_KIND = "home";
 
   return await new Promise((resolve) => {
     const child = spawn(bin, args, { cwd, env });

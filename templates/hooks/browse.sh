@@ -94,9 +94,53 @@ if [ -z "$_port" ]; then
   exit 1
 fi
 
+# 슬롯 디렉터리를 찾아 owner - busy를 적는다(§11-13 결정 1 - 2). 슬롯을 만드는 것은
+# 종전대로 browser.sh다 - 여기서는 만들어진 슬롯에 한 줄씩 더할 뿐이다.
+_local="${TICKET_LOCAL:-$HOME/.config/dira}"
+_pool="$_local/browser-pool"
+
+_find_slot() {
+  local slot
+  for slot in "$_pool"/*/; do
+    [ -d "$slot" ] || continue
+    if [ "$(cat "${slot}hash" 2>/dev/null)" = "$1" ]; then
+      echo "${slot%/}"
+      return 0
+    fi
+  done
+  return 1
+}
+
+# 판정 순서(결정 1): (1) DIRA_SESSION_KIND=home (2) cwd가 <큐 루트>/worktrees/<워커> 밑
+# (3) 그 밖은 external. <큐 루트>는 이 스크립트가 사는 디렉터리(_root)다 - .dira 사본이든
+# templates/hooks 원본이든, 워커 세션은 언제나 <큐 루트>/worktrees/<워커>에서 돈다.
+_owner_value() {
+  if [ "${DIRA_SESSION_KIND:-}" = "home" ]; then
+    echo "home"
+    return
+  fi
+  case "$PWD" in
+    "$_root"/worktrees/*)
+      local rest="${PWD#"$_root"/worktrees/}"
+      echo "worker:${rest%%/*}"
+      return
+      ;;
+  esac
+  echo "external"
+}
+
+_slot="$(_find_slot "$_hash")" || _slot=""
+if [ -n "$_slot" ]; then
+  _owner_value > "$_slot/owner"
+  echo $$ > "$_slot/busy"
+  trap 'rm -f "$_slot/busy"' EXIT
+fi
+
 export DIRA_BROWSE_PORT="$_port"
 export DIRA_BROWSE_HASH="$_hash"
-exec python3 - "$_cmd" "$@" <<'PYEOF'
+# exec을 안 쓴다 - exec은 이 프로세스 이미지를 python3로 갈아치워 위에서 건 trap(busy 정리)이
+# 등록된 채로 통째로 사라진다. 자식으로 돌리고 종료 코드를 그대로 물려준다.
+python3 - "$_cmd" "$@" <<'PYEOF'
 import base64
 import json
 import os
@@ -1005,3 +1049,4 @@ def main():
 
 main()
 PYEOF
+exit $?

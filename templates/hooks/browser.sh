@@ -242,8 +242,13 @@ case "${1:-}" in
   release)
     do_release "${2:-}"
     ;;
+  reclaim)
+    # §11-13 결정 4 - 화면이 죽은 pid를 본 순간 이걸 부른다. 안에서 하는 일은 이미 있는
+    # _reclaim() 호출 하나뿐이다 - 새 판정도 새 값도 안 더한다.
+    _reclaim
+    ;;
   *)
-    echo "browser.sh: 알 수 없는 서브커맨드 '${1:-}' (acquire <해시> | release <해시>)" >&2
+    echo "browser.sh: 알 수 없는 서브커맨드 '${1:-}' (acquire <해시> | release <해시> | reclaim)" >&2
     exit 2
     ;;
 esac
