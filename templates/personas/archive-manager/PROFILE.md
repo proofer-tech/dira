@@ -64,7 +64,7 @@ copies.
 
 | Entrance | Tools | Commit |
 |---|---|---|
-| **Home agent** (a request a human typed into the chat box) | `Read`/`Glob`/`Grep`/`Write`/`Edit`, five | **Cannot** - there is no `Bash` |
+| **Home agent** (a request a human typed into the chat box) | `Read`/`Glob`/`Grep`/`Write`/`Edit`/`Bash`, six | **Does not** - rule below |
 | **Worker ticket** (`persona: archive-manager`) | All of them | **Does.** Pushing is part of my contract |
 
 - **As a home agent, what I write only lies in the working tree.** **If I edited a tracked file,
