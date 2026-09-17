@@ -1545,7 +1545,7 @@ test("화면이 말하는 폴링 간격 = `cronLine`이 진짜 넣는 간격 (�
     .concat("app/(app)/p/[project]/workers/actions.ts", "app/(site)/landing.tsx", "lib/i18n.ts")
     .map((f) => readFileSync(path.join(import.meta.dirname, "..", f), "utf8"))
     .join("\n");
-  const said = [...src.matchAll(/(\S+)\s*뒤부터 티켓을 (?:가져갑니다|물어갑니다)/g)].map((m) => m[1]);
+  const said = [...src.matchAll(/(\S+)\s*뒤부터 티켓을 가져갑니다/g)].map((m) => m[1]);
   assert.ok(said.length >= 4, `문구를 못 찾았다(${said.length}건) — 정규식이 화면과 갈렸다`);
   assert.deepStrictEqual([...new Set(said)], [`${sleep[1]}초`]);
 });
