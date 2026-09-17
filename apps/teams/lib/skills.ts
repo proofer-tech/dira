@@ -536,12 +536,13 @@ export const readPersonaSkills = async (dir: string, name: string): Promise<Skil
  *  **이미 든 것의 순서를 지키고 새로 고른 것을 뒤에 붙인다.** 체크 순서로 재배열하면 아무것도
  *  안 고른 저장에서도 파일의 줄이 뒤섞인다.
  *
- *  설명은 **설치본이 이긴다**(§5-1 — `SKILL.md`의 `description`을 그대로 옮긴다). 후보에 없는
- *  스킬만 파일에 적힌 설명을 들고 남는다(§5-1 — 지우지 않는다). 어느 쪽에도 없는 이름은 뺀다:
- *  설명을 지어낼 자리가 없고, 그 이름이 어디서 왔는지 아는 것이 화면뿐이라면 참이 아니다. */
+ *  설명은 **파일이 이긴다**(§5-1 결정 2 — 사람이 줄여 놓은 한국어 한 줄을 지키고, 저장을 다시
+ *  눌러도 설치본 원문으로 되살리지 않는다). 파일에 없는 이름만 설치본의 설명을 받는다(§5-1 —
+ *  새로 고른 스킬은 그것 말고 설명을 얻을 데가 없다). 어느 쪽에도 없는 이름은 뺀다: 설명을
+ *  지어낼 자리가 없고, 그 이름이 어디서 왔는지 아는 것이 화면뿐이라면 참이 아니다. */
 export function pickedSkills(picked: string[], current: Skill[], installed: Skill[]): Skill[] {
-  const byName = new Map(current.map((s) => [s.name, s]));
-  for (const s of installed) byName.set(s.name, s);
+  const byName = new Map(installed.map((s) => [s.name, s]));
+  for (const s of current) byName.set(s.name, s);
   const order = [
     ...current.filter((s) => picked.includes(s.name)).map((s) => s.name),
     ...picked.filter((n) => !current.some((s) => s.name === n)),

@@ -676,16 +676,21 @@ test("고른 이름 → 저장할 목록 (pickedSkills)", () => {
     { name: "added", description: "새로 고른다" },
   ];
 
-  // 순서: 이미 든 것이 먼저(파일 순서 그대로) · 새로 고른 것이 뒤. 설명은 설치본이 이긴다
+  // 순서: 이미 든 것이 먼저(파일 순서 그대로) · 새로 고른 것이 뒤. 설명은 파일이 이긴다
   assert.deepEqual(pickedSkills(["added", "keep", "orphan"], current, installed), [
-    { name: "keep", description: "SKILL.md의 새 설명" },
+    { name: "keep", description: "파일에 적힌 설명" }, // 설치본 원문으로 안 바뀐다
     { name: "orphan", description: "후보에 없다 — 다른 머신에서 골랐다" }, // 파일의 설명이 남는다
-    { name: "added", description: "새로 고른다" },
+    { name: "added", description: "새로 고른다" }, // 파일에 없던 이름만 설치본의 설명을 받는다
   ]);
 
   // 어느 쪽에도 없는 이름은 뺀다 — 설명을 지어낼 자리가 없다
   assert.deepEqual(pickedSkills(["없는스킬"], current, installed), []);
   assert.deepEqual(pickedSkills([], current, installed), []); // 0개 = 파일이 사라진다
+
+  // 파일에 이미 있는 이름을 다시 골라도 사람이 줄인 한국어 설명이 한 글자도 안 바뀐다(§5-1 결정 2)
+  assert.deepEqual(pickedSkills(["keep"], current, installed), [
+    { name: "keep", description: "파일에 적힌 설명" },
+  ]);
 });
 
 // ── 비활성 스킬 (`skills-off.md` · DESIGN.md §5-1 §n:m 배정과 비활성 · §비주얼 §25 ⑥) ────────
