@@ -60,7 +60,7 @@ export const ko: Record<string, string> = {
   "settings.tree.workers": "워커",
 
   "settings.claude.descriptionMulti":
-    "워커가 Claude에 붙을 때 쓰는 장기 토큰 목록입니다. 이 컴퓨터에 하나뿐이고, 계정 여러 개를 두면 리밋을 만난 쪽 대신 다음 계정으로 돌아갑니다.",
+    "워커가 Claude에 붙을 때 쓰는 장기 토큰 목록입니다. 이 컴퓨터에 하나뿐이고, 계정 여러 개를 두면 리밋을 만난 쪽 대신 다음 계정으로 넘어갑니다.",
   "settings.claude.descriptionSingle": "워커가 Claude에 붙을 때 쓰는 장기 토큰입니다. 이 컴퓨터에 하나뿐입니다.",
   "settings.claude.cliMissing": "claude CLI를 찾지 못했습니다 — 워커가 세션을 띄우지 못합니다",
   "settings.claude.authBrowserLabel": "브라우저로 인증",
@@ -109,8 +109,8 @@ export const ko: Record<string, string> = {
   // §0-23 §화면 — agy 줄은 못 하는 이유까지 알려 준다. 키체인 항목이 `svce=gemini` 하나뿐이고
   // 갈아 끼우는 레버가 `HOME`밖에 없어 이번 회차에 목록도 버튼도 안 세웠다(그 절 §agy).
   "settings.other.agyCred":
-    "인증이 macOS 로그인 키체인에 있습니다 — 항목이 하나뿐이라 계정을 여러 장 못 씁니다. 갈아 끼우려면 워커의 HOME을 통째로 옮겨야 합니다.",
-  "settings.other.codexMissing": "발견 못 함 — OPENAI_API_KEY로 도는 워커는 이 판정 밖입니다",
+    "인증이 macOS 로그인 키체인에 있습니다 — 항목이 하나뿐이라 계정을 여러 개 못 씁니다. 바꾸려면 워커의 HOME을 통째로 옮겨야 합니다.",
+  "settings.other.codexMissing": "발견 못 함 — OPENAI_API_KEY로 실행되는 워커는 이 판정 밖입니다",
   "settings.other.grokMissing": "발견 못 함 — 터미널에서 grok 로그인이 필요합니다",
   "settings.other.notInstalled": "설치되지 않았습니다",
 
@@ -130,7 +130,7 @@ export const ko: Record<string, string> = {
   "settings.keymap.capturePrompt": "키를 누르세요",
   "settings.keymap.captureRejectedSuffix": "다른 키를 누르세요 ·",
   "settings.keymap.captureCancelSuffix": "취소",
-  "settings.keymap.captureHint": "누른 조합이 그대로 지정됩니다 · 다른 단축키는 그동안 듣지 않습니다 ·",
+  "settings.keymap.captureHint": "누른 조합이 그대로 지정됩니다 · 다른 단축키는 그동안 작동하지 않습니다 ·",
   "settings.keymap.resetTooltipPrefix": "기본값",
   "settings.keymap.resetTooltipSuffix": "(으)로 되돌립니다",
   // 되돌리기 버튼의 aria-label(`<이름> 기본값으로 되돌리기`) — 위 툴팁 문구와는 다른 문장이다.
@@ -160,7 +160,7 @@ export const ko: Record<string, string> = {
   "settings.keymap.reject.unknownAction": "모르는 액션입니다:",
 
   "settings.stats.description":
-    "몇 벌이 도는지와 어떤 화면 동작이 있었는지만 익명으로 보냅니다. 경로·프로젝트 이름·티켓 내용은 보내지 않습니다.",
+    "몇 벌이 실행되는지와 어떤 화면 동작이 있었는지만 익명으로 보냅니다. 경로·프로젝트 이름·티켓 내용은 보내지 않습니다.",
   "settings.stats.notConfigured": "보내지 않습니다 — 이 빌드에 설정이 없습니다",
   "settings.stats.sending": "보내는 중입니다",
   "settings.stats.disabled": "보내지 않습니다 — 껐습니다",
@@ -169,7 +169,7 @@ export const ko: Record<string, string> = {
 
   // §0-23 §화면 — 스위치가 이제 세 엔진을 가른다. 종전 문장은 claude 계정을 전제했다.
   "settings.multiplay.description":
-    "다중계정 허용은 계정을 여러 장 등록할 수 있게 하고, 다중계정 동시사용은 그 계정들을 워커마다 나눠 동시에 씁니다. claude · codex · grok 세 엔진에 각각 적용됩니다 — agy는 계정이 하나뿐이라 빠집니다.",
+    "다중계정 허용은 계정을 여러 개 등록할 수 있게 하고, 다중계정 동시사용은 그 계정들을 워커마다 나눠 동시에 씁니다. claude · codex · grok 세 엔진에 각각 적용됩니다 — agy는 계정이 하나뿐이라 빠집니다.",
   "settings.multitoken.enabled": "허용되어 있습니다",
   "settings.multitoken.disabled": "허용되지 않았습니다",
   "settings.multitoken.turnOff": "끄기",
@@ -209,7 +209,7 @@ export const ko: Record<string, string> = {
   "settings.workers.sessionCapLimitLabel": "상한",
   "settings.workers.sessionCapLimitNone": "없음",
   "settings.workers.sessionCapPopoverLabel": "동시 세션 상한",
-  "settings.workers.sessionCapPopoverHint": "비우면 상한이 없어집니다 — 이 컴퓨터에서 한꺼번에 도는 claude 세션 수를 막는 값입니다.",
+  "settings.workers.sessionCapPopoverHint": "비우면 상한이 없어집니다 — 이 컴퓨터에서 한꺼번에 실행되는 claude 세션 수를 제한하는 값입니다.",
   "settings.workers.sessionCapSaveFailedTitle": "상한을 저장하지 못했습니다",
   "settings.workers.sessionCapWarnUnreadable": "session-limit을 읽지 못했습니다 — 상한 없음으로 읽습니다.",
   "settings.workers.sessionCapTotalPrefix": "머신 전체 ",
@@ -361,7 +361,7 @@ export const ko: Record<string, string> = {
   // `middle`/`after` 넷에서 갈렸다. `kind`는 나열 행으로 내려갔다).
   "bell.resume.titlePrefix": "큐가 멈춰 있던 구간",
   "bell.resume.titleSuffix": "건",
-  "bell.resume.body": "잃은 것은 없습니다 — 이미 다시 돌고 있습니다.",
+  "bell.resume.body": "잃은 것은 없습니다 — 이미 다시 실행되고 있습니다.",
   "bell.resume.noAction": "고칠 일은 없습니다.",
   // 종 ⑧(§4-14 §표식 파일 · §0-10 ⑧). 본문은 게이트가 표식 첫 줄에 적은 받는 트리 절대경로
   // 앞에 붙는 꼬리다(`<tree>가 …` — `bell.assigned.titlePrefix`와 같은 앞·뒤 조립 방식, 요구 `90b7d019`).
@@ -390,7 +390,7 @@ export const ko: Record<string, string> = {
   "bell.failures.footer": "사유에 적힌 시각이 지나면 저절로 다시 집습니다 — 고칠 일은 없습니다.",
   "bell.assigned.titlePrefix": "아무도 집지 않는 티켓",
   "bell.assigned.titleSuffix": "건",
-  "bell.assigned.body": "워커가 잡아 둔 채 놓지 않아서, 이 티켓들은 순서가 와도 넘어갑니다.",
+  "bell.assigned.body": "워커가 할당한 채 반환하지 않아서, 이 티켓들은 순서가 와도 넘어갑니다.",
   "bell.awaiting.titlePrefix": "답변을 기다리는 티켓",
   "bell.awaiting.titleSuffix": "건",
   "bell.awaiting.body": "사람이 답을 써야 이 티켓들이 다시 큐에 뜹니다. 고장난 것은 없습니다.",
@@ -405,7 +405,7 @@ export const ko: Record<string, string> = {
   "bell.backoff.countPrefix": "죽은 횟수",
   "bell.backoff.countSuffix": "회",
   "bell.backoff.retryPrefix": "다시 집는 시각",
-  "bell.backoff.footer": "기다리면 저절로 다시 돕니다 — 고칠 일은 없습니다.",
+  "bell.backoff.footer": "기다리면 저절로 다시 실행됩니다 — 고칠 일은 없습니다.",
   "bell.backoff.openTicket": "티켓 열기",
 
   // 웹훅(§0-10 §답변 대기가 앱 밖으로 나간다) — 본문 `text` 칸 하나. 담는 값은 세 자리뿐이라
@@ -528,7 +528,7 @@ export const ko: Record<string, string> = {
   "scaffold.engineNotFoundPrefix": "엔진 레포를 찾지 못했습니다 —",
   "scaffold.engineNotFoundMid": "에 tick.sh가 없습니다.",
   "scaffold.engineNotFoundEnvHint": "DIRA_ENGINE이 가리키는 자리입니다.",
-  "scaffold.engineNotFoundDefaultHint": "GUI는 <엔진 레포>/apps/teams/에서 돌아야 합니다.",
+  "scaffold.engineNotFoundDefaultHint": "GUI는 <엔진 레포>/apps/teams/에서 실행돼야 합니다.",
   "scaffold.notAbsolutePrefix": "절대경로여야 합니다:",
   "scaffold.emptyPlaceholder": "(비어 있음)",
   "scaffold.alreadyQueueSuffix": "는 이미 dira 프로젝트입니다. 만들지 않고 등록하세요.",
@@ -581,7 +581,7 @@ export const ko: Record<string, string> = {
   "resolve.workers.countSuffix": "개",
   // `projects-ui.tsx`의 목록 표 자원 줄(워커 0개)도 같은 문구를 쓴다(코드 주석 — 같은 사실을
   // 두 자리에서 다른 말로 하지 않는다).
-  "resolve.workers.empty": "없음 — 이 프로젝트는 돌지 않습니다",
+  "resolve.workers.empty": "없음 — 이 프로젝트는 실행되지 않습니다",
   "resolve.unknownProjectPrefix": "등록되지 않은 프로젝트입니다:",
 
   "project.branchRequired": "통합 브랜치를 입력하세요.",
@@ -653,7 +653,7 @@ export const ko: Record<string, string> = {
   // `components/projects-ui.tsx` — 온톨로지 마이그레이션 섹션.
   "project.ontologyMigration.title": "온톨로지 마이그레이션",
   "project.ontologyMigration.description":
-    "없으면 새로 세우고, 있으면 최신 규약으로 다시 올립니다. 다시 돌려도 안전합니다.",
+    "없으면 새로 만들고, 있으면 최신 규약으로 다시 적용합니다. 다시 실행해도 안전합니다.",
   "project.ontologyMigration.linkPrefix": "마이그레이션",
   "project.ontologyMigration.startPending": "발행하는 중…",
   "project.ontologyMigration.start": "마이그레이션 시작",
@@ -688,7 +688,7 @@ export const ko: Record<string, string> = {
   "board.lane.preemptConfirm": "끊고 시작",
   // 피해자 없음 — 도는 `.wip`이 0건이거나 전부 유효 우선순위 5라 `--dryrun`이 빈 출력을 낸다.
   // 두 사유를 한 문장이 다 담는다(화면이 둘을 못 가른다).
-  "board.lane.noVictim": "지금 시작할 수 없습니다 — 도는 티켓이 없거나 전부 유효 우선순위 5라 끊을 것이 없습니다.",
+  "board.lane.noVictim": "지금 시작할 수 없습니다 — 진행 중인 티켓이 없거나 전부 유효 우선순위 5라 끊을 것이 없습니다.",
   "epics.empty": "에픽 없음",
   "epics.viewInBoard": "보드에서 보기",
   "epics.readme.missingBadge": "README 없음",
@@ -767,7 +767,7 @@ export const ko: Record<string, string> = {
   // 이 사전으로 안 옮겨졌다(`workers/page.tsx`의 `DEFECT` 그대로) — 이 티켓의 몫은 이 하나뿐이다.
   "worker.defect.noExec.title": "실행 비트 없음",
   "worker.defect.noExec.why":
-    "cron이 Permission denied로 워커를 못 띄웁니다 — tick.sh가 아예 안 돌아 runner.log가 한 줄도 늘지 않고, 열린 티켓이 그대로 뜹니다.",
+    "cron이 Permission denied로 워커를 못 띄웁니다 — tick.sh가 아예 실행되지 않아 runner.log가 한 줄도 늘지 않고, 열린 티켓이 그대로 뜹니다.",
   // `cwdDefects`의 `detail`(티켓 c7c284f6) — 위 title·why와 같은 kind인데 접두가 단수인 것은
   // 티켓 b60520ea가 먼저 붙인 그대로다.
   "worker.defect.noExec.detailSuffix": "에 실행 비트가 없습니다.",
@@ -818,7 +818,7 @@ export const ko: Record<string, string> = {
   "protocols.delete.descSuffix": "를 지웁니다. 되돌릴 수 없습니다.",
   "protocols.delete.agentsWarnTitle": "모든 세션이 협업 프로토콜 없이 시작합니다",
   "protocols.delete.agentsWarnBody":
-    "tick.sh는 이 파일이 없으면 그냥 넘어갑니다 — 에러도 경고도 없습니다. 이 프로젝트는 계속 돌고, 세션만 규약을 모릅니다.",
+    "tick.sh는 이 파일이 없으면 그냥 넘어갑니다 — 에러도 경고도 없습니다. 이 프로젝트는 계속 작동하고, 세션만 규약을 모릅니다.",
   "protocols.delete.failTitle": "지우지 못했습니다",
   "protocols.delete.working": "삭제 중…",
 
@@ -840,7 +840,7 @@ export const ko: Record<string, string> = {
   "protocols.rejected.title": "이 경로는 열 수 없습니다",
   "protocols.core.notFoundPrefix": "코어 프로토콜에 없는 파일입니다:",
   "protocols.picker.expanded": "파일을 고르세요.",
-  "protocols.picker.collapsed": "파일 목록을 펴서 고르세요.",
+  "protocols.picker.collapsed": "파일 목록을 펼쳐서 고르세요.",
   "protocols.core.vendoredPrefix": "이 파일은 이 큐에 vendored된 코어 사본입니다 —",
   "protocols.core.notVendoredPrefix": "이 파일은 큐가 아니라 엔진 레포에 있습니다 —",
   // `{" "}` 앞뒤로 갈려 실측 스크립트가 못 센다.
@@ -1002,13 +1002,13 @@ export const ko: Record<string, string> = {
   "persona.action.deleteFailedMessage": "삭제하지 못했습니다.",
   "persona.action.remove": "제거",
   "persona.squad.rulesHeading": "규칙",
-  "persona.squad.rulesBadgeTitle": "리더로 뜬 세션의 프롬프트에만 이 파일 전문이 붙습니다",
+  "persona.squad.rulesBadgeTitle": "리더로 디스패치된 세션의 프롬프트에만 이 파일 전문이 붙습니다",
   "persona.squad.rulesBadgePrefix": "리더 프롬프트에 인라인 ·",
   "persona.squad.rulesHint":
     "리더 세션의 프롬프트에만 실립니다. 비우면 리더는 멤버 이름과 각자의 역할만 봅니다.",
   "persona.squad.membersHeading": "멤버",
   "persona.squad.membersBadgeTitle":
-    "이 스쿼드의 멤버는 티켓이 스쿼드를 안 들어도 이 블록을 프롬프트로 받습니다",
+    "이 스쿼드의 멤버는 티켓이 스쿼드를 지정하지 않아도 이 블록을 프롬프트로 받습니다",
   "persona.squad.membersBadgePrefix": "멤버 전원 프롬프트에 인라인 ·",
   "persona.squad.overBudgetSuffix": "초과",
   "persona.squad.noEligible": "프로필이 있는 페르소나가 없습니다 — 먼저 페르소나를 만듭니다.",
@@ -1245,7 +1245,7 @@ export const ko: Record<string, string> = {
   "ticketDetail.duplicateTicketTitle": "티켓 복제",
   "ticketDetail.duplicateDescSuffix":
     "의 title·kind·persona·본문을 그대로 채웠습니다. deps는 복제되지 않습니다 — 필요하면 직접 고르세요.",
-  "ticketDetail.publishDesc": "선택지는 전부 이 프로젝트의 실제 값입니다 — 손으로 치는 건 title과 본문뿐입니다.",
+  "ticketDetail.publishDesc": "선택지는 전부 이 프로젝트의 실제 값입니다 — 손으로 입력하는 것은 title과 본문뿐입니다.",
   "ticketDetail.titlePlaceholder": "한 줄 제목 — 무엇을 하는지",
   "ticketDetail.publishFailedTitle": "발행하지 못했습니다",
   "ticketDetail.publishing": "발행 중…",
@@ -1295,7 +1295,7 @@ export const ko: Record<string, string> = {
   "ticketDetail.titleRequired": "제목을 입력하세요.",
   "ticketDetail.notAssigned": "할당된 티켓이 아닙니다(session_id가 비어 있습니다).",
   "ticketDetail.notAwaitingAnymore":
-    "지금 이 티켓은 답변 대기가 아닙니다 — 이미 답변이 달렸거나 세션이 잡았습니다. 화면을 새로고침해 상태를 확인하세요.",
+    "지금 이 티켓은 답변 대기가 아닙니다 — 이미 답변이 달렸거나 세션이 다시 가져갔습니다. 화면을 새로고침해 상태를 확인하세요.",
   "ticketDetail.badAwaitingStemPrefix": "awaiting 값을 파일 이름으로 쓸 수 없습니다:",
   "ticketDetail.badAwaitingStemSuffix":
     ". 경로 구분자·제어문자가 없는 이름이어야 합니다 — 요구사항의 frontmatter를 고치세요.",
@@ -1336,7 +1336,7 @@ export const ko: Record<string, string> = {
   "attachmentField.removeSuffix": "첨부 제거",
 
   "updateToast.progress.prefix": "업데이트를 받는 중",
-  "updateToast.confirm.message": "지금 도는 일이 있습니다. 그래도 재시작할까요?",
+  "updateToast.confirm.message": "지금 진행 중인 작업이 있습니다. 그래도 재시작할까요?",
   "updateToast.confirm.cancel": "취소",
   "updateToast.confirm.restart": "재시작",
   "updateToast.downloaded.title": "업데이트를 받았습니다",
@@ -1483,13 +1483,13 @@ export const ko: Record<string, string> = {
   // claude 인증 섹션(붙여넣기·브라우저 인증 둘 다)이 이 파일의 에러를 그대로 보여준다.
   "auth.token.empty": "토큰이 비어 있습니다.",
   "auth.token.hasWhitespace": "토큰 안에 공백·줄바꿈이 있습니다. 한 줄만 붙여 넣어 주세요.",
-  "auth.verify.notAuthenticated": "CLI 화면에서 집은 값이 인증되지 않습니다. 다시 시도해 주세요.",
+  "auth.verify.notAuthenticated": "CLI 화면에서 읽은 값이 인증되지 않습니다. 다시 시도해 주세요.",
   "auth.setup.pathNotFoundPrefix": "PATH에서 claude를 찾지 못했습니다. (PATH=",
   "auth.setup.pathNotFoundSuffix": ")",
   "auth.setup.timeoutSuffix": "초 안에 토큰을 받지 못했습니다.",
   "auth.setup.endedWithCodeMid": "토큰을 받지 못한 채 끝났습니다 (종료 코드 ",
   "auth.setup.endedWithCodeSuffix": ").",
-  "auth.setup.saveFailedPrefix": "토큰을 잡았지만 저장하지 못했습니다:",
+  "auth.setup.saveFailedPrefix": "토큰을 받았지만 저장하지 못했습니다:",
   "auth.setup.execFailedPrefix": "실행하지 못했습니다:",
   "auth.setup.endedNoToken": "토큰을 받지 못한 채 끝났습니다.",
 
@@ -1522,7 +1522,7 @@ export const ko: Record<string, string> = {
   // `workers.settingsDialog.trigger` · `workers.reap.sectionTitle` · `worker.defect.noExec.*`는
   // 이 화면이 이미 쓰던 키라 그대로 둔다(중복 안 만든다).
   "workers.crontabApprovalHint": "권한 창이 뜨면 [허용]을 누르세요 — crontab 등록이 그 대답을 기다립니다.",
-  "workers.notRunningYetHint": "아직 돌지 않습니다 — 이 명령을 셸에서 실행하세요",
+  "workers.notRunningYetHint": "아직 실행되지 않습니다 — 이 명령을 셸에서 실행하세요",
   "workers.cronRegisterFailedTitle": "crontab에 등록하지 못했습니다",
 
   // `no-exec` 복구 버튼(`ExecBitFix`, §0-21 결정 3).
@@ -1581,7 +1581,7 @@ export const ko: Record<string, string> = {
   "workers.row.deleteBlockedTitle": "지금은 삭제할 수 없습니다",
   "workers.row.deleteBlockedPidPrefix": "이 워커가 티켓을 물고 있습니다(pid",
   "workers.row.deleteBlockedPidSuffix":
-    "). 지금 지우면 락과 돌고 있는 세션이 붕 뜹니다. 먼저 중단하고, 물고 있는 티켓이 끝난 뒤 지우세요.",
+    "). 지금 지우면 락과 실행 중인 세션이 정리되지 않고 남습니다. 먼저 중단하고, 물고 있는 티켓이 끝난 뒤 지우세요.",
   "workers.row.deleteBodyText": "파일을 지웁니다. 이 프로젝트의 티켓은 삭제되지 않습니다.",
   "workers.row.deleteCronPrefix": "crontab 줄도 같이 뺍니다 —",
   "workers.row.deleteCronBold": "crontab 먼저, 파일 나중",
@@ -1600,7 +1600,7 @@ export const ko: Record<string, string> = {
   "workers.context.rejectionTitleMiddle": "의",
   "workers.context.rejectionTitleSuffix": "블록을 GUI가 고칠 수 없습니다",
   "workers.context.rejectionBodyPrefix":
-    "추측해서 쓰지 않습니다 — 엉뚱한 라인을 밟으면 워커가 죽고 cron이 조용히 실패합니다.",
+    "추측해서 쓰지 않습니다 — 엉뚱한 줄을 건드리면 워커가 죽고 cron이 조용히 실패합니다.",
   "workers.context.rejectionBodySuffix": "를 손으로 편집한 뒤 이 화면을 새로고침하세요.",
   "workers.context.missingLinePrefix": "넣을 줄은 이것 하나입니다 — 필수",
   "workers.context.missingLineMiddle": "줄",
@@ -1633,14 +1633,14 @@ export const ko: Record<string, string> = {
   "workers.settingsDialog.commonContextIntro3": ". 여기 항목은 각 워커 컨텍스트 목록의",
   "workers.settingsDialog.commonContextIntro4":
     "에 들어가고, 워커별 목록에서는 지울 수 없습니다. 한 줄을 고치면 전원에게 반영됩니다.",
-  "workers.settingsDialog.commonContextIntro5": "는 워커마다 갈리므로 존재 여부는",
+  "workers.settingsDialog.commonContextIntro5": "는 워커마다 다르므로 존재 여부는",
   "workers.settingsDialog.commonContextIntro6":
-    "있음입니다 — 워커에 따라 갈리면 단정하지 않습니다(확인 못 했습니다).",
+    "있음입니다 — 워커에 따라 다르면 단정하지 않습니다(확인 못 했습니다).",
   "workers.settingsDialog.commonContextTopLabel": "최상단",
   "workers.settingsDialog.commonContextEveryoneLabel": "전원에게 있을 때만",
   "workers.settingsDialog.readonlyHeading": "나머지 워커 설정 (표시만)",
   "workers.settingsDialog.readonlyDescription": "이 값들은 이 화면에서 고치지 않습니다 — 워커 파일을 손으로 편집합니다.",
-  "workers.settingsDialog.divergentTitle": "워커 간 값이 갈렸습니다",
+  "workers.settingsDialog.divergentTitle": "워커마다 값이 다릅니다",
   "workers.settingsDialog.divergentBody":
     "엔진은 티켓을 디스패치한 워커의 값을 씁니다 — 같은 티켓이 어느 워커에 물리느냐로 결과가 달라집니다.",
   "workers.settingsDialog.reapDescription": "세션이 죽었는데 진행중으로 남은 티켓을 백로그로 되돌립니다.",
@@ -1659,7 +1659,7 @@ export const ko: Record<string, string> = {
   "workers.contextRow.applyCommonFailedTitle": "공통을 적용하지 못했습니다",
   "workers.contextRow.noSelfHealTitle": "이 워커는 지워도 cron 줄이 남습니다",
   "workers.contextRow.selfHealMissingMiddle":
-    "하는 줄이 없습니다 — dira를 지우면 이 워커의 crontab 2줄을 뺄 코드가 돌지 않고, cron이 1분마다 없는 파일을 부릅니다. 적용하면",
+    "하는 줄이 없습니다 — dira를 지우면 이 워커의 crontab 2줄을 뺄 코드가 실행되지 않고, cron이 1분마다 없는 파일을 실행합니다. 적용하면",
   "workers.contextRow.selfHealMissingSuffix": "바로 위에 한 줄이 들어갑니다(엔진 경로는 이 파일의 그 줄에서 읽습니다).",
   "workers.contextRow.applySelfHealButton": "자가 정리 적용",
   "workers.contextRow.selfHealAppliedSentence": "자가 정리를 적용했습니다",
@@ -1667,7 +1667,7 @@ export const ko: Record<string, string> = {
   "workers.contextRow.gateStaleTitle": "이 워커의 통합 게이트가 낡았습니다",
   "workers.contextRow.gateMissingTitle": "이 워커는 받는 트리가 더러워도 그냥 디스패치됩니다",
   "workers.contextRow.gateStaleBody":
-    "의 내용이 지금 판과 다릅니다 — 이 워커는 옛 통합 게이트를 그대로 돕니다. 적용하면 파일을 지금 판으로 덮어씁니다.",
+    "의 내용이 지금 판과 다릅니다 — 이 워커는 옛 통합 게이트를 그대로 실행합니다. 적용하면 파일을 지금 판으로 덮어씁니다.",
   "workers.contextRow.gateMissingMiddle":
     "하는 줄이 없습니다 — 받는 트리가 더러운 채로 디스패치되면 세션이 일을 다 끝낸 뒤 push에서만 거부됩니다. 적용하면",
   "workers.contextRow.gateMissingSuffix": "바로 위에 한 줄이 들어갑니다(통합 브랜치는 protocols/AGENTS.md에서 읽습니다).",
@@ -1692,7 +1692,7 @@ export const ko: Record<string, string> = {
   "workers.contextRow.copyDescMid3": "개로 바꿉니다.",
   "workers.contextRow.copyDescSuffix": "의 기존 항목은 남지 않습니다.",
   "workers.contextRow.copyBodySuffix":
-    "는 펴지 않고 문자열째로 옮깁니다 — 받는 워커는 자기 작업 디렉터리를 가리킵니다. 컨텍스트가 워커마다 갈라져 있으면 같은 티켓이 어느 워커에 물리느냐로 결과가 달라집니다.",
+    "는 펴지 않고 문자열째로 옮깁니다 — 받는 워커는 자기 작업 디렉터리를 가리킵니다. 컨텍스트가 워커마다 다르면 같은 티켓이 어느 워커에 물리느냐로 결과가 달라집니다.",
   "workers.contextRow.copyFailedTitle": "복사하지 못했습니다",
   "workers.contextRow.copyingPending": "복사 중…",
   "workers.contextRow.copyButton": "복사",
@@ -1705,9 +1705,9 @@ export const ko: Record<string, string> = {
   "workers.defect.missingCwd.why": "tick.sh가 ERROR cwd 없음을 남기고 락을 풀어 티켓을 되돌립니다 — 물었다 놓기만 합니다.",
   "workers.defect.missingLink.title": ".dira 심링크 없음",
   "workers.defect.missingLink.why":
-    "세션이 미끼 .dira를 보고 자기 티켓을 못 찾습니다 — 완료 신고도 못 하고 reap이 attempts만 올립니다.",
+    "세션이 엉뚱한 .dira를 보고 자기 티켓을 못 찾습니다 — 완료 신고도 못 하고 reap이 attempts만 올립니다.",
   "workers.defect.sharedCwd.title": "작업 디렉터리 공유",
-  "workers.defect.sharedCwd.why": "두 세션이 한 트리에서 한 브랜치를 밟습니다 — dispatch-gate.sh가 디스패치를 막습니다.",
+  "workers.defect.sharedCwd.why": "두 세션이 한 트리에서 한 브랜치를 동시에 고칩니다 — dispatch-gate.sh가 디스패치를 막습니다.",
   "workers.defect.noTicketCwd.title": "TICKET_CWD 없음",
   "workers.defect.noTicketCwd.why":
     "받는 트리에서 그대로 커밋합니다 — 미커밋 흔적이 남으면 통합 게이트가 큐의 워커 전부를 보류시킵니다.",
@@ -1827,27 +1827,27 @@ export const ko: Record<string, string> = {
   "ontology.survey.q1.option.content": "글이나 콘텐츠를 만듭니다",
   "ontology.survey.q1.option.people": "사람을 상대합니다 (고객·파트너·팀)",
   "ontology.survey.q1.option.data": "자료를 모으고 정리합니다",
-  "ontology.survey.q2.question": "일하다 보면 자주 이름을 불러 부르게 될 대상은 무엇인가요?",
+  "ontology.survey.q2.question": "일하다 보면 자주 이름을 부르게 될 대상은 무엇인가요?",
   "ontology.survey.q2.chip.customer": "고객",
   "ontology.survey.q2.chip.project": "프로젝트",
   "ontology.survey.q2.chip.doc": "문서",
   "ontology.survey.q2.chip.task": "작업",
   "ontology.survey.q2.chip.product": "제품",
   "ontology.survey.q2.customPlaceholder": "직접 입력 (쉼표로 여러 개)",
-  "ontology.survey.q3.question": "나중에 이런 걸 물어보게 될 것 같나요?",
+  "ontology.survey.q3.question": "나중에 이런 것을 물어보게 될 것 같나요?",
   "ontology.survey.q3.option.connect": "이게 무엇과 연결되나요?",
   "ontology.survey.q3.option.owner": "누가 관여했나요?",
   "ontology.survey.q3.option.cause": "무엇 때문에 이렇게 됐나요?",
   "ontology.survey.q3.option.next": "다음에 무엇으로 이어지나요?",
   "ontology.survey.q4.question": "다음 중 프로젝트 자체가 아니라 작업 흔적이라 정리 대상이 아닌 것을 골라주세요",
-  "ontology.survey.q4.option.tool": "이 프로젝트를 굴리는 관리 도구 자체(예: 지금 쓰는 이 화면)",
+  "ontology.survey.q4.option.tool": "이 프로젝트를 운영하는 관리 도구 자체(예: 지금 쓰는 이 화면)",
   "ontology.survey.q4.option.memo": "임시 메모나 낙서",
   "ontology.survey.q4.option.chatlog": "지나간 대화 로그",
   "ontology.survey.q4.option.testfile": "테스트로 남긴 파일",
   // 제출 뒤 대기 문장 — `보드`는 `shell.nav.board`를 그대로 재사용한다(같은 낱말, 새 문구
   // 0). prefix/suffix 사이에 그 링크가 낀다: `${prefix} <Link>보드</Link>${suffix}`.
   "ontology.survey.pendingPrefix": "답을 바탕으로 만드는 중입니다… 이어지는 첫 채움은",
-  "ontology.survey.pendingSuffix": "의 티켓 한 장으로 돕니다.",
+  "ontology.survey.pendingSuffix": "의 티켓 한 장으로 진행됩니다.",
   "ontology.survey.failTitle": "만들지 못했습니다",
 
   // `lib/ontology.ts`의 `schemaViolations` — 화면에 전문이 뜨는 유일한 진단 배열이다
@@ -1873,7 +1873,7 @@ export const ko: Record<string, string> = {
   "ontology.sidebar.ariaLabel": "온톨로지 파일",
   "ontology.rejected.title": "이 경로는 열 수 없습니다",
   "ontology.picker.expanded": "파일을 고르세요.",
-  "ontology.picker.collapsed": "파일 목록을 펴서 고르세요.",
+  "ontology.picker.collapsed": "파일 목록을 펼쳐서 고르세요.",
   "ontology.metrics.objectRelation": "객체 · 관계",
   "ontology.metrics.hiddenEdges": "숨은 간선",
   "ontology.metrics.normativeSentences": "규범 문장",
@@ -1893,10 +1893,10 @@ export const ko: Record<string, string> = {
   "ontology.metrics.fixTicketPrefix": "정리 티켓",
   "ontology.metrics.loadFixing": "지표 읽기 오류를 고치는 중",
   "ontology.empty.heading": "몇 가지만 답하면 시작할 자료를 만들어 드립니다",
-  "ontology.empty.bodyPrefix": "건너뛰어도 이 프로젝트는 그대로 돕니다 —",
+  "ontology.empty.bodyPrefix": "건너뛰어도 이 프로젝트는 그대로 작동합니다 —",
   "ontology.empty.bodyMiddle": "는",
   "ontology.empty.bodySuffix": "가 비어 있으면 그냥 넘어갑니다.",
-  "ontology.empty.skipHint": "답할 게 마땅치 않다면 건너뛰고 빈 파일부터 시작해도 됩니다.",
+  "ontology.empty.skipHint": "답할 것이 마땅치 않다면 건너뛰고 빈 파일부터 시작해도 됩니다.",
 
   // ontology/actions.ts — 발행 서버 액션. `등록되지 않은 프로젝트입니다:`는
   // `boardPage.action.unknownProjectPrefix`·`protocols.action.unknownProjectPrefix`와 같은
@@ -1950,7 +1950,7 @@ export const ko: Record<string, string> = {
   "boardPage.sort.ariaSuffix": "정렬",
   "boardPage.search.placeholder": "title · 본문 · frontmatter 검색",
   "boardPage.search.ariaLabel": "티켓 검색",
-  "boardPage.epicDrag.missingTitle": "티켓 파일을 찾지 못했습니다 — 큐에서 사라졌거나 상태가 갈렸습니다",
+  "boardPage.epicDrag.missingTitle": "티켓 파일을 찾지 못했습니다 — 큐에서 사라졌거나 상태가 바뀌었습니다",
   "boardPage.epicDrag.failTitle": "에픽을 옮기지 못했습니다",
 
   // 발행 서버 액션(`(board)/actions.ts`) — `readLanguage()`를 직접 읽는다(§0-16 §장치). 이
@@ -2018,12 +2018,12 @@ export const ko: Record<string, string> = {
 
   "home.onboarding.title": "이 프로젝트에 대해 묻는다",
   "home.onboarding.body":
-    "티켓과 프로젝트 자원(페르소나 · 프로토콜 · 워커)들을 읽고 답합니다. 프로젝트 자원을 수정하도록 할 수도 있습니다.",
+    "티켓과 프로젝트 자원(페르소나 · 프로토콜 · 워커)을 읽고 답합니다. 프로젝트 자원을 수정하도록 할 수도 있습니다.",
   "home.example.ticketsWhy": "답변 대기 티켓이 왜 안 도나",
   "home.example.summarizeProtocols": "이 프로젝트의 프로토콜을 요약해 달라",
   // page.tsx §온보딩 예시 앞의 둘 — 이름 뒤에 공백 없이 붙는 접미(`${워커이름}${이 키}`).
   "home.example.workerActivitySuffix": " 워커는 지금 무슨 일을 하고 있나",
-  "home.example.workerEngineSuffix": " 워커는 어떤 엔진으로 도나",
+  "home.example.workerEngineSuffix": " 워커는 어떤 엔진으로 실행되나",
 
   "home.fail.spawn.title": "답을 받지 못했습니다 — 세션을 띄우지 못했습니다",
   "home.fail.spawn.next": "엔진 CLI가 PATH에 있는지 확인하세요",
@@ -2031,7 +2031,7 @@ export const ko: Record<string, string> = {
   "home.fail.auth.next": "헤더 오른쪽 설정에서 장기 토큰을 넣고 다시 물어보세요.",
   "home.fail.timeout.title": "답을 받지 못했습니다 — 세션이 답 없이 끝났습니다",
   "home.fail.timeout.next": "다시 보내 보세요. 쓴 글은 그대로 남아 있습니다.",
-  "home.fail.busy.title": "보내지 못했습니다 — 답이 아직 도는 중입니다",
+  "home.fail.busy.title": "보내지 못했습니다 — 답이 아직 처리 중입니다",
   "home.fail.busy.next": "끝나면 이 칸이 다시 열립니다. 새로고침하지 않아도 됩니다.",
   "home.fail.noTranscript.title": "답을 찾지 못했습니다 — 트랜스크립트가 없습니다",
   "home.fail.noTranscript.next": "새 대화로 다시 물어보세요.",
@@ -2051,15 +2051,15 @@ export const ko: Record<string, string> = {
 
   "home.schedule.new": "새 스케줄",
   "home.schedule.emptyTitle": "회차 없음",
-  "home.schedule.overdueNote": "예정 시각이 지나 이 스케줄은 돌지 않습니다 — 지우고 다시 만듭니다",
-  "home.schedule.noNextRunNote": "31일 안에 도는 회차가 없어 이 스케줄은 돌지 않습니다 — 지우고 다시 만듭니다",
+  "home.schedule.overdueNote": "예정 시각이 지나 이 스케줄은 실행되지 않습니다 — 지우고 다시 만듭니다",
+  "home.schedule.noNextRunNote": "31일 안에 실행될 회차가 없어 이 스케줄은 실행되지 않습니다 — 지우고 다시 만듭니다",
   "home.schedule.noNextRun": "다음 회차 없음",
   // 다이얼로그 설명 둘째 문장과 **한 글자까지 같다**(회차 0건 판정 문장, 위 overdueNote 옆자리) —
   // 마침표는 이 값에 안 넣는다: 회차 0건 자리는 뒤에 붙는 문장이 없어 마침표가 없다.
   "home.schedule.liveNote":
-    "스케줄은 이 앱이 떠 있는 동안에만 돕니다 — 앱을 꺼도 큐의 티켓은 계속 디스패치됩니다",
-  "home.schedule.dueAtSuffix": "에 첫 회차가 돕니다.",
-  "home.schedule.locked": "첫 회차가 돌기 전에는 이 스케줄에 말을 걸 수 없습니다",
+    "스케줄은 이 앱이 떠 있는 동안에만 실행됩니다 — 앱을 꺼도 큐의 티켓은 계속 디스패치됩니다",
+  "home.schedule.dueAtSuffix": "에 첫 회차가 실행됩니다.",
+  "home.schedule.locked": "첫 회차가 실행되기 전에는 이 스케줄에 말을 걸 수 없습니다",
   "home.schedule.kind.once": "한 번만",
   "home.schedule.kind.daily": "매일",
   "home.schedule.kind.weekly": "매주",
@@ -2071,13 +2071,13 @@ export const ko: Record<string, string> = {
   "home.schedule.promptPlaceholder": "답변 대기 티켓을 훑고 사람이 답할 것이 있으면 요구사항으로 올려라.",
   "home.schedule.dayLimitNote": "29일부터 31일까지는 없는 달이 있어서 고를 수 없습니다.",
   "home.schedule.cronInvalid": "분 시 일 월 요일 다섯 필드만 받습니다 — *, 정수, 범위(a-b), 스텝(*/n)만 됩니다.",
-  "home.schedule.cronNextRunSuffix": "에 다음 회차가 돕니다.",
-  "home.schedule.cronNoNextRun": "31일 안에 도는 회차가 없습니다.",
+  "home.schedule.cronNextRunSuffix": "에 다음 회차가 실행됩니다.",
+  "home.schedule.cronNoNextRun": "31일 안에 실행될 회차가 없습니다.",
   "home.schedule.createFailTitle": "스케줄을 만들지 못했습니다",
   "home.schedule.createFixing": "스케줄 만들기 오류를 고치는 중",
   "home.schedule.invalidWhenOrPrompt": "시각 또는 문장을 확인하세요.",
   "home.schedule.desc1": "정한 시각에 세션이 이 문장을 수행합니다.",
-  "home.schedule.desc3": "꺼져 있던 사이의 회차는 앱을 켤 때 한 번만 늦게 돕니다.",
+  "home.schedule.desc3": "꺼져 있던 사이의 회차는 앱을 켤 때 한 번만 늦게 실행됩니다.",
   "home.schedule.deleteTrigger": "스케줄 삭제",
   "home.schedule.deleteTitle": "스케줄을 지웁니다",
   "home.schedule.deleteNote": "지난 회차의 대화를 화면에서 다시 열 수 없습니다.",
@@ -2104,7 +2104,7 @@ export const ko: Record<string, string> = {
   "home.surface.scm.empty": "변경 없음",
   "home.surface.explorer.empty": "빈 디렉터리",
   "home.surface.schedules.empty": "스케줄 없음",
-  "home.surface.browser.empty": "지금 도는 브라우저가 없습니다",
+  "home.surface.browser.empty": "지금 실행 중인 브라우저가 없습니다",
   "home.tabs.empty": "열린 탭 없음",
   "home.tabs.close": "닫기",
   "home.tabs.closeLeft": "좌측 탭 모두 닫기",
@@ -2122,10 +2122,10 @@ export const ko: Record<string, string> = {
   // 좌측 목록 한 줄(§11-6 결정 6) — 작업중 표식 · 끊김 표식 · 명령 없음 자리.
   "terminal.row.running": "작업 중",
   "terminal.row.disconnected": "끊김",
-  "terminal.row.noCommand": "아직 친 명령이 없습니다",
+  "terminal.row.noCommand": "아직 입력한 명령이 없습니다",
 
   // 브라우저 표면(§11-11 결정 5-6, P417-3) — 풀 슬롯 목록과 랩 레이어 세 상태.
-  "browser.wrap.confirm": "지금 이 브라우저로 세션이 일하는 중입니다. 만지면 그 회차의 실측이 튈 수 있습니다. 계속하시겠습니까?",
+  "browser.wrap.confirm": "지금 이 브라우저로 세션이 일하는 중입니다. 만지면 그 회차의 실측이 어긋날 수 있습니다. 계속하시겠습니까?",
   "browser.wrap.unlocked": "입력 열림",
   "browser.wrap.lock": "다시 잠그기",
   "browser.disconnected": "브라우저가 반납되어 화면이 끊겼습니다",
@@ -2212,7 +2212,7 @@ export const ko: Record<string, string> = {
   // §비주얼 §21 실패 4종(`FAIL`) — `error` 문장을 되짚어 갈리면 문구 한 자를 고치는 날 화면이
   // 조용히 뭉친다(`lib/interject.ts`의 같은 경고와 짝).
   "sessionStream.fail.enxio.title": "보내지 못했습니다 — 세션이 끝났습니다",
-  "sessionStream.fail.enxio.next": "이 티켓엔 더 이상 도는 세션이 없습니다. 위 글을 복사해 새 티켓으로 지시하세요.",
+  "sessionStream.fail.enxio.next": "이 티켓에는 더 이상 도는 세션이 없습니다. 위 글을 복사해 새 티켓으로 지시하세요.",
   "sessionStream.fail.enoent.title": "보내지 못했습니다 — 입구가 없습니다",
   "sessionStream.fail.enoent.next":
     "세션이 방금 끝났거나 엔진이 입구를 못 만들었습니다. 한 번 더 보내 보고, 그래도 안 되면 새 티켓으로 지시하세요.",
@@ -2561,7 +2561,7 @@ export const ko: Record<string, string> = {
   "siteError.retry": "다시 시도",
   "siteNotFound.body": "이 주소에는 페이지가 없습니다.",
   "siteNotFound.homeLink": "홈으로",
-  "siteMeta.description": "티켓을 큐에 넣으면 cron에 물린 워커가 claude 세션에 넘깁니다. 파일시스템이 곧 큐인 티켓 디스패처.",
+  "siteMeta.description": "티켓을 큐에 넣으면 cron에 등록된 워커가 claude 세션에 넘깁니다. 파일시스템이 곧 큐인 티켓 디스패처입니다.",
 };
 
 /** 제품 낱말의 영어 대응 — **여기가 한자리다**(621c7a97). 다음 묶음이 같은 것을 다르게 부르지
