@@ -696,7 +696,7 @@ function NotificationItems({
     ),
     // ⑨ 자동 회수 예산을 넘겨 잠시 쉬는 티켓 (§0-10 §결정 기록 §엔진 수정 서른세 번째 승인 ·
     // §0-10 ⑨). **판정이 GUI 밖에 있는 두 번째 항목이다**(⑧과 같은 자리) — 나열은 엔진이
-    // 표식(`readBackoff`)에 적어 둔 죽은 횟수·다시 집는 시각 그대로다. 화면은 예산 상한도
+    // 표식(`readBackoff`)에 적어 둔 죽은 횟수·다시 가져가는 시각 그대로다. 화면은 예산 상한도
     // 백오프 길이도 다시 안 잰다. `보관`이 없다 — ②·⑥과 달리 지나간 사건이 아니라 지금 걸려
     // 있는 상태라 보관해도 다음 tick에 그대로 다시 뜬다(§0-10 문구 표 ⑨).
     alerts.backoff && (
@@ -707,7 +707,7 @@ function NotificationItems({
           {t(locale, "bell.backoff.titleSuffix")}
         </p>
         <p className="col-start-2 text-sm text-foreground">{t(locale, "bell.backoff.body")}</p>
-        {/* 한 행 = 한 티켓, ⑦과 같은 해부(Hash + 문구 + `ml-auto` 링크). 죽은 횟수·다시 집는
+        {/* 한 행 = 한 티켓, ⑦과 같은 해부(Hash + 문구 + `ml-auto` 링크). 죽은 횟수·다시 가져가는
             시각은 엔진이 표식(`readBackoff`)에 적어 둔 값 그대로다 — 상한값(`REAP_BACKOFF_CAP`)도
             창 길이(`REAP_BACKOFF_SEC`)도 화면 코드에 없다(§0-10 ⑨). 시각 표기는 ⑥과 같은
             `dateTimeLabel`(같은 날이면 `HH:MM`, 아니면 `M/D HH:MM`). */}

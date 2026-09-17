@@ -446,7 +446,7 @@ these rows copy the English dictionary, and when the two disagree the dictionary
 | `claude CLI를 찾지 못했습니다 — 워커가 세션을 띄우지 못합니다` | `No claude CLI here — workers can't start a session` |
 | `요구사항이 접수되었습니다. 곧 PM이 검토할 예정입니다.` | `Request received. The PM will review it shortly.` |
 | `쓰던 내용이 있습니다` | `You have unsaved text` |
-| `아무도 집지 않는 티켓 <n>건` | `Tickets no one will claim: <n>` |
+| `아무도 가져가지 않는 티켓 <n>건` | `Tickets no one will claim: <n>` |
 | `(디스패치되지 않는 N건은 상단 알림)` | `(Not dispatched: N — see notifications)` |
 | `수거할 스테일 티켓이 없습니다.` | `No stale tickets to collect.` |
 | `crontab에 등록했습니다 — 30초 뒤부터 티켓을 가져갑니다.` | `Registered in the crontab — it starts claiming tickets in 30 seconds.` |
@@ -454,7 +454,7 @@ these rows copy the English dictionary, and when the two disagree the dictionary
 | `<날짜> 추가` | `<date> added` |
 | `저장했습니다. 유효한지는 다음 디스패치에서 드러납니다.` | `Saved. Whether it works shows up on the next dispatch.` |
 | `Claude 토큰이 없습니다` | `No Claude token` |
-| `워커가 티켓을 집어도 세션을 못 열고 그대로 끝냅니다.` | `Workers still claim tickets, but they can't open a session and end right there.` |
+| `워커가 티켓을 가져가도 세션을 못 열고 그대로 끝냅니다.` | `Workers still claim tickets, but they can't open a session and end right there.` |
 | `세션이 열리자마자 죽는 워커` | `Workers that die the moment a session opens:` |
 | `답변을 기다리는 티켓` | `Tickets waiting on an answer:` |
 | `커밋 안 된 변경이 디스패치를 막고 있습니다` | `Uncommitted changes are blocking dispatch` |
