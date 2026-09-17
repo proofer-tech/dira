@@ -322,9 +322,13 @@ side by side.
 
 ## What goes on a card - facts only, or nothing
 
-One card is three layers. The frontmatter at the top of the file carries the kind, the name, the
-properties and the relations to other cards. The body under it says in prose what that thing is
-and why it is in the state it is in.
+One card is three layers - description, properties, relations. The layers are three but the places
+are two, so the properties and the relations share the frontmatter at the top of the file. Under
+the kind and the name, a line like `scriptPath:` or `branch:` holding a value of the thing itself
+is a property, and a line under `links:` pointing at another card is a relation. The description
+stays in the body below, in prose, saying what that thing is and why it is in the state it is in.
+A new fact splits the same three ways. A value is a property, a pointer to another card is a
+relation, a reason or a history is description.
 
 There is one criterion. **Write the state that is true now, and do not write a judgement about
 what should be done next.**
