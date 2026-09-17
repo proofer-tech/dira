@@ -203,7 +203,7 @@ session that writes that chapter follows it.
 | `auth.md` | 앱 없이 - 엔진만 쓸 때 | Without the app - using the engine alone |
 | `personas.md` | 디스패치 정책 - 상한과 엔진 | Dispatch policy - the cap and the engine |
 | `troubleshooting.md` | 티켓이 보드에 안 보인다 | A ticket is not on the board |
-| `troubleshooting.md` | 대기인데 아무도 안 집는다 | It is Open and nobody claims it |
+| `troubleshooting.md` | 대기인데 아무도 안 가져간다 | It is Open and nobody claims it |
 
 ## Screen labels the manual quotes
 
