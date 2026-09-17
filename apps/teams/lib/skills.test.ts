@@ -8,6 +8,8 @@ import {
   DEFAULT_SKILLS,
   defaultSkillsFor,
   deletePersonaMemory,
+  describeNewSkills,
+  describeSkillsKorean,
   extractSkillArchive,
   fetchSkillFromAddress,
   installSkill,
@@ -691,6 +693,77 @@ test("고른 이름 → 저장할 목록 (pickedSkills)", () => {
   assert.deepEqual(pickedSkills(["keep"], current, installed), [
     { name: "keep", description: "파일에 적힌 설명" },
   ]);
+});
+
+// ── 새로 고른 스킬의 한국어 한 줄 설명 (describeNewSkills · describeSkillsKorean) ─────
+
+test("describeNewSkills — skills.md에 이미 있던 이름은 안 부른다, 새 이름만 넣는다", async () => {
+  const current = [{ name: "keep", description: "파일에 적힌 설명" }];
+  const newActive = [
+    { name: "keep", description: "SKILL.md 원문" },
+    { name: "added", description: "SKILL.md 원문 added" },
+  ];
+  const seen: Skill[][] = [];
+  const describe = async (skills: Skill[]) => {
+    seen.push(skills);
+    return new Map([["added", "새로 만든 한 줄"]]);
+  };
+  const result = await describeNewSkills(newActive, current, describe);
+  assert.deepEqual(
+    seen.map((s) => s.map((x) => x.name)),
+    [["added"]], // keep은 안 넘어간다
+  );
+  assert.deepEqual(result, [
+    { name: "keep", description: "SKILL.md 원문" }, // 그대로
+    { name: "added", description: "새로 만든 한 줄" }, // 모델 값으로 갈아끼운다
+  ]);
+});
+
+test("describeNewSkills — 생성기가 던지면(호출 실패) 원문 그대로 남고 안 던진다", async () => {
+  const newActive = [{ name: "added", description: "SKILL.md 원문" }];
+  const describe = async (): Promise<Map<string, string>> => {
+    throw new Error("타임아웃");
+  };
+  const result = await describeNewSkills(newActive, [], describe);
+  assert.deepEqual(result, [{ name: "added", description: "SKILL.md 원문" }]);
+});
+
+test("describeNewSkills — 새 이름이 없으면 생성기를 아예 안 부른다", async () => {
+  const current = [{ name: "keep", description: "d" }];
+  let called = false;
+  const describe = async (skills: Skill[]) => {
+    called = true;
+    return new Map<string, string>();
+  };
+  const result = await describeNewSkills(current, current, describe);
+  assert.equal(called, false);
+  assert.deepEqual(result, current);
+});
+
+test("describeSkillsKorean — 배열 길이로 짝짓고, 여러 줄 응답을 한 줄로 접는다", async () => {
+  const skills = [
+    { name: "a", description: "A" },
+    { name: "b", description: "B" },
+  ];
+  const runner = async (args: string[]) => {
+    assert.equal(args[0], "-p");
+    assert.ok(args[1].includes("a: A") && args[1].includes("b: B")); // 이름+설명만 준다
+    return { stdout: JSON.stringify(["여러 줄로\n  온 설명이다", "한 줄"]) };
+  };
+  const out = await describeSkillsKorean(skills, runner);
+  assert.equal(out.get("a"), "여러 줄로 온 설명이다"); // 접힌다
+  assert.equal(out.get("b"), "한 줄");
+});
+
+test("describeSkillsKorean — JSON이 아니거나 길이가 다르면 빈 Map(원문 그대로 남을 신호)", async () => {
+  const skills = [{ name: "a", description: "A" }];
+  assert.deepEqual(await describeSkillsKorean(skills, async () => ({ stdout: "이건 JSON이 아니다" })), new Map());
+  assert.deepEqual(
+    await describeSkillsKorean(skills, async () => ({ stdout: JSON.stringify(["하나", "둘"]) })),
+    new Map(),
+  );
+  assert.deepEqual(await describeSkillsKorean(skills, null), new Map()); // 바이너리 없음
+  assert.deepEqual(await describeSkillsKorean([], async () => ({ stdout: "[]" })), new Map()); // 새 이름 0개
 });
 
 // ── 비활성 스킬 (`skills-off.md` · DESIGN.md §5-1 §n:m 배정과 비활성 · §비주얼 §25 ⑥) ────────

@@ -23,6 +23,7 @@ import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { MAX_BYTES } from "./attachment-limit.ts";
+import { execClaude } from "./auth.ts";
 import { byteLength } from "./budgets.ts";
 import { skillUploadError } from "./skill-upload-limit.ts";
 import { DEFAULT_LOCALE, t, wrap, type Locale } from "./i18n.ts";
@@ -609,6 +610,76 @@ export const writePersonaSkills = (dir: string, name: string, skills: Skill[]) =
 
 export const writePersonaOffSkills = (dir: string, name: string, skills: Skill[]) =>
   writeSkillsSidecar(dir, name, skills, "skills-off.md", "");
+
+// ── 새로 고른 스킬의 한국어 한 줄 설명 (§5-1, 요구 `284f43b4` 답 `3241aea8`) ──────
+
+/** `claude`를 부르는 자리 하나 — `["-p", ...]` -> `{ stdout }`. 실제 구현(아래 `claudeRunner`)과
+ *  테스트 주입을 가르는 경계가 이거다. 새 npm 0개, `execFile`은 `unzip` 호출과 같은 벌이다. */
+type ClaudeRunner = (args: string[]) => Promise<{ stdout: string }>;
+
+const DESCRIBE_TIMEOUT_MS = 60_000;
+
+/** `execClaude()`가 못 찾으면 `null` — 호출부가 그 자리에서 빈 `Map`으로 접는다(§import 자리와
+ *  같은 "없는 머신도 있다" 판정). 찾으면 그 바이너리로 미는 얇은 래퍼다. */
+function claudeRunner(): ClaudeRunner | null {
+  const bin = execClaude();
+  if (!bin) return null;
+  return (args) => execFileP(bin, args, { timeout: DESCRIBE_TIMEOUT_MS });
+}
+
+/** 새로 고른 스킬들의 한국어 한 줄 설명을 **한 번의 호출**로 받는다(§참고 — 하나씩 부르면
+ *  다섯 개 저장이 100초짜리가 된다). 모델에 주는 것은 이름과 `SKILL.md` frontmatter의
+ *  `description`뿐이다 — 본문은 안 읽는다. 답은 스킬 순서와 같은 길이의 JSON 문자열 배열
+ *  하나로 받는다 — 배열이면 순서로 짝짓기가 되어 구분자(`|`·`:`)가 설명 안에 나와도 안 깨진다.
+ *
+ *  실패 갈래(런너 없음·호출 실패·타임아웃·JSON이 아님·길이가 안 맞음) 전부 **빈 `Map`**이다 —
+ *  호출부(`describeNewSkills`)가 빈 `Map`을 "이 이름은 원문 그대로"로 읽는다. 여기서 던지지
+ *  않는 것이 계약이다(§검증 4 — 저장은 항상 성공하고 화면에 오류가 안 뜬다).
+ *
+ *  받은 문자열은 공백(줄바꿈 포함)을 접어 한 줄로 만든다 — 접지 않으면 `writeSkillsSidecar`가
+ *  쓴 파일을 `ITEM_RE`가 다시 못 읽는다. */
+export async function describeSkillsKorean(
+  skills: Skill[],
+  runner: ClaudeRunner | null = claudeRunner(),
+): Promise<Map<string, string>> {
+  if (!runner || skills.length === 0) return new Map();
+  const prompt = [
+    "아래 스킬 각각에 대해 \"언제 이 스킬을 쓰는가\"를 한국어 한 줄(한글 마흔 자 안팎)로 요약하라.",
+    "답은 스킬과 같은 순서·같은 개수의 JSON 문자열 배열 하나만 내라. 다른 글자는 덧붙이지 마라.",
+    "",
+    ...skills.map((s, i) => `${i + 1}. ${s.name}: ${s.description}`),
+  ].join("\n");
+  try {
+    const { stdout } = await runner(["-p", prompt, "--dangerously-skip-permissions"]);
+    const parsed: unknown = JSON.parse(stdout.trim());
+    if (!Array.isArray(parsed) || parsed.length !== skills.length) return new Map();
+    const out = new Map<string, string>();
+    skills.forEach((s, i) => {
+      const v = parsed[i];
+      if (typeof v === "string" && v.trim()) out.set(s.name, v.replace(/\s+/g, " ").trim());
+    });
+    return out;
+  } catch {
+    return new Map();
+  }
+}
+
+/** 저장 액션이 부르는 창구 하나 — <무엇이 새 이름인가>와 <설명을 어디서 채우는가>를 여기 모은다.
+ *  **`skills.md`에 이미 있던 이름은 안 부른다**(§검증 1) — `currentActive`가 그 판정 기준이다
+ *  (지금 파일의 목록. `skills-off.md`에서 넘어온 이름도 이 판정 앞에서는 "새 이름"이다 — 그
+ *  이름이 `skills.md`에 없었다는 사실은 같다). 실패해도(런너가 던지지 않지만, 만에 하나를 대비해
+ *  한 번 더 감싼다) `newActive`를 그대로 돌려준다 — 설명은 설치본 원문 그대로 남는다. */
+export async function describeNewSkills(
+  newActive: Skill[],
+  currentActive: Skill[],
+  describe: (skills: Skill[]) => Promise<Map<string, string>> = describeSkillsKorean,
+): Promise<Skill[]> {
+  const newlyAdded = newActive.filter((s) => !currentActive.some((c) => c.name === s.name));
+  if (newlyAdded.length === 0) return newActive;
+  const described = await describe(newlyAdded).catch(() => new Map<string, string>());
+  if (described.size === 0) return newActive;
+  return newActive.map((s) => (described.has(s.name) ? { ...s, description: described.get(s.name)! } : s));
+}
 
 // ── 페르소나 동시 워커 상한 (`<personas>/<이름>/limit` · §5-4) ───────────────
 

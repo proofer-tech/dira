@@ -30,6 +30,7 @@ import {
 import { openInApp, type OpenResult } from "@/lib/paths";
 import {
   deletePersonaMemory,
+  describeNewSkills,
   extractSkillArchive,
   fetchSkillFromAddress,
   installSkill,
@@ -199,6 +200,11 @@ export async function setPersonaColorAction(
  *  파일에 같은 이름을 넣어 둔 경우도, 다이얼로그가 비활성 이름을 체크해 활성으로 올린 경우도
  *  이 한 줄이 같이 처리한다.
  *
+ *  **`skills.md`에 없던 이름마다 `claude`를 한 번(합쳐서) 부른다**(§5-1, 요구 `284f43b4` 답
+ *  `3241aea8`) — `describeNewSkills`가 `currentActive` 기준으로 새 이름만 추려 모델에 묻고,
+ *  받은 한국어 한 줄로 설치본 설명을 갈아끼운다. 실패해도 이 함수는 안 던진다 — 설치본 원문이
+ *  그대로 남는다.
+ *
  *  **쓴 뒤 그 파일들을 다시 읽어 돌려준다.** 접힌 줄의 자수는 `skills.md` **파일 전체**를 세는데
  *  (§비주얼 §25) 사람이 손으로 덧붙인 산문까지 든 값이라 클라이언트가 계산할 수 없다. 화면이
  *  저장 직후에 참인 수를 그리는 길이 이 한 번의 되읽기다 — 두 번째 왕복을 만들지 않는다. */
@@ -215,7 +221,8 @@ export async function savePersonaSkillsAction(
       readPersonaOffSkillsFile(dir, name),
       listInstalledSkills(),
     ]);
-    const newActive = pickedSkills(picked, currentActive, [...currentOff, ...installed]);
+    const rawActive = pickedSkills(picked, currentActive, [...currentOff, ...installed]);
+    const newActive = await describeNewSkills(rawActive, currentActive);
     const activeNames = new Set(newActive.map((s) => s.name));
     const newOff = pickedSkills(offPicked, currentOff, [...currentActive, ...installed]).filter(
       (s) => !activeNames.has(s.name),
