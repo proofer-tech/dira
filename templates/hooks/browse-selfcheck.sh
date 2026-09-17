@@ -7,7 +7,8 @@
 # snapshot/@e 참조(498ac41d §Done when)는 별도 벌을 안 만들고 이 한 장에 이어 붙인다.
 set -eu
 _root="$(cd "$(dirname "$0")" && pwd -P)"
-_hash="browse-selfcheck-$$"
+# browser.sh가 8자리 16진수(^[0-9a-f]{8}$)가 아니면 거절하므로(§P423-1) pid를 그 형식으로 채운다.
+_hash="$(printf '%08x' "$$")"
 _page_dir="$(mktemp -d)"
 cat > "$_page_dir/index.html" <<'HTML'
 <html><body><h1 id="t">selfcheck-ok</h1>

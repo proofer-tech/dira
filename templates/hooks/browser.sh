@@ -11,6 +11,8 @@
 #   acquire <해시> - 슬롯을 빌리고(없으면 새로 띄우고) 포트 한 줄을 stdout에 낸다.
 #                    이미 이 해시가 쥔 슬롯이 있으면 새로 안 띄우고 그 포트를 그대로 낸다.
 #   release <해시> - 그 슬롯의 브라우저를 죽이고 /tmp/qa-<해시>를 지우고 슬롯을 비운다.
+#   <해시>는 8자리 16진수(^[0-9a-f]{8}$)여야 한다 - 어긋나면 두 서브커맨드 다 슬롯도
+#   /tmp/qa-<값>도 프로세스도 만들지 않고 종료 코드 2로 끝난다(§P423-1).
 set -u
 # job control을 켠다 - 이게 없으면 백그라운드로 띄운 브라우저가 이 스크립트를 부른 셸과 같은
 # 프로세스 그룹에 남아서, release/reclaim의 `kill -TERM -- -$pgid`가 그 그룹 전체(=부른 세션
@@ -141,9 +143,23 @@ _session_pid() {
   fi
 }
 
+# 두 서브커맨드가 공유하는 해시 형식 검사(§P423-1) - 8자리 16진수(^[0-9a-f]{8}$)가 아니면
+# 받은 값과 기대 형식을 stderr에 내고 종료 코드 2로 끝난다. 이 검사보다 앞서 슬롯이나
+# /tmp/qa-<값>이나 프로세스가 생기면 안 되므로 각 do_* 맨 앞에서 부른다.
+_check_hash() {
+  case "$1" in
+    [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f])
+      return 0
+      ;;
+  esac
+  echo "browser.sh: 해시 형식이 어긋났다 - 받은 값 '$1', 기대 형식 8자리 16진수(^[0-9a-f]{8}\$)" >&2
+  exit 2
+}
+
 do_acquire() {
   local hash="$1" limit waited=0 logged_wait=0 got_slot n slot used
   [ -n "$hash" ] || { echo "browser.sh: 사용법 - acquire <해시>" >&2; exit 2; }
+  _check_hash "$hash"
 
   _reclaim
   if port=$(_existing_port "$hash") && [ -n "$port" ]; then
@@ -195,6 +211,7 @@ do_acquire() {
 do_release() {
   local hash="$1" slot pgid n waited=0
   [ -n "$hash" ] || { echo "browser.sh: 사용법 - release <해시>" >&2; exit 2; }
+  _check_hash "$hash"
   for slot in "$_pool"/*/; do
     [ -d "$slot" ] || continue
     [ "$(cat "${slot}hash" 2>/dev/null)" = "$hash" ] || continue

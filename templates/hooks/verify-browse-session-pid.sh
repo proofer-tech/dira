@@ -35,7 +35,8 @@ export DIRA_CHROME_HEADLESS="$TMP/fake-chrome"
 mkdir -p "$TICKET_LOCAL"
 echo 1 > "$TICKET_LOCAL/browser-limit"
 
-HASH="simtest$$"
+# browser.sh가 8자리 16진수(^[0-9a-f]{8}$)가 아니면 거절하므로(§P423-1) pid를 그 형식으로 채운다.
+HASH="$(printf '%08x' "$$")"
 
 # 실제 Bash 도구 호출을 흉내낸다 - 매번 `bash -c`로 새 임시 셸(S)을 낳고, 그 안에서
 # browse.sh(B) -> browser.sh acquire(C)로 두 겹 래핑한다. 이 스크립트 프로세스($$) 자신이

@@ -10,6 +10,8 @@
 # 프레이밍은 python3 표준 라이브러리(socket - struct - urllib)로 직접 문다 - 의존성 0.
 #
 # 호출 모양: bash .dira/browse.sh <해시> <명령> [인자...]
+# <해시>는 8자리 16진수(^[0-9a-f]{8}$)여야 한다 - browser.sh acquire/release의 형식
+# 검사가 두 입구를 다 덮으므로 이 파일 자신은 따로 재지 않는다(§P423-1).
 #
 # A 묶음 열둘:
 #   goto <url>              url로 이동하고 완전히 뜰 때까지 기다린다
