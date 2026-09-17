@@ -1,28 +1,28 @@
 # apps/teams/ 코드베이스 규약
 
 dira 큐를 보는 로컬 웹 UI. **스펙은 `../docs/DESIGN.md`가 단일 출처**다.
-여기 있는 건 코드 규약뿐이다. 스펙과 다르게 만들고 싶으면 `kind: feedback` 티켓을 올린다.
+여기 있는 것은 코드 규약뿐이다. 스펙과 다르게 만들고 싶으면 `kind: feedback` 티켓을 올린다.
 
 ## 구조
 
 ```
 apps/teams/
-  app/                  App Router. fs 접근은 전부 여기(서버) 아니면 lib/
+  app/                  App Router. fs 접근은 전부 여기(서버)나 lib/에 둔다
                         **루트 레이아웃이 둘이다**(Next "Multiple Root Layouts") — `(app)`과
                         `(site)`가 각자 `<html>`을 그린다(§한 코드베이스 §부딪히는 것 ① — `/p/**`는
                         `h-full overflow-hidden`, 랜딩·매뉴얼은 문서가 스크롤한다). `globals.css`는
-                        `app/`에 그대로 두고 두 그룹이 각자 상대경로로 문다 — 공유 리셋이라서다.
+                        `app/`에 그대로 두고 두 그룹이 각자 상대경로로 import한다 — 공유 리셋이기 때문이다.
     globals.css         Tailwind v4 + shadcn 토큰. 색은 여기서만 정의한다
     (app)/              기존 GUI 전부(§구조 나머지가 이 아래고 경로만 한 단 밀렸다 — `@/app/actions`
-                        같은 alias import는 `app/` 기준이라 안 갈린다)
+                        같은 alias import는 `app/` 기준이라 달라지지 않는다)
       layout.tsx        html·폰트·TooltipProvider + **키맵을 읽는 유일한 곳**(§0-6 배선 —
                         두 셸이 다 이 아래고 파일 하나짜리 읽기다. 셸마다 읽지 않는다)
                         + `<ScreenView/>` — `screen_view`를 보내는 유일한 자리(§0-11)
                         + `<FeedbackDialog/>` — 의견 폼(§0-12). 화면 이동 없이 **지금 화면 위에**
                         떠야 해서 자리가 여기다(닫혀 있으면 안 그린다)
                         + `<DesktopFindBar/>` — N5 찾기 바(§데스크톱 앱). 붙는 화면이 다섯이고
-                        레이아웃이 둘로 갈려서 자리가 여기다. **`KeymapProvider` 안**이어야
-                        한다(`⌘F`가 그 컨텍스트를 읽는다) — 위 둘과 갈리는 유일한 조건이다
+                        레이아웃이 둘로 나뉘어서 자리가 여기다. **`KeymapProvider` 안**이어야
+                        한다(`⌘F`가 그 컨텍스트를 읽는다) — 위 둘과 달라지는 유일한 조건이다
       not-found.tsx     404. `p/[project]/layout.tsx`의 notFound()를 받는 경계가 여기다
       api/awaiting/     **화면이 쓰지 않는다** — Electron main이 답변 대기를 물어보는 창구다
                         (DESIGN.md §데스크톱 앱 N2 · 고정하는 것 5). 판정은 `lib/queue.ts`의
@@ -45,11 +45,11 @@ apps/teams/
                         `home/`은 라우트가 아니라 이 액션·`pty/`의 공동 배치 폴더로 남는다
     actions.ts          Server Action (프로젝트 등록·이름·순서·해제·재해석). 큐 파일은 안 건드린다
                         + **사용 통계 액션 셋**(§0-11): `trackEvent`(화면에서 GA로 나가는
-                        **유일한 길** — 새 API 라우트를 안 만든다. `app/api/`는 Electron main
+                        **유일한 수단** — 새 API 라우트를 안 만든다. `app/api/`는 Electron main
                         창구뿐이다) · `readAnalyticsAction`·`setAnalyticsAction`(끄는 자리).
                         서버 쪽 트리거는 이걸 안 거치고 `lib/analytics.ts`의 `track()`을 직접 부른다.
                         `(app)/` 밖(그룹 바깥 `app/`)에 있다 — `@/app/actions` alias import가
-                        그룹 이름을 안 타서, 옮기면 그 import 전부를 고쳐야 한다
+                        그룹 이름의 영향을 받지 않아서, 옮기면 그 import 전부를 고쳐야 한다
     (site)/             공개 사이트 — 랜딩·매뉴얼 22장·`/privacy`·`/terms`(§한 코드베이스, 이사
                         `6a24257d`). `apps/site/`가 여기로 통째로 흡수됐다 — 내부 구조·CSS
                         스코프(`landing.css`·`manual.css`·`fonts.css`)·정본은 옛 절 그대로다
@@ -62,16 +62,16 @@ apps/teams/
                         페르소나 CRUD (기준 디렉터리가 `resolveConfig().personas`라 여기 있다)
                         + **키맵 파일 3함수**(`keymapPath`·`readKeymap`·`writeKeymap`, §0-6).
                         `keymap.ts`가 아니라 여기 있는 이유는 그 파일 머리 주석에 있다 —
-                        저기는 클라이언트 번들로 가고, 이 셋이 필요한 건 `registryPath()`뿐이다
+                        저기는 클라이언트 번들로 가고, 이 셋에 필요한 것은 `registryPath()`뿐이다
     keymap.ts           키맵 코어 (§0-6): `DEFAULT_KEYMAP`(액션 8개) · `matchCombo` ·
                         `formatCombo` · `validateBinding`. **`node:*` import 금지** —
-                        키를 듣는 것도 그리는 것도 클라이언트 컴포넌트다(`urls.ts`와 같은 축).
+                        키를 듣는 것도 그리는 것도 클라이언트 컴포넌트다(`urls.ts`와 같은 제약이다).
                         화면에 키를 적는 코드는 `formatCombo` 하나만 쓴다
     urls.ts             슬러그·전환 경로·`~` 축약·배지 경과 접미사·스트림 폼 모드·시각 표기
                         (`timeLabel` §26 ④)·홈 대화 목록 한 줄(`chatRows` §24)
-                        + **통계 화면 enum `Screen`·`screenOf`**(§0-11 — 경로를 enum 하나로 접는
+                        + **통계 화면 enum `Screen`·`screenOf`**(§0-11 — 경로를 enum 하나로 축약하는
                         유일한 곳. `analytics.ts`가 이 타입을 가져다 쓴다)
-                        + `hasFindBar`(§데스크톱 앱 N5 — 그 enum을 접어 보드·홈만 뺀다.
+                        + `hasFindBar`(§데스크톱 앱 N5 — 그 enum을 이용해 보드와 홈만 제외한다.
                         경로를 다시 파싱하지 않는다). **순수 함수만** —
                         클라이언트가 import한다(배지도 클라이언트 컴포넌트에 들어간다).
                         JSX는 `node --test`가 못 읽으므로 컴포넌트의 순수 판정은 여기서 검증한다
@@ -81,10 +81,10 @@ apps/teams/
     protocols.ts        프로토콜 파일트리·읽기·쓰기. 기준은 **해석된 TICKET_PROTOCOLS**(루트 아니다)
     skills.ts           페르소나 사이드카 — 스킬(§5-1)과 **메모리**(§5-2): 이 머신에 설치된 스킬
                         발견(`~/.claude` — **큐 밖**) + `<personas>/<이름>/skills.md` 읽기·쓰기
-                        + `memory/*.md` 한 단계 글롭 읽기·삭제. `projects.ts`에 안 얹은 이유는
+                        + `memory/*.md` 한 단계 글롭 읽기·삭제. `projects.ts`에 추가하지 않은 이유는
                         그 파일 머리 주석에 있다 — 여기 든 것 절반이 프로젝트를 인자로도 안 받는다.
                         경로 방어는 `projects.ts`의 `personaFilePath` 하나를 같이 쓴다.
-                        메모리 삭제의 화이트리스트는 **읽기가 쓰는 그 목록**이다(갈리면 방어가
+                        메모리 삭제의 화이트리스트는 **읽기가 쓰는 그 목록**이다(어긋나면 방어가
                         아니라 다른 규칙이 된다) — 한글 파일명 때문에 NFC로 대조한다
     scaffold.ts         새 프로젝트 스캐폴딩 (DESIGN.md §0-3). **등록되지 않은 경로에 파일을 쓰는
                         유일한 곳** — 경계가 파일 목록 자체고 전부 `wx`다(있는 파일은 안 덮는다)
@@ -92,19 +92,19 @@ apps/teams/
     kick.ts             즉시 디스패치(§4-5). 사람의 조작이 열린 티켓을 만들거나 되돌리면 그 자리에서
                         `idle` 워커 하나를 인자 없이 **detach spawn**한다. 부르는 곳은 서버 액션
                         5곳(`createTicket`·`answerRequirement`·`sendFollowup`·`unassignTicket`·
-                        `saveTicket`). **`engine.ts`에 못 얹는다**: 저긴 `execFile` + 60초 타임아웃이
-                        계약이고("rc와 출력을 그대로 넘긴다") 그 길로 부르면 5~25분짜리 세션을
+                        `saveTicket`). **`engine.ts`에 추가할 수 없다**: 저기는 `execFile` + 60초 타임아웃이
+                        계약이고("rc와 출력을 그대로 넘긴다") 그 경로로 호출하면 5~25분짜리 세션을
                         60초마다 죽인다. 여기는 결과가 없다 — **던지지 않고** 화면에 보고도 없다
     transcript.ts       세션 스트림(§2-1) 읽기 코어. 트랜스크립트 경로 찾기 · 바이트 오프셋 테일 ·
                         jsonl 레코드 → 사건 매핑. **root 밖(`~/.claude/projects`)을 읽는 유일한 곳** —
                         방어는 `session_id` UUID 정규식 하나다(사람 입력을 받지 않는다)
     interject.ts        참견 보내기(§2-2). 티켓 fm의 `inbox:` FIFO에 JSON 한 줄. **읽는 쪽이
-                        `transcript.ts`인 것과 짝**이라 그쪽에 안 얹었다 — 저긴 순수 읽기 코어고
-                        여긴 유일한 쓰기다. `O_WRONLY|O_NONBLOCK`이 이 파일의 존재 이유고
-                        (없으면 Server Action이 영영 안 끝난다) 실패 사유를 갈라서 돌려준다
+                        `transcript.ts`인 것과 짝**이라 그쪽에 추가하지 않았다 — 저기는 순수 읽기 코어고
+                        여기는 유일한 쓰기다. `O_WRONLY|O_NONBLOCK`이 이 파일의 존재 이유고
+                        (없으면 Server Action이 영영 안 끝난다) 실패 사유를 구분해서 돌려준다
     followup.ts         이어받기(§2-2 완료 티켓의 참견). 완료 티켓 + 참견 → **새 열린 티켓 한 장**.
-                        `interject.ts`와 **짝이고 한 파일이 아니다**: 저긴 FIFO에 쓰고 티켓 파일을
-                        안 건드리고, 여긴 큐에 파일을 만들고 FIFO를 모른다. 모드 판정이 반대
+                        `interject.ts`와 **짝이고 한 파일이 아니다**: 저기는 FIFO에 쓰고 티켓 파일을
+                        안 건드리고, 여기는 큐에 파일을 만들고 FIFO를 모른다. 모드 판정이 반대
                         방향(`.done` / `.wip`)이라 합치면 한 함수가 두 계약을 들게 된다.
                         해시·`O_EXCL`·10회 재시도는 `createTicket`과 **같은 코드가 두 벌**이다
                         (`"use server"` 파일에서 import 못 한다 — 그쪽 머리 주석이 같은 대가를 적는다)
@@ -117,18 +117,18 @@ apps/teams/
                         프로젝트 → session id 목록(`$TICKET_LOCAL/home-sessions.json` — §대화가 여럿이다.
                         상한 20을 자르는 것도 여기고 화면은 받은 줄을 그대로 그린다).
                         **GUI가 큐를 안 거치고 세션을 소유하는 유일한 곳** — `engine.ts`와 짝이
-                        아니다(저긴 이미 있는 워커 스크립트에 하위명령을 넘긴다). 커맨드를 확정한
+                        아니다(저기는 이미 있는 워커 스크립트에 하위명령을 넘긴다). 커맨드를 확정한
                         실측은 그 파일 머리 주석에 있다. 특히 **도구 목록을 줄이는 것은 `--tools`
                         (+ MCP를 빼는 `--strict-mcp-config`)뿐**이다 — `--allowed-tools`는 권한
                         자동승인 목록이라 목록 밖 `Bash`가 그대로 돈다(A/B 실측 `89962e56`).
-                        `--permission-mode manual`은 그 뒤에 남은 것의 관문이다. 대화 이력 저장소를
+                        `--permission-mode manual`은 그 뒤에 남은 것의 승인 조건이다. 대화 이력 저장소를
                         만들지 않는다: 렌더는 `transcript.ts`가 읽는 그 트랜스크립트다.
                         **출처가 둘인 유일한 화면이다**(§7 §답은 흐른다): 도는 동안은 자식의 stdout
                         (`--output-format stream-json --include-partial-messages --verbose` →
                         `text_delta` 누적 = `HomeChunk.partial`)이고, 끝나는 순간 정본이
                         트랜스크립트로 넘어간다(같은 응답에서 `partial`이 비고 `turns`가 그 답을
-                        데려온다 — 한 답을 두 벌로 안 그린다). `중지`는 그 자식에 `SIGTERM` 하나고
-                        (`SIGKILL` 사다리 없음) 실패가 아니라 `stopped`다
+                        가져온다 — 한 답을 두 벌로 안 그린다). `중지`는 그 자식에 `SIGTERM` 하나고
+                        (`SIGKILL` 단계 없음) 실패가 아니라 `stopped`다
     usage.ts            토큰의 **두 축**(§0-8). 판정 1(소비): `workers/logs/` 파일명 → 워커·시각,
                         마지막 줄 JSON → 그 세션의 토큰(`lastJsonLine`을 `workers.ts`와 **같이 쓴다**).
                         판정 2(잔여): `engineLimits`가 엔진 이름 → `%`·리셋 시각을 준다 —
@@ -137,25 +137,25 @@ apps/teams/
                         **부르는 주체는 서버뿐이고 토큰은 응답에 안 담긴다.** TTL 60초 캐시가
                         Promise를 들어서 5초 폴링에 외부 호출이 매달리지 않는다.
                         **아무 파일도 쓰지 않는다.** 큰 수를 줄이는 `formatTokens`도 여기다 —
-                        워커 화면의 열과 상단 합계가 같은 모양을 써야 한다(자리마다 적으면 갈린다).
+                        워커 화면의 열과 상단 합계가 같은 모양을 써야 한다(자리마다 적으면 달라진다).
                         **하단 status bar는 `formatTokens`를 안 쓴다** — 그 칸의 소비량은
                         `toLocaleString()`이다(§비주얼 §26 ⑤가 `1.2M`을 명시적으로 거절했다)
     analytics.ts        사용 통계 GA4 전송 (§0-11). **규칙 넷이 여기 한 곳에 있다** — 세션 정의
                         (`install_id`는 `$TICKET_LOCAL/analytics.json`, `session_id`는 모듈 메모리
                         30분) · 자격값 읽기(`GA_MEASUREMENT_ID`·`GA_API_SECRET`, 없으면 안 보냄) ·
-                        끄기 판정 · 익명 규칙. 트리거 자리에 `if (enabled)`를 흩뿌리지 않는다.
-                        **`gtag.js`를 안 쓴다**(렌더러에 원격 JS를 안 들인다 — 고정하는 것 4):
+                        끄기 판정 · 익명 규칙. 트리거 자리마다 `if (enabled)`를 분산해 적지 않는다.
+                        **`gtag.js`를 안 쓴다**(렌더러에 원격 JS를 포함하지 않는다 — 고정하는 것 4):
                         서버가 `mp/collect`로 POST한다. **던지지 않고 호출자는 await하지 않는다**
                         (Promise를 주는 이유는 하나 — 테스트가 전송을 관찰한다). 이벤트 이름 8개는
-                        `Events` 타입이 닫는다 — 표 밖의 이름은 컴파일이 거부한다(§0-11 표가 단일 출처)
+                        `Events` 타입이 제한한다 — 표 밖의 이름은 컴파일이 거부한다(§0-11 표가 단일 출처)
     feedback.ts         의견 → GitHub 프리필 URL (§0-12). **순수 함수뿐이다** — 여는 것은
-                        `window.open`이라 부르는 쪽이 클라이언트다(`urls.ts`와 같은 축.
-                        `node:*` import 금지). 제목 40자 컷 · 본문 두 줄 · **URL 상한 6,000바이트**
+                        `window.open`이라 부르는 쪽이 클라이언트다(`urls.ts`와 같은 제약이다.
+                        `node:*` import 금지). 제목 40자 제한 · 본문 두 줄 · **URL 상한 6,000바이트**
                         (실측값과 근거는 그 파일 상수 옆에 있다)와 자르기가 여기 한 곳에 있다.
-                        `urls.ts`에 안 얹은 이유: 저기는 앱 안 경로고 여기는 앱 밖으로 나가는 URL이다
+                        `urls.ts`에 추가하지 않은 이유: 저기는 앱 안 경로고 여기는 앱 밖으로 나가는 URL이다
     markdown-breaks.ts  `<Markdown breaks>`의 remark 플러그인 (§비주얼 §10 **면제** — 사람이 입력칸에
-                        친 줄바꿈만 그린다). `remark-breaks`를 안 들인 이유는 `untilHeading`이다:
-                        요구 티켓 본문은 첫 `##` **앞까지만** 켜는데 그 패키지는 트리 전체다.
+                        친 줄바꿈만 그린다). `remark-breaks`를 도입하지 않은 이유는 `untilHeading`이다:
+                        요구 티켓 본문은 첫 `##` **앞까지만** 적용하는데 그 패키지는 트리 전체다.
                         `components/`가 아니라 여기 있는 이유는 JSX를 `node --test`가 못 읽어서다
     utils.ts            shadcn cn() — 건드리지 않는다
     *.test.ts           node --test
@@ -163,7 +163,7 @@ apps/teams/
     status-badge.tsx    상태 표현의 유일한 출처 (티켓 5 · 워커 4 · 연결 2) + deps 배지
     worker-mark.tsx     `.wip` 워커 마크의 유일한 출처 (§비주얼 §19). 자리가 셋이고
                         (칸반 카드 · 테이블 `owner` 셀 · 상세 잠금 `Alert`) 클래스 문자열이
-                        셋에서 같아야 한다. **`status-badge.tsx`에 못 얹는 이유**: 그 파일은
+                        셋에서 같아야 한다. **`status-badge.tsx`에 추가할 수 없는 이유**: 그 파일은
                         클라이언트 컴포넌트가 import해서 번들로 가는데 여기는 `workerOf`
                         (= `lib/workers.ts`, `node:fs`)가 필요하다. 부르는 곳은 서버 페이지 둘뿐
     persona-badge.tsx   persona 값 표시의 유일한 출처 (점+이름 배지 · 점만 그리는 모드).
@@ -172,18 +172,18 @@ apps/teams/
     feedback-dialog.tsx `의견 보내기` 폼(§0-12) — `textarea` 하나 + 보내기. **여는 신호가 하나다**:
                         데스크톱 셸의 `Help > 의견 보내기`가 던지는 `dira:feedback` window 이벤트
                         (`apps/desktop/main.ts` — preload에 새 API가 0개다. 고정하는 것 4).
-                        진입점이 그 메뉴 하나뿐이라 열림 상태를 자기가 든다. 보내기는 `window.open` 하나고
+                        진입점이 그 메뉴 하나뿐이라 열림 상태를 자기가 가진다. 보내기는 `window.open` 하나고
                         (`setWindowOpenHandler`가 외부로 보낸다 — **새 IPC 0개**) 서버로 가는 것은
                         `feedback_submit` 하나고 그 길은 `trackEvent` 하나다(§0-11). **의견 본문은 GA로 안 간다**.
                         URL 조립은 `lib/feedback.ts`고 여기는 그리기 + 두 줄 공개뿐이다.
-                        **새 파일인 이유**: 두 셸 어디서나 떠야 해서 기존 파일 어디에 얹어도
-                        나머지 셸이 그 파일을 import한다(`keymap-provider.tsx`와 같은 축)
-    keymap-provider.tsx 서버가 읽은 키맵을 클라이언트로 나르는 통로 (§0-6 배선):
+                        **새 파일인 이유**: 두 셸 어디서나 떠야 해서 기존 파일 어디에 넣어도
+                        나머지 셸이 그 파일을 import한다(`keymap-provider.tsx`와 같은 이유다)
+    keymap-provider.tsx 서버가 읽은 키맵을 클라이언트로 전달하는 통로 (§0-6 배선):
                         `KeymapProvider`(`useContext` 하나) · `useKeymap()` ·
                         **`useHotkey()`**. 전역 키를 거는 코드는 이 훅만 쓴다 — 글 쓰는 중
-                        가드(`lib/keymap.ts`의 `shouldFire`)를 자리마다 다시 짜면 어느 한 곳이
-                        조용히 검색 칸을 먹는다. **새 파일인 이유**: 쓰는 곳이 셸 · 티켓 상세 ·
-                        설정 다이얼로그 셋이라 어디에 얹어도 나머지 둘이 그 파일을 import한다
+                        가드(`lib/keymap.ts`의 `shouldFire`)를 자리마다 다시 구현하면 어느 한 곳이
+                        조용히 검색 칸의 입력을 가로챈다. **새 파일인 이유**: 쓰는 곳이 셸 · 티켓 상세 ·
+                        설정 다이얼로그 셋이라 어디에 넣어도 나머지 둘이 그 파일을 import한다
     project-switcher.tsx 전환기 · 내비 · 다시 확인 (셸의 클라이언트 조각) + **브랜드 마크**
                         (§비주얼 §14). 마크는 두 셸(`p/[project]/layout.tsx` · `(list)/page.tsx`)이
                         같이 쓰고 `href`만 다르다 — 셸마다 인라인하면 §14가 2벌로 고정한 사본이
@@ -192,7 +192,7 @@ apps/teams/
                         `screen_view`를 다 보낸다. 같은 이유로 여기 있다(이미 `usePathname()`을
                         쓰는 셸 조각이고 그리는 것이 없다). **서버 컴포넌트로는 못 옮긴다** —
                         보드가 5초마다 refresh해서 렌더마다 보내면 체류 시간이 조회수가 된다
-                        + **`<NotificationPopover>`**(§28 ④) — 알림 종의 그릇. 트리거·내용
+                        + **`<NotificationPopover>`**(§28 ④) — 알림 종의 컨테이너다. 트리거·내용
                         마크업은 셸에 그대로 있고(`children`) 여기 있는 것은 열림 상태 하나다.
                         안에서 `<a>`를 누르면 닫는다 — `<button>` 둘(`토큰 저장`·`할당 해제`)은
                         안 닫는다. 같은 이유로 여기 있다(셸의 클라이언트 조각 · 새 파일 0)
@@ -203,7 +203,7 @@ apps/teams/
                         두 값으로 받는 이유: 배너 쪽 호출자가 **서버 컴포넌트**다
     projects-ui.tsx      등록 폼 · 해석 결과 표 · **목록 표** · 행 액션 (`/`의 클라이언트 조각).
                         목록 표가 서버가 아니라 여기 있는 이유는 `<ProjectRows>` 주석에 있다
-                        (`955a8237`: 서버가 행 엘리먼트를 그리면 순서 변경이 화면에 안 붙는다)
+                        (`955a8237`: 서버가 행 엘리먼트를 그리면 순서 변경이 화면에 반영되지 않는다)
     ticket-ui.tsx       편집 폼 · 할당 해제 · 삭제 + **보드의 발행 · 요구 접수
                         다이얼로그**(§3 — 라우트가 아니다. 트리거가 보드에 있다)
                         + **답변 폼 한 벌 `AnswerForm`**(§2-3 ③) — 자리가 둘이라 여기 있다:
@@ -213,18 +213,18 @@ apps/teams/
                         **다이얼로그 전용이다** — 상세의 스레드는 병합 상자 안에 있다(§2-3 ⑤)
     personas-ui.tsx     생성 · PROFILE.md 편집 · 삭제 + 스킬 절(§25) · **메모리 절**(§5-2 · §32 —
                         중첩 `<details>`. 그룹에 **이름을 준다**(`group/mem`): 이름 없는
-                        `group-open:`은 조상인 카드의 `group`을 물어 항목이 접혀 있어도 chevron이
+                        `group-open:`은 조상인 카드의 `group`을 참조해 항목이 접혀 있어도 chevron이
                         돈다) (페르소나 화면의 클라이언트 조각)
     protocols-ui.tsx    md 에디터 · 새 파일 · 이름변경 · 삭제 (프로토콜의 클라이언트 조각)
     session-stream.tsx  **진행 기록**(§2-3 · §비주얼 §29) — 종전 세션 스트림(§2-1 · §9)이 한 상자다.
                         2초 폴링 + 자동 스크롤 + 네이티브 <details>. 읽기·파싱은 전부
-                        lib/transcript.ts고 여기는 그리기만 한다. 상자 안에 문법이 둘이고
+                        lib/transcript.ts고 여기는 그리기만 한다. 상자 안에 표현 형식이 둘이고
                         (스트림 줄 · 말풍선 `ThreadRow`) 순서는 `lib/urls.ts`의 `mergeProgress`가
-                        정한다 — 화면이 시간순을 다시 판정하지 않는다. 상자 높이의 갈림길은
+                        정한다 — 화면이 시간순을 다시 판정하지 않는다. 상자 높이의 판정 기준은
                         `stream` prop 하나다(스트림 줄이 흐르면 `h-[32rem]` + 머리 줄, 아니면
                         `max-h-[32rem]`). 워커 다이얼로그는 기본값 그대로라 §9 그대로다.
                         **입력칸 form(§2-2 · §2-3 ③ · §비주얼 §21)도 여기 있다** — 상자 밖·밑. 이 파일
-                        하나에 다니까 티켓 상세와 워커 다이얼로그가 같은 폼을 그린다(§2-1 Q2=(a)).
+                        하나에 전부 들어 있어서 티켓 상세와 워커 다이얼로그가 같은 폼을 그린다(§2-1 Q2=(a)).
                         **그 칸은 하나고 모드가 셋이다**: `.wip`이면 참견(`lib/interject.ts` → FIFO),
                         답변 대기면 답변(`ticket-ui.tsx`의 `AnswerForm` 한 벌 → `answerRequirement`),
                         `.done`이면 이어받기(`lib/followup.ts` → 새 열린 티켓 + 그 상세로 이동).
@@ -232,20 +232,20 @@ apps/teams/
                         **서버가 파일을 다시 읽어** 판정한다(어긋나면 실패 + 사유). 폼은 **낙관적
                         에코를 그리지 않는다**: 보낸 문장은 다음 폴링의 `enqueue` 줄로 돌아온다.
                         **codex 워커에는 둘 다 없다**(§4-3 · §비주얼 §23 ⑤): `engine` prop
-                        하나로 갈리고 상자 자리엔 `<EmptyState>`, 폼 자리엔 비활성 + 사유 한 줄.
+                        하나로 나뉘고 상자 자리에는 `<EmptyState>`, 폼 자리에는 비활성 + 사유 한 줄.
                         폴링도 안 돈다. **진입점은 안 지운다** — 조용히 사라지면 고장으로 읽힌다.
-                        `engineName`은 **서버가** 적용해 넘긴다(그 파일이 `node:fs`를 탄다)
+                        `engineName`은 **서버가** 적용해 넘긴다(그 파일이 `node:fs`를 사용한다)
     home-ui.tsx         홈 대화 뷰(§7 · §비주얼 §24) — 말풍선 스레드 · 입력 form · **좌측 패널
                         (`대화` + `워커 세션` 두 그룹)**(shadcn `sidebar`. 팝오버는 `01e5293b`이
-                        걷었다 — 같은 목록이 두 자리에 뜨면 정본이 없다. **`command`는 여전히
-                        안 쓴다** — 그릇이 곧 검색칸인데 §7이 대화 검색을 뺐다. `sidebar`를
-                        버렸던 근거(부수 의존 5개)는 **틀린 수**여서 §비주얼 §34가 뽑았다:
-                        실측으로 느는 파일 셋 · **새 npm 0**). 사슬은 `SidebarProvider`(2단 행
+                        제거했다 — 같은 목록이 두 자리에 뜨면 정본이 없다. **`command`는 여전히
+                        안 쓴다** — 컨테이너가 곧 검색칸인데 §7이 대화 검색을 뺐다. `sidebar`를
+                        버렸던 근거(부수 의존 5개)는 **잘못된 수치**여서 §비주얼 §34가 정정했다:
+                        실측으로 느는 파일 셋 · **새 npm 0**). 구성 순서는 `SidebarProvider`(2단 행
                         자신) → `Sidebar collapsible="none"` → `SidebarContent` → `SidebarGroup`
                         ×2 → `SidebarGroupLabel` + `SidebarMenu`>`Item`>`MenuButton`이고
                         **접기·`SidebarTrigger`·`SidebarRail`·모바일 `Sheet`가 0개다**(§34
                         §안 하는 것 — `collapsible="none"` 분기가 `isMobile` 검사 앞에서 반환한다).
-                        면은 `bg-surface`가 낸다(`bg-sidebar`는 다크에서 `--card`값이라 카드 대
+                        면의 색은 `bg-surface`가 정한다(`bg-sidebar`는 다크에서 `--card`값이라 카드 대
                         면이 1.00이 된다 — §비주얼 §33 층 셋이 깨진다).
                         **`current` 한 칸이 두 그룹을 통틀어 가리킨다** — 워커 세션을
                         고르면 그 트랜스크립트가 같은 스레드에 그려지고 `conversations`에는 줄이
@@ -253,13 +253,13 @@ apps/teams/
                         도는 세션은 `보내기`가 잠기고(그 근거는 자리가 아니라 파일이다 — 한
                         트랜스크립트에 두 프로세스) 서버가 `startAsk`에서 한 번 더 거절한다.
                         줄 안의 해시는 **글자**다(링크는 손잡이 줄 문구 — `<button>` 안에 `<a>`를
-                        못 넣는다. §24와 갈린 자리라 designer에게 `077d3b2d`) ·
+                        못 넣는다. §24와 어긋난 자리라 designer에게 `077d3b2d`) ·
                         `새 대화`(**여는 버튼이다. 확인이 없다**) +
                         **답 아래 24px 띠 하나**(도는 중 = 진행 표식 + `중지`, 끝났으면 `복사` +
                         `다시 답하기`, 중지된 답이면 `중지됨`이 앞에). 띠가 답 항목 **안**에 있는
-                        것이 계약이다 — 답이 끝날 때 높이가 안 튄다(자동 스크롤이 바닥을 문다).
+                        것이 계약이다 — 답이 끝날 때 높이가 안 튄다(자동 스크롤이 바닥에 고정된다).
                         대화 목록도 `current`도 서버 파일에 있고 화면은 **폴링 응답 하나**로
-                        그 둘과 스레드를 같이 받는다(`HomeChunk.conversations`) — 라우트가 안 는다.
+                        그 둘과 스레드를 같이 받는다(`HomeChunk.conversations`) — 라우트가 늘지 않는다.
                         **`session-stream.tsx`를 안 쓴다**(§7이 그렇게 적었다 — 저건 티켓 `stem`에
                         묶여 있고 참견·이어받기 폼을 달고 있다). 재사용하는 것은 화면이 아니라
                         읽기 코어(`lib/transcript.ts`)이고 그건 `lib/home-session.ts`가 부른다.
@@ -267,45 +267,45 @@ apps/teams/
                         낙관적 에코가 없다: 방금 보낸 질문도 트랜스크립트에서 읽어 온다 —
                         화면의 출처가 그 파일 하나여야 새로고침 전후가 같다.
                         **새 파일인 이유**: 페이지가 서버 컴포넌트여야 하고(§24 — 스켈레톤 0,
-                        서버가 트랜스크립트를 읽어 동기로 그린다) 이 화면은 상태를 여섯 개 든다
+                        서버가 트랜스크립트를 읽어 동기로 그린다) 이 화면은 상태가 여섯 개다
     markdown.tsx        읽기 전용 마크다운 렌더(§비주얼 §10). **왕복 스레드와 `.wip` 본문의
                         유일한 출처** — 편집기는 종전대로 원문이다. 자리별 오버라이드 없음
     find-bar.tsx        찾기 바(§7 §대화 안에서 찾기 · §비주얼 §30) — `⌘F`로 열고 **지금 화면에
-                        떠 있는 글**에서 찾는다. **서버가 한 줄도 안 든다**(새 라우트 0 · 새 액션 0):
+                        떠 있는 글**에서 찾는다. **서버가 한 줄도 관여하지 않는다**(새 라우트 0 · 새 액션 0):
                         훑는 것이 이미 그려진 DOM이다. **DOM도 안 고친다** — 일치한 곳은
                         `CSS.highlights` + `::highlight()` 둘(이 파일의 `<style>` — §비주얼 §30 ⑧)이라 스트리밍 중인
-                        스레드를 React가 다시 그려도 다투지 않고, 다시 그려질 때마다 다시 걷는
+                        스레드를 React가 다시 그려도 충돌하지 않고, 다시 그려질 때마다 다시 수집하는
                         것은 `MutationObserver` 하나다. 순수 판정(문자열 → 일치 오프셋)은
                         `lib/urls.ts`의 `findMatches`다(JSX를 `pnpm test`가 못 읽는다).
-                        **한 벌이 두 화면에 뜬다**(홈 · §데스크톱 앱 N5)라 갈리는 값 둘만 props다 —
+                        **한 벌이 두 화면에 뜬다**(홈 · §데스크톱 앱 N5)라 달라지는 값 둘만 props다 —
                         훑을 자리(`scope`)와 닫을 때 돌아갈 포커스(`restore`). 열림 상태와
-                        `board.search` 훅은 자기가 든다: **마운트되는 자리가 곧 범위다**
+                        `board.search` 훅은 자기가 관리한다: **마운트되는 자리가 곧 범위다**
                         (`board-ui.tsx`가 같은 액션의 보드 갈래를 쓰는 그대로).
-                        메뉴에서 여는 길 하나를 같이 듣는다 — 데스크톱 셸의 `Edit > 찾기`가 던지는
+                        메뉴에서 여는 경로 하나를 같이 듣는다 — 데스크톱 셸의 `Edit > 찾기`가 던지는
                         `dira:find` window 이벤트(`feedback-dialog.tsx`와 같은 관용구.
                         **preload에 새 API 0 · 새 IPC 채널 0**)
                         + **`<DesktopFindBar>`**(§데스크톱 앱 N5) — 위 바를 **보드·홈이 아닌
-                        모든 화면**에 만드는 껍데기. 채우는 것은 갈리는 값 둘(`main` · 없음)이고
+                        모든 화면**에 만드는 외곽 컴포넌트. 채우는 것은 달라지는 값 둘(`main` · 없음)이고
                         판정 둘이 전부다: 데스크톱인가(`useIsDesktop` — `path-picker.tsx`와
                         **같은 판정 하나**를 쓴다. 브라우저에는 크롬 찾기 바가 있어서
-                        **우리 코드 0줄이 그 화면의 계약이다**)와 이 경로에 서나
-                        (`lib/urls.ts`의 `hasFindBar` — `screenOf`를 접는다).
+                        **우리 코드 0줄이 그 화면의 계약이다**)와 이 경로에 해당하나
+                        (`lib/urls.ts`의 `hasFindBar` — `screenOf`를 축약한다).
                         **루트 레이아웃에 한 번 뜬다**(`app/layout.tsx`, `KeymapProvider` 안):
-                        붙는 화면이 다섯이고 레이아웃이 둘로 갈려서 화면마다 얹으면 같은 두 줄이
+                        붙는 화면이 다섯이고 레이아웃이 둘로 나뉘어서 화면마다 넣으면 같은 두 줄이
                         다섯 벌이 된다. 같은 이유로 여기 있다(새 파일 0)
                         **새 파일인 이유**: 쓰는 곳이 두 화면이라 어느 한쪽에 얹으면 나머지가
-                        그 파일을 import한다(`keymap-provider.tsx`와 같은 축)
+                        그 파일을 import한다(`keymap-provider.tsx`와 같은 제약이다)
     copy-command.tsx    실행 대신 복사시키는 명령 블록
   components/ui/        shadcn CLI 산출물. 손으로 만들지 않는다.
                         **예외 넷. `add`를 다시 돌리면 전부 되살아난다 — 돌린 뒤 그 조각만
                         다시 뺀다**(그래서 여기 적혀 있다):
                         ① `alert.tsx` 기본 변종의 `*:[svg]:text-current`를 뺐다(`b532bf8b`).
-                        그게 아이콘의 `text-status-*`를 21곳 전부에서 덮어 §비주얼 §2의 색 겹이
-                        죽어 있었다
+                        그게 아이콘의 `text-status-*`를 21곳 전부에서 덮어 §비주얼 §2의 색 층이
+                        작동하지 않고 있었다
                         ② `sidebar.tsx`의 `SIDEBAR_KEYBOARD_SHORTCUT` 1줄과 그 `useEffect`
                         6줄을 뺐다(`bac53a2e` · 근거는 §비주얼 §34 §사실 표 한 줄이 틀렸다).
-                        `SidebarProvider`가 **무조건** `window`에 keydown을 걸어 `⌘B`를 먹고
-                        `sidebar_state` 쿠키를 낳는데(제어 프롭 분기 **밖**이라 프롭으로 못 막는다)
+                        `SidebarProvider`가 **무조건** `window`에 keydown을 걸어 `⌘B`를 가로채고
+                        `sidebar_state` 쿠키를 생성하는데(제어 프롭 분기 **밖**이라 프롭으로 못 막는다)
                         이 앱은 접기를 안 켜서 잃는 기능이 0이다. §0-6이 이 앱 키의 단일 출처다.
                         **뒤집는 조건**: 접기를 켜면 되살리고 그 키를 §0-6 표에 아홉 번째로 넣는다
                         ③ `hooks/use-mobile.ts`를 `useSyncExternalStore`로 다시 적었다
@@ -316,11 +316,11 @@ apps/teams/
                         전용 값으로 개정하면서 장식 테두리가 라이트 17.93 · 다크 15.72로 거의
                         검정 액자가 됐다 — §비주얼 §9가 재선택한 `--chart-2`(라이트 4.74 · 다크
                         4.18)로 되돌린다. `[button,a]:focus-visible:border-ring`은 그대로다.
-                        **그 4.74/4.18은 다시 볼륨을 냈다** — `border-chart-2`를
+                        **그 4.74/4.18도 테두리가 여전히 도드라졌다** — `border-chart-2`를
                         `border-chart-2/65`(라이트 2.49 · 다크 2.38)로 낮추고
                         `data-[align=end]:*:data-[slot=bubble-content]:rounded-br-none`으로
-                        화자 쪽 아래 한 귀를 각으로 냈다(요구 `8e6f6903`, `8ab664e3`). 상자(`Card`
-                        `rounded-md` 네 귀)와 갈리는 일을 대비가 아니라 꼴이 하게 하고, 알파라
+                        화자 쪽 아래 한 모서리를 각지게 만들었다(요구 `8e6f6903`, `8ab664e3`). 상자(`Card`
+                        `rounded-md` 네 모서리)와는 대비 대신 형태로 구분하게 하고, 알파라
                         흰 밑면·검은 밑면에서 같은 세기다 — §비주얼 §13 §유저측 말풍선을 다시
                         그렸다가 정본이다
                         ⑤ `dialog.tsx`의 닫기 버튼 `sr-only` 문구를 리터럴 `Close`에서
@@ -329,27 +329,27 @@ apps/teams/
                         읽고 있었다. `common.close`는 `lib/i18n.ts`에 있고 `LanguageProvider`는
                         루트 레이아웃 둘 다에서 이미 전역이라 새 배선은 0줄이다
     sidebar.tsx         `sidebar` 부품 24개. 쓰는 것은 여덟이고(§비주얼 §34 §안 쓰는 export)
-                        세 화면 **안**의 좌측 패널이 그릇으로 쓴다 — 앱 내비는 상단 바 그대로다(§4)
+                        세 화면 **안**의 좌측 패널이 컨테이너로 쓴다 — 앱 내비는 상단 바 그대로다(§4)
   hooks/                shadcn CLI가 만든 첫 훅 디렉터리(`components.json`의 `aliases.hooks`).
                         **손으로 만들지 않는다** — `components/ui/`와 같은 자리다
-    use-mobile.ts       `sidebar`가 데려왔다. `Sidebar collapsible="none"`은 이 값을 안 읽지만
+    use-mobile.ts       `sidebar`가 함께 설치했다. `Sidebar collapsible="none"`은 이 값을 안 읽지만
                         (`isMobile` 검사 앞에서 반환한다) `SidebarProvider`가 무조건 부른다
   components.json       shadcn 설정
 ```
 
-`lib/`의 파일 목록은 DESIGN.md §아키텍처가 정한 것이다. **새 파일을 늘리지 않는다** —
+`lib/`의 파일 목록은 DESIGN.md §아키텍처가 정한 것이다. **새 파일을 늘리지 않는다** -
 300줄짜리 `queue.ts` 하나가 50줄짜리 6개보다 낫다. 위에 없는 파일을 만들려면 티켓에 이유를 적는다.
 
-**`node:*`를 import하는 모듈은 클라이언트 컴포넌트에서 import하지 못한다.** 그래서 슬러그·전환
+**`node:*`를 import하는 모듈은 클라이언트 컴포넌트에서 import하지 못한다.** 그래서 슬러그와 전환
 경로처럼 **양쪽이 같은 규칙을 써야 하는 순수 함수는 `lib/urls.ts`에** 둔다. 여기에 `node:*`
-import을 추가하면 등록 폼과 전환기가 빌드에서 깨진다.
+import를 추가하면 등록 폼과 전환기가 빌드에서 깨진다.
 
 ## `notFound()`와 빈 SSR
 
 `notFound()`가 그리는 화면은 **SSR HTML이 비어 온다.** `/p/<없는id>`의 응답은 27,887바이트인데
-렌더된 엘리먼트가 0개다(`<main>` 0 · `<h1>` 0, `<body>`는 `<div hidden><!--$--><!--/$--></div>`
+렌더된 엘리먼트가 0개다(`<main>` 0, `<h1>` 0, `<body>`는 `<div hidden><!--$--><!--/$--></div>`
 하나). 404 본문은 flight 페이로드 안에만 있고 하이드레이션이 채운다. 응답 끝에 셸이 abort된 흔적
-(`NEXT_HTTP_ERROR_FALLBACK;404`)이 남는다 — Next 16의 동적 라우트 + `notFound()` 동작이다.
+(`NEXT_HTTP_ERROR_FALLBACK;404`)이 남는다 - Next 16의 동적 라우트 + `notFound()` 동작이다.
 
 **나머지 화면은 전부 서버 렌더된다.** 그래서 JS가 안 돌면 404 화면만 백지다(실측):
 
@@ -365,19 +365,19 @@ import을 추가하면 등록 폼과 전환기가 빌드에서 깨진다.
   판정은 **하이드레이션 후 DOM**으로 한다(헤드리스 Chrome + CDP `Runtime.evaluate`).
 - **경계를 옮겨서 못 고친다**(실측). `(board)/loading.tsx`를 빼도, `app/p/[project]/not-found.tsx`를
   더해도, `global-not-found`를 켜도 SSR HTML은 여전히 `<main>` 0개다. 스켈레톤 위치는 무관하다.
-- **"라우트 미스는 멀쩡한데 `notFound()`만 백지"는 앱 회귀가 아니라 JS가 안 돌았다는 신호다.**
+- **"라우트 미스는 멀쩡한데 `notFound()`만 백지"는 JS가 안 돌았다는 신호다. 앱 회귀로 읽지 않는다.**
   서버가 새 빌드로 안 올라갔거나 청크 로드가 실패한 쪽을 먼저 본다. 이 비대칭을 회귀로
   오귀속하는 데 세션 하나를 썼다(`1c9de45f`).
 
-**왜 안 고치나** — `bb21be0a` wontfix(사람 결정 2026-07-30). 원인이 Next 소스에 있다:
+**왜 안 고치나** - `bb21be0a` wontfix(사람 결정 2026-07-30). 원인이 Next 소스에 있다:
 `server/app-render/app-render.js`의 `getErrorRSCPayload`가 런타임 dynamic 요청의 `notFound()`에서
-루트 레이아웃을 `<html id="__next_error__">` + 빈 `<body>`로 **갈아치운다**. `renderToStream`의
+루트 레이아웃을 `<html id="__next_error__">` + 빈 `<body>`로 **교체한다**. `renderToStream`의
 catch가 무조건 그 경로라 파일 배치로는 못 고친다(위 둘째 함정의 근거다. 응답의
-`id="__next_error__"`가 표식이다). 되는 길은 렌더 전에 정적 `/_not-found`로 rewrite하는 `proxy.ts`
-하나뿐인데, 재보니 티켓 상세가 **요청당 +68ms(+69%)**이고(`proxy`와 페이지가 `tickets.py find`를
-각각 부른다) 404 판정이 두 곳으로 갈린다. **JS를 끄면 `/`도 스켈레톤에 고정되므로** 고쳐도
-"JS 없이 되는 앱"이 되지 않는다 — 제일 많이 여는 화면을 느리게 할 값이 없다.
-프로토타입·실측은 `bb21be0a.done.md` §3~5에 있다.
+`id="__next_error__"`가 표식이다). 가능한 방법은 렌더 전에 정적 `/_not-found`로 rewrite하는 `proxy.ts`
+하나뿐인데, 측정해 보니 티켓 상세가 **요청당 +68ms(+69%)**이고(`proxy`와 페이지가 `tickets.py find`를
+각각 부른다) 404 판정이 두 곳으로 나뉜다. **JS를 끄면 `/`도 스켈레톤에 고정되므로** 고쳐도
+"JS 없이 되는 앱"이 되지 않는다 - 제일 많이 여는 화면을 느리게 만들 이유가 없다.
+프로토타입과 실측은 `bb21be0a.done.md` §3~5에 있다.
 
 ## 명령
 
@@ -418,14 +418,14 @@ if ! grep -q "Ready in" "$LOG" 2>/dev/null; then
 fi
 ```
 
-이미 도는 서버는 포트가 아니라 트리 경로로 찾는다 - 포트는 겹치고 남의 프로젝트도 같은 값을 쓴다:
+이미 도는 서버는 트리 경로로 찾는다 - 포트는 겹치고 남의 프로젝트도 같은 값을 쓴다:
 
 ```bash
 PID=$(pgrep -of "$(git rev-parse --show-toplevel)/apps/teams.*next dev")
 ```
 
 `next dev`는 turbopack 워커까지 자식을 여러 벌 띄우므로 그 pid 하나만 죽이면 남은 자식이 포트를
-쥔 채 남는다. 프로세스 그룹째 죽인다:
+점유한 채 남는다. 프로세스 그룹째 죽인다:
 
 ```bash
 kill -TERM -- -"$(ps -o pgid= -p "$PID" | tr -d ' ')"
@@ -434,13 +434,13 @@ kill -TERM -- -"$(ps -o pgid= -p "$PID" | tr -d ' ')"
 `pnpm build`가 타입체크를 겸한다. 따로 `tsc`를 돌리지 않는다.
 
 **`build` 스크립트의 `NODE_ENV=production`을 지우지 마라.** `next build`는 물려받은
-`NODE_ENV`를 존중한다(`next/dist/bin/next:66` — `process.env.NODE_ENV || 'production'`).
+`NODE_ENV`를 존중한다(`next/dist/bin/next:66` - `process.env.NODE_ENV || 'production'`).
 `next dev`는 자기 프로세스에 `NODE_ENV=development`를 지정하고(같은 파일 `:95`), dira 앱이
 그 프로세스에서 워커를 detach spawn하므로(`lib/kick.ts:32`) **앱이 띄운 세션은 전부
-`NODE_ENV=development`를 물려받는다.** 그 환경에서 굽던 옛 `next build`는 커밋과 무관하게
+`NODE_ENV=development`를 물려받는다.** 그 환경에서 실행되던 옛 `next build`는 커밋과 무관하게
 항상 `/_global-error` 프리렌더에서 `TypeError: Cannot read properties of null (reading
-'useContext')`로 죽었다 — 없는 결함을 보고하게 만들고 나가도 되는 릴리즈를 막았다
-(티켓 `bb6d332e`). 여기서 고정하면 CI·`apps/desktop`의 `pnpm dist`·세션이 한 줄로 같이 낫는다.
+'useContext')`로 죽었다 - 없는 결함을 보고하게 만들고 나가도 되는 릴리즈를 막았다
+(티켓 `bb6d332e`). 여기서 고정하면 CI와 `apps/desktop`의 `pnpm dist`와 세션이 한 줄로 함께 해결된다.
 
 ## 규칙
 
@@ -448,42 +448,42 @@ kill -TERM -- -"$(ps -o pgid= -p "$PID" | tr -d ' ')"
 `node:fs`를 import하는 코드는 리뷰에서 되돌린다.
 
 **런타임은 nodejs.** App Router 기본값이다. `export const runtime = 'edge'`를 쓰지 않는다
-(fs가 필요하다). 기본값이므로 라우트마다 `runtime = 'nodejs'`를 적지도 않는다 — 노이즈다.
+(fs가 필요하다). 기본값이므로 라우트마다 `runtime = 'nodejs'`를 적지도 않는다 - 노이즈다.
 
-**클라이언트 상태 라이브러리 없음.** zustand·jotai·redux·tanstack-query 다 안 쓴다.
-필터·검색·뷰 전환은 URL `searchParams`가 담는다(공유·새로고침 공짜). 서버 데이터는
-Server Component가 읽고, 갱신은 Server Action → `revalidatePath`다.
+**클라이언트 상태 라이브러리 없음.** zustand, jotai, redux, tanstack-query 다 안 쓴다.
+필터와 검색과 뷰 전환은 URL `searchParams`가 담는다(공유와 새로고침이 그대로 된다). 서버 데이터는
+Server Component가 읽고, 갱신은 Server Action 다음에 `revalidatePath`다.
 
-**링크·URL·엔진 인자는 `Ticket.stem`이다.** `Ticket.hash`는 **화면 표시값**이다
-(`fm.ticket || 파일명`). 엔진 조회(`tickets.py find` → `find_any`)는 파일명만 보므로 표시값을
-URL·엔진에 실으면 `ticket:`이 파일명과 갈린 티켓에서 상세가 404가 되거나 `unassign`만
-`티켓을 못 찾음`으로 실패한다. `stem`은 `listTickets`가 한 번 만든다 — 호출부에서 basename을
+**링크와 URL과 엔진 인자는 `Ticket.stem`이다.** `Ticket.hash`는 **화면 표시값**이다
+(`fm.ticket || 파일명`). 엔진 조회(`tickets.py find` -> `find_any`)는 파일명만 보므로 표시값을
+URL과 엔진에 실으면 `ticket:`이 파일명과 어긋난 티켓에서 상세가 404가 되거나 `unassign`만
+`티켓을 못 찾음`으로 실패한다. `stem`은 `listTickets`가 한 번 만든다 - 호출부에서 basename을
 쪼개지 않는다. 규칙은 DESIGN.md §데이터 모델 > 식별자다.
 
-**신뢰 경계는 게으르지 않는다.** 사용자 입력이 파일 경로가 되는 지점(티켓 해시·워커 이름·
-페르소나 이름·프로토콜 경로)은 **서버에서** 검증한다. 클라이언트 검증은 검증이 아니다.
+**신뢰 경계에서는 검증을 생략하지 않는다.** 사용자 입력이 파일 경로가 되는 지점(티켓 해시, 워커 이름,
+페르소나 이름, 프로토콜 경로)은 **서버에서** 검증한다. 클라이언트 검증은 검증이 아니다.
 규칙은 DESIGN.md §루트 확정 + 경로 방어에 있다. 경로를 문자열로 조립하지 말고
 `tickets.py find`로 얻거나 `fs.realpath` 후 루트 접두를 확인한다.
 
-**엔진은 읽기 전용.** `../tick.sh`·`../tickets.py`·`../test_*.py`를 수정하지 않는다.
-상태 전이(claim·unassign·reap)는 TS로 다시 구현하지 않고 `workers/<w>.sh`를 서브프로세스로 부른다.
-`.wip` 티켓 파일은 쓰지 않는다 — 그 파일로 지금 세션이 일하고 있다.
+**엔진은 읽기 전용.** `../tick.sh`, `../tickets.py`, `../test_*.py`를 수정하지 않는다.
+상태 전이(claim, unassign, reap)는 TS로 다시 구현하지 않고 `workers/<w>.sh`를 서브프로세스로 부른다.
+`.wip` 티켓 파일은 쓰지 않는다 - 그 파일로 지금 세션이 일하고 있다.
 
 **의존성 추가는 티켓에 근거를 적는다.** 무엇이 없어서 필요했는지, 몇 줄을 대체했는지.
-표준 라이브러리 → 플랫폼 기능 → 이미 설치된 것 → 그 다음이 새 패키지다.
-YAML 파서는 특히 금지다 — `tickets.py`가 정규식이라 파서를 쓰면 판정이 갈린다.
+표준 라이브러리, 플랫폼 기능, 이미 설치된 것, 그 다음이 새 패키지다.
+YAML 파서는 특히 금지다 - `tickets.py`가 정규식이라 파서를 쓰면 판정이 달라진다.
 
-**shadcn 기본값을 이기려 하지 않는다.** 컴포넌트는 `pnpm dlx shadcn@latest add <이름>`으로
-받는다. 색은 `globals.css`의 시맨틱 토큰(`bg-background`·`text-muted-foreground`)만 쓴다.
-`bg-zinc-50` 같은 원시값이나 손으로 쓴 `dark:` 색 오버라이드는 라이트/다크가 갈린다.
+**shadcn 기본값을 무리하게 바꾸지 않는다.** 컴포넌트는 `pnpm dlx shadcn@latest add <이름>`으로
+받는다. 색은 `globals.css`의 시맨틱 토큰(`bg-background`, `text-muted-foreground`)만 쓴다.
+`bg-zinc-50` 같은 원시값이나 손으로 쓴 `dark:` 색 오버라이드는 라이트와 다크가 어긋난다.
 
-**의도한 단순화는 `// ponytail:` 주석으로 천장과 업그레이드 경로를 적는다.**
+**의도한 단순화는 `// ponytail:` 주석으로 한계와 업그레이드 경로를 적는다.**
 예: `// ponytail: 전체 재스캔. 티켓 수천 건 되면 mtime 캐시`.
 
 ## 검증
 
-비자명한 로직(파서·경로 처리·상태 판정)은 `lib/*.test.ts`에 **돌아가는 검증 하나**를 남긴다.
-프레임워크는 추가하지 않는다 — Node 25가 `.ts`를 직접 실행하므로 `node:test` + `node:assert`로 끝난다.
+비자명한 로직(파서, 경로 처리, 상태 판정)은 `lib/*.test.ts`에 **돌아가는 검증 하나**를 남긴다.
+프레임워크는 추가하지 않는다 - Node 25가 `.ts`를 직접 실행하므로 `node:test` + `node:assert`로 끝난다.
 
 ```ts
 import { test } from "node:test";
@@ -494,10 +494,10 @@ import { listTickets } from "./queue.ts";   // lib 안에서는 확장자 `.ts`�
 **`lib/` 내부 상대 import는 확장자 `.ts`를 붙인다.** Node의 타입 스트리핑이 실제 파일을 찾기
 때문이고(`tsconfig`의 `allowImportingTsExtensions`가 이걸 허용한다), 안 붙이면 `pnpm test`가
 모듈을 못 찾는다. 앱 코드에서 `lib/`를 부를 때는 종전대로 `@/lib/queue`다.
-**타입만 가져올 때는 `import type`을 쓴다** — 안 쓰면 런타임에 없는 바인딩을 import해서 터진다.
+**타입만 가져올 때는 `import type`을 쓴다** - 안 쓰면 런타임에 없는 바인딩을 import해서 실패한다.
 
 `lib/queue.ts`는 `tickets.py`와 판정이 같아야 한다(NFC 정규화, 상태 접미사, `deps` 두 문법,
-미할당 판정). 눈으로 맞추지 말고 **패리티 테스트**로 고정한다 — 같은 픽스처 큐에 대해
+미할당 판정). 눈으로 맞추지 말고 **패리티 테스트**로 고정한다 - 같은 픽스처 큐에 대해
 `python3 tickets.py list`와 TS 결과를 비교한다.
 
 ## 의존성 근거
@@ -512,9 +512,9 @@ import { listTickets } from "./queue.ts";   // lib 안에서는 확장자 `.ts`�
 | `shadcn` | CLI 겸 **런타임 CSS**. `globals.css`가 `@import "shadcn/tailwind.css"`로 읽는다 |
 | `@base-ui/react`·`class-variance-authority`·`clsx`·`tailwind-merge`·`tw-animate-css` | shadcn 컴포넌트가 직접 import |
 | `lucide-react` | `components.json`의 `iconLibrary`. shadcn 기본 |
-| `react-markdown` | 읽기 전용 마크다운 렌더(`components/markdown.tsx` · DESIGN.md §비주얼 §10). 파서 + AST + React 매핑을 직접 쓰면 수백 줄이다. **기본값이 raw HTML 무시**라 새니타이저를 따로 안 들인다(`rehype-raw`를 켜지 않는 근거) — 티켓 본문은 세션이 쓰는 파일이라 HTML이 섞일 수 있다. `marked` + `dangerouslySetInnerHTML`은 그 이유로 거절했다 |
+| `react-markdown` | 읽기 전용 마크다운 렌더(`components/markdown.tsx` · DESIGN.md §비주얼 §10). 파서 + AST + React 매핑을 직접 쓰면 수백 줄이다. **기본값이 raw HTML 무시**라 새니타이저를 따로 도입하지 않는다(`rehype-raw`를 켜지 않는 근거) — 티켓 본문은 세션이 쓰는 파일이라 HTML이 섞일 수 있다. `marked` + `dangerouslySetInnerHTML`은 그 이유로 거절했다 |
 | `remark-gfm` | 이 큐의 본문이 표와 체크리스트(`- [ ]`)로 가득한데 CommonMark에 둘 다 없다. `react-markdown`이 GFM을 기본으로 안 켠다 |
-| `cmdk` | shadcn `command`가 직접 import. DESIGN.md §5가 전환기·deps 멀티셀렉트·필터를 `command`로 정한 것의 대가다(검색·키보드 이동·필터링을 직접 쓰면 수백 줄). `add command`가 끌고 왔다 |
+| `cmdk` | shadcn `command`가 직접 import. DESIGN.md §5가 전환기·deps 멀티셀렉트·필터를 `command`로 정한 것의 대가다(검색·키보드 이동·필터링을 직접 쓰면 수백 줄). `add command`가 함께 설치했다 |
 | `shiki` | `app/(site)/doc.tsx`(매뉴얼 22장 코드펜스 하이라이팅). `apps/site` 이사(`6a24257d`, §한 코드베이스)로 들어왔다 — 렉서·문법·테마 매핑을 직접 쓰면 수백 줄이고, 다크 대응까지 필요하다(`--shiki-light`/`--shiki-dark` 두 변수) |
 | `typed.js` | 히어로 `<h1>` 타이핑(`landing.tsx:442`, DESIGN §P237 §푸는 규칙 ①). **사람이 이름으로 지목했다** — 무의존 대안이 있었고 거절당했다(로드맵 §P237-2 `4655e36c`). 몇 줄을 대체했나로 정당화하지 않는다. 버전 고정(`3.0.0`, `^` 없이) — 랜딩이 유일한 공개 화면이라 자동 마이너 업데이트가 히어로 첫 줄을 조용히 바꾸는 자리를 안 만든다 |
-| `sonner` | 랜딩 사용 **0** — 레인 힌트 토스트가 걷혔다(DESIGN §랜딩 §레인 힌트 폐기). `package.json`에는 남는다 — §5 §부품 목록이 서버 액션 결과용으로 예약했다(같은 절) |
+| `sonner` | 랜딩 사용 **0** — 레인 힌트 토스트를 제거했다(DESIGN §랜딩 §레인 힌트 폐기). `package.json`에는 남는다 — §5 §부품 목록이 서버 액션 결과용으로 예약했다(같은 절) |
