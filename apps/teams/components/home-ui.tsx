@@ -819,6 +819,7 @@ export function HomeUI({
   useLayoutEffect(() => {
     const stored = initialActiveTab(project, home.tabs);
     if (stored === null) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- hydration을 맞추려 일부러 늦게 읽는다. 마운트 한 판뿐이라 연쇄가 안 난다(위 주석)
     setActiveTabRaw(stored);
     setSurface(surfaceForTab(home.tabs.find((t) => t.id === stored) ?? null));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 마운트 한 번뿐이다(§11-10 결정 2)
@@ -836,6 +837,7 @@ export function HomeUI({
     if (activeTab === null && home.tabs.length === 0) return;
     const landedId = mostRecentTab(home.tabs);
     const landed = home.tabs.find((t) => t.id === landedId) ?? null;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 위 두 가드가 재진입을 막아 이월 한 번으로 끝난다(다음 판은 활성 탭이 목록에 있어 곧장 return)
     setActiveTab(landedId);
     setSurface(surfaceForTab(landed));
     if (landed?.kind === "chat" && landed.id !== home.current) {
@@ -2313,6 +2315,7 @@ function TerminalLeftPanel({
   const ids = tabs.map((tb) => tb.id).join(",");
   useEffect(() => {
     if (!ids) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 탭이 0개인 판의 캐시 비우기 한 갈래다. 뒤에 폴링을 안 걸므로 연쇄가 안 난다
       setRows({});
       return;
     }
