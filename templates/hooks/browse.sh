@@ -16,8 +16,8 @@
 #   url                      지금 주소를 낸다
 #   text                     document.body.innerText를 낸다
 #   html [sel]               sel의 outerHTML, 없으면 문서 전체
-#   click <sel>               sel을 찾아 클릭한다(JS click() - 실제 마우스 이벤트는 C 묶음)
-#   fill <sel> <val>          sel의 값을 val로 채우고 input/change를 쏜다
+#   click <sel|@eN>           sel(또는 snapshot 참조)을 찾아 클릭한다(JS click())
+#   fill <sel|@eN> <val>      sel(또는 참조)의 값을 val로 채우고 input/change를 쏜다
 #   press <key>              키 하나를 누른다(Enter - Tab - Escape 등 - C 묶음 전에는 최소 표)
 #   wait <sel|--load|--networkidle>  그 조건이 될 때까지 기다린다(상한 10초)
 #   screenshot [path]        PNG를 그 경로에 쓴다. 생략하면 mktemp 경로에 쓰고 그 경로를 낸다
@@ -25,10 +25,16 @@
 #   console [--clear]        지금까지 쌓인 콘솔 로그를 낸다. --clear면 비운다
 #   release                  browser.sh release <해시>를 그대로 부른다
 #
+# B 묶음 - 셀렉터를 모르는 화면을 다루는 수단(결정 3):
+#   snapshot [-i] [-s <sel>] [-d <N>]  접근성 트리를 역할 - 이름 - @e<n> 참조로 낸다.
+#                            -i는 무시(ignored) 노드도 포함, -s는 그 서브트리로 좁힌다,
+#                            -d는 깊이 상한이다. 참조 맵은 이 슬롯의 프로필 밑
+#                            (/tmp/qa-<해시>/snapshot-refs.json)에 적어 release가 지운다.
+#
 # C 묶음 열아홉(있으면 편하고 없으면 A로 우회되는 것들 - §브라우저는 내장이 기본이다 결정 3):
 #   back / forward           탐색 이력을 앞뒤로 옮긴다
 #   reload                   지금 페이지를 새로고침한다
-#   hover <sel>              sel 위로 마우스를 옮긴다(실제 mouseMoved 이벤트)
+#   hover <sel|@eN>          sel(또는 참조) 위로 마우스를 옮긴다(실제 mouseMoved 이벤트)
 #   select <sel> <val>       <select>의 값을 val로 고르고 change를 쏜다
 #   scroll [sel]             sel이 있으면 그 요소로, 없으면 한 화면만큼 아래로 스크롤한다
 #   type <text>              지금 포커스에 문자 하나씩 키 이벤트로 친다(fill과 달리 셀렉터가 없다)
@@ -46,8 +52,10 @@
 #   cookies                  지금 쿠키를 "name=value; domain=..; path=.." 줄로 낸다
 #   storage [set <k> <v>]    localStorage를 key=value 줄로 낸다. set이 있으면 그 키를 쓴다
 #
-# 셀렉터를 받는 C 묶음 명령은 전부 _resolve_sel() 한 곳을 거친다 - `@e<n>` 참조맵(498ac41d)이
-# 서면 이 함수 안에서만 풀면 된다. 지금은 그대로 돌려준다(셀렉터 문자열만 받는다).
+# 셀렉터를 받는 C 묶음 명령(그리고 click - fill)은 전부 _resolve_sel() 한 곳을 거친다.
+# `@e<n>` 참조(498ac41d B묶음)를 여기서 그 요소에 임시 data-dira-ref 속성을 달아 CSS
+# 셀렉터로 바꾼다 - 참조가 없거나 페이지가 갈려 죽었으면 0이 아닌 종료 코드와 사유 한 줄로
+# 끝난다. 참조 맵은 goto - back - forward - reload처럼 문서가 바뀌는 자리마다 지운다.
 set -u
 
 _root="$(cd "$(dirname "$0")" && pwd -P)"
@@ -71,6 +79,7 @@ if [ -z "$_port" ]; then
 fi
 
 export DIRA_BROWSE_PORT="$_port"
+export DIRA_BROWSE_HASH="$_hash"
 exec python3 - "$_cmd" "$@" <<'PYEOF'
 import base64
 import json
@@ -288,7 +297,7 @@ class CDP:
             payload = bytes(byte ^ mask[i % 4] for i, byte in enumerate(payload))
         return opcode, payload
 
-    def call(self, method, params=None, timeout=15):
+    def call(self, method, params=None, timeout=15, die_on_error=True):
         self._id += 1
         mid = self._id
         self._send_frame(
@@ -309,10 +318,14 @@ class CDP:
             msg = json.loads(payload.decode())
             if msg.get("id") == mid:
                 if "error" in msg:
-                    die("%s: %s" % (method, msg["error"].get("message", msg["error"])))
+                    if die_on_error:
+                        die("%s: %s" % (method, msg["error"].get("message", msg["error"])))
+                    return {"__error__": msg["error"]}
                 return msg.get("result", {})
             # 다른 메시지(이벤트, 다른 id의 응답)는 버린다 - 명령당 새 연결이라 쌓일 일이 적다
-        die("%s 응답 시간초과" % method)
+        if die_on_error:
+            die("%s 응답 시간초과" % method)
+        return {"__error__": {"message": "시간초과"}}
 
     def eval_js(self, expr, timeout=15):
         result = self.call(
@@ -340,12 +353,6 @@ def connect():
     return CDP(target["webSocketDebuggerUrl"])
 
 
-def _resolve_sel(sel):
-    # ponytail: @e<n> 참조맵(498ac41d)이 아직 안 서 있다. 서면 이 함수 안에서만 풀면 된다 -
-    # 셀렉터를 받는 C 묶음 명령은 전부 여기를 거친다. 지금은 그대로 돌려준다.
-    return sel
-
-
 def _install_buffers(cdp):
     cdp.call("Page.addScriptToEvaluateOnNewDocument", {"source": _CONSOLE_INSTALL_JS})
     cdp.call("Page.addScriptToEvaluateOnNewDocument", {"source": _NETWORK_INSTALL_JS})
@@ -358,6 +365,103 @@ def _ensure_buffers(cdp):
     cdp.ensure_dialog_buffer()
 
 
+# snapshot의 @e<n> 참조 맵 - 슬롯 프로필 밑(/tmp/qa-<해시>)에 산다. browser.sh release가
+# 그 디렉터리 전체를 지우므로 여기서 따로 청소할 필요가 없다(워크트리 안에는 안 만든다).
+def _profile_dir():
+    h = os.environ.get("DIRA_BROWSE_HASH", "")
+    if not h:
+        die("내부 오류 - DIRA_BROWSE_HASH가 없다")
+    return "/tmp/qa-%s" % h
+
+
+def _refs_path():
+    return os.path.join(_profile_dir(), "snapshot-refs.json")
+
+
+def _load_refs():
+    try:
+        with open(_refs_path()) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def _save_refs(refs):
+    path = _refs_path()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(refs, f)
+    os.replace(tmp, path)
+
+
+def _clear_refs():
+    try:
+        os.remove(_refs_path())
+    except OSError:
+        pass
+
+
+def call_on(cdp, object_id, func_decl, arg_values=None):
+    args = [{"value": v} for v in (arg_values or [])]
+    result = cdp.call(
+        "Runtime.callFunctionOn",
+        {
+            "objectId": object_id,
+            "functionDeclaration": func_decl,
+            "arguments": args,
+            "returnByValue": True,
+        },
+    )
+    if result.get("exceptionDetails"):
+        ex = result["exceptionDetails"]
+        die("js 오류 - " + json.dumps(ex.get("text", ex), ensure_ascii=False))
+    return result.get("result", {}).get("value")
+
+
+def _resolve_ref_object_id(cdp, n):
+    refs = _load_refs()
+    entry = refs.get(n)
+    if entry is None:
+        die("참조를 모른다 - @e" + n + " (snapshot을 먼저 부른다, 또는 페이지가 바뀌었다)")
+    result = cdp.call(
+        "DOM.resolveNode", {"backendNodeId": entry["backendNodeId"]}, die_on_error=False
+    )
+    obj_id = result.get("object", {}).get("objectId") if "__error__" not in result else None
+    if not obj_id:
+        die("참조가 오래됐다(페이지가 바뀌었다) - @e" + n)
+    return obj_id
+
+
+def _resolve_selector_backend_id(cdp, sel):
+    expr = "document.querySelector(%s)" % json.dumps(sel)
+    result = cdp.call("Runtime.evaluate", {"expression": expr, "returnByValue": False})
+    if result.get("exceptionDetails") or "objectId" not in result.get("result", {}):
+        return None
+    node = cdp.call("DOM.describeNode", {"objectId": result["result"]["objectId"]})
+    return node.get("node", {}).get("backendNodeId")
+
+
+# 셀렉터를 받는 명령(click - fill - C 묶음 전부)이 거치는 단일 진입점. @e<n>이면 그 요소에
+# 임시 data-dira-ref 속성을 달아 CSS 셀렉터로 바꿔 돌려준다 - 아니면 그대로 돌려준다.
+# ponytail: 속성이 지워지지 않고 남는다. attrs가 그 한 줄을 더 보여줄 뿐 동작에는 해가
+# 없다 - 신경 쓰이면 release가 프로필째로 지운다(페이지 자체가 죽으므로).
+def _resolve_sel(cdp, sel):
+    m = re.match(r"^@e(\d+)$", sel)
+    if not m:
+        return sel
+    n = m.group(1)
+    obj_id = _resolve_ref_object_id(cdp, n)
+    marker = "e" + n
+    call_on(
+        cdp,
+        obj_id,
+        "function(m){ this.setAttribute('data-dira-ref', m); return 'OK'; }",
+        [marker],
+    )
+    return '[data-dira-ref="%s"]' % marker
+
+
 def cmd_goto(cdp, args):
     if not args:
         die("goto <url>가 필요하다")
@@ -367,6 +471,9 @@ def cmd_goto(cdp, args):
     cdp.call("Page.navigate", {"url": url})
     _poll_ready(cdp, timeout=15)
     _ensure_buffers(cdp)
+    # 새 문서로 넘어가면 옛 @e 참조는 무효다 - 맵을 지워 확실히 실패하게 한다(backendNodeId
+    # 자체도 새 문서에서 무효가 되므로 이중 안전망이다).
+    _clear_refs()
 
 
 def _history_nav(cdp, delta):
@@ -379,6 +486,7 @@ def _history_nav(cdp, delta):
     cdp.call("Page.navigateToHistoryEntry", {"entryId": entries[target_idx]["id"]})
     _poll_ready(cdp, timeout=15)
     _ensure_buffers(cdp)
+    _clear_refs()
 
 
 def cmd_back(cdp, args):
@@ -393,6 +501,7 @@ def cmd_reload(cdp, args):
     cdp.call("Page.reload", {})
     _poll_ready(cdp, timeout=15)
     _ensure_buffers(cdp)
+    _clear_refs()
 
 
 def _poll_ready(cdp, timeout=15):
@@ -427,8 +536,8 @@ def cmd_html(cdp, args):
 
 def cmd_click(cdp, args):
     if not args:
-        die("click <sel>이 필요하다")
-    sel = json.dumps(args[0])
+        die("click <sel|@eN>이 필요하다")
+    sel = json.dumps(_resolve_sel(cdp, args[0]))
     expr = (
         "(function(){var e=document.querySelector(%s); "
         "if(!e) return 'NOTFOUND'; e.click(); return 'OK';})()" % sel
@@ -440,8 +549,8 @@ def cmd_click(cdp, args):
 
 def cmd_fill(cdp, args):
     if len(args) < 2:
-        die("fill <sel> <val>이 필요하다")
-    sel, val = json.dumps(args[0]), json.dumps(args[1])
+        die("fill <sel|@eN> <val>이 필요하다")
+    sel, val = json.dumps(_resolve_sel(cdp, args[0])), json.dumps(args[1])
     expr = (
         "(function(){var e=document.querySelector(%s); if(!e) return 'NOTFOUND'; "
         "e.focus(); e.value=%s; "
@@ -452,6 +561,95 @@ def cmd_fill(cdp, args):
     result = cdp.eval_js(expr)
     if result == "NOTFOUND":
         die("fill - 셀렉터를 못 찾았다 - " + args[0])
+
+
+# ponytail: 접근성 트리를 얕게 담는다 - AXNode.role/name만 읽고 CSS 겉모습 속성은 안 본다.
+# 노드마다 @e<n>을 매겨 backendNodeId를 참조 맵에 저장한다 - _resolve_sel이 그 맵으로
+# 되짚어 DOM.resolveNode -> objectId를 얻는다.
+def cmd_snapshot(cdp, args):
+    include_ignored = False
+    scope_sel = None
+    max_depth = None
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a == "-i":
+            include_ignored = True
+        elif a == "-s":
+            i += 1
+            if i >= len(args):
+                die("snapshot -s는 셀렉터가 필요하다")
+            scope_sel = args[i]
+        elif a == "-d":
+            i += 1
+            if i >= len(args):
+                die("snapshot -d는 정수가 필요하다")
+            try:
+                max_depth = int(args[i])
+            except ValueError:
+                die("snapshot -d 값이 정수가 아니다 - " + args[i])
+        else:
+            die("snapshot - 모르는 인자 - " + a)
+        i += 1
+
+    if scope_sel:
+        backend_id = _resolve_selector_backend_id(cdp, scope_sel)
+        if backend_id is None:
+            die("snapshot -s - 셀렉터를 못 찾았다 - " + scope_sel)
+    else:
+        # queryAXTree는 root를 반드시 받는다(빈 params로는 "no node" 오류) - 문서 루트를 쓴다.
+        doc = cdp.call("DOM.getDocument", {"depth": 0})
+        backend_id = doc.get("root", {}).get("backendNodeId")
+        if backend_id is None:
+            die("snapshot - 문서 루트를 못 얻었다")
+    params = {"backendNodeId": backend_id}
+
+    cdp.call("Accessibility.enable", {})
+    result = cdp.call("Accessibility.queryAXTree", params)
+    cdp.call("Accessibility.disable", {})
+    nodes = result.get("nodes", [])
+
+    by_id = {n["nodeId"]: n for n in nodes}
+    child_ref = set()
+    for n in nodes:
+        child_ref.update(n.get("childIds", []))
+    roots = [n for n in nodes if n["nodeId"] not in child_ref]
+
+    refs = {}
+    lines = []
+    counter = [0]
+
+    def visit(node, depth):
+        if max_depth is not None and depth > max_depth:
+            return
+        if node.get("ignored", False) and not include_ignored:
+            for cid in node.get("childIds", []):
+                child = by_id.get(cid)
+                if child is not None:
+                    visit(child, depth)
+            return
+        role = (node.get("role") or {}).get("value") or "generic"
+        name = (node.get("name") or {}).get("value") or ""
+        backend_id = node.get("backendDOMNodeId")
+        counter[0] += 1
+        n_idx = counter[0]
+        if backend_id is not None:
+            refs[str(n_idx)] = {"backendNodeId": backend_id}
+        indent = "  " * depth
+        if name:
+            lines.append('%s%s "%s" @e%d' % (indent, role, name, n_idx))
+        else:
+            lines.append("%s%s @e%d" % (indent, role, n_idx))
+        for cid in node.get("childIds", []):
+            child = by_id.get(cid)
+            if child is not None:
+                visit(child, depth + 1)
+
+    for r in roots:
+        visit(r, 0)
+
+    _save_refs(refs)
+    print("\n".join(lines))
 
 
 def cmd_press(cdp, args):
@@ -529,8 +727,8 @@ def cmd_console(cdp, args):
 
 def cmd_hover(cdp, args):
     if not args:
-        die("hover <sel>가 필요하다")
-    sel = json.dumps(_resolve_sel(args[0]))
+        die("hover <sel|@eN>가 필요하다")
+    sel = json.dumps(_resolve_sel(cdp, args[0]))
     rect = cdp.eval_js(
         "(function(){var e=document.querySelector(%s); if(!e) return null; "
         "var r=e.getBoundingClientRect(); return {x:r.left+r.width/2, y:r.top+r.height/2};})()"
@@ -544,7 +742,7 @@ def cmd_hover(cdp, args):
 def cmd_select(cdp, args):
     if len(args) < 2:
         die("select <sel> <val>이 필요하다")
-    sel, val = json.dumps(_resolve_sel(args[0])), json.dumps(args[1])
+    sel, val = json.dumps(_resolve_sel(cdp, args[0])), json.dumps(args[1])
     expr = (
         "(function(){var e=document.querySelector(%s); if(!e) return 'NOTFOUND'; "
         "e.value=%s; e.dispatchEvent(new Event('input',{bubbles:true})); "
@@ -557,7 +755,7 @@ def cmd_select(cdp, args):
 
 def cmd_scroll(cdp, args):
     if args:
-        sel = json.dumps(_resolve_sel(args[0]))
+        sel = json.dumps(_resolve_sel(cdp, args[0]))
         expr = (
             "(function(){var e=document.querySelector(%s); if(!e) return 'NOTFOUND'; "
             "e.scrollIntoView({block:'center'}); return 'OK';})()" % sel
@@ -616,7 +814,7 @@ def cmd_forms(cdp, args):
 def cmd_attrs(cdp, args):
     if not args:
         die("attrs <sel>이 필요하다")
-    sel = json.dumps(_resolve_sel(args[0]))
+    sel = json.dumps(_resolve_sel(cdp, args[0]))
     result = cdp.eval_js(
         "(function(){var e=document.querySelector(%s); if(!e) return null; var o={}; "
         "for (var i=0;i<e.attributes.length;i++){var a=e.attributes[i]; o[a.name]=a.value;} "
@@ -631,7 +829,7 @@ def cmd_attrs(cdp, args):
 def cmd_css(cdp, args):
     if len(args) < 2:
         die("css <sel> <prop>가 필요하다")
-    sel, prop = json.dumps(_resolve_sel(args[0])), json.dumps(args[1])
+    sel, prop = json.dumps(_resolve_sel(cdp, args[0])), json.dumps(args[1])
     result = cdp.eval_js(
         "(function(){var e=document.querySelector(%s); if(!e) return null; "
         "return getComputedStyle(e).getPropertyValue(%s);})()" % (sel, prop)
@@ -664,7 +862,7 @@ def cmd_is(cdp, args):
     prop, sel = args[0], args[1]
     if prop not in _IS_PROPS:
         die("is - 모르는 판정 - " + prop)
-    sel_json = json.dumps(_resolve_sel(sel))
+    sel_json = json.dumps(_resolve_sel(cdp, sel))
     expr = "(function(){var e=document.querySelector(%s); if(!e) return null; return %s;})()" % (
         sel_json,
         _IS_PROPS[prop],
@@ -745,6 +943,7 @@ _COMMANDS = {
     "screenshot": cmd_screenshot,
     "js": cmd_js,
     "console": cmd_console,
+    "snapshot": cmd_snapshot,
     "back": cmd_back,
     "forward": cmd_forward,
     "reload": cmd_reload,
