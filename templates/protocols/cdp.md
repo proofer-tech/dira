@@ -1,41 +1,48 @@
 # 브라우저를 띄울 때 (CDP)
 
-인라인 `AGENTS.md` §브라우저를 띄울 때가 가리키는 세부 절차다. 에이전트가 브라우저를 띄우는
-프로젝트에만 해당한다.
-
+브라우저가 필요한 티켓이면 띄우기 전에 읽는다(AGENTS.md §브라우저가 가리키는 문서다).
 사람이 이 화면 앞에서 다른 일을 하고 있다. **크롬 창이 앞으로 나오면 그 사람의 작업이
 중단된다.**
 
-- 브라우저를 띄우기 전에, 살아 있는 크롬이 참조하지 않는 오래된 `/tmp/qa-*`를 먼저 지운다
-  (`ps -eo command | grep -o -- '--user-data-dir=[^ ]*'`로 살아 있는 경로를 뽑아 그 목록에
-  없는 `/tmp/qa-*`만 지운다). **이 정리가 실패해도 브라우저 기동은 막지 않는다** - 실패하면
-  건너뛰고 계속한다.
-- 기본은 헤드리스다. 스크린샷-클릭-폼 입력-팝오버 전부 CDP로 되고 창이 아예 안 뜬다. 사람이
-  쓰는 `/Applications/Google Chrome.app`를 그대로 쓰지 않는다 - 그 앱의 자동 업데이트가
-  프레임워크를 제자리에서 교체하면 실행 중인 헤드리스 인스턴스가 중단된다. 갱신 주기가 분리된
-  전용 바이너리 `chrome-headless-shell`을 쓴다(`npx @puppeteer/browsers install
-  chrome-headless-shell@stable --path ~/.cache/dira`로 설치, 경로는 사람마다 다를 수 있으니
-  환경 변수 `DIRA_CHROME_HEADLESS`를 먼저 보고 없으면 그 설치 경로를 기본값으로 쓴다). 포트는
-  `0`으로 지정해 커널이 고르게 하고(고정 포트는 다른 세션과 충돌한다), crashpad와 각종
-  백그라운드 동작은 전용 디렉터리로 분리하거나 비활성화해서 사람의 GUI 크롬 crashpad와 섞이지
-  않게 한다:
-  `"${DIRA_CHROME_HEADLESS:-$HOME/.cache/dira/chrome-headless-shell/mac_arm-152.0.7977.64/chrome-headless-shell-mac-arm64/chrome-headless-shell}" --remote-debugging-port=0 --user-data-dir=/tmp/qa-<해시>/chrome-profile --crash-dumps-dir=/tmp/qa-<해시>/chrome-profile/crashpad --disable-breakpad --disable-component-update --disable-background-networking --no-first-run --no-default-browser-check --window-size=1440,900 about:blank &`
-  `chrome-headless-shell`은 이미 헤드리스 전용 바이너리라 `--headless` 플래그가 없다.
-  실제 포트는 커널이 고른 값이라 `<user-data-dir>/DevToolsActivePort` 파일 첫 줄에서 읽는다:
-  `head -1 /tmp/qa-<해시>/chrome-profile/DevToolsActivePort`
-- **사람의 로그인이 들어 있는 프로필에는 헤드리스를 붙이지 않는다.** 헤드리스는 키체인에 못
-  붙어 쿠키를 복호화하지 못하고 **그 쿠키를 지운다** - 읽으려는 시도 한 번이 쿠키를 영구히
-  삭제한다. 한 번 지우면 사람이 다시 로그인해야 한다(실측: 인증쿠키 18건 -> 0건, 다음 로드가
-  로그인 화면).
-  그런 프로필은 아래 `open -g`로 띄우고 CDP로 조작한다.
+- **기본 경로는 `<큐 루트>/browse.sh <해시> <명령>`이다.** `goto`-`text`-`html`-`click`-
+  `fill`-`press`-`wait`-`screenshot`-`js`-`console`-`snapshot`-`release` 등 실사용 빈도
+  순으로 이식된 명령 표면을 이 한 줄로 다 쓴다. `browse.sh`는 안에서 `browser.sh acquire
+  <해시>`를 불러 포트를 쥐고, 이미 그 해시가 슬롯을 쥐고 있으면 새로 띄우지 않고 그 포트를
+  그대로 쓴다 - 슬롯을 두 번 빌리지 않는다. 명령 전량과 발행 순서는 `docs/DESIGN.md`
+  §브라우저는 내장이 기본이다 결정 3이 정본이다.
+- **경계는 dira 작업 전부다.** 목적지가 localhost든 바깥 사이트든 가르지 않는다 - 큐
+  안에서 뜨는 브라우저는 전부 `browse.sh`를 거쳐 풀 슬롯으로 뜬다. **외부 브라우저는 그
+  티켓 본문에 사람이 직접 지시한 줄이 있을 때만 띄운다.** 세션이 스스로 "이건 반드시
+  외부여야 한다"고 판정하는 길은 없다 - 그런 판단이 필요하면 `## 블록`이다. 근거는
+  `docs/DESIGN.md` §브라우저는 내장이 기본이다 결정 1.
+- `browser.sh acquire <해시>`를 직접 부르는 길도 남아 있다. 죽은 슬롯을 먼저 회수하고
+  머신 전체 상한 안에서 슬롯을 확보해 전용 바이너리 `chrome-headless-shell`을 띄운 뒤 포트
+  번호 한 줄을 stdout으로 출력한다(이미 이 해시가 슬롯을 점유하고 있으면 새로 띄우지 않고
+  그 포트를 그대로 출력한다). 상한에 걸려 슬롯을 확보하지 못하면 300초까지 기다리다
+  실패한다. `browse.sh`가 내부에서 부르는 것이 바로 이 명령이다 - 명령줄-상한-기본값-로그
+  문구는 전부 `docs/DESIGN.md` §CDP 브라우저를 풀에서 빌린다가 정본이다.
+- **로그인이 필요한 화면은 풀 슬롯을 쥔 채로 받는다.** 쿠키 복사를 시도하지 않는다(실측
+  `800188a7`에서 이미 닫힌 길이다 - 구글 계열은 쿠키를 복사해도 프로필을 통째로 옮겨도
+  로그아웃으로 떨어진다). 대신 `browse.sh`나 `browser.sh acquire`로 슬롯을 하나 빌린 채로
+  **§11-11 홈 `browser` 탭의 `입력 열림`**을 켜고, 사람에게 그 화면에서 로그인을 한 번
+  받는다. 슬롯 프로필은 `/tmp/qa-<해시>`라 `release`가 통째로 지운다 - 세션 안에서만 사는
+  로그인이고, 사람의 크롬 프로필은 건드리지 않는다. 근거는 `docs/DESIGN.md` §브라우저는
+  내장이 기본이다 결정 2.
+- **사람의 로그인이 들어 있는 기존 프로필에는 헤드리스를 붙이지 않는다.** 헤드리스는
+  키체인에 못 붙어 쿠키를 복호화하지 못하고 **그 쿠키를 지운다** - 읽으려는 시도 한 번이
+  쿠키를 영구히 삭제한다. 한 번 지우면 사람이 다시 로그인해야 한다(실측 `800188a7` 7회차:
+  인증쿠키 18건 -> 0건, 다음 로드가 로그인 화면). 그 프로필이 꼭 필요하면 위 경계의 예외를
+  타고(사람이 직접 지시한 경우) 아래 `open -g`로 띄우고 CDP로 조작한다.
 - 눈으로 볼 창이 정말 필요하면 **`open -g`로 띄운다**(창은 뜨고 포커스는 안 넘어간다):
   `open -na "Google Chrome" -g --args --remote-debugging-port=<포트> --user-data-dir=/tmp/qa-<해시>/chrome-profile --no-first-run --no-default-browser-check about:blank`
   바이너리를 직접 실행하면 앱이 활성화되어 포커스를 가져간다 - 창이 필요하면 `open -g`만 쓴다.
   창이 떠 있어도 `Page.navigate`-`Runtime.evaluate`-클릭은 전부 CDP로 된다.
-- 포트는 세션마다 다른 값을 쓴다(9222는 이미 다른 프로세스가 쓰고 있을 수 있다).
-  `--user-data-dir`은 반드시 전용 임시 경로로 지정한다 - 빼면 사람이 쓰는 크롬 창에 붙는다.
-- **끝나면 죽인다.** 남겨 둔 크롬은 다음 세션이 쓸 포트를 점유한다. 프로세스를 죽인 다음
-  `/tmp/qa-<해시>` 디렉터리도 지운다 - 안 지우면 다음 검사에서 오래된 항목으로 쌓인다.
-- CDP를 호출하는 일회용 스크립트(`cdp.mjs`, `expr*.js` 같은 것)도 워크트리 안에 만들지
-  않는다. `mktemp -d`가 만들어 준 경로에 쓴다 - 워크트리 안에 남으면 다음 세션이 부르는
-  `git add -A`가 그 파일을 자기 커밋에 포함시킨다.
+- 포트는 세션마다 다른 값을 쓴다(9222는 이미 다른 프로세스가 쓰고 있다). `--user-data-dir`은
+  반드시 전용 임시 경로로 지정한다 - 빼면 사람이 쓰는 크롬 창에 붙는다.
+- **끝나면 반납한다.** 남겨 둔 크롬은 다음 세션이 쓸 포트를 점유한다. `browse.sh <해시>
+  release`나 `browser.sh release <해시>`가 프로세스를 죽이고 `/tmp/qa-<해시>` 디렉터리도
+  지우고 슬롯을 비운다. `open -g`로 연 것(풀 밖)은 `release`가 인식하지 못하므로 프로세스와
+  `/tmp/qa-<해시>` 디렉터리를 직접 지운다 - 안 지우면 다음 검사에서 오래된 항목으로 쌓인다.
+- CDP 조작용 일회성 스크립트(`cdp.mjs`, `expr*.js` 등)도 워크트리 안에 만들지 않고
+  `mktemp -d` 경로에 만든다 - 워크트리에 두면 다음 세션이 부르는 `push.sh`의
+  `git add -A`가 그 파일을 자기 커밋에 포함시킨다(사고 `36a85346`).
