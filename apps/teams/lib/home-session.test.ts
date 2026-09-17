@@ -242,7 +242,9 @@ test("workerSessions — `.wip` 전부가 먼저, `.done`은 최근 10개. sessi
 });
 
 test("buildPrompt — 스냅샷이 질문 앞에 오고 경계 문단 둘이 §7-5로 사라진다", () => {
-  const p = buildPrompt("SNAP", "w1이 지금 무슨 일을 하고 있나?", "/Users/x/proj/.dira/ontology");
+  // ontologyDir을 비운다 — 이 테스트는 스냅샷·경계 문단의 순서를 재지 온톨로지 블록을 재지 않는다
+  // (그건 아래 §7-6 전용 테스트의 몫이다).
+  const p = buildPrompt("SNAP", "w1이 지금 무슨 일을 하고 있나?", "");
   assert.ok(p.indexOf("SNAP") < p.indexOf("w1이 지금"));
   // §7-5 결정 4가 지운 경로 나열·셸 제한 문단 — 도구가 더 이상 그 경계를 안 지므로 글도 안 진다
   assert.ok(!p.includes("고칠 수 있는 것은 이것뿐이다"));
@@ -279,9 +281,18 @@ test("buildPrompt — 페르소나 블록이 스냅샷 앞에 뜬다 (§7 §페�
   assert.strictEqual(questionOf(p), "질문");
 });
 
-test("buildPrompt — ontologyDir은 §7-5 이후 본문에 안 실린다(인자는 시그니처 보존용으로 남는다)", () => {
-  const p = buildPrompt("SNAP", "질문", "/Users/x/vault/ontology");
-  assert.ok(!p.includes("/Users/x/vault/ontology"));
+test("buildPrompt — ontologyDir을 주면 §7-6 온톨로지 블록이 실리고, 비우면 안 실린다", () => {
+  const withDir = buildPrompt("SNAP", "질문", "/tmp/x/ont", "PERSONA");
+  assert.ok(withDir.includes("/tmp/x/ont"));
+  assert.ok(withDir.includes("_ontology/SCHEMA.md"));
+  assert.ok(withDir.includes("grep"));
+
+  const empty = buildPrompt("SNAP", "질문", "", "PERSONA");
+  assert.ok(!empty.includes("온톨로지"));
+
+  // 결정 4 — 자리는 페르소나 다음이다: 페르소나 블록 < 온톨로지 블록 < 스냅샷
+  assert.ok(withDir.indexOf("PERSONA") < withDir.indexOf("===== 온톨로지"));
+  assert.ok(withDir.indexOf("===== 온톨로지") < withDir.indexOf("SNAP"));
 });
 
 test("personaBlock — 세 조각이 tick.sh:265와 같은 순서로 · 없으면 빈 문자열", async () => {
@@ -299,7 +310,8 @@ test("personaBlock — 세 조각이 tick.sh:265와 같은 순서로 · 없으�
   assert.match(only, /===== archive-manager PROFILE \(.*PROFILE\.md\) =====\n나는 아카이브 담당이다\.\n\n===== PROFILE 끝 =====/);
   assert.ok(!only.includes("스킬 끝") && !only.includes("메모리 끝"));
 
-  // ③ 셋 다 — 순서가 PROFILE → skills → memory이고 memory는 **이름 오름차순**이다
+  // ③ 셋 다 — 순서가 PROFILE → skills → memory다. §7-6 결정 3: 메모리는 전문이 아니라
+  // 위치 + grep 안내 포인터다 — 파일명·본문 글자는 안 실리고 절대경로만 실린다.
   writeFileSync(path.join(dir, "skills.md"), "## 스킬\n- ontology\n");
   writeFileSync(path.join(dir, "memory", "b-두번째.md"), "둘째 개념\n");
   writeFileSync(path.join(dir, "memory", "a-첫째.md"), "첫째 개념\n");
@@ -308,17 +320,23 @@ test("personaBlock — 세 조각이 tick.sh:265와 같은 순서로 · 없으�
   mkdirSync(path.join(dir, "memory", "sub"), { recursive: true });
   writeFileSync(path.join(dir, "memory", "sub", "깊다.md"), "안 실린다\n");
   const full = await personaBlock(personas);
-  assert.deepStrictEqual(
-    ["PROFILE 끝", "스킬 끝", "메모리 끝", "--- a-첫째.md", "--- b-두번째.md"].map((s) => full.indexOf(s) >= 0),
-    [true, true, true, true, true],
-  );
   assert.ok(full.indexOf("PROFILE 끝") < full.indexOf("스킬 끝"));
   assert.ok(full.indexOf("스킬 끝") < full.indexOf("메모리 끝"));
-  assert.ok(full.indexOf("--- a-첫째.md") < full.indexOf("--- b-두번째.md"));
-  assert.ok(!full.includes("md가 아니다"));
-  assert.ok(!full.includes("안 실린다"));
+  const memDir = path.join(dir, "memory");
+  assert.ok(full.includes(memDir), "메모리 디렉터리 절대경로가 실려야 한다");
+  assert.ok(full.includes("grep"), "grep 검색 안내가 실려야 한다");
+  assert.ok(full.indexOf("grep -rl") < full.indexOf("1홉")); // [[링크]]는 grep -rl 1홉
+  // 파일명·본문 글자는 하나도 없다 — 있는 것은 위치뿐이다
+  for (const gone of ["a-첫째.md", "b-두번째.md", "첫째 개념", "둘째 개념", "md가 아니다", "안 실린다"]) {
+    assert.ok(!full.includes(gone), `메모리 본문/파일명 '${gone}'이 실리면 안 된다`);
+  }
   // 이름은 프로필 머리 문장에도 뜬다(워커 쪽 문장과 같은 자리 — 누구로 도는지가 첫 줄이다)
   assert.match(full, /^당신은 이 프로젝트의 'archive-manager'입니다\./);
+
+  // 블록이 상수 크기다 — memory/*.md 한 장을 더해도 반환 길이가 안 갈린다(§7-6 결정 3)
+  writeFileSync(path.join(dir, "memory", "c-셋째.md"), "셋째 개념, 아주 긴 본문".repeat(50));
+  const grown = await personaBlock(personas);
+  assert.strictEqual(grown.length, full.length);
 
   // ④ 이름이 다르면 아무것도 없다 — 고정 페르소나 하나만 읽는다
   assert.strictEqual(await personaBlock(personas, "pm"), "");
@@ -837,13 +855,59 @@ test("ask — TICKET_ONTOLOGY 재정의 큐에서도 §7-5 인자는 안 갈린�
     const r = await ask(project, "질문");
     assert.strictEqual(r.ok, true, r.output);
     const argv = readFileSync(log, "utf8").trim();
-    // §7-5 이후 온톨로지 재정의는 argv에 아무 흔적도 안 남긴다 — 경로 스코프가 통째로 없다
-    assert.ok(!argv.includes(vault));
-    assert.ok(!argv.includes(`${root}/ontology`));
+    // §7-5 이후 온톨로지 재정의는 경로 스코프 토큰(Write()·Edit())에 아무 흔적도 안 남긴다
     assert.ok(!argv.match(/Write\(|Edit\(/));
     assert.ok(argv.includes("--dangerously-skip-permissions"));
+    // §7-6 결정 2 — `TICKET_ONTOLOGY`가 값을 준 갈래(`usingDefault`가 거짓)는 존재 검사 없이
+    // 그대로 프롬프트에 싣는다. vault가 비어 있어도 블록은 붙는다(존재를 안 재기 때문이다).
+    assert.ok(argv.includes(vault));
+    assert.ok(argv.includes("_ontology/SCHEMA.md"));
+    assert.ok(!argv.includes(`${root}/ontology`)); // 기본값 자리는 안 쓴다 — 재정의 값만 실린다
     // cwd(스냅샷 읽기 근거)는 안 갈린다 — 그대로 큐의 부모다
     assert.match(argv, new RegExp(`작업 디렉터리\\(= 이 세션의 cwd\\): ${path.dirname(root).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
+  } finally {
+    process.env.PATH = path0;
+  }
+});
+
+test("ask — 워커가 TICKET_ONTOLOGY를 안 준 큐는 <루트>/ontology의 존재를 잰다(§7-6 결정 2)", async () => {
+  const bin = mkdtempSync(path.join(tmpdir(), "ha-bin-"));
+  tmps.push(bin);
+  const mkClaude = (log: string) =>
+    writeFileSync(
+      path.join(bin, "claude"),
+      `#!/bin/sh\nprintf '%s\\n' "$*" >> "${log}"\nread -r p\nprintf '%s\\n' "$p" >> "${log}"\necho '{"type":"result","is_error":false,"result":"답"}'\n`,
+      { mode: 0o755 },
+    );
+  const path0 = process.env.PATH;
+  process.env.PATH = `${bin}:${path0 ?? ""}`;
+  try {
+    // 픽스처 큐 ① — 기본 온톨로지 디렉터리가 비어 있다: 블록이 안 붙는다
+    const rootEmpty = path.join(mkdtempSync(path.join(tmpdir(), "ha-ont-empty-")), ".dira");
+    tmps.push(path.dirname(rootEmpty));
+    mkdirSync(path.join(rootEmpty, "workers"), { recursive: true });
+    mkdirSync(path.join(rootEmpty, "ontology"), { recursive: true });
+    const logEmpty = path.join(LOCAL, "ontology-default-empty.log");
+    mkClaude(logEmpty);
+    const r1 = await ask({ id: "ont-default-empty", name: "큐", root: rootEmpty }, "질문");
+    assert.strictEqual(r1.ok, true, r1.output);
+    const argvEmpty = readFileSync(logEmpty, "utf8").trim();
+    assert.ok(!argvEmpty.includes("===== 온톨로지"));
+
+    // 픽스처 큐 ② — 기본 온톨로지 디렉터리 안(한 단계 아래)에 *.md가 있다: 블록이 붙는다
+    const rootFilled = path.join(mkdtempSync(path.join(tmpdir(), "ha-ont-filled-")), ".dira");
+    tmps.push(path.dirname(rootFilled));
+    mkdirSync(path.join(rootFilled, "workers"), { recursive: true });
+    const ontDir = path.join(rootFilled, "ontology");
+    mkdirSync(path.join(ontDir, "_ontology"), { recursive: true });
+    writeFileSync(path.join(ontDir, "_ontology", "SCHEMA.md"), "# 스키마\n");
+    const logFilled = path.join(LOCAL, "ontology-default-filled.log");
+    mkClaude(logFilled);
+    const r2 = await ask({ id: "ont-default-filled", name: "큐", root: rootFilled }, "질문");
+    assert.strictEqual(r2.ok, true, r2.output);
+    const argvFilled = readFileSync(logFilled, "utf8").trim();
+    assert.ok(argvFilled.includes(ontDir));
+    assert.ok(argvFilled.includes("_ontology/SCHEMA.md"));
   } finally {
     process.env.PATH = path0;
   }

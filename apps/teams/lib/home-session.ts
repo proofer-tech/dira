@@ -96,6 +96,7 @@ import {
   registryPath,
   resolveConfig,
   ticketsCached,
+  usingDefault,
   type Project,
   type ProjectConfig,
 } from "./projects.ts";
@@ -748,14 +749,19 @@ const QUESTION_MARK = "\n## 질문\n\n";
 export const HOME_PERSONA = "archive-manager";
 
 /** 페르소나 세 조각을 **`tick.sh:265`와 같은 순서**로 읽어 한 블록으로 만든다 —
- *  `PROFILE.md` → `skills.md` → `memory/*.md`(**한 단계** 글롭 · 이름 오름차순).
+ *  `PROFILE.md` → `skills.md` → 메모리 위치 포인터(§7-6 결정 3, `memory/*.md` **한 단계** 글롭으로
+ *  존재만 잰다 — 본문은 안 싣는다).
  *
  *  **`buildPrompt` 밖에서 읽는다.** 저 함수는 순수로 남아야 하고(`home-session.test.ts`가 그걸
  *  검증한다) fs를 들이는 순간 그 테스트가 죽는다 — 그래서 조립된 문자열을 인자로 넘긴다.
  *
  *  **파일이 없으면 빈 문자열이고 WARN도 없다**(§7). `PROFILE.md`가 없으면 사이드카도 안 싣는다 —
  *  `tick.sh`가 `persona:`가 빈 티켓에 내린 판정과 같은 선이고, 스캐폴딩 전 큐·옛 큐에서 홈 화면이
- *  그대로 도는 근거가 이것이다(이 티켓이 `39ee5ae0` 없이 먼저 들어도 되는 이유다). */
+ *  그대로 도는 근거가 이것이다(이 티켓이 `39ee5ae0` 없이 먼저 들어도 되는 이유다).
+ *
+ *  **메모리 블록은 상수 크기다**(§7-6 결정 3 §블록 크기가 장수와 무관해진다) — 요소는 ①
+ *  `memory/` 절대경로 ② 무엇이 쌓인 곳인지 한 줄 ③ `grep` 검색 방법(`[[링크]]`는 `grep -rl` 1홉)
+ *  셋뿐이고 `tick.sh`의 `MEMBLOCK` 문장을 그대로 쓴다(§7-6 결정 1 §문장은 구현이 쓴다). */
 export async function personaBlock(personasDir: string, name: string = HOME_PERSONA): Promise<string> {
   const dir = path.join(personasDir, name);
   const read = (...p: string[]) => readFile(path.join(dir, ...p), "utf8").catch(() => null);
@@ -764,14 +770,9 @@ export async function personaBlock(personasDir: string, name: string = HOME_PERS
   if (profile === null) return "";
 
   const skills = await read("skills.md");
-  // 글롭이 한 단계인 것은 tick.sh와 같다(`memory/<하위>/x.md`는 안 읽는다). 디렉터리 이름이
-  // `*.md`여도 `readFile`이 EISDIR로 떨어져 null이 되므로 `[ -f ]` 검사가 따로 필요 없다.
+  // 글롭이 한 단계인 것은 tick.sh와 같다(`memory/<하위>/x.md`는 안 읽는다) — 존재만 잰다, 본문은 안 읽는다.
   const memDir = path.join(dir, "memory");
-  const mem: string[] = [];
-  for (const f of (await readdir(memDir).catch(() => [] as string[])).filter((n) => n.endsWith(".md")).sort()) {
-    const body = await readFile(path.join(memDir, f), "utf8").catch(() => null);
-    if (body !== null) mem.push(`--- ${f}\n${body}`);
-  }
+  const hasMemory = (await readdir(memDir).catch(() => [] as string[])).some((n) => n.endsWith(".md"));
 
   return [
     `당신은 이 프로젝트의 '${name}'입니다. 아래 프로필이 당신의 역할·권한·판단 기준이고,`,
@@ -783,7 +784,16 @@ export async function personaBlock(personasDir: string, name: string = HOME_PERS
     ...(skills === null
       ? []
       : ["", `===== ${name} 스킬 (${path.join(dir, "skills.md")}) =====`, skills, "===== 스킬 끝 ====="]),
-    ...(mem.length === 0 ? [] : ["", `===== ${name} 메모리 (${memDir}) =====`, ...mem, "===== 메모리 끝 ====="]),
+    ...(hasMemory
+      ? [
+          "",
+          `===== ${name} 메모리 (${memDir}) =====`,
+          "이 큐에서 알아낸 교훈이 파일별로 쌓인 곳입니다(CORE.md §회고가 쓰는 자리). 본문은 안 실립니다 -",
+          `필요한 개념은 티켓의 어휘로 ${memDir} 를 grep해서 그 파일을 여세요. [[링크]]는`,
+          `grep -rl '\\[\\[<이름>\\]\\]' ${memDir} 로 1홉 따라갑니다.`,
+          "===== 메모리 끝 =====",
+        ]
+      : []),
   ].join("\n");
 }
 
@@ -805,11 +815,24 @@ export async function personaBlock(personasDir: string, name: string = HOME_PERS
  *  제약을 여기 프롬프트 글이 온전히 진다 — §7 §`kind`를 지는 것이 글이다가 정한 그 자리고,
  *  §7-5 결정 4 마지막 항이 그대로 남긴 문단이다.
  *
- *  **`ontologyDir`은 이제 본문에 안 쓰인다** — 경로 나열 문단이 죽으면서 유일한 쓰임이
- *  없어졌다. 인자는 그대로 둔다(시그니처를 바꾸면 모든 호출부·테스트가 갈린다). */
+ *  **`ontologyDir`이 §7-6 결정 1·4·5로 다시 산다** — 워커 프롬프트(`tick.sh`)와 같은 요소 셋(①
+ *  절대경로 ② `_ontology/SCHEMA.md`가 진입점이라는 것 ③ 본문은 안 싣고 `grep`으로 닿는다)의
+ *  블록을 페르소나 블록 다음·스냅샷 앞에 싣는다(결정 4 §자리는 페르소나 다음이다). **판정은 여기서
+ *  안 한다** — 순수 함수로 남아야 해서(결정 5) 받은 `ontologyDir`이 빈 문자열이면 문단을 안
+ *  그린다. 존재 검사·`TICKET_ONTOLOGY` 재정의 판정은 `ask()`가 하고 그 결과(경로 또는 빈 문자열)를
+ *  그대로 여기로 넘긴다. */
 export function buildPrompt(snapshot: string, question: string, ontologyDir: string, persona = ""): string {
-  void ontologyDir;
-  return `${persona ? `${persona}\n\n` : ""}${snapshot}
+  const ontologyBlock = ontologyDir
+    ? `아래는 이 큐의 온톨로지가 있는 곳입니다.
+
+===== 온톨로지 (${ontologyDir}) =====
+${ontologyDir} 안의 _ontology/SCHEMA.md가 지도입니다(객체·관계·액션 타입의 진입점). 본문은 안 실립니다 -
+필요한 개념은 티켓의 어휘로 ${ontologyDir} 를 grep해서 여세요.
+===== 온톨로지 끝 =====
+
+`
+    : "";
+  return `${persona ? `${persona}\n\n` : ""}${ontologyBlock}${snapshot}
 
 ---
 
@@ -846,6 +869,18 @@ ${QUESTION_MARK}${question}`;
 export function questionOf(prompt: string): string {
   const i = prompt.indexOf(QUESTION_MARK);
   return (i < 0 ? prompt : prompt.slice(i + QUESTION_MARK.length)).trim();
+}
+
+/** §7-6 결정 2 — 기본값(`<큐 루트>/ontology`) 갈래에서만 부른다. `tick.sh`의 `find "$ONTDIR" -type f
+ *  -name '*.md'`와 같은 선(maxdepth 없이 트리 전체 — `_ontology/SCHEMA.md`가 실제로 한 단계 밑이
+ *  아니라 `_ontology/` 아래라서다). 못 읽거나 `*.md`가 0장이면 false — WARN 없이 블록을 안 붙인다. */
+async function ontologyHasMarkdown(dir: string): Promise<boolean> {
+  try {
+    const entries = await readdir(dir, { recursive: true, withFileTypes: true });
+    return entries.some((e) => e.isFile() && e.name.endsWith(".md"));
+  } catch {
+    return false;
+  }
 }
 
 // ── 실행 ────────────────────────────────────────────────────────────────────
@@ -999,10 +1034,14 @@ export async function ask(
   // 담아 알려 준다). **이 대화가 고른 페르소나 이름**(§7-4 결정 1)은 `persona`가 든다.
   const config = await resolveConfig(project).catch(() => null);
   const ontology = config?.ontology ?? path.join(project.root, "ontology");
+  // §7-6 결정 2 — 워커 `.sh`가 `TICKET_ONTOLOGY`로 재정의한 값(`usingDefault`가 거짓)은 존재
+  // 검사 없이 그대로 싣는다(남의 앱 데이터 도메인을 질문마다 재면 macOS 권한 창이 뜬다,
+  // `51c730de`와 같은 선). 기본값(`<root>/ontology`)은 워커와 같이 존재를 잰다.
+  const showOntology = config && !usingDefault(config, "ontology") ? true : await ontologyHasMarkdown(ontology);
   const prompt = buildPrompt(
     await snapshotOf(project),
     q,
-    ontology,
+    showOntology ? ontology : "",
     config?.personas ? await personaBlock(config.personas, persona ?? HOME_PERSONA) : "",
   );
   const locale = await readLanguage(); // 위 §언어 층 둘 — 못 읽으면 `ko`로 흡수한다(같은 판정)
