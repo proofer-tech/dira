@@ -40774,6 +40774,159 @@ bash .dira/browser.sh acquire dddddddd >/dev/null
 grep 'BROWSER acquire dddddddd' ~/Projects/dira/.dira/workers/runner.log | tail -1   # used=<n>/6
 ```
 
+## 브라우저는 내장이 기본이다 - browse를 이식하고 호출을 가로챈다 (요구 `b62588c9`, 답 `3186dfa7`)
+
+사람 요구: *"워커가 gstack browse 말고 내장브라우저만 쓰게 만들고 싶어. 외부브라우저는 반드시
+써야만할때만 쓰고 그 이외 dira 작업에는 내부브라우저 쓰게"*
+
+앞단의 풀 계약은 **§CDP 브라우저를 풀에서 빌린다**가, 미러 화면은 **§11-11**이 정본이다. 둘 다
+서 있는데 사람이 화면에서 아무것도 못 본다. **이 절은 그 사이가 왜 비어 있는지와, 그 자리를
+무엇으로 채우는지를 적는다.**
+
+### 실측 (1) - 풀은 0슬롯인데 풀 밖에 브라우저가 서른 개 떠 있었다 (2026-09-18, 이 머신)
+
+| 센 것 | 수 | 어디 |
+|---|---|---|
+| 풀 슬롯 | 0 | `~/.config/dira/browser-pool` |
+| `chrome-headless-shell` | 30 | 전부 `bun run .../gstack/browse/src/server.ts`(browse 데몬 7개)의 자식 |
+
+경로부터 갈라져 있다. browse가 띄우는 것은 `~/Library/Caches/ms-playwright/...`의 playwright
+크로미움이고, `browser.sh`가 띄우는 것은 `~/.cache/dira/chrome-headless-shell/...`의 전용
+바이너리다. **§11-11의 미러는 풀만 읽으므로**(`lib/browser-pool.ts` `listBrowserPoolHashes`)
+풀 밖의 서른 개는 화면에 한 칸도 안 뜬다.
+
+같은 시각 `.dira/browser.sh acquire`로 슬롯 하나를 빌리자 풀에 슬롯 1이 서고 설치본 앱의
+`/p/dira/cdp/b62588c9`가 200을 냈다. **미러 배관은 멀쩡하다. 올라올 대상이 없었을 뿐이다.**
+
+### 실측 (2) - browse는 밖의 CDP에 붙을 길이 구조적으로 없다
+
+`~/.claude/skills/gstack/browse/src`를 읽은 결과다.
+
+- `connectOverCDP` 호출 **0건**. browse는 자기 크로미움을 띄우는 것만 한다.
+- 띄울 때 `--remote-debugging-pipe`를 쓴다. **CDP 포트가 아예 없어** 밖에서 붙을 소켓이 없다.
+- 기동 인자를 밖에서 밀어 넣는 환경변수도 없다. `buildGStackLaunchArgs`가 읽는 것은
+  `GSTACK_GPU_*` - `GSTACK_PLATFORM` - `GSTACK_HW_CONCURRENCY` 같은 위장용 값뿐이고, 임의
+  인자를 더하는 자리가 없다. `GSTACK_CHROMIUM_PATH`는 바이너리만 바꾼다.
+- browse 본문과 소스는 업스트림 자산이라 우리가 못 고친다.
+
+**그러므로 browse를 풀에 끌어들이는 얇은 길이 없다.** 남은 길은 명령 표면을 우리 쪽에 이식하고
+호출을 가로채는 것 하나다 - 답 `3186dfa7` 4번이 고른 것이 이 길이다.
+
+### 결정 1 - 경계는 dira 작업 전부다. 외부는 그 티켓에서 사람이 직접 지시했을 때만 뜬다
+
+답 1번 (c)다. 목적지가 localhost이든 바깥 사이트이든 가르지 않는다 - **큐 안에서 뜨는
+브라우저는 전부 풀 슬롯이어야 사람이 볼 수 있다**는 것이 요구의 본뜻이고, 목적지로 가르면
+가르는 규칙 자체가 판단거리가 되어 매번 샌다.
+
+- 기본 - `<큐 루트>/browse.sh`. 안에서 `browser.sh acquire <해시>`를 부르고 그 포트를 쓴다.
+- 예외 - **그 티켓 본문에 사람이 외부 브라우저를 직접 지시한 줄이 있을 때만.** 세션이 스스로
+  "이건 반드시 외부여야 한다"고 판정하는 길은 없다. 판정이 필요하면 `## 블록`이다.
+
+### 결정 2 - 로그인이 필요한 화면은 내장 슬롯 안에서 사람이 직접 로그인한다
+
+답 1번의 단서가 *"쿠키 가져오는 스킬로 가져오거나 내장에서 로그인해달라고 요청"*이다. 이 머신의
+실측이 앞의 갈래를 이미 닫아 두었다(`800188a7` 6회차까지) - 구글 계열은 쿠키를 복사해도
+프로필을 통째로 옮겨도 로그아웃으로 떨어진다. **그러므로 뒤의 갈래가 본선이다.**
+
+- 풀 슬롯을 하나 빌린 채로 **§11-11 홈 `browser` 탭의 `입력 열림`**을 켜고, 사람에게 그 화면에서
+  로그인을 한 번 받는다. 슬롯 프로필은 `/tmp/qa-<해시>`라 `release`가 통째로 지운다 -
+  **세션 안에서만 사는 로그인이고, 사람의 크롬 프로필은 건드리지 않는다.**
+- **사람의 로그인이 든 기존 프로필에 헤드리스를 붙이는 금지는 그대로다**(`cdp.md`, 실측
+  `800188a7` 7회차 - 인증 쿠키 18건이 0건이 되고 다음 로드가 로그인 화면이었다). 그 프로필이
+  꼭 필요하면 결정 1의 예외를 타고 `open -g`다.
+- 이 길이 막히는 자리(자동화 탐지로 로그인 자체를 거부하는 서비스)는 실측으로 확인되면 그때
+  `cdp.md`에 이름을 적는다. **미리 목록을 만들지 않는다.**
+
+### 결정 3 - browse의 명령 표면을 `browse.sh`로 이식한다. 발행 순서는 실사용 빈도다
+
+답 2번 (b)와 4번이다. 목적지는 browse가 내주는 명령 전량이고, **한 번에 다 내지 않는다.**
+
+정본은 `templates/hooks/browse.sh`, 큐 사본은 `<큐 루트>/browse.sh`다(`browser.sh`와 같은
+자리, 같은 이유). 의존성은 0이다 - bash와 python3 표준 라이브러리만 쓰고, CDP 웹소켓도
+표준 라이브러리로 직접 문다. 포트는 안에서 `browser.sh acquire <해시>`가 내주는 것을 쓰고
+**슬롯을 두 번 빌리지 않는다**(§CDP 결정 1의 접미사 규칙이 그대로 적용된다).
+
+| 묶음 | 명령 | 왜 이 순서인가 |
+|---|---|---|
+| A | `goto` `url` `text` `html` `click` `fill` `press` `wait` `screenshot` `js` `console` `release` | dira 티켓이 실제로 하는 일의 거의 전부다 - 화면을 열고 눌러 보고 찍고 콘솔을 읽는다 |
+| B | `snapshot` + `@e` 참조 맵 + `click @e3` 해석 | browse 인체공학의 핵심. 셀렉터를 모르는 화면을 다루는 유일한 수단이다 |
+| C | `back` `forward` `reload` `hover` `select` `scroll` `type` `viewport` `links` `forms` `attrs` `css` `is` `network` `dialog` `dialog-accept` `dialog-dismiss` `cookies` `storage` | 있으면 편하고 없으면 A로 우회된다 |
+| D | `tabs` `tab` `newtab` `closetab` `upload` `pdf` `responsive` `perf` `diff` `chain` `accessibility` `cookie-import` | 큐에서 쓴 적이 없다. D가 안 쓰이는 채로 분기가 지나면 그때 지운다 |
+
+**A가 서기 전에는 가로채기를 켜지 않는다.** 대체재 없이 막으면 워커가 브라우저를 아예 못 쓴다.
+
+### 결정 4 - 가로채기는 PreToolUse 후크 한 장이다. 새 기구를 안 만든다
+
+답 4번의 *"내장으로 라우팅되도록 가로챕니다"*를 이미 서 있는 기구로 받는다. 이 레포에는
+`.claude/settings.json`의 `PreToolUse`와 `.claude/hooks/block-outside-worktree.py`가 이미
+있다(요구 `0146fd70`). **같은 자리에 항목 하나를 더한다 - 새 개념 0개.**
+
+- 매처는 `Bash`, 판정 대상은 명령줄에 든 browse 실행 경로다.
+- 막을 때 **대체 명령을 문구에 넣는다** - `.dira/browse.sh <같은 명령>`. 사유만 적고 끊으면
+  세션이 우회로를 찾는다.
+- **gstack 상위 스킬(`qa` - `design-review` - `canary` - `design-shotgun` 등 스무 개 남짓)도
+  이 후크에 같이 걸린다.** 그 스킬들은 본문에서 browse를 Bash로 부르므로 별도 처분이 필요
+  없다 - 답 4번이 고른 가로채기가 상위 스킬 문제를 함께 닫는다.
+
+### 결정 5 - 스킬 목록과 사람 전역 설정의 충돌 줄을 같이 건는다
+
+가로채기만으로는 세션이 **왜** 막혔는지 모른 채 부딪힌다. 권하는 줄 자체를 거둔다.
+
+- `personas/*/skills.md`에서 `browse`와 `open-gstack-browser` 두 줄을 뺀다. 새 프로젝트가
+  받는 기본 스킬 셋(`lib/skills.ts`)에서도 뺀다.
+- `~/.claude/CLAUDE.md`의 `Use the /browse skill from gstack for all web browsing.` 한 줄을
+  갈아 적는다. **답 3번 (b)가 이 한 번을 허가했다.** 사용자 지시라 큐 프로토콜보다 우선하므로,
+  이 줄이 남아 있으면 위의 넷이 다 서도 워커는 browse 쪽으로 간다.
+
+### 안 하는 것
+
+- **엔진을 안 고친다.** `tick.sh` - `tickets.py` - `test_tickets.py`가 0줄이다.
+- **`browser.sh`의 풀 계약을 안 건드린다.** 슬롯 - 상한 - 회수 - 로그 다섯 줄이 그대로다.
+  `browse.sh`는 `acquire`의 소비자일 뿐이다.
+- **§11-11 미러 화면을 안 고친다.** 결정 2가 쓰는 `입력 열림`은 P417-3이 이미 세운 것이다.
+- **browse를 머신에서 지우지 않는다.** 큐 밖에서 사람이 쓰는 것은 그대로다. 후크는 이 레포
+  안에서만 돈다.
+- **D 묶음을 미리 만들지 않는다.** 쓰인 적 없는 열두 개다.
+- **다른 큐(`pofol` `stream` `proofer`)에 소급 배선하지 않는다.** 정본을 `templates/hooks/`에
+  두고 dira 큐부터 쓴다(§CDP §안 하는 것과 같은 판단).
+
+### 수용조건
+
+```bash
+# (1) 이식 A - 슬롯을 빌리고 화면을 열어 글자를 읽는다. 명령 한 줄씩이다
+bash .dira/browse.sh e1e1e1e1 goto http://localhost:3000/p/dira/board
+bash .dira/browse.sh e1e1e1e1 text | head -5          # 보드 글자가 나온다
+bash .dira/browse.sh e1e1e1e1 screenshot /tmp/s.png && test -s /tmp/s.png
+# (2) 슬롯을 하나만 먹는다 - 명령을 여러 번 불러도 브라우저가 하나다
+ls ~/.config/dira/browser-pool | wc -l                # 1
+pgrep -f '[c]hrome-headless-shell.*qa-e1e1e1e1' | wc -l   # 1
+# (3) 미러 - 그 슬롯이 §11-11 화면에 뜬다
+curl -s -o /dev/null -w '%{http_code}' localhost:<앱포트>/p/dira/cdp/e1e1e1e1   # 200
+# (4) 반납 - release가 슬롯도 프로필도 지운다
+bash .dira/browse.sh e1e1e1e1 release
+ls ~/.config/dira/browser-pool | wc -l                # 0
+# (5) 이식 B - snapshot이 참조를 내주고 그 참조로 눌린다
+bash .dira/browse.sh e2e2e2e2 goto http://localhost:3000/p/dira/board
+bash .dira/browse.sh e2e2e2e2 snapshot | grep -c '@e'   # 1 이상
+bash .dira/browse.sh e2e2e2e2 click @e1
+# (6) 가로채기 - browse를 부르면 막히고 문구에 대체 명령이 있다
+#     후크를 직접 먹여 판정한다(세션을 안 띄운다)
+echo '{"tool_name":"Bash","tool_input":{"command":"~/.claude/skills/gstack/browse/dist/browse goto http://x"}}' \
+  | python3 .claude/hooks/block-gstack-browse.py; echo "exit=$?"   # 0이 아니고 stderr에 .dira/browse.sh
+# (7) 가로채기가 우리 것은 안 막는다
+echo '{"tool_name":"Bash","tool_input":{"command":"bash .dira/browse.sh e1 text"}}' \
+  | python3 .claude/hooks/block-gstack-browse.py; echo "exit=$?"   # 0
+# (8) 권하는 줄이 걷혔다
+grep -rc 'browse\|open-gstack-browser' .dira/personas/*/skills.md   # 전부 0
+grep -c 'browse skill from gstack for all web browsing' ~/.claude/CLAUDE.md   # 0
+# (9) 의존성 0 - bash와 python3 표준 라이브러리 밖을 안 부른다
+grep -nE 'npm |pnpm |bun |node |pip |import (requests|websocket|playwright)' templates/hooks/browse.sh   # 0줄
+# (10) 엔진 무수정
+git diff --stat master -- tick.sh tickets.py test_tickets.py   # 0줄
+# (11) 규약 - cdp.md가 browse.sh를 기본으로 적고 인라인 예산을 안 넘는다
+grep -c 'browse.sh' .dira/protocols/cdp.md   # 1 이상
+```
+
 ## 통합 push의 벽 - 락 하나로 직렬화하고 받는 트리를 자동으로 치운다 (요구 `0146fd70`, 답 `a4b95659`)
 
 사람 요구: *"간혹 스테이징/커밋 되지 않은 파일들이 있어서 다른 세션들이 줄줄이 죽어나가는데요.
@@ -59472,6 +59625,44 @@ P420-2는 바깥 프로세스를 부르는 새 경로라 실패 갈래까지 테
 되고, 화면은 0픽셀 갈리고, 요구 하나에서 파생한 셋이라 `req:`가 묶는다(§에픽 결정 20의 하한).
 
 
+### P421. 브라우저는 내장이 기본이 된다 - browse를 이식하고 호출을 가로챈다 (요구 `b62588c9`, 답 `3186dfa7`, 왕복 1회, 에픽 P421)
+
+계약은 **§브라우저는 내장이 기본이다**가 정본이고 이 절은 경계와 순서만 적는다. 새 npm 0 -
+엔진 무수정 - 새 화면 0. 앞단의 풀 계약(**§CDP 브라우저를 풀에서 빌린다**)과 미러 화면
+(**§11-11**)도 안 건드린다.
+
+**한 번 되물었다.** 경계 - 인체공학 - 사람 전역 설정 - 상위 스킬 넷이 전부 사람 몫이었고,
+답 `3186dfa7`이 넷을 다 골랐다(차례로 전면 강제, 이식까지 함께, 워커가 고치도록 허가,
+가로채기). **고른 뒤에 판단이 남은 자리가 없다.**
+
+| ID | 무엇 | 페르소나 | deps | 상태 |
+|---|---|---|---|---|
+| P421-1 | 구현 - `templates/hooks/browse.sh`와 큐 사본 `.dira/browse.sh`. CDP 전송 계층(python3 표준 라이브러리로 웹소켓을 직접 문다)과 A 묶음 열둘. 수용조건 (1)(2)(4)(9)(10)을 그 자리에서 돌린다 `9e30296f` | developer | - | 발행 |
+| P421-2 | 구현 - B 묶음. `snapshot`이 접근성 트리를 `@e` 참조로 내주고 `click @e3`이 그 참조를 푼다. 수용조건 (5) `498ac41d` | developer | P421-1 | 발행 |
+| P421-3 | 구현 - C 묶음 열아홉. 조회와 조작의 나머지다 `92d19ded` | developer | P421-1 | 발행 |
+| P421-4 | 구현 - 가로채기. `.claude/hooks/block-gstack-browse.py`와 `settings.json` 항목 하나. 막을 때 문구가 대체 명령을 든다. 수용조건 (6)(7) `63572557` | developer | P421-1 | 발행 |
+| P421-5 | 구현 - 권하는 줄을 걷는다. `personas/*/skills.md` 둘, 새 프로젝트 기본 셋(`lib/skills.ts`), `~/.claude/CLAUDE.md` 한 줄. 수용조건 (8) `3a40bc05` | developer | P421-1 | 발행 |
+| P421-6 | 규약 - `cdp.md`가 `browse.sh`를 기본으로 적고 결정 1과 결정 2의 경계를 싣는다. 인라인 예산(§프롬프트 층)을 재서 앞뒤 바이트를 `## 결과`에 적는다 `43541b90` | developer | P421-1 | 발행 |
+| P421-7 | QA - §브라우저는 내장이 기본이다 §수용조건 열하나를 `kind: tc`로 발행하고 한 줄씩 판정한다 `6e182e1e` | qa | P421-2, P421-3, P421-4, P421-5, P421-6 | 발행 |
+
+**여섯이 전부 P421-1을 문다. 이 줄들이 진짜다.** B와 C는 전송 계층 없이 한 줄도 못 짜고,
+가로채기는 대체재가 서기 전에 켜면 워커가 브라우저를 아예 못 쓰며, 규약이 먼저 바뀌면 세션이
+아직 없는 스크립트를 부른다(P376-2와 같은 논리). **서로는 안 엮는다** - 넷이 각각 다른 파일에
+산다.
+
+**P421-5가 P421-4를 안 문다.** 권하는 줄을 걷는 것과 막는 것은 서로를 안 본다. 다만 둘 중
+하나만 서면 세션이 왜 막혔는지 모른 채 부딪히므로, 그 사실을 P421-5 본문에 적어 둔다 - 큐를
+직렬화하는 값보다 문장 한 줄이 싸다.
+
+**D 묶음 0장.** `tabs` - `pdf` - `responsive` - `chain` 등 열둘은 이 큐에서 쓰인 적이 없다.
+답 4번이 말한 *"모두"*의 목적지에 남겨 두되, 쓰이는 자리가 나오면 그때 한 장을 낸다.
+
+**designer 0장.** 새 화면이 0픽셀이다. 결정 2가 쓰는 `입력 열림`은 P417-3이 이미 세웠다.
+
+**writer 0장.** `browse.sh`도 후크도 세션이 읽는 규약이지 사람이 읽는 매뉴얼이 아니다.
+
+**에픽을 연다.** 일곱 장이 페르소나 둘과 파일 여섯 자리에 걸친다 - §에픽 결정 20의 하한
+위다. `epics/P421/README.md`가 같이 선다.
 
 ## 수용조건 (전체)
 
