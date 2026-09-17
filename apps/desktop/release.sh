@@ -79,8 +79,11 @@ pnpm run dist || exit 1
 
 # 올리기 전에 세 자산이 실제로 있는지 본다. 특히 latest-mac.yml이 빠지면 자동 업데이트는
 # 에러가 아니라 **아무 일도 안 일어남**으로 죽는다(R1 첫 줄). 없는 채로 올리는 대신 멈춘다.
-dmg=$(ls dist/*.dmg 2>/dev/null | head -1)
-zip=$(ls dist/*.zip 2>/dev/null | head -1)
+# `$ver`로 좁힌다 — `dist/`는 옛 릴리스 산출물을 그대로 쥐고 있어서 `head -1`이 알파벳 순으로
+# 그쪽을 집는다. 그러면 6번이 **옛 버전 자산을 새 태그에 올린다**(실측 v1.2.0: 1.1.0 dmg·zip이
+# 올라가고 latest-mac.yml만 새것이라 자동 업데이트가 404로 조용히 죽었다).
+dmg=$(ls dist/*"$ver"*.dmg 2>/dev/null | head -1)
+zip=$(ls dist/*"$ver"*.zip 2>/dev/null | head -1)
 [ -n "$dmg" ] || add "dist/*.dmg — 사람이 건네는 첫 설치본."
 [ -n "$zip" ] || add "dist/*.zip — 자동 업데이트가 실제로 내려받는 자산."
 [ -f dist/latest-mac.yml ] || add "dist/latest-mac.yml — 이게 없으면 앱이 새 버전을 못 찾는다(조용히)."

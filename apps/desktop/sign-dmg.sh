@@ -7,7 +7,10 @@
 # 여기서 다시 설명하지 않는다. 절대 빌드를 실패시키지 않는다는 것도 preflight와 같다.
 set -u
 
-dmg=$(ls dist/*.dmg 2>/dev/null | head -1)
+ver=$(node -p "require('./package.json').version" 2>/dev/null)
+# 지금 굽는 판만 고른다. `head -1`만 쓰면 `dist/`에 남은 옛 릴리스 dmg가 알파벳 순으로
+# 먼저 잡혀서, 그 옛 파일을 서명·공증하고 새 dmg는 손도 안 댄 채 나간다(실측 v1.2.0).
+dmg=$(ls dist/*"$ver"*.dmg 2>/dev/null | head -1)
 [ -n "$dmg" ] || exit 0
 
 id=$(security find-identity -v -p codesigning 2>/dev/null | grep '"Developer ID Application' \
