@@ -24,6 +24,30 @@
 #   js <expr>                Runtime.evaluate로 표현식을 돌리고 값을 낸다
 #   console [--clear]        지금까지 쌓인 콘솔 로그를 낸다. --clear면 비운다
 #   release                  browser.sh release <해시>를 그대로 부른다
+#
+# C 묶음 열아홉(있으면 편하고 없으면 A로 우회되는 것들 - §브라우저는 내장이 기본이다 결정 3):
+#   back / forward           탐색 이력을 앞뒤로 옮긴다
+#   reload                   지금 페이지를 새로고침한다
+#   hover <sel>              sel 위로 마우스를 옮긴다(실제 mouseMoved 이벤트)
+#   select <sel> <val>       <select>의 값을 val로 고르고 change를 쏜다
+#   scroll [sel]             sel이 있으면 그 요소로, 없으면 한 화면만큼 아래로 스크롤한다
+#   type <text>              지금 포커스에 문자 하나씩 키 이벤트로 친다(fill과 달리 셀렉터가 없다)
+#   viewport <WxH>           뷰포트 크기를 바꾼다
+#   links                    문서의 <a href>를 "글자 -> href" 줄로 낸다
+#   forms                    입력-버튼 요소를 태그-type-name-id 줄로 낸다
+#   attrs <sel>              sel의 속성을 key=value 줄로 낸다
+#   css <sel> <prop>         sel의 계산된 CSS 속성값을 낸다
+#   is <prop> <sel>          visible/hidden/enabled/disabled/checked/editable/focused 판정 -
+#                            참이면 종료코드 0, 거짓이면 1
+#   network [--clear]        goto 뒤 fetch/XHR 왕복을 "메서드 상태 URL" 줄로 낸다. --clear면 비운다
+#   dialog [--clear]         alert/confirm/prompt 호출 로그를 낸다. --clear면 비운다
+#   dialog-accept [text]     다음 confirm/prompt를 승인으로 돌리게 한다(text는 prompt 반환값)
+#   dialog-dismiss           다음 confirm/prompt를 거부로 돌리게 한다
+#   cookies                  지금 쿠키를 "name=value; domain=..; path=.." 줄로 낸다
+#   storage [set <k> <v>]    localStorage를 key=value 줄로 낸다. set이 있으면 그 키를 쓴다
+#
+# 셀렉터를 받는 C 묶음 명령은 전부 _resolve_sel() 한 곳을 거친다 - `@e<n>` 참조맵(498ac41d)이
+# 서면 이 함수 안에서만 풀면 된다. 지금은 그대로 돌려준다(셀렉터 문자열만 받는다).
 set -u
 
 _root="$(cd "$(dirname "$0")" && pwd -P)"
@@ -86,6 +110,69 @@ _CONSOLE_INSTALL_JS = """
   window.addEventListener('error', function(e){
     window.__diraConsole.push('error: ' + e.message);
   });
+  return 'ok';
+})()
+"""
+
+# network 버퍼도 같은 이유로 페이지에 심는다 - 명령마다 새 연결이라 CDP Network 이벤트를 계속
+# 못 듣는다. fetch/XHR을 감싸 왕복을 전역 배열에 쌓아 두고 읽기만 한다.
+# ponytail: fetch와 XMLHttpRequest만 잡는다 - <img> - <link> - <script> 태그가 직접 무는
+# 리소스나 버퍼 설치 이전에 뜬 요청은 안 잡힌다. 진짜 전체가 필요해지면 Network.enable +
+# 이벤트 리스너를 물고 있는 별도 프로세스로 옮긴다(지금 구조는 명령마다 연결이 끊긴다).
+_NETWORK_INSTALL_JS = """
+(function(){
+  if (window.__diraNetwork) return 'ok';
+  window.__diraNetwork = [];
+  var push = function(method, url, status){
+    window.__diraNetwork.push(method + ' ' + status + ' ' + url);
+  };
+  var origFetch = window.fetch;
+  if (origFetch) {
+    window.fetch = function(input, init){
+      var url = typeof input === 'string' ? input : (input && input.url) || '';
+      var method = (init && init.method) || (input && input.method) || 'GET';
+      return origFetch.apply(this, arguments).then(function(resp){
+        push(method, url, resp.status);
+        return resp;
+      }, function(err){
+        push(method, url, 'ERR');
+        throw err;
+      });
+    };
+  }
+  var OrigXHR = window.XMLHttpRequest;
+  var origOpen = OrigXHR.prototype.open;
+  OrigXHR.prototype.open = function(method, url){
+    this.__diraMethod = method;
+    this.__diraUrl = url;
+    this.addEventListener('loadend', function(){
+      push(this.__diraMethod, this.__diraUrl, this.status);
+    });
+    return origOpen.apply(this, arguments);
+  };
+  return 'ok';
+})()
+"""
+
+# dialog도 같은 방식이다 - CDP Page.javascriptDialogOpening은 그 순간 붙어 있는 연결이 있어야
+# 받는데, 이 구조는 명령마다 연결이 끊긴다. 대신 alert/confirm/prompt 자체를 감싸 로그를 쌓고,
+# dialog-accept/dialog-dismiss가 다음 호출의 반환값을 미리 정해 둔다.
+# ponytail: window.print()나 beforeunload 다이얼로그는 안 잡힌다 - alert/confirm/prompt 셋뿐이다.
+_DIALOG_INSTALL_JS = """
+(function(){
+  if (window.__diraDialog) return 'ok';
+  window.__diraDialog = [];
+  window.__diraDialogMode = 'accept';
+  window.__diraDialogText = '';
+  window.alert = function(msg){ window.__diraDialog.push('alert: ' + msg); };
+  window.confirm = function(msg){
+    window.__diraDialog.push('confirm: ' + msg);
+    return window.__diraDialogMode === 'accept';
+  };
+  window.prompt = function(msg, def){
+    window.__diraDialog.push('prompt: ' + msg);
+    return window.__diraDialogMode === 'accept' ? (window.__diraDialogText || def || '') : null;
+  };
   return 'ok';
 })()
 """
@@ -241,21 +328,71 @@ class CDP:
     def ensure_console_buffer(self):
         self.eval_js(_CONSOLE_INSTALL_JS)
 
+    def ensure_network_buffer(self):
+        self.eval_js(_NETWORK_INSTALL_JS)
+
+    def ensure_dialog_buffer(self):
+        self.eval_js(_DIALOG_INSTALL_JS)
+
 
 def connect():
     target = find_page_target()
     return CDP(target["webSocketDebuggerUrl"])
 
 
+def _resolve_sel(sel):
+    # ponytail: @e<n> 참조맵(498ac41d)이 아직 안 서 있다. 서면 이 함수 안에서만 풀면 된다 -
+    # 셀렉터를 받는 C 묶음 명령은 전부 여기를 거친다. 지금은 그대로 돌려준다.
+    return sel
+
+
+def _install_buffers(cdp):
+    cdp.call("Page.addScriptToEvaluateOnNewDocument", {"source": _CONSOLE_INSTALL_JS})
+    cdp.call("Page.addScriptToEvaluateOnNewDocument", {"source": _NETWORK_INSTALL_JS})
+    cdp.call("Page.addScriptToEvaluateOnNewDocument", {"source": _DIALOG_INSTALL_JS})
+
+
+def _ensure_buffers(cdp):
+    cdp.ensure_console_buffer()
+    cdp.ensure_network_buffer()
+    cdp.ensure_dialog_buffer()
+
+
 def cmd_goto(cdp, args):
     if not args:
         die("goto <url>가 필요하다")
     url = args[0]
-    # 다음 문서에도 콘솔 버퍼가 심기도록 addScriptToEvaluateOnNewDocument로 등록해 둔다.
-    cdp.call("Page.addScriptToEvaluateOnNewDocument", {"source": _CONSOLE_INSTALL_JS})
+    # 다음 문서에도 버퍼들이 심기도록 addScriptToEvaluateOnNewDocument로 등록해 둔다.
+    _install_buffers(cdp)
     cdp.call("Page.navigate", {"url": url})
     _poll_ready(cdp, timeout=15)
-    cdp.ensure_console_buffer()
+    _ensure_buffers(cdp)
+
+
+def _history_nav(cdp, delta):
+    hist = cdp.call("Page.getNavigationHistory")
+    idx = hist.get("currentIndex", 0)
+    entries = hist.get("entries", [])
+    target_idx = idx + delta
+    if target_idx < 0 or target_idx >= len(entries):
+        die("이동할 이력이 없다")
+    cdp.call("Page.navigateToHistoryEntry", {"entryId": entries[target_idx]["id"]})
+    _poll_ready(cdp, timeout=15)
+    _ensure_buffers(cdp)
+
+
+def cmd_back(cdp, args):
+    _history_nav(cdp, -1)
+
+
+def cmd_forward(cdp, args):
+    _history_nav(cdp, 1)
+
+
+def cmd_reload(cdp, args):
+    cdp.call("Page.reload", {})
+    _poll_ready(cdp, timeout=15)
+    _ensure_buffers(cdp)
 
 
 def _poll_ready(cdp, timeout=15):
@@ -390,6 +527,212 @@ def cmd_console(cdp, args):
         cdp.eval_js("window.__diraConsole = []")
 
 
+def cmd_hover(cdp, args):
+    if not args:
+        die("hover <sel>가 필요하다")
+    sel = json.dumps(_resolve_sel(args[0]))
+    rect = cdp.eval_js(
+        "(function(){var e=document.querySelector(%s); if(!e) return null; "
+        "var r=e.getBoundingClientRect(); return {x:r.left+r.width/2, y:r.top+r.height/2};})()"
+        % sel
+    )
+    if rect is None:
+        die("hover - 셀렉터를 못 찾았다 - " + args[0])
+    cdp.call("Input.dispatchMouseEvent", {"type": "mouseMoved", "x": rect["x"], "y": rect["y"]})
+
+
+def cmd_select(cdp, args):
+    if len(args) < 2:
+        die("select <sel> <val>이 필요하다")
+    sel, val = json.dumps(_resolve_sel(args[0])), json.dumps(args[1])
+    expr = (
+        "(function(){var e=document.querySelector(%s); if(!e) return 'NOTFOUND'; "
+        "e.value=%s; e.dispatchEvent(new Event('input',{bubbles:true})); "
+        "e.dispatchEvent(new Event('change',{bubbles:true})); return 'OK';})()" % (sel, val)
+    )
+    result = cdp.eval_js(expr)
+    if result == "NOTFOUND":
+        die("select - 셀렉터를 못 찾았다 - " + args[0])
+
+
+def cmd_scroll(cdp, args):
+    if args:
+        sel = json.dumps(_resolve_sel(args[0]))
+        expr = (
+            "(function(){var e=document.querySelector(%s); if(!e) return 'NOTFOUND'; "
+            "e.scrollIntoView({block:'center'}); return 'OK';})()" % sel
+        )
+        result = cdp.eval_js(expr)
+        if result == "NOTFOUND":
+            die("scroll - 셀렉터를 못 찾았다 - " + args[0])
+    else:
+        cdp.eval_js("window.scrollBy(0, window.innerHeight); 'OK'")
+
+
+def cmd_type(cdp, args):
+    # press와 달리 셀렉터가 없다 - 지금 포커스에 문자 하나씩 진짜 키 이벤트로 친다(fill의
+    # 값 대입과 달리 keydown을 듣는 React 등 컨트롤드 인풋에도 먹힌다).
+    if not args:
+        die("type <text>가 필요하다")
+    for ch in args[0]:
+        base = {"key": ch, "text": ch}
+        cdp.call("Input.dispatchKeyEvent", dict(base, type="rawKeyDown"))
+        cdp.call("Input.dispatchKeyEvent", dict(base, type="char"))
+        cdp.call("Input.dispatchKeyEvent", dict(base, type="keyUp"))
+
+
+def cmd_viewport(cdp, args):
+    if not args:
+        die("viewport <WxH>가 필요하다")
+    m = re.match(r"^(\d+)x(\d+)$", args[0])
+    if not m:
+        die("viewport - WxH 형식이 아니다 - " + args[0])
+    w, h = int(m.group(1)), int(m.group(2))
+    cdp.call(
+        "Emulation.setDeviceMetricsOverride",
+        {"width": w, "height": h, "deviceScaleFactor": 1, "mobile": False},
+    )
+
+
+def cmd_links(cdp, args):
+    items = cdp.eval_js(
+        "Array.prototype.map.call(document.querySelectorAll('a[href]'), function(a){"
+        "return (a.textContent||'').trim().replace(/\\s+/g,' ') + ' -> ' + a.href;})"
+    ) or []
+    for line in items:
+        print(line)
+
+
+def cmd_forms(cdp, args):
+    items = cdp.eval_js(
+        "Array.prototype.map.call(document.querySelectorAll('input,select,textarea,button'), "
+        "function(e){return e.tagName.toLowerCase()+' type='+(e.type||'')+' name='+(e.name||'')"
+        "+' id='+(e.id||'');})"
+    ) or []
+    for line in items:
+        print(line)
+
+
+def cmd_attrs(cdp, args):
+    if not args:
+        die("attrs <sel>이 필요하다")
+    sel = json.dumps(_resolve_sel(args[0]))
+    result = cdp.eval_js(
+        "(function(){var e=document.querySelector(%s); if(!e) return null; var o={}; "
+        "for (var i=0;i<e.attributes.length;i++){var a=e.attributes[i]; o[a.name]=a.value;} "
+        "return o;})()" % sel
+    )
+    if result is None:
+        die("attrs - 셀렉터를 못 찾았다 - " + args[0])
+    for k, v in result.items():
+        print("%s=%s" % (k, v))
+
+
+def cmd_css(cdp, args):
+    if len(args) < 2:
+        die("css <sel> <prop>가 필요하다")
+    sel, prop = json.dumps(_resolve_sel(args[0])), json.dumps(args[1])
+    result = cdp.eval_js(
+        "(function(){var e=document.querySelector(%s); if(!e) return null; "
+        "return getComputedStyle(e).getPropertyValue(%s);})()" % (sel, prop)
+    )
+    if result is None:
+        die("css - 셀렉터를 못 찾았다 - " + args[0])
+    print(result)
+
+
+_IS_PROPS = {
+    "visible": (
+        "!!(e.offsetWidth||e.offsetHeight||e.getClientRects().length) && "
+        "getComputedStyle(e).visibility!=='hidden'"
+    ),
+    "hidden": (
+        "!(!!(e.offsetWidth||e.offsetHeight||e.getClientRects().length) && "
+        "getComputedStyle(e).visibility!=='hidden')"
+    ),
+    "enabled": "!e.disabled",
+    "disabled": "!!e.disabled",
+    "checked": "!!e.checked",
+    "editable": "!e.disabled && !e.readOnly",
+    "focused": "document.activeElement === e",
+}
+
+
+def cmd_is(cdp, args):
+    if len(args) < 2:
+        die("is <prop> <sel>이 필요하다")
+    prop, sel = args[0], args[1]
+    if prop not in _IS_PROPS:
+        die("is - 모르는 판정 - " + prop)
+    sel_json = json.dumps(_resolve_sel(sel))
+    expr = "(function(){var e=document.querySelector(%s); if(!e) return null; return %s;})()" % (
+        sel_json,
+        _IS_PROPS[prop],
+    )
+    result = cdp.eval_js(expr)
+    if result is None:
+        die("is - 셀렉터를 못 찾았다 - " + sel)
+    print("true" if result else "false")
+    sys.exit(0 if result else 1)
+
+
+def cmd_network(cdp, args):
+    clear = "--clear" in args
+    cdp.ensure_network_buffer()
+    lines = cdp.eval_js("window.__diraNetwork || []") or []
+    for line in lines:
+        print(line)
+    if clear:
+        cdp.eval_js("window.__diraNetwork = []")
+
+
+def cmd_dialog(cdp, args):
+    clear = "--clear" in args
+    cdp.ensure_dialog_buffer()
+    lines = cdp.eval_js("window.__diraDialog || []") or []
+    for line in lines:
+        print(line)
+    if clear:
+        cdp.eval_js("window.__diraDialog = []")
+
+
+def cmd_dialog_accept(cdp, args):
+    cdp.ensure_dialog_buffer()
+    text = args[0] if args else ""
+    cdp.eval_js(
+        "window.__diraDialogMode='accept'; window.__diraDialogText=%s;" % json.dumps(text)
+    )
+
+
+def cmd_dialog_dismiss(cdp, args):
+    cdp.ensure_dialog_buffer()
+    cdp.eval_js("window.__diraDialogMode='dismiss';")
+
+
+def cmd_cookies(cdp, args):
+    result = cdp.call("Network.getCookies", {})
+    for c in result.get("cookies", []):
+        print(
+            "%s=%s; domain=%s; path=%s"
+            % (c.get("name"), c.get("value"), c.get("domain"), c.get("path"))
+        )
+
+
+def cmd_storage(cdp, args):
+    if args and args[0] == "set":
+        if len(args) < 3:
+            die("storage set <k> <v>가 필요하다")
+        k, v = json.dumps(args[1]), json.dumps(args[2])
+        cdp.eval_js("localStorage.setItem(%s, %s)" % (k, v))
+        return
+    items = cdp.eval_js(
+        "(function(){var o={}; for (var i=0;i<localStorage.length;i++){"
+        "var k=localStorage.key(i); o[k]=localStorage.getItem(k);} return o;})()"
+    ) or {}
+    for k, v in items.items():
+        print("%s=%s" % (k, v))
+
+
 _COMMANDS = {
     "goto": cmd_goto,
     "url": cmd_url,
@@ -402,6 +745,25 @@ _COMMANDS = {
     "screenshot": cmd_screenshot,
     "js": cmd_js,
     "console": cmd_console,
+    "back": cmd_back,
+    "forward": cmd_forward,
+    "reload": cmd_reload,
+    "hover": cmd_hover,
+    "select": cmd_select,
+    "scroll": cmd_scroll,
+    "type": cmd_type,
+    "viewport": cmd_viewport,
+    "links": cmd_links,
+    "forms": cmd_forms,
+    "attrs": cmd_attrs,
+    "css": cmd_css,
+    "is": cmd_is,
+    "network": cmd_network,
+    "dialog": cmd_dialog,
+    "dialog-accept": cmd_dialog_accept,
+    "dialog-dismiss": cmd_dialog_dismiss,
+    "cookies": cmd_cookies,
+    "storage": cmd_storage,
 }
 
 
