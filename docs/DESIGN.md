@@ -40727,6 +40727,8 @@ RSS 1위가 Slack 하나로 643MB라 브라우저 전체보다 컸고 `next-serv
   슬롯의 `pid`가 지금 부르는 세션과 같으면 해시가 무엇이든 쓰던 포트를 돌려준다. **한 세션이
   화면 둘을 봐야 하면 브라우저 둘이 아니라 그 브라우저의 탭 둘을 쓴다** - 이 문장이 위 줄을
   실제로 세우는 자리다.
+  **접미사 문자열 자체는 2026-09-18부터 입구에서 막힌다**(결정 6) - 슬롯의 `pid` 판정은 서로
+  다른 유효 해시 둘에 그대로 남는다.
 - **완전 강제가 아니라는 것을 여기 적어 둔다.** 세션은 여전히 `Bash`로 바이너리를 직접 부를 수
   있다. 그 길을 막는 것은 도구 경계라 이 절의 범위 밖이고, 여기서 만드는 것은 **부르면 세어지는
   자리**와 **안 불러도 줍는 안전망**(결정 5) 둘이다.
@@ -40788,6 +40790,31 @@ RSS 1위가 Slack 하나로 643MB라 브라우저 전체보다 컸고 `next-serv
 **`used=`가 있는 이유가 이것 하나다.** 결정 2가 기본값 3을 계단 없이 골랐으므로, 이 수가 쌓이면
 동시 대여가 실제로 몇에서 멈추는지와 `wait`이 몇 번 걸리는지를 세어 값을 다시 고를 수 있다.
 
+### 결정 6 - 해시 형식을 입구에서 재고, 어긋나면 안 띄운다 (요구 `7dd4ab9e`)
+
+`browse.sh home0001 goto <url>`이 종료 코드 0으로 돌았고 슬롯도 잡혔고 chrome-headless-shell도
+떴는데, 앱의 브라우저 표면에는 `지금 실행 중인 브라우저가 없습니다`만 떴다. 화면은 해시를
+`^[0-9a-f]{8}$`로 재고(§11-11 결정 1, `apps/teams/lib/cdp-relay.ts`의 `isValidCdpHash`),
+통과하지 못한 슬롯을 `listBrowserPoolHashes`가 목록에서 말없이 뺀다. 엔진 쪽 `browse.sh`와
+`browser.sh`는 그 형식을 한 번도 재지 않았다. **그래서 호출자는 자기 슬롯이 화면에서 빠졌다는
+사실을 알 길이 없었다** - stderr도 비어 있고 종료 코드도 0이다.
+
+- **재는 자리는 `browser.sh`의 서브커맨드 진입 한 곳이다.** `browse.sh`는 어떤 명령이든
+  `acquire`를 먼저 부르고 `release`는 `browser.sh release`로 그대로 넘기므로 호출 경로가 전부
+  이 한 곳을 지난다. 두 스크립트 헤더 주석의 `<해시>` 설명에도 형식을 적는다.
+- **정규식은 화면이 쓰는 것과 같은 `^[0-9a-f]{8}$` 하나다.** 두 자리가 같은 문자열을 서로 다르게
+  재는 순간 이 버그가 다시 난다.
+- **어긋나면 stderr에 사유 한 줄을 내고 종료 코드 2로 끝난다.** 그 줄에 받은 값과 기대하는
+  형식을 같이 적는다. 재기 전에는 슬롯도 프로필도 프로세스도 안 만든다.
+- **티켓 해시가 없는 세션은 8자리 16진수를 하나 만들어 쓴다** -
+  `python3 -c 'import uuid;print(uuid.uuid4().hex[:8])'`. 홈 대화처럼 티켓 밖에서 브라우저를
+  띄우는 자리가 `home0001` 같은 값을 지어내던 자리다. `cdp.md`가 이 한 줄을 든다.
+- **접미사(`<해시>-A`)도 같은 문에서 막힌다.** 결정 1이 남겨 둔 접미사 관용은 슬롯의 `hash`
+  파일에 그 값을 그대로 적기 때문에 그 슬롯도 화면 목록에서 빠진다. 같은 버그라 같이 닫는다.
+- **자기 검사 스크립트 셋이 먼저 걸린다.** `browse-selfcheck.sh` - `browse-selfcheck-c.sh` -
+  `verify-browse-session-pid.sh`가 `browse-selfcheck-$$` 같은 값을 쓰고 있다. 셋 다 8자리
+  16진수를 만들어 쓰도록 같이 고친다.
+
 ### 안 하는 것
 
 - **엔진을 안 고친다.** `tick.sh` - `tickets.py` - `test_tickets.py`가 0줄이다.
@@ -40802,6 +40829,8 @@ RSS 1위가 Slack 하나로 643MB라 브라우저 전체보다 컸고 `next-serv
   두고 dira 큐부터 쓴다(§부하 §안 하는 것의 마지막 줄과 같은 판단).
 - **`/tmp/qa-*` 정리 규칙을 새로 안 만든다.** `cdp.md`가 든 오래된 프로필 청소 문단이 그대로 남고,
   `release`가 자기 것을 지우는 것이 더해질 뿐이다.
+- **화면을 안 고친다**(요구 `7dd4ab9e`). `isValidCdpHash`와 `listBrowserPoolHashes`는 신뢰
+  경계라 지금 모양 그대로가 맞다. 입구에서 막으면 목록에서 빠질 슬롯이 아예 안 생긴다.
 
 ### 수용조건
 
@@ -40827,14 +40856,27 @@ grep -c '^BROWSER ' ~/Projects/dira/.dira/workers/runner.log
 grep -c 'remote-debugging-port=0' .dira/protocols/cdp.md   # 0
 # (8) 엔진 무수정
 git diff --stat master -- tick.sh tickets.py test_tickets.py   # 0줄
-# (9) 접미사 - 같은 세션이 접미사를 바꿔 불러도 슬롯이 하나다 (결정 1, 요구 cc2e4f22)
-bash .dira/browser.sh acquire cccccccc-A >/dev/null
-test "$(bash .dira/browser.sh acquire cccccccc-B)" = "$(bash .dira/browser.sh acquire cccccccc-A)"
+# (9) 접미사 - 입구에서 막힌다(결정 6). pid 판정은 유효한 해시 둘로 잰다(결정 1, 요구 cc2e4f22)
+bash .dira/browser.sh acquire cccccccc-A; echo $?          # 2, 슬롯이 안 생긴다
+test "$(bash .dira/browser.sh acquire cccccccc)" = "$(bash .dira/browser.sh acquire ccccccc1)"
 ls ~/.config/dira/browser-pool | wc -l                    # 1
 # (10) 기본값 - browser-limit 파일이 없으면 상한이 6이다
 rm -f ~/.config/dira/browser-limit
 bash .dira/browser.sh acquire dddddddd >/dev/null
 grep 'BROWSER acquire dddddddd' ~/Projects/dira/.dira/workers/runner.log | tail -1   # used=<n>/6
+# (11) 형식 - 8자리 16진수가 아니면 아무것도 안 뜨고 종료 코드가 0이 아니다 (결정 6, 요구 7dd4ab9e)
+bash .dira/browser.sh acquire home0001; echo $?            # 2, stderr에 사유 한 줄
+bash .dira/browse.sh home0001 goto https://example.com; echo $?   # 2
+bash .dira/browser.sh release home0001; echo $?            # 2
+ls ~/.config/dira/browser-pool | wc -l                     # 0
+pgrep -f '[c]hrome-headless-shell.*qa-home0001' | wc -l    # 0
+ls -d /tmp/qa-home0001 2>/dev/null | wc -l                 # 0
+# (12) 자기 검사 셋이 8자리 16진수 해시로 돌아간다
+grep -c 'selfcheck-\$\$\|simtest\$\$' templates/hooks/browse-selfcheck.sh \
+  templates/hooks/browse-selfcheck-c.sh templates/hooks/verify-browse-session-pid.sh   # 전부 0
+bash templates/hooks/browse-selfcheck.sh   # 통과
+# (13) 큐 사본이 정본과 같다
+diff templates/hooks/browse.sh .dira/browse.sh && diff templates/hooks/browser.sh .dira/browser.sh
 ```
 
 ## 브라우저는 내장이 기본이다 - browse를 이식하고 호출을 가로챈다 (요구 `b62588c9`, 답 `3186dfa7`)
@@ -59748,6 +59790,28 @@ developer의 값이다.
 
 **writer 0장.** 사람이 읽는 매뉴얼에 이 경계가 안 뜬다 - 고치는 것은 사람이 기대한 동작으로
 되돌리는 일이다.
+
+### P423. 어긋난 해시로 뜬 브라우저가 조용히 사라지지 않는다 - 입구에서 재고 거절한다 (요구 `7dd4ab9e`, 왕복 0회)
+
+계약은 **§CDP 브라우저를 풀에서 빌린다 결정 6**이 정본이고 이 절은 경계와 순서만 적는다. 갈리는
+파일은 `templates/hooks/` 아래 스크립트 다섯과 `templates/protocols/cdp.md`이고, 새 npm 0 -
+화면 0줄 - `tick.sh`/`tickets.py` 0줄이다.
+
+**안 되물었다.** 사람이 증상을 보고 고칠 자리까지 지목했고(`browse.sh`와 `browser.sh`의 입구)
+형식은 §11-11 결정 1이 이미 못박아 둔 값이라 고를 것이 없다.
+
+**엔진 파일을 고치는 근거와 승인.** `browse.sh`와 `browser.sh`는 큐마다 복사되는 훅이고 엔진
+본체(`tick.sh` - `tickets.py`)는 안 갈린다. 사람이 이 요구에 `티켓으로 잡고`로 답한 것이 승인이다.
+
+| ID | 무엇 | 페르소나 | deps | 상태 |
+|---|---|---|---|---|
+| P423-1 | 구현 - `browser.sh` 입구의 형식 검사, 두 헤더 주석, 자기 검사 셋의 해시, `cdp.md` 한 줄 `7e66dcbc` | developer | - | 발행 |
+| P423-2 | QA - §CDP 수용조건 (9) (11) (12) (13)을 `kind: tc`로 발행하고 한 줄씩 판정한다 `01b7b838` | qa | P423-1 | 발행 |
+
+**에픽을 안 연다.** 두 장이 같은 파일 묶음에 걸린다 - §에픽 결정 20의 하한 아래다.
+
+**designer 0장, writer 0장.** 사람이 읽는 매뉴얼에 이 경계가 안 뜬다 - 세션이 읽는 규약
+(`cdp.md`)만 한 줄 는다.
 
 ## 수용조건 (전체)
 
