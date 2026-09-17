@@ -1,7 +1,7 @@
 # 사용 통계와 끄는 법
 
 앱(`dira teams`)은 GA4로 사용 통계를 보냅니다. 엔진(`tick.sh`, `tickets.py`)은 아무것도 보내지
-않습니다. 이 장이 다루는 것은 전부 앱 쪽 이야기입니다.
+않습니다. 이 장에서 다루는 내용은 전부 앱에 관한 것입니다.
 
 ## 보내는 것 - 이벤트 8종
 
@@ -12,14 +12,14 @@
 | `app_open` | 사용자 세션이 시작될 때(첫 이벤트 앞, 30분 무활동 뒤 재시작) | `app_version`, `shell`(`desktop`\|`browser`) |
 | `screen_view` | 화면 진입 | `screen`(`root`\|`board`\|`ticket`\|`workers`\|`personas`\|`protocols`\|`ontology`\|`home`) |
 | `project_add` | 프로젝트가 하나 늘었을 때 | `method`(`create`\|`register`) |
-| `worker_create` | 워커 생성 성공 | `engine`(엔진 카탈로그의 id 그대로. 지금은 `claude`\|`codex`\|`grok`\|`agy`이고, 손으로 적은 값은 `other`로 접힌다), `cron_ok`(bool) |
+| `worker_create` | 워커 생성 성공 | `engine`(엔진 카탈로그의 id 그대로. 지금은 `claude`\|`codex`\|`grok`\|`agy`이고, 직접 적은 값은 `other`로 분류된다), `cron_ok`(bool) |
 | `ticket_create` | 티켓 발행이나 요구 접수 성공 | `kind`(`work`\|`request`\|`feedback`) |
 | `answer_submit` | 답변 왕복의 답을 사람이 썼을 때 | 없음 |
 | `feedback_submit` | 의견 보내기 폼에서 보내기를 눌렀을 때 | 없음 |
 | `analytics_off` | 통계를 끌 때(끄기 직전 마지막 한 번) | 없음 |
 
 값은 개수, 불리언, 미리 정한 enum뿐입니다. `.done` 전환이나 디스패치처럼 엔진이 만드는 사실은
-이벤트가 아닙니다. 화면 동작만 셉니다. 에러와 크래시도 보내지 않습니다.
+이벤트가 아닙니다. 화면 동작만 집계합니다. 에러와 크래시도 보내지 않습니다.
 
 ## 보내지 않는 것
 
@@ -31,14 +31,14 @@ IP를 유추할 값.
 
 `screen_view`도 URL 자체는 안 보냅니다. `/p/<project>/tickets/<hash>`는 프로젝트 이름과 티켓
 해시를 둘 다 담고 있어서, 보내는 것은 그 경로를 미리 정한 화면 이름(`ticket` 등) 하나로 바꾼
-값입니다. 의견 보내기 폼에 쓰신 자유 입력도 GA로 가지 않습니다. 그건 GitHub 이슈로만 가고,
-GA에는 "보낸 사실"(`feedback_submit`)만 남습니다.
+값입니다. 의견 보내기 폼에 쓰신 자유 입력도 GA로 가지 않습니다. 그 내용은 GitHub 이슈로만
+전달되고, GA에는 "보낸 사실"(`feedback_submit`)만 남습니다.
 
 ## 전송 조건 - 자격값 두 개
 
 전송은 `GA_MEASUREMENT_ID`와 `GA_API_SECRET` 두 값이 있어야 나갑니다. 이 둘은 릴리스 빌드에만
 CI가 넣고, 레포에는 커밋되지 않습니다. **값이 없으면 코드가 아무것도 보내지 않습니다.**
-`pnpm dev`로 띄운 개발 서버와 손으로 빌드한 `.app`은 둘 다 이 상태입니다. 개발 중에 도는
+`pnpm dev`로 띄운 개발 서버와 직접 빌드한 `.app`은 둘 다 이 상태입니다. 개발 중에 실행되는
 세션이 통계를 오염시키지 않는 이유가 이것입니다.
 
 `설정` 다이얼로그의 `사용 통계`도 이 값의 유무를 그대로 보여줍니다. 자격값이 없는 빌드에서는
@@ -52,10 +52,10 @@ CI가 넣고, 레포에는 커밋되지 않습니다. **값이 없으면 코드�
 
 ## 지우는 법
 
-통계 파일은 `~/.config/dira/analytics.json` 하나입니다. 여기 든 값은 `install_id`(GA4에
-보내는 익명 설치 식별자)와 `enabled`(껐을 때만 `false`로 적힙니다) 둘뿐입니다. 파일을 지우면
-다음 실행에서 새 `install_id`가 발급되고, 이전 통계와 이어지지 않는 새 설치로 잡힙니다.
-아래 한 줄을 터미널에 입력하시면 됩니다.
+통계 파일은 `~/.config/dira/analytics.json` 하나입니다. 여기 든 값은 `install_id`(GA4에 보내는
+익명 설치 식별자)와 `enabled`(껐을 때만 `false`로 적힙니다) 둘뿐입니다. 파일을 지우면 다음
+실행에서 새 `install_id`가 발급되고, 이전 통계와 이어지지 않는 새 설치로 집계됩니다. 아래 한
+줄을 터미널에 입력하시면 됩니다.
 
 ```bash
 rm ~/.config/dira/analytics.json
