@@ -59928,10 +59928,10 @@ developer의 값이다.
 
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
-| P424-1 | 셸 - `browse.sh`가 `owner`와 `busy`를 쓰고 `browser.sh`에 `reclaim`이 는다. 홈 세션 `spawn`에 `DIRA_SESSION_KIND`. §11-13 결정 1 - 2 - 4 앞 두 줄 | developer | - | 발행 |
-| P424-2 | GUI - 좌측 줄 - 탭 줄 - 랩 머리 줄 셋이 이름과 점을 그리고, 죽은 슬롯을 빼고 회수를 부른다. §11-13 결정 3 - 4 | developer | - | 발행 |
-| P424-3 | QA - §11-13 수용조건 열넷을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P424-1, P424-2 | 발행 |
-| P424-4 | 매뉴얼 - `apps/teams/docs/screens.md`의 브라우저 장이 주인 이름과 점을 알려 준다 | writer | P424-2 | 발행 |
+| P424-1 | 셸 - `browse.sh`가 `owner`와 `busy`를 쓰고 `browser.sh`에 `reclaim`이 는다. 홈 세션 `spawn`에 `DIRA_SESSION_KIND`. §11-13 결정 1 - 2 - 4 앞 두 줄 `b80cee1c` | developer | - | 발행 |
+| P424-2 | GUI - 좌측 줄 - 탭 줄 - 랩 머리 줄 셋이 이름과 점을 그리고, 죽은 슬롯을 빼고 회수를 부른다. §11-13 결정 3 - 4 `7fb54f6e` | developer | - | 발행 |
+| P424-3 | QA - §11-13 수용조건 열넷을 `kind: tc`로 발행하고 한 줄씩 판정한다 `3dd2729c` | qa | P424-1, P424-2 | 발행 |
+| P424-4 | 매뉴얼 - `apps/teams/docs/screens.md`의 브라우저 장이 주인 이름과 점을 알려 준다 `494fdcde` | writer | P424-2 | 발행 |
 
 **P424-1과 P424-2를 안 엮는다.** 파일 형식(`owner` 토큰 셋 - `busy` 한 줄)이 §11-13에 적혀
 있어서 GUI가 셸을 기다리지 않고 착수한다. 둘이 만나는 자리는 P424-3의 판정이다.
