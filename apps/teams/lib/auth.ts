@@ -642,8 +642,13 @@ const SETUP_TIMEOUT_MS = 120_000;
  *  확정하는 창(§0-4 §개정 `8f4712a6`). 같은 청크 안에서 이어 온 토막은 이 창을 안 쓴다 — 이건
  *  <그 뒤로 정말 더 안 온다>를 재는 마지막 그물이다. 픽스처 재현(`443dd1fa`)에서 갈린 두
  *  토막의 실제 간격은 한 자릿수 ms였다 — 500ms면 실물 pty 스케줄링 지연을 넉넉히 덮고도
- *  사람이 못 느낄 창이다(발급 전체가 이미 브라우저 승인을 낀 수 초~수십 초다). */
+ *  사람이 못 느낄 창이다(발급 전체가 이미 브라우저 승인을 낀 수 초~수십 초다).
+ *
+ *  `DIRA_TOKEN_IDLE_MS`는 **테스트 이음매다** — 제품은 안 읽고 아무도 안 심는다. 갈린 청크를
+ *  재는 테스트(`lib/auth.test.ts` §개정 `8f4712a6`)가 이 창을 크게 덮어써서, 청크 간격과 이
+ *  창의 경주를 판정에서 뺀다(그 자리는 매치 뒤 원문으로 확정한다). 창을 늘리는 수선이 아니다. */
 const TOKEN_IDLE_MS = 500;
+const tokenIdleMs = () => Number(process.env.DIRA_TOKEN_IDLE_MS) || TOKEN_IDLE_MS;
 /** 남의 TUI를 긁는 일이라 접두사에 묶인다 — 저장 검증(`normalizeToken`)이 접두사로 거르지
  *  **않는** 것과 축이 다르다. 여기선 화면 잡음 속에서 토큰을 골라낼 표식이 이것뿐이다. */
 const TOKEN_RE = /sk-ant-[A-Za-z0-9._-]{20,}/;
@@ -1035,7 +1040,7 @@ export function startSetup(locale: Locale = DEFAULT_LOCALE): SetupState {
     if (pending) {
       s.idleTimer = setTimeout(() => {
         if (!s.settled) finalize(pending);
-      }, TOKEN_IDLE_MS);
+      }, tokenIdleMs());
     }
   };
   child.stdout?.on("data", feed);

@@ -218,21 +218,30 @@ test("startSetup — 토막난 토큰(커서 이동 escape·줄바꿈으로 갈�
   stopSetup();
 });
 
-test("startSetup — 토막난 토큰이 서로 다른 청크로 갈려 와도(스케줄링에 안 기댄다) 머리를 다 볼 때까지 잠그지 않는다 (§0-4 §개정 `8f4712a6`)", async () => {
+test("startSetup — 토막난 토큰이 서로 다른 청크로 갈려 와도(스케줄링에 안 기댄다) 머리를 다 볼 때까지 잠그지 않는다 (§0-4 §개정 `8f4712a6`)", async (t) => {
   process.env.TICKET_LOCAL = mkdtempSync(path.join(tmpdir(), "fst-auth-split-"));
   // 위 `443dd1fa` 픽스처와 같은 세 토막이지만, 두 `printf` 사이에 실제 간격(`sleep 0.3`)을
   // 끼워 **두 쓰기가 한 번의 read로 붙을 가능성을 없앤다** — PM 세션(2026-09-03)이 이 값으로
   // 로컬·GitHub Actions 러너 양쪽에서 갈린 청크를 재현했다. 첫 청크(FRAG1+FRAG2)는 그 자체로
   // `\r\n`에서 끝나 원문 끝에 닿는다 — 고친 `feed()`가 여기서 확정하면(옛 코드처럼) 44자만
   // 남고 뒤 61자(FRAG3)가 도착할 기회를 잃는다.
+  //
+  // **청크 간격과 idle 창을 경주시키지 않는다**(`b5fd35f2`). 옛 픽스처는 둘째 청크가
+  // `TOKEN_IDLE_MS`(500ms) 안에 닿는 것에 기댔고, 스폰 비용이 남은 200ms를 자주 먹어 단독
+  // 실행에서도 열 번에 네 번 44자로 확정됐다. 지금은 창을 60초로 덮어써 idle 그물을 판정에서
+  // 빼고, 확정은 둘째 청크의 꼬리 낱말(`Store`)이 매치 뒤에 원문을 남기는 **명시적 신호**가
+  // 낸다 — `sleep 0.3`은 청크를 가르는 역할만 하고 길이는 결과를 안 바꾼다. 창을 늘려 여유를
+  // 버는 수선이 아니다: 창이 아무리 길어도 첫 청크에서 잠그는 옛 `feed()`는 여기서 44자로 진다.
   const FRAG1 = "sk-ant-oa";
   const FRAG2 = "D".repeat(35);
   const FRAG3 = "E".repeat(61);
   const TOKEN = FRAG1 + FRAG2 + FRAG3;
   stubClaude(
-    `printf '${FRAG1}\\033[46G${FRAG2}\\r\\n'\nsleep 0.3\nprintf '${FRAG3}\\r\\n'\nsleep 60`,
+    `printf '${FRAG1}\\033[46G${FRAG2}\\r\\n'\nsleep 0.3\nprintf '${FRAG3} Store\\r\\n'\nsleep 60`,
   );
   armPidfile();
+  process.env.DIRA_TOKEN_IDLE_MS = "60000";
+  t.after(() => delete process.env.DIRA_TOKEN_IDLE_MS); // 새면 뒤 테스트가 idle 확정을 못 본다
   startSetup();
   await until(() => !!pollSetup().savedAt);
 
