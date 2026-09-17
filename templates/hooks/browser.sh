@@ -121,7 +121,17 @@ _launch() {
 # 스크립트가 끝나자마자 죽어서 다음 회수 스캔이 세션을 죽은 것으로 오판한다. 그 임시 셸의
 # 부모(조부모)가 진짜 오래 사는 세션이므로(실측 - 이 값이 티켓 frontmatter의 pid:와 같다)
 # 한 단 더 올라간다. 조부모를 못 읽으면(0 또는 조회 실패) $PPID로 물러선다.
+#
+# browse.sh가 acquire를 부를 때는 한 겹 더 감싸므로($PPID가 browse.sh 자신이 된다) 이
+# 스크립트 안에서 조부모를 구하면 browse.sh를 부른 임시 셸이 나온다 - 그 셸은 다음 Bash
+# 호출 전에 죽어 있다(efa22ca0 실측). browse.sh는 자신을 부른 임시 셸의 부모(=오래 사는
+# 세션)를 이미 정확히 구할 수 있는 위치이므로, 그 값을 BROWSER_SESSION_PID로 넘겨 받으면
+# 그대로 쓴다 - 없으면(직접 호출, push.sh/cold-boot.sh 등) 기존 ps 판정으로 물러선다.
 _session_pid() {
+  if [ -n "${BROWSER_SESSION_PID:-}" ]; then
+    echo "$BROWSER_SESSION_PID"
+    return
+  fi
   local gp
   gp=$(ps -o ppid= -p "$PPID" 2>/dev/null | tr -d ' ')
   if [ -n "$gp" ] && [ "$gp" != 0 ]; then

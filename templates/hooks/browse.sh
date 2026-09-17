@@ -72,7 +72,21 @@ if [ "$_cmd" = release ]; then
   exec bash "$_root/browser.sh" release "$_hash"
 fi
 
-_port="$(bash "$_root/browser.sh" acquire "$_hash")" || exit $?
+# browser.sh 안의 _session_pid()가 부모(=이 스크립트)의 조부모를 잡으면 이 스크립트를
+# 부른 임시 셸이 나온다(efa22ca0 실측 - 두 겹 래핑). 그 셸은 다음 Bash 호출 전에 죽으므로
+# 여기서 먼저 오래 사는 세션 pid를 구해 넘긴다 - browser.sh 쪽 판정은 CORE.md·건드리지
+# 않는다(엔진 파일 아님, 이 파일도 큐 사본이라 자유롭게 고친다).
+_session_pid() {
+  local gp
+  gp=$(ps -o ppid= -p "$PPID" 2>/dev/null | tr -d ' ')
+  if [ -n "$gp" ] && [ "$gp" != 0 ]; then
+    echo "$gp"
+  else
+    echo "$PPID"
+  fi
+}
+
+_port="$(BROWSER_SESSION_PID="$(_session_pid)" bash "$_root/browser.sh" acquire "$_hash")" || exit $?
 if [ -z "$_port" ]; then
   echo "browse.sh: browser.sh acquire가 포트를 안 냈다 - $_hash" >&2
   exit 1
