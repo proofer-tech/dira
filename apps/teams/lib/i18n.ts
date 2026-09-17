@@ -388,7 +388,7 @@ export const ko: Record<string, string> = {
   "bell.failures.titleSuffix": "개",
   "bell.failures.body": "티켓은 그때마다 대기로 정확히 돌아옵니다. 잃는 것은 없습니다.",
   "bell.failures.footer": "사유에 적힌 시각이 지나면 저절로 다시 가져갑니다 — 고칠 일은 없습니다.",
-  "bell.assigned.titlePrefix": "아무도 집지 않는 티켓",
+  "bell.assigned.titlePrefix": "아무도 가져가지 않는 티켓",
   "bell.assigned.titleSuffix": "건",
   "bell.assigned.body": "워커가 할당한 채 반환하지 않아서, 이 티켓들은 순서가 와도 넘어갑니다.",
   "bell.awaiting.titlePrefix": "답변을 기다리는 티켓",
@@ -397,7 +397,7 @@ export const ko: Record<string, string> = {
   "bell.awaiting.answerLink": "답변 쓰기",
 
   // 종 ⑨(P362-3, §0-10 §결정 기록 §엔진 수정 서른세 번째 승인). 판정이 GUI 밖에 있는 두 번째
-  // 항목 — 나열은 엔진이 표식에 적어 둔 죽은 횟수·다시 집는 시각 그대로다. `보관`이 없다(②·⑥과
+  // 항목 — 나열은 엔진이 표식에 적어 둔 죽은 횟수·다시 가져가는 시각 그대로다. `보관`이 없다(②·⑥과
   // 달리 지나간 사건이 아니라 지금 걸려 있는 상태다).
   "bell.backoff.titlePrefix": "되풀이해 죽어서 쉬는 티켓",
   "bell.backoff.titleSuffix": "건",

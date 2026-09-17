@@ -281,7 +281,7 @@ test("dd97c69c — 알림 트리거·종 넷(②③④의 개수 제목)·전환
 
   const assignedTitle = (n: number) =>
     `${t("ko", "bell.assigned.titlePrefix")} ${n}${t("ko", "bell.assigned.titleSuffix")}`;
-  assert.strictEqual(assignedTitle(2), "아무도 집지 않는 티켓 2건");
+  assert.strictEqual(assignedTitle(2), "아무도 가져가지 않는 티켓 2건");
 
   const awaitingTitle = (n: number) =>
     `${t("ko", "bell.awaiting.titlePrefix")} ${n}${t("ko", "bell.awaiting.titleSuffix")}`;
