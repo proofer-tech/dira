@@ -438,8 +438,8 @@ def _resolve_selector_backend_id(cdp, sel):
     result = cdp.call("Runtime.evaluate", {"expression": expr, "returnByValue": False})
     if result.get("exceptionDetails") or "objectId" not in result.get("result", {}):
         return None
-    node = cdp.call("DOM.describeNode", {"objectId": result["result"]["objectId"]})
-    return node.get("node", {}).get("backendNodeId")
+    desc = cdp.call("DOM.describeNode", {"objectId": result["result"]["objectId"]})
+    return desc.get("node", {}).get("backendNodeId")
 
 
 # 셀렉터를 받는 명령(click - fill - C 묶음 전부)이 거치는 단일 진입점. @e<n>이면 그 요소에
