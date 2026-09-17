@@ -39,6 +39,7 @@ import {
   openFileTab,
   openTerminalTab,
   pollHome,
+  readHome,
   readScheduleViews,
   readSessionId,
   sayAsk,
@@ -47,6 +48,7 @@ import {
   stopAsk,
   switchConversation,
   type Answer,
+  type Home,
   type HomeChunk,
   type ScheduleView,
 } from "@/lib/home-session";
@@ -157,6 +159,22 @@ export async function pollHomeAnswer(
       // 없다. 참을 안 주면 화면이 있지도 않은 프로젝트를 5분 동안 다시 묻는다(머리 주석).
       done: true,
     };
+  }
+}
+
+/** 유휴 프로젝트에서도 탭 목록이 창 사이로 퍼지는 자리(§11-10 결정 3, QA `d1970adc` 결함 2).
+ *  `pollHomeAnswer`는 도는 대화가 있어야만 돌아서(위 머리말 "홈은 5초 폴링을 하지 않는다")
+ *  대화가 하나도 없는 창은 `tabs`를 받을 길이 없었다 — 트랜스크립트를 읽는 `pollHome` 전체를
+ *  다시 부르지 않고 `readHome` 한 번(파일 하나 읽기, `/api/revision`의 `getProject` 왕복과
+ *  같은 값)으로 이 칸만 돌려준다. `current`는 안 돌려준다 — 그 값은 여전히 `pollHomeAnswer`
+ *  하나가 정하고(도는 워커 세션 판정 등 다른 칸과 얽힌다), 탭 이월 이펙트(`home-ui.tsx`)는
+ *  `tabs`만 보고도 활성 탭을 옮긴다. */
+export async function pollTabs(projectId: string): Promise<Home["tabs"]> {
+  try {
+    const project = await required(projectId);
+    return (await readHome(project.id)).tabs;
+  } catch {
+    return []; // 등록이 풀린 프로젝트 — 위 pollHomeAnswer의 물러남과 같은 값
   }
 }
 

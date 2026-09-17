@@ -76,6 +76,7 @@ import {
   openBrowserTabAction,
   openTerminal,
   pollHomeAnswer,
+  pollTabs,
   refreshRefs,
   restartTerminal,
   scmCheckouts,
@@ -651,6 +652,37 @@ export function HomeUI({
       clearTimeout(timer);
     };
   }, [project]);
+
+  // **유휴 프로젝트에서도 탭 목록이 창 사이로 퍼진다**(§11-10 결정 3, QA `d1970adc` 결함 2).
+  // 위 `pollHome` 루프는 도는 대화가 있어야만 돈다(§7 머리말) — 도는 것이 하나도 없는 창에서는
+  // 그 루프가 아예 안 붙어서 창 A가 연 탭이 창 B에 20초+ 지나도 안 떴다(재현 §3). 그 루프가
+  // 이미 돌 때는 이 폴이 겹치지 않도록 같은 세 문(`running`·`anyRunning`·`readOnly`)의 **부정**을
+  // 게이트로 쓴다 — 탭 갱신 경로가 둘로 겹쳐 도는 순간이 없다. 주기는 다른 두 유휴 폴
+  // (`terminalStatuses`·`browserPoolTickets`)과 같은 5초 — 표 하나 세 폴이 나란한 값이라 새
+  // 상수를 안 늘린다. `home.tabs`만 갈아 끼우고 `current`는 안 건드린다(위 `pollTabs` 주석) —
+  // 탭 이월 이펙트(아래, `home.tabs` deps)가 나머지를 잇는다.
+  useEffect(() => {
+    if (running || anyRunning || readOnly) return;
+    let stop = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const poll = () => {
+      void pollTabs(project).then(
+        (tabs) => {
+          if (stop) return;
+          setHome((now) => ({ ...now, tabs }));
+          timer = setTimeout(poll, 5000);
+        },
+        () => {
+          if (!stop) timer = setTimeout(poll, 5000);
+        },
+      );
+    };
+    timer = setTimeout(poll, 5000);
+    return () => {
+      stop = true;
+      clearTimeout(timer);
+    };
+  }, [project, running, anyRunning, readOnly]);
 
   const empty = !text.trim();
   const busy = running || starting;
