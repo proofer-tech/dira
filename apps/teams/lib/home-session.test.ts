@@ -1295,7 +1295,10 @@ test("겹침 판정 — 도구가 도는 동안 트랜스크립트가 같은 답
     // 고치기 전 코드(`live.partial`을 `message_start`에서만 비움 + 겹침 판정 없음)에서는
     // 이 응답의 `partial`이 "답"이라 이 단언이 실패했다 — 실측은 `## 결과`에 있다.
     const p = poller(project.id);
-    const mid = await p.until((c) => c.turns.length > 0);
+    // 물음-답이 서로 다른 응답으로 갈라져 올 수 있다 — 델타(`c.turns`)가 아니라 누적분
+    // (`p.turns`)이 두 줄 다 찰 때까지 기다린다. 델타 기준이면 "물음"만 들어온 응답에서
+    // 조건이 풀려 바로 아래 단언이 ["물음"]과 맞부딪힌다(흔들림의 원인, 요구 `0edfbea5`).
+    const mid = await p.until(() => p.turns.length > 1);
     assert.strictEqual(mid.running, true); // 도구가 아직 돈다 — 답은 끝난 게 아니다
     assert.deepStrictEqual(p.turns, ["물음", "답"]); // 같은 답이 turns에 한 벌
     assert.strictEqual(mid.partial, ""); // 겹침 판정 — 같은 답을 두 벌로 안 그린다
