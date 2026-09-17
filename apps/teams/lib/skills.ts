@@ -508,12 +508,13 @@ async function readSkillsSidecar(
   }
   const text = await readFile(filePath, "utf8").catch(() => null);
   if (text === null) return { skills: [], chars: 0 };
+  const byName = new Map<string, string>(); // 이름 중복(엠대시-하이픈 이월분, `541b0d5a`) 최초 줄만 남긴다
+  for (const l of text.split("\n")) {
+    const m = ITEM_RE.exec(l.trimEnd());
+    if (m && !byName.has(m[1])) byName.set(m[1], m[2]);
+  }
   return {
-    skills: text
-      .split("\n")
-      .map((l) => ITEM_RE.exec(l.trimEnd()))
-      .filter((m) => m !== null)
-      .map((m) => ({ name: m[1], description: m[2] })),
+    skills: [...byName].map(([name, description]) => ({ name, description })),
     chars: byteLength(text),
   };
 }

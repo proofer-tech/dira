@@ -587,6 +587,25 @@ test("엠대시로 쓰인 옛 사이드카(v1.1.0~v1.1.4)도 읽고, 다시 쓰�
   assert.match(text, /^- `shadcn` - 컴포넌트$/m);
 });
 
+test("같은 이름이 하이픈-엠대시로 겹치면 최초 줄만 남는다 (541b0d5a)", async () => {
+  const file = path.join(personas, "developer", "skills.md");
+  writeFileSync(
+    file,
+    "## 스킬\n\n- `qa` — 옛 엠대시 줄.\n- `qa` - 새 하이픈 줄.\n- `find-skills` - 하나뿐인 줄.\n",
+  );
+
+  // 렌더가 React key로 쓰는 배열이라 이름당 한 항목이어야 한다 — 최초로 나온 설명을 그대로 남긴다.
+  assert.deepEqual(await readPersonaSkills(personas, "developer"), [
+    { name: "qa", description: "옛 엠대시 줄." },
+    { name: "find-skills", description: "하나뿐인 줄." },
+  ]);
+
+  // 다시 저장하면 파일에도 중복 줄이 하나로 합쳐진다.
+  await writePersonaSkills(personas, "developer", await readPersonaSkills(personas, "developer"));
+  const text = readFileSync(file, "utf8");
+  assert.equal((text.match(/^- `qa`/gm) ?? []).length, 1);
+});
+
 test("사람이 덧붙인 산문 — 목록에서 빠지되 파일에서 지워지지 않는다", async () => {
   const file = path.join(personas, "developer", "skills.md");
   writeFileSync(file, readFileSync(file, "utf8") + "\n손으로 적는다: ponytail을 제일 먼저 쓴다.\n");
