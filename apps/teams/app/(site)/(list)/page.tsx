@@ -11,6 +11,7 @@ import { homedir } from "node:os";
 import { readAuth, readOtherEngineAuth } from "@/lib/auth";
 import { type AuthView } from "@/components/settings-dialog";
 import { ProjectRows, type ProjectRow } from "@/components/projects-ui";
+import { DesktopFindBar } from "@/components/find-bar";
 import { UpdateToast } from "@/components/update-toast";
 import { isLandingOnly } from "@/lib/flags";
 import { readProjects, readSummary, registryPath } from "@/lib/projects";
@@ -109,6 +110,11 @@ export default async function Page() {
         {/* `rows`가 있는 것은 `fullMode`뿐이라 그때 `auth`는 항상 non-null이다(위 조립) */}
         {rows.length > 0 && <ProjectRows rows={rows} auth={auth!} />}
       </Landing>
+      {/* §데스크톱 앱 N5 찾기 바(피드백 `944323bd`) - 루트 페이지가 `(site)` 그룹이라
+          `(app)/layout.tsx`의 `<DesktopFindBar/>`가 안 걸린다. `screenOf("/")`가 "root"라
+          `hasFindBar`는 참인데 실제로 안 그려졌던 것이 이 자리다. 아래 `<UpdateToast/>`와 같은
+          이유로 `useIsDesktop()`이 `false`인 브라우저·랜딩-only에서는 바로 `null`이다. */}
+      <DesktopFindBar />
       {/* T1(§릴리스 - 자동 업데이트 §표면이 창 안으로 들어온다, 요구 `1c5db160`) - 창이 처음 여는
           화면이 홈이라 `(app)/layout.tsx`와 같은 자리가 여기도 떠야 한다. 브라우저·랜딩-only에서는
           `useIsDesktop()`이 `false`라 이 컴포넌트가 그 자리에서 바로 `null`이다 - 새로 뜨는 것도
