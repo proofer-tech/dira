@@ -43,7 +43,7 @@
  *  한 마디가 더 뜬다. 상태마다 띠를 따로 세우지 않는 이유는 **답이 끝나는 순간 높이가 안
  *  튀어야** 해서다 — 자동 스크롤이 바닥을 물고 있는 화면에서 24px 점프가 가장 나쁘다(§13). */
 
-import { useEffect, useRef, useState, useTransition, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useTransition, type RefObject } from "react";
 import Link from "@/components/link";
 // `Check`은 **패널에서 빠졌다**(§비주얼 §34 ③). import는 남는다 — 같은 파일의 `복사` 버튼이
 // 눌린 뒤 1.2초 동안 그 글리프를 든다(§24 §띠). §34가 *lucide `Check`이 빠진다*고 적은 것은
@@ -415,7 +415,12 @@ export function HomeUI({
   // 대신 창마다 따로 들면서 새로고침에는 남는다. 다른 창의 조작(탭을 열고 닫는 것)은 `home.tabs`
   // 목록에는 실려 오지만 이 값은 안 따라간다 — 아래 탭 이월 이펙트가 유일하게 이 값을 서버
   // 응답(정확히는 `home.tabs`의 변화)을 보고 고치는 자리다.
-  const [activeTab, setActiveTabRaw] = useState<string | null>(() => initialActiveTab(project, initial.tabs));
+  //
+  // **초기값은 항상 `null`이다** — 서버는 `sessionStorage`를 못 읽어 항상 활성 탭 없음으로
+  // 그린다(§11-10 결정 1). 여기서 `initialActiveTab`을 바로 불러 마운트 렌더에 반영하면
+  // 클라이언트의 첫 렌더(hydration이 서버 HTML과 맞춰 보는 그 렌더)가 서버와 갈려 hydration이
+  // 깨진다 — 저장된 탭은 아래 탭 이월 이펙트가 **마운트 뒤**(커밋 이후) 갈아 끼운다.
+  const [activeTab, setActiveTabRaw] = useState<string | null>(null);
   const setActiveTab = (tabId: string | null) => {
     setActiveTabRaw(tabId);
     writeStoredActiveTab(project, tabId);
@@ -426,9 +431,10 @@ export function HomeUI({
   // 그대로다**(§11 결정 1 §우측 탭은 표면을 가로지른다) — 탭을 눌러 그 탭의 종류가 지금 표면과
   // 다르면 아래 통합 탭 줄의 `onSelect`가 이 값도 같이 맞춰 준다(그래야 고른 탭의 내용이
   // 바로 보인다).
-  const [surface, setSurface] = useState<Surface>(() =>
-    surfaceForTab(initial.tabs.find((t) => t.id === initialActiveTab(project, initial.tabs)) ?? null),
-  );
+  //
+  // 초기값은 `activeTab`과 같은 이유로 `"session"` 고정이다 — 서버의 첫 렌더와 같은 값이라야
+  // hydration이 안 깨진다.
+  const [surface, setSurface] = useState<Surface>("session");
   // **터미널 탭마다 끊김 확인 여부**(§11-1 §개정 — 살아 있는 pty는 `끊김`이 아니다). 서버
   // 파일에 없는 값이지만 정본은 서버의 `alive`다 — 이 값은 그 판정이 한 번 죽었다고 확인해 준
   // id만 담는 캐시다. 마운트 직후(새로고침 - 표면을 다시 연 것 - 라우트 이탈/복귀 전부)는
@@ -768,6 +774,23 @@ export function HomeUI({
     setEcho(null); // 갈아탄 대화의 것이 아니다 — 앞 대화에서 보낸 에코를 여기로 안 옮긴다
     setPendingSchedule(null); // 실제 세션으로 갈아탔다 — 회차 0건 스케줄 화면은 이 자리가 아니다
   };
+
+  /** **마운트 뒤에만 `sessionStorage`를 읽는다**(§11-10 결정 2) — `activeTab`·`surface`의
+   *  초기값은 서버와 맞추느라 항상 `null`·`"session"`으로 굳어 있다(위 상태 선언 주석). 서버는
+   *  `sessionStorage`를 못 읽어 항상 그 값으로 그리므로, 클라이언트도 hydration이 비교하는 첫
+   *  렌더까지는 같은 값을 들고 있어야 한다 — 저장된 활성 탭은 `useLayoutEffect`로 커밋 직후(아직
+   *  페인트 전)에 갈아 끼운다. `useLayoutEffect`를 쓰는 이유는 아래 탭 이월 이펙트(일반
+   *  `useEffect`, 이 마운트에도 함께 돈다)가 아직 갱신 전인 `activeTab === null`을 보고 엉뚱하게
+   *  `mostRecentTab`으로 이월해 버리는 것을 막기 위해서다 — 레이아웃 이펙트의 상태 갱신은
+   *  페인트 전에 동기로 한 번 더 렌더링을 밀어붙이므로, 그 뒤에 도는 일반 이펙트는 이미 갈아
+   *  끼운 값을 본다(QA `d1970adc` 결함 1, `suppressHydrationWarning` 없이 자연스럽게 처리). */
+  useLayoutEffect(() => {
+    const stored = initialActiveTab(project, home.tabs);
+    if (stored === null) return;
+    setActiveTabRaw(stored);
+    setSurface(surfaceForTab(home.tabs.find((t) => t.id === stored) ?? null));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 마운트 한 번뿐이다(§11-10 결정 2)
+  }, []);
 
   /** **탭 이월도 창이 계산한다**(§11-10 결정 3). `home.tabs`가 갈릴 때마다 돈다 — 이 창이 방금
    *  닫은 탭이든 다른 창이 닫아 폴링으로 넘어온 탭이든 같은 통로다: 지금 이 창의 활성 탭이 그
