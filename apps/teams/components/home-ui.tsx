@@ -426,6 +426,9 @@ export function HomeUI({
     setActiveTabRaw(tabId);
     writeStoredActiveTab(project, tabId);
   };
+  // 탭 이월 이펙트가 첫 판과 그 뒤 판을 가르는 값(아래 이펙트 머리 주석) — 마운트 첫 실행만
+  // `true`가 아니고, 그 뒤로는 이 이펙트가 실행될 때마다 곧장 `true`로 굳는다.
+  const landedOnceRef = useRef(false);
   // **표면 고르기**(§11-10 결정 1) — `home-sessions.json`에도 URL에도 안 산다. **새로고침한
   // 뒤에는 활성 탭에서 계산한다**(`surfaceForTab`, `lib/tabs.ts`) — 활성 탭이 없으면(창을 처음
   // 여는 순간) `세션`이고 그게 종전과 같은 첫 인상이다. **우측 탭 줄은 이 값과 무관하게
@@ -835,13 +838,25 @@ export function HomeUI({
    *  간 탭이 `chat`이면 몸통도 그 대화로 잇는다(§11-10 결정 1 §첫 인상 — 표식이 붙은 탭의 내용은
    *  반드시 몸통에 떠 있어야 한다는 §11-9 계약을 여기서도 지킨다). 남은 탭이 없으면(전부 닫힘)
    *  `null`로 물러난다 — 표식이 빈 채로 안 남는 것은 "갈 곳이 있을 때"의 얘기고, 여기는 갈 곳이
-   *  없는 경우라 처음 여는 창과 같은 값(`session`)이 된다. */
+   *  없는 경우라 처음 여는 창과 같은 값(`session`)이 된다.
+   *
+   *  **탭이 있으면서 표식이 빈 판은 성질이 둘로 갈린다**(P422-1) — 창을 방금 열어 저장된
+   *  활성 탭이 없는 판과, 사람이 `changeSurface`로 빈 표면을 골라 `activeTab`을 스스로 `null`로
+   *  내린 판이다. 후자를 이월이 덮으면 고른 빈 표면이 다음 폴링에서 곧바로 튕겨 나간다. 이
+   *  이펙트의 **첫 실행**(마운트)만 전자로 본다 — `landedOnceRef`가 아직 안 섰을 때다. 그
+   *  뒤로 다시 `activeTab === null`을 보면 그 사이 사람이 골랐다는 뜻이라 이월을 건너뛴다.
+   *  // ponytail: 탭이 0개인 판을 거쳐 처음으로 탭이 생기는 순간도 이 판정으로는 "사람이
+   *  // 골랐다"로 잡힌다(그 사이에 `landedOnceRef`가 이미 섰을 수 있다) — 실측으로 문제가
+   *  // 되면 `home.tabs.length === 0` 가드에서는 `landedOnceRef`를 안 세우게 좁힌다. */
   useEffect(() => {
+    const firstRun = !landedOnceRef.current;
+    landedOnceRef.current = true;
     if (activeTab !== null && home.tabs.some((t) => t.id === activeTab)) return;
     if (activeTab === null && home.tabs.length === 0) return;
+    if (activeTab === null && !firstRun) return;
     const landedId = mostRecentTab(home.tabs);
     const landed = home.tabs.find((t) => t.id === landedId) ?? null;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- 위 두 가드가 재진입을 막아 이월 한 번으로 끝난다(다음 판은 활성 탭이 목록에 있어 곧장 return)
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 위 가드들이 재진입을 막아 이월 한 번으로 끝난다(다음 판은 활성 탭이 목록에 있거나, 사람이 고른 빈 표면이라 곧장 return)
     setActiveTab(landedId);
     setSurface(surfaceForTab(landed));
     if (landed?.kind === "chat" && landed.id !== home.current) {

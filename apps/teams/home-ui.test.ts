@@ -38,7 +38,7 @@ test("closeTab — activeTab·surface를 직접 안 건드린다(이월은 이�
   assert.ok(!closeBody.includes("setActiveTab") && !closeBody.includes("setSurface"), "closeTab이 표식·표면을 직접 옮기면 다른 창이 닫은 탭과 다른 통로가 생긴다");
 });
 
-const carryA = s.indexOf("useEffect(() => {\n    if (activeTab !== null && home.tabs.some((t) => t.id === activeTab)) return;");
+const carryA = s.indexOf("useEffect(() => {\n    const firstRun = !landedOnceRef.current;");
 assert.ok(carryA >= 0, "home-ui.tsx: 탭 이월 이펙트를 못 찾았다");
 const carryB = s.indexOf("}, [home.tabs]);", carryA);
 const carryBody = s.slice(carryA, carryB);
@@ -51,6 +51,23 @@ test("탭 이월 이펙트 — mostRecentTab + surfaceForTab으로 옮기고, la
   assert.ok(carryBody.includes("mostRecentTab(home.tabs)"), "남은 탭 중 가장 최근 본 것으로 이월해야 한다(§11-8 결정 1)");
   assert.ok(carryBody.includes("setSurface(surfaceForTab(landed))"), "표면도 이월한 탭 종류로 맞춰야 한다");
   assert.ok(carryBody.includes('landed?.kind === "chat"') && carryBody.includes("switchHome(project, landed.id)"), "이월한 탭이 chat이면 몸통도 그 대화로 이어야 한다(§11-9 계약)");
+});
+
+// 티켓 9b9fe760(요구 cdb7ebfd, P422-1): 탭이 하나라도 있으면서 활성 탭이 `null`인 판은 둘로
+// 갈린다 — 창을 방금 열어 저장된 활성 탭이 없는 판(이월해야 한다)과, 사람이 `changeSurface`로
+// 빈 표면을 골라 스스로 `null`로 내린 판(이월하면 안 된다). `landedOnceRef`가 그 둘을 가른다.
+
+test("탭 이월 이펙트 — 사람이 고른 빈 표면(activeTab === null, 두 번째 판 이후)은 안 덮는다", () => {
+  assert.ok(carryBody.includes("if (activeTab === null && !firstRun) return;"), "landedOnceRef가 이미 섰는데도 activeTab === null을 이월하면 사람이 고른 빈 표면이 다음 폴링에 튕겨 나간다");
+  const guardIdx = carryBody.indexOf("if (activeTab === null && !firstRun) return;");
+  const landedIdx = carryBody.indexOf("mostRecentTab(home.tabs)");
+  assert.ok(guardIdx >= 0 && landedIdx > guardIdx, "이 가드가 mostRecentTab 계산보다 먼저 와야 이월을 막는다");
+});
+
+test("탭 이월 이펙트 — 창을 방금 열어 표식이 빈 판(첫 실행)은 종전대로 이월한다", () => {
+  assert.ok(carryBody.includes("const firstRun = !landedOnceRef.current;"), "첫 실행 여부를 landedOnceRef로 기록해야 두 판을 가를 수 있다");
+  assert.ok(carryBody.includes("landedOnceRef.current = true;"), "이펙트가 한 번이라도 돌면 그 뒤 판은 전부 '사람이 골랐다'로 봐야 한다");
+  assert.ok(!carryBody.includes("if (activeTab === null && !firstRun) return;\n    if (activeTab === null && home.tabs.length === 0)"), "0개 가드보다 firstRun 가드가 먼저면 첫 실행에 탭이 없던 판까지 막혀 버린다");
 });
 
 // 티켓 b9c31c83(요구 `aa7e914a`, DESIGN.md §11-1 §개정): 살아 있는 pty는 `끊김`이 아니다.
