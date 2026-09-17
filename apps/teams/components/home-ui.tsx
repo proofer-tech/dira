@@ -698,6 +698,10 @@ export function HomeUI({
   // 턴이 적고 그 뒤로는 안 바뀐다(`saveModel`). 아직 없으면 `undefined`고 `<SessionInfo>`가
   // 그 칸을 뺀다.
   const conv = home.conversations.find((c) => c.id === home.current);
+  // 회차 페르소나(§7-4 결정 5) — 워커 세션을 보고 있으면 그 티켓의 fm `persona:`(빈 문자열이면
+  // 그 칸 자체를 숨긴다), 아니면 종전대로 대화 단위 값이거나 기본값이다. `worker` 유무로 갈라
+  // 대화 줄은 무수정이다.
+  const turnPersona = worker ? worker.persona : (conv?.persona ?? DEFAULT_PERSONA);
 
   // **홈이 도는 페르소나**(§7-4 결정 1·2). 회차 0건인 스케줄을 보는 동안은 그 스케줄의 값을
   // 그대로 보여준다(그 줄의 페르소나는 만들 때 정해지고 여기서 못 바꾼다 — 스케줄 다이얼로그가
@@ -1214,14 +1218,18 @@ export function HomeUI({
                             <>
                               <Prose text={turn.text} refs={liveRefs} />
                               <Band>
-                                {/* 회차 페르소나(§7-4 결정 4 · §비주얼 §75) — 값이 대화 단위라
-                                    회차마다 같은 이름이 반복된다. `persona` 없는 옛 대화는
-                                    기본값이다. 새 클래스 0개 — 띠가 이미 든 `text-xs
-                                    text-muted-foreground`를 상속한다. */}
-                                <span>
-                                  <span className="sr-only">{t("home.personaLabel")}</span>
-                                  {conv?.persona ?? DEFAULT_PERSONA}
-                                </span>
+                                {/* 회차 페르소나(§7-4 결정 4·5 · §비주얼 §75) — 대화는 값이 단위라
+                                    회차마다 같은 이름이 반복되고 `persona` 없는 옛 대화는
+                                    기본값이다. 워커 세션은 그 티켓의 fm `persona:`고 빈 문자열이면
+                                    칸 자체를 숨긴다(`turnPersona`, 위 §회차 페르소나 주석). 새
+                                    클래스 0개 — 띠가 이미 든 `text-xs text-muted-foreground`를
+                                    상속한다. */}
+                                {turnPersona && (
+                                  <span>
+                                    <span className="sr-only">{t("home.personaLabel")}</span>
+                                    {turnPersona}
+                                  </span>
+                                )}
                                 {/* 중지된 답 — **실패가 아니다**(§7). `<StatusBadge>`도 색도 없다:
                                     이건 큐의 상태가 아니라 답 하나가 끝난 방식이라 13번째 상태를
                                     만들지 않는다(§24). 자리는 진행 표식 문구가 앉던 그 자리다. */}
@@ -1306,10 +1314,12 @@ export function HomeUI({
                         {partial !== "" && <Prose text={partial} refs={liveRefs} />}
                         <Band>
                           {/* 회차 페르소나 — 끝난 답과 같은 값·같은 이유(위 §회차 페르소나 주석). */}
-                          <span>
-                            <span className="sr-only">{t("home.personaLabel")}</span>
-                            {conv?.persona ?? DEFAULT_PERSONA}
-                          </span>
+                          {turnPersona && (
+                            <span>
+                              <span className="sr-only">{t("home.personaLabel")}</span>
+                              {turnPersona}
+                            </span>
+                          )}
                           <span
                             aria-hidden
                             className="mx-1 size-2 shrink-0 animate-wip-pulse rounded-full bg-muted-foreground motion-reduce:animate-none"

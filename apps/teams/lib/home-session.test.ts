@@ -205,7 +205,11 @@ test("workerSessions — `.wip` 전부가 먼저, `.done`은 최근 10개. sessi
   const sid = (n: number) => `0000000${n.toString(16)}-1111-2222-3333-444444444444`;
 
   // 도는 것 둘 — 하나는 `session_id`가 없다(디스패치 직전에 사람이 손으로 만든 `.wip`)
-  put("wip00001.wip.md", `ticket: wip00001\ntitle: 도는 티켓\nsession_id: ${sid(1)}\nowner: developer / w1-deadbeef\n`, 30);
+  put(
+    "wip00001.wip.md",
+    `ticket: wip00001\ntitle: 도는 티켓\npersona: developer\nsession_id: ${sid(1)}\nowner: developer / w1-deadbeef\n`,
+    30,
+  );
   put("wip00002.wip.md", "ticket: wip00002\ntitle: 세션 없는 wip\nowner: developer / w2-deadbeef\n", 40);
   // 끝난 것 12 + 깨진 값 하나. 12개는 분 단위로 갈라 최신 10개가 무엇인지 계산할 수 있게 한다
   for (let i = 0; i < 12; i++) {
@@ -229,6 +233,7 @@ test("workerSessions — `.wip` 전부가 먼저, `.done`은 최근 10개. sessi
     stem: "wip00001",
     hash: "wip00001", // 링크는 `stem` · 화면 글자는 `hash`다(§식별자). 이 픽스처에서는 같다
     running: true,
+    persona: "developer", // fm `persona:`가 그대로 담긴다(§7-4 결정 5)
   });
   // ③ `.done`은 mtime 내림차순이고 잘리는 것은 **오래된 쪽**이다 (11 … 2 · 0·1이 빠진다)
   assert.deepStrictEqual(
@@ -239,6 +244,8 @@ test("workerSessions — `.wip` 전부가 먼저, `.done`은 최근 10개. sessi
   assert.ok(!rows.some((r) => r.stem === "done00zz"));
   // ⑤ 워커 이름은 `owner:`에서 온다(`workerOf`) — 형식이 아니면 빈 문자열이고 여긴 다 형식이다
   assert.deepStrictEqual([...new Set(rows.map((r) => r.worker))], ["w1", "w3"]);
+  // ⑥ fm에 `persona:` 줄이 없으면 빈 문자열이다 — 기본값으로 메우지 않는다(`worker`와 같은 선)
+  assert.ok(rows.slice(1).every((r) => r.persona === ""));
 });
 
 test("buildPrompt — 스냅샷이 질문 앞에 오고 경계 문단 둘이 §7-5로 사라진다", () => {
@@ -1762,7 +1769,7 @@ test("도는 워커 세션은 스레드에서도 돈다 — 활동은 트랜스�
 test("폴링을 끊는 근거는 `running`이 아니라 **답이 왔다**다 (§7 §폴링은 서버가 잊어도 안 끊긴다)", () => {
   const answer = { key: "1", role: "answer" as const, text: "답" };
   const workerRow = (running: boolean) => [
-    { id: "w", worker: "w1", title: "제목", stem: "s", hash: "h", running },
+    { id: "w", worker: "w1", title: "제목", stem: "s", hash: "h", running, persona: "" },
   ];
   const chunk = (c: Partial<Parameters<typeof pollDone>[0]>) =>
     pollDone({ running: false, turns: [], answered: false, sessionId: null, workers: [], ...c });

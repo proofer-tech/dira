@@ -571,6 +571,9 @@ export type WorkerSession = {
   hash: string;
   /** `.wip` = 지금 도는 세션. 목록에서 **먼저 온다** */
   running: boolean;
+  /** 티켓 fm `persona:`(`t.persona` - `queue.ts`가 이미 `PERSONA_RE`로 걸러 둔 값). 없으면
+   *  **빈 문자열**이다(`worker`와 같은 선 - 기본값으로 메우지 않는다. §7-4 결정 5) */
+  persona: string;
 };
 
 /** §7: 끝난 세션은 **최근 10개**(대화 20과 같은 자리에 두는 수다 — 세지 않으면 티켓 수백 장이
@@ -597,6 +600,7 @@ export function workerSessions(tickets: Ticket[]): WorkerSession[] {
             stem: t.stem,
             hash: t.hash,
             running: state === "wip",
+            persona: t.persona,
           },
         ];
       });

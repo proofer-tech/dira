@@ -29006,12 +29006,12 @@ blocked`로 구조적으로 막힌다(③은 `;`로 붙은 앞 세그먼트가 �
 
 ##### 수용조건 (이 개정)
 
-- [ ] `persona: developer`인 `.wip` 티켓의 워커 세션을 홈 좌측에서 열면 회차마다 뜨는 페르소나 이름이 `developer`다. `archive-manager`가 아니다.
-- [ ] `persona: archive-manager`인 워커 세션에서는 종전대로 `archive-manager`가 뜬다.
-- [ ] `persona:` 줄이 없는 티켓의 워커 세션에서는 그 이름 칸 자체가 안 그려진다. 화면이 500을 내지 않는다.
-- [ ] 대화(워커 세션이 아닌 줄)는 무수정이다 - `persona` 값이 있으면 그 값, 없으면 `archive-manager`가 뜬다.
-- [ ] `cd apps/teams && node --test lib/home-session.test.ts`가 통과하고, `workerSessions`가 fm `persona:`를 담는 단언이 하나 더 있다.
-- [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과한다.
+- [x] `persona: developer`인 `.wip` 티켓의 워커 세션을 홈 좌측에서 열면 회차마다 뜨는 페르소나 이름이 `developer`다. `archive-manager`가 아니다.
+- [x] `persona: archive-manager`인 워커 세션에서는 종전대로 `archive-manager`가 뜬다.
+- [x] `persona:` 줄이 없는 티켓의 워커 세션에서는 그 이름 칸 자체가 안 그려진다. 화면이 500을 내지 않는다.
+- [x] 대화(워커 세션이 아닌 줄)는 무수정이다 - `persona` 값이 있으면 그 값, 없으면 `archive-manager`가 뜬다.
+- [x] `cd apps/teams && node --test lib/home-session.test.ts`가 통과하고, `workerSessions`가 fm `persona:`를 담는 단언이 하나 더 있다.
+- [x] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과한다.
 
 
 ### 8. 파일 첨부 - 프롬프트 칸 넷 (§2-2 - §3 - §7)
