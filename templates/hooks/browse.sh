@@ -453,12 +453,21 @@ def _resolve_sel(cdp, sel):
     n = m.group(1)
     obj_id = _resolve_ref_object_id(cdp, n)
     marker = "e" + n
-    call_on(
+    # nodeType !== 1(Element)이면 setAttribute가 없어 raw JS 예외("Uncaught")가 난다 -
+    # snapshot 루트(@e1, 보통 Document)가 그 경우다. 예외 전에 걸러 알아들을 수 있는
+    # 메시지로 바꾼다.
+    result = call_on(
         cdp,
         obj_id,
-        "function(m){ this.setAttribute('data-dira-ref', m); return 'OK'; }",
+        "function(m){ if(this.nodeType!==1){return 'NOTELEMENT'; } "
+        "this.setAttribute('data-dira-ref', m); return 'OK'; }",
         [marker],
     )
+    if result == "NOTELEMENT":
+        die(
+            "@e" + n + "은 문서 루트(또는 요소가 아닌 노드)라 클릭이나 채우기 대상이 "
+            "아니다 - snapshot에서 실제 요소의 @e<n>을 고른다"
+        )
     return '[data-dira-ref="%s"]' % marker
 
 
