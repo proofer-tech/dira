@@ -29,7 +29,7 @@ import {
 import { DEFAULT_LOCALE, t, type Locale } from "@/lib/i18n";
 import type { RefIndex } from "@/lib/markdown-refs";
 import { openWithinApp, type OpenResult } from "@/lib/paths";
-import { listTickets } from "@/lib/queue";
+import { listTickets, type Ticket } from "@/lib/queue";
 import {
   closeHomeTab,
   createSchedule as createScheduleRow,
@@ -52,7 +52,8 @@ import {
   type HomeChunk,
   type ScheduleView,
 } from "@/lib/home-session";
-import { listBrowserPoolHashes } from "@/lib/browser-pool";
+import { listBrowserPoolSlots } from "@/lib/browser-pool";
+import { reclaimBrowserPool } from "@/lib/engine";
 import { explorerRoot, getProject, resolveConfig, type Project } from "@/lib/projects";
 import { killPty, openPty, ptyStatuses, restartPty, type PtyStatus } from "@/lib/pty";
 import {
@@ -415,16 +416,53 @@ export async function openBrowserTabAction(projectId: string, hash: string): Pro
   return pollHomeAnswer(projectId, null, 0);
 }
 
-/** 좌측 `브라우저` 패널의 줄 목록(§11-11 수용조건 §`ls browser-pool | wc -l`의 값과 같다) —
- *  `ptyStatuses`처럼 머신 전역 값이라 프로젝트 스코프가 아니다. 등록 안 된 프로젝트에서 불러도
- *  조용히 빈 배열로 물러난다(`terminalStatuses`와 같은 규칙). */
-export async function browserPoolTickets(projectId: string): Promise<string[]> {
+/** 슬롯 하나가 그릴 줄 하나(§11-13 결정 3) — `ownerKind`가 `"worker"`일 때만 `ownerName`이
+ *  값을 갖는다(`<페르소나> - <제목>` 또는 티켓을 못 찾으면 `<워커>`). `"home"` - `"external"`
+ *  문구는 화면이 `useT`로 옮긴다 - 여기서 사람이 읽는 문자열을 만들지 않는다(§11-13 결정 1
+ *  §사람이 읽는 문구를 셸이 쓰지 않는다와 같은 경계, 이 층에도 그대로 적용한다). */
+export type BrowserPoolRow = {
+  hash: string;
+  ownerKind: "worker" | "home" | "external" | null;
+  ownerName: string | null;
+  busy: boolean;
+};
+
+/** 좌측 `브라우저` 패널의 줄 목록(§11-11 수용조건 §`ls browser-pool | wc -l`의 값과 같다,
+ *  §11-13 결정 3 - 4) — `ptyStatuses`처럼 머신 전역 값이라 프로젝트 스코프가 아니다. 등록
+ *  안 된 프로젝트에서 불러도 조용히 빈 배열로 물러난다(`terminalStatuses`와 같은 규칙).
+ *
+ *  `hasDeadSlot`이면 정리된 목록을 내기 전에 `reclaimBrowserPool`을 한 번 부른다(§11-13
+ *  결정 4 §화면은 죽은 pid를 본 그 순간에만 회수를 부른다) — 실패해도 삼킨다: 회수가
+ *  안 됐어도 죽은 슬롯은 `listBrowserPoolSlots`가 이미 목록에서 뺐으므로 줄은 정확하다. */
+export async function browserPoolTickets(projectId: string): Promise<BrowserPoolRow[]> {
+  let project;
   try {
-    await required(projectId);
+    project = await required(projectId);
   } catch {
     return [];
   }
-  return listBrowserPoolHashes();
+  const { slots, hasDeadSlot } = await listBrowserPoolSlots();
+  if (hasDeadSlot) await reclaimBrowserPool(project.root).catch(() => {});
+
+  let tickets: Ticket[] | null = null;
+  const rows: BrowserPoolRow[] = [];
+  for (const slot of slots) {
+    let ownerKind: BrowserPoolRow["ownerKind"] = null;
+    let ownerName: string | null = null;
+    if (slot.owner === "home") {
+      ownerKind = "home";
+    } else if (slot.owner === "external") {
+      ownerKind = "external";
+    } else if (slot.owner?.startsWith("worker:")) {
+      ownerKind = "worker";
+      const workerName = slot.owner.slice("worker:".length);
+      if (!tickets) tickets = await listTickets(project.root, await resolveConfig(project));
+      const ticket = tickets.find((tk) => tk.hash === slot.hash);
+      ownerName = ticket ? `${ticket.persona} - ${ticket.title}` : workerName;
+    }
+    rows.push({ hash: slot.hash, ownerKind, ownerName, busy: slot.busy });
+  }
+  return rows;
 }
 
 /** 파일 하나를 스테이지 - 해제한다(§11-3 결정 2). 성공 여부와 무관하게 최신 status를 다시

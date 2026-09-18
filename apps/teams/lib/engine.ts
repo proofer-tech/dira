@@ -154,6 +154,17 @@ export async function discardGateDirty(root: string): Promise<Run> {
   return execScript("bash", [path.join(root, "push.sh"), "discard"], path.dirname(root));
 }
 
+/** `bash <root>/browser.sh reclaim` — 죽은 주인의 브라우저 풀 슬롯을 회수한다(§11-13 결정 4).
+ *  안에서 하는 일은 이미 있는 `_reclaim()` 호출 하나뿐이라 새 판정도 새 값도 없다 — `discardGateDirty`
+ *  와 같은 `execScript` 한 벌을 그대로 쓴다. `cwd`가 필요 없다: `browser.sh`의 풀 경로는
+ *  `TICKET_LOCAL`(없으면 `$HOME/.config/dira`)에서 오지 프로세스 cwd에서 오지 않는다
+ *  (`push.sh`의 `_recv`와 다른 자리 — 그래서 `discardGateDirty`처럼 `path.dirname(root)`로
+ *  옮기지 않는다). 화면은 죽은 pid를 본 그 순간에만 이 함수를 부른다 — 폴링마다 셸을 띄우지
+ *  않는다(§11-13 결정 4 §화면은 죽은 pid를 본 그 순간에만 회수를 부른다). */
+export async function reclaimBrowserPool(root: string): Promise<Run> {
+  return execScript("bash", [path.join(root, "browser.sh"), "reclaim"]);
+}
+
 /** 해시 → 실제 티켓 경로. 없으면 null(404의 근거).
  *
  *  **경로를 조립하지 않는다.** 형식 검증을 통과한 해시를 큐 스캔(`findPath`)에 물어 실제 파일을

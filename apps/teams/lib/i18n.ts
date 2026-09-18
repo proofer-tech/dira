@@ -2130,6 +2130,16 @@ export const ko: Record<string, string> = {
   "browser.wrap.lock": "다시 잠그기",
   "browser.disconnected": "브라우저가 반납되어 화면이 끊겼습니다",
 
+  // 브라우저 풀 주인 표식(§11-13 결정 1 · 3) — 셸이 적는 `owner` 원문 토큰(`home` -
+  // `external`)만 여기서 옮긴다. `worker:<이름>` 쪽은 티켓 - 페르소나로 이미 뜻이 있는 문자열을
+  // 서버가 만들어 내려서 옮길 낱말이 없다. `browser.mirror.inUse.suffix`는 `wrap()`으로
+  // 이름 뒤에 붙이는 조각이다 — 자리표시자 치환기를 새로 안 만든다(`wrap` 머리 주석의
+  // ponytail 결정과 같은 선). 한국어 주격 조사(이/가)는 `components/browser-panel.tsx`의
+  // `subjectParticle`이 이름 끝 글자로 고른다.
+  "home.surface.browser.owner.home": "홈 대화",
+  "home.surface.browser.owner.external": "외부 호출",
+  "browser.mirror.inUse.suffix": "쓰는 중",
+
   // 소스 컨트롤(§11-3 결정 1-2-3-4, P366-8 · P366-9) — 체크아웃 목록·status·업스트림·커밋·
   // push·pull. `word.*` 넷은 `--porcelain=v2`의 아는 코드 넷의 낱말이고, 모르는 코드는 이
   // 사전을 안 거친다(§비주얼 §72 ④ — 화면이 코드를 그대로 `font-mono`로 보여준다).
@@ -4434,6 +4444,10 @@ export const en: Record<string, string> = {
   "browser.wrap.unlocked": "Input unlocked",
   "browser.wrap.lock": "Lock again",
   "browser.disconnected": "The browser was released and the screen went dark",
+
+  "home.surface.browser.owner.home": "Home chat",
+  "home.surface.browser.owner.external": "External call",
+  "browser.mirror.inUse.suffix": "in use",
 
   "home.scm.checkout": "Checkout",
   "home.scm.root": "Root",

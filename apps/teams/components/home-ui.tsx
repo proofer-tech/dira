@@ -92,6 +92,7 @@ import {
   stopHome,
   switchHome,
   terminalStatuses,
+  type BrowserPoolRow,
   type ScmResult,
 } from "@/app/(app)/p/[project]/home/actions";
 import {
@@ -101,7 +102,7 @@ import {
   useAttachments,
 } from "@/components/attachment-field";
 import { AttachmentPreview } from "@/components/attachment-preview";
-import { BrowserMirror } from "@/components/browser-panel";
+import { BrowserMirror, browserOwnerLabel } from "@/components/browser-panel";
 import { CopyCommand } from "@/components/copy-command";
 import { EmptyState } from "@/components/empty-state";
 import { ExplorerPane, ExplorerTree, useExplorerOpen } from "@/components/explorer-ui";
@@ -446,6 +447,10 @@ export function HomeUI({
   // (예전에는 그 반대였다: 빈 집합 = 전부 끊김이라 표면 이탈마다 다시 비웠다). 좌측 목록(연
   // 줄)과 우측 칸(`끊긴 터미널입니다` - `다시 열기`)이 같은 값을 봐야 해서 `HomeUI` 자신이 든다.
   const [terminalDisconnected, setTerminalDisconnected] = useState<Set<string>>(new Set());
+  // **브라우저 풀 슬롯 목록 — `HomeUI` 하나가 든다**(§11-13 결정 3). 좌측 패널 줄 · 미러 머리
+  // 줄 · 우측 탭 줄 셋이 이름과 점을 그리려면 같은 값을 봐야 어긋나지 않는다. 폴링은 아래
+  // 이펙트 하나뿐이다 — 세 자리가 각자 부르면 같은 왕복이 셋으로 는다.
+  const [browserRows, setBrowserRows] = useState<BrowserPoolRow[]>([]);
   // 폴링이 들고 다니는 두 값. 렌더에 안 쓰므로 상태가 아니다(바뀔 때마다 그릴 것이 없다).
   const session = useRef(initial.sessionId);
   const offset = useRef(initial.offset);
@@ -686,6 +691,31 @@ export function HomeUI({
       clearTimeout(timer);
     };
   }, [project, running, anyRunning, readOnly]);
+
+  // 브라우저 풀 폴링(위 `browserRows`) — 게이트를 안 건다. 브라우저 풀은 대화가 도는 것과
+  // 무관하게 갈리고, `BrowserLeftPanel`이 종전에 홀로 돌리던 폴이 이 하나로 옮겨 왔을 뿐이라
+  // 주기도 그대로 5초다.
+  useEffect(() => {
+    let stop = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const poll = () => {
+      void browserPoolTickets(project).then(
+        (rows) => {
+          if (stop) return;
+          setBrowserRows(rows);
+          timer = setTimeout(poll, 5000);
+        },
+        () => {
+          if (!stop) timer = setTimeout(poll, 5000);
+        },
+      );
+    };
+    poll();
+    return () => {
+      stop = true;
+      clearTimeout(timer);
+    };
+  }, [project]);
 
   const empty = !text.trim();
   const busy = running || starting;
@@ -1008,6 +1038,7 @@ export function HomeUI({
             activeTab={activeTab}
             onFocusTab={setActiveTab}
             terminalDisconnected={terminalDisconnected}
+            browserRows={browserRows}
             onTerminalReconnect={(id) =>
               setTerminalDisconnected((now) => {
                 if (!now.has(id)) return now;
@@ -1071,6 +1102,7 @@ export function HomeUI({
             conversations={home.conversations}
             workers={home.workers}
             schedules={home.schedules}
+            browserRows={browserRows}
             onSelect={(id) => {
               const tab = home.tabs.find((tb) => tb.id === id);
               if (tab) void selectTab(tab);
@@ -1115,7 +1147,12 @@ export function HomeUI({
               apply={apply}
             />
           ) : surface === "browser" ? (
-            <BrowserSurface project={project} tabs={home.tabs.filter((tb) => tb.kind === "browser")} activeTab={activeTab} />
+            <BrowserSurface
+              project={project}
+              tabs={home.tabs.filter((tb) => tb.kind === "browser")}
+              activeTab={activeTab}
+              browserRows={browserRows}
+            />
           ) : (
             <>
           {/* 대화 컬럼 — 남은 폭·높이 전부다. **자식이 언제나 셋이고 순서가 안 바뀐다**(§24 · §7-4
@@ -1781,6 +1818,7 @@ function TabBar({
   conversations,
   workers,
   schedules,
+  browserRows,
   onSelect,
   onClose,
   onCloseLeft,
@@ -1792,6 +1830,8 @@ function TabBar({
   conversations: Home["conversations"];
   workers: WorkerSession[];
   schedules: ScheduleView[];
+  /** 브라우저 탭 옆 점의 출처(§11-13 결정 3 셋째 자리) — `browser` 탭이 아니면 안 읽는다. */
+  browserRows: BrowserPoolRow[];
   onSelect: (id: string) => void;
   onClose: (id: string) => void;
   onCloseLeft: (id: string) => void;
@@ -1820,6 +1860,9 @@ function TabBar({
             const title = titleOf(tab);
             const Icon = TAB_ICON[tab.kind];
             const isActive = tab.id === activeTab;
+            // §11-13 결정 3 셋째 자리 — 브라우저 탭이 아니면 애초에 안 켜진다(조작 중이 아닌
+            // 탭 종류는 `browserRows`에 물을 값이 없다).
+            const busy = tab.kind === "browser" && browserRows.some((r) => r.hash === tab.id && r.busy);
             // 좌우 모두 닫기가 흐리게 뜨는 판정(§11-7 결정 2 §닫을 것이 0개인 항목) — 배열
             // 순서에서 우클릭한 탭이 맨 끝이면(또는 그쪽에 `unsaved` 탭 하나만 있으면) 0개다.
             const hasLeft = tabsOnSide(tabs, tab.id, "left").length > 0;
@@ -1830,6 +1873,12 @@ function TabBar({
                 <ContextMenuTrigger render={<div />}>
                   <TabsTrigger value={tab.id} nativeButton={false} render={<div />} className="max-w-40 flex-none gap-1.5">
                     <Icon aria-hidden className="size-3.5 shrink-0" />
+                    {busy && (
+                      <span
+                        aria-hidden
+                        className="size-1.5 shrink-0 rounded-full bg-muted-foreground"
+                      />
+                    )}
                     <Tooltip>
                       <TooltipTrigger render={<span className="min-w-0 truncate">{title}</span>} />
                       <TooltipContent>{title}</TooltipContent>
@@ -2459,63 +2508,64 @@ function TerminalLeftPanel({
 /** 우측 칸 — `browser` 탭마다 `BrowserMirror`(`components/browser-panel.tsx`) 하나를 마운트하고
  *  활성 탭만 보인다(§11-11 결정 5 · `TerminalSurface`와 같은 관용구 — 안 보이는 탭도 `hidden`
  *  으로만 접어서 랩 레이어의 걷힌 상태가 표면을 오가는 동안은 안 날아간다). */
-function BrowserSurface({ project, tabs, activeTab }: { project: string; tabs: Tab[]; activeTab: string | null }) {
+function BrowserSurface({
+  project,
+  tabs,
+  activeTab,
+  browserRows,
+}: {
+  project: string;
+  tabs: Tab[];
+  activeTab: string | null;
+  /** 미러 머리 줄의 주인 이름 · 점 출처(§11-13 결정 3) — `HomeUI`가 한 폴링으로 든 값을
+   *  그대로 내려받는다. 탭에 슬롯이 없으면(회수된 뒤 남은 탭 등) 이름 없이 그린다. */
+  browserRows: BrowserPoolRow[];
+}) {
   const t = useT();
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {tabs.length === 0 && <EmptyState text={t("home.surface.browser.empty")} />}
       <div className="min-h-0 flex-1">
-        {tabs.map((tab) => (
-          <div key={tab.id} hidden={tab.id !== activeTab} className="h-full">
-            <BrowserMirror projectId={project} hash={tab.id} />
-          </div>
-        ))}
+        {tabs.map((tab) => {
+          const row = browserRows.find((r) => r.hash === tab.id);
+          return (
+            <div key={tab.id} hidden={tab.id !== activeTab} className="h-full">
+              <BrowserMirror
+                projectId={project}
+                hash={tab.id}
+                ownerName={row ? browserOwnerLabel(row, t) : null}
+                busy={row?.busy ?? false}
+              />
+            </div>
+          );
+        })}
       </div>
     </div>
   );
 }
 
-/** 좌측 아래 단(§11-11 결정 5) — 풀 슬롯 줄이 한 줄씩 뜬다. **여기서 브라우저를 띄우거나
- *  `release`하지 않는다**(결정 7 §안 하는 것) — 목록은 이미 도는 슬롯을 5초마다 다시 읽을
- *  뿐이고(`TerminalLeftPanel`의 `terminalStatuses` 폴링과 같은 결), 누르면 그 해시로 탭을
- *  열거나(`openBrowserTabAction`) 이미 열려 있으면 그 탭으로 옮긴다(로컬 `onFocus`만). */
+/** 좌측 아래 단(§11-11 결정 5, §11-13 결정 3) — 풀 슬롯 줄이 한 줄씩 뜬다. **여기서 브라우저를
+ *  띄우거나 `release`하지 않는다**(결정 7 §안 하는 것) — 누르면 그 해시로 탭을 열거나
+ *  (`openBrowserTabAction`) 이미 열려 있으면 그 탭으로 옮긴다(로컬 `onFocus`만).
+ *
+ *  **폴링은 `HomeUI` 하나가 든다** — 이 패널이 종전에 홀로 돌리던 5초 폴을 걷어내고
+ *  `browserRows` prop 하나로 그린다(§11-13 결정 3 §세 자리가 같은 값을 봐야 어긋나지 않는다). */
 function BrowserLeftPanel({
   project,
   tabs,
   activeTab,
   apply,
   onFocus,
+  browserRows,
 }: {
   project: string;
   tabs: Tab[];
   activeTab: string | null;
   apply: (c: HomeChunk) => void;
   onFocus: (id: string) => void;
+  browserRows: BrowserPoolRow[];
 }) {
   const t = useT();
-  const [hashes, setHashes] = useState<string[]>([]);
-
-  useEffect(() => {
-    let stop = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const poll = () => {
-      void browserPoolTickets(project).then(
-        (r) => {
-          if (stop) return;
-          setHashes(r);
-          timer = setTimeout(poll, 5000);
-        },
-        () => {
-          if (!stop) timer = setTimeout(poll, 5000);
-        },
-      );
-    };
-    poll();
-    return () => {
-      stop = true;
-      clearTimeout(timer);
-    };
-  }, [project]);
 
   const open = async (hash: string) => {
     if (tabs.some((tb) => tb.id === hash)) {
@@ -2529,22 +2579,31 @@ function BrowserLeftPanel({
   return (
     <SidebarGroup className="p-0">
       <SidebarGroupLabel className="h-6 text-muted-foreground">{t("home.surface.browser")}</SidebarGroupLabel>
-      {hashes.length === 0 ? (
+      {browserRows.length === 0 ? (
         <EmptyState text={t("home.surface.browser.empty")} />
       ) : (
         <SidebarMenu aria-label={t("home.surface.browser")}>
-          {hashes.map((hash) => (
-            <SidebarMenuItem key={hash}>
-              <SidebarMenuButton
-                className={ROW}
-                isActive={hash === activeTab}
-                aria-current={hash === activeTab ? "true" : undefined}
-                onClick={() => void open(hash)}
-              >
-                <span className="min-w-0 grow truncate font-mono text-sm">{hash}</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          ))}
+          {browserRows.map((row) => {
+            // §11-13 결정 3 — 줄 왼쪽 끝에 점, 그 옆에 `<주인 이름>` + 해시. 이름이 없으면
+            // (`owner` 파일이 없는 옛 슬롯) 해시만 그린다(추정으로 안 메운다).
+            const name = browserOwnerLabel(row, t);
+            return (
+              <SidebarMenuItem key={row.hash}>
+                <SidebarMenuButton
+                  className={ROW}
+                  isActive={row.hash === activeTab}
+                  aria-current={row.hash === activeTab ? "true" : undefined}
+                  onClick={() => void open(row.hash)}
+                >
+                  {row.busy && <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-muted-foreground" />}
+                  <span className="min-w-0 grow truncate text-sm">
+                    {name && <span className="mr-1">{name}</span>}
+                    <span className="font-mono text-muted-foreground">{row.hash}</span>
+                  </span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            );
+          })}
         </SidebarMenu>
       )}
     </SidebarGroup>
@@ -2594,6 +2653,7 @@ function SidePanel({
   onFocusTab,
   terminalDisconnected,
   onTerminalReconnect,
+  browserRows,
 }: {
   project: string;
   /** 소스 컨트롤 표면 루트 줄의 이름(§비주얼 §72 ⑤) — `<ScmSurface>`로 그대로 내린다. */
@@ -2634,6 +2694,9 @@ function SidePanel({
   /** `HomeUI`가 든 `terminalDisconnected` 그 값 — `TerminalLeftPanel`의 `끊김` 배지가 우측 칸과
    *  같은 것을 보게 그대로 내린다(§11-1 §개정, §11-6 결정 6, 버그 2 고침). */
   terminalDisconnected: Set<string>;
+  /** `HomeUI`가 든 브라우저 풀 슬롯 목록(§11-13 결정 3) — `BrowserLeftPanel`이 이 값 하나로
+   *  줄을 그린다. 셀프 폴링을 안 한다(우측 미러 · 탭 줄과 같은 값을 봐야 어긋나지 않는다). */
+  browserRows: BrowserPoolRow[];
 }) {
   const t = useT();
   const locale = useLocale();
@@ -2754,7 +2817,14 @@ function SidePanel({
         {/* `브라우저`(§11-11 결정 5) — 풀 슬롯 줄이 한 줄씩 뜬다. 누르면 그 해시의 탭을 열거나
             (이미 있으면) 그 탭으로 옮긴다. */}
         {surface === "browser" && (
-          <BrowserLeftPanel project={project} tabs={home.tabs.filter((tb) => tb.kind === "browser")} activeTab={activeTab} apply={apply} onFocus={onFocusTab} />
+          <BrowserLeftPanel
+            project={project}
+            tabs={home.tabs.filter((tb) => tb.kind === "browser")}
+            activeTab={activeTab}
+            apply={apply}
+            onFocus={onFocusTab}
+            browserRows={browserRows}
+          />
         )}
         {surface === "session" && (
           <>

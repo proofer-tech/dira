@@ -9,20 +9,64 @@
  *  시작한다. `TerminalSurface`처럼 탭을 오가는 동안(표면 전환)은 `hidden`으로만 접히므로
  *  그 사이에는 걷힌 상태가 유지된다 — 결정 6이 요구하는 것은 새로고침·탭 닫기 재시작 둘뿐이다. */
 import { useEffect, useRef, useState } from "react";
-import { useT } from "@/components/language-provider";
+import { useLocale, useT } from "@/components/language-provider";
 import { readCdpFrameStream } from "@/lib/cdp-relay";
 import { keyBody, mouseButtonBody, scaleToFrame, wheelBody, type KeyCdpBody, type MouseCdpBody } from "@/lib/browser-input";
 import { Button } from "@/components/ui/button";
 import { useTrackedRouter } from "@/lib/route-pending";
 import { writeStoredActiveTab } from "@/lib/tabs";
-import { openBrowserTabAction } from "@/app/(app)/p/[project]/home/actions";
+import { openBrowserTabAction, type BrowserPoolRow } from "@/app/(app)/p/[project]/home/actions";
+import { wrap } from "@/lib/i18n";
 
 function postInput(url: string, body: MouseCdpBody | KeyCdpBody): void {
   fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).catch(() => {});
 }
 
-export function BrowserMirror({ projectId, hash }: { projectId: string; hash: string }) {
+/** 슬롯 하나의 주인 이름(§11-13 결정 3 §주인 이름을 만드는 표) — `worker:` 값은 서버
+ *  (`browserPoolTickets`)가 이미 `<페르소나> - <제목>`으로 조립해 내려서 그대로 쓰고,
+ *  `home` - `external`은 여기서 i18n으로 옮긴다. `owner`가 없는 옛 슬롯은 `null`이다 —
+ *  추정으로 메우지 않는다(결정 1 마지막 줄과 같은 경계). */
+export function browserOwnerLabel(row: BrowserPoolRow, t: (key: string) => string): string | null {
+  if (row.ownerKind === "worker") return row.ownerName;
+  if (row.ownerKind === "home") return t("home.surface.browser.owner.home");
+  if (row.ownerKind === "external") return t("home.surface.browser.owner.external");
+  return null;
+}
+
+/** 이름 끝 글자의 받침 여부로 주격 조사(이/가)를 고른다. 로마자·숫자·빈 문자열은 받침이 없는
+ *  값으로 보고 "가"를 쓴다 — 과도한 예외표는 안 만든다(ponytail). `browser.mirror.inUse.suffix`
+ *  한 자리에서만 쓴다(한국어 로케일 전용, `wrap`이 자리표시자 없이 조립한다). */
+function subjectParticle(name: string): string {
+  const last = name.trim().slice(-1);
+  const code = last.codePointAt(0) ?? 0;
+  if (code < 0xac00 || code > 0xd7a3) return "가";
+  return (code - 0xac00) % 28 === 0 ? "가" : "이";
+}
+
+/** "<이름>이 쓰는 중"(§11-13 결정 3) — 한국어만 조사가 붙는다. 영어는 `wrap`이 이름과 접미
+ *  사이에 공백 하나를 넣는다("<name> in use"). `t`는 `useT()`가 이미 지금 로케일에 묶어
+ *  준 값이라 여기서 로케일을 다시 안 받는다 — `locale`은 조사를 고를 때만 쓴다. */
+function inUseLabel(locale: "ko" | "en", name: string, t: (key: string) => string): string {
+  const subject = locale === "ko" ? `${name}${subjectParticle(name)}` : name;
+  return wrap("", subject, t("browser.mirror.inUse.suffix"));
+}
+
+export function BrowserMirror({
+  projectId,
+  hash,
+  ownerName,
+  busy,
+}: {
+  projectId: string;
+  hash: string;
+  /** 슬롯의 주인 이름(§11-13 결정 3) — 이미 `browserOwnerLabel`로 옮긴 값. `null`이면 그
+   *  슬롯에 `owner` 파일이 없다(옛 슬롯) — 이름 없이 종전 상태만 그린다. */
+  ownerName: string | null;
+  /** 명령이 도는 동안만 참(§11-13 결정 2) — 이름 옆 점의 출처. */
+  busy: boolean;
+}) {
   const t = useT();
+  const locale = useLocale();
   const url = `/p/${projectId}/cdp/${hash}`;
   const [frame, setFrame] = useState<string | null>(null);
   const [lost, setLost] = useState(false);
@@ -65,15 +109,23 @@ export function BrowserMirror({ projectId, hash }: { projectId: string; hash: st
     return <div className="flex h-full flex-1 items-center justify-center text-sm text-muted-foreground">{t("browser.disconnected")}</div>;
   }
 
+  // §11-13 결정 3 — 주인 이름은 상시고, 걷힌 동안만 `입력 열림` + `다시 잠그기`가 같은
+  // 줄에 더 붙는다(§11-11 결정 6의 세 상태는 무수정). 이름도 없고 안 걷혔으면 줄 자체가
+  // 없다 — 빈 줄을 안 남긴다.
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col">
-      {/* §11-11 결정 6 §승인하면 걷힌다 — `입력 열림` 표식 + `다시 잠그기`가 몸통 머리 줄에 선다. */}
-      {unlocked && (
+      {(ownerName || unlocked) && (
         <div className="flex items-center justify-between border-b bg-muted/50 px-3 py-1.5">
-          <span className="text-xs font-medium">{t("browser.wrap.unlocked")}</span>
-          <Button size="xs" variant="outline" onClick={() => setUnlocked(false)}>
-            {t("browser.wrap.lock")}
-          </Button>
+          <span className="flex items-center gap-1.5 text-xs font-medium">
+            {busy && <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-muted-foreground" />}
+            {ownerName && <span>{inUseLabel(locale, ownerName, t)}</span>}
+            {unlocked && <span>{t("browser.wrap.unlocked")}</span>}
+          </span>
+          {unlocked && (
+            <Button size="xs" variant="outline" onClick={() => setUnlocked(false)}>
+              {t("browser.wrap.lock")}
+            </Button>
+          )}
         </div>
       )}
       <div
