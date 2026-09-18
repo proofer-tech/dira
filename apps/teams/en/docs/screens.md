@@ -99,6 +99,38 @@ other tickets written in it keep up.
 A running ticket is read-only. The session is holding the file. Press `Unassign` in the lock card
 and the file goes back to the queue. Only then can you edit it by hand.
 
+### The `Working in browser` section on a ticket holding one
+
+While a worker is driving a browser, that ticket gets one more section in the right-hand column.
+It comes right under the `frontmatter` table and above `Polling`, and it is called
+`Working in browser`. The screen the worker is on lies open directly beneath the heading.
+
+There is nothing to press and no arrow to unfold. The picture is there from the moment the
+section appears, and it is live: turn the page on the worker's side and the picture turns with
+it. The browser runs without a window, so this section is where all of it shows. The picture
+fills the width of the column and takes its height from the shape of the worker's screen. For the
+short moment before the first frame lands, the heading stands alone.
+
+**A ticket not holding a browser has no such section.** No heading, no dimmed line, no empty box.
+Open the ticket again once the worker has finished and handed the browser back, and the section is
+gone.
+
+**You cannot touch it here.** Press on the picture and the worker's page does not budge. This is
+a place for watching. It is shut off so that an idle click of yours never shakes a screen the
+worker is measuring.
+
+When you do need to touch it, press `Open in home tab` at the right-hand end of the heading row.
+You land on the `Browser` surface at home with that ticket's tab picked. One approval there and
+your mouse and keyboard go through (see [Terminal, files, and source control](/docs/ide)).
+
+**The heading row carries no owner name and no dot.** Here the owner is always this ticket, so
+there is nothing worth writing twice. Those two markers stand on the `Browser` surface at home,
+where every browser a project has opened gathers in one list, and that chapter reads them for
+you.
+
+Narrow the window until the two columns fold into one and this section keeps its place in the
+order.
+
 ### The `Polling` section on a waiting ticket
 
 Only a ticket waiting on an outside condition gets one more section in the right-hand column. It
@@ -475,27 +507,6 @@ What that field does is decided by the ticket's state. The three are mutually ex
 
 A question with no answer yet sits at the very end. The field for writing that answer is right below
 it, so question and answer are next to each other.
-
-### `Working in browser` - the screen the worker is on right now
-
-While a worker is working in a browser, one row reading `Working in browser` stands in the box.
-It looks like any other folded row and carries a handle in front. Press it and the screen the
-worker is looking at unfolds below. It is live. The picture turns when the worker turns the
-page. The browser has no window, so this one row is the only place any of it shows.
-
-A ticket not holding a browser has no such row at all. Nothing dimmed, nothing left empty. Open
-the ticket again after the worker has finished and handed the browser back, and the row is gone.
-
-**You cannot touch it here.** Press on the picture and the worker's page does not budge. This is
-a place for watching. It is shut off so that an idle click of yours never shakes a screen the
-worker is measuring.
-
-When you do need to touch it, press `Open in home tab` just above the picture, at the
-right-hand end. You land on the `Browser` surface at home with that ticket's tab picked. One approval
-there and your mouse and keyboard go through (see
-[Terminal, files, and source control](/docs/ide)).
-
-Fold the row and the picture stops. It only flows while you have it open.
 
 ### The token figure on the heading — how much of the limit this ticket burned
 

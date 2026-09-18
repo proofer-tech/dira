@@ -330,21 +330,40 @@ Some tickets need a worker to look at a screen. QA opening the deployed site, a 
 checking the page they just changed. The worker brings up a browser with no window for that, so
 nothing appears on your screen and there is no way to tell what page it is on.
 
-The `Browser` surface shows you. One row stands in the left panel per browser a worker is
-holding, and what the row carries is that ticket's eight-character hash. When no worker is
-holding one, the panel reads `No browsers running right now`. The list rereads itself every
-five seconds.
+The `Browser` surface shows you. One row stands in the left panel per browser someone is
+holding, and the row carries the name of whoever holds it with the eight-character hash after
+it. When a ticket holds the browser, that name is the ticket's persona and title, and if the
+queue has no ticket under that hash the worker's own name stands there alone.
+
+A browser opened from the home chat lands in the same list under the name `Home chat`, and one
+you started yourself by calling `browse.sh` in a terminal reads `External call`. Some rows carry
+a hash and nothing else. Those are older browsers, opened before the rule that writes the owner
+into the slot, and the app will not guess a name to fill the gap.
+
+**The small dot at the left end of a row means a command is running through that browser right
+now.** Between commands it goes out. The name tells you who is holding the browser; the dot only
+tells you whether the screen is changing this second.
+
+When nobody is using a browser, the panel reads `No browsers running right now`. The list rereads
+itself every five seconds.
 
 Press a row and a tab opens on that hash. If the tab is already open, nothing new is made and
 you move to it. That makes four kinds of tab, and the limit of twelve is shared among all four.
+Up in the tab strip there is no room for a name, so a browser tab carries the hash alone with
+the same dot beside it.
 
 **Nothing in the app turns a browser on or off.** Opening it and handing it back are the work
-of the worker running that ticket. Close the tab and the browser keeps going. What closes is
-the one pipe carrying the picture. The row leaves the list on the left once the worker finishes
-and hands the browser back.
+of whoever holds it. Close the tab and the browser keeps going. What closes is the one pipe
+carrying the picture. The row leaves the list on the left once the owner finishes and hands the
+browser back.
 
-If you had that tab open at the time, the screen turns into `The browser was released and the
-screen went dark`. The tab does not close itself, so close it by hand.
+A row also goes when the owner dies without handing anything back, which is what a session cut
+off mid-run leaves behind. Within five seconds the row disappears and the browser still sitting
+in memory is cleaned up with it. The app clears only slots whose owner is already gone, so a
+browser held by a live session keeps running.
+
+If you had that tab open when the row went, the screen turns into `The browser was released and
+the screen went dark`. The tab does not close itself, so close it by hand.
 
 ### Touching it takes one approval
 
@@ -354,10 +373,11 @@ What comes up instead is a confirmation:
 > A session is working in this browser right now. Touching it may throw off that run's
 > measurements. Continue anyway?
 
-Cancel and it stays locked. Approve and your mouse and keyboard go through from then on.
-`Input unlocked` appears at the head of the screen with `Lock again` to its right - a marker
-put there so you do not forget it is open and keep clicking. Press `Lock again` and it locks
-straight away.
+Cancel and it stays locked. Approve and your mouse and keyboard go through from then on. The
+head of the screen reads `<owner name> in use` whether the screen is locked or open. While it is
+open, `Input unlocked` joins that same row and a `Lock again` button appears at the right-hand
+end, a marker put there so you do not forget it is open and keep clicking. Press `Lock again` and
+it locks straight away.
 
 The reason for asking is that you are touching the same page as the worker. There is only one
 page, so scrolling moves what the worker was looking at too. If the worker was measuring the
@@ -366,8 +386,9 @@ result is shaken once by it.
 
 The approval is not kept. Close the tab or refresh and it starts locked again.
 
-If all you want is to watch a running ticket's screen, you never have to come this far. It
-unfolds on the ticket page itself (see [The screens](/docs/screens)).
+If all you want is to watch a running ticket's screen, you never have to come this far. The
+right-hand column of the ticket page lays that screen out with nothing to unfold (see
+[The screens](/docs/screens)).
 
 ## What is not here
 
