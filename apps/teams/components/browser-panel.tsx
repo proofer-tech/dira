@@ -13,6 +13,9 @@ import { useT } from "@/components/language-provider";
 import { readCdpFrameStream } from "@/lib/cdp-relay";
 import { keyBody, mouseButtonBody, scaleToFrame, wheelBody, type KeyCdpBody, type MouseCdpBody } from "@/lib/browser-input";
 import { Button } from "@/components/ui/button";
+import { useTrackedRouter } from "@/lib/route-pending";
+import { writeStoredActiveTab } from "@/lib/tabs";
+import { openBrowserTabAction } from "@/app/(app)/p/[project]/home/actions";
 
 function postInput(url: string, body: MouseCdpBody | KeyCdpBody): void {
   fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).catch(() => {});
@@ -127,5 +130,69 @@ export function BrowserMirror({ projectId, hash }: { projectId: string; hash: st
         />
       </div>
     </div>
+  );
+}
+
+/** 티켓 상세 우측 절의 읽기 전용 미리보기(§11-14 결정 2) — GET SSE(`cdp/[hash]`)의 프레임을
+ *  `<img>`에 그대로 흘린다. **포인터 이벤트를 안 받는다**(결정 3 무수정 — 미러는 보는 자리다,
+ *  이 컴포넌트에 POST를 부르는 줄이 없다). 랩 레이어 세 상태(위 `BrowserMirror`)는 홈 탭
+ *  전용이고 이 자리에 안 온다(결정 4 §안 하는 것). */
+export function BrowserPreview({ projectId, hash }: { projectId: string; hash: string }) {
+  const t = useT();
+  const [frame, setFrame] = useState<string | null>(null);
+
+  useEffect(() => {
+    const url = `/p/${projectId}/cdp/${hash}`;
+    const ac = new AbortController();
+    (async () => {
+      let res: Response;
+      try {
+        res = await fetch(url, { signal: ac.signal });
+      } catch {
+        return; // abort(언마운트) — 조용히 물러난다
+      }
+      await readCdpFrameStream(res, (base64Jpeg) => setFrame(base64Jpeg), ac.signal);
+    })();
+    return () => ac.abort();
+  }, [projectId, hash]);
+
+  return frame ? (
+    <img
+      src={`data:image/jpeg;base64,${frame}`}
+      alt={t("sessionStream.browserActive")}
+      className="pointer-events-none w-full rounded-md border"
+    />
+  ) : null;
+}
+
+/** 티켓 상세 우측 칼럼의 브라우저 절(§11-14 결정 1) — frontmatter 표 아래, 폴링 대기 절 위에
+ *  선다. 부르는 쪽(`page.tsx`)이 `DevToolsActivePort` 존재로 이미 걸러 넘기므로 이 컴포넌트는
+ *  브라우저를 쥔 티켓에서만 마운트된다(결정 3 §브라우저가 없으면 h2도 없다). */
+export function TicketBrowserSection({ project, hash }: { project: string; hash: string }) {
+  const t = useT();
+  const router = useTrackedRouter();
+  // 홈의 `browser` 표면에서 같은 탭을 연다 — 탭을 먼저 만들고(`home-sessions.json`에 없으면
+  // `HomeUI`가 못 찾는다), 이 창의 활성 탭 자리(`lib/tabs.ts` §`writeStoredActiveTab`)에 적은
+  // 뒤 홈으로 옮긴다. `HomeUI` 마운트가 그 값을 읽어 `browser` 표면을 바로 연다.
+  const openInHomeTab = async () => {
+    await openBrowserTabAction(project, hash);
+    writeStoredActiveTab(project, hash);
+    router.push(`/p/${project}`);
+  };
+  return (
+    <section className="space-y-2">
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-medium">{t("sessionStream.browserActive")}</h2>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() => void openInHomeTab()}
+        >
+          {t("sessionStream.openInHomeTab")}
+        </Button>
+      </div>
+      <BrowserPreview projectId={project} hash={hash} />
+    </section>
   );
 }

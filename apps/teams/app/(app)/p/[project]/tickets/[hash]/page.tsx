@@ -10,6 +10,7 @@ import { notFound } from "next/navigation";
 import { Lock, TriangleAlert } from "lucide-react";
 import { boardRevision } from "@/lib/board-revision";
 import { AttachmentPreview } from "@/components/attachment-preview";
+import { TicketBrowserSection } from "@/components/browser-panel";
 import { browserPortPath, portFromDevToolsFile } from "@/lib/cdp-relay";
 import { EarlyRefreshPolling } from "@/components/early-refresh";
 import { EmptyState } from "@/components/empty-state";
@@ -284,7 +285,7 @@ export default async function TicketDetail({
   // 사라진다**(보드에서 접수한 요구가 정확히 그 모양이다). 넷째가 없으면 **회수된 열림 티켓**
   // (reap이 `session_id`를 지운다 — `tickets.py` `REAP_CLEAR`)이 남긴 계획도 같이 사라진다 —
   // 그 화면이 가리키는 것이 정확히 "어디까지 갔나"다.
-  const hasProgress = !!(sessionId || thread.length > 0 || awaiting || plans.length > 0 || browserActive);
+  const hasProgress = !!(sessionId || thread.length > 0 || awaiting || plans.length > 0);
   // 토큰량 덩이(§비주얼 §63 ①④) — **h2가 뜨면 뜬다**, 즉 이 절이 뜨는 조건과 같다. 창이 없다
   // (§2-13 판정 1) — 이 해시를 든 로그 전부를 매 렌더마다 다시 훑되, 끝난 로그는 `usage.ts`의
   // 캐시가 잡는다(§0-8과 같은 Map).
@@ -301,7 +302,7 @@ export default async function TicketDetail({
             조각을 그린다(§비주얼 §23 ⑤). 스레드·답변 대기·계획만 있는 경우(극단 A — 세션이
             붙은 적 없는 요구사항 · 회수된 열림 티켓)도 여기로 온다: 상자는 `max-h`가 되고
             **스트림이 없다는 말을 하지 않는다**(§29 ④ — `대기` 배지가 이미 알려 준다). */}
-        {transcript || engineCan("stream", engine) === false || thread.length > 0 || awaiting || plans.length > 0 || browserActive ? (
+        {transcript || engineCan("stream", engine) === false || thread.length > 0 || awaiting || plans.length > 0 ? (
           <SessionStream
             project={id}
             stem={ticket.stem}
@@ -322,7 +323,6 @@ export default async function TicketDetail({
             vault={vault}
             refs={refs}
             costChunk={costChunk}
-            browserActive={browserActive}
             rev={rev}
           />
         ) : (
@@ -727,6 +727,13 @@ export default async function TicketDetail({
               <FrontmatterTable fm={ticket.fm} file={path.basename(ticket.path)} />
             )}
           </section>
+
+          {/* 브라우저 절(§11-14 결정 1-3) — "지금 이 티켓에 벌어지는 일" 묶음이라 폴링 대기 ·
+              재시도 대기 앞이고 관계 절보다는 앞이다. 판정은 `browserActive` 하나다 — 참이 아니면
+              `h2`도 빈 상자도 없다(결정 3). 티켓 상세의 미러는 항상 이 티켓 자신이 주인이라
+              머리 줄에 주인 이름을 안 적는다(§11-13 결정 3이 이름을 그리는 자리 셋에 여기가
+              없다). */}
+          {browserActive && <TicketBrowserSection project={id} hash={ticket.stem} />}
 
           {/* 폴링 대기 절(§폴링 대기 결정 9 표 §티켓 상세) — 요구의 "언제까지(시간 또는 조건)" 중
               **조건**이 여기다(시간은 보드 카드의 남은 시각, §1 보드). 스크립트 본문이 그 조건의

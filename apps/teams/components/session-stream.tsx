@@ -52,9 +52,6 @@ import {
   useAttachments,
 } from "@/components/attachment-field";
 import { AttachmentPreview } from "@/components/attachment-preview";
-import { readCdpFrameStream } from "@/lib/cdp-relay";
-import { writeStoredActiveTab } from "@/lib/tabs";
-import { openBrowserTabAction } from "@/app/(app)/p/[project]/home/actions";
 import { EmptyState } from "@/components/empty-state";
 import { Markdown } from "@/components/markdown";
 import { splitAttachments } from "@/lib/attachment-format";
@@ -169,7 +166,6 @@ export function SessionStream({
   variant,
   rev,
   startOffset = 0,
-  browserActive = false,
 }: {
   project: string;
   stem: string;
@@ -233,10 +229,6 @@ export function SessionStream({
    *  `dispatchRound`·`nthInitOffset`으로 미리 계산해 내려준다. 기본값 0은 종전 그대로다
    *  (회차 1 · 세션이 안 붙은 자리 · 이 prop을 안 넘기는 워커 다이얼로그). */
   startOffset?: number;
-  /** 이 티켓이 지금 CDP 브라우저를 쥐고 있나(§11-11 결정 1·4) — 서버가
-   *  `portFromDevToolsFile`로 `DevToolsActivePort` 존재를 재 내려준다. 참이면 진행 기록에
-   *  `브라우저에서 작업중` 마커 줄이 서고, 거짓이면(기본값) 종전 화면과 클래스 0 차이다. */
-  browserActive?: boolean;
 }) {
   const [events, setEvents] = useState<StreamEvent[]>([]);
   // 폴링이 실어 오는 새 표식 값을 누적한다(§9 §클라이언트가 폴링하는 자리) — vault와 달리
@@ -636,10 +628,8 @@ export function SessionStream({
         />
       )}
       {/* 상자는 **그릴 것이 있을 때만** 뜬다. codex이고 스레드도 없으면 위 `<EmptyState>` 하나가
-          이 자리의 전부다(종전 그대로) — 빈 상자를 하나 더 그리는 것은 소음이다(§29 ④).
-          `browserActive`도 그릴 것이다(§11-11 결정 4) — 트랜스크립트도 스레드도 없이 막
-          디스패치된 세션이 브라우저부터 여는 순간에도 그 줄 하나는 떠야 한다. */}
-      {(stream || merged.length > 0 || browserActive) &&
+          이 자리의 전부다(종전 그대로) — 빈 상자를 하나 더 그리는 것은 소음이다(§29 ④). */}
+      {(stream || merged.length > 0) &&
         (() => {
           const listContent = (
             <>
@@ -701,7 +691,6 @@ export function SessionStream({
                   />
                 ),
               ))}
-              {browserActive && <BrowserMirrorRow project={project} stem={stem} />}
               {/* 진행 표식(§18 ④) — **자리가 한 갈래다**(개정 요구 `c1312f3d`): 계획이 있든 없든
                   상자 안 맨 아래다. 진행중 계획 아코디언을 접어도 안 숨는다 — `<details>` 밖에
                   뜬다. 마지막 사건 다음 줄이 올 자리를 지킨다. **말풍선 아래로 안 내려간다**:
@@ -1587,96 +1576,6 @@ function Row({
       </div>
     </details>
   );
-}
-
-/** §11-11 결정 4 — 브라우저를 쥔 티켓의 진행 기록에 서는 마커 줄. 접힌 채로는 §9 그대로
- *  (`Row`의 `<details>`+`<Marker render={<summary />}>` 그릇을 그대로 재사용 — 새 그릇을 안
- *  만든다). 펼치면 아래 `<BrowserMirror>`가 뜬다. 부르는 쪽(`SessionStream`)이 `browserActive`가
- *  참일 때만 이 컴포넌트를 마운트하므로 - 브라우저를 안 쥔 티켓에는 이 줄이 아예 없다
- *  (Done when 2). */
-function BrowserMirrorRow({ project, stem }: { project: string; stem: string }) {
-  const t = useT();
-  const router = useTrackedRouter();
-  const [open, setOpen] = useState(false);
-  // 홈의 `browser` 표면에서 같은 탭을 연다(§11-11 결정 4 §마지막 줄) — 탭을 먼저 만들고
-  // (`home-sessions.json`에 없으면 `HomeUI`가 못 찾는다), 이 창의 활성 탭 자리(`lib/tabs.ts`
-  // §`writeStoredActiveTab`)에 적은 뒤 홈으로 옮긴다. `HomeUI` 마운트가 그 값을 읽어
-  // `browser` 표면을 바로 연다(`initialActiveTab`).
-  const openInHomeTab = async () => {
-    await openBrowserTabAction(project, stem);
-    writeStoredActiveTab(project, stem);
-    router.push(`/p/${project}`);
-  };
-  return (
-    <details
-      className="open:[&>summary>span>svg:first-child]:rotate-90"
-      onToggle={(e) => setOpen(e.currentTarget.open)}
-    >
-      <Marker
-        render={<summary />}
-        className={cn(
-          LINE,
-          "cursor-pointer list-none hover:bg-muted/50 hover:text-foreground [&::-webkit-details-marker]:hidden",
-        )}
-      >
-        <MarkerIcon>
-          <ChevronRight />
-        </MarkerIcon>
-        <MarkerContent>{t("sessionStream.browserActive")}</MarkerContent>
-      </Marker>
-      {/* 펼친 동안에만 마운트한다 — 접으면 `BrowserMirror`가 언마운트되어 스트림을 끊는다
-       *  (`TerminalPanel`과 같은 정리 규칙, `cleanup: ac.abort()`). */}
-      {open && (
-        <div className="px-3">
-          <div className="mb-1 flex justify-end">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={(e) => {
-                e.preventDefault();
-                void openInHomeTab();
-              }}
-            >
-              {t("sessionStream.openInHomeTab")}
-            </Button>
-          </div>
-          <BrowserMirror project={project} hash={stem} />
-        </div>
-      )}
-    </details>
-  );
-}
-
-/** GET SSE(`cdp/[hash]`)의 프레임을 `<img>`에 그대로 흘린다(결정 2·4) — `readCdpFrameStream`이
- *  `lib/pty-stream.ts`와 같은 모양의 순수 리더다(선례는 `TerminalPanel`). **포인터 이벤트를 안
- *  받는다**(결정 3 — 미러는 보는 자리다, 이 화면에서 POST를 부르는 줄이 없다 = Done when 4). */
-function BrowserMirror({ project, hash }: { project: string; hash: string }) {
-  const t = useT();
-  const [frame, setFrame] = useState<string | null>(null);
-
-  useEffect(() => {
-    const url = `/p/${project}/cdp/${hash}`;
-    const ac = new AbortController();
-    (async () => {
-      let res: Response;
-      try {
-        res = await fetch(url, { signal: ac.signal });
-      } catch {
-        return; // abort(언마운트) — 조용히 물러난다
-      }
-      await readCdpFrameStream(res, (base64Jpeg) => setFrame(base64Jpeg), ac.signal);
-    })();
-    return () => ac.abort();
-  }, [project, hash]);
-
-  return frame ? (
-    <img
-      src={`data:image/jpeg;base64,${frame}`}
-      alt={t("sessionStream.browserActive")}
-      className="pointer-events-none w-full rounded-md border"
-    />
-  ) : null;
 }
 
 /** 묶음 접힌 줄 — 말풍선 사이 연속 사건은 한 항목이다(§2-6 ② · §비주얼 §9 §묶음 접힌 줄).
