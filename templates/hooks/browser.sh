@@ -77,18 +77,17 @@ _reclaim() {
   done
 }
 
-# 이미 이 해시가 쥔 슬롯, 또는 지금 부르는 세션(pid)이 다른 해시로 쥔 슬롯이 있으면 그
-# 포트를 낸다(결정 1 - 2026-09-16 재조정, 요구 cc2e4f22). pid가 같으면 해시가 달라도 같은
-# 세션이 <해시>-A/<해시>-B 접미사로 두 번 부른 것이라 새로 안 띄운다. 없으면 빈 문자열 +
-# 실패 종료.
+# 이미 이 해시가 쥔 슬롯이 있으면 그 포트를 낸다(결정 1 - 2026-09-18 재재조정, 요구
+# 9dc3306a). pid 비교는 없앴다 - 예전에는 같은 세션(pid)이 다른 해시로 불러도 새로 안
+# 띄웠는데, 그러면 상한에 여유가 있어도 뒤에 요청한 해시가 슬롯을 못 받았다(재현
+# 9dc3306a). 접미사(<해시>-A 등)로 슬롯을 두 개 먹던 원래 문제는 결정 6의 `_check_hash`가
+# 입구에서 막으므로, hash 일치만 봐도 안전하다.
 _existing_port() {
-  local slot slot_hash slot_pid session_pid
-  session_pid=$(_session_pid)
+  local slot slot_hash
   for slot in "$_pool"/*/; do
     [ -d "$slot" ] || continue
     slot_hash=$(cat "${slot}hash" 2>/dev/null)
-    slot_pid=$(cat "${slot}pid" 2>/dev/null)
-    if [ "$slot_hash" = "$1" ] || { [ -n "$slot_pid" ] && [ "$slot_pid" = "$session_pid" ]; }; then
+    if [ "$slot_hash" = "$1" ]; then
       head -1 "/tmp/qa-$slot_hash/chrome-profile/DevToolsActivePort" 2>/dev/null
       return 0
     fi
