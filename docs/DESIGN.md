@@ -31255,6 +31255,82 @@ confirm으로 경고를 띄우고 그럼에도 하고자 하면 벗겨냅니다"
 질문 한 번이다 - 1차 실측 ⑦이 *"턴 종료 타이밍인지 이벤트 인접성인지"*를 못 가른 자리가 여기고,
 이 갈림이 곧 결정 2와 결정 3을 가른다.
 
+##### 재실측 (이 머신, 2026-09-20 - claude 2.1.278)
+
+`runClaudeAt`이 실제로 넘기는 argv를 그대로 썼다(`toolFlags()`의 현재 반환값 - `--tools
+Read,Glob,Grep,Write,Edit,Bash --strict-mcp-config --dangerously-skip-permissions` - §7-5
+이후로 `--permission-mode manual`이 빠졌다). 통로는 1차 실측과 같은 FIFO 선례이지만, 이번엔
+스트림을 실시간으로 지켜보다가 실제 사건(도구 호출 발생 - 첫 `text_delta` 등장)을 보고 그
+순간에 밀어 넣었다 - 1차 실측처럼 고정된 초 수를 추정해 미리 정하지 않았다. **홈 화면에서
+브라우저로 직접 왕복하는 시도는 이 세션에서 접었다** - `새 대화` 버튼과 전송 버튼이 React
+합성 이벤트 없이는 안 눌려 반복 실패했다(예산 초과 판단). 다만 §7-7이 재는 대상은 CLI가 stdin
+한 줄을 어떻게 처리하는가이고, 그 처리는 `claude` 바이너리 안에서 나는 일이라 부모가 셸
+파이프인지 Node `spawn`인지에 좌우되지 않는다 - argv와 stdin 프로토콜(`{"type":"user",...}\n`)이
+`runClaudeAt`과 글자로 같으면 같은 값이 난다.
+
+**판 A - 도구를 부르는 질문.** `Bash`로 `sleep 4 && echo one` 다음 `sleep 4 && echo two`를
+차례로 시키고, 첫 도구가 도는 중(첫 `tool_use` 뒤, `tool_result` 전)에 참견을 밀어 넣었다.
+세션 `69308177-ffaa-49a8-a842-7d962aebf240`
+(`~/.claude/projects/-private-tmp-interject2-a/69308177-ffaa-49a8-a842-7d962aebf240.jsonl`):
+
+```
+19:42:20.479Z  tool_use   Bash "sleep 4 && echo one"
+19:42:25.383Z  queue-operation enqueue  "참견: 두 번째 sleep은 4초가 아니라 2초로..."
+19:42:28.733Z  tool_result "one"
+19:42:28.863Z  queue-operation remove   (같은 참견)
+19:42:30.782Z  tool_use   Bash "sleep 2 && echo two"          ← 참견대로 2초로 줄었다
+19:42:33.294Z  tool_result "two"
+19:42:35.646Z  assistant  "...(참견대로 2초로 줄인) 대기 후 `two`가 출력됐다."
+```
+
+`result`는 이 왕복 전체에 **한 번뿐**이다(`num_turns:1`) - 앞 턴의 `result`라는 것 자체가
+없다(참견이 아직 안 끝난 바로 그 턴 안에 있다). `remove` 레코드와 같은 시각에 `attachment`
+레코드가 하나 더 있고, 그 `rendered` 값이 CLI 자신의 설명 문구를 담고 있다:
+
+```
+<system-reminder>
+The user sent a new message while you were working:
+참견: 두 번째 sleep은 4초가 아니라 2초로 줄여서 실행해라.
+
+This is how Claude Code surfaces messages the user sends mid-turn — within the
+running turn, often alongside the next tool result, rather than as a separate
+conversation turn. Address the message above as you continue this turn.
+</system-reminder>
+```
+
+**판 B - 도구 없이 산문만 내는 질문.** "1부터 30까지 각 숫자마다 사실 한 문장씩" 산문을 시키고,
+첫 `text_delta`가 뜬 직후(도구 경계가 전혀 없다)에 참견을 밀어 넣었다. 세션
+`cbfe60a5-7622-4fa4-bced-4ca56dd81a16`
+(`~/.claude/projects/-private-tmp-interject2-b/cbfe60a5-7622-4fa4-bced-4ca56dd81a16.jsonl`):
+
+```
+19:45:08.751Z  queue-operation enqueue  "참견: 16번부터는...그리스 문자로..."
+19:45:48.167Z  assistant  결과 1 완결("1. 1은 곱셈의 항등원이면서...")
+19:45:48.935Z  queue-operation dequeue  (같은 참견)
+19:46:13.865Z  assistant  결과 2 시작("알파. 16은...")
+```
+
+`result`가 **둘**이다(`result_index 0` - `result_index 1`, 둘 다 `num_turns:1`) - 앞 턴의
+`result`(48.167Z)가 참견의 `dequeue`(48.935Z)보다 **먼저** 났다. 참견은 도구 경계가 없으면
+지금 도는 턴에 못 들어가고 다음 턴으로 큐잉된다 - 1차 실측(claude 2.1.222)과 같은 값이다.
+
+| 칸 | 판 A(도구) | 판 B(산문) |
+|---|---|---|
+| CLI 버전 | 2.1.278 | 2.1.278 |
+| 세션 id | `69308177-ffaa-49a8-a842-7d962aebf240` | `cbfe60a5-7622-4fa4-bced-4ca56dd81a16` |
+| 밀어 넣은 시각 | `enqueue` 19:42:25.383Z | `enqueue` 19:45:08.751Z |
+| 전달된 시각 | `remove` 19:42:28.863Z(도구 결과와 같은 자리) | `dequeue` 19:45:48.935Z |
+| 그 사이 `result` | 없음 - 참견이 아직도 도는 그 턴 안이다 | 앞 턴 `result`(48.167Z)가 전달보다 먼저다 |
+| 모델이 봤나 | 봤다 - 두 번째 `sleep`이 실제로 2초로 줄었고 답 산문에 그 사실을 적었다 | 이번 턴 안에서는 못 봤다 - 다음 턴(두 번째 `result`)에서 봤다 |
+
+**결론 - 도구 경계의 유무가 갈림을 만든다.** 참견을 밀어 넣은 순간 도구 하나가 돌고 있으면
+(판 A) CLI가 그 참견을 `attachment`(`queued_command`)로 다음 `tool_result`에 실어 **같은 턴
+안**으로 넣는다 - `queue-operation` 로그는 `remove`라는 낱말을 쓰지만 그 참견은 실제로 모델에
+전달된다. 도구 경계가 없으면(판 B, 순수 산문 스트리밍 도중) 참견은 `dequeue`로 다음 턴이 된다 -
+1차 실측이 잰 값과 같다. **§7-7 결정 3이 말한 "도구 경계에서만 닿는" 갈래가 이 CLI 버전에서
+그대로 실측된 것이다** - 결정 2가 그리는 갈래(버튼 없이 화면 문구만 건는 경우)는 이번 실측
+범위에서는 뜨지 않았다.
+
 #### 결정 2 - 앞 턴 안에서 닿으면 버튼을 안 만든다. 거짓말하는 줄을 걷는다
 
 닿는다면 사람이 요구한 동작은 **이미 돌고 있는 것**이고 남은 고장은 화면의 문구 하나다. 버튼을
