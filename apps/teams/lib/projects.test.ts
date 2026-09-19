@@ -32,6 +32,7 @@ const {
   saveSquadMembers,
   saveSquadRules,
   savePersona,
+  setMarketInstall,
   setMultiplayEnabled,
   setMultitoken,
   setPersonaColor,
@@ -519,6 +520,34 @@ test("레지스트리 — personaColors 왕복 (DESIGN.md §5)", async () => {
   // 큐에는 아무것도 쓰지 않는다(§5) — 색은 레지스트리 파일 하나가 전부다
   await setPersonaColor("c", "developer", "sky");
   assert.deepStrictEqual(readdirSync(path.join((await getProject("c"))!.root)), queueBefore);
+});
+
+test("레지스트리 — market 설치 기록 왕복 (DESIGN.md §페르소나 마켓 §저장 자리)", async () => {
+  rmSync(registryPath(), { force: true });
+  await addProject("마켓", newQueue({ "w1.sh": "" }), "m");
+
+  await setMarketInstall("m", "personas", "writer", { owner: "dira", name: "writer", v: 1 });
+  assert.deepStrictEqual((await getProject("m"))!.market, {
+    personas: { writer: { owner: "dira", name: "writer", v: 1 } },
+    squads: {},
+  });
+
+  // 다시 받기 — 같은 이름에 더 큰 v로 덮어쓴다(갱신 배지가 꺼지는 그 값)
+  await setMarketInstall("m", "personas", "writer", { owner: "dira", name: "writer", v: 2 });
+  await setMarketInstall("m", "squads", "default", { owner: "dira", name: "default", v: 1 });
+  assert.deepStrictEqual((await getProject("m"))!.market, {
+    personas: { writer: { owner: "dira", name: "writer", v: 2 } },
+    squads: { default: { owner: "dira", name: "default", v: 1 } },
+  });
+
+  await assert.rejects(
+    () => setMarketInstall("m", "personas", "../x", { owner: "dira", name: "writer", v: 1 }),
+    /이름 규칙/,
+  );
+  await assert.rejects(
+    () => setMarketInstall("없는프로젝트", "personas", "writer", { owner: "dira", name: "writer", v: 1 }),
+    /없는 프로젝트/,
+  );
 });
 
 test("레지스트리 — 옛 gui-tenants.json을 읽고, 첫 쓰기가 새 파일로 옮긴다", async () => {

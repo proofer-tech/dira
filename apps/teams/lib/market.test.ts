@@ -9,18 +9,24 @@ const LOCAL = mkdtempSync(path.join(tmpdir(), "fst-market-local-"));
 process.env.TICKET_LOCAL = LOCAL;
 
 const {
+  appendInstall,
   deployPersona,
   deploySquad,
   getMarketItem,
+  importPersona,
+  importSquad,
   listInstalls,
   listMarketItems,
   marketDir,
+  marketInstallsPath,
   marketItemId,
   missingMarketMembers,
+  missingSquadMembers,
   needsUpdate,
   nextVersion,
   parseMarketItemId,
   readFavorites,
+  squadMemberNames,
   toggleFavorite,
 } = await import("./market.ts");
 
@@ -42,6 +48,26 @@ function seedPersona(owner: string, name: string, latest: number, tags: string[]
         at: "2026-09-19T18:00:00+09:00",
         note: `v${i + 1}`,
       })),
+    }),
+    "utf8",
+  );
+  return dir;
+}
+
+function seedSquad(owner: string, name: string, membersText: string, latest = 1) {
+  const dir = path.join(marketDir(), "squads", owner, name);
+  mkdirSync(path.join(dir, `v${latest}`), { recursive: true });
+  writeFileSync(path.join(dir, `v${latest}`, "members"), membersText, "utf8");
+  writeFileSync(
+    path.join(dir, "meta.json"),
+    JSON.stringify({
+      kind: "squad",
+      owner,
+      ownerName: owner,
+      name,
+      tags: [],
+      latest,
+      versions: [{ v: latest, at: "2026-09-19T18:00:00+09:00", note: "seed" }],
     }),
     "utf8",
   );
@@ -235,4 +261,66 @@ test("deploySquad — members 한 장을 담고 버전이 늘어난다", async (
   } finally {
     process.env.TICKET_LOCAL = prev;
   }
+});
+
+// ── 가져오기 ─────────────────────────────────────────────────────────────────
+
+test("missingSquadMembers — 대상에 없는 이름만 순수 판정", () => {
+  assert.deepEqual(missingSquadMembers(["a", "b", "c"], ["b"]), ["a", "c"]);
+  assert.deepEqual(missingSquadMembers(["a"], ["a"]), []);
+});
+
+test("squadMemberNames — 첫 낱말만 뽑고 순서·리더(첫 줄)를 보존한다", () => {
+  assert.deepEqual(squadMemberNames("pm 리더\ndeveloper\nqa 검증\n"), ["pm", "developer", "qa"]);
+});
+
+test("importPersona — 이름이 없으면 새로 쓰고, 같은 이름이 있으면 overwrite 없이는 conflict", async () => {
+  seedPersona("dira", "importable", 1);
+  const targetDir = mkdtempSync(path.join(tmpdir(), "fst-market-target-personas-"));
+
+  const first = await importPersona("dira", "importable", targetDir, "importable");
+  assert.deepEqual(first, { ok: true });
+  assert.equal(readFileSync(path.join(targetDir, "importable", "PROFILE.md"), "utf8"), "# importable\n");
+
+  const conflict = await importPersona("dira", "importable", targetDir, "importable");
+  assert.deepEqual(conflict, { ok: false, reason: "conflict" });
+
+  const overwritten = await importPersona("dira", "importable", targetDir, "importable", true);
+  assert.deepEqual(overwritten, { ok: true });
+});
+
+test("importPersona — 마켓에 없는 항목은 notFound, 이름 규칙 밖은 invalidName", async () => {
+  const targetDir = mkdtempSync(path.join(tmpdir(), "fst-market-target-personas-"));
+  assert.deepEqual(await importPersona("dira", "no-such", targetDir, "x"), { ok: false, reason: "notFound" });
+  assert.deepEqual(await importPersona("dira", "writer", targetDir, "../etc"), {
+    ok: false,
+    reason: "invalidName",
+  });
+});
+
+test("importSquad — 대상에 없는 멤버를 마켓에서 같이 가져오고, 마켓에도 없는 멤버는 목록으로 남긴다", async () => {
+  seedPersona("dira", "pm", 1);
+  seedPersona("dira", "qa", 1);
+  seedSquad("dira", "default", "pm 리더\nqa\nghost\n");
+
+  const personasDir = mkdtempSync(path.join(tmpdir(), "fst-market-target-personas-"));
+  const squadsDir = mkdtempSync(path.join(tmpdir(), "fst-market-target-squads-"));
+  // qa는 대상에 이미 있다 — 안 건드린다(내용이 마켓과 다름을 표지로 삼는다).
+  mkdirSync(path.join(personasDir, "qa"), { recursive: true });
+  writeFileSync(path.join(personasDir, "qa", "PROFILE.md"), "# 로컬에서 고친 qa\n", "utf8");
+
+  const r = await importSquad("dira", "default", squadsDir, personasDir, "default");
+  assert.deepEqual(r, { ok: true, missingInMarket: ["ghost"] });
+  assert.equal(readFileSync(path.join(squadsDir, "default", "members"), "utf8"), "pm 리더\nqa\nghost\n");
+  assert.equal(readFileSync(path.join(personasDir, "pm", "PROFILE.md"), "utf8"), "# pm\n"); // 마켓에서 새로 옴
+  assert.equal(readFileSync(path.join(personasDir, "qa", "PROFILE.md"), "utf8"), "# 로컬에서 고친 qa\n"); // 안 건드림
+
+  const conflict = await importSquad("dira", "default", squadsDir, personasDir, "default");
+  assert.deepEqual(conflict, { ok: false, reason: "conflict" });
+});
+
+test("appendInstall — installs.jsonl에 한 줄 append", async () => {
+  await appendInstall({ at: "t9", kind: "persona", owner: "dira", name: "writer", v: 3, project: "pofol", as: "writer" });
+  const after = readFileSync(marketInstallsPath(), "utf8");
+  assert.ok(after.trim().split("\n").pop()!.includes('"v":3'));
 });

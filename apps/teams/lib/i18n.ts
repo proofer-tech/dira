@@ -554,7 +554,10 @@ export const ko: Record<string, string> = {
   "projects.dupIdSuffix": "가 이미 쓰이고 있습니다. 다른 이름을 쓰거나 조각을 직접 정하세요.",
   "projects.unknownProjectIdPrefix": "없는 프로젝트:",
   "projects.notAPersonaNamePrefix": "페르소나 이름이 아닙니다:",
+  "projects.notAMarketEntryNamePrefix": "받을 이름이 이름 규칙(영문·숫자·_·-)을 벗어납니다:",
   "projects.notInPalettePrefix": "팔레트에 없는 색입니다:",
+  "market.import.notFound": "마켓에 그런 항목이 없습니다(또는 담을 프로필이 없습니다).",
+  "market.import.conflict": "대상에 같은 이름이 이미 있습니다. 덮어쓰기나 다른 이름을 골라 다시 시도하세요.",
   "projects.personaNameRulePrefix": "페르소나 이름은 영문·숫자·_·- 만 됩니다:",
   "projects.personaNameRuleMiddle": "— 엔진이 이 이름으로 <personas>/<이름>/",
   "projects.personaNameRuleSuffix": "경로를 만듭니다.",
@@ -4692,7 +4695,10 @@ export const en: Record<string, string> = {
   "projects.dupIdSuffix": " is already taken. Use a different name, or set the slug yourself.",
   "projects.unknownProjectIdPrefix": "Unknown project:",
   "projects.notAPersonaNamePrefix": "Not a persona name:",
+  "projects.notAMarketEntryNamePrefix": "The import name breaks the name rule (letters, digits, _ and -):",
   "projects.notInPalettePrefix": "Not a palette color:",
+  "market.import.notFound": "No such item in the market (or it has no profile to import).",
+  "market.import.conflict": "The target already has this name. Pick overwrite or a different name and retry.",
   // 이름 규칙 한 줄은 `<prefix> <name> <middle><file> <suffix>`로 조립된다 —
   // `… — the engine builds <personas>/<name>/PROFILE.md from this name.`
   "projects.personaNameRulePrefix": "Persona names take letters, digits, _ and - only:",

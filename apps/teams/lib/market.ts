@@ -1,13 +1,18 @@
 /** 페르소나 마켓 저장소 — 자리와 `meta.json` 스키마, 목록·상세·즐겨찾기·설치 기록 읽기,
- *  배포(DESIGN.md §페르소나 마켓 §계약 §저장 자리 §배포, 티켓 `ad443849` · `44a57214`).
+ *  배포(DESIGN.md §페르소나 마켓 §계약 §저장 자리 §배포, 티켓 `ad443849` · `44a57214`),
+ *  가져오기(§가져오기, 티켓 `299a45d8`).
  *
- *  가져오기(`299a45d8`)가 이 파일의 타입과 경로 함수를 그대로 받아 쓴다.
+ *  배포 쓰기(`deployPersona` · `deploySquad`, `44a57214`)와 가져오기 쓰기(`importPersona` ·
+ *  `importSquad`, `299a45d8`)가 이 파일의 타입과 경로 함수를 나눠 받아 쓰되 자기 함수는 따로
+ *  낸다 — 두 티켓이 같은 파일에 각자의 쓰기 함수를 더한다. 즐겨찾기 토글도 예외로 쓰기다
+ *  (배포·가져오기와 무관한 화면 상태라 여기 둔다).
  *
  *  경로 조립은 `lib/paths.ts`의 기존 방어(`resolveWithin` · `NAME_RE` · `PROJECT_ID_RE`)를
  *  그대로 쓴다 — 새 방어를 따로 만들지 않는다. */
-import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { NAME_RE, PROJECT_ID_RE, localDir, resolveWithin } from "./paths.ts";
+import { personaNames, squadNames } from "./projects.ts";
 
 export type MarketKind = "persona" | "squad";
 
@@ -320,4 +325,107 @@ export async function deploySquad(
   };
   await writeMetaAtomic(dir, nextMeta);
   return nextMeta;
+}
+
+// ── 설치 기록 쓰기 ───────────────────────────────────────────────────────────
+
+/** `installs.jsonl`에 한 줄 append(DESIGN.md §저장 자리 — "추가만 한다"). */
+export async function appendInstall(install: MarketInstall): Promise<void> {
+  await mkdir(marketDir(), { recursive: true });
+  await appendFile(marketInstallsPath(), JSON.stringify(install) + "\n", "utf8");
+}
+
+// ── 가져오기 (DESIGN.md §가져오기, 티켓 `299a45d8`) ────────────────────────────
+
+/** `members` 한 줄에서 이름만(첫 낱말) — 역할 문구는 필요 없는 자리라 `parseSquadMemberLine`
+ *  (`projects.ts`)을 새로 안 부른다. 정규식은 그 함수의 이름 자리와 같다(첫 공백에서 자른다). */
+export function squadMemberNames(membersText: string): string[] {
+  return membersText
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l !== "")
+    .map((l) => /^(\S+)/.exec(l)![1]);
+}
+
+/** 스쿼드 멤버 중 대상 프로젝트에 아직 없는 이름 — 순수 함수(파일을 안 읽는다). 대상에 이미
+ *  있는 이름은 로컬에서 고쳐 쓰던 페르소나일 수 있어 안 건드린다(DESIGN.md §가져오기). */
+export function missingSquadMembers(memberNames: string[], existingPersonaNames: string[]): string[] {
+  const existing = new Set(existingPersonaNames);
+  return memberNames.filter((n) => !existing.has(n));
+}
+
+/** `importPersona` · `importSquad`가 실패를 가르는 이유. 문자열을 지어내지 않고 서버 액션이
+ *  이 값으로 문구를 고른다.
+ *  - `conflict`: 대상에 같은 이름이 이미 있는데 `overwrite`가 아니다 — 아무 파일도 안 썼다.
+ *  - `notFound`: 마켓에 그런 항목(또는 `PROFILE.md`)이 없다.
+ *  - `invalidName`: 받을 이름이 `NAME_RE`를 벗어난다. */
+export type ImportReason = "conflict" | "notFound" | "invalidName";
+
+export type ImportResult = { ok: true } | { ok: false; reason: ImportReason };
+
+/** 페르소나 가져오기. `overwrite`가 없거나 `false`인데 대상에 같은 이름이 있으면 **아무 파일도
+ *  안 쓰고** `conflict`를 돌려준다 — 호출자(서버 액션)가 사람에게 덮어쓰기/다른 이름을 물어
+ *  `asName`이나 `overwrite`를 바꿔 다시 부른다. 덮어쓰기도 `PROFILE.md`·`skills.md` 둘만
+ *  쓴다 — 대상의 `memory/`·`limit`·`engine`은 손대지 않는다(파일 둘 밖은 아예 건드리지 않는다). */
+export async function importPersona(
+  owner: string,
+  name: string,
+  targetPersonasDir: string,
+  asName: string,
+  overwrite = false,
+): Promise<ImportResult> {
+  if (!NAME_RE.test(asName)) return { ok: false, reason: "invalidName" };
+  const item = await getMarketItem("persona", owner, name);
+  if (!item || item.profile === null) return { ok: false, reason: "notFound" };
+  if (!overwrite && (await personaNames(targetPersonasDir)).includes(asName)) {
+    return { ok: false, reason: "conflict" };
+  }
+  await mkdir(targetPersonasDir, { recursive: true });
+  const dest = await resolveWithin(targetPersonasDir, asName);
+  await mkdir(dest, { recursive: true });
+  await writeFile(path.join(dest, "PROFILE.md"), item.profile, "utf8");
+  if (item.skills !== null) await writeFile(path.join(dest, "skills.md"), item.skills, "utf8");
+  return { ok: true };
+}
+
+export type ImportSquadResult =
+  | { ok: true; missingInMarket: string[] }
+  | { ok: false; reason: ImportReason };
+
+/** 스쿼드 가져오기. `members`를 원문 그대로 쓴다(줄 순서·첫 줄(리더) 보존 — 다시 조립하지
+ *  않는다). 대상에 없는 멤버 페르소나는 같은 소유 프로젝트의 마켓 최신 버전으로 같이 가져오되
+ *  대상에 이미 있는 이름은 건드리지 않는다(`missingSquadMembers`). 마켓에도 없는 멤버는
+ *  `missingInMarket`에 담기고 가져오기 자체는 성공한다(엔진이 프로필 없는 멤버를 WARN으로
+ *  넘기므로 큐가 멎지 않는다) — 멤버 쪽 `notFound`만 이렇게 삼키고, 그 밖의 이유(이름 규칙 위반
+ *  등)는 없다: 멤버 이름은 `members` 파일에서 그대로 읽은 값이라 `NAME_RE`를 벗어나도 여기서는
+ *  걸러지지 않고 `importPersona`가 `invalidName`으로 실패시키면 그 멤버도 조용히 건너뛴다 —
+ *  마켓에 없는 것과 같은 결과라 목록을 하나로 합친다. */
+export async function importSquad(
+  owner: string,
+  name: string,
+  targetSquadsDir: string,
+  targetPersonasDir: string,
+  asName: string,
+  overwrite = false,
+): Promise<ImportSquadResult> {
+  if (!NAME_RE.test(asName)) return { ok: false, reason: "invalidName" };
+  const item = await getMarketItem("squad", owner, name);
+  if (!item || item.members === null) return { ok: false, reason: "notFound" };
+  if (!overwrite && (await squadNames(targetSquadsDir)).includes(asName)) {
+    return { ok: false, reason: "conflict" };
+  }
+
+  const memberNames = squadMemberNames(item.members);
+  const missing = missingSquadMembers(memberNames, await personaNames(targetPersonasDir));
+  const missingInMarket: string[] = [];
+  for (const member of missing) {
+    const r = await importPersona(owner, member, targetPersonasDir, member, false);
+    if (!r.ok) missingInMarket.push(member); // notFound(마켓에 없음)와 invalidName 둘 다 여기로
+  }
+
+  await mkdir(targetSquadsDir, { recursive: true });
+  const dest = await resolveWithin(targetSquadsDir, asName);
+  await mkdir(dest, { recursive: true });
+  await writeFile(path.join(dest, "members"), item.members, "utf8");
+  return { ok: true, missingInMarket };
 }

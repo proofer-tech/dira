@@ -36,7 +36,15 @@ export type Project = {
    *  파일은 큐에 GUI 전용 규약을 새로 만든다. 레지스트리는 이미 있는 머신 로컬 저장소다.
    *  페르소나를 지워도 청소하지 않는다 — 이름으로 조회하는 맵이라 고아 키가 아무것도 안 한다. */
   personaColors?: Record<string, string>;
+  /** 마켓에서 받은 항목의 현재 설치 버전(DESIGN.md §페르소나 마켓 §저장 자리). 갱신 배지
+   *  (`market.ts`의 `needsUpdate`)가 이 `v`와 그 항목의 `meta.json.latest`를 비교한다.
+   *  키는 **받은 이름**(`asName`)이다 — 원본 이름과 다르게 받았을 수 있다. */
+  market?: { personas: Record<string, MarketInstallEntry>; squads: Record<string, MarketInstallEntry> };
 };
+
+/** 레지스트리 한 칸의 모양 — `{owner, name, v}`(DESIGN.md §저장 자리). `owner`·`name`은 마켓
+ *  쪽 원본 식별자이고 `v`는 지금 설치된 버전이다. */
+export type MarketInstallEntry = { owner: string; name: string; v: number };
 
 export type ProjectConfig = {
   personas: string;
@@ -508,6 +516,26 @@ export async function setPersonaColor(
   // 빈 맵은 키째 지운다 — 색을 한 번도 안 고른 프로젝트와 전부 지운 프로젝트가 같아야 한다.
   if (Object.keys(colors).length === 0) delete found.personaColors;
   else found.personaColors = colors;
+  await writeProjects(projects);
+}
+
+/** 마켓 가져오기가 쓰는 레지스트리 한 칸(DESIGN.md §페르소나 마켓 §저장 자리) — `setPersonaColor`와
+ *  같은 자리다. **큐에는 아무것도 쓰지 않는다.** 가져오기 한 번(첫 설치 · 다시 받기 둘 다)이
+ *  이 함수를 부른다 — 다시 받기는 같은 `name`에 더 큰 `v`로 덮어써서 갱신 배지를 끈다. */
+export async function setMarketInstall(
+  id: string,
+  kind: "personas" | "squads",
+  name: string,
+  install: MarketInstallEntry,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<void> {
+  if (!NAME_RE.test(name)) throw new Error(`${t(locale, "projects.notAMarketEntryNamePrefix")} ${name}`);
+  const projects = await readProjects(locale);
+  const found = projects.find((x) => x.id === id);
+  if (!found) throw new Error(`${t(locale, "projects.unknownProjectIdPrefix")} ${id}`);
+  const market = { personas: { ...found.market?.personas }, squads: { ...found.market?.squads } };
+  market[kind] = { ...market[kind], [name]: install };
+  found.market = market;
   await writeProjects(projects);
 }
 
