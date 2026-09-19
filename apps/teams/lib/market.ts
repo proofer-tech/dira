@@ -232,6 +232,50 @@ export function needsUpdate(installedVersion: number, latest: number): boolean {
   return installedVersion < latest;
 }
 
+// ── 원본에서 보는 기록 (DESIGN.md §원본에서 보는 기록, 티켓 `1c06035e`) ────────────
+
+/** 원본 화면(페르소나 상세·스쿼드 상세) 절 하나가 보여 주는 값 셋 — 배포 이력·가져간 기록·
+ *  갱신 배지. `deploy`가 `null`이면 이 프로젝트가 그 이름으로 배포한 적이 없다(§원본에서 보는
+ *  기록의 "아직 배포 안 함"). `update`는 이 페르소나-스쿼드가 마켓에서 가져온 것이고 원본이
+ *  그 뒤 더 배포했을 때만 채워진다 — 그 밖에는 `null`이라 배지가 안 뜬다. */
+export type MarketRecord = {
+  deploy: { latest: number; versions: MarketVersion[] } | null;
+  installs: MarketInstall[];
+  update: { owner: string; name: string; installedVersion: number; latestVersion: number } | null;
+};
+
+/** 한 페르소나-스쿼드가 든 마켓 기록 전부를 한 번에 모은다. `owner`는 언제나 이 프로젝트
+ *  자신이다(§계약 §항목 식별) — 배포 이력·가져간 기록은 이 프로젝트가 그 이름으로 마켓에 낸
+ *  것만 본다. `importEntry`(레지스트리의 `market.personas/squads.<이름>`)가 있으면 그 원본
+ *  항목의 최신 버전과 비교해 갱신 여부를 판정한다 — 없으면(가져온 적 없는 이름) `update`는
+ *  항상 `null`이다. */
+export async function marketRecord(
+  kind: MarketKind,
+  projectId: string,
+  name: string,
+  importEntry?: { owner: string; name: string; v: number },
+): Promise<MarketRecord> {
+  const [own, installs, source] = await Promise.all([
+    getMarketItem(kind, projectId, name),
+    listInstalls(kind, projectId, name),
+    importEntry ? getMarketItem(kind, importEntry.owner, importEntry.name) : Promise.resolve(null),
+  ]);
+  const update =
+    importEntry && source && needsUpdate(importEntry.v, source.latest)
+      ? {
+          owner: importEntry.owner,
+          name: importEntry.name,
+          installedVersion: importEntry.v,
+          latestVersion: source.latest,
+        }
+      : null;
+  return {
+    deploy: own ? { latest: own.latest, versions: own.versions } : null,
+    installs,
+    update,
+  };
+}
+
 // ── 배포 (DESIGN.md §배포) ───────────────────────────────────────────────────
 
 /** 다음 버전 번호. 첫 배포가 `1`, 그 뒤로 `latest + 1`(§계약 §버전). 파일을 안 읽는 순수

@@ -20,6 +20,7 @@ const {
   marketDir,
   marketInstallsPath,
   marketItemId,
+  marketRecord,
   missingMarketMembers,
   missingSquadMembers,
   needsUpdate,
@@ -323,4 +324,61 @@ test("appendInstall — installs.jsonl에 한 줄 append", async () => {
   await appendInstall({ at: "t9", kind: "persona", owner: "dira", name: "writer", v: 3, project: "pofol", as: "writer" });
   const after = readFileSync(marketInstallsPath(), "utf8");
   assert.ok(after.trim().split("\n").pop()!.includes('"v":3'));
+});
+
+// ── 원본에서 보는 기록 ─────────────────────────────────────────────────────────
+
+test("marketRecord — 배포한 적 없으면 deploy가 null(아직 배포 안 함)", async () => {
+  const local = mkdtempSync(path.join(tmpdir(), "fst-market-record-none-"));
+  const prev = process.env.TICKET_LOCAL;
+  process.env.TICKET_LOCAL = local;
+  try {
+    const rec = await marketRecord("persona", "dira", "newbie");
+    assert.equal(rec.deploy, null);
+    assert.deepEqual(rec.installs, []);
+    assert.equal(rec.update, null);
+  } finally {
+    process.env.TICKET_LOCAL = prev;
+  }
+});
+
+test("marketRecord — 이 프로젝트가 배포한 적 있으면 그 버전 이력을 담는다", async () => {
+  const local = mkdtempSync(path.join(tmpdir(), "fst-market-record-own-"));
+  const prev = process.env.TICKET_LOCAL;
+  process.env.TICKET_LOCAL = local;
+  try {
+    seedPersona("dira", "writer", 2);
+    const rec = await marketRecord("persona", "dira", "writer");
+    assert.equal(rec.deploy?.latest, 2);
+    assert.equal(rec.deploy?.versions.length, 2);
+    assert.equal(rec.update, null); // importEntry를 안 넘겼으니 갱신 판정 자체가 없다
+  } finally {
+    process.env.TICKET_LOCAL = prev;
+  }
+});
+
+test("marketRecord — importEntry가 있고 원본이 더 새 버전이면 update가 찬다", async () => {
+  const local = mkdtempSync(path.join(tmpdir(), "fst-market-record-update-"));
+  const prev = process.env.TICKET_LOCAL;
+  process.env.TICKET_LOCAL = local;
+  try {
+    seedPersona("dira", "writer", 3);
+    const rec = await marketRecord("persona", "pofol", "writer", { owner: "dira", name: "writer", v: 1 });
+    assert.deepEqual(rec.update, { owner: "dira", name: "writer", installedVersion: 1, latestVersion: 3 });
+  } finally {
+    process.env.TICKET_LOCAL = prev;
+  }
+});
+
+test("marketRecord — 설치 버전이 이미 최신이면 update는 null", async () => {
+  const local = mkdtempSync(path.join(tmpdir(), "fst-market-record-uptodate-"));
+  const prev = process.env.TICKET_LOCAL;
+  process.env.TICKET_LOCAL = local;
+  try {
+    seedPersona("dira", "writer", 2);
+    const rec = await marketRecord("persona", "pofol", "writer", { owner: "dira", name: "writer", v: 2 });
+    assert.equal(rec.update, null);
+  } finally {
+    process.env.TICKET_LOCAL = prev;
+  }
 });

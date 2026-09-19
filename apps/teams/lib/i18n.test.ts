@@ -189,6 +189,7 @@ const FILLED = [
   "siteNotFound.",
   "siteMeta.",
   "languageToggle.",
+  "market.", // 1c06035e가 en을 채우고 여기 더했다(P426-6, 원본에서 보는 기록 + 배포·다시 받기)
 ];
 
 test("이미 찬 묶음(설정·마감·셸)의 ko 키는 en에 하나도 안 빠졌다", () => {

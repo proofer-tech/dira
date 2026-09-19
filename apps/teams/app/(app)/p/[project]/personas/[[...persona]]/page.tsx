@@ -24,6 +24,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { listEpics, resolveMarkdownRefs } from "@/lib/epics";
 import { t } from "@/lib/i18n";
+import { marketRecord } from "@/lib/market";
 import { personaActivity } from "@/lib/persona-activity";
 import { listTickets } from "@/lib/queue";
 import { decodeHash } from "@/lib/urls";
@@ -107,12 +108,16 @@ export default async function Personas({
     listWorkers(project.root),
     listSquads(squadsDir(project)),
   ]);
-  const squads = squadList.map((s) => ({
-    ...s,
-    // §5-5 §프로필-스쿼드가 없는 것은 경고다 — 이름이 personas 디렉터리에 없거나 PROFILE.md가
-    // 없으면(body === null) "프로필 없다"는 하나의 사실이다.
-    missingProfile: s.members.some((m) => !personas.some((p) => p.name === m.name && p.body !== null)),
-  }));
+  const squads = await Promise.all(
+    squadList.map(async (s) => ({
+      ...s,
+      // §5-5 §프로필-스쿼드가 없는 것은 경고다 — 이름이 personas 디렉터리에 없거나 PROFILE.md가
+      // 없으면(body === null) "프로필 없다"는 하나의 사실이다.
+      missingProfile: s.members.some((m) => !personas.some((p) => p.name === m.name && p.body !== null)),
+      // 원본에서 보는 기록(§원본에서 보는 기록, 티켓 `1c06035e`) — 배포 이력·가져간 기록·갱신 배지.
+      market: await marketRecord("squad", id, s.name, project.market?.squads?.[s.name]),
+    })),
+  );
   const engineHint = personaEngineHint(
     workers.map((w) => w.engine),
     locale,
@@ -126,14 +131,17 @@ export default async function Personas({
       // 머리가 그리는 값이라 스킬·메모리와 같은 벌이다. `personaActivity`(4ea1147a)도 여기 —
       // `활동` 탭 절 넷의 출처다(§비주얼 §66, 티켓 `46d7ef1e`). `runner.log`는 `cache()`로
       // 요청당 1회다(위 `lastLogByWorker` 호출과 같은 경로 — 새 파일 읽기가 안 늘어난다).
-      const [{ skills, chars }, { skills: rawOff }, { memories }, limit, engine, activity] = await Promise.all([
-        readPersonaSkillsFile(config.personas, p.name),
-        readPersonaOffSkillsFile(config.personas, p.name),
-        readPersonaMemory(config.personas, p.name),
-        readPersonaLimit(config.personas, p.name),
-        readPersonaEngine(config.personas, p.name),
-        personaActivity(p.name, tickets, project.root, config),
-      ]);
+      const [{ skills, chars }, { skills: rawOff }, { memories }, limit, engine, activity, market] =
+        await Promise.all([
+          readPersonaSkillsFile(config.personas, p.name),
+          readPersonaOffSkillsFile(config.personas, p.name),
+          readPersonaMemory(config.personas, p.name),
+          readPersonaLimit(config.personas, p.name),
+          readPersonaEngine(config.personas, p.name),
+          personaActivity(p.name, tickets, project.root, config),
+          // 원본에서 보는 기록(§원본에서 보는 기록, 티켓 `1c06035e`) — 배포 이력·가져간 기록·갱신 배지.
+          marketRecord("persona", id, p.name, project.market?.personas?.[p.name]),
+        ]);
       // 손으로 두 파일에 같은 이름을 넣어 두면 활성이 이긴다(§5-1 §충돌) — 화면은 그 이름을
       // 활성으로 한 번만 그린다. 파일 자체는 다음 저장이 고친다(savePersonaSkillsAction).
       const offSkills = rawOff.filter((o) => !skills.some((a) => a.name === o.name));
@@ -150,6 +158,7 @@ export default async function Personas({
         lastActivity: lastActivityFor(p.name, personaRuns),
         squads: memberSquads,
         activity,
+        market,
       };
     }),
   );

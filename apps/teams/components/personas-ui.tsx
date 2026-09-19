@@ -33,6 +33,12 @@ import {
   setPersonaColorAction,
   type PersonaResult,
 } from "@/app/(app)/p/[project]/personas/actions";
+import {
+  deployPersonaAction,
+  deploySquadAction,
+  missingSquadMembersAction,
+} from "@/app/(app)/p/[project]/personas/market-actions";
+import { importPersonaAction, importSquadAction } from "@/app/(app)/market/actions";
 import type { SquadMember } from "@/lib/projects";
 import { Markdown } from "@/components/markdown";
 import { MarkdownEditor } from "@/components/markdown-editor";
@@ -108,10 +114,11 @@ import {
   SQUAD_BLOCK_MAX_BYTES,
   squadBlockBytes,
 } from "@/lib/budgets";
+import type { MarketRecord } from "@/lib/market";
 import { skillUploadError } from "@/lib/skill-upload-limit";
 import type { Memory, Skill } from "@/lib/skills";
 import { applyLeaderOverride, orderedSquadMembers, sameSquadMembers } from "@/lib/squads";
-import { agoLabel, decodeHash, engineMissing, PERSONA_COLORS, personaDotClass } from "@/lib/urls";
+import { agoLabel, dateTimeLabel, decodeHash, engineMissing, PERSONA_COLORS, personaDotClass } from "@/lib/urls";
 import { daysSince, kindLabel } from "@/components/status-badge";
 import type {
   PersonaActivity,
@@ -159,6 +166,9 @@ export type PersonaRow = {
   /** `활동` 탭 절 넷의 값 전부(§비주얼 §66, 티켓 `46d7ef1e`) — `personaActivity`(4ea1147a)가
    *  이 렌더에서 이미 뽑아 둔 것. 이 화면은 값을 다시 세지 않고 포맷만 한다. */
   activity: PersonaActivity;
+  /** 마켓 배포 이력·가져간 기록·갱신 배지(§원본에서 보는 기록, 티켓 `1c06035e`) —
+   *  `marketRecord`(`lib/market.ts`)가 이 렌더에서 이미 뽑아 둔 것. */
+  market: MarketRecord;
 };
 
 /** 서버가 읽어 넘긴 스쿼드 한 항목(DESIGN.md §5-5). 색·자수·스킬·메모리·상한이 **없다** —
@@ -171,6 +181,8 @@ export type SquadRow = {
   rules: string;
   /** 멤버 중 `personas/`에 `PROFILE.md`가 없는 이름이 있다(§5-5 §경고) */
   missingProfile: boolean;
+  /** 마켓 배포 이력·가져간 기록·갱신 배지(§원본에서 보는 기록, 티켓 `1c06035e`) — `PersonaRow.market`과 같다. */
+  market: MarketRecord;
 };
 
 /** 역할이 빈 멤버 줄의 자리표시 — 프로필 첫 줄(§5-5 §개정 "역할이 없는 줄"). 값이 아니다. */
@@ -940,6 +952,7 @@ export function PersonasPane({
             onEdit={(next) => setSquadEdits((prev) => ({ ...prev, [currentSquad.name]: next }))}
             onDeleted={() => select(null)}
             onSelect={select}
+            nowMs={nowMs}
           />
         ) : current === undefined ? (
           // **404가 아니다** — 왼쪽 목록은 계속 뜬다(§5). 그릇은 §6 프로토콜의 `?core=` 거부와
@@ -976,6 +989,271 @@ export function PersonasPane({
         )}
       </div>
     </SidebarProvider>
+  );
+}
+
+// ── 마켓 (DESIGN.md §페르소나 마켓 §배포 §원본에서 보는 기록, 티켓 `1c06035e`) ────────
+
+/** `마켓에 배포` 버튼 + 다이얼로그. 페르소나 상세·스쿼드 상세 머리에서 같은 컴포넌트를
+ *  `kind`만 갈아 쓴다(§배포 "입구는 두 곳이다"). 스쿼드는 배포를 누른 뒤 서버가 없는 멤버를
+ *  먼저 판정해 확인 단계로 넘어간다(§배포 §스쿼드 배포) — 페르소나는 그 단계가 없다. */
+function DeployButton({
+  projectId,
+  kind,
+  name,
+}: {
+  projectId: string;
+  kind: "persona" | "squad";
+  name: string;
+}) {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  const [note, setNote] = useState("");
+  const [tags, setTags] = useState("");
+  const [missing, setMissing] = useState<string[] | null>(null);
+  const [result, setResult] = useState<{ ok: boolean; message?: string } | null>(null);
+  const [pending, start] = useTransition();
+
+  const reset = () => {
+    setNote("");
+    setTags("");
+    setMissing(null);
+    setResult(null);
+  };
+
+  const tagList = () =>
+    tags
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+  const runDeploy = () =>
+    start(async () => {
+      const r =
+        kind === "persona"
+          ? await deployPersonaAction(projectId, name, note, tagList())
+          : await deploySquadAction(projectId, name, note, tagList());
+      setResult(r);
+      if (r.ok) setOpen(false);
+    });
+
+  const onSubmit = () => {
+    if (kind === "persona") {
+      runDeploy();
+      return;
+    }
+    // 스쿼드는 먼저 없는 멤버를 물어야 한다(§배포 §스쿼드 배포 1-2) — 확인 없이 바로 배포하면
+    // 사람이 몇이 같이 올라가는지 모른 채 누른 셈이 된다.
+    start(async () => {
+      const m = await missingSquadMembersAction(projectId, name);
+      if (!m.ok) {
+        setResult({ ok: false, message: m.message });
+        return;
+      }
+      if (m.missing && m.missing.length > 0) setMissing(m.missing);
+      else runDeploy();
+    });
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o);
+        if (!o) reset();
+      }}
+    >
+      <DialogTrigger render={<Button size="sm" variant="outline" />}>{t("market.deploy.button")}</DialogTrigger>
+      <DialogContent className="sm:max-w-lg">
+        {missing !== null ? (
+          // §배포 §스쿼드 배포 2 — 없는 멤버 전부를 보여 주고 같이 배포할지 묻는다.
+          <>
+            <DialogHeader>
+              <DialogTitle>{t("market.deploy.missingMembersTitle")}</DialogTitle>
+              <DialogDescription>{t("market.deploy.missingMembersBody")}</DialogDescription>
+            </DialogHeader>
+            <ul className="space-y-1">
+              {missing.map((m) => (
+                <li key={m} className="font-mono text-xs">
+                  {m}
+                </li>
+              ))}
+            </ul>
+            {result && !result.ok && (
+              <Failure title={t("market.deploy.failedTitle")} message={result.message ?? ""} />
+            )}
+            <DialogFooter>
+              <Button
+                variant="outline"
+                disabled={pending}
+                onClick={() => {
+                  // §배포 §스쿼드 배포 4 — 거절하면 스쿼드를 안 배포하고 사유를 남긴다. 다이얼로그는
+                  // 안 닫는다(§0) — 폼으로 돌아가 사람이 무엇을 거절했는지 그대로 보인다.
+                  setMissing(null);
+                  setResult({ ok: false, message: t("market.deploy.declinedMessage") });
+                }}
+              >
+                {t("common.cancel")}
+              </Button>
+              <Button disabled={pending} onClick={runDeploy}>
+                {pending ? t("common.creating") : t("market.deploy.missingMembersConfirm")}
+              </Button>
+            </DialogFooter>
+          </>
+        ) : (
+          <>
+            <DialogHeader>
+              <DialogTitle>
+                {kind === "persona" ? t("market.deploy.titlePersona") : t("market.deploy.titleSquad")}
+              </DialogTitle>
+              <DialogDescription>{t("market.deploy.description")}</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-2">
+              <Label htmlFor="market-deploy-note">{t("market.deploy.noteLabel")}</Label>
+              <Input
+                id="market-deploy-note"
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder={t("market.deploy.notePlaceholder")}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="market-deploy-tags">{t("market.deploy.tagsLabel")}</Label>
+              <Input
+                id="market-deploy-tags"
+                value={tags}
+                onChange={(e) => setTags(e.target.value)}
+                placeholder={t("market.deploy.tagsPlaceholder")}
+              />
+            </div>
+            {result && !result.ok && (
+              <Failure title={t("market.deploy.failedTitle")} message={result.message ?? ""} />
+            )}
+            <DialogFooter>
+              <DialogClose render={<Button variant="outline" />}>{t("common.cancel")}</DialogClose>
+              <Button disabled={pending || !note.trim()} onClick={onSubmit}>
+                {pending ? t("market.deploy.submitting") : t("market.deploy.submit")}
+              </Button>
+            </DialogFooter>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** 갱신 배지 — 마켓에서 가져온 이름이고 원본이 그 뒤 더 배포했을 때만 뜬다(§원본에서 보는
+ *  기록). 누르면 확인 없이 바로 다시 받지 않는다 — 로컬에서 고친 내용이 있을 수 있어 한 번
+ *  묻는다(`AlertDialog`, `DeleteButton`과 같은 관용구). 다이얼로그가 짧은 이유는 이름이 이미
+ *  정해져 있어서다(§원본에서 보는 기록 "대상 선택 칸이 없다") — 대상도 이름도 다시 안 묻는다. */
+function UpdateBadge({
+  projectId,
+  kind,
+  name,
+  update,
+}: {
+  projectId: string;
+  kind: "persona" | "squad";
+  name: string;
+  update: NonNullable<MarketRecord["update"]>;
+}) {
+  const t = useT();
+  const locale = useLocale();
+  const [open, setOpen] = useState(false);
+  const [result, setResult] = useState<{ ok: boolean; message?: string } | null>(null);
+  const [pending, start] = useTransition();
+
+  const refetch = () =>
+    start(async () => {
+      const r =
+        kind === "persona"
+          ? await importPersonaAction(update.owner, update.name, projectId, name, true, locale)
+          : await importSquadAction(update.owner, update.name, projectId, name, true, locale);
+      setResult(r);
+      if (r.ok) setOpen(false);
+    });
+
+  return (
+    <AlertDialog
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o);
+        if (!o) setResult(null);
+      }}
+    >
+      <AlertDialogTrigger
+        render={
+          <Badge
+            variant="secondary"
+            className="cursor-pointer self-center"
+            title={t("market.update.badgeTitle")}
+          />
+        }
+      >
+        {t("market.update.badgePrefix")} v{update.latestVersion}
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{t("market.update.confirmTitle")}</AlertDialogTitle>
+          <AlertDialogDescription>
+            {t("market.update.confirmBodyPrefix")} v{update.latestVersion} {t("market.update.confirmBodySuffix")}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        {result && !result.ok && <Failure title={t("market.update.failedTitle")} message={result.message ?? ""} />}
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={pending}>{t("common.cancel")}</AlertDialogCancel>
+          <AlertDialogAction disabled={pending} onClick={refetch}>
+            {pending ? t("market.deploy.submitting") : t("market.update.confirmAction")}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
+/** 배포 이력 · 가져간 기록 절(§원본에서 보는 기록). 둘 다 읽기 전용이고 최신이 위다 — 마켓에서
+ *  내용을 고치는 자리가 이 앱에 없다(§화면 "마켓에서 내용을 고치지 않는다"와 같은 판단). */
+function MarketHistorySection({ record, nowMs }: { record: MarketRecord; nowMs: number }) {
+  const t = useT();
+  return (
+    <section className="space-y-3 border-t pt-3">
+      <div className="space-y-1">
+        <h3 className="text-sm font-medium">{t("market.history.deployHeading")}</h3>
+        {record.deploy === null ? (
+          <p className="text-xs text-muted-foreground">{t("market.history.notDeployed")}</p>
+        ) : (
+          <ul className="space-y-1">
+            {[...record.deploy.versions]
+              .reverse()
+              .map((v) => (
+                <li key={v.v} className="text-xs">
+                  <span className="font-mono">v{v.v}</span>{" "}
+                  <span className="text-muted-foreground">{dateTimeLabel(Date.parse(v.at), nowMs)}</span>{" "}
+                  <span className="break-all">{v.note}</span>
+                </li>
+              ))}
+          </ul>
+        )}
+      </div>
+      <div className="space-y-1">
+        <h3 className="text-sm font-medium">{t("market.history.installsHeading")}</h3>
+        {record.installs.length === 0 ? (
+          <p className="text-xs text-muted-foreground">{t("market.history.noInstalls")}</p>
+        ) : (
+          <ul className="space-y-1">
+            {[...record.installs]
+              .reverse()
+              .map((i, idx) => (
+                <li key={`${i.at}-${idx}`} className="text-xs">
+                  <span className="font-mono">{i.project}</span>{" "}
+                  <span className="font-mono">v{i.v}</span>{" "}
+                  <span className="text-muted-foreground">{dateTimeLabel(Date.parse(i.at), nowMs)}</span>
+                </li>
+              ))}
+          </ul>
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -1088,8 +1366,12 @@ function PersonaDetail({
             {t("persona.badge.noProfile")}
           </Badge>
         )}
+        {row.market.update && (
+          <UpdateBadge projectId={projectId} kind="persona" name={row.name} update={row.market.update} />
+        )}
         {edit.saved !== null && (
           <span className="ml-auto flex shrink-0 items-center gap-1 self-center">
+            <DeployButton projectId={projectId} kind="persona" name={row.name} />
             <OpenInAppButton action={() => openPersonaProfileAction(projectId, row.name)} />
             <DeleteButton
               projectId={projectId}
@@ -1243,6 +1525,10 @@ function PersonaDetail({
               onDeleted={onMemoryDeleted}
               refs={refs}
             />
+
+            {/* 마켓 절(§원본에서 보는 기록, 티켓 `1c06035e`) — 메모리 절 바로 뒤. 배포·가져오기
+                둘 다 이 페르소나가 마켓과 맺은 관계라 스킬·메모리와 같은 사이드바 열에 묶인다. */}
+            <MarketHistorySection record={row.market} nowMs={nowMs} />
           </div>
         </TabsContent>
       </Tabs>
@@ -1464,6 +1750,7 @@ function SquadDetail({
   onEdit,
   onDeleted,
   onSelect,
+  nowMs,
 }: {
   projectId: string;
   row: SquadRow;
@@ -1479,6 +1766,8 @@ function SquadDetail({
    *  가는 손잡이가 된다) — `PersonasPane`의 `select` 그대로다. `<Link>`도 `router.push`도
    *  아니다: 서버 왕복이 나면 이 화면의 미저장 편집(`edit`)이 죽는다. */
   onSelect: (name: string) => void;
+  /** `PersonasPane`의 그 값 그대로 — 마켓 절(§원본에서 보는 기록)의 시각 표시가 쓴다. */
+  nowMs: number;
 }) {
   const t = useT();
   const [membersResult, setMembersResult] = useState<PersonaResult | null>(null);
@@ -1644,7 +1933,11 @@ function SquadDetail({
       {/* 머리 — 이름 · `삭제`(§5-5 §화면). 색 점이 없다: 스쿼드는 신원이 아니다 */}
       <div className="flex items-center gap-2">
         <span className="font-mono text-sm break-all">{row.name}</span>
-        <span className="ml-auto">
+        {row.market.update && (
+          <UpdateBadge projectId={projectId} kind="squad" name={row.name} update={row.market.update} />
+        )}
+        <span className="ml-auto flex shrink-0 items-center gap-1">
+          <DeployButton projectId={projectId} kind="squad" name={row.name} />
           <DeleteSquadButton
             projectId={projectId}
             row={row}
@@ -1802,6 +2095,10 @@ function SquadDetail({
           </Button>
         </div>
       </section>
+
+      {/* 마켓 절(§원본에서 보는 기록, 티켓 `1c06035e`) — 멤버 절 바로 뒤. 페르소나 상세와 같은
+          위치 규칙이다(정책·프로필 절 뒤). */}
+      <MarketHistorySection record={row.market} nowMs={nowMs} />
 
       {/* 교체 · 리더 카드의 `제거` confirm 한 벌(§비주얼 §61 (22) §confirm) — 리더 절이 차
           있으면 언제나 뜬다. 문장 셋 중 가운데(역할 손실)만 역할 칸에 글자가 있을 때 뜬다.
