@@ -812,10 +812,128 @@ writing as the page you see on the web. In the app, the list rides on top of it 
   under the first tree group, `Project`, and the eight things from resolved values through
   unregister are there. No separate `Project settings` dialog opens any more (see [The settings
   dialog](#the-settings-dialog) above).
-- The right of the header carries `Manual` · `Star` · `New project` · `Settings`.
-  `Settings` here is a word, not a gear.
+- The right of the header carries `Manual` · `Market` · `Star` · `New project` ·
+  `Settings`. `Settings` here is a word, not a gear.
 - With zero registered projects, the creation form unfolds where the table would be, and `New project`
   drops out of the header (see [Create your first project](/docs/first-ticket)).
+
+## The market
+
+Where projects on one Mac hand personas and squads to each other. When you want the `writer` you
+raised in this queue over in the project next door, you put it here and pull it down instead of
+copying files by hand. The store is one directory, `~/.config/dira/market/`, and nothing leaves
+this Mac. No account, no upload.
+
+Two doors lead in: `Market` at the top right of the `Squads` screen, and `Market` in the header of
+the project list.
+
+### Putting something up
+
+You deploy from the origin project. Pick a persona in the left list of the `Squads` screen and
+`Deploy to market` sits in the head of the right pane. Pick a squad and the same button shows up in
+the same place. A persona with no profile yet does not get the button, since there is nothing to
+carry.
+
+- The dialog asks for `Note (required)` and `Tags (comma-separated, optional)`. Leave the note
+  empty and `Deploy` stays dead.
+- **That one line of note is the version's name tag.** It sits next to the timestamp in the version
+  list, and it is what you read later in the origin's `Deploy history` section and in the market
+  item's `Versions` list. Stack up four notes that say `fix` and the list is just numbers.
+- Versions are plain integers. The first deploy is `v1` and every press adds one. Deploy the same
+  bytes twice and you get two versions. Old versions are never deleted.
+- Tags are what narrow the list later on the market screen. You can leave them blank.
+
+### What a deployed copy leaves behind
+
+A deployed persona carries `PROFILE.md` and `skills.md`, and nothing else. A squad carries one
+member list.
+
+**Memory does not travel.** The retrospectives under `memory/` are lessons that hold in this queue
+only, so shipping them means the receiving side loads someone else's project history into its own
+prompt. The session limit and the engine setting stay behind for the same reason. Whoever imports
+it gets the profile and the skill lines, and builds its own memory from there.
+
+The skill names written in `skills.md` cross over as text. If a skill is not installed on this Mac,
+the line is all you get. Importing from the market never installs a skill for you (see
+[Personas](/docs/personas)).
+
+### Deploying a squad deploys its members first
+
+A squad carries member names only. So if a member persona is missing from the market, whoever
+imports the squad gets a shell with names in it. Deploy order closes that hole.
+
+Press `Deploy to market` on a squad and it counts the members that are not in the market yet, then
+asks first with `Some members aren't in the market`. Choose `Deploy them too` and it **puts the
+members up one at a time, then the squad.** Each member gets the same note line you wrote for the
+squad. Cancel and the squad does not go up either; nothing is left half deployed. If one member
+fails on the way, it stops there and skips the squad. Members already up stay up, and pressing
+again picks up where it left off.
+
+### Finding something
+
+The market screen lives outside any project. It is the same list whichever project you opened it
+from, and the project panel on the left is not there.
+
+- Two tabs, `Personas` and `Squads`. One card carries the name, the owning project, the latest
+  version, the tags and a favorite star. If anyone has imported it, `Imported in` and a count ride
+  along.
+- The search box sweeps the name, the owning project's name, the tags and the first line of
+  `PROFILE.md`. Press a tag and only that tag is left. Both filters show as badges at the top and
+  `Reset filters` clears them in one press.
+- Turn a star on and it stays on through a refresh. Favorites are per Mac too.
+- Press a card and the detail opens: the body of `PROFILE.md`, the skill lines and the version
+  list, all read-only. **You cannot edit anything from the market.** Editing happens in the origin
+  project, always.
+
+### Importing
+
+`Import` at the top right of the detail opens a dialog.
+
+- `Target project` is where it lands. With no project registered yet, you get a note telling you to
+  register one first.
+- `Name` comes pre-filled with the market item's name and you can change it right there.
+- Import a squad and it pulls in any member persona the target is missing, at the latest version.
+  The result screen lists them under `Members brought along:`. Names the target already has are
+  left alone, because one squad should not overwrite a persona you have been editing locally. If a
+  member is missing from the market as well, the import still succeeds and that name shows up
+  separately under `Members missing from the market:`.
+
+### When the name is already taken
+
+If a persona by that name already sits in the target, `Import` stops right there and offers two
+ways forward. Nothing is overwritten quietly.
+
+- `Overwrite` replaces `PROFILE.md` and `skills.md`, and those two only. That persona's `memory/`,
+  its session limit and its engine setting stay put, because nothing in the deployed copy gives a
+  reason to erase them.
+- `Different name` sends you back to the `Name` box with the text selected. Change it, press
+  `Import` again, and it lands under the new name with the old one untouched.
+
+### What the origin sees
+
+Pick that persona in the origin project and open the `Profile` tab: two more sections sit at the
+bottom right, below the memory section. For a squad there are no tabs, and the same two sit below
+the `Members` section.
+
+- `Deploy history` lists what you put up, newest first, one line each with the version, the time
+  and the note. Never deployed reads `Not deployed yet`.
+- `Installs` stacks one line per import: which project took it, which version, and when. Empty
+  reads `None yet`.
+
+### A newer version raises a badge on the receiving side
+
+On the `Squads` screen of the project that imported it, a badge like `Update available v3` sits
+next to the persona's name in the head of the right pane. It shows only while the installed version
+is behind the market's latest. Squads carry the same badge.
+
+Press the badge and it asks once, `Fetch the latest version?`. Choose `Fetch update` and that
+version's `PROFILE.md` and `skills.md` overwrite what is there, and the badge goes away. **This
+can't be undone.** If you had been editing the imported profile, those edits go with it, so move
+anything worth keeping out first. Memory is untouched here as well.
+
+An imported persona is not tethered to its origin. Edit it after the import and it is simply a file
+in that project; the badge only tells you the two versions have drifted apart. There is no
+two-way sync.
 
 ## The way to the manual and back
 
