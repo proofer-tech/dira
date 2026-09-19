@@ -1029,13 +1029,19 @@ export async function createSquad(dir: string, name: string): Promise<string> {
   return file;
 }
 
-/** 저장. 줄은 `<이름>` 또는 `<이름> <역할>`(역할이 있을 때만) — 0개면 빈 파일이다(§5-5 §값:
- *  파서가 없어 빈 파일도 "멤버 0"으로 그냥 읽힌다). */
+/** `SquadMember[]` -> `members` 파일 본문. 줄은 `<이름>` 또는 `<이름> <역할>`(역할이 있을
+ *  때만) — 0개면 빈 파일이다(§5-5 §값: 파서가 없어 빈 파일도 "멤버 0"으로 그냥 읽힌다).
+ *  마켓 배포(`lib/market.ts`)가 같은 모양을 써야 해서 저장과 별도로 뗀다. */
+export function squadMembersFileText(members: SquadMember[]): string {
+  const lines = members.map((m) => (m.role ? `${m.name} ${m.role}` : m.name));
+  return lines.length > 0 ? lines.join("\n") + "\n" : "";
+}
+
+/** 저장. */
 export async function saveSquadMembers(dir: string, name: string, members: SquadMember[]): Promise<void> {
   const file = await squadMembersPath(dir, name);
   await mkdir(path.dirname(file), { recursive: true });
-  const lines = members.map((m) => (m.role ? `${m.name} ${m.role}` : m.name));
-  await writeFile(file, lines.length > 0 ? lines.join("\n") + "\n" : "", "utf8");
+  await writeFile(file, squadMembersFileText(members), "utf8");
 }
 
 /** 저장. 빈 값이면 파일을 지운다(= 없음, `writePersonaLimit`과 같은 규약 — §5-5 §개정 "없어도
