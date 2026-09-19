@@ -1352,6 +1352,27 @@ test("`중지` — SIGTERM 하나로 끝나고, 받은 글은 남고, 다음 질
   );
 });
 
+test("§7-7 결정 4 - `중지`가 걸어 둔 참견도 같이 걷는다, 디스크에 안 남는다", async () => {
+  const project = { id: "stop-interject-test", name: "큐", root: CWD };
+  await withFake("hang", async () => {
+    const p = poller(project.id);
+    assert.strictEqual(await startAsk(project, "긴 질문"), null);
+    await p.until((c) => c.partial !== "");
+
+    const sid = await readSessionId(project.id);
+    assert.ok(sid);
+    assert.strictEqual(sayAsk(sid, "참견"), true);
+    const mid = await p.until((c) => c.pendingInterject !== null);
+    assert.strictEqual(mid.pendingInterject, "참견");
+
+    assert.strictEqual(stopAsk(sid), true);
+    const end = await p.until((c) => !c.running);
+    // 말풍선(트랜스크립트)이 아니라 **서버가 붙든 대기 표시**만 걷힌다 - `runs`가 인메모리라
+    // 이 값은 파일 어디에도 안 쓰인다(§Done when - 앱을 껐다 켜면 없다)
+    assert.strictEqual(end.pendingInterject, null);
+  });
+});
+
 test("실패 ③ 재정의 — 자식이 결과 객체 없이 죽으면 종료 코드(신호) · stderr 꼬리가 뜬다 (kill -9 실측)", async () => {
   const project = { id: "crash-test", name: "큐", root: CWD };
   const pidFile = path.join(mkdtempSync(path.join(tmpdir(), "ha-pid-")), "pid");
@@ -1403,11 +1424,15 @@ test("sayAsk — 도는 자식에게만 가고 다음 턴으로 선다, 참견 1
     // 새 `runs` 항목이 안 생겼다 — 도는 세션은 여전히 그 하나다(§안 갈리는 것 — 큐잉 층 0줄)
     const after = await p.next();
     assert.deepStrictEqual(after.runningSessions, [sid]);
+    // §7-7 결정 4 - 밀자마자 그 글을 서버가 붙든다(`pollHome`이 이 값을 화면에 내려 준다)
+    assert.strictEqual(after.pendingInterject, "참견");
 
     // **참견 1개 = result 2개** — 첫 턴이 끝나도 stdin이 안 닫혀 둘째 턴이 돌고, 둘 다 실린다
     const end = await p.until((c) => !c.running);
     assert.deepStrictEqual(p.turns, ["물음", "첫 답", "참견", "참견 답"]);
     assert.strictEqual(end.failed, null);
+    // 다음 result가 그 참견의 처분을 정본에 넘겼다 - 붙든 값도 같이 걷힌다
+    assert.strictEqual(end.pendingInterject, null);
     // 왕복 전체가 **한 프로세스**다(§안 갈리는 것) — 다음 질문도 같은 대화(--resume)로 잇는다
     assert.strictEqual(isAsking(project.id), false);
   });

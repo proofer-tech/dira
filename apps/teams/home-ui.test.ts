@@ -130,3 +130,24 @@ test("run()이 echoIsInterject를 false로 세우는 자리가 anyRunning만 참
   const runBody = s.slice(runA, runB);
   assert.ok(runBody.includes("setEcho(question);\n    setEchoIsInterject(false);"), "run()의 echo 다음 줄이 setEchoIsInterject(false)가 아니다 — anyRunning만 참이고 이 대화가 놀 때(run 경로) 기다리는 줄이 켜진다");
 });
+
+// 티켓 f7df9724(§7-7 결정 4): 대기 중인 참견의 붙드는 자리를 화면 state에서 서버로 옮긴다 -
+// 프로젝트를 옮겼다 오거나 새로고침해도 `initial`(page.tsx의 `pollHome` 한 번)이 그 값을 데려온다.
+test("echo, echoIsInterject의 씨앗이 `initial.pendingInterject`다 - 프로젝트를 옮겼다 오거나 새로고침해도 서버가 붙든 값을 그대로 받는다", () => {
+  assert.ok(
+    s.includes("const [echo, setEcho] = useState<string | null>(initial.pendingInterject);"),
+    "echo의 초기값이 initial.pendingInterject가 아니다 - 리마운트에서 서버 값을 안 받는다",
+  );
+  assert.ok(
+    s.includes("const [echoIsInterject, setEchoIsInterject] = useState(initial.pendingInterject !== null);"),
+    "echoIsInterject의 초기값이 initial.pendingInterject 유무로 안 갈린다",
+  );
+});
+
+test("apply()도 갈아탄 대화의 pendingInterject로 echo 씨앗을 다시 심는다 - 대화 전환도 같은 서버 붙듦을 탄다", () => {
+  const applyA = s.indexOf("const apply = (c: HomeChunk) => {");
+  const applyB = s.indexOf("\n  };", applyA);
+  const applyBody = s.slice(applyA, applyB);
+  assert.ok(applyBody.includes("setEcho(c.pendingInterject);"), "apply()가 echo를 무조건 null로 걷는다 - 그 대화가 붙들고 있던 참견을 놓친다");
+  assert.ok(applyBody.includes("setEchoIsInterject(c.pendingInterject !== null);"), "apply()가 echoIsInterject를 안 맞춘다 - 기다리는 줄 조건이 어긋난다");
+});

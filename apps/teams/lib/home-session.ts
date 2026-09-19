@@ -971,6 +971,12 @@ export type Live = {
   /** 아직 안 온 `result` 수(§안 갈리는 것 — 민 줄 수만큼 본 순간 닫는다). spawn 직후 1(최초
    *  질문)이고, `sayAsk`가 한 줄 밀 때마다 1씩 는다. 0이 되는 순간 실행층이 stdin을 닫는다. */
   pendingResults: number;
+  /** §7-7 결정 4 - **아직 정본에 안 뜬 참견 한 줄**. `sayAsk`가 밀 때 적고, 다음 `result`가
+   *  오거나(그 참견이 그 턴 안에 실렸든 다음 턴으로 밀렸든, 화면의 기존 판정과 같은 굵기로
+   *  본다) `stopAsk`가 부르면 지운다. `pollHome`이 이 값을 `HomeChunk.pendingInterject`로
+   *  내려 화면의 `initial` 첫 렌더가 이 값을 그대로 받는다 - 프로젝트를 옮겼다 오거나
+   *  새로고침해도 같은 왕복 하나가 이걸 데려온다(붙드는 자리는 서버, 화면 state가 아니다). */
+  pendingInterject: string | null;
 };
 
 export const newLive = (): Live => ({
@@ -982,6 +988,7 @@ export const newLive = (): Live => ({
   lastAnswer: null,
   stdinOpen: false,
   pendingResults: 0,
+  pendingInterject: null,
 });
 
 /** 질문 하나 = 프로세스 하나(§7). 첫 질문이 세션을 열고 다음 질문이 그것을 잇는다.
@@ -1448,6 +1455,7 @@ export async function runClaudeAt(
         if (r) {
           result = r;
           live.pendingResults -= 1;
+          live.pendingInterject = null; // §7-7 결정 4 - 다음 result가 그 참견의 처분을 정본에 넘긴다
         }
       }
       closeStdinIfDone();
@@ -1478,6 +1486,7 @@ export async function runClaudeAt(
         if (r) {
           result = r;
           live.pendingResults -= 1;
+          live.pendingInterject = null; // 위 stdout 분기와 같은 판정
         }
       }
       // **사람이 멈춘 것이 먼저다.** `SIGTERM`을 받은 `claude`는 스스로 rc 143으로 나가면서
@@ -1628,6 +1637,7 @@ export function stopAsk(sessionId: string): boolean {
   if (!live || live.stopping) return false;
   live.stopping = true; // 아직 spawn 전이면 `runClaude`가 뜨자마자 이걸 보고 죽인다
   live.stdinOpen = false; // 죽는 자식에는 더 밀 것이 없다(`sayAsk`가 이 값을 본다)
+  live.pendingInterject = null; // §7-7 결정 4 - 대화가 죽으면 대기 표시도 같이 죽는다
   live.child?.kill("SIGTERM");
   return true;
 }
@@ -1644,6 +1654,7 @@ export function sayAsk(sessionId: string, text: string): boolean {
   const live = runs.get(sessionId)?.live;
   if (!live || !live.child?.stdin || !live.stdinOpen || live.stopping) return false;
   live.pendingResults += 1; // 이 줄의 `result`도 실행층이 기다려야 stdin이 안 일찍 닫힌다
+  live.pendingInterject = text; // §7-7 결정 4 - 다음 `result`가 올 때까지 이 글을 붙든다
   live.child.stdin.write(
     `${JSON.stringify({ type: "user", message: { role: "user", content: [{ type: "text", text }] } })}\n`,
   );
@@ -1922,6 +1933,11 @@ export type HomeChunk = {
    *  (§9 §클라이언트가 폴링하는 자리 — `tailSession`의 `refs`와 같은 계약). `mayHaveRefs`가
    *  그 모양을 못 찾으면(대부분의 회차) 빈 인덱스고 `listTickets`를 다시 안 돈다. */
   refs: RefIndex;
+  /** §7-7 결정 4 - 아직 정본에 안 뜬 참견 한 줄. 출처는 `entry.live.pendingInterject`이고
+   *  `running`이 아니면 언제나 `null`이다(`partial`과 같은 판정 - 붙드는 자리가 그 자식이라
+   *  자식이 없으면 붙들 것도 없다). 화면은 이 값을 첫 렌더(`initial`)의 `echo` 씨앗으로만
+   *  쓴다 - 그 뒤로 참견을 지우는 판정은 종전 그대로(`turns`가 새로 오면 걷는다) 안 갈린다. */
+  pendingInterject: string | null;
 };
 
 const NO_REFS: RefIndex = { tickets: {}, epics: {} };
@@ -2047,6 +2063,7 @@ export async function pollHome(
       failed,
       answered,
       refs: NO_REFS,
+      pendingInterject: running ? (entry?.live.pendingInterject ?? null) : null,
     });
   }
 
@@ -2082,6 +2099,7 @@ export async function pollHome(
           ? { ...done, ok: false, reason: "no-transcript", output: `~/.claude/projects/*/${sid}.jsonl` }
           : null),
       refs: NO_REFS,
+      pendingInterject: running ? (entry?.live.pendingInterject ?? null) : null,
     });
   }
   const r = await tailEvents(file, at, false, locale);
@@ -2139,5 +2157,6 @@ export async function pollHome(
     failed,
     answered,
     refs,
+    pendingInterject: running ? (entry?.live.pendingInterject ?? null) : null,
   });
 }

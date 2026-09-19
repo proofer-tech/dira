@@ -381,11 +381,15 @@ export function HomeUI({
   const [activity, setActivity] = useState<Activity | null>(initial.activity);
   // **보낸 질문의 낙관적 말풍선**(§7 §천장이 없다 ③). 정본은 트랜스크립트다 — 첫 폴링이 그 줄을
   // 데려오면(`turns`가 늘어나면) 내린다. 실패하면 즉시 내리고 글이 입력칸으로 돌아온다.
-  const [echo, setEcho] = useState<string | null>(null);
+  // **씨앗이 `initial.pendingInterject`인 이유**(§7-7 결정 4) - 아직 정본에 안 뜬 참견은 이
+  // 컴포넌트가 새로 마운트되는 그 자리(프로젝트를 옮겼다 오거나 새로고침)에서 서버가 붙들고
+  // 있던 값을 그대로 받는다. 그 뒤로 내리는 판정은 위 주석 그대로 안 갈린다 - `turns`가 늘면
+  // 아래 poll 효과가 `null`로 내린다.
+  const [echo, setEcho] = useState<string | null>(initial.pendingInterject);
   // **그 echo가 참견에서 왔는가**(§비주얼 §기다리는 창). 보통 질문의 echo는 running이 아직
   // 거짓인 동안 뜨고(§24 그쪽엔 답 띠가 바로 붙는다), 참견의 echo는 running이 이미 참인 동안
   // 뜬다 — 그래서 이 값이 없으면 기다리는 줄이 첫 질문에도 켜진다.
-  const [echoIsInterject, setEchoIsInterject] = useState(false);
+  const [echoIsInterject, setEchoIsInterject] = useState(initial.pendingInterject !== null);
   // **도는 동안 받은 글**(§7 §답은 흐른다). 출처가 `turns`와 다르다 — 이건 자식의 stdout이고
   // 저건 트랜스크립트다. 끝나는 순간 서버가 빈 문자열을 주고 같은 응답의 `turns`가 그 답을
   // 진짜 줄로 데려온다. **한 답이 두 벌로 안 그려지는 자리가 그 교대다** — 여기서 다시 안 막는다.
@@ -840,7 +844,10 @@ export function HomeUI({
     setActivity(c.activity);
     setStopping(false);
     setFail(c.failed);
-    setEcho(null); // 갈아탄 대화의 것이 아니다 — 앞 대화에서 보낸 에코를 여기로 안 옮긴다
+    // 갈아탄 대화의 echo로 씨앗을 다시 심는다(§7-7 결정 4) - 앞 대화에서 보낸 에코를 여기로
+    // 안 옮기는 것은 그대로다, `c.pendingInterject`는 **이 대화가 붙들고 있던** 값이다.
+    setEcho(c.pendingInterject);
+    setEchoIsInterject(c.pendingInterject !== null);
     setPendingSchedule(null); // 실제 세션으로 갈아탔다 — 회차 0건 스케줄 화면은 이 자리가 아니다
   };
 
