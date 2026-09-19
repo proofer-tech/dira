@@ -37,6 +37,20 @@ test("랜딩-only — /p/**·/api/**가 404 (메서드 무관)", () => {
   }
 });
 
+test("랜딩-only — /market도 404다(§페르소나 마켓 §화면)", () => {
+  process.env.DIRA_LANDING_ONLY = "1";
+  try {
+    assert.strictEqual(proxy(req("/market")).status, 404);
+  } finally {
+    delete process.env.DIRA_LANDING_ONLY;
+  }
+});
+
+test("풀 모드 — /market은 통과한다", () => {
+  delete process.env.DIRA_LANDING_ONLY;
+  assert.ok(isPassthrough(proxy(req("/market"))));
+});
+
 test("랜딩-only — 홈의 서버 액션(POST + next-action)이 거절된다", () => {
   process.env.DIRA_LANDING_ONLY = "1";
   try {

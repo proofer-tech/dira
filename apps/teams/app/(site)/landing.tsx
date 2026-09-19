@@ -425,6 +425,9 @@ export default function Landing({
           §비주얼 §46 ③). `btn-manual`은 풀 모드에서만 붙는다 — 랜딩-only 헤더(넷 이하)는
           이 접힘 규칙 밖이다. */}
       <a className={fullMode ? "btn btn-manual" : "btn"} href="/docs/">{t("landing.nav.manualLink")}</a>
+      {/* 들어오는 링크 둘 중 하나(DESIGN.md §페르소나 마켓 §화면, §비주얼 §79 ①). 랜딩-only에서는
+          `/market`이 404라 풀 모드에서만 붙인다 — `매뉴얼` 링크와 같은 자리, 같은 값. */}
+      {fullMode && <a className="btn" href="/market">{t("market.title")}</a>}
       <a className="btn star"
          href="https://github.com/proofer-tech/dira" target="_blank" rel="noopener"
          aria-label="Star proofer-tech/dira on GitHub">

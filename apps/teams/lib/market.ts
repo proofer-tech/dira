@@ -433,17 +433,17 @@ export async function importPersona(
 }
 
 export type ImportSquadResult =
-  | { ok: true; missingInMarket: string[] }
+  | { ok: true; missingInMarket: string[]; coImported: string[] }
   | { ok: false; reason: ImportReason };
 
 /** 스쿼드 가져오기. `members`를 원문 그대로 쓴다(줄 순서·첫 줄(리더) 보존 — 다시 조립하지
  *  않는다). 대상에 없는 멤버 페르소나는 같은 소유 프로젝트의 마켓 최신 버전으로 같이 가져오되
- *  대상에 이미 있는 이름은 건드리지 않는다(`missingSquadMembers`). 마켓에도 없는 멤버는
- *  `missingInMarket`에 담기고 가져오기 자체는 성공한다(엔진이 프로필 없는 멤버를 WARN으로
- *  넘기므로 큐가 멎지 않는다) — 멤버 쪽 `notFound`만 이렇게 삼키고, 그 밖의 이유(이름 규칙 위반
- *  등)는 없다: 멤버 이름은 `members` 파일에서 그대로 읽은 값이라 `NAME_RE`를 벗어나도 여기서는
- *  걸러지지 않고 `importPersona`가 `invalidName`으로 실패시키면 그 멤버도 조용히 건너뛴다 —
- *  마켓에 없는 것과 같은 결과라 목록을 하나로 합친다. */
+ *  대상에 이미 있는 이름은 건드리지 않는다(`missingSquadMembers`). 실제로 같이 들어온 이름은
+ *  `coImported`, 마켓에도 없어 못 들어온 이름은 `missingInMarket`에 담기고 가져오기 자체는
+ *  성공한다(엔진이 프로필 없는 멤버를 WARN으로 넘기므로 큐가 멎지 않는다) — 멤버 쪽 `notFound`만
+ *  이렇게 삼키고, 그 밖의 이유(이름 규칙 위반 등)는 없다: 멤버 이름은 `members` 파일에서 그대로
+ *  읽은 값이라 `NAME_RE`를 벗어나도 여기서는 걸러지지 않고 `importPersona`가 `invalidName`으로
+ *  실패시키면 그 멤버도 조용히 건너뛴다 — 마켓에 없는 것과 같은 결과라 목록을 하나로 합친다. */
 export async function importSquad(
   owner: string,
   name: string,
@@ -462,14 +462,54 @@ export async function importSquad(
   const memberNames = squadMemberNames(item.members);
   const missing = missingSquadMembers(memberNames, await personaNames(targetPersonasDir));
   const missingInMarket: string[] = [];
+  const coImported: string[] = [];
   for (const member of missing) {
     const r = await importPersona(owner, member, targetPersonasDir, member, false);
-    if (!r.ok) missingInMarket.push(member); // notFound(마켓에 없음)와 invalidName 둘 다 여기로
+    if (r.ok) coImported.push(member);
+    else missingInMarket.push(member); // notFound(마켓에 없음)와 invalidName 둘 다 여기로
   }
 
   await mkdir(targetSquadsDir, { recursive: true });
   const dest = await resolveWithin(targetSquadsDir, asName);
   await mkdir(dest, { recursive: true });
   await writeFile(path.join(dest, "members"), item.members, "utf8");
-  return { ok: true, missingInMarket };
+  return { ok: true, missingInMarket, coImported };
+}
+
+// ── 화면 (DESIGN.md §페르소나 마켓 §화면, 티켓 `0aac85ef`) ───────────────────────
+
+/** 본문 첫 줄. `epicTitle`(`epics.ts`)과 같은 한 줄짜리 규칙이고 파일이 이 앱에서 세 번째로
+ *  쓴다 — 공유 헬퍼로 안 뽑는다(자리마다 "없으면 무엇"이 갈린다: 여긴 빈 문자열, 그쪽은
+ *  `null`). 검색 판정과 화면 표시 둘 다 여기로 지난다. */
+export function firstLine(text: string): string {
+  return text.split("\n").find((l) => l.trim() !== "")?.trim() ?? "";
+}
+
+/** 검색 판정 — 이름·소유 프로젝트 이름·태그·`PROFILE.md` 첫 줄을 훑는다(§화면). 순수 함수 —
+ *  `profileFirstLine`은 호출자가 `getMarketItem`으로 미리 뽑아 넘긴다(페르소나가 아니면 빈
+ *  문자열). 빈 검색어는 항상 참이다. */
+export function matchesMarketSearch(
+  item: Pick<MarketItem, "name" | "ownerName" | "tags">,
+  profileFirstLine: string,
+  query: string,
+): boolean {
+  const q = query.trim().toLowerCase();
+  if (q === "") return true;
+  const hay = [item.name, item.ownerName, ...item.tags, profileFirstLine].join(" ").toLowerCase();
+  return hay.includes(q);
+}
+
+/** 이 항목을 가져간 프로젝트 이름 목록 — 카드의 "가져간 곳" 표식(§화면 §카드 상태 넷)이 읽는
+ *  값이다. 순수 함수 — `readProjects()`가 이미 읽은 레지스트리를 호출자가 넘긴다(항목 수만큼
+ *  다시 레지스트리를 읽지 않는다). */
+export function projectsThatImported(
+  kind: MarketKind,
+  owner: string,
+  name: string,
+  projects: { name: string; market?: { personas: Record<string, { owner: string; name: string }>; squads: Record<string, { owner: string; name: string }> } }[],
+): string[] {
+  const bucket = kind === "persona" ? "personas" : "squads";
+  return projects
+    .filter((p) => Object.values(p.market?.[bucket] ?? {}).some((e) => e.owner === owner && e.name === name))
+    .map((p) => p.name);
 }

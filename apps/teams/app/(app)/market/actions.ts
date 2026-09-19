@@ -16,12 +16,15 @@ import {
   getMarketItem,
   importPersona,
   importSquad,
+  toggleFavorite,
   type ImportReason,
+  type MarketItemDetail,
+  type MarketKind,
 } from "@/lib/market";
 import { getProject, resolveConfig, setMarketInstall, squadsDir } from "@/lib/projects";
 
 export type ImportResult =
-  | { ok: true; missingInMarket?: string[] }
+  | { ok: true; as: string; missingInMarket?: string[]; coImported?: string[] }
   | { ok: false; conflict?: true; message: string };
 
 function reasonMessage(reason: ImportReason, asName: string, locale: Locale): string {
@@ -55,7 +58,7 @@ export async function importPersonaAction(
     await setMarketInstall(projectId, "personas", to, { owner, name, v }, locale);
     revalidatePath(`/p/${projectId}/personas`);
     revalidatePath("/market");
-    return { ok: true };
+    return { ok: true, as: to };
   } catch (e) {
     return { ok: false, message: (e as Error).message };
   }
@@ -87,8 +90,24 @@ export async function importSquadAction(
     await setMarketInstall(projectId, "squads", to, { owner, name, v }, locale);
     revalidatePath(`/p/${projectId}/personas`);
     revalidatePath("/market");
-    return { ok: true, missingInMarket: r.missingInMarket };
+    return { ok: true, as: to, missingInMarket: r.missingInMarket, coImported: r.coImported };
   } catch (e) {
     return { ok: false, message: (e as Error).message };
   }
+}
+
+/** 즐겨찾기 켜기/끄기(§화면, 티켓 `0aac85ef`) — `favorites.json` 읽고 쓰는 유일한 서버 액션.
+ *  갱신된 배열을 그대로 돌려준다 — 클라이언트가 목록을 다시 안 읽어도 켜짐 상태를 안다. */
+export async function toggleFavoriteAction(id: string): Promise<string[]> {
+  return toggleFavorite(id);
+}
+
+/** 항목 상세(`PROFILE.md`/`members` 본문 · `skills.md`)를 다이얼로그가 열릴 때 지연 로드한다
+ *  (§화면 §상세). 목록은 이미 메타(태그·버전·즐겨찾기)를 들고 있으므로 본문만 더 받는다. */
+export async function getMarketItemDetailAction(
+  kind: MarketKind,
+  owner: string,
+  name: string,
+): Promise<MarketItemDetail | null> {
+  return getMarketItem(kind, owner, name);
 }

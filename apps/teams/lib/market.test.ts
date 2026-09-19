@@ -12,6 +12,7 @@ const {
   appendInstall,
   deployPersona,
   deploySquad,
+  firstLine,
   getMarketItem,
   importPersona,
   importSquad,
@@ -21,11 +22,13 @@ const {
   marketInstallsPath,
   marketItemId,
   marketRecord,
+  matchesMarketSearch,
   missingMarketMembers,
   missingSquadMembers,
   needsUpdate,
   nextVersion,
   parseMarketItemId,
+  projectsThatImported,
   readFavorites,
   squadMemberNames,
   toggleFavorite,
@@ -311,7 +314,7 @@ test("importSquad — 대상에 없는 멤버를 마켓에서 같이 가져오�
   writeFileSync(path.join(personasDir, "qa", "PROFILE.md"), "# 로컬에서 고친 qa\n", "utf8");
 
   const r = await importSquad("dira", "default", squadsDir, personasDir, "default");
-  assert.deepEqual(r, { ok: true, missingInMarket: ["ghost"] });
+  assert.deepEqual(r, { ok: true, missingInMarket: ["ghost"], coImported: ["pm"] });
   assert.equal(readFileSync(path.join(squadsDir, "default", "members"), "utf8"), "pm 리더\nqa\nghost\n");
   assert.equal(readFileSync(path.join(personasDir, "pm", "PROFILE.md"), "utf8"), "# pm\n"); // 마켓에서 새로 옴
   assert.equal(readFileSync(path.join(personasDir, "qa", "PROFILE.md"), "utf8"), "# 로컬에서 고친 qa\n"); // 안 건드림
@@ -381,4 +384,30 @@ test("marketRecord — 설치 버전이 이미 최신이면 update는 null", asy
   } finally {
     process.env.TICKET_LOCAL = prev;
   }
+});
+
+test("firstLine — 빈 줄을 건너뛰고 첫 내용 줄을 다듬어 돌려준다", () => {
+  assert.equal(firstLine("\n\n  writer 페르소나\n둘째 줄\n"), "writer 페르소나");
+  assert.equal(firstLine("\n \n"), "");
+});
+
+test("matchesMarketSearch — 이름·소유·태그·프로필 첫 줄 중 하나만 맞아도 통과한다", () => {
+  const item = { name: "writer", ownerName: "dira teams", tags: ["글", "한국어"] };
+  assert.equal(matchesMarketSearch(item, "글 쓰는 페르소나", ""), true); // 빈 검색어는 항상 참
+  assert.equal(matchesMarketSearch(item, "글 쓰는 페르소나", "writer"), true); // 이름
+  assert.equal(matchesMarketSearch(item, "글 쓰는 페르소나", "DIRA TEAMS"), true); // 소유, 대소문자 무시
+  assert.equal(matchesMarketSearch(item, "글 쓰는 페르소나", "한국어"), true); // 태그
+  assert.equal(matchesMarketSearch(item, "글 쓰는 페르소나", "쓰는"), true); // 프로필 첫 줄
+  assert.equal(matchesMarketSearch(item, "글 쓰는 페르소나", "포폴"), false); // 어디에도 없다
+});
+
+test("projectsThatImported — owner·name이 맞는 레지스트리 칸이 있는 프로젝트 이름만 뽑는다", () => {
+  const projects: { name: string; market?: { personas: Record<string, { owner: string; name: string }>; squads: Record<string, { owner: string; name: string }> } }[] = [
+    { name: "pofol", market: { personas: { writer: { owner: "dira", name: "writer" } }, squads: {} } },
+    { name: "acme", market: { personas: {}, squads: { default: { owner: "dira", name: "default" } } } },
+    { name: "empty" },
+  ];
+  assert.deepEqual(projectsThatImported("persona", "dira", "writer", projects), ["pofol"]);
+  assert.deepEqual(projectsThatImported("squad", "dira", "default", projects), ["acme"]);
+  assert.deepEqual(projectsThatImported("persona", "dira", "reviewer", projects), []);
 });

@@ -14,14 +14,22 @@ import { NextResponse, type NextRequest } from "next/server.js";
 import { isLandingOnly } from "./lib/flags.ts";
 
 export const config = {
-  matcher: ["/", "/p/:path*", "/api/:path*"],
+  matcher: ["/", "/p/:path*", "/api/:path*", "/market"],
 };
 
 export function proxy(request: NextRequest) {
   if (!isLandingOnly()) return NextResponse.next();
 
   const { pathname } = request.nextUrl;
-  if (pathname === "/p" || pathname.startsWith("/p/") || pathname === "/api" || pathname.startsWith("/api/")) {
+  if (
+    pathname === "/p" ||
+    pathname.startsWith("/p/") ||
+    pathname === "/api" ||
+    pathname.startsWith("/api/") ||
+    // 마켓도 레지스트리·마켓 저장소를 읽는 화면이라 §플래그의 fs 요건에 걸린다(§페르소나 마켓
+    // §화면). `/p/**`와 같은 경계 — 서브경로가 없어 `startsWith` 없이 정확히 하나만 막는다.
+    pathname === "/market"
+  ) {
     return new NextResponse(null, { status: 404 });
   }
   if (request.method === "POST" && request.headers.has("next-action")) {
