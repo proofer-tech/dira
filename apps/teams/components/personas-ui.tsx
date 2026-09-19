@@ -114,6 +114,7 @@ import {
   SQUAD_BLOCK_MAX_BYTES,
   squadBlockBytes,
 } from "@/lib/budgets";
+import { deployNoteHintKey, shouldResetDeployForm } from "@/lib/deploy-form";
 import type { MarketRecord } from "@/lib/market";
 import { skillUploadError } from "@/lib/skill-upload-limit";
 import type { Memory, Skill } from "@/lib/skills";
@@ -1034,7 +1035,10 @@ function DeployButton({
           ? await deployPersonaAction(projectId, name, note, tagList())
           : await deploySquadAction(projectId, name, note, tagList());
       setResult(r);
-      if (r.ok) setOpen(false);
+      if (shouldResetDeployForm(r)) {
+        setOpen(false);
+        reset();
+      }
     });
 
   const onSubmit = () => {
@@ -1116,6 +1120,9 @@ function DeployButton({
                 onChange={(e) => setNote(e.target.value)}
                 placeholder={t("market.deploy.notePlaceholder")}
               />
+              {deployNoteHintKey(note) && (
+                <p className="text-xs text-muted-foreground">{t(deployNoteHintKey(note)!)}</p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="market-deploy-tags">{t("market.deploy.tagsLabel")}</Label>

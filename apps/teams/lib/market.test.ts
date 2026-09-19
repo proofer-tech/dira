@@ -3,6 +3,7 @@ import assert from "node:assert";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { deployNoteHintKey, shouldResetDeployForm } from "./deploy-form.ts";
 
 // 진짜 마켓(~/.config/dira/market/)을 밟지 않는다. import 전에 건다(projects.test.ts 선례).
 const LOCAL = mkdtempSync(path.join(tmpdir(), "fst-market-local-"));
@@ -165,6 +166,17 @@ test("missingMarketMembers — 마켓에 없는 이름만 순서대로 뽑는다
   assert.deepEqual(missingMarketMembers(["a", "b", "c"], ["b"]), ["a", "c"]);
   assert.deepEqual(missingMarketMembers(["a", "b"], ["a", "b"]), []);
   assert.deepEqual(missingMarketMembers([], ["a"]), []);
+});
+
+test("deployNoteHintKey — 노트가 비었을 때만 안내 문구 키를 돌려준다 (티켓 22dc0696)", () => {
+  assert.equal(deployNoteHintKey(""), "market.deploy.noteRequiredHint");
+  assert.equal(deployNoteHintKey("   "), "market.deploy.noteRequiredHint"); // 공백만 있어도 비었다고 본다
+  assert.equal(deployNoteHintKey("첫 배포"), null);
+});
+
+test("shouldResetDeployForm — 배포가 성공했을 때만 폼을 비운다 (티켓 22dc0696)", () => {
+  assert.equal(shouldResetDeployForm({ ok: true }), true);
+  assert.equal(shouldResetDeployForm({ ok: false }), false); // 실패 값은 그대로 남겨 고쳐 쓰게 한다
 });
 
 test("deployPersona — 빈 노트는 거절하고 마켓 디렉터리에 아무것도 안 남는다", async () => {
