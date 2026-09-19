@@ -16,7 +16,8 @@ import {
   toggleFavoriteAction,
   type ImportResult,
 } from "@/app/(app)/market/actions";
-import { matchesMarketSearch, type MarketItemDetail, type MarketKind } from "@/lib/market";
+import type { MarketItemDetail, MarketKind } from "@/lib/market";
+import { matchesMarketSearch } from "@/lib/market-search";
 import type { Locale } from "@/lib/i18n";
 import { EmptyState } from "@/components/empty-state";
 import { Markdown } from "@/components/markdown";

@@ -13,6 +13,7 @@ import { appendFile, mkdir, readFile, readdir, rename, writeFile } from "node:fs
 import path from "node:path";
 import { NAME_RE, PROJECT_ID_RE, localDir, resolveWithin } from "./paths.ts";
 import { personaNames, squadNames } from "./projects.ts";
+export { matchesMarketSearch } from "./market-search.ts";
 
 export type MarketKind = "persona" | "squad";
 
@@ -483,20 +484,6 @@ export async function importSquad(
  *  `null`). 검색 판정과 화면 표시 둘 다 여기로 지난다. */
 export function firstLine(text: string): string {
   return text.split("\n").find((l) => l.trim() !== "")?.trim() ?? "";
-}
-
-/** 검색 판정 — 이름·소유 프로젝트 이름·태그·`PROFILE.md` 첫 줄을 훑는다(§화면). 순수 함수 —
- *  `profileFirstLine`은 호출자가 `getMarketItem`으로 미리 뽑아 넘긴다(페르소나가 아니면 빈
- *  문자열). 빈 검색어는 항상 참이다. */
-export function matchesMarketSearch(
-  item: Pick<MarketItem, "name" | "ownerName" | "tags">,
-  profileFirstLine: string,
-  query: string,
-): boolean {
-  const q = query.trim().toLowerCase();
-  if (q === "") return true;
-  const hay = [item.name, item.ownerName, ...item.tags, profileFirstLine].join(" ").toLowerCase();
-  return hay.includes(q);
 }
 
 /** 이 항목을 가져간 프로젝트 이름 목록 — 카드의 "가져간 곳" 표식(§화면 §카드 상태 넷)이 읽는
