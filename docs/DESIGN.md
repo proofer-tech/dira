@@ -60652,7 +60652,7 @@ GUI 둘(`apps/teams/lib/workers.ts` - `apps/teams/lib/scaffold.ts`)이고, `tick
 | P428-3 | `alert` - `kind: feedback` 한 장 + `osascript` 알림, 코드마다 하나. §사람을 부르는 자리 | developer | P428-1 | 발행 |
 | P428-4 | GUI가 `watchdog.sh`를 프로젝트마다 쓰고 크론 한 줄을 등록-해제한다. `dispatchGateSh`와 같은 자리 | developer | P428-1 | 발행 |
 | P428-5 | QA - §수용조건 아홉을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P428-2, P428-3, P428-4 | 발행 |
-| P428-6 | 새 프로젝트가 `watchdog_gates.py`와 `watchdog_alert.py`도 받는다 - `templates/` 둘 + `TEMPLATE_FILES` 두 줄 | developer | P428-4 | 발행 |
+| P428-6 | 새 프로젝트가 `watchdog_gates.py`와 `watchdog_alert.py`도 받는다 - `templates/` 둘 + `TEMPLATE_FILES` 두 줄 | developer | - | 발행 |
 
 **P428-6은 두 파일을 `templates/`에 둔다.** 지적이 올린 갈래는 셋이었다. 배선을 다음 회차로
 미루는 길은 그동안 새 프로젝트의 크론이 5분마다 죽은 명령을 부르니 버린다. 셋을 합쳐
@@ -60660,6 +60660,10 @@ GUI 둘(`apps/teams/lib/workers.ts` - `apps/teams/lib/scaffold.ts`)이고, `tick
 GUI의 `workers.ts`에 `WATCHDOG_SH`처럼 문자열 상수로 심는 길은 감시자 파일이 한 자리에 모인다는
 값이 있지만, python 원문에 백틱이 22개라 TS 템플릿 리터럴에 넣으려면 전부 이스케이프해야 하고
 그 순간 상수와 원본 파일의 바이트가 갈려 `watchdogState`의 `stale` 판정이 설 자리를 잃는다.
+
+**P428-4에 안 엮는다.** 두 파일을 `templates/`에 넣고 `TEMPLATE_FILES`에 두 줄을 더하는 일은
+`WATCHDOG_SH`가 `workers.ts`에 있든 없든 착수가 된다. 둘 다 `scaffold.ts`를 건드리지만 자리가
+갈려(`TEMPLATE_FILES` 배열 대 `put` 줄) rebase가 푼다.
 
 남는 길이 `templates/`다. 그 아래 경로가 곧 `.dira/` 아래 경로라는 1:1 규약(§0-3)을 쓰면
 `scaffold.ts`의 `TEMPLATE_FILES`에 두 줄을 더하는 것이 전부이고, 원본은 레포에 파일 그대로 남아
