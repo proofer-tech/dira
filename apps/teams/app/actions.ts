@@ -101,6 +101,9 @@ import {
   markAlertsRead,
   readIntegrationBranch,
   registerCron,
+  registerWatchdogCron,
+  unregisterWatchdogCron,
+  watchdogCronRegisterCmd,
   writeIntegrationBranch,
   writeOntology,
 } from "@/lib/workers";
@@ -327,6 +330,11 @@ export type CreateState = RegisterState & {
     cron: boolean;
     cronError?: string;
     registerCmd: string;
+    /** 감시자(`watchdog.sh`) crontab 줄 등록 결과 — `cron`/`cronError`와 같은 규약(P428-4 결함
+     *  수정). 실패해도 생성 자체는 안 막는다. */
+    watchdogCron: boolean;
+    watchdogCronError?: string;
+    watchdogRegisterCmd: string;
     /** 온톨로지 자리 칸을 채웠는데 거절됐다(§0-3 §온톨로지 자리를 만들 때 정한다). `cronError`와
      *  같은 규약 — 만들기는 되돌리지 않고, 사유와 함께 온톨로지 화면에서 다시 정하라고 안내한다. */
     ontologyError?: string;
@@ -395,6 +403,11 @@ export async function createProject(
       () => undefined,
       (e: Error) => e.message,
     );
+    // 감시자 crontab 줄도 같은 자리에서 등록한다(P428-4 결함 수정) — 실패해도 생성은 안 막는다.
+    const watchdogCronError = await registerWatchdogCron(made.root).then(
+      () => undefined,
+      (e: Error) => e.message,
+    );
     created = {
       root: made.root,
       repo: made.repo,
@@ -405,6 +418,9 @@ export async function createProject(
       ontologyError,
       denyCurrentBranchNote: made.denyCurrentBranchNote,
       registerCmd: cronRegisterCmd({ path: workerPath }),
+      watchdogCron: !watchdogCronError,
+      watchdogCronError,
+      watchdogRegisterCmd: watchdogCronRegisterCmd(made.root),
       skills: { installed: 0, skipped: 0, failed: 0 },
     };
 
@@ -504,12 +520,22 @@ export async function moveProjectAction(id: string, dir: -1 | 1): Promise<Action
   }
 }
 
-/** 레지스트리에서만 제거한다. 큐 파일은 손대지 않는다(제약 7). */
+/** 레지스트리에서 제거하고 감시자 crontab 줄도 뺀다(제약 7 — 큐 파일 자체는 손대지 않는다).
+ *  `removeProject` 전에 `root`를 먼저 잡아 둔다 — 지운 뒤에는 `getProject`가 못 찾는다.
+ *  crontab 해제가 실패해도 레지스트리 제거는 되돌리지 않는다(`cronError`와 같은 규약) — 줄이
+ *  하나 남는 것이 등록 자체를 막는 것보다 낫다. */
 export async function unregisterProjectAction(id: string): Promise<ActionResult> {
   try {
+    const root = (await getProject(id))?.root;
     await removeProject(id);
+    let message: string | undefined;
+    if (root) {
+      await unregisterWatchdogCron(root).catch((e: Error) => {
+        message = e.message;
+      });
+    }
     revalidatePath("/", "layout");
-    return { ok: true };
+    return { ok: true, message };
   } catch (e) {
     return { ok: false, message: (e as Error).message };
   }
