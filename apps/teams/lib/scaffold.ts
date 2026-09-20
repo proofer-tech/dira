@@ -50,6 +50,8 @@ const TEMPLATE_FILES = [
   "personas/designer/PROFILE.md",
   "personas/archive-manager/PROFILE.md",
   "squads/default/members",
+  "watchdog_gates.py",
+  "watchdog_alert.py",
 ];
 
 /** 자리표시자 3종 치환(§0-3 표). **문자열을 그대로 바꾼다** — 정규식도 템플릿 엔진도 안 쓴다.

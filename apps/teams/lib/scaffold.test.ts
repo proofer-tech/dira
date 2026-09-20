@@ -40,6 +40,8 @@ const SET = [
   ".dira/personas/designer/PROFILE.md",
   ".dira/personas/archive-manager/PROFILE.md",
   ".dira/squads/default/members",
+  ".dira/watchdog_gates.py",
+  ".dira/watchdog_alert.py",
   ".dira/workers/w1.sh",
   ".dira/self-heal.sh",
   ".dira/dispatch-gate.sh",
@@ -104,6 +106,15 @@ test("scaffold — §0-3 집합 그대로, 두 번째는 전부 skipped", async 
   const ontology = await readFile(path.join(project, ".dira/protocols/ontology.md"), "utf8");
   const ontologyTemplate = await readFile(path.join(repo.path, "templates/protocols/ontology.md"), "utf8");
   assert.equal(ontology, ontologyTemplate);
+
+  // (P428-6) watchdog_gates.py · watchdog_alert.py — 치환이 python을 안 깨뜨렸다는 판정.
+  // 자리표시자 없는 파일이라 바이트도 원본과 같아야 한다.
+  for (const name of ["watchdog_gates.py", "watchdog_alert.py"]) {
+    const written = await readFile(path.join(project, ".dira", name), "utf8");
+    const template = await readFile(path.join(repo.path, "templates", name), "utf8");
+    assert.equal(written, template);
+    execFileSync("python3", ["-c", "import ast,sys;ast.parse(open(sys.argv[1]).read())", path.join(project, ".dira", name)]);
+  }
 
   // (D1) 기본 스쿼드 default — 이름 넷, 역할 칸 없음, 끝이 개행 하나, rules는 안 만든다
   const members = await readFile(path.join(project, ".dira/squads/default/members"), "utf8");
