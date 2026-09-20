@@ -16,6 +16,8 @@ import {
   PUSH_SH_FILE,
   SELF_HEAL_FILE,
   SELF_HEAL_SH,
+  WATCHDOG_FILE,
+  WATCHDOG_SH,
   dispatchGateSh,
   engineRepo,
   firstWorkerBody,
@@ -233,6 +235,10 @@ export async function scaffold(
   await put("integration-branch", integrationBranchText(opts.branch));
   await put(SELF_HEAL_FILE, SELF_HEAL_SH);
   await put(DISPATCH_GATE_FILE, dispatchGateSh(opts.branch));
+  // 디스패치 감시자(DESIGN.md §디스패치 감시자, P428-4) — 같은 O_EXCL 규약, 자리표시자가
+  // 없어 상수를 그대로 쓴다. 크론 등록은 이 함수의 몫이 아니다(워커 첫 등록과 달리 이 티켓의
+  // 파일 범위 밖 — DESIGN.md P428-4 서두).
+  await put(WATCHDOG_FILE, WATCHDOG_SH);
   // 통합 push 헬퍼(DESIGN.md §통합 브랜치가 설정이 된다 결정 5) — `protocols/AGENTS.md`가 이미
   // `bash .dira/push.sh ship`을 시키므로 이 파일 없이는 세션이 없는 파일을 부른다. 실행 파일이라
   // `workers/w1.sh`와 같은 모드(0o755) — 세션이 `bash .dira/push.sh`로 부르니 +x가 필수는 아니지만

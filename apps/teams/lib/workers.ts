@@ -1775,6 +1775,28 @@ export function cronUnregisterCmd(worker: Pick<Worker, "path">): string {
   return `crontab -l | grep -Fv ${grepBothForms(worker.path)} | crontab -`;
 }
 
+/** 감시자(`watchdog.sh`)의 cron **1줄**(§디스패치 감시자 §계약) — 워커의 `cronLine`과 달리
+ *  등록 단위가 1줄이다: 5분 간격에 `sleep 30` 짝은 30초 폴링이 아니라서 뜻이 없다. 로그는
+ *  워커와 같은 `workers/runner.log`에 합류한다 — `diagnose`가 상태 바뀔 때만 `WATCHDOG` 줄을
+ *  낸다(§계약 로그 칸). */
+export function watchdogCronLine(root: string): string {
+  const sh = path.join(root, WATCHDOG_FILE);
+  const log = path.join(root, "workers", "runner.log");
+  return `*/5 * * * * ${dq(sh)} >> ${dq(log)} 2>&1`;
+}
+
+/** `cronRegisterCmd`와 같은 규약(먼저 지우고 넣는다, 두 형태 grep) — 등록 단위만 1줄이다. */
+export function watchdogCronRegisterCmd(root: string): string {
+  const sh = path.join(root, WATCHDOG_FILE);
+  const keep = `crontab -l 2>/dev/null | grep -Fv ${grepBothForms(sh)}`;
+  return `(${keep}; printf '%s\\n' ${sq(watchdogCronLine(root))}) | crontab -`;
+}
+
+/** `cronUnregisterCmd`와 같은 규약. */
+export function watchdogCronUnregisterCmd(root: string): string {
+  return `crontab -l | grep -Fv ${grepBothForms(path.join(root, WATCHDOG_FILE))} | crontab -`;
+}
+
 // ── crontab 쓰기 (제약 4 — 그 프로젝트의 워커 줄만) ─────────────────────────
 //
 // crontab은 **머신 전역**이다: 남의 프로젝트 큐와 사람의 무관한 잡이 같은 파일에 있다.
@@ -1803,6 +1825,18 @@ export function cronRegister(text: string, workerPath: string): string {
   const base = kept === "" || kept.endsWith("\n") ? kept : `${kept}\n`;
   return `${base}${cronLine({ path: workerPath })}\n`;
 }
+
+/** `cronRegister`와 같은 계산이지만 1줄(`watchdogCronLine`)만 넣는다. 경로가 다르면 `isWorkerLine`의
+ *  부분일치 판정이 그대로 통하므로 `cronUnregister`를 재사용한다 — 판정식을 새로 짓지 않는다. */
+export function watchdogCronRegister(text: string, root: string): string {
+  const kept = cronUnregister(text, path.join(root, WATCHDOG_FILE));
+  const base = kept === "" || kept.endsWith("\n") ? kept : `${kept}\n`;
+  return `${base}${watchdogCronLine(root)}\n`;
+}
+
+/** `cronUnregister`를 그대로 쓴다 — 판정이 경로 부분일치라 워커 줄과 다를 이유가 없다. */
+export const watchdogCronUnregister = (text: string, root: string): string =>
+  cronUnregister(text, path.join(root, WATCHDOG_FILE));
 
 /** 쓰기 직전의 읽기. `crontabText()`와 달리 **모든 실패를 빈 crontab으로 보지 않는다** —
  *  읽기 실패를 "비었다"로 오해하고 그 위에 쓰면 남의 줄이 전부 사라진다. 진짜로 비어 있는
@@ -1857,13 +1891,17 @@ export const cronWriteError = (stderr: string, locale: Locale = DEFAULT_LOCALE) 
  *
  *  돌려주는 값은 **crontab이 실제로 바뀌었는가**다. false = 이미 그 상태였다(no-op) — 중단이
  *  "이미 미등록입니다"를 에러가 아니라 사실로 말할 수 있는 근거가 이것뿐이다. */
+/** `matchKey`가 들어간 줄로 등록 여부를 잰다 — 계산은 `compute`(감시자는 1줄, 워커는 2줄)로
+ *  갈라진다. 워커 전용이던 것을 일반화했다(P428-4) — `registerWatchdogCron`도 이 하나를 쓴다,
+ *  판정식(`isWorkerLine`)·타임아웃·에러 변환을 새로 짓지 않는다. */
 async function applyCrontab(
-  workerPath: string,
+  matchKey: string,
   want: boolean,
+  compute: { register: (text: string) => string; unregister: (text: string) => string },
   locale: Locale = DEFAULT_LOCALE,
 ): Promise<boolean> {
   const before = await crontabForWrite(locale);
-  const next = want ? cronRegister(before, workerPath) : cronUnregister(before, workerPath);
+  const next = want ? compute.register(before) : compute.unregister(before);
   const changed = next !== before;
   if (changed) {
     await new Promise<void>((resolve, reject) => {
@@ -1877,7 +1915,7 @@ async function applyCrontab(
     });
   }
   const after = await crontabForWrite(locale);
-  if (after.split("\n").some((l) => isWorkerLine(l, workerPath)) !== want) {
+  if (after.split("\n").some((l) => isWorkerLine(l, matchKey)) !== want) {
     throw new Error(
       want
         ? t(locale, "workers.crontab.registerMismatch")
@@ -1889,10 +1927,38 @@ async function applyCrontab(
 
 /** 이 워커 줄 하나를 crontab에 넣는다(이미 있으면 그 줄을 새로 쓴다). */
 export const registerCron = (workerPath: string, locale: Locale = DEFAULT_LOCALE) =>
-  applyCrontab(workerPath, true, locale);
+  applyCrontab(
+    workerPath,
+    true,
+    { register: (t) => cronRegister(t, workerPath), unregister: (t) => cronUnregister(t, workerPath) },
+    locale,
+  );
 /** 이 워커 줄을 뺀다. 없으면 아무것도 쓰지 않는다. */
 export const unregisterCron = (workerPath: string, locale: Locale = DEFAULT_LOCALE) =>
-  applyCrontab(workerPath, false, locale);
+  applyCrontab(
+    workerPath,
+    false,
+    { register: (t) => cronRegister(t, workerPath), unregister: (t) => cronUnregister(t, workerPath) },
+    locale,
+  );
+
+/** 감시자(`watchdog.sh`) 줄 1개를 crontab에 넣는다 — `registerCron`과 같은 계약(실패·상한·재확인).
+ *  `applyCrontab`을 그대로 재사용한다 — 등록 단위만 1줄(`watchdogCronRegister`)로 갈린다. */
+export const registerWatchdogCron = (root: string, locale: Locale = DEFAULT_LOCALE) =>
+  applyCrontab(
+    path.join(root, WATCHDOG_FILE),
+    true,
+    { register: (t) => watchdogCronRegister(t, root), unregister: (t) => watchdogCronUnregister(t, root) },
+    locale,
+  );
+/** 감시자 줄을 뺀다. 없으면 아무것도 쓰지 않는다 — `unregisterCron`과 같은 계약. */
+export const unregisterWatchdogCron = (root: string, locale: Locale = DEFAULT_LOCALE) =>
+  applyCrontab(
+    path.join(root, WATCHDOG_FILE),
+    false,
+    { register: (t) => watchdogCronRegister(t, root), unregister: (t) => watchdogCronUnregister(t, root) },
+    locale,
+  );
 
 /** 워커가 0개인 큐의 **첫 워커**를 손으로 만드는 명령. `<dira 레포>`는 채워지지 않는다 —
  *  엔진 코드 위치는 워커 파일에만 적혀 있고, 워커가 없으면 GUI가 알 방법이 없다(→ createWorker). */
@@ -2381,6 +2447,72 @@ export async function dispatchGateState(root: string, branch: string): Promise<D
   if (text === null) return "none";
   if (text === dispatchGateSh(branch)) return "latest";
   return text.includes(DISPATCH_GATE_MARKER) ? "stale" : "handEdited";
+}
+
+// ── 디스패치 감시자 (DESIGN.md §디스패치 감시자, P428-4) ──────────────────────
+//
+// `<루트>/watchdog.sh`(§계약 — `workers/` 밖. 안에 두면 GUI의 `listWorkers`가 워커로 읽는다,
+// `dispatch-gate.sh`와 같은 이유). 전문·크론 등록·소급 상태 판정을 이 자리에 `dispatchGateSh`와
+// 같은 방식으로 둔다 — 자리표시자가 없어(브랜치처럼 채울 값이 없다) `dispatchGateSh` 같은
+// 채움 함수가 필요 없고 문자열 상수 하나로 끝난다.
+
+export const WATCHDOG_FILE = "watchdog.sh";
+
+/** `<루트>/watchdog.sh`의 전문 (§디스패치 감시자 §계약). `diagnose`(P428-1)·`recover`(P428-2)·
+ *  `alert`(P428-3)는 이 파일이 source하는 `watchdog_gates.py`/`watchdog_alert.py`에 있다 — 이
+ *  파일 자신은 서브커맨드를 그 둘로 넘기는 얇은 뼈대다. `self-heal.sh`와 같은 순서로 자기
+ *  `$0`을 먼저 자기치유에 넘긴다(reaper.sh 선례). */
+export const WATCHDOG_SH = `#!/bin/bash
+# 디스패치 감시자 (DESIGN.md §디스패치 감시자) — 프로젝트마다 한 벌, cron */5로 돈다.
+# GUI가 만들고 관리한다. 손으로 고치지 않는다.
+#
+# 프로젝트마다 하나가 멎음을 읽고(\`diagnose\`, P428-1) 되돌릴 수 있는 것만 고치고(\`recover\`,
+# P428-2) 진짜 못 고칠 때만 사람을 부른다(\`alert\`, P428-3). 인자 없이 부르는 것(셋을 순서대로
+# 도는 것)은 아직 없다 - 배선은 별도 티켓이다.
+#
+# workers/ 밖에 둔다 - 안에 두면 GUI의 listWorkers가 이 파일을 워커로 읽는다(reaper.sh
+# 머리 주석과 같은 이유).
+set -uo pipefail
+
+ROOT="$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd -P)"
+
+# 자기치유를 자기 $0으로 먼저 부른다(reaper.sh와 같은 순서) - 엔진 레포(tick.sh)가 사라지면
+# 살아 있는 워커들의 크론 줄은 이 호출이 정리한다. tick.sh는 이 큐 한 단계 위(main 체크아웃
+# 루트)에 있다 - reaper.sh가 \`$(dirname "$ROOT")/tick.sh\`를 쓰는 것과 같은 경로 계산이다.
+# 감시자 자신의 크론 줄까지 빠진 경우는 이 파일이 아예 안 돌아서 self-heal도 못 부른다 -
+# 그 구멍은 diagnose의 G6 갈래 주석에 있다(watchdog_gates.py 참고).
+. "$ROOT/self-heal.sh" "$(dirname "$ROOT")/tick.sh"
+
+case "\${1:-diagnose}" in
+  diagnose)
+    exec python3 "$ROOT/watchdog_gates.py" "$ROOT"
+    ;;
+  recover)
+    exec python3 "$ROOT/watchdog_gates.py" recover "$ROOT"
+    ;;
+  alert)
+    exec python3 "$ROOT/watchdog_alert.py" "$ROOT"
+    ;;
+  *)
+    echo "watchdog.sh: 알 수 없는 서브커맨드 '$1' (diagnose)" >&2
+    exit 2
+    ;;
+esac
+`;
+
+/** 템플릿 안의 관리 표식 — `DISPATCH_GATE_MARKER`와 같은 문장을 그대로 쓴다(§4-14 §소급의
+ *  판정과 같은 계약이어야 화면이 두 파일을 다른 규칙으로 안 읽는다). */
+const WATCHDOG_MARKER = "GUI가 만들고 관리한다";
+
+export type WatchdogState = "none" | "latest" | "stale" | "handEdited";
+
+/** `<루트>/watchdog.sh`의 지금 상태를 넷으로 가른다 — `dispatchGateState`와 같은 계약. 이
+ *  파일엔 채울 자리표시자가 없어 비교 대상이 상수 `WATCHDOG_SH` 하나뿐이다. */
+export async function watchdogState(root: string): Promise<WatchdogState> {
+  const text = await readFile(path.join(root, WATCHDOG_FILE), "utf8").catch(() => null);
+  if (text === null) return "none";
+  if (text === WATCHDOG_SH) return "latest";
+  return text.includes(WATCHDOG_MARKER) ? "stale" : "handEdited";
 }
 
 // ── 통합 브랜치 (`<루트>/integration-branch`, DESIGN.md §통합 브랜치가 설정이 된다 결정 1-2) ──
