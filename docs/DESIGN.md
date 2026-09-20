@@ -44752,7 +44752,7 @@ that shape"*이다. 사실과 다르다 - 엔진 `tickets.py`가 `### <n>.` 문�
 
 | | |
 |---|---|
-| 자리 | `<루트>/watchdog.sh`. `workers/` 밖이다 - 안에 두면 GUI의 `listWorkers`가 워커로 읽는다(`reaper.sh`와 같은 이유) |
+| 자리 | `<루트>/watchdog.sh`와 그 셸이 부르는 `<루트>/watchdog_gates.py` - `<루트>/watchdog_alert.py` 셋이다. 셋 다 `workers/` 밖이다 - 안에 두면 GUI의 `listWorkers`가 워커로 읽는다(`reaper.sh`와 같은 이유) |
 | 크론 | 프로젝트당 `*/5` 한 줄. 워커 줄과 달리 등록 단위가 1줄이다 - 5분 간격에 `sleep 30` 짝은 뜻이 없다 |
 | 서브커맨드 | `diagnose`(읽기만) - `recover`(고친다) - `alert`(사람을 부른다). 인자 없이 부르면 셋을 순서대로 돈다 |
 | 전제 | 열린 티켓이 0이면 아무것도 안 한다. 큐가 빈 것은 멎은 것이 아니다 |
@@ -60630,9 +60630,16 @@ developer의 값이다.
 
 ### P428. 디스패치 감시자 - 프로젝트마다 하나가 멎음을 읽고 고칠 수 있는 것만 고친다 (요구 `d2882b56`, 답 `1e60d532`, 왕복 1회)
 
-계약은 **§디스패치 감시자**가 정본이고 이 절은 경계와 순서만 적는다. 갈리는 파일은 큐 하나
-(`.dira/watchdog.sh` - 새 파일)와 GUI 둘(`apps/teams/lib/workers.ts` -
-`apps/teams/lib/scaffold.ts`)이고, 엔진 0줄 - 새 npm 0개 - 새 화면 0이다.
+계약은 **§디스패치 감시자**가 정본이고 이 절은 경계와 순서만 적는다. 갈리는 파일은 큐 셋
+(`.dira/watchdog.sh` - `.dira/watchdog_gates.py` - `.dira/watchdog_alert.py`, 셋 다 새 파일)과
+GUI 둘(`apps/teams/lib/workers.ts` - `apps/teams/lib/scaffold.ts`)이고, `tick.sh` - `tickets.py` -
+`push.sh` 0줄 - 새 npm 0개 - 새 화면 0이다.
+
+**파일 셋이라고 처음부터 적지 못했다(지적 `d590fa42`).** 이 절을 쓸 때는 감시자가 파일 하나인
+줄 알았는데, P428-1과 P428-2와 P428-3이 진단-처방-알림 코드를 `watchdog_gates.py`(18KB)와
+`watchdog_alert.py`(5KB)로 갈라 놓았고 `watchdog.sh`는 그 둘을 `exec python3`으로 부르는 얇은
+뼈대가 되었다. P428-4는 위 목록을 그대로 믿고 `watchdog.sh` 하나만 심어서, 새 프로젝트는
+크론이 5분마다 `watchdog.sh diagnose`를 부를 때마다 `python3: can't open file`로 죽는다.
 
 **한 번 되물었다.** 요구의 낱말 *"어떻게든"*이 손대도 되는 범위를 안 정해 주고, 멎음의 판정
 기준도 사람이 고를 값이라 추측으로 못 채웠다. 답이 셋 다 정했다 - 특히 `1.(d)`가 시간 임계를
@@ -60645,11 +60652,28 @@ developer의 값이다.
 | P428-3 | `alert` - `kind: feedback` 한 장 + `osascript` 알림, 코드마다 하나. §사람을 부르는 자리 | developer | P428-1 | 발행 |
 | P428-4 | GUI가 `watchdog.sh`를 프로젝트마다 쓰고 크론 한 줄을 등록-해제한다. `dispatchGateSh`와 같은 자리 | developer | P428-1 | 발행 |
 | P428-5 | QA - §수용조건 아홉을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P428-2, P428-3, P428-4 | 발행 |
+| P428-6 | 새 프로젝트가 `watchdog_gates.py`와 `watchdog_alert.py`도 받는다 - `templates/` 둘 + `TEMPLATE_FILES` 두 줄 | developer | P428-4 | 발행 |
+
+**P428-6은 두 파일을 `templates/`에 둔다.** 지적이 올린 갈래는 셋이었다. 배선을 다음 회차로
+미루는 길은 그동안 새 프로젝트의 크론이 5분마다 죽은 명령을 부르니 버린다. 셋을 합쳐
+`watchdog.sh` 한 파일에 인라인하는 길은 23KB의 python을 bash 히어독 안에 접는 일이라 버린다.
+GUI의 `workers.ts`에 `WATCHDOG_SH`처럼 문자열 상수로 심는 길은 감시자 파일이 한 자리에 모인다는
+값이 있지만, python 원문에 백틱이 22개라 TS 템플릿 리터럴에 넣으려면 전부 이스케이프해야 하고
+그 순간 상수와 원본 파일의 바이트가 갈려 `watchdogState`의 `stale` 판정이 설 자리를 잃는다.
+
+남는 길이 `templates/`다. 그 아래 경로가 곧 `.dira/` 아래 경로라는 1:1 규약(§0-3)을 쓰면
+`scaffold.ts`의 `TEMPLATE_FILES`에 두 줄을 더하는 것이 전부이고, 원본은 레포에 파일 그대로 남아
+diff가 읽힌다. `fillPlaceholders`는 자리표시자 셋이 python 원문에 하나도 없어 no-op이고,
+`python3 <경로>`로 불리는 파일이라 실행 권한도 필요 없다(`put`의 기본 모드).
+
+**지금 이 큐의 두 파일은 git 밖에 있다.** 티켓 `6d9919ad`가 `.dira/` 안에 손으로 놓았는데
+`.dira`는 `.gitignore`에 있어서 `git ls-files`에 안 잡힌다. P428-6이 `templates/`에 넣는
+사본이 그 코드의 첫 버전 관리본이 된다 - 바이트를 그대로 옮기고 새로 쓰지 않는다.
 
 **셋을 P428-1에 엮는다.** 같은 파일에 서브커맨드를 더하는 일이라 그 파일이 없으면 착수가
 안 된다. 2와 3과 4는 서로 안 엮는다 - 1이 낸 출력 형식만 알면 셋이 동시에 간다.
 
-**에픽을 안 연다.** 다섯 장이 파일 셋에 걸린다 - §에픽 결정 20의 하한 아래다.
+**에픽을 안 연다.** 여섯 장이 파일 다섯에 걸린다 - §에픽 결정 20의 하한 아래다.
 
 **designer 0장.** 감시자에 화면이 없다. 사람을 부르는 표면은 이미 있는 티켓 목록과 macOS
 알림 센터이고 둘 다 새로 그릴 픽셀이 없다.
