@@ -2078,7 +2078,7 @@ export const ko: Record<string, string> = {
   // 도는 대화에서만 뜨는 두 줄(§비주얼 §24 §입력 form 표 네 번째 열 — §비주얼 §기다리는 창).
   // 앞엣것은 참견 모드의 placeholder이고, 뒤엣것은 참견 말풍선 아래 꼬리표 한 줄이다.
   "home.interjectPlaceholder": "도는 답에 말 걸기",
-  "home.waitingTurn": "차례를 기다리는 중",
+  "home.waitingTurn": "답을 기다리는 중",
   "home.answer.retry": "다시 답하기",
   "home.answer.copy": "복사",
 
@@ -4391,9 +4391,9 @@ export const en: Record<string, string> = {
   // `sessionStream.interjectPlaceholder`(`Say something to the running session`)와 목적어에서
   // 갈린다 — 홈에서 사람이 보고 있는 것은 세션이 아니라 흐르는 답이다.
   "home.interjectPlaceholder": "Say something to the answer in progress",
-  // 활동 표식(`Answering`·`Thinking`)이 아니라 이 말풍선의 꼬리표다 — 주어가 화면이 아니라
-  // 방금 보낸 글이므로 `its turn`을 남긴다.
-  "home.waitingTurn": "Waiting its turn",
+  // 활동 표식(`Answering`·`Thinking`)이 아니라 이 말풍선의 꼬리표다. 이 턴에 닿든 다음 턴이
+  // 되든 사람이 기다리는 것은 답이라 두 갈래에서 다 참이다(§7-7 결정 5).
+  "home.waitingTurn": "Waiting for the answer",
   "home.answer.retry": "Answer again",
   "home.answer.copy": "Copy",
 
