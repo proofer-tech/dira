@@ -35,9 +35,14 @@ export type Run = { ok: boolean; output: string; code?: number };
  *  곳에서만 만든다. */
 async function execScript(cmd: string, args: string[], cwd?: string): Promise<Run> {
   try {
-    // ponytail: reap은 python 스캔 한 번이라 초 단위로 끝난다. 60초면 매달린 걸 알아채기 충분하다.
+    // f1aa3bb7 — 60초였고 `unassign --force`가 그 위로 넘었다. 이 경로는 엔진 안에서만 15초를
+    // 두 번 기다린다(부모의 release, 그리고 kill 확인 — `tick.sh:469`, DESIGN.md 표 코드 `1`)
+    // 그 위에 python3·bash 스폰이 얹힌다. 실측(2026-09-20, 큐가 붐비던 맥): 플레인 unassign
+    // 31초, `--force` 63초. 60초에서 죽이면 **엔진은 이미 풀었는데 화면만 `할당 해제 실패`를
+    // 그린다** — 티켓은 백로그로 갔고 답변 대기로 잠겼는데 사람은 안 된 줄 안다. 180초는 그
+    // 실측의 약 3배고, 진짜로 매달린 워커를 알아채는 상한이라는 뜻은 그대로다.
     const { stdout, stderr } = await promisify(execFile)(cmd, args, {
-      timeout: 60_000,
+      timeout: 180_000,
       maxBuffer: 4 << 20,
       ...(cwd ? { cwd } : {}),
     });
