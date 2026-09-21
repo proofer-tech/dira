@@ -263,6 +263,23 @@ do_ship() {
     echo 'push.sh: 사용법 - ship <해시> "<제목>" ["<본문>"]' >&2
     exit 2
   }
+  # 판정 1(DESIGN.md §엔진 수정 마흔 번째 승인) - 디스패치 시점에 tick.sh가 적어 둔 더러운
+  # 경로가 `git add -A` 시점에도 남아 있으면 거절한다. 대조는 경로만 본다 - 내용이 바뀌었어도
+  # 세션이 그 경로를 손댔다면 통과다. 기록 파일이 없으면(트리가 깨끗하게 시작했거나 기록 실패)
+  # 종전과 다르게 안 돈다. `$LOCAL`은 tick.sh와 같은 식으로 푼다(TICKET_LOCAL 미설정이면
+  # ~/.config/dira).
+  local _dirty_fp _now_dirty _remain
+  _dirty_fp="${TICKET_LOCAL:-$HOME/.config/dira}/run/dirty-$hash"
+  if [ -f "$_dirty_fp" ]; then
+    _now_dirty=$(git status --porcelain 2>/dev/null | cut -c4-)
+    _remain=$(comm -12 <(sort -u "$_dirty_fp") <(printf '%s\n' "$_now_dirty" | sort -u))
+    if [ -n "$_remain" ]; then
+      echo "push.sh: ship 거절 - 디스패치 시점에 더러웠던 경로가 아직 남아 있다:" >&2
+      printf '%s\n' "$_remain" >&2
+      echo "워크트리.md §시작에 만난 미커밋 변경대로 처분한 뒤 다시 시도한다." >&2
+      exit 1
+    fi
+  fi
   if [ -n "$(git status --porcelain)" ]; then
     git add -A
   fi

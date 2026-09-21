@@ -1353,6 +1353,17 @@ log "DISPATCH $THASH kind=${TKIND:--} persona=${TPERSONA:-none} sid=$SID log=$(b
 
 cleanup_stray_wip "$TICKET_CWD"
 
+# 판정 1(DESIGN.md §엔진 수정 마흔 번째 승인) - 디스패치 시점의 더러운 경로를 적어 둔다.
+# push.sh ship이 같은 경로를 대조해 세션이 안 건드린 채로 남아 있으면 커밋을 거절한다.
+# 대조는 경로만 - 내용은 안 본다. 깨끗하면 지운다(앞 회차가 남긴 같은 이름의 파일도 치운다).
+_dirty_fp="$LOCAL/run/dirty-$THASH"
+_dirty_now=$(git -C "$TICKET_CWD" status --porcelain 2>/dev/null | cut -c4-)
+if [ -n "$_dirty_now" ]; then
+  printf '%s\n' "$_dirty_now" > "$_dirty_fp"
+else
+  rm -f -- "$_dirty_fp"
+fi
+
 cd "$TICKET_CWD" || { log "ERROR cwd 없음 $TICKET_CWD"; OUT=$(reap_silent "$TPATH"); [ -n "$OUT" ] && log "$OUT"; exit 1; }
 
 # 실행 상한(기본 90분). 매달린 세션이 티켓을 무한정 쥐고 있는 걸 막는다.
