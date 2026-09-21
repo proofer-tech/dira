@@ -26,6 +26,7 @@ COMMANDS = {
     "G2": "GUI에서 이 프로젝트를 다시 등록해 전용 워크트리를 만들어 준다",
     "G3": "계정을 늘리거나 tokens.json의 소진된 토큰이 풀릴 때까지 기다려 준다",
     "G4": "claude setup-token",
+    "G6": "GUI의 워커 화면에서 그 워커 줄의 '재등록' 버튼을 눌러 crontab 줄을 다시 심어 준다",
     "G7": "이 줄의 원문대로 사람 세션에서 git을 한 번 실행해 도구 라이선스에 동의해 준다",
 }
 DEFAULT_COMMAND = "자동 복구가 이미 한 번 실패했다. workers/runner.log에서 원인을 직접 확인해 준다"

@@ -2,10 +2,14 @@
 """디스패치 감시자 판정 - docs/DESIGN.md `§디스패치 감시자`(P428-1, 티켓 6d9919ad).
 
 이 파일 하나가 멎음 일곱(G1~G7)을 위에서부터 재고 `<코드> <자력|사람> <한 줄>`로
-낸다. `diagnose()`가 유일한 진입점이고 test_watchdog.py가 이 함수만 임시 디렉터리로
+낸다. `diagnose()`가 그 진입점이고 test_watchdog.py가 이 함수를 임시 디렉터리로
 잰다 - 실제 pgrep/crontab/git 결과는 인자로 주입한다(기본값은 진짜 명령).
 
-recover(P428-2)·alert(P428-3)는 아직 없다. 이 파일은 읽기만 한다.
+`recover()`(P428-2)가 G1-G3-G5만 되돌릴 수 있는 손으로 고치고(개정 `3ed7b692`가 G6을
+뺐다), `tick()`
+(§디스패치 감시자 §개정, P429-1)이 diagnose -> recover -> alert를 이 프로세스 안에서
+순서대로 돈다 - alert(P428-3, watchdog_alert.py)는 진단이 낸 lines를 파일/파이프로
+다시 안 읽고 그대로 받는다.
 """
 import json
 import os
@@ -167,11 +171,11 @@ def diagnose(root, local=None, now=None, pgrep_count=_real_pgrep_count,
                 break
         if not found:
             # ponytail: 이 검사 자체가 감시자 자신의 크론 줄을 안 본다 - 감시자의 크론 줄까지
-            # 빠지면 이 파일이 아예 안 돌아서 여기까지 못 온다. 그 경우는 이 칸이 못 잡는다
-            # (DESIGN.md §멎음의 목록: "G6은 자기를 못 고친다"). 크론 밖에 감시자용 상위
-            # 감시자를 하나 더 세우면 그것을 또 감시할 것이 필요해지므로 늘리지 않는다.
+            # 빠지면 이 파일이 아예 안 돌아서 여기까지 못 온다. 그 경우는 이 칸이 못 잡는다.
+            # 안 고친다(개정 `3ed7b692`) - `recover`는 G6을 아예 안 읽고, `alert`가 티켓
+            # 한 장으로 사람에게 넘긴다.
             lines.append(
-                f"G6 자력 살아 있는 워커 {len(worker_paths)}개의 크론 줄이 0개다")
+                f"G6 사람 살아 있는 워커 {len(worker_paths)}개의 크론 줄이 0개다")
 
     # --- G7: git 자체가 죽어 있다 ---
     code, out = git_version()
@@ -182,8 +186,9 @@ def diagnose(root, local=None, now=None, pgrep_count=_real_pgrep_count,
     return lines
 
 
-# --- recover: G1-G3-G5-G6만 고친다 (DESIGN.md §고치는 손은 되돌릴 수 있는 것만 잡는다,
-# 티켓 3db4cc2a). G2-G4-G7은 diagnose()가 줄을 내도 이 함수가 아예 안 읽는다.
+# --- recover: G1-G3-G5만 고친다 (DESIGN.md §고치는 손은 되돌릴 수 있는 것만 잡는다,
+# 티켓 3db4cc2a - 개정 3ed7b692가 G6을 뺐다). G2-G4-G6-G7은 diagnose()가 줄을 내도 이
+# 함수가 아예 안 읽는다.
 #
 # 처방마다 `<루트>/workers/.watchdog-<코드>`에 (시각, 이번에 고친 상태의 신호) 두 줄을
 # 남긴다. 같은 신호가 다시 오면 시각을 갱신하지 않고 건너뛴다 - "같은 원인에 두 번 안
@@ -280,44 +285,18 @@ def _real_token_rotate(root):
     subprocess.run(["bash", os.path.join(root, "token-rotate.sh"), "exhausted"])
 
 
-def _real_crontab_read():
-    try:
-        out = subprocess.run(["crontab", "-l"], capture_output=True, text=True)
-    except OSError:
-        return (False, [])
-    if out.returncode != 0:
-        return (False, [])
-    return (True, out.stdout.splitlines())
-
-
-def _real_crontab_write(lines):
-    subprocess.run(["crontab", "-"], input="\n".join(lines) + ("\n" if lines else ""),
-                    text=True)
-
-
-def _cron_lines_for(worker_path):
-    # workers.ts의 cronLine()과 같은 모양 - 등록 단위 2줄, `;`로 안 붙인다(:00/:30이 결정적
-    # 이어야 한다는 이유도 같다). GUI가 아니라 여기서 새로 짓는 이유는 이 파일이 node에
-    # 안 기댄다는 계약(bash+python3+git+osascript) 때문이다 - 모양만 같게 맞춘다.
-    log = os.path.join(os.path.dirname(worker_path), "cron.log")
-    run = f'"{worker_path}" >> "{log}" 2>&1'
-    return [f"* * * * * {run}", f"* * * * * sleep 30; {run}"]
-
-
 def recover(root, local=None, now=None, lines=None,
             classify=_real_classify, restore=_real_restore,
             pids_by_age=_real_pids_by_age, kill=_real_kill,
-            token_rotate=_real_token_rotate,
-            crontab_read=_real_crontab_read, crontab_write=_real_crontab_write):
-    """G1-G3-G5-G6만 고치고 결과를 `<코드> <조치|건너뜀> <한 줄>`로 낸다."""
+            token_rotate=_real_token_rotate):
+    """G1-G3-G5만 고치고 결과를 `<코드> <조치|건너뜀> <한 줄>`로 낸다. G6은 안 읽는다
+    (개정 `3ed7b692`) - crontab을 읽지도 쓰지도 않는다."""
     now = now if now is not None else time.time()
     local = local or os.environ.get("TICKET_LOCAL") or os.path.join(
         os.path.expanduser("~"), ".config", "dira")
 
-    cron_ok, cron_lines_now = crontab_read()
     if lines is None:
-        lines = diagnose(root, local=local, now=now,
-                          crontab_lines=lambda: cron_lines_now)
+        lines = diagnose(root, local=local, now=now)
 
     codes = {l.split(" ", 1)[0]: l for l in lines}
     workers_dir = os.path.join(root, "workers")
@@ -388,26 +367,6 @@ def recover(root, local=None, now=None, lines=None,
                 kill(pid)
             out.append(f"G5 처방 {name} {len(targets)}벌 kill(상한 {threshold})")
             _write_marker(root, "G5", now, signature)
-
-    # --- G6: 살아 있는 워커마다 크론 2줄을 다시 심는다. 읽기가 애매하면 안 건드린다 ---
-    if "G6" in codes:
-        if not cron_ok or not cron_lines_now:
-            out.append("G6 건너뜀 crontab -l이 실패했거나 비었다")
-        else:
-            worker_paths = [os.path.join(workers_dir, n)
-                             for n in sorted(os.listdir(workers_dir))
-                             if n.endswith(".sh")] if os.path.isdir(workers_dir) else []
-            if worker_paths:
-                signature = "G6:" + ",".join(worker_paths)
-                if _already_treated(root, "G6", signature):
-                    out.append("G6 건너뜀 이미 처방했다")
-                else:
-                    new_lines = list(cron_lines_now)
-                    for wp in worker_paths:
-                        new_lines.extend(_cron_lines_for(wp))
-                    crontab_write(new_lines)
-                    out.append(f"G6 처방 워커 {len(worker_paths)}개 크론 재등록")
-                    _write_marker(root, "G6", now, signature)
 
     return out
 
