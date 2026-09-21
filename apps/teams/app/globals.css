@@ -462,12 +462,21 @@
 }
 
 /* 탐색기 편집기(§11-2 결정 2) — `app/(site)/doc.tsx`의 shiki 이중 테마와 같은 관용구.
-   `--shiki-light`/`--shiki-dark` 두 변수만 나가고 어느 쪽을 칠할지는 이 클래스가 정한다. */
+   `--shiki-light`/`--shiki-dark` 두 변수만 나가고 어느 쪽을 칠할지는 이 클래스가 정한다.
+   편집기가 사는 `(app)` 트리에는 `.dark` 클래스를 붙이는 코드가 없어(붙이는 곳은
+   `app/(site)/shell.tsx` 하나뿐이다) `.dark` 조상 하나로만 가르면 OS가 다크일 때 라이트용
+   잉크가 다크 배경 위에 칠해진다. 위 `@media (prefers-color-scheme: dark)` 블록과 같은
+   이유로 조건을 두 벌 둔다 — 하나는 `.dark`(랜딩 밖 다른 화면), 하나는 OS 설정. */
 .code-editor .shiki span {
   color: var(--shiki-light);
 }
 .dark .code-editor .shiki span {
   color: var(--shiki-dark);
+}
+@media (prefers-color-scheme: dark) {
+  .code-editor .shiki span {
+    color: var(--shiki-dark);
+  }
 }
 
 /* §비주얼 §73 팔레트 여백 여섯(②) — `Command`의 `p-1` 4px을 8px(ⓐⓓ)로, 검색 칸 감싸개는

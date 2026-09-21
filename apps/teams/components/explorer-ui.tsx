@@ -659,10 +659,14 @@ function CodeEditor({
   const [saving, setSaving] = useState(false);
   const { error, fixing, run } = useSelfHealRetry();
   const [html, setHtml] = useState<string | null>(null);
+  // `html`이 그리는 원문 — `text`와 갈리는 동안은 `<pre>`가 옛 글자라 `textarea` 쪽을 대신
+  // 보여준다(결정 2 "색은 늦어도 되지만 글자는 늦으면 안 된다").
+  const [highlightedText, setHighlightedText] = useState(initial.text);
   const preRef = useRef<HTMLPreElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
   const dirty = text !== savedText;
   const lang = langOf(relPath);
+  const synced = text === highlightedText;
 
   // 서버(탭의 `unsaved`)에는 깨끗함 <-> 더러움이 **갈릴 때만** 알린다 — 마운트 때 한 번 뜨는
   // `false`는 이미 서버 쪽 기본값이라 안 보낸다(§11 수용조건 4, `home-session.ts setFileTabUnsaved`
@@ -681,6 +685,7 @@ function CodeEditor({
     const { codeToHtml } = await import("shiki");
     const out = await codeToHtml(source, { lang, themes: SHIKI_THEMES, defaultColor: false });
     setHtml(padTrailingLine(out, source));
+    setHighlightedText(source);
   }
 
   // 마운트 한 번 — 이후 다시 그리는 자리는 `blur`(아래)다(파일 top 주석 §타이핑마다 안 긋는다).
@@ -691,7 +696,10 @@ function CodeEditor({
     (async () => {
       const { codeToHtml } = await import("shiki");
       const out = await codeToHtml(initial.text, { lang, themes: SHIKI_THEMES, defaultColor: false });
-      if (!ignore) setHtml(padTrailingLine(out, initial.text));
+      if (!ignore) {
+        setHtml(padTrailingLine(out, initial.text));
+        setHighlightedText(initial.text);
+      }
     })();
     return () => {
       ignore = true;
@@ -769,9 +777,11 @@ function CodeEditor({
           fixingText={t("explorer.saveFixing")}
         />
       )}
-      {/* 결정 2 §editor — 배경의 읽기 전용 `<pre>`(shiki)가 색을 내고, 위에 겹친 투명 `textarea`가
+      {/* 결정 2 §editor — 배경의 읽기 전용 `<pre>`(shiki)가 색을 내고, 위에 겹친 `textarea`가
           캐럿·타이핑을 받는다. 폰트·줄높이·패딩이 두 층에서 한 자도 안 갈려야 겹친다
-          (`font-mono text-sm leading-6 p-3`을 양쪽에 그대로 준다). */}
+          (`font-mono text-sm leading-6 p-3`을 양쪽에 그대로 준다). `<pre>`가 최신(`synced`)일
+          때만 `textarea`를 투명하게 지운다 — 어긋난 동안은 `text-foreground`로 자기 글자를
+          직접 보여준다(색은 늦어도 되지만 글자는 늦으면 안 된다, 425c5af8). */}
       <div className="relative min-h-0 flex-1 overflow-hidden rounded-md border">
         <pre
           ref={preRef}
@@ -800,7 +810,9 @@ function CodeEditor({
             }
           }}
           spellCheck={false}
-          className="relative h-full w-full resize-none overflow-auto whitespace-pre-wrap break-words bg-transparent p-3 font-mono text-sm leading-6 text-transparent caret-foreground outline-none"
+          className={`relative h-full w-full resize-none overflow-auto whitespace-pre-wrap break-words bg-transparent p-3 font-mono text-sm leading-6 caret-foreground outline-none ${
+            synced ? "text-transparent" : "text-foreground"
+          }`}
           aria-label={relPath}
         />
       </div>
