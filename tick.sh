@@ -864,6 +864,43 @@ live_other() {                     # 파일이 있고 · 내 것이 아니고 ·
 # 안 건드린다.
 reap_silent() { python3 "$PY" reapclear "$1" "${2:-}"; }
 
+# 엔진 수정 마흔 번째 승인 §판정 2 - 디스패치 직전에 워크트리 3항(주인이 .wip/미배정 ->
+# 버린다)만 대신 집행한다. 4항(보존)-5항(후속 티켓)은 판단이 들어가 세션의 몫으로 남긴다.
+# 순서 계약: 이 함수는 DISPATCH 로그 직후, cd "$TICKET_CWD" 전에 돈다(판정 1의 dirty-<해시>
+# 기록보다 먼저 -> AC13). 실패해도 디스패치를 막지 않는다(AC12) - NOTE만 남기고 넘어간다.
+cleanup_stray_wip() {
+  local wt="$1" tdir="$TICKET_ROOT/tickets" line status path owner_hash owner_file hit_count f
+  git -C "$wt" status --porcelain 2>/dev/null | while IFS= read -r line; do
+    status="${line:0:2}"
+    path="${line:3}"
+    # 이름바꾸기(R  old -> new)는 새 이름만 본다 - 옛 이름은 이미 트리에 없다
+    case "$path" in *' -> '*) path="${path##*' -> '}" ;; esac
+    [ -z "$path" ] && continue
+    hit_count=0; owner_file=""
+    for f in "$tdir"/*.md; do
+      [ -e "$f" ] || continue
+      if grep -qF -- "$path" "$f" 2>/dev/null; then
+        hit_count=$((hit_count + 1))
+        owner_file="$f"
+      fi
+    done
+    [ "$hit_count" -eq 1 ] || continue
+    case "$owner_file" in
+      *.done.md) continue ;;   # 4항 - 보존, 세션의 몫
+      *.wip.md|*.md) ;;        # 3항 - 버린다 (미배정 <해시>.md도 이 갈래)
+      *) continue ;;
+    esac
+    owner_hash="$(basename "$owner_file")"; owner_hash="${owner_hash%%.*}"
+    case "$status" in
+      '??') rm -f -- "$wt/$path" 2>/dev/null && log "NOTE cleanup_stray_wip 버림(미추적) path=$path owner=$owner_hash" ;;
+      *) git -C "$wt" restore --staged --worktree -- "$path" 2>/dev/null \
+           && log "NOTE cleanup_stray_wip 버림 path=$path owner=$owner_hash" \
+           || log "NOTE cleanup_stray_wip 실패 path=$path owner=$owner_hash" ;;
+    esac
+  done
+  return 0
+}
+
 SID=$(python3 -c 'import uuid;print(uuid.uuid4())')
 TPATH=""; THASH=""; TKIND=""; TPERSONA=""; TPRIO=""; TBASE=""; TEFF=""; TSQUAD=""
 OVER=""    # 이 판에서 이미 상한이던 페르소나들. 후보가 여럿이어도 SKIP은 페르소나당 한 줄이다
@@ -1304,6 +1341,8 @@ python3 "$PY" assign "$TPATH" "$SID" "${TPERSONA:-agent} / ${TICKET_NAME}-${SID:
 LOGF="$LOGDIR/$(date '+%Y%m%d-%H%M%S')-${TICKET_NAME}-${THASH}.log"
 PRIOLOG=$(prio_log "$TPRIO" "$TBASE" "$TEFF")
 log "DISPATCH $THASH kind=${TKIND:--} persona=${TPERSONA:-none} sid=$SID log=$(basename "$LOGF") $PRIOLOG"
+
+cleanup_stray_wip "$TICKET_CWD"
 
 cd "$TICKET_CWD" || { log "ERROR cwd 없음 $TICKET_CWD"; OUT=$(reap_silent "$TPATH"); [ -n "$OUT" ] && log "$OUT"; exit 1; }
 
