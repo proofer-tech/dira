@@ -84,6 +84,15 @@ TICKET_PLAN_NUDGE="${TICKET_PLAN_NUDGE:-1200}"
 # 켜는 값은 운영이 관측하며 고른다. 사람 참견이 그 사이 들어왔으면 안 끊는다(check_plan_kill).
 TICKET_PLAN_KILL="${TICKET_PLAN_KILL:-0}"
 
+# 엔진 수정 마흔한 번째 승인 §판정 1. `result ok`를 낸 세션이 티켓을 `.wip`으로 남긴 채
+# 죽기 전, 이번 구간에 하네스가 밀어낸(`moved to the background`) 명령이 있으면 그 알림이
+# 닿을 창을 이 초(기본 40)만큼 준다. 0이면 장치가 꺼진다. 기본값은 apps/teams의 pnpm test
+# 실측 셋(24.07s/22.41s/22.51s, 최댓값의 1.5배 36.105s를 10초 단위로 올림)이다.
+TICKET_BG_GRACE="${TICKET_BG_GRACE:-40}"
+# 한 티켓에서 유예가 몇 번까지 걸리는지의 상한. 밀린 작업이 계속 새로 생기는 세션이 창을
+# 무한히 늘리는 것을 이 수가 막는다 - REUSE로 새 티켓을 받으면 다시 0부터 잰다.
+TICKET_BG_MAX="${TICKET_BG_MAX:-2}"
+
 # 엔진 수정 서른아홉 번째 승인 §판정 1. MAXRUN 감시 루프가 이 초(기본 60)마다
 # `workers/health/YYYYMMDD.log`에 바깥 상태 한 줄을 적는다. 부모 셸까지 함께 죽는 세션은 종료
 # 줄을 남길 손이 없으므로, 죽기 직전 상태를 남기려면 종료 시점이 아니라 도는 동안 적어야 한다.
@@ -1512,6 +1521,30 @@ for ln in sys.stdin:
 print("|".join((sid, ok, reason, reset, ctx)))'
 }
 
+# 엔진 수정 마흔한 번째 승인 §판정 1 - 세 조건. segok는 이번 구간의 segment_result 둘째
+# 필드(ok/err)를 호출부가 이미 파싱해 건네준다(segment_result를 여기서 또 부르지 않는다).
+bg_pending() {
+  local segok="$1"
+  [ "$segok" = "ok" ] || return 1
+  [ -f "$TPATH" ] || return 1
+  tail -n +"$(( OUTOFFSET + 1 ))" "$OUTF" 2>/dev/null | grep -qF 'moved to the background (ID: '
+}
+
+# 유예 걸음 1·2 공용 - LASTLINE(호출 시점의 줄 수) 대비 출력이 TICKET_BG_GRACE초 안에
+# 자라면 0(알림이 왔다). POLL 간격으로 본다 - is_result 감시 루프와 같은 박자다. 세션이
+# 그 사이 죽으면(kill -0 실패) 더 기다릴 이유가 없어 즉시 판정한다.
+bg_wait_grow() {
+  local lastline elapsed
+  lastline=$(wc -l < "$OUTF")
+  elapsed=0
+  while [ "$elapsed" -lt "$TICKET_BG_GRACE" ]; do
+    [ "$(wc -l < "$OUTF")" -gt "$lastline" ] && return 0
+    kill -0 "$CPID" 2>/dev/null || break
+    sleep "$POLL"; elapsed=$((elapsed + POLL))
+  done
+  [ "$(wc -l < "$OUTF")" -gt "$lastline" ]
+}
+
 # §4-11 조건 ⑤: 같은 페르소나 후보를 종전 선정과 같은 임계구역·게이트에서 다시 claim한다.
 # ENGINE_NAME·CDOWN은 이미 이 세션의 페르소나로 정해져 있다(위 선정 루프에서 세워졌고 그 뒤로
 # 아무도 안 건드린다) - 재활용은 페르소나를 안 바꾸므로 다시 세우지 않고 같은 값으로 게이트를 본다.
@@ -1610,6 +1643,9 @@ sys.exit(1 if re.search(r"^## 진행 계획[ \t]*$", text, re.M) else 0)
 # 다시 무장시킨다 - 새 티켓의 mtime을 옛 티켓의 것과 우연히 비교하지 않는다. PN_KIND는
 # check_plan_nudge가 exit 0으로 돌아온 뒤 호출부가 참견 문장을 고르는 갈래 표식이다.
 PN_MTIME=""; PN_SINCE=0; PN_ARMED=1; PN_KIND=""
+# 엔진 수정 마흔한 번째 승인 §판정 1 - 이 티켓에서 유예를 쓴 횟수(TICKET_BG_MAX가 상한).
+# REUSE로 새 티켓을 받으면 0으로 되감는다(아래 REUSE 절 참고) - 티켓마다 새로 잰다.
+BG_GRACE_USED=0
 
 # 감시 루프가 매 POLL(스트리밍이면 1초)마다 부른다. `TICKET_PLAN_NUDGE=0`이면 장치가 꺼진다
 # (조건 6). 파일이 갈리면(mtime 변화) 다시 무장하고 시계를 되감는다(조건 3·4) - 세션의 손이
@@ -1776,6 +1812,31 @@ sys.stdout.write(json.dumps({"type":"user","message":{"role":"user","content":sy
     done
     kill -0 "$CPID" 2>/dev/null || break     # 스스로 끝났다(MAXRUN 강제종료 포함) - 재활용 없이 종료 경로
 
+    # 엔진 수정 마흔한 번째 승인 §판정 1 - REUSE 판정 앞에서 밀린 백그라운드 작업을 먼저
+    # 본다. 세 조건(이번 구간 ok - 티켓이 아직 .wip - 이번 구간에 밀림 문구)이 다 참이고
+    # 이 티켓에서 유예를 TICKET_BG_MAX회 미만으로 썼을 때만 걸고, 하나라도 거짓이면 아래
+    # REUSE 판정으로 그대로 내려간다(종전 경로 한 글자도 안 갈림).
+    if [ "$TICKET_BG_GRACE" != "0" ] && [ "$BG_GRACE_USED" -lt "$TICKET_BG_MAX" ]; then
+      BG_SEG=$(segment_result "$OUTF" "$OUTOFFSET")
+      IFS='|' read -r _BGSID BG_SEGOK _BGREASON _BGRESET _BGCTX <<< "$BG_SEG"
+      if bg_pending "$BG_SEGOK"; then
+        BG_GRACE_USED=$((BG_GRACE_USED + 1))
+        if bg_wait_grow; then
+          continue     # 1. 기다린다 - 자랐다. offset 그대로 두고 다음 result를 다시 기다린다
+        fi
+        # 2. 민다 - 참견과 같은 FIFO·같은 JSON 한 줄 모양이다. 새 장치를 안 만든다.
+        python3 -c 'import json,sys
+sys.stdout.write(json.dumps({"type":"user","message":{"role":"user","content":sys.argv[1]}},
+                            ensure_ascii=False, separators=(",", ":")) + "\n")' \
+          "밀려 있는 백그라운드 작업의 출력을 확인해서 마무리하거나 폴링 대기로 넘겨 주세요." >&9
+        log "NUDGE $THASH bg"
+        if bg_wait_grow; then
+          continue     # 주입 뒤에 자랐다. 1과 같이 offset 그대로 두고 돌아간다
+        fi
+        # 3. 끝낸다 - 주입 뒤에도 안 자랐다. 아래 REUSE·종료 경로가 종전 그대로 이어받는다.
+      fi
+    fi
+
     # 새 구간의 result다. §4-11 재활용 판정 5개 - ①은 여기 도달한 것 자체가(스트리밍+INBOX)
     # 참이므로 TICKET_REUSE만 본다. 하나라도 거짓이면 종전 그대로 죽인다.
     REUSE=""
@@ -1832,6 +1893,7 @@ sys.stdout.write(json.dumps({"type":"user","message":{"role":"user","content":sy
       OUTOFFSET="$INJOFFSET"
       TPATH="$RTPATH"; THASH="$RTHASH"; TKIND="$RTKIND"
       PN_MTIME=""; PN_SINCE=0; PN_ARMED=1; PN_NUDGE_AT=0  # 새 티켓 - 참견 무장을 새로 잰다(옛 mtime과 안 겹친다)
+      BG_GRACE_USED=0  # 새 티켓 - 유예 횟수도 새로 잰다
       kill "$WPID" 2>/dev/null; wait "$WPID" 2>/dev/null
       start_watchdog
       continue
