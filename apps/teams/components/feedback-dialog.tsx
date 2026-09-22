@@ -3,10 +3,12 @@
 /** `의견 보내기` 다이얼로그 (DESIGN.md §0-12 §폼).
  *
  *  **칸 하나다** — `textarea` + 보내기. 이름·이메일·분류 select를 만들지 않는다(§0-12).
- *  보내기는 서버로 안 간다: `window.open`이 GitHub `새 이슈`를 제목·본문이 채워진 채 열고
- *  (데스크톱 셸에서는 `setWindowOpenHandler`가 `shell.openExternal`로 보낸다 — **새 IPC 0개**)
- *  마지막 `Submit`은 사람이 GitHub에서 누른다. 서버로 가는 것은 `feedback_submit` 하나고
- *  **거기에 의견 본문은 없다**(§0-11 익명 규칙).
+ *  보내기는 GitHub `새 이슈`를 제목·본문이 채워진 채 연다. 프로젝트 문맥이 있으면
+ *  (`projectIdFromPath`) `openLink`가 링크 슬롯(`c0ffee00`)에서 열고(§11-15 결정 3), 문맥이
+ *  없으면(예: `/market`) 옛 `window.open`으로 물러난다 — 데스크톱 셸에서는
+ *  `setWindowOpenHandler`가 `shell.openExternal`로 보낸다(**새 IPC 0개**). 마지막 `Submit`은
+ *  사람이 GitHub에서 누른다. 서버로 가는 것은 `feedback_submit` 하나고 **거기에 의견 본문은
+ *  없다**(§0-11 익명 규칙).
  *
  *  **여는 신호는 하나다** — `apps/desktop/main.ts`의 `Help > 의견 보내기`가 지금 떠 있는 문서에
  *  던지는 `dira:feedback` 이벤트다(§0-12 · `252fd905`). 그래서 열림 상태가 여기 있다: 진입점이
@@ -22,7 +24,11 @@
 import { useEffect, useState } from "react";
 import { feedbackMetaAction, trackEvent } from "@/app/actions";
 import { useLocale, useT } from "@/components/language-provider";
+import { openLink } from "@/components/browser-panel";
+import { useTrackedRouter } from "@/lib/route-pending";
+import { projectIdFromPath } from "@/lib/urls";
 import { issueUrl, type FeedbackMeta } from "@/lib/feedback";
+import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -37,6 +43,9 @@ import { Textarea } from "@/components/ui/textarea";
 export function FeedbackDialog() {
   const locale = useLocale();
   const t = useT();
+  const pathname = usePathname();
+  const router = useTrackedRouter();
+  const projectId = projectIdFromPath(pathname);
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   const [meta, setMeta] = useState<FeedbackMeta | null>(null);
@@ -75,8 +84,11 @@ export function FeedbackDialog() {
           onSubmit={(e) => {
             e.preventDefault();
             if (!built) return;
-            // 사람의 클릭 안에서 연다 — 액션을 await한 뒤에 열면 브라우저 팝업 차단에 걸린다
-            window.open(built.url, "_blank", "noopener");
+            // §11-15 결정 3 §피드백 대화상자의 `window.open`도 링크 슬롯으로 갈린다. 프로젝트
+            // 문맥이 없으면(`/market` 등) `link-interceptor.tsx`와 같은 예외로 종전 동작을
+            // 둔다 — 사람의 클릭 안에서 바로 연다(액션을 await한 뒤에 열면 팝업 차단에 걸린다).
+            if (projectId) void openLink(projectId, built.url, locale, router.push);
+            else window.open(built.url, "_blank", "noopener");
             // 화면에서 GA로 나가는 길은 `trackEvent` 하나다(§0-11). **본문은 안 넘긴다** —
             // 자유 입력은 GA로 안 간다(익명 규칙). 기다리지 않는다: 통계 한 건이 폼을 못 막는다
             void trackEvent("feedback_submit", {});

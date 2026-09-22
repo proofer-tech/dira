@@ -23,6 +23,7 @@ import {
   mergeProgress,
   pairTool,
   planBlocks,
+  projectIdFromPath,
   progressFilterKindOf,
   progressMarkerText,
   relativeElapsed,
@@ -97,6 +98,16 @@ test("screenOf — 표에 없는 경로는 `null`이라 아무것도 안 보낸�
 });
 
 /** `Esc` 목적지 (DESIGN.md §0-7 §목적지 표) — 얹힌 것 둘만 보드로 보내고 나머지는 무동작이다. */
+/** `link-interceptor.tsx` · `feedback-dialog.tsx`가 링크 슬롯 액션에 넘길 프로젝트 id
+ *  (DESIGN.md §11-15 결정 3). */
+test("projectIdFromPath — `/p/<id>` 세그먼트를 뽑고, 없으면 `null`이다", () => {
+  assert.equal(projectIdFromPath("/p/dira"), "dira");
+  assert.equal(projectIdFromPath("/p/dira/board"), "dira");
+  assert.equal(projectIdFromPath("/p/dira/tickets/fff28e90"), "dira");
+  assert.equal(projectIdFromPath("/market"), null);
+  assert.equal(projectIdFromPath("/"), null);
+});
+
 test("escDestination — 티켓 상세 · 에픽 화면은 보드로 보낸다(§0-7 §목적지 표)", () => {
   assert.equal(escDestination("/p/dira/tickets/fff28e90"), "/p/dira/board");
   assert.equal(escDestination("/p/dira/epics"), "/p/dira/board"); // 세그먼트 없는 에픽

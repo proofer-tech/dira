@@ -98,6 +98,13 @@ export type Screen =
  *
  *  **표에 없는 경로는 `null`이고 아무것도 안 보낸다** — 404·모르는 경로에 화면 이름을
  *  지어내면 통계에 없는 화면이 뜬다. */
+/** 지금 경로가 든 프로젝트 id (DESIGN.md §11-15 결정 3) — `link-interceptor.tsx`가 캡처한
+ *  클릭을 `openLinkAction(projectId, ...)`으로 넘길 때 쓴다. `/market`처럼 프로젝트 밖 화면은
+ *  `null`이다 — 그 화면에서는 링크를 가로챌 문맥이 없다(호출자가 그때 기본 동작을 둔다). */
+export function projectIdFromPath(pathname: string): string | null {
+  return /^\/p\/([^/]+)/.exec(pathname)?.[1] ?? null;
+}
+
 export function screenOf(pathname: string): Screen | null {
   if (pathname === "/") return "root";
   const [, id, rest = ""] = /^\/p\/([^/]+)(\/.*)?$/.exec(pathname) ?? [];

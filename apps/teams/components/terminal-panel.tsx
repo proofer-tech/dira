@@ -13,14 +13,17 @@
  *  이든 표면 이탈/복귀든 곧장 마운트한다. 죽은 탭만 사람이 `다시 열기`를 눌러야
  *  `restartTerminal` 액션이 새 pty를 심고, 그 뒤에야 이 컴포넌트가 뜬다). */
 import { useEffect, useRef, useState } from "react";
-import { Terminal } from "@xterm/xterm";
+import { Terminal, type ILink } from "@xterm/xterm";
 import { SearchAddon, type ISearchOptions } from "@xterm/addon-search";
 import "@xterm/xterm/css/xterm.css";
 import { useHotkey } from "@/components/keymap-provider";
-import { useT } from "@/components/language-provider";
+import { useLocale, useT } from "@/components/language-provider";
 import { readPtyStream } from "@/lib/pty-stream";
 import { FindBarChrome } from "@/components/find-bar";
 import { isShellBoundCtrlF, resultLabel, searchDecorations } from "@/lib/terminal-search";
+import { openLink } from "@/components/browser-panel";
+import { useTrackedRouter } from "@/lib/route-pending";
+import { findTerminalLinks } from "@/lib/terminal-links";
 
 /** `lib/pty.ts`의 `stty cols 120 rows 32`와 같은 값 — 서버가 그 크기로 셸을 열었으므로 화면도
  *  같은 크기로 맞춘다. ponytail: 고정 크기, 창 크기 반영은 다음 티켓(§11-1 수용조건 밖). */
@@ -47,6 +50,13 @@ export function TerminalPanel({
   onDisconnect?: () => void;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
+  const locale = useLocale();
+  const router = useTrackedRouter();
+  // 값만 최신으로 들고 있는 ref다 — 아래 effect의 의존성에는 안 넣는다. 넣으면 언어를
+  // 바꾸거나 라우터가 재구성될 때마다 pty 스트림이 끊겼다 다시 붙는다(§11-1 §다시 연결을
+  // 하지 않는다). 링크를 누르는 순간에만 최신 값을 읽으면 된다.
+  const linkCtxRef = useRef({ locale, push: router.push });
+  linkCtxRef.current = { locale, push: router.push };
 
   useEffect(() => {
     const url = `/p/${projectId}/home/pty/${id}`;
@@ -63,6 +73,28 @@ export function TerminalPanel({
     const search = new SearchAddon();
     term.loadAddon(search);
     registry.set(id, { term, search });
+
+    // §11-15 결정 3. `@xterm/addon-web-links`를 안 붙인다 — 새 의존성 0개가 이 층의 규칙이고
+    // 누른 뒤에 하는 일이 우리 `openLink`라 addon의 기본 동작을 어차피 덮는다. 정규식만
+    // 순수 함수(`findTerminalLinks`)로 빼서 코어 `registerLinkProvider`에 물린다.
+    const linkDisposable = term.registerLinkProvider({
+      provideLinks(bufferLineNumber, callback) {
+        const line = term.buffer.active.getLine(bufferLineNumber - 1);
+        const text = line?.translateToString(true) ?? "";
+        const links: ILink[] = findTerminalLinks(text).map((m) => ({
+          range: {
+            start: { x: m.start + 1, y: bufferLineNumber },
+            end: { x: m.start + m.text.length, y: bufferLineNumber },
+          },
+          text: m.text,
+          activate: () => {
+            const { locale, push } = linkCtxRef.current;
+            void openLink(projectId, m.text, locale, push);
+          },
+        }));
+        callback(links.length ? links : undefined);
+      },
+    });
 
     const dataSub = term.onData((data) => {
       fetch(url, { method: "POST", body: data }).catch(() => {});
@@ -84,6 +116,7 @@ export function TerminalPanel({
       ac.abort();
       dataSub.dispose();
       registry.delete(id);
+      linkDisposable.dispose();
       search.dispose();
       term.dispose();
     };

@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { KeymapProvider } from "@/components/keymap-provider";
 import { LanguageProvider } from "@/components/language-provider";
 import { FeedbackDialog } from "@/components/feedback-dialog";
+import { LinkInterceptor } from "@/components/link-interceptor";
 import { DesktopFindBar } from "@/components/find-bar";
 import { UpdateToast } from "@/components/update-toast";
 import { RoutePending } from "@/components/route-pending";
@@ -65,6 +66,9 @@ export default async function RootLayout({
                 **화면 이동 없이 지금 화면 위에** 떠야 해서 자리가 여기다. 닫혀 있으면 안 그린다.
                 `LanguageProvider` 안이어야 `useT()`-`useLocale()`이 실제 로케일을 읽는다 */}
             <FeedbackDialog />
+            {/* §11-15 결정 3. 화면 이동을 안 그리므로 자리는 `<FeedbackDialog/>`와 같다 —
+                `LanguageProvider` 안이어야 `useLocale()`이 실제 로케일을 읽는다 */}
+            <LinkInterceptor />
             <KeymapProvider keymap={keymap}>
               {children}
               {/* §데스크톱 앱 N5 찾기 바. **`KeymapProvider` 안**이어야 한다 — `⌘F`는 키맵의
